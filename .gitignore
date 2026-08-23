@@ -1,0 +1,169 @@
+# IDE
+.idea/
+*.iml
+.vscode/
+.fleet/
+.agents/
+.zcode/
+
+# UI 原型/预检产物（非项目源码）
+mc-commander-prototype/
+prototype/
+mc_manager_web/prototype.html
+mc_manager_web/give-proto.html
+.history/
+.vs/
+.trae/
+trae/
+*.code-workspace
+
+# Agent 私有配置/技能/MCP（本机工作环境，不入库；AGENTS.md/CLAUDE.md 为社区版入库）
+.claude/
+.ai/
+.mimosa/
+.mcp.json
+CLAUDE.local.md
+skills-lock.json
+
+# Code intelligence caches
+.codegraph/
+
+# Debug
+.dbg/
+*.log
+debug-*.md
+mc_commander_server/test_rcon.js
+# 调试探针残留目录（孤儿进程/进程树模拟探针，禁止提交；含 *_pid.txt 运行残留）
+mc_commander_server/.repro_orphan/
+
+# Superpowers session data
+.superpowers/
+.omo/
+
+# Archives
+*.tar.gz
+*.zip
+*.7z
+*.rar
+release/
+
+# Server runtime data
+mc_commander_server/data/
+mc_commander_server/node_modules/
+mc_commander_server/.env
+mc_commander_server/backups/
+# servers/ 整体忽略（含 jar/world/logs 等运行时文件）由 mc_commander_server/.gitignore 的 servers/ 规则覆盖，
+# 此处的按文件列举规则已删除（原为死规则，从未实际生效）
+
+# Flutter build artifacts（桌面端已废弃归档，路径前缀为 archived/）
+archived/
+mc_commander-dev/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 本地笔记（不入库；docs/ 为公开文档入库）
+CHANGELOG.md
+mc_commander_optimization_plan.md
+服务器日志.md
+repowiki/
+
+# --- 以下为补充的通用排除规则 ---
+
+# 环境变量文件（保留 .env.example 模板）
+.env
+.env.local
+.env.*.local
+*.env.local
+!.env.example
+
+# 包管理器调试日志
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+.yarn-integrity
+
+# 包管理器缓存目录
+.npm/
+.pnpm-store/
+.yarn/cache/
+.yarn/install-state.gz
+
+# 通用缓存
+.cache/
+.eslintcache
+.parcel-cache/
+
+# 测试覆盖率输出
+coverage/
+.nyc_output/
+*.lcov
+
+# 通用构建输出
+dist/
+out/
+node_modules/
+
+# 临时与备份文件
+*.tmp
+*.bak
+*.orig
+*.swp
+*~
+
+# TypeScript 增量编译信息
+*.tsbuildinfo
+
+# SSH 密钥与凭据（防止误提交敏感信息，dartssh2 自动部署相关）
+*.pem
+*.key
+*.ppk
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
+id_ecdsa
+id_ecdsa.pub
+id_dsa
+id_dsa.pub
+known_hosts
+authorized_keys
+.ssh/
+
+# 部署运行时生成的文件
+server.log
+server.pid
+*.pid
+
+# 本地开发部署脚本
+mc_commander_server/scripts/dev-deploy.sh
+
+# Flutter 自动生成文件（补充）
+.flutter-plugins
+
+# 图片与截图（防止误提交本地截图；以下 assets/ 白名单由 git add 显式纳入）
+screenshots/
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.webp
+!archived/mc_manager_app/assets/**
+!mc_manager_web/src/assets/**
+
+# 编译产物与二进制文件
+*.exe
+*.dll
+*.so
+*.dylib
+*.bin
+*.o
+*.obj
+
+# macOS 资源分支文件
+._*

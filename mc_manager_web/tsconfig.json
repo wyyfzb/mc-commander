@@ -1,0 +1,13 @@
+{
+  "files": [],
+  "compilerOptions": {
+    // 供 shadcn CLI 等工具读取的路径别名（实际编译配置见 tsconfig.app.json）
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "references": [
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.node.json" }
+  ]
+}

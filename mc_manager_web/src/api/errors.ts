@@ -1,0 +1,102 @@
+/**
+ * 错误码映射（设计文档 §5.1 errors.ts）
+ * 对照服务端 utils/response.js ErrorCodes 全表；
+ * 策略：服务端 message 已本地化的（40902/40904 等）直接透传，
+ *       英文默认文案的用本地友好文案覆盖
+ */
+import { ApiError } from './client'
+
+/** 服务端错误码枚举（与 ErrorCodes 对齐） */
+export const ErrorCode = {
+  SUCCESS: 0,
+  SERVER_ERROR: 50000,
+  VALIDATION_ERROR: 40000,
+  UNAUTHORIZED: 40100,
+  FORBIDDEN: 40300,
+  NOT_FOUND: 40400,
+  RATE_LIMITED: 42900,
+
+  INVALID_API_KEY: 40101,
+
+  PERMISSION_DENIED: 40301,
+
+  INSTANCE_NOT_FOUND: 40401,
+  INSTANCE_ALREADY_RUNNING: 40001,
+  INSTANCE_NOT_RUNNING: 40002,
+  INSTANCE_RUNNING: 40003,
+  INSTANCE_START_FAILED: 50001,
+
+  BACKUP_NOT_FOUND: 40402,
+  BACKUP_IN_PROGRESS: 40901,
+  BACKUP_RCON_UNAVAILABLE: 40902,
+  RESTORE_IN_PROGRESS: 40903,
+  BACKUP_FORMAT_UNSUPPORTED: 40904,
+  BACKUP_FAILED: 50002,
+
+  PLAYER_NOT_FOUND: 40403,
+  PLAYER_NOT_ONLINE: 40003, // 注意：与 INSTANCE_RUNNING 同码，按端点场景区分
+
+  TASK_NOT_FOUND: 40405,
+  INVALID_CRON_EXPRESSION: 40004,
+
+  FILE_NOT_FOUND: 40406,
+  PATH_TRAVERSAL_DETECTED: 40302,
+  FILE_TOO_LARGE: 40005,
+  BINARY_FILE_NOT_SUPPORTED: 40006,
+} as const
+
+export type ErrorCodeValue = (typeof ErrorCode)[keyof typeof ErrorCode]
+
+/** 需要本地化文案覆盖的错误码（服务端返回英文默认文案） */
+const LOCALIZED_MESSAGES: Partial<Record<ErrorCodeValue, string>> = {
+  [ErrorCode.SERVER_ERROR]: '服务器内部错误，请稍后重试',
+  [ErrorCode.VALIDATION_ERROR]: '请求参数校验失败',
+  [ErrorCode.UNAUTHORIZED]: '未授权：请检查 API Key',
+  [ErrorCode.FORBIDDEN]: '没有权限执行此操作',
+  [ErrorCode.NOT_FOUND]: '请求的资源不存在',
+  [ErrorCode.RATE_LIMITED]: '请求过于频繁，请稍后再试',
+  [ErrorCode.INVALID_API_KEY]: 'API Key 无效或已过期',
+  [ErrorCode.PERMISSION_DENIED]: '权限不足',
+  [ErrorCode.INSTANCE_NOT_FOUND]: '服务器实例不存在',
+  [ErrorCode.INSTANCE_ALREADY_RUNNING]: '实例已在运行中',
+  [ErrorCode.INSTANCE_NOT_RUNNING]: '实例未在运行',
+  [ErrorCode.INSTANCE_START_FAILED]: '实例启动失败',
+  [ErrorCode.BACKUP_NOT_FOUND]: '备份不存在',
+  [ErrorCode.BACKUP_IN_PROGRESS]: '已有备份任务进行中',
+  [ErrorCode.RESTORE_IN_PROGRESS]: '已有恢复任务进行中',
+  [ErrorCode.BACKUP_FAILED]: '备份失败',
+  [ErrorCode.PLAYER_NOT_FOUND]: '玩家不存在',
+  [ErrorCode.PLAYER_NOT_ONLINE]: '玩家不在线',
+  [ErrorCode.TASK_NOT_FOUND]: '定时任务不存在',
+  [ErrorCode.INVALID_CRON_EXPRESSION]: 'cron 表达式无效',
+  [ErrorCode.FILE_NOT_FOUND]: '文件不存在',
+  [ErrorCode.PATH_TRAVERSAL_DETECTED]: '检测到非法路径访问',
+  [ErrorCode.FILE_TOO_LARGE]: '文件过大',
+  [ErrorCode.BINARY_FILE_NOT_SUPPORTED]: '不支持二进制文件',
+}
+
+/** 服务端已本地化的错误码（message 直接透传，不覆盖） */
+const SERVER_LOCALIZED_CODES: ReadonlySet<ErrorCodeValue> = new Set([
+  ErrorCode.BACKUP_RCON_UNAVAILABLE, // 40902 中文文案
+  ErrorCode.BACKUP_FORMAT_UNSUPPORTED, // 40904 中文文案
+])
+
+/**
+ * 返回用户友好的错误文案。
+ * 服务端已本地化的 message 透传；英文默认文案按错误码映射。
+ */
+export function getFriendlyErrorMessage(code: number, serverMessage?: string): string {
+  if (SERVER_LOCALIZED_CODES.has(code as ErrorCodeValue)) {
+    return serverMessage || LOCALIZED_MESSAGES[code as ErrorCodeValue] || '操作失败'
+  }
+  return LOCALIZED_MESSAGES[code as ErrorCodeValue] || serverMessage || `操作失败（错误码 ${code}）`
+}
+
+/**
+ * catch 块 unknown 错误 → 友好文案（ApiError 走错误码映射，其余网络错误兜底）
+ * 供各调用方 catch (e) 后统一使用
+ */
+export function getFriendlyErrorText(err: unknown): string {
+  if (err instanceof ApiError) return getFriendlyErrorMessage(err.code, err.message)
+  return '网络错误'
+}

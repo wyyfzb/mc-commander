@@ -1,0 +1,48 @@
+/**
+ * 字体资产（设计文档 §4.2）
+ * 思源黑体 GB2312 子集（3.7MB，archived 资产复用）+ JetBrains Mono 4 字重
+ * font-display: swap；回退 PingFang SC / Microsoft YaHei / Noto Sans SC
+ */
+@font-face {
+  font-family: 'Noto Sans SC Subset';
+  src: url('../assets/fonts/NotoSansSC-Subset.ttf') format('truetype');
+  font-weight: 400 600;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('../assets/fonts/JetBrainsMono-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('../assets/fonts/JetBrainsMono-Medium.ttf') format('truetype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('../assets/fonts/JetBrainsMono-SemiBold.ttf') format('truetype');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('../assets/fonts/JetBrainsMono-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* 数字表格对齐（P1：关键数字 tabular 对齐防跳动） */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}

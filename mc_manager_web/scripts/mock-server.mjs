@@ -1,0 +1,584 @@
+/**
+ * E2E mock 服务端（Playwright webServer 依赖，端口 5198）
+ * 模拟 MC Commander 服务端 API 契约（信封格式与字段对齐 routes/*）。
+ * 数据为结构占位 mock，严禁真实服务器信息（项目规则 8）。
+ * 不实现 WS：页面在无 WS 时走 HTTP 轮询正常渲染（E2E 断言不依赖实时事件）。
+ */
+import { createServer } from 'node:http'
+
+const PORT = Number(process.env.MOCK_PORT) || 5198
+
+const now = () => new Date().toISOString()
+const ok = (data, message = 'Success') =>
+  JSON.stringify({ status: 'ok', code: 0, message, data, timestamp: now() })
+
+/** 解析 URL query 参数（decodeURIComponent 容错） */
+const parseQuery = (url) => {
+  const qs = url.split('?')[1] ?? ''
+  const params = {}
+  for (const pair of qs.split('&')) {
+    if (!pair) continue
+    const [k, v] = pair.split('=')
+    params[decodeURIComponent(k)] = decodeURIComponent(v ?? '')
+  }
+  return params
+}
+
+const instance = {
+  id: 'e2e-demo',
+  name: 'E2E 演示实例',
+  isRunning: true,
+  isRconConnected: true,
+  autoRestart: true,
+  uptime: 7200,
+  address: 'localhost:25565',
+  players: [{ name: 'Steve' }, { name: 'Alex' }, { name: 'Bob' }],
+  playerCount: 3,
+  maxPlayers: 20,
+  mcVersion: '1.21.4',
+  modLoader: 'vanilla',
+  tps: 20,
+  mspt: 12,
+  cpuUsage: 15,
+  memoryUsage: 3.2,
+  totalMemory: 16,
+  worldSize: '1.2GB',
+  seed: null,
+  lastSave: new Date(Date.now() - 5 * 60_000).toISOString(),
+  lastOutput: null,
+  gameMode: 'survival',
+  difficulty: 'normal',
+  whitelisted: false,
+  onlineMode: true,
+  viewDistance: 10,
+  spawnProtection: 16,
+  worldDay: 42,
+  worldTime: 6000,
+  weather: 'clear',
+  opCount: 1,
+  todayNewPlayers: 2,
+  opNames: ['Steve'],
+  sleepingPlayers: 1,
+  sleepingPlayerNames: ['Alex'],
+  awakePlayerNames: ['Steve', 'Bob'],
+  totalUptime: 172800,
+  startTime: new Date(Date.now() - 7200_000).toISOString(),
+  startCommand: null,
+  jvmArgs: null,
+  javaPath: 'java',
+  maxMemory: 4096,
+  minMemory: 1024,
+  jarFile: 'server.jar',
+}
+
+const overview = {
+  version: '1.1.0',
+  instanceCount: 1,
+  runningCount: 1,
+  totalPlayers: 3,
+  systemCpuUsage: 12.5,
+  systemMemoryUsage: 4.2,
+  systemMemoryTotal: 16,
+  systemMemoryPercent: 26.3,
+  totalMemory: 16,
+  freeMemory: 11.8,
+  instances: [{ id: 'e2e-demo', name: 'E2E 演示实例', isRunning: true, playerCount: 3 }],
+}
+
+const systemStats = {
+  cpuUsage: 12.5,
+  memoryUsage: 4.2,
+  totalMemory: 16,
+  memoryPercent: 26.3,
+  cpuCores: 4,
+  loadAvg: [0.1, 0.2, 0.15],
+  uptime: 86400,
+}
+
+const logs = [
+  { text: '[00:00:01] [Server thread/INFO]: Starting minecraft server', type: 'stdout' },
+  { text: '[00:00:05] [Server thread/INFO]: Done (1.2s)! For help, type "help"', type: 'stdout' },
+  { text: '[00:00:06] [Server thread/WARN]: Can\'t keep up! Is the server overloaded?', type: 'stdout' },
+  // 超长行占位（真实场景：MC 会回显玩家执行的完整命令，长 NBT 命令回显超宽）
+  { text: '[00:00:07] [Server thread/INFO]: Steve issued server command: /give Steve minecraft:diamond_sword{Enchantments:[{id:"minecraft:sharpness",lvl:5},{id:"minecraft:unbreaking",lvl:3},{id:"minecraft:mending",lvl:1},{id:"minecraft:looting",lvl:3},{id:"minecraft:fire_aspect",lvl:2}]} 1', type: 'stdout' },
+]
+
+// ── 世界/属性/文件 mock 数据（结构占位，虚构内容）──────────────────
+const worldInfo = {
+  name: 'E2E演示世界',
+  type: 'minecraft:normal',
+  seed: '887654321',
+  sizeGB: 1.8,
+  difficulty: 'normal',
+  gameMode: 'survival',
+  viewDistance: 10,
+  simulationDistance: 10,
+  onlinePlayers: 3,
+  maxPlayers: 20,
+  spawnProtection: 16,
+  maxWorldSize: 29999984,
+  allowFlight: false,
+  hardcore: false,
+  pvp: true,
+  commandBlock: false,
+  generateStructures: true,
+  whiteList: false,
+  onlineMode: true,
+  lastSave: new Date(Date.now() - 5 * 60_000).getTime(),
+  gameDays: 42,
+  dimensions: [
+    { name: '主世界', icon: '🌍', playerCount: 2 },
+    { name: '地狱', icon: '🔥', playerCount: 1 },
+    { name: '末地', icon: '🟣', playerCount: 0 },
+  ],
+}
+
+// 9 个敏感键占位符掩码 + 常用键（结构与真实 server.properties 对齐）
+const properties = {
+  'enable-rcon': '********',
+  'rcon.password': '********',
+  'rcon.port': '********',
+  'enable-query': '********',
+  'enable-status': '********',
+  'enable-command-block': '********',
+  'online-mode': '********',
+  'server-port': '********',
+  'server-ip': '********',
+  'level-name': 'world',
+  'level-type': 'minecraft:normal',
+  'level-seed': '',
+  motd: 'E2E 演示服务器',
+  difficulty: 'normal',
+  gamemode: 'survival',
+  'white-list': 'false',
+  'enforce-whitelist': 'false',
+  'max-players': '20',
+  'view-distance': '10',
+  'simulation-distance': '10',
+  'spawn-protection': '16',
+  'max-world-size': '29999984',
+  'allow-flight': 'false',
+  hardcore: 'false',
+  pvp: 'true',
+  'generate-structures': 'true',
+  'max-tick-time': '60000',
+  'network-compression-threshold': '256',
+}
+
+const serverPropertiesText = `#Minecraft server properties
+#E2E mock 文件内容（虚构占位，勿当真）
+motd=E2E 演示服务器
+difficulty=normal
+gamemode=survival
+white-list=false
+max-players=20
+view-distance=10
+online-mode=true
+`
+
+// ── 定时任务 mock 数据（结构占位，虚构内容）─────────────────
+const mockTasks = [
+  {
+    id: 1,
+    instanceId: 'e2e-demo',
+    name: '每日自动重启',
+    type: 'restart',
+    cronExpression: '0 4 * * *',
+    command: null,
+    isEnabled: true,
+    lastRunAt: new Date(Date.now() - 24 * 3600_000).toISOString(),
+    nextRunAt: new Date(Date.now() + 2 * 3600_000).toISOString(),
+    createdAt: new Date(Date.now() - 30 * 86400_000).toISOString(),
+    updatedAt: new Date(Date.now() - 30 * 86400_000).toISOString(),
+  },
+  {
+    id: 2,
+    instanceId: 'e2e-demo',
+    name: '每日备份',
+    type: 'backup',
+    cronExpression: '0 0 * * *',
+    command: null,
+    isEnabled: true,
+    lastRunAt: null,
+    nextRunAt: new Date(Date.now() + 8 * 3600_000).toISOString(),
+    createdAt: new Date(Date.now() - 10 * 86400_000).toISOString(),
+    updatedAt: new Date(Date.now() - 10 * 86400_000).toISOString(),
+  },
+  {
+    id: 3,
+    instanceId: 'e2e-demo',
+    name: '清理告示牌命令',
+    type: 'command',
+    cronExpression: '*/30 * * * *',
+    command: 'say 服务器每半小时自动公告',
+    isEnabled: false,
+    lastRunAt: new Date(Date.now() - 3 * 86400_000).toISOString(),
+    nextRunAt: null,
+    createdAt: new Date(Date.now() - 5 * 86400_000).toISOString(),
+    updatedAt: new Date(Date.now() - 86400_000).toISOString(),
+  },
+]
+
+// ── 备份 mock 数据（M6；结构占位虚构，E2E 断言用）────────────
+const mockBackups = [
+  {
+    id: 21,
+    instanceId: 'e2e-demo',
+    name: '手动备份 2026-08-14',
+    description: null,
+    type: 'manual',
+    size: 524_288_000,
+    status: 'completed',
+    worldName: 'world',
+    format: 'snapshot',
+    createdAt: new Date(Date.now() - 86400_000).toISOString(),
+    updatedAt: new Date(Date.now() - 86_340_000).toISOString(),
+  },
+  {
+    id: 20,
+    instanceId: 'e2e-demo',
+    name: '旧格式压缩包',
+    description: null,
+    type: 'manual',
+    size: 102_400_000,
+    status: 'completed',
+    worldName: 'world',
+    format: 'zip',
+    createdAt: new Date(Date.now() - 7 * 86400_000).toISOString(),
+    updatedAt: new Date(Date.now() - 7 * 86400_000).toISOString(),
+  },
+  {
+    id: 19,
+    instanceId: 'e2e-demo',
+    name: '失败的备份',
+    description: null,
+    type: 'manual',
+    size: 0,
+    status: 'failed',
+    worldName: 'world',
+    format: 'snapshot',
+    createdAt: new Date(Date.now() - 6 * 86400_000).toISOString(),
+    updatedAt: new Date(Date.now() - 6 * 86400_000).toISOString(),
+  },
+]
+
+const rootFileList = {
+  path: '/',
+  isDirectory: true,
+  files: [
+    { name: 'server.properties', path: '/server.properties', type: 'file', size: 1024, modifiedAt: new Date(Date.now() - 3600_000).toISOString(), isDirectory: false },
+    { name: 'whitelist.json', path: '/whitelist.json', type: 'file', size: 128, modifiedAt: new Date(Date.now() - 7200_000).toISOString(), isDirectory: false },
+    { name: 'ops.json', path: '/ops.json', type: 'file', size: 64, modifiedAt: new Date(Date.now() - 86400_000).toISOString(), isDirectory: false },
+    { name: 'world', path: '/world', type: 'directory', size: 0, modifiedAt: new Date(Date.now() - 86_400_000).toISOString(), isDirectory: true },
+    { name: 'logs', path: '/logs', type: 'directory', size: 0, modifiedAt: new Date(Date.now() - 86_400_000).toISOString(), isDirectory: true },
+  ],
+}
+
+const worldDirList = {
+  path: '/world',
+  isDirectory: true,
+  files: [
+    { name: 'level.dat', path: '/world/level.dat', type: 'file', size: 2048, modifiedAt: new Date(Date.now() - 3600_000).toISOString(), isDirectory: false },
+    { name: 'region', path: '/world/region', type: 'directory', size: 0, modifiedAt: new Date(Date.now() - 86_400_000).toISOString(), isDirectory: true },
+  ],
+}
+
+// ── 玩家 mock 数据（结构占位，虚构玩家名；E2E 断言用）────────────
+const statsPlaceholder = {
+  totalOnline: 86400, loginCount: 12, offlineSince: 0,
+  deathCount: 3, achievementCount: 25, sleepCount: 2,
+}
+
+function mockPlayer(overrides) {
+  return {
+    name: 'Steve',
+    uuid: '00000000-0000-4000-8000-000000000001',
+    isOnline: true,
+    ip: '',
+    joinTime: Date.now() - 3600000,
+    onlineTime: 3600,
+    totalPlayTime: 36000,
+    isOp: false,
+    isWhitelisted: false,
+    isBanned: false,
+    banExpiresAt: null,
+    isIpBanned: false,
+    ipBanExpiresAt: null,
+    isFakePlayer: false,
+    lastSeen: new Date().toISOString(),
+    health: 20, maxHealth: 20, hunger: 18, xpLevel: 12,
+    spawnPoint: { x: 0, y: 64, z: 0 },
+    respawnPoint: null,
+    position: { x: 123.5, y: 64, z: -456.2 },
+    gameMode: 'survival',
+    dimension: 'overworld',
+    armor: 15,
+    xpProgress: 0.4,
+    ping: 35,
+    isSleeping: false,
+    isAfk: false, isFlying: false, isSneaking: false, isSprinting: false,
+    isBurning: false, isFrozen: false,
+    potionEffects: [],
+    ipHistory: [],
+    inventory: null,
+    events: [],
+    sessions: [],
+    stats: { ...statsPlaceholder },
+    ...overrides,
+  }
+}
+
+const players = [
+  mockPlayer({ name: 'Steve', isOp: true }),
+  mockPlayer({
+    name: 'Alex', uuid: '00000000-0000-4000-8000-000000000002',
+    isSleeping: true, gameMode: 'creative',
+    potionEffects: [{ id: 'speed', name: '迅捷', level: 2, durationSeconds: 240, isBeneficial: true }],
+  }),
+  mockPlayer({
+    name: 'Bob', uuid: '00000000-0000-4000-8000-000000000003',
+    isOnline: false, isWhitelisted: true, totalPlayTime: 180000,
+    health: null, maxHealth: null, hunger: null, xpLevel: null,
+    armor: null, ping: null, position: null, joinTime: null, onlineTime: 0,
+    lastSeen: new Date(Date.now() - 86400000).toISOString(),
+  }),
+  mockPlayer({
+    name: 'Charlie', uuid: '00000000-0000-4000-8000-000000000004',
+    isOnline: false, isBanned: true, banExpiresAt: Date.now() + 43200000,
+    health: null, maxHealth: null, hunger: null, xpLevel: null,
+    armor: null, ping: null, position: null, joinTime: null, onlineTime: 0,
+    lastSeen: new Date(Date.now() - 172800000).toISOString(),
+  }),
+  mockPlayer({
+    name: 'Bot_farm1', uuid: '00000000-0000-4000-8000-000000000005',
+    isFakePlayer: true, dimension: 'nether',
+  }),
+]
+
+const bans = [
+  {
+    targetType: 'player', target: 'Charlie', reason: '作弊',
+    isActive: true, isPermanent: false,
+    expiresAt: Date.now() + 43200000,
+    createdAt: new Date(Date.now() - 43200000).toISOString(),
+  },
+  {
+    targetType: 'player', target: 'Ghost', reason: '恶意破坏',
+    isActive: false, isPermanent: false,
+    expiresAt: Date.now() - 3600000,
+    createdAt: new Date(Date.now() - 86400000).toISOString(),
+  },
+]
+
+const server = createServer((req, res) => {
+  const url = req.url ?? ''
+  const path = url.split('?')[0]
+
+  let body = ''
+  req.on('data', (chunk) => { body += chunk })
+  req.on('end', () => {
+    res.setHeader('Content-Type', 'application/json')
+    res.setHeader('Access-Control-Allow-Origin', '*')
+
+    if (path === '/api/v1/overview') return res.end(ok(overview))
+    if (path === '/api/v1/system-stats') return res.end(ok(systemStats))
+    if (path === '/api/v1/rotate-key' && req.method === 'POST') {
+      // API Key 轮换（mock：固定返回演示 key；生产为随机生成）
+      return res.end(ok({ apiKey: 'mcck-mock-0000-0000-0000-0001' }, 'API Key 已轮换：旧 Key 立即失效，请立即保存新 Key'))
+    }
+    if (path === '/api/v1/instances') return res.end(ok([instance]))
+    if (path === '/api/v1/instances/e2e-demo') {
+      // PUT：实例配置更新（general-panel autoRestart 用；合并白名单字段）
+      if (req.method === 'PUT') {
+        try {
+          Object.assign(instance, JSON.parse(body || '{}'))
+        } catch {}
+        return res.end(ok(instance, 'Instance updated successfully'))
+      }
+      return res.end(ok(instance))
+    }
+    if (path === '/api/v1/instances/e2e-demo/logs') return res.end(ok(logs))
+    if (path === '/api/v1/instances/e2e-demo/command') {
+      let cmd = ''
+      try { cmd = JSON.parse(body || '{}').command ?? '' } catch {}
+      // gamerule 无参查询 → 全量规则文本（≥ 规则集 1/3 才能过 parseGameruleOutput 阈值，返回 20 条）
+      if (/^gamerule\s*$/i.test(cmd)) {
+        return res.end(ok([
+          'allowEnteringNetherUsingPortals = true',
+          'announceAdvancements = true',
+          'blockExplosionDropDecay = true',
+          'commandBlockOutput = true',
+          'commandBlocksEnabled = true',
+          'commandModificationBlockLimit = 32768',
+          'disableElytraMovementCheck = false',
+          'disablePlayerMovementCheck = false',
+          'disableRaids = false',
+          'doDaylightCycle = true',
+          'doEntityDrops = true',
+          'doImmediateRespawn = false',
+          'doInsomnia = true',
+          'doLimitedCrafting = false',
+          'doMobLoot = true',
+          'doMobSpawning = true',
+          'doPatrolSpawning = true',
+          'doTileDrops = true',
+          'doTraderSpawning = true',
+          'doVinesSpread = true',
+        ].join('\n')))
+      }
+      // gamerule 修改（带值）→ RCON 成功文本
+      if (/^gamerule\s+\S+\s+\S+\s*$/i.test(cmd)) {
+        return res.end(ok('Game rule has been updated'))
+      }
+      return res.end(ok({ response: `已执行: ${cmd}` }))
+    }
+    if (path === '/api/v1/instances/e2e-demo/start') return res.end(ok({ started: true }))
+    if (path === '/api/v1/instances/e2e-demo/stop') return res.end(ok({ stopped: true }))
+    if (path === '/api/v1/instances/e2e-demo/restart') return res.end(ok({ restarted: true }))
+
+    // ── 任务域 ──
+    if (path === '/api/v1/instances/e2e-demo/tasks') {
+      if (req.method === 'POST') {
+        const bodyObj = JSON.parse(body || '{}')
+        return res.end(ok({
+          id: 99,
+          instanceId: 'e2e-demo',
+          name: bodyObj.name ?? '新任务',
+          type: bodyObj.type ?? 'restart',
+          cronExpression: bodyObj.cronExpression ?? '0 0 * * *',
+          command: bodyObj.command ?? null,
+          isEnabled: bodyObj.isEnabled ?? true,
+          lastRunAt: null,
+          nextRunAt: null,
+          createdAt: now(),
+          updatedAt: now(),
+        }, 'Scheduled task created successfully'))
+      }
+      return res.end(ok(mockTasks))
+    }
+    const taskMatch = path.match(/^\/api\/v1\/tasks\/(\d+)$/)
+    if (taskMatch) {
+      const task = mockTasks.find((t) => t.id === Number(taskMatch[1]))
+      if (req.method === 'PUT') {
+        return res.end(ok({ ...(task ?? {}), ...JSON.parse(body || '{}') }, 'Scheduled task updated successfully'))
+      }
+      if (req.method === 'DELETE') {
+        return res.end(ok(null, 'Scheduled task deleted successfully'))
+      }
+    }
+    if (path.match(/^\/api\/v1\/tasks\/(\d+)\/run$/)) {
+      return res.end(ok(null, 'Task execution triggered'))
+    }
+    // ── 备份域（M6；虚构占位数据）──
+    if (path === '/api/v1/instances/e2e-demo/backups') {
+      if (req.method === 'POST') {
+        return res.end(ok({
+          id: 23,
+          instanceId: 'e2e-demo',
+          name: '手动备份 2026-08-15',
+          description: null,
+          type: 'manual',
+          size: 0,
+          status: 'creating',
+          worldName: 'world',
+          format: 'snapshot',
+          createdAt: now(),
+          updatedAt: now(),
+        }, 'Backup created successfully'))
+      }
+      return res.end(ok(mockBackups))
+    }
+    if (path.match(/^\/api\/v1\/backups\/\d+\/restore$/)) {
+      return res.end(ok(null, 'Restore started'))
+    }
+    if (path.match(/^\/api\/v1\/backups\/\d+$/)) {
+      if (req.method === 'DELETE') {
+        return res.end(ok(null, 'Backup deleted successfully'))
+      }
+    }
+    // ── 部署域 ──
+    if (path === '/api/v1/versions') {
+      const { type } = parseQuery(url)
+      const verType = type || 'vanilla'
+      return res.end(ok({
+        type: verType,
+        versions: ['26.2', '1.21.4', '1.21.1', '1.20.6', '1.20.4', '1.19.4'],
+        ...(verType === 'fabric' ? { loaders: ['0.16.10', '0.16.9', '0.15.11'] } : {}),
+      }))
+    }
+    if (path === '/api/v1/instances/deploy' && req.method === 'POST') {
+      return res.end(ok({
+        id: 'paper-a1b2c3d4',
+        name: '新部署实例',
+        type: 'paper',
+        mcVersion: '1.21.4',
+        javaVersion: '21',
+        path: '/mock/instances/paper-a1b2c3d4',
+        maxMemory: '2G',
+      }, 'Instance deployed successfully'))
+    }
+    // ── 世界/属性域 ──
+    if (path === '/api/v1/instances/e2e-demo/world') return res.end(ok(worldInfo))
+    if (path === '/api/v1/instances/e2e-demo/properties') {
+      if (req.method === 'PUT') {
+        return res.end(ok({ restartRequired: [] }, 'Properties updated'))
+      }
+      return res.end(ok(properties))
+    }
+
+    // ── 文件域 ──
+    if (path === '/api/v1/instances/e2e-demo/files/content') {
+      const { path: filePath } = parseQuery(url)
+      if (req.method === 'PUT') {
+        return res.end(ok({ path: filePath, size: 1024, modifiedAt: now() }, 'File saved successfully'))
+      }
+      const name = filePath.split('/').filter(Boolean).pop() || 'server.properties'
+      return res.end(ok({
+        path: filePath,
+        name,
+        size: 1024,
+        content: serverPropertiesText,
+        encoding: 'utf-8',
+        modifiedAt: now(),
+      }))
+    }
+    if (path === '/api/v1/instances/e2e-demo/files') {
+      if (req.method === 'DELETE') {
+        return res.end(ok(null, 'File/directory deleted successfully'))
+      }
+      const { path: dirPath } = parseQuery(url)
+      return res.end(ok(dirPath === '/world' ? worldDirList : rootFileList))
+    }
+
+    // ── 玩家域 ──
+    if (path === '/api/v1/instances/e2e-demo/players') return res.end(ok(players))
+    if (path === '/api/v1/instances/e2e-demo/players/bans') return res.end(ok(bans))
+    if (path === '/api/v1/instances/e2e-demo/players/bans/Charlie/pardon') return res.end(ok(null))
+    const detailsMatch = path.match(/^\/api\/v1\/instances\/e2e-demo\/players\/([^/]+)\/details$/)
+    if (detailsMatch) {
+      const found = players.find((p) => p.name === detailsMatch[1])
+      if (found) return res.end(ok(found))
+      res.statusCode = 404
+      return res.end(JSON.stringify({ status: 'error', code: 40403, message: '玩家不存在', details: null, timestamp: now() }))
+    }
+    const opMatch = path.match(/^\/api\/v1\/instances\/e2e-demo\/players\/([^/]+)\/op$/)
+    if (opMatch) return res.end(ok(null))
+    const kickMatch = path.match(/^\/api\/v1\/instances\/e2e-demo\/players\/([^/]+)\/kick$/)
+    if (kickMatch) return res.end(ok(null))
+    const banMatch = path.match(/^\/api\/v1\/instances\/e2e-demo\/players\/([^/]+)\/ban$/)
+    if (banMatch) return res.end(ok({ expiresAt: Date.now() + 3600000 }))
+    const pardonMatch = path.match(/^\/api\/v1\/instances\/e2e-demo\/players\/([^/]+)\/pardon$/)
+    if (pardonMatch) return res.end(ok(null))
+    const whitelistAddMatch = path.match(/^\/api\/v1\/instances\/e2e-demo\/players\/([^/]+)\/whitelist\/add$/)
+    if (whitelistAddMatch) return res.end(ok(null))
+    const whitelistRemoveMatch = path.match(/^\/api\/v1\/instances\/e2e-demo\/players\/([^/]+)\/whitelist$/)
+    if (whitelistRemoveMatch) return res.end(ok(null))
+
+    res.statusCode = 404
+    res.end(JSON.stringify({ status: 'error', code: 40400, message: 'Not found', details: null, timestamp: now() }))
+  })
+})
+
+server.listen(PORT, () => {
+  console.log(`[mock-server] listening on http://localhost:${PORT}`)
+})

@@ -1,0 +1,33 @@
+# 统一换行策略：文本文件按 LF 入库（Windows 检出由 git 处理）
+* text=auto eol=lf
+
+# Windows 专属脚本保持 CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# 二进制文件
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.jar binary
+*.db binary
+*.zip binary
+*.tar.gz binary
+
+# 语言细分的强制文本
+*.js text
+*.mjs text
+*.ts text
+*.tsx text
+*.jsx text
+*.json text
+*.md text
+*.yml text
+*.yaml text
+*.sh text eol=lf
+*.css text
+*.html text

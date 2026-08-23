@@ -1,0 +1,97 @@
+import { create } from 'zustand'
+import type {
+  InstanceStatus,
+  SystemStats,
+  WsPerformancePayload,
+  WsStatusSnapshot,
+} from '@/api/types'
+
+/**
+ * 服务器实时状态 store（WS 事件 → 分派；Query 轮询 30s 保底互补，设计文档 §5.2）
+ * - performanceUpdate → 局部字段更新（500ms 节流由消费端按需处理）
+ * - status 事件 → 触发全量刷新（消费端监听 event 变化后 fetch）
+ * - systemStats：云服务器系统资源（独立于实例状态）
+ */
+
+export interface StatusEvent {
+  event: 'started' | 'stopped' | 'ready' | 'crash' | 'save'
+  timestamp: number
+}
+
+interface ServerState {
+  /** 当前实例全量状态（GET /instances/:id） */
+  status: InstanceStatus | null
+  /** 云服务器系统资源 */
+  systemStats: SystemStats | null
+  /** 当前订阅实例 id */
+  instanceId: string | null
+  /** WS 连接态 */
+  socketConnected: boolean
+  /** 是否曾成功连接过 WS（区分"初次连接中"与"实时通道断开"） */
+  hasConnectedOnce: boolean
+  /** 最近一次 status 跃迁事件（started/stopped/... 供全量刷新触发） */
+  lastStatusEvent: StatusEvent | null
+
+  setStatus: (status: InstanceStatus | null) => void
+  setSystemStats: (stats: SystemStats | null) => void
+  setInstanceId: (id: string | null) => void
+  setSocketConnected: (connected: boolean) => void
+  setHasConnectedOnce: (value: boolean) => void
+  /** WS status 快照（订阅即回）：合并局部字段 */
+  applyWsSnapshot: (instanceId: string, snapshot: WsStatusSnapshot) => void
+  /** performanceUpdate：合并局部字段 + 记状态跃迁 */
+  applyWsPerformance: (payload: WsPerformancePayload) => void
+  /** status 事件（started/stopped/...）：记录跃迁供消费端触发全量刷新 */
+  applyWsStatusEvent: (event: StatusEvent['event']) => void
+}
+
+export const useServerStore = create<ServerState>()((set) => ({
+  status: null,
+  systemStats: null,
+  instanceId: null,
+  socketConnected: false,
+  hasConnectedOnce: false,
+  lastStatusEvent: null,
+
+  setStatus: (status) => set({ status }),
+  setSystemStats: (systemStats) => set({ systemStats }),
+  setInstanceId: (instanceId) => set({ instanceId }),
+  setSocketConnected: (socketConnected) => set({ socketConnected }),
+  setHasConnectedOnce: (hasConnectedOnce) => set({ hasConnectedOnce }),
+
+  applyWsSnapshot: (instanceId, snapshot) =>
+    set((s) => {
+      if (s.instanceId !== instanceId) return {}
+      return {
+        status: s.status
+          ? {
+              ...s.status,
+              isRunning: snapshot.isRunning,
+              tps: snapshot.tps ?? s.status.tps,
+            }
+          : null,
+      }
+    }),
+
+  applyWsPerformance: (payload) =>
+    set((s) => {
+      if (!s.status) return {}
+      return {
+        status: {
+          ...s.status,
+          cpuUsage: payload.cpu,
+          memoryUsage: payload.memory,
+          tps: payload.tps,
+          mspt: payload.mspt,
+          worldTime: payload.worldTime,
+          worldDay: payload.worldDay,
+          sleepingPlayers: payload.sleepingPlayers,
+          sleepingPlayerNames: payload.sleepingPlayerNames,
+          awakePlayerNames: payload.awakePlayerNames,
+        },
+      }
+    }),
+
+  applyWsStatusEvent: (event) =>
+    set({ lastStatusEvent: { event, timestamp: Date.now() } }),
+}))

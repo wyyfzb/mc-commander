@@ -1,0 +1,494 @@
+import { Router } from 'express';
+import path from 'path';
+import fs from 'fs';
+import { TextDecoder } from 'util';
+import iconv from 'iconv-lite';
+import { success, ErrorCodes, AppError } from '../utils/response.js';
+import { atomicWriteFile, resolveSafePath, PathTraversalError } from '../utils/fs-utils.js';
+import config from '../config.js';
+import { BanModel } from '../db/index.js';
+
+// 前 1024 字节含 NUL 字节 → 判定二进制（文本文件几乎不含 NUL）
+function detectBinary(buffer) {
+  return buffer.subarray(0, 1024).includes(0);
+}
+
+// UTF-8 BOM 标记（带 BOM 文件保存后需保留，避免 BOM 静默丢失）
+const UTF8_BOM = Buffer.from([0xEF, 0xBB, 0xBF]);
+
+// 解码文件内容：UTF-8 严格解码优先（带 BOM 先剥离并标记），失败回退 GBK；二进制返回 null
+function decodeContent(buffer) {
+  if (detectBinary(buffer)) return null;
+  let hasBom = false;
+  let body = buffer;
+  if (buffer.length >= 3 && buffer.subarray(0, 3).equals(UTF8_BOM)) {
+    hasBom = true;
+    body = buffer.subarray(3);
+  }
+  try {
+    return {
+      content: new TextDecoder('utf-8', { fatal: true }).decode(body),
+      encoding: 'utf-8',
+      hasBom
+    };
+  } catch {
+    return { content: iconv.decode(buffer, 'gbk'), encoding: 'gbk', hasBom: false };
+  }
+}
+
+// 读取文件头部（编码/二进制检测只需开头字节，避免 PUT 场景全量读入大文件）
+function readFileHead(fullPath, size = 4096) {
+  const fd = fs.openSync(fullPath, 'r');
+  try {
+    const buf = Buffer.alloc(size);
+    const bytesRead = fs.readSync(fd, buf, 0, size, 0);
+    return buf.subarray(0, bytesRead);
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+// 按编码编码内容：utf-8 保留 BOM；gbk 往返校验，防不可表示字符被静默替换为 '?' 造成损坏
+function encodeContent(content, encoding, hasBom) {
+  let encoded = iconv.encode(content, encoding);
+  if (encoding === 'gbk') {
+    if (iconv.decode(encoded, 'gbk') !== content) {
+      throw new AppError(ErrorCodes.VALIDATION_ERROR,
+        'Content contains characters not representable in GBK encoding');
+    }
+  } else if (hasBom) {
+    encoded = Buffer.concat([UTF8_BOM, encoded]);
+  }
+  return encoded;
+}
+
+// ── 列表文件编辑同步 ──────────────────────────────────────────────
+// 原版 MC 启动时把 banned-players.json / banned-ips.json / whitelist.json /
+// ops.json 读入内存，运行中直接编辑文件不会生效（ban/op 无 reload 命令，
+// 仅 whitelist 有 /whitelist reload，但逐个命令同步更精确且兼容旧版）。
+// 用户通过文件管理编辑这些文件时，若只改文件，会与 MC 内存状态不一致
+// （典型症状：文件删了封禁条目但玩家仍无法连接）。因此保存后对比新旧
+// 内容差异：被移除的条目执行 pardon/pardon-ip/whitelist remove/deop，
+// 被新增的条目执行 ban/ban-ip/whitelist add/op 让变更立即生效。
+// 封禁文件另有 temp_bans 表需同步清理（自实现临时封禁记录）。
+const LIST_FILE_SYNC = {
+  'banned-players.json': {
+    key: 'name',
+    removeCmd: 'pardon',
+    addCmd: 'ban',
+    hasReason: true,
+    cleanTempBan: (instanceId, target) => BanModel.deactivateByPlayer(instanceId, target),
+  },
+  'banned-ips.json': {
+    key: 'ip',
+    removeCmd: 'pardon-ip',
+    addCmd: 'ban-ip',
+    hasReason: true,
+    cleanTempBan: (instanceId, target) => BanModel.deactivateByIp(instanceId, target),
+  },
+  'whitelist.json': {
+    key: 'name',
+    removeCmd: 'whitelist remove',
+    addCmd: 'whitelist add',
+    hasReason: false,
+  },
+  'ops.json': {
+    key: 'name',
+    removeCmd: 'deop',
+    addCmd: 'op',
+    hasReason: false,
+    // 注意：ops.json 的 level 字段无法通过命令精确同步（原版 op 固定 level 4），
+    // 修改 level 需重启服务器生效；增删条目同步无此限制。
+  },
+};
+
+// 原子写统一走 utils/fs-utils.js 公共实现（写唯一 .tmp 再 rename，失败清残留）。
+// 防止并发写入竞态——目标文件被直接 writeFileSync 覆盖时（先 truncate 后写），
+// 同时刻的读取者会读到空/半截内容；且 server.properties 存在双写入点
+// （本接口与 mc_server.js saveProperties），原子写消除"读-改-写不原子"的互相覆盖。
+
+// 清理 reason 字符串，防止命令注入（与 players.js sanitizeReason 一致）
+function sanitizeReason(reason) {
+  if (!reason) return '';
+  return String(reason).replace(/[\r\n;|&]/g, ' ').trim().substring(0, 200);
+}
+
+// 解析列表文件 JSON 数组，提取 { target, reason } 列表；非合法数组抛错
+function parseListEntries(content, fileName) {
+  const spec = LIST_FILE_SYNC[fileName];
+  const arr = JSON.parse(content);
+  if (!Array.isArray(arr)) {
+    throw new Error(`${fileName} must be a JSON array`);
+  }
+  return arr
+    .filter((entry) => entry && entry[spec.key])
+    .map((entry) => ({
+      target: String(entry[spec.key]),
+      reason: spec.hasReason ? sanitizeReason(entry.reason) : '',
+    }));
+}
+
+// 对比新旧条目差异并同步：
+//  - 移除的目标 → 运行中实例执行 removeCmd（同步 MC 内存）
+//  - 新增的目标 → 运行中实例执行 addCmd（变更立即生效）
+// 封禁文件另清理被移除目标的 temp_bans 生效记录（文件是编辑后的最终状态，
+// 记录跟随文件，避免封禁记录残留已失效的"生效中"条目）。
+// 实例未运行时跳过命令（启动时自动加载文件），但 temp_bans 记录仍跟随文件清理。
+function syncListFileChanges(instance, fileName, oldEntries, newEntries) {
+  const spec = LIST_FILE_SYNC[fileName];
+  const oldMap = new Map(oldEntries.map((e) => [e.target, e.reason]));
+  const newMap = new Map(newEntries.map((e) => [e.target, e.reason]));
+  const removed = oldEntries.map((e) => e.target).filter((t) => !newMap.has(t));
+  const added = newEntries.filter((e) => !oldMap.has(e.target));
+  if (removed.length === 0 && added.length === 0) return;
+
+  if (spec.cleanTempBan) {
+    for (const target of removed) spec.cleanTempBan(instance.id, target);
+  }
+  if (!instance.isRunning) return;
+
+  // 命令串行执行（RCON 并行存在响应交叉问题），尽力而为，失败不阻断文件保存。
+  // fire-and-forget 的 IIFE 必须带全局 catch：任何逃逸内部 try/catch 的异常
+  // （如未来重构新增未包裹的 await）若变成 unhandled rejection，Node 默认
+  // unhandledRejection=throw 会终止整个服务进程。
+  (async () => {
+    try {
+      for (const target of removed) {
+        try {
+          await instance.sendCommand(`${spec.removeCmd} ${target}`);
+        } catch (err) {
+          console.error(`[Files] Failed to ${spec.removeCmd} ${target} after ${fileName} edit:`, err.message);
+        }
+      }
+      for (const entry of added) {
+        try {
+          await instance.sendCommand(
+            `${spec.addCmd} ${entry.target}${entry.reason ? ` ${entry.reason}` : ''}`,
+          );
+        } catch (err) {
+          console.error(`[Files] Failed to ${spec.addCmd} ${entry.target} after ${fileName} edit:`, err.message);
+        }
+      }
+    } catch (fatalErr) {
+      console.error('[Files] Unexpected error syncing list file commands:', fatalErr);
+    }
+  })();
+}
+
+// 统一实例内路径校验入口（find-006/007 共用）：resolveSafePath 抛出的
+// PathTraversalError 映射为 PATH_TRAVERSAL_DETECTED（403）；其余错误原样上抛，
+// 由各路由现有 catch 按 ENOENT→FILE_NOT_FOUND（404）的风格处理
+function resolveInstancePath(basePath, userPath, options) {
+  try {
+    return resolveSafePath(basePath, userPath, options);
+  } catch (err) {
+    if (err instanceof PathTraversalError) {
+      throw new AppError(ErrorCodes.PATH_TRAVERSAL_DETECTED);
+    }
+    throw err;
+  }
+}
+
+export function createFileRoutes(serverManager) {
+  const router = Router({ mergeParams: true });
+  
+  // 列出文件/目录
+  router.get('/instances/:instanceId/files', (req, res, next) => {
+    try {
+      const { instanceId } = req.params;
+      const dirPath = req.query.path || '/';
+      
+      // 检查实例是否存在
+      const instance = serverManager.getInstance(instanceId);
+      if (!instance) {
+        throw new AppError(ErrorCodes.INSTANCE_NOT_FOUND);
+      }
+
+      const basePath = instance.serverPath || path.join(config.serversDir, instanceId);
+      // 统一路径校验（find-006/007）：resolveSafePath 四步防线——path.resolve 归一化、
+      // 相等排除 + sep 边界、已存在组件逐段 realpath、最终目标 symlink 拒绝。
+      // 列表根目录 '/' 是唯一合法的"归一化后等于实例根"场景，故传 allowRoot。
+      const fullPath = resolveInstancePath(basePath, dirPath, { allowRoot: true });
+
+      if (!fs.existsSync(fullPath)) {
+        throw new AppError(ErrorCodes.FILE_NOT_FOUND);
+      }
+      
+      const stats = fs.statSync(fullPath);
+      
+      if (stats.isDirectory()) {
+        const files = fs.readdirSync(fullPath).map(fileName => {
+          const filePath = path.join(fullPath, fileName);
+          const fileStats = fs.statSync(filePath);
+          return {
+            name: fileName,
+            path: path.join(dirPath, fileName),
+            type: fileStats.isDirectory() ? 'directory' : 'file',
+            size: fileStats.size,
+            modifiedAt: fileStats.mtime.toISOString(),
+            isDirectory: fileStats.isDirectory()
+          };
+        });
+        
+        // 目录在前，文件在后，按名称排序
+        files.sort((a, b) => {
+          if (a.isDirectory && !b.isDirectory) return -1;
+          if (!a.isDirectory && b.isDirectory) return 1;
+          return a.name.localeCompare(b.name);
+        });
+        
+        res.json(success({
+          path: dirPath,
+          isDirectory: true,
+          files
+        }));
+      } else {
+        // 返回文件信息
+        res.json(success({
+          name: path.basename(fullPath),
+          path: dirPath,
+          type: 'file',
+          size: stats.size,
+          modifiedAt: stats.mtime.toISOString(),
+          isDirectory: false
+        }));
+      }
+    } catch (err) {
+      // 目录/文件在 existsSync 预检通过后、statSync/readdirSync/子项 statSync
+      // 执行期间被并发删除（另一管理请求、MC 重启清理、备份删除等）时抛裸
+      // ENOENT：映射为 404 FILE_NOT_FOUND，否则 errorHandler 兜底返回 500。
+      if (err.code === 'ENOENT') {
+        next(new AppError(ErrorCodes.FILE_NOT_FOUND));
+        return;
+      }
+      next(err);
+    }
+  });
+
+  // 读取文件内容
+  router.get('/instances/:instanceId/files/content', (req, res, next) => {
+    try {
+      const { instanceId } = req.params;
+      const filePath = req.query.path;
+      
+      if (!filePath) {
+        throw new AppError(ErrorCodes.VALIDATION_ERROR, 'File path is required');
+      }
+
+      const instance = serverManager.getInstance(instanceId);
+      if (!instance) {
+        throw new AppError(ErrorCodes.INSTANCE_NOT_FOUND);
+      }
+
+      const basePath = instance.serverPath || path.join(config.serversDir, instanceId);
+      // 统一路径校验（find-007）：实例目录内符号链接可越界读文件（root 运行时
+      // 可读 /etc/shadow 等敏感文件），resolveSafePath 逐段 realpath + 最终目标
+      // symlink 拒绝
+      const fullPath = resolveInstancePath(basePath, filePath);
+
+      // 不采用 existsSync 预检 + 后续 stat/read 的 check-then-act 模式：检查通过
+      // 不保证读取时文件仍存在，并发删除会让 statSync/readFileSync 抛裸 ENOENT
+      // 落入 500。直接 stat/read，文件不存在统一在 catch 映射为 404 FILE_NOT_FOUND。
+      const stats = fs.statSync(fullPath);
+      if (!stats.isFile()) {
+        throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Path is not a file');
+      }
+      
+      // 限制文件大小（10MB）
+      if (stats.size > 10 * 1024 * 1024) {
+        throw new AppError(ErrorCodes.FILE_TOO_LARGE, 'File too large to read content (max 10MB)');
+      }
+      
+      const raw = fs.readFileSync(fullPath);
+      const decoded = decodeContent(raw);
+      if (!decoded) {
+        throw new AppError(ErrorCodes.BINARY_FILE_NOT_SUPPORTED);
+      }
+
+      res.json(success({
+        path: filePath,
+        name: path.basename(fullPath),
+        size: stats.size,
+        content: decoded.content,
+        encoding: decoded.encoding,
+        modifiedAt: stats.mtime.toISOString()
+      }));
+    } catch (err) {
+      // 文件在 statSync 与 readFileSync 之间被并发删除（另一管理请求、MC 重启
+      // 重建文件、备份清理等）时抛裸 ENOENT：映射为 404 FILE_NOT_FOUND，
+      // 否则 errorHandler 兜底返回 500 SERVER_ERROR。AppError.code 为数字错误码，
+      // 与 fs 错误码字符串 'ENOENT' 互不冲突，不会误判。
+      if (err.code === 'ENOENT') {
+        next(new AppError(ErrorCodes.FILE_NOT_FOUND));
+        return;
+      }
+      next(err);
+    }
+  });
+
+  // 写入文件内容
+  router.put('/instances/:instanceId/files/content', (req, res, next) => {
+    try {
+      const { instanceId } = req.params;
+      const { path: filePath, content } = req.body;
+      
+      if (!filePath || content === undefined) {
+        throw new AppError(ErrorCodes.VALIDATION_ERROR, 'File path and content are required');
+      }
+
+      const instance = serverManager.getInstance(instanceId);
+      if (!instance) {
+        throw new AppError(ErrorCodes.INSTANCE_NOT_FOUND);
+      }
+
+      const basePath = instance.serverPath || path.join(config.serversDir, instanceId);
+      // 统一路径校验（find-007）：符号链接越界写可覆盖实例外任意文件
+      const fullPath = resolveInstancePath(basePath, filePath);
+
+      // 确保目录存在
+      const dir = path.dirname(fullPath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+
+      // 目标已存在且为二进制文件时拒绝覆盖（防二进制被 utf-8 解码乱码后保存损坏）
+      // 已存在文件按原编码写回（utf-8 或 gbk，含 BOM 保留），新文件默认 utf-8
+      let encoding = 'utf-8';
+      let hasBom = false;
+      if (fs.existsSync(fullPath)) {
+        const existing = readFileHead(fullPath);
+        const decoded = decodeContent(existing);
+        if (!decoded) {
+          throw new AppError(ErrorCodes.BINARY_FILE_NOT_SUPPORTED);
+        }
+        encoding = decoded.encoding;
+        hasBom = decoded.hasBom;
+      }
+
+      // 列表文件（banned-players/banned-ips/whitelist/ops.json）编辑后需同步 MC 内存：
+      // 原版 MC 运行中不重读这些文件，直接改文件会导致内存/文件不一致（封禁文件另有
+      // temp_bans 表）。保存前校验新内容为合法 JSON 数组（坏文件会让 MC 启动时加载
+      // 失败），保存后对比新旧差异对运行中实例执行移除/新增命令并清理 temp_bans。
+      // 大小写不敏感：BANNED-PLAYERS.JSON 等大写/混合大小写文件同样命中同步
+      // （与前端 _languageForFile 的 toLowerCase 保持一致）
+      const fileName = path.basename(fullPath).toLowerCase();
+      const listSync = LIST_FILE_SYNC[fileName];
+      if (listSync) {
+        // 写入前读取旧条目（写完后旧内容已不存在，无法对比）
+        let oldEntries = [];
+        if (fs.existsSync(fullPath)) {
+          try {
+            const oldDecoded = decodeContent(fs.readFileSync(fullPath));
+            oldEntries = oldDecoded ? parseListEntries(oldDecoded.content, fileName) : [];
+          } catch {
+            oldEntries = []; // 旧文件损坏无法解析 → 视为空，仅同步新增
+          }
+        }
+
+        // 校验新内容必须为合法 JSON 数组，非法直接拒绝保存
+        let newEntries;
+        try {
+          newEntries = parseListEntries(content, fileName);
+        } catch {
+          throw new AppError(ErrorCodes.VALIDATION_ERROR, `${fileName} 必须是合法的 JSON 数组`);
+        }
+
+        atomicWriteFile(fullPath, encodeContent(content, encoding, hasBom));
+        syncListFileChanges(instance, fileName, oldEntries, newEntries);
+      } else {
+        atomicWriteFile(fullPath, encodeContent(content, encoding, hasBom));
+      }
+
+      // 保存 server.properties 后刷新实例内存缓存：缓存仅在构造时加载一次，
+      // 不刷新会导致 isRconConnected 判 RCON 关闭、saveProperties 以陈旧缓存
+      // 为合并基址回滚文件编辑、状态页读到过期值（与 GET /properties 的重读行为对齐）
+      if (fileName === 'server.properties' && typeof instance._loadProperties === 'function') {
+        const fresh = instance._loadProperties();
+        if (fresh && Object.keys(fresh).length > 0) {
+          instance.properties = fresh;
+        }
+      }
+
+      const stats = fs.statSync(fullPath);
+      
+      res.json(success({
+        path: filePath,
+        size: stats.size,
+        modifiedAt: stats.mtime.toISOString()
+      }, 'File saved successfully'));
+    } catch (err) {
+      // 文件在 existsSync 预检通过后、readFileHead 的 openSync 打开前被并发删除
+      // 时抛裸 ENOENT：映射为 404 FILE_NOT_FOUND，否则 errorHandler 兜底返回 500。
+      if (err.code === 'ENOENT') {
+        next(new AppError(ErrorCodes.FILE_NOT_FOUND));
+        return;
+      }
+      next(err);
+    }
+  });
+  
+  // 删除文件/目录
+  router.delete('/instances/:instanceId/files', (req, res, next) => {
+    try {
+      const { instanceId } = req.params;
+      const filePath = req.query.path;
+      
+      if (!filePath) {
+        throw new AppError(ErrorCodes.VALIDATION_ERROR, 'File path is required');
+      }
+
+      const instance = serverManager.getInstance(instanceId);
+      if (!instance) {
+        throw new AppError(ErrorCodes.INSTANCE_NOT_FOUND);
+      }
+
+      const basePath = instance.serverPath || path.join(config.serversDir, instanceId);
+      // 统一路径校验（find-006/007）：resolveSafePath 相等性排除兜住根目录删除，
+      // sep 边界杜绝父子实例越界，删除前 lstat 确认目标非符号链接。
+      const fullPath = resolveInstancePath(basePath, filePath);
+
+      if (!fs.existsSync(fullPath)) {
+        throw new AppError(ErrorCodes.FILE_NOT_FOUND);
+      }
+
+      // 列表文件（banned-players/banned-ips/whitelist/ops.json）删除 = 清空全部条目：
+      // 删除前读取旧条目，删除后同步 MC 内存（下发移除命令）+ 清理 temp_bans，
+      // 否则 MC 运行中内存封禁仍生效、玩家无法进服（与 PUT 的 LIST_FILE_SYNC 行为对齐）
+      const delFileName = path.basename(fullPath).toLowerCase();
+      const delSpec = LIST_FILE_SYNC[delFileName];
+      let delOldEntries = [];
+      if (delSpec && fs.existsSync(fullPath) && fs.statSync(fullPath).isFile()) {
+        try {
+          const oldDecoded = decodeContent(fs.readFileSync(fullPath));
+          delOldEntries = oldDecoded ? parseListEntries(oldDecoded.content, delFileName) : [];
+        } catch {
+          delOldEntries = []; // 旧文件损坏无法解析 → 视为空
+        }
+      }
+
+      // 递归删除
+      fs.rmSync(fullPath, { recursive: true, force: true });
+
+      // 文件已删除 → 新条目为空：全部旧条目视为移除
+      if (delSpec && delOldEntries.length > 0) {
+        syncListFileChanges(instance, delFileName, delOldEntries, []);
+      }
+
+      res.json(success(null, 'File/directory deleted successfully'));
+    } catch (err) {
+      // 文件在 existsSync 预检通过后、statSync 执行前被并发删除（另一管理请求、
+      // MC 重启清理、备份删除等）时抛裸 ENOENT：映射为 404 FILE_NOT_FOUND，
+      // 否则 errorHandler 兜底返回 500 SERVER_ERROR。AppError.code 为数字错误码，
+      // 与 fs 错误码字符串 'ENOENT' 互不冲突，不会误判。
+      if (err.code === 'ENOENT') {
+        next(new AppError(ErrorCodes.FILE_NOT_FOUND));
+        return;
+      }
+      next(err);
+    }
+  });
+  
+  return router;
+}
+
+export default createFileRoutes;

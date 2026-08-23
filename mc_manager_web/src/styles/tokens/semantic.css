@@ -1,0 +1,178 @@
+/**
+ * Semantic 层 —— --mcs-* 语义 token（设计文档 §4.5）
+ * 命名公式：[category]-[semantic]-[variant]（Primer 法）
+ * 层级词表固定：default / muted / subtle / emphasis，禁同义词混用
+ * 组件代码只允许消费本层；深色为默认（P4 深色优先），.light 为亮色覆盖
+ */
+:root {
+  /* ── 背景（明度层级词表）── */
+  --mcs-bg-default: var(--ref-dark-bg);         /* 页面底 */
+  --mcs-bg-muted: var(--ref-dark-card);         /* 卡片/容器 */
+  --mcs-bg-subtle: var(--ref-dark-base);        /* 深嵌区（终端/代码块） */
+  --mcs-bg-emphasis: var(--ref-dark-popover);   /* 弹窗/下拉 */
+  --mcs-bg-hover: var(--ref-dark-hover);        /* 悬浮面 */
+
+  /* ── 文字 ── */
+  --mcs-text-default: var(--ref-dark-text-default);
+  --mcs-text-muted: var(--ref-dark-text-muted);
+  --mcs-text-subtle: var(--ref-dark-text-subtle);   /* 禁用/占位（WCAG 豁免） */
+
+  /* ── 边框 ── */
+  --mcs-border-default: var(--ref-border-interactive);    /* 交互组件边界（≥3:1） */
+  --mcs-border-muted: var(--ref-border-hairline);         /* 装饰发丝线（豁免） */
+  --mcs-border-subtle: var(--ref-border-hairline-subtle); /* 装饰弱线（豁免） */
+
+  /* ── 状态六色（fg = 文字/描边/图标；bg-subtle = 12% alpha 容器底；border = 25% alpha）
+       铁律：亮色只做文字/描边/图标，容器底一律该色 12% 深底，严禁亮色实底+白字 ── */
+  --mcs-success-fg: var(--ref-success);
+  --mcs-success-bg-subtle: color-mix(in oklch, var(--ref-success) 12%, transparent);
+  --mcs-success-border: color-mix(in oklch, var(--ref-success) 25%, transparent);
+  --mcs-warning-fg: var(--ref-warning);
+  --mcs-warning-bg-subtle: color-mix(in oklch, var(--ref-warning) 12%, transparent);
+  --mcs-warning-border: color-mix(in oklch, var(--ref-warning) 25%, transparent);
+  --mcs-error-fg: var(--ref-error);
+  --mcs-error-bg-subtle: color-mix(in oklch, var(--ref-error) 12%, transparent);
+  --mcs-error-border: color-mix(in oklch, var(--ref-error) 25%, transparent);
+  --mcs-info-fg: var(--ref-info);
+  --mcs-info-bg-subtle: color-mix(in oklch, var(--ref-info) 12%, transparent);
+  --mcs-info-border: color-mix(in oklch, var(--ref-info) 25%, transparent);
+  --mcs-purple-fg: var(--ref-purple);
+  --mcs-purple-bg-subtle: color-mix(in oklch, var(--ref-purple) 12%, transparent);
+  --mcs-purple-border: color-mix(in oklch, var(--ref-purple) 25%, transparent);
+  --mcs-orange-fg: var(--ref-orange);
+  --mcs-orange-bg-subtle: color-mix(in oklch, var(--ref-orange) 12%, transparent);
+  --mcs-orange-border: color-mix(in oklch, var(--ref-orange) 25%, transparent);
+
+  /* ── 品牌 accent（P6 品牌克制：全界面彩色像素 <5%，只给 CTA/激活态/品牌元素）── */
+  --mcs-accent: var(--ref-accent);
+  --mcs-accent-hover: var(--ref-accent-hover);
+  --mcs-on-accent: var(--ref-on-accent-dark);        /* accent 实底上的文字 */
+  --mcs-accent-fg: var(--ref-accent);                /* accent 做文字/图标 */
+  --mcs-accent-bg-subtle: color-mix(in oklch, var(--ref-accent) 12%, transparent); /* 激活态容器底 */
+  --mcs-accent-border: color-mix(in oklch, var(--ref-accent) 25%, transparent);
+
+  /* ── 焦点指示（≥3:1 实测：info 对暗底 9.0:1）── */
+  --mcs-focus-ring: var(--ref-info);
+
+  /* ── 维度色（玩家页领域色：8px 色点 + 中文标签三重编码之一，色点 ≥3:1）── */
+  --mcs-dimension-overworld: var(--ref-dimension-overworld);
+  --mcs-dimension-nether: var(--ref-dimension-nether);
+  --mcs-dimension-end: var(--ref-dimension-end);
+
+  /* ── 状态层（M3 State Layer：hover 8% / focus 12% / pressed 12%）── */
+  --mcs-state-hover: var(--ref-state-hover);
+  --mcs-state-focus: var(--ref-state-focus);
+  --mcs-state-pressed: var(--ref-state-pressed);
+
+  /* ── 间距（8px 网格）── */
+  --mcs-space-1: 4px;
+  --mcs-space-2: 8px;
+  --mcs-space-3: 12px;
+  --mcs-space-4: 16px;
+  --mcs-space-5: 20px;
+  --mcs-space-6: 24px;
+  --mcs-space-8: 32px;
+  --mcs-space-10: 40px;
+  --mcs-space-12: 48px;
+
+  /* ── 圆角（纪律：卡片 ≤8px / 面板 ≤4px / 弹窗 ≤12px / 全应用 ≤16px）── */
+  --mcs-radius-xs: 4px;   /* 面板/输入框 */
+  --mcs-radius-sm: 6px;   /* 小控件 */
+  --mcs-radius-md: 8px;   /* 卡片上限 */
+  --mcs-radius-lg: 12px;  /* 弹窗上限 */
+  --mcs-radius-xl: 16px;  /* 全应用上限 */
+
+  /* ── 字体（CJK 规范：偶数字号 ≤7 档 / 行高 1.6-1.7 / 字重 400-600）── */
+  --mcs-font-sans: 'Noto Sans SC Subset', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
+  --mcs-font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  --mcs-font-size-2xs: 10px;  /* 标签 */
+  --mcs-font-size-xs: 12px;   /* 辅助 */
+  --mcs-font-size-sm: 14px;   /* 正文基准 */
+  --mcs-font-size-md: 16px;   /* 按钮/二级标题 */
+  --mcs-font-size-lg: 18px;   /* 模块标题 */
+  --mcs-font-size-xl: 22px;   /* 页面标题 */
+  --mcs-font-size-2xl: 24px;  /* 页面大标题 */
+  --mcs-font-weight-regular: 400;
+  --mcs-font-weight-medium: 500;
+  --mcs-font-weight-semibold: 600;
+  --mcs-line-height-body: 1.6;
+  --mcs-line-height-body-long: 1.7;
+  --mcs-line-height-heading: 1.3;
+  --mcs-line-height-tight: 1.2;
+
+  /* ── 终端专用（设计文档 4.6：ServerTerminal 独立深底，与基面同阶，主题无关）── */
+  --mcs-terminal-bg: oklch(0.1663 0.0262 269.37);     /* 基面深底（亮暗同值） */
+  --mcs-terminal-fg: var(--ref-dark-text-muted);
+  --mcs-terminal-fg-bright: var(--ref-dark-text-default);
+  --mcs-terminal-subtle: var(--ref-dark-text-subtle);
+  --mcs-terminal-error: var(--ref-error);             /* 深底上的亮色变体（主题无关） */
+  --mcs-terminal-warning: var(--ref-warning);
+  --mcs-terminal-accent: var(--ref-accent);
+
+  /* ── 动效（≤300ms，只动 transform/opacity，quint easing）── */
+  --mcs-motion-fast: 150ms;      /* hover */
+  --mcs-motion-base: 300ms;      /* 标准上限 */
+  --mcs-motion-slow: 450ms;      /* 布局 */
+  --mcs-ease-snappy: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* ── 密度（compact 数据密集 32px / default 舒适 40px）── */
+  --mcs-density-row: 40px;          /* 表格行高（[data-density=compact] 覆盖为 32px） */
+  --mcs-density-cell-padding-x: 16px;
+  --mcs-density-toolbar: 40px;      /* 工具栏/批量操作条高度联动 */
+}
+
+.light {
+  /* 亮色主题独立映射（换档不换色，明暗独立验证） */
+  --mcs-bg-default: var(--ref-light-bg);
+  --mcs-bg-muted: var(--ref-light-card);
+  /* 深嵌区：亮色下与页面底同值（浅灰）。终端等真正深嵌场景由 M2 引入
+     主题无关的 --mcs-terminal-* 专用 token（设计文档：ServerTerminal 独立深底） */
+  --mcs-bg-subtle: var(--ref-light-bg);
+  --mcs-bg-emphasis: var(--ref-light-popover);
+  --mcs-bg-hover: var(--ref-light-hover);
+
+  --mcs-text-default: var(--ref-light-text-default);
+  --mcs-text-muted: var(--ref-light-text-muted);
+  --mcs-text-subtle: var(--ref-light-text-subtle);
+
+  --mcs-border-default: var(--ref-border-interactive-light);
+  --mcs-border-muted: var(--ref-border-hairline-light);
+  --mcs-border-subtle: var(--ref-border-hairline-light-subtle);
+
+  --mcs-success-fg: var(--ref-success-light);
+  --mcs-success-bg-subtle: color-mix(in oklch, var(--ref-success-light) 10%, transparent);
+  --mcs-success-border: color-mix(in oklch, var(--ref-success-light) 25%, transparent);
+  --mcs-warning-fg: var(--ref-warning-light);
+  --mcs-warning-bg-subtle: color-mix(in oklch, var(--ref-warning-light) 10%, transparent);
+  --mcs-warning-border: color-mix(in oklch, var(--ref-warning-light) 25%, transparent);
+  --mcs-error-fg: var(--ref-error-light);
+  --mcs-error-bg-subtle: color-mix(in oklch, var(--ref-error-light) 10%, transparent);
+  --mcs-error-border: color-mix(in oklch, var(--ref-error-light) 25%, transparent);
+  --mcs-info-fg: var(--ref-info-light);
+  --mcs-info-bg-subtle: color-mix(in oklch, var(--ref-info-light) 10%, transparent);
+  --mcs-info-border: color-mix(in oklch, var(--ref-info-light) 25%, transparent);
+  --mcs-purple-fg: var(--ref-purple-light);
+  --mcs-purple-bg-subtle: color-mix(in oklch, var(--ref-purple-light) 10%, transparent);
+  --mcs-purple-border: color-mix(in oklch, var(--ref-purple-light) 25%, transparent);
+  --mcs-orange-fg: var(--ref-orange-light);
+  --mcs-orange-bg-subtle: color-mix(in oklch, var(--ref-orange-light) 10%, transparent);
+  --mcs-orange-border: color-mix(in oklch, var(--ref-orange-light) 25%, transparent);
+
+  --mcs-accent: var(--ref-accent-light);
+  --mcs-accent-hover: color-mix(in oklch, var(--ref-accent-light) 88%, white);
+  --mcs-on-accent: var(--ref-on-accent);           /* 深绿黑字（10.6:1） */
+  --mcs-accent-fg: var(--ref-success-light);       /* 绿做文字时换深档（5.0:1） */
+  --mcs-accent-bg-subtle: color-mix(in oklch, var(--ref-accent-light) 15%, transparent);
+  --mcs-accent-border: color-mix(in oklch, var(--ref-accent-light) 30%, transparent);
+
+  --mcs-focus-ring: var(--ref-info-light);
+
+  /* 维度色亮色变体（同色相加深） */
+  --mcs-dimension-overworld: var(--ref-dimension-overworld-light);
+  --mcs-dimension-nether: var(--ref-dimension-nether-light);
+  --mcs-dimension-end: var(--ref-dimension-end-light);
+
+  --mcs-state-hover: var(--ref-state-hover-light);
+  --mcs-state-focus: var(--ref-state-focus-light);
+  --mcs-state-pressed: var(--ref-state-pressed-light);
+}

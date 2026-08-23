@@ -1,0 +1,32 @@
+/**
+ * 实例/部署域 API 函数（对照服务端 routes/server-jar.js + status.js 契约）
+ * config 由调用方从 useConnectionStore 传入（与 src/api/players.ts 同模式）。
+ */
+import { apiDelete, apiGet, apiPost, apiPut, type ConnectionConfig } from './client'
+import type { DeployRequest, DeployResult, InstanceStatus, InstanceUpdatePayload, VersionsResponse } from './types'
+
+/** 服务端版本列表（GET /versions?type=；fabric 额外返回 loaders） */
+export function apiGetServerVersions(config: ConnectionConfig, type: string) {
+  return apiGet<VersionsResponse>(`/api/v1/versions?type=${encodeURIComponent(type)}`, config)
+}
+
+/** 部署新实例（POST /instances/deploy）；同步长请求（jar 下载数分钟），超时放大到 10 分钟 */
+export function apiDeployInstance(config: ConnectionConfig, payload: DeployRequest) {
+  return apiPost<DeployResult>('/api/v1/instances/deploy', config, payload, {
+    timeoutMs: 10 * 60_000,
+  })
+}
+
+/** 卸载实例（DELETE /instances/:id；危险操作由 UI 层确认） */
+export function apiUninstallInstance(config: ConnectionConfig, instanceId: string) {
+  return apiDelete<null>(`/api/v1/instances/${instanceId}`, config)
+}
+
+/** 更新实例配置（PUT /instances/:id；白名单字段：name/description/javaPath/maxMemory/minMemory/jarFile/autoRestart/jvmArgs/startCommand） */
+export function apiUpdateInstance(
+  config: ConnectionConfig,
+  instanceId: string,
+  payload: InstanceUpdatePayload,
+) {
+  return apiPut<InstanceStatus>(`/api/v1/instances/${instanceId}`, config, payload)
+}

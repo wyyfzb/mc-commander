@@ -1,0 +1,17 @@
+/**
+ * 密度档位（设计文档 §4.3，Carbon 联动法）
+ * default：行高 40px 舒适（仪表盘/表单）
+ * compact：行高 32px 密集（玩家列表/日志/文件列表默认）
+ * 表格行高与工具栏/分页/批量操作条高度联动
+ */
+[data-density='default'] {
+  --mcs-density-row: 40px;
+  --mcs-density-cell-padding-x: 16px;
+  --mcs-density-toolbar: 40px;
+}
+
+[data-density='compact'] {
+  --mcs-density-row: 32px;
+  --mcs-density-cell-padding-x: 12px;
+  --mcs-density-toolbar: 32px;
+}

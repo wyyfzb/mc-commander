@@ -1,0 +1,55 @@
+/**
+ * Component 层映射（设计文档 §4.5 tokens/theme.css）
+ * shadcn/nova 组件变量 ← 语义 token（--mcs-*）
+ * shadcn 组件代码只认这层变量名，本层负责把设计系统语义注入组件基座
+ */
+:root {
+  --background: var(--mcs-bg-default);
+  --foreground: var(--mcs-text-default);
+
+  --card: var(--mcs-bg-muted);
+  --card-foreground: var(--mcs-text-default);
+  --popover: var(--mcs-bg-emphasis);
+  --popover-foreground: var(--mcs-text-default);
+
+  /* primary = 品牌 CTA（P6：accent 只给 CTA/激活态） */
+  --primary: var(--mcs-accent);
+  --primary-foreground: var(--mcs-on-accent);
+
+  --secondary: var(--mcs-bg-hover);
+  --secondary-foreground: var(--mcs-text-default);
+
+  --muted: var(--mcs-bg-muted);
+  --muted-foreground: var(--mcs-text-muted);
+
+  --accent: var(--mcs-bg-hover);
+  --accent-foreground: var(--mcs-text-default);
+
+  /* destructive = 深红实底按钮（严禁亮色实底+白字：白字对深红 7.4:1 达标） */
+  --destructive: var(--ref-destructive);
+  --destructive-foreground: oklch(0.985 0 0);
+
+  /* border=装饰发丝线（卡片描边/分隔线，豁免）；input=交互边框（≥3:1 达标） */
+  --border: var(--mcs-border-muted);
+  --input: var(--mcs-border-default);
+  --ring: var(--mcs-focus-ring);
+
+  /* 图表色板（M1 预映射状态色共用色源；P0 洞察仪表盘时按色相环 ≥40° 采样细化） */
+  --chart-1: var(--mcs-success-fg);
+  --chart-2: var(--mcs-info-fg);
+  --chart-3: var(--mcs-purple-fg);
+  --chart-4: var(--mcs-warning-fg);
+  --chart-5: var(--mcs-orange-fg);
+
+  --radius: var(--mcs-radius-md);
+
+  /* 侧栏（shadcn sidebar 变量预留；AppShell 侧栏同源消费） */
+  --sidebar: var(--mcs-bg-muted);
+  --sidebar-foreground: var(--mcs-text-default);
+  --sidebar-primary: var(--mcs-accent);
+  --sidebar-primary-foreground: var(--mcs-on-accent);
+  --sidebar-accent: var(--mcs-bg-hover);
+  --sidebar-accent-foreground: var(--mcs-text-default);
+  --sidebar-border: var(--mcs-border-default);
+  --sidebar-ring: var(--mcs-focus-ring);
+}

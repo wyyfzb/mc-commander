@@ -1,0 +1,198 @@
+/**
+ * PlayerDetailPanel —— 详情面板壳（Master-Detail 右栏）
+ * - 单个模式：头像+名字+状态徽章+UUID + 5 Tab（概览/物品栏/传送/给予物品/日志）
+ * - 批量模式：堆叠头像+「已选择 N 名玩家」+目标名单，仅保留 传送/给予物品 Tab
+ * - 打开期间封禁记录 30s 轮询
+ */
+import { X } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { cn } from '@/lib/utils'
+import type { Player } from '@/api/types'
+import { DETAIL_TAB_LABELS, usePlayersUiStore, type PlayerDetailTab } from '../store'
+import { usePlayerBans, usePlayerDetails } from '../queries'
+import type { PlayerActionRequest } from '../mutations'
+import { PlayerAvatar } from './player-avatar'
+import { OverviewTab } from './detail-overview-tab'
+import { InventoryTab } from './detail-inventory-tab'
+import { TeleportTab } from './detail-teleport-tab'
+import { LogTab } from './detail-log-tab'
+import { GiveItemPanel } from './give-item-dialog'
+
+interface PlayerDetailPanelProps {
+  instanceId: string
+  /** 单个模式玩家（列表最新数据）；批量模式 null */
+  player: Player | null
+  /** 批量目标（单个模式为 [player]） */
+  batchTargets: Player[]
+  isBatchMode: boolean
+  isRconConnected: boolean
+  mcVersion: string
+  onAction: (req: PlayerActionRequest) => Promise<void>
+  onOpenBanDialog: (player: Player) => void
+}
+
+/** 批量模式下保留的 Tab（只保留传送/给予路径） */
+const BATCH_TABS: PlayerDetailTab[] = ['teleport', 'give']
+
+export function PlayerDetailPanel({
+  instanceId,
+  player,
+  batchTargets,
+  isBatchMode,
+  isRconConnected,
+  mcVersion,
+  onAction,
+  onOpenBanDialog,
+}: PlayerDetailPanelProps) {
+  const detail = usePlayersUiStore((s) => s.detail)
+  const closeDetail = usePlayersUiStore((s) => s.closeDetail)
+  const setDetailTab = usePlayersUiStore((s) => s.setDetailTab)
+
+  // 列表查不到时回退详情端点
+  const detailName = isBatchMode ? null : (detail?.playerName ?? null)
+  const fallbackDetails = usePlayerDetails(instanceId, player === null && detailName !== null ? detailName : null)
+  const effectivePlayer: Player | null = player ?? fallbackDetails.data ?? null
+
+  // 封禁记录 30s 轮询（面板打开期间）
+  const bansQuery = usePlayerBans(instanceId, detail !== null)
+  const bans = bansQuery.data ?? []
+
+  const tabs = isBatchMode ? BATCH_TABS : DETAIL_TAB_LABELS.map((t) => t.value)
+  const currentTab = detail?.tab ?? 'overview'
+  const effectiveTab = tabs.includes(currentTab) ? currentTab : tabs[0]
+
+  return (
+    <aside
+      className="flex w-[420px] shrink-0 flex-col border-l border-mcs-border-default bg-mcs-bg-default"
+      aria-label="玩家详情面板"
+    >
+      {/* ── 头部 ── */}
+      <div className="flex items-start gap-2.5 border-b border-mcs-border-muted px-3.5 py-3">
+        {isBatchMode ? (
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <div className="flex shrink-0 -space-x-2">
+              {batchTargets.slice(0, 4).map((p) => (
+                <PlayerAvatar
+                  key={p.uuid}
+                  name={p.name}
+                  isOnline={p.isOnline}
+                  isFakePlayer={p.isFakePlayer}
+                  size={26}
+                  className="ring-2 ring-mcs-bg-default"
+                />
+              ))}
+              {batchTargets.length > 4 && (
+                <span className="inline-flex size-[26px] items-center justify-center rounded-mcs-sm bg-mcs-bg-hover text-mcs-2xs font-medium text-mcs-text-muted ring-2 ring-mcs-bg-default">
+                  +{batchTargets.length - 4}
+                </span>
+              )}
+            </div>
+            <div className="min-w-0">
+              <div className="text-mcs-sm font-medium text-mcs-text-default">已选择 {batchTargets.length} 名玩家</div>
+              <div className="max-h-10 truncate text-mcs-xs text-mcs-text-subtle">
+                {batchTargets.map((p) => p.name).join('、')}
+              </div>
+            </div>
+          </div>
+        ) : effectivePlayer ? (
+          <div className="flex min-w-0 flex-1 items-center gap-2.5">
+            <PlayerAvatar
+              name={effectivePlayer.name}
+              isOnline={effectivePlayer.isOnline}
+              isFakePlayer={effectivePlayer.isFakePlayer}
+              size={36}
+            />
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="truncate text-mcs-sm font-medium text-mcs-text-default">
+                  {effectivePlayer.name}
+                </span>
+                <span
+                  className={cn(
+                    'shrink-0 rounded-full px-1.5 text-mcs-2xs',
+                    effectivePlayer.isOnline
+                      ? 'bg-mcs-success-bg-subtle text-mcs-success-fg'
+                      : 'bg-mcs-bg-hover text-mcs-text-muted',
+                  )}
+                >
+                  {effectivePlayer.isOnline ? '在线' : '离线'}
+                </span>
+                {effectivePlayer.isOp && (
+                  <span className="shrink-0 rounded-full bg-mcs-purple-bg-subtle px-1.5 text-mcs-2xs text-mcs-purple-fg">
+                    OP
+                  </span>
+                )}
+              </div>
+              <div className="truncate font-mono text-mcs-2xs text-mcs-text-subtle">{effectivePlayer.uuid}</div>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-1 items-center text-mcs-sm text-mcs-text-subtle">加载中…</div>
+        )}
+        <Button variant="ghost" size="icon-sm" onClick={closeDetail} aria-label="关闭详情面板">
+          <X aria-hidden />
+        </Button>
+      </div>
+
+      {/* ── Tab 栏 ── */}
+      <Tabs
+        value={effectiveTab}
+        onValueChange={(v) => setDetailTab(v as PlayerDetailTab)}
+        className="border-b border-mcs-border-muted px-2"
+      >
+        <TabsList className="h-9 justify-start gap-0 rounded-none bg-transparent p-0">
+          {tabs.map((tab) => {
+            const label = DETAIL_TAB_LABELS.find((t) => t.value === tab)?.label ?? tab
+            return (
+              <TabsTrigger
+                key={tab}
+                value={tab}
+                className="h-9 rounded-none border-b-2 border-transparent px-3 text-mcs-xs data-[state=active]:border-mcs-accent data-[state=active]:text-mcs-text-default data-[state=active]:shadow-none"
+              >
+                {label}
+              </TabsTrigger>
+            )
+          })}
+        </TabsList>
+      </Tabs>
+
+      {/* ── 内容区 ── */}
+      <div className="min-h-0 flex-1 overflow-auto px-3.5 py-3">
+        {effectiveTab === 'overview' && effectivePlayer && (
+          <OverviewTab
+            instanceId={instanceId}
+            player={effectivePlayer}
+            isRconConnected={isRconConnected}
+            bans={bans}
+            onAction={onAction}
+            onOpenBanDialog={onOpenBanDialog}
+          />
+        )}
+        {effectiveTab === 'inventory' && effectivePlayer && <InventoryTab player={effectivePlayer} />}
+        {effectiveTab === 'teleport' && (
+          <TeleportTab
+            player={isBatchMode ? null : effectivePlayer}
+            batchTargets={isBatchMode ? batchTargets : effectivePlayer ? [effectivePlayer] : []}
+            isBatchMode={isBatchMode}
+            instanceId={instanceId}
+            isRconConnected={isRconConnected}
+            onAction={onAction}
+          />
+        )}
+        {effectiveTab === 'give' && (
+          <GiveItemPanel
+            player={isBatchMode ? null : effectivePlayer}
+            batchTargets={isBatchMode ? batchTargets : effectivePlayer ? [effectivePlayer] : []}
+            isBatchMode={isBatchMode}
+            instanceId={instanceId}
+            mcVersion={mcVersion}
+            isRconConnected={isRconConnected}
+            onAction={onAction}
+          />
+        )}
+        {effectiveTab === 'log' && effectivePlayer && <LogTab player={effectivePlayer} />}
+      </div>
+    </aside>
+  )
+}

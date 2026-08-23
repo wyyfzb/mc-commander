@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- MC Commander PWA maskable 图标：内容收缩至 80% 安全区（圆形裁切兼容） -->
+  <rect width="512" height="512" rx="107" fill="#0A0E1A"/>
+  <circle cx="256" cy="256" r="77" fill="#4ADE80"/>
+  <circle cx="256" cy="256" r="77" fill="none" stroke="#4ADE80" stroke-opacity="0.35" stroke-width="34"/>
+</svg>

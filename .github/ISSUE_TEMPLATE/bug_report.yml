@@ -1,0 +1,57 @@
+name: 🐛 Bug 报告
+description: 报告功能异常或崩溃
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: 问题描述
+      description: 清晰简洁地描述遇到了什么问题
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 进入 '...'
+        2. 点击 '...'
+        3. 看到 '...'
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望行为
+      description: 你预期应该发生什么
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: 受影响组件
+      options:
+        - 服务端 (mc_commander_server)
+        - Web 前端 (mc_manager_web)
+        - 部署/脚本
+        - 文档
+        - 其他
+    validations:
+      required: true
+  - type: textarea
+    id: env
+    attributes:
+      label: 环境信息
+      placeholder: |
+        - MC Commander 版本:
+        - Node.js 版本:
+        - 操作系统:
+        - Minecraft 版本与服务端类型:
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 相关日志
+      description: 浏览器控制台 / 服务端日志（注意脱敏，不要粘贴 API Key 或真实服务器 IP）
+      render: shell

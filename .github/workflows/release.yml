@@ -1,0 +1,65 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: 构建发布产物
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mc_manager_web/package-lock.json
+
+      # 前端构建 → 产物进入服务端 public/（同源托管）
+      - name: 构建前端
+        working-directory: mc_manager_web
+        run: |
+          npm ci
+          npm run build
+
+      - name: 打包服务端（含前端产物）
+        working-directory: mc_commander_server
+        run: |
+          npm ci --omit=dev
+          mkdir -p public
+          cp -r ../mc_manager_web/dist/* public/
+          tar -czf ../mc-commander-server-${{ github.ref_name }}.tar.gz \
+            --exclude=node_modules --exclude=data --exclude=backups --exclude=servers --exclude=.env \
+            .
+
+      - name: 创建 GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: mc-commander-server-${{ github.ref_name }}.tar.gz
+
+  # gitee 镜像同步（需配置仓库变量 ENABLE_GITEE_MIRROR=true 与 Secret GITEE_SSH_KEY）
+  mirror:
+    name: 同步 gitee 镜像
+    runs-on: ubuntu-latest
+    if: vars.ENABLE_GITEE_MIRROR == 'true'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: 推送镜像
+        env:
+          GITEE_SSH_KEY: ${{ secrets.GITEE_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$GITEE_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -t ed25519 gitee.com >> ~/.ssh/known_hosts
+          git remote add mirror "${{ vars.GITEE_MIRROR_URL }}"
+          git push mirror --tags --force
+          git push mirror refs/remotes/origin/*:refs/heads/* --force

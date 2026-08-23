@@ -1,0 +1,167 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
+
+/* ── MCS 设计系统 token 三层（设计文档 §4.5）── */
+@import './styles/tokens/reference.css';
+@import './styles/tokens/semantic.css';
+@import './styles/tokens/theme.css';
+@import './styles/fonts.css';
+@import './styles/glass.css';
+@import './styles/density.css';
+
+@custom-variant dark (&:is(.dark *));
+
+/* MCS 语义 token 工具类注册：text-mcs-* / bg-mcs-* / border-mcs-* / rounded-mcs-* 等
+   （inline：变量值随 .light/.dark 动态解析） */
+@theme inline {
+    --color-mcs-bg-default: var(--mcs-bg-default);
+    --color-mcs-bg-muted: var(--mcs-bg-muted);
+    --color-mcs-bg-subtle: var(--mcs-bg-subtle);
+    --color-mcs-bg-emphasis: var(--mcs-bg-emphasis);
+    --color-mcs-bg-hover: var(--mcs-bg-hover);
+    --color-mcs-text-default: var(--mcs-text-default);
+    --color-mcs-text-muted: var(--mcs-text-muted);
+    --color-mcs-text-subtle: var(--mcs-text-subtle);
+    --color-mcs-border-default: var(--mcs-border-default);
+    --color-mcs-border-muted: var(--mcs-border-muted);
+    --color-mcs-border-subtle: var(--mcs-border-subtle);
+    --color-mcs-success-fg: var(--mcs-success-fg);
+    --color-mcs-success-bg-subtle: var(--mcs-success-bg-subtle);
+    --color-mcs-success-border: var(--mcs-success-border);
+    --color-mcs-warning-fg: var(--mcs-warning-fg);
+    --color-mcs-warning-bg-subtle: var(--mcs-warning-bg-subtle);
+    --color-mcs-warning-border: var(--mcs-warning-border);
+    --color-mcs-error-fg: var(--mcs-error-fg);
+    --color-mcs-error-bg-subtle: var(--mcs-error-bg-subtle);
+    --color-mcs-error-border: var(--mcs-error-border);
+    --color-mcs-info-fg: var(--mcs-info-fg);
+    --color-mcs-info-bg-subtle: var(--mcs-info-bg-subtle);
+    --color-mcs-info-border: var(--mcs-info-border);
+    --color-mcs-purple-fg: var(--mcs-purple-fg);
+    --color-mcs-purple-bg-subtle: var(--mcs-purple-bg-subtle);
+    --color-mcs-purple-border: var(--mcs-purple-border);
+    --color-mcs-orange-fg: var(--mcs-orange-fg);
+    --color-mcs-orange-bg-subtle: var(--mcs-orange-bg-subtle);
+    --color-mcs-orange-border: var(--mcs-orange-border);
+    --color-mcs-accent: var(--mcs-accent);
+    --color-mcs-accent-hover: var(--mcs-accent-hover);
+    --color-mcs-on-accent: var(--mcs-on-accent);
+    --color-mcs-accent-fg: var(--mcs-accent-fg);
+    --color-mcs-accent-bg-subtle: var(--mcs-accent-bg-subtle);
+    --color-mcs-accent-border: var(--mcs-accent-border);
+    --color-mcs-focus-ring: var(--mcs-focus-ring);
+    --color-mcs-state-hover: var(--mcs-state-hover);
+    --color-mcs-state-focus: var(--mcs-state-focus);
+    --color-mcs-state-pressed: var(--mcs-state-pressed);
+    --radius-mcs-xs: var(--mcs-radius-xs);
+    --radius-mcs-sm: var(--mcs-radius-sm);
+    --radius-mcs-md: var(--mcs-radius-md);
+    --radius-mcs-lg: var(--mcs-radius-lg);
+    --radius-mcs-xl: var(--mcs-radius-xl);
+    --text-mcs-2xs: var(--mcs-font-size-2xs);
+    --text-mcs-xs: var(--mcs-font-size-xs);
+    --text-mcs-sm: var(--mcs-font-size-sm);
+    --text-mcs-md: var(--mcs-font-size-md);
+    --text-mcs-lg: var(--mcs-font-size-lg);
+    --text-mcs-xl: var(--mcs-font-size-xl);
+    --text-mcs-2xl: var(--mcs-font-size-2xl);
+    --duration-mcs-fast: var(--mcs-motion-fast);
+    --duration-mcs-base: var(--mcs-motion-base);
+    --duration-mcs-slow: var(--mcs-motion-slow);
+    --ease-mcs-snappy: var(--mcs-ease-snappy);
+}
+
+/* shadcn/nova 的 @theme inline 映射：--color-* 工具类 → 组件变量（值由 theme.css 提供） */
+@theme inline {
+    --font-heading: var(--mcs-font-sans);
+    --font-sans: var(--mcs-font-sans);
+    --font-mono: var(--mcs-font-mono);
+    --color-sidebar-ring: var(--sidebar-ring);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar: var(--sidebar);
+    --color-chart-5: var(--chart-5);
+    --color-chart-4: var(--chart-4);
+    --color-chart-3: var(--chart-3);
+    --color-chart-2: var(--chart-2);
+    --color-chart-1: var(--chart-1);
+    --color-ring: var(--ring);
+    --color-input: var(--input);
+    --color-border: var(--border);
+    --color-destructive: var(--destructive);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-accent: var(--accent);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-muted: var(--muted);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-secondary: var(--secondary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-primary: var(--primary);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-popover: var(--popover);
+    --color-card-foreground: var(--card-foreground);
+    --color-card: var(--card);
+    --color-foreground: var(--foreground);
+    --color-background: var(--background);
+    --radius-sm: calc(var(--radius) * 0.6);
+    --radius-md: calc(var(--radius) * 0.8);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) * 1.4);
+    --radius-2xl: calc(var(--radius) * 1.8);
+    --radius-3xl: calc(var(--radius) * 2.2);
+    --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/* 深色优先（P4）：html 默认 .dark；切亮色时替换为 .light（见 useTheme） */
+:root {
+  color-scheme: dark;
+}
+
+.light {
+  color-scheme: light;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans;
+    /* 根字号保持浏览器默认 16px（rem 基准）：正文 14px 设在 body 层，
+       避免缩放整个 rem 体系导致 Tailwind 间距网格漂移（审查发现） */
+    line-height: var(--mcs-line-height-body);
+    letter-spacing: 0; /* 禁负字距 */
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-size: var(--mcs-font-size-sm); /* 14px 正文基准（CJK 规范） */
+    font-synthesis-weight: none;
+  }
+  /* 键盘焦点可见（P5 + 无障碍：焦点指示 ≥3:1） */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  /* 禁中文斜体（无 italic 字库） */
+  em, i, cite {
+    font-style: normal;
+  }
+  /* 长文本行高 1.7-1.8 */
+  .prose-long {
+    line-height: var(--mcs-line-height-body-long);
+  }
+}
+
+/* 动效偏好降级（无障碍） */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
