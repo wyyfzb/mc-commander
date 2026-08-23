@@ -1,7 +1,25 @@
-import { describe, it, expect, vi, afterAll } from 'vitest';
+import { describe, it, expect, vi, afterAll, beforeAll } from 'vitest';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
+
+// config 指向临时目录：restoreBackup 会校验实例目录存在性，
+// 真实 ./servers 在开发机可能有残留（测试通过）而 CI 全新检出没有（测试失败）
+vi.mock('../config.js', async (importOriginal) => {
+  const actual = await importOriginal();
+  const fsp = (await import('fs')).default;
+  const osp = (await import('os')).default;
+  const p = (await import('path')).default;
+  const root = fsp.mkdtempSync(p.join(osp.tmpdir(), 'backup-cfg-'));
+  return {
+    default: {
+      ...actual.default,
+      serversDir: p.join(root, 'servers'),
+      backupsDir: p.join(root, 'backups'),
+    },
+  };
+});
+
 import config from '../config.js';
 
 // ---------- 服务层 mock（不触真实 DB / 不写入任何真实数据） ----------
@@ -25,7 +43,7 @@ import {
 } from '../services/backup.service.js';
 import { BackupModel as MockBackupModel } from '../db/backup.model.js';
 
-describe('find-004: resolveContained 路径包含校验', () => {
+describe('resolveContained 路径包含校验', () => {
   const tmpBase = fs.mkdtempSync(path.join(os.tmpdir(), 'backup-resolve-'));
   const base = path.join(tmpBase, 'base');
   fs.mkdirSync(base);
@@ -80,7 +98,7 @@ describe('find-004: resolveContained 路径包含校验', () => {
   });
 });
 
-describe('find-004: createBackup 对 worldName 强制校验', () => {
+describe('createBackup 对 worldName 强制校验', () => {
   it('显式传入 ../ 恶意 worldName 拒绝创建（白名单）', async () => {
     const service = new BackupService(null);
     await expect(
@@ -121,7 +139,12 @@ describe('find-004: createBackup 对 worldName 强制校验', () => {
   });
 });
 
-describe('find-004: restoreBackup 路径与状态校验（实例级恢复）', () => {
+describe('restoreBackup 路径与状态校验（实例级恢复）', () => {
+  // restoreBackup 先校验实例目录存在性：统一预置 s1 实例目录
+  beforeAll(() => {
+    fs.mkdirSync(path.join(config.serversDir, 's1'), { recursive: true });
+  });
+
   it('file_path 越界（DB 被篡改）拒绝恢复', async () => {
     MockBackupModel.findByIdWithPath.mockReturnValue({
       id: 1,
@@ -206,7 +229,7 @@ describe('find-004: restoreBackup 路径与状态校验（实例级恢复）', (
   });
 });
 
-describe('find-004: deleteBackup 对 file_path 校验（异步化）', () => {
+describe('deleteBackup 对 file_path 校验（异步化）', () => {
   it('file_path 越界（DB 被篡改）拒绝删除', async () => {
     MockBackupModel.findByIdWithPath.mockReturnValue({
       id: 1,

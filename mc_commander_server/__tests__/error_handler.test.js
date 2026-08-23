@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { errorHandler, notFoundHandler } from '../middleware/error_handler.js';
 import { AppError, ErrorCodes } from '../utils/response.js';
 
-describe('errorHandler 500 分支（find-022）', () => {
+describe('errorHandler 500 分支', () => {
   let req, res, next;
 
   beforeEach(() => {

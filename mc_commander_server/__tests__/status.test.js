@@ -85,7 +85,7 @@ describe('Status Routes', () => {
   });
 
   describe('PUT /api/instances/:id', () => {
-    it('find-002: startCommand 已从可写字段移除，提交该字段返回 400（RCE 入口封堵）', async () => {
+    it('startCommand 已从可写字段移除，提交该字段返回 400（RCE 入口封堵）', async () => {
       const instance = {
         id: 's1',
         name: 'S1',

@@ -51,10 +51,10 @@ describe('authMiddleware', () => {
     expect(res.status).toHaveBeenCalledWith(401);
   });
 
-  // find-001 回归测试：Upgrade: websocket 头不再是认证旁路。
+  // 回归测试：Upgrade: websocket 头不再是认证旁路。
   // 真实 WS 升级请求走 Node http server 的 upgrade 事件（不经过此中间件），
   // 攻击者仅需给普通 HTTP 请求伪造该头即可免 Key 访问 API——必须拒绝。
-  it('should reject request with Upgrade: websocket header and no api key (find-001 regression)', () => {
+  it('should reject request with Upgrade: websocket header and no api key', () => {
     req.headers.upgrade = 'websocket';
 
     authMiddleware(req, res, next);
@@ -66,7 +66,7 @@ describe('authMiddleware', () => {
     );
   });
 
-  it('should reject request with Upgrade: websocket header and invalid api key (find-001 regression)', () => {
+  it('should reject request with Upgrade: websocket header and invalid api key', () => {
     req.headers.upgrade = 'websocket';
     req.headers['x-api-key'] = 'wrong-key';
 

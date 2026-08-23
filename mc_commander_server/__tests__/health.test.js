@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import express from 'express';
 import request from 'supertest';
 
-// find-020：/health 不得触发实例状态扫描（getAllInstances 内部对每个实例
+// /health 不得触发实例状态扫描（getAllInstances 内部对每个实例
 // 执行 toStatus()，含 RCON 探测等开销）。mock 掉全部子路由模块，
 // 与并行修改的 A4/A5 文件解耦，仅验证 /health 自身行为。
 vi.mock('../routes/status.js', () => ({
@@ -26,7 +26,7 @@ vi.mock('../routes/server-jar.js', () => ({
 
 import { setupRoutes } from '../routes/index.js';
 
-describe('GET /health（find-020）', () => {
+describe('GET /health', () => {
   let app;
   let mockManager;
 
@@ -56,7 +56,7 @@ describe('GET /health（find-020）', () => {
     expect(res.body.data.nodeVersion).toBeTruthy();
   });
 
-  it('should not call getAllInstances / toStatus scan (find-020 regression)', async () => {
+  it('should not call getAllInstances / toStatus scan', async () => {
     setupRoutes(app, mockManager);
 
     await request(app).get('/health');

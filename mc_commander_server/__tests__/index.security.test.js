@@ -88,7 +88,7 @@ function resetAndImport() {
   return import('../index.js');
 }
 
-describe('find-012: WebSocketServer maxPayload', () => {
+describe('WebSocketServer maxPayload', () => {
   beforeEach(() => {
     vi.unstubAllEnvs();
     vi.stubEnv('NODE_ENV', 'development');
@@ -103,7 +103,7 @@ describe('find-012: WebSocketServer maxPayload', () => {
   });
 });
 
-describe('find-009: 限流中间件挂载顺序', () => {
+describe('限流中间件挂载顺序', () => {
   beforeEach(() => {
     vi.unstubAllEnvs();
     vi.stubEnv('NODE_ENV', 'development');
@@ -130,7 +130,7 @@ describe('find-009: 限流中间件挂载顺序', () => {
   });
 });
 
-describe('find-016: API Key 强度校验', () => {
+describe('API Key 强度校验', () => {
   describe('checkApiKeyStrength 纯函数', () => {
     it('强随机 Key 应通过（≥16 位且非低熵形态）', () => {
       expect(checkApiKeyStrength(STRONG_KEY).ok).toBe(true);

@@ -5,7 +5,7 @@ import path from 'path';
 
 import { resolveSafePath, PathTraversalError } from '../utils/fs-utils.js';
 
-// resolveSafePath 单元测试：覆盖 find-006/007 的四步防线
+// resolveSafePath 单元测试：四步防线
 // （归一化、相等排除 + sep 边界、逐段 realpath、最终目标 symlink 拒绝）
 describe('fs-utils resolveSafePath', () => {
   let base;
@@ -79,7 +79,7 @@ describe('fs-utils resolveSafePath', () => {
     }
   });
 
-  describe('符号链接防线（find-007）', () => {
+  describe('符号链接防线', () => {
     // Windows 创建符号链接需要管理员权限或开发者模式：探测一次，不可用则跳过
     let symlinkSupported = false;
     try {

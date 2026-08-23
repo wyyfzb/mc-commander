@@ -18,7 +18,7 @@ vi.mock('../db/index.js', () => ({
   },
 }));
 
-describe('安全修复：find-008-read（players.js _getTotalPlayTime 路径校验）', () => {
+describe('安全修复：players.js _getTotalPlayTime 路径校验', () => {
   let app;
   let mockManager;
   let tmpServerPath;

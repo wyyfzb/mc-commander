@@ -227,7 +227,7 @@ describe('File Routes - Path Traversal Protection', () => {
       expect(fs.existsSync(tmpDir)).toBe(true);
     });
 
-    // find-006 修复：'.'/'./'/'.//'/'a/../' 经 path.resolve 归一化后等于实例根目录，
+    // 修复：'.'/'./'/'.//'/'a/../' 经 path.resolve 归一化后等于实例根目录，
     // 原防护（字符串 includes('..') + 无边界 startsWith 前缀检查）全部可绕过——
     // 归一化后 startsWith 恒真，随后 rmSync recursive 会删除整个实例目录
     it('should reject deleting the instance root via . (归一化后等于根目录)', async () => {
@@ -739,7 +739,7 @@ describe('File Routes - Path Traversal Protection', () => {
     });
   });
 
-  describe('File Routes - 符号链接越界防护（find-007）', () => {
+  describe('File Routes - 符号链接越界防护', () => {
     // Windows 创建符号链接需要管理员权限或开发者模式：模块加载时探测一次，
     // 不可用则整组跳过（Linux/macOS 无条件可用）
     let symlinkSupported = false;

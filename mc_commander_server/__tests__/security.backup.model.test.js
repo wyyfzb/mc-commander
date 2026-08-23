@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 
-// find-021：backup.model 显式列查询，file_path 不出现在对外查询结果中。
+// backup.model 显式列查询，file_path 不出现在对外查询结果中。
 // 仅 mock database 模块（不 mock backup.model.js 本身），捕获 prepare
 // 收到的 SQL 做断言，不触真实 DB / 不写入任何真实数据。
 const { fakeDb, sqlLog } = vi.hoisted(() => {
@@ -21,7 +21,7 @@ vi.mock('../db/database.js', () => ({ getDb: () => fakeDb }));
 
 import { BackupModel } from '../db/backup.model.js';
 
-describe('find-021: backup.model 显式列查询，不泄露 file_path', () => {
+describe('backup.model 显式列查询，不泄露 file_path', () => {
   it('findAll 主查询不含 file_path 与 SELECT *', () => {
     BackupModel.findAll({});
     const sql = sqlLog.find((s) => s.includes('ORDER BY id DESC'));

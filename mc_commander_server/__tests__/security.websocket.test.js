@@ -29,7 +29,7 @@ function createFakeWs() {
   return ws;
 }
 
-describe('WebSocket 资源上限与频率限制（find-012）', () => {
+describe('WebSocket 资源上限与频率限制', () => {
   let wss;
   let serverManager;
   let fakeDb;

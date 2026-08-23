@@ -63,7 +63,7 @@ function makeFakeProcess() {
   return proc;
 }
 
-describe('安全修复：find-002-service（start 结构化改造）', () => {
+describe('安全修复：start 结构化改造', () => {
   let tmpDir;
   let lastProc;
 
@@ -260,7 +260,7 @@ describe('安全修复：find-002-service（start 结构化改造）', () => {
   });
 });
 
-describe('安全修复：find-018-service（saveProperties 换行转义）', () => {
+describe('安全修复：saveProperties 换行转义', () => {
   let tmpDir;
 
   function createInstance() {
@@ -317,7 +317,7 @@ describe('安全修复：find-018-service（saveProperties 换行转义）', () 
   });
 });
 
-describe('安全修复：extra-1（level-name 服务层兜底校验）', () => {
+describe('安全修复：level-name 服务层兜底校验', () => {
   let tmpDir;
 
   function createInstance() {
@@ -395,7 +395,7 @@ describe('安全修复：extra-1（level-name 服务层兜底校验）', () => {
   });
 });
 
-describe('安全修复：find-008-read（读侧路径校验）', () => {
+describe('安全修复：读侧路径校验', () => {
   let tmpDir;
 
   function createInstance() {
@@ -498,7 +498,7 @@ describe('安全修复：find-008-read（读侧路径校验）', () => {
   });
 });
 
-describe('安全修复：find-023-server（日志单行截断）', () => {
+describe('安全修复：日志单行截断', () => {
   let tmpDir;
   let lastProc;
 

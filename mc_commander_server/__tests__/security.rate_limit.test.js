@@ -7,7 +7,7 @@ import {
   _pruneExpired,
 } from '../middleware/rate_limit.js';
 
-// find-009：限流键可伪造 + Map 无上限 + 24h 清理周期过长
+// 限流键可伪造 + Map 无上限 + 24h 清理周期过长
 // 修复验证：默认键用真实连接 IP、apiKey 截断 128、容量上限 LRU、窗口级清理
 
 function makeReq(remoteIp, headers = {}) {
@@ -22,7 +22,7 @@ function makeRes() {
   };
 }
 
-describe('rateLimit keyGenerator（find-009 修复）', () => {
+describe('rateLimit keyGenerator', () => {
   beforeEach(() => {
     _clearRateLimitMap();
   });
@@ -92,7 +92,7 @@ describe('rateLimit keyGenerator（find-009 修复）', () => {
   });
 });
 
-describe('apiKeyRateLimit（find-009 修复）', () => {
+describe('apiKeyRateLimit', () => {
   beforeEach(() => {
     _clearRateLimitMap();
   });
@@ -136,7 +136,7 @@ describe('apiKeyRateLimit（find-009 修复）', () => {
   });
 });
 
-describe('rateLimit Map 容量上限（LRU，find-009 修复）', () => {
+describe('rateLimit Map 容量上限（LRU）', () => {
   beforeEach(() => {
     _clearRateLimitMap();
   });
@@ -166,7 +166,7 @@ describe('rateLimit Map 容量上限（LRU，find-009 修复）', () => {
   });
 });
 
-describe('窗口级空闲清理（find-009 修复）', () => {
+describe('窗口级空闲清理', () => {
   beforeEach(() => {
     _clearRateLimitMap();
   });

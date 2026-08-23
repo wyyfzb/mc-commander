@@ -17,9 +17,8 @@ import { createStatusRoutes } from '../routes/status.js';
 import { InstanceModel } from '../db/index.js';
 import { errorHandler } from '../middleware/error_handler.js';
 
-// find-018（PUT /properties 键白名单与值校验）、find-002-route
-// （PUT /instances/:id 与 POST /start 移除 startCommand 注入面）、
-// find-015-server（GET/PUT /properties 敏感键占位符）安全修复回归测试。
+// 安全修复回归测试：PUT /properties 键白名单与值校验、PUT /instances/:id
+// 与 POST /start 移除 startCommand 注入面、GET/PUT /properties 敏感键占位符。
 // 测试全部使用 mock 实例与临时目录文件，不包含任何真实数据。
 
 function buildApp(mockManager) {
@@ -50,7 +49,7 @@ function makeMockInstance(overrides = {}) {
   };
 }
 
-describe('find-018: PUT /api/instances/:id/properties 键白名单与值校验', () => {
+describe('PUT /api/instances/:id/properties 键白名单与值校验', () => {
   let app;
   let mockManager;
   let consoleWarnSpy;
@@ -207,7 +206,7 @@ describe('find-018: PUT /api/instances/:id/properties 键白名单与值校验',
   });
 });
 
-describe('find-002-route: PUT /api/instances/:id 与 POST /start 封堵 startCommand 注入面', () => {
+describe('PUT /api/instances/:id 与 POST /start 封堵 startCommand 注入面', () => {
   let app;
   let mockManager;
 
@@ -337,7 +336,7 @@ describe('find-002-route: PUT /api/instances/:id 与 POST /start 封堵 startCom
   });
 });
 
-describe('find-015-server: GET/PUT /properties 敏感键占位符掩码', () => {
+describe('GET/PUT /properties 敏感键占位符掩码', () => {
   let app;
   let mockManager;
 
@@ -392,9 +391,9 @@ describe('find-015-server: GET/PUT /properties 敏感键占位符掩码', () => 
   });
 });
 
-// ── find-002 闭环：实例级 jvmArgs 结构化参数持久化 + startCommand 清除途径 ──
+// ── 实例级 jvmArgs 结构化参数持久化 + startCommand 清除途径 ──
 // （前端实例设置弹窗提交 jvmArgs 数组；旧实例遗留 startCommand 经 null 清除）
-describe('find-002 闭环: PUT /api/instances/:id jvmArgs 持久化与 startCommand 清除', () => {
+describe('PUT /api/instances/:id jvmArgs 持久化与 startCommand 清除', () => {
   let app;
   let mockManager;
 
