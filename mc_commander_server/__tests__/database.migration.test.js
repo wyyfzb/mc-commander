@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import fs from 'fs';
-import path from 'path';
 
 // 将 dataDir 指向临时目录，避免迁移初始化读写真实 data/ 目录
 vi.mock('../config.js', async () => {

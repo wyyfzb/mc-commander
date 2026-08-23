@@ -9,8 +9,8 @@
 import { ChevronRight, Code, Heart, Link as LinkIcon, MessageSquareWarning, Tag } from 'lucide-react'
 import type { AboutPanelProps } from './contracts'
 
-/** 开源仓库主页（Gitee；Releases/Issues 由子路径拼接） */
-const REPO_URL = 'https://gitee.com/wyyfzb/mc_commander'
+/** 开源仓库主页（GitHub 主仓；Releases/Issues 由子路径拼接，国内镜像见 README） */
+const REPO_URL = 'https://github.com/wyyfzb/mc-commander'
 
 /** 三行外链：标题/副标题/地址 + 图标（图标底色走语义 token） */
 const LINKS = [
@@ -56,7 +56,7 @@ export function AboutPanel(_props: AboutPanelProps) {
         </span>
         <div className="min-w-0 flex-1">
           <div className="text-mcs-sm font-semibold text-mcs-text-default">开源项目</div>
-          <div className="text-mcs-xs text-mcs-text-muted">基于 MIT 协议开源</div>
+          <div className="text-mcs-xs text-mcs-text-muted">基于 AGPL-3.0 协议开源</div>
         </div>
       </section>
 

@@ -1,7 +1,7 @@
 /**
  * AboutPanel 测试（静态面板无网络依赖）：
  * - 应用名 + 副标题 + 版本徽章（mono）
- * - 开源卡片（开源项目 + 基于 MIT 协议开源）
+ * - 开源卡片（开源项目 + 基于 AGPL-3.0 协议开源）
  * - 相关链接卡片：三行外链 href/target/rel + 标题副标题
  * - 版权文案（居中 subtle）
  */
@@ -9,24 +9,24 @@ import { describe, it, expect } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import { AboutPanel } from '../about-panel'
 
-const REPO_URL = 'https://gitee.com/wyyfzb/mc_commander'
+const REPO_URL = 'https://github.com/wyyfzb/mc-commander'
 
 describe('AboutPanel 应用信息', () => {
   it('应用名 + 副标题 + 版本徽章（mono）', () => {
     render(<AboutPanel />)
     expect(screen.getByRole('heading', { name: 'MC Commander' })).toBeInTheDocument()
     expect(screen.getByText('自托管 Minecraft 服务器管理客户端')).toBeInTheDocument()
-    const badge = screen.getByText('v1.1.0')
+    const badge = screen.getByText('v1.0.0')
     expect(badge).toBeInTheDocument()
     expect(badge.classList.contains('font-mono')).toBe(true)
   })
 })
 
 describe('AboutPanel 开源卡片', () => {
-  it('「开源项目」+「基于 MIT 协议开源」', () => {
+  it('「开源项目」+「基于 AGPL-3.0 协议开源」', () => {
     render(<AboutPanel />)
     expect(screen.getByText('开源项目')).toBeInTheDocument()
-    expect(screen.getByText('基于 MIT 协议开源')).toBeInTheDocument()
+    expect(screen.getByText('基于 AGPL-3.0 协议开源')).toBeInTheDocument()
   })
 })
 

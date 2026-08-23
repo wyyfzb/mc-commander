@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import fs from 'fs';
-import os from 'os';
 import path from 'path';
 import Database from 'better-sqlite3';
 
