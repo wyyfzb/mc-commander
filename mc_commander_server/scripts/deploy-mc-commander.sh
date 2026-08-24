@@ -44,7 +44,7 @@ PACKAGE_URL="${PACKAGE_URL:-https://github.com/wyyfzb/mc-commander/releases/down
 # 预期代码包 sha256（强制完整性校验，防篡改/防发布版本错配）。
 # 当前值为本地构建参考值，发布新版本时必须按脚本头部注释流程同步更新；
 # 自定义 PACKAGE_URL 时通过 PACKAGE_SHA256 环境变量提供对应文件的 sha256
-EXPECTED_PACKAGE_SHA256="${PACKAGE_SHA256:-aa5fb4313242183d6719ec124b11b97483f376235ff32bf210f342b2da73ef5e}"
+EXPECTED_PACKAGE_SHA256="${PACKAGE_SHA256:-f3182d20a6a64c4aa0d29c16d6bbb04b93742b939c3a12e98fcf2c008a8b3535}"
 
 log()  { echo "[$(date '+%H:%M:%S')] $*"; }
 warn() { echo "[WARN] $*"; }
