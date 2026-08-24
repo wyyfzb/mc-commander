@@ -24,9 +24,9 @@
 #   - systemd 服务以专用低权限用户 mc-commander 运行（25566 高位端口无需 root）
 #
 # 发布新版本时须同步更新（保证脚本与代码包版本一致）：
-#   1) bash scripts/build-release.sh
-#   2) sha256sum release/mc-commander-server.tar.gz  → 更新下方 EXPECTED_PACKAGE_SHA256
-#   3) 将 BRANCH 默认值更新为新 tag，与代码包一起推送
+#   1) 推送新 tag → CI release.yml 自动构建并上传 mc-commander-server-<tag>.tar.gz
+#   2) 下载该 Release 产物取 sha256 → 更新下方 EXPECTED_PACKAGE_SHA256
+#   3) 提交脚本更新并推送（tag 产物内容不变，无需重打）
 set -euo pipefail
 
 # 禁止 apt/debconf 在安装过程中弹出交互式配置界面（如 needrestart 服务重启提示）
@@ -44,7 +44,7 @@ PACKAGE_URL="${PACKAGE_URL:-https://github.com/wyyfzb/mc-commander/releases/down
 # 预期代码包 sha256（强制完整性校验，防篡改/防发布版本错配）。
 # 当前值为本地构建参考值，发布新版本时必须按脚本头部注释流程同步更新；
 # 自定义 PACKAGE_URL 时通过 PACKAGE_SHA256 环境变量提供对应文件的 sha256
-EXPECTED_PACKAGE_SHA256="${PACKAGE_SHA256:-f3182d20a6a64c4aa0d29c16d6bbb04b93742b939c3a12e98fcf2c008a8b3535}"
+EXPECTED_PACKAGE_SHA256="${PACKAGE_SHA256:-09237dce1f98458261ac0bcf72ed223458a293239df088f17382a425f8774a18}"
 
 log()  { echo "[$(date '+%H:%M:%S')] $*"; }
 warn() { echo "[WARN] $*"; }
