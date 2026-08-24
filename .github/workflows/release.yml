@@ -37,11 +37,33 @@ jobs:
             --exclude=node_modules --exclude=data --exclude=backups --exclude=servers --exclude=.env \
             .
 
+      - name: 生成 SHA256SUMS
+        run: sha256sum mc-commander-server-${{ github.ref_name }}.tar.gz > SHA256SUMS.txt
+
       - name: 创建 GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
-          files: mc-commander-server-${{ github.ref_name }}.tar.gz
+          files: |
+            mc-commander-server-${{ github.ref_name }}.tar.gz
+            SHA256SUMS.txt
+
+      # 产物 sha256 自动回写 deploy 脚本并开 PR（消除手工「下载→算值→改脚本→提交」链路）
+      - name: 回写 deploy 脚本 sha256
+        run: |
+          SHA=$(cut -d' ' -f1 SHA256SUMS.txt)
+          sed -i "s/^EXPECTED_PACKAGE_SHA256=\"\${PACKAGE_SHA256:-[a-f0-9]\{64\}\}\"/EXPECTED_PACKAGE_SHA256=\"\${PACKAGE_SHA256:-$SHA}\"/" \
+            mc_commander_server/scripts/deploy-mc-commander.sh
+          grep -q "$SHA" mc_commander_server/scripts/deploy-mc-commander.sh
+
+      - name: 创建 sha256 回写 PR
+        uses: peter-evans/create-pull-request@v7
+        with:
+          commit-message: "chore(deploy): ${{ github.ref_name }} Release 产物 sha256 自动回写"
+          title: "chore(deploy): ${{ github.ref_name }} Release 产物 sha256 自动回写"
+          body: "CI 自动生成：下载地址见 [Release ${{ github.ref_name }}](https://github.com/wyyfzb/mc-commander/releases/tag/${{ github.ref_name }})，合并后 deploy 脚本内嵌校验值与产物一致。"
+          branch: auto/sha256-${{ github.ref_name }}
+          base: main
 
   # gitee 镜像同步（需配置仓库变量 ENABLE_GITEE_MIRROR=true 与 Secret GITEE_SSH_KEY）
   mirror:

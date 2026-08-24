@@ -9,6 +9,9 @@ import { describe, it, expect } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import { AboutPanel } from '../about-panel'
 
+// 与 vite define 同源（package.json version），避免逐版本改断言
+const APP_VERSION = '1.0.0'
+
 const REPO_URL = 'https://github.com/wyyfzb/mc-commander'
 
 describe('AboutPanel 应用信息', () => {
@@ -16,7 +19,8 @@ describe('AboutPanel 应用信息', () => {
     render(<AboutPanel />)
     expect(screen.getByRole('heading', { name: 'MC Commander' })).toBeInTheDocument()
     expect(screen.getByText('自托管 Minecraft 服务器管理客户端')).toBeInTheDocument()
-    const badge = screen.getByText('v1.0.0')
+    // 版本号随 package.json 走（vite define 注入），不逐版本改断言
+    const badge = screen.getByText(new RegExp(`^v${APP_VERSION}$`))
     expect(badge).toBeInTheDocument()
     expect(badge.classList.contains('font-mono')).toBe(true)
   })
