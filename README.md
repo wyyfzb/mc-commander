@@ -7,7 +7,7 @@
 <h1 align="center">MC_Commander</h1>
 <p align="center">自托管 Minecraft 服务器管理面板 — 图形化免命令管理你的 MC 服务器</p>
 
-MC_Commander 是一个自托管的 Minecraft 服务器管理工具。**核心定位：图形化界面拼装指令，服主无需手敲任何 MC 命令**——可视化给予物品（含附魔/药水）、传送、封禁、踢出等操作全部由面板自动生成指令。架构为 **Web 前端（React 19）+ Node.js 服务端（Express + WebSocket + better-sqlite3）**，浏览器直接访问即用。
+MC_Commander 是一个自托管的 Minecraft 服务器管理工具。**核心定位：图形化界面拼装指令，服主无需手敲任何 MC 命令**——可视化给予物品（含附魔/药水）、传送、封禁、踢出等操作全部由面板自动生成指令。架构为 **Web 前端（React 19）+ Node.js 服务端（Express + WebSocket + better-sqlite3）**，浏览器直接访问即用。国内用户可访问 gitee 镜像仓库（`https://gitee.com/wyyfzb/mc-commander`，分支/标签自动同步，Release 附件不随镜像）。
 
 ---
 
@@ -60,7 +60,7 @@ sudo bash /tmp/deploy-mc-commander.sh
 
 脚本会自动安装 Java/Node.js、下载代码、生成 API Key 并注册 systemd 服务（下载
 tarball 带 sha256 完整性校验）。
-（国内网络可改用 gitee 镜像源：`https://gitee.com/wyyfzb/mc-commander/raw/master/...` 同路径，并配合 `PACKAGE_URL`/`PACKAGE_SHA256` 环境变量）
+（国内网络可改用 gitee 镜像源（分支为 `main`，无 `master`）：`https://gitee.com/wyyfzb/mc-commander/raw/main/...` 同路径，并配合 `PACKAGE_URL`/`PACKAGE_SHA256` 环境变量）
 
 #### 方式二：手动部署
 
