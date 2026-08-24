@@ -4,6 +4,7 @@ updates:
     directory: /mc_commander_server
     schedule:
       interval: weekly
+    rebase-strategy: auto
     commit-message:
       prefix: "chore(deps)"
     groups:
@@ -14,6 +15,7 @@ updates:
     directory: /mc_manager_web
     schedule:
       interval: weekly
+    rebase-strategy: auto
     commit-message:
       prefix: "chore(deps)"
     groups:
@@ -24,5 +26,6 @@ updates:
     directory: /
     schedule:
       interval: monthly
+    rebase-strategy: auto
     commit-message:
       prefix: "chore(ci)"
