@@ -83,8 +83,8 @@ test.describe('设置页', () => {
   test('备份管理：列表 + 立即备份 + 恢复确认取消', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/settings/backup')
-    // 面板标题（按角色定位，避免与子导航同名链接歧义）
-    await expect(page.getByRole('heading', { name: '备份管理' })).toBeVisible()
+    // 面板标题（h3 面板内标题；页面级 h2 与其同名，按层级区分）
+    await expect(page.getByRole('heading', { name: '备份管理', level: 3 })).toBeVisible()
     // 快照机制说明
     await expect(page.getByText('快照备份：未修改文件零拷贝增量传输，超出保留策略自动清理')).toBeVisible()
     // 列表行（mock 3 条：completed snapshot / zip / failed）
