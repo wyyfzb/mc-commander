@@ -30,7 +30,7 @@
     "minecraft-core": "^1.0.2",
     "prismarine-nbt": "^2.8.0",
     "rcon-client": "^4.2.5",
-    "ws": "^8.16.0"
+    "ws": "^8.21.3"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
