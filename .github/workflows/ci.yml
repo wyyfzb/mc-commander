@@ -31,8 +31,8 @@ jobs:
       - run: npm run lint
       - run: npm test
 
-  web:
-    name: 前端（lint + test + build + e2e）
+  web-check:
+    name: 前端（lint + test）
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -47,7 +47,22 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run test
-      # build 内含 tsc -b（类型检查），产物供 preview e2e 复用
+
+  web-e2e:
+    name: 前端（build + e2e）
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mc_manager_web
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mc_manager_web/package-lock.json
+      - run: npm ci
+      # build 内含 tsc -b（类型检查），产物供 preview e2e 复用（E2E_SERVER=preview）
       - run: npm run build
       - name: 缓存 Playwright 浏览器
         uses: actions/cache@v4
@@ -55,7 +70,6 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('mc_manager_web/package-lock.json') }}
       - run: npx playwright install chromium --with-deps
-      # e2e 跑构建产物（vite preview），无 dev 编译延迟
       - run: npm run test:e2e
         env:
           E2E_SERVER: preview
