@@ -15,7 +15,7 @@ const REPO_URL = 'https://github.com/wyyfzb/mc-commander'
 /** 三行外链：标题/副标题/地址 + 图标（图标底色走语义 token） */
 const LINKS = [
   {
-    title: '⭐ Gitee 仓库',
+    title: '⭐ GitHub 仓库',
     subtitle: '查看源代码并参与贡献',
     href: REPO_URL,
     icon: Code,

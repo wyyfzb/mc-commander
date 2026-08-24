@@ -62,8 +62,10 @@ npm run dev                  # node --watch 热重载
 ## e2e 说明
 
 Playwright 配置（`mc_manager_web/playwright.config.ts`）会自动启动两个本地服务：
-mock 后端（端口 5198）+ Vite dev（端口 5199），无需手工准备；浏览器通道自动降级
-（Chrome → Edge → 内置 chromium）。断言优先用可访问性角色/名称，不用脆弱的 CSS 选择器。
+mock 后端（端口 5198）+ 前端服务器（端口 5199，默认 dev；CI 与 `E2E_SERVER=preview`
+时用 vite preview 服务构建产物，需先 `npm run build`），无需手工准备；浏览器通道
+自动降级（Chrome → Edge → 内置 chromium）。断言优先用可访问性角色/名称，
+不用脆弱的 CSS 选择器。
 
 ## 提交规范
 

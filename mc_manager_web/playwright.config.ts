@@ -50,12 +50,22 @@ export default defineConfig({
       timeout: 30_000,
       env: { MOCK_PORT: String(MOCK_PORT) },
     },
-    {
-      command: `npm run dev -- --port ${DEV_PORT}`,
-      url: `http://localhost:${DEV_PORT}`,
-      reuseExistingServer: true,
-      timeout: 60_000,
-      env: { VITE_PROXY_TARGET: `http://localhost:${MOCK_PORT}` },
-    },
+    // E2E_SERVER=preview 时服务构建产物（vite preview，页面加载无编译延迟，
+    // CI 用）；默认 dev（本地改代码即测）
+    process.env.E2E_SERVER === 'preview'
+      ? {
+          command: `npm run preview -- --port ${DEV_PORT} --strictPort`,
+          url: `http://localhost:${DEV_PORT}`,
+          reuseExistingServer: true,
+          timeout: 30_000,
+          env: { VITE_PROXY_TARGET: `http://localhost:${MOCK_PORT}` },
+        }
+      : {
+          command: `npm run dev -- --port ${DEV_PORT}`,
+          url: `http://localhost:${DEV_PORT}`,
+          reuseExistingServer: true,
+          timeout: 60_000,
+          env: { VITE_PROXY_TARGET: `http://localhost:${MOCK_PORT}` },
+        },
   ],
 })

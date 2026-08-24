@@ -65,6 +65,20 @@ export default defineConfig({
       },
     },
   },
+  // preview（e2e 用）：代理配置与 dev 一致，构建产物直出无编译延迟
+  preview: {
+    proxy: {
+      '/api': {
+        target: proxyTarget,
+        changeOrigin: true,
+      },
+      '/ws': {
+        target: proxyTarget,
+        ws: true,
+        changeOrigin: true,
+      },
+    },
+  },
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],

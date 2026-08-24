@@ -46,7 +46,7 @@ describe('AboutPanel 相关链接', () => {
   it('三行标题/副标题文案', () => {
     render(<AboutPanel />)
     const links = screen.getAllByRole('link')
-    expect(within(links[0]!).getByText('⭐ Gitee 仓库')).toBeInTheDocument()
+    expect(within(links[0]!).getByText('⭐ GitHub 仓库')).toBeInTheDocument()
     expect(within(links[0]!).getByText('查看源代码并参与贡献')).toBeInTheDocument()
     expect(within(links[1]!).getByText('🚀 项目 Releases')).toBeInTheDocument()
     expect(within(links[1]!).getByText('查看版本发布与更新日志')).toBeInTheDocument()

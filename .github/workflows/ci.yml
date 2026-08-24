@@ -32,7 +32,7 @@ jobs:
       - run: npm test
 
   web:
-    name: 前端（lint + typecheck + test + build）
+    name: 前端（lint + test + build + e2e）
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -46,32 +46,19 @@ jobs:
           cache-dependency-path: mc_manager_web/package-lock.json
       - run: npm ci
       - run: npm run lint
-      - run: npx tsc -b
       - run: npm run test
+      # build 内含 tsc -b（类型检查），产物供 preview e2e 复用
       - run: npm run build
-
-  e2e:
-    name: 前端 e2e（Playwright）
-    runs-on: ubuntu-latest
-    needs: web
-    defaults:
-      run:
-        working-directory: mc_manager_web
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: mc_manager_web/package-lock.json
-      - run: npm ci
       - name: 缓存 Playwright 浏览器
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('mc_manager_web/package-lock.json') }}
       - run: npx playwright install chromium --with-deps
+      # e2e 跑构建产物（vite preview），无 dev 编译延迟
       - run: npm run test:e2e
+        env:
+          E2E_SERVER: preview
       - name: 上传失败现场
         if: failure()
         uses: actions/upload-artifact@v4
