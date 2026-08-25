@@ -7,10 +7,12 @@
 import { useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import {
+  columnSizingFeature,
+  columnVisibilityFeature,
   flexRender,
-  getCoreRowModel,
-  getSortedRowModel,
-  useReactTable,
+  rowSortingFeature,
+  tableFeatures,
+  useTable,
   type ColumnDef,
   type Row,
   type SortingState,
@@ -57,6 +59,13 @@ const GAME_MODE_LABELS: Record<string, string> = {
   spectator: '旁观',
 }
 
+// v9 features 需模块级静态定义（官方建议）：排序 + 列尺寸（getSize）/列可见（getVisibleCells）
+const features = tableFeatures({
+  rowSortingFeature,
+  columnSizingFeature,
+  columnVisibilityFeature,
+})
+
 const DIMENSION_META = {
   overworld: { label: '主世界', token: '--mcs-dimension-overworld' },
   nether: { label: '下界', token: '--mcs-dimension-nether' },
@@ -101,7 +110,7 @@ export function PlayerTable({
 
   const selectedSet = useMemo(() => new Set(selectedUuids), [selectedUuids])
 
-  const columns = useMemo<ColumnDef<Player>[]>(
+  const columns = useMemo<ColumnDef<typeof features, Player>[]>(
     () => [
       {
         id: 'select',
@@ -348,15 +357,15 @@ export function PlayerTable({
     [selectedSet, onOpenDetail, onAction, onOpenBan, toggleSelect, toggleSelectPage],
   )
 
-  const table = useReactTable({
-    data: players,
-    columns,
-    state: { sorting },
-    onSortingChange: setSorting,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    autoResetPageIndex: true,
-  })
+  const table = useTable(
+    {
+      features,
+      data: players,
+      columns,
+      state: { sorting },
+      onSortingChange: setSorting,
+    },
+  )
 
   const allRows = table.getRowModel().rows
   const totalPages = pageSize === -1 ? 1 : Math.max(1, Math.ceil(allRows.length / pageSize))
@@ -622,7 +631,7 @@ function PlayerRow({
   selected,
   onOpenDetail,
 }: {
-  row: Row<Player>
+  row: Row<typeof features, Player>
   selected: boolean
   onOpenDetail: (name: string) => void
 }) {
