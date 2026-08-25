@@ -1,0 +1,30 @@
+name: Dependabot auto-merge
+
+# dependabot 的 minor/patch PR 自动打 auto-merge 标记：
+# CI 全绿 + 分支最新时 GitHub 自动合并；major 升级留给人工决策（SOP §6）
+# strict required checks 下「分支最新」由 maint-loop.sh 的 @dependabot rebase 循环补齐
+
+on: pull_request_target
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    name: 自动合并标记（minor/patch）
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    steps:
+      - name: 获取依赖元数据
+        id: metadata
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: "${{ secrets.GITHUB_TOKEN }}"
+
+      - name: minor/patch 打 auto-merge
+        if: steps.metadata.outputs.update-type != 'version-update:semver-major'
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
