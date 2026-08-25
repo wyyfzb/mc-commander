@@ -440,7 +440,8 @@ export function createPlayerRoutes(serverManager) {
       return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND));
     }
     if (!requireRunning(instance, res)) return;
-    const reason = sanitizeReason(req.body.reason) || 'Kicked by operator';
+    // express 5：无 JSON body 的请求 req.body 为 undefined（v4 是 {}）
+    const reason = sanitizeReason(req.body?.reason) || 'Kicked by operator';
     await instance.sendCommand(`kick ${req.params.player} ${reason}`);
     res.json(success(null, `Kicked ${req.params.player}`));
   }));
@@ -464,9 +465,10 @@ export function createPlayerRoutes(serverManager) {
       return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND));
     }
     if (!requireRunning(instance, res)) return;
-    const reason = sanitizeReason(req.body.reason) || 'Banned by operator';
-    const duration = req.body.duration;
-    const ip = typeof req.body.ip === 'string' ? req.body.ip.trim() : null;
+    // 同 kick：express 5 无 body 请求的 req.body 为 undefined
+    const reason = sanitizeReason(req.body?.reason) || 'Banned by operator';
+    const duration = req.body?.duration;
+    const ip = typeof req.body?.ip === 'string' ? req.body.ip.trim() : null;
 
     if (ip) {
       if (!IP_REGEX.test(ip)) {
