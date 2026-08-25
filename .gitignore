@@ -4,7 +4,6 @@
 .vscode/
 .fleet/
 .agents/
-.zcode/
 
 # UI 原型/预检产物（非项目源码）
 mc-commander-prototype/
@@ -20,7 +19,9 @@ trae/
 # Agent 私有配置/技能/MCP（本机工作环境，不入库；AGENTS.md/CLAUDE.md 为社区版入库）
 .claude/
 .ai/
+.zcode/
 .mimosa/
+.workbuddy/
 .mcp.json
 CLAUDE.local.md
 skills-lock.json
