@@ -21,7 +21,7 @@
   "author": "MC_Commander Team",
   "license": "AGPL-3.0-or-later",
   "dependencies": {
-    "better-sqlite3": "^11.0.0",
+    "better-sqlite3": "^13.0.3",
     "croner": "^10.0.1",
     "dotenv": "^17.4.2",
     "express": "^4.18.0",
