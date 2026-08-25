@@ -29,3 +29,8 @@ updates:
     rebase-strategy: auto
     commit-message:
       prefix: "chore(ci)"
+    groups:
+      # actions 版本号即 semver，major（如 cache v4→v6）与小版本同组合并，
+      # 拆分意义不大；如某 action 需要谨慎升级，用 exclude-patterns 排除
+      actions-all:
+        patterns: ["*"]
