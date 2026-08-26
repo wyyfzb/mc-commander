@@ -71,3 +71,10 @@ mock 后端（端口 5198）+ 前端服务器（端口 5199，默认 dev；CI �
 
 Conventional Commits（`feat`/`fix`/`refactor`/`docs`/`chore`/`test` + scope），
 描述用中文，例：`feat(web): 玩家详情新增成就标签页`。详见 CONTRIBUTING.md。
+
+- **AI 协作署名（Co-authored-by）**：Agent 发起或协助生成的提交，在 commit footer 附带共同作者声明：
+  ```text
+  Co-authored-by: ZCode Agent <noreply@zcode.ai>
+  ```
+- **PR 与分支**：所有非 dependabot 改动均走特性分支 + PR，主干 squash 合并；合并后自动删除特性分支。
+
