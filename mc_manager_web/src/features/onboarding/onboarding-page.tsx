@@ -14,9 +14,9 @@ import { ConnectionForm } from '@/features/settings/components/connection-form'
 
 type DeployMode = 'already' | 'windows' | 'docker' | 'manual'
 
-/** 手动部署一键命令（项目公开仓库脚本地址） */
+/** 手动部署一键命令（项目公开仓库脚本地址；gitee 镜像同路径，README 与设置页一致用 main 分支） */
 const DEPLOY_COMMAND =
-  'sudo su -c "curl -fsSL https://gitee.com/wyyfzb/mc_commander/raw/master/mc_commander_server/scripts/deploy-mc-commander.sh | bash"'
+  'sudo su -c "curl -fsSL https://gitee.com/wyyfzb/mc-commander/raw/main/mc_commander_server/scripts/deploy-mc-commander.sh | bash"'
 
 /** Docker 部署命令（官方镜像发布后可用；国内镜像加速见部署文档） */
 const DOCKER_COMMAND =
@@ -231,11 +231,11 @@ export function OnboardingPage() {
           }}
         />
 
-        {/* 底部：部署文档入口 */}
-        <div className="mt-6 flex items-center justify-between border-t border-mcs-border-muted pt-4">
+        {/* 底部：部署文档入口（引导语与动作紧邻居中，语义连贯） */}
+        <div className="mt-6 flex items-center justify-center gap-1.5 border-t border-mcs-border-muted pt-4">
           <span className="text-mcs-2xs text-mcs-text-subtle">遇到问题？</span>
           <a
-            href="https://gitee.com/wyyfzb/mc_commander"
+            href="https://gitee.com/wyyfzb/mc-commander"
             target="_blank"
             rel="noreferrer"
             className="text-mcs-xs font-semibold text-mcs-accent-fg transition-colors hover:underline"

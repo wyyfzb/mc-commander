@@ -77,6 +77,38 @@ describe('BigStatCards 顶部四卡', () => {
     expect(screen.queryByText('卡顿')).not.toBeInTheDocument()
     expect(screen.getByText('--')).toBeInTheDocument()
   })
+
+  it('在线玩家超过 3 人时显示头像帽 +N', () => {
+    setState({
+      ...mockInstanceStatus,
+      playerCount: 5,
+      opNames: ['Steve'],
+      sleepingPlayerNames: ['Alex', 'Bob'],
+      awakePlayerNames: ['Charlie', 'Dave'],
+    })
+    render(<BigStatCards history={emptyHistory} />)
+    expect(screen.getByText('5')).toBeInTheDocument()
+    // 5 人去重后渲染前 3 个头像 + 1 个 +2 头像帽
+    expect(screen.getByText('+2')).toBeInTheDocument()
+  })
+
+  it('totalMemory 为 0 时内存进度条兜底为 0', () => {
+    useServerStore.setState({
+      status: mockInstanceStatus,
+      systemStats: { cpuUsage: 10, memoryUsage: 0, totalMemory: 0, memoryPercent: 0, cpuCores: 4, loadAvg: [0.1], uptime: 86400 },
+      instanceId: 'demo',
+      socketConnected: true,
+      lastStatusEvent: null,
+    })
+    render(<BigStatCards history={emptyHistory} />)
+    expect(screen.getByText('0%')).toBeInTheDocument()
+    expect(screen.getByText('0.0')).toBeInTheDocument()
+    expect(screen.getByText((c) => c.includes('/ 0G'))).toBeInTheDocument()
+  })
+
+  it('history 为空数组时 sparkline 正常渲染不报错', () => {
+    expect(() => render(<BigStatCards history={{ cpu: [], mem: [], tps: [] }} />)).not.toThrow()
+  })
 })
 
 describe('PlayersCard（右栏可点行）', () => {
