@@ -10,7 +10,7 @@ import { render, screen, within } from '@testing-library/react'
 import { AboutPanel } from '../about-panel'
 
 // 与 vite define 同源（package.json version），避免逐版本改断言
-const APP_VERSION = '1.0.0'
+const APP_VERSION = '0.1.0'
 
 const REPO_URL = 'https://github.com/wyyfzb/mc-commander'
 const GITEE_REPO_URL = 'https://gitee.com/wyyfzb/mc-commander'
