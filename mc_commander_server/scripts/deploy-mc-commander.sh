@@ -11,7 +11,7 @@
 #
 # 环境变量覆盖:
 #   MC_COMMANDER_DIR=/opt/mc-commander  安装目录
-#   BRANCH=v1.0.0                       发布标签/分支（默认锁定具体 tag，避免 master 可变分支被篡改；
+#   BRANCH=v0.1.0                       发布标签/分支（默认锁定具体 tag，避免 master 可变分支被篡改；
 #                                       显式覆盖为可变分支时，必须同时提供 PACKAGE_SHA256 完成完整性校验）
 #   PACKAGE_URL=xxx                     后端代码包下载地址（tar.gz，默认 GitHub Release 固定标签；
 #                                       国内网络可覆盖为 gitee 镜像同文件地址）
@@ -38,7 +38,7 @@ export NEEDRESTART_MODE=a
 MC_COMMANDER_DIR="${MC_COMMANDER_DIR:-/opt/mc-commander}"
 # 默认锁定具体发布标签（vX.Y.Z），避免 master 可变分支被投毒/误覆盖后影响安装；
 # 仍保留 BRANCH 环境变量覆盖（例如 BRANCH=master 或指定 commit），但可变分支场景必须配合 PACKAGE_SHA256
-BRANCH="${BRANCH:-v1.0.0}"
+BRANCH="${BRANCH:-v0.1.0}"
 # GitHub Release 资产为权威来源（CI 构建）；国内网络可通过 PACKAGE_URL 覆盖为 gitee 镜像
 PACKAGE_URL="${PACKAGE_URL:-https://github.com/wyyfzb/mc-commander/releases/download/${BRANCH}/mc-commander-server-${BRANCH}.tar.gz}"
 # 预期代码包 sha256（强制完整性校验，防篡改/防发布版本错配）。

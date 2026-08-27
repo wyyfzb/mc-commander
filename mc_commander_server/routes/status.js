@@ -121,7 +121,7 @@ export function createStatusRoutes(serverManager) {
     const cpuUsagePercent = getSystemCpuUsage();
 
     res.json(success({
-      version: '1.1.0',
+      version: '0.1.0',
       instanceCount: instances.length,
       runningCount: instances.filter(i => i.isRunning).length,
       totalPlayers,

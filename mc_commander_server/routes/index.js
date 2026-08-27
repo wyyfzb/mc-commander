@@ -16,7 +16,7 @@ export function setupRoutes(app, serverManager, taskScheduler) {
     const instanceCount = serverManager?.instances?.size ?? 0;
     res.json(success({
       status: 'ok',
-      version: '1.1.0',
+      version: '0.1.0',
       uptime: Math.floor(process.uptime()),
       instanceCount,
       nodeVersion: process.version,
