@@ -1872,3 +1872,50 @@ ErrorBoundary、备份下载、文件管理接线、CSV 导出、DiskUsageCard�
 3. 安全主线：管理员密码登录（roadmap 工程基建第 1 项，当前最大未启动项）
 PR #41 已合并（历史）；PR #45（oxlint 清零）本轮合并。CI 4/4 全绿，无未同步内容。
 2026-08-29 00:17 CI 守护健康检查：PR #45 CI 全绿 → squash 合并（de253bc），main 已同步。无待处理项。
+
+---
+
+# 2026-08-29 00:35 · 灾后重实现轮 R7（feat-6 P0-3 经验/效果/召唤表单）
+
+## 一、项目当前状态描述与判断
+
+- 工作区 /home/z/reference 完好；未触碰 /home/z/my-project；方向与 roadmap 一致，无跑偏。
+- 开工基线：服务端 555/555（40 文件）、前端 619/619（58 文件）、tsc 0 errors、oxlint 80 warnings（全存量）。
+- PR #41-#45 全部已合并到 main，CI 全绿，无待处理项。
+- 本轮选择依据：worklog R6 建议第 2 项「feat-6 重实现（经验/药水效果/召唤表单）」= roadmap P0 第 3 项。
+
+## 二、当前目标 / 已完成的修改 / 验证结果
+
+**目标**：交付 P0-3 经验/效果/召唤表单（纯前端 RCON 命令拼装，无服务端改动）。
+
+已完成：
+
+1. **实体目录**（`lib/mc-entities.ts` 新建）：82 种常用 MC 实体，9 分类（敌对/中立/被动/环境/方块实体/弹射物/载具/NPC），`searchEntities()` 支持中英文搜索，`getEntitiesByCategory()` 分组。
+2. **操作表单面板**（`action-forms.tsx` 新建 ~350 行）：
+   - 三 Tab（经验/效果/召唤），Tabs 组件包裹。
+   - **经验表单**：经验值/等级切换 + 给予/设置/移除操作 + 快捷数量档（1-1000/等级 1-30）+ 命令预览 + 批量支持（runBatchForTargets）。
+   - **效果表单**：复用 mc-potions.ts 20 种效果数据，正向/负面/中性三分类网格选择 + 等级 I-V + 时长预设（30s-无限）+ 清除全部模式（warning 提示）+ 搜索过滤 + 批量支持。
+   - **召唤表单**：82 种实体分类网格 + 中英文搜索 + XYZ 坐标输入（~/数字/混合）+ 快捷坐标（当前位置/头顶上方）+ 命令预览。
+   - RCON 离线拦截（OfflineBanner）+ 命令预览卡（mono code）+ 执行 loading。
+3. **Tab 集成**：store.ts PlayerDetailTab 新增 'actions'（6 Tab）+ DETAIL_TAB_LABELS 新增「操作」+ BATCH_TABS 扩展（传送/给予/操作三 Tab 可批量）。
+4. **player-detail-panel.tsx**：导入 ActionForms + 渲染 actions Tab 内容（batchTargets 透传）。
+5. **测试**：+18 用例（mc-entities.test 9 + action-forms.test 9：Tab 渲染/快捷数量/命令预览/等级模式/效果搜索/坐标输入/离线提示）。
+
+验证结果：
+- 服务端 **555/555**（40 文件，零改动）、eslint 0 errors
+- 前端 **637/637**（60 文件，+18）、tsc 0 errors、oxlint 0 errors（80 warnings 全存量）
+- roadmap.md P0-3 标记 ✅（P0 1/2/3 完成，4/5 灾后重实现未达）
+- CHANGES.md feat-6 条目
+
+## 三、未解决问题或风险与下一阶段优先事项
+
+风险/未解决：
+- mc_server.test.js:617 全套件竞态（灾前债务，单独运行通过）
+- oxlint 80 warnings 全存量（refs-during-render/only-export-components/purity 等低优先级）
+- 沙盒进程托管同前（dev server 需同命令块内联启动）
+
+下一阶段优先建议（按序）：
+1. feat-7 重实现：P0-4 实例版本升级（服务端 UpgradeService + 前端 UpgradeDialog）
+2. feat-8 重实现：P0-5 插件管理（列表/上传/删除）
+3. 小改进池：oxlint 80 warnings 存量清理
+4. 安全主线：管理员密码登录（roadmap 工程基建第 1 项，当前最大未启动项）
