@@ -79,7 +79,7 @@
 
 ## feat-3 · P0-2 文件管理增强（上传 / 新建目录 / 重命名，roadmap P0-2）
 
-- **类型**：新功能（roadmap P0-2 全链路交付）
+- **类型**：新功能（roadmap P0-2 全链路交付；**灾后重实现完成 2026-08-28**，本轮 R5 补齐前端 UI 接线）
 - **位置**：
   - 服务端 `routes/files.js`（新增 3 个端点 + multer 集成 + 文件名清洗 + 扩展名黑名单 + 体积上限 50MB）
   - 服务端 `utils/response.js`（新增 FILE_UPLOAD_TOO_LARGE/FILE_TYPE_NOT_ALLOWED/FILE_ALREADY_EXISTS 三个错误码）
@@ -87,6 +87,10 @@
   - 前端 `src/api/files.ts`（`apiUploadFile` / `apiCreateDirectory` / `apiRenameFile`）
   - 前端 `src/api/__tests__/files-enhanced.test.ts`（5 用例 msw mock）
   - 服务端 `__tests__/files.enhanced.test.js`（11 用例真实 fs 集成：mkdir 成功/嵌套/400/409 + rename 成功/404/409/400/403）
+  - 前端 `src/features/files/queries.ts`（R5：`useCreateDirectory` / `useRenameFile` / `useUploadFile` 三 mutation，成功后失效对应目录缓存）
+  - 前端 `src/features/files/components/file-list.tsx`（R5：工具栏「新建目录」+ 启用「上传」+ 行级「重命名」按钮；空态双 CTA）
+  - 前端 `src/features/files/files-page.tsx`（R5：新建目录对话框（recursive 多级路径提示）/ 重命名对话框（预填原名，编辑器打开目标改名跟随新路径）/ 隐藏 file input multipart 上传 + toast 反馈）
+  - 前端 `src/lib/mc-files.ts`（R5：formatFileSize / formatModifiedAt / fileIconName 纯函数迁移出组件文件，fast-refresh 合规）
 - **设计**：
   - 上传走 multer（磁盘缓冲），上传后原子 rename 到目标路径（.upload.tmp 中间态防半写）；同名覆盖（MC 用户常上传覆盖配置）
   - 扩展名黑名单覆盖可执行文件（.exe/.sh/.dll/.jar/.class 等 14 种），MC jar 走部署流程不上传
@@ -95,9 +99,9 @@
   - 新建目录 `mkdir -p` 支持嵌套创建；重命名 `fs.renameSync` 原子操作
   - 三个端点均走 `resolveInstancePath` 路径校验（与既有 GET/PUT/DELETE 同源安全链）
 - **验证**：
-  - 服务端 **514/514**（37 文件，新增 11）
-  - 前端 **614/614**（56 文件，新增 5）
-  - 双端 lint/类型检查全通过
+  - 服务端 **522/522**（37 文件，R5 实测）
+  - 前端 **615/615**（57 文件，R5 实测 +2：upload 成功/黑名单拒绝）
+  - 双端 lint/类型检查全通过；改动文件 oxlint 0 新增警告（file-list 3 条存量经纯函数迁移清零）
 
 ## feat-4 · 工程基建：Webhook 外部通知（roadmap 工程基建第 3 项）
 

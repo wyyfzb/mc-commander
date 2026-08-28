@@ -1640,3 +1640,43 @@ ErrorBoundary、备份下载、文件管理接线、CSV 导出、DiskUsageCard�
 1. 等 CI 变绿确认
 2. feat-4 按 CHANGES 规格重实现（磁盘监控 / 运维韧性）
 3. chore 债务：63 条 oxlint 存量警告按文件逐步清零
+
+---
+
+# 2026-08-28 19:50-20:05 · 灾后重实现轮 R5（feat-3 前端收尾 + CI 修复）
+
+## 一、项目状态
+
+- 工作区 /home/z/reference 完好；PR #41 已建立（CI 首轮：服务端/build+e2e/密钥扫描 3 绿，
+  前端 lint+test 1 失败）。
+- 用户指令：持续跟踪 GitHub 同步 + 跟进 CI。本轮 = 修 CI + 完成 feat-3 前端收尾。
+- 开工基线：服务端 522/522、前端 613/613。
+
+## 二、已完成
+
+1. **CI 修复（PR #41 唯一红灯）**：backups-download.test 的 `toBeInstanceOf(Blob)` 在 CI
+   Node undici 与 jsdom 跨 realm 下失败（沙盒本地恰好同 realm 掩盖）→ 改
+   `Object.prototype.toString.call(blob) === '[object Blob]'` realm 无关断言 + size>0。
+2. **feat-3 前端全链路接线**（R4 只做了 mkdir/rename API，UI 未接）：
+   - api/files.ts：`apiUploadFile`（multipart 独立 fetch，120s 超时，信封解析与错误码对齐）
+   - queries.ts：useCreateDirectory / useRenameFile / useUploadFile 三 mutation
+   - file-list.tsx：工具栏 FolderPlus 新建目录 + Upload 启用 + 行级 TextCursorInput 重命名；
+     空态「新建目录/新建文件」双 CTA
+   - files-page.tsx：新建目录对话框（recursive 多级提示）/ 重命名对话框（预填原名；
+     编辑器打开目标改名后无脏则跟随新路径）/ 隐藏 file input 上传 + toast
+   - src/lib/mc-files.ts：formatFileSize/formatModifiedAt/fileIconName 迁出组件文件
+     （fast-refresh 合规，file-list 存量 3 警告清零）；测试导入同步更新
+3. **CHANGES.md** feat-3 条目更新（R5 补齐标注 + 新验证数字）。
+
+## 三、验证结果
+
+- 服务端 **522/522**（37 文件，零改动）、eslint 0
+- 前端 **615/615**（57 文件，+2 上传用例）、tsc 0、改动文件 oxlint 0 新增警告
+- 测试环境注记：jsdom File 与 undici 跨 realm —— msw handler 断言改用 multipart 原文
+  正则（realm 无关），此坑已记录避免复发
+
+## 四、下一阶段
+
+1. 推送本轮 → PR #41 CI 复跑应全绿 → 提醒用户合并
+2. feat-4 磁盘监控重实现（CHANGES 规格完备）
+3. 存量 oxlint 警告按文件清零（monaco-editor-pane 1 条等）
