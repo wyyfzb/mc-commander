@@ -1176,7 +1176,7 @@ export class MCServerInstance extends EventEmitter {
         if (this._consecutiveCrashes >= maxCrashes && !this._circuitBreakerTripped) {
           this._circuitBreakerTripped = true;
           this.autoRestart = false;
-          try { InstanceModel.update(this.id, { autoRestart: false }); } catch (e) { /* best-effort */ }
+          try { InstanceModel.update(this.id, { autoRestart: false }); } catch { /* best-effort */ }
           this.emit('log', {
             text: `[服务器] 崩溃循环熔断已触发（${windowMs / 1000}s 内崩溃 ${this._consecutiveCrashes} 次），自动重启已禁用。请在实例设置中手动重新启用。`,
             type: 'stdout',

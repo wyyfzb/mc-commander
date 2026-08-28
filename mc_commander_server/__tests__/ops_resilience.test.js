@@ -5,10 +5,7 @@
  * - check-update 端点（npm registry / 离线回退）
  * - autoStart 恢复（面板重启后逐个错峰启动，跳过熔断/已运行/缺失）
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import fs from 'fs';
-import path from 'path';
-import os from 'os';
+import { describe, it, expect } from 'vitest';
 
 // ── 1. 崩溃循环熔断 ──────────────────────────────────────
 describe('崩溃循环熔断', () => {
@@ -58,29 +55,34 @@ describe('崩溃循环熔断', () => {
     consecutiveCrashes++;
     if (!crashWindowStart) crashWindowStart = t1;
 
-    // 模拟窗口过期（t2 远超窗口）
+    // 模拟窗口过期（t2 远超窗口）→ 计数清零、窗口起点重置
     const t2 = t1 + windowMs + 1;
     if (crashWindowStart && t2 - crashWindowStart > windowMs) {
       consecutiveCrashes = 0;
       crashWindowStart = null;
     }
-    // 窗口过期后再崩溃 2 次（不足阈值）
-    consecutiveCrashes++;
-    if (!crashWindowStart) crashWindowStart = t2;
-    consecutiveCrashes++;
+    // 窗口过期后再崩溃 maxCrashes-1 次（不足以触发熔断）
+    for (let i = 0; i < maxCrashes - 1; i++) {
+      consecutiveCrashes++;
+      if (!crashWindowStart) crashWindowStart = t2;
+      if (consecutiveCrashes >= maxCrashes && !circuitBreakerTripped) {
+        circuitBreakerTripped = true;
+      }
+    }
 
-    expect(consecutiveCrashes).toBe(2);
+    expect(consecutiveCrashes).toBe(maxCrashes - 1);
     expect(circuitBreakerTripped).toBe(false);
+    expect(crashWindowStart).toBe(t2);
   });
 
   it('成功启动重置熔断器', () => {
     let consecutiveCrashes = 5;
-    let crashWindowStart = Date.now();
+    let _crashWindowStart = Date.now();
     let circuitBreakerTripped = true;
 
     // 模拟 start() 重置
     consecutiveCrashes = 0;
-    crashWindowStart = null;
+    _crashWindowStart = null;
     circuitBreakerTripped = false;
 
     expect(consecutiveCrashes).toBe(0);
