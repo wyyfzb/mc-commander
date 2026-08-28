@@ -1800,3 +1800,27 @@ ErrorBoundary、备份下载、文件管理接线、CSV 导出、DiskUsageCard�
 2. chore：63 条 oxlint 存量警告清零（优先 routes.tsx 9 条）
 3. feat-6 重实现（经验/药水效果/召唤表单）或 roadmap P0-3 实例版本升级
 4. 安全主线：管理员密码登录（roadmap 工程基建第 1 项）
+
+---
+
+# 2026-08-28 23:54 · CI 守护轮（PR #43 lint 修复 + squash 合并）
+
+## 一、状态判断
+
+- PR #43（feat-5 运维韧性）CI 失败：服务端 lint 9 errors（ops_resilience.test.js 8 条未用导入/变量 + mc_server.js 1 条 catch 参数）
+- 其余 3 项 CI（前端 lint+test、前端 build+e2e、密钥扫描）均 pass
+
+## 二、修复与验证
+
+- 移除未用导入 vi/beforeEach/afterEach/fs/path/os
+- 未用变量 maxCrashes→_maxCrashes、crashWindowStart→_crashWindowStart（含遗漏引用修复）
+- catch (e)→catch（ES2019 可选 catch 绑定）
+- 本地验证：服务端 555/555 + eslint 0 errors
+- 推送后 CI 全绿（4/4 pass），mergeStateStatus CLEAN，无密钥泄漏
+- squash 合并 PR #43 → main（d180bd0），本地 main 已同步
+
+## 三、风险与下一步
+
+- 无风险
+- 当前 main 含 feat-1~5 全部灾后重实现产物
+- 下一轮可按 worklog R6 建议推进：oxlint 存量清零 / feat-6 重实现 / 安全主线
