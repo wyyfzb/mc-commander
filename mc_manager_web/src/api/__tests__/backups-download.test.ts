@@ -38,8 +38,11 @@ afterEach(() => server.close())
 describe('apiDownloadBackup', () => {
   it('returns blob for successful download', async () => {
     const blob = await apiDownloadBackup(config, 1)
-    expect(blob).toBeInstanceOf(Blob)
+    // realm 无关断言：CI 的 Node undici res.blob() 与 jsdom 全局 Blob 构造器不同，
+    // toBeInstanceOf(Blob) 会跨 realm 失败；改用 Object.prototype.toString 判定
+    expect(Object.prototype.toString.call(blob)).toBe('[object Blob]')
     expect(blob.type).toContain('gzip')
+    expect(blob.size).toBeGreaterThan(0)
   })
 
   it('throws error message from server for 409', async () => {
