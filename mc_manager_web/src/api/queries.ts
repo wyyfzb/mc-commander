@@ -7,7 +7,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { apiGet } from './client'
 import { useConnectionStore } from '@/stores/connection'
-import type { InstanceStatus, InstanceSummary, LogEntry, OverviewData, SystemStats } from './types'
+import type { InstanceStatus, InstanceSummary, LogEntry, OverviewData, SystemStats, UpdateCheckResult } from './types'
 import { apiGetAuditLogsPage, apiGetCommandHistoryPage, type AuditQueryParams } from './audit'
 
 // ── Query key 工厂（分层规范，防冲突）───────────────────────────
@@ -32,6 +32,7 @@ export const queryKeys = {
   commandHistory: (params?: AuditQueryParams) => [...queryKeys.all, 'command-history', params ?? {}] as const,
   webhooks: () => [...queryKeys.all, 'webhooks'] as const,
   webhookDeliveries: (id: number) => [...queryKeys.all, 'webhooks', id, 'deliveries'] as const,
+  checkUpdate: () => [...queryKeys.all, 'check-update'] as const,
 }
 
 /** 面板概览（含云服务器系统级资源；未配置连接时禁用） */
@@ -111,5 +112,16 @@ export function useCommandHistory(params: AuditQueryParams = {}) {
     queryFn: ({ signal }) => apiGetCommandHistoryPage(config, params, signal),
     enabled: config.status === 'ready',
     placeholderData: (prev) => prev,
+  })
+}
+
+/** 面板更新检查（1h staleTime，不轮询） */
+export function useCheckUpdate() {
+  const config = useConnectionStore()
+  return useQuery({
+    queryKey: queryKeys.checkUpdate(),
+    queryFn: ({ signal }) => apiGet<UpdateCheckResult>('/api/v1/check-update', config, signal),
+    enabled: config.status === 'ready',
+    staleTime: 3_600_000,
   })
 }

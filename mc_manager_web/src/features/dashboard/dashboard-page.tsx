@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { ServerOff } from 'lucide-react'
-import { BigStatCards, PlayersCard, RuntimeInfoCard } from './components/stat-cards'
+import { BigStatCards, PlayersCard, RuntimeInfoCard, DiskUsageCard } from './components/stat-cards'
 import { ServerTerminal } from './components/server-terminal'
 import { CommandInput } from './components/command-input'
 import { McClockCard } from './components/mc-clock-card'
@@ -78,6 +78,7 @@ export function DashboardPage() {
           <EventsCard />
           <AnnouncementCard />
           <PlayersCard />
+          <DiskUsageCard />
           <RuntimeInfoCard />
         </aside>
       </div>

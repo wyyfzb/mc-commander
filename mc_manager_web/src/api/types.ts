@@ -48,10 +48,25 @@ export interface OverviewData {
   /** 兼容旧字段 */
   totalMemory: number
   freeMemory: number
+  /** 磁盘使用率（feat-5） */
+  diskUsage?: DiskUsage
   instances: InstanceSummary[]
 }
 
 // ── 系统统计（GET /system-stats）──────────────────────────────
+export interface DiskInfo {
+  mountpoint: string
+  totalGB: number
+  usedGB: number
+  percent: number
+}
+
+export interface DiskUsage {
+  /** 使用率最高的主分区 */
+  primary: DiskInfo | null
+  all: DiskInfo[]
+}
+
 export interface SystemStats {
   cpuUsage: number
   memoryUsage: number
@@ -60,6 +75,8 @@ export interface SystemStats {
   cpuCores: number
   loadAvg: number[]
   uptime: number
+  /** 磁盘使用率（feat-5） */
+  diskUsage?: DiskUsage
 }
 
 // ── 玩家（GET /instances/:id/players + /players/:player/details）──
@@ -238,6 +255,8 @@ export interface InstanceUpdatePayload {
   minMemory?: string
   jarFile?: string
   autoRestart?: boolean
+  /** 面板重启后自动恢复（feat-5） */
+  autoStart?: boolean
   /** 结构化启动参数（服务端白名单：仅 -X/-D 前缀、-jar 与 nogui） */
   jvmArgs?: string[]
   /** null 清除启动命令 */
@@ -250,6 +269,12 @@ export interface InstanceStatus {
   isRunning: boolean
   isRconConnected: boolean
   autoRestart: boolean
+  /** 面板重启后自动恢复（feat-5） */
+  autoStart: boolean
+  /** 崩溃循环熔断已触发 */
+  circuitBreakerTripped: boolean
+  /** 当前滑动窗口内连续崩溃次数 */
+  consecutiveCrashes: number
   /** 本次运行秒数 */
   uptime: number
   address: string
@@ -321,9 +346,11 @@ export interface WsLogPayload {
 }
 
 export interface WsStatusEventPayload {
-  event: 'started' | 'stopped' | 'ready' | 'crash' | 'save'
+  event: 'started' | 'stopped' | 'ready' | 'crash' | 'save' | 'circuit_breaker'
   code?: number | null
   autoRestart?: boolean
+  consecutiveCrashes?: number
+  windowMs?: number
 }
 
 export interface WsPlayerEventPayload {
@@ -385,6 +412,7 @@ export const WS_EVENT_TYPES = [
   'restoreFailed',
   'taskExecute',
   'deployProgress',
+  'circuit_breaker',
   'error',
 ] as const
 
@@ -640,6 +668,15 @@ export interface WebhookDelivery {
   durationMs: number | null
   attempts: number
   createdAt: string
+}
+
+// ── 更新检查（GET /check-update）────────────────────────────
+export interface UpdateCheckResult {
+  current: string
+  latest: string | null
+  hasUpdate: boolean
+  offline?: boolean
+  url?: string
 }
 
 export interface WebhookTestResult {

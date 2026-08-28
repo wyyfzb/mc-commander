@@ -9,6 +9,7 @@ import { createKeyRoutes } from './keys.js';
 import { createAuditRoutes } from './audit.js';
 import { createWebhookRoutes } from './webhooks.js';
 import { success } from '../utils/response.js';
+import config from '../config.js';
 import { notFoundHandler } from '../middleware/error_handler.js';
 
 export function setupRoutes(app, serverManager, taskScheduler) {
@@ -37,6 +38,34 @@ export function setupRoutes(app, serverManager, taskScheduler) {
   v1Router.use('/', createAuditRoutes());
   v1Router.use('/', createWebhookRoutes());
 
+  // GET /api/v1/check-update —— 面板更新检查（Node 内置 fetch，零新增依赖）
+  v1Router.get('/check-update', async (req, res, next) => {
+    try {
+      const pkgName = config.npmPkgName;
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 5000);
+      const npmRes = await fetch(`https://registry.npmjs.org/${pkgName}/latest`, { signal: ctrl.signal });
+      clearTimeout(timer);
+      if (!npmRes.ok) throw new Error(`npm registry ${npmRes.status}`);
+      const pkg = await npmRes.json();
+      const current = '0.1.0'; // 与 package.json / overview 保持一致
+      const latest = pkg.version || null;
+      res.json(success({
+        current,
+        latest,
+        hasUpdate: latest !== null && latest !== current,
+        url: latest ? `https://www.npmjs.com/package/${pkgName}/v/${latest}` : undefined,
+      }));
+    } catch (e) {
+      // 网络不可达不报错
+      if (e.name === 'AbortError' || e.code === 'UND_ERR_CONNECTABLE') {
+        res.json(success({ current: '0.1.0', latest: null, hasUpdate: false, offline: true }));
+      } else {
+        next(e);
+      }
+    }
+  });
+
   v1Router.get('/', (req, res) => {
     res.json(success({
       version: 'v1',
@@ -61,6 +90,7 @@ export function setupRoutes(app, serverManager, taskScheduler) {
         '/webhooks/:id',
         '/webhooks/:id/test',
         '/webhooks/:id/deliveries',
+        '/check-update',
       ]
     }));
   });

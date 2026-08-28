@@ -29,5 +29,19 @@ export default {
   backupSpawnTimeoutMs: parseInt(process.env.BACKUP_SPAWN_TIMEOUT_MS || '3600000'),
   // 进行中备份/恢复记录的卡死判定阈值：服务启动与互斥检查时，
   // 状态变更超过此阈值的 creating（→failed）/restoring（→completed）记录自动重置
-  backupInProgressTimeoutMs: parseInt(process.env.BACKUP_IN_PROGRESS_TIMEOUT_MS || '3600000')
+  backupInProgressTimeoutMs: parseInt(process.env.BACKUP_IN_PROGRESS_TIMEOUT_MS || '3600000'),
+  // 崩溃循环熔断：滑动窗口（ms）内连续崩溃达阈值自动禁用 autoRestart
+  crashLoop: {
+    windowMs: parseInt(process.env.CRASH_LOOP_WINDOW_MS || '300000'),
+    maxCrashes: parseInt(process.env.CRASH_LOOP_MAX_CRASHES || '5'),
+  },
+  // 磁盘使用率告警阈值（百分比）
+  diskAlert: {
+    warningPercent: parseInt(process.env.DISK_WARNING_PERCENT || '85'),
+    errorPercent: parseInt(process.env.DISK_ERROR_PERCENT || '95'),
+  },
+  // 面板重启后自动恢复实例间隔（ms）
+  autoStartDelayMs: parseInt(process.env.AUTO_START_DELAY_MS || '3000'),
+  // npm 包名（更新检查用）
+  npmPkgName: 'mc-commander-server',
 };
