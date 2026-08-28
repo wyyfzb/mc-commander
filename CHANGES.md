@@ -902,3 +902,14 @@
   - 服务端 **522/522**（37 文件，零改动）、eslint 0
   - 前端 **615/615**（57 文件，+2）、tsc 0 errors、oxlint 0 warnings 0 errors
   - CI 修复：Blob 跨 realm 断言改用 Object.prototype.toString（backups-download.test.ts）
+## feat-4 · 工程基建：Webhook 外部通知（roadmap 工程基建第 3 项，灾后重实现）
+
+- **类型**：新功能（全链路重实现）
+- **位置**：
+  - 服务端 db/database.js（迁移 v7）/db/webhook.model.js（WebhookModel）/services/webhook.service.js/routes/webhooks.js/utils/response.js（+4 错误码）/utils/audit.js（+4 审计动作）/db/index.js + routes/index.js + index.js
+  - 服务端 __tests__/webhook.model.test.js（13 用例）/webhook.routes.test.js（9 用例）/index.security.test.js（补 mock）/迁移测试（user_version 7）
+  - 前端 api/types.ts（4 类型）/api/webhooks.ts（7 API）/api/errors.ts（+3 错误码）/api/queries.ts（query keys）
+  - 前端 features/webhooks/webhook-page.tsx（全链路管理页面）/__tests__/webhook-api.test.ts（4 用例）
+  - 前端 layouts/app-sidebar.tsx（Webhook 导航）/routes.tsx（/webhooks 路由）
+- **设计**：fire-and-forget 投递 + HMAC-SHA256 签名兼容 GitHub/Discord + 19 种事件白名单 + 指数退避重试 + 背压保护(5 并发) + MCServerManager EventEmitter 事件桥接
+- **验证**：服务端 544/544（39 文件+22）/前端 619/619（58 文件+4）/双端 lint+tsc 0。PR #42

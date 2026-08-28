@@ -7,6 +7,7 @@ import { createFileRoutes } from './files.js';
 import { createServerJarRoutes } from './server-jar.js';
 import { createKeyRoutes } from './keys.js';
 import { createAuditRoutes } from './audit.js';
+import { createWebhookRoutes } from './webhooks.js';
 import { success } from '../utils/response.js';
 import { notFoundHandler } from '../middleware/error_handler.js';
 
@@ -34,6 +35,7 @@ export function setupRoutes(app, serverManager, taskScheduler) {
   v1Router.use('/', createServerJarRoutes(serverManager));
   v1Router.use('/', createKeyRoutes());
   v1Router.use('/', createAuditRoutes());
+  v1Router.use('/', createWebhookRoutes());
 
   v1Router.get('/', (req, res) => {
     res.json(success({
@@ -55,6 +57,10 @@ export function setupRoutes(app, serverManager, taskScheduler) {
         '/instances/:id/files/mkdir',
         '/instances/:id/files/rename',
         '/instances/:id/files/upload',
+        '/webhooks',
+        '/webhooks/:id',
+        '/webhooks/:id/test',
+        '/webhooks/:id/deliveries',
       ]
     }));
   });

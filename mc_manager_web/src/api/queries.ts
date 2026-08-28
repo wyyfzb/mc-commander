@@ -30,6 +30,8 @@ export const queryKeys = {
   properties: (id: string) => [...queryKeys.all, 'properties', id] as const,
   auditLogs: (params?: AuditQueryParams) => [...queryKeys.all, 'audit-logs', params ?? {}] as const,
   commandHistory: (params?: AuditQueryParams) => [...queryKeys.all, 'command-history', params ?? {}] as const,
+  webhooks: () => [...queryKeys.all, 'webhooks'] as const,
+  webhookDeliveries: (id: number) => [...queryKeys.all, 'webhooks', id, 'deliveries'] as const,
 }
 
 /** 面板概览（含云服务器系统级资源；未配置连接时禁用） */

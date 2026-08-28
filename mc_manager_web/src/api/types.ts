@@ -605,3 +605,44 @@ export interface CommandHistoryItem {
   durationMs: number | null
   createdAt: string
 }
+
+// ── Webhook（服务端 routes/webhooks.js + db/webhook.model.js）──
+export interface Webhook {
+  id: number
+  name: string
+  url: string
+  secret: string | null
+  events: string[]
+  instanceId: string | null
+  isEnabled: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface WebhookCreatePayload {
+  name: string
+  url: string
+  secret?: string | null
+  events?: string[]
+  instanceId?: string | null
+  isEnabled?: boolean
+}
+
+export interface WebhookDelivery {
+  id: number
+  webhookId: number
+  eventType: string
+  instanceId: string | null
+  payload: unknown
+  status: 'pending' | 'success' | 'failed'
+  responseStatus: number | null
+  responseBody: string | null
+  durationMs: number | null
+  attempts: number
+  createdAt: string
+}
+
+export interface WebhookTestResult {
+  statusCode: number
+  body: string | null
+}
