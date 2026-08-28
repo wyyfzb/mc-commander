@@ -1,6 +1,8 @@
 import express from 'express';
 import { WebSocketServer } from 'ws';
 import http from 'http';
+import fs from 'fs';
+import path from 'path';
 import config from './config.js';
 import { authMiddleware } from './middleware/auth.js';
 import { errorHandler } from './middleware/error_handler.js';
@@ -12,8 +14,9 @@ import { MCServerManager } from './services/mc_server.js';
 import { TaskScheduler } from './services/task_scheduler.js';
 import { setupWebSocket } from './websocket.js';
 import { BackupModel } from './db/backup.model.js';
+import { setupWebhookDispatch } from './services/webhook.service.js';
 import { BackupService } from './services/backup.service.js';
-import { initDatabase } from './db/index.js';
+import { initDatabase, InstanceModel } from './db/index.js';
 
 // 启动前校验关键配置（在 listen 之前）
 if (!config.apiKey || config.apiKey === '') {
@@ -139,6 +142,7 @@ setupRoutes(app, serverManager, taskScheduler);
 
 app.use(errorHandler);
 
+setupWebhookDispatch(serverManager);
 setupWebSocket(wss, serverManager);
 
 server.listen(config.port, '0.0.0.0', () => {
@@ -158,6 +162,38 @@ server.listen(config.port, '0.0.0.0', () => {
 
   taskScheduler.start();
   console.log(`  Task scheduler: started`);
+
+  // 面板重启后自动恢复标记 autoStart 的实例（延迟 2s 错峰启动）
+  // InstanceModel 已在模块顶层通过 initDatabase() 初始化，直接同步调用即可
+  setTimeout(() => {
+    let autoStartInstances;
+    try { autoStartInstances = InstanceModel.getAll().filter(i => i.autoStart === true); } catch { return; }
+    if (autoStartInstances.length === 0) return;
+    console.log(`[AutoStart] Found ${autoStartInstances.length} instance(s) marked for auto-start`);
+    let idx = 0;
+    const startNext = () => {
+      if (idx >= autoStartInstances.length) return;
+      const inst = autoStartInstances[idx++];
+      const instance = serverManager.getInstance(inst.id);
+      if (!instance) { startNext(); return; }
+      // 跳过已运行/熔断/目录缺失
+      if (instance.isRunning) { console.log(`[AutoStart] ${inst.id} already running, skipping`); startNext(); return; }
+      if (instance._circuitBreakerTripped) { console.log(`[AutoStart] ${inst.id} circuit breaker tripped, skipping`); startNext(); return; }
+      if (!fs.existsSync(path.join(instance.serverPath, instance.jarFile))) {
+        console.log(`[AutoStart] ${inst.id} jar missing, skipping`);
+        startNext(); return;
+      }
+      try {
+        instance.start();
+        console.log(`[AutoStart] ${inst.id} started successfully`);
+      } catch (e) {
+        console.error(`[AutoStart] ${inst.id} failed to start:`, e.message);
+      }
+      setTimeout(startNext, config.autoStartDelayMs);
+    };
+    startNext();
+  }, 2000);
+
   console.log(`========================================`);
 });
 

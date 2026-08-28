@@ -36,6 +36,9 @@ const TasksPage = lazy(() =>
 const InstancesPage = lazy(() =>
   import('@/features/instances/instances-page').then((m) => ({ default: m.InstancesPage })),
 )
+const WebhookPage = lazy(() =>
+  import('@/features/webhooks/webhook-page').then((m) => ({ default: m.default })),
+)
 const OnboardingPageLazy = lazy(() =>
   import('@/features/onboarding/onboarding-page').then((m) => ({ default: m.OnboardingPage })),
 )
@@ -70,6 +73,7 @@ export const router = createBrowserRouter([
       { path: 'files', Component: FilesPage },
       { path: 'tasks', Component: TasksPage },
       { path: 'instances', Component: InstancesPage },
+      { path: 'webhooks', Component: WebhookPage },
       {
         path: 'settings',
         Component: SettingsPage,

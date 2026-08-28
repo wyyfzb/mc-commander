@@ -4,15 +4,18 @@
  * - 开源卡片（success 色调三元组 token）
  * - 相关链接卡片：三行外链 <a target="_blank" rel="noreferrer">
  * - 版权行（居中 subtle）
+ * - 更新检查（UpdateCheckSection，独立组件，由 settings-page 按条件渲染）
  * 设计纪律：实底卡（玻璃禁区）+ --mcs-* 语义 token + shadcn 基座
  */
-import { ChevronRight, Code, Heart, Link as LinkIcon, MessageSquareWarning, Tag } from 'lucide-react'
+import { ChevronRight, Code, GitBranch, Heart, Link as LinkIcon, MessageSquareWarning, Tag } from 'lucide-react'
 import type { AboutPanelProps } from './contracts'
 
-/** 开源仓库主页（GitHub 主仓；Releases/Issues 由子路径拼接，国内镜像见 README） */
+/** 开源仓库主页（GitHub 主仓；Releases/Issues 由子路径拼接） */
 const REPO_URL = 'https://github.com/wyyfzb/mc-commander'
+/** Gitee 国内镜像仓库主页 */
+const GITEE_REPO_URL = 'https://gitee.com/wyyfzb/mc-commander'
 
-/** 三行外链：标题/副标题/地址 + 图标（图标底色走语义 token） */
+/** 外链行：标题/副标题/地址 + 图标（图标底色走语义 token） */
 const LINKS = [
   {
     title: '⭐ GitHub 仓库',
@@ -20,6 +23,13 @@ const LINKS = [
     href: REPO_URL,
     icon: Code,
     iconClass: 'bg-mcs-bg-emphasis',
+  },
+  {
+    title: '🇨🇳 Gitee 镜像仓库',
+    subtitle: '国内访问 · 自动同步',
+    href: GITEE_REPO_URL,
+    icon: GitBranch,
+    iconClass: 'bg-mcs-accent-bg-subtle',
   },
   {
     title: '🚀 项目 Releases',

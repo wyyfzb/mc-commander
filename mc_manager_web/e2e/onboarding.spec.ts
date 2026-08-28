@@ -61,6 +61,11 @@ test.describe('onboarding', () => {
     await expect(
       page.getByText('部署完成后，记下终端输出的「API Key」，下一步连接时需要填写。'),
     ).toBeVisible()
+    // 部署命令与文档链接均指向现行 gitee 镜像（mc-commander / main 分支）
+    await expect(page.getByText(/gitee\.com\/wyyfzb\/mc-commander\/raw\/main\//)).toBeVisible()
+    const docLink = page.getByRole('link', { name: '查看部署文档' })
+    await expect(docLink).toHaveAttribute('href', 'https://gitee.com/wyyfzb/mc-commander')
+    await expect(docLink).toHaveAttribute('target', '_blank')
     await maybeShot(page, 'onboarding-manual-dark.png')
   })
 

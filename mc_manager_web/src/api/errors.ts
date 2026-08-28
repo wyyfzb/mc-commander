@@ -43,6 +43,14 @@ export const ErrorCode = {
   PATH_TRAVERSAL_DETECTED: 40302,
   FILE_TOO_LARGE: 40005,
   BINARY_FILE_NOT_SUPPORTED: 40006,
+  FILE_UPLOAD_TOO_LARGE: 40007,
+  FILE_TYPE_NOT_ALLOWED: 40008,
+  FILE_ALREADY_EXISTS: 40909,
+
+  WEBHOOK_NOT_FOUND: 40410,
+  WEBHOOK_INVALID_URL: 40010,
+  WEBHOOK_INVALID_EVENTS: 40011,
+  WEBHOOK_TEST_FAILED: 50010,
 } as const
 
 export type ErrorCodeValue = (typeof ErrorCode)[keyof typeof ErrorCode]
@@ -73,6 +81,13 @@ const LOCALIZED_MESSAGES: Partial<Record<ErrorCodeValue, string>> = {
   [ErrorCode.PATH_TRAVERSAL_DETECTED]: '检测到非法路径访问',
   [ErrorCode.FILE_TOO_LARGE]: '文件过大',
   [ErrorCode.BINARY_FILE_NOT_SUPPORTED]: '不支持二进制文件',
+  [ErrorCode.FILE_UPLOAD_TOO_LARGE]: '上传文件过大',
+  [ErrorCode.FILE_TYPE_NOT_ALLOWED]: '该文件类型不允许上传',
+  [ErrorCode.FILE_ALREADY_EXISTS]: '文件或目录已存在',
+  [ErrorCode.WEBHOOK_NOT_FOUND]: 'Webhook 不存在',
+  [ErrorCode.WEBHOOK_INVALID_URL]: 'Webhook URL 无效（仅允许 http/https）',
+  [ErrorCode.WEBHOOK_INVALID_EVENTS]: '包含无效事件类型',
+  [ErrorCode.WEBHOOK_TEST_FAILED]: 'Webhook 测试投递失败',
 }
 
 /** 服务端已本地化的错误码（message 直接透传，不覆盖） */

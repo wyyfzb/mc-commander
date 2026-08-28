@@ -107,13 +107,14 @@ export function applyPlayersFilter(players: Player[], filter: PlayersFilter): Pl
     .sort(sortPlayers)
 }
 
-export type PlayerDetailTab = 'overview' | 'inventory' | 'teleport' | 'give' | 'log'
+export type PlayerDetailTab = 'overview' | 'inventory' | 'teleport' | 'give' | 'actions' | 'log'
 
 export const DETAIL_TAB_LABELS: Array<{ value: PlayerDetailTab; label: string }> = [
   { value: 'overview', label: '概览' },
   { value: 'inventory', label: '物品栏' },
   { value: 'teleport', label: '传送' },
   { value: 'give', label: '给予物品' },
+  { value: 'actions', label: '操作' },
   { value: 'log', label: '日志' },
 ]
 

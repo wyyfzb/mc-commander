@@ -7,7 +7,7 @@ import zlib from 'zlib';
 import { Rcon } from 'rcon-client';
 import { parseUncompressed as parseNbtSync } from 'prismarine-nbt';
 import config from '../config.js';
-import { InstanceModel } from '../db/index.js';
+import { InstanceModel, CommandHistoryModel } from '../db/index.js';
 import { atomicWriteFile } from '../utils/fs-utils.js';
 // offline uuid / stats 时长读取全仓公共实现（与 routes/players.js 共用 player-utils.js）
 import { offlineUuid as computeOfflineUuid, getTotalPlayTime } from '../utils/player-utils.js';
@@ -102,6 +102,7 @@ export class MCServerManager extends EventEmitter {
           startCommand: inst.startCommand,
           jvmArgs: inst.jvmArgs,
           autoRestart: inst.autoRestart,
+          autoStart: inst.autoStart,
         });
         console.log(`Loaded instance from DB: ${inst.id}`);
       } catch (e) {
@@ -229,7 +230,7 @@ export class MCServerManager extends EventEmitter {
 }
 
 export class MCServerInstance extends EventEmitter {
-  constructor({ id, name, javaPath, jarFile, maxMemory, minMemory, serverPath, startCommand, jvmArgs, autoRestart }) {
+  constructor({ id, name, javaPath, jarFile, maxMemory, minMemory, serverPath, startCommand, jvmArgs, autoRestart, autoStart }) {
     super();
     this.id = id;
     this.name = name;
@@ -278,6 +279,11 @@ export class MCServerInstance extends EventEmitter {
     this._deathAggBuffer = [];
     this._deathAggTimer = null;
     this._restartTimer = null;      // 重启延迟启动定时器（stop/kill 时取消）
+    // 崩溃循环熔断（feat-5 运维韧性）
+    this._consecutiveCrashes = 0;
+    this._crashWindowStart = null;
+    this._circuitBreakerTripped = false;
+    this.autoStart = autoStart === true;  // 面板重启后自动恢复（DB 持久化，默认关）
     this._lastSaveTime = null;      // 真实存档时刻（来自 "Saved the game" 日志）
     // 仪表盘扩展状态
     this._weather = 'clear';       // clear / rain / thunder
@@ -1156,6 +1162,28 @@ export class MCServerInstance extends EventEmitter {
       // 主动 stop/kill/restart 会设置 _manualStop=true；正常退出 code 通常为 0。
       const unexpectedExit = !this._manualStop && code !== 0;
       if (unexpectedExit) {
+        // ── 崩溃循环熔断检测（feat-5 运维韧性）──
+        const now = Date.now();
+        const { windowMs, maxCrashes } = config.crashLoop;
+        // 滑动窗口：窗口外重置计数
+        if (this._crashWindowStart && now - this._crashWindowStart > windowMs) {
+          this._consecutiveCrashes = 0;
+          this._crashWindowStart = null;
+        }
+        this._consecutiveCrashes++;
+        if (!this._crashWindowStart) this._crashWindowStart = now;
+        // 达阈值 → 熔断：自动禁用 autoRestart 并持久化
+        if (this._consecutiveCrashes >= maxCrashes && !this._circuitBreakerTripped) {
+          this._circuitBreakerTripped = true;
+          this.autoRestart = false;
+          try { InstanceModel.update(this.id, { autoRestart: false }); } catch { /* best-effort */ }
+          this.emit('log', {
+            text: `[服务器] 崩溃循环熔断已触发（${windowMs / 1000}s 内崩溃 ${this._consecutiveCrashes} 次），自动重启已禁用。请在实例设置中手动重新启用。`,
+            type: 'stdout',
+          });
+          this.emit('status', { event: 'circuit_breaker', consecutiveCrashes: this._consecutiveCrashes, windowMs });
+        }
+
         // 意外停止：记录到日志流（终端可见），并按开关决定是否自动重启
         const willRestart = this.autoRestart;
         this.emit('log', {
@@ -1190,6 +1218,11 @@ export class MCServerInstance extends EventEmitter {
         this.emit('status', { event: 'stopped', code });
       }
     });
+
+    // 成功启动 → 重置熔断器
+    this._consecutiveCrashes = 0;
+    this._crashWindowStart = null;
+    this._circuitBreakerTripped = false;
 
     this.emit('status', { event: 'started' });
 
@@ -1504,7 +1537,11 @@ export class MCServerInstance extends EventEmitter {
     }
     // 记录用户发送的命令到日志流（终端显示 "> 命令"，供操作反馈上下文）
     this.emit('log', { text: `> ${command}`, type: 'command' });
-    // 优先使用 RCON：stdin 管道对含特殊字符（" [ ] { }）的命令处理不可靠，
+    // feat-2: 命令历史落库（chokepoint finally）
+    const cmdStart = Date.now();
+    let cmdSuccess = true;
+    try {
+      // 优先使用 RCON：stdin 管道对含特殊字符（" [ ] { }）的命令处理不可靠，
     // 特别是 MC 1.20.5+ Data Components 格式（如 give ... [enchantments={...}]）
     // 中的引号会被 stdin 错误解析，导致附魔装备给予失败。
     // RCON 协议以二进制包传输，不存在字符转义问题。
@@ -1541,6 +1578,20 @@ export class MCServerInstance extends EventEmitter {
     }
     this._writeToStdin(command + '\n');
     return null;
+    } catch (err) {
+      cmdSuccess = false;
+      throw err;
+    } finally {
+      try {
+        CommandHistoryModel.create({
+          instanceId: this.id,
+          command,
+          source: 'api',
+          success: cmdSuccess ? 1 : 0,
+          durationMs: Date.now() - cmdStart,
+        });
+      } catch { /* audit write failure never blocks command flow */ }
+    }
   }
 
   sendCommandWithResponse(command, { timeout = 5000 } = {}) {
@@ -2440,6 +2491,10 @@ export class MCServerInstance extends EventEmitter {
       awakePlayerNames: this._getAwakePlayerNames(),
       totalUptime: this._getTotalUptime(),
       startTime: this.startTime ? new Date(this.startTime).toISOString() : null,
+      // ── 运维韧性字段（feat-5）──
+      autoStart: this.autoStart,
+      circuitBreakerTripped: this._circuitBreakerTripped,
+      consecutiveCrashes: this._consecutiveCrashes,
       // ── 启动配置（供实例设置弹窗读写）──
       startCommand: this.startCommand,
       jvmArgs: this.jvmArgs,

@@ -67,6 +67,7 @@ vi.mock('../routes/index.js', () => ({ setupRoutes: vi.fn() }));
 vi.mock('../services/mc_server.js', () => ({
   MCServerManager: class {
     stopAll = vi.fn(async () => {});
+    on = vi.fn();
   },
 }));
 vi.mock('../services/task_scheduler.js', () => ({
@@ -76,6 +77,7 @@ vi.mock('../services/task_scheduler.js', () => ({
   },
 }));
 vi.mock('../websocket.js', () => ({ setupWebSocket: vi.fn() }));
+vi.mock('../services/webhook.service.js', () => ({ setupWebhookDispatch: vi.fn() }));
 vi.mock('../db/index.js', () => ({ initDatabase: vi.fn() }));
 
 // 满足强度规则的 mock 强 Key（≥16 位且非低熵形态）

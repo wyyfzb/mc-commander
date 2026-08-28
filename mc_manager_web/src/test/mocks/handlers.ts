@@ -20,7 +20,7 @@ import type {
  */
 
 export const mockOverview: OverviewData = {
-  version: '1.1.0',
+  version: '0.1.0',
   instanceCount: 1,
   runningCount: 1,
   totalPlayers: 0,
@@ -60,6 +60,9 @@ export const mockInstanceStatus: InstanceStatus = {
   isRunning: true,
   isRconConnected: true,
   autoRestart: true,
+  autoStart: false,
+  circuitBreakerTripped: false,
+  consecutiveCrashes: 0,
   uptime: 7200,
   address: 'localhost:25565',
   players: [],
@@ -495,6 +498,7 @@ export const handlers = [
   ...backupHandlers,
   http.get('*/api/v1/overview', () => ok(mockOverview)),
   http.get('*/api/v1/system-stats', () => ok(mockSystemStats)),
+  http.get('*/api/v1/check-update', () => ok({ current: '0.1.0', latest: null, hasUpdate: false, offline: true })),
   http.get('*/api/v1/instances', () => ok([mockInstanceStatus])),
   http.get('*/api/v1/instances/:id', () => ok(mockInstanceStatus)),
   // PUT /instances/:id 实例配置更新（启动配置弹窗；回显提交字段，结构占位）

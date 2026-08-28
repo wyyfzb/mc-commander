@@ -160,6 +160,85 @@ function createTables() {
     console.log('Migration: added last_run_status column to scheduled_tasks table');
   }
 
+  // 迁移 v6：审计日志 + 命令历史（append-only 双表）
+  if (userVersion < 6) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS audit_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        instance_id TEXT NOT NULL,
+        action TEXT NOT NULL,
+        target_type TEXT,
+        target_id TEXT,
+        detail TEXT,
+        source TEXT DEFAULT 'api',
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS command_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        instance_id TEXT NOT NULL,
+        command TEXT NOT NULL,
+        source TEXT DEFAULT 'api',
+        success INTEGER DEFAULT 1,
+        response TEXT,
+        duration_ms INTEGER,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_audit_instance ON audit_logs(instance_id);
+      CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at);
+      CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_logs(action);
+      CREATE INDEX IF NOT EXISTS idx_cmd_instance ON command_history(instance_id);
+      CREATE INDEX IF NOT EXISTS idx_cmd_created ON command_history(created_at);
+    `);
+    db.pragma('user_version = 6');
+    console.log('Migration: added audit_logs and command_history tables');
+  }
+
+  // 迁移 v7：Webhook 外部通知 + 投递日志
+  if (userVersion < 7) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS webhooks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        url TEXT NOT NULL,
+        secret TEXT,
+        events TEXT DEFAULT '[]',
+        instance_id TEXT,
+        is_enabled INTEGER DEFAULT 1,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (instance_id) REFERENCES instances(id) ON DELETE CASCADE
+      )
+    `);
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS webhook_deliveries (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        webhook_id INTEGER NOT NULL,
+        event_type TEXT NOT NULL,
+        instance_id TEXT,
+        payload TEXT,
+        status TEXT DEFAULT 'pending',
+        response_status INTEGER,
+        response_body TEXT,
+        duration_ms INTEGER,
+        attempts INTEGER DEFAULT 1,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (webhook_id) REFERENCES webhooks(id) ON DELETE CASCADE
+      )
+    `);
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_webhooks_enabled ON webhooks(is_enabled);
+      CREATE INDEX IF NOT EXISTS idx_webhooks_instance ON webhooks(instance_id);
+      CREATE INDEX IF NOT EXISTS idx_deliveries_webhook ON webhook_deliveries(webhook_id);
+      CREATE INDEX IF NOT EXISTS idx_deliveries_created ON webhook_deliveries(created_at);
+    `);
+    db.pragma('user_version = 7');
+    console.log('Migration: added webhooks and webhook_deliveries tables');
+  }
+
   // 临时封禁表（服务端自实现 tempban：原版 ban 立即生效 + 到期自动 pardon）
   db.exec(`
     CREATE TABLE IF NOT EXISTS temp_bans (

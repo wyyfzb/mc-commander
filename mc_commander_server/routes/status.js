@@ -6,6 +6,43 @@ import { success, error, ErrorCodes } from '../utils/response.js';
 import { InstanceModel, BackupModel } from '../db/index.js';
 import config from '../config.js';
 import { atomicWriteFile } from '../services/mc_server.js';
+import { recordAudit, AuditActions } from '../utils/audit.js';
+
+// ── 磁盘使用率（feat-5 运维韧性）：fs.statfsSync 零新增依赖，10s 缓存 ──
+let _diskCache = { ts: 0, result: null };
+function getDiskUsage() {
+  const now = Date.now();
+  if (_diskCache.result && now - _diskCache.ts < 10_000) return _diskCache.result;
+  // 去重：serversDir / dataDir / backupsDir 所在分区
+  const dirs = [config.serversDir, config.dataDir, config.backupsDir];
+  const seen = new Map(); // mountpoint → DiskInfo
+  for (const dir of dirs) {
+    try {
+      const stat = fs.statfsSync(dir);
+      const total = stat.bsize * stat.blocks;
+      const free = stat.bsize * stat.bfree;
+      const used = total - free;
+      const percent = total > 0 ? Math.round((used / total) * 1000) / 10 : 0;
+      const entry = {
+        mountpoint: stat.mounted || dir,
+        totalGB: Math.round(total / (1024 * 1024 * 1024) * 10) / 10,
+        usedGB: Math.round(used / (1024 * 1024 * 1024) * 10) / 10,
+        percent,
+      };
+      if (!seen.has(entry.mountpoint) || entry.percent > seen.get(entry.mountpoint).percent) {
+        seen.set(entry.mountpoint, entry);
+      }
+    } catch {
+      // 路径不存在时静默跳过
+    }
+  }
+  const all = Array.from(seen.values());
+  // 主分区 = 使用率最高
+  const primary = all.sort((a, b) => b.percent - a.percent)[0] || null;
+  const result = { primary, all };
+  _diskCache = { ts: now, result };
+  return result;
+}
 
 // async 路由包装：Express 4 不捕获中间件/路由返回的 Promise rejection。
 // 未包装的 async handler 抛错时请求永久挂起 + unhandledRejection
@@ -121,7 +158,7 @@ export function createStatusRoutes(serverManager) {
     const cpuUsagePercent = getSystemCpuUsage();
 
     res.json(success({
-      version: '1.1.0',
+      version: '0.1.0',
       instanceCount: instances.length,
       runningCount: instances.filter(i => i.isRunning).length,
       totalPlayers,
@@ -133,6 +170,8 @@ export function createStatusRoutes(serverManager) {
       // 兼容旧字段
       totalMemory: totalMemGB,
       freeMemory: Math.round(freeMemBytes / (1024 * 1024 * 1024) * 10) / 10,
+      // 磁盘使用率（feat-5）
+      diskUsage: getDiskUsage(),
       instances: instances.map(i => ({
         id: i.id,
         name: i.name,
@@ -163,6 +202,8 @@ export function createStatusRoutes(serverManager) {
       cpuCores: os.cpus().length,
       loadAvg: os.loadavg(),
       uptime: os.uptime(),
+      // 磁盘使用率（feat-5）
+      diskUsage: getDiskUsage(),
     }));
   });
 
@@ -243,7 +284,7 @@ export function createStatusRoutes(serverManager) {
       updates.jvmArgs = jvmArgs;
     }
     // 允许更新的字段（驼峰命名，与 InstanceModel.FIELD_TO_COLUMN 对应）
-    const allowedFields = ['javaPath', 'maxMemory', 'minMemory', 'name', 'description', 'jarFile', 'autoRestart'];
+    const allowedFields = ['javaPath', 'maxMemory', 'minMemory', 'name', 'description', 'jarFile', 'autoRestart', 'autoStart'];
     for (const key of allowedFields) {
       if (body[key] !== undefined) {
         updates[key] = body[key];
@@ -264,7 +305,14 @@ export function createStatusRoutes(serverManager) {
     if (updates.name !== undefined) instance.name = updates.name;
     if (updates.jarFile !== undefined) instance.jarFile = updates.jarFile;
     if (updates.autoRestart !== undefined) instance.autoRestart = Boolean(updates.autoRestart);
+    if (updates.autoStart !== undefined) instance.autoStart = Boolean(updates.autoStart);
     if (updates.jvmArgs !== undefined) instance.jvmArgs = updates.jvmArgs;
+    // 重新开启 autoRestart 时重置熔断器（用户已确认手动介入）
+    if (updates.autoRestart === true && instance._circuitBreakerTripped) {
+      instance._consecutiveCrashes = 0;
+      instance._crashWindowStart = null;
+      instance._circuitBreakerTripped = false;
+    }
 
     // 3. 同步 instance.json 保持最新（含 startCommand/jvmArgs），供 DB 丢失时兜底恢复
     _syncInstanceJson(instance);
@@ -298,6 +346,7 @@ export function createStatusRoutes(serverManager) {
 
     instance.start();
     try { InstanceModel.update(req.params.id, { status: 'running' }); } catch (e) { console.warn('Failed to sync instance status to DB:', e.message); }
+    recordAudit({ instanceId: req.params.id, action: AuditActions.INSTANCE_START, targetType: 'instance', targetId: req.params.id });
     res.json(success(null, 'Server starting'));
   }));
 
@@ -309,6 +358,7 @@ export function createStatusRoutes(serverManager) {
     }
     instance.stop();
     try { InstanceModel.update(req.params.id, { status: 'stopped' }); } catch (e) { console.warn('Failed to sync instance status to DB:', e.message); }
+    recordAudit({ instanceId: req.params.id, action: AuditActions.INSTANCE_STOP, targetType: 'instance', targetId: req.params.id });
     res.json(success(null, 'Server stopping'));
   }));
 
@@ -320,6 +370,7 @@ export function createStatusRoutes(serverManager) {
     }
     // 统一走 instance.restart()：内部处理停止命令 + 可取消的延迟启动
     instance.restart();
+    recordAudit({ instanceId: req.params.id, action: AuditActions.INSTANCE_RESTART, targetType: 'instance', targetId: req.params.id });
     res.json(success(null, 'Server restarting'));
   }));
 
@@ -602,6 +653,7 @@ export function createStatusRoutes(serverManager) {
     }
 
     console.log(`[PUT properties] Saved successfully, instance.properties now has ${Object.keys(instance.properties).length} keys`);
+    recordAudit({ instanceId: req.params.id, action: 'CONFIG_CHANGE', targetType: 'instance', targetId: req.params.id, detail: { field: 'properties' } });
     res.json(success({ restartRequired }, restartRequired.length > 0
       ? `Properties updated, ${restartRequired.length} 项需重启服务器生效`
       : 'Properties updated'));
@@ -672,7 +724,7 @@ export function createStatusRoutes(serverManager) {
       //    属 SQLite 本地写失败的极端情况，且实例目录已删 createInstance 会
       //    重建空目录，风险远小于本路由历史 bug 的不可补偿半删除）
       try { InstanceModel.delete(req.params.id); } catch (e) { console.warn('Failed to delete instance from DB:', e.message); }
-
+      recordAudit({ instanceId: req.params.id, action: AuditActions.INSTANCE_DELETE, targetType: 'instance', targetId: req.params.id });
       res.json(success(null, 'Instance deleted'));
   }));
 

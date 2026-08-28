@@ -108,13 +108,16 @@ test.describe('设置页', () => {
     await setupConnection(page)
     await page.goto('/settings/about')
     await expect(page.getByRole('heading', { name: 'MC Commander' })).toBeVisible()
-    await expect(page.getByText('v1.0.0')).toBeVisible()
+    await expect(page.getByText('v0.1.0')).toBeVisible()
     await expect(page.getByText('开源项目', { exact: true })).toBeVisible()
     await expect(page.getByText('基于 AGPL-3.0 协议开源')).toBeVisible()
-    // 外链（GitHub 主仓）
+    // 外链（GitHub 主仓与 Gitee 镜像）
     const repoLink = page.getByRole('link', { name: /GitHub 仓库/ })
     await expect(repoLink).toHaveAttribute('href', /github\.com\/wyyfzb\/mc-commander/)
     await expect(repoLink).toHaveAttribute('target', '_blank')
+    const giteeLink = page.getByRole('link', { name: /Gitee 镜像仓库/ })
+    await expect(giteeLink).toHaveAttribute('href', /gitee\.com\/wyyfzb\/mc-commander/)
+    await expect(giteeLink).toHaveAttribute('target', '_blank')
     await expect(page.getByText('© 2026 MC_Commander · 社区开源项目')).toBeVisible()
     await maybeShot(page, 'settings-about-dark.png')
   })
