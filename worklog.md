@@ -1680,3 +1680,11 @@ ErrorBoundary、备份下载、文件管理接线、CSV 导出、DiskUsageCard�
 1. 推送本轮 → PR #41 CI 复跑应全绿 → 提醒用户合并
 2. feat-4 磁盘监控重实现（CHANGES 规格完备）
 3. 存量 oxlint 警告按文件清零（monaco-editor-pane 1 条等）
+
+## R5 补记（20:10）：PR #41 CI 复跑全绿 ✅
+
+- 前端（lint + test）**pass**（1m21s，Blob 跨 realm 修复生效）
+- 前端（build + e2e）**pass**（2m04s）
+- 服务端（lint + test）**pass**（25s）
+- 密钥泄漏扫描 **pass**（6s）
+- 下一轮起可按 feat-4（磁盘监控）推进；PR #41 待用户合并
