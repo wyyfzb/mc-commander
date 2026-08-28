@@ -1919,3 +1919,49 @@ PR #41 已合并（历史）；PR #45（oxlint 清零）本轮合并。CI 4/4 �
 2. feat-8 重实现：P0-5 插件管理（列表/上传/删除）
 3. 小改进池：oxlint 80 warnings 存量清理
 4. 安全主线：管理员密码登录（roadmap 工程基建第 1 项，当前最大未启动项）
+
+---
+
+# 2026-08-29 03:50 · 综合守护轮 R8（feat-7 P0-4 实例版本升级全链路 + E2E 实测四连修）
+
+## 一、项目当前状态描述与判断
+
+- 工作区 /home/z/reference 完好；未触碰 /home/z/my-project；方向与 roadmap 一致，无跑偏。
+- 开工基线：main @ 31ab134（feat-6 已合并），PR #41-#45、#47 全部合并；发现 feat-7（P0-4 实例版本升级）半成品未提交变更（上轮被中断，含 JSX 语法残缺）。
+- GitHub 侧：dependabot PR #32（fetch-metadata 2→3）BEHIND → update-branch 后 CI 全绿自动合并 ✅。
+- 本轮职责：收尾 feat-7 + CI 守护 + QA + 推进，三线合一（新合并 cron #342943 首轮）。
+
+## 二、当前目标 / 已完成的修改 / 验证结果
+
+**目标**：收尾 feat-7（P0-4 实例版本升级）至可合并状态并全链路实测。
+
+已完成（续做收尾 + E2E 实测四连修）：
+
+1. **残缺修复**：instances-page.tsx 重复 UpgradeDialog 块（缺闭合 `}`）、upgrade-dialog.tsx 重复 SelectItem 片段——上轮中断遗留的语法错误。
+2. **设计修正**：WS 终态先 clear 再让弹窗展示的矛盾（改为全阶段落 store + 关闭清态）；去 useEffect+setState（类型切换事件驱动重置、派生 upgrading 态）——防 oxlint set-state-in-effect 回潮；文案中文化；connection store 取参修正（无 .config 字段）。
+3. **测试补齐**：服务端 upgrade.test.js 重写（原版 ESM 里用 require() 必崩；重写为静态导入 + got/BackupService/db/audit 离线 mock，13 用例）；前端 upgrade-dialog 9 用例 + upgrade store 4 用例 + msw 升级 handler。
+4. **tsc 假绿纠正**：根 tsconfig 为 solution 型，`tsc --noEmit` 空转；`tsc -b` 才是真检查——照出 4 个真错误并全部修复（含 InstanceCard 解构漏 onUpgrade 导致点击 ReferenceError，QA 时定位）。
+5. **E2E 实测四连修**（agent-browser + QA 假实例 + 真实 purpur JAR 下载）：
+   - serverDir→serverPath（MCServer 运行时字段）；_startAndVerify 改听 instance:status {event:ready|crash}（原 ready/crash 事件不存在）+ start() 同步兼容
+   - websocket: upgradeProgress broadcastAll→broadcast（信封盖章+订阅过滤+背压）；deployProgress 同型既有 bug（部署进度真实场景永不更新）前端一并修复
+   - use-server-socket 守卫重构（deployProgress 全局放行 / upgradeProgress 按信封 instanceId 放行）；弹窗打开按需 subscribe 目标实例
+   - audit detail 双层 stringify 修复
+6. **E2E 全链路实测通过**：升级按钮（停止态）→ 弹窗（类型三卡/版本禁选当前）→ POST 202 → WS 实时进度（下载中 72%→94% 真实 Purpur JAR 44MB）→ 替换（DB 回写）→ 首启校验 120s 超时 → 自动回滚（DB 恢复 1.20.4 + 临时文件清理）→ 终态红色错误块 → 关闭清态。审计 INSTANCE_UPGRADE 记录 ✓。QA 假实例与临时文件已清理。
+
+验证结果：
+- 服务端 **568/568**（41 文件，+13）+ eslint 0 errors（mc_server.test.js:617 已知 flaky，全套件偶发、单独运行 69/69 过）
+- 前端 **650/650**（62 文件，+13）、tsc -b 0 errors、oxlint 0 errors（80 warnings 全存量）、vite build ✓
+- roadmap.md P0-4 标记 ✅；CHANGES.md feat-7 条目（含 QA 修复清单）
+- PR #48 CI 4/4 全绿（含 update-branch 后重跑）→ **squash 合并入 main（7876bfb）**，feat-7 完成 ✅；本地 main 已同步（7876bfb ← 608cc36(PR#32 dependabot) ← 31ab134）
+- PR #32 已自动合并 ✅
+
+## 三、未解决问题或风险与下一阶段优先事项
+
+风险/未解决：
+- mc_server.test.js:617 全套件竞态（灾前债务，单独运行通过；本轮再次确认）
+- oxlint 80 warnings 全存量（refs-during-render/only-export-components 等，非阻塞）
+
+下一阶段优先建议（按序）：
+1. feat-8：P0-5 插件管理最小闭环（列表/启停/上传删除）
+3. 安全主线：管理员密码登录（roadmap 工程基建第 1 项，最大未启动项）
+4. 小改进池：oxlint 80 warnings 存量清理；引导页直连跨域提示
