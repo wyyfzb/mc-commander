@@ -883,3 +883,18 @@
 - **验证**：
   - 服务端 **514/515**（37 文件，+11，1 个预先存在竞态非本轮引入）、eslint 0
   - 前端 **613/613**（57 文件，+2）、tsc 0 errors、oxlint 0 warnings 0 errors
+
+## feat-3b · feat-3 前端收尾（上传 / 新建目录 / 重命名 UI 全链路）
+
+- **类型**：新功能（feat-3 P0-2 前端交付）
+- **背景**：服务端 multer 上传 + mkdir + rename 已实现（chore-R4），前端 API 层仅声明 props 未接线
+- **位置**：
+  - 前端 `src/api/files.ts`（新增 `apiUploadFile`：multipart 独立 fetch，120s 超时，不走 JSON apiRequest）
+  - 前端 `src/features/files/queries.ts`（新增 `useCreateDirectory` / `useRenameFile` / `useUploadFile` 三个 mutation；成功后失效目录列表 + 重命名失效旧路径内容缓存）
+  - 前端 `src/features/files/components/file-list.tsx`（工具栏：FolderPlus 新建目录 + Upload 上传按钮启用，替代原禁用占位；行级 TextCursorInput 重命名按钮；空态并列 CTA）
+  - 前端 `src/features/files/files-page.tsx`（新建目录对话框支持多级路径 / 重命名对话框含编辑器脏状态处理 / 隐藏 file input + uploadMutation）
+  - 前端 `src/api/__tests__/files-enhanced.test.ts`（+2 上传用例：成功元数据验证 + 扩展名黑名单拒绝）
+- **验证**：
+  - 服务端 **522/522**（37 文件，零改动）、eslint 0
+  - 前端 **615/615**（57 文件，+2）、tsc 0 errors、oxlint 0 warnings 0 errors
+  - CI 修复：Blob 跨 realm 断言改用 Object.prototype.toString（backups-download.test.ts）

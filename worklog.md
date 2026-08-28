@@ -1593,3 +1593,50 @@ ErrorBoundary、备份下载、文件管理接线、CSV 导出、DiskUsageCard�
 - feat-3 收尾：前端 file-list.tsx 接线（onUpload/onCreateDirectory/onRename props 已声明未用，
   上传按钮仍为禁用占位）+ files-page 对话框 + apiUploadFile。
 - 之后：feat-4 磁盘监控（按 CHANGES 规格）。
+
+---
+
+# 2026-08-28 19:35-20:05 · 灾后重实现轮 R5（GitHub 同步 + CI 修复 + feat-3 前端收尾）
+
+## 一、项目当前状态描述与判断
+
+- 工作区 /home/z/reference 完好；未触碰 /home/z/my-project；方向与 roadmap 一致，无跑偏。
+- 用户指令（1）及时同步 GitHub 防丢失；（2）持续跟踪 CI。
+- 开工基线：服务端 522/522（37 文件）、前端 613/613（57 文件）、tsc 0、oxlint 63 存量。
+- 本轮选择依据：用户明确要求 GitHub 同步优先 + 顺 worklog R4 建议「feat-3 收尾前端 UI」。
+
+## 二、当前目标 / 已完成的修改 / 验证结果
+
+**目标**：GitHub 备份通道建立 + CI 修复 + feat-3 前端全链路交付。
+
+已完成：
+
+1. **GitHub 同步**：
+   - 本地 /home/z/reference 为 git 克隆（main=1047f8f=#39），45 文件灾后改动未推送
+   - 新分支 `recovery/feat1-feat3` → commit → push → **PR #41**（含 R2-R4 全部进度）
+   - 旧 PR #40 关闭（注明被 #41 超集取代）
+2. **CI 修复**：`backups-download.test.ts` Blob 跨 realm 断言 → `Object.prototype.toString`（CI Node undici res.blob() 与 jsdom 全局 Blob 构造器不同）
+3. **feat-3 前端收尾**（4 文件 374 行增量）：
+   - `api/files.ts`：`apiUploadFile`（multipart 独立 fetch，120s 超时）
+   - `queries.ts`：`useCreateDirectory`/`useRenameFile`/`useUploadFile` 三个 mutation
+   - `file-list.tsx`：工具栏 FolderPlus+Upload 启用 + 行级 TextCursorInput 重命名 + 空态并列 CTA
+   - `files-page.tsx`：新建目录对话框（多级路径）/ 重命名对话框（编辑器脏状态处理）/ 隐藏 file input
+   - `files-enhanced.test.ts`：+2 上传用例
+4. **CHANGES.md** 登记 feat-3b 条目
+
+验证结果：
+- 服务端 **522/522**（37 文件，零改动）、eslint 0
+- 前端 **615/615**（57 文件，+2）、tsc 0 errors、oxlint 新增代码 0 warnings
+- CI 修复已推送，等新 run 变绿
+
+## 三、未解决问题或风险与下一阶段优先事项
+
+风险/未解决：
+- CI 新 run 正在跑（含 feat-3 前端 + Blob 修复）
+- oxlint 63 条存量 set-state-in-effect 警告（灾前 chore 债务，非本轮范围）
+- 上传固定落地到实例根目录（服务端设计：targetPath = basePath/safeName），未来可支持子目录上传
+
+下一阶段优先建议（按序）：
+1. 等 CI 变绿确认
+2. feat-4 按 CHANGES 规格重实现（磁盘监控 / 运维韧性）
+3. chore 债务：63 条 oxlint 存量警告按文件逐步清零
