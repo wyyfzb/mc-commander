@@ -77,7 +77,7 @@ function createMockInstance(overrides = {}) {
     status: 'stopped',
     mcVersion: '1.20.4',
     jarFile: 'server-1.20.4.jar',
-    serverDir: '/tmp/mc-test/inst-1',
+    serverPath: '/tmp/mc-test/inst-1',
     isRunning: false,
     ...overrides,
   };

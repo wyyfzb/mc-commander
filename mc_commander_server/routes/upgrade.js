@@ -50,12 +50,12 @@ export function createUpgradeRoutes(serverManager) {
         return res.status(400).json(error(ErrorCodes.UPGRADE_VERSION_SAME, 'Target version is the same as current version'));
       }
 
-      // 审计埋点
+      // 审计埋点（AuditLogModel.create 内部统一 stringify，这里传原始对象）
       recordAudit({
         instanceId: id,
         action: AuditActions.INSTANCE_UPGRADE,
         targetId: id,
-        detail: JSON.stringify({ from: instance.mcVersion, to: mcVersion, type }),
+        detail: { from: instance.mcVersion, to: mcVersion, type },
       });
 
       // 异步启动升级（不 await）

@@ -168,7 +168,9 @@ export class UpgradeService {
   }
 
   /**
-   * 首启校验：120s 窗口监听 crash/ready 事件
+   * 首启校验：120s 窗口监听 instance:status 的 ready/crash 事件
+   * （MCServerManager 事件模型：instance 'status' 转发为 instance:status，
+   *   payload = { instanceId, event: 'ready'|'crash'|'stopped'|... }）
    */
   _startAndVerify(instanceId) {
     return new Promise((resolve, reject) => {
@@ -178,14 +180,12 @@ export class UpgradeService {
         reject(new Error('Startup verification timed out (120s)'));
       }, VERIFY_WINDOW_MS);
 
-      const onReady = (data) => {
-        if (data.instanceId === instanceId) {
+      const onStatus = (data) => {
+        if (data.instanceId !== instanceId) return;
+        if (data.event === 'ready') {
           cleanup();
           resolve();
-        }
-      };
-      const onCrash = (data) => {
-        if (data.instanceId === instanceId) {
+        } else if (data.event === 'crash') {
           cleanup();
           reject(new Error('Server crashed during startup verification'));
         }
@@ -193,24 +193,31 @@ export class UpgradeService {
 
       const cleanup = () => {
         clearTimeout(timer);
-        this.serverManager.removeListener('instance:ready', onReady);
-        this.serverManager.removeListener('instance:crash', onCrash);
+        this.serverManager.removeListener('instance:status', onStatus);
       };
 
-      this.serverManager.on('instance:ready', onReady);
-      this.serverManager.on('instance:crash', onCrash);
+      this.serverManager.on('instance:status', onStatus);
 
-      // 启动实例
+      // 启动实例：start 为同步方法（可能同步 throw，如 EULA 未同意）
+      // 也兼容未来返回 promise 的情形
       const instance = this.serverManager.getInstance(instanceId);
       if (!instance) {
         cleanup();
         reject(new Error('Instance not found in memory'));
         return;
       }
-      instance.start().catch((err) => {
+      try {
+        const result = instance.start();
+        if (result && typeof result.catch === 'function') {
+          result.catch((err) => {
+            cleanup();
+            reject(err);
+          });
+        }
+      } catch (err) {
         cleanup();
         reject(err);
-      });
+      }
     });
   }
 
@@ -224,7 +231,7 @@ export class UpgradeService {
 
       // 恢复旧 JAR
       if (oldJarPath && fs.existsSync(oldJarPath)) {
-        const currentJar = path.join(instance.serverDir, instance.jarFile);
+        const currentJar = path.join(instance.serverPath, instance.jarFile);
         fs.copyFileSync(oldJarPath, currentJar);
       }
 
@@ -272,10 +279,10 @@ export class UpgradeService {
 
     const oldJarFile = instance.jarFile;
     const oldMcVersion = instance.mcVersion;
-    const oldJarPath = path.join(instance.serverDir, oldJarFile);
+    const oldJarPath = path.join(instance.serverPath, oldJarFile);
     const newJarName = `server-${mcVersion}.jar`;
-    const newJarPath = path.join(instance.serverDir, newJarName);
-    const backupJarPath = path.join(instance.serverDir, `._upgrade_backup_${oldJarFile}`);
+    const newJarPath = path.join(instance.serverPath, newJarName);
+    const backupJarPath = path.join(instance.serverPath, `._upgrade_backup_${oldJarFile}`);
     let backupId = null;
 
     // 保存原始版本用于回滚

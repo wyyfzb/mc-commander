@@ -8,7 +8,7 @@ import { useDeployStore } from '@/stores/deploy'
 import { applyUpgradeProgress } from '@/stores/upgrade'
 import { useNotificationStore } from '@/stores/notifications'
 import { useTerminalStore } from '@/stores/terminal'
-import type { Player, WsMessage } from '@/api/types'
+import type { Player, UpgradeStage, WsMessage } from '@/api/types'
 
 /**
  * useServerSocket —— WS 单例 hook（设计文档 §5.2）
@@ -56,8 +56,40 @@ export function useServerSocket(instanceId: string | null) {
     let disposed = false
 
     const handleMessage = (msg: WsMessage) => {
-      if (!msg.instanceId || msg.instanceId !== instanceRef.current) return
       const data = (msg.data ?? {}) as Record<string, unknown>
+
+      // 全局进度事件（部署：创建新实例前即有进度，无实例归属）
+      if (msg.type === 'deployProgress') {
+        applyDeployProgress({
+          stage: String(data.stage ?? ''),
+          percent: Number(data.percent ?? 0),
+          transferred: Number(data.transferred ?? 0),
+          total: Number(data.total ?? 0),
+          ...(data.error ? { error: String(data.error) } : {}),
+        })
+        return
+      }
+
+      // 升级进度：实例归属在 payload（信封 instanceId 由服务端 broadcast 盖章），
+      // 可针对非当前查看实例 → 只要求信封带 instanceId（服务端已按订阅过滤）
+      if (msg.type === 'upgradeProgress') {
+        if (!msg.instanceId) return
+        const stage = String(data.stage ?? 'backup') as UpgradeStage
+        applyUpgradeProgress({
+          instanceId: String(data.instanceId ?? msg.instanceId),
+          stage,
+          percent: Number(data.percent ?? 0),
+          detail: String(data.detail ?? ''),
+          timestamp: Number(data.timestamp ?? Date.now()),
+        })
+        if (stage === 'completed' || stage === 'failed' || stage === 'rolled_back') {
+          // 终态：刷新实例列表（版本号/JAR 已变更）
+          void queryClient.invalidateQueries({ queryKey: queryKeys.instances() })
+        }
+        return
+      }
+
+      if (!msg.instanceId || msg.instanceId !== instanceRef.current) return
 
       switch (msg.type) {
         case 'status': {
@@ -131,30 +163,6 @@ export function useServerSocket(instanceId: string | null) {
           // 玩家列表全量刷新（join/leave 后重新拉取），随后落入通知中心
           void queryClient.invalidateQueries({ queryKey: queryKeys.players(msg.instanceId) })
           dispatchWsEvent({ type: msg.type, data: msg.data as Record<string, unknown>, instanceId: msg.instanceId })
-          break
-        case 'deployProgress':
-          // 部署进度：落 deploy store（stage/percent/transferred/total/error）
-          applyDeployProgress({
-            stage: String(data.stage ?? ''),
-            percent: Number(data.percent ?? 0),
-            transferred: Number(data.transferred ?? 0),
-            total: Number(data.total ?? 0),
-            ...(data.error ? { error: String(data.error) } : {}),
-          })
-          break
-        case 'upgradeProgress':
-          // 升级进度：全阶段落 upgrade store（终态也写入，供弹窗展示结果）
-          applyUpgradeProgress({
-            instanceId: String(data.instanceId ?? ''),
-            stage: String(data.stage ?? 'backup'),
-            percent: Number(data.percent ?? 0),
-            detail: String(data.detail ?? ''),
-            timestamp: Number(data.timestamp ?? Date.now()),
-          })
-          if (data.stage === 'completed' || data.stage === 'failed' || data.stage === 'rolled_back') {
-            // 终态：刷新实例列表（版本号/JAR 已变更）
-            void queryClient.invalidateQueries({ queryKey: queryKeys.instances() })
-          }
           break
         case 'weatherUpdate':
         case 'backupStart':

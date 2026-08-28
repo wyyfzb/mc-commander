@@ -9,13 +9,14 @@
  * 设计纪律：--mcs-* 语义 token，禁硬编码色值/间距/圆角；
  * 不使用 useEffect+setState（oxlint set-state-in-effect 已清零，勿回潮）。
  */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useConnectionStore } from '@/stores/connection'
 import { apiUpgradeInstance } from '@/api/instances'
 import { getFriendlyErrorText } from '@/api/errors'
+import { getSocketSingleton } from '@/hooks/use-server-socket'
 import { useUpgradeStore, UPGRADE_STAGE_LABELS, clearUpgradeProgress } from '@/stores/upgrade'
 import { useServerVersions } from '../queries'
-import type { InstanceStatus, UpgradeRequest, UpgradeStage } from '@/api/types'
+import type { InstanceStatus, UpgradeStage } from '@/api/types'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog'
@@ -65,11 +66,18 @@ interface UpgradeDialogProps {
 export function UpgradeDialog({ instance, open, onOpenChange }: UpgradeDialogProps) {
   // ConnectionState extends ConnectionConfig：全 store 即 config（与 queries.ts 同模式）
   const config = useConnectionStore()
-  const [type, setType] = useState<UpgradeRequest['type']>('vanilla')
+  const [type, setType] = useState<'vanilla' | 'paper' | 'purpur'>('vanilla')
   const [mcVersion, setMcVersion] = useState('')
   const [starting, setStarting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const progress = useUpgradeStore((s) => s.progress[instance.id])
+
+  // 打开弹窗时按需订阅目标实例（服务端按订阅过滤升级进度事件；
+  // Set 幂等去重，不退订 —— 避免与 useServerSocket 的当前实例订阅冲突）
+  useEffect(() => {
+    if (!open) return
+    getSocketSingleton()?.subscribe(instance.id)
+  }, [open, instance.id])
 
   const versionsQuery = useServerVersions(type)
   const versions: string[] = versionsQuery.isSuccess ? (versionsQuery.data?.versions ?? []) : []
@@ -81,7 +89,7 @@ export function UpgradeDialog({ instance, open, onOpenChange }: UpgradeDialogPro
   const isRolledBack = progress?.stage === 'rolled_back'
 
   /** 类型切换与版本重置合并为一次事件驱动更新（不走 useEffect） */
-  const handleTypeChange = (next: string) => {
+  const handleTypeChange = (next: 'vanilla' | 'paper' | 'purpur') => {
     setType(next)
     setMcVersion('')
   }

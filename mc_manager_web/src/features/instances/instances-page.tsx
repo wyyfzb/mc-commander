@@ -198,13 +198,18 @@ export function InstancesPage() {
       )}
 
       {/* ── 升级弹窗 ── */}
-      {upgradeTarget && detailStatuses[upgradeTarget.id] && (
-        <UpgradeDialog
-          instance={detailStatuses[upgradeTarget.id]}
-          open={true}
-          onOpenChange={(open) => !open && setUpgradeTarget(null)}
-        />
-      )}
+      {(() => {
+        // 局部变量承接索引访问，truthiness 收窄后传入（noUncheckedIndexedAccess 安全）
+        const upgradeDetail = upgradeTarget ? detailStatuses[upgradeTarget.id] : undefined
+        if (!upgradeTarget || !upgradeDetail) return null
+        return (
+          <UpgradeDialog
+            instance={upgradeDetail}
+            open={true}
+            onOpenChange={(open) => !open && setUpgradeTarget(null)}
+          />
+        )
+      })()}
 
       {/* ── 停止确认（卡片停止按钮） ── */}
       <ConfirmDialog

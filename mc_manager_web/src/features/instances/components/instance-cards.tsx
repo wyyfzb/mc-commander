@@ -108,6 +108,7 @@ function InstanceCard({
   onSwitch,
   onOpenSettings,
   onUninstall,
+  onUpgrade,
   onStart,
   onStop,
 }: {

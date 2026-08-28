@@ -966,4 +966,10 @@
   - 弹窗交互细节：类型切换重置版本选择（事件驱动，无 useEffect+setState，防 oxlint set-state-in-effect 回潮）；升级中禁用取消 + Escape 不触发关闭；同版本选项禁选（当前标记）；错误走 getFriendlyErrorText 友好文案
   - 下载写盘失败显式接管 file error 事件（否则 uncaught exception 击穿进程）——测试离线 mock（got/BackupService/db/audit）保证 CI 无外网确定性
   - 全部 --mcs-* 设计 token；中文文案与全局一致
-- **验证**：服务端 **568/568**（41 文件，+13）；前端 **650/650**（62 文件，+13）、tsc 0 errors、oxlint 0 errors；前端 vite build 通过；roadmap P0-4 标记 ✅
+- **浏览器 E2E 实测发现并修复（agent-browser 全链路 QA）**：
+  1. `upgrade.service.js`：运行时实例目录字段为 `serverPath` 而非 `serverDir`（MCServer 类构造器实锤），4 处路径拼接修正；`_startAndVerify` 改听 `instance:status` 事件（`{event:'ready'|'crash'}`，MCServerManager 事件模型），并兼容 `start()` 同步方法（try/catch + promise 双路径）——原实现的 `instance:ready`/`instance:crash` 事件根本不存在
+  2. `websocket.js`：upgradeProgress 从 `broadcastAll`（信封无 instanceId、无订阅过滤）改为 `broadcast(instanceId, ...)`（盖章 + 订阅过滤 + 背压保护）；异常 payload 退回全局广播兜底。**同型既有 bug**：deployProgress 同样被前端实例守卫丢弃（部署进度条真实场景永不更新），前端一并修复
+  3. `use-server-socket.ts`：消息守卫重构——deployProgress（无实例归属，全局放行）与 upgradeProgress（信封带 instanceId 即放行，支持升级非当前实例）前置处理，其余事件维持「当前实例」守卫
+  4. `upgrade-dialog.tsx`：打开时经 `getSocketSingleton().subscribe(instance.id)` 按需订阅目标实例（Set 幂等，不退订避免与 hook 当前实例订阅冲突）
+  5. `routes/upgrade.js`：audit detail 传原始对象（AuditLogModel.create 内部统一 stringify，原实现双层序列化）
+- **验证**：服务端 **568/568**（41 文件，+13）；前端 **650/650**（62 文件，+13）、tsc -b 0 errors（注：根 tsconfig 为 solution 型，`tsc --noEmit` 空转，必须 `tsc -b`）、oxlint 0 errors；前端 vite build 通过；agent-browser E2E：202 受理 → 备份 → WS 实时进度（下载中 72%→94% 进度条）→ 替换（DB 回写 server-1.20.1.jar）→ 首启校验 120s 超时 → 自动回滚（DB 恢复 1.20.4 + 临时文件清理）→ 终态红色错误块 → 关闭清态，全链路 ✓；roadmap P0-4 标记 ✅
