@@ -10,7 +10,7 @@
  * - 空态：「暂无已安装的实例」+「部署新实例」按钮（onDeploy 与页面头部入口共用）
  * - 设计纪律：实底卡（玻璃禁区）+ --mcs-* 语义 token，禁硬编码色值/间距/圆角
  */
-import { ArrowRightLeft, Loader2, Play, Server, Settings, Square, Trash2 } from 'lucide-react'
+import { ArrowRightLeft, Loader2, Play, Server, Settings, ShieldAlert, Square, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
@@ -128,6 +128,7 @@ function InstanceCard({
       className={cn(
         'flex flex-col gap-3 rounded-mcs-md border bg-mcs-bg-muted p-4',
         isCurrent ? 'border-mcs-accent-border' : 'border-mcs-border-muted',
+        detail?.circuitBreakerTripped && 'border-mcs-error-border',
       )}
     >
       {/* 首行：状态点 + 名称 + 「当前」徽章 + 版本 mono 徽章（加载中骨架占位） */}
@@ -169,6 +170,20 @@ function InstanceCard({
         <Metric label="JVM 堆" value={isRunning && detail?.memoryUsage != null ? `${detail.memoryUsage}G` : '—'} />
         <Metric label="世界" value={detail?.worldSize ?? '—'} />
       </div>
+
+      {/* 熔断告警行（feat-5） */}
+      {detail?.circuitBreakerTripped && (
+        <div className="flex items-center gap-1.5 rounded-mcs-sm border border-mcs-error-border bg-mcs-error-bg-subtle px-2.5 py-1.5 text-mcs-xs text-mcs-error-fg">
+          <ShieldAlert className="size-3.5 shrink-0" aria-hidden />
+          <span>崩溃循环熔断已触发，自动重启已禁用</span>
+        </div>
+      )}
+      {detail && !detail.circuitBreakerTripped && detail.consecutiveCrashes > 0 && (
+        <div className="flex items-center gap-1.5 rounded-mcs-sm border border-mcs-warning-border bg-mcs-warning-bg-subtle px-2.5 py-1.5 text-mcs-xs text-mcs-warning-fg">
+          <ShieldAlert className="size-3.5 shrink-0" aria-hidden />
+          <span>近期崩溃 {detail.consecutiveCrashes} 次</span>
+        </div>
+      )}
 
       {/* 操作行：启停 / 切换（非当前实例）/ 启动配置 / 卸载（卸载中禁用） */}
       <div className="mt-auto flex items-center justify-end gap-1.5">

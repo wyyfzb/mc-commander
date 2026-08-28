@@ -4,6 +4,7 @@
  * - 开源卡片（success 色调三元组 token）
  * - 相关链接卡片：三行外链 <a target="_blank" rel="noreferrer">
  * - 版权行（居中 subtle）
+ * - 更新检查（UpdateCheckSection，独立组件，由 settings-page 按条件渲染）
  * 设计纪律：实底卡（玻璃禁区）+ --mcs-* 语义 token + shadcn 基座
  */
 import { ChevronRight, Code, GitBranch, Heart, Link as LinkIcon, MessageSquareWarning, Tag } from 'lucide-react'

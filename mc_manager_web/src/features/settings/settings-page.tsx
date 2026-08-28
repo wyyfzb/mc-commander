@@ -14,6 +14,7 @@ import { GeneralPanel } from './components/general-panel'
 import { NotificationsPanel } from './components/notifications-panel'
 import { BackupPanel } from './components/backup-panel'
 import { AboutPanel } from './components/about-panel'
+import { UpdateCheckSection } from './components/update-check-section'
 
 /** 子导航项（五项） */
 const SUB_NAV: { to: string; label: string; icon: LucideIcon }[] = [
@@ -97,7 +98,14 @@ export function BackupSettingsPage() {
   return <BackupPanel instanceId={instanceId} />
 }
 
-/** 关于子页 */
+/** 关于子页（静态面板 + 更新检查） */
 export function AboutSettingsPage() {
-  return <AboutPanel />
+  return (
+    <>
+      <AboutPanel />
+      <div className="mt-3">
+        <UpdateCheckSection />
+      </div>
+    </>
+  )
 }

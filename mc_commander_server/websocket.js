@@ -24,6 +24,7 @@ export const WSEvents = {
   RESTORE_FAILED: 'restoreFailed',
   TASK_EXECUTE: 'taskExecute',
   DEPLOY_PROGRESS: 'deployProgress',
+  CIRCUIT_BREAKER: 'circuit_breaker',
   ERROR: 'error',
 };
 
@@ -90,7 +91,7 @@ export function cleanupNotificationEvents() {
 }
 
 // status 事件中需要持久化的状态跃迁子事件（前端据此生成通知）
-const STATUS_EVENT_TYPES = new Set(['started', 'stopped', 'crash', 'ready', 'save']);
+const STATUS_EVENT_TYPES = new Set(['started', 'stopped', 'crash', 'ready', 'save', 'circuit_breaker']);
 
 /// 通知事件落库（广播前）：返回自增 id 供消息携带与断线补齐
 function persistNotificationEvent(instanceId, type, data) {

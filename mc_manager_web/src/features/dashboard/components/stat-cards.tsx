@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useNavigate } from 'react-router'
-import { ArrowRight, CheckCircle2, Info, MoonStar, Skull, Users } from 'lucide-react'
+import { ArrowRight, CheckCircle2, HardDrive, Info, MoonStar, Skull, Users } from 'lucide-react'
 import { Chip } from '@/components/mcs/chip'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Sparkline } from '@/components/mcs/sparkline'
@@ -391,6 +391,82 @@ export function RuntimeInfoCard() {
           </div>
         ))}
       </div>
+    </Card>
+  )
+}
+
+// ── 右栏卡：磁盘使用率（feat-5 运维韧性）────────────────────
+/** 磁盘使用率色阶：正常 / 警告(≥85%) / 错误(≥95%) */
+function diskColor(percent: number): string {
+  if (percent >= 95) return 'text-mcs-error-fg'
+  if (percent >= 85) return 'text-mcs-warning-fg'
+  return 'text-mcs-success-fg'
+}
+
+function diskBarColor(percent: number): string {
+  if (percent >= 95) return 'var(--mcs-error-fg)'
+  if (percent >= 85) return 'var(--mcs-warning-fg)'
+  return 'var(--mcs-success-fg)'
+}
+
+export function DiskUsageCard() {
+  const systemStats = useServerStore((s) => s.systemStats)
+  const diskUsage = systemStats?.diskUsage
+  const primary = diskUsage?.primary ?? null
+  const all = diskUsage?.all ?? []
+
+  const body = !primary ? (
+    <p className="py-1 text-mcs-xs text-mcs-text-subtle">暂无磁盘数据</p>
+  ) : (
+    <div className="flex flex-col gap-2">
+      {/* 主分区 */}
+      <div className="flex items-center justify-between text-mcs-xs">
+        <span className="flex items-center gap-1.5 text-mcs-text-muted">
+          <HardDrive className="size-3.5" aria-hidden />
+          <span className="max-w-[120px] truncate" title={primary.mountpoint}>{primary.mountpoint}</span>
+        </span>
+        <span className={cn('tnum font-semibold', diskColor(primary.percent))}>
+          {primary.percent.toFixed(1)}%
+        </span>
+      </div>
+      <div
+        role="progressbar"
+        aria-valuenow={Math.round(primary.percent)}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        className="h-1.5 w-full overflow-hidden rounded-full bg-mcs-bg-emphasis"
+      >
+        <div className="h-full rounded-full" style={{ width: `${Math.min(primary.percent, 100)}%`, background: diskBarColor(primary.percent) }} />
+      </div>
+      <div className="flex justify-between text-mcs-2xs text-mcs-text-subtle">
+        <span>已用 {primary.usedGB}G</span>
+        <span>总计 {primary.totalGB}G</span>
+        <span>可用 {(primary.totalGB - primary.usedGB).toFixed(1)}G</span>
+      </div>
+      {/* 多分区子行 */}
+      {all.length > 1 && (
+        <div className="flex flex-col gap-1 border-t border-mcs-border-subtle pt-1.5">
+          {all.filter(d => d.mountpoint !== primary.mountpoint).slice(0, 3).map(d => (
+            <div key={d.mountpoint} className="flex items-center justify-between text-mcs-2xs">
+              <span className="max-w-[100px] truncate text-mcs-text-muted" title={d.mountpoint}>{d.mountpoint}</span>
+              <span className={cn('tnum', diskColor(d.percent))}>{d.percent.toFixed(1)}%</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+
+  return (
+    <Card
+      title="磁盘使用率"
+      eyebrow={
+        <span className="flex size-7 items-center justify-center rounded-mcs-sm bg-mcs-accent-bg-subtle">
+          <HardDrive className="size-4 text-mcs-accent" aria-hidden />
+        </span>
+      }
+    >
+      {body}
     </Card>
   )
 }
