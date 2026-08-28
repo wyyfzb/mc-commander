@@ -20,6 +20,7 @@ import {
   FilePlus,
   FileText,
   Folder,
+  FolderPlus,
   Home,
   Image,
   Inbox,
@@ -27,6 +28,7 @@ import {
   RefreshCw,
   Settings,
   Trash2,
+  TextCursorInput,
   Upload,
   type LucideIcon,
 } from 'lucide-react'
@@ -105,9 +107,11 @@ interface FileListRowProps {
   onSelectFile: (path: string) => void
   onOpenDir: (path: string) => void
   onDelete: (entry: FileEntry) => void
+  /** 行级「重命名」（未提供则不渲染按钮） */
+  onRename?: (entry: FileEntry) => void
 }
 
-function FileListRow({ entry, isSelected, onSelectFile, onOpenDir, onDelete }: FileListRowProps) {
+function FileListRow({ entry, isSelected, onSelectFile, onOpenDir, onDelete, onRename }: FileListRowProps) {
   const Icon = FILE_ICONS[fileIconName(entry)] ?? File
   const isDir = entry.isDirectory
 
@@ -160,6 +164,21 @@ function FileListRow({ entry, isSelected, onSelectFile, onOpenDir, onDelete }: F
           <Pencil className="size-3.5" aria-hidden />
         </Button>
       )}
+      {onRename && (
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label={`重命名 ${entry.name}`}
+          title="重命名"
+          className="text-mcs-text-muted hover:text-mcs-text-default"
+          onClick={(e) => {
+            e.stopPropagation()
+            onRename(entry)
+          }}
+        >
+          <TextCursorInput className="size-3.5" aria-hidden />
+        </Button>
+      )}
       <Button
         variant="ghost"
         size="icon-sm"
@@ -186,6 +205,9 @@ export function FileList({
   onRefresh,
   onGoUp,
   onNewFile,
+  onUpload,
+  onCreateDirectory,
+  onRename,
 }: FileListProps) {
   const { data, isLoading, isError } = useFileList(instanceId, dir)
 
@@ -271,16 +293,22 @@ export function FileList({
               <FilePlus aria-hidden />
             </Button>
           )}
-          {/* 上传：服务端暂无上传 API → 禁用 + 说明，不渲染假功能 */}
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label="上传文件"
-            title="文件上传将在后续版本提供（服务端暂不支持）"
-            disabled
-          >
-            <Upload aria-hidden />
-          </Button>
+          {onCreateDirectory && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="新建目录"
+              title="新建目录"
+              onClick={onCreateDirectory}
+            >
+              <FolderPlus aria-hidden />
+            </Button>
+          )}
+          {onUpload && (
+            <Button variant="ghost" size="icon-sm" aria-label="上传文件" title="上传文件到实例根目录" onClick={onUpload}>
+              <Upload aria-hidden />
+            </Button>
+          )}
         </div>
       </nav>
 
@@ -307,10 +335,18 @@ export function FileList({
             <Inbox className="size-8 opacity-60" aria-hidden />
             <p className="text-mcs-sm">{normalizedDir === '/' ? '该实例根目录下没有文件' : '此文件夹为空'}</p>
             {onNewFile && (
-              <Button variant="outline" size="sm" onClick={onNewFile}>
-                <FilePlus aria-hidden />
-                新建文件
-              </Button>
+              <div className="flex items-center gap-2">
+                {onCreateDirectory && (
+                  <Button variant="outline" size="sm" onClick={onCreateDirectory}>
+                    <FolderPlus aria-hidden />
+                    新建目录
+                  </Button>
+                )}
+                <Button variant="outline" size="sm" onClick={onNewFile}>
+                  <FilePlus aria-hidden />
+                  新建文件
+                </Button>
+              </div>
             )}
           </div>
         )}
@@ -324,6 +360,7 @@ export function FileList({
                 onSelectFile={onSelectFile}
                 onOpenDir={onOpenDir}
                 onDelete={onDelete}
+                onRename={onRename}
               />
             ))}
           </div>

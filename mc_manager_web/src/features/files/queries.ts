@@ -7,10 +7,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/api/queries'
 import {
+  apiCreateDirectory,
   apiDeleteFile,
   apiGetFileContent,
   apiListFiles,
+  apiRenameFile,
   apiSaveFileContent,
+  apiUploadFile,
 } from '@/api/files'
 import { useConnectionStore } from '@/stores/connection'
 
@@ -83,6 +86,72 @@ export function useDeleteFile(instanceId: string | null) {
       })
       void queryClient.invalidateQueries({
         queryKey: queryKeys.fileContent(instanceId ?? '', path),
+      })
+    },
+  })
+}
+
+/** 新建目录（POST /files/mkdir，recursive）；成功后失效当前目录列表 */
+export function useCreateDirectory(instanceId: string | null) {
+  const config = useConnectionStore()
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ dirPath }: { dirPath: string }) => {
+      if (!instanceId) throw new Error('未选择实例')
+      return apiCreateDirectory(config, instanceId, dirPath)
+    },
+    onSuccess: (_data, { dirPath }) => {
+      // mkdir recursive 可能创建多级：父目录与目标目录列表一并失效
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.files(instanceId ?? '', parentDirOf(dirPath)),
+      })
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.files(instanceId ?? '', dirPath),
+      })
+    },
+  })
+}
+
+/** 重命名文件/目录（POST /files/rename 原子操作）；成功后失效新旧两侧目录列表 */
+export function useRenameFile(instanceId: string | null) {
+  const config = useConnectionStore()
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ oldPath, newPath }: { oldPath: string; newPath: string }) => {
+      if (!instanceId) throw new Error('未选择实例')
+      return apiRenameFile(config, instanceId, oldPath, newPath)
+    },
+    onSuccess: (_data, { oldPath, newPath }) => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.files(instanceId ?? '', parentDirOf(oldPath)),
+      })
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.files(instanceId ?? '', parentDirOf(newPath)),
+      })
+      // 重命名目标若正被编辑器打开，旧路径内容缓存失效避免回写旧路径
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.fileContent(instanceId ?? '', oldPath),
+      })
+    },
+  })
+}
+
+/** 上传文件（POST /files/upload multipart，服务端落地到实例根目录）；成功后失效根目录列表 */
+export function useUploadFile(instanceId: string | null) {
+  const config = useConnectionStore()
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ file }: { file: File }) => {
+      if (!instanceId) throw new Error('未选择实例')
+      return apiUploadFile(config, instanceId, file)
+    },
+    onSuccess: () => {
+      // 服务端固定落地到实例根目录（目标路径取清洗后的原始文件名）
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.files(instanceId ?? '', '/'),
       })
     },
   })

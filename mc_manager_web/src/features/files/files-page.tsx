@@ -4,18 +4,19 @@
  * - 中栏：文件列表（面包屑 + 上级/刷新/新建文件工具栏 + 删除入口）
  * - 右栏：Monaco 编辑器（选中文件即打开；Ctrl+S 保存；脏标记；关闭确认）
  * - 删除确认对话框（目录红色警告递归删除）；新建文件对话框（PUT content 新路径）
+ * - feat-3：新建目录对话框（mkdir recursive）/ 重命名对话框（原子 rename）/
+ *   上传（隐藏 file input multipart 直传，服务端落地到实例根目录同名覆盖）
  * - 编辑内容为组件 state，与 query 缓存隔离（保存成功由 mutation 失效列表/内容缓存）
  * - URL 深链接：?dir=/world&file=/world/level.dat（可分享、可刷新保持）
  * - 实例切换：目录/选中文件重置回初始态
  */
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { ServerOff } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router'
 import { toast } from 'sonner'
 import { getFriendlyErrorText } from '@/api/errors'
 import { queryKeys } from '@/api/queries'
-import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
@@ -32,7 +33,14 @@ import type { FileEntry } from '@/api/types'
 import { DirTree } from './components/dir-tree'
 import { FileList } from './components/file-list'
 import { MonacoEditorPane } from './components/monaco-editor-pane'
-import { useDeleteFile, useFileContent, useSaveFile } from './queries'
+import {
+  useCreateDirectory,
+  useDeleteFile,
+  useFileContent,
+  useRenameFile,
+  useSaveFile,
+  useUploadFile,
+} from './queries'
 import { EmptyState } from '@/components/mcs/empty-state'
 import { useNavigate } from 'react-router'
 
@@ -94,10 +102,19 @@ export function FilesPage() {
   const [newFileOpen, setNewFileOpen] = useState(false)
   const [newFileName, setNewFileName] = useState('')
   const [closeConfirmOpen, setCloseConfirmOpen] = useState(false)
+  // feat-3：新建目录 / 重命名 / 上传
+  const [newDirOpen, setNewDirOpen] = useState(false)
+  const [newDirName, setNewDirName] = useState('')
+  const [renameTarget, setRenameTarget] = useState<FileEntry | null>(null)
+  const [renameValue, setRenameValue] = useState('')
+  const uploadInputRef = useRef<HTMLInputElement>(null)
 
   const contentQuery = useFileContent(instanceId, selectedPath)
   const saveMutation = useSaveFile(instanceId)
   const deleteMutation = useDeleteFile(instanceId)
+  const createDirMutation = useCreateDirectory(instanceId)
+  const renameMutation = useRenameFile(instanceId)
+  const uploadMutation = useUploadFile(instanceId)
 
   /** 内容加载完成 → 同步本地 draft 与基线 */
   useEffect(() => {
@@ -199,6 +216,79 @@ export function FilesPage() {
     }
   }
 
+  /** 新建目录：POST /files/mkdir（recursive 支持多级，如 plugins/SomePlugin/config） */
+  const createDirectory = async () => {
+    const name = newDirName.trim()
+    if (name.length === 0) {
+      toast.error('目录名不能为空')
+      return
+    }
+    if (name.includes('\\')) {
+      toast.error('目录名不能包含反斜杠')
+      return
+    }
+    const dirPath = name.startsWith('/') ? name : dir === '/' ? `/${name}` : `${dir}/${name}`
+    try {
+      await createDirMutation.mutateAsync({ dirPath })
+      setNewDirOpen(false)
+      setNewDirName('')
+      toast.success(`已创建目录 ${name}`)
+    } catch (e) {
+      toast.error(`创建目录失败：${getFriendlyErrorText(e)}`)
+    }
+  }
+
+  /** 重命名：POST /files/rename 原子操作；编辑器打开的目标改名后跟随新路径 */
+  const confirmRename = async () => {
+    if (!renameTarget) return
+    const newName = renameValue.trim()
+    if (newName.length === 0) {
+      toast.error('名称不能为空')
+      return
+    }
+    if (newName.includes('/') || newName.includes('\\')) {
+      toast.error('名称不能包含路径分隔符')
+      return
+    }
+    if (newName === renameTarget.name) {
+      setRenameTarget(null)
+      return
+    }
+    const newPath = `${parentDirOf(renameTarget.path)}/${newName}`
+    try {
+      await renameMutation.mutateAsync({ oldPath: renameTarget.path, newPath })
+      // 编辑器正打开被重命名文件且无未保存修改 → 跟随新路径；脏状态保留在旧 draft，用户可自行选择
+      if (selectedPath === renameTarget.path && !dirty) {
+        setSelectedPath(newPath)
+      } else if (selectedPath === renameTarget.path) {
+        setSelectedPath(null)
+        originalRef.current = null
+        setDraft('')
+      }
+      toast.success(`已重命名为 ${newName}`)
+      setRenameTarget(null)
+    } catch (e) {
+      toast.error(`重命名失败：${getFriendlyErrorText(e)}`)
+    }
+  }
+
+  /** 上传：触发隐藏 file input（服务端落地到实例根目录，同名覆盖） */
+  const openUploadPicker = () => {
+    uploadInputRef.current?.click()
+  }
+
+  const handleUploadChange = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = '' // 允许重复上传同名文件
+    if (!file) return
+    try {
+      const result = await uploadMutation.mutateAsync({ file })
+      toast.success(`已上传 ${result.name}（${(result.size / 1024).toFixed(1)} KB）`)
+    } catch (err) {
+      toast.error(`上传失败：${getFriendlyErrorText(err)}`)
+    }
+  }
+
   return (
     <div className="flex h-full min-h-0 gap-3 p-3">
       {/* ── 左栏：目录树（220px，实底卡） ── */}
@@ -227,6 +317,12 @@ export function FilesPage() {
             }
           }}
           onNewFile={() => setNewFileOpen(true)}
+          onCreateDirectory={() => setNewDirOpen(true)}
+          onUpload={openUploadPicker}
+          onRename={(entry) => {
+            setRenameTarget(entry)
+            setRenameValue(entry.name)
+          }}
         />
       </section>
 
@@ -354,6 +450,78 @@ export function FilesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ── 新建目录对话框（feat-3） ── */}
+      <Dialog open={newDirOpen} onOpenChange={setNewDirOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>新建目录</DialogTitle>
+            <DialogDescription>
+              将在「{dir}」目录下创建；支持多级路径（如 plugins/Essentials/config）。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2">
+            <Input
+              value={newDirName}
+              onChange={(e) => setNewDirName(e.target.value)}
+              placeholder="目录名，如 plugins 或 plugins/Essentials"
+              aria-label="目录名"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void createDirectory()
+              }}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setNewDirOpen(false)}>
+              取消
+            </Button>
+            <Button onClick={() => void createDirectory()} disabled={createDirMutation.isPending}>
+              {createDirMutation.isPending ? '创建中…' : '创建'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── 重命名对话框（feat-3） ── */}
+      <Dialog open={renameTarget !== null} onOpenChange={(open) => !open && setRenameTarget(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>重命名 {renameTarget?.name}</DialogTitle>
+            <DialogDescription>
+              {renameTarget?.isDirectory === true ? '目录' : '文件'}路径：{renameTarget?.path}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2">
+            <Input
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              placeholder="新名称"
+              aria-label="新名称"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void confirmRename()
+              }}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRenameTarget(null)}>
+              取消
+            </Button>
+            <Button onClick={() => void confirmRename()} disabled={renameMutation.isPending}>
+              {renameMutation.isPending ? '重命名中…' : '重命名'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── 隐藏上传 input（feat-3：multipart 直传，服务端落地到实例根目录） ── */}
+      <input
+        ref={uploadInputRef}
+        type="file"
+        className="hidden"
+        aria-hidden
+        tabIndex={-1}
+        onChange={(e) => void handleUploadChange(e)}
+      />
     </div>
   )
 }
