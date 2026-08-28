@@ -946,3 +946,30 @@
   - 全部 `--mcs-*` 设计 token；批量操作走 runBatchForTargets + formatBatchSummary
   - 批量模式新增「操作」Tab（BATCH_TABS 扩展）
 - **验证**：服务端 **555/555**（零改动）；前端 **637/637**（60 文件，+18 用例）；tsc 0 errors；oxlint 0 errors 80 warnings（全存量）；roadmap P0-3 标记 ✅
+
+## feat-7 · P0-4 实例版本升级（roadmap P0 第 4 项，灾后重实现）
+
+- **类型**：新功能（服务端升级服务 + 前端升级弹窗，异步 202 + WS 进度推送）
+- **位置**：
+  - `mc_commander_server/services/upgrade.service.js`（新建，UpgradeService：备份→下载→替换→首启校验→失败回滚五阶段）
+  - `mc_commander_server/routes/upgrade.js`（新建，POST /instances/:id/upgrade 202 异步受理 + GET /instances/:id/upgrade/status 查询）
+  - `mc_commander_server/routes/index.js`（路由挂载 + 敏感路径清单补录两升级端点）
+  - `mc_commander_server/utils/audit.js`（INSTANCE_UPGRADE / INSTANCE_UPGRADE_ROLLBACK 审计动作）
+  - `mc_commander_server/utils/response.js`（UPGRADE_IN_PROGRESS 40907 / UPGRADE_VERSION_SAME 40012 错误码）
+  - `mc_commander_server/websocket.js`（upgradeProgress WS 事件广播）
+  - `mc_commander_web`：`api/types.ts`（UpgradeStage/UpgradeProgress/UpgradeRequest 类型 + WS 事件类型）、`api/instances.ts`（apiUpgradeInstance/apiGetUpgradeStatus）、`stores/upgrade.ts`（新建，进度 store + 中文阶段标签）、`hooks/use-server-socket.ts`（upgradeProgress 落 store + 终态失效实例列表）、`features/instances/components/upgrade-dialog.tsx`（新建弹窗）、`instances-page.tsx`（升级弹窗挂载 + 打开清残留进度）、`instance-cards.tsx`（停止状态卡片新增「升级」入口）
+  - 测试：服务端 `__tests__/upgrade.test.js`（13 用例：校验矩阵/202 受理/服务进度序列/常量完整性）；前端 `upgrade-dialog.test.tsx`（9 用例）+ `stores/__tests__/upgrade.test.ts`（4 用例）+ msw 升级 handler
+- **设计**：
+  - 前置校验六连：mcVersion 必填 → type 白名单（vanilla/paper/purpur）→ 实例存在 → 实例未运行 → 未在升级中（409）→ 版本不同（40012）
+  - 五阶段流水：BackupService 自动备份（事件回执等待）→ 上游 API 解析 JAR URL（Mojang Piston / PaperMC v3 / Purpur v2）→ got 流式下载带进度广播 → DB 回写 jarFile/mcVersion + 旧 JAR 磁盘备份 → 120s 首启校验（ready/crash 事件），任一失败自动回滚（恢复旧 JAR + DB 回写 + 备份恢复）
+  - WS 全阶段落 store（含终态），弹窗消费 store 展示进度/终态；打开弹窗清残留进度，关闭终态弹窗清 store
+  - 弹窗交互细节：类型切换重置版本选择（事件驱动，无 useEffect+setState，防 oxlint set-state-in-effect 回潮）；升级中禁用取消 + Escape 不触发关闭；同版本选项禁选（当前标记）；错误走 getFriendlyErrorText 友好文案
+  - 下载写盘失败显式接管 file error 事件（否则 uncaught exception 击穿进程）——测试离线 mock（got/BackupService/db/audit）保证 CI 无外网确定性
+  - 全部 --mcs-* 设计 token；中文文案与全局一致
+- **浏览器 E2E 实测发现并修复（agent-browser 全链路 QA）**：
+  1. `upgrade.service.js`：运行时实例目录字段为 `serverPath` 而非 `serverDir`（MCServer 类构造器实锤），4 处路径拼接修正；`_startAndVerify` 改听 `instance:status` 事件（`{event:'ready'|'crash'}`，MCServerManager 事件模型），并兼容 `start()` 同步方法（try/catch + promise 双路径）——原实现的 `instance:ready`/`instance:crash` 事件根本不存在
+  2. `websocket.js`：upgradeProgress 从 `broadcastAll`（信封无 instanceId、无订阅过滤）改为 `broadcast(instanceId, ...)`（盖章 + 订阅过滤 + 背压保护）；异常 payload 退回全局广播兜底。**同型既有 bug**：deployProgress 同样被前端实例守卫丢弃（部署进度条真实场景永不更新），前端一并修复
+  3. `use-server-socket.ts`：消息守卫重构——deployProgress（无实例归属，全局放行）与 upgradeProgress（信封带 instanceId 即放行，支持升级非当前实例）前置处理，其余事件维持「当前实例」守卫
+  4. `upgrade-dialog.tsx`：打开时经 `getSocketSingleton().subscribe(instance.id)` 按需订阅目标实例（Set 幂等，不退订避免与 hook 当前实例订阅冲突）
+  5. `routes/upgrade.js`：audit detail 传原始对象（AuditLogModel.create 内部统一 stringify，原实现双层序列化）
+- **验证**：服务端 **568/568**（41 文件，+13）；前端 **650/650**（62 文件，+13）、tsc -b 0 errors（注：根 tsconfig 为 solution 型，`tsc --noEmit` 空转，必须 `tsc -b`）、oxlint 0 errors；前端 vite build 通过；agent-browser E2E：202 受理 → 备份 → WS 实时进度（下载中 72%→94% 进度条）→ 替换（DB 回写 server-1.20.1.jar）→ 首启校验 120s 超时 → 自动回滚（DB 恢复 1.20.4 + 临时文件清理）→ 终态红色错误块 → 关闭清态，全链路 ✓；roadmap P0-4 标记 ✅

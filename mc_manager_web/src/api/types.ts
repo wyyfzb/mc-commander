@@ -413,6 +413,7 @@ export const WS_EVENT_TYPES = [
   'taskExecute',
   'deployProgress',
   'circuit_breaker',
+  'upgradeProgress',
   'error',
 ] as const
 
@@ -682,4 +683,34 @@ export interface UpdateCheckResult {
 export interface WebhookTestResult {
   statusCode: number
   body: string | null
+}
+
+// -- 升级（P0-4，服务端 routes/upgrade.js）--
+export type UpgradeStage =
+  | 'backup'
+  | 'download'
+  | 'replace'
+  | 'verify'
+  | 'completed'
+  | 'failed'
+  | 'rolled_back'
+
+export interface UpgradeProgress {
+  instanceId: string
+  stage: UpgradeStage
+  percent: number
+  detail: string
+  timestamp: number
+}
+
+export interface UpgradeRequest {
+  mcVersion: string
+  type?: 'vanilla' | 'paper' | 'purpur'
+}
+
+export interface UpgradeStartResponse {
+  message: string
+  instanceId: string
+  mcVersion: string
+  type: string
 }

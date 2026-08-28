@@ -25,6 +25,7 @@ export const WSEvents = {
   TASK_EXECUTE: 'taskExecute',
   DEPLOY_PROGRESS: 'deployProgress',
   CIRCUIT_BREAKER: 'circuit_breaker',
+  UPGRADE_PROGRESS: 'upgradeProgress',
   ERROR: 'error',
 };
 
@@ -420,6 +421,16 @@ export function setupWebSocket(wss, serverManager) {
 
   serverManager.on(WSEvents.DEPLOY_PROGRESS, (data) => {
     broadcastAll(WSEvents.DEPLOY_PROGRESS, data);
+  });
+
+  // 升级进度：带实例归属（可针对非当前查看实例），走 broadcast 盖章 instanceId
+  // 并遵循客户端订阅过滤；缺 instanceId 的异常 payload 退回全局广播兜底
+  serverManager.on('instance:upgradeProgress', (data) => {
+    if (data && data.instanceId) {
+      broadcast(data.instanceId, WSEvents.UPGRADE_PROGRESS, data);
+    } else {
+      broadcastAll(WSEvents.UPGRADE_PROGRESS, data);
+    }
   });
 
   return { broadcast, broadcastAll, WSEvents, ClientMessages };

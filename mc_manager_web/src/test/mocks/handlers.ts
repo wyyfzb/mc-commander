@@ -387,6 +387,9 @@ export const mockBans: BanRecord[] = [  {
 /** 部署失败开关（测试注入：结构占位，非真实错误） */
 export const deployMock = { shouldFail: false }
 
+/** 升级失败开关（测试注入：结构占位，非真实错误） */
+export const upgradeMock = { shouldFail: false, conflict: false }
+
 /** 版本列表 mock（结构占位版本号；fabric 额外带 loaders） */
 const mockVersions = {
   vanilla: { versions: ['1.21.4', '1.21.1'] },
@@ -594,6 +597,49 @@ export const handlers = [
       path: '/opt/mc/instances/inst-deploy-001',
       maxMemory: body.maxMemory ?? '2G',
     })
+  }),
+  // ── 升级域（P0-4）──
+  http.post('*/api/v1/instances/:id/upgrade', async ({ request }) => {
+    if (upgradeMock.conflict) {
+      return HttpResponse.json(
+        {
+          status: 'error',
+          code: 40907,
+          message: 'Upgrade already in progress',
+          details: null,
+          timestamp: new Date().toISOString(),
+        },
+        { status: 409 },
+      )
+    }
+    if (upgradeMock.shouldFail) {
+      return HttpResponse.json(
+        {
+          status: 'error',
+          code: 50000,
+          message: 'upgrade start failed',
+          details: null,
+          timestamp: new Date().toISOString(),
+        },
+        { status: 500 },
+      )
+    }
+    const body = (await request.json()) as { mcVersion?: string; type?: string }
+    return HttpResponse.json(
+      {
+        status: 'ok',
+        code: 0,
+        message: 'Upgrade started',
+        data: {
+          message: 'Upgrade started',
+          instanceId: 'inst-001',
+          mcVersion: body.mcVersion ?? '1.21.4',
+          type: body.type ?? 'vanilla',
+        },
+        timestamp: new Date().toISOString(),
+      },
+      { status: 202 },
+    )
   }),
   // 未配置 API Key 场景：401
   http.get('*/api/v1/unauthorized-probe', () =>

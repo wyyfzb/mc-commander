@@ -10,7 +10,7 @@
  * - 空态：「暂无已安装的实例」+「部署新实例」按钮（onDeploy 与页面头部入口共用）
  * - 设计纪律：实底卡（玻璃禁区）+ --mcs-* 语义 token，禁硬编码色值/间距/圆角
  */
-import { ArrowRightLeft, Loader2, Play, Server, Settings, ShieldAlert, Square, Trash2 } from 'lucide-react'
+import { ArrowRightLeft, ArrowUpCircle, Loader2, Play, Server, Settings, ShieldAlert, Square, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
@@ -34,6 +34,8 @@ export interface InstanceCardsProps {
   onOpenSettings: (instance: InstanceSummary) => void
   /** 卸载实例 */
   onUninstall: (instance: InstanceSummary) => void
+  /** 升级实例（已停止时可用） */
+  onUpgrade: (instance: InstanceSummary) => void
   /** 启动实例 */
   onStart: (instance: InstanceSummary) => void
   /** 停止实例（页面负责确认弹窗） */
@@ -53,6 +55,7 @@ export function InstanceCards({
   onSwitch,
   onOpenSettings,
   onUninstall,
+  onUpgrade,
   onStart,
   onStop,
   busyId,
@@ -84,6 +87,7 @@ export function InstanceCards({
           isBusy={busyId === instance.id}
           onSwitch={onSwitch}
           onOpenSettings={onOpenSettings}
+          onUpgrade={onUpgrade}
           onUninstall={onUninstall}
           onStart={onStart}
           onStop={onStop}
@@ -104,6 +108,7 @@ function InstanceCard({
   onSwitch,
   onOpenSettings,
   onUninstall,
+  onUpgrade,
   onStart,
   onStop,
 }: {
@@ -116,6 +121,7 @@ function InstanceCard({
   onSwitch: (instance: InstanceSummary) => void
   onOpenSettings: (instance: InstanceSummary) => void
   onUninstall: (instance: InstanceSummary) => void
+  onUpgrade: (instance: InstanceSummary) => void
   onStart: (instance: InstanceSummary) => void
   onStop: (instance: InstanceSummary) => void
 }) {
@@ -234,6 +240,18 @@ function InstanceCard({
           <Settings aria-hidden />
           配置
         </Button>
+        {!isRunning && (
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label={`升级 ${name}`}
+            title="升级版本"
+            onClick={() => onUpgrade(instance)}
+          >
+            <ArrowUpCircle aria-hidden />
+            升级
+          </Button>
+        )}
         <Button
           variant="outline"
           size="sm"

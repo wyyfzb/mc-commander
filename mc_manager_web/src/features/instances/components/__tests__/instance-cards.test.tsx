@@ -26,6 +26,7 @@ function baseProps(overrides: Partial<InstanceCardsProps> = {}): InstanceCardsPr
     uninstallingId: null,
     onSwitch: vi.fn(),
     onOpenSettings: vi.fn(),
+    onUpgrade: vi.fn(),
     onUninstall: vi.fn(),
     onStart: vi.fn(),
     onStop: vi.fn(),
