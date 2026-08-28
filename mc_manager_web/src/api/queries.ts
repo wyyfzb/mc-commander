@@ -4,10 +4,20 @@
  * 提供 key 工厂 + 基础 hook（overview/system-stats/logs 等）；
  * 各领域 queries.ts 见 features/<domain>/queries.ts
  */
-import { useQuery } from '@tanstack/react-query'
-import { apiGet } from './client'
+import { useQuery, keepPreviousData } from '@tanstack/react-query'
+import { apiGet, apiGetEnvelope } from './client'
 import { useConnectionStore } from '@/stores/connection'
-import type { InstanceStatus, InstanceSummary, LogEntry, OverviewData, SystemStats } from './types'
+import type {
+  AuditLogItem,
+  CommandHistoryItem,
+  InstanceStatus,
+  InstanceSummary,
+  LogEntry,
+  OverviewData,
+  SystemStats,
+} from './types'
+import type { AuditQueryParams } from './audit'
+import { buildAuditQuery } from './audit'
 
 // ── Query key 工厂（分层规范，防冲突）───────────────────────────
 export const queryKeys = {
@@ -27,6 +37,10 @@ export const queryKeys = {
     [...queryKeys.all, 'files', id, 'content', filePath] as const,
   world: (id: string) => [...queryKeys.all, 'world', id] as const,
   properties: (id: string) => [...queryKeys.all, 'properties', id] as const,
+  auditLogs: (params: AuditQueryParams) =>
+    [...queryKeys.all, 'audit-logs', params] as const,
+  commandHistory: (params: AuditQueryParams) =>
+    [...queryKeys.all, 'command-history', params] as const,
 }
 
 /** 面板概览（含云服务器系统级资源；未配置连接时禁用） */
@@ -84,5 +98,29 @@ export function useInstanceLogs(instanceId: string, lines = 200) {
       apiGet<LogEntry[]>(`/api/v1/instances/${instanceId}/logs?lines=${lines}`, config, signal),
     enabled: config.status === 'ready' && Boolean(instanceId),
     staleTime: 5_000,
+  })
+}
+
+/** 审计日志（信封级：items + pagination；翻页用 keepPreviousData 避免闪烁） */
+export function useAuditLogs(params: AuditQueryParams = {}) {
+  const config = useConnectionStore()
+  return useQuery({
+    queryKey: queryKeys.auditLogs(params),
+    queryFn: ({ signal }) =>
+      apiGetEnvelope<AuditLogItem[]>(`/api/v1/audit-logs${buildAuditQuery(params)}`, config, signal),
+    enabled: config.status === 'ready',
+    placeholderData: keepPreviousData,
+  })
+}
+
+/** 命令历史（信封级：items + pagination；翻页用 keepPreviousData 避免闪烁） */
+export function useCommandHistory(params: AuditQueryParams = {}) {
+  const config = useConnectionStore()
+  return useQuery({
+    queryKey: queryKeys.commandHistory(params),
+    queryFn: ({ signal }) =>
+      apiGetEnvelope<CommandHistoryItem[]>(`/api/v1/command-history${buildAuditQuery(params)}`, config, signal),
+    enabled: config.status === 'ready',
+    placeholderData: keepPreviousData,
   })
 }

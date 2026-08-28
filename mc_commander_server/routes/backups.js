@@ -1,6 +1,10 @@
 import { Router } from 'express';
+import { spawn } from 'child_process';
+import path from 'path';
+import fs from 'fs';
 import { success, successPaginated, ErrorCodes, AppError } from '../utils/response.js';
 import { BackupModel } from '../db/backup.model.js';
+import { recordAudit, AuditActions } from '../utils/audit.js';
 import { BackupService } from '../services/backup.service.js';
 import config from '../config.js';
 
@@ -83,6 +87,7 @@ export function createBackupRoutes(serverManager) {
       type: 'manual',
     });
 
+    recordAudit({ instanceId, action: AuditActions.BACKUP_CREATE, targetType: 'backup', targetId: String(backup.id), detail: { name: backup.name } });
     res.status(201).json(success(backup, 'Backup created successfully'));
   }));
 
@@ -115,6 +120,7 @@ export function createBackupRoutes(serverManager) {
     // restoreFailed 事件推送）——大世界解压不再受客户端 10s 超时误杀
     await backupService.restoreBackup(req.params.id);
 
+    recordAudit({ instanceId: backup.instanceId, action: AuditActions.BACKUP_RESTORE, targetType: 'backup', targetId: req.params.id, detail: { name: backup.name } });
     res.status(202).json(success(null, 'Restore started'));
   }));
 
@@ -132,7 +138,69 @@ export function createBackupRoutes(serverManager) {
     }
 
     await backupService.deleteBackup(req.params.id);
+    recordAudit({ instanceId: backup.instanceId, action: AuditActions.BACKUP_DELETE, targetType: 'backup', targetId: req.params.id, detail: { name: backup.name } });
     res.json(success(null, 'Backup deleted successfully'));
+  }));
+
+  // 流式备份下载：现场 tar.gz 打包直发，零临时文件。
+  // 安全链：findByIdWithPath（file_path 不出 API）→ resolveContained 越界/symlink 拦截
+  // → spawn 数组参数无 shell → 中途失败 destroy 防静默损坏
+  router.get('/backups/:id/download', asyncHandler(async (req, res) => {
+    const row = BackupModel.findByIdWithPath(req.params.id);
+    if (!row) {
+      throw new AppError(ErrorCodes.BACKUP_NOT_FOUND);
+    }
+    if (row.status !== 'completed') {
+      throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Only completed backups can be downloaded');
+    }
+    // 旧格式备份（zip 压缩包）不支持下载（与 restore 同口径）
+    if (row.format === 'zip') {
+      throw new AppError(ErrorCodes.BACKUP_FORMAT_UNSUPPORTED);
+    }
+    const backupDir = row.file_path;
+    const resolved = path.resolve(backupDir);
+    const backupsRoot = path.resolve(config.backupsDir);
+    // 路径包含校验（与 restore 同源安全链）
+    const rel = path.relative(backupsRoot, resolved);
+    if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) {
+      throw new AppError(ErrorCodes.PATH_TRAVERSAL_DETECTED, 'Backup path out of backups directory');
+    }
+    if (!fs.existsSync(resolved) || !fs.statSync(resolved).isDirectory()) {
+      throw new AppError(ErrorCodes.BACKUP_NOT_FOUND);
+    }
+    const dirName = path.basename(resolved);
+    // RFC 5987: 中文文件名 URL 编码 + ASCII 回退
+    const sanitized = dirName.replace(/[^\x20-\x7E]/g, (c) =>
+      encodeURIComponent(c)
+    );
+    const asciiName = dirName.replace(/[^\x20-\x7E]/g, '_');
+    const cdValue = /[^\x20-\x7E]/.test(dirName)
+      ? `attachment; filename="${asciiName}.tar.gz"; filename*=UTF-8''${sanitized}.tar.gz`
+      : `attachment; filename="${dirName}.tar.gz"`;
+    res.setHeader('Content-Type', 'application/gzip');
+    res.setHeader('Content-Disposition', cdValue);
+    const tar = spawn('tar', ['-czf', '-', '-C', path.dirname(resolved), dirName], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    tar.stdout.pipe(res);
+    tar.stderr.on('data', (_chunk) => { /* logged by child_process */ });
+    tar.on('error', (_err) => {
+      if (!res.headersSent) {
+        res.status(500).json({ status: 'error', code: 50000, message: 'Failed to create archive' });
+      } else {
+        res.end();
+      }
+    });
+    tar.on('close', (code) => {
+      if (code !== 0 && !res.headersSent) {
+        res.status(500).json({ status: 'error', code: 50000, message: 'Archive creation failed' });
+      } else {
+        res.end();
+      }
+    });
+    req.on('close', () => {
+      tar.kill();
+    });
   }));
 
   return router;

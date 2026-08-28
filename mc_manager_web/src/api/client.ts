@@ -3,7 +3,7 @@
  * fetch 封装：X-API-Key 头、10s 超时、响应信封解析、错误码 → ApiError
  * 连接配置来自 useConnectionStore（onboarding/M6 配置，默认同源 dev proxy）
  */
-import type { ApiEnvelope, ApiErrorEnvelope } from './types'
+import type { ApiEnvelope, ApiErrorEnvelope, Pagination } from './types'
 
 export class ApiError extends Error {
   readonly code: number
@@ -48,7 +48,7 @@ function buildUrl(config: ConnectionConfig, path: string): string {
   return `${base}${p}`
 }
 
-async function parseEnvelope<T>(res: Response): Promise<T> {
+async function parseEnvelopeRaw<T>(res: Response): Promise<ApiEnvelope<T>> {
   let payload: ApiEnvelope<T> | ApiErrorEnvelope
   try {
     payload = (await res.json()) as ApiEnvelope<T> | ApiErrorEnvelope
@@ -57,7 +57,7 @@ async function parseEnvelope<T>(res: Response): Promise<T> {
   }
 
   if (payload.status === 'ok') {
-    return (payload as ApiEnvelope<T>).data
+    return payload as ApiEnvelope<T>
   }
 
   const err = payload as ApiErrorEnvelope
@@ -72,6 +72,28 @@ export async function apiRequest<T>(
   config: ConnectionConfig,
   options: ApiRequestOptions = {},
 ): Promise<T> {
+  const payload = await requestEnvelope<T>(path, config, options)
+  return payload.data
+}
+
+/**
+ * GET 便捷方法（信封级）：额外返回 pagination（分页列表用），
+ * 供审计日志 / 命令历史等携带 total/totalPages 的端点消费
+ */
+export async function apiGetEnvelope<T>(
+  path: string,
+  config: ConnectionConfig,
+  signal?: AbortSignal,
+): Promise<{ data: T; pagination: Pagination | null }> {
+  const payload = await requestEnvelope<T>(path, config, { method: 'GET', signal })
+  return { data: payload.data, pagination: payload.pagination ?? null }
+}
+
+async function requestEnvelope<T>(
+  path: string,
+  config: ConnectionConfig,
+  options: ApiRequestOptions,
+): Promise<ApiEnvelope<T>> {
   const timeout = new AbortController()
   const timer = setTimeout(() => timeout.abort(), options.timeoutMs ?? REQUEST_TIMEOUT_MS)
 
@@ -99,7 +121,7 @@ export async function apiRequest<T>(
       throw new NetworkError(`请求失败（HTTP ${res.status}）`)
     }
 
-    return parseEnvelope<T>(res)
+    return parseEnvelopeRaw<T>(res)
   } catch (e) {
     if (e instanceof ApiError) throw e
     if (e instanceof DOMException && e.name === 'AbortError') {

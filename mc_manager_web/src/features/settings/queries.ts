@@ -11,6 +11,7 @@ import { queryKeys } from '@/api/queries'
 import {
   apiCreateBackup,
   apiDeleteBackup,
+  apiDownloadBackup,
   apiGetBackups,
   apiRestoreBackup,
 } from '@/api/backups'
@@ -70,6 +71,25 @@ export function useDeleteBackup(instanceId: string | null) {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.backups(instanceId ?? '') })
+    },
+  })
+}
+
+/** 下载导出备份（blob + anchor 触发浏览器保存，不走 toast 成功反馈） */
+export function useDownloadBackup() {
+  const config = useConnectionStore()
+
+  return useMutation({
+    mutationFn: async ({ backupId, fileName }: { backupId: number; fileName: string }) => {
+      const blob = await apiDownloadBackup(config, backupId)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${fileName}.tar.gz`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
     },
   })
 }

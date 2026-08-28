@@ -14,7 +14,7 @@ import { atomicWriteFile } from '../services/mc_server.js';
 const mcCoreManager = new MinecraftServerManager(new NodeAdapter());
 
 const PAPER_API_BASE = 'https://api.papermc.io/v3';
-const PAPER_USER_AGENT = 'MC_Commander/0.1.0 (https://github.com/wyyfzb/mc-commander)';
+const PAPER_USER_AGENT = 'MC_Commander/1.0.0 (https://github.com/wyyfzb/mc-commander)';
 
 async function getPaperVersions() {
   const data = await got(`${PAPER_API_BASE}/projects/paper`, {
@@ -77,7 +77,7 @@ async function downloadWithProgress(url, destPath, serverManager, stage = 'downl
     const stream = got.stream(url, {
       timeout: { request: 120000 },
       retry: { limit: 2 },
-      headers: { 'User-Agent': 'MC_Commander/0.1.0 (https://github.com/wyyfzb/mc-commander)' }
+      headers: { 'User-Agent': 'MC_Commander/1.0.0 (https://github.com/wyyfzb/mc-commander)' }
     });
 
     // 下载进度节流：got 的 downloadProgress 每个 chunk 触发（大 jar 每秒可达多次），

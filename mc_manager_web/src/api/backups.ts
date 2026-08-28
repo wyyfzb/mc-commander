@@ -37,3 +37,29 @@ export function apiRestoreBackup(config: ConnectionConfig, backupId: number) {
 export function apiDeleteBackup(config: ConnectionConfig, backupId: number) {
   return apiDelete<null>(`/api/v1/backups/${backupId}`, config)
 }
+
+/**
+ * 备份下载导出（GET /backups/:id/download）
+ * 不走 JSON 信封——直接返回 blob（application/gzip），浏览器触发保存。
+ * 不受 10s 超时约束（大备份可能需要几十秒）。
+ */
+export async function apiDownloadBackup(
+  config: ConnectionConfig,
+  backupId: number,
+  signal?: AbortSignal,
+): Promise<Blob> {
+  const base = config.baseUrl.replace(/\/+$/, '')
+  const res = await fetch(`${base}/api/v1/backups/${backupId}/download`, {
+    headers: { 'X-API-Key': config.apiKey },
+    signal,
+  })
+  if (!res.ok) {
+    let msg = `下载失败（HTTP ${res.status}）`
+    try {
+      const err = (await res.json()) as { message?: string; code?: number }
+      if (err.message) msg = err.message
+    } catch {}
+    throw new Error(msg)
+  }
+  return res.blob()
+}

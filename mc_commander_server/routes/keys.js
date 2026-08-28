@@ -5,6 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import config from '../config.js';
 import { success, error, ErrorCodes } from '../utils/response.js';
+import { recordAudit, AuditActions } from '../utils/audit.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -44,6 +45,7 @@ export function createKeyRoutes() {
       ));
     }
     config.apiKey = newKey; // 内存即时生效（WS 与 HTTP 共用）
+    recordAudit({ instanceId: '__global__', action: AuditActions.KEY_ROTATE });
     res.json(success({ apiKey: newKey }, 'API Key 已轮换：旧 Key 立即失效，请立即保存新 Key'));
   });
 

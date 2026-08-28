@@ -175,6 +175,43 @@ function createTables() {
     )
   `);
 
+  // 迁移 v6：审计日志 + 命令历史表（仅追加写，高吞吐低查询频率）
+  if (userVersion < 6) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS audit_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        instance_id TEXT NOT NULL,
+        action TEXT NOT NULL,
+        target_type TEXT,
+        target_id TEXT,
+        detail TEXT,
+        source TEXT DEFAULT 'api',
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS command_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        instance_id TEXT NOT NULL,
+        command TEXT NOT NULL,
+        source TEXT DEFAULT 'api',
+        success INTEGER NOT NULL DEFAULT 1,
+        response TEXT,
+        duration_ms INTEGER,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_audit_instance ON audit_logs(instance_id);
+      CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at);
+      CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_logs(action);
+      CREATE INDEX IF NOT EXISTS idx_cmd_instance ON command_history(instance_id);
+      CREATE INDEX IF NOT EXISTS idx_cmd_created ON command_history(created_at);
+    `);
+    db.pragma('user_version = 6');
+    console.log('Migration: added audit_logs and command_history tables');
+  }
+
   // 通知事件日志表（广播前落库：断线补齐 + 投递审计）。
   // 高频事件（log/status 快照/performance/tps）不落库，仅通知类事件落库
   db.exec(`

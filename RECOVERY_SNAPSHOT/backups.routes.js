@@ -50,6 +50,7 @@ function _syncInstanceJson(instance) {
 // 计算云服务器系统级 CPU 使用率（Linux: /proc/stat；其他平台回退到 os.loadavg）
 // 返回 0-100 的百分比。维护上一次的采样状态以做差分。
 let _lastCpuSample = null;
+let _lastDiskCheck = null;  // 磁盘缓存：{ timestamp, result }
 function getSystemCpuUsage() {
   try {
     if (process.platform === 'linux') {
@@ -82,6 +83,55 @@ function getSystemCpuUsage() {
   } catch {
     return 0;
   }
+}
+
+/**
+ * 获取磁盘使用情况（缓存 10s 避免频繁 statvfs 调用）
+ * 监控 serversDir 与 dataDir 所在分区
+ */
+function getDiskUsage() {
+  const now = Date.now();
+  if (_lastDiskCheck && (now - _lastDiskCheck.timestamp) < 10000) {
+    return _lastDiskCheck.result;
+  }
+  let result = null;
+  try {
+    // Node.js 18.15+ 内置 fs.statfs
+    if (typeof fs.statfs === 'function') {
+      const dirs = [config.serversDir, config.dataDir, config.backupsDir];
+      // 去重（同一分区只查一次）
+      const seen = new Set();
+      const disks = [];
+      for (const dir of dirs) {
+        const real = fs.realpathSync(dir);
+        if (seen.has(real)) continue;
+        seen.add(real);
+        const stats = fs.statfsSync(real);
+        const total = stats.bsize * stats.blocks;
+        const free = stats.bsize * stats.bfree;
+        const used = total - free;
+        const percent = total > 0 ? Math.round((used / total) * 1000) / 10 : 0;
+        disks.push({
+          path: real,
+          totalGB: Math.round(total / (1024 * 1024 * 1024) * 10) / 10,
+          usedGB: Math.round(used / (1024 * 1024 * 1024) * 10) / 10,
+          freeGB: Math.round(free / (1024 * 1024 * 1024) * 10) / 10,
+          percent,
+        });
+      }
+      // 取使用率最高的磁盘作为主监控
+      disks.sort((a, b) => b.percent - a.percent);
+      result = {
+        primary: disks[0],
+        all: disks,
+      };
+    }
+  } catch {
+    // statfs 不可用（旧 Node / 非支持平台），返回 null
+    result = null;
+  }
+  _lastDiskCheck = { timestamp: now, result };
+  return result;
 }
 
 export function createStatusRoutes(serverManager) {
@@ -122,7 +172,7 @@ export function createStatusRoutes(serverManager) {
     const cpuUsagePercent = getSystemCpuUsage();
 
     res.json(success({
-      version: '0.1.0',
+      version: '1.1.0',
       instanceCount: instances.length,
       runningCount: instances.filter(i => i.isRunning).length,
       totalPlayers,
@@ -131,6 +181,8 @@ export function createStatusRoutes(serverManager) {
       systemMemoryUsage: usedMemGB,
       systemMemoryTotal: totalMemGB,
       systemMemoryPercent: memUsagePercent,
+      // 磁盘使用情况（运维韧性）
+      diskUsage: getDiskUsage(),
       // 兼容旧字段
       totalMemory: totalMemGB,
       freeMemory: Math.round(freeMemBytes / (1024 * 1024 * 1024) * 10) / 10,
@@ -164,6 +216,8 @@ export function createStatusRoutes(serverManager) {
       cpuCores: os.cpus().length,
       loadAvg: os.loadavg(),
       uptime: os.uptime(),
+      // 磁盘使用情况（运维韧性）
+      diskUsage: getDiskUsage(),
     }));
   });
 
@@ -172,6 +226,12 @@ export function createStatusRoutes(serverManager) {
     const instances = serverManager.getAllInstances();
     res.json(success(instances));
   });
+
+  // GET /api/instances/trash - 回收站列表（必须在 :id 之前注册）
+  router.get('/instances/trash', asyncHandler(async (_req, res) => {
+    const deleted = InstanceModel.getDeleted();
+    res.json(success(deleted));
+  }));
 
   // GET /api/instances/:id - 单个实例详情
   router.get('/instances/:id', (req, res) => {
@@ -244,7 +304,7 @@ export function createStatusRoutes(serverManager) {
       updates.jvmArgs = jvmArgs;
     }
     // 允许更新的字段（驼峰命名，与 InstanceModel.FIELD_TO_COLUMN 对应）
-    const allowedFields = ['javaPath', 'maxMemory', 'minMemory', 'name', 'description', 'jarFile', 'autoRestart'];
+    const allowedFields = ['javaPath', 'maxMemory', 'minMemory', 'name', 'description', 'jarFile', 'autoRestart', 'autoStart'];
     for (const key of allowedFields) {
       if (body[key] !== undefined) {
         updates[key] = body[key];
@@ -264,7 +324,16 @@ export function createStatusRoutes(serverManager) {
     if (updates.minMemory !== undefined) instance.minMemory = updates.minMemory;
     if (updates.name !== undefined) instance.name = updates.name;
     if (updates.jarFile !== undefined) instance.jarFile = updates.jarFile;
-    if (updates.autoRestart !== undefined) instance.autoRestart = Boolean(updates.autoRestart);
+    if (updates.autoRestart !== undefined) {
+      instance.autoRestart = Boolean(updates.autoRestart);
+      // 用户手动重新开启 autoRestart → 重置熔断器
+      if (updates.autoRestart && instance._circuitBreakerTripped) {
+        instance._circuitBreakerTripped = false;
+        instance._consecutiveCrashes = 0;
+        instance._crashWindowStart = null;
+      }
+    }
+    if (updates.autoStart !== undefined) instance.autoStart = Boolean(updates.autoStart);
     if (updates.jvmArgs !== undefined) instance.jvmArgs = updates.jvmArgs;
 
     // 3. 同步 instance.json 保持最新（含 startCommand/jvmArgs），供 DB 丢失时兜底恢复
@@ -299,7 +368,7 @@ export function createStatusRoutes(serverManager) {
 
     instance.start();
     try { InstanceModel.update(req.params.id, { status: 'running' }); } catch (e) { console.warn('Failed to sync instance status to DB:', e.message); }
-    recordAudit({ instanceId: req.params.id, action: AuditActions.INSTANCE_START });
+    recordAudit({ instanceId: req.params.id, action: AuditActions.INSTANCE_START, targetType: 'instance', targetId: req.params.id });
     res.json(success(null, 'Server starting'));
   }));
 
@@ -311,7 +380,7 @@ export function createStatusRoutes(serverManager) {
     }
     instance.stop();
     try { InstanceModel.update(req.params.id, { status: 'stopped' }); } catch (e) { console.warn('Failed to sync instance status to DB:', e.message); }
-    recordAudit({ instanceId: req.params.id, action: AuditActions.INSTANCE_STOP });
+    recordAudit({ instanceId: req.params.id, action: AuditActions.INSTANCE_STOP, targetType: 'instance', targetId: req.params.id });
     res.json(success(null, 'Server stopping'));
   }));
 
@@ -323,7 +392,7 @@ export function createStatusRoutes(serverManager) {
     }
     // 统一走 instance.restart()：内部处理停止命令 + 可取消的延迟启动
     instance.restart();
-    recordAudit({ instanceId: req.params.id, action: AuditActions.INSTANCE_RESTART });
+    recordAudit({ instanceId: req.params.id, action: AuditActions.INSTANCE_RESTART, targetType: 'instance', targetId: req.params.id });
     res.json(success(null, 'Server restarting'));
   }));
 
@@ -606,82 +675,147 @@ export function createStatusRoutes(serverManager) {
     }
 
     console.log(`[PUT properties] Saved successfully, instance.properties now has ${Object.keys(instance.properties).length} keys`);
-    if (Object.keys(validated).length > 0) {
-      recordAudit({ instanceId: req.params.id, action: 'CONFIG_CHANGE', targetType: 'instance', targetId: req.params.id, detail: { keys: Object.keys(validated) } });
-    }
+    recordAudit({ instanceId: req.params.id, action: AuditActions.PROPERTIES_UPDATE, targetType: 'instance', targetId: req.params.id, detail: { changedKeys, restartRequired } });
     res.json(success({ restartRequired }, restartRequired.length > 0
       ? `Properties updated, ${restartRequired.length} 项需重启服务器生效`
       : 'Properties updated'));
   }));
 
-  // DELETE /api/instances/:id - 卸载（删除）实例
+  // DELETE /api/instances/:id - 软删除实例（移到回收站）
+  //   停止运行中的实例 → 从内存 Map 移除 → DB 标记 deleted_at。
+  //   文件/备份/关联数据保留，可在回收站恢复。
   router.delete('/instances/:id', asyncHandler(async (req, res) => {
     const instance = serverManager.getInstance(req.params.id);
     if (!instance) {
       return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND));
     }
 
-      // 0. 无条件取消崩溃重启/延迟重启定时器：已崩溃实例（isRunning=false）
-      //    不满足下方 stopGracefully 分支（其内部才调用 cancelRestart），卸载时
-      //    定时器不取消会保持存活；若 rmSync 因 Windows 文件占用句柄抛 EPERM
-      //    导致目录与 server.jar 残留，5s 定时器回调的 jar 存在性检查通过，
-      //    会对已从 manager 移除的实例 start() → 孤儿服务器进程自动启动
-      //    （实例已 404，无人能再停止）。运行中实例此处先取消无副作用
-      //    （cancelRestart 幂等），stopGracefully 内重复取消同样安全。
-      instance.cancelRestart();
+    // 0. 取消重启定时器（幂等）
+    instance.cancelRestart();
 
-      // 1. 停止运行中的实例：用 stopGracefully 等待 MC 正常退出后再删除目录
-      //    （await stop 命令 → 等 exit 事件 → 超时强杀兜底），避免与仍存活的
-      //    MC 进程竞争（Windows EPERM 半删除 / Linux 向已删 inode 写数据）
-      if (instance.isRunning) {
-        try { await instance.stopGracefully(); } catch {}
-        // stopGracefully 超时强杀后进程退出是异步的，rmSync 前再等进程真正退出，
-        // 避免 Windows 上 TerminateProcess 与句柄释放之间的竞态导致仍 EPERM
-        const proc = instance.process;
-        if (proc && proc.exitCode === null && proc.signalCode === null) {
-          await new Promise((resolve) => {
-            const timer = setTimeout(resolve, 3000);
-            proc.once('exit', () => { clearTimeout(timer); resolve(); });
+    // 1. 停止运行中的实例
+    if (instance.isRunning) {
+      try { await instance.stopGracefully(); } catch {}
+      const proc = instance.process;
+      if (proc && proc.exitCode === null && proc.signalCode === null) {
+        await new Promise((resolve) => {
+          const timer = setTimeout(resolve, 3000);
+          proc.once('exit', () => { clearTimeout(timer); resolve(); });
+        });
+      }
+    }
+
+    const instancePath = instance.serverPath;
+
+    // 2. 从内存 Map 移除（文件保留）
+    serverManager.instances.delete(req.params.id);
+
+    // 3. DB 软删除
+    if (!InstanceModel.softDelete(req.params.id)) {
+      // 回滚：软删除失败时重新加载到内存
+      try {
+        const inst = InstanceModel.getByIdRaw(req.params.id);
+        if (inst) {
+          serverManager.createInstance({
+            id: inst.id,
+            name: inst.name,
+            javaPath: inst.javaPath || 'java',
+            jarFile: inst.jarFile,
+            maxMemory: inst.maxMemory || '2G',
+            minMemory: inst.minMemory || '1G',
+            serverPath: inst.serverPath || path.join(config.serversDir, inst.id),
+            startCommand: inst.startCommand,
+            jvmArgs: inst.jvmArgs,
+            autoRestart: inst.autoRestart,
+            autoStart: inst.autoStart,
           });
         }
+      } catch (reLoadErr) {
+        console.warn('Failed to reload instance after soft-delete rollback:', reLoadErr.message);
       }
+      return res.status(409).json(error(ErrorCodes.INSTANCE_ALREADY_DELETED));
+    }
 
-      const instancePath = instance.serverPath;
+    recordAudit({ instanceId: req.params.id, action: AuditActions.INSTANCE_SOFT_DELETE, targetType: 'instance', targetId: req.params.id, detail: { path: instancePath } });
+    res.json(success(null, 'Instance moved to recycle bin'));
+  }));
 
-      // 2. 先删除实例文件夹（含 instance.json）。文件删除必须前置：若先删内存/DB
-      //    再 rmSync，Windows 句柄占用（杀软扫描 server.jar、资源管理器打开目录、
-      //    日志文件被编辑器占用等）导致 rmSync 抛 EPERM（force:true 只吞 ENOENT
-      //    不吞 EPERM）时删除已不可逆完成一半——实例已 404 客户端无法重试补偿，
-      //    目录与备份残留，重启 loadInstances（mc_server.js）还会从残留的
-      //    instance.json 迁移"复活"已卸载实例。文件删除失败直接抛错经 asyncHandler
-      //    进入全局 errorHandler，此时内存与 DB 记录均未动 → 实例保留可重试。
-      if (instancePath && fs.existsSync(instancePath)) {
-        fs.rmSync(instancePath, { recursive: true, force: true });
+  // POST /api/instances/:id/restore - 从回收站恢复
+  router.post('/instances/:id/restore', asyncHandler(async (req, res) => {
+    const inst = InstanceModel.getDeletedById(req.params.id);
+    if (!inst) {
+      return res.status(409).json(error(ErrorCodes.INSTANCE_NOT_IN_TRASH));
+    }
+
+    // 检查目录是否存在（被手动删除则恢复 DB 但无法加载到内存）
+    const instancePath = inst.serverPath || path.join(config.serversDir, req.params.id);
+    const dirExists = fs.existsSync(instancePath);
+
+    if (!InstanceModel.restore(req.params.id)) {
+      return res.status(409).json(error(ErrorCodes.INSTANCE_NOT_IN_TRASH));
+    }
+
+    // 重新加载到内存 Map
+    if (dirExists) {
+      try {
+        const restored = InstanceModel.getById(req.params.id);
+        if (restored) {
+          serverManager.createInstance({
+            id: restored.id,
+            name: restored.name,
+            javaPath: restored.javaPath || 'java',
+            jarFile: restored.jarFile,
+            maxMemory: restored.maxMemory || '2G',
+            minMemory: restored.minMemory || '1G',
+            serverPath: restored.serverPath || path.join(config.serversDir, restored.id),
+            startCommand: restored.startCommand,
+            jvmArgs: restored.jvmArgs,
+            autoRestart: restored.autoRestart,
+            autoStart: restored.autoStart,
+          });
+        }
+      } catch (e) {
+        console.warn(`Failed to reload restored instance ${req.params.id}:`, e.message);
       }
+    }
 
-      // 3. 清理备份：快照目录按约定存放于 backupsDir/<instanceId>/（backup.service.js
-      //    getInstanceBackupDir），与实例目录 serversDir/<id> 分离，需显式清理，否则
-      //    磁盘残留孤儿快照；同时删除 backups 表该实例的全部 DB 记录
-      //    （InstanceModel.delete 只删 instances 表，记录同样成孤儿）。不吞错：
-      //    备份清理失败同样抛错保留实例，重试可补偿（重试时实例目录已删 existsSync
-      //    跳过，只重试备份清理）。
-      const backupDirPath = path.join(config.backupsDir, req.params.id);
-      if (fs.existsSync(backupDirPath)) {
-        fs.rmSync(backupDirPath, { recursive: true, force: true });
+    recordAudit({ instanceId: req.params.id, action: AuditActions.INSTANCE_RESTORE, targetType: 'instance', targetId: req.params.id, detail: { path: instancePath, dirExists } });
+    res.json(success(null, dirExists ? 'Instance restored' : 'Instance restored (server directory missing)'));
+  }));
+
+  // DELETE /api/instances/:id/force - 永久删除（物理清理）
+  router.delete('/instances/:id/force', asyncHandler(async (req, res) => {
+    const inst = InstanceModel.getDeletedById(req.params.id);
+    if (!inst) {
+      // 允许对非回收站实例也执行永久删除（兜底清理）
+      const anyInst = InstanceModel.getByIdRaw(req.params.id);
+      if (!anyInst) {
+        return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND));
       }
-      BackupModel.deleteByInstance(req.params.id);
+    }
 
-      // 4. 文件与备份全部清理成功后才从内存中移除
-      serverManager.instances.delete(req.params.id);
+    const instancePath = inst?.serverPath || InstanceModel.getByIdRaw(req.params.id)?.serverPath;
 
-      // 5. 最后从数据库删除记录。DB 删除失败仅警告不阻塞（实例目录已删、
-      //    实例已 404，重试不可行；DB 记录残留重启会尝试加载该实例——
-      //    属 SQLite 本地写失败的极端情况，且实例目录已删 createInstance 会
-      //    重建空目录，风险远小于本路由历史 bug 的不可补偿半删除）
-      try { InstanceModel.delete(req.params.id); } catch (e) { console.warn('Failed to delete instance from DB:', e.message); }
+    // 1. 物理删除实例目录
+    if (instancePath && fs.existsSync(instancePath)) {
+      fs.rmSync(instancePath, { recursive: true, force: true });
+    }
 
-      recordAudit({ instanceId: req.params.id, action: AuditActions.INSTANCE_DELETE });
-      res.json(success(null, 'Instance deleted'));
+    // 2. 清理备份目录 + DB 记录
+    const backupDirPath = path.join(config.backupsDir, req.params.id);
+    if (fs.existsSync(backupDirPath)) {
+      fs.rmSync(backupDirPath, { recursive: true, force: true });
+    }
+    BackupModel.deleteByInstance(req.params.id);
+
+    // 3. 从内存移除（若仍在 Map 中）
+    serverManager.instances.delete(req.params.id);
+
+    // 4. 物理删除 DB 记录（CASCADE 删除备份/任务/封禁）
+    try { InstanceModel.delete(req.params.id); } catch (e) { console.warn('Failed to hard-delete instance from DB:', e.message); }
+
+    recordAudit({ instanceId: req.params.id, action: AuditActions.INSTANCE_HARD_DELETE, targetType: 'instance', targetId: req.params.id, detail: { path: instancePath } });
+    res.json(success(null, 'Instance permanently deleted'));
   }));
 
   // POST /api/instances/:id/eula - 写入 EULA 协议确认
@@ -702,6 +836,9 @@ export function createStatusRoutes(serverManager) {
       : '#By changing the setting below to TRUE you are indicating your agreement to our EULA (https://aka.ms/MinecraftEULA).\neula=false\n';
     fs.writeFileSync(eulaPath, content, 'utf-8');
 
+    if (agreed) {
+      recordAudit({ instanceId: req.params.id, action: AuditActions.EULA_ACCEPT, targetType: 'instance', targetId: req.params.id });
+    }
     res.json(success(null, agreed ? 'EULA accepted' : 'EULA declined'));
   }));
 

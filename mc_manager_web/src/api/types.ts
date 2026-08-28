@@ -544,6 +544,29 @@ export interface TaskCreatePayload {
 /** PUT /tasks/:id 载荷（局部更新） */
 export type TaskUpdatePayload = Partial<TaskCreatePayload>
 
+// ── 审计日志（GET /audit-logs）──────────────────────────
+export interface AuditLogItem {
+  id: number
+  instanceId: string
+  action: string
+  targetType: string | null
+  targetId: string | null
+  detail: unknown
+  source: string
+  createdAt: string
+}
+
+export interface CommandHistoryItem {
+  id: number
+  instanceId: string
+  command: string
+  source: string
+  success: boolean
+  response: string
+  durationMs: number
+  createdAt: string
+}
+
 // ── 部署（mc_commander_server/routes/server-jar.js 契约）──
 
 /** GET /versions?type= 响应（fabric 额外带 loaders） */

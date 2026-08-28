@@ -17,6 +17,7 @@ import {
   CalendarClock,
   CircleAlert,
   CloudUpload,
+  Download,
   HardDrive,
   Loader2,
   RotateCcw,
@@ -38,7 +39,7 @@ import {
   formatBackupSize,
   isLegacyFormat,
 } from '@/lib/mc-backup'
-import { useBackupEventRefresh, useBackups, useCreateBackup, useDeleteBackup, useRestoreBackup } from '../queries'
+import { useBackupEventRefresh, useBackups, useCreateBackup, useDeleteBackup, useDownloadBackup, useRestoreBackup } from '../queries'
 import { useInstances } from '@/api/queries'
 import type { BackupPanelProps } from './contracts'
 import { EmptyState } from '@/components/mcs/empty-state'
@@ -63,6 +64,7 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
   const createMutation = useCreateBackup(instanceId)
   const restoreMutation = useRestoreBackup(instanceId)
   const deleteMutation = useDeleteBackup(instanceId)
+  const downloadMutation = useDownloadBackup()
   useBackupEventRefresh(instanceId)
   // 实例名（恢复危险确认输入匹配；无实例时按钮路径已拦截）
   const instancesQuery = useInstances()
@@ -126,6 +128,18 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
       toast.success('备份已删除')
     } catch (e) {
       toast.error(`删除失败：${getFriendlyErrorText(e)}`)
+    }
+  }
+
+  const handleDownload = async (backup: BackupItem) => {
+    try {
+      await downloadMutation.mutateAsync({
+        backupId: backup.id,
+        fileName: backup.name,
+      })
+      toast.success('已导出')
+    } catch (e) {
+      toast.error(`导出失败：${getFriendlyErrorText(e)}`)
     }
   }
 
@@ -200,6 +214,8 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
                 restoringLocked={restoringLocked}
                 onRestore={setRestoreTarget}
                 onDelete={setDeleteTarget}
+                onDownload={() => handleDownload(backup)}
+                downloadPending={downloadMutation.isPending}
               />
             ))}
           </div>
@@ -260,12 +276,16 @@ function BackupRow({
   restoringLocked,
   onRestore,
   onDelete,
+  onDownload,
+  downloadPending,
 }: {
   backup: BackupItem
   /** 页面级恢复中锁：任一行 restoring 或恢复请求在途时全列表恢复禁用 */
   restoringLocked: boolean
   onRestore: (backup: BackupItem) => void
   onDelete: (backup: BackupItem) => void
+  onDownload: () => void
+  downloadPending: boolean
 }) {
   const status = backup.status
   const tone = backupStatusTone(status)
@@ -338,6 +358,21 @@ function BackupRow({
         onClick={() => onRestore(backup)}
       >
         <RotateCcw className="size-3.5" aria-hidden />
+      </Button>
+      {/* 下载导出（仅 completed 快照；进行中/旧格式禁用） */}
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        aria-label={`${name} 下载导出`}
+        disabled={isInProgress || isLegacy || status !== 'completed' || downloadPending}
+        className="text-mcs-muted-fg hover:bg-mcs-state-hover hover:text-mcs-fg"
+        onClick={onDownload}
+      >
+        {downloadPending ? (
+          <Loader2 className="size-3.5 animate-spin" aria-hidden />
+        ) : (
+          <Download className="size-3.5" aria-hidden />
+        )}
       </Button>
       {/* 删除（creating/restoring 中不可删——服务端互斥状态机拒绝） */}
       <Button
