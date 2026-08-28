@@ -1824,3 +1824,11 @@ ErrorBoundary、备份下载、文件管理接线、CSV 导出、DiskUsageCard�
 - 无风险
 - 当前 main 含 feat-1~5 全部灾后重实现产物
 - 下一轮可按 worklog R6 建议推进：oxlint 存量清零 / feat-6 重实现 / 安全主线
+
+## 四、R6 最终收尾（22:07）
+
+- PR #43 CI 全绿（bb9abcd：服务端 lint+test ✅ · 前端 lint+test ✅ · 前端 build+e2e ✅ · 密钥扫描 ✅）→ **squash 合并入 main（d180bd0）**，feat-5 完成 ✅
+- 与 CI 守护任务 #342313 同时触发合并（「Merge already in progress」竞态，结果一致，无害）
+- 已合并分支清理：远端 recovery/feat5-ops-resilience（gh --delete-branch）+ 本地 feat1-feat3 / feat4-webhook / feat5-ops-resilience 三支
+- main 现状：d180bd0（feat-5）← 76fb84e（feat-4）← 3e9c245（PR #41 / feat-1~3）
+- 下一轮入口：oxlint 存量清理或 feat-6 重实现或安全主线（管理员密码登录）
