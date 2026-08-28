@@ -581,3 +581,27 @@ export interface DeployProgress {
   total: number
   error?: string
 }
+
+/** 审计日志条目（服务端 routes/audit.js + db/audit.model.js） */
+export interface AuditLogItem {
+  id: number
+  instanceId: string | null
+  action: string
+  targetType: string | null
+  targetId: string | null
+  detail: unknown
+  source: string
+  createdAt: string
+}
+
+/** 命令历史条目（服务端 routes/audit.js + db/command_history.model.js） */
+export interface CommandHistoryItem {
+  id: number
+  instanceId: string | null
+  command: string
+  source: string
+  success: boolean
+  response: string | null
+  durationMs: number | null
+  createdAt: string
+}

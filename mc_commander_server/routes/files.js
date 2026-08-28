@@ -1,8 +1,10 @@
 import { Router } from 'express';
 import path from 'path';
 import fs from 'fs';
+import os from 'os';
 import { TextDecoder } from 'util';
 import iconv from 'iconv-lite';
+import multer from 'multer';
 import { success, ErrorCodes, AppError } from '../utils/response.js';
 import { atomicWriteFile, resolveSafePath, PathTraversalError } from '../utils/fs-utils.js';
 import config from '../config.js';
@@ -488,6 +490,205 @@ export function createFileRoutes(serverManager) {
     }
   });
   
+  // 新建目录（POST /instances/:instanceId/files/mkdir）
+  router.post('/instances/:instanceId/files/mkdir', (req, res, next) => {
+    try {
+      const { instanceId } = req.params;
+      const { path: dirPath } = req.body;
+
+      if (!dirPath) {
+        throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Directory path is required');
+      }
+
+      const instance = serverManager.getInstance(instanceId);
+      if (!instance) {
+        throw new AppError(ErrorCodes.INSTANCE_NOT_FOUND);
+      }
+
+      const basePath = instance.serverPath || path.join(config.serversDir, instanceId);
+      const fullPath = resolveInstancePath(basePath, dirPath);
+
+      if (fs.existsSync(fullPath)) {
+        throw new AppError(ErrorCodes.FILE_ALREADY_EXISTS, 'Directory already exists');
+      }
+
+      fs.mkdirSync(fullPath, { recursive: true });
+
+      res.json(success({
+        path: dirPath,
+        name: path.basename(fullPath),
+      }, 'Directory created successfully'));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // 重命名文件/目录（POST /instances/:instanceId/files/rename）
+  router.post('/instances/:instanceId/files/rename', (req, res, next) => {
+    try {
+      const { instanceId } = req.params;
+      const { path: oldPath, newPath } = req.body;
+
+      if (!oldPath || !newPath) {
+        throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Old path and new path are required');
+      }
+
+      const instance = serverManager.getInstance(instanceId);
+      if (!instance) {
+        throw new AppError(ErrorCodes.INSTANCE_NOT_FOUND);
+      }
+
+      const basePath = instance.serverPath || path.join(config.serversDir, instanceId);
+      const fullOldPath = resolveInstancePath(basePath, oldPath);
+      const fullNewPath = resolveInstancePath(basePath, newPath);
+
+      if (!fs.existsSync(fullOldPath)) {
+        throw new AppError(ErrorCodes.FILE_NOT_FOUND, 'Source file not found');
+      }
+
+      if (fs.existsSync(fullNewPath)) {
+        throw new AppError(ErrorCodes.FILE_ALREADY_EXISTS, 'Target already exists');
+      }
+
+      fs.renameSync(fullOldPath, fullNewPath);
+
+      res.json(success({
+        oldPath,
+        newPath,
+        name: path.basename(fullNewPath),
+      }, 'Renamed successfully'));
+    } catch (err) {
+      if (err.code === 'ENOENT') {
+        next(new AppError(ErrorCodes.FILE_NOT_FOUND));
+        return;
+      }
+      next(err);
+    }
+  });
+
+// ── 文件上传常量 ──────────────────────────────────────────────
+
+/** 上传体积上限（字节），可通过环境变量覆盖 */
+const FILE_UPLOAD_MAX_SIZE = parseInt(process.env.FILE_UPLOAD_MAX_SIZE || '') || 50 * 1024 * 1024;
+
+/** 扩展名黑名单：可执行文件与 MC JAR（JAR 走部署流程不上传） */
+const BLOCKED_EXTENSIONS = new Set([
+  '.exe', '.sh', '.bash', '.bat', '.cmd', '.ps1', '.vbs', '.wsf',
+  '.dll', '.so', '.dylib', '.class', '.jar', '.msi', '.deb', '.rpm',
+]);
+
+/**
+ * 清洗上传文件名：拒绝路径分隔符、控制字符、..、.、空名；
+ * 保留 MC 配置文件 .properties 等以点开头的合法名称。
+ */
+function sanitizeFileName(raw) {
+  if (typeof raw !== 'string' || raw.length === 0) return null;
+  // 拒绝路径分隔符与控制字符
+  if (/[\\/\x00-\x1f]/.test(raw)) return null; // eslint-disable-line no-control-regex
+  // 拒绝 .. 和单独 .
+  if (raw === '..' || raw === '.') return null;
+  // 拒绝以 .. 开头或包含 /../ 的路径段
+  if (raw.includes('..')) return null;
+  return raw;
+}
+
+/** multer 磁盘缓冲配置（临时目录在系统 tmpdir 下，不污染实例目录） */
+const uploadStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const tmpDir = path.join(os.tmpdir(), 'mc-commander-uploads');
+    fs.mkdirSync(tmpDir, { recursive: true });
+    cb(null, tmpDir);
+  },
+  filename: (req, file, cb) => {
+    cb(null, `.upload.tmp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+  },
+});
+
+const upload = multer({
+  storage: uploadStorage,
+  limits: { fileSize: FILE_UPLOAD_MAX_SIZE },
+  fileFilter: (req, file, cb) => {
+    // 扩展名黑名单
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (BLOCKED_EXTENSIONS.has(ext)) {
+      return cb(new AppError(ErrorCodes.FILE_TYPE_NOT_ALLOWED, `File type ${ext} is not allowed`), false);
+    }
+    // 文件名清洗（拒绝路径分隔符 / .. / 控制字符）
+    const safeName = sanitizeFileName(file.originalname);
+    if (!safeName) {
+      return cb(new AppError(ErrorCodes.VALIDATION_ERROR, 'Invalid file name'), false);
+    }
+    cb(null, true);
+  },
+});
+
+
+  // 上传文件（POST /instances/:instanceId/files/upload，multipart/form-data）
+  // multer 错误标准化中间件：MulterError（file too large 等）→ AppError
+  router.post('/instances/:instanceId/files/upload', (req, res, next) => {
+    upload.single('file')(req, res, (err) => {
+      if (err) {
+        // multer 自身错误（MulterError）统一映射为 400
+        if (err.code === 'LIMIT_FILE_SIZE') {
+          return next(new AppError(ErrorCodes.FILE_UPLOAD_TOO_LARGE,
+            `File too large (max ${Math.round(FILE_UPLOAD_MAX_SIZE / 1024 / 1024)}MB)`));
+        }
+        // AppError（文件名清洗/扩展名黑名单）直接透传
+        return next(err);
+      }
+      next();
+    });
+  }, (req, res, next) => {
+    try {
+      const { instanceId } = req.params;
+      const uploadedFile = req.file;
+
+      if (!uploadedFile) {
+        throw new AppError(ErrorCodes.VALIDATION_ERROR, 'No file uploaded');
+      }
+
+      // 清洗原始文件名
+      const safeName = sanitizeFileName(uploadedFile.originalname);
+      if (!safeName) {
+        // 清理 multer 临时文件
+        try { fs.unlinkSync(uploadedFile.path); } catch {}
+        throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Invalid file name');
+      }
+
+      const instance = serverManager.getInstance(instanceId);
+      if (!instance) {
+        try { fs.unlinkSync(uploadedFile.path); } catch {}
+        throw new AppError(ErrorCodes.INSTANCE_NOT_FOUND);
+      }
+
+      const basePath = instance.serverPath || path.join(config.serversDir, instanceId);
+
+      // 目标路径：文件名取自清洗后的原始名，忽略客户端可能传入的相对路径
+      const targetPath = path.join(basePath, safeName);
+      // 路径校验（用文件名而非完整路径，防止 .. 注入）
+      resolveInstancePath(basePath, '/' + safeName);
+
+      // 同名覆盖（MC 用户常上传覆盖配置）；跨设备安全用 copyFileSync + unlink
+      fs.copyFileSync(uploadedFile.path, targetPath);
+      try { fs.unlinkSync(uploadedFile.path); } catch {}
+
+      const stats = fs.statSync(targetPath);
+      res.json(success({
+        path: '/' + safeName,
+        name: safeName,
+        size: stats.size,
+        modifiedAt: stats.mtime.toISOString(),
+        isDirectory: false,
+      }, 'File uploaded successfully'));
+    } catch (err) {
+      // 清理 multer 临时文件（如果还存在）
+      if (req.file) {
+        try { fs.unlinkSync(req.file.path); } catch {}
+      }
+      next(err);
+    }
+  });
+
   return router;
 }
 

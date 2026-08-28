@@ -3,7 +3,7 @@
  * config 由调用方从 useConnectionStore 传入（与 src/api/tasks.ts 同模式）。
  * 分页信封仅解包 data（pagination 丢失）——前端拉 pageSize=100 后 slice 最近 10 条。
  */
-import { apiDelete, apiGet, apiPost, type ConnectionConfig } from './client'
+import { apiDelete, apiGet, apiPost, type ConnectionConfig, ApiError, NetworkError } from './client'
 import type { BackupItem } from './types'
 
 /** 备份列表（GET /instances/:id/backups?page=&pageSize=；分页信封） */
@@ -36,4 +36,42 @@ export function apiRestoreBackup(config: ConnectionConfig, backupId: number) {
 /** 删除备份（DELETE /backups/:id；creating/restoring 中拒绝 40901） */
 export function apiDeleteBackup(config: ConnectionConfig, backupId: number) {
   return apiDelete<null>(`/api/v1/backups/${backupId}`, config)
+}
+
+/** 下载备份（GET /backups/:id/download；流式 tar.gz blob，独立 120s 超时） */
+export async function apiDownloadBackup(config: ConnectionConfig, backupId: number): Promise<Blob> {
+  const base = config.baseUrl.replace(/\/+$/, '')
+  const url = `${base}/api/v1/backups/${backupId}/download`
+  const timeout = new AbortController()
+  const timer = setTimeout(() => timeout.abort(), 120_000)
+
+  try {
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: { 'X-API-Key': config.apiKey },
+      signal: timeout.signal,
+    })
+
+    if (!res.ok) {
+      try {
+        const errPayload = await res.json()
+        if (errPayload.status === 'error') {
+          throw new ApiError(errPayload.code, res.status, errPayload.message, errPayload.details)
+        }
+      } catch (e) {
+        if (e instanceof ApiError) throw e
+      }
+      throw new NetworkError(`备份下载失败（HTTP ${res.status}）`)
+    }
+
+    return await res.blob()
+  } catch (e) {
+    if (e instanceof ApiError || e instanceof NetworkError) throw e
+    if (e instanceof DOMException && e.name === 'AbortError') {
+      throw new NetworkError('备份下载超时')
+    }
+    throw e
+  } finally {
+    clearTimeout(timer)
+  }
 }

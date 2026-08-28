@@ -4,6 +4,7 @@ import path from 'path';
 import { success, error, ErrorCodes } from '../utils/response.js';
 import { BanModel } from '../db/index.js';
 import { getTotalPlayTime } from '../utils/player-utils.js';
+import { recordAudit, AuditActions } from '../utils/audit.js';
 
 // async 路由包装：Express 4 不捕获中间件/路由返回的 Promise rejection。
 // 未包装的 async handler 抛错时请求永久挂起 + unhandledRejection
@@ -419,6 +420,7 @@ export function createPlayerRoutes(serverManager) {
     }
     if (!requireRunning(instance, res)) return;
     await instance.sendCommand(`op ${req.params.player}`);
+    recordAudit({ instanceId: req.params.id, action: AuditActions.PLAYER_OP, targetType: 'player', targetId: req.params.player });
     res.json(success(null, `Opped ${req.params.player}`));
   }));
 
@@ -430,6 +432,7 @@ export function createPlayerRoutes(serverManager) {
     }
     if (!requireRunning(instance, res)) return;
     await instance.sendCommand(`deop ${req.params.player}`);
+    recordAudit({ instanceId: req.params.id, action: AuditActions.PLAYER_DEOP, targetType: 'player', targetId: req.params.player });
     res.json(success(null, `Deopped ${req.params.player}`));
   }));
 
@@ -443,6 +446,7 @@ export function createPlayerRoutes(serverManager) {
     // express 5：无 JSON body 的请求 req.body 为 undefined（v4 是 {}）
     const reason = sanitizeReason(req.body?.reason) || 'Kicked by operator';
     await instance.sendCommand(`kick ${req.params.player} ${reason}`);
+    recordAudit({ instanceId: req.params.id, action: AuditActions.PLAYER_KICK, targetType: 'player', targetId: req.params.player, detail: { reason } });
     res.json(success(null, `Kicked ${req.params.player}`));
   }));
 
@@ -511,6 +515,7 @@ export function createPlayerRoutes(serverManager) {
       throw err;
     }
 
+    recordAudit({ instanceId: req.params.id, action: AuditActions.PLAYER_BAN, targetType: ip ? 'ip' : 'player', targetId: ip || req.params.player, detail: { reason, duration: duration || null } });
     res.json(success({ expiresAt }, `Banned ${req.params.player}`));
   }));
 
@@ -551,6 +556,7 @@ export function createPlayerRoutes(serverManager) {
       }
       throw err;
     }
+    recordAudit({ instanceId: req.params.id, action: AuditActions.PLAYER_PARDON, targetType: 'player', targetId: req.params.player });
     res.json(success(null, `Pardoned ${req.params.player}`));
   }));
 
@@ -622,6 +628,7 @@ export function createPlayerRoutes(serverManager) {
     }
     if (!requireRunning(instance, res)) return;
     await instance.sendCommand(`whitelist add ${req.params.player}`);
+    recordAudit({ instanceId: req.params.id, action: AuditActions.PLAYER_WHITELIST, targetType: 'player', targetId: req.params.player });
     res.json(success(null, `Added ${req.params.player} to whitelist`));
   }));
 
