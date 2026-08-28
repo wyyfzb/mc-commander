@@ -77,16 +77,17 @@ describe('崩溃循环熔断', () => {
 
   it('成功启动重置熔断器', () => {
     let consecutiveCrashes = 5;
-    let _crashWindowStart = Date.now();
+    let crashWindowStart = Date.now();
     let circuitBreakerTripped = true;
 
     // 模拟 start() 重置
     consecutiveCrashes = 0;
-    _crashWindowStart = null;
+    crashWindowStart = null;
     circuitBreakerTripped = false;
 
     expect(consecutiveCrashes).toBe(0);
     expect(circuitBreakerTripped).toBe(false);
+    expect(crashWindowStart).toBeNull();
   });
 });
 
