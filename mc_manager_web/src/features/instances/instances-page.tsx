@@ -5,7 +5,7 @@
  * - 切换实例/启动配置（实例设置弹窗，instance-settings-dialog 组件）/卸载（危险确认）
  * - 深链接：?tab=deploy 自动打开部署向导
  */
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query'
 import { Rocket } from 'lucide-react'
@@ -35,7 +35,8 @@ export function InstancesPage() {
   const queryClient = useQueryClient()
 
   // ── 对话框状态 ──
-  const [deployOpen, setDeployOpen] = useState(false)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [deployOpen, setDeployOpen] = useState(() => searchParams.get('tab') === 'deploy')
   const [settingsTarget, setSettingsTarget] = useState<InstanceSummary | null>(null)
   const [uninstallTarget, setUninstallTarget] = useState<InstanceSummary | null>(null)
   /** 待停止确认的实例（启动直接执行） */
@@ -57,11 +58,6 @@ export function InstancesPage() {
   })
 
   // ── 深链接：?tab=deploy 打开部署向导；写入 URL 保持全站一致性 ──
-  const [searchParams, setSearchParams] = useSearchParams()
-  const tabParam = searchParams.get('tab')
-  useEffect(() => {
-    if (tabParam === 'deploy') setDeployOpen(true)
-  }, [tabParam])
   const setDeployOpenDeep = (open: boolean) => {
     setDeployOpen(open)
     setSearchParams((prev) => {

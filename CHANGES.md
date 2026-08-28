@@ -913,3 +913,17 @@
   - 前端 layouts/app-sidebar.tsx（Webhook 导航）/routes.tsx（/webhooks 路由）
 - **设计**：fire-and-forget 投递 + HMAC-SHA256 签名兼容 GitHub/Discord + 19 种事件白名单 + 指数退避重试 + 背压保护(5 并发) + MCServerManager EventEmitter 事件桥接
 - **验证**：服务端 544/544（39 文件+22）/前端 619/619（58 文件+4）/双端 lint+tsc 0。PR #42
+
+## chore-1 · oxlint set-state-in-effect 存量警告清零
+
+- **类型**：chore（React Compiler 兼容性）
+- **位置**：
+  - `mc_manager_web/src/features/instances/instances-page.tsx`
+  - `mc_manager_web/src/features/dashboard/use-metric-history.ts`
+  - `mc_manager_web/src/features/players/components/ban-dialog.tsx`
+- **问题**：5 条 `react(set-state-in-effect)` 警告（从灾前 63 条经多轮降至 5 条），阻塞 React Compiler 优化。
+- **修复**：
+  - instances-page.tsx：深链接 `?tab=deploy` 同步从 `useEffect+setState` 改为 `useState(() => searchParams.get('tab') === 'deploy')` 初始值模式，移除 `useEffect` 和未用 `useEffect` 导入。
+  - use-metric-history.ts：三段 `useEffect+setHistory` 改为 `useRef` 去重累积模式（`_cpuLast/_memLast/_tpsLast` 去重，strict mode 二次渲染安全），store 变化即触发渲染时直接读 ref 追加，零 `useState`/`useEffect`。
+  - ban-dialog.tsx：表单重置从 `useEffect([open, player.name])` 内 6 个 `setState` 改为 `key={player.name}` 驱动的 `BanFormContent` 子组件提取（条件挂载 `{open && <BanFormContent key=.../>}`），挂载即全新表单，卸载即丢弃。
+- **验证**：oxlint `set-state-in-effect` 5→0；前端 619/619 全绿；tsc 0 errors；服务端 555/555 全绿（已知 flaky mc_server.test.js:617 全套件竞态，非本轮引入）。
