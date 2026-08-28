@@ -1570,3 +1570,26 @@ ErrorBoundary、备份下载、文件管理接线、CSV 导出、DiskUsageCard�
 2. 推送 GitHub 分支 + PR（含 R4 修复 + feat-3 起步）
 3. feat-4 按 CHANGES 规格重实现（磁盘监控 / 运维韧性）
 4. 之后按 CHANGES 顺序推进 feat-5~feat-28
+
+---
+
+# 2026-08-28 19:35-19:45 · GitHub 进度同步轮（用户指令：及时推送防丢失）
+
+## 一、项目状态
+
+- 工作区 /home/z/reference 完好（本轮发现其自身已是带 origin 的 git 克隆，main 停在 #39）。
+- 本地 45 文件改动（R2-R4 全部成果 + feat-3 服务端）此前未推送，按用户指令立即同步。
+- 开工基线实测：服务端 522/522（37 文件）、前端 613/613（57 文件）、双端 lint/tsc 0 错误。
+
+## 二、已完成
+
+1. 新建分支 `recovery/feat1-feat3`（自 main 1047f8f），`git add -A` + 提交全部 45 文件改动。
+2. 推送 origin → **PR #41**（feat-1 备份下载 + feat-2 审计/命令历史 + feat-3 文件管理服务端 + R4 修复 + 文档恢复）。
+3. 关闭旧 PR #40（注明被 #41 超集取代，分支 recovery/feat1-feat2 历史保留）。
+4. 此后每轮收尾固定：commit + push 分支 + 更新 PR，容器重置只需 git clone 即恢复。
+
+## 三、下一阶段
+
+- feat-3 收尾：前端 file-list.tsx 接线（onUpload/onCreateDirectory/onRename props 已声明未用，
+  上传按钮仍为禁用占位）+ files-page 对话框 + apiUploadFile。
+- 之后：feat-4 磁盘监控（按 CHANGES 规格）。
