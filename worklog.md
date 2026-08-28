@@ -1688,3 +1688,13 @@ ErrorBoundary、备份下载、文件管理接线、CSV 导出、DiskUsageCard�
 - 服务端（lint + test）**pass**（25s）
 - 密钥泄漏扫描 **pass**（6s）
 - 下一轮起可按 feat-4（磁盘监控）推进；PR #41 待用户合并
+
+---
+
+# 2026-08-28 20:10 · CI 变绿确认
+
+## 补充
+
+- PR #41 最新 CI run（b72c5f2）四项全绿：服务端 lint+test ✅ · 前端 lint+test ✅ · 前端 build+e2e ✅ · 密钥泄漏扫描 ✅
+- 前两次失败原因：中间 commit（c4a439a）files-page.tsx 缺少 Button 导入（-1 行 diff 误删），b72c5f2 已修复
+- PR #41 当前状态：CI 全绿，待 review/合并
