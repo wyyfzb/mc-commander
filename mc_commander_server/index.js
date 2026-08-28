@@ -12,6 +12,7 @@ import { MCServerManager } from './services/mc_server.js';
 import { TaskScheduler } from './services/task_scheduler.js';
 import { setupWebSocket } from './websocket.js';
 import { BackupModel } from './db/backup.model.js';
+import { setupWebhookDispatch } from './services/webhook.service.js';
 import { BackupService } from './services/backup.service.js';
 import { initDatabase } from './db/index.js';
 
@@ -139,6 +140,7 @@ setupRoutes(app, serverManager, taskScheduler);
 
 app.use(errorHandler);
 
+setupWebhookDispatch(serverManager);
 setupWebSocket(wss, serverManager);
 
 server.listen(config.port, '0.0.0.0', () => {

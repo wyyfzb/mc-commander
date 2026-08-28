@@ -7,6 +7,7 @@ import {
   CalendarClock,
   Server,
   Settings,
+  Webhook as WebhookIcon,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -33,6 +34,7 @@ const PRIMARY_NAV: NavItem[] = [
   { to: '/files', label: '文件', icon: FolderOpen },
   { to: '/tasks', label: '任务', icon: CalendarClock },
   { to: '/instances', label: '实例', icon: Server },
+  { to: '/webhooks', label: 'Webhook', icon: WebhookIcon },
 ]
 
 const BOTTOM_NAV: NavItem[] = [{ to: '/settings', label: '设置', icon: Settings }]

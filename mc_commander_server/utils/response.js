@@ -60,6 +60,12 @@ export const ErrorCodes = {
   FILE_UPLOAD_TOO_LARGE: { code: 40007, message: 'File upload too large', status: 400 },
   FILE_TYPE_NOT_ALLOWED: { code: 40008, message: 'File type not allowed', status: 400 },
   FILE_ALREADY_EXISTS: { code: 40909, message: 'File already exists', status: 409 },
+
+  // Webhook 错误
+  WEBHOOK_NOT_FOUND: { code: 40410, message: 'Webhook not found', status: 404 },
+  WEBHOOK_INVALID_URL: { code: 40010, message: 'Invalid webhook URL (only http/https allowed)', status: 400 },
+  WEBHOOK_INVALID_EVENTS: { code: 40011, message: 'Invalid webhook event types', status: 400 },
+  WEBHOOK_TEST_FAILED: { code: 50010, message: 'Webhook test delivery failed', status: 500 },
 };
 
 // 自定义错误类
