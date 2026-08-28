@@ -927,3 +927,22 @@
   - use-metric-history.ts：三段 `useEffect+setHistory` 改为 `useRef` 去重累积模式（`_cpuLast/_memLast/_tpsLast` 去重，strict mode 二次渲染安全），store 变化即触发渲染时直接读 ref 追加，零 `useState`/`useEffect`。
   - ban-dialog.tsx：表单重置从 `useEffect([open, player.name])` 内 6 个 `setState` 改为 `key={player.name}` 驱动的 `BanFormContent` 子组件提取（条件挂载 `{open && <BanFormContent key=.../>}`），挂载即全新表单，卸载即丢弃。
 - **验证**：oxlint `set-state-in-effect` 5→0；前端 619/619 全绿；tsc 0 errors；服务端 555/555 全绿（已知 flaky mc_server.test.js:617 全套件竞态，非本轮引入）。
+
+## feat-6 · P0-3 经验/效果/召唤表单（roadmap P0 第 3 项，灾后重实现）
+
+- **类型**：新功能（纯前端，RCON 命令拼装）
+- **位置**：
+  - `mc_manager_web/src/lib/mc-entities.ts`（新建，82 种实体目录 + 分类 + 搜索）
+  - `mc_manager_web/src/features/players/components/action-forms.tsx`（新建，三表单 Tab 面板）
+  - `mc_manager_web/src/features/players/store.ts`（PlayerDetailTab 类型 + DETAIL_TAB_LABELS 新增 'actions'）
+  - `mc_manager_web/src/features/players/components/player-detail-panel.tsx`（导入 + Tab 渲染 + BATCH_TABS 扩展）
+  - `mc_manager_web/src/lib/__tests__/mc-entities.test.ts`（新建，9 用例）
+  - `mc_manager_web/src/features/players/components/__tests__/action-forms.test.tsx`（新建，9 用例）
+- **设计**：
+  - 与 GiveItemPanel/TeleportTab 同构模式：纯前端 RCON 命令拼装（`/xp`/`/effect`/`/summon`），执行走 `onAction({kind:'command', command})`
+  - **经验表单**：经验值/等级切换 + 给予/设置/移除操作 + 快捷数量档 + 命令预览 + 批量支持
+  - **效果表单**：复用 mc-potions.ts 20 种效果数据 + 正向/负面/中性三分类展示 + 等级/时长选择 + 清除全部模式 + 批量支持
+  - **召唤表单**：82 种实体目录（9 分类）+ 中英文搜索 + 坐标输入（~/数字/混合）+ 快捷坐标预设 + 命令预览
+  - 全部 `--mcs-*` 设计 token；批量操作走 runBatchForTargets + formatBatchSummary
+  - 批量模式新增「操作」Tab（BATCH_TABS 扩展）
+- **验证**：服务端 **555/555**（零改动）；前端 **637/637**（60 文件，+18 用例）；tsc 0 errors；oxlint 0 errors 80 warnings（全存量）；roadmap P0-3 标记 ✅

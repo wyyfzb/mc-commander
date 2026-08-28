@@ -18,6 +18,7 @@ import { InventoryTab } from './detail-inventory-tab'
 import { TeleportTab } from './detail-teleport-tab'
 import { LogTab } from './detail-log-tab'
 import { GiveItemPanel } from './give-item-dialog'
+import { ActionForms } from './action-forms'
 
 interface PlayerDetailPanelProps {
   instanceId: string
@@ -33,7 +34,7 @@ interface PlayerDetailPanelProps {
 }
 
 /** 批量模式下保留的 Tab（只保留传送/给予路径） */
-const BATCH_TABS: PlayerDetailTab[] = ['teleport', 'give']
+const BATCH_TABS: PlayerDetailTab[] = ['teleport', 'give', 'actions']
 
 export function PlayerDetailPanel({
   instanceId,
@@ -187,6 +188,16 @@ export function PlayerDetailPanel({
             isBatchMode={isBatchMode}
             instanceId={instanceId}
             mcVersion={mcVersion}
+            isRconConnected={isRconConnected}
+            onAction={onAction}
+          />
+        )}
+        {effectiveTab === 'actions' && (
+          <ActionForms
+            player={isBatchMode ? null : effectivePlayer}
+            batchTargets={isBatchMode ? batchTargets : effectivePlayer ? [effectivePlayer] : []}
+            isBatchMode={isBatchMode}
+            instanceId={instanceId}
             isRconConnected={isRconConnected}
             onAction={onAction}
           />
