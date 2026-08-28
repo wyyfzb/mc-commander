@@ -25,6 +25,7 @@ export const WSEvents = {
   TASK_EXECUTE: 'taskExecute',
   DEPLOY_PROGRESS: 'deployProgress',
   CIRCUIT_BREAKER: 'circuit_breaker',
+  UPGRADE_PROGRESS: 'upgradeProgress',
   ERROR: 'error',
 };
 
@@ -420,6 +421,10 @@ export function setupWebSocket(wss, serverManager) {
 
   serverManager.on(WSEvents.DEPLOY_PROGRESS, (data) => {
     broadcastAll(WSEvents.DEPLOY_PROGRESS, data);
+  });
+
+  serverManager.on('instance:upgradeProgress', (data) => {
+    broadcastAll(WSEvents.UPGRADE_PROGRESS, data);
   });
 
   return { broadcast, broadcastAll, WSEvents, ClientMessages };

@@ -1,0 +1,256 @@
+/**
+ * UpgradeDialog - 实例版本升级弹窗（P0-4）
+ * - 服务端类型三卡选择（vanilla/paper/purpur）+ 版本 Select
+ * - 警示条（自动备份 + 失败自动回滚）
+ * - 进度条经 WS upgradeProgress 事件驱动（upgrade store）
+ * - 终态展示（成功/失败/已回滚），关闭时清空该实例进度
+ * - 运行中/同版本/升级中时按钮禁用
+ *
+ * 设计纪律：--mcs-* 语义 token，禁硬编码色值/间距/圆角；
+ * 不使用 useEffect+setState（oxlint set-state-in-effect 已清零，勿回潮）。
+ */
+import { useState } from 'react'
+import { useConnectionStore } from '@/stores/connection'
+import { apiUpgradeInstance } from '@/api/instances'
+import { getFriendlyErrorText } from '@/api/errors'
+import { useUpgradeStore, UPGRADE_STAGE_LABELS, clearUpgradeProgress } from '@/stores/upgrade'
+import { useServerVersions } from '../queries'
+import type { InstanceStatus, UpgradeRequest, UpgradeStage } from '@/api/types'
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import { Loader2, ArrowUpCircle, CheckCircle2, RotateCcw, XCircle, AlertTriangle } from 'lucide-react'
+
+const SERVER_TYPES = [
+  { value: 'vanilla', label: 'Vanilla' },
+  { value: 'paper', label: 'Paper' },
+  { value: 'purpur', label: 'Purpur' },
+] as const
+
+const TERMINAL_STAGES = new Set<UpgradeStage>(['completed', 'failed', 'rolled_back'])
+
+function StageIcon({ stage }: { stage: UpgradeStage }) {
+  if (stage === 'completed') return <CheckCircle2 className="h-5 w-5 text-mcs-success-fg" />
+  if (stage === 'rolled_back') return <RotateCcw className="h-5 w-5 text-mcs-warning-fg" />
+  if (stage === 'failed') return <XCircle className="h-5 w-5 text-mcs-error-fg" />
+  return <Loader2 className="h-5 w-5 animate-spin text-mcs-accent-fg" />
+}
+
+/** 进度条（token 填充，与 deploy-dialog 同模式） */
+function ProgressBar({ percent }: { percent: number }) {
+  const p = Math.max(0, Math.min(100, percent))
+  return (
+    <div
+      role="progressbar"
+      aria-valuenow={Math.round(p)}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      className="h-1.5 w-full overflow-hidden rounded-full bg-mcs-bg-emphasis"
+    >
+      <div className="h-full rounded-full" style={{ width: `${p}%`, background: 'var(--mcs-accent)' }} />
+    </div>
+  )
+}
+
+interface UpgradeDialogProps {
+  instance: InstanceStatus
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}
+
+export function UpgradeDialog({ instance, open, onOpenChange }: UpgradeDialogProps) {
+  // ConnectionState extends ConnectionConfig：全 store 即 config（与 queries.ts 同模式）
+  const config = useConnectionStore()
+  const [type, setType] = useState<UpgradeRequest['type']>('vanilla')
+  const [mcVersion, setMcVersion] = useState('')
+  const [starting, setStarting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const progress = useUpgradeStore((s) => s.progress[instance.id])
+
+  const versionsQuery = useServerVersions(type)
+  const versions: string[] = versionsQuery.isSuccess ? (versionsQuery.data?.versions ?? []) : []
+
+  // 派生态：进度存在且未到终态 = 升级进行中（WS 驱动，无需 effect 同步）
+  const isTerminal = progress != null && TERMINAL_STAGES.has(progress.stage)
+  const upgrading = progress != null && !TERMINAL_STAGES.has(progress.stage)
+  const isSuccess = progress?.stage === 'completed'
+  const isRolledBack = progress?.stage === 'rolled_back'
+
+  /** 类型切换与版本重置合并为一次事件驱动更新（不走 useEffect） */
+  const handleTypeChange = (next: string) => {
+    setType(next)
+    setMcVersion('')
+  }
+
+  const handleUpgrade = async () => {
+    if (!mcVersion || mcVersion === instance.mcVersion) return
+    setStarting(true)
+    setError(null)
+    try {
+      await apiUpgradeInstance(config, instance.id, { mcVersion, type })
+      // 202 受理后由 WS upgradeProgress 驱动界面
+    } catch (err) {
+      setError(getFriendlyErrorText(err))
+    } finally {
+      setStarting(false)
+    }
+  }
+
+  const handleClose = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      // 升级进行中禁止关闭（终态/未开始可关），关闭即清空该实例进度
+      if (upgrading || starting) return
+      setError(null)
+      clearUpgradeProgress(instance.id)
+    }
+    onOpenChange(nextOpen)
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <ArrowUpCircle className="h-5 w-5" aria-hidden />
+            {`升级 ${instance.name}`}
+          </DialogTitle>
+          <DialogDescription>
+            {`${instance.name} · 当前版本 ${instance.mcVersion}`}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          {/* 警示条 */}
+          <div className="rounded-mcs-sm border border-mcs-warning-border bg-mcs-warning-bg-subtle p-3 text-sm text-mcs-warning-fg">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+              <div>
+                <p className="font-medium">升级须知</p>
+                <p className="mt-1 text-mcs-text-secondary">
+                  升级前自动创建备份，随后下载并替换服务端 JAR，启动校验失败将自动回滚。
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* 升级进行中：进度 */}
+          {upgrading && progress && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <StageIcon stage={progress.stage} />
+                <span className="text-sm font-medium">
+                  {UPGRADE_STAGE_LABELS[progress.stage]}
+                </span>
+                {progress.percent > 0 && (
+                  <span className="text-xs text-mcs-text-secondary">{progress.percent}%</span>
+                )}
+              </div>
+              {progress.percent > 0 && <ProgressBar percent={progress.percent} />}
+              {progress.detail && (
+                <p className="text-xs text-mcs-text-secondary">{progress.detail}</p>
+              )}
+            </div>
+          )}
+
+          {/* 终态展示 */}
+          {isTerminal && progress && (
+            <div
+              className={`rounded-mcs-sm border p-4 ${
+                isSuccess
+                  ? 'border-mcs-success-fg/20 bg-mcs-success-bg-subtle'
+                  : 'border-mcs-error-fg/20 bg-mcs-error-bg-subtle'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <StageIcon stage={progress.stage} />
+                <span
+                  className={`font-medium ${
+                    isSuccess ? 'text-mcs-success-fg'
+                    : isRolledBack ? 'text-mcs-warning-fg'
+                    : 'text-mcs-error-fg'
+                  }`}
+                >
+                  {progress.detail || UPGRADE_STAGE_LABELS[progress.stage]}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* 版本选择（升级进行中/终态隐藏） */}
+          {!progress && (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">服务端类型</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {SERVER_TYPES.map((t) => (
+                    <button
+                      key={t.value}
+                      type="button"
+                      onClick={() => handleTypeChange(t.value)}
+                      aria-pressed={type === t.value}
+                      className={`rounded-mcs-sm border p-2 text-center text-sm transition-colors ${
+                        type === t.value
+                          ? 'border-mcs-accent-fg bg-mcs-accent-bg-subtle text-mcs-accent-fg'
+                          : 'border-mcs-border-muted hover:bg-mcs-state-hover'
+                      }`}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">目标版本</label>
+                <Select value={mcVersion} onValueChange={setMcVersion}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="选择版本" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {versions.map((v) => (
+                      <SelectItem
+                        key={v}
+                        value={v}
+                        disabled={v === instance.mcVersion}
+                      >
+                        {v}{v === instance.mcVersion ? '（当前）' : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+
+          {/* 错误 */}
+          {error && (
+            <p className="text-sm text-mcs-error-fg" role="alert">{error}</p>
+          )}
+        </div>
+
+        <DialogFooter>
+          {isTerminal ? (
+            <Button onClick={() => handleClose(false)}>关闭</Button>
+          ) : (
+            <div className="flex gap-2">
+              <Button variant="ghost" onClick={() => handleClose(false)} disabled={upgrading || starting}>
+                取消
+              </Button>
+              <Button
+                onClick={handleUpgrade}
+                disabled={!mcVersion || mcVersion === instance.mcVersion || upgrading || starting}
+              >
+                {starting && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />}
+                开始升级
+              </Button>
+            </div>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+

@@ -5,6 +5,7 @@ import { queryKeys } from '@/api/queries'
 import { useConnectionStore } from '@/stores/connection'
 import { useServerStore } from '@/stores/server'
 import { useDeployStore } from '@/stores/deploy'
+import { applyUpgradeProgress } from '@/stores/upgrade'
 import { useNotificationStore } from '@/stores/notifications'
 import { useTerminalStore } from '@/stores/terminal'
 import type { Player, WsMessage } from '@/api/types'
@@ -140,6 +141,20 @@ export function useServerSocket(instanceId: string | null) {
             total: Number(data.total ?? 0),
             ...(data.error ? { error: String(data.error) } : {}),
           })
+          break
+        case 'upgradeProgress':
+          // 升级进度：全阶段落 upgrade store（终态也写入，供弹窗展示结果）
+          applyUpgradeProgress({
+            instanceId: String(data.instanceId ?? ''),
+            stage: String(data.stage ?? 'backup'),
+            percent: Number(data.percent ?? 0),
+            detail: String(data.detail ?? ''),
+            timestamp: Number(data.timestamp ?? Date.now()),
+          })
+          if (data.stage === 'completed' || data.stage === 'failed' || data.stage === 'rolled_back') {
+            // 终态：刷新实例列表（版本号/JAR 已变更）
+            void queryClient.invalidateQueries({ queryKey: queryKeys.instances() })
+          }
           break
         case 'weatherUpdate':
         case 'backupStart':

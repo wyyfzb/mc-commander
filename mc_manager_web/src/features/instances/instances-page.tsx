@@ -23,6 +23,8 @@ import type { DeployResult, InstanceStatus, InstanceSummary } from '@/api/types'
 import { InstanceCards } from './components/instance-cards'
 import { DeployDialog } from './components/deploy-dialog'
 import { InstanceSettingsDialog } from './components/instance-settings-dialog'
+import { UpgradeDialog } from './components/upgrade-dialog'
+import { clearUpgradeProgress } from '@/stores/upgrade'
 import { useUninstallInstance } from './queries'
 
 export function InstancesPage() {
@@ -38,6 +40,7 @@ export function InstancesPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [deployOpen, setDeployOpen] = useState(() => searchParams.get('tab') === 'deploy')
   const [settingsTarget, setSettingsTarget] = useState<InstanceSummary | null>(null)
+  const [upgradeTarget, setUpgradeTarget] = useState<InstanceSummary | null>(null)
   const [uninstallTarget, setUninstallTarget] = useState<InstanceSummary | null>(null)
   /** 待停止确认的实例（启动直接执行） */
   const [stopTarget, setStopTarget] = useState<InstanceSummary | null>(null)
@@ -166,6 +169,11 @@ export function InstancesPage() {
             }
             onSwitch={handleSwitch}
             onOpenSettings={handleOpenSettings}
+            onUpgrade={(inst) => {
+              // 每次打开升级弹窗清空该实例残留进度，避免展示上一轮终态
+              clearUpgradeProgress(inst.id)
+              setUpgradeTarget(inst)
+            }}
             onUninstall={setUninstallTarget}
             onStart={(inst) => runMutation.mutate({ id: inst.id, action: 'start' })}
             onStop={setStopTarget}
@@ -186,6 +194,15 @@ export function InstancesPage() {
           instance={settingsTarget}
           detail={detailStatuses[settingsTarget.id]}
           onOpenChange={(open) => !open && setSettingsTarget(null)}
+        />
+      )}
+
+      {/* ── 升级弹窗 ── */}
+      {upgradeTarget && detailStatuses[upgradeTarget.id] && (
+        <UpgradeDialog
+          instance={detailStatuses[upgradeTarget.id]}
+          open={true}
+          onOpenChange={(open) => !open && setUpgradeTarget(null)}
         />
       )}
 

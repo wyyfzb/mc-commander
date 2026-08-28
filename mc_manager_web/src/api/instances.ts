@@ -3,7 +3,7 @@
  * config 由调用方从 useConnectionStore 传入（与 src/api/players.ts 同模式）。
  */
 import { apiDelete, apiGet, apiPost, apiPut, type ConnectionConfig } from './client'
-import type { DeployRequest, DeployResult, InstanceStatus, InstanceUpdatePayload, VersionsResponse } from './types'
+import type { DeployRequest, DeployResult, InstanceStatus, InstanceUpdatePayload, UpgradeRequest, UpgradeStartResponse, VersionsResponse } from './types'
 
 /** 服务端版本列表（GET /versions?type=；fabric 额外返回 loaders） */
 export function apiGetServerVersions(config: ConnectionConfig, type: string) {
@@ -29,4 +29,17 @@ export function apiUpdateInstance(
   payload: InstanceUpdatePayload,
 ) {
   return apiPut<InstanceStatus>(`/api/v1/instances/${instanceId}`, config, payload)
+}
+
+/** 实例版本升级（POST /instances/:id/upgrade；202 异步，WS 推送进度） */
+export function apiUpgradeInstance(config: ConnectionConfig, instanceId: string, payload: UpgradeRequest) {
+  return apiPost<UpgradeStartResponse>(`/api/v1/instances/${instanceId}/upgrade`, config, payload)
+}
+
+/** 查询升级状态（GET /instances/:id/upgrade/status） */
+export function apiGetUpgradeStatus(config: ConnectionConfig, instanceId: string) {
+  return apiGet<{ upgrading: boolean; instanceId?: string; stage?: string; percent?: number; detail?: string }>(
+    `/api/v1/instances/${instanceId}/upgrade/status`,
+    config,
+  )
 }

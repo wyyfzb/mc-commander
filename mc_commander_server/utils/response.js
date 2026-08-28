@@ -66,6 +66,10 @@ export const ErrorCodes = {
   WEBHOOK_INVALID_URL: { code: 40010, message: 'Invalid webhook URL (only http/https allowed)', status: 400 },
   WEBHOOK_INVALID_EVENTS: { code: 40011, message: 'Invalid webhook event types', status: 400 },
   WEBHOOK_TEST_FAILED: { code: 50010, message: 'Webhook test delivery failed', status: 500 },
+
+  // 升级错误
+  UPGRADE_IN_PROGRESS: { code: 40907, message: 'Upgrade already in progress', status: 409 },
+  UPGRADE_VERSION_SAME: { code: 40012, message: 'Target version is the same as current version', status: 400 },
 };
 
 // 自定义错误类
