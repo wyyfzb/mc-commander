@@ -1832,3 +1832,41 @@ ErrorBoundary、备份下载、文件管理接线、CSV 导出、DiskUsageCard�
 - 已合并分支清理：远端 recovery/feat5-ops-resilience（gh --delete-branch）+ 本地 feat1-feat3 / feat4-webhook / feat5-ops-resilience 三支
 - main 现状：d180bd0（feat-5）← 76fb84e（feat-4）← 3e9c245（PR #41 / feat-1~3）
 - 下一轮入口：oxlint 存量清理或 feat-6 重实现或安全主线（管理员密码登录）
+
+---
+
+# 2026-08-29 00:07 · 基线哨兵轮（oxlint set-state-in-effect 清零）
+
+## 一、项目当前状态描述与判断
+
+- 工作区 /home/z/reference 完好；未触碰 /home/z/my-project；方向与 roadmap 一致，无跑偏。
+- 开工基线：服务端 555/555（40 文件）、前端 619/619（58 文件）、双端 lint/tsc 0 错误。
+- oxlint `set-state-in-effect` 从灾前 63 条经多轮降至 5 条，本轮清零。
+- 审查 roadmap 进度：工程基建 3/4 ✅（审计日志/Webhook/运维韧性，安全主线待做）、P0 1-3 ✅、P0 4-5 🔲。与 CHANGES/worklog 记录一致，无跑偏。
+
+## 二、已完成修改与验证结果
+
+**目标**：oxlint 存量警告清零（worklog 建议优先项）。
+
+已完成（3 文件 5 条警告→0）：
+
+1. **instances-page.tsx**（1 条）：深链接 `?tab=deploy` 从 `useEffect+setDeployOpen` 改为 `useState(() => searchParams.get('tab') === 'deploy')` 初始值模式，移除 useEffect 和未用导入
+2. **use-metric-history.ts**（3 条）：三段 `useEffect+setHistory` 合并为 `useRef` 去重累积（`_cpuLast/_memLast/_tpsLast` 去重 + strict mode 安全），零 useState/useEffect
+3. **ban-dialog.tsx**（1 条）：表单重置从 `useEffect([open, player.name])` 6 个 setState 改为 `key={player.name}` 驱动子组件 `BanFormContent` 提取 + 条件挂载
+
+验证结果：
+- oxlint `set-state-in-effect` 5→0
+- 前端 619/619 全绿、tsc 0 errors
+- 服务端 555/555（已知 flaky mc_server.test.js:617 全套件竞态，非本轮引入）
+- PR #45：https://github.com/wyyfzb/mc-commander/pull/45
+
+## 三、未解决问题或风险与下一阶段优先事项
+
+风险/未解决：
+- mc_server.test.js:617 全套件竞态（灾前债务，单独运行通过）
+- oxlint `only-export-components` 警告仍存（routes.tsx 9 条 + instance-settings-dialog 4 条 + button/badge/tabs 导出变体），属 fast-refresh 优化建议，非阻塞
+
+下一阶段优先建议（按序）：
+1. PR #45 CI 全绿 → 合并（CI 守护任务 #342313 自动跟踪）
+2. feat-6 重实现（经验/药水效果/召唤表单）或 roadmap P0-4 实例版本升级
+3. 安全主线：管理员密码登录（roadmap 工程基建第 1 项，当前最大未启动项）
