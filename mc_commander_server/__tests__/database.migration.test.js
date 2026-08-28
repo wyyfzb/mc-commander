@@ -26,7 +26,7 @@ describe('数据库 v5 迁移 - scheduled_tasks.last_run_status', () => {
   });
 
   it('user_version 升到 5', () => {
-    expect(db.pragma('user_version', { simple: true })).toBe(5);
+    expect(db.pragma('user_version', { simple: true })).toBe(6);
   });
 
   it('新插入任务 last_run_status 默认 never', () => {

@@ -114,9 +114,60 @@ export async function apiRequest<T>(
   }
 }
 
-/** GET 便捷方法 */
+/** GET 便捷方法（解包信封，仅返回 data） */
 export function apiGet<T>(path: string, config: ConnectionConfig, signal?: AbortSignal): Promise<T> {
   return apiRequest<T>(path, config, { method: 'GET', signal })
+}
+
+/** GET 信封级变体：返回完整信封（含 pagination），供分页控件消费 */
+export async function apiGetEnvelope<T>(path: string, config: ConnectionConfig, signal?: AbortSignal): Promise<ApiEnvelope<T>> {
+  const timeout = new AbortController()
+  const timer = setTimeout(() => timeout.abort(), REQUEST_TIMEOUT_MS)
+
+  try {
+    const res = await fetch(buildUrl(config, path), {
+      method: 'GET',
+      headers: { 'X-API-Key': config.apiKey },
+      signal: signal ?? timeout.signal,
+    })
+
+    if (!res.ok && res.status >= 400) {
+      try {
+        const errPayload = (await res.json()) as ApiErrorEnvelope
+        if (errPayload.status === 'error') {
+          throw new ApiError(errPayload.code, res.status, errPayload.message, errPayload.details)
+        }
+      } catch (e) {
+        if (e instanceof ApiError) throw e
+      }
+      throw new NetworkError(`请求失败（HTTP ${res.status}`)
+    }
+
+    let payload: ApiEnvelope<T> | ApiErrorEnvelope
+    try {
+      payload = (await res.json()) as ApiEnvelope<T> | ApiErrorEnvelope
+    } catch {
+      throw new NetworkError(`响应解析失败（HTTP ${res.status}）`)
+    }
+
+    if (payload.status === 'ok') {
+      return payload as ApiEnvelope<T>
+    }
+
+    const err = payload as ApiErrorEnvelope
+    throw new ApiError(err.code, res.status, err.message, err.details)
+  } catch (e) {
+    if (e instanceof ApiError) throw e
+    if (e instanceof DOMException && e.name === 'AbortError') {
+      throw new NetworkError('请求超时，请检查服务器连接')
+    }
+    if (e instanceof TypeError) {
+      throw new NetworkError('网络连接失败，请检查面板地址与服务器状态', { cause: e })
+    }
+    throw e
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 /** POST 便捷方法 */

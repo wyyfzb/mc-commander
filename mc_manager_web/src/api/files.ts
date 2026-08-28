@@ -3,7 +3,7 @@
  * config 由调用方从 useConnectionStore 传入（与 src/api/players.ts 同模式）。
  * path 均为相对实例根目录的路径（"server.properties" 或 "/world/dat"）。
  */
-import { apiDelete, apiGet, apiPut, type ConnectionConfig } from './client'
+import { apiDelete, apiGet, apiPost, apiPut, type ConnectionConfig } from './client'
 import type {
   FileContentResponse,
   FileInfoResponse,
@@ -42,4 +42,27 @@ export function apiSaveFileContent(
 /** 删除文件/目录（DELETE /instances/:id/files?path=；目录递归删除） */
 export function apiDeleteFile(config: ConnectionConfig, instanceId: string, path: string) {
   return apiDelete<null>(`${base(instanceId)}/files?path=${encodeURIComponent(path)}`, config)
+}
+
+/** 新建目录（POST /instances/:id/files/mkdir） */
+export function apiCreateDirectory(config: ConnectionConfig, instanceId: string, dirPath: string) {
+  return apiPost<{ path: string; name: string }>(
+    `${base(instanceId)}/files/mkdir`,
+    config,
+    { path: dirPath },
+  )
+}
+
+/** 重命名文件/目录（POST /instances/:id/files/rename） */
+export function apiRenameFile(
+  config: ConnectionConfig,
+  instanceId: string,
+  oldPath: string,
+  newPath: string,
+) {
+  return apiPost<{ oldPath: string; newPath: string; name: string }>(
+    `${base(instanceId)}/files/rename`,
+    config,
+    { path: oldPath, newPath },
+  )
 }

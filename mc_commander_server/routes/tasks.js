@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { success, successPaginated, ErrorCodes, AppError } from '../utils/response.js';
 import { ScheduledTaskModel } from '../db/scheduled_task.model.js';
+import { recordAudit, AuditActions } from '../utils/audit.js';
 
 export function createTaskRoutes(serverManager, taskScheduler) {
   const router = Router({ mergeParams: true });
@@ -100,6 +101,7 @@ export function createTaskRoutes(serverManager, taskScheduler) {
         isEnabled: isEnabled !== false,
       });
       
+      recordAudit({ instanceId, action: AuditActions.TASK_CREATE, targetType: 'task', targetId: String(task.id), detail: { name, type } });
       res.status(201).json(success(task, 'Scheduled task created successfully'));
     } catch (err) {
       next(err);
@@ -116,6 +118,7 @@ export function createTaskRoutes(serverManager, taskScheduler) {
       }
       
       const updatedTask = ScheduledTaskModel.update(req.params.id, req.body);
+      recordAudit({ instanceId: task.instanceId, action: AuditActions.TASK_UPDATE, targetType: 'task', targetId: req.params.id });
       res.json(success(updatedTask, 'Scheduled task updated successfully'));
     } catch (err) {
       next(err);
@@ -132,6 +135,7 @@ export function createTaskRoutes(serverManager, taskScheduler) {
       }
       
       ScheduledTaskModel.delete(req.params.id);
+      recordAudit({ instanceId: task.instanceId, action: AuditActions.TASK_DELETE, targetType: 'task', targetId: req.params.id });
       res.json(success(null, 'Scheduled task deleted successfully'));
     } catch (err) {
       next(err);
@@ -150,7 +154,7 @@ export function createTaskRoutes(serverManager, taskScheduler) {
       if (taskScheduler) {
         await taskScheduler.runTask(task.id);
       }
-      
+      recordAudit({ instanceId: task.instanceId, action: AuditActions.TASK_EXECUTE, targetType: 'task', targetId: req.params.id });
       res.json(success(null, 'Task execution triggered'));
     } catch (err) {
       next(err);

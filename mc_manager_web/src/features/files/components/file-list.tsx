@@ -54,6 +54,12 @@ export interface FileListProps {
   onGoUp?: () => void
   /** 工具栏「新建文件」：打开新建文件对话框（父组件负责） */
   onNewFile?: () => void
+  /** 工具栏「上传文件」：打开文件选择器（父组件负责 multipart 上传） */
+  onUpload?: () => void
+  /** 工具栏「新建目录」：创建目录对话框 */
+  onCreateDirectory?: () => void
+  /** 行级「重命名」 */
+  onRename?: (entry: FileEntry) => void
 }
 
 /** 文件大小格式化：B / KB / MB 一位小数 */

@@ -8,6 +8,7 @@ import { useQuery } from '@tanstack/react-query'
 import { apiGet } from './client'
 import { useConnectionStore } from '@/stores/connection'
 import type { InstanceStatus, InstanceSummary, LogEntry, OverviewData, SystemStats } from './types'
+import { apiGetAuditLogsPage, apiGetCommandHistoryPage, type AuditQueryParams } from './audit'
 
 // ── Query key 工厂（分层规范，防冲突）───────────────────────────
 export const queryKeys = {
@@ -27,6 +28,8 @@ export const queryKeys = {
     [...queryKeys.all, 'files', id, 'content', filePath] as const,
   world: (id: string) => [...queryKeys.all, 'world', id] as const,
   properties: (id: string) => [...queryKeys.all, 'properties', id] as const,
+  auditLogs: (params?: AuditQueryParams) => [...queryKeys.all, 'audit-logs', params ?? {}] as const,
+  commandHistory: (params?: AuditQueryParams) => [...queryKeys.all, 'command-history', params ?? {}] as const,
 }
 
 /** 面板概览（含云服务器系统级资源；未配置连接时禁用） */
@@ -84,5 +87,27 @@ export function useInstanceLogs(instanceId: string, lines = 200) {
       apiGet<LogEntry[]>(`/api/v1/instances/${instanceId}/logs?lines=${lines}`, config, signal),
     enabled: config.status === 'ready' && Boolean(instanceId),
     staleTime: 5_000,
+  })
+}
+
+/** 审计日志（信封级分页；keepPreviousData 翻页不闪烁） */
+export function useAuditLogs(params: AuditQueryParams = {}) {
+  const config = useConnectionStore()
+  return useQuery({
+    queryKey: queryKeys.auditLogs(params),
+    queryFn: ({ signal }) => apiGetAuditLogsPage(config, params, signal),
+    enabled: config.status === 'ready',
+    placeholderData: (prev) => prev,
+  })
+}
+
+/** 命令历史（信封级分页；keepPreviousData 翻页不闪烁） */
+export function useCommandHistory(params: AuditQueryParams = {}) {
+  const config = useConnectionStore()
+  return useQuery({
+    queryKey: queryKeys.commandHistory(params),
+    queryFn: ({ signal }) => apiGetCommandHistoryPage(config, params, signal),
+    enabled: config.status === 'ready',
+    placeholderData: (prev) => prev,
   })
 }

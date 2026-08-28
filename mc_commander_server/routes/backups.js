@@ -1,7 +1,11 @@
 import { Router } from 'express';
+import { spawn } from 'child_process';
+import path from 'path';
+import fs from 'fs';
 import { success, successPaginated, ErrorCodes, AppError } from '../utils/response.js';
 import { BackupModel } from '../db/backup.model.js';
-import { BackupService } from '../services/backup.service.js';
+import { BackupService, resolveContained } from '../services/backup.service.js';
+import { recordAudit, AuditActions } from '../utils/audit.js';
 import config from '../config.js';
 
 // async 路由包装：Express 4 不捕获中间件/路由返回的 Promise rejection。
@@ -83,6 +87,7 @@ export function createBackupRoutes(serverManager) {
       type: 'manual',
     });
 
+    recordAudit({ instanceId, action: AuditActions.BACKUP_CREATE, targetType: 'backup', targetId: String(backup.id) });
     res.status(201).json(success(backup, 'Backup created successfully'));
   }));
 
@@ -113,6 +118,7 @@ export function createBackupRoutes(serverManager) {
     // restoreBackup 同步段完成校验与 status='restoring' 互斥锁置位后
     // 快速返回（恢复实际在后台执行，进度经 restoreStart/restoreComplete/
     // restoreFailed 事件推送）——大世界解压不再受客户端 10s 超时误杀
+    recordAudit({ instanceId: backup.instanceId, action: AuditActions.BACKUP_RESTORE, targetType: 'backup', targetId: req.params.id });
     await backupService.restoreBackup(req.params.id);
 
     res.status(202).json(success(null, 'Restore started'));
@@ -131,11 +137,50 @@ export function createBackupRoutes(serverManager) {
       throw new AppError(ErrorCodes.BACKUP_IN_PROGRESS);
     }
 
+    recordAudit({ instanceId: backup.instanceId, action: AuditActions.BACKUP_DELETE, targetType: 'backup', targetId: req.params.id });
     await backupService.deleteBackup(req.params.id);
     res.json(success(null, 'Backup deleted successfully'));
   }));
 
+  // feat-1: 备份下载（流式 tar.gz）
+  // 安全链：findByIdWithPath（不泄露 file_path）→ resolveContained（目录包含 + symlink 复检）→
+  // spawn 数组参数（无 shell 注入）→ 仅 completed + snapshot 可下载
+  router.get('/backups/:id/download', asyncHandler(async (req, res) => {
+    const backup = BackupModel.findByIdWithPath(req.params.id);
+    if (!backup) {
+      throw new AppError(ErrorCodes.BACKUP_NOT_FOUND);
+    }
+    if (backup.status !== 'completed') {
+      throw new AppError(ErrorCodes.VALIDATION_ERROR);
+    }
+    if (backup.format === 'zip') {
+      throw new AppError(ErrorCodes.BACKUP_FORMAT_UNSUPPORTED);
+    }
+    // 路径安全：resolveContained 会 realpath 复检 symlink 逃逸
+    const resolvedDir = resolveContained(config.backupsDir, backup.file_path);
+    if (!fs.existsSync(resolvedDir)) {
+      throw new AppError(ErrorCodes.BACKUP_NOT_FOUND);
+    }
+    const dirName = path.basename(resolvedDir);
+    res.setHeader('Content-Type', 'application/gzip');
+    res.setHeader('Content-Disposition', contentDisposition(dirName));
+    const tar = spawn('tar', ['-czf', '-', '-C', resolvedDir, '.']);
+    tar.stdout.pipe(res);
+    tar.stderr.on('data', (d) => console.warn('[backup-download] tar stderr:', d.toString()));
+    tar.on('error', (err) => {
+      if (!res.headersSent) res.status(500).json({ status: 'error', code: 50000, message: err.message });
+      else res.destroy();
+    });
+  }));
+
   return router;
+}
+
+/** RFC 5987 Content-Disposition：中文文件名 URL 编码 + ASCII 回退 */
+function contentDisposition(filename) {
+  const encoded = encodeURIComponent(filename).replace(/'/g, "'%27");
+  const ascii = filename.replace(/[^\x20-\x7E]/g, '_');
+  return `attachment; filename="${ascii}"; filename*=UTF-8''${encoded}`;
 }
 
 export default createBackupRoutes;
