@@ -686,11 +686,11 @@ export const handlers = [
   http.get('*/api/v1/auth/status', () => ok({ hasPassword: true })),
   // 密码登录（固定测试凭据）
   http.post('*/api/v1/auth/login', async () =>
-    ok({ token: 'mock-session-token-0123456789abcdef', sessionId: 1, expiresAt: new Date(Date.now() + 7 * 86_400_000).toISOString() }),
+    ok({ token: 'mock-session-token-0123456789abcdef', sessionId: 'sess-mock-1', expiresAt: new Date(Date.now() + 7 * 86_400_000).toISOString() }),
   ),
   // 首访设密（同登录响应）
   http.post('*/api/v1/auth/setup', async () =>
-    ok({ hasPassword: true, token: 'mock-session-token-0123456789abcdef', sessionId: 1, expiresAt: new Date(Date.now() + 7 * 86_400_000).toISOString() }),
+    ok({ hasPassword: true, token: 'mock-session-token-0123456789abcdef', sessionId: 'sess-mock-1', expiresAt: new Date(Date.now() + 7 * 86_400_000).toISOString() }),
   ),
   // 活跃会话列表
   http.get('*/api/v1/auth/sessions', () =>

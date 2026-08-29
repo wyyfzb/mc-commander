@@ -12,7 +12,7 @@ const SESSION_STORAGE_KEY = 'mcs-session'
 /** 服务端 /auth/login|setup 返回的会话凭据 */
 export interface StoredSession {
   token: string
-  sessionId: number
+  sessionId: string
   /** ISO 时间；过期后服务端返回 40103，由全局拦截清会话跳登录 */
   expiresAt: string
 }
@@ -24,7 +24,7 @@ function readInitialSession(): StoredSession | null {
     const parsed = JSON.parse(raw) as Partial<StoredSession>
     if (
       typeof parsed.token === 'string' &&
-      typeof parsed.sessionId === 'number' &&
+      typeof parsed.sessionId === 'string' &&
       typeof parsed.expiresAt === 'string'
     ) {
       return { token: parsed.token, sessionId: parsed.sessionId, expiresAt: parsed.expiresAt }

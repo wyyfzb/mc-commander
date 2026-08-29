@@ -389,7 +389,7 @@ const server = createServer((req, res) => {
       return res.end(ok({ hasPassword: !fresh }))
     }
     if (path === '/api/v1/auth/login' && req.method === 'POST') {
-      const mockSession = { token: 'e2e-mock-session-token-0000000001', sessionId: 1, expiresAt: new Date(Date.now() + 7 * 86400000).toISOString() }
+      const mockSession = { token: 'e2e-mock-session-token-0000000001', sessionId: 'sess-mock-1', expiresAt: new Date(Date.now() + 7 * 86400000).toISOString() }
       try {
         const { password } = JSON.parse(body || '{}')
         if (password !== 'e2e-correct-pass') {
@@ -400,7 +400,7 @@ const server = createServer((req, res) => {
       return res.end(ok(mockSession))
     }
     if (path === '/api/v1/auth/setup' && req.method === 'POST') {
-      return res.end(ok({ hasPassword: true, token: 'e2e-mock-session-token-0000000001', sessionId: 1, expiresAt: new Date(Date.now() + 7 * 86400000).toISOString() }))
+      return res.end(ok({ hasPassword: true, token: 'e2e-mock-session-token-0000000001', sessionId: 'sess-mock-1', expiresAt: new Date(Date.now() + 7 * 86400000).toISOString() }))
     }
     if (path === '/api/v1/auth/sessions') {
       return res.end(ok({ sessions: [{ id: 1, userAgent: 'Playwright E2E', ip: '127.0.0.1', createdAt: new Date().toISOString(), lastSeenAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 6 * 86400000).toISOString(), current: true }] }))
