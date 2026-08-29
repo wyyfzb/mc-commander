@@ -767,3 +767,65 @@ export interface PluginUploadResult {
   /** 是否覆盖了同名旧文件（overwrite=true 时可能为 true） */
   overwritten: boolean
 }
+
+// ── 插件市场（feat-8 延伸：Modrinth 代理，对照 services/market.service.js）──
+
+/** GET /instances/:id/plugins/market/search 单条结果 */
+export interface MarketSearchHit {
+  projectId: string | null
+  slug: string | null
+  title: string | null
+  description: string | null
+  author: string | null
+  downloads: number
+  follows: number
+  iconUrl: string | null
+  dateModified: string | null
+  categories: string[]
+  serverSide: string | null
+  clientSide: string | null
+}
+
+/** GET /instances/:id/plugins/market/search 响应 */
+export interface MarketSearchResult {
+  totalHits: number
+  hits: MarketSearchHit[]
+  /** 是否命中服务端 60s TTL 缓存（展示层可提示数据新鲜度） */
+  cached: boolean
+}
+
+/** 版本 primary 文件（服务端已过滤无文件版本） */
+export interface MarketVersionFile {
+  url: string | null
+  filename: string
+  size: number
+}
+
+/** GET /instances/:id/plugins/market/projects/:slug/versions 单版本 */
+export interface MarketVersion {
+  versionNumber: string
+  versionType: 'release' | 'beta' | 'alpha' | null
+  name: string | null
+  changelog: string | null
+  datePublished: string | null
+  downloads: number
+  gameVersions: string[]
+  loaders: string[]
+  file: MarketVersionFile
+}
+
+/** GET /instances/:id/plugins/market/projects/:slug/versions 响应 */
+export interface MarketVersionsResult {
+  projectSlug: string
+  versions: MarketVersion[]
+  cached: boolean
+}
+
+/** POST /instances/:id/plugins/market/install 响应（新建 201 / 覆盖 200） */
+export interface MarketInstallResult extends PluginUploadResult {
+  slug: string
+  versionNumber: string
+  source: 'modrinth' | string
+  /** Modrinth 原始文件名（落盘文件名经服务端安全净化，可能与之不同） */
+  originalFileName: string
+}

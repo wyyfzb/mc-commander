@@ -63,6 +63,11 @@ export const ErrorCode = {
   PLUGIN_NOT_FOUND: 40411,
   PLUGIN_STATE_CONFLICT: 40910,
   PLUGIN_FILE_EXISTS: 40912,
+
+  // 插件市场（feat-8 延伸：Modrinth 代理）
+  MARKET_PROJECT_NOT_FOUND: 40412,
+  MARKET_VERSION_NOT_FOUND: 40413,
+  MARKET_UPSTREAM_ERROR: 50301,
 } as const
 
 export type ErrorCodeValue = (typeof ErrorCode)[keyof typeof ErrorCode]
@@ -108,6 +113,9 @@ const LOCALIZED_MESSAGES: Partial<Record<ErrorCodeValue, string>> = {
   [ErrorCode.PLUGIN_NOT_FOUND]: '插件文件不存在（可能已被删除或改名）',
   [ErrorCode.PLUGIN_STATE_CONFLICT]: '插件状态冲突（可能已在目标状态或同名文件存在）',
   [ErrorCode.PLUGIN_FILE_EXISTS]: '同名插件文件已存在，可选择覆盖上传',
+  [ErrorCode.MARKET_PROJECT_NOT_FOUND]: '插件市场：Modrinth 上未找到该项目（可能已下架）',
+  [ErrorCode.MARKET_VERSION_NOT_FOUND]: '插件市场：Modrinth 上未找到该版本',
+  [ErrorCode.MARKET_UPSTREAM_ERROR]: '插件市场：Modrinth 服务暂时不可用，请稍后再试',
 }
 
 /** 服务端已本地化的错误码（message 直接透传，不覆盖） */

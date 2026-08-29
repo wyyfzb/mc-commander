@@ -19,6 +19,7 @@ import {
   PowerOff,
   RefreshCw,
   Search,
+  Store,
   Trash2,
   X,
 } from 'lucide-react'
@@ -46,6 +47,7 @@ import { EmptyState } from '@/components/mcs/empty-state'
 import { formatFileSize, formatModifiedAt } from '@/lib/mc-files'
 import { useServerStore } from '@/stores/server'
 import { useConnectionStore } from '@/stores/connection'
+import { MarketSheet } from './market-sheet'
 import { useDeletePlugin, usePlugins, useTogglePlugin } from './queries'
 
 /** 同名冲突上下文：触发冲突的文件 + 上传队列剩余文件（确认覆盖后继续） */
@@ -80,6 +82,8 @@ export function PluginsPage() {
   const [conflict, setConflict] = useState<UploadConflict | null>(null)
   /** 拖放悬停高亮 */
   const [dragActive, setDragActive] = useState(false)
+  /** 插件市场侧滑面板 */
+  const [marketOpen, setMarketOpen] = useState(false)
   const uploadAbortRef = useRef<AbortController | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   /** 拖放嵌套计数（子元素 dragleave 会误触发，用计数法） */
@@ -416,6 +420,16 @@ export function PluginsPage() {
           <ArrowUpFromLine className="size-3.5" aria-hidden />
           上传插件
         </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setMarketOpen(true)}
+          aria-label="打开插件市场"
+          data-testid="open-market"
+        >
+          <Store className="size-3.5" aria-hidden />
+          插件市场
+        </Button>
       </div>
 
       {/* ── 上传进度条（顺序队列，可取消） ── */}
@@ -530,6 +544,12 @@ export function PluginsPage() {
             }
             action={{ label: '上传插件', onClick: () => fileInputRef.current?.click() }}
           />
+          <div className="mt-3 flex justify-center">
+            <Button variant="link" size="sm" onClick={() => setMarketOpen(true)} data-testid="open-market-empty">
+              <Store className="size-3.5" aria-hidden />
+              或从插件市场一键安装
+            </Button>
+          </div>
         </div>
       ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center gap-1.5 px-4 py-12 text-center text-mcs-text-muted">
@@ -609,6 +629,13 @@ export function PluginsPage() {
         }}
         onToggle={(p, enabled) => void handleToggle(p, enabled)}
         toggling={detail !== null && togglingFile === detail.file}
+      />
+
+      {/* ── 插件市场（Modrinth 一键安装，feat-8 延伸） ── */}
+      <MarketSheet
+        open={marketOpen}
+        onOpenChange={setMarketOpen}
+        instanceId={instanceId}
       />
     </div>
   )
