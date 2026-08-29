@@ -177,6 +177,89 @@ describe('FileList', () => {
     expect(row.className).toContain('bg-mcs-accent-bg-subtle')
   })
 
+  // ── feat-9：二进制编辑保护 + 行级下载 ──
+
+  /** 含二进制文件的列表项（server.jar / level.dat 混入常规文本文件） */
+  const binaryFiles = [
+    { name: 'server.jar', path: '/server.jar', type: 'file', size: 4096, modifiedAt: '2026-08-01T00:00:00Z', isDirectory: false },
+    { name: 'level.dat', path: '/level.dat', type: 'file', size: 8192, modifiedAt: '2026-08-01T00:00:00Z', isDirectory: false },
+    { name: 'server.properties', path: '/server.properties', type: 'file', size: 100, modifiedAt: '2026-08-01T00:00:00Z', isDirectory: false },
+  ] as const
+
+  function useBinaryList() {
+    server.use(
+      http.get('*/api/v1/instances/:id/files', () =>
+        ok({ path: '/', isDirectory: true, files: [...binaryFiles] }),
+      ),
+    )
+  }
+
+  it('二进制文件不渲染编辑按钮（feat-9 编辑保护），文本文件正常', async () => {
+    useBinaryList()
+    renderWithClient(<FileList {...baseFileListProps} />)
+    await screen.findByRole('button', { name: '文件 server.jar（二进制，可下载）' })
+    expect(screen.queryByRole('button', { name: '编辑 server.jar' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '编辑 level.dat' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '编辑 server.properties' })).toBeInTheDocument()
+  })
+
+  it('二进制文件行单击不触发 onSelectFile（仅可下载）', async () => {
+    useBinaryList()
+    const onSelectFile = vi.fn()
+    renderWithClient(<FileList {...baseFileListProps} onSelectFile={onSelectFile} />)
+    fireEvent.click(await screen.findByRole('button', { name: '文件 server.jar（二进制，可下载）' }))
+    expect(onSelectFile).not.toHaveBeenCalled()
+    // 文本文件行单击不受影响
+    fireEvent.click(screen.getByRole('button', { name: '选择文件 server.properties' }))
+    expect(onSelectFile).toHaveBeenCalledWith('/server.properties')
+  })
+
+  it('下载按钮：文件行渲染、目录行不渲染、点击回调 onDownload', async () => {
+    useBinaryList()
+    const onDownload = vi.fn()
+    // 混入一个目录验证目录无下载按钮
+    server.use(
+      http.get('*/api/v1/instances/:id/files', () =>
+        ok({
+          path: '/',
+          isDirectory: true,
+          files: [
+            { name: 'world', path: '/world', type: 'directory', size: 0, modifiedAt: '2026-08-01T00:00:00Z', isDirectory: true },
+            ...binaryFiles,
+          ],
+        }),
+      ),
+    )
+    renderWithClient(<FileList {...baseFileListProps} onDownload={onDownload} />)
+    await screen.findByRole('button', { name: '下载 server.jar' })
+    expect(screen.getByRole('button', { name: '下载 level.dat' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '下载 server.properties' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '下载 world' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '下载 server.jar' }))
+    expect(onDownload).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'server.jar', path: '/server.jar' }),
+    )
+  })
+
+  it('未提供 onDownload 时不渲染下载按钮（向后兼容）', async () => {
+    useBinaryList()
+    renderWithClient(<FileList {...baseFileListProps} />)
+    await screen.findByRole('button', { name: '文件 server.jar（二进制，可下载）' })
+    expect(screen.queryByRole('button', { name: '下载 server.jar' })).not.toBeInTheDocument()
+  })
+
+  it('下载中（downloadingPath 命中）→ 按钮 disabled + spinner 图标', async () => {
+    useBinaryList()
+    renderWithClient(
+      <FileList {...baseFileListProps} onDownload={vi.fn()} downloadingPath="/server.jar" />,
+    )
+    const btn = await screen.findByRole('button', { name: '下载 server.jar' })
+    expect(btn).toBeDisabled()
+    expect(btn.querySelector('.animate-spin')).not.toBeNull()
+    // 其他行不受影响
+    expect(screen.getByRole('button', { name: '下载 level.dat' })).toBeEnabled()
+  })
+
   it('面包屑：根 Home + 逐级可点，末级加粗 aria-current', async () => {
     const onOpenDir = vi.fn()
     renderWithClient(<FileList {...baseFileListProps} dir="/world/region" onOpenDir={onOpenDir} />)

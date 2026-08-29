@@ -6,7 +6,8 @@
  * - 行：图标（目录 folder 黄色 --mcs-warning-fg；文件按扩展名映射）+ 名称 + 副行
  *   （目录「文件夹 · MM-DD HH:mm」/ 文件「大小 · 修改时间」，B/KB/MB 一位小数格式化在组件内）
  * - 目录行单击 onOpenDir 进入；文件行单击 onSelectFile（选中态 bg-accent-bg-subtle）；
- *   行尾操作：文件有编辑按钮（同 onSelectFile 打开编辑器），全部有删除按钮（error 色）
+ *   行尾操作：可编辑文件有编辑按钮（二进制文件不提供——防误入文本编辑器，
+ *   feat-9 编辑保护），全部文件有下载按钮（目录无），全部有删除按钮（error 色）
  * - 空态：根目录「该实例根目录下没有文件」/ 子目录「此文件夹为空」；加载显示 Skeleton 行
  * - 设计纪律：全部 --mcs-* 语义 token；表格/列表实底，禁硬编码色值/间距/圆角
  */
@@ -16,6 +17,7 @@ import {
   ArrowUp,
   Braces,
   ChevronRight,
+  Download,
   File,
   FilePlus,
   FileText,
@@ -24,6 +26,7 @@ import {
   Home,
   Image,
   Inbox,
+  Loader2,
   Pencil,
   RefreshCw,
   Settings,
@@ -35,7 +38,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
-import { fileIconName, formatFileSize, formatModifiedAt } from '@/lib/mc-files'
+import { fileIconName, formatFileSize, formatModifiedAt, isEditableFile } from '@/lib/mc-files'
 import { useFileList } from '../queries'
 import type { FileEntry } from '@/api/types'
 
@@ -63,6 +66,10 @@ export interface FileListProps {
   onCreateDirectory?: () => void
   /** 行级「重命名」 */
   onRename?: (entry: FileEntry) => void
+  /** 行级「下载」（文件行） */
+  onDownload?: (entry: FileEntry) => void
+  /** 正在下载的文件路径（null = 无下载进行中） */
+  downloadingPath?: string | null
 }
 
 /** 文件大小格式化 → src/lib/mc-files.ts（fast-refresh 合规） */
@@ -85,22 +92,37 @@ interface FileListRowProps {
   onDelete: (entry: FileEntry) => void
   /** 行级「重命名」（未提供则不渲染按钮） */
   onRename?: (entry: FileEntry) => void
+  /** 行级「下载」（文件行；未提供则不渲染按钮） */
+  onDownload?: (entry: FileEntry) => void
+  /** 正在下载的文件路径（行内按钮转 spinner 并禁用） */
+  downloadingPath: string | null
 }
 
-function FileListRow({ entry, isSelected, onSelectFile, onOpenDir, onDelete, onRename }: FileListRowProps) {
+function FileListRow({
+  entry,
+  isSelected,
+  onSelectFile,
+  onOpenDir,
+  onDelete,
+  onRename,
+  onDownload,
+  downloadingPath,
+}: FileListRowProps) {
   const Icon = FILE_ICONS[fileIconName(entry)] ?? File
   const isDir = entry.isDirectory
+  const editable = isEditableFile(entry)
+  const isDownloading = !isDir && entry.path === downloadingPath
 
   const handleRowClick = () => {
     if (isDir) onOpenDir(entry.path)
-    else onSelectFile(entry.path)
+    else if (editable) onSelectFile(entry.path)
   }
 
   return (
     <div
       role="button"
       tabIndex={0}
-      aria-label={isDir ? `打开目录 ${entry.name}` : `选择文件 ${entry.name}`}
+      aria-label={isDir ? `打开目录 ${entry.name}` : editable ? `选择文件 ${entry.name}` : `文件 ${entry.name}（二进制，可下载）`}
       onClick={handleRowClick}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -126,11 +148,12 @@ function FileListRow({ entry, isSelected, onSelectFile, onOpenDir, onDelete, onR
             : `${formatFileSize(entry.size)} · ${formatModifiedAt(entry.modifiedAt)}`}
         </div>
       </div>
-      {!isDir && (
+      {!isDir && editable && (
         <Button
           variant="ghost"
           size="icon-sm"
           aria-label={`编辑 ${entry.name}`}
+          title="编辑"
           className="text-mcs-text-muted hover:text-mcs-text-default"
           onClick={(e) => {
             e.stopPropagation()
@@ -138,6 +161,26 @@ function FileListRow({ entry, isSelected, onSelectFile, onOpenDir, onDelete, onR
           }}
         >
           <Pencil className="size-3.5" aria-hidden />
+        </Button>
+      )}
+      {!isDir && onDownload && (
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label={`下载 ${entry.name}`}
+          title="下载到本地"
+          disabled={isDownloading}
+          className="text-mcs-text-muted hover:text-mcs-text-default"
+          onClick={(e) => {
+            e.stopPropagation()
+            onDownload(entry)
+          }}
+        >
+          {isDownloading ? (
+            <Loader2 className="size-3.5 animate-spin" aria-hidden />
+          ) : (
+            <Download className="size-3.5" aria-hidden />
+          )}
         </Button>
       )}
       {onRename && (
@@ -184,6 +227,8 @@ export function FileList({
   onUpload,
   onCreateDirectory,
   onRename,
+  onDownload,
+  downloadingPath = null,
 }: FileListProps) {
   const { data, isLoading, isError } = useFileList(instanceId, dir)
 
@@ -337,6 +382,8 @@ export function FileList({
                 onOpenDir={onOpenDir}
                 onDelete={onDelete}
                 onRename={onRename}
+                onDownload={onDownload}
+                downloadingPath={downloadingPath}
               />
             ))}
           </div>

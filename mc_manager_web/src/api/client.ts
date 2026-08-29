@@ -225,6 +225,118 @@ export function apiDelete<T>(path: string, config: ConnectionConfig): Promise<T>
   return apiRequest<T>(path, config, { method: 'DELETE' })
 }
 
+export interface DownloadOptions {
+  /** 下载进度回调（0-100 整数，基于已接收字节 / Content-Length） */
+  onProgress?: (pct: number) => void
+  /** 取消下载（用户主动中止） */
+  signal?: AbortSignal
+}
+
+export interface DownloadResult {
+  blob: Blob
+  /** 服务端 Content-Disposition 解析出的文件名（缺失时返回 null，由调用方回退） */
+  fileName: string | null
+}
+
+/** Content-Disposition 文件名解析：RFC 5987 filename* 优先，filename= 回退 */
+function fileNameFromDisposition(header: string | null): string | null {
+  if (!header) return null
+  const rfc5987 = /filename\*=(?:UTF-8'')?([^;]+)/i.exec(header)?.[1]
+  if (rfc5987) {
+    try {
+      return decodeURIComponent(rfc5987.trim().replace(/^"|"$/g, ''))
+    } catch {
+      // 编码异常回退到 filename=
+    }
+  }
+  const plain =
+    /filename="([^"]+)"/.exec(header)?.[1] ?? /filename=([^;]+)/.exec(header)?.[1]
+  return plain ? plain.trim() : null
+}
+
+/**
+ * 文件下载（feat-9 文件管理器增强）：
+ * - fetch 而非 window.open：需注入双通道凭据（Bearer 会话 / X-API-Key）+ 网关
+ *   XTransformPort 适配；window.open 场景下会话令牌无法附带必然 401
+ * - 流式读取（ReadableStream）而非直接 res.blob()：支持下载进度回调
+ *   （world/备份等大文件全量 blob 无进度会让用户以为卡死）
+ * - 错误响应仍是 JSON 信封（application/json），按 content-type 分支解析，
+ *   错误码语义（含 40103 会话过期处置）与 apiRequest 一致
+ * - 超时 10 分钟兜底；用户取消走 signal → AbortError → NetworkError('下载已取消')
+ */
+export async function apiDownloadFile(
+  path: string,
+  config: ConnectionConfig,
+  options: DownloadOptions = {},
+): Promise<DownloadResult> {
+  const timeout = new AbortController()
+  const timer = setTimeout(() => timeout.abort(), 600_000)
+  // 外部 signal 中止转发到内部 controller（fetch 只接受单一 signal）
+  const onExternalAbort = () => timeout.abort()
+  options.signal?.addEventListener('abort', onExternalAbort, { once: true })
+
+  try {
+    const res = await fetch(buildUrl(config, path), {
+      method: 'GET',
+      headers: {
+        ...buildAuthHeaders(),
+        ...(!hasSessionToken() && config.apiKey ? { 'X-API-Key': config.apiKey } : {}),
+      },
+      signal: timeout.signal,
+    })
+
+    if (!res.ok) {
+      if (res.headers.get('content-type')?.includes('application/json')) {
+        try {
+          const errPayload = (await res.json()) as ApiErrorEnvelope
+          if (errPayload.status === 'error') {
+            if (errPayload.code === AUTH_SESSION_EXPIRED_CODE) handleSessionExpired()
+            throw new ApiError(errPayload.code, res.status, errPayload.message, errPayload.details)
+          }
+        } catch (e) {
+          if (e instanceof ApiError) throw e
+        }
+      }
+      throw new NetworkError(`下载失败（HTTP ${res.status}）`)
+    }
+
+    const fileName = fileNameFromDisposition(res.headers.get('Content-Disposition'))
+    const total = Number(res.headers.get('Content-Length') ?? 0)
+
+    let blob: Blob
+    if (res.body && options.onProgress && total > 0) {
+      const reader = res.body.getReader()
+      const chunks: Uint8Array[] = []
+      let loaded = 0
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        chunks.push(value)
+        loaded += value.length
+        options.onProgress(Math.min(100, Math.round((loaded / total) * 100)))
+      }
+      blob = new Blob(chunks as BlobPart[])
+    } else {
+      blob = await res.blob()
+      options.onProgress?.(100)
+    }
+
+    return { blob, fileName }
+  } catch (e) {
+    if (e instanceof ApiError) throw e
+    if (e instanceof DOMException && e.name === 'AbortError') {
+      throw new NetworkError(options.signal?.aborted ? '下载已取消' : '下载超时，请检查网络连接')
+    }
+    if (e instanceof TypeError) {
+      throw new NetworkError('网络连接失败，请检查面板地址与服务器状态', { cause: e })
+    }
+    throw e
+  } finally {
+    clearTimeout(timer)
+    options.signal?.removeEventListener('abort', onExternalAbort)
+  }
+}
+
 export interface UploadOptions {
   /** multipart 字段名（默认 'file'） */
   fieldName?: string
