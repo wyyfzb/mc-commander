@@ -7,7 +7,7 @@
 <h1 align="center">MC_Commander</h1>
 <p align="center">自托管 Minecraft 服务器管理面板 — 图形化免命令管理你的 MC 服务器（预览版）</p>
 
-MC_Commander 是一个自托管的 Minecraft 服务器管理工具。**核心定位：图形化界面拼装指令，服主无需手敲任何 MC 命令**——可视化给予物品（含附魔/药水）、传送、封禁、踢出等操作全部由面板自动生成指令。架构为 **Web 前端（React 19）+ Node.js 服务端（Express + WebSocket + better-sqlite3）**，浏览器直接访问即用。国内用户可访问 gitee 镜像仓库（`https://gitee.com/wyyfzb/mc-commander`，分支/标签自动同步，Release 附件不随镜像）。
+MC_Commander 是一个自托管的 Minecraft 服务器管理工具。**核心定位：图形化界面拼装指令，服主无需手敲任何 MC 命令**——可视化给予物品（含附魔/药水）、传送、封禁、踢出等操作全部由面板自动生成指令。架构为 **Web 前端（React 19）+ Node.js 服务端（Express + WebSocket + better-sqlite3）**，浏览器直接访问即用。愿景：覆盖 MC 服务器全生命周期——建服、运营、扩展、排障、迁移——以友好直观的界面与交互，打造高效、省心、值得信赖的服务器控制面板。国内用户可访问 gitee 镜像仓库（`https://gitee.com/wyyfzb/mc-commander`，分支/标签自动同步，Release 附件不随镜像）。
 
 ---
 
