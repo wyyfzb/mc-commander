@@ -6,14 +6,20 @@ import path from 'path';
 import { success, error, AppError, ErrorCodes } from '../utils/response.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
 import { listPlugins, setPluginEnabled, deletePlugin, uploadPlugin } from '../services/plugin.service.js';
+import { searchMarketPlugins, getMarketProjectVersions, installPluginFromMarket } from '../services/market.service.js';
 import config from '../config.js';
 
 /**
- * 插件管理路由（feat-8 P0-5 最小闭环 + 上传延伸）
+ * 插件管理路由（feat-8 P0-5 最小闭环 + 上传延伸 + Modrinth 市场延伸）
  * GET    /api/v1/instances/:id/plugins                    —— 列表（含元数据与启停状态）
  * POST   /api/v1/instances/:id/plugins/upload             —— 上传插件 jar（multipart 字段 file；?overwrite=true 显式覆盖）
  * PUT    /api/v1/instances/:id/plugins/:file/enabled      —— 启用/禁用（body: {enabled}）
  * DELETE /api/v1/instances/:id/plugins/:file              —— 删除插件 jar
+ *
+ * 市场延伸（Modrinth 代理，注册在 :file 参数路由之前避免匹配冲突）：
+ * GET  /api/v1/instances/:id/plugins/market/search                       —— 搜索（q/offset/limit/game_version/loader）
+ * GET  /api/v1/instances/:id/plugins/market/projects/:slug/versions      —— 版本列表（game_version/loader）
+ * POST /api/v1/instances/:id/plugins/market/install                      —— 一键安装（body: {slug, versionNumber}；?overwrite=true）
  *
  * 设计要点：
  * - :file 为白名单文件名（见 plugin.service PLUGIN_FILE_REGEX），非任意路径
@@ -21,6 +27,9 @@ import config from '../config.js';
  * - 上传：multer 磁盘缓冲（系统 tmpdir）+ zip 魔数校验；同名默认 40912 拒绝，
  *   显式 overwrite=true 才替换（插件升级/降级是高影响操作，必须用户显式确认，
  *   与文件页「同名静默覆盖」策略刻意不同）
+ * - 市场：服务端代理 Modrinth（60s TTL 缓存尊重上游限速），下载 URL 服务端重
+ *   新解析（不信任客户端传入）+ CDN 域名白名单；安装落盘复用 uploadPlugin
+ *   （同一套 zip 魔数/白名单/40912 语义）；审计 PLUGIN_MARKET_INSTALL
  * - 服务器运行中允许启停/删除（Bukkit 仅在启动时加载插件），前端提示重启生效
  */
 
@@ -76,6 +85,77 @@ export function createPluginRoutes(serverManager) {
     if (!instance) return null;
     return instance.serverPath || path.join(config.serversDir, id);
   }
+
+  // ── 市场延伸（feat-8）：必须在 :file 参数路由之前注册 ──────────
+
+  // GET /api/v1/instances/:id/plugins/market/search?q=&offset=&limit=&game_version=&loader=
+  router.get('/instances/:id/plugins/market/search', async (req, res, next) => {
+    try {
+      const serverPath = requireInstance(req.params.id);
+      if (!serverPath) {
+        return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND, 'Instance not found'));
+      }
+      const result = await searchMarketPlugins({
+        query: req.query.q,
+        offset: typeof req.query.offset === 'string' ? Number.parseInt(req.query.offset, 10) : 0,
+        limit: typeof req.query.limit === 'string' ? Number.parseInt(req.query.limit, 10) : 20,
+        gameVersion: req.query.game_version ?? null,
+        loader: req.query.loader ?? null,
+      });
+      res.json(success(result));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // GET /api/v1/instances/:id/plugins/market/projects/:slug/versions?game_version=&loader=
+  router.get('/instances/:id/plugins/market/projects/:slug/versions', async (req, res, next) => {
+    try {
+      const serverPath = requireInstance(req.params.id);
+      if (!serverPath) {
+        return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND, 'Instance not found'));
+      }
+      const result = await getMarketProjectVersions(req.params.slug, {
+        gameVersion: req.query.game_version ?? null,
+        loader: req.query.loader ?? null,
+      });
+      res.json(success(result));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // POST /api/v1/instances/:id/plugins/market/install  body: { slug, versionNumber }；?overwrite=true 显式覆盖
+  router.post('/instances/:id/plugins/market/install', async (req, res, next) => {
+    try {
+      const { id } = req.params;
+      const serverPath = requireInstance(id);
+      if (!serverPath) {
+        return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND, 'Instance not found'));
+      }
+      const { slug, versionNumber } = req.body || {};
+      const overwrite = req.query.overwrite === 'true';
+      const result = await installPluginFromMarket(serverPath, { slug, versionNumber }, { overwrite });
+      recordAudit({
+        instanceId: id,
+        action: AuditActions.PLUGIN_MARKET_INSTALL,
+        targetType: 'plugin',
+        targetId: result.file,
+        detail: {
+          source: 'modrinth',
+          slug: result.slug,
+          versionNumber: result.versionNumber,
+          sizeBytes: result.sizeBytes,
+          overwritten: result.overwritten,
+        },
+      });
+      res.status(result.overwritten ? 200 : 201).json(success(result));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // ── 既有插件端点（feat-8 P0-5 最小闭环 + 上传延伸）────────────
 
   // GET /api/v1/instances/:id/plugins
   router.get('/instances/:id/plugins', (req, res, next) => {
