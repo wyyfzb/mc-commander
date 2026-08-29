@@ -59,6 +59,9 @@ const PAGE_SIZE = 20
 const SEARCH_DEBOUNCE_MS = 400
 const MAX_VISIBLE_VERSIONS = 5
 
+/** Bukkit 系加载器（版本行 loader chip 的高亮集合；其余显示为 muted） */
+const BUKKIT_LOADERS = new Set(['paper', 'spigot', 'bukkit', 'purpur', 'folia'])
+
 const LOADER_OPTIONS = [
   { value: '', label: '全部加载器' },
   { value: 'paper', label: 'Paper' },
@@ -565,6 +568,12 @@ function MarketHitCard({
                       <Chip tone="error">Alpha</Chip>
                     ) : null}
                     {installedSameFile(v) && <Chip tone="muted">同名已安装</Chip>}
+                    {/* loader 标签：区分 bukkit 系 / fabric / neoforge 构建产物 */}
+                    {v.loaders.slice(0, 4).map((l) => (
+                      <Chip key={l} tone={BUKKIT_LOADERS.has(l) ? 'info' : 'muted'}>
+                        {l}
+                      </Chip>
+                    ))}
                     <span className="text-mcs-xs text-mcs-text-subtle">
                       {formatFileSize(v.file.size)}
                       {v.datePublished && ` · ${formatRelativeTime(v.datePublished)}`}
