@@ -4,8 +4,7 @@
  * - MarketSheet initialQuery：打开时预填搜索词（更新徽章 → 市场直达），关闭后清预填
  */
 import { describe, it, expect, beforeEach, afterEach, afterAll, beforeAll } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
+import { render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { setupServer } from 'msw/node'
 import { http, HttpResponse } from 'msw'
