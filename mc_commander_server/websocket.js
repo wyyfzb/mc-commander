@@ -23,6 +23,7 @@ export const WSEvents = {
   RESTORE_COMPLETE: 'restoreComplete',
   RESTORE_FAILED: 'restoreFailed',
   TASK_EXECUTE: 'taskExecute',
+  TASK_FAILED: 'taskFailed',
   DEPLOY_PROGRESS: 'deployProgress',
   CIRCUIT_BREAKER: 'circuit_breaker',
   UPGRADE_PROGRESS: 'upgradeProgress',
@@ -70,6 +71,9 @@ const NOTIFICATION_EVENT_TYPES = new Set([
   WSEvents.RESTORE_START,
   WSEvents.RESTORE_COMPLETE,
   WSEvents.RESTORE_FAILED,
+  // 任务失败与 backupFailed 同语义：低频高价值，落库断线补齐。
+  // taskExecute 每次触发都发故不入集合（见上方注释），失败事件仅在异常时发射
+  WSEvents.TASK_FAILED,
 ]);
 
 // notification_events 保留期：超过保留期的记录定期清理（表只增不删，
@@ -384,6 +388,11 @@ export function setupWebSocket(wss, serverManager) {
 
   serverManager.on('instance:taskExecute', (data) => {
     broadcast(data.instanceId, WSEvents.TASK_EXECUTE, data);
+  });
+
+  // 定时任务执行失败（task_scheduler 发出）：与 backupFailed 一致的通知链
+  serverManager.on('instance:taskFailed', (data) => {
+    broadcast(data.instanceId, WSEvents.TASK_FAILED, data);
   });
 
   // 监听器注册：统一在 try 中注册并记录注册失败

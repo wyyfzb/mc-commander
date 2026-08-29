@@ -411,6 +411,7 @@ export const WS_EVENT_TYPES = [
   'restoreComplete',
   'restoreFailed',
   'taskExecute',
+  'taskFailed',
   'deployProgress',
   'circuit_breaker',
   'upgradeProgress',
@@ -443,6 +444,7 @@ export const NOTIFICATION_EVENT_TYPES: ReadonlySet<WsEventType> = new Set([
   'restoreStart',
   'restoreComplete',
   'restoreFailed',
+  'taskFailed',
 ])
 
 // ── 世界信息（GET /instances/:id/world；服务端 status.js L734-765 全字段）──

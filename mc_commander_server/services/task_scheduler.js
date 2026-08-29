@@ -159,7 +159,10 @@ export class TaskScheduler {
             ScheduledTaskModel.updateLastRun(task.id, nextRunAt);
             instance.sendCommand(task.command)
               .then(() => ScheduledTaskModel.updateLastRunStatus(task.id, 'success'))
-              .catch(() => ScheduledTaskModel.updateLastRunStatus(task.id, 'failed'));
+              .catch((err) => {
+                ScheduledTaskModel.updateLastRunStatus(task.id, 'failed');
+                this.emitTaskFailed(task, err);
+              });
           } else {
             // 实例未运行/无命令未真正下发：本次触发按跳过计
             ScheduledTaskModel.updateLastRun(task.id, nextRunAt, 'skipped');
@@ -243,6 +246,7 @@ export class TaskScheduler {
         default:
           console.warn(`Unknown task type: ${task.type}`);
           ScheduledTaskModel.updateLastRun(task.id, nextRunAt, 'failed');
+          this.emitTaskFailed(task, new Error(`未知任务类型: ${task.type}`));
       }
 
       // start/stop/restart 记「触发结果」（trigger outcome）而非实例最终状态：
@@ -257,7 +261,25 @@ export class TaskScheduler {
       console.error(`Task execution failed (${task.name}):`, err);
       // 同步 throw（如 start 的 EULA/路径校验）：失败同样落库记录 last_run_at
       ScheduledTaskModel.updateLastRun(task.id, nextRunAt, 'failed');
+      this.emitTaskFailed(task, err);
     }
+  }
+
+  /**
+   * 任务失败通知：与定时备份失败（backupFailed）同链路——事件经 websocket
+   * 落库并广播，前端通知中心 + Toast 提示；补齐“失败仅静默写库”的可见性缺口。
+   */
+  emitTaskFailed(task, err) {
+    if (!this.serverManager) return;
+    const message = err?.message ?? String(err);
+    this.serverManager.emit('instance:taskFailed', {
+      instanceId: task.instanceId,
+      taskId: task.id,
+      taskName: task.name,
+      taskType: task.type,
+      error: message,
+      content: `定时任务「${task.name}」执行失败: ${message}`,
+    });
   }
 
   runTask(taskId) {

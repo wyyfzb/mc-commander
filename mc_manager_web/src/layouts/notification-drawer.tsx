@@ -2,6 +2,7 @@ import {
   AlertCircle,
   AlertTriangle,
   Archive,
+  CalendarX,
   CheckCheck,
   CheckCircle2,
   ChevronRight,
@@ -50,7 +51,7 @@ const TYPE_ICON: Record<NotificationType, LucideIcon> = {
   lowTps: Gauge, highCpu: Cpu, highMemory: MemoryStick, weatherChange: CloudSun,
   backupStart: Archive, backupComplete: CheckCircle2, backupFailed: AlertCircle,
   backupSkipped: SkipForward, restoreStart: History, restoreComplete: CheckCheck,
-  restoreFailed: XCircle,
+  restoreFailed: XCircle, taskFailed: CalendarX,
 }
 
 /** 类型 → 语义色 token 工具类（气泡图标/边框用） */
@@ -77,6 +78,7 @@ const TYPE_COLOR: Record<NotificationType, { text: string; bg: string; border: s
   restoreStart: { text: 'text-mcs-info-fg', bg: 'bg-mcs-info-bg-subtle', border: 'border-mcs-info-border' },
   restoreComplete: { text: 'text-mcs-success-fg', bg: 'bg-mcs-success-bg-subtle', border: 'border-mcs-success-border' },
   restoreFailed: { text: 'text-mcs-error-fg', bg: 'bg-mcs-error-bg-subtle', border: 'border-mcs-error-border' },
+  taskFailed: { text: 'text-mcs-error-fg', bg: 'bg-mcs-error-bg-subtle', border: 'border-mcs-error-border' },
 }
 
 interface NotificationDrawerProps {

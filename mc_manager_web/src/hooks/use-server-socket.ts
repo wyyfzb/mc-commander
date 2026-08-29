@@ -175,6 +175,7 @@ export function useServerSocket(instanceId: string | null) {
         case 'restoreStart':
         case 'restoreComplete':
         case 'restoreFailed':
+        case 'taskFailed':
           dispatchWsEvent({ type: msg.type, data: msg.data as Record<string, unknown>, instanceId: msg.instanceId })
           break
         default:
