@@ -191,7 +191,7 @@ describe('market.service - searchMarketPlugins', () => {
     vi.mocked(got).mockReturnValueOnce(mockJsonResponse(SEARCH_FIXTURE));
 
     await searchMarketPlugins({ query: '' });
-    const [url, opts] = vi.mocked(got).mock.calls[0];
+    const [, opts] = vi.mocked(got).mock.calls[0];
     expect(opts.searchParams.index).toBe('downloads');
     expect(opts.searchParams.query).toBeUndefined();
   });
