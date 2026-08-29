@@ -94,6 +94,11 @@ describe('AppShell', () => {
     // 选择"世界"跳转（cmdk item role=option，与侧栏导航文本区分）
     fireEvent.click(await screen.findByRole('option', { name: /世界/ }))
     expect(await screen.findByText('世界占位')).toBeInTheDocument()
+
+    // 回归：命令面板页面组必须包含「插件」「Webhook」（此前漏配导致 Ctrl+K 无法跳转）
+    fireEvent.keyDown(window, { key: 'k', metaKey: true })
+    expect(await screen.findByRole('option', { name: /插件/ })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: /Webhook/ })).toBeInTheDocument()
   })
 
   it('侧栏折叠按钮切换宽度状态', () => {
