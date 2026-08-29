@@ -8,7 +8,8 @@ on:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # PR 内旧提交的 run 取消省资源；主干 push run 排队不取消，保每个合并点的完整验证
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   server:
@@ -34,6 +35,9 @@ jobs:
   web-check:
     name: 前端（lint + test）
     runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'push' ||
+      !github.event.pull_request.draft
     defaults:
       run:
         working-directory: mc_manager_web
@@ -51,6 +55,9 @@ jobs:
   web-e2e:
     name: 前端（build + e2e）
     runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'push' ||
+      !github.event.pull_request.draft
     defaults:
       run:
         working-directory: mc_manager_web
@@ -85,6 +92,9 @@ jobs:
   gitleaks:
     name: 密钥泄漏扫描
     runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'push' ||
+      !github.event.pull_request.draft
     steps:
       - uses: actions/checkout@v7
         with:

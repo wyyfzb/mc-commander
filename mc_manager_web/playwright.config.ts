@@ -27,7 +27,9 @@ function resolveChannel(): string | undefined {
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: false,
-  retries: 0,
+  // CI 上必需检查一票否决合并，网络抖动偶发红会硬性卡住 PR，故重试 2 次；
+  // 本地保持 0 快速失败
+  retries: process.env.CI ? 2 : 0,
   reporter: [['list'], ['html', { open: 'never' }]],
   // M6 起路由级 lazy：dev 下首访页面触发 chunk 编译（Monaco 等大 chunk 较慢），
   // 默认 5s 在并行 worker 竞争下偶发超时——放宽到 15s（生产构建无编译延迟）
