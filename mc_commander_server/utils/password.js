@@ -1,0 +1,58 @@
+import crypto from 'crypto';
+
+/**
+ * 管理员密码与令牌哈希工具（安全主线：单管理员密码登录）
+ *
+ * - 密码：Node 内置 scrypt（零新依赖，与项目极简依赖哲学一致）。
+ *   存储格式：`scrypt$N$r$p$<salt b64>$<hash b64>`，参数随格式自描述，
+ *   未来调参/换算法（argon2 等）时旧哈希仍可校验并可在改密时透明升级。
+ * - 会话令牌：仅存 SHA-256 摘要——数据库泄露不等于会话泄露（服务端不存明文令牌）。
+ */
+
+const SCRYPT_N = 16384;
+const SCRYPT_R = 8;
+const SCRYPT_P = 1;
+const KEY_LEN = 64;
+
+/** 哈希明文密码（随机盐 + 自描述参数编码） */
+export function hashPassword(password) {
+  const salt = crypto.randomBytes(16);
+  const hash = crypto.scryptSync(String(password), salt, KEY_LEN, {
+    N: SCRYPT_N,
+    r: SCRYPT_R,
+    p: SCRYPT_P,
+  });
+  return `scrypt$${SCRYPT_N}$${SCRYPT_R}$${SCRYPT_P}$${salt.toString('base64')}$${hash.toString('base64')}`;
+}
+
+/**
+ * 校验密码：按存储格式解析参数重算后恒时比较。
+ * 任何解析/格式异常一律返回 false（不抛出，登录失败语义统一）。
+ */
+export function verifyPassword(password, stored) {
+  try {
+    const parts = String(stored).split('$');
+    if (parts.length !== 6 || parts[0] !== 'scrypt') return false;
+    const [, n, r, p, saltB64, hashB64] = parts;
+    const salt = Buffer.from(saltB64, 'base64');
+    const expected = Buffer.from(hashB64, 'base64');
+    const actual = crypto.scryptSync(String(password), salt, expected.length, {
+      N: Number(n),
+      r: Number(r),
+      p: Number(p),
+    });
+    return actual.length === expected.length && crypto.timingSafeEqual(actual, expected);
+  } catch {
+    return false;
+  }
+}
+
+/** 会话令牌指纹（SHA-256 hex）：库中只存摘要，不存明文 */
+export function hashToken(token) {
+  return crypto.createHash('sha256').update(String(token)).digest('hex');
+}
+
+/** 生成新会话令牌：32 字节随机 → base64url（约 43 字符，URL 安全） */
+export function generateSessionToken() {
+  return crypto.randomBytes(32).toString('base64url');
+}

@@ -75,6 +75,17 @@ export const ErrorCodes = {
   PLUGIN_NOT_FOUND: { code: 40411, message: 'Plugin not found', status: 404 },
   // 启停语义冲突：目标已是请求状态 / 重命名目标名已存在
   PLUGIN_STATE_CONFLICT: { code: 40910, message: 'Plugin state conflict', status: 409 },
+
+  // 管理员登录（安全主线）
+  AUTH_INVALID_CREDENTIALS: { code: 40102, message: '密码错误', status: 401 },
+  // Bearer 会话不存在 / 已过期 / 已被踢出——客户端应重新登录
+  AUTH_SESSION_EXPIRED: { code: 40103, message: '会话已过期，请重新登录', status: 401 },
+  // 登录失败次数过多，暂时锁定
+  AUTH_LOGIN_LOCKED: { code: 42901, message: '登录失败次数过多，请稍后再试', status: 429 },
+  // 首访设密时已存在密码
+  AUTH_ALREADY_CONFIGURED: { code: 40911, message: '管理员密码已设置', status: 409 },
+  // 未设密码时尝试登录
+  AUTH_NOT_CONFIGURED: { code: 40013, message: '管理员密码尚未设置，请先完成初始化', status: 400 },
 };
 
 // 自定义错误类

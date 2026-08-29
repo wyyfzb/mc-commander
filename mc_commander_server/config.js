@@ -15,6 +15,15 @@ export default {
   // 而非 cwd——服务器从任意工作目录启动都不影响托管（运行时数据目录仍保持 cwd 相对）
   publicDir: path.resolve(__dirname, process.env.PUBLIC_DIR || './public'),
   logLevel: process.env.LOG_LEVEL || 'info',
+  // 管理员密码登录（安全主线）：Bearer 会话滑动续期；登录失败锁定为
+  // 按账号/来源 IP 的内存级限制（重启即清零，配合全局速率限流足够
+  // 单管理员自托管场景；TOTP 挂靠点见 admin_account.totp_secret）
+  adminSession: {
+    // 会话有效期（滑动）：默认 7 天，每次认证触达续期
+    ttlMs: parseInt(process.env.ADMIN_SESSION_TTL_HOURS || '168') * 3600_000,
+    loginLockMaxFails: parseInt(process.env.AUTH_LOGIN_MAX_FAILS || '10'),
+    loginLockMs: parseInt(process.env.AUTH_LOGIN_LOCK_MS || '300000'),
+  },
   rateLimit: {
     windowMs: parseInt(process.env.RATE_LIMIT_WINDOW || '60000'),
     max: parseInt(process.env.RATE_LIMIT_MAX || '100')

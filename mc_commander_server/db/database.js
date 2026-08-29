@@ -165,7 +165,7 @@ function createTables() {
     db.exec(`
       CREATE TABLE IF NOT EXISTS audit_logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        instance_id TEXT NOT NULL,
+        instance_id TEXT,
         action TEXT NOT NULL,
         target_type TEXT,
         target_id TEXT,
@@ -266,8 +266,66 @@ function createTables() {
     )
   `);
 
+  // v8：audit_logs.instance_id 放宽为可空——全局动作（API Key 轮换、管理员
+  // 登录/登出/改密等）没有实例上下文，原 NOT NULL 约束导致这些审计写入
+  // 失败且被 recordAudit 静默吞掉（仅 warn），审计链路存在盲区。
+  // SQLite 无法直接改列约束：重建表 + 复制 + 原名替换；新库由上方 v6 建表
+  // 语句直接可空，此处仅在检测到 notnull 标记时执行重建。
+  if (userVersion < 8) {
+    const auditInstanceId = db.prepare('PRAGMA table_info(audit_logs)').all()
+      .find((c) => c.name === 'instance_id');
+    if (auditInstanceId?.notnull) {
+      db.exec(`
+        CREATE TABLE audit_logs_v8 (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          instance_id TEXT,
+          action TEXT NOT NULL,
+          target_type TEXT,
+          target_id TEXT,
+          detail TEXT,
+          source TEXT DEFAULT 'api',
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+        INSERT INTO audit_logs_v8 (id, instance_id, action, target_type, target_id, detail, source, created_at)
+          SELECT id, instance_id, action, target_type, target_id, detail, source, created_at FROM audit_logs;
+        DROP TABLE audit_logs;
+        ALTER TABLE audit_logs_v8 RENAME TO audit_logs;
+      `);
+      console.log('Migration: relaxed audit_logs.instance_id to nullable (global actions audit)');
+    }
+    db.pragma('user_version = 8');
+  }
+
+  // 管理员账号（安全主线：单管理员密码登录）。单行表 id 恒为 1；
+  // totp_secret 预留 TOTP 两步验证挂靠（roadmap）
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS admin_account (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      password_hash TEXT NOT NULL,
+      totp_secret TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // 管理员会话：仅存令牌 SHA-256 摘要（数据库泄露不等于会话泄露）；
+  // 滑动续期（expires_at 每次认证触达刷新）；踢单设备 = 删除对应行
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS admin_sessions (
+      id TEXT PRIMARY KEY,
+      token_hash TEXT NOT NULL UNIQUE,
+      user_agent TEXT,
+      ip TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      last_seen_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      expires_at TEXT NOT NULL
+    )
+  `);
+
   // 创建索引
   db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_admin_sessions_expires ON admin_sessions(expires_at);
+
     CREATE INDEX IF NOT EXISTS idx_backups_instance_id ON backups(instance_id);
     CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_instance_id ON scheduled_tasks(instance_id);
     CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_enabled ON scheduled_tasks(is_enabled);
