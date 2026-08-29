@@ -324,7 +324,7 @@ export async function downloadMarketFile(url) {
     headers: { 'User-Agent': USER_AGENT },
     timeout: { request: DOWNLOAD_TIMEOUT_MS },
     retry: { limit: 1 },
-    isResponseOk: true,
+    // 注：got v13+ 移除 isResponseOk 选项；默认 throwHttpErrors 已对非 2xx 抛错
   });
 
   // 计数中间层：流式实时统计字节数，超限立刻断流（比 Content-Length 预检更可靠——
