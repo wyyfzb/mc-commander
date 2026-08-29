@@ -28,9 +28,12 @@ export default defineConfig({
         background_color: '#0A0E1A',
         display: 'standalone',
         start_url: '/',
+        // 图标用相对路径：随 base 解析（根部署 /pwa-icon.svg；子路径部署
+        // 如 /app/ 下为 /app/pwa-icon.svg），manifest 相对 URL 以 manifest
+        // 所在目录为基准，两种部署形态均正确
         icons: [
-          { src: '/pwa-icon.svg', sizes: '512x512', type: 'image/svg+xml' },
-          { src: '/pwa-maskable.svg', sizes: '512x512', type: 'image/svg+xml', purpose: 'maskable' },
+          { src: './pwa-icon.svg', sizes: '512x512', type: 'image/svg+xml' },
+          { src: './pwa-maskable.svg', sizes: '512x512', type: 'image/svg+xml', purpose: 'maskable' },
         ],
       },
       workbox: {
