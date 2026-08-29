@@ -147,7 +147,7 @@ export function AccountPanel() {
   }
 
   // ── 踢单设备 ──
-  const [kickTarget, setKickTarget] = useState<number | null>(null)
+  const [kickTarget, setKickTarget] = useState<string | null>(null)
   const [kicking, setKicking] = useState(false)
 
   const handleKick = async () => {
@@ -387,7 +387,7 @@ export function AccountPanel() {
                         variant="ghost"
                         size="icon-sm"
                         aria-label={`下线会话（${describeUserAgent(s.userAgent)}）`}
-                        onClick={() => setKickTarget(s.id)}
+                        onClick={() => setKickTarget(String(s.id))}
                         className="text-mcs-text-subtle hover:text-red-600"
                       >
                         <Trash2 className="size-3.5" aria-hidden />
@@ -428,7 +428,7 @@ export function AccountPanel() {
         }}
         title="下线该会话？"
         description={
-          kickTarget != null && sessions.find((s) => s.id === kickTarget)?.current
+          kickTarget != null && sessions.find((s) => String(s.id) === kickTarget)?.current
             ? '这是当前浏览器的会话，下线后需要重新登录。'
             : '该设备将被强制登出，需重新输入密码才能访问面板。'
         }

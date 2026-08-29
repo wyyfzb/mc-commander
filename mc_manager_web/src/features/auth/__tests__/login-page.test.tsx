@@ -85,7 +85,7 @@ describe('LoginPage（登录/首访设密三态）', () => {
     await userEvent.type(screen.getByLabelText('确认密码'), 'Abcdef123456')
     await userEvent.click(screen.getByRole('button', { name: /设置密码并登录/ }))
     await waitFor(() => expect(screen.getByText('dashboard-reached')).toBeInTheDocument())
-    expect(useAuthStore.getState().session?.sessionId).toBe(1)
+    expect(useAuthStore.getState().session?.sessionId).toBe('sess-mock-1')
   })
 
   it('密码不足 8 位 → 前置拦截不发请求', async () => {

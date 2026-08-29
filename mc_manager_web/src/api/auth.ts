@@ -87,7 +87,7 @@ export function fetchSessions(config: ConnectionConfig, signal?: AbortSignal): P
 }
 
 /** DELETE /auth/sessions/:id：踢单设备 */
-export function kickSession(config: ConnectionConfig, sessionId: number): Promise<KickSessionData> {
+export function kickSession(config: ConnectionConfig, sessionId: string): Promise<KickSessionData> {
   return apiDelete<KickSessionData>(`/api/v1/auth/sessions/${sessionId}`, config)
 }
 

@@ -151,7 +151,7 @@ export function LoginPage() {
   }, [probe])
 
   /** 登录/设密成功：写会话 → 同步连接状态（setConfig 内含凭据重算）→ 回跳 */
-  const handleAuthSuccess = (token: string, sessionId: number, expiresAt: string) => {
+  const handleAuthSuccess = (token: string, sessionId: string, expiresAt: string) => {
     useAuthStore.getState().setSession({ token, sessionId, expiresAt })
     useConnectionStore.getState().setConfig({ baseUrl })
     toast.success(phase === 'setup' ? '管理员密码设置成功' : '登录成功')

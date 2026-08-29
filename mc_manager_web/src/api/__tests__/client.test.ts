@@ -58,7 +58,7 @@ describe('API 客户端（统一信封契约）', () => {
 describe('API 客户端双通道凭据（安全主线）', () => {
 
   it('有会话令牌 → Authorization: Bearer，且不再携带 X-API-Key（双通道互斥）', async () => {
-    useAuthStore.getState().setSession({ token: 'tok-abc', sessionId: 1, expiresAt: new Date(Date.now() + 60_000).toISOString() })
+    useAuthStore.getState().setSession({ token: 'tok-abc', sessionId: 'sess-mock-1', expiresAt: new Date(Date.now() + 60_000).toISOString() })
     const captured: { headers: Headers | null } = { headers: null }
     server.events.on('request:start', ({ request }) => {
       captured.headers = request.headers
@@ -92,7 +92,7 @@ describe('API 客户端双通道凭据（安全主线）', () => {
   })
 
   it('40103 会话过期 → 清会话 + 派发全局事件（跳登录由路由层监听）', async () => {
-    useAuthStore.getState().setSession({ token: 'tok-expired', sessionId: 1, expiresAt: new Date(Date.now() - 1_000).toISOString() })
+    useAuthStore.getState().setSession({ token: 'tok-expired', sessionId: 'sess-mock-1', expiresAt: new Date(Date.now() - 1_000).toISOString() })
     const listener = vi.fn()
     window.addEventListener(SESSION_EXPIRED_EVENT, listener)
     try {
