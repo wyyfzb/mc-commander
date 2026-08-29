@@ -2,8 +2,10 @@ import { lazy } from 'react'
 import { createBrowserRouter, redirect } from 'react-router'
 import { AppShell } from '@/layouts/app-shell'
 import { useConnectionStore } from '@/stores/connection'
+import { useAuthStore, SESSION_EXPIRED_EVENT } from '@/stores/auth'
 import {
   AboutSettingsPage,
+  AccountSettingsPage,
   BackupSettingsPage,
   ConnectionSettingsPage,
   GeneralSettingsPage,
@@ -48,18 +50,29 @@ const OnboardingPageLazy = lazy(() =>
 const EmergencyPageLazy = lazy(() =>
   import('@/features/emergency/emergency-page').then((m) => ({ default: m.EmergencyPage })),
 )
+const LoginPageLazy = lazy(() =>
+  import('@/features/auth/login-page').then((m) => ({ default: m.LoginPage })),
+)
 
-/** 首次使用守卫（D11）：无连接配置（status=unconfigured）→ 引导页 */
+/**
+ * 凭据判定（安全主线守卫）：API Key（自动化通道）或管理员会话令牌（登录通道）
+ * 任一存在即视为已连接。loader 与 React 渲染周期解耦，直接读 store 快照
+ */
+function hasCredentials(): boolean {
+  const { apiKey } = useConnectionStore.getState()
+  const { session } = useAuthStore.getState()
+  return Boolean(apiKey || session?.token)
+}
+
+/** 连接守卫（D11 演进）：无任何凭据 → 登录页（登录页内含首访设密向导） */
 function requireConfigured() {
-  const status = useConnectionStore.getState().status
-  if (status === 'unconfigured') return redirect('/onboarding')
+  if (!hasCredentials()) return redirect('/login')
   return null
 }
 
-/** 已配置时访问引导页 → 回仪表盘 */
+/** 无凭据守卫：已连接时访问登录页/引导页 → 回仪表盘 */
 function requireUnconfigured() {
-  const status = useConnectionStore.getState().status
-  if (status !== 'unconfigured') return redirect('/dashboard')
+  if (hasCredentials()) return redirect('/dashboard')
   return null
 }
 
@@ -84,6 +97,7 @@ export const router = createBrowserRouter([
         children: [
           { index: true, loader: () => redirect('/settings/connection') },
           { path: 'connection', Component: ConnectionSettingsPage },
+          { path: 'account', Component: AccountSettingsPage },
           { path: 'general', Component: GeneralSettingsPage },
           { path: 'notifications', Component: NotificationsSettingsPage },
           { path: 'backup', Component: BackupSettingsPage },
@@ -92,6 +106,11 @@ export const router = createBrowserRouter([
       },
       { path: '*', loader: () => redirect('/dashboard') },
     ],
+  },
+  {
+    path: '/login',
+    Component: LoginPageLazy,
+    loader: requireUnconfigured,
   },
   {
     path: '/onboarding',
@@ -105,3 +124,21 @@ export const router = createBrowserRouter([
     loader: requireConfigured,
   },
 ])
+
+/**
+ * 会话过期全局处置：client.ts 检测 40103 时派发事件（与 React 无关的模块层），
+ * 此处用 router.navigate 跳登录页——不依赖组件树，与 history/hash 路由模式无关。
+ * 清会话由派发方（clearSessionAndDispatchExpired）完成，这里补一次 status 重算
+ * 并带上 returnTo 便于登录后回跳。
+ */
+if (typeof window !== 'undefined') {
+  window.addEventListener(SESSION_EXPIRED_EVENT, () => {
+    useConnectionStore.getState().refreshStatus()
+    const current = router.state.location.pathname
+    // 已在登录页/引导页时不再跳转（避免循环）
+    if (current === '/login' || current === '/onboarding') return
+    const search = new URLSearchParams()
+    if (current && current !== '/') search.set('returnTo', current)
+    void router.navigate({ to: '/login', search: `?${search.toString()}` })
+  })
+}

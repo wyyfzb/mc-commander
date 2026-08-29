@@ -67,6 +67,30 @@ describe('McSocket（对照服务端 websocket.js 契约）', () => {
     expect(socket.isOpen).toBe(true)
   })
 
+  it('会话令牌优先：subprotocol 切换为 mc-commander-session.<token>', async () => {
+    const socket = new McSocket({
+      apiKey: 'secret-key-123',
+      sessionToken: 'session-token-abc',
+      WebSocketImpl: FakeCtor,
+    })
+    const p = socket.connect()
+    const ws = FakeWebSocket.instances[0]!
+    expect(ws.protocols).toEqual(['mc-commander-session.session-token-abc'])
+    ws.open()
+    await p
+    expect(socket.isOpen).toBe(true)
+  })
+
+  it('仅会话令牌（无 API Key）也能握手（密码登录用户）', async () => {
+    const socket = new McSocket({ apiKey: '', sessionToken: 'only-token', WebSocketImpl: FakeCtor })
+    const p = socket.connect()
+    const ws = FakeWebSocket.instances[0]!
+    expect(ws.protocols).toEqual(['mc-commander-session.only-token'])
+    ws.open()
+    await p
+    expect(socket.isOpen).toBe(true)
+  })
+
   it('subscribe 发送 {type:subscribe, instanceId, lastEventId?}；首次无游标不带 lastEventId', async () => {
     const socket = new McSocket({ apiKey: 'k', WebSocketImpl: FakeCtor })
     const p = socket.connect()
@@ -112,8 +136,8 @@ describe('McSocket（对照服务端 websocket.js 契约）', () => {
     expect(handler).toHaveBeenCalledTimes(1)
   })
 
-  it('未配置 API Key 时 connect 拒绝', async () => {
+  it('未配置任何凭据时 connect 拒绝（API Key 与会话令牌皆空）', async () => {
     const socket = new McSocket({ apiKey: '', WebSocketImpl: FakeCtor })
-    await expect(socket.connect()).rejects.toThrow('API Key 未配置')
+    await expect(socket.connect()).rejects.toThrow('连接凭据未配置')
   })
 })

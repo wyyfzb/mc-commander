@@ -667,4 +667,49 @@ export const handlers = [
       { status: 409 },
     ),
   ),
+
+  // ── 安全主线：auth 端点（登录页/账号面板组件测试用） ──
+  // 会话过期探针：40103（client 全局登出事件测试）
+  http.get('*/api/v1/session-expired-probe', () =>
+    HttpResponse.json(
+      {
+        status: 'error',
+        code: 40103,
+        message: '会话已过期，请重新登录',
+        details: null,
+        timestamp: new Date().toISOString(),
+      },
+      { status: 401 },
+    ),
+  ),
+  // 登录状态探测（hasPassword 由测试用例按需覆写：http.all 场景在组件测试内自建 server）
+  http.get('*/api/v1/auth/status', () => ok({ hasPassword: true })),
+  // 密码登录（固定测试凭据）
+  http.post('*/api/v1/auth/login', async () =>
+    ok({ token: 'mock-session-token-0123456789abcdef', sessionId: 1, expiresAt: new Date(Date.now() + 7 * 86_400_000).toISOString() }),
+  ),
+  // 首访设密（同登录响应）
+  http.post('*/api/v1/auth/setup', async () =>
+    ok({ hasPassword: true, token: 'mock-session-token-0123456789abcdef', sessionId: 1, expiresAt: new Date(Date.now() + 7 * 86_400_000).toISOString() }),
+  ),
+  // 活跃会话列表
+  http.get('*/api/v1/auth/sessions', () =>
+    ok({
+      sessions: [
+        {
+          id: 1,
+          userAgent: 'Mozilla/5.0 (X11; Linux x86_64) Chrome/126.0',
+          ip: '127.0.0.1',
+          createdAt: new Date(Date.now() - 3_600_000).toISOString(),
+          lastSeenAt: new Date().toISOString(),
+          expiresAt: new Date(Date.now() + 6 * 86_400_000).toISOString(),
+          current: true,
+        },
+      ],
+    }),
+  ),
+  // 登出 / 改密 / 踢单设备（结构占位）
+  http.post('*/api/v1/auth/logout', () => ok({ ok: true })),
+  http.put('*/api/v1/auth/password', () => ok({ ok: true, kickedSessions: 2 })),
+  http.delete('*/api/v1/auth/sessions/:id', () => ok({ ok: true, current: false })),
 ]

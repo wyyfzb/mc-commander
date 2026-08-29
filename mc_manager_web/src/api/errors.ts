@@ -18,6 +18,13 @@ export const ErrorCode = {
 
   INVALID_API_KEY: 40101,
 
+  // 安全主线：管理员认证（routes/auth.js）
+  AUTH_INVALID_CREDENTIALS: 40102,
+  AUTH_SESSION_EXPIRED: 40103,
+  AUTH_NOT_CONFIGURED: 40013,
+  AUTH_ALREADY_CONFIGURED: 40911,
+  AUTH_LOGIN_LOCKED: 42901,
+
   PERMISSION_DENIED: 40301,
 
   INSTANCE_NOT_FOUND: 40401,
@@ -64,6 +71,11 @@ const LOCALIZED_MESSAGES: Partial<Record<ErrorCodeValue, string>> = {
   [ErrorCode.NOT_FOUND]: '请求的资源不存在',
   [ErrorCode.RATE_LIMITED]: '请求过于频繁，请稍后再试',
   [ErrorCode.INVALID_API_KEY]: 'API Key 无效或已过期',
+  [ErrorCode.AUTH_INVALID_CREDENTIALS]: '密码错误',
+  [ErrorCode.AUTH_SESSION_EXPIRED]: '登录会话已过期，请重新登录',
+  [ErrorCode.AUTH_NOT_CONFIGURED]: '管理员密码尚未设置，请先完成初始化',
+  [ErrorCode.AUTH_ALREADY_CONFIGURED]: '管理员密码已设置，请直接登录',
+  [ErrorCode.AUTH_LOGIN_LOCKED]: '登录失败次数过多，请稍后再试',
   [ErrorCode.PERMISSION_DENIED]: '权限不足',
   [ErrorCode.INSTANCE_NOT_FOUND]: '服务器实例不存在',
   [ErrorCode.INSTANCE_ALREADY_RUNNING]: '实例已在运行中',

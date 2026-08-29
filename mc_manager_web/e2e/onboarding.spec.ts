@@ -30,9 +30,12 @@ async function setupConnection(page: Page) {
 }
 
 test.describe('onboarding', () => {
-  test('无配置：/dashboard 重定向 /onboarding', async ({ page }) => {
+  test('无配置：/dashboard 重定向 /login（安全主线：登录页为首访入口）', async ({ page }) => {
     await clearConnection(page)
     await page.goto('/dashboard')
+    await expect(page).toHaveURL(/\/login/)
+    // onboarding 变为部署引导页，可从登录页 footer 链接进入
+    await page.getByRole('link', { name: '前往连接引导' }).click()
     await expect(page).toHaveURL(/\/onboarding/)
     await expect(page.getByText('欢迎使用 MC Commander')).toBeVisible()
   })

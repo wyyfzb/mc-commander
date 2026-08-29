@@ -1,7 +1,8 @@
 /**
  * WebSocket 封装（设计文档 §5.1 ws.ts）
  * 契约（服务端 websocket.js）：
- *  - 鉴权：subprotocol `mc-commander-apikey.<apiKey>`（握手失败 1008）
+ *  - 鉴权：subprotocol `mc-commander-apikey.<apiKey>` 或
+ *    `mc-commander-session.<token>`（会话通道，安全主线；握手失败 1008）
  *  - 消息：{type:'subscribe'|'unsubscribe'|'ping', instanceId?, lastEventId?}
  *  - 订阅即回 status 快照；通知事件带自增 id（断线补齐游标，上限 500 条）
  *  - 服务端 30s ping 心跳；客户端消息限速 60 条/分钟
@@ -39,14 +40,29 @@ interface McSocketOptions {
   url?: string
   /** 面板 baseUrl（远程部署时用于推导 ws 地址；空串=同源） */
   baseUrl?: string
+  /** API Key（自动化通道；与会话令牌二选一，会话令牌优先） */
   apiKey: string
+  /** 管理员会话令牌（安全主线：浏览器登录后与 HTTP Bearer 同源凭据） */
+  sessionToken?: string | null
   WebSocketImpl?: WebSocketCtor
+}
+
+/** WS 鉴权 subprotocol 前缀（与服务端 handleProtocols 对齐） */
+export const WS_APIKEY_PROTOCOL_PREFIX = 'mc-commander-apikey.'
+export const WS_SESSION_PROTOCOL_PREFIX = 'mc-commander-session.'
+
+/** 按凭据选择鉴权 subprotocol（会话优先，回退 API Key） */
+export function resolveAuthProtocol(apiKey: string, sessionToken?: string | null): string | null {
+  if (sessionToken) return `${WS_SESSION_PROTOCOL_PREFIX}${sessionToken}`
+  if (apiKey) return `${WS_APIKEY_PROTOCOL_PREFIX}${apiKey}`
+  return null
 }
 
 export class McSocket {
   private ws: WebSocketLike | null = null
   private readonly url: string
   private readonly apiKey: string
+  private readonly sessionToken: string | null
   private readonly WebSocketImpl: WebSocketCtor
   private handlers = new Set<MessageHandler>()
   private subscribed = new Set<string>()
@@ -56,18 +72,20 @@ export class McSocket {
 
   constructor(options: McSocketOptions) {
     this.apiKey = options.apiKey
+    this.sessionToken = options.sessionToken ?? null
     this.url = options.url ?? deriveWsUrl(options.baseUrl)
     this.WebSocketImpl = options.WebSocketImpl ?? (WebSocket as unknown as WebSocketCtor)
   }
 
-  /** 建立连接（subprotocol 鉴权） */
+  /** 建立连接（subprotocol 鉴权：会话令牌优先，回退 API Key） */
   connect(): Promise<void> {
     return new Promise((resolve, reject) => {
-      if (!this.apiKey) {
-        reject(new Error('API Key 未配置'))
+      const protocol = resolveAuthProtocol(this.apiKey, this.sessionToken)
+      if (!protocol) {
+        reject(new Error('连接凭据未配置（API Key 或会话令牌）'))
         return
       }
-      const ws = new this.WebSocketImpl(this.url, [`mc-commander-apikey.${this.apiKey}`])
+      const ws = new this.WebSocketImpl(this.url, [protocol])
       this.ws = ws
 
       ws.onopen = () => {
