@@ -224,3 +224,92 @@ export function apiPut<T>(path: string, config: ConnectionConfig, body?: unknown
 export function apiDelete<T>(path: string, config: ConnectionConfig): Promise<T> {
   return apiRequest<T>(path, config, { method: 'DELETE' })
 }
+
+export interface UploadOptions {
+  /** multipart 字段名（默认 'file'） */
+  fieldName?: string
+  /** 追加到 URL 的查询串（如 'overwrite=true'；勿含 XTransformPort，内部自动处理） */
+  query?: string
+  /** 上传进度回调（0-100 整数，基于已发送字节） */
+  onProgress?: (pct: number) => void
+  /** 取消上传（用户主动中止） */
+  signal?: AbortSignal
+}
+
+/**
+ * multipart 文件上传（共享实现，feat-8 插件上传延伸）：
+ * - XHR 而非 fetch：fetch 无法观测上传进度（onprogress 仅 fetch stream 读响应侧）
+ * - 双通道凭据注入（Bearer 会话优先 / X-API-Key 回退，与 apiRequest 互斥逻辑一致）
+ * - withTransformPort 网关适配（此前 files.ts 独立实现遗漏此处理，沙箱下上传必挂）
+ * - 超时 10 分钟兜底（大文件慢速网络）；用户取消走 signal
+ * - 响应信封解析与错误码语义与 apiRequest 完全一致
+ */
+export function apiUploadFile<T>(
+  path: string,
+  config: ConnectionConfig,
+  file: File,
+  options: UploadOptions = {},
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const url = buildUrl(config, options.query ? `${path}?${options.query}` : path)
+    const form = new FormData()
+    form.append(options.fieldName ?? 'file', file, file.name)
+
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', url)
+    xhr.responseType = 'text'
+
+    // 凭据注入（双通道互斥，与 apiRequest 一致）
+    const authHeaders = buildAuthHeaders()
+    for (const [k, v] of Object.entries(authHeaders)) xhr.setRequestHeader(k, v)
+    if (!hasSessionToken() && config.apiKey) {
+      xhr.setRequestHeader('X-API-Key', config.apiKey)
+    }
+
+    // 10 分钟兜底超时
+    xhr.timeout = 600_000
+
+    // 上传进度（xhr.upload 才是请求方向）
+    if (options.onProgress) {
+      xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable) {
+          options.onProgress!(Math.min(100, Math.round((e.loaded / e.total) * 100)))
+        }
+      })
+    }
+
+    // 用户取消
+    options.signal?.addEventListener('abort', () => xhr.abort(), { once: true })
+
+    xhr.addEventListener('load', () => {
+      let payload: ApiEnvelope<T> | ApiErrorEnvelope
+      try {
+        payload = JSON.parse(xhr.responseText) as ApiEnvelope<T> | ApiErrorEnvelope
+      } catch {
+        reject(new NetworkError(`响应解析失败（HTTP ${xhr.status}）`))
+        return
+      }
+      if (payload.status === 'ok') {
+        resolve((payload as ApiEnvelope<T>).data)
+        return
+      }
+      const err = payload as ApiErrorEnvelope
+      if (err.code === AUTH_SESSION_EXPIRED_CODE) handleSessionExpired()
+      reject(new ApiError(err.code, xhr.status, err.message, err.details))
+    })
+
+    xhr.addEventListener('timeout', () => {
+      reject(new NetworkError('上传超时，请检查网络或减小文件体积'))
+    })
+
+    xhr.addEventListener('abort', () => {
+      reject(new NetworkError('上传已取消'))
+    })
+
+    xhr.addEventListener('error', () => {
+      reject(new NetworkError('网络连接失败，请检查面板地址与服务器状态'))
+    })
+
+    xhr.send(form)
+  })
+}
