@@ -187,11 +187,20 @@ describe('market.service - searchMarketPlugins', () => {
     expect(again.cached).toBe(true);
   });
 
-  it('非法参数：空查询 / 超长查询 / 非法加载器 / 非法版本号 → 40000', async () => {
-    await expect(searchMarketPlugins({ query: '   ' })).rejects.toMatchObject({ code: ErrorCodes.VALIDATION_ERROR.code });
+  it('空关键词浏览模式：index=downloads 且不带 query 参数', async () => {
+    vi.mocked(got).mockReturnValueOnce(mockJsonResponse(SEARCH_FIXTURE));
+
+    await searchMarketPlugins({ query: '' });
+    const [url, opts] = vi.mocked(got).mock.calls[0];
+    expect(opts.searchParams.index).toBe('downloads');
+    expect(opts.searchParams.query).toBeUndefined();
+  });
+
+  it('非法参数：超长查询 / 非法加载器 / 非法版本号 → 40000', async () => {
     await expect(searchMarketPlugins({ query: 'x'.repeat(101) })).rejects.toMatchObject({ code: ErrorCodes.VALIDATION_ERROR.code });
     await expect(searchMarketPlugins({ query: 'ok', loader: 'fabric' })).rejects.toMatchObject({ code: ErrorCodes.VALIDATION_ERROR.code });
     await expect(searchMarketPlugins({ query: 'ok', gameVersion: '1.21.x' })).rejects.toMatchObject({ code: ErrorCodes.VALIDATION_ERROR.code });
+    await expect(searchMarketPlugins({ query: 123 })).rejects.toMatchObject({ code: ErrorCodes.VALIDATION_ERROR.code });
     expect(got).not.toHaveBeenCalled();
   });
 
