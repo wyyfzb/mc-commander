@@ -71,9 +71,33 @@ export function authMiddleware(req, res, next) {
   ));
 }
 
-export function authenticateWebSocket(apiKey) {
-  if (!apiKey) return false;
-  return safeEqual(apiKey, config.apiKey);
+/**
+ * WebSocket 升级认证（双通道，与 authMiddleware 的 HTTP 语义对齐）：
+ * - 通道一：API Key（handleProtocols 提取的 mc-commander-apikey.* subprotocol）
+ * - 通道二：管理员会话令牌（mc-commander-session.* subprotocol）——
+ *   浏览器会话化后 WS 握手不再依赖明文 API Key，与 HTTP Bearer 同源凭据。
+ *   会话需存在且未过期；不在此处 touch 续期（重连频率不可控，避免绕过
+ *   HTTP 通道的 60s 写库节流），会话活性由 HTTP Bearer 请求持续滑动续期。
+ *   校验失败一律返回 false，由调用方以 1008 关闭。
+ * @param {string|null} apiKey
+ * @param {string|null} sessionToken 明文会话令牌（内部立即做 SHA-256，不留存）
+ * @returns {boolean}
+ */
+export function authenticateWebSocket(apiKey, sessionToken = null) {
+  if (apiKey) {
+    return safeEqual(apiKey, config.apiKey);
+  }
+  if (sessionToken) {
+    const session = AdminSessionModel.findByTokenHash(hashToken(sessionToken));
+    if (!session) return false;
+    if (new Date(session.expires_at).getTime() <= Date.now()) {
+      // 过期会话顺手清理（与 HTTP 中间件的惰性清理语义一致）
+      AdminSessionModel.deleteById(session.id);
+      return false;
+    }
+    return true;
+  }
+  return false;
 }
 
 export default { authMiddleware, authenticateWebSocket };
