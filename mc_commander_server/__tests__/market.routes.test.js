@@ -127,11 +127,17 @@ describe('routes/plugins.js - 市场端点', () => {
     expect(res.body.code).toBe(40401);
   });
 
-  it('GET market/search：缺 q → 400 校验错误', async () => {
+  it('GET market/search：缺 q 合法（浏览模式，index=downloads）', async () => {
     mockManager.getInstance.mockReturnValue({ serverPath });
+    vi.mocked(got).mockReturnValueOnce({ json: async () => SEARCH_FIXTURE });
+
     const res = await request(app).get('/api/v1/instances/inst1/plugins/market/search');
-    expect(res.status).toBe(400);
-    expect(res.body.code).toBe(40000);
+    expect(res.status).toBe(200);
+    expect(res.body.data.totalHits).toBe(1);
+    // 浏览模式：无 query 参数，按下载量排序
+    const [, opts] = vi.mocked(got).mock.calls[0];
+    expect(opts.searchParams.index).toBe('downloads');
+    expect(opts.searchParams.query).toBeUndefined();
   });
 
   it('GET market/versions：200 + 版本映射', async () => {

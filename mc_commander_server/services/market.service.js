@@ -98,12 +98,21 @@ function translateUpstreamError(err, notFoundCode) {
     `Modrinth upstream error: ${err?.message || 'unknown'}`);
 }
 
-/** 参数校验：搜索词 */
-function requireQuery(q) {
-  if (typeof q !== 'string' || q.trim().length === 0 || q.length > 100) {
+/**
+ * 参数校验：搜索词（可空）。空/未传 → null = 浏览模式（热门插件，index=downloads）；
+ * 非空则 1-100 字符。
+ */
+function sanitizeQuery(q) {
+  if (q === undefined || q === null) return null;
+  if (typeof q !== 'string') {
+    throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Query must be a string');
+  }
+  const trimmed = q.trim();
+  if (trimmed.length === 0) return null;
+  if (trimmed.length > 100) {
     throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Query must be 1-100 chars');
   }
-  return q.trim();
+  return trimmed;
 }
 
 /** 参数校验：MC 版本（可空） */
@@ -137,26 +146,29 @@ function buildFacets({ gameVersion, loader }) {
  * @returns {{ totalHits: number, hits: Array, cached: boolean }}
  */
 export async function searchMarketPlugins({ query, offset = 0, limit = 20, gameVersion = null, loader = null }) {
-  const q = requireQuery(query);
+  const q = sanitizeQuery(query);
   const gv = sanitizeGameVersion(gameVersion);
   const ld = sanitizeLoader(loader);
 
   const off = Number.isInteger(offset) && offset >= 0 ? Math.min(offset, 10_000) : 0;
   const lim = Number.isInteger(limit) && limit >= 1 ? Math.min(limit, 20) : 20;
 
-  const cacheKey = `search:${q}:${off}:${lim}:${gv ?? ''}:${ld ?? ''}`;
+  const cacheKey = `search:${q ?? ''}:${off}:${lim}:${gv ?? ''}:${ld ?? ''}`;
   const cached = cacheGet(cacheKey);
   if (cached) return { ...cached, cached: true };
 
   try {
+    // 空关键词 = 浏览模式：按下载量排序的热门插件（Modrinth search 的 query 可选）
+    const searchParams = {
+      offset: off,
+      limit: lim,
+      index: q ? 'relevance' : 'downloads',
+      facets: JSON.stringify(buildFacets({ gameVersion: gv, loader: ld })),
+    };
+    if (q) searchParams.query = q;
+
     const data = await got(`${MODRINTH_API_BASE}/search`, {
-      searchParams: {
-        query: q,
-        offset: off,
-        limit: lim,
-        index: 'relevance',
-        facets: JSON.stringify(buildFacets({ gameVersion: gv, loader: ld })),
-      },
+      searchParams,
       headers: { 'User-Agent': USER_AGENT },
       timeout: { request: API_TIMEOUT_MS },
       retry: { limit: 1 },
