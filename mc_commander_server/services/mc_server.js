@@ -40,11 +40,6 @@ function matchCommandFailure(response) {
 
 export { atomicWriteFile };
 
-// 世界出生点读盘节流窗口（毫秒）：level.dat 是 MB 级文件且仅随服务器存档落盘
-// （默认约 5 分钟一次），窗口内复用缓存（statSync 快速校验兜底），避免每次
-// 访问 _worldSpawn 都完整 readFileSync 同步阻塞事件循环。
-const WORLD_SPAWN_READ_TTL_MS = 60_000;
-
 // 日志单行最大长度：超长行截断并加标记，防超长输出（崩溃堆栈/异常打印）撑爆
 // logBuffer 与 WebSocket 广播（find-023-server 单行截断）。
 const LOG_LINE_MAX_LENGTH = 4096;
@@ -294,8 +289,6 @@ export class MCServerInstance extends EventEmitter {
     this._publicIp = null;         // 公网 IP（异步探测后缓存）
     this._worldSpawn = null;       // 世界出生点 { x, y, z }（从 level.dat 读取）
     this._worldSpawnRaw = null;    // 上次成功解析时 level.dat 的原始字节，运行期变更检测用
-    this._worldSpawnReadAt = null; // 上次完整读盘时刻（TTL 节流窗口基准，仅 getter 读盘时更新）
-    this._worldSpawnStat = null;   // 上次读盘时 level.dat 的 mtimeMs/size，TTL 窗口内快速变更校验用
     // 异步探测公网 IP（环境变量 → 云元数据 → ipify），不阻塞构造
     this._detectPublicIp();
     // 启动时读取世界出生点（纯文件 I/O，不阻塞）
@@ -306,45 +299,21 @@ export class MCServerInstance extends EventEmitter {
   /// 运行期惰性刷新：游戏内 /setworldspawn 会把新出生点写回 level.dat
   /// （随服务器存档落盘，默认约 5 分钟），玩家列表/详情读取时通过
   /// level.dat 原始字节对比检测变更后重读，避免 spawnPoint 一直显示旧坐标直到服务重启。
-  /// 读盘节流：level.dat 是 MB 级文件且仅随存档写入，采用 TTL 窗口节流 +
-  /// statSync 快速校验兜底：
-  ///   - TTL 窗口内：仅 statSync（mtime/size）校验，未变化直接返回缓存，
-  ///     零完整读盘；stat 变化（运行期 /setworldspawn 落盘）立即降级为完整
-  ///     读盘 + 字节对比检测；
-  ///   - TTL 窗口外：完整读盘 + 字节对比（原逻辑），内容对比作为最终检测手段，
-  ///     stat 盲区（mtime/size 同而内容变）由窗口外的字节对比兜底。
-  /// stat 仅作窗口内快速路径，不单独依赖 mtime：粗粒度文件系统上同一时间片内
-  /// 重写 mtime 可能不变，主检测仍是内容对比。
+  /// 变更检测以内容级字节对比为唯一判定，禁止引入 mtime/size 等 stat 摘要
+  /// 快速路径：粗粒度文件系统上同时间片内重写 mtime 不变、gzip 同尺寸
+  /// size 不变，两者叠加会在窗口内漏检写回，出生点显示陈旧坐标（fix-1
+  /// 回归，实测碰撞率高）。读盘成本可控：level.dat 读取是页缓存命中，
+  /// 真正的开销在 NBT 解压解析，字节未变化时零解析。
   get _worldSpawn() {
     try {
       const levelName = this._getSafeLevelName();
       const levelDatPath = path.join(this.serverPath, levelName, 'level.dat');
       if (fs.existsSync(levelDatPath)) {
-        const now = Date.now();
-        if (this._worldSpawnReadAt != null && now - this._worldSpawnReadAt < WORLD_SPAWN_READ_TTL_MS) {
-          // TTL 窗口内：statSync 快速校验，未变化则零完整读盘
-          try {
-            const st = fs.statSync(levelDatPath);
-            if (this._worldSpawnStat &&
-                st.mtimeMs === this._worldSpawnStat.mtimeMs &&
-                st.size === this._worldSpawnStat.size) {
-              return this._worldSpawnValue;
-            }
-          } catch {
-            // stat 失败（文件被占用/瞬断等）：降级为完整读盘，下方路径兜底
-          }
-        }
         const raw = fs.readFileSync(levelDatPath);
-        this._worldSpawnReadAt = Date.now();
         // 内容级变更检测：仅在字节变化时重新解析，未变更时零解析开销
         if (!this._worldSpawnRaw || !raw.equals(this._worldSpawnRaw)) {
           this._readWorldSpawnFromLevelDat(raw);
         }
-        // 记录 stat 快照供 TTL 窗口内快速校验（仅成功读盘后更新）
-        try {
-          const st = fs.statSync(levelDatPath);
-          this._worldSpawnStat = { mtimeMs: st.mtimeMs, size: st.size };
-        } catch {}
       }
     } catch {
       // 读取失败（文件被占用/瞬断等）：沿用缓存值，下次访问重试
