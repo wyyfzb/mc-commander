@@ -6,11 +6,13 @@ import {
   Globe,
   LayoutDashboard,
   Moon,
+  Puzzle,
   Server,
   Settings,
   Sun,
   Terminal,
   Users,
+  Webhook,
   type LucideIcon,
 } from 'lucide-react'
 import {
@@ -101,7 +103,9 @@ export function CommandPalette() {
     { label: '世界', icon: Globe, keywords: 'world 属性 gamelogic 规则', run: () => go('/world') },
     { label: '文件', icon: FolderOpen, keywords: 'files 文件管理 编辑器', run: () => go('/files') },
     { label: '任务', icon: CalendarClock, keywords: 'tasks 定时 cron 备份', run: () => go('/tasks') },
+    { label: '插件', icon: Puzzle, keywords: 'plugins 插件市场 modrinth 上传 启用 禁用', run: () => go('/plugins') },
     { label: '实例', icon: Server, keywords: 'instances 部署 服务器', run: () => go('/instances') },
+    { label: 'Webhook', icon: Webhook, keywords: 'webhooks 通知 推送 钩子', run: () => go('/webhooks') },
     { label: '设置', icon: Settings, keywords: 'settings 连接 通用 关于', run: () => go('/settings') },
   ]
 
