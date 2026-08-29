@@ -58,6 +58,11 @@ export const ErrorCode = {
   WEBHOOK_INVALID_URL: 40010,
   WEBHOOK_INVALID_EVENTS: 40011,
   WEBHOOK_TEST_FAILED: 50010,
+
+  // 插件管理（feat-8，routes/plugins.js）
+  PLUGIN_NOT_FOUND: 40411,
+  PLUGIN_STATE_CONFLICT: 40910,
+  PLUGIN_FILE_EXISTS: 40912,
 } as const
 
 export type ErrorCodeValue = (typeof ErrorCode)[keyof typeof ErrorCode]
@@ -100,6 +105,9 @@ const LOCALIZED_MESSAGES: Partial<Record<ErrorCodeValue, string>> = {
   [ErrorCode.WEBHOOK_INVALID_URL]: 'Webhook URL 无效（仅允许 http/https）',
   [ErrorCode.WEBHOOK_INVALID_EVENTS]: '包含无效事件类型',
   [ErrorCode.WEBHOOK_TEST_FAILED]: 'Webhook 测试投递失败',
+  [ErrorCode.PLUGIN_NOT_FOUND]: '插件文件不存在（可能已被删除或改名）',
+  [ErrorCode.PLUGIN_STATE_CONFLICT]: '插件状态冲突（可能已在目标状态或同名文件存在）',
+  [ErrorCode.PLUGIN_FILE_EXISTS]: '同名插件文件已存在，可选择覆盖上传',
 }
 
 /** 服务端已本地化的错误码（message 直接透传，不覆盖） */

@@ -727,6 +727,12 @@ export interface PluginMeta {
   description: string | null
   authors: string[]
   depend: string[]
+  /** 软依赖：存在则先于本插件加载，缺失不影响（详情面板展示） */
+  softdepend: string[]
+  /** 插件官网（详情面板展示） */
+  website: string | null
+  /** 加载时机：STARTUP（世界加载前）/ POSTWORLD（默认，世界后） */
+  load: 'STARTUP' | 'POSTWORLD' | null
 }
 
 /** plugins/ 目录内单个插件（启用 = *.jar，禁用 = *.jar.disabled） */
@@ -750,4 +756,14 @@ export interface PluginList {
 export interface PluginToggleResult {
   file: string
   enabled: boolean
+}
+
+/** POST /instances/:id/plugins/upload 响应（新建 201 / 覆盖 200） */
+export interface PluginUploadResult {
+  file: string
+  sizeBytes: number
+  mtimeMs: number
+  meta: PluginMeta | null
+  /** 是否覆盖了同名旧文件（overwrite=true 时可能为 true） */
+  overwritten: boolean
 }

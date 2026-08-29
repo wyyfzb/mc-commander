@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { setupServer } from 'msw/node'
 import { http, HttpResponse } from 'msw'
-import { apiDeletePlugin, apiGetPlugins, apiSetPluginEnabled } from '../plugins'
+import { apiDeletePlugin, apiGetPlugins, apiSetPluginEnabled, apiUploadPlugin } from '../plugins'
 import type { PluginList } from '../types'
 import type { ConnectionConfig } from '../client'
 
@@ -21,6 +21,9 @@ const mockPlugins: PluginList = {
         description: null,
         authors: ['EssentialsX Team'],
         depend: ['Vault'],
+        softdepend: [],
+        website: 'https://essentialsx.net',
+        load: null,
       },
     },
     {
@@ -49,6 +52,39 @@ const server = setupServer(
     return ok({ file: body.enabled ? file.replace(/\.disabled$/, '') : `${file}.disabled`, enabled: body.enabled })
   }),
   http.delete('*/api/v1/instances/inst1/plugins/:file', ({ params }) => ok({ deleted: params.file as string })),
+  // 上传：不解析 multipart body（msw 对 jsdom File 断言不兼容，body 解析由服务端测试覆盖），
+  // 仅验证 multipart 头 + overwrite 查询参数 + 信封解析
+  http.post('*/api/v1/instances/inst1/plugins/upload', ({ request }) => {
+    const ct = request.headers.get('content-type') ?? ''
+    if (!ct.includes('multipart/form-data')) {
+      return HttpResponse.json(
+        { status: 'error', code: 40000, message: 'Expected multipart', details: null, timestamp: '' },
+        { status: 400 },
+      )
+    }
+    const overwrite = new URL(request.url).searchParams.get('overwrite') === 'true'
+    return HttpResponse.json(
+      {
+        status: 'ok', code: 0, message: 'Uploaded',
+        data: {
+          file: 'Uploaded.jar',
+          sizeBytes: 2048,
+          mtimeMs: 1_753_600_000_000,
+          meta: { name: 'Uploaded', version: '1.0.0', main: 'a.b.C', apiVersion: '1.20', description: null, authors: [], depend: [], softdepend: [], website: null, load: null },
+          overwritten: overwrite,
+        },
+        timestamp: new Date().toISOString(),
+      },
+      { status: overwrite ? 200 : 201 },
+    )
+  }),
+  // 冲突实例：固定返回 40912（错误码传播验证）
+  http.post('*/api/v1/instances/inst2/plugins/upload', () =>
+    HttpResponse.json(
+      { status: 'error', code: 40912, message: 'Plugin file already exists', details: null, timestamp: '' },
+      { status: 409 },
+    ),
+  ),
 )
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
@@ -83,5 +119,26 @@ describe('plugins API', () => {
   it('DELETE 返回被删文件名（文件名经 URL 编码传输）', async () => {
     const res = await apiDeletePlugin(config, 'inst1', 'Vault.jar.disabled')
     expect(res.deleted).toBe('Vault.jar.disabled')
+  })
+
+  describe('上传（apiUploadPlugin，feat-8 延伸）', () => {
+    it('multipart 上传返回元数据（overwritten=false，201 语义）', async () => {
+      const jar = new File(['PK-extracted-bytes'], 'Uploaded.jar', { type: 'application/java-archive' })
+      const res = await apiUploadPlugin(config, 'inst1', jar)
+      expect(res.file).toBe('Uploaded.jar')
+      expect(res.overwritten).toBe(false)
+      expect(res.meta?.name).toBe('Uploaded')
+    })
+
+    it('overwrite=true 透传查询参数（服务端返回 overwritten=true）', async () => {
+      const jar = new File(['x'], 'Uploaded.jar', { type: 'application/java-archive' })
+      const res = await apiUploadPlugin(config, 'inst1', jar, { overwrite: true })
+      expect(res.overwritten).toBe(true)
+    })
+
+    it('同名冲突 40912 抛 ApiError（错误码供页面弹覆盖确认）', async () => {
+      const jar = new File(['x'], 'Conflict.jar', { type: 'application/java-archive' })
+      await expect(apiUploadPlugin(config, 'inst2', jar)).rejects.toMatchObject({ code: 40912 })
+    })
   })
 })
