@@ -9,6 +9,7 @@ import { createKeyRoutes } from './keys.js';
 import { createAuditRoutes } from './audit.js';
 import { createWebhookRoutes } from './webhooks.js';
 import { createUpgradeRoutes } from './upgrade.js';
+import { createPluginRoutes } from './plugins.js';
 import { success } from '../utils/response.js';
 import config from '../config.js';
 import { notFoundHandler } from '../middleware/error_handler.js';
@@ -39,6 +40,7 @@ export function setupRoutes(app, serverManager, taskScheduler) {
   v1Router.use('/', createAuditRoutes());
   v1Router.use('/', createWebhookRoutes());
   v1Router.use('/', createUpgradeRoutes(serverManager));
+  v1Router.use('/', createPluginRoutes(serverManager));
 
   // GET /api/v1/check-update —— 面板更新检查（Node 内置 fetch，零新增依赖）
   v1Router.get('/check-update', async (req, res, next) => {

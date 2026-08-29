@@ -70,6 +70,11 @@ export const ErrorCodes = {
   // 升级错误
   UPGRADE_IN_PROGRESS: { code: 40907, message: 'Upgrade already in progress', status: 409 },
   UPGRADE_VERSION_SAME: { code: 40012, message: 'Target version is the same as current version', status: 400 },
+
+  // 插件错误（feat-8 P0-5）
+  PLUGIN_NOT_FOUND: { code: 40411, message: 'Plugin not found', status: 404 },
+  // 启停语义冲突：目标已是请求状态 / 重命名目标名已存在
+  PLUGIN_STATE_CONFLICT: { code: 40910, message: 'Plugin state conflict', status: 409 },
 };
 
 // 自定义错误类
