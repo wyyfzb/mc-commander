@@ -21,8 +21,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { apiPost } from '@/api/client'
 import { apiSendCommand } from '@/api/players'
-import { useInstanceStatus } from '@/api/queries'
+import { useInstanceStatus, queryKeys } from '@/api/queries'
 import { useUnsavedGuard } from '@/hooks/use-unsaved-guard'
 import { useConnectionStore } from '@/stores/connection'
 import { useServerStore } from '@/stores/server'
@@ -32,6 +33,7 @@ import { PropertiesPanel } from './components/properties-panel'
 import { GamerulePanel } from './components/gamerule-panel'
 import { useServerProperties, useUpdateProperties, useWorldInfo } from './queries'
 import { EmptyState } from '@/components/mcs/empty-state'
+import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router'
 
 type WorldTab = 'properties' | 'gamerule'
@@ -47,6 +49,7 @@ export function WorldPage() {
   const propertiesQuery = useServerProperties(instanceId)
   const statusQuery = useInstanceStatus(instanceId)
   const updateProperties = useUpdateProperties(instanceId)
+  const queryClient = useQueryClient()
   const navigate = useNavigate()
 
   if (!instanceId) {
@@ -84,6 +87,15 @@ export function WorldPage() {
     const res = await updateProperties.mutateAsync(payload)
     return res.restartRequired ?? []
   }
+
+  /** 重启服务器（属性保存后 Dialog 内「立即重启」触发；复用 instance-controls 同款 API） */
+  const handleRestart = async () => {
+    if (!instanceId) throw new Error('未选择实例')
+    await apiPost(`/api/v1/instances/${instanceId}/restart`, config)
+    void queryClient.invalidateQueries({ queryKey: queryKeys.instance(instanceId) })
+  }
+
+  const isRunning = statusQuery.data?.isRunning ?? false
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4 p-4">
@@ -134,6 +146,8 @@ export function WorldPage() {
               isLoading={propertiesQuery.isLoading}
               onSave={handleSaveProperties}
               onEditingChange={setPropertiesEditing}
+              isRunning={isRunning}
+              onRestart={() => handleRestart()}
             />
           </TabsContent>
           <TabsContent value="gamerule" className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4">
