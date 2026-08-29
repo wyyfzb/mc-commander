@@ -2,8 +2,6 @@ import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from 'vites
 import express from 'express';
 import request from 'supertest';
 import fs from 'fs';
-import os from 'os';
-import path from 'path';
 
 // dataDir 指向临时目录（真实 SQLite，验证模型/路由/中间件全链路），
 // 其余 config 保留实际值（authMiddleware 依赖真实 apiKey）
@@ -17,7 +15,7 @@ vi.mock('../config.js', async (importOriginal) => {
 });
 
 import config from '../config.js';
-import { initDatabase, getDb } from '../db/index.js';
+import { initDatabase } from '../db/index.js';
 import { AdminAccountModel, AdminSessionModel } from '../db/admin.model.js';
 import { hashPassword, verifyPassword, hashToken, generateSessionToken } from '../utils/password.js';
 import { authMiddleware } from '../middleware/auth.js';
