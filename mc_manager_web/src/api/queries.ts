@@ -22,6 +22,7 @@ export const queryKeys = {
     [...queryKeys.all, 'players', id, filters ?? {}] as const,
   backups: (id: string) => [...queryKeys.all, 'backups', id] as const,
   tasks: (id: string) => [...queryKeys.all, 'tasks', id] as const,
+  plugins: (id: string) => [...queryKeys.all, 'plugins', id] as const,
   files: (id: string, dir: string) => [...queryKeys.all, 'files', id, dir] as const,
   /** 文件内容（按完整文件路径细分） */
   fileContent: (id: string, filePath: string) =>

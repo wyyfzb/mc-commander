@@ -5,6 +5,7 @@ import {
   Globe,
   FolderOpen,
   CalendarClock,
+  Puzzle,
   Server,
   Settings,
   Webhook as WebhookIcon,
@@ -33,6 +34,7 @@ const PRIMARY_NAV: NavItem[] = [
   { to: '/world', label: '世界', icon: Globe },
   { to: '/files', label: '文件', icon: FolderOpen },
   { to: '/tasks', label: '任务', icon: CalendarClock },
+  { to: '/plugins', label: '插件', icon: Puzzle },
   { to: '/instances', label: '实例', icon: Server },
   { to: '/webhooks', label: 'Webhook', icon: WebhookIcon },
 ]
