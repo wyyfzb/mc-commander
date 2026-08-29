@@ -6,7 +6,7 @@ import path from 'path';
 import { success, error, AppError, ErrorCodes } from '../utils/response.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
 import { listPlugins, setPluginEnabled, deletePlugin, uploadPlugin } from '../services/plugin.service.js';
-import { searchMarketPlugins, getMarketProjectVersions, installPluginFromMarket } from '../services/market.service.js';
+import { searchMarketPlugins, getMarketProjectVersions, installPluginFromMarket, checkPluginUpdates } from '../services/market.service.js';
 import config from '../config.js';
 
 /**
@@ -20,6 +20,7 @@ import config from '../config.js';
  * GET  /api/v1/instances/:id/plugins/market/search                       —— 搜索（q/offset/limit/game_version/loader）
  * GET  /api/v1/instances/:id/plugins/market/projects/:slug/versions      —— 版本列表（game_version/loader）
  * POST /api/v1/instances/:id/plugins/market/install                      —— 一键安装（body: {slug, versionNumber}；?overwrite=true）
+ * POST /api/v1/instances/:id/plugins/check-updates                       —— 批量更新检测（已装插件 vs Modrinth 最新版）
  *
  * 设计要点：
  * - :file 为白名单文件名（见 plugin.service PLUGIN_FILE_REGEX），非任意路径
@@ -156,6 +157,21 @@ export function createPluginRoutes(serverManager) {
   });
 
   // ── 既有插件端点（feat-8 P0-5 最小闭环 + 上传延伸）────────────
+
+  // POST /api/v1/instances/:id/plugins/check-updates —— 批量更新检测（读操作，不审计；
+  // POST 语义：触发多次上游请求 + 结果非幂等缓存，GET 会被中间层/浏览器误缓存）
+  router.post('/instances/:id/plugins/check-updates', async (req, res, next) => {
+    try {
+      const serverPath = requireInstance(req.params.id);
+      if (!serverPath) {
+        return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND, 'Instance not found'));
+      }
+      const result = await checkPluginUpdates(serverPath);
+      res.json(success(result));
+    } catch (err) {
+      next(err);
+    }
+  });
 
   // GET /api/v1/instances/:id/plugins
   router.get('/instances/:id/plugins', (req, res, next) => {
