@@ -30,6 +30,9 @@ const WorldPage = lazy(() =>
 const FilesPage = lazy(() =>
   import('@/features/files/files-page').then((m) => ({ default: m.FilesPage })),
 )
+const PluginsPage = lazy(() =>
+  import('@/features/plugins/plugins-page').then((m) => ({ default: m.PluginsPage })),
+)
 const TasksPage = lazy(() =>
   import('@/features/tasks/tasks-page').then((m) => ({ default: m.TasksPage })),
 )
@@ -72,6 +75,7 @@ export const router = createBrowserRouter([
       { path: 'world', Component: WorldPage },
       { path: 'files', Component: FilesPage },
       { path: 'tasks', Component: TasksPage },
+      { path: 'plugins', Component: PluginsPage },
       { path: 'instances', Component: InstancesPage },
       { path: 'webhooks', Component: WebhookPage },
       {

@@ -714,3 +714,40 @@ export interface UpgradeStartResponse {
   mcVersion: string
   type: string
 }
+
+// ── 插件管理（feat-8 P0-5）────────────────────────────
+
+/** jar 内 plugin.yml / paper-plugin.yml 解析出的元数据；读取失败为 null */
+export interface PluginMeta {
+  name: string | null
+  version: string | null
+  main: string | null
+  /** Bukkit `api-version` / Paper `apiVersion` 归一化字段 */
+  apiVersion: string | null
+  description: string | null
+  authors: string[]
+  depend: string[]
+}
+
+/** plugins/ 目录内单个插件（启用 = *.jar，禁用 = *.jar.disabled） */
+export interface PluginInfo {
+  /** 文件名（含扩展名与 .disabled 后缀，作为启停/删除的 URL 参数） */
+  file: string
+  /** 展示名：去掉 .jar(.disabled) 的文件名 */
+  name: string
+  enabled: boolean
+  sizeBytes: number
+  mtimeMs: number
+  meta: PluginMeta | null
+}
+
+/** GET /instances/:id/plugins 响应 */
+export interface PluginList {
+  plugins: PluginInfo[]
+}
+
+/** PUT /instances/:id/plugins/:file/enabled 响应 */
+export interface PluginToggleResult {
+  file: string
+  enabled: boolean
+}
