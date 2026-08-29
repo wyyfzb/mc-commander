@@ -139,6 +139,7 @@ if (typeof window !== 'undefined') {
     if (current === '/login' || current === '/onboarding') return
     const search = new URLSearchParams()
     if (current && current !== '/') search.set('returnTo', current)
-    void router.navigate({ to: '/login', search: `?${search.toString()}` })
+    const qs = search.toString()
+    void router.navigate(`/login${qs ? `?${qs}` : ''}`)
   })
 }
