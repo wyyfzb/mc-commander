@@ -1,8 +1,7 @@
 name: Dependabot auto-merge
 
 # dependabot 的 minor/patch PR 自动打 auto-merge 标记：
-# CI 全绿 + 分支最新时 GitHub 自动合并；major 升级留给人工决策（SOP §6）
-# strict required checks 下「分支最新」由 maint-loop.sh 的 @dependabot rebase 循环补齐
+# CI 全绿时 GitHub 自动合并；major 升级留给人工决策（SOP §6）
 
 on: pull_request_target
 
