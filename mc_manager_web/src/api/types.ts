@@ -752,6 +752,32 @@ export interface PluginList {
   plugins: PluginInfo[]
 }
 
+/** POST /instances/:id/plugins/check-updates 单条结果（feat-8 延伸：更新检测） */
+export interface PluginUpdateStatus {
+  file: string
+  /** plugin.yml name（命中 Modrinth 的匹配键） */
+  name: string
+  installedVersion: string | null
+  enabled: boolean
+  /** Modrinth 是否找到对应项目（未收录/名称差异大 → false，保守不猜测） */
+  matched: boolean
+  slug: string | null
+  title: string | null
+  iconUrl: string | null
+  /** Modrinth 最新版本号（matched 时才有值） */
+  latestVersion: string | null
+  /** 版本号与最新版不一致（无论新旧方向——版本风格差异也提示） */
+  updateAvailable: boolean
+  /** 本地版本 < 最新版（真正的"落后"），与 updateAvailable 区分展示强度 */
+  hasNewer: boolean
+}
+
+/** POST /instances/:id/plugins/check-updates 响应 */
+export interface PluginUpdateCheckResult {
+  checkedAt: string
+  results: PluginUpdateStatus[]
+}
+
 /** PUT /instances/:id/plugins/:file/enabled 响应 */
 export interface PluginToggleResult {
   file: string

@@ -24,7 +24,7 @@ import { PassThrough } from 'stream';
 import { pipeline } from 'stream/promises';
 import got from 'got';
 import { AppError, ErrorCodes } from '../utils/response.js';
-import { uploadPlugin } from './plugin.service.js';
+import { uploadPlugin, listPlugins } from './plugin.service.js';
 
 const MODRINTH_API_BASE = 'https://api.modrinth.com/v2';
 
@@ -397,4 +397,140 @@ export async function installPluginFromMarket(serverPath, { slug, versionNumber 
   } finally {
     try { fs.unlinkSync(tmpPath); } catch { /* 已清理 */ }
   }
+}
+
+// ── 更新检测（feat-8 延伸：已装插件 vs Modrinth 最新版） ──────────────
+
+/// 单次批量检测的插件数量上限：每个插件至少 1 次上游搜索请求，
+/// 20 个 ≈ 限速安全余量内的一次交互（缓存可复用时更少）
+const UPDATE_CHECK_MAX_PLUGINS = 20;
+
+/// 每个插件最多审视的搜索结果数：name 完全一致可能排在后面（前缀重名等）
+const UPDATE_CHECK_MAX_CANDIDATES = 5;
+
+/// 更新检测并发批次大小：串行 20 个 ≈ 20×RTT 过慢；全并发易触限速
+const UPDATE_CHECK_CONCURRENCY = 5;
+
+/** 插件名 → slug 候选（Modrinth slug 全小写连字符风格：VaultUnlocked → vaultunlocked） */
+function slugifyPluginName(name) {
+  return String(name).toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
+/**
+ * 版本号归一化比较（无新依赖的轻量 semver 语义）：
+ * - 忽略前缀 v/V、build 元数据（+build.1）
+ * - 主段按 '.' 切分逐段数字比较，缺段补 0（2.0 == 2.0.0）
+ * - 主段相等后比预发布后缀：无后缀（release）> 有后缀（1.0-beta）；后缀同为字符串比较
+ * - 任一侧非数字段无法解析 → 退化为字符串精确比较（不同即视为有更新，保守报告）
+ * @returns {number} 1: a>b；0: 相等；-1: a<b
+ */
+export function comparePluginVersions(a, b) {
+  const norm = (v) => String(v ?? '').trim().replace(/^[vV]/, '').split('+')[0];
+  const va = norm(a);
+  const vb = norm(b);
+  if (va === vb) return 0;
+  if (!va || !vb) return va ? 1 : -1;
+
+  const [mainA, ...preA] = va.split('-');
+  const [mainB, ...preB] = vb.split('-');
+  const segsA = mainA.split('.');
+  const segsB = mainB.split('.');
+  const allNumeric = (s) => /^\d+$/.test(s);
+  const comparable = segsA.every(allNumeric) && segsB.every(allNumeric);
+  if (!comparable) return va > vb ? 1 : va < vb ? -1 : 0;
+
+  const len = Math.max(segsA.length, segsB.length);
+  for (let i = 0; i < len; i++) {
+    const x = parseInt(segsA[i] ?? '0', 10);
+    const y = parseInt(segsB[i] ?? '0', 10);
+    if (x !== y) return x > y ? 1 : -1;
+  }
+  // 主段相等：release > 预发布；同为预发布按字典序
+  if (preA.length !== preB.length) return preA.length > preB.length ? -1 : 1;
+  const sa = preA.join('-');
+  const sb = preB.join('-');
+  return sa > sb ? 1 : sa < sb ? -1 : 0;
+}
+
+/**
+ * 在搜索结果中定位与本地插件名对应的项目：
+ * 命中规则（按序）：title 精确（忽略大小写）→ slug 精确（slugify 后）。
+ * 只审视前 UPDATE_CHECK_MAX_CANDIDATES 个结果，杜绝长尾误配；
+ * 未命中返回 null（输出 matched:false，绝不猜测推荐）。
+ */
+function matchProjectByPluginName(hits, pluginName) {
+  const lower = String(pluginName).toLowerCase();
+  const slugified = slugifyPluginName(pluginName);
+  for (const hit of hits.slice(0, UPDATE_CHECK_MAX_CANDIDATES)) {
+    if (!hit || typeof hit.title !== 'string' || typeof hit.slug !== 'string') continue;
+    if (hit.title.toLowerCase() === lower || slugifyPluginName(hit.slug) === slugified) {
+      return hit;
+    }
+  }
+  return null;
+}
+
+/**
+ * 批量检测已装插件更新（feat-8 延伸）。
+ * 流程：listPlugins 读本地元数据 → 逐个 Modrinth 搜索（并发分批 + 搜索缓存复用）→
+ * 名称命中后取最新版本号（getMarketProjectVersions 缓存复用）→ 版本比对。
+ * 单个插件失败（上游错误/无结果）不拖垮整批：该插件 matched:false。
+ *
+ * @returns {{ checkedAt: string, results: Array<{
+ *   file, name, installedVersion, enabled,
+ *   matched, slug, title, iconUrl, latestVersion, updateAvailable, hasNewer
+ * }> }}
+ */
+export async function checkPluginUpdates(serverPath) {
+  const { plugins } = listPlugins(serverPath);
+  const candidates = plugins
+    .filter((p) => p.meta?.name && p.enabled)
+    .slice(0, UPDATE_CHECK_MAX_PLUGINS);
+
+  const results = new Map();
+  for (const p of candidates) {
+    results.set(p.file, {
+      file: p.file,
+      name: p.meta.name,
+      installedVersion: p.meta.version,
+      enabled: p.enabled,
+      matched: false,
+      slug: null,
+      title: null,
+      iconUrl: null,
+      latestVersion: null,
+      updateAvailable: false,
+      hasNewer: false,
+    });
+  }
+
+  const task = async (p) => {
+    const entry = results.get(p.file);
+    try {
+      const search = await searchMarketPlugins({ query: p.meta.name, limit: 10 });
+      const hit = matchProjectByPluginName(search.hits, p.meta.name);
+      if (!hit) return; // 未命中保持 matched:false（Modrinth 未收录/名称差异过大）
+      const { versions } = await getMarketProjectVersions(hit.slug, {});
+      const latest = versions[0]?.versionNumber ?? null;
+      entry.matched = true;
+      entry.slug = hit.slug;
+      entry.title = hit.title;
+      entry.iconUrl = hit.iconUrl;
+      entry.latestVersion = latest;
+      const cmp = latest ? comparePluginVersions(p.meta.version, latest) : 0;
+      entry.updateAvailable = cmp !== 0;
+      entry.hasNewer = cmp < 0;
+    } catch {
+      // 上游抖动/限速：该插件按未匹配报告，其余照常
+    }
+  };
+
+  for (let i = 0; i < candidates.length; i += UPDATE_CHECK_CONCURRENCY) {
+    await Promise.all(candidates.slice(i, i + UPDATE_CHECK_CONCURRENCY).map(task));
+  }
+
+  return {
+    checkedAt: new Date().toISOString(),
+    results: [...results.values()],
+  };
 }

@@ -87,6 +87,8 @@ interface MarketSheetProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   instanceId: string | null
+  /** 打开时预填搜索词（插件页「更新」入口带 plugin.yml name 直达搜索） */
+  initialQuery?: string | null
 }
 
 /** 展开状态：记录哪个 slug 展开了版本列表（同一时刻仅一个，降低请求压力） */
@@ -97,7 +99,7 @@ interface VersionsPanel {
   error: string | null
 }
 
-export function MarketSheet({ open, onOpenChange, instanceId }: MarketSheetProps) {
+export function MarketSheet({ open, onOpenChange, instanceId, initialQuery = null }: MarketSheetProps) {
   const instanceMcVersion = useServerStore((s) => s.status?.mcVersion)
 
   const [query, setQuery] = useState('')
@@ -112,6 +114,13 @@ export function MarketSheet({ open, onOpenChange, instanceId }: MarketSheetProps
       setGameVersion(instanceMcVersion)
     }
   }, [open, instanceMcVersion])
+
+  // 打开时预填搜索词（更新检测入口直达对应插件；debounce 由既有 effect 兜底同步）
+  useEffect(() => {
+    if (!open || !initialQuery) return
+    setQuery(initialQuery)
+    setDebouncedQuery(initialQuery)
+  }, [open, initialQuery])
 
   // 关键词防抖
   useEffect(() => {
