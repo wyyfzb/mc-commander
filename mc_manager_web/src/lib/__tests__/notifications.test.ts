@@ -66,6 +66,20 @@ describe('buildNotifications 文案模板', () => {
     expect(buildNotifications({ type: 'backupSkipped' })[0]?.content).toBe('定时备份已跳过（上一备份仍在进行）')
   })
 
+  it('taskFailed 文案含任务名与错误摘要', () => {
+    const [n] = buildNotifications({
+      type: 'taskFailed',
+      data: { taskName: '每日重启', taskType: 'restart', error: '端口被占用' },
+    })
+    expect(n).toMatchObject({ type: 'taskFailed', category: 'server' })
+    expect(n?.content).toBe('定时任务「每日重启」执行失败: 端口被占用')
+  })
+
+  it('taskFailed 缺错误字段时仅含任务名', () => {
+    const [n] = buildNotifications({ type: 'taskFailed', data: { taskName: '每日重启' } })
+    expect(n?.content).toBe('定时任务「每日重启」执行失败')
+  })
+
   it('非通知事件返回空数组', () => {
     expect(buildNotifications({ type: 'log', data: { text: 'x' } })).toEqual([])
   })
@@ -112,6 +126,16 @@ describe('aggregateNotifications 聚合规则', () => {
       existing,
       { type: 'serverCrash', category: 'server', content: '服务器意外退出' },
       100_000,
+    )
+    expect(result).toHaveLength(2)
+  })
+
+  it('taskFailed 属 critical 类：同任务连发不聚合（每次失败独立可见）', () => {
+    const existing = [base({ type: 'taskFailed', content: '定时任务「每日重启」执行失败', timestamp: 95_000 })]
+    const result = aggregateNotifications(
+      existing,
+      { type: 'taskFailed', category: 'server', content: '定时任务「每日重启」执行失败' },
+      100_000, // 5s 后同一失败再来一条
     )
     expect(result).toHaveLength(2)
   })

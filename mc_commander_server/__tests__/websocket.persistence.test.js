@@ -134,6 +134,36 @@ describe('WebSocket 通知持久化与断线补齐', () => {
     expect(fakeDb.inserted.length).toBe(1);
   });
 
+  it('定时任务失败事件（taskFailed）落库并广播（断线补齐可见）', () => {
+    const ws = connectAndSubscribe('s1');
+
+    serverManager.emit('instance:taskFailed', {
+      instanceId: 's1',
+      taskId: 7,
+      taskName: '每日重启',
+      taskType: 'restart',
+      error: '端口被占用',
+      content: '定时任务「每日重启」执行失败: 端口被占用',
+    });
+
+    expect(fakeDb.inserted.length).toBe(1);
+    const msg = sentMessage(ws);
+    expect(msg.id).toBe(1);
+    expect(msg.type).toBe('taskFailed');
+    expect(msg.data).toMatchObject({ taskId: 7, taskName: '每日重启', error: '端口被占用' });
+  });
+
+  it('taskExecute 触发事件不落库（既有决策：仅失败事件落库）', () => {
+    const ws = connectAndSubscribe('s1');
+
+    serverManager.emit('instance:taskExecute', { instanceId: 's1', taskId: 7, taskName: '每日重启' });
+
+    expect(fakeDb.inserted.length).toBe(0);
+    const msg = sentMessage(ws);
+    expect(msg.type).toBe('taskExecute');
+    expect(msg.id).toBeUndefined();
+  });
+
   it('subscribe 携带 lastEventId 时重放其后的事件（断线补齐）', () => {
     const ws = createFakeWs();
     wss.emit('connection', ws, { _wsApiKey: TEST_API_KEY });

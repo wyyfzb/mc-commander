@@ -109,6 +109,36 @@ describe('TaskScheduler - executeTask 完整结果语义', () => {
     expect(ScheduledTaskModel.updateLastRunStatus).toHaveBeenCalledWith(100, 'failed');
   });
 
+  it('command reject → 发出 instance:taskFailed 事件（含任务名与错误摘要）', async () => {
+    const instance = { isRunning: true, sendCommand: vi.fn(() => Promise.reject(new Error('RCON 不可用'))) };
+    mockManager.getInstance.mockReturnValue(instance);
+
+    scheduler.executeTask(makeTask({ type: 'command', command: 'list', name: '每日公告' }));
+    await flushAsync();
+
+    expect(mockManager.emit).toHaveBeenCalledWith(
+      'instance:taskFailed',
+      expect.objectContaining({
+        instanceId: 's1',
+        taskId: 100,
+        taskName: '每日公告',
+        taskType: 'command',
+        error: 'RCON 不可用',
+      }),
+    );
+  });
+
+  it('command resolve → 不发 taskFailed（仅失败时通知）', async () => {
+    const instance = { isRunning: true, sendCommand: vi.fn(() => Promise.resolve('ok')) };
+    mockManager.getInstance.mockReturnValue(instance);
+
+    scheduler.executeTask(makeTask({ type: 'command', command: 'list' }));
+    await flushAsync();
+
+    const failedCalls = mockManager.emit.mock.calls.filter(([e]) => e === 'instance:taskFailed');
+    expect(failedCalls).toHaveLength(0);
+  });
+
   it('command 实例未运行/无命令 → 未真正下发，结果落 skipped', () => {
     mockManager.getInstance.mockReturnValue({ isRunning: false, sendCommand: vi.fn() });
 
@@ -121,5 +151,49 @@ describe('TaskScheduler - executeTask 完整结果语义', () => {
     scheduler.executeTask(makeTask({ type: 'unknown-type' }));
 
     expect(ScheduledTaskModel.updateLastRun).toHaveBeenCalledWith(100, expect.any(String), 'failed');
+  });
+
+  it('未知任务类型 → 发出 instance:taskFailed 事件', () => {
+    scheduler.executeTask(makeTask({ type: 'unknown-type' }));
+
+    expect(mockManager.emit).toHaveBeenCalledWith(
+      'instance:taskFailed',
+      expect.objectContaining({
+        taskId: 100,
+        taskType: 'unknown-type',
+        error: expect.stringContaining('未知任务类型'),
+      }),
+    );
+  });
+
+  it('start 同步 throw → 发出 instance:taskFailed 事件', () => {
+    const instance = {
+      isRunning: false,
+      start: vi.fn(() => {
+        throw new Error('EULA 未接受');
+      }),
+    };
+    mockManager.getInstance.mockReturnValue(instance);
+
+    scheduler.executeTask(makeTask({ type: 'start' }));
+
+    expect(mockManager.emit).toHaveBeenCalledWith(
+      'instance:taskFailed',
+      expect.objectContaining({
+        taskId: 100,
+        taskType: 'start',
+        error: 'EULA 未接受',
+      }),
+    );
+  });
+
+  it('start/stop/restart 成功 → 不发 taskFailed（触发结果语义）', () => {
+    const instance = { isRunning: false, start: vi.fn() };
+    mockManager.getInstance.mockReturnValue(instance);
+
+    scheduler.executeTask(makeTask({ type: 'start' }));
+
+    const failedCalls = mockManager.emit.mock.calls.filter(([e]) => e === 'instance:taskFailed');
+    expect(failedCalls).toHaveLength(0);
   });
 });

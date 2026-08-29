@@ -209,6 +209,7 @@ stage 取值：`download` / `download_complete` / `forge_install` / `first_launc
 | `restoreComplete` | 恢复完成 | 恢复成功（提示启动服务器生效） |
 | `restoreFailed` | 恢复失败 | 恢复失败（含原因；自动回滚已执行） |
 | `taskExecute` | 定时任务执行 | Cron 触发（**不落库**：前端零消费，避免挤占断线补齐配额） |
+| `taskFailed` | 定时任务失败 | 任务执行失败（command 异步失败/同步 throw/未知类型；**落库**：与 backupFailed 同语义，断线补齐可见） |
 | `deployProgress` | 部署进度 | MC 实例部署期间（下载/配置/首次启动）；进度节流 ≥1% 才发射 |
 | `error` | 错误事件 | 异常情况 |
 
