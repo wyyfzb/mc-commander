@@ -16,7 +16,10 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router'
 import { toast } from 'sonner'
 import { getFriendlyErrorText } from '@/api/errors'
+import { apiDownloadFile } from '@/api/files'
 import { queryKeys } from '@/api/queries'
+import { useConnectionStore } from '@/stores/connection'
+import { isBinaryFileName } from '@/lib/mc-files'
 import {
   Dialog,
   DialogContent,
@@ -54,6 +57,7 @@ function parentDirOf(path: string): string {
 export function FilesPage() {
   const instanceId = useServerStore((s) => s.instanceId)
   const theme = useUiStore((s) => s.theme)
+  const connection = useConnectionStore()
   const queryClient = useQueryClient()
   const [searchParams, setSearchParams] = useSearchParams()
 
@@ -109,6 +113,8 @@ export function FilesPage() {
   const [renameTarget, setRenameTarget] = useState<FileEntry | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const uploadInputRef = useRef<HTMLInputElement>(null)
+  // feat-9：正在下载的文件路径（行内 spinner + 防重复点击）
+  const [downloadingPath, setDownloadingPath] = useState<string | null>(null)
 
   const contentQuery = useFileContent(instanceId, selectedPath)
   const saveMutation = useSaveFile(instanceId)
@@ -126,6 +132,22 @@ export function FilesPage() {
   }, [contentQuery.data, selectedPath])
 
   const dirty = selectedPath !== null && draft !== originalRef.current
+
+  /**
+   * 二进制文件深链接守卫（feat-9）：URL ?file=/world/level.dat 直达二进制时，
+   * 文本编辑器本就打不开（服务端 40006），主动清选择并提示改用下载，
+   * 避免“编辑器 + 报错”的误导态。
+   */
+  useEffect(() => {
+    const name = selectedPath?.split('/').pop() ?? ''
+    if (selectedPath && isBinaryFileName(name)) {
+      toast.info('二进制文件无法在线编辑，可使用行内下载按钮导出到本地', {
+        description: selectedPath,
+      })
+      setSelectedPath(null)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedPath])
 
   /** 路由切换守卫：编辑未保存切页确认 */
   const guard = useUnsavedGuard(dirty)
@@ -278,6 +300,34 @@ export function FilesPage() {
     uploadInputRef.current?.click()
   }
 
+  /**
+   * 下载文件到本地（feat-9）：blob → a[download] 触发保存。
+   * toast 复用同一 id 展示进度（>5% 才刷新，避免大文件高频重渲染）；
+   * 二进制/大文件是下载能力的主要受益者（编辑器对二进制不可用）。
+   */
+  const downloadFile = async (entry: FileEntry) => {
+    if (downloadingPath) return
+    setDownloadingPath(entry.path)
+    const toastId = `download-${entry.path}`
+    let lastPct = 0
+    try {
+      toast.loading(`正在下载 ${entry.name}…`, { id: toastId })
+      const { fileName } = await apiDownloadFile(connection, instanceId, entry, {
+        onProgress: (pct) => {
+          if (pct - lastPct >= 5 || pct === 100) {
+            lastPct = pct
+            toast.loading(`正在下载 ${entry.name} ${pct}%`, { id: toastId })
+          }
+        },
+      })
+      toast.success(`已下载 ${fileName}`, { id: toastId })
+    } catch (err) {
+      toast.error(`下载失败：${getFriendlyErrorText(err)}`, { id: toastId })
+    } finally {
+      setDownloadingPath(null)
+    }
+  }
+
   const handleUploadChange = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     e.target.value = '' // 允许重复上传同名文件
@@ -324,6 +374,8 @@ export function FilesPage() {
             setRenameTarget(entry)
             setRenameValue(entry.name)
           }}
+          onDownload={(entry) => void downloadFile(entry)}
+          downloadingPath={downloadingPath}
         />
       </section>
 
@@ -335,7 +387,11 @@ export function FilesPage() {
           encoding={contentQuery.data?.encoding ?? 'utf-8'}
           theme={theme}
           isLoading={contentQuery.isLoading && selectedPath !== null}
-          loadError={contentQuery.isError ? '文件加载失败，请检查文件是否存在或稍后重试' : null}
+          loadError={
+            contentQuery.isError
+              ? `文件加载失败：${getFriendlyErrorText(contentQuery.error)}`
+              : null
+          }
           isSaving={saveMutation.isPending}
           dirty={dirty}
           onChange={setDraft}

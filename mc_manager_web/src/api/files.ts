@@ -5,6 +5,7 @@
  */
 import {
   apiDelete,
+  apiDownloadFile as downloadViaClient,
   apiGet,
   apiPost,
   apiPut,
@@ -92,4 +93,36 @@ export function apiUploadFile(
     onProgress: opts?.onProgress,
     signal: opts?.signal,
   })
+}
+
+/**
+ * 下载文件到本地（GET /instances/:id/files/download?path=，feat-9）。
+ * 委托 client.ts 共享实现（流式进度 + 双通道凭据 + withTransformPort 网关适配）；
+ * 取到 blob 后在浏览器侧触发保存（a[download] + ObjectURL，用后即 revoke）。
+ * 文件名优先服务端 Content-Disposition（RFC 5987 中文安全），回退 entry.name。
+ * 仅单文件：目录下载不支持（服务端 400），由调用方在 UI 层隐藏目录下载入口。
+ */
+export async function apiDownloadFile(
+  config: ConnectionConfig,
+  instanceId: string,
+  entry: { path: string; name: string },
+  opts?: { onProgress?: (pct: number) => void; signal?: AbortSignal },
+): Promise<{ fileName: string }> {
+  const url = `${base(instanceId)}/files/download?path=${encodeURIComponent(entry.path)}`
+  const { blob, fileName } = await downloadViaClient(url, config, {
+    onProgress: opts?.onProgress,
+    signal: opts?.signal,
+  })
+
+  const objectUrl = URL.createObjectURL(blob)
+  // a[download] 需挂在 DOM 中触发（Firefox）；点击后同步 revoke 释放内存
+  const anchor = document.createElement('a')
+  anchor.href = objectUrl
+  anchor.download = fileName ?? entry.name
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  URL.revokeObjectURL(objectUrl)
+
+  return { fileName: anchor.download }
 }
