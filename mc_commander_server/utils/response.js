@@ -78,6 +78,14 @@ export const ErrorCodes = {
   // 上传同名冲突：plugins/ 目录已存在同名文件且未显式 overwrite
   PLUGIN_FILE_EXISTS: { code: 40912, message: 'Plugin file already exists', status: 409 },
 
+  // 插件市场（feat-8 延伸：Modrinth 代理）
+  // Modrinth 上未找到项目（slug 无效或已下架）
+  MARKET_PROJECT_NOT_FOUND: { code: 40412, message: 'Project not found on Modrinth', status: 404 },
+  // Modrinth 上未找到指定版本号 / 版本无可下载文件
+  MARKET_VERSION_NOT_FOUND: { code: 40413, message: 'Version not found on Modrinth', status: 404 },
+  // Modrinth 上游错误（搜索/版本/下载任一环节，保留 502 语义）
+  MARKET_UPSTREAM_ERROR: { code: 50301, message: 'Modrinth upstream error', status: 502 },
+
   // 管理员登录（安全主线）
   AUTH_INVALID_CREDENTIALS: { code: 40102, message: '密码错误', status: 401 },
   // Bearer 会话不存在 / 已过期 / 已被踢出——客户端应重新登录
