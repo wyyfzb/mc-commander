@@ -1,10 +1,14 @@
-import { Bell, ChevronsLeft, ChevronsRight, Menu, Moon, Search, Server, Sun } from 'lucide-react'
+import { Bell, ChevronsLeft, ChevronsRight, KeyRound, LogOut, Menu, Moon, Search, Server, Settings, Sun, UserRound } from 'lucide-react'
+import { useState } from 'react'
+import { useNavigate } from 'react-router'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -14,6 +18,8 @@ import { useUiStore } from '@/stores/ui'
 import { useServerStore } from '@/stores/server'
 import { useNotificationStore } from '@/stores/notifications'
 import { useConnectionStore } from '@/stores/connection'
+import { useAuthStore } from '@/stores/auth'
+import { logout } from '@/api/auth'
 import { useInstances } from '@/api/queries'
 
 /**
@@ -21,6 +27,7 @@ import { useInstances } from '@/api/queries'
  * 实例选择器 ▸ 全局搜索 (Cmd+K) ▸ 服务器状态点（WS 实时）▸ 通知铃铛（未读徽章+抽屉）▸ 主题切换
  */
 export function AppTopBar() {
+  const navigate = useNavigate()
   const theme = useUiStore((s) => s.theme)
   const toggleTheme = useUiStore((s) => s.toggleTheme)
   const sidebarCollapsed = useUiStore((s) => s.sidebarCollapsed)
@@ -37,6 +44,31 @@ export function AppTopBar() {
   const instanceId = useServerStore((s) => s.instanceId)
   const setInstanceId = useServerStore((s) => s.setInstanceId)
   const unreadCount = useNotificationStore((s) => s.unreadCount)
+
+  // 安全主线：用户菜单（会话登录显示管理员身份；API Key 直连显示凭据徽章）
+  const sessionToken = useAuthStore((s) => s.session?.token ?? null)
+  const apiKey = useConnectionStore((s) => s.apiKey)
+  const [loggingOut, setLoggingOut] = useState(false)
+
+  const handleLogout = async () => {
+    setLoggingOut(true)
+    try {
+      if (sessionToken) {
+        await logout({ baseUrl: useConnectionStore.getState().baseUrl, apiKey })
+      }
+      useAuthStore.getState().clearSession()
+      useConnectionStore.getState().refreshStatus()
+      toast.info('已退出登录')
+      navigate('/login', { replace: true })
+    } catch {
+      // 服务端登出失败不阻塞本地登出（令牌已不可用）
+      useAuthStore.getState().clearSession()
+      useConnectionStore.getState().refreshStatus()
+      navigate('/login', { replace: true })
+    } finally {
+      setLoggingOut(false)
+    }
+  }
 
   const instancesQuery = useInstances()
 
@@ -162,6 +194,55 @@ export function AppTopBar() {
         </TooltipTrigger>
         <TooltipContent side="bottom">通知</TooltipContent>
       </Tooltip>
+
+      {/* 用户菜单（安全主线：管理员身份 / 凭据状态） */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={sessionToken ? '管理员菜单' : 'API Key 直连状态'}
+          >
+            {sessionToken ? (
+              <UserRound aria-hidden />
+            ) : (
+              <KeyRound aria-hidden className="text-amber-600 dark:text-amber-400" />
+            )}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-56">
+          <DropdownMenuLabel>
+            {sessionToken ? '管理员（会话登录）' : 'API Key 直连'}
+          </DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => navigate('/settings/account')} className="gap-2">
+            <Settings className="size-4 text-mcs-text-muted" aria-hidden />
+            账号与安全
+          </DropdownMenuItem>
+          {sessionToken ? (
+            <DropdownMenuItem
+              onClick={() => void handleLogout()}
+              disabled={loggingOut}
+              className="gap-2 text-red-600 focus:text-red-600 dark:text-red-400 dark:focus:text-red-400"
+            >
+              <LogOut className="size-4" aria-hidden />
+              退出登录
+            </DropdownMenuItem>
+          ) : (
+            <DropdownMenuItem
+              onClick={() => {
+                useAuthStore.getState().clearSession()
+                useConnectionStore.getState().refreshStatus()
+                navigate('/login', { replace: true })
+              }}
+              className="gap-2"
+            >
+              <LogOut className="size-4" aria-hidden />
+              改用密码登录
+            </DropdownMenuItem>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
 
       {/* 主题切换 */}
       <Tooltip>

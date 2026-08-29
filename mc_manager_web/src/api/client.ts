@@ -1,9 +1,12 @@
 /**
  * API 客户端（设计文档 §5.1 client.ts）
- * fetch 封装：X-API-Key 头、10s 超时、响应信封解析、错误码 → ApiError
- * 连接配置来自 useConnectionStore（onboarding/M6 配置，默认同源 dev proxy）
+ * fetch 封装：双通道凭据注入、10s 超时、响应信封解析、错误码 → ApiError
+ * 凭据优先级（安全主线）：会话 Bearer 令牌 > X-API-Key（自动化/回退通道）；
+ * 会话过期（40103）时派发全局事件由路由层跳登录页
+ * 连接配置来自 useConnectionStore（onboarding 配置，默认同源 dev proxy）
  */
 import type { ApiEnvelope, ApiErrorEnvelope } from './types'
+import { getStoredSession, clearSessionAndDispatchExpired } from '@/stores/auth'
 
 export class ApiError extends Error {
   readonly code: number
@@ -34,6 +37,9 @@ export interface ConnectionConfig {
 
 const REQUEST_TIMEOUT_MS = 10_000
 
+/** 服务端会话过期错误码（40103 AUTH_SESSION_EXPIRED，触发全局登出） */
+const AUTH_SESSION_EXPIRED_CODE = 40103
+
 interface ApiRequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH'
   body?: unknown
@@ -46,6 +52,29 @@ function buildUrl(config: ConnectionConfig, path: string): string {
   const base = config.baseUrl.replace(/\/+$/, '')
   const p = path.startsWith('/') ? path : `/${path}`
   return `${base}${p}`
+}
+
+/**
+ * 认证头注入（双通道互斥）：
+ * - 会话令牌存在 → Authorization: Bearer（浏览器登录主线）
+ * - 否则 apiKey 非空 → X-API-Key（自动化 / 高级用户通道，行为兼容）
+ * - 两者皆无（公开端点：auth/status|login|setup）→ 不带认证头
+ */
+function hasSessionToken(): boolean {
+  return Boolean(getStoredSession()?.token)
+}
+
+function buildAuthHeaders(): Record<string, string> {
+  const session = getStoredSession()
+  if (session?.token) {
+    return { Authorization: `Bearer ${session.token}` }
+  }
+  return {}
+}
+
+/** 会话过期统一处置：清会话 + 派发全局事件（路由层监听跳登录） */
+function handleSessionExpired(): void {
+  clearSessionAndDispatchExpired()
 }
 
 async function parseEnvelope<T>(res: Response): Promise<T> {
@@ -79,7 +108,8 @@ export async function apiRequest<T>(
     const res = await fetch(buildUrl(config, path), {
       method: options.method ?? 'GET',
       headers: {
-        'X-API-Key': config.apiKey,
+        ...buildAuthHeaders(),
+        ...(!hasSessionToken() && config.apiKey ? { 'X-API-Key': config.apiKey } : {}),
         ...(options.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
       },
       body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
@@ -91,6 +121,7 @@ export async function apiRequest<T>(
       try {
         const errPayload = (await res.json()) as ApiErrorEnvelope
         if (errPayload.status === 'error') {
+          if (errPayload.code === AUTH_SESSION_EXPIRED_CODE) handleSessionExpired()
           throw new ApiError(errPayload.code, res.status, errPayload.message, errPayload.details)
         }
       } catch (e) {
@@ -127,7 +158,10 @@ export async function apiGetEnvelope<T>(path: string, config: ConnectionConfig, 
   try {
     const res = await fetch(buildUrl(config, path), {
       method: 'GET',
-      headers: { 'X-API-Key': config.apiKey },
+      headers: {
+        ...buildAuthHeaders(),
+        ...(!hasSessionToken() && config.apiKey ? { 'X-API-Key': config.apiKey } : {}),
+      },
       signal: signal ?? timeout.signal,
     })
 
@@ -135,6 +169,7 @@ export async function apiGetEnvelope<T>(path: string, config: ConnectionConfig, 
       try {
         const errPayload = (await res.json()) as ApiErrorEnvelope
         if (errPayload.status === 'error') {
+          if (errPayload.code === AUTH_SESSION_EXPIRED_CODE) handleSessionExpired()
           throw new ApiError(errPayload.code, res.status, errPayload.message, errPayload.details)
         }
       } catch (e) {

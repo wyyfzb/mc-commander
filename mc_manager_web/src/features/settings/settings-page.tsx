@@ -5,20 +5,22 @@
  * - 设计纪律：设置页内容区实底（风格 A 玻璃禁区）；子侧栏同实底卡
  */
 import { Link, Outlet, useLocation } from 'react-router'
-import { BellRing, DatabaseBackup, Info, Link2, SlidersHorizontal } from 'lucide-react'
+import { BellRing, DatabaseBackup, Info, Link2, ShieldCheck, SlidersHorizontal } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useServerStore } from '@/stores/server'
 import { ConnectionForm } from './components/connection-form'
+import { AccountPanel } from './components/account-panel'
 import { GeneralPanel } from './components/general-panel'
 import { NotificationsPanel } from './components/notifications-panel'
 import { BackupPanel } from './components/backup-panel'
 import { AboutPanel } from './components/about-panel'
 import { UpdateCheckSection } from './components/update-check-section'
 
-/** 子导航项（五项） */
+/** 子导航项（六项） */
 const SUB_NAV: { to: string; label: string; icon: LucideIcon }[] = [
   { to: '/settings/connection', label: '连接设置', icon: Link2 },
+  { to: '/settings/account', label: '账号与安全', icon: ShieldCheck },
   { to: '/settings/general', label: '通用设置', icon: SlidersHorizontal },
   { to: '/settings/notifications', label: '通知设置', icon: BellRing },
   { to: '/settings/backup', label: '备份管理', icon: DatabaseBackup },
@@ -75,11 +77,16 @@ export function SettingsPage() {
   )
 }
 
-// ── 五个子页薄封装（子路由组件；实例数据从 server store 注入 backup/general 面板） ──
+// ── 六个子页薄封装（子路由组件；实例数据从 server store 注入 backup/general 面板） ──
 
 /** 连接设置子页 */
 export function ConnectionSettingsPage() {
   return <ConnectionForm variant="settings" />
+}
+
+/** 账号与安全子页（管理员密码 / 会话管理 / 登出） */
+export function AccountSettingsPage() {
+  return <AccountPanel />
 }
 
 /** 通用设置子页 */

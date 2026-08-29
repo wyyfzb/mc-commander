@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { McSocket } from '@/api/ws'
 import { queryKeys } from '@/api/queries'
 import { useConnectionStore } from '@/stores/connection'
+import { useAuthStore } from '@/stores/auth'
 import { useServerStore } from '@/stores/server'
 import { useDeployStore } from '@/stores/deploy'
 import { applyUpgradeProgress } from '@/stores/upgrade'
@@ -29,6 +30,8 @@ export function useServerSocket(instanceId: string | null) {
   const apiKey = useConnectionStore((s) => s.apiKey)
   const baseUrl = useConnectionStore((s) => s.baseUrl)
   const connectionReady = useConnectionStore((s) => s.status === 'ready')
+  // 安全主线：会话令牌优先于 API Key 作为 WS 鉴权凭据（登录后 session 变更触发重建连接）
+  const sessionToken = useAuthStore((s) => s.session?.token ?? null)
   const applyWsSnapshot = useServerStore((s) => s.applyWsSnapshot)
   const applyWsPerformance = useServerStore((s) => s.applyWsPerformance)
   const applyWsStatusEvent = useServerStore((s) => s.applyWsStatusEvent)
@@ -45,11 +48,11 @@ export function useServerSocket(instanceId: string | null) {
   instanceRef.current = instanceId
 
   useEffect(() => {
-    if (!connectionReady || !apiKey) return
+    if (!connectionReady || (!apiKey && !sessionToken)) return
 
     let socket = socketSingleton
     if (!socket) {
-      socket = new McSocket({ apiKey, baseUrl })
+      socket = new McSocket({ apiKey, baseUrl, sessionToken })
       socketSingleton = socket
     }
 
@@ -198,7 +201,7 @@ export function useServerSocket(instanceId: string | null) {
       setSocketConnected(false)
       // 单例保留（跨页面复用）；实例切换由下方 effect 处理订阅
     }
-  }, [connectionReady, apiKey, baseUrl, applyWsSnapshot, applyWsPerformance, applyWsStatusEvent, setSocketConnected, setHasConnectedOnce, dispatchWsEvent, dispatchPerformance, applyDeployProgress, pushLog, queryClient])
+  }, [connectionReady, apiKey, sessionToken, baseUrl, applyWsSnapshot, applyWsPerformance, applyWsStatusEvent, setSocketConnected, setHasConnectedOnce, dispatchWsEvent, dispatchPerformance, applyDeployProgress, pushLog, queryClient])
 
   // 实例切换：更新订阅
   useEffect(() => {

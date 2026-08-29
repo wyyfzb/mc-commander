@@ -382,6 +382,31 @@ const server = createServer((req, res) => {
 
     if (path === '/api/v1/overview') return res.end(ok(overview))
     if (path === '/api/v1/system-stats') return res.end(ok(systemStats))
+    // ── 安全主线：auth 端点（登录 e2e 用；mock 固定凭据，严禁真实密码） ──
+    if (path === '/api/v1/auth/status') {
+      // 默认已设密（登录模式）；?fresh=1 模拟首访（设密向导模式）
+      const fresh = new URL(url, 'http://x').searchParams.get('fresh') === '1'
+      return res.end(ok({ hasPassword: !fresh }))
+    }
+    if (path === '/api/v1/auth/login' && req.method === 'POST') {
+      const mockSession = { token: 'e2e-mock-session-token-0000000001', sessionId: 1, expiresAt: new Date(Date.now() + 7 * 86400000).toISOString() }
+      try {
+        const { password } = JSON.parse(body || '{}')
+        if (password !== 'e2e-correct-pass') {
+          res.statusCode = 401
+          return res.end(JSON.stringify({ status: 'error', code: 40102, message: '密码错误', details: null, timestamp: '' }))
+        }
+      } catch {}
+      return res.end(ok(mockSession))
+    }
+    if (path === '/api/v1/auth/setup' && req.method === 'POST') {
+      return res.end(ok({ hasPassword: true, token: 'e2e-mock-session-token-0000000001', sessionId: 1, expiresAt: new Date(Date.now() + 7 * 86400000).toISOString() }))
+    }
+    if (path === '/api/v1/auth/sessions') {
+      return res.end(ok({ sessions: [{ id: 1, userAgent: 'Playwright E2E', ip: '127.0.0.1', createdAt: new Date().toISOString(), lastSeenAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 6 * 86400000).toISOString(), current: true }] }))
+    }
+    if (path === '/api/v1/auth/logout' && req.method === 'POST') return res.end(ok({ ok: true }))
+    if (path === '/api/v1/auth/password' && req.method === 'PUT') return res.end(ok({ ok: true, kickedSessions: 1 }))
     if (path === '/api/v1/rotate-key' && req.method === 'POST') {
       // API Key 轮换（mock：固定返回演示 key；生产为随机生成）
       return res.end(ok({ apiKey: 'mcck-mock-0000-0000-0000-0001' }, 'API Key 已轮换：旧 Key 立即失效，请立即保存新 Key'))

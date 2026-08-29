@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
 import { setupServer } from 'msw/node'
 import { handlers, mockOverview } from '@/test/mocks/handlers'
 import { apiGet, apiPost, ApiError, NetworkError, type ConnectionConfig } from '../client'
+import { useAuthStore, SESSION_EXPIRED_EVENT } from '@/stores/auth'
 
 const server = setupServer(...handlers)
 
@@ -50,6 +51,56 @@ describe('API 客户端（统一信封契约）', () => {
       ).rejects.toBeInstanceOf(NetworkError)
     } finally {
       server.listen({ onUnhandledRequest: 'error' })
+    }
+  })
+})
+
+describe('API 客户端双通道凭据（安全主线）', () => {
+
+  it('有会话令牌 → Authorization: Bearer，且不再携带 X-API-Key（双通道互斥）', async () => {
+    useAuthStore.getState().setSession({ token: 'tok-abc', sessionId: 1, expiresAt: new Date(Date.now() + 60_000).toISOString() })
+    const captured: { headers: Headers | null } = { headers: null }
+    server.events.on('request:start', ({ request }) => {
+      captured.headers = request.headers
+    })
+    await apiGet('/api/v1/overview', config)
+    expect(captured.headers?.get('authorization')).toBe('Bearer tok-abc')
+    expect(captured.headers?.get('x-api-key')).toBeNull()
+    useAuthStore.getState().clearSession()
+  })
+
+  it('无会话令牌 → X-API-Key 回退（行为兼容）', async () => {
+    useAuthStore.getState().clearSession()
+    const captured: { headers: Headers | null } = { headers: null }
+    server.events.on('request:start', ({ request }) => {
+      captured.headers = request.headers
+    })
+    await apiGet('/api/v1/overview', config)
+    expect(captured.headers?.get('x-api-key')).toBe('test-key')
+    expect(captured.headers?.get('authorization')).toBeNull()
+  })
+
+  it('公开端点（无凭据无 key）不带任何认证头', async () => {
+    useAuthStore.getState().clearSession()
+    const captured: { headers: Headers | null } = { headers: null }
+    server.events.on('request:start', ({ request }) => {
+      captured.headers = request.headers
+    })
+    await apiGet('/api/v1/auth/status', { baseUrl: '', apiKey: '' })
+    expect(captured.headers?.get('authorization')).toBeNull()
+    expect(captured.headers?.get('x-api-key')).toBeNull()
+  })
+
+  it('40103 会话过期 → 清会话 + 派发全局事件（跳登录由路由层监听）', async () => {
+    useAuthStore.getState().setSession({ token: 'tok-expired', sessionId: 1, expiresAt: new Date(Date.now() - 1_000).toISOString() })
+    const listener = vi.fn()
+    window.addEventListener(SESSION_EXPIRED_EVENT, listener)
+    try {
+      await expect(apiGet('/api/v1/session-expired-probe', config)).rejects.toMatchObject({ code: 40103 })
+      expect(useAuthStore.getState().session).toBeNull()
+      expect(listener).toHaveBeenCalledTimes(1)
+    } finally {
+      window.removeEventListener(SESSION_EXPIRED_EVENT, listener)
     }
   })
 })
