@@ -12,6 +12,7 @@ import { errorHandler } from '../middleware/error_handler.js';
 // mock 审计（recordAudit 内部吞错，直接 spy 断言调用参数）
 vi.mock('../utils/audit.js', () => ({
   AuditActions: {
+    PLUGIN_UPLOAD: 'PLUGIN_UPLOAD',
     PLUGIN_ENABLE: 'PLUGIN_ENABLE',
     PLUGIN_DISABLE: 'PLUGIN_DISABLE',
     PLUGIN_DELETE: 'PLUGIN_DELETE',
@@ -20,6 +21,7 @@ vi.mock('../utils/audit.js', () => ({
 }));
 
 import { recordAudit } from '../utils/audit.js';
+import { uploadPlugin } from '../services/plugin.service.js';
 
 // 临时实例目录：每个用例独立，测试后整体清理
 const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'mcs-plugins-'));
@@ -268,5 +270,182 @@ describe('Plugin Routes', () => {
     mockManager.getInstance.mockReturnValue(null);
     const res = await request(app).delete('/api/v1/instances/nope/plugins/Vault.jar');
     expect(res.status).toBe(404);
+  });
+});
+
+describe('plugin.service - uploadPlugin（feat-8 上传延伸）', () => {
+  beforeEach(() => {
+    fs.rmSync(pluginsDir, { recursive: true, force: true });
+    vi.clearAllMocks();
+  });
+
+  /** 在 tmpRoot 下生成待上传文件，返回其绝对路径 */
+  function stageUpload(fileName, content) {
+    const p = path.join(tmpRoot, fileName);
+    fs.writeFileSync(p, content);
+    return p;
+  }
+
+  it('合法 jar 上传成功：落盘 + 元数据解析 + 自动创建 plugins 目录', () => {
+    // 故意不预建 plugins 目录（首启前装插件是主流流程）
+    const tmp = stageUpload('essx.jar', Buffer.alloc(0));
+    const zip = new AdmZip();
+    zip.addFile('plugin.yml', Buffer.from('name: EssentialsX\nversion: 2.20.1\nmain: net.essentialsx.Essentials\nwebsite: https://essentialsx.net\nsoftdepend: [Vault]\nload: POSTWORLD\n', 'utf8'));
+    zip.writeZip(tmp);
+
+    const result = uploadPlugin(serverPath, tmp, 'EssentialsX-2.20.1.jar');
+    expect(result.file).toBe('EssentialsX-2.20.1.jar');
+    expect(result.overwritten).toBe(false);
+    expect(result.sizeBytes).toBe(fs.statSync(path.join(pluginsDir, 'EssentialsX-2.20.1.jar')).size);
+    expect(result.meta).toMatchObject({
+      name: 'EssentialsX',
+      website: 'https://essentialsx.net',
+      softdepend: ['Vault'],
+      load: 'POSTWORLD',
+    });
+    expect(fs.existsSync(path.join(pluginsDir, 'EssentialsX-2.20.1.jar'))).toBe(true);
+  });
+
+  it('非 jar 扩展名返回 400', () => {
+    const tmp = stageUpload('notes.txt', 'hello');
+    expect(() => uploadPlugin(serverPath, tmp, 'notes.txt')).toThrowError(/Invalid plugin file name/);
+  });
+
+  it('路径逃逸文件名返回 400', () => {
+    const tmp = stageUpload('evil.jar', Buffer.from([0x50, 0x4b, 0x03, 0x04]));
+    expect(() => uploadPlugin(serverPath, tmp, '../evil.jar')).toThrowError(/Invalid plugin file name/);
+    expect(() => uploadPlugin(serverPath, tmp, 'a/b.jar')).toThrowError(/Invalid plugin file name/);
+    // .disabled 状态不允许直接上传（启停走接口）
+    expect(() => uploadPlugin(serverPath, tmp, 'Vault.jar.disabled')).toThrowError(/Invalid plugin file name/);
+  });
+
+  it('非 zip 内容（伪装 .jar）返回 400（魔数校验）', () => {
+    const tmp = stageUpload('fake.jar', 'this is not a zip file');
+    expect(() => uploadPlugin(serverPath, tmp, 'Fake.jar'))
+      .toThrowError(/not a valid jar \(zip magic check failed\)/);
+    expect(fs.existsSync(path.join(pluginsDir, 'Fake.jar'))).toBe(false);
+  });
+
+  it('同名冲突默认拒绝（40912），源文件保留', () => {
+    writePluginJar('Vault.jar', 'name: Vault\nversion: 1.7.3\nmain: net.milkbowl.vault.Vault\n');
+    const tmp = stageUpload('new.jar', Buffer.alloc(0));
+    const zip = new AdmZip();
+    zip.addFile('plugin.yml', Buffer.from('name: Vault\nversion: 9.9.9\nmain: net.milkbowl.vault.Vault\n', 'utf8'));
+    zip.writeZip(tmp);
+
+    expect(() => uploadPlugin(serverPath, tmp, 'Vault.jar')).toThrowError(/already exists/);
+    // 旧文件未被破坏
+    const meta = readPluginMeta(path.join(pluginsDir, 'Vault.jar'));
+    expect(meta.version).toBe('1.7.3');
+  });
+
+  it('overwrite=true 替换旧文件并标记 overwritten', () => {
+    writePluginJar('Vault.jar', 'name: Vault\nversion: 1.7.3\nmain: net.milkbowl.vault.Vault\n');
+    const tmp = stageUpload('new.jar', Buffer.alloc(0));
+    const zip = new AdmZip();
+    zip.addFile('plugin.yml', Buffer.from('name: Vault\nversion: 9.9.9\nmain: net.milkbowl.vault.Vault\n', 'utf8'));
+    zip.writeZip(tmp);
+
+    const result = uploadPlugin(serverPath, tmp, 'Vault.jar', { overwrite: true });
+    expect(result.overwritten).toBe(true);
+    expect(readPluginMeta(path.join(pluginsDir, 'Vault.jar')).version).toBe('9.9.9');
+  });
+});
+
+describe('Plugin Routes - POST upload', () => {
+  let app;
+  let mockManager;
+
+  beforeEach(() => {
+    fs.rmSync(pluginsDir, { recursive: true, force: true });
+    ensurePluginsDir();
+    app = express();
+    app.use(express.json());
+    mockManager = { getInstance: vi.fn() };
+    app.use('/api/v1', createPluginRoutes(mockManager));
+    app.use(errorHandler);
+    vi.clearAllMocks();
+  });
+
+  it('上传合法 jar：201 + 元数据返回 + 审计 PLUGIN_UPLOAD + 临时文件清理', async () => {
+    mockManager.getInstance.mockReturnValue({ serverPath });
+    const zip = new AdmZip();
+    zip.addFile('plugin.yml', Buffer.from('name: LuckPerms\nversion: 5.4.140\nmain: me.lucko.luckperms.bukkit.LP Bukkit\n'.replace('LP Bukkit', 'LPBukkit'), 'utf8'));
+    const jarBuffer = zip.toBuffer();
+
+    const res = await request(app)
+      .post('/api/v1/instances/inst1/plugins/upload')
+      .attach('file', jarBuffer, { filename: 'LuckPerms.jar', contentType: 'application/java-archive' });
+
+    expect(res.status).toBe(201);
+    expect(res.body.status).toBe('ok');
+    expect(res.body.data.file).toBe('LuckPerms.jar');
+    expect(res.body.data.overwritten).toBe(false);
+    expect(res.body.data.meta.name).toBe('LuckPerms');
+    expect(fs.existsSync(path.join(pluginsDir, 'LuckPerms.jar'))).toBe(true);
+    expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({
+      instanceId: 'inst1',
+      action: 'PLUGIN_UPLOAD',
+      targetId: 'LuckPerms.jar',
+      detail: expect.objectContaining({ overwritten: false }),
+    }));
+    // multer 临时文件应被清理（tmpdir 下无 .plugin-upload.tmp 残留）
+    const tmpDir = path.join(os.tmpdir(), 'mc-commander-uploads');
+    const leftovers = fs.existsSync(tmpDir)
+      ? fs.readdirSync(tmpDir).filter((f) => f.startsWith('.plugin-upload.tmp'))
+      : [];
+    expect(leftovers).toHaveLength(0);
+  });
+
+  it('同名冲突返回 409 code 40912', async () => {
+    mockManager.getInstance.mockReturnValue({ serverPath });
+    writePluginJar('Vault.jar');
+    const zip = new AdmZip();
+    zip.addFile('plugin.yml', Buffer.from('name: Vault\nversion: 2.0\nmain: net.milkbowl.vault.Vault\n', 'utf8'));
+    const res = await request(app)
+      .post('/api/v1/instances/inst1/plugins/upload')
+      .attach('file', zip.toBuffer(), { filename: 'Vault.jar' });
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe(40912);
+  });
+
+  it('?overwrite=true 返回 200 且内容被替换', async () => {
+    mockManager.getInstance.mockReturnValue({ serverPath });
+    writePluginJar('Vault.jar', 'name: Vault\nversion: 1.7.3\nmain: net.milkbowl.vault.Vault\n');
+    const zip = new AdmZip();
+    zip.addFile('plugin.yml', Buffer.from('name: Vault\nversion: 2.0\nmain: net.milkbowl.vault.Vault\n', 'utf8'));
+    const res = await request(app)
+      .post('/api/v1/instances/inst1/plugins/upload?overwrite=true')
+      .attach('file', zip.toBuffer(), { filename: 'Vault.jar' });
+    expect(res.status).toBe(200);
+    expect(res.body.data.overwritten).toBe(true);
+    expect(readPluginMeta(path.join(pluginsDir, 'Vault.jar')).version).toBe('2.0');
+    expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({
+      detail: expect.objectContaining({ overwritten: true }),
+    }));
+  });
+
+  it('非 .jar 扩展名返回 400', async () => {
+    mockManager.getInstance.mockReturnValue({ serverPath });
+    const res = await request(app)
+      .post('/api/v1/instances/inst1/plugins/upload')
+      .attach('file', Buffer.from('hello'), { filename: 'readme.txt' });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe(40000);
+  });
+
+  it('实例不存在返回 404 且不留临时文件', async () => {
+    mockManager.getInstance.mockReturnValue(null);
+    const zip = new AdmZip();
+    zip.addFile('plugin.yml', Buffer.from('name: Vault\nmain: v\n', 'utf8'));
+    const res = await request(app)
+      .post('/api/v1/instances/nope/plugins/upload')
+      .attach('file', zip.toBuffer(), { filename: 'Vault.jar' });
+    expect(res.status).toBe(404);
+    const tmpDir = path.join(os.tmpdir(), 'mc-commander-uploads');
+    const leftovers = fs.existsSync(tmpDir)
+      ? fs.readdirSync(tmpDir).filter((f) => f.startsWith('.plugin-upload.tmp'))
+      : [];
+    expect(leftovers).toHaveLength(0);
   });
 });

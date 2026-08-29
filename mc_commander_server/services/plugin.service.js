@@ -1,7 +1,7 @@
 import path from 'path';
 import fs from 'fs';
 import AdmZip from 'adm-zip';
-import { load as yamlLoad } from 'js-yaml';
+import { load as yamlLoad, FAILSAFE_SCHEMA } from 'js-yaml';
 import { AppError, ErrorCodes } from '../utils/response.js';
 import { resolveSafePath, PathTraversalError } from '../utils/fs-utils.js';
 
@@ -20,6 +20,12 @@ import { resolveSafePath, PathTraversalError } from '../utils/fs-utils.js';
 /// 插件文件名白名单：字母数字开头，允许 . _ - ，以 .jar 或 .jar.disabled 结尾。
 /// 拒绝路径分隔符/空白/控制字符/隐藏文件，路径逃逸由 resolveSafePath 兜底。
 const PLUGIN_FILE_REGEX = /^[A-Za-z0-9][A-Za-z0-9._-]*\.jar(\.disabled)?$/;
+
+/// 上传文件名白名单：仅允许 .jar（不允许直接上传 .disabled 状态，启停走接口）
+const PLUGIN_UPLOAD_NAME_REGEX = /^[A-Za-z0-9][A-Za-z0-9._-]*\.jar$/;
+
+/// zip 容器魔数（jar 实为 zip）：PK\x03\x04
+const ZIP_MAGIC = Buffer.from([0x50, 0x4b, 0x03, 0x04]);
 
 /// 单实例插件数量上限：防止异常目录拖垮列表请求（正常服 < 100 个插件）
 const MAX_PLUGINS = 200;
@@ -65,7 +71,9 @@ export function readPluginMeta(jarPath) {
       const text = entry.getData().toString('utf8');
       let doc;
       try {
-        doc = yamlLoad(text);
+        // FAILSAFE schema：所有标量按字符串读取（与 Bukkit PluginDescriptionFile 语义一致），
+        // 避免 version: 2.0 / api-version: 1.20 被 YAML 解析为 float 后丢失尾零/类型不符
+        doc = yamlLoad(text, { schema: FAILSAFE_SCHEMA });
       } catch {
         continue; // YAML 解析失败，尝试下一个 descriptor
       }
@@ -86,6 +94,12 @@ export function readPluginMeta(jarPath) {
         depend: Array.isArray(doc.depend)
           ? doc.depend.filter((d) => typeof d === 'string').slice(0, 20)
           : [],
+        // 详情面板扩展字段：软依赖（缺失不影响加载）、官网、加载时机（STARTUP/POSTWORLD）
+        softdepend: Array.isArray(doc.softdepend)
+          ? doc.softdepend.filter((d) => typeof d === 'string').slice(0, 20)
+          : [],
+        website: typeof doc.website === 'string' ? doc.website : null,
+        load: doc.load === 'STARTUP' || doc.load === 'POSTWORLD' ? doc.load : null,
       };
       // 至少有 name 或 main 才算有效元数据
       if (meta.name || meta.main) return meta;
@@ -95,6 +109,86 @@ export function readPluginMeta(jarPath) {
   } catch {
     return null;
   }
+}
+
+/**
+ * 上传插件 jar（feat-8 延伸）：multer 已将 multipart 落盘到临时文件。
+ * - 文件名校验：PLUGIN_UPLOAD_NAME_REGEX（仅 .jar，拒绝路径分隔符/控制字符）
+ * - zip 魔数校验：头部 4 字节必须为 PK\x03\x04（拒绝伪装成 jar 的任意文件）
+ * - plugins/ 目录不存在时自动创建（首次启动前装插件是主流流程）
+ * - 同名冲突：默认拒绝（40912）；overwrite=true 时替换旧文件（审计记录 overwritten）
+ * - 移动：copyFileSync（跨设备安全，与 files 路由同模式；临时文件由路由层清理）
+ * 返回 { file, sizeBytes, mtimeMs, meta, overwritten }。
+ */
+export function uploadPlugin(serverPath, tmpFilePath, originalName, { overwrite = false } = {}) {
+  if (typeof originalName !== 'string' || !PLUGIN_UPLOAD_NAME_REGEX.test(originalName)) {
+    throw new AppError(ErrorCodes.VALIDATION_ERROR, `Invalid plugin file name: ${originalName}`);
+  }
+
+  // zip 魔数校验（只读头部 4 字节，不整包扫描）
+  let head;
+  try {
+    const fd = fs.openSync(tmpFilePath, 'r');
+    try {
+      head = Buffer.alloc(4);
+      fs.readSync(fd, head, 0, 4, 0);
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch (err) {
+    throw new AppError(ErrorCodes.SERVER_ERROR, `Failed to read uploaded file: ${err.message}`);
+  }
+  if (!head.subarray(0, 4).equals(ZIP_MAGIC)) {
+    throw new AppError(ErrorCodes.VALIDATION_ERROR,
+      'Uploaded file is not a valid jar (zip magic check failed)');
+  }
+
+  const pluginsDir = path.join(serverPath, 'plugins');
+  try {
+    fs.mkdirSync(pluginsDir, { recursive: true });
+  } catch (err) {
+    throw new AppError(ErrorCodes.SERVER_ERROR, `Failed to create plugins dir: ${err.message}`);
+  }
+
+  // 路径兜底：文件名不可能含分隔符（正则已挡），双保险校验解析结果仍在 plugins/ 下
+  const targetFull = path.join(pluginsDir, originalName);
+  if (path.dirname(targetFull) !== path.resolve(pluginsDir)) {
+    throw new AppError(ErrorCodes.VALIDATION_ERROR, `Invalid plugin path: ${originalName}`);
+  }
+
+  let overwritten = false;
+  if (fs.existsSync(targetFull)) {
+    if (!overwrite) {
+      throw new AppError(ErrorCodes.PLUGIN_FILE_EXISTS,
+        `Plugin file already exists: ${originalName}`);
+    }
+    try {
+      fs.unlinkSync(targetFull);
+    } catch (err) {
+      throw new AppError(ErrorCodes.SERVER_ERROR, `Failed to replace plugin: ${err.message}`);
+    }
+    overwritten = true;
+  }
+
+  try {
+    fs.copyFileSync(tmpFilePath, targetFull);
+  } catch (err) {
+    throw new AppError(ErrorCodes.SERVER_ERROR, `Failed to save plugin: ${err.message}`);
+  }
+
+  let stat;
+  try {
+    stat = fs.statSync(targetFull);
+  } catch (err) {
+    throw new AppError(ErrorCodes.SERVER_ERROR, `Failed to stat plugin: ${err.message}`);
+  }
+  return {
+    file: originalName,
+    sizeBytes: stat.size,
+    mtimeMs: Math.round(stat.mtimeMs),
+    meta: readPluginMeta(targetFull),
+    overwritten,
+  };
 }
 
 /**
