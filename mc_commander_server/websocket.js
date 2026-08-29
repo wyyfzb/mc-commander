@@ -136,10 +136,11 @@ export function setupWebSocket(wss, serverManager) {
   wss.on('close', () => clearInterval(cleanupInterval));
 
   wss.on('connection', (ws, req) => {
-    // API Key 由 handleProtocols 在 index.js 中提取并挂载到 req._wsApiKey
+    // 凭据由 handleProtocols 在 index.js 中提取并挂载到 req（双通道互斥，客户端只会带其一）
     const apiKey = req._wsApiKey || null;
+    const sessionToken = req._wsSessionToken || null;
 
-    if (!authenticateWebSocket(apiKey)) {
+    if (!authenticateWebSocket(apiKey, sessionToken)) {
       ws.close(1008, 'Unauthorized');
       return;
     }

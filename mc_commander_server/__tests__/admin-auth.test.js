@@ -18,7 +18,7 @@ import config from '../config.js';
 import { initDatabase } from '../db/index.js';
 import { AdminAccountModel, AdminSessionModel } from '../db/admin.model.js';
 import { hashPassword, verifyPassword, hashToken, generateSessionToken } from '../utils/password.js';
-import { authMiddleware } from '../middleware/auth.js';
+import { authMiddleware, authenticateWebSocket } from '../middleware/auth.js';
 import { createAuthRoutes, resetLoginLockState } from '../routes/auth.js';
 import { errorHandler } from '../middleware/error_handler.js';
 
@@ -54,7 +54,6 @@ describe('utils/password', () => {
     expect(stored).toMatch(/^scrypt\$16384\$8\$1\$/);
     expect(verifyPassword('correct horse battery', stored)).toBe(true);
   });
-
   it('错误密码 / 损坏存储格式一律 false（不抛出）', () => {
     const stored = hashPassword('secret-pass-1');
     expect(verifyPassword('wrong-pass', stored)).toBe(false);
@@ -66,6 +65,47 @@ describe('utils/password', () => {
     expect(hashToken('abc')).toBe(hashToken('abc'));
     expect(hashToken('abc')).toMatch(/^[0-9a-f]{64}$/);
     expect(generateSessionToken()).not.toBe(generateSessionToken());
+  });
+});
+
+describe('authenticateWebSocket 会话通道（WS 握手双通道）', () => {
+  function seedSession({ expiresInMs = 60_000 } = {}) {
+    const token = generateSessionToken();
+    AdminSessionModel.create({
+      tokenHash: hashToken(token),
+      userAgent: 'vitest-ws',
+      ip: '127.0.0.1',
+      expiresAt: new Date(Date.now() + expiresInMs).toISOString(),
+    });
+    return token;
+  }
+
+  it('有效会话令牌 → true（与 API Key 通道语义对齐）', () => {
+    const token = seedSession();
+    expect(authenticateWebSocket(null, token)).toBe(true);
+  });
+
+  it('未知令牌 → false', () => {
+    expect(authenticateWebSocket(null, 'no-such-token')).toBe(false);
+  });
+
+  it('过期会话 → false 且记录被顺手清理', () => {
+    const token = seedSession({ expiresInMs: -1_000 });
+    expect(authenticateWebSocket(null, token)).toBe(false);
+    // 惰性清理：库中不应残留过期行
+    const rows = AdminSessionModel.listActive();
+    expect(rows).toHaveLength(0);
+  });
+
+  it('apiKey 与 sessionToken 同时传入 → apiKey 优先', () => {
+    seedSession();
+    expect(authenticateWebSocket(config.apiKey, 'ignored-invalid-token')).toBe(true);
+    expect(authenticateWebSocket('wrong-key', 'ignored-invalid-token')).toBe(false);
+  });
+
+  it('两者皆空 → false', () => {
+    expect(authenticateWebSocket(null, null)).toBe(false);
+    expect(authenticateWebSocket('', '')).toBe(false);
   });
 });
 
