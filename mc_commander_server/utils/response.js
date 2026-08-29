@@ -75,6 +75,8 @@ export const ErrorCodes = {
   PLUGIN_NOT_FOUND: { code: 40411, message: 'Plugin not found', status: 404 },
   // 启停语义冲突：目标已是请求状态 / 重命名目标名已存在
   PLUGIN_STATE_CONFLICT: { code: 40910, message: 'Plugin state conflict', status: 409 },
+  // 上传同名冲突：plugins/ 目录已存在同名文件且未显式 overwrite
+  PLUGIN_FILE_EXISTS: { code: 40912, message: 'Plugin file already exists', status: 409 },
 
   // 管理员登录（安全主线）
   AUTH_INVALID_CREDENTIALS: { code: 40102, message: '密码错误', status: 401 },
