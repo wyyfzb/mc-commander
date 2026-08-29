@@ -9,6 +9,16 @@ import { success, ErrorCodes, AppError } from '../utils/response.js';
 import { atomicWriteFile, resolveSafePath, PathTraversalError } from '../utils/fs-utils.js';
 import config from '../config.js';
 import { BanModel } from '../db/index.js';
+import { recordAudit, AuditActions } from '../utils/audit.js';
+
+// Content-Disposition filename 编码（RFC 5987）：ASCII 可直接用 filename，
+// 非 ASCII（中文等）用 filename*=UTF-8''percent-encoded，双写兼容不支持 5987 的旧客户端
+function contentDisposition(fileName) {
+  const asciiFallback = fileName.replace(/[^\x20-\x7e]/g, '_').replace(/(["\\])/g, '\\$1');
+  const encoded = encodeURIComponent(fileName)
+    .replace(/['()]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+  return `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encoded}`;
+}
 
 // 前 1024 字节含 NUL 字节 → 判定二进制（文本文件几乎不含 NUL）
 function detectBinary(buffer) {
@@ -267,6 +277,65 @@ export function createFileRoutes(serverManager) {
     }
   });
 
+  // 下载文件（GET /instances/:instanceId/files/download?path=）
+  // 流式发送（createReadStream 不整读入内存，world/备份等大文件可下）；
+  // 目录拒绝（目录下载应走备份打包流程，避免递归流拼接的边界问题）；
+  // 审计 FILE_DOWNLOAD（与管理页其他文件操作对齐，下载敏感文件可追溯）
+  router.get('/instances/:instanceId/files/download', (req, res, next) => {
+    try {
+      const { instanceId } = req.params;
+      const filePath = req.query.path;
+
+      if (!filePath) {
+        throw new AppError(ErrorCodes.VALIDATION_ERROR, 'File path is required');
+      }
+
+      const instance = serverManager.getInstance(instanceId);
+      if (!instance) {
+        throw new AppError(ErrorCodes.INSTANCE_NOT_FOUND);
+      }
+
+      const basePath = instance.serverPath || path.join(config.serversDir, instanceId);
+      // 统一路径校验（find-006/007）：实例内符号链接可越界读任意文件，
+      // 与 GET /content 同级别的 realpath + symlink 拒绝防线
+      const fullPath = resolveInstancePath(basePath, filePath);
+
+      const stats = fs.statSync(fullPath);
+      if (!stats.isFile()) {
+        throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Path is not a file (directory download not supported)');
+      }
+
+      const fileName = path.basename(fullPath);
+      res.setHeader('Content-Type', 'application/octet-stream');
+      res.setHeader('Content-Length', stats.size);
+      res.setHeader('Content-Disposition', contentDisposition(fileName));
+
+      recordAudit({
+        instanceId,
+        action: AuditActions.FILE_DOWNLOAD,
+        targetType: 'file',
+        targetId: filePath,
+        detail: { name: fileName, sizeBytes: stats.size },
+      });
+
+      // 流错误在 headers 已发送后只能终止连接（无法改写状态码）——
+      // 转发为 destroy 让 Node 记录连接错误，客户端表现为下载中断
+      const stream = fs.createReadStream(fullPath);
+      stream.on('error', (streamErr) => {
+        console.error('[Files] Download stream error:', streamErr.message);
+        res.destroy(streamErr);
+      });
+      stream.pipe(res);
+    } catch (err) {
+      // statSync 阶段被并发删除 → 404（与 GET /content 同语义）
+      if (err.code === 'ENOENT') {
+        next(new AppError(ErrorCodes.FILE_NOT_FOUND));
+        return;
+      }
+      next(err);
+    }
+  });
+
   // 读取文件内容
   router.get('/instances/:instanceId/files/content', (req, res, next) => {
     try {
@@ -412,7 +481,15 @@ export function createFileRoutes(serverManager) {
       }
 
       const stats = fs.statSync(fullPath);
-      
+
+      recordAudit({
+        instanceId,
+        action: AuditActions.FILE_SAVE,
+        targetType: 'file',
+        targetId: filePath,
+        detail: { name: path.basename(fullPath), sizeBytes: stats.size, encoding },
+      });
+
       res.json(success({
         path: filePath,
         size: stats.size,
@@ -468,6 +545,8 @@ export function createFileRoutes(serverManager) {
         }
       }
 
+      const delIsDirectory = fs.statSync(fullPath).isDirectory();
+
       // 递归删除
       fs.rmSync(fullPath, { recursive: true, force: true });
 
@@ -475,6 +554,14 @@ export function createFileRoutes(serverManager) {
       if (delSpec && delOldEntries.length > 0) {
         syncListFileChanges(instance, delFileName, delOldEntries, []);
       }
+
+      recordAudit({
+        instanceId,
+        action: AuditActions.FILE_DELETE,
+        targetType: delIsDirectory ? 'directory' : 'file',
+        targetId: filePath,
+        detail: { name: path.basename(fullPath), isDirectory: delIsDirectory },
+      });
 
       res.json(success(null, 'File/directory deleted successfully'));
     } catch (err) {
@@ -514,6 +601,14 @@ export function createFileRoutes(serverManager) {
 
       fs.mkdirSync(fullPath, { recursive: true });
 
+      recordAudit({
+        instanceId,
+        action: AuditActions.FILE_MKDIR,
+        targetType: 'directory',
+        targetId: dirPath,
+        detail: { name: path.basename(fullPath) },
+      });
+
       res.json(success({
         path: dirPath,
         name: path.basename(fullPath),
@@ -551,6 +646,14 @@ export function createFileRoutes(serverManager) {
       }
 
       fs.renameSync(fullOldPath, fullNewPath);
+
+      recordAudit({
+        instanceId,
+        action: AuditActions.FILE_RENAME,
+        targetType: 'file',
+        targetId: newPath,
+        detail: { from: oldPath, to: newPath },
+      });
 
       res.json(success({
         oldPath,
@@ -673,6 +776,15 @@ const upload = multer({
       try { fs.unlinkSync(uploadedFile.path); } catch {}
 
       const stats = fs.statSync(targetPath);
+
+      recordAudit({
+        instanceId,
+        action: AuditActions.FILE_UPLOAD,
+        targetType: 'file',
+        targetId: '/' + safeName,
+        detail: { name: safeName, sizeBytes: stats.size },
+      });
+
       res.json(success({
         path: '/' + safeName,
         name: safeName,
