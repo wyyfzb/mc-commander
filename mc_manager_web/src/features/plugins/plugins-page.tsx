@@ -48,6 +48,8 @@ import { formatFileSize, formatModifiedAt } from '@/lib/mc-files'
 import { useServerStore } from '@/stores/server'
 import { useConnectionStore } from '@/stores/connection'
 import { MarketSheet } from './market-sheet'
+import { apiCheckPluginUpdates } from '@/api/plugins'
+import type { PluginUpdateStatus } from '@/api/types'
 import { useDeletePlugin, usePlugins, useTogglePlugin } from './queries'
 
 /** 同名冲突上下文：触发冲突的文件 + 上传队列剩余文件（确认覆盖后继续） */
@@ -84,6 +86,11 @@ export function PluginsPage() {
   const [dragActive, setDragActive] = useState(false)
   /** 插件市场侧滑面板 */
   const [marketOpen, setMarketOpen] = useState(false)
+  /** 更新检测结果（file → status，feat-8 延伸：已装插件 vs Modrinth 最新版） */
+  const [updateMap, setUpdateMap] = useState<Map<string, PluginUpdateStatus>>(new Map())
+  const [updateChecking, setUpdateChecking] = useState(false)
+  /** 市场预填搜索词（点「更新」时带上 plugin.yml name 直达） */
+  const [marketInitialQuery, setMarketInitialQuery] = useState<string | null>(null)
   const uploadAbortRef = useRef<AbortController | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   /** 拖放嵌套计数（子元素 dragleave 会误触发，用计数法） */
@@ -124,6 +131,11 @@ export function PluginsPage() {
   const enabledCount = useMemo(() => plugins.filter((p) => p.enabled).length, [plugins])
 
   /** 清空选择（列表变化后勾选项可能已不存在） */
+  // 插件列表变化（实例切换/上传/删除后失效重取）→ 更新检测结果同步失效
+  useEffect(() => {
+    setUpdateMap(new Map())
+  }, [instanceId])
+
   useEffect(() => {
     setSelected((prev) => {
       const valid = new Set(plugins.map((p) => p.file))
@@ -231,6 +243,35 @@ export function PluginsPage() {
         action={{ label: '前往实例管理', onClick: () => navigate('/instances') }}
       />
     )
+  }
+
+  /**
+   * 批量更新检测（feat-8 延伸）：POST check-updates（服务端搜索 Modrinth + 版本比对）。
+   * 结果映射 file → status 供行内徽章消费；hasNewer（真落后）计数 toast 提示。
+   * 检测按钮与行内「可更新」徽章联动；关闭市场面板即清预填。
+   */
+  const checkUpdates = async () => {
+    if (!instanceId || updateChecking) return
+    setUpdateChecking(true)
+    try {
+      const result = await apiCheckPluginUpdates(useConnectionStore.getState(), instanceId)
+      setUpdateMap(new Map(result.results.map((r) => [r.file, r])))
+      const outdated = result.results.filter((r) => r.hasNewer)
+      const mismatched = result.results.filter((r) => r.matched && !r.hasNewer && r.updateAvailable)
+      if (outdated.length > 0) {
+        toast.info(`检测到 ${outdated.length} 个插件有新版本`, {
+          description: outdated.map((r) => `${r.name} → ${r.latestVersion}`).join('、'),
+        })
+      } else if (mismatched.length > 0) {
+        toast.info(`${mismatched.length} 个插件版本号与 Modrinth 不一致（可能为自定义构建）`)
+      } else {
+        toast.success('所有已收录插件均为最新版本')
+      }
+    } catch (err) {
+      toast.error(`更新检测失败：${getFriendlyErrorText(err)}`)
+    } finally {
+      setUpdateChecking(false)
+    }
   }
 
   /** 单插件启停：成功 toast 强调"重启实例后生效"（Bukkit 插件仅启动时加载） */
@@ -423,6 +464,17 @@ export function PluginsPage() {
         <Button
           variant="outline"
           size="sm"
+          onClick={() => void checkUpdates()}
+          disabled={updateChecking || plugins.length === 0}
+          aria-label="检查插件更新"
+          data-testid="check-updates"
+        >
+          <RefreshCw className={`size-3.5 ${updateChecking ? 'animate-spin' : ''}`} aria-hidden />
+          检查更新
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
           onClick={() => setMarketOpen(true)}
           aria-label="打开插件市场"
           data-testid="open-market"
@@ -572,6 +624,11 @@ export function PluginsPage() {
                   onToggle={handleToggle}
                   onDelete={() => setDeleteTarget(plugin)}
                   onOpenDetail={() => setDetail(plugin)}
+                  updateInfo={updateMap.get(plugin.file)}
+                  onUpdate={(p) => {
+                    setMarketInitialQuery(p.meta?.name ?? p.name)
+                    setMarketOpen(true)
+                  }}
                 />
               ))}
             </ul>
@@ -634,8 +691,12 @@ export function PluginsPage() {
       {/* ── 插件市场（Modrinth 一键安装，feat-8 延伸） ── */}
       <MarketSheet
         open={marketOpen}
-        onOpenChange={setMarketOpen}
+        onOpenChange={(o) => {
+          setMarketOpen(o)
+          if (!o) setMarketInitialQuery(null) // 关闭即清预填，下次手动打开回到浏览模式
+        }}
         instanceId={instanceId}
+        initialQuery={marketInitialQuery}
       />
     </div>
   )
@@ -650,10 +711,14 @@ interface PluginRowProps {
   onToggle: (plugin: PluginInfo, enabled: boolean) => Promise<void>
   onDelete: () => void
   onOpenDetail: () => void
+  /** 更新检测结果（未检测/未收录为 undefined；hasNewer=true 展示「可更新」徽章） */
+  updateInfo?: PluginUpdateStatus
+  /** 点击「更新」：打开市场并预填搜索 */
+  onUpdate: (plugin: PluginInfo) => void
 }
 
 /** 单行插件卡片：复选框 + 元数据主列 + 状态/操作列；行点击打开详情 */
-function PluginRow({ plugin, checked, onCheckedChange, toggling, deleting, onToggle, onDelete, onOpenDetail }: PluginRowProps) {
+function PluginRow({ plugin, checked, onCheckedChange, toggling, deleting, onToggle, onDelete, onOpenDetail, updateInfo, onUpdate }: PluginRowProps) {
   const displayName = plugin.meta?.name ?? plugin.name
   const version = plugin.meta?.version
   const apiVersion = plugin.meta?.apiVersion
@@ -703,6 +768,20 @@ function PluginRow({ plugin, checked, onCheckedChange, toggling, deleting, onTog
           <Chip tone={plugin.enabled ? 'success' : 'muted'}>
             {plugin.enabled ? '已启用' : '已禁用'}
           </Chip>
+          {updateInfo?.hasNewer && (
+            <button
+              type="button"
+              data-testid="update-badge"
+              className="rounded-full bg-mcs-accent-bg-subtle px-2 py-0.5 text-mcs-2xs font-medium text-mcs-accent-fg transition-colors duration-mcs-fast hover:bg-mcs-accent-bg"
+              onClick={(e) => {
+                e.stopPropagation()
+                onUpdate(plugin)
+              }}
+              title={`Modrinth 最新版 ${updateInfo.latestVersion ?? ''}，点击前往市场更新`}
+            >
+              可更新 → {updateInfo.latestVersion}
+            </button>
+          )}
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-mcs-xs text-mcs-text-subtle">
           <span className="truncate font-mono" title={plugin.file}>{plugin.file}</span>

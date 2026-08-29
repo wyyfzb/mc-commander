@@ -11,6 +11,7 @@ import type {
   MarketVersionsResult,
   PluginList,
   PluginToggleResult,
+  PluginUpdateCheckResult,
   PluginUploadResult,
 } from './types'
 
@@ -135,5 +136,19 @@ export function apiMarketInstall(
     config,
     { slug, versionNumber },
     { timeoutMs: 600_000 },
+  )
+}
+
+/**
+ * 批量更新检测（POST /instances/:id/plugins/check-updates，feat-8 延伸）。
+ * 服务端逐个搜索 Modrinth（并发 5 + 缓存），命中后比对版本；最坏情况
+ * 20 插件 × 多次上游往返，超时放宽到 60s。
+ */
+export function apiCheckPluginUpdates(config: ConnectionConfig, instanceId: string) {
+  return apiPost<PluginUpdateCheckResult>(
+    `/api/v1/instances/${instanceId}/plugins/check-updates`,
+    config,
+    {},
+    { timeoutMs: 60_000 },
   )
 }
