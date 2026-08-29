@@ -1,12 +1,12 @@
 /**
  * PropertiesPanel —— server.properties 属性表单
- * - 只读态/编辑态：快照 → 编辑（NoticeBanner + 取消/保存）→ PUT → restartRequired 中文标签 toast
+ * - 只读态/编辑态：快照 → 编辑（NoticeBanner + 取消/保存）→ PUT → 需重启项 Dialog 清单 + 可选一键重启
  * - 三分类 FilterChip + 搜索；未知属性自动追加展示（只读，服务端白名单外不可写）
  * - 敏感 9 键锁定（锁图标 + 占位符，tooltip 说明）；热改 4 键编辑态标记「即时生效」
  * - 编辑值在组件 state，与 30s 轮询 query data 隔离，无需暂停轮询
  */
 import { useMemo, useState } from 'react'
-import { Lock, Pencil, Save, Search, X } from 'lucide-react'
+import { Copy, Check, Lock, Loader2, Pencil, RefreshCw, Save, Search, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
@@ -18,7 +18,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
+import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { toast } from 'sonner'
 import { getFriendlyErrorText } from '@/api/errors'
@@ -39,6 +48,14 @@ const CATEGORY_LABELS: Array<{ value: string; label: string }> = [
   { value: 'serverSettings', label: '服务器设置' },
 ]
 
+/** 保存后需重启项清单行 */
+interface RestartItem {
+  key: string
+  label: string
+  oldValue: string
+  newValue: string
+}
+
 interface PropertiesPanelProps {
   /** 服务端当前属性值（GET /properties，敏感键已掩码） */
   properties: Record<string, string> | undefined
@@ -47,9 +64,13 @@ interface PropertiesPanelProps {
   onSave: (payload: Record<string, string>) => Promise<string[]>
   /** 编辑态变化回调（页面级未保存守卫用） */
   onEditingChange?: (editing: boolean) => void
+  /** 服务器是否运行中（决定 Dialog 是否展示重启入口） */
+  isRunning?: boolean
+  /** 重启回调（Dialog 内「立即重启」按钮触发；由页面层注入重启 mutation） */
+  onRestart?: () => Promise<void>
 }
 
-export function PropertiesPanel({ properties, isLoading, onSave, onEditingChange }: PropertiesPanelProps) {
+export function PropertiesPanel({ properties, isLoading, onSave, onEditingChange, isRunning = false, onRestart }: PropertiesPanelProps) {
   const [isEditing, setIsEditingState] = useState(false)
 
   /** 编辑态统一入口（state + 通知页面守卫） */
@@ -63,6 +84,14 @@ export function PropertiesPanel({ properties, isLoading, onSave, onEditingChange
   const [snapshot, setSnapshot] = useState<Record<string, string>>({})
   const [category, setCategory] = useState('all')
   const [search, setSearch] = useState('')
+  /** 保存后需重启项清单（Dialog 展示用） */
+  const [restartItems, setRestartItems] = useState<RestartItem[]>([])
+  const [restartDialogOpen, setRestartDialogOpen] = useState(false)
+  /** Dialog 内重启确认态 */
+  const [confirmRestartOpen, setConfirmRestartOpen] = useState(false)
+  const [restarting, setRestarting] = useState(false)
+  /** 复制按钮反馈态 */
+  const [copied, setCopied] = useState(false)
 
   /** 完整规则行：已知 66 + 未知追加 */
   const rows = useMemo(() => {
@@ -100,6 +129,31 @@ export function PropertiesPanel({ properties, isLoading, onSave, onEditingChange
     setEditing(false)
   }
 
+  /** 复制需重启项清单为纯文本 */
+  const handleCopy = async () => {
+    const text = restartItems
+      .map((item) => `${item.label}（${item.key}）：${item.oldValue} → ${item.newValue}`)
+      .join('\n')
+    await navigator.clipboard.writeText(text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  /** Dialog 内触发重启（二次确认后执行） */
+  const handleRestart = async () => {
+    setConfirmRestartOpen(false)
+    if (!onRestart) return
+    setRestarting(true)
+    try {
+      await onRestart()
+      setRestartDialogOpen(false)
+    } catch {
+      toast.error('重启失败，请检查服务器连接')
+    } finally {
+      setRestarting(false)
+    }
+  }
+
   const save = async () => {
     setSaving(true)
     try {
@@ -115,12 +169,16 @@ export function PropertiesPanel({ properties, isLoading, onSave, onEditingChange
       if (restartRequired.length === 0) {
         toast.success('规则已保存到服务器')
       } else {
-        const labels = restartRequired
-          .map((k) => SERVER_PROPERTY_DEF_MAP.get(k)?.label ?? k)
-          .slice(0, 3)
-        const suffix = restartRequired.length > 3 ? `等 ${restartRequired.length} 项` : ''
-        // 需重启项用 warning 强调「还需行动」
-        toast.warning(`已保存到文件，${labels.join('、')}${suffix}需重启服务器后生效`)
+        // 构建需重启项清单（快照旧值 → 编辑新值）
+        const items: RestartItem[] = restartRequired.map((k) => ({
+          key: k,
+          label: SERVER_PROPERTY_DEF_MAP.get(k)?.label ?? k,
+          oldValue: snapshot[k] ?? '',
+          newValue: edited[k] ?? payload[k] ?? '',
+        }))
+        setRestartItems(items)
+        setRestartDialogOpen(true)
+        toast.success(`已保存，${restartRequired.length} 项需重启，查看详情`)
       }
     } catch (e) {
       toast.error(`保存失败：${getFriendlyErrorText(e)}`)
@@ -186,6 +244,62 @@ export function PropertiesPanel({ properties, isLoading, onSave, onEditingChange
           </Chip>
         ))}
       </div>
+
+      {/* ── 需重启项清单 Dialog ── */}
+      <Dialog open={restartDialogOpen} onOpenChange={setRestartDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>以下属性需重启后生效</DialogTitle>
+            <DialogDescription>
+              {isRunning
+                ? '这些属性已写入文件，重启服务器后将立即生效'
+                : '这些属性已写入文件，将在下次启动服务器时生效'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-60 overflow-y-auto">
+            {restartItems.map((item) => (
+              <div
+                key={item.key}
+                className="flex items-baseline gap-2 border-b border-mcs-border-subtle px-1 py-1.5 last:border-b-0"
+              >
+                <span className="shrink-0 text-mcs-xs font-medium text-mcs-text-default">{item.label}</span>
+                <span className="min-w-0 flex-1 truncate font-mono text-mcs-2xs text-mcs-text-subtle">
+                  {item.oldValue} <span className="text-mcs-text-default">→</span> {item.newValue}
+                </span>
+              </div>
+            ))}
+          </div>
+          <DialogFooter className="flex-col gap-2 sm:flex-col">
+            <div className="flex w-full items-center gap-2">
+              <Button variant="outline" size="sm" className="ml-auto" onClick={() => void handleCopy()}>
+                {copied ? <Check className="size-3.5" aria-hidden /> : <Copy className="size-3.5" aria-hidden />}
+                {copied ? '已复制' : '复制清单'}
+              </Button>
+              {isRunning && onRestart && (
+                <Button
+                  size="sm"
+                  disabled={restarting}
+                  onClick={() => setConfirmRestartOpen(true)}
+                >
+                  {restarting ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <RefreshCw className="size-3.5" aria-hidden />}
+                  {restarting ? '重启中…' : '立即重启'}
+                </Button>
+              )}
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── 重启二次确认 ── */}
+      <ConfirmDialog
+        open={confirmRestartOpen}
+        onOpenChange={setConfirmRestartOpen}
+        title="重启服务器"
+        description="确定要重启服务器吗？重启期间玩家将断开连接。"
+        confirmText="确定重启"
+        loading={restarting}
+        onConfirm={() => void handleRestart()}
+      />
 
       {/* ── 属性列表 ── */}
       <div className="min-h-0 flex-1 overflow-y-auto">

@@ -95,13 +95,23 @@ describe('PropertiesPanel 编辑流程', () => {
     expect(await screen.findByText('规则已保存到服务器')).toBeInTheDocument()
   })
 
-  it('restartRequired 非空：中文标签 toast（前 3 项）', async () => {
+  it('restartRequired 非空：简化 toast + Dialog 清单展示', async () => {
     const user = userEvent.setup()
     const onSave = vi.fn().mockResolvedValue(['pvp', 'motd', 'max-players'])
     renderPanel(onSave)
     await user.click(screen.getByRole('button', { name: '编辑' }))
     await user.click(screen.getByRole('button', { name: '保存' }))
-    expect(await screen.findByText(/已保存到文件，PvP、MOTD、最大玩家数需重启服务器后生效/)).toBeInTheDocument()
+    // 简化 toast
+    expect(await screen.findByText(/已保存.*3 项需重启/)).toBeInTheDocument()
+    // Dialog 展示需重启项清单（旧值 → 新值）
+    expect(screen.getByText('以下属性需重启后生效')).toBeInTheDocument()
+    expect(screen.getByText('PvP')).toBeInTheDocument()
+    expect(screen.getByText('MOTD')).toBeInTheDocument()
+    expect(screen.getByText('最大玩家数')).toBeInTheDocument()
+    // 复制按钮
+    expect(screen.getByRole('button', { name: '复制清单' })).toBeInTheDocument()
+    // 未运行时不显示重启按钮（isRunning 默认 false）
+    expect(screen.queryByRole('button', { name: '立即重启' })).not.toBeInTheDocument()
   })
 
   it('取消恢复快照：修改后取消 → 再进编辑显示原值', async () => {
