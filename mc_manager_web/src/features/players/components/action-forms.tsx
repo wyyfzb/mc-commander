@@ -110,6 +110,7 @@ function ExperienceForm({ player, batchTargets, isBatchMode, isRconConnected, on
             variant={mode === 'points' ? 'default' : 'outline'}
             size="sm"
             onClick={() => setMode('points')}
+            aria-pressed={mode === 'points'}
             className="text-mcs-xs"
           >
             经验值
@@ -119,6 +120,7 @@ function ExperienceForm({ player, batchTargets, isBatchMode, isRconConnected, on
             variant={mode === 'levels' ? 'default' : 'outline'}
             size="sm"
             onClick={() => setMode('levels')}
+            aria-pressed={mode === 'levels'}
             className="text-mcs-xs"
           >
             等级
@@ -137,6 +139,7 @@ function ExperienceForm({ player, batchTargets, isBatchMode, isRconConnected, on
               variant={action === act ? 'default' : 'outline'}
               size="sm"
               onClick={() => setAction(act)}
+              aria-pressed={action === act}
               className="text-mcs-xs"
             >
               {label}
@@ -167,6 +170,7 @@ function ExperienceForm({ player, batchTargets, isBatchMode, isRconConnected, on
               size="sm"
               className="h-6 px-2 text-mcs-2xs"
               onClick={() => setAmount(String(v))}
+              aria-pressed={amount === String(v)}
             >
               {v}{mode === 'levels' ? 'L' : ''}
             </Button>
@@ -272,6 +276,7 @@ function EffectForm({ player, batchTargets, isBatchMode, isRconConnected, onActi
           variant={effectMode === 'give' ? 'default' : 'outline'}
           size="sm"
           onClick={() => setEffectMode('give')}
+          aria-pressed={effectMode === 'give'}
           className="text-mcs-xs"
         >
           赋予效果
@@ -281,6 +286,7 @@ function EffectForm({ player, batchTargets, isBatchMode, isRconConnected, onActi
           variant={effectMode === 'clear' ? 'default' : 'outline'}
           size="sm"
           onClick={() => setEffectMode('clear')}
+          aria-pressed={effectMode === 'clear'}
           className="text-mcs-xs"
         >
           <Trash2 className="mr-1 size-3" />
@@ -292,11 +298,12 @@ function EffectForm({ player, batchTargets, isBatchMode, isRconConnected, onActi
         <>
           {/* 搜索 */}
           <div className="relative">
-            <Search className="absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-mcs-text-muted" />
+            <Search className="absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-mcs-text-muted" aria-hidden="true" />
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="搜索效果（中文/ID）"
+              aria-label="搜索效果"
               className="h-8 pl-7 text-mcs-sm"
             />
             {search && (
@@ -322,6 +329,7 @@ function EffectForm({ player, batchTargets, isBatchMode, isRconConnected, onActi
                       key={e.effectId}
                       type="button"
                       onClick={() => setEffectId(e.effectId)}
+                      aria-pressed={effectId === e.effectId}
                       className={cn(
                         'inline-flex items-center gap-1 rounded-mcs-sm border px-2 py-0.5 text-mcs-xs transition-colors',
                         effectId === e.effectId
@@ -354,6 +362,7 @@ function EffectForm({ player, batchTargets, isBatchMode, isRconConnected, onActi
                     size="sm"
                     className="h-7 px-2.5 text-mcs-xs"
                     onClick={() => setLevel(l)}
+                    aria-pressed={level === l}
                   >
                     {l}
                   </Button>
@@ -375,6 +384,7 @@ function EffectForm({ player, batchTargets, isBatchMode, isRconConnected, onActi
                     size="sm"
                     className="h-7 px-2.5 text-mcs-xs"
                     onClick={() => setDurationSeconds(preset.seconds)}
+                    aria-pressed={durationSeconds === preset.seconds}
                   >
                     {preset.label}
                   </Button>
@@ -456,11 +466,12 @@ function SummonForm({ isRconConnected, onAction }: ActionFormProps) {
 
       {/* 搜索 */}
       <div className="relative">
-        <Search className="absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-mcs-text-muted" />
+        <Search className="absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-mcs-text-muted" aria-hidden="true" />
         <Input
           value={entitySearch}
           onChange={(e) => setEntitySearch(e.target.value)}
           placeholder="搜索实体（中文/ID）"
+          aria-label="搜索实体"
           className="h-8 pl-7 text-mcs-sm"
         />
         {entitySearch && (
@@ -486,6 +497,7 @@ function SummonForm({ isRconConnected, onAction }: ActionFormProps) {
                   key={e.id}
                   type="button"
                   onClick={() => setSelectedEntity(e)}
+                  aria-pressed={selectedEntity?.id === e.id}
                   className={cn(
                     'rounded-mcs-sm border px-2 py-0.5 text-mcs-xs transition-colors',
                     selectedEntity?.id === e.id
@@ -525,6 +537,7 @@ function SummonForm({ isRconConnected, onAction }: ActionFormProps) {
                 value={value}
                 onChange={(e) => set(e.target.value)}
                 placeholder={placeholder}
+                aria-label={label}
                 className="h-8 text-mcs-sm font-mono"
               />
             </div>
