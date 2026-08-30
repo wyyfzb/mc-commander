@@ -9,11 +9,11 @@ import {
 } from '../format'
 
 describe('formatUptime', () => {
-  it('>1天「X天 X小时」', () => {
-    expect(formatUptime(2 * 86400 + 3 * 3600)).toBe('2天 3小时')
+  it('>1天「Xd Xh」', () => {
+    expect(formatUptime(2 * 86400 + 3 * 3600)).toBe('2d 3h')
   })
-  it('1 天整「1天 0小时」（边界：否则 0h 余显示 0m）', () => {
-    expect(formatUptime(86400)).toBe('1天 0小时')
+  it('1 天整「1d 0h」（边界：否则 0h 余显示 0m）', () => {
+    expect(formatUptime(86400)).toBe('1d 0h')
   })
   it('>1小时「Xh Ym」', () => {
     expect(formatUptime(2 * 3600 + 30 * 60)).toBe('2h 30m')
