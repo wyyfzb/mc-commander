@@ -2,13 +2,13 @@
  * 格式化工具（纯函数可单测）
  */
 
-/** 运行时长：>1天「X天 X小时」/>1小时「Xh Ym」/否则「Xm」；null 表示未运行 */
+/** 运行时长：>1天「Xd Xh」/>1小时「Xh Ym」/否则「Xm」；null 表示未运行 */
 export function formatUptime(seconds: number | null | undefined): string {
   if (seconds == null || seconds <= 0) return '未运行'
   const days = Math.floor(seconds / 86400)
   const hours = Math.floor((seconds % 86400) / 3600)
   const minutes = Math.floor((seconds % 3600) / 60)
-  if (days >= 1) return `${days}天 ${hours}小时`
+  if (days >= 1) return `${days}d ${hours}h`
   if (hours >= 1) return `${hours}h ${minutes}m`
   return `${minutes}m`
 }
