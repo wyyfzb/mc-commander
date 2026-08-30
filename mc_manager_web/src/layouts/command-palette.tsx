@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   Moon,
   Puzzle,
+  ScrollText,
   Server,
   Settings,
   Sun,
@@ -106,6 +107,7 @@ export function CommandPalette() {
     { label: '插件', icon: Puzzle, keywords: 'plugins 插件市场 modrinth 上传 启用 禁用', run: () => go('/plugins') },
     { label: '实例', icon: Server, keywords: 'instances 部署 服务器', run: () => go('/instances') },
     { label: 'Webhook', icon: Webhook, keywords: 'webhooks 通知 推送 钩子', run: () => go('/webhooks') },
+    { label: '审计日志', icon: ScrollText, keywords: 'audit 审计 操作记录 命令历史', run: () => go('/audit') },
     { label: '设置', icon: Settings, keywords: 'settings 连接 通用 关于', run: () => go('/settings') },
   ]
 
