@@ -138,7 +138,7 @@ export function UpgradeDialog({ instance, open, onOpenChange }: UpgradeDialogPro
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
               <div>
                 <p className="font-medium">升级须知</p>
-                <p className="mt-1 text-mcs-text-secondary">
+                <p className="mt-1 text-mcs-text-subtle">
                   升级前自动创建备份，随后下载并替换服务端 JAR，启动校验失败将自动回滚。
                 </p>
               </div>
@@ -154,12 +154,12 @@ export function UpgradeDialog({ instance, open, onOpenChange }: UpgradeDialogPro
                   {UPGRADE_STAGE_LABELS[progress.stage]}
                 </span>
                 {progress.percent > 0 && (
-                  <span className="text-xs text-mcs-text-secondary">{progress.percent}%</span>
+                  <span className="text-xs text-mcs-text-subtle">{progress.percent}%</span>
                 )}
               </div>
               {progress.percent > 0 && <ProgressBar percent={progress.percent} />}
               {progress.detail && (
-                <p className="text-xs text-mcs-text-secondary">{progress.detail}</p>
+                <p className="text-xs text-mcs-text-subtle">{progress.detail}</p>
               )}
             </div>
           )}
