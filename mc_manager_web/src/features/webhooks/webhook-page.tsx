@@ -63,7 +63,7 @@ export default function WebhookPage() {
     queryFn: ({ signal }) => apiGetWebhookEventTypes(config, signal),
     enabled: config.status === 'ready', staleTime: Infinity,
   })
-  const { data: deliveriesData } = useQuery({
+  const { data: deliveriesData, isLoading: deliveriesLoading } = useQuery({
     queryKey: queryKeys.webhookDeliveries(expandedId ?? -1),
     queryFn: ({ signal }) => apiGetWebhookDeliveries(config, expandedId!, 1, 10, signal),
     enabled: expandedId != null && config.status === 'ready',
@@ -250,7 +250,13 @@ export default function WebhookPage() {
                 {expandedId === w.id && (
                   <div className="mt-3 border-t border-mcs-border-subtle pt-3">
                     <p className="mb-2 text-mcs-xs font-semibold text-mcs-text-default">投递日志</p>
-                    {deliveries.length === 0 ? (
+                    {deliveriesLoading ? (
+                      <div className="space-y-1" aria-label="加载投递日志中">
+                        {Array.from({ length: 3 }, (_, i) => (
+                          <Skeleton key={i} className="h-7 w-full" />
+                        ))}
+                      </div>
+                    ) : deliveries.length === 0 ? (
                       <p className="text-mcs-xs text-mcs-text-subtle">暂无投递记录</p>
                     ) : (
                       <div className="flex max-h-60 flex-col gap-1 overflow-y-auto">
