@@ -61,24 +61,24 @@ export function ConnectionForm({ variant = 'settings', onSaved }: ConnectionForm
 
   /**
    * 测试连接：表单值临时构造 config，成功后不写 store（保存才持久化）。
-   * 返回是否成功；silentFailure=true 时不弹失败细节 toast（保存路径由调用方统一提示）
+   * 返回结果对象；silentFailure=true 时不弹失败细节 toast（保存路径由调用方统一提示）
    */
-  async function runTest(base: string, opts?: { silentFailure?: boolean }): Promise<boolean> {
+  async function runTest(base: string, opts?: { silentFailure?: boolean }): Promise<{ ok: boolean; error?: string }> {
     setTesting(true)
     try {
       const t0 = performance.now()
       await apiGet<OverviewData>('/api/v1/overview', { baseUrl: base, apiKey })
       setLatencyMs(Math.round(performance.now() - t0))
       setTestedOk(true)
-      return true
+      return { ok: true }
     } catch (e) {
       setTestedOk(false)
+      // 服务端返回错误信封（如 API Key 无效）→ 友好文案；网络/超时 → 通用失败提示
+      const reason = e instanceof ApiError ? getFriendlyErrorText(e) : '连接失败，请检查配置'
       if (!opts?.silentFailure) {
-        // 服务端返回错误信封（如 API Key 无效）→ 友好文案；网络/超时 → 通用失败提示
-        if (e instanceof ApiError) toast.error(`连接测试失败：${getFriendlyErrorText(e)}`)
-        else toast.error('连接失败，请检查配置')
+        toast.error(`连接测试失败：${reason}`)
       }
-      return false
+      return { ok: false, error: reason }
     } finally {
       setTesting(false)
     }
@@ -90,10 +90,10 @@ export function ConnectionForm({ variant = 'settings', onSaved }: ConnectionForm
    */
   async function doSave(base: string) {
     setSaving(true)
-    const ok = await runTest(base, { silentFailure: true })
+    const result = await runTest(base, { silentFailure: true })
     setSaving(false)
-    if (!ok) {
-      toast.error('保存失败：连接测试未通过')
+    if (!result.ok) {
+      toast.error(`保存失败：${result.error ?? '连接测试未通过'}`)
       return
     }
     useConnectionStore.getState().setConfig({ baseUrl: base, apiKey })
@@ -114,8 +114,8 @@ export function ConnectionForm({ variant = 'settings', onSaved }: ConnectionForm
       setPendingAction('test')
       return
     }
-    void runTest(base).then((ok) => {
-      if (ok) toast.success('连接成功')
+    void runTest(base).then((r) => {
+      if (r.ok) toast.success('连接成功')
     })
   }
 
@@ -161,8 +161,8 @@ export function ConnectionForm({ variant = 'settings', onSaved }: ConnectionForm
     setPendingAction(null)
     const base = normalizeBaseUrl(url)
     if (action === 'test') {
-      void runTest(base).then((ok) => {
-        if (ok) toast.success('连接成功')
+      void runTest(base).then((r) => {
+        if (r.ok) toast.success('连接成功')
       })
     } else if (action === 'save') {
       void doSave(base)
