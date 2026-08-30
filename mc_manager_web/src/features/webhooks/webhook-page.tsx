@@ -51,6 +51,7 @@ export default function WebhookPage() {
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Webhook | null>(null)
   const [form, setForm] = useState({ name: '', url: '', secret: '', events: [] as string[], isEnabled: true })
+  const urlInvalid = form.url !== '' && !form.url.startsWith('http://') && !form.url.startsWith('https://')
 
   const { data: webhooksData, isLoading, error } = useQuery({
     queryKey: queryKeys.webhooks(),
@@ -305,7 +306,11 @@ export default function WebhookPage() {
                 onChange={e => setForm(f => ({ ...f, url: e.target.value }))}
                 placeholder="https://example.com/webhook"
                 className="text-mcs-sm"
+                aria-invalid={urlInvalid}
               />
+              {urlInvalid && (
+                <p className="text-mcs-2xs text-mcs-error-fg">URL 需以 http:// 或 https:// 开头</p>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label className="text-mcs-xs text-mcs-text-muted">HMAC 密钥（留空不签名）</Label>
@@ -356,7 +361,7 @@ export default function WebhookPage() {
             <Button variant="outline" onClick={closeDialog}>取消</Button>
             <Button
               onClick={handleSubmit}
-              disabled={!form.name || !form.url || createMut.isPending || updateMut.isPending}
+              disabled={!form.name || !form.url || urlInvalid || createMut.isPending || updateMut.isPending}
             >
               {createMut.isPending || updateMut.isPending ? '处理中…' : (editTarget ? '保存' : '创建')}
             </Button>
