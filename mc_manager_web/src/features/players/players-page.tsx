@@ -23,7 +23,7 @@ import { Input } from '@/components/ui/input'
 import { useServerStore } from '@/stores/server'
 import { useInstanceStatus } from '@/api/queries'
 import type { Player } from '@/api/types'
-import { applyPlayersFilter, usePlayersUiStore, type PlayerDetailTab } from './store'
+import { applyPlayersFilter, usePlayersUiStore, FILTER_MODE_OPTIONS, type PlayerDetailTab } from './store'
 import type { BanFormModel } from '@/lib/mc-ban'
 import { usePlayers } from './queries'
 import { usePlayerAction, type PlayerActionRequest } from './mutations'
@@ -78,7 +78,9 @@ export function PlayersPage() {
     const playerName = searchParams.get('player')
     const patch: Partial<typeof filter> = {}
     if (q) patch.q = q
-    if (mode) patch.mode = (mode as typeof filter.mode) || 'all'
+    if (mode && FILTER_MODE_OPTIONS.some((o) => o.value === mode)) {
+      patch.mode = mode as typeof filter.mode
+    }
     if (Object.keys(patch).length > 0) setFilter(patch)
     if (playerName) openPlayerDetail(playerName)
     // eslint-disable-next-line react-hooks/exhaustive-deps
