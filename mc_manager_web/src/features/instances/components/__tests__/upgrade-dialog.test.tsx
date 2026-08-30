@@ -165,7 +165,8 @@ describe('UpgradeDialog', () => {
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '取消' })).not.toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('button', { name: '关闭' }))
+    const closeButtons = screen.getAllByRole('button', { name: '关闭' })
+    await userEvent.click(closeButtons[closeButtons.length - 1])
     expect(onOpenChange).toHaveBeenCalledWith(false)
     expect(useUpgradeStore.getState().progress['alpha']).toBeUndefined()
   })
