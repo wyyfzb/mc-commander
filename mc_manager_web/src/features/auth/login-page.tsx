@@ -225,7 +225,7 @@ export function LoginPage() {
       </div>
 
       {/* 登录卡片 */}
-      <main className="relative z-10 w-full max-w-md rounded-mcs-lg border border-mcs-border-muted bg-mcs-bg-card p-6 shadow-lg shadow-black/5">
+      <main className="relative z-10 w-full max-w-md rounded-mcs-lg border border-mcs-border-muted bg-mcs-bg-default p-6 shadow-lg shadow-black/5">
         <div className="mb-5">
           <h2 className="text-mcs-md font-semibold text-mcs-text-default">{heading}</h2>
           <p className="mt-1 text-mcs-xs text-mcs-text-subtle">
