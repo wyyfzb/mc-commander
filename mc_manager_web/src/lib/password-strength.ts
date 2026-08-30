@@ -57,20 +57,20 @@ export function assessPasswordStrength(pw: string): PasswordStrength {
   return { score, label: labels[score] }
 }
 
-/** 强度条配色（4 段；score 决定填充段数与色阶） */
+/** 强度条配色（4 段；score 决定填充段数与色阶；语义 token 自动双主题） */
 export const STRENGTH_BAR_STYLES: string[] = [
   'bg-mcs-border-muted',
-  'bg-red-500',
-  'bg-amber-500',
-  'bg-emerald-500',
-  'bg-emerald-600',
+  'bg-mcs-error-fg',
+  'bg-mcs-warning-fg',
+  'bg-mcs-success-fg',
+  'bg-mcs-success-fg',
 ]
 
 /** 强度标签配色 */
 export const STRENGTH_TEXT_STYLES: string[] = [
   'text-mcs-text-subtle',
-  'text-red-600 dark:text-red-400',
-  'text-amber-600 dark:text-amber-400',
-  'text-emerald-600 dark:text-emerald-400',
-  'text-emerald-700 dark:text-emerald-400',
+  'text-mcs-error-fg',
+  'text-mcs-warning-fg',
+  'text-mcs-success-fg',
+  'text-mcs-success-fg',
 ]

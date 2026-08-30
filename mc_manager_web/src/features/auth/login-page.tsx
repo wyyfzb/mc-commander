@@ -104,7 +104,7 @@ function PasswordInput({
         </button>
       </div>
       {capsLock && (
-        <p className="flex items-center gap-1 text-mcs-2xs text-amber-600 dark:text-amber-400" role="status">
+        <p className="flex items-center gap-1 text-mcs-2xs text-mcs-warning-fg" role="status">
           <TriangleAlert className="size-3" aria-hidden />
           大写锁定已开启
         </p>
@@ -255,10 +255,10 @@ export function LoginPage() {
           <div className="space-y-4">
             <div
               role="alert"
-              className="flex items-start gap-2.5 rounded-mcs-md border border-red-200 bg-red-50 p-3 dark:border-red-900/50 dark:bg-red-950/30"
+              className="flex items-start gap-2.5 rounded-mcs-md border border-mcs-error-border bg-mcs-error-bg-subtle p-3"
             >
-              <ServerOff className="mt-0.5 size-4 shrink-0 text-red-600 dark:text-red-400" aria-hidden />
-              <div className="text-mcs-xs text-red-700 dark:text-red-300">
+              <ServerOff className="mt-0.5 size-4 shrink-0 text-mcs-error-fg" aria-hidden />
+              <div className="text-mcs-xs text-mcs-error-fg">
                 <p className="font-semibold">连接失败</p>
                 <p className="mt-0.5 opacity-90">
                   请确认服务端已启动（默认端口 25566），或展开下方「高级」修改面板地址后重试。
@@ -310,7 +310,7 @@ export function LoginPage() {
             {errorText && (
               <p
                 role="alert"
-                className="flex items-start gap-1.5 rounded-mcs-sm border border-red-200 bg-red-50 px-2.5 py-2 text-mcs-xs text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300"
+                className="flex items-start gap-1.5 rounded-mcs-sm border border-mcs-error-border bg-mcs-error-bg-subtle px-2.5 py-2 text-mcs-xs text-mcs-error-fg"
               >
                 <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
                 {errorText}

@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { ServerOff } from 'lucide-react'
+import { AlertTriangle, RefreshCw, ServerOff } from 'lucide-react'
 import { BigStatCards, PlayersCard, RuntimeInfoCard, DiskUsageCard } from './components/stat-cards'
 import { ServerTerminal } from './components/server-terminal'
 import { CommandInput } from './components/command-input'
@@ -11,6 +11,8 @@ import { useMetricHistory } from './use-metric-history'
 import { useInstanceStatus, useSystemStats, queryKeys } from '@/api/queries'
 import { useServerStore } from '@/stores/server'
 import { EmptyState } from '@/components/mcs/empty-state'
+import { NoticeBanner } from '@/components/mcs/notice-banner'
+import { Button } from '@/components/ui/button'
 import { useNavigate } from 'react-router'
 
 /**
@@ -64,6 +66,24 @@ export function DashboardPage() {
 
   return (
     <div className="flex h-full flex-col gap-4 overflow-y-auto p-4" data-density="default">
+      {/* 状态查询失败横幅（避免卡片静默显示 0 被误读为真实状态） */}
+      {statusQuery.isError && !statusLoading && (
+        <NoticeBanner variant="error" icon={AlertTriangle}>
+          <span className="flex items-center gap-2">
+            <b>服务器状态获取失败</b> · 以下数据可能已过期
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 px-1.5 text-mcs-2xs text-mcs-error-fg"
+              onClick={() => void statusQuery.refetch()}
+            >
+              <RefreshCw className="size-3" aria-hidden />
+              重试
+            </Button>
+          </span>
+        </NoticeBanner>
+      )}
+
       {/* 顶部大数字四卡 */}
       <BigStatCards history={history} isLoading={statusLoading} />
 

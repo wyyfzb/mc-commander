@@ -43,6 +43,9 @@ export function InstancesPage() {
   const [settingsTarget, setSettingsTarget] = useState<InstanceSummary | null>(null)
   const [upgradeTarget, setUpgradeTarget] = useState<InstanceSummary | null>(null)
   const [uninstallTarget, setUninstallTarget] = useState<InstanceSummary | null>(null)
+  /** 卸载强确认：输入实例名匹配后才可确认（防误删世界数据） */
+  const [uninstallInput, setUninstallInput] = useState('')
+  const uninstallInputMatches = uninstallInput.trim() === (uninstallTarget?.name ?? '')
   /** 待停止确认的实例（启动直接执行） */
   const [stopTarget, setStopTarget] = useState<InstanceSummary | null>(null)
 
@@ -234,18 +237,37 @@ export function InstancesPage() {
         }}
       />
 
-      {/* ── 卸载确认 ── */}
+      {/* ── 卸载确认（破坏力最大操作：输入实例名强确认，与备份恢复同级门槛） ── */}
       <ConfirmDialog
         open={uninstallTarget !== null}
-        onOpenChange={(open) => !open && setUninstallTarget(null)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setUninstallTarget(null)
+            setUninstallInput('')
+          }
+        }}
         title="卸载实例"
         description={`确定要卸载实例 "${uninstallTarget?.name ?? ''}" 吗？`}
         confirmText="确认卸载"
         danger
         loading={uninstallMutation.isPending}
         warning="此操作不可撤销！将会：停止运行中的服务器、删除所有世界数据和配置、从数据库中移除记录"
+        confirmDisabled={!uninstallInputMatches}
         onConfirm={() => void handleUninstallConfirm()}
-      />
+      >
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="uninstall-confirm-input" className="text-mcs-xs font-semibold text-mcs-text-muted">
+            输入实例名「{uninstallTarget?.name ?? ''}」以确认
+          </label>
+          <input
+            id="uninstall-confirm-input"
+            value={uninstallInput}
+            onChange={(e) => setUninstallInput(e.target.value)}
+            placeholder={uninstallTarget?.name ?? ''}
+            className="h-9 rounded-mcs-md border border-mcs-error-border bg-mcs-bg-default px-3 font-mono text-mcs-sm text-mcs-text-default outline-none placeholder:text-mcs-text-subtle focus:border-mcs-error-fg"
+          />
+        </div>
+      </ConfirmDialog>
     </div>
   )
 }

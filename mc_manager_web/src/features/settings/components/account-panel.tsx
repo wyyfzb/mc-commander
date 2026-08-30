@@ -209,12 +209,12 @@ export function AccountPanel() {
       >
         <div className="flex flex-wrap items-center gap-2.5">
           {session?.token ? (
-            <Badge className="gap-1 bg-emerald-600 text-white hover:bg-emerald-600">
+            <Badge className="gap-1 bg-mcs-success-bg-subtle text-mcs-success-fg border-mcs-success-border hover:bg-mcs-success-bg-subtle">
               <ShieldCheck className="size-3" aria-hidden />
               管理员会话
             </Badge>
           ) : (
-            <Badge variant="outline" className="gap-1 border-amber-400 text-amber-700 dark:text-amber-400">
+            <Badge variant="outline" className="gap-1 border-mcs-warning-border text-mcs-warning-fg">
               <KeyRound className="size-3" aria-hidden />
               API Key 直连
             </Badge>
@@ -227,7 +227,7 @@ export function AccountPanel() {
           )}
         </div>
         {!session?.token && (
-          <p className="mt-3 flex items-start gap-1.5 rounded-mcs-sm border border-amber-200 bg-amber-50 px-2.5 py-2 text-mcs-2xs text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300">
+          <p className="mt-3 flex items-start gap-1.5 rounded-mcs-sm border border-mcs-warning-border bg-mcs-warning-bg-subtle px-2.5 py-2 text-mcs-2xs text-mcs-warning-fg">
             <TriangleAlert className="mt-0.5 size-3 shrink-0" aria-hidden />
             当前使用明文 API Key 直连。建议退出后使用管理员密码登录（令牌仅存服务端摘要，传输/存储更安全）。
           </p>
@@ -303,7 +303,7 @@ export function AccountPanel() {
           {changeError && (
             <p
               role="alert"
-              className="sm:col-span-3 rounded-mcs-sm border border-red-200 bg-red-50 px-2.5 py-2 text-mcs-xs text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300"
+              className="sm:col-span-3 rounded-mcs-sm border border-mcs-error-border bg-mcs-error-bg-subtle px-2.5 py-2 text-mcs-xs text-mcs-error-fg"
             >
               {changeError}
             </p>
@@ -388,7 +388,7 @@ export function AccountPanel() {
                         size="icon-sm"
                         aria-label={`下线会话（${describeUserAgent(s.userAgent)}）`}
                         onClick={() => setKickTarget(String(s.id))}
-                        className="text-mcs-text-subtle hover:text-red-600"
+                        className="text-mcs-text-subtle hover:text-mcs-error-fg"
                       >
                         <Trash2 className="size-3.5" aria-hidden />
                       </Button>

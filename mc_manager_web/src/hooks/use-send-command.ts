@@ -26,13 +26,13 @@ export function useSendCommand() {
     onMutate: (command) => {
       if (instanceId) pushEntry(instanceId, command.trim().replace(/^\//, ''), 'command')
     },
-    onSuccess: (resp, command) => {
+    onSuccess: (resp) => {
       const text =
         typeof resp === 'string'
           ? resp.trim()
           : (resp as { response?: string } | null)?.response?.trim()
       if (text && instanceId) pushEntry(instanceId, text, 'stdout')
-      toast.success(`命令已发送: ${command.trim().replace(/^\//, '')}`)
+      // 成功不弹 toast：终端已有 command + stdout 回显，双重反馈是噪音（连续运维时刷屏）
     },
     onError: (err) => {
       const friendly = err instanceof ApiError ? getFriendlyErrorMessage(err.code, err.message) : '网络错误'

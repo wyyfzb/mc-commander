@@ -18,28 +18,28 @@ const GITEE_REPO_URL = 'https://gitee.com/wyyfzb/mc-commander'
 /** 外链行：标题/副标题/地址 + 图标（图标底色走语义 token） */
 const LINKS = [
   {
-    title: '⭐ GitHub 仓库',
+    title: 'GitHub 仓库',
     subtitle: '查看源代码并参与贡献',
     href: REPO_URL,
     icon: Code,
     iconClass: 'bg-mcs-bg-emphasis',
   },
   {
-    title: '🇨🇳 Gitee 镜像仓库',
+    title: 'Gitee 镜像仓库',
     subtitle: '国内访问 · 自动同步',
     href: GITEE_REPO_URL,
     icon: GitBranch,
     iconClass: 'bg-mcs-accent-bg-subtle',
   },
   {
-    title: '🚀 项目 Releases',
+    title: '项目 Releases',
     subtitle: '查看版本发布与更新日志',
     href: `${REPO_URL}/releases`,
     icon: Tag,
     iconClass: 'bg-mcs-info-bg-subtle',
   },
   {
-    title: '🐛 问题反馈',
+    title: '问题反馈',
     subtitle: '报告 Bug 或建议新功能',
     href: `${REPO_URL}/issues`,
     icon: MessageSquareWarning,

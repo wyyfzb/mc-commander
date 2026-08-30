@@ -144,7 +144,7 @@ describe('DeployDialog', () => {
     // 52428800B = 50.0 MB；104857600B = 100 MB
     expect(screen.getByText('已下载 50.0 / 100 MB')).toBeInTheDocument()
     // 禁用关闭：无 X 按钮
-    expect(screen.queryByRole('button', { name: 'Close' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '关闭弹窗' })).not.toBeInTheDocument()
     // 无步骤导航
     expect(screen.queryByRole('button', { name: '上一步' })).not.toBeInTheDocument()
   })
@@ -190,7 +190,7 @@ describe('DeployDialog', () => {
     await user.type(screen.getByLabelText('实例名称'), 'x')
 
     // 点关闭 → 确认框
-    await user.click(screen.getByRole('button', { name: 'Close' }))
+    await user.click(screen.getByRole('button', { name: '关闭弹窗' }))
     expect(screen.getByText('放弃部署配置？')).toBeInTheDocument()
     expect(onOpenChange).not.toHaveBeenCalled()
 
@@ -199,7 +199,7 @@ describe('DeployDialog', () => {
     expect(screen.queryByText('放弃部署配置？')).not.toBeInTheDocument()
 
     // 再关 → 放弃配置 → 关闭 + 部署状态重置
-    await user.click(screen.getByRole('button', { name: 'Close' }))
+    await user.click(screen.getByRole('button', { name: '关闭弹窗' }))
     await user.click(screen.getByRole('button', { name: '放弃配置' }))
     expect(onOpenChange).toHaveBeenCalledWith(false)
     expect(useDeployStore.getState().lastResult).toBeNull()

@@ -894,7 +894,7 @@ function PluginDetailSheet({ plugin, open, onOpenChange, onToggle, toggling }: P
 
           {/* 基本信息 */}
           <section className="space-y-2.5" aria-label="基本信息">
-            <h3 className="flex items-center gap-1.5 text-mcs-xs font-semibold tracking-wide text-mcs-text-subtle uppercase">
+            <h3 className="flex items-center gap-1.5 text-mcs-xs font-semibold text-mcs-text-subtle">
               <Layers className="size-3.5" aria-hidden />
               基本信息
             </h3>
@@ -956,7 +956,7 @@ function PluginDetailSheet({ plugin, open, onOpenChange, onToggle, toggling }: P
           {/* 依赖 */}
           {((meta?.depend?.length ?? 0) > 0 || (meta?.softdepend?.length ?? 0) > 0) && (
             <section className="space-y-2.5" aria-label="依赖关系">
-              <h3 className="text-mcs-xs font-semibold tracking-wide text-mcs-text-subtle uppercase">依赖关系</h3>
+              <h3 className="text-mcs-xs font-semibold text-mcs-text-subtle">依赖关系</h3>
               {(meta?.depend?.length ?? 0) > 0 && (
                 <div className="space-y-1">
                   <p className="text-mcs-xs text-mcs-text-subtle">硬依赖（缺失时插件无法加载）</p>
@@ -982,7 +982,7 @@ function PluginDetailSheet({ plugin, open, onOpenChange, onToggle, toggling }: P
 
           {/* 文件信息 */}
           <section className="space-y-2.5" aria-label="文件信息">
-            <h3 className="text-mcs-xs font-semibold tracking-wide text-mcs-text-subtle uppercase">文件信息</h3>
+              <h3 className="text-mcs-xs font-semibold text-mcs-text-subtle">文件信息</h3>
             <dl className="grid grid-cols-[auto_1fr] items-baseline gap-x-4 gap-y-2 text-mcs-sm">
               <dt className="shrink-0 text-mcs-text-subtle">大小</dt>
               <dd className="text-mcs-text-default">{formatFileSize(plugin.sizeBytes)}</dd>

@@ -38,7 +38,8 @@ interface BanDialogProps {
  */
 function BanFormContent({ player, onConfirm, onOpenChange }: Omit<BanDialogProps, 'open'>) {
   const [targetType, setTargetType] = useState<'player' | 'ip'>('player')
-  const [durationIndex, setDurationIndex] = useState(5) // 默认「永久」
+  // 默认最低档时长：永久封禁是不可逆高危默认值，不应作为默认选项（防错原则）
+  const [durationIndex, setDurationIndex] = useState(0)
   const [reasonIndex, setReasonIndex] = useState(0) // 默认「作弊」
   const [customReason, setCustomReason] = useState('')
   const [kickFirst, setKickFirst] = useState(true)

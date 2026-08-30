@@ -118,7 +118,7 @@ export function AppSidebar({ collapsed, mobileNavOpen, onMobileNavClose }: AppSi
       <div className={cn('fixed inset-0 z-50 md:hidden', !mobileNavOpen && 'pointer-events-none')}>
         <div
           className={cn(
-            'absolute inset-0 bg-black/50 transition-opacity duration-mcs-base',
+            'absolute inset-0 bg-mcs-scrim transition-opacity duration-mcs-base',
             mobileNavOpen ? 'opacity-100' : 'opacity-0',
           )}
           onClick={onMobileNavClose}

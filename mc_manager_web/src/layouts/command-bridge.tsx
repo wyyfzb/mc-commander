@@ -47,7 +47,7 @@ export function CommandBridge() {
         }
         try {
           await apiSendCommand(config, instanceId, command)
-          toast.success(`命令已发送: ${command}`)
+          // 成功不弹 toast：RCON 回显进终端日志流（失败仍 toast 告警）
         } catch (e) {
           toast.error(getFriendlyErrorText(e))
         }
@@ -59,7 +59,7 @@ export function CommandBridge() {
   const doSend = async (command: string) => {
     try {
       await apiSendCommand(config, instanceId ?? '', command)
-      toast.success(`命令已发送: ${command}`)
+      // 同上：成功静默，终端日志流为反馈源
     } catch (e) {
       toast.error(getFriendlyErrorText(e))
     }

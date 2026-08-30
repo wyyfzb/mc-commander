@@ -9,7 +9,7 @@
  * - 实例切换：query key 含 instanceId，自动切换；无实例显示空态
  */
 import { useState } from 'react'
-import { Archive, ServerOff } from 'lucide-react'
+import { AlertTriangle, Archive, RefreshCw, ServerOff } from 'lucide-react'
 import { useSearchParams } from 'react-router'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
@@ -33,6 +33,7 @@ import { PropertiesPanel } from './components/properties-panel'
 import { GamerulePanel } from './components/gamerule-panel'
 import { useServerProperties, useUpdateProperties, useWorldInfo } from './queries'
 import { EmptyState } from '@/components/mcs/empty-state'
+import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router'
 
@@ -110,6 +111,28 @@ export function WorldPage() {
           备份世界
         </Button>
       </div>
+
+      {/* ── 数据错误横幅（查询失败明确报错，避免左栏/属性面板把错误呈现为空态） ── */}
+      {(worldQuery.isError || propertiesQuery.isError) && (
+        <NoticeBanner variant="error" icon={AlertTriangle}>
+          <span className="flex items-center gap-2">
+            <b>世界数据获取失败</b> ·
+            {worldQuery.isError ? '世界信息不可用' : '服务器属性不可用'}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 px-1.5 text-mcs-2xs text-mcs-error-fg"
+              onClick={() => {
+                if (worldQuery.isError) void worldQuery.refetch()
+                if (propertiesQuery.isError) void propertiesQuery.refetch()
+              }}
+            >
+              <RefreshCw className="size-3" aria-hidden />
+              重试
+            </Button>
+          </span>
+        </NoticeBanner>
+      )}
 
       {/* ── 主体：左栏信息卡 + 右栏 Tabs ── */}
       <div className="flex min-h-0 flex-1 gap-4">

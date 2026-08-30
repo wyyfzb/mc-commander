@@ -6,7 +6,19 @@
  */
 import { useState } from 'react'
 import { Link } from 'react-router'
-import { Loader2, LogOut, Moon, RefreshCw, Settings, Square, Sun, Terminal, UserRound, Users } from 'lucide-react'
+import {
+  AlertTriangle,
+  Loader2,
+  Moon,
+  RefreshCw,
+  Save,
+  Settings,
+  Square,
+  Sun,
+  Terminal,
+  UserRound,
+  Users,
+} from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
@@ -37,6 +49,8 @@ export function EmergencyPage() {
   const toggleTheme = useUiStore((s) => s.toggleTheme)
   const [tab, setTab] = useState<EmergencyTab>('overview')
   const [confirmStop, setConfirmStop] = useState(false)
+  // 重启与停止同级破坏力（断开全部玩家），确认保护与桌面端对齐
+  const [confirmRestart, setConfirmRestart] = useState(false)
   const [command, setCommand] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
 
@@ -58,16 +72,18 @@ export function EmergencyPage() {
   })
 
   const action = useMutation({
-    mutationFn: async ({ kind, name }: { kind: 'restart' | 'stop' | 'kick'; name?: string }) => {
+    mutationFn: async ({ kind, name }: { kind: 'restart' | 'stop' | 'kick' | 'save'; name?: string }) => {
       if (!currentId) throw new ApiError(40401, 404, 'Instance not found', null)
       if (kind === 'kick' && name) {
         await apiPost(`/api/v1/instances/${currentId}/players/${name}/kick`, config, { reason: '管理员通过紧急视图踢出' })
+      } else if (kind === 'save') {
+        await apiPost(`/api/v1/instances/${currentId}/command`, config, { command: 'save-all' })
       } else {
         await apiPost(`/api/v1/instances/${currentId}/${kind}`, config)
       }
     },
-    onSuccess: async () => {
-      toast.success('指令已发送')
+    onSuccess: async (_data, vars) => {
+      toast.success(vars.kind === 'save' ? '存档指令已发送' : '指令已发送')
       setBusy(null)
       await queryClient.invalidateQueries({ queryKey: queryKeys.instance(currentId ?? '') })
     },
@@ -79,12 +95,16 @@ export function EmergencyPage() {
     },
   })
 
-  function run(kind: 'restart' | 'stop' | 'kick', name?: string) {
+  function run(kind: 'restart' | 'stop' | 'kick' | 'save', name?: string) {
     if (kind === 'stop') {
       setConfirmStop(true)
       return
     }
-    setBusy(kind === 'restart' ? '重启' : '踢出')
+    if (kind === 'restart') {
+      setConfirmRestart(true)
+      return
+    }
+    setBusy(kind === 'kick' ? '踢出' : '存档')
     action.mutate({ kind, name })
   }
 
@@ -108,7 +128,14 @@ export function EmergencyPage() {
     <div className="flex h-dvh flex-col bg-mcs-bg-default text-mcs-text-default">
       {/* 顶栏：实例名 + 健康 chip */}
       <header className="flex h-12 shrink-0 items-center gap-2 border-b border-mcs-border-muted px-4">
-        <Link to="/dashboard" className="size-2.5 rounded-full bg-mcs-accent" aria-label="返回主面板" />
+        {/* 44px 触控热区内嵌 10px 视觉点（该页触控纪律 ≥44px） */}
+        <Link
+          to="/dashboard"
+          className="-ml-2 flex size-11 items-center justify-center"
+          aria-label="返回主面板"
+        >
+          <span className="size-2.5 rounded-full bg-mcs-accent" aria-hidden />
+        </Link>
         <span className="text-mcs-sm font-bold">{st?.name ?? 'MC Commander'}</span>
         <span
           className={cn(
@@ -132,24 +159,37 @@ export function EmergencyPage() {
       <main className="min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-3">
         {tab === 'overview' && (
           <div className="flex flex-col gap-3">
-            {/* TPS 大字 */}
+            {/* TPS 大字（状态查询失败时明确报错，不呈现为假死的「—」） */}
             <section className="flex flex-col items-center rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted py-5">
-              <span
-                className={cn('tnum text-5xl font-extrabold leading-none', healthy ? 'text-mcs-success-fg' : 'text-mcs-warning-fg')}
-              >
-                {st?.tps != null ? st.tps.toFixed(1) : '—'}
-              </span>
-              <span className="mt-1.5 text-mcs-2xs tracking-[0.2em] text-mcs-text-subtle">
-                TPS{isRunning ? ' · 运行中' : ' · 已停止'}
-              </span>
-              <div className="mt-4 flex w-full justify-around">
-                <Stat label="在线" value={`${st?.playerCount ?? 0}/${st?.maxPlayers ?? 20}`} />
-                <Stat label="CPU" value={`${st?.cpuUsage ?? 0}%`} />
-                <Stat label="内存" value={`${st?.memoryUsage ?? 0}G`} />
-              </div>
+              {status.isError && !status.isLoading ? (
+                <>
+                  <AlertTriangle className="size-8 text-mcs-error-fg" aria-hidden />
+                  <p className="mt-2 text-mcs-sm text-mcs-text-muted">服务器状态获取失败</p>
+                  <Button variant="outline" size="sm" className="mt-3" onClick={() => void status.refetch()}>
+                    <RefreshCw className="size-4" aria-hidden />
+                    重试
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <span
+                    className={cn('tnum text-5xl font-extrabold leading-none', healthy ? 'text-mcs-success-fg' : 'text-mcs-warning-fg')}
+                  >
+                    {st?.tps != null ? st.tps.toFixed(1) : '—'}
+                  </span>
+                  <span className="mt-1.5 text-mcs-2xs tracking-[0.2em] text-mcs-text-subtle">
+                    TPS{isRunning ? ' · 运行中' : ' · 已停止'}
+                  </span>
+                  <div className="mt-4 flex w-full justify-around">
+                    <Stat label="在线" value={`${st?.playerCount ?? 0}/${st?.maxPlayers ?? 20}`} />
+                    <Stat label="CPU" value={`${st?.cpuUsage ?? 0}%`} />
+                    <Stat label="内存" value={`${st?.memoryUsage ?? 0}G`} />
+                  </div>
+                </>
+              )}
             </section>
 
-            {/* 4 大按钮（触控 ≥44px） */}
+            {/* 4 大按钮（触控 ≥44px）：重启/停止为破坏性操作走确认；存档是处置黄金位的高频动作 */}
             <section className="grid grid-cols-2 gap-2.5">
               <Button
                 className="h-14 text-mcs-md"
@@ -172,30 +212,41 @@ export function EmergencyPage() {
               <Button
                 className="h-14 text-mcs-md"
                 variant="outline"
+                disabled={!isRunning || busy !== null}
+                onClick={() => run('save')}
+              >
+                <Save className="size-5" aria-hidden />
+                存档
+              </Button>
+              <Button
+                className="h-14 text-mcs-md"
+                variant="outline"
                 onClick={() => setTab('players')}
               >
-                <LogOut className="size-5" aria-hidden />
-                踢人
-              </Button>
-              <Button className="h-14 text-mcs-md" variant="outline" onClick={() => setTab('players')}>
-                <UserRound className="size-5" aria-hidden />
+                <Users className="size-5" aria-hidden />
                 玩家操作
               </Button>
             </section>
 
-            {/* 迷你终端 */}
+            {/* 迷你终端（日志查询失败时明确报错） */}
             <section className="flex flex-col rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-subtle">
               <div className="flex items-center gap-1.5 border-b border-mcs-border-muted px-3 py-2">
                 <span className="size-1.5 rounded-full bg-mcs-success-fg" aria-hidden />
                 <span className="font-mono text-mcs-xs tracking-wider text-mcs-text-subtle">SERVER CONSOLE</span>
               </div>
               <div className="min-h-24 px-3 py-2 font-mono text-mcs-2xs leading-relaxed text-mcs-text-muted">
-                {(lastLogs.length === 0 || !isRunning) && (
-                  <p className="text-mcs-text-subtle">{isRunning ? '暂无日志输出…' : '服务器已停止，启动后可查看日志'}</p>
+                {logsQuery.isError && !logsQuery.isLoading ? (
+                  <p className="text-mcs-error-fg">日志获取失败，正在重试…</p>
+                ) : (
+                  <>
+                    {(lastLogs.length === 0 || !isRunning) && (
+                      <p className="text-mcs-text-subtle">{isRunning ? '暂无日志输出…' : '服务器已停止，启动后可查看日志'}</p>
+                    )}
+                    {lastLogs.map((l, i) => (
+                      <p key={i} className="line-clamp-2" title={l.text}>{l.text}</p>
+                    ))}
+                  </>
                 )}
-                {lastLogs.map((l, i) => (
-                  <p key={i} className="truncate">{l.text}</p>
-                ))}
               </div>
             </section>
           </div>
@@ -240,10 +291,16 @@ export function EmergencyPage() {
                 SERVER CONSOLE
               </div>
               <div className="min-h-40 px-3 py-2 font-mono text-mcs-2xs leading-relaxed text-mcs-text-muted">
-                {lastLogs.length === 0 && <p className="text-mcs-text-subtle">暂无日志</p>}
-                {lastLogs.map((l, i) => (
-                  <p key={i} className="truncate">{l.text}</p>
-                ))}
+                {logsQuery.isError && !logsQuery.isLoading ? (
+                  <p className="text-mcs-error-fg">日志获取失败，正在重试…</p>
+                ) : (
+                  <>
+                    {lastLogs.length === 0 && <p className="text-mcs-text-subtle">暂无日志</p>}
+                    {lastLogs.map((l, i) => (
+                      <p key={i} className="line-clamp-2" title={l.text}>{l.text}</p>
+                    ))}
+                  </>
+                )}
               </div>
             </div>
             <div className="flex gap-2">
@@ -268,24 +325,26 @@ export function EmergencyPage() {
               {theme === 'dark' ? <Sun className="size-4" aria-hidden /> : <Moon className="size-4" aria-hidden />}
               {theme === 'dark' ? '切换到亮色主题' : '切换到深色主题'}
             </Button>
-            <Button variant="outline" className="h-12 justify-start text-mcs-sm" onClick={() => setTab('overview')}>
+            {/* 直达完整设置（原为切换 Tab 的死按钮，点击无任何反馈） */}
+            <Link
+              to="/settings"
+              className="flex h-12 items-center justify-start gap-2 rounded-mcs-sm border border-mcs-border-default px-4 text-mcs-sm text-mcs-text-default"
+            >
               <Settings className="size-4" aria-hidden />
-              紧急视图设置（桌面端完整设置）
-            </Button>
-            <Link to="/settings" className="text-center text-mcs-2xs text-mcs-text-subtle underline-offset-2 hover:underline">
-              打开完整设置 →
+              打开完整设置
             </Link>
           </div>
         )}
       </main>
 
-      {/* 底部 Tab */}
-      <nav className="flex shrink-0 border-t border-mcs-border-muted bg-mcs-bg-muted pb-[env(safe-area-inset-bottom)]">
+      {/* 底部 Tab（aria-current 标记当前页） */}
+      <nav className="flex shrink-0 border-t border-mcs-border-muted bg-mcs-bg-muted pb-[env(safe-area-inset-bottom)]" aria-label="紧急视图导航">
         {TAB_LABELS.map(({ key, label, icon: Icon }) => (
           <button
             key={key}
             onClick={() => setTab(key)}
             aria-label={label}
+            aria-current={tab === key ? 'page' : undefined}
             className={cn(
               'flex h-14 flex-1 flex-col items-center justify-center gap-1 text-mcs-2xs font-semibold',
               tab === key ? 'text-mcs-accent-fg' : 'text-mcs-text-muted',
@@ -314,6 +373,25 @@ export function EmergencyPage() {
           setConfirmStop(false)
           setBusy('停止')
           action.mutate({ kind: 'stop' })
+        }}
+      />
+
+      {/* 重启确认（与桌面端保护粒度对齐：重启同样断开全部玩家） */}
+      <ConfirmDialog
+        open={confirmRestart}
+        onOpenChange={setConfirmRestart}
+        title="重启服务器"
+        description={
+          isRunning && onlinePlayers.length > 0
+            ? `${onlinePlayers.length} 名玩家当前在线，重启期间他们将断开连接，完成后可自动回连。`
+            : '确定要重启服务器吗？'
+        }
+        confirmText="存档并重启"
+        cancelText="取消"
+        onConfirm={() => {
+          setConfirmRestart(false)
+          setBusy('重启')
+          action.mutate({ kind: 'restart' })
         }}
       />
     </div>

@@ -1,5 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
-import { Clock } from 'lucide-react'
+import {
+  Clock,
+  CloudLightning,
+  CloudRain,
+  Cloudy,
+  Moon,
+  Sun,
+  type LucideIcon,
+} from 'lucide-react'
 import { worldTimePhase } from '@/lib/format'
 import { Chip } from '@/components/mcs/chip'
 import { useServerStore } from '@/stores/server'
@@ -30,9 +38,9 @@ export function interpolateTick(base: number, at: number, now: number, isRunning
 }
 
 const WEATHER_PRESETS = [
-  { key: 'clear', label: '☀ 晴天', cmd: 'weather clear' },
-  { key: 'rain', label: '🌧 雨天', cmd: 'weather rain' },
-  { key: 'thunder', label: '⛈ 雷暴', cmd: 'weather thunder' },
+  { key: 'clear', label: '晴天', cmd: 'weather clear' },
+  { key: 'rain', label: '雨天', cmd: 'weather rain' },
+  { key: 'thunder', label: '雷暴', cmd: 'weather thunder' },
 ] as const
 
 const TIME_PRESETS = [
@@ -43,10 +51,10 @@ const TIME_PRESETS = [
   { key: 'midnight', label: '午夜', cmd: 'time set midnight', tick: 18000 },
 ] as const
 
-const WEATHER_LABEL: Record<'clear' | 'rain' | 'thunder', { label: string; icon: string }> = {
-  clear: { label: '晴朗', icon: '☀️' },
-  rain: { label: '雨天', icon: '🌧️' },
-  thunder: { label: '雷暴', icon: '⛈️' },
+const WEATHER_LABEL: Record<'clear' | 'rain' | 'thunder', { label: string; Icon: LucideIcon }> = {
+  clear: { label: '晴朗', Icon: Sun },
+  rain: { label: '雨天', Icon: CloudRain },
+  thunder: { label: '雷暴', Icon: CloudLightning },
 }
 
 export function McClockCard() {
@@ -104,9 +112,20 @@ export function McClockCard() {
           />
         )}
         <circle cx={140} cy={20} r={13} fill="var(--mcs-bg-default)" stroke="var(--mcs-border-default)" strokeWidth={1.5} />
-        <text x={140} y={25} textAnchor="middle" fontSize={13}>
-          {cycle?.day ? '☀' : '🌙'}
-        </text>
+        {/* 日月 orb：嵌套 lucide 图标（合法嵌套 SVG），随昼夜切换 */}
+        {(() => {
+          const OrbIcon = cycle?.day ? Sun : Moon
+          return (
+            <OrbIcon
+              x={132}
+              y={12}
+              width={16}
+              height={16}
+              stroke={cycle?.day ? 'var(--mcs-warning-fg)' : 'var(--mcs-info-fg)'}
+              aria-hidden
+            />
+          )
+        })()}
         <text
           x={140}
           y={4}
@@ -120,9 +139,11 @@ export function McClockCard() {
         <text x={140} y={92} textAnchor="middle" fontSize={13} fontWeight={600} fill="var(--mcs-text-default)">
           {weather ? WEATHER_LABEL[weather].label : '--'}
         </text>
-        <text x={140} y={114} textAnchor="middle" fontSize={24}>
-          {weather ? WEATHER_LABEL[weather].icon : '⛅'}
-        </text>
+        {/* 天气图标：未知天气用 Cloudy 占位（aria 由外层 svg label 承载） */}
+        {(() => {
+          const WeatherIcon = weather ? WEATHER_LABEL[weather].Icon : Cloudy
+          return <WeatherIcon x={128} y={100} width={24} height={24} stroke="var(--mcs-text-muted)" aria-hidden />
+        })()}
         <text x={140} y={141} textAnchor="middle" fontSize={14} fontWeight={650} fill="var(--mcs-text-muted)">
           第 {worldDay ?? '--'} 天
         </text>

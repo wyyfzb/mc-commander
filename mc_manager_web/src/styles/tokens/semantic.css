@@ -64,6 +64,10 @@
   --mcs-state-focus: var(--ref-state-focus);
   --mcs-state-pressed: var(--ref-state-pressed);
 
+  /* ── 遮罩（弹窗/抽屉背板；原始值见 reference 层 --ref-scrim*）── */
+  --mcs-scrim: var(--ref-scrim);
+  --mcs-scrim-subtle: var(--ref-scrim-subtle);
+
   /* ── 间距（8px 网格）── */
   --mcs-space-1: 4px;
   --mcs-space-2: 8px;

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterAll, beforeAll } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent , waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { setupServer } from 'msw/node'
 import { Toaster } from 'sonner'
@@ -58,8 +58,8 @@ describe('CommandInput', () => {
     const input = screen.getByLabelText('服务器命令输入')
     fireEvent.change(input, { target: { value: 'say hello' } })
     fireEvent.keyDown(input, { key: 'Enter' })
-    // RCON 响应插入终端 + toast
-    expect(await screen.findByText(/命令已发送: say hello/)).toBeInTheDocument()
+    // RCON 响应插入终端；成功不弹 toast（终端为反馈源），以输入框清空为完成信号
+    await waitFor(() => expect(input).toHaveValue(''))
   })
 
   it('快捷 chips：默认 5 条渲染（图标+播放+删除）', () => {
@@ -76,7 +76,7 @@ describe('CommandInput', () => {
     fireEvent.click(screen.getByTitle('time set day'))
     expect(screen.getByLabelText('服务器命令输入')).toHaveValue('time set day')
     fireEvent.click(screen.getByRole('button', { name: /发送 time set day/ }))
-    expect(await screen.findByText(/命令已发送: time set day/)).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByLabelText('服务器命令输入')).toHaveValue(''))
   })
 
   it('注册命令总线 runner（Cmd+K 命令域桥）', () => {
@@ -92,7 +92,7 @@ describe('CommandInput', () => {
       for (const cmd of cmds) {
         fireEvent.change(input, { target: { value: cmd } })
         fireEvent.keyDown(input, { key: 'Enter' })
-        await screen.findByText(`命令已发送: ${cmd}`)
+        await waitFor(() => expect(input).toHaveValue(''))
       }
     }
 
