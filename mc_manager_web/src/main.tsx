@@ -5,6 +5,7 @@ import { RouterProvider } from 'react-router/dom'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { Toaster } from 'sonner'
 import { PageLoader } from '@/components/mcs/page-loader'
+import { ErrorBoundary } from '@/components/mcs/error-boundary'
 import { startNotificationCleanupTimer } from '@/stores/notifications'
 import './index.css'
 import { router } from './routes'
@@ -26,9 +27,11 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <TooltipProvider delayDuration={300}>
-        <Suspense fallback={<PageLoader />}>
-          <RouterProvider router={router} />
-        </Suspense>
+        <ErrorBoundary>
+          <Suspense fallback={<PageLoader />}>
+            <RouterProvider router={router} />
+          </Suspense>
+        </ErrorBoundary>
         <Toaster
           position="top-center"
           toastOptions={{
