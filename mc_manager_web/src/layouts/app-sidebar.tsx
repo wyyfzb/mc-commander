@@ -8,6 +8,7 @@ import {
   Puzzle,
   Server,
   Settings,
+  ScrollText,
   Webhook as WebhookIcon,
   type LucideIcon,
 } from 'lucide-react'
@@ -37,6 +38,7 @@ const PRIMARY_NAV: NavItem[] = [
   { to: '/plugins', label: '插件', icon: Puzzle },
   { to: '/instances', label: '实例', icon: Server },
   { to: '/webhooks', label: 'Webhook', icon: WebhookIcon },
+  { to: '/audit', label: '审计日志', icon: ScrollText },
 ]
 
 const BOTTOM_NAV: NavItem[] = [{ to: '/settings', label: '设置', icon: Settings }]
