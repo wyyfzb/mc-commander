@@ -151,6 +151,16 @@ app.use(errorHandler);
 setupWebhookDispatch(serverManager);
 setupWebSocket(wss, serverManager);
 
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`错误: 端口 ${config.port} 已被占用，请修改 .env 的 PORT 配置或停止占用该端口的进程。`);
+    process.exit(1);
+    return;
+  }
+  // 其他 listen 错误仍按 Node.js 默认行为抛出
+  throw err;
+});
+
 server.listen(config.port, '0.0.0.0', () => {
   console.log(`========================================`);
   console.log(`  MC_Commander Server v1.1.0`);
