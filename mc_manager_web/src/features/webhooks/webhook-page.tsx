@@ -1,10 +1,35 @@
+/**
+ * WebhookPage —— Webhook 外部通知管理
+ * - 列表展示（卡片行：名称/状态/URL/事件标签/操作按钮）
+ * - 新建/编辑对话框（shadcn Dialog）
+ * - 删除确认（ConfirmDialog 危险样式）
+ * - 投递日志展开行
+ * - 加载骨架行 + 空态 + Toast 反馈
+ */
 import { useState } from 'react'
+import { Plus, Send, Pencil, Trash2, ChevronDown, Webhook as WebhookIcon, Hourglass, RefreshCw } from 'lucide-react'
+import { toast } from 'sonner'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useConnectionStore } from '@/stores/connection'
-import { apiGetWebhooks, apiGetWebhookEventTypes, apiCreateWebhook, apiUpdateWebhook, apiDeleteWebhook, apiTestWebhook, apiGetWebhookDeliveries } from '@/api/webhooks'
+import {
+  apiGetWebhooks, apiGetWebhookEventTypes, apiCreateWebhook,
+  apiUpdateWebhook, apiDeleteWebhook, apiTestWebhook, apiGetWebhookDeliveries,
+} from '@/api/webhooks'
 import { queryKeys } from '@/api/queries'
 import { getFriendlyErrorText } from '@/api/errors'
 import type { Webhook, WebhookDelivery } from '@/api/types'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Switch } from '@/components/ui/switch'
+import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
+import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+  DialogDescription, DialogFooter,
+} from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
+import { cn } from '@/lib/utils'
 
 const EVENT_LABELS: Record<string, string> = {
   'player.join': '玩家加入', 'player.leave': '玩家离开', 'player.death': '玩家死亡',
@@ -15,23 +40,8 @@ const EVENT_LABELS: Record<string, string> = {
   'backup.delete': '备份删除', 'server.start': '面板启动', 'server.shutdown': '面板关闭', 'ping': 'Ping 测试',
 }
 
-const mcsText = 'var(--mcs-text-primary, #e2e8f0)'
-const mcsTextSec = 'var(--mcs-text-secondary, #94a3b8)'
-const mcsTextTer = 'var(--mcs-text-tertiary, #64748b)'
-const mcsBgCard = 'var(--mcs-bg-card, #1e293b)'
-const mcsBgMuted = 'var(--mcs-bg-muted, #0f172a)'
-const mcsBgInput = 'var(--mcs-bg-input, #0f172a)'
-const mcsBorder = 'var(--mcs-border, #334155)'
-const mcsAccent = 'var(--mcs-accent, #3b82f6)'
-const mcsRadius = 'var(--mcs-radius-sm, 6px)'
-const mcsTextSuccess = 'var(--mcs-text-success, #4ade80)'
-const mcsBgSuccess = 'var(--mcs-bg-success, #166534)'
-const mcsTextError = 'var(--mcs-text-error, #f87171)'
-const mcsBgError = 'var(--mcs-bg-error, #7f1d1d)'
-const mcsTextInverse = 'var(--mcs-text-inverse, inherit)'
-
 function fmtEvt(t: string) { return EVENT_LABELS[t] || t }
-function fmtTime(iso: string) { return new Date(iso).toLocaleString('zh-CN') }
+function fmtTime(iso: string) { return new Date(iso).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }) }
 
 export default function WebhookPage() {
   const config = useConnectionStore()
@@ -39,6 +49,7 @@ export default function WebhookPage() {
   const [showDialog, setShowDialog] = useState(false)
   const [editTarget, setEditTarget] = useState<Webhook | null>(null)
   const [expandedId, setExpandedId] = useState<number | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Webhook | null>(null)
   const [form, setForm] = useState({ name: '', url: '', secret: '', events: [] as string[], isEnabled: true })
 
   const { data: webhooksData, isLoading, error } = useQuery({
@@ -59,18 +70,23 @@ export default function WebhookPage() {
 
   const createMut = useMutation({
     mutationFn: (d: Parameters<typeof apiCreateWebhook>[1]) => apiCreateWebhook(config, d),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: queryKeys.webhooks() }); closeDialog() },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: queryKeys.webhooks() }); closeDialog(); toast.success('Webhook 已创建') },
+    onError: (e) => toast.error(`创建失败：${getFriendlyErrorText(e)}`),
   })
   const updateMut = useMutation({
     mutationFn: ({ id, data }: { id: number; data: Parameters<typeof apiUpdateWebhook>[2] }) => apiUpdateWebhook(config, id, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: queryKeys.webhooks() }); closeDialog() },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: queryKeys.webhooks() }); closeDialog(); toast.success('Webhook 已更新') },
+    onError: (e) => toast.error(`更新失败：${getFriendlyErrorText(e)}`),
   })
   const deleteMut = useMutation({
     mutationFn: (id: number) => apiDeleteWebhook(config, id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.webhooks() }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: queryKeys.webhooks() }); toast.success('Webhook 已删除') },
+    onError: (e) => toast.error(`删除失败：${getFriendlyErrorText(e)}`),
   })
   const testMut = useMutation({
     mutationFn: (id: number) => apiTestWebhook(config, id),
+    onSuccess: (data) => toast.success(`测试投递成功 HTTP ${data.statusCode}`),
+    onError: (e) => toast.error(`测试投递失败：${getFriendlyErrorText(e)}`),
   })
 
   const openCreate = () => { setEditTarget(null); setForm({ name: '', url: '', secret: '', events: [], isEnabled: true }); setShowDialog(true) }
@@ -85,134 +101,281 @@ export default function WebhookPage() {
     else createMut.mutate(payload as unknown as Parameters<typeof apiCreateWebhook>[1])
   }
 
+  const handleDeleteConfirm = () => {
+    if (!deleteTarget) return
+    const id = deleteTarget.id
+    setDeleteTarget(null)
+    deleteMut.mutate(id)
+  }
+
   const webhooks = webhooksData?.data ?? []
   const deliveries = deliveriesData?.data ?? []
+  const testingId = testMut.isPending ? testMut.variables : null
+
   if (config.status !== 'ready') return null
 
-  const btnBase: React.CSSProperties = { padding: '4px 10px', borderRadius: mcsRadius, fontSize: 12, border: `1px solid ${mcsBorder}`, background: 'transparent', color: mcsTextSec, cursor: 'pointer' }
-
   return (
-    <div style={{ maxWidth: 960, margin: '0 auto', padding: '24px 16px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <h2 style={{ fontSize: 18, fontWeight: 600, color: mcsText }}>Webhook 外部通知</h2>
-        <button onClick={openCreate} disabled={createMut.isPending || updateMut.isPending}
-          style={{ padding: '6px 14px', borderRadius: mcsRadius, background: mcsAccent, color: mcsTextInverse, border: 'none', cursor: 'pointer', fontSize: 13 }}>
-          + 新建 Webhook
-        </button>
+    <div className="flex h-full min-h-0 flex-col gap-4 p-4">
+      {/* ── 页面头 ── */}
+      <div className="flex items-center gap-3">
+        <div>
+          <h2 className="text-mcs-xl font-semibold text-mcs-text-default">Webhook 外部通知</h2>
+          <p className="text-mcs-xs text-mcs-text-subtle">配置外部通知通道，接收服务器事件推送</p>
+        </div>
+        <div className="ml-auto flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => void qc.invalidateQueries({ queryKey: queryKeys.webhooks() })} disabled={isLoading}>
+            <RefreshCw className={isLoading ? 'animate-spin' : ''} aria-hidden />
+            刷新
+          </Button>
+          <Button size="sm" onClick={openCreate} disabled={createMut.isPending || updateMut.isPending}>
+            <Plus aria-hidden />
+            新建 Webhook
+          </Button>
+        </div>
       </div>
-      {error && <div style={{ padding: 12, marginBottom: 16, borderRadius: mcsRadius, background: 'var(--mcs-bg-error, #fecaca)', color: 'var(--mcs-text-error, #991b1b)' }}>{getFriendlyErrorText(error)}</div>}
-      {isLoading ? <div style={{ textAlign: 'center', padding: 40, color: mcsTextSec }}>加载中...</div>
-        : webhooks.length === 0 ? <div style={{ textAlign: 'center', padding: 40, color: mcsTextSec }}>暂无 Webhook，点击新建添加外部通知通道</div>
-        : <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {webhooks.map((w: Webhook) => {
-              const testResult = testMut.variables === w.id ? testMut : null
-              return (
-                <div key={w.id} style={{ padding: 14, borderRadius: mcsRadius, border: `1px solid ${mcsBorder}`, background: mcsBgCard }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ minWidth: 0, flex: 1 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ fontWeight: 600, color: mcsText, fontSize: 14 }}>{w.name}</span>
-                        <span style={{ fontSize: 11, padding: '1px 6px', borderRadius: 4, background: w.isEnabled ? 'var(--mcs-bg-success, #166534)' : mcsBgMuted, color: w.isEnabled ? mcsTextSuccess : mcsTextSec }}>
-                          {w.isEnabled ? '启用' : '禁用'}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: 12, color: mcsTextSec, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.url}</div>
-                      {w.events.length > 0 && (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
-                          {w.events.map(e => <span key={e} style={{ fontSize: 11, padding: '1px 6px', borderRadius: 4, background: mcsBgMuted, color: mcsTextSec }}>{fmtEvt(e)}</span>)}
-                        </div>
-                      )}
-                      {w.events.length === 0 && <div style={{ fontSize: 11, color: mcsTextTer, marginTop: 4 }}>订阅全部事件</div>}
-                    </div>
-                    <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                      <button onClick={() => testMut.mutate(w.id)} disabled={testMut.isPending} style={btnBase}>{testMut.isPending && testMut.variables === w.id ? '投递中...' : '测试'}</button>
-                      <button onClick={() => setExpandedId(expandedId === w.id ? null : w.id)} style={btnBase}>投递日志</button>
-                      <button onClick={() => openEdit(w)} style={btnBase}>编辑</button>
-                      <button onClick={() => { if (confirm('确定删除此 Webhook？')) deleteMut.mutate(w.id) }} disabled={deleteMut.isPending} style={{ ...btnBase, color: mcsTextError }}>删除</button>
-                    </div>
-                  </div>
-                  {expandedId === w.id && (
-                    <div style={{ marginTop: 12, borderTop: `1px solid ${mcsBorder}`, paddingTop: 10 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: mcsText, marginBottom: 8 }}>投递日志</div>
-                      {deliveries.length === 0 ? <div style={{ fontSize: 12, color: mcsTextTer }}>暂无投递记录</div>
-                        : <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 240, overflowY: 'auto' }}>
-                            {deliveries.map((d: WebhookDelivery) => (
-                              <div key={d.id} style={{ padding: '6px 8px', borderRadius: 4, fontSize: 12, background: mcsBgMuted, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <div>
-                                  <span style={{ fontWeight: 500, color: mcsText }}>{fmtEvt(d.eventType)}</span>
-                                  <span style={{ color: mcsTextTer, marginLeft: 8 }}>{d.responseStatus ? String(d.responseStatus) : d.status}{d.durationMs != null ? ` ${String(d.durationMs)}ms` : ''}{d.attempts > 1 ? ` ${d.attempts}次` : ''}</span>
-                                </div>
-                                <span style={{ color: d.status === 'success' ? mcsTextSuccess : d.status === 'failed' ? mcsTextError : mcsTextSec }}>{fmtTime(d.createdAt)}</span>
-                              </div>
-                            ))}
-                          </div>}
-                    </div>
-                  )}
-                  {testResult?.isSuccess && (
-                    <div style={{ marginTop: 8, padding: '6px 10px', borderRadius: 4, fontSize: 12, background: mcsBgSuccess, color: mcsTextSuccess }}>
-                      {'测试投递成功 HTTP ' + String(testResult.data?.statusCode ?? '')}
-                    </div>
-                  )}
-                  {testResult?.isError && (
-                    <div style={{ marginTop: 8, padding: '6px 10px', borderRadius: 4, fontSize: 12, background: mcsBgError, color: 'var(--mcs-text-error, #fca5a5)' }}>
-                      {'测试投递失败：' + getFriendlyErrorText(testResult.error)}
-                    </div>
-                  )}
+
+      {/* ── 错误提示 ── */}
+      {error && (
+        <div className="rounded-mcs-sm border border-mcs-error-border bg-mcs-error-bg-subtle px-3 py-2 text-mcs-sm text-mcs-error-fg">
+          {getFriendlyErrorText(error)}
+        </div>
+      )}
+
+      {/* ── 列表容器 ── */}
+      <div className="min-h-0 flex-1 overflow-hidden rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted">
+        {isLoading ? (
+          /* 骨架行 */
+          <div data-testid="webhook-skeletons" className="space-y-1 p-4" aria-label="加载 Webhook 中">
+            {Array.from({ length: 3 }, (_, i) => (
+              <div key={i} className="flex items-center gap-3 py-2">
+                <Skeleton className="size-9 shrink-0" />
+                <div className="min-w-0 flex-1 space-y-1.5">
+                  <Skeleton className="h-4 w-1/4" />
+                  <Skeleton className="h-3 w-1/2" />
                 </div>
-              )
-            })}
-          </div>}
-      {showDialog && (
-        <div style={{ position: 'fixed', inset: 0, background: 'var(--mcs-bg-overlay, #00000066)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}
-          onClick={(e) => { if (e.target === e.currentTarget) closeDialog() }}>
-          <div style={{ background: mcsBgCard, borderRadius: 'var(--mcs-radius-md, 8px)', padding: 20, width: 480, maxHeight: '80vh', overflowY: 'auto', border: `1px solid ${mcsBorder}` }}>
-            <h3 style={{ fontSize: 16, fontWeight: 600, color: mcsText, marginBottom: 16 }}>{editTarget ? '编辑 Webhook' : '新建 Webhook'}</h3>
-            <label style={{ display: 'block', marginBottom: 12 }}>
-              <span style={{ fontSize: 13, color: mcsTextSec, marginBottom: 4, display: 'block' }}>名称 *</span>
-              <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                style={{ width: '100%', padding: '6px 10px', borderRadius: mcsRadius, border: `1px solid ${mcsBorder}`, background: mcsBgInput, color: mcsText, fontSize: 13, boxSizing: 'border-box' }} />
-            </label>
-            <label style={{ display: 'block', marginBottom: 12 }}>
-              <span style={{ fontSize: 13, color: mcsTextSec, marginBottom: 4, display: 'block' }}>URL *</span>
-              <input value={form.url} onChange={e => setForm(f => ({ ...f, url: e.target.value }))} placeholder='https://example.com/webhook'
-                style={{ width: '100%', padding: '6px 10px', borderRadius: mcsRadius, border: `1px solid ${mcsBorder}`, background: mcsBgInput, color: mcsText, fontSize: 13, boxSizing: 'border-box' }} />
-            </label>
-            <label style={{ display: 'block', marginBottom: 12 }}>
-              <span style={{ fontSize: 13, color: mcsTextSec, marginBottom: 4, display: 'block' }}>HMAC 密钥（留空不签名）</span>
-              <input value={form.secret} onChange={e => setForm(f => ({ ...f, secret: e.target.value }))} type='password' placeholder={editTarget ? '留空保持原密钥不变' : '可选'}
-                style={{ width: '100%', padding: '6px 10px', borderRadius: mcsRadius, border: `1px solid ${mcsBorder}`, background: mcsBgInput, color: mcsText, fontSize: 13, boxSizing: 'border-box' }} />
-            </label>
-            <div style={{ marginBottom: 12 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                <span style={{ fontSize: 13, color: mcsTextSec }}>事件过滤</span>
-                <button onClick={selectAll} style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, cursor: 'pointer', border: `1px solid ${mcsBorder}`, background: 'transparent', color: mcsTextSec }}>
-                  {eventTypes && form.events.length === eventTypes.length ? '取消全选' : '全选'}
-                </button>
+                <div className="flex gap-1">
+                  <Skeleton className="size-8" />
+                  <Skeleton className="size-8" />
+                </div>
               </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+            ))}
+          </div>
+        ) : webhooks.length === 0 ? (
+          /* 空态 */
+          <div className="flex flex-col items-center gap-1.5 px-4 py-12 text-center">
+            <WebhookIcon className="size-8 text-mcs-text-subtle opacity-60" aria-hidden />
+            <p className="mt-1 text-mcs-sm text-mcs-text-muted">暂无 Webhook</p>
+            <p className="text-mcs-xs text-mcs-text-subtle">点击新建添加外部通知通道</p>
+            <Button variant="outline" size="sm" className="mt-2" onClick={openCreate}>
+              <Plus className="size-3.5" aria-hidden />
+              新建 Webhook
+            </Button>
+          </div>
+        ) : (
+          <div className="divide-y divide-mcs-border-subtle">
+            {webhooks.map((w: Webhook) => (
+              <div key={w.id} className="px-4 py-3">
+                <div className="flex items-center gap-3">
+                  {/* 名称 + 状态 + URL + 事件 */}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="truncate text-mcs-sm font-semibold text-mcs-text-default" title={w.name}>{w.name}</span>
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          'text-mcs-xs',
+                          w.isEnabled
+                            ? 'border-mcs-success-border bg-mcs-success-bg-subtle text-mcs-success-fg'
+                            : 'border-mcs-border-muted text-mcs-text-subtle',
+                        )}
+                      >
+                        {w.isEnabled ? '启用' : '禁用'}
+                      </Badge>
+                    </div>
+                    <p className="mt-1 truncate text-mcs-xs text-mcs-text-muted" title={w.url}>{w.url}</p>
+                    {w.events.length > 0 && (
+                      <div className="mt-1.5 flex flex-wrap gap-1">
+                        {w.events.map(e => (
+                          <Badge key={e} variant="outline" className="border-mcs-border-muted text-mcs-2xs text-mcs-text-subtle">
+                            {fmtEvt(e)}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                    {w.events.length === 0 && (
+                      <p className="mt-1 text-mcs-2xs text-mcs-text-subtle">订阅全部事件</p>
+                    )}
+                  </div>
+
+                  {/* 操作按钮 */}
+                  <div className="flex shrink-0 items-center gap-0.5">
+                    <Button
+                      variant="ghost" size="icon-sm"
+                      disabled={testMut.isPending}
+                      aria-label={`测试 ${w.name}`}
+                      className="text-mcs-accent-fg"
+                      onClick={() => testMut.mutate(w.id)}
+                    >
+                      {testingId === w.id ? <Hourglass className="size-3.5 animate-spin" aria-hidden /> : <Send className="size-3.5" aria-hidden />}
+                    </Button>
+                    <Button
+                      variant="ghost" size="icon-sm"
+                      aria-label={`${w.name} 投递日志`}
+                      className="text-mcs-text-muted hover:text-mcs-text-default"
+                      onClick={() => setExpandedId(expandedId === w.id ? null : w.id)}
+                    >
+                      <ChevronDown className={cn("size-3.5 transition-transform", expandedId === w.id && "rotate-180")} aria-hidden />
+                    </Button>
+                    <Button
+                      variant="ghost" size="icon-sm"
+                      aria-label={`编辑 ${w.name}`}
+                      className="text-mcs-text-muted hover:text-mcs-text-default"
+                      onClick={() => openEdit(w)}
+                    >
+                      <Pencil className="size-3.5" aria-hidden />
+                    </Button>
+                    <Button
+                      variant="ghost" size="icon-sm"
+                      aria-label={`删除 ${w.name}`}
+                      className="text-mcs-error-fg hover:bg-mcs-error-bg-subtle hover:text-mcs-error-fg"
+                      onClick={() => setDeleteTarget(w)}
+                    >
+                      <Trash2 className="size-3.5" aria-hidden />
+                    </Button>
+                  </div>
+                </div>
+
+                {/* 投递日志展开 */}
+                {expandedId === w.id && (
+                  <div className="mt-3 border-t border-mcs-border-subtle pt-3">
+                    <p className="mb-2 text-mcs-xs font-semibold text-mcs-text-default">投递日志</p>
+                    {deliveries.length === 0 ? (
+                      <p className="text-mcs-xs text-mcs-text-subtle">暂无投递记录</p>
+                    ) : (
+                      <div className="flex max-h-60 flex-col gap-1 overflow-y-auto">
+                        {deliveries.map((d: WebhookDelivery) => (
+                          <div key={d.id} className="flex items-center justify-between rounded-mcs-xs bg-mcs-bg-default px-2 py-1.5 text-mcs-xs">
+                            <div>
+                              <span className="font-medium text-mcs-text-default">{fmtEvt(d.eventType)}</span>
+                              <span className="ml-2 text-mcs-text-subtle">
+                                {d.responseStatus ? String(d.responseStatus) : d.status}
+                                {d.durationMs != null ? ` ${String(d.durationMs)}ms` : ''}
+                                {d.attempts > 1 ? ` ${d.attempts}次` : ''}
+                              </span>
+                            </div>
+                            <span className={cn(
+                              d.status === 'success' ? 'text-mcs-success-fg' : d.status === 'failed' ? 'text-mcs-error-fg' : 'text-mcs-text-muted',
+                            )}>
+                              {fmtTime(d.createdAt)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── 新建/编辑对话框 ── */}
+      <Dialog open={showDialog} onOpenChange={(open) => { if (!open) closeDialog() }}>
+        <DialogContent className="glass-overlay sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{editTarget ? '编辑 Webhook' : '新建 Webhook'}</DialogTitle>
+            <DialogDescription>{editTarget ? '修改 Webhook 配置' : '创建新的外部通知通道'}</DialogDescription>
+          </DialogHeader>
+
+          <div className="flex flex-col gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-mcs-xs text-mcs-text-muted">名称 *</Label>
+              <Input
+                value={form.name}
+                onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                placeholder="Discord 通知"
+                className="text-mcs-sm"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-mcs-xs text-mcs-text-muted">URL *</Label>
+              <Input
+                value={form.url}
+                onChange={e => setForm(f => ({ ...f, url: e.target.value }))}
+                placeholder="https://example.com/webhook"
+                className="text-mcs-sm"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-mcs-xs text-mcs-text-muted">HMAC 密钥（留空不签名）</Label>
+              <Input
+                value={form.secret}
+                onChange={e => setForm(f => ({ ...f, secret: e.target.value }))}
+                type="password"
+                placeholder={editTarget ? '留空保持原密钥不变' : '可选'}
+                className="text-mcs-sm"
+              />
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-mcs-xs text-mcs-text-muted">事件过滤</Label>
+                <Button variant="outline" size="sm" className="h-6 text-mcs-2xs" onClick={selectAll}>
+                  {eventTypes && form.events.length === eventTypes.length ? '取消全选' : '全选'}
+                </Button>
+              </div>
+              <div className="flex flex-wrap gap-1">
                 {eventTypes?.map(evt => (
-                  <button key={evt} onClick={() => toggleEvent(evt)}
-                    style={{ fontSize: 11, padding: '3px 8px', borderRadius: 4, cursor: 'pointer', border: form.events.includes(evt) ? `1px solid ${mcsAccent}` : `1px solid ${mcsBorder}`, background: form.events.includes(evt) ? mcsAccent : 'transparent', color: form.events.includes(evt) ? mcsTextInverse : mcsTextSec }}>
+                  <button
+                    key={evt}
+                    type="button"
+                    onClick={() => toggleEvent(evt)}
+                    className={cn(
+                      'rounded-mcs-xs border px-2 py-0.5 text-mcs-2xs transition-colors cursor-pointer',
+                      form.events.includes(evt)
+                        ? 'border-mcs-accent-border bg-mcs-accent-bg-subtle text-mcs-accent-fg'
+                        : 'border-mcs-border-muted text-mcs-text-subtle hover:border-mcs-border-default',
+                    )}
+                  >
                     {fmtEvt(evt)}
                   </button>
                 ))}
               </div>
-              <div style={{ fontSize: 11, color: mcsTextTer, marginTop: 4 }}>未选择 = 订阅全部事件</div>
+              <p className="text-mcs-2xs text-mcs-text-subtle">未选择 = 订阅全部事件</p>
             </div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, cursor: 'pointer' }}>
-              <input type='checkbox' checked={form.isEnabled} onChange={e => setForm(f => ({ ...f, isEnabled: e.target.checked }))} />
-              <span style={{ fontSize: 13, color: mcsText }}>启用</span>
-            </label>
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button onClick={closeDialog} style={{ ...btnBase }}>取消</button>
-              <button onClick={handleSubmit} disabled={!form.name || !form.url || createMut.isPending || updateMut.isPending}
-                style={{ padding: '6px 16px', borderRadius: mcsRadius, fontSize: 13, border: 'none', background: mcsAccent, color: mcsTextInverse, cursor: 'pointer', opacity: (!form.name || !form.url) ? 0.5 : 1 }}>
-                {editTarget ? '保存' : '创建'}
-              </button>
+            <div className="flex items-center gap-2">
+              <Switch
+                checked={form.isEnabled}
+                onCheckedChange={checked => setForm(f => ({ ...f, isEnabled: checked }))}
+              />
+              <Label className="text-mcs-sm text-mcs-text-default cursor-pointer" onClick={() => setForm(f => ({ ...f, isEnabled: !f.isEnabled }))}>启用</Label>
             </div>
           </div>
-        </div>
-      )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={closeDialog}>取消</Button>
+            <Button
+              onClick={handleSubmit}
+              disabled={!form.name || !form.url || createMut.isPending || updateMut.isPending}
+            >
+              {createMut.isPending || updateMut.isPending ? '处理中…' : (editTarget ? '保存' : '创建')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── 删除确认 ── */}
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        title="确认删除"
+        description={`确定要删除 Webhook 「${deleteTarget?.name ?? ''}」吗？删除后将停止该通道的所有事件推送。`}
+        confirmText="删除"
+        danger
+        warning="此操作不可撤销"
+        loading={deleteMut.isPending}
+        onConfirm={() => void handleDeleteConfirm()}
+      />
     </div>
   )
 }
