@@ -181,6 +181,13 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
               </div>
             ))}
           </div>
+        ) : backupsQuery.isError ? (
+          <EmptyState
+            icon={CircleAlert}
+            title="加载备份列表失败"
+            hint={getFriendlyErrorText(backupsQuery.error)}
+            action={{ label: '重试', onClick: () => backupsQuery.refetch() }}
+          />
         ) : items.length === 0 ? (
           /* 空态：引导立即备份或配置定时备份（后者跳 /tasks） */
           <div className="flex flex-col items-center gap-1.5 px-4 py-10 text-center text-mcs-text-muted">
