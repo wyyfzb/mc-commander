@@ -35,16 +35,19 @@ npm run lint                 # ESLint
 npm run dev                  # node --watch 热重载
 ```
 
-## 验证分级（重要：按改动范围选择，禁止小改动跑全量）
+## 验证策略（一律全量）
 
-| 级别 | 场景 | 内容 | 耗时 |
-|---|---|---|---|
-| L1 | 单文件/小改动 | `npx tsc -b` + 相关测试文件（同目录 `__tests__/` 或直接依赖方） | ~15s |
-| L2 | 组件/交互改动 | L1 + 前端 `npm run test` 全量 | ~2min |
-| L3 | 里程碑/收尾 | L2 + 按需 e2e + 服务端 `npm test` + `npm run build` | ~5min |
+改动不分大小，本地自测一律全量，禁止只跑相关测试就提交：
 
-- e2e 只跑受影响 spec；全量 e2e 仅 L3。
-- 已知慢测试：`give-item-dialog.test.tsx`（重组件集成，~30s+），小改动不要因它触发全量。
+| 改动范围 | 验证内容 |
+|---|---|
+| 前端 | `npx tsc -b` + `npm run lint` + `npm run test`（全量） |
+| 服务端 | `npm run lint` + `npm test`（全量） |
+| 跨端 | 两者都跑；一键路径 `bash scripts/local-check.sh` |
+
+- 涉及页面渲染 / 展示文案的改动，加跑相关 e2e spec（`npx playwright test <spec>`）。
+- 全量 e2e 由 CI 兜底，本地按需。
+- PR 自测清单必须附全量结果（通过数 / 总数），仅写「相关测试通过」视为自测未完成。
 
 ## 工程纪律
 
