@@ -335,6 +335,7 @@ export default function WebhookPage() {
                     key={evt}
                     type="button"
                     onClick={() => toggleEvent(evt)}
+                    aria-pressed={form.events.includes(evt)}
                     className={cn(
                       'rounded-mcs-xs border px-2 py-0.5 text-mcs-2xs transition-colors cursor-pointer',
                       form.events.includes(evt)
