@@ -162,7 +162,7 @@ export function AccountPanel() {
       if (err instanceof ApiError && err.code === 40103) {
         handleLogoutLocal('当前会话已被下线')
       } else {
-        toast.error(getFriendlyErrorText(err))
+        toast.error(`操作失败：${getFriendlyErrorText(err)}`)
       }
     } finally {
       setKicking(false)

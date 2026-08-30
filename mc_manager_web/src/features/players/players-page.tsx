@@ -109,7 +109,7 @@ export function PlayersPage() {
     try {
       await action.mutateAsync(req)
     } catch (e) {
-      toast.error(getFriendlyErrorText(e))
+      toast.error(`操作失败：${getFriendlyErrorText(e)}`)
       throw e
     }
   }

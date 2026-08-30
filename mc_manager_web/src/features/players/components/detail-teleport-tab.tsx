@@ -198,7 +198,7 @@ function TeleportTabContent({
         else toast.success(summary)
       }
     } catch (e) {
-      toast.error(getFriendlyErrorText(e))
+      toast.error(`传送失败：${getFriendlyErrorText(e)}`)
     } finally {
       setRunning(false)
     }
@@ -237,7 +237,7 @@ function TeleportTabContent({
       toast.success('世界出生点已修改')
       setWorldSpawnConfirm(null)
     } catch (e) {
-      toast.error(getFriendlyErrorText(e))
+      toast.error(`操作失败：${getFriendlyErrorText(e)}`)
     } finally {
       setRunning(false)
     }
