@@ -9,6 +9,7 @@ import { RefreshCw, AlertTriangle } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
 import { useAuditLogs, useCommandHistory } from '@/api/queries'
 import { getFriendlyErrorText } from '@/api/errors'
 import type { Pagination } from '@/api/types'
@@ -185,9 +186,16 @@ export function AuditPage() {
               </thead>
               <tbody>
                 {auditQuery.isError && <ErrorRow colSpan={4} error={auditQuery.error} />}
-                {!auditQuery.isError && auditQuery.isLoading && (
-                  <tr><td colSpan={4} className="px-3 py-8 text-center text-mcs-text-subtle">加载中...</td></tr>
-                )}
+                {!auditQuery.isError && auditQuery.isLoading &&
+                  Array.from({ length: 5 }, (_, i) => (
+                    <tr key={`audit-skeleton-${i}`} className="border-b border-mcs-border-muted last:border-b-0" aria-hidden>
+                      <td className="px-3 py-2"><Skeleton className="h-3.5 w-20" /></td>
+                      <td className="px-3 py-2"><Skeleton className="h-5 w-14" /></td>
+                      <td className="px-3 py-2"><Skeleton className="h-3.5 w-24" /></td>
+                      <td className="px-3 py-2"><Skeleton className="h-3.5 w-36" /></td>
+                    </tr>
+                  ))
+                }
                 {!auditQuery.isError && !auditQuery.isLoading && auditQuery.data?.data.length === 0 && (
                   <tr><td colSpan={4} className="px-3 py-8 text-center text-mcs-text-subtle">暂无记录</td></tr>
                 )}
@@ -232,9 +240,17 @@ export function AuditPage() {
               </thead>
               <tbody>
                 {cmdQuery.isError && <ErrorRow colSpan={5} error={cmdQuery.error} />}
-                {!cmdQuery.isError && cmdQuery.isLoading && (
-                  <tr><td colSpan={5} className="px-3 py-8 text-center text-mcs-text-subtle">加载中...</td></tr>
-                )}
+                {!cmdQuery.isError && cmdQuery.isLoading &&
+                  Array.from({ length: 5 }, (_, i) => (
+                    <tr key={`cmd-skeleton-${i}`} className="border-b border-mcs-border-muted last:border-b-0" aria-hidden>
+                      <td className="px-3 py-2"><Skeleton className="h-3.5 w-20" /></td>
+                      <td className="px-3 py-2"><Skeleton className="h-3.5 w-40" /></td>
+                      <td className="px-3 py-2"><Skeleton className="h-5 w-10" /></td>
+                      <td className="px-3 py-2"><Skeleton className="h-3.5 w-14" /></td>
+                      <td className="px-3 py-2"><Skeleton className="h-3.5 w-12" /></td>
+                    </tr>
+                  ))
+                }
                 {!cmdQuery.isError && !cmdQuery.isLoading && cmdQuery.data?.data.length === 0 && (
                   <tr><td colSpan={5} className="px-3 py-8 text-center text-mcs-text-subtle">暂无记录</td></tr>
                 )}
