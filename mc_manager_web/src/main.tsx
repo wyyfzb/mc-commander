@@ -7,6 +7,7 @@ import { Toaster } from 'sonner'
 import { PageLoader } from '@/components/mcs/page-loader'
 import { ErrorBoundary } from '@/components/mcs/error-boundary'
 import { startNotificationCleanupTimer } from '@/stores/notifications'
+import { useUiStore } from '@/stores/ui'
 import './index.css'
 import { router } from './routes'
 
@@ -23,6 +24,22 @@ const queryClient = new QueryClient({
   },
 })
 
+/** Toaster 需跟随用户主题切换，提取为组件从 store 读取 theme */
+function ThemedToaster() {
+  const theme = useUiStore((s) => s.theme)
+  return (
+    <Toaster
+      theme={theme}
+      position="top-center"
+      toastOptions={{
+        classNames: {
+          toast: 'glass-toast! border-mcs-border-default!',
+        },
+      }}
+    />
+  )
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
@@ -32,14 +49,7 @@ createRoot(document.getElementById('root')!).render(
             <RouterProvider router={router} />
           </Suspense>
         </ErrorBoundary>
-        <Toaster
-          position="top-center"
-          toastOptions={{
-            classNames: {
-              toast: 'glass-toast! border-mcs-border-default!',
-            },
-          }}
-        />
+        <ThemedToaster />
       </TooltipProvider>
     </QueryClientProvider>
   </StrictMode>,
