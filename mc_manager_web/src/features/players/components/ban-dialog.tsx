@@ -134,6 +134,7 @@ function BanFormContent({ player, onConfirm, onOpenChange }: Omit<BanDialogProps
                 key={option.label}
                 type="button"
                 onClick={() => setDurationIndex(i)}
+                aria-pressed={durationIndex === i}
                 className={cn(
                   'rounded-mcs-sm border px-2.5 py-1 text-mcs-xs transition-colors',
                   durationIndex === i
@@ -156,6 +157,7 @@ function BanFormContent({ player, onConfirm, onOpenChange }: Omit<BanDialogProps
                 key={reason}
                 type="button"
                 onClick={() => setReasonIndex(i)}
+                aria-pressed={reasonIndex === i}
                 className={cn(
                   'rounded-mcs-sm border px-2.5 py-1 text-mcs-xs transition-colors',
                   reasonIndex === i
