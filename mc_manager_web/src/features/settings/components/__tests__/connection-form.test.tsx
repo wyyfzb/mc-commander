@@ -180,7 +180,7 @@ describe('ConnectionForm 测试连接', () => {
     await user.type(screen.getByLabelText('API Key'), 'wrong-key')
     await user.click(screen.getByRole('button', { name: '测试连接' }))
 
-    expect(await screen.findByText('API Key 无效或已过期')).toBeInTheDocument()
+    expect(await screen.findByText(/API Key 无效或已过期/)).toBeInTheDocument()
   })
 
   it('失败（网络错误）：toast「连接失败，请检查配置」', async () => {

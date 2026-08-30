@@ -62,7 +62,7 @@ export function BatchBar({ selectedPlayers, onOpenBatchDetail, onAction }: Batch
         toast.success(formatBatchSummary(actionLabel, result))
       }
     } catch (e) {
-      toast.error(getFriendlyErrorText(e))
+      toast.error(`批量操作失败：${getFriendlyErrorText(e)}`)
     } finally {
       setRunning(false)
     }

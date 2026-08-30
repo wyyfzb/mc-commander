@@ -75,7 +75,7 @@ export function ConnectionForm({ variant = 'settings', onSaved }: ConnectionForm
       setTestedOk(false)
       if (!opts?.silentFailure) {
         // 服务端返回错误信封（如 API Key 无效）→ 友好文案；网络/超时 → 通用失败提示
-        if (e instanceof ApiError) toast.error(getFriendlyErrorText(e))
+        if (e instanceof ApiError) toast.error(`连接测试失败：${getFriendlyErrorText(e)}`)
         else toast.error('连接失败，请检查配置')
       }
       return false
@@ -148,7 +148,7 @@ export function ConnectionForm({ variant = 'settings', onSaved }: ConnectionForm
       })
       toast.success('新 API Key 已生成并启用，旧 Key 已失效')
     } catch (e) {
-      if (e instanceof ApiError) toast.error(getFriendlyErrorText(e))
+      if (e instanceof ApiError) toast.error(`生成失败：${getFriendlyErrorText(e)}`)
       else toast.error('重新生成失败，请检查连接配置')
     } finally {
       setRotating(false)

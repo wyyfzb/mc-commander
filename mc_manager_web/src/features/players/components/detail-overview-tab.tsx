@@ -72,7 +72,7 @@ export function OverviewTab({ player, isRconConnected, bans, onAction, onOpenBan
       await onAction(req)
       if (successText) toast.success(successText)
     } catch (e) {
-      toast.error(getFriendlyErrorText(e))
+      toast.error(`操作失败：${getFriendlyErrorText(e)}`)
     } finally {
       setRunning(null)
     }
