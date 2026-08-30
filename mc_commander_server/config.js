@@ -26,7 +26,9 @@ export default {
   },
   rateLimit: {
     windowMs: parseInt(process.env.RATE_LIMIT_WINDOW || '60000'),
-    max: parseInt(process.env.RATE_LIMIT_MAX || '100')
+    // 240/min：前端常态轮询 6-8 个端点 × 5s ≈ 72-96 req/min，100 会在多标签页
+    // 场景触发 429 误伤正常使用；仍保留对命令执行类之外的滥用拦截空间
+    max: parseInt(process.env.RATE_LIMIT_MAX || '240')
   },
   // 备份保留策略（自动清理）：备份完成时清理超出上限的旧备份
   backupRetention: {
