@@ -11,7 +11,8 @@ export function setupStaticServe(app, publicDir) {
   // 未部署前端：整体不挂载，保持纯后端行为
   if (!fs.existsSync(indexHtml)) return;
 
-  app.use(express.static(publicDir));
+  // 静态资源 7 天浏览器缓存；index.html 由 SPA fallback 单独设 no-cache
+  app.use(express.static(publicDir, { maxAge: '7d' }));
 
   // SPA 深链接兜底：仅普通 GET；/api /ws 与现有非 API 路由 /health 交回原有链路。
   // /health 是 deploy 脚本就绪探测依赖（JSON 语义），不可被 fallback 换成 HTML。
@@ -27,6 +28,7 @@ export function setupStaticServe(app, publicDir) {
     ) {
       return next();
     }
+    res.set('Cache-Control', 'no-cache');
     res.sendFile(indexHtml, (err) => {
       if (err) next(err);
     });
