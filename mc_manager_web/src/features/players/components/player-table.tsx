@@ -19,6 +19,7 @@ import {
 } from '@tanstack/react-table'
 import {
   Ban,
+  CircleAlert,
   ChevronLeft,
   ChevronRight,
   Eye,
@@ -76,6 +77,9 @@ interface PlayerTableProps {
   /** 已过滤+排序的玩家列表 */
   players: Player[]
   isLoading: boolean
+  /** 加载失败时显示错误提示 + 重试按钮 */
+  isError?: boolean
+  onRetry?: () => void
   /** 未筛选总数（空态双文案判断：0=暂无玩家，>0=无匹配） */
   totalCount: number
   isRconConnected: boolean
@@ -90,6 +94,8 @@ interface PlayerTableProps {
 export function PlayerTable({
   players,
   isLoading,
+  isError,
+  onRetry,
   totalCount,
   isRconConnected,
   onOpenDetail,
@@ -484,11 +490,21 @@ export function PlayerTable({
             {!isLoading && pageSize === -1 && bottomPadding > 0 && <tr style={{ height: bottomPadding }} aria-hidden />}
           </tbody>
         </table>
-        {!isLoading && allRows.length === 0 && (
+        {isError && !isLoading && allRows.length === 0 ? (
+          <div className="flex h-40 flex-col items-center justify-center gap-2">
+            <CircleAlert className="size-6 text-mcs-text-subtle" aria-hidden />
+            <p className="text-mcs-sm text-mcs-text-muted">加载玩家列表失败</p>
+            {onRetry && (
+              <Button variant="outline" size="sm" onClick={onRetry}>
+                重试
+              </Button>
+            )}
+          </div>
+        ) : !isLoading && allRows.length === 0 ? (
           <div className="flex h-40 items-center justify-center text-mcs-sm text-mcs-text-subtle">
             {totalCount === 0 ? '暂无在线玩家' : '没有匹配的玩家'}
           </div>
-        )}
+        ) : null}
       </div>
 
       {/* 分页器（非「全部」档） */}

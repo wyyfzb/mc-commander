@@ -182,6 +182,8 @@ export function PlayersPage() {
           <PlayerTable
             players={filteredPlayers}
             isLoading={playersQuery.isLoading}
+            isError={playersQuery.isError}
+            onRetry={() => playersQuery.refetch()}
             totalCount={allPlayers.length}
             isRconConnected={isRconConnected}
             onOpenDetail={(name, tab) => openPlayerDetail(name, tab as PlayerDetailTab | undefined)}
