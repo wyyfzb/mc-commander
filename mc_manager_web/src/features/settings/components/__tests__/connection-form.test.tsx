@@ -193,7 +193,7 @@ describe('ConnectionForm 测试连接', () => {
     await user.type(screen.getByLabelText('API Key'), 'test-key-abc')
     await user.click(screen.getByRole('button', { name: '测试连接' }))
 
-    expect(await screen.findByText('连接失败，请检查配置')).toBeInTheDocument()
+    expect(await screen.findByText(/连接测试失败：连接失败，请检查配置/)).toBeInTheDocument()
   })
 
   it('在途：测试按钮 loading + 禁用，完成后恢复', async () => {
@@ -313,7 +313,7 @@ describe('ConnectionForm 保存', () => {
     expect(screen.getByText('已连接')).toBeInTheDocument()
   })
 
-  it('保存前强制测试：连接失败 → 「保存失败：连接测试未通过」且不写 store、不 onSaved', async () => {
+  it('保存前强制测试：连接失败 → toast 包含具体错误原因且不写 store、不 onSaved', async () => {
     server.use(http.get('*/api/v1/overview', () => HttpResponse.error()))
     const user = userEvent.setup()
     const { onSaved } = renderForm({ variant: 'settings' })
@@ -322,7 +322,8 @@ describe('ConnectionForm 保存', () => {
     await user.type(screen.getByLabelText('API Key'), 'test-key-abc')
     await user.click(screen.getByRole('button', { name: '保存连接' }))
 
-    expect(await screen.findByText('保存失败：连接测试未通过')).toBeInTheDocument()
+    // 保存失败 toast 应包含具体错误原因（网络错误时为通用提示）
+    expect(await screen.findByText(/保存失败：连接失败，请检查配置/)).toBeInTheDocument()
     // 未写入：store 保持未配置，onSaved 未调用（杜绝「告知失败但已生效」）
     const s = useConnectionStore.getState()
     expect(s.baseUrl).toBe('')
