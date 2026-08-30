@@ -297,8 +297,9 @@ export default function WebhookPage() {
 
           <div className="flex flex-col gap-3">
             <div className="space-y-1.5">
-              <Label className="text-mcs-xs text-mcs-text-muted">名称 *</Label>
+              <Label htmlFor="webhook-name" className="text-mcs-xs text-mcs-text-muted">名称 *</Label>
               <Input
+                id="webhook-name"
                 value={form.name}
                 onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                 placeholder="Discord 通知"
@@ -306,8 +307,9 @@ export default function WebhookPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-mcs-xs text-mcs-text-muted">URL *</Label>
+              <Label htmlFor="webhook-url" className="text-mcs-xs text-mcs-text-muted">URL *</Label>
               <Input
+                id="webhook-url"
                 value={form.url}
                 onChange={e => setForm(f => ({ ...f, url: e.target.value }))}
                 placeholder="https://example.com/webhook"
@@ -319,8 +321,9 @@ export default function WebhookPage() {
               )}
             </div>
             <div className="space-y-1.5">
-              <Label className="text-mcs-xs text-mcs-text-muted">HMAC 密钥（留空不签名）</Label>
+              <Label htmlFor="webhook-secret" className="text-mcs-xs text-mcs-text-muted">HMAC 密钥（留空不签名）</Label>
               <Input
+                id="webhook-secret"
                 value={form.secret}
                 onChange={e => setForm(f => ({ ...f, secret: e.target.value }))}
                 type="password"
