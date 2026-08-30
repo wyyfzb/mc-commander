@@ -3,7 +3,7 @@ import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 // 官方 CSS 必须引入：缺失会导致测量元素可见（32 个问号乱码行）+ 光标/选区样式缺失
 import '@xterm/xterm/css/xterm.css'
-import { Download, Eraser, Eye, EyeOff, Loader2, TerminalSquare } from 'lucide-react'
+import { Download, Eraser, Eye, EyeOff, Loader2, TerminalSquare, Copy, Check } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -86,6 +86,7 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
   const config = useConnectionStore()
   const [showJvmWarnings, setShowJvmWarnings] = useState(false)
   const [downloading, setDownloading] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   // 历史日志（组件挂载时回填，store 去重）
   const logsQuery = useInstanceLogs(instanceId ?? '', 200)
@@ -197,6 +198,26 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
     stoppedMarkRef.current = false
   }, [clearTerminal])
 
+  // 复制终端内容（选中区域优先，无选中则复制全部缓冲）
+  const handleCopy = useCallback(() => {
+    const term = xtermRef.current
+    if (!term) return
+    const selection = term.getSelection()
+    const text = selection || buffer.map((e) => (e as TerminalLogEntry).text).join('\n')
+    if (!text) {
+      toast.info('暂无内容可复制')
+      return
+    }
+    navigator.clipboard.writeText(text).then(
+      () => {
+        setCopied(true)
+        toast.success('已复制到剪贴板')
+        setTimeout(() => setCopied(false), 1500)
+      },
+      () => toast.error('复制失败'),
+    )
+  }, [buffer])
+
   // Ctrl+L 清屏（P0 服主肌肉记忆；window capture 覆盖输入框焦点，dashboard 内任意位置生效）
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -265,6 +286,14 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
               </Button>
             </TooltipTrigger>
             <TooltipContent side="bottom">{showJvmWarnings ? '隐藏 JVM 警告' : '显示 JVM 警告'}</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon-sm" onClick={handleCopy} aria-label="复制终端内容">
+                {copied ? <Check className="text-mcs-success-fg" aria-hidden /> : <Copy aria-hidden />}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">复制终端内容</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
