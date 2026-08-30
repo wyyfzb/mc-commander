@@ -64,12 +64,12 @@ export function isBoolValue(v: string): boolean {
 }
 
 /**
- * 已知 server.properties 属性的元数据（66 条）
+ * 已知 server.properties 属性的元数据（71 条）
  * 覆盖 vanilla 1.20.5 – 1.21+ 全部已知属性；保留少量废弃字段以兼容旧配置。
- * 分类分布：gameplay 16 / worldGen 18 / serverSettings 32。
+ * 分类分布：gameplay 19 / worldGen 18 / serverSettings 34。
  */
 export const SERVER_PROPERTY_DEFS: PropertyDef[] = [
-  // ── 游戏玩法（gameplay，16） ──
+  // ── 游戏玩法（gameplay，19） ──
   {
     name: 'difficulty',
     label: '难度',
@@ -160,6 +160,39 @@ export const SERVER_PROPERTY_DEFS: PropertyDef[] = [
     isSensitive: false,
     isHotReload: false,
     isWritable: false,
+  },
+  {
+    name: 'spawn-monsters',
+    label: '生成怪物',
+    desc: '是否生成怪物',
+    category: 'gameplay',
+    type: 'checkbox',
+    defaultValue: 'true',
+    isSensitive: false,
+    isHotReload: false,
+    isWritable: true,
+  },
+  {
+    name: 'spawn-npcs',
+    label: '生成NPC',
+    desc: '是否生成村民等 NPC',
+    category: 'gameplay',
+    type: 'checkbox',
+    defaultValue: 'true',
+    isSensitive: false,
+    isHotReload: false,
+    isWritable: true,
+  },
+  {
+    name: 'spawn-animals',
+    label: '生成动物',
+    desc: '是否生成动物',
+    category: 'gameplay',
+    type: 'checkbox',
+    defaultValue: 'true',
+    isSensitive: false,
+    isHotReload: false,
+    isWritable: true,
   },
   {
     name: 'max-players',
@@ -471,7 +504,7 @@ export const SERVER_PROPERTY_DEFS: PropertyDef[] = [
     isWritable: true,
   },
 
-  // ── 服务器设置（serverSettings，32） ──
+  // ── 服务器设置（serverSettings，34） ──
   {
     // vanilla 默认 false；热改键（whitelist on/off）
     name: 'white-list',
@@ -622,6 +655,28 @@ export const SERVER_PROPERTY_DEFS: PropertyDef[] = [
     name: 'resource-pack-sha1',
     label: '资源包SHA1',
     desc: '资源包校验值',
+    category: 'serverSettings',
+    type: 'input',
+    defaultValue: '',
+    isSensitive: false,
+    isHotReload: false,
+    isWritable: true,
+  },
+  {
+    name: 'resource-pack-prompt',
+    label: '资源包提示',
+    desc: '资源包下载时的自定义提示消息',
+    category: 'serverSettings',
+    type: 'input',
+    defaultValue: '',
+    isSensitive: false,
+    isHotReload: false,
+    isWritable: true,
+  },
+  {
+    name: 'text-filtering-config',
+    label: '文本过滤配置',
+    desc: '聊天文本过滤配置的 URL',
     category: 'serverSettings',
     type: 'input',
     defaultValue: '',
