@@ -1,6 +1,6 @@
 /**
  * 插件管理域 TanStack Query hooks（feat-8 P0-5）
- * - usePlugins：插件列表（staleTime 10s，不轮询——插件仅在文件变更/启停后变化）
+ * - usePlugins：插件列表（staleTime 10s，30s 轮询——与其他列表页一致）
  * - useTogglePlugin / useDeletePlugin：mutation，成功后失效列表
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -16,6 +16,7 @@ export function usePlugins(instanceId: string | null) {
     queryFn: () => apiGetPlugins(config, instanceId ?? ''),
     enabled: config.status === 'ready' && Boolean(instanceId),
     staleTime: 10_000,
+    refetchInterval: 30_000,
   })
 }
 
