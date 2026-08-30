@@ -45,6 +45,8 @@ export function InstancesPage() {
   const [uninstallTarget, setUninstallTarget] = useState<InstanceSummary | null>(null)
   /** 待停止确认的实例（启动直接执行） */
   const [stopTarget, setStopTarget] = useState<InstanceSummary | null>(null)
+  /** 卸载危险确认：实例名输入（不匹配禁用确认，对齐恢复备份防护级别） */
+  const [uninstallInput, setUninstallInput] = useState('')
 
   // ── 启停（卡片按钮；停止需确认弹窗）──
   const runMutation = useMutation({
@@ -109,6 +111,7 @@ export function InstancesPage() {
     if (!uninstallTarget) return
     const target = uninstallTarget
     setUninstallTarget(null)
+    setUninstallInput('')
     try {
       await uninstallMutation.mutateAsync(target.id)
       toast.success(`实例 "${target.name}" 已卸载`)
@@ -234,18 +237,37 @@ export function InstancesPage() {
         }}
       />
 
-      {/* ── 卸载确认 ── */}
+      {/* ── 卸载确认（输入实例名才可确认，对齐恢复备份防护级别） ── */}
       <ConfirmDialog
         open={uninstallTarget !== null}
-        onOpenChange={(open) => !open && setUninstallTarget(null)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setUninstallTarget(null)
+            setUninstallInput('')
+          }
+        }}
         title="卸载实例"
         description={`确定要卸载实例 "${uninstallTarget?.name ?? ''}" 吗？`}
         confirmText="确认卸载"
         danger
         loading={uninstallMutation.isPending}
+        confirmDisabled={uninstallInput.trim() !== (uninstallTarget?.name ?? '')}
         warning="此操作不可撤销！将会：停止运行中的服务器、删除所有世界数据和配置、从数据库中移除记录"
         onConfirm={() => void handleUninstallConfirm()}
-      />
+      >
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="uninstall-confirm-input" className="text-mcs-xs font-semibold text-mcs-text-muted">
+            输入实例名「{uninstallTarget?.name ?? ''}」以确认
+          </label>
+          <input
+            id="uninstall-confirm-input"
+            value={uninstallInput}
+            onChange={(e) => setUninstallInput(e.target.value)}
+            placeholder={uninstallTarget?.name ?? ''}
+            className="h-9 rounded-mcs-md border border-mcs-error-border bg-mcs-bg-default px-3 font-mono text-mcs-sm text-mcs-text-default outline-none placeholder:text-mcs-text-subtle focus:border-mcs-error-fg"
+          />
+        </div>
+      </ConfirmDialog>
     </div>
   )
 }
