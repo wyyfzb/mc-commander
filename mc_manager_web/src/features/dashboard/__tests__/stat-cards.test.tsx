@@ -175,7 +175,7 @@ describe('RuntimeInfoCard', () => {
   it('显示本次运行时长/累计运行/启动时间/上次存档', () => {
     render(<RuntimeInfoCard />)
     expect(screen.getByText('2h 0m')).toBeInTheDocument() // 7200s
-    expect(screen.getByText('1天 0小时')).toBeInTheDocument() // 86400s=1天整
+    expect(screen.getByText('1d 0h')).toBeInTheDocument() // 86400s=1天整
     expect(screen.getByText('上次存档')).toBeInTheDocument()
     expect(screen.getByText('5分钟前')).toBeInTheDocument()
   })

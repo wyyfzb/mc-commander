@@ -36,7 +36,7 @@ test.describe('仪表盘', () => {
     await expect(page.getByText('3/20').first()).toBeVisible()
     await expect(page.getByText('OP 1/3')).toBeVisible()
     await expect(page.getByText('2h 0m')).toBeVisible()
-    await expect(page.getByText('2天 0小时')).toBeVisible()
+    await expect(page.getByText('2d 0h')).toBeVisible()
     await expect(page.getByText('第 42 天')).toBeVisible()
   })
 
