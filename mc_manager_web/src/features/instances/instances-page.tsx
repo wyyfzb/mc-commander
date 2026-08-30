@@ -8,11 +8,12 @@
 import { useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query'
-import { Rocket } from 'lucide-react'
+import { AlertTriangle, Rocket } from 'lucide-react'
 import { toast } from 'sonner'
 import { apiGet, apiPost } from '@/api/client'
 import { queryKeys, useInstances } from '@/api/queries'
 import { getFriendlyErrorText } from '@/api/errors'
+import { EmptyState } from '@/components/mcs/empty-state'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -157,6 +158,13 @@ export function InstancesPage() {
               <div key={i} className="h-28 rounded-mcs-md bg-mcs-bg-muted" aria-hidden />
             ))}
           </div>
+        ) : instancesQuery.isError && !instancesQuery.isLoading ? (
+          <EmptyState
+            icon={AlertTriangle}
+            title="加载失败"
+            hint={`无法获取实例列表：${getFriendlyErrorText(instancesQuery.error)}`}
+            action={{ label: '重试', onClick: () => void instancesQuery.refetch() }}
+          />
         ) : (
           <InstanceCards
             instances={instances}

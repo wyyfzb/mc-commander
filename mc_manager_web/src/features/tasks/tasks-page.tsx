@@ -5,7 +5,7 @@
  * - 对话框保存后 toast（任务已创建/已更新/已删除/已触发执行）
  */
 import { useEffect, useRef, useState } from 'react'
-import { Plus, RefreshCw, ServerOff } from 'lucide-react'
+import { AlertTriangle, Plus, RefreshCw, ServerOff } from 'lucide-react'
 import { toast } from 'sonner'
 import { getFriendlyErrorText } from '@/api/errors'
 import { Button } from '@/components/ui/button'
@@ -147,16 +147,25 @@ export function TasksPage() {
 
       {/* ── 任务列表 ── */}
       <div className="min-h-0 flex-1">
-        <TaskList
-          tasks={tasksQuery.data ?? []}
-          isLoading={tasksQuery.isLoading}
-          runningTaskId={runningTaskId}
-          onToggle={(t, v) => void handleToggle(t, v)}
-          onRunNow={(t) => void handleRunNow(t)}
-          onEdit={openEdit}
-          onDelete={setDeleteTarget}
-          onNewTask={openCreate}
-        />
+        {tasksQuery.isError && !tasksQuery.isLoading ? (
+          <EmptyState
+            icon={AlertTriangle}
+            title="加载失败"
+            hint={`无法获取定时任务列表：${getFriendlyErrorText(tasksQuery.error)}`}
+            action={{ label: '重试', onClick: () => void tasksQuery.refetch() }}
+          />
+        ) : (
+          <TaskList
+            tasks={tasksQuery.data ?? []}
+            isLoading={tasksQuery.isLoading}
+            runningTaskId={runningTaskId}
+            onToggle={(t, v) => void handleToggle(t, v)}
+            onRunNow={(t) => void handleRunNow(t)}
+            onEdit={openEdit}
+            onDelete={setDeleteTarget}
+            onNewTask={openCreate}
+          />
+        )}
       </div>
 
       {/* ── 新建/编辑对话框（恒开组件，条件渲染控制显隐） ── */}
