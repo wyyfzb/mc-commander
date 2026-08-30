@@ -670,19 +670,19 @@ function PlayerRow({
   )
 }
 
-/** 在线时长短格式（h/m） */
+/** 在线时长短格式（Xh Ym） */
 function formatOnlineTimeShort(seconds: number): string {
   const hours = Math.floor(seconds / 3600)
   const minutes = Math.floor((seconds % 3600) / 60)
-  if (hours > 0) return `${hours}时${minutes}分`
-  return `${minutes}分`
+  if (hours > 0) return `${hours}h ${minutes}m`
+  return `${minutes}m`
 }
 
-/** 总时长短格式 */
+/** 总时长短格式（Xh Ym） */
 function formatTotalPlayTimeShort(seconds: number): string {
   const hours = Math.floor(seconds / 3600)
-  if (hours > 0) return `${hours}h`
-  const minutes = Math.floor(seconds / 60)
+  const minutes = Math.floor((seconds % 3600) / 60)
+  if (hours > 0) return `${hours}h ${minutes}m`
   return `${minutes}m`
 }
 
