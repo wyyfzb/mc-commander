@@ -91,9 +91,15 @@ export function EmergencyPage() {
   async function sendCommand() {
     const cmd = command.trim()
     if (!cmd || !currentId) return
-    await apiPost(`/api/v1/instances/${currentId}/command`, config, { command: cmd })
-    setCommand('')
-    toast.success(`已执行：${cmd}`)
+    try {
+      await apiPost(`/api/v1/instances/${currentId}/command`, config, { command: cmd })
+      setCommand('')
+      toast.success(`已执行：${cmd}`)
+    } catch (err) {
+      toast.error(
+        err instanceof ApiError ? getFriendlyErrorMessage(err.code, err.message) : '命令发送失败，请检查连接',
+      )
+    }
   }
 
   const lastLogs = (logsQuery.data ?? []).slice(-12)
