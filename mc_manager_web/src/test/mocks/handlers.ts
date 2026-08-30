@@ -390,6 +390,14 @@ export const deployMock = { shouldFail: false }
 /** 升级失败开关（测试注入：结构占位，非真实错误） */
 export const upgradeMock = { shouldFail: false, conflict: false }
 
+/** 升级状态轮询 mock（测试注入：模拟断线后轮询返回的进度） */
+export const upgradeStatusMock = {
+  upgrading: true,
+  stage: 'download',
+  percent: 80,
+  detail: '正在下载新版本服务端…',
+}
+
 /** 版本列表 mock（结构占位版本号；fabric 额外带 loaders） */
 const mockVersions = {
   vanilla: { versions: ['1.21.4', '1.21.1'] },
@@ -641,6 +649,9 @@ export const handlers = [
       { status: 202 },
     )
   }),
+  http.get('*/api/v1/instances/:id/upgrade/status', () =>
+    ok(upgradeStatusMock),
+  ),
   // 未配置 API Key 场景：401
   http.get('*/api/v1/unauthorized-probe', () =>
     HttpResponse.json(

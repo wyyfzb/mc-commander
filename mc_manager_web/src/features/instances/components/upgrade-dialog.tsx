@@ -9,12 +9,13 @@
  * 设计纪律：--mcs-* 语义 token，禁硬编码色值/间距/圆角；
  * 不使用 useEffect+setState（oxlint set-state-in-effect 已清零，勿回潮）。
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useConnectionStore } from '@/stores/connection'
-import { apiUpgradeInstance } from '@/api/instances'
+import { useServerStore } from '@/stores/server'
+import { apiUpgradeInstance, apiGetUpgradeStatus } from '@/api/instances'
 import { getFriendlyErrorText } from '@/api/errors'
 import { getSocketSingleton } from '@/hooks/use-server-socket'
-import { useUpgradeStore, UPGRADE_STAGE_LABELS, clearUpgradeProgress } from '@/stores/upgrade'
+import { useUpgradeStore, UPGRADE_STAGE_LABELS, clearUpgradeProgress, applyUpgradeProgress } from '@/stores/upgrade'
 import { useServerVersions } from '../queries'
 import type { InstanceStatus, UpgradeStage } from '@/api/types'
 import {
@@ -72,6 +73,10 @@ export function UpgradeDialog({ instance, open, onOpenChange }: UpgradeDialogPro
   const [error, setError] = useState<string | null>(null)
   const progress = useUpgradeStore((s) => s.progress[instance.id])
 
+  // 派生态：进度存在且未到终态 = 升级进行中（WS 驱动，无需 effect 同步）
+  const isTerminal = progress != null && TERMINAL_STAGES.has(progress.stage)
+  const upgrading = progress != null && !TERMINAL_STAGES.has(progress.stage)
+
   // 打开弹窗时按需订阅目标实例（服务端按订阅过滤升级进度事件；
   // Set 幂等去重，不退订 —— 避免与 useServerSocket 的当前实例订阅冲突）
   useEffect(() => {
@@ -79,12 +84,58 @@ export function UpgradeDialog({ instance, open, onOpenChange }: UpgradeDialogPro
     getSocketSingleton()?.subscribe(instance.id)
   }, [open, instance.id])
 
+  // WS 断线时轮询升级状态，WS 恢复或终态时停止
+  const socketConnected = useServerStore((s) => s.socketConnected)
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  useEffect(() => {
+    if (!open || !upgrading) {
+      // 非升级中或弹窗关闭 → 清理轮询
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current)
+        pollingRef.current = null
+      }
+      return
+    }
+    if (socketConnected) {
+      // WS 已连接 → 停止轮询
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current)
+        pollingRef.current = null
+      }
+      return
+    }
+    // WS 断线 + 升级进行中 → 启动 5s 轮询
+    if (!pollingRef.current) {
+      pollingRef.current = setInterval(async () => {
+        try {
+          const status = await apiGetUpgradeStatus(config, instance.id)
+          if (status.upgrading && status.stage && status.percent != null) {
+            applyUpgradeProgress({
+              instanceId: instance.id,
+              stage: status.stage as UpgradeStage,
+              percent: status.percent,
+              detail: status.detail ?? '',
+              timestamp: Date.now(),
+            })
+          }
+          // 终态由 applyUpgradeProgress 写入 store，后续 effect 自然停止轮询
+        } catch {
+          // 轮询失败静默，下次 5s 重试
+        }
+      }, 5000)
+    }
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current)
+        pollingRef.current = null
+      }
+    }
+  }, [open, upgrading, socketConnected, config, instance.id])
+
   const versionsQuery = useServerVersions(type)
   const versions: string[] = versionsQuery.isSuccess ? (versionsQuery.data?.versions ?? []) : []
 
-  // 派生态：进度存在且未到终态 = 升级进行中（WS 驱动，无需 effect 同步）
-  const isTerminal = progress != null && TERMINAL_STAGES.has(progress.stage)
-  const upgrading = progress != null && !TERMINAL_STAGES.has(progress.stage)
   const isSuccess = progress?.stage === 'completed'
   const isRolledBack = progress?.stage === 'rolled_back'
 
