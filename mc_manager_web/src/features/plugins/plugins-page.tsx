@@ -9,6 +9,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  AlertTriangle,
   ArrowUpFromLine,
   ExternalLink,
   FileText,
@@ -582,6 +583,15 @@ export function PluginsPage() {
               </div>
             </div>
           ))}
+        </div>
+      ) : pluginsQuery.isError ? (
+        <div className="min-h-0 flex-1">
+          <EmptyState
+            icon={AlertTriangle}
+            title="加载失败"
+            hint={`无法获取插件列表：${getFriendlyErrorText(pluginsQuery.error)}`}
+            action={{ label: '重试', onClick: () => void pluginsQuery.refetch() }}
+          />
         </div>
       ) : plugins.length === 0 ? (
         <div className="min-h-0 flex-1">
