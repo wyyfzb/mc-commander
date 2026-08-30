@@ -43,9 +43,11 @@ export function recommendedJavaVersion(mcVersion: string | null | undefined): st
 
 /**
  * 版本列表本地缓存 fallback（硬编码）
- * 远程版本服务不可用时仍可部署；默认首个 1.21.4
+ * 远程版本服务不可用时仍可部署；默认首个 26.2
  */
 export const FALLBACK_VERSIONS = [
+  '26.2',
+  '26.1',
   '1.21.4',
   '1.21.3',
   '1.21.1',

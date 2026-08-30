@@ -374,7 +374,6 @@ export const SERVER_PROPERTY_DEFS: PropertyDef[] = [
       'flat',
       'largeBiomes',
       'amplified',
-      'buffet',
     ],
     defaultValue: 'minecraft:normal',
     isSensitive: false,
