@@ -76,7 +76,7 @@ describe('TaskDialog 新建模式与校验', { timeout: 15000 }, () => {
     expect(screen.getByLabelText('任务名称')).toHaveValue('')
     expect(screen.getByRole('combobox', { name: '任务类型' })).toHaveTextContent('重启服务器')
     expect(screen.getByLabelText('Cron 表达式')).toHaveValue('')
-    expect(screen.getByRole('switch', { name: '启用' })).not.toBeChecked()
+    expect(screen.getByRole('switch', { name: '启用' })).toBeChecked()
     expect(screen.queryByLabelText('执行的命令')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '创建' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '取消' })).toBeInTheDocument()
@@ -138,6 +138,22 @@ describe('TaskDialog Cron 表达式交互', { timeout: 15000 }, () => {
     expect(screen.getByRole('button', { name: '每天 4:00' })).toHaveAttribute('aria-pressed', 'true')
   })
 
+  it('预置 chip 点击自动填充名称建议（名称为空时）', async () => {
+    const user = userEvent.setup()
+    renderDialog()
+    expect(screen.getByLabelText('任务名称')).toHaveValue('')
+    await user.click(screen.getByRole('button', { name: '每天 4:00' }))
+    expect(screen.getByLabelText('任务名称')).toHaveValue('每天 4:00 重启服务器')
+  })
+
+  it('预置 chip 点击不覆盖已有名称', async () => {
+    const user = userEvent.setup()
+    renderDialog()
+    await user.type(screen.getByLabelText('任务名称'), '自定义任务名')
+    await user.click(screen.getByRole('button', { name: '每小时' }))
+    expect(screen.getByLabelText('任务名称')).toHaveValue('自定义任务名')
+  })
+
   it('可视化编辑器：五字段联动回写 + 自定义值项 + 双向同步', async () => {
     const user = userEvent.setup()
     renderDialog()
@@ -181,7 +197,6 @@ describe('TaskDialog 保存链路', { timeout: 15000 }, () => {
     await user.click(screen.getByRole('combobox', { name: '任务类型' }))
     await user.click(await screen.findByRole('option', { name: '执行命令' }))
     await user.type(screen.getByLabelText('执行的命令'), 'say hello')
-    await user.click(screen.getByRole('switch', { name: '启用' }))
     await user.click(screen.getByRole('button', { name: '创建' }))
     await waitFor(() =>
       expect(onSave).toHaveBeenCalledWith({
@@ -194,7 +209,7 @@ describe('TaskDialog 保存链路', { timeout: 15000 }, () => {
     )
   })
 
-  it('保存：非 command 类型 command 为 null、未启用为 false', async () => {
+  it('保存：非 command 类型 command 为 null、默认启用', async () => {
     const user = userEvent.setup()
     const { onSave } = renderDialog()
     await user.type(screen.getByLabelText('任务名称'), '每日重启任务')
@@ -206,7 +221,7 @@ describe('TaskDialog 保存链路', { timeout: 15000 }, () => {
         type: 'restart',
         cronExpression: '0 * * * *',
         command: null,
-        isEnabled: false,
+        isEnabled: true,
       }),
     )
   })

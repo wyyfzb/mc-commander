@@ -55,7 +55,7 @@ export function TaskDialog({ task, onClose, onSave, saving }: TaskDialogProps) {
     type: (task?.type ?? 'restart') as TaskType,
     cron: task?.cronExpression ?? '',
     command: task?.command ?? '',
-    enabled: task?.isEnabled ?? false,
+    enabled: task?.isEnabled ?? true,
   }
 
   const [name, setName] = useState(initial.name)
@@ -177,7 +177,17 @@ export function TaskDialog({ task, onClose, onSave, saving }: TaskDialogProps) {
                 {CRON_PRESETS.map((preset) => {
                   const active = cron.trim() === preset.value
                   return (
-                    <Chip key={preset.value} onClick={() => setCron(preset.value)} selected={active}>
+                    <Chip
+                      key={preset.value}
+                      onClick={() => {
+                        setCron(preset.value)
+                        if (name.trim() === '') {
+                          const typeLabel = TASK_TYPE_OPTIONS.find((o) => o.value === type)?.label ?? type
+                          setName(`${preset.label} ${typeLabel}`)
+                        }
+                      }}
+                      selected={active}
+                    >
                       {preset.label}
                     </Chip>
                   )
