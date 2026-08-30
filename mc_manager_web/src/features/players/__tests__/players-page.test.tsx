@@ -165,8 +165,9 @@ describe('PlayersPage', () => {
     expect(await screen.findByText('确定要解封 Charlie 吗？解封后对方可重新连接。')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '确认解封' }))
     expect(await screen.findByText('已解封 Charlie')).toBeInTheDocument()
-    // 关闭弹窗
-    await user.click(within(dialog).getByRole('button', { name: '关闭' }))
+    // 关闭弹窗（footer 按钮，X 按钮 sr-only 同名需排除）
+    const closeButtons = within(dialog).getAllByRole('button', { name: '关闭' })
+    await user.click(closeButtons[closeButtons.length - 1]!)
     expect(screen.queryByRole('heading', { name: '封禁记录' })).not.toBeInTheDocument()
   })
 })

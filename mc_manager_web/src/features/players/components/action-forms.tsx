@@ -289,7 +289,7 @@ function EffectForm({ player, batchTargets, isBatchMode, isRconConnected, onActi
           aria-pressed={effectMode === 'clear'}
           className="text-mcs-xs"
         >
-          <Trash2 className="mr-1 size-3" />
+          <Trash2 className="mr-1 size-3" aria-hidden="true" />
           清除全部
         </Button>
       </div>
@@ -398,7 +398,7 @@ function EffectForm({ player, batchTargets, isBatchMode, isRconConnected, onActi
       {effectMode === 'clear' && (
         <div className="rounded-mcs-sm border border-mcs-warning-bg-subtle bg-mcs-warning-bg-subtle p-3">
           <div className="flex items-start gap-2 text-mcs-xs text-mcs-warning-fg">
-            <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+            <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
             <span>将清除目标玩家的全部状态效果，包括正向增益效果。</span>
           </div>
         </div>
@@ -571,7 +571,7 @@ function SummonForm({ isRconConnected, onAction }: ActionFormProps) {
 function OfflineBanner() {
   return (
     <div className="flex items-center gap-2 rounded-mcs-sm border border-mcs-warning-bg-subtle bg-mcs-warning-bg-subtle p-2.5">
-      <CloudOff className="size-4 shrink-0 text-mcs-warning-fg" />
+      <CloudOff className="size-4 shrink-0 text-mcs-warning-fg" aria-hidden="true" />
       <span className="text-mcs-xs text-mcs-warning-fg">RCON 未连接，无法执行操作</span>
     </div>
   )
