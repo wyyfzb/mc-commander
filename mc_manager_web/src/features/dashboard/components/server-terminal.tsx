@@ -76,6 +76,7 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
   const autoScrollEnabled = useUiStore((s) => s.terminalAutoScroll)
   // onScroll 注册于 mount effect，闭包捕获首渲染值——ref 同步最新偏好
   const autoScrollEnabledRef = useRef(autoScrollEnabled)
+  // eslint-disable-next-line react/refs -- latest-ref 模式：滚动处理器闭包读最新偏好，避免反复注销重挂
   autoScrollEnabledRef.current = autoScrollEnabled
   const buffer = useTerminalStore((s) => s.buffer)
   const pushNothing = useTerminalStore((s) => s.setInstance)

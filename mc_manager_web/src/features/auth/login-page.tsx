@@ -15,9 +15,11 @@ import {
   EyeOff,
   KeyRound,
   Loader2,
+  Moon,
   RefreshCw,
   ServerOff,
   ShieldCheck,
+  Sun,
   TriangleAlert,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -30,6 +32,7 @@ import { ApiError, NetworkError } from '@/api/client'
 import { getFriendlyErrorText } from '@/api/errors'
 import { useAuthStore } from '@/stores/auth'
 import { useConnectionStore } from '@/stores/connection'
+import { useUiStore } from '@/stores/ui'
 import {
   assessPasswordStrength,
   STRENGTH_BAR_STYLES,
@@ -117,6 +120,8 @@ export function LoginPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const returnTo = searchParams.get('returnTo') ?? '/dashboard'
+  const theme = useUiStore((s) => s.theme)
+  const toggleTheme = useUiStore((s) => s.toggleTheme)
 
   const [phase, setPhase] = useState<Phase>('probing')
   const [baseUrlOpen, setBaseUrlOpen] = useState(false)
@@ -207,6 +212,16 @@ export function LoginPage() {
 
   return (
     <div className="relative flex min-h-svh flex-col items-center justify-center overflow-hidden bg-mcs-bg-canvas px-4 py-10">
+      {/* 主题切换（本地偏好，与会话无关；登录态外仍可调） */}
+      <button
+        type="button"
+        onClick={toggleTheme}
+        aria-label={theme === 'dark' ? '切换到亮色主题' : '切换到深色主题'}
+        className="absolute right-4 top-4 z-10 rounded-mcs-md p-2 text-mcs-text-subtle transition-colors hover:bg-mcs-bg-hover hover:text-mcs-text-default"
+      >
+        {theme === 'dark' ? <Sun className="size-4" aria-hidden /> : <Moon className="size-4" aria-hidden />}
+      </button>
+
       {/* 装饰性网格纹理（控制台质感；aria 隐藏） */}
       <div
         aria-hidden

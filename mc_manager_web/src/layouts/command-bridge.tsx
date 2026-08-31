@@ -31,6 +31,7 @@ export function CommandBridge() {
   const [pendingCommand, setPendingCommand] = useState<string | null>(null)
   // setBaseRunner 依赖 confirmCommands 变化——ref 让执行器始终读最新偏好
   const confirmRef = useRef(confirmCommands)
+  // eslint-disable-next-line react/refs -- latest-ref 模式：渲染期同步最新值，供 effect 注册的执行器闭包读取
   confirmRef.current = confirmCommands
 
   useEffect(() => {

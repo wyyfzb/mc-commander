@@ -153,6 +153,12 @@
   em, i, cite {
     font-style: normal;
   }
+  /* Edge 对 type=password 注入原生显隐/清除按钮，与应用内显隐按钮叠加成双图标；
+     显隐交互统一由应用按钮承载（::-ms-* 仅 IE/Edge 内核识别，其他浏览器无影响） */
+  input[type="password"]::-ms-reveal,
+  input[type="password"]::-ms-clear {
+    display: none;
+  }
   /* 长文本行高 1.7-1.8 */
   .prose-long {
     line-height: var(--mcs-line-height-body-long);

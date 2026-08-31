@@ -1,3 +1,7 @@
+/* 渲染期 ref 读写是有意设计（本文件核心模式，见下方 hook 注释）：
+   挪入 effect 需补 setState 触发渲染（回到 set-state-in-effect）且 StrictMode 双跑需重做去重；
+   代价仅为该 hook 不被 React Compiler 自动 memo（sparkline 数据流高频变化，memo 无增益） */
+/* eslint-disable react/refs */
 import { useRef } from 'react'
 import { useServerStore } from '@/stores/server'
 

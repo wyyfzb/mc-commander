@@ -85,6 +85,9 @@ export function OverviewTab({ player, isRconConnected, bans, onAction, onOpenBan
   )
   const ipBans = player.ip ? bans.filter((b) => b.targetType === 'ip' && b.target === player.ip) : []
   const relatedBans = [...playerBans, ...ipBans]
+  // 渲染期取当前时间为可接受权衡：封禁剩余时间随详情数据刷新更新，非实时倒计时
+  // eslint-disable-next-line react/purity
+  const nowMs = Date.now()
 
   const behaviorBadges: Array<{ active: boolean; label: string; icon: ReactNode }> = [
     { active: player.isAfk, label: 'AFK', icon: <Zap aria-hidden /> },
@@ -309,7 +312,7 @@ export function OverviewTab({ player, isRconConnected, bans, onAction, onOpenBan
                     {ban.isPermanent
                       ? '永久'
                       : ban.expiresAt
-                        ? (ban.isActive ? (formatBanRemaining(ban.expiresAt, Date.now()) ?? '即将解封') : '已到期')
+                        ? (ban.isActive ? (formatBanRemaining(ban.expiresAt, nowMs) ?? '即将解封') : '已到期')
                         : ''}
                     {' · '}
                     {ban.createdAt ? formatRelativeTime(ban.createdAt) : ''}
