@@ -12,15 +12,26 @@ export interface EmptyStateAction {
   onClick: () => void
 }
 
+/** CTA 风格：outline 描边（默认，次级行动）/ greenFilled 品牌绿实底（空态主行动入口） */
+export type EmptyStateActionVariant = 'outline' | 'greenFilled'
+
 interface EmptyStateProps {
   icon?: ComponentType<{ className?: string }>
   title: string
   hint?: React.ReactNode
   action?: EmptyStateAction
+  actionVariant?: EmptyStateActionVariant
   className?: string
 }
 
-export function EmptyState({ icon: Icon, title, hint, action, className }: EmptyStateProps) {
+export function EmptyState({
+  icon: Icon,
+  title,
+  hint,
+  action,
+  actionVariant = 'outline',
+  className,
+}: EmptyStateProps) {
   return (
     <div
       className={cn(
@@ -32,7 +43,12 @@ export function EmptyState({ icon: Icon, title, hint, action, className }: Empty
       <p className="text-mcs-sm font-medium text-mcs-text-muted">{title}</p>
       {hint && <p className="text-mcs-xs text-mcs-text-subtle">{hint}</p>}
       {action && (
-        <Button variant="outline" size="sm" className="mt-2" onClick={action.onClick}>
+        <Button
+          variant={actionVariant === 'greenFilled' ? 'default' : 'outline'}
+          size="sm"
+          className="mt-2"
+          onClick={action.onClick}
+        >
           {action.label}
         </Button>
       )}

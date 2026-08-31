@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { StatusPill } from '@/components/mcs/status-pill'
+import { EmptyState } from '@/components/mcs/empty-state'
 import type { InstanceStatus, InstanceSummary } from '@/api/types'
 
 export interface InstanceCardsProps {
@@ -63,14 +64,15 @@ export function InstanceCards({
 }: InstanceCardsProps) {
   if (instances.length === 0) {
     return (
-      <div className="flex flex-col items-center gap-2 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted px-6 py-12">
-        <Server className="size-8 text-mcs-text-subtle" aria-hidden />
-        <p className="text-mcs-sm font-medium text-mcs-text-default">暂无已安装的实例</p>
-        <p className="text-mcs-xs text-mcs-text-subtle">使用部署向导创建第一个实例</p>
-        <Button size="sm" className="mt-1" onClick={onDeploy}>
-          部署新实例
-        </Button>
-      </div>
+      /* 空态（EmptyState 统一组件；保留独立卡容器描边，绿实底 CTA 对齐原默认 variant） */
+      <EmptyState
+        icon={Server}
+        title="暂无已安装的实例"
+        hint="使用部署向导创建第一个实例"
+        action={{ label: '部署新实例', onClick: onDeploy }}
+        actionVariant="greenFilled"
+        className="h-auto rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted py-12"
+      />
     )
   }
 

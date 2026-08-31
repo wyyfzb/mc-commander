@@ -9,13 +9,14 @@
  * - 时间行 formatTaskDate（MM-DD HH:mm 本地时区；null → '从未'）
  * - 容器：实底卡（风格 A 列表实底，禁 backdrop-blur）+ 行分隔；空态含新建任务按钮；加载骨架行
  */
-import { AlertCircle, Clock, Hourglass, Pencil, Play, Plus, Terminal, Timer, Trash2 } from 'lucide-react'
+import { AlertCircle, Clock, Hourglass, Pencil, Play, Terminal, Timer, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { StatusPill } from '@/components/mcs/status-pill'
+import { EmptyState } from '@/components/mcs/empty-state'
 import {
   TASK_TYPE_LABELS,
   TASK_TYPE_TONES,
@@ -96,16 +97,14 @@ export function TaskList({
           ))}
         </div>
       ) : tasks.length === 0 ? (
-        /* 空态（icon+标题+副标题+动作按钮） */
-        <div className="flex flex-col items-center gap-1.5 px-4 py-12 text-center text-mcs-text-muted">
-          <Clock className="size-8 opacity-60" aria-hidden />
-          <p className="mt-1 text-mcs-sm">暂无定时任务</p>
-          <p className="text-mcs-xs text-mcs-text-subtle">创建定时任务以自动执行重启、备份等操作</p>
-          <Button variant="outline" size="sm" className="mt-2" onClick={onNewTask}>
-            <Plus className="size-3.5" aria-hidden />
-            新建任务
-          </Button>
-        </div>
+        /* 空态（EmptyState 统一组件；绿实底 CTA 为页面主行动） */
+        <EmptyState
+          icon={Clock}
+          title="暂无定时任务"
+          hint="创建定时任务以自动执行重启、备份等操作"
+          action={{ label: '新建任务', onClick: onNewTask }}
+          actionVariant="greenFilled"
+        />
       ) : (
         <div className="divide-y divide-mcs-border-subtle">
           {tasks.map((task) => (
