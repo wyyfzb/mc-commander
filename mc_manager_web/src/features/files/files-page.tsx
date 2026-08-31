@@ -20,15 +20,9 @@ import { apiDownloadFile } from '@/api/files'
 import { queryKeys } from '@/api/queries'
 import { useConnectionStore } from '@/stores/connection'
 import { isBinaryFileName } from '@/lib/mc-files'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { Input } from '@/components/ui/input'
 import { useUnsavedGuard } from '@/hooks/use-unsaved-guard'
 import { useServerStore } from '@/stores/server'
@@ -451,35 +445,27 @@ export function FilesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ── 删除确认（目录红色警告递归删除） ── */}
-      <Dialog open={deleteTarget !== null} onOpenChange={(open) => !open && setDeleteTarget(null)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>删除 {deleteTarget?.name}？</DialogTitle>
-            <DialogDescription>
-              {deleteTarget?.isDirectory === true
-                ? `将递归删除目录「${deleteTarget.name}」及其全部内容，此操作不可撤销。`
-                : `将删除文件「${deleteTarget?.name}」，此操作不可撤销。`}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-1">
-            <p
-              className="truncate rounded-mcs-xs bg-mcs-bg-muted px-2 py-1 font-mono text-mcs-2xs text-mcs-text-subtle"
-              title={deleteTarget?.path}
-            >
-              {deleteTarget?.path}
-            </p>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteTarget(null)}>
-              取消
-            </Button>
-            <Button variant="destructive" onClick={() => void confirmDelete()}>
-              确认删除
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* ── 删除确认（ConfirmDialog danger 模式） ── */}
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        title={`删除 ${deleteTarget?.name ?? ''}？`}
+        description={deleteTarget?.isDirectory === true ? `将递归删除目录「${deleteTarget?.name}」及其全部内容。` : `将删除文件「${deleteTarget?.name}」。`}
+        confirmText="确认删除"
+        danger
+        warning="此操作不可撤销"
+        loading={deleteMutation.isPending}
+        onConfirm={() => void confirmDelete()}
+      >
+        <div className="py-1">
+          <p
+            className="truncate rounded-mcs-xs bg-mcs-bg-muted px-2 py-1 font-mono text-mcs-2xs text-mcs-text-subtle"
+            title={deleteTarget?.path}
+          >
+            {deleteTarget?.path}
+          </p>
+        </div>
+      </ConfirmDialog>
 
       {/* ── 新建文件对话框 ── */}
       <Dialog open={newFileOpen} onOpenChange={setNewFileOpen}>
