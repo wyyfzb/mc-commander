@@ -59,6 +59,7 @@ export class ScheduledTaskModel {
       isEnabled: !!row.is_enabled,
       lastRunAt: row.last_run_at,
       lastRunStatus: row.last_run_status ?? 'never',
+      lastRunError: row.last_run_error ?? null,
       nextRunAt: row.next_run_at,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
@@ -135,29 +136,48 @@ export class ScheduledTaskModel {
     return rows.map(r => this._toCamel(r));
   }
 
-  static updateLastRun(id, nextRunAt, status) {
+  static updateLastRun(id, nextRunAt, status, error = null) {
     const db = getDb();
     // status 可选：异步任务触发时先落时间戳，结果稍后由 updateLastRunStatus 回填
-    const statusClause = status !== undefined ? ', last_run_status = ?' : '';
-    const params = status !== undefined
-      ? [nextRunAt || null, status, id]
-      : [nextRunAt || null, id];
+    // error 可选：失败原因文本，与 status='failed' 配合使用
+    const clauses = ['last_run_at = CURRENT_TIMESTAMP', 'next_run_at = ?'];
+    const params = [nextRunAt || null];
+    if (status !== undefined) {
+      clauses.push('last_run_status = ?');
+      params.push(status);
+    }
+    if (error !== null) {
+      clauses.push('last_run_error = ?');
+      params.push(error);
+    } else if (status === 'success' || status === 'skipped') {
+      // 成功/跳过时清空上次错误
+      clauses.push('last_run_error = NULL');
+    }
+    clauses.push('updated_at = CURRENT_TIMESTAMP');
+    params.push(id);
 
     db.prepare(`
-      UPDATE scheduled_tasks
-      SET last_run_at = CURRENT_TIMESTAMP, next_run_at = ?${statusClause}, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
+      UPDATE scheduled_tasks SET ${clauses.join(', ')} WHERE id = ?
     `).run(...params);
   }
 
   /** 异步结果回填：仅写状态不刷新 last_run_at（时间戳已在触发时落库） */
-  static updateLastRunStatus(id, status) {
+  static updateLastRunStatus(id, status, error = null) {
     const db = getDb();
-    db.prepare(`
-      UPDATE scheduled_tasks
-      SET last_run_status = ?, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `).run(status, id);
+    const clauses = ['last_run_status = ?'];
+    const params = [status];
+    if (error !== null) {
+      clauses.push('last_run_error = ?');
+      params.push(error);
+    } else if (status === 'success' || status === 'skipped') {
+      clauses.push('last_run_error = NULL');
+    }
+    clauses.push('updated_at = CURRENT_TIMESTAMP');
+    params.push(id);
+
+    db.prepare(
+      `UPDATE scheduled_tasks SET ${clauses.join(', ')} WHERE id = ?`
+    ).run(...params);
   }
 }
 

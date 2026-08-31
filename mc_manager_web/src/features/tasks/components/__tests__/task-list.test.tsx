@@ -10,6 +10,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import userEvent from '@testing-library/user-event'
 import { TaskList, type TaskListProps } from '../task-list'
 import { mockTasks } from '@/test/mocks/handlers'
@@ -29,6 +30,7 @@ function renderList(overrides: Partial<TaskListProps> = {}) {
     onNewTask: vi.fn(),
   }
   render(
+    <TooltipProvider>
     <TaskList
       tasks={overrides.tasks ?? mockTasks}
       isLoading={overrides.isLoading ?? false}
@@ -38,7 +40,8 @@ function renderList(overrides: Partial<TaskListProps> = {}) {
       onEdit={handlers.onEdit}
       onDelete={handlers.onDelete}
       onNewTask={handlers.onNewTask}
-    />,
+    />
+    </TooltipProvider>,
   )
   return handlers
 }
@@ -102,6 +105,7 @@ describe('TaskList 上次运行结果标记', () => {
       isEnabled: true,
       lastRunAt,
       lastRunStatus: status,
+      lastRunError: status === 'failed' ? 'RCON 不可用' : null,
       nextRunAt: new Date(Date.now() + 3_600_000).toISOString(),
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',

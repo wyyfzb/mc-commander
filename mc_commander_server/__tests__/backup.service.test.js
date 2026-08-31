@@ -86,7 +86,7 @@ describe('BackupService.executeBackup - 定时任务结果回写', () => {
       service.executeBackup('s1', 999, '/nonexistent-dir', { taskId: 42 })
     ).rejects.toThrow('rsync failed');
 
-    expect(ScheduledTaskModel.updateLastRunStatus).toHaveBeenCalledWith(42, 'failed');
+    expect(ScheduledTaskModel.updateLastRunStatus).toHaveBeenCalledWith(42, 'failed', 'rsync failed');
   });
 
   it('taskId 为空（手动备份）不回写任务状态', async () => {

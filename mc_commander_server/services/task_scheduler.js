@@ -160,7 +160,8 @@ export class TaskScheduler {
             instance.sendCommand(task.command)
               .then(() => ScheduledTaskModel.updateLastRunStatus(task.id, 'success'))
               .catch((err) => {
-                ScheduledTaskModel.updateLastRunStatus(task.id, 'failed');
+                const errMsg = err?.message ?? String(err);
+                ScheduledTaskModel.updateLastRunStatus(task.id, 'failed', errMsg);
                 this.emitTaskFailed(task, err);
               });
           } else {
@@ -233,7 +234,7 @@ export class TaskScheduler {
                   content: `备份失败: ${err.message}`,
                 });
               }
-              ScheduledTaskModel.updateLastRunStatus(task.id, 'failed');
+              ScheduledTaskModel.updateLastRunStatus(task.id, 'failed', err.message);
             });
             console.log(`Backup task triggered for instance ${task.instanceId}`);
           } else {
@@ -245,7 +246,7 @@ export class TaskScheduler {
 
         default:
           console.warn(`Unknown task type: ${task.type}`);
-          ScheduledTaskModel.updateLastRun(task.id, nextRunAt, 'failed');
+          ScheduledTaskModel.updateLastRun(task.id, nextRunAt, 'failed', `未知任务类型: ${task.type}`);
           this.emitTaskFailed(task, new Error(`未知任务类型: ${task.type}`));
       }
 
@@ -260,7 +261,7 @@ export class TaskScheduler {
     } catch (err) {
       console.error(`Task execution failed (${task.name}):`, err);
       // 同步 throw（如 start 的 EULA/路径校验）：失败同样落库记录 last_run_at
-      ScheduledTaskModel.updateLastRun(task.id, nextRunAt, 'failed');
+      ScheduledTaskModel.updateLastRun(task.id, nextRunAt, 'failed', err?.message ?? String(err));
       this.emitTaskFailed(task, err);
     }
   }

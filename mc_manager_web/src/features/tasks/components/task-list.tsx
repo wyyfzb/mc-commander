@@ -9,11 +9,12 @@
  * - 时间行 formatTaskDate（MM-DD HH:mm 本地时区；null → '从未'）
  * - 容器：实底卡（风格 A 列表实底，禁 backdrop-blur）+ 行分隔；空态含新建任务按钮；加载骨架行
  */
-import { Clock, Hourglass, Pencil, Play, Plus, Terminal, Timer, Trash2 } from 'lucide-react'
+import { AlertCircle, Clock, Hourglass, Pencil, Play, Plus, Terminal, Timer, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { StatusPill } from '@/components/mcs/status-pill'
 import {
   TASK_TYPE_LABELS,
@@ -191,10 +192,29 @@ function TaskRow({
         <p className="mt-0.5 truncate text-mcs-xs text-mcs-text-muted">
           {`上次运行: ${formatTaskDate(task.lastRunAt)}`}
           {lastRunMeta && (
-            <span className={cn('ml-1.5 inline-flex items-center gap-1 font-medium', lastRunMeta.text)}>
-              <span className={cn('size-1.5 rounded-full', lastRunMeta.dot)} aria-hidden />
-              {lastRunMeta.label}
-            </span>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span
+                  className={cn(
+                    'ml-1.5 inline-flex items-center gap-1 font-medium',
+                    lastRunMeta.text,
+                    task.lastRunStatus === 'failed' && task.lastRunError && 'cursor-help underline decoration-dashed underline-offset-2',
+                  )}
+                >
+                  <span className={cn('size-1.5 rounded-full', lastRunMeta.dot)} aria-hidden />
+                  {lastRunMeta.label}
+                  {task.lastRunStatus === 'failed' && task.lastRunError && (
+                    <AlertCircle className="size-3" aria-hidden />
+                  )}
+                </span>
+              </TooltipTrigger>
+              {task.lastRunStatus === 'failed' && task.lastRunError && (
+                <TooltipContent side="bottom" className="max-w-xs">
+                  <p className="text-mcs-xs font-medium text-mcs-error-fg">失败原因</p>
+                  <p className="mt-1 text-xs text-mcs-text-default">{task.lastRunError}</p>
+                </TooltipContent>
+              )}
+            </Tooltip>
           )}
           {`  ·  下次运行: ${nextRunCountdown === null ? '从未' : `${formatTaskDate(task.nextRunAt)}（${nextRunCountdown}）`}`}
         </p>
