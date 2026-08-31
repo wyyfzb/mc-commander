@@ -25,8 +25,8 @@ import { toast } from 'sonner'
 import { DangerButton } from '@/components/mcs/danger-button'
 import { LoadingButton } from '@/components/mcs/loading-button'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { PasswordInput } from '@/components/ui/password-input'
 import { StatusPill } from '@/components/mcs/status-pill'
 import {
   Table,
@@ -247,39 +247,36 @@ export function AccountPanel() {
             <Label htmlFor="current-password" className="text-mcs-xs">
               当前密码
             </Label>
-            <Input
+            <PasswordInput
               id="current-password"
-              type="password"
               value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
+              onChange={setCurrentPassword}
               autoComplete="current-password"
-              className="h-9 font-mono"
+              className="h-9"
             />
           </div>
           <div className="space-y-2">
             <Label htmlFor="new-password" className="text-mcs-xs">
               新密码（8–128 位）
             </Label>
-            <Input
+            <PasswordInput
               id="new-password"
-              type="password"
               value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
+              onChange={setNewPassword}
               autoComplete="new-password"
-              className="h-9 font-mono"
+              className="h-9"
             />
           </div>
           <div className="space-y-2">
             <Label htmlFor="confirm-new-password" className="text-mcs-xs">
               确认新密码
             </Label>
-            <Input
+            <PasswordInput
               id="confirm-new-password"
-              type="password"
               value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
+              onChange={setConfirmPassword}
               autoComplete="new-password"
-              className="h-9 font-mono"
+              className="h-9"
             />
           </div>
 
