@@ -982,7 +982,7 @@ function PluginDetailSheet({ plugin, open, onOpenChange, onToggle, toggling }: P
 
           {/* 文件信息 */}
           <section className="space-y-2.5" aria-label="文件信息">
-              <h3 className="text-mcs-xs font-semibold text-mcs-text-subtle">文件信息</h3>
+            <h3 className="text-mcs-xs font-semibold text-mcs-text-subtle">文件信息</h3>
             <dl className="grid grid-cols-[auto_1fr] items-baseline gap-x-4 gap-y-2 text-mcs-sm">
               <dt className="shrink-0 text-mcs-text-subtle">大小</dt>
               <dd className="text-mcs-text-default">{formatFileSize(plugin.sizeBytes)}</dd>

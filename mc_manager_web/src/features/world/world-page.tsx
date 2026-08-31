@@ -117,7 +117,11 @@ export function WorldPage() {
         <NoticeBanner variant="error" icon={AlertTriangle}>
           <span className="flex items-center gap-2">
             <b>世界数据获取失败</b> ·
-            {worldQuery.isError ? '世界信息不可用' : '服务器属性不可用'}
+            {/* 双查询同错时两部分都列出（审查观察①） */}
+            {[
+              worldQuery.isError ? '世界信息不可用' : null,
+              propertiesQuery.isError ? '服务器属性不可用' : null,
+            ].filter(Boolean).join('、')}
             <Button
               variant="ghost"
               size="sm"
