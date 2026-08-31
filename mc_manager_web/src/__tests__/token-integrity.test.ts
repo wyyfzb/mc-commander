@@ -7,6 +7,7 @@ import { join } from 'node:path'
  * 1. semantic.css 引用的所有 --ref-* 必须已在 reference.css 定义
  * 2. theme.css / @theme inline 引用的所有 --mcs-* 必须已在 semantic.css 定义
  * 3. 组件源码（styles/、components/ui/、test/ 除外）禁止硬编码色值
+ * 4. 玻璃预算：glass-overlay 仅允许 ≤2 处（Sheet 抽屉 + 确认弹窗），防视觉异质回潮
  */
 
 const srcDir = join(import.meta.dirname, '..')
@@ -79,6 +80,25 @@ describe('组件源码禁硬编码色值', () => {
     }
     return out
   }
+
+  it('玻璃预算：glass-overlay 组件引用 ≤2 处（仅 Sheet 抽屉 + 确认弹窗豁免）', () => {
+    // 收集 src/ 下引用 glass-overlay 的 .tsx 组件文件（glass.css 定义处不计入）
+    const glassUsers: string[] = []
+    for (const file of collectTsxTs(srcDir)) {
+      if (!file.endsWith('.tsx')) continue
+      if (readFileSync(file, 'utf-8').includes('glass-overlay')) {
+        glassUsers.push(file)
+      }
+    }
+    // 预算超支时报出全部违规文件，便于逐处回归实底
+    expect(glassUsers.length).toBeLessThanOrEqual(2)
+    expect(glassUsers).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('notification-drawer'),
+        expect.stringContaining('confirm-dialog'),
+      ]),
+    )
+  })
 
   it('业务/布局组件与 mcs 组件无 hex/rgb 硬编码（允许 var(--mcs-*) 与 shadcn 组件变量）', () => {
     const violations: string[] = []
