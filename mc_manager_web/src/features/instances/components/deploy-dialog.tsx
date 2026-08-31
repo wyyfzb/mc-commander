@@ -28,6 +28,7 @@ import {
   XCircle,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { DangerButton } from '@/components/mcs/danger-button'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -693,15 +694,14 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
               <Button variant="outline" onClick={() => setCloseConfirmOpen(false)}>
                 继续编辑
               </Button>
-              <Button
-                variant="destructive"
+              <DangerButton
                 onClick={() => {
                   setCloseConfirmOpen(false)
                   handleClose()
                 }}
               >
                 放弃配置
-              </Button>
+              </DangerButton>
             </DialogFooter>
           </DialogContent>
         </Dialog>

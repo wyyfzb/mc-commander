@@ -12,6 +12,7 @@ import { useState } from 'react'
 import { AlertTriangle, Archive, RefreshCw, ServerOff } from 'lucide-react'
 import { useSearchParams } from 'react-router'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { DangerButton } from '@/components/mcs/danger-button'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -200,9 +201,9 @@ export function WorldPage() {
             <Button variant="outline" onClick={guard.cancel}>
               留下
             </Button>
-            <Button variant="destructive" onClick={guard.proceed}>
+            <DangerButton onClick={guard.proceed}>
               放弃修改并离开
-            </Button>
+            </DangerButton>
           </DialogFooter>
         </DialogContent>
       </Dialog>
