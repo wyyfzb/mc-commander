@@ -20,8 +20,6 @@ import {
 import {
   Ban,
   CircleAlert,
-  ChevronLeft,
-  ChevronRight,
   Eye,
   Gift,
   MoreHorizontal,
@@ -30,6 +28,7 @@ import {
   ShieldX,
   UserX,
 } from 'lucide-react'
+import { Pagination } from '@/components/mcs/pagination'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -388,27 +387,6 @@ export function PlayerTable({
     overscan: 12,
   })
 
-  /** 页码集合：{1, total, current±2} + 省略号 */
-  const pageNumbers = useMemo(() => {
-    if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1)
-    const set = new Set<number>([
-      1,
-      totalPages,
-      safePageIndex + 1,
-      safePageIndex,
-      safePageIndex - 1,
-      safePageIndex + 2,
-      safePageIndex - 2,
-    ])
-    const sorted = [...set].filter((n) => n >= 1 && n <= totalPages).sort((a, b) => a - b)
-    const withGaps: Array<number | '…'> = []
-    for (let i = 0; i < sorted.length; i++) {
-      if (i > 0 && sorted[i]! - sorted[i - 1]! > 1) withGaps.push('…')
-      withGaps.push(sorted[i]!)
-    }
-    return withGaps
-  }, [totalPages, safePageIndex])
-
   const virtualItems = rowVirtualizer.getVirtualItems()
   const topPadding = virtualItems.length > 0 ? virtualItems[0]!.start : 0
   const bottomPadding =
@@ -509,72 +487,23 @@ export function PlayerTable({
         ) : null}
       </div>
 
-      {/* 分页器（非「全部」档） */}
+      {/* 分页器（非「全部」档）——统一 Pagination 组件 */}
       {pageSize !== -1 && (
-        <div
-          className="flex items-center justify-between border-t border-mcs-border-muted px-4 py-2"
-          data-density="compact"
-        >
-          <div className="flex items-center gap-2 text-mcs-xs text-mcs-text-subtle">
-            每页
-            <select
-              value={String(pageSize)}
-              onChange={(e) => {
-                setPageSize(Number(e.target.value) as (typeof PAGE_SIZE_OPTIONS)[number])
-                setPageIndex(0)
-              }}
-              className="rounded-mcs-xs border border-mcs-border-default bg-mcs-bg-muted px-1.5 py-0.5 text-mcs-xs text-mcs-text-default"
-              aria-label="每页行数"
-            >
-              {PAGE_SIZE_OPTIONS.filter((s) => s !== -1).map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-              <option value={-1}>全部</option>
-            </select>
-            <span>
-              共 {allRows.length} 条 · 第 {safePageIndex + 1}/{totalPages} 页
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              disabled={safePageIndex === 0}
-              onClick={() => setPageIndex((p) => Math.max(0, p - 1))}
-              aria-label="上一页"
-            >
-              <ChevronLeft aria-hidden />
-            </Button>
-            {pageNumbers.map((n, i) =>
-              n === '…' ? (
-                <span key={`gap${i}`} className="px-1 text-mcs-xs text-mcs-text-subtle">
-                  …
-                </span>
-              ) : (
-                <Button
-                  key={n}
-                  variant={safePageIndex + 1 === n ? 'default' : 'ghost'}
-                  size="icon-sm"
-                  onClick={() => setPageIndex(n - 1)}
-                  aria-label={`第 ${n} 页`}
-                >
-                  {n}
-                </Button>
-              ),
-            )}
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              disabled={safePageIndex >= totalPages - 1}
-              onClick={() => setPageIndex((p) => Math.min(totalPages - 1, p + 1))}
-              aria-label="下一页"
-            >
-              <ChevronRight aria-hidden />
-            </Button>
-          </div>
-        </div>
+        <Pagination
+          page={safePageIndex + 1}
+          totalPages={totalPages}
+          totalItems={allRows.length}
+          onPageChange={(p) => setPageIndex(p - 1)}
+          variant="numbers"
+          pageSize={pageSize}
+          pageSizeOptions={[...PAGE_SIZE_OPTIONS.filter((s) => s !== -1)]}
+          onPageSizeChange={(size) => {
+            setPageSize(size as (typeof PAGE_SIZE_OPTIONS)[number])
+            setPageIndex(0)
+          }}
+          showAllOption
+          showPageSizeSelector
+        />
       )}
 
       {/* OP/白名单切换确认 */}
