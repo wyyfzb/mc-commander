@@ -39,6 +39,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { fileIconName, formatFileSize, formatModifiedAt, isEditableFile } from '@/lib/mc-files'
+import { getFriendlyErrorText } from '@/api/errors'
 import { useFileList } from '../queries'
 import type { FileEntry } from '@/api/types'
 
@@ -351,7 +352,7 @@ export function FileList({
         {!isLoading && isError && (
           <div className="flex flex-col items-center gap-3 px-4 py-10">
             <p className="text-mcs-sm text-mcs-text-muted">
-              加载失败：{error instanceof Error ? error.message : '未知错误'}
+              加载失败：{getFriendlyErrorText(error)}
             </p>
             <Button
               variant="outline"
