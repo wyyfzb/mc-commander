@@ -14,7 +14,7 @@ import { ArrowRightLeft, ArrowUpCircle, Loader2, Play, Server, Settings, ShieldA
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
-import { Chip } from '@/components/mcs/chip'
+import { StatusPill } from '@/components/mcs/status-pill'
 import type { InstanceStatus, InstanceSummary } from '@/api/types'
 
 export interface InstanceCardsProps {
@@ -151,16 +151,16 @@ function InstanceCard({
           {name}
         </span>
         {isCurrent && (
-          <Chip tone="accent" className="h-5 px-1.5 text-mcs-2xs font-semibold">
+          <StatusPill tone="accent" className="text-mcs-2xs font-semibold">
             当前
-          </Chip>
+          </StatusPill>
         )}
         {detailLoading ? (
           <Skeleton className="h-4 w-12 shrink-0" />
         ) : mcVersion ? (
-          <Chip tone="muted" className="h-5 px-1.5 font-mono text-mcs-2xs" title={mcVersion}>
+          <StatusPill tone="muted" className="font-mono text-mcs-2xs" title={mcVersion}>
             {mcVersion}
-          </Chip>
+          </StatusPill>
         ) : null}
       </div>
 

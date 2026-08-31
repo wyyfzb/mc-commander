@@ -8,7 +8,7 @@ import { useState } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
+import { StatusPill } from '@/components/mcs/status-pill'
 import { DataTableShell } from '@/components/mcs/data-table-shell'
 import { useAuditLogs, useCommandHistory } from '@/api/queries'
 import type { AuditLogItem, CommandHistoryItem } from '@/api/types'
@@ -79,9 +79,9 @@ function AuditBody({ logs }: { logs: AuditLogItem[] }) {
         <tr key={log.id} className="border-b border-mcs-border-muted last:border-b-0">
           <td className="whitespace-nowrap px-3 py-2 text-mcs-text-default font-mono text-mcs-xs">{formatTime(log.createdAt)}</td>
           <td className="px-3 py-2">
-            <Badge variant="outline" className="border-mcs-border-muted text-mcs-text-default">
+            <StatusPill variant="outline">
               {getActionLabel(log.action)}
-            </Badge>
+            </StatusPill>
           </td>
           <td className="px-3 py-2 text-mcs-text-default">{log.targetType ? `${log.targetType}${log.targetId ? `: ${log.targetId}` : ''}` : '-'}</td>
           <td className="max-w-xs truncate px-3 py-2 text-mcs-text-subtle">
@@ -117,9 +117,9 @@ function CmdBody({ cmds }: { cmds: CommandHistoryItem[] }) {
           <td className="whitespace-nowrap px-3 py-2 text-mcs-text-default font-mono text-mcs-xs">{formatTime(cmd.createdAt)}</td>
           <td className="px-3 py-2 font-mono text-mcs-text-default">{cmd.command}</td>
           <td className="px-3 py-2">
-            <Badge variant={cmd.success ? 'outline' : 'destructive'} className={cmd.success ? 'border-mcs-border-muted text-mcs-text-default' : ''}>
+            <StatusPill tone={cmd.success ? 'success' : 'error'}>
               {cmd.success ? '成功' : '失败'}
-            </Badge>
+            </StatusPill>
           </td>
           <td className="px-3 py-2 text-mcs-text-subtle">{cmd.source}</td>
           <td className="px-3 py-2 text-mcs-text-subtle font-mono text-mcs-xs">{formatDuration(cmd.durationMs)}</td>

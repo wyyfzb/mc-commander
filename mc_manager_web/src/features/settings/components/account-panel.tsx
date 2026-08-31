@@ -25,7 +25,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Badge } from '@/components/ui/badge'
+import { StatusPill } from '@/components/mcs/status-pill'
 import {
   Table,
   TableBody,
@@ -209,15 +209,15 @@ export function AccountPanel() {
       >
         <div className="flex flex-wrap items-center gap-2.5">
           {session?.token ? (
-            <Badge className="gap-1 bg-mcs-success-bg-subtle text-mcs-success-fg border-mcs-success-border hover:bg-mcs-success-bg-subtle">
+            <StatusPill tone="success" className="gap-1">
               <ShieldCheck className="size-3" aria-hidden />
               管理员会话
-            </Badge>
+            </StatusPill>
           ) : (
-            <Badge variant="outline" className="gap-1 border-mcs-warning-border text-mcs-warning-fg">
+            <StatusPill variant="outline" tone="warning" className="gap-1">
               <KeyRound className="size-3" aria-hidden />
               API Key 直连
-            </Badge>
+            </StatusPill>
           )}
           {session?.expiresAt && (
             <span className="inline-flex items-center gap-1 text-mcs-2xs text-mcs-text-subtle">
@@ -364,9 +364,9 @@ export function AccountPanel() {
                           {describeUserAgent(s.userAgent)}
                         </span>
                         {s.current && (
-                          <Badge variant="outline" className="h-4 px-1.5 text-mcs-2xs text-mcs-accent-fg">
+                          <StatusPill variant="outline" tone="accent" className="text-mcs-2xs">
                             本机
-                          </Badge>
+                          </StatusPill>
                         )}
                       </div>
                       <p className="mt-0.5 max-w-52 truncate text-mcs-2xs text-mcs-text-subtle" title={s.userAgent ?? undefined}>

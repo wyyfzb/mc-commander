@@ -42,7 +42,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Chip } from '@/components/mcs/chip'
+import { StatusPill } from '@/components/mcs/status-pill'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { EmptyState } from '@/components/mcs/empty-state'
 import { formatFileSize, formatModifiedAt } from '@/lib/mc-files'
@@ -773,11 +773,11 @@ function PluginRow({ plugin, checked, onCheckedChange, toggling, deleting, onTog
           <span className="truncate text-mcs-sm font-medium text-mcs-text-default" title={displayName}>
             {displayName}
           </span>
-          {version && <Chip tone="muted">v{version}</Chip>}
-          {apiVersion && <Chip tone="info">API {apiVersion}</Chip>}
-          <Chip tone={plugin.enabled ? 'success' : 'muted'}>
+          {version && <StatusPill tone="muted">v{version}</StatusPill>}
+          {apiVersion && <StatusPill tone="info">API {apiVersion}</StatusPill>}
+          <StatusPill tone={plugin.enabled ? 'success' : 'muted'}>
             {plugin.enabled ? '已启用' : '已禁用'}
-          </Chip>
+          </StatusPill>
           {updateInfo?.hasNewer && (
             <button
               type="button"
@@ -879,9 +879,9 @@ function PluginDetailSheet({ plugin, open, onOpenChange, onToggle, toggling }: P
         <SheetHeader className="text-left">
           <SheetTitle className="flex flex-wrap items-center gap-2">
             <span className="truncate">{displayName}</span>
-            <Chip tone={plugin.enabled ? 'success' : 'muted'}>
+            <StatusPill tone={plugin.enabled ? 'success' : 'muted'}>
               {plugin.enabled ? '已启用' : '已禁用'}
-            </Chip>
+            </StatusPill>
           </SheetTitle>
           <SheetDescription className="font-mono text-mcs-xs">{plugin.file}</SheetDescription>
         </SheetHeader>
@@ -903,7 +903,7 @@ function PluginDetailSheet({ plugin, open, onOpenChange, onToggle, toggling }: P
                 <>
                   <dt className="shrink-0 text-mcs-text-subtle">版本</dt>
                   <dd className="text-mcs-text-default">
-                    <Chip tone="muted">v{meta.version}</Chip>
+                    <StatusPill tone="muted">v{meta.version}</StatusPill>
                   </dd>
                 </>
               )}
@@ -911,7 +911,7 @@ function PluginDetailSheet({ plugin, open, onOpenChange, onToggle, toggling }: P
                 <>
                   <dt className="shrink-0 text-mcs-text-subtle">API 版本</dt>
                   <dd className="text-mcs-text-default">
-                    <Chip tone="info">API {meta.apiVersion}</Chip>
+                    <StatusPill tone="info">API {meta.apiVersion}</StatusPill>
                   </dd>
                 </>
               )}
@@ -962,7 +962,7 @@ function PluginDetailSheet({ plugin, open, onOpenChange, onToggle, toggling }: P
                   <p className="text-mcs-xs text-mcs-text-subtle">硬依赖（缺失时插件无法加载）</p>
                   <div className="flex flex-wrap gap-1.5">
                     {meta!.depend.map((d) => (
-                      <Chip key={d} tone="warning">{d}</Chip>
+                      <StatusPill key={d} tone="warning">{d}</StatusPill>
                     ))}
                   </div>
                 </div>
@@ -972,7 +972,7 @@ function PluginDetailSheet({ plugin, open, onOpenChange, onToggle, toggling }: P
                   <p className="text-mcs-xs text-mcs-text-subtle">软依赖（缺失不影响加载）</p>
                   <div className="flex flex-wrap gap-1.5">
                     {meta!.softdepend.map((d) => (
-                      <Chip key={d} tone="muted">{d}</Chip>
+                      <StatusPill key={d} tone="muted">{d}</StatusPill>
                     ))}
                   </div>
                 </div>

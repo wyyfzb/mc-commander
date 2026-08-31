@@ -8,7 +8,6 @@ import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import {
   WorldInfoCard,
-  PillBadge,
   formatWorldType,
   formatDifficulty,
   formatGameMode,
@@ -16,6 +15,7 @@ import {
   gameModeTone,
   sizeProgress,
 } from '../world-info-card'
+import { StatusPill } from '@/components/mcs/status-pill'
 import { DimensionCards, dimensionKind } from '../dimension-cards'
 import type { WorldInfo } from '@/api/types'
 
@@ -83,7 +83,7 @@ describe('世界类型/难度/模式映射', () => {
     expect(formatGameMode('spectator')).toBe('旁观')
   })
 
-  it('难度 → PillBadge 状态色（peaceful→info/easy→success/hard→error/其余→warning）', () => {
+  it('难度 → StatusPill 状态色（peaceful→info/easy→success/hard→error/其余→warning）', () => {
     expect(difficultyTone('peaceful')).toBe('info')
     expect(difficultyTone('easy')).toBe('success')
     expect(difficultyTone('hard')).toBe('error')
@@ -91,7 +91,7 @@ describe('世界类型/难度/模式映射', () => {
     expect(difficultyTone('unknown')).toBe('warning')
   })
 
-  it('游戏模式 → PillBadge 状态色（survival→success/creative→info/adventure→warning/spectator→purple）', () => {
+  it('游戏模式 → StatusPill 状态色（survival→success/creative→info/adventure→warning/spectator→purple）', () => {
     expect(gameModeTone('survival')).toBe('success')
     expect(gameModeTone('creative')).toBe('info')
     expect(gameModeTone('adventure')).toBe('warning')
@@ -107,34 +107,34 @@ describe('世界类型/难度/模式映射', () => {
   })
 })
 
-// ── PillBadge 状态色 token 断言 ───────────────────────────────────
+// ── StatusPill 状态色 token 断言 ───────────────────────────────────
 
-describe('PillBadge', () => {
+describe('StatusPill', () => {
   it('按 tone 输出 --mcs-*-border/bg-subtle/fg 三元组 token 类', () => {
     const { container } = render(
       <>
-        <PillBadge tone="warning">普通</PillBadge>
-        <PillBadge tone="info">和平</PillBadge>
-        <PillBadge tone="success">生存</PillBadge>
-        <PillBadge tone="error">困难</PillBadge>
-        <PillBadge tone="purple">旁观</PillBadge>
+        <StatusPill tone="warning">普通</StatusPill>
+        <StatusPill tone="info">和平</StatusPill>
+        <StatusPill tone="success">生存</StatusPill>
+        <StatusPill tone="error">困难</StatusPill>
+        <StatusPill tone="purple">旁观</StatusPill>
       </>,
     )
-    const badges = container.querySelectorAll('[data-pill-tone]')
-    expect(badges).toHaveLength(5)
-    const warning = badges[0] as HTMLElement
-    expect(warning.dataset.pillTone).toBe('warning')
+    const pills = container.querySelectorAll('[data-status-pill]')
+    expect(pills).toHaveLength(5)
+    const warning = pills[0] as HTMLElement
+    expect(warning.dataset.statusTone).toBe('warning')
     expect(warning.classList.contains('text-mcs-warning-fg')).toBe(true)
     expect(warning.classList.contains('bg-mcs-warning-bg-subtle')).toBe(true)
     expect(warning.classList.contains('border-mcs-warning-border')).toBe(true)
-    const info = badges[1] as HTMLElement
+    const info = pills[1] as HTMLElement
     expect(info.classList.contains('text-mcs-info-fg')).toBe(true)
     expect(info.classList.contains('bg-mcs-info-bg-subtle')).toBe(true)
-    const success = badges[2] as HTMLElement
+    const success = pills[2] as HTMLElement
     expect(success.classList.contains('text-mcs-success-fg')).toBe(true)
-    const error = badges[3] as HTMLElement
+    const error = pills[3] as HTMLElement
     expect(error.classList.contains('text-mcs-error-fg')).toBe(true)
-    const purple = badges[4] as HTMLElement
+    const purple = pills[4] as HTMLElement
     expect(purple.classList.contains('text-mcs-purple-fg')).toBe(true)
   })
 })
@@ -196,9 +196,9 @@ describe('WorldInfoCard', () => {
     )
     expect(screen.getByText('困难')).toBeInTheDocument()
     expect(screen.getByText('创造')).toBeInTheDocument()
-    const badges = container.querySelectorAll('[data-pill-tone]')
-    expect(badges[0]!.getAttribute('data-pill-tone')).toBe('error')
-    expect(badges[1]!.getAttribute('data-pill-tone')).toBe('info')
+    const pills = container.querySelectorAll('[data-status-pill]')
+    expect(pills[0]!.getAttribute('data-status-tone')).toBe('error')
+    expect(pills[1]!.getAttribute('data-status-tone')).toBe('info')
   })
 
   it('加载中显示骨架行，刷新按钮禁用 + 图标旋转', () => {

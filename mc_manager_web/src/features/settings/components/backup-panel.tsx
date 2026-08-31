@@ -32,7 +32,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { cn } from '@/lib/utils'
-import { Chip } from '@/components/mcs/chip'
+import { StatusPill } from '@/components/mcs/status-pill'
 import {
   backupStatusLabel,
   backupStatusTone,
@@ -343,9 +343,9 @@ function BackupRow({
           </span>
           {/* 旧格式徽章（zip 压缩包：仅可删除，不支持恢复） */}
           {isLegacy && (
-            <Chip tone="warning" className="h-5 px-2 text-mcs-xs font-medium">
+            <StatusPill tone="warning" className="text-mcs-xs">
               旧格式
-            </Chip>
+            </StatusPill>
           )}
         </div>
         {/* 时间 · 大小（size 空则不显示，避免尾部分隔符） */}
@@ -355,9 +355,9 @@ function BackupRow({
       </div>
 
       {/* 状态徽章（backupStatusTone + label） */}
-      <Chip tone={tone} className="h-5 px-2 text-mcs-xs font-medium">
+      <StatusPill tone={tone} className="text-mcs-xs">
         {backupStatusLabel(status)}
-      </Chip>
+      </StatusPill>
 
       {/* 恢复（仅 completed 且非 zip；restoring 中全列表禁用） */}
       <Button
