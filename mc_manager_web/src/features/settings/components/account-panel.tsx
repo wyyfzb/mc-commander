@@ -22,6 +22,7 @@ import {
 } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import { DangerButton } from '@/components/mcs/danger-button'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -407,9 +408,8 @@ export function AccountPanel() {
         title="退出登录"
         description="删除当前浏览器会话；API Key 直连不受影响"
       >
-        <Button
+        <DangerButton
           type="button"
-          variant="destructive"
           size="sm"
           onClick={() => setLogoutOpen(true)}
           disabled={!session?.token}
@@ -417,7 +417,7 @@ export function AccountPanel() {
         >
           <LogOut className="size-3.5" aria-hidden />
           退出登录
-        </Button>
+        </DangerButton>
       </SectionCard>
 
       {/* 踢单设备确认 */}
