@@ -153,16 +153,19 @@
   em, i, cite {
     font-style: normal;
   }
-  /* Edge 对 type=password 注入原生显隐/清除按钮，与应用内显隐按钮叠加成双图标；
-     显隐交互统一由应用按钮承载（::-ms-* 仅 IE/Edge 内核识别，其他浏览器无影响） */
-  input[type="password"]::-ms-reveal,
-  input[type="password"]::-ms-clear {
-    display: none;
-  }
   /* 长文本行高 1.7-1.8 */
   .prose-long {
     line-height: var(--mcs-line-height-body-long);
   }
+}
+
+/* Edge 对 type=password 注入原生显隐/清除按钮，与应用内显隐按钮叠加成双图标；
+   显隐交互统一由应用按钮承载（::-ms-* 仅 IE/Edge 内核识别，其他浏览器无影响）
+   须置于 @layer 外：Edge 原生伪元素样式不在任何 layer，未分层样式优先级高于分层内，
+   在 @layer base 内会被其默认样式压掉不生效 */
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear {
+  display: none;
 }
 
 /* 动效偏好降级（无障碍） */

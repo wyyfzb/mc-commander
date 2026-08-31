@@ -11,8 +11,6 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams, Link } from 'react-router'
 import {
   ArrowRight,
-  Eye,
-  EyeOff,
   KeyRound,
   Loader2,
   Moon,
@@ -26,6 +24,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { PasswordInput } from '@/components/ui/password-input'
 import { cn } from '@/lib/utils'
 import { fetchAuthStatus, login, setupPassword } from '@/api/auth'
 import { ApiError, NetworkError } from '@/api/client'
@@ -60,58 +59,6 @@ function StrengthBar({ score, label }: { score: number; label: string }) {
         密码强度：{label}
         {score > 0 && score < 3 && '（建议混合大小写字母、数字与符号）'}
       </p>
-    </div>
-  )
-}
-
-/** 密码输入框（显隐切换 + CapsLock 提醒） */
-function PasswordInput({
-  id,
-  value,
-  onChange,
-  placeholder,
-  autoComplete,
-  autoFocus,
-}: {
-  id: string
-  value: string
-  onChange: (v: string) => void
-  placeholder: string
-  autoComplete?: string
-  autoFocus?: boolean
-}) {
-  const [visible, setVisible] = useState(false)
-  const [capsLock, setCapsLock] = useState(false)
-
-  return (
-    <div className="space-y-1">
-      <div className="relative">
-        <Input
-          id={id}
-          type={visible ? 'text' : 'password'}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onKeyUp={(e) => setCapsLock(e.getModifierState?.('CapsLock') ?? false)}
-          placeholder={placeholder}
-          autoComplete={autoComplete}
-          autoFocus={autoFocus}
-          className="h-10 pr-10 font-mono"
-        />
-        <button
-          type="button"
-          onClick={() => setVisible((v) => !v)}
-          aria-label={visible ? '隐藏密码' : '显示密码'}
-          className="absolute right-2 top-1/2 -translate-y-1/2 rounded-mcs-sm p-1.5 text-mcs-text-subtle transition-colors hover:bg-mcs-bg-hover hover:text-mcs-text-default"
-        >
-          {visible ? <EyeOff className="size-4" aria-hidden /> : <Eye className="size-4" aria-hidden />}
-        </button>
-      </div>
-      {capsLock && (
-        <p className="flex items-center gap-1 text-mcs-2xs text-mcs-warning-fg" role="status">
-          <TriangleAlert className="size-3" aria-hidden />
-          大写锁定已开启
-        </p>
-      )}
     </div>
   )
 }
