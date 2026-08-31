@@ -112,6 +112,7 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
       theme: buildXtermTheme(),
       scrollback: 2000,
       allowProposedApi: true,
+      screenReaderMode: true,
     })
     const fit = new FitAddon()
     term.loadAddon(fit)
