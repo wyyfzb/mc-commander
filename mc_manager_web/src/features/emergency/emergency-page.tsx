@@ -5,7 +5,7 @@
  * 设计纪律：全部 --mcs-* token；大按钮触控目标 ≥44px。
  */
 import { useState } from 'react'
-import { Link } from 'react-router'
+import { Link, useNavigate } from 'react-router'
 import { Loader2, LogOut, Moon, RefreshCw, Settings, Square, Sun, Terminal, UserRound, Users } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -31,6 +31,7 @@ const TAB_LABELS: { key: EmergencyTab; label: string; icon: typeof Users }[] = [
 
 export function EmergencyPage() {
   const config = useConnectionStore()
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const instanceId = useServerStore((s) => s.instanceId)
   const theme = useUiStore((s) => s.theme)
@@ -268,7 +269,7 @@ export function EmergencyPage() {
               {theme === 'dark' ? <Sun className="size-4" aria-hidden /> : <Moon className="size-4" aria-hidden />}
               {theme === 'dark' ? '切换到亮色主题' : '切换到深色主题'}
             </Button>
-            <Button variant="outline" className="h-12 justify-start text-mcs-sm" onClick={() => setTab('overview')}>
+            <Button variant="outline" className="h-12 justify-start text-mcs-sm" onClick={() => navigate('/settings')}>
               <Settings className="size-4" aria-hidden />
               紧急视图设置（桌面端完整设置）
             </Button>
