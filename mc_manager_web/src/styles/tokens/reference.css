@@ -16,11 +16,10 @@
   --ref-dark-popover: oklch(0.325 0.0262 269.37);    /* 弹窗（L=0.325） */
   --ref-dark-border: oklch(0.37 0.0262 269.37);      /* 装饰线参考（L=0.37，见 --ref-border-interactive） */
 
-  /* ── 暗色文字三级（对基面 17.1 / 10.9 / 4.1:1；
-        default/muted 对弹窗 10.9 / 7.1:1，全层 ≥4.5）── */
+  /* ── 暗色文字三级（全层背景 ≥4.5:1，WCAG AA）── */
   --ref-dark-text-default: oklch(0.9588 0.0086 247.92);  /* #EDF2F7 */
   --ref-dark-text-muted: oklch(0.816 0.0261 255.58);     /* #B8C4D4 */
-  --ref-dark-text-subtle: oklch(0.5544 0.0407 257.42);   /* #64748B（禁用/占位，WCAG 豁免） */
+  --ref-dark-text-subtle: oklch(0.695 0.0407 257.42);    /* 次要文字（全层 ≥4.5:1，WCAG AA） */
 
   /* ── 状态六色（暗底全部 ≥4.5:1 实测）── */
   --ref-success: oklch(0.8003 0.1821 151.71);   /* #4ADE80 品牌翠绿 11.1:1 */
@@ -37,10 +36,10 @@
   --ref-light-popover: oklch(1 0 none);         /* #FFFFFF */
   --ref-light-border: oklch(0.9118 0.0058 258.32);  /* #DCE3EA */
 
-  /* ── 亮色文字三级（对白底 14.6 / 7.6 / 4.8:1）── */
+  /* ── 亮色文字三级（全层背景 ≥4.5:1，WCAG AA）── */
   --ref-light-text-default: oklch(0.2795 0.0368 260.03); /* #1E293B */
   --ref-light-text-muted: oklch(0.4455 0.0374 257.28);   /* #475569 */
-  --ref-light-text-subtle: oklch(0.5544 0.0407 257.42);  /* #64748B（禁用/占位） */
+  --ref-light-text-subtle: oklch(0.535 0.0407 257.42);   /* 次要文字（全层 ≥4.5:1，WCAG AA） */
 
   /* ── 状态六色亮色变体（换档不换色：同色相加深，白底 ≥4.5:1 实测）── */
   --ref-success-light: oklch(0.4479 0.1083 151.33); /* #166534 green-800，对 hover 6.3:1 */
