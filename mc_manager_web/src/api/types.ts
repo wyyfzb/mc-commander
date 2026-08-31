@@ -558,6 +558,8 @@ export interface ScheduledTask {
   lastRunAt: string | null
   /** 上次运行结果；never = 尚未运行（与 lastRunAt null 对齐） */
   lastRunStatus: 'never' | 'success' | 'failed' | 'skipped'
+  /** 上次运行失败原因（仅 failed 时有值） */
+  lastRunError: string | null
   nextRunAt: string | null
   createdAt: string
   updatedAt: string

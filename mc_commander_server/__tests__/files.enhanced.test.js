@@ -266,4 +266,65 @@ describe('POST /instances/:id/files/upload', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.name).toBe('server.properties');
   });
+
+  it('uploads to target directory via query parameter', async () => {
+    // 先创建目标目录
+    fs.mkdirSync(path.join(tmpDir, 'test-inst', 'plugins', 'Essentials'), { recursive: true });
+    const buf = Buffer.from('config data');
+    const res = await request(app)
+      .post('/api/v1/instances/test-inst/files/upload?targetDir=/plugins/Essentials')
+      .set(authHeaders())
+      .attach('file', buf, { filename: 'config.yml', contentType: 'text/plain' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.name).toBe('config.yml');
+    expect(res.body.data.path).toBe('/plugins/Essentials/config.yml');
+    expect(fs.existsSync(path.join(tmpDir, 'test-inst', 'plugins', 'Essentials', 'config.yml'))).toBe(true);
+    expect(fs.readFileSync(path.join(tmpDir, 'test-inst', 'plugins', 'Essentials', 'config.yml'), 'utf-8')).toBe('config data');
+  });
+
+  it('rejects path traversal in targetDir', async () => {
+    const buf = Buffer.from('hack');
+    const res = await request(app)
+      .post('/api/v1/instances/test-inst/files/upload?targetDir=/../../../etc')
+      .set(authHeaders())
+      .attach('file', buf, { filename: 'evil.txt', contentType: 'text/plain' });
+
+    expect(res.status).toBe(403);
+  });
+
+  it('returns 400 when targetDir is not a directory', async () => {
+    // 在根目录创建一个文件（不是目录）
+    fs.writeFileSync(path.join(tmpDir, 'test-inst', 'server.properties'), 'test');
+    const buf = Buffer.from('data');
+    const res = await request(app)
+      .post('/api/v1/instances/test-inst/files/upload?targetDir=/server.properties')
+      .set(authHeaders())
+      .attach('file', buf, { filename: 'file.txt', contentType: 'text/plain' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe(ErrorCodes.VALIDATION_ERROR.code);
+  });
+
+  it('returns 400 when targetDir does not exist', async () => {
+    const buf = Buffer.from('data');
+    const res = await request(app)
+      .post('/api/v1/instances/test-inst/files/upload?targetDir=/nonexistent-dir')
+      .set(authHeaders())
+      .attach('file', buf, { filename: 'file.txt', contentType: 'text/plain' });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('backward compatible: no targetDir uploads to root', async () => {
+    const buf = Buffer.from('root file');
+    const res = await request(app)
+      .post('/api/v1/instances/test-inst/files/upload')
+      .set(authHeaders())
+      .attach('file', buf, { filename: 'root.txt', contentType: 'text/plain' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.path).toBe('/root.txt');
+    expect(fs.existsSync(path.join(tmpDir, 'test-inst', 'root.txt'))).toBe(true);
+  });
 });

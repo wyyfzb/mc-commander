@@ -30,7 +30,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
 import { MINECRAFT_POTIONS, type PotionEffect } from '@/lib/mc-potions'
 import { searchEntities, type McEntity } from '@/lib/mc-entities'
-import { formatBatchSummary, runBatchForTargets } from '@/lib/mc-batch'
+import { formatBatchSummary, formatFailureDetails, runBatchForTargets } from '@/lib/mc-batch'
 import type { Player } from '@/api/types'
 import type { PlayerActionRequest } from '../mutations'
 
@@ -85,7 +85,9 @@ function ExperienceForm({ player, batchTargets, isBatchMode, isRconConnected, on
           requireOnline: true,
           execute: async (p) => { await onAction({ kind: 'command', command: buildCommand(p.name) }) },
         })
-        toast.success(formatBatchSummary('给予经验', results))
+        toast.success(formatBatchSummary('给予经验', results), {
+          description: formatFailureDetails(results),
+        })
       } else if (player) {
         await onAction({ kind: 'command', command: buildCommand(player.name) })
         toast.success(`已执行：${getPreview()}`)
@@ -252,7 +254,9 @@ function EffectForm({ player, batchTargets, isBatchMode, isRconConnected, onActi
           requireOnline: true,
           execute: async (p) => { await onAction({ kind: 'command', command: buildCommand(p.name) }) },
         })
-        toast.success(formatBatchSummary('赋予效果', results))
+        toast.success(formatBatchSummary('赋予效果', results), {
+          description: formatFailureDetails(results),
+        })
       } else if (player) {
         await onAction({ kind: 'command', command: buildCommand(player.name) })
         toast.success(`已执行：${buildCommand(player.name)}`)

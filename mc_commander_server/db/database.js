@@ -296,6 +296,17 @@ function createTables() {
     db.pragma('user_version = 8');
   }
 
+  // 迁移：scheduled_tasks 表增加 last_run_error 列（v9）
+  // 定时任务失败原因落库，前端可展示无需翻服务端日志
+  if (userVersion < 9) {
+    try {
+      db.exec(`ALTER TABLE scheduled_tasks ADD COLUMN last_run_error TEXT`);
+    } catch (e) {
+      if (!e.message.includes('duplicate column')) throw e;
+    }
+    db.pragma('user_version = 9');
+  }
+
   // 管理员账号（安全主线：单管理员密码登录）。单行表 id 恒为 1；
   // totp_secret 预留 TOTP 两步验证挂靠（roadmap）
   db.exec(`

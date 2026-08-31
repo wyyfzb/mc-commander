@@ -459,7 +459,7 @@ export class BackupService {
 
       // 定时备份任务的结果回写：执行阶段真实失败（快照/校验/压缩）
       if (taskId != null) {
-        ScheduledTaskModel.updateLastRunStatus(taskId, 'failed');
+        ScheduledTaskModel.updateLastRunStatus(taskId, 'failed', err?.message ?? String(err));
       }
 
       // 清理失败的半成品快照目录（rsync/robocopy 失败可能残留部分文件）

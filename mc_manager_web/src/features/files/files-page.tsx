@@ -5,7 +5,7 @@
  * - 右栏：Monaco 编辑器（选中文件即打开；Ctrl+S 保存；脏标记；关闭确认）
  * - 删除确认对话框（目录红色警告递归删除）；新建文件对话框（PUT content 新路径）
  * - feat-3：新建目录对话框（mkdir recursive）/ 重命名对话框（原子 rename）/
- *   上传（隐藏 file input multipart 直传，服务端落地到实例根目录同名覆盖）
+ *   上传（隐藏 file input multipart 直传，服务端落地到当前浏览目录同名覆盖）
  * - 编辑内容为组件 state，与 query 缓存隔离（保存成功由 mutation 失效列表/内容缓存）
  * - URL 深链接：?dir=/world&file=/world/level.dat（可分享、可刷新保持）
  * - 实例切换：目录/选中文件重置回初始态
@@ -317,7 +317,7 @@ export function FilesPage() {
     }
   }
 
-  /** 上传：触发隐藏 file input（服务端落地到实例根目录，同名覆盖） */
+  /** 上传：触发隐藏 file input（服务端落地到当前浏览目录，同名覆盖） */
   const openUploadPicker = () => {
     uploadInputRef.current?.click()
   }
@@ -355,8 +355,8 @@ export function FilesPage() {
     e.target.value = '' // 允许重复上传同名文件
     if (!file) return
     try {
-      const result = await uploadMutation.mutateAsync({ file })
-      toast.success(`已上传 ${result.name}（${(result.size / 1024).toFixed(1)} KB）`)
+      const result = await uploadMutation.mutateAsync({ file, targetDir: dir })
+      toast.success(`已上传 ${result.path}（${(result.size / 1024).toFixed(1)} KB）`)
     } catch (err) {
       toast.error(`上传失败：${getFriendlyErrorText(err)}`)
     }
@@ -658,7 +658,7 @@ export function FilesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ── 隐藏上传 input（feat-3：multipart 直传，服务端落地到实例根目录） ── */}
+      {/* ── 隐藏上传 input（feat-3：multipart 直传，服务端落地到当前浏览目录） ── */}
       <input
         ref={uploadInputRef}
         type="file"

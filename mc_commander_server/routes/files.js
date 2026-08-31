@@ -766,27 +766,61 @@ const upload = multer({
 
       const basePath = instance.serverPath || path.join(config.serversDir, instanceId);
 
-      // 目标路径：文件名取自清洗后的原始名，忽略客户端可能传入的相对路径
-      const targetPath = path.join(basePath, safeName);
-      // 路径校验（用文件名而非完整路径，防止 .. 注入）
-      resolveInstancePath(basePath, '/' + safeName);
+      // 目标目录：支持可选 targetDir 查询参数（默认 '/' 保持后向兼容）
+      const rawTargetDir = req.query.targetDir ?? '/';
+      // 安全校验：拒绝路径分隔符与目录穿越
+      if (typeof rawTargetDir !== 'string' || rawTargetDir.length === 0) {
+        try { fs.unlinkSync(uploadedFile.path); } catch {}
+        throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Invalid targetDir');
+      }
+      // 确保目录路径以 / 开头（与前端 dir 状态格式一致）
+      const normalizedDir = rawTargetDir.startsWith('/') ? rawTargetDir : `/${rawTargetDir}`;
+      // 安全校验：拒绝控制字符
+      if (/\x00-\x1f/.test(normalizedDir)) { // eslint-disable-line no-control-regex
+        try { fs.unlinkSync(uploadedFile.path); } catch {}
+        throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Invalid targetDir');
+      }
+      // 去掉前导 / 以便拼接（normalizedDir 为 '/' 时 relativeDir 为空）
+      const relativeDir = normalizedDir === '/' ? '' : normalizedDir.slice(1);
+      const relativePath = relativeDir ? `${relativeDir}/${safeName}` : safeName;
+
+      // 路径校验（resolveInstancePath 兜住目录穿越）
+      const targetDirFullPath = resolveInstancePath(basePath, normalizedDir, { allowRoot: true });
+      // 目标目录必须存在（ENOENT → 400；非目录 → 400）
+      let dirStats;
+      try {
+        dirStats = fs.statSync(targetDirFullPath);
+      } catch {
+        try { fs.unlinkSync(uploadedFile.path); } catch {}
+        throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Target directory does not exist');
+      }
+      if (!dirStats.isDirectory()) {
+        try { fs.unlinkSync(uploadedFile.path); } catch {}
+        throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Target path is not a directory');
+      }
+
+      // 目标路径：文件名取自清洗后的原始名
+      const targetPath = path.join(targetDirFullPath, safeName);
+      // 二次路径校验（用完整路径兜住边缘情况）
+      resolveInstancePath(basePath, `/${relativePath}`);
 
       // 同名覆盖（MC 用户常上传覆盖配置）；跨设备安全用 copyFileSync + unlink
       fs.copyFileSync(uploadedFile.path, targetPath);
       try { fs.unlinkSync(uploadedFile.path); } catch {}
 
       const stats = fs.statSync(targetPath);
+      const resultPath = `/${relativePath}`;
 
       recordAudit({
         instanceId,
         action: AuditActions.FILE_UPLOAD,
         targetType: 'file',
-        targetId: '/' + safeName,
+        targetId: resultPath,
         detail: { name: safeName, sizeBytes: stats.size },
       });
 
       res.json(success({
-        path: '/' + safeName,
+        path: resultPath,
         name: safeName,
         size: stats.size,
         modifiedAt: stats.mtime.toISOString(),
