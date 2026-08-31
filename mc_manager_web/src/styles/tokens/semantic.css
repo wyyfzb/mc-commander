@@ -15,7 +15,7 @@
   /* ── 文字 ── */
   --mcs-text-default: var(--ref-dark-text-default);
   --mcs-text-muted: var(--ref-dark-text-muted);
-  --mcs-text-subtle: var(--ref-dark-text-subtle);   /* 禁用/占位（WCAG 豁免） */
+  --mcs-text-subtle: var(--ref-dark-text-subtle);   /* 次要文字（WCAG AA ≥4.5:1） */
 
   /* ── 边框 ── */
   --mcs-border-default: var(--ref-border-interactive);    /* 交互组件边界（≥3:1） */

@@ -106,12 +106,11 @@ for (const [scopeName, vars] of [
   console.log(`\n════ ${scopeName}主题 ════`)
   void refVars
 
-  // 1. 文字 × 背景（subtle 豁免；default/muted 全层 ≥4.5——OKLCH L 阶梯下可全达标）
+  // 1. 文字 × 背景（全层 ≥4.5:1，含 subtle）
   for (const textKey of ['text-default', 'text-muted', 'text-subtle']) {
-    const exempt = textKey === 'text-subtle'
     for (const bgKey of BG_KEYS) {
       const ratio = contrastVarPair(`--mcs-${textKey}`, `--mcs-${bgKey}`, vars)
-      check(`${textKey} on ${bgKey}`, ratio, 4.5, exempt)
+      check(`${textKey} on ${bgKey}`, ratio, 4.5)
     }
   }
 
