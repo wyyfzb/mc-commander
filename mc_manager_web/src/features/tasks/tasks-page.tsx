@@ -16,6 +16,7 @@ import { useCreateTask, useDeleteTask, useRunTaskNow, useTasks, useUpdateTask } 
 import { TaskDialog } from './components/task-dialog'
 import { TaskList } from './components/task-list'
 import { EmptyState } from '@/components/mcs/empty-state'
+import { PageHeader } from '@/components/mcs/page-header'
 import { useNavigate } from 'react-router'
 
 export function TasksPage() {
@@ -123,28 +124,27 @@ export function TasksPage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4 p-4">
-      {/* ── 页面头：标题 + 刷新/新建 ── */}
-      <div className="flex items-center gap-3">
-        <div>
-          <h2 className="text-mcs-xl font-semibold text-mcs-text-default">定时任务</h2>
-          <p className="text-mcs-xs text-mcs-text-subtle">自动化执行服务器重启、备份、命令等操作</p>
-        </div>
-        <div className="ml-auto flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void tasksQuery.refetch()}
-            disabled={tasksQuery.isLoading}
-          >
-            <RefreshCw aria-hidden />
-            刷新
-          </Button>
-          <Button size="sm" onClick={openCreate}>
-            <Plus aria-hidden />
-            新建任务
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title="定时任务"
+        description="自动化执行服务器重启、备份、命令等操作"
+        actions={
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void tasksQuery.refetch()}
+              disabled={tasksQuery.isLoading}
+            >
+              <RefreshCw aria-hidden />
+              刷新
+            </Button>
+            <Button size="sm" onClick={openCreate}>
+              <Plus aria-hidden />
+              新建任务
+            </Button>
+          </div>
+        }
+      />
 
       {/* ── 任务列表 ── */}
       <div className="min-h-0 flex-1">

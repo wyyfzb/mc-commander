@@ -35,6 +35,7 @@ import { GamerulePanel } from './components/gamerule-panel'
 import { useServerProperties, useUpdateProperties, useWorldInfo } from './queries'
 import { EmptyState } from '@/components/mcs/empty-state'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
+import { PageHeader } from '@/components/mcs/page-header'
 import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router'
 
@@ -101,17 +102,16 @@ export function WorldPage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4 p-4">
-      {/* ── 页头：标题 + 「备份世界」入口（→ 设置备份页） ── */}
-      <div className="flex shrink-0 items-center justify-between">
-        <div>
-          <h2 className="text-mcs-xl font-semibold text-mcs-text-default">世界</h2>
-          <p className="text-mcs-xs text-mcs-text-subtle">服务器属性 · 游戏规则 · 存档</p>
-        </div>
-        <Button variant="outline" size="sm" onClick={() => navigate('/settings/backup')}>
-          <Archive aria-hidden />
-          备份世界
-        </Button>
-      </div>
+      <PageHeader
+        title="世界"
+        description="服务器属性 · 游戏规则 · 存档"
+        actions={
+          <Button variant="outline" size="sm" onClick={() => navigate('/settings/backup')}>
+            <Archive aria-hidden />
+            备份世界
+          </Button>
+        }
+      />
 
       {/* ── 数据错误横幅（查询失败明确报错，避免左栏/属性面板把错误呈现为空态） ── */}
       {(worldQuery.isError || propertiesQuery.isError) && (

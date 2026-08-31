@@ -8,6 +8,7 @@ import { Link, Outlet, useLocation } from 'react-router'
 import { BellRing, DatabaseBackup, Info, Link2, ShieldCheck, SlidersHorizontal } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { PageHeader } from '@/components/mcs/page-header'
 import { useServerStore } from '@/stores/server'
 import { ConnectionForm } from './components/connection-form'
 import { AccountPanel } from './components/account-panel'
@@ -66,9 +67,7 @@ export function SettingsPage() {
 
       {/* ── 右内容区（页面头 + 子路由 Outlet） ── */}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <header className="shrink-0 px-4 pt-1">
-          <h2 className="text-mcs-xl font-semibold text-mcs-text-default">{current?.label}</h2>
-        </header>
+        <PageHeader title={current?.label} className="px-4 pt-1" />
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
           <Outlet />
         </div>

@@ -25,6 +25,7 @@ import { Switch } from '@/components/ui/switch'
 import { StatusPill } from '@/components/mcs/status-pill'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
+import { PageHeader } from '@/components/mcs/page-header'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
   DialogDescription, DialogFooter,
@@ -118,23 +119,22 @@ export default function WebhookPage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4 p-4">
-      {/* ── 页面头 ── */}
-      <div className="flex items-center gap-3">
-        <div>
-          <h2 className="text-mcs-xl font-semibold text-mcs-text-default">Webhook 外部通知</h2>
-          <p className="text-mcs-xs text-mcs-text-subtle">配置外部通知通道，接收服务器事件推送</p>
-        </div>
-        <div className="ml-auto flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => void qc.invalidateQueries({ queryKey: queryKeys.webhooks() })} disabled={isLoading}>
-            <RefreshCw className={isLoading ? 'animate-spin' : ''} aria-hidden />
-            刷新
-          </Button>
-          <Button size="sm" onClick={openCreate} disabled={createMut.isPending || updateMut.isPending}>
-            <Plus aria-hidden />
-            新建 Webhook
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title="Webhook 外部通知"
+        description="配置外部通知通道，接收服务器事件推送"
+        actions={
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => void qc.invalidateQueries({ queryKey: queryKeys.webhooks() })} disabled={isLoading}>
+              <RefreshCw className={isLoading ? 'animate-spin' : ''} aria-hidden />
+              刷新
+            </Button>
+            <Button size="sm" onClick={openCreate} disabled={createMut.isPending || updateMut.isPending}>
+              <Plus aria-hidden />
+              新建 Webhook
+            </Button>
+          </div>
+        }
+      />
 
       {/* ── 错误提示 ── */}
       {error && (

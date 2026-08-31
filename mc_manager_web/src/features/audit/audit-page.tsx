@@ -9,6 +9,7 @@ import { RefreshCw } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { StatusPill } from '@/components/mcs/status-pill'
+import { PageHeader } from '@/components/mcs/page-header'
 import { DataTableShell } from '@/components/mcs/data-table-shell'
 import { useAuditLogs, useCommandHistory } from '@/api/queries'
 import type { AuditLogItem, CommandHistoryItem } from '@/api/types'
@@ -143,12 +144,10 @@ export function AuditPage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4 p-4">
-      <div className="flex items-center gap-3">
-        <div>
-          <h2 className="text-mcs-xl font-semibold text-mcs-text-default">审计</h2>
-          <p className="text-mcs-xs text-mcs-text-subtle">操作日志与命令执行记录</p>
-        </div>
-        <div className="ml-auto">
+      <PageHeader
+        title="审计"
+        description="操作日志与命令执行记录"
+        actions={
           <Button
             variant="outline"
             size="sm"
@@ -161,8 +160,8 @@ export function AuditPage() {
             <RefreshCw aria-hidden className={refreshing ? 'animate-spin' : undefined} />
             刷新
           </Button>
-        </div>
-      </div>
+        }
+      />
 
       <Tabs value={tab} onValueChange={setTab} className="min-h-0 flex-1 flex flex-col">
         <TabsList className="w-fit">

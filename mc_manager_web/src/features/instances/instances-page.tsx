@@ -15,6 +15,7 @@ import { queryKeys, useInstances } from '@/api/queries'
 import { getFriendlyErrorText } from '@/api/errors'
 import { EmptyState } from '@/components/mcs/empty-state'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
+import { PageHeader } from '@/components/mcs/page-header'
 import { ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
@@ -133,21 +134,16 @@ export function InstancesPage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4 p-4">
-      {/* ── 页面头 ── */}
-      <div className="flex items-center gap-3">
-        <div>
-          <h2 className="text-mcs-xl font-semibold text-mcs-text-default">实例管理</h2>
-          <p className="text-mcs-xs text-mcs-text-subtle">
-            {instancesQuery.isLoading ? '管理服务器实例的部署、切换与卸载' : `已安装 ${instances.length} 个实例`}
-          </p>
-        </div>
-        <div className="ml-auto">
+      <PageHeader
+        title="实例管理"
+        description={instancesQuery.isLoading ? '管理服务器实例的部署、切换与卸载' : `已安装 ${instances.length} 个实例`}
+        actions={
           <Button size="sm" onClick={() => setDeployOpenDeep(true)}>
             <Rocket aria-hidden />
             部署新实例
           </Button>
-        </div>
-      </div>
+        }
+      />
 
       {/* ── 实例隔离说明 ── */}
       <NoticeBanner variant="info" icon={ShieldCheck}>

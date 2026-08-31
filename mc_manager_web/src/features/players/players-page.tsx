@@ -13,6 +13,7 @@ import { AlertTriangle } from 'lucide-react'
 import { getFriendlyErrorText } from '@/api/errors'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/mcs/empty-state'
+import { PageHeader } from '@/components/mcs/page-header'
 import {
   Dialog,
   DialogContent,
@@ -172,13 +173,10 @@ export function PlayersPage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4 p-4">
-      {/* ── 页面头（与其他列表页统一：标题 + 副题；操作按钮留在 FilterBar） ── */}
-      <header className="flex shrink-0 items-center justify-between">
-        <div>
-          <h2 className="text-mcs-xl font-semibold text-mcs-text-default">玩家</h2>
-          <p className="text-mcs-xs text-mcs-text-subtle">查看 · 管理 · 洞察服务器玩家</p>
-        </div>
-      </header>
+      <PageHeader
+        title="玩家"
+        description="查看 · 管理 · 洞察服务器玩家"
+      />
 
       {/* 左栏：筛选 + 表格 */}
       <div className="flex min-h-0 flex-1">
