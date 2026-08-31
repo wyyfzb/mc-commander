@@ -157,6 +157,15 @@ for (const [scopeName, vars] of [
     check(`focus-ring on ${bgKey}`, ratio, 3.0)
   }
 
+  // 7b. 焦点环 /50 透明度组合 × 背景（实际渲染场景：ring-3 + ring-ring/50）
+  for (const bgKey of ['bg-default', 'bg-muted', 'bg-subtle']) {
+    const fg = parseColor(vars.get('--mcs-focus-ring'), vars, refVars)
+    const bg = parseColor(vars.get(`--mcs-${bgKey}`), vars, refVars)
+    const effective50 = composite(fg.color, bg.color, 0.5)
+    const ratio = wcagContrast(fg.color, effective50)
+    check(`focus-ring/50 on ${bgKey}`, ratio, 3.0)
+  }
+
   // 8. 维度三色 × 背景（8px 色点小图形 ≥3:1，WCAG 1.4.11 非文字图形标准）
   for (const dim of ['overworld', 'nether', 'end']) {
     for (const bgKey of ['bg-default', 'bg-muted', 'bg-subtle']) {

@@ -13,7 +13,8 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "check:contrast": "node scripts/check-contrast.mjs",
-    "check:tokens": "node scripts/gen-token-colors.mjs"
+    "check:tokens": "node scripts/gen-token-colors.mjs",
+    "check:design-tokens": "node scripts/check-design-tokens.mjs"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",

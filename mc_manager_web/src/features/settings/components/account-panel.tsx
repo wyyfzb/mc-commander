@@ -287,7 +287,7 @@ export function AccountPanel() {
                 {[0, 1, 2, 3].map((i) => (
                   <div
                     key={i}
-                    className={`h-1 flex-1 rounded-full transition-colors duration-300 ${
+                    className={`h-1 flex-1 rounded-full transition-colors duration-mcs-base ${
                       i < strength.score ? STRENGTH_BAR_STYLES[strength.score] : 'bg-mcs-border-muted'
                     }`}
                   />

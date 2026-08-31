@@ -47,7 +47,7 @@ function StrengthBar({ score, label }: { score: number; label: string }) {
           <div
             key={i}
             className={cn(
-              'h-1 flex-1 rounded-full transition-colors duration-300',
+              'h-1 flex-1 rounded-full transition-colors duration-mcs-base',
               i < score ? STRENGTH_BAR_STYLES[score] : 'bg-mcs-border-muted',
             )}
           />
