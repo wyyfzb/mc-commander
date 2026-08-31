@@ -1066,7 +1066,7 @@ function EnchantToggle({
     >
       <span
         className={cn(
-          'absolute top-1/2 size-2.5 -translate-y-1/2 rounded-full transition-all',
+          'absolute top-1/2 size-2.5 -translate-y-1/2 rounded-full transition-[left,background-color]',
           on ? 'left-[14px] bg-mcs-purple-fg' : 'left-0.5 bg-mcs-text-subtle',
         )}
       />

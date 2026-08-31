@@ -387,7 +387,7 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
               className="h-1.5 w-full overflow-hidden rounded-full bg-mcs-bg-hover"
             >
               <div
-                className="h-full rounded-full bg-mcs-accent transition-all duration-mcs-base"
+                className="h-full rounded-full bg-mcs-accent transition-[width] duration-mcs-base"
                 style={{ width: `${pct}%` }}
               />
             </div>
