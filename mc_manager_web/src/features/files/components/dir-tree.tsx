@@ -10,7 +10,7 @@
  * - 宽约 220px，ScrollArea 滚动；设计纪律：全部 --mcs-* 语义 token，禁硬编码色值/间距
  */
 import { useMemo, useState } from 'react'
-import { ChevronDown, ChevronRight, Folder, Home } from 'lucide-react'
+import { ChevronDown, ChevronRight, Folder, FolderX, Home } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
@@ -50,7 +50,7 @@ function DirTreeNode({
   onToggle,
   onNavigate,
 }: DirTreeNodeProps) {
-  const { data, isLoading } = useFileList(instanceId, dirPath)
+  const { data, isLoading, isError, refetch } = useFileList(instanceId, dirPath)
   const isRoot = dirPath === '/'
   const isExpanded = expanded.has(dirPath)
   const isActive = currentPath === dirPath
@@ -120,7 +120,18 @@ function DirTreeNode({
               <Skeleton className="h-5 w-3/5" />
             </div>
           )}
-          {!isLoading && subDirs.map((dir) => (
+          {isError && !isLoading && (
+            <button
+              type="button"
+              onClick={() => void refetch()}
+              className="flex w-full items-center gap-1 py-1 text-mcs-2xs text-mcs-error-fg hover:underline"
+              style={{ paddingLeft: `calc(var(--mcs-space-2) + var(--mcs-space-3) * ${depth + 1})` }}
+            >
+              <FolderX className="size-3.5 shrink-0" aria-hidden />
+              目录加载失败 · 点击重试
+            </button>
+          )}
+          {!isLoading && !isError && subDirs.map((dir) => (
             <DirTreeNode
               key={dir.path}
               instanceId={instanceId}

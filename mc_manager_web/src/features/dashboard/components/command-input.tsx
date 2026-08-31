@@ -82,7 +82,7 @@ export function CommandInput() {
         pushEntry(instanceId, text, 'stdout')
       }
       pushHistory(command)
-      toast.success(`命令已发送: ${command}`)
+      // 成功不弹 toast：终端已有 command + stdout 回显（失败仍 toast 告警）
       setValue('')
       inputRef.current?.focus()
     },

@@ -26,8 +26,8 @@ test.describe('移动端紧急视图', () => {
     await expect(page.getByText('健康')).toBeVisible()
     // TPS 大字（mock 20.0）
     await expect(page.getByText('20.0')).toBeVisible()
-    // 四按钮
-    for (const label of ['重启', '停止', '踢人', '玩家操作']) {
+    // 四按钮（玩家操作为导航，存档为处置黄金位动作）
+    for (const label of ['重启', '停止', '存档', '玩家操作']) {
       await expect(page.getByRole('button', { name: label })).toBeVisible()
     }
     // 迷你终端

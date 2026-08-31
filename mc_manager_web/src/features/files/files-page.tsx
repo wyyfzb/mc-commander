@@ -503,7 +503,9 @@ export function FilesPage() {
             <Button variant="outline" onClick={() => setNewFileOpen(false)}>
               取消
             </Button>
-            <Button onClick={() => void createFile()}>创建</Button>
+            <Button onClick={() => void createFile()} disabled={saveMutation.isPending}>
+              {saveMutation.isPending ? '创建中…' : '创建'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

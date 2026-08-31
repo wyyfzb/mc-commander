@@ -38,10 +38,11 @@ export function createKeyRoutes() {
     const envPath = path.join(__dirname, '..', '.env');
     try {
       persistApiKey(envPath, newKey);
-    } catch (e) {
+    } catch {
+      // 500 脱敏（同 error_handler 策略）：不回传 e.message（可能含服务器路径）
       return res.status(500).json(error(
         ErrorCodes.SERVER_ERROR,
-        'API Key 已生成但 .env 写入失败，请检查服务端目录写权限：' + e.message,
+        'API Key 已生成但 .env 写入失败，请检查服务端目录写权限后重试',
       ));
     }
     config.apiKey = newKey; // 内存即时生效（WS 与 HTTP 共用）

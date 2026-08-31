@@ -54,6 +54,8 @@
     --color-mcs-state-hover: var(--mcs-state-hover);
     --color-mcs-state-focus: var(--mcs-state-focus);
     --color-mcs-state-pressed: var(--mcs-state-pressed);
+    --color-mcs-scrim: var(--mcs-scrim);
+    --color-mcs-scrim-subtle: var(--mcs-scrim-subtle);
     --radius-mcs-xs: var(--mcs-radius-xs);
     --radius-mcs-sm: var(--mcs-radius-sm);
     --radius-mcs-md: var(--mcs-radius-md);

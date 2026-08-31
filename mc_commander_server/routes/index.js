@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { readFileSync } from 'node:fs';
 import { createStatusRoutes } from './status.js';
 import { createPlayerRoutes } from './players.js';
 import { createBackupRoutes } from './backups.js';
@@ -15,6 +16,9 @@ import { success } from '../utils/response.js';
 import config from '../config.js';
 import { notFoundHandler } from '../middleware/error_handler.js';
 
+/** 版本号单一来源：package.json（/health、check-update、启动横幅共用，杜绝三处硬编码漂移） */
+const SERVER_VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf-8')).version;
+
 export function setupRoutes(app, serverManager, taskScheduler) {
   // 轻量健康检查：仅返回进程存活与静态信息，不调用 getAllInstances()（内部
   // toStatus() 含 RCON 探测等开销，未认证的 /health 不应触发全量实例状态扫描）
@@ -22,7 +26,7 @@ export function setupRoutes(app, serverManager, taskScheduler) {
     const instanceCount = serverManager?.instances?.size ?? 0;
     res.json(success({
       status: 'ok',
-      version: '0.1.0',
+      version: SERVER_VERSION,
       uptime: Math.floor(process.uptime()),
       instanceCount,
       nodeVersion: process.version,
@@ -54,7 +58,7 @@ export function setupRoutes(app, serverManager, taskScheduler) {
       clearTimeout(timer);
       if (!npmRes.ok) throw new Error(`npm registry ${npmRes.status}`);
       const pkg = await npmRes.json();
-      const current = '0.1.0'; // 与 package.json / overview 保持一致
+      const current = SERVER_VERSION;
       const latest = pkg.version || null;
       res.json(success({
         current,
@@ -65,7 +69,7 @@ export function setupRoutes(app, serverManager, taskScheduler) {
     } catch (e) {
       // 网络不可达不报错
       if (e.name === 'AbortError' || e.code === 'UND_ERR_CONNECTABLE') {
-        res.json(success({ current: '0.1.0', latest: null, hasUpdate: false, offline: true }));
+        res.json(success({ current: SERVER_VERSION, latest: null, hasUpdate: false, offline: true }));
       } else {
         next(e);
       }

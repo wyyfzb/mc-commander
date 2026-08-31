@@ -1,7 +1,20 @@
 import { Router } from 'express';
+import { Cron } from 'croner';
 import { success, successPaginated, ErrorCodes, AppError } from '../utils/response.js';
 import { ScheduledTaskModel } from '../db/scheduled_task.model.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
+
+/**
+ * cron 表达式合法性校验（与 task_scheduler 同用 croner 解析器，保证「存得进就能跑」）。
+ * 不校验则非法表达式入库后任务静默永不触发（运行期仅 console.error）。
+ */
+function assertValidCron(cronExpression) {
+  try {
+    new Cron(cronExpression, { paused: true });
+  } catch {
+    throw new AppError(ErrorCodes.INVALID_CRON_EXPRESSION, `Invalid cron expression: ${cronExpression}`);
+  }
+}
 
 export function createTaskRoutes(serverManager, taskScheduler) {
   const router = Router({ mergeParams: true });
@@ -85,7 +98,10 @@ export function createTaskRoutes(serverManager, taskScheduler) {
       if (!validTypes.includes(type)) {
         throw new AppError(ErrorCodes.VALIDATION_ERROR, `Invalid task type. Must be one of: ${validTypes.join(', ')}`);
       }
-      
+
+      // 验证 cron 表达式（非法表达式拒绝入库，返回 40004）
+      assertValidCron(cronExpression);
+
       // 检查实例是否存在
       const instance = serverManager.getInstance(instanceId);
       if (!instance) {
@@ -116,7 +132,12 @@ export function createTaskRoutes(serverManager, taskScheduler) {
       if (!task) {
         throw new AppError(ErrorCodes.TASK_NOT_FOUND);
       }
-      
+
+      // 更新携带 cronExpression 时同样校验（非法表达式拒绝写入）
+      if (req.body.cronExpression !== undefined) {
+        assertValidCron(req.body.cronExpression);
+      }
+
       const updatedTask = ScheduledTaskModel.update(req.params.id, req.body);
       recordAudit({ instanceId: task.instanceId, action: AuditActions.TASK_UPDATE, targetType: 'task', targetId: req.params.id });
       res.json(success(updatedTask, 'Scheduled task updated successfully'));

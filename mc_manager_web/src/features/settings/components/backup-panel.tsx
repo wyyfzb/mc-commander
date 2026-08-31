@@ -187,11 +187,12 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
             ))}
           </div>
         ) : backupsQuery.isError ? (
+          /* 错误态：明确报错 + 重试（避免错误被空态分支伪装成「点击立即备份」引导） */
           <EmptyState
             icon={CircleAlert}
-            title="加载备份列表失败"
-            hint={getFriendlyErrorText(backupsQuery.error)}
-            action={{ label: '重试', onClick: () => backupsQuery.refetch() }}
+            title="加载失败"
+            hint={`无法获取备份列表：${getFriendlyErrorText(backupsQuery.error)}`}
+            action={{ label: '重试', onClick: () => void backupsQuery.refetch() }}
           />
         ) : items.length === 0 ? (
           /* 空态：引导立即备份或配置定时备份（后者跳 /tasks） */

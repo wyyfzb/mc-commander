@@ -112,6 +112,8 @@ export function PlayerTable({
   const [kickTarget, setKickTarget] = useState<Player | null>(null)
   /** OP/白名单切换确认 */
   const [confirmToggle, setConfirmToggle] = useState<{ type: 'op' | 'whitelist'; player: Player } | null>(null)
+  /** 行内确认提交中（防确认期间重复点击产生重复 kick/op 请求） */
+  const [confirmPending, setConfirmPending] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   const selectedSet = useMemo(() => new Set(selectedUuids), [selectedUuids])
@@ -604,18 +606,24 @@ export function PlayerTable({
             : ''
         }
         confirmText="确认操作"
+        loading={confirmPending}
         onConfirm={async () => {
           if (!confirmToggle) return
           const { type, player } = confirmToggle
-          if (type === 'op') {
-            await onAction({ kind: player.isOp ? 'deop' : 'op', playerName: player.name })
-          } else {
-            await onAction({
-              kind: player.isWhitelisted ? 'whitelistRemove' : 'whitelistAdd',
-              playerName: player.name,
-            })
+          setConfirmPending(true)
+          try {
+            if (type === 'op') {
+              await onAction({ kind: player.isOp ? 'deop' : 'op', playerName: player.name })
+            } else {
+              await onAction({
+                kind: player.isWhitelisted ? 'whitelistRemove' : 'whitelistAdd',
+                playerName: player.name,
+              })
+            }
+            setConfirmToggle(null)
+          } finally {
+            setConfirmPending(false)
           }
-          setConfirmToggle(null)
         }}
       />
 
@@ -630,11 +638,17 @@ export function PlayerTable({
         warning="此操作不可撤销"
         confirmText="确认操作"
         danger
+        loading={confirmPending}
         onConfirm={async () => {
           if (!kickTarget) return
-          await onAction({ kind: 'kick', playerName: kickTarget.name })
-          setKickTarget(null)
-          onKicked()
+          setConfirmPending(true)
+          try {
+            await onAction({ kind: 'kick', playerName: kickTarget.name })
+            setKickTarget(null)
+            onKicked()
+          } finally {
+            setConfirmPending(false)
+          }
         }}
       />
       <span className="sr-only">{isRconConnected ? 'rcon' : 'no-rcon'}</span>

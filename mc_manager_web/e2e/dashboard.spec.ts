@@ -43,10 +43,17 @@ test.describe('仪表盘', () => {
   test('MC 时钟·世界控制：天气/时间按钮点击即发命令', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/dashboard')
-    await page.getByRole('button', { name: '🌧 雨天' }).click()
-    await expect(page.getByText(/命令已发送: weather rain/)).toBeVisible({ timeout: 10_000 })
+    // 成功反馈已静默（终端回显为反馈源），以命令请求实际发出为断言信号
+    const rainReq = page.waitForRequest(
+      (r) => r.url().includes('/command') && String(r.postDataJSON()?.command).includes('weather rain'),
+    )
+    await page.getByRole('button', { name: '雨天' }).click()
+    await rainReq
+    const nightReq = page.waitForRequest(
+      (r) => r.url().includes('/command') && String(r.postDataJSON()?.command).includes('time set night'),
+    )
     await page.getByRole('button', { name: '夜晚' }).click()
-    await expect(page.getByText(/命令已发送: time set night/)).toBeVisible({ timeout: 10_000 })
+    await nightReq
   })
 
   test('公告发送：模板填充 → 发送 say → 清空', async ({ page }) => {
@@ -54,8 +61,11 @@ test.describe('仪表盘', () => {
     await page.goto('/dashboard')
     await page.getByRole('button', { name: /服务器将在 5 分钟后重启/ }).click()
     await expect(page.getByLabel('公告内容')).toHaveValue('服务器将在 5 分钟后重启，请及时停靠')
+    const sayReq = page.waitForRequest(
+      (r) => r.url().includes('/command') && String(r.postDataJSON()?.command).includes('say 服务器将在'),
+    )
     await page.getByRole('button', { name: '发送公告' }).click()
-    await expect(page.getByText(/命令已发送: say 服务器将在/)).toBeVisible({ timeout: 10_000 })
+    await sayReq
     await expect(page.getByLabel('公告内容')).toHaveValue('')
   })
 
@@ -93,13 +103,16 @@ test.describe('仪表盘', () => {
     await expect(page.getByText('服务器已停止')).toBeVisible({ timeout: 10_000 })
   })
 
-  test('命令输入：回车发送 + toast 反馈', async ({ page }) => {
+  test('命令输入：回车发送（成功静默，终端回显为反馈源）', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/dashboard')
     const input = page.getByLabel('服务器命令输入')
+    const cmdReq = page.waitForRequest(
+      (r) => r.url().includes('/command') && String(r.postDataJSON()?.command).includes('say hello'),
+    )
     await input.fill('say hello')
     await input.press('Enter')
-    await expect(page.getByText(/命令已发送: say hello/)).toBeVisible({ timeout: 10_000 })
+    await cmdReq
   })
 
   test('命令补全：/ 开头出现下拉', async ({ page }) => {

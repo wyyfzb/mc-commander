@@ -208,7 +208,7 @@ export function AppTopBar() {
             {sessionToken ? (
               <UserRound aria-hidden />
             ) : (
-              <KeyRound aria-hidden className="text-amber-600 dark:text-amber-400" />
+              <KeyRound aria-hidden className="text-mcs-warning-fg" />
             )}
           </Button>
         </DropdownMenuTrigger>
@@ -225,7 +225,7 @@ export function AppTopBar() {
             <DropdownMenuItem
               onClick={() => void handleLogout()}
               disabled={loggingOut}
-              className="gap-2 text-red-600 focus:text-red-600 dark:text-red-400 dark:focus:text-red-400"
+              className="gap-2 text-mcs-error-fg focus:text-mcs-error-fg"
             >
               <LogOut className="size-4" aria-hidden />
               退出登录

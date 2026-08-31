@@ -9,8 +9,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { toast } from 'sonner'
+import { AlertTriangle } from 'lucide-react'
 import { getFriendlyErrorText } from '@/api/errors'
 import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/mcs/empty-state'
 import {
   Dialog,
   DialogContent,
@@ -42,6 +44,8 @@ export function PlayersPage() {
   /** 添加白名单弹窗（页头入口；离线玩家同样生效） */
   const [whitelistOpen, setWhitelistOpen] = useState(false)
   const [whitelistName, setWhitelistName] = useState('')
+  /** 白名单提交中（防重复提交） */
+  const [whitelistPending, setWhitelistPending] = useState(false)
 
   const filter = usePlayersUiStore((s) => s.filter)
   const setFilter = usePlayersUiStore((s) => s.setFilter)
@@ -146,7 +150,8 @@ export function PlayersPage() {
   /** 添加白名单：失败时保留弹窗与输入，便于修正后重试 */
   const confirmAddWhitelist = async () => {
     const name = whitelistName.trim()
-    if (!name) return
+    if (!name || whitelistPending) return
+    setWhitelistPending(true)
     try {
       await handleAction({ kind: 'whitelistAdd', playerName: name })
       toast.success(`已添加 ${name} 至白名单`)
@@ -154,6 +159,8 @@ export function PlayersPage() {
       setWhitelistOpen(false)
     } catch {
       // handleAction 已 toast 错误
+    } finally {
+      setWhitelistPending(false)
     }
   }
 
@@ -179,18 +186,26 @@ export function PlayersPage() {
             onOpenBanRecords={() => setBanRecordsOpen(true)}
             onAddWhitelist={() => setWhitelistOpen(true)}
           />
-          <PlayerTable
-            players={filteredPlayers}
-            isLoading={playersQuery.isLoading}
-            isError={playersQuery.isError}
-            onRetry={() => playersQuery.refetch()}
-            totalCount={allPlayers.length}
-            isRconConnected={isRconConnected}
-            onOpenDetail={(name, tab) => openPlayerDetail(name, tab as PlayerDetailTab | undefined)}
-            onOpenBan={setBanTarget}
-            onAction={handleAction}
-            onKicked={handleKicked}
-          />
+          {/* 列表错误态（避免错误被呈现为「暂无在线玩家」的误导空态） */}
+          {playersQuery.isError && !playersQuery.isLoading ? (
+            <EmptyState
+              icon={AlertTriangle}
+              title="加载失败"
+              hint={`无法获取玩家列表：${getFriendlyErrorText(playersQuery.error)}`}
+              action={{ label: '重试', onClick: () => void playersQuery.refetch() }}
+            />
+          ) : (
+            <PlayerTable
+              players={filteredPlayers}
+              isLoading={playersQuery.isLoading}
+              totalCount={allPlayers.length}
+              isRconConnected={isRconConnected}
+              onOpenDetail={(name, tab) => openPlayerDetail(name, tab as PlayerDetailTab | undefined)}
+              onOpenBan={setBanTarget}
+              onAction={handleAction}
+              onKicked={handleKicked}
+            />
+          )}
         </div>
 
         {/* 右栏：详情面板 */}
@@ -269,8 +284,11 @@ export function PlayersPage() {
             <Button variant="outline" onClick={() => setWhitelistOpen(false)}>
               取消
             </Button>
-            <Button onClick={() => void confirmAddWhitelist()} disabled={whitelistName.trim().length === 0}>
-              添加
+            <Button
+              onClick={() => void confirmAddWhitelist()}
+              disabled={whitelistName.trim().length === 0 || whitelistPending}
+            >
+              {whitelistPending ? '添加中…' : '添加'}
             </Button>
           </DialogFooter>
         </DialogContent>

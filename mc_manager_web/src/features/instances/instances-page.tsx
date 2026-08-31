@@ -43,10 +43,11 @@ export function InstancesPage() {
   const [settingsTarget, setSettingsTarget] = useState<InstanceSummary | null>(null)
   const [upgradeTarget, setUpgradeTarget] = useState<InstanceSummary | null>(null)
   const [uninstallTarget, setUninstallTarget] = useState<InstanceSummary | null>(null)
+  /** 卸载强确认：输入实例名匹配后才可确认（防误删世界数据） */
+  const [uninstallInput, setUninstallInput] = useState('')
+  const uninstallInputMatches = uninstallInput.trim() === (uninstallTarget?.name ?? '')
   /** 待停止确认的实例（启动直接执行） */
   const [stopTarget, setStopTarget] = useState<InstanceSummary | null>(null)
-  /** 卸载危险确认：实例名输入（不匹配禁用确认，对齐恢复备份防护级别） */
-  const [uninstallInput, setUninstallInput] = useState('')
 
   // ── 启停（卡片按钮；停止需确认弹窗）──
   const runMutation = useMutation({
@@ -237,7 +238,7 @@ export function InstancesPage() {
         }}
       />
 
-      {/* ── 卸载确认（输入实例名才可确认，对齐恢复备份防护级别） ── */}
+      {/* ── 卸载确认（破坏力最大操作：输入实例名强确认，与备份恢复同级门槛） ── */}
       <ConfirmDialog
         open={uninstallTarget !== null}
         onOpenChange={(open) => {
@@ -251,8 +252,8 @@ export function InstancesPage() {
         confirmText="确认卸载"
         danger
         loading={uninstallMutation.isPending}
-        confirmDisabled={uninstallInput.trim() !== (uninstallTarget?.name ?? '')}
         warning="此操作不可撤销！将会：停止运行中的服务器、删除所有世界数据和配置、从数据库中移除记录"
+        confirmDisabled={!uninstallInputMatches}
         onConfirm={() => void handleUninstallConfirm()}
       >
         <div className="flex flex-col gap-1.5">

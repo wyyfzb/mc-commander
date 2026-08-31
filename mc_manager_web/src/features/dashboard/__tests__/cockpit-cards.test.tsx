@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { describe, it, expect, beforeEach, beforeAll, afterAll } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { setupServer } from 'msw/node'
 import { Toaster } from 'sonner'
@@ -74,23 +74,24 @@ describe('McClockCard 世界控制', () => {
     expect(screen.getByText('第 42 天')).toBeInTheDocument()
     expect(screen.getByText(/6000 tick/)).toBeInTheDocument()
     expect(screen.getAllByText('正午').length).toBeGreaterThan(0)
-    expect(screen.getByRole('button', { name: '☀ 晴天' })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByRole('button', { name: '🌧 雨天' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('button', { name: '晴天' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: '雨天' })).toHaveAttribute('aria-pressed', 'false')
     const noon = screen.getAllByRole('button', { name: '正午' }).pop()!
     expect(noon).toHaveAttribute('aria-pressed', 'true')
   })
 
-  it('点击雨天发送 weather rain 并回显终端/成功 toast', async () => {
+  it('点击雨天发送 weather rain 并回显终端（成功不弹 toast，终端为反馈源）', async () => {
     renderWithProviders(<McClockCard />)
-    fireEvent.click(screen.getByRole('button', { name: '🌧 雨天' }))
-    expect(await screen.findByText(/命令已发送: weather rain/)).toBeInTheDocument()
-    expect(useTerminalStore.getState().buffer.some((e) => e.text === 'weather rain')).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: '雨天' }))
+    await waitFor(() =>
+      expect(useTerminalStore.getState().buffer.some((e) => e.text === 'weather rain')).toBe(true),
+    )
   })
 
   it('实例停止时控件禁用', () => {
     useServerStore.setState({ status: { ...mockInstanceStatus, isRunning: false, weather: null, worldTime: null } })
     renderWithProviders(<McClockCard />)
-    expect(screen.getByRole('button', { name: '☀ 晴天' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '晴天' })).toBeDisabled()
     expect(screen.getByRole('button', { name: '白天' })).toBeDisabled()
   })
 })
@@ -132,7 +133,9 @@ describe('AnnouncementCard 公告发送', () => {
     const input = screen.getByLabelText('公告内容')
     expect(input).toHaveValue('服务器将在 5 分钟后重启，请及时停靠')
     fireEvent.keyDown(input, { key: 'Enter' })
-    expect(await screen.findByText(/命令已发送: say 服务器将在 5 分钟后重启/)).toBeInTheDocument()
+    await waitFor(() =>
+      expect(useTerminalStore.getState().buffer.some((e) => e.text.includes('say 服务器将在'))).toBe(true),
+    )
     expect(input).toHaveValue('')
     expect(useTerminalStore.getState().buffer.some((e) => e.text.includes('say 服务器将在'))).toBe(true)
   })

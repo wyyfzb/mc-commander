@@ -264,7 +264,7 @@ export function ConnectionForm({ variant = 'settings', onSaved }: ConnectionForm
           />
           <span className="text-mcs-sm font-medium">{isConnected ? '已连接' : '未连接'}</span>
           {isConnected && latencyMs != null && (
-            <span className="text-mcs-2xs text-mcs-text-subtle">WebSocket 实时 · 延迟 {latencyMs}ms</span>
+            <span className="text-mcs-2xs text-mcs-text-subtle">连接正常 · 延迟 {latencyMs}ms</span>
           )}
         </div>
       )}

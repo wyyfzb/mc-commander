@@ -4,6 +4,9 @@ import http from 'http';
 import fs from 'fs';
 import path from 'path';
 import config from './config.js';
+
+// 版本号单一来源：package.json（与 routes/index.js 的 /health、check-update 共用）
+const SERVER_VERSION = JSON.parse(fs.readFileSync(new URL('./package.json', import.meta.url), 'utf-8')).version;
 import { authMiddleware } from './middleware/auth.js';
 import { errorHandler } from './middleware/error_handler.js';
 import { apiKeyRateLimit, rateLimit } from './middleware/rate_limit.js';
@@ -163,7 +166,7 @@ server.on('error', (err) => {
 
 server.listen(config.port, '0.0.0.0', () => {
   console.log(`========================================`);
-  console.log(`  MC_Commander Server v1.1.0`);
+  console.log(`  MC_Commander Server v${SERVER_VERSION}`);
   console.log(`========================================`);
   console.log(`  Port: ${config.port}`);
   const maskedKey = config.apiKey.length > 4
