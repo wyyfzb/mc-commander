@@ -32,7 +32,7 @@ import { apiUploadPlugin } from '@/api/plugins'
 import type { PluginInfo } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Input } from '@/components/ui/input'
+import { SearchInput } from '@/components/mcs/search-input'
 import { Separator } from '@/components/ui/separator'
 import {
   Sheet,
@@ -573,16 +573,12 @@ export function PluginsPage() {
 
       {/* ── 搜索（多插件时快速定位；过滤不改变统计数字） ── */}
       {plugins.length > 5 && (
-        <div className="relative">
-          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-mcs-text-subtle" aria-hidden />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="搜索插件名或文件名…"
-            className="pl-8"
-            aria-label="搜索插件"
-          />
-        </div>
+        <SearchInput
+          value={search}
+          onValueChange={setSearch}
+          placeholder="搜索插件名或文件名…"
+          aria-label="搜索插件"
+        />
       )}
 
       {/* ── 内容区 ── */}

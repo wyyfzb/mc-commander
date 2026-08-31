@@ -19,6 +19,7 @@ import { queryKeys } from '@/api/queries'
 import { getFriendlyErrorText } from '@/api/errors'
 import type { Webhook, WebhookDelivery } from '@/api/types'
 import { Button } from '@/components/ui/button'
+import { LoadingButton } from '@/components/mcs/loading-button'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { StatusPill } from '@/components/mcs/status-pill'
@@ -364,12 +365,14 @@ export default function WebhookPage() {
 
           <DialogFooter>
             <Button variant="outline" onClick={closeDialog}>取消</Button>
-            <Button
+            <LoadingButton
+              loading={createMut.isPending || updateMut.isPending}
+              loadingText="处理中…"
               onClick={handleSubmit}
-              disabled={!form.name || !form.url || urlInvalid || createMut.isPending || updateMut.isPending}
+              disabled={!form.name || !form.url || urlInvalid}
             >
-              {createMut.isPending || updateMut.isPending ? '处理中…' : (editTarget ? '保存' : '创建')}
-            </Button>
+              {editTarget ? '保存' : '创建'}
+            </LoadingButton>
           </DialogFooter>
         </DialogContent>
       </Dialog>

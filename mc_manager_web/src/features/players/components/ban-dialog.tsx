@@ -6,8 +6,7 @@
  * - 附加选项：同时踢出在线玩家（kick 失败不阻断封禁）
  */
 import { useState } from 'react'
-import { Loader2 } from 'lucide-react'
-import { DangerButton } from '@/components/mcs/danger-button'
+import { LoadingButton } from '@/components/mcs/loading-button'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -198,10 +197,9 @@ function BanFormContent({ player, onConfirm, onOpenChange }: Omit<BanDialogProps
         <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
           取消
         </Button>
-        <DangerButton onClick={handleConfirm} disabled={submitting}>
-          {submitting && <Loader2 className="animate-spin" aria-hidden />}
+        <LoadingButton variant="destructive" loading={submitting} onClick={handleConfirm}>
           封禁{selectedDuration?.label ? `（${selectedDuration.label}）` : ''}
-        </DangerButton>
+        </LoadingButton>
       </DialogFooter>
     </>
   )

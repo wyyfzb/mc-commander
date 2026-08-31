@@ -4,9 +4,9 @@
  * 筛选值从 store 反推（store.filter 单一数据源防切页失同步）
  */
 import { useState } from 'react'
-import { Download, RotateCcw, ScrollText, Search, UserPlus, X } from 'lucide-react'
+import { Download, RotateCcw, ScrollText, UserPlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { SearchInput } from '@/components/mcs/search-input'
 import {
   Select,
   SelectContent,
@@ -61,26 +61,13 @@ export function FilterBar({ players, totalCount, onOpenBanRecords, onAddWhitelis
 
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-mcs-border-muted px-4 py-2.5">
-      <div className="relative w-72">
-        <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-mcs-text-subtle" aria-hidden />
-        <Input
-          value={filter.q}
-          onChange={(e) => setFilter({ q: e.target.value })}
-          placeholder="搜索玩家名或 UUID…"
-          className="pl-8 pr-8"
-          aria-label="搜索玩家"
-        />
-        {filter.q.length > 0 && (
-          <button
-            type="button"
-            onClick={() => setFilter({ q: '' })}
-            aria-label="清空搜索"
-            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-mcs-xs p-0.5 text-mcs-text-subtle hover:bg-mcs-bg-hover hover:text-mcs-text-default"
-          >
-            <X className="size-3.5" aria-hidden />
-          </button>
-        )}
-      </div>
+      <SearchInput
+        value={filter.q}
+        onValueChange={(v) => setFilter({ q: v })}
+        placeholder="搜索玩家名或 UUID…"
+        aria-label="搜索玩家"
+        className="w-72"
+      />
 
       <Select
         value={filter.mode}

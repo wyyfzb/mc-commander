@@ -25,6 +25,7 @@ import {
   ServerOff,
   Trash2,
 } from 'lucide-react'
+import { LoadingButton } from '@/components/mcs/loading-button'
 import { toast } from 'sonner'
 import { getFriendlyErrorText } from '@/api/errors'
 import type { BackupItem } from '@/api/types'
@@ -152,19 +153,16 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
         <p className="min-w-0 flex-1 truncate text-mcs-sm text-mcs-text-muted" title={lastBackupText}>
           {lastBackupText}
         </p>
-        <Button
+        <LoadingButton
           variant="outline"
           size="sm"
-          disabled={createMutation.isPending}
+          loading={createMutation.isPending}
+          loadingText="备份中..."
           onClick={() => void handleCreate()}
         >
-          {createMutation.isPending ? (
-            <Loader2 className="size-3.5 animate-spin" aria-hidden />
-          ) : (
-            <CloudUpload className="size-3.5" aria-hidden />
-          )}
-          {createMutation.isPending ? '备份中...' : '立即备份'}
-        </Button>
+          <CloudUpload className="size-3.5" aria-hidden />
+          立即备份
+        </LoadingButton>
       </div>
 
       {/* 快照机制说明（subtle 小字；保留策略服务端可配且 API 未暴露，不硬编码数值——避免与服务端实际配置漂移） */}

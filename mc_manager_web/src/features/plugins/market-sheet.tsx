@@ -21,14 +21,13 @@ import {
   Loader2,
   Package,
   RefreshCw,
-  Search,
-  X,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { ApiError } from '@/api/client'
 import { ErrorCode, getFriendlyErrorText } from '@/api/errors'
 import { apiMarketInstall, apiMarketSearch, apiMarketVersions } from '@/api/plugins'
 import type { MarketSearchHit, MarketVersion } from '@/api/types'
+import { SearchInput } from '@/components/mcs/search-input'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -104,6 +103,12 @@ export function MarketSheet({ open, onOpenChange, instanceId, initialQuery = nul
 
   const [query, setQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
+
+  // 防抖回调（由 SearchInput 内部管理 debounce 定时器；清除时立即同步）
+  const handleDebouncedChange = useCallback(
+    (v: string) => setDebouncedQuery(v),
+    [],
+  )
   const [loader, setLoader] = useState<string>('')
   const [gameVersion, setGameVersion] = useState('')
 
@@ -115,18 +120,12 @@ export function MarketSheet({ open, onOpenChange, instanceId, initialQuery = nul
     }
   }, [open, instanceMcVersion])
 
-  // 打开时预填搜索词（更新检测入口直达对应插件；debounce 由既有 effect 兜底同步）
+  // 打开时预填搜索词（更新检测入口直达对应插件）
   useEffect(() => {
     if (!open || !initialQuery) return
     setQuery(initialQuery)
     setDebouncedQuery(initialQuery)
   }, [open, initialQuery])
-
-  // 关键词防抖
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedQuery(query.trim()), SEARCH_DEBOUNCE_MS)
-    return () => clearTimeout(t)
-  }, [query])
 
   // 搜索状态：手动管理（支持「加载更多」追加 + 过滤变化重置）
   const [hits, setHits] = useState<MarketSearchHit[]>([])
@@ -295,28 +294,15 @@ export function MarketSheet({ open, onOpenChange, instanceId, initialQuery = nul
 
         {/* ── 过滤栏 ── */}
         <div className="space-y-2 border-b border-mcs-border-muted px-5 py-3">
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-mcs-text-subtle" aria-hidden />
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="搜索插件（留空浏览热门）…"
-              className="pl-9 pr-8"
-              aria-label="搜索插件关键词"
-              data-testid="market-search-input"
-            />
-            {query && (
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                className="absolute right-1 top-1/2 -translate-y-1/2"
-                onClick={() => setQuery('')}
-                aria-label="清空搜索"
-              >
-                <X className="size-3.5" aria-hidden />
-              </Button>
-            )}
-          </div>
+          <SearchInput
+            value={query}
+            onValueChange={setQuery}
+            onDebouncedChange={handleDebouncedChange}
+            debounceMs={SEARCH_DEBOUNCE_MS}
+            placeholder="搜索插件（留空浏览热门）…"
+            aria-label="搜索插件关键词"
+            testId="market-search-input"
+          />
           <div className="flex items-center gap-2">
             <Select value={loader} onValueChange={setLoader}>
               <SelectTrigger size="sm" className="w-[130px]" aria-label="按加载器过滤">

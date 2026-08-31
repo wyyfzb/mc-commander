@@ -23,6 +23,7 @@ import {
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { DangerButton } from '@/components/mcs/danger-button'
+import { LoadingButton } from '@/components/mcs/loading-button'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -311,10 +312,9 @@ export function AccountPanel() {
           )}
 
           <div className="sm:col-span-3">
-            <Button type="submit" size="sm" disabled={changing || !authed}>
-              {changing && <Loader2 className="size-3.5 animate-spin" aria-hidden />}
+            <LoadingButton type="submit" size="sm" loading={changing} disabled={!authed}>
               更新密码
-            </Button>
+            </LoadingButton>
           </div>
         </form>
       </SectionCard>

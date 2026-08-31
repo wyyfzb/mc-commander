@@ -16,8 +16,6 @@ import {
   MoreVertical,
   Pencil,
   Plus,
-  Search,
-  SearchX,
   Terminal,
   Trash2,
   Wand2,
@@ -48,6 +46,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
+import { SearchInput } from '@/components/mcs/search-input'
 import { cn } from '@/lib/utils'
 import { ApiError } from '@/api/client'
 import { getFriendlyErrorMessage } from '@/api/errors'
@@ -513,29 +512,12 @@ export function GiveItemPanel({
         {/* ── Tab 1：物品选择 ── */}
         <TabsContent value="items" className="flex min-h-0 flex-1 flex-col gap-2">
           {/* 搜索框 */}
-          <div className="relative">
-            <Search
-              className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-mcs-text-subtle"
-              aria-hidden
-            />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="搜索物品名称或 ID..."
-              aria-label="搜索物品"
-              className="h-8 w-full rounded-mcs-sm border border-mcs-border-default bg-mcs-bg-default pl-8 pr-8 text-mcs-sm text-mcs-text-default placeholder:text-mcs-text-subtle focus:border-mcs-accent-border focus:outline-none focus:ring-1 focus:ring-mcs-focus-ring"
-            />
-            {search.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setSearch('')}
-                aria-label="清空搜索"
-                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-mcs-xs p-0.5 text-mcs-text-subtle hover:bg-mcs-bg-hover hover:text-mcs-text-default"
-              >
-                <X className="size-3.5" aria-hidden />
-              </button>
-            )}
-          </div>
+          <SearchInput
+            value={search}
+            onValueChange={setSearch}
+            placeholder="搜索物品名称或 ID..."
+            aria-label="搜索物品"
+          />
 
           {/* 分类 chips + 匹配数 */}
           <div className="flex items-center gap-2">
@@ -719,7 +701,7 @@ export function GiveItemPanel({
           {/* 物品网格 */}
           {filteredItems.length === 0 ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-1.5 py-8">
-              <SearchX className="size-6 text-mcs-text-subtle" aria-hidden />
+              <Terminal className="size-6 text-mcs-text-subtle" aria-hidden />
               <p className="text-mcs-sm text-mcs-text-subtle">没有找到匹配的物品</p>
             </div>
           ) : (
@@ -1536,19 +1518,13 @@ function KitEditorDialog({
               <span className="text-mcs-xs font-medium text-mcs-text-default">添加物品</span>
               <span className="text-mcs-2xs text-mcs-text-subtle">找到 {filteredItems.length} 个</span>
             </div>
-            <div className="relative">
-              <Search
-                className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-mcs-text-subtle"
-                aria-hidden
-              />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="搜索物品名称或 ID..."
-                aria-label="搜索礼包物品"
-                className="h-8 w-full rounded-mcs-sm border border-mcs-border-default bg-mcs-bg-default pl-8 pr-2.5 text-mcs-sm text-mcs-text-default placeholder:text-mcs-text-subtle focus:border-mcs-accent-border focus:outline-none focus:ring-1 focus:ring-mcs-focus-ring"
-              />
-            </div>
+            <SearchInput
+              value={search}
+              onValueChange={setSearch}
+              placeholder="搜索物品名称或 ID..."
+              aria-label="搜索礼包物品"
+              clearable={false}
+            />
             <div className="flex gap-1 overflow-x-auto">
               {ITEM_CATEGORIES.map((cat) => (
                 <button

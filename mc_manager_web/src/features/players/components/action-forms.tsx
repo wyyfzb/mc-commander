@@ -13,9 +13,6 @@ import { useState, type FormEvent } from 'react'
 import {
   AlertTriangle,
   CloudOff,
-  Loader2,
-  Search,
-  SearchX,
   Sparkles,
   Star,
   Trash2,
@@ -24,6 +21,8 @@ import {
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { SearchInput } from '@/components/mcs/search-input'
+import { LoadingButton } from '@/components/mcs/loading-button'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
@@ -184,13 +183,12 @@ function ExperienceForm({ player, batchTargets, isBatchMode, isRconConnected, on
       <CommandPreview command={getPreview()} />
 
       {/* 执行 */}
-      <Button type="submit" disabled={!canExecute || loading} className="w-full">
-        {loading && <Loader2 className="mr-1.5 size-3.5 animate-spin" />}
+      <LoadingButton type="submit" loading={loading} disabled={!canExecute} className="w-full">
         <Star className="mr-1.5 size-3.5" />
         {action === 'set' ? '设置' : action === 'remove' ? '移除' : '给予'}
         {mode === 'levels' ? '等级' : '经验'}
         {isBatchMode && `（${batchTargets.length} 名玩家）`}
-      </Button>
+      </LoadingButton>
     </form>
   )
 }
@@ -301,26 +299,14 @@ function EffectForm({ player, batchTargets, isBatchMode, isRconConnected, onActi
       {effectMode === 'give' && (
         <>
           {/* 搜索 */}
-          <div className="relative">
-            <Search className="absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-mcs-text-muted" aria-hidden="true" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="搜索效果（中文/ID）"
-              aria-label="搜索效果"
-              className="h-8 pl-7 text-mcs-sm"
-            />
-            {search && (
-              <button
-                type="button"
-                onClick={() => setSearch('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-mcs-text-muted hover:text-mcs-text-default"
-                aria-label="清除搜索"
-              >
-                <SearchX className="size-3.5" />
-              </button>
-            )}
-          </div>
+          <SearchInput
+            value={search}
+            onValueChange={setSearch}
+            placeholder="搜索效果（中文/ID）"
+            aria-label="搜索效果"
+            inputClassName="h-8 text-mcs-sm"
+            size="sm"
+          />
 
           {/* 效果选择网格 */}
           <div className="max-h-48 space-y-3 overflow-auto pr-1">
@@ -417,12 +403,11 @@ function EffectForm({ player, batchTargets, isBatchMode, isRconConnected, onActi
       )}
 
       {/* 执行 */}
-      <Button type="submit" disabled={!canExecute || loading} className="w-full">
-        {loading && <Loader2 className="mr-1.5 size-3.5 animate-spin" />}
+      <LoadingButton type="submit" loading={loading} disabled={!canExecute} className="w-full">
         <Sparkles className="mr-1.5 size-3.5" />
         {effectMode === 'clear' ? '清除全部效果' : `赋予${selectedEffect?.name ?? ''}效果`}
         {isBatchMode && `（${batchTargets.length} 名玩家）`}
-      </Button>
+      </LoadingButton>
     </form>
   )
 }
@@ -469,26 +454,14 @@ function SummonForm({ isRconConnected, onAction }: ActionFormProps) {
       {!isRconConnected && <OfflineBanner />}
 
       {/* 搜索 */}
-      <div className="relative">
-        <Search className="absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-mcs-text-muted" aria-hidden="true" />
-        <Input
-          value={entitySearch}
-          onChange={(e) => setEntitySearch(e.target.value)}
-          placeholder="搜索实体（中文/ID）"
-          aria-label="搜索实体"
-          className="h-8 pl-7 text-mcs-sm"
-        />
-        {entitySearch && (
-          <button
-            type="button"
-            onClick={() => setEntitySearch('')}
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-mcs-text-muted hover:text-mcs-text-default"
-            aria-label="清除搜索"
-          >
-            <SearchX className="size-3.5" />
-          </button>
-        )}
-      </div>
+      <SearchInput
+        value={entitySearch}
+        onValueChange={setEntitySearch}
+        placeholder="搜索实体（中文/ID）"
+        aria-label="搜索实体"
+        inputClassName="h-8 text-mcs-sm"
+        size="sm"
+      />
 
       {/* 实体选择网格 */}
       <div className="max-h-52 space-y-2.5 overflow-auto pr-1">
@@ -561,11 +534,10 @@ function SummonForm({ isRconConnected, onAction }: ActionFormProps) {
       {selectedEntity && <CommandPreview command={buildCommand()} />}
 
       {/* 执行 */}
-      <Button type="submit" disabled={!canExecute || loading} className="w-full">
-        {loading && <Loader2 className="mr-1.5 size-3.5 animate-spin" />}
+      <LoadingButton type="submit" loading={loading} disabled={!canExecute} className="w-full">
         <Zap className="mr-1.5 size-3.5" />
         召唤{selectedEntity ? selectedEntity.name : '实体'}
-      </Button>
+      </LoadingButton>
     </form>
   )
 }
