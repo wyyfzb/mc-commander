@@ -45,6 +45,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { StatusPill } from '@/components/mcs/status-pill'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { EmptyState } from '@/components/mcs/empty-state'
+import { PageHeader } from '@/components/mcs/page-header'
 import { formatFileSize, formatModifiedAt } from '@/lib/mc-files'
 import { useServerStore } from '@/stores/server'
 import { useConnectionStore } from '@/stores/connection'
@@ -449,55 +450,58 @@ export function PluginsPage() {
         }}
       />
 
-      {/* ── 页面头：标题 + 上传/刷新 ── */}
-      <div className="flex items-center gap-3">
-        <div className="min-w-0 flex-1">
-          <h2 className="text-mcs-xl font-semibold text-mcs-text-default">插件管理</h2>
-          <p className="text-mcs-xs text-mcs-text-subtle">
+      <PageHeader
+        title="插件管理"
+        description={
+          <>
             管理 Bukkit 系插件（Paper/Spigot）：启停与增删在重启实例后生效
             {plugins.length > 0 && (
               <span className="ml-2 text-mcs-text-muted">
                 共 {plugins.length} 个（启用 {enabledCount} / 禁用 {plugins.length - enabledCount}）
               </span>
             )}
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => void pluginsQuery.refetch()}
-          disabled={pluginsQuery.isFetching}
-          aria-label="刷新插件列表"
-        >
-          <RefreshCw className={`size-3.5 ${pluginsQuery.isFetching ? 'animate-spin' : ''}`} aria-hidden />
-          刷新
-        </Button>
-        <Button size="sm" onClick={() => fileInputRef.current?.click()} aria-label="上传插件">
-          <ArrowUpFromLine className="size-3.5" aria-hidden />
-          上传插件
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => void checkUpdates()}
-          disabled={updateChecking || plugins.length === 0}
-          aria-label="检查插件更新"
-          data-testid="check-updates"
-        >
-          <RefreshCw className={`size-3.5 ${updateChecking ? 'animate-spin' : ''}`} aria-hidden />
-          检查更新
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setMarketOpen(true)}
-          aria-label="打开插件市场"
-          data-testid="open-market"
-        >
-          <Store className="size-3.5" aria-hidden />
-          插件市场
-        </Button>
-      </div>
+          </>
+        }
+        actions={
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void pluginsQuery.refetch()}
+              disabled={pluginsQuery.isFetching}
+              aria-label="刷新插件列表"
+            >
+              <RefreshCw className={`size-3.5 ${pluginsQuery.isFetching ? 'animate-spin' : ''}`} aria-hidden />
+              刷新
+            </Button>
+            <Button size="sm" onClick={() => fileInputRef.current?.click()} aria-label="上传插件">
+              <ArrowUpFromLine className="size-3.5" aria-hidden />
+              上传插件
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void checkUpdates()}
+              disabled={updateChecking || plugins.length === 0}
+              aria-label="检查插件更新"
+              data-testid="check-updates"
+            >
+              <RefreshCw className={`size-3.5 ${updateChecking ? 'animate-spin' : ''}`} aria-hidden />
+              检查更新
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setMarketOpen(true)}
+              aria-label="打开插件市场"
+              data-testid="open-market"
+            >
+              <Store className="size-3.5" aria-hidden />
+              插件市场
+            </Button>
+          </div>
+        }
+      />
 
       {/* ── 上传进度条（顺序队列，可取消） ── */}
       {uploading && (
