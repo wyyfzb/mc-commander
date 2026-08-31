@@ -122,6 +122,6 @@ describe('TaskScheduler - backup 任务分支（互斥跳过 + 失败可见性�
         content: expect.stringContaining('备份失败'),
       })
     );
-    expect(ScheduledTaskModel.updateLastRunStatus).toHaveBeenCalledWith(10, 'failed');
+    expect(ScheduledTaskModel.updateLastRunStatus).toHaveBeenCalledWith(10, 'failed', 'World directory not found');
   });
 });
