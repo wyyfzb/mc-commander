@@ -15,6 +15,8 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import {
   CalendarClock,
+  ChevronDown,
+  ChevronUp,
   CircleAlert,
   CloudUpload,
   HardDrive,
@@ -58,6 +60,8 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
   const [deleteTarget, setDeleteTarget] = useState<BackupItem | null>(null)
   /** 恢复危险确认：实例名输入（不匹配禁用确认） */
   const [restoreInput, setRestoreInput] = useState('')
+  /** 是否展开全部备份（默认只显示最近 10 条，超出时提供展开入口） */
+  const [showAll, setShowAll] = useState(false)
 
   const backupsQuery = useBackups(instanceId)
   const createMutation = useCreateBackup(instanceId)
@@ -82,12 +86,13 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
   }
 
   const backups = backupsQuery.data ?? []
-  /** 最多展示最近 10 条（与自动清理默认保留数一致，避免列表无限增长） */
-  const items = backups.slice(0, 10)
+  /** 默认展示最近 10 条，用户可展开全部（避免列表无限增长） */
+  const isTruncated = backups.length > 10
+  const items = showAll ? backups : backups.slice(0, 10)
   /** 最近一条 completed 备份（上次备份信息行数据源；服务端列表已按时间倒序） */
   const lastCompleted = backups.find((b) => b.status === 'completed')
-  /** 恢复中：任一行 restoring 或恢复请求在途 → 全列表恢复按钮禁用 */
-  const restoringLocked = restoreMutation.isPending || items.some((b) => b.status === 'restoring')
+  /** 恢复中：任一行 restoring 或恢复请求在途 → 全列表恢复按钮禁用（检查全量，防止截断后遗漏） */
+  const restoringLocked = restoreMutation.isPending || backups.some((b) => b.status === 'restoring')
 
   const lastBackupText = lastCompleted
     ? `上次备份：${[formatBackupDate(lastCompleted.createdAt), formatBackupSize(lastCompleted.size)]
@@ -199,17 +204,45 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
             </Button>
           </div>
         ) : (
-          <div className="divide-y divide-mcs-border-subtle">
-            {items.map((backup) => (
-              <BackupRow
-                key={backup.id}
-                backup={backup}
-                restoringLocked={restoringLocked}
-                onRestore={setRestoreTarget}
-                onDelete={setDeleteTarget}
-              />
-            ))}
-          </div>
+          <>
+            <div className="divide-y divide-mcs-border-subtle">
+              {items.map((backup) => (
+                <BackupRow
+                  key={backup.id}
+                  backup={backup}
+                  restoringLocked={restoringLocked}
+                  onRestore={setRestoreTarget}
+                  onDelete={setDeleteTarget}
+                />
+              ))}
+            </div>
+            {/* 截断提示：总数统计 + 展开/收起按钮 */}
+            {isTruncated && (
+              <div className="flex items-center justify-between border-t border-mcs-border-subtle px-4 py-2.5">
+                <span className="text-mcs-xs text-mcs-text-muted">
+                  共 {backups.length} 条备份{!showAll && `，已显示 ${items.length} 条`}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-mcs-accent-fg"
+                  onClick={() => setShowAll((prev) => !prev)}
+                >
+                  {showAll ? (
+                    <>
+                      <ChevronUp className="size-3.5" aria-hidden />
+                      收起
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDown className="size-3.5" aria-hidden />
+                      显示全部
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
+          </>
         )}
       </div>
 
