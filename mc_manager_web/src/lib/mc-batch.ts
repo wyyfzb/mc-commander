@@ -14,6 +14,14 @@ export interface BatchTarget {
   isOnline: boolean
 }
 
+/** 单条失败记录 */
+export interface BatchFailure {
+  /** 目标名称 */
+  target: string
+  /** 失败原因（原始错误信息） */
+  error: string
+}
+
 /** 批量执行结果汇总 */
 export interface BatchResult {
   /** 成功数 */
@@ -24,6 +32,8 @@ export interface BatchResult {
   skippedCount: number
   /** 过滤后无任何可执行目标（全部离线） */
   allOffline: boolean
+  /** 个体失败详情（仅 failCount > 0 时有内容） */
+  failures: BatchFailure[]
 }
 
 export interface RunBatchOptions {
@@ -48,6 +58,7 @@ export async function runBatchForTargets(options: RunBatchOptions): Promise<Batc
   let successCount = 0
   let failCount = 0
   let skippedCount = 0
+  const failures: BatchFailure[] = []
 
   const actionable = targets.filter((t) => {
     if (requireOnline && !t.isOnline) {
@@ -58,19 +69,20 @@ export async function runBatchForTargets(options: RunBatchOptions): Promise<Batc
   })
 
   if (actionable.length === 0) {
-    return { successCount: 0, failCount: 0, skippedCount, allOffline: true }
+    return { successCount: 0, failCount: 0, skippedCount, allOffline: true, failures: [] }
   }
 
   for (const target of actionable) {
     try {
       await execute(target)
       successCount++
-    } catch {
+    } catch (err) {
       failCount++
+      failures.push({ target: target.name, error: err instanceof Error ? err.message : String(err) })
     }
   }
 
-  return { successCount, failCount, skippedCount, allOffline: false }
+  return { successCount, failCount, skippedCount, allOffline: false, failures }
 }
 
 /** 汇总文案（Toast：「批量<动作>完成：成功 N，失败 N，跳过离线 N」） */
@@ -79,4 +91,10 @@ export function formatBatchSummary(actionLabel: string, result: BatchResult): st
   const parts = [`成功 ${result.successCount}`, `失败 ${result.failCount}`]
   if (result.skippedCount > 0) parts.push(`跳过离线 ${result.skippedCount}`)
   return `批量${actionLabel}完成：${parts.join('，')}`
+}
+
+/** 失败详情文案（Toast description，仅 failures 非空时有内容） */
+export function formatFailureDetails(result: BatchResult): string | undefined {
+  if (result.failures.length === 0) return undefined
+  return result.failures.map((f) => `• ${f.target}：${f.error}`).join('\n')
 }

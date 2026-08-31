@@ -355,6 +355,7 @@ export function PluginsPage() {
   const batchSetEnabled = async (enabled: boolean) => {
     let ok = 0
     let fail = 0
+    const failures: { target: string; error: string }[] = []
     for (const p of selectedInfos) {
       if (p.enabled === enabled) {
         ok += 1
@@ -363,14 +364,20 @@ export function PluginsPage() {
       try {
         await toggleMutation.mutateAsync({ file: p.file, enabled })
         ok += 1
-      } catch {
+      } catch (err) {
         fail += 1
+        failures.push({ target: p.file, error: err instanceof Error ? err.message : String(err) })
       }
     }
     setSelected(new Set())
-    toast.success(
-      `批量${enabled ? '启用' : '禁用'}完成：成功 ${ok} 个${fail > 0 ? `，失败 ${fail} 个` : ''}，重启实例后生效`,
-    )
+    const summary = `批量${enabled ? '启用' : '禁用'}完成：成功 ${ok} 个${fail > 0 ? `，失败 ${fail} 个` : ''}，重启实例后生效`
+    if (fail > 0) {
+      toast.warning(summary, {
+        description: failures.map((f) => `• ${f.target}：${f.error}`).join('\n'),
+      })
+    } else {
+      toast.success(summary)
+    }
   }
 
   const handleBatchDeleteConfirm = async () => {
@@ -378,17 +385,24 @@ export function PluginsPage() {
     setBatchDeleteOpen(false)
     let ok = 0
     let fail = 0
+    const failures: { target: string; error: string }[] = []
     for (const p of targets) {
       try {
         await deleteMutation.mutateAsync(p.file)
         ok += 1
-      } catch {
+      } catch (err) {
         fail += 1
+        failures.push({ target: p.file, error: err instanceof Error ? err.message : String(err) })
       }
     }
     setSelected(new Set())
-    if (fail === 0) toast.success(`已删除 ${ok} 个插件`)
-    else toast.warning(`删除完成：成功 ${ok} 个，失败 ${fail} 个`)
+    if (fail === 0) {
+      toast.success(`已删除 ${ok} 个插件`)
+    } else {
+      toast.warning(`删除完成：成功 ${ok} 个，失败 ${fail} 个`, {
+        description: failures.map((f) => `• ${f.target}：${f.error}`).join('\n'),
+      })
+    }
   }
 
   const toggleSelected = (file: string, checked: boolean) => {
