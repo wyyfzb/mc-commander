@@ -325,7 +325,7 @@ export function EmergencyPage() {
               {theme === 'dark' ? <Sun className="size-4" aria-hidden /> : <Moon className="size-4" aria-hidden />}
               {theme === 'dark' ? '切换到亮色主题' : '切换到深色主题'}
             </Button>
-            {/* 直达完整设置（原为切换 Tab 的死按钮，点击无任何反馈） */}
+            {/* 直达完整设置（原为切换 Tab 的死按钮，点击无任何反馈；main 侧同功能修复取 Link 语义版） */}
             <Link
               to="/settings"
               className="flex h-12 items-center justify-start gap-2 rounded-mcs-sm border border-mcs-border-default px-4 text-mcs-sm text-mcs-text-default"
