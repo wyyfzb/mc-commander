@@ -4,23 +4,16 @@ export const ErrorCodes = {
   SUCCESS: { code: 0, message: 'Success', status: 200 },
   SERVER_ERROR: { code: 50000, message: 'Internal Server Error', status: 500 },
   VALIDATION_ERROR: { code: 40000, message: 'Validation Error', status: 400 },
-  UNAUTHORIZED: { code: 40100, message: 'Unauthorized', status: 401 },
-  FORBIDDEN: { code: 40300, message: 'Permission Denied', status: 403 },
   NOT_FOUND: { code: 40400, message: 'Resource Not Found', status: 404 },
   RATE_LIMITED: { code: 42900, message: 'Too Many Requests', status: 429 },
   
   // 认证错误
   INVALID_API_KEY: { code: 40101, message: 'Invalid or expired API Key', status: 401 },
   
-  // 权限错误
-  PERMISSION_DENIED: { code: 40301, message: 'Insufficient permissions', status: 403 },
-  
   // 实例错误
   INSTANCE_NOT_FOUND: { code: 40401, message: 'Instance not found', status: 404 },
-  INSTANCE_ALREADY_RUNNING: { code: 40001, message: 'Instance is already running', status: 400 },
   INSTANCE_NOT_RUNNING: { code: 40002, message: 'Instance is not running', status: 400 },
   INSTANCE_RUNNING: { code: 40003, message: 'Instance is running', status: 409 },
-  INSTANCE_START_FAILED: { code: 50001, message: 'Failed to start instance', status: 500 },
   
   // 备份错误
   BACKUP_NOT_FOUND: { code: 40402, message: 'Backup not found', status: 404 },
@@ -42,11 +35,6 @@ export const ErrorCodes = {
     message: '旧格式备份（zip 压缩包）不支持恢复，仅可删除',
     status: 409,
   },
-  
-  // 玩家错误
-  PLAYER_NOT_FOUND: { code: 40403, message: 'Player not found', status: 404 },
-  PLAYER_NOT_ONLINE: { code: 40003, message: 'Player is not online', status: 400 },
-  
   
   // 定时任务错误
   TASK_NOT_FOUND: { code: 40405, message: 'Scheduled task not found', status: 404 },

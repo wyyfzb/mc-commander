@@ -152,13 +152,13 @@ describe('Upgrade Routes', () => {
     expect(res.body.code).toBe(40401);
   });
 
-  it('POST /instances/:id/upgrade - 实例运行中返回 400', async () => {
+  it('POST /instances/:id/upgrade - 实例运行中返回 409（INSTANCE_RUNNING CONFLICT）', async () => {
     serverManager._instance.status = 'running';
     serverManager._instance.isRunning = true;
     const res = await request
       .post('/api/v1/instances/inst-1/upgrade')
       .send({ mcVersion: '1.21.4', type: 'vanilla' });
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(409);
     expect(res.body.code).toBe(40003);
   });
 

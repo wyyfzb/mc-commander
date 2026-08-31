@@ -35,9 +35,9 @@ export function createUpgradeRoutes(serverManager) {
         return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND, 'Instance not found'));
       }
 
-      // 前置校验 4：实例未运行
+      // 前置校验 4：实例未运行（INSTANCE_RUNNING 语义 = 409 CONFLICT）
       if (instance.status === 'running') {
-        return res.status(400).json(error(ErrorCodes.INSTANCE_RUNNING, 'Instance must be stopped before upgrade'));
+        return res.status(ErrorCodes.INSTANCE_RUNNING.status).json(error(ErrorCodes.INSTANCE_RUNNING, 'Instance must be stopped before upgrade'));
       }
 
       // 前置校验 5：未升级中

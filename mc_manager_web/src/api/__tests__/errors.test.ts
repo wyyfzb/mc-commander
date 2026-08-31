@@ -20,7 +20,24 @@ describe('错误码映射（对照服务端 ErrorCodes 契约）', () => {
     expect(getFriendlyErrorMessage(99999)).toBe('操作失败（错误码 99999）')
   })
 
-  it('40003 同码场景：玩家不在线的本地化文案', () => {
-    expect(getFriendlyErrorMessage(ErrorCode.PLAYER_NOT_ONLINE)).toBe('玩家不在线')
+  it('40003 碰撞已消除：INSTANCE_RUNNING 独占 40003', () => {
+    // 40003 曾经与 PLAYER_NOT_ONLINE 碰撞，现已拆分
+    // PLAYER_NOT_ONLINE 已随僵尸码清理移除，40003 仅 INSTANCE_RUNNING 使用
+    expect(ErrorCode.INSTANCE_RUNNING).toBe(40003)
+    // 确认不再有其他枚举值映射到 40003
+    const values = Object.values(ErrorCode)
+    const count40003 = values.filter(v => v === 40003).length
+    expect(count40003).toBe(1)
+  })
+
+  it('新增升级错误码枚举与本地化', () => {
+    expect(ErrorCode.UPGRADE_IN_PROGRESS).toBe(40907)
+    expect(ErrorCode.UPGRADE_VERSION_SAME).toBe(40012)
+    expect(getFriendlyErrorMessage(ErrorCode.UPGRADE_IN_PROGRESS)).toBe('已有升级任务进行中')
+    expect(getFriendlyErrorMessage(ErrorCode.UPGRADE_VERSION_SAME)).toBe('目标版本与当前版本相同')
+  })
+
+  it('INSTANCE_RUNNING 有本地化文案', () => {
+    expect(getFriendlyErrorMessage(ErrorCode.INSTANCE_RUNNING)).toBe('实例正在运行')
   })
 })
