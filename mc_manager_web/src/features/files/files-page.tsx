@@ -11,7 +11,7 @@
  * - 实例切换：目录/选中文件重置回初始态
  */
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
-import { ServerOff } from 'lucide-react'
+import { ServerOff, PanelLeftClose, MonitorSmartphone } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router'
 import { toast } from 'sonner'
@@ -24,6 +24,13 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { Input } from '@/components/ui/input'
+import { NoticeBanner } from '@/components/mcs/notice-banner'
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
 import { useUnsavedGuard } from '@/hooks/use-unsaved-guard'
 import { useServerStore } from '@/stores/server'
 import { useUiStore } from '@/stores/ui'
@@ -47,6 +54,23 @@ function parentDirOf(path: string): string {
   const idx = path.lastIndexOf('/')
   return idx <= 0 ? '/' : path.slice(0, idx)
 }
+
+/** 响应式媒体查询 hook（SSR 安全，首渲染同步返回 initialValue） */
+function useMediaQuery(query: string, initialValue = false): boolean {
+  const [matches, setMatches] = useState(initialValue)
+  useEffect(() => {
+    const mql = window.matchMedia(query)
+    setMatches(mql.matches)
+    const handler = (e: MediaQueryListEvent) => setMatches(e.matches)
+    mql.addEventListener('change', handler)
+    return () => mql.removeEventListener('change', handler)
+  }, [query])
+  return matches
+}
+
+/** 断点常量（与 Tailwind md/lg 断点对齐） */
+const BREAKPOINT_MOBILE = '(max-width: 767px)'
+const BREAKPOINT_NARROW = '(min-width: 768px) and (max-width: 1023px)'
 
 export function FilesPage() {
   const instanceId = useServerStore((s) => s.instanceId)
@@ -109,6 +133,12 @@ export function FilesPage() {
   const uploadInputRef = useRef<HTMLInputElement>(null)
   // feat-9：正在下载的文件路径（行内 spinner + 防重复点击）
   const [downloadingPath, setDownloadingPath] = useState<string | null>(null)
+
+  // ── 响应式断点 ──
+  const isMobile = useMediaQuery(BREAKPOINT_MOBILE)
+  const isNarrowDesktop = useMediaQuery(BREAKPOINT_NARROW)
+  // 移动端：目录树 Sheet 抽屉
+  const [dirTreeOpen, setDirTreeOpen] = useState(false)
 
   const contentQuery = useFileContent(instanceId, selectedPath)
   const saveMutation = useSaveFile(instanceId)
@@ -335,71 +365,144 @@ export function FilesPage() {
   }
 
   return (
-    <div className="flex h-full min-h-0 gap-3 p-3">
-      {/* ── 左栏：目录树（220px，实底卡） ── */}
-      <section className="flex h-full min-h-0 w-[220px] shrink-0 flex-col rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted">
-        <header className="flex h-10 shrink-0 items-center gap-2 border-b border-mcs-border-subtle px-3">
-          <span className="text-mcs-sm font-semibold text-mcs-text-default">目录</span>
-        </header>
-        <div className="min-h-0 flex-1">
-          <DirTree instanceId={instanceId} currentPath={dir} onNavigate={setDir} />
+    <div className="flex h-full min-h-0 flex-col gap-1.5">
+      {/* ── 桌面窄窗降级条（≥768px <1024px） ── */}
+      {isNarrowDesktop && (
+        <div className="shrink-0 px-3 pt-1">
+          <NoticeBanner variant="info" icon={MonitorSmartphone}>
+            窗口较窄，部分内容可能被截断，建议使用更宽的视图以获得最佳体验
+          </NoticeBanner>
         </div>
-      </section>
+      )}
 
-      {/* ── 中栏：文件列表（实底卡） ── */}
-      <section className="flex h-full min-h-0 min-w-0 flex-1 flex-col rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted">
-        <FileList
-          instanceId={instanceId}
-          dir={dir}
-          selectedPath={selectedPath}
-          onSelectFile={selectFile}
-          onOpenDir={setDir}
-          onDelete={setDeleteTarget}
-          onGoUp={() => setDir(parentDirOf(dir))}
-          onRefresh={() => {
-            if (instanceId) {
-              void queryClient.invalidateQueries({ queryKey: queryKeys.files(instanceId, dir) })
-            }
-          }}
-          onNewFile={() => setNewFileOpen(true)}
-          onCreateDirectory={() => setNewDirOpen(true)}
-          onUpload={openUploadPicker}
-          onRename={(entry) => {
-            setRenameTarget(entry)
-            setRenameValue(entry.name)
-          }}
-          onDownload={(entry) => void downloadFile(entry)}
-          downloadingPath={downloadingPath}
-        />
-      </section>
+      {/* ── 移动端：目录树 Sheet 抽屉 ── */}
+      <Sheet open={isMobile && dirTreeOpen} onOpenChange={setDirTreeOpen}>
+        <SheetContent side="left" className="w-[280px] gap-0 p-0" showCloseButton={false}>
+          <SheetHeader className="border-b border-mcs-border-subtle px-3 py-2">
+            <SheetTitle className="text-mcs-sm font-semibold">目录</SheetTitle>
+          </SheetHeader>
+          <div className="min-h-0 flex-1">
+            <DirTree instanceId={instanceId} currentPath={dir} onNavigate={(path) => {
+              setDir(path)
+              setDirTreeOpen(false)
+            }} />
+          </div>
+        </SheetContent>
+      </Sheet>
 
-      {/* ── 右栏：Monaco 编辑器（实底卡） ── */}
-      <section className="flex h-full min-h-0 w-[45%] shrink-0 flex-col rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted">
-        <MonacoEditorPane
-          path={selectedPath ?? ''}
-          content={draft}
-          encoding={contentQuery.data?.encoding ?? 'utf-8'}
-          theme={theme}
-          isLoading={contentQuery.isLoading && selectedPath !== null}
-          loadError={
-            contentQuery.isError
-              ? `文件加载失败：${getFriendlyErrorText(contentQuery.error)}`
-              : null
-          }
-          isSaving={saveMutation.isPending}
-          dirty={dirty}
-          onChange={setDraft}
-          onSave={() => void save()}
-          onRestore={() => {
-            if (originalRef.current != null) {
-              setDraft(originalRef.current)
-              toast.info('已恢复到上次保存版本')
+      {/* ── 三栏主体 ── */}
+      <div className="flex min-h-0 flex-1 gap-3 p-3">
+        {/* 左栏：目录树（桌面端内联，移动端隐藏） */}
+        {!isMobile && (
+          <section className="flex h-full min-h-0 w-[220px] shrink-0 flex-col rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted">
+            <header className="flex h-10 shrink-0 items-center gap-2 border-b border-mcs-border-subtle px-3">
+              <span className="text-mcs-sm font-semibold text-mcs-text-default">目录</span>
+            </header>
+            <div className="min-h-0 flex-1">
+              <DirTree instanceId={instanceId} currentPath={dir} onNavigate={setDir} />
+            </div>
+          </section>
+        )}
+
+        {/* 中栏：文件列表（移动端全宽，桌面端 flex-1） */}
+        <section className="flex h-full min-h-0 min-w-0 flex-col rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted">
+          {isMobile && (
+            <div className="flex h-8 shrink-0 items-center border-b border-mcs-border-subtle px-3">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label="打开目录树"
+                onClick={() => setDirTreeOpen(true)}
+              >
+                <PanelLeftClose aria-hidden />
+              </Button>
+            </div>
+          )}
+          <FileList
+            instanceId={instanceId}
+            dir={dir}
+            selectedPath={selectedPath}
+            onSelectFile={selectFile}
+            onOpenDir={setDir}
+            onDelete={setDeleteTarget}
+            onGoUp={() => setDir(parentDirOf(dir))}
+            onRefresh={() => {
+              if (instanceId) {
+                void queryClient.invalidateQueries({ queryKey: queryKeys.files(instanceId, dir) })
+              }
+            }}
+            onNewFile={() => setNewFileOpen(true)}
+            onCreateDirectory={() => setNewDirOpen(true)}
+            onUpload={openUploadPicker}
+            onRename={(entry) => {
+              setRenameTarget(entry)
+              setRenameValue(entry.name)
+            }}
+            onDownload={(entry) => void downloadFile(entry)}
+            downloadingPath={downloadingPath}
+          />
+        </section>
+
+        {/* 右栏：Monaco 编辑器（桌面端内联，移动端隐藏由全屏覆盖替代） */}
+        {!isMobile && (
+          <section className="flex h-full min-h-0 w-[45%] shrink-0 flex-col rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted">
+            <MonacoEditorPane
+              path={selectedPath ?? ''}
+              content={draft}
+              encoding={contentQuery.data?.encoding ?? 'utf-8'}
+              theme={theme}
+              isLoading={contentQuery.isLoading && selectedPath !== null}
+              loadError={
+                contentQuery.isError
+                  ? `文件加载失败：${getFriendlyErrorText(contentQuery.error)}`
+                  : null
+              }
+              isSaving={saveMutation.isPending}
+              dirty={dirty}
+              onChange={setDraft}
+              onSave={() => void save()}
+              onRestore={() => {
+                if (originalRef.current != null) {
+                  setDraft(originalRef.current)
+                  toast.info('已恢复到上次保存版本')
+                }
+              }}
+              onClose={requestClose}
+              onRetry={() => void contentQuery.refetch()}
+            />
+          </section>
+        )}
+      </div>
+
+      {/* ── 移动端：编辑器全屏覆盖 ── */}
+      {isMobile && selectedPath !== null && (
+        <div className="fixed inset-0 z-40 flex flex-col bg-mcs-bg-muted">
+          <MonacoEditorPane
+            path={selectedPath}
+            content={draft}
+            encoding={contentQuery.data?.encoding ?? 'utf-8'}
+            theme={theme}
+            isLoading={contentQuery.isLoading}
+            loadError={
+              contentQuery.isError
+                ? `文件加载失败：${getFriendlyErrorText(contentQuery.error)}`
+                : null
             }
-          }}
-          onClose={requestClose}
-          onRetry={() => void contentQuery.refetch()}
-        />
-      </section>
+            isSaving={saveMutation.isPending}
+            dirty={dirty}
+            onChange={setDraft}
+            onSave={() => void save()}
+            onRestore={() => {
+              if (originalRef.current != null) {
+                setDraft(originalRef.current)
+                toast.info('已恢复到上次保存版本')
+              }
+            }}
+            onClose={requestClose}
+            onRetry={() => void contentQuery.refetch()}
+          />
+        </div>
+      )}
 
       {/* ── 关闭编辑器脏确认 ── */}
       {/* ── 未保存确认（关闭编辑器与路由守卫共用：guard.isBlocked 时离开即切页） ── */}
