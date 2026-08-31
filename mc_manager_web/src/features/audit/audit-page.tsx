@@ -1,18 +1,17 @@
 /**
  * AuditPage —— 审计日志 & 命令历史
  * 双 Tab：审计日志（操作记录）/ 命令历史（命令执行记录）
- * TanStack Query 数据获取（轮次 chore-30 方向）：isLoading/isFetching/isError 内建，
+ * TanStack Query 数据获取：isLoading/isFetching/isError 内建，
  * keepPreviousData 翻页不闪烁，过滤器变化经 query key 自动重获取
  */
 import { useState } from 'react'
-import { RefreshCw, AlertTriangle } from 'lucide-react'
+import { RefreshCw } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Skeleton } from '@/components/ui/skeleton'
+import { DataTableShell } from '@/components/mcs/data-table-shell'
 import { useAuditLogs, useCommandHistory } from '@/api/queries'
-import { getFriendlyErrorText } from '@/api/errors'
-import type { Pagination } from '@/api/types'
+import type { AuditLogItem, CommandHistoryItem } from '@/api/types'
 
 const ACTION_LABELS: Record<string, string> = {
   INSTANCE_START: '启动实例',
@@ -55,72 +54,88 @@ function formatDuration(ms: number | null): string {
   return `${(ms / 1000).toFixed(1)}s`
 }
 
-/** 表格内错误行（getFriendlyErrorText 转译） */
-function ErrorRow({ colSpan, error }: { colSpan: number; error: unknown }) {
+const AUDIT_COLUMNS = 4
+const CMD_COLUMNS = 5
+
+/** 审计日志表头 */
+function AuditHeader() {
   return (
-    <tr>
-      <td colSpan={colSpan} className="px-3 py-8 text-center">
-        <div className="flex flex-col items-center gap-2">
-          <AlertTriangle aria-hidden className="h-5 w-5 text-mcs-error-fg" />
-          <span className="text-mcs-sm text-mcs-error-fg">加载失败：{getFriendlyErrorText(error)}</span>
-        </div>
-      </td>
-    </tr>
+    <thead className="sticky top-0 bg-mcs-bg-muted">
+      <tr className="border-b border-mcs-border-muted text-left">
+        <th className="px-3 py-2 font-medium text-mcs-text-subtle">时间</th>
+        <th className="px-3 py-2 font-medium text-mcs-text-subtle">操作</th>
+        <th className="px-3 py-2 font-medium text-mcs-text-subtle">目标</th>
+        <th className="px-3 py-2 font-medium text-mcs-text-subtle">详情</th>
+      </tr>
+    </thead>
   )
 }
 
-/** 分页条（两 Tab 共用；isFetching 期间禁用翻页避免竞态） */
-function PaginationBar({
-  page,
-  pagination,
-  isFetching,
-  onPage,
-}: {
-  page: number
-  pagination: Pagination | undefined
-  isFetching: boolean
-  onPage: (page: number) => void
-}) {
-  const totalPages = pagination?.totalPages ?? null
-  const total = pagination?.total ?? null
+/** 审计日志表体 */
+function AuditBody({ logs }: { logs: AuditLogItem[] }) {
   return (
-    <div className="flex items-center justify-between">
-      <span className="text-mcs-xs text-mcs-text-subtle">
-        {total != null && totalPages != null
-          ? <>第 {page} / {totalPages} 页 · 共 {total} 条</>
-          : <>第 {page} 页</>}
-      </span>
-      <div className="flex gap-1">
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={isFetching || page <= 1}
-          onClick={() => onPage(page - 1)}
-        >
-          上一页
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={isFetching || (totalPages != null && page >= totalPages)}
-          onClick={() => onPage(page + 1)}
-        >
-          下一页
-        </Button>
-      </div>
-    </div>
+    <tbody>
+      {logs.map((log) => (
+        <tr key={log.id} className="border-b border-mcs-border-muted last:border-b-0">
+          <td className="whitespace-nowrap px-3 py-2 text-mcs-text-default font-mono text-mcs-xs">{formatTime(log.createdAt)}</td>
+          <td className="px-3 py-2">
+            <Badge variant="outline" className="border-mcs-border-muted text-mcs-text-default">
+              {getActionLabel(log.action)}
+            </Badge>
+          </td>
+          <td className="px-3 py-2 text-mcs-text-default">{log.targetType ? `${log.targetType}${log.targetId ? `: ${log.targetId}` : ''}` : '-'}</td>
+          <td className="max-w-xs truncate px-3 py-2 text-mcs-text-subtle">
+            {log.detail ? (typeof log.detail === 'object' ? JSON.stringify(log.detail) : String(log.detail)) : '-'}
+          </td>
+        </tr>
+      ))}
+    </tbody>
+  )
+}
+
+/** 命令历史表头 */
+function CmdHeader() {
+  return (
+    <thead className="sticky top-0 bg-mcs-bg-muted">
+      <tr className="border-b border-mcs-border-muted text-left">
+        <th className="px-3 py-2 font-medium text-mcs-text-subtle">时间</th>
+        <th className="px-3 py-2 font-medium text-mcs-text-subtle">命令</th>
+        <th className="px-3 py-2 font-medium text-mcs-text-subtle">结果</th>
+        <th className="px-3 py-2 font-medium text-mcs-text-subtle">来源</th>
+        <th className="px-3 py-2 font-medium text-mcs-text-subtle">耗时</th>
+      </tr>
+    </thead>
+  )
+}
+
+/** 命令历史表体 */
+function CmdBody({ cmds }: { cmds: CommandHistoryItem[] }) {
+  return (
+    <tbody>
+      {cmds.map((cmd) => (
+        <tr key={cmd.id} className="border-b border-mcs-border-muted last:border-b-0">
+          <td className="whitespace-nowrap px-3 py-2 text-mcs-text-default font-mono text-mcs-xs">{formatTime(cmd.createdAt)}</td>
+          <td className="px-3 py-2 font-mono text-mcs-text-default">{cmd.command}</td>
+          <td className="px-3 py-2">
+            <Badge variant={cmd.success ? 'outline' : 'destructive'} className={cmd.success ? 'border-mcs-border-muted text-mcs-text-default' : ''}>
+              {cmd.success ? '成功' : '失败'}
+            </Badge>
+          </td>
+          <td className="px-3 py-2 text-mcs-text-subtle">{cmd.source}</td>
+          <td className="px-3 py-2 text-mcs-text-subtle font-mono text-mcs-xs">{formatDuration(cmd.durationMs)}</td>
+        </tr>
+      ))}
+    </tbody>
   )
 }
 
 export function AuditPage() {
   const [tab, setTab] = useState('audit')
 
-  // 审计日志查询（action 变化自动回第 1 页由过滤器 onChange 保证）
   const [auditPage, setAuditPage] = useState(1)
   const [auditAction, setAuditAction] = useState('')
   const auditQuery = useAuditLogs({ page: auditPage, pageSize: 20, action: auditAction || undefined })
 
-  // 命令历史查询
   const [cmdPage, setCmdPage] = useState(1)
   const cmdQuery = useCommandHistory({ page: cmdPage, pageSize: 20 })
 
@@ -128,7 +143,6 @@ export function AuditPage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4 p-4">
-      {/* 页面头 */}
       <div className="flex items-center gap-3">
         <div>
           <h2 className="text-mcs-xl font-semibold text-mcs-text-default">审计</h2>
@@ -156,9 +170,7 @@ export function AuditPage() {
           <TabsTrigger value="commands">命令历史</TabsTrigger>
         </TabsList>
 
-        {/* ── 审计日志 Tab ── */}
         <TabsContent value="audit" className="min-h-0 flex-1 flex flex-col gap-3 mt-3">
-          {/* 过滤栏 */}
           <div className="flex items-center gap-2">
             <select
               className="h-8 rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-muted px-2 text-mcs-sm text-mcs-text-default"
@@ -173,110 +185,47 @@ export function AuditPage() {
             </select>
           </div>
 
-          {/* 表格 */}
-          <div className="min-h-0 flex-1 overflow-auto rounded-mcs-md border border-mcs-border-muted">
-            <table className="w-full text-mcs-sm">
-              <thead className="sticky top-0 bg-mcs-bg-muted">
-                <tr className="border-b border-mcs-border-muted text-left">
-                  <th className="px-3 py-2 font-medium text-mcs-text-subtle">时间</th>
-                  <th className="px-3 py-2 font-medium text-mcs-text-subtle">操作</th>
-                  <th className="px-3 py-2 font-medium text-mcs-text-subtle">目标</th>
-                  <th className="px-3 py-2 font-medium text-mcs-text-subtle">详情</th>
-                </tr>
-              </thead>
-              <tbody>
-                {auditQuery.isError && <ErrorRow colSpan={4} error={auditQuery.error} />}
-                {!auditQuery.isError && auditQuery.isLoading &&
-                  Array.from({ length: 5 }, (_, i) => (
-                    <tr key={`audit-skeleton-${i}`} className="border-b border-mcs-border-muted last:border-b-0" aria-hidden>
-                      <td className="px-3 py-2"><Skeleton className="h-3.5 w-20" /></td>
-                      <td className="px-3 py-2"><Skeleton className="h-5 w-14" /></td>
-                      <td className="px-3 py-2"><Skeleton className="h-3.5 w-24" /></td>
-                      <td className="px-3 py-2"><Skeleton className="h-3.5 w-36" /></td>
-                    </tr>
-                  ))
-                }
-                {!auditQuery.isError && !auditQuery.isLoading && auditQuery.data?.data.length === 0 && (
-                  <tr><td colSpan={4} className="px-3 py-8 text-center text-mcs-text-subtle">暂无记录</td></tr>
-                )}
-                {auditQuery.data?.data.map((log: import('@/api/types').AuditLogItem) => (
-                  <tr key={log.id} className="border-b border-mcs-border-muted last:border-b-0">
-                    <td className="whitespace-nowrap px-3 py-2 text-mcs-text-default font-mono text-mcs-xs">{formatTime(log.createdAt)}</td>
-                    <td className="px-3 py-2">
-                      <Badge variant="outline" className="border-mcs-border-muted text-mcs-text-default">
-                        {getActionLabel(log.action)}
-                      </Badge>
-                    </td>
-                    <td className="px-3 py-2 text-mcs-text-default">{log.targetType ? `${log.targetType}${log.targetId ? `: ${log.targetId}` : ''}` : '-'}</td>
-                    <td className="max-w-xs truncate px-3 py-2 text-mcs-text-subtle">
-                      {log.detail ? (typeof log.detail === 'object' ? JSON.stringify(log.detail) : String(log.detail)) : '-'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <PaginationBar
-            page={auditPage}
-            pagination={auditQuery.data?.pagination}
-            isFetching={auditQuery.isFetching}
-            onPage={setAuditPage}
-          />
+          <DataTableShell
+            columns={AUDIT_COLUMNS}
+            isLoading={auditQuery.isLoading}
+            error={auditQuery.isError ? auditQuery.error : undefined}
+            isEmpty={!auditQuery.isLoading && !auditQuery.isError && auditQuery.data?.data.length === 0}
+            emptyText="暂无记录"
+            skeletonWidths={['w-20', 'w-14', 'w-24', 'w-36']}
+            header={<AuditHeader />}
+            pagination={auditQuery.data?.pagination ? {
+              page: auditPage,
+              totalPages: auditQuery.data.pagination.totalPages,
+              totalItems: auditQuery.data.pagination.total,
+              onPageChange: setAuditPage,
+              variant: 'prev-next',
+              disabled: auditQuery.isFetching,
+            } : undefined}
+          >
+            <AuditBody logs={auditQuery.data?.data ?? []} />
+          </DataTableShell>
         </TabsContent>
 
-        {/* ── 命令历史 Tab ── */}
         <TabsContent value="commands" className="min-h-0 flex-1 flex flex-col gap-3 mt-3">
-          <div className="min-h-0 flex-1 overflow-auto rounded-mcs-md border border-mcs-border-muted">
-            <table className="w-full text-mcs-sm">
-              <thead className="sticky top-0 bg-mcs-bg-muted">
-                <tr className="border-b border-mcs-border-muted text-left">
-                  <th className="px-3 py-2 font-medium text-mcs-text-subtle">时间</th>
-                  <th className="px-3 py-2 font-medium text-mcs-text-subtle">命令</th>
-                  <th className="px-3 py-2 font-medium text-mcs-text-subtle">结果</th>
-                  <th className="px-3 py-2 font-medium text-mcs-text-subtle">来源</th>
-                  <th className="px-3 py-2 font-medium text-mcs-text-subtle">耗时</th>
-                </tr>
-              </thead>
-              <tbody>
-                {cmdQuery.isError && <ErrorRow colSpan={5} error={cmdQuery.error} />}
-                {!cmdQuery.isError && cmdQuery.isLoading &&
-                  Array.from({ length: 5 }, (_, i) => (
-                    <tr key={`cmd-skeleton-${i}`} className="border-b border-mcs-border-muted last:border-b-0" aria-hidden>
-                      <td className="px-3 py-2"><Skeleton className="h-3.5 w-20" /></td>
-                      <td className="px-3 py-2"><Skeleton className="h-3.5 w-40" /></td>
-                      <td className="px-3 py-2"><Skeleton className="h-5 w-10" /></td>
-                      <td className="px-3 py-2"><Skeleton className="h-3.5 w-14" /></td>
-                      <td className="px-3 py-2"><Skeleton className="h-3.5 w-12" /></td>
-                    </tr>
-                  ))
-                }
-                {!cmdQuery.isError && !cmdQuery.isLoading && cmdQuery.data?.data.length === 0 && (
-                  <tr><td colSpan={5} className="px-3 py-8 text-center text-mcs-text-subtle">暂无记录</td></tr>
-                )}
-                {cmdQuery.data?.data.map((cmd: import('@/api/types').CommandHistoryItem) => (
-                  <tr key={cmd.id} className="border-b border-mcs-border-muted last:border-b-0">
-                    <td className="whitespace-nowrap px-3 py-2 text-mcs-text-default font-mono text-mcs-xs">{formatTime(cmd.createdAt)}</td>
-                    <td className="px-3 py-2 font-mono text-mcs-text-default">{cmd.command}</td>
-                    <td className="px-3 py-2">
-                      <Badge variant={cmd.success ? 'outline' : 'destructive'} className={cmd.success ? 'border-mcs-border-muted text-mcs-text-default' : ''}>
-                        {cmd.success ? '成功' : '失败'}
-                      </Badge>
-                    </td>
-                    <td className="px-3 py-2 text-mcs-text-subtle">{cmd.source}</td>
-                    <td className="px-3 py-2 text-mcs-text-subtle font-mono text-mcs-xs">{formatDuration(cmd.durationMs)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <PaginationBar
-            page={cmdPage}
-            pagination={cmdQuery.data?.pagination}
-            isFetching={cmdQuery.isFetching}
-            onPage={setCmdPage}
-          />
+          <DataTableShell
+            columns={CMD_COLUMNS}
+            isLoading={cmdQuery.isLoading}
+            error={cmdQuery.isError ? cmdQuery.error : undefined}
+            isEmpty={!cmdQuery.isLoading && !cmdQuery.isError && cmdQuery.data?.data.length === 0}
+            emptyText="暂无记录"
+            skeletonWidths={['w-20', 'w-40', 'w-10', 'w-14', 'w-12']}
+            header={<CmdHeader />}
+            pagination={cmdQuery.data?.pagination ? {
+              page: cmdPage,
+              totalPages: cmdQuery.data.pagination.totalPages,
+              totalItems: cmdQuery.data.pagination.total,
+              onPageChange: setCmdPage,
+              variant: 'prev-next',
+              disabled: cmdQuery.isFetching,
+            } : undefined}
+          >
+            <CmdBody cmds={cmdQuery.data?.data ?? []} />
+          </DataTableShell>
         </TabsContent>
       </Tabs>
     </div>
