@@ -26,6 +26,7 @@ import { StatusPill } from '@/components/mcs/status-pill'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { PageHeader } from '@/components/mcs/page-header'
+import { EmptyState } from '@/components/mcs/empty-state'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
   DialogDescription, DialogFooter,
@@ -163,16 +164,14 @@ export default function WebhookPage() {
             ))}
           </div>
         ) : webhooks.length === 0 ? (
-          /* 空态 */
-          <div className="flex flex-col items-center gap-1.5 px-4 py-12 text-center">
-            <WebhookIcon className="size-8 text-mcs-text-subtle opacity-60" aria-hidden />
-            <p className="mt-1 text-mcs-sm text-mcs-text-muted">暂无 Webhook</p>
-            <p className="text-mcs-xs text-mcs-text-subtle">点击新建添加外部通知通道</p>
-            <Button variant="outline" size="sm" className="mt-2" onClick={openCreate}>
-              <Plus className="size-3.5" aria-hidden />
-              新建 Webhook
-            </Button>
-          </div>
+          /* 空态（EmptyState 统一组件；绿实底 CTA 为页面主行动） */
+          <EmptyState
+            icon={WebhookIcon}
+            title="暂无 Webhook"
+            hint="点击新建添加外部通知通道"
+            action={{ label: '新建 Webhook', onClick: openCreate }}
+            actionVariant="greenFilled"
+          />
         ) : (
           <div className="divide-y divide-mcs-border-subtle">
             {webhooks.map((w: Webhook) => (
