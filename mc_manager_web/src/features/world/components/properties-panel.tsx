@@ -134,9 +134,13 @@ export function PropertiesPanel({ properties, isLoading, onSave, onEditingChange
     const text = restartItems
       .map((item) => `${item.label}（${item.key}）：${item.oldValue} → ${item.newValue}`)
       .join('\n')
-    await navigator.clipboard.writeText(text)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      toast.error('复制失败')
+    }
   }
 
   /** Dialog 内触发重启（二次确认后执行） */
