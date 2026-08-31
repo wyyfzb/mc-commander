@@ -289,6 +289,31 @@ describe('FileList', () => {
     view.rerender(<FileList {...baseFileListProps} dir="/world" />)
     expect(await screen.findByText('此文件夹为空')).toBeInTheDocument()
   })
+
+  it('错误状态显示失败原因 + 重试按钮，重试成功后显示文件列表', async () => {
+    let callCount = 0
+    server.use(
+      http.get('*/api/v1/instances/:id/files', () => {
+        callCount++
+        if (callCount === 1) {
+          return HttpResponse.json(
+            { status: 'error', code: 500, message: '目录不存在', data: null, timestamp: new Date().toISOString() },
+            { status: 500 },
+          )
+        }
+        return ok({ path: '/', isDirectory: true, files: [fakeEntry({ name: 'recovered.txt' })] })
+      }),
+    )
+    renderWithClient(<FileList {...baseFileListProps} />)
+    // 错误状态：显示失败原因 + 重试按钮
+    expect(await screen.findByText(/^加载失败：/)).toBeInTheDocument()
+    const retryBtn = screen.getByRole('button', { name: '重试' })
+    expect(retryBtn).toBeEnabled()
+    // 点击重试 → 第二次请求成功 → 文件列表出现
+    fireEvent.click(retryBtn)
+    expect(await screen.findByText('recovered.txt')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '重试' })).not.toBeInTheDocument()
+  })
 })
 
 describe('DirTree', () => {
