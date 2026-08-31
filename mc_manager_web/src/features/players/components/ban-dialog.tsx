@@ -7,6 +7,7 @@
  */
 import { useState } from 'react'
 import { Loader2 } from 'lucide-react'
+import { DangerButton } from '@/components/mcs/danger-button'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -197,10 +198,10 @@ function BanFormContent({ player, onConfirm, onOpenChange }: Omit<BanDialogProps
         <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
           取消
         </Button>
-        <Button variant="destructive" onClick={handleConfirm} disabled={submitting}>
+        <DangerButton onClick={handleConfirm} disabled={submitting}>
           {submitting && <Loader2 className="animate-spin" aria-hidden />}
           封禁{selectedDuration?.label ? `（${selectedDuration.label}）` : ''}
-        </Button>
+        </DangerButton>
       </DialogFooter>
     </>
   )

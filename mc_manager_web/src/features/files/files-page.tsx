@@ -21,6 +21,7 @@ import { queryKeys } from '@/api/queries'
 import { useConnectionStore } from '@/stores/connection'
 import { isBinaryFileName } from '@/lib/mc-files'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { DangerButton } from '@/components/mcs/danger-button'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { Input } from '@/components/ui/input'
@@ -532,8 +533,7 @@ export function FilesPage() {
             >
               留下
             </Button>
-            <Button
-              variant="destructive"
+            <DangerButton
               onClick={() => {
                 setCloseConfirmOpen(false)
                 setSelectedPath(null)
@@ -543,7 +543,7 @@ export function FilesPage() {
               }}
             >
               放弃修改并离开
-            </Button>
+            </DangerButton>
           </DialogFooter>
         </DialogContent>
       </Dialog>
