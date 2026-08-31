@@ -47,6 +47,9 @@ const WebhookPage = lazy(() =>
 const OnboardingPageLazy = lazy(() =>
   import('@/features/onboarding/onboarding-page').then((m) => ({ default: m.OnboardingPage })),
 )
+const AuditPageLazy = lazy(() =>
+  import('@/features/audit/audit-page').then((m) => ({ default: m.AuditPage })),
+)
 const EmergencyPageLazy = lazy(() =>
   import('@/features/emergency/emergency-page').then((m) => ({ default: m.EmergencyPage })),
 )
@@ -91,6 +94,7 @@ export const router = createBrowserRouter([
       { path: 'plugins', Component: PluginsPage },
       { path: 'instances', Component: InstancesPage },
       { path: 'webhooks', Component: WebhookPage },
+      { path: 'audit', Component: AuditPageLazy },
       {
         path: 'settings',
         Component: SettingsPage,

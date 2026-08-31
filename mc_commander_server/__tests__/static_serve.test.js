@@ -41,6 +41,7 @@ describe('静态托管 + SPA fallback', () => {
     expect(html.text).toContain('test-app');
     expect(js.status).toBe(200);
     expect(js.headers['content-type']).toMatch(/javascript/);
+    expect(js.headers['cache-control']).toMatch(/max-age=604800/);
   });
 
   it('SPA 深链接：GET /players?q=x 回退到 index.html', async () => {
@@ -52,6 +53,7 @@ describe('静态托管 + SPA fallback', () => {
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toMatch(/text\/html/);
     expect(res.text).toContain('spa');
+    expect(res.headers['cache-control']).toBe('no-cache');
   });
 
   it('/api/ 不受静态层影响：命中路由返回 JSON，未命中仍 JSON 404', async () => {

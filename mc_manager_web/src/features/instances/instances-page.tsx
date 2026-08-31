@@ -112,6 +112,7 @@ export function InstancesPage() {
     if (!uninstallTarget) return
     const target = uninstallTarget
     setUninstallTarget(null)
+    setUninstallInput('')
     try {
       await uninstallMutation.mutateAsync(target.id)
       toast.success(`实例 "${target.name}" 已卸载`)

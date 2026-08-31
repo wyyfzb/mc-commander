@@ -19,7 +19,7 @@ import { setupWebSocket } from './websocket.js';
 import { BackupModel } from './db/backup.model.js';
 import { setupWebhookDispatch } from './services/webhook.service.js';
 import { BackupService } from './services/backup.service.js';
-import { initDatabase, InstanceModel } from './db/index.js';
+import { initDatabase, getDb, InstanceModel } from './db/index.js';
 
 // 启动前校验关键配置（在 listen 之前）
 if (!config.apiKey || config.apiKey === '') {
@@ -154,6 +154,16 @@ app.use(errorHandler);
 setupWebhookDispatch(serverManager);
 setupWebSocket(wss, serverManager);
 
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`错误: 端口 ${config.port} 已被占用，请修改 .env 的 PORT 配置或停止占用该端口的进程。`);
+    process.exit(1);
+    return;
+  }
+  // 其他 listen 错误仍按 Node.js 默认行为抛出
+  throw err;
+});
+
 server.listen(config.port, '0.0.0.0', () => {
   console.log(`========================================`);
   console.log(`  MC_Commander Server v${SERVER_VERSION}`);
@@ -206,7 +216,7 @@ server.listen(config.port, '0.0.0.0', () => {
   console.log(`========================================`);
 });
 
-// 优雅停机：先 await stopAll（stop 命令送达 + 等待 MC 正常退出，超时强杀兜底），再关闭 HTTP/WS 服务退出。
+// 优雅停机：停实例 → 关 WS → 关 DB → 关 HTTP，确保 WAL 刷盘且连接不泄漏
 async function shutdown(signal) {
   console.log(`${signal} received, shutting down...`);
   taskScheduler.stop();
@@ -215,12 +225,21 @@ async function shutdown(signal) {
   } catch (e) {
     console.error('Failed to stop instances gracefully:', e.message);
   }
-  server.close(() => {
-    console.log('Server closed');
-    process.exit(0);
+  wss.close(() => {
+    console.log('WebSocket server closed');
+    try {
+      getDb().close();
+      console.log('Database closed');
+    } catch (e) {
+      console.error('Failed to close database:', e.message);
+    }
+    server.close(() => {
+      console.log('Server closed');
+      process.exit(0);
+    });
+    // 兜底：server.close 回调未触发也强制退出
+    setTimeout(() => process.exit(0), 3000).unref();
   });
-  // 兜底：server.close 回调未触发（如 WS 连接未断开）也强制退出
-  setTimeout(() => process.exit(0), 3000).unref();
 }
 
 process.on('SIGTERM', () => shutdown('SIGTERM'));

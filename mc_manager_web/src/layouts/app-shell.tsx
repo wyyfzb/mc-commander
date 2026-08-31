@@ -5,6 +5,7 @@ import { AppSidebar } from './app-sidebar'
 import { CommandPalette } from './command-palette'
 import { CommandBridge } from './command-bridge'
 import { DegradationBanners } from './degradation-banners'
+import { ErrorBoundary } from '@/components/mcs/error-boundary'
 import { useUiStore } from '@/stores/ui'
 import { useServerStore } from '@/stores/server'
 import { useInstances } from '@/api/queries'
@@ -65,7 +66,9 @@ export function AppShell() {
         {/* 降级横幅：WS 断开/RCON 未连接时的诚实提示 + 处置入口 */}
         <DegradationBanners />
         <main id="main-content" tabIndex={-1} className="min-h-0 flex-1 overflow-y-auto focus-visible:outline-none">
-          <Outlet />
+          <ErrorBoundary>
+            <Outlet />
+          </ErrorBoundary>
         </main>
       </div>
       <CommandPalette />

@@ -261,3 +261,69 @@ describe('BackupPanel 立即备份', () => {
     expect(await screen.findByText('操作失败：已有备份任务进行中')).toBeInTheDocument()
   })
 })
+
+describe('BackupPanel 列表截断与展开', () => {
+  /** 生成 12 条虚构备份（超出 10 条截断阈值） */
+  function makeManyBackups(count: number): BackupItem[] {
+    return Array.from({ length: count }, (_, i) => ({
+      ...mockBackups[0]!,
+      id: 100 + i,
+      name: `批量备份 ${String(i + 1).padStart(2, '0')}`,
+      createdAt: new Date(Date.now() - i * 86_400_000).toISOString(),
+    }))
+  }
+
+  it('不超过 10 条：不显示截断提示', async () => {
+    const few = makeManyBackups(5)
+    server.use(http.get('*/api/v1/instances/:id/backups', () => okEnvelope(few)))
+    renderPanel()
+    await screen.findByText('批量备份 01')
+    expect(screen.queryByText(/显示全部/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/共 \d+ 条备份/)).not.toBeInTheDocument()
+  })
+
+  it('超过 10 条：显示「共 N 条备份，已显示 10 条」+「显示全部」按钮', async () => {
+    const many = makeManyBackups(12)
+    server.use(http.get('*/api/v1/instances/:id/backups', () => okEnvelope(many)))
+    renderPanel()
+    await screen.findByText('批量备份 01')
+    // 截断提示
+    expect(screen.getByText(/共 12 条备份，已显示 10 条/)).toBeInTheDocument()
+    const expandBtn = screen.getByRole('button', { name: '显示全部' })
+    expect(expandBtn).toBeInTheDocument()
+    // 默认只渲染 10 条
+    expect(screen.queryByText('批量备份 11')).not.toBeInTheDocument()
+  })
+
+  it('点击「显示全部」→ 展开全部 → 提示变为「共 N 条备份」+「收起」按钮', async () => {
+    const user = userEvent.setup()
+    const many = makeManyBackups(12)
+    server.use(http.get('*/api/v1/instances/:id/backups', () => okEnvelope(many)))
+    renderPanel()
+    await screen.findByText('批量备份 01')
+    // 展开
+    await user.click(screen.getByRole('button', { name: '显示全部' }))
+    // 全部 12 条可见
+    expect(screen.getByText('批量备份 12')).toBeInTheDocument()
+    // 提示文案变更
+    expect(screen.getByText(/共 12 条备份/)).toBeInTheDocument()
+    expect(screen.queryByText(/已显示 10 条/)).not.toBeInTheDocument()
+    // 收起按钮
+    expect(screen.getByRole('button', { name: '收起' })).toBeInTheDocument()
+  })
+
+  it('展开后点击「收起」→ 恢复截断显示', async () => {
+    const user = userEvent.setup()
+    const many = makeManyBackups(12)
+    server.use(http.get('*/api/v1/instances/:id/backups', () => okEnvelope(many)))
+    renderPanel()
+    await screen.findByText('批量备份 01')
+    // 展开
+    await user.click(screen.getByRole('button', { name: '显示全部' }))
+    expect(screen.getByText('批量备份 12')).toBeInTheDocument()
+    // 收起
+    await user.click(screen.getByRole('button', { name: '收起' }))
+    expect(screen.queryByText('批量备份 11')).not.toBeInTheDocument()
+    expect(screen.getByText(/共 12 条备份，已显示 10 条/)).toBeInTheDocument()
+  })
+})

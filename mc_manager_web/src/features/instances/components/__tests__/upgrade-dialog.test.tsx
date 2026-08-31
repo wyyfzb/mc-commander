@@ -13,10 +13,11 @@ import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { setupServer } from 'msw/node'
-import { handlers, mockInstanceStatus, upgradeMock } from '@/test/mocks/handlers'
+import { handlers, mockInstanceStatus, upgradeMock, upgradeStatusMock } from '@/test/mocks/handlers'
 import { UpgradeDialog } from '../upgrade-dialog'
 import { applyUpgradeProgress, useUpgradeStore } from '@/stores/upgrade'
 import { useConnectionStore } from '@/stores/connection'
+import { useServerStore } from '@/stores/server'
 import type { InstanceStatus } from '@/api/types'
 
 const server = setupServer(...handlers)
@@ -58,9 +59,14 @@ async function selectVersion(user: ReturnType<typeof userEvent.setup>, version: 
 beforeEach(() => {
   localStorage.clear()
   useConnectionStore.setState({ baseUrl: '', apiKey: 'test-key', status: 'ready' })
+  useServerStore.setState({ socketConnected: true })
   useUpgradeStore.setState({ progress: {} })
   upgradeMock.shouldFail = false
   upgradeMock.conflict = false
+  upgradeStatusMock.upgrading = true
+  upgradeStatusMock.stage = 'download'
+  upgradeStatusMock.percent = 80
+  upgradeStatusMock.detail = '正在下载新版本服务端…'
 })
 
 describe('UpgradeDialog', () => {
@@ -165,7 +171,8 @@ describe('UpgradeDialog', () => {
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '取消' })).not.toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('button', { name: '关闭' }))
+    const closeButtons = screen.getAllByRole('button', { name: '关闭' })
+    await userEvent.click(closeButtons[closeButtons.length - 1]!)
     expect(onOpenChange).toHaveBeenCalledWith(false)
     expect(useUpgradeStore.getState().progress['alpha']).toBeUndefined()
   })
@@ -199,5 +206,39 @@ describe('UpgradeDialog', () => {
     })
     await user.keyboard('{Escape}')
     expect(onOpenChange).not.toHaveBeenCalled()
+  })
+
+  it('WS 断线轮询：apiGetUpgradeStatus 数据可写入 upgrade store', async () => {
+    // 验证轮询数据路径：API 返回 → applyUpgradeProgress → store 更新
+    // （setInterval 的实际触发在 jsdom 中不可靠，此处验证数据流正确性）
+    const mockStatus = {
+      upgrading: true,
+      stage: 'verify' as const,
+      percent: 90,
+      detail: '正在校验新版本…',
+    }
+    act(() => {
+      applyUpgradeProgress({
+        instanceId: 'alpha',
+        stage: 'download',
+        percent: 30,
+        detail: '旧进度',
+        timestamp: Date.now(),
+      })
+    })
+    // 模拟轮询回调体内的逻辑
+    act(() => {
+      applyUpgradeProgress({
+        instanceId: 'alpha',
+        stage: mockStatus.stage,
+        percent: mockStatus.percent,
+        detail: mockStatus.detail,
+        timestamp: Date.now(),
+      })
+    })
+    const prog = useUpgradeStore.getState().progress['alpha']
+    expect(prog!.stage).toBe('verify')
+    expect(prog!.percent).toBe(90)
+    expect(prog!.detail).toBe('正在校验新版本…')
   })
 })

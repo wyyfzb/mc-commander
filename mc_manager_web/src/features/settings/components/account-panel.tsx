@@ -77,7 +77,7 @@ function SectionCard({
   children: React.ReactNode
 }) {
   return (
-    <section className="rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-card p-5">
+    <section className="rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-default p-5">
       <div className="mb-4 flex items-start gap-3">
         <div className="flex size-8 shrink-0 items-center justify-center rounded-mcs-sm bg-mcs-accent-bg-subtle">
           <Icon className="size-4 text-mcs-accent-fg" aria-hidden />

@@ -135,7 +135,9 @@ export function AppTopBar() {
         <DropdownMenuContent align="start" className="w-56">
           <DropdownMenuLabel>服务器实例</DropdownMenuLabel>
           {(instancesQuery.data ?? []).length === 0 && (
-            <DropdownMenuItem disabled>暂无实例</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => navigate('/instances?tab=deploy')}>
+              暂无实例，前往部署
+            </DropdownMenuItem>
           )}
           {(instancesQuery.data ?? []).map((inst) => (
             <DropdownMenuItem

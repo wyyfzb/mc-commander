@@ -9,14 +9,17 @@ import { checkApiKeyStrength } from '../index.js';
 const h = vi.hoisted(() => {
   const appUse = vi.fn();
   const app = { use: appUse, set: vi.fn() };
+  const serverOn = vi.fn();
   const server = {
     listen: vi.fn((port, host, cb) => typeof cb === 'function' && cb()),
+    on: serverOn,
     close: vi.fn((cb) => typeof cb === 'function' && cb()),
   };
   return {
     apiKey: 'mock-strong-key-0123456789abcdef',
     app,
     server,
+    serverOn,
     appUse,
     wsOpts: null,
   };
@@ -212,5 +215,67 @@ describe('API Key 强度校验', () => {
       await resetAndImport();
       expect(exitSpy).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('端口占用错误处理（EADDRINUSE）', () => {
+  let exitSpy;
+  let errorSpy;
+
+  beforeAll(() => {
+    exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {});
+    errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterAll(() => {
+    exitSpy.mockRestore();
+    errorSpy.mockRestore();
+    vi.unstubAllEnvs();
+  });
+
+  beforeEach(() => {
+    exitSpy.mockClear();
+    errorSpy.mockClear();
+    h.serverOn.mockClear();
+    vi.unstubAllEnvs();
+    vi.stubEnv('NODE_ENV', 'development');
+    h.apiKey = STRONG_KEY;
+  });
+
+  it('server.listen 前应注册 error 事件监听', async () => {
+    await resetAndImport();
+    expect(h.serverOn).toHaveBeenCalledWith('error', expect.any(Function));
+  });
+
+  it('EADDRINUSE 错误应输出友好提示并以 exit code 1 退出', async () => {
+    await resetAndImport();
+    const errorHandler = h.serverOn.mock.calls.find(
+      ([event]) => event === 'error',
+    )?.[1];
+    expect(errorHandler).toBeDefined();
+
+    const err = new Error('port in use');
+    err.code = 'EADDRINUSE';
+    errorHandler(err);
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('端口'),
+    );
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('.env'),
+    );
+    expect(exitSpy).toHaveBeenCalledWith(1);
+  });
+
+  it('非 EADDRINUSE 错误应抛出（不吞掉）', async () => {
+    await resetAndImport();
+    const errorHandler = h.serverOn.mock.calls.find(
+      ([event]) => event === 'error',
+    )?.[1];
+    expect(errorHandler).toBeDefined();
+
+    const err = new Error('something else');
+    expect(() => errorHandler(err)).toThrow('something else');
+    expect(exitSpy).not.toHaveBeenCalled();
   });
 });
