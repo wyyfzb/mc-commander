@@ -51,6 +51,9 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run test
+      # 设计 token 守门（色板类/dark:/transition-all/动效/圆角 + 对比度）——与 lint/test 并列拦截
+      - run: npm run check:design-tokens
+      - run: npm run check:contrast
 
   web-e2e:
     name: 前端（build + e2e）

@@ -94,8 +94,8 @@ function walkDir(dir) {
       continue
     }
     if (!['.tsx','.ts','.jsx','.js'].includes(extname(entry.name))) continue
-    // 排除 shadcn UI 组件
-    if (fullPath.includes(EXCLUDE_DIR)) continue
+    // 排除 shadcn UI 组件（路径分隔符归一为正斜杠，兼容 Windows join 产生的反斜杠）
+    if (fullPath.replace(/\\/g, '/').includes(EXCLUDE_DIR)) continue
 
     const relPath = relative(root, fullPath)
     const lines = readFileSync(fullPath, 'utf-8').split('\n')
