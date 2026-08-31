@@ -28,8 +28,8 @@ import {
   XCircle,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { DangerButton } from '@/components/mcs/danger-button'
 import { Button } from '@/components/ui/button'
+import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import {
   Dialog,
   DialogContent,
@@ -684,27 +684,19 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
         )}
 
         {/* dirty 关闭拦截确认 */}
-        <Dialog open={closeConfirmOpen} onOpenChange={setCloseConfirmOpen}>
-          <DialogContent className="sm:max-w-sm">
-            <DialogHeader>
-              <DialogTitle>放弃部署配置？</DialogTitle>
-              <DialogDescription>当前配置尚未部署，关闭后表单内容将丢失。</DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setCloseConfirmOpen(false)}>
-                继续编辑
-              </Button>
-              <DangerButton
-                onClick={() => {
-                  setCloseConfirmOpen(false)
-                  handleClose()
-                }}
-              >
-                放弃配置
-              </DangerButton>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <ConfirmDialog
+          open={closeConfirmOpen}
+          onOpenChange={setCloseConfirmOpen}
+          title="放弃部署配置？"
+          description="当前配置尚未部署，关闭后表单内容将丢失。"
+          cancelText="继续编辑"
+          confirmText="放弃配置"
+          danger
+          onConfirm={() => {
+            setCloseConfirmOpen(false)
+            handleClose()
+          }}
+        />
       </DialogContent>
     </Dialog>
   )

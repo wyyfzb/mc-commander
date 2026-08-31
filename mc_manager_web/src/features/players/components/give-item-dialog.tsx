@@ -494,16 +494,16 @@ export function GiveItemPanel({
         onValueChange={(v) => setMainTab(v as 'items' | 'kits')}
         className="flex min-h-0 flex-1 flex-col"
       >
-        <TabsList className="h-8 w-full justify-start gap-0 rounded-none border-b border-mcs-border-muted bg-transparent p-0">
+        <TabsList variant="line" className="h-8 w-full justify-start gap-0 border-b border-mcs-border-muted p-0">
           <TabsTrigger
             value="items"
-            className="h-8 rounded-none border-b-2 border-transparent px-3 text-mcs-xs data-[state=active]:border-mcs-accent data-[state=active]:text-mcs-text-default data-[state=active]:shadow-none"
+            className="h-8 px-3 text-mcs-xs after:bg-mcs-accent"
           >
             物品选择
           </TabsTrigger>
           <TabsTrigger
             value="kits"
-            className="h-8 rounded-none border-b-2 border-transparent px-3 text-mcs-xs data-[state=active]:border-mcs-accent data-[state=active]:text-mcs-text-default data-[state=active]:shadow-none"
+            className="h-8 px-3 text-mcs-xs after:bg-mcs-accent"
           >
             预设礼包
           </TabsTrigger>

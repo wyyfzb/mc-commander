@@ -21,7 +21,6 @@ import { queryKeys } from '@/api/queries'
 import { useConnectionStore } from '@/stores/connection'
 import { isBinaryFileName } from '@/lib/mc-files'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { DangerButton } from '@/components/mcs/danger-button'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { Input } from '@/components/ui/input'
@@ -502,9 +501,8 @@ export function FilesPage() {
         </div>
       )}
 
-      {/* ── 关闭编辑器脏确认 ── */}
       {/* ── 未保存确认（关闭编辑器与路由守卫共用：guard.isBlocked 时离开即切页） ── */}
-      <Dialog
+      <ConfirmDialog
         open={closeConfirmOpen || guard.isBlocked}
         onOpenChange={(open) => {
           if (!open) {
@@ -512,38 +510,19 @@ export function FilesPage() {
             guard.cancel()
           }
         }}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>放弃未保存的修改？</DialogTitle>
-            <DialogDescription>
-              当前文件有未保存的更改，{guard.isBlocked ? '离开页面' : '关闭'}后将丢失这些修改。
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setCloseConfirmOpen(false)
-                guard.cancel()
-              }}
-            >
-              留下
-            </Button>
-            <DangerButton
-              onClick={() => {
-                setCloseConfirmOpen(false)
-                setSelectedPath(null)
-                originalRef.current = null
-                setDraft('')
-                guard.proceed()
-              }}
-            >
-              放弃修改并离开
-            </DangerButton>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        title="放弃未保存的修改？"
+        description={`当前文件有未保存的更改，${guard.isBlocked ? '离开页面' : '关闭'}后将丢失这些修改。`}
+        cancelText="留下"
+        confirmText="放弃修改并离开"
+        danger
+        onConfirm={() => {
+          setCloseConfirmOpen(false)
+          setSelectedPath(null)
+          originalRef.current = null
+          setDraft('')
+          guard.proceed()
+        }}
+      />
 
       {/* ── 删除确认（ConfirmDialog danger 模式） ── */}
       <ConfirmDialog
