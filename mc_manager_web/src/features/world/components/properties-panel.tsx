@@ -6,11 +6,12 @@
  * - 编辑值在组件 state，与 30s 轮询 query data 隔离，无需暂停轮询
  */
 import { useMemo, useState } from 'react'
-import { Copy, Check, Lock, Loader2, Pencil, RefreshCw, Save, Search, X } from 'lucide-react'
+import { Copy, Check, Lock, Loader2, Pencil, RefreshCw, Save, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { Chip } from '@/components/mcs/chip'
+import { SearchInput } from '@/components/mcs/search-input'
 import {
   Select,
   SelectContent,
@@ -232,16 +233,14 @@ export function PropertiesPanel({ properties, isLoading, onSave, onEditingChange
 
       {/* ── 搜索 + 分类 FilterChip ── */}
       <div className="flex flex-wrap items-center gap-1.5">
-        <div className="relative w-56">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-mcs-text-subtle" aria-hidden />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="搜索属性…"
-            className="h-7 pl-8 text-mcs-xs"
-            aria-label="搜索属性"
-          />
-        </div>
+        <SearchInput
+          value={search}
+          onValueChange={setSearch}
+          placeholder="搜索属性…"
+          aria-label="搜索属性"
+          size="sm"
+          className="w-56"
+        />
         {CATEGORY_LABELS.map((c) => (
           <Chip key={c.value} onClick={() => setCategory(c.value)} selected={category === c.value}>
             {c.label}

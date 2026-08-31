@@ -8,7 +8,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { DangerButton } from '@/components/mcs/danger-button'
+import { LoadingButton } from '@/components/mcs/loading-button'
 
 /**
  * ConfirmDialog —— Tasteful Friction 分级确认（设计文档 P2）
@@ -82,13 +82,13 @@ export function ConfirmDialog({
             {cancelText}
           </Button>
           {danger ? (
-            <DangerButton onClick={onConfirm} disabled={loading || confirmDisabled}>
-              {loading ? '处理中…' : confirmText}
-            </DangerButton>
+            <LoadingButton variant="destructive" loading={loading} loadingText="处理中…" onClick={onConfirm} disabled={confirmDisabled}>
+              {confirmText}
+            </LoadingButton>
           ) : (
-            <Button onClick={onConfirm} disabled={loading || confirmDisabled}>
-              {loading ? '处理中…' : confirmText}
-            </Button>
+            <LoadingButton loading={loading} loadingText="处理中…" onClick={onConfirm} disabled={confirmDisabled}>
+              {confirmText}
+            </LoadingButton>
           )}
         </DialogFooter>
       </DialogContent>

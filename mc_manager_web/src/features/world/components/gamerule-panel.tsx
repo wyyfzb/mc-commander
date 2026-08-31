@@ -10,13 +10,14 @@
  * - 解析失败：warning 提示 + 默认值态（可点刷新重试）
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AlertTriangle, Check, Plug, RefreshCw, Search, X } from 'lucide-react'
+import { AlertTriangle, Check, Plug, RefreshCw, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { Chip } from '@/components/mcs/chip'
+import { SearchInput } from '@/components/mcs/search-input'
 import { StatusPill } from '@/components/mcs/status-pill'
 import { toast } from 'sonner'
 import { ApiError } from '@/api/client'
@@ -185,16 +186,14 @@ export function GamerulePanel({ instanceId, mcVersion, isRconConnected, onSendCo
 
       {/* ── 搜索 + 分类 FilterChip ── */}
       <div className="flex flex-wrap items-center gap-1.5">
-        <div className="relative w-56">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-mcs-text-subtle" aria-hidden />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="搜索规则…"
-            className="h-7 pl-8 text-mcs-xs"
-            aria-label="搜索规则"
-          />
-        </div>
+        <SearchInput
+          value={search}
+          onValueChange={setSearch}
+          placeholder="搜索规则…"
+          aria-label="搜索规则"
+          size="sm"
+          className="w-56"
+        />
         <Chip onClick={() => setCategory('all')} selected={category === 'all'}>
           全部
         </Chip>
