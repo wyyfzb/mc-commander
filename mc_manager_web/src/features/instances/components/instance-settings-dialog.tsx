@@ -7,7 +7,7 @@
  * - 保存调 PUT /instances/:id（白名单 maxMemory/minMemory/jvmArgs/javaPath），成功后 toast +
  *   失效实例详情查询 + 关闭；遗留 startCommand 实例保存时一并传 startCommand:null 清除
  *   （否则 jvmArgs 空数组时 start() 回退旧命令，新配置被静默覆盖）
- * - 玻璃弹窗（glass-overlay）+ 表单输入实底（bg-mcs-bg-default）；token 纪律，禁硬编码
+ * - 弹窗实底（bg-mcs-bg-default）+ 表单输入实底；token 纪律，禁硬编码
  */
 import { useState } from 'react'
 import { ChevronDown, ChevronUp, Gauge, Info, Loader2, Save, Settings } from 'lucide-react'
@@ -257,7 +257,7 @@ export function InstanceSettingsDialog({
 
   return (
     <Dialog open onOpenChange={(open) => !open && onOpenChange(false)}>
-      <DialogContent className="glass-overlay max-h-[85vh] overflow-y-auto sm:max-w-lg">
+      <DialogContent className="bg-mcs-bg-default max-h-[85vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader className="flex-row items-center gap-3 space-y-0">
           <span className="flex size-9 shrink-0 items-center justify-center rounded-mcs-sm bg-mcs-accent-bg-subtle text-mcs-accent-fg">
             <Settings className="size-4.5" aria-hidden />

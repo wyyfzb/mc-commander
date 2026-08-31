@@ -105,7 +105,7 @@ export function BatchBar({ selectedPlayers, onOpenBatchDetail, onAction }: Batch
 
   return (
     <div className="pointer-events-auto fixed inset-x-0 bottom-4 z-40 flex justify-center">
-      <div className="glass-overlay flex max-w-[calc(100vw-2rem)] items-center gap-1.5 rounded-mcs-md border border-mcs-border-default px-3 py-2 shadow-lg">
+      <div className="bg-mcs-bg-default flex max-w-[calc(100vw-2rem)] items-center gap-1.5 rounded-mcs-md border border-mcs-border-default px-3 py-2 shadow-lg">
         <span className="mr-1 whitespace-nowrap text-mcs-sm font-medium text-mcs-text-default">
           已选择 {count} 名玩家
         </span>

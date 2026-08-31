@@ -1370,7 +1370,7 @@ function KitEditorDialog({
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="glass-overlay max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+      <DialogContent className="bg-mcs-bg-default max-h-[85vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{isNew ? '新建礼包' : '编辑礼包'}</DialogTitle>
           <DialogDescription className="sr-only">

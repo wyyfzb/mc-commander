@@ -284,7 +284,7 @@ export default function WebhookPage() {
 
       {/* ── 新建/编辑对话框 ── */}
       <Dialog open={showDialog} onOpenChange={(open) => { if (!open) closeDialog() }}>
-        <DialogContent className="glass-overlay sm:max-w-lg">
+        <DialogContent className="bg-mcs-bg-default sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>{editTarget ? '编辑 Webhook' : '新建 Webhook'}</DialogTitle>
             <DialogDescription>{editTarget ? '修改 Webhook 配置' : '创建新的外部通知通道'}</DialogDescription>
