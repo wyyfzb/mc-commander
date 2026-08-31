@@ -230,7 +230,7 @@ export function FileList({
   onDownload,
   downloadingPath = null,
 }: FileListProps) {
-  const { data, isLoading, isError } = useFileList(instanceId, dir)
+  const { data, isLoading, isError, error, refetch, isFetching } = useFileList(instanceId, dir)
 
   /** 规范化目录：去除尾部斜杠（根目录保持 '/'） */
   const normalizedDir = dir === '/' ? '/' : dir.replace(/\/+$/, '') || '/'
@@ -349,7 +349,20 @@ export function FileList({
           </div>
         )}
         {!isLoading && isError && (
-          <p className="px-4 py-10 text-center text-mcs-sm text-mcs-text-muted">加载失败，请稍后重试</p>
+          <div className="flex flex-col items-center gap-3 px-4 py-10">
+            <p className="text-mcs-sm text-mcs-text-muted">
+              加载失败：{error instanceof Error ? error.message : '未知错误'}
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isFetching}
+              onClick={() => void refetch()}
+            >
+              {isFetching ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <RefreshCw className="size-3.5" aria-hidden />}
+              重试
+            </Button>
+          </div>
         )}
         {!isLoading && !isError && isEmpty && (
           <div className="flex flex-col items-center gap-2 py-12 text-mcs-text-muted">
