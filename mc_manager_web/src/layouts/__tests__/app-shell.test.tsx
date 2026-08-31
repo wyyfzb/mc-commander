@@ -77,12 +77,11 @@ describe('AppShell', () => {
     expect(await screen.findByPlaceholderText('搜索玩家名或 UUID…')).toBeInTheDocument()
   })
 
-  it('主题切换更新 html class（dark ↔ light）', () => {
+  it('顶栏主题按钮切换 store 状态（html class 联动由根级 ThemeClassSync 负责）', () => {
     renderShell()
-    expect(document.documentElement.classList.contains('dark')).toBe(true)
     fireEvent.click(screen.getByRole('button', { name: /切换到亮色主题/ }))
-    expect(document.documentElement.classList.contains('light')).toBe(true)
-    expect(document.documentElement.classList.contains('dark')).toBe(false)
+    expect(screen.getByRole('button', { name: /切换到深色主题/ })).toBeInTheDocument()
+    expect(useUiStore.getState().theme).toBe('light')
   })
 
   it('Cmd+K 打开命令面板；选择页面命令跳转', async () => {
