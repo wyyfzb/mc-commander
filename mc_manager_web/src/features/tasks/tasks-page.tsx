@@ -92,6 +92,7 @@ export function TasksPage() {
   const handleToggle = async (task: ScheduledTask, enabled: boolean) => {
     try {
       await updateMutation.mutateAsync({ taskId: task.id, payload: { isEnabled: enabled } })
+      toast.success(`任务 "${task.name}" 已${enabled ? '启用' : '禁用'}`)
     } catch (e) {
       toast.error(`更新失败：${getFriendlyErrorText(e)}`)
     }
