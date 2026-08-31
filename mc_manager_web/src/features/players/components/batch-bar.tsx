@@ -17,7 +17,7 @@ import {
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { toast } from 'sonner'
 import { getFriendlyErrorText } from '@/api/errors'
-import { formatBatchSummary, runBatchForTargets } from '@/lib/mc-batch'
+import { formatBatchSummary, formatFailureDetails, runBatchForTargets } from '@/lib/mc-batch'
 import { GAME_MODE_OPTIONS, usePlayersUiStore } from '../store'
 import type { Player } from '@/api/types'
 import type { PlayerActionRequest } from '../mutations'
@@ -54,12 +54,14 @@ export function BatchBar({ selectedPlayers, onOpenBatchDetail, onAction }: Batch
         requireOnline,
         execute: (target) => execute(selectedPlayers.find((p) => p.name === target.name)!),
       })
+      const summary = formatBatchSummary(actionLabel, result)
+      const details = formatFailureDetails(result)
       if (result.allOffline) {
-        toast.warning(formatBatchSummary(actionLabel, result))
+        toast.warning(summary)
       } else if (result.failCount > 0) {
-        toast.warning(formatBatchSummary(actionLabel, result))
+        toast.warning(summary, { description: details })
       } else {
-        toast.success(formatBatchSummary(actionLabel, result))
+        toast.success(summary)
       }
     } catch (e) {
       toast.error(`批量操作失败：${getFriendlyErrorText(e)}`)

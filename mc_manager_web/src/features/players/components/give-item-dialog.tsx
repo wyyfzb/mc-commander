@@ -81,7 +81,7 @@ import {
   type KitItem,
   type KitPreset,
 } from '@/lib/mc-kits'
-import { formatBatchSummary, runBatchForTargets } from '@/lib/mc-batch'
+import { formatBatchSummary, formatFailureDetails, runBatchForTargets } from '@/lib/mc-batch'
 import type { Player } from '@/api/types'
 import type { PlayerActionRequest } from '../mutations'
 
@@ -438,8 +438,9 @@ export function GiveItemPanel({
           },
         })
         const summary = formatBatchSummary('给予', result)
+        const details = formatFailureDetails(result)
         if (result.allOffline || result.failCount > 0) {
-          toast.warning(summary)
+          toast.warning(summary, { description: details })
         } else {
           toast.success(summary)
         }
