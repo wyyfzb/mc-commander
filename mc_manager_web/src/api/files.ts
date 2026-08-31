@@ -86,10 +86,12 @@ export function apiUploadFile(
   config: ConnectionConfig,
   instanceId: string,
   file: File,
-  opts?: { onProgress?: (pct: number) => void; signal?: AbortSignal },
+  opts?: { onProgress?: (pct: number) => void; signal?: AbortSignal; targetDir?: string },
 ): Promise<{ path: string; name: string; size: number; modifiedAt: string; isDirectory: boolean }> {
+  const query = opts?.targetDir ? `targetDir=${encodeURIComponent(opts.targetDir)}` : undefined
   return uploadFileViaClient(`${base(instanceId)}/files/upload`, config, file, {
     fieldName: 'file',
+    query,
     onProgress: opts?.onProgress,
     signal: opts?.signal,
   })

@@ -138,20 +138,21 @@ export function useRenameFile(instanceId: string | null) {
   })
 }
 
-/** 上传文件（POST /files/upload multipart，服务端落地到实例根目录）；成功后失效根目录列表 */
+/** 上传文件（POST /files/upload multipart，支持 targetDir 指定目标目录）；成功后失效对应目录列表 */
 export function useUploadFile(instanceId: string | null) {
   const config = useConnectionStore()
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async ({ file }: { file: File }) => {
+    mutationFn: async ({ file, targetDir }: { file: File; targetDir?: string }) => {
       if (!instanceId) throw new Error('未选择实例')
-      return apiUploadFile(config, instanceId, file)
+      return apiUploadFile(config, instanceId, file, { targetDir })
     },
-    onSuccess: () => {
-      // 服务端固定落地到实例根目录（目标路径取清洗后的原始文件名）
+    onSuccess: (_data, variables) => {
+      // 失效目标目录的文件列表（默认根目录，与后端 targetDir 默认 '/' 一致）
+      const targetDir = variables.targetDir ?? '/'
       void queryClient.invalidateQueries({
-        queryKey: queryKeys.files(instanceId ?? '', '/'),
+        queryKey: queryKeys.files(instanceId ?? '', targetDir),
       })
     },
   })
