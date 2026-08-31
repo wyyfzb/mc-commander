@@ -1,7 +1,7 @@
 /**
  * 世界信息卡
  * 只读 9 行信息 + 刷新按钮；isLoading 显示骨架行；world 为 null 显示空态
- * 视觉纪律：实底卡（数据区禁玻璃）+ --mcs-* 语义 token；PillBadge 走状态色三元组
+ * 视觉纪律：实底卡（数据区禁玻璃）+ --mcs-* 语义 token；StatusPill 走状态色三元组
  * （--mcs-*-fg / --mcs-*-border / --mcs-*-bg-subtle），无任何硬编码色值
  */
 import type { ReactNode } from 'react'
@@ -55,20 +55,11 @@ export function formatGameMode(gameMode: string): string {
   }
 }
 
-// ── PillBadge（难度/游戏模式小徽章；颜色走 --mcs-*-border/bg-subtle/fg 三元组 token）──
-
-export type PillTone = 'info' | 'success' | 'warning' | 'error' | 'purple'
-
-const PILL_TONE_CLASS: Record<PillTone, string> = {
-  info: 'border-mcs-info-border bg-mcs-info-bg-subtle text-mcs-info-fg',
-  success: 'border-mcs-success-border bg-mcs-success-bg-subtle text-mcs-success-fg',
-  warning: 'border-mcs-warning-border bg-mcs-warning-bg-subtle text-mcs-warning-fg',
-  error: 'border-mcs-error-border bg-mcs-error-bg-subtle text-mcs-error-fg',
-  purple: 'border-mcs-purple-border bg-mcs-purple-bg-subtle text-mcs-purple-fg',
-}
+import { StatusPill } from '@/components/mcs/status-pill'
+import type { ChipTone } from '@/components/mcs/chip'
 
 /** 难度 → 状态色（peaceful→info / easy→success / hard→error / 其余→warning） */
-export function difficultyTone(difficulty: string): PillTone {
+export function difficultyTone(difficulty: string): ChipTone {
   switch (difficulty.toLowerCase()) {
     case 'peaceful':
       return 'info'
@@ -82,7 +73,7 @@ export function difficultyTone(difficulty: string): PillTone {
 }
 
 /** 游戏模式 → 状态色（survival→success / creative→info / adventure→warning / spectator→purple） */
-export function gameModeTone(gameMode: string): PillTone {
+export function gameModeTone(gameMode: string): ChipTone {
   switch (gameMode.toLowerCase()) {
     case 'creative':
       return 'info'
@@ -93,21 +84,6 @@ export function gameModeTone(gameMode: string): PillTone {
     default:
       return 'success'
   }
-}
-
-/** 状态色 PillBadge（本地小型徽章；同 shadcn Badge 的 pill 视觉语言） */
-export function PillBadge({ tone, children }: { tone: PillTone; children: ReactNode }) {
-  return (
-    <span
-      data-pill-tone={tone}
-      className={cn(
-        'inline-flex h-5 shrink-0 items-center rounded-mcs-xl border px-2 text-xs font-medium whitespace-nowrap',
-        PILL_TONE_CLASS[tone],
-      )}
-    >
-      {children}
-    </span>
-  )
 }
 
 // ── 信息行（标签灰字 + 值默认色）──
@@ -199,10 +175,10 @@ export function WorldInfoCard({ world, isLoading, onRefresh }: WorldInfoCardProp
             </InfoRow>
             <InfoRow label="游戏天数">{world.gameDays} 天</InfoRow>
             <InfoRow label="难度">
-              <PillBadge tone={difficultyTone(world.difficulty)}>{formatDifficulty(world.difficulty)}</PillBadge>
+              <StatusPill tone={difficultyTone(world.difficulty)}>{formatDifficulty(world.difficulty)}</StatusPill>
             </InfoRow>
             <InfoRow label="游戏模式">
-              <PillBadge tone={gameModeTone(world.gameMode)}>{formatGameMode(world.gameMode)}</PillBadge>
+              <StatusPill tone={gameModeTone(world.gameMode)}>{formatGameMode(world.gameMode)}</StatusPill>
             </InfoRow>
             <InfoRow label="视野距离">
               <span className="tnum">{world.viewDistance}</span>

@@ -8,7 +8,7 @@
  */
 import { CheckCircle2, Folder } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
-import { Chip } from '@/components/mcs/chip'
+import { StatusPill } from '@/components/mcs/status-pill'
 import {
   NOTIFICATION_TYPE_META,
   NOTIFICATION_TYPE_ORDER,
@@ -90,9 +90,9 @@ export function NotificationsPanel() {
                     className="grid grid-cols-[1fr_auto_auto] items-center gap-x-4 border-b border-mcs-border-muted px-4 py-2 last:border-b-0"
                   >
                     <span className="min-w-0 truncate text-mcs-sm text-mcs-text-default">{meta.label}</span>
-                    <Chip tone={sev.tone} className="h-5 w-12 justify-center px-0 text-mcs-2xs">
+                    <StatusPill tone={sev.tone} className="w-12 justify-center px-0 text-mcs-2xs">
                       {sev.label}
-                    </Chip>
+                    </StatusPill>
                     <Switch
                       checked={isEnabled(type)}
                       onCheckedChange={(checked) => setEnabled(type, checked)}

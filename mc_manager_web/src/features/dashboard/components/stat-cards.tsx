@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useNavigate } from 'react-router'
 import { ArrowRight, CheckCircle2, HardDrive, Info, MoonStar, Skull, Users } from 'lucide-react'
-import { Chip } from '@/components/mcs/chip'
+import { StatusPill } from '@/components/mcs/status-pill'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Sparkline } from '@/components/mcs/sparkline'
 import { useServerStore } from '@/stores/server'
@@ -129,10 +129,10 @@ export function BigStatCards({
       <Card
         title="在线玩家"
         eyebrow={
-          <Chip tone="success" className="h-5 gap-1 px-1.5 text-mcs-2xs">
+          <StatusPill tone="success" className="gap-1 text-mcs-2xs">
             <span className="flex size-1.5 rounded-full bg-mcs-success-fg" aria-hidden />
             {online}/{max}
-          </Chip>
+          </StatusPill>
         }
       >
         <div className="flex items-end gap-2.5">
@@ -174,10 +174,10 @@ export function BigStatCards({
         title="TPS"
         eyebrow={
           isRunning ? (
-            <Chip tone={healthy ? 'success' : 'warning'} className="h-5 gap-1 px-1.5 text-mcs-2xs">
+            <StatusPill tone={healthy ? 'success' : 'warning'} className="gap-1 text-mcs-2xs">
               <CheckCircle2 className="size-3.5" aria-hidden />
               {healthy ? '健康' : '卡顿'}
-            </Chip>
+            </StatusPill>
           ) : undefined
         }
       >
@@ -191,7 +191,7 @@ export function BigStatCards({
       <Card
         title="CPU"
         eyebrow={cores ? (
-          <Chip tone="muted" className="h-5 px-1.5 text-mcs-2xs">{cores} 核</Chip>
+          <StatusPill tone="muted" className="text-mcs-2xs">{cores} 核</StatusPill>
         ) : undefined}
       >
         <p className="tnum text-3xl font-bold leading-none">
@@ -206,7 +206,7 @@ export function BigStatCards({
       {/* 内存 */}
       <Card
         title="内存"
-        eyebrow={<Chip tone="muted" className="h-5 px-1.5 text-mcs-2xs">{memPct.toFixed(0)}%</Chip>}
+        eyebrow={<StatusPill tone="muted" className="text-mcs-2xs">{memPct.toFixed(0)}%</StatusPill>}
       >
         <p className="tnum text-3xl font-bold leading-none">
           {memUsed.toFixed(1)}
@@ -311,9 +311,9 @@ export function PlayersCard() {
     >
       {opCount > 0 && (
         <div className="flex items-center gap-1.5 text-mcs-xs">
-          <Chip tone="warning" className="h-5 px-1.5 text-mcs-2xs">
+          <StatusPill tone="warning" className="text-mcs-2xs">
             OP {opCount}/{online}
-          </Chip>
+          </StatusPill>
         </div>
       )}
       {body}

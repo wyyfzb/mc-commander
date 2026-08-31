@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
-import { Chip } from '@/components/mcs/chip'
+import { StatusPill } from '@/components/mcs/status-pill'
 import {
   TASK_TYPE_LABELS,
   TASK_TYPE_TONES,
@@ -167,9 +167,9 @@ function TaskRow({
           <span className="truncate text-mcs-sm font-semibold text-mcs-text-default" title={task.name}>
             {task.name}
           </span>
-          <Chip tone={tone} className="h-5 px-2 text-mcs-xs font-medium">
+          <StatusPill tone={tone} className="text-mcs-xs">
             {TASK_TYPE_LABELS[task.type]}
-          </Chip>
+          </StatusPill>
         </div>
 
         {/* cron mono + 命令（有则 Terminal 图标） */}

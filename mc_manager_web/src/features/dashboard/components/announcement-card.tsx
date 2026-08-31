@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { useSendCommand } from '@/hooks/use-send-command'
 import { Chip } from '@/components/mcs/chip'
+import { StatusPill } from '@/components/mcs/status-pill'
 
 /**
  * 公告发送卡
@@ -29,9 +30,9 @@ export function AnnouncementCard() {
     <section className="flex shrink-0 flex-col rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted p-4">
       <header className="mb-2 flex items-center gap-2">
         <h3 className="text-mcs-sm font-medium text-mcs-text-muted">公告发送</h3>
-        <Chip tone="muted" className="ml-auto h-5 px-1.5 text-mcs-2xs">
+        <StatusPill tone="muted" className="ml-auto text-mcs-2xs">
           say 全服广播
-        </Chip>
+        </StatusPill>
       </header>
 
       <div className="flex items-center gap-1.5">

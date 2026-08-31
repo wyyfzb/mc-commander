@@ -17,6 +17,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { Chip } from '@/components/mcs/chip'
+import { StatusPill } from '@/components/mcs/status-pill'
 import { toast } from 'sonner'
 import { ApiError } from '@/api/client'
 import { getFriendlyErrorMessage } from '@/api/errors'
@@ -154,9 +155,9 @@ export function GamerulePanel({ instanceId, mcVersion, isRconConnected, onSendCo
       {/* ── 头部：标题 + 版本徽章 + 刷新 ── */}
       <div className="flex items-center gap-2">
         <span className="text-mcs-sm font-semibold text-mcs-text-default">游戏规则</span>
-        <Chip tone={isNewSet ? 'accent' : 'muted'} className="h-5 px-1.5 text-mcs-2xs">
+        <StatusPill tone={isNewSet ? 'accent' : 'muted'} className="text-mcs-2xs">
           {isNewSet ? '1.21.11+ 新规则' : '旧版规则'}
-        </Chip>
+        </StatusPill>
         <Button
           variant="ghost"
           size="sm"

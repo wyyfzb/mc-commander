@@ -45,7 +45,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
-import { Chip } from '@/components/mcs/chip'
+import { StatusPill } from '@/components/mcs/status-pill'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { EmptyState } from '@/components/mcs/empty-state'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -286,7 +286,7 @@ export function MarketSheet({ open, onOpenChange, instanceId, initialQuery = nul
           <SheetTitle className="flex items-center gap-2 text-mcs-text-default">
             <Package className="size-4 text-mcs-accent" aria-hidden />
             插件市场
-            {cached && <Chip tone="muted">缓存</Chip>}
+            {cached && <StatusPill tone="muted">缓存</StatusPill>}
           </SheetTitle>
           <SheetDescription className="text-mcs-xs">
             从 Modrinth 社区搜索并一键安装 Bukkit 系插件；安装后需重启实例生效
@@ -517,7 +517,7 @@ function MarketHitCard({
             </span>
             {hit.author && <span className="text-mcs-xs text-mcs-text-subtle">{hit.author}</span>}
             {/* 已安装同名提示（按净化文件名比对） */}
-            <Chip tone="success">↓ {formatCompact(hit.downloads)}</Chip>
+            <StatusPill tone="success">↓ {formatCompact(hit.downloads)}</StatusPill>
           </div>
           {hit.description && (
             <p className="mt-1 line-clamp-2 text-mcs-xs text-mcs-text-muted" title={hit.description}>
@@ -526,7 +526,7 @@ function MarketHitCard({
           )}
           <div className="mt-1.5 flex flex-wrap items-center gap-1">
             {hit.categories.slice(0, 3).map((c) => (
-              <Chip key={c} tone="muted">{c}</Chip>
+              <StatusPill key={c} tone="muted">{c}</StatusPill>
             ))}
             {hit.dateModified && (
               <span className="text-mcs-xs text-mcs-text-subtle">
@@ -570,18 +570,18 @@ function MarketHitCard({
                       {v.versionNumber}
                     </span>
                     {v.versionType === 'release' ? (
-                      <Chip tone="success">正式</Chip>
+                      <StatusPill tone="success">正式</StatusPill>
                     ) : v.versionType === 'beta' ? (
-                      <Chip tone="warning">Beta</Chip>
+                      <StatusPill tone="warning">Beta</StatusPill>
                     ) : v.versionType === 'alpha' ? (
-                      <Chip tone="error">Alpha</Chip>
+                      <StatusPill tone="error">Alpha</StatusPill>
                     ) : null}
-                    {installedSameFile(v) && <Chip tone="muted">同名已安装</Chip>}
+                    {installedSameFile(v) && <StatusPill tone="muted">同名已安装</StatusPill>}
                     {/* loader 标签：区分 bukkit 系 / fabric / neoforge 构建产物 */}
                     {v.loaders.slice(0, 4).map((l) => (
-                      <Chip key={l} tone={BUKKIT_LOADERS.has(l) ? 'info' : 'muted'}>
+                      <StatusPill key={l} tone={BUKKIT_LOADERS.has(l) ? 'info' : 'muted'}>
                         {l}
-                      </Chip>
+                      </StatusPill>
                     ))}
                     <span className="text-mcs-xs text-mcs-text-subtle">
                       {formatFileSize(v.file.size)}

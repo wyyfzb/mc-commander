@@ -21,7 +21,7 @@ import type { Webhook, WebhookDelivery } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
-import { Badge } from '@/components/ui/badge'
+import { StatusPill } from '@/components/mcs/status-pill'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import {
@@ -181,25 +181,20 @@ export default function WebhookPage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex min-w-0 items-center gap-2">
                       <span className="truncate text-mcs-sm font-semibold text-mcs-text-default" title={w.name}>{w.name}</span>
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          'text-mcs-xs',
-                          w.isEnabled
-                            ? 'border-mcs-success-border bg-mcs-success-bg-subtle text-mcs-success-fg'
-                            : 'border-mcs-border-muted text-mcs-text-subtle',
-                        )}
+                      <StatusPill
+                        tone={w.isEnabled ? 'success' : 'muted'}
+                        className="text-mcs-xs"
                       >
                         {w.isEnabled ? '启用' : '禁用'}
-                      </Badge>
+                      </StatusPill>
                     </div>
                     <p className="mt-1 truncate text-mcs-xs text-mcs-text-muted" title={w.url}>{w.url}</p>
                     {w.events.length > 0 && (
                       <div className="mt-1.5 flex flex-wrap gap-1">
                         {w.events.map(e => (
-                          <Badge key={e} variant="outline" className="border-mcs-border-muted text-mcs-2xs text-mcs-text-subtle">
+                          <StatusPill key={e} variant="outline" className="text-mcs-2xs">
                             {fmtEvt(e)}
-                          </Badge>
+                          </StatusPill>
                         ))}
                       </div>
                     )}
