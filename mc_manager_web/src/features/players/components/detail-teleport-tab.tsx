@@ -154,16 +154,19 @@ function TeleportTabContent({
     z: String(Math.round(initialPos.z)),
   })
   const coordsTouched = useRef(false)
+  // 坐标提取为原始值再进依赖数组：服务器高频推送 position 对象（引用常变、坐标数值不变），
+  // 按对象引用依赖会反复 setState；仅坐标数值实际变化时才同步表单
+  const posX = displayPlayer?.position?.x
+  const posY = displayPlayer?.position?.y
+  const posZ = displayPlayer?.position?.z
   useEffect(() => {
-    const pos = displayPlayer?.position
-    if (pos && !coordsTouched.current) {
-      setCoords({
-        x: String(Math.round(pos.x)),
-        y: String(Math.round(pos.y)),
-        z: String(Math.round(pos.z)),
-      })
-    }
-  }, [displayPlayer?.position?.x, displayPlayer?.position?.y, displayPlayer?.position?.z])
+    if (posX == null || posY == null || posZ == null || coordsTouched.current) return
+    setCoords({
+      x: String(Math.round(posX)),
+      y: String(Math.round(posY)),
+      z: String(Math.round(posZ)),
+    })
+  }, [posX, posY, posZ])
 
   const persistQuick = (next: QuickTeleportSchema) => {
     setQuickSchema(next)

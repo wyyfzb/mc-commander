@@ -36,6 +36,9 @@ import { BatchBar } from './components/batch-bar'
 import { BanDialog } from './components/ban-dialog'
 import { BanRecordsDialog } from './components/ban-records-dialog'
 
+/** data 未就绪时的稳定空数组（避免 ?? [] 每次渲染新建引用、污染下游 useMemo） */
+const NO_PLAYERS: Player[] = []
+
 export function PlayersPage() {
   const instanceId = useServerStore((s) => s.instanceId)
   const [searchParams, setSearchParams] = useSearchParams()
@@ -59,7 +62,7 @@ export function PlayersPage() {
   const statusQuery = useInstanceStatus(instanceId)
   const action = usePlayerAction(instanceId)
 
-  const allPlayers = playersQuery.data ?? []
+  const allPlayers = playersQuery.data ?? NO_PLAYERS
   const filteredPlayers = useMemo(() => applyPlayersFilter(allPlayers, filter), [allPlayers, filter])
   const selectedPlayers = useMemo(
     () => allPlayers.filter((p) => selectedUuids.includes(p.uuid)),

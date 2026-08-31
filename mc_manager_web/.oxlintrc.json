@@ -3,6 +3,9 @@
   "plugins": ["react", "typescript", "oxc"],
   "rules": {
     "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
+    // only-export-components（fast-refresh 粒度提示）关闭：项目固有模式为
+    // 路由文件集中懒加载、shadcn 组件同文件导出 variants（上游标准写法）、
+    // 卡片组件文件导出展示常量；逐文件拆分伤结构，代价仅为这些文件热更新时整页刷新
+    "react/only-export-components": "off"
   }
 }

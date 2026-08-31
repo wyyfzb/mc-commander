@@ -147,6 +147,8 @@ function BanStatus({ ban }: { ban: BanRecord }) {
   if (!ban.isActive) return <span className={cls('text-mcs-text-subtle')}>已解封</span>
   if (ban.isPermanent) return <span className={cls('text-mcs-error-fg')}>永久封禁</span>
   if (ban.expiresAt !== null) {
+    // 渲染期取当前时间为可接受权衡：剩余时间精度到分钟、随列表数据刷新自然更新，非实时倒计时
+    // eslint-disable-next-line react/purity
     const remain = ban.expiresAt - Date.now()
     if (remain < 0) return <span className={cls('text-mcs-warning-fg')}>已到期</span>
     const days = Math.floor(remain / 86_400_000)
