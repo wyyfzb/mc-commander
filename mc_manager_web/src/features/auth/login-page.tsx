@@ -275,20 +275,6 @@ export function LoginPage() {
         {/* 设密 / 登录表单 */}
         {(phase === 'setup' || phase === 'login') && (
           <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-            {phase === 'setup' && (
-              <div className="space-y-2">
-                <Label htmlFor="confirm-password">确认密码</Label>
-                <Input
-                  id="confirm-password"
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="再次输入密码"
-                  autoComplete="new-password"
-                  className="h-10 font-mono"
-                />
-              </div>
-            )}
             <div className="space-y-2">
               <Label htmlFor="admin-password">管理员密码</Label>
               <PasswordInput
@@ -303,6 +289,20 @@ export function LoginPage() {
                 autoFocus
               />
             </div>
+            {phase === 'setup' && (
+              <div className="space-y-2">
+                <Label htmlFor="confirm-password">确认密码</Label>
+                <Input
+                  id="confirm-password"
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="再次输入密码"
+                  autoComplete="new-password"
+                  className="h-10 font-mono"
+                />
+              </div>
+            )}
             {phase === 'setup' && (password.length > 0 || confirmPassword.length > 0) && (
               <StrengthBar score={strength.score} label={strength.label} />
             )}
