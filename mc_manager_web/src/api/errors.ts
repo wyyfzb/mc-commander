@@ -11,8 +11,6 @@ export const ErrorCode = {
   SUCCESS: 0,
   SERVER_ERROR: 50000,
   VALIDATION_ERROR: 40000,
-  UNAUTHORIZED: 40100,
-  FORBIDDEN: 40300,
   NOT_FOUND: 40400,
   RATE_LIMITED: 42900,
 
@@ -25,13 +23,9 @@ export const ErrorCode = {
   AUTH_ALREADY_CONFIGURED: 40911,
   AUTH_LOGIN_LOCKED: 42901,
 
-  PERMISSION_DENIED: 40301,
-
   INSTANCE_NOT_FOUND: 40401,
-  INSTANCE_ALREADY_RUNNING: 40001,
   INSTANCE_NOT_RUNNING: 40002,
   INSTANCE_RUNNING: 40003,
-  INSTANCE_START_FAILED: 50001,
 
   BACKUP_NOT_FOUND: 40402,
   BACKUP_IN_PROGRESS: 40901,
@@ -39,9 +33,6 @@ export const ErrorCode = {
   RESTORE_IN_PROGRESS: 40903,
   BACKUP_FORMAT_UNSUPPORTED: 40904,
   BACKUP_FAILED: 50002,
-
-  PLAYER_NOT_FOUND: 40403,
-  PLAYER_NOT_ONLINE: 40003, // 注意：与 INSTANCE_RUNNING 同码，按端点场景区分
 
   TASK_NOT_FOUND: 40405,
   INVALID_CRON_EXPRESSION: 40004,
@@ -58,6 +49,10 @@ export const ErrorCode = {
   WEBHOOK_INVALID_URL: 40010,
   WEBHOOK_INVALID_EVENTS: 40011,
   WEBHOOK_TEST_FAILED: 50010,
+
+  // 升级
+  UPGRADE_IN_PROGRESS: 40907,
+  UPGRADE_VERSION_SAME: 40012,
 
   // 插件管理（feat-8，routes/plugins.js）
   PLUGIN_NOT_FOUND: 40411,
@@ -76,8 +71,6 @@ export type ErrorCodeValue = (typeof ErrorCode)[keyof typeof ErrorCode]
 const LOCALIZED_MESSAGES: Partial<Record<ErrorCodeValue, string>> = {
   [ErrorCode.SERVER_ERROR]: '服务器内部错误，请稍后重试',
   [ErrorCode.VALIDATION_ERROR]: '请求参数校验失败',
-  [ErrorCode.UNAUTHORIZED]: '未授权：请检查 API Key',
-  [ErrorCode.FORBIDDEN]: '没有权限执行此操作',
   [ErrorCode.NOT_FOUND]: '请求的资源不存在',
   [ErrorCode.RATE_LIMITED]: '请求过于频繁，请稍后再试',
   [ErrorCode.INVALID_API_KEY]: 'API Key 无效或已过期',
@@ -86,17 +79,13 @@ const LOCALIZED_MESSAGES: Partial<Record<ErrorCodeValue, string>> = {
   [ErrorCode.AUTH_NOT_CONFIGURED]: '管理员密码尚未设置，请先完成初始化',
   [ErrorCode.AUTH_ALREADY_CONFIGURED]: '管理员密码已设置，请直接登录',
   [ErrorCode.AUTH_LOGIN_LOCKED]: '登录失败次数过多，请稍后再试',
-  [ErrorCode.PERMISSION_DENIED]: '权限不足',
   [ErrorCode.INSTANCE_NOT_FOUND]: '服务器实例不存在',
-  [ErrorCode.INSTANCE_ALREADY_RUNNING]: '实例已在运行中',
   [ErrorCode.INSTANCE_NOT_RUNNING]: '实例未在运行',
-  [ErrorCode.INSTANCE_START_FAILED]: '实例启动失败',
+  [ErrorCode.INSTANCE_RUNNING]: '实例正在运行',
   [ErrorCode.BACKUP_NOT_FOUND]: '备份不存在',
   [ErrorCode.BACKUP_IN_PROGRESS]: '已有备份任务进行中',
   [ErrorCode.RESTORE_IN_PROGRESS]: '已有恢复任务进行中',
   [ErrorCode.BACKUP_FAILED]: '备份失败',
-  [ErrorCode.PLAYER_NOT_FOUND]: '玩家不存在',
-  [ErrorCode.PLAYER_NOT_ONLINE]: '玩家不在线',
   [ErrorCode.TASK_NOT_FOUND]: '定时任务不存在',
   [ErrorCode.INVALID_CRON_EXPRESSION]: 'cron 表达式无效',
   [ErrorCode.FILE_NOT_FOUND]: '文件不存在',
@@ -116,6 +105,8 @@ const LOCALIZED_MESSAGES: Partial<Record<ErrorCodeValue, string>> = {
   [ErrorCode.MARKET_PROJECT_NOT_FOUND]: '插件市场：Modrinth 上未找到该项目（可能已下架）',
   [ErrorCode.MARKET_VERSION_NOT_FOUND]: '插件市场：Modrinth 上未找到该版本',
   [ErrorCode.MARKET_UPSTREAM_ERROR]: '插件市场：Modrinth 服务暂时不可用，请稍后再试',
+  [ErrorCode.UPGRADE_IN_PROGRESS]: '已有升级任务进行中',
+  [ErrorCode.UPGRADE_VERSION_SAME]: '目标版本与当前版本相同',
 }
 
 /** 服务端已本地化的错误码（message 直接透传，不覆盖） */
