@@ -12,16 +12,8 @@ import { useState } from 'react'
 import { AlertTriangle, Archive, RefreshCw, ServerOff } from 'lucide-react'
 import { useSearchParams } from 'react-router'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { DangerButton } from '@/components/mcs/danger-button'
 import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { apiPost } from '@/api/client'
 import { apiSendCommand } from '@/api/players'
 import { useInstanceStatus, queryKeys } from '@/api/queries'
@@ -154,16 +146,16 @@ export function WorldPage() {
       {/* ── 右栏：属性 / 游戏规则 Tabs ── */}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted">
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as WorldTab)} className="flex h-full min-h-0 flex-col">
-          <TabsList className="h-10 shrink-0 justify-start gap-0 rounded-none border-b border-mcs-border-muted bg-transparent px-2 py-0">
+          <TabsList variant="line" className="h-10 shrink-0 justify-start gap-0 border-b border-mcs-border-muted px-2 py-0">
             <TabsTrigger
               value="properties"
-              className="h-10 rounded-none border-b-2 border-transparent px-3 text-mcs-sm data-[state=active]:border-mcs-accent data-[state=active]:text-mcs-text-default data-[state=active]:shadow-none"
+              className="h-10 px-3 text-mcs-sm after:bg-mcs-accent"
             >
               服务器属性
             </TabsTrigger>
             <TabsTrigger
               value="gamerule"
-              className="h-10 rounded-none border-b-2 border-transparent px-3 text-mcs-sm data-[state=active]:border-mcs-accent data-[state=active]:text-mcs-text-default data-[state=active]:shadow-none"
+              className="h-10 px-3 text-mcs-sm after:bg-mcs-accent"
             >
               游戏规则
             </TabsTrigger>
@@ -191,22 +183,16 @@ export function WorldPage() {
       </div>
 
       {/* ── 属性编辑未保存守卫确认 ── */}
-      <Dialog open={guard.isBlocked} onOpenChange={(open) => !open && guard.cancel()}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>属性编辑尚未保存</DialogTitle>
-            <DialogDescription>离开页面将丢失未保存的属性修改，确定离开吗？</DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={guard.cancel}>
-              留下
-            </Button>
-            <DangerButton onClick={guard.proceed}>
-              放弃修改并离开
-            </DangerButton>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ConfirmDialog
+        open={guard.isBlocked}
+        onOpenChange={(open) => !open && guard.cancel()}
+        title="属性编辑尚未保存"
+        description="离开页面将丢失未保存的属性修改，确定离开吗？"
+        cancelText="留下"
+        confirmText="放弃修改并离开"
+        danger
+        onConfirm={guard.proceed}
+      />
     </div>
   )
 }
