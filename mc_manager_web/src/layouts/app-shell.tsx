@@ -18,22 +18,15 @@ import { useServerSocket } from '@/hooks/use-server-socket'
  * ├──────┬─────────────────────────────────────────────┤
  * │ 侧栏 │ Outlet（页面内容）                            │
  * └──────┴─────────────────────────────────────────────┘
- * 主题同步：html.classList = dark（默认）/ light（亮色）
+ * 主题同步在根级 main.tsx（ThemeClassSync），覆盖 AppShell 外的登录/引导路由
  */
 export function AppShell() {
-  const theme = useUiStore((s) => s.theme)
   const sidebarCollapsed = useUiStore((s) => s.sidebarCollapsed)
   const mobileNavOpen = useUiStore((s) => s.mobileNavOpen)
   const setMobileNavOpen = useUiStore((s) => s.setMobileNavOpen)
   const density = useUiStore((s) => s.density)
   const instanceId = useServerStore((s) => s.instanceId)
   const setInstanceId = useServerStore((s) => s.setInstanceId)
-
-  useEffect(() => {
-    const root = document.documentElement
-    root.classList.toggle('dark', theme === 'dark')
-    root.classList.toggle('light', theme === 'light')
-  }, [theme])
 
   // 默认实例选择：列表就绪且未选择时取第一个（单实例场景）
   const instancesQuery = useInstances()

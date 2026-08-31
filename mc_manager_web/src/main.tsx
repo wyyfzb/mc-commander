@@ -6,6 +6,7 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { Toaster } from 'sonner'
 import { PageLoader } from '@/components/mcs/page-loader'
 import { ErrorBoundary } from '@/components/mcs/error-boundary'
+import { ThemeClassSync } from '@/layouts/theme-class-sync'
 import { startNotificationCleanupTimer } from '@/stores/notifications'
 import { useUiStore } from '@/stores/ui'
 import './index.css'
@@ -43,6 +44,7 @@ function ThemedToaster() {
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
+      <ThemeClassSync />
       <TooltipProvider delayDuration={300}>
         <ErrorBoundary>
           <Suspense fallback={<PageLoader />}>

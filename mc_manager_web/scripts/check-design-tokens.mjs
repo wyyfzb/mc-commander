@@ -9,7 +9,7 @@
  *   5. rounded-[ 任意值圆角
  * 发现违规 → 输出 文件:行号 → 非零退出码（阻止合并）
  */
-import { readFileSync, readdirSync, statSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { join, extname, relative } from 'node:path'
 
 const root = join(import.meta.dirname, '..')
@@ -22,18 +22,6 @@ const PALETTE_COLORS = new Set([
   'lime','green','emerald','teal','cyan','sky','blue','indigo','violet',
   'purple','fuchsia','pink','rose','black','white',
 ])
-
-// 允许的 mcs-* token 前缀
-const MCS_TOKEN_PREFIXES = [
-  'bg-mcs-','text-mcs-','border-mcs-','rounded-mcs-','ring-mcs-',
-  'shadow-','bg-popover','bg-card','text-popover','text-card',
-  'text-muted-foreground','bg-muted','bg-accent','text-accent-foreground',
-  'bg-sidebar','text-sidebar','border-sidebar','ring-ring','ring-input',
-  'bg-background','text-foreground','bg-primary','text-primary-foreground',
-  'bg-destructive','text-destructive','border-destructive','border-input',
-  'border-primary','border-accent','ring-primary','ring-accent',
-  'accent-foreground','border-border','ring-offset',
-]
 
 let violations = 0
 

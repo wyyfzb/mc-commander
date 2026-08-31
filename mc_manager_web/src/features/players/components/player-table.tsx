@@ -361,7 +361,7 @@ export function PlayerTable({
         size: 48,
       },
     ],
-    [selectedSet, onOpenDetail, onAction, onOpenBan, toggleSelect, toggleSelectPage],
+    [selectedSet, onOpenDetail, onOpenBan, toggleSelect, toggleSelectPage],
   )
 
   const table = useTable(
@@ -380,6 +380,8 @@ export function PlayerTable({
   const visibleRows =
     pageSize === -1 ? allRows : allRows.slice(safePageIndex * pageSize, (safePageIndex + 1) * pageSize)
 
+  // TanStack Virtual 自管内部缓存，与 React Compiler 互斥（官方不兼容清单），不可自动 memo 化
+  // eslint-disable-next-line react/incompatible-library
   const rowVirtualizer = useVirtualizer({
     count: pageSize === -1 ? allRows.length : 0,
     getScrollElement: () => scrollRef.current,

@@ -10,7 +10,7 @@
  * - URL 深链接：?dir=/world&file=/world/level.dat（可分享、可刷新保持）
  * - 实例切换：目录/选中文件重置回初始态
  */
-import { useEffect, useRef, useState, type ChangeEvent } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore, type ChangeEvent } from 'react'
 import { ServerOff, PanelLeftClose, MonitorSmartphone } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router'
@@ -56,17 +56,14 @@ function parentDirOf(path: string): string {
   return idx <= 0 ? '/' : path.slice(0, idx)
 }
 
-/** 响应式媒体查询 hook（SSR 安全，首渲染同步返回 initialValue） */
+/** 响应式媒体查询 hook（useSyncExternalStore：无 setState-in-effect 级联，首渲染即真实值） */
 function useMediaQuery(query: string, initialValue = false): boolean {
-  const [matches, setMatches] = useState(initialValue)
-  useEffect(() => {
+  const subscribe = (onStoreChange: () => void) => {
     const mql = window.matchMedia(query)
-    setMatches(mql.matches)
-    const handler = (e: MediaQueryListEvent) => setMatches(e.matches)
-    mql.addEventListener('change', handler)
-    return () => mql.removeEventListener('change', handler)
-  }, [query])
-  return matches
+    mql.addEventListener('change', onStoreChange)
+    return () => mql.removeEventListener('change', onStoreChange)
+  }
+  return useSyncExternalStore(subscribe, () => window.matchMedia(query).matches, () => initialValue)
 }
 
 /** 断点常量（与 Tailwind md/lg 断点对齐） */

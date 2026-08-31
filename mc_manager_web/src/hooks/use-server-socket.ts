@@ -45,6 +45,7 @@ export function useServerSocket(instanceId: string | null) {
 
   // 当前订阅的实例（ref 供事件处理器读取最新值）
   const instanceRef = useRef(instanceId)
+  // eslint-disable-next-line react/refs -- latest-ref 模式：WS 事件处理器闭包读最新 instanceId，避免重建连接
   instanceRef.current = instanceId
 
   useEffect(() => {

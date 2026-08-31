@@ -22,6 +22,9 @@ export function tpsColor(tps: number | null, isRunning: boolean): string {
   return 'text-mcs-error-fg'
 }
 
+/** status 未就绪时的稳定空数组（避免 ?? [] 每次渲染新建引用、污染下游 useMemo） */
+const NO_NAMES: string[] = []
+
 function Card({
   title,
   eyebrow,
@@ -230,8 +233,8 @@ export function PlayersCard() {
   const max = status?.maxPlayers ?? 20
   const opCount = status?.opCount ?? 0
   const sleeping = status?.sleepingPlayers ?? 0
-  const sleepingNames = status?.sleepingPlayerNames ?? []
-  const awakeNames = status?.awakePlayerNames ?? []
+  const sleepingNames = status?.sleepingPlayerNames ?? NO_NAMES
+  const awakeNames = status?.awakePlayerNames ?? NO_NAMES
   const awake = Math.max(online - sleeping, 0)
   const names = useMemo(
     () => [...new Set([...sleepingNames, ...awakeNames])],

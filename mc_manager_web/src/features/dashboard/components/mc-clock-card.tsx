@@ -60,6 +60,7 @@ const WEATHER_LABEL: Record<'clear' | 'rain' | 'thunder', { label: string; Icon:
 export function McClockCard() {
   const status = useServerStore((s) => s.status)
   const { send, isRunning } = useSendCommand()
+  // eslint-disable-next-line react/purity -- 幂等初值，StrictMode 双初始化仅差数毫秒，无可观察影响
   const [now, setNow] = useState(Date.now())
   const anchorRef = useRef<{ tick: number; at: number } | null>(null)
 
@@ -70,12 +71,16 @@ export function McClockCard() {
   }, [])
 
   const rawTick = status?.worldTime ?? null
+  /* 渲染期锚点更新是有意设计：worldTime 由 store 推送驱动渲染，此时记录锚点供秒级插值；
+     挪入 effect 会引入 setState-in-effect 级联与首帧无锚点闪烁，代价仅该组件不被 Compiler memo */
+  /* eslint-disable react/refs, react/purity */
   if (rawTick != null) {
     const base = anchorRef.current
     if (!base || base.tick !== rawTick) anchorRef.current = { tick: rawTick, at: Date.now() }
   }
   const anchored = anchorRef.current && rawTick != null ? anchorRef.current.tick : null
   const tick = anchored != null ? interpolateTick(anchored, anchorRef.current!.at, now, isRunning) : null
+  /* eslint-enable react/refs, react/purity */
   const cycle = tick != null ? dayCycle(tick) : null
   const phase = worldTimePhase(tick)
   const weather = status?.weather ?? null
