@@ -153,4 +153,79 @@ describe('CommandInput', () => {
       expect(input).toHaveValue('fresh')
     })
   })
+
+  describe('RCON 降级横幅', () => {
+    it('isRunning + !isRconConnected 时显示降级横幅', () => {
+      useServerStore.setState({
+        status: { isRunning: true, isRconConnected: false } as NonNullable<
+          ReturnType<typeof useServerStore.getState>['status']
+        >,
+      })
+      renderInput()
+      const banner = screen.getByRole('status')
+      expect(banner).toBeInTheDocument()
+      expect(banner).toHaveTextContent('RCON 未启用，命令已发送但响应不可见')
+    })
+
+    it('isRunning + isRconConnected 时不显示横幅', () => {
+      useServerStore.setState({
+        status: { isRunning: true, isRconConnected: true } as NonNullable<
+          ReturnType<typeof useServerStore.getState>['status']
+        >,
+      })
+      renderInput()
+      expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    })
+
+    it('!isRunning 时不显示横幅', () => {
+      useServerStore.setState({ status: null })
+      renderInput()
+      expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    })
+  })
+
+  describe('命令历史持久化（localStorage）', () => {
+    const HISTORY_KEY = 'mcs-command-history'
+
+    it('发送命令后写入 localStorage', async () => {
+      renderInput()
+      const input = screen.getByLabelText('服务器命令输入')
+      fireEvent.change(input, { target: { value: 'say persist-test' } })
+      fireEvent.keyDown(input, { key: 'Enter' })
+      await waitFor(() => expect(input).toHaveValue(''))
+      const stored = JSON.parse(localStorage.getItem(HISTORY_KEY)!) as string[]
+      expect(Array.isArray(stored)).toBe(true)
+      expect(stored).toContain('say persist-test')
+    })
+
+    it('连续相同命令不重复写入', async () => {
+      renderInput()
+      const input = screen.getByLabelText('服务器命令输入')
+      fireEvent.change(input, { target: { value: 'say dup' } })
+      fireEvent.keyDown(input, { key: 'Enter' })
+      await waitFor(() => expect(input).toHaveValue(''))
+      fireEvent.change(input, { target: { value: 'say dup' } })
+      fireEvent.keyDown(input, { key: 'Enter' })
+      await waitFor(() => expect(input).toHaveValue(''))
+      const stored = JSON.parse(localStorage.getItem(HISTORY_KEY)!) as string[]
+      const dupCount = stored.filter((c) => c === 'say dup').length
+      expect(dupCount).toBe(1)
+    })
+
+    it('超出 50 条上限裁剪最旧条目', async () => {
+      // 预填 50 条历史
+      const fifty = Array.from({ length: 50 }, (_, i) => `cmd ${i}`)
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(fifty))
+      renderInput()
+      const input = screen.getByLabelText('服务器命令输入')
+      fireEvent.change(input, { target: { value: 'cmd newest' } })
+      fireEvent.keyDown(input, { key: 'Enter' })
+      await waitFor(() => expect(input).toHaveValue(''))
+      const stored = JSON.parse(localStorage.getItem(HISTORY_KEY)!) as string[]
+      expect(stored.length).toBe(50)
+      // 最旧的 cmd 0 被裁掉
+      expect(stored).not.toContain('cmd 0')
+      expect(stored).toContain('cmd newest')
+    })
+  })
 })
