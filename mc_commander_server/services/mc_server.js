@@ -9,6 +9,7 @@ import { parseUncompressed as parseNbtSync } from 'prismarine-nbt';
 import config from '../config.js';
 import { InstanceModel, CommandHistoryModel } from '../db/index.js';
 import { atomicWriteFile } from '../utils/fs-utils.js';
+import { reconcileTempBans } from '../utils/ban-reconcile.js';
 // offline uuid / stats 时长读取全仓公共实现（与 routes/players.js 共用 player-utils.js）
 import { offlineUuid as computeOfflineUuid, getTotalPlayTime } from '../utils/player-utils.js';
 
@@ -954,6 +955,14 @@ export class MCServerInstance extends EventEmitter {
     }
     if (!eulaAccepted) {
       throw new Error('EULA_NOT_ACCEPTED');
+    }
+
+    // 实例启动前对账 tempban 状态：停机期间用户可能直接编辑
+    // banned-players.json 添加/删除封禁，导致面板 DB 与文件不一致。
+    // 方向 1：文件有但 DB 无活跃记录 → 文件直接添加的封禁，补入 DB（永久）
+    // 方向 2：DB 已过期但文件仍存在 → 停机期间到期未 pardon，清理文件 + 停用记录
+    try { reconcileTempBans(this.id, this.serverPath); } catch (e) {
+      console.warn(`[${this.id}] tempban 对账失败（不阻塞启动）:`, e.message);
     }
 
     // 清理 world 锁文件，防止 session.lock 冲突
