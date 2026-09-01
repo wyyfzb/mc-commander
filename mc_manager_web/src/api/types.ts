@@ -415,6 +415,7 @@ export const WS_EVENT_TYPES = [
   'deployProgress',
   'circuit_breaker',
   'upgradeProgress',
+  'systemStatsUpdate',
   'error',
 ] as const
 

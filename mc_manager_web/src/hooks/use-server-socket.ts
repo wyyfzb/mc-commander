@@ -62,6 +62,12 @@ export function useServerSocket(instanceId: string | null) {
     const handleMessage = (msg: WsMessage) => {
       const data = (msg.data ?? {}) as Record<string, unknown>
 
+      // 全局系统资源统计推送（broadcastAll，无 instanceId）
+      if (msg.type === 'systemStatsUpdate') {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.systemStats() })
+        return
+      }
+
       // 全局进度事件（部署：创建新实例前即有进度，无实例归属）
       if (msg.type === 'deployProgress') {
         applyDeployProgress({
@@ -99,6 +105,8 @@ export function useServerSocket(instanceId: string | null) {
         case 'status': {
           if (data.event && typeof data.event === 'string') {
             applyWsStatusEvent(data.event as 'started' | 'stopped' | 'ready' | 'crash' | 'save')
+            // 实例列表状态变化时刷新列表（runningCount 等）
+            void queryClient.invalidateQueries({ queryKey: queryKeys.instances() })
           } else {
             applyWsSnapshot(msg.instanceId, {
               status: String(data.status ?? ''),

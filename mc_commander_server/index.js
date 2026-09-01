@@ -170,7 +170,8 @@ setupRoutes(app, serverManager, taskScheduler);
 app.use(errorHandler);
 
 setupWebhookDispatch(serverManager);
-setupWebSocket(wss, serverManager);
+// eslint-disable-next-line no-unused-vars
+const wsSetup = setupWebSocket(wss, serverManager);
 
 server.on('error', (err) => {
   if (err.code === 'EADDRINUSE') {
