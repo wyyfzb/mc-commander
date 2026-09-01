@@ -1,5 +1,11 @@
 "use client"
 
+/*
+ * shadcn/ui 基础组件 —— rounded-[2px] 为合法派生用法：
+ * Tooltip 箭头旋转 45° 后形成菱形，2px 圆角保持尖端锐利，非设计 token 适用场景。
+ * 详见 mc_manager_web/docs/design-review-guidelines.md §圆角守门规则
+ */
+
 import * as React from "react"
 import { Tooltip as TooltipPrimitive } from "radix-ui"
 
