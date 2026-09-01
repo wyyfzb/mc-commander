@@ -86,6 +86,51 @@ describe('ActionForms', () => {
     expect(screen.getByText('/xp 10 TestPlayer').textContent).toContain('/xp 10 TestPlayer')
   })
 
+  it('设置经验值生成 /xp set 语法', async () => {
+    const user = userEvent.setup()
+    render(<ActionForms {...defaultProps} />, { wrapper })
+    await user.click(screen.getByText('设置'))
+    expect(screen.getByText(/\/xp set TestPlayer 10$/)).toBeTruthy()
+  })
+
+  it('设置等级生成 /xp set ...L 语法', async () => {
+    const user = userEvent.setup()
+    render(<ActionForms {...defaultProps} />, { wrapper })
+    await user.click(screen.getByText('等级'))
+    await user.click(screen.getByText('设置'))
+    expect(screen.getByText(/\/xp set TestPlayer 10L/)).toBeTruthy()
+  })
+
+  it('移除经验值生成带负号命令', async () => {
+    const user = userEvent.setup()
+    render(<ActionForms {...defaultProps} />, { wrapper })
+    await user.click(screen.getByText('移除'))
+    expect(screen.getByText(/\/xp -10 TestPlayer/)).toBeTruthy()
+  })
+
+  it('移除等级生成带负号 L 命令', async () => {
+    const user = userEvent.setup()
+    render(<ActionForms {...defaultProps} />, { wrapper })
+    await user.click(screen.getByText('等级'))
+    await user.click(screen.getByText('移除'))
+    expect(screen.getByText(/\/xp -10L TestPlayer/)).toBeTruthy()
+  })
+
+  it('给予等级生成正确 L 命令', async () => {
+    const user = userEvent.setup()
+    render(<ActionForms {...defaultProps} />, { wrapper })
+    await user.click(screen.getByText('等级'))
+    expect(screen.getByText(/\/xp 10L TestPlayer/)).toBeTruthy()
+  })
+
+  it('设置快捷数量更新预览', async () => {
+    const user = userEvent.setup()
+    render(<ActionForms {...defaultProps} />, { wrapper })
+    await user.click(screen.getByText('设置'))
+    await user.click(screen.getByText('30'))
+    expect(screen.getByText(/\/xp set TestPlayer 30$/)).toBeTruthy()
+  })
+
   it('切换到等级模式更新预览', async () => {
     const user = userEvent.setup()
     render(<ActionForms {...defaultProps} />, { wrapper })

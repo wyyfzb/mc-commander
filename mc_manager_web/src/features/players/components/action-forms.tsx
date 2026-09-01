@@ -60,9 +60,13 @@ function ExperienceForm({ player, batchTargets, isBatchMode, isRconConnected, on
   const numAmount = Number(amount) || 0
 
   function buildCommand(targetName: string): string {
+    if (action === 'set') {
+      // /xp set <player> <amount>[L] — MC 1.13+ 语法，player 在 amount 前面
+      return `/xp set ${targetName} ${numAmount}${mode === 'levels' ? 'L' : ''}`
+    }
     if (mode === 'levels') {
-      const suffix = action === 'set' ? '' : action === 'remove' ? '-' : ''
-      return `/xp ${suffix}${action === 'set' ? '' : numAmount}L ${targetName}`
+      const suffix = action === 'remove' ? '-' : ''
+      return `/xp ${suffix}${numAmount}L ${targetName}`
     }
     const suffix = action === 'remove' ? '-' : ''
     return `/xp ${suffix}${numAmount} ${targetName}`
