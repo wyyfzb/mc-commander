@@ -71,7 +71,7 @@ function CommandBlock({ command, ariaLabel }: { command: string; ariaLabel: stri
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(command)
-      toast.success('命令已复制')
+      toast.success('命令已复制', { duration: 1500 })
     } catch {
       toast.error('复制失败，请手动复制')
     }

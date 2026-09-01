@@ -54,7 +54,11 @@ export default function WebhookPage() {
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Webhook | null>(null)
   const [form, setForm] = useState({ name: '', url: '', secret: '', events: [] as string[], isEnabled: true })
+  const [initialForm, setInitialForm] = useState({ name: '', url: '', secret: '', events: [] as string[], isEnabled: true })
+  const [dialogDirtyConfirm, setDialogDirtyConfirm] = useState(false)
   const urlInvalid = form.url !== '' && !form.url.startsWith('http://') && !form.url.startsWith('https://')
+  const formDirty = form.name !== initialForm.name || form.url !== initialForm.url || form.secret !== initialForm.secret
+    || form.isEnabled !== initialForm.isEnabled || JSON.stringify(form.events) !== JSON.stringify(initialForm.events)
 
   const { data: webhooksData, isLoading, error } = useQuery({
     queryKey: queryKeys.webhooks(),
@@ -93,9 +97,10 @@ export default function WebhookPage() {
     onError: (e) => toast.error(`测试投递失败：${getFriendlyErrorText(e)}`),
   })
 
-  const openCreate = () => { setEditTarget(null); setForm({ name: '', url: '', secret: '', events: [], isEnabled: true }); setShowDialog(true) }
-  const openEdit = (w: Webhook) => { setEditTarget(w); setForm({ name: w.name, url: w.url, secret: '', events: [...w.events], isEnabled: w.isEnabled }); setShowDialog(true) }
-  const closeDialog = () => { setShowDialog(false); setEditTarget(null); setForm({ name: '', url: '', secret: '', events: [], isEnabled: true }) }
+  const openCreate = () => { setEditTarget(null); const f = { name: '', url: '', secret: '', events: [] as string[], isEnabled: true }; setForm(f); setInitialForm(f); setShowDialog(true) }
+  const openEdit = (w: Webhook) => { setEditTarget(w); const f = { name: w.name, url: w.url, secret: '', events: [...w.events], isEnabled: w.isEnabled }; setForm(f); setInitialForm(f); setShowDialog(true) }
+  const closeDialog = () => { setShowDialog(false); setEditTarget(null); setForm({ name: '', url: '', secret: '', events: [], isEnabled: true }); setInitialForm({ name: '', url: '', secret: '', events: [], isEnabled: true }) }
+  const tryCloseDialog = () => { if (formDirty) { setDialogDirtyConfirm(true) } else { closeDialog() } }
   const toggleEvent = (evt: string) => setForm(f => ({ ...f, events: f.events.includes(evt) ? f.events.filter(e => e !== evt) : [...f.events, evt] }))
   const selectAll = () => { if (eventTypes && form.events.length === eventTypes.length) setForm(f => ({ ...f, events: [] })); else if (eventTypes) setForm(f => ({ ...f, events: [...eventTypes] })) }
   const handleSubmit = () => {
@@ -283,7 +288,7 @@ export default function WebhookPage() {
       </div>
 
       {/* ── 新建/编辑对话框 ── */}
-      <Dialog open={showDialog} onOpenChange={(open) => { if (!open) closeDialog() }}>
+      <Dialog open={showDialog} onOpenChange={(open) => { if (!open) tryCloseDialog() }}>
         <DialogContent className="bg-mcs-bg-default sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>{editTarget ? '编辑 Webhook' : '新建 Webhook'}</DialogTitle>
@@ -363,7 +368,7 @@ export default function WebhookPage() {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={closeDialog}>取消</Button>
+            <Button variant="outline" onClick={tryCloseDialog}>取消</Button>
             <LoadingButton
               loading={createMut.isPending || updateMut.isPending}
               loadingText="处理中…"
@@ -387,6 +392,17 @@ export default function WebhookPage() {
         warning="此操作不可撤销"
         loading={deleteMut.isPending}
         onConfirm={() => void handleDeleteConfirm()}
+      />
+
+      {/* ── 脏状态关闭确认 ── */}
+      <ConfirmDialog
+        open={dialogDirtyConfirm}
+        onOpenChange={(open) => !open && setDialogDirtyConfirm(false)}
+        title="未保存的更改"
+        description="当前有未保存的 Webhook 更改，关闭后这些修改将丢失。"
+        confirmText="不保存"
+        cancelText="继续编辑"
+        onConfirm={() => { setDialogDirtyConfirm(false); closeDialog() }}
       />
     </div>
   )

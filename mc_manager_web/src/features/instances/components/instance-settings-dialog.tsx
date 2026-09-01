@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/dialog'
 import { Switch } from '@/components/ui/switch'
 import { Slider } from '@/components/ui/slider'
+import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { cn } from '@/lib/utils'
 import { getFriendlyErrorText } from '@/api/errors'
 import { useUpdateInstance } from '../queries'
@@ -196,6 +197,14 @@ export function InstanceSettingsDialog({
   const [javaPath, setJavaPath] = useState(initial.javaPath)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [closeConfirmOpen, setCloseConfirmOpen] = useState(false)
+
+  // 脏状态：任一字段偏离初始值
+  const dirty =
+    allocatedMemory !== initial.memory ||
+    useAikarFlags !== initial.useAikar ||
+    jvmArgsText !== initial.jvmArgsText ||
+    javaPath !== initial.javaPath
 
   // totalMemory > 1 用系统内存，否则 16 兜底
   const totalMax = detail && detail.totalMemory > 1 ? detail.totalMemory : 16
@@ -256,7 +265,7 @@ export function InstanceSettingsDialog({
     'h-9 w-full rounded-mcs-sm border border-mcs-border-default bg-mcs-bg-default px-2.5 text-mcs-sm text-mcs-text-default placeholder:text-mcs-text-subtle focus:border-mcs-accent-border focus:outline-none focus:ring-1 focus:ring-mcs-focus-ring'
 
   return (
-    <Dialog open onOpenChange={(open) => !open && onOpenChange(false)}>
+    <Dialog open onOpenChange={(open) => { if (!open && dirty) { setCloseConfirmOpen(true) } else if (!open) { onOpenChange(false) } }}>
       <DialogContent className="bg-mcs-bg-default max-h-[85vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader className="flex-row items-center gap-3 space-y-0">
           <span className="flex size-9 shrink-0 items-center justify-center rounded-mcs-sm bg-mcs-accent-bg-subtle text-mcs-accent-fg">
@@ -395,7 +404,7 @@ export function InstanceSettingsDialog({
             variant="outline"
             className="flex-1"
             disabled={isSaving}
-            onClick={() => onOpenChange(false)}
+            onClick={() => { if (dirty) { setCloseConfirmOpen(true) } else { onOpenChange(false) } }}
           >
             取消
           </Button>
@@ -411,6 +420,17 @@ export function InstanceSettingsDialog({
           </Button>
         </div>
       </DialogContent>
+
+      {/* ── 脏状态关闭确认 ── */}
+      <ConfirmDialog
+        open={closeConfirmOpen}
+        onOpenChange={(open) => !open && setCloseConfirmOpen(false)}
+        title="未保存的更改"
+        description="当前有未保存的配置更改，关闭后这些修改将丢失。"
+        confirmText="不保存"
+        cancelText="继续编辑"
+        onConfirm={() => { setCloseConfirmOpen(false); onOpenChange(false) }}
+      />
     </Dialog>
   )
 }

@@ -3,7 +3,7 @@
  * - 新建/编辑双模式：task=null 新建（空表单）；task 非空编辑（回填初始值）
  * - cron 实时中文描述（cronDescription）+ 可视化编辑器开关（CronEditor）+ 7 预置 chip（CRON_PRESETS）
  * - 命令输入仅 type==='command' 时显示；启用 Switch
- * - 校验：名称/cron 任一为空 → toast.warning「请填写任务名称和 Cron 表达式」不发 onSave
+ * - 校验：名称/cron 任一为空 → 行内错误提示（对齐 deploy-dialog 范式），不发 onSave
  * - dirty 关闭拦截：表单有改动（对比初始值）时点遮罩/ESC/关闭/取消 → 弹确认（继续编辑/放弃修改）；
  *   无改动直接关闭。保存中（saving）禁止关闭
  */
@@ -30,7 +30,6 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { Chip } from '@/components/mcs/chip'
-import { toast } from 'sonner'
 import { CRON_PRESETS, cronDescription } from '@/lib/mc-cron'
 import { TASK_TYPE_OPTIONS, type TaskType } from '@/lib/mc-deploy'
 import { CronEditor } from './cron-editor'
@@ -65,6 +64,8 @@ export function TaskDialog({ task, onClose, onSave, saving }: TaskDialogProps) {
   const [enabled, setEnabled] = useState(initial.enabled)
   const [showEditor, setShowEditor] = useState(false)
   const [confirmClose, setConfirmClose] = useState(false)
+  const [nameError, setNameError] = useState('')
+  const [cronError, setCronError] = useState('')
 
   /** 表单相对初始值是否有改动（dirty 关闭拦截依据） */
   const dirty =
@@ -85,10 +86,12 @@ export function TaskDialog({ task, onClose, onSave, saving }: TaskDialogProps) {
   }
 
   const handleSave = async () => {
-    if (name.trim().length === 0 || cron.trim().length === 0) {
-      toast.warning('请填写任务名称和 Cron 表达式')
-      return
-    }
+    let valid = true
+    if (name.trim().length === 0) { setNameError('请填写任务名称'); valid = false }
+    else { setNameError('') }
+    if (cron.trim().length === 0) { setCronError('请填写 Cron 表达式'); valid = false }
+    else { setCronError('') }
+    if (!valid) return
     try {
       await onSave({
         name: name.trim(),
@@ -121,9 +124,12 @@ export function TaskDialog({ task, onClose, onSave, saving }: TaskDialogProps) {
               <Input
                 id="task-name"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => { setName(e.target.value); setNameError('') }}
                 placeholder="如：每日自动重启"
               />
+              {nameError !== '' && (
+                <p className="text-mcs-xs text-mcs-error-fg">{nameError}</p>
+              )}
             </div>
 
             {/* 任务类型 */}
@@ -150,7 +156,7 @@ export function TaskDialog({ task, onClose, onSave, saving }: TaskDialogProps) {
                 <Input
                   id="task-cron"
                   value={cron}
-                  onChange={(e) => setCron(e.target.value)}
+                  onChange={(e) => { setCron(e.target.value); setCronError('') }}
                   placeholder="如：0 4 * * * （每天 4:00）"
                   className="font-mono"
                 />
@@ -165,6 +171,9 @@ export function TaskDialog({ task, onClose, onSave, saving }: TaskDialogProps) {
                   {showEditor ? <ChevronUp aria-hidden /> : <SlidersHorizontal aria-hidden />}
                 </Button>
               </div>
+              {cronError !== '' && (
+                <p className="text-mcs-xs text-mcs-error-fg">{cronError}</p>
+              )}
               <p className="text-mcs-xs text-mcs-text-subtle">格式：分 时 日 月 周（* 表示任意）</p>
               {cronDesc.length > 0 && (
                 <p className="flex items-start gap-1 text-mcs-xs text-mcs-text-subtle">
@@ -181,6 +190,7 @@ export function TaskDialog({ task, onClose, onSave, saving }: TaskDialogProps) {
                       key={preset.value}
                       onClick={() => {
                         setCron(preset.value)
+                        setCronError('')
                         if (name.trim() === '') {
                           const typeLabel = TASK_TYPE_OPTIONS.find((o) => o.value === type)?.label ?? type
                           setName(`${preset.label} ${typeLabel}`)

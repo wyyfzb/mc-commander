@@ -43,6 +43,8 @@ export function ConnectionForm({ variant = 'settings', onSaved }: ConnectionForm
   const [testedOk, setTestedOk] = useState(false)
   const [latencyMs, setLatencyMs] = useState<number | null>(null)
   const [pendingAction, setPendingAction] = useState<PendingAction>(null)
+  const [urlError, setUrlError] = useState('')
+  const [keyError, setKeyError] = useState('')
 
   /** 未保存修改（与 store 对比） */
   const dirty = url !== storedBaseUrl || apiKey !== storedApiKey
@@ -52,11 +54,12 @@ export function ConnectionForm({ variant = 'settings', onSaved }: ConnectionForm
   // 状态行即时反馈：保存过（ready）或测试连接成功 → 已连接
   const isConnected = status === 'ready' || testedOk
 
-  /** 空值校验（测试/保存前置） */
+  /** 空值校验（测试/保存前置）——行内提示，对齐 deploy-dialog 范式 */
   function ensureFilled(): boolean {
-    if (url.trim() !== '' && apiKey.trim() !== '') return true
-    toast.warning('请先填写服务器地址和 API Key')
-    return false
+    let valid = true
+    if (url.trim() === '') { setUrlError('请填写服务器地址'); valid = false } else { setUrlError('') }
+    if (apiKey.trim() === '') { setKeyError('请填写 API Key'); valid = false } else { setKeyError('') }
+    return valid
   }
 
   /**
@@ -179,11 +182,15 @@ export function ConnectionForm({ variant = 'settings', onSaved }: ConnectionForm
           onChange={(e) => {
             setUrl(e.target.value)
             setTestedOk(false)
+            setUrlError('')
           }}
           placeholder="https://192.168.1.100:25566"
           autoComplete="off"
           spellCheck={false}
         />
+        {urlError !== '' && (
+          <p className="text-mcs-xs text-mcs-error-fg">{urlError}</p>
+        )}
         <p className="text-mcs-xs text-mcs-text-subtle">
           支持 http/https 协议；局域网自建服务器推荐内网地址
         </p>
@@ -210,6 +217,7 @@ export function ConnectionForm({ variant = 'settings', onSaved }: ConnectionForm
             onChange={(e) => {
               setApiKey(e.target.value)
               setTestedOk(false)
+              setKeyError('')
             }}
             placeholder="输入 API Key"
             autoComplete="off"
@@ -225,6 +233,9 @@ export function ConnectionForm({ variant = 'settings', onSaved }: ConnectionForm
             {showApiKey ? <EyeOff className="size-4" aria-hidden /> : <Eye className="size-4" aria-hidden />}
           </button>
         </div>
+        {keyError !== '' && (
+          <p className="text-mcs-xs text-mcs-error-fg">{keyError}</p>
+        )}
       </div>
 
       <div className="flex gap-3">

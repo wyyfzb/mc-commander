@@ -83,20 +83,22 @@ describe('TaskDialog 新建模式与校验', { timeout: 15000 }, () => {
     expect(screen.getByRole('button', { name: '取消' })).toBeInTheDocument()
   })
 
-  it('空名称与空 cron：toast 提示且不触发 onSave', async () => {
+  it('空名称与空 cron：行内错误提示且不触发 onSave', async () => {
     const user = userEvent.setup()
     const { onSave } = renderDialog()
     await user.click(screen.getByRole('button', { name: '创建' }))
-    expect(await screen.findByText('请填写任务名称和 Cron 表达式')).toBeInTheDocument()
+    expect(screen.getByText('请填写任务名称')).toBeInTheDocument()
+    expect(screen.getByText('请填写 Cron 表达式')).toBeInTheDocument()
     expect(onSave).not.toHaveBeenCalled()
   })
 
-  it('仅填名称（cron 为空）：仍拦截', async () => {
+  it('仅填名称（cron 为空）：仅显示 cron 行内错误', async () => {
     const user = userEvent.setup()
     const { onSave } = renderDialog()
     await user.type(screen.getByLabelText('任务名称'), '只有名字')
     await user.click(screen.getByRole('button', { name: '创建' }))
-    expect(await screen.findByText('请填写任务名称和 Cron 表达式')).toBeInTheDocument()
+    expect(screen.queryByText('请填写任务名称')).not.toBeInTheDocument()
+    expect(screen.getByText('请填写 Cron 表达式')).toBeInTheDocument()
     expect(onSave).not.toHaveBeenCalled()
   })
 
