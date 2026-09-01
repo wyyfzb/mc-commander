@@ -74,6 +74,9 @@ export const ErrorCodes = {
   // Modrinth 上游错误（搜索/版本/下载任一环节，保留 502 语义）
   MARKET_UPSTREAM_ERROR: { code: 50301, message: 'Modrinth upstream error', status: 502 },
 
+  // RCON 不可用（命令路由需要 RCON 响应但连接未启用或已断开）
+  RCON_UNAVAILABLE: { code: 50302, message: 'RCON not available', status: 503 },
+
   // 管理员登录（安全主线）
   AUTH_INVALID_CREDENTIALS: { code: 40102, message: '密码错误', status: 401 },
   // Bearer 会话不存在 / 已过期 / 已被踢出——客户端应重新登录

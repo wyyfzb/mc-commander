@@ -478,8 +478,8 @@ export interface WorldInfo {
   onlineMode: boolean
   /** 最后存档时间戳（ms；服务端 _getLastSaveTime，可能为 null） */
   lastSave: number | null
-  /** 游戏天数（time query gametime ÷ 24000） */
-  gameDays: number
+  /** 游戏天数（time query gametime ÷ 24000）；RCON 不可用时为 null */
+  gameDays: number | null
   dimensions: WorldDimension[]
 }
 

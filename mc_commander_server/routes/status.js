@@ -390,8 +390,16 @@ export function createStatusRoutes(serverManager) {
       return res.status(400).json(error(ErrorCodes.INSTANCE_NOT_RUNNING));
     }
 
-    const response = await instance.sendCommand(command);
-    res.json(success(response, 'Command sent'));
+    try {
+      const response = await instance.sendCommand(command);
+      res.json(success(response, 'Command sent'));
+    } catch (err) {
+      // RCON 连接断开/超时：返回专用错误码，前端可区分引导用户启用 RCON
+      if (!instance.isRconConnected) {
+        return res.status(503).json(error(ErrorCodes.RCON_UNAVAILABLE));
+      }
+      throw err;
+    }
   }));
 
   // GET /api/instances/:id/logs
@@ -759,7 +767,8 @@ export function createStatusRoutes(serverManager) {
     const props = instance.properties;
 
     // 通过 RCON 查询游戏天数（time query gametime 返回总 tick，24000 tick = 1 天）
-    let gameDays = 0;
+    // 查询失败时返回 null 而非静默 0，前端可据此展示「不可用」而非误导数据
+    let gameDays = null;
     if (instance.isRunning && instance.isRconConnected) {
       try {
         const result = await instance.sendCommandWithResponse('time query gametime', { timeout: 3000 });
@@ -774,7 +783,9 @@ export function createStatusRoutes(serverManager) {
         if (match) {
           gameDays = Math.floor(parseInt(match[1], 10) / 24000);
         }
-      } catch {}
+      } catch {
+        // RCON 查询失败（超时/断连/解析失败）：保持 null，不回退 0
+      }
     }
 
     // 统计各维度在线玩家数（从缓存的玩家详情中读取维度）
