@@ -126,6 +126,59 @@ describe('MCServerManager', () => {
   });
 
   describe('MCServerInstance', () => {
+    describe('mcVersion 传播', () => {
+      it('DB 有版本且无 versions/ 目录时返回 DB 值', () => {
+        const instance = manager.createInstance({
+          id: 'ver-db',
+          name: 'DB Version',
+          jarFile: 'server.jar',
+          mcVersion: '1.21.4',
+        });
+        // toStatus 内部调用 _getMcVersion
+        const status = instance.toStatus();
+        expect(status.mcVersion).toBe('1.21.4');
+      });
+
+      it('DB 无版本且有 versions/ 目录时回退目录探测', () => {
+        const instance = manager.createInstance({
+          id: 'ver-fs',
+          name: 'FS Version',
+          jarFile: 'server.jar',
+        });
+        // 手动创建 versions/ 目录并写入版本文件
+        const versionsDir = path.join(instance.serverPath, 'versions');
+        fs.mkdirSync(versionsDir, { recursive: true });
+        fs.writeFileSync(path.join(versionsDir, '1.20.4'), '');
+        const status = instance.toStatus();
+        expect(status.mcVersion).toBe('1.20.4');
+      });
+
+      it('DB 无版本且无 versions/ 目录时返回 unknown', () => {
+        const instance = manager.createInstance({
+          id: 'ver-none',
+          name: 'No Version',
+          jarFile: 'server.jar',
+        });
+        const status = instance.toStatus();
+        expect(status.mcVersion).toBe('unknown');
+      });
+
+      it('DB 版本优先于 versions/ 目录', () => {
+        const instance = manager.createInstance({
+          id: 'ver-priority',
+          name: 'Priority',
+          jarFile: 'server.jar',
+          mcVersion: '1.21.4',
+        });
+        // 即使有 versions/ 目录，DB 值优先
+        const versionsDir = path.join(instance.serverPath, 'versions');
+        fs.mkdirSync(versionsDir, { recursive: true });
+        fs.writeFileSync(path.join(versionsDir, '1.20.1'), '');
+        const status = instance.toStatus();
+        expect(status.mcVersion).toBe('1.21.4');
+      });
+    });
+
     it('should have correct initial status', () => {
       const instance = manager.createInstance({
         id: 'test',

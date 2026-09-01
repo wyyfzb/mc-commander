@@ -99,6 +99,7 @@ export class MCServerManager extends EventEmitter {
           jvmArgs: inst.jvmArgs,
           autoRestart: inst.autoRestart,
           autoStart: inst.autoStart,
+          mcVersion: inst.mcVersion,
         });
         console.log(`Loaded instance from DB: ${inst.id}`);
       } catch (e) {
@@ -226,7 +227,7 @@ export class MCServerManager extends EventEmitter {
 }
 
 export class MCServerInstance extends EventEmitter {
-  constructor({ id, name, javaPath, jarFile, maxMemory, minMemory, serverPath, startCommand, jvmArgs, autoRestart, autoStart }) {
+  constructor({ id, name, javaPath, jarFile, maxMemory, minMemory, serverPath, startCommand, jvmArgs, autoRestart, autoStart, mcVersion }) {
     super();
     this.id = id;
     this.name = name;
@@ -240,6 +241,8 @@ export class MCServerInstance extends EventEmitter {
     this.jvmArgs = Array.isArray(jvmArgs) ? jvmArgs : null;
     // 意外停止自动重启开关（DB 持久化，默认开）
     this.autoRestart = autoRestart !== undefined ? Boolean(autoRestart) : true;
+    // DB 持久化的 MC 版本号（部署/升级时写入），运行时以此为准
+    this.mcVersion = mcVersion || null;
     // 是否主动停止（stop/kill 设置），用于区分「意外停止/崩溃」与「用户主动停止」
     this._manualStop = false;
     this.process = null;
@@ -2658,6 +2661,9 @@ export class MCServerInstance extends EventEmitter {
   }
 
   _getMcVersion() {
+    // DB 持久化版本优先（部署/升级时写入，重启后由 loadInstances 传入）
+    if (this.mcVersion) return this.mcVersion;
+    // 兜底：扫描实例目录 versions/ 子目录（仅当 DB 无版本时）
     const versionPath = path.join(this.serverPath, 'versions');
     if (fs.existsSync(versionPath)) {
       try {
