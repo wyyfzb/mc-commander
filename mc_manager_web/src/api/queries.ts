@@ -49,14 +49,15 @@ export function useOverview() {
   })
 }
 
-/** 系统资源统计（云服务器资源，5s 轮询） */
+/** 系统资源统计（云服务器资源，WS 推送 + 30s 保底轮询） */
 export function useSystemStats() {
   const config = useConnectionStore()
   return useQuery({
     queryKey: queryKeys.systemStats(),
     queryFn: ({ signal }) => apiGet<SystemStats>('/api/v1/system-stats', config, signal),
     enabled: config.status === 'ready',
-    refetchInterval: 5_000,
+    refetchInterval: 30_000,
+    staleTime: 30_000,
   })
 }
 

@@ -10,7 +10,7 @@ import { queryKeys } from '@/api/queries'
 import { useConnectionStore } from '@/stores/connection'
 import type { BanRecord, Player } from '@/api/types'
 
-/** 玩家列表（全量拉取无分页；5s 轮询 + WS 事件驱动 invalidate） */
+/** 玩家列表（全量拉取无分页；WS 事件驱动 invalidate + 30s 保底轮询） */
 export function usePlayers(instanceId: string | null) {
   const config = useConnectionStore()
   return useQuery({
@@ -18,8 +18,8 @@ export function usePlayers(instanceId: string | null) {
     queryFn: ({ signal }) =>
       apiGet<Player[]>(`/api/v1/instances/${instanceId}/players`, config, signal),
     enabled: config.status === 'ready' && Boolean(instanceId),
-    refetchInterval: 5_000, // 默认刷新间隔 5s
-    staleTime: 4_000,
+    refetchInterval: 30_000,
+    staleTime: 30_000,
   })
 }
 

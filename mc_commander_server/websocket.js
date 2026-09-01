@@ -1,5 +1,8 @@
 import { authenticateWebSocket } from './middleware/auth.js';
 import { getDb } from './db/index.js';
+import os from 'os';
+import fs from 'fs';
+import config from './config.js';
 
 export const WSEvents = {
   LOG: 'log',
@@ -27,6 +30,7 @@ export const WSEvents = {
   DEPLOY_PROGRESS: 'deployProgress',
   CIRCUIT_BREAKER: 'circuit_breaker',
   UPGRADE_PROGRESS: 'upgradeProgress',
+  SYSTEM_STATS_UPDATE: 'systemStatsUpdate',
   ERROR: 'error',
 };
 
@@ -415,7 +419,16 @@ export function setupWebSocket(wss, serverManager) {
     }
   }
 
+  // broadcastAll 限流：按 type 记录最近发送时间，同类型 15s 内不重复发送
+  // （系统统计每 15s 推送一次 = 4/分钟 ≤ 240/分钟上限）
+  const broadcastAllThrottle = new Map();
+  const BROADCAST_ALL_THROTTLE_MS = 15_000;
+
   function broadcastAll(type, data) {
+    const now = Date.now();
+    const lastSent = broadcastAllThrottle.get(type) || 0;
+    if (now - lastSent < BROADCAST_ALL_THROTTLE_MS) return;
+    broadcastAllThrottle.set(type, now);
     const message = JSON.stringify({
       type,
       data,
@@ -443,7 +456,75 @@ export function setupWebSocket(wss, serverManager) {
     }
   });
 
-  return { broadcast, broadcastAll, WSEvents, ClientMessages };
+  return { broadcast, broadcastAll, WSEvents, ClientMessages, startSystemStatsBroadcast };
+
+  /// 每 15s 通过 broadcastAll 推送系统资源统计（CPU/内存/磁盘）
+  /// 调用方在 index.js 启动后调用，返回 stop 函数供优雅停机
+  function startSystemStatsBroadcast() {
+    // 磁盘使用率 10s 缓存（复用 status.js 同逻辑）
+    let _diskCache = { ts: 0, result: null };
+    function getDiskUsage() {
+      const now = Date.now();
+      if (_diskCache.result && now - _diskCache.ts < 10_000) return _diskCache.result;
+      const dirs = [config.serversDir, config.dataDir, config.backupsDir];
+      const seen = new Map();
+      for (const dir of dirs) {
+        try {
+          const stat = fs.statfsSync(dir);
+          const total = stat.bsize * stat.blocks;
+          const free = stat.bsize * stat.bfree;
+          const used = total - free;
+          const percent = total > 0 ? Math.round((used / total) * 1000) / 10 : 0;
+          const entry = {
+            mountpoint: stat.mounted || dir,
+            totalGB: Math.round(total / (1024 * 1024 * 1024) * 10) / 10,
+            usedGB: Math.round(used / (1024 * 1024 * 1024) * 10) / 10,
+            percent,
+          };
+          if (!seen.has(entry.mountpoint) || entry.percent > seen.get(entry.mountpoint).percent) {
+            seen.set(entry.mountpoint, entry);
+          }
+        } catch { /* skip */ }
+      }
+      const all = Array.from(seen.values());
+      const primary = all.sort((a, b) => b.percent - a.percent)[0] || null;
+      const result = { primary, all };
+      _diskCache = { ts: now, result };
+      return result;
+    }
+
+    // CPU 使用率：简单 loadavg 近似（避免复制 /proc/stat 状态机）
+    function getCpuUsage() {
+      const cores = os.cpus().length || 1;
+      const load = os.loadavg()[0] || 0;
+      return Math.min(100, Math.round((load / cores) * 100 * 10) / 10);
+    }
+
+    function collectAndBroadcast() {
+      const totalMemBytes = os.totalmem();
+      const freeMemBytes = os.freemem();
+      const usedMemBytes = totalMemBytes - freeMemBytes;
+      const totalMemGB = Math.round(totalMemBytes / (1024 * 1024 * 1024) * 10) / 10;
+      const usedMemGB = Math.round(usedMemBytes / (1024 * 1024 * 1024) * 10) / 10;
+      const memUsagePercent = totalMemBytes > 0
+        ? Math.round((usedMemBytes / totalMemBytes) * 1000) / 10 : 0;
+      broadcastAll(WSEvents.SYSTEM_STATS_UPDATE, {
+        cpuUsage: getCpuUsage(),
+        memoryUsage: usedMemGB,
+        totalMemory: totalMemGB,
+        memoryPercent: memUsagePercent,
+        cpuCores: os.cpus().length,
+        loadAvg: os.loadavg(),
+        uptime: os.uptime(),
+        diskUsage: getDiskUsage(),
+      });
+    }
+
+    // 立即推送一次，然后每 15s 定时
+    collectAndBroadcast();
+    const timer = setInterval(collectAndBroadcast, 15_000);
+    return () => clearInterval(timer);
+  }
 }
 
 export default setupWebSocket;
