@@ -59,6 +59,16 @@ import { vi } from 'vitest';
 vi.mock('../db/database.js', () => ({ getDb: () => db }));
 vi.mock('../utils/audit.js', () => ({ recordAudit: vi.fn(), AuditActions: {} }));
 
+// url-guard 真实实现 + 注入假 lookup：域名测试不触网（恒定解析到公网示例地址）
+vi.mock('../utils/url-guard.js', async () => {
+  const real = await vi.importActual('../utils/url-guard.js');
+  return {
+    checkPublicUrl: (url) => real.checkPublicUrl(url, {
+      lookup: async () => [{ address: '93.184.216.34', family: 4 }],
+    }),
+  };
+});
+
 const { createWebhookRoutes } = await import('../routes/webhooks.js');
 
 function getApp() {
@@ -95,6 +105,36 @@ describe('Webhook 路由', () => {
     const res = await request(getApp()).post('/api/v1/webhooks').send({
       name: 'Bad URL',
       url: 'ftp://evil.com/hook',
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe(40010);
+  });
+
+  it('POST /webhooks SSRF 防护（环回/私网 IP 字面量拒绝）', async () => {
+    const blockedUrls = [
+      'http://127.0.0.1/hook',
+      'http://10.1.2.3/hook',
+      'http://192.168.1.100/hook',
+      'http://172.16.0.9/hook',
+      'http://169.254.169.254/latest/meta-data',
+      'http://0.0.0.0/hook',
+      'http://[::1]/hook',
+    ];
+    for (const url of blockedUrls) {
+      const res = await request(getApp()).post('/api/v1/webhooks').send({
+        name: `SSRF ${url}`,
+        url,
+      });
+      expect(res.status, `URL ${url} 应被拒绝`).toBe(400);
+      expect(res.body.code).toBe(40010);
+      expect(res.body.message).toContain('拒绝');
+    }
+  });
+
+  it('POST /webhooks SSRF 防护（localhost 主机名拒绝）', async () => {
+    const res = await request(getApp()).post('/api/v1/webhooks').send({
+      name: 'SSRF localhost',
+      url: 'http://localhost:8080/hook',
     });
     expect(res.status).toBe(400);
     expect(res.body.code).toBe(40010);
@@ -137,6 +177,15 @@ describe('Webhook 路由', () => {
     expect(res.body.data.name).toBe('Updated Hook');
   });
 
+  it('PUT /webhooks/:id SSRF 防护（更新为私网 URL 拒绝）', async () => {
+    const res = await request(getApp()).put('/api/v1/webhooks/1').send({
+      url: 'http://192.168.0.50/hook',
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe(40010);
+    expect(res.body.message).toContain('拒绝');
+  });
+
   it('DELETE /webhooks/:id 删除', async () => {
     // 先创建一个待删的
     await request(getApp()).post('/api/v1/webhooks').send({
@@ -153,5 +202,14 @@ describe('Webhook 路由', () => {
     const res = await request(getApp()).get('/api/v1/webhooks/1/deliveries');
     expect(res.status).toBe(200);
     expect(res.body.pagination).toBeDefined();
+  });
+
+  // 放行用例置于末尾：创建新记录会占用自增 id，避免影响前序用例的 id 约定
+  it('POST /webhooks SSRF 防护（公网域名放行）', async () => {
+    const res = await request(getApp()).post('/api/v1/webhooks').send({
+      name: 'Public Hook',
+      url: 'https://hooks.example.com/webhook',
+    });
+    expect(res.status).toBe(200);
   });
 });
