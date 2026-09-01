@@ -5,7 +5,7 @@
  * 可能覆盖新请求的结果。本 hook 用单调递增序号标记每次执行，
  * 异步操作返回后校验序号是否仍为最新，过时结果静默丢弃。
  *
- * 设计参考：general-panel.tsx 的 seqRef 手动模式（issue #222 统一抽象）。
+ * 设计参考：general-panel.tsx 的 seqRef 手动模式（统一抽象）。
  *
  * 用法：
  *   const { execute, data, isPending, error } = useSequencedQuery(
