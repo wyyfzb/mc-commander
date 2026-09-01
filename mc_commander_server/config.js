@@ -7,6 +7,7 @@ dotenv.config({ path: path.join(__dirname, '.env') });
 
 export default {
   apiKey: process.env.API_KEY || '',
+  apiKeyHash: process.env.API_KEY_HASH || '',
   port: parseInt(process.env.PORT || '25566'),
   serversDir: path.resolve(process.env.SERVERS_DIR || './servers'),
   dataDir: path.resolve(process.env.DATA_DIR || './data'),
