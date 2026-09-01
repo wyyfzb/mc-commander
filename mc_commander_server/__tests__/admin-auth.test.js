@@ -4,7 +4,7 @@ import request from 'supertest';
 import fs from 'fs';
 
 // dataDir 指向临时目录（真实 SQLite，验证模型/路由/中间件全链路），
-// 其余 config 保留实际值（authMiddleware 依赖真实 apiKey）
+// 其余 config 保留实际值（authMiddleware 依赖真实 apiKeyHash）
 vi.mock('../config.js', async (importOriginal) => {
   const actual = await importOriginal();
   const fs = await import('fs');
@@ -21,6 +21,9 @@ import { hashPassword, verifyPassword, hashToken, generateSessionToken } from '.
 import { authMiddleware, authenticateWebSocket } from '../middleware/auth.js';
 import { createAuthRoutes, resetLoginLockState } from '../routes/auth.js';
 import { errorHandler } from '../middleware/error_handler.js';
+
+// 测试用明文 Key（与 vitest.config.js 中 API_KEY 一致）
+const TEST_PLAINTEXT_KEY = 'test-api-key-for-unit-tests';
 
 let app;
 let db;
@@ -99,7 +102,7 @@ describe('authenticateWebSocket 会话通道（WS 握手双通道）', () => {
 
   it('apiKey 与 sessionToken 同时传入 → apiKey 优先', () => {
     seedSession();
-    expect(authenticateWebSocket(config.apiKey, 'ignored-invalid-token')).toBe(true);
+    expect(authenticateWebSocket(TEST_PLAINTEXT_KEY, 'ignored-invalid-token')).toBe(true);
     expect(authenticateWebSocket('wrong-key', 'ignored-invalid-token')).toBe(false);
   });
 
@@ -111,7 +114,7 @@ describe('authenticateWebSocket 会话通道（WS 握手双通道）', () => {
 
 describe('认证中间件', () => {
   it('X-API-Key 通道保持兼容（req.auth.source = apiKey）', async () => {
-    const res = await request(app).get('/api/v1/protected').set('X-API-Key', config.apiKey);
+    const res = await request(app).get('/api/v1/protected').set('X-API-Key', TEST_PLAINTEXT_KEY);
     expect(res.status).toBe(200);
     expect(res.body.auth.source).toBe('apiKey');
   });
@@ -231,7 +234,7 @@ describe('认证路由 - login/logout/sessions', () => {
 
     const viaKey = await request(app)
       .post('/api/v1/auth/logout')
-      .set('X-API-Key', config.apiKey);
+      .set('X-API-Key', TEST_PLAINTEXT_KEY);
     expect(viaKey.status).toBe(400);
   });
 

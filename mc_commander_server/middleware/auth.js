@@ -4,6 +4,14 @@ import { ErrorCodes, error } from '../utils/response.js';
 import { AdminSessionModel } from '../db/index.js';
 import { hashToken } from '../utils/password.js';
 
+/** 恒时比对 API Key：对入站明文做 SHA-256 后与存储的哈希比较 */
+function verifyApiKey(incomingKey) {
+  const storedHash = config.apiKeyHash;
+  if (!storedHash) return false;
+  const incomingHash = hashToken(incomingKey);
+  return safeEqual(incomingHash, storedHash);
+}
+
 function safeEqual(a, b) {
   const bufA = Buffer.from(String(a));
   const bufB = Buffer.from(String(b));
@@ -32,7 +40,7 @@ export function authMiddleware(req, res, next) {
   // 通道一：API Key（自动化 / API 调用通道，与既有行为完全兼容）
   const apiKey = req.headers['x-api-key'];
   if (apiKey != null) {
-    if (!safeEqual(apiKey, config.apiKey)) {
+    if (!verifyApiKey(apiKey)) {
       return res.status(401).json(error(
         ErrorCodes.INVALID_API_KEY,
         'Invalid API Key'
@@ -85,7 +93,7 @@ export function authMiddleware(req, res, next) {
  */
 export function authenticateWebSocket(apiKey, sessionToken = null) {
   if (apiKey) {
-    return safeEqual(apiKey, config.apiKey);
+    return verifyApiKey(apiKey);
   }
   if (sessionToken) {
     const session = AdminSessionModel.findByTokenHash(hashToken(sessionToken));

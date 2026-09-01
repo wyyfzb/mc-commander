@@ -1,10 +1,8 @@
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
-import { checkApiKeyStrength } from '../index.js';
 
 // ── 模块级共享状态与桩对象 ─────────────────────────────────────
 // 全部依赖在下方 vi.mock 为桩：避免 import index.js 时产生真实副作用
-// （真实数据库初始化 / 端口监听 / MC 子进程等）。测试用密钥均为 mock，
-// 仅用于验证强度判定逻辑，非真实数据。
+// （真实数据库初始化 / 端口监听 / MC 子进程等）。
 // 注意：vi.mock 的路径相对于本测试文件，因此源码模块需用 ../ 前缀。
 const h = vi.hoisted(() => {
   const appUse = vi.fn();
@@ -15,8 +13,9 @@ const h = vi.hoisted(() => {
     on: serverOn,
     close: vi.fn((cb) => typeof cb === 'function' && cb()),
   };
+  // SHA-256('mock-strong-key-0123456789abcdef') 预计算
   return {
-    apiKey: 'mock-strong-key-0123456789abcdef',
+    apiKeyHash: '98f5a7bec05d6145e649c6edd8f8d27f380d0da515a86ab4f77c5f0f50b56bf6',
     app,
     server,
     serverOn,
@@ -41,9 +40,11 @@ vi.mock('ws', () => ({
 }));
 vi.mock('../config.js', () => ({
   default: {
-    // getter：测试间可通过 h.apiKey 动态切换，重新 import 后生效
+    get apiKeyHash() {
+      return h.apiKeyHash;
+    },
     get apiKey() {
-      return h.apiKey;
+      return '';
     },
     port: 1,
     serversDir: 'mock:/servers',
@@ -84,8 +85,9 @@ vi.mock('../websocket.js', () => ({ setupWebSocket: vi.fn() }));
 vi.mock('../services/webhook.service.js', () => ({ setupWebhookDispatch: vi.fn() }));
 vi.mock('../db/index.js', () => ({ initDatabase: vi.fn() }));
 
-// 满足强度规则的 mock 强 Key（≥16 位且非低熵形态）
-const STRONG_KEY = 'mock-strong-key-0123456789abcdef';
+// 满足哈希格式的 mock Hash（64 位 hex）
+// SHA-256('mock-strong-key-0123456789abcdef') 预计算
+const VALID_HASH = '98f5a7bec05d6145e649c6edd8f8d27f380d0da515a86ab4f77c5f0f50b56bf6';
 
 // 重新 import index.js 前复位：模块注册表 / use 记录
 function resetAndImport() {
@@ -98,7 +100,7 @@ describe('WebSocketServer maxPayload', () => {
   beforeEach(() => {
     vi.unstubAllEnvs();
     vi.stubEnv('NODE_ENV', 'development');
-    h.apiKey = STRONG_KEY;
+    h.apiKeyHash = VALID_HASH;
   });
 
   it('WebSocketServer 构造应设置 maxPayload 为 1MB 并保留原 path', async () => {
@@ -113,7 +115,7 @@ describe('限流中间件挂载顺序', () => {
   beforeEach(() => {
     vi.unstubAllEnvs();
     vi.stubEnv('NODE_ENV', 'development');
-    h.apiKey = STRONG_KEY;
+    h.apiKeyHash = VALID_HASH;
   });
 
   it('rateLimit 应先于 authMiddleware，apiKeyRateLimit 应在 authMiddleware 之后', async () => {
@@ -140,7 +142,7 @@ describe('安全响应头中间件（helmet）', () => {
   beforeEach(() => {
     vi.unstubAllEnvs();
     vi.stubEnv('NODE_ENV', 'development');
-    h.apiKey = STRONG_KEY;
+    h.apiKeyHash = VALID_HASH;
   });
 
   it('helmet 中间件应挂在根路径且先于 body 解析器', async () => {
@@ -157,43 +159,8 @@ describe('安全响应头中间件（helmet）', () => {
   });
 });
 
-describe('API Key 强度校验', () => {
-  describe('checkApiKeyStrength 纯函数', () => {
-    it('强随机 Key 应通过（≥16 位且非低熵形态）', () => {
-      expect(checkApiKeyStrength(STRONG_KEY).ok).toBe(true);
-      expect(checkApiKeyStrength('Ab3#xK9!qW2@zL7%v').ok).toBe(true);
-    });
-
-    it('长度不足 16 位应拒绝', () => {
-      const r = checkApiKeyStrength('short-key-123');
-      expect(r.ok).toBe(false);
-      expect(r.reason).toContain('长度');
-    });
-
-    it('纯数字低熵形态应拒绝', () => {
-      expect(checkApiKeyStrength('1234567890123456').ok).toBe(false);
-    });
-
-    it('纯小写字母低熵形态应拒绝', () => {
-      expect(checkApiKeyStrength('abcdefghijklmnop').ok).toBe(false);
-    });
-
-    it('纯大写字母低熵形态应拒绝', () => {
-      expect(checkApiKeyStrength('ABCDEFGHIJKLMNOP').ok).toBe(false);
-    });
-
-    it('纯重复字符低熵形态应拒绝', () => {
-      expect(checkApiKeyStrength('aaaaaaaaaaaaaaaa').ok).toBe(false);
-      expect(checkApiKeyStrength('1111111111111111').ok).toBe(false);
-    });
-
-    it('非字符串输入应拒绝', () => {
-      expect(checkApiKeyStrength(undefined).ok).toBe(false);
-      expect(checkApiKeyStrength(null).ok).toBe(false);
-    });
-  });
-
-  describe('启动时强度校验行为', () => {
+describe('API Key Hash 启动校验', () => {
+  describe('启动时哈希存在性校验', () => {
     let exitSpy;
 
     beforeAll(() => {
@@ -210,30 +177,14 @@ describe('API Key 强度校验', () => {
       vi.unstubAllEnvs();
     });
 
-    it('生产环境低熵强度 Key 应 process.exit(1)', async () => {
-      vi.stubEnv('NODE_ENV', 'production');
-      h.apiKey = '1234567890123456'; // 纯数字低熵
+    it('无 API Key Hash 应 process.exit(1)', async () => {
+      h.apiKeyHash = '';
       await resetAndImport();
       expect(exitSpy).toHaveBeenCalledWith(1);
     });
 
-    it('生产环境默认弱 Key（精确匹配）应 process.exit(1)', async () => {
-      vi.stubEnv('NODE_ENV', 'production');
-      h.apiKey = 'mc-commander-default-key';
-      await resetAndImport();
-      expect(exitSpy).toHaveBeenCalledWith(1);
-    });
-
-    it('开发环境低熵强度 Key 仅告警不退出', async () => {
-      vi.stubEnv('NODE_ENV', 'development');
-      h.apiKey = '1234567890123456';
-      await resetAndImport();
-      expect(exitSpy).not.toHaveBeenCalled();
-    });
-
-    it('生产环境强 Key 不退出', async () => {
-      vi.stubEnv('NODE_ENV', 'production');
-      h.apiKey = STRONG_KEY;
+    it('有 API Key Hash 不退出', async () => {
+      h.apiKeyHash = VALID_HASH;
       await resetAndImport();
       expect(exitSpy).not.toHaveBeenCalled();
     });
@@ -261,7 +212,7 @@ describe('端口占用错误处理（EADDRINUSE）', () => {
     h.serverOn.mockClear();
     vi.unstubAllEnvs();
     vi.stubEnv('NODE_ENV', 'development');
-    h.apiKey = STRONG_KEY;
+    h.apiKeyHash = VALID_HASH;
   });
 
   it('server.listen 前应注册 error 事件监听', async () => {

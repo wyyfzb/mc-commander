@@ -3,9 +3,12 @@ import { WebSocketServer } from 'ws';
 import http from 'http';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import helmet from 'helmet';
 import config from './config.js';
+import { hashToken } from './utils/password.js';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // 版本号单一来源：package.json（与 routes/index.js 的 /health、check-update 共用）
 const SERVER_VERSION = JSON.parse(fs.readFileSync(new URL('./package.json', import.meta.url), 'utf-8')).version;
 import { authMiddleware } from './middleware/auth.js';
@@ -22,60 +25,47 @@ import { setupWebhookDispatch } from './services/webhook.service.js';
 import { BackupService } from './services/backup.service.js';
 import { initDatabase, getDb, InstanceModel } from './db/index.js';
 
-// 启动前校验关键配置（在 listen 之前）
-if (!config.apiKey || config.apiKey === '') {
-  console.error('╔══════════════════════════════════════════════════╗');
-  console.error('║  错误: 未设置 API_KEY！                          ║');
-  console.error('║  请在 .env 文件中设置 API_KEY 后再启动服务端。   ║');
-  console.error('╚══════════════════════════════════════════════════╝');
-  process.exit(1);
-}
+// ── 启动时 API Key 哈希迁移 + .env 权限检查 ────────────
+const envPath = path.join(__dirname, '.env');
 
-// ── find-016 生产环境 API Key 强度校验 ────────────────────────
-// 低熵形态：纯数字 / 纯小写字母 / 纯大写字母 / 纯重复字符等
-const LOW_ENTROPY_PATTERNS = [
-  { regex: /^\d+$/, label: '纯数字' },
-  { regex: /^[a-z]+$/, label: '纯小写字母' },
-  { regex: /^[A-Z]+$/, label: '纯大写字母' },
-  { regex: /^(.)\1+$/, label: '纯重复字符' },
-];
-
-// 强度判定（导出供单元测试）：长度 ≥ 16 且非低熵形态视为合格
-export function checkApiKeyStrength(apiKey) {
-  if (typeof apiKey !== 'string' || apiKey.length < 16) {
-    return { ok: false, reason: '长度不足 16 位' };
-  }
-  for (const { regex, label } of LOW_ENTROPY_PATTERNS) {
-    if (regex.test(apiKey)) {
-      return { ok: false, reason: `低熵形态（${label}）` };
+// 迁移：旧格式 API_KEY=<明文> → API_KEY_HASH=<sha256hex>
+if (!config.apiKeyHash && config.apiKey) {
+  const hash = hashToken(config.apiKey);
+  config.apiKeyHash = hash;
+  try {
+    let content = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf-8') : '';
+    content = content.replace(/^API_KEY=.*$/m, '');
+    const hashLine = `API_KEY_HASH=${hash}`;
+    if (/^API_KEY_HASH=.*$/m.test(content)) {
+      content = content.replace(/^API_KEY_HASH=.*$/m, hashLine);
+    } else {
+      content += (content === '' || content.endsWith('\n') ? '' : '\n') + hashLine + '\n';
     }
+    const tmp = envPath + '.tmp';
+    fs.writeFileSync(tmp, content, 'utf-8');
+    try { fs.chmodSync(tmp, 0o600); } catch { /* Windows 无权限位 */ }
+    fs.renameSync(tmp, envPath);
+    console.log('[Security] API Key 已自动迁移为哈希存储格式（API_KEY_HASH）');
+  } catch (err) {
+    console.error(`[Security] API Key 哈希迁移失败：${err.message}，请手动将 .env 中 API_KEY 替换为 API_KEY_HASH=<sha256hex>`);
   }
-  return { ok: true, reason: null };
 }
 
-const isProduction = process.env.NODE_ENV === 'production';
-const weakKeys = ['mc-commander-dev-key', 'mc-commander-default-key', ''];
-const isWeakExactKey = weakKeys.includes(config.apiKey);
-const strengthCheck = checkApiKeyStrength(config.apiKey);
-const isWeakApiKey = isWeakExactKey || !strengthCheck.ok;
-
-if (isProduction && isWeakApiKey) {
-  console.error('╔══════════════════════════════════════════════════╗');
-  console.error('║  错误: 生产环境禁止使用默认/弱 API Key！         ║');
-  if (isWeakExactKey) {
-    console.error('║  请使用强随机串（如 openssl rand -hex 32）。     ║');
-  } else {
-    console.error(`║  当前 Key 强度不足（${strengthCheck.reason}）。   ║`);
+// .env 权限检查：POSIX 下 group/other 可读位告警
+try {
+  const stat = fs.statSync(envPath);
+  if ((stat.mode & 0o077) !== 0) {
+    console.warn(`[Security] .env 文件权限过宽（${(stat.mode & 0o777).toString(8)}），建议设置为 0600（仅所有者可读写）`);
   }
+} catch { /* 文件不存在等情况由后续校验处理 */ }
+
+// 启动前校验关键配置（在 listen 之前）
+if (!config.apiKeyHash) {
+  console.error('╔══════════════════════════════════════════════════╗');
+  console.error('║  错误: 未设置 API_KEY_HASH！                     ║');
+  console.error('║  请在 .env 文件中设置 API_KEY_HASH 后再启动。  ║');
   console.error('╚══════════════════════════════════════════════════╝');
   process.exit(1);
-}
-
-if (!isProduction && isWeakApiKey) {
-  console.warn('╔══════════════════════════════════════════════════╗');
-  console.warn('║  警告: 正在使用默认/弱 API Key！                  ║');
-  console.warn('║  请修改 .env 文件中的 API_KEY 以确保安全。        ║');
-  console.warn('╚══════════════════════════════════════════════════╝');
 }
 
 initDatabase();
@@ -197,10 +187,10 @@ server.listen(config.port, '0.0.0.0', () => {
   console.log(`  MC_Commander Server v${SERVER_VERSION}`);
   console.log(`========================================`);
   console.log(`  Port: ${config.port}`);
-  const maskedKey = config.apiKey.length > 4
-    ? config.apiKey.substring(0, 4) + '****'
+  const maskedHash = config.apiKeyHash.length > 8
+    ? config.apiKeyHash.substring(0, 8) + '...'
     : '****';
-  console.log(`  API Key: ${maskedKey}`);
+  console.log(`  API Key Hash: ${maskedHash}`);
   console.log(`  Servers Dir: ${config.serversDir}`);
   console.log(`  Data Dir: ${config.dataDir}`);
   console.log(`  API Endpoint: http://localhost:${config.port}/api/v1`);

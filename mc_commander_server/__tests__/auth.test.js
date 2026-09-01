@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { authMiddleware, authenticateWebSocket } from '../middleware/auth.js';
-import config from '../config.js';
+
+// 测试用明文 Key（与 vitest.config.js 中 API_KEY 一致）
+const TEST_PLAINTEXT_KEY = 'test-api-key-for-unit-tests';
 
 describe('authMiddleware', () => {
   let req, res, next;
@@ -15,7 +17,7 @@ describe('authMiddleware', () => {
   });
 
   it('should allow request with valid apikey in header', () => {
-    req.headers['x-api-key'] = config.apiKey;
+    req.headers['x-api-key'] = TEST_PLAINTEXT_KEY;
 
     authMiddleware(req, res, next);
 
@@ -43,7 +45,7 @@ describe('authMiddleware', () => {
   });
 
   it('should no longer accept apikey via query parameter', () => {
-    req.query.apikey = config.apiKey;
+    req.query.apikey = TEST_PLAINTEXT_KEY;
 
     authMiddleware(req, res, next);
 
@@ -79,7 +81,7 @@ describe('authMiddleware', () => {
 
 describe('authenticateWebSocket', () => {
   it('should return true for valid apikey', () => {
-    expect(authenticateWebSocket(config.apiKey)).toBe(true);
+    expect(authenticateWebSocket(TEST_PLAINTEXT_KEY)).toBe(true);
   });
 
   it('should return false for invalid apikey', () => {
