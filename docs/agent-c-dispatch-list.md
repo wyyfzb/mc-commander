@@ -33,7 +33,7 @@
 | 15 | [打磨] 玻璃预算收敛：glass-overlay 6→2，弹窗回归实底（一致性） | 中 | PR-10 拆① / A6 | 只留命令面板与 notification-drawer；batch-bar 与 plugins 批量条统一；玻璃预算纳入 CI 断言（衔接 #1） | #1 |
 | 16 | [打磨] 色板/动效瘦身 + 圆角双轨清理 + CTA 配额成文（一致性） | 中 | PR-10 拆② / A5/A7/A12 | 删死色 orange；purple 49 处转 `--mcs-special-fg`；维度三色注册 @theme；删 motion-slow；圆角双轨规则改写；「每页 1 绿实底 CTA + outline ≤2 排」写入 design-review-guidelines 并全站清点；emergency 停止按钮升级 destructive | #1 |
 
-## Phase 2 · UX 工作流（可与 Phase 1 后半并行）
+## Phase 2 · UX 工作流 ✅（#17-20 全部合并；#20 含对比度复算记录 PR#248）
 
 | # | 任务标题 | 粒度 | 来源 | 验收要点 | 依赖 |
 |---|---|---|---|---|---|
