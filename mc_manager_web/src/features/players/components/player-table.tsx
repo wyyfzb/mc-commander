@@ -411,6 +411,7 @@ export function PlayerTable({
                   return (
                     <th
                       key={header.id}
+                      scope="col"
                       style={{ width: header.getSize() }}
                       className={cn(
                         'h-9 px-2 text-mcs-xs font-medium text-mcs-text-subtle',

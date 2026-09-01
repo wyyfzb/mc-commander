@@ -1,3 +1,4 @@
+import { useEffect, useRef, useCallback } from 'react'
 import { NavLink } from 'react-router'
 import {
   LayoutDashboard,
@@ -43,6 +44,58 @@ const PRIMARY_NAV: NavItem[] = [
 
 const BOTTOM_NAV: NavItem[] = [{ to: '/settings', label: '设置', icon: Settings }]
 
+/**
+ * FocusTrap —— WAI-ARIA 焦点陷阱
+ * 打开时 Tab 循环在容器内；关闭后焦点还原到触发按钮。
+ * 仅用于移动端抽屉（<768px），桌面侧栏无需焦点陷阱。
+ */
+function FocusTrap({ active, containerRef, onDeactivate }: { active: boolean; containerRef: React.RefObject<HTMLElement | null>; onDeactivate: () => void }) {
+  const previousFocusRef = useRef<HTMLElement | null>(null)
+
+  // 保存/还原焦点
+  useEffect(() => {
+    if (active) {
+      previousFocusRef.current = document.activeElement as HTMLElement
+      // 自动聚焦容器内第一个可聚焦元素
+      const first = containerRef.current?.querySelector<HTMLElement>('a, button, [tabindex]:not([tabindex="-1"])')
+      first?.focus()
+    } else {
+      previousFocusRef.current?.focus()
+      previousFocusRef.current = null
+    }
+  }, [active, containerRef])
+
+  // Tab 循环 + Escape 关闭
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (!active || !containerRef.current) return
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      onDeactivate()
+      return
+    }
+    if (e.key !== 'Tab') return
+    const focusable = containerRef.current.querySelectorAll<HTMLElement>('a, button, [tabindex]:not([tabindex="-1"])')
+    if (focusable.length === 0) return
+    const first = focusable[0]!
+    const last = focusable[focusable.length - 1]!
+    if (e.shiftKey) {
+      if (document.activeElement === first) {
+        e.preventDefault()
+        last.focus()
+      }
+    } else {
+      if (document.activeElement === last) {
+        e.preventDefault()
+        first.focus()
+      }
+    }
+  }, [active, containerRef, onDeactivate])
+
+  if (!active) return null
+  // 不可见哨兵：接收焦点但不占空间
+  return <div onKeyDown={handleKeyDown} tabIndex={-1} style={{ position: 'absolute', width: 0, height: 0, overflow: 'hidden' }} />
+}
+
 interface AppSidebarProps {
   collapsed: boolean
   mobileNavOpen: boolean
@@ -53,6 +106,7 @@ export function AppSidebar({ collapsed, mobileNavOpen, onMobileNavClose }: AppSi
   const instanceId = useServerStore((s) => s.instanceId)
   const instancesQuery = useInstances()
   const current = instancesQuery.data?.find((i) => i.id === instanceId)
+  const mobileDrawerRef = useRef<HTMLElement | null>(null)
 
   const nav = (
     <>
@@ -127,14 +181,16 @@ export function AppSidebar({ collapsed, mobileNavOpen, onMobileNavClose }: AppSi
           aria-hidden
         />
         <aside
+          ref={mobileDrawerRef}
           className={cn(
-            'glass-chrome absolute inset-y-0 left-0 flex w-64 flex-col border-r border-mcs-border-muted',
+            'glass-chrome relative inset-y-0 left-0 flex w-64 flex-col border-r border-mcs-border-muted',
             'transition-transform duration-mcs-base ease-mcs-snappy',
             mobileNavOpen ? 'translate-x-0' : '-translate-x-full',
           )}
           aria-label="主导航（移动端）"
           aria-hidden={!mobileNavOpen}
         >
+          <FocusTrap active={mobileNavOpen} containerRef={mobileDrawerRef} onDeactivate={onMobileNavClose} />
           <BrandRow collapsed={false} />
           {nav}
         </aside>
