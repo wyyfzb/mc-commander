@@ -66,12 +66,16 @@ function buildXtermTheme() {
   }
 }
 
+/** 屏读镜像：保留最近 N 行纯文本，供 aria-live 推送给屏幕阅读器 */
+const SR_LINE_COUNT = 20
+
 export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const xtermRef = useRef<Terminal | null>(null)
   const fitRef = useRef<FitAddon | null>(null)
   const renderedCountRef = useRef(0)
   const autoScrollRef = useRef(true)
+  const srLiveRef = useRef<HTMLDivElement>(null)
   const theme = useUiStore((s) => s.theme)
   const autoScrollEnabled = useUiStore((s) => s.terminalAutoScroll)
   // onScroll 注册于 mount effect，闭包捕获首渲染值——ref 同步最新偏好
@@ -156,16 +160,26 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
     const rendered = renderedCountRef.current
     if (buffer.length === rendered) return
 
+    const visibleLines: string[] = []
     for (let i = rendered; i < buffer.length; i++) {
       const entry = buffer[i] as TerminalLogEntry
       if (entry.jvmWarning && !showJvmWarnings) continue
       const ansi = LEVEL_ANSI[entry.level]
       const bold = BOLD_LEVELS.has(entry.level) ? '1;' : ''
       term.write(`\x1b[${bold}${ansi}m${entry.text}\x1b[0m\r\n`)
+      visibleLines.push(entry.text)
     }
     renderedCountRef.current = buffer.length
     if (autoScrollRef.current) {
       term.scrollToBottom()
+    }
+    // 同步屏读镜像：取最近 N 行纯文本
+    if (srLiveRef.current) {
+      const allVisible = buffer.filter((e) => {
+        const entry = e as TerminalLogEntry
+        return !(entry.jvmWarning && !showJvmWarnings)
+      }).map((e) => (e as TerminalLogEntry).text)
+      srLiveRef.current.textContent = allVisible.slice(-SR_LINE_COUNT).join('\n')
     }
   }, [buffer, showJvmWarnings])
 
@@ -318,6 +332,15 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
 
       {/* 终端区 */}
       <div className="relative min-h-0 flex-1">
+        {/* 屏读镜像：aria-live 区域，屏幕阅读器可朗读最近 N 行终端输出 */}
+        <div
+          ref={srLiveRef}
+          data-testid="sr-live-mirror"
+          aria-live="polite"
+          aria-atomic="false"
+          aria-label="终端输出"
+          className="sr-only"
+        />
         <div ref={containerRef} className="absolute inset-0 p-2" data-testid="xterm-container" />
         {isLoading && buffer.length === 0 ? (
           // B17 首屏骨架：日志未到前占位（xterm 已挂载，日志到达自动替换）

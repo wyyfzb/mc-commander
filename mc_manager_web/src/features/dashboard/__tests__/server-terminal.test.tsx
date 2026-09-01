@@ -87,4 +87,18 @@ describe('ServerTerminal', () => {
     fireEvent.keyDown(window, { key: 'l' })
     expect(useTerminalStore.getState().buffer.length).toBeGreaterThan(0)
   })
+
+  it('aria-live 屏读镜像区域存在且含终端文本', async () => {
+    renderTerminal()
+    const srMirror = await waitFor(() =>
+      document.querySelector('[data-testid="sr-live-mirror"]'),
+    )
+    expect(srMirror).toBeTruthy()
+    expect(srMirror?.getAttribute('aria-live')).toBe('polite')
+    expect(srMirror?.getAttribute('aria-label')).toBe('终端输出')
+    // 等日志回填后，屏读镜像应包含文本
+    await waitFor(() => {
+      expect(srMirror?.textContent).toBeTruthy()
+    })
+  })
 })
