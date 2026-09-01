@@ -217,6 +217,12 @@ describe('WorldInfoCard', () => {
     expect(screen.queryByText('虚构测试世界')).not.toBeInTheDocument()
   })
 
+  it('gameDays null 时显示「不可用」而非数字', () => {
+    render(<WorldInfoCard world={makeWorld({ gameDays: null })} isLoading={false} onRefresh={() => {}} />)
+    expect(screen.getByText('不可用')).toBeInTheDocument()
+    expect(screen.queryByText('42 天')).not.toBeInTheDocument()
+  })
+
   it('点击刷新按钮触发 onRefresh；加载中禁用时点击不触发', () => {
     const onRefresh = vi.fn()
     const { rerender } = render(<WorldInfoCard world={makeWorld()} isLoading={false} onRefresh={onRefresh} />)

@@ -173,7 +173,7 @@ export function WorldInfoCard({ world, isLoading, onRefresh }: WorldInfoCardProp
                 />
               </span>
             </InfoRow>
-            <InfoRow label="游戏天数">{world.gameDays} 天</InfoRow>
+            <InfoRow label="游戏天数">{world.gameDays != null ? `${world.gameDays} 天` : '不可用'}</InfoRow>
             <InfoRow label="难度">
               <StatusPill tone={difficultyTone(world.difficulty)}>{formatDifficulty(world.difficulty)}</StatusPill>
             </InfoRow>
