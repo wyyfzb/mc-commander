@@ -3,6 +3,7 @@ import { WebSocketServer } from 'ws';
 import http from 'http';
 import fs from 'fs';
 import path from 'path';
+import helmet from 'helmet';
 import config from './config.js';
 
 // 版本号单一来源：package.json（与 routes/index.js 的 /health、check-update 共用）
@@ -132,6 +133,33 @@ try {
 }
 
 app.use(cors());
+
+// 安全响应头（helmet）：CSP / X-Frame-Options / X-Content-Type-Options 等
+// - style-src 放行 'unsafe-inline'：React style 属性内联样式必需
+// - connect-src 放行任意目标：面板前端支持指向任意配置的服务端地址
+// - 禁用 upgrade-insecure-requests：局域网 http 自托管部署下相对路径请求
+//   会被强制升级 https 而中断
+// - 关闭 COEP（require-corp 会阻断跨源图片等嵌入资源，非本任务必需）
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
+      fontSrc: ["'self'", 'data:'],
+      connectSrc: ["'self'", 'ws:', 'wss:', 'http:', 'https:'],
+      objectSrc: ["'none'"],
+      baseUri: ["'self'"],
+      formAction: ["'self'"],
+      frameAncestors: ["'none'"],
+      upgradeInsecureRequests: null,
+    },
+  },
+  frameguard: { action: 'deny' },
+  crossOriginEmbedderPolicy: false,
+}));
+
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 

@@ -10,6 +10,7 @@ import { WebhookModel } from '../db/index.js';
 import { success, successPaginated, error, ErrorCodes } from '../utils/response.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
 import { WebhookService, WEBHOOK_EVENT_TYPES } from '../services/webhook.service.js';
+import { checkPublicUrl } from '../utils/url-guard.js';
 
 function asyncHandler(fn) {
   return (req, res, next) => {
@@ -61,6 +62,11 @@ export function createWebhookRoutes() {
     if (!validateUrl(url)) {
       return res.status(400).json(error(ErrorCodes.WEBHOOK_INVALID_URL));
     }
+    // SSRF 防护：拒绝指向私网/环回/保留地址的 URL（含 DNS 解析校验）
+    const guard = await checkPublicUrl(url);
+    if (!guard.ok) {
+      return res.status(400).json(error(ErrorCodes.WEBHOOK_INVALID_URL, guard.reason));
+    }
     if (events && Array.isArray(events)) {
       const invalid = events.filter(e => !WEBHOOK_EVENT_TYPES.includes(e));
       if (invalid.length > 0) {
@@ -85,6 +91,13 @@ export function createWebhookRoutes() {
     const { name, url, secret, events, instanceId, isEnabled } = req.body;
     if (url && !validateUrl(url)) {
       return res.status(400).json(error(ErrorCodes.WEBHOOK_INVALID_URL));
+    }
+    // SSRF 防护：拒绝指向私网/环回/保留地址的 URL（含 DNS 解析校验）
+    if (url) {
+      const guard = await checkPublicUrl(url);
+      if (!guard.ok) {
+        return res.status(400).json(error(ErrorCodes.WEBHOOK_INVALID_URL, guard.reason));
+      }
     }
     if (events && Array.isArray(events)) {
       const invalid = events.filter(e => !WEBHOOK_EVENT_TYPES.includes(e));
