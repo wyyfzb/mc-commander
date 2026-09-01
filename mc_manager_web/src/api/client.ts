@@ -210,19 +210,28 @@ export function apiPost<T>(
   path: string,
   config: ConnectionConfig,
   body?: unknown,
-  options?: { timeoutMs?: number },
+  options?: { timeoutMs?: number; signal?: AbortSignal },
 ): Promise<T> {
   return apiRequest<T>(path, config, { method: 'POST', body, ...options })
 }
 
 /** PUT 便捷方法 */
-export function apiPut<T>(path: string, config: ConnectionConfig, body?: unknown): Promise<T> {
-  return apiRequest<T>(path, config, { method: 'PUT', body })
+export function apiPut<T>(
+  path: string,
+  config: ConnectionConfig,
+  body?: unknown,
+  options?: { timeoutMs?: number; signal?: AbortSignal },
+): Promise<T> {
+  return apiRequest<T>(path, config, { method: 'PUT', body, ...options })
 }
 
 /** DELETE 便捷方法 */
-export function apiDelete<T>(path: string, config: ConnectionConfig): Promise<T> {
-  return apiRequest<T>(path, config, { method: 'DELETE' })
+export function apiDelete<T>(
+  path: string,
+  config: ConnectionConfig,
+  options?: { signal?: AbortSignal },
+): Promise<T> {
+  return apiRequest<T>(path, config, { method: 'DELETE', ...options })
 }
 
 export interface DownloadOptions {
