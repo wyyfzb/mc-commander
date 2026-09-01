@@ -49,7 +49,13 @@
   --ref-purple-light: oklch(0.4907 0.2412 292.58);  /* #6D28D9 7.1:1 */
   --ref-orange-light: oklch(0.5534 0.1739 38.4);    /* #C2410C 5.2:1 */
 
-  /* ── 品牌 accent（亮暗同源翠绿；亮色模式提明度降饱和 + 深绿黑字 10.6:1）── */
+  /* ── 品牌 accent（亮暗同源翠绿；亮色模式提明度降饱和 + 深绿黑字 10.6:1）
+   * WCAG AA 对比度实测（2026-09-01，OKLCH→sRGB→WCAG 相对亮度公式）：
+   *   暗色：on-accent-dark(#090D1A) ON accent(#4ADE80) = 11.05:1 ✅
+   *   亮色：on-accent(#052E16) ON accent-light(#86EFAC) = 10.62:1 ✅
+   *   亮色 hover：on-accent(#052E16) ON accent-hover(#97F1B6) = 11.08:1 ✅
+   *   注：亮色模式按钮文字用 --ref-on-accent（深绿黑），非白色；白色 ON accent-light 仅 1.40:1 不达标
+   * ── */
   --ref-accent: var(--ref-success);               /* #4ADE80 亮暗同值（M3 Fixed 法） */
   --ref-accent-hover: oklch(0.8437 0.1702 151.71);/* 亮 5% */
   --ref-accent-light: oklch(0.8712 0.1363 154.45);/* #86EFAC 亮色底 */
