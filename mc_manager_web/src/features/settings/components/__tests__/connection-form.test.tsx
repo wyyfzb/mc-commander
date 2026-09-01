@@ -107,7 +107,7 @@ describe('ConnectionForm 渲染', () => {
 })
 
 describe('ConnectionForm 校验', () => {
-  it('空值：地址或 key 为空 → warning toast，不弹警告、不发起请求', async () => {
+  it('空值：地址或 key 为空 → 行内错误提示，不弹警告、不发起请求', async () => {
     let requested = 0
     server.use(
       http.get('*/api/v1/overview', () => {
@@ -119,17 +119,20 @@ describe('ConnectionForm 校验', () => {
     renderForm()
 
     await user.click(screen.getByRole('button', { name: '测试连接' }))
-    expect(await screen.findByText('请先填写服务器地址和 API Key')).toBeInTheDocument()
+    expect(screen.getByText('请填写服务器地址')).toBeInTheDocument()
+    expect(screen.getByText('请填写 API Key')).toBeInTheDocument()
     expect(requested).toBe(0)
 
     // 仅填地址仍视为空
     await user.type(screen.getByLabelText('面板地址'), 'https://192.168.1.100:25566')
     await user.click(screen.getByRole('button', { name: '测试连接' }))
-    expect((await screen.findAllByText('请先填写服务器地址和 API Key')).length).toBe(2)
+    expect(screen.queryByText('请填写服务器地址')).not.toBeInTheDocument()
+    expect(screen.getByText('请填写 API Key')).toBeInTheDocument()
     expect(requested).toBe(0)
 
     await user.click(screen.getByRole('button', { name: '保存连接' }))
-    expect((await screen.findAllByText('请先填写服务器地址和 API Key')).length).toBe(3)
+    expect(screen.queryByText('请填写服务器地址')).not.toBeInTheDocument()
+    expect(screen.getByText('请填写 API Key')).toBeInTheDocument()
     expect(useConnectionStore.getState().apiKey).toBe('')
   })
 })

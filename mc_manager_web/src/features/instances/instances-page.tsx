@@ -100,7 +100,7 @@ export function InstancesPage() {
   /** 切换当前实例 */
   const handleSwitch = (inst: InstanceSummary) => {
     setInstanceId(inst.id)
-    toast.success(`已切换到 "${inst.name}"`)
+    toast.success(`已切换到 "${inst.name}"`, { duration: 1500 })
   }
 
   /** 启动配置 → 实例设置弹窗 */

@@ -207,13 +207,13 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
     const selection = term.getSelection()
     const text = selection || buffer.map((e) => (e as TerminalLogEntry).text).join('\n')
     if (!text) {
-      toast.info('暂无内容可复制')
+      toast.info('暂无内容可复制', { duration: 1500 })
       return
     }
     navigator.clipboard.writeText(text).then(
       () => {
         setCopied(true)
-        toast.success('已复制到剪贴板')
+        toast.success('已复制到剪贴板', { duration: 1500 })
         setTimeout(() => setCopied(false), 1500)
       },
       () => toast.error('复制失败'),

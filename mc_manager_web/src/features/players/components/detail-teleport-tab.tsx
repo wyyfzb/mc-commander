@@ -210,7 +210,7 @@ function TeleportTabContent({
   const copyCoords = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text)
-      toast.success('已复制坐标')
+      toast.success('已复制坐标', { duration: 1500 })
     } catch {
       toast.error('复制失败')
     }
