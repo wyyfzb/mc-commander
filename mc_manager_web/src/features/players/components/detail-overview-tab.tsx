@@ -1,9 +1,9 @@
 /**
  * OverviewTab —— 详情概览 Tab
  * 分区顺序：操作按钮组 → 状态条 → 药水效果 → 基本信息 → 封禁记录 → 行为状态 → 统计 → IP 登录历史
- * 破坏性操作分级确认（P2 Tasteful Friction）；操作错误 toast 走 getFriendlyErrorMessage
+ * 可逆操作（OP/白名单切换）直接执行 + 5s undo toast；不可逆操作保留确认弹窗
  */
-import { useState, type ReactNode } from 'react'
+import { useState, useCallback, useRef, type ReactNode } from 'react'
 import {
   Ban,
   Feather,
@@ -60,10 +60,11 @@ interface OverviewTabProps {
 
 export function OverviewTab({ player, isRconConnected, bans, onAction, onOpenBanDialog }: OverviewTabProps) {
   const [confirmAction, setConfirmAction] = useState<string | null>(null)
-  const [confirmToggle, setConfirmToggle] = useState<'op' | 'whitelist' | null>(null)
   const [messageText, setMessageText] = useState('')
   const [messageOpen, setMessageOpen] = useState(false)
   const [running, setRunning] = useState<string | null>(null)
+  /** 保存可逆操作的撤销函数，5s 内有效 */
+  const undoFnRef = useRef<(() => void) | null>(null)
 
   /** 执行带确认的操作（统一错误 toast） */
   const runAction = async (key: string, req: PlayerActionRequest, successText?: string) => {
@@ -77,6 +78,38 @@ export function OverviewTab({ player, isRconConnected, bans, onAction, onOpenBan
       setRunning(null)
     }
   }
+
+  /** 可逆操作：直接执行 + undo toast（5s 撤销窗口） */
+  const runReversibleAction = useCallback(
+    async (key: string, req: PlayerActionRequest, undoReq: PlayerActionRequest, successText: string, undoText: string) => {
+      setRunning(key)
+      try {
+        await onAction(req)
+        const undoFn = async () => {
+          undoFnRef.current = null
+          try {
+            await onAction(undoReq)
+            toast.success(undoText)
+          } catch (e) {
+            toast.error(`撤销失败：${getFriendlyErrorText(e)}`)
+          }
+        }
+        undoFnRef.current = undoFn
+        toast.success(successText, {
+          duration: 5000,
+          action: {
+            label: '撤销',
+            onClick: () => undoFn(),
+          },
+        })
+      } catch (e) {
+        toast.error(`操作失败：${getFriendlyErrorText(e)}`)
+      } finally {
+        setRunning(null)
+      }
+    },
+    [onAction],
+  )
 
   const gamemodeCommand = (mode: string) => ({ kind: 'command', command: `gamemode ${mode} ${player.name}` }) as PlayerActionRequest
 
@@ -107,7 +140,23 @@ export function OverviewTab({ player, isRconConnected, bans, onAction, onOpenBan
           variant="outline"
           size="sm"
           disabled={running !== null}
-          onClick={() => setConfirmToggle('op')}
+          onClick={() =>
+            void (player.isOp
+              ? runReversibleAction(
+                  'deop',
+                  { kind: 'deop', playerName: player.name },
+                  { kind: 'op', playerName: player.name },
+                  `已取消 ${player.name} 的 OP`,
+                  `已恢复 ${player.name} 的 OP`,
+                )
+              : runReversibleAction(
+                  'op',
+                  { kind: 'op', playerName: player.name },
+                  { kind: 'deop', playerName: player.name },
+                  `已设置 ${player.name} 为 OP`,
+                  `已取消 ${player.name} 的 OP`,
+                ))
+          }
         >
           {player.isOp ? <ShieldX aria-hidden /> : <ShieldCheck aria-hidden />}
           {player.isOp ? '取消OP' : '设为OP'}
@@ -117,7 +166,23 @@ export function OverviewTab({ player, isRconConnected, bans, onAction, onOpenBan
           variant="outline"
           size="sm"
           disabled={running !== null}
-          onClick={() => setConfirmToggle('whitelist')}
+          onClick={() =>
+            void (player.isWhitelisted
+              ? runReversibleAction(
+                  'whitelistRemove',
+                  { kind: 'whitelistRemove', playerName: player.name },
+                  { kind: 'whitelistAdd', playerName: player.name },
+                  `已移除 ${player.name} 的白名单`,
+                  `已恢复 ${player.name} 的白名单`,
+                )
+              : runReversibleAction(
+                  'whitelistAdd',
+                  { kind: 'whitelistAdd', playerName: player.name },
+                  { kind: 'whitelistRemove', playerName: player.name },
+                  `已添加 ${player.name} 至白名单`,
+                  `已移除 ${player.name} 的白名单`,
+                ))
+          }
         >
           {player.isWhitelisted ? <ShieldX aria-hidden /> : <ShieldCheck aria-hidden />}
           {player.isWhitelisted ? '移除白名单' : '加入白名单'}
@@ -387,53 +452,6 @@ export function OverviewTab({ player, isRconConnected, bans, onAction, onOpenBan
           </div>
         </Section>
       )}
-
-      {/* ── OP/白名单确认对话框 ── */}
-      <ConfirmDialog
-        open={confirmToggle !== null}
-        onOpenChange={(open) => {
-          if (!open) setConfirmToggle(null)
-        }}
-        title={
-          confirmToggle === 'op'
-            ? player.isOp
-              ? '确认取消OP'
-              : '确认设为OP'
-            : player.isWhitelisted
-              ? '确认移除白名单'
-              : '确认加入白名单'
-        }
-        description={
-          confirmToggle === 'op'
-            ? player.isOp
-              ? `即将取消 ${player.name} 的 OP 权限`
-              : `即将设置 ${player.name} 为 OP`
-            : player.isWhitelisted
-              ? `即将移除 ${player.name} 的白名单`
-              : `即将添加 ${player.name} 至白名单`
-        }
-        confirmText="确认操作"
-        onConfirm={async () => {
-          if (!confirmToggle) return
-          if (confirmToggle === 'op') {
-            await runAction(
-              player.isOp ? 'deop' : 'op',
-              { kind: player.isOp ? 'deop' : 'op', playerName: player.name },
-              player.isOp ? `已取消 ${player.name} 的 OP` : `已设置 ${player.name} 为 OP`,
-            )
-          } else {
-            await runAction(
-              player.isWhitelisted ? 'whitelistRemove' : 'whitelistAdd',
-              {
-                kind: player.isWhitelisted ? 'whitelistRemove' : 'whitelistAdd',
-                playerName: player.name,
-              },
-              player.isWhitelisted ? `已移除 ${player.name} 的白名单` : `已添加 ${player.name} 至白名单`,
-            )
-          }
-          setConfirmToggle(null)
-        }}
-      />
 
       {/* ── 确认对话框（清空背包/踢出/解封）── */}
       <ConfirmDialog
