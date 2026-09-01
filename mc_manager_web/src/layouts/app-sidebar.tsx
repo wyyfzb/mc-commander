@@ -189,7 +189,6 @@ export function AppSidebar({ collapsed, mobileNavOpen, onMobileNavClose }: AppSi
           )}
           aria-label="主导航（移动端）"
           aria-hidden={!mobileNavOpen}
-          role="dialog"
         >
           <FocusTrap active={mobileNavOpen} containerRef={mobileDrawerRef} onDeactivate={onMobileNavClose} />
           <BrandRow collapsed={false} />
