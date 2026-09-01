@@ -166,11 +166,13 @@ function SidebarLink({
       onClick={onClick}
       className={({ isActive }) =>
         cn(
-          'flex h-8 items-center gap-2.5 rounded-mcs-sm px-2.5 text-mcs-sm font-medium',
+          'relative flex h-8 items-center gap-2.5 rounded-mcs-sm px-2.5 text-mcs-sm font-medium',
           'text-mcs-text-muted transition-colors duration-mcs-fast',
           'hover:bg-mcs-state-hover hover:text-mcs-text-default',
           'focus-visible:outline-2',
-          isActive && 'bg-mcs-accent-bg-subtle text-mcs-accent-fg',
+          // 激活指示条：2px accent 左缘 inset（伪元素常驻 + opacity 过渡，避免 display 切换不可过渡）
+          'before:pointer-events-none before:absolute before:inset-y-1 before:left-0 before:w-0.5 before:rounded-full before:bg-mcs-accent before:opacity-0 before:transition-opacity before:duration-mcs-fast',
+          isActive && 'bg-mcs-accent-bg-subtle text-mcs-accent-fg before:opacity-100',
           collapsed && 'justify-center px-0',
         )
       }
