@@ -45,6 +45,7 @@ export function PlayerAvatar({ name, isOnline, isFakePlayer = false, size = 32, 
         alt=""
         width={size}
         height={size}
+        loading="lazy"
         draggable={false}
         onError={() => setFailed(true)}
         className={cn(

@@ -63,10 +63,10 @@ function AuditHeader() {
   return (
     <thead className="sticky top-0 bg-mcs-bg-muted">
       <tr className="border-b border-mcs-border-muted text-left">
-        <th className="px-3 py-2 font-medium text-mcs-text-subtle">时间</th>
-        <th className="px-3 py-2 font-medium text-mcs-text-subtle">操作</th>
-        <th className="px-3 py-2 font-medium text-mcs-text-subtle">目标</th>
-        <th className="px-3 py-2 font-medium text-mcs-text-subtle">详情</th>
+        <th scope="col" className="px-3 py-2 font-medium text-mcs-text-subtle">时间</th>
+        <th scope="col" className="px-3 py-2 font-medium text-mcs-text-subtle">操作</th>
+        <th scope="col" className="px-3 py-2 font-medium text-mcs-text-subtle">目标</th>
+        <th scope="col" className="px-3 py-2 font-medium text-mcs-text-subtle">详情</th>
       </tr>
     </thead>
   )
@@ -99,11 +99,11 @@ function CmdHeader() {
   return (
     <thead className="sticky top-0 bg-mcs-bg-muted">
       <tr className="border-b border-mcs-border-muted text-left">
-        <th className="px-3 py-2 font-medium text-mcs-text-subtle">时间</th>
-        <th className="px-3 py-2 font-medium text-mcs-text-subtle">命令</th>
-        <th className="px-3 py-2 font-medium text-mcs-text-subtle">结果</th>
-        <th className="px-3 py-2 font-medium text-mcs-text-subtle">来源</th>
-        <th className="px-3 py-2 font-medium text-mcs-text-subtle">耗时</th>
+        <th scope="col" className="px-3 py-2 font-medium text-mcs-text-subtle">时间</th>
+        <th scope="col" className="px-3 py-2 font-medium text-mcs-text-subtle">命令</th>
+        <th scope="col" className="px-3 py-2 font-medium text-mcs-text-subtle">结果</th>
+        <th scope="col" className="px-3 py-2 font-medium text-mcs-text-subtle">来源</th>
+        <th scope="col" className="px-3 py-2 font-medium text-mcs-text-subtle">耗时</th>
       </tr>
     </thead>
   )
