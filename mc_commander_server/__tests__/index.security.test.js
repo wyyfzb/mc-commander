@@ -66,6 +66,7 @@ vi.mock('../middleware/error_handler.js', () => ({
   errorHandler: 'error-handler',
 }));
 vi.mock('../middleware/cors.js', () => ({ default: vi.fn() }));
+vi.mock('helmet', () => ({ default: vi.fn(() => 'helmet-middleware') }));
 vi.mock('../routes/index.js', () => ({ setupRoutes: vi.fn() }));
 vi.mock('../services/mc_server.js', () => ({
   MCServerManager: class {
@@ -132,6 +133,27 @@ describe('限流中间件挂载顺序', () => {
     // 关键顺序：IP 全局限流 → 认证 → 按 key 限流
     expect(idxAuth).toBeGreaterThan(idxRate);
     expect(idxApiKey).toBeGreaterThan(idxAuth);
+  });
+});
+
+describe('安全响应头中间件（helmet）', () => {
+  beforeEach(() => {
+    vi.unstubAllEnvs();
+    vi.stubEnv('NODE_ENV', 'development');
+    h.apiKey = STRONG_KEY;
+  });
+
+  it('helmet 中间件应挂在根路径且先于 body 解析器', async () => {
+    await resetAndImport();
+    // 归一化：app.use(fn) 单参调用视为无路径中间件
+    const mounted = h.appUse.mock.calls.map(([p, mw]) =>
+      mw === undefined ? { path: undefined, mw: p } : { path: p, mw });
+    const idxHelmet = mounted.findIndex((m) => m.mw === 'helmet-middleware');
+    const idxJson = mounted.findIndex((m) => m.mw === 'express-json-middleware');
+
+    expect(idxHelmet).toBeGreaterThanOrEqual(0);
+    expect(mounted[idxHelmet].path).toBeUndefined();
+    expect(idxJson).toBeGreaterThan(idxHelmet);
   });
 });
 

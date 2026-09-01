@@ -8,6 +8,7 @@
 import crypto from 'crypto';
 import got from 'got';
 import { WebhookModel } from '../db/index.js';
+import { checkPublicUrl } from '../utils/url-guard.js';
 
 // 19 种事件白名单
 export const WEBHOOK_EVENT_TYPES = [
@@ -85,6 +86,25 @@ export class WebhookService {
    * 投递单个 webhook（含重试 + 背压 + 签名 + 投递日志）
    */
   static async _deliver(webhook, eventType, payload) {
+    // SSRF 防护：投递前二次校验（兼容历史存量数据，创建/更新时已在路由层拦截）
+    const guard = await checkPublicUrl(webhook.url);
+    if (!guard.ok) {
+      const deliveryId = WebhookModel.createDelivery({
+        webhookId: webhook.id,
+        eventType,
+        instanceId: payload.instanceId || null,
+        payload,
+        status: 'failed',
+      });
+      WebhookModel.updateDelivery(deliveryId, {
+        status: 'failed',
+        responseBody: `Blocked by SSRF guard: ${guard.reason}`,
+        durationMs: 0,
+        attempts: 0,
+      });
+      return;
+    }
+
     const deliveryId = WebhookModel.createDelivery({
       webhookId: webhook.id,
       eventType,
@@ -180,6 +200,12 @@ export class WebhookService {
   static async testDelivery(webhookId) {
     const webhook = WebhookModel.findByIdInternal(webhookId);
     if (!webhook) return { success: false, error: 'Webhook not found' };
+
+    // SSRF 防护：测试投递同样拦截私网/保留地址
+    const guard = await checkPublicUrl(webhook.url);
+    if (!guard.ok) {
+      return { success: false, error: guard.reason };
+    }
 
     const payload = {
       event: 'ping',
