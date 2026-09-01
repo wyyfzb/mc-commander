@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowRight, Play, Send, Star, X } from 'lucide-react'
+import { ArrowRight, Play, Send, ShieldAlert, Star, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { useMutation } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
@@ -12,16 +12,19 @@ import { useServerStore } from '@/stores/server'
 import { useTerminalStore } from '@/stores/terminal'
 import { useCommandBus } from '@/stores/command-bus'
 import { colorForCommand, completeCommands, iconForCommand, type CompletionItem } from '@/lib/mc-commands'
+import { NoticeBanner } from '@/components/mcs/notice-banner'
 
 /**
  * 命令输入行
  * - `>` 前缀 + 回车/按钮发送；RCON 响应非空时插入终端（INFO 级）
  * - / 开头触发补全（命令名前缀 / 参数子串，最多 10 条）
- * - ↑↓ 翻命令历史（会话级；连续重复去重；导航中保留草稿）
+ * - ↑↓ 翻命令历史（localStorage 持久化；连续重复去重；导航中保留草稿）
  * - 快捷 chips：5 默认 + 持久化（localStorage），播放=立即发送，点主体=仅填充，X=删除
+ * - RCON 未启用时显示降级横幅
  */
 
 const PRESET_STORAGE_KEY = 'mcs-command-presets'
+const HISTORY_STORAGE_KEY = 'mcs-command-history'
 const HISTORY_LIMIT = 50
 const DEFAULT_PRESETS = [
   'give @p diamond 64',
@@ -44,17 +47,39 @@ function readPresets(): string[] {
   return DEFAULT_PRESETS
 }
 
+function readCommandHistory(): string[] {
+  try {
+    const raw = localStorage.getItem(HISTORY_STORAGE_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw) as string[]
+      if (Array.isArray(parsed)) return parsed.slice(-HISTORY_LIMIT)
+    }
+  } catch {
+    // 回退空历史
+  }
+  return []
+}
+
+function writeCommandHistory(history: string[]) {
+  try {
+    localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history.slice(-HISTORY_LIMIT)))
+  } catch {
+    // localStorage 不可用时静默忽略
+  }
+}
+
 export function CommandInput() {
   const config = useConnectionStore()
   const instanceId = useServerStore((s) => s.instanceId)
   const isRunning = useServerStore((s) => s.status?.isRunning ?? false)
+  const isRconConnected = useServerStore((s) => s.status?.isRconConnected ?? false)
   const pushEntry = useTerminalStore((s) => s.pushEntry)
   const [value, setValue] = useState('')
   const [presets, setPresets] = useState<string[]>(readPresets)
   const [sending, setSending] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
-  /** 会话级命令历史（发送成功入列；连续重复合并） */
-  const historyRef = useRef<string[]>([])
+  /** 持久化命令历史（localStorage；发送成功入列；连续重复合并） */
+  const historyRef = useRef<string[]>(readCommandHistory())
   /** 历史导航态：index=当前条目、draft=进入导航前的未发送输入 */
   const navRef = useRef<{ index: number; draft: string } | null>(null)
 
@@ -101,11 +126,13 @@ export function CommandInput() {
     mutation.mutate(trimmed, { onSettled: () => setSending(false) })
   }
 
-  /** 入列历史（shell 语义：与最近一条相同则跳过；超出上限裁头） */
+  /** 入列历史（shell 语义：与最近一条相同则跳过；超出上限裁头；同步写入 localStorage） */
   const pushHistory = (command: string) => {
     const h = historyRef.current
     if (h[h.length - 1] === command) return
-    historyRef.current = [...h, command].slice(-HISTORY_LIMIT)
+    const next = [...h, command].slice(-HISTORY_LIMIT)
+    historyRef.current = next
+    writeCommandHistory(next)
   }
 
   /** ↑↓ 历史导航：↑ 上移，↓ 下移；↓ 越过最新恢复草稿；任何编辑退出导航 */
@@ -164,6 +191,12 @@ export function CommandInput() {
 
   return (
     <section className="flex shrink-0 flex-col gap-2 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted p-3">
+      {/* RCON 降级横幅：命令已发送但响应不可见 */}
+      {isRunning && !isRconConnected && (
+        <NoticeBanner variant="warning" icon={ShieldAlert}>
+          RCON 未启用，命令已发送但响应不可见
+        </NoticeBanner>
+      )}
       {/* 快捷 chips */}
       {presets.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5">
