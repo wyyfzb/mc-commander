@@ -1,5 +1,11 @@
 "use client"
 
+/*
+ * shadcn/ui 基础组件 —— rounded-[inherit] 为合法派生用法：
+ * Viewport 需继承父容器圆角，无法用 token 表达。
+ * 详见 mc_manager_web/docs/design-review-guidelines.md §圆角守门规则
+ */
+
 import * as React from "react"
 import { ScrollArea as ScrollAreaPrimitive } from "radix-ui"
 

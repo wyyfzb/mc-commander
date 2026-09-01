@@ -185,7 +185,7 @@ export function InstanceControls({ compact = false }: { compact?: boolean }) {
           <Tooltip key={b.action}>
             <TooltipTrigger asChild>
               <Button
-                variant="ghost"
+                variant={b.action === '停止' ? 'destructive' : 'ghost'}
                 size="icon-sm"
                 disabled={b.disabled}
                 aria-label={b.action}

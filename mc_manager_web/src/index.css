@@ -70,7 +70,6 @@
     --text-mcs-2xl: var(--mcs-font-size-2xl);
     --duration-mcs-fast: var(--mcs-motion-fast);
     --duration-mcs-base: var(--mcs-motion-base);
-    --duration-mcs-slow: var(--mcs-motion-slow);
     --ease-mcs-snappy: var(--mcs-ease-snappy);
 }
 

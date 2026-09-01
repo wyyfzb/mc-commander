@@ -1,5 +1,11 @@
 "use client"
 
+/*
+ * shadcn/ui 基础组件 —— rounded-[calc(var(--radius)-Npx)] 为合法派生用法：
+ * 内嵌按钮/键盘需比容器圆角小 Npx 以视觉内嵌，必须用 calc 派生。
+ * 详见 mc_manager_web/docs/design-review-guidelines.md §圆角守门规则
+ */
+
 import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
 

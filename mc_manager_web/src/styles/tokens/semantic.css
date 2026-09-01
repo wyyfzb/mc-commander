@@ -116,7 +116,6 @@
   /* ── 动效（≤300ms，只动 transform/opacity，quint easing）── */
   --mcs-motion-fast: 150ms;      /* hover */
   --mcs-motion-base: 300ms;      /* 标准上限 */
-  --mcs-motion-slow: 450ms;      /* 布局 */
   --mcs-ease-snappy: cubic-bezier(0.22, 1, 0.36, 1);
 
   /* ── 密度（compact 数据密集 32px / default 舒适 40px）── */
