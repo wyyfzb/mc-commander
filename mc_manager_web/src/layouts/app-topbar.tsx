@@ -16,6 +16,7 @@ import { StatusIndicator, type IndicatorStatus } from '@/components/mcs/status-i
 import { NotificationDrawer } from '@/layouts/notification-drawer'
 import { useUiStore } from '@/stores/ui'
 import { useServerStore } from '@/stores/server'
+import { useInstanceSwitch } from '@/hooks/use-instance-switch'
 import { useNotificationStore } from '@/stores/notifications'
 import { useConnectionStore } from '@/stores/connection'
 import { useAuthStore } from '@/stores/auth'
@@ -42,7 +43,7 @@ export function AppTopBar() {
   const hasConnectedOnce = useServerStore((s) => s.hasConnectedOnce)
   const status = useServerStore((s) => s.status)
   const instanceId = useServerStore((s) => s.instanceId)
-  const setInstanceId = useServerStore((s) => s.setInstanceId)
+  const { switchInstance } = useInstanceSwitch()
   const unreadCount = useNotificationStore((s) => s.unreadCount)
 
   // 安全主线：用户菜单（会话登录显示管理员身份；API Key 直连显示凭据徽章）
@@ -142,7 +143,7 @@ export function AppTopBar() {
           {(instancesQuery.data ?? []).map((inst) => (
             <DropdownMenuItem
               key={inst.id}
-              onClick={() => setInstanceId(inst.id)}
+              onClick={() => switchInstance(inst.id)}
               className="flex items-center justify-between gap-2"
             >
               <span className="truncate">{inst.name}</span>

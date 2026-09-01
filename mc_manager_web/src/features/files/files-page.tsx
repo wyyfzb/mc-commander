@@ -10,7 +10,7 @@
  * - URL 深链接：?dir=/world&file=/world/level.dat（可分享、可刷新保持）
  * - 实例切换：目录/选中文件重置回初始态
  */
-import { useEffect, useRef, useState, useSyncExternalStore, type ChangeEvent } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore, useCallback, type ChangeEvent } from 'react'
 import { ServerOff, PanelLeftClose, MonitorSmartphone } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router'
@@ -32,6 +32,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { useUnsavedGuard } from '@/hooks/use-unsaved-guard'
+import { useSnapshotSave } from '@/hooks/use-snapshot-save'
 import { useServerStore } from '@/stores/server'
 import { useUiStore } from '@/stores/ui'
 import type { FileEntry } from '@/api/types'
@@ -144,6 +145,30 @@ export function FilesPage() {
   const renameMutation = useRenameFile(instanceId)
   const uploadMutation = useUploadFile(instanceId)
 
+  /** 保存竞态守卫：连续快速保存时只有最后一次结果被采纳（hook 须在早返回前调用） */
+  const fileSave = useSnapshotSave<{ path: string; content: string }>({
+    onSave: async (snapshot) => {
+      await saveMutation.mutateAsync(snapshot)
+    },
+    onSaved: (snapshot) => {
+      originalRef.current = snapshot.content
+      if (snapshot.path.endsWith('server.properties')) {
+        toast.success('文件已保存，部分属性需重启服务器后生效')
+      } else {
+        toast.success('文件已保存')
+      }
+    },
+    onError: (e) => {
+      toast.error(`保存失败：${getFriendlyErrorText(e)}`)
+    },
+  })
+
+  /** 保存当前文件（Ctrl+S / 保存按钮共用；竞态守卫） */
+  const save = useCallback(() => {
+    if (!selectedPath) return
+    fileSave.save({ path: selectedPath, content: draft })
+  }, [selectedPath, draft, fileSave])
+
   /** 内容加载完成 → 同步本地 draft 与基线 */
   useEffect(() => {
     if (contentQuery.data && contentQuery.data.path === selectedPath) {
@@ -198,22 +223,6 @@ export function FilesPage() {
     }
   }
 
-  /** 保存当前文件（Ctrl+S / 保存按钮共用） */
-  const save = async () => {
-    if (!selectedPath) return
-    try {
-      await saveMutation.mutateAsync({ path: selectedPath, content: draft })
-      originalRef.current = draft
-      // server.properties 经文件编辑器保存与 PUT /properties 热改通道区分
-      if (selectedPath.endsWith('server.properties')) {
-        toast.success('文件已保存，部分属性需重启服务器后生效')
-      } else {
-        toast.success('文件已保存')
-      }
-    } catch (e) {
-      toast.error(`保存失败：${getFriendlyErrorText(e)}`)
-    }
-  }
 
   /** 删除确认（目录红色警告递归删除） */
   const confirmDelete = async () => {
@@ -454,7 +463,7 @@ export function FilesPage() {
                   ? `文件加载失败：${getFriendlyErrorText(contentQuery.error)}`
                   : null
               }
-              isSaving={saveMutation.isPending}
+              isSaving={fileSave.isSaving}
               dirty={dirty}
               onChange={setDraft}
               onSave={() => void save()}
@@ -485,7 +494,7 @@ export function FilesPage() {
                 ? `文件加载失败：${getFriendlyErrorText(contentQuery.error)}`
                 : null
             }
-            isSaving={saveMutation.isPending}
+            isSaving={fileSave.isSaving}
             dirty={dirty}
             onChange={setDraft}
             onSave={() => void save()}
