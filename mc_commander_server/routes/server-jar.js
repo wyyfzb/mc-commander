@@ -12,6 +12,11 @@ import { InstanceModel } from '../db/index.js';
 import { atomicWriteFile } from '../services/mc_server.js';
 import { deployRequestSchema } from '@mc-commander/schemas';
 import { validateBody } from '../middleware/validate.js';
+import {
+  JAR_DOWNLOAD_MAX_BYTES,
+  assertDownloadIntegrity,
+  assertSizeWithinLimit,
+} from '../utils/jar-download-guard.js';
 
 const mcCoreManager = new MinecraftServerManager(new NodeAdapter());
 
@@ -59,21 +64,27 @@ async function getPaperBuild(mcVersion) {
   return latest;
 }
 
-async function getPaperDownloadUrl(mcVersion) {
+async function getPaperDownload(mcVersion) {
   const build = await getPaperBuild(mcVersion);
   if (!build) throw new Error(`No Paper build found for ${mcVersion}`);
   const downloads = build.downloads || {};
   const downloadInfo = downloads['server:default'] || downloads.application;
   if (downloadInfo && downloadInfo.url) {
-    return downloadInfo.url;
+    const expectedHash = downloadInfo.sha256
+      ? { algorithm: 'sha256', digest: downloadInfo.sha256 }
+      : null;
+    return { url: downloadInfo.url, expectedHash };
   }
-  // 回退到 v2 URL 格式（v3 用 id 字段）
+  // 回退到 v2 URL 格式（v3 用 id 字段；无上游摘要 → 跳过完整性校验）
   const buildNum = build.id || build.build;
   const fileName = downloadInfo?.name || `paper-${mcVersion}-${buildNum}.jar`;
-  return `https://api.papermc.io/v2/projects/paper/versions/${mcVersion}/builds/${buildNum}/downloads/${fileName}`;
+  return {
+    url: `https://api.papermc.io/v2/projects/paper/versions/${mcVersion}/builds/${buildNum}/downloads/${fileName}`,
+    expectedHash: null,
+  };
 }
 
-async function downloadWithProgress(url, destPath, serverManager, stage = 'download') {
+async function downloadWithProgress(url, destPath, serverManager, stage = 'download', { expectedHash = null, maxBytes = JAR_DOWNLOAD_MAX_BYTES } = {}) {
   return new Promise((resolve, reject) => {
     const file = fs.createWriteStream(destPath);
     const stream = got.stream(url, {
@@ -82,10 +93,25 @@ async function downloadWithProgress(url, destPath, serverManager, stage = 'downl
       headers: { 'User-Agent': 'MC_Commander/0.1.0 (https://github.com/wyyfzb/mc-commander)' }
     });
 
+    /** 中止：清理半成品 + 断流 + reject（promise 已 settle 时 reject 为 no-op） */
+    const abort = (err) => {
+      fs.existsSync(destPath) && fs.unlinkSync(destPath);
+      stream.destroy();
+      file.destroy();
+      reject(err);
+    };
+
     // 下载进度节流：got 的 downloadProgress 每个 chunk 触发（大 jar 每秒可达多次），
     // 全部广播会对所有在线客户端高频轰炸。节流：百分比变化 ≥1% 才发射
     let lastPct = -1;
     stream.on('downloadProgress', ({ percent, transferred, total }) => {
+      // 体积上限断言在前（S-P1-1）：超限即刻断流清理，不等下载自然结束
+      try {
+        assertSizeWithinLimit(transferred, maxBytes);
+      } catch (err) {
+        abort(err);
+        return;
+      }
       const pct = percent > 0 ? percent : (total > 0 ? transferred / total : 0);
       if (pct - lastPct < 0.01) return;
       lastPct = pct;
@@ -100,14 +126,24 @@ async function downloadWithProgress(url, destPath, serverManager, stage = 'downl
     stream.pipe(file);
 
     file.on('finish', () => {
-      file.close();
-      serverManager.emit('deployProgress', {
-        stage: 'download_complete',
-        percent: 1.0,
-        transferred: 0,
-        total: 0
+      // close 回调确保 fd 落盘后才校验摘要（issue 316：fail-closed）
+      file.close(() => {
+        assertDownloadIntegrity(destPath, expectedHash)
+          .then(() => {
+            serverManager.emit('deployProgress', {
+              stage: 'download_complete',
+              percent: 1.0,
+              transferred: 0,
+              total: 0
+            });
+            resolve(destPath);
+          })
+          .catch((err) => {
+            // 校验失败：弃已下载部分（清理残留）并抛含期望/实际摘要的可读错误
+            try { fs.unlinkSync(destPath); } catch { /* 已清理 */ }
+            reject(err);
+          });
       });
-      resolve(destPath);
     });
 
     stream.on('error', (err) => {
@@ -335,8 +371,9 @@ export function createServerJarRoutes(serverManager) {
       console.log(`Deploying ${type} ${mcVersion} as ${instanceId}...`);
 
       let downloadUrl;
+      let expectedHash = null; // 上游摘要（issue 316）：有则强校验，无则仅限流
       if (type.toLowerCase() === 'paper') {
-        downloadUrl = await getPaperDownloadUrl(mcVersion);
+        ({ url: downloadUrl, expectedHash } = await getPaperDownload(mcVersion));
       } else {
         try {
           const build = await mcCoreManager.getLatestBuild(type.toLowerCase(), mcVersion);
@@ -358,6 +395,15 @@ export function createServerJarRoutes(serverManager) {
               downloadUrl = downloadInfo.url;
             }
           }
+          // minecraft-core 各核心返回结构不一，防御式取摘要字段：
+          // v3 downloads.application.sha256 / 顶层 sha256 / 顶层 sha1（有则校验）
+          const buildHash = build?.downloads?.application?.sha256 || build?.sha256 || build?.sha1;
+          if (downloadUrl && buildHash) {
+            expectedHash = {
+              algorithm: build?.sha1 && !build?.sha256 && !build?.downloads?.application?.sha256 ? 'sha1' : 'sha256',
+              digest: String(buildHash),
+            };
+          }
         } catch (mcErr) {
           console.error(`minecraft-core failed for ${type}:`, mcErr.message);
           if (type.toLowerCase() === 'fabric') {
@@ -373,7 +419,7 @@ export function createServerJarRoutes(serverManager) {
 
       if (downloadUrl) {
         console.log(`Download URL: ${downloadUrl}`);
-        await downloadWithProgress(downloadUrl, jarPath, serverManager, 'download');
+        await downloadWithProgress(downloadUrl, jarPath, serverManager, 'download', { expectedHash });
       } else {
         const downloadedFile = fs.readdirSync(instancePath).find(f => f.endsWith('.jar'));
         if (downloadedFile && downloadedFile !== downloadJarName) {
