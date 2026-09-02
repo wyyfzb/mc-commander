@@ -57,21 +57,29 @@ test.describe('任务页', () => {
     await maybeShot(page, 'tasks-create-dark.png')
   })
 
-  test('可视化编辑器：五字段下拉联动回写表达式', async ({ page }) => {
+  test('可视化编辑器：四字段下拉 + 周字段 chip 联动回写表达式', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/tasks')
     await page.getByRole('button', { name: '新建任务' }).click()
     // 打开可视化编辑器
     await page.getByRole('button', { name: '可视化编辑' }).click()
-    // 五字段标签可见（分/时/日/月/周）
+    // 四字段标签可见（分/时/日/月）+ 周标签
     for (const label of ['分', '时', '日', '月', '周']) {
-      await expect(page.getByText(label, { exact: true })).toBeVisible()
+      await expect(page.getByText(label, { exact: true }).first()).toBeVisible()
+    }
+    // 周字段为 7 个星期 chip（日一二三四五六）
+    for (const chip of ['周日', '周一', '周二', '周三', '周四', '周五', '周六']) {
+      await expect(page.getByRole('button', { name: chip, exact: true })).toBeVisible()
     }
     // 选「每30分」→ cron 输入更新
     await page.getByRole('combobox', { name: '分' }).click()
     await page.getByRole('option', { name: '每30分' }).click()
     await expect(page.getByLabel('Cron 表达式')).toHaveValue('*/30 * * * *')
     await expect(page.getByText('每30分钟每天执行')).toBeVisible()
+    // 点选周一 chip → 表达式回写周字段，描述切换为每周一
+    await page.getByRole('button', { name: '周一', exact: true }).click()
+    await expect(page.getByLabel('Cron 表达式')).toHaveValue('*/30 * * * 1')
+    await expect(page.getByText('每30分钟每周一执行')).toBeVisible()
     await maybeShot(page, 'tasks-cron-editor-dark.png')
   })
 

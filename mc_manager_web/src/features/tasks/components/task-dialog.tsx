@@ -31,7 +31,7 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { Chip } from '@/components/mcs/chip'
-import { CRON_PRESETS, cronDescription } from '@/lib/mc-cron'
+import { CRON_PRESETS, cronDescription, formatNextRun } from '@/lib/mc-cron'
 import { TASK_TYPE_OPTIONS, type TaskType } from '@/lib/mc-deploy'
 import { CronEditor } from './cron-editor'
 import type { ScheduledTask, TaskCreatePayload } from '@/api/types'
@@ -108,6 +108,7 @@ export function TaskDialog({ task, onClose, onSave, saving }: TaskDialogProps) {
   }
 
   const cronDesc = cronDescription(cron)
+  const nextRunHint = formatNextRun(cron)
 
   return (
     <>
@@ -180,6 +181,12 @@ export function TaskDialog({ task, onClose, onSave, saving }: TaskDialogProps) {
                 <p className="flex items-start gap-1 text-mcs-xs text-mcs-text-subtle">
                   <Info className="mt-0.5 size-3 shrink-0" aria-hidden />
                   <span>{cronDesc}</span>
+                </p>
+              )}
+              {nextRunHint.length > 0 && (
+                <p className="flex items-start gap-1 text-mcs-xs text-mcs-text-subtle">
+                  <Info className="mt-0.5 size-3 shrink-0" aria-hidden />
+                  <span>下次运行约 {nextRunHint}</span>
                 </p>
               )}
               {showEditor && <CronEditor value={cron} onChange={setCron} />}

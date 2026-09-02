@@ -12,6 +12,67 @@ export interface CronFieldOption {
   value: string
 }
 
+/**
+ * 周字段 chip 选项（cron: 0=周日 ... 6=周六）
+ */
+export const WEEKDAY_CHIPS: Array<{ label: string; value: number }> = [
+  { label: '日', value: 0 },
+  { label: '一', value: 1 },
+  { label: '二', value: 2 },
+  { label: '三', value: 3 },
+  { label: '四', value: 4 },
+  { label: '五', value: 5 },
+  { label: '六', value: 6 },
+]
+
+/**
+ * 周字段快捷组合
+ */
+export const WEEKDAY_COMBOS: Array<{ label: string; value: string }> = [
+  { label: '工作日', value: '1-5' },
+  { label: '周末', value: '0,6' },
+]
+
+/**
+ * 将周字段值解析为已选中的星期数字集合
+ * `*` 或空 → 空集（全选=任意天）
+ * `1-5` → {1,2,3,4,5}
+ * `0,6` → {0,6}
+ * 单数字 → 对应集合
+ */
+export function parseWeekdayField(dow: string): Set<number> {
+  if (dow === '*' || dow === '') return new Set()
+  const result = new Set<number>()
+  for (const part of dow.split(',')) {
+    const trimmed = part.trim()
+    if (trimmed.includes('-')) {
+      const range = trimmed.split('-').map((s) => strictParseInt(s))
+      const a = range[0]
+      const b = range[1]
+      if (a !== null && a !== undefined && b !== null && b !== undefined) {
+        const lo = Math.min(a, b)
+        const hi = Math.max(a, b)
+        for (let i = lo; i <= hi; i++) result.add(i)
+      }
+    } else {
+      const n = strictParseInt(trimmed)
+      if (n !== null) result.add(n)
+    }
+  }
+  return result
+}
+
+/**
+ * 将已选中的星期数字集合序列化为 cron 周字段值
+ * 空集 → `*`；单项 → 数字字符串；多项 → 逗号分隔
+ */
+export function serializeWeekdayField(selected: Set<number>): string {
+  if (selected.size === 0) return '*'
+  if (selected.size === 7) return '*'
+  const sorted = [...selected].sort((a, b) => a - b)
+  return sorted.join(',')
+}
+
 /** 7 项 cron 快捷预置 */
 export const CRON_PRESETS: CronFieldOption[] = [
   { label: '每小时', value: '0 * * * *' },
@@ -170,4 +231,35 @@ export function weekdayName(dow: string): string {
 export function monthName(mon: string): string {
   const n = strictParseInt(mon)
   return n === null ? mon : `${n}月`
+}
+
+import { Cron } from 'croner'
+
+/**
+ * 计算标准 5 字段 cron 表达式的下一次运行时间
+ * 与后端 task_scheduler.js getNextRun 同源语义（croner 库、本地时区）
+ * @returns 下次运行 Date，无效表达式返回 null
+ */
+export function getNextCronRun(cronExpr: string): Date | null {
+  if (!parseCronFields(cronExpr)) return null
+  try {
+    const job = new Cron(cronExpr, { paused: true })
+    return job.nextRun() ?? null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 格式化下次运行时间为简短中文提示
+ * @returns "MM/DD HH:mm" 格式，null 时返回空串
+ */
+export function formatNextRun(cronExpr: string): string {
+  const next = getNextCronRun(cronExpr)
+  if (!next) return ''
+  const M = String(next.getMonth() + 1).padStart(2, '0')
+  const D = String(next.getDate()).padStart(2, '0')
+  const h = String(next.getHours()).padStart(2, '0')
+  const m = String(next.getMinutes()).padStart(2, '0')
+  return `${M}/${D} ${h}:${m}`
 }
