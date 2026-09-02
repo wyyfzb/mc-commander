@@ -321,11 +321,6 @@ export function createServerJarRoutes(serverManager) {
   router.post('/instances/deploy', validateBody(deployRequestSchema), async (req, res) => {
     const { type, mcVersion, instanceName, maxMemory, loaderVersion } = req.body;
 
-    const validTypes = ['vanilla', 'paper', 'fabric', 'forge', 'purpur'];
-    if (!validTypes.includes(type.toLowerCase())) {
-      return res.status(400).json(error(ErrorCodes.VALIDATION_ERROR, `Invalid type. Supported: ${validTypes.join(', ')}`));
-    }
-
     const instanceId = `${type}-${crypto.randomBytes(4).toString('hex')}`;
     const instancePath = path.join(config.serversDir, instanceId);
 
