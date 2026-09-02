@@ -4,7 +4,10 @@
  * - 步骤① 服务端类型 5 卡单选（SERVER_TYPE_LABELS + 类型说明一行）+ 版本 Select
  *   （useServerVersions 按类型拉取；切换类型触发新查询）+ Java 推荐提示 + fabric/forge loader Select
  * - 步骤② 实例名称 Input（默认空）+ 内存 Select 档位（1G/2G/4G/8G，默认 2G）
- * - 步骤③ 确认摘要（类型/版本/名称/内存/Java 推荐）+「开始部署」
+ * - 步骤③ 确认摘要（类型/版本/名称/内存/Java 推荐）+ EULA 同意勾选（默认不勾，
+ *   未勾选时「部署并启动」禁用并提示）+「部署并启动」
+ * - 部署成功且已勾选：自动同意 EULA（POST /eula）+ 发启动指令（POST /start），
+ *   结果块展示启动状态（首启闭环，issue 312）
  * - 部署中：进度条（percent×100）+ stage 中文标签（DEPLOY_STAGE_LABELS）+ transferred/total MB
  *   格式化（服务端 got 下载进度，单位字节）；禁用上一步与关闭（ESC/遮罩拦截）
  * - 成功：绿色结果块（实例 id/名称/版本）+「完成」关闭（onDeployed(result)）；
@@ -29,6 +32,7 @@ import {
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import {
   Dialog,
@@ -49,7 +53,10 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
+import { toast } from 'sonner'
+import { apiPost } from '@/api/client'
 import { getFriendlyErrorText } from '@/api/errors'
+import { useConnectionStore } from '@/stores/connection'
 import {
   FALLBACK_VERSIONS,
   SERVER_TYPES,
@@ -184,8 +191,13 @@ export interface DeployDialogProps {
 }
 
 export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogProps) {
+  const config = useConnectionStore()
   const [step, setStep] = useState(0)
   const [form, setForm] = useState<DeployForm>({ ...INITIAL_FORM })
+  /** EULA 同意（默认不勾；不参与 dirty 判定——流程性同意而非部署配置） */
+  const [eulaAgreed, setEulaAgreed] = useState(false)
+  /** 部署成功后自动启动状态（首启闭环；未勾选 EULA 时为 null 不自动启动） */
+  const [autoStart, setAutoStart] = useState<'pending' | 'ok' | 'failed' | null>(null)
   /** 基线（自动回填的版本/加载器同步基线：不算用户改动） */
   const baselineRef = useRef<DeployForm>({ ...INITIAL_FORM })
   const [nameError, setNameError] = useState('')
@@ -220,6 +232,8 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
     baselineRef.current = { ...INITIAL_FORM }
     setResult(null)
     setNameError('')
+    setEulaAgreed(false)
+    setAutoStart(null)
     setCloseConfirmOpen(false)
     useDeployStore.getState().resetDeploy()
   }, [open])
@@ -308,6 +322,19 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
       const deployed = await deployMutation.mutateAsync(payload)
       setResult(deployed)
       finishDeploy({ ok: true, instanceId: deployed.id })
+      // 首启闭环（issue 312）：已同意 EULA → 写入 eula.txt + 发启动指令（启动异步，状态在仪表盘/终端可见）
+      if (eulaAgreed) {
+        setAutoStart('pending')
+        try {
+          await apiPost(`/api/v1/instances/${deployed.id}/eula`, config, { agreed: true })
+          await apiPost(`/api/v1/instances/${deployed.id}/start`, config)
+          setAutoStart('ok')
+          toast.success('部署完成，服务器开始启动')
+        } catch (e) {
+          setAutoStart('failed')
+          toast.error(`自动启动失败：${getFriendlyErrorText(e)}`)
+        }
+      }
     } catch (e) {
       finishDeploy({ ok: false, error: getFriendlyErrorText(e) })
     }
@@ -429,6 +456,26 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
                 </p>
               </div>
             </div>
+            {autoStart !== null && (
+              <div
+                role="status"
+                className={cn(
+                  'flex items-center gap-2 rounded-mcs-sm border px-3 py-2 text-mcs-sm',
+                  autoStart === 'ok' && 'border-mcs-success-border bg-mcs-success-bg-subtle text-mcs-success-fg',
+                  autoStart === 'pending' && 'border-mcs-border-muted bg-mcs-bg-muted text-mcs-text-muted',
+                  autoStart === 'failed' && 'border-mcs-warning-border bg-mcs-warning-bg-subtle text-mcs-warning-fg',
+                )}
+              >
+                {autoStart === 'pending' && <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />}
+                {autoStart === 'ok' && <CheckCircle2 className="size-4 shrink-0" aria-hidden />}
+                {autoStart === 'failed' && <XCircle className="size-4 shrink-0" aria-hidden />}
+                <p aria-live="polite">
+                  {autoStart === 'pending' && '正在启动服务器…'}
+                  {autoStart === 'ok' && '已发送启动指令，服务器正在启动（状态可在仪表盘查看）'}
+                  {autoStart === 'failed' && '自动启动失败，可稍后在实例页手动启动'}
+                </p>
+              </div>
+            )}
             <DialogFooter>
               <Button onClick={handleComplete}>完成</Button>
             </DialogFooter>
@@ -634,7 +681,8 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
             )}
 
             {step === 2 && (
-              <div className="flex flex-col gap-2 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted py-1">
+              <div className="flex flex-col gap-2.5">
+                <div className="flex flex-col gap-2 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted py-1">
                 {(
                   [
                     ['服务端类型', SERVER_TYPE_LABELS[form.type]],
@@ -657,6 +705,29 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
                     </span>
                   </div>
                 ))}
+                </div>
+
+                {/* EULA 同意勾选（首启闭环：同意后部署完成自动启动；默认不勾） */}
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="deploy-eula-agree" className="flex cursor-pointer items-start gap-2 text-mcs-sm text-mcs-text-default">
+                    <Checkbox
+                      id="deploy-eula-agree"
+                      checked={eulaAgreed}
+                      onCheckedChange={(v) => setEulaAgreed(v === true)}
+                      className="mt-0.5"
+                    />
+                    <span>我已阅读并同意 Minecraft EULA（Mojang 最终用户许可协议）</span>
+                  </label>
+                  <p className="pl-6 text-mcs-xs text-mcs-text-subtle">
+                    同意后将写入 eula.txt（eula=true），部署完成后自动启动服务器。
+                  </p>
+                  {!eulaAgreed && (
+                    <p className="flex items-center gap-1.5 pl-6 text-mcs-xs text-mcs-warning-fg">
+                      <Info className="size-3.5 shrink-0" aria-hidden />
+                      请先同意 EULA：未同意时无法启动服务器
+                    </p>
+                  )}
+                </div>
               </div>
             )}
 
@@ -674,9 +745,9 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
                   下一步
                 </Button>
               ) : (
-                <Button onClick={() => void handleDeploy()}>
+                <Button onClick={() => void handleDeploy()} disabled={!eulaAgreed} aria-label="部署并启动">
                   <CloudDownload className="size-4" aria-hidden />
-                  开始部署
+                  部署并启动
                 </Button>
               )}
             </DialogFooter>
