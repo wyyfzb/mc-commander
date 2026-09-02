@@ -7,7 +7,7 @@ import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { apiGet, apiPost } from '@/api/client'
 import { ApiError } from '@/api/client'
-import { getFriendlyErrorMessage } from '@/api/errors'
+import { getFriendlyErrorText, getFriendlyErrorMessage } from '@/api/errors'
 import { queryKeys } from '@/api/queries'
 import { useConnectionStore } from '@/stores/connection'
 import { useServerStore } from '@/stores/server'
@@ -74,15 +74,13 @@ export function InstanceControls({ compact = false }: { compact?: boolean }) {
       }
     },
     onError: (err, action) => {
-      const friendly = err instanceof ApiError
-        ? getFriendlyErrorMessage(err.code, err.message)
-        : `${action}失败，请检查服务器连接`
       // EULA 特例
       if (err instanceof ApiError && err.message.includes('EULA_NOT_ACCEPTED')) {
         setEulaOpen(true)
         return
       }
-      toast.error(`${action === 'save' ? '保存失败' : `${action}失败`}: ${friendly}`)
+      const friendly = getFriendlyErrorText(err)
+      toast.error(`${action === 'save' ? '保存失败' : `${action}失败`}：${friendly}`)
     },
   })
 

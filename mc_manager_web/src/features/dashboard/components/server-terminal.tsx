@@ -14,8 +14,7 @@ import { useServerStore } from '@/stores/server'
 import { useConnectionStore } from '@/stores/connection'
 import { useInstanceLogs } from '@/api/queries'
 import { apiGet } from '@/api/client'
-import { ApiError } from '@/api/client'
-import { getFriendlyErrorMessage } from '@/api/errors'
+import { getFriendlyErrorText } from '@/api/errors'
 import { formatLogFileName } from '@/lib/format'
 import { useUiStore } from '@/stores/ui'
 import type { LogEntry } from '@/api/types'
@@ -276,11 +275,7 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
       URL.revokeObjectURL(url)
       toast.success('日志已保存到本地')
     } catch (err) {
-      toast.error(
-        err instanceof ApiError
-          ? `日志下载失败: ${getFriendlyErrorMessage(err.code, err.message)}`
-          : '日志下载失败',
-      )
+      toast.error(`日志下载失败：${getFriendlyErrorText(err)}`)
     } finally {
       setDownloading(false)
     }
