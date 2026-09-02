@@ -1,7 +1,8 @@
 import { ErrorCodes, error, AppError } from '../utils/response.js';
+import { logger } from '../utils/logger.js';
 
 export function errorHandler(err, req, res, _next) {
-  console.error('Error:', err);
+  logger.error('Error:', err);
 
   if (err instanceof AppError) {
     return res.status(err.status).json(error(

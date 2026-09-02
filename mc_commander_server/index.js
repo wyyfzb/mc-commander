@@ -25,6 +25,7 @@ import { BackupModel } from './db/backup.model.js';
 import { setupWebhookDispatch } from './services/webhook.service.js';
 import { BackupService } from './services/backup.service.js';
 import { initDatabase, getDb, InstanceModel } from './db/index.js';
+import { logger } from './utils/logger.js';
 
 // ── 启动时 API Key 哈希迁移 + .env 权限检查 ────────────
 const envPath = path.join(__dirname, '.env');
@@ -46,9 +47,9 @@ if (!config.apiKeyHash && config.apiKey) {
     fs.writeFileSync(tmp, content, 'utf-8');
     try { fs.chmodSync(tmp, 0o600); } catch { /* Windows 无权限位 */ }
     fs.renameSync(tmp, envPath);
-    console.log('[Security] API Key 已自动迁移为哈希存储格式（API_KEY_HASH）');
+    logger.info('[Security] API Key 已自动迁移为哈希存储格式（API_KEY_HASH）');
   } catch (err) {
-    console.error(`[Security] API Key 哈希迁移失败：${err.message}，请手动将 .env 中 API_KEY 替换为 API_KEY_HASH=<sha256hex>`);
+    logger.error(`[Security] API Key 哈希迁移失败：${err.message}，请手动将 .env 中 API_KEY 替换为 API_KEY_HASH=<sha256hex>`);
   }
 }
 
@@ -56,7 +57,7 @@ if (!config.apiKeyHash && config.apiKey) {
 try {
   const stat = fs.statSync(envPath);
   if ((stat.mode & 0o077) !== 0) {
-    console.warn(`[Security] .env 文件权限过宽（${(stat.mode & 0o777).toString(8)}），建议设置为 0600（仅所有者可读写）`);
+    logger.warn(`[Security] .env 文件权限过宽（${(stat.mode & 0o777).toString(8)}），建议设置为 0600（仅所有者可读写）`);
   }
 } catch { /* 文件不存在等情况由后续校验处理 */ }
 
@@ -67,11 +68,12 @@ if (process.env.NODE_ENV === 'production' && !process.env.ALLOW_WEAK_KEY) {
   const rawKey = process.env.API_KEY;
   if (rawKey) {
     if (isWeakApiKey(rawKey)) {
-      console.error('╔══════════════════════════════════════════════════╗');
-      console.error('║  错误: 生产环境不允许使用弱 API Key！         ║');
-      console.error('║  Key 长度须 >= 16 且不得为纯重复字符。         ║');
-      console.error('║  如确需使用弱 Key，请设置 ALLOW_WEAK_KEY=1。    ║');
-      console.error('╚══════════════════════════════════════════════════╝');
+      // exit 前引导输出走 banner 白名单（stderr 直写，不受 LOG_LEVEL 过滤）
+      logger.banner('╔══════════════════════════════════════════════════╗');
+      logger.banner('║  错误: 生产环境不允许使用弱 API Key！         ║');
+      logger.banner('║  Key 长度须 >= 16 且不得为纯重复字符。         ║');
+      logger.banner('║  如确需使用弱 Key，请设置 ALLOW_WEAK_KEY=1。    ║');
+      logger.banner('╚══════════════════════════════════════════════════╝');
       process.exit(1);
     }
   }
@@ -80,10 +82,10 @@ if (process.env.NODE_ENV === 'production' && !process.env.ALLOW_WEAK_KEY) {
 
 // 启动前校验关键配置（在 listen 之前）
 if (!config.apiKeyHash) {
-  console.error('╔══════════════════════════════════════════════════╗');
-  console.error('║  错误: 未设置 API_KEY_HASH！                     ║');
-  console.error('║  请在 .env 文件中设置 API_KEY_HASH 后再启动。  ║');
-  console.error('╚══════════════════════════════════════════════════╝');
+  logger.banner('╔══════════════════════════════════════════════════╗');
+  logger.banner('║  错误: 未设置 API_KEY_HASH！                     ║');
+  logger.banner('║  请在 .env 文件中设置 API_KEY_HASH 后再启动。  ║');
+  logger.banner('╚══════════════════════════════════════════════════╝');
   process.exit(1);
 }
 
@@ -128,17 +130,17 @@ const taskScheduler = new TaskScheduler(serverManager);
 try {
   const resetCount = BackupModel.resetStaleInProgress({ maxAgeMs: config.backupInProgressTimeoutMs });
   if (resetCount > 0) {
-    console.log(`[Backup] Reset ${resetCount} stale in-progress backup record(s) on startup`);
+    logger.info(`[Backup] Reset ${resetCount} stale in-progress backup record(s) on startup`);
   }
 } catch (err) {
-  console.error('Failed to reset stale backup records:', err.message);
+  logger.error('Failed to reset stale backup records:', err.message);
 }
 
 // 启动检测：残留的 pre_restore 目录（进程在上次恢复中段崩溃）告警提示
 try {
   new BackupService().detectOrphanedPreRestoreDirs();
 } catch (err) {
-  console.error('Failed to scan for orphaned pre-restore dirs:', err.message);
+  logger.error('Failed to scan for orphaned pre-restore dirs:', err.message);
 }
 
 app.use(cors());
@@ -194,7 +196,7 @@ const wsSetup = setupWebSocket(wss, serverManager);
 
 server.on('error', (err) => {
   if (err.code === 'EADDRINUSE') {
-    console.error(`错误: 端口 ${config.port} 已被占用，请修改 .env 的 PORT 配置或停止占用该端口的进程。`);
+    logger.error(`错误: 端口 ${config.port} 已被占用，请修改 .env 的 PORT 配置或停止占用该端口的进程。`);
     process.exit(1);
     return;
   }
@@ -203,23 +205,25 @@ server.on('error', (err) => {
 });
 
 server.listen(config.port, config.host, () => {
-  console.log(`========================================`);
-  console.log(`  MC_Commander Server v${SERVER_VERSION}`);
-  console.log(`========================================`);
-  console.log(`  Host: ${config.host}`);
-  console.log(`  Port: ${config.port}`);
+  // 启动横幅走 banner 白名单（stderr 直写不受 LOG_LEVEL 过滤）：部署排障时
+  // 即使 LOG_LEVEL=error 也能看到启动信息（journalctl 场景同理，见 README「日志」章节）
+  logger.banner(`========================================`);
+  logger.banner(`  MC_Commander Server v${SERVER_VERSION}`);
+  logger.banner(`========================================`);
+  logger.banner(`  Host: ${config.host}`);
+  logger.banner(`  Port: ${config.port}`);
   const maskedHash = config.apiKeyHash.length > 8
     ? config.apiKeyHash.substring(0, 8) + '...'
     : '****';
-  console.log(`  API Key Hash: ${maskedHash}`);
-  console.log(`  Servers Dir: ${config.serversDir}`);
-  console.log(`  Data Dir: ${config.dataDir}`);
-  console.log(`  API Endpoint: http://localhost:${config.port}/api/v1`);
-  console.log(`  WebSocket: ws://localhost:${config.port}/ws`);
-  console.log(`========================================`);
+  logger.banner(`  API Key Hash: ${maskedHash}`);
+  logger.banner(`  Servers Dir: ${config.serversDir}`);
+  logger.banner(`  Data Dir: ${config.dataDir}`);
+  logger.banner(`  API Endpoint: http://localhost:${config.port}/api/v1`);
+  logger.banner(`  WebSocket: ws://localhost:${config.port}/ws`);
+  logger.banner(`========================================`);
 
   taskScheduler.start();
-  console.log(`  Task scheduler: started`);
+  logger.banner(`  Task scheduler: started`);
 
   // 面板重启后自动恢复标记 autoStart 的实例（延迟 2s 错峰启动）
   // InstanceModel 已在模块顶层通过 initDatabase() 初始化，直接同步调用即可
@@ -227,7 +231,7 @@ server.listen(config.port, config.host, () => {
     let autoStartInstances;
     try { autoStartInstances = InstanceModel.getAll().filter(i => i.autoStart === true); } catch { return; }
     if (autoStartInstances.length === 0) return;
-    console.log(`[AutoStart] Found ${autoStartInstances.length} instance(s) marked for auto-start`);
+    logger.info(`[AutoStart] Found ${autoStartInstances.length} instance(s) marked for auto-start`);
     let idx = 0;
     const startNext = () => {
       if (idx >= autoStartInstances.length) return;
@@ -235,45 +239,45 @@ server.listen(config.port, config.host, () => {
       const instance = serverManager.getInstance(inst.id);
       if (!instance) { startNext(); return; }
       // 跳过已运行/熔断/目录缺失
-      if (instance.isRunning) { console.log(`[AutoStart] ${inst.id} already running, skipping`); startNext(); return; }
-      if (instance._circuitBreakerTripped) { console.log(`[AutoStart] ${inst.id} circuit breaker tripped, skipping`); startNext(); return; }
+      if (instance.isRunning) { logger.info(`[AutoStart] ${inst.id} already running, skipping`); startNext(); return; }
+      if (instance._circuitBreakerTripped) { logger.info(`[AutoStart] ${inst.id} circuit breaker tripped, skipping`); startNext(); return; }
       if (!fs.existsSync(path.join(instance.serverPath, instance.jarFile))) {
-        console.log(`[AutoStart] ${inst.id} jar missing, skipping`);
+        logger.info(`[AutoStart] ${inst.id} jar missing, skipping`);
         startNext(); return;
       }
       try {
         instance.start();
-        console.log(`[AutoStart] ${inst.id} started successfully`);
+        logger.info(`[AutoStart] ${inst.id} started successfully`);
       } catch (e) {
-        console.error(`[AutoStart] ${inst.id} failed to start:`, e.message);
+        logger.error(`[AutoStart] ${inst.id} failed to start:`, e.message);
       }
       setTimeout(startNext, config.autoStartDelayMs);
     };
     startNext();
   }, 2000);
 
-  console.log(`========================================`);
+  logger.info(`========================================`);
 });
 
 // 优雅停机：停实例 → 关 WS → 关 DB → 关 HTTP，确保 WAL 刷盘且连接不泄漏
 async function shutdown(signal) {
-  console.log(`${signal} received, shutting down...`);
+  logger.info(`${signal} received, shutting down...`);
   taskScheduler.stop();
   try {
     await serverManager.stopAll({ timeout: 8000 });
   } catch (e) {
-    console.error('Failed to stop instances gracefully:', e.message);
+    logger.error('Failed to stop instances gracefully:', e.message);
   }
   wss.close(() => {
-    console.log('WebSocket server closed');
+    logger.info('WebSocket server closed');
     try {
       getDb().close();
-      console.log('Database closed');
+      logger.info('Database closed');
     } catch (e) {
-      console.error('Failed to close database:', e.message);
+      logger.error('Failed to close database:', e.message);
     }
     server.close(() => {
-      console.log('Server closed');
+      logger.info('Server closed');
       process.exit(0);
     });
     // 兜底：server.close 回调未触发也强制退出

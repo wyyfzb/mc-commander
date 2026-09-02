@@ -17,6 +17,7 @@ import {
   assertDownloadIntegrity,
   assertSizeWithinLimit,
 } from '../utils/jar-download-guard.js';
+import { logger } from '../utils/logger.js';
 
 const mcCoreManager = new MinecraftServerManager(new NodeAdapter());
 
@@ -272,7 +273,7 @@ async function runFirstLaunch(instancePath, javaPath, jarFile, maxMemory) {
       }
       // 单进程 SIGKILL 兜底（进程树终止失败/pid 缺失时仍杀主进程本身）
       try { proc.kill('SIGKILL'); } catch {}
-      console.warn('First launch timed out (60s), but config may have been generated');
+      logger.warn('First launch timed out (60s), but config may have been generated');
       resolve();
     }, 60000);
 
@@ -281,14 +282,14 @@ async function runFirstLaunch(instancePath, javaPath, jarFile, maxMemory) {
       if (fs.existsSync(logsDir) || code === 0) {
         resolve();
       } else {
-        console.warn(`First launch exited with code ${code}. Output: ${output.substring(0, 500)}`);
+        logger.warn(`First launch exited with code ${code}. Output: ${output.substring(0, 500)}`);
         resolve();
       }
     });
 
     proc.on('error', (err) => {
       clearTimeout(timeout);
-      console.warn('First launch error:', err.message);
+      logger.warn('First launch error:', err.message);
       resolve();
     });
   });
@@ -348,7 +349,7 @@ export function createServerJarRoutes(serverManager) {
       const versions = Array.isArray(rawVersions) ? rawVersions : (rawVersions.versions || Object.keys(rawVersions));
       return res.json(success({ type, versions: versions.slice(0, 30) }));
     } catch (e) {
-      console.error(`Failed to fetch ${type} versions:`, e.message);
+      logger.error(`Failed to fetch ${type} versions:`, e.message);
       return res.status(502).json(error(ErrorCodes.SERVER_ERROR, `Failed to fetch versions: ${e.message}`));
     }
   });
@@ -368,7 +369,7 @@ export function createServerJarRoutes(serverManager) {
       // 必须在 try 内：mkdirSync 抛错（ENOTDIR/EACCES/EPERM）时由 catch 统一返回 502 并清理，
       // 否则裸 async handler 的 rejection 不被 Express 4 捕获 → 请求挂起 + unhandledRejection
       fs.mkdirSync(instancePath, { recursive: true });
-      console.log(`Deploying ${type} ${mcVersion} as ${instanceId}...`);
+      logger.info(`Deploying ${type} ${mcVersion} as ${instanceId}...`);
 
       let downloadUrl;
       let expectedHash = null; // 上游摘要（issue 316）：有则强校验，无则仅限流
@@ -405,7 +406,7 @@ export function createServerJarRoutes(serverManager) {
             };
           }
         } catch (mcErr) {
-          console.error(`minecraft-core failed for ${type}:`, mcErr.message);
+          logger.error(`minecraft-core failed for ${type}:`, mcErr.message);
           if (type.toLowerCase() === 'fabric') {
             const loader = loaderVersion || '0.16.10';
             downloadUrl = `https://meta.fabricmc.net/v2/versions/loader/${mcVersion}/${loader}/1.0.1/server/jar`;
@@ -418,7 +419,7 @@ export function createServerJarRoutes(serverManager) {
       }
 
       if (downloadUrl) {
-        console.log(`Download URL: ${downloadUrl}`);
+        logger.info(`Download URL: ${downloadUrl}`);
         await downloadWithProgress(downloadUrl, jarPath, serverManager, 'download', { expectedHash });
       } else {
         const downloadedFile = fs.readdirSync(instancePath).find(f => f.endsWith('.jar'));
@@ -434,7 +435,7 @@ export function createServerJarRoutes(serverManager) {
       let jarFile = 'server.jar';
 
       if (isForge) {
-        console.log('Forge detected, extracting server files...');
+        logger.info('Forge detected, extracting server files...');
         serverManager.emit('deployProgress', { stage: 'forge_install', percent: 0, transferred: 0, total: 0 });
         const extractArgs = ['-Xmx512M', '-jar', downloadJarName, '--installServer'];
         const extractProc = spawn(javaPath, extractArgs, { cwd: instancePath });
@@ -445,7 +446,7 @@ export function createServerJarRoutes(serverManager) {
           }, 120000);
           extractProc.on('exit', (code) => {
             clearTimeout(timer);
-            if (code !== 0) console.warn(`Forge installer exited with code ${code}`);
+            if (code !== 0) logger.warn(`Forge installer exited with code ${code}`);
             resolve();
           });
           extractProc.on('error', (err) => {
@@ -495,24 +496,24 @@ export function createServerJarRoutes(serverManager) {
           mcVersion,
           port: 25565 + parseInt(instanceId.slice(-4), 16) % 100,
         });
-        console.log(`Instance ${instanceId} written to DB`);
+        logger.info(`Instance ${instanceId} written to DB`);
       } catch (dbErr) {
-        console.warn(`Failed to write instance to DB:`, dbErr.message);
+        logger.warn(`Failed to write instance to DB:`, dbErr.message);
       }
 
       serverManager.emit('deployProgress', { stage: 'first_launch', percent: 0, transferred: 0, total: 0 });
       try {
-        console.log('Running first launch to generate config...');
+        logger.info('Running first launch to generate config...');
         await runFirstLaunch(instancePath, javaPath, jarFile, ramSize);
-        console.log('First launch completed');
+        logger.info('First launch completed');
       } catch (e) {
-        console.warn('First launch failed (may require manual setup):', e.message);
+        logger.warn('First launch failed (may require manual setup):', e.message);
       }
 
       serverManager.loadInstances();
 
       serverManager.emit('deployProgress', { stage: 'complete', percent: 1.0, transferred: 0, total: 0 });
-      console.log(`Instance ${instanceId} deployed successfully`);
+      logger.info(`Instance ${instanceId} deployed successfully`);
 
       res.json(success({
         id: instanceId,
@@ -531,10 +532,10 @@ export function createServerJarRoutes(serverManager) {
       try {
         fs.rmSync(instancePath, { recursive: true, force: true });
       } catch (cleanupErr) {
-        console.warn('Failed to clean up instance dir after failed deploy:', cleanupErr.message);
+        logger.warn('Failed to clean up instance dir after failed deploy:', cleanupErr.message);
       }
       serverManager.emit('deployProgress', { stage: 'error', percent: 0, transferred: 0, total: 0, error: e.message });
-      console.error(`Failed to deploy ${type} ${mcVersion}:`, e.message);
+      logger.error(`Failed to deploy ${type} ${mcVersion}:`, e.message);
       return res.status(502).json(error(ErrorCodes.SERVER_ERROR, `Deployment failed: ${e.message}`));
     }
   });

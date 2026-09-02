@@ -197,7 +197,7 @@ describe('端口占用错误处理（EADDRINUSE）', () => {
 
   beforeAll(() => {
     exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {});
-    errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    errorSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true); // logger.error 走 stderr
   });
 
   afterAll(() => {

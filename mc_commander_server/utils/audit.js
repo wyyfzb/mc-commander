@@ -1,4 +1,5 @@
 import { AuditLogModel } from '../db/index.js';
+import { logger } from './logger.js';
 
 export const AuditActions = {
   INSTANCE_START: 'INSTANCE_START',
@@ -57,6 +58,6 @@ export function recordAudit({ instanceId, action, targetType, targetId, detail, 
       source: source || 'api',
     });
   } catch (err) {
-    console.warn(`[Audit] Failed to record audit log (${action}):`, err.message);
+    logger.warn(`[Audit] Failed to record audit log (${action}):`, err.message);
   }
 }

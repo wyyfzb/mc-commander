@@ -5,6 +5,7 @@ import config from '../config.js';
 import { BackupModel } from '../db/backup.model.js';
 import { ScheduledTaskModel } from '../db/scheduled_task.model.js';
 import { AppError, ErrorCodes } from '../utils/response.js';
+import { logger } from '../utils/logger.js';
 
 // 世界目录名白名单（find-004）：与路由层 server.properties level-name 校验
 // 一致（^[A-Za-z0-9_-]+$），单段字符集禁止 / \ . 等路径分隔/穿越字符。
@@ -315,11 +316,11 @@ export class BackupService {
       jarFile: instance?.jarFile || null,
       taskId,
     }).catch(err => {
-      console.error('Backup failed:', err);
+      logger.error('Backup failed:', err);
       try {
         BackupModel.update(backupRecord.id, { status: 'failed' });
       } catch (e) {
-        console.error('Failed to update backup status:', e);
+        logger.error('Failed to update backup status:', e);
       }
     });
 
@@ -364,14 +365,14 @@ export class BackupService {
         const instance = this.serverManager.getInstance(instanceId);
         if (instance && instance.isRconConnected) {
           try {
-            console.log(`[Backup] Sending save-off for ${instanceId}...`);
+            logger.info(`[Backup] Sending save-off for ${instanceId}...`);
             await instance.sendCommandWithResponse('save-off', { timeout: 3000 });
-            console.log(`[Backup] Sending save-all flush for ${instanceId}...`);
+            logger.info(`[Backup] Sending save-all flush for ${instanceId}...`);
             await instance.sendCommandWithResponse('save-all flush', { timeout: 5000 });
             // 等待磁盘写入完成
             await new Promise(resolve => setTimeout(resolve, 2000));
           } catch (rconErr) {
-            console.warn(`[Backup] RCON save commands failed (non-fatal): ${rconErr.message}`);
+            logger.warn(`[Backup] RCON save commands failed (non-fatal): ${rconErr.message}`);
           }
         }
       }
@@ -413,16 +414,16 @@ export class BackupService {
         ScheduledTaskModel.updateLastRunStatus(taskId, 'success', null, Date.now() - startTs);
       }
 
-      console.log(`Backup completed: ${snapshotDir}`);
+      logger.info(`Backup completed: ${snapshotDir}`);
 
       // 自动清理旧备份（备份成功路径接线：清理超出保留策略的旧备份）
       try {
         const deleted = await this.cleanupOldBackups(instanceId, config.backupRetention);
         if (deleted > 0) {
-          console.log(`[Backup] Cleaned up ${deleted} old backup(s) for instance ${instanceId}`);
+          logger.info(`[Backup] Cleaned up ${deleted} old backup(s) for instance ${instanceId}`);
         }
       } catch (cleanupErr) {
-        console.error(`[Backup] Cleanup failed for instance ${instanceId}:`, cleanupErr.message);
+        logger.error(`[Backup] Cleanup failed for instance ${instanceId}:`, cleanupErr.message);
       }
 
       // 触发 WebSocket 事件（content 携带名称与大小，前端不再回退默认文案）
@@ -439,7 +440,7 @@ export class BackupService {
       }
 
     } catch (err) {
-      console.error('Backup execution failed:', err);
+      logger.error('Backup execution failed:', err);
 
       // 触发备份失败事件（content 携带失败原因，磁盘满/压缩超时等对用户可见）
       if (this.serverManager) {
@@ -456,7 +457,7 @@ export class BackupService {
       try {
         BackupModel.update(backupId, { status: 'failed' });
       } catch (e) {
-        console.error('Failed to update backup status:', e);
+        logger.error('Failed to update backup status:', e);
       }
 
       // 定时备份任务的结果回写：执行阶段真实失败（快照/校验/压缩）
@@ -489,7 +490,7 @@ export class BackupService {
         // rsync 缺失（未安装 MSYS2/不在 PATH）：降级 robocopy 全量镜像。
         // 其余错误（命令执行失败）原样上抛——降级只针对工具缺失
         if (err.code !== 'ENOENT') throw err;
-        console.warn(`[Backup] rsync 不可用，降级为 robocopy 全量快照: ${err.message}`);
+        logger.warn(`[Backup] rsync 不可用，降级为 robocopy 全量快照: ${err.message}`);
         await this._robocopySnapshot(instanceId, snapshotDir, { jarFile, timeout });
         return 'robocopy';
       }
@@ -536,7 +537,7 @@ export class BackupService {
       okCodes: [0, 24],
     });
     if (code === 24) {
-      console.warn('[Backup] rsync: 部分源文件在传输中消失（exit 24），快照已容忍处理');
+      logger.warn('[Backup] rsync: 部分源文件在传输中消失（exit 24），快照已容忍处理');
     }
   }
 
@@ -580,10 +581,10 @@ export class BackupService {
     const instance = this.serverManager.getInstance(instanceId);
     if (!instance || !instance.isRconConnected) return;
     try {
-      console.log(`[Backup] Sending save-on for ${instanceId}...`);
+      logger.info(`[Backup] Sending save-on for ${instanceId}...`);
       await instance.sendCommandWithResponse('save-on', { timeout: 3000 });
     } catch (rconErr) {
-      console.warn(`[Backup] RCON save-on failed (non-fatal): ${rconErr.message}`);
+      logger.warn(`[Backup] RCON save-on failed (non-fatal): ${rconErr.message}`);
       this.serverManager.emit('instance:backupFailed', {
         instanceId,
         error: rconErr.message,
@@ -662,12 +663,12 @@ export class BackupService {
     this.executeRestore(backupId, backup, instanceDir, snapshotDir, {
       jarFile: instance?.jarFile || null,
     }).catch(err => {
-      console.error('Restore failed:', err);
+      logger.error('Restore failed:', err);
       // 恢复失败：备份文件未动，重置为 completed 供重试（释放互斥锁）
       try {
         BackupModel.update(backupId, { status: 'completed' });
       } catch (e) {
-        console.error('Failed to reset backup status after failed restore:', e);
+        logger.error('Failed to reset backup status after failed restore:', e);
       }
     });
 
@@ -746,7 +747,7 @@ export class BackupService {
       }
       BackupModel.update(backupId, { status: 'completed' });
 
-      console.log(`Backup restored: ${snapshotDir}`);
+      logger.info(`Backup restored: ${snapshotDir}`);
       if (this.serverManager) {
         this.serverManager.emit('instance:restoreComplete', {
           instanceId,
@@ -757,7 +758,7 @@ export class BackupService {
       return true;
 
     } catch (err) {
-      console.error('Restore failed:', err);
+      logger.error('Restore failed:', err);
 
       // 失败回滚：删除半解压的新实例目录，rename 本次 pre_restore 回来。
       // 精确匹配本次目录名（preRestoreDir 局部变量）而非前缀扫描——
@@ -772,7 +773,7 @@ export class BackupService {
       try {
         BackupModel.update(backupId, { status: 'completed' });
       } catch (e) {
-        console.error('Failed to reset backup status after failed restore:', e);
+        logger.error('Failed to reset backup status after failed restore:', e);
       }
       if (this.serverManager) {
         this.serverManager.emit('instance:restoreFailed', {
@@ -806,7 +807,7 @@ export class BackupService {
       } catch (err) {
         // rsync 缺失（未安装 MSYS2/不在 PATH）：降级 robocopy；其余错误上抛
         if (err.code !== 'ENOENT') throw err;
-        console.warn(`[Backup] rsync 不可用，恢复降级为 robocopy: ${err.message}`);
+        logger.warn(`[Backup] rsync 不可用，恢复降级为 robocopy: ${err.message}`);
       }
     } else {
       await spawnProcess('rsync', ['-a', '--delete', `${snapshotDir}/`, `${instanceDir}/`], {
@@ -851,7 +852,7 @@ export class BackupService {
         try {
           fs.copyFileSync(src, path.join(newInstanceDir, name));
         } catch (e) {
-          console.warn(`[Backup] Failed to copy back jar ${name}:`, e.message);
+          logger.warn(`[Backup] Failed to copy back jar ${name}:`, e.message);
         }
       }
     }
@@ -934,7 +935,7 @@ export class BackupService {
           await this.deleteBackup(backup.id);
           deletedCount++;
         } catch (e) {
-          console.error('Failed to delete old backup:', e);
+          logger.error('Failed to delete old backup:', e);
         }
       }
     }
@@ -950,7 +951,7 @@ export class BackupService {
           await this.deleteBackup(backup.id);
           deletedCount++;
         } catch (e) {
-          console.error('Failed to delete old backup:', e);
+          logger.error('Failed to delete old backup:', e);
         }
       }
     }
@@ -966,7 +967,7 @@ export class BackupService {
         .filter((name) => /_pre_restore_\d{4}-\d{2}-\d{2}T/.test(name) && !EXCLUDED_DIRS.has(name))
         .map((name) => path.join(config.serversDir, name));
       for (const dir of orphans) {
-        console.warn(
+        logger.warn(
           `[Backup] 检测到残留的恢复暂存目录（进程可能在上次恢复中崩溃）: ${dir}。` +
           `请人工确认后处理（数据恢复完成可删除；如需回滚请用其中内容覆盖实例目录）`
         );

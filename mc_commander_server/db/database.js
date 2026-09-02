@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import config from '../config.js';
+import { logger } from '../utils/logger.js';
 
 let db = null;
 
@@ -20,7 +21,7 @@ export function initDatabase() {
 
   createTables();
 
-  console.log(`Database initialized at ${dbPath}`);
+  logger.info(`Database initialized at ${dbPath}`);
   return db;
 }
 
@@ -55,7 +56,7 @@ function createTables() {
     db.prepare('SELECT total_uptime FROM instances LIMIT 1').get();
   } catch {
     db.exec('ALTER TABLE instances ADD COLUMN total_uptime INTEGER DEFAULT 0');
-    console.log('Migration: added total_uptime column to instances table');
+    logger.info('Migration: added total_uptime column to instances table');
   }
 
   // 迁移：实例意外停止自动重启默认开启（新功能，用 user_version 标记一次性执行）
@@ -63,7 +64,7 @@ function createTables() {
   if (userVersion < 1) {
     db.exec('UPDATE instances SET auto_restart = 1 WHERE auto_restart = 0');
     db.pragma('user_version = 1');
-    console.log('Migration: enabled auto_restart for all instances (default on)');
+    logger.info('Migration: enabled auto_restart for all instances (default on)');
   }
 
   // 迁移：jvm_args 结构化启动参数列（实例级 jvmArgs 持久化，
@@ -75,7 +76,7 @@ function createTables() {
       db.exec('ALTER TABLE instances ADD COLUMN jvm_args TEXT');
     }
     db.pragma('user_version = 2');
-    console.log('Migration: added jvm_args column to instances table');
+    logger.info('Migration: added jvm_args column to instances table');
   }
 
   // 备份表
@@ -110,7 +111,7 @@ function createTables() {
       db.exec('ALTER TABLE backups ADD COLUMN updated_at TEXT DEFAULT CURRENT_TIMESTAMP');
     }
     db.pragma('user_version = 3');
-    console.log('Migration: added updated_at column to backups table');
+    logger.info('Migration: added updated_at column to backups table');
   }
 
   // 迁移：backups 表增加 format 列（v4）——快照方案（目录快照 + rsync/robocopy
@@ -126,7 +127,7 @@ function createTables() {
     }
     db.exec("UPDATE backups SET format = 'zip' WHERE file_path LIKE '%.zip'");
     db.pragma('user_version = 4');
-    console.log('Migration: added format column to backups table');
+    logger.info('Migration: added format column to backups table');
   }
 
   // 定时任务表
@@ -157,7 +158,7 @@ function createTables() {
       db.exec("ALTER TABLE scheduled_tasks ADD COLUMN last_run_status TEXT DEFAULT 'never'");
     }
     db.pragma('user_version = 5');
-    console.log('Migration: added last_run_status column to scheduled_tasks table');
+    logger.info('Migration: added last_run_status column to scheduled_tasks table');
   }
 
   // 迁移 v6：审计日志 + 命令历史（append-only 双表）
@@ -194,7 +195,7 @@ function createTables() {
       CREATE INDEX IF NOT EXISTS idx_cmd_created ON command_history(created_at);
     `);
     db.pragma('user_version = 6');
-    console.log('Migration: added audit_logs and command_history tables');
+    logger.info('Migration: added audit_logs and command_history tables');
   }
 
   // 迁移 v7：Webhook 外部通知 + 投递日志
@@ -236,7 +237,7 @@ function createTables() {
       CREATE INDEX IF NOT EXISTS idx_deliveries_created ON webhook_deliveries(created_at);
     `);
     db.pragma('user_version = 7');
-    console.log('Migration: added webhooks and webhook_deliveries tables');
+    logger.info('Migration: added webhooks and webhook_deliveries tables');
   }
 
   // 临时封禁表（服务端自实现 tempban：原版 ban 立即生效 + 到期自动 pardon）
@@ -291,7 +292,7 @@ function createTables() {
         DROP TABLE audit_logs;
         ALTER TABLE audit_logs_v8 RENAME TO audit_logs;
       `);
-      console.log('Migration: relaxed audit_logs.instance_id to nullable (global actions audit)');
+      logger.info('Migration: relaxed audit_logs.instance_id to nullable (global actions audit)');
     }
     db.pragma('user_version = 8');
   }
@@ -328,7 +329,7 @@ function createTables() {
       CREATE INDEX IF NOT EXISTS idx_task_history_task ON task_run_history(task_id, id);
     `);
     db.pragma('user_version = 10');
-    console.log('Migration: added task_run_history table');
+    logger.info('Migration: added task_run_history table');
   }
 
   // 管理员账号（安全主线：单管理员密码登录）。单行表 id 恒为 1；

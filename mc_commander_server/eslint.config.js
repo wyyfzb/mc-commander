@@ -21,6 +21,9 @@ export default [
       'no-empty': ['error', { allowEmptyCatch: true }],
       'no-constant-condition': ['error', { checkLoops: false }],
       eqeqeq: ['warn', 'smart'],
+      // 日志收口（issue #325）：运行时一律走 utils/logger.js（四级过滤 +
+      // error 分流轮转 + stderr banner 白名单），裸 console 禁止回归
+      'no-console': 'error',
     },
   },
 ];

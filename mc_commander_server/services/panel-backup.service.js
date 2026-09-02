@@ -15,6 +15,7 @@ import fs from 'fs';
 import path from 'path';
 import config from '../config.js';
 import { getDb } from '../db/index.js';
+import { logger } from '../utils/logger.js';
 
 // 快照文件名：panel-<ISO 时间戳（:/. → -）>.db；仅识别该命名，
 // 清理不会误伤目录内可能存在的人工放置文件
@@ -75,7 +76,7 @@ export function cleanupPanelSnapshots(options = {}) {
       fs.unlinkSync(path.join(dir, f));
       deletedCount++;
     } catch (e) {
-      console.error(`[PanelBackup] Failed to delete snapshot ${f}:`, e.message);
+      logger.error(`[PanelBackup] Failed to delete snapshot ${f}:`, e.message);
     }
   }
   return deletedCount;

@@ -8,6 +8,7 @@ import config from '../config.js';
 import { atomicWriteFile } from '../services/mc_server.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import { logger } from '../utils/logger.js';
 
 // ── 磁盘使用率（feat-5 运维韧性）：fs.statfsSync 零新增依赖，10s 缓存 ──
 let _diskCache = { ts: 0, result: null };
@@ -69,7 +70,7 @@ function _syncInstanceJson(instance) {
     // 复用 services/mc_server.js atomicWriteFile 正例，崩溃只影响 .tmp 中间文件。
     atomicWriteFile(configPath, JSON.stringify(updated, null, 2));
   } catch (e) {
-    console.warn('Failed to sync instance.json:', e.message);
+    logger.warn('Failed to sync instance.json:', e.message);
   }
 }
 
@@ -335,7 +336,7 @@ export function createStatusRoutes(serverManager) {
     }
 
     instance.start();
-    try { InstanceModel.update(req.params.id, { status: 'running' }); } catch (e) { console.warn('Failed to sync instance status to DB:', e.message); }
+    try { InstanceModel.update(req.params.id, { status: 'running' }); } catch (e) { logger.warn('Failed to sync instance status to DB:', e.message); }
     recordAudit({ instanceId: req.params.id, action: AuditActions.INSTANCE_START, targetType: 'instance', targetId: req.params.id });
     res.json(success(null, 'Server starting'));
   }));
@@ -347,7 +348,7 @@ export function createStatusRoutes(serverManager) {
       return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND));
     }
     instance.stop();
-    try { InstanceModel.update(req.params.id, { status: 'stopped' }); } catch (e) { console.warn('Failed to sync instance status to DB:', e.message); }
+    try { InstanceModel.update(req.params.id, { status: 'stopped' }); } catch (e) { logger.warn('Failed to sync instance status to DB:', e.message); }
     recordAudit({ instanceId: req.params.id, action: AuditActions.INSTANCE_STOP, targetType: 'instance', targetId: req.params.id });
     res.json(success(null, 'Server stopping'));
   }));
@@ -566,20 +567,20 @@ export function createStatusRoutes(serverManager) {
   router.put('/instances/:id/properties', asyncHandler(async (req, res) => {
     const instance = serverManager.getInstance(req.params.id);
     if (!instance) {
-      console.warn(`[PUT properties] Instance not found: ${req.params.id}`);
+      logger.warn(`[PUT properties] Instance not found: ${req.params.id}`);
       return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND));
     }
 
     const newProps = req.body;
-    console.log(`[PUT properties] Instance=${req.params.id}, keys=${Object.keys(newProps || {}).length}, body type=${typeof newProps}`);
+    logger.info(`[PUT properties] Instance=${req.params.id}, keys=${Object.keys(newProps || {}).length}, body type=${typeof newProps}`);
 
     if (!newProps || typeof newProps !== 'object' || Array.isArray(newProps)) {
-      console.error(`[PUT properties] Invalid body: type=${typeof newProps}, isArray=${Array.isArray(newProps)}`);
+      logger.error(`[PUT properties] Invalid body: type=${typeof newProps}, isArray=${Array.isArray(newProps)}`);
       return res.status(400).json(error(ErrorCodes.SERVER_ERROR, '请求体必须是 JSON 对象'));
     }
 
     if (typeof instance.saveProperties !== 'function') {
-      console.error(`[PUT properties] instance.saveProperties is not a function! Available methods: ${Object.getOwnPropertyNames(Object.getPrototypeOf(instance)).filter(n => typeof instance[n] === 'function').join(', ')}`);
+      logger.error(`[PUT properties] instance.saveProperties is not a function! Available methods: ${Object.getOwnPropertyNames(Object.getPrototypeOf(instance)).filter(n => typeof instance[n] === 'function').join(', ')}`);
       return res.status(500).json(error(ErrorCodes.SERVER_ERROR, '服务端版本过旧，请重启服务端以加载最新代码'));
     }
 
@@ -605,19 +606,19 @@ export function createStatusRoutes(serverManager) {
       if (SENSITIVE_PROPERTIES.has(key)) {
         if (rawValue === SENSITIVE_PLACEHOLDER) continue;
         rejectedKeys.push(key);
-        console.warn(`[PUT properties] 拒绝写入敏感属性: ${key}`);
+        logger.warn(`[PUT properties] 拒绝写入敏感属性: ${key}`);
         continue;
       }
       // 键白名单：仅允许世界属性页暴露的键 + 运行期命令键
       if (!ALLOWED_PROPERTY_KEYS.has(key)) {
         rejectedKeys.push(key);
-        console.warn(`[PUT properties] 拒绝未知属性键: ${key}`);
+        logger.warn(`[PUT properties] 拒绝未知属性键: ${key}`);
         continue;
       }
       const result = validatePropertyValue(key, rawValue);
       if (!result.ok) {
         rejectedKeys.push(key);
-        console.warn(`[PUT properties] 属性值校验失败 ${key}: ${result.reason}`);
+        logger.warn(`[PUT properties] 属性值校验失败 ${key}: ${result.reason}`);
         continue;
       }
       validated[key] = result.value;
@@ -648,14 +649,14 @@ export function createStatusRoutes(serverManager) {
         const cmd = RUNTIME_COMMAND_MAP[key](validated[key]);
         try {
           await instance.sendCommand(cmd);
-          console.log(`[PUT properties] 下发运行中命令: ${cmd}`);
+          logger.info(`[PUT properties] 下发运行中命令: ${cmd}`);
         } catch (e) {
-          console.warn(`[PUT properties] 命令 ${cmd} 下发失败: ${e.message}`);
+          logger.warn(`[PUT properties] 命令 ${cmd} 下发失败: ${e.message}`);
         }
       }
     }
 
-    console.log(`[PUT properties] Saved successfully, instance.properties now has ${Object.keys(instance.properties).length} keys`);
+    logger.info(`[PUT properties] Saved successfully, instance.properties now has ${Object.keys(instance.properties).length} keys`);
     recordAudit({ instanceId: req.params.id, action: 'CONFIG_CHANGE', targetType: 'instance', targetId: req.params.id, detail: { field: 'properties' } });
     res.json(success({ restartRequired }, restartRequired.length > 0
       ? `Properties updated, ${restartRequired.length} 项需重启服务器生效`
@@ -726,7 +727,7 @@ export function createStatusRoutes(serverManager) {
       //    实例已 404，重试不可行；DB 记录残留重启会尝试加载该实例——
       //    属 SQLite 本地写失败的极端情况，且实例目录已删 createInstance 会
       //    重建空目录，风险远小于本路由历史 bug 的不可补偿半删除）
-      try { InstanceModel.delete(req.params.id); } catch (e) { console.warn('Failed to delete instance from DB:', e.message); }
+      try { InstanceModel.delete(req.params.id); } catch (e) { logger.warn('Failed to delete instance from DB:', e.message); }
       recordAudit({ instanceId: req.params.id, action: AuditActions.INSTANCE_DELETE, targetType: 'instance', targetId: req.params.id });
       res.json(success(null, 'Instance deleted'));
   }));

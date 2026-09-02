@@ -5,6 +5,7 @@ import { recordAudit, AuditActions } from '../utils/audit.js';
 import { AdminAccountModel, AdminSessionModel } from '../db/index.js';
 import { hashPassword, verifyPassword, hashToken, generateSessionToken } from '../utils/password.js';
 import { isSetupTokenRequired, verifySetupToken, consumeSetupToken } from '../utils/setup-token.js';
+import { logger } from '../utils/logger.js';
 
 /**
  * 管理员认证路由（安全主线：单管理员密码登录）
@@ -154,7 +155,7 @@ export function createAuthRoutes() {
         const { envRemoved } = consumeSetupToken();
         if (!envRemoved) {
           // best-effort 失败仅告警：内存已作废，本进程内已不可再用
-          console.warn('[auth] SETUP_TOKEN 已作废，但 .env 移除失败（重启前请手动移除 SETUP_TOKEN 行）');
+          logger.warn('[auth] SETUP_TOKEN 已作废，但 .env 移除失败（重启前请手动移除 SETUP_TOKEN 行）');
         }
       }
       // 设密即登录：首访向导完成直达面板

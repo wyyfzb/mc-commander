@@ -9,6 +9,7 @@ import crypto from 'crypto';
 import got from 'got';
 import { WebhookModel } from '../db/index.js';
 import { checkPublicUrl } from '../utils/url-guard.js';
+import { logger } from '../utils/logger.js';
 
 // 19 种事件白名单
 export const WEBHOOK_EVENT_TYPES = [
@@ -60,7 +61,7 @@ export class WebhookService {
     try {
       webhooks = WebhookModel.findAllEnabled();
     } catch (err) {
-      console.warn(`[Webhook] Failed to fetch webhooks: ${err.message}`);
+      logger.warn(`[Webhook] Failed to fetch webhooks: ${err.message}`);
       return;
     }
 
@@ -77,13 +78,13 @@ export class WebhookService {
       // 背压检查
       const current = _concurrentCount.get(webhook.id) || 0;
       if (current >= MAX_CONCURRENT_PER_WEBHOOK) {
-        console.warn(`[Webhook] Backpressure: skipping webhook #${webhook.id} (${current} concurrent)`);
+        logger.warn(`[Webhook] Backpressure: skipping webhook #${webhook.id} (${current} concurrent)`);
         continue;
       }
 
       // fire-and-forget：不 await，错误内部捕获
       this._deliver(webhook, eventType, payload).catch(err => {
-        console.warn(`[Webhook] Unhandled delivery error for #${webhook.id}: ${err.message}`);
+        logger.warn(`[Webhook] Unhandled delivery error for #${webhook.id}: ${err.message}`);
       });
     }
   }
@@ -324,5 +325,5 @@ export function setupWebhookDispatch(serverManager) {
     }
   });
 
-  console.log('[Webhook] Event dispatch bridge initialized');
+  logger.info('[Webhook] Event dispatch bridge initialized');
 }

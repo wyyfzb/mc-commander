@@ -2,6 +2,7 @@ import { execSync, execFileSync } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { logger } from './logger.js';
 
 // 默认推荐的 Java 版本
 const DEFAULT_JAVA_VERSION = '17';
@@ -363,7 +364,7 @@ export function findJavaPath(requiredVersion) {
   }
 
   // 3. 默认返回 'java' 并警告
-  console.warn(`[java-detector] 未找到 Java ${requiredVersion} 或更新版本，回退到系统 'java' 命令`);
+  logger.warn(`[java-detector] 未找到 Java ${requiredVersion} 或更新版本，回退到系统 'java' 命令`);
   return 'java';
 }
 

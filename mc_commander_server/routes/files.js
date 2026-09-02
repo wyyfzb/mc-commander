@@ -10,6 +10,7 @@ import { atomicWriteFile, resolveSafePath, PathTraversalError } from '../utils/f
 import config from '../config.js';
 import { BanModel } from '../db/index.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
+import { logger } from '../utils/logger.js';
 
 // Content-Disposition filename 编码（RFC 5987）：ASCII 可直接用 filename，
 // 非 ASCII（中文等）用 filename*=UTF-8''percent-encoded，双写兼容不支持 5987 的旧客户端
@@ -169,7 +170,7 @@ function syncListFileChanges(instance, fileName, oldEntries, newEntries) {
         try {
           await instance.sendCommand(`${spec.removeCmd} ${target}`);
         } catch (err) {
-          console.error(`[Files] Failed to ${spec.removeCmd} ${target} after ${fileName} edit:`, err.message);
+          logger.error(`[Files] Failed to ${spec.removeCmd} ${target} after ${fileName} edit:`, err.message);
         }
       }
       for (const entry of added) {
@@ -178,11 +179,11 @@ function syncListFileChanges(instance, fileName, oldEntries, newEntries) {
             `${spec.addCmd} ${entry.target}${entry.reason ? ` ${entry.reason}` : ''}`,
           );
         } catch (err) {
-          console.error(`[Files] Failed to ${spec.addCmd} ${entry.target} after ${fileName} edit:`, err.message);
+          logger.error(`[Files] Failed to ${spec.addCmd} ${entry.target} after ${fileName} edit:`, err.message);
         }
       }
     } catch (fatalErr) {
-      console.error('[Files] Unexpected error syncing list file commands:', fatalErr);
+      logger.error('[Files] Unexpected error syncing list file commands:', fatalErr);
     }
   })();
 }
@@ -322,7 +323,7 @@ export function createFileRoutes(serverManager) {
       // 转发为 destroy 让 Node 记录连接错误，客户端表现为下载中断
       const stream = fs.createReadStream(fullPath);
       stream.on('error', (streamErr) => {
-        console.error('[Files] Download stream error:', streamErr.message);
+        logger.error('[Files] Download stream error:', streamErr.message);
         res.destroy(streamErr);
       });
       stream.pipe(res);
