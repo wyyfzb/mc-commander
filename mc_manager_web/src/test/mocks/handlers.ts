@@ -20,6 +20,7 @@ import {
   banRecordSchema,
   backupItemSchema,
   instanceStatusSchema,
+  taskRunHistorySchema,
 } from '@mc-commander/schemas'
 
 /**
@@ -525,6 +526,37 @@ const playerHandlers = [
 export const handlers = [
   ...playerHandlers,
   ...backupHandlers,
+  // 任务执行历史（编辑对话框最近执行时间线；结构占位，虚构任务数据）
+  http.get('*/api/v1/tasks/:id/history', () =>
+    ok(
+      taskRunHistorySchema.array().parse([
+        {
+          id: 12,
+          taskId: 1,
+          runAt: '2026-09-02 04:00:05',
+          status: 'success',
+          error: null,
+          durationMs: 850,
+        },
+        {
+          id: 11,
+          taskId: 1,
+          runAt: '2026-09-01 04:00:03',
+          status: 'failed',
+          error: 'RCON 不可用（虚构占位文案）',
+          durationMs: 3000,
+        },
+        {
+          id: 10,
+          taskId: 1,
+          runAt: '2026-08-31 04:00:01',
+          status: 'skipped',
+          error: null,
+          durationMs: null,
+        },
+      ]),
+    ),
+  ),
   http.get('*/api/v1/overview', () => ok(overviewDataSchema.parse(mockOverview))),
   http.get('*/api/v1/system-stats', () => ok(systemStatsSchema.parse(mockSystemStats))),
   http.get('*/api/v1/check-update', () => ok({ current: '0.1.0', latest: null, hasUpdate: false, offline: true })),

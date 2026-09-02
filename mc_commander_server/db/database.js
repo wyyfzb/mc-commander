@@ -307,6 +307,30 @@ function createTables() {
     db.pragma('user_version = 9');
   }
 
+  // 迁移 v10：定时任务执行历史（append-only）。scheduled_tasks 的 last_run_*
+  // 三列是覆盖写单槽：上次失败原因在下一次执行时被覆盖，无法回答「过去 N 天
+  // 失败几次、原因是什么」。历史表按任务倒序供排障时间线查询；
+  // 行数上界由模型层保留策略保证（每任务最近 50 条，见 task_run_history.model.js）
+  if (userVersion < 10) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS task_run_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        task_id INTEGER NOT NULL,
+        run_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        status TEXT NOT NULL,
+        error TEXT,
+        duration_ms INTEGER,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (task_id) REFERENCES scheduled_tasks(id) ON DELETE CASCADE
+      )
+    `);
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_task_history_task ON task_run_history(task_id, id);
+    `);
+    db.pragma('user_version = 10');
+    console.log('Migration: added task_run_history table');
+  }
+
   // 管理员账号（安全主线：单管理员密码登录）。单行表 id 恒为 1；
   // totp_secret 预留 TOTP 两步验证挂靠（roadmap）
   db.exec(`

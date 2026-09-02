@@ -3890,6 +3890,21 @@ const taskCreatePayloadSchema = objectType({
 	isEnabled: booleanType().optional()
 });
 const taskUpdatePayloadSchema = taskCreatePayloadSchema.partial();
+/** 单次执行历史状态（不含 never：历史表只落真实执行结果） */
+const taskRunStatusSchema = enumType([
+	"success",
+	"failed",
+	"skipped"
+]);
+/** 定时任务执行历史行（task_run_history 表，append-only + 每任务保留上限） */
+const taskRunHistorySchema = objectType({
+	id: numberType(),
+	taskId: numberType(),
+	runAt: stringType(),
+	status: taskRunStatusSchema,
+	error: stringType().nullable(),
+	durationMs: numberType().nullable()
+});
 //#endregion
 //#region src/ws.ts
 const WS_EVENT_TYPES = [
@@ -4334,4 +4349,4 @@ const updateCheckResultSchema = objectType({
 	url: stringType().optional()
 });
 //#endregion
-export { NOTIFICATION_EVENT_TYPES, WS_EVENT_TYPES, apiEnvelopeSchema, apiErrorEnvelopeSchema, auditLogItemSchema, backupCreateRequestSchema, backupItemSchema, banRecordSchema, banRequestBodySchema, commandHistoryItemSchema, deployProgressSchema, deployRequestSchema, deployResultSchema, diskInfoSchema, diskUsageSchema, fileContentResponseSchema, fileEntrySchema, fileInfoResponseSchema, fileListResponseSchema, fileSaveResponseSchema, instanceStatusSchema, instanceSummarySchema, instanceUpdatePayloadSchema, inventoryItemSchema, ipHistoryEntrySchema, logEntrySchema, makeApiEnvelopeSchema, marketInstallResultSchema, marketSearchHitSchema, marketSearchResultSchema, marketVersionFileSchema, marketVersionSchema, marketVersionsResultSchema, overviewDataSchema, paginationSchema, playerDimensionSchema, playerEventSchema, playerGameModeSchema, playerInventorySchema, playerPositionSchema, playerPotionEffectSchema, playerSchema, playerSessionSchema, playerStatsSchema, pluginInfoSchema, pluginListSchema, pluginMetaSchema, pluginToggleResultSchema, pluginUpdateCheckResultSchema, pluginUpdateStatusSchema, pluginUploadResultSchema, scheduledTaskSchema, scheduledTaskTypeSchema, spawnPointSchema, systemStatsSchema, taskCreatePayloadSchema, taskUpdatePayloadSchema, updateCheckResultSchema, updatePropertiesResponseSchema, upgradeProgressSchema, upgradeRequestSchema, upgradeStageSchema, upgradeStartResponseSchema, versionsResponseSchema, weatherTypeSchema, webhookCreatePayloadSchema, webhookDeliverySchema, webhookSchema, webhookTestResultSchema, worldDimensionSchema, worldInfoSchema, wsBackupPayloadSchema, wsEventTypeSchema, wsLogPayloadSchema, wsMessageSchema, wsPerformancePayloadSchema, wsPlayerEventPayloadSchema, wsStatusEventPayloadSchema, wsStatusSnapshotSchema, wsWeatherPayloadSchema };
+export { NOTIFICATION_EVENT_TYPES, WS_EVENT_TYPES, apiEnvelopeSchema, apiErrorEnvelopeSchema, auditLogItemSchema, backupCreateRequestSchema, backupItemSchema, banRecordSchema, banRequestBodySchema, commandHistoryItemSchema, deployProgressSchema, deployRequestSchema, deployResultSchema, diskInfoSchema, diskUsageSchema, fileContentResponseSchema, fileEntrySchema, fileInfoResponseSchema, fileListResponseSchema, fileSaveResponseSchema, instanceStatusSchema, instanceSummarySchema, instanceUpdatePayloadSchema, inventoryItemSchema, ipHistoryEntrySchema, logEntrySchema, makeApiEnvelopeSchema, marketInstallResultSchema, marketSearchHitSchema, marketSearchResultSchema, marketVersionFileSchema, marketVersionSchema, marketVersionsResultSchema, overviewDataSchema, paginationSchema, playerDimensionSchema, playerEventSchema, playerGameModeSchema, playerInventorySchema, playerPositionSchema, playerPotionEffectSchema, playerSchema, playerSessionSchema, playerStatsSchema, pluginInfoSchema, pluginListSchema, pluginMetaSchema, pluginToggleResultSchema, pluginUpdateCheckResultSchema, pluginUpdateStatusSchema, pluginUploadResultSchema, scheduledTaskSchema, scheduledTaskTypeSchema, spawnPointSchema, systemStatsSchema, taskCreatePayloadSchema, taskRunHistorySchema, taskRunStatusSchema, taskUpdatePayloadSchema, updateCheckResultSchema, updatePropertiesResponseSchema, upgradeProgressSchema, upgradeRequestSchema, upgradeStageSchema, upgradeStartResponseSchema, versionsResponseSchema, weatherTypeSchema, webhookCreatePayloadSchema, webhookDeliverySchema, webhookSchema, webhookTestResultSchema, worldDimensionSchema, worldInfoSchema, wsBackupPayloadSchema, wsEventTypeSchema, wsLogPayloadSchema, wsMessageSchema, wsPerformancePayloadSchema, wsPlayerEventPayloadSchema, wsStatusEventPayloadSchema, wsStatusSnapshotSchema, wsWeatherPayloadSchema };

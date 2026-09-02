@@ -85,7 +85,7 @@ describe('TaskScheduler - executeTask 完整结果语义', () => {
     expect(() => scheduler.executeTask(makeTask({ type: 'start' }))).not.toThrow();
 
     // updateLastRun 落库即同时写 last_run_at=CURRENT_TIMESTAMP，保证失败也记录触发时间
-    expect(ScheduledTaskModel.updateLastRun).toHaveBeenCalledWith(100, expect.any(String), 'failed', 'EULA 未接受');
+    expect(ScheduledTaskModel.updateLastRun).toHaveBeenCalledWith(100, expect.any(String), 'failed', 'EULA 未接受', expect.any(Number));
   });
 
   it('command resolve → 触发先刷新时间戳（不写 status），异步回填 success', async () => {
@@ -96,7 +96,7 @@ describe('TaskScheduler - executeTask 完整结果语义', () => {
 
     expect(ScheduledTaskModel.updateLastRun).toHaveBeenCalledWith(100, expect.any(String));
     await flushAsync();
-    expect(ScheduledTaskModel.updateLastRunStatus).toHaveBeenCalledWith(100, 'success');
+    expect(ScheduledTaskModel.updateLastRunStatus).toHaveBeenCalledWith(100, 'success', null, expect.any(Number));
   });
 
   it('command reject → 异步回填 failed（不崩）', async () => {
@@ -106,7 +106,7 @@ describe('TaskScheduler - executeTask 完整结果语义', () => {
     scheduler.executeTask(makeTask({ type: 'command', command: 'list' }));
     await flushAsync();
 
-    expect(ScheduledTaskModel.updateLastRunStatus).toHaveBeenCalledWith(100, 'failed', 'RCON 不可用');
+    expect(ScheduledTaskModel.updateLastRunStatus).toHaveBeenCalledWith(100, 'failed', 'RCON 不可用', expect.any(Number));
   });
 
   it('command reject → 发出 instance:taskFailed 事件（含任务名与错误摘要）', async () => {
@@ -150,7 +150,7 @@ describe('TaskScheduler - executeTask 完整结果语义', () => {
   it('未知任务类型 → 结果落 failed', () => {
     scheduler.executeTask(makeTask({ type: 'unknown-type' }));
 
-    expect(ScheduledTaskModel.updateLastRun).toHaveBeenCalledWith(100, expect.any(String), 'failed', expect.stringContaining('未知任务类型'));
+    expect(ScheduledTaskModel.updateLastRun).toHaveBeenCalledWith(100, expect.any(String), 'failed', expect.stringContaining('未知任务类型'), expect.any(Number));
   });
 
   it('未知任务类型 → 发出 instance:taskFailed 事件', () => {

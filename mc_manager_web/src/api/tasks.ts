@@ -4,7 +4,7 @@
  * 分页信封仅解包 data（pagination 丢失）——前端拉 pageSize=100 全量。
  */
 import { apiDelete, apiGet, apiPost, apiPut, type ConnectionConfig } from './client'
-import type { ScheduledTask, TaskCreatePayload, TaskUpdatePayload } from './types'
+import type { ScheduledTask, TaskCreatePayload, TaskRunHistory, TaskUpdatePayload } from './types'
 
 /** 任务列表（GET /instances/:id/tasks；pageSize=100 拉全量） */
 export function apiGetTasks(config: ConnectionConfig, instanceId: string) {
@@ -36,4 +36,9 @@ export function apiDeleteTask(config: ConnectionConfig, taskId: number) {
 /** 立即执行任务（POST /tasks/:id/run） */
 export function apiRunTaskNow(config: ConnectionConfig, taskId: number) {
   return apiPost<null>(`/api/v1/tasks/${taskId}/run`, config)
+}
+
+/** 任务执行历史（GET /tasks/:id/history；倒序最近 10 条，排障时间线） */
+export function apiGetTaskHistory(config: ConnectionConfig, taskId: number) {
+  return apiGet<TaskRunHistory[]>(`/api/v1/tasks/${taskId}/history?limit=10`, config)
 }

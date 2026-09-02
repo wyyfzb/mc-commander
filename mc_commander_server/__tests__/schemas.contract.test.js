@@ -20,6 +20,7 @@ import {
   makeApiEnvelopeSchema,
   webhookSchema,
   scheduledTaskSchema,
+  taskRunHistorySchema,
 } from '@mc-commander/schemas';
 
 const TEST_DIR = './test-schema-contract-data';
@@ -64,6 +65,17 @@ beforeAll(() => {
   )`);
   db.exec(`ALTER TABLE scheduled_tasks ADD COLUMN last_run_status TEXT DEFAULT 'never'`);
   db.exec(`ALTER TABLE scheduled_tasks ADD COLUMN last_run_error TEXT`);
+  // v10：任务执行历史（history 契约测试用）
+  db.exec(`CREATE TABLE IF NOT EXISTS task_run_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id INTEGER NOT NULL,
+    run_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    status TEXT NOT NULL,
+    error TEXT,
+    duration_ms INTEGER,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (task_id) REFERENCES scheduled_tasks(id) ON DELETE CASCADE
+  )`);
   db.exec(`CREATE TABLE IF NOT EXISTS audit_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT, instance_id TEXT NOT NULL,
     action TEXT NOT NULL, target_type TEXT, target_id TEXT, detail TEXT,
@@ -168,6 +180,28 @@ describe('响应契约：任务路由 × scheduledTaskSchema', () => {
     expect(res.body.data.length).toBeGreaterThan(0);
     for (const item of res.body.data) {
       expect(scheduledTaskSchema.safeParse(item).success).toBe(true);
+    }
+  });
+
+  it('GET /tasks/:id/history → data 逐条通过 taskRunHistorySchema（倒序）', async () => {
+    const created = await request(getApp()).post('/api/v1/instances/demo/tasks').send({
+      name: '历史契约', type: 'command', cronExpression: '0 5 * * *', command: 'say hi',
+    });
+    const taskId = created.body.data.id;
+    db.prepare(
+      "INSERT INTO task_run_history (task_id, run_at, status, error, duration_ms) VALUES (?, '2026-09-02 12:00:00', 'failed', 'RCON 不可用', 3000)"
+    ).run(taskId);
+    db.prepare(
+      "INSERT INTO task_run_history (task_id, run_at, status, error, duration_ms) VALUES (?, '2026-09-02 12:05:00', 'success', NULL, 800)"
+    ).run(taskId);
+
+    const res = await request(getApp()).get(`/api/v1/tasks/${taskId}/history`);
+    expect(res.status).toBe(200);
+    expect(apiEnvelopeSchema.safeParse(res.body).success).toBe(true);
+    expect(res.body.data.length).toBe(2);
+    expect(res.body.data[0].status).toBe('success');
+    for (const item of res.body.data) {
+      expect(taskRunHistorySchema.safeParse(item).success).toBe(true);
     }
   });
 });
