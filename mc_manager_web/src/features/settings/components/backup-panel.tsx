@@ -245,7 +245,7 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
         )}
       </div>
 
-      {/* 恢复确认：红色警示 + 影响说明 + 输入实例名确认（不匹配禁用） */}
+      {/* 恢复确认：红色警示 + 影响说明 + 信息块（快照名/时间/覆盖范围）+ 输入实例名确认（不匹配禁用） */}
       <ConfirmDialog
         open={restoreTarget !== null}
         onOpenChange={(open) => {
@@ -264,6 +264,27 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
         confirmDisabled={!restoreInputMatches}
         onConfirm={() => void handleRestoreConfirm()}
       >
+        {/* 目标快照信息块：名称/时间/覆盖范围（恢复为目录快照复制，非命令下发，故无命令预览） */}
+        <div className="flex flex-col gap-1 rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-default px-2.5 py-2 text-mcs-xs text-mcs-text-muted">
+          <div className="flex items-center gap-1.5">
+            <HardDrive className="size-3 shrink-0 text-mcs-accent-fg" aria-hidden />
+            <span className="truncate font-mono text-mcs-text-default" title={restoreTarget?.name ?? ''}>
+              {restoreTarget?.name ?? ''}
+            </span>
+          </div>
+          {restoreTarget && (
+            <div className="flex items-center gap-1.5">
+              <CalendarClock className="size-3 shrink-0 text-mcs-text-subtle" aria-hidden />
+              <span>
+                快照时间：{[formatBackupDate(restoreTarget.createdAt), formatBackupSize(restoreTarget.size)].filter(Boolean).join(' · ')}
+              </span>
+            </div>
+          )}
+          <div className="flex items-center gap-1.5">
+            <ServerOff className="size-3 shrink-0 text-mcs-error-fg" aria-hidden />
+            <span>覆盖范围：实例「{instanceName}」全部世界数据</span>
+          </div>
+        </div>
         <div className="flex flex-col gap-1.5">
           <label htmlFor="restore-confirm-input" className="text-mcs-xs font-semibold text-mcs-text-muted">
             输入实例名「{instanceName}」以确认

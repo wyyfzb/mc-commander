@@ -1,12 +1,15 @@
 /**
  * CommandPreview —— 终端风格命令预览条
- * 全站统一复用：玩家 give-item / action-forms / 天气-时间 / 任务执行 / 备份恢复等
+ * 全站统一复用：玩家 give-item / action-forms / 天气-时间 / 任务执行确认等有命令下发语义的场景
+ * （备份恢复为目录快照复制、无命令下发，不适用本组件）。
  * 提取自 give-item-preview-bar.tsx，保持完全一致的视觉风格。
  */
 import { Copy, Terminal } from 'lucide-react'
 import { toast } from 'sonner'
 
 export function CommandPreview({ command }: { command: string }) {
+  // 空串守卫：调用方 command 缺失时静默不渲染（旧版行为，防契约降级）
+  if (!command) return null
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(command)

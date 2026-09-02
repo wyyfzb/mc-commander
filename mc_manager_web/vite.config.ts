@@ -54,6 +54,10 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(import.meta.dirname, './src'),
+      '@mc-commander/schemas': path.resolve(import.meta.dirname, '../mc-schemas/src/index.ts'),
+      // mc-schemas 位于本包 node_modules 之外，其内部 import 'zod' 无法按目录链解析到
+      // 本包依赖，统一钉到显式声明的 zod 副本（与 tsconfig.app.json paths 映射对齐）
+      'zod': path.resolve(import.meta.dirname, './node_modules/zod'),
     },
   },
   server: {

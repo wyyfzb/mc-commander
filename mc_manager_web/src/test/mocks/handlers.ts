@@ -13,6 +13,14 @@ import type {
   SystemStats,
   WorldInfo,
 } from '@/api/types'
+import {
+  overviewDataSchema,
+  systemStatsSchema,
+  playerSchema,
+  banRecordSchema,
+  backupItemSchema,
+  instanceStatusSchema,
+} from '@mc-commander/schemas'
 
 /**
  * MSW handlers 基座（设计文档 §六：单测/组件测试拦截 API）
@@ -459,7 +467,7 @@ export const mockBackups: BackupItem[] = [
 
 /** 备份域 mock 端点（服务端 routes/backups.js 契约） */
 const backupHandlers = [
-  http.get('*/api/v1/instances/:id/backups', () => ok([...mockBackups])),
+  http.get('*/api/v1/instances/:id/backups', () => ok(backupItemSchema.array().parse(mockBackups))),
   http.get('*/api/v1/backups/:id', ({ params }) => {
     const found = mockBackups.find((b) => String(b.id) === String(params.id))
     return found ? ok(found) : HttpResponse.json(
@@ -488,7 +496,7 @@ const backupHandlers = [
 
 /** 玩家域 mock 端点 */
 const playerHandlers = [
-  http.get('*/api/v1/instances/:id/players/bans', () => ok(mockBans)),
+  http.get('*/api/v1/instances/:id/players/bans', () => ok(banRecordSchema.array().parse(mockBans))),
   http.get('*/api/v1/instances/:id/players/:player/details', ({ params }) => {
     const found = mockPlayers.find((p) => p.name === params.player)
     return found ? ok(found) : HttpResponse.json(
@@ -496,7 +504,7 @@ const playerHandlers = [
       { status: 404 },
     )
   }),
-  http.get('*/api/v1/instances/:id/players', () => ok(mockPlayers)),
+  http.get('*/api/v1/instances/:id/players', () => ok(playerSchema.array().parse(mockPlayers))),
   http.post('*/api/v1/instances/:id/players/:player/op', () => ok(null)),
   http.delete('*/api/v1/instances/:id/players/:player/op', () => ok(null)),
   http.post('*/api/v1/instances/:id/players/:player/kick', () => ok(null)),
@@ -510,11 +518,11 @@ const playerHandlers = [
 export const handlers = [
   ...playerHandlers,
   ...backupHandlers,
-  http.get('*/api/v1/overview', () => ok(mockOverview)),
-  http.get('*/api/v1/system-stats', () => ok(mockSystemStats)),
+  http.get('*/api/v1/overview', () => ok(overviewDataSchema.parse(mockOverview))),
+  http.get('*/api/v1/system-stats', () => ok(systemStatsSchema.parse(mockSystemStats))),
   http.get('*/api/v1/check-update', () => ok({ current: '0.1.0', latest: null, hasUpdate: false, offline: true })),
-  http.get('*/api/v1/instances', () => ok([mockInstanceStatus])),
-  http.get('*/api/v1/instances/:id', () => ok(mockInstanceStatus)),
+  http.get('*/api/v1/instances', () => ok([instanceStatusSchema.parse(mockInstanceStatus)])),
+  http.get('*/api/v1/instances/:id', () => ok(instanceStatusSchema.parse(mockInstanceStatus))),
   // PUT /instances/:id 实例配置更新（启动配置弹窗；回显提交字段，结构占位）
   http.put('*/api/v1/instances/:id', async ({ request, params }) => {
     const body = (await request.json()) as Record<string, unknown>

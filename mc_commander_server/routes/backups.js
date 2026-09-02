@@ -7,6 +7,8 @@ import { BackupModel } from '../db/backup.model.js';
 import { BackupService, resolveContained } from '../services/backup.service.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
 import config from '../config.js';
+import { backupCreateRequestSchema } from '@mc-commander/schemas';
+import { validateBody } from '../middleware/validate.js';
 
 // async 路由包装：Express 4 不捕获中间件/路由返回的 Promise rejection。
 // 未包装的 async handler 抛错时请求永久挂起 + unhandledRejection
@@ -67,7 +69,7 @@ export function createBackupRoutes(serverManager) {
     res.json(success(backup));
   }));
 
-  router.post('/instances/:instanceId/backups', asyncHandler(async (req, res) => {
+  router.post('/instances/:instanceId/backups', validateBody(backupCreateRequestSchema), asyncHandler(async (req, res) => {
     const { instanceId } = req.params;
     const { name, description } = req.body;
 

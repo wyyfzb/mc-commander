@@ -106,6 +106,9 @@ coverage/
 
 # 通用构建输出
 dist/
+!mc-schemas/dist/
+mc-schemas/dist/*.d.ts
+mc-schemas/dist/*.map
 out/
 node_modules/
 
