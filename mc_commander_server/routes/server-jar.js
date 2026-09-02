@@ -10,6 +10,8 @@ import { success, error, ErrorCodes } from '../utils/response.js';
 import { getRecommendedJavaVersion, findJavaPath } from '../utils/java-detector.js';
 import { InstanceModel } from '../db/index.js';
 import { atomicWriteFile } from '../services/mc_server.js';
+import { deployRequestSchema } from '@mc-commander/schemas';
+import { validateBody } from '../middleware/validate.js';
 
 const mcCoreManager = new MinecraftServerManager(new NodeAdapter());
 
@@ -315,12 +317,9 @@ export function createServerJarRoutes(serverManager) {
     }
   });
 
-  router.post('/instances/deploy', async (req, res) => {
+  // 部署实例（请求体 schema parse 校验：type 枚举/必填字段由 deployRequestSchema 单源定义）
+  router.post('/instances/deploy', validateBody(deployRequestSchema), async (req, res) => {
     const { type, mcVersion, instanceName, maxMemory, loaderVersion } = req.body;
-
-    if (!type || !mcVersion || !instanceName) {
-      return res.status(400).json(error(ErrorCodes.VALIDATION_ERROR, 'type, mcVersion, instanceName are required'));
-    }
 
     const validTypes = ['vanilla', 'paper', 'fabric', 'forge', 'purpur'];
     if (!validTypes.includes(type.toLowerCase())) {

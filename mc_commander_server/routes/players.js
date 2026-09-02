@@ -5,6 +5,8 @@ import { success, error, ErrorCodes } from '../utils/response.js';
 import { BanModel } from '../db/index.js';
 import { getTotalPlayTime } from '../utils/player-utils.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
+import { banRequestBodySchema } from '@mc-commander/schemas';
+import { validateBody } from '../middleware/validate.js';
 
 // async 路由包装：Express 4 不捕获中间件/路由返回的 Promise rejection。
 // 未包装的 async handler 抛错时请求永久挂起 + unhandledRejection
@@ -451,28 +453,19 @@ export function createPlayerRoutes(serverManager) {
   }));
 
   // POST /api/instances/:id/players/:player/ban
-  // 服务端自实现临时封禁：
-  //   body: { reason?, duration?, ip? }
-  //   - duration 缺省 → 永久封禁（原版 ban，不写临时记录）
-  //   - duration 提供（如 '1h'/'7d'）→ 先写 temp_bans 记录、再执行原版 ban，
-  //     由 TaskScheduler 到期自动 pardon；命令执行失败时回滚已写入的记录
-  //   - ip 提供（合法 IPv4）→ IP 封禁（ban-ip），否则封禁玩家
-  //
-  // 「命令执行」与「temp_bans 记录写入」必须原子一致：
-  // 若先执行 ban/ban-ip 再写记录，DB 写入失败（SQLITE_BUSY/磁盘满）时原版封禁
-  // 已生效（banned-players.json 不可回滚）而记录缺失，到期轮询查不到记录 →
-  // 不自动解封 → 临时封禁退化为永久封禁。因此先写记录（失败则命令不执行，
-  // 无中间态），命令失败再回滚记录。
-  router.post('/instances/:id/players/:player/ban', validatePlayerName, asyncHandler(async (req, res) => {
+  // schema 校验请求结构，后续业务逻辑（IP 正则、时长解析、原子写入）不变
+  router.post('/instances/:id/players/:player/ban',
+    validatePlayerName,
+    validateBody(banRequestBodySchema),
+    asyncHandler(async (req, res) => {
     const instance = serverManager.getInstance(req.params.id);
     if (!instance) {
       return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND));
     }
     if (!requireRunning(instance, res)) return;
-    // 同 kick：express 5 无 body 请求的 req.body 为 undefined
-    const reason = sanitizeReason(req.body?.reason) || 'Banned by operator';
-    const duration = req.body?.duration;
-    const ip = typeof req.body?.ip === 'string' ? req.body.ip.trim() : null;
+    const reason = sanitizeReason(req.body.reason) || 'Banned by operator';
+    const duration = req.body.duration;
+    const ip = typeof req.body.ip === 'string' ? req.body.ip.trim() : null;
 
     if (ip) {
       if (!IP_REGEX.test(ip)) {
