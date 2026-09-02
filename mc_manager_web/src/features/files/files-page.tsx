@@ -23,6 +23,7 @@ import { isBinaryFileName } from '@/lib/mc-files'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
+import { LoadingButton } from '@/components/mcs/loading-button'
 import { Input } from '@/components/ui/input'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
 import {
@@ -577,9 +578,9 @@ export function FilesPage() {
             <Button variant="outline" onClick={() => setNewFileOpen(false)}>
               取消
             </Button>
-            <Button onClick={() => void createFile()} disabled={saveMutation.isPending}>
-              {saveMutation.isPending ? '创建中…' : '创建'}
-            </Button>
+            <LoadingButton onClick={() => void createFile()} loading={saveMutation.isPending} loadingText="创建中…">
+              创建
+            </LoadingButton>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -608,9 +609,9 @@ export function FilesPage() {
             <Button variant="outline" onClick={() => setNewDirOpen(false)}>
               取消
             </Button>
-            <Button onClick={() => void createDirectory()} disabled={createDirMutation.isPending}>
-              {createDirMutation.isPending ? '创建中…' : '创建'}
-            </Button>
+            <LoadingButton onClick={() => void createDirectory()} loading={createDirMutation.isPending} loadingText="创建中…">
+              创建
+            </LoadingButton>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -639,9 +640,9 @@ export function FilesPage() {
             <Button variant="outline" onClick={() => setRenameTarget(null)}>
               取消
             </Button>
-            <Button onClick={() => void confirmRename()} disabled={renameMutation.isPending}>
-              {renameMutation.isPending ? '重命名中…' : '重命名'}
-            </Button>
+            <LoadingButton onClick={() => void confirmRename()} loading={renameMutation.isPending} loadingText="重命名中…">
+              重命名
+            </LoadingButton>
           </DialogFooter>
         </DialogContent>
       </Dialog>
