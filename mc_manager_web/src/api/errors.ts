@@ -120,14 +120,36 @@ const SERVER_LOCALIZED_CODES: ReadonlySet<ErrorCodeValue> = new Set([
 ])
 
 /**
+ * 校验失败 details 数组 → 字段级错误拼接文案（如 "mcVersion Required；name Too short"）。
+ * 非数组/空数组/无有效项返回 null，调用方维持原通用文案。
+ */
+function formatValidationDetails(details: unknown): string | null {
+  if (!Array.isArray(details) || details.length === 0) return null
+  const items = details
+    .filter((d): d is Record<string, unknown> => typeof d === 'object' && d !== null)
+    .map((d) => {
+      const path = typeof d.path === 'string' ? d.path : ''
+      const message = typeof d.message === 'string' ? d.message : ''
+      return path && message ? `${path} ${message}` : path || message
+    })
+    .filter(Boolean)
+  return items.length > 0 ? items.join('；') : null
+}
+
+/**
  * 返回用户友好的错误文案。
  * 服务端已本地化的 message 透传；英文默认文案按错误码映射。
+ * 校验失败（40000）且携带结构化 details 时，拼接字段级错误帮助定位。
  */
-export function getFriendlyErrorMessage(code: number, serverMessage?: string): string {
-  if (SERVER_LOCALIZED_CODES.has(code as ErrorCodeValue)) {
-    return serverMessage || LOCALIZED_MESSAGES[code as ErrorCodeValue] || '操作失败'
+export function getFriendlyErrorMessage(code: number, serverMessage?: string, details?: unknown): string {
+  const base = SERVER_LOCALIZED_CODES.has(code as ErrorCodeValue)
+    ? serverMessage || LOCALIZED_MESSAGES[code as ErrorCodeValue] || '操作失败'
+    : LOCALIZED_MESSAGES[code as ErrorCodeValue] || serverMessage || `操作失败（错误码 ${code}）`
+  if (code === ErrorCode.VALIDATION_ERROR) {
+    const detailText = formatValidationDetails(details)
+    if (detailText) return `${base}：${detailText}`
   }
-  return LOCALIZED_MESSAGES[code as ErrorCodeValue] || serverMessage || `操作失败（错误码 ${code}）`
+  return base
 }
 
 /**
@@ -135,6 +157,6 @@ export function getFriendlyErrorMessage(code: number, serverMessage?: string): s
  * 供各调用方 catch (e) 后统一使用
  */
 export function getFriendlyErrorText(err: unknown): string {
-  if (err instanceof ApiError) return getFriendlyErrorMessage(err.code, err.message)
+  if (err instanceof ApiError) return getFriendlyErrorMessage(err.code, err.message, err.details)
   return '网络错误'
 }

@@ -40,4 +40,33 @@ describe('错误码映射（对照服务端 ErrorCodes 契约）', () => {
   it('INSTANCE_RUNNING 有本地化文案', () => {
     expect(getFriendlyErrorMessage(ErrorCode.INSTANCE_RUNNING)).toBe('实例正在运行')
   })
+
+  it('40000 携带 details 数组时拼接字段级错误文案', () => {
+    const details = [
+      { path: 'mcVersion', code: 'invalid_type', message: 'Required' },
+      { path: 'name', code: 'too_small', message: 'Too short' },
+    ]
+    expect(getFriendlyErrorMessage(ErrorCode.VALIDATION_ERROR, 'name Required; mcVersion Required', details)).toBe(
+      '请求参数校验失败：mcVersion Required；name Too short'
+    )
+  })
+
+  it('40000 无 details / 空 details / 非法 details 时维持通用文案（链路不破坏）', () => {
+    expect(getFriendlyErrorMessage(ErrorCode.VALIDATION_ERROR, 'name Required')).toBe('请求参数校验失败')
+    expect(getFriendlyErrorMessage(ErrorCode.VALIDATION_ERROR, undefined, [])).toBe('请求参数校验失败')
+    expect(getFriendlyErrorMessage(ErrorCode.VALIDATION_ERROR, undefined, 'not-an-array')).toBe('请求参数校验失败')
+    expect(getFriendlyErrorMessage(ErrorCode.VALIDATION_ERROR, undefined, [null, 42])).toBe('请求参数校验失败')
+  })
+
+  it('40000 details 缺 path/message 字段时逐项降级拼接', () => {
+    expect(getFriendlyErrorMessage(ErrorCode.VALIDATION_ERROR, undefined, [{ path: 'mcVersion' }, { message: 'Required' }])).toBe(
+      '请求参数校验失败：mcVersion；Required'
+    )
+  })
+
+  it('非 40000 错误即使带 details 也不拼接（行为不变）', () => {
+    expect(getFriendlyErrorMessage(ErrorCode.INSTANCE_NOT_FOUND, undefined, [{ path: 'id', message: 'Required' }])).toBe(
+      '服务器实例不存在'
+    )
+  })
 })
