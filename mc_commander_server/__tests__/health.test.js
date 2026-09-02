@@ -42,7 +42,7 @@ describe('GET /health', () => {
     };
   });
 
-  it('should return process liveness with static info', async () => {
+  it('should return status + version only（P2-9 信息暴露收口）', async () => {
     setupRoutes(app, mockManager);
 
     const res = await request(app).get('/health');
@@ -50,10 +50,12 @@ describe('GET /health', () => {
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('ok');
     expect(res.body.data.status).toBe('ok');
-    expect(res.body.data.instanceCount).toBe(2);
-    expect(typeof res.body.data.uptime).toBe('number');
     expect(res.body.data.version).toBeTruthy();
-    expect(res.body.data.nodeVersion).toBeTruthy();
+
+    // 信息暴露收口（audit P2-9）：以下字段不得再出现在未认证的 /health
+    expect(res.body.data).not.toHaveProperty('instanceCount');
+    expect(res.body.data).not.toHaveProperty('nodeVersion');
+    expect(res.body.data).not.toHaveProperty('uptime');
   });
 
   it('should not call getAllInstances / toStatus scan', async () => {
@@ -64,7 +66,7 @@ describe('GET /health', () => {
     expect(mockManager.getAllInstances).not.toHaveBeenCalled();
   });
 
-  it('should count instances via instances map length, not status scan', async () => {
+  it('should remain stable even if getAllInstances throws', async () => {
     // 即使 getAllInstances 抛错（模拟状态扫描失败），/health 也应正常返回
     mockManager.getAllInstances.mockImplementation(() => {
       throw new Error('toStatus scan failure');
@@ -74,25 +76,17 @@ describe('GET /health', () => {
     const res = await request(app).get('/health');
 
     expect(res.status).toBe(200);
-    expect(res.body.data.instanceCount).toBe(2);
+    expect(res.body.data.status).toBe('ok');
   });
 
-  it('should return instanceCount 0 when serverManager is absent', async () => {
+  it('should work without serverManager', async () => {
     setupRoutes(app, undefined);
 
     const res = await request(app).get('/health');
 
     expect(res.status).toBe(200);
-    expect(res.body.data.instanceCount).toBe(0);
-  });
-
-  it('should return instanceCount 0 when manager has no instances', async () => {
-    mockManager.instances = new Map();
-    setupRoutes(app, mockManager);
-
-    const res = await request(app).get('/health');
-
-    expect(res.status).toBe(200);
-    expect(res.body.data.instanceCount).toBe(0);
+    expect(res.body.data.status).toBe('ok');
+    expect(res.body.data.version).toBeTruthy();
+    expect(res.body.data).not.toHaveProperty('instanceCount');
   });
 });

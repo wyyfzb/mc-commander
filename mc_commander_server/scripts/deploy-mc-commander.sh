@@ -451,7 +451,9 @@ LOG_LEVEL=info
 RATE_LIMIT_WINDOW=60000
 RATE_LIMIT_MAX=100
 EOF
-  log "已生成 API Key: $API_KEY"
+  # Key 掩码进日志（P2-10）：完整值仅在下方完成横幅一次性展示（交付通道），
+  # 不进 log 长期留存；.env 为唯一持久存储
+  log "已生成 API Key: ${API_KEY:0:4}****（完整值见部署完成横幅）"
   log "已生成一次性 SETUP_TOKEN（首访设密时需粘贴，用后作废）"
 else
   log ".env 已存在，读取现有配置..."

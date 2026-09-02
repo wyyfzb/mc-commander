@@ -93,6 +93,32 @@ export class AdminSessionModel {
     return res.changes;
   }
 
+  /**
+   * 会话数上限收口（P2-11）：先惰性清理过期行，再按最近活跃排序保留前
+   * maxSessions 条，其余删除（新登录挤掉最旧会话）。
+   * 排序用 COALESCE(last_seen_at, created_at)：存量行两列均有默认值，
+   * COALESCE 兼容未来可能引入的 NULL。
+   * @param {number} maxSessions
+   * @returns {number} 被挤掉的会话数
+   */
+  static enforceLimit(maxSessions) {
+    this.deleteExpired();
+    if (!maxSessions || maxSessions < 1) return 0;
+    const rows = getDb()
+      .prepare(
+        `SELECT id FROM admin_sessions
+         ORDER BY COALESCE(last_seen_at, created_at) DESC, created_at DESC`,
+      )
+      .all();
+    if (rows.length <= maxSessions) return 0;
+    const del = getDb().prepare('DELETE FROM admin_sessions WHERE id = ?');
+    let evicted = 0;
+    for (const row of rows.slice(maxSessions)) {
+      evicted += del.run(row.id).changes;
+    }
+    return evicted;
+  }
+
   /** 活跃会话列表（踢单设备 UI 数据源）；过期行先惰性清理 */
   static listActive() {
     this.deleteExpired();

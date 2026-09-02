@@ -3,7 +3,7 @@ import config from '../config.js';
 import { success, error, ErrorCodes } from '../utils/response.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
 import { AdminAccountModel, AdminSessionModel } from '../db/index.js';
-import { hashPassword, verifyPassword, hashToken, generateSessionToken } from '../utils/password.js';
+import { hashPassword, verifyPassword, hashToken, generateSessionToken, needsRehash } from '../utils/password.js';
 import { isSetupTokenRequired, verifySetupToken, consumeSetupToken } from '../utils/setup-token.js';
 
 /**
@@ -111,6 +111,8 @@ function createSession(req) {
     ip: clientIp(req),
     expiresAt,
   });
+  // 会话并发上限（P2-11）：新登录挤掉最旧会话（内部先惰性清理过期行）
+  AdminSessionModel.enforceLimit(config.adminSession.maxSessions);
   return { token, sessionId: session.id, expiresAt };
 }
 
@@ -183,12 +185,19 @@ export function createAuthRoutes() {
         return res.status(401).json(error(ErrorCodes.AUTH_INVALID_CREDENTIALS, '密码错误'));
       }
       clearLoginFailures(ip);
+      // scrypt 参数透明升级（P2-5）：旧参数（如 2^14）哈希验证成功后立即按
+      // 当前参数重哈希，逐步收敛到 OWASP 推荐成本，无需用户改密
+      let rehashed = false;
+      if (needsRehash(account.password_hash)) {
+        AdminAccountModel.setPassword(hashPassword(String(password)));
+        rehashed = true;
+      }
       const session = createSession(req);
       recordAudit({
         action: AuditActions.AUTH_LOGIN,
         targetType: 'admin',
         targetId: '1',
-        detail: { ip: clientIp(req), userAgent: req.headers['user-agent']?.slice(0, 100) || null },
+        detail: { ip: clientIp(req), userAgent: req.headers['user-agent']?.slice(0, 100) || null, rehashed },
       });
       res.json(success(session));
     } catch (err) {

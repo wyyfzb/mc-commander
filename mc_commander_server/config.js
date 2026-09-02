@@ -25,12 +25,22 @@ export default {
   // 而非 cwd——服务器从任意工作目录启动都不影响托管（运行时数据目录仍保持 cwd 相对）
   publicDir: path.resolve(__dirname, process.env.PUBLIC_DIR || './public'),
   logLevel: process.env.LOG_LEVEL || 'info',
+  // 认证前 JSON body 上限（P2-7）：全局 10mb 过宽（认证前攻击面），收紧至
+  // 1mb；文件上传走 multer multipart 独立通道不受此值影响，大型插件/文件
+  // 场景不受影响
+  bodyLimitJson: process.env.BODY_LIMIT_JSON || '1mb',
   // 管理员密码登录（安全主线）：Bearer 会话滑动续期；登录失败锁定为
   // 按账号/来源 IP 的内存级限制（重启即清零，配合全局速率限流足够
   // 单管理员自托管场景；TOTP 挂靠点见 admin_account.totp_secret）
   adminSession: {
-    // 会话有效期（滑动）：默认 7 天，每次认证触达续期
+    // 会话有效期（滑动）：默认 7 天，每次认证触达续期；续期上限 cap 在
+    // absoluteTtlMs 边界，不能无限推迟重登（P2-11）
     ttlMs: parseInt(process.env.ADMIN_SESSION_TTL_HOURS || '168') * 3600_000,
+    // 会话绝对存活期（P2-11）：自创建起 30 天后强制重登，限制被窃取令牌的
+    // 永久有效窗口；设 0 关闭（不建议）
+    absoluteTtlMs: parseInt(process.env.ADMIN_SESSION_ABSOLUTE_TTL_DAYS || '30') * 86400_000,
+    // 每用户会话上限（P2-11）：新登录挤掉最旧会话（last_seen_at 最旧）
+    maxSessions: parseInt(process.env.ADMIN_SESSION_MAX_SESSIONS || '5'),
     loginLockMaxFails: parseInt(process.env.AUTH_LOGIN_MAX_FAILS || '10'),
     loginLockMs: parseInt(process.env.AUTH_LOGIN_LOCK_MS || '300000'),
   },
