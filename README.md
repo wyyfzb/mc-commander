@@ -58,8 +58,10 @@ curl -fsSL -o /tmp/deploy-mc-commander.sh https://raw.githubusercontent.com/wyyf
 sudo bash /tmp/deploy-mc-commander.sh
 ```
 
-脚本会自动安装 Java/Node.js、下载代码、生成 API Key 并注册 systemd 服务（下载
+脚本会自动安装 Java/Node.js、下载代码、生成 API Key 与一次性 SETUP_TOKEN 并注册 systemd 服务（下载
 tarball 带 sha256 完整性校验）。
+**SETUP_TOKEN 仅首次设密使用**：公网部署时，浏览器首访设密页需粘贴部署输出中的 SETUP_TOKEN
+（防部署完成到设密窗口内被抢先接管面板，一次性，用后作废）。
 （国内网络可改用 gitee 镜像源（分支为 `main`，无 `master`）：`https://gitee.com/wyyfzb/mc-commander/raw/main/...` 同路径，并配合 `PACKAGE_URL`/`PACKAGE_SHA256` 环境变量）
 
 #### 方式二：手动部署
@@ -200,6 +202,7 @@ ws.onmessage = (event) => {
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
 | `API_KEY` | （必填） | API 认证密钥 |
+| `SETUP_TOKEN` | （未配置） | 首访设密所有权证明（一次性）：配置后 `POST /auth/setup` 必须携带 `Authorization: SetupToken <token>`，校验通过立即作废（内存 + 本行移除）；部署脚本首次部署自动生成，未配置 = 不校验（仅建议本机/可信网络使用） |
 | `PORT` | `25566` | 服务端口 |
 | `SERVERS_DIR` | `./servers` | MC 实例数据目录 |
 | `DATA_DIR` | `./data` | SQLite 数据库目录 |

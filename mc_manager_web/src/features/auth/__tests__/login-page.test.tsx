@@ -3,7 +3,8 @@
  * - 探测驱动：hasPassword=true → 登录模式；false → 设密模式；后端不可达 → 错误态
  * - 登录成功：写会话（auth store）+ 状态同步（connection ready）+ 跳转
  * - 设密校验：强度条渲染 / 两次密码不一致报错不提交
- * - 服务端错误：40102 密码错误显示友好文案；40911 抢先设密 → 切回登录模式
+ * - 服务端错误：40102 密码错误显示友好文案；40911 抢先设密 → 切回登录模式；
+ *   40104 SETUP_TOKEN 必需 → 令牌输入框出现，携 Authorization: SetupToken 头重试
  * - returnTo 回跳
  * mock 数据为结构占位（虚构凭据），严禁真实服务器信息
  */
@@ -121,6 +122,66 @@ describe('LoginPage（登录/首访设密三态）', () => {
     renderLoginPage()
     expect(await screen.findByRole('alert')).toHaveTextContent('连接失败')
     expect(screen.getByRole('button', { name: /重新探测/ })).toBeInTheDocument()
+  })
+
+  it('设密 40104（SETUP_TOKEN 必需）→ 展示令牌输入框，携 Authorization: SetupToken 头重试成功', async () => {
+    // 虚构令牌（64 位 hex，非真实凭据）：服务端按头校验，错误 403 / 正确 200
+    const CORRECT_TOKEN = 'a'.repeat(64)
+    const WRONG_TOKEN = 'f'.repeat(64)
+    server.use(
+      http.get('*/api/v1/auth/status', () => okEnvelope({ hasPassword: false })),
+      http.post('*/api/v1/auth/setup', async ({ request }) => {
+        const auth = request.headers.get('authorization')
+        if (auth !== `SetupToken ${CORRECT_TOKEN}`) {
+          return HttpResponse.json(
+            {
+              status: 'error',
+              code: 40104,
+              message: 'SETUP_TOKEN 缺失或错误：请携带部署完成时输出的一次性令牌',
+              details: null,
+              timestamp: '',
+            },
+            { status: 403 },
+          )
+        }
+        return okEnvelope({
+          hasPassword: true,
+          token: 'mock-session-token-0123456789abcdef',
+          sessionId: 'sess-mock-1',
+          expiresAt: '2099-01-01T00:00:00.000Z',
+        })
+      }),
+    )
+    renderLoginPage()
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: '设置管理员密码' })).toBeInTheDocument(),
+    )
+    // 初始态不展示令牌输入框（未配置保护的面板零打扰）
+    expect(screen.queryByLabelText(/SETUP_TOKEN/)).not.toBeInTheDocument()
+
+    await userEvent.type(screen.getByLabelText('管理员密码'), 'Abcdef123456')
+    await userEvent.type(screen.getByLabelText('确认密码'), 'Abcdef123456')
+    await userEvent.click(screen.getByRole('button', { name: /设置密码并登录/ }))
+
+    // 首次无凭据头请求被 40104 拒 → 令牌输入框出现 + 错误文案
+    const tokenInput = await screen.findByLabelText(/SETUP_TOKEN/)
+    expect(screen.getByRole('alert')).toHaveTextContent('SETUP_TOKEN 缺失或错误')
+
+    // 未填 token 直接提交 → 前端拦截不发请求
+    await userEvent.click(screen.getByRole('button', { name: /设置密码并登录/ }))
+    expect(screen.getByRole('alert')).toHaveTextContent('请输入 SETUP_TOKEN')
+
+    // 错误 token → 服务端仍 40104
+    await userEvent.type(tokenInput, WRONG_TOKEN)
+    await userEvent.click(screen.getByRole('button', { name: /设置密码并登录/ }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('SETUP_TOKEN 缺失或错误')
+
+    // 正确 token → 携 SetupToken 头请求成功，写会话并跳转
+    await userEvent.clear(screen.getByLabelText(/SETUP_TOKEN/))
+    await userEvent.type(screen.getByLabelText(/SETUP_TOKEN/), CORRECT_TOKEN)
+    await userEvent.click(screen.getByRole('button', { name: /设置密码并登录/ }))
+    await waitFor(() => expect(screen.getByText('dashboard-reached')).toBeInTheDocument())
+    expect(useAuthStore.getState().session?.sessionId).toBe('sess-mock-1')
   })
 
   it('returnTo 参数：登录后回跳原页面（非 dashboard）', async () => {

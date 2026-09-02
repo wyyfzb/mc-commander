@@ -54,9 +54,22 @@ export function fetchAuthStatus(baseUrl: string, signal?: AbortSignal): Promise<
   return apiGet<AuthStatusData>('/api/v1/auth/status', publicConfig(baseUrl), signal)
 }
 
-/** POST /auth/setup（公开）：首访设密，成功即自动登录 */
-export function setupPassword(baseUrl: string, password: string): Promise<AuthSessionData> {
-  return apiPost<AuthSessionData>('/api/v1/auth/setup', publicConfig(baseUrl), { password })
+/**
+ * POST /auth/setup（公开）：首访设密，成功即自动登录。
+ * 公网部署开启了所有权证明时需携一次性 SETUP_TOKEN（服务端以
+ * `Authorization: SetupToken <token>` 校验，通过即作废，见 routes/auth.js 顶部约定）
+ */
+export function setupPassword(
+  baseUrl: string,
+  password: string,
+  setupToken?: string,
+): Promise<AuthSessionData> {
+  return apiPost<AuthSessionData>(
+    '/api/v1/auth/setup',
+    publicConfig(baseUrl),
+    { password },
+    setupToken ? { extraHeaders: { Authorization: `SetupToken ${setupToken}` } } : undefined,
+  )
 }
 
 /** POST /auth/login（公开）：密码换会话令牌（服务端按 IP 锁定防爆破） */

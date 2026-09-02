@@ -46,6 +46,8 @@ interface ApiRequestOptions {
   signal?: AbortSignal
   /** 超时覆盖（默认 10s；部署等长请求需放大，如 10 分钟） */
   timeoutMs?: number
+  /** 额外请求头（如 setup 阶段的 Authorization: SetupToken；与认证头叠加，不覆盖常规认证头键） */
+  extraHeaders?: Record<string, string>
 }
 
 function buildUrl(config: ConnectionConfig, path: string): string {
@@ -111,6 +113,7 @@ export async function apiRequest<T>(
         ...buildAuthHeaders(),
         ...(!hasSessionToken() && config.apiKey ? { 'X-API-Key': config.apiKey } : {}),
         ...(options.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+        ...(options.extraHeaders ?? {}),
       },
       body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
       signal: options.signal ?? timeout.signal,
@@ -210,7 +213,7 @@ export function apiPost<T>(
   path: string,
   config: ConnectionConfig,
   body?: unknown,
-  options?: { timeoutMs?: number; signal?: AbortSignal },
+  options?: { timeoutMs?: number; signal?: AbortSignal; extraHeaders?: Record<string, string> },
 ): Promise<T> {
   return apiRequest<T>(path, config, { method: 'POST', body, ...options })
 }

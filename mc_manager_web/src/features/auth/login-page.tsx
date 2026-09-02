@@ -40,6 +40,9 @@ import {
 
 type Phase = 'probing' | 'setup' | 'login' | 'unreachable'
 
+/** 服务端 AUTH_SETUP_TOKEN_INVALID：公网部署开启了首访设密所有权证明（issue 309） */
+const AUTH_SETUP_TOKEN_INVALID_CODE = 40104
+
 /** 强度条（4 段，score 决定填充段数与色阶） */
 function StrengthBar({ score, label }: { score: number; label: string }) {
   return (
@@ -75,6 +78,9 @@ export function LoginPage() {
   const [baseUrl, setBaseUrl] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  // 首访设密所有权证明（issue 309）：服务端返回 40104 时展示 SETUP_TOKEN 输入框
+  const [needsSetupToken, setNeedsSetupToken] = useState(false)
+  const [setupToken, setSetupToken] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [errorText, setErrorText] = useState('')
   const probeSeq = useRef(0)
@@ -86,6 +92,8 @@ export function LoginPage() {
     const seq = ++probeSeq.current
     setPhase('probing')
     setErrorText('')
+    setNeedsSetupToken(false)
+    setSetupToken('')
     try {
       const status = await fetchAuthStatus(base)
       if (seq !== probeSeq.current) return
@@ -123,6 +131,10 @@ export function LoginPage() {
         setErrorText('两次输入的密码不一致')
         return
       }
+      if (needsSetupToken && !setupToken.trim()) {
+        setErrorText('请输入 SETUP_TOKEN（部署完成时输出的一次性令牌）')
+        return
+      }
     }
     if (!password) {
       setErrorText('请输入管理员密码')
@@ -133,7 +145,9 @@ export function LoginPage() {
     setErrorText('')
     try {
       const session =
-        phase === 'setup' ? await setupPassword(baseUrl, password) : await login(baseUrl, password)
+        phase === 'setup'
+          ? await setupPassword(baseUrl, password, needsSetupToken ? setupToken.trim() : undefined)
+          : await login(baseUrl, password)
       handleAuthSuccess(session.token, session.sessionId, session.expiresAt)
     } catch (err) {
       if (err instanceof ApiError) {
@@ -141,6 +155,12 @@ export function LoginPage() {
         if (err.code === 40911) {
           setPhase('login')
           setErrorText('管理员密码已被设置，请直接登录')
+        } else if (err.code === AUTH_SETUP_TOKEN_INVALID_CODE) {
+          // 40104：公网部署开启了首访设密所有权证明 → 展示 SETUP_TOKEN 输入框
+          setNeedsSetupToken(true)
+          setErrorText(
+            err.message || 'SETUP_TOKEN 缺失或错误：请粘贴部署完成时输出的一次性令牌',
+          )
         } else {
           setErrorText(getFriendlyErrorText(err))
         }
@@ -263,6 +283,25 @@ export function LoginPage() {
                   autoComplete="new-password"
                   className="h-10 font-mono"
                 />
+              </div>
+            )}
+            {phase === 'setup' && needsSetupToken && (
+              <div className="space-y-2">
+                <Label htmlFor="setup-token">SETUP_TOKEN（一次性，部署完成时输出）</Label>
+                <PasswordInput
+                  id="setup-token"
+                  value={setupToken}
+                  onChange={(v) => {
+                    setSetupToken(v)
+                    setErrorText('')
+                  }}
+                  placeholder="粘贴部署输出中的 SETUP_TOKEN"
+                  autoComplete="off"
+                  className="font-mono"
+                />
+                <p className="text-mcs-2xs text-mcs-text-subtle">
+                  该面板已开启部署保护：公网部署场景下需证明您是部署者（令牌见部署脚本完成输出，用后即作废）。
+                </p>
               </div>
             )}
             {phase === 'setup' && (password.length > 0 || confirmPassword.length > 0) && (
