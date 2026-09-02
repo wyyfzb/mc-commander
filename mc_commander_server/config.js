@@ -12,6 +12,7 @@ export default {
   // 部署脚本首次部署生成写入 .env；POST /auth/setup 强制校验，通过即作废
   //（内存清空 + .env 移除，重启后同样失效）。未配置 = 未开启（本机首发兼容）
   setupToken: process.env.SETUP_TOKEN || '',
+  host: process.env.HOST || '127.0.0.1',
   port: parseInt(process.env.PORT || '25566'),
   serversDir: path.resolve(process.env.SERVERS_DIR || './servers'),
   dataDir: path.resolve(process.env.DATA_DIR || './data'),

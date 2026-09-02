@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url';
 import helmet from 'helmet';
 import config from './config.js';
 import { hashToken } from './utils/password.js';
+import { isWeakApiKey } from './utils/weak-key.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // 版本号单一来源：package.json（与 routes/index.js 的 /health、check-update 共用）
@@ -58,6 +59,24 @@ try {
     console.warn(`[Security] .env 文件权限过宽（${(stat.mode & 0o777).toString(8)}），建议设置为 0600（仅所有者可读写）`);
   }
 } catch { /* 文件不存在等情况由后续校验处理 */ }
+
+// 生产环境弱 API Key 检测（S-P0-5）：仅在明文 API_KEY 迁移路径中可检测
+//（哈希值无法逆推）。弱 = 长度 < 16 或纯重复字符（如 'aaaa...'）。
+// ALLOW_WEAK_KEY=1 显式豁免（开发/测试环境默认不检查）。
+if (process.env.NODE_ENV === 'production' && !process.env.ALLOW_WEAK_KEY) {
+  const rawKey = process.env.API_KEY;
+  if (rawKey) {
+    if (isWeakApiKey(rawKey)) {
+      console.error('╔══════════════════════════════════════════════════╗');
+      console.error('║  错误: 生产环境不允许使用弱 API Key！         ║');
+      console.error('║  Key 长度须 >= 16 且不得为纯重复字符。         ║');
+      console.error('║  如确需使用弱 Key，请设置 ALLOW_WEAK_KEY=1。    ║');
+      console.error('╚══════════════════════════════════════════════════╝');
+      process.exit(1);
+    }
+  }
+  // apiKeyHash 已存在但无明文 → 无法检测原始密钥强度，放行
+}
 
 // 启动前校验关键配置（在 listen 之前）
 if (!config.apiKeyHash) {
@@ -183,10 +202,11 @@ server.on('error', (err) => {
   throw err;
 });
 
-server.listen(config.port, '0.0.0.0', () => {
+server.listen(config.port, config.host, () => {
   console.log(`========================================`);
   console.log(`  MC_Commander Server v${SERVER_VERSION}`);
   console.log(`========================================`);
+  console.log(`  Host: ${config.host}`);
   console.log(`  Port: ${config.port}`);
   const maskedHash = config.apiKeyHash.length > 8
     ? config.apiKeyHash.substring(0, 8) + '...'
