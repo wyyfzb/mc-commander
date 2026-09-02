@@ -3,7 +3,7 @@
  * - 列表展示（卡片行：名称/状态/URL/事件标签/操作按钮）
  * - 新建/编辑对话框（shadcn Dialog）
  * - 删除确认（ConfirmDialog 危险样式）
- * - 投递日志展开行
+ * - 投递日志展开行（行内点击查看响应体摘要，截断 200 字符）
  * - 加载骨架行 + 空态 + Toast 反馈
  */
 import { useState } from 'react'
@@ -46,12 +46,19 @@ const EVENT_LABELS: Record<string, string> = {
 function fmtEvt(t: string) { return EVENT_LABELS[t] || t }
 function fmtTime(iso: string) { return new Date(iso).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }) }
 
+/** 响应体摘要截断（验收上限 200 字符）；null/纯空白视为无响应体 */
+export function truncateResponseBody(body: string | null | undefined, max = 200): string | null {
+  if (body == null || body.trim() === '') return null
+  return body.length > max ? `${body.slice(0, max)}…` : body
+}
+
 export default function WebhookPage() {
   const config = useConnectionStore()
   const qc = useQueryClient()
   const [showDialog, setShowDialog] = useState(false)
   const [editTarget, setEditTarget] = useState<Webhook | null>(null)
   const [expandedId, setExpandedId] = useState<number | null>(null)
+  const [expandedDeliveryId, setExpandedDeliveryId] = useState<number | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Webhook | null>(null)
   const [form, setForm] = useState({ name: '', url: '', secret: '', events: [] as string[], isEnabled: true })
   const [initialForm, setInitialForm] = useState({ name: '', url: '', secret: '', events: [] as string[], isEnabled: true })
@@ -223,7 +230,7 @@ export default function WebhookPage() {
                       variant="ghost" size="icon-sm"
                       aria-label={`${w.name} 投递日志`}
                       className="text-mcs-text-muted hover:text-mcs-text-default"
-                      onClick={() => setExpandedId(expandedId === w.id ? null : w.id)}
+                      onClick={() => { setExpandedId(expandedId === w.id ? null : w.id); setExpandedDeliveryId(null) }}
                     >
                       <ChevronDown className={cn("size-3.5 transition-transform", expandedId === w.id && "rotate-180")} aria-hidden />
                     </Button>
@@ -260,23 +267,41 @@ export default function WebhookPage() {
                       <p className="text-mcs-xs text-mcs-text-subtle">暂无投递记录</p>
                     ) : (
                       <div className="flex max-h-60 flex-col gap-1 overflow-y-auto">
-                        {deliveries.map((d: WebhookDelivery) => (
-                          <div key={d.id} className="flex items-center justify-between rounded-mcs-xs bg-mcs-bg-default px-2 py-1.5 text-mcs-xs">
-                            <div>
-                              <span className="font-medium text-mcs-text-default">{fmtEvt(d.eventType)}</span>
-                              <span className="ml-2 text-mcs-text-subtle">
-                                {d.responseStatus ? String(d.responseStatus) : d.status}
-                                {d.durationMs != null ? ` ${String(d.durationMs)}ms` : ''}
-                                {d.attempts > 1 ? ` ${d.attempts}次` : ''}
-                              </span>
+                        {deliveries.map((d: WebhookDelivery) => {
+                          const summary = truncateResponseBody(d.responseBody)
+                          const deliveryExpanded = expandedDeliveryId === d.id
+                          return (
+                            <div key={d.id}>
+                              <button
+                                type="button"
+                                className="flex w-full cursor-pointer items-center justify-between rounded-mcs-xs bg-mcs-bg-default px-2 py-1.5 text-left text-mcs-xs hover:bg-mcs-bg-hover"
+                                aria-expanded={deliveryExpanded}
+                                onClick={() => setExpandedDeliveryId(deliveryExpanded ? null : d.id)}
+                              >
+                                <div>
+                                  <span className="font-medium text-mcs-text-default">{fmtEvt(d.eventType)}</span>
+                                  <span className="ml-2 text-mcs-text-subtle">
+                                    {d.responseStatus ? String(d.responseStatus) : d.status}
+                                    {d.durationMs != null ? ` ${String(d.durationMs)}ms` : ''}
+                                    {d.attempts > 1 ? ` ${d.attempts}次` : ''}
+                                  </span>
+                                </div>
+                                <span className={cn(
+                                  d.status === 'success' ? 'text-mcs-success-fg' : d.status === 'failed' ? 'text-mcs-error-fg' : 'text-mcs-text-muted',
+                                )}>
+                                  {fmtTime(d.createdAt)}
+                                </span>
+                              </button>
+                              {deliveryExpanded && (
+                                summary ? (
+                                  <pre data-testid={`delivery-response-${d.id}`} className="mt-1 whitespace-pre-wrap break-all rounded-mcs-xs bg-mcs-bg-subtle px-2 py-1.5 font-mono text-mcs-2xs text-mcs-text-muted">{summary}</pre>
+                                ) : (
+                                  <p data-testid={`delivery-response-${d.id}`} className="mt-1 px-2 py-1 text-mcs-2xs text-mcs-text-subtle">无响应体</p>
+                                )
+                              )}
                             </div>
-                            <span className={cn(
-                              d.status === 'success' ? 'text-mcs-success-fg' : d.status === 'failed' ? 'text-mcs-error-fg' : 'text-mcs-text-muted',
-                            )}>
-                              {fmtTime(d.createdAt)}
-                            </span>
-                          </div>
-                        ))}
+                          )
+                        })}
                       </div>
                     )}
                   </div>
