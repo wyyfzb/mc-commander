@@ -10,6 +10,7 @@ import { toast } from 'sonner'
 import { getFriendlyErrorText } from '@/api/errors'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
+import { CommandPreview } from '@/components/mcs/command-preview'
 import { useServerStore } from '@/stores/server'
 import type { ScheduledTask, TaskCreatePayload } from '@/api/types'
 import { useCreateTask, useDeleteTask, useRunTaskNow, useTasks, useUpdateTask } from './queries'
@@ -27,6 +28,7 @@ export function TasksPage() {
   const [dialogTask, setDialogTask] = useState<ScheduledTask | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<ScheduledTask | null>(null)
+  const [runTarget, setRunTarget] = useState<ScheduledTask | null>(null)
 
   const tasksQuery = useTasks(instanceId)
   const createMutation = useCreateTask(instanceId)
@@ -99,11 +101,19 @@ export function TasksPage() {
     }
   }
 
-  /** 立即执行 */
-  const handleRunNow = async (task: ScheduledTask) => {
+  /** 立即执行：打开确认（含命令预览） */
+  const handleRunNow = (task: ScheduledTask) => {
+    setRunTarget(task)
+  }
+
+  /** 执行确认 */
+  const handleRunConfirm = async () => {
+    if (!runTarget) return
+    const target = runTarget
+    setRunTarget(null)
     try {
-      await runMutation.mutateAsync(task.id)
-      toast.success(`任务 "${task.name}" 已触发执行`)
+      await runMutation.mutateAsync(target.id)
+      toast.success(`任务 "${target.name}" 已触发执行`)
     } catch (e) {
       toast.error(`执行失败：${getFriendlyErrorText(e)}`)
     }
@@ -191,6 +201,19 @@ export function TasksPage() {
         loading={deleteMutation.isPending}
         onConfirm={() => void handleDeleteConfirm()}
       />
+
+      {/* ── 执行确认（命令类型任务含命令预览） ── */}
+      <ConfirmDialog
+        open={runTarget !== null}
+        onOpenChange={(open) => !open && setRunTarget(null)}
+        title="确认执行任务"
+        description={`确定要立即执行任务 "${runTarget?.name ?? ''}" 吗？`}
+        confirmText="执行"
+        loading={runMutation.isPending}
+        onConfirm={() => void handleRunConfirm()}
+      >
+        {runTarget?.command && <CommandPreview command={runTarget.command} />}
+      </ConfirmDialog>
     </div>
   )
 }

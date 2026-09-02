@@ -78,8 +78,11 @@ test.describe('任务页', () => {
   test('行内操作：立即执行 + 按钮复位 + 删除确认', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/tasks')
-    // 立即执行（mock 返回触发成功）→ toast
+    // 立即执行 → 确认对话框（命令预览仅命令类型任务显示）
     await page.getByRole('button', { name: '每日自动重启 立即执行' }).click()
+    await expect(page.getByText('确认执行任务')).toBeVisible()
+    await page.getByRole('button', { name: '执行' }).click()
+    // mock 返回触发成功 → toast
     await expect(page.getByText(/已触发执行/)).toBeVisible()
     // 按钮复位：锁定 mutation 完成后按钮恢复可用（variables 残留会导致永久禁用）
     const runButton = page.getByRole('button', { name: '每日自动重启 立即执行' })

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowRight, Play, Send, ShieldAlert, Star, X } from 'lucide-react'
+import { ArrowRight, Check, Play, Send, ShieldAlert, Star, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { useMutation } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
@@ -25,7 +25,37 @@ import { NoticeBanner } from '@/components/mcs/notice-banner'
 
 const PRESET_STORAGE_KEY = 'mcs-command-presets'
 const HISTORY_STORAGE_KEY = 'mcs-command-history'
+const HISTORY_STATUS_KEY = 'mcs-command-history-status'
 const HISTORY_LIMIT = 50
+
+/** 命令历史条目状态 */
+type CommandStatus = 'sent' | 'failed'
+
+/** 命令历史状态映射（command → status/error） */
+function readCommandStatusMap(): Record<string, { status: CommandStatus; error?: string }> {
+  try {
+    const raw = localStorage.getItem(HISTORY_STATUS_KEY)
+    if (raw) return JSON.parse(raw)
+  } catch {
+    // 回退空
+  }
+  return {}
+}
+
+function writeCommandStatusMap(map: Record<string, { status: CommandStatus; error?: string }>) {
+  try {
+    // 只保留历史中存在的命令状态
+    const history = readCommandHistory()
+    const activeKeys = new Set(history)
+    const trimmed: Record<string, { status: CommandStatus; error?: string }> = {}
+    for (const [k, v] of Object.entries(map)) {
+      if (activeKeys.has(k)) trimmed[k] = v
+    }
+    localStorage.setItem(HISTORY_STATUS_KEY, JSON.stringify(trimmed))
+  } catch {
+    // localStorage 不可用时静默忽略
+  }
+}
 const DEFAULT_PRESETS = [
   'give @p diamond 64',
   'gamemode creative',
@@ -80,8 +110,12 @@ export function CommandInput() {
   const inputRef = useRef<HTMLInputElement>(null)
   /** 持久化命令历史（localStorage；发送成功入列；连续重复合并） */
   const historyRef = useRef<string[]>(readCommandHistory())
+  /** 历史条目状态映射（command → sent/failed + error） */
+  const statusMapRef = useRef(readCommandStatusMap())
   /** 历史导航态：index=当前条目、draft=进入导航前的未发送输入 */
   const navRef = useRef<{ index: number; draft: string } | null>(null)
+  /** 导航中当前条目的状态（用于显示状态指示器） */
+  const [navStatus, setNavStatus] = useState<{ status: CommandStatus; error?: string } | null>(null)
 
   const completions: CompletionItem[] = value.startsWith('/') ? completeCommands(value) : []
 
@@ -106,15 +140,18 @@ export function CommandInput() {
       if (text && instanceId) {
         pushEntry(instanceId, text, 'stdout')
       }
-      pushHistory(command)
+      pushHistory(command, 'sent')
       // 成功不弹 toast：终端已有 command + stdout 回显（失败仍 toast 告警）
       setValue('')
+      setNavStatus(null)
+      navRef.current = null
       inputRef.current?.focus()
     },
-    onError: (err) => {
+    onError: (err, command) => {
       const friendly = err instanceof ApiError
         ? getFriendlyErrorMessage(err.code, err.message)
         : '网络错误'
+      pushHistory(command, 'failed', friendly)
       toast.error(`命令发送失败: ${friendly}`)
     },
   })
@@ -127,12 +164,19 @@ export function CommandInput() {
   }
 
   /** 入列历史（shell 语义：与最近一条相同则跳过；超出上限裁头；同步写入 localStorage） */
-  const pushHistory = (command: string) => {
+  const pushHistory = (command: string, status: CommandStatus = 'sent', error?: string) => {
     const h = historyRef.current
-    if (h[h.length - 1] === command) return
+    if (h[h.length - 1] === command) {
+      // 重复命令仅更新状态
+      statusMapRef.current[command] = { status, error }
+      writeCommandStatusMap(statusMapRef.current)
+      return
+    }
     const next = [...h, command].slice(-HISTORY_LIMIT)
     historyRef.current = next
     writeCommandHistory(next)
+    statusMapRef.current[command] = { status, error }
+    writeCommandStatusMap(statusMapRef.current)
   }
 
   /** ↑↓ 历史导航：↑ 上移，↓ 下移；↓ 越过最新恢复草稿；任何编辑退出导航 */
@@ -143,16 +187,21 @@ export function CommandInput() {
       if (navRef.current == null) navRef.current = { index: h.length - 1, draft: value }
       else if (navRef.current.index > 0) navRef.current.index -= 1
       const nav = navRef.current
-      setValue(h[nav.index] ?? '')
+      const cmd = h[nav.index] ?? ''
+      setValue(cmd)
+      setNavStatus(statusMapRef.current[cmd] ?? null)
     } else {
       const nav = navRef.current
       if (nav == null) return
       if (nav.index < h.length - 1) {
         nav.index += 1
-        setValue(h[nav.index] ?? '')
+        const cmd = h[nav.index] ?? ''
+        setValue(cmd)
+        setNavStatus(statusMapRef.current[cmd] ?? null)
       } else {
         setValue(nav.draft)
         navRef.current = null
+        setNavStatus(null)
       }
     }
   }
@@ -251,6 +300,14 @@ export function CommandInput() {
         </div>
       )}
 
+      {/* 历史导航状态指示器 */}
+      {navStatus && navRef.current != null && (
+        <div className={"flex items-center gap-1 text-mcs-2xs " + (navStatus.status === 'sent' ? 'text-mcs-success-fg' : 'text-mcs-error-fg')}>
+          <Check className="size-3" aria-hidden />
+          {navStatus.status === 'sent' ? '已送达' : `失败: ${navStatus.error ?? '未知'}`}
+        </div>
+      )}
+
       {/* 输入行 */}
       <div className="relative flex items-center gap-2">
         <span className="font-mono text-mcs-accent-fg" aria-hidden>&gt;</span>
@@ -260,6 +317,7 @@ export function CommandInput() {
           onChange={(e) => {
             // 编辑即退出历史导航（shell 语义：导航态下输入中断恢复）
             navRef.current = null
+            setNavStatus(null)
             setValue(e.target.value)
           }}
           onKeyDown={(e) => {
@@ -268,6 +326,7 @@ export function CommandInput() {
             if (e.key === 'Enter') send(value)
             if (e.key === 'Escape') {
               navRef.current = null
+              setNavStatus(null)
               setValue('')
             }
             if (e.key === 'ArrowUp') {

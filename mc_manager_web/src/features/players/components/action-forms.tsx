@@ -23,6 +23,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { SearchInput } from '@/components/mcs/search-input'
 import { LoadingButton } from '@/components/mcs/loading-button'
+import { CommandPreview } from '@/components/mcs/command-preview'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
@@ -557,15 +558,7 @@ function OfflineBanner() {
   )
 }
 
-function CommandPreview({ command }: { command: string }) {
-  if (!command) return null
-  return (
-    <div className="rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-muted px-3 py-2">
-      <div className="mb-1 text-mcs-2xs text-mcs-text-subtle">命令预览</div>
-      <code className="block break-all font-mono text-mcs-xs text-mcs-accent-fg">{command}</code>
-    </div>
-  )
-}
+
 
 // ── 导出（Tab 壳）──
 
