@@ -5,22 +5,22 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { apiGet, apiPost } from '@/api/client'
-import { ApiError } from '@/api/client'
-import { getFriendlyErrorText, getFriendlyErrorMessage } from '@/api/errors'
+import { apiGet, apiPost, ApiError } from '@/api/client'
+import { getFriendlyErrorText } from '@/api/errors'
 import { queryKeys } from '@/api/queries'
 import { useConnectionStore } from '@/stores/connection'
 import { useServerStore } from '@/stores/server'
 import { useTerminalStore } from '@/stores/terminal'
+import { useStartInstanceWithEula } from '@/hooks/use-start-instance-with-eula'
 import type { InstanceStatus } from '@/api/types'
 
 /**
  * 启停管理
  * - 启动/重启/停止：ConfirmDialog 强制显式确认（barrierDismissible:false）
+ * - 启动：共享 mutation useStartInstanceWithEula（EULA 首启特例内置，与实例页同源）
  * - 启动等待：每 2s 轮询至 isRunning，60s 超时；崩溃/宽限期判定
  * - 停止：等待 2s 后刷新；重启：等待 3s 后刷新
  * - 保存（save-all）：无确认直接发送
- * - EULA 特例：启动失败含 EULA_NOT_ACCEPTED → 引导同意对话框
  */
 
 type BusyAction = '启动' | '停止' | '重启' | '保存' | null
@@ -35,12 +35,15 @@ export function InstanceControls({ compact = false }: { compact?: boolean }) {
   const resetTerminal = useTerminalStore((s) => s.resetForRestart)
   const [busyAction, setBusyAction] = useState<BusyAction>(null)
   const [confirmAction, setConfirmAction] = useState<'启动' | '停止' | '重启' | null>(null)
-  const [eulaOpen, setEulaOpen] = useState(false)
 
   const isRunning = status?.isRunning ?? false
 
+  // 启动：共享 mutation（EULA 首启特例内置：命中 → 弹同意 → 续启；与实例页同源）
+  const { startInstance, startPending, pendingStartId, eulaDialog } = useStartInstanceWithEula()
+
+  // 停止/重启/保存（启动已拆出走共享 hook）
   const mutation = useMutation({
-    mutationFn: async (action: 'start' | 'stop' | 'restart' | 'save') => {
+    mutationFn: async (action: 'stop' | 'restart' | 'save') => {
       if (!instanceId) throw new ApiError(40401, 404, 'Instance not found', null)
       if (action === 'save') {
         await apiPost(`/api/v1/instances/${instanceId}/command`, config, { command: 'save-all' })
@@ -59,26 +62,11 @@ export function InstanceControls({ compact = false }: { compact?: boolean }) {
         await sleep(3000)
         await queryClient.invalidateQueries({ queryKey: queryKeys.instance(instanceId ?? '') })
         toast.success('服务器已重启')
-      } else if (action === 'save') {
-        toast.success('已发送保存指令')
       } else {
-        // start：终端联动 + 轮询至运行
-        resetTerminal()
-        const result = await waitForStart(instanceId ?? '')
-        if (result.ok) {
-          toast.success('服务器已启动')
-        } else {
-          toast.error(result.message)
-        }
-        await queryClient.invalidateQueries({ queryKey: queryKeys.instance(instanceId ?? '') })
+        toast.success('已发送保存指令')
       }
     },
     onError: (err, action) => {
-      // EULA 特例
-      if (err instanceof ApiError && err.message.includes('EULA_NOT_ACCEPTED')) {
-        setEulaOpen(true)
-        return
-      }
       const friendly = getFriendlyErrorText(err)
       toast.error(`${action === 'save' ? '保存失败' : `${action}失败`}：${friendly}`)
     },
@@ -108,29 +96,31 @@ export function InstanceControls({ compact = false }: { compact?: boolean }) {
     const action = confirmAction
     setConfirmAction(null)
     if (!action) return
+    if (action === '启动') {
+      setBusyAction('启动')
+      startInstance(instanceId ?? '', {
+        onStarted: async () => {
+          // start：终端联动 + 轮询至运行
+          resetTerminal()
+          const result = await waitForStart(instanceId ?? '')
+          if (result.ok) {
+            toast.success('服务器已启动')
+          } else {
+            toast.error(result.message)
+          }
+          await queryClient.invalidateQueries({ queryKey: queryKeys.instance(instanceId ?? '') })
+        },
+        onStartError: (err) => {
+          toast.error(`启动失败：${getFriendlyErrorText(err)}`)
+        },
+        onSettled: () => setBusyAction(null),
+      })
+      return
+    }
     setBusyAction(action)
-    mutation.mutate(action === '启动' ? 'start' : action === '停止' ? 'stop' : 'restart', {
+    mutation.mutate(action === '停止' ? 'stop' : 'restart', {
       onSettled: () => setBusyAction(null),
     })
-  }
-
-  const handleEulaAgree = async (agreed: boolean) => {
-    setEulaOpen(false)
-    if (!instanceId) return
-    try {
-      await apiPost(`/api/v1/instances/${instanceId}/eula`, config, { agreed })
-      if (agreed) {
-        toast.success('EULA 已同意，正在启动服务器...')
-        setBusyAction('启动')
-        mutation.mutate('start', { onSettled: () => setBusyAction(null) })
-      } else {
-        toast.warning('已拒绝 EULA，无法启动服务器')
-      }
-    } catch (err) {
-      toast.error(
-        err instanceof ApiError ? getFriendlyErrorMessage(err.code, err.message) : 'EULA 操作失败',
-      )
-    }
   }
 
   // 在线玩家名（停止确认时动态展示）
@@ -138,11 +128,14 @@ export function InstanceControls({ compact = false }: { compact?: boolean }) {
     ?.map((p) => p.name)
     .filter(Boolean) ?? []
 
+  // 启动按钮 busy：共享 hook 的启动中（含 EULA 同意后续启）或本页确认弹窗链路
+  const startBusy = (startPending && pendingStartId === instanceId) || busyAction === '启动'
+
   const buttons = [
     {
       action: '启动' as const,
       icon: Play,
-      disabled: isRunning || busyAction !== null,
+      disabled: isRunning || busyAction !== null || startBusy,
       color: 'text-mcs-success-fg',
       confirm: { title: '启动服务器', description: '确定要启动服务器吗？' },
     },
@@ -195,7 +188,7 @@ export function InstanceControls({ compact = false }: { compact?: boolean }) {
                   }
                 }}
               >
-                {busyAction === b.action ? (
+                {busyAction === b.action || (b.action === '启动' && startBusy) ? (
                   <Loader2 className="size-4 animate-spin" aria-hidden />
                 ) : (
                   <b.icon className={`size-4 ${b.color}`} aria-hidden />
@@ -221,17 +214,8 @@ export function InstanceControls({ compact = false }: { compact?: boolean }) {
         onConfirm={doConfirm}
       />
 
-      {/* EULA 特例对话框 */}
-      <ConfirmDialog
-        open={eulaOpen}
-        onOpenChange={setEulaOpen}
-        title="Minecraft EULA 协议"
-        description="启动失败：Mojang 要求必须同意 EULA 协议才能运行服务器。同意后将在 eula.txt 中写入 agreed=true 并启动服务器。"
-        confirmText="同意并启动"
-        cancelText="不同意"
-        onConfirm={() => void handleEulaAgree(true)}
-        onCancel={() => void handleEulaAgree(false)}
-      />
+      {/* EULA 首启特例（共享 hook：同意写入 eula.txt 后自动续启） */}
+      {eulaDialog}
     </>
   )
 }

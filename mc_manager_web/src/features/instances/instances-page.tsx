@@ -28,6 +28,7 @@ import { InstanceSettingsDialog } from './components/instance-settings-dialog'
 import { UpgradeDialog } from './components/upgrade-dialog'
 import { clearUpgradeProgress } from '@/stores/upgrade'
 import { useUninstallInstance } from './queries'
+import { useStartInstanceWithEula } from '@/hooks/use-start-instance-with-eula'
 
 export function InstancesPage() {
   const config = useConnectionStore()
@@ -47,16 +48,19 @@ export function InstancesPage() {
   /** 卸载强确认：输入实例名匹配后才可确认（防误删世界数据） */
   const [uninstallInput, setUninstallInput] = useState('')
   const uninstallInputMatches = uninstallInput.trim() === (uninstallTarget?.name ?? '')
-  /** 待停止确认的实例（启动直接执行） */
+  /** 待停止确认的实例（启动走共享 hook：EULA 首启特例内置） */
   const [stopTarget, setStopTarget] = useState<InstanceSummary | null>(null)
 
-  // ── 启停（卡片按钮；停止需确认弹窗）──
+  // 启动：共享 mutation（EULA 首启特例：命中 → 弹同意 → 续启；与仪表盘同源）
+  const { startInstance, startPending, pendingStartId, eulaDialog } = useStartInstanceWithEula()
+
+  // ── 停止（卡片停止按钮，需确认弹窗）──
   const runMutation = useMutation({
-    mutationFn: async ({ id, action }: { id: string; action: 'start' | 'stop' }) => {
-      await apiPost(`/api/v1/instances/${id}/${action}`, config)
+    mutationFn: async ({ id }: { id: string }) => {
+      await apiPost(`/api/v1/instances/${id}/stop`, config)
     },
-    onSuccess: (_data, { id, action }) => {
-      toast.success(action === 'start' ? '启动指令已发送' : '停止指令已发送')
+    onSuccess: (_data, { id }) => {
+      toast.success('停止指令已发送')
       void queryClient.invalidateQueries({ queryKey: queryKeys.instance(id) })
       void instancesQuery.refetch()
     },
@@ -64,6 +68,18 @@ export function InstancesPage() {
       toast.error(`操作失败：${getFriendlyErrorText(e)}`)
     },
   })
+
+  /** 卡片启动：EULA 首启弹窗由共享 hook 处理，成功后反馈与列表刷新与 stop 一致 */
+  const handleStart = (inst: InstanceSummary) => {
+    startInstance(inst.id, {
+      onStarted: () => {
+        toast.success('启动指令已发送')
+        void queryClient.invalidateQueries({ queryKey: queryKeys.instance(inst.id) })
+        void instancesQuery.refetch()
+      },
+      // 非 EULA 错误由 hook 内 toast 兜底
+    })
+  }
 
   // ── 深链接：?tab=deploy 打开部署向导；写入 URL 保持全站一致性 ──
   const setDeployOpenDeep = (open: boolean) => {
@@ -183,9 +199,12 @@ export function InstancesPage() {
               setUpgradeTarget(inst)
             }}
             onUninstall={setUninstallTarget}
-            onStart={(inst) => runMutation.mutate({ id: inst.id, action: 'start' })}
+            onStart={handleStart}
             onStop={setStopTarget}
-            busyId={runMutation.isPending ? (runMutation.variables?.id ?? null) : null}
+            busyId={
+              (startPending ? pendingStartId : null) ??
+              (runMutation.isPending ? (runMutation.variables?.id ?? null) : null)
+            }
             onDeploy={() => setDeployOpenDeep(true)}
           />
         )}
@@ -230,9 +249,12 @@ export function InstancesPage() {
         onConfirm={() => {
           const target = stopTarget
           setStopTarget(null)
-          if (target) runMutation.mutate({ id: target.id, action: 'stop' })
+          if (target) runMutation.mutate({ id: target.id })
         }}
       />
+
+      {/* ── EULA 首启特例（共享 hook：同意写入 eula.txt 后自动续启） ── */}
+      {eulaDialog}
 
       {/* ── 卸载确认（破坏力最大操作：输入实例名强确认，与备份恢复同级门槛） ── */}
       <ConfirmDialog

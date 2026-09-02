@@ -399,6 +399,15 @@ export const mockBans: BanRecord[] = [  {
 /** 部署失败开关（测试注入：结构占位，非真实错误） */
 export const deployMock = { shouldFail: false }
 
+/** 实例列表运行态开关（测试注入：false → 卡片显示启动按钮，供 EULA 首启用例） */
+export const instanceListMock = { running: true }
+
+/** 启动开关（测试注入：eulaRequired=EULA 首启特例 / shouldFail=普通失败；calls 供断言续启） */
+export const startMock = { eulaRequired: false, shouldFail: false, calls: 0 }
+
+/** EULA 写入开关（测试注入：shouldFail=写入失败；calls 供断言自动同意） */
+export const eulaMock = { shouldFail: false, calls: 0 }
+
 /** 升级失败开关（测试注入：结构占位，非真实错误） */
 export const upgradeMock = { shouldFail: false, conflict: false }
 
@@ -560,7 +569,9 @@ export const handlers = [
   http.get('*/api/v1/overview', () => ok(overviewDataSchema.parse(mockOverview))),
   http.get('*/api/v1/system-stats', () => ok(systemStatsSchema.parse(mockSystemStats))),
   http.get('*/api/v1/check-update', () => ok({ current: '0.1.0', latest: null, hasUpdate: false, offline: true })),
-  http.get('*/api/v1/instances', () => ok([instanceStatusSchema.parse(mockInstanceStatus)])),
+  http.get('*/api/v1/instances', () =>
+    ok([instanceStatusSchema.parse({ ...mockInstanceStatus, isRunning: instanceListMock.running })]),
+  ),
   http.get('*/api/v1/instances/:id', () => ok(instanceStatusSchema.parse(mockInstanceStatus))),
   // PUT /instances/:id 实例配置更新（启动配置弹窗；回显提交字段，结构占位）
   http.put('*/api/v1/instances/:id', async ({ request, params }) => {
@@ -575,7 +586,34 @@ export const handlers = [
   ),
   // API Key 轮换（返回固定 mock 新 key；测试断言格式与 store 更新）
   http.post('*/api/v1/rotate-key', () => ok({ apiKey: 'mcck-mock-0000-0000-0000-0001' })),
-  http.post('*/api/v1/instances/:id/start', () => ok({ started: true })),
+  http.post('*/api/v1/instances/:id/start', () => {
+    startMock.calls += 1
+    if (startMock.eulaRequired) {
+      // 服务端 start 前置检查：eula.txt 缺失或 eula=false → 403 EULA_NOT_ACCEPTED
+      return HttpResponse.json(
+        { status: 'error', code: 40000, message: 'EULA_NOT_ACCEPTED', details: null, timestamp: new Date().toISOString() },
+        { status: 403 },
+      )
+    }
+    if (startMock.shouldFail) {
+      return HttpResponse.json(
+        { status: 'error', code: 50000, message: 'start failed', details: null, timestamp: new Date().toISOString() },
+        { status: 500 },
+      )
+    }
+    return ok({ started: true })
+  }),
+  // POST /instances/:id/eula 写入 EULA 协议确认（eulaAgree 开关控制失败）
+  http.post('*/api/v1/instances/:id/eula', () => {
+    eulaMock.calls += 1
+    if (eulaMock.shouldFail) {
+      return HttpResponse.json(
+        { status: 'error', code: 50000, message: 'eula write failed', details: null, timestamp: new Date().toISOString() },
+        { status: 500 },
+      )
+    }
+    return ok({ accepted: true })
+  }),
   http.post('*/api/v1/instances/:id/stop', () => ok({ stopped: true })),
   http.post('*/api/v1/instances/:id/restart', () => ok({ restarted: true })),
   http.post('*/api/v1/instances/:id/command', async ({ request }) => {

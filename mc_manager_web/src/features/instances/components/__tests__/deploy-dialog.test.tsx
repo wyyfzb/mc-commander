@@ -12,7 +12,7 @@ import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { setupServer } from 'msw/node'
-import { handlers, deployMock } from '@/test/mocks/handlers'
+import { handlers, deployMock, startMock, eulaMock } from '@/test/mocks/handlers'
 import { DeployDialog } from '../deploy-dialog'
 import { useDeployStore } from '@/stores/deploy'
 import { useConnectionStore } from '@/stores/connection'
@@ -46,11 +46,25 @@ async function waitVersion() {
   await screen.findByText('1.21.4')
 }
 
+/** 走到步骤③并勾选 EULA（弹既有用例公共前置） */
+async function gotoStep3AndAgreeEula(user: ReturnType<typeof userEvent.setup>) {
+  await waitVersion()
+  await user.click(screen.getByRole('button', { name: '下一步' }))
+  await user.type(screen.getByLabelText('实例名称'), '我的生存服')
+  await user.click(screen.getByRole('button', { name: '下一步' }))
+  await user.click(screen.getByRole('checkbox', { name: /Minecraft EULA/ }))
+}
+
 beforeEach(() => {
   localStorage.clear()
   useConnectionStore.setState({ baseUrl: '', apiKey: 'test-key', status: 'ready' })
   useDeployStore.setState({ progress: null, deploying: false, lastResult: null })
   deployMock.shouldFail = false
+  startMock.eulaRequired = false
+  startMock.shouldFail = false
+  startMock.calls = 0
+  eulaMock.shouldFail = false
+  eulaMock.calls = 0
 })
 
 describe('DeployDialog', () => {
@@ -87,7 +101,7 @@ describe('DeployDialog', () => {
     expect(screen.queryByText('请填写实例名称')).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '下一步' }))
 
-    // 步骤③：确认摘要（类型/版本/名称/内存/Java 推荐）
+    // 步骤③：确认摘要（类型/版本/名称/内存/Java 推荐）+ EULA 同意勾选
     // mock overview totalMemory=16 → 推荐档位 8G（50% 推荐覆盖逻辑）
     expect(screen.getByText('确认部署')).toBeInTheDocument()
     expect(screen.getByText('Fabric')).toBeInTheDocument()
@@ -96,13 +110,24 @@ describe('DeployDialog', () => {
     expect(screen.getByText('推荐 Java')).toBeInTheDocument()
     expect(screen.getByText('21')).toBeInTheDocument()
 
-    // 开始部署 → 成功结果块（含服务端/推荐 Java 信息行）
-    await user.click(screen.getByRole('button', { name: '开始部署' }))
+    // EULA 勾选门控：未勾选时「部署并启动」禁用 + 提示；勾选后可点
+    const deployBtn = screen.getByRole('button', { name: '部署并启动' })
+    expect(deployBtn).toBeDisabled()
+    expect(screen.getByText('请先同意 EULA：未同意时无法启动服务器')).toBeInTheDocument()
+    await user.click(screen.getByRole('checkbox', { name: /Minecraft EULA/ }))
+    expect(screen.getByRole('button', { name: '部署并启动' })).toBeEnabled()
+
+    // 部署并启动 → 成功结果块（含服务端/推荐 Java 信息行 + 自动启动状态）
+    await user.click(screen.getByRole('button', { name: '部署并启动' }))
     expect(await screen.findByText('部署成功')).toBeInTheDocument()
     expect(screen.getByText('实例 ID：inst-deploy-001')).toBeInTheDocument()
     expect(screen.getByText('名称：我的生存服')).toBeInTheDocument()
     expect(screen.getByText('服务端：Fabric 1.21.4')).toBeInTheDocument()
     expect(screen.getByText('推荐 Java 版本：21')).toBeInTheDocument()
+    // 首启闭环：自动同意 EULA + 发启动指令，结果块展示启动状态
+    expect(await screen.findByText('已发送启动指令，服务器正在启动（状态可在仪表盘查看）')).toBeInTheDocument()
+    expect(eulaMock.calls).toBe(1)
+    expect(startMock.calls).toBe(1)
 
     // 完成 → onDeployed(result) + 关闭
     await user.click(screen.getByRole('button', { name: '完成' }))
@@ -163,11 +188,8 @@ describe('DeployDialog', () => {
     const { onDeployed } = renderDialog()
     const user = userEvent.setup()
 
-    await waitVersion()
-    await user.click(screen.getByRole('button', { name: '下一步' }))
-    await user.type(screen.getByLabelText('实例名称'), '我的生存服')
-    await user.click(screen.getByRole('button', { name: '下一步' }))
-    await user.click(screen.getByRole('button', { name: '开始部署' }))
+    await gotoStep3AndAgreeEula(user)
+    await user.click(screen.getByRole('button', { name: '部署并启动' }))
 
     // 失败 error 块（错误码 50000 → 友好文案）
     expect(await screen.findByRole('alert')).toBeInTheDocument()
@@ -213,5 +235,33 @@ describe('DeployDialog', () => {
     await user.click(screen.getByRole('button', { name: '取消' }))
     expect(onOpenChange).toHaveBeenCalledWith(false)
     expect(useDeployStore.getState().lastResult).toBeNull()
+  })
+
+  it('EULA 勾选门控：默认不勾 + 未勾选提示；自动启动失败展示降级提示', async () => {
+    startMock.shouldFail = true // EULA 同意成功但启动指令失败
+    renderDialog()
+    const user = userEvent.setup()
+
+    await gotoStep3AndAgreeEula(user)
+    await user.click(screen.getByRole('button', { name: '部署并启动' }))
+    expect(await screen.findByText('部署成功')).toBeInTheDocument()
+    // 自动启动失败：结果块降级提示（部署本身仍成功）
+    expect(await screen.findByText('自动启动失败，可稍后在实例页手动启动')).toBeInTheDocument()
+    expect(eulaMock.calls).toBe(1)
+    expect(startMock.calls).toBe(1)
+  })
+
+  it('未勾选 EULA 时不发自动启动请求（部署成功后无启动状态块）', async () => {
+    renderDialog()
+    const user = userEvent.setup()
+
+    await waitVersion()
+    await user.click(screen.getByRole('button', { name: '下一步' }))
+    await user.type(screen.getByLabelText('实例名称'), '我的生存服')
+    await user.click(screen.getByRole('button', { name: '下一步' }))
+    // 不勾选 EULA（按钮禁用保护；此处直接断言禁用）
+    expect(screen.getByRole('button', { name: '部署并启动' })).toBeDisabled()
+    expect(startMock.calls).toBe(0)
+    expect(eulaMock.calls).toBe(0)
   })
 })

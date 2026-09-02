@@ -460,6 +460,9 @@ const server = createServer((req, res) => {
     if (path === '/api/v1/instances/e2e-demo/start') return res.end(ok({ started: true }))
     if (path === '/api/v1/instances/e2e-demo/stop') return res.end(ok({ stopped: true }))
     if (path === '/api/v1/instances/e2e-demo/restart') return res.end(ok({ restarted: true }))
+    // EULA 首启闭环（issue 312）：部署产物实例的同意写入 + 自动启动端点
+    if (path === '/api/v1/instances/paper-a1b2c3d4/eula') return res.end(ok({ accepted: true }))
+    if (path === '/api/v1/instances/paper-a1b2c3d4/start') return res.end(ok({ started: true }))
 
     // ── 任务域 ──
     if (path === '/api/v1/instances/e2e-demo/tasks') {
