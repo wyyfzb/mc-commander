@@ -106,16 +106,17 @@ export function TasksPage() {
     setRunTarget(task)
   }
 
-  /** 执行确认 */
+  /** 执行确认：待 mutation 完成后再关闭对话框（与删除流程时序一致，loading 态可见） */
   const handleRunConfirm = async () => {
     if (!runTarget) return
     const target = runTarget
-    setRunTarget(null)
     try {
       await runMutation.mutateAsync(target.id)
       toast.success(`任务 "${target.name}" 已触发执行`)
+      setRunTarget(null)
     } catch (e) {
       toast.error(`执行失败：${getFriendlyErrorText(e)}`)
+      setRunTarget(null)
     }
   }
 
