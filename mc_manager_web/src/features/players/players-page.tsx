@@ -184,6 +184,7 @@ export function PlayersPage() {
           <FilterBar
             players={filteredPlayers}
             totalCount={allPlayers.length}
+            isRconConnected={isRconConnected}
             onOpenBanRecords={() => setBanRecordsOpen(true)}
             onAddWhitelist={() => setWhitelistOpen(true)}
           />

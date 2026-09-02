@@ -6,14 +6,9 @@
 import { useState } from 'react'
 import { Download, RotateCcw, ScrollText, UserPlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { SearchInput } from '@/components/mcs/search-input'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { FilterSelect } from './filter-select'
 import {
   DIMENSION_OPTIONS,
   FILTER_MODE_OPTIONS,
@@ -27,6 +22,8 @@ interface FilterBarProps {
   players: Player[]
   /** 总玩家数（未筛选，用于空态区分） */
   totalCount: number
+  /** RCON 连接状态：封禁/白名单等写操作依赖 RCON 通道执行 */
+  isRconConnected: boolean
   /** 打开页面级封禁记录弹窗 */
   onOpenBanRecords: () => void
   /** 打开添加白名单弹窗（页头主按钮；离线玩家同样生效） */
@@ -40,7 +37,13 @@ const GAME_MODE_VALUE: Record<string, string> = {
   旁观: 'spectator',
 }
 
-export function FilterBar({ players, totalCount, onOpenBanRecords, onAddWhitelist }: FilterBarProps) {
+export function FilterBar({
+  players,
+  totalCount,
+  isRconConnected,
+  onOpenBanRecords,
+  onAddWhitelist,
+}: FilterBarProps) {
   const filter = usePlayersUiStore((s) => s.filter)
   const setFilter = usePlayersUiStore((s) => s.setFilter)
   const resetFilter = usePlayersUiStore((s) => s.resetFilter)
@@ -69,49 +72,30 @@ export function FilterBar({ players, totalCount, onOpenBanRecords, onAddWhitelis
         className="w-72"
       />
 
-      <Select
+      <FilterSelect
+        label="状态筛选"
+        placeholder="玩家状态"
         value={filter.mode}
-        onValueChange={(v) => setFilter({ mode: v as typeof filter.mode })}
-      >
-        <SelectTrigger className="w-28" aria-label="状态筛选">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {FILTER_MODE_OPTIONS.map((option) => (
-            <SelectItem key={option.value} value={option.value}>
-              {option.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+        allValue="all"
+        options={FILTER_MODE_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+        onChange={(v) => setFilter({ mode: v as typeof filter.mode })}
+      />
 
-      <Select value={gameModeValue} onValueChange={(v) => setFilter({ gameMode: v === '' ? '' : GAME_MODE_VALUE[v] ?? '' })}>
-        <SelectTrigger className="w-28" aria-label="游戏模式筛选">
-          <SelectValue placeholder="游戏模式" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="全部">全部</SelectItem>
-          {GAME_MODE_OPTIONS.map((label) => (
-            <SelectItem key={label} value={label}>
-              {label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <FilterSelect
+        label="游戏模式筛选"
+        placeholder="游戏模式"
+        value={gameModeValue}
+        options={GAME_MODE_OPTIONS.map((label) => ({ value: label, label }))}
+        onChange={(v) => setFilter({ gameMode: v === '' ? '' : GAME_MODE_VALUE[v] ?? '' })}
+      />
 
-      <Select value={filter.dimension} onValueChange={(v) => setFilter({ dimension: v === '全部' ? '' : v })}>
-        <SelectTrigger className="w-28" aria-label="维度筛选">
-          <SelectValue placeholder="维度" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="全部">全部</SelectItem>
-          {DIMENSION_OPTIONS.map((option) => (
-            <SelectItem key={option.value} value={option.value}>
-              {option.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <FilterSelect
+        label="维度筛选"
+        placeholder="维度"
+        value={filter.dimension}
+        options={DIMENSION_OPTIONS.map((option) => ({ ...option }))}
+        onChange={(v) => setFilter({ dimension: v })}
+      />
 
       <Button variant="ghost" size="sm" onClick={resetFilter} aria-label="重置筛选">
         <RotateCcw aria-hidden />
@@ -123,18 +107,38 @@ export function FilterBar({ players, totalCount, onOpenBanRecords, onAddWhitelis
           {players.length > 0 && totalCount > 0 && `${players.length} / ${totalCount} 名玩家`}
           {totalCount === 0 && '暂无玩家数据'}
         </span>
-        <Button variant="ghost" size="sm" onClick={onOpenBanRecords} aria-label="封禁记录">
-          <ScrollText aria-hidden />
-          封禁记录
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="inline-flex">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onOpenBanRecords}
+                disabled={!isRconConnected}
+                aria-label="封禁记录"
+              >
+                <ScrollText aria-hidden />
+                封禁记录
+              </Button>
+            </span>
+          </TooltipTrigger>
+          {!isRconConnected && <TooltipContent>需要 RCON 连接</TooltipContent>}
+        </Tooltip>
         <Button variant="outline" size="sm" onClick={handleExport} disabled={exporting || players.length === 0}>
           <Download aria-hidden />
           {exporting ? '导出中…' : '导出 Excel'}
         </Button>
-        <Button variant="default" size="sm" onClick={onAddWhitelist}>
-          <UserPlus aria-hidden />
-          添加白名单
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="inline-flex">
+              <Button variant="default" size="sm" onClick={onAddWhitelist} disabled={!isRconConnected}>
+                <UserPlus aria-hidden />
+                添加白名单
+              </Button>
+            </span>
+          </TooltipTrigger>
+          {!isRconConnected && <TooltipContent>需要 RCON 连接</TooltipContent>}
+        </Tooltip>
       </div>
     </div>
   )
