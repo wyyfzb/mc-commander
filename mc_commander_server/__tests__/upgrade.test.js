@@ -6,9 +6,12 @@
  * 网络隔离：got 全量 mock（离线语义），backup.service / db / audit 全 mock，
  * 保证 CI 无外网也能确定性通过。
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import express from 'express';
 import supertest from 'supertest';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 
 // ── 模块 mock（vi.mock 提升，factory 内不得引用外部变量） ──
 
@@ -68,7 +71,15 @@ vi.mock('../utils/audit.js', () => ({
 import { createUpgradeRoutes } from '../routes/upgrade.js';
 import { UpgradeService, UPGRADE_STAGES, VALID_TYPES } from '../services/upgrade.service.js';
 
+// 每个用例独立临时目录（beforeEach 在两处 describe 中均可用）
+beforeEach(() => {
+  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-upgrade-test-'));
+});
+
 // ── 桩 serverManager ──
+// serverPath 用真实临时目录：S-P0-2 路径收口后，resolveSafePath 的逐段
+// realpath 防线要求实例目录真实存在（与生产语义一致）
+let tmpDir;
 
 function createMockInstance(overrides = {}) {
   return {
@@ -77,7 +88,7 @@ function createMockInstance(overrides = {}) {
     status: 'stopped',
     mcVersion: '1.20.4',
     jarFile: 'server-1.20.4.jar',
-    serverPath: '/tmp/mc-test/inst-1',
+    serverPath: tmpDir,
     isRunning: false,
     ...overrides,
   };
@@ -125,6 +136,10 @@ describe('Upgrade Routes', () => {
   beforeEach(() => {
     serverManager = createMockServerManager();
     request = supertest(createApp(serverManager));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
   it('POST /instances/:id/upgrade - mcVersion 必填返回 400', async () => {
@@ -196,6 +211,10 @@ describe('Upgrade Routes', () => {
 });
 
 describe('UpgradeService 进度序列（离线 mock）', () => {
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
   it('backup → download 失败 → rolled_back/failed，且清理升级状态', async () => {
     const serverManager = createMockServerManager();
     const service = new UpgradeService(serverManager);

@@ -8,8 +8,66 @@ import fs from 'fs';
 import path from 'path';
 import got from 'got';
 import { BackupService } from './backup.service.js';
+import { resolveSafePath, PathTraversalError } from '../utils/fs-utils.js';
+import { AppError, ErrorCodes } from '../utils/response.js';
 
 const VALID_TYPES = new Set(['vanilla', 'paper', 'purpur']);
+
+/// mcVersion 白名单（S-P0-2）：1-3 位数字段、最多 4 段点分形态（1 / 1.21 /
+/// 1.21.4 / 265）。从源头杜绝 '..'、'/'、'\\'、空白、控制字符与 URL 特殊
+/// 字符进入文件名与上游 URL 路径；路由层先行校验，此处导出供其复用，
+/// 避免两处正则口径分叉。
+export const MC_VERSION_REGEX = /^\d{1,3}(\.\d{1,3}){0,3}$/;
+
+/// 升级 JAR 入库文件名白名单：固定 server-<mcVersion>.jar 形态。mcVersion
+/// 已过上方白名单，此层双保险防 jarFile 入库值被后续流程（回恢复/启动）
+/// 当作穿越向量（S-P0-2「jarFile 入库值同样校验」）。
+const SERVER_JAR_NAME_REGEX = /^server-\d{1,3}(\.\d{1,3}){0,3}\.jar$/;
+
+/// 上游下载域白名单：与 resolveDownloadUrl 三个分支实际产出的域一致。
+/// 上游 API 响应中的 URL 字段（piston manifest 的 versionEntry.url /
+/// downloads.server.url、paper v3 downloads）理论可携带任意 host，下载前
+/// 统一断言，防污染响应把下载流导向任意主机。
+const ALLOWED_DOWNLOAD_HOSTS = new Set([
+  'piston-meta.mojang.com',   // vanilla manifest / version detail
+  'piston-data.mojang.com',   // vanilla server jar 实际文件域
+  'api.papermc.io',           // paper v2/v3 API + v2 回退拼接
+  'fill-data.papermc.io',     // paper v3 downloads 实际文件域
+  'api.purpurmc.org',         // purpur latest/download
+]);
+
+/**
+ * 断言下载 URL 的 host 在白名单内（S-P0-2 纵深防御，_downloadJar 唯一入口）。
+ * 非白名单域或畸形 URL 一律以 VALIDATION_ERROR 语义拒绝。
+ */
+function assertAllowedDownloadHost(rawUrl) {
+  let host;
+  try {
+    host = new URL(rawUrl).hostname;
+  } catch {
+    throw new AppError(ErrorCodes.VALIDATION_ERROR, `Invalid download URL: ${rawUrl}`);
+  }
+  if (!ALLOWED_DOWNLOAD_HOSTS.has(host)) {
+    throw new AppError(ErrorCodes.VALIDATION_ERROR, `Download host not allowed: ${host}`);
+  }
+}
+
+/**
+ * 实例内落地路径收口（S-P0-2）：resolveSafePath 四步防线（归一化/前缀边界/
+ * 逐段 realpath/最终 lstat），保证 JAR 写入与回滚覆盖均不逃逸实例目录。
+ * PathTraversalError 转 VALIDATION_ERROR 语义（与 plugin.service 同口径）；
+ * 实例目录缺失（ENOENT）原样上抛——那是部署配置问题而非安全事件。
+ */
+function assertSafeInstancePath(serverPath, fileName) {
+  try {
+    return resolveSafePath(serverPath, fileName, { allowRoot: false });
+  } catch (err) {
+    if (err instanceof PathTraversalError) {
+      throw new AppError(ErrorCodes.VALIDATION_ERROR, `Unsafe upgrade path for: ${fileName}`);
+    }
+    throw err;
+  }
+}
 
 const UPGRADE_STAGES = {
   BACKUP: 'backup',
@@ -92,6 +150,8 @@ export class UpgradeService {
    * 下载 JAR 文件到指定路径，带进度广播
    */
   _downloadJar(url, destPath, instanceId) {
+    // 域白名单断言在下载流创建前（唯一下载入口，覆盖三个 resolveDownloadUrl 分支）
+    assertAllowedDownloadHost(url);
     return new Promise((resolve, reject) => {
       const file = fs.createWriteStream(destPath);
       const stream = got.stream(url, {
@@ -229,9 +289,9 @@ export class UpgradeService {
       const instance = this.serverManager.getInstance(instanceId);
       if (!instance) return;
 
-      // 恢复旧 JAR
+      // 恢复旧 JAR（jarFile 为 DB 值，路径同样收口，防回滚覆盖逃逸实例目录）
       if (oldJarPath && fs.existsSync(oldJarPath)) {
-        const currentJar = path.join(instance.serverPath, instance.jarFile);
+        const currentJar = assertSafeInstancePath(instance.serverPath, instance.jarFile);
         fs.copyFileSync(oldJarPath, currentJar);
       }
 
@@ -280,9 +340,21 @@ export class UpgradeService {
     const oldJarFile = instance.jarFile;
     const oldMcVersion = instance.mcVersion;
     const oldJarPath = path.join(instance.serverPath, oldJarFile);
+
+    // ── S-P0-2 纵深防御：路由白名单被绕过时（直调服务层/未来调用方）的
+    // 最后一道防线。fail-fast 于任何副作用（备份/下载）之前。
+    // ① jarFile 入库值白名单（固定 server-<version>.jar 形态）
     const newJarName = `server-${mcVersion}.jar`;
-    const newJarPath = path.join(instance.serverPath, newJarName);
-    const backupJarPath = path.join(instance.serverPath, `._upgrade_backup_${oldJarFile}`);
+    if (!SERVER_JAR_NAME_REGEX.test(newJarName)) {
+      throw new AppError(ErrorCodes.VALIDATION_ERROR, `Unsafe JAR file name: ${newJarName}`);
+    }
+    // ② JAR 落地/备份路径收口：resolveSafePath 保证不逃逸实例目录
+    const newJarPath = assertSafeInstancePath(instance.serverPath, newJarName);
+    const backupJarPath = assertSafeInstancePath(
+      instance.serverPath,
+      `._upgrade_backup_${oldJarFile}`
+    );
+
     let backupId = null;
 
     // 保存原始版本用于回滚
