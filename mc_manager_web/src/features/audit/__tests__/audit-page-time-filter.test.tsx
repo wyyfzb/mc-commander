@@ -207,7 +207,7 @@ describe('与 action 筛选叠加', () => {
     renderPage()
 
     // 打开操作类型下拉，选择「启动实例」
-    await user.click(screen.getByLabelText('按操作类型过滤'))
+    await user.click(screen.getByLabelText('操作类型'))
     await user.click(await screen.findByRole('option', { name: '启动实例' }))
 
     await user.click(screen.getByRole('button', { name: '近 7 天' }))

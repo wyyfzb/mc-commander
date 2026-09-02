@@ -8,7 +8,7 @@ import { Download, RotateCcw, ScrollText, UserPlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { SearchInput } from '@/components/mcs/search-input'
-import { FilterSelect } from './filter-select'
+import { FilterSelect } from '@/components/mcs/filter-select'
 import {
   DIMENSION_OPTIONS,
   FILTER_MODE_OPTIONS,
