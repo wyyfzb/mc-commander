@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { apiPost } from '@/api/client'
 import { ApiError } from '@/api/client'
-import { getFriendlyErrorMessage } from '@/api/errors'
+import { getFriendlyErrorText } from '@/api/errors'
 import { useConnectionStore } from '@/stores/connection'
 import { useServerStore } from '@/stores/server'
 import { useTerminalStore } from '@/stores/terminal'
@@ -148,11 +148,9 @@ export function CommandInput() {
       inputRef.current?.focus()
     },
     onError: (err, command) => {
-      const friendly = err instanceof ApiError
-        ? getFriendlyErrorMessage(err.code, err.message)
-        : '网络错误'
+      const friendly = getFriendlyErrorText(err)
       pushHistory(command, 'failed', friendly)
-      toast.error(`命令发送失败: ${friendly}`)
+      toast.error(`命令发送失败：${friendly}`)
     },
   })
 
