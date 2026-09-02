@@ -169,8 +169,8 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,
 }));
 
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json({ limit: config.bodyLimitJson }));
+app.use(express.urlencoded({ extended: true, limit: config.bodyLimitJson }));
 
 // 限流分层挂载：
 // ① 按真实连接 IP 的全局限流（认证之前挂载，防未认证暴力破解，

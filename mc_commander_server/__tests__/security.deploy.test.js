@@ -122,4 +122,17 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
       expect(script).toMatch(/if \[ -n "\$SETUP_TOKEN" \]; then/);
     });
   });
+
+  describe('API Key 日志掩码（audit P2-10 / issue 324）', () => {
+    it('首次部署 log 行不再完整打印 Key（掩码保留前 4 位）', () => {
+      // 「已生成 API Key」日志必须走掩码，防完整 Key 进入部署日志长期留存
+      expect(script).toMatch(/已生成 API Key: \$\{API_KEY:0:4\}\*\*\*\*/);
+      expect(script).not.toMatch(/已生成 API Key: \$API_KEY/);
+    });
+
+    it('完整 Key 仅在部署完成横幅一次性展示（交付通道保留）', () => {
+      // 横幅 printf 是唯一完整展示点（用户取 Key 的交付通道，有意保留）
+      expect(script).toContain('► API Key:');
+    });
+  });
 });

@@ -20,16 +20,13 @@ import { notFoundHandler } from '../middleware/error_handler.js';
 const SERVER_VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf-8')).version;
 
 export function setupRoutes(app, serverManager, taskScheduler) {
-  // 轻量健康检查：仅返回进程存活与静态信息，不调用 getAllInstances()（内部
-  // toStatus() 含 RCON 探测等开销，未认证的 /health 不应触发全量实例状态扫描）
+  // 轻量健康检查：仅返回存活与版本（P2-9 信息暴露收口：未认证的 /health
+  // 不再暴露 instanceCount/nodeVersion/uptime 运行细节；check-update 依赖的
+  // version 保留），不调用 getAllInstances()
   app.get('/health', (req, res) => {
-    const instanceCount = serverManager?.instances?.size ?? 0;
     res.json(success({
       status: 'ok',
       version: SERVER_VERSION,
-      uptime: Math.floor(process.uptime()),
-      instanceCount,
-      nodeVersion: process.version,
     }));
   });
 

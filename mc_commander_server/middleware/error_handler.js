@@ -15,6 +15,11 @@ export function errorHandler(err, req, res, _next) {
     return res.status(400).json(error(ErrorCodes.VALIDATION_ERROR, 'Invalid JSON'));
   }
 
+  // body 超限（P2-7：认证前 1MB 收口）返回明确 413 语义，不再落 500
+  if (err.type === 'entity.too.large') {
+    return res.status(413).json(error(ErrorCodes.VALIDATION_ERROR, 'Request body too large'));
+  }
+
   // 500 一律返回通用文案，不回传 err.message：fs/spawn 等底层错误可能
   // 携带服务器绝对路径等敏感信息。详细错误已由上方 console.error 记录日志；
   // 仅 development 环境用 X-Debug-Error 响应头携带详情辅助排查
