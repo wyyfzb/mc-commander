@@ -8,8 +8,9 @@
  *   无改动直接关闭。保存中（saving）禁止关闭
  */
 import { useState } from 'react'
-import { ChevronUp, Info, Loader2, SlidersHorizontal } from 'lucide-react'
+import { ChevronUp, Info, SlidersHorizontal } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { LoadingButton } from '@/components/mcs/loading-button'
 import {
   Dialog,
   DialogContent,
@@ -235,10 +236,9 @@ export function TaskDialog({ task, onClose, onSave, saving }: TaskDialogProps) {
             <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={saving}>
               取消
             </Button>
-            <Button onClick={() => void handleSave()} disabled={saving}>
-              {saving && <Loader2 className="animate-spin" aria-hidden />}
+            <LoadingButton onClick={() => void handleSave()} loading={saving}>
               {isEdit ? '保存' : '创建'}
-            </Button>
+            </LoadingButton>
           </DialogFooter>
         </DialogContent>
       </Dialog>
