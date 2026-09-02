@@ -36,7 +36,7 @@ _(待补充)_
 ### 部署与运维
 - **一键部署** — Vanilla/Paper/Fabric/Forge/Purpur 五种服务端类型，自动下载 JAR（实时进度）、Java 版本检测、首次启动配置、失败可重试
 - **Aikar's Flags JVM 优化** — 一键生成 G1GC 优化参数集，内存滑块带推荐值
-- **备份管理** — **目录快照 + 增量传输**（Linux rsync `--link-dest` 硬链接快照：未变化文件零拷贝；Windows rsync 优先、自动降级 robocopy 全量镜像）、**实例级备份**（世界+配置+插件全量，自动排除日志/加载器依赖/jar，兼容 26.x 新布局与旧版 Bukkit 维度目录）、在线备份原子序列（save-off→save-all flush→save-on）、恢复异步化（后台执行 + 进度事件 + 自动回滚 + 快照预检 + level.dat 完整性校验）、**自动清理**（数量/天数双上限）、磁盘预检与快照完整性校验（SQLite 持久化；旧 zip 备份保留可删、恢复拒绝）
+- **备份管理** — **目录快照 + 增量传输**（Linux rsync `--link-dest` 硬链接快照：未变化文件零拷贝；Windows rsync 优先、自动降级 robocopy 全量镜像）、**实例级备份**（世界+配置+插件全量，自动排除日志/加载器依赖/jar，兼容 26.x 新布局与旧版 Bukkit 维度目录）、在线备份原子序列（save-off→save-all flush→save-on）、恢复异步化（后台执行 + 进度事件 + 自动回滚 + 快照预检 + level.dat 完整性校验）、**自动清理**（数量/天数双上限）、磁盘预检与快照完整性校验（SQLite 持久化；旧 zip 备份保留可删、恢复拒绝）、**面板自身数据快照**（SQLite 在线备份 API 每日快照至 `backups/panel/`，保留策略与实例备份一致，恢复步骤见 ADR-0005；`.env` 不入自动备份，手动备份指引见 ADR）
 - **性能监控** — CPU/内存/TPS 采集，WebSocket 实时推送
 
 ### 实时与可靠性
@@ -206,6 +206,9 @@ ws.onmessage = (event) => {
 | `BACKUPS_DIR` | `./backups` | 备份存储目录 |
 | `BACKUP_RETENTION_MAX` | `10` | 每实例保留备份数量上限（超出自动清理） |
 | `BACKUP_RETENTION_DAYS` | `30` | 备份最大保留天数（超出自动清理） |
+| `PANEL_BACKUP_ENABLED` | `true` | 面板自身数据每日快照开关（SQLite 在线快照至 `backups/panel/`） |
+| `PANEL_BACKUP_CRON` | `0 4 * * *` | 面板快照 cron 表达式 |
+| `PANEL_BACKUP_RETENTION_MAX` / `PANEL_BACKUP_RETENTION_DAYS` | 继承 `BACKUP_RETENTION_*` | 面板快照独立保留策略（数量/天数上限） |
 | `BACKUP_SPAWN_TIMEOUT_MS` | `3600000` | 备份/恢复子进程超时上限（默认按规模动态计算） |
 | `BACKUP_IN_PROGRESS_TIMEOUT_MS` | `3600000` | 进行中备份/恢复记录卡死判定阈值（崩溃后自动重置） |
 | `LOG_LEVEL` | `info` | 日志级别 (debug/info/warn/error) |
