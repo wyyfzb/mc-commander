@@ -44,6 +44,9 @@ interface ChipProps {
   title?: string
   className?: string
   children: ReactNode
+  /** 指针事件透传（命令预览悬停等场景） */
+  onPointerEnter?: (e: React.PointerEvent) => void
+  onPointerLeave?: (e: React.PointerEvent) => void
 }
 
 export function Chip({
@@ -55,6 +58,8 @@ export function Chip({
   title,
   className,
   children,
+  onPointerEnter,
+  onPointerLeave,
 }: ChipProps) {
   const base =
     'inline-flex h-6 max-w-full items-center justify-center gap-1 truncate rounded-mcs-sm border px-2 text-mcs-xs transition-colors'
@@ -70,6 +75,8 @@ export function Chip({
       <button
         type="button"
         onClick={onClick}
+        onPointerEnter={onPointerEnter}
+        onPointerLeave={onPointerLeave}
         disabled={disabled}
         aria-pressed={selected != null ? (selected ? 'true' : 'false') : undefined}
         aria-label={ariaLabel}
@@ -81,7 +88,12 @@ export function Chip({
     )
   }
   return (
-    <span title={title} className={all(base, toneClass, className)}>
+    <span
+      title={title}
+      onPointerEnter={onPointerEnter}
+      onPointerLeave={onPointerLeave}
+      className={all(base, toneClass, className)}
+    >
       {children}
     </span>
   )

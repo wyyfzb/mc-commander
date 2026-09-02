@@ -5,15 +5,13 @@
 import {
   Check,
   ChevronDown,
-  Copy,
   FlaskConical,
   Minus,
   Plus,
-  Terminal,
   Wand2,
   X,
 } from 'lucide-react'
-import { toast } from 'sonner'
+export { CommandPreview } from '@/components/mcs/command-preview'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -35,37 +33,7 @@ export function effectColorHex(effect: PotionEffect): string {
   return `#${effect.color.toString(16).padStart(6, '0')}`
 }
 
-/** 命令预览：终端深底 + mono 小字 + 复制按钮 */
-export function CommandPreview({ command }: { command: string }) {
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(command)
-      toast.success('命令已复制', { duration: 1500 })
-    } catch {
-      toast.error('复制失败')
-    }
-  }
-  return (
-    <div
-      className="flex items-center gap-1.5 rounded-mcs-xs border border-mcs-border-muted px-2 py-1.5"
-      style={{ backgroundColor: 'var(--mcs-terminal-bg)' }}
-      data-testid="command-preview"
-    >
-      <Terminal className="size-3 shrink-0 text-mcs-terminal-accent" aria-hidden />
-      <code className="min-w-0 flex-1 truncate font-mono text-mcs-2xs leading-snug text-mcs-terminal-fg-bright">
-        {command}
-      </code>
-      <button
-        type="button"
-        onClick={() => void copy()}
-        aria-label="复制命令"
-        className="shrink-0 rounded-mcs-xs p-0.5 text-mcs-terminal-subtle hover:bg-mcs-bg-hover hover:text-mcs-text-default"
-      >
-        <Copy className="size-3" aria-hidden />
-      </button>
-    </div>
-  )
-}
+
 
 /** 物品贴图 / 药水效果色块（复用于已选 chip 缩略图） */
 function ItemThumb({
