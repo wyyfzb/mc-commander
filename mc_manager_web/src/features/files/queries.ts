@@ -144,9 +144,18 @@ export function useUploadFile(instanceId: string | null) {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async ({ file, targetDir }: { file: File; targetDir?: string }) => {
+    mutationFn: async ({
+      file,
+      targetDir,
+      onProgress,
+    }: {
+      file: File
+      targetDir?: string
+      /** 上传进度回调（0-100），透传给 apiUploadFile 的 xhr.upload 监听；不传则行为不变 */
+      onProgress?: (pct: number) => void
+    }) => {
       if (!instanceId) throw new Error('未选择实例')
-      return apiUploadFile(config, instanceId, file, { targetDir })
+      return apiUploadFile(config, instanceId, file, { targetDir, onProgress })
     },
     onSuccess: (_data, variables) => {
       // 失效目标目录的文件列表（默认根目录，与后端 targetDir 默认 '/' 一致）
