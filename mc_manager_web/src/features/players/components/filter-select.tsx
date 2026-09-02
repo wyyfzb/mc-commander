@@ -42,12 +42,16 @@ export function FilterSelect({
   const mergedOptions = options.filter((option) => option.value !== allValue)
   return (
     <Select
-      value={value === allValue ? ALL_ITEM_VALUE : value}
+      value={active ? value : undefined}
       onValueChange={(v) => onChange(v === ALL_ITEM_VALUE ? allValue : v)}
     >
       <SelectTrigger
         aria-label={label}
-        className={cn('w-28', active && 'border-mcs-accent-border text-mcs-text-default', className)}
+        className={cn(
+          'w-28',
+          active && 'border-mcs-accent-border bg-mcs-accent-bg-subtle text-mcs-text-default',
+          className,
+        )}
       >
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
