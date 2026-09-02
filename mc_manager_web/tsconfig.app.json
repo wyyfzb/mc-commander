@@ -12,9 +12,15 @@
     "strict": true,
     "noUncheckedIndexedAccess": true,
 
-    /* Path alias（shadcn/ui 要求 @/* → src/*；TS 5+ 无 baseUrl 直接相对 tsconfig 解析） */
+    /* Path alias（shadcn/ui 要求 @/* → src/*；TS 5+ 无 baseUrl 直接相对 tsconfig 解析）
+       @mc-commander/schemas：共享 zod 包位于仓库根 ../mc-schemas（无 workspace 根安装，
+       由 vite.config alias 覆盖运行时解析；此处同步映射供 tsc -b 类型检查解析。
+       其内部 import 'zod' 按 importer 目录向上解析不到本包 node_modules，
+       故将 zod 一并映射到本包显式声明的依赖副本，保证 CI 类型检查可用） */
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@mc-commander/schemas": ["../mc-schemas/src/index.ts"],
+      "zod": ["./node_modules/zod"]
     },
 
     /* Bundler mode */
