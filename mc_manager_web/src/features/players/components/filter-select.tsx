@@ -1,11 +1,12 @@
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 
 /**
  * FilterSelect —— 列表筛选下拉（可复用）
- * 统一三态呈现：未筛选显示字段名占位；筛选生效显示值 + accent 边框激活态；
- * 「全部」项由组件按 allValue 统一注入（消除各处空值语义漂移——Radix 不允许空串
- * item value，故内部用哨兵转换，对外契约仍是调用方的 allValue）
+ * 触发器文案恒为「筛选类别：值」（未筛选值为「全部」），字段名常驻可见；
+ * 筛选生效（值 ≠ 全部）时切换 accent 激活态（subtle 底 + accent 前景 + accent 边框）；
+ * 「全部」项由组件按 allValue 统一注入（Radix 不允许空串 item value，
+ * 内部用哨兵转换，对外契约仍是调用方的 allValue）
  */
 export interface FilterOption {
   value: string
@@ -13,11 +14,9 @@ export interface FilterOption {
 }
 
 interface FilterSelectProps {
-  /** 无障碍名（trigger aria-label） */
+  /** 筛选类别名（触发器文案前缀 + trigger aria-label） */
   label: string
-  /** 未筛选时框内显示的字段名 */
-  placeholder: string
-  /** 当前值；等于 allValue 视为未筛选 */
+  /** 当前值；等于 allValue 视为未筛选（显示「类别：全部」） */
   value: string
   /** 选项（可含「全部」项，组件会按 allValue 去重后统一注入） */
   options: ReadonlyArray<FilterOption>
@@ -31,7 +30,6 @@ const ALL_ITEM_VALUE = '__filter_all__'
 
 export function FilterSelect({
   label,
-  placeholder,
   value,
   options,
   allValue = '',
@@ -40,20 +38,25 @@ export function FilterSelect({
 }: FilterSelectProps) {
   const active = value !== allValue
   const mergedOptions = options.filter((option) => option.value !== allValue)
+  const selectedLabel = active
+    ? (mergedOptions.find((option) => option.value === value)?.label ?? value)
+    : '全部'
   return (
     <Select
-      value={active ? value : undefined}
+      value={active ? value : ALL_ITEM_VALUE}
       onValueChange={(v) => onChange(v === ALL_ITEM_VALUE ? allValue : v)}
     >
       <SelectTrigger
         aria-label={label}
         className={cn(
-          'w-28',
-          active && 'border-mcs-accent-border bg-mcs-accent-bg-subtle text-mcs-text-default',
+          'w-40',
+          active && 'border-mcs-accent-border bg-mcs-accent-bg-subtle text-mcs-accent-fg',
           className,
         )}
       >
-        <SelectValue placeholder={placeholder} />
+        <span className="truncate">
+          {label}：{selectedLabel}
+        </span>
       </SelectTrigger>
       <SelectContent>
         <SelectItem value={ALL_ITEM_VALUE}>全部</SelectItem>

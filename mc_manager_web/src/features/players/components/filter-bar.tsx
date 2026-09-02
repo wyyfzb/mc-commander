@@ -73,8 +73,7 @@ export function FilterBar({
       />
 
       <FilterSelect
-        label="状态筛选"
-        placeholder="玩家状态"
+        label="玩家状态"
         value={filter.mode}
         allValue="all"
         options={FILTER_MODE_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
@@ -82,16 +81,14 @@ export function FilterBar({
       />
 
       <FilterSelect
-        label="游戏模式筛选"
-        placeholder="游戏模式"
+        label="游戏模式"
         value={gameModeValue}
         options={GAME_MODE_OPTIONS.map((label) => ({ value: label, label }))}
         onChange={(v) => setFilter({ gameMode: v === '' ? '' : GAME_MODE_VALUE[v] ?? '' })}
       />
 
       <FilterSelect
-        label="维度筛选"
-        placeholder="维度"
+        label="维度"
         value={filter.dimension}
         options={DIMENSION_OPTIONS.map((option) => ({ ...option }))}
         onChange={(v) => setFilter({ dimension: v })}
