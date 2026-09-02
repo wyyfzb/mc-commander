@@ -150,3 +150,84 @@ describe('world info gameDays null 降级', () => {
     expect(res.body.data.gameDays).toBe(3) // 72000 / 24000 = 3
   })
 })
+
+describe('readDifficulty 意外异常兜底（issue #295）', () => {
+  // properties/world 路由对 readDifficulty 的调用兜底意外异常：
+  // 静默降级保留文件值并返回 200，而非挂起请求或触发 unhandledRejection。
+  let app, mockManager
+
+  beforeEach(() => {
+    app = express()
+    app.use(express.json())
+    mockManager = {
+      instances: new Map(),
+      getAllInstances: vi.fn(),
+      getInstance: vi.fn(),
+    }
+    app.use('/api', createStatusRoutes(mockManager))
+    app.use(errorHandler)
+  })
+
+  it('GET /properties readDifficulty 拒绝时静默降级，返回文件值而非挂起', async () => {
+    const mockInstance = {
+      properties: { 'difficulty': 'hard', 'gamemode': 'survival' },
+      isRunning: false,
+      isRconConnected: false,
+      _loadProperties: vi.fn().mockReturnValue(null),
+      readDifficulty: vi.fn().mockRejectedValue(new Error('unexpected async failure')),
+      _readGameTypeFromLevelDat: vi.fn().mockReturnValue(null),
+    }
+    mockManager.getInstance.mockReturnValue(mockInstance)
+
+    const res = await request(app).get('/api/instances/s1/properties')
+
+    expect(res.status).toBe(200)
+    // 难度读取失败不阻断响应，保留 properties 文件值
+    expect(res.body.data.difficulty).toBe('hard')
+    expect(res.body.data.gamemode).toBe('survival')
+  })
+
+  it('GET /world readDifficulty 拒绝时静默降级，难度回退文件值/默认值', async () => {
+    const mockInstance = {
+      id: 's1',
+      isRunning: false,
+      isRconConnected: false,
+      properties: { 'level-name': 'world', 'difficulty': 'easy' },
+      players: new Map(),
+      sendCommandWithResponse: vi.fn(),
+      _readSeedFromLevelDat: vi.fn().mockReturnValue(null),
+      _getWorldSize: vi.fn().mockReturnValue(1.5),
+      readDifficulty: vi.fn().mockRejectedValue(new Error('unexpected async failure')),
+      _readGameTypeFromLevelDat: vi.fn().mockReturnValue(null),
+      _getLastSaveTime: vi.fn().mockReturnValue(null),
+    }
+    mockManager.getInstance.mockReturnValue(mockInstance)
+
+    const res = await request(app).get('/api/instances/s1/world')
+
+    expect(res.status).toBe(200)
+    expect(res.body.data.difficulty).toBe('easy')
+  })
+
+  it('GET /world readDifficulty 拒绝且文件无值时难度回退默认 normal', async () => {
+    const mockInstance = {
+      id: 's1',
+      isRunning: false,
+      isRconConnected: false,
+      properties: { 'level-name': 'world' },
+      players: new Map(),
+      sendCommandWithResponse: vi.fn(),
+      _readSeedFromLevelDat: vi.fn().mockReturnValue(null),
+      _getWorldSize: vi.fn().mockReturnValue(1.5),
+      readDifficulty: vi.fn().mockRejectedValue(new Error('unexpected async failure')),
+      _readGameTypeFromLevelDat: vi.fn().mockReturnValue(null),
+      _getLastSaveTime: vi.fn().mockReturnValue(null),
+    }
+    mockManager.getInstance.mockReturnValue(mockInstance)
+
+    const res = await request(app).get('/api/instances/s1/world')
+
+    expect(res.status).toBe(200)
+    expect(res.body.data.difficulty).toBe('normal')
+  })
+})

@@ -433,8 +433,13 @@ export function createStatusRoutes(serverManager) {
     // 运行状态型属性：游戏内 /difficulty、/defaultgamemode 只改 level.dat，
     // 不写回 server.properties，读取运行中真实值覆盖，否则客户端读到旧值（多端同步）。
     // difficulty 优先 RCON 实时查询、level.dat 兜底；gamemode 读 level.dat。
-    const difficulty = await instance.readDifficulty();
-    if (difficulty) props['difficulty'] = difficulty;
+    // readDifficulty 服务层已捕获 RCON/level.dat 预期失败并回退文件值，此处再兜底
+    // 意外异常：难度缺失不影响 properties 主体响应（Express 4 下未捕获 rejection
+    // 会挂起请求并可能终止进程，见上方 asyncHandler 注释）。
+    try {
+      const difficulty = await instance.readDifficulty();
+      if (difficulty) props['difficulty'] = difficulty;
+    } catch {}
     const gameMode = instance._readGameTypeFromLevelDat();
     if (gameMode) props['gamemode'] = gameMode;
 
@@ -798,6 +803,13 @@ export function createStatusRoutes(serverManager) {
       else dimCounts.overworld++;
     }
 
+    // 运行时难度优先；readDifficulty 意外异常时保留文件值/默认值，不影响
+    // world 信息主体响应（与 properties 路由同一兜底策略）。
+    let difficulty = props['difficulty'] || 'normal';
+    try {
+      difficulty = (await instance.readDifficulty()) || difficulty;
+    } catch {}
+
     const worldInfo = {
       name: props['level-name'] || 'world',
       type: props['level-type'] || 'minecraft:normal',
@@ -805,8 +817,7 @@ export function createStatusRoutes(serverManager) {
       // 从 level.dat NBT 读取真实种子（兼容 1.16+ 与旧版结构）
       seed: instance._readSeedFromLevelDat() ?? props['level-seed'] ?? '',
       sizeGB: instance._getWorldSize(),
-      difficulty:
-        (await instance.readDifficulty()) || props['difficulty'] || 'normal',
+      difficulty,
       gameMode:
         instance._readGameTypeFromLevelDat() || props['gamemode'] || 'survival',
       viewDistance: parseInt(props['view-distance'] || '10', 10),
