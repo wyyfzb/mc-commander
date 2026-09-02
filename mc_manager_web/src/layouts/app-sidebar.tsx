@@ -14,6 +14,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { BrandLogo } from '@/components/mcs/brand-logo'
 import { useInstances } from '@/api/queries'
 import { useServerStore } from '@/stores/server'
 
@@ -201,8 +202,8 @@ export function AppSidebar({ collapsed, mobileNavOpen, onMobileNavClose }: AppSi
 
 function BrandRow({ collapsed }: { collapsed: boolean }) {
   return (
-    <div className={cn('flex h-12 items-center gap-2 px-3', collapsed && 'justify-center')}>
-      <span className="size-2.5 shrink-0 rounded-full bg-mcs-accent" aria-hidden />
+    <div className={cn('flex h-12 items-center gap-2 px-3', collapsed && 'justify-center px-0')}>
+      <BrandLogo className={cn('text-mcs-text-default', collapsed ? 'size-6' : 'size-5')} />
       {!collapsed && <span className="truncate text-mcs-md font-semibold">MC Commander</span>}
     </div>
   )

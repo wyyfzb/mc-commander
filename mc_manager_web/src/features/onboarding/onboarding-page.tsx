@@ -10,6 +10,7 @@ import { useNavigate } from 'react-router'
 import { Check, Container, Copy, Lightbulb, Package, Server, Terminal } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { BrandLogo } from '@/components/mcs/brand-logo'
 import { ConnectionForm } from '@/features/settings/components/connection-form'
 
 type DeployMode = 'already' | 'windows' | 'docker' | 'manual'
@@ -100,8 +101,9 @@ export function OnboardingPage() {
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center bg-mcs-bg-default p-6">
       <div className="w-full max-w-xl">
-        {/* ── 欢迎区 ── */}
+        {/* ── 欢迎区（品牌 Logo + 标题） ── */}
         <div className="mb-6 text-center">
+          <BrandLogo className="mx-auto mb-3 size-12 text-mcs-text-default" label="MC Commander Logo" />
           <h1 className="text-mcs-2xl font-bold text-mcs-text-default">欢迎使用 MC Commander</h1>
           <p className="mt-2 text-mcs-sm text-mcs-text-muted">
             自托管 Minecraft 服务器管理面板。首次使用前，请先确认服务端部署状态。

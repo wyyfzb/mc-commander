@@ -1,6 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
-  <!-- MC Commander 品牌图标：偏蓝深底 + 翠绿状态点（呼应侧栏品牌区） -->
+  <!-- MC Commander 品牌图标：终端提示符标记（与侧栏 BrandLogo 同构） -->
   <rect width="48" height="48" rx="10" fill="#0A0E1A"/>
-  <circle cx="24" cy="24" r="9" fill="#4ADE80"/>
-  <circle cx="24" cy="24" r="9" fill="none" stroke="#4ADE80" stroke-opacity="0.35" stroke-width="4"/>
+  <rect x="5.5" y="5.5" width="37" height="37" rx="10" fill="none" stroke="#E6EDF3" stroke-opacity="0.9" stroke-width="3"/>
+  <path d="M15 17.5 22 24l-7 6.5" fill="none" stroke="#4ADE80" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M27 30.5h6.5" fill="none" stroke="#4ADE80" stroke-width="4" stroke-linecap="round"/>
 </svg>
