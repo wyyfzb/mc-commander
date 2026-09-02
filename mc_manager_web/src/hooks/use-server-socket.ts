@@ -185,6 +185,7 @@ export function useServerSocket(instanceId: string | null) {
         case 'restoreComplete':
         case 'restoreFailed':
         case 'taskFailed':
+        case 'webhookDeliveryFailed':
           dispatchWsEvent({ type: msg.type, data: msg.data as Record<string, unknown>, instanceId: msg.instanceId })
           break
         default:

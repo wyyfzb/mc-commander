@@ -15,6 +15,7 @@ export type NotificationType =
   | 'backupStart' | 'backupComplete' | 'backupFailed' | 'backupSkipped'
   | 'restoreStart' | 'restoreComplete' | 'restoreFailed'
   | 'taskFailed'
+  | 'webhookFailed'
 
 export interface AppNotification {
   id: string
@@ -57,6 +58,7 @@ export const NOTIFICATION_TYPE_META: Record<
   restoreComplete: { label: '恢复完成', category: 'server', severity: 'info' },
   restoreFailed: { label: '恢复失败', category: 'server', severity: 'severe' },
   taskFailed: { label: '任务失败', category: 'server', severity: 'severe' },
+  webhookFailed: { label: 'Webhook 投递失败', category: 'server', severity: 'severe' },
 }
 
 /** 设置页显示顺序：game 组在前、server 组在后 */
@@ -66,7 +68,7 @@ export const NOTIFICATION_TYPE_ORDER: NotificationType[] = Object.keys(
 
 /** critical 类：不参与聚合，每次都独立通知 */
 const CRITICAL_TYPES: ReadonlySet<NotificationType> = new Set([
-  'serverCrash', 'backupFailed', 'restoreFailed', 'taskFailed',
+  'serverCrash', 'backupFailed', 'restoreFailed', 'taskFailed', 'webhookFailed',
 ])
 
 /** 告警类型集合（阈值跃迁语义，需 _activeAlerts 状态机） */
@@ -178,6 +180,13 @@ export function buildNotifications(
       return [{
         type: 'taskFailed', category: 'server',
         content: `定时任务「${String(d.taskName ?? '未命名')}」执行失败${errText}`,
+      }]
+    }
+    case 'webhookDeliveryFailed': {
+      const name = String(d.webhookName ?? '未命名 Webhook')
+      return [{
+        type: 'webhookFailed', category: 'server',
+        content: `Webhook「${name}」投递失败（重试耗尽）`,
       }]
     }
     default: {
