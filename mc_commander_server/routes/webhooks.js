@@ -11,8 +11,8 @@ import { success, successPaginated, error, ErrorCodes } from '../utils/response.
 import { recordAudit, AuditActions } from '../utils/audit.js';
 import { WebhookService, WEBHOOK_EVENT_TYPES } from '../services/webhook.service.js';
 import { checkPublicUrl } from '../utils/url-guard.js';
-import { webhookCreatePayloadSchema } from '../../mc-schemas/dist/webhook.js';
-import { validateBody } from '../middleware/validate.js';
+import { webhookCreatePayloadSchema, webhookSchema } from '@mc-commander/schemas';
+import { validateBody, validatedSuccess, validatedSuccessPaginated } from '../middleware/validate.js';
 
 function asyncHandler(fn) {
   return (req, res, next) => {
@@ -42,7 +42,7 @@ export function createWebhookRoutes() {
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const pageSize = Math.min(200, Math.max(1, parseInt(req.query.pageSize, 10) || 20));
     const result = WebhookModel.findAll({ page, pageSize });
-    res.json(successPaginated(result.webhooks, result.total, result.page, result.pageSize));
+    res.json(validatedSuccessPaginated(webhookSchema, result.webhooks, result.total, result.page, result.pageSize));
   });
 
   // GET /webhooks/:id — 详情
@@ -51,7 +51,7 @@ export function createWebhookRoutes() {
     if (!webhook) {
       return res.status(404).json(error(ErrorCodes.WEBHOOK_NOT_FOUND));
     }
-    res.json(success(webhook));
+    res.json(validatedSuccess(webhookSchema, webhook));
   });
 
   // POST /webhooks — 创建
@@ -76,7 +76,7 @@ export function createWebhookRoutes() {
 
     const webhook = WebhookModel.create({ name, url, secret: secret || null, events: events || [], instanceId: instanceId || null, isEnabled });
     recordAudit({ action: AuditActions.WEBHOOK_CREATE, targetType: 'webhook', targetId: String(webhook.id), detail: { name, url } });
-    res.json(success(webhook, 'Webhook 创建成功'));
+    res.json(validatedSuccess(webhookSchema, webhook, 'Webhook 创建成功'));
   }));
 
   // PUT /webhooks/:id — 更新

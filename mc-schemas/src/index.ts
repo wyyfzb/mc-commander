@@ -65,7 +65,9 @@ export {
 // 备份
 export {
   backupItemSchema,
+  backupCreateRequestSchema,
   type BackupItem,
+  type BackupCreateRequest,
 } from './backup'
 
 // 定时任务

@@ -14,4 +14,11 @@ export const backupItemSchema = z.object({
   updatedAt: z.string(),
 })
 
+/** 创建备份请求体（服务端缺省 name/description，故均可选） */
+export const backupCreateRequestSchema = z.object({
+  name: z.string().optional(),
+  description: z.string().optional(),
+})
+
 export type BackupItem = z.infer<typeof backupItemSchema>
+export type BackupCreateRequest = z.infer<typeof backupCreateRequestSchema>

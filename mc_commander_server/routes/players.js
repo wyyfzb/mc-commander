@@ -5,7 +5,7 @@ import { success, error, ErrorCodes } from '../utils/response.js';
 import { BanModel } from '../db/index.js';
 import { getTotalPlayTime } from '../utils/player-utils.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
-import { banRequestBodySchema } from '../../mc-schemas/dist/player.js';
+import { banRequestBodySchema } from '@mc-commander/schemas';
 import { validateBody } from '../middleware/validate.js';
 
 // async 路由包装：Express 4 不捕获中间件/路由返回的 Promise rejection。

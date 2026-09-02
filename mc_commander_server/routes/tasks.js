@@ -1,10 +1,10 @@
 import { Router } from 'express';
 import { Cron } from 'croner';
-import { success, successPaginated, ErrorCodes, AppError } from '../utils/response.js';
+import { success, ErrorCodes, AppError } from '../utils/response.js';
 import { ScheduledTaskModel } from '../db/scheduled_task.model.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
-import { taskCreatePayloadSchema, taskUpdatePayloadSchema } from '../../mc-schemas/dist/task.js';
-import { validateBody } from '../middleware/validate.js';
+import { taskCreatePayloadSchema, taskUpdatePayloadSchema, scheduledTaskSchema } from '@mc-commander/schemas';
+import { validateBody, validatedSuccess, validatedSuccessPaginated } from '../middleware/validate.js';
 
 /**
  * cron 表达式合法性校验（与 task_scheduler 同用 croner 解析器，保证「存得进就能跑」）。
@@ -40,7 +40,7 @@ export function createTaskRoutes(serverManager, taskScheduler) {
         isEnabled
       });
       
-      res.json(successPaginated(result.tasks, result.total, page, pageSize));
+      res.json(validatedSuccessPaginated(scheduledTaskSchema, result.tasks, result.total, page, pageSize));
     } catch (err) {
       next(err);
     }
@@ -63,7 +63,7 @@ export function createTaskRoutes(serverManager, taskScheduler) {
         isEnabled
       });
       
-      res.json(successPaginated(result.tasks, result.total, page, pageSize));
+      res.json(validatedSuccessPaginated(scheduledTaskSchema, result.tasks, result.total, page, pageSize));
     } catch (err) {
       next(err);
     }
@@ -78,13 +78,13 @@ export function createTaskRoutes(serverManager, taskScheduler) {
         throw new AppError(ErrorCodes.TASK_NOT_FOUND);
       }
       
-      res.json(success(task));
+      res.json(validatedSuccess(scheduledTaskSchema, task));
     } catch (err) {
       next(err);
     }
   });
   
-  // 创建定时任务
+  // 创建定时任务（请求体 schema parse 校验：必填/枚举由 taskCreatePayloadSchema 单源定义）
   router.post('/instances/:instanceId/tasks', validateBody(taskCreatePayloadSchema), (req, res, next) => {
     try {
       const { instanceId } = req.params;
@@ -109,7 +109,7 @@ export function createTaskRoutes(serverManager, taskScheduler) {
       });
       
       recordAudit({ instanceId, action: AuditActions.TASK_CREATE, targetType: 'task', targetId: String(task.id), detail: { name, type } });
-      res.status(201).json(success(task, 'Scheduled task created successfully'));
+      res.status(201).json(validatedSuccess(scheduledTaskSchema, task, 'Scheduled task created successfully'));
     } catch (err) {
       next(err);
     }
@@ -131,7 +131,7 @@ export function createTaskRoutes(serverManager, taskScheduler) {
 
       const updatedTask = ScheduledTaskModel.update(req.params.id, req.body);
       recordAudit({ instanceId: task.instanceId, action: AuditActions.TASK_UPDATE, targetType: 'task', targetId: req.params.id });
-      res.json(success(updatedTask, 'Scheduled task updated successfully'));
+      res.json(validatedSuccess(scheduledTaskSchema, updatedTask, 'Scheduled task updated successfully'));
     } catch (err) {
       next(err);
     }
