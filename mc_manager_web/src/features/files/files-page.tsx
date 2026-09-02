@@ -5,12 +5,12 @@
  * - 右栏：Monaco 编辑器（选中文件即打开；Ctrl+S 保存；脏标记；关闭确认）
  * - 删除确认对话框（目录红色警告递归删除）；新建文件对话框（PUT content 新路径）
  * - feat-3：新建目录对话框（mkdir recursive）/ 重命名对话框（原子 rename）/
- *   上传（隐藏 file input multipart 直传，服务端落地到当前浏览目录同名覆盖）
+ *   上传（隐藏 file input multipart 直传，服务端落地到当前浏览目录；同名冲突弹确认）
  * - 编辑内容为组件 state，与 query 缓存隔离（保存成功由 mutation 失效列表/内容缓存）
  * - URL 深链接：?dir=/world&file=/world/level.dat（可分享、可刷新保持）
  * - 实例切换：目录/选中文件重置回初始态
  */
-import { useEffect, useRef, useState, useSyncExternalStore, useCallback, type ChangeEvent } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore, useCallback, useMemo, type ChangeEvent } from 'react'
 import { ServerOff, PanelLeftClose, MonitorSmartphone } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router'
@@ -44,6 +44,7 @@ import {
   useCreateDirectory,
   useDeleteFile,
   useFileContent,
+  useFileList,
   useRenameFile,
   useSaveFile,
   useUploadFile,
@@ -132,6 +133,8 @@ export function FilesPage() {
   const uploadInputRef = useRef<HTMLInputElement>(null)
   // feat-9：正在下载的文件路径（行内 spinner + 防重复点击）
   const [downloadingPath, setDownloadingPath] = useState<string | null>(null)
+  // 上传同名冲突确认（对齐插件市场 40912 冲突流程）
+  const [uploadConflictTarget, setUploadConflictTarget] = useState<File | null>(null)
 
   // ── 响应式断点 ──
   const isMobile = useMediaQuery(BREAKPOINT_MOBILE)
@@ -145,6 +148,18 @@ export function FilesPage() {
   const createDirMutation = useCreateDirectory(instanceId)
   const renameMutation = useRenameFile(instanceId)
   const uploadMutation = useUploadFile(instanceId)
+
+  /** 当前目录文件列表（上传前探测同名冲突；仅目录列表有 .files） */
+  const fileListQuery = useFileList(instanceId, dir)
+  const existingFileNames = useMemo(
+    () => new Set(
+      (fileListQuery.data && 'files' in fileListQuery.data
+        ? fileListQuery.data.files
+        : []
+      ).map((f: { name: string }) => f.name),
+    ),
+    [fileListQuery.data],
+  )
 
   /** 保存竞态守卫：连续快速保存时只有最后一次结果被采纳（hook 须在早返回前调用） */
   const fileSave = useSnapshotSave<{ path: string; content: string }>({
@@ -359,12 +374,8 @@ export function FilesPage() {
     }
   }
 
-  const handleUploadChange = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    e.target.value = '' // 允许重复上传同名文件
-    if (!file) return
-    if (uploadMutation.isPending) return // 在途保护：上传中忽略重复触发
-    // 进度反馈对齐下载：同一 toast id 展示进度（>5% 才刷新，避免大文件高频重渲染），完成/失败同 id 收尾
+  /** 执行上传（冲突确认后调用或无冲突直接调用） */
+  const doUpload = async (file: File) => {
     const toastId = `upload-${file.name}`
     let lastPct = 0
     try {
@@ -383,6 +394,19 @@ export function FilesPage() {
     } catch (err) {
       toast.error(`上传失败：${getFriendlyErrorText(err)}`, { id: toastId })
     }
+  }
+
+  const handleUploadChange = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = '' // 允许重复上传同名文件
+    if (!file) return
+    if (uploadMutation.isPending) return // 在途保护：上传中忽略重复触发
+    // 同名冲突探测：当前目录已有同名文件 → 弹确认（对齐插件市场 40912 流程）
+    if (existingFileNames.has(file.name)) {
+      setUploadConflictTarget(file)
+      return
+    }
+    await doUpload(file)
   }
 
   return (
@@ -660,6 +684,23 @@ export function FilesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ── 上传同名冲突确认（覆盖/跳过，对齐插件市场冲突流程） ── */}
+      <ConfirmDialog
+        open={uploadConflictTarget !== null}
+        onOpenChange={(o) => { if (!o) setUploadConflictTarget(null) }}
+        title="同名文件已存在"
+        description={`当前目录已存在「${uploadConflictTarget?.name ?? ''}」，上传将覆盖原文件内容。`}
+        confirmText="覆盖"
+        cancelText="跳过"
+        danger
+        loading={false}
+        onConfirm={() => {
+          const f = uploadConflictTarget
+          setUploadConflictTarget(null)
+          if (f) void doUpload(f)
+        }}
+      />
 
       {/* ── 隐藏上传 input（feat-3：multipart 直传，服务端落地到当前浏览目录） ── */}
       <input
