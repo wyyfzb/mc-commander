@@ -30,10 +30,13 @@
 在目标 Linux 服务器上执行：
 
 ```bash
-curl -fsSL https://gitee.com/wyyfzb/mc_commander/raw/master/mc_commander_server/scripts/deploy-mc-commander.sh | sudo bash
+curl -fsSL -o /tmp/deploy-mc-commander.sh https://gitee.com/wyyfzb/mc_commander/raw/main/mc_commander_server/scripts/deploy-mc-commander.sh
+sudo bash /tmp/deploy-mc-commander.sh
 ```
 
-脚本会自动安装 Java 17/21/25 / Node.js 22+、下载代码、生成 API Key、注册 systemd 服务并启动。
+> gitee 镜像分支为 `main`（无 `master`）；国际网络可将域名替换为 `https://raw.githubusercontent.com/wyyfzb/mc-commander/main/...` 同路径。先下载脚本再执行，便于执行前审阅。
+
+脚本会自动安装 Java 17/21/25 / Node.js 22+、下载代码、生成 API Key 与一次性 SETUP_TOKEN、注册 systemd 服务并启动（代码包下载带 sha256 强校验）。
 
 ### 手动部署
 
@@ -45,11 +48,59 @@ npm install
 cp .env.example .env
 # 编辑 .env，设置 API_KEY（必填）
 
+# （可选）整合 Web 前端：构建 dist 产物复制到 public/
+# public/index.html 存在时服务端自动同源托管前端（含 SPA 深链接兜底），
+# 目录位置可用 PUBLIC_DIR 环境变量覆盖；不部署则保持纯后端行为
+mkdir -p public
+cp -r ../mc_manager_web/dist/. public/
+
 # 启动服务
 npm start
 ```
 
 服务端默认运行在 `http://localhost:25566`
+
+## 升级
+
+### 一键部署：重跑脚本原地升级
+
+部署脚本幂等，发布新版本后重新执行同一脚本即完成升级：
+
+```bash
+curl -fsSL -o /tmp/deploy-mc-commander.sh https://gitee.com/wyyfzb/mc_commander/raw/main/mc_commander_server/scripts/deploy-mc-commander.sh
+sudo bash /tmp/deploy-mc-commander.sh
+```
+
+**升级时自动保留**（脚本同步代码但不覆盖以下内容）：
+
+| 保留项 | 说明 |
+|--------|------|
+| `.env` | 配置与 API_KEY 沿用不重新生成（缺失时以 `.env.example` 为模板生成） |
+| `data/` | SQLite 数据库与运行时数据 |
+| `servers/` | MC 实例目录 |
+| `backups/` | 备份快照 |
+| `node_modules/` | 代码同步不覆盖已装依赖；随后 `npm install --omit=dev` 按新 package.json 增量更新 |
+
+升级完成后自动 `systemctl restart mc-commander` 生效。
+
+> SETUP_TOKEN 仅首次设密使用（一次性，设密成功即作废，升级流程无需配置）。如需重新开启设密保护，手动向 `.env` 添加 `SETUP_TOKEN` 行后重启服务。
+
+### 回滚路径
+
+脚本默认拉取固定标签的 Release 代码包。回滚到旧版本时将 `BRANCH` 指定为旧标签；可变分支/commit 场景必须配合 `PACKAGE_SHA256`：
+
+```bash
+sudo BRANCH=<旧版本标签> PACKAGE_SHA256=<该代码包 sha256> bash /tmp/deploy-mc-commander.sh
+```
+
+`.env`、`data/`、`servers/`、`backups/` 不受回滚影响（数据不回退，仅回退代码）。
+
+### sha256 校验文件使用顺序
+
+代码包下载后强制 sha256 校验，与预期值不一致立即中止并删除临时文件：
+
+1. **默认 Release 产物**：预期 sha256 内嵌于脚本（`EXPECTED_PACKAGE_SHA256`），下载后自动比对，无需额外配置；发新版时按脚本头注释先取 Release 产物 sha256 更新该值
+2. **自定义 `PACKAGE_URL`**：必须先取该文件的 sha256，通过 `PACKAGE_SHA256` 环境变量传入后再执行脚本（未提供则中止）
 
 ## 环境变量
 
@@ -283,7 +334,7 @@ mc_commander_server/
 ## 测试
 
 ```bash
-npm test        # vitest，422 个用例
+npm test        # vitest 全量用例
 npm run lint    # eslint
 ```
 
