@@ -23,6 +23,7 @@ export const WS_EVENT_TYPES = [
   'restoreFailed',
   'taskExecute',
   'taskFailed',
+  'webhookDeliveryFailed',
   'deployProgress',
   'circuit_breaker',
   'upgradeProgress',
@@ -107,6 +108,7 @@ export const NOTIFICATION_EVENT_TYPES: ReadonlySet<WsEventType> = new Set([
   'restoreComplete',
   'restoreFailed',
   'taskFailed',
+  'webhookDeliveryFailed',
 ])
 
 export type WsEventType = (typeof WS_EVENT_TYPES)[number]

@@ -23,6 +23,7 @@ import {
   Skull,
   Square,
   Trophy,
+  Webhook,
   XCircle,
   type LucideIcon,
 } from 'lucide-react'
@@ -51,7 +52,7 @@ const TYPE_ICON: Record<NotificationType, LucideIcon> = {
   lowTps: Gauge, highCpu: Cpu, highMemory: MemoryStick, weatherChange: CloudSun,
   backupStart: Archive, backupComplete: CheckCircle2, backupFailed: AlertCircle,
   backupSkipped: SkipForward, restoreStart: History, restoreComplete: CheckCheck,
-  restoreFailed: XCircle, taskFailed: CalendarX,
+  restoreFailed: XCircle, taskFailed: CalendarX, webhookFailed: Webhook,
 }
 
 /** 类型 → 语义色 token 工具类（气泡图标/边框用） */
@@ -79,6 +80,7 @@ const TYPE_COLOR: Record<NotificationType, { text: string; bg: string; border: s
   restoreComplete: { text: 'text-mcs-success-fg', bg: 'bg-mcs-success-bg-subtle', border: 'border-mcs-success-border' },
   restoreFailed: { text: 'text-mcs-error-fg', bg: 'bg-mcs-error-bg-subtle', border: 'border-mcs-error-border' },
   taskFailed: { text: 'text-mcs-error-fg', bg: 'bg-mcs-error-bg-subtle', border: 'border-mcs-error-border' },
+  webhookFailed: { text: 'text-mcs-error-fg', bg: 'bg-mcs-error-bg-subtle', border: 'border-mcs-error-border' },
 }
 
 interface NotificationDrawerProps {

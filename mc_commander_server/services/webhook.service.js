@@ -45,7 +45,13 @@ const MAX_RESPONSE_BODY_LENGTH = 4096;
 /** 背压计数器：webhookId → 当前并发数 */
 const _concurrentCount = new Map();
 
+/** 投递失败去重：已通知的 webhookId 集合，成功投递后移除以恢复告警 */
+const _webhookFailNotified = new Set();
+
 export class WebhookService {
+  /** serverManager 引用（由 setupWebhookDispatch 注入，供投递失败时 emit WS 事件） */
+  static _serverManager = null;
+
   /**
    * 分发事件到所有匹配的 webhook（fire-and-forget）
    */
@@ -162,6 +168,8 @@ export class WebhookService {
               durationMs: Date.now() - startTime,
               attempts,
             });
+            // 成功投递：移除失败通知状态（恢复后续失败告警能力）
+            _webhookFailNotified.delete(webhook.id);
             return;
           }
 
@@ -187,6 +195,19 @@ export class WebhookService {
         durationMs: Date.now() - startTime,
         attempts,
       });
+
+      // 投递失败通知：同一 webhook 连续失败仅首次通知（去重防刷屏）
+      if (!_webhookFailNotified.has(webhook.id) && WebhookService._serverManager) {
+        _webhookFailNotified.add(webhook.id);
+        WebhookService._serverManager.emit('instance:webhookDeliveryFailed', {
+          instanceId: payload.instanceId || null,
+          webhookId: webhook.id,
+          webhookName: webhook.name,
+          url: webhook.url,
+          eventType,
+          error: responseBody || (lastError ? lastError.message : 'Unknown error'),
+        });
+      }
     } finally {
       // 释放背压计数
       const current = _concurrentCount.get(webhook.id) || 0;
@@ -285,6 +306,9 @@ const STATUS_EVENT_MAP = {
  * 在 index.js 启动时调用，桥接 serverManager 事件到 WebhookService.dispatch
  */
 export function setupWebhookDispatch(serverManager) {
+  // 注入 serverManager 引用供投递失败通知使用
+  WebhookService._serverManager = serverManager;
+
   // 玩家/成就等直接事件
   for (const [srcEvent, webhookEvent] of Object.entries(EVENT_MAP)) {
     serverManager.on(srcEvent, (data) => {

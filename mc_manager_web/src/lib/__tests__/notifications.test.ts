@@ -80,6 +80,21 @@ describe('buildNotifications 文案模板', () => {
     expect(n?.content).toBe('定时任务「每日重启」执行失败')
   })
 
+  it('webhookDeliveryFailed 生成 server 类 severe 通知', () => {
+    const [n] = buildNotifications({
+      type: 'webhookDeliveryFailed',
+      data: { webhookName: 'Discord 告警', webhookId: 42, error: 'HTTP 403' },
+    })
+    expect(n).toMatchObject({ type: 'webhookFailed', category: 'server' })
+    expect(n?.content).toContain('Discord 告警')
+    expect(n?.content).toContain('重试耗尽')
+  })
+
+  it('webhookDeliveryFailed 缺名称时使用默认文案', () => {
+    const [n] = buildNotifications({ type: 'webhookDeliveryFailed', data: {} })
+    expect(n?.content).toBe('Webhook「未命名 Webhook」投递失败（重试耗尽）')
+  })
+
   it('非通知事件返回空数组', () => {
     expect(buildNotifications({ type: 'log', data: { text: 'x' } })).toEqual([])
   })

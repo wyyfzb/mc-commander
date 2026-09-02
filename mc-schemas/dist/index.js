@@ -3915,6 +3915,7 @@ const WS_EVENT_TYPES = [
 	"restoreFailed",
 	"taskExecute",
 	"taskFailed",
+	"webhookDeliveryFailed",
 	"deployProgress",
 	"circuit_breaker",
 	"upgradeProgress",
@@ -4001,7 +4002,8 @@ const NOTIFICATION_EVENT_TYPES = /* @__PURE__ */ new Set([
 	"restoreStart",
 	"restoreComplete",
 	"restoreFailed",
-	"taskFailed"
+	"taskFailed",
+	"webhookDeliveryFailed"
 ]);
 //#endregion
 //#region src/world.ts
