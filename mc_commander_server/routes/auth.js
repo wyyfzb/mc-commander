@@ -38,7 +38,9 @@ const LOGIN_FAILURES_MAX_KEYS = 10000;
 const loginFailures = new Map(); // key: ip → { count, lockedUntil, lastSeen }
 
 function clientIp(req) {
-  return req.ip || req.socket?.remoteAddress || null;
+  // 登录锁定键始终取直连 IP（socket.remoteAddress），不信任 X-Forwarded-For
+  // 代理头可被客户端伪造；req.ip 仍可用于会话记录等非安全场景
+  return req.socket?.remoteAddress || null;
 }
 
 function isLoginLocked(ip) {

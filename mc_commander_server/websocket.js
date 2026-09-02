@@ -122,11 +122,21 @@ function persistNotificationEvent(instanceId, type, data) {
   }
 }
 
+// WS 会话复验：每 N 次心跳对 session 认证的连接抽样校验会话有效性。
+// 被踢出/过期/删除的会话在下一轮复验中被 close(1008) 断开，
+// 避免踢会后 WS 长连接无限存活。每次心跳只校验部分连接以控制 DB 开销。
+export const WS_SESSION_REVALIDATE_INTERVAL = 3; // 每 3 次心跳（90s）轮询一轮全量复验
+let heartbeatCount = 0;
+
 export function setupWebSocket(wss, serverManager) {
   const clients = new Set();
 
   // 心跳保活：每 30s ping，60s 未 pong 则 terminate（防止代理静默断开的死连接残留 clients 集合）。
+  // 同时对 session 认证的连接周期性复验会话有效性（踢出/过期后及时断开 WS）。
   const heartbeatInterval = setInterval(() => {
+    heartbeatCount++;
+    const doSessionRevalidate = heartbeatCount % WS_SESSION_REVALIDATE_INTERVAL === 0;
+
     for (const client of clients) {
       if (client.isAlive === false) {
         console.warn('Terminating dead websocket client (heartbeat timeout)');
@@ -134,6 +144,17 @@ export function setupWebSocket(wss, serverManager) {
         clients.delete(client);
         continue;
       }
+
+      // 会话复验：仅对 session 认证的连接（API Key 无会话可过期）
+      if (doSessionRevalidate && client._sessionToken) {
+        if (!authenticateWebSocket(null, client._sessionToken)) {
+          console.warn('Closing websocket: session token no longer valid (kicked or expired)');
+          client.close(1008, 'Session invalidated');
+          clients.delete(client);
+          continue;
+        }
+      }
+
       client.isAlive = false;
       client.ping();
     }
@@ -166,6 +187,8 @@ export function setupWebSocket(wss, serverManager) {
 
     clients.add(ws);
     ws.isAlive = true;
+    // 保存 session token 供心跳复验使用（API Key 认证无 token）
+    ws._sessionToken = sessionToken || null;
     ws.on('pong', () => {
       ws.isAlive = true;
     });
