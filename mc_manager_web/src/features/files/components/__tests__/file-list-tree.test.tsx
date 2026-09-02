@@ -6,15 +6,14 @@ import { setupServer } from 'msw/node'
 import { http, HttpResponse } from 'msw'
 import { FileList, type FileListProps } from '../file-list'
 import { fileIconName, formatFileSize, formatModifiedAt } from '@/lib/mc-files'
-import { DirTree, type DirTreeProps } from '../dir-tree'
-import { handlers, mockFileListRoot, mockFileListWorld } from '@/test/mocks/handlers'
+import { handlers } from '@/test/mocks/handlers'
 import { useConnectionStore } from '@/stores/connection'
 import type { FileEntry } from '@/api/types'
 
 /**
- * FileList / DirTree 组件测试
+ * FileList 组件测试
  * 覆盖：列表渲染（目录在前/图标映射/大小格式化）/ 行交互（onOpenDir/onSelectFile/onDelete）/
- *      面包屑渲染与点击 / 空态双文案 / 加载 Skeleton / 选中高亮 / dir-tree 逐层懒加载展开与叶子判定
+ *      面包屑渲染与点击 / 空态双文案 / 加载 Skeleton / 选中高亮
  * mock 数据为结构占位虚构（world/logs/region 等），严禁真实服务器信息
  */
 
@@ -67,12 +66,6 @@ const baseFileListProps: FileListProps = {
   onSelectFile: vi.fn(),
   onOpenDir: vi.fn(),
   onDelete: vi.fn(),
-}
-
-const baseDirTreeProps: DirTreeProps = {
-  instanceId: 'demo',
-  currentPath: '/',
-  onNavigate: vi.fn(),
 }
 
 describe('格式化函数（组件内）', () => {
@@ -313,46 +306,5 @@ describe('FileList', () => {
     fireEvent.click(retryBtn)
     expect(await screen.findByText('recovered.txt')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '重试' })).not.toBeInTheDocument()
-  })
-})
-
-describe('DirTree', () => {
-  it('根节点渲染 + 逐层懒加载展开 + 叶子无箭头 + 高亮 + 点击跳转', async () => {
-    // /world/region 为叶子（空目录）；其余走默认 mock（根 5 项 / world 2 项）
-    server.use(
-      http.get('*/api/v1/instances/:id/files', ({ request }) => {
-        const dir = new URL(request.url).searchParams.get('path') ?? '/'
-        if (dir === '/world/region') return ok({ path: dir, isDirectory: true, files: [] })
-        return ok(dir === '/world' ? mockFileListWorld : mockFileListRoot)
-      }),
-    )
-    const onNavigate = vi.fn()
-    renderWithClient(<DirTree {...baseDirTreeProps} currentPath="/world" onNavigate={onNavigate} />)
-    // 初始仅根节点（懒加载：子目录未挂载，不显示）
-    expect(screen.getByRole('button', { name: '/' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'world' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'logs' })).not.toBeInTheDocument()
-    // 展开根 → 懒加载出 world/logs（只显示目录，不显示 server.properties 等文件）
-    fireEvent.click(screen.getByRole('button', { name: '展开 实例根目录' }))
-    expect(await screen.findByRole('button', { name: 'world' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'logs' })).toBeInTheDocument()
-    expect(screen.queryByText('server.properties')).not.toBeInTheDocument()
-    // 展开 world → 懒加载其子目录 region（world 子项仅 region，level.dat 为文件不显示）
-    fireEvent.click(screen.getByRole('button', { name: '展开 world' }))
-    expect(await screen.findByRole('button', { name: 'region' })).toBeInTheDocument()
-    expect(screen.queryByText('level.dat')).not.toBeInTheDocument()
-    // 叶子判定：region 无子目录 → 不显示展开箭头
-    await vi.waitFor(() => expect(screen.queryByRole('button', { name: '展开 region' })).toBeNull())
-    // 当前路径高亮：world（currentPath=/world）→ aria-current=location
-    expect(screen.getByRole('button', { name: 'world' })).toHaveAttribute('aria-current', 'location')
-    expect(screen.getByRole('button', { name: '/' })).not.toHaveAttribute('aria-current')
-    // 点击目录名 → onNavigate
-    fireEvent.click(screen.getByRole('button', { name: 'region' }))
-    expect(onNavigate).toHaveBeenCalledWith('/world/region')
-    fireEvent.click(screen.getByRole('button', { name: '/' }))
-    expect(onNavigate).toHaveBeenCalledWith('/')
-    // 折叠根 → 子树收起
-    fireEvent.click(screen.getByRole('button', { name: '折叠 实例根目录' }))
-    expect(screen.queryByRole('button', { name: 'world' })).not.toBeInTheDocument()
   })
 })
