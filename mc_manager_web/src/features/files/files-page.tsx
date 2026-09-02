@@ -363,11 +363,25 @@ export function FilesPage() {
     const file = e.target.files?.[0]
     e.target.value = '' // 允许重复上传同名文件
     if (!file) return
+    if (uploadMutation.isPending) return // 在途保护：上传中忽略重复触发
+    // 进度反馈对齐下载：同一 toast id 展示进度（>5% 才刷新，避免大文件高频重渲染），完成/失败同 id 收尾
+    const toastId = `upload-${file.name}`
+    let lastPct = 0
     try {
-      const result = await uploadMutation.mutateAsync({ file, targetDir: dir })
-      toast.success(`已上传 ${result.path}（${(result.size / 1024).toFixed(1)} KB）`)
+      toast.loading(`正在上传 ${file.name}…`, { id: toastId })
+      const result = await uploadMutation.mutateAsync({
+        file,
+        targetDir: dir,
+        onProgress: (pct) => {
+          if (pct - lastPct >= 5 || pct === 100) {
+            lastPct = pct
+            toast.loading(`正在上传 ${file.name} ${pct}%`, { id: toastId })
+          }
+        },
+      })
+      toast.success(`已上传 ${result.path}（${(result.size / 1024).toFixed(1)} KB）`, { id: toastId })
     } catch (err) {
-      toast.error(`上传失败：${getFriendlyErrorText(err)}`)
+      toast.error(`上传失败：${getFriendlyErrorText(err)}`, { id: toastId })
     }
   }
 
