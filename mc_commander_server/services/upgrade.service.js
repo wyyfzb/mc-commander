@@ -10,6 +10,11 @@ import got from 'got';
 import { BackupService } from './backup.service.js';
 import { resolveSafePath, PathTraversalError } from '../utils/fs-utils.js';
 import { AppError, ErrorCodes } from '../utils/response.js';
+import {
+  JAR_DOWNLOAD_MAX_BYTES,
+  assertDownloadIntegrity,
+  assertSizeWithinLimit,
+} from '../utils/jar-download-guard.js';
 
 const VALID_TYPES = new Set(['vanilla', 'paper', 'purpur']);
 
@@ -87,20 +92,27 @@ export class UpgradeService {
   /**
    * @param {import('../services/mc_server.js').MCServerManager} serverManager
    */
-  constructor(serverManager) {
+  constructor(serverManager, options = {}) {
     this.serverManager = serverManager;
     this.backupService = new BackupService(serverManager);
     /** @type {Map<string, import('./upgrade.service.js').UpgradeProgress>} */
     this._activeUpgrades = new Map();
+    // 下载体积上限可注入（测试用），默认 512MB（S-P1-1）
+    this.maxJarDownloadBytes = options.maxJarDownloadBytes ?? JAR_DOWNLOAD_MAX_BYTES;
   }
 
   /**
-   * 解析 JAR 下载 URL（复用 server-jar.js 的上游 API 逻辑）
+   * 解析 JAR 下载地址与期望摘要（issue 316：上游提供 sha 时返回 expectedHash，
+   * 下载完成后由 _downloadJar 强制校验）。
+   * 各上游摘要可用性：vanilla Piston detail.downloads.server.sha1（官方提供
+   * sha1）；paper v3 downloadInfo.sha256（v2 回退拼接路径无摘要可用）；
+   * purpur latest/download 无摘要。无摘要时 expectedHash 为 null，
+   * _downloadJar 跳过完整性校验但仍执行体积上限。
    * @param {string} mcVersion
    * @param {string} type - vanilla | paper | purpur
-   * @returns {Promise<string>}
+   * @returns {Promise<{ url: string, expectedHash: { algorithm: string, digest: string } | null }>}
    */
-  async resolveDownloadUrl(mcVersion, type) {
+  async resolveDownload(mcVersion, type) {
     if (type === 'vanilla') {
       // Mojang Piston API
       const manifest = await got('https://piston-meta.mojang.com/mc/game/version_manifest_v2.json', {
@@ -115,7 +127,10 @@ export class UpgradeService {
       }).json();
       const serverJar = versionDetail.downloads?.server;
       if (!serverJar?.url) throw new Error(`No server JAR download for ${mcVersion}`);
-      return serverJar.url;
+      const expectedHash = serverJar.sha1
+        ? { algorithm: 'sha1', digest: serverJar.sha1 }
+        : null;
+      return { url: serverJar.url, expectedHash };
     }
 
     if (type === 'paper') {
@@ -132,25 +147,38 @@ export class UpgradeService {
       const latest = candidates.sort((a, b) => (b.id || 0) - (a.id || 0))[0];
       const downloads = latest.downloads || {};
       const downloadInfo = downloads['server:default'] || downloads.application;
-      if (downloadInfo?.url) return downloadInfo.url;
+      if (downloadInfo?.url) {
+        const expectedHash = downloadInfo.sha256
+          ? { algorithm: 'sha256', digest: downloadInfo.sha256 }
+          : null;
+        return { url: downloadInfo.url, expectedHash };
+      }
+      // v2 回退拼接路径无上游响应，拿不到摘要 → 跳过完整性校验
       const buildNum = latest.id || latest.build;
       const fileName = downloadInfo?.name || `paper-${mcVersion}-${buildNum}.jar`;
-      return `https://api.papermc.io/v2/projects/paper/versions/${mcVersion}/builds/${buildNum}/downloads/${fileName}`;
+      return {
+        url: `https://api.papermc.io/v2/projects/paper/versions/${mcVersion}/builds/${buildNum}/downloads/${fileName}`,
+        expectedHash: null,
+      };
     }
 
     if (type === 'purpur') {
-      // Purpur API
-      return `https://api.purpurmc.org/v2/purpur/${mcVersion}/latest/download`;
+      // Purpur API（上游不提供摘要 → 跳过完整性校验，仍执行体积上限）
+      return { url: `https://api.purpurmc.org/v2/purpur/${mcVersion}/latest/download`, expectedHash: null };
     }
 
     throw new Error(`Unsupported server type: ${type}`);
   }
 
   /**
-   * 下载 JAR 文件到指定路径，带进度广播
+   * 下载 JAR 文件到指定路径，带进度广播 + 体积上限 + 落地完整性校验（issue 316）
+   * @param {string} url
+   * @param {string} destPath
+   * @param {string} instanceId
+   * @param {{ algorithm: string, digest: string } | null} expectedHash - 上游摘要，null 跳过校验
    */
-  _downloadJar(url, destPath, instanceId) {
-    // 域白名单断言在下载流创建前（唯一下载入口，覆盖三个 resolveDownloadUrl 分支）
+  _downloadJar(url, destPath, instanceId, expectedHash = null) {
+    // 域白名单断言在下载流创建前（唯一下载入口，覆盖三个 resolveDownload 分支）
     assertAllowedDownloadHost(url);
     return new Promise((resolve, reject) => {
       const file = fs.createWriteStream(destPath);
@@ -160,8 +188,23 @@ export class UpgradeService {
         headers: { 'User-Agent': PAPER_USER_AGENT },
       });
 
+      /** 中止：清理半成品 + 断流 + reject（promise 已 settle 时 reject 为 no-op） */
+      const abort = (err) => {
+        fs.unlink(destPath, () => {});
+        stream.destroy();
+        file.destroy();
+        reject(err);
+      };
+
       let lastPct = -1;
       stream.on('downloadProgress', ({ percent, transferred, total }) => {
+        // 体积上限断言在前（S-P1-1）：超限即刻断流清理，不等下载自然结束
+        try {
+          assertSizeWithinLimit(transferred, this.maxJarDownloadBytes);
+        } catch (err) {
+          abort(err);
+          return;
+        }
         const pct = percent > 0 ? percent : (total > 0 ? transferred / total : 0);
         if (pct - lastPct < 0.01) return;
         lastPct = pct;
@@ -171,14 +214,21 @@ export class UpgradeService {
       stream.pipe(file);
 
       file.on('finish', () => {
-        file.close();
-        resolve();
+        // close 回调确保 fd 落盘后才校验摘要（issue 316：fail-closed）
+        file.close(() => {
+          assertDownloadIntegrity(destPath, expectedHash)
+            .then(() => resolve())
+            .catch((err) => {
+              // 校验失败：弃已下载部分（清理残留）并返回含期望/实际摘要的可读错误
+              fs.unlink(destPath, () => {});
+              reject(err);
+            });
+        });
       });
 
       // 写盘失败（目录不存在/磁盘满等）：写流 error 事件若无人监听会变成
       // uncaught exception 直接击穿进程，必须显式接管并清理半成品。
       file.on('error', (err) => {
-        fs.unlink(destPath, () => {});
         stream.destroy();
         reject(err);
       });
@@ -368,9 +418,9 @@ export class UpgradeService {
 
       // 阶段 2：下载新 JAR
       this._emitProgress(instanceId, UPGRADE_STAGES.DOWNLOAD, 0, '正在解析下载地址...');
-      const downloadUrl = await this.resolveDownloadUrl(mcVersion, type);
+      const { url: downloadUrl, expectedHash } = await this.resolveDownload(mcVersion, type);
       this._emitProgress(instanceId, UPGRADE_STAGES.DOWNLOAD, 0, '正在下载...');
-      await this._downloadJar(downloadUrl, newJarPath, instanceId);
+      await this._downloadJar(downloadUrl, newJarPath, instanceId, expectedHash);
       this._emitProgress(instanceId, UPGRADE_STAGES.DOWNLOAD, 100, '下载完成');
 
       // 阶段 3：替换 JAR
