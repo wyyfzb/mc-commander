@@ -7,6 +7,7 @@ import { InstanceModel, BackupModel } from '../db/index.js';
 import config from '../config.js';
 import { atomicWriteFile } from '../services/mc_server.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
+import { asyncHandler } from '../utils/asyncHandler.js';
 
 // ── 磁盘使用率（feat-5 运维韧性）：fs.statfsSync 零新增依赖，10s 缓存 ──
 let _diskCache = { ts: 0, result: null };
@@ -42,17 +43,6 @@ function getDiskUsage() {
   const result = { primary, all };
   _diskCache = { ts: now, result };
   return result;
-}
-
-// async 路由包装：Express 4 不捕获中间件/路由返回的 Promise rejection。
-// 未包装的 async handler 抛错时请求永久挂起 + unhandledRejection
-// （Node 默认 throw 使进程崩溃），包装后将错误传递给全局 errorHandler 统一处理。
-// 与 players.js 保持同一错误处理风格（统一后内部错误经全局 errorHandler
-// 返回通用 500，不再向客户端泄露 e.message 等内部细节）。
-function asyncHandler(fn) {
-  return (req, res, next) => {
-    Promise.resolve(fn(req, res, next)).catch(next);
-  };
 }
 
 // 同步实例目录下的 instance.json，保持其与 DB/内存中的最新配置一致。

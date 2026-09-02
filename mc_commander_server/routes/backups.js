@@ -9,15 +9,7 @@ import { recordAudit, AuditActions } from '../utils/audit.js';
 import config from '../config.js';
 import { backupCreateRequestSchema } from '@mc-commander/schemas';
 import { validateBody } from '../middleware/validate.js';
-
-// async 路由包装：Express 4 不捕获中间件/路由返回的 Promise rejection。
-// 未包装的 async handler 抛错时请求永久挂起 + unhandledRejection
-// （Node 默认 throw 使进程崩溃），包装后将错误传递给全局 errorHandler 统一处理。
-function asyncHandler(fn) {
-  return (req, res, next) => {
-    Promise.resolve(fn(req, res, next)).catch(next);
-  };
-}
+import { asyncHandler } from '../utils/asyncHandler.js';
 
 // 进行中操作互斥检查（restoring 状态机）：同实例存在 creating（备份中）
 // 或 restoring（恢复中）记录时返回 true。创建/恢复/删除三入口统一口径；

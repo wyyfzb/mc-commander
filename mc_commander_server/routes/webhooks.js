@@ -13,12 +13,7 @@ import { WebhookService, WEBHOOK_EVENT_TYPES } from '../services/webhook.service
 import { checkPublicUrl } from '../utils/url-guard.js';
 import { webhookCreatePayloadSchema, webhookSchema } from '@mc-commander/schemas';
 import { validateBody, validatedSuccess, validatedSuccessPaginated } from '../middleware/validate.js';
-
-function asyncHandler(fn) {
-  return (req, res, next) => {
-    Promise.resolve(fn(req, res, next)).catch(next);
-  };
-}
+import { asyncHandler } from '../utils/asyncHandler.js';
 
 function validateUrl(url) {
   try {
