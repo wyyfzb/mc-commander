@@ -88,11 +88,7 @@ function AuditBody({ logs }: { logs: AuditLogItem[] }) {
       {logs.map((log) => (
         <tr key={log.id} className="border-b border-mcs-border-muted last:border-b-0">
           <td className="whitespace-nowrap px-3 py-2 text-mcs-text-default font-mono text-mcs-xs">{formatTime(log.createdAt)}</td>
-          <td className="px-3 py-2">
-            <StatusPill variant="outline">
-              {getActionLabel(log.action)}
-            </StatusPill>
-          </td>
+          <td className="px-3 py-2 text-mcs-text-default">{getActionLabel(log.action)}</td>
           <td className="px-3 py-2 text-mcs-text-default">{log.targetType ? `${log.targetType}${log.targetId ? `: ${log.targetId}` : ''}` : '-'}</td>
           <td className="max-w-xs truncate px-3 py-2 text-mcs-text-subtle">
             {log.detail ? (typeof log.detail === 'object' ? JSON.stringify(log.detail) : String(log.detail)) : '-'}
