@@ -27,6 +27,7 @@ export interface WebSocketLike {
 }
 
 /** 原生 WebSocket 常量（测试环境可能没有） */
+const WS_CONNECTING = 0
 const WS_OPEN = 1
 
 const MAX_RECONNECT_DELAY_MS = 30_000
@@ -60,12 +61,16 @@ export function resolveAuthProtocol(apiKey: string, sessionToken?: string | null
 
 export class McSocket {
   private ws: WebSocketLike | null = null
+  /** 进行中/已建立连接的 connect promise（幂等锚点：重复 connect 复用同一连接，防双 WebSocket） */
+  private connectPromise: Promise<void> | null = null
   private readonly url: string
   private readonly apiKey: string
   private readonly sessionToken: string | null
   private readonly WebSocketImpl: WebSocketCtor
   private handlers = new Set<MessageHandler>()
   private subscribed = new Set<string>()
+  /** 本连接已成功发送 subscribe 的实例（onopen 后重置：新连接需全部重发） */
+  private subscribedSent = new Set<string>()
   private reconnectAttempts = 0
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private closedByUser = false
@@ -77,20 +82,36 @@ export class McSocket {
     this.WebSocketImpl = options.WebSocketImpl ?? (WebSocket as unknown as WebSocketCtor)
   }
 
-  /** 建立连接（subprotocol 鉴权：会话令牌优先，回退 API Key） */
+  /** 比对连接凭据是否一致（单例复用方检测凭据变更：改密/踢单设备/换账号/登出） */
+  credentialsMatch(options: { apiKey: string; sessionToken?: string | null }): boolean {
+    return this.apiKey === options.apiKey && this.sessionToken === (options.sessionToken ?? null)
+  }
+
+  /** 建立连接（subprotocol 鉴权：会话令牌优先，回退 API Key）
+   *  幂等：连接进行中（CONNECTING）或已建立（OPEN）时复用既有 promise，
+   *  不再新建 WebSocket —— effect 重跑/重复点重连按钮不会产生双连接、事件不会重复派发 */
   connect(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const protocol = resolveAuthProtocol(this.apiKey, this.sessionToken)
-      if (!protocol) {
-        reject(new Error('连接凭据未配置（API Key 或会话令牌）'))
-        return
-      }
+    if (
+      this.connectPromise &&
+      this.ws &&
+      (this.ws.readyState === WS_CONNECTING || this.ws.readyState === WS_OPEN)
+    ) {
+      return this.connectPromise
+    }
+    const protocol = resolveAuthProtocol(this.apiKey, this.sessionToken)
+    if (!protocol) {
+      return Promise.reject(new Error('连接凭据未配置（API Key 或会话令牌）'))
+    }
+    // 重建前清理旧连接：断开/半开的旧 socket 先关掉，事件不再派发，防重连风暴叠加
+    this.disposeSocket()
+    const promise = new Promise<void>((resolve, reject) => {
       const ws = new this.WebSocketImpl(this.url, [protocol])
       this.ws = ws
 
       ws.onopen = () => {
         this.reconnectAttempts = 0
-        // 重连后恢复订阅（携带各实例断线补齐游标）
+        // 新连接：清发送标记后重发全部订阅（携带各实例断线补齐游标）
+        this.subscribedSent.clear()
         for (const instanceId of this.subscribed) {
           this.sendSubscribe(instanceId)
         }
@@ -112,26 +133,33 @@ export class McSocket {
         }
       }
       ws.onclose = (ev) => {
+        // 连接已终止：幂等锚点失效，允许后续 connect() 重建
+        this.clearConnectPromise(promise)
         if (!this.closedByUser) {
           this.scheduleReconnect()
         }
         void ev
       }
       ws.onerror = () => {
+        this.clearConnectPromise(promise)
         // onclose 随后触发，统一走重连逻辑
         reject(new Error('WebSocket 连接失败'))
       }
     })
+    this.connectPromise = promise
+    return promise
   }
 
-  /** 订阅实例（幂等；断线后重连自动恢复） */
+  /** 订阅实例（幂等；同一连接内不重复发送订阅消息，断线重连自动恢复） */
   subscribe(instanceId: string): void {
     this.subscribed.add(instanceId)
+    if (this.isOpen && this.subscribedSent.has(instanceId)) return
     this.sendSubscribe(instanceId)
   }
 
   unsubscribe(instanceId: string): void {
     this.subscribed.delete(instanceId)
+    this.subscribedSent.delete(instanceId)
     this.sendRaw({ type: 'unsubscribe', instanceId })
   }
 
@@ -143,15 +171,15 @@ export class McSocket {
     }
   }
 
-  /** 主动关闭（不再重连） */
+  /** 主动关闭（不再重连；登出/凭据重建时调用，重连定时器一并清空） */
   close(): void {
     this.closedByUser = true
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer)
       this.reconnectTimer = null
     }
-    this.ws?.close()
-    this.ws = null
+    this.connectPromise = null
+    this.disposeSocket()
   }
 
   get isOpen(): boolean {
@@ -172,19 +200,22 @@ export class McSocket {
   private sendSubscribe(instanceId: string): void {
     if (!this.isOpen) return
     const lastEventId = this.getLastEventId(instanceId)
-    this.sendRaw({
+    const ok = this.sendRaw({
       type: 'subscribe',
       instanceId,
       ...(lastEventId > 0 ? { lastEventId } : {}),
     })
+    if (ok) this.subscribedSent.add(instanceId)
   }
 
-  private sendRaw(msg: Record<string, unknown>): void {
-    if (!this.isOpen) return
+  private sendRaw(msg: Record<string, unknown>): boolean {
+    if (!this.isOpen) return false
     try {
       this.ws?.send(JSON.stringify(msg))
+      return true
     } catch {
       // 连接竞态：忽略（重连逻辑会恢复订阅）
+      return false
     }
   }
 
@@ -196,9 +227,33 @@ export class McSocket {
     }
   }
 
-  /** 指数退避重连（1s → 2s → 4s → … 上限 30s） */
+  /** 清理当前连接：解绑事件处理器（旧 socket 事件不再派发）+ 关闭 + 置空引用 */
+  private disposeSocket(): void {
+    const stale = this.ws
+    this.ws = null
+    if (!stale) return
+    stale.onopen = null
+    stale.onmessage = null
+    stale.onclose = null
+    stale.onerror = null
+    try {
+      stale.close()
+    } catch {
+      // 竞态安全：close 失败不影响后续重建
+    }
+  }
+
+  /** 幂等锚点失效（连接已终止时），允许后续 connect() 重建 */
+  private clearConnectPromise(p: Promise<void>): void {
+    if (this.connectPromise === p) {
+      this.connectPromise = null
+    }
+  }
+
+  /** 指数退避重连（1s → 2s → 4s → … 上限 30s）；触发时先清死连接，防重连风暴叠加 */
   private scheduleReconnect(): void {
     if (this.closedByUser || this.reconnectTimer) return
+    this.disposeSocket()
     const delay = Math.min(
       RECONNECT_BASE_DELAY_MS * 2 ** this.reconnectAttempts,
       MAX_RECONNECT_DELAY_MS,
