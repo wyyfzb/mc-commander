@@ -3,7 +3,9 @@
  * - 卡片结构：标题「备份管理」→ 上次备份信息行（最近一条 completed）+「立即备份」
  *   → 快照机制说明（subtle 小字）→ 备份列表（最近 10 条）
  * - 行：状态图标（tone 浅底；进行中转圈）→ 名称 + 旧格式(zip)徽章 → 时间·大小 → 状态徽章
- *   （backupStatusTone+backupStatusLabel）→ 恢复/删除
+ *   （backupStatusTone+backupStatusLabel）→ 下载/恢复/删除
+ * - 下载仅 completed 且非 zip（服务端 GET /backups/:id/download 同约束），blob → a[download]
+ *   触发浏览器保存；下载中按钮转圈禁用，失败 toast
  * - 恢复仅 completed 且非 zip（旧 zip 仅可删除，服务端 40904 拒绝）；任一行 restoring 或
  *   恢复请求在途 → 全列表恢复按钮禁用；creating/restoring 行
  *   不可删除（服务端互斥状态机拒绝）
@@ -19,6 +21,7 @@ import {
   ChevronUp,
   CircleAlert,
   CloudUpload,
+  Download,
   HardDrive,
   Loader2,
   RotateCcw,
@@ -28,7 +31,9 @@ import {
 import { LoadingButton } from '@/components/mcs/loading-button'
 import { toast } from 'sonner'
 import { getFriendlyErrorText } from '@/api/errors'
+import { apiDownloadBackup } from '@/api/backups'
 import type { BackupItem } from '@/api/types'
+import { useConnectionStore } from '@/stores/connection'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
@@ -45,6 +50,21 @@ import { useBackupEventRefresh, useBackups, useCreateBackup, useDeleteBackup, us
 import { useInstances } from '@/api/queries'
 import type { BackupPanelProps } from './contracts'
 import { EmptyState } from '@/components/mcs/empty-state'
+
+/**
+ * 下载文件名：快照名 + 创建时间戳（紧凑 yyyyMMdd-HHmm，随本地时区）+ .tar.gz。
+ * 服务端响应为 tar.gz 流且前端 blob 模式拿不到 Content-Disposition，
+ * 由前端生成确定性文件名（时间戳来自 createdAt，满足「文件名含备份时间戳」）。
+ * export 供测试断言（时区中立）。
+ */
+export function buildBackupDownloadName(backup: Pick<BackupItem, 'name' | 'createdAt'>): string {
+  const d = new Date(backup.createdAt)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const stamp = Number.isNaN(d.getTime())
+    ? ''
+    : `_${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}`
+  return `${backup.name}${stamp}.tar.gz`
+}
 
 /** tone → 徽章类（完整字面量类名，Tailwind 主题色静态生成；全 token 引用） */
 const TONE_CLASSES: Record<ReturnType<typeof backupStatusTone>, string> = {
@@ -336,9 +356,36 @@ function BackupRow({
   const isLegacy = isLegacyFormat(backup.format)
   /** 可恢复 = 已完成 + 快照格式（旧 zip 仅可删；进行中不可操作） */
   const canRestore = status === 'completed' && !isLegacy
+  /** 可下载 = 已完成 + 快照格式（服务端仅此二者放行；zip 40904 / 非完成 40000） */
+  const canDownload = canRestore
   const metaLine = [formatBackupDate(backup.createdAt), formatBackupSize(backup.size)]
     .filter(Boolean)
     .join(' · ')
+
+  const config = useConnectionStore()
+  /** 下载在途（行级独立 loading，不影响其他行按钮） */
+  const [downloading, setDownloading] = useState(false)
+
+  const handleDownload = async () => {
+    setDownloading(true)
+    try {
+      const blob = await apiDownloadBackup(config, backup.id)
+      const objectUrl = URL.createObjectURL(blob)
+      // a[download] 需挂在 DOM 中触发（Firefox）；点击后同步 revoke 释放内存
+      const anchor = document.createElement('a')
+      anchor.href = objectUrl
+      anchor.download = buildBackupDownloadName(backup)
+      document.body.appendChild(anchor)
+      anchor.click()
+      anchor.remove()
+      URL.revokeObjectURL(objectUrl)
+      toast.success('备份已开始下载')
+    } catch (e) {
+      toast.error(`下载失败：${getFriendlyErrorText(e)}`)
+    } finally {
+      setDownloading(false)
+    }
+  }
 
   return (
     <div className="flex items-center gap-3 px-4 py-3">
@@ -379,6 +426,30 @@ function BackupRow({
         {backupStatusLabel(status)}
       </StatusPill>
 
+      {/* 下载（仅 completed 快照可下载；下载中转圈禁用，行级 loading） */}
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        aria-label={`${name} 下载`}
+        disabled={!canDownload || downloading}
+        title={
+          downloading
+            ? '正在下载...'
+            : isLegacy
+              ? '旧格式备份不支持下载'
+              : !canDownload
+                ? '仅已就绪的备份可下载'
+                : undefined
+        }
+        className="text-mcs-accent-fg"
+        onClick={() => void handleDownload()}
+      >
+        {downloading ? (
+          <Loader2 className="size-3.5 animate-spin" aria-hidden />
+        ) : (
+          <Download className="size-3.5" aria-hidden />
+        )}
+      </Button>
       {/* 恢复（仅 completed 且非 zip；restoring 中全列表禁用） */}
       <Button
         variant="ghost"
