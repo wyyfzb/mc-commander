@@ -2,7 +2,7 @@ import { useMutation } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { apiSendCommand } from '@/api/players'
 import { ApiError } from '@/api/client'
-import { getFriendlyErrorMessage } from '@/api/errors'
+import { getFriendlyErrorText } from '@/api/errors'
 import { useConnectionStore } from '@/stores/connection'
 import { useServerStore } from '@/stores/server'
 import { useTerminalStore } from '@/stores/terminal'
@@ -35,8 +35,7 @@ export function useSendCommand() {
       // 成功不弹 toast：终端已有 command + stdout 回显，双重反馈是噪音（连续运维时刷屏）
     },
     onError: (err) => {
-      const friendly = err instanceof ApiError ? getFriendlyErrorMessage(err.code, err.message) : '网络错误'
-      toast.error(`命令发送失败: ${friendly}`)
+      toast.error(`命令发送失败：${getFriendlyErrorText(err)}`)
     },
   })
 
