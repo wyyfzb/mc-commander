@@ -114,8 +114,8 @@ const wss = new WebSocketServer({
   },
 });
 
-// 信任反向代理（nginx/CDN），确保 req.ip 返回真实客户端 IP
-app.set('trust proxy', 1);
+// 信任反向代理（nginx/CDN）：层数可通过 TRUST_PROXY 环境变量配置，默认 1
+app.set('trust proxy', config.trustProxy);
 
 const serverManager = new MCServerManager();
 

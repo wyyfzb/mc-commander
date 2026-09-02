@@ -13,6 +13,10 @@ export default {
   //（内存清空 + .env 移除，重启后同样失效）。未配置 = 未开启（本机首发兼容）
   setupToken: process.env.SETUP_TOKEN || '',
   host: process.env.HOST || '127.0.0.1',
+  // 信任反向代理层数（Express trust proxy）。默认 1 兼容 nginx/CDN 反代场景，
+  // 设 0 不信任代理头（req.ip = 直连 IP）；影响 req.ip 解析（不影响锁定键，
+  // 锁定键始终取 socket.remoteAddress）
+  trustProxy: parseInt(process.env.TRUST_PROXY || '1'),
   port: parseInt(process.env.PORT || '25566'),
   serversDir: path.resolve(process.env.SERVERS_DIR || './servers'),
   dataDir: path.resolve(process.env.DATA_DIR || './data'),
