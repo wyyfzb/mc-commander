@@ -30,4 +30,10 @@ describe('CommandPreview', () => {
       expect(mockWriteText).toHaveBeenCalledWith('weather clear')
     })
   })
+
+  it('空串守卫：command 为空时静默不渲染', () => {
+    const { container } = render(<CommandPreview command="" />)
+    expect(container.firstChild).toBeNull()
+    expect(screen.queryByTestId('command-preview')).toBeNull()
+  })
 })

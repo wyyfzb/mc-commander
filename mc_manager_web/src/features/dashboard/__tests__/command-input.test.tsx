@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeEach, afterAll, beforeAll } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, afterAll, beforeAll } from 'vitest'
 import { render, screen, fireEvent , waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { setupServer } from 'msw/node'
+import { http, HttpResponse } from 'msw'
 import { Toaster } from 'sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { handlers } from '@/test/mocks/handlers'
@@ -17,6 +18,7 @@ import { useTerminalStore } from '@/stores/terminal'
 
 const server = setupServer(...handlers)
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
+afterEach(() => server.resetHandlers())
 afterAll(() => server.close())
 
 function renderInput() {
@@ -181,6 +183,85 @@ describe('CommandInput', () => {
       useServerStore.setState({ status: null })
       renderInput()
       expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    })
+  })
+
+  describe('历史状态回显（sent/failed 指示器）', () => {
+    const HISTORY_KEY = 'mcs-command-history'
+
+    it('成功命令入列 + ↑ 导航显示「已送达」', async () => {
+      renderInput()
+      const input = screen.getByLabelText('服务器命令输入')
+      // 非导航态指示器不显示
+      expect(screen.queryByText('已送达')).not.toBeInTheDocument()
+      fireEvent.change(input, { target: { value: 'say ok' } })
+      fireEvent.keyDown(input, { key: 'Enter' })
+      await waitFor(() => expect(input).toHaveValue(''))
+      // ↑ 进入导航 → 指示器出现
+      fireEvent.keyDown(input, { key: 'ArrowUp' })
+      expect(input).toHaveValue('say ok')
+      expect(screen.getByText('已送达')).toBeInTheDocument()
+      // 编辑退出导航 → 指示器消失
+      fireEvent.change(input, { target: { value: 'fresh' } })
+      expect(screen.queryByText('已送达')).not.toBeInTheDocument()
+    })
+
+    it('失败命令入列含 error，↑ 导航显示「失败: 原因」', async () => {
+      server.use(
+        http.post('*/api/v1/instances/:id/command', () =>
+          HttpResponse.json(
+            {
+              status: 'error',
+              code: 99999,
+              message: 'mock 命令失败原因',
+              details: null,
+              timestamp: new Date().toISOString(),
+            },
+            { status: 500 },
+          ),
+        ),
+      )
+      renderInput()
+      const input = screen.getByLabelText('服务器命令输入')
+      fireEvent.change(input, { target: { value: 'say bad' } })
+      fireEvent.keyDown(input, { key: 'Enter' })
+      // 失败 toast + 输入框不清空（失败保留输入）
+      expect(await screen.findByText(/命令发送失败/)).toBeInTheDocument()
+      fireEvent.keyDown(input, { key: 'ArrowUp' })
+      expect(screen.getByText('失败: mock 命令失败原因')).toBeInTheDocument()
+    })
+
+    it('连续重复命令仅更新状态不重复入列（后态覆盖前态）', async () => {
+      renderInput()
+      const input = screen.getByLabelText('服务器命令输入')
+      // 第一次成功入列
+      fireEvent.change(input, { target: { value: 'say dup' } })
+      fireEvent.keyDown(input, { key: 'Enter' })
+      await waitFor(() => expect(input).toHaveValue(''))
+      // 第二次失败（覆盖状态）
+      server.use(
+        http.post('*/api/v1/instances/:id/command', () =>
+          HttpResponse.json(
+            {
+              status: 'error',
+              code: 99999,
+              message: 'mock 二次失败',
+              details: null,
+              timestamp: new Date().toISOString(),
+            },
+            { status: 500 },
+          ),
+        ),
+      )
+      fireEvent.change(input, { target: { value: 'say dup' } })
+      fireEvent.keyDown(input, { key: 'Enter' })
+      expect(await screen.findByText(/命令发送失败/)).toBeInTheDocument()
+      // 历史仍只有一条
+      const stored = JSON.parse(localStorage.getItem(HISTORY_KEY)!) as string[]
+      expect(stored.filter((c) => c === 'say dup').length).toBe(1)
+      // ↑ 导航显示最新（失败）状态
+      fireEvent.keyDown(input, { key: 'ArrowUp' })
+      expect(screen.getByText('失败: mock 二次失败')).toBeInTheDocument()
     })
   })
 
