@@ -47,12 +47,12 @@
 
 ## Phase A1 · 安全加固（公网就绪）
 
-- [ ] **A1-1** [安全] /auth/setup 首访设密所有权证明（P0·bug修复）｜中｜来源：audit S-P0-1
+- [x] **A1-1** [安全] /auth/setup 首访设密所有权证明（P0·bug修复）｜中｜来源：audit S-P0-1 ✅ #309 (2026-09-03)
   现状（2026-09-03 复核）：routes/auth.js:104-116 仍「仅未设密即可设密」，无凭证要求。
   **C 甄别**：审计原方案「携带 .env API_KEY 或一次性 setup token」前半已失效——API_KEY 已迁移为 API_KEY_HASH（#229），服务端无明文可比对。修正方案：部署脚本生成一次性 `SETUP_TOKEN` 写入 .env（或 stdout 提示），setup 请求必须携带且用后作废；未配置 token 时保持现有行为（本机首发场景）并在 README 安全章节说明公网部署必须配 token。better-sqlite3 同步 API，检查+写入间无 await 即可规避 TOCTOU，注释说明。
   验收：SETUP_TOKEN 生成/校验/作废全链路；token 错误 403；测试覆盖（正确/错误/缺失/已作废）。
 
-- [ ] **A1-2** [安全] 升级接口 mcVersion 白名单 + 路径收口（P0·bug修复）｜小｜来源：audit S-P0-2
+- [x] **A1-2** [安全] 升级接口 mcVersion 白名单 + 路径收口（P0·bug修复）｜小｜来源：audit S-P0-2 ✅ #310 (2026-09-03)
   现状：routes/upgrade.js:22-24 仅「必填 + string」校验，无格式白名单。
   验收：路由层白名单 `/^\d{1,3}(\.\d{1,3}){0,3}$/`；jar 落地路径复用 resolveSafePath（或等价 contains 检查）；测试覆盖穿越 payload（`../`、绝对路径、编码变体）。
 
