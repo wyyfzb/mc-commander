@@ -49,7 +49,21 @@ export function useServerSocket(instanceId: string | null) {
   instanceRef.current = instanceId
 
   useEffect(() => {
-    if (!connectionReady || (!apiKey && !sessionToken)) return
+    // 登出/凭据清空：显式关闭并置空单例（旧 token 不得占用实时通道，重连定时器一并清空）
+    if (!connectionReady || (!apiKey && !sessionToken)) {
+      if (socketSingleton) {
+        socketSingleton.close()
+        socketSingleton = null
+      }
+      return
+    }
+
+    // 凭据变更（改密/踢单设备/换账号/登出回退 apiKey）：close 旧单例并重建，
+    // 旧 token 不再占用通道；断线补齐游标存 localStorage（不随单例丢失），重建后补齐仍有效
+    if (socketSingleton && !socketSingleton.credentialsMatch({ apiKey, sessionToken })) {
+      socketSingleton.close()
+      socketSingleton = null
+    }
 
     let socket = socketSingleton
     if (!socket) {
