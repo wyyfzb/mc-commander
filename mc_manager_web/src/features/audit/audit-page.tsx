@@ -4,10 +4,11 @@
  * TanStack Query 数据获取：isLoading/isFetching/isError 内建，
  * keepPreviousData 翻页不闪烁，过滤器变化经 query key 自动重获取
  */
-import { useState } from 'react'
-import { RefreshCw } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { RefreshCw, X } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import {
   Select,
   SelectContent,
@@ -20,6 +21,7 @@ import { PageHeader } from '@/components/mcs/page-header'
 import { DataTableShell } from '@/components/mcs/data-table-shell'
 import { useAuditLogs, useCommandHistory } from '@/api/queries'
 import type { AuditLogItem, CommandHistoryItem } from '@/api/types'
+import { QUICK_RANGES, isRangeInverted, quickRangeDates, toServerEnd, toServerStart, type QuickRange } from './time-range'
 
 const ACTION_LABELS: Record<string, string> = {
   INSTANCE_START: '启动实例',
@@ -142,7 +144,50 @@ export function AuditPage() {
 
   const [auditPage, setAuditPage] = useState(1)
   const [auditAction, setAuditAction] = useState('')
-  const auditQuery = useAuditLogs({ page: auditPage, pageSize: 20, action: auditAction || undefined })
+  const [auditStart, setAuditStart] = useState('')
+  const [auditEnd, setAuditEnd] = useState('')
+
+  // 起止倒置：可见提示并暂停时间过滤（不许静默空结果）；仅一端有值时单边过滤
+  const rangeInvalid = isRangeInverted(auditStart, auditEnd)
+  const hasTimeRange = Boolean(auditStart || auditEnd)
+
+  // 命中某个快捷区间则高亮（自定义值不命中任何快捷键）
+  const activeQuick = useMemo(() => {
+    if (!hasTimeRange || rangeInvalid) return undefined
+    return QUICK_RANGES.find((q) => {
+      const r = quickRangeDates(q.daysBack)
+      return r.start === auditStart && r.end === auditEnd
+    })
+  }, [hasTimeRange, rangeInvalid, auditStart, auditEnd])
+
+  const applyQuick = (q: QuickRange) => {
+    const r = quickRangeDates(q.daysBack)
+    const same = auditStart === r.start && auditEnd === r.end
+    setAuditStart(same ? '' : r.start)
+    setAuditEnd(same ? '' : r.end)
+    setAuditPage(1)
+  }
+
+  const changeDate = (which: 'start' | 'end', v: string) => {
+    if (which === 'start') setAuditStart(v)
+    else setAuditEnd(v)
+    setAuditPage(1)
+  }
+
+  const clearTimeRange = () => {
+    setAuditStart('')
+    setAuditEnd('')
+    setAuditPage(1)
+  }
+
+  const auditQuery = useAuditLogs({
+    page: auditPage,
+    pageSize: 20,
+    action: auditAction || undefined,
+    // 倒置期间两侧均不传（服务端 created_at 为 UTC「YYYY-MM-DD HH:MM:SS」字符串比较，须先换算）
+    startTime: auditStart && !rangeInvalid ? toServerStart(auditStart) : undefined,
+    endTime: auditEnd && !rangeInvalid ? toServerEnd(auditEnd) : undefined,
+  })
 
   const [cmdPage, setCmdPage] = useState(1)
   const cmdQuery = useCommandHistory({ page: cmdPage, pageSize: 20 })
@@ -177,7 +222,7 @@ export function AuditPage() {
         </TabsList>
 
         <TabsContent value="audit" className="min-h-0 flex-1 flex flex-col gap-3 mt-3">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Select value={auditAction || '全部'} onValueChange={(v) => { setAuditAction(v === '全部' ? '' : v); setAuditPage(1) }}>
               <SelectTrigger className="w-32" aria-label="按操作类型过滤">
                 <SelectValue />
@@ -189,7 +234,57 @@ export function AuditPage() {
                 ))}
               </SelectContent>
             </Select>
+
+            <div className="flex items-center gap-1" role="group" aria-label="快捷时间范围">
+              {QUICK_RANGES.map((q) => {
+                const active = activeQuick?.key === q.key
+                return (
+                  <Button
+                    key={q.key}
+                    size="sm"
+                    variant={active ? 'default' : 'outline'}
+                    aria-pressed={active}
+                    onClick={() => applyQuick(q)}
+                  >
+                    {q.label}
+                  </Button>
+                )
+              })}
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <Input
+                type="date"
+                className="w-36 text-mcs-xs"
+                value={auditStart}
+                max={auditEnd || undefined}
+                onChange={(e) => changeDate('start', e.target.value)}
+                aria-label="开始日期"
+              />
+              <span className="text-mcs-xs text-mcs-text-subtle">至</span>
+              <Input
+                type="date"
+                className="w-36 text-mcs-xs"
+                value={auditEnd}
+                min={auditStart || undefined}
+                onChange={(e) => changeDate('end', e.target.value)}
+                aria-label="结束日期"
+              />
+            </div>
+
+            {hasTimeRange && (
+              <Button size="sm" variant="ghost" onClick={clearTimeRange}>
+                <X aria-hidden />
+                清空时间
+              </Button>
+            )}
           </div>
+
+          {rangeInvalid && (
+            <p role="alert" className="text-mcs-xs text-mcs-error-fg">
+              起止时间倒置：时间过滤已暂停，调整后自动恢复
+            </p>
+          )}
 
           <DataTableShell
             columns={AUDIT_COLUMNS}
