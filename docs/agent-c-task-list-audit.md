@@ -56,7 +56,7 @@
   现状：routes/upgrade.js:22-24 仅「必填 + string」校验，无格式白名单。
   验收：路由层白名单 `/^\d{1,3}(\.\d{1,3}){0,3}$/`；jar 落地路径复用 resolveSafePath（或等价 contains 检查）；测试覆盖穿越 payload（`../`、绝对路径、编码变体）。
 
-- [ ] **A1-3** [安全] 网络暴露收口：rcon.port 实例派生 + HOST 可配 + 弱 Key 生产阻断（P0/P1·bug修复）｜中｜来源：audit S-P0-5 + S-P1-2
+- [x] **A1-3** [安全] 网络暴露收口：rcon.port 实例派生 + HOST 可配 + 弱 Key 生产阻断（P0/P1·bug修复）｜中｜来源：audit S-P0-5 + S-P1-2 ✅ #315 (2026-09-03)
   现状：server-jar.js:134 `rcon.port=25575` 硬编码（server-port 已派生）；index.js:186 硬编码 '0.0.0.0'；无弱 Key 生产阻断。
   **C 甄别**：审计把 RCON 派生与弱 Key/HOST 分列，三者同属「网络暴露面」，合并一个任务一次验收。
   验收：rcon.port 按 server-port 同款规则派生且不冲突；`HOST` 环境变量（默认 127.0.0.1，文档说明公网部署显式设 0.0.0.0）；生产（NODE_ENV=production）弱 Key 默认拒绝启动、`ALLOW_WEAK_KEY=1` 显式豁免；.env.example 同步。
@@ -97,7 +97,7 @@
 
 ## Phase A3 · 前端质量
 
-- [ ] **A3-1** [前端] WS 单例治理：connect 幂等 + 凭据变更重建 + 登出关闭（P0/P1·bug修复）｜中｜来源：audit F-P0-2 + F-P1-1
+- [x] **A3-1** [前端] WS 单例治理：connect 幂等 + 凭据变更重建 + 登出关闭（P0/P1·bug修复）｜中｜来源：audit F-P0-2 + F-P1-1
   现状（2026-09-03 复核）：api/ws.ts:81-89 connect 直接 `new WebSocketImpl` 无 readyState 检查（双连接/重复派发/泄漏）；use-server-socket.ts effect 内 socketSingleton 复用旧凭据（注释称「session 变更触发重建」但实现未重建）。
   **C 甄别**：审计两条同文件同根因（单例生命周期），合并一个任务。
   验收：connect 入口 readyState 检查（CONNECTING/OPEN 直接返回既有 promise）；重连前 close 旧连接清 timer；凭据不一致时 close+重建单例；登出显式关闭；测试覆盖双 connect/换 token 重连/登出。
