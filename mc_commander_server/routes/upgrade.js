@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { success, error, ErrorCodes } from '../utils/response.js';
 import { recordAudit } from '../utils/audit.js';
 import { AuditActions } from '../utils/audit.js';
-import { UpgradeService, VALID_TYPES } from '../services/upgrade.service.js';
+import { UpgradeService, VALID_TYPES, MC_VERSION_REGEX } from '../services/upgrade.service.js';
 
 /**
  * 升级路由（P0-4）
@@ -24,28 +24,37 @@ export function createUpgradeRoutes(serverManager) {
         return res.status(400).json(error(ErrorCodes.VALIDATION_ERROR, 'mcVersion is required'));
       }
 
-      // 前置校验 2：type 白名单
+      // 前置校验 2：mcVersion 白名单（S-P0-2）：仅允许点分数字版本形态，
+      // 杜绝 '../../'、绝对路径、URL 特殊字符等 payload 进入文件名与上游 URL。
+      // 正则从服务层导入，与服务层纵深防御同一口径。
+      if (!MC_VERSION_REGEX.test(mcVersion)) {
+        return res.status(400).json(
+          error(ErrorCodes.VALIDATION_ERROR, `Invalid mcVersion: ${mcVersion}. Expected dotted numeric version like 1.21.4`)
+        );
+      }
+
+      // 前置校验 3：type 白名单
       if (!VALID_TYPES.has(type)) {
         return res.status(400).json(error(ErrorCodes.VALIDATION_ERROR, `Invalid type: ${type}. Must be one of: ${[...VALID_TYPES].join(', ')}`));
       }
 
-      // 前置校验 3：实例存在
+      // 前置校验 4：实例存在
       const instance = serverManager.getInstance(id);
       if (!instance) {
         return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND, 'Instance not found'));
       }
 
-      // 前置校验 4：实例未运行（INSTANCE_RUNNING 语义 = 409 CONFLICT）
+      // 前置校验 5：实例未运行（INSTANCE_RUNNING 语义 = 409 CONFLICT）
       if (instance.status === 'running') {
         return res.status(ErrorCodes.INSTANCE_RUNNING.status).json(error(ErrorCodes.INSTANCE_RUNNING, 'Instance must be stopped before upgrade'));
       }
 
-      // 前置校验 5：未升级中
+      // 前置校验 6：未升级中
       if (upgradeService.isUpgrading(id)) {
         return res.status(409).json(error(ErrorCodes.UPGRADE_IN_PROGRESS, 'An upgrade is already in progress for this instance'));
       }
 
-      // 前置校验 6：版本不同
+      // 前置校验 7：版本不同
       if (instance.mcVersion === mcVersion) {
         return res.status(400).json(error(ErrorCodes.UPGRADE_VERSION_SAME, 'Target version is the same as current version'));
       }
