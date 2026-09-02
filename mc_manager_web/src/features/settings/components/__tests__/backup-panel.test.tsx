@@ -196,7 +196,9 @@ describe('BackupPanel 删除', () => {
     await screen.findByText('手动备份 2026-08-14')
     await user.click(screen.getByRole('button', { name: '手动备份 2026-08-14 删除' }))
     expect(screen.getByText('删除备份')).toBeInTheDocument()
-    expect(screen.getByText('确定要删除备份 “手动备份 2026-08-14” 吗？删除后无法恢复。')).toBeInTheDocument()
+    expect(screen.getByText('确定要删除备份 “手动备份 2026-08-14” 吗？')).toBeInTheDocument()
+    // 不可逆提示以 warning 色小字独立呈现（全站删除确认统一规范）
+    expect(screen.getByText('删除后无法恢复')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '删除' }))
     expect(await screen.findByText('备份已删除')).toBeInTheDocument()
   })
