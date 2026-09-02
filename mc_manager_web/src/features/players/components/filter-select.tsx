@@ -58,7 +58,7 @@ export function FilterSelect({
           {label}：{selectedLabel}
         </span>
       </SelectTrigger>
-      <SelectContent>
+      <SelectContent position="popper" sideOffset={4}>
         <SelectItem value={ALL_ITEM_VALUE}>全部</SelectItem>
         {mergedOptions.map((option) => (
           <SelectItem key={option.value} value={option.value}>
