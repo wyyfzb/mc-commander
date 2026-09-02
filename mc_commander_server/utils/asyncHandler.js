@@ -1,10 +1,12 @@
 /**
- * asyncHandler —— Express 4 异步路由包装（共享实现）
+ * asyncHandler —— async 路由包装（共享实现）
  *
- * 使用场景：Express 4 不支持 async 路由处理器的自动错误传递——处理器内
- * 抛出或 reject 的 Promise 不会被路由栈捕获，请求将永久挂起，且 Node 15+
- * 默认因 unhandledRejection 终止进程。本包装将 Promise rejection 转交
- * next(err)，由下游错误中间件统一响应。
+ * 使用场景：本仓库当前依赖 Express 5（^5.2.1），框架已原生把 async 处理器
+ * reject 的 Promise 转交错误中间件，本包装因此不承担版本兼容职责；保留意义
+ * 在于显式兜底与统一错误通道约定——调用点不依赖框架版本的隐式行为，且若
+ * 降级到 Express 4 依旧正确（Express 4 不会捕获路由返回的 Promise
+ * rejection，请求将永久挂起，且 Node 15+ 默认因 unhandledRejection 终止
+ * 进程）。
  *
  * 约定：仅包装 async 处理器；同步路由用原生 try/catch 风格即可。
  * 注意：包装的是「意外异常」的兜底通道，处理器内部对可预期失败
