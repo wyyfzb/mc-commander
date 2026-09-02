@@ -22,6 +22,8 @@ export const ErrorCode = {
   AUTH_NOT_CONFIGURED: 40013,
   AUTH_ALREADY_CONFIGURED: 40911,
   AUTH_LOGIN_LOCKED: 42901,
+  /** 首访设密 SETUP_TOKEN 校验失败（缺失/错误/已作废；公网部署所有权证明，issue 309） */
+  AUTH_SETUP_TOKEN_INVALID: 40104,
 
   INSTANCE_NOT_FOUND: 40401,
   INSTANCE_NOT_RUNNING: 40002,
@@ -82,6 +84,7 @@ const LOCALIZED_MESSAGES: Partial<Record<ErrorCodeValue, string>> = {
   [ErrorCode.AUTH_NOT_CONFIGURED]: '管理员密码尚未设置，请先完成初始化',
   [ErrorCode.AUTH_ALREADY_CONFIGURED]: '管理员密码已设置，请直接登录',
   [ErrorCode.AUTH_LOGIN_LOCKED]: '登录失败次数过多，请稍后再试',
+  [ErrorCode.AUTH_SETUP_TOKEN_INVALID]: 'SETUP_TOKEN 缺失或错误：请粘贴部署完成时输出的一次性令牌',
   [ErrorCode.INSTANCE_NOT_FOUND]: '服务器实例不存在',
   [ErrorCode.INSTANCE_NOT_RUNNING]: '实例未在运行',
   [ErrorCode.INSTANCE_RUNNING]: '实例正在运行',

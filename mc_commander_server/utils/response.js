@@ -87,6 +87,12 @@ export const ErrorCodes = {
   AUTH_ALREADY_CONFIGURED: { code: 40911, message: '管理员密码已设置', status: 409 },
   // 未设密码时尝试登录
   AUTH_NOT_CONFIGURED: { code: 40013, message: '管理员密码尚未设置，请先完成初始化', status: 400 },
+  // 首访设密 SETUP_TOKEN 校验失败（缺失/错误/已作废；公网部署所有权证明，#309）
+  AUTH_SETUP_TOKEN_INVALID: {
+    code: 40104,
+    message: 'SETUP_TOKEN 缺失或错误：请携带部署完成时输出的一次性令牌',
+    status: 403,
+  },
 };
 
 // 自定义错误类

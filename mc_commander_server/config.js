@@ -8,6 +8,10 @@ dotenv.config({ path: path.join(__dirname, '.env') });
 export default {
   apiKey: process.env.API_KEY || '',
   apiKeyHash: process.env.API_KEY_HASH || '',
+  // 首访设密所有权证明（一次性 SETUP_TOKEN，audit S-P0-1 / issue #309）：
+  // 部署脚本首次部署生成写入 .env；POST /auth/setup 强制校验，通过即作废
+  //（内存清空 + .env 移除，重启后同样失效）。未配置 = 未开启（本机首发兼容）
+  setupToken: process.env.SETUP_TOKEN || '',
   port: parseInt(process.env.PORT || '25566'),
   serversDir: path.resolve(process.env.SERVERS_DIR || './servers'),
   dataDir: path.resolve(process.env.DATA_DIR || './data'),

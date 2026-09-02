@@ -104,4 +104,22 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
     expect(script).toContain('1f8b');
     expect(script).toContain('解压后未找到 package.json');
   });
+
+  describe('SETUP_TOKEN 首访设密所有权证明（audit S-P0-1 / #309）', () => {
+    it('首次部署生成一次性 SETUP_TOKEN（openssl rand -hex 32）并写入 .env', () => {
+      expect(script).toContain('SETUP_TOKEN=$(openssl rand -hex 32)');
+      expect(script).toContain('SETUP_TOKEN=$SETUP_TOKEN');
+    });
+
+    it('部署完成输出展示 SETUP_TOKEN（与 API Key 同位置）并说明一次性语义', () => {
+      expect(script).toContain('► SETUP_TOKEN:');
+      expect(script).toContain('用后作废');
+    });
+
+    it('令牌仅在本次生成时展示（更新部署不重复暴露一次性凭据）', () => {
+      // 更新分支不读取/不生成 SETUP_TOKEN（仅首启 .env 创建时生成），banner 有值才打印
+      expect(script).toContain('SETUP_TOKEN=""');
+      expect(script).toMatch(/if \[ -n "\$SETUP_TOKEN" \]; then/);
+    });
+  });
 });

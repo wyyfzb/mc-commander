@@ -4,12 +4,20 @@ import { success, error, ErrorCodes } from '../utils/response.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
 import { AdminAccountModel, AdminSessionModel } from '../db/index.js';
 import { hashPassword, verifyPassword, hashToken, generateSessionToken } from '../utils/password.js';
+import { isSetupTokenRequired, verifySetupToken, consumeSetupToken } from '../utils/setup-token.js';
 
 /**
  * 管理员认证路由（安全主线：单管理员密码登录）
  *
  * - GET    /auth/status      公开  探测是否已设密（登录页首屏）
  * - POST   /auth/setup       公开  首访设密（仅未设密时可用；成功即自动登录）
+ *                                  所有权证明约定（#309）：.env 配置了 SETUP_TOKEN 时（公网
+ *                                  部署，部署脚本首次部署自动生成），请求必须携带
+ *                                  `Authorization: SetupToken <token>`（本文件与
+ *                                  utils/setup-token.js 约定的唯一通道；与 Bearer 会话头互不
+ *                                  干扰——setup 为公开端点，authMiddleware 直接放行）；校验
+ *                                  通过立即作废（内存 + .env，重启后同样失效）；未配置 token
+ *                                  时不校验，保持本机首发行为
  * - POST   /auth/login       公开  密码换会话令牌（失败锁定挂靠点）
  * - PUT    /auth/password    认证  改密（验旧密；改后踢掉其余会话）
  * - POST   /auth/logout      认证  登出（删除当前会话；仅会话认证可用）
@@ -81,6 +89,17 @@ function validatePasswordStrength(password) {
   );
 }
 
+/**
+ * 解析 `Authorization: SetupToken <token>` 头（setup 所有权证明通道）。
+ * scheme 按 RFC 7235 不区分大小写，token 值本身区分大小写；
+ * 格式不符/缺失返回 null。
+ */
+function parseSetupTokenHeader(header) {
+  if (typeof header !== 'string') return null;
+  const m = /^SetupToken\s+(\S+)\s*$/i.exec(header);
+  return m ? m[1] : null;
+}
+
 function createSession(req) {
   const token = generateSessionToken();
   const expiresAt = new Date(Date.now() + config.adminSession.ttlMs).toISOString();
@@ -101,11 +120,21 @@ export function createAuthRoutes() {
     res.json(success({ hasPassword: AdminAccountModel.isConfigured() }));
   });
 
-  // POST /api/v1/auth/setup —— 公开：首访设密（幂等防护：已设密 409）
+  // POST /api/v1/auth/setup —— 公开：首访设密（幂等防护：已设密 409；所有权证明：SETUP_TOKEN）
   router.post('/auth/setup', (req, res, next) => {
     try {
       if (AdminAccountModel.isConfigured()) {
         return res.status(409).json(error(ErrorCodes.AUTH_ALREADY_CONFIGURED, '管理员密码已设置，请直接登录'));
+      }
+      // 所有权证明（audit S-P0-1 / #309）：公网部署时「部署完成 → 管理员设密」窗口内
+      // 任何发现端口者可抢先设密永久接管面板；配置了 SETUP_TOKEN 则强制校验。
+      // token 校验置于密码强度校验之前——未证明所有权不泄露后续校验语义
+      const tokenRequired = isSetupTokenRequired();
+      if (tokenRequired) {
+        const provided = parseSetupTokenHeader(req.headers['authorization']);
+        if (!provided || !verifySetupToken(provided)) {
+          return res.status(403).json(error(ErrorCodes.AUTH_SETUP_TOKEN_INVALID));
+        }
       }
       const { password } = req.body || {};
       if (!validatePasswordStrength(password)) {
@@ -114,7 +143,18 @@ export function createAuthRoutes() {
           `密码长度需在 ${PASSWORD_MIN}-${PASSWORD_MAX} 位之间`,
         ));
       }
+      // TOCTOU 说明：better-sqlite3 为同步 API——上方 isConfigured() 检查与此处
+      // setPassword() 写入之间无 await，事件循环内原子，无并发竞态窗口；
+      // 该保障依赖同步语义（若换异步驱动需改为事务或条件更新）
       AdminAccountModel.setPassword(hashPassword(password));
+      // 一次性：设密成功即作废（内存清空 + .env 移除，重启后同样失效）
+      if (tokenRequired) {
+        const { envRemoved } = consumeSetupToken();
+        if (!envRemoved) {
+          // best-effort 失败仅告警：内存已作废，本进程内已不可再用
+          console.warn('[auth] SETUP_TOKEN 已作废，但 .env 移除失败（重启前请手动移除 SETUP_TOKEN 行）');
+        }
+      }
       // 设密即登录：首访向导完成直达面板
       const session = createSession(req);
       recordAudit({ action: AuditActions.AUTH_SETUP, targetType: 'admin', targetId: '1', detail: null });

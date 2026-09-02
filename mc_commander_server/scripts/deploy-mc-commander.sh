@@ -430,11 +430,19 @@ export npm_config_node_mirror="https://npmmirror.com/mirrors/node/"
 npm install --omit=dev
 
 # 9. 生成/读取 .env 配置（API Key 首次部署自动生成，更新时保留原有Key）
+# SETUP_TOKEN：首访设密所有权证明（audit S-P0-1 / #309）——仅首次部署生成；
+# 更新部署不读取不再生成（一次性凭据，避免重复展示扩大暴露面；存量部署
+# 需开启保护请手动向 .env 添加 SETUP_TOKEN 行后重启服务）
+SETUP_TOKEN=""
 if [ ! -f .env ]; then
   log "首次部署，生成 API Key 和 .env 配置文件..."
   API_KEY=$(openssl rand -hex 16)
+  # 一次性令牌：浏览器首访设密时需粘贴（服务端校验 Authorization: SetupToken <token>），
+  # 设密成功立即作废（内存清空 + .env 移除，重启后同样失效）
+  SETUP_TOKEN=$(openssl rand -hex 32)
   cat > .env <<EOF
 API_KEY=$API_KEY
+SETUP_TOKEN=$SETUP_TOKEN
 PORT=25566
 SERVERS_DIR=./servers
 DATA_DIR=./data
@@ -444,6 +452,7 @@ RATE_LIMIT_WINDOW=60000
 RATE_LIMIT_MAX=100
 EOF
   log "已生成 API Key: $API_KEY"
+  log "已生成一次性 SETUP_TOKEN（首访设密时需粘贴，用后作废）"
 else
   log ".env 已存在，读取现有配置..."
   # 从已有 .env 中读取 API_KEY（支持 API_KEY=xxx 或 API Key: xxx 格式）
@@ -579,6 +588,11 @@ echo "║                                                  ║"
 printf "║   ► 服务器地址:  %-34s ║\n" "$SERVER_IP"
 printf "║   ► 端口:        %-34s ║\n" "25566"
 printf "║   ► API Key:     %-34s ║\n" "$API_KEY"
+if [ -n "$SETUP_TOKEN" ]; then
+printf "║   ► SETUP_TOKEN: %-34s ║\n" "$SETUP_TOKEN"
+echo "║   ⓘ 仅首次设密使用：浏览器设密页粘贴，用后作废  ║"
+echo "║                                                  ║"
+fi
 echo "║                                                  ║"
 if [ "$IP_WARN" -eq 1 ]; then
 echo "║  ⚠ 以上地址为内网IP/未获取到，请在云服务器控制台 ║"
