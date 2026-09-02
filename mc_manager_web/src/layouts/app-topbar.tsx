@@ -1,4 +1,4 @@
-import { Bell, ChevronsLeft, ChevronsRight, KeyRound, LogOut, Menu, Moon, Search, Server, Settings, Sun, UserRound } from 'lucide-react'
+import { Bell, KeyRound, LogOut, Menu, Moon, Search, Server, Settings, Sun, UserRound } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
@@ -31,8 +31,6 @@ export function AppTopBar() {
   const navigate = useNavigate()
   const theme = useUiStore((s) => s.theme)
   const toggleTheme = useUiStore((s) => s.toggleTheme)
-  const sidebarCollapsed = useUiStore((s) => s.sidebarCollapsed)
-  const toggleSidebar = useUiStore((s) => s.toggleSidebar)
   const toggleMobileNav = useUiStore((s) => s.toggleMobileNav)
   const setCommandPaletteOpen = useUiStore((s) => s.setCommandPaletteOpen)
   const notificationsOpen = useUiStore((s) => s.notificationsOpen)
@@ -92,16 +90,7 @@ export function AppTopBar() {
 
   return (
     <header className="glass-chrome flex h-12 shrink-0 items-center gap-2 border-b border-mcs-border-muted px-3">
-      {/* 侧栏折叠（桌面）/ 移动端导航抽屉开关 */}
-      <IconButton
-        tooltip={sidebarCollapsed ? '展开侧栏' : '折叠侧栏'}
-        tooltipSide="bottom"
-        onClick={toggleSidebar}
-        aria-label={sidebarCollapsed ? '展开侧栏' : '折叠侧栏'}
-        className="hidden md:inline-flex"
-      >
-        {sidebarCollapsed ? <ChevronsRight /> : <ChevronsLeft />}
-      </IconButton>
+      {/* 移动端导航抽屉开关（桌面侧栏开合在侧栏 Logo 上，见 app-sidebar） */}
       <IconButton onClick={toggleMobileNav} aria-label="打开导航菜单" className="md:hidden">
         <Menu aria-hidden />
       </IconButton>
