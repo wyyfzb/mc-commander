@@ -6,6 +6,8 @@
  * 仅覆盖常见模式（星号步进、星号、具体数值、范围 1-5、列表 0,6），无法识别返回空串。
  */
 
+import { Cron } from 'croner'
+
 /** 字段选项（label 显示名 + value cron 字段值） */
 export interface CronFieldOption {
   label: string
@@ -232,8 +234,6 @@ export function monthName(mon: string): string {
   const n = strictParseInt(mon)
   return n === null ? mon : `${n}月`
 }
-
-import { Cron } from 'croner'
 
 /**
  * 计算标准 5 字段 cron 表达式的下一次运行时间

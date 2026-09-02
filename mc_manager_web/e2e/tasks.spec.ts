@@ -63,9 +63,9 @@ test.describe('任务页', () => {
     await page.getByRole('button', { name: '新建任务' }).click()
     // 打开可视化编辑器
     await page.getByRole('button', { name: '可视化编辑' }).click()
-    // 四字段标签可见（分/时/日/月）+ 周标签
-    for (const label of ['分', '时', '日', '月', '周']) {
-      await expect(page.getByText(label, { exact: true }).first()).toBeVisible()
+    // 四字段 Select 可见（分/时/日/月）
+    for (const label of ['分', '时', '日', '月']) {
+      await expect(page.getByRole('combobox', { name: label })).toBeVisible()
     }
     // 周字段为 7 个星期 chip（日一二三四五六）
     for (const chip of ['周日', '周一', '周二', '周三', '周四', '周五', '周六']) {
