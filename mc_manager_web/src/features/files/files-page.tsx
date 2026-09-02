@@ -540,7 +540,7 @@ export function FilesPage() {
         onOpenChange={(open) => !open && setDeleteTarget(null)}
         title={`删除 ${deleteTarget?.name ?? ''}？`}
         description={deleteTarget?.isDirectory === true ? `将递归删除目录「${deleteTarget?.name}」及其全部内容。` : `将删除文件「${deleteTarget?.name}」。`}
-        confirmText="确认删除"
+        confirmText="删除"
         danger
         warning="此操作不可撤销"
         loading={deleteMutation.isPending}
