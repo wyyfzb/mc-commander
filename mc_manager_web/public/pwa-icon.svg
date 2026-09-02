@@ -1,6 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-  <!-- MC Commander PWA 图标 512（品牌图标放大版：偏蓝深底 + 翠绿状态点） -->
+  <!-- MC Commander PWA 图标 512：终端提示符标记（与侧栏 BrandLogo 同构） -->
   <rect width="512" height="512" rx="107" fill="#0A0E1A"/>
-  <circle cx="256" cy="256" r="96" fill="#4ADE80"/>
-  <circle cx="256" cy="256" r="96" fill="none" stroke="#4ADE80" stroke-opacity="0.35" stroke-width="43"/>
+  <rect x="59" y="59" width="394" height="394" rx="107" fill="none" stroke="#E6EDF3" stroke-opacity="0.9" stroke-width="32"/>
+  <path d="M160 187 235 256l-75 69" fill="none" stroke="#4ADE80" stroke-width="43" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M288 325h69" fill="none" stroke="#4ADE80" stroke-width="43" stroke-linecap="round"/>
 </svg>
