@@ -157,18 +157,19 @@ describe('TaskDialog Cron 表达式交互', { timeout: 15000 }, () => {
     expect(screen.getByLabelText('任务名称')).toHaveValue('自定义任务名')
   })
 
-  it('可视化编辑器：五字段联动回写 + 自定义值项 + 双向同步', async () => {
+  it('可视化编辑器：四字段联动回写 + 周字段 chip + 自定义值项 + 双向同步', async () => {
     const user = userEvent.setup()
     renderDialog()
     await user.click(screen.getByRole('button', { name: '可视化编辑' }))
-    // 空表达式按全 * 显示
+    // 空表达式按全 * 显示（四字段 Select + 周字段 chip）
     expect(screen.getByRole('combobox', { name: '分' })).toHaveTextContent('每分钟')
     expect(screen.getByRole('combobox', { name: '时' })).toHaveTextContent('每小时')
     expect(screen.getByRole('combobox', { name: '日' })).toHaveTextContent('每天')
     expect(screen.getByRole('combobox', { name: '月' })).toHaveTextContent('每月')
-    expect(screen.getByRole('combobox', { name: '周' })).toHaveTextContent('每天')
+    // 周字段用 chip 多选：全不选=任意天（*），无 chip 激活
+    expect(screen.getByRole('button', { name: '周日' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('button', { name: '周一' })).toHaveAttribute('aria-pressed', 'false')
     // 选「分=0分」「时=4点」→ 逐字段回写完整表达式，描述实时更新
-    // （空表达式按全 * 处理：仅改小时字段会得到 `* 4 * * *`）
     await user.click(screen.getByRole('combobox', { name: '分' }))
     await user.click(await screen.findByRole('option', { name: '0分' }))
     expect(screen.getByLabelText('Cron 表达式')).toHaveValue('0 * * * *')
@@ -176,6 +177,10 @@ describe('TaskDialog Cron 表达式交互', { timeout: 15000 }, () => {
     await user.click(await screen.findByRole('option', { name: '4点' }))
     expect(screen.getByLabelText('Cron 表达式')).toHaveValue('0 4 * * *')
     expect(screen.getByText('04:00每天执行')).toBeInTheDocument()
+    // 点击周 chip 选中周一 → 表达式更新
+    await user.click(screen.getByRole('button', { name: '周一' }))
+    expect(screen.getByLabelText('Cron 表达式')).toHaveValue('0 4 * * 1')
+    expect(screen.getByRole('button', { name: '周一' })).toHaveAttribute('aria-pressed', 'true')
     // 文本输入非预设值 → 字段下拉出现「自定义: xxx」项
     const cronInput = screen.getByLabelText('Cron 表达式')
     await user.clear(cronInput)
