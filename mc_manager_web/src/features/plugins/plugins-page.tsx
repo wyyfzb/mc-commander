@@ -666,9 +666,9 @@ export function PluginsPage() {
         onOpenChange={(open) => {
           if (!open) setDeleteTarget(null)
         }}
-        title={`删除插件 ${deleteTarget?.name ?? ''}`}
+        title={`删除插件 ${deleteTarget?.name ?? ''}？`}
         description={`将永久删除文件 ${deleteTarget?.file ?? ''}。`}
-        warning="此操作不可恢复"
+        warning="此操作不可撤销"
         confirmText="删除"
         danger
         onConfirm={() => void handleDeleteConfirm()}
@@ -680,9 +680,9 @@ export function PluginsPage() {
         onOpenChange={(open) => {
           if (!open) setBatchDeleteOpen(false)
         }}
-        title={`删除 ${selected.size} 个插件`}
+        title={`删除 ${selected.size} 个插件？`}
         description="将永久删除选中的插件文件。"
-        warning="此操作不可恢复"
+        warning="此操作不可撤销"
         confirmText={`删除 ${selected.size} 个`}
         danger
         onConfirm={() => void handleBatchDeleteConfirm()}

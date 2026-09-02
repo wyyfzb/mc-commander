@@ -385,7 +385,7 @@ export default function WebhookPage() {
       <ConfirmDialog
         open={deleteTarget !== null}
         onOpenChange={(open) => !open && setDeleteTarget(null)}
-        title="确认删除"
+        title={`删除 Webhook 「${deleteTarget?.name ?? ''}」？`}
         description={`确定要删除 Webhook 「${deleteTarget?.name ?? ''}」吗？删除后将停止该通道的所有事件推送。`}
         confirmText="删除"
         danger

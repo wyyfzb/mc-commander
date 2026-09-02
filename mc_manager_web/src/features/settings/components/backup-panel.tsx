@@ -299,13 +299,13 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
         </div>
       </ConfirmDialog>
 
-      {/* 删除确认（危险操作：删除后无法恢复） */}
+      {/* 删除确认（危险操作：此操作不可撤销） */}
       <ConfirmDialog
         open={deleteTarget !== null}
         onOpenChange={(open) => !open && setDeleteTarget(null)}
-        title="删除备份"
+        title={`删除备份 “${deleteTarget?.name ?? ''}”？`}
         description={`确定要删除备份 “${deleteTarget?.name ?? ''}” 吗？`}
-        warning="删除后无法恢复"
+        warning="此操作不可撤销"
         confirmText="删除"
         danger
         loading={deleteMutation.isPending}

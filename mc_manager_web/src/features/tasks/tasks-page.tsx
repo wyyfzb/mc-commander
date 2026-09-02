@@ -194,7 +194,7 @@ export function TasksPage() {
       <ConfirmDialog
         open={deleteTarget !== null}
         onOpenChange={(open) => !open && setDeleteTarget(null)}
-        title="确认删除"
+        title={`删除任务 "${deleteTarget?.name ?? ''}"？`}
         description={`确定要删除任务 "${deleteTarget?.name ?? ''}" 吗？`}
         warning="此操作不可撤销"
         confirmText="删除"
