@@ -8,6 +8,13 @@ import { useState } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { StatusPill } from '@/components/mcs/status-pill'
 import { PageHeader } from '@/components/mcs/page-header'
 import { DataTableShell } from '@/components/mcs/data-table-shell'
@@ -171,17 +178,17 @@ export function AuditPage() {
 
         <TabsContent value="audit" className="min-h-0 flex-1 flex flex-col gap-3 mt-3">
           <div className="flex items-center gap-2">
-            <select
-              className="h-8 rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-muted px-2 text-mcs-sm text-mcs-text-default"
-              value={auditAction}
-              onChange={(e) => { setAuditAction(e.target.value); setAuditPage(1) }}
-              aria-label="按操作类型过滤"
-            >
-              <option value="">全部操作</option>
-              {Object.entries(ACTION_LABELS).map(([k, v]) => (
-                <option key={k} value={k}>{v}</option>
-              ))}
-            </select>
+            <Select value={auditAction || '全部'} onValueChange={(v) => { setAuditAction(v === '全部' ? '' : v); setAuditPage(1) }}>
+              <SelectTrigger className="w-32" aria-label="按操作类型过滤">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="全部">全部操作</SelectItem>
+                {Object.entries(ACTION_LABELS).map(([k, v]) => (
+                  <SelectItem key={k} value={k}>{v}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <DataTableShell
