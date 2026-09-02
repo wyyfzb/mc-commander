@@ -1113,7 +1113,7 @@ describe('MCServerManager', () => {
       const tmpDir = instance.serverPath;
       fs.writeFileSync(path.join(tmpDir, 'playerdata'), 'not a dir');
 
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const errorSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true); // logger.error 走 stderr
       try {
         instance._savePlayerData('Steve', { name: 'Steve' });
         // 修复前：空 catch 静默吞掉，写盘失败无任何日志可排查

@@ -3,6 +3,7 @@ import { success, error, ErrorCodes } from '../utils/response.js';
 import { recordAudit } from '../utils/audit.js';
 import { AuditActions } from '../utils/audit.js';
 import { UpgradeService, VALID_TYPES, MC_VERSION_REGEX } from '../services/upgrade.service.js';
+import { logger } from '../utils/logger.js';
 
 /**
  * 升级路由（P0-4）
@@ -69,7 +70,7 @@ export function createUpgradeRoutes(serverManager) {
 
       // 异步启动升级（不 await）
       upgradeService.upgrade(id, mcVersion, type).catch((err) => {
-        console.error(`[UpgradeRoute] Upgrade failed for ${id}:`, err.message);
+        logger.error(`[UpgradeRoute] Upgrade failed for ${id}:`, err.message);
       });
 
       return res.status(202).json(success({

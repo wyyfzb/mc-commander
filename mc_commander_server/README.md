@@ -55,6 +55,39 @@ npm start
 
 参见根目录 README。
 
+## 日志
+
+服务端日志经 `utils/logger.js` 统一收口，四级级别过滤：
+
+| 级别 | 流向 | 说明 |
+|------|------|------|
+| `debug` | stdout | 开发排障细节 |
+| `info` | stdout | 常规运行信息 |
+| `warn` | stderr | 可恢复告警 |
+| `error` | stderr + `data/logs/error.log` | 错误（独立分流落盘） |
+
+- **级别控制**：`.env` 设置 `LOG_LEVEL`（`debug` / `info` / `warn` / `error`，默认 `info`），低于设定级别的日志不输出。
+- **error 分流与轮转**：error 级别独立写入 `data/logs/error.log`；单文件 20MB，满后整体后移轮转为 `error.log.1` ~ `error.log.5`（最旧删除，磁盘占用上限约 100MB）。
+- **启动横幅白名单**：版本/端口/目录等启动信息与 exit 前引导告警走 stderr 白名单，不受 `LOG_LEVEL` 过滤，任何级别下均可见。
+- **每行格式**：`[ISO-8601 时间戳] [LEVEL] 消息`，占位符与多参数行为与 `console.*` 一致。
+
+### systemd / journalctl 场景
+
+服务由 systemd 托管时，stdout/stderr 自动进入 journal：
+
+```bash
+# 全部日志（stdout + stderr 合流，含启动横幅）
+journalctl -u mc-commander -f
+
+# 仅看告警与错误（warn/error 走 stderr，按优先级过滤）
+journalctl -u mc-commander -p warning -f
+
+# 本次启动的日志
+journalctl -u mc-commander -b --no-pager
+```
+
+提示：error 除 journal 外仍落盘 `data/logs/error.log`（即 `DATA_DIR/logs/error.log`），便于 journal 轮转后回溯历史错误；`LOG_LEVEL` 默认 `info` 已含全部常规运行信息，无需另行配置日志文件。
+
 ## API 文档
 
 ### 认证

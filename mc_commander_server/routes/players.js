@@ -8,6 +8,7 @@ import { recordAudit, AuditActions } from '../utils/audit.js';
 import { banRequestBodySchema } from '@mc-commander/schemas';
 import { validateBody } from '../middleware/validate.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import { logger } from '../utils/logger.js';
 
 // Minecraft 玩家名规范：3-16 位字母数字下划线
 const PLAYER_NAME_REGEX = /^[A-Za-z0-9_]{3,16}$/;
@@ -170,7 +171,7 @@ export function createPlayerRoutes(serverManager) {
           }
         }
       } catch (e) {
-        console.warn('Failed to fetch player details:', e.message);
+        logger.warn('Failed to fetch player details:', e.message);
       }
     } else if (onlinePlayers.length > 0) {
       // RCON 不可用时，从 .dat 文件加载物品栏快照作为回退
@@ -361,7 +362,7 @@ export function createPlayerRoutes(serverManager) {
       const details = await instance.getPlayerDetails(playerName);
       res.json(success({ ...baseInfo, ...details }));
     } catch (e) {
-      console.error(`Failed to get player details for ${playerName}:`, e);
+      logger.error(`Failed to get player details for ${playerName}:`, e);
       const fallbackSaved = loadPlayerData(instance.serverPath, playerName) || {};
       // 与成功路径字段集对齐：缺 sessions/stats/inventory/armor/xpProgress
       // 会让前端把 undefined 当数组访问崩溃——detail-log-tab 对 sessions 展开
@@ -494,7 +495,7 @@ export function createPlayerRoutes(serverManager) {
         try {
           BanModel.deactivate(tempBan.id);
         } catch (rollbackErr) {
-          console.error(`Failed to rollback temp ban record ${tempBan.id}:`, rollbackErr);
+          logger.error(`Failed to rollback temp ban record ${tempBan.id}:`, rollbackErr);
         }
       }
       throw err;
@@ -536,7 +537,7 @@ export function createPlayerRoutes(serverManager) {
             expiresAt: b.expiresAt,
           });
         } catch (restoreErr) {
-          console.error(`Failed to restore temp ban record for ${b.target}:`, restoreErr);
+          logger.error(`Failed to restore temp ban record for ${b.target}:`, restoreErr);
         }
       }
       throw err;
@@ -597,7 +598,7 @@ export function createPlayerRoutes(serverManager) {
             expiresAt: b.expiresAt,
           });
         } catch (restoreErr) {
-          console.error(`Failed to restore temp ban record for ${b.target}:`, restoreErr);
+          logger.error(`Failed to restore temp ban record for ${b.target}:`, restoreErr);
         }
       }
       throw err;

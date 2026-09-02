@@ -815,7 +815,7 @@ describe('MCServerInstance lifecycle / RCON / stats timers', () => {
       instance.players.set('Steve', { name: 'Steve', joinTime: Date.now(), totalPlayTime: 0 });
       vi.spyOn(instance, '_rconEnsureConnected').mockRejectedValue(new Error('connect failed'));
       const sendSpy = vi.spyOn(instance, '_rconSend');
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true); // logger.warn 走 stderr
 
       await instance._collectPlayerStats();
 
@@ -913,7 +913,7 @@ describe('MCServerInstance lifecycle / RCON / stats timers', () => {
       instance.players.set('Steve', { name: 'Steve', joinTime: Date.now(), totalPlayTime: 0 });
       instance.players.set('Alex', { name: 'Alex', joinTime: Date.now(), totalPlayTime: 0 });
       Rcon.connect.mockResolvedValue(makeFakeRconClient());
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true); // logger.warn 走 stderr
       // Steve 的 SleepTimer 查询失败，Alex 正常入睡
       vi.spyOn(instance, '_rconSend')
         .mockResolvedValueOnce('Steve has the following entity data: 20.0f')

@@ -61,7 +61,7 @@ describe('PUT /api/instances/:id/properties 键白名单与值校验', () => {
       getInstance: vi.fn(),
     };
     app = buildApp(mockManager);
-    consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    consoleWarnSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true); // logger.warn 走 stderr
   });
 
   afterEach(() => {

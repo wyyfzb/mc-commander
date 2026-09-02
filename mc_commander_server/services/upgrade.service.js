@@ -15,6 +15,7 @@ import {
   assertDownloadIntegrity,
   assertSizeWithinLimit,
 } from '../utils/jar-download-guard.js';
+import { logger } from '../utils/logger.js';
 
 const VALID_TYPES = new Set(['vanilla', 'paper', 'purpur']);
 
@@ -458,7 +459,7 @@ export class UpgradeService {
           }
         }
       } catch (rollbackErr) {
-        console.error(`[UpgradeService] Rollback failed for ${instanceId}:`, rollbackErr);
+        logger.error(`[UpgradeService] Rollback failed for ${instanceId}:`, rollbackErr);
       }
 
       this._emitProgress(instanceId, UPGRADE_STAGES.FAILED, 0, `升级失败并已回滚: ${err.message}`);

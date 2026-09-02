@@ -355,7 +355,7 @@ describe('安全修复：level-name 服务层兜底校验', () => {
     const instance = createInstance();
     // world 目录不存在 → 回退后统计结果为 0；未修复时 resolve 到 tmpDir 上级（存在）会统计其大小
     instance.properties = { 'level-name': '..' };
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true); // logger.warn/error 均走 stderr
     expect(instance._getWorldSize()).toBe(0);
     expect(warnSpy).toHaveBeenCalled();
     warnSpy.mockRestore();
@@ -367,7 +367,7 @@ describe('安全修复：level-name 服务层兜底校验', () => {
     fs.writeFileSync(path.join(tmpDir, 'my_world-1', 'data.bin'), '12345678');
     instance.properties = { 'level-name': 'my_world-1' };
     // 8 字节 → 0GB（四舍五入），仅验证不告警、不抛错
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true); // logger.warn/error 均走 stderr
     expect(instance._getWorldSize()).toBe(0);
     expect(warnSpy).not.toHaveBeenCalled();
     warnSpy.mockRestore();
@@ -376,7 +376,7 @@ describe('安全修复：level-name 服务层兜底校验', () => {
   it('start() 的 session.lock 清理：非法 level-name 回退 world，不越界 unlink', () => {
     const instance = createInstance();
     instance.properties = { 'level-name': '..' };
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true); // logger.warn/error 均走 stderr
     // 未修复时 lockPath = tmpDir/../session.lock（越界 unlink）；修复后回退 tmpDir/world/session.lock
     expect(() => instance.start()).not.toThrow();
     expect(spawn).toHaveBeenCalledTimes(1);
@@ -387,7 +387,7 @@ describe('安全修复：level-name 服务层兜底校验', () => {
   it('_readSeedFromLevelDat / _readWeatherFromLevelDat 非法 level-name 回退 world 不越界', () => {
     const instance = createInstance();
     instance.properties = { 'level-name': '../evil' };
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true); // logger.warn/error 均走 stderr
     expect(instance._readSeedFromLevelDat()).toBeNull();
     expect(instance._readWeatherFromLevelDat()).toBeNull();
     expect(warnSpy).toHaveBeenCalled();
@@ -448,7 +448,7 @@ describe('安全修复：读侧路径校验', () => {
     // gzip 压缩的空 NBT compound（无 Inventory 字段 → 快照为空但结构有效）
     fs.writeFileSync(path.join(dataDir, 'u1.dat'), zlib.gzipSync(Buffer.from([10, 0, 0])));
     instance.properties = { 'level-name': '../../evil' };
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true); // logger.warn/error 均走 stderr
     const inv = instance._loadInventoryFromDat('u1', 'Steve');
     expect(inv).not.toBeNull();
     expect(inv.source).toBe('snapshot');
@@ -464,7 +464,7 @@ describe('安全修复：读侧路径校验', () => {
     }));
     vi.spyOn(instance, '_getPlayerUuid').mockReturnValue('u1');
     instance.properties = { 'level-name': '../evil' };
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true); // logger.warn/error 均走 stderr
     const real = instance._loadPlayerRealStats('Steve');
     expect(real).not.toBeNull();
     expect(real.deaths).toBe(7);

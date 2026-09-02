@@ -3,6 +3,7 @@ import { getDb } from './db/index.js';
 import os from 'os';
 import fs from 'fs';
 import config from './config.js';
+import { logger } from './utils/logger.js';
 
 export const WSEvents = {
   LOG: 'log',
@@ -95,10 +96,10 @@ export function cleanupNotificationEvents() {
       .prepare(`DELETE FROM notification_events WHERE created_at < datetime('now', ?)`)
       .run(`-${NOTIFICATION_EVENT_RETENTION_DAYS} days`);
     if (result.changes > 0) {
-      console.log(`[WebSocket] Cleaned up ${result.changes} stale notification events`);
+      logger.info(`[WebSocket] Cleaned up ${result.changes} stale notification events`);
     }
   } catch (err) {
-    console.error('Failed to clean up notification events:', err);
+    logger.error('Failed to clean up notification events:', err);
   }
 }
 
@@ -117,7 +118,7 @@ function persistNotificationEvent(instanceId, type, data) {
     return result.lastInsertRowid;
   } catch (err) {
     // 落库失败不阻断广播（通知投递优先），但记录日志便于审计
-    console.error(`Failed to persist notification event (${type}):`, err);
+    logger.error(`Failed to persist notification event (${type}):`, err);
     return null;
   }
 }
@@ -139,7 +140,7 @@ export function setupWebSocket(wss, serverManager) {
 
     for (const client of clients) {
       if (client.isAlive === false) {
-        console.warn('Terminating dead websocket client (heartbeat timeout)');
+        logger.warn('Terminating dead websocket client (heartbeat timeout)');
         client.terminate();
         clients.delete(client);
         continue;
@@ -148,7 +149,7 @@ export function setupWebSocket(wss, serverManager) {
       // 会话复验：仅对 session 认证的连接（API Key 无会话可过期）
       if (doSessionRevalidate && client._sessionToken) {
         if (!authenticateWebSocket(null, client._sessionToken)) {
-          console.warn('Closing websocket: session token no longer valid (kicked or expired)');
+          logger.warn('Closing websocket: session token no longer valid (kicked or expired)');
           client.close(1008, 'Session invalidated');
           clients.delete(client);
           continue;
@@ -180,7 +181,7 @@ export function setupWebSocket(wss, serverManager) {
     // 连接数上限：clients 已满（≥ MAX_CONNECTIONS）时拒绝新连接，
     // 防止恶意客户端无限建连耗尽服务端资源
     if (clients.size >= MAX_CONNECTIONS) {
-      console.warn(`Rejecting websocket connection: too many clients (${clients.size})`);
+      logger.warn(`Rejecting websocket connection: too many clients (${clients.size})`);
       ws.close(1013, 'Too many connections');
       return;
     }
@@ -192,7 +193,7 @@ export function setupWebSocket(wss, serverManager) {
     ws.on('pong', () => {
       ws.isAlive = true;
     });
-    console.log(`WebSocket client connected. Total: ${clients.size}`);
+    logger.info(`WebSocket client connected. Total: ${clients.size}`);
 
     ws.subscribedInstances = new Set();
     // 消息速率限制状态：当前窗口起点与窗口内已收消息数
@@ -209,7 +210,7 @@ export function setupWebSocket(wss, serverManager) {
       }
       ws._msgCount += 1;
       if (ws._msgCount > MAX_MESSAGES_PER_WINDOW) {
-        console.warn('Closing websocket client: message rate limit exceeded');
+        logger.warn('Closing websocket client: message rate limit exceeded');
         ws.close(1008, 'Message rate limit exceeded');
         return;
       }
@@ -264,11 +265,11 @@ export function setupWebSocket(wss, serverManager) {
 
     ws.on('close', () => {
       clients.delete(ws);
-      console.log(`WebSocket client disconnected. Total: ${clients.size}`);
+      logger.info(`WebSocket client disconnected. Total: ${clients.size}`);
     });
 
     ws.on('error', (err) => {
-      console.error('WebSocket error:', err);
+      logger.error('WebSocket error:', err);
     });
   });
 
@@ -305,10 +306,10 @@ export function setupWebSocket(wss, serverManager) {
         }));
       }
       if (events.length > 0) {
-        console.log(`Replayed ${events.length} notification events to client (after id ${lastEventId})`);
+        logger.info(`Replayed ${events.length} notification events to client (after id ${lastEventId})`);
       }
     } catch (err) {
-      console.error('Failed to replay notification events:', err);
+      logger.error('Failed to replay notification events:', err);
     }
   }
 
@@ -334,7 +335,7 @@ export function setupWebSocket(wss, serverManager) {
       if (client.bufferedAmount > 1024 * 1024) {
         if (type === WSEvents.LOG) continue;
         if (client.bufferedAmount > 8 * 1024 * 1024) {
-          console.warn('Terminating slow websocket client (bufferedAmount overflow)');
+          logger.warn('Terminating slow websocket client (bufferedAmount overflow)');
           client.terminate();
           continue;
         }
@@ -446,7 +447,7 @@ export function setupWebSocket(wss, serverManager) {
     try {
       serverManager.on(eventName, handler);
     } catch (err) {
-      console.error(`Failed to register WebSocket listener for ${eventName}:`, err);
+      logger.error(`Failed to register WebSocket listener for ${eventName}:`, err);
     }
   }
 

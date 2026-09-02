@@ -10,6 +10,7 @@ import config from '../config.js';
 import { backupCreateRequestSchema } from '@mc-commander/schemas';
 import { validateBody } from '../middleware/validate.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import { logger } from '../utils/logger.js';
 
 // 进行中操作互斥检查（restoring 状态机）：同实例存在 creating（备份中）
 // 或 restoring（恢复中）记录时返回 true。创建/恢复/删除三入口统一口径；
@@ -160,7 +161,7 @@ export function createBackupRoutes(serverManager) {
     res.setHeader('Content-Disposition', contentDisposition(dirName));
     const tar = spawn('tar', ['-czf', '-', '-C', resolvedDir, '.']);
     tar.stdout.pipe(res);
-    tar.stderr.on('data', (d) => console.warn('[backup-download] tar stderr:', d.toString()));
+    tar.stderr.on('data', (d) => logger.warn('[backup-download] tar stderr:', d.toString()));
     tar.on('error', (err) => {
       if (!res.headersSent) res.status(500).json({ status: 'error', code: 50000, message: err.message });
       else res.destroy();

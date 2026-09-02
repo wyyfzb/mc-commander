@@ -9,6 +9,7 @@
  *   故障）；__tests__/schemas.contract.test.js 在 CI 实打实断言响应可 parse。
  */
 import { success, successPaginated, error, ErrorCodes } from '../utils/response.js';
+import { logger } from '../utils/logger.js';
 
 /** zod issues → 结构化 details（path 折叠为点号路径，便于客户端定位） */
 function formatIssues(zodError) {
@@ -37,7 +38,7 @@ export function validateBody(schema) {
 export function validatedSuccess(schema, data, message = 'Success') {
   const result = schema.safeParse(data);
   if (!result.success) {
-    console.error('[contract] 响应数据与 schema 不一致:', JSON.stringify(formatIssues(result.error)));
+    logger.error('[contract] 响应数据与 schema 不一致:', JSON.stringify(formatIssues(result.error)));
   }
   return success(data, message);
 }
@@ -49,7 +50,7 @@ export function validatedSuccessPaginated(schema, data, total, page, pageSize, m
     .map((item, index) => ({ item, index, result: schema.safeParse(item) }))
     .find((entry) => !entry.result.success);
   if (mismatch) {
-    console.error(
+    logger.error(
       `[contract] 响应列表第 ${mismatch.index} 条与 schema 不一致:`,
       JSON.stringify(formatIssues(mismatch.result.error))
     );

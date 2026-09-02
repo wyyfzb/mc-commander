@@ -6,6 +6,7 @@ import { BackupModel } from '../db/backup.model.js';
 import { BackupService } from './backup.service.js';
 import { runPanelBackupCycle } from './panel-backup.service.js';
 import config from '../config.js';
+import { logger } from '../utils/logger.js';
 
 /**
  * 定时任务调度器
@@ -27,7 +28,7 @@ export class TaskScheduler {
     if (this.running) return;
 
     this.running = true;
-    console.log('Task scheduler started');
+    logger.info('Task scheduler started');
 
     this.interval = setInterval(() => {
       this.checkAndRunTasks();
@@ -48,7 +49,7 @@ export class TaskScheduler {
       this.panelBackupCron.stop();
       this.panelBackupCron = null;
     }
-    console.log('Task scheduler stopped');
+    logger.info('Task scheduler stopped');
   }
 
   // 面板库每日快照（独立 croner 实例）：不进用户定时任务体系——面板库
@@ -60,19 +61,19 @@ export class TaskScheduler {
         this.runPanelBackup();
       });
     } catch (err) {
-      console.error('Panel backup cron register failed:', err.message);
+      logger.error('Panel backup cron register failed:', err.message);
     }
   }
 
   async runPanelBackup() {
     try {
       const result = await runPanelBackupCycle();
-      console.log(
+      logger.info(
         `[PanelBackup] snapshot ok: ${path.basename(result.filePath)} ` +
         `(${Math.max(1, Math.round(result.sizeBytes / 1024))} KB), cleaned ${result.deletedCount}`
       );
     } catch (err) {
-      console.error('[PanelBackup] snapshot failed:', err.message);
+      logger.error('[PanelBackup] snapshot failed:', err.message);
     }
   }
 
@@ -105,11 +106,11 @@ export class TaskScheduler {
             this.executeTask(task);
           }
         } catch (err) {
-          console.error(`Error checking task ${task.id}:`, err);
+          logger.error(`Error checking task ${task.id}:`, err);
         }
       }
     } catch (err) {
-      console.error('Error checking scheduled tasks:', err);
+      logger.error('Error checking scheduled tasks:', err);
     }
   }
 
@@ -134,20 +135,20 @@ export class TaskScheduler {
         instance.sendCommand(cmd)
           .then(() => {
             BanModel.deactivate(ban.id);
-            console.log(`Auto-pardoned ${ban.targetType} ${ban.target} (expired temp ban)`);
+            logger.info(`Auto-pardoned ${ban.targetType} ${ban.target} (expired temp ban)`);
           })
           .catch((err) => {
             // 发送失败时保留记录，下次轮询重试
-            console.error(`Failed to auto-pardon ${ban.target} (${ban.targetType}):`, err.message);
+            logger.error(`Failed to auto-pardon ${ban.target} (${ban.targetType}):`, err.message);
           });
       }
     } catch (err) {
-      console.error('Error checking expired temp bans:', err);
+      logger.error('Error checking expired temp bans:', err);
     }
   }
 
   executeTask(task) {
-    console.log(`Executing scheduled task: ${task.name} (${task.type})`);
+    logger.info(`Executing scheduled task: ${task.name} (${task.type})`);
     // 执行起点：command/backup 的异步结果回写历史时换算 duration_ms
     const startTs = Date.now();
 
@@ -230,7 +231,7 @@ export class TaskScheduler {
               status: 'restoring',
             }).total;
             if (creatingCount + restoringCount > 0) {
-              console.warn(
+              logger.warn(
                 `Scheduled backup skipped for instance ${task.instanceId}: backup/restore already in progress`
               );
               // 跳过必须对用户可见：发送 backupSkipped 提示事件；结果状态
@@ -261,7 +262,7 @@ export class TaskScheduler {
               // 仅 setup 阶段失败（世界缺失/磁盘不足/RCON 不可用等，executeBackup
               // 尚未启动）走这里；执行阶段失败由 executeBackup 内部回写。
               // 定时备份失败必须对用户可见：补发 backupFailed 事件（旧实现仅记日志）
-              console.error(`Scheduled backup failed for instance ${task.instanceId}:`, err);
+              logger.error(`Scheduled backup failed for instance ${task.instanceId}:`, err);
               if (this.serverManager) {
                 this.serverManager.emit('instance:backupFailed', {
                   instanceId: task.instanceId,
@@ -272,7 +273,7 @@ export class TaskScheduler {
               }
               ScheduledTaskModel.updateLastRunStatus(task.id, 'failed', err.message, Date.now() - startTs);
             });
-            console.log(`Backup task triggered for instance ${task.instanceId}`);
+            logger.info(`Backup task triggered for instance ${task.instanceId}`);
           } else {
             // 实例缺失（instance_id 为空/实例未被加载）：与 command 分支一致记 skipped，
             // 避免备份分支零落库（不刷新 last_run_at 也不写状态）
@@ -281,7 +282,7 @@ export class TaskScheduler {
           break;
 
         default:
-          console.warn(`Unknown task type: ${task.type}`);
+          logger.warn(`Unknown task type: ${task.type}`);
           ScheduledTaskModel.updateLastRun(task.id, nextRunAt, 'failed', `未知任务类型: ${task.type}`, Date.now() - startTs);
           this.emitTaskFailed(task, new Error(`未知任务类型: ${task.type}`));
       }
@@ -295,7 +296,7 @@ export class TaskScheduler {
       }
 
     } catch (err) {
-      console.error(`Task execution failed (${task.name}):`, err);
+      logger.error(`Task execution failed (${task.name}):`, err);
       // 同步 throw（如 start 的 EULA/路径校验）：失败同样落库记录 last_run_at
       ScheduledTaskModel.updateLastRun(task.id, nextRunAt, 'failed', err?.message ?? String(err), Date.now() - startTs);
       this.emitTaskFailed(task, err);
@@ -349,7 +350,7 @@ function getNextRun(cronExpr) {
     const cron = new Cron(cronExpr, { paused: true });
     return cron.nextRun();
   } catch (e) {
-    console.error(`Invalid cron expression: ${cronExpr}`, e);
+    logger.error(`Invalid cron expression: ${cronExpr}`, e);
     return null;
   }
 }

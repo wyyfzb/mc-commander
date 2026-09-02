@@ -13,7 +13,7 @@ describe('errorHandler 500 分支', () => {
       json: vi.fn().mockReturnThis()
     };
     next = vi.fn();
-    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(process.stderr, 'write').mockImplementation(() => true); // 静默 logger.error 的 stderr 输出
   });
 
   afterEach(() => {

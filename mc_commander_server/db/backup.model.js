@@ -1,4 +1,5 @@
 import { getDb } from './database.js';
+import { logger } from '../utils/logger.js';
 
 // 对外查询列白名单（find-021）：显式列出字段，绝不返回 file_path。
 // file_path 是服务器本地磁盘路径，原样下发给 API 客户端会泄露服务器
@@ -179,7 +180,7 @@ export class BackupModel {
         const target = row.status === 'restoring' ? 'completed' : 'failed';
         db.prepare(`UPDATE backups SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
           .run(target, row.id);
-        console.warn(
+        logger.warn(
           `[Backup] Reset stale ${row.status} backup record #${row.id} -> ${target} (crashed process)`
         );
         resetCount++;

@@ -1,5 +1,6 @@
 import { getDb } from './database.js';
 import { TaskRunHistoryModel } from './task_run_history.model.js';
+import { logger } from '../utils/logger.js';
 
 export class ScheduledTaskModel {
   static findAll(options = {}) {
@@ -206,7 +207,7 @@ export class ScheduledTaskModel {
         runAt: row?.last_run_at ?? null,
       });
     } catch (err) {
-      console.warn(`[TaskRunHistory] record failed for task ${taskId}:`, err.message);
+      logger.warn(`[TaskRunHistory] record failed for task ${taskId}:`, err.message);
     }
   }
 }

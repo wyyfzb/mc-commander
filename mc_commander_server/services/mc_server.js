@@ -12,6 +12,7 @@ import { atomicWriteFile } from '../utils/fs-utils.js';
 import { reconcileTempBans } from '../utils/ban-reconcile.js';
 // offline uuid / stats 时长读取全仓公共实现（与 routes/players.js 共用 player-utils.js）
 import { offlineUuid as computeOfflineUuid, getTotalPlayTime } from '../utils/player-utils.js';
+import { logger } from '../utils/logger.js';
 
 // 原子写统一走 utils/fs-utils.js 公共实现（写唯一 .tmp 再 rename，失败清残留）。
 // 保留 re-export：routes/status.js（_syncInstanceJson 同步 instance.json）与
@@ -79,9 +80,9 @@ export class MCServerManager extends EventEmitter {
     let dbInstances = [];
     try {
       dbInstances = InstanceModel.getAll();
-      console.log(`Loading ${dbInstances.length} instances from DB`);
+      logger.info(`Loading ${dbInstances.length} instances from DB`);
     } catch (e) {
-      console.warn('Failed to load instances from DB, will try file system:', e.message);
+      logger.warn('Failed to load instances from DB, will try file system:', e.message);
     }
 
     // 2. 从 DB 加载到内存
@@ -101,9 +102,9 @@ export class MCServerManager extends EventEmitter {
           autoStart: inst.autoStart,
           mcVersion: inst.mcVersion,
         });
-        console.log(`Loaded instance from DB: ${inst.id}`);
+        logger.info(`Loaded instance from DB: ${inst.id}`);
       } catch (e) {
-        console.error(`Failed to load DB instance ${inst.id}:`, e);
+        logger.error(`Failed to load DB instance ${inst.id}:`, e);
       }
     }
 
@@ -130,7 +131,7 @@ export class MCServerManager extends EventEmitter {
                   ...instanceConfig,
                   serverPath: path.join(config.serversDir, dir.name)
                 });
-                console.log(`Loaded migrated instance: ${instanceConfig.id}`);
+                logger.info(`Loaded migrated instance: ${instanceConfig.id}`);
               }
               continue;
             }
@@ -155,7 +156,7 @@ export class MCServerManager extends EventEmitter {
           }
 
           // DB 无记录，执行迁移
-          console.log(`Migrating instance ${instanceConfig.id} from JSON to DB...`);
+          logger.info(`Migrating instance ${instanceConfig.id} from JSON to DB...`);
           const serverPath = path.join(config.serversDir, dir.name);
           const migrated = InstanceModel.migrateFromJson(instanceConfig, serverPath);
           if (migrated) {
@@ -169,10 +170,10 @@ export class MCServerManager extends EventEmitter {
             // 标记为已迁移
             instanceConfig.migrated = true;
             atomicWriteFile(configPath, JSON.stringify(instanceConfig, null, 2));
-            console.log(`Migrated instance ${instanceConfig.id} to DB`);
+            logger.info(`Migrated instance ${instanceConfig.id} to DB`);
           }
         } catch (e) {
-          console.error(`Failed to load/migrate instance ${dir.name}:`, e);
+          logger.error(`Failed to load/migrate instance ${dir.name}:`, e);
         }
       }
     }
@@ -460,11 +461,11 @@ export class MCServerInstance extends EventEmitter {
   _getSafeLevelName() {
     const raw = this.properties?.['level-name'] || 'world';
     if (typeof raw !== 'string' || !/^[A-Za-z0-9_-]+$/.test(raw)) {
-      console.warn(`[Instance ${this.id}] 非法 level-name '${raw}'（仅允许字母/数字/_/-），回退 'world'`);
+      logger.warn(`[Instance ${this.id}] 非法 level-name '${raw}'（仅允许字母/数字/_/-），回退 'world'`);
       return 'world';
     }
     if (!isPathContained(this.serverPath, raw)) {
-      console.warn(`[Instance ${this.id}] level-name '${raw}' 越出实例目录，回退 'world'`);
+      logger.warn(`[Instance ${this.id}] level-name '${raw}' 越出实例目录，回退 'world'`);
       return 'world';
     }
     return raw;
@@ -526,7 +527,7 @@ export class MCServerInstance extends EventEmitter {
       };
       return this._worldSizeCache.value;
     } catch (err) {
-      console.warn(`[Instance ${this.id}] 计算存档大小失败:`, err.message);
+      logger.warn(`[Instance ${this.id}] 计算存档大小失败:`, err.message);
       return 0;
     }
   }
@@ -589,7 +590,7 @@ export class MCServerInstance extends EventEmitter {
       }
       return null;
     } catch (err) {
-      console.warn(`[Instance ${this.id}] 读取世界种子失败:`, err.message);
+      logger.warn(`[Instance ${this.id}] 读取世界种子失败:`, err.message);
       return null;
     }
   }
@@ -630,7 +631,7 @@ export class MCServerInstance extends EventEmitter {
       }
       return null;
     } catch (err) {
-      console.warn(`[Instance ${this.id}] 读取 world_gen_settings.dat 种子失败:`, err.message);
+      logger.warn(`[Instance ${this.id}] 读取 world_gen_settings.dat 种子失败:`, err.message);
       return null;
     }
   }
@@ -703,7 +704,7 @@ export class MCServerInstance extends EventEmitter {
       );
       return parsed?.value?.Data?.value || parsed?.value || null;
     } catch (err) {
-      console.warn(`[Instance ${this.id}] 读取 level.dat 失败:`, err.message);
+      logger.warn(`[Instance ${this.id}] 读取 level.dat 失败:`, err.message);
       return null;
     }
   }
@@ -845,10 +846,10 @@ export class MCServerInstance extends EventEmitter {
         // 记录本次成功解析的原始字节，供 get _worldSpawn 做运行期变更检测；
         // 仅在成功解析后更新，解析失败时下次访问会重试
         this._worldSpawnRaw = raw;
-        console.log(`[${this.id}] World spawn initialized from level.dat: ${spawnX}, ${spawnY}, ${spawnZ}`);
+        logger.info(`[${this.id}] World spawn initialized from level.dat: ${spawnX}, ${spawnY}, ${spawnZ}`);
       }
     } catch (e) {
-      console.warn(`[${this.id}] Failed to read world spawn from level.dat:`, e.message);
+      logger.warn(`[${this.id}] Failed to read world spawn from level.dat:`, e.message);
     }
   }
 
@@ -965,7 +966,7 @@ export class MCServerInstance extends EventEmitter {
     // 方向 1：文件有但 DB 无活跃记录 → 文件直接添加的封禁，补入 DB（永久）
     // 方向 2：DB 已过期但文件仍存在 → 停机期间到期未 pardon，清理文件 + 停用记录
     try { reconcileTempBans(this.id, this.serverPath); } catch (e) {
-      console.warn(`[${this.id}] tempban 对账失败（不阻塞启动）:`, e.message);
+      logger.warn(`[${this.id}] tempban 对账失败（不阻塞启动）:`, e.message);
     }
 
     // 清理 world 锁文件，防止 session.lock 冲突
@@ -1045,7 +1046,7 @@ export class MCServerInstance extends EventEmitter {
     // 注意：'java' 这类 PATH 命令不能靠 existsSync 预校验（始终 false），
     // 只能通过 error 事件捕获，错误信息经日志流呈现给用户。
     this.process.on('error', (err) => {
-      console.error(`[${this.id}] Failed to spawn server process:`, err.message);
+      logger.error(`[${this.id}] Failed to spawn server process:`, err.message);
       this.isRunning = false;
       this.process = null;
       this._stopStatsCollection();
@@ -1069,7 +1070,7 @@ export class MCServerInstance extends EventEmitter {
     // 场景无 .on，防御跳过。
     if (typeof this.process.stdin.on === 'function') {
       this.process.stdin.on('error', (err) => {
-        console.warn(`[${this.id}] Server stdin pipe error (server exited mid-command?):`, err.message);
+        logger.warn(`[${this.id}] Server stdin pipe error (server exited mid-command?):`, err.message);
       });
     }
 
@@ -1081,7 +1082,7 @@ export class MCServerInstance extends EventEmitter {
     const initialWeather = this._readWeatherFromLevelDat();
     if (initialWeather) {
       this._weather = initialWeather;
-      console.log(`[${this.id}] Weather initialized from level.dat: ${this._weather}`);
+      logger.info(`[${this.id}] Weather initialized from level.dat: ${this._weather}`);
     }
     this._readWorldSpawnFromLevelDat();
     this._sleepingPlayers = 0;
@@ -1136,7 +1137,7 @@ export class MCServerInstance extends EventEmitter {
       // 持久化累计运行时长到数据库
       if (this.startTime) {
         const uptimeSeconds = Math.floor((Date.now() - this.startTime) / 1000);
-        try { InstanceModel.addUptime(this.id, uptimeSeconds); } catch (e) { console.warn('Failed to persist uptime:', e.message); }
+        try { InstanceModel.addUptime(this.id, uptimeSeconds); } catch (e) { logger.warn('Failed to persist uptime:', e.message); }
       }
 
       // 区分「意外停止/崩溃」与「用户主动停止」：
@@ -1182,15 +1183,15 @@ export class MCServerInstance extends EventEmitter {
             if (this.isRunning) return;
             // 实例目录已被删除（用户卸载）→ 放弃自动重启
             if (!fs.existsSync(path.join(this.serverPath, this.jarFile))) {
-              console.log(`[${this.id}] Auto-restart cancelled: server jar no longer exists`);
+              logger.info(`[${this.id}] Auto-restart cancelled: server jar no longer exists`);
               return;
             }
             try {
               this.start();
-              console.log(`[${this.id}] 意外停止后自动重启成功`);
+              logger.info(`[${this.id}] 意外停止后自动重启成功`);
               this.emit('log', { text: '[服务器] 已自动重启', type: 'stdout' });
             } catch (e) {
-              console.error(`[${this.id}] 自动重启失败:`, e.message);
+              logger.error(`[${this.id}] 自动重启失败:`, e.message);
               this.emit('log', { text: `[服务器] 自动重启失败: ${e.message}`, type: 'stderr' });
             }
           }, 5000);
@@ -1249,7 +1250,7 @@ export class MCServerInstance extends EventEmitter {
         timeout: 5000,
       });
       client.on('error', (err) => {
-        console.error(`RCON error on ${this.id}:`, err.message);
+        logger.error(`RCON error on ${this.id}:`, err.message);
       });
       try {
         await client.connect();
@@ -1408,13 +1409,13 @@ export class MCServerInstance extends EventEmitter {
       if (this.isRunning) return;
       // 实例目录已被删除（用户卸载）→ 放弃延迟启动
       if (!fs.existsSync(path.join(this.serverPath, this.jarFile))) {
-        console.log(`[${this.id}] Restart cancelled: server jar no longer exists`);
+        logger.info(`[${this.id}] Restart cancelled: server jar no longer exists`);
         return;
       }
       try {
         this.start();
       } catch (e) {
-        console.error('Restart failed:', e);
+        logger.error('Restart failed:', e);
       }
     }, 3000);
   }
@@ -1471,7 +1472,7 @@ export class MCServerInstance extends EventEmitter {
     try {
       return stdin.write(data);
     } catch (err) {
-      console.warn(`[${this.id}] stdin write failed:`, err.message);
+      logger.warn(`[${this.id}] stdin write failed:`, err.message);
       return false;
     }
   }
@@ -1552,7 +1553,7 @@ export class MCServerInstance extends EventEmitter {
         // 回退 stdin 重发会让 give/kick/tp/ban 等非幂等命令重复生效
         // → 直接向调用方抛错，保持 RCON 队列语义
         if (!(err && err.rconConfirmedNotSent)) throw err;
-        console.warn(`[Instance ${this.id}] RCON send failed, fallback to stdin:`, err.message);
+        logger.warn(`[Instance ${this.id}] RCON send failed, fallback to stdin:`, err.message);
         this._writeToStdin(command + '\n');
         return null;
       }
@@ -2282,7 +2283,7 @@ export class MCServerInstance extends EventEmitter {
     try {
       await this._rconEnsureConnected();
     } catch (e) {
-      console.warn(`[${this.id}] RCON connect failed in _collectPlayerStats: ${e.message}`);
+      logger.warn(`[${this.id}] RCON connect failed in _collectPlayerStats: ${e.message}`);
       return;
     }
 
@@ -2292,15 +2293,15 @@ export class MCServerInstance extends EventEmitter {
       try {
         // 串行查询，避免 RCON 并发导致响应错乱
         const healthResult = await this._rconSend(`data get entity ${name} Health`).catch(e => {
-          console.warn(`[${this.id}] RCON Health query failed for ${name}: ${e.message}`);
+          logger.warn(`[${this.id}] RCON Health query failed for ${name}: ${e.message}`);
           return null;
         });
         const posResult = await this._rconSend(`data get entity ${name} Pos`).catch(e => {
-          console.warn(`[${this.id}] RCON Pos query failed for ${name}: ${e.message}`);
+          logger.warn(`[${this.id}] RCON Pos query failed for ${name}: ${e.message}`);
           return null;
         });
         const sleepResult = await this._rconSend(`data get entity ${name} SleepTimer`).catch(e => {
-          console.warn(`[${this.id}] RCON SleepTimer query failed for ${name}: ${e.message}`);
+          logger.warn(`[${this.id}] RCON SleepTimer query failed for ${name}: ${e.message}`);
           return null;
         });
         // 护甲：使用 /attribute 按属性名查询最终值（含装备加成）
@@ -2369,7 +2370,7 @@ export class MCServerInstance extends EventEmitter {
         stats.push({ name, health, armor, position, isSleeping });
       } catch (e) {
         // 单个玩家查询失败，跳过
-        console.warn(`[${this.id}] Player stats query failed for ${name}: ${e.message}`);
+        logger.warn(`[${this.id}] Player stats query failed for ${name}: ${e.message}`);
       }
     }
 
@@ -2745,7 +2746,7 @@ export class MCServerInstance extends EventEmitter {
       // 写盘失败（磁盘满/权限异常等）不得静默吞掉：
       // 60s 定时保存与离开/停机最终保存都会走这里，失败意味着
       // 玩家累计时长/事件/lastSeen 回退丢失，必须留日志可排查
-      console.error(`[${this.id}] Failed to save player data for ${playerName}:`, e.message);
+      logger.error(`[${this.id}] Failed to save player data for ${playerName}:`, e.message);
     }
   }
 
@@ -2906,7 +2907,7 @@ export class MCServerInstance extends EventEmitter {
 
       return this._buildInventoryResult(invList, enderList, 'snapshot');
     } catch (e) {
-      console.warn(`[${this.id}] Failed to read player dat for ${playerName}:`, e.message);
+      logger.warn(`[${this.id}] Failed to read player dat for ${playerName}:`, e.message);
       return null;
     }
   }
@@ -3191,7 +3192,7 @@ export class MCServerInstance extends EventEmitter {
 
       return details;
     } catch (e) {
-      console.warn(`RCON 获取玩家详情失败 ${playerName}:`, e.message);
+      logger.warn(`RCON 获取玩家详情失败 ${playerName}:`, e.message);
     }
   }
 
