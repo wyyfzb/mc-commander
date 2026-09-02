@@ -1,8 +1,10 @@
 import { Cron } from 'croner';
+import path from 'path';
 import { ScheduledTaskModel } from '../db/scheduled_task.model.js';
 import { BanModel } from '../db/ban.model.js';
 import { BackupModel } from '../db/backup.model.js';
 import { BackupService } from './backup.service.js';
+import { runPanelBackupCycle } from './panel-backup.service.js';
 import config from '../config.js';
 
 /**
@@ -18,6 +20,7 @@ export class TaskScheduler {
     this.running = false;
     this.interval = null;
     this.lastCheckMinute = -1;
+    this.panelBackupCron = null;
   }
 
   start() {
@@ -31,6 +34,8 @@ export class TaskScheduler {
     }, 60 * 1000);
 
     this.checkAndRunTasks();
+
+    this.startPanelBackupCron();
   }
 
   stop() {
@@ -39,7 +44,36 @@ export class TaskScheduler {
       clearInterval(this.interval);
       this.interval = null;
     }
+    if (this.panelBackupCron) {
+      this.panelBackupCron.stop();
+      this.panelBackupCron = null;
+    }
     console.log('Task scheduler stopped');
+  }
+
+  // 面板库每日快照（独立 croner 实例）：不进用户定时任务体系——面板库
+  // 故障时用户任务仍可正常增删执行，快照失败仅记日志不干扰调度主循环
+  startPanelBackupCron() {
+    if (!config.panelBackup.enabled) return;
+    try {
+      this.panelBackupCron = new Cron(config.panelBackup.cron, () => {
+        this.runPanelBackup();
+      });
+    } catch (err) {
+      console.error('Panel backup cron register failed:', err.message);
+    }
+  }
+
+  async runPanelBackup() {
+    try {
+      const result = await runPanelBackupCycle();
+      console.log(
+        `[PanelBackup] snapshot ok: ${path.basename(result.filePath)} ` +
+        `(${Math.max(1, Math.round(result.sizeBytes / 1024))} KB), cleaned ${result.deletedCount}`
+      );
+    } catch (err) {
+      console.error('[PanelBackup] snapshot failed:', err.message);
+    }
   }
 
   checkAndRunTasks() {
