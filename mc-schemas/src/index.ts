@@ -76,9 +76,13 @@ export {
   scheduledTaskTypeSchema,
   taskCreatePayloadSchema,
   taskUpdatePayloadSchema,
+  taskRunHistorySchema,
+  taskRunStatusSchema,
   type ScheduledTask,
   type ScheduledTaskType,
   type TaskCreatePayload,
+  type TaskRunHistory,
+  type TaskRunStatus,
   type TaskUpdatePayload,
 } from './task'
 

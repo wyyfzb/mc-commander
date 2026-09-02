@@ -344,6 +344,8 @@ export class BackupService {
   // 执行备份（异步）：实例级备份——目录快照整个实例（排除运行时产物，
   // Linux rsync --link-dest 硬链接增量 / Windows robocopy 全量镜像降级）
   async executeBackup(instanceId, backupId, snapshotDir, { estimateBytes = 0, jarFile = null, taskId = null } = {}) {
+    // 执行起点：定时备份结果回写历史时换算 duration_ms（快照耗时是排障关键指标）
+    const startTs = Date.now();
     try {
       // 触发备份开始事件
       if (this.serverManager) {
@@ -408,7 +410,7 @@ export class BackupService {
       // 定时备份任务的结果回写：真实成功（快照完成+校验通过）而非 createBackup
       // 触发即成功（createBackup fire-and-forget，resolve 早于快照完成）
       if (taskId != null) {
-        ScheduledTaskModel.updateLastRunStatus(taskId, 'success');
+        ScheduledTaskModel.updateLastRunStatus(taskId, 'success', null, Date.now() - startTs);
       }
 
       console.log(`Backup completed: ${snapshotDir}`);
@@ -459,7 +461,7 @@ export class BackupService {
 
       // 定时备份任务的结果回写：执行阶段真实失败（快照/校验/压缩）
       if (taskId != null) {
-        ScheduledTaskModel.updateLastRunStatus(taskId, 'failed', err?.message ?? String(err));
+        ScheduledTaskModel.updateLastRunStatus(taskId, 'failed', err?.message ?? String(err), Date.now() - startTs);
       }
 
       // 清理失败的半成品快照目录（rsync/robocopy 失败可能残留部分文件）

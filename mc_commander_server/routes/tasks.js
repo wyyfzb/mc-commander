@@ -2,8 +2,9 @@ import { Router } from 'express';
 import { Cron } from 'croner';
 import { success, ErrorCodes, AppError } from '../utils/response.js';
 import { ScheduledTaskModel } from '../db/scheduled_task.model.js';
+import { TaskRunHistoryModel } from '../db/task_run_history.model.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
-import { taskCreatePayloadSchema, taskUpdatePayloadSchema, scheduledTaskSchema } from '@mc-commander/schemas';
+import { taskCreatePayloadSchema, taskUpdatePayloadSchema, scheduledTaskSchema, taskRunHistorySchema } from '@mc-commander/schemas';
 import { validateBody, validatedSuccess, validatedSuccessPaginated } from '../middleware/validate.js';
 
 /**
@@ -79,6 +80,26 @@ export function createTaskRoutes(serverManager, taskScheduler) {
       }
       
       res.json(validatedSuccess(scheduledTaskSchema, task));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // 任务执行历史（倒序，最新在前）：scheduled_tasks.last_run_* 是覆盖写
+  // 单槽，排障需要完整时间线（失败次数/原因/耗时）时查此接口
+  router.get('/tasks/:id/history', (req, res, next) => {
+    try {
+      const task = ScheduledTaskModel.findById(req.params.id);
+
+      if (!task) {
+        throw new AppError(ErrorCodes.TASK_NOT_FOUND);
+      }
+
+      let limit = parseInt(req.query.limit) || 20;
+      limit = Math.max(1, Math.min(limit, 100));
+
+      const runs = TaskRunHistoryModel.findByTask(task.id, limit);
+      res.json(validatedSuccessPaginated(taskRunHistorySchema, runs, runs.length, 1, limit));
     } catch (err) {
       next(err);
     }

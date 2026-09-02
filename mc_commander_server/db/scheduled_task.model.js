@@ -1,4 +1,5 @@
 import { getDb } from './database.js';
+import { TaskRunHistoryModel } from './task_run_history.model.js';
 
 export class ScheduledTaskModel {
   static findAll(options = {}) {
@@ -136,7 +137,7 @@ export class ScheduledTaskModel {
     return rows.map(r => this._toCamel(r));
   }
 
-  static updateLastRun(id, nextRunAt, status, error = null) {
+  static updateLastRun(id, nextRunAt, status, error = null, durationMs = null) {
     const db = getDb();
     // status 可选：异步任务触发时先落时间戳，结果稍后由 updateLastRunStatus 回填
     // error 可选：失败原因文本，与 status='failed' 配合使用
@@ -159,10 +160,17 @@ export class ScheduledTaskModel {
     db.prepare(`
       UPDATE scheduled_tasks SET ${clauses.join(', ')} WHERE id = ?
     `).run(...params);
+
+    // 带 status 的调用是真实执行结果：同步追加执行历史（单点收口，
+    // 覆盖调度器所有执行路径；无 status 的触发调用不算结果不落历史）。
+    // run_at 取刚写入的 last_run_at（触发时刻口径，与列表页一致）
+    if (status !== undefined) {
+      this._recordHistory(id, status, error, durationMs);
+    }
   }
 
   /** 异步结果回填：仅写状态不刷新 last_run_at（时间戳已在触发时落库） */
-  static updateLastRunStatus(id, status, error = null) {
+  static updateLastRunStatus(id, status, error = null, durationMs = null) {
     const db = getDb();
     const clauses = ['last_run_status = ?'];
     const params = [status];
@@ -178,6 +186,28 @@ export class ScheduledTaskModel {
     db.prepare(
       `UPDATE scheduled_tasks SET ${clauses.join(', ')} WHERE id = ?`
     ).run(...params);
+
+    // 异步结果同样是真实执行结果：追加历史，run_at 取触发时已落的 last_run_at
+    this._recordHistory(id, status, error, durationMs);
+  }
+
+  /** 执行历史追加（失败仅告警不反噬主流程：历史缺失不应阻断任务调度） */
+  static _recordHistory(taskId, status, error, durationMs) {
+    try {
+      const db = getDb();
+      const row = db.prepare(
+        'SELECT last_run_at FROM scheduled_tasks WHERE id = ?'
+      ).get(taskId);
+      TaskRunHistoryModel.record({
+        taskId,
+        status,
+        error,
+        durationMs,
+        runAt: row?.last_run_at ?? null,
+      });
+    } catch (err) {
+      console.warn(`[TaskRunHistory] record failed for task ${taskId}:`, err.message);
+    }
   }
 }
 

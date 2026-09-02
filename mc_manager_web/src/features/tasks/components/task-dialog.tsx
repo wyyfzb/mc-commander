@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
   Select,
   SelectContent,
@@ -34,7 +35,8 @@ import { Chip } from '@/components/mcs/chip'
 import { CRON_PRESETS, cronDescription, formatNextRun } from '@/lib/mc-cron'
 import { TASK_TYPE_OPTIONS, type TaskType } from '@/lib/mc-deploy'
 import { CronEditor } from './cron-editor'
-import type { ScheduledTask, TaskCreatePayload } from '@/api/types'
+import { useTaskHistory } from '../queries'
+import type { ScheduledTask, TaskCreatePayload, TaskRunHistory } from '@/api/types'
 
 export interface TaskDialogProps {
   /** null=新建；非空=编辑（回填初始值） */
@@ -237,6 +239,9 @@ export function TaskDialog({ task, onClose, onSave, saving }: TaskDialogProps) {
                 aria-label="启用"
               />
             </div>
+
+            {/* 最近执行（仅编辑模式；排障时间线，服务端 task_run_history） */}
+            {isEdit && task && <TaskRunHistory taskId={task.id} />}
           </div>
 
           <DialogFooter>
@@ -267,5 +272,79 @@ export function TaskDialog({ task, onClose, onSave, saving }: TaskDialogProps) {
         onCancel={() => setConfirmClose(false)}
       />
     </>
+  )
+}
+
+/**
+ * 执行结果语义色映射（与 task-list LAST_RUN_STATUS 同源）。
+ * 历史表只落真实执行结果，无 never。
+ */
+const RUN_STATUS_META: Record<TaskRunHistory['status'], { dot: string; text: string; label: string }> = {
+  success: { dot: 'bg-mcs-success-fg', text: 'text-mcs-success-fg', label: '成功' },
+  failed: { dot: 'bg-mcs-error-fg', text: 'text-mcs-error-fg', label: '失败' },
+  skipped: { dot: 'bg-mcs-warning-fg', text: 'text-mcs-warning-fg', label: '跳过' },
+}
+
+/** SQLite CURRENT_TIMESTAMP（UTC 无时区标记）→ 本地 MM/DD HH:mm（与下次运行预估同风格） */
+function formatRunTime(runAt: string): string {
+  const d = new Date(runAt.includes('T') ? runAt : `${runAt.replace(' ', 'T')}Z`)
+  if (Number.isNaN(d.getTime())) return runAt
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+/** 执行耗时：<1s 展示毫秒，否则秒（保留一位） */
+function formatDuration(ms: number): string {
+  return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`
+}
+
+/**
+ * 最近执行时间线（编辑模式）：倒序最近 10 条，
+ * 状态语义色圆点 + 触发时间 + 耗时 + 失败原因（截断，悬停看全文）。
+ */
+function TaskRunHistory({ taskId }: { taskId: number }) {
+  const { data: runs, isLoading } = useTaskHistory(taskId)
+
+  return (
+    <div className="flex flex-col gap-1.5" data-testid="task-run-history">
+      <Label>最近执行</Label>
+      {isLoading ? (
+        <div className="space-y-1.5" aria-label="加载执行历史中">
+          <Skeleton className="h-4 w-3/4" />
+          <Skeleton className="h-4 w-2/3" />
+        </div>
+      ) : !runs || runs.length === 0 ? (
+        <p className="text-mcs-xs text-mcs-text-subtle">暂无执行记录</p>
+      ) : (
+        <ul
+          className="max-h-40 space-y-1.5 overflow-y-auto rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted p-2"
+          aria-label="最近执行列表"
+        >
+          {runs.map((run) => {
+            const meta = RUN_STATUS_META[run.status]
+            return (
+              <li key={run.id} className="flex flex-col gap-0.5">
+                <div className="flex items-center gap-1.5 text-mcs-xs">
+                  <span className={`size-1.5 shrink-0 rounded-full ${meta.dot}`} aria-hidden />
+                  <span className={meta.text}>{meta.label}</span>
+                  <span className="text-mcs-text-muted">{formatRunTime(run.runAt)}</span>
+                  {run.durationMs !== null && (
+                    <span className="text-mcs-text-subtle">· {formatDuration(run.durationMs)}</span>
+                  )}
+                </div>
+                {run.error && (
+                  <p
+                    className="truncate pl-3 text-mcs-xs text-mcs-error-fg"
+                    title={run.error}
+                  >
+                    {run.error}
+                  </p>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </div>
   )
 }

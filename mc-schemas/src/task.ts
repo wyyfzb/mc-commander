@@ -28,7 +28,22 @@ export const taskCreatePayloadSchema = z.object({
 
 export const taskUpdatePayloadSchema = taskCreatePayloadSchema.partial()
 
+/** 单次执行历史状态（不含 never：历史表只落真实执行结果） */
+export const taskRunStatusSchema = z.enum(['success', 'failed', 'skipped'])
+
+/** 定时任务执行历史行（task_run_history 表，append-only + 每任务保留上限） */
+export const taskRunHistorySchema = z.object({
+  id: z.number(),
+  taskId: z.number(),
+  runAt: z.string(),
+  status: taskRunStatusSchema,
+  error: z.string().nullable(),
+  durationMs: z.number().nullable(),
+})
+
 export type ScheduledTaskType = z.infer<typeof scheduledTaskTypeSchema>
 export type ScheduledTask = z.infer<typeof scheduledTaskSchema>
 export type TaskCreatePayload = z.infer<typeof taskCreatePayloadSchema>
 export type TaskUpdatePayload = z.infer<typeof taskUpdatePayloadSchema>
+export type TaskRunStatus = z.infer<typeof taskRunStatusSchema>
+export type TaskRunHistory = z.infer<typeof taskRunHistorySchema>

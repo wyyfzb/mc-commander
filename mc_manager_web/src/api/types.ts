@@ -50,7 +50,7 @@ export type { WorldDimension, WorldInfo, ServerProperties, UpdatePropertiesRespo
 export type { FileEntry, FileListResponse, FileInfoResponse, FileContentResponse, FileSaveResponse } from '@mc-commander/schemas'
 
 // ── 定时任务 ──
-export type { ScheduledTaskType, ScheduledTask, TaskCreatePayload, TaskUpdatePayload } from '@mc-commander/schemas'
+export type { ScheduledTaskType, ScheduledTask, TaskCreatePayload, TaskUpdatePayload, TaskRunHistory } from '@mc-commander/schemas'
 
 // ── 部署/升级 ──
 export type { VersionsResponse, DeployRequest, DeployResult, DeployProgress, UpgradeStage, UpgradeProgress, UpgradeRequest, UpgradeStartResponse } from '@mc-commander/schemas'

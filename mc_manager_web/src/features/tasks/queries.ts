@@ -8,6 +8,7 @@ import { queryKeys } from '@/api/queries'
 import {
   apiCreateTask,
   apiDeleteTask,
+  apiGetTaskHistory,
   apiGetTasks,
   apiRunTaskNow,
   apiUpdateTask,
@@ -84,5 +85,16 @@ export function useRunTaskNow(instanceId: string | null) {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.tasks(instanceId ?? '') })
     },
+  })
+}
+
+/** 任务执行历史（编辑对话框展示最近执行时间线）；taskId=null（新建模式）不查询 */
+export function useTaskHistory(taskId: number | null) {
+  const config = useConnectionStore()
+  return useQuery({
+    queryKey: queryKeys.taskHistory(taskId ?? 0),
+    queryFn: () => apiGetTaskHistory(config, taskId ?? 0),
+    enabled: config.status === 'ready' && taskId !== null,
+    staleTime: 30_000,
   })
 }

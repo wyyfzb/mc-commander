@@ -8,7 +8,14 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Toaster, toast as sonnerToast } from 'sonner'
 import { TaskDialog } from '../task-dialog'
-import type { ScheduledTask } from '@/api/types'
+import type { ScheduledTask, TaskRunHistory } from '@/api/types'
+
+// 执行历史 hook 模块级 mock：对话框测试不依赖网络层/QueryClientProvider，
+// 由用例按需注入返回值（默认空数据 → 编辑模式显示「暂无执行记录」）
+const useTaskHistoryMock = vi.hoisted(() =>
+  vi.fn<() => { data?: TaskRunHistory[]; isLoading: boolean }>(() => ({ isLoading: false })),
+)
+vi.mock('../../queries', () => ({ useTaskHistory: useTaskHistoryMock }))
 
 // jsdom 未实现 Pointer Capture API（radix Select/下拉依赖，缺失会崩溃）
 if (typeof Element.prototype.hasPointerCapture !== 'function') {
@@ -20,6 +27,8 @@ if (typeof Element.prototype.hasPointerCapture !== 'function') {
 beforeEach(() => {
   // sonner toast 存于模块级 store，跨测试残留会导致同文案 toast 重复匹配
   sonnerToast.dismiss()
+  useTaskHistoryMock.mockClear()
+  useTaskHistoryMock.mockImplementation(() => ({ data: undefined, isLoading: false }))
 })
 
 // ── 结构占位 mock ────────────────────────────────────────────────
@@ -329,5 +338,55 @@ describe('TaskDialog dirty 关闭拦截', { timeout: 15000 }, () => {
     expect(onClose).not.toHaveBeenCalled()
     await user.click(within(confirm).getByRole('button', { name: '放弃修改' }))
     expect(onClose).toHaveBeenCalledTimes(1)
+  })
+})
+
+// ── 最近执行时间线（issue #299）──────────────────────────────────
+
+const RUN_HISTORY_MOCK: TaskRunHistory[] = [
+  { id: 12, taskId: 1, runAt: '2026-09-02 04:00:05', status: 'success', error: null, durationMs: 850 },
+  { id: 11, taskId: 1, runAt: '2026-09-01 04:00:03', status: 'failed', error: 'RCON 不可用', durationMs: 3000 },
+  { id: 10, taskId: 1, runAt: '2026-08-31 04:00:01', status: 'skipped', error: null, durationMs: null },
+]
+
+describe('TaskDialog 最近执行时间线（issue #299）', { timeout: 15000 }, () => {
+  it('编辑模式：渲染倒序执行历史（状态/耗时/失败原因），hook 收到任务 id', () => {
+    useTaskHistoryMock.mockImplementation(() => ({ data: RUN_HISTORY_MOCK, isLoading: false }))
+    renderDialog({ task: makeTask({ id: 1 }) })
+
+    const list = screen.getByRole('list', { name: '最近执行列表' })
+    const items = within(list).getAllByRole('listitem')
+    expect(items).toHaveLength(3)
+    // 最新在前
+    const successItem = items[0]!
+    const failedItem = items[1]!
+    const skippedItem = items[2]!
+    expect(within(successItem).getByText('成功')).toBeInTheDocument()
+    expect(within(successItem).getByText(/850ms/)).toBeInTheDocument()
+    expect(within(failedItem).getByText('失败')).toBeInTheDocument()
+    expect(within(failedItem).getByText('RCON 不可用')).toBeInTheDocument()
+    expect(within(failedItem).getByText(/3\.0s/)).toBeInTheDocument()
+    expect(within(skippedItem).getByText('跳过')).toBeInTheDocument()
+    // 跳过行无耗时展示
+    expect(within(skippedItem).queryByText(/ms$/)).not.toBeInTheDocument()
+    expect(useTaskHistoryMock).toHaveBeenCalledWith(1)
+  })
+
+  it('编辑模式：历史为空 → 「暂无执行记录」占位', () => {
+    renderDialog({ task: makeTask({ id: 1 }) })
+    expect(screen.getByTestId('task-run-history')).toBeInTheDocument()
+    expect(screen.getByText('暂无执行记录')).toBeInTheDocument()
+  })
+
+  it('编辑模式：加载中 → 骨架占位', () => {
+    useTaskHistoryMock.mockImplementation(() => ({ data: undefined, isLoading: true }))
+    renderDialog({ task: makeTask({ id: 1 }) })
+    expect(screen.getByLabelText('加载执行历史中')).toBeInTheDocument()
+  })
+
+  it('新建模式：不渲染执行历史区块，也不调用 hook', () => {
+    renderDialog()
+    expect(screen.queryByTestId('task-run-history')).not.toBeInTheDocument()
+    expect(useTaskHistoryMock).not.toHaveBeenCalled()
   })
 })
