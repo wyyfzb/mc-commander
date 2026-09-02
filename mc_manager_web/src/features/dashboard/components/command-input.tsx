@@ -303,7 +303,7 @@ export function CommandInput() {
       {/* 历史导航状态指示器 */}
       {navStatus && navRef.current != null && (
         <div className={"flex items-center gap-1 text-mcs-2xs " + (navStatus.status === 'sent' ? 'text-mcs-success-fg' : 'text-mcs-error-fg')}>
-          <Check className="size-3" aria-hidden />
+          {navStatus.status === 'sent' ? <Check className="size-3" aria-hidden /> : <X className="size-3" aria-hidden />}
           {navStatus.status === 'sent' ? '已送达' : `失败: ${navStatus.error ?? '未知'}`}
         </div>
       )}
