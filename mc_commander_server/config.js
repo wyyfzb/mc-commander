@@ -36,6 +36,17 @@ export default {
     maxBackups: parseInt(process.env.BACKUP_RETENTION_MAX || '10'),
     maxAgeDays: parseInt(process.env.BACKUP_RETENTION_DAYS || '30')
   },
+  // 面板自身数据备份（SQLite 在线快照，每日定时）：面板库与管理员账号、
+  // 审计日志等同库存储，实例备份不覆盖它。保留策略默认继承实例备份配置
+  // （BACKUP_RETENTION_*），可用 PANEL_BACKUP_RETENTION_* 独立覆盖
+  panelBackup: {
+    enabled: (process.env.PANEL_BACKUP_ENABLED || 'true') !== 'false',
+    cron: process.env.PANEL_BACKUP_CRON || '0 4 * * *',
+    retention: {
+      maxBackups: parseInt(process.env.PANEL_BACKUP_RETENTION_MAX || process.env.BACKUP_RETENTION_MAX || '10'),
+      maxAgeDays: parseInt(process.env.PANEL_BACKUP_RETENTION_DAYS || process.env.BACKUP_RETENTION_DAYS || '30'),
+    },
+  },
   // 备份/恢复子进程超时上限（毫秒）：大世界压缩可能远超默认 5 分钟，
   // 实际超时按预估规模动态计算（每 MB 4s，下限 5min，上限本值）
   backupSpawnTimeoutMs: parseInt(process.env.BACKUP_SPAWN_TIMEOUT_MS || '3600000'),
