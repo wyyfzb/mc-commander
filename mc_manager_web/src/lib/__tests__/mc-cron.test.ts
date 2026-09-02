@@ -8,10 +8,16 @@ import {
   cronDescription,
   describeDay,
   describeTime,
+  formatNextRun,
+  getNextCronRun,
   hourLabel,
   minuteLabel,
   monthName,
   parseCronFields,
+  parseWeekdayField,
+  serializeWeekdayField,
+  WEEKDAY_CHIPS,
+  WEEKDAY_COMBOS,
   weekdayName,
 } from '../mc-cron'
 
@@ -110,5 +116,96 @@ describe('预置与字段选项', () => {
     expect(CRON_FIELD_OPTIONS.day).toHaveLength(3)
     expect(CRON_FIELD_OPTIONS.month).toHaveLength(5)
     expect(CRON_FIELD_OPTIONS.weekday).toHaveLength(10)
+  })
+})
+
+describe('周字段 chip 辅助', () => {
+  it('WEEKDAY_CHIPS 7 项（周日0~周六6）', () => {
+    expect(WEEKDAY_CHIPS).toHaveLength(7)
+    expect(WEEKDAY_CHIPS.map((c) => c.value)).toEqual([0, 1, 2, 3, 4, 5, 6])
+  })
+
+  it('WEEKDAY_COMBOS 工作日/周末', () => {
+    expect(WEEKDAY_COMBOS).toHaveLength(2)
+    expect(WEEKDAY_COMBOS[0]).toEqual({ label: '工作日', value: '1-5' })
+    expect(WEEKDAY_COMBOS[1]).toEqual({ label: '周末', value: '0,6' })
+  })
+
+  it('parseWeekdayField: * / 空返回空集', () => {
+    expect(parseWeekdayField('*')).toEqual(new Set())
+    expect(parseWeekdayField('')).toEqual(new Set())
+  })
+
+  it('parseWeekdayField: 单数字', () => {
+    expect(parseWeekdayField('1')).toEqual(new Set([1]))
+    expect(parseWeekdayField('0')).toEqual(new Set([0]))
+  })
+
+  it('parseWeekdayField: 逗号列表', () => {
+    expect(parseWeekdayField('0,6')).toEqual(new Set([0, 6]))
+    expect(parseWeekdayField('1,3,5')).toEqual(new Set([1, 3, 5]))
+  })
+
+  it('parseWeekdayField: 范围展开', () => {
+    expect(parseWeekdayField('1-5')).toEqual(new Set([1, 2, 3, 4, 5]))
+    expect(parseWeekdayField('0-6')).toEqual(new Set([0, 1, 2, 3, 4, 5, 6]))
+  })
+
+  it('parseWeekdayField: 混合列表', () => {
+    expect(parseWeekdayField('1-3,5')).toEqual(new Set([1, 2, 3, 5]))
+  })
+
+  it('parseWeekdayField: 非法值静默跳过', () => {
+    expect(parseWeekdayField('abc')).toEqual(new Set())
+    expect(parseWeekdayField('1,abc,3')).toEqual(new Set([1, 3]))
+  })
+
+  it('serializeWeekdayField: 空集/全7天→*，其余逗号分隔排序', () => {
+    expect(serializeWeekdayField(new Set())).toBe('*')
+    expect(serializeWeekdayField(new Set([0, 1, 2, 3, 4, 5, 6]))).toBe('*')
+    expect(serializeWeekdayField(new Set([1]))).toBe('1')
+    expect(serializeWeekdayField(new Set([0, 6]))).toBe('0,6')
+    expect(serializeWeekdayField(new Set([3, 1, 5]))).toBe('1,3,5')
+  })
+})
+
+describe('getNextCronRun / formatNextRun', () => {
+  it('*/5 * * * *：返回未来 5 分钟整的 Date', () => {
+    const next = getNextCronRun('*/5 * * * *')
+    expect(next).toBeInstanceOf(Date)
+    expect(next!.getTime()).toBeGreaterThan(Date.now())
+    // 分钟应为 5 的倍数
+    expect(next!.getMinutes() % 5).toBe(0)
+  })
+
+  it('* * * * 0,6：返回周末的下一分钟', () => {
+    const next = getNextCronRun('* * * * 0,6')
+    expect(next).toBeInstanceOf(Date)
+    const dow = next!.getDay()
+    // 0=Sunday, 6=Saturday
+    expect([0, 6]).toContain(dow)
+  })
+
+  it('0 0 30 2 *：2 月 30 日不存在，croner 返回 null（越界无匹配）', () => {
+    // croner 对不存在日期返回 null（2月30日永不存在）
+    expect(getNextCronRun('0 0 30 2 *')).toBeNull()
+    expect(formatNextRun('0 0 30 2 *')).toBe('')
+  })
+
+  it('无效表达式返回 null', () => {
+    expect(getNextCronRun('')).toBeNull()
+    expect(getNextCronRun('0 4 *')).toBeNull()
+    expect(getNextCronRun('a b c d e')).toBeNull()
+  })
+
+  it('formatNextRun 返回 MM/DD HH:mm 格式', () => {
+    const formatted = formatNextRun('0 4 * * *')
+    // 格式应为 MM/DD HH:mm
+    expect(formatted).toMatch(/^\d{2}\/\d{2} \d{2}:\d{2}$/)
+  })
+
+  it('formatNextRun 无效表达式返回空串', () => {
+    expect(formatNextRun('')).toBe('')
+    expect(formatNextRun('bad')).toBe('')
   })
 })
