@@ -283,7 +283,8 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
         open={deleteTarget !== null}
         onOpenChange={(open) => !open && setDeleteTarget(null)}
         title="删除备份"
-        description={`确定要删除备份 “${deleteTarget?.name ?? ''}” 吗？删除后无法恢复。`}
+        description={`确定要删除备份 “${deleteTarget?.name ?? ''}” 吗？`}
+        warning="删除后无法恢复"
         confirmText="删除"
         danger
         loading={deleteMutation.isPending}
