@@ -492,6 +492,13 @@ const backupHandlers = [
   ),
   http.post('*/api/v1/backups/:id/restore', () => ok(null)),
   http.delete('*/api/v1/backups/:id', () => ok(null)),
+  // 下载（GET /backups/:id/download；gzip magic bytes 占位流，服务端为 tar.gz 流）
+  http.get('*/api/v1/backups/:id/download', () =>
+    new HttpResponse(new Uint8Array([0x1f, 0x8b, 8, 0, 0, 0, 0, 0, 0, 3]), {
+      status: 200,
+      headers: { 'Content-Type': 'application/gzip' },
+    }),
+  ),
 ]
 
 /** 玩家域 mock 端点 */

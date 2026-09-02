@@ -4,9 +4,11 @@
  * - 恢复确认与 toast / zip·failed 行恢复禁用 / 任一行 restoring → 全列表恢复禁用
  * - 删除确认与 toast / 进行中（creating）行删除禁用
  * - 立即备份在途禁用 + 成功/失败 toast / 空态引导与「配置定时备份」跳转 /tasks
+ * - 下载：completed 快照可下载（文件名含时间戳）→ a[download] 触发 + toast；
+ *   zip/failed 禁用 + title 提示；下载中行级转圈禁用；失败错误 toast
  * mock 数据为结构占位（mockBackups 虚构内容），严禁真实服务器信息
  */
-import { describe, it, expect, beforeEach, afterAll, afterEach, beforeAll } from 'vitest'
+import { describe, it, expect, beforeEach, afterAll, afterEach, beforeAll, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -19,7 +21,7 @@ import { handlers, mockBackups } from '@/test/mocks/handlers'
 import { useConnectionStore } from '@/stores/connection'
 import { formatBackupDate, formatBackupSize } from '@/lib/mc-backup'
 import type { BackupItem } from '@/api/types'
-import { BackupPanel } from '../backup-panel'
+import { BackupPanel, buildBackupDownloadName } from '../backup-panel'
 
 const server = setupServer(...handlers)
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
@@ -327,5 +329,109 @@ describe('BackupPanel 列表截断与展开', () => {
     await user.click(screen.getByRole('button', { name: '收起' }))
     expect(screen.queryByText('批量备份 11')).not.toBeInTheDocument()
     expect(screen.getByText(/共 12 条备份，已显示 10 条/)).toBeInTheDocument()
+  })
+})
+
+describe('BackupPanel 下载', () => {
+  /** jsdom 无真实下载：捕获 a[download] click 时的文件名 */
+  let downloads: string[]
+
+  beforeEach(() => {
+    downloads = []
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:mock-download')
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      downloads.push(this.download)
+    })
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('completed 快照行可下载：点击 → a[download] 触发（文件名含时间戳）+ ObjectURL 用后即 revoke + 成功 toast', async () => {
+    const user = userEvent.setup()
+    renderPanel()
+    await screen.findByText('手动备份 2026-08-14')
+    await user.click(screen.getByRole('button', { name: '手动备份 2026-08-14 下载' }))
+    expect(await screen.findByText('备份已开始下载')).toBeInTheDocument()
+    expect(downloads).toHaveLength(1)
+    expect(downloads[0]).toBe(buildBackupDownloadName(mockBackups[0]!))
+    // 文件名含备份创建时间戳（紧凑 yyyyMMdd-HHmm）+ tar.gz 扩展名
+    expect(downloads[0]).toMatch(/_\d{8}-\d{4}\.tar\.gz$/)
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(1)
+    expect(URL.revokeObjectURL).toHaveBeenCalledTimes(1)
+  })
+
+  it('zip 旧格式/failed 行下载禁用 + title 提示；completed 快照可用', async () => {
+    renderPanel()
+    await screen.findByText('手动备份 2026-08-14')
+    const zipBtn = screen.getByRole('button', { name: '旧格式压缩包 下载' })
+    expect(zipBtn).toBeDisabled()
+    expect(zipBtn).toHaveAttribute('title', '旧格式备份不支持下载')
+    expect(screen.getByRole('button', { name: '失败的备份 下载' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '手动备份 2026-08-14 下载' })).toBeEnabled()
+  })
+
+  it('下载中：按钮转圈禁用（title=正在下载...）→ 完成后恢复 + 成功 toast', async () => {
+    const user = userEvent.setup()
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    server.use(
+      http.get('*/api/v1/backups/:id/download', async () => {
+        await gate
+        return new HttpResponse(new Uint8Array([0x1f, 0x8b]), {
+          status: 200,
+          headers: { 'Content-Type': 'application/gzip' },
+        })
+      }),
+    )
+    renderPanel()
+    await screen.findByText('手动备份 2026-08-14')
+    await user.click(screen.getByRole('button', { name: '手动备份 2026-08-14 下载' }))
+    // 在途：禁用 + 转圈图标（gate 未放行，状态稳定可断言）
+    await waitFor(() => {
+      const btn = screen.getByRole('button', { name: '手动备份 2026-08-14 下载' })
+      expect(btn).toBeDisabled()
+      expect(btn.querySelector('.animate-spin')).not.toBeNull()
+    })
+    release()
+    expect(await screen.findByText('备份已开始下载')).toBeInTheDocument()
+    // 完成后按钮恢复可用
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '手动备份 2026-08-14 下载' })).toBeEnabled()
+    })
+  })
+
+  it('下载失败 → 错误 toast（40904 服务端中文文案透传）', async () => {
+    const user = userEvent.setup()
+    server.use(
+      http.get('*/api/v1/backups/:id/download', () =>
+        HttpResponse.json(
+          {
+            status: 'error',
+            code: 40904,
+            message: '旧格式备份不支持下载',
+            details: null,
+            timestamp: new Date().toISOString(),
+          },
+          { status: 409 },
+        ),
+      ),
+    )
+    renderPanel()
+    await screen.findByText('手动备份 2026-08-14')
+    await user.click(screen.getByRole('button', { name: '手动备份 2026-08-14 下载' }))
+    expect(await screen.findByText('下载失败：旧格式备份不支持下载')).toBeInTheDocument()
+    // 失败不触发浏览器下载
+    expect(downloads).toHaveLength(0)
+  })
+
+  it('buildBackupDownloadName：非法 createdAt 不抛错（无时间戳后缀）', () => {
+    expect(buildBackupDownloadName({ name: '坏时间备份', createdAt: 'not-a-date' })).toBe(
+      '坏时间备份.tar.gz',
+    )
   })
 })
