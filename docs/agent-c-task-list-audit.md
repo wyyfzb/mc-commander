@@ -65,7 +65,7 @@
   现状：部署/升级 JAR 下载无完整性校验与上限（对比插件市场已有 100MB 截断+白名单）。
   验收：上游 sha256 校验（Piston-meta manifest 提供值）；流式体积上限（512MB）；下载域名白名单（mojang/piston 域）；失败即弃并给可读错误。
 
-- [ ] **A1-5** [安全] 认证通道残留收口：锁定键对齐 + trust proxy 可配 + WS 会话周期复验（P0/P1·bug修复）｜中｜来源：audit S-P0-3 残留 + S-P1-4
+- [x] **A1-5** [安全] 认证通道残留收口：锁定键对齐 + trust proxy 可配 + WS 会话周期复验（P0/P1·bug修复）｜中｜来源：audit S-P0-3 残留 + S-P1-4 ✅ #320 (2026-09-03)
   现状：auth.js:33 仍 `req.ip || socket.remoteAddress`（XFF 可伪造优先）；index.js:99 `trust proxy` 硬编码 1；websocket.js 仅握手鉴权（1008 在 :155 仅握手拒绝用），踢会话后长连接仍存活。
   **C 甄别**：#231 已加 LRU 容量上限（部分闭环），残留即锁定键与复验。合并为「认证通道」一个任务。
   验收：锁定键改 `socket.remoteAddress`；`TRUST_PROXY` 环境变量（默认 1 兼容现网）；WS 心跳周期内抽样复验会话有效性，失效 `close(1008)`；测试覆盖踢出后 WS 断开。
@@ -113,7 +113,7 @@
 
 ## Phase A4 · 体验补强
 
-- [ ] **A4-1** [UX] 实例页 EULA 首启闭环（P1·交互优化）｜小｜来源：audit U-P1-1
+- [x] **A4-1** [UX] 实例页 EULA 首启闭环（P1·交互优化）｜小｜来源：audit U-P1-1 ✅ #312 (2026-09-03)
   现状：instances-page.tsx 无 EULA 处理（仪表盘 instance-controls.tsx:80-84 已有特例）。
   **C 甄别**：审计方案合理（抽共享 mutation + 部署向导内置同意），性价比最高，优先发布。
   验收：EULA 特例抽共享 mutation；实例页启动命中 EULA 弹同意（同意即续启）；部署向导「部署并启动」闭环；测试覆盖两入口。
