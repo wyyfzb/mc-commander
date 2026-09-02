@@ -578,6 +578,39 @@ const server = createServer((req, res) => {
       return res.end(ok(dirPath === '/world' ? worldDirList : rootFileList))
     }
 
+    // ── 审计域（操作日志 + 命令历史：action/时间过滤 + 分页信封）──
+    if (path === '/api/v1/audit-logs' || path === '/api/v1/command-history') {
+      const q = parseQuery(url)
+      const hoursAgo = (h) => new Date(Date.now() - h * 3600000).toISOString()
+      const auditLogs = [
+        { id: 1, instanceId: 'e2e-demo', action: 'INSTANCE_START', targetType: 'instance', targetId: 'e2e-demo', detail: { reason: '手动启动' }, source: 'web', createdAt: hoursAgo(30) },
+        { id: 2, instanceId: 'e2e-demo', action: 'PLAYER_OP', targetType: 'player', targetId: 'Steve', detail: { by: 'admin' }, source: 'rcon', createdAt: hoursAgo(20) },
+        { id: 3, instanceId: 'e2e-demo', action: 'CONFIG_CHANGE', targetType: 'properties', targetId: 'server.properties', detail: { key: 'view-distance', from: '10', to: '12' }, source: 'web', createdAt: hoursAgo(8) },
+        { id: 4, instanceId: 'e2e-demo', action: 'PLAYER_KICK', targetType: 'player', targetId: 'Alex', detail: { reason: '违规行为' }, source: 'web', createdAt: hoursAgo(2) },
+        { id: 5, instanceId: 'e2e-demo', action: 'BACKUP_CREATE', targetType: 'backup', targetId: 'backup-demo', detail: { sizeBytes: 1048576 }, source: 'cron', createdAt: hoursAgo(1) },
+      ]
+      const commandHistory = [
+        { id: 1, instanceId: 'e2e-demo', command: 'list', source: 'web', success: true, response: 'There are 3 of a max of 20 players online', durationMs: 42, createdAt: hoursAgo(3) },
+        { id: 2, instanceId: 'e2e-demo', command: 'time set day', source: 'web', success: true, response: 'Set the time to 1000', durationMs: 18, createdAt: hoursAgo(2.5) },
+        { id: 3, instanceId: 'e2e-demo', command: 'gamemode creative Steve', source: 'web', success: false, response: 'No player was found', durationMs: 21, createdAt: hoursAgo(2) },
+        { id: 4, instanceId: 'e2e-demo', command: 'say hello', source: 'rcon', success: true, response: null, durationMs: 9, createdAt: hoursAgo(1) },
+      ]
+      const isAudit = path === '/api/v1/audit-logs'
+      let list = isAudit ? auditLogs : commandHistory
+      if (isAudit && q.action) list = list.filter((l) => l.action === q.action)
+      if (isAudit && q.startTime) list = list.filter((l) => l.createdAt >= q.startTime)
+      if (isAudit && q.endTime) list = list.filter((l) => l.createdAt <= q.endTime)
+      const page = Math.max(1, parseInt(q.page) || 1)
+      const pageSize = Math.min(200, Math.max(1, parseInt(q.pageSize) || 20))
+      const total = list.length
+      return res.end(JSON.stringify({
+        status: 'ok', code: 0, message: 'Success',
+        data: list.slice((page - 1) * pageSize, page * pageSize),
+        pagination: { total, page, pageSize, totalPages: Math.ceil(total / pageSize) || 1 },
+        timestamp: now(),
+      }))
+    }
+
     // ── 玩家域 ──
     if (path === '/api/v1/instances/e2e-demo/players') return res.end(ok(players))
     if (path === '/api/v1/instances/e2e-demo/players/bans') return res.end(ok(bans))
