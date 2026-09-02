@@ -11,6 +11,8 @@ import { success, successPaginated, error, ErrorCodes } from '../utils/response.
 import { recordAudit, AuditActions } from '../utils/audit.js';
 import { WebhookService, WEBHOOK_EVENT_TYPES } from '../services/webhook.service.js';
 import { checkPublicUrl } from '../utils/url-guard.js';
+import { webhookCreatePayloadSchema } from '../../mc-schemas/dist/webhook.js';
+import { validateBody } from '../middleware/validate.js';
 
 function asyncHandler(fn) {
   return (req, res, next) => {
@@ -53,12 +55,9 @@ export function createWebhookRoutes() {
   });
 
   // POST /webhooks — 创建
-  router.post('/webhooks', asyncHandler(async (req, res) => {
+  router.post('/webhooks', validateBody(webhookCreatePayloadSchema), asyncHandler(async (req, res) => {
     const { name, url, secret, events, instanceId, isEnabled } = req.body;
 
-    if (!name || !url) {
-      return res.status(400).json(error(ErrorCodes.VALIDATION_ERROR, 'name 和 url 为必填项'));
-    }
     if (!validateUrl(url)) {
       return res.status(400).json(error(ErrorCodes.WEBHOOK_INVALID_URL));
     }

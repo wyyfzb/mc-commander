@@ -5,6 +5,7 @@
   "type": "module",
   "main": "index.js",
   "scripts": {
+    "postinstall": "cd ../mc-schemas && npm ci --ignore-scripts",
     "start": "node index.js",
     "dev": "node --watch index.js",
     "test": "vitest run",
@@ -34,7 +35,8 @@
     "multer": "^2.2.0",
     "prismarine-nbt": "^2.8.0",
     "rcon-client": "^4.2.5",
-    "ws": "^8.21.3"
+    "ws": "^8.21.3",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",

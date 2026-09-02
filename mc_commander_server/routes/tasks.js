@@ -3,6 +3,8 @@ import { Cron } from 'croner';
 import { success, successPaginated, ErrorCodes, AppError } from '../utils/response.js';
 import { ScheduledTaskModel } from '../db/scheduled_task.model.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
+import { taskCreatePayloadSchema, taskUpdatePayloadSchema } from '../../mc-schemas/dist/task.js';
+import { validateBody } from '../middleware/validate.js';
 
 /**
  * cron 表达式合法性校验（与 task_scheduler 同用 croner 解析器，保证「存得进就能跑」）。
@@ -83,21 +85,10 @@ export function createTaskRoutes(serverManager, taskScheduler) {
   });
   
   // 创建定时任务
-  router.post('/instances/:instanceId/tasks', (req, res, next) => {
+  router.post('/instances/:instanceId/tasks', validateBody(taskCreatePayloadSchema), (req, res, next) => {
     try {
       const { instanceId } = req.params;
       const { name, type, cronExpression, command, isEnabled } = req.body;
-      
-      // 验证必填字段
-      if (!name || !type || !cronExpression) {
-        throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Name, type and cronExpression are required');
-      }
-      
-      // 验证任务类型
-      const validTypes = ['restart', 'backup', 'command', 'stop', 'start'];
-      if (!validTypes.includes(type)) {
-        throw new AppError(ErrorCodes.VALIDATION_ERROR, `Invalid task type. Must be one of: ${validTypes.join(', ')}`);
-      }
 
       // 验证 cron 表达式（非法表达式拒绝入库，返回 40004）
       assertValidCron(cronExpression);
@@ -125,7 +116,7 @@ export function createTaskRoutes(serverManager, taskScheduler) {
   });
   
   // 更新定时任务
-  router.put('/tasks/:id', (req, res, next) => {
+  router.put('/tasks/:id', validateBody(taskUpdatePayloadSchema), (req, res, next) => {
     try {
       const task = ScheduledTaskModel.findById(req.params.id);
       
