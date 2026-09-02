@@ -54,6 +54,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(import.meta.dirname, './src'),
+      '@mc-commander/schemas': path.resolve(import.meta.dirname, '../mc-schemas/src/index.ts'),
     },
   },
   server: {
