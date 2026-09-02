@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
+import { SearchAddon, type ISearchDecorationOptions } from '@xterm/addon-search'
 // 官方 CSS 必须引入：缺失会导致测量元素可见（32 个问号乱码行）+ 光标/选区样式缺失
 import '@xterm/xterm/css/xterm.css'
-import { Download, Eraser, Eye, EyeOff, Loader2, TerminalSquare, Copy, Check } from 'lucide-react'
+import { ChevronDown, ChevronUp, Download, Eraser, Eye, EyeOff, Loader2, Search, TerminalSquare, Copy, Check, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { InstanceControls } from '@/features/dashboard/components/instance-controls'
@@ -24,7 +26,8 @@ import type { LogLevel, TerminalLogEntry } from '@/lib/terminal-log'
  * ServerTerminal —— xterm 终端（business 组件）
  * - 独立深底（--mcs-bg-subtle）+ 等宽；级别四色编码（无文字前缀，仅颜色）
  * - 缓冲 2000 条（store，切页不丢）；自动滚动（上滚 >60px 暂停）
- * - JVM 警告默认隐藏（眼睛切换）；清空；下载日志
+ * - JVM 警告默认隐藏（眼睛切换）；清空；下载日志；终端内搜索
+ *   （放大镜/Ctrl+F 打开，SearchAddon 装饰高亮 + n/m 计数，Esc 关闭清除回焦点）
  */
 
 /** 级别 → ANSI 前景色序号（xterm theme 调色板映射 token） */
@@ -68,6 +71,27 @@ function buildXtermTheme() {
 /** 屏读镜像：保留最近 N 行纯文本，供 aria-live 推送给屏幕阅读器 */
 const SR_LINE_COUNT = 20
 
+/**
+ * 搜索装饰颜色（canvas 绘制需具体色值，cssVar 取 token 运行时值）：
+ * 当前命中 accent 亮显、其余命中 subtle 弱显；overview ruler 两色对应（addon 要求必填）
+ */
+function buildSearchDecorations(): ISearchDecorationOptions {
+  const accent = cssVar('--mcs-terminal-accent')
+  const subtle = cssVar('--mcs-terminal-subtle')
+  return {
+    matchBackground: subtle,
+    matchOverviewRuler: subtle,
+    activeMatchBackground: accent,
+    activeMatchColorOverviewRuler: accent,
+  }
+}
+
+/** 搜索结果计数（addon resultIndex 从 0 起；-1 表示超过 highlightLimit 阈值） */
+interface SearchResult {
+  resultIndex: number
+  resultCount: number
+}
+
 export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const xtermRef = useRef<Terminal | null>(null)
@@ -91,6 +115,19 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
   const [showJvmWarnings, setShowJvmWarnings] = useState(false)
   const [downloading, setDownloading] = useState(false)
   const [copied, setCopied] = useState(false)
+  // 终端内搜索（SearchAddon；canvas 渲染下浏览器原生 Ctrl+F 对终端内容无效）
+  // 状态收敛单对象：实例切换时在渲染期整体重置（React 官方 adjusting-state 模式，避免 effect 级联 setState）
+  const searchAddonRef = useRef<SearchAddon | null>(null)
+  const [search, setSearch] = useState<{
+    open: boolean
+    query: string
+    result: SearchResult | null
+  }>({ open: false, query: '', result: null })
+  const [searchInstanceId, setSearchInstanceId] = useState(instanceId)
+  if (searchInstanceId !== instanceId) {
+    setSearchInstanceId(instanceId)
+    setSearch({ open: false, query: '', result: null })
+  }
 
   // 历史日志（组件挂载时回填，store 去重）
   const logsQuery = useInstanceLogs(instanceId ?? '', 200)
@@ -100,9 +137,10 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
     }
   }, [instanceId, logsQuery.data, fillHistory])
 
-  // 实例切换 → store 清空旧缓冲
+  // 实例切换 → store 清空旧缓冲；搜索装饰对应旧缓冲一并清除（外部系统调用，无 setState）
   useEffect(() => {
     pushNothing(instanceId)
+    searchAddonRef.current?.clearDecorations()
   }, [instanceId, pushNothing])
 
   // xterm 初始化（一次）
@@ -120,10 +158,25 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
     })
     const fit = new FitAddon()
     term.loadAddon(fit)
+    const searchAddon = new SearchAddon()
+    term.loadAddon(searchAddon)
+    searchAddon.onDidChangeResults((r) => setSearch((s) => ({ ...s, result: { resultIndex: r.resultIndex, resultCount: r.resultCount } })))
+    // Ctrl+F：仅终端聚焦时生效（attachCustomKeyEventHandler 只在 xterm 持有焦点时触发，
+    // dashboard 其他区域浏览器原生查找不受影响）。canvas 渲染下原生 Ctrl+F 对终端内容
+    // 无法命中，preventDefault 抑制浏览器查找弹窗并转为打开终端内搜索。
+    term.attachCustomKeyEventHandler((e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+        e.preventDefault()
+        setSearch((s) => ({ ...s, open: true }))
+        return false
+      }
+      return true
+    })
     term.open(containerRef.current)
     fit.fit()
     xtermRef.current = term
     fitRef.current = fit
+    searchAddonRef.current = searchAddon
 
     const onResize = () => fit.fit()
     window.addEventListener('resize', onResize)
@@ -140,8 +193,11 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
 
     return () => {
       window.removeEventListener('resize', onResize)
+      // addon 随 term.dispose 一并释放；refs 同步置空避免悬垂
       term.dispose()
       xtermRef.current = null
+      fitRef.current = null
+      searchAddonRef.current = null
     }
   }, [])
 
@@ -211,6 +267,9 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
     xtermRef.current?.clear()
     renderedCountRef.current = 0
     stoppedMarkRef.current = false
+    // 缓冲已清空，搜索高亮/计数随之失效
+    searchAddonRef.current?.clearDecorations()
+    setSearch((s) => ({ ...s, result: null }))
   }, [clearTerminal])
 
   // 复制终端内容（选中区域优先，无选中则复制全部缓冲）
@@ -244,6 +303,27 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
     window.addEventListener('keydown', onKeyDown, true)
     return () => window.removeEventListener('keydown', onKeyDown, true)
   }, [handleClear])
+
+  // 终端内搜索：装饰高亮 + n/m 计数（onDidChangeResults 驱动）；Esc 关闭并清除恢复焦点
+  const handleSearchNext = useCallback(() => {
+    const addon = searchAddonRef.current
+    const q = search.query.trim()
+    if (!addon || !q) return
+    addon.findNext(q, { decorations: buildSearchDecorations() })
+  }, [search.query])
+
+  const handleSearchPrev = useCallback(() => {
+    const addon = searchAddonRef.current
+    const q = search.query.trim()
+    if (!addon || !q) return
+    addon.findPrevious(q, { decorations: buildSearchDecorations() })
+  }, [search.query])
+
+  const handleSearchClose = useCallback(() => {
+    setSearch((s) => ({ ...s, open: false, result: null }))
+    searchAddonRef.current?.clearDecorations()
+    xtermRef.current?.focus()
+  }, [])
 
   // 下载日志
   const handleDownload = async () => {
@@ -292,6 +372,20 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
         <div className="flex items-center gap-1">
           <Tooltip>
             <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => setSearch((s) => ({ ...s, open: !s.open }))}
+                aria-label="搜索终端内容"
+                aria-pressed={search.open}
+              >
+                <Search aria-hidden />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">搜索终端内容（Ctrl+F）</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
               <Button variant="ghost" size="icon-sm" onClick={() => setShowJvmWarnings((v) => !v)} aria-label={showJvmWarnings ? '隐藏 JVM 警告' : '显示 JVM 警告'}>
                 {showJvmWarnings ? <EyeOff aria-hidden /> : <Eye aria-hidden />}
               </Button>
@@ -327,6 +421,56 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
 
       {/* 终端区 */}
       <div className="relative min-h-0 flex-1">
+        {/* 搜索条（右上浮层）：Enter/下按钮向后、Shift+Enter/上按钮向前、Esc 关闭清除高亮回焦点终端 */}
+        {search.open && (
+          <div
+            role="search"
+            aria-label="终端内容搜索"
+            className="absolute right-2 top-2 z-10 flex items-center gap-1 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-default p-1 shadow-sm"
+          >
+            <Input
+              value={search.query}
+              onChange={(e) => {
+                const v = e.target.value
+                setSearch((s) => ({ ...s, query: v, result: null }))
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  if (e.shiftKey) handleSearchPrev()
+                  else handleSearchNext()
+                } else if (e.key === 'Escape') {
+                  e.preventDefault()
+                  handleSearchClose()
+                }
+              }}
+              placeholder="搜索终端内容..."
+              aria-label="搜索终端内容"
+              className="h-7 w-44 text-mcs-xs"
+              autoFocus
+            />
+            <span className="min-w-12 text-center text-mcs-xs tabular-nums text-mcs-text-muted" aria-live="polite">
+              {search.result
+                ? search.result.resultCount === 0
+                  ? '无结果'
+                  : search.result.resultIndex < 0
+                    ? `${search.result.resultCount}+`
+                    : `${search.result.resultIndex + 1}/${search.result.resultCount}`
+                : search.query.trim()
+                  ? '—'
+                  : ''}
+            </span>
+            <Button variant="ghost" size="icon-sm" onClick={handleSearchPrev} aria-label="上一个结果">
+              <ChevronUp aria-hidden />
+            </Button>
+            <Button variant="ghost" size="icon-sm" onClick={handleSearchNext} aria-label="下一个结果">
+              <ChevronDown aria-hidden />
+            </Button>
+            <Button variant="ghost" size="icon-sm" onClick={handleSearchClose} aria-label="关闭搜索">
+              <X aria-hidden />
+            </Button>
+          </div>
+        )}
         {/* 屏读镜像：aria-live 区域，屏幕阅读器可朗读最近 N 行终端输出 */}
         <div
           ref={srLiveRef}
