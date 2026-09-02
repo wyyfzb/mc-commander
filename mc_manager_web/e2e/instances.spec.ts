@@ -55,12 +55,15 @@ test.describe('实例页', () => {
     await expect(page.getByText('实例配置')).toBeVisible()
     await page.getByLabel('实例名称').fill('E2E 新服务器')
     await page.getByRole('button', { name: '下一步' }).click()
-    // 步骤③：确认摘要
+    // 步骤③：确认摘要 + EULA 同意勾选（首启闭环：未勾选时「部署并启动」禁用）
     await expect(page.getByText('确认部署')).toBeVisible()
     await expect(page.getByText('E2E 新服务器')).toBeVisible()
-    await page.getByRole('button', { name: '开始部署' }).click()
-    // mock 直接成功：结果块 + 完成
+    await expect(page.getByRole('button', { name: '部署并启动' })).toBeDisabled()
+    await page.getByRole('checkbox', { name: /Minecraft EULA/ }).check()
+    await page.getByRole('button', { name: '部署并启动' }).click()
+    // mock 直接成功：结果块 + 自动启动状态（已勾选 EULA → 部署完成自动启动）+ 完成
     await expect(page.getByText('部署成功')).toBeVisible()
+    await expect(page.getByText('已发送启动指令，服务器正在启动（状态可在仪表盘查看）')).toBeVisible()
     await expect(page.getByText('新部署实例').first()).toBeVisible()
     await maybeShot(page, 'deploy-done-dark.png')
     await page.getByRole('button', { name: '完成' }).click()
