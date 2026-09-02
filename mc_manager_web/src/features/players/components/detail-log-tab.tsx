@@ -164,7 +164,7 @@ export function LogTab({ player }: LogTabProps) {
   useEffect(() => {
     setCollapsed(new Set(sessionIndexes))
     // 契约：仅 player.name 与 sessions.length 变化时重置
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- sessionIndexes 由 buildLogNodes 每次渲染重新计算（新数组引用），加入会导致 effect 每帧执行
   }, [player.name, player.sessions?.length ?? 0])
 
   // 空态：无会话（事件也无从归属）时整 Tab 提示

@@ -149,7 +149,7 @@ export function PluginsPage() {
   // ── 上传（顺序队列 + 进度 + 冲突确认） ─────────────────────
 
   /** 上传单个文件；40912 同名冲突时抛给调用方处理 */
-  const uploadOne = async (file: File, overwrite: boolean) => {
+  const uploadOne = useCallback(async (file: File, overwrite: boolean) => {
     if (!instanceId) return // 早退分支语义（此处尚未渲染，防御性 guard）
     setUploading({ name: file.name, pct: 0 })
     const controller = new AbortController()
@@ -169,7 +169,7 @@ export function PluginsPage() {
     } finally {
       uploadAbortRef.current = null
     }
-  }
+  }, [instanceId])
 
   /** 顺序上传队列：冲突时暂停并弹确认；取消/失败不阻断其余文件 */
   const runUploadQueue = useCallback(
@@ -207,8 +207,7 @@ export function PluginsPage() {
       }
       void pluginsQuery.refetch()
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [instanceId],
+    [uploadOne, pluginsQuery],
   )
 
   /** 选择/拖放入口：过滤非 .jar（逐个提示），剩余进入队列 */

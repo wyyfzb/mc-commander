@@ -58,7 +58,7 @@ vi.mock('@monaco-editor/react', async () => {
           { KeyMod: { CtrlCmd: 2048 }, KeyCode: { KeyS: 49 } },
         )
         // mock 组件：仅首次挂载模拟一次 onMount（依赖数组留空是刻意为之）
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- 测试 mock 精确模拟首次挂载 onMount（依赖数组留空是刻意设计）
       }, [])
       return React.createElement('textarea', {
         'data-testid': 'monaco-editor',

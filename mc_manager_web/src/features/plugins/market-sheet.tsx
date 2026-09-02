@@ -192,8 +192,7 @@ export function MarketSheet({ open, onOpenChange, instanceId, initialQuery = nul
     setTotalHits(0)
     void fetchSearch(0)
     return () => searchAbortRef.current?.abort()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, instanceId, debouncedQuery, gameVersion, loader])
+  }, [open, instanceId, debouncedQuery, gameVersion, loader, fetchSearch])
 
   // ── 版本面板展开 ────────────────────────────────────────────
   const [panel, setPanel] = useState<VersionsPanel | null>(null)

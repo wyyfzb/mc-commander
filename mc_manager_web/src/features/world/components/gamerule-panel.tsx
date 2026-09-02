@@ -100,7 +100,7 @@ export function GamerulePanel({ instanceId, mcVersion, isRconConnected, onSendCo
       setValues(new Map())
       setEdit(null)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- 不依赖 load——onSendCommand 是父级 prop 回调，引用随父级重渲染变化，加入会导致反复 RCON 查询
   }, [instanceId, isRconConnected])
 
   /** 分类 chips：全部 + 当前规则集出现过的分类（GAMERULE_CATEGORY_LABELS 映射，按首现顺序） */

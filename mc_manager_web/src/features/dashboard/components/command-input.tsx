@@ -124,7 +124,7 @@ export function CommandInput() {
   useEffect(() => {
     setOverlayRunner((cmd) => send(cmd))
     return () => setOverlayRunner(null)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- send 是组件内普通函数（非 useCallback），每次渲染新引用，加入会每帧重注册 runner
   }, [instanceId, isRunning])
 
   const mutation = useMutation({

@@ -113,7 +113,7 @@ export function FilesPage() {
       setDraft('')
     }
     prevInstanceRef.current = instanceId
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // oxlint-disable-next-line react-hooks/exhaustive-deps -- setDir/setSelectedPath 是 React 稳定 setter，省略不影响语义
   }, [instanceId])
 
   // ── 编辑器内容（组件 state，与 query 隔离；originalRef 为已加载/已保存基线） ──
@@ -208,7 +208,6 @@ export function FilesPage() {
       })
       setSelectedPath(null)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPath])
 
   /** 路由切换守卫：编辑未保存切页确认 */

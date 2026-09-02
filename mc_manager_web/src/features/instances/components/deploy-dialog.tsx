@@ -253,7 +253,7 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
       baselineRef.current = { ...baselineRef.current, memory: next }
       return { ...f, memory: next }
     })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // oxlint-disable-next-line react-hooks/exhaustive-deps -- recommendedMemoryGB 模块级纯函数，setter/ref 稳定引用
   }, [totalMemory, open])
 
   // 版本列表就绪 → 自动回填首个版本，并同步基线。
@@ -268,7 +268,6 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
       baselineRef.current = { ...baselineRef.current, version: first }
       return { ...f, version: first }
     })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [versions, open])
 
   // 加载器列表就绪 → 自动回填首个 loader（时序同版本）
@@ -280,7 +279,6 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
       baselineRef.current = { ...baselineRef.current, loader: first }
       return { ...f, loader: first }
     })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loaders, open])
 
   /** dirty：与基线对比（用户改动过任意字段） */
