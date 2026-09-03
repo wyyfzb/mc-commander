@@ -147,3 +147,39 @@ export function worldTimePhase(worldTime: number | null | undefined): string {
   if (t < 18000) return '夜晚'
   return '午夜'
 }
+
+/** 秒基聚合分解共享核心（负值按 0 处理）：formatDurationSec/Full 两套输出语义共用 */
+function decomposeSeconds(sec: number): { h: number; m: number; s: number } {
+  const total = Math.max(0, Math.floor(sec))
+  return {
+    h: Math.floor(total / 3600),
+    m: Math.floor((total % 3600) / 60),
+    s: total % 60,
+  }
+}
+
+/** 短时长（毫秒基）：<1s 「Nms」/ 否则秒保留一位「X.Xs」；null/undefined → emptyText（默认 '-'） */
+export function formatDurationMs(
+  ms: number | null | undefined,
+  emptyText = '-',
+): string {
+  if (ms == null) return emptyText
+  if (ms < 1000) return `${ms}ms`
+  return `${(ms / 1000).toFixed(1)}s`
+}
+
+/** 短时长（秒基聚合）：Xh Ym / Xm Ys / Xs */
+export function formatDurationSec(sec: number): string {
+  const { h, m, s } = decomposeSeconds(sec)
+  if (h > 0) return `${h}h${String(m).padStart(2, '0')}m`
+  if (m > 0) return `${m}m${String(s).padStart(2, '0')}s`
+  return `${s}s`
+}
+
+/** 完整时长（秒基中文聚合）：X 时 Y 分 / X 分 Y 秒 / X 秒 */
+export function formatDurationSecFull(sec: number): string {
+  const { h, m, s } = decomposeSeconds(sec)
+  if (h > 0) return `${h} 时 ${m} 分`
+  if (m > 0) return `${m} 分 ${s} 秒`
+  return `${s} 秒`
+}

@@ -34,7 +34,7 @@ import { Switch } from '@/components/ui/switch'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { Chip } from '@/components/mcs/chip'
 import { CRON_PRESETS, cronDescription, formatNextRun } from '@/lib/mc-cron'
-import { formatUtcNaive } from '@/lib/format'
+import { formatDurationMs, formatUtcNaive } from '@/lib/format'
 import { TASK_TYPE_OPTIONS, type TaskType } from '@/lib/mc-deploy'
 import { CronEditor } from './cron-editor'
 import { useTaskHistory } from '../queries'
@@ -287,11 +287,6 @@ const RUN_STATUS_META: Record<TaskRunHistory['status'], { dot: string; text: str
   skipped: { dot: 'bg-mcs-warning-fg', text: 'text-mcs-warning-fg', label: '跳过' },
 }
 
-/** 执行耗时：<1s 展示毫秒，否则秒（保留一位） */
-function formatDuration(ms: number): string {
-  return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`
-}
-
 /**
  * 最近执行时间线（编辑模式）：倒序最近 10 条，
  * 状态语义色圆点 + 触发时间 + 耗时 + 失败原因（截断，悬停看全文）。
@@ -333,7 +328,7 @@ function TaskRunHistory({ taskId }: { taskId: number }) {
                   <span className={meta.text}>{meta.label}</span>
                   <span className="text-mcs-text-muted">{formatUtcNaive(run.runAt)}</span>
                   {run.durationMs !== null && (
-                    <span className="text-mcs-text-subtle">· {formatDuration(run.durationMs)}</span>
+                    <span className="text-mcs-text-subtle">· {formatDurationMs(run.durationMs)}</span>
                   )}
                 </div>
                 {run.error && (
