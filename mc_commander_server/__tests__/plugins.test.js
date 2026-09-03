@@ -492,4 +492,28 @@ describe('Plugin Routes zod 请求契约（issue 391）', () => {
     expect(res.status).toBe(400);
     expect(res.body.details.some((d) => d.path === 'overwrite')).toBe(true);
   });
+
+  it('plugins/upload：?overwrite=yes 非法 → 400 且 multer 临时文件被清理（diskStorage 无残留）', async () => {
+    // multer diskStorage 缓冲目录（routes/plugins.js pluginUploadStorage.destination）
+    const tmpUploadDir = path.join(os.tmpdir(), 'mc-commander-uploads');
+    const snapshotBefore = new Set(
+      fs.existsSync(tmpUploadDir) ? fs.readdirSync(tmpUploadDir) : []
+    );
+
+    const res = await request(app)
+      .post('/api/v1/instances/inst1/plugins/upload?overwrite=yes')
+      .attach('file', Buffer.from('fake jar'), { filename: 'x.jar', contentType: 'application/java-archive' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.details.some((d) => d.path === 'overwrite')).toBe(true);
+
+    // validateQuery onError 钩子在 400 前清理落盘临时文件：
+    // 本次请求新增的 .plugin-upload.tmp-* 不应残留在磁盘上
+    const leftovers = fs.existsSync(tmpUploadDir)
+      ? fs.readdirSync(tmpUploadDir).filter(
+          (f) => f.startsWith('.plugin-upload.tmp-') && !snapshotBefore.has(f)
+        )
+      : [];
+    expect(leftovers).toEqual([]);
+  });
 });
