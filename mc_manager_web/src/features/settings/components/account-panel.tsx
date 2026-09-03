@@ -37,6 +37,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
+import { EmptyState } from '@/components/mcs/empty-state'
 import { queryKeys } from '@/api/queries'
 import { changePassword, fetchSessions, kickSession, logout } from '@/api/auth'
 import { ApiError } from '@/api/client'
@@ -336,17 +337,12 @@ export function AccountPanel() {
             </Button>
           </div>
         ) : sessions.length === 0 ? (
-          <div className="rounded-mcs-md border border-dashed border-mcs-border-muted py-8 text-center">
-            <MonitorSmartphone className="mx-auto size-8 text-mcs-text-subtle/60" aria-hidden />
-            <p className="mt-2 text-mcs-xs text-mcs-text-muted">
-              {session?.token ? '暂无活跃会话' : '当前为 API Key 直连，暂无浏览器会话'}
-            </p>
-            {!session?.token && (
-              <p className="mt-1 text-mcs-2xs text-mcs-text-subtle">
-                退出登录后通过密码登录，即可在此管理设备会话
-              </p>
-            )}
-          </div>
+          /* 空态：EmptyState 收敛写法（同 backup-panel），dashed 孤例已消除 */
+          <EmptyState
+            icon={MonitorSmartphone}
+            title={session?.token ? '暂无活跃会话' : '当前为 API Key 直连，暂无浏览器会话'}
+            hint={session?.token ? undefined : '退出登录后通过密码登录，即可在此管理设备会话'}
+          />
         ) : (
           <div className="max-h-96 overflow-y-auto rounded-mcs-md border border-mcs-border-muted">
             <Table>

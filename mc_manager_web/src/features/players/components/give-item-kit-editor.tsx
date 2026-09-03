@@ -287,9 +287,8 @@ export function KitEditorDialog({
               当前物品（{items.length}）
             </span>
             {items.length === 0 ? (
-              <p className="rounded-mcs-sm border border-dashed border-mcs-border-muted px-3 py-3 text-center text-mcs-xs text-mcs-text-subtle">
-                未添加物品，请从下方选择
-              </p>
+              /* 空态：纯文本主流写法（同 task-dialog「暂无执行记录」），dashed 孤例已消除 */
+              <p className="text-mcs-xs text-mcs-text-subtle">未添加物品，请从下方选择</p>
             ) : (
               <div className="flex max-h-28 flex-wrap gap-1.5 overflow-y-auto">
                 {items.map((entry, index) => {
