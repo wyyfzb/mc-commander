@@ -1,12 +1,19 @@
 import express from 'express';
 import fs from 'fs';
 import path from 'path';
-import { success, error, ErrorCodes } from '../utils/response.js';
+import { error, ErrorCodes } from '../utils/response.js';
 import { BanModel } from '../db/index.js';
 import { getTotalPlayTime } from '../utils/player-utils.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
-import { banRequestBodySchema } from '@mc-commander/schemas';
-import { validateBody } from '../middleware/validate.js';
+import {
+  banRecordListSchema,
+  banRequestBodySchema,
+  banResponseBodySchema,
+  nullDataSchema,
+  playerDetailsResponseSchema,
+  playerListSchema,
+} from '@mc-commander/schemas';
+import { validateBody, validatedSuccess } from '../middleware/validate.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { logger } from '../utils/logger.js';
 
@@ -256,7 +263,7 @@ export function createPlayerRoutes(serverManager) {
     }
 
     const players = [...onlinePlayers, ...offlinePlayers];
-    res.json(success(players));
+    res.json(validatedSuccess(playerListSchema, players));
   }));
 
   // GET /api/instances/:id/players/bans - 封禁记录（生效中 + 历史）
@@ -325,7 +332,7 @@ export function createPlayerRoutes(serverManager) {
       return String(b.createdAt || '').localeCompare(String(a.createdAt || ''));
     });
 
-    res.json(success(bans));
+    res.json(validatedSuccess(banRecordListSchema, bans));
   }));
 
   router.get('/instances/:id/players/:player/details', validatePlayerName, asyncHandler(async (req, res) => {
@@ -360,7 +367,7 @@ export function createPlayerRoutes(serverManager) {
 
     try {
       const details = await instance.getPlayerDetails(playerName);
-      res.json(success({ ...baseInfo, ...details }));
+      res.json(validatedSuccess(playerDetailsResponseSchema, { ...baseInfo, ...details }));
     } catch (e) {
       logger.error(`Failed to get player details for ${playerName}:`, e);
       const fallbackSaved = loadPlayerData(instance.serverPath, playerName) || {};
@@ -370,7 +377,7 @@ export function createPlayerRoutes(serverManager) {
         fallbackSaved.events || [],
         instance.playerEvents?.get(playerName) || [],
       );
-      res.json(success({
+      res.json(validatedSuccess(playerDetailsResponseSchema, {
         ...baseInfo,
         health: null,
         maxHealth: null,
@@ -416,7 +423,7 @@ export function createPlayerRoutes(serverManager) {
     if (!requireRunning(instance, res)) return;
     await instance.sendCommand(`op ${req.params.player}`);
     recordAudit({ instanceId: req.params.id, action: AuditActions.PLAYER_OP, targetType: 'player', targetId: req.params.player });
-    res.json(success(null, `Opped ${req.params.player}`));
+    res.json(validatedSuccess(nullDataSchema, null, `Opped ${req.params.player}`));
   }));
 
   // DELETE /api/instances/:id/players/:player/op
@@ -428,7 +435,7 @@ export function createPlayerRoutes(serverManager) {
     if (!requireRunning(instance, res)) return;
     await instance.sendCommand(`deop ${req.params.player}`);
     recordAudit({ instanceId: req.params.id, action: AuditActions.PLAYER_DEOP, targetType: 'player', targetId: req.params.player });
-    res.json(success(null, `Deopped ${req.params.player}`));
+    res.json(validatedSuccess(nullDataSchema, null, `Deopped ${req.params.player}`));
   }));
 
   // POST /api/instances/:id/players/:player/kick
@@ -442,7 +449,7 @@ export function createPlayerRoutes(serverManager) {
     const reason = sanitizeReason(req.body?.reason) || 'Kicked by operator';
     await instance.sendCommand(`kick ${req.params.player} ${reason}`);
     recordAudit({ instanceId: req.params.id, action: AuditActions.PLAYER_KICK, targetType: 'player', targetId: req.params.player, detail: { reason } });
-    res.json(success(null, `Kicked ${req.params.player}`));
+    res.json(validatedSuccess(nullDataSchema, null, `Kicked ${req.params.player}`));
   }));
 
   // POST /api/instances/:id/players/:player/ban
@@ -502,7 +509,7 @@ export function createPlayerRoutes(serverManager) {
     }
 
     recordAudit({ instanceId: req.params.id, action: AuditActions.PLAYER_BAN, targetType: ip ? 'ip' : 'player', targetId: ip || req.params.player, detail: { reason, duration: duration || null } });
-    res.json(success({ expiresAt }, `Banned ${req.params.player}`));
+    res.json(validatedSuccess(banResponseBodySchema, { expiresAt }, `Banned ${req.params.player}`));
   }));
 
   // POST /api/instances/:id/players/:player/pardon
@@ -543,7 +550,7 @@ export function createPlayerRoutes(serverManager) {
       throw err;
     }
     recordAudit({ instanceId: req.params.id, action: AuditActions.PLAYER_PARDON, targetType: 'player', targetId: req.params.player });
-    res.json(success(null, `Pardoned ${req.params.player}`));
+    res.json(validatedSuccess(nullDataSchema, null, `Pardoned ${req.params.player}`));
   }));
 
   // POST /api/instances/:id/players/bans/pardon - 通用手动解封（玩家或 IP）
@@ -607,7 +614,7 @@ export function createPlayerRoutes(serverManager) {
     // 枚举覆盖全部解封操作，拆新枚举会让同一动作出现两个标签；targetType 对齐 PLAYER_BAN
     // 的 ip/player 双型；detail.entry 标注来自封禁记录端点，与玩家卡解封行可区分。
     recordAudit({ instanceId: req.params.id, action: AuditActions.PLAYER_PARDON, targetType, targetId: target, detail: { entry: 'ban-record' } });
-    res.json(success(null, `Pardoned ${targetType}: ${target}`));
+    res.json(validatedSuccess(nullDataSchema, null, `Pardoned ${targetType}: ${target}`));
   }));
 
   // POST /api/instances/:id/players/:player/whitelist/add
@@ -620,7 +627,7 @@ export function createPlayerRoutes(serverManager) {
     await instance.sendCommand(`whitelist add ${req.params.player}`);
     // detail.op 与 remove 端点成对标注：add/remove 共用 PLAYER_WHITELIST，靠 detail 区分方向
     recordAudit({ instanceId: req.params.id, action: AuditActions.PLAYER_WHITELIST, targetType: 'player', targetId: req.params.player, detail: { op: 'add' } });
-    res.json(success(null, `Added ${req.params.player} to whitelist`));
+    res.json(validatedSuccess(nullDataSchema, null, `Added ${req.params.player} to whitelist`));
   }));
 
   // DELETE /api/instances/:id/players/:player/whitelist
@@ -634,7 +641,7 @@ export function createPlayerRoutes(serverManager) {
     // 审计复用 PLAYER_WHITELIST：前端映射「白名单操作」本就方向中性（add/remove 共用），
     // 拆新枚举会让过滤下拉出现两个半语义项；detail.op 区分加入/移除，与 add 端点成对标注。
     recordAudit({ instanceId: req.params.id, action: AuditActions.PLAYER_WHITELIST, targetType: 'player', targetId: req.params.player, detail: { op: 'remove' } });
-    res.json(success(null, `Removed ${req.params.player} from whitelist`));
+    res.json(validatedSuccess(nullDataSchema, null, `Removed ${req.params.player} from whitelist`));
   }));
 
   return router;

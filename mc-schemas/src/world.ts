@@ -26,10 +26,13 @@ export const worldInfoSchema = z.object({
   generateStructures: z.boolean(),
   whiteList: z.boolean(),
   onlineMode: z.boolean(),
-  lastSave: z.number().nullable(),
+  lastSave: z.string().nullable(),
   gameDays: z.number().nullable(),
   dimensions: z.array(worldDimensionSchema),
 })
+
+/** server.properties 键值对（GET /properties 全量响应，值均为 properties 文件文本） */
+export const serverPropertiesSchema = z.record(z.string(), z.string())
 
 export type WorldDimension = z.infer<typeof worldDimensionSchema>
 export type WorldInfo = z.infer<typeof worldInfoSchema>
@@ -42,3 +45,4 @@ export const updatePropertiesResponseSchema = z.object({
 })
 
 export type UpdatePropertiesResponse = z.infer<typeof updatePropertiesResponseSchema>
+export type ServerPropertiesMap = z.infer<typeof serverPropertiesSchema>

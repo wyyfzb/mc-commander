@@ -41,4 +41,9 @@ export const apiErrorEnvelopeSchema = z.object({
 
 export type Pagination = z.infer<typeof paginationSchema>
 export type ApiEnvelope<T = unknown> = z.infer<typeof apiEnvelopeSchema> & { data: T }
+
+/** 无载荷操作的成功响应 data（启动/停止/删除/解封等副作用端点固定返回 null） */
+export const nullDataSchema = z.null()
+
+export type NullData = z.infer<typeof nullDataSchema>
 export type ApiErrorEnvelope = z.infer<typeof apiErrorEnvelopeSchema>

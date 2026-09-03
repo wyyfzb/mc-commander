@@ -42,7 +42,7 @@ function makeWorld(overrides: Partial<WorldInfo> = {}): WorldInfo {
     generateStructures: true,
     whiteList: false,
     onlineMode: true,
-    lastSave: Date.now(),
+    lastSave: new Date(Date.now() - 60_000).toISOString(),
     gameDays: 42,
     dimensions: [
       { name: '主世界', icon: '🌍', playerCount: 2 },
