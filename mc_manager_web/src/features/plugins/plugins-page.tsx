@@ -135,10 +135,12 @@ export function PluginsPage() {
   /** 清空选择（列表变化后勾选项可能已不存在） */
   // 插件列表变化（实例切换/上传/删除后失效重取）→ 更新检测结果同步失效
   useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect -- 实例切换时重置检测结果（重置 on 属性变化惯用法），派生渲染重写会扩大改动面
     setUpdateMap(new Map())
   }, [instanceId])
 
   useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect -- 列表刷新后剔除已不存在的勾选项；函数式更新返回原引用时无级联渲染风险
     setSelected((prev) => {
       const valid = new Set(plugins.map((p) => p.file))
       const next = new Set([...prev].filter((f) => valid.has(f)))
@@ -149,7 +151,7 @@ export function PluginsPage() {
   // ── 上传（顺序队列 + 进度 + 冲突确认） ─────────────────────
 
   /** 上传单个文件；40912 同名冲突时抛给调用方处理 */
-  const uploadOne = async (file: File, overwrite: boolean) => {
+  const uploadOne = useCallback(async (file: File, overwrite: boolean) => {
     if (!instanceId) return // 早退分支语义（此处尚未渲染，防御性 guard）
     setUploading({ name: file.name, pct: 0 })
     const controller = new AbortController()
@@ -169,7 +171,7 @@ export function PluginsPage() {
     } finally {
       uploadAbortRef.current = null
     }
-  }
+  }, [instanceId])
 
   /** 顺序上传队列：冲突时暂停并弹确认；取消/失败不阻断其余文件 */
   const runUploadQueue = useCallback(
@@ -207,8 +209,7 @@ export function PluginsPage() {
       }
       void pluginsQuery.refetch()
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [instanceId],
+    [uploadOne, pluginsQuery],
   )
 
   /** 选择/拖放入口：过滤非 .jar（逐个提示），剩余进入队列 */
