@@ -1,9 +1,14 @@
 import { describe, it, expect } from 'vitest'
 import {
+  formatClock,
+  formatDateTime,
+  formatFullDateMinute,
+  formatFullDateTime,
   formatLogFileName,
   formatNotificationTime,
   formatRelativeTime,
   formatStartTime,
+  formatUtcNaive,
   formatUptime,
   worldTimePhase,
 } from '../format'
@@ -36,6 +41,11 @@ describe('formatRelativeTime', () => {
     expect(formatRelativeTime(new Date(now - 2 * 86_400_000).toISOString(), now)).toBe('2天前')
     expect(formatRelativeTime(null, now)).toBe('未知')
   })
+  it('自定义空值文案（空串 / 非法输入同兜底）', () => {
+    expect(formatRelativeTime(null, now, '从未')).toBe('从未')
+    expect(formatRelativeTime('', now, '从未')).toBe('从未')
+    expect(formatRelativeTime('not-a-date', now, '从未')).toBe('从未')
+  })
 })
 
 describe('formatNotificationTime', () => {
@@ -51,11 +61,80 @@ describe('formatNotificationTime', () => {
   })
 })
 
+describe('formatDateTime（MM-dd HH:mm:ss）', () => {
+  it('本地时区含秒；秒位补零边界', () => {
+    const d = new Date(2026, 7, 14, 9, 5, 3) // 本地时区构造（个位分/秒补零）
+    expect(formatDateTime(d.toISOString())).toBe('08-14 09:05:03')
+  })
+  it('空值 / 非法输入 → 默认 -- 与自定义兜底', () => {
+    expect(formatDateTime(null)).toBe('--')
+    expect(formatDateTime('')).toBe('--')
+    expect(formatDateTime('not-a-date')).toBe('--')
+    expect(formatDateTime(undefined, '无记录')).toBe('无记录')
+    expect(formatDateTime('not-a-date', '原始值兜底')).toBe('原始值兜底')
+  })
+})
+
+describe('formatFullDateTime（YYYY-MM-DD HH:mm:ss）', () => {
+  it('本地时区含年与秒', () => {
+    const d = new Date(2026, 7, 14, 23, 5, 3)
+    expect(formatFullDateTime(d.toISOString())).toBe('2026-08-14 23:05:03')
+  })
+  it('空值 / 非法输入 → 默认 -- 与自定义兜底', () => {
+    expect(formatFullDateTime(null)).toBe('--')
+    expect(formatFullDateTime('not-a-date')).toBe('--')
+    expect(formatFullDateTime(undefined, '未知')).toBe('未知')
+  })
+})
+
+describe('formatFullDateMinute（YYYY-MM-DD HH:mm）', () => {
+  it('本地时区到分', () => {
+    const d = new Date(2026, 7, 14, 9, 5)
+    expect(formatFullDateMinute(d.toISOString())).toBe('2026-08-14 09:05')
+  })
+  it('空值 / 非法输入 → 默认 -- 与自定义兜底', () => {
+    expect(formatFullDateMinute(null)).toBe('--')
+    expect(formatFullDateMinute('not-a-date')).toBe('--')
+    expect(formatFullDateMinute(undefined, '')).toBe('')
+  })
+})
+
+describe('formatClock（HH:mm）', () => {
+  it('本地时区时刻；分位补零边界', () => {
+    const d = new Date(2026, 7, 14, 9, 5)
+    expect(formatClock(d.toISOString())).toBe('09:05')
+  })
+  it('空值 / 非法输入 → 默认 -- 与自定义兜底', () => {
+    expect(formatClock(null)).toBe('--')
+    expect(formatClock('not-a-date')).toBe('--')
+    expect(formatClock(undefined, '现在')).toBe('现在')
+  })
+})
+
+describe('formatUtcNaive（SQLite CURRENT_TIMESTAMP → MM-dd HH:mm）', () => {
+  // 往返构造：本地时刻 → toISOString（UTC）→ 去 Z/换空格模拟 SQLite 存储，断言还原回同一本地时刻
+  it('UTC naive 字符串按 UTC 解析后转本地；空格分隔', () => {
+    const local = new Date(2026, 7, 14, 9, 5)
+    const sqliteTs = local.toISOString().slice(0, 19).replace('T', ' ')
+    expect(formatUtcNaive(sqliteTs)).toBe('08-14 09:05')
+  })
+  it('兼容已带 T 的 ISO 输入', () => {
+    const local = new Date(2026, 7, 14, 9, 5)
+    const isoNoMillis = local.toISOString().slice(0, 19)
+    expect(formatUtcNaive(isoNoMillis)).toBe('08-14 09:05')
+  })
+  it('解析失败原样返回输入', () => {
+    expect(formatUtcNaive('not-a-date')).toBe('not-a-date')
+  })
+})
+
 describe('formatStartTime / formatLogFileName / worldTimePhase', () => {
-  it('startTime 本地时区 MM-dd HH:mm；缺失 --', () => {
+  it('startTime 本地时区 MM-dd HH:mm；缺失 --；自定义兜底', () => {
     const d = new Date(2026, 7, 14, 9, 30) // 本地时区构造
     expect(formatStartTime(d.toISOString())).toBe('08-14 09:30')
     expect(formatStartTime(null)).toBe('--')
+    expect(formatStartTime('not-a-date', '-')).toBe('-')
+    expect(formatStartTime(undefined, '从未')).toBe('从未')
   })
 
   it('日志文件名格式', () => {

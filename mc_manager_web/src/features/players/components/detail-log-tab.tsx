@@ -31,6 +31,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { formatClock, formatFullDateTime } from '@/lib/format'
 import type { Player, PlayerEvent, PlayerSession } from '@/api/types'
 
 export interface LogTabProps {
@@ -300,7 +301,7 @@ function EventRow({ event }: { event: PlayerEvent }) {
         {label}
       </span>
       <span className="min-w-0 flex-1 truncate text-mcs-xs text-mcs-text-default">{message}</span>
-      <span className="shrink-0 font-mono text-mcs-2xs text-mcs-text-subtle">{formatFullTime(event.timestamp)}</span>
+      <span className="shrink-0 font-mono text-mcs-2xs text-mcs-text-subtle">{formatFullDateTime(event.timestamp)}</span>
     </div>
   )
 }
@@ -355,19 +356,4 @@ function formatDurationFull(sec: number): string {
   if (h > 0) return `${h} 时 ${m} 分`
   if (m > 0) return `${m} 分 ${s} 秒`
   return `${s} 秒`
-}
-
-/** 时刻 HH:mm（本地时区） */
-function formatClock(iso: string): string {
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return '--'
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
-}
-
-/** 完整时间 YYYY-MM-DD HH:mm:ss（本地时区） */
-function formatFullTime(iso: string): string {
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return '--'
-  const p = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
 }

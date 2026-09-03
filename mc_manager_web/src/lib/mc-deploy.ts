@@ -4,6 +4,7 @@
  * - recommendedJavaVersion：版本 → Java 版本推荐
  * - 任务类型标签与状态色
  */
+import { formatStartTime } from './format'
 
 /** 服务端类型（deploy 端点 validTypes） */
 export const SERVER_TYPES = ['vanilla', 'paper', 'fabric', 'forge', 'purpur'] as const
@@ -93,13 +94,9 @@ export const TASK_TYPE_TONES: Record<TaskType, TaskTypeTone> = {
   start: 'success',
 }
 
-/** 任务时间格式化：MM-DD HH:mm 本地时区；null/非法 → '从未' */
+/** 任务时间格式化：MM-DD HH:mm 本地时区；null/非法 → '从未'（收口复用 lib/format） */
 export function formatTaskDate(iso: string | null | undefined): string {
-  if (iso == null || iso.length === 0) return '从未'
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return '从未'
-  const p = (n: number) => String(n).padStart(2, '0')
-  return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+  return formatStartTime(iso, '从未')
 }
 
 /**
