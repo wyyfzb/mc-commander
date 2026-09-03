@@ -31,7 +31,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { formatClock, formatFullDateTime } from '@/lib/format'
+import { formatClock, formatDurationSec, formatDurationSecFull, formatFullDateTime } from '@/lib/format'
 import type { Player, PlayerEvent, PlayerSession } from '@/api/types'
 
 export interface LogTabProps {
@@ -200,9 +200,9 @@ export function LogTab({ player }: LogTabProps) {
       <div className="rounded-mcs-md border border-mcs-border-muted p-3">
         <div className="flex items-start justify-between gap-2">
           <div className="grid flex-1 grid-cols-3 gap-2">
-            <StatCell label="总在线" value={formatDurationShort(stats.totalOnline)} />
+            <StatCell label="总在线" value={formatDurationSec(stats.totalOnline)} />
             <StatCell label="累计登录" value={`${stats.loginCount} 次`} />
-            <StatCell label="已离线" value={formatDurationShort(stats.offlineSince)} color="text-mcs-text-subtle" />
+            <StatCell label="已离线" value={formatDurationSec(stats.offlineSince)} color="text-mcs-text-subtle" />
             <StatCell label="死亡" value={`${stats.deathCount} 次`} color="text-mcs-error-fg" />
             <StatCell label="进度" value={`${stats.achievementCount} 个`} color="text-mcs-accent-fg" />
             <StatCell label="入睡" value={`${stats.sleepCount} 次`} color="text-mcs-info-fg" />
@@ -249,7 +249,7 @@ function SessionRow({
   const { session, labelNo, events } = node
   const endLabel = session.leaveTime ? formatClock(session.leaveTime) : '现在'
   const title =
-    `登录日志${labelNo} ${formatClock(session.joinTime)} → ${endLabel} · ` + formatDurationShort(session.duration)
+    `登录日志${labelNo} ${formatClock(session.joinTime)} → ${endLabel} · ` + formatDurationSec(session.duration)
 
   return (
     <div className="flex flex-col">
@@ -315,7 +315,7 @@ function OfflineRow({ node }: { node: OfflineNode }) {
         离线
       </span>
       <span className="min-w-0 flex-1 truncate text-mcs-xs text-mcs-text-muted">
-        离线 · {formatDurationFull(node.durationSec)}
+        离线 · {formatDurationSecFull(node.durationSec)}
       </span>
       <span className="shrink-0 font-mono text-mcs-2xs text-mcs-text-subtle">
         {formatClock(node.start)} ~ {formatClock(node.end)}
@@ -332,28 +332,4 @@ function StatCell({ label, value, color = 'text-mcs-text-default' }: { label: st
       <span className={`truncate font-mono text-mcs-sm font-medium tabular-nums ${color}`}>{value}</span>
     </div>
   )
-}
-
-// ── 格式化工具 ──
-
-/** 短时长：Xh Ym / Xm Ys / Xs */
-function formatDurationShort(sec: number): string {
-  const total = Math.max(0, Math.floor(sec))
-  const h = Math.floor(total / 3600)
-  const m = Math.floor((total % 3600) / 60)
-  const s = total % 60
-  if (h > 0) return `${h}h${String(m).padStart(2, '0')}m`
-  if (m > 0) return `${m}m${String(s).padStart(2, '0')}s`
-  return `${s}s`
-}
-
-/** 完整时长：X 时 Y 分 / X 分 Y 秒 / X 秒（离线间隔用） */
-function formatDurationFull(sec: number): string {
-  const total = Math.max(0, Math.floor(sec))
-  const h = Math.floor(total / 3600)
-  const m = Math.floor((total % 3600) / 60)
-  const s = total % 60
-  if (h > 0) return `${h} 时 ${m} 分`
-  if (m > 0) return `${m} 分 ${s} 秒`
-  return `${s} 秒`
 }

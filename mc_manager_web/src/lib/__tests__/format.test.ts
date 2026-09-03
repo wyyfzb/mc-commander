@@ -2,6 +2,9 @@ import { describe, it, expect } from 'vitest'
 import {
   formatClock,
   formatDateTime,
+  formatDurationMs,
+  formatDurationSec,
+  formatDurationSecFull,
   formatFullDateMinute,
   formatFullDateTime,
   formatLogFileName,
@@ -148,5 +151,59 @@ describe('formatStartTime / formatLogFileName / worldTimePhase', () => {
     expect(worldTimePhase(15000)).toBe('夜晚')
     expect(worldTimePhase(22000)).toBe('午夜')
     expect(worldTimePhase(null)).toBe('--')
+  })
+})
+
+describe('formatDurationMs', () => {
+  it('<1s 展示毫秒「Nms」', () => {
+    expect(formatDurationMs(0)).toBe('0ms')
+    expect(formatDurationMs(500)).toBe('500ms')
+    expect(formatDurationMs(999)).toBe('999ms')
+  })
+  it('≥1s 秒保留一位「X.Xs」', () => {
+    expect(formatDurationMs(1000)).toBe('1.0s')
+    expect(formatDurationMs(1234)).toBe('1.2s')
+    expect(formatDurationMs(59500)).toBe('59.5s')
+  })
+  it('空值返回 emptyText（默认 -，可自定义）', () => {
+    expect(formatDurationMs(null)).toBe('-')
+    expect(formatDurationMs(undefined)).toBe('-')
+    expect(formatDurationMs(null, '—')).toBe('—')
+  })
+})
+
+describe('formatDurationSec', () => {
+  it('<1m「Xs」', () => {
+    expect(formatDurationSec(0)).toBe('0s')
+    expect(formatDurationSec(5)).toBe('5s')
+    expect(formatDurationSec(59)).toBe('59s')
+  })
+  it('<1h「Xm Ys」（秒两位补零）', () => {
+    expect(formatDurationSec(60)).toBe('1m00s')
+    expect(formatDurationSec(65)).toBe('1m05s')
+  })
+  it('≥1h「Xh Ym」（分两位补零）', () => {
+    expect(formatDurationSec(3600)).toBe('1h00m')
+    expect(formatDurationSec(3661)).toBe('1h01m')
+  })
+  it('负值按 0 处理', () => {
+    expect(formatDurationSec(-3)).toBe('0s')
+  })
+})
+
+describe('formatDurationSecFull', () => {
+  it('<1m「X 秒」', () => {
+    expect(formatDurationSecFull(5)).toBe('5 秒')
+    expect(formatDurationSecFull(59)).toBe('59 秒')
+  })
+  it('<1h「X 分 Y 秒」', () => {
+    expect(formatDurationSecFull(65)).toBe('1 分 5 秒')
+  })
+  it('≥1h「X 时 Y 分」', () => {
+    expect(formatDurationSecFull(3600)).toBe('1 时 0 分')
+    expect(formatDurationSecFull(3661)).toBe('1 时 1 分')
+  })
+  it('负值按 0 处理', () => {
+    expect(formatDurationSecFull(-3)).toBe('0 秒')
   })
 })

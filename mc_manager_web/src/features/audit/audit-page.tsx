@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { FilterSelect } from '@/components/mcs/filter-select'
 import { StatusPill } from '@/components/mcs/status-pill'
-import { formatDateTime } from '@/lib/format'
+import { formatDateTime, formatDurationMs } from '@/lib/format'
 import { PageHeader } from '@/components/mcs/page-header'
 import { DataTableShell } from '@/components/mcs/data-table-shell'
 import { useAuditLogs, useCommandHistory } from '@/api/queries'
@@ -48,12 +48,6 @@ function getActionLabel(action: string): string {
 function formatTime(iso: string): string {
   if (Number.isNaN(new Date(iso).getTime())) return iso
   return formatDateTime(iso)
-}
-
-function formatDuration(ms: number | null): string {
-  if (ms == null) return '-'
-  if (ms < 1000) return `${ms}ms`
-  return `${(ms / 1000).toFixed(1)}s`
 }
 
 const AUDIT_COLUMNS = 4
@@ -120,7 +114,7 @@ function CmdBody({ cmds }: { cmds: CommandHistoryItem[] }) {
             </StatusPill>
           </td>
           <td className="px-3 py-2 text-mcs-text-subtle">{cmd.source}</td>
-          <td className="px-3 py-2 text-mcs-text-subtle font-mono text-mcs-xs">{formatDuration(cmd.durationMs)}</td>
+          <td className="px-3 py-2 text-mcs-text-subtle font-mono text-mcs-xs">{formatDurationMs(cmd.durationMs)}</td>
         </tr>
       ))}
     </tbody>
