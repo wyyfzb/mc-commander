@@ -16,7 +16,7 @@
  *   + useDeployInstance().mutateAsync；关闭时 resetDeploy
  * - dirty 关闭拦截：表单与基线对比（自动回填的版本/加载器同步基线，不误判 dirty）
  */
-import { Fragment, useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Check,
   CheckCircle2,
@@ -213,10 +213,13 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
 
   const deployMutation = useDeployInstance()
   const versionsQuery = useServerVersions(form.type)
-  // 版本列表失败 → 本地缓存兜底（仍可部署）
-  const versions =
-    versionsQuery.data?.versions ??
-    (versionsQuery.isError ? [...FALLBACK_VERSIONS] : EMPTY_STRINGS)
+  // 版本列表失败 → 本地缓存兜底（仍可部署）；useMemo 稳定引用（回填 effect 依赖）
+  const versions = useMemo(
+    () =>
+      versionsQuery.data?.versions ??
+      (versionsQuery.isError ? [...FALLBACK_VERSIONS] : EMPTY_STRINGS),
+    [versionsQuery.data, versionsQuery.isError],
+  )
   const loaders = versionsQuery.data?.loaders ?? EMPTY_STRINGS
 
   // 系统内存 → 推荐档位（用户手动调整后不覆盖）

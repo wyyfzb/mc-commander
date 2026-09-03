@@ -94,14 +94,14 @@ export function FilesPage() {
     setSearchParams(next, { replace: true })
   }
 
-  /** 选中文件切换：state + URL（null 时移除参数） */
-  const setSelectedPath = (path: string | null) => {
+  /** 选中文件切换：state + URL（null 时移除参数）；useCallback 稳定引用（effect 依赖） */
+  const setSelectedPath = useCallback((path: string | null) => {
     setSelectedPathState(path)
     const next = new URLSearchParams(searchParams)
     if (path === null) next.delete('file')
     else next.set('file', path)
     setSearchParams(next, { replace: true })
-  }
+  }, [searchParams, setSearchParams])
 
   // 实例切换：目录/选中文件重置（跳过首次挂载）
   const prevInstanceRef = useRef<string | null>(null)
@@ -113,7 +113,7 @@ export function FilesPage() {
       setDraft('')
     }
     prevInstanceRef.current = instanceId
-  // oxlint-disable-next-line react-hooks/exhaustive-deps -- setDir/setSelectedPath 是 React 稳定 setter，省略不影响语义
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- setDir 为渲染期重建的包装函数，实例切换后 effect 重跑仅重复幂等赋值，省略不影响语义
   }, [instanceId])
 
   // ── 编辑器内容（组件 state，与 query 隔离；originalRef 为已加载/已保存基线） ──
@@ -208,7 +208,7 @@ export function FilesPage() {
       })
       setSelectedPath(null)
     }
-  }, [selectedPath])
+  }, [selectedPath, setSelectedPath])
 
   /** 路由切换守卫：编辑未保存切页确认 */
   const guard = useUnsavedGuard(dirty)

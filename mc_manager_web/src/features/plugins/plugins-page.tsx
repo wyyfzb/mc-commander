@@ -135,10 +135,12 @@ export function PluginsPage() {
   /** 清空选择（列表变化后勾选项可能已不存在） */
   // 插件列表变化（实例切换/上传/删除后失效重取）→ 更新检测结果同步失效
   useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect -- 实例切换时重置检测结果（重置 on 属性变化惯用法），派生渲染重写会扩大改动面
     setUpdateMap(new Map())
   }, [instanceId])
 
   useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect -- 列表刷新后剔除已不存在的勾选项；函数式更新返回原引用时无级联渲染风险
     setSelected((prev) => {
       const valid = new Set(plugins.map((p) => p.file))
       const next = new Set([...prev].filter((f) => valid.has(f)))
