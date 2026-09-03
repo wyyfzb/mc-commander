@@ -4,8 +4,10 @@
  * - 时长 6 档：1小时/12小时/1天/7天/30天/永久（服务端 temp_bans 到期自动解封）
  * - 理由 9 项：「其他」展开自定义输入（空回退「其他」）
  * - 附加选项：同时踢出在线玩家（kick 失败不阻断封禁）
+ * - 脏状态关闭拦截：自定义理由有未提交输入时，ESC/遮罩/X/取消先弹确认（对齐 task-dialog 范式）；
+ *   其余选项均有安全默认值，不构成可丢失输入
  */
-import { useState } from 'react'
+import { useEffect, useRef, useState, type RefObject } from 'react'
 import { LoadingButton } from '@/components/mcs/loading-button'
 import { Button } from '@/components/ui/button'
 import {
@@ -20,6 +22,7 @@ import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Textarea } from '@/components/ui/textarea'
+import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { cn } from '@/lib/utils'
 import { BAN_DURATION_OPTIONS, BAN_REASONS, BAN_REASON_FALLBACK, validateBanForm, type BanFormModel } from '@/lib/mc-ban'
 import type { Player } from '@/api/types'
@@ -34,9 +37,27 @@ interface BanDialogProps {
 
 /**
  * 表单内容（key=player.name 驱动重置，避免 setState-in-effect）
- * 每次挂载即为全新表单，关闭时卸载，无需 useEffect 清理
+ * 每次挂载即为全新表单，关闭时卸载：确认弹窗等局部状态随之自动重置
  */
-function BanFormContent({ player, onConfirm, onOpenChange }: Omit<BanDialogProps, 'open'>) {
+function BanFormContent({
+  player,
+  onConfirm,
+  onRequestClose,
+  onOpenChange,
+  dirtyRef,
+  confirmRequestRef,
+}: {
+  player: Player
+  onConfirm: (model: BanFormModel) => Promise<void>
+  /** 取消按钮路径：脏状态时由外层弹确认 */
+  onRequestClose: () => void
+  /** 提交成功关闭：直接关不确认 */
+  onOpenChange: (open: boolean) => void
+  /** 脏状态同步到外层（外层据此拦截关闭；ref 避免驱动重渲染） */
+  dirtyRef: RefObject<boolean>
+  /** 向外层注册「请求弹关闭确认」入口（外层拦截到关闭请求时调用） */
+  confirmRequestRef: RefObject<() => void>
+}) {
   const [targetType, setTargetType] = useState<'player' | 'ip'>('player')
   // 默认最低档时长：永久封禁是不可逆高危默认值，不应作为默认选项（防错原则）
   const [durationIndex, setDurationIndex] = useState(0)
@@ -45,11 +66,25 @@ function BanFormContent({ player, onConfirm, onOpenChange }: Omit<BanDialogProps
   const [kickFirst, setKickFirst] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [confirmClose, setConfirmClose] = useState(false)
 
   const ipAvailable = Boolean(player.ip && player.ip.length > 0)
   const selectedDuration = BAN_DURATION_OPTIONS[durationIndex]
   const selectedReason = BAN_REASONS[reasonIndex] ?? BAN_REASONS[0]
   const finalReason = selectedReason === '其他' ? (customReason.trim() || BAN_REASON_FALLBACK) : selectedReason
+
+  // 仅自定义理由是可丢失的自由输入；理由未选「其他」或输入为空白时提交不依赖它
+  const closeDirty = selectedReason === '其他' && customReason.trim().length > 0
+  useEffect(() => {
+    dirtyRef.current = closeDirty
+  }, [closeDirty, dirtyRef])
+  // 确认弹窗状态留在本组件（随卸载自动重置，无残留），外层经 ref 请求弹出
+  useEffect(() => {
+    confirmRequestRef.current = () => setConfirmClose(true)
+    return () => {
+      confirmRequestRef.current = () => {}
+    }
+  }, [confirmRequestRef])
 
   const handleConfirm = async () => {
     const model: BanFormModel = {
@@ -194,27 +229,67 @@ function BanFormContent({ player, onConfirm, onOpenChange }: Omit<BanDialogProps
       </div>
 
       <DialogFooter>
-        <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
+        <Button variant="outline" onClick={onRequestClose} disabled={submitting}>
           取消
         </Button>
         <LoadingButton variant="destructive" loading={submitting} onClick={handleConfirm}>
           封禁{selectedDuration?.label ? `（${selectedDuration.label}）` : ''}
         </LoadingButton>
       </DialogFooter>
+
+      {/* dirty 关闭确认：确认状态留在表单内容层，随卸载自动重置 */}
+      <ConfirmDialog
+        open={confirmClose}
+        onOpenChange={(next) => {
+          if (!next) setConfirmClose(false)
+        }}
+        title="放弃未保存的修改？"
+        description="自定义理由尚未提交，关闭对话框将丢失输入内容。"
+        confirmText="放弃修改"
+        cancelText="继续编辑"
+        onConfirm={() => {
+          setConfirmClose(false)
+          onOpenChange(false)
+        }}
+        onCancel={() => setConfirmClose(false)}
+      />
     </>
   )
 }
 
 export function BanDialog({ open, onOpenChange, player, onConfirm }: BanDialogProps) {
+  const closeDirtyRef = useRef(false)
+  /** 表单内容注册的「弹关闭确认」入口（open=false 时随卸载解绑） */
+  const confirmRequestRef = useRef<() => void>(() => {})
+
+  /** 所有关闭路径（遮罩/ESC/X/取消）统一入口：有未提交输入 → 确认，否则直接关 */
+  const requestClose = (next: boolean) => {
+    if (next || !closeDirtyRef.current) {
+      onOpenChange(next)
+      return
+    }
+    confirmRequestRef.current()
+  }
+
+  // 弹窗关闭后重置脏标记，下次打开重新评估（写 ref 不驱动渲染）
+  useEffect(() => {
+    if (!open) {
+      closeDirtyRef.current = false
+    }
+  }, [open])
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={requestClose}>
       <DialogContent className="sm:max-w-md">
         {open && (
           <BanFormContent
             key={player.name}
             player={player}
             onConfirm={onConfirm}
+            onRequestClose={() => requestClose(false)}
             onOpenChange={onOpenChange}
+            dirtyRef={closeDirtyRef}
+            confirmRequestRef={confirmRequestRef}
           />
         )}
       </DialogContent>

@@ -1,6 +1,8 @@
 /**
  * 礼包编辑器 —— KitEditorDialog（新建/编辑礼包弹窗）+ KitTab（预设礼包 Tab 内容）
  * 从 give-item-dialog.tsx 提取，礼包管理独立可测试。
+ * KitEditorDialog 带脏状态关闭拦截（对齐 task-dialog 范式）：
+ * name/icon/desc/items 相对初始值有改动时，ESC/遮罩/X/取消一律先弹确认（继续编辑/放弃修改）。
  */
 import { useMemo, useState } from 'react'
 import { Minus, MoreVertical, Pencil, Plus, Trash2, X } from 'lucide-react'
@@ -21,6 +23,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { SearchInput } from '@/components/mcs/search-input'
+import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { cn } from '@/lib/utils'
 import {
   ITEM_CATEGORIES,
@@ -138,6 +141,27 @@ export function KitEditorDialog({
   const [items, setItems] = useState<KitItem[]>(() => initial.items.map((it) => ({ ...it })))
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState<string>('全部')
+  const [confirmClose, setConfirmClose] = useState(false)
+
+  /** 礼包相对初始值是否有改动（dirty 关闭拦截依据；items 逐件深比较） */
+  const dirty =
+    name !== initial.name ||
+    icon !== initial.icon ||
+    desc !== initial.desc ||
+    items.length !== initial.items.length ||
+    items.some(
+      (it, i) => it.id !== initial.items[i]?.id || it.count !== initial.items[i]?.count,
+    )
+
+  /** 所有关闭路径（遮罩/ESC/X/取消按钮）统一入口：dirty → 确认，否则直接关 */
+  const handleOpenChange = (next: boolean) => {
+    if (next) return
+    if (dirty) {
+      setConfirmClose(true)
+      return
+    }
+    onClose()
+  }
 
   const filteredItems = useMemo(() => {
     let list = category === '全部' ? MINECRAFT_ITEMS : MINECRAFT_ITEMS.filter((i) => i.category === category)
@@ -186,7 +210,8 @@ export function KitEditorDialog({
   }
 
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
+    <>
+      <Dialog open onOpenChange={handleOpenChange}>
       <DialogContent className="bg-mcs-bg-default max-h-[85vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{isNew ? '新建礼包' : '编辑礼包'}</DialogTitle>
@@ -394,12 +419,30 @@ export function KitEditorDialog({
 
         <DialogFooter>
           <span className="mr-auto text-mcs-xs text-mcs-text-subtle">共 {items.length} 件物品</span>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={() => handleOpenChange(false)}>
             取消
           </Button>
           <Button onClick={save}>{isNew ? '创建' : '保存'}</Button>
         </DialogFooter>
       </DialogContent>
-    </Dialog>
+      </Dialog>
+
+      {/* dirty 关闭确认：允许关闭但需显式确认 */}
+      <ConfirmDialog
+        open={confirmClose}
+        onOpenChange={(next) => {
+          if (!next) setConfirmClose(false)
+        }}
+        title="放弃未保存的修改？"
+        description="礼包有未保存的修改，关闭对话框将丢失这些修改。"
+        confirmText="放弃修改"
+        cancelText="继续编辑"
+        onConfirm={() => {
+          setConfirmClose(false)
+          onClose()
+        }}
+        onCancel={() => setConfirmClose(false)}
+      />
+    </>
   )
 }
