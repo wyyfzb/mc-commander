@@ -11,7 +11,9 @@
  */
 import { useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router'
-import { RefreshCw, X } from 'lucide-react'
+import { Download, RefreshCw, X } from 'lucide-react'
+import { toast } from 'sonner'
+import { useConnectionStore } from '@/stores/connection'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -23,34 +25,8 @@ import { DataTableShell } from '@/components/mcs/data-table-shell'
 import { useAuditLogs, useCommandHistory } from '@/api/queries'
 import type { AuditLogItem, CommandHistoryItem } from '@/api/types'
 import { QUICK_RANGES, isRangeInverted, quickRangeDates, toServerEnd, toServerStart, type QuickRange } from './time-range'
-
-const ACTION_LABELS: Record<string, string> = {
-  INSTANCE_CREATE: '创建实例',
-  INSTANCE_UPDATE: '更新实例配置',
-  INSTANCE_START: '启动实例',
-  INSTANCE_STOP: '停止实例',
-  INSTANCE_RESTART: '重启实例',
-  INSTANCE_DELETE: '删除实例',
-  CONFIG_CHANGE: '配置修改',
-  BACKUP_CREATE: '创建备份',
-  BACKUP_RESTORE: '恢复备份',
-  BACKUP_DELETE: '删除备份',
-  PLAYER_OP: '授权管理员',
-  PLAYER_DEOP: '撤销管理员',
-  PLAYER_KICK: '踢出玩家',
-  PLAYER_BAN: '封禁玩家',
-  PLAYER_PARDON: '解封玩家',
-  PLAYER_WHITELIST: '白名单操作',
-  TASK_CREATE: '创建任务',
-  TASK_UPDATE: '更新任务',
-  TASK_DELETE: '删除任务',
-  TASK_EXECUTE: '执行任务',
-  KEY_ROTATE: '密钥轮换',
-}
-
-function getActionLabel(action: string): string {
-  return ACTION_LABELS[action] ?? action
-}
+import { ACTION_LABELS, getActionLabel } from './action-labels'
+import { AUDIT_EXPORT_MAX_ROWS, exportAuditLogsToExcel } from './audit-export'
 
 /** 时间列：合法 ISO 走统一收口格式（MM-dd HH:mm:ss）；非法输入原样返回（保留审计原始值兜底） */
 function formatTime(iso: string): string {
@@ -323,6 +299,28 @@ export function AuditPage() {
     endTime: cmdEnd && !cmdRangeInvalid ? toServerEnd(cmdEnd) : undefined,
   })
 
+  const config = useConnectionStore()
+  // 导出：按当前筛选 + 排序口径拉取（服务端零改动，上限 1000 条，issue 384）
+  const [exporting, setExporting] = useState(false)
+  const handleExport = async () => {
+    setExporting(true)
+    try {
+      await exportAuditLogsToExcel(
+        config,
+        {
+          action: auditAction || undefined,
+          startTime: auditStart && !rangeInvalid ? toServerStart(auditStart) : undefined,
+          endTime: auditEnd && !rangeInvalid ? toServerEnd(auditEnd) : undefined,
+        },
+        auditOrder,
+      )
+    } catch {
+      toast.error('导出失败，请重试')
+    } finally {
+      setExporting(false)
+    }
+  }
+
   const refreshing = auditQuery.isFetching || cmdQuery.isFetching
 
   return (
@@ -436,6 +434,23 @@ export function AuditPage() {
                 最早优先
               </Button>
             </div>
+
+            <span className="h-5 w-px shrink-0 bg-mcs-border-muted" aria-hidden />
+
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8"
+              onClick={() => void handleExport()}
+              disabled={exporting}
+              data-testid="audit-export"
+            >
+              <Download aria-hidden />
+              导出
+            </Button>
+            <span className="text-mcs-2xs text-mcs-text-subtle">
+              最多导出 {AUDIT_EXPORT_MAX_ROWS} 条（时间最新优先）
+            </span>
           </div>
 
           {rangeInvalid && (
