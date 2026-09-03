@@ -191,12 +191,13 @@ export class UpgradeService {
         headers: { 'User-Agent': PAPER_USER_AGENT },
       });
 
-      /** 中止：清理半成品 + 断流 + reject（promise 已 settle 时 reject 为 no-op） */
+      /** 中止：终结写流，待其完全关闭（open 已终结，不会被后续反向创建）后清理半成品，再 reject */
       const abort = (err) => {
-        fs.unlink(destPath, () => {});
         stream.destroy();
         file.destroy();
-        reject(err);
+        file.once('close', () => {
+          fs.unlink(destPath, () => reject(err));
+        });
       };
 
       let lastPct = -1;
@@ -222,9 +223,9 @@ export class UpgradeService {
           assertDownloadIntegrity(destPath, expectedHash)
             .then(() => resolve())
             .catch((err) => {
-              // 校验失败：弃已下载部分（清理残留）并返回含期望/实际摘要的可读错误
-              fs.unlink(destPath, () => {});
-              reject(err);
+              // 校验失败：弃已下载部分并返回含期望/实际摘要的可读错误。
+              // 清理完成后才 reject：调用方收到失败错误时磁盘已无残留（fail-closed 完整语义）
+              fs.unlink(destPath, () => reject(err));
             });
         });
       });
@@ -237,8 +238,12 @@ export class UpgradeService {
       });
 
       stream.on('error', (err) => {
-        fs.unlink(destPath, () => {});
-        reject(err);
+        // 同上：写流完全关闭后再清理，reject 时保证调用方磁盘无半成品残留
+        stream.destroy();
+        file.destroy();
+        file.once('close', () => {
+          fs.unlink(destPath, () => reject(err));
+        });
       });
     });
   }
