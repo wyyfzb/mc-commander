@@ -49,6 +49,7 @@ import {
   type TeleportPoint,
 } from '@/lib/mc-teleport'
 import { formatBatchSummary, runBatchForTargets } from '@/lib/mc-batch'
+import { copyText } from '@/lib/clipboard'
 import type { Player } from '@/api/types'
 import type { PlayerActionRequest } from '../mutations'
 
@@ -208,12 +209,10 @@ function TeleportTabContent({
   }
 
   const copyCoords = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text)
-      toast.success('已复制坐标', { duration: 1500 })
-    } catch {
-      toast.error('复制失败')
-    }
+    // copyText 内部降级 execCommand（HTTP 非安全上下文可用）且绝不抛异常
+    const ok = await copyText(text)
+    if (ok) toast.success('已复制坐标', { duration: 1500 })
+    else toast.error('复制失败，请手动复制')
   }
 
   /** 传送到个人复活点：单个用其复活点（无则回退世界出生点）；批量各目标各自复活点 */
