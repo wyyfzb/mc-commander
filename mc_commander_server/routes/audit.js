@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { successPaginated } from '../utils/response.js';
+import { parsePagination } from '../utils/pagination.js';
 import { AuditLogModel, CommandHistoryModel } from '../db/index.js';
 
 export function createAuditRoutes() {
@@ -8,10 +9,7 @@ export function createAuditRoutes() {
   // GET /api/v1/audit-logs
   router.get('/audit-logs', (req, res, next) => {
     try {
-      let page = parseInt(req.query.page) || 1;
-      let pageSize = parseInt(req.query.pageSize) || 20;
-      page = Math.max(1, Math.min(page, 1000));
-      pageSize = Math.max(1, Math.min(pageSize, 200));
+      const { page, pageSize } = parsePagination(req.query);
 
       // 排序参数白名单（issue 383）：仅接受 asc/desc，缺省/非法回落 desc（向后兼容）
       const order = req.query.order === 'asc' ? 'asc' : 'desc';
@@ -37,10 +35,7 @@ export function createAuditRoutes() {
   // GET /api/v1/command-history
   router.get('/command-history', (req, res, next) => {
     try {
-      let page = parseInt(req.query.page) || 1;
-      let pageSize = parseInt(req.query.pageSize) || 20;
-      page = Math.max(1, Math.min(page, 1000));
-      pageSize = Math.max(1, Math.min(pageSize, 200));
+      const { page, pageSize } = parsePagination(req.query);
 
       const result = CommandHistoryModel.findAll({
         instanceId: req.query.instanceId,

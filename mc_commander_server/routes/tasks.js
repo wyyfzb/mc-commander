@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { Cron } from 'croner';
 import { success, ErrorCodes, AppError } from '../utils/response.js';
+import { parsePagination } from '../utils/pagination.js';
 import { ScheduledTaskModel } from '../db/scheduled_task.model.js';
 import { TaskRunHistoryModel } from '../db/task_run_history.model.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
@@ -26,10 +27,7 @@ export function createTaskRoutes(serverManager, taskScheduler) {
   router.get('/instances/:instanceId/tasks', (req, res, next) => {
     try {
       const { instanceId } = req.params;
-      let page = parseInt(req.query.page) || 1;
-      let pageSize = parseInt(req.query.pageSize) || 20;
-      page = Math.max(1, Math.min(page, 1000));
-      pageSize = Math.max(1, Math.min(pageSize, 100));
+      const { page, pageSize } = parsePagination(req.query, { maxPageSize: 100 });
       const type = req.query.type;
       const isEnabled = req.query.isEnabled !== undefined ? req.query.isEnabled === 'true' : undefined;
       
@@ -50,10 +48,7 @@ export function createTaskRoutes(serverManager, taskScheduler) {
   // 获取所有定时任务
   router.get('/tasks', (req, res, next) => {
     try {
-      let page = parseInt(req.query.page) || 1;
-      let pageSize = parseInt(req.query.pageSize) || 20;
-      page = Math.max(1, Math.min(page, 1000));
-      pageSize = Math.max(1, Math.min(pageSize, 100));
+      const { page, pageSize } = parsePagination(req.query, { maxPageSize: 100 });
       const type = req.query.type;
       const isEnabled = req.query.isEnabled !== undefined ? req.query.isEnabled === 'true' : undefined;
       
