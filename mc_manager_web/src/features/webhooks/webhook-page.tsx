@@ -103,6 +103,11 @@ export default function WebhookPage() {
     mutationFn: (id: number) => apiTestWebhook(config, id),
     onSuccess: (data) => toast.success(`测试投递成功 HTTP ${data.statusCode}`),
     onError: (e) => toast.error(`测试投递失败：${getFriendlyErrorText(e)}`),
+    onSettled: (_data, _error, id) => {
+      // 测试投递已落投递历史（服务端 event_type=ping 记录，成败均落库）：
+      // 无论成败都失效对应缓存——面板已展开则即时刷新可见，未展开则下次展开取新数据
+      if (id != null) qc.invalidateQueries({ queryKey: queryKeys.webhookDeliveries(id) })
+    },
   })
 
   const openCreate = () => { setEditTarget(null); const f = { name: '', url: '', secret: '', events: [] as string[], isEnabled: true }; setForm(f); setInitialForm(f); setShowDialog(true) }
