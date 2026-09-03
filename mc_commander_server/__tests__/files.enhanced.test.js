@@ -369,4 +369,29 @@ describe('files zod 请求契约（issue 391）', () => {
     expect(res.status).toBe(400);
     expect(res.body.code).toBe(ErrorCodes.VALIDATION_ERROR.code);
   });
+
+  it('POST /files/upload：?targetDir= 控制字符 → 400 且 multer 临时文件被清理（diskStorage 无残留）', async () => {
+    // multer diskStorage 缓冲目录（routes/files.js uploadStorage.destination）
+    const tmpUploadDir = path.join(os.tmpdir(), 'mc-commander-uploads');
+    const snapshotBefore = new Set(
+      fs.existsSync(tmpUploadDir) ? fs.readdirSync(tmpUploadDir) : []
+    );
+
+    const res = await request(app)
+      .post('/api/v1/instances/test-inst/files/upload?targetDir=%01bad')
+      .set(authHeaders())
+      .attach('file', Buffer.from('data'), { filename: 'a.txt', contentType: 'text/plain' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe(ErrorCodes.VALIDATION_ERROR.code);
+
+    // validateQuery onError 钩子在 400 前清理落盘临时文件：
+    // 本次请求新增的 .upload.tmp-* 不应残留在磁盘上
+    const leftovers = fs.existsSync(tmpUploadDir)
+      ? fs.readdirSync(tmpUploadDir).filter(
+          (f) => f.startsWith('.upload.tmp-') && !snapshotBefore.has(f)
+        )
+      : [];
+    expect(leftovers).toEqual([]);
+  });
 });

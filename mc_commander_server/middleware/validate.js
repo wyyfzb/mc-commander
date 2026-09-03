@@ -42,11 +42,22 @@ export function validateBody(schema) {
  * Express 5 中 req.query 定义在 Request 原型上（defineGetter，只读），
  * 直接赋值在 ESM 严格模式下抛 TypeError，因此用实例级 own property
  * 覆盖（defineProperty 合法且对下游 handler 完全透明）。
+ *
+ * options.onError(req)：校验失败时在 400 响应前调用的清理钩子。上传路由
+ * （multer diskStorage）文件已落盘，校验失败必须清理临时文件防止磁盘残留
+ * （原 handler 内 unlinkSync 清理语义由钩子承接，安全性只增不减）。
  */
-export function validateQuery(schema) {
+export function validateQuery(schema, options = {}) {
   return (req, res, next) => {
     const result = schema.safeParse(req.query ?? {});
     if (!result.success) {
+      if (typeof options.onError === 'function') {
+        try {
+          options.onError(req);
+        } catch (cleanupErr) {
+          logger.error('[validate] 查询校验失败清理钩子异常:', cleanupErr);
+        }
+      }
       const messages = result.error.issues.map((i) => i.message);
       return res.status(400).json(
         error(ErrorCodes.VALIDATION_ERROR, messages.join('; '), formatIssues(result.error))
