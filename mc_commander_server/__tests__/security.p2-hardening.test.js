@@ -94,7 +94,7 @@ describe('P2-5 scrypt 参数升级（2^14 → 2^17）', () => {
     expect(needsRehash('md5$1$2$3$xx$yy')).toBe(false);
   });
 
-  it('登录成功后透明重哈希：旧参数存储被升级为当前参数（无需改密）', async () => {
+  it('登录成功后透明重哈希：旧参数存储被升级为当前参数（无需改密）', { timeout: 30000 }, async () => {
     // 种一个旧参数账号（动态构造）
     const salt = crypto.randomBytes(16);
     const oldHash = crypto.scryptSync('upgrade-me-pass', salt, 64, { N: 16384, r: 8, p: 1 });
@@ -264,7 +264,7 @@ describe('P2-11 会话并发上限（每用户 5 条挤最旧）', () => {
     expect(AdminSessionModel.getById('expired-1')).toBeNull();
   });
 
-  it('登录路径集成：第 6 次登录挤掉最旧会话（登录即惰性清理触发点）', async () => {
+  it('登录路径集成：第 6 次登录挤掉最旧会话（登录即惰性清理触发点）', { timeout: 30000 }, async () => {
     AdminAccountModel.setPassword(hashPassword('session-limit-pass'));
 
     const tokens = [];
