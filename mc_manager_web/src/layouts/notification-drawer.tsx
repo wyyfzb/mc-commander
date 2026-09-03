@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import {
   AlertCircle,
   AlertTriangle,
@@ -36,10 +37,16 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
+import { Chip } from '@/components/mcs/chip'
+import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { useNotificationStore } from '@/stores/notifications'
 import { formatNotificationTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import type { NotificationType } from '@/lib/notifications'
+import {
+  NOTIFICATION_TYPE_META,
+  type NotificationSeverity,
+  type NotificationType,
+} from '@/lib/notifications'
 
 /**
  * NotificationDrawer —— 右侧滑出通知抽屉（设计文档 §3.2：通知面板改顶栏铃铛+滑出抽屉）
@@ -86,6 +93,18 @@ const TYPE_COLOR: Record<NotificationType, { text: string; bg: string; border: s
   webhookFailed: { text: 'text-mcs-error-fg', bg: 'bg-mcs-error-bg-subtle', border: 'border-mcs-error-border' },
 }
 
+/** severity 筛选选项（Tasteful Friction：按严重度快速聚焦告警） */
+const SEVERITY_FILTERS: Array<{
+  value: 'all' | NotificationSeverity
+  label: string
+  tone: 'default' | 'error' | 'warning' | 'info'
+}> = [
+  { value: 'all', label: '全部', tone: 'default' },
+  { value: 'severe', label: '严重', tone: 'error' },
+  { value: 'warning', label: '警告', tone: 'warning' },
+  { value: 'info', label: '提示', tone: 'info' },
+]
+
 interface NotificationDrawerProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -98,6 +117,14 @@ export function NotificationDrawer({ open, onOpenChange }: NotificationDrawerPro
   const markAsRead = useNotificationStore((s) => s.markAsRead)
   const markAllRead = useNotificationStore((s) => s.markAllRead)
   const clearAll = useNotificationStore((s) => s.clearAll)
+  const [severityFilter, setSeverityFilter] = useState<'all' | NotificationSeverity>('all')
+  const [confirmClearOpen, setConfirmClearOpen] = useState(false)
+
+  // 筛选仅作用于列表展示；未读徽章/全部已读语义仍是全局（不随筛选变）
+  const visibleItems =
+    severityFilter === 'all'
+      ? items
+      : items.filter((n) => NOTIFICATION_TYPE_META[n.type].severity === severityFilter)
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -125,7 +152,7 @@ export function NotificationDrawer({ open, onOpenChange }: NotificationDrawerPro
               variant="ghost"
               size="sm"
               disabled={items.length === 0}
-              onClick={clearAll}
+              onClick={() => setConfirmClearOpen(true)}
               className="text-mcs-xs"
             >
               清除全部
@@ -133,13 +160,30 @@ export function NotificationDrawer({ open, onOpenChange }: NotificationDrawerPro
           </div>
         </SheetHeader>
 
+        {/* severity 筛选 chips（有通知时才出现，避免空态噪音） */}
+        {items.length > 0 && (
+          <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-mcs-border-muted px-4 py-2" role="group" aria-label="按严重度筛选">
+            {SEVERITY_FILTERS.map((f) => (
+              <Chip
+                key={f.value}
+                tone={f.tone}
+                selected={severityFilter === f.value}
+                onClick={() => setSeverityFilter(f.value)}
+                ariaLabel={`${f.label}通知`}
+              >
+                {f.label}
+              </Chip>
+            ))}
+          </div>
+        )}
+
         <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-4">
-          {items.length === 0 ? (
+          {visibleItems.length === 0 ? (
             <div className="flex flex-1 items-center justify-center text-mcs-text-subtle">
-              暂无动态
+              {items.length === 0 ? '暂无动态' : '该严重度下暂无通知'}
             </div>
           ) : (
-            items.map((n) => {
+            visibleItems.map((n) => {
               const Icon = TYPE_ICON[n.type]
               const color = TYPE_COLOR[n.type]
               const isGame = n.category === 'game'
@@ -219,6 +263,20 @@ export function NotificationDrawer({ open, onOpenChange }: NotificationDrawerPro
             <ChevronRight className="size-3.5" aria-hidden />
           </button>
         </footer>
+
+        {/* 清除全部：不可逆操作走 Tasteful Friction 确认（清空含未读，误触代价高） */}
+        <ConfirmDialog
+          open={confirmClearOpen}
+          onOpenChange={setConfirmClearOpen}
+          title="清除全部通知"
+          description={`将移除当前全部 ${items.length} 条通知（含未读）。`}
+          confirmText="清除"
+          warning="此操作不可撤销"
+          onConfirm={() => {
+            clearAll()
+            setConfirmClearOpen(false)
+          }}
+        />
       </SheetContent>
     </Sheet>
   )

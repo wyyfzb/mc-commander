@@ -11,7 +11,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { IconButton } from '@/components/mcs/icon-button'
 import { StatusIndicator, type IndicatorStatus } from '@/components/mcs/status-indicator'
 import { NotificationDrawer } from '@/layouts/notification-drawer'
 import { useUiStore } from '@/stores/ui'
@@ -93,29 +93,18 @@ export function AppTopBar() {
   return (
     <header className="glass-chrome flex h-12 shrink-0 items-center gap-2 border-b border-mcs-border-muted px-3">
       {/* 侧栏折叠（桌面）/ 移动端导航抽屉开关 */}
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={toggleSidebar}
-            aria-label={sidebarCollapsed ? '展开侧栏' : '折叠侧栏'}
-            className="hidden md:inline-flex"
-          >
-            {sidebarCollapsed ? <ChevronsRight /> : <ChevronsLeft />}
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent side="bottom">{sidebarCollapsed ? '展开侧栏' : '折叠侧栏'}</TooltipContent>
-      </Tooltip>
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        onClick={toggleMobileNav}
-        aria-label="打开导航菜单"
-        className="md:hidden"
+      <IconButton
+        tooltip={sidebarCollapsed ? '展开侧栏' : '折叠侧栏'}
+        tooltipSide="bottom"
+        onClick={toggleSidebar}
+        aria-label={sidebarCollapsed ? '展开侧栏' : '折叠侧栏'}
+        className="hidden md:inline-flex"
       >
+        {sidebarCollapsed ? <ChevronsRight /> : <ChevronsLeft />}
+      </IconButton>
+      <IconButton onClick={toggleMobileNav} aria-label="打开导航菜单" className="md:hidden">
         <Menu aria-hidden />
-      </Button>
+      </IconButton>
 
       {/* 服务器地址（B15：原型顶栏地址 chip；延迟由状态点语义覆盖） */}
       {status?.address && (
@@ -174,44 +163,35 @@ export function AppTopBar() {
       <StatusIndicator status={indicator} className="hidden md:inline-flex" />
 
       {/* 通知铃铛（未读徽章 + 抽屉） */}
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className="relative"
-            onClick={() => setNotificationsOpen(true)}
-            aria-label={`通知${unreadCount > 0 ? `（${unreadCount} 条未读）` : ''}`}
+      <IconButton
+        tooltip="通知"
+        tooltipSide="bottom"
+        className="relative"
+        onClick={() => setNotificationsOpen(true)}
+        aria-label={`通知${unreadCount > 0 ? `（${unreadCount} 条未读）` : ''}`}
+      >
+        <Bell aria-hidden />
+        {unreadCount > 0 && (
+          // subtle 底 + fg 字：实底（fg+白字）在 dark 亮红上对比度不足（~2.6:1），且白字非 token
+          <span
+            className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-mcs-error-bg-subtle px-1 text-mcs-2xs font-medium text-mcs-error-fg"
+            aria-hidden
           >
-            <Bell aria-hidden />
-            {unreadCount > 0 && (
-              // subtle 底 + fg 字：实底（fg+白字）在 dark 亮红上对比度不足（~2.6:1），且白字非 token
-              <span
-                className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-mcs-error-bg-subtle px-1 text-mcs-2xs font-medium text-mcs-error-fg"
-                aria-hidden
-              >
-                {unreadCount > 99 ? '99+' : unreadCount}
-              </span>
-            )}
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent side="bottom">通知</TooltipContent>
-      </Tooltip>
+            {unreadCount > 99 ? '99+' : unreadCount}
+          </span>
+        )}
+      </IconButton>
 
       {/* 用户菜单（安全主线：管理员身份 / 凭据状态） */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label={sessionToken ? '管理员菜单' : 'API Key 直连状态'}
-          >
+          <IconButton aria-label={sessionToken ? '管理员菜单' : 'API Key 直连状态'}>
             {sessionToken ? (
               <UserRound aria-hidden />
             ) : (
               <KeyRound aria-hidden className="text-mcs-warning-fg" />
             )}
-          </Button>
+          </IconButton>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">
           <DropdownMenuLabel>
@@ -248,21 +228,14 @@ export function AppTopBar() {
       </DropdownMenu>
 
       {/* 主题切换 */}
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={toggleTheme}
-            aria-label={theme === 'dark' ? '切换到亮色主题' : '切换到深色主题'}
-          >
-            {theme === 'dark' ? <Sun aria-hidden /> : <Moon aria-hidden />}
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent side="bottom">
-          {theme === 'dark' ? '切换到亮色主题' : '切换到深色主题'}
-        </TooltipContent>
-      </Tooltip>
+      <IconButton
+        tooltip={theme === 'dark' ? '切换到亮色主题' : '切换到深色主题'}
+        tooltipSide="bottom"
+        onClick={toggleTheme}
+        aria-label={theme === 'dark' ? '切换到亮色主题' : '切换到深色主题'}
+      >
+        {theme === 'dark' ? <Sun aria-hidden /> : <Moon aria-hidden />}
+      </IconButton>
 
       <NotificationDrawer open={notificationsOpen} onOpenChange={setNotificationsOpen} />
     </header>

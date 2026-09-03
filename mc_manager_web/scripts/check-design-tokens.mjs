@@ -7,10 +7,12 @@
  *   3. transition-all
  *   4. duration-{数字}（非 token 的硬编码时长）
  *   5. rounded-[ 任意值圆角
+ *   6. Tailwind 原生字号 3xl 及以上（字号 token 体系上限 --mcs-font-size-2xl，KPI/大字一律 ≤ 2xl）
+ *   7. 紧急页（src/features/emergency/）字重 bold 及以上（触控页字重限定 400-600）
  * 发现违规 → 输出 文件:行号 → 非零退出码（阻止合并）
  */
 import { readFileSync, readdirSync } from 'node:fs'
-import { join, extname, relative } from 'node:path'
+import { join, extname, relative, sep } from 'node:path'
 
 const root = join(import.meta.dirname, '..')
 const srcDir = join(root, 'src')
@@ -26,7 +28,7 @@ const PALETTE_COLORS = new Set([
 let violations = 0
 
 /** 在单行 className 字符串中检测违规模式 */
-function checkLine(filePath, lineNum, line) {
+function checkLine(filePath, lineNum, line, isEmergencyPage) {
   // 提取 className 内容（单引号、双引号、模板字面量）
   const classMatches = [...line.matchAll(/(?:className|class)=["'`]([^"'`]*)["'`]/g)]
   if (classMatches.length === 0) return
@@ -74,6 +76,22 @@ function checkLine(filePath, lineNum, line) {
       console.log(`${filePath}:${lineNum + 1}: bg-black → 请使用 --mcs-* token`)
       violations++
     }
+    // 7. 检测 Tailwind 原生超大字号（3xl+；--mcs-font-size-* 上限 2xl=24px，
+    //    KPI 大数字/页面大标题一律走 token，防审计 P2-22 类字号膨胀复发）
+    const oversize = classes.match(/\btext-(3xl|4xl|5xl|6xl|7xl|8xl|9xl)\b/)
+    if (oversize) {
+      console.log(`${filePath}:${lineNum + 1}: text-${oversize[1]} 超出字号 token 体系 → 请使用 text-mcs-* token（≤ 2xl）`)
+      violations++
+    }
+    // 8. 紧急页字重限定 400-600（触控页视觉纪律，防审计 P2-12 类字重加重复发；
+    //    仅约束紧急页，其余页面标题字重不受限）
+    if (isEmergencyPage) {
+      const heavy = classes.match(/\bfont-(bold|extrabold|black)\b/)
+      if (heavy) {
+        console.log(`${filePath}:${lineNum + 1}: font-${heavy[1]} 紧急页字重超限 → 字重限定 400-600（font-normal/medium/semibold）`)
+        violations++
+      }
+    }
   }
 }
 
@@ -98,9 +116,11 @@ function walkDir(dir) {
     if (fullPath.replace(/\\/g, '/').includes(EXCLUDE_DIR)) continue
 
     const relPath = relative(root, fullPath)
+    // 紧急页目录：字重 400-600 断言仅约束该目录（触控页视觉纪律）
+    const isEmergencyPage = relPath.split(sep).includes('emergency')
     const lines = readFileSync(fullPath, 'utf-8').split('\n')
     for (let i = 0; i < lines.length; i++) {
-      checkLine(relPath, i, lines[i])
+      checkLine(relPath, i, lines[i], isEmergencyPage)
     }
   }
 }
@@ -111,4 +131,4 @@ if (violations > 0) {
   console.error(`\n✗ 发现 ${violations} 处设计 token 违规（设计规范 §4.5）`)
   process.exit(1)
 }
-console.log('✓ 设计 token 完整性检查通过（色板类/dark:/transition-all/duration-数字/rounded-任意值）')
+console.log('✓ 设计 token 完整性检查通过（色板类/dark:/transition-all/duration-数字/rounded-任意值/字号上限/紧急页字重）')

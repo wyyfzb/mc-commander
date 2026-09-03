@@ -3,6 +3,7 @@ import { render, fireEvent, waitFor, screen, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { setupServer } from 'msw/node'
+import { http, HttpResponse } from 'msw'
 import { Toaster } from 'sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { handlers } from '@/test/mocks/handlers'
@@ -13,12 +14,14 @@ import { useConnectionStore } from '@/stores/connection'
 
 /**
  * 终端组件测试：Ctrl+L 清屏（xterm 在 jsdom 不可用，mock 掉；buffer 清空断言）/
- * 终端内搜索：搜索条开闭、Ctrl+F 拦截、Enter/上/下查找接线、n/m 计数、Esc 清理
+ * 终端内搜索：搜索条开闭、Ctrl+F 拦截、Enter/上/下查找接线、n/m 计数、Esc 清理 /
+ * JVM 眼睛切换：清屏全量重写（P2-27 复现修复）
  */
 
-/** 捕获 SearchAddon 与 xterm 内部注册物，供搜索交互断言（vi.hoisted 提升到 mock 工厂之前） */
+/** 捕获 SearchAddon 与 xterm 内部注册物，供搜索/渲染交互断言（vi.hoisted 提升到 mock 工厂之前） */
 const xtermStub = vi.hoisted(() => {
   type ResultCb = (r: { resultIndex: number; resultCount: number }) => void
+  type TermEvent = { op: 'write'; text: string } | { op: 'clear' }
   return {
     customKeyHandlers: [] as ((e: { key: string; ctrlKey?: boolean; metaKey?: boolean; preventDefault: () => void }) => boolean)[],
     searchAddonInstances: [] as {
@@ -28,6 +31,10 @@ const xtermStub = vi.hoisted(() => {
       fireResults: (r: { resultIndex: number; resultCount: number }) => void
     }[],
     resultCb: null as ResultCb | null,
+    /** Terminal 实例（单渲染一个） */
+    terminals: [] as unknown[],
+    /** 渲染事件序列：write/clear 依序记录（JVM 切换全量重写断言用） */
+    events: [] as TermEvent[],
   }
 })
 
@@ -39,8 +46,12 @@ vi.mock('@xterm/xterm', () => ({
     buffer = { active: { baseY: 0, cursorY: 0, viewportY: 0 } }
     loadAddon() {}
     open() {}
-    write() {}
-    clear() {}
+    write(t: string) {
+      xtermStub.events.push({ op: 'write', text: t })
+    }
+    clear() {
+      xtermStub.events.push({ op: 'clear' })
+    }
     scrollToBottom() {}
     dispose() {}
     focus() {}
@@ -49,6 +60,9 @@ vi.mock('@xterm/xterm', () => ({
     }
     attachCustomKeyEventHandler(h: (e: { key: string; ctrlKey?: boolean; metaKey?: boolean; preventDefault: () => void }) => boolean) {
       xtermStub.customKeyHandlers.push(h)
+    }
+    constructor() {
+      xtermStub.terminals.push(this)
     }
   },
 }))
@@ -84,6 +98,8 @@ beforeEach(() => {
   xtermStub.customKeyHandlers.length = 0
   xtermStub.searchAddonInstances.length = 0
   xtermStub.resultCb = null
+  xtermStub.terminals.length = 0
+  xtermStub.events.length = 0
   useConnectionStore.setState({ baseUrl: '', apiKey: 'test-key', status: 'ready' })
   useServerStore.setState({
     status: { isRunning: true } as never,
@@ -242,5 +258,59 @@ describe('ServerTerminal 终端内搜索', () => {
     await user.click(screen.getByRole('button', { name: '关闭搜索' }))
     expect(addon.clearDecorations).toHaveBeenCalled()
     expect(screen.queryByRole('search')).not.toBeInTheDocument()
+  })
+})
+
+describe('ServerTerminal JVM 眼睛切换（P2-27 复现修复）', () => {
+  const JVM_LINE = 'WARNING: A restricted method in java.lang.System.invoke has been called'
+
+  /** 最近一次 clear 之后写入的行（全量重写断言窗口） */
+  function writesAfterLastClear(): string[] {
+    const ops = xtermStub.events
+    const lastClear = ops.map((e) => e.op).lastIndexOf('clear')
+    return ops
+      .slice(lastClear + 1)
+      .filter((e) => e.op === 'write')
+      .map((e) => (e as { op: 'write'; text: string }).text)
+  }
+
+  it('切换「显示 JVM 警告」→ 清屏 + 历史行含 JVM 警告全量重写（修复前：只 clear 不重写，终端空白）', async () => {
+    const user = userEvent.setup()
+    // 覆盖 logs 端点：INFO + JVM 警告（stderr）+ INFO（envelope 结构与 apiGet 解包一致）
+    server.use(
+      http.get('*/api/v1/instances/:id/logs', () =>
+        HttpResponse.json({
+          status: 'ok',
+          code: 0,
+          message: 'Success',
+          data: [
+            { text: '[00:00:01] [Server thread/INFO]: Starting minecraft server', type: 'stdout' },
+            { text: JVM_LINE, type: 'stderr' },
+            { text: '[00:00:05] [Server thread/INFO]: Done (1.2s)!', type: 'stdout' },
+          ],
+          timestamp: new Date().toISOString(),
+        }),
+      ),
+    )
+    renderTerminal()
+    await waitFor(() => expect(useTerminalStore.getState().buffer).toHaveLength(3))
+
+    // 初始态（默认隐藏 JVM 警告）：2 行可见，无 clear，不含 JVM 行
+    expect(xtermStub.events.filter((e) => e.op === 'write')).toHaveLength(2)
+    expect(xtermStub.events.some((e) => e.op === 'clear')).toBe(false)
+    expect(xtermStub.events.some((e) => e.op === 'write' && e.text.includes('restricted method'))).toBe(false)
+
+    // 切换显示：clear + 3 行全量重写（含 JVM 警告行）→ 历史行回填
+    await user.click(screen.getByRole('button', { name: '显示 JVM 警告' }))
+    await waitFor(() => expect(xtermStub.events.some((e) => e.op === 'clear')).toBe(true))
+    await waitFor(() => expect(writesAfterLastClear()).toHaveLength(3))
+    const rewritten = writesAfterLastClear()
+    expect(rewritten.some((t) => t.includes('restricted method'))).toBe(true)
+
+    // 切回隐藏：再次 clear + 2 行重写（JVM 行被过滤）
+    await user.click(screen.getByRole('button', { name: '隐藏 JVM 警告' }))
+    await waitFor(() => expect(writesAfterLastClear()).toHaveLength(2))
+    const rewrittenBack = writesAfterLastClear()
+    expect(rewrittenBack.some((t) => t.includes('restricted method'))).toBe(false)
   })
 })
