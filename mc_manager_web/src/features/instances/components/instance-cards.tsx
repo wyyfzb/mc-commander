@@ -16,6 +16,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { StatusPill } from '@/components/mcs/status-pill'
 import { EmptyState } from '@/components/mcs/empty-state'
+import type { InstancePhase } from '@/stores/server'
 import type { InstanceStatus, InstanceSummary } from '@/api/types'
 
 export interface InstanceCardsProps {
@@ -43,6 +44,8 @@ export interface InstanceCardsProps {
   onStop: (instance: InstanceSummary) => void
   /** 启停请求在途的实例 id（对应卡启停按钮禁用 + spinner） */
   busyId: string | null
+  /** 启停中间态表（issue 334：starting/stopping 期间对应卡禁用；与 busyId 叠加） */
+  phaseById: Record<string, InstancePhase>
   /** 部署新实例入口（空态按钮与页面头部共用） */
   onDeploy: () => void
 }
@@ -60,6 +63,7 @@ export function InstanceCards({
   onStart,
   onStop,
   busyId,
+  phaseById,
   onDeploy,
 }: InstanceCardsProps) {
   if (instances.length === 0) {
@@ -87,6 +91,7 @@ export function InstanceCards({
           detailLoading={loadingIds.has(instance.id)}
           isUninstalling={uninstallingId === instance.id}
           isBusy={busyId === instance.id}
+          phase={phaseById[instance.id] ?? null}
           onSwitch={onSwitch}
           onOpenSettings={onOpenSettings}
           onUpgrade={onUpgrade}
@@ -107,6 +112,7 @@ function InstanceCard({
   detailLoading,
   isUninstalling,
   isBusy,
+  phase,
   onSwitch,
   onOpenSettings,
   onUninstall,
@@ -120,6 +126,7 @@ function InstanceCard({
   detailLoading: boolean
   isUninstalling: boolean
   isBusy: boolean
+  phase: InstancePhase | null
   onSwitch: (instance: InstanceSummary) => void
   onOpenSettings: (instance: InstanceSummary) => void
   onUninstall: (instance: InstanceSummary) => void
@@ -193,30 +200,31 @@ function InstanceCard({
         </div>
       )}
 
-      {/* 操作行：启停 / 切换（非当前实例）/ 启动配置 / 卸载（卸载中禁用） */}
+      {/* 操作行：启停（phase 中间态禁用：starting/stopping spinner，WS 确认后解锁 issue 334）/
+           切换（非当前实例）/ 启动配置 / 卸载（卸载中禁用） */}
       <div className="mt-auto flex items-center justify-end gap-1.5">
         {isRunning ? (
           <Button
             variant="outline"
             size="sm"
-            aria-label={`停止 ${name}`}
+            aria-label={phase === 'stopping' ? `正在停止 ${name}` : `停止 ${name}`}
             title="停止"
-            disabled={isBusy}
+            disabled={isBusy || phase !== null}
             onClick={() => onStop(instance)}
             className="border-mcs-error-border text-mcs-error-fg hover:bg-mcs-error-bg-subtle hover:text-mcs-error-fg"
           >
-            {isBusy ? <Loader2 className="animate-spin" aria-hidden /> : <Square aria-hidden />}
+            {isBusy || phase === 'stopping' ? <Loader2 className="animate-spin" aria-hidden /> : <Square aria-hidden />}
             停止
           </Button>
         ) : (
           <Button
             size="sm"
-            aria-label={`启动 ${name}`}
+            aria-label={phase === 'starting' ? `正在启动 ${name}` : `启动 ${name}`}
             title="启动"
-            disabled={isBusy}
+            disabled={isBusy || phase !== null}
             onClick={() => onStart(instance)}
           >
-            {isBusy ? <Loader2 className="animate-spin" aria-hidden /> : <Play aria-hidden />}
+            {isBusy || phase === 'starting' ? <Loader2 className="animate-spin" aria-hidden /> : <Play aria-hidden />}
             启动
           </Button>
         )}

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import { McSocket } from '@/api/ws'
 import { queryKeys } from '@/api/queries'
 import { useConnectionStore } from '@/stores/connection'
@@ -9,6 +10,7 @@ import { useDeployStore } from '@/stores/deploy'
 import { applyUpgradeProgress } from '@/stores/upgrade'
 import { useNotificationStore } from '@/stores/notifications'
 import { useTerminalStore } from '@/stores/terminal'
+import type { InstanceSummary } from '@/api/types'
 import type { Player, UpgradeStage, WsMessage } from '@/api/types'
 
 /**
@@ -26,6 +28,12 @@ export function getSocketSingleton(): McSocket | null {
   return socketSingleton
 }
 
+/** 从实例列表缓存取实例名（critical toast 文案用；查不到回退实例 id） */
+function getInstanceName(queryClient: ReturnType<typeof useQueryClient>, instanceId: string): string {
+  const list = queryClient.getQueryData<InstanceSummary[]>(queryKeys.instances())
+  return list?.find((i) => i.id === instanceId)?.name ?? instanceId
+}
+
 export function useServerSocket(instanceId: string | null) {
   const apiKey = useConnectionStore((s) => s.apiKey)
   const baseUrl = useConnectionStore((s) => s.baseUrl)
@@ -39,6 +47,7 @@ export function useServerSocket(instanceId: string | null) {
   const setHasConnectedOnce = useServerStore((s) => s.setHasConnectedOnce)
   const dispatchWsEvent = useNotificationStore((s) => s.dispatchWsEvent)
   const dispatchPerformance = useNotificationStore((s) => s.dispatchPerformance)
+  const clearPhase = useServerStore((s) => s.setPhase)
   const applyDeployProgress = useDeployStore((s) => s.applyDeployProgress)
   const pushLog = useTerminalStore((s) => s.pushEntry)
   const queryClient = useQueryClient()
@@ -82,6 +91,16 @@ export function useServerSocket(instanceId: string | null) {
         return
       }
 
+      // ── critical 事件全局广播（issue 334）：非当前实例的 crash/熔断不丢弃 ──
+      // 用户切到其他页面/实例时，崩溃与熔断仍入通知中心（可跳转回溯）
+      if (msg.type === 'status' && msg.instanceId !== instanceRef.current) {
+        const ev = String(data.event ?? '')
+        if (ev === 'crash' || ev === 'circuit_breaker') {
+          dispatchWsEvent({ type: 'status', data: msg.data as Record<string, unknown>, instanceId: msg.instanceId })
+        }
+        return
+      }
+
       // 全局进度事件（部署：创建新实例前即有进度，无实例归属）
       if (msg.type === 'deployProgress') {
         applyDeployProgress({
@@ -118,9 +137,25 @@ export function useServerSocket(instanceId: string | null) {
       switch (msg.type) {
         case 'status': {
           if (data.event && typeof data.event === 'string') {
-            applyWsStatusEvent(data.event as 'started' | 'stopped' | 'ready' | 'crash' | 'save')
+            const ev = data.event as 'started' | 'stopped' | 'ready' | 'crash' | 'save' | 'circuit_breaker'
+            applyWsStatusEvent(ev)
+            // 启停中间态确认清除（issue 334）：started/stopped 为终态确认，crash/熔断为异常终态
+            if (ev === 'started' || ev === 'stopped' || ev === 'crash' || ev === 'circuit_breaker') {
+              clearPhase(msg.instanceId, null)
+            }
             // 实例列表状态变化时刷新列表（runningCount 等）
             void queryClient.invalidateQueries({ queryKey: queryKeys.instances() })
+            // critical 事件（当前实例）：入通知中心 + 持久 toast（手动关闭防错过）
+            if (ev === 'crash' || ev === 'circuit_breaker') {
+              dispatchWsEvent({ type: 'status', data: msg.data as Record<string, unknown>, instanceId: msg.instanceId })
+              const name = getInstanceName(queryClient, msg.instanceId)
+              toast.error(
+                ev === 'crash'
+                  ? `实例「${name}」服务器意外退出${data.autoRestart ? '，正在自动重启' : ''}`
+                  : `实例「${name}」连续崩溃 ${Number(data.consecutiveCrashes ?? 0)} 次，已触发熔断保护`,
+                { duration: Infinity },
+              )
+            }
           } else {
             applyWsSnapshot(msg.instanceId, {
               status: String(data.status ?? ''),
@@ -226,7 +261,7 @@ export function useServerSocket(instanceId: string | null) {
       setSocketConnected(false)
       // 单例保留（跨页面复用）；实例切换由下方 effect 处理订阅
     }
-  }, [connectionReady, apiKey, sessionToken, baseUrl, applyWsSnapshot, applyWsPerformance, applyWsStatusEvent, setSocketConnected, setHasConnectedOnce, dispatchWsEvent, dispatchPerformance, applyDeployProgress, pushLog, queryClient])
+  }, [connectionReady, apiKey, sessionToken, baseUrl, applyWsSnapshot, applyWsPerformance, applyWsStatusEvent, setSocketConnected, setHasConnectedOnce, dispatchWsEvent, dispatchPerformance, applyDeployProgress, pushLog, clearPhase, queryClient])
 
   // 实例切换：更新订阅
   useEffect(() => {

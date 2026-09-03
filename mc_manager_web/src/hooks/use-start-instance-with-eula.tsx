@@ -13,6 +13,7 @@ import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { apiPost, ApiError } from '@/api/client'
 import { getFriendlyErrorText, getFriendlyErrorMessage } from '@/api/errors'
 import { useConnectionStore } from '@/stores/connection'
+import { useServerStore } from '@/stores/server'
 
 /** 启动回调（入口差异化行为：仪表盘轮询等待/实例页即时反馈） */
 export interface StartInstanceCallbacks {
@@ -31,6 +32,7 @@ export function isEulaError(err: unknown): boolean {
 
 export function useStartInstanceWithEula() {
   const config = useConnectionStore()
+  const setPhase = useServerStore((s) => s.setPhase)
   /** 待同意 EULA 的实例（非空即弹窗） */
   const [eulaTargetId, setEulaTargetId] = useState<string | null>(null)
   const [eulaBusy, setEulaBusy] = useState(false)
@@ -39,6 +41,9 @@ export function useStartInstanceWithEula() {
 
   const startMutation = useMutation({
     mutationFn: async (id: string) => {
+      // phase 中间态（issue 334）：发令即置 starting（按钮禁用防连点）；
+      // WS started 确认清除；异常路径（失败/EULA 拦截/onStarted 链终了）兜底清除
+      setPhase(id, 'starting')
       await apiPost(`/api/v1/instances/${id}/start`, config)
       return id
     },
@@ -49,9 +54,13 @@ export function useStartInstanceWithEula() {
     callbacksRef.current = callbacks ?? null
     startMutation.mutate(id, {
       onSuccess: () => {
-        void callbacksRef.current?.onStarted?.()
+        // onStarted 可能是长链（仪表盘 waitForStart 轮询）：链终了兜底清 phase
+        void Promise.resolve(callbacksRef.current?.onStarted?.())
+          .catch(() => {})
+          .finally(() => setPhase(id, null))
       },
       onError: (err) => {
+        setPhase(id, null)
         if (isEulaError(err)) {
           setEulaTargetId(id)
           return
@@ -84,13 +93,16 @@ export function useStartInstanceWithEula() {
       toast.success('EULA 已同意，正在启动服务器...')
       await startMutation.mutateAsync(id, {
         onSuccess: () => {
-          void callbacks?.onStarted?.()
+          void Promise.resolve(callbacks?.onStarted?.())
+            .catch(() => {})
+            .finally(() => setPhase(id, null))
         },
         onSettled: () => {
           callbacks?.onSettled?.()
         },
       })
     } catch (err) {
+      setPhase(id, null)
       if (isEulaError(err)) {
         // 同意写入后仍报 EULA（极端竞态）：重新弹窗引导
         setEulaTargetId(id)

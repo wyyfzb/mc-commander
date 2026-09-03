@@ -31,6 +31,7 @@ function baseProps(overrides: Partial<InstanceCardsProps> = {}): InstanceCardsPr
     onStart: vi.fn(),
     onStop: vi.fn(),
     busyId: null,
+    phaseById: {},
     onDeploy: vi.fn(),
     ...overrides,
   }

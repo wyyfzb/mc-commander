@@ -72,6 +72,37 @@ describe('notifications store 偏好过滤', () => {
   })
 })
 
+describe('notifications store instanceId 透传（issue 334）', () => {
+  beforeEach(() => {
+    useNotificationStore.setState({ items: [], unreadCount: 0, activeAlerts: new Set() })
+    useNotificationPreferenceStore.setState({ prefs: {} })
+  })
+
+  it('server 类事件携带 instanceId → 通知条目透传（供跳转实例页）', () => {
+    useNotificationStore.getState().dispatchWsEvent({
+      type: 'status',
+      data: { event: 'crash', autoRestart: false },
+      instanceId: 'inst-1',
+    })
+
+    const items = useNotificationStore.getState().items
+    expect(items).toHaveLength(1)
+    expect(items[0]?.type).toBe('serverCrash')
+    expect(items[0]?.instanceId).toBe('inst-1')
+  })
+
+  it('无 instanceId 的事件不写该字段', () => {
+    useNotificationStore.getState().dispatchWsEvent({
+      type: 'playerJoin',
+      data: { name: 'Alex' },
+    })
+
+    const items = useNotificationStore.getState().items
+    expect(items).toHaveLength(1)
+    expect(items[0]?.instanceId).toBeUndefined()
+  })
+})
+
 describe('notifications store 定时清理', () => {
   /** 构造 N 条占位通知（最新在前；id=0 最新），read 按 i%2 交替 */
   function seedItems(count: number) {

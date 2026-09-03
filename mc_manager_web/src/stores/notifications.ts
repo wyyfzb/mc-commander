@@ -89,10 +89,13 @@ export const useNotificationStore = create<NotificationState>()((set, get) => ({
   activeAlerts: new Set(),
 
   dispatchWsEvent: (event, now = Date.now()) => {
-    const built = buildNotifications(event).filter((n) =>
-      // 偏好过滤：该类型开关关闭则通知不生成（getState 直读，无 React 依赖）
-      useNotificationPreferenceStore.getState().isEnabled(n.type),
-    )
+    // instanceId 透传：server 类事件关联实例（通知条目据此跳转实例页，issue 334）
+    const built = buildNotifications(event)
+      .map((n) => (event.instanceId ? { ...n, instanceId: event.instanceId } : n))
+      .filter((n) =>
+        // 偏好过滤：该类型开关关闭则通知不生成（getState 直读，无 React 依赖）
+        useNotificationPreferenceStore.getState().isEnabled(n.type),
+      )
     if (built.length === 0) return
     set((s) => {
       let items = s.items
