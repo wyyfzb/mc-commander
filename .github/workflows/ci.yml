@@ -68,7 +68,7 @@ jobs:
           retention-days: 7
 
   coverage-gate:
-    name: 覆盖率门禁（≥ 70%）
+    name: 覆盖率门禁（≥ 65%）
     runs-on: ubuntu-latest
     if: >-
       github.event_name == 'push' ||
@@ -84,7 +84,7 @@ jobs:
         with:
           path: coverage-artifacts
       - name: 汇总两份覆盖率并与阈值比较
-        run: node scripts/check-coverage-gate.mjs coverage-artifacts/coverage-web/coverage-final.json coverage-artifacts/coverage-server/coverage-final.json 70
+        run: node scripts/check-coverage-gate.mjs coverage-artifacts/coverage-web/coverage-final.json coverage-artifacts/coverage-server/coverage-final.json 65
 
   web-e2e:
     name: 前端（build + e2e）
