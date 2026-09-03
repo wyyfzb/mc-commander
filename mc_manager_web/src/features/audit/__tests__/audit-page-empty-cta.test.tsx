@@ -77,7 +77,7 @@ describe('AuditPage 空态 CTA（issue 343）', () => {
     const user = userEvent.setup()
     renderPage()
     // 选择操作类型「启动实例」（radix Select 需要 pointer capture stub 环境）
-    await user.click(screen.getByRole('combobox', { name: '按操作类型过滤' }))
+    await user.click(screen.getByRole('combobox', { name: '操作类型' }))
     await user.click(screen.getByRole('option', { name: '启动实例' }))
     await waitFor(() => expect(screen.getByText('当前筛选条件下暂无记录')).toBeInTheDocument())
     expect(screen.getByTestId('audit-clear-filters')).toBeInTheDocument()
