@@ -19,6 +19,15 @@ import {
   worldInfoSchema,
   systemStatsSchema,
   NOTIFICATION_EVENT_TYPES,
+  fileUploadQuerySchema,
+  filePathRequestSchema,
+  fileSaveRequestSchema,
+  auditLogsQuerySchema,
+  marketSearchRequestSchema,
+  pluginOverwriteQuerySchema,
+  pluginEnabledRequestSchema,
+  marketInstallRequestSchema,
+  upgradeRequestSchema,
 } from '../src/index'
 
 describe('schemas 基础校验', () => {
@@ -178,5 +187,69 @@ describe('schemas 基础校验', () => {
       cpuCores: 4, loadAvg: [0.5, 0.3, 0.2], uptime: 86400,
     })
     expect(s.cpuCores).toBe(4)
+  })
+})
+
+describe('请求侧契约（issue 391 路由层 zod 统一）', () => {
+  it('fileUploadQuerySchema：缺省归一为 /，无前导斜杠补全，空串非法', () => {
+    expect(fileUploadQuerySchema.parse({}).targetDir).toBe('/')
+    expect(fileUploadQuerySchema.parse({ targetDir: 'world' }).targetDir).toBe('/world')
+    expect(fileUploadQuerySchema.parse({ targetDir: '/a/b' }).targetDir).toBe('/a/b')
+    expect(() => fileUploadQuerySchema.parse({ targetDir: '' })).toThrow()
+    expect(() => fileUploadQuerySchema.parse({ targetDir: 'a\x00b' })).toThrow()
+  })
+
+  it('filePathRequestSchema：path 必填非空，剥离未知字段', () => {
+    expect(filePathRequestSchema.parse({ path: '/a.txt', junk: 1 })).toEqual({ path: '/a.txt' })
+    expect(() => filePathRequestSchema.parse({ path: '' })).toThrow()
+    expect(() => filePathRequestSchema.parse({})).toThrow()
+  })
+
+  it('fileSaveRequestSchema：path/content 类型守护', () => {
+    expect(fileSaveRequestSchema.parse({ path: '/a', content: 'x' })).toEqual({ path: '/a', content: 'x' })
+    expect(() => fileSaveRequestSchema.parse({ path: '/a', content: 1 })).toThrow()
+  })
+
+  it('auditLogsQuerySchema：order 缺省/非法回落 desc（issue 383 向后兼容语义），合法值保留', () => {
+    expect(auditLogsQuerySchema.parse({}).order).toBe('desc')
+    expect(auditLogsQuerySchema.parse({ order: 'asc' }).order).toBe('asc')
+    expect(auditLogsQuerySchema.parse({ order: 'desc' }).order).toBe('desc')
+    expect(auditLogsQuerySchema.parse({ order: 'DROP TABLE' }).order).toBe('desc')
+  })
+
+  it('auditLogsQuerySchema：page/pageSize 原样透传（#392 分页边界）', () => {
+    const parsed = auditLogsQuerySchema.parse({ page: '3', pageSize: '50' })
+    expect(parsed.page).toBe('3')
+    expect(parsed.pageSize).toBe('50')
+  })
+
+  it('marketSearchRequestSchema：offset/limit 透传 + 未知字段剥离', () => {
+    const parsed = marketSearchRequestSchema.parse({ q: 'vault', offset: '10', junk: 'x' })
+    expect(parsed).toEqual({ q: 'vault', offset: '10' })
+  })
+
+  it('pluginOverwriteQuerySchema：仅接受 true/false 字符串枚举', () => {
+    expect(pluginOverwriteQuerySchema.parse({ overwrite: 'true' })).toEqual({ overwrite: 'true' })
+    expect(pluginOverwriteQuerySchema.parse({})).toEqual({})
+    expect(() => pluginOverwriteQuerySchema.parse({ overwrite: 'yes' })).toThrow()
+  })
+
+  it('pluginEnabledRequestSchema：enabled 必须为布尔', () => {
+    expect(pluginEnabledRequestSchema.parse({ enabled: true })).toEqual({ enabled: true })
+    expect(() => pluginEnabledRequestSchema.parse({ enabled: 'yes' })).toThrow(/enabled must be a boolean/)
+  })
+
+  it('marketInstallRequestSchema：slug/versionNumber 必填字符串', () => {
+    expect(marketInstallRequestSchema.parse({ slug: 'vault', versionNumber: '1.0.0' })).toEqual({
+      slug: 'vault', versionNumber: '1.0.0',
+    })
+    expect(() => marketInstallRequestSchema.parse({ slug: 1, versionNumber: '1.0.0' })).toThrow()
+  })
+
+  it('upgradeRequestSchema：mcVersion 必填（保留原文案），type 缺省 vanilla、非法保留 Invalid type 文案', () => {
+    expect(() => upgradeRequestSchema.parse({ type: 'vanilla' })).toThrow(/mcVersion is required/)
+    const parsed = upgradeRequestSchema.parse({ mcVersion: '1.21.4' })
+    expect(parsed.type).toBe('vanilla')
+    expect(() => upgradeRequestSchema.parse({ mcVersion: '1.21.4', type: 'bukkit' })).toThrow(/Invalid type/)
   })
 })

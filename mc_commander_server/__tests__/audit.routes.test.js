@@ -163,3 +163,44 @@ describe('Audit Routes', () => {
     );
   });
 });
+
+describe('Audit Routes zod 请求契约（issue 391）', () => {
+  let app;
+
+  beforeEach(() => {
+    app = express();
+    app.use(express.json());
+    app.use('/api/v1', createAuditRoutes());
+    vi.clearAllMocks();
+    AuditLogModel.findAll.mockReturnValue({ logs: [], total: 0, page: 1, pageSize: 20 });
+    CommandHistoryModel.findAll.mockReturnValue({ commands: [], total: 0, page: 1, pageSize: 20 });
+  });
+
+  it('GET /audit-logs 未知查询字段被剥离（下游只见契约字段）', async () => {
+    await request(app).get('/api/v1/audit-logs?instanceId=i1&junk=injected');
+    const arg = AuditLogModel.findAll.mock.calls[0][0];
+    expect(arg.instanceId).toBe('i1');
+    expect(arg).not.toHaveProperty('junk');
+  });
+
+  it('GET /audit-logs 分页参数保持 #392 parsePagination 语义（schema 透传 → util 解析）', async () => {
+    await request(app).get('/api/v1/audit-logs?page=3&pageSize=50');
+    expect(AuditLogModel.findAll).toHaveBeenCalledWith(
+      expect.objectContaining({ page: 3, pageSize: 50 }),
+    );
+  });
+
+  it('GET /command-history 未知字段剥离 + 默认分页不变', async () => {
+    await request(app).get('/api/v1/command-history?junk=1');
+    const arg = CommandHistoryModel.findAll.mock.calls[0][0];
+    expect(arg).not.toHaveProperty('junk');
+    expect(arg.page).toBe(1);
+  });
+
+  it('GET /audit-logs 非法 order 回落 desc 是 schema 契约的一部分（issue 383 向后兼容语义，不升级 400）', async () => {
+    await request(app).get('/api/v1/audit-logs?order=<script>');
+    expect(AuditLogModel.findAll).toHaveBeenCalledWith(
+      expect.objectContaining({ order: 'desc' }),
+    );
+  });
+});

@@ -146,17 +146,31 @@ export {
   fileInfoResponseSchema,
   fileContentResponseSchema,
   fileSaveResponseSchema,
+  fileListRequestSchema,
+  filePathRequestSchema,
+  fileSaveRequestSchema,
+  fileMkdirRequestSchema,
+  fileRenameRequestSchema,
+  fileUploadQuerySchema,
   type FileEntry,
   type FileListResponse,
   type FileInfoResponse,
   type FileContentResponse,
   type FileSaveResponse,
+  type FileListRequest,
+  type FilePathRequest,
+  type FileSaveRequest,
+  type FileMkdirRequest,
+  type FileRenameRequest,
+  type FileUploadQuery,
 } from './files'
 
 // 审计
 export {
   auditLogItemSchema,
   commandHistoryItemSchema,
+  auditLogsQuerySchema,
+  commandHistoryQuerySchema,
   type AuditLogItem,
   type CommandHistoryItem,
 } from './audit'
@@ -208,6 +222,11 @@ export {
   marketVersionSchema,
   marketVersionsResultSchema,
   marketInstallResultSchema,
+  marketSearchRequestSchema,
+  marketVersionsRequestSchema,
+  pluginOverwriteQuerySchema,
+  marketInstallRequestSchema,
+  pluginEnabledRequestSchema,
   type PluginMeta,
   type PluginInfo,
   type PluginList,
@@ -221,6 +240,11 @@ export {
   type MarketVersion,
   type MarketVersionsResult,
   type MarketInstallResult,
+  type MarketSearchRequest,
+  type MarketVersionsRequest,
+  type PluginOverwriteQuery,
+  type MarketInstallRequest,
+  type PluginEnabledRequest,
 } from './plugin'
 
 // 系统

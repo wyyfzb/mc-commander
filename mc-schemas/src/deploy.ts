@@ -50,9 +50,22 @@ export const upgradeProgressSchema = z.object({
   timestamp: z.number(),
 })
 
+/**
+ * POST /instances/:id/upgrade 请求体契约（issue 391 接入路由层）。
+ * - mcVersion 缺省消息保留原路由文案；点分版本白名单（MC_VERSION_REGEX）
+ *   属服务层纵深防御口径，保持在路由/服务层校验，schema 只做类型与必填。
+ * - type 枚举错误消息保留原路由 'Invalid type' 文案（errorMap 保留既有
+ *   断言与前端提示兼容），缺省归一为 vanilla（与原解构默认值一致）。
+ */
 export const upgradeRequestSchema = z.object({
-  mcVersion: z.string(),
-  type: z.enum(['vanilla', 'paper', 'purpur']).optional(),
+  mcVersion: z.string({ required_error: 'mcVersion is required' }),
+  type: z
+    .enum(['vanilla', 'paper', 'purpur'], {
+      errorMap: () => ({
+        message: 'Invalid type. Must be one of: vanilla, paper, purpur',
+      }),
+    })
+    .default('vanilla'),
 })
 
 export const upgradeStartResponseSchema = z.object({

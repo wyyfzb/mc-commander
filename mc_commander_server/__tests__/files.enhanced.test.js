@@ -328,3 +328,45 @@ describe('POST /instances/:id/files/upload', () => {
     expect(fs.existsSync(path.join(tmpDir, 'test-inst', 'root.txt'))).toBe(true);
   });
 });
+describe('files zod 请求契约（issue 391）', () => {
+  it('PUT /files/content：content 非字符串 → 400 + 结构化 details（契约拦截在 handler 前）', async () => {
+    const res = await request(app)
+      .put('/api/v1/instances/test-inst/files/content')
+      .set(authHeaders())
+      .send({ path: '/a.txt', content: 123 });
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe(ErrorCodes.VALIDATION_ERROR.code);
+    expect(Array.isArray(res.body.details)).toBe(true);
+    expect(res.body.details[0]).toMatchObject({ path: 'content' });
+  });
+
+  it('GET /files/download：缺 path 查询 → 400 + 结构化 details（原手写校验收敛到 schema）', async () => {
+    const res = await request(app)
+      .get('/api/v1/instances/test-inst/files/download')
+      .set(authHeaders());
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe(ErrorCodes.VALIDATION_ERROR.code);
+    expect(res.body.details[0]).toMatchObject({ path: 'path', message: 'File path is required' });
+  });
+
+  it('GET /files 列表：未知查询字段被剥离（下游只见契约字段），path 缺省归一 /', async () => {
+    const res = await request(app)
+      .get('/api/v1/instances/test-inst/files?junk=injected')
+      .set(authHeaders());
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.path).toBe('/');
+  });
+
+  it('POST /files/upload：?targetDir= 空串 → 400（schema 拒绝，控制字符/前导斜杠归一同源）', async () => {
+    const res = await request(app)
+      .post('/api/v1/instances/test-inst/files/upload?targetDir=')
+      .set(authHeaders())
+      .attach('file', Buffer.from('data'), { filename: 'a.txt', contentType: 'text/plain' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe(ErrorCodes.VALIDATION_ERROR.code);
+  });
+});

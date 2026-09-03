@@ -449,3 +449,47 @@ describe('Plugin Routes - POST upload', () => {
     expect(leftovers).toHaveLength(0);
   });
 });
+
+describe('Plugin Routes zod 请求契约（issue 391）', () => {
+  let app;
+  let mockManager;
+
+  beforeEach(() => {
+    fs.rmSync(pluginsDir, { recursive: true, force: true });
+    app = express();
+    app.use(express.json());
+    mockManager = { getInstance: vi.fn() };
+    app.use('/api/v1', createPluginRoutes(mockManager));
+    app.use(errorHandler);
+    vi.clearAllMocks();
+  });
+
+  it('PUT 启停：enabled 非布尔 → 400 + 结构化 details（原手写 typeof 校验收敛到 schema）', async () => {
+    mockManager.getInstance.mockReturnValue({ serverPath });
+    const res = await request(app)
+      .put('/api/v1/instances/inst1/plugins/Vault.jar/enabled')
+      .send({ enabled: 'yes' });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe(40000);
+    expect(res.body.details.some((d) => d.path === 'enabled')).toBe(true);
+  });
+
+  it('market install：body 缺 versionNumber → 400 + 结构化 details', async () => {
+    mockManager.getInstance.mockReturnValue({ serverPath });
+    const res = await request(app)
+      .post('/api/v1/instances/inst1/plugins/market/install')
+      .send({ slug: 'essentialsx' });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe(40000);
+    expect(res.body.details.some((d) => d.path === 'versionNumber')).toBe(true);
+  });
+
+  it('market install：?overwrite=yes 非法枚举 → 400 + details path=overwrite（前端仅发送 true/缺省，不受影响）', async () => {
+    mockManager.getInstance.mockReturnValue({ serverPath });
+    const res = await request(app)
+      .post('/api/v1/instances/inst1/plugins/market/install?overwrite=yes')
+      .send({ slug: 'essentialsx', versionNumber: '1.0' });
+    expect(res.status).toBe(400);
+    expect(res.body.details.some((d) => d.path === 'overwrite')).toBe(true);
+  });
+});
