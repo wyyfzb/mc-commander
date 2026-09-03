@@ -79,30 +79,17 @@ function handleSessionExpired(): void {
   clearSessionAndDispatchExpired()
 }
 
-async function parseEnvelope<T>(res: Response): Promise<T> {
-  let payload: ApiEnvelope<T> | ApiErrorEnvelope
-  try {
-    payload = (await res.json()) as ApiEnvelope<T> | ApiErrorEnvelope
-  } catch {
-    throw new NetworkError(`响应解析失败（HTTP ${res.status}）`)
-  }
-
-  if (payload.status === 'ok') {
-    return (payload as ApiEnvelope<T>).data
-  }
-
-  const err = payload as ApiErrorEnvelope
-  throw new ApiError(err.code, res.status, err.message, err.details)
-}
-
 /**
- * 核心请求函数：解析统一信封，失败抛 ApiError（携带错误码）或 NetworkError
+ * 单源请求执行链：fetch 构造 → HTTP ≥400 错误信封处置（含 40103 会话过期）
+ * → 成功信封解析，返回完整信封。信封级变体（apiGetEnvelope）与解包变体
+ * （apiRequest）共用此实现，杜绝平行复制带来的文案/行为漂移。
+ * 失败抛 ApiError（携带错误码）或 NetworkError。
  */
-export async function apiRequest<T>(
+async function requestEnvelope<T>(
   path: string,
   config: ConnectionConfig,
-  options: ApiRequestOptions = {},
-): Promise<T> {
+  options: ApiRequestOptions,
+): Promise<ApiEnvelope<T>> {
   const timeout = new AbortController()
   const timer = setTimeout(() => timeout.abort(), options.timeoutMs ?? REQUEST_TIMEOUT_MS)
 
@@ -133,54 +120,6 @@ export async function apiRequest<T>(
       throw new NetworkError(`请求失败（HTTP ${res.status}）`)
     }
 
-    return parseEnvelope<T>(res)
-  } catch (e) {
-    if (e instanceof ApiError) throw e
-    if (e instanceof DOMException && e.name === 'AbortError') {
-      throw new NetworkError('请求超时，请检查服务器连接')
-    }
-    if (e instanceof TypeError) {
-      throw new NetworkError('网络连接失败，请检查面板地址与服务器状态', { cause: e })
-    }
-    throw e
-  } finally {
-    clearTimeout(timer)
-  }
-}
-
-/** GET 便捷方法（解包信封，仅返回 data） */
-export function apiGet<T>(path: string, config: ConnectionConfig, signal?: AbortSignal): Promise<T> {
-  return apiRequest<T>(path, config, { method: 'GET', signal })
-}
-
-/** GET 信封级变体：返回完整信封（含 pagination），供分页控件消费 */
-export async function apiGetEnvelope<T>(path: string, config: ConnectionConfig, signal?: AbortSignal): Promise<ApiEnvelope<T>> {
-  const timeout = new AbortController()
-  const timer = setTimeout(() => timeout.abort(), REQUEST_TIMEOUT_MS)
-
-  try {
-    const res = await fetch(buildUrl(config, path), {
-      method: 'GET',
-      headers: {
-        ...buildAuthHeaders(),
-        ...(!hasSessionToken() && config.apiKey ? { 'X-API-Key': config.apiKey } : {}),
-      },
-      signal: signal ?? timeout.signal,
-    })
-
-    if (!res.ok && res.status >= 400) {
-      try {
-        const errPayload = (await res.json()) as ApiErrorEnvelope
-        if (errPayload.status === 'error') {
-          if (errPayload.code === AUTH_SESSION_EXPIRED_CODE) handleSessionExpired()
-          throw new ApiError(errPayload.code, res.status, errPayload.message, errPayload.details)
-        }
-      } catch (e) {
-        if (e instanceof ApiError) throw e
-      }
-      throw new NetworkError(`请求失败（HTTP ${res.status}`)
-    }
-
     let payload: ApiEnvelope<T> | ApiErrorEnvelope
     try {
       payload = (await res.json()) as ApiEnvelope<T> | ApiErrorEnvelope
@@ -206,6 +145,27 @@ export async function apiGetEnvelope<T>(path: string, config: ConnectionConfig, 
   } finally {
     clearTimeout(timer)
   }
+}
+
+/**
+ * 核心请求函数：解析统一信封，失败抛 ApiError（携带错误码）或 NetworkError
+ */
+export async function apiRequest<T>(
+  path: string,
+  config: ConnectionConfig,
+  options: ApiRequestOptions = {},
+): Promise<T> {
+  return (await requestEnvelope<T>(path, config, options)).data
+}
+
+/** GET 便捷方法（解包信封，仅返回 data） */
+export function apiGet<T>(path: string, config: ConnectionConfig, signal?: AbortSignal): Promise<T> {
+  return apiRequest<T>(path, config, { method: 'GET', signal })
+}
+
+/** GET 信封级变体：返回完整信封（含 pagination），供分页控件消费（与 apiRequest 单源请求链） */
+export function apiGetEnvelope<T>(path: string, config: ConnectionConfig, signal?: AbortSignal): Promise<ApiEnvelope<T>> {
+  return requestEnvelope<T>(path, config, { method: 'GET', signal })
 }
 
 /** POST 便捷方法 */

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
 import { setupServer } from 'msw/node'
 import { handlers, mockOverview } from '@/test/mocks/handlers'
-import { apiGet, apiPost, ApiError, NetworkError, type ConnectionConfig } from '../client'
+import { apiGet, apiGetEnvelope, apiPost, ApiError, NetworkError, type ConnectionConfig } from '../client'
 import { useAuthStore, SESSION_EXPIRED_EVENT } from '@/stores/auth'
 
 const server = setupServer(...handlers)
@@ -51,6 +51,31 @@ describe('API 客户端（统一信封契约）', () => {
       ).rejects.toBeInstanceOf(NetworkError)
     } finally {
       server.listen({ onUnhandledRequest: 'error' })
+    }
+  })
+})
+
+describe('API 客户端信封级 GET（apiGetEnvelope 单源请求链）', () => {
+  it('400 错误信封抛 ApiError（code/httpStatus/message 与解包路径一致）', async () => {
+    const promise = apiGetEnvelope('/api/v1/bad-request-probe', config)
+    await expect(promise).rejects.toBeInstanceOf(ApiError)
+    await expect(promise).rejects.toMatchObject({
+      code: 40000,
+      httpStatus: 400,
+      message: 'Validation Error',
+    })
+  })
+
+  it('40103 会话过期在信封级路径同样触发清会话 + 全局事件（单源处置）', async () => {
+    useAuthStore.getState().setSession({ token: 'tok-envelope-expired', sessionId: 'sess-mock-1', expiresAt: new Date(Date.now() - 1_000).toISOString() })
+    const listener = vi.fn()
+    window.addEventListener(SESSION_EXPIRED_EVENT, listener)
+    try {
+      await expect(apiGetEnvelope('/api/v1/session-expired-probe', config)).rejects.toMatchObject({ code: 40103 })
+      expect(useAuthStore.getState().session).toBeNull()
+      expect(listener).toHaveBeenCalledTimes(1)
+    } finally {
+      window.removeEventListener(SESSION_EXPIRED_EVENT, listener)
     }
   })
 })
