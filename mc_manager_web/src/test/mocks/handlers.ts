@@ -766,6 +766,19 @@ export const handlers = [
       { status: 409 },
     ),
   ),
+  // 40000 校验失败场景：HTTP 400 错误信封（信封级 GET 请求路径测试）
+  http.get('*/api/v1/bad-request-probe', () =>
+    HttpResponse.json(
+      {
+        status: 'error',
+        code: 40000,
+        message: 'Validation Error',
+        details: null,
+        timestamp: new Date().toISOString(),
+      },
+      { status: 400 },
+    ),
+  ),
 
   // ── 安全主线：auth 端点（登录页/账号面板组件测试用） ──
   // 会话过期探针：40103（client 全局登出事件测试）

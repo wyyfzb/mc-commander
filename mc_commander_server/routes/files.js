@@ -728,7 +728,16 @@ const upload = multer({
       }
       next();
     });
-  }, validateQuery(fileUploadQuerySchema), (req, res, next) => {
+  }, validateQuery(fileUploadQuerySchema, {
+    // multer diskStorage 已落盘（系统 tmpdir 缓冲）：schema 拒绝非法 targetDir
+    // （空串/控制字符）时在 400 前清理临时文件，承接原 handler 内 unlinkSync
+    // 清理语义，杜绝磁盘残留（#397 回归修复，issue 391 安全性只增不减）
+    onError: (req) => {
+      if (req.file?.path) {
+        try { fs.unlinkSync(req.file.path); } catch {}
+      }
+    },
+  }), (req, res, next) => {
     try {
       const { instanceId } = req.params;
       const uploadedFile = req.file;
