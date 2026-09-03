@@ -61,7 +61,7 @@
   **C 甄别**：审计把 RCON 派生与弱 Key/HOST 分列，三者同属「网络暴露面」，合并一个任务一次验收。
   验收：rcon.port 按 server-port 同款规则派生且不冲突；`HOST` 环境变量（默认 127.0.0.1，文档说明公网部署显式设 0.0.0.0）；生产（NODE_ENV=production）弱 Key 默认拒绝启动、`ALLOW_WEAK_KEY=1` 显式豁免；.env.example 同步。
 
-- [ ] **A1-4** [安全] JAR 下载落地校验：sha256 + 体积上限 + 域名白名单（P1·bug修复）｜中｜来源：audit S-P1-1
+- [x] **A1-4** [安全] JAR 下载落地校验：sha256 + 体积上限 + 域名白名单（P1·bug修复）｜中｜来源：audit S-P1-1 ✅ #316 (2026-09-03, PR#326)
   现状：部署/升级 JAR 下载无完整性校验与上限（对比插件市场已有 100MB 截断+白名单）。
   验收：上游 sha256 校验（Piston-meta manifest 提供值）；流式体积上限（512MB）；下载域名白名单（mojang/piston 域）；失败即弃并给可读错误。
 
@@ -70,43 +70,43 @@
   **C 甄别**：#231 已加 LRU 容量上限（部分闭环），残留即锁定键与复验。合并为「认证通道」一个任务。
   验收：锁定键改 `socket.remoteAddress`；`TRUST_PROXY` 环境变量（默认 1 兼容现网）；WS 心跳周期内抽样复验会话有效性，失效 `close(1008)`；测试覆盖踢出后 WS 断开。
 
-- [ ] **A1-6** [安全] P2 安全小批打包（P2·加固）｜小｜来源：audit P2-5/6/7/8/9/10/11
+- [x] **A1-6** [安全] P2 安全小批打包（P2·加固）｜小｜来源：audit P2-5/6/7/8/9/10/11 ✅ #324 (2026-09-03, PR#331)
   现状（逐项复核）：password.js:12 `SCRYPT_N=16384`；password.js:44 safeEqual 长度不等提前返回；index.js:153 全局 10mb；/health 返回 instanceCount+nodeVersion+uptime（routes/index.js:26-33）；deploy 脚本 :446 完整打印 API Key；会话无绝对过期/并发上限/惰性清理。
   **C 甄别**：七项均为小改，打包一个任务；/health 保留 `status+version`（check-update 依赖），去掉 instanceCount/nodeVersion/uptime。
   验收：scrypt N 提至 2^17（旧哈希按存储参数校验后透明升级）；safeEqual 先 SHA-256 再恒时比较；认证前 body 1MB（文件路由单独放宽）；/health 精简；部署日志 Key 掩码（前 4 位）；会话 30 天绝对存活 + 5 会话上限挤最旧 + 登录路径惰性清理过期会话；全部带测试。
 
 ## Phase A2 · 交付就绪
 
-- [ ] **A2-1** [交付] 轻量结构化日志系统（P0·功能闭环）｜中｜来源：audit D-P0-2
+- [x] **A2-1** [交付] 轻量结构化日志系统（P0·功能闭环）｜中｜来源：audit D-P0-2 ✅ #325 (2026-09-03, PR#332)
   现状：全服务端裸 console.log/error；config.js:18 logLevel 零消费。
   **C 甄别**：审计给「pino 或 console 包装器」二选一。项目极简依赖哲学（utils/password.js 注释自证），**选 console 包装器、不引 pino**：logger 模块 debug/info/warn/error 四级消费 config.logLevel；error 分流独立文件；单文件 20MB×5 简单轮转；安全日志（启动横幅等）保持 stderr 习惯。systemd 场景 journalctl 说明进 README。
   验收：全服务端 console.* 收口至 logger（保留启动横幅白名单）；LOG_LEVEL 生效；error 文件分流+轮转；测试覆盖级别过滤与轮转。
 
-- [ ] **A2-2** [交付] 文档与配置纠偏批（P0/P1·bug修复）｜中｜来源：audit D-P0-4 + D-P0-5 + D-P1-2
+- [x] **A2-2** [交付] 文档与配置纠偏批（P0/P1·bug修复）｜中｜来源：audit D-P0-4 + D-P0-5 + D-P1-2 ✅ #327 (2026-09-03, PR#336)
   现状：README.md:33 仍 gitee **master** 路径（分支 main → 404）；无升级章节；.env.example 16 项 vs config.js 实际约 20 项、NODE_ENV 未引导。
   **C 甄别**：审计 D-P0-4 的「Docker 卡片」部分已过时——onboarding 卡片已重构为「官方镜像发布后可用」引导（DeployMode 含 docker/manual），与 roadmap「不做 Docker 化」的矛盾点弱化为文案问题，仅要求：镜像真正发布前卡片不得宣称立即可用。三项合并一个任务（文档同域）。
   验收：master→main 修复；README 新增「升级」章节（重跑脚本/保留项/回滚/sha256 PR 顺序）；.env.example 补齐对齐 config.js 全量 + NODE_ENV 引导注释；手动部署补「前端 dist → public/」整合步骤；Docker 卡片文案核对。
 
-- [ ] **A2-3** [交付] 用户向导 + 核心页面截图（P1·体验升级）｜中｜来源：audit D-P1-3
+- [x] **A2-3** [交付] 用户向导 + 核心页面截图（P1·体验升级）｜中｜来源：audit D-P1-3 ✅ #337 (2026-09-04, PR#371)
   现状：README.md:14 截图节为占位；docs/ 无 user-guide。
   验收：6-8 张核心页面截图（onboarding/仪表盘/文件/玩家/备份/审计）+「首次使用 10 分钟」docs/user-guide.md（部署→设密→建实例→启动→连服）。
 
-- [ ] **A2-4** [交付] CI 小批：覆盖率门禁 + Windows 标注 + WS 上限文档（P2·加固）｜小｜来源：audit P2-1 + D-P1-4 + P2-4
+- [x] **A2-4** [交付] CI 小批：覆盖率门禁 + Windows 标注 + WS 上限文档（P2·加固）｜小｜来源：audit P2-1 + D-P1-4 + P2-4 ✅ #338 (2026-09-03, PR#362)
   **C 甄别**：Windows 原生编译验证（windows-latest job）成本高、受众窄；按审计备选路线**选「README 标注实验性」**，不加 Windows job；与覆盖率门禁、WS 多设备说明合并为 CI/文档小批。
   验收：ci.yml 覆盖率上传+阈值 70%；README Windows 实验性标注；WS 32 连接多设备说明入 README。
 
 ## Phase A3 · 前端质量
 
-- [x] **A3-1** [前端] WS 单例治理：connect 幂等 + 凭据变更重建 + 登出关闭（P0/P1·bug修复）｜中｜来源：audit F-P0-2 + F-P1-1
+- [x] **A3-1** [前端] WS 单例治理：connect 幂等 + 凭据变更重建 + 登出关闭（P0/P1·bug修复）｜中｜来源：audit F-P0-2 + F-P1-1 ✅ #311 (2026-09-03, PR#318)
   现状（2026-09-03 复核）：api/ws.ts:81-89 connect 直接 `new WebSocketImpl` 无 readyState 检查（双连接/重复派发/泄漏）；use-server-socket.ts effect 内 socketSingleton 复用旧凭据（注释称「session 变更触发重建」但实现未重建）。
   **C 甄别**：审计两条同文件同根因（单例生命周期），合并一个任务。
   验收：connect 入口 readyState 检查（CONNECTING/OPEN 直接返回既有 promise）；重连前 close 旧连接清 timer；凭据不一致时 close+重建单例；登出显式关闭；测试覆盖双 connect/换 token 重连/登出。
 
-- [ ] **A3-2** [前端] 文件上传冲突确认（P1·交互优化）｜小｜来源：audit F-P1-3
+- [x] **A3-2** [前端] 文件上传冲突确认（P1·交互优化）｜小｜来源：audit F-P1-3 ✅ #328 (2026-09-03, PR#330)
   现状：files-page.tsx:329 注释自述「服务端落地到当前浏览目录同名覆盖」。
   验收：对齐插件页 40912 冲突流程——上传前探测同名，命中弹确认（覆盖/跳过）；危险扩展名沿用既有上传防护；测试覆盖冲突中断与确认覆盖两路径。
 
-- [ ] **A3-3** [前端] 代码卫生批：exhaustive-deps 开启 + onerror 全局兜底 + 断言清理（P1/P2·技术债）｜中｜来源：audit F-P1-5 + F-P0-1 残留 + P2-14 + P2-15
+- [x] **A3-3** [前端] 代码卫生批：exhaustive-deps 开启 + onerror 全局兜底 + 断言清理（P1/P2·技术债）｜中｜来源：audit F-P1-5 + F-P0-1 残留 + P2-14 + P2-15 ✅ #333 (2026-09-03, PR#340)
   现状：oxlint 未启用 react-hooks/exhaustive-deps（12 处 disable 形同虚设）；main.tsx 无 onerror/unhandledrejection 注册；webhook-page.tsx:116-117 两处 `as unknown as`。
   **C 甄别**：F-P0-1 渲染崩溃兜底已闭环，残留的「事件处理器/异步异常全局兜底」并本批。
   验收：oxlint 开启 exhaustive-deps 且逐处清理 12 处 disable（确实该豁免的写明理由）；main.tsx 注册 onerror/unhandledrejection → 中文错误提示 + ErrorBoundary 引导；webhook 表单显式 payload 映射函数；P2-15 低危随批清理并在 PR 列明细。
@@ -118,23 +118,23 @@
   **C 甄别**：审计方案合理（抽共享 mutation + 部署向导内置同意），性价比最高，优先发布。
   验收：EULA 特例抽共享 mutation；实例页启动命中 EULA 弹同意（同意即续启）；部署向导「部署并启动」闭环；测试覆盖两入口。
 
-- [ ] **A4-2** [UX] 实例状态触达：启停中间态 + 崩溃事件三断裂（P1·交互优化）｜大｜来源：audit U-P1-2 + U-P1-3
+- [x] **A4-2** [UX] 实例状态触达：启停中间态 + 崩溃事件三断裂（P1·交互优化）｜大｜来源：audit U-P1-2 + U-P1-3 ✅ #334 (2026-09-03, PR#345)
   现状：stores 无 phase/starting/stopping；use-server-socket.ts 无 circuit_breaker case、非当前实例崩溃事件丢弃、通知条目不可跳转。
   **C 甄别**：两审计项同为「WS 状态事件 → 前端呈现」断点，同 store/事件链路，合并一个任务。
   验收：store 增 phase 字段（WS started/stopped 确认后清除），两处启停收敛同一 mutation + 按钮中间态禁用；critical 事件（crash/circuit_breaker）按实例广播入通知中心 + 条目可跳转实例页 + 持久 toast；非当前实例事件不丢弃。
 
-- [ ] **A4-3** [UX] 备份入口提升：仪表盘最近备份卡（P1·体验升级）｜中｜来源：audit U-P1-5 残留
+- [x] **A4-3** [UX] 备份入口提升：仪表盘最近备份卡（P1·体验升级）｜中｜来源：audit U-P1-5 残留 ✅ #335 (2026-09-03, PR#342)
   现状（复核）：backup-panel.tsx:112 已有 `showAll` 展开机制（审计「硬截断 10 条」部分缓解）；残留 = 入口在设置二级页过深 + 无总数显示。
   **C 甄别**：审计原两条（分页 + 入口）收敛为入口提升一条；列表总数与展开机制补足即可，不必引入完整分页。
   验收：仪表盘增「最近备份」卡（最近 3-5 条 + 立即备份按钮 + 跳转设置）；列表显示总数。
 
 ## Phase A5 · 打磨批（P2 残余）
 
-- [ ] **A5-1** [UX] 排障与快捷路径批（P2·体验升级）｜中｜来源：audit P2-16 + P2-17 + P2-19
+- [x] **A5-1** [UX] 排障与快捷路径批（P2·体验升级）｜中｜来源：audit P2-16 + P2-17 + P2-19 ✅ #343 (2026-09-03, PR#348)
   现状：command-palette 无实例操作分组（已有玩家操作与导航）；无 lastOutput/级别过滤；空态深链部分到位（topbar 已直达，6 处空态待复查）。
   验收：命令面板增「实例操作」分组（重启/备份/停止，带实例名）；崩溃横幅「查看末尾日志」（消费 lastOutput）+ 终端级别过滤 chips；复查 6 处空态 CTA 深链并补齐。
 
-- [ ] **A5-2** [设计] 组件打磨批：通知筛选 + 字号越档 + icon-button 抽象 + JVM 回填（P2·一致性）｜中｜来源：audit P2-21 + P2-22 + P2-25 + P2-12 + P2-27
+- [x] **A5-2** [设计] 组件打磨批：通知筛选 + 字号越档 + icon-button 抽象 + JVM 回填（P2·一致性）｜中｜来源：audit P2-21 + P2-22 + P2-25 + P2-12 + P2-27 ✅ #344 (2026-09-03, PR#346)
   现状（逐项复核）：notification-drawer 有「清除全部」无确认无严重度筛选；stat-cards text-3xl ×4、emergency text-5xl/extrabold；mcs/ 无 icon-button 抽象；server-terminal 渲染仍增量过滤（JVM 开关切换后历史行是否回填待复现验证）；P2-27 重复代码函数名已变待重新定位。
   **C 甄别**：P2-12 先复现再修（若 #21 屏读镜像重构已顺带修复则记录证据关闭该项）；P2-27 重新定位后若已抽公共模块同样记录关闭。
   验收：通知抽屉 severity chips + 清除全部确认；KPI ≤2xl/紧急页字重 400-600（check-design-tokens 扩展字号断言防复发）；icon-button 抽象消化高频裸按钮（清单化，不求一次清零）；JVM/重复代码两项给出复现结论。
