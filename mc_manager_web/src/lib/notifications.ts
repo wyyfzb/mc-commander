@@ -16,6 +16,8 @@ export type NotificationType =
   | 'restoreStart' | 'restoreComplete' | 'restoreFailed'
   | 'taskFailed'
   | 'webhookFailed'
+  | 'deployComplete' | 'deployFailed'
+  | 'upgradeComplete' | 'upgradeFailed'
 
 export interface AppNotification {
   id: string
@@ -62,6 +64,10 @@ export const NOTIFICATION_TYPE_META: Record<
   restoreFailed: { label: '恢复失败', category: 'server', severity: 'severe' },
   taskFailed: { label: '任务失败', category: 'server', severity: 'severe' },
   webhookFailed: { label: 'Webhook 投递失败', category: 'server', severity: 'severe' },
+  deployComplete: { label: '部署完成', category: 'server', severity: 'info' },
+  deployFailed: { label: '部署失败', category: 'server', severity: 'severe' },
+  upgradeComplete: { label: '升级完成', category: 'server', severity: 'info' },
+  upgradeFailed: { label: '升级失败', category: 'server', severity: 'severe' },
 }
 
 /** 设置页显示顺序：game 组在前、server 组在后 */
@@ -72,6 +78,7 @@ export const NOTIFICATION_TYPE_ORDER: NotificationType[] = Object.keys(
 /** critical 类：不参与聚合，每次都独立通知 */
 const CRITICAL_TYPES: ReadonlySet<NotificationType> = new Set([
   'serverCrash', 'circuitBreaker', 'backupFailed', 'restoreFailed', 'taskFailed', 'webhookFailed',
+  'deployFailed', 'upgradeFailed',
 ])
 
 /** 告警类型集合（阈值跃迁语义，需 _activeAlerts 状态机） */
@@ -199,6 +206,28 @@ export function buildNotifications(
         content: `Webhook「${name}」投递失败（重试耗尽）`,
       }]
     }
+    // 长任务终态（issue 352）：部署完成前实例未入库，实例名由 payload 携带；
+    // 升级终态的服务端 payload 同样补了 instanceName
+    case 'deployComplete':
+      return [{
+        type: 'deployComplete', category: 'server',
+        content: `实例「${String(d.instanceName ?? '未命名')}」部署完成`,
+      }]
+    case 'deployFailed':
+      return [{
+        type: 'deployFailed', category: 'server',
+        content: `实例「${String(d.instanceName ?? '未命名')}」部署失败：${String(d.error || '未知错误')}`,
+      }]
+    case 'upgradeComplete':
+      return [{
+        type: 'upgradeComplete', category: 'server',
+        content: `实例「${String(d.instanceName ?? '未命名')}」升级完成`,
+      }]
+    case 'upgradeFailed':
+      return [{
+        type: 'upgradeFailed', category: 'server',
+        content: `实例「${String(d.instanceName ?? '未命名')}」${String(d.detail || '升级失败')}`,
+      }]
     default: {
       if (type in BACKUP_CONTENT) {
         return [{

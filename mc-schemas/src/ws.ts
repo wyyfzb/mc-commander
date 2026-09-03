@@ -25,8 +25,12 @@ export const WS_EVENT_TYPES = [
   'taskFailed',
   'webhookDeliveryFailed',
   'deployProgress',
+  'deployComplete',
+  'deployFailed',
   'circuit_breaker',
   'upgradeProgress',
+  'upgradeComplete',
+  'upgradeFailed',
   'systemStatsUpdate',
   'error',
 ] as const

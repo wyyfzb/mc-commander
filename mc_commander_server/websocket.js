@@ -30,8 +30,12 @@ export const WSEvents = {
   TASK_FAILED: 'taskFailed',
   WEBHOOK_DELIVERY_FAILED: 'webhookDeliveryFailed',
   DEPLOY_PROGRESS: 'deployProgress',
+  DEPLOY_COMPLETE: 'deployComplete',
+  DEPLOY_FAILED: 'deployFailed',
   CIRCUIT_BREAKER: 'circuit_breaker',
   UPGRADE_PROGRESS: 'upgradeProgress',
+  UPGRADE_COMPLETE: 'upgradeComplete',
+  UPGRADE_FAILED: 'upgradeFailed',
   SYSTEM_STATS_UPDATE: 'systemStatsUpdate',
   ERROR: 'error',
 };
@@ -82,6 +86,12 @@ const NOTIFICATION_EVENT_TYPES = new Set([
   WSEvents.TASK_FAILED,
   // Webhook 投递失败：低频高价值，首次失败通知（连续失败去重后恢复）
   WSEvents.WEBHOOK_DELIVERY_FAILED,
+  // 长任务终态（部署/升级完成与失败）：低频高价值，用户离开向导后
+  // 唯一得知结果的通道；落库后断线/离线重连也能补齐看到
+  WSEvents.DEPLOY_COMPLETE,
+  WSEvents.DEPLOY_FAILED,
+  WSEvents.UPGRADE_COMPLETE,
+  WSEvents.UPGRADE_FAILED,
 ]);
 
 // notification_events 保留期：超过保留期的记录定期清理（表只增不删，
@@ -195,6 +205,17 @@ export function setupWebSocket(wss, serverManager) {
     });
     logger.info(`WebSocket client connected. Total: ${clients.size}`);
 
+    // 长任务状态补发：连接建立即推送进行中的部署快照。部署进度是全局事件
+    // （部署实例未入库，无订阅语义），刷新页面/重连后前端据此恢复「部署中」
+    // 显示——长阶段（Forge 安装/首启）事件稀疏，仅靠阶段边界广播会零可见
+    try {
+      for (const dep of serverManager.activeDeploys?.values() ?? []) {
+        ws.send(JSON.stringify({ type: WSEvents.DEPLOY_PROGRESS, data: dep, timestamp: Date.now() }));
+      }
+    } catch (err) {
+      logger.error('Failed to send active deploy snapshot:', err);
+    }
+
     ws.subscribedInstances = new Set();
     // 消息速率限制状态：当前窗口起点与窗口内已收消息数
     ws._msgRateWindowStart = 0;
@@ -238,6 +259,21 @@ export function setupWebSocket(wss, serverManager) {
             } else {
               replayEvents(ws, msg.instanceId, lastEventId);
             }
+          }
+          // 进行中升级补发：订阅即恢复该实例的升级进度（重连/刷新后
+          // 升级弹窗与实例卡「升级中」标识可恢复）
+          try {
+            const upgradeProgress = serverManager.activeUpgrades?.get(msg.instanceId);
+            if (upgradeProgress) {
+              ws.send(JSON.stringify({
+                type: WSEvents.UPGRADE_PROGRESS,
+                instanceId: msg.instanceId,
+                data: upgradeProgress,
+                timestamp: Date.now(),
+              }));
+            }
+          } catch (err) {
+            logger.error('Failed to send active upgrade snapshot:', err);
           }
           const instance = serverManager.getInstance(msg.instanceId);
           if (instance) {
@@ -351,6 +387,24 @@ export function setupWebSocket(wss, serverManager) {
         data: { message },
         timestamp: Date.now()
       }));
+    }
+  }
+
+  /// 全局通知广播：落库（instance_id NULL，重连补齐对所有订阅者可见）+
+  /// 发给所有在线客户端。用于无实例归属的低频高价值事件——部署终态：
+  /// 部署实例在完成前不入库，订阅过滤不适用，broadcast 的订阅匹配会全部落空
+  function broadcastGlobalNotification(type, data) {
+    const eventId = persistNotificationEvent(null, type, data);
+    const message = JSON.stringify({
+      ...(eventId != null ? { id: eventId } : {}),
+      type,
+      data,
+      timestamp: Date.now()
+    });
+    for (const client of clients) {
+      if (client.readyState === 1) {
+        client.send(message);
+      }
     }
   }
 
@@ -476,13 +530,29 @@ export function setupWebSocket(wss, serverManager) {
 
   serverManager.on(WSEvents.DEPLOY_PROGRESS, (data) => {
     broadcastAll(WSEvents.DEPLOY_PROGRESS, data);
+    // 部署终态转通知事件：deployProgress 本身高频不落库，完成/失败仅此一次，
+    // 落库后通知中心可见且断线补齐覆盖（用户离开向导后唯一得知结果的方式）
+    if (data?.stage === 'complete') {
+      broadcastGlobalNotification(WSEvents.DEPLOY_COMPLETE, data);
+    } else if (data?.stage === 'error') {
+      broadcastGlobalNotification(WSEvents.DEPLOY_FAILED, data);
+    }
   });
 
   // 升级进度：带实例归属（可针对非当前查看实例），走 broadcast 盖章 instanceId
-  // 并遵循客户端订阅过滤；缺 instanceId 的异常 payload 退回全局广播兜底
+  // 并遵循客户端订阅过滤；缺 instanceId 的异常 payload 退回全局广播兜底。
+  // 终态（completed/failed/rolled_back）额外转通知事件落库；通知 payload 补
+  // 实例名（前端通知文案所需，升级失败回滚后 DB 版本已回写，不带版本号防误导）
   serverManager.on('instance:upgradeProgress', (data) => {
     if (data && data.instanceId) {
       broadcast(data.instanceId, WSEvents.UPGRADE_PROGRESS, data);
+      const instance = serverManager.getInstance(data.instanceId);
+      const notifyPayload = { ...data, instanceName: instance?.name ?? data.instanceId };
+      if (data.stage === 'completed') {
+        broadcast(data.instanceId, WSEvents.UPGRADE_COMPLETE, notifyPayload);
+      } else if (data.stage === 'failed' || data.stage === 'rolled_back') {
+        broadcast(data.instanceId, WSEvents.UPGRADE_FAILED, notifyPayload);
+      }
     } else {
       broadcastAll(WSEvents.UPGRADE_PROGRESS, data);
     }

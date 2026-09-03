@@ -4,10 +4,11 @@
  * 切换·启动配置·卸载回调 / 卸载中禁用（他卡不受影响）/ 详情加载骨架 / 空态 + 部署入口
  * mock 数据为结构占位虚构（虚构实例名/版本），严禁真实服务器信息
  */
-import { describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { InstanceCards, type InstanceCardsProps } from '../instance-cards'
 import { mockInstanceStatus } from '@/test/mocks/handlers'
+import { useUpgradeStore } from '@/stores/upgrade'
 import type { InstanceSummary } from '@/api/types'
 
 // ── 虚构占位数据（虚构实例名，非真实服务器）──────────────────
@@ -40,6 +41,14 @@ function baseProps(overrides: Partial<InstanceCardsProps> = {}): InstanceCardsPr
 // ── 卡片渲染 ──────────────────────────────────────────────────────
 
 describe('InstanceCards', () => {
+  beforeEach(() => {
+    useUpgradeStore.setState({ progress: {} })
+  })
+
+  afterEach(() => {
+    useUpgradeStore.setState({ progress: {} })
+  })
+
   it('渲染实例卡：名称 + 状态文本（运行中 · N 人在线 / 已停止）', () => {
     render(<InstanceCards {...baseProps()} />)
 
@@ -47,6 +56,29 @@ describe('InstanceCards', () => {
     expect(screen.getByText('虚构乙服')).toBeInTheDocument()
     expect(screen.getByText('运行中 · 3 人在线')).toBeInTheDocument()
     expect(screen.getByText('已停止')).toBeInTheDocument()
+  })
+
+  it('升级中徽标：store 有非终态进度时显示（issue 352）', () => {
+    act(() => {
+      useUpgradeStore.setState({
+        progress: { alpha: { instanceId: 'alpha', stage: 'download', percent: 40, detail: '', timestamp: 1 } },
+      })
+    })
+    render(<InstanceCards {...baseProps()} />)
+
+    // 仅甲服有升级进度，徽标唯一
+    expect(screen.getAllByText('升级中')).toHaveLength(1)
+  })
+
+  it('升级终态残留不误显示升级中徽标', () => {
+    act(() => {
+      useUpgradeStore.setState({
+        progress: { alpha: { instanceId: 'alpha', stage: 'completed', percent: 100, detail: '', timestamp: 1 } },
+      })
+    })
+    render(<InstanceCards {...baseProps()} />)
+
+    expect(screen.queryByText('升级中')).not.toBeInTheDocument()
   })
 
   it('版本徽章：detailStatuses 有 mcVersion 显示 mono 徽章，缺失不显示', () => {

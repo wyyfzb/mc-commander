@@ -30,6 +30,12 @@ export const deployProgressSchema = z.object({
   transferred: z.number(),
   total: z.number(),
   error: z.string().optional(),
+  // 实例归属（WS 连接补发恢复显示与通知文案所需）：部署实例完成前未入库，
+  // 事件走全局广播，归属由 payload 携带而非信封 instanceId
+  instanceId: z.string().optional(),
+  instanceName: z.string().optional(),
+  type: z.string().optional(),
+  mcVersion: z.string().optional(),
 })
 
 export const upgradeStageSchema = z.enum([
