@@ -19,6 +19,13 @@ vi.mock('../db/index.js', () => ({
 }));
 import { BanModel } from '../db/index.js';
 
+// mock recordAudit 捕获审计断言；AuditActions 保留真实枚举值
+vi.mock('../utils/audit.js', async (importOriginal) => {
+  const actual = await importOriginal();
+  return { ...actual, recordAudit: vi.fn() };
+});
+import { recordAudit, AuditActions } from '../utils/audit.js';
+
 describe('Player Routes', () => {
   let app;
   let mockManager;
@@ -539,6 +546,65 @@ describe('Player Routes', () => {
       expect(BanModel.deactivateByPlayer).toHaveBeenCalledWith('s1', 'Steve');
     });
 
+    it('should record PLAYER_PARDON audit for record-level pardon (player)', async () => {
+      vi.clearAllMocks();
+      const mockInstance = {
+        isRunning: true, sendCommand: vi.fn() };
+      mockManager.getInstance.mockReturnValue(mockInstance);
+
+      const res = await request(app)
+        .post('/api/instances/s1/players/bans/Steve/pardon')
+        .send({ targetType: 'player' });
+
+      expect(res.status).toBe(200);
+      expect(recordAudit).toHaveBeenCalledTimes(1);
+      expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({
+        instanceId: 's1',
+        action: AuditActions.PLAYER_PARDON,
+        targetType: 'player',
+        targetId: 'Steve',
+        detail: { entry: 'ban-record' },
+      }));
+    });
+
+    it('should record PLAYER_PARDON audit for record-level pardon (ip)', async () => {
+      vi.clearAllMocks();
+      const mockInstance = {
+        isRunning: true, sendCommand: vi.fn() };
+      mockManager.getInstance.mockReturnValue(mockInstance);
+
+      const res = await request(app)
+        .post('/api/instances/s1/players/bans/1.2.3.4/pardon')
+        .send({ targetType: 'ip' });
+
+      expect(res.status).toBe(200);
+      expect(recordAudit).toHaveBeenCalledTimes(1);
+      expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({
+        instanceId: 's1',
+        action: AuditActions.PLAYER_PARDON,
+        targetType: 'ip',
+        targetId: '1.2.3.4',
+        detail: { entry: 'ban-record' },
+      }));
+    });
+
+    it('should not record audit when pardon command fails', async () => {
+      vi.clearAllMocks();
+      const mockInstance = {
+        isRunning: true,
+        sendCommand: vi.fn().mockRejectedValue(new Error('rcon timeout')),
+      };
+      mockManager.getInstance.mockReturnValue(mockInstance);
+
+      const res = await request(app)
+        .post('/api/instances/s1/players/bans/Steve/pardon')
+        .send({ targetType: 'player' });
+
+      expect(res.status).toBe(500);
+      // 解封未生效（记录已补偿恢复），无审计——审计语义 = 实际效果
+      expect(recordAudit).not.toHaveBeenCalled();
+    });
+
     it('should reject invalid IP', async () => {
       vi.clearAllMocks();
       const mockInstance = {
@@ -570,6 +636,7 @@ describe('Player Routes', () => {
 
   describe('POST /api/instances/:id/players/:player/whitelist/add', () => {
     it('should add player to whitelist', async () => {
+      vi.clearAllMocks();
       const mockInstance = {
         isRunning: true, sendCommand: vi.fn() };
       mockManager.getInstance.mockReturnValue(mockInstance);
@@ -578,11 +645,19 @@ describe('Player Routes', () => {
 
       expect(res.status).toBe(200);
       expect(mockInstance.sendCommand).toHaveBeenCalledWith('whitelist add Steve');
+      expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({
+        instanceId: 's1',
+        action: AuditActions.PLAYER_WHITELIST,
+        targetType: 'player',
+        targetId: 'Steve',
+        detail: { op: 'add' },
+      }));
     });
   });
 
   describe('DELETE /api/instances/:id/players/:player/whitelist', () => {
     it('should remove player from whitelist', async () => {
+      vi.clearAllMocks();
       const mockInstance = {
         isRunning: true, sendCommand: vi.fn() };
       mockManager.getInstance.mockReturnValue(mockInstance);
@@ -591,6 +666,30 @@ describe('Player Routes', () => {
 
       expect(res.status).toBe(200);
       expect(mockInstance.sendCommand).toHaveBeenCalledWith('whitelist remove Steve');
+      // 白名单移除接入审计（与 add 同枚举，detail.op 区分方向）
+      expect(recordAudit).toHaveBeenCalledTimes(1);
+      expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({
+        instanceId: 's1',
+        action: AuditActions.PLAYER_WHITELIST,
+        targetType: 'player',
+        targetId: 'Steve',
+        detail: { op: 'remove' },
+      }));
+    });
+
+    it('should not record audit when whitelist remove command fails', async () => {
+      vi.clearAllMocks();
+      const mockInstance = {
+        isRunning: true,
+        sendCommand: vi.fn().mockRejectedValue(new Error('rcon timeout')),
+      };
+      mockManager.getInstance.mockReturnValue(mockInstance);
+
+      const res = await request(app).delete('/api/instances/s1/players/Steve/whitelist');
+
+      expect(res.status).toBe(500);
+      // 移除未生效，无审计
+      expect(recordAudit).not.toHaveBeenCalled();
     });
   });
 });
