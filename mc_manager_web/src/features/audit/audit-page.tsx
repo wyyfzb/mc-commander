@@ -6,6 +6,8 @@
  * 审计状态 URL 持久化（issue 381）：tab/页码/操作类型/时间起止同步到查询参数，
  * 刷新/分享链接后筛选保持（与核心列表页 useSearchParams 模式对齐）
  * 时间排序切换（issue 383）：正序/倒序（默认倒序，URL 不留参数），切换重置页码保留筛选
+ * 命令历史 tab 时间筛选（issue 385）：接入服务端既有 startTime/endTime 参数，
+ * 筛选栏样式与倒置防护对齐审计日志 tab（cmdStart/cmdEnd/cmdPage 同样 URL 持久化）
  */
 import { useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router'
@@ -254,8 +256,72 @@ export function AuditPage() {
     order: auditOrder === 'asc' ? 'asc' : undefined,
   })
 
-  const [cmdPage, setCmdPage] = useState(1)
-  const cmdQuery = useCommandHistory({ page: cmdPage, pageSize: 20 })
+  const [cmdPage, setCmdPageState] = useState(() => {
+    const n = Number(searchParams.get('cmdPage'))
+    return Number.isInteger(n) && n >= 1 ? n : 1
+  })
+  const [cmdStart, setCmdStartState] = useState(() => {
+    const v = searchParams.get('cmdStart') ?? ''
+    return DATE_PARAM_RE.test(v) ? v : ''
+  })
+  const [cmdEnd, setCmdEndState] = useState(() => {
+    const v = searchParams.get('cmdEnd') ?? ''
+    return DATE_PARAM_RE.test(v) ? v : ''
+  })
+
+  // setter 包装（cmd 前缀参数与审计日志 tab 参数互不冲突）
+  const setCmdPage = (n: number) => {
+    setCmdPageState(n)
+    syncParams({ cmdPage: n === 1 ? null : String(n) })
+  }
+  const setCmdStart = (v: string) => {
+    setCmdStartState(v)
+    syncParams({ cmdStart: v || null })
+  }
+  const setCmdEnd = (v: string) => {
+    setCmdEndState(v)
+    syncParams({ cmdEnd: v || null })
+  }
+
+  // ── 命令历史 tab 时间筛选（issue 385：接入服务端既有 startTime/endTime 参数） ──
+  // 起止倒置：与审计日志 tab 同款防护——可见提示并暂停时间过滤
+  const cmdRangeInvalid = isRangeInverted(cmdStart, cmdEnd)
+  const cmdHasTimeRange = Boolean(cmdStart || cmdEnd)
+
+  const activeQuickCmd = useMemo(() => {
+    if (!cmdHasTimeRange || cmdRangeInvalid) return undefined
+    return QUICK_RANGES.find((q) => {
+      const r = quickRangeDates(q.daysBack)
+      return r.start === cmdStart && r.end === cmdEnd
+    })
+  }, [cmdHasTimeRange, cmdRangeInvalid, cmdStart, cmdEnd])
+
+  const applyQuickCmd = (q: QuickRange) => {
+    const r = quickRangeDates(q.daysBack)
+    const same = cmdStart === r.start && cmdEnd === r.end
+    setCmdStart(same ? '' : r.start)
+    setCmdEnd(same ? '' : r.end)
+    setCmdPage(1)
+  }
+
+  const changeCmdDate = (which: 'start' | 'end', v: string) => {
+    if (which === 'start') setCmdStart(v)
+    else setCmdEnd(v)
+    setCmdPage(1)
+  }
+
+  const clearCmdTimeRange = () => {
+    setCmdStart('')
+    setCmdEnd('')
+    setCmdPage(1)
+  }
+
+  const cmdQuery = useCommandHistory({
+    page: cmdPage,
+    pageSize: 20,
+    startTime: cmdStart && !cmdRangeInvalid ? toServerStart(cmdStart) : undefined,
+    endTime: cmdEnd && !cmdRangeInvalid ? toServerEnd(cmdEnd) : undefined,
+  })
 
   const refreshing = auditQuery.isFetching || cmdQuery.isFetching
 
@@ -408,6 +474,62 @@ export function AuditPage() {
         </TabsContent>
 
         <TabsContent value="commands" className="min-h-0 flex-1 flex flex-col gap-3 mt-3">
+          {/* 时间筛选栏（issue 385）：样式与交互对齐审计日志 tab，倒置防护复用同一逻辑 */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1" role="group" aria-label="快捷时间范围">
+              {QUICK_RANGES.map((q) => {
+                const active = activeQuickCmd?.key === q.key
+                return (
+                  <Button
+                    key={q.key}
+                    size="sm"
+                    className="h-8"
+                    variant={active ? 'default' : 'outline'}
+                    aria-pressed={active}
+                    onClick={() => applyQuickCmd(q)}
+                  >
+                    {q.label}
+                  </Button>
+                )
+              })}
+            </div>
+
+            <span className="h-5 w-px shrink-0 bg-mcs-border-muted" aria-hidden />
+
+            <div className="flex items-center gap-1.5">
+              <Input
+                type="date"
+                className="w-36 text-mcs-xs"
+                value={cmdStart}
+                max={cmdEnd || undefined}
+                onChange={(e) => changeCmdDate('start', e.target.value)}
+                aria-label="开始日期"
+              />
+              <span className="text-mcs-xs text-mcs-text-subtle">至</span>
+              <Input
+                type="date"
+                className="w-36 text-mcs-xs"
+                value={cmdEnd}
+                min={cmdStart || undefined}
+                onChange={(e) => changeCmdDate('end', e.target.value)}
+                aria-label="结束日期"
+              />
+            </div>
+
+            {cmdHasTimeRange && (
+              <Button size="sm" variant="ghost" onClick={clearCmdTimeRange}>
+                <X aria-hidden />
+                清空时间
+              </Button>
+            )}
+          </div>
+
+          {cmdRangeInvalid && (
+            <p role="alert" className="text-mcs-xs text-mcs-error-fg">
+              起止时间倒置：时间过滤已暂停，调整后自动恢复
+            </p>
+          )}
+
           <DataTableShell
             columns={CMD_COLUMNS}
             isLoading={cmdQuery.isLoading}
