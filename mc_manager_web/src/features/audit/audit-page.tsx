@@ -20,6 +20,7 @@ import { QUICK_RANGES, isRangeInverted, quickRangeDates, toServerEnd, toServerSt
 
 const ACTION_LABELS: Record<string, string> = {
   INSTANCE_CREATE: '创建实例',
+  INSTANCE_UPDATE: '更新实例配置',
   INSTANCE_START: '启动实例',
   INSTANCE_STOP: '停止实例',
   INSTANCE_RESTART: '重启实例',

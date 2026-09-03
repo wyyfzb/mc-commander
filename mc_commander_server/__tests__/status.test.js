@@ -17,6 +17,13 @@ import { createStatusRoutes } from '../routes/status.js';
 import { InstanceModel } from '../db/index.js';
 import { errorHandler } from '../middleware/error_handler.js';
 
+// mock recordAudit 捕获审计断言；AuditActions 保留真实枚举值
+vi.mock('../utils/audit.js', async (importOriginal) => {
+  const actual = await importOriginal();
+  return { ...actual, recordAudit: vi.fn() };
+});
+import { recordAudit, AuditActions } from '../utils/audit.js';
+
 describe('Status Routes', () => {
   let app;
   let mockManager;
@@ -108,6 +115,7 @@ describe('Status Routes', () => {
     });
 
     it('should update instance name and persist to DB', async () => {
+      vi.clearAllMocks();
       const instance = {
         id: 's1',
         name: 'S1',
@@ -130,6 +138,75 @@ describe('Status Routes', () => {
       // 内存实例字段同步更新（下次 start() 生效）
       expect(instance.name).toBe('S2');
       expect(res.body.data.id).toBe('s1');
+    });
+
+    it('should record INSTANCE_UPDATE audit with changed field list', async () => {
+      vi.clearAllMocks();
+      const instance = {
+        id: 's1',
+        name: 'S1',
+        startCommand: null,
+        javaPath: 'java',
+        maxMemory: null,
+        minMemory: null,
+        jarFile: null,
+        toStatus: () => ({ id: 's1', name: 'S1' }),
+      };
+      mockManager.getInstance.mockReturnValue(instance);
+      InstanceModel.update.mockReturnValue({ changes: 1 });
+
+      const res = await request(app)
+        .put('/api/instances/s1')
+        .send({ maxMemory: '8G', autoRestart: false });
+
+      expect(res.status).toBe(200);
+      expect(recordAudit).toHaveBeenCalledTimes(1);
+      expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({
+        instanceId: 's1',
+        action: AuditActions.INSTANCE_UPDATE,
+        targetType: 'instance',
+        targetId: 's1',
+        // fields 记录本次实际生效的字段集合（allowedFields 遍历序，确定性）
+        detail: { fields: ['maxMemory', 'autoRestart'] },
+      }));
+    });
+
+    it('should not record audit when no valid fields provided (400)', async () => {
+      vi.clearAllMocks();
+      mockManager.getInstance.mockReturnValue({
+        id: 's1',
+        toStatus: () => ({ id: 's1' }),
+      });
+
+      const res = await request(app).put('/api/instances/s1').send({});
+
+      expect(res.status).toBe(400);
+      // 审计语义 = 实际生效的变更，无可更新字段不记审计
+      expect(recordAudit).not.toHaveBeenCalled();
+    });
+
+    it('should not record audit when validation rejects (400)', async () => {
+      vi.clearAllMocks();
+      const instance = {
+        id: 's1',
+        name: 'S1',
+        startCommand: null,
+        javaPath: 'java',
+        maxMemory: null,
+        minMemory: null,
+        jarFile: null,
+        toStatus: () => ({ id: 's1', name: 'S1' }),
+      };
+      mockManager.getInstance.mockReturnValue(instance);
+
+      const res = await request(app)
+        .put('/api/instances/s1')
+        .send({ startCommand: 'java -Xmx4G -jar server.jar' });
+
+      expect(res.status).toBe(400);
+      expect(InstanceModel.update).not.toHaveBeenCalled();
+      // 校验拒绝未产生任何变更，不记审计
+      expect(recordAudit).not.toHaveBeenCalled();
     });
 
     it('should sync instance.json with latest config when updating', async () => {
