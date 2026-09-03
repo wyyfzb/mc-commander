@@ -329,7 +329,13 @@ export function FileList({
             </Button>
           )}
           {onUpload && (
-            <Button variant="ghost" size="icon-sm" aria-label="上传文件" title="上传文件到当前目录" onClick={onUpload}>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="上传文件（单个文件 ≤ 50MB）"
+              title="上传文件到当前目录（单个文件 ≤ 50MB）"
+              onClick={onUpload}
+            >
               <Upload aria-hidden />
             </Button>
           )}
