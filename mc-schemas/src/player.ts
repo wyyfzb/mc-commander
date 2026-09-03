@@ -122,6 +122,30 @@ export const playerSchema = z.object({
   stats: playerStatsSchema,
 })
 
+/** 玩家列表（在线 + 离线混合，非分页信封） */
+export const playerListSchema = z.array(playerSchema)
+
+/**
+ * 玩家详情端点响应（观测边界：核心字段严格，RCON 动态字段透传）。
+ * 详情聚合 baseInfo 与 RCON 实时采集，后者字段集随实例状态浮动，
+ * 故仅锁定身份与时长等稳定字段，zod 默认忽略未声明键。
+ */
+export const playerDetailsResponseSchema = z.object({
+  name: z.string(),
+  uuid: z.string(),
+  isOnline: z.boolean(),
+  isOp: z.boolean(),
+  isWhitelisted: z.boolean(),
+  isBanned: z.boolean(),
+  totalPlayTime: z.number(),
+  lastSeen: z.string().nullable(),
+})
+
+/** 封禁操作响应（临时封禁返回到期时间，永久/未传时长为 null） */
+export const banResponseBodySchema = z.object({
+  expiresAt: z.number().nullable(),
+})
+
 /** 封禁记录 */
 export const banRecordSchema = z.object({
   targetType: z.enum(['player', 'ip']),
@@ -132,6 +156,9 @@ export const banRecordSchema = z.object({
   expiresAt: z.number().nullable(),
   createdAt: z.string(),
 })
+
+/** 封禁记录列表（生效中在前 + 历史，非分页信封） */
+export const banRecordListSchema = z.array(banRecordSchema)
 
 /** 封禁请求体 */
 export const banRequestBodySchema = z.object({
@@ -154,5 +181,9 @@ export type IpHistoryEntry = z.infer<typeof ipHistoryEntrySchema>
 export type InventoryItem = z.infer<typeof inventoryItemSchema>
 export type PlayerInventory = z.infer<typeof playerInventorySchema>
 export type Player = z.infer<typeof playerSchema>
+export type PlayerList = z.infer<typeof playerListSchema>
+export type PlayerDetailsResponse = z.infer<typeof playerDetailsResponseSchema>
+export type BanResponseBody = z.infer<typeof banResponseBodySchema>
 export type BanRecord = z.infer<typeof banRecordSchema>
+export type BanRecordList = z.infer<typeof banRecordListSchema>
 export type BanRequestBody = z.infer<typeof banRequestBodySchema>
