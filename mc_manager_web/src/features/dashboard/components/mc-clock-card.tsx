@@ -10,7 +10,6 @@ import {
 } from 'lucide-react'
 import { worldTimePhase } from '@/lib/format'
 import { Chip } from '@/components/mcs/chip'
-import { CommandPreview } from '@/components/mcs/command-preview'
 import { useServerStore } from '@/stores/server'
 import { useSendCommand } from '@/hooks/use-send-command'
 
@@ -67,7 +66,6 @@ const WEATHER_LABEL: Record<'clear' | 'rain' | 'thunder', { label: string; Icon:
 export function McClockCard() {
   const status = useServerStore((s) => s.status)
   const { send, isRunning } = useSendCommand()
-  const [previewCmd, setPreviewCmd] = useState('')
   // eslint-disable-next-line react/purity -- 幂等初值，StrictMode 双初始化仅差数毫秒，无可观察影响
   const [now, setNow] = useState(Date.now())
   const anchorRef = useRef<{ tick: number; at: number } | null>(null)
@@ -173,13 +171,6 @@ export function McClockCard() {
         <span>24000</span>
       </div>
 
-      {/* 命令预览：悬停时预览，点击后保留显示 2 秒 */}
-      {previewCmd && (
-        <div className="mt-1.5">
-          <CommandPreview command={previewCmd} />
-        </div>
-      )}
-
       {/* 天气 */}
       <div className="mt-2 flex items-center gap-2">
         <span className="flex w-8 shrink-0 items-center text-mcs-2xs text-mcs-text-subtle">天气</span>
@@ -190,9 +181,7 @@ export function McClockCard() {
               tone="default"
               selected={weather === w.key}
               disabled={!canControl}
-              onClick={() => { send(w.cmd); setPreviewCmd(w.cmd); setTimeout(() => setPreviewCmd((p) => p === w.cmd ? '' : p), 2000) }}
-              onPointerEnter={() => setPreviewCmd(w.cmd)}
-              onPointerLeave={() => setPreviewCmd((p) => p === w.cmd ? '' : p)}
+              onClick={() => { send(w.cmd) }}
               className="flex-1"
             >
               {w.label}
@@ -211,9 +200,7 @@ export function McClockCard() {
               tone="default"
               selected={worldTimePhase(p.tick) === phase && tick != null}
               disabled={!canControl}
-              onClick={() => { send(p.cmd); setPreviewCmd(p.cmd); setTimeout(() => setPreviewCmd((c) => c === p.cmd ? '' : c), 2000) }}
-              onPointerEnter={() => setPreviewCmd(p.cmd)}
-              onPointerLeave={() => setPreviewCmd((c) => c === p.cmd ? '' : c)}
+              onClick={() => { send(p.cmd) }}
               className="flex-1"
             >
               {p.label}
