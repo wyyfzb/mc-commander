@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { FilterSelect } from '@/components/mcs/filter-select'
 import { StatusPill } from '@/components/mcs/status-pill'
+import { formatDateTime } from '@/lib/format'
 import { PageHeader } from '@/components/mcs/page-header'
 import { DataTableShell } from '@/components/mcs/data-table-shell'
 import { useAuditLogs, useCommandHistory } from '@/api/queries'
@@ -43,13 +44,10 @@ function getActionLabel(action: string): string {
   return ACTION_LABELS[action] ?? action
 }
 
+/** 时间列：合法 ISO 走统一收口格式（MM-dd HH:mm:ss）；非法输入原样返回（保留审计原始值兜底） */
 function formatTime(iso: string): string {
-  try {
-    const d = new Date(iso)
-    return d.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })
-  } catch {
-    return iso
-  }
+  if (Number.isNaN(new Date(iso).getTime())) return iso
+  return formatDateTime(iso)
 }
 
 function formatDuration(ms: number | null): string {

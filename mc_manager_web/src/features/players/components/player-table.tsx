@@ -42,6 +42,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { cn } from '@/lib/utils'
+import { formatRelativeTime } from '@/lib/format'
 import { formatBanRemaining } from '@/lib/mc-ban'
 import type { Player } from '@/api/types'
 import { usePlayersUiStore, type PlayerDetailTab } from '../store'
@@ -296,7 +297,7 @@ export function PlayerTable({
           const p = row.original
           return (
             <span className="block text-right text-mcs-xs text-mcs-text-muted">
-              {p.isOnline ? formatOnlineTimeShort(p.onlineTime) : formatLastSeenShort(p.lastSeen)}
+              {p.isOnline ? formatOnlineTimeShort(p.onlineTime) : formatRelativeTime(p.lastSeen ?? null, Date.now(), '从未')}
             </span>
           )
         },
@@ -654,16 +655,4 @@ function formatTotalPlayTimeShort(seconds: number): string {
   const minutes = Math.floor((seconds % 3600) / 60)
   if (hours > 0) return `${hours}h ${minutes}m`
   return `${minutes}m`
-}
-
-/** 离线行「在线时长」列显示最后上线相对时间（null=从未） */
-function formatLastSeenShort(lastSeen: string | null): string {
-  if (lastSeen == null) return '从未'
-  const delta = Date.now() - new Date(lastSeen).getTime()
-  const minutes = Math.floor(delta / 60_000)
-  if (minutes < 1) return '刚刚'
-  if (minutes < 60) return `${minutes}分钟前`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}小时前`
-  return `${Math.floor(hours / 24)}天前`
 }

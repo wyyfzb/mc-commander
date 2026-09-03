@@ -11,6 +11,7 @@ import { Plus, Send, Pencil, Trash2, ChevronDown, Webhook as WebhookIcon, Hourgl
 import { toast } from 'sonner'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useConnectionStore } from '@/stores/connection'
+import { formatDateTime } from '@/lib/format'
 import {
   apiGetWebhooks, apiGetWebhookEventTypes, apiCreateWebhook,
   apiUpdateWebhook, apiDeleteWebhook, apiTestWebhook, apiGetWebhookDeliveries,
@@ -45,7 +46,6 @@ const EVENT_LABELS: Record<string, string> = {
 }
 
 function fmtEvt(t: string) { return EVENT_LABELS[t] || t }
-function fmtTime(iso: string) { return new Date(iso).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }) }
 
 /** 响应体摘要截断（验收上限 200 字符）；null/纯空白视为无响应体 */
 export function truncateResponseBody(body: string | null | undefined, max = 200): string | null {
@@ -286,7 +286,7 @@ export default function WebhookPage() {
                                 <span className={cn(
                                   d.status === 'success' ? 'text-mcs-success-fg' : d.status === 'failed' ? 'text-mcs-error-fg' : 'text-mcs-text-muted',
                                 )}>
-                                  {fmtTime(d.createdAt)}
+                                  {formatDateTime(d.createdAt)}
                                 </span>
                               </button>
                               {deliveryExpanded && (

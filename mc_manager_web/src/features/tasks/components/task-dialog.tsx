@@ -33,6 +33,7 @@ import { Switch } from '@/components/ui/switch'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { Chip } from '@/components/mcs/chip'
 import { CRON_PRESETS, cronDescription, formatNextRun } from '@/lib/mc-cron'
+import { formatUtcNaive } from '@/lib/format'
 import { TASK_TYPE_OPTIONS, type TaskType } from '@/lib/mc-deploy'
 import { CronEditor } from './cron-editor'
 import { useTaskHistory } from '../queries'
@@ -285,14 +286,6 @@ const RUN_STATUS_META: Record<TaskRunHistory['status'], { dot: string; text: str
   skipped: { dot: 'bg-mcs-warning-fg', text: 'text-mcs-warning-fg', label: '跳过' },
 }
 
-/** SQLite CURRENT_TIMESTAMP（UTC 无时区标记）→ 本地 MM/DD HH:mm（与下次运行预估同风格） */
-function formatRunTime(runAt: string): string {
-  const d = new Date(runAt.includes('T') ? runAt : `${runAt.replace(' ', 'T')}Z`)
-  if (Number.isNaN(d.getTime())) return runAt
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
-}
-
 /** 执行耗时：<1s 展示毫秒，否则秒（保留一位） */
 function formatDuration(ms: number): string {
   return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`
@@ -327,7 +320,7 @@ function TaskRunHistory({ taskId }: { taskId: number }) {
                 <div className="flex items-center gap-1.5 text-mcs-xs">
                   <span className={`size-1.5 shrink-0 rounded-full ${meta.dot}`} aria-hidden />
                   <span className={meta.text}>{meta.label}</span>
-                  <span className="text-mcs-text-muted">{formatRunTime(run.runAt)}</span>
+                  <span className="text-mcs-text-muted">{formatUtcNaive(run.runAt)}</span>
                   {run.durationMs !== null && (
                     <span className="text-mcs-text-subtle">· {formatDuration(run.durationMs)}</span>
                   )}

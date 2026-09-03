@@ -6,6 +6,7 @@
  * - isBinaryFileName / isEditableFile：二进制文件判定（feat-9 编辑保护）
  */
 import type { FileEntry } from '@/api/types'
+import { formatStartTime } from './format'
 
 /** 文件大小格式化：B / KB / MB 一位小数 */
 export function formatFileSize(bytes: number): string {
@@ -14,12 +15,9 @@ export function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-/** 修改时间格式化：MM-DD HH:mm 本地时区；非法时间返回 '-' */
+/** 修改时间格式化：MM-DD HH:mm 本地时区；非法时间返回 '-'（收口复用 lib/format） */
 export function formatModifiedAt(iso: string): string {
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return '-'
-  const p = (n: number) => String(n).padStart(2, '0')
-  return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+  return formatStartTime(iso, '-')
 }
 
 /** 文件类型 → 图标名（扩展名映射；目录恒为 folder） */
