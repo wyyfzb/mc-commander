@@ -19,6 +19,7 @@ import { queryKeys } from '@/api/queries'
 import { getFriendlyErrorText } from '@/api/errors'
 import type { Webhook, WebhookCreatePayload, WebhookDelivery } from '@/api/types'
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/mcs/icon-button'
 import { LoadingButton } from '@/components/mcs/loading-button'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
@@ -217,39 +218,35 @@ export default function WebhookPage() {
 
                   {/* 操作按钮 */}
                   <div className="flex shrink-0 items-center gap-0.5">
-                    <Button
-                      variant="ghost" size="icon-sm"
+                    <IconButton
                       disabled={testMut.isPending}
                       aria-label={`测试 ${w.name}`}
                       className="text-mcs-accent-fg"
                       onClick={() => testMut.mutate(w.id)}
                     >
                       {testingId === w.id ? <Hourglass className="size-3.5 animate-spin" aria-hidden /> : <Send className="size-3.5" aria-hidden />}
-                    </Button>
-                    <Button
-                      variant="ghost" size="icon-sm"
+                    </IconButton>
+                    <IconButton
                       aria-label={`${w.name} 投递日志`}
                       className="text-mcs-text-muted hover:text-mcs-text-default"
                       onClick={() => { setExpandedId(expandedId === w.id ? null : w.id); setExpandedDeliveryId(null) }}
                     >
                       <ChevronDown className={cn("size-3.5 transition-transform", expandedId === w.id && "rotate-180")} aria-hidden />
-                    </Button>
-                    <Button
-                      variant="ghost" size="icon-sm"
+                    </IconButton>
+                    <IconButton
                       aria-label={`编辑 ${w.name}`}
                       className="text-mcs-text-muted hover:text-mcs-text-default"
                       onClick={() => openEdit(w)}
                     >
                       <Pencil className="size-3.5" aria-hidden />
-                    </Button>
-                    <Button
-                      variant="ghost" size="icon-sm"
+                    </IconButton>
+                    <IconButton
                       aria-label={`删除 ${w.name}`}
                       className="text-mcs-error-fg hover:bg-mcs-error-bg-subtle hover:text-mcs-error-fg"
                       onClick={() => setDeleteTarget(w)}
                     >
                       <Trash2 className="size-3.5" aria-hidden />
-                    </Button>
+                    </IconButton>
                   </div>
                 </div>
 

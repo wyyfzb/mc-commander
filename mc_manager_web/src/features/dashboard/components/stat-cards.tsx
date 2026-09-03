@@ -139,7 +139,7 @@ export function BigStatCards({
         }
       >
         <div className="flex items-end gap-2.5">
-          <span className="tnum text-3xl font-bold leading-none">{online}</span>
+          <span className="tnum text-mcs-2xl font-bold leading-none">{online}</span>
           {names.length > 0 && (
             <span className="mb-0.5 flex shrink-0">
               {names.slice(0, 3).map((name, i) => (
@@ -184,7 +184,7 @@ export function BigStatCards({
           ) : undefined
         }
       >
-        <p className={cn('tnum text-3xl font-bold leading-none', tpsColor(tps, isRunning))}>
+        <p className={cn('tnum text-mcs-2xl font-bold leading-none', tpsColor(tps, isRunning))}>
           {isRunning && tps != null ? tps.toFixed(1) : '--'}
         </p>
         <Sparkline data={history.tps} colorVar="var(--mcs-success-fg)" className="mt-1 h-7 w-full" />
@@ -197,7 +197,7 @@ export function BigStatCards({
           <StatusPill tone="muted" className="text-mcs-2xs">{cores} 核</StatusPill>
         ) : undefined}
       >
-        <p className="tnum text-3xl font-bold leading-none">
+        <p className="tnum text-mcs-2xl font-bold leading-none">
           {cpu.toFixed(1)}
           <span className="text-mcs-sm font-medium text-mcs-text-subtle">%</span>
         </p>
@@ -211,7 +211,7 @@ export function BigStatCards({
         title="内存"
         eyebrow={<StatusPill tone="muted" className="text-mcs-2xs">{memPct.toFixed(0)}%</StatusPill>}
       >
-        <p className="tnum text-3xl font-bold leading-none">
+        <p className="tnum text-mcs-2xl font-bold leading-none">
           {memUsed.toFixed(1)}
           <span className="text-mcs-sm font-medium text-mcs-text-subtle"> / {memTotal.toFixed(0)}G</span>
         </p>

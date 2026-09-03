@@ -136,7 +136,7 @@ export function EmergencyPage() {
         >
           <span className="size-2.5 rounded-full bg-mcs-accent" aria-hidden />
         </Link>
-        <span className="text-mcs-sm font-bold">{st?.name ?? 'MC Commander'}</span>
+        <span className="text-mcs-sm font-semibold">{st?.name ?? 'MC Commander'}</span>
         <span
           className={cn(
             'ml-auto inline-flex items-center gap-1 rounded-mcs-sm px-2 py-0.5 text-mcs-2xs font-semibold',
@@ -173,7 +173,7 @@ export function EmergencyPage() {
               ) : (
                 <>
                   <span
-                    className={cn('tnum text-5xl font-extrabold leading-none', healthy ? 'text-mcs-success-fg' : 'text-mcs-warning-fg')}
+                    className={cn('tnum text-mcs-2xl font-semibold leading-none', healthy ? 'text-mcs-success-fg' : 'text-mcs-warning-fg')}
                   >
                     {st?.tps != null ? st.tps.toFixed(1) : '—'}
                   </span>
@@ -264,7 +264,7 @@ export function EmergencyPage() {
                 key={p.name}
                 className="flex items-center gap-3 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted px-3 py-3"
               >
-                <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-mcs-accent-bg-subtle text-mcs-sm font-bold text-mcs-accent-fg">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-mcs-accent-bg-subtle text-mcs-sm font-semibold text-mcs-accent-fg">
                   {p.name?.charAt(0).toUpperCase()}
                 </span>
                 <div className="min-w-0 flex-1">
@@ -401,7 +401,7 @@ export function EmergencyPage() {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="text-center">
-      <div className="tnum text-mcs-md font-bold">{value}</div>
+      <div className="tnum text-mcs-md font-semibold">{value}</div>
       <div className="mt-0.5 text-mcs-2xs text-mcs-text-subtle">{label}</div>
     </div>
   )

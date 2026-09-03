@@ -7,6 +7,7 @@
 import { useMemo } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/mcs/icon-button'
 
 const DEFAULT_PAGE_SIZES = [10, 20, 50] as const
 
@@ -104,15 +105,13 @@ export function Pagination({
       <div className="flex items-center gap-1.5">
         {variant === 'numbers' ? (
           <>
-            <Button
-              variant="ghost"
-              size="icon-sm"
+            <IconButton
               disabled={disabled || safePage <= 1}
               onClick={() => onPageChange(safePage - 1)}
               aria-label="上一页"
             >
               <ChevronLeft aria-hidden />
-            </Button>
+            </IconButton>
             {pageNumbers.map((n, i) =>
               n === '…' ? (
                 <span key={`gap${i}`} className="px-1 text-mcs-xs text-mcs-text-subtle">…</span>
@@ -129,15 +128,13 @@ export function Pagination({
                 </Button>
               ),
             )}
-            <Button
-              variant="ghost"
-              size="icon-sm"
+            <IconButton
               disabled={disabled || safePage >= totalPages}
               onClick={() => onPageChange(safePage + 1)}
               aria-label="下一页"
             >
               <ChevronRight aria-hidden />
-            </Button>
+            </IconButton>
           </>
         ) : (
           <>

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ArrowRight, Check, Play, Send, ShieldAlert, Star, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { useMutation } from '@tanstack/react-query'
-import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/mcs/icon-button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { apiPost } from '@/api/client'
 import { ApiError } from '@/api/client'
@@ -341,18 +341,17 @@ export function CommandInput() {
           className="h-8 min-w-0 flex-1 bg-transparent font-mono text-mcs-xs text-mcs-text-default outline-none placeholder:text-mcs-text-subtle disabled:cursor-not-allowed disabled:opacity-50"
           aria-label="服务器命令输入"
         />
-        <Button
-          size="icon-sm"
+        <IconButton
           variant="outline"
           onClick={() => savePreset()}
           aria-label="存为预设"
           title="存为预设"
         >
           <Star className="size-3.5" aria-hidden />
-        </Button>
-        <Button size="icon-sm" onClick={() => send(value)} disabled={sending || !isRunning} aria-label="发送命令">
+        </IconButton>
+        <IconButton variant="default" onClick={() => send(value)} disabled={sending || !isRunning} aria-label="发送命令">
           <Send className="size-3.5" aria-hidden />
-        </Button>
+        </IconButton>
 
         {/* 补全下拉 */}
         {completions.length > 0 && (

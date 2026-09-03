@@ -35,6 +35,7 @@ import { apiDownloadBackup } from '@/api/backups'
 import type { BackupItem } from '@/api/types'
 import { useConnectionStore } from '@/stores/connection'
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/mcs/icon-button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { cn } from '@/lib/utils'
@@ -428,9 +429,7 @@ function BackupRow({
       </StatusPill>
 
       {/* 下载（仅 completed 快照可下载；下载中转圈禁用，行级 loading） */}
-      <Button
-        variant="ghost"
-        size="icon-sm"
+      <IconButton
         aria-label={`${name} 下载`}
         disabled={!canDownload || downloading}
         title={
@@ -450,11 +449,9 @@ function BackupRow({
         ) : (
           <Download className="size-3.5" aria-hidden />
         )}
-      </Button>
+      </IconButton>
       {/* 恢复（仅 completed 且非 zip；restoring 中全列表禁用） */}
-      <Button
-        variant="ghost"
-        size="icon-sm"
+      <IconButton
         aria-label={`${name} 恢复`}
         disabled={!canRestore || restoringLocked}
         // 禁用原因提示（无提示会让用户误以为功能损坏）
@@ -471,18 +468,16 @@ function BackupRow({
         onClick={() => onRestore(backup)}
       >
         <RotateCcw className="size-3.5" aria-hidden />
-      </Button>
+      </IconButton>
       {/* 删除（creating/restoring 中不可删——服务端互斥状态机拒绝） */}
-      <Button
-        variant="ghost"
-        size="icon-sm"
+      <IconButton
         aria-label={`${name} 删除`}
         disabled={isInProgress}
         className="text-mcs-error-fg hover:bg-mcs-error-bg-subtle hover:text-mcs-error-fg"
         onClick={() => onDelete(backup)}
       >
         <Trash2 className="size-3.5" aria-hidden />
-      </Button>
+      </IconButton>
     </div>
   )
 }

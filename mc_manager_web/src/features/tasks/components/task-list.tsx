@@ -10,7 +10,7 @@
  * - 容器：实底卡（风格 A 列表实底，禁 backdrop-blur）+ 行分隔；空态含新建任务按钮；加载骨架行
  */
 import { AlertCircle, Clock, Hourglass, Pencil, Play, Terminal, Timer, Trash2 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/mcs/icon-button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
@@ -226,34 +226,28 @@ function TaskRow({
           onCheckedChange={(checked) => onToggle(task, checked)}
           aria-label={`${task.name} 启用开关`}
         />
-        <Button
-          variant="ghost"
-          size="icon-sm"
+        <IconButton
           disabled={running}
           aria-label={`${task.name} 立即执行`}
           className="text-mcs-accent-fg"
           onClick={() => onRunNow(task)}
         >
           {running ? <Hourglass className="size-3.5" aria-hidden /> : <Play className="size-3.5" aria-hidden />}
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon-sm"
+        </IconButton>
+        <IconButton
           aria-label={`${task.name} 编辑`}
           className="text-mcs-text-muted hover:text-mcs-text-default"
           onClick={() => onEdit(task)}
         >
           <Pencil className="size-3.5" aria-hidden />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon-sm"
+        </IconButton>
+        <IconButton
           aria-label={`${task.name} 删除`}
           className="text-mcs-error-fg hover:bg-mcs-error-bg-subtle hover:text-mcs-error-fg"
           onClick={() => onDelete(task)}
         >
           <Trash2 className="size-3.5" aria-hidden />
-        </Button>
+        </IconButton>
       </div>
     </div>
   )

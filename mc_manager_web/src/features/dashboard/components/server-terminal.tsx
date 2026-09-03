@@ -6,10 +6,9 @@ import { SearchAddon, type ISearchDecorationOptions } from '@xterm/addon-search'
 import '@xterm/xterm/css/xterm.css'
 import { ChevronDown, ChevronUp, Download, Eraser, Eye, EyeOff, Loader2, Search, TerminalSquare, Copy, Check, X } from 'lucide-react'
 import { toast } from 'sonner'
-import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { IconButton } from '@/components/mcs/icon-button'
 import { InstanceControls } from '@/features/dashboard/components/instance-controls'
 import { useTerminalStore } from '@/stores/terminal'
 import { useServerStore } from '@/stores/server'
@@ -99,6 +98,8 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
   const renderedCountRef = useRef(0)
   const autoScrollRef = useRef(true)
   const srLiveRef = useRef<HTMLDivElement>(null)
+  // 停止标记行：一旦写入（或随全量重写清屏消失）由增量渲染按运行态补写，两处共用标记防重复
+  const stoppedMarkRef = useRef(false)
   const theme = useUiStore((s) => s.theme)
   const autoScrollEnabled = useUiStore((s) => s.terminalAutoScroll)
   // onScroll 注册于 mount effect，闭包捕获首渲染值——ref 同步最新偏好
@@ -113,6 +114,8 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
   const isRunning = useServerStore((s) => s.status?.isRunning ?? false)
   const config = useConnectionStore()
   const [showJvmWarnings, setShowJvmWarnings] = useState(false)
+  // 眼睛开关 latest-ref：增量渲染 effect 内检测切换 → 全量重写（闭包读最新值）
+  const showJvmWarningsRef = useRef(showJvmWarnings)
   const [downloading, setDownloading] = useState(false)
   const [copied, setCopied] = useState(false)
   // 终端内搜索（SearchAddon；canvas 渲染下浏览器原生 Ctrl+F 对终端内容无效）
@@ -208,23 +211,35 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
     term.options.theme = buildXtermTheme()
   }, [theme])
 
-  // 缓冲增量渲染
+  // 缓冲增量渲染；眼睛开关切换 → 清屏 + 从头按新过滤态全量重写。
+  // （P2-27 复现修复：原独立切换 effect 只 clear 不重写，切换后历史行不回填、
+  // 终端空白直到下一条新日志到达——现合并到同一 effect，切换即重写）
   useEffect(() => {
     const term = xtermRef.current
     if (!term) return
+    if (showJvmWarningsRef.current !== showJvmWarnings) {
+      showJvmWarningsRef.current = showJvmWarnings
+      term.clear()
+      renderedCountRef.current = 0
+      // 停止标记行随 clear 消失，重写后按当前运行态补写
+      stoppedMarkRef.current = false
+    }
     const rendered = renderedCountRef.current
     if (buffer.length === rendered) return
 
-    const visibleLines: string[] = []
     for (let i = rendered; i < buffer.length; i++) {
       const entry = buffer[i] as TerminalLogEntry
       if (entry.jvmWarning && !showJvmWarnings) continue
       const ansi = LEVEL_ANSI[entry.level]
       const bold = BOLD_LEVELS.has(entry.level) ? '1;' : ''
       term.write(`\x1b[${bold}${ansi}m${entry.text}\x1b[0m\r\n`)
-      visibleLines.push(entry.text)
     }
     renderedCountRef.current = buffer.length
+    // 眼睛切换重写后：停止态补写标记行（主路径停止标记由下方 effect 负责，标记防重复）
+    if (!isRunning && buffer.length > 0 && !stoppedMarkRef.current) {
+      term.write('\x1b[3m—— 实例已停止，以上为最后日志 ——\x1b[0m\r\n')
+      stoppedMarkRef.current = true
+    }
     if (autoScrollRef.current) {
       term.scrollToBottom()
     }
@@ -236,21 +251,9 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
       }).map((e) => (e as TerminalLogEntry).text)
       srLiveRef.current.textContent = allVisible.slice(-SR_LINE_COUNT).join('\n')
     }
-  }, [buffer, showJvmWarnings])
+  }, [buffer, showJvmWarnings, isRunning])
 
-  // 眼睛切换：全量重渲染
-  useEffect(() => {
-    const term = xtermRef.current
-    if (!term) return
-    term.clear()
-    renderedCountRef.current = 0
-    // 触发上方增量渲染 effect：主动刷一次
-    const rendered = 0
-    void rendered
-  }, [showJvmWarnings])
-
-  // 停止标记行：实例停止且缓冲非空时追加
-  const stoppedMarkRef = useRef(false)
+  // 停止标记行：实例停止且缓冲非空时追加（主路径：运行→停止；重写后补写由增量渲染负责）
   useEffect(() => {
     const term = xtermRef.current
     if (!term) return
@@ -370,52 +373,48 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
       <div className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-mcs-border-muted bg-mcs-bg-muted px-2">
         <InstanceControls compact />
         <div className="flex items-center gap-1">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={() => setSearch((s) => ({ ...s, open: !s.open }))}
-                aria-label="搜索终端内容"
-                aria-pressed={search.open}
-              >
-                <Search aria-hidden />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">搜索终端内容（Ctrl+F）</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon-sm" onClick={() => setShowJvmWarnings((v) => !v)} aria-label={showJvmWarnings ? '隐藏 JVM 警告' : '显示 JVM 警告'}>
-                {showJvmWarnings ? <EyeOff aria-hidden /> : <Eye aria-hidden />}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">{showJvmWarnings ? '隐藏 JVM 警告' : '显示 JVM 警告'}</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon-sm" onClick={handleCopy} aria-label="复制终端内容">
-                {copied ? <Check className="text-mcs-success-fg" aria-hidden /> : <Copy aria-hidden />}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">复制终端内容</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon-sm" onClick={handleClear} aria-label="清空终端">
-                <Eraser aria-hidden />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">清空终端</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon-sm" onClick={() => void handleDownload()} disabled={downloading} aria-label="下载日志">
-                {downloading ? <Loader2 className="animate-spin" aria-hidden /> : <Download aria-hidden />}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">下载日志</TooltipContent>
-          </Tooltip>
+          <IconButton
+            tooltip="搜索终端内容（Ctrl+F）"
+            tooltipSide="bottom"
+            onClick={() => setSearch((s) => ({ ...s, open: !s.open }))}
+            aria-label="搜索终端内容"
+            aria-pressed={search.open}
+          >
+            <Search aria-hidden />
+          </IconButton>
+          <IconButton
+            tooltip={showJvmWarnings ? '隐藏 JVM 警告' : '显示 JVM 警告'}
+            tooltipSide="bottom"
+            onClick={() => setShowJvmWarnings((v) => !v)}
+            aria-label={showJvmWarnings ? '隐藏 JVM 警告' : '显示 JVM 警告'}
+          >
+            {showJvmWarnings ? <EyeOff aria-hidden /> : <Eye aria-hidden />}
+          </IconButton>
+          <IconButton
+            tooltip="复制终端内容"
+            tooltipSide="bottom"
+            onClick={handleCopy}
+            aria-label="复制终端内容"
+          >
+            {copied ? <Check className="text-mcs-success-fg" aria-hidden /> : <Copy aria-hidden />}
+          </IconButton>
+          <IconButton
+            tooltip="清空终端"
+            tooltipSide="bottom"
+            onClick={handleClear}
+            aria-label="清空终端"
+          >
+            <Eraser aria-hidden />
+          </IconButton>
+          <IconButton
+            tooltip="下载日志"
+            tooltipSide="bottom"
+            onClick={() => void handleDownload()}
+            disabled={downloading}
+            aria-label="下载日志"
+          >
+            {downloading ? <Loader2 className="animate-spin" aria-hidden /> : <Download aria-hidden />}
+          </IconButton>
         </div>
       </div>
 
@@ -460,15 +459,15 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
                   ? '—'
                   : ''}
             </span>
-            <Button variant="ghost" size="icon-sm" onClick={handleSearchPrev} aria-label="上一个结果">
+            <IconButton onClick={handleSearchPrev} aria-label="上一个结果">
               <ChevronUp aria-hidden />
-            </Button>
-            <Button variant="ghost" size="icon-sm" onClick={handleSearchNext} aria-label="下一个结果">
+            </IconButton>
+            <IconButton onClick={handleSearchNext} aria-label="下一个结果">
               <ChevronDown aria-hidden />
-            </Button>
-            <Button variant="ghost" size="icon-sm" onClick={handleSearchClose} aria-label="关闭搜索">
+            </IconButton>
+            <IconButton onClick={handleSearchClose} aria-label="关闭搜索">
               <X aria-hidden />
-            </Button>
+            </IconButton>
           </div>
         )}
         {/* 屏读镜像：aria-live 区域，屏幕阅读器可朗读最近 N 行终端输出 */}

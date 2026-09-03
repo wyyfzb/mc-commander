@@ -35,6 +35,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/mcs/icon-button'
 import { cn } from '@/lib/utils'
 import { fileIconName, formatFileSize, formatModifiedAt, isEditableFile } from '@/lib/mc-files'
 import {
@@ -152,9 +153,7 @@ function FileListRow({
         </div>
       </div>
       {!isDir && editable && (
-        <Button
-          variant="ghost"
-          size="icon-sm"
+        <IconButton
           aria-label={`编辑 ${entry.name}`}
           title="编辑"
           className="text-mcs-text-muted hover:text-mcs-text-default"
@@ -164,12 +163,10 @@ function FileListRow({
           }}
         >
           <Pencil className="size-3.5" aria-hidden />
-        </Button>
+        </IconButton>
       )}
       {!isDir && onDownload && (
-        <Button
-          variant="ghost"
-          size="icon-sm"
+        <IconButton
           aria-label={`下载 ${entry.name}`}
           title="下载到本地"
           disabled={isDownloading}
@@ -184,12 +181,10 @@ function FileListRow({
           ) : (
             <Download className="size-3.5" aria-hidden />
           )}
-        </Button>
+        </IconButton>
       )}
       {onRename && (
-        <Button
-          variant="ghost"
-          size="icon-sm"
+        <IconButton
           aria-label={`重命名 ${entry.name}`}
           title="重命名"
           className="text-mcs-text-muted hover:text-mcs-text-default"
@@ -199,11 +194,9 @@ function FileListRow({
           }}
         >
           <TextCursorInput className="size-3.5" aria-hidden />
-        </Button>
+        </IconButton>
       )}
-      <Button
-        variant="ghost"
-        size="icon-sm"
+      <IconButton
         aria-label={`删除 ${entry.name}`}
         className="text-mcs-error-fg hover:bg-mcs-error-bg-subtle hover:text-mcs-error-fg"
         onClick={(e) => {
@@ -212,7 +205,7 @@ function FileListRow({
         }}
       >
         <Trash2 className="size-3.5" aria-hidden />
-      </Button>
+      </IconButton>
     </div>
   )
 }
@@ -303,41 +296,33 @@ export function FileList({
         {/* 工具栏：上级 / 刷新 / 新建文件（未提供回调则不渲染对应按钮） */}
         <div className="ml-auto flex shrink-0 items-center gap-0.5">
           {onGoUp && normalizedDir !== '/' && (
-            <Button variant="ghost" size="icon-sm" aria-label="上级目录" title="上级目录" onClick={onGoUp}>
+            <IconButton aria-label="上级目录" title="上级目录" onClick={onGoUp}>
               <ArrowUp aria-hidden />
-            </Button>
+            </IconButton>
           )}
           {onRefresh && (
-            <Button variant="ghost" size="icon-sm" aria-label="刷新" title="刷新" onClick={onRefresh}>
+            <IconButton aria-label="刷新" title="刷新" onClick={onRefresh}>
               <RefreshCw aria-hidden />
-            </Button>
+            </IconButton>
           )}
           {onNewFile && (
-            <Button variant="ghost" size="icon-sm" aria-label="新建文件" title="新建文件" onClick={onNewFile}>
+            <IconButton aria-label="新建文件" title="新建文件" onClick={onNewFile}>
               <FilePlus aria-hidden />
-            </Button>
+            </IconButton>
           )}
           {onCreateDirectory && (
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label="新建目录"
-              title="新建目录"
-              onClick={onCreateDirectory}
-            >
+            <IconButton aria-label="新建目录" title="新建目录" onClick={onCreateDirectory}>
               <FolderPlus aria-hidden />
-            </Button>
+            </IconButton>
           )}
           {onUpload && (
-            <Button
-              variant="ghost"
-              size="icon-sm"
+            <IconButton
               aria-label="上传文件（单个文件 ≤ 50MB）"
               title="上传文件到当前目录（单个文件 ≤ 50MB）"
               onClick={onUpload}
             >
               <Upload aria-hidden />
-            </Button>
+            </IconButton>
           )}
         </div>
       </nav>
