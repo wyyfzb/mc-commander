@@ -134,4 +134,32 @@ describe('Audit Routes', () => {
       .set('X-API-Key', 'test-key');
     expect(res.status).toBe(200);
   });
+
+  // ── 分页参数回归（parsePagination 统一收口，issue 388）──
+  it('GET /audit-logs 分页参数透传到模型', async () => {
+    await request(app)
+      .get('/api/v1/audit-logs?page=3&pageSize=7')
+      .set('X-API-Key', 'test-key');
+    expect(AuditLogModel.findAll).toHaveBeenCalledWith(
+      expect.objectContaining({ page: 3, pageSize: 7 }),
+    );
+  });
+
+  it('GET /audit-logs page 越界钳制到 1000', async () => {
+    await request(app)
+      .get('/api/v1/audit-logs?page=5000')
+      .set('X-API-Key', 'test-key');
+    expect(AuditLogModel.findAll).toHaveBeenCalledWith(
+      expect.objectContaining({ page: 1000 }),
+    );
+  });
+
+  it('GET /audit-logs 非法分页参数回落默认', async () => {
+    await request(app)
+      .get('/api/v1/audit-logs?page=abc&pageSize=xyz')
+      .set('X-API-Key', 'test-key');
+    expect(AuditLogModel.findAll).toHaveBeenCalledWith(
+      expect.objectContaining({ page: 1, pageSize: 20 }),
+    );
+  });
 });

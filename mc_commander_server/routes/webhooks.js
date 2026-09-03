@@ -14,6 +14,7 @@ import { checkPublicUrl } from '../utils/url-guard.js';
 import { webhookCreatePayloadSchema, webhookSchema } from '@mc-commander/schemas';
 import { validateBody, validatedSuccess, validatedSuccessPaginated } from '../middleware/validate.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import { parsePagination } from '../utils/pagination.js';
 
 function validateUrl(url) {
   try {
@@ -34,8 +35,7 @@ export function createWebhookRoutes() {
 
   // GET /webhooks — 列表
   router.get('/webhooks', (req, res) => {
-    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
-    const pageSize = Math.min(200, Math.max(1, parseInt(req.query.pageSize, 10) || 20));
+    const { page, pageSize } = parsePagination(req.query, { maxPageSize: 200 });
     const result = WebhookModel.findAll({ page, pageSize });
     res.json(validatedSuccessPaginated(webhookSchema, result.webhooks, result.total, result.page, result.pageSize));
   });
@@ -152,8 +152,7 @@ export function createWebhookRoutes() {
       return res.status(404).json(error(ErrorCodes.WEBHOOK_NOT_FOUND));
     }
 
-    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
-    const pageSize = Math.min(200, Math.max(1, parseInt(req.query.pageSize, 10) || 20));
+    const { page, pageSize } = parsePagination(req.query, { maxPageSize: 200 });
     const result = WebhookModel.findDeliveries({ webhookId: id, page, pageSize });
     res.json(successPaginated(result.deliveries, result.total, result.page, result.pageSize));
   });
