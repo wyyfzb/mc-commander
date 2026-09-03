@@ -7,6 +7,7 @@ import { CommandInput } from './components/command-input'
 import { McClockCard } from './components/mc-clock-card'
 import { EventsCard } from './components/events-card'
 import { AnnouncementCard } from './components/announcement-card'
+import { RecentBackupsCard } from './components/recent-backups-card'
 import { useMetricHistory } from './use-metric-history'
 import { useInstanceStatus, useSystemStats, queryKeys } from '@/api/queries'
 import { useServerStore } from '@/stores/server'
@@ -95,6 +96,7 @@ export function DashboardPage() {
         </div>
         <aside className="flex min-h-0 flex-col gap-4 overflow-y-auto pr-1">
           <McClockCard />
+          <RecentBackupsCard />
           <EventsCard />
           <AnnouncementCard />
           <PlayersCard />

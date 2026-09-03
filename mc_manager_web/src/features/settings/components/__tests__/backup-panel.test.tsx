@@ -277,13 +277,14 @@ describe('BackupPanel 列表截断与展开', () => {
     }))
   }
 
-  it('不超过 10 条：不显示截断提示', async () => {
+  it('不超过 10 条：显示总数但不显示展开按钮', async () => {
     const few = makeManyBackups(5)
     server.use(http.get('*/api/v1/instances/:id/backups', () => okEnvelope(few)))
     renderPanel()
     await screen.findByText('批量备份 01')
     expect(screen.queryByText(/显示全部/)).not.toBeInTheDocument()
-    expect(screen.queryByText(/共 \d+ 条备份/)).not.toBeInTheDocument()
+    // 总数始终显示
+    expect(screen.getByText('共 5 条备份')).toBeInTheDocument()
   })
 
   it('超过 10 条：显示「共 N 条备份，已显示 10 条」+「显示全部」按钮', async () => {

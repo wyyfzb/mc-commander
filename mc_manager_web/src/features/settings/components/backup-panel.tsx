@@ -235,12 +235,13 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
                 />
               ))}
             </div>
-            {/* 截断提示：总数统计 + 展开/收起按钮 */}
-            {isTruncated && (
-              <div className="flex items-center justify-between border-t border-mcs-border-subtle px-4 py-2.5">
-                <span className="text-mcs-xs text-mcs-text-muted">
-                  共 {backups.length} 条备份{!showAll && `，已显示 ${items.length} 条`}
-                </span>
+            {/* 底栏：总数统计（始终显示）+ 展开/收起按钮（仅超出时显示） */}
+            <div className="flex items-center justify-between border-t border-mcs-border-subtle px-4 py-2.5">
+              <span className="text-mcs-xs text-mcs-text-muted">
+                共 {backups.length} 条备份
+                {isTruncated && !showAll && `，已显示 ${items.length} 条`}
+              </span>
+              {isTruncated && (
                 <Button
                   variant="ghost"
                   size="sm"
@@ -259,8 +260,8 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
                     </>
                   )}
                 </Button>
-              </div>
-            )}
+              )}
+            </div>
           </>
         )}
       </div>
