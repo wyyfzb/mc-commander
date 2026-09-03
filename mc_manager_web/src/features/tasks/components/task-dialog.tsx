@@ -8,8 +8,9 @@
  *   无改动直接关闭。保存中（saving）禁止关闭
  */
 import { useState } from 'react'
-import { ChevronUp, Info, SlidersHorizontal } from 'lucide-react'
+import { ChevronUp, CircleAlert, Info, SlidersHorizontal } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { getFriendlyErrorText } from '@/api/errors'
 import { LoadingButton } from '@/components/mcs/loading-button'
 import {
   Dialog,
@@ -296,7 +297,7 @@ function formatDuration(ms: number): string {
  * 状态语义色圆点 + 触发时间 + 耗时 + 失败原因（截断，悬停看全文）。
  */
 function TaskRunHistory({ taskId }: { taskId: number }) {
-  const { data: runs, isLoading } = useTaskHistory(taskId)
+  const { data: runs, isLoading, isError, error, refetch } = useTaskHistory(taskId)
 
   return (
     <div className="flex flex-col gap-1.5" data-testid="task-run-history">
@@ -305,6 +306,16 @@ function TaskRunHistory({ taskId }: { taskId: number }) {
         <div className="space-y-1.5" aria-label="加载执行历史中">
           <Skeleton className="h-4 w-3/4" />
           <Skeleton className="h-4 w-2/3" />
+        </div>
+      ) : isError ? (
+        <div className="flex flex-col items-start gap-1.5 py-1">
+          <p className="flex items-center gap-1 text-mcs-xs text-mcs-error-fg">
+            <CircleAlert className="size-3.5 shrink-0" aria-hidden />
+            执行历史加载失败：{getFriendlyErrorText(error)}
+          </p>
+          <Button variant="outline" size="sm" className="h-6 text-mcs-2xs" onClick={() => void refetch()}>
+            重试
+          </Button>
         </div>
       ) : !runs || runs.length === 0 ? (
         <p className="text-mcs-xs text-mcs-text-subtle">暂无执行记录</p>

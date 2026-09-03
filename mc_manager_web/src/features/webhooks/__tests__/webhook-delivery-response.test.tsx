@@ -118,3 +118,20 @@ describe('WebhookPage 投递响应体摘要', () => {
     expect(await screen.findByTestId('delivery-response-13')).toHaveTextContent('无响应体')
   })
 })
+
+describe('WebhookPage 投递日志错误态', () => {
+  it('投递日志查询失败 → 错误态而非「暂无投递记录」，含失败原因与重试', async () => {
+    const user = userEvent.setup()
+    // 局部覆盖：投递日志端点返回 500（其余 handler 沿用全局默认）
+    server.use(
+      http.get('*/api/v1/webhooks/1/deliveries', () => HttpResponse.json({ status: 'error', code: 500, message: 'internal error' }, { status: 500 })),
+    )
+    renderPage()
+    await user.click(await screen.findByRole('button', { name: 'Notify 投递日志' }))
+    const errorText = await screen.findByText(/投递日志加载失败/)
+    expect(errorText).toBeInTheDocument()
+    // 空态文案不得与错误态混淆（拉取失败 ≠ 确无投递）
+    expect(screen.queryByText('暂无投递记录')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '重试' })).toBeInTheDocument()
+  })
+})
