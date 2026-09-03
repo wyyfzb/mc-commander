@@ -288,7 +288,9 @@ describe('服务层路径收口（真实临时目录 + 真实 fs）', () => {
     const written = fs.readdirSync(tmpDir);
     expect(written).toContain('server-1.21.4.jar');
     for (const name of written) {
-      expect(path.resolve(tmpDir, name)).toMatch(new RegExp(`^${tmpDir.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}`));
+      // 分隔符归一为正斜杠再断言前缀：Windows 反斜杠路径做正则转义易碎，统一归一化比较
+      const norm = (p) => p.replaceAll('\\', '/');
+      expect(norm(path.resolve(tmpDir, name))).toMatch(new RegExp(`^${norm(tmpDir)}/`));
     }
 
     // 进度终态 completed

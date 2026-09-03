@@ -26,16 +26,13 @@ function collectJsFiles(dir, files = []) {
   return files;
 }
 
-/** 在源码中搜索 ErrorCodes.KEY 的引用 */
+// 源码内容缓存：僵尸码逐键扫描不重复读盘（全量并发慢机器上逐键重读曾触发 5s 超时）
+let sourceContents = [];
+
+/** 在源码中搜索 ErrorCodes.KEY 的引用（源码内容由僵尸码 describe 的 beforeAll 一次性缓存） */
 function isReferenced(keyName) {
   const pattern = `ErrorCodes.${keyName}`;
-  const allFiles = [...collectJsFiles(SRC_DIR)];
-  // 也检查测试文件中对 code 数值的直接引用（如 expect(res.body.code).toBe(40903)）
-  for (const file of allFiles) {
-    const content = fs.readFileSync(file, 'utf-8');
-    if (content.includes(pattern)) return true;
-  }
-  return false;
+  return sourceContents.some((content) => content.includes(pattern));
 }
 
 describe('错误码契约：码值唯一性', () => {
@@ -73,6 +70,10 @@ describe('错误码契约：码值唯一性', () => {
 });
 
 describe('错误码契约：僵尸码检测', () => {
+  beforeAll(() => {
+    sourceContents = collectJsFiles(SRC_DIR).map((f) => fs.readFileSync(f, 'utf-8'));
+  });
+
   it('每个已定义的 ErrorCodes 键在源码中被引用（无僵尸码）', () => {
     const unreferenced = [];
     for (const [name] of Object.entries(ErrorCodes)) {
