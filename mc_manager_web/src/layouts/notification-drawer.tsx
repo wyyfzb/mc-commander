@@ -19,6 +19,7 @@ import {
   MessageSquare,
   MoonStar,
   Play,
+  Rocket,
   Save,
   Settings2,
   SkipForward,
@@ -62,6 +63,8 @@ const TYPE_ICON: Record<NotificationType, LucideIcon> = {
   backupStart: Archive, backupComplete: CheckCircle2, backupFailed: AlertCircle,
   backupSkipped: SkipForward, restoreStart: History, restoreComplete: CheckCheck,
   restoreFailed: XCircle, taskFailed: CalendarX, webhookFailed: Webhook,
+  deployComplete: Rocket, deployFailed: XCircle,
+  upgradeComplete: CheckCircle2, upgradeFailed: XCircle,
 }
 
 /** 类型 → 语义色 token 工具类（气泡图标/边框用） */
@@ -91,6 +94,10 @@ const TYPE_COLOR: Record<NotificationType, { text: string; bg: string; border: s
   restoreFailed: { text: 'text-mcs-error-fg', bg: 'bg-mcs-error-bg-subtle', border: 'border-mcs-error-border' },
   taskFailed: { text: 'text-mcs-error-fg', bg: 'bg-mcs-error-bg-subtle', border: 'border-mcs-error-border' },
   webhookFailed: { text: 'text-mcs-error-fg', bg: 'bg-mcs-error-bg-subtle', border: 'border-mcs-error-border' },
+  deployComplete: { text: 'text-mcs-success-fg', bg: 'bg-mcs-success-bg-subtle', border: 'border-mcs-success-border' },
+  deployFailed: { text: 'text-mcs-error-fg', bg: 'bg-mcs-error-bg-subtle', border: 'border-mcs-error-border' },
+  upgradeComplete: { text: 'text-mcs-success-fg', bg: 'bg-mcs-success-bg-subtle', border: 'border-mcs-success-border' },
+  upgradeFailed: { text: 'text-mcs-error-fg', bg: 'bg-mcs-error-bg-subtle', border: 'border-mcs-error-border' },
 }
 
 /** severity 筛选选项（Tasteful Friction：按严重度快速聚焦告警） */

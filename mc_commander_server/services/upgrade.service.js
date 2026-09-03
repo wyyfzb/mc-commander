@@ -97,7 +97,9 @@ export class UpgradeService {
     this.serverManager = serverManager;
     this.backupService = new BackupService(serverManager);
     /** @type {Map<string, import('./upgrade.service.js').UpgradeProgress>} */
-    this._activeUpgrades = new Map();
+    // 共享注册表：MCServerManager 构造时创建（websocket.js 连接补发读取），
+    // 测试桩无该字段时回退实例本地 Map 保持隔离（serverManager 缺省场景见 health 路由）
+    this._activeUpgrades = serverManager?.activeUpgrades ?? new Map();
     // 下载体积上限可注入（测试用），默认 512MB（S-P1-1）
     this.maxJarDownloadBytes = options.maxJarDownloadBytes ?? JAR_DOWNLOAD_MAX_BYTES;
   }

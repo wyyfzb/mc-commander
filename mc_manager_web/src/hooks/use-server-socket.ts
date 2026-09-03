@@ -103,7 +103,8 @@ export function useServerSocket(instanceId: string | null) {
         return
       }
 
-      // 全局进度事件（部署：创建新实例前即有进度，无实例归属）
+      // 全局进度事件（部署：创建新实例前即有进度，无实例归属）。
+      // 归属字段（instanceName 等）透传：连接补发恢复显示与部署横幅所需
       if (msg.type === 'deployProgress') {
         applyDeployProgress({
           stage: String(data.stage ?? ''),
@@ -111,6 +112,28 @@ export function useServerSocket(instanceId: string | null) {
           transferred: Number(data.transferred ?? 0),
           total: Number(data.total ?? 0),
           ...(data.error ? { error: String(data.error) } : {}),
+          ...(data.instanceName ? { instanceName: String(data.instanceName) } : {}),
+        })
+        return
+      }
+
+      // 部署终态通知（服务端落库事件，信封无 instanceId——部署实例未入库）：
+      // 入通知中心；完成时新实例已入库，刷新列表
+      if (msg.type === 'deployComplete' || msg.type === 'deployFailed') {
+        dispatchWsEvent({ type: msg.type, data: msg.data as Record<string, unknown> })
+        if (msg.type === 'deployComplete') {
+          void queryClient.invalidateQueries({ queryKey: queryKeys.instances() })
+        }
+        return
+      }
+
+      // 升级终态通知（带实例归属）：入通知中心（列表刷新由 upgradeProgress
+      // 终态分支处理，不重复）
+      if (msg.type === 'upgradeComplete' || msg.type === 'upgradeFailed') {
+        dispatchWsEvent({
+          type: msg.type,
+          data: msg.data as Record<string, unknown>,
+          instanceId: msg.instanceId,
         })
         return
       }

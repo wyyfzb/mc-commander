@@ -16,6 +16,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { StatusPill } from '@/components/mcs/status-pill'
 import { EmptyState } from '@/components/mcs/empty-state'
+import { useUpgradeStore } from '@/stores/upgrade'
 import type { InstancePhase } from '@/stores/server'
 import type { InstanceStatus, InstanceSummary } from '@/api/types'
 
@@ -136,6 +137,14 @@ function InstanceCard({
 }) {
   const { id, name, isRunning, playerCount } = instance
   const mcVersion = detail?.mcVersion
+  // 升级中标识（issue 352）：WS 订阅补发/实时事件驱动；终态残留不误显示
+  // （终态 store 清理由升级弹窗打开时做，卡片只认非终态）
+  const upgradeStage = useUpgradeStore((s) => s.progress[id]?.stage)
+  const upgrading =
+    upgradeStage != null &&
+    upgradeStage !== 'completed' &&
+    upgradeStage !== 'failed' &&
+    upgradeStage !== 'rolled_back'
 
   return (
     <div
@@ -146,7 +155,7 @@ function InstanceCard({
         detail?.circuitBreakerTripped && 'border-mcs-error-border',
       )}
     >
-      {/* 首行：状态点 + 名称 + 「当前」徽章 + 版本 mono 徽章（加载中骨架占位） */}
+      {/* 首行：状态点 + 名称 + 「当前」徽章 + 升级中徽章 + 版本 mono 徽章（加载中骨架占位） */}
       <div className="flex items-center gap-2">
         <span
           data-instance-status={isRunning ? 'running' : 'stopped'}
@@ -162,6 +171,12 @@ function InstanceCard({
         {isCurrent && (
           <StatusPill tone="accent" className="text-mcs-2xs font-semibold">
             当前
+          </StatusPill>
+        )}
+        {upgrading && (
+          <StatusPill tone="accent" className="gap-1 text-mcs-2xs font-semibold" title={`正在升级 ${name}`}>
+            <Loader2 className="size-3 animate-spin" aria-hidden />
+            升级中
           </StatusPill>
         )}
         {detailLoading ? (

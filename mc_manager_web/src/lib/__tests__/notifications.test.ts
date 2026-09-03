@@ -112,6 +112,66 @@ describe('buildNotifications 文案模板', () => {
     const [n] = buildNotifications({ type: 'status', data: { event: 'circuit_breaker' } })
     expect(n?.content).toBe('连续崩溃 0 次，已触发熔断保护（自动重启暂停，请检查日志）')
   })
+
+  it('deployComplete 生成 server 类 info 通知（含实例名）', () => {
+    const [n] = buildNotifications({
+      type: 'deployComplete',
+      data: { instanceName: '生存服', instanceId: 'paper-abc1', stage: 'complete' },
+    })
+    expect(n).toMatchObject({ type: 'deployComplete', category: 'server' })
+    expect(n?.content).toBe('实例「生存服」部署完成')
+  })
+
+  it('deployFailed 生成 server 类 severe 通知（含失败原因）', () => {
+    const [n] = buildNotifications({
+      type: 'deployFailed',
+      data: { instanceName: 'Forge 服', error: 'Forge installer timed out (120s)' },
+    })
+    expect(n).toMatchObject({ type: 'deployFailed', category: 'server' })
+    expect(n?.content).toBe('实例「Forge 服」部署失败：Forge installer timed out (120s)')
+  })
+
+  it('deployComplete 缺实例名时使用默认文案', () => {
+    const [n] = buildNotifications({ type: 'deployComplete', data: {} })
+    expect(n?.content).toBe('实例「未命名」部署完成')
+  })
+
+  it('upgradeComplete 生成 server 类 info 通知（含实例名）', () => {
+    const [n] = buildNotifications({
+      type: 'upgradeComplete',
+      data: { instanceName: '生存服', instanceId: 'paper-abc1', stage: 'completed' },
+    })
+    expect(n).toMatchObject({ type: 'upgradeComplete', category: 'server' })
+    expect(n?.content).toBe('实例「生存服」升级完成')
+  })
+
+  it('upgradeFailed 透出服务端 detail（含回滚说明）', () => {
+    const [n] = buildNotifications({
+      type: 'upgradeFailed',
+      data: { instanceName: '生存服', detail: '升级失败并已回滚: 下载失败' },
+    })
+    expect(n).toMatchObject({ type: 'upgradeFailed', category: 'server' })
+    expect(n?.content).toBe('实例「生存服」升级失败并已回滚: 下载失败')
+  })
+
+  it('upgradeFailed 缺 detail 时使用默认文案', () => {
+    const [n] = buildNotifications({ type: 'upgradeFailed', data: { instanceName: '生存服' } })
+    expect(n?.content).toBe('实例「生存服」升级失败')
+  })
+
+  it('deployFailed / upgradeFailed 为 critical 类不参与聚合', () => {
+    const result = aggregateNotifications(
+      [
+        {
+          id: 'a', type: 'deployFailed', category: 'server',
+          content: '实例「Forge 服」部署失败：x', timestamp: 60_000, count: 1, read: false,
+        },
+      ],
+      { type: 'deployFailed', category: 'server', content: '实例「Forge 服」部署失败：x' },
+      65_000,
+    )
+    expect(result).toHaveLength(2)
+  })
 })
 
 describe('aggregateNotifications 聚合规则', () => {

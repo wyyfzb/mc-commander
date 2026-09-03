@@ -38,7 +38,14 @@ export const useDeployStore = create<DeployState>()((set) => ({
   progress: null,
   deploying: false,
   lastResult: null,
-  applyDeployProgress: (p) => set({ progress: p, deploying: true }),
+  // 终态（complete/error）不再延续 deploying：进度视图由 progress 终态驱动到
+  // POST 响应落定（finishDeploy），避免刷新恢复场景下终态后 deploying 残留
+  // 导致向导无法关闭（部署中禁关拦截读的就是 deploying）
+  applyDeployProgress: (p) =>
+    set({
+      progress: p,
+      deploying: p.stage !== 'complete' && p.stage !== 'error',
+    }),
   startDeploy: () => set({ progress: null, deploying: true, lastResult: null }),
   finishDeploy: (result) =>
     set(() => ({
