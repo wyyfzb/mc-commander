@@ -7,7 +7,6 @@ import { Toaster, toast } from 'sonner'
 import { PageLoader } from '@/components/mcs/page-loader'
 import { ErrorBoundary } from '@/components/mcs/error-boundary'
 import { ThemeClassSync } from '@/layouts/theme-class-sync'
-import { BackdropRasterRefresh } from '@/layouts/backdrop-raster-refresh'
 import { startNotificationCleanupTimer } from '@/stores/notifications'
 import { useUiStore } from '@/stores/ui'
 import './index.css'
@@ -61,7 +60,6 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <ThemeClassSync />
-      <BackdropRasterRefresh />
       <TooltipProvider delayDuration={300}>
         <ErrorBoundary>
           <Suspense fallback={<PageLoader />}>
