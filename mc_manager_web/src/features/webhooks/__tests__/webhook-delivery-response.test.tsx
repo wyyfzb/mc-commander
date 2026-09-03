@@ -6,7 +6,7 @@
  * MSW 局部拦截，数据为虚构测试值
  */
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { http, HttpResponse } from 'msw'
@@ -116,5 +116,60 @@ describe('WebhookPage 投递响应体摘要', () => {
     const row = await screen.findByRole('button', { name: /Ping 测试/ })
     await user.click(row)
     expect(await screen.findByTestId('delivery-response-13')).toHaveTextContent('无响应体')
+  })
+
+  it('测试投递后历史面板即时刷新：invalidate 触发 refetch，新增 ping 记录可见（issue #356）', async () => {
+    const user = userEvent.setup()
+    let deliveryGetCount = 0
+    server.use(
+      http.get('*/api/v1/webhooks/1/deliveries', () => {
+        deliveryGetCount += 1
+        // 首次拉取为旧数据；invalidate 触发的二次拉取返回含新 ping 记录的列表
+        const rows =
+          deliveryGetCount >= 2
+            ? [
+                { id: 14, webhookId: 1, eventType: 'ping', instanceId: null, payload: null, status: 'success', responseStatus: 200, responseBody: 'ok', durationMs: 42, attempts: 1, createdAt: '2026-09-01T09:00:00Z' },
+                ...mockDeliveries,
+              ]
+            : mockDeliveries
+        return envelope(rows)
+      }),
+      http.post('*/api/v1/webhooks/1/test', () =>
+        envelope({ success: true, statusCode: 200, body: 'ok' }),
+      ),
+    )
+
+    renderPage()
+    await user.click(await screen.findByRole('button', { name: 'Notify 投递日志' }))
+    // 面板展开后首次拉取完成，初始列表仅 1 条 ping 记录
+    await screen.findByRole('button', { name: /玩家加入/ })
+    const countAfterExpand = deliveryGetCount
+    expect(countAfterExpand).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('Ping 测试')).toHaveLength(1)
+
+    // 点「测试 Notify」→ onSettled invalidate → 面板 refetch
+    await user.click(screen.getByRole('button', { name: '测试 Notify' }))
+    await waitFor(() => expect(deliveryGetCount).toBeGreaterThan(countAfterExpand))
+
+    // 新 ping 记录（id 14）在面板中可见（响应体摘要默认收起）
+    // 注：toast 提示依赖根布局挂载的 Toaster，本测试不渲染根布局，故不断言 toast
+    await waitFor(() => expect(screen.getAllByText('Ping 测试')).toHaveLength(2))
+  })
+})
+
+describe('WebhookPage 投递日志错误态', () => {
+  it('投递日志查询失败 → 错误态而非「暂无投递记录」，含失败原因与重试', async () => {
+    const user = userEvent.setup()
+    // 局部覆盖：投递日志端点返回 500（其余 handler 沿用全局默认）
+    server.use(
+      http.get('*/api/v1/webhooks/1/deliveries', () => HttpResponse.json({ status: 'error', code: 500, message: 'internal error' }, { status: 500 })),
+    )
+    renderPage()
+    await user.click(await screen.findByRole('button', { name: 'Notify 投递日志' }))
+    const errorText = await screen.findByText(/投递日志加载失败/)
+    expect(errorText).toBeInTheDocument()
+    // 空态文案不得与错误态混淆（拉取失败 ≠ 确无投递）
+    expect(screen.queryByText('暂无投递记录')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '重试' })).toBeInTheDocument()
   })
 })

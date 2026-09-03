@@ -6,17 +6,16 @@
  */
 import { Copy, Terminal } from 'lucide-react'
 import { toast } from 'sonner'
+import { copyText } from '@/lib/clipboard'
 
 export function CommandPreview({ command }: { command: string }) {
   // 空串守卫：调用方 command 缺失时静默不渲染（旧版行为，防契约降级）
   if (!command) return null
   const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(command)
-      toast.success('命令已复制', { duration: 1500 })
-    } catch {
-      toast.error('复制失败')
-    }
+    // copyText 内部降级 execCommand（HTTP 非安全上下文可用）且绝不抛异常
+    const ok = await copyText(command)
+    if (ok) toast.success('命令已复制', { duration: 1500 })
+    else toast.error('复制失败，请手动复制')
   }
   return (
     <div

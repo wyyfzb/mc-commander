@@ -227,9 +227,20 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
   const totalMemory = overviewQuery.data?.totalMemory ?? 4
   const memoryTouchedRef = useRef(false)
 
-  // 打开时重置表单与部署状态（自动回填前的基线同步见下方 effect）
+  // 打开时重置表单与部署状态（自动回填前的基线同步见下方 effect）。
+  // 恢复场景例外：store 中已有进行中的部署（页面刷新后 WS 连接补发恢复的
+  // 进度）→ 保留进度直接显示部署视图，重置会丢掉恢复态（issue 352）
   useEffect(() => {
     if (!open) return
+    const store = useDeployStore.getState()
+    const resuming =
+      store.deploying &&
+      store.progress != null &&
+      store.progress.stage !== 'complete' &&
+      store.progress.stage !== 'error'
+    if (!resuming) {
+      store.resetDeploy()
+    }
     setStep(0)
     setForm({ ...INITIAL_FORM })
     baselineRef.current = { ...INITIAL_FORM }
@@ -238,7 +249,6 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
     setEulaAgreed(false)
     setAutoStart(null)
     setCloseConfirmOpen(false)
-    useDeployStore.getState().resetDeploy()
   }, [open])
 
   // 系统内存就绪 → 推荐档位覆盖默认 2G。

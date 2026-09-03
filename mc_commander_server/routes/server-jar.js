@@ -10,6 +10,7 @@ import { success, error, ErrorCodes } from '../utils/response.js';
 import { getRecommendedJavaVersion, findJavaPath } from '../utils/java-detector.js';
 import { InstanceModel } from '../db/index.js';
 import { atomicWriteFile } from '../services/mc_server.js';
+import { recordAudit, AuditActions } from '../utils/audit.js';
 import { deployRequestSchema } from '@mc-commander/schemas';
 import { validateBody } from '../middleware/validate.js';
 import {
@@ -85,7 +86,23 @@ async function getPaperDownload(mcVersion) {
   };
 }
 
-async function downloadWithProgress(url, destPath, serverManager, stage = 'download', { expectedHash = null, maxBytes = JAR_DOWNLOAD_MAX_BYTES } = {}) {
+/**
+ * 部署进度发射 + 进行中注册表同步（单一出口）：
+ * - 事件 payload 附带实例归属（instanceId/instanceName 等），前端据此在刷新后
+ *   恢复「部署中」显示（部署实例未入库，订阅过滤不适用，走全局广播）
+ * - 注册表（serverManager.activeDeploys）供 websocket 连接建立时补发
+ * @param {{ instanceId: string, instanceName: string, type: string, mcVersion: string }|null} meta
+ */
+function trackDeployProgress(serverManager, meta, payload) {
+  if (meta) {
+    serverManager.activeDeploys?.set(meta.instanceId, { ...meta, stage: payload.stage, percent: payload.percent });
+    serverManager.emit('deployProgress', { ...payload, ...meta });
+  } else {
+    serverManager.emit('deployProgress', payload);
+  }
+}
+
+async function downloadWithProgress(url, destPath, serverManager, stage = 'download', { expectedHash = null, maxBytes = JAR_DOWNLOAD_MAX_BYTES, deployMeta = null } = {}) {
   return new Promise((resolve, reject) => {
     const file = fs.createWriteStream(destPath);
     const stream = got.stream(url, {
@@ -116,7 +133,7 @@ async function downloadWithProgress(url, destPath, serverManager, stage = 'downl
       const pct = percent > 0 ? percent : (total > 0 ? transferred / total : 0);
       if (pct - lastPct < 0.01) return;
       lastPct = pct;
-      serverManager.emit('deployProgress', {
+      trackDeployProgress(serverManager, deployMeta, {
         stage,
         percent: pct,
         transferred,
@@ -131,7 +148,7 @@ async function downloadWithProgress(url, destPath, serverManager, stage = 'downl
       file.close(() => {
         assertDownloadIntegrity(destPath, expectedHash)
           .then(() => {
-            serverManager.emit('deployProgress', {
+            trackDeployProgress(serverManager, deployMeta, {
               stage: 'download_complete',
               percent: 1.0,
               transferred: 0,
@@ -361,6 +378,15 @@ export function createServerJarRoutes(serverManager) {
     const instanceId = `${type}-${crypto.randomBytes(4).toString('hex')}`;
     const instancePath = path.join(config.serversDir, instanceId);
 
+    // 部署归属元数据：进度事件 payload 与进行中注册表共用（展示名与
+    // instanceConfig.name 同一口径，含默认名规则）
+    const deployMeta = {
+      instanceId,
+      instanceName: instanceName || `${type.charAt(0).toUpperCase() + type.slice(1)} Server`,
+      type: type.toLowerCase(),
+      mcVersion,
+    };
+
     const isForge = type.toLowerCase() === 'forge';
     const downloadJarName = isForge ? 'forge-installer.jar' : 'server.jar';
     const jarPath = path.join(instancePath, downloadJarName);
@@ -370,6 +396,21 @@ export function createServerJarRoutes(serverManager) {
       // 否则裸 async handler 的 rejection 不被 Express 4 捕获 → 请求挂起 + unhandledRejection
       fs.mkdirSync(instancePath, { recursive: true });
       logger.info(`Deploying ${type} ${mcVersion} as ${instanceId}...`);
+      // 部署起始即入注册表（连接补发的最早可见点：下载阶段首事件前）
+      trackDeployProgress(serverManager, deployMeta, { stage: 'download', percent: 0, transferred: 0, total: 0 });
+
+      // 审计「受理」语义（与 INSTANCE_DELETE 对偶，回查实例何时被谁创建）：
+      // schema 校验通过 + 实例目录已建 + 部署流程正式启动即记录，不等终态。
+      // 失败路径刻意不记审计：部署中断时实例目录已被清理、DB 未入库，不存在
+      // 可回查的实例实体，失败可见性由部署进度 error 事件（进度面板 + 通知）承担，
+      // 避免审计页出现指向已清理目录的幽灵记录
+      recordAudit({
+        instanceId,
+        action: AuditActions.INSTANCE_CREATE,
+        targetType: 'instance',
+        targetId: instanceId,
+        detail: { instanceName: deployMeta.instanceName, mcVersion, type: deployMeta.type },
+      });
 
       let downloadUrl;
       let expectedHash = null; // 上游摘要（issue 316）：有则强校验，无则仅限流
@@ -420,7 +461,7 @@ export function createServerJarRoutes(serverManager) {
 
       if (downloadUrl) {
         logger.info(`Download URL: ${downloadUrl}`);
-        await downloadWithProgress(downloadUrl, jarPath, serverManager, 'download', { expectedHash });
+        await downloadWithProgress(downloadUrl, jarPath, serverManager, 'download', { expectedHash, deployMeta });
       } else {
         const downloadedFile = fs.readdirSync(instancePath).find(f => f.endsWith('.jar'));
         if (downloadedFile && downloadedFile !== downloadJarName) {
@@ -436,7 +477,7 @@ export function createServerJarRoutes(serverManager) {
 
       if (isForge) {
         logger.info('Forge detected, extracting server files...');
-        serverManager.emit('deployProgress', { stage: 'forge_install', percent: 0, transferred: 0, total: 0 });
+        trackDeployProgress(serverManager, deployMeta, { stage: 'forge_install', percent: 0, transferred: 0, total: 0 });
         const extractArgs = ['-Xmx512M', '-jar', downloadJarName, '--installServer'];
         const extractProc = spawn(javaPath, extractArgs, { cwd: instancePath });
         await new Promise((resolve, reject) => {
@@ -468,7 +509,7 @@ export function createServerJarRoutes(serverManager) {
 
       const instanceConfig = {
         id: instanceId,
-        name: instanceName || `${type.charAt(0).toUpperCase() + type.slice(1)} Server`,
+        name: deployMeta.instanceName,
         type: type.toLowerCase(),
         jarFile,
         maxMemory: ramSize,
@@ -501,7 +542,7 @@ export function createServerJarRoutes(serverManager) {
         logger.warn(`Failed to write instance to DB:`, dbErr.message);
       }
 
-      serverManager.emit('deployProgress', { stage: 'first_launch', percent: 0, transferred: 0, total: 0 });
+      trackDeployProgress(serverManager, deployMeta, { stage: 'first_launch', percent: 0, transferred: 0, total: 0 });
       try {
         logger.info('Running first launch to generate config...');
         await runFirstLaunch(instancePath, javaPath, jarFile, ramSize);
@@ -512,7 +553,9 @@ export function createServerJarRoutes(serverManager) {
 
       serverManager.loadInstances();
 
-      serverManager.emit('deployProgress', { stage: 'complete', percent: 1.0, transferred: 0, total: 0 });
+      // 终态：先移除注册表（补发只针对进行中），payload 仍携带归属供通知文案
+      serverManager.activeDeploys?.delete(instanceId);
+      trackDeployProgress(serverManager, deployMeta, { stage: 'complete', percent: 1.0, transferred: 0, total: 0 });
       logger.info(`Instance ${instanceId} deployed successfully`);
 
       res.json(success({
@@ -534,7 +577,8 @@ export function createServerJarRoutes(serverManager) {
       } catch (cleanupErr) {
         logger.warn('Failed to clean up instance dir after failed deploy:', cleanupErr.message);
       }
-      serverManager.emit('deployProgress', { stage: 'error', percent: 0, transferred: 0, total: 0, error: e.message });
+      serverManager.activeDeploys?.delete(instanceId);
+      trackDeployProgress(serverManager, deployMeta, { stage: 'error', percent: 0, transferred: 0, total: 0, error: e.message });
       logger.error(`Failed to deploy ${type} ${mcVersion}:`, e.message);
       return res.status(502).json(error(ErrorCodes.SERVER_ERROR, `Deployment failed: ${e.message}`));
     }

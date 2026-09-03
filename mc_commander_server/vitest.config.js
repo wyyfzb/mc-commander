@@ -10,6 +10,12 @@ export default defineConfig({
     env: {
       API_KEY: TEST_API_KEY,
       API_KEY_HASH: TEST_API_KEY_HASH,
+    },
+    coverage: {
+      provider: 'v8',
+      reporter: ['json', 'text'],
+      include: ['routes/**', 'services/**', 'utils/**', 'db/**', 'websocket.js'],
+      exclude: ['routes/*.test.js', '**/__tests__/**'],
     }
   }
 });

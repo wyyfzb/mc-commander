@@ -75,6 +75,18 @@ export function RecentBackupsCard() {
             </div>
           ))}
         </div>
+      ) : backupsQuery.isError ? (
+        <div className="flex flex-col items-center gap-1.5 py-4 text-center">
+          <CircleAlert className="size-6 text-mcs-error-fg" aria-hidden />
+          <p className="text-mcs-xs text-mcs-error-fg">备份记录加载失败：{getFriendlyErrorText(backupsQuery.error)}</p>
+          <button
+            type="button"
+            onClick={() => void backupsQuery.refetch()}
+            className="text-mcs-xs font-medium text-mcs-info-fg hover:underline"
+          >
+            重试
+          </button>
+        </div>
       ) : items.length === 0 ? (
         <div className="flex flex-col items-center gap-1.5 py-4 text-center">
           <HardDrive className="size-6 opacity-60 text-mcs-text-subtle" aria-hidden />

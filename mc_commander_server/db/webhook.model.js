@@ -99,7 +99,7 @@ export class WebhookModel {
       data.status,
       data.responseStatus || null,
       data.responseBody || null,
-      data.durationMs || null,
+      data.durationMs ?? null,
       data.attempts || 1,
     );
     return result.lastInsertRowid;

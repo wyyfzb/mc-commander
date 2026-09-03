@@ -2,6 +2,8 @@ import { AuditLogModel } from '../db/index.js';
 import { logger } from './logger.js';
 
 export const AuditActions = {
+  INSTANCE_CREATE: 'INSTANCE_CREATE',
+  INSTANCE_UPDATE: 'INSTANCE_UPDATE',
   INSTANCE_START: 'INSTANCE_START',
   INSTANCE_STOP: 'INSTANCE_STOP',
   INSTANCE_RESTART: 'INSTANCE_RESTART',

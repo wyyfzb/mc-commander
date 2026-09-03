@@ -17,6 +17,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   Bed,
+  CircleAlert,
   CircleDot,
   CloudOff,
   Copy,
@@ -49,6 +50,7 @@ import {
   type TeleportPoint,
 } from '@/lib/mc-teleport'
 import { formatBatchSummary, runBatchForTargets } from '@/lib/mc-batch'
+import { copyText } from '@/lib/clipboard'
 import type { Player } from '@/api/types'
 import type { PlayerActionRequest } from '../mutations'
 
@@ -208,12 +210,10 @@ function TeleportTabContent({
   }
 
   const copyCoords = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text)
-      toast.success('已复制坐标', { duration: 1500 })
-    } catch {
-      toast.error('复制失败')
-    }
+    // copyText 内部降级 execCommand（HTTP 非安全上下文可用）且绝不抛异常
+    const ok = await copyText(text)
+    if (ok) toast.success('已复制坐标', { duration: 1500 })
+    else toast.error('复制失败，请手动复制')
   }
 
   /** 传送到个人复活点：单个用其复活点（无则回退世界出生点）；批量各目标各自复活点 */
@@ -462,6 +462,14 @@ function TeleportTabContent({
         <div className="overflow-hidden rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-default">
           {playersQuery.isLoading ? (
             <p className="py-6 text-center text-mcs-xs text-mcs-text-subtle">正在加载玩家列表…</p>
+          ) : playersQuery.isError ? (
+            <div className="flex flex-col items-center gap-1.5 py-8">
+              <CircleAlert className="size-6 text-mcs-text-subtle" aria-hidden />
+              <p className="text-mcs-xs text-mcs-error-fg">玩家列表加载失败：{getFriendlyErrorText(playersQuery.error)}</p>
+              <Button variant="outline" size="xs" onClick={() => void playersQuery.refetch()}>
+                重试
+              </Button>
+            </div>
           ) : onlineOthers.length === 0 ? (
             <div className="flex flex-col items-center gap-1.5 py-8">
               <Users className="size-6 text-mcs-text-subtle" aria-hidden />

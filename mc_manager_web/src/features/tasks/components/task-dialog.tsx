@@ -8,8 +8,9 @@
  *   无改动直接关闭。保存中（saving）禁止关闭
  */
 import { useState } from 'react'
-import { ChevronUp, Info, SlidersHorizontal } from 'lucide-react'
+import { ChevronUp, CircleAlert, Info, SlidersHorizontal } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { getFriendlyErrorText } from '@/api/errors'
 import { LoadingButton } from '@/components/mcs/loading-button'
 import {
   Dialog,
@@ -33,6 +34,7 @@ import { Switch } from '@/components/ui/switch'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { Chip } from '@/components/mcs/chip'
 import { CRON_PRESETS, cronDescription, formatNextRun } from '@/lib/mc-cron'
+import { formatDurationMs, formatUtcNaive } from '@/lib/format'
 import { TASK_TYPE_OPTIONS, type TaskType } from '@/lib/mc-deploy'
 import { CronEditor } from './cron-editor'
 import { useTaskHistory } from '../queries'
@@ -285,25 +287,12 @@ const RUN_STATUS_META: Record<TaskRunHistory['status'], { dot: string; text: str
   skipped: { dot: 'bg-mcs-warning-fg', text: 'text-mcs-warning-fg', label: '跳过' },
 }
 
-/** SQLite CURRENT_TIMESTAMP（UTC 无时区标记）→ 本地 MM/DD HH:mm（与下次运行预估同风格） */
-function formatRunTime(runAt: string): string {
-  const d = new Date(runAt.includes('T') ? runAt : `${runAt.replace(' ', 'T')}Z`)
-  if (Number.isNaN(d.getTime())) return runAt
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
-}
-
-/** 执行耗时：<1s 展示毫秒，否则秒（保留一位） */
-function formatDuration(ms: number): string {
-  return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`
-}
-
 /**
  * 最近执行时间线（编辑模式）：倒序最近 10 条，
  * 状态语义色圆点 + 触发时间 + 耗时 + 失败原因（截断，悬停看全文）。
  */
 function TaskRunHistory({ taskId }: { taskId: number }) {
-  const { data: runs, isLoading } = useTaskHistory(taskId)
+  const { data: runs, isLoading, isError, error, refetch } = useTaskHistory(taskId)
 
   return (
     <div className="flex flex-col gap-1.5" data-testid="task-run-history">
@@ -312,6 +301,16 @@ function TaskRunHistory({ taskId }: { taskId: number }) {
         <div className="space-y-1.5" aria-label="加载执行历史中">
           <Skeleton className="h-4 w-3/4" />
           <Skeleton className="h-4 w-2/3" />
+        </div>
+      ) : isError ? (
+        <div className="flex flex-col items-start gap-1.5 py-1">
+          <p className="flex items-center gap-1 text-mcs-xs text-mcs-error-fg">
+            <CircleAlert className="size-3.5 shrink-0" aria-hidden />
+            执行历史加载失败：{getFriendlyErrorText(error)}
+          </p>
+          <Button variant="outline" size="sm" className="h-6 text-mcs-2xs" onClick={() => void refetch()}>
+            重试
+          </Button>
         </div>
       ) : !runs || runs.length === 0 ? (
         <p className="text-mcs-xs text-mcs-text-subtle">暂无执行记录</p>
@@ -327,9 +326,9 @@ function TaskRunHistory({ taskId }: { taskId: number }) {
                 <div className="flex items-center gap-1.5 text-mcs-xs">
                   <span className={`size-1.5 shrink-0 rounded-full ${meta.dot}`} aria-hidden />
                   <span className={meta.text}>{meta.label}</span>
-                  <span className="text-mcs-text-muted">{formatRunTime(run.runAt)}</span>
+                  <span className="text-mcs-text-muted">{formatUtcNaive(run.runAt)}</span>
                   {run.durationMs !== null && (
-                    <span className="text-mcs-text-subtle">· {formatDuration(run.durationMs)}</span>
+                    <span className="text-mcs-text-subtle">· {formatDurationMs(run.durationMs)}</span>
                   )}
                 </div>
                 {run.error && (

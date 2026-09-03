@@ -11,6 +11,7 @@ import { Plus, Send, Pencil, Trash2, ChevronDown, Webhook as WebhookIcon, Hourgl
 import { toast } from 'sonner'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useConnectionStore } from '@/stores/connection'
+import { formatDateTime } from '@/lib/format'
 import {
   apiGetWebhooks, apiGetWebhookEventTypes, apiCreateWebhook,
   apiUpdateWebhook, apiDeleteWebhook, apiTestWebhook, apiGetWebhookDeliveries,
@@ -45,7 +46,6 @@ const EVENT_LABELS: Record<string, string> = {
 }
 
 function fmtEvt(t: string) { return EVENT_LABELS[t] || t }
-function fmtTime(iso: string) { return new Date(iso).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }) }
 
 /** 响应体摘要截断（验收上限 200 字符）；null/纯空白视为无响应体 */
 export function truncateResponseBody(body: string | null | undefined, max = 200): string | null {
@@ -73,12 +73,12 @@ export default function WebhookPage() {
     queryFn: ({ signal }) => apiGetWebhooks(config, 1, 100, signal),
     enabled: config.status === 'ready',
   })
-  const { data: eventTypes } = useQuery({
+  const { data: eventTypes, isError: eventTypesError, refetch: refetchEventTypes } = useQuery({
     queryKey: [...queryKeys.webhooks(), 'event-types'],
     queryFn: ({ signal }) => apiGetWebhookEventTypes(config, signal),
     enabled: config.status === 'ready', staleTime: Infinity,
   })
-  const { data: deliveriesData, isLoading: deliveriesLoading } = useQuery({
+  const { data: deliveriesData, isLoading: deliveriesLoading, isError: deliveriesError, refetch: refetchDeliveries } = useQuery({
     queryKey: queryKeys.webhookDeliveries(expandedId ?? -1),
     queryFn: ({ signal }) => apiGetWebhookDeliveries(config, expandedId!, 1, 10, signal),
     enabled: expandedId != null && config.status === 'ready',
@@ -103,6 +103,11 @@ export default function WebhookPage() {
     mutationFn: (id: number) => apiTestWebhook(config, id),
     onSuccess: (data) => toast.success(`测试投递成功 HTTP ${data.statusCode}`),
     onError: (e) => toast.error(`测试投递失败：${getFriendlyErrorText(e)}`),
+    onSettled: (_data, _error, id) => {
+      // 测试投递已落投递历史（服务端 event_type=ping 记录，成败均落库）：
+      // 无论成败都失效对应缓存——面板已展开则即时刷新可见，未展开则下次展开取新数据
+      if (id != null) qc.invalidateQueries({ queryKey: queryKeys.webhookDeliveries(id) })
+    },
   })
 
   const openCreate = () => { setEditTarget(null); const f = { name: '', url: '', secret: '', events: [] as string[], isEnabled: true }; setForm(f); setInitialForm(f); setShowDialog(true) }
@@ -260,6 +265,14 @@ export default function WebhookPage() {
                           <Skeleton key={i} className="h-7 w-full" />
                         ))}
                       </div>
+                    ) : deliveriesError ? (
+                      <div className="flex flex-col items-start gap-1.5 py-2">
+                        <p className="text-mcs-xs text-mcs-error-fg">投递日志加载失败：{getFriendlyErrorText(deliveriesError)}</p>
+                        <Button variant="outline" size="sm" className="h-6 text-mcs-2xs" onClick={() => void refetchDeliveries()}>
+                          <RefreshCw className="size-3" aria-hidden />
+                          重试
+                        </Button>
+                      </div>
                     ) : deliveries.length === 0 ? (
                       <p className="text-mcs-xs text-mcs-text-subtle">暂无投递记录</p>
                     ) : (
@@ -286,7 +299,7 @@ export default function WebhookPage() {
                                 <span className={cn(
                                   d.status === 'success' ? 'text-mcs-success-fg' : d.status === 'failed' ? 'text-mcs-error-fg' : 'text-mcs-text-muted',
                                 )}>
-                                  {fmtTime(d.createdAt)}
+                                  {formatDateTime(d.createdAt)}
                                 </span>
                               </button>
                               {deliveryExpanded && (
@@ -360,6 +373,14 @@ export default function WebhookPage() {
                   {eventTypes && form.events.length === eventTypes.length ? '取消全选' : '全选'}
                 </Button>
               </div>
+              {eventTypesError && (
+                <div className="flex items-center justify-between rounded-mcs-xs border border-mcs-warning-border bg-mcs-warning-bg-subtle px-2 py-1.5">
+                  <p className="text-mcs-2xs text-mcs-warning-fg">事件类型加载失败，无法勾选事件</p>
+                  <Button variant="ghost" size="sm" className="h-5 px-1.5 text-mcs-2xs" onClick={() => void refetchEventTypes()}>
+                    重试
+                  </Button>
+                </div>
+              )}
               <div className="flex flex-wrap gap-1">
                 {eventTypes?.map(evt => (
                   <button

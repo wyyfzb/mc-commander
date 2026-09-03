@@ -6,6 +6,7 @@
  * - backupStatusTone：completed success/failed error/restoring warning/其余 info
  * - isLegacyFormat：zip 旧格式（仅可删除，不可恢复）
  */
+import { formatFullDateMinute } from './format'
 
 /** 字节 → 可读大小 */
 export function formatBackupSize(bytes: number | null | undefined): string {
@@ -16,13 +17,12 @@ export function formatBackupSize(bytes: number | null | undefined): string {
   return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`
 }
 
-/** ISO 时间 → YYYY-MM-DD HH:mm 本地时区 */
+/** ISO 时间 → YYYY-MM-DD HH:mm 本地时区（空值返回空串、解析失败原样返回，收口复用 lib/format） */
 export function formatBackupDate(iso: string | null | undefined): string {
   if (iso == null || iso === '') return ''
   const t = new Date(iso)
   if (Number.isNaN(t.getTime())) return iso
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())} ${pad(t.getHours())}:${pad(t.getMinutes())}`
+  return formatFullDateMinute(iso)
 }
 
 /**

@@ -308,6 +308,12 @@ export function createStatusRoutes(serverManager) {
     // 3. 同步 instance.json 保持最新（含 startCommand/jvmArgs），供 DB 丢失时兜底恢复
     _syncInstanceJson(instance);
 
+    // 审计新增 INSTANCE_UPDATE 枚举（命名对齐 INSTANCE_* 生命周期组）：本端点是实例核心
+    // 配置（内存/JVM/javaPath/自启自恢复开关）的唯一写入口，与 properties 外围属性更新
+    //（CONFIG_CHANGE）分属不同资源层级，复用会让同一动作跨语义；detail.fields 记录本次
+    // 实际生效的字段集合（含 startCommand 显式清除），供回查「谁改了内存/谁关了自恢复」。
+    // 400 路径（无可更新字段/校验拒绝）不记审计——审计语义 = 实际生效的变更。
+    recordAudit({ instanceId: req.params.id, action: AuditActions.INSTANCE_UPDATE, targetType: 'instance', targetId: req.params.id, detail: { fields: Object.keys(updates) } });
     res.json(success(instance.toStatus(), 'Instance updated'));
   }));
 

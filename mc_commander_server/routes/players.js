@@ -603,6 +603,10 @@ export function createPlayerRoutes(serverManager) {
       }
       throw err;
     }
+    // 审计复用 PLAYER_PARDON（与玩家名 pardon 端点同一「解封」语义）：操作过滤下拉由该
+    // 枚举覆盖全部解封操作，拆新枚举会让同一动作出现两个标签；targetType 对齐 PLAYER_BAN
+    // 的 ip/player 双型；detail.entry 标注来自封禁记录端点，与玩家卡解封行可区分。
+    recordAudit({ instanceId: req.params.id, action: AuditActions.PLAYER_PARDON, targetType, targetId: target, detail: { entry: 'ban-record' } });
     res.json(success(null, `Pardoned ${targetType}: ${target}`));
   }));
 
@@ -614,7 +618,8 @@ export function createPlayerRoutes(serverManager) {
     }
     if (!requireRunning(instance, res)) return;
     await instance.sendCommand(`whitelist add ${req.params.player}`);
-    recordAudit({ instanceId: req.params.id, action: AuditActions.PLAYER_WHITELIST, targetType: 'player', targetId: req.params.player });
+    // detail.op 与 remove 端点成对标注：add/remove 共用 PLAYER_WHITELIST，靠 detail 区分方向
+    recordAudit({ instanceId: req.params.id, action: AuditActions.PLAYER_WHITELIST, targetType: 'player', targetId: req.params.player, detail: { op: 'add' } });
     res.json(success(null, `Added ${req.params.player} to whitelist`));
   }));
 
@@ -626,6 +631,9 @@ export function createPlayerRoutes(serverManager) {
     }
     if (!requireRunning(instance, res)) return;
     await instance.sendCommand(`whitelist remove ${req.params.player}`);
+    // 审计复用 PLAYER_WHITELIST：前端映射「白名单操作」本就方向中性（add/remove 共用），
+    // 拆新枚举会让过滤下拉出现两个半语义项；detail.op 区分加入/移除，与 add 端点成对标注。
+    recordAudit({ instanceId: req.params.id, action: AuditActions.PLAYER_WHITELIST, targetType: 'player', targetId: req.params.player, detail: { op: 'remove' } });
     res.json(success(null, `Removed ${req.params.player} from whitelist`));
   }));
 

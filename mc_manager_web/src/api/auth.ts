@@ -5,7 +5,7 @@
  *  - password/logout/sessions 需认证（Bearer 会话或 X-API-Key 双通道均可）
  * 类型与信封字段 camelCase 对齐服务端响应（token/sessionId/expiresAt/userAgent…）
  */
-import { apiGet, apiPost, apiPut, apiDelete, apiRequest } from './client'
+import { apiGet, apiPost, apiPut, apiDelete } from './client'
 import type { ConnectionConfig } from './client'
 import type { StoredSession } from '@/stores/auth'
 
@@ -102,12 +102,4 @@ export function fetchSessions(config: ConnectionConfig, signal?: AbortSignal): P
 /** DELETE /auth/sessions/:id：踢单设备 */
 export function kickSession(config: ConnectionConfig, sessionId: string): Promise<KickSessionData> {
   return apiDelete<KickSessionData>(`/api/v1/auth/sessions/${sessionId}`, config)
-}
-
-/**
- * 公开端点的裸请求变体：登录页探测后端可达性（不解析信封外语义时仍走信封）。
- * 探测失败（NetworkError）用于登录页展示「无法连接服务器」错误态。
- */
-export async function probeAuthEndpoint(baseUrl: string, path: '/api/v1/auth/status'): Promise<unknown> {
-  return apiRequest(path, publicConfig(baseUrl))
 }

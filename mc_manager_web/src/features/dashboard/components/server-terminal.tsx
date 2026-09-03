@@ -17,6 +17,7 @@ import { useInstanceLogs } from '@/api/queries'
 import { apiGet } from '@/api/client'
 import { getFriendlyErrorText } from '@/api/errors'
 import { formatLogFileName } from '@/lib/format'
+import { copyText } from '@/lib/clipboard'
 import { useUiStore } from '@/stores/ui'
 import type { LogEntry } from '@/api/types'
 import type { LogLevel, TerminalLogEntry } from '@/lib/terminal-log'
@@ -285,14 +286,16 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
       toast.info('暂无内容可复制', { duration: 1500 })
       return
     }
-    navigator.clipboard.writeText(text).then(
-      () => {
+    // copyText 统一入口：内部降级 execCommand 且绝不抛异常（消除未捕获同步异常冒泡至 ErrorBoundary 的路径）
+    void copyText(text).then((ok) => {
+      if (ok) {
         setCopied(true)
         toast.success('已复制到剪贴板', { duration: 1500 })
         setTimeout(() => setCopied(false), 1500)
-      },
-      () => toast.error('复制失败'),
-    )
+      } else {
+        toast.error('复制失败，请手动复制')
+      }
+    })
   }, [buffer])
 
   // Ctrl+L 清屏（P0 服主肌肉记忆；window capture 覆盖输入框焦点，dashboard 内任意位置生效）

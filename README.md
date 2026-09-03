@@ -13,7 +13,21 @@ MC_Commander 是一个自托管的 Minecraft 服务器管理工具。**核心定
 
 ## 截图
 
-_(待补充)_
+> 以下截图为示例环境（虚构数据）渲染效果，实际面板展示你的服务器真实状态。
+
+| 仪表盘 | 实例列表 |
+|---|---|
+| ![仪表盘](docs/screenshots/dashboard.png) | ![实例列表](docs/screenshots/instances.png) |
+
+| 文件管理 | 玩家管理 |
+|---|---|
+| ![文件管理](docs/screenshots/files.png) | ![玩家管理](docs/screenshots/players.png) |
+
+| 备份管理 |
+|---|
+| ![备份管理](docs/screenshots/backup.png) |
+
+> 其余页面（世界/任务/插件/Webhook/审计/设置）截图待补充；完整操作流程见 [docs/user-guide.md](docs/user-guide.md)。
 
 ---
 
@@ -184,6 +198,8 @@ ws.onmessage = (event) => {
 
 > `tpsUpdate` 已并入 `performanceUpdate`（payload 含 tps 字段，避免双广播冗余）；`playerDeath` 批量场景为聚合格式 `{players: [...], count: N}`（5s 窗口）；`deployProgress` 进度节流 ≥1% 才发射。
 
+> **连接上限**：服务端最多同时接受 **32 个 WebSocket 连接**（`MAX_CONNECTIONS`），超过上限的新连接将被拒绝；单个连接最多订阅 64 个实例、每分钟 60 条消息（防滥用保护）。
+
 ## Web 页面一览
 
 | 页面 | 功能 |
@@ -279,6 +295,16 @@ mc-commander/
 | Java | 17/21/25（部署脚本自动安装，按 MC 版本自动选择） |
 | 浏览器 | 现代浏览器（Chrome/Edge/Firefox） |
 | 操作系统 | 服务端: Linux / Windows / macOS；前端构建: 任意 |
+
+## 平台支持
+
+| 平台 | 支持状态 |
+|------|---------|
+| Linux | ✅ 全支持（推荐部署环境，一键部署脚本面向 Ubuntu/Debian） |
+| Windows | ⚠️ 实验性——服务端依赖 better-sqlite3 原生编译（Node 22 预编译产物可能缺失，需本机构建工具链）；建议使用 WSL2 以获得与 Linux 一致体验 |
+| macOS | ✅ 支持（better-sqlite3 原生编译通常可直接完成） |
+
+> 部署脚本（`方式一：Linux 一键部署`）仅面向 Linux；Windows / macOS 请走手动部署路径。
 
 ## 开发与测试
 

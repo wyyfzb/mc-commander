@@ -252,7 +252,7 @@ export function getNextCronRun(cronExpr: string): Date | null {
 
 /**
  * 格式化下次运行时间为简短中文提示
- * @returns "MM/DD HH:mm" 格式，null 时返回空串
+ * @returns "MM-dd HH:mm" 格式（与 lib/format.ts 收口风格一致），null 时返回空串
  */
 export function formatNextRun(cronExpr: string): string {
   const next = getNextCronRun(cronExpr)
@@ -261,5 +261,5 @@ export function formatNextRun(cronExpr: string): string {
   const D = String(next.getDate()).padStart(2, '0')
   const h = String(next.getHours()).padStart(2, '0')
   const m = String(next.getMinutes()).padStart(2, '0')
-  return `${M}/${D} ${h}:${m}`
+  return `${M}-${D} ${h}:${m}`
 }

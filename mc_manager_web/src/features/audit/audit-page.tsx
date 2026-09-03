@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { FilterSelect } from '@/components/mcs/filter-select'
 import { StatusPill } from '@/components/mcs/status-pill'
+import { formatDateTime, formatDurationMs } from '@/lib/format'
 import { PageHeader } from '@/components/mcs/page-header'
 import { DataTableShell } from '@/components/mcs/data-table-shell'
 import { useAuditLogs, useCommandHistory } from '@/api/queries'
@@ -18,6 +19,8 @@ import type { AuditLogItem, CommandHistoryItem } from '@/api/types'
 import { QUICK_RANGES, isRangeInverted, quickRangeDates, toServerEnd, toServerStart, type QuickRange } from './time-range'
 
 const ACTION_LABELS: Record<string, string> = {
+  INSTANCE_CREATE: '创建实例',
+  INSTANCE_UPDATE: '更新实例配置',
   INSTANCE_START: '启动实例',
   INSTANCE_STOP: '停止实例',
   INSTANCE_RESTART: '重启实例',
@@ -43,19 +46,10 @@ function getActionLabel(action: string): string {
   return ACTION_LABELS[action] ?? action
 }
 
+/** 时间列：合法 ISO 走统一收口格式（MM-dd HH:mm:ss）；非法输入原样返回（保留审计原始值兜底） */
 function formatTime(iso: string): string {
-  try {
-    const d = new Date(iso)
-    return d.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })
-  } catch {
-    return iso
-  }
-}
-
-function formatDuration(ms: number | null): string {
-  if (ms == null) return '-'
-  if (ms < 1000) return `${ms}ms`
-  return `${(ms / 1000).toFixed(1)}s`
+  if (Number.isNaN(new Date(iso).getTime())) return iso
+  return formatDateTime(iso)
 }
 
 const AUDIT_COLUMNS = 4
@@ -122,7 +116,7 @@ function CmdBody({ cmds }: { cmds: CommandHistoryItem[] }) {
             </StatusPill>
           </td>
           <td className="px-3 py-2 text-mcs-text-subtle">{cmd.source}</td>
-          <td className="px-3 py-2 text-mcs-text-subtle font-mono text-mcs-xs">{formatDuration(cmd.durationMs)}</td>
+          <td className="px-3 py-2 text-mcs-text-subtle font-mono text-mcs-xs">{formatDurationMs(cmd.durationMs)}</td>
         </tr>
       ))}
     </tbody>
