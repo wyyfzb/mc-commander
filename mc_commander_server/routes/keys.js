@@ -16,9 +16,10 @@ function generateApiKey() {
   return 'mcck-' + rand.replace(/(.{8})(?=.)/g, '$1-');
 }
 
-/** 写回 .env 哈希（保留其余键；API_KEY_HASH 行不存在则追加），原子写防半截文件，权限 0o600 */
+/** 写回 .env 哈希（保留其余键；明文 API_KEY 行不落盘，与 index.js 启动迁移同约束），原子写防半截文件，权限 0o600 */
 function persistApiKeyHash(envPath, hash) {
   let content = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf-8') : '';
+  content = content.replace(/^API_KEY=.*$/m, '');
   const newLine = `API_KEY_HASH=${hash}`;
   if (/^API_KEY_HASH=.*$/m.test(content)) {
     content = content.replace(/^API_KEY_HASH=.*$/m, newLine);
