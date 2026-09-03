@@ -107,7 +107,7 @@ export function LoginPage() {
   useEffect(() => {
     void probe(baseUrl)
     // 仅首挂载探测一次；baseUrl 修改后由「探测」按钮显式触发
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- baseUrl 变化由探测按钮显式驱动
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- baseUrl 变化由探测按钮显式驱动
   }, [probe])
 
   /** 登录/设密成功：写会话 → 同步连接状态（setConfig 内含凭据重算）→ 回跳 */

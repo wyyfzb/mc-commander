@@ -17,7 +17,7 @@ import {
 } from '@/api/webhooks'
 import { queryKeys } from '@/api/queries'
 import { getFriendlyErrorText } from '@/api/errors'
-import type { Webhook, WebhookDelivery } from '@/api/types'
+import type { Webhook, WebhookCreatePayload, WebhookDelivery } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { LoadingButton } from '@/components/mcs/loading-button'
 import { Input } from '@/components/ui/input'
@@ -111,10 +111,10 @@ export default function WebhookPage() {
   const toggleEvent = (evt: string) => setForm(f => ({ ...f, events: f.events.includes(evt) ? f.events.filter(e => e !== evt) : [...f.events, evt] }))
   const selectAll = () => { if (eventTypes && form.events.length === eventTypes.length) setForm(f => ({ ...f, events: [] })); else if (eventTypes) setForm(f => ({ ...f, events: [...eventTypes] })) }
   const handleSubmit = () => {
-    const payload: Record<string, unknown> = { name: form.name, url: form.url, events: form.events, isEnabled: form.isEnabled }
+    const payload: WebhookCreatePayload = { name: form.name, url: form.url, events: form.events, isEnabled: form.isEnabled }
     if (form.secret) payload.secret = form.secret
-    if (editTarget) updateMut.mutate({ id: editTarget.id, data: payload as unknown as Parameters<typeof apiUpdateWebhook>[2] })
-    else createMut.mutate(payload as unknown as Parameters<typeof apiCreateWebhook>[1])
+    if (editTarget) updateMut.mutate({ id: editTarget.id, data: payload })
+    else createMut.mutate(payload)
   }
 
   const handleDeleteConfirm = () => {

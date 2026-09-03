@@ -116,6 +116,7 @@ export function MarketSheet({ open, onOpenChange, instanceId, initialQuery = nul
   useEffect(() => {
     if (!open) return
     if (typeof instanceMcVersion === 'string' && GAME_VERSION_RE.test(instanceMcVersion)) {
+      // oxlint-disable-next-line react/set-state-in-effect -- 打开时用 prop 初始化可编辑 state（重置 on 开关惯用法），用户后续编辑不受影响
       setGameVersion(instanceMcVersion)
     }
   }, [open, instanceMcVersion])
@@ -123,6 +124,7 @@ export function MarketSheet({ open, onOpenChange, instanceId, initialQuery = nul
   // 打开时预填搜索词（更新检测入口直达对应插件）
   useEffect(() => {
     if (!open || !initialQuery) return
+    // oxlint-disable-next-line react/set-state-in-effect -- 打开时用 prop 初始化可编辑搜索词（重置 on 开关惯用法），仅首次生效
     setQuery(initialQuery)
     setDebouncedQuery(initialQuery)
   }, [open, initialQuery])
@@ -188,12 +190,12 @@ export function MarketSheet({ open, onOpenChange, instanceId, initialQuery = nul
   // 打开时首次加载；防抖词/过滤器变化时重置列表
   useEffect(() => {
     if (!open || !instanceId) return
+    // oxlint-disable-next-line react/set-state-in-effect -- 过滤条件变化时重置搜索结果（手动管理搜索状态，重置与重取同周期），随后立即异步重取
     setHits([])
     setTotalHits(0)
     void fetchSearch(0)
     return () => searchAbortRef.current?.abort()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, instanceId, debouncedQuery, gameVersion, loader])
+  }, [open, instanceId, debouncedQuery, gameVersion, loader, fetchSearch])
 
   // ── 版本面板展开 ────────────────────────────────────────────
   const [panel, setPanel] = useState<VersionsPanel | null>(null)
@@ -370,9 +372,9 @@ export function MarketSheet({ open, onOpenChange, instanceId, initialQuery = nul
             />
           ) : (
             <ul className="space-y-2.5" aria-label="插件搜索结果">
-              {hits.map((hit) => (
+              {hits.map((hit, i) => (
                 <MarketHitCard
-                  key={hit.slug ?? hit.projectId ?? hit.title ?? Math.random()}
+                  key={hit.slug ?? hit.projectId ?? hit.title ?? `hit-${i}`}
                   hit={hit}
                   expanded={panel?.slug === hit.slug}
                   panel={panel?.slug === hit.slug ? panel : null}

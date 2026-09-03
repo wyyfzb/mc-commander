@@ -91,7 +91,7 @@ export function PlayersPage() {
     }
     if (Object.keys(patch).length > 0) setFilter(patch)
     if (playerName) openPlayerDetail(playerName)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- 仅首次挂载初始化深链接——加 searchParams 会与反向同步 effect（state→URL）形成写-读死循环
   }, [])
 
   // ── 深链接：状态同步回 URL（防抖 300ms） ──
