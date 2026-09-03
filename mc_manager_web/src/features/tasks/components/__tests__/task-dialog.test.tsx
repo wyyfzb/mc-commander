@@ -13,7 +13,13 @@ import type { ScheduledTask, TaskRunHistory } from '@/api/types'
 // 执行历史 hook 模块级 mock：对话框测试不依赖网络层/QueryClientProvider，
 // 由用例按需注入返回值（默认空数据 → 编辑模式显示「暂无执行记录」）
 const useTaskHistoryMock = vi.hoisted(() =>
-  vi.fn<() => { data?: TaskRunHistory[]; isLoading: boolean }>(() => ({ isLoading: false })),
+  vi.fn<() => {
+    data?: TaskRunHistory[]
+    isLoading: boolean
+    isError?: boolean
+    error?: Error | null
+    refetch?: () => Promise<unknown>
+  }>(() => ({ isLoading: false })),
 )
 vi.mock('../../queries', () => ({ useTaskHistory: useTaskHistoryMock }))
 
@@ -382,6 +388,35 @@ describe('TaskDialog 最近执行时间线（issue #299）', { timeout: 15000 },
     useTaskHistoryMock.mockImplementation(() => ({ data: undefined, isLoading: true }))
     renderDialog({ task: makeTask({ id: 1 }) })
     expect(screen.getByLabelText('加载执行历史中')).toBeInTheDocument()
+  })
+
+  it('编辑模式：历史加载失败 → 错误态而非「暂无执行记录」，含失败原因', () => {
+    useTaskHistoryMock.mockImplementation(() => ({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: new Error('boom'),
+    }))
+    renderDialog({ task: makeTask({ id: 1 }) })
+    const history = screen.getByTestId('task-run-history')
+    expect(within(history).getByText(/执行历史加载失败/)).toBeInTheDocument()
+    // 空态文案不得与错误态混淆（网络失败 ≠ 确无记录）
+    expect(within(history).queryByText('暂无执行记录')).not.toBeInTheDocument()
+  })
+
+  it('编辑模式：历史错误态点击重试 → 调用 refetch', async () => {
+    const refetch = vi.fn().mockResolvedValue(undefined)
+    useTaskHistoryMock.mockImplementation(() => ({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: null,
+      refetch,
+    }))
+    renderDialog({ task: makeTask({ id: 1 }) })
+    const history = screen.getByTestId('task-run-history')
+    await userEvent.click(within(history).getByRole('button', { name: '重试' }))
+    expect(refetch).toHaveBeenCalledTimes(1)
   })
 
   it('新建模式：不渲染执行历史区块，也不调用 hook', () => {

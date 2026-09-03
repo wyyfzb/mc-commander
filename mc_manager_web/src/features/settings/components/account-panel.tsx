@@ -327,6 +327,14 @@ export function AccountPanel() {
             <Loader2 className="size-4 animate-spin" aria-hidden />
             正在加载会话列表…
           </div>
+        ) : sessionsQuery.isError ? (
+          <div className="flex flex-col items-center gap-1.5 py-8 text-center">
+            <TriangleAlert className="size-6 text-mcs-error-fg" aria-hidden />
+            <p className="text-mcs-xs text-mcs-error-fg">会话列表加载失败：{getFriendlyErrorText(sessionsQuery.error)}</p>
+            <Button variant="outline" size="sm" onClick={() => void sessionsQuery.refetch()}>
+              重试
+            </Button>
+          </div>
         ) : sessions.length === 0 ? (
           <div className="rounded-mcs-md border border-dashed border-mcs-border-muted py-8 text-center">
             <MonitorSmartphone className="mx-auto size-8 text-mcs-text-subtle/60" aria-hidden />

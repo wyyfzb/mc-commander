@@ -17,6 +17,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   Bed,
+  CircleAlert,
   CircleDot,
   CloudOff,
   Copy,
@@ -461,6 +462,14 @@ function TeleportTabContent({
         <div className="overflow-hidden rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-default">
           {playersQuery.isLoading ? (
             <p className="py-6 text-center text-mcs-xs text-mcs-text-subtle">正在加载玩家列表…</p>
+          ) : playersQuery.isError ? (
+            <div className="flex flex-col items-center gap-1.5 py-8">
+              <CircleAlert className="size-6 text-mcs-text-subtle" aria-hidden />
+              <p className="text-mcs-xs text-mcs-error-fg">玩家列表加载失败：{getFriendlyErrorText(playersQuery.error)}</p>
+              <Button variant="outline" size="xs" onClick={() => void playersQuery.refetch()}>
+                重试
+              </Button>
+            </div>
           ) : onlineOthers.length === 0 ? (
             <div className="flex flex-col items-center gap-1.5 py-8">
               <Users className="size-6 text-mcs-text-subtle" aria-hidden />

@@ -73,12 +73,12 @@ export default function WebhookPage() {
     queryFn: ({ signal }) => apiGetWebhooks(config, 1, 100, signal),
     enabled: config.status === 'ready',
   })
-  const { data: eventTypes } = useQuery({
+  const { data: eventTypes, isError: eventTypesError, refetch: refetchEventTypes } = useQuery({
     queryKey: [...queryKeys.webhooks(), 'event-types'],
     queryFn: ({ signal }) => apiGetWebhookEventTypes(config, signal),
     enabled: config.status === 'ready', staleTime: Infinity,
   })
-  const { data: deliveriesData, isLoading: deliveriesLoading } = useQuery({
+  const { data: deliveriesData, isLoading: deliveriesLoading, isError: deliveriesError, refetch: refetchDeliveries } = useQuery({
     queryKey: queryKeys.webhookDeliveries(expandedId ?? -1),
     queryFn: ({ signal }) => apiGetWebhookDeliveries(config, expandedId!, 1, 10, signal),
     enabled: expandedId != null && config.status === 'ready',
@@ -260,6 +260,14 @@ export default function WebhookPage() {
                           <Skeleton key={i} className="h-7 w-full" />
                         ))}
                       </div>
+                    ) : deliveriesError ? (
+                      <div className="flex flex-col items-start gap-1.5 py-2">
+                        <p className="text-mcs-xs text-mcs-error-fg">投递日志加载失败：{getFriendlyErrorText(deliveriesError)}</p>
+                        <Button variant="outline" size="sm" className="h-6 text-mcs-2xs" onClick={() => void refetchDeliveries()}>
+                          <RefreshCw className="size-3" aria-hidden />
+                          重试
+                        </Button>
+                      </div>
                     ) : deliveries.length === 0 ? (
                       <p className="text-mcs-xs text-mcs-text-subtle">暂无投递记录</p>
                     ) : (
@@ -360,6 +368,14 @@ export default function WebhookPage() {
                   {eventTypes && form.events.length === eventTypes.length ? '取消全选' : '全选'}
                 </Button>
               </div>
+              {eventTypesError && (
+                <div className="flex items-center justify-between rounded-mcs-xs border border-mcs-warning-border bg-mcs-warning-bg-subtle px-2 py-1.5">
+                  <p className="text-mcs-2xs text-mcs-warning-fg">事件类型加载失败，无法勾选事件</p>
+                  <Button variant="ghost" size="sm" className="h-5 px-1.5 text-mcs-2xs" onClick={() => void refetchEventTypes()}>
+                    重试
+                  </Button>
+                </div>
+              )}
               <div className="flex flex-wrap gap-1">
                 {eventTypes?.map(evt => (
                   <button
