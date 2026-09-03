@@ -10,7 +10,7 @@ export type NotificationCategory = 'game' | 'server' | 'management'
 
 export type NotificationType =
   | 'join' | 'leave' | 'death' | 'revive' | 'achievement' | 'chat' | 'sleep'
-  | 'serverStart' | 'serverStop' | 'serverCrash' | 'save'
+  | 'serverStart' | 'serverStop' | 'serverCrash' | 'save' | 'circuitBreaker'
   | 'lowTps' | 'highCpu' | 'highMemory' | 'weatherChange'
   | 'backupStart' | 'backupComplete' | 'backupFailed' | 'backupSkipped'
   | 'restoreStart' | 'restoreComplete' | 'restoreFailed'
@@ -25,6 +25,8 @@ export interface AppNotification {
   timestamp: number
   count: number
   read: boolean
+  /** 关联实例（server 类事件携带；通知条目据此跳转实例页） */
+  instanceId?: string
 }
 
 /** 通知严重度（严重/警告/提示；行内即时反馈分级） */
@@ -45,6 +47,7 @@ export const NOTIFICATION_TYPE_META: Record<
   serverStart: { label: '启动', category: 'server', severity: 'info' },
   serverStop: { label: '停止', category: 'server', severity: 'warning' },
   serverCrash: { label: '崩溃', category: 'server', severity: 'severe' },
+  circuitBreaker: { label: '熔断保护', category: 'server', severity: 'severe' },
   save: { label: '保存', category: 'server', severity: 'info' },
   lowTps: { label: 'TPS 过低', category: 'server', severity: 'warning' },
   highCpu: { label: 'CPU 过高', category: 'server', severity: 'warning' },
@@ -68,7 +71,7 @@ export const NOTIFICATION_TYPE_ORDER: NotificationType[] = Object.keys(
 
 /** critical 类：不参与聚合，每次都独立通知 */
 const CRITICAL_TYPES: ReadonlySet<NotificationType> = new Set([
-  'serverCrash', 'backupFailed', 'restoreFailed', 'taskFailed', 'webhookFailed',
+  'serverCrash', 'circuitBreaker', 'backupFailed', 'restoreFailed', 'taskFailed', 'webhookFailed',
 ])
 
 /** 告警类型集合（阈值跃迁语义，需 _activeAlerts 状态机） */
@@ -164,6 +167,13 @@ export function buildNotifications(
         return [{
           type: 'serverCrash', category: 'server',
           content: d.autoRestart ? '服务器意外退出，正在自动重启' : '服务器意外退出',
+        }]
+      }
+      if (ev === 'circuit_breaker') {
+        const crashes = Number(d.consecutiveCrashes ?? 0)
+        return [{
+          type: 'circuitBreaker', category: 'server',
+          content: `连续崩溃 ${crashes} 次，已触发熔断保护（自动重启暂停，请检查日志）`,
         }]
       }
       if (ev === 'save') {

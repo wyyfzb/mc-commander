@@ -14,9 +14,12 @@ import type {
  */
 
 export interface StatusEvent {
-  event: 'started' | 'stopped' | 'ready' | 'crash' | 'save'
+  event: 'started' | 'stopped' | 'ready' | 'crash' | 'save' | 'circuit_breaker'
   timestamp: number
 }
+
+/** 启停中间态（issue 334）：mutation 发令时置入，WS started/stopped/crash 确认后清除 */
+export type InstancePhase = 'starting' | 'stopping'
 
 interface ServerState {
   /** 当前实例全量状态（GET /instances/:id） */
@@ -31,12 +34,16 @@ interface ServerState {
   hasConnectedOnce: boolean
   /** 最近一次 status 跃迁事件（started/stopped/... 供全量刷新触发） */
   lastStatusEvent: StatusEvent | null
+  /** 启停中间态表（按实例；空对象表示无在途启停） */
+  phase: Record<string, InstancePhase>
 
   setStatus: (status: InstanceStatus | null) => void
   setSystemStats: (stats: SystemStats | null) => void
   setInstanceId: (id: string | null) => void
   setSocketConnected: (connected: boolean) => void
   setHasConnectedOnce: (value: boolean) => void
+  /** 置/清实例启停中间态（phase=null 清除；清除不存在的 key 无害） */
+  setPhase: (instanceId: string, phase: InstancePhase | null) => void
   /** WS status 快照（订阅即回）：合并局部字段 */
   applyWsSnapshot: (instanceId: string, snapshot: WsStatusSnapshot) => void
   /** performanceUpdate：合并局部字段 + 记状态跃迁 */
@@ -52,12 +59,24 @@ export const useServerStore = create<ServerState>()((set) => ({
   socketConnected: false,
   hasConnectedOnce: false,
   lastStatusEvent: null,
+  phase: {},
 
   setStatus: (status) => set({ status }),
   setSystemStats: (systemStats) => set({ systemStats }),
   setInstanceId: (instanceId) => set({ instanceId }),
   setSocketConnected: (socketConnected) => set({ socketConnected }),
   setHasConnectedOnce: (hasConnectedOnce) => set({ hasConnectedOnce }),
+
+  setPhase: (instanceId, phase) =>
+    set((s) => {
+      if (!phase) {
+        if (!(instanceId in s.phase)) return {}
+        const next = { ...s.phase }
+        delete next[instanceId]
+        return { phase: next }
+      }
+      return { phase: { ...s.phase, [instanceId]: phase } }
+    }),
 
   applyWsSnapshot: (instanceId, snapshot) =>
     set((s) => {

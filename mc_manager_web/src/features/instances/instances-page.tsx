@@ -3,14 +3,14 @@
  * - 实例卡片网格（30s 轮询；逐卡详情 useQueries 批量拉取版本等字段，与 dashboard 共享 query 缓存）
  * - 部署向导 Dialog（三步 Stepper + WS 进度，deploy-dialog 组件）
  * - 切换实例/启动配置（实例设置弹窗，instance-settings-dialog 组件）/卸载（危险确认）
- * - 深链接：?tab=deploy 自动打开部署向导
+ * - 深链接：?tab=deploy 自动打开部署向导；?focus=<id> 从通知中心跳转（切换到关联实例）
  */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router'
-import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query'
+import { useQueries, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, Rocket } from 'lucide-react'
 import { toast } from 'sonner'
-import { apiGet, apiPost } from '@/api/client'
+import { apiGet } from '@/api/client'
 import { queryKeys, useInstances } from '@/api/queries'
 import { getFriendlyErrorText } from '@/api/errors'
 import { EmptyState } from '@/components/mcs/empty-state'
@@ -29,6 +29,7 @@ import { UpgradeDialog } from './components/upgrade-dialog'
 import { clearUpgradeProgress } from '@/stores/upgrade'
 import { useUninstallInstance } from './queries'
 import { useStartInstanceWithEula } from '@/hooks/use-start-instance-with-eula'
+import { useStopInstance } from '@/hooks/use-instance-stop'
 
 export function InstancesPage() {
   const config = useConnectionStore()
@@ -37,7 +38,9 @@ export function InstancesPage() {
 
   const instancesQuery = useInstances()
   const uninstallMutation = useUninstallInstance()
+  const stopMutation = useStopInstance()
   const queryClient = useQueryClient()
+  const phase = useServerStore((s) => s.phase)
 
   // ── 对话框状态 ──
   const [searchParams, setSearchParams] = useSearchParams()
@@ -54,20 +57,26 @@ export function InstancesPage() {
   // 启动：共享 mutation（EULA 首启特例：命中 → 弹同意 → 续启；与仪表盘同源）
   const { startInstance, startPending, pendingStartId, eulaDialog } = useStartInstanceWithEula()
 
-  // ── 停止（卡片停止按钮，需确认弹窗）──
-  const runMutation = useMutation({
-    mutationFn: async ({ id }: { id: string }) => {
-      await apiPost(`/api/v1/instances/${id}/stop`, config)
-    },
-    onSuccess: (_data, { id }) => {
-      toast.success('停止指令已发送')
-      void queryClient.invalidateQueries({ queryKey: queryKeys.instance(id) })
-      void instancesQuery.refetch()
-    },
-    onError: (e) => {
-      toast.error(`操作失败：${getFriendlyErrorText(e)}`)
-    },
-  })
+  // ── 深链接：?focus=<id> 从通知中心跳转（issue 334）→ 切换到关联实例并清参数 ──
+  useEffect(() => {
+    const focus = searchParams.get('focus')
+    if (!focus) return
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        next.delete('focus')
+        return next
+      },
+      { replace: true },
+    )
+    if (focus !== instanceId) {
+      setInstanceId(focus)
+      toast.success('已切换到通知关联的实例', { duration: 1500 })
+    }
+  }, [searchParams, setSearchParams, setInstanceId, instanceId])
+
+  // ── 停止：共享 mutation（issue 334 收敛：与仪表盘同源，phase 中间态防连点） ──
+  // 卡片停止按钮仍经 ConfirmDialog 确认后调用 stopMutation.mutate(id)
 
   /** 卡片启动：EULA 首启弹窗由共享 hook 处理，成功后反馈与列表刷新与 stop 一致 */
   const handleStart = (inst: InstanceSummary) => {
@@ -203,8 +212,9 @@ export function InstancesPage() {
             onStop={setStopTarget}
             busyId={
               (startPending ? pendingStartId : null) ??
-              (runMutation.isPending ? (runMutation.variables?.id ?? null) : null)
+              (stopMutation.isPending ? (stopMutation.variables ?? null) : null)
             }
+            phaseById={phase}
             onDeploy={() => setDeployOpenDeep(true)}
           />
         )}
@@ -249,7 +259,7 @@ export function InstancesPage() {
         onConfirm={() => {
           const target = stopTarget
           setStopTarget(null)
-          if (target) runMutation.mutate({ id: target.id })
+          if (target) stopMutation.mutate(target.id)
         }}
       />
 

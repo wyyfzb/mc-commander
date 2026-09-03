@@ -6,6 +6,7 @@ import {
   CheckCheck,
   CheckCircle2,
   ChevronRight,
+  CircuitBoard,
   CloudSun,
   Cpu,
   Gauge,
@@ -49,6 +50,7 @@ const TYPE_ICON: Record<NotificationType, LucideIcon> = {
   join: LogIn, leave: LogOut, death: Skull, revive: HeartPulse,
   achievement: Trophy, chat: MessageSquare, sleep: MoonStar,
   serverStart: Play, serverStop: Square, serverCrash: AlertTriangle, save: Save,
+  circuitBreaker: CircuitBoard,
   lowTps: Gauge, highCpu: Cpu, highMemory: MemoryStick, weatherChange: CloudSun,
   backupStart: Archive, backupComplete: CheckCircle2, backupFailed: AlertCircle,
   backupSkipped: SkipForward, restoreStart: History, restoreComplete: CheckCheck,
@@ -67,6 +69,7 @@ const TYPE_COLOR: Record<NotificationType, { text: string; bg: string; border: s
   serverStart: { text: 'text-mcs-success-fg', bg: 'bg-mcs-success-bg-subtle', border: 'border-mcs-success-border' },
   serverStop: { text: 'text-mcs-text-muted', bg: 'bg-mcs-bg-hover', border: 'border-mcs-border-default' },
   serverCrash: { text: 'text-mcs-error-fg', bg: 'bg-mcs-error-bg-subtle', border: 'border-mcs-error-border' },
+  circuitBreaker: { text: 'text-mcs-error-fg', bg: 'bg-mcs-error-bg-subtle', border: 'border-mcs-error-border' },
   save: { text: 'text-mcs-info-fg', bg: 'bg-mcs-info-bg-subtle', border: 'border-mcs-info-border' },
   lowTps: { text: 'text-mcs-warning-fg', bg: 'bg-mcs-warning-bg-subtle', border: 'border-mcs-warning-border' },
   highCpu: { text: 'text-mcs-warning-fg', bg: 'bg-mcs-warning-bg-subtle', border: 'border-mcs-warning-border' },
@@ -140,11 +143,19 @@ export function NotificationDrawer({ open, onOpenChange }: NotificationDrawerPro
               const Icon = TYPE_ICON[n.type]
               const color = TYPE_COLOR[n.type]
               const isGame = n.category === 'game'
+              // 关联实例条目可跳转（issue 334）：关闭抽屉 → 实例页 focus 深链接切换
+              const jumpToInstance = () => {
+                markAsRead(n.id)
+                if (n.instanceId) {
+                  onOpenChange(false)
+                  navigate(`/instances?focus=${encodeURIComponent(n.instanceId)}`)
+                }
+              }
               return (
                 <button
                   key={n.id}
                   type="button"
-                  onClick={() => markAsRead(n.id)}
+                  onClick={jumpToInstance}
                   className={cn(
                     'flex max-w-[260px] flex-col gap-1 rounded-mcs-sm border px-3 py-2 text-left',
                     isGame
@@ -154,8 +165,13 @@ export function NotificationDrawer({ open, onOpenChange }: NotificationDrawerPro
                     n.read
                       ? 'border-mcs-border-muted'
                       : cn('border', color.border),
+                    n.instanceId && 'cursor-pointer transition-colors hover:border-mcs-accent-border',
                   )}
-                  aria-label={n.read ? n.content : `未读：${n.content}`}
+                  aria-label={
+                    n.read
+                      ? (n.instanceId ? `${n.content}，点击查看关联实例` : n.content)
+                      : `未读：${n.content}${n.instanceId ? '，点击查看关联实例' : ''}`
+                  }
                 >
                   <span className="flex items-center gap-1.5">
                     <Icon className={cn('size-3', color.text)} aria-hidden />
@@ -175,6 +191,12 @@ export function NotificationDrawer({ open, onOpenChange }: NotificationDrawerPro
                     {n.content}
                     {n.count > 1 && <span className="text-mcs-accent-fg"> ×{n.count}</span>}
                   </span>
+                  {n.instanceId && (
+                    <span className="flex items-center gap-0.5 text-mcs-2xs text-mcs-info-fg">
+                      查看实例
+                      <ChevronRight className="size-3" aria-hidden />
+                    </span>
+                  )}
                 </button>
               )
             })

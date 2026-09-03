@@ -12,6 +12,7 @@ import { useConnectionStore } from '@/stores/connection'
 import { useServerStore } from '@/stores/server'
 import { useTerminalStore } from '@/stores/terminal'
 import { useStartInstanceWithEula } from '@/hooks/use-start-instance-with-eula'
+import { useStopInstance } from '@/hooks/use-instance-stop'
 import type { InstanceStatus } from '@/api/types'
 
 /**
@@ -32,6 +33,7 @@ export function InstanceControls({ compact = false }: { compact?: boolean }) {
   const config = useConnectionStore()
   const status = useServerStore((s) => s.status)
   const instanceId = useServerStore((s) => s.instanceId)
+  const currentPhase = useServerStore((s) => (s.instanceId ? (s.phase[s.instanceId] ?? null) : null))
   const resetTerminal = useTerminalStore((s) => s.resetForRestart)
   const [busyAction, setBusyAction] = useState<BusyAction>(null)
   const [confirmAction, setConfirmAction] = useState<'启动' | '停止' | '重启' | null>(null)
@@ -41,9 +43,12 @@ export function InstanceControls({ compact = false }: { compact?: boolean }) {
   // 启动：共享 mutation（EULA 首启特例内置：命中 → 弹同意 → 续启；与实例页同源）
   const { startInstance, startPending, pendingStartId, eulaDialog } = useStartInstanceWithEula()
 
-  // 停止/重启/保存（启动已拆出走共享 hook）
+  // 停止：共享 mutation（issue 334 收敛：与实例页同源，phase 中间态防连点）
+  const stopMutation = useStopInstance()
+
+  // 重启/保存（启动/停止已拆出共享 hook）
   const mutation = useMutation({
-    mutationFn: async (action: 'stop' | 'restart' | 'save') => {
+    mutationFn: async (action: 'restart' | 'save') => {
       if (!instanceId) throw new ApiError(40401, 404, 'Instance not found', null)
       if (action === 'save') {
         await apiPost(`/api/v1/instances/${instanceId}/command`, config, { command: 'save-all' })
@@ -52,11 +57,7 @@ export function InstanceControls({ compact = false }: { compact?: boolean }) {
       await apiPost(`/api/v1/instances/${instanceId}/${action}`, config)
     },
     onSuccess: async (_data, action) => {
-      if (action === 'stop') {
-        await sleep(2000)
-        await queryClient.invalidateQueries({ queryKey: queryKeys.instance(instanceId ?? '') })
-        toast.success('服务器已停止')
-      } else if (action === 'restart') {
+      if (action === 'restart') {
         // 终端联动：手动重启清空终端+重拉新进程历史
         resetTerminal()
         await sleep(3000)
@@ -68,7 +69,7 @@ export function InstanceControls({ compact = false }: { compact?: boolean }) {
     },
     onError: (err, action) => {
       const friendly = getFriendlyErrorText(err)
-      toast.error(`${action === 'save' ? '保存失败' : `${action}失败`}：${friendly}`)
+      toast.error(`${action === 'save' ? '保存失败' : '重启失败'}：${friendly}`)
     },
   })
 
@@ -118,7 +119,11 @@ export function InstanceControls({ compact = false }: { compact?: boolean }) {
       return
     }
     setBusyAction(action)
-    mutation.mutate(action === '停止' ? 'stop' : 'restart', {
+    if (action === '停止') {
+      stopMutation.mutate(instanceId ?? '', { onSettled: () => setBusyAction(null) })
+      return
+    }
+    mutation.mutate('restart', {
       onSettled: () => setBusyAction(null),
     })
   }
@@ -128,8 +133,10 @@ export function InstanceControls({ compact = false }: { compact?: boolean }) {
     ?.map((p) => p.name)
     .filter(Boolean) ?? []
 
-  // 启动按钮 busy：共享 hook 的启动中（含 EULA 同意后续启）或本页确认弹窗链路
-  const startBusy = (startPending && pendingStartId === instanceId) || busyAction === '启动'
+  // 启动按钮 busy：共享 hook 的启动中（含 EULA 同意后续启）或本页确认弹窗链路；
+  // phase 中间态（issue 334）：starting/stopping 期间全部启停按钮禁用（WS 确认后解锁）
+  const startBusy = (startPending && pendingStartId === instanceId) || busyAction === '启动' || currentPhase === 'starting'
+  const stopBusy = stopMutation.isPending || currentPhase === 'stopping'
 
   const buttons = [
     {
@@ -142,7 +149,7 @@ export function InstanceControls({ compact = false }: { compact?: boolean }) {
     {
       action: '停止' as const,
       icon: Square,
-      disabled: !isRunning || (busyAction !== null && busyAction !== '停止'),
+      disabled: !isRunning || (busyAction !== null && busyAction !== '停止') || currentPhase !== null,
       color: 'text-mcs-error-fg',
       confirm: {
         title: '关闭服务器',
@@ -156,14 +163,14 @@ export function InstanceControls({ compact = false }: { compact?: boolean }) {
     {
       action: '重启' as const,
       icon: RefreshCw,
-      disabled: !isRunning || (busyAction !== null && busyAction !== '重启'),
+      disabled: !isRunning || (busyAction !== null && busyAction !== '重启') || currentPhase !== null,
       color: 'text-mcs-info-fg',
       confirm: { title: '重启服务器', description: '确定要重启服务器吗？重启期间玩家将断开连接。' },
     },
     {
       action: '保存' as const,
       icon: Save,
-      disabled: !isRunning || busyAction !== null,
+      disabled: !isRunning || busyAction !== null || currentPhase !== null,
       color: 'text-mcs-accent-fg',
       confirm: null, // 保存无确认直接发送
     },
@@ -188,7 +195,7 @@ export function InstanceControls({ compact = false }: { compact?: boolean }) {
                   }
                 }}
               >
-                {busyAction === b.action || (b.action === '启动' && startBusy) ? (
+                {busyAction === b.action || (b.action === '启动' && startBusy) || (b.action === '停止' && stopBusy) ? (
                   <Loader2 className="size-4 animate-spin" aria-hidden />
                 ) : (
                   <b.icon className={`size-4 ${b.color}`} aria-hidden />

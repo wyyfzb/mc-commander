@@ -98,6 +98,20 @@ describe('buildNotifications 文案模板', () => {
   it('非通知事件返回空数组', () => {
     expect(buildNotifications({ type: 'log', data: { text: 'x' } })).toEqual([])
   })
+
+  it('status circuit_breaker → circuitBreaker severe 通知（含连崩次数）', () => {
+    const [n] = buildNotifications({
+      type: 'status',
+      data: { event: 'circuit_breaker', consecutiveCrashes: 3, windowMs: 120000 },
+    })
+    expect(n).toMatchObject({ type: 'circuitBreaker', category: 'server' })
+    expect(n?.content).toBe('连续崩溃 3 次，已触发熔断保护（自动重启暂停，请检查日志）')
+  })
+
+  it('status circuit_breaker 缺次数字段时显示 0', () => {
+    const [n] = buildNotifications({ type: 'status', data: { event: 'circuit_breaker' } })
+    expect(n?.content).toBe('连续崩溃 0 次，已触发熔断保护（自动重启暂停，请检查日志）')
+  })
 })
 
 describe('aggregateNotifications 聚合规则', () => {
@@ -151,6 +165,16 @@ describe('aggregateNotifications 聚合规则', () => {
       existing,
       { type: 'taskFailed', category: 'server', content: '定时任务「每日重启」执行失败' },
       100_000, // 5s 后同一失败再来一条
+    )
+    expect(result).toHaveLength(2)
+  })
+
+  it('circuitBreaker 属 critical 类：连续熔断不聚合（每次独立可见）', () => {
+    const existing = [base({ type: 'circuitBreaker', content: '连续崩溃 3 次，已触发熔断保护（自动重启暂停，请检查日志）', timestamp: 95_000 })]
+    const result = aggregateNotifications(
+      existing,
+      { type: 'circuitBreaker', category: 'server', content: '连续崩溃 3 次，已触发熔断保护（自动重启暂停，请检查日志）' },
+      100_000,
     )
     expect(result).toHaveLength(2)
   })
