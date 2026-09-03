@@ -277,6 +277,23 @@ describe('DeployDialog', () => {
     expect(useDeployStore.getState().lastResult).toBeNull()
   })
 
+  it('上一步返回步骤①再前进：表单值保留（拆分后主流程回归，组件层状态提升验证）', async () => {
+    renderDialog()
+    const user = userEvent.setup()
+    await waitVersion()
+
+    // 步骤②填写名称 → 上一步回步骤① → 再前进
+    await user.click(screen.getByRole('button', { name: '下一步' }))
+    await user.type(screen.getByLabelText('实例名称'), '我的生存服')
+    await user.click(screen.getByRole('button', { name: '上一步' }))
+    expect(screen.getAllByRole('radio')).toHaveLength(5)
+
+    await user.click(screen.getByRole('button', { name: '下一步' }))
+    expect(screen.getByLabelText('实例名称')).toHaveValue('我的生存服')
+    // 步骤②无名称错误残留（前进时校验已清空）
+    expect(screen.queryByText('请填写实例名称')).not.toBeInTheDocument()
+  })
+
   it('EULA 勾选门控：默认不勾 + 未勾选提示；自动启动失败展示降级提示', async () => {
     startMock.shouldFail = true // EULA 同意成功但启动指令失败
     renderDialog()
