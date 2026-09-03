@@ -198,10 +198,10 @@ describe('getNextCronRun / formatNextRun', () => {
     expect(getNextCronRun('a b c d e')).toBeNull()
   })
 
-  it('formatNextRun 返回 MM/DD HH:mm 格式', () => {
+  it('formatNextRun 返回 MM-dd HH:mm 格式', () => {
     const formatted = formatNextRun('0 4 * * *')
-    // 格式应为 MM/DD HH:mm
-    expect(formatted).toMatch(/^\d{2}\/\d{2} \d{2}:\d{2}$/)
+    // 格式应为 MM-dd HH:mm（与 lib/format.ts 收口风格一致，MM-dd 短横线分隔）
+    expect(formatted).toMatch(/^\d{2}-\d{2} \d{2}:\d{2}$/)
   })
 
   it('formatNextRun 无效表达式返回空串', () => {
