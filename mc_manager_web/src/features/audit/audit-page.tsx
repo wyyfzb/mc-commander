@@ -3,8 +3,11 @@
  * 双 Tab：审计日志（操作记录）/ 命令历史（命令执行记录）
  * TanStack Query 数据获取：isLoading/isFetching/isError 内建，
  * keepPreviousData 翻页不闪烁，过滤器变化经 query key 自动重获取
+ * 筛选状态 URL 持久化（issue 381）：tab/页码/操作类型/时间起止同步到查询参数，
+ * 刷新/分享链接后筛选保持（与核心列表页 useSearchParams 模式对齐）
  */
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router'
 import { RefreshCw, X } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
@@ -54,6 +57,9 @@ function formatTime(iso: string): string {
 
 const AUDIT_COLUMNS = 4
 const CMD_COLUMNS = 5
+
+/** URL 日期参数校验：仅接受 yyyy-MM-dd（与 input type=date 值同构，非法值回退默认不过滤） */
+const DATE_PARAM_RE = /^\d{4}-\d{2}-\d{2}$/
 
 /** 审计日志表头 */
 function AuditHeader() {
@@ -124,12 +130,65 @@ function CmdBody({ cmds }: { cmds: CommandHistoryItem[] }) {
 }
 
 export function AuditPage() {
-  const [tab, setTab] = useState('audit')
+  // ── 筛选状态 URL 持久化（issue 381）：state 为唯一真源，URL 为镜像 ──
+  // 挂载时惰性读取（非法值回退默认，与无参数访问行为一致）；变更经 setter 包装同步写回。
+  // paramsRef 累积同批次多次 patch（如清空筛选四连调）：setSearchParams 的函数式更新
+  // 捕获的是本次渲染的闭包值，同批多次调用会互相覆盖，因此先在 ref 上合并再一次性写回。
+  const [searchParams, setSearchParams] = useSearchParams()
+  const paramsRef = useRef(new URLSearchParams(searchParams))
+  const syncParams = (patch: Record<string, string | null>) => {
+    const next = new URLSearchParams(paramsRef.current)
+    for (const [key, value] of Object.entries(patch)) {
+      if (value === null || value === '') next.delete(key)
+      else next.set(key, value)
+    }
+    paramsRef.current = next
+    setSearchParams(next, { replace: true })
+  }
 
-  const [auditPage, setAuditPage] = useState(1)
-  const [auditAction, setAuditAction] = useState('')
-  const [auditStart, setAuditStart] = useState('')
-  const [auditEnd, setAuditEnd] = useState('')
+  const [tab, setTabState] = useState(() => {
+    const v = searchParams.get('tab')
+    return v === 'audit' || v === 'commands' ? v : 'audit'
+  })
+
+  const [auditPage, setAuditPageState] = useState(() => {
+    const n = Number(searchParams.get('page'))
+    return Number.isInteger(n) && n >= 1 ? n : 1
+  })
+  const [auditAction, setAuditActionState] = useState(() => {
+    const v = searchParams.get('action')
+    return v && v in ACTION_LABELS ? v : ''
+  })
+  const [auditStart, setAuditStartState] = useState(() => {
+    const v = searchParams.get('start') ?? ''
+    return DATE_PARAM_RE.test(v) ? v : ''
+  })
+  const [auditEnd, setAuditEndState] = useState(() => {
+    const v = searchParams.get('end') ?? ''
+    return DATE_PARAM_RE.test(v) ? v : ''
+  })
+
+  // setter 包装：state 与 URL 镜像同步写回（默认值/空值不留参数，URL 保持最短）
+  const setTab = (v: string) => {
+    setTabState(v)
+    syncParams({ tab: v === 'audit' ? null : v })
+  }
+  const setAuditPage = (n: number) => {
+    setAuditPageState(n)
+    syncParams({ page: n === 1 ? null : String(n) })
+  }
+  const setAuditAction = (v: string) => {
+    setAuditActionState(v)
+    syncParams({ action: v || null })
+  }
+  const setAuditStart = (v: string) => {
+    setAuditStartState(v)
+    syncParams({ start: v || null })
+  }
+  const setAuditEnd = (v: string) => {
+    setAuditEndState(v)
+    syncParams({ end: v || null })
+  }
 
   // 起止倒置：可见提示并暂停时间过滤（不许静默空结果）；仅一端有值时单边过滤
   const rangeInvalid = isRangeInverted(auditStart, auditEnd)

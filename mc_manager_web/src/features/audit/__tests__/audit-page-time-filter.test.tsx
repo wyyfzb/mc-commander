@@ -13,6 +13,7 @@ import { describe, expect, it, vi, beforeEach, beforeAll } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { createMemoryRouter, RouterProvider } from 'react-router'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { AuditPage } from '../audit-page'
 import { quickRangeDates, toServerStart, toServerEnd } from '../time-range'
@@ -68,15 +69,25 @@ function lastCall(): Record<string, unknown> {
   return last!
 }
 
-function renderPage() {
+function renderPage(initialPath = '/audit') {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  return render(
-    <QueryClientProvider client={qc}>
-      <TooltipProvider>
-        <AuditPage />
-      </TooltipProvider>
-    </QueryClientProvider>,
+  // AuditPage 内部使用 useSearchParams，须经 Router 提供 context
+  const router = createMemoryRouter(
+    [
+      {
+        path: '/audit',
+        element: (
+          <QueryClientProvider client={qc}>
+            <TooltipProvider>
+              <AuditPage />
+            </TooltipProvider>
+          </QueryClientProvider>
+        ),
+      },
+    ],
+    { initialEntries: [initialPath] },
   )
+  return render(<RouterProvider router={router} />)
 }
 
 function dateInput(label: string): HTMLInputElement {
