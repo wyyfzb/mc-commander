@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { Chip } from '@/components/mcs/chip'
 import { SearchInput } from '@/components/mcs/search-input'
+import { copyText } from '@/lib/clipboard'
 import {
   Select,
   SelectContent,
@@ -135,12 +136,13 @@ export function PropertiesPanel({ properties, isLoading, onSave, onEditingChange
     const text = restartItems
       .map((item) => `${item.label}（${item.key}）：${item.oldValue} → ${item.newValue}`)
       .join('\n')
-    try {
-      await navigator.clipboard.writeText(text)
+    // copyText 内部降级 execCommand（HTTP 非安全上下文可用）且绝不抛异常
+    const ok = await copyText(text)
+    if (ok) {
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
-    } catch {
-      toast.error('复制失败')
+    } else {
+      toast.error('复制失败，请手动复制')
     }
   }
 

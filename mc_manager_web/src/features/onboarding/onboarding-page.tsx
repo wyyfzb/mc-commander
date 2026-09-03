@@ -10,6 +10,7 @@ import { useNavigate } from 'react-router'
 import { Check, Container, Copy, Lightbulb, Package, Server, Terminal } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { copyText } from '@/lib/clipboard'
 import { BrandLogo } from '@/components/mcs/brand-logo'
 import { ConnectionForm } from '@/features/settings/components/connection-form'
 
@@ -70,12 +71,10 @@ function ModeCard({
 /** 命令展示块（mono 可复制） */
 function CommandBlock({ command, ariaLabel }: { command: string; ariaLabel: string }) {
   const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(command)
-      toast.success('命令已复制', { duration: 1500 })
-    } catch {
-      toast.error('复制失败，请手动复制')
-    }
+    // copyText 内部降级 execCommand（HTTP 非安全上下文可用）且绝不抛异常
+    const ok = await copyText(command)
+    if (ok) toast.success('命令已复制', { duration: 1500 })
+    else toast.error('复制失败，请手动复制')
   }
   return (
     <div className="flex items-start gap-2">
