@@ -63,6 +63,42 @@ describe('Audit Routes', () => {
     );
   });
 
+  it('GET /audit-logs passes order=asc to model', async () => {
+    await request(app)
+      .get('/api/v1/audit-logs?order=asc')
+      .set('X-API-Key', 'test-key');
+    expect(AuditLogModel.findAll).toHaveBeenCalledWith(
+      expect.objectContaining({ order: 'asc' }),
+    );
+  });
+
+  it('GET /audit-logs passes order=desc to model', async () => {
+    await request(app)
+      .get('/api/v1/audit-logs?order=desc')
+      .set('X-API-Key', 'test-key');
+    expect(AuditLogModel.findAll).toHaveBeenCalledWith(
+      expect.objectContaining({ order: 'desc' }),
+    );
+  });
+
+  it('GET /audit-logs without order defaults to desc (backward compatible)', async () => {
+    await request(app)
+      .get('/api/v1/audit-logs')
+      .set('X-API-Key', 'test-key');
+    expect(AuditLogModel.findAll).toHaveBeenCalledWith(
+      expect.objectContaining({ order: 'desc' }),
+    );
+  });
+
+  it('GET /audit-logs invalid order falls back to desc', async () => {
+    await request(app)
+      .get('/api/v1/audit-logs?order=invalid')
+      .set('X-API-Key', 'test-key');
+    expect(AuditLogModel.findAll).toHaveBeenCalledWith(
+      expect.objectContaining({ order: 'desc' }),
+    );
+  });
+
   it('GET /command-history returns paginated results', async () => {
     const res = await request(app)
       .get('/api/v1/command-history?page=1&pageSize=10')
