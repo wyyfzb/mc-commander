@@ -30,7 +30,13 @@ jobs:
           cache-dependency-path: mc_commander_server/package-lock.json
       - run: npm ci
       - run: npm run lint
-      - run: npm test
+      - run: npm run test:coverage
+      - name: 上传覆盖率报告
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-server
+          path: mc_commander_server/coverage/coverage-final.json
+          retention-days: 7
 
   web-check:
     name: 前端（lint + test）
@@ -50,10 +56,35 @@ jobs:
           cache-dependency-path: mc_manager_web/package-lock.json
       - run: npm ci
       - run: npm run lint
-      - run: npm run test
+      - run: npm run test:coverage
       # 设计 token 守门（色板类/dark:/transition-all/动效/圆角 + 对比度）——与 lint/test 并列拦截
       - run: npm run check:design-tokens
       - run: npm run check:contrast
+      - name: 上传覆盖率报告
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-web
+          path: mc_manager_web/coverage/coverage-final.json
+          retention-days: 7
+
+  coverage-gate:
+    name: 覆盖率门禁（≥ 70%）
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'push' ||
+      !github.event.pull_request.draft
+    needs: [server, web-check]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: 下载覆盖率产物
+        uses: actions/download-artifact@v7
+        with:
+          path: coverage-artifacts
+      - name: 汇总两份覆盖率并与阈值比较
+        run: node scripts/check-coverage-gate.mjs coverage-artifacts/coverage-web/coverage-final.json coverage-artifacts/coverage-server/coverage-final.json 70
 
   web-e2e:
     name: 前端（build + e2e）
