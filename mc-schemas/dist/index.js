@@ -3520,7 +3520,7 @@ const booleanType = ZodBoolean.create;
 ZodDate.create;
 ZodSymbol.create;
 ZodUndefined.create;
-ZodNull.create;
+const nullType = ZodNull.create;
 ZodAny.create;
 const unknownType = ZodUnknown.create;
 ZodNever.create;
@@ -3532,7 +3532,7 @@ const unionType = ZodUnion.create;
 ZodDiscriminatedUnion.create;
 ZodIntersection.create;
 ZodTuple.create;
-ZodRecord.create;
+const recordType = ZodRecord.create;
 ZodMap.create;
 ZodSet.create;
 ZodFunction.create;
@@ -3583,6 +3583,8 @@ const apiErrorEnvelopeSchema = objectType({
 	details: unknownType(),
 	timestamp: stringType()
 });
+/** 无载荷操作的成功响应 data（启动/停止/删除/解封等副作用端点固定返回 null） */
+const nullDataSchema = nullType();
 //#endregion
 //#region src/player.ts
 const playerDimensionSchema = enumType([
@@ -3708,6 +3710,25 @@ const playerSchema = objectType({
 	sessions: arrayType(playerSessionSchema),
 	stats: playerStatsSchema
 });
+/** 玩家列表（在线 + 离线混合，非分页信封） */
+const playerListSchema = arrayType(playerSchema);
+/**
+* 玩家详情端点响应（观测边界：核心字段严格，RCON 动态字段透传）。
+* 详情聚合 baseInfo 与 RCON 实时采集，后者字段集随实例状态浮动，
+* 故仅锁定身份与时长等稳定字段，zod 默认忽略未声明键。
+*/
+const playerDetailsResponseSchema = objectType({
+	name: stringType(),
+	uuid: stringType(),
+	isOnline: booleanType(),
+	isOp: booleanType(),
+	isWhitelisted: booleanType(),
+	isBanned: booleanType(),
+	totalPlayTime: numberType(),
+	lastSeen: stringType().nullable()
+});
+/** 封禁操作响应（临时封禁返回到期时间，永久/未传时长为 null） */
+const banResponseBodySchema = objectType({ expiresAt: numberType().nullable() });
 /** 封禁记录 */
 const banRecordSchema = objectType({
 	targetType: enumType(["player", "ip"]),
@@ -3718,6 +3739,8 @@ const banRecordSchema = objectType({
 	expiresAt: numberType().nullable(),
 	createdAt: stringType()
 });
+/** 封禁记录列表（生效中在前 + 历史，非分页信封） */
+const banRecordListSchema = arrayType(banRecordSchema);
 /** 封禁请求体 */
 const banRequestBodySchema = objectType({
 	reason: stringType().optional(),
@@ -3828,6 +3851,12 @@ const logEntrySchema = objectType({
 	text: stringType(),
 	type: enumType(["stdout", "stderr"])
 });
+/** 实例列表（toStatus() 数组，非分页信封） */
+const instanceStatusListSchema = arrayType(instanceStatusSchema);
+/** 日志环形缓冲切片（logBuffer 元素含 time 键，观测仅锁定 text/type） */
+const logEntriesSchema = arrayType(logEntrySchema);
+/** 命令执行响应：RCON 回显文本或 null（实例未运行/空回显） */
+const commandResponseSchema = stringType().nullable();
 //#endregion
 //#region src/backup.ts
 const backupItemSchema = objectType({
@@ -3932,8 +3961,12 @@ const WS_EVENT_TYPES = [
 	"taskFailed",
 	"webhookDeliveryFailed",
 	"deployProgress",
+	"deployComplete",
+	"deployFailed",
 	"circuit_breaker",
 	"upgradeProgress",
+	"upgradeComplete",
+	"upgradeFailed",
 	"systemStatsUpdate",
 	"error"
 ];
@@ -4047,10 +4080,12 @@ const worldInfoSchema = objectType({
 	generateStructures: booleanType(),
 	whiteList: booleanType(),
 	onlineMode: booleanType(),
-	lastSave: numberType().nullable(),
+	lastSave: stringType().nullable(),
 	gameDays: numberType().nullable(),
 	dimensions: arrayType(worldDimensionSchema)
 });
+/** server.properties 键值对（GET /properties 全量响应，值均为 properties 文件文本） */
+const serverPropertiesSchema = recordType(stringType(), stringType());
 const updatePropertiesResponseSchema = objectType({ restartRequired: arrayType(stringType()) });
 //#endregion
 //#region src/files.ts
@@ -4186,7 +4221,11 @@ const deployProgressSchema = objectType({
 	percent: numberType(),
 	transferred: numberType(),
 	total: numberType(),
-	error: stringType().optional()
+	error: stringType().optional(),
+	instanceId: stringType().optional(),
+	instanceName: stringType().optional(),
+	type: stringType().optional(),
+	mcVersion: stringType().optional()
 });
 const upgradeStageSchema = enumType([
 	"backup",
@@ -4349,4 +4388,4 @@ const updateCheckResultSchema = objectType({
 	url: stringType().optional()
 });
 //#endregion
-export { NOTIFICATION_EVENT_TYPES, WS_EVENT_TYPES, apiEnvelopeSchema, apiErrorEnvelopeSchema, auditLogItemSchema, backupCreateRequestSchema, backupItemSchema, banRecordSchema, banRequestBodySchema, commandHistoryItemSchema, deployProgressSchema, deployRequestSchema, deployResultSchema, diskInfoSchema, diskUsageSchema, fileContentResponseSchema, fileEntrySchema, fileInfoResponseSchema, fileListResponseSchema, fileSaveResponseSchema, instanceStatusSchema, instanceSummarySchema, instanceUpdatePayloadSchema, inventoryItemSchema, ipHistoryEntrySchema, logEntrySchema, makeApiEnvelopeSchema, marketInstallResultSchema, marketSearchHitSchema, marketSearchResultSchema, marketVersionFileSchema, marketVersionSchema, marketVersionsResultSchema, overviewDataSchema, paginationSchema, playerDimensionSchema, playerEventSchema, playerGameModeSchema, playerInventorySchema, playerPositionSchema, playerPotionEffectSchema, playerSchema, playerSessionSchema, playerStatsSchema, pluginInfoSchema, pluginListSchema, pluginMetaSchema, pluginToggleResultSchema, pluginUpdateCheckResultSchema, pluginUpdateStatusSchema, pluginUploadResultSchema, scheduledTaskSchema, scheduledTaskTypeSchema, spawnPointSchema, systemStatsSchema, taskCreatePayloadSchema, taskRunHistorySchema, taskRunStatusSchema, taskUpdatePayloadSchema, updateCheckResultSchema, updatePropertiesResponseSchema, upgradeProgressSchema, upgradeRequestSchema, upgradeStageSchema, upgradeStartResponseSchema, versionsResponseSchema, weatherTypeSchema, webhookCreatePayloadSchema, webhookDeliverySchema, webhookSchema, webhookTestResultSchema, worldDimensionSchema, worldInfoSchema, wsBackupPayloadSchema, wsEventTypeSchema, wsLogPayloadSchema, wsMessageSchema, wsPerformancePayloadSchema, wsPlayerEventPayloadSchema, wsStatusEventPayloadSchema, wsStatusSnapshotSchema, wsWeatherPayloadSchema };
+export { NOTIFICATION_EVENT_TYPES, WS_EVENT_TYPES, apiEnvelopeSchema, apiErrorEnvelopeSchema, auditLogItemSchema, backupCreateRequestSchema, backupItemSchema, banRecordListSchema, banRecordSchema, banRequestBodySchema, banResponseBodySchema, commandHistoryItemSchema, commandResponseSchema, deployProgressSchema, deployRequestSchema, deployResultSchema, diskInfoSchema, diskUsageSchema, fileContentResponseSchema, fileEntrySchema, fileInfoResponseSchema, fileListResponseSchema, fileSaveResponseSchema, instanceStatusListSchema, instanceStatusSchema, instanceSummarySchema, instanceUpdatePayloadSchema, inventoryItemSchema, ipHistoryEntrySchema, logEntriesSchema, logEntrySchema, makeApiEnvelopeSchema, marketInstallResultSchema, marketSearchHitSchema, marketSearchResultSchema, marketVersionFileSchema, marketVersionSchema, marketVersionsResultSchema, nullDataSchema, overviewDataSchema, paginationSchema, playerDetailsResponseSchema, playerDimensionSchema, playerEventSchema, playerGameModeSchema, playerInventorySchema, playerListSchema, playerPositionSchema, playerPotionEffectSchema, playerSchema, playerSessionSchema, playerStatsSchema, pluginInfoSchema, pluginListSchema, pluginMetaSchema, pluginToggleResultSchema, pluginUpdateCheckResultSchema, pluginUpdateStatusSchema, pluginUploadResultSchema, scheduledTaskSchema, scheduledTaskTypeSchema, serverPropertiesSchema, spawnPointSchema, systemStatsSchema, taskCreatePayloadSchema, taskRunHistorySchema, taskRunStatusSchema, taskUpdatePayloadSchema, updateCheckResultSchema, updatePropertiesResponseSchema, upgradeProgressSchema, upgradeRequestSchema, upgradeStageSchema, upgradeStartResponseSchema, versionsResponseSchema, weatherTypeSchema, webhookCreatePayloadSchema, webhookDeliverySchema, webhookSchema, webhookTestResultSchema, worldDimensionSchema, worldInfoSchema, wsBackupPayloadSchema, wsEventTypeSchema, wsLogPayloadSchema, wsMessageSchema, wsPerformancePayloadSchema, wsPlayerEventPayloadSchema, wsStatusEventPayloadSchema, wsStatusSnapshotSchema, wsWeatherPayloadSchema };

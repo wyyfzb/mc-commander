@@ -245,7 +245,7 @@ export const mockWorldInfo: WorldInfo = {
   generateStructures: true,
   whiteList: false,
   onlineMode: true,
-  lastSave: new Date(Date.now() - 5 * 60_000).getTime(),
+  lastSave: new Date(Date.now() - 5 * 60_000).toISOString(),
   gameDays: 42,
   dimensions: [
     { name: '主世界', icon: '🌍', playerCount: 2 },

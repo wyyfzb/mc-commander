@@ -167,7 +167,7 @@ describe('schemas 基础校验', () => {
       onlinePlayers: 1, maxPlayers: 20, spawnProtection: 0, maxWorldSize: 29999984,
       allowFlight: false, hardcore: false, pvp: true, commandBlock: false,
       generateStructures: true, whiteList: false, onlineMode: true,
-      lastSave: 1704067200000, gameDays: 42, dimensions: [],
+      lastSave: '2026-01-01T00:00:00.000Z', gameDays: 42, dimensions: [],
     })
     expect(w.seed).toBe('12345')
   })

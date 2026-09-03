@@ -2,11 +2,24 @@ import express from 'express';
 import os from 'os';
 import fs from 'fs';
 import path from 'path';
-import { success, error, ErrorCodes } from '../utils/response.js';
+import { error, ErrorCodes } from '../utils/response.js';
 import { InstanceModel, BackupModel } from '../db/index.js';
 import config from '../config.js';
 import { atomicWriteFile } from '../services/mc_server.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
+import {
+  commandResponseSchema,
+  instanceStatusListSchema,
+  instanceStatusSchema,
+  logEntriesSchema,
+  nullDataSchema,
+  overviewDataSchema,
+  serverPropertiesSchema,
+  systemStatsSchema,
+  updatePropertiesResponseSchema,
+  worldInfoSchema,
+} from '@mc-commander/schemas';
+import { validatedSuccess } from '../middleware/validate.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { logger } from '../utils/logger.js';
 
@@ -148,7 +161,7 @@ export function createStatusRoutes(serverManager) {
       : 0;
     const cpuUsagePercent = getSystemCpuUsage();
 
-    res.json(success({
+    res.json(validatedSuccess(overviewDataSchema, {
       version: '0.1.0',
       instanceCount: instances.length,
       runningCount: instances.filter(i => i.isRunning).length,
@@ -184,7 +197,7 @@ export function createStatusRoutes(serverManager) {
       : 0;
     const cpuUsagePercent = getSystemCpuUsage();
 
-    res.json(success({
+    res.json(validatedSuccess(systemStatsSchema, {
       cpuUsage: cpuUsagePercent,
       memoryUsage: usedMemGB,
       totalMemory: totalMemGB,
@@ -201,7 +214,7 @@ export function createStatusRoutes(serverManager) {
   // GET /api/instances - 实例列表
   router.get('/instances', (req, res) => {
     const instances = serverManager.getAllInstances();
-    res.json(success(instances));
+    res.json(validatedSuccess(instanceStatusListSchema, instances));
   });
 
   // GET /api/instances/:id - 单个实例详情
@@ -210,7 +223,7 @@ export function createStatusRoutes(serverManager) {
     if (!instance) {
       return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND));
     }
-    res.json(success(instance.toStatus()));
+    res.json(validatedSuccess(instanceStatusSchema, instance.toStatus()));
   });
 
   // PUT /api/instances/:id - 更新实例配置（启动命令/JVM 参数等）
@@ -314,7 +327,7 @@ export function createStatusRoutes(serverManager) {
     // 实际生效的字段集合（含 startCommand 显式清除），供回查「谁改了内存/谁关了自恢复」。
     // 400 路径（无可更新字段/校验拒绝）不记审计——审计语义 = 实际生效的变更。
     recordAudit({ instanceId: req.params.id, action: AuditActions.INSTANCE_UPDATE, targetType: 'instance', targetId: req.params.id, detail: { fields: Object.keys(updates) } });
-    res.json(success(instance.toStatus(), 'Instance updated'));
+    res.json(validatedSuccess(instanceStatusSchema, instance.toStatus(), 'Instance updated'));
   }));
 
   // POST /api/instances/:id/start
@@ -344,7 +357,7 @@ export function createStatusRoutes(serverManager) {
     instance.start();
     try { InstanceModel.update(req.params.id, { status: 'running' }); } catch (e) { logger.warn('Failed to sync instance status to DB:', e.message); }
     recordAudit({ instanceId: req.params.id, action: AuditActions.INSTANCE_START, targetType: 'instance', targetId: req.params.id });
-    res.json(success(null, 'Server starting'));
+    res.json(validatedSuccess(nullDataSchema, null, 'Server starting'));
   }));
 
   // POST /api/instances/:id/stop
@@ -356,7 +369,7 @@ export function createStatusRoutes(serverManager) {
     instance.stop();
     try { InstanceModel.update(req.params.id, { status: 'stopped' }); } catch (e) { logger.warn('Failed to sync instance status to DB:', e.message); }
     recordAudit({ instanceId: req.params.id, action: AuditActions.INSTANCE_STOP, targetType: 'instance', targetId: req.params.id });
-    res.json(success(null, 'Server stopping'));
+    res.json(validatedSuccess(nullDataSchema, null, 'Server stopping'));
   }));
 
   // POST /api/instances/:id/restart
@@ -368,7 +381,7 @@ export function createStatusRoutes(serverManager) {
     // 统一走 instance.restart()：内部处理停止命令 + 可取消的延迟启动
     instance.restart();
     recordAudit({ instanceId: req.params.id, action: AuditActions.INSTANCE_RESTART, targetType: 'instance', targetId: req.params.id });
-    res.json(success(null, 'Server restarting'));
+    res.json(validatedSuccess(nullDataSchema, null, 'Server restarting'));
   }));
 
   // POST /api/instances/:id/command
@@ -389,7 +402,7 @@ export function createStatusRoutes(serverManager) {
 
     try {
       const response = await instance.sendCommand(command);
-      res.json(success(response, 'Command sent'));
+      res.json(validatedSuccess(commandResponseSchema, response, 'Command sent'));
     } catch (err) {
       // RCON 连接断开/超时：返回专用错误码，前端可区分引导用户启用 RCON
       if (!instance.isRconConnected) {
@@ -408,7 +421,7 @@ export function createStatusRoutes(serverManager) {
 
     let lines = parseInt(req.query.lines, 10) || 100;
     lines = Math.max(1, Math.min(lines, 1000));
-    res.json(success(instance.getLogs(lines)));
+    res.json(validatedSuccess(logEntriesSchema, instance.getLogs(lines)));
   });
 
   // GET /api/instances/:id/properties - 获取 server.properties
@@ -448,7 +461,7 @@ export function createStatusRoutes(serverManager) {
       }
     }
 
-    res.json(success(props));
+    res.json(validatedSuccess(serverPropertiesSchema, props));
   });
 
   // 支持运行中通过斜杠命令修改的 server.properties 属性 → 命令构造。
@@ -634,7 +647,7 @@ export function createStatusRoutes(serverManager) {
     }
     // 全部为占位符/空提交：无实际变更，直接返回
     if (Object.keys(validated).length === 0) {
-      return res.json(success({ restartRequired: [] }, 'Properties updated'));
+      return res.json(validatedSuccess(updatePropertiesResponseSchema, { restartRequired: [] }, 'Properties updated'));
     }
 
     instance.saveProperties(validated);
@@ -664,7 +677,7 @@ export function createStatusRoutes(serverManager) {
 
     logger.info(`[PUT properties] Saved successfully, instance.properties now has ${Object.keys(instance.properties).length} keys`);
     recordAudit({ instanceId: req.params.id, action: 'CONFIG_CHANGE', targetType: 'instance', targetId: req.params.id, detail: { field: 'properties' } });
-    res.json(success({ restartRequired }, restartRequired.length > 0
+    res.json(validatedSuccess(updatePropertiesResponseSchema, { restartRequired }, restartRequired.length > 0
       ? `Properties updated, ${restartRequired.length} 项需重启服务器生效`
       : 'Properties updated'));
   }));
@@ -735,7 +748,7 @@ export function createStatusRoutes(serverManager) {
       //    重建空目录，风险远小于本路由历史 bug 的不可补偿半删除）
       try { InstanceModel.delete(req.params.id); } catch (e) { logger.warn('Failed to delete instance from DB:', e.message); }
       recordAudit({ instanceId: req.params.id, action: AuditActions.INSTANCE_DELETE, targetType: 'instance', targetId: req.params.id });
-      res.json(success(null, 'Instance deleted'));
+      res.json(validatedSuccess(nullDataSchema, null, 'Instance deleted'));
   }));
 
   // POST /api/instances/:id/eula - 写入 EULA 协议确认
@@ -756,7 +769,7 @@ export function createStatusRoutes(serverManager) {
       : '#By changing the setting below to TRUE you are indicating your agreement to our EULA (https://aka.ms/MinecraftEULA).\neula=false\n';
     fs.writeFileSync(eulaPath, content, 'utf-8');
 
-    res.json(success(null, agreed ? 'EULA accepted' : 'EULA declined'));
+    res.json(validatedSuccess(nullDataSchema, null, agreed ? 'EULA accepted' : 'EULA declined'));
   }));
 
   // GET /api/instances/:id/world - 获取世界信息
@@ -839,7 +852,7 @@ export function createStatusRoutes(serverManager) {
       ]
     };
 
-    res.json(success(worldInfo));
+    res.json(validatedSuccess(worldInfoSchema, worldInfo));
   });
 
   return router;

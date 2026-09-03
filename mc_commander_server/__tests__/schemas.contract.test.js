@@ -21,6 +21,9 @@ import {
   webhookSchema,
   scheduledTaskSchema,
   taskRunHistorySchema,
+  banRecordSchema,
+  backupItemSchema,
+  overviewDataSchema,
 } from '@mc-commander/schemas';
 
 const TEST_DIR = './test-schema-contract-data';
@@ -81,6 +84,33 @@ beforeAll(() => {
     action TEXT NOT NULL, target_type TEXT, target_id TEXT, detail TEXT,
     source TEXT DEFAULT 'api', created_at TEXT DEFAULT CURRENT_TIMESTAMP
   )`);
+  // v11：响应侧契约观测推广（#393）——players 封禁记录 / backups 列表契约断言用
+  db.exec(`CREATE TABLE IF NOT EXISTS temp_bans (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    instance_id TEXT NOT NULL,
+    target_type TEXT NOT NULL DEFAULT 'player',
+    target TEXT NOT NULL,
+    reason TEXT,
+    expires_at INTEGER NOT NULL,
+    is_active INTEGER DEFAULT 1,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (instance_id) REFERENCES instances(id) ON DELETE CASCADE
+  )`);
+  db.exec(`CREATE TABLE IF NOT EXISTS backups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    instance_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT,
+    type TEXT DEFAULT 'manual',
+    size INTEGER DEFAULT 0,
+    status TEXT DEFAULT 'creating',
+    file_path TEXT,
+    world_name TEXT,
+    format TEXT DEFAULT 'snapshot',
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (instance_id) REFERENCES instances(id) ON DELETE CASCADE
+  )`);
   // 外键种子：任务路由创建时校验实例存在（serverManager fake + DB 外键双重约束）
   db.prepare("INSERT OR IGNORE INTO instances (id, name) VALUES ('demo', '契约测试实例')").run();
 });
@@ -105,6 +135,9 @@ vi.mock('../utils/url-guard.js', async () => {
 
 const { createWebhookRoutes } = await import('../routes/webhooks.js');
 const { createTaskRoutes } = await import('../routes/tasks.js');
+const { createPlayerRoutes } = await import('../routes/players.js');
+const { createStatusRoutes } = await import('../routes/status.js');
+const { createBackupRoutes } = await import('../routes/backups.js');
 
 function getApp() {
   const app = express();
@@ -202,6 +235,75 @@ describe('响应契约：任务路由 × scheduledTaskSchema', () => {
     expect(res.body.data[0].status).toBe('success');
     for (const item of res.body.data) {
       expect(taskRunHistorySchema.safeParse(item).success).toBe(true);
+    }
+  });
+});
+
+// ── 响应侧契约观测推广（#393）：players / status / backups 接入断言 ──
+
+describe('响应契约：玩家路由 × banRecordSchema（#393 接入）', () => {
+  it('GET /instances/:id/players/bans → data 逐条通过 banRecordSchema', async () => {
+    db.prepare(
+      "INSERT INTO temp_bans (instance_id, target_type, target, reason, expires_at, is_active) VALUES (?, 'player', 'Steve', '破坏行为', ?, 1)"
+    ).run('demo', Date.now() + 3_600_000);
+    db.prepare(
+      "INSERT INTO temp_bans (instance_id, target_type, target, reason, expires_at, is_active) VALUES (?, 'ip', '1.2.3.4', '恶意攻击', ?, 1)"
+    ).run('demo', Date.now() + 7_200_000);
+
+    const app = express();
+    app.use(express.json());
+    // serverPath 指向不存在目录：banned-*.json 原版封禁文件读取走静默跳过分支
+    const fakeManager = { getInstance: () => ({ id: 'demo', serverPath: './contract-test-nonexistent' }) };
+    app.use('/api/v1', createPlayerRoutes(fakeManager));
+
+    const res = await request(app).get('/api/v1/instances/demo/players/bans');
+    expect(res.status).toBe(200);
+    expect(apiEnvelopeSchema.safeParse(res.body).success).toBe(true);
+    expect(res.body.data.length).toBe(2);
+    for (const item of res.body.data) {
+      expect(banRecordSchema.safeParse(item).success).toBe(true);
+    }
+  });
+});
+
+describe('响应契约：状态路由 × overviewDataSchema（#393 接入）', () => {
+  it('GET /overview → 信封与 data 均通过 overviewDataSchema', async () => {
+    const fakeManager = {
+      instances: new Map(),
+      getAllInstances: () => [
+        { id: 'demo', name: '契约实例', isRunning: true, playerCount: 2 },
+      ],
+      getInstance: () => null,
+    };
+    const app = express();
+    app.use(express.json());
+    app.use('/api/v1', createStatusRoutes(fakeManager));
+
+    const res = await request(app).get('/api/v1/overview');
+    expect(res.status).toBe(200);
+    expect(apiEnvelopeSchema.safeParse(res.body).success).toBe(true);
+    expect(overviewDataSchema.safeParse(res.body.data).success).toBe(true);
+  });
+});
+
+describe('响应契约：备份路由 × backupItemSchema（#393 接入）', () => {
+  it('GET /instances/:instanceId/backups → 信封 + pagination 可 parse，data 逐条通过 backupItemSchema', async () => {
+    db.prepare(
+      "INSERT INTO backups (instance_id, name, description, type, size, status, world_name, format) VALUES (?, ?, ?, 'manual', ?, 'completed', ?, 'snapshot')"
+    ).run('demo', '契约快照', null, 1024, 'world');
+
+    const app = express();
+    app.use(express.json());
+    app.use('/api/v1', createBackupRoutes({ getInstance: () => ({ id: 'demo' }) }));
+    const { errorHandler } = await import('../middleware/error_handler.js');
+    app.use(errorHandler);
+
+    const res = await request(app).get('/api/v1/instances/demo/backups');
+    expect(res.status).toBe(200);
+    expect(apiEnvelopeSchema.safeParse(res.body).success).toBe(true);
+    expect(res.body.pagination).toBeDefined();
+    for (const item of res.body.data) {
+      expect(backupItemSchema.safeParse(item).success).toBe(true);
     }
   });
 });
