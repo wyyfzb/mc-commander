@@ -3,8 +3,9 @@
  * 双 Tab：审计日志（操作记录）/ 命令历史（命令执行记录）
  * TanStack Query 数据获取：isLoading/isFetching/isError 内建，
  * keepPreviousData 翻页不闪烁，过滤器变化经 query key 自动重获取
- * 筛选状态 URL 持久化（issue 381）：tab/页码/操作类型/时间起止同步到查询参数，
+ * 审计状态 URL 持久化（issue 381）：tab/页码/操作类型/时间起止同步到查询参数，
  * 刷新/分享链接后筛选保持（与核心列表页 useSearchParams 模式对齐）
+ * 时间排序切换（issue 383）：正序/倒序（默认倒序，URL 不留参数），切换重置页码保留筛选
  */
 import { useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router'
@@ -167,6 +168,10 @@ export function AuditPage() {
     const v = searchParams.get('end') ?? ''
     return DATE_PARAM_RE.test(v) ? v : ''
   })
+  // 时间排序（issue 383）：仅 asc 留参数（desc 为默认，URL 保持最短）；非法值回退默认
+  const [auditOrder, setAuditOrderState] = useState<'asc' | 'desc'>(() =>
+    searchParams.get('order') === 'asc' ? 'asc' : 'desc',
+  )
 
   // setter 包装：state 与 URL 镜像同步写回（默认值/空值不留参数，URL 保持最短）
   const setTab = (v: string) => {
@@ -188,6 +193,12 @@ export function AuditPage() {
   const setAuditEnd = (v: string) => {
     setAuditEndState(v)
     syncParams({ end: v || null })
+  }
+  // 切换排序：重置到第 1 页、保留现有筛选（issue 383 验收项）
+  const setAuditOrder = (v: 'asc' | 'desc') => {
+    setAuditOrderState(v)
+    syncParams({ order: v === 'asc' ? 'asc' : null })
+    setAuditPage(1)
   }
 
   // 起止倒置：可见提示并暂停时间过滤（不许静默空结果）；仅一端有值时单边过滤
@@ -239,6 +250,8 @@ export function AuditPage() {
     // 倒置期间两侧均不传（服务端 created_at 为 UTC「YYYY-MM-DD HH:MM:SS」字符串比较，须先换算）
     startTime: auditStart && !rangeInvalid ? toServerStart(auditStart) : undefined,
     endTime: auditEnd && !rangeInvalid ? toServerEnd(auditEnd) : undefined,
+    // desc 为服务端默认不传，请求与历史形态一致（issue 383）
+    order: auditOrder === 'asc' ? 'asc' : undefined,
   })
 
   const [cmdPage, setCmdPage] = useState(1)
@@ -334,6 +347,29 @@ export function AuditPage() {
                 清空时间
               </Button>
             )}
+
+            <span className="h-5 w-px shrink-0 bg-mcs-border-muted" aria-hidden />
+
+            <div className="flex items-center gap-1" role="group" aria-label="时间排序">
+              <Button
+                size="sm"
+                className="h-8"
+                variant={auditOrder === 'desc' ? 'default' : 'outline'}
+                aria-pressed={auditOrder === 'desc'}
+                onClick={() => setAuditOrder('desc')}
+              >
+                最新优先
+              </Button>
+              <Button
+                size="sm"
+                className="h-8"
+                variant={auditOrder === 'asc' ? 'default' : 'outline'}
+                aria-pressed={auditOrder === 'asc'}
+                onClick={() => setAuditOrder('asc')}
+              >
+                最早优先
+              </Button>
+            </div>
           </div>
 
           {rangeInvalid && (

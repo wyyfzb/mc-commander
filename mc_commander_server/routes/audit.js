@@ -13,6 +13,9 @@ export function createAuditRoutes() {
       page = Math.max(1, Math.min(page, 1000));
       pageSize = Math.max(1, Math.min(pageSize, 200));
 
+      // 排序参数白名单（issue 383）：仅接受 asc/desc，缺省/非法回落 desc（向后兼容）
+      const order = req.query.order === 'asc' ? 'asc' : 'desc';
+
       const result = AuditLogModel.findAll({
         instanceId: req.query.instanceId,
         action: req.query.action,
@@ -20,6 +23,7 @@ export function createAuditRoutes() {
         startTime: req.query.startTime,
         endTime: req.query.endTime,
         source: req.query.source,
+        order,
         page,
         pageSize,
       });

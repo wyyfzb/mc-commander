@@ -84,6 +84,31 @@ describe('AuditLogModel', () => {
     expect(selectSql).toContain('LIMIT ? OFFSET ?');
   });
 
+  it('findAll default order is DESC (backward compatible)', () => {
+    AuditLogModel.findAll({});
+    const selectSql = sqlLog.find(s => s.includes('LIMIT ? OFFSET ?'));
+    expect(selectSql).toContain('ORDER BY id DESC');
+  });
+
+  it('findAll order=asc sorts ascending', () => {
+    AuditLogModel.findAll({ order: 'asc' });
+    const selectSql = sqlLog.find(s => s.includes('LIMIT ? OFFSET ?'));
+    expect(selectSql).toContain('ORDER BY id ASC');
+  });
+
+  it('findAll order=desc sorts descending', () => {
+    AuditLogModel.findAll({ order: 'desc' });
+    const selectSql = sqlLog.find(s => s.includes('LIMIT ? OFFSET ?'));
+    expect(selectSql).toContain('ORDER BY id DESC');
+  });
+
+  it('findAll invalid order falls back to DESC', () => {
+    AuditLogModel.findAll({ order: 'DROP TABLE' });
+    const selectSql = sqlLog.find(s => s.includes('LIMIT ? OFFSET ?'));
+    expect(selectSql).toContain('ORDER BY id DESC');
+    expect(selectSql).not.toContain('DROP');
+  });
+
   it('_toCamel parses JSON detail', () => {
     const result = AuditLogModel._toCamel({
       id: 1, instance_id: 'i1', action: 'TEST',
