@@ -218,12 +218,14 @@ export class WebhookService {
 
   /**
    * 测试投递（同步等待结果，供 API 调用）
+   * 成功与非 2xx/网络异常路径均落一条 event_type=ping 的投递记录（排障可回查；
+   * ping 为测试专用事件标记，不触发用户配置事件分发）
    */
   static async testDelivery(webhookId) {
     const webhook = WebhookModel.findByIdInternal(webhookId);
     if (!webhook) return { success: false, error: 'Webhook not found' };
 
-    // SSRF 防护：测试投递同样拦截私网/保留地址
+    // SSRF 防护：测试投递同样拦截私网/保留地址（拦截发生在投递尝试前，不落投递记录）
     const guard = await checkPublicUrl(webhook.url);
     if (!guard.ok) {
       return { success: false, error: guard.reason };
@@ -235,6 +237,7 @@ export class WebhookService {
       timestamp: new Date().toISOString(),
       message: 'Test delivery from MC Commander',
     };
+    const startTime = Date.now();
 
     try {
       const timestamp = Math.floor(Date.now() / 1000).toString();
@@ -254,12 +257,36 @@ export class WebhookService {
         retry: { limit: 0 },
       });
 
-      return {
-        success: response.statusCode >= 200 && response.statusCode < 300,
-        statusCode: response.statusCode,
-        body: this._truncateBody(response.body),
-      };
+      const success = response.statusCode >= 200 && response.statusCode < 300;
+      const body = this._truncateBody(response.body);
+
+      // 落投递历史（与真实事件投递并列可查）
+      WebhookModel.createDelivery({
+        webhookId,
+        eventType: 'ping',
+        instanceId: null,
+        payload,
+        status: success ? 'success' : 'failed',
+        responseStatus: response.statusCode,
+        responseBody: body,
+        durationMs: Date.now() - startTime,
+        attempts: 1,
+      });
+
+      return { success, statusCode: response.statusCode, body };
     } catch (err) {
+      // 网络异常同样落历史（responseStatus 为空，响应体记错误信息）
+      WebhookModel.createDelivery({
+        webhookId,
+        eventType: 'ping',
+        instanceId: null,
+        payload,
+        status: 'failed',
+        responseStatus: null,
+        responseBody: err.message,
+        durationMs: Date.now() - startTime,
+        attempts: 1,
+      });
       return { success: false, error: err.message };
     }
   }
