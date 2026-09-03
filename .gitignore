@@ -156,6 +156,9 @@ screenshots/
 *.jpeg
 *.gif
 *.bmp
+# 用户向导配图白名单（docs/user-guide.md 相对引用，须入库）
+!docs/screenshots/
+!docs/screenshots/*.png
 *.webp
 !archived/mc_manager_app/assets/**
 !mc_manager_web/src/assets/**
