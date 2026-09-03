@@ -94,6 +94,12 @@ export default defineConfig({
     exclude: ['e2e/**', 'node_modules/**'],
     css: false, // 组件测试不解析 CSS（token 校验走独立脚本/测试）
     pool: 'threads', // 全量测试 107s → 64s（2026-08-20 实测；Windows 上 threads 显著快于默认 forks）
+    coverage: {
+      provider: 'v8',
+      reporter: ['json', 'text'],
+      include: ['src/**/*.{ts,tsx}'],
+      exclude: ['src/**/*.test.{ts,tsx}', 'src/test/**', 'src/**/__tests__/**'],
+    },
   },
   define: {
     // 应用版本（package.json 同步；关于页展示，避免硬编码失真）
