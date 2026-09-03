@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { setupServer } from 'msw/node'
 import { http, HttpResponse } from 'msw'
-import { apiGetAuditLogs, apiGetCommandHistory, apiGetAuditLogsPage, apiGetCommandHistoryPage } from '../audit'
+import { apiGetAuditLogsPage, apiGetCommandHistoryPage } from '../audit'
 import type { AuditLogItem, CommandHistoryItem } from '../types'
 import type { ConnectionConfig } from '../client'
 
@@ -41,20 +41,7 @@ afterAll(() => server.close())
 const config: ConnectionConfig = { baseUrl: '', apiKey: 'test-key' }
 
 describe('审计 API', () => {
-  it('apiGetAuditLogs 返回审计日志列表', async () => {
-    const data = await apiGetAuditLogs(config)
-    expect(Array.isArray(data)).toBe(true)
-    expect(data.length).toBe(2)
-    expect(data[0]!.action).toBe('INSTANCE_START')
-  })
-
-  it('apiGetAuditLogs 传递 action 过滤参数', async () => {
-    const data = await apiGetAuditLogs(config, { action: 'PLAYER_BAN' })
-    expect(data.length).toBe(1)
-    expect(data[0]!.action).toBe('PLAYER_BAN')
-  })
-
-  it('apiGetAuditLogs 传递 instanceId 过滤参数', async () => {
+  it('apiGetAuditLogsPage 传递 instanceId 过滤参数（buildAuditQuery 编码）', async () => {
     let capturedUrl = ''
     server.use(
       http.get('*/api/v1/audit-logs', ({ request }) => {
@@ -65,25 +52,11 @@ describe('审计 API', () => {
         return ok(filtered, { total: filtered.length, page: 1, pageSize: 20, totalPages: 1 })
       }),
     )
-    const data = await apiGetAuditLogs(config, { instanceId: 'demo' })
+    const { data } = await apiGetAuditLogsPage(config, { instanceId: 'demo' })
     expect(capturedUrl).toContain('instanceId=demo')
     expect(data.length).toBe(1)
     expect(data[0]!.instanceId).toBe('demo')
     server.resetHandlers()
-  })
-
-  it('apiGetCommandHistory 返回命令历史列表', async () => {
-    const data = await apiGetCommandHistory(config)
-    expect(Array.isArray(data)).toBe(true)
-    expect(data.length).toBe(2)
-    expect(data[0]!.command).toBe('say hello')
-    expect(data[0]!.success).toBe(true)
-  })
-
-  it('apiGetCommandHistory 返回失败记录的 success=false', async () => {
-    const data = await apiGetCommandHistory(config)
-    expect(data[1]!.success).toBe(false)
-    expect(data[1]!.durationMs).toBe(15)
   })
 
   it('apiGetAuditLogsPage 返回列表与分页信息', async () => {
