@@ -199,7 +199,15 @@ export function createPluginRoutes(serverManager) {
   // POST /api/v1/instances/:id/plugins/upload  multipart 字段 file；?overwrite=true 显式覆盖
   router.post('/instances/:id/plugins/upload', (req, res, next) => {
     pluginUpload.single('file')(req, res, (err) => handleMulterError(err, next));
-  }, validateQuery(pluginOverwriteQuerySchema), (req, res, next) => {
+  }, validateQuery(pluginOverwriteQuerySchema, {
+    // multer diskStorage 已落盘：schema 拒绝非法 overwrite（非 true/false 枚举）
+    // 时在 400 前清理临时文件，防止磁盘残留（#397 回归修复，issue 391）
+    onError: (req) => {
+      if (req.file?.path) {
+        try { fs.unlinkSync(req.file.path); } catch {}
+      }
+    },
+  }), (req, res, next) => {
     const uploaded = req.file;
     try {
       const { id } = req.params;
