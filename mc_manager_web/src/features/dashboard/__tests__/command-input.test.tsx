@@ -66,16 +66,17 @@ describe('CommandInput', () => {
 
   it('快捷 chips：默认 5 条渲染（图标+播放+删除）', () => {
     renderInput()
-    expect(screen.getByTitle('give @p diamond 64')).toBeInTheDocument()
-    expect(screen.getByTitle('gamemode creative')).toBeInTheDocument()
-    expect(screen.getByTitle('time set day')).toBeInTheDocument()
-    expect(screen.getByTitle('tp @p 0 100 0')).toBeInTheDocument()
-    expect(screen.getByTitle('kill @e[type=!player]')).toBeInTheDocument()
+    // chip 主体按钮的名称即命令全文（文本内容），tooltip 全文由 Radix Tooltip 提供
+    expect(screen.getByRole('button', { name: 'give @p diamond 64' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'gamemode creative' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'time set day' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'tp @p 0 100 0' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'kill @e[type=!player]' })).toBeInTheDocument()
   })
 
   it('点击 chip 主体仅填充不发送；播放按钮立即发送', async () => {
     renderInput()
-    fireEvent.click(screen.getByTitle('time set day'))
+    fireEvent.click(screen.getByRole('button', { name: 'time set day' }))
     expect(screen.getByLabelText('服务器命令输入')).toHaveValue('time set day')
     fireEvent.click(screen.getByRole('button', { name: /发送 time set day/ }))
     await waitFor(() => expect(screen.getByLabelText('服务器命令输入')).toHaveValue(''))

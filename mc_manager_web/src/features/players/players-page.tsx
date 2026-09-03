@@ -184,9 +184,18 @@ export function PlayersPage() {
           <FilterBar
             players={filteredPlayers}
             totalCount={allPlayers.length}
+            isRconConnected={isRconConnected}
             onOpenBanRecords={() => setBanRecordsOpen(true)}
             onAddWhitelist={() => setWhitelistOpen(true)}
           />
+          {/* 批量操作条内联在表格上方（不悬浮，避免遮挡底部内容） */}
+          {selectedPlayers.length > 0 && (
+            <BatchBar
+              selectedPlayers={selectedPlayers}
+              onOpenBatchDetail={(tab) => openBatchDetail(tab)}
+              onAction={handleAction}
+            />
+          )}
           {/* 列表错误态（避免错误被呈现为「暂无在线玩家」的误导空态） */}
           {playersQuery.isError && !playersQuery.isLoading ? (
             <EmptyState
@@ -224,15 +233,6 @@ export function PlayersPage() {
           />
         )}
       </div>
-
-      {/* 底部浮动批量操作条 */}
-      {selectedPlayers.length > 0 && (
-        <BatchBar
-          selectedPlayers={selectedPlayers}
-          onOpenBatchDetail={(tab) => openBatchDetail(tab)}
-          onAction={handleAction}
-        />
-      )}
 
       {/* 封禁对话框 */}
       {banTarget && (

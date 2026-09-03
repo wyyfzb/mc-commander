@@ -9,13 +9,7 @@ import { RefreshCw, X } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { FilterSelect } from '@/components/mcs/filter-select'
 import { StatusPill } from '@/components/mcs/status-pill'
 import { PageHeader } from '@/components/mcs/page-header'
 import { DataTableShell } from '@/components/mcs/data-table-shell'
@@ -88,11 +82,7 @@ function AuditBody({ logs }: { logs: AuditLogItem[] }) {
       {logs.map((log) => (
         <tr key={log.id} className="border-b border-mcs-border-muted last:border-b-0">
           <td className="whitespace-nowrap px-3 py-2 text-mcs-text-default font-mono text-mcs-xs">{formatTime(log.createdAt)}</td>
-          <td className="px-3 py-2">
-            <StatusPill variant="outline">
-              {getActionLabel(log.action)}
-            </StatusPill>
-          </td>
+          <td className="px-3 py-2 text-mcs-text-default">{getActionLabel(log.action)}</td>
           <td className="px-3 py-2 text-mcs-text-default">{log.targetType ? `${log.targetType}${log.targetId ? `: ${log.targetId}` : ''}` : '-'}</td>
           <td className="max-w-xs truncate px-3 py-2 text-mcs-text-subtle">
             {log.detail ? (typeof log.detail === 'object' ? JSON.stringify(log.detail) : String(log.detail)) : '-'}
@@ -232,17 +222,18 @@ export function AuditPage() {
 
         <TabsContent value="audit" className="min-h-0 flex-1 flex flex-col gap-3 mt-3">
           <div className="flex flex-wrap items-center gap-2">
-            <Select value={auditAction || '全部'} onValueChange={(v) => { setAuditAction(v === '全部' ? '' : v); setAuditPage(1) }}>
-              <SelectTrigger className="w-32" aria-label="按操作类型过滤">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="全部">全部操作</SelectItem>
-                {Object.entries(ACTION_LABELS).map(([k, v]) => (
-                  <SelectItem key={k} value={k}>{v}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <FilterSelect
+              label="操作类型"
+              value={auditAction}
+              options={Object.entries(ACTION_LABELS).map(([value, label]) => ({ value, label }))}
+              onChange={(v) => {
+                setAuditAction(v)
+                setAuditPage(1)
+              }}
+              className="w-44"
+            />
+
+            <span className="h-5 w-px shrink-0 bg-mcs-border-muted" aria-hidden />
 
             <div className="flex items-center gap-1" role="group" aria-label="快捷时间范围">
               {QUICK_RANGES.map((q) => {
@@ -251,6 +242,7 @@ export function AuditPage() {
                   <Button
                     key={q.key}
                     size="sm"
+                    className="h-8"
                     variant={active ? 'default' : 'outline'}
                     aria-pressed={active}
                     onClick={() => applyQuick(q)}
@@ -260,6 +252,8 @@ export function AuditPage() {
                 )
               })}
             </div>
+
+            <span className="h-5 w-px shrink-0 bg-mcs-border-muted" aria-hidden />
 
             <div className="flex items-center gap-1.5">
               <Input

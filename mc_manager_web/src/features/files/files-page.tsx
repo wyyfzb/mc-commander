@@ -1,7 +1,6 @@
 /**
- * FilesPage —— 文件页（三栏布局）
- * - 左栏：目录树（DirTree，根 '/' 起逐层懒加载）
- * - 中栏：文件列表（面包屑 + 上级/刷新/新建文件工具栏 + 删除入口）
+ * FilesPage —— 文件页（双栏布局）
+ * - 左栏：文件列表（面包屑根/逐级可点 + 上级/刷新/新建文件工具栏 + 删除入口）
  * - 右栏：Monaco 编辑器（选中文件即打开；Ctrl+S 保存；脏标记；关闭确认）
  * - 删除确认对话框（目录红色警告递归删除）；新建文件对话框（PUT content 新路径）
  * - feat-3：新建目录对话框（mkdir recursive）/ 重命名对话框（原子 rename）/
@@ -11,7 +10,7 @@
  * - 实例切换：目录/选中文件重置回初始态
  */
 import { useEffect, useRef, useState, useSyncExternalStore, useCallback, useMemo, type ChangeEvent } from 'react'
-import { ServerOff, PanelLeftClose, MonitorSmartphone, X } from 'lucide-react'
+import { ServerOff, MonitorSmartphone, X } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router'
 import { toast } from 'sonner'
@@ -26,18 +25,11 @@ import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { LoadingButton } from '@/components/mcs/loading-button'
 import { Input } from '@/components/ui/input'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet'
 import { useUnsavedGuard } from '@/hooks/use-unsaved-guard'
 import { useSnapshotSave } from '@/hooks/use-snapshot-save'
 import { useServerStore } from '@/stores/server'
 import { useUiStore } from '@/stores/ui'
 import type { FileEntry } from '@/api/types'
-import { DirTree } from './components/dir-tree'
 import { FileList } from './components/file-list'
 import { MonacoEditorPane } from './components/monaco-editor-pane'
 import {
@@ -142,8 +134,6 @@ export function FilesPage() {
   // ── 响应式断点 ──
   const isMobile = useMediaQuery(BREAKPOINT_MOBILE)
   const isNarrowDesktop = useMediaQuery(BREAKPOINT_NARROW)
-  // 移动端：目录树 Sheet 抽屉
-  const [dirTreeOpen, setDirTreeOpen] = useState(false)
 
   const contentQuery = useFileContent(instanceId, selectedPath)
   const saveMutation = useSaveFile(instanceId)
@@ -438,49 +428,10 @@ export function FilesPage() {
         </div>
       )}
 
-      {/* ── 移动端：目录树 Sheet 抽屉 ── */}
-      <Sheet open={isMobile && dirTreeOpen} onOpenChange={setDirTreeOpen}>
-        <SheetContent side="left" className="w-[280px] gap-0 p-0" showCloseButton={false}>
-          <SheetHeader className="border-b border-mcs-border-subtle px-3 py-2">
-            <SheetTitle className="text-mcs-sm font-semibold">目录</SheetTitle>
-          </SheetHeader>
-          <div className="min-h-0 flex-1">
-            <DirTree instanceId={instanceId} currentPath={dir} onNavigate={(path) => {
-              setDir(path)
-              setDirTreeOpen(false)
-            }} />
-          </div>
-        </SheetContent>
-      </Sheet>
-
-      {/* ── 三栏主体 ── */}
+      {/* ── 双栏主体 ── */}
       <div className="flex min-h-0 flex-1 gap-3 p-3">
-        {/* 左栏：目录树（桌面端内联，移动端隐藏） */}
-        {!isMobile && (
-          <section className="flex h-full min-h-0 w-[220px] shrink-0 flex-col rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted">
-            <header className="flex h-10 shrink-0 items-center gap-2 border-b border-mcs-border-subtle px-3">
-              <span className="text-mcs-sm font-semibold text-mcs-text-default">目录</span>
-            </header>
-            <div className="min-h-0 flex-1">
-              <DirTree instanceId={instanceId} currentPath={dir} onNavigate={setDir} />
-            </div>
-          </section>
-        )}
-
-        {/* 中栏：文件列表（移动端全宽，桌面端 flex-1） */}
-        <section className="flex h-full min-h-0 min-w-0 flex-col rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted">
-          {isMobile && (
-            <div className="flex h-8 shrink-0 items-center border-b border-mcs-border-subtle px-3">
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label="打开目录树"
-                onClick={() => setDirTreeOpen(true)}
-              >
-                <PanelLeftClose aria-hidden />
-              </Button>
-            </div>
-          )}
+        {/* 左栏：文件列表（桌面/移动同构：面包屑 + 工具栏导航）；flex-1 吃满编辑器以外宽度 */}
+        <section className="flex h-full min-h-0 min-w-0 flex-1 flex-col rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted">
           {/* ── 上传进度条（对齐插件页交互：progressbar ARIA + 取消） ── */}
           {uploading && (
             <div

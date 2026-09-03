@@ -27,12 +27,14 @@ import {
   Square,
   Trophy,
   Webhook,
+  X,
   XCircle,
   type LucideIcon,
 } from 'lucide-react'
 import { useNavigate } from 'react-router'
 import {
   Sheet,
+  SheetClose,
   SheetContent,
   SheetHeader,
   SheetTitle,
@@ -135,8 +137,12 @@ export function NotificationDrawer({ open, onOpenChange }: NotificationDrawerPro
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="glass-overlay flex w-96 max-w-full flex-col p-0">
-        <SheetHeader className="flex-row items-center justify-between border-b border-mcs-border-muted px-4 py-3">
+      <SheetContent
+        side="right"
+        showCloseButton={false}
+        className="glass-overlay flex w-96 max-w-full flex-col p-0"
+      >
+        <SheetHeader className="flex-row items-center justify-between border-b border-mcs-border-muted py-3 pl-4 pr-3">
           <SheetTitle className="flex items-center gap-2 text-mcs-md">
             通知
             {unreadCount > 0 && (
@@ -145,6 +151,7 @@ export function NotificationDrawer({ open, onOpenChange }: NotificationDrawerPro
               </span>
             )}
           </SheetTitle>
+          {/* 关闭按钮并入操作组统一排布（SheetContent 内置的 absolute X 会与最右按钮重叠） */}
           <div className="flex items-center gap-1">
             <Button
               variant="ghost"
@@ -164,6 +171,11 @@ export function NotificationDrawer({ open, onOpenChange }: NotificationDrawerPro
             >
               清除全部
             </Button>
+            <SheetClose asChild>
+              <Button variant="ghost" size="icon-sm" aria-label="关闭通知">
+                <X aria-hidden />
+              </Button>
+            </SheetClose>
           </div>
         </SheetHeader>
 

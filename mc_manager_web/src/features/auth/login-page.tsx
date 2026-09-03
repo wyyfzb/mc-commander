@@ -3,7 +3,7 @@
  * 三态自适应（探测 GET /auth/status 驱动）：
  *  - setup：后端未设密 → 首访设密向导（一次输入，成功即自动登录）
  *  - login：已设密 → 密码登录（服务端按 IP 锁定 10 次/5min）
- *  - unreachable：后端不可达 → 错误态 + 重试（高级区可改面板地址）
+ *  - unreachable：后端不可达 → 错误态 + 重试（此时才提供「连接其他面板地址」入口，渐进披露）
  * 细节：密码显隐切换 / CapsLock 提醒 / 强度条（引导性）/ returnTo 回跳 /
  *       装饰性网格纹理 / 公开端点探测不携带任何凭据头
  */
@@ -243,14 +243,67 @@ export function LoginPage() {
               <div className="text-mcs-xs text-mcs-error-fg">
                 <p className="font-semibold">连接失败</p>
                 <p className="mt-0.5 opacity-90">
-                  请确认服务端已启动（默认端口 25566），或展开下方「高级」修改面板地址后重试。
+                  请确认面板服务端已启动（默认端口 25566）。
+                  {baseUrl && ' 当前地址无法连接，可恢复默认地址重试。'}
                 </p>
               </div>
             </div>
-            <Button type="button" className="w-full" onClick={() => void probe(baseUrl)}>
-              <RefreshCw className="size-4" aria-hidden />
-              重新探测
-            </Button>
+            <div className="flex gap-2">
+              <Button type="button" className="h-10 flex-1" onClick={() => void probe(baseUrl)}>
+                <RefreshCw className="size-4" aria-hidden />
+                重新探测
+              </Button>
+              {baseUrl && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-10 flex-1"
+                  onClick={() => {
+                    setBaseUrl('')
+                    void probe('')
+                  }}
+                >
+                  恢复默认地址
+                </Button>
+              )}
+            </div>
+            {/* 「连接其他地址」入口仅出现在连接失败时（渐进披露，正常路径不出现） */}
+            <div>
+              <button
+                type="button"
+                onClick={() => setBaseUrlOpen((v) => !v)}
+                aria-expanded={baseUrlOpen}
+                className="flex items-center gap-1 text-mcs-2xs font-medium text-mcs-text-subtle transition-colors hover:text-mcs-text-default"
+              >
+                <span aria-hidden>{baseUrlOpen ? '▾' : '▸'}</span>
+                尝试连接其他面板地址
+              </button>
+              {baseUrlOpen && (
+                <div className="mt-2.5 space-y-2">
+                  <Label htmlFor="base-url" className="text-mcs-2xs">
+                    面板服务端地址（用于面板网页与服务端分开部署的场景）
+                  </Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="base-url"
+                      value={baseUrl}
+                      onChange={(e) => setBaseUrl(e.target.value.trim())}
+                      placeholder="http://your-server:25566"
+                      className="h-8 font-mono text-mcs-xs"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8"
+                      onClick={() => void probe(baseUrl)}
+                    >
+                      连接
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -329,45 +382,6 @@ export function LoginPage() {
             </Button>
           </form>
         )}
-
-        {/* 高级：自定义面板地址（默认同源；远程面板/CORS 场景使用） */}
-        <div className="mt-5 border-t border-mcs-border-muted pt-4">
-          <button
-            type="button"
-            onClick={() => setBaseUrlOpen((v) => !v)}
-            aria-expanded={baseUrlOpen}
-            className="flex items-center gap-1 text-mcs-2xs font-medium text-mcs-text-subtle transition-colors hover:text-mcs-text-default"
-          >
-            <span aria-hidden>{baseUrlOpen ? '▾' : '▸'}</span>
-            高级：自定义面板地址
-          </button>
-          {baseUrlOpen && (
-            <div className="mt-2.5 space-y-2">
-              <Label htmlFor="base-url" className="text-mcs-2xs">
-                面板地址（留空 = 当前页面同源）
-              </Label>
-              <div className="flex gap-2">
-                <Input
-                  id="base-url"
-                  value={baseUrl}
-                  onChange={(e) => setBaseUrl(e.target.value.trim())}
-                  placeholder="http://your-server:25566"
-                  className="h-8 font-mono text-mcs-xs"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-8"
-                  onClick={() => void probe(baseUrl)}
-                >
-                  <RefreshCw className="size-3.5" aria-hidden />
-                  探测
-                </Button>
-              </div>
-            </div>
-          )}
-        </div>
       </main>
 
       {/* 底部辅助链接 */}
