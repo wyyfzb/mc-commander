@@ -10,6 +10,7 @@ import { success, error, ErrorCodes } from '../utils/response.js';
 import { getRecommendedJavaVersion, findJavaPath } from '../utils/java-detector.js';
 import { InstanceModel } from '../db/index.js';
 import { atomicWriteFile } from '../services/mc_server.js';
+import { recordAudit, AuditActions } from '../utils/audit.js';
 import { deployRequestSchema } from '@mc-commander/schemas';
 import { validateBody } from '../middleware/validate.js';
 import {
@@ -397,6 +398,19 @@ export function createServerJarRoutes(serverManager) {
       logger.info(`Deploying ${type} ${mcVersion} as ${instanceId}...`);
       // 部署起始即入注册表（连接补发的最早可见点：下载阶段首事件前）
       trackDeployProgress(serverManager, deployMeta, { stage: 'download', percent: 0, transferred: 0, total: 0 });
+
+      // 审计「受理」语义（与 INSTANCE_DELETE 对偶，回查实例何时被谁创建）：
+      // schema 校验通过 + 实例目录已建 + 部署流程正式启动即记录，不等终态。
+      // 失败路径刻意不记审计：部署中断时实例目录已被清理、DB 未入库，不存在
+      // 可回查的实例实体，失败可见性由部署进度 error 事件（进度面板 + 通知）承担，
+      // 避免审计页出现指向已清理目录的幽灵记录
+      recordAudit({
+        instanceId,
+        action: AuditActions.INSTANCE_CREATE,
+        targetType: 'instance',
+        targetId: instanceId,
+        detail: { instanceName: deployMeta.instanceName, mcVersion, type: deployMeta.type },
+      });
 
       let downloadUrl;
       let expectedHash = null; // 上游摘要（issue 316）：有则强校验，无则仅限流
