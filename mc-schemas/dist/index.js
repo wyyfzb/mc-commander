@@ -3932,8 +3932,12 @@ const WS_EVENT_TYPES = [
 	"taskFailed",
 	"webhookDeliveryFailed",
 	"deployProgress",
+	"deployComplete",
+	"deployFailed",
 	"circuit_breaker",
 	"upgradeProgress",
+	"upgradeComplete",
+	"upgradeFailed",
 	"systemStatsUpdate",
 	"error"
 ];
@@ -4088,6 +4092,29 @@ const fileSaveResponseSchema = objectType({
 	size: numberType(),
 	modifiedAt: stringType()
 });
+/** GET /instances/:id/files 目录列表查询：path 缺省归一为 '/'（与既有行为一致） */
+const fileListRequestSchema = objectType({ path: stringType().optional().default("/") });
+/** GET download / GET content / DELETE files 查询：path 必填非空 */
+const filePathRequestSchema = objectType({ path: stringType({ required_error: "File path is required" }).min(1, "File path is required") });
+/** PUT /instances/:id/files/content 保存内容请求体 */
+const fileSaveRequestSchema = objectType({
+	path: stringType({ required_error: "File path and content are required" }).min(1, "File path is required"),
+	content: stringType({ required_error: "File path and content are required" })
+});
+/** POST /instances/:id/files/mkdir 新建目录请求体 */
+const fileMkdirRequestSchema = objectType({ path: stringType({ required_error: "Directory path is required" }).min(1, "Directory path is required") });
+/** POST /instances/:id/files/rename 重命名请求体 */
+const fileRenameRequestSchema = objectType({
+	path: stringType({ required_error: "Old path and new path are required" }).min(1, "Old path and new path are required"),
+	newPath: stringType({ required_error: "Old path and new path are required" }).min(1, "Old path and new path are required")
+});
+/**
+* POST /instances/:id/files/upload 查询（?targetDir=，可选缺省 '/'）。
+* 归一化语义与既有路由一致：拒绝控制字符、空串非法、补全前导 '/'；
+* 控制字符判定用完整 [^\x00-\x1f] 类（原路由内联正则缺方括号为字面
+* 三字符序列匹配，收敛到 schema 顺带修正，安全性只增不减）。
+*/
+const fileUploadQuerySchema = objectType({ targetDir: stringType().min(1, "Invalid targetDir").refine((v) => !/[\x00-\x1f]/.test(v), "Invalid targetDir").transform((v) => v.startsWith("/") ? v : `/${v}`).optional().default("/") });
 //#endregion
 //#region src/audit.ts
 const auditLogItemSchema = objectType({
@@ -4109,6 +4136,33 @@ const commandHistoryItemSchema = objectType({
 	response: stringType().nullable(),
 	durationMs: numberType().nullable(),
 	createdAt: stringType()
+});
+/**
+* GET /audit-logs 查询契约。
+* - order：仅 asc/desc；缺省/非法回落 desc（issue 383 明确的向后兼容语义，
+*   catch 表达，不升级为 400）。
+* - page/pageSize：分页参数，按 issue 391 边界保持 #392 parsePagination
+*   既有解析不动，schema 仅作字符串透传避免归一化剥离。
+*/
+const auditLogsQuerySchema = objectType({
+	instanceId: stringType().optional(),
+	action: stringType().optional(),
+	targetType: stringType().optional(),
+	startTime: stringType().optional(),
+	endTime: stringType().optional(),
+	source: stringType().optional(),
+	order: enumType(["asc", "desc"]).optional().default("desc").catch("desc"),
+	page: stringType().optional(),
+	pageSize: stringType().optional()
+});
+/** GET /command-history 查询契约（page/pageSize 同上透传） */
+const commandHistoryQuerySchema = objectType({
+	instanceId: stringType().optional(),
+	startTime: stringType().optional(),
+	endTime: stringType().optional(),
+	source: stringType().optional(),
+	page: stringType().optional(),
+	pageSize: stringType().optional()
 });
 //#endregion
 //#region src/webhook.ts
@@ -4186,7 +4240,11 @@ const deployProgressSchema = objectType({
 	percent: numberType(),
 	transferred: numberType(),
 	total: numberType(),
-	error: stringType().optional()
+	error: stringType().optional(),
+	instanceId: stringType().optional(),
+	instanceName: stringType().optional(),
+	type: stringType().optional(),
+	mcVersion: stringType().optional()
 });
 const upgradeStageSchema = enumType([
 	"backup",
@@ -4204,13 +4262,20 @@ const upgradeProgressSchema = objectType({
 	detail: stringType(),
 	timestamp: numberType()
 });
+/**
+* POST /instances/:id/upgrade 请求体契约（issue 391 接入路由层）。
+* - mcVersion 缺省消息保留原路由文案；点分版本白名单（MC_VERSION_REGEX）
+*   属服务层纵深防御口径，保持在路由/服务层校验，schema 只做类型与必填。
+* - type 枚举错误消息保留原路由 'Invalid type' 文案（errorMap 保留既有
+*   断言与前端提示兼容），缺省归一为 vanilla（与原解构默认值一致）。
+*/
 const upgradeRequestSchema = objectType({
-	mcVersion: stringType(),
+	mcVersion: stringType({ required_error: "mcVersion is required" }),
 	type: enumType([
 		"vanilla",
 		"paper",
 		"purpur"
-	]).optional()
+	], { errorMap: () => ({ message: "Invalid type. Must be one of: vanilla, paper, purpur" }) }).default("vanilla")
 });
 const upgradeStartResponseSchema = objectType({
 	message: stringType(),
@@ -4319,6 +4384,35 @@ const marketInstallResultSchema = pluginUploadResultSchema.extend({
 	source: stringType(),
 	originalFileName: stringType()
 });
+/**
+* GET /instances/:id/plugins/market/search 查询契约。
+* offset/limit 为分页参数，按 issue 391 边界保持既有手写解析不动
+* （由 #392 分页 util 后续统一），schema 仅作字符串透传避免归一化剥离。
+*/
+const marketSearchRequestSchema = objectType({
+	q: stringType().optional(),
+	offset: stringType().optional(),
+	limit: stringType().optional(),
+	game_version: stringType().optional(),
+	loader: stringType().optional()
+});
+/** GET /instances/:id/plugins/market/projects/:slug/versions 查询契约 */
+const marketVersionsRequestSchema = objectType({
+	game_version: stringType().optional(),
+	loader: stringType().optional()
+});
+/**
+* overwrite 查询参数契约：与既有 `=== 'true'` 判定同域（字符串枚举），
+* 非法值从「静默按 false 处理」收紧为 400（前端仅发送 'true' 或缺省，不受影响）。
+*/
+const pluginOverwriteQuerySchema = objectType({ overwrite: enumType(["true", "false"]).optional() });
+/** POST /instances/:id/plugins/market/install 请求体契约 */
+const marketInstallRequestSchema = objectType({
+	slug: stringType(),
+	versionNumber: stringType()
+});
+/** PUT /instances/:id/plugins/:file/enabled 请求体契约 */
+const pluginEnabledRequestSchema = objectType({ enabled: booleanType({ invalid_type_error: "enabled must be a boolean" }) });
 //#endregion
 //#region src/system.ts
 const diskInfoSchema = objectType({
@@ -4349,4 +4443,4 @@ const updateCheckResultSchema = objectType({
 	url: stringType().optional()
 });
 //#endregion
-export { NOTIFICATION_EVENT_TYPES, WS_EVENT_TYPES, apiEnvelopeSchema, apiErrorEnvelopeSchema, auditLogItemSchema, backupCreateRequestSchema, backupItemSchema, banRecordSchema, banRequestBodySchema, commandHistoryItemSchema, deployProgressSchema, deployRequestSchema, deployResultSchema, diskInfoSchema, diskUsageSchema, fileContentResponseSchema, fileEntrySchema, fileInfoResponseSchema, fileListResponseSchema, fileSaveResponseSchema, instanceStatusSchema, instanceSummarySchema, instanceUpdatePayloadSchema, inventoryItemSchema, ipHistoryEntrySchema, logEntrySchema, makeApiEnvelopeSchema, marketInstallResultSchema, marketSearchHitSchema, marketSearchResultSchema, marketVersionFileSchema, marketVersionSchema, marketVersionsResultSchema, overviewDataSchema, paginationSchema, playerDimensionSchema, playerEventSchema, playerGameModeSchema, playerInventorySchema, playerPositionSchema, playerPotionEffectSchema, playerSchema, playerSessionSchema, playerStatsSchema, pluginInfoSchema, pluginListSchema, pluginMetaSchema, pluginToggleResultSchema, pluginUpdateCheckResultSchema, pluginUpdateStatusSchema, pluginUploadResultSchema, scheduledTaskSchema, scheduledTaskTypeSchema, spawnPointSchema, systemStatsSchema, taskCreatePayloadSchema, taskRunHistorySchema, taskRunStatusSchema, taskUpdatePayloadSchema, updateCheckResultSchema, updatePropertiesResponseSchema, upgradeProgressSchema, upgradeRequestSchema, upgradeStageSchema, upgradeStartResponseSchema, versionsResponseSchema, weatherTypeSchema, webhookCreatePayloadSchema, webhookDeliverySchema, webhookSchema, webhookTestResultSchema, worldDimensionSchema, worldInfoSchema, wsBackupPayloadSchema, wsEventTypeSchema, wsLogPayloadSchema, wsMessageSchema, wsPerformancePayloadSchema, wsPlayerEventPayloadSchema, wsStatusEventPayloadSchema, wsStatusSnapshotSchema, wsWeatherPayloadSchema };
+export { NOTIFICATION_EVENT_TYPES, WS_EVENT_TYPES, apiEnvelopeSchema, apiErrorEnvelopeSchema, auditLogItemSchema, auditLogsQuerySchema, backupCreateRequestSchema, backupItemSchema, banRecordSchema, banRequestBodySchema, commandHistoryItemSchema, commandHistoryQuerySchema, deployProgressSchema, deployRequestSchema, deployResultSchema, diskInfoSchema, diskUsageSchema, fileContentResponseSchema, fileEntrySchema, fileInfoResponseSchema, fileListRequestSchema, fileListResponseSchema, fileMkdirRequestSchema, filePathRequestSchema, fileRenameRequestSchema, fileSaveRequestSchema, fileSaveResponseSchema, fileUploadQuerySchema, instanceStatusSchema, instanceSummarySchema, instanceUpdatePayloadSchema, inventoryItemSchema, ipHistoryEntrySchema, logEntrySchema, makeApiEnvelopeSchema, marketInstallRequestSchema, marketInstallResultSchema, marketSearchHitSchema, marketSearchRequestSchema, marketSearchResultSchema, marketVersionFileSchema, marketVersionSchema, marketVersionsRequestSchema, marketVersionsResultSchema, overviewDataSchema, paginationSchema, playerDimensionSchema, playerEventSchema, playerGameModeSchema, playerInventorySchema, playerPositionSchema, playerPotionEffectSchema, playerSchema, playerSessionSchema, playerStatsSchema, pluginEnabledRequestSchema, pluginInfoSchema, pluginListSchema, pluginMetaSchema, pluginOverwriteQuerySchema, pluginToggleResultSchema, pluginUpdateCheckResultSchema, pluginUpdateStatusSchema, pluginUploadResultSchema, scheduledTaskSchema, scheduledTaskTypeSchema, spawnPointSchema, systemStatsSchema, taskCreatePayloadSchema, taskRunHistorySchema, taskRunStatusSchema, taskUpdatePayloadSchema, updateCheckResultSchema, updatePropertiesResponseSchema, upgradeProgressSchema, upgradeRequestSchema, upgradeStageSchema, upgradeStartResponseSchema, versionsResponseSchema, weatherTypeSchema, webhookCreatePayloadSchema, webhookDeliverySchema, webhookSchema, webhookTestResultSchema, worldDimensionSchema, worldInfoSchema, wsBackupPayloadSchema, wsEventTypeSchema, wsLogPayloadSchema, wsMessageSchema, wsPerformancePayloadSchema, wsPlayerEventPayloadSchema, wsStatusEventPayloadSchema, wsStatusSnapshotSchema, wsWeatherPayloadSchema };

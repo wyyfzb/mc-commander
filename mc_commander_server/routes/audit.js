@@ -1,18 +1,20 @@
 import { Router } from 'express';
 import { successPaginated } from '../utils/response.js';
 import { parsePagination } from '../utils/pagination.js';
+import { auditLogsQuerySchema, commandHistoryQuerySchema } from '@mc-commander/schemas';
+import { validateQuery } from '../middleware/validate.js';
 import { AuditLogModel, CommandHistoryModel } from '../db/index.js';
 
 export function createAuditRoutes() {
   const router = Router();
 
   // GET /api/v1/audit-logs
-  router.get('/audit-logs', (req, res, next) => {
+  // 查询参数契约（issue 391）：筛选字段 + order（asc/desc，缺省/非法回落 desc，
+  // issue 383 向后兼容语义由 schema catch 表达）；page/pageSize 透传给
+  // parsePagination（issue 391 分页边界，#392 收敛的解析语义不变）
+  router.get('/audit-logs', validateQuery(auditLogsQuerySchema), (req, res, next) => {
     try {
       const { page, pageSize } = parsePagination(req.query);
-
-      // 排序参数白名单（issue 383）：仅接受 asc/desc，缺省/非法回落 desc（向后兼容）
-      const order = req.query.order === 'asc' ? 'asc' : 'desc';
 
       const result = AuditLogModel.findAll({
         instanceId: req.query.instanceId,
@@ -21,7 +23,7 @@ export function createAuditRoutes() {
         startTime: req.query.startTime,
         endTime: req.query.endTime,
         source: req.query.source,
-        order,
+        order: req.query.order,
         page,
         pageSize,
       });
@@ -33,7 +35,7 @@ export function createAuditRoutes() {
   });
 
   // GET /api/v1/command-history
-  router.get('/command-history', (req, res, next) => {
+  router.get('/command-history', validateQuery(commandHistoryQuerySchema), (req, res, next) => {
     try {
       const { page, pageSize } = parsePagination(req.query);
 

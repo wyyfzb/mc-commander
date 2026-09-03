@@ -10,6 +10,15 @@ import { atomicWriteFile, resolveSafePath, PathTraversalError } from '../utils/f
 import config from '../config.js';
 import { BanModel } from '../db/index.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
+import {
+  fileListRequestSchema,
+  filePathRequestSchema,
+  fileSaveRequestSchema,
+  fileMkdirRequestSchema,
+  fileRenameRequestSchema,
+  fileUploadQuerySchema,
+} from '@mc-commander/schemas';
+import { validateBody, validateQuery } from '../middleware/validate.js';
 import { logger } from '../utils/logger.js';
 
 // Content-Disposition filename 编码（RFC 5987）：ASCII 可直接用 filename，
@@ -205,11 +214,11 @@ function resolveInstancePath(basePath, userPath, options) {
 export function createFileRoutes(serverManager) {
   const router = Router({ mergeParams: true });
   
-  // 列出文件/目录
-  router.get('/instances/:instanceId/files', (req, res, next) => {
+  // 列出文件/目录（查询契约 issue 391：path 缺省归一 '/'，未知字段剥离）
+  router.get('/instances/:instanceId/files', validateQuery(fileListRequestSchema), (req, res, next) => {
     try {
       const { instanceId } = req.params;
-      const dirPath = req.query.path || '/';
+      const dirPath = req.query.path;
       
       // 检查实例是否存在
       const instance = serverManager.getInstance(instanceId);
@@ -282,14 +291,10 @@ export function createFileRoutes(serverManager) {
   // 流式发送（createReadStream 不整读入内存，world/备份等大文件可下）；
   // 目录拒绝（目录下载应走备份打包流程，避免递归流拼接的边界问题）；
   // 审计 FILE_DOWNLOAD（与管理页其他文件操作对齐，下载敏感文件可追溯）
-  router.get('/instances/:instanceId/files/download', (req, res, next) => {
+  router.get('/instances/:instanceId/files/download', validateQuery(filePathRequestSchema), (req, res, next) => {
     try {
       const { instanceId } = req.params;
       const filePath = req.query.path;
-
-      if (!filePath) {
-        throw new AppError(ErrorCodes.VALIDATION_ERROR, 'File path is required');
-      }
 
       const instance = serverManager.getInstance(instanceId);
       if (!instance) {
@@ -338,14 +343,10 @@ export function createFileRoutes(serverManager) {
   });
 
   // 读取文件内容
-  router.get('/instances/:instanceId/files/content', (req, res, next) => {
+  router.get('/instances/:instanceId/files/content', validateQuery(filePathRequestSchema), (req, res, next) => {
     try {
       const { instanceId } = req.params;
       const filePath = req.query.path;
-      
-      if (!filePath) {
-        throw new AppError(ErrorCodes.VALIDATION_ERROR, 'File path is required');
-      }
 
       const instance = serverManager.getInstance(instanceId);
       if (!instance) {
@@ -399,14 +400,10 @@ export function createFileRoutes(serverManager) {
   });
 
   // 写入文件内容
-  router.put('/instances/:instanceId/files/content', (req, res, next) => {
+  router.put('/instances/:instanceId/files/content', validateBody(fileSaveRequestSchema), (req, res, next) => {
     try {
       const { instanceId } = req.params;
       const { path: filePath, content } = req.body;
-      
-      if (!filePath || content === undefined) {
-        throw new AppError(ErrorCodes.VALIDATION_ERROR, 'File path and content are required');
-      }
 
       const instance = serverManager.getInstance(instanceId);
       if (!instance) {
@@ -508,14 +505,10 @@ export function createFileRoutes(serverManager) {
   });
   
   // 删除文件/目录
-  router.delete('/instances/:instanceId/files', (req, res, next) => {
+  router.delete('/instances/:instanceId/files', validateQuery(filePathRequestSchema), (req, res, next) => {
     try {
       const { instanceId } = req.params;
       const filePath = req.query.path;
-      
-      if (!filePath) {
-        throw new AppError(ErrorCodes.VALIDATION_ERROR, 'File path is required');
-      }
 
       const instance = serverManager.getInstance(instanceId);
       if (!instance) {
@@ -579,14 +572,10 @@ export function createFileRoutes(serverManager) {
   });
   
   // 新建目录（POST /instances/:instanceId/files/mkdir）
-  router.post('/instances/:instanceId/files/mkdir', (req, res, next) => {
+  router.post('/instances/:instanceId/files/mkdir', validateBody(fileMkdirRequestSchema), (req, res, next) => {
     try {
       const { instanceId } = req.params;
       const { path: dirPath } = req.body;
-
-      if (!dirPath) {
-        throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Directory path is required');
-      }
 
       const instance = serverManager.getInstance(instanceId);
       if (!instance) {
@@ -620,14 +609,10 @@ export function createFileRoutes(serverManager) {
   });
 
   // 重命名文件/目录（POST /instances/:instanceId/files/rename）
-  router.post('/instances/:instanceId/files/rename', (req, res, next) => {
+  router.post('/instances/:instanceId/files/rename', validateBody(fileRenameRequestSchema), (req, res, next) => {
     try {
       const { instanceId } = req.params;
       const { path: oldPath, newPath } = req.body;
-
-      if (!oldPath || !newPath) {
-        throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Old path and new path are required');
-      }
 
       const instance = serverManager.getInstance(instanceId);
       if (!instance) {
@@ -728,7 +713,8 @@ const upload = multer({
 
 
   // 上传文件（POST /instances/:instanceId/files/upload，multipart/form-data）
-  // multer 错误标准化中间件：MulterError（file too large 等）→ AppError
+  // multer 错误标准化中间件：MulterError（file too large 等）→ AppError；
+  // targetDir 查询契约（issue 391）：缺省归一 '/'、拒绝控制字符，由 schema 完成
   router.post('/instances/:instanceId/files/upload', (req, res, next) => {
     upload.single('file')(req, res, (err) => {
       if (err) {
@@ -742,7 +728,7 @@ const upload = multer({
       }
       next();
     });
-  }, (req, res, next) => {
+  }, validateQuery(fileUploadQuerySchema), (req, res, next) => {
     try {
       const { instanceId } = req.params;
       const uploadedFile = req.file;
@@ -767,20 +753,9 @@ const upload = multer({
 
       const basePath = instance.serverPath || path.join(config.serversDir, instanceId);
 
-      // 目标目录：支持可选 targetDir 查询参数（默认 '/' 保持后向兼容）
-      const rawTargetDir = req.query.targetDir ?? '/';
-      // 安全校验：拒绝路径分隔符与目录穿越
-      if (typeof rawTargetDir !== 'string' || rawTargetDir.length === 0) {
-        try { fs.unlinkSync(uploadedFile.path); } catch {}
-        throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Invalid targetDir');
-      }
-      // 确保目录路径以 / 开头（与前端 dir 状态格式一致）
-      const normalizedDir = rawTargetDir.startsWith('/') ? rawTargetDir : `/${rawTargetDir}`;
-      // 安全校验：拒绝控制字符
-      if (/\x00-\x1f/.test(normalizedDir)) { // eslint-disable-line no-control-regex
-        try { fs.unlinkSync(uploadedFile.path); } catch {}
-        throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Invalid targetDir');
-      }
+      // 目标目录：可选 targetDir 查询参数（schema 已缺省归一 '/'、补全前导 /
+      // 并拒绝控制字符，issue 391）
+      const normalizedDir = req.query.targetDir;
       // 去掉前导 / 以便拼接（normalizedDir 为 '/' 时 relativeDir 为空）
       const relativeDir = normalizedDir === '/' ? '' : normalizedDir.slice(1);
       const relativePath = relativeDir ? `${relativeDir}/${safeName}` : safeName;
