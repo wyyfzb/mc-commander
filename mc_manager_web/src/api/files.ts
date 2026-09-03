@@ -22,6 +22,14 @@ import type {
 
 const base = (instanceId: string) => `/api/v1/instances/${instanceId}`
 
+/** 上传体积上限（与服务端 multer 校验一致：50MB）；UI 层在选择文件阶段即用此值前置拦截 */
+export const UPLOAD_MAX_FILE_BYTES = 50 * 1024 * 1024
+
+/** 字节数转人类可读体积（MB 保留 0 位；与 50MB 上限标注共用） */
+export function formatUploadLimit(bytes: number): string {
+  return `${Math.round(bytes / 1024 / 1024)}MB`
+}
+
 /** 列出目录（GET /instances/:id/files?path=；目录返回 files 数组，文件返回单文件信息） */
 export function apiListFiles(config: ConnectionConfig, instanceId: string, path: string) {
   return apiGet<FileListResponse | FileInfoResponse>(

@@ -1,9 +1,9 @@
 /**
- * FilesPage 上传进度反馈测试（#293）
+ * FilesPage 上传进度反馈测试（#293 toast 文字 → issue 339 进度条改版）
  * Monaco 在 jsdom 不可渲染——沿用 monaco-editor-pane.test 的 mock 策略（占位组件 + 常量 stub）。
  * apiUploadFile 走 XMLHttpRequest：以 FakeXHR 全局替换并手动编排 upload progress / load 响应，
  * 验证 handleUploadChange → useUploadFile → apiUploadFile 的 onProgress 透传链、
- * toast 进度（5% 步进同 id 复用）与成功/失败/在途保护收尾。
+ * 可视进度条（progressbar ARIA 三元组 + 直更无节流）、取消中断、50MB 前置拦截与成功/失败/在途保护收尾。
  * 测试路径与文件名均为虚构示例，严禁真实服务器数据
  */
 import { describe, it, expect, beforeEach, afterEach, afterAll, beforeAll, vi } from 'vitest'
@@ -11,7 +11,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { setupServer } from 'msw/node'
 import { createMemoryRouter, RouterProvider } from 'react-router'
-import { Toaster } from 'sonner'
+import { Toaster, toast } from 'sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { handlers } from '@/test/mocks/handlers'
 import { useConnectionStore } from '@/stores/connection'
@@ -81,6 +81,8 @@ afterAll(() => server.close())
 
 beforeEach(() => {
   sentXHR.length = 0
+  // sonner toast store 模块级：清残留防跨测试泄漏干扰反向断言
+  toast.dismiss()
   vi.stubGlobal('XMLHttpRequest', FakeXHR)
   localStorage.clear()
   useConnectionStore.setState({ baseUrl: '', apiKey: 'test-key', status: 'ready' })
@@ -132,27 +134,34 @@ function okUploadEnvelope() {
 }
 
 describe('FilesPage 上传进度反馈', () => {
-  it('onProgress 接线：进度 toast 按 5% 步进更新（同 id）→ 完成后 success 收尾', async () => {
+  it('onProgress 接线：进度条 aria-valuenow 直更 + ARIA 三元组齐全 → 完成后进度条消失 + success 收尾', async () => {
     renderPage()
     await pickFile(new File(['data'], '示例整合包.zip', { type: 'application/zip' }))
 
+    // 进度条出现且 ARIA 属性齐全（role/label/min/max）
+    const bar = await screen.findByRole('progressbar', { name: '文件上传进度' })
+    expect(bar).toHaveAttribute('aria-valuemin', '0')
+    expect(bar).toHaveAttribute('aria-valuemax', '100')
+
     const xhr = sentXHR[0]!
     xhr.emitProgress(5, 100)
-    expect(await screen.findByText('正在上传 示例整合包.zip 5%')).toBeInTheDocument()
-    // 步进不足 5%：不刷新文案（节流与下载一致）
+    await waitFor(() => expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '5'))
+    // 进度条直更（无 toast 文字节流）：5% → 7% 直接反映
     xhr.emitProgress(7, 100)
-    expect(screen.queryByText('正在上传 示例整合包.zip 7%')).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '7'))
     xhr.emitProgress(100, 100)
-    expect(await screen.findByText('正在上传 示例整合包.zip 100%')).toBeInTheDocument()
-    // 同 id 收尾：loading → success
+    await waitFor(() => expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '100'))
+    // 完成收尾：进度条消失 + success toast
     xhr.emitLoad(okUploadEnvelope())
     expect(await screen.findByText('已上传 /示例整合包.zip（1.0 KB）')).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByRole('progressbar')).not.toBeInTheDocument())
   })
 
-  it('上传失败：toast error 同 id 收尾（错误码本地化文案）', async () => {
+  it('上传失败：进度条消失 + toast error 收尾（错误码本地化文案）', async () => {
     renderPage()
     await pickFile(new File(['data'], '示例地图.zip', { type: 'application/zip' }))
 
+    expect(await screen.findByRole('progressbar')).toBeInTheDocument()
     const xhr = sentXHR[0]!
     xhr.emitLoad({
       status: 'error',
@@ -162,6 +171,7 @@ describe('FilesPage 上传进度反馈', () => {
       timestamp: new Date().toISOString(),
     })
     expect(await screen.findByText(/上传失败：/)).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByRole('progressbar')).not.toBeInTheDocument())
   })
 
   it('在途保护：上传进行中再次选择文件不产生第二个请求', async () => {
@@ -175,5 +185,38 @@ describe('FilesPage 上传进度反馈', () => {
     // 放行后完成收尾
     sentXHR[0]!.emitLoad(okUploadEnvelope())
     expect(await screen.findByText('已上传 /示例整合包.zip（1.0 KB）')).toBeInTheDocument()
+  })
+
+  it('50MB 前置拦截：超限文件选择阶段即拒绝，不发起请求', async () => {
+    renderPage()
+    // 构造 size 属性覆盖的 File（避免真实分配 51MB 缓冲）
+    const oversized = new File(['data'], '超限世界备份.zip', { type: 'application/zip' })
+    Object.defineProperty(oversized, 'size', { value: 51 * 1024 * 1024 })
+
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement
+    fireEvent.change(input, { target: { files: [oversized] } })
+
+    // 不发请求 + 明确上限提示
+    await new Promise((r) => setTimeout(r, 20))
+    expect(sentXHR).toHaveLength(0)
+    expect(await screen.findByText(/超过单文件上限 50MB/)).toBeInTheDocument()
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
+  })
+
+  it('取消：点击取消按钮 → XHR abort 被调用 + 进度条消失 + 取消提示（无错误 toast）', async () => {
+    const abortSpy = vi.spyOn(FakeXHR.prototype, 'abort')
+    renderPage()
+    await pickFile(new File(['data'], '示例大地图.zip', { type: 'application/zip' }))
+
+    const xhr = sentXHR[0]!
+    xhr.emitProgress(30, 100)
+    await waitFor(() => expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '30'))
+
+    fireEvent.click(screen.getByTestId('upload-cancel'))
+    expect(abortSpy).toHaveBeenCalled()
+    await waitFor(() => expect(screen.queryByRole('progressbar')).not.toBeInTheDocument())
+    // 取消提示出现（info toast；FakeXHR.abort 为空实现不触发 abort 事件，
+    // 请求侧 signal.aborted 静默分支由组件逻辑保证，此处验证 UI 即时反馈链）
+    expect(await screen.findByText('上传已取消')).toBeInTheDocument()
   })
 })

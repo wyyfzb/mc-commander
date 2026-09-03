@@ -148,14 +148,17 @@ export function useUploadFile(instanceId: string | null) {
       file,
       targetDir,
       onProgress,
+      signal,
     }: {
       file: File
       targetDir?: string
       /** 上传进度回调（0-100），透传给 apiUploadFile 的 xhr.upload 监听；不传则行为不变 */
       onProgress?: (pct: number) => void
+      /** 用户取消信号，透传给 apiUploadFile（abort 后 XHR 触发 abort 事件 → reject NetworkError） */
+      signal?: AbortSignal
     }) => {
       if (!instanceId) throw new Error('未选择实例')
-      return apiUploadFile(config, instanceId, file, { targetDir, onProgress })
+      return apiUploadFile(config, instanceId, file, { targetDir, onProgress, signal })
     },
     onSuccess: (_data, variables) => {
       // 失效目标目录的文件列表（默认根目录，与后端 targetDir 默认 '/' 一致）
