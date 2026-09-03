@@ -11,6 +11,7 @@ import { queryKeys } from '@/api/queries'
 import { useConnectionStore } from '@/stores/connection'
 import { useServerStore } from '@/stores/server'
 import { useTerminalStore } from '@/stores/terminal'
+import { useUiStore } from '@/stores/ui'
 import { useStartInstanceWithEula } from '@/hooks/use-start-instance-with-eula'
 import { useStopInstance } from '@/hooks/use-instance-stop'
 import type { InstanceStatus } from '@/api/types'
@@ -35,6 +36,7 @@ export function InstanceControls({ compact = false }: { compact?: boolean }) {
   const instanceId = useServerStore((s) => s.instanceId)
   const currentPhase = useServerStore((s) => (s.instanceId ? (s.phase[s.instanceId] ?? null) : null))
   const resetTerminal = useTerminalStore((s) => s.resetForRestart)
+  const setLastOutputInstanceId = useUiStore((s) => s.setLastOutputInstanceId)
   const [busyAction, setBusyAction] = useState<BusyAction>(null)
   const [confirmAction, setConfirmAction] = useState<'启动' | '停止' | '重启' | null>(null)
 
@@ -74,7 +76,7 @@ export function InstanceControls({ compact = false }: { compact?: boolean }) {
   })
 
   /** 启动轮询：每 2s 查 isRunning，60s 超时 */
-  async function waitForStart(id: string): Promise<{ ok: boolean; message: string }> {
+  async function waitForStart(id: string): Promise<{ ok: boolean; message: string; instanceId?: string }> {
     let wasRunning = false
     for (let i = 0; i < 30; i++) {
       await sleep(2000)
@@ -89,8 +91,15 @@ export function InstanceControls({ compact = false }: { compact?: boolean }) {
         // 单次探测失败继续
       }
     }
-    if (wasRunning) return { ok: false, message: '服务器启动后立即崩溃，请检查日志' }
-    return { ok: false, message: '服务器启动失败，请检查配置和日志' }
+    if (wasRunning) {
+      return {
+        ok: false,
+        message: '服务器启动后立即崩溃，请检查日志',
+        // 深入链接：一键查看进程末尾日志（issue 343，消费 lastOutput）
+        instanceId: id,
+      }
+    }
+    return { ok: false, message: '服务器启动失败，请检查配置和日志', instanceId: id }
   }
 
   const doConfirm = () => {
@@ -107,7 +116,12 @@ export function InstanceControls({ compact = false }: { compact?: boolean }) {
           if (result.ok) {
             toast.success('服务器已启动')
           } else {
-            toast.error(result.message)
+            toast.error(result.message, {
+              // 深入链接：失败时进程可能已留下末尾输出（issue 343）
+              ...(result.instanceId
+                ? { action: { label: '查看末尾日志', onClick: () => setLastOutputInstanceId(result.instanceId!) } }
+                : {}),
+            })
           }
           await queryClient.invalidateQueries({ queryKey: queryKeys.instance(instanceId ?? '') })
         },

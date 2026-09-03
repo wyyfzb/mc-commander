@@ -25,6 +25,8 @@ export interface DataTableShellProps {
   isEmpty?: boolean
   /** 空态文案 */
   emptyText?: string
+  /** 空态操作区（如「清空筛选」；渲染在文案下方） */
+  emptyActions?: ReactNode
   /** 骨架行数量 */
   skeletonRows?: number
   /** 骨架列宽度 class 数组 */
@@ -45,11 +47,11 @@ function ErrorRow({ colSpan, error }: { colSpan: number; error: unknown }) {
   )
 }
 
-function EmptyRow({ colSpan, text }: { colSpan: number; text: string }) {
+function EmptyRow({ colSpan, text, actions }: { colSpan: number; text: string; actions?: ReactNode }) {
   return (
     <tr>
       <td colSpan={colSpan} className="px-3 py-8">
-        <EmptyStateVisual text={text} />
+        <EmptyStateVisual text={text} actions={actions} />
       </td>
     </tr>
   )
@@ -75,6 +77,7 @@ export function DataTableShell({
   error,
   isEmpty = false,
   emptyText = '暂无记录',
+  emptyActions,
   skeletonRows = 5,
   skeletonWidths,
   pagination,
@@ -94,7 +97,7 @@ export function DataTableShell({
             : error
               ? (<tbody><ErrorRow colSpan={columns} error={error} /></tbody>)
               : isEmpty
-                ? (<tbody><EmptyRow colSpan={columns} text={emptyText} /></tbody>)
+                ? (<tbody><EmptyRow colSpan={columns} text={emptyText} actions={emptyActions} /></tbody>)
               : children}
         </table>
       </div>

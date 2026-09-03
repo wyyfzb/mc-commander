@@ -90,6 +90,18 @@ describe('PlayersPage', () => {
     expect(await screen.findByText('没有匹配的玩家')).toBeInTheDocument()
   })
 
+  it('无匹配空态提供「清空筛选」CTA：点击恢复全量列表（issue 343）', async () => {
+    renderPage()
+    await screen.findByText('Steve')
+    fireEvent.change(screen.getByPlaceholderText('搜索玩家名或 UUID…'), { target: { value: 'zzz-not-exist' } })
+    expect(await screen.findByText('没有匹配的玩家')).toBeInTheDocument()
+    // 深链 CTA 出现并可一键复位
+    fireEvent.click(screen.getByTestId('players-clear-filter'))
+    expect(await screen.findByText('Steve')).toBeInTheDocument()
+    expect(screen.queryByText('没有匹配的玩家')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('players-clear-filter')).not.toBeInTheDocument()
+  })
+
   it('点击行打开详情面板（概览 Tab：操作按钮组与基本信息）', async () => {
     const user = userEvent.setup()
     renderPage()

@@ -200,6 +200,7 @@ export function PlayersPage() {
               players={filteredPlayers}
               isLoading={playersQuery.isLoading}
               totalCount={allPlayers.length}
+              onClearFilter={() => setFilter({ q: '', mode: 'all' })}
               isRconConnected={isRconConnected}
               onOpenDetail={(name, tab) => openPlayerDetail(name, tab as PlayerDetailTab | undefined)}
               onOpenBan={setBanTarget}

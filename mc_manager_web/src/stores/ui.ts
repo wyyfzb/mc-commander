@@ -21,6 +21,8 @@ interface UiState {
   notificationsOpen: boolean
   /** 移动端侧栏抽屉开合（<768px 窄屏；桌面端不使用） */
   mobileNavOpen: boolean
+  /** 末尾日志弹窗（崩溃/熔断 toast「查看末尾日志」入口；存实例 id，null=关） */
+  lastOutputInstanceId: string | null
   /** 界面密度（B5：density.css 联动，compact 32px 密集行） */
   density: DensityMode
   /** 终端自动滚动（B5：新日志自动滚动到底部；关闭后不跟随） */
@@ -32,6 +34,7 @@ interface UiState {
   toggleSidebar: () => void
   setCommandPaletteOpen: (open: boolean) => void
   setNotificationsOpen: (open: boolean) => void
+  setLastOutputInstanceId: (id: string | null) => void
   toggleMobileNav: () => void
   setMobileNavOpen: (open: boolean) => void
   setDensity: (density: DensityMode) => void
@@ -57,6 +60,7 @@ export const useUiStore = create<UiState>()(
       commandPaletteOpen: false,
       notificationsOpen: false,
       mobileNavOpen: false,
+      lastOutputInstanceId: null,
       density: 'default',
       terminalAutoScroll: true,
       confirmCommands: false,
@@ -65,6 +69,7 @@ export const useUiStore = create<UiState>()(
       toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
       setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),
       setNotificationsOpen: (open) => set({ notificationsOpen: open }),
+      setLastOutputInstanceId: (id) => set({ lastOutputInstanceId: id }),
       toggleMobileNav: () => set((s) => ({ mobileNavOpen: !s.mobileNavOpen })),
       setMobileNavOpen: (open) => set({ mobileNavOpen: open }),
       setDensity: (density) => set({ density }),
