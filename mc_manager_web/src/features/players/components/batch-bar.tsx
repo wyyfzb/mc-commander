@@ -104,11 +104,11 @@ export function BatchBar({ selectedPlayers, onOpenBatchDetail, onAction }: Batch
   }
 
   return (
-    <div className="pointer-events-auto fixed inset-x-0 bottom-4 z-40 flex justify-center">
-      <div className="bg-mcs-bg-default flex max-w-[calc(100vw-2rem)] items-center gap-1.5 rounded-mcs-md border border-mcs-border-default px-3 py-2 shadow-lg">
-        <span className="mr-1 whitespace-nowrap text-mcs-sm font-medium text-mcs-text-default">
-          已选择 {count} 名玩家
-        </span>
+    // 内联出现在表格上方（accent 激活语言呼应「选择生效中」）；flex-wrap 防窄视口溢出
+    <div className="mb-3 flex flex-wrap items-center gap-1.5 rounded-mcs-md border border-mcs-accent-border bg-mcs-accent-bg-subtle px-3 py-2">
+      <span className="mr-1 whitespace-nowrap text-mcs-sm font-medium text-mcs-accent-fg">
+        已选择 {count} 名玩家
+      </span>
 
         {/* 导航类 */}
         <Button variant="outline" size="sm" onClick={() => onOpenBatchDetail('teleport')} disabled={running}>
@@ -217,7 +217,6 @@ export function BatchBar({ selectedPlayers, onOpenBatchDetail, onAction }: Batch
           loading={running}
           onConfirm={() => void executeGamemode()}
         />
-      </div>
     </div>
   )
 }

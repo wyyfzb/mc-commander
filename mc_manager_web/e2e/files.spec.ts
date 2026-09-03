@@ -23,18 +23,18 @@ async function setupConnection(page: Page) {
 }
 
 test.describe('文件页', () => {
-  test('三栏布局：目录树 + 文件列表 + 编辑器空态', async ({ page }) => {
+  test('双栏布局：文件列表 + 编辑器空态', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/files')
-    // 左栏目录树根节点（展开箭头 aria-label 含「实例根目录」）
-    await expect(page.getByRole('button', { name: '展开 实例根目录' })).toBeVisible()
-    // 中栏文件列表（根目录 5 项）
+    // 目录树已移除（导航收敛到面包屑 + 上级按钮）
+    await expect(page.getByRole('button', { name: '展开 实例根目录' })).toHaveCount(0)
+    // 左栏文件列表（根目录 5 项）
     await expect(page.getByText('server.properties')).toBeVisible()
     await expect(page.getByText('whitelist.json')).toBeVisible()
     await expect(page.getByText('ops.json')).toBeVisible()
     // 右栏编辑器空态
     await expect(page.getByText('选择文件进行编辑')).toBeVisible()
-    await maybeShot(page, 'files-three-column-dark.png')
+    await maybeShot(page, 'files-two-column-dark.png')
   })
 
   test('点击文件打开 Monaco 编辑器 + 编辑保存', async ({ page }) => {

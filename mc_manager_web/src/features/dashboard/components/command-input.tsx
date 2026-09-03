@@ -264,7 +264,6 @@ export function CommandInput() {
                       type="button"
                       className="cursor-pointer font-mono hover:text-mcs-text-default"
                       onClick={() => setValue(preset)}
-                      title={preset}
                     >
                       {display}
                     </button>

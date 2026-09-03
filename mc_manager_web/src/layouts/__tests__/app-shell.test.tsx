@@ -100,11 +100,13 @@ describe('AppShell', () => {
     expect(screen.getByRole('option', { name: /Webhook/ })).toBeInTheDocument()
   })
 
-  it('侧栏折叠按钮切换宽度状态', () => {
+  it('侧栏 Logo 开合按钮切换宽度状态（开合交互归属侧栏本体）', () => {
     renderShell()
     const aside = screen.getByRole('complementary', { name: '主导航' })
     expect(aside).not.toHaveClass('w-14')
-    fireEvent.click(screen.getByRole('button', { name: /折叠侧栏/ }))
+    fireEvent.click(screen.getByRole('button', { name: /收起侧栏/ }))
     expect(aside).toHaveClass('w-14')
+    fireEvent.click(screen.getByRole('button', { name: /展开侧栏/ }))
+    expect(aside).not.toHaveClass('w-14')
   })
 })

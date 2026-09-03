@@ -1,6 +1,8 @@
 import { useEffect, useRef, useCallback } from 'react'
 import { NavLink } from 'react-router'
 import {
+  ChevronsLeft,
+  ChevronsRight,
   LayoutDashboard,
   Users,
   Globe,
@@ -15,6 +17,8 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { BrandLogo } from '@/components/mcs/brand-logo'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { useUiStore } from '@/stores/ui'
 import { useInstances } from '@/api/queries'
 import { useServerStore } from '@/stores/server'
 
@@ -108,6 +112,7 @@ export function AppSidebar({ collapsed, mobileNavOpen, onMobileNavClose }: AppSi
   const instancesQuery = useInstances()
   const current = instancesQuery.data?.find((i) => i.id === instanceId)
   const mobileDrawerRef = useRef<HTMLElement | null>(null)
+  const toggleSidebar = useUiStore((s) => s.toggleSidebar)
 
   const nav = (
     <>
@@ -158,16 +163,16 @@ export function AppSidebar({ collapsed, mobileNavOpen, onMobileNavClose }: AppSi
 
   return (
     <>
-      {/* 桌面侧栏（≥768px） */}
+      {/* 桌面侧栏（≥768px）；overflow-hidden 让常驻文字随宽度过渡裁剪（防收起中溢出） */}
       <aside
         className={cn(
-          'glass-chrome hidden h-full shrink-0 flex-col border-r border-mcs-border-muted md:flex',
+          'glass-chrome hidden h-full shrink-0 flex-col overflow-hidden border-r border-mcs-border-muted md:flex',
           'transition-[width] duration-mcs-base ease-mcs-snappy',
           collapsed ? 'w-14' : 'w-52',
         )}
         aria-label="主导航"
       >
-        <BrandRow collapsed={collapsed} />
+        <BrandRow collapsed={collapsed} onToggle={() => toggleSidebar()} />
         {nav}
       </aside>
 
@@ -200,11 +205,69 @@ export function AppSidebar({ collapsed, mobileNavOpen, onMobileNavClose }: AppSi
   )
 }
 
-function BrandRow({ collapsed }: { collapsed: boolean }) {
+/**
+ * BrandRow —— 侧栏品牌行
+ * - 文字常驻挂载，收起时以 max-w + opacity 与容器宽度同曲线渐隐（条件卸载会造成收起抖动）
+ * - onToggle 存在时（桌面侧栏）Logo 承载开合交互：hover 时 Logo 淡出、切换为对应态的开合按钮；
+ *   移动端抽屉不传 onToggle，Logo 纯展示
+ */
+function BrandRow({ collapsed, onToggle }: { collapsed: boolean; onToggle?: () => void }) {
+  const label = collapsed ? '展开侧栏' : '收起侧栏'
+  const Chevron = collapsed ? ChevronsRight : ChevronsLeft
+  const logoArt = (
+    <>
+      <BrandLogo
+        className={cn(
+          'text-mcs-text-default transition-[width,height,opacity] duration-mcs-fast',
+          collapsed ? 'size-6' : 'size-5',
+          'group-hover/brand-btn:opacity-0',
+        )}
+      />
+      <Chevron
+        aria-hidden
+        className={cn(
+          'absolute size-4 text-mcs-text-default transition-opacity duration-mcs-fast',
+          'opacity-0 group-hover/brand-btn:opacity-100',
+        )}
+      />
+    </>
+  )
+  const logoButton = onToggle ? (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-label={label}
+          className="group/brand-btn relative flex size-8 shrink-0 items-center justify-center rounded-mcs-sm transition-colors duration-mcs-fast hover:bg-mcs-state-hover focus-visible:outline-2 focus-visible:outline-offset-2"
+        >
+          {logoArt}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="right">{label}</TooltipContent>
+    </Tooltip>
+  ) : (
+    <div className="relative flex size-8 shrink-0 items-center justify-center">
+      <BrandLogo className={cn('text-mcs-text-default', 'size-5')} />
+    </div>
+  )
   return (
-    <div className={cn('flex h-12 items-center gap-2 px-3', collapsed && 'justify-center px-0')}>
-      <BrandLogo className={cn('text-mcs-text-default', collapsed ? 'size-6' : 'size-5')} />
-      {!collapsed && <span className="truncate text-mcs-md font-semibold">MC Commander</span>}
+    <div
+      className={cn(
+        'flex h-12 items-center gap-2 px-3 transition-[padding] duration-mcs-base ease-mcs-snappy',
+        collapsed && 'justify-center px-0',
+      )}
+    >
+      {logoButton}
+      <span
+        className={cn(
+          'min-w-0 truncate whitespace-nowrap text-mcs-md font-semibold',
+          'transition-[max-width,opacity] duration-mcs-base ease-mcs-snappy',
+          collapsed ? 'max-w-0 opacity-0' : 'max-w-36 opacity-100',
+        )}
+      >
+        MC Commander
+      </span>
     </div>
   )
 }
@@ -235,7 +298,16 @@ function SidebarLink({
       }
     >
       <Icon className="size-4 shrink-0" aria-hidden />
-      {!collapsed && <span className="truncate">{label}</span>}
+      {/* 文字常驻挂载：收起时 max-w + opacity 与容器宽度同曲线渐隐（条件卸载会抖动） */}
+      <span
+        className={cn(
+          'min-w-0 truncate whitespace-nowrap',
+          'transition-[max-width,opacity] duration-mcs-base ease-mcs-snappy',
+          collapsed ? 'max-w-0 opacity-0' : 'max-w-28 opacity-100',
+        )}
+      >
+        {label}
+      </span>
     </NavLink>
   )
 }
