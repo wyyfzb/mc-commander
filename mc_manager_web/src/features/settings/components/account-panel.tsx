@@ -2,6 +2,7 @@
  * AccountPanel —— 设置页「账号与安全」面板（安全主线）
  * - 当前身份卡：会话登录（Bearer）/ API Key 直连 双模式徽章 + 会话到期时间
  * - 修改密码：验旧密改新密；服务端踢其余会话保留当前（响应 kickedSessions）
+ * - 未提交密码输入接入 useUnsavedGuard（与同页 connection-form 同模式），路由离开前确认
  * - 活跃会话列表：30s 轮询 + current 标记 + 踢单设备（ConfirmDialog）
  * - 登出：删除当前会话 → 清凭据 → 回登录页
  * API Key 直连用户：会话区块显示引导空态（建议改用会话登录），改密仍可用
@@ -42,6 +43,7 @@ import { queryKeys } from '@/api/queries'
 import { changePassword, fetchSessions, kickSession, logout } from '@/api/auth'
 import { ApiError } from '@/api/client'
 import { getFriendlyErrorText } from '@/api/errors'
+import { useUnsavedGuard } from '@/hooks/use-unsaved-guard'
 import { useAuthStore } from '@/stores/auth'
 import { useConnectionStore } from '@/stores/connection'
 import { formatRelativeTime, formatStartTime as formatDateTime } from '@/lib/format'
@@ -118,6 +120,11 @@ export function AccountPanel() {
   const [changing, setChanging] = useState(false)
   const [changeError, setChangeError] = useState('')
   const strength = assessPasswordStrength(newPassword)
+
+  /** 未提交的密码输入（三字段相对空初始值；提交成功清空后自动解除） */
+  const passwordDirty = currentPassword !== '' || newPassword !== '' || confirmPassword !== ''
+  // 未保存守卫：与同页 connection-form 同模式，切面板（子路由）/离开页面前弹确认
+  const guard = useUnsavedGuard(passwordDirty)
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -449,6 +456,18 @@ export function AccountPanel() {
         danger
         loading={loggingOut}
         onConfirm={() => void handleLogout()}
+      />
+
+      {/* 未提交密码守卫：切面板/离开页面前弹确认（同 connection-form 语义） */}
+      <ConfirmDialog
+        open={guard.isBlocked}
+        onOpenChange={(open) => !open && guard.cancel()}
+        title="密码修改尚未提交"
+        description="离开页面将丢失未提交的密码输入，确定离开吗？"
+        confirmText="放弃修改并离开"
+        cancelText="留下"
+        danger
+        onConfirm={guard.proceed}
       />
     </div>
   )
