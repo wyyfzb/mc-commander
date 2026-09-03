@@ -123,8 +123,9 @@ describe('formatUtcNaive（SQLite CURRENT_TIMESTAMP → MM-dd HH:mm）', () => {
   })
   it('兼容已带 T 的 ISO 输入', () => {
     const local = new Date(2026, 7, 14, 9, 5)
-    const isoNoMillis = local.toISOString().slice(0, 19)
-    expect(formatUtcNaive(isoNoMillis)).toBe('08-14 09:05')
+    // 保留 Z 时区标记：无标记的 T 形式被 JS 按本地时区解析，断言会随机器时区漂移
+    const iso = local.toISOString()
+    expect(formatUtcNaive(iso)).toBe('08-14 09:05')
   })
   it('解析失败原样返回输入', () => {
     expect(formatUtcNaive('not-a-date')).toBe('not-a-date')
