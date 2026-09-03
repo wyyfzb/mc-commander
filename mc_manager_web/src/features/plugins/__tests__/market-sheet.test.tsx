@@ -217,4 +217,45 @@ describe('MarketSheet', () => {
     expect(screen.getAllByText(/Modrinth 服务暂时不可用|Modrinth upstream/).length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: '重试' })).toBeInTheDocument()
   })
+
+  it('无匹配空态提供「清空过滤」CTA：清关键词+过滤后回到热门浏览（issue 343）', async () => {
+    const user = userEvent.setup()
+    let lastQ = ''
+    server.use(
+      http.get('/api/v1/instances/demo/plugins/market/search', ({ request }) => {
+        const url = new URL(request.url)
+        const q = url.searchParams.get('q') ?? ''
+        // 关键词 nonexist 时返回空结果；清空后恢复热门
+        if (q === 'nonexist') {
+          lastQ = q
+          return HttpResponse.json({
+            status: 'ok',
+            code: 0,
+            message: 'ok',
+            data: { totalHits: 0, hits: [], cached: false },
+          })
+        }
+        lastQ = q
+        return HttpResponse.json({
+          status: 'ok',
+          code: 0,
+          message: 'ok',
+          data: SEARCH_FIXTURE,
+        })
+      }),
+    )
+    renderSheet()
+    await screen.findByText('EssentialsX')
+    // 输入无匹配关键词
+    const input = screen.getByPlaceholderText(/搜索插件/) as HTMLInputElement
+    await user.type(input, 'nonexist')
+    await user.click(screen.getByRole('button', { name: '重新搜索' }))
+    // 空态出现 + CTA
+    expect(await screen.findByText('没有找到匹配的插件')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '清空过滤' }))
+    // 清空后恢复热门浏览（输入框也被清空）
+    expect(await screen.findByText('EssentialsX')).toBeInTheDocument()
+    expect(lastQ).toBe('')
+    expect((screen.getByPlaceholderText(/搜索插件/) as HTMLInputElement).value).toBe('')
+  })
 })

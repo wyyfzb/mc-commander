@@ -245,9 +245,20 @@ export function PlayersCard() {
   const body = !isRunning ? (
     <p className="py-1 text-mcs-xs text-mcs-text-subtle">实例已停止，暂无玩家数据</p>
   ) : names.length === 0 ? (
-    <p className="py-1 text-mcs-xs text-mcs-text-subtle">
-      {rconConnected ? '暂无玩家在线' : '需启用 RCON 才能读取在线玩家'}
-    </p>
+    <div className="flex items-center gap-2 py-1">
+      <p className="text-mcs-xs text-mcs-text-subtle">
+        {rconConnected ? '暂无玩家在线' : '需启用 RCON 才能读取在线玩家'}
+      </p>
+      {!rconConnected && (
+        <button
+          type="button"
+          onClick={() => navigate('/world?tab=properties')}
+          className="shrink-0 text-mcs-xs font-medium text-mcs-info-fg hover:underline"
+        >
+          前往服务器属性
+        </button>
+      )}
+    </div>
   ) : (
     <ol className="flex flex-col">
       {names.slice(0, maxRows).map((name) => (

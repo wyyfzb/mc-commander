@@ -167,6 +167,18 @@ describe('PlayersCard（右栏可点行）', () => {
     renderCard()
     expect(screen.getByText('需启用 RCON 才能读取在线玩家')).toBeInTheDocument()
   })
+
+  it('RCON 未连接 → 空态提供「前往服务器属性」深链（issue 343）', () => {
+    setState({ ...mockInstanceStatus, isRconConnected: false, sleepingPlayerNames: [], awakePlayerNames: [] })
+    renderCard()
+    expect(screen.getByRole('button', { name: '前往服务器属性' })).toBeInTheDocument()
+  })
+
+  it('RCON 已连接 → 不渲染「前往服务器属性」深链', () => {
+    setState({ ...mockInstanceStatus, isRconConnected: true, sleepingPlayerNames: [], awakePlayerNames: [] })
+    renderCard()
+    expect(screen.queryByRole('button', { name: '前往服务器属性' })).not.toBeInTheDocument()
+  })
 })
 
 describe('RuntimeInfoCard', () => {

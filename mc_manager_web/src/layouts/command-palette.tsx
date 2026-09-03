@@ -1,21 +1,26 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router'
 import {
   CalendarClock,
+  CloudUpload,
   FolderOpen,
   Globe,
   LayoutDashboard,
   Moon,
   Puzzle,
+  RefreshCw,
   ScrollText,
   Server,
   Settings,
+  Square,
   Sun,
   Terminal,
   Users,
   Webhook,
   type LucideIcon,
 } from 'lucide-react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import {
   Command,
   CommandDialog,
@@ -29,14 +34,22 @@ import {
 import { useUiStore } from '@/stores/ui'
 import { useCommandBus } from '@/stores/command-bus'
 import { useServerStore } from '@/stores/server'
+import { useConnectionStore } from '@/stores/connection'
 import { usePlayers } from '@/features/players/queries'
 import { usePlayersUiStore } from '@/features/players/store'
+import { useCreateBackup } from '@/features/settings/queries'
+import { useStopInstance } from '@/hooks/use-instance-stop'
+import { apiPost } from '@/api/client'
+import { getFriendlyErrorText } from '@/api/errors'
+import { queryKeys } from '@/api/queries'
 import { iconForCommand } from '@/lib/mc-commands'
+import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 
 /**
  * CommandPalette —— Cmd+K 全局命令面板
  * 能力：页面跳转 / 主题切换 / 命令域（预设快捷命令经命令总线执行）
  * / 玩家搜索、给予/传送/封禁快捷入口
+ * / 实例操作（重启/备份/停止，issue 343：破坏性操作二次确认，备份直接执行）
  */
 
 const PRESET_STORAGE_KEY = 'mcs-command-presets'
@@ -79,7 +92,59 @@ export function CommandPalette() {
   const baseRunner = useCommandBus((s) => s.baseRunner)
   const commandRunner = overlayRunner ?? baseRunner
   const instanceId = useServerStore((s) => s.instanceId)
+  const instanceName = useServerStore((s) => s.status?.name ?? null)
+  const isInstanceRunning = useServerStore((s) => s.status?.isRunning ?? false)
   const openPlayerDetail = usePlayersUiStore((s) => s.openPlayerDetail)
+
+  // 实例操作（issue 343）：重启/备份/停止；破坏性操作关面板后二次确认
+  const queryClient = useQueryClient()
+  const config = useConnectionStore()
+  const stopMutation = useStopInstance()
+  const createBackupMutation = useCreateBackup(instanceId)
+  const [pendingAction, setPendingAction] = useState<'重启' | '停止' | null>(null)
+  const [confirmExecuting, setConfirmExecuting] = useState(false)
+
+  /** 重启：与实例页同源 apiPost；发令成功后失效实例状态（WS status 事件后续驱动） */
+  const restartMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiPost(`/api/v1/instances/${id}/restart`, config)
+      return id
+    },
+    onSuccess: (_data, id) => {
+      toast.success('重启指令已发送')
+      void queryClient.invalidateQueries({ queryKey: queryKeys.instance(id) })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.instances() })
+    },
+    onError: (e) => {
+      toast.error(`重启失败：${getFriendlyErrorText(e)}`)
+    },
+  })
+
+  /** 破坏性操作确认回调（面板已关，ConfirmDialog 独立挂载） */
+  const executePendingAction = async () => {
+    if (!pendingAction || !instanceId) return
+    setConfirmExecuting(true)
+    try {
+      if (pendingAction === '停止') {
+        stopMutation.mutate(instanceId)
+      } else {
+        await restartMutation.mutateAsync(instanceId)
+      }
+    } finally {
+      setConfirmExecuting(false)
+      setPendingAction(null)
+    }
+  }
+
+  /** 备份：非破坏性直接执行（与 recent-backups-card 同语义） */
+  const runBackup = async () => {
+    try {
+      await createBackupMutation.mutateAsync()
+      toast.success('备份任务已启动')
+    } catch (e) {
+      toast.error(`操作失败：${getFriendlyErrorText(e)}`)
+    }
+  }
 
   // Cmd/Ctrl+K 全局快捷键；Esc 由 Dialog 自身处理
   useEffect(() => {
@@ -144,7 +209,8 @@ export function CommandPalette() {
   }, [playersQuery.data, navigate, openPlayerDetail, setOpen])
 
   return (
-    <CommandDialog open={open} onOpenChange={setOpen}>
+    <>
+      <CommandDialog open={open} onOpenChange={setOpen}>
       {/* shadcn 4.x：CommandDialog 仅提供 Dialog 外壳，cmdk 根必须显式包裹 */}
       <Command>
         <CommandInput placeholder="输入页面名称或命令…" />
@@ -199,6 +265,45 @@ export function CommandPalette() {
               </CommandGroup>
             </>
           )}
+          {instanceId && instanceName && (
+            <>
+              <CommandSeparator />
+              <CommandGroup heading={`实例操作 · ${instanceName}`}>
+                <CommandItem
+                  value={`重启实例 ${instanceName} restart 重启`}
+                  disabled={!isInstanceRunning}
+                  onSelect={() => {
+                    setOpen(false)
+                    setPendingAction('重启')
+                  }}
+                >
+                  <RefreshCw className="size-4 text-mcs-info-fg" aria-hidden />
+                  重启实例 · {instanceName}
+                </CommandItem>
+                <CommandItem
+                  value={`备份实例 ${instanceName} backup 备份 save`}
+                  onSelect={() => {
+                    setOpen(false)
+                    void runBackup()
+                  }}
+                >
+                  <CloudUpload className="size-4 text-mcs-accent-fg" aria-hidden />
+                  备份实例 · {instanceName}
+                </CommandItem>
+                <CommandItem
+                  value={`停止实例 ${instanceName} stop 停止 shutdown`}
+                  disabled={!isInstanceRunning}
+                  onSelect={() => {
+                    setOpen(false)
+                    setPendingAction('停止')
+                  }}
+                >
+                  <Square className="size-4 text-mcs-error-fg" aria-hidden />
+                  停止实例 · {instanceName}
+                </CommandItem>
+              </CommandGroup>
+            </>
+          )}
           <CommandSeparator />
           <CommandGroup heading="外观">
             <CommandItem value={`主题 ${themeAction.keywords ?? ''}`} onSelect={themeAction.run}>
@@ -208,6 +313,25 @@ export function CommandPalette() {
           </CommandGroup>
         </CommandList>
       </Command>
-    </CommandDialog>
+      </CommandDialog>
+      {/* 实例操作二次确认（破坏性：重启/停止；必须在面板 Dialog 外独立挂载：
+          面板关闭时其 children 会卸载，嵌套会连带丢掉确认弹窗） */}
+      <ConfirmDialog
+        open={pendingAction !== null}
+        onOpenChange={(o) => {
+          if (!o) setPendingAction(null)
+        }}
+        title={pendingAction ? `${pendingAction}服务器` : ''}
+        description={
+          pendingAction === '重启'
+            ? '确定要重启服务器吗？重启期间玩家将断开连接。'
+            : '确定要关闭服务器吗？'
+        }
+        confirmText={pendingAction ?? '确定'}
+        danger={pendingAction === '停止'}
+        loading={confirmExecuting}
+        onConfirm={() => void executePendingAction()}
+      />
+    </>
   )
 }

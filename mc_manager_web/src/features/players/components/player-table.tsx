@@ -81,6 +81,8 @@ interface PlayerTableProps {
   onRetry?: () => void
   /** 未筛选总数（空态双文案判断：0=暂无玩家，>0=无匹配） */
   totalCount: number
+  /** 无匹配空态的清空筛选回调（有筛选时展示 CTA，issue 343） */
+  onClearFilter?: () => void
   isRconConnected: boolean
   onOpenDetail: (name: string, tab?: PlayerDetailTab) => void
   onOpenBan: (player: Player) => void
@@ -96,6 +98,7 @@ export function PlayerTable({
   isError,
   onRetry,
   totalCount,
+  onClearFilter,
   isRconConnected,
   onOpenDetail,
   onOpenBan,
@@ -484,8 +487,13 @@ export function PlayerTable({
             )}
           </div>
         ) : !isLoading && allRows.length === 0 ? (
-          <div className="flex h-40 items-center justify-center text-mcs-sm text-mcs-text-subtle">
+          <div className="flex h-40 flex-col items-center justify-center gap-2 text-mcs-sm text-mcs-text-subtle">
             {totalCount === 0 ? '暂无在线玩家' : '没有匹配的玩家'}
+            {totalCount > 0 && onClearFilter && (
+              <Button variant="outline" size="sm" onClick={onClearFilter} data-testid="players-clear-filter">
+                清空筛选
+              </Button>
+            )}
           </div>
         ) : null}
       </div>

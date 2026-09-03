@@ -10,6 +10,7 @@ import { useDeployStore } from '@/stores/deploy'
 import { applyUpgradeProgress } from '@/stores/upgrade'
 import { useNotificationStore } from '@/stores/notifications'
 import { useTerminalStore } from '@/stores/terminal'
+import { useUiStore } from '@/stores/ui'
 import type { InstanceSummary } from '@/api/types'
 import type { Player, UpgradeStage, WsMessage } from '@/api/types'
 
@@ -48,6 +49,7 @@ export function useServerSocket(instanceId: string | null) {
   const dispatchWsEvent = useNotificationStore((s) => s.dispatchWsEvent)
   const dispatchPerformance = useNotificationStore((s) => s.dispatchPerformance)
   const clearPhase = useServerStore((s) => s.setPhase)
+  const setLastOutputInstanceId = useUiStore((s) => s.setLastOutputInstanceId)
   const applyDeployProgress = useDeployStore((s) => s.applyDeployProgress)
   const pushLog = useTerminalStore((s) => s.pushEntry)
   const queryClient = useQueryClient()
@@ -149,11 +151,16 @@ export function useServerSocket(instanceId: string | null) {
             if (ev === 'crash' || ev === 'circuit_breaker') {
               dispatchWsEvent({ type: 'status', data: msg.data as Record<string, unknown>, instanceId: msg.instanceId })
               const name = getInstanceName(queryClient, msg.instanceId)
+              const crashedInstanceId = msg.instanceId
               toast.error(
                 ev === 'crash'
                   ? `实例「${name}」服务器意外退出${data.autoRestart ? '，正在自动重启' : ''}`
                   : `实例「${name}」连续崩溃 ${Number(data.consecutiveCrashes ?? 0)} 次，已触发熔断保护`,
-                { duration: Infinity },
+                {
+                  duration: Infinity,
+                  // 深入链接：一键查看进程末尾日志（issue 343，消费 lastOutput）
+                  action: { label: '查看末尾日志', onClick: () => setLastOutputInstanceId(crashedInstanceId) },
+                },
               )
             }
           } else {
@@ -261,7 +268,7 @@ export function useServerSocket(instanceId: string | null) {
       setSocketConnected(false)
       // 单例保留（跨页面复用）；实例切换由下方 effect 处理订阅
     }
-  }, [connectionReady, apiKey, sessionToken, baseUrl, applyWsSnapshot, applyWsPerformance, applyWsStatusEvent, setSocketConnected, setHasConnectedOnce, dispatchWsEvent, dispatchPerformance, applyDeployProgress, pushLog, clearPhase, queryClient])
+  }, [connectionReady, apiKey, sessionToken, baseUrl, applyWsSnapshot, applyWsPerformance, applyWsStatusEvent, setSocketConnected, setHasConnectedOnce, dispatchWsEvent, dispatchPerformance, applyDeployProgress, pushLog, clearPhase, setLastOutputInstanceId, queryClient])
 
   // 实例切换：更新订阅
   useEffect(() => {

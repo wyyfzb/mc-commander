@@ -369,6 +369,16 @@ export function MarketSheet({ open, onOpenChange, instanceId, initialQuery = nul
               icon={Package}
               title="没有找到匹配的插件"
               hint="尝试更换关键词、放宽版本/加载器过滤，或清空过滤条件浏览热门插件"
+              action={{
+                label: '清空过滤',
+                onClick: () => {
+                  // 一键回到「热门浏览」：清关键词 + 版本/加载器过滤（防抖词同步清，避免重搜旧词）
+                  setQuery('')
+                  setDebouncedQuery('')
+                  setLoader('')
+                  setGameVersion('')
+                },
+              }}
             />
           ) : (
             <ul className="space-y-2.5" aria-label="插件搜索结果">

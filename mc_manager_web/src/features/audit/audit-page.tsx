@@ -180,6 +180,15 @@ export function AuditPage() {
     setAuditPage(1)
   }
 
+  /** 空态排查：筛选（操作类型/时间范围）生效时提供一键清空（issue 343 空态 CTA 补齐） */
+  const auditFiltered = Boolean(auditAction) || hasTimeRange
+  const clearAuditFilters = () => {
+    setAuditAction('')
+    setAuditStart('')
+    setAuditEnd('')
+    setAuditPage(1)
+  }
+
   const auditQuery = useAuditLogs({
     page: auditPage,
     pageSize: 20,
@@ -291,7 +300,15 @@ export function AuditPage() {
             isLoading={auditQuery.isLoading}
             error={auditQuery.isError ? auditQuery.error : undefined}
             isEmpty={!auditQuery.isLoading && !auditQuery.isError && auditQuery.data?.data.length === 0}
-            emptyText="暂无记录"
+            emptyText={auditFiltered ? '当前筛选条件下暂无记录' : '暂无记录'}
+            emptyActions={
+              auditFiltered ? (
+                <Button variant="outline" size="sm" onClick={clearAuditFilters} data-testid="audit-clear-filters">
+                  <X aria-hidden />
+                  清空筛选
+                </Button>
+              ) : undefined
+            }
             skeletonWidths={['w-20', 'w-14', 'w-24', 'w-36']}
             header={<AuditHeader />}
             pagination={auditQuery.data?.pagination ? {

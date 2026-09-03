@@ -6,6 +6,7 @@ import { CommandPalette } from './command-palette'
 import { CommandBridge } from './command-bridge'
 import { DegradationBanners } from './degradation-banners'
 import { ErrorBoundary } from '@/components/mcs/error-boundary'
+import { LastOutputDialog } from '@/components/mcs/last-output-dialog'
 import { useUiStore } from '@/stores/ui'
 import { useServerStore } from '@/stores/server'
 import { useInstances } from '@/api/queries'
@@ -67,6 +68,8 @@ export function AppShell() {
       <CommandPalette />
       {/* 全局命令执行器（命令面板全站可用） */}
       <CommandBridge />
+      {/* 末尾日志弹窗（崩溃/熔断 toast 深入链接入口，issue 343） */}
+      <LastOutputDialog />
     </div>
   )
 }
