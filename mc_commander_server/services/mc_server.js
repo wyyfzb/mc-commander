@@ -68,6 +68,12 @@ export class MCServerManager extends EventEmitter {
   constructor() {
     super();
     this.instances = new Map();
+    // 长任务进行中注册表（内存态）：部署与升级在阶段边界写入、终态移除。
+    // websocket.js 在连接建立/订阅时读取并补发，刷新页面或重连后前端可恢复
+    // 进行中显示（长阶段如 Forge 安装/首启期间事件稀疏，仅靠广播会零可见）。
+    // 服务重启即失效——重启本身会中断未完成的长任务，无需持久化。
+    this.activeDeploys = new Map();
+    this.activeUpgrades = new Map();
     this.loadInstances();
   }
 

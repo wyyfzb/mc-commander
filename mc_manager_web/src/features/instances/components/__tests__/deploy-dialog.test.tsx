@@ -183,6 +183,46 @@ describe('DeployDialog', () => {
     expect(screen.getByText('正在部署…')).toBeInTheDocument()
   })
 
+  it('恢复场景：打开时保留进行中的部署进度（页面刷新后 WS 补发恢复态不被 reset，issue 352）', () => {
+    // 预置恢复态（模拟刷新后 WS 连接补发已写入 store）
+    act(() => {
+      useDeployStore.setState({
+        deploying: true,
+        progress: {
+          stage: 'forge_install',
+          percent: 0,
+          transferred: 0,
+          total: 0,
+          instanceId: 'forge-abc1',
+          instanceName: 'Forge 服',
+        },
+        lastResult: null,
+      })
+    })
+    renderDialog()
+
+    // 直接显示部署视图且进度保留（Forge 安装中）
+    expect(screen.getByText('正在安装 Forge…')).toBeInTheDocument()
+    expect(useDeployStore.getState().progress?.stage).toBe('forge_install')
+    expect(useDeployStore.getState().deploying).toBe(true)
+  })
+
+  it('无进行中部署时打开照常重置（终态残留不进入部署视图）', () => {
+    act(() => {
+      useDeployStore.setState({
+        deploying: false,
+        progress: { stage: 'complete', percent: 1, transferred: 0, total: 0 },
+        lastResult: { ok: true, instanceId: 'vanilla-x' },
+      })
+    })
+    renderDialog()
+
+    // 表单视图（步骤①）而非部署进度视图，store 已重置
+    expect(screen.getAllByRole('radio')).toHaveLength(5)
+    expect(useDeployStore.getState().progress).toBeNull()
+    expect(useDeployStore.getState().deploying).toBe(false)
+  })
+
   it('部署失败：error 块 + 重试回到步骤①', async () => {
     deployMock.shouldFail = true
     const { onDeployed } = renderDialog()

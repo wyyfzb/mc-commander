@@ -8,7 +8,7 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { useQueries, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Rocket } from 'lucide-react'
+import { AlertTriangle, Loader2, Rocket } from 'lucide-react'
 import { toast } from 'sonner'
 import { apiGet } from '@/api/client'
 import { queryKeys, useInstances } from '@/api/queries'
@@ -21,6 +21,7 @@ import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { useConnectionStore } from '@/stores/connection'
 import { useServerStore } from '@/stores/server'
+import { useDeployStore, DEPLOY_STAGE_LABELS } from '@/stores/deploy'
 import type { DeployResult, InstanceStatus, InstanceSummary } from '@/api/types'
 import { InstanceCards } from './components/instance-cards'
 import { DeployDialog } from './components/deploy-dialog'
@@ -30,6 +31,28 @@ import { clearUpgradeProgress } from '@/stores/upgrade'
 import { useUninstallInstance } from './queries'
 import { useStartInstanceWithEula } from '@/hooks/use-start-instance-with-eula'
 import { useStopInstance } from '@/hooks/use-instance-stop'
+
+/**
+ * 部署进行中横幅（issue 352）：部署实例完成前未入实例列表，卡片网格看不到它——
+ * 列表页顶部横幅是刷新后恢复的「最小可见标识」（WS 连接补发 deployProgress）。
+ * 终态由 deployStore.deploying 收敛（applyDeployProgress 终态不置 deploying）
+ */
+function DeployingBanner() {
+  const deploying = useDeployStore((s) => s.deploying)
+  const progress = useDeployStore((s) => s.progress)
+  if (!deploying) return null
+  const stageLabel = progress ? (DEPLOY_STAGE_LABELS[progress.stage] ?? '正在部署…') : '正在部署…'
+  const nameSuffix = progress?.instanceName ? `「${progress.instanceName}」` : ''
+  const pctSuffix =
+    progress != null && progress.stage === 'download' && progress.total > 0
+      ? `（${Math.round(progress.percent * 100)}%）`
+      : ''
+  return (
+    <NoticeBanner variant="info" icon={Loader2} className="animate-pulse">
+      {`有实例正在部署：${nameSuffix}${stageLabel}${pctSuffix}`}
+    </NoticeBanner>
+  )
+}
 
 export function InstancesPage() {
   const config = useConnectionStore()
@@ -174,6 +197,9 @@ export function InstancesPage() {
       <NoticeBanner variant="info" icon={ShieldCheck}>
         实例隔离：每个实例独立目录 / 端口 / Java 版本，切换实例仅需在顶栏选择。
       </NoticeBanner>
+
+      {/* ── 部署进行中横幅（刷新后 WS 补发恢复的可见标识；部署实例未入列表） ── */}
+      <DeployingBanner />
 
       {/* ── 实例卡片网格 ── */}
       <div className="min-h-0 flex-1 overflow-y-auto">
