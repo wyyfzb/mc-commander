@@ -75,6 +75,23 @@ export const upgradeStartResponseSchema = z.object({
   type: z.string(),
 })
 
+/**
+ * GET /instances/:id/upgrade/status 响应契约（issue 402 响应侧接入）。
+ * upgrading 为判别字段：升级中 = 进度对象展开（与 upgradeProgressSchema 同构），
+ * 空闲 = 仅布尔 false（与路由 null progress 分支一致）。
+ */
+export const upgradeStatusResponseSchema = z.discriminatedUnion('upgrading', [
+  z.object({ upgrading: z.literal(false) }),
+  z.object({
+    upgrading: z.literal(true),
+    instanceId: z.string(),
+    stage: upgradeStageSchema,
+    percent: z.number(),
+    detail: z.string(),
+    timestamp: z.number(),
+  }),
+])
+
 export type VersionsResponse = z.infer<typeof versionsResponseSchema>
 export type DeployRequest = z.infer<typeof deployRequestSchema>
 export type DeployResult = z.infer<typeof deployResultSchema>
@@ -83,3 +100,4 @@ export type UpgradeStage = z.infer<typeof upgradeStageSchema>
 export type UpgradeProgress = z.infer<typeof upgradeProgressSchema>
 export type UpgradeRequest = z.infer<typeof upgradeRequestSchema>
 export type UpgradeStartResponse = z.infer<typeof upgradeStartResponseSchema>
+export type UpgradeStatusResponse = z.infer<typeof upgradeStatusResponseSchema>

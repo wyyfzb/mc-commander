@@ -28,6 +28,12 @@ import {
   pluginEnabledRequestSchema,
   marketInstallRequestSchema,
   upgradeRequestSchema,
+  fileListResponseSchema,
+  fileMkdirResponseSchema,
+  fileRenameResponseSchema,
+  fileUploadResponseSchema,
+  pluginDeleteResultSchema,
+  upgradeStatusResponseSchema,
 } from '../src/index'
 
 describe('schemas 基础校验', () => {
@@ -251,5 +257,52 @@ describe('请求侧契约（issue 391 路由层 zod 统一）', () => {
     const parsed = upgradeRequestSchema.parse({ mcVersion: '1.21.4' })
     expect(parsed.type).toBe('vanilla')
     expect(() => upgradeRequestSchema.parse({ mcVersion: '1.21.4', type: 'bukkit' })).toThrow(/Invalid type/)
+  })
+})
+
+describe('响应侧契约（issue 402 files/plugins/upgrade 接入）', () => {
+  it('fileMkdirResponseSchema：path/name 必填字符串', () => {
+    expect(fileMkdirResponseSchema.parse({ path: '/world', name: 'world' })).toEqual({ path: '/world', name: 'world' })
+    expect(() => fileMkdirResponseSchema.parse({ path: '/world' })).toThrow()
+  })
+
+  it('fileRenameResponseSchema：oldPath/newPath/name 三字段', () => {
+    expect(fileRenameResponseSchema.parse({ oldPath: '/a.jar', newPath: '/b.jar', name: 'b.jar' })).toEqual({
+      oldPath: '/a.jar', newPath: '/b.jar', name: 'b.jar',
+    })
+    expect(() => fileRenameResponseSchema.parse({ oldPath: '/a.jar', newPath: '/b.jar' })).toThrow()
+  })
+
+  it('fileUploadResponseSchema：isDirectory 必须为字面 false（上传结果不含目录）', () => {
+    const data = { path: '/plugins/x.jar', name: 'x.jar', size: 1024, modifiedAt: '2026-01-01T00:00:00.000Z', isDirectory: false }
+    expect(fileUploadResponseSchema.parse(data)).toEqual(data)
+    expect(() => fileUploadResponseSchema.parse({ ...data, isDirectory: true })).toThrow()
+  })
+
+  it('pluginDeleteResultSchema：deleted 为被删文件名', () => {
+    expect(pluginDeleteResultSchema.parse({ deleted: 'vault.jar' })).toEqual({ deleted: 'vault.jar' })
+    expect(() => pluginDeleteResultSchema.parse({ deleted: 1 })).toThrow()
+  })
+
+  it('upgradeStatusResponseSchema：upgrading 判别联合——空闲与升级中两分支', () => {
+    const idle = upgradeStatusResponseSchema.parse({ upgrading: false })
+    expect(idle).toEqual({ upgrading: false })
+    const busy = upgradeStatusResponseSchema.parse({
+      upgrading: true, instanceId: 'inst-1', stage: 'download', percent: 40, detail: 'downloading jar', timestamp: 1760000000000,
+    })
+    expect(busy.upgrading).toBe(true)
+    expect(() => upgradeStatusResponseSchema.parse({ upgrading: true })).toThrow()
+    expect(() => upgradeStatusResponseSchema.parse({ upgrading: 'yes' })).toThrow()
+    // zod 默认 strip：false 分支上的多余字段不出现在输出
+    expect(upgradeStatusResponseSchema.parse({ upgrading: false, stage: 'download' })).toEqual({ upgrading: false })
+  })
+
+  it('fileListResponseSchema：目录列表结构（既有响应首次入契约观测）', () => {
+    const data = {
+      path: '/',
+      isDirectory: true,
+      files: [{ name: 'plugins', path: '/plugins', type: 'directory', size: 0, modifiedAt: '2026-01-01T00:00:00.000Z', isDirectory: true }],
+    }
+    expect(fileListResponseSchema.parse(data)).toEqual(data)
   })
 })

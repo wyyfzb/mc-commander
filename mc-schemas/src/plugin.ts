@@ -50,6 +50,10 @@ export const pluginToggleResultSchema = z.object({
   enabled: z.boolean(),
 })
 
+export const pluginDeleteResultSchema = z.object({
+  deleted: z.string(),
+})
+
 export const pluginUploadResultSchema = z.object({
   file: z.string(),
   sizeBytes: z.number(),
@@ -156,6 +160,7 @@ export type PluginList = z.infer<typeof pluginListSchema>
 export type PluginUpdateStatus = z.infer<typeof pluginUpdateStatusSchema>
 export type PluginUpdateCheckResult = z.infer<typeof pluginUpdateCheckResultSchema>
 export type PluginToggleResult = z.infer<typeof pluginToggleResultSchema>
+export type PluginDeleteResult = z.infer<typeof pluginDeleteResultSchema>
 export type PluginUploadResult = z.infer<typeof pluginUploadResultSchema>
 export type MarketSearchHit = z.infer<typeof marketSearchHitSchema>
 export type MarketSearchResult = z.infer<typeof marketSearchResultSchema>

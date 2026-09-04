@@ -39,6 +39,25 @@ export const fileSaveResponseSchema = z.object({
   modifiedAt: z.string(),
 })
 
+export const fileMkdirResponseSchema = z.object({
+  path: z.string(),
+  name: z.string(),
+})
+
+export const fileRenameResponseSchema = z.object({
+  oldPath: z.string(),
+  newPath: z.string(),
+  name: z.string(),
+})
+
+export const fileUploadResponseSchema = z.object({
+  path: z.string(),
+  name: z.string(),
+  size: z.number(),
+  modifiedAt: z.string(),
+  isDirectory: z.literal(false),
+})
+
 // ── 请求侧契约（issue 391：路由层 zod 契约统一）──
 
 /** GET /instances/:id/files 目录列表查询：path 缺省归一为 '/'（与既有行为一致） */
@@ -99,6 +118,9 @@ export type FileListResponse = z.infer<typeof fileListResponseSchema>
 export type FileInfoResponse = z.infer<typeof fileInfoResponseSchema>
 export type FileContentResponse = z.infer<typeof fileContentResponseSchema>
 export type FileSaveResponse = z.infer<typeof fileSaveResponseSchema>
+export type FileMkdirResponse = z.infer<typeof fileMkdirResponseSchema>
+export type FileRenameResponse = z.infer<typeof fileRenameResponseSchema>
+export type FileUploadResponse = z.infer<typeof fileUploadResponseSchema>
 export type FileListRequest = z.infer<typeof fileListRequestSchema>
 export type FilePathRequest = z.infer<typeof filePathRequestSchema>
 export type FileSaveRequest = z.infer<typeof fileSaveRequestSchema>
