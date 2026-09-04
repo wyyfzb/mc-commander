@@ -307,7 +307,6 @@ export function CommandInput() {
 
       {/* 输入行 */}
       <div className="relative flex items-center gap-2">
-        <span className="font-mono text-mcs-accent-fg" aria-hidden>&gt;</span>
         <input
           ref={inputRef}
           value={value}
@@ -337,9 +336,16 @@ export function CommandInput() {
           }}
           placeholder="输入服务器命令... (如 /say hello)"
           disabled={!isRunning}
-          className="h-8 min-w-0 flex-1 rounded-mcs-sm border border-input bg-mcs-bg-subtle px-2.5 font-mono text-mcs-xs text-mcs-text-default transition-colors outline-none placeholder:text-mcs-text-subtle focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+          className="h-8 min-w-0 flex-1 rounded-mcs-sm border border-input bg-mcs-bg-subtle py-0 pr-2.5 pl-7 font-mono text-mcs-xs text-mcs-text-default transition-colors outline-none placeholder:text-mcs-text-subtle focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
           aria-label="服务器命令输入"
         />
+        {/* shell 语义前缀：内嵌输入框内 */}
+        <span
+          className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 font-mono text-mcs-accent-fg"
+          aria-hidden
+        >
+          &gt;
+        </span>
         <IconButton
           variant="outline"
           onClick={() => savePreset()}

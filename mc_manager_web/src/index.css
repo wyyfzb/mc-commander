@@ -178,6 +178,11 @@
   .xterm .xterm-accessibility-tree {
     font-family: var(--mcs-font-mono) !important;
   }
+  /* 终端为只读回显（命令走输入行），隐藏光标避免「可输入」误导；
+     xterm 6 运行时内联写 display（blink 机制），须 !important 覆盖 */
+  .xterm .xterm-cursor {
+    display: none !important;
+  }
   ::-webkit-scrollbar {
     width: 10px;
     height: 10px;
