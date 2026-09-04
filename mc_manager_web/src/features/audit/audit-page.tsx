@@ -25,7 +25,7 @@ import { DataTableShell } from '@/components/mcs/data-table-shell'
 import { useAuditLogs, useCommandHistory } from '@/api/queries'
 import type { AuditLogItem, CommandHistoryItem } from '@/api/types'
 import { QUICK_RANGES, isRangeInverted, quickRangeDates, toServerEnd, toServerStart, type QuickRange } from './time-range'
-import { ACTION_LABELS, getActionLabel } from './action-labels'
+import { ACTION_LABELS, actionFilterOptions, getActionLabel } from './action-labels'
 import { AUDIT_EXPORT_MAX_ROWS, exportAuditLogsToExcel, exportCommandHistoryToExcel } from './audit-export'
 
 /** 时间列：合法 ISO 走统一收口格式（MM-dd HH:mm:ss）；非法输入原样返回（保留审计原始值兜底） */
@@ -375,7 +375,7 @@ export function AuditPage() {
             <FilterSelect
               label="操作类型"
               value={auditAction}
-              options={Object.entries(ACTION_LABELS).map(([value, label]) => ({ value, label }))}
+              options={actionFilterOptions()}
               onChange={(v) => {
                 setAuditAction(v)
                 setAuditPage(1)
