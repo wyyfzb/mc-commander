@@ -3,7 +3,7 @@ import path from 'path';
 import { ScheduledTaskModel } from '../db/scheduled_task.model.js';
 import { BanModel } from '../db/ban.model.js';
 import { BackupModel } from '../db/backup.model.js';
-import { AuditLogModel } from '../db/audit.model.js';
+import { AuditLogModel, CommandHistoryModel } from '../db/audit.model.js';
 import { WebhookModel } from '../db/webhook.model.js';
 import { BackupService } from './backup.service.js';
 import { runPanelBackupCycle } from './panel-backup.service.js';
@@ -81,13 +81,13 @@ export class TaskScheduler {
   }
 
   /**
-   * 执行一轮保留清理：审计日志与 webhook 投递记录两张 append-only 表
-   * 分别 try/catch——单表失败不拖累另一张，返回删除计数供日志与测试断言。
+   * 执行一轮保留清理：审计日志、webhook 投递记录与命令历史三张 append-only 表
+   * 分别 try/catch——单表失败不拖累其余表，返回删除计数供日志与测试断言。
    * @param {'startup'|'cron'} trigger 触发来源（日志归因用）
-   * @returns {{auditDeleted: number, webhookDeleted: number, failed: string[]}}
+   * @returns {{auditDeleted: number, webhookDeleted: number, commandHistoryDeleted: number, failed: string[]}}
    */
   runRetentionPrune(trigger = 'manual') {
-    const result = { auditDeleted: 0, webhookDeleted: 0, failed: [] };
+    const result = { auditDeleted: 0, webhookDeleted: 0, commandHistoryDeleted: 0, failed: [] };
     try {
       result.auditDeleted = AuditLogModel.prune(config.retentionPrune.auditLogDays);
     } catch (err) {
@@ -100,9 +100,15 @@ export class TaskScheduler {
       result.failed.push('webhook');
       logger.error(`[RetentionPrune] webhook_deliveries prune failed (${trigger}):`, err.message);
     }
+    try {
+      result.commandHistoryDeleted = CommandHistoryModel.prune(config.retentionPrune.commandHistoryDays);
+    } catch (err) {
+      result.failed.push('command_history');
+      logger.error(`[RetentionPrune] command_history prune failed (${trigger}):`, err.message);
+    }
     if (result.failed.length === 0) {
       logger.info(
-        `[RetentionPrune] ok (${trigger}): audit_logs -${result.auditDeleted}, webhook_deliveries -${result.webhookDeleted}`
+        `[RetentionPrune] ok (${trigger}): audit_logs -${result.auditDeleted}, webhook_deliveries -${result.webhookDeleted}, command_history -${result.commandHistoryDeleted}`
       );
     }
     return result;
