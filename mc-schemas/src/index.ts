@@ -268,3 +268,25 @@ export {
   type SystemStats,
   type UpdateCheckResult,
 } from './system'
+
+// 认证与 API Key
+export {
+  authSessionResponseSchema,
+  authSetupResponseSchema,
+  authStatusResponseSchema,
+  authPasswordChangeResponseSchema,
+  authLogoutResponseSchema,
+  authSessionItemSchema,
+  authSessionsResponseSchema,
+  authSessionKickResponseSchema,
+  apiKeyRotateResponseSchema,
+  type AuthSessionResponse,
+  type AuthSetupResponse,
+  type AuthStatusResponse,
+  type AuthPasswordChangeResponse,
+  type AuthLogoutResponse,
+  type AuthSessionItem,
+  type AuthSessionsResponse,
+  type AuthSessionKickResponse,
+  type ApiKeyRotateResponse,
+} from './auth'
