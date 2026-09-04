@@ -194,7 +194,7 @@ export function AnnouncementCard() {
 
       {/* 预设编辑器：名称 + 文案（新增/编辑共用） */}
       <Dialog open={editorOpen} onOpenChange={setEditorOpen}>
-        <DialogContent className="glass-overlay sm:max-w-sm">
+        <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>{editIndex == null ? '添加预设' : '编辑预设'}</DialogTitle>
             <DialogDescription>点击胶囊将文案填充到公告输入框</DialogDescription>
