@@ -74,6 +74,17 @@ describe('CommandInput', () => {
     expect(screen.getByRole('button', { name: 'kill @e[type=!player]' })).toBeInTheDocument()
   })
 
+  it('删除快捷指令：经二次确认后移除并更新持久化', () => {
+    renderInput()
+    fireEvent.click(screen.getByRole('button', { name: '删除 give @p diamond 64' }))
+    // 确认前不删除（Dialog modal 置背景 aria-hidden，role 查询不可用，用文本断言）
+    expect(screen.getByText('give @p diamond 64')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /^删除$/ }))
+    expect(screen.queryByText('give @p diamond 64')).not.toBeInTheDocument()
+    const stored = JSON.parse(localStorage.getItem('mcs-command-presets') ?? '[]') as string[]
+    expect(stored).not.toContain('give @p diamond 64')
+  })
+
   it('点击 chip 主体仅填充不发送；播放按钮立即发送', async () => {
     renderInput()
     fireEvent.click(screen.getByRole('button', { name: 'time set day' }))

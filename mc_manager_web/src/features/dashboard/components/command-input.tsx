@@ -13,6 +13,7 @@ import { useTerminalStore } from '@/stores/terminal'
 import { useCommandBus } from '@/stores/command-bus'
 import { colorForCommand, completeCommands, iconForCommand, type CompletionItem } from '@/lib/mc-commands'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
+import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 
 /**
  * 命令输入行
@@ -116,6 +117,8 @@ export function CommandInput() {
   const navRef = useRef<{ index: number; draft: string } | null>(null)
   /** 导航中当前条目的状态（用于显示状态指示器） */
   const [navStatus, setNavStatus] = useState<{ status: CommandStatus; error?: string } | null>(null)
+  // 删除快捷指令经二次确认（待删命令全文；null=未发起）
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
 
   const completions: CompletionItem[] = value.startsWith('/') ? completeCommands(value) : []
 
@@ -234,6 +237,7 @@ export function CommandInput() {
       setPresets(presets)
       toast.error('删除快捷指令失败')
     }
+    setDeleteTarget(null)
   }
 
   return (
@@ -287,7 +291,7 @@ export function CommandInput() {
                   type="button"
                   aria-label={`删除 ${preset}`}
                   className="cursor-pointer text-mcs-text-subtle hover:text-mcs-error-fg"
-                  onClick={() => removePreset(preset)}
+                  onClick={() => setDeleteTarget(preset)}
                 >
                   <X className="size-3" aria-hidden />
                 </button>
@@ -387,6 +391,21 @@ export function CommandInput() {
           </div>
         )}
       </div>
+
+      {/* 删除快捷指令：二次确认（danger 标红确认键） */}
+      <ConfirmDialog
+        open={deleteTarget != null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null)
+        }}
+        title="删除快捷指令"
+        description={deleteTarget != null ? `确定删除「${deleteTarget}」？` : ''}
+        confirmText="删除"
+        danger
+        onConfirm={() => {
+          if (deleteTarget != null) removePreset(deleteTarget)
+        }}
+      />
     </section>
   )
 }

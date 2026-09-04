@@ -4,6 +4,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { setupServer } from 'msw/node'
 import { Toaster } from 'sonner'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { handlers } from '@/test/mocks/handlers'
 import { McClockCard, dayCycle, interpolateTick } from '../components/mc-clock-card'
 import { EventsCard } from '../components/events-card'
@@ -27,8 +28,10 @@ afterAll(() => server.close())
 function renderWithProviders(ui: ReactNode) {
   return render(
     <QueryClientProvider client={new QueryClient()}>
-      {ui}
-      <Toaster />
+      <TooltipProvider>
+        {ui}
+        <Toaster />
+      </TooltipProvider>
     </QueryClientProvider>,
   )
 }
@@ -127,9 +130,9 @@ describe('EventsCard 事件与待办', () => {
 })
 
 describe('AnnouncementCard 公告发送', () => {
-  it('模板填充 → Ctrl+Enter → 确认弹窗确认 → 发送 say 公告 → 清空输入并回显终端', async () => {
+  it('预设胶囊填充 → Ctrl+Enter → 确认弹窗确认 → 发送 say 公告 → 清空输入并回显终端', async () => {
     renderWithProviders(<AnnouncementCard />)
-    fireEvent.click(screen.getByRole('button', { name: /服务器将在 5 分钟后重启/ }))
+    fireEvent.click(screen.getByRole('button', { name: '重启预告' }))
     const input = screen.getByLabelText('公告内容')
     expect(input).toHaveValue('服务器将在 5 分钟后重启，请及时停靠')
     fireEvent.keyDown(input, { key: 'Enter', ctrlKey: true })
@@ -143,9 +146,25 @@ describe('AnnouncementCard 公告发送', () => {
     expect(useTerminalStore.getState().buffer.some((e) => e.text.includes('say 服务器将在'))).toBe(true)
   })
 
+  it('预设管理：添加 → 胶囊与持久化；删除 → 胶囊消失', () => {
+    renderWithProviders(<AnnouncementCard />)
+    // 添加预设（名称+文案）
+    fireEvent.click(screen.getByRole('button', { name: '添加预设' }))
+    fireEvent.change(screen.getByLabelText('预设名'), { target: { value: '活动预告' } })
+    fireEvent.change(screen.getByLabelText('公告文案'), { target: { value: '周末活动即将开始' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    expect(screen.getByRole('button', { name: '活动预告' })).toBeInTheDocument()
+    const stored = JSON.parse(localStorage.getItem('mcs-announcement-presets') ?? '[]') as { name: string }[]
+    expect(stored.some((p) => p.name === '活动预告')).toBe(true)
+    // 删除预设：经二次确认
+    fireEvent.click(screen.getByRole('button', { name: '删除预设 活动预告' }))
+    fireEvent.click(screen.getByRole('button', { name: /^删除$/ }))
+    expect(screen.queryByRole('button', { name: '活动预告' })).not.toBeInTheDocument()
+  })
+
   it('确认弹窗取消：不发送命令', () => {
     renderWithProviders(<AnnouncementCard />)
-    fireEvent.click(screen.getByRole('button', { name: /服务器将在 5 分钟后重启/ }))
+    fireEvent.click(screen.getByRole('button', { name: '重启预告' }))
     const input = screen.getByLabelText('公告内容')
     fireEvent.keyDown(input, { key: 'Enter', ctrlKey: true })
     fireEvent.click(screen.getByRole('button', { name: /^取消$/ }))

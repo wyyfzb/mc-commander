@@ -57,10 +57,11 @@ test.describe('仪表盘', () => {
     await nightReq
   })
 
-  test('公告发送：模板填充 → 发送 → 二次确认 → say → 清空', async ({ page }) => {
+  test('公告发送：预设胶囊填充 → 发送 → 二次确认 → say → 清空', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/dashboard')
-    await page.getByRole('button', { name: /服务器将在 5 分钟后重启/ }).click()
+    // 胶囊显示预设名（同名还有编辑/删除按钮，exact 避免子串匹配）
+    await page.getByRole('button', { name: '重启预告', exact: true }).click()
     await expect(page.getByLabel('公告内容')).toHaveValue('服务器将在 5 分钟后重启，请及时停靠')
     const sayReq = page.waitForRequest(
       (r) => r.url().includes('/command') && String(r.postDataJSON()?.command).includes('say 服务器将在'),
