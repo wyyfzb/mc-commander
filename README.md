@@ -64,7 +64,7 @@ MC_Commander 是一个自托管的 Minecraft 服务器管理工具。**核心定
 
 ### 服务端部署
 
-需要 **Node.js 22+** 和 **Java 17/21/25**（部署脚本会自动安装）。
+需要 **Node.js 22+** 和 **Java 17/21/25**（部署脚本会自动安装）。双包 package.json 均已声明 `engines`（node>=22）并启用 engine-strict，低版本 Node 执行 `npm install` 会直接报错拒绝安装，避免装完依赖运行时才崩溃。
 
 #### 方式一：Linux 一键部署（推荐）
 
@@ -95,7 +95,7 @@ npm start
 
 ### Web 前端运行
 
-需要 **Node.js 22+**。
+需要 **Node.js 22+**（`npm install` 受 engines 门禁强制校验，低版本 Node 直接报错拒绝安装）。
 
 ```bash
 cd mc_manager_web
