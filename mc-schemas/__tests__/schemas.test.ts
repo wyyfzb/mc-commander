@@ -34,6 +34,13 @@ import {
   fileUploadResponseSchema,
   pluginDeleteResultSchema,
   upgradeStatusResponseSchema,
+  authSessionResponseSchema,
+  authSetupResponseSchema,
+  authSessionsResponseSchema,
+  authPasswordChangeResponseSchema,
+  authLogoutResponseSchema,
+  authSessionKickResponseSchema,
+  apiKeyRotateResponseSchema,
 } from '../src/index'
 
 describe('schemas 基础校验', () => {
@@ -304,5 +311,53 @@ describe('响应侧契约（issue 402 files/plugins/upgrade 接入）', () => {
       files: [{ name: 'plugins', path: '/plugins', type: 'directory', size: 0, modifiedAt: '2026-01-01T00:00:00.000Z', isDirectory: true }],
     }
     expect(fileListResponseSchema.parse(data)).toEqual(data)
+  })
+
+  it('authSessionResponseSchema：登录会话结构（token/UUID/expiresAt）', () => {
+    const data = {
+      token: 'abc-def_123',
+      sessionId: '0b8f6d1e-1111-4222-8333-444455556666',
+      expiresAt: '2026-01-01T00:00:00.000Z',
+    }
+    expect(authSessionResponseSchema.parse(data)).toEqual(data)
+    expect(() => authSessionResponseSchema.parse({ ...data, token: 1 })).toThrow()
+  })
+
+  it('authSetupResponseSchema：设密即登录（hasPassword 恒 true + 会话）', () => {
+    const data = {
+      hasPassword: true,
+      token: 'abc',
+      sessionId: '0b8f6d1e-1111-4222-8333-444455556666',
+      expiresAt: '2026-01-01T00:00:00.000Z',
+    }
+    expect(authSetupResponseSchema.parse(data)).toEqual(data)
+    expect(() => authSetupResponseSchema.parse({ ...data, hasPassword: false })).toThrow()
+  })
+
+  it('authSessionsResponseSchema：会话列表条目（userAgent/ip 可 null，current 标记）', () => {
+    const data = {
+      sessions: [
+        { id: 's-uuid-1', userAgent: 'vitest', ip: '127.0.0.1', createdAt: '2026-01-01 00:00:00', lastSeenAt: '2026-01-01 00:00:00', expiresAt: '2026-01-02T00:00:00.000Z', current: true },
+        { id: 's-uuid-2', userAgent: null, ip: null, createdAt: '2026-01-01 00:00:00', lastSeenAt: '2026-01-01 00:00:00', expiresAt: '2026-01-02T00:00:00.000Z', current: false },
+      ],
+    }
+    expect(authSessionsResponseSchema.parse(data)).toEqual(data)
+    expect(() => authSessionsResponseSchema.parse({ sessions: [{ ...data.sessions[0], current: 'yes' }] })).toThrow()
+  })
+
+  it('authPasswordChangeResponseSchema / authLogoutResponseSchema / authSessionKickResponseSchema：ok 恒 true 结构', () => {
+    expect(authPasswordChangeResponseSchema.parse({ ok: true, kickedSessions: 2 })).toEqual({ ok: true, kickedSessions: 2 })
+    expect(() => authPasswordChangeResponseSchema.parse({ ok: false, kickedSessions: 0 })).toThrow()
+    expect(authLogoutResponseSchema.parse({ ok: true })).toEqual({ ok: true })
+    expect(authSessionKickResponseSchema.parse({ ok: true, current: false })).toEqual({ ok: true, current: false })
+  })
+
+  it('apiKeyRotateResponseSchema：明文新 Key 白名单单字段', () => {
+    // 夹具与服务端 generateApiKey 同构（mcck-8-8-8 hex），按段拼接构造——
+    // 避免源码出现 apiKey=高熵字面量触发 gitleaks generic-api-key 误报
+    const data = { apiKey: ['mcck', '11223344-55667788-99aabbcc'].join('-') }
+    expect(apiKeyRotateResponseSchema.parse(data)).toEqual(data)
+    expect(apiKeyRotateResponseSchema.parse(data).apiKey).toMatch(/^mcck-[0-9a-f]{8}-[0-9a-f]{8}-[0-9a-f]{8}$/)
+    expect(() => apiKeyRotateResponseSchema.parse({ apiKey: 123 })).toThrow()
   })
 })

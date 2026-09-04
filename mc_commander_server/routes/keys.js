@@ -4,7 +4,9 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import config from '../config.js';
-import { success, error, ErrorCodes } from '../utils/response.js';
+import { error, ErrorCodes } from '../utils/response.js';
+import { apiKeyRotateResponseSchema } from '@mc-commander/schemas';
+import { validatedSuccess } from '../middleware/validate.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
 import { hashToken } from '../utils/password.js';
 
@@ -50,7 +52,7 @@ export function createKeyRoutes() {
     }
     config.apiKeyHash = newHash;
     recordAudit({ action: AuditActions.KEY_ROTATE, targetType: 'api_key', detail: { prefix: newKey.substring(0, 8) + '...' } });
-    res.json(success({ apiKey: newKey }, 'API Key 已轮换：旧 Key 立即失效，请立即保存新 Key'));
+    res.json(validatedSuccess(apiKeyRotateResponseSchema, { apiKey: newKey }, 'API Key 已轮换：旧 Key 立即失效，请立即保存新 Key'));
   });
 
   return router;
