@@ -51,7 +51,7 @@ export function AboutPanel(_props: AboutPanelProps) {
   return (
     <div className="flex flex-col gap-3">
       {/* ── 应用信息：应用名 + 副标题 + 版本徽章 ── */}
-      <section className="flex flex-col items-center gap-1.5 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted px-4 py-6">
+      <section className="flex flex-col items-center gap-1.5 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted px-4 py-6 shadow-mcs-card">
         <h3 className="text-mcs-xl font-bold text-mcs-text-default tracking-tight">MC Commander</h3>
         <p className="text-mcs-sm text-mcs-text-muted">自托管 Minecraft 服务器管理客户端</p>
         <span className="mt-1 inline-flex h-5 items-center rounded-mcs-xl border border-mcs-accent-border bg-mcs-accent-bg-subtle px-2 font-mono text-mcs-xs font-semibold text-mcs-accent-fg">
@@ -71,7 +71,7 @@ export function AboutPanel(_props: AboutPanelProps) {
       </section>
 
       {/* ── 相关链接卡片 ── */}
-      <section className="rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted">
+      <section className="rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted shadow-mcs-card">
         <header className="flex items-center gap-3 border-b border-mcs-border-subtle px-4 py-3">
           <span className="flex size-8 shrink-0 items-center justify-center rounded-mcs-sm bg-mcs-accent-bg-subtle">
             <LinkIcon className="size-4 text-mcs-accent" aria-hidden />

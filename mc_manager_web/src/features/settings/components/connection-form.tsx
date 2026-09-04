@@ -282,7 +282,7 @@ export function ConnectionForm({ variant = 'settings', onSaved }: ConnectionForm
 
       <div
         className={cn(
-          'flex flex-col gap-5 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted p-6',
+          'flex flex-col gap-5 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted p-6 shadow-mcs-card',
           variant === 'settings' && 'mt-4',
         )}
       >

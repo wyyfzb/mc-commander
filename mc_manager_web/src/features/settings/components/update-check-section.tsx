@@ -14,7 +14,7 @@ export function UpdateCheckSection() {
 
   if (isLoading) {
     return (
-      <section className="flex items-center gap-3 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted px-4 py-3">
+      <section className="flex items-center gap-3 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted px-4 py-3 shadow-mcs-card">
         <Loader2 className="size-4 animate-spin text-mcs-text-subtle" aria-hidden />
         <span className="text-mcs-sm text-mcs-text-muted">正在检查更新…</span>
       </section>
@@ -26,7 +26,7 @@ export function UpdateCheckSection() {
   // 已是最新
   if (!data.hasUpdate) {
     return (
-      <section className="flex items-center gap-3 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted px-4 py-3">
+      <section className="flex items-center gap-3 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted px-4 py-3 shadow-mcs-card">
         <span className="flex size-8 shrink-0 items-center justify-center rounded-mcs-sm bg-mcs-success-bg-subtle">
           <CheckCircle2 className="size-4 text-mcs-success-fg" aria-hidden />
         </span>

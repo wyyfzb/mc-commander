@@ -361,7 +361,7 @@ export function PluginsPage() {
       {/* ── 批量操作条 ── */}
       {selected.size > 0 && (
         <div
-          className="flex flex-wrap items-center gap-2 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted px-4 py-2.5"
+          className="flex flex-wrap items-center gap-2 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted px-4 py-2.5 shadow-mcs-card"
           data-testid="batch-bar"
         >
           <span className="text-mcs-sm text-mcs-text-default">
@@ -451,7 +451,7 @@ export function PluginsPage() {
         </div>
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <div className="overflow-hidden rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted">
+          <div className="overflow-hidden rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted shadow-mcs-card">
             <ul className="divide-y divide-mcs-border-subtle">
               {filtered.map((plugin) => (
                 <PluginRow
