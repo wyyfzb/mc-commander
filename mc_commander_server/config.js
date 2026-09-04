@@ -69,6 +69,16 @@ export default {
   // 备份/恢复子进程超时上限（毫秒）：大世界压缩可能远超默认 5 分钟，
   // 实际超时按预估规模动态计算（每 MB 4s，下限 5min，上限本值）
   backupSpawnTimeoutMs: parseInt(process.env.BACKUP_SPAWN_TIMEOUT_MS || '3600000'),
+  // append-only 表保留策略（每日定时清理）：审计日志与 webhook 投递记录
+  // 只增不删，长期运行表无限增长拖慢查询。调度器周期调用
+  // AuditLog.prune / WebhookModel.pruneDeliveries，服务启动时先执行一次。
+  // 默认天数沿用 model 签名值（审计 90 / 投递 30）
+  retentionPrune: {
+    enabled: (process.env.RETENTION_PRUNE_ENABLED || 'true') !== 'false',
+    cron: process.env.RETENTION_PRUNE_CRON || '30 4 * * *',
+    auditLogDays: parseInt(process.env.AUDIT_LOG_RETENTION_DAYS || '90'),
+    webhookDeliveryDays: parseInt(process.env.WEBHOOK_DELIVERY_RETENTION_DAYS || '30'),
+  },
   // 进行中备份/恢复记录的卡死判定阈值：服务启动与互斥检查时，
   // 状态变更超过此阈值的 creating（→failed）/restoring（→completed）记录自动重置
   backupInProgressTimeoutMs: parseInt(process.env.BACKUP_IN_PROGRESS_TIMEOUT_MS || '3600000'),
