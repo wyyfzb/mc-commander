@@ -33,8 +33,8 @@ test.describe('仪表盘', () => {
     // 健康标签与实时数据
     await expect(page.getByText('健康')).toBeVisible()
     await expect(page.getByText('20.0')).toBeVisible()
-    await expect(page.getByText('3', { exact: true }).first()).toBeVisible()
-    await expect(page.getByText('/20').first()).toBeVisible()
+    // v2 大数/小数分层：外层 span 完整文本为「在线/上限」整体，断言合并串
+    await expect(page.getByText('3/20', { exact: true })).toBeVisible()
     await expect(page.getByText('OP 1/3')).toBeVisible()
     await expect(page.getByText('2h 0m')).toBeVisible()
     await expect(page.getByText('2d 0h')).toBeVisible()
