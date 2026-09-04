@@ -66,7 +66,7 @@ export function EditorSlot({
   )
   if (variant === 'desktop') {
     return (
-      <section className="flex h-full min-h-0 w-[45%] shrink-0 flex-col rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted">
+      <section className="flex h-full min-h-0 w-[45%] shrink-0 flex-col rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted shadow-mcs-card">
         {editor}
       </section>
     )

@@ -54,8 +54,8 @@ function ModeCard({
       className={cn(
         'flex flex-1 flex-col items-start gap-2 rounded-mcs-md border p-4 text-left transition-colors',
         active
-          ? 'border-mcs-accent bg-mcs-accent-bg-subtle'
-          : 'border-mcs-border-muted bg-mcs-bg-muted hover:bg-mcs-bg-hover',
+          ? 'border-mcs-accent bg-mcs-accent-bg-subtle shadow-mcs-card'
+          : 'border-mcs-border-muted bg-mcs-bg-muted shadow-mcs-card hover:bg-mcs-bg-hover',
       )}
     >
       <Icon
@@ -147,7 +147,7 @@ export function OnboardingPage() {
 
         {/* ── 部署指南（随选择切换） ── */}
         {mode !== 'already' && (
-          <div className="mb-4 flex flex-col gap-3 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted p-4">
+          <div className="mb-4 flex flex-col gap-3 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted p-4 shadow-mcs-card">
             {mode === 'windows' && (
               <>
                 <div className="flex items-center gap-2">

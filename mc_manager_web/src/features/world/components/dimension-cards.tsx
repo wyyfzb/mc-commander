@@ -7,6 +7,7 @@
  * 空 dimensions 返回 null（区块标题由父组件按需渲染）
  */
 import type { WorldInfo } from '@/api/types'
+import { cn } from '@/lib/utils'
 
 export type DimensionKind = 'overworld' | 'nether' | 'end'
 
@@ -42,14 +43,16 @@ const DIMENSION_BG_SUBTLE: Record<DimensionKind, string> = {
 
 export interface DimensionCardsProps {
   dimensions: WorldInfo['dimensions'] | undefined
+  /** 入场 stagger（页面组合处注入） */
+  className?: string
 }
 
 /** 维度卡（3 张；空/未定义不渲染。左栏 320px 窄列下纵向堆叠，避免三列截断） */
-export function DimensionCards({ dimensions }: DimensionCardsProps) {
+export function DimensionCards({ dimensions, className }: DimensionCardsProps) {
   if (!dimensions || dimensions.length === 0) return null
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className={cn('flex flex-col gap-3', className)}>
       {dimensions.map((dim) => {
         const kind = dimensionKind(dim.name)
         const english = dimEnglishName(dim.name)
@@ -57,7 +60,7 @@ export function DimensionCards({ dimensions }: DimensionCardsProps) {
           <section
             key={dim.name}
             data-dimension-kind={kind}
-            className="flex overflow-hidden rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted"
+            className="flex overflow-hidden rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted shadow-mcs-card"
           >
             {/* 左 4px 垂直维度色条（维度语义色 token） */}
             <span

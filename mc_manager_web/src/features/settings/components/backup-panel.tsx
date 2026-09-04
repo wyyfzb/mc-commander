@@ -157,7 +157,7 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
   }
 
   return (
-    <div className="overflow-hidden rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted">
+    <div className="overflow-hidden rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted shadow-mcs-card">
       {/* 标题：图标 + 备份管理 */}
       <div className="flex items-center gap-2 px-4 pb-3 pt-4">
         <span

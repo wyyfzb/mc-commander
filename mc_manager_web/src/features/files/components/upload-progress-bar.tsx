@@ -15,7 +15,7 @@ interface UploadProgressBarProps {
 export function UploadProgressBar({ uploading, onCancel }: UploadProgressBarProps) {
   return (
     <div
-      className="mx-3 mt-2 flex shrink-0 items-center gap-3 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted px-4 py-3"
+      className="mx-3 mt-2 flex shrink-0 items-center gap-3 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted px-4 py-3 shadow-mcs-card"
       data-testid="upload-progress"
       aria-live="polite"
     >
@@ -24,7 +24,7 @@ export function UploadProgressBar({ uploading, onCancel }: UploadProgressBarProp
           <p className="truncate text-mcs-sm text-mcs-text-default" title={uploading.name}>
             正在上传 {uploading.name}
           </p>
-          <span className="text-mcs-xs tabular-nums text-mcs-text-muted">{uploading.pct}%</span>
+          <span className="mcs-num text-mcs-xs leading-none text-mcs-text-muted">{uploading.pct}%</span>
         </div>
         <div
           role="progressbar"

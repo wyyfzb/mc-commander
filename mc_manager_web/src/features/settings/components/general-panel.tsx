@@ -73,7 +73,7 @@ export function GeneralPanel(_props: GeneralPanelProps) {
   }
 
   return (
-    <section className="rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted">
+    <section className="rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted shadow-mcs-card">
       <header className="flex items-center gap-3 border-b border-mcs-border-subtle px-4 py-3">
         <span className="flex size-8 shrink-0 items-center justify-center rounded-mcs-sm bg-mcs-accent-bg-subtle">
           <Settings2 className="size-4 text-mcs-accent" aria-hidden />

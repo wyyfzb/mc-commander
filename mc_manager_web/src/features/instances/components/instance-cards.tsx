@@ -83,7 +83,7 @@ export function InstanceCards({
 
   return (
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-      {instances.map((instance) => (
+      {instances.map((instance, index) => (
         <InstanceCard
           key={instance.id}
           instance={instance}
@@ -99,6 +99,7 @@ export function InstanceCards({
           onUninstall={onUninstall}
           onStart={onStart}
           onStop={onStop}
+          className={`animate-mcs-fade-up mcs-delay-${Math.min(index + 1, 6)}`}
         />
       ))}
     </div>
@@ -120,6 +121,7 @@ function InstanceCard({
   onUpgrade,
   onStart,
   onStop,
+  className,
 }: {
   instance: InstanceSummary
   isCurrent: boolean
@@ -134,6 +136,8 @@ function InstanceCard({
   onUpgrade: (instance: InstanceSummary) => void
   onStart: (instance: InstanceSummary) => void
   onStop: (instance: InstanceSummary) => void
+  /** 入场 stagger（页面组合处注入，组件内不内嵌动效类） */
+  className?: string
 }) {
   const { id, name, isRunning, playerCount } = instance
   const mcVersion = detail?.mcVersion
@@ -150,7 +154,8 @@ function InstanceCard({
     <div
       data-instance-id={id}
       className={cn(
-        'flex flex-col gap-3 rounded-mcs-md border bg-mcs-bg-muted p-4',
+        'mcs-edge-top relative flex flex-col gap-3 rounded-mcs-md border bg-mcs-bg-muted p-4 shadow-mcs-card',
+        className,
         isCurrent ? 'border-mcs-accent-border' : 'border-mcs-border-muted',
         detail?.circuitBreakerTripped && 'border-mcs-error-border',
       )}
@@ -194,7 +199,7 @@ function InstanceCard({
       </p>
 
       {/* 指标行（在线/TPS/JVM 堆/世界大小；详情缺省 —） */}
-      <div className="grid grid-cols-4 gap-2 rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-default px-3 py-2">
+      <div className="grid grid-cols-4 gap-2 rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-default px-3 py-2 shadow-mcs-card">
         <Metric label="在线" value={isRunning ? `${playerCount}` : '—'} />
         <Metric label="TPS" value={isRunning && detail?.tps != null ? detail.tps.toFixed(1) : '—'} />
         <Metric label="JVM 堆" value={isRunning && detail?.memoryUsage != null ? `${detail.memoryUsage}G` : '—'} />
@@ -299,7 +304,7 @@ function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0">
       <div className="text-mcs-2xs text-mcs-text-subtle">{label}</div>
-      <div className="tnum truncate text-mcs-sm font-semibold text-mcs-text-default" title={value}>
+      <div className="mcs-num truncate text-mcs-sm leading-none font-semibold text-mcs-text-default" title={value}>
         {value}
       </div>
     </div>

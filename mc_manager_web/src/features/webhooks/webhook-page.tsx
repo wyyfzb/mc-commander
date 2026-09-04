@@ -163,7 +163,7 @@ export default function WebhookPage() {
       )}
 
       {/* ── 列表容器 ── */}
-      <div className="min-h-0 flex-1 overflow-hidden rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted">
+      <div className="min-h-0 flex-1 overflow-hidden rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted shadow-mcs-card">
         {isLoading ? (
           /* 骨架行 */
           <div data-testid="webhook-skeletons" className="space-y-1 p-4" aria-label="加载 Webhook 中">

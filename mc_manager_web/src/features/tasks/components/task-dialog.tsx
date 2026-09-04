@@ -316,7 +316,7 @@ function TaskRunHistory({ taskId }: { taskId: number }) {
         <p className="text-mcs-xs text-mcs-text-subtle">暂无执行记录</p>
       ) : (
         <ul
-          className="max-h-40 space-y-1.5 overflow-y-auto rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted p-2"
+          className="max-h-40 space-y-1.5 overflow-y-auto rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted p-2 shadow-mcs-card"
           aria-label="最近执行列表"
         >
           {runs.map((run) => {

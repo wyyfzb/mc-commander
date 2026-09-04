@@ -550,7 +550,7 @@ function StatCell({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col gap-0.5 rounded-mcs-xs bg-mcs-bg-muted px-2 py-1.5">
       <span className="text-mcs-2xs text-mcs-text-subtle">{label}</span>
-      <span className="font-mono text-mcs-sm font-medium tabular-nums text-mcs-text-default">{value}</span>
+      <span className="mcs-num text-mcs-sm leading-none font-medium text-mcs-text-default">{value}</span>
     </div>
   )
 }

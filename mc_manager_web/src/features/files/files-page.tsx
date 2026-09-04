@@ -270,7 +270,7 @@ export function FilesPage() {
       {/* ── 双栏主体 ── */}
       <div className="flex min-h-0 flex-1 gap-3 p-3">
         {/* 左栏：文件列表（桌面/移动同构：面包屑 + 工具栏导航）；flex-1 吃满编辑器以外宽度 */}
-        <section className="flex h-full min-h-0 min-w-0 flex-1 flex-col rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted">
+        <section className="flex h-full min-h-0 min-w-0 flex-1 flex-col rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted shadow-mcs-card">
           {/* ── 上传进度条（对齐插件页交互：progressbar ARIA + 取消） ── */}
           {uploading && <UploadProgressBar uploading={uploading} onCancel={cancelUpload} />}
           <FileList
