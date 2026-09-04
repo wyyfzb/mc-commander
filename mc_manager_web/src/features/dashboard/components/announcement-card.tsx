@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Megaphone, Send } from 'lucide-react'
+import { Send } from 'lucide-react'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { useSendCommand } from '@/hooks/use-send-command'
@@ -39,7 +39,6 @@ export function AnnouncementCard() {
       </header>
 
       <div className="flex items-start gap-1.5">
-        <Megaphone className="mt-2 size-3.5 shrink-0 text-mcs-text-subtle" aria-hidden />
         <Textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
