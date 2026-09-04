@@ -86,10 +86,16 @@ git clone https://github.com/wyyfzb/mc-commander.git
 cd mc-commander/mc_commander_server
 
 npm install
-cp .env.example .env   # 编辑 .env，设置 API_KEY（必填）
+cp .env.example .env   # 编辑 .env，设置 API Key（两种部署口径见下）
 
 npm start
 ```
+
+**API Key 部署口径（二选一）**：
+- **明文自动迁移（推荐）**：`.env` 中设置 `API_KEY=<你的密钥>`，首次启动自动计算 SHA-256 并改写为 `API_KEY_HASH=<sha256hex>` 哈希存储，明文行随即移除（迁移失败时日志提示手动替换）；生产环境（`NODE_ENV=production`）下弱密钥（长度 <16 或纯重复字符）阻断启动，`ALLOW_WEAK_KEY=1` 可临时豁免（仅限开发联调，严禁生产开启）。
+- **纯 HASH 零明文落盘**：直接写入 `API_KEY_HASH=<sha256hex>`（如 `printf '%s' '你的密钥' | sha256sum` 生成），不配置明文 `API_KEY`。
+
+启动校验以 `API_KEY_HASH` 为准：两种方式最终都未设置（或迁移失败）时，服务端打印错误横幅并以 `exit(1)` 拒绝启动。
 
 服务端默认运行在 `http://localhost:25566`
 
@@ -218,12 +224,17 @@ ws.onmessage = (event) => {
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
-| `API_KEY` | （必填） | API 认证密钥 |
+| `API_KEY` | （与 `API_KEY_HASH` 二选一） | API 认证密钥（明文）：首次启动自动迁移为 `API_KEY_HASH` 哈希存储并移除明文行；生产环境弱密钥（长度 <16 或纯重复字符）阻断启动（`ALLOW_WEAK_KEY` 可临时豁免，严禁生产开启） |
+| `API_KEY_HASH` | （与 `API_KEY` 二选一，启动校验以本值为准） | API 认证密钥的 SHA-256 哈希（零明文落盘口径，如 `printf '%s' '<密钥>' \| sha256sum` 生成）；最终都未设置时启动报错 `exit(1)` |
 | `SETUP_TOKEN` | （未配置） | 首访设密所有权证明（一次性）：配置后 `POST /auth/setup` 必须携带 `Authorization: SetupToken <token>`，校验通过立即作废（内存 + 本行移除）；部署脚本首次部署自动生成，未配置 = 不校验（仅建议本机/可信网络使用） |
+| `HOST` | `127.0.0.1` | 服务监听地址：公网部署需显式设 `0.0.0.0`（默认仅本机） |
+| `TRUST_PROXY` | `1` | 信任反向代理层数（Express trust proxy）：默认 1 兼容 nginx/CDN 反代，设 0 不信任代理头（`req.ip` = 直连 IP）；仅影响 `req.ip` 解析，登录锁定键始终取直连 IP |
 | `PORT` | `25566` | 服务端口 |
 | `SERVERS_DIR` | `./servers` | MC 实例数据目录 |
 | `DATA_DIR` | `./data` | SQLite 数据库目录 |
 | `BACKUPS_DIR` | `./backups` | 备份存储目录 |
+| `PUBLIC_DIR` | `./public` | 前端静态产物目录（锚定服务端安装目录而非工作目录，一般无需修改） |
+| `BODY_LIMIT_JSON` | `1mb` | 认证前 JSON body 大小上限（body-parser limit 语法）；文件上传走 multipart 独立通道不受此值影响 |
 | `BACKUP_RETENTION_MAX` | `10` | 每实例保留备份数量上限（超出自动清理） |
 | `BACKUP_RETENTION_DAYS` | `30` | 备份最大保留天数（超出自动清理） |
 | `PANEL_BACKUP_ENABLED` | `true` | 面板自身数据每日快照开关（SQLite 在线快照至 `backups/panel/`） |
@@ -232,8 +243,18 @@ ws.onmessage = (event) => {
 | `BACKUP_SPAWN_TIMEOUT_MS` | `3600000` | 备份/恢复子进程超时上限（默认按规模动态计算） |
 | `BACKUP_IN_PROGRESS_TIMEOUT_MS` | `3600000` | 进行中备份/恢复记录卡死判定阈值（崩溃后自动重置） |
 | `LOG_LEVEL` | `info` | 日志级别 (debug/info/warn/error) |
+| `ADMIN_SESSION_TTL_HOURS` | `168` | 管理员会话滑动有效期（小时）：每次认证触达续期，续期上限受 `ADMIN_SESSION_ABSOLUTE_TTL_DAYS` 约束 |
+| `ADMIN_SESSION_ABSOLUTE_TTL_DAYS` | `30` | 会话绝对存活期（天）：自创建起超过即强制重登（限制被窃取令牌的永久有效窗口）；设 0 关闭（不建议） |
+| `ADMIN_SESSION_MAX_SESSIONS` | `5` | 每用户会话并发上限：新登录挤掉最旧会话 |
+| `AUTH_LOGIN_MAX_FAILS` | `10` | 登录失败锁定阈值（按账号/来源 IP 内存级计数，重启即清零） |
+| `AUTH_LOGIN_LOCK_MS` | `300000` | 登录失败锁定时长（毫秒） |
 | `RATE_LIMIT_WINDOW` | `60000` | 速率限制窗口（毫秒） |
-| `RATE_LIMIT_MAX` | `100` | 窗口内最大请求数 |
+| `RATE_LIMIT_MAX` | `240` | 窗口内最大请求数（认证前按 IP 计数；默认兼顾前端多标签页轮询 ≈72-96 req/min 不误伤） |
+| `CRASH_LOOP_WINDOW_MS` | `300000` | 崩溃循环熔断滑动窗口（毫秒） |
+| `CRASH_LOOP_MAX_CRASHES` | `5` | 窗口内连续崩溃次数阈值：达到即自动禁用该实例 autoRestart |
+| `AUTO_START_DELAY_MS` | `3000` | 面板重启后自动恢复实例的间隔（毫秒） |
+| `DISK_WARNING_PERCENT` | `85` | 磁盘使用率告警阈值（百分比，warning 级通知） |
+| `DISK_ERROR_PERCENT` | `95` | 磁盘使用率告警阈值（百分比，error 级通知） |
 
 ## 技术栈
 
