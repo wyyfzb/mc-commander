@@ -16,13 +16,14 @@ import {
   Moon,
   RefreshCw,
   ServerOff,
-  ShieldCheck,
   Sun,
   TriangleAlert,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Skeleton } from '@/components/ui/skeleton'
+import { BrandLogo } from '@/components/mcs/brand-logo'
 import { Label } from '@/components/ui/label'
 import { PasswordInput } from '@/components/ui/password-input'
 import { cn } from '@/lib/utils'
@@ -178,7 +179,7 @@ export function LoginPage() {
     phase === 'setup' ? '设置管理员密码' : phase === 'login' ? '管理员登录' : '连接面板'
 
   return (
-    <div className="relative flex min-h-svh flex-col items-center justify-center overflow-hidden bg-mcs-bg-canvas px-4 py-10">
+    <div className="mcs-shell-bg mcs-grain relative flex min-h-svh flex-col items-center justify-center overflow-hidden px-4 py-10">
       {/* 主题切换（本地偏好，与会话无关；登录态外仍可调） */}
       <button
         type="button"
@@ -189,25 +190,21 @@ export function LoginPage() {
         {theme === 'dark' ? <Sun className="size-4" aria-hidden /> : <Moon className="size-4" aria-hidden />}
       </button>
 
-      {/* 装饰性网格纹理（控制台质感；aria 隐藏） */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-[0.35] [background-image:linear-gradient(var(--color-mcs-border-muted)_1px,transparent_1px),linear-gradient(90deg,var(--color-mcs-border-muted)_1px,transparent_1px)] [background-size:32px_32px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_40%,black_30%,transparent_75%)]"
-      />
+      {/* 装饰性方块网格（MC 世界语义，24px = 1 格；aria 隐藏） */}
+      <div aria-hidden className="mcs-grid-bg mcs-grid-fade pointer-events-none absolute inset-0" />
 
-      {/* 顶部品牌区 */}
-      <div className="relative z-10 mb-6 flex items-center gap-3">
-        <div className="flex size-11 items-center justify-center rounded-mcs-md border border-mcs-accent-border bg-mcs-accent-bg-subtle shadow-sm">
-          <ShieldCheck className="size-6 text-mcs-accent-fg" aria-hidden />
-        </div>
+      {/* 顶部品牌区：裸 logo 与侧栏同语言（无装饰容器），放大档位；items-stretch 令 logo 与两行文字等高 */}
+      <div className="animate-mcs-fade-up relative z-10 mb-6 flex items-stretch gap-3">
+        {/* 57.6px = 标题 22px + 副标题 14px 两行行高之和（1.6 行高系数），字号档位调整时需同步 */}
+        <BrandLogo className="h-[57.6px] w-auto text-mcs-text-default" />
         <div>
-          <h1 className="text-mcs-lg font-bold tracking-tight text-mcs-text-default">MC Commander</h1>
-          <p className="text-mcs-xs text-mcs-text-subtle">Minecraft 服务器管理面板</p>
+          <h1 className="text-mcs-xl font-bold tracking-tight text-mcs-text-default">MC Commander</h1>
+          <p className="text-mcs-sm text-mcs-text-subtle">Minecraft 服务器管理面板</p>
         </div>
       </div>
 
-      {/* 登录卡片 */}
-      <main className="relative z-10 w-full max-w-md rounded-mcs-lg border border-mcs-border-muted bg-mcs-bg-default p-6 shadow-lg shadow-black/5">
+      {/* 登录卡片（浮起面：卡阴影 + 顶部受光线；stagger 入场跟随品牌区） */}
+      <main className="animate-mcs-fade-up mcs-delay-1 mcs-edge-top relative z-10 w-full max-w-md rounded-mcs-lg border border-mcs-border-muted bg-mcs-bg-muted p-6 shadow-mcs-card">
         <div className="mb-5">
           <h2 className="text-mcs-md font-semibold text-mcs-text-default">{heading}</h2>
           <p className="mt-1 text-mcs-xs text-mcs-text-subtle">
@@ -226,8 +223,8 @@ export function LoginPage() {
           <div className="flex flex-col items-center gap-3 py-8" role="status" aria-label="正在探测面板状态">
             <Loader2 className="size-6 animate-spin text-mcs-text-subtle" aria-hidden />
             <div className="w-full space-y-2">
-              <div className="h-9 w-full animate-pulse rounded-mcs-sm bg-mcs-bg-muted" />
-              <div className="h-9 w-full animate-pulse rounded-mcs-sm bg-mcs-bg-muted" />
+              <Skeleton className="h-9 w-full" />
+              <Skeleton className="h-9 w-full" />
             </div>
           </div>
         )}
@@ -385,7 +382,7 @@ export function LoginPage() {
       </main>
 
       {/* 底部辅助链接 */}
-      <footer className="relative z-10 mt-6 flex flex-col items-center gap-1.5 text-center">
+      <footer className="animate-mcs-fade-up mcs-delay-2 relative z-10 mt-6 flex flex-col items-center gap-1.5 text-center">
         <p className="text-mcs-2xs text-mcs-text-subtle">
           使用 API Key 直连（自动化 / 运维场景）？{' '}
           <Link

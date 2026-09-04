@@ -61,6 +61,10 @@ export default defineConfig({
     },
   },
   server: {
+    // 忽略 Mimosa 钩子运行时状态目录：其文件被锁定时 watch 报 EBUSY 导致 dev server 崩溃
+    watch: {
+      ignored: ['**/.mimosa/**'],
+    },
     proxy: {
       '/api': {
         target: proxyTarget,

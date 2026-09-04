@@ -145,8 +145,14 @@ export function AppSidebar({ collapsed, mobileNavOpen, onMobileNavClose }: AppSi
       {/* 实例迷你卡（原型 side-foot：当前实例 + TPS + 人数；仅展开态展示） */}
       {!collapsed && current && (
         <div className="border-t border-mcs-border-muted p-2.5">
-          <div className="flex items-center gap-2 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted px-2.5 py-2">
-            <span className="size-2 shrink-0 rounded-full bg-mcs-accent" aria-hidden />
+          <div className="flex items-center gap-2 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted px-2.5 py-2 shadow-mcs-card">
+            <span
+              className={cn(
+                'size-2 shrink-0 rounded-full',
+                current.isRunning ? 'bg-mcs-accent shadow-mcs-glow-accent' : 'bg-mcs-text-subtle',
+              )}
+              aria-hidden
+            />
             <div className="min-w-0">
               <div className="truncate text-mcs-xs font-semibold text-mcs-text-default">
                 {current.name}

@@ -1,9 +1,8 @@
 import { useMemo } from 'react'
 import { useNavigate } from 'react-router'
-import { ArrowRight, CheckCircle2, HardDrive, Info, MoonStar, Skull, Users } from 'lucide-react'
+import { ArrowRight, CheckCircle2, History, MoonStar, Play, Save } from 'lucide-react'
 import { StatusPill } from '@/components/mcs/status-pill'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Sparkline } from '@/components/mcs/sparkline'
 import { useServerStore } from '@/stores/server'
 import { formatRelativeTime, formatStartTime, formatUptime } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -29,15 +28,22 @@ function Card({
   title,
   eyebrow,
   eyebrowClass,
+  className,
   children,
 }: {
   title: string
   eyebrow?: React.ReactNode
   eyebrowClass?: string
+  className?: string
   children: React.ReactNode
 }) {
   return (
-    <section className="flex min-w-0 flex-1 flex-col gap-3 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted p-4">
+    <section
+      className={cn(
+        'mcs-edge-top relative flex min-w-0 flex-1 flex-col gap-3 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted p-4 shadow-mcs-card',
+        className,
+      )}
+    >
       <header className="flex items-center justify-between gap-2">
         <h2 className="text-mcs-sm font-medium text-mcs-text-muted">{title}</h2>
         {eyebrow && <span className={cn('text-mcs-xs', eyebrowClass)}>{eyebrow}</span>}
@@ -47,37 +53,11 @@ function Card({
   )
 }
 
-/** 迷你进度条（token 填充色；XP 条语义） */
-function XpBar({ percent }: { percent: number }) {
-  const p = Math.max(0, Math.min(100, percent))
-  return (
-    <div
-      role="progressbar"
-      aria-valuenow={Math.round(p)}
-      aria-valuemin={0}
-      aria-valuemax={100}
-      className="h-1.5 w-full overflow-hidden rounded-full bg-mcs-bg-emphasis"
-    >
-      <div className="h-full rounded-full" style={{ width: `${p}%`, background: 'var(--mcs-accent)' }} />
-    </div>
-  )
-}
-
-/** 在线玩家名（op + 入睡 + 清醒 并集保序去重） */
-
-const AVATAR_TONES = [
-  'bg-mcs-accent-bg-subtle text-mcs-accent-fg',
-  'bg-mcs-info-bg-subtle text-mcs-info-fg',
-  'bg-mcs-warning-bg-subtle text-mcs-warning-fg',
-] as const
-
-// ── 顶部四卡 ─────────────────────────────────────────────────
+// ── 顶部资源卡（CPU/内存/磁盘三行 + 右上角 TPS 信息）────────────
 export function BigStatCards({
-  history,
   isLoading = false,
 }: {
-  history: { cpu: number[]; mem: number[]; tps: number[] }
-  /** 首屏加载（B17）：status 未到前四卡显示骨架 */
+  /** 首屏加载（B17）：status 未到前显示骨架 */
   isLoading?: boolean
 }) {
   const status = useServerStore((s) => s.status)
@@ -87,143 +67,140 @@ export function BigStatCards({
   const tps = status?.tps ?? null
   const healthy = isRunning && (tps ?? 0) >= 19
 
-  const online = status?.playerCount ?? 0
-  const max = status?.maxPlayers ?? 20
-  const names = useMemo(
-    () => [
-      ...new Set([
-        ...(status?.opNames ?? []),
-        ...(status?.sleepingPlayerNames ?? []),
-        ...(status?.awakePlayerNames ?? []),
-      ]),
-    ],
-    [status?.opNames, status?.sleepingPlayerNames, status?.awakePlayerNames],
-  )
-  const opCount = status?.opCount ?? 0
-  const sleeping = status?.sleepingPlayers ?? 0
-
   const cpu = systemStats?.cpuUsage ?? status?.cpuUsage ?? 0
   const memUsed = systemStats?.memoryUsage ?? status?.memoryUsage ?? 0
   const memTotal = systemStats?.totalMemory ?? status?.totalMemory ?? 0
   const cores = systemStats?.cpuCores
   const memPct = systemStats?.memoryPercent ?? (memTotal > 0 ? (memUsed / memTotal) * 100 : 0)
+  const diskUsage = systemStats?.diskUsage
+  const primary = diskUsage?.primary ?? null
 
-  // B17 首屏骨架：四卡同构占位（标题条 + 大数字 + 进度条）
+  // B17 首屏骨架：单卡同构占位（标题条 + 三行进度条）
   if (isLoading) {
     return (
-      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4" aria-label="统计加载中" role="status">
-        {Array.from({ length: 4 }, (_, i) => (
-          <section
-            key={i}
-            className="flex min-w-0 flex-1 flex-col gap-3 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted p-4"
-          >
-            <Skeleton className="h-3.5 w-16" />
-            <Skeleton className="h-9 w-20" />
+      <section
+        className="animate-mcs-fade-up mcs-delay-2 mcs-edge-top relative flex min-w-0 flex-col gap-3 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted p-4 shadow-mcs-card"
+        aria-label="统计加载中"
+        role="status"
+      >
+        <Skeleton className="h-3.5 w-16" />
+        {Array.from({ length: 3 }, (_, i) => (
+          <div key={i} className="flex flex-col gap-1.5">
+            <Skeleton className="h-3 w-24" />
             <Skeleton className="h-1.5 w-full" />
-          </section>
+          </div>
         ))}
-      </div>
+      </section>
     )
   }
 
   return (
-    <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
-      {/* 在线玩家 */}
-      <Card
-        title="在线玩家"
-        eyebrow={
-          <StatusPill tone="success" className="gap-1 text-mcs-2xs">
-            <span className="flex size-1.5 rounded-full bg-mcs-success-fg" aria-hidden />
-            {online}/{max}
-          </StatusPill>
-        }
-      >
-        <div className="flex items-end gap-2.5">
-          <span className="tnum text-mcs-2xl font-bold leading-none">{online}</span>
-          {names.length > 0 && (
-            <span className="mb-0.5 flex shrink-0">
-              {names.slice(0, 3).map((name, i) => (
-                <span
-                  key={name}
-                  title={name}
-                  className={cn(
-                    'flex size-6 items-center justify-center rounded-full border-2 border-mcs-bg-muted text-mcs-2xs font-bold',
-                    AVATAR_TONES[i % AVATAR_TONES.length],
-                  )}
-                  style={{ marginLeft: i > 0 ? -6 : 0 }}
-                  aria-hidden
-                >
-                  {name.charAt(0).toUpperCase()}
-                </span>
-              ))}
-              {names.length > 3 && (
-                <span
-                  className="mb-0.5 ml-[-6px] flex size-6 items-center justify-center rounded-full border-2 border-mcs-bg-muted bg-mcs-bg-emphasis text-mcs-2xs font-medium text-mcs-text-muted"
-                  aria-hidden
-                >
-                  +{names.length - 3}
-                </span>
-              )}
-            </span>
-          )}
-        </div>
-        <p className="text-mcs-2xs text-mcs-text-subtle">
-          OP {opCount} · 入睡 {sleeping} · 今日新增 {status?.todayNewPlayers ?? 0}
-        </p>
-      </Card>
-
-      {/* TPS */}
-      <Card
-        title="TPS"
-        eyebrow={
-          isRunning ? (
+    <Card
+      title="资源使用"
+      className="animate-mcs-fade-up mcs-delay-2"
+      eyebrow={
+        isRunning ? (
+          <span className="inline-flex items-center gap-2">
             <StatusPill tone={healthy ? 'success' : 'warning'} className="gap-1 text-mcs-2xs">
               <CheckCircle2 className="size-3.5" aria-hidden />
               {healthy ? '健康' : '卡顿'}
             </StatusPill>
-          ) : undefined
-        }
-      >
-        <p className={cn('tnum text-mcs-2xl font-bold leading-none', tpsColor(tps, isRunning))}>
-          {isRunning && tps != null ? tps.toFixed(1) : '--'}
-        </p>
-        <Sparkline data={history.tps} colorVar="var(--mcs-success-fg)" className="mt-1 h-7 w-full" />
-      </Card>
+            <span className={cn('mcs-num text-mcs-md leading-none', tpsColor(tps, isRunning))}>
+              {tps != null ? tps.toFixed(1) : '--'}
+            </span>
+            <span className="text-mcs-2xs text-mcs-text-subtle">TPS</span>
+          </span>
+        ) : undefined
+      }
+    >
+      <div className="flex flex-col gap-3">
+        <ResourceRow
+          label="CPU"
+          eyebrow={cores ? <StatusPill tone="muted" className="text-mcs-2xs">{cores} 核</StatusPill> : undefined}
+          value={
+            <>
+              {cpu.toFixed(1)}
+              <span className="text-mcs-sm font-medium text-mcs-text-subtle">%</span>
+            </>
+          }
+          percent={cpu}
+        />
+        <ResourceRow
+          label="内存"
+          eyebrow={<StatusPill tone="muted" className="text-mcs-2xs">{memPct.toFixed(0)}%</StatusPill>}
+          value={
+            <>
+              {memUsed.toFixed(1)}
+              <span className="text-mcs-sm font-medium text-mcs-text-subtle"> / {memTotal.toFixed(0)}G</span>
+            </>
+          }
+          percent={memPct}
+        />
+        <ResourceRow
+          label="磁盘"
+          value={
+            primary ? (
+              <>
+                {primary.percent.toFixed(1)}
+                <span className="text-mcs-sm font-medium text-mcs-text-subtle">%</span>
+                <span className="ml-1 text-mcs-2xs font-normal text-mcs-text-subtle">
+                  {primary.usedGB}G / {primary.totalGB}G
+                </span>
+              </>
+            ) : (
+              <span className="font-sans text-mcs-sm font-medium text-mcs-text-subtle">暂无磁盘数据</span>
+            )
+          }
+          percent={primary?.percent ?? 0}
+          barColor={primary ? diskBarColor(primary.percent) : undefined}
+        />
+      </div>
+    </Card>
+  )
+}
 
-      {/* CPU */}
-      <Card
-        title="CPU"
-        eyebrow={cores ? (
-          <StatusPill tone="muted" className="text-mcs-2xs">{cores} 核</StatusPill>
-        ) : undefined}
+/** 资源行：标签 + 右侧数值 + 底部进度条（CPU/内存/磁盘 共用） */
+function ResourceRow({
+  label,
+  eyebrow,
+  value,
+  percent,
+  barColor,
+}: {
+  label: string
+  eyebrow?: React.ReactNode
+  value: React.ReactNode
+  percent: number
+  barColor?: string
+}) {
+  const p = Math.max(0, Math.min(100, percent))
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-mcs-xs font-medium text-mcs-text-muted">{label}</span>
+        {eyebrow}
+        <span className="mcs-num text-mcs-lg leading-none">{value}</span>
+      </div>
+      <div
+        role="progressbar"
+        aria-valuenow={Math.round(p)}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-mcs-bg-emphasis"
       >
-        <p className="tnum text-mcs-2xl font-bold leading-none">
-          {cpu.toFixed(1)}
-          <span className="text-mcs-sm font-medium text-mcs-text-subtle">%</span>
-        </p>
-        <div className="mt-auto">
-          <XpBar percent={cpu} />
-        </div>
-      </Card>
-
-      {/* 内存 */}
-      <Card
-        title="内存"
-        eyebrow={<StatusPill tone="muted" className="text-mcs-2xs">{memPct.toFixed(0)}%</StatusPill>}
-      >
-        <p className="tnum text-mcs-2xl font-bold leading-none">
-          {memUsed.toFixed(1)}
-          <span className="text-mcs-sm font-medium text-mcs-text-subtle"> / {memTotal.toFixed(0)}G</span>
-        </p>
-        <div className="mt-auto">
-          <XpBar percent={memPct} />
-        </div>
-      </Card>
+        <div
+          className="mcs-progress-sheen h-full rounded-full transition-[width] duration-mcs-base ease-mcs-snappy"
+          style={{ width: `${p}%`, background: barColor ?? 'var(--mcs-accent)' }}
+        />
+      </div>
     </div>
   )
 }
 
-// ── 右栏卡：在线玩家（整行可点直达详情）────────────────────────
+// ── 右栏卡：在线玩家（Flutter 版两列布局 + Web 版交互）──────────
+/** 每列最多显示玩家数（Flutter 版 maxDisplay=3 同源），超出以 +N 汇总 */
+const MAX_COLUMN_ROWS = 3
+
 export function PlayersCard() {
   const status = useServerStore((s) => s.status)
   const navigate = useNavigate()
@@ -232,15 +209,71 @@ export function PlayersCard() {
   const online = status?.playerCount ?? 0
   const max = status?.maxPlayers ?? 20
   const opCount = status?.opCount ?? 0
+  const opNames = status?.opNames ?? NO_NAMES
   const sleeping = status?.sleepingPlayers ?? 0
   const sleepingNames = status?.sleepingPlayerNames ?? NO_NAMES
   const awakeNames = status?.awakePlayerNames ?? NO_NAMES
   const awake = Math.max(online - sleeping, 0)
+
+  /** 玩家行按钮：整行可点直达详情（保留 Web 版交互） */
+  const renderPlayerRow = (name: string, isSleeping: boolean) => (
+    <button
+      key={name}
+      type="button"
+      onClick={() => navigate(`/players?player=${encodeURIComponent(name)}`)}
+      aria-label={`查看 ${name} 详情`}
+      className="group flex w-full items-center gap-2 rounded-mcs-xs px-1.5 py-1 text-left hover:bg-mcs-state-hover"
+    >
+      <span
+        className={cn(
+          'flex size-5 shrink-0 items-center justify-center rounded-full text-mcs-2xs font-bold',
+          isSleeping
+            ? 'bg-mcs-info-bg-subtle text-mcs-info-fg'
+            : 'bg-mcs-accent-bg-subtle text-mcs-success-fg',
+        )}
+        aria-hidden
+      >
+        {name.charAt(0).toUpperCase()}
+      </span>
+      <span className="min-w-0 flex-1 truncate text-mcs-xs text-mcs-text-muted group-hover:text-mcs-text-default">
+        {name}
+      </span>
+    </button>
+  )
+
+  /** 入睡/清醒列（Flutter 版 _PlayerNameColumn）：列头图标+标签+数量，名单最多 3 名 +N 汇总 */
+  const renderColumn = (
+    icon: React.ReactNode,
+    label: string,
+    count: number,
+    names: string[],
+    isSleeping: boolean,
+  ) => (
+    <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex items-center gap-1 text-mcs-2xs text-mcs-text-muted">
+        {icon}
+        <span>{label}</span>
+        <b className="tnum font-semibold">{count}</b>
+      </div>
+      {names.length === 0 ? (
+        <span className="pt-1 text-mcs-2xs text-mcs-text-subtle">—</span>
+      ) : (
+        <ol className="flex flex-col">
+          {names.slice(0, MAX_COLUMN_ROWS).map((name) => renderPlayerRow(name, isSleeping))}
+          {names.length > MAX_COLUMN_ROWS && (
+            <li className="px-1.5 py-0.5 text-mcs-2xs text-mcs-text-subtle">
+              +{names.length - MAX_COLUMN_ROWS}
+            </li>
+          )}
+        </ol>
+      )}
+    </div>
+  )
+
   const names = useMemo(
     () => [...new Set([...sleepingNames, ...awakeNames])],
     [sleepingNames, awakeNames],
   )
-  const maxRows = 5
 
   const body = !isRunning ? (
     <p className="py-1 text-mcs-xs text-mcs-text-subtle">实例已停止，暂无玩家数据</p>
@@ -260,92 +293,71 @@ export function PlayersCard() {
       )}
     </div>
   ) : (
-    <ol className="flex flex-col">
-      {names.slice(0, maxRows).map((name) => (
-        <li key={name}>
-          <button
-            type="button"
-            onClick={() => navigate(`/players?player=${encodeURIComponent(name)}`)}
-            aria-label={`查看 ${name} 详情`}
-            className="group flex w-full items-center gap-2 rounded-mcs-xs px-1.5 py-1 text-left hover:bg-mcs-state-hover"
-          >
-            <span
-              className={cn(
-                'flex size-5 shrink-0 items-center justify-center rounded-full text-mcs-2xs font-bold',
-                sleepingNames.includes(name)
-                  ? 'bg-mcs-info-bg-subtle text-mcs-info-fg'
-                  : 'bg-mcs-accent-bg-subtle text-mcs-success-fg',
-              )}
-              aria-hidden
-            >
-              {name.charAt(0).toUpperCase()}
-            </span>
-            <span className="min-w-0 flex-1 truncate text-mcs-xs text-mcs-text-muted group-hover:text-mcs-text-default">
-              {name}
-            </span>
-            <span className="inline-flex items-center gap-1 text-mcs-2xs text-mcs-text-subtle">
-              {sleepingNames.includes(name) ? (
-                <>
-                  <MoonStar className="size-3 text-mcs-info-fg" aria-hidden />
-                  入睡
-                </>
-              ) : (
-                <span className="size-1.5 rounded-full bg-mcs-success-fg" aria-hidden />
-              )}
-            </span>
-          </button>
-        </li>
-      ))}
-      {names.length > maxRows && (
-        <li className="px-1.5 py-0.5 text-mcs-2xs text-mcs-text-subtle">… 另有 {names.length - maxRows} 人在线</li>
+    <div className="flex gap-4 border-t border-mcs-border-muted pt-2">
+      {renderColumn(
+        <MoonStar className="size-3 text-mcs-info-fg" aria-hidden />,
+        '入睡',
+        sleeping,
+        sleepingNames,
+        true,
       )}
-    </ol>
+      {renderColumn(
+        <span className="size-1.5 rounded-full bg-mcs-success-fg" aria-hidden />,
+        '清醒',
+        awake,
+        awakeNames,
+        false,
+      )}
+    </div>
   )
 
   return (
     <Card
       title="在线玩家"
+      className="animate-mcs-fade-up mcs-delay-1"
       eyebrow={
-        <span className="inline-flex items-center gap-2">
-          <span className="inline-flex items-center gap-1 text-mcs-xs text-mcs-text-muted">
-            <Users className="size-3.5 text-mcs-text-muted" aria-hidden />
-            {online}/{max}
-          </span>
-          <button
-            type="button"
-            onClick={() => navigate('/players')}
-            aria-label="查看全部玩家"
-            className="inline-flex items-center gap-0.5 text-mcs-xs font-medium text-mcs-info-fg hover:underline"
-          >
-            全部
-            <ArrowRight className="size-3" aria-hidden />
-          </button>
-        </span>
+        <button
+          type="button"
+          onClick={() => navigate('/players')}
+          aria-label="查看全部玩家"
+          className="inline-flex items-center gap-0.5 text-mcs-xs font-medium text-mcs-info-fg hover:underline"
+        >
+          全部
+          <ArrowRight className="size-3" aria-hidden />
+        </button>
       }
     >
-      {opCount > 0 && (
-        <div className="flex items-center gap-1.5 text-mcs-xs">
-          <StatusPill tone="warning" className="text-mcs-2xs">
-            OP {opCount}/{online}
-          </StatusPill>
+      {/* 主数字行（Flutter 版 RunStatusCard 同款：在线/上限大字号 + OP 徽章与名单） */}
+      <div className="flex items-end justify-between gap-2">
+        <div className="flex flex-col gap-0.5">
+          <span className="mcs-num text-mcs-display leading-none">
+            {online}
+            <span className="text-mcs-lg font-normal text-mcs-text-subtle">/{max}</span>
+          </span>
+          <span className="text-mcs-2xs text-mcs-text-subtle">
+            今日新增 {status?.todayNewPlayers ?? 0}
+          </span>
         </div>
-      )}
-      {body}
-      <div className="flex gap-4 border-t border-mcs-border-muted pt-2 text-mcs-2xs">
-        <span className="inline-flex items-center gap-1 text-mcs-text-muted">
-          <MoonStar className="size-3 text-mcs-info-fg" aria-hidden />
-          入睡 <b className="tnum font-semibold">{sleeping}</b>
-        </span>
-        <span className="inline-flex items-center gap-1 text-mcs-text-muted">
-          <span className="size-1.5 rounded-full bg-mcs-success-fg" aria-hidden />
-          清醒 <b className="tnum font-semibold">{awake}</b>
-        </span>
+        {opCount > 0 && (
+          <div className="flex flex-col items-end gap-0.5">
+            <StatusPill tone="warning" className="text-mcs-2xs">
+              OP {opCount}/{online}
+            </StatusPill>
+            {opNames.length > 0 && (
+              <span className="max-w-[140px] truncate text-mcs-2xs text-mcs-warning-fg">
+                {opNames.slice(0, 2).join(', ')}
+                {opNames.length > 2 ? '…' : ''}
+              </span>
+            )}
+          </div>
+        )}
       </div>
+      {body}
     </Card>
   )
 }
 
-// ── 右栏卡：实例运行信息 ─────────────────────────────────────
+// ── 顶部卡：实例信息 ────────────────────────────────────────
 export function RuntimeInfoCard() {
   const status = useServerStore((s) => s.status)
   const isRunning = status?.isRunning ?? false
@@ -359,38 +371,40 @@ export function RuntimeInfoCard() {
       label: '累计运行',
       value: formatUptime(totalUptime),
       tooltip: '累计运行 = 历史累计时长 + 本次运行时长',
+      icon: History,
     },
     {
       label: isRunning ? '本次启动' : '上次启动',
       value: formatStartTime(status?.startTime),
+      icon: Play,
     },
     {
       label: '上次存档',
       value: formatRelativeTime(status?.lastSave),
+      icon: Save,
     },
-    // 运行信息卡：版本 / 核心
-    ...(status?.mcVersion
-      ? [
-          {
-            label: '版本 / 核心',
-            value: status.modLoader && status.modLoader !== 'vanilla' ? `${status.mcVersion} · ${status.modLoader}` : status.mcVersion,
-          },
-        ]
-      : []),
   ]
+
+  // 版本信息：右上角展示（替代原图标位）；无 modLoader 时仅显示 MC 版本
+  const versionText = status?.mcVersion
+    ? status.modLoader && status.modLoader !== 'vanilla'
+      ? `${status.mcVersion} · ${status.modLoader}`
+      : status.mcVersion
+    : null
 
   return (
     <Card
-      title="实例运行信息"
+      title="实例信息"
+      className="animate-mcs-fade-up mcs-delay-3"
       eyebrow={
-        <span className="flex size-7 items-center justify-center rounded-mcs-sm bg-mcs-purple-bg-subtle">
-          <Info className="size-4 text-mcs-purple-fg" aria-hidden />
-        </span>
+        versionText ? (
+          <span className="tnum text-mcs-xs font-medium text-mcs-text-muted">{versionText}</span>
+        ) : undefined
       }
     >
-      <div>
+      <div className="flex items-center justify-between gap-2">
         <p className="text-mcs-xs text-mcs-text-subtle">本次运行时长</p>
-        <p className={cn('tnum text-mcs-lg font-semibold', !isRunning && 'text-mcs-text-subtle')}>
+        <p className={cn('mcs-num text-mcs-lg', !isRunning && 'text-mcs-text-subtle')}>
           {formatUptime(isRunning ? uptime : null)}
         </p>
       </div>
@@ -398,7 +412,7 @@ export function RuntimeInfoCard() {
         {infoLines.map((line) => (
           <div key={line.label} className="flex items-center justify-between text-mcs-xs" title={line.tooltip}>
             <span className="flex items-center gap-1.5 text-mcs-text-muted">
-              <Skull className="size-3 text-mcs-text-subtle" aria-hidden />
+              <line.icon className="size-3 text-mcs-text-subtle" aria-hidden />
               {line.label}
             </span>
             <span className="tnum font-medium">{line.value}</span>
@@ -409,78 +423,9 @@ export function RuntimeInfoCard() {
   )
 }
 
-// ── 右栏卡：磁盘使用率（feat-5 运维韧性）────────────────────
-/** 磁盘使用率色阶：正常 / 警告(≥85%) / 错误(≥95%) */
-function diskColor(percent: number): string {
-  if (percent >= 95) return 'text-mcs-error-fg'
-  if (percent >= 85) return 'text-mcs-warning-fg'
-  return 'text-mcs-success-fg'
-}
-
+/** 磁盘使用率色阶（ResourceRow 磁盘行用）：正常 / 警告(≥85%) / 错误(≥95%) */
 function diskBarColor(percent: number): string {
   if (percent >= 95) return 'var(--mcs-error-fg)'
   if (percent >= 85) return 'var(--mcs-warning-fg)'
   return 'var(--mcs-success-fg)'
-}
-
-export function DiskUsageCard() {
-  const systemStats = useServerStore((s) => s.systemStats)
-  const diskUsage = systemStats?.diskUsage
-  const primary = diskUsage?.primary ?? null
-  const all = diskUsage?.all ?? []
-
-  const body = !primary ? (
-    <p className="py-1 text-mcs-xs text-mcs-text-subtle">暂无磁盘数据</p>
-  ) : (
-    <div className="flex flex-col gap-2">
-      {/* 主分区 */}
-      <div className="flex items-center justify-between text-mcs-xs">
-        <span className="flex items-center gap-1.5 text-mcs-text-muted">
-          <HardDrive className="size-3.5" aria-hidden />
-          <span className="max-w-[120px] truncate" title={primary.mountpoint}>{primary.mountpoint}</span>
-        </span>
-        <span className={cn('tnum font-semibold', diskColor(primary.percent))}>
-          {primary.percent.toFixed(1)}%
-        </span>
-      </div>
-      <div
-        role="progressbar"
-        aria-valuenow={Math.round(primary.percent)}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        className="h-1.5 w-full overflow-hidden rounded-full bg-mcs-bg-emphasis"
-      >
-        <div className="h-full rounded-full" style={{ width: `${Math.min(primary.percent, 100)}%`, background: diskBarColor(primary.percent) }} />
-      </div>
-      <div className="flex justify-between text-mcs-2xs text-mcs-text-subtle">
-        <span>已用 {primary.usedGB}G</span>
-        <span>总计 {primary.totalGB}G</span>
-        <span>可用 {(primary.totalGB - primary.usedGB).toFixed(1)}G</span>
-      </div>
-      {/* 多分区子行 */}
-      {all.length > 1 && (
-        <div className="flex flex-col gap-1 border-t border-mcs-border-subtle pt-1.5">
-          {all.filter(d => d.mountpoint !== primary.mountpoint).slice(0, 3).map(d => (
-            <div key={d.mountpoint} className="flex items-center justify-between text-mcs-2xs">
-              <span className="max-w-[100px] truncate text-mcs-text-muted" title={d.mountpoint}>{d.mountpoint}</span>
-              <span className={cn('tnum', diskColor(d.percent))}>{d.percent.toFixed(1)}%</span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-
-  return (
-    <Card
-      title="磁盘使用率"
-      eyebrow={
-        <span className="flex size-7 items-center justify-center rounded-mcs-sm bg-mcs-accent-bg-subtle">
-          <HardDrive className="size-4 text-mcs-accent" aria-hidden />
-        </span>
-      }
-    >
-      {body}
-    </Card>
-  )
 }

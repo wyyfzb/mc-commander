@@ -13,6 +13,7 @@ import { useTerminalStore } from '@/stores/terminal'
 import { useCommandBus } from '@/stores/command-bus'
 import { colorForCommand, completeCommands, iconForCommand, type CompletionItem } from '@/lib/mc-commands'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
+import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 
 /**
  * 命令输入行
@@ -116,6 +117,8 @@ export function CommandInput() {
   const navRef = useRef<{ index: number; draft: string } | null>(null)
   /** 导航中当前条目的状态（用于显示状态指示器） */
   const [navStatus, setNavStatus] = useState<{ status: CommandStatus; error?: string } | null>(null)
+  // 删除快捷指令经二次确认（待删命令全文；null=未发起）
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
 
   const completions: CompletionItem[] = value.startsWith('/') ? completeCommands(value) : []
 
@@ -234,10 +237,11 @@ export function CommandInput() {
       setPresets(presets)
       toast.error('删除快捷指令失败')
     }
+    setDeleteTarget(null)
   }
 
   return (
-    <section className="flex shrink-0 flex-col gap-2 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted p-3">
+    <section className="animate-mcs-fade-up mcs-delay-5 mcs-edge-top relative flex shrink-0 flex-col gap-2 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted p-3 shadow-mcs-card">
       {/* RCON 降级横幅：命令已发送但响应不可见 */}
       {isRunning && !isRconConnected && (
         <NoticeBanner variant="warning" icon={ShieldAlert}>
@@ -287,7 +291,7 @@ export function CommandInput() {
                   type="button"
                   aria-label={`删除 ${preset}`}
                   className="cursor-pointer text-mcs-text-subtle hover:text-mcs-error-fg"
-                  onClick={() => removePreset(preset)}
+                  onClick={() => setDeleteTarget(preset)}
                 >
                   <X className="size-3" aria-hidden />
                 </button>
@@ -307,7 +311,6 @@ export function CommandInput() {
 
       {/* 输入行 */}
       <div className="relative flex items-center gap-2">
-        <span className="font-mono text-mcs-accent-fg" aria-hidden>&gt;</span>
         <input
           ref={inputRef}
           value={value}
@@ -337,9 +340,16 @@ export function CommandInput() {
           }}
           placeholder="输入服务器命令... (如 /say hello)"
           disabled={!isRunning}
-          className="h-8 min-w-0 flex-1 bg-transparent font-mono text-mcs-xs text-mcs-text-default outline-none placeholder:text-mcs-text-subtle disabled:cursor-not-allowed disabled:opacity-50"
+          className="h-8 min-w-0 flex-1 rounded-mcs-sm border border-input bg-mcs-bg-subtle py-0 pr-2.5 pl-7 font-mono text-mcs-xs text-mcs-text-default transition-colors outline-none placeholder:text-mcs-text-subtle focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
           aria-label="服务器命令输入"
         />
+        {/* shell 语义前缀：内嵌输入框内 */}
+        <span
+          className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 font-mono text-mcs-accent-fg"
+          aria-hidden
+        >
+          &gt;
+        </span>
         <IconButton
           variant="outline"
           onClick={() => savePreset()}
@@ -381,6 +391,21 @@ export function CommandInput() {
           </div>
         )}
       </div>
+
+      {/* 删除快捷指令：二次确认（danger 标红确认键） */}
+      <ConfirmDialog
+        open={deleteTarget != null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null)
+        }}
+        title="删除快捷指令"
+        description={deleteTarget != null ? `确定删除「${deleteTarget}」？` : ''}
+        confirmText="删除"
+        danger
+        onConfirm={() => {
+          if (deleteTarget != null) removePreset(deleteTarget)
+        }}
+      />
     </section>
   )
 }
