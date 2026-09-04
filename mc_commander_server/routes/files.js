@@ -5,7 +5,7 @@ import os from 'os';
 import { TextDecoder } from 'util';
 import iconv from 'iconv-lite';
 import multer from 'multer';
-import { success, ErrorCodes, AppError } from '../utils/response.js';
+import { ErrorCodes, AppError } from '../utils/response.js';
 import { atomicWriteFile, resolveSafePath, PathTraversalError } from '../utils/fs-utils.js';
 import config from '../config.js';
 import { BanModel } from '../db/index.js';
@@ -17,8 +17,16 @@ import {
   fileMkdirRequestSchema,
   fileRenameRequestSchema,
   fileUploadQuerySchema,
+  fileListResponseSchema,
+  fileInfoResponseSchema,
+  fileContentResponseSchema,
+  fileSaveResponseSchema,
+  fileMkdirResponseSchema,
+  fileRenameResponseSchema,
+  fileUploadResponseSchema,
+  nullDataSchema,
 } from '@mc-commander/schemas';
-import { validateBody, validateQuery } from '../middleware/validate.js';
+import { validateBody, validateQuery, validatedSuccess } from '../middleware/validate.js';
 import { logger } from '../utils/logger.js';
 
 // Content-Disposition filename 编码（RFC 5987）：ASCII 可直接用 filename，
@@ -259,14 +267,14 @@ export function createFileRoutes(serverManager) {
           return a.name.localeCompare(b.name);
         });
         
-        res.json(success({
+        res.json(validatedSuccess(fileListResponseSchema, {
           path: dirPath,
           isDirectory: true,
           files
         }));
       } else {
         // 返回文件信息
-        res.json(success({
+        res.json(validatedSuccess(fileInfoResponseSchema, {
           name: path.basename(fullPath),
           path: dirPath,
           type: 'file',
@@ -378,7 +386,7 @@ export function createFileRoutes(serverManager) {
         throw new AppError(ErrorCodes.BINARY_FILE_NOT_SUPPORTED);
       }
 
-      res.json(success({
+      res.json(validatedSuccess(fileContentResponseSchema, {
         path: filePath,
         name: path.basename(fullPath),
         size: stats.size,
@@ -488,7 +496,7 @@ export function createFileRoutes(serverManager) {
         detail: { name: path.basename(fullPath), sizeBytes: stats.size, encoding },
       });
 
-      res.json(success({
+      res.json(validatedSuccess(fileSaveResponseSchema, {
         path: filePath,
         size: stats.size,
         modifiedAt: stats.mtime.toISOString()
@@ -557,7 +565,7 @@ export function createFileRoutes(serverManager) {
         detail: { name: path.basename(fullPath), isDirectory: delIsDirectory },
       });
 
-      res.json(success(null, 'File/directory deleted successfully'));
+      res.json(validatedSuccess(nullDataSchema, null, 'File/directory deleted successfully'));
     } catch (err) {
       // 文件在 existsSync 预检通过后、statSync 执行前被并发删除（另一管理请求、
       // MC 重启清理、备份删除等）时抛裸 ENOENT：映射为 404 FILE_NOT_FOUND，
@@ -599,7 +607,7 @@ export function createFileRoutes(serverManager) {
         detail: { name: path.basename(fullPath) },
       });
 
-      res.json(success({
+      res.json(validatedSuccess(fileMkdirResponseSchema, {
         path: dirPath,
         name: path.basename(fullPath),
       }, 'Directory created successfully'));
@@ -641,7 +649,7 @@ export function createFileRoutes(serverManager) {
         detail: { from: oldPath, to: newPath },
       });
 
-      res.json(success({
+      res.json(validatedSuccess(fileRenameResponseSchema, {
         oldPath,
         newPath,
         name: path.basename(fullNewPath),
@@ -804,7 +812,7 @@ const upload = multer({
         detail: { name: safeName, sizeBytes: stats.size },
       });
 
-      res.json(success({
+      res.json(validatedSuccess(fileUploadResponseSchema, {
         path: resultPath,
         name: safeName,
         size: stats.size,

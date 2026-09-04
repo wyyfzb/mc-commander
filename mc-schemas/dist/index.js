@@ -3529,7 +3529,7 @@ const arrayType = ZodArray.create;
 const objectType = ZodObject.create;
 ZodObject.strictCreate;
 const unionType = ZodUnion.create;
-ZodDiscriminatedUnion.create;
+const discriminatedUnionType = ZodDiscriminatedUnion.create;
 ZodIntersection.create;
 ZodTuple.create;
 const recordType = ZodRecord.create;
@@ -4123,6 +4123,22 @@ const fileSaveResponseSchema = objectType({
 	size: numberType(),
 	modifiedAt: stringType()
 });
+const fileMkdirResponseSchema = objectType({
+	path: stringType(),
+	name: stringType()
+});
+const fileRenameResponseSchema = objectType({
+	oldPath: stringType(),
+	newPath: stringType(),
+	name: stringType()
+});
+const fileUploadResponseSchema = objectType({
+	path: stringType(),
+	name: stringType(),
+	size: numberType(),
+	modifiedAt: stringType(),
+	isDirectory: literalType(false)
+});
 /** GET /instances/:id/files 目录列表查询：path 缺省归一为 '/'（与既有行为一致） */
 const fileListRequestSchema = objectType({ path: stringType().optional().default("/") });
 /** GET download / GET content / DELETE files 查询：path 必填非空 */
@@ -4314,6 +4330,19 @@ const upgradeStartResponseSchema = objectType({
 	mcVersion: stringType(),
 	type: stringType()
 });
+/**
+* GET /instances/:id/upgrade/status 响应契约（issue 402 响应侧接入）。
+* upgrading 为判别字段：升级中 = 进度对象展开（与 upgradeProgressSchema 同构），
+* 空闲 = 仅布尔 false（与路由 null progress 分支一致）。
+*/
+const upgradeStatusResponseSchema = discriminatedUnionType("upgrading", [objectType({ upgrading: literalType(false) }), objectType({
+	upgrading: literalType(true),
+	instanceId: stringType(),
+	stage: upgradeStageSchema,
+	percent: numberType(),
+	detail: stringType(),
+	timestamp: numberType()
+})]);
 //#endregion
 //#region src/plugin.ts
 const pluginMetaSchema = objectType({
@@ -4358,6 +4387,7 @@ const pluginToggleResultSchema = objectType({
 	file: stringType(),
 	enabled: booleanType()
 });
+const pluginDeleteResultSchema = objectType({ deleted: stringType() });
 const pluginUploadResultSchema = objectType({
 	file: stringType(),
 	sizeBytes: numberType(),
@@ -4474,4 +4504,4 @@ const updateCheckResultSchema = objectType({
 	url: stringType().optional()
 });
 //#endregion
-export { NOTIFICATION_EVENT_TYPES, WS_EVENT_TYPES, apiEnvelopeSchema, apiErrorEnvelopeSchema, auditLogItemSchema, auditLogsQuerySchema, backupCreateRequestSchema, backupItemSchema, banRecordListSchema, banRecordSchema, banRequestBodySchema, banResponseBodySchema, commandHistoryItemSchema, commandHistoryQuerySchema, commandResponseSchema, deployProgressSchema, deployRequestSchema, deployResultSchema, diskInfoSchema, diskUsageSchema, fileContentResponseSchema, fileEntrySchema, fileInfoResponseSchema, fileListRequestSchema, fileListResponseSchema, fileMkdirRequestSchema, filePathRequestSchema, fileRenameRequestSchema, fileSaveRequestSchema, fileSaveResponseSchema, fileUploadQuerySchema, instanceStatusListSchema, instanceStatusSchema, instanceSummarySchema, instanceUpdatePayloadSchema, inventoryItemSchema, ipHistoryEntrySchema, logEntriesSchema, logEntrySchema, makeApiEnvelopeSchema, marketInstallRequestSchema, marketInstallResultSchema, marketSearchHitSchema, marketSearchRequestSchema, marketSearchResultSchema, marketVersionFileSchema, marketVersionSchema, marketVersionsRequestSchema, marketVersionsResultSchema, nullDataSchema, overviewDataSchema, paginationSchema, playerDetailsResponseSchema, playerDimensionSchema, playerEventSchema, playerGameModeSchema, playerInventorySchema, playerListSchema, playerPositionSchema, playerPotionEffectSchema, playerSchema, playerSessionSchema, playerStatsSchema, pluginEnabledRequestSchema, pluginInfoSchema, pluginListSchema, pluginMetaSchema, pluginOverwriteQuerySchema, pluginToggleResultSchema, pluginUpdateCheckResultSchema, pluginUpdateStatusSchema, pluginUploadResultSchema, scheduledTaskSchema, scheduledTaskTypeSchema, serverPropertiesSchema, spawnPointSchema, systemStatsSchema, taskCreatePayloadSchema, taskRunHistorySchema, taskRunStatusSchema, taskUpdatePayloadSchema, updateCheckResultSchema, updatePropertiesResponseSchema, upgradeProgressSchema, upgradeRequestSchema, upgradeStageSchema, upgradeStartResponseSchema, versionsResponseSchema, weatherTypeSchema, webhookCreatePayloadSchema, webhookDeliverySchema, webhookSchema, webhookTestResultSchema, worldDimensionSchema, worldInfoSchema, wsBackupPayloadSchema, wsEventTypeSchema, wsLogPayloadSchema, wsMessageSchema, wsPerformancePayloadSchema, wsPlayerEventPayloadSchema, wsStatusEventPayloadSchema, wsStatusSnapshotSchema, wsWeatherPayloadSchema };
+export { NOTIFICATION_EVENT_TYPES, WS_EVENT_TYPES, apiEnvelopeSchema, apiErrorEnvelopeSchema, auditLogItemSchema, auditLogsQuerySchema, backupCreateRequestSchema, backupItemSchema, banRecordListSchema, banRecordSchema, banRequestBodySchema, banResponseBodySchema, commandHistoryItemSchema, commandHistoryQuerySchema, commandResponseSchema, deployProgressSchema, deployRequestSchema, deployResultSchema, diskInfoSchema, diskUsageSchema, fileContentResponseSchema, fileEntrySchema, fileInfoResponseSchema, fileListRequestSchema, fileListResponseSchema, fileMkdirRequestSchema, fileMkdirResponseSchema, filePathRequestSchema, fileRenameRequestSchema, fileRenameResponseSchema, fileSaveRequestSchema, fileSaveResponseSchema, fileUploadQuerySchema, fileUploadResponseSchema, instanceStatusListSchema, instanceStatusSchema, instanceSummarySchema, instanceUpdatePayloadSchema, inventoryItemSchema, ipHistoryEntrySchema, logEntriesSchema, logEntrySchema, makeApiEnvelopeSchema, marketInstallRequestSchema, marketInstallResultSchema, marketSearchHitSchema, marketSearchRequestSchema, marketSearchResultSchema, marketVersionFileSchema, marketVersionSchema, marketVersionsRequestSchema, marketVersionsResultSchema, nullDataSchema, overviewDataSchema, paginationSchema, playerDetailsResponseSchema, playerDimensionSchema, playerEventSchema, playerGameModeSchema, playerInventorySchema, playerListSchema, playerPositionSchema, playerPotionEffectSchema, playerSchema, playerSessionSchema, playerStatsSchema, pluginDeleteResultSchema, pluginEnabledRequestSchema, pluginInfoSchema, pluginListSchema, pluginMetaSchema, pluginOverwriteQuerySchema, pluginToggleResultSchema, pluginUpdateCheckResultSchema, pluginUpdateStatusSchema, pluginUploadResultSchema, scheduledTaskSchema, scheduledTaskTypeSchema, serverPropertiesSchema, spawnPointSchema, systemStatsSchema, taskCreatePayloadSchema, taskRunHistorySchema, taskRunStatusSchema, taskUpdatePayloadSchema, updateCheckResultSchema, updatePropertiesResponseSchema, upgradeProgressSchema, upgradeRequestSchema, upgradeStageSchema, upgradeStartResponseSchema, upgradeStatusResponseSchema, versionsResponseSchema, weatherTypeSchema, webhookCreatePayloadSchema, webhookDeliverySchema, webhookSchema, webhookTestResultSchema, worldDimensionSchema, worldInfoSchema, wsBackupPayloadSchema, wsEventTypeSchema, wsLogPayloadSchema, wsMessageSchema, wsPerformancePayloadSchema, wsPlayerEventPayloadSchema, wsStatusEventPayloadSchema, wsStatusSnapshotSchema, wsWeatherPayloadSchema };

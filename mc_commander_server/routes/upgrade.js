@@ -1,9 +1,9 @@
 import { Router } from 'express';
-import { success, error, ErrorCodes } from '../utils/response.js';
+import { error, ErrorCodes } from '../utils/response.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
 import { UpgradeService, MC_VERSION_REGEX } from '../services/upgrade.service.js';
-import { upgradeRequestSchema } from '@mc-commander/schemas';
-import { validateBody } from '../middleware/validate.js';
+import { upgradeRequestSchema, upgradeStartResponseSchema, upgradeStatusResponseSchema } from '@mc-commander/schemas';
+import { validateBody, validatedSuccess } from '../middleware/validate.js';
 import { logger } from '../utils/logger.js';
 
 /**
@@ -68,7 +68,7 @@ export function createUpgradeRoutes(serverManager) {
         logger.error(`[UpgradeRoute] Upgrade failed for ${id}:`, err.message);
       });
 
-      return res.status(202).json(success({
+      return res.status(202).json(validatedSuccess(upgradeStartResponseSchema, {
         message: 'Upgrade started',
         instanceId: id,
         mcVersion,
@@ -84,9 +84,9 @@ export function createUpgradeRoutes(serverManager) {
     const { id } = req.params;
     const progress = upgradeService.getUpgradeProgress(id);
     if (!progress) {
-      return res.json(success({ upgrading: false }));
+      return res.json(validatedSuccess(upgradeStatusResponseSchema, { upgrading: false }));
     }
-    return res.json(success({ upgrading: true, ...progress }));
+    return res.json(validatedSuccess(upgradeStatusResponseSchema, { upgrading: true, ...progress }));
   });
 
   return router;

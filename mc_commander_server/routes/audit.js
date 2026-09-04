@@ -1,8 +1,7 @@
 import { Router } from 'express';
-import { successPaginated } from '../utils/response.js';
 import { parsePagination } from '../utils/pagination.js';
-import { auditLogsQuerySchema, commandHistoryQuerySchema } from '@mc-commander/schemas';
-import { validateQuery } from '../middleware/validate.js';
+import { auditLogsQuerySchema, commandHistoryQuerySchema, auditLogItemSchema, commandHistoryItemSchema } from '@mc-commander/schemas';
+import { validateQuery, validatedSuccessPaginated } from '../middleware/validate.js';
 import { AuditLogModel, CommandHistoryModel } from '../db/index.js';
 
 export function createAuditRoutes() {
@@ -28,7 +27,7 @@ export function createAuditRoutes() {
         pageSize,
       });
 
-      res.json(successPaginated(result.logs, result.total, page, pageSize));
+      res.json(validatedSuccessPaginated(auditLogItemSchema, result.logs, result.total, page, pageSize));
     } catch (err) {
       next(err);
     }
@@ -48,7 +47,7 @@ export function createAuditRoutes() {
         pageSize,
       });
 
-      res.json(successPaginated(result.commands, result.total, page, pageSize));
+      res.json(validatedSuccessPaginated(commandHistoryItemSchema, result.commands, result.total, page, pageSize));
     } catch (err) {
       next(err);
     }

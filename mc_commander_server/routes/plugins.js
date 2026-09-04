@@ -3,7 +3,7 @@ import multer from 'multer';
 import os from 'os';
 import fs from 'fs';
 import path from 'path';
-import { success, error, AppError, ErrorCodes } from '../utils/response.js';
+import { error, AppError, ErrorCodes } from '../utils/response.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
 import {
   marketSearchRequestSchema,
@@ -11,8 +11,16 @@ import {
   pluginOverwriteQuerySchema,
   marketInstallRequestSchema,
   pluginEnabledRequestSchema,
+  marketSearchResultSchema,
+  marketVersionsResultSchema,
+  marketInstallResultSchema,
+  pluginUpdateCheckResultSchema,
+  pluginListSchema,
+  pluginUploadResultSchema,
+  pluginToggleResultSchema,
+  pluginDeleteResultSchema,
 } from '@mc-commander/schemas';
-import { validateBody, validateQuery } from '../middleware/validate.js';
+import { validateBody, validateQuery, validatedSuccess } from '../middleware/validate.js';
 import { listPlugins, setPluginEnabled, deletePlugin, uploadPlugin } from '../services/plugin.service.js';
 import { searchMarketPlugins, getMarketProjectVersions, installPluginFromMarket, checkPluginUpdates } from '../services/market.service.js';
 import config from '../config.js';
@@ -113,7 +121,7 @@ export function createPluginRoutes(serverManager) {
         gameVersion: req.query.game_version ?? null,
         loader: req.query.loader ?? null,
       });
-      res.json(success(result));
+      res.json(validatedSuccess(marketSearchResultSchema, result));
     } catch (err) {
       next(err);
     }
@@ -130,7 +138,7 @@ export function createPluginRoutes(serverManager) {
         gameVersion: req.query.game_version ?? null,
         loader: req.query.loader ?? null,
       });
-      res.json(success(result));
+      res.json(validatedSuccess(marketVersionsResultSchema, result));
     } catch (err) {
       next(err);
     }
@@ -160,7 +168,7 @@ export function createPluginRoutes(serverManager) {
           overwritten: result.overwritten,
         },
       });
-      res.status(result.overwritten ? 200 : 201).json(success(result));
+      res.status(result.overwritten ? 200 : 201).json(validatedSuccess(marketInstallResultSchema, result));
     } catch (err) {
       next(err);
     }
@@ -177,7 +185,7 @@ export function createPluginRoutes(serverManager) {
         return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND, 'Instance not found'));
       }
       const result = await checkPluginUpdates(serverPath);
-      res.json(success(result));
+      res.json(validatedSuccess(pluginUpdateCheckResultSchema, result));
     } catch (err) {
       next(err);
     }
@@ -190,7 +198,7 @@ export function createPluginRoutes(serverManager) {
       if (!serverPath) {
         return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND, 'Instance not found'));
       }
-      res.json(success(listPlugins(serverPath)));
+      res.json(validatedSuccess(pluginListSchema, listPlugins(serverPath)));
     } catch (err) {
       next(err);
     }
@@ -227,7 +235,7 @@ export function createPluginRoutes(serverManager) {
         targetId: result.file,
         detail: { sizeBytes: result.sizeBytes, overwritten: result.overwritten },
       });
-      res.status(result.overwritten ? 200 : 201).json(success(result));
+      res.status(result.overwritten ? 200 : 201).json(validatedSuccess(pluginUploadResultSchema, result));
     } catch (err) {
       next(err);
     } finally {
@@ -253,7 +261,7 @@ export function createPluginRoutes(serverManager) {
         targetId: file,
         detail: { from: file, to: result.file },
       });
-      res.json(success(result));
+      res.json(validatedSuccess(pluginToggleResultSchema, result));
     } catch (err) {
       next(err);
     }
@@ -275,7 +283,7 @@ export function createPluginRoutes(serverManager) {
         targetId: file,
         detail: null,
       });
-      res.json(success(result));
+      res.json(validatedSuccess(pluginDeleteResultSchema, result));
     } catch (err) {
       next(err);
     }
