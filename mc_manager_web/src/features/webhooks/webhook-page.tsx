@@ -7,7 +7,7 @@
  * - 加载骨架行 + 空态 + Toast 反馈
  */
 import { useState } from 'react'
-import { Plus, Send, Pencil, Trash2, ChevronDown, Webhook as WebhookIcon, Hourglass, RefreshCw } from 'lucide-react'
+import { Plus, Send, Pencil, Trash2, ChevronDown, Webhook as WebhookIcon, Hourglass, RefreshCw, AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useConnectionStore } from '@/stores/connection'
@@ -68,7 +68,7 @@ export default function WebhookPage() {
   const formDirty = form.name !== initialForm.name || form.url !== initialForm.url || form.secret !== initialForm.secret
     || form.isEnabled !== initialForm.isEnabled || JSON.stringify(form.events) !== JSON.stringify(initialForm.events)
 
-  const { data: webhooksData, isLoading, error } = useQuery({
+  const { data: webhooksData, isLoading, error, refetch } = useQuery({
     queryKey: queryKeys.webhooks(),
     queryFn: ({ signal }) => apiGetWebhooks(config, 1, 100, signal),
     enabled: config.status === 'ready',
@@ -181,6 +181,14 @@ export default function WebhookPage() {
               </div>
             ))}
           </div>
+        ) : error != null ? (
+          /* 加载失败态（优先于空态：避免错误信息与「暂无 Webhook」混排误导） */
+          <EmptyState
+            icon={AlertTriangle}
+            title="加载失败"
+            hint={`无法获取 Webhook 列表：${getFriendlyErrorText(error)}`}
+            action={{ label: '重试', onClick: () => void refetch() }}
+          />
         ) : webhooks.length === 0 ? (
           /* 空态（EmptyState 统一组件；绿实底 CTA 为页面主行动） */
           <EmptyState

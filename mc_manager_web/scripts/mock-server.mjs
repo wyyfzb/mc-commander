@@ -396,6 +396,34 @@ const bans = [
   },
 ]
 
+/** 插件演示数据（模块级以支持 enabled 状态在 PUT 后持久） */
+const plugins = [
+  {
+    file: 'EssentialsX-2.20.1.jar',
+    name: 'EssentialsX',
+    enabled: true,
+    sizeBytes: 2_201_600,
+    mtimeMs: Date.now() - 86_400_000,
+    meta: { name: 'EssentialsX', version: '2.20.1', main: 'com.earth2me.essentials.Essentials', apiVersion: '1.13', description: '提供基础指令与权限管理', authors: ['EssentialsX Team'], depend: [], softdepend: ['Vault'] },
+  },
+  {
+    file: 'Vault.jar',
+    name: 'Vault',
+    enabled: true,
+    sizeBytes: 331_264,
+    mtimeMs: Date.now() - 2 * 86_400_000,
+    meta: { name: 'Vault', version: '1.7.3', main: 'net.milkbowl.vault.Vault', apiVersion: null, description: '经济与权限抽象层', authors: ['Sleaker'], depend: [], softdepend: [] },
+  },
+  {
+    file: 'WorldEdit.jar',
+    name: 'WorldEdit',
+    enabled: false,
+    sizeBytes: 8_912_896,
+    mtimeMs: Date.now() - 7 * 86_400_000,
+    meta: { name: 'WorldEdit', version: '7.3.0', main: 'com.sk89q.worldedit.bukkit.WorldEditPlugin', apiVersion: '1.17', description: '世界编辑工具', authors: ['EngineHub'], depend: [], softdepend: ['CommandBook'] },
+  },
+]
+
 const server = createServer((req, res) => {
   const url = req.url ?? ''
   const path = url.split('?')[0]
@@ -494,6 +522,33 @@ const server = createServer((req, res) => {
       }))
     }
     if (/^\/api\/v1\/webhooks\/\d+$/.test(path) && req.method === 'DELETE') return res.end(ok(null))
+    // ── 插件域（对齐 @mc-commander/schemas plugin 契约；数据见模块级 plugins） ──
+    if (path === '/api/v1/instances/e2e-demo/plugins' && req.method === 'GET') {
+      return res.end(ok({ plugins }))
+    }
+    if (/^\/api\/v1\/instances\/e2e-demo\/plugins\/[^/]+\/enabled$/.test(path) && req.method === 'PUT') {
+      let target = null
+      try {
+        const file = decodeURIComponent(path.split('/')[6])
+        const { enabled } = JSON.parse(body || '{}')
+        target = plugins.find((p) => p.file === file)
+        if (target) target.enabled = Boolean(enabled)
+      } catch {}
+      return res.end(ok({ ok: Boolean(target) }))
+    }
+    if (/^\/api\/v1\/instances\/e2e-demo\/plugins\/[^/]+$/.test(path) && req.method === 'DELETE') {
+      return res.end(ok({ ok: true }))
+    }
+    if (path === '/api/v1/instances/e2e-demo/plugins/check-updates' && req.method === 'POST') {
+      return res.end(ok({ results: plugins.map((p) => ({
+        file: p.file, name: p.name, installedVersion: p.meta?.version ?? null, enabled: p.enabled,
+        matched: true, slug: p.name.toLowerCase(), title: p.name, iconUrl: null,
+        latestVersion: p.meta?.version ?? '1.0.0', updateAvailable: false, hasNewer: false,
+      })) }))
+    }
+    if (/^\/api\/v1\/instances\/e2e-demo\/plugins\/market\/search$/.test(path) && req.method === 'GET') {
+      return res.end(ok({ hits: [], total: 0 }))
+    }
     if (path === '/api/v1/instances') return res.end(ok([instance]))
     if (path === '/api/v1/instances/e2e-demo') {
       // PUT：实例配置更新（general-panel autoRestart 用；合并白名单字段）
