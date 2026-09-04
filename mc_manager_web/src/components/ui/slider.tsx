@@ -36,7 +36,7 @@ function Slider({
       <SliderPrimitive.Thumb
         data-slot="slider-thumb"
         aria-label={ariaLabel}
-        className="block size-4 shrink-0 rounded-full border border-primary/50 bg-background shadow-xs transition-[color,box-shadow] outline-none hover:bg-background focus-visible:ring-4 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
+        className="block size-4 shrink-0 rounded-full border border-primary/50 bg-background shadow-xs transition-[color,box-shadow] outline-none hover:bg-background focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
       />
     </SliderPrimitive.Root>
   )

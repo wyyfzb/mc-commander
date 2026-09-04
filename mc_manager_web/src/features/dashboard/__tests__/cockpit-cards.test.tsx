@@ -127,12 +127,12 @@ describe('EventsCard 事件与待办', () => {
 })
 
 describe('AnnouncementCard 公告发送', () => {
-  it('模板填充 → Enter 发送 say 公告 → 清空输入并回显终端', async () => {
+  it('模板填充 → Ctrl+Enter 发送 say 公告 → 清空输入并回显终端', async () => {
     renderWithProviders(<AnnouncementCard />)
     fireEvent.click(screen.getByRole('button', { name: /服务器将在 5 分钟后重启/ }))
     const input = screen.getByLabelText('公告内容')
     expect(input).toHaveValue('服务器将在 5 分钟后重启，请及时停靠')
-    fireEvent.keyDown(input, { key: 'Enter' })
+    fireEvent.keyDown(input, { key: 'Enter', ctrlKey: true })
     await waitFor(() =>
       expect(useTerminalStore.getState().buffer.some((e) => e.text.includes('say 服务器将在'))).toBe(true),
     )
@@ -143,7 +143,7 @@ describe('AnnouncementCard 公告发送', () => {
   it('空输入不发命令', () => {
     renderWithProviders(<AnnouncementCard />)
     const input = screen.getByLabelText('公告内容')
-    fireEvent.keyDown(input, { key: 'Enter' })
+    fireEvent.keyDown(input, { key: 'Enter', ctrlKey: true })
     expect(screen.queryByText(/命令已发送/)).not.toBeInTheDocument()
     expect(useTerminalStore.getState().buffer.length).toBe(0)
   })

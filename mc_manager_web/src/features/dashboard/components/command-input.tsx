@@ -237,7 +237,7 @@ export function CommandInput() {
   }
 
   return (
-    <section className="flex shrink-0 flex-col gap-2 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted p-3">
+    <section className="animate-mcs-fade-up mcs-delay-5 mcs-edge-top relative flex shrink-0 flex-col gap-2 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted p-3 shadow-mcs-card">
       {/* RCON 降级横幅：命令已发送但响应不可见 */}
       {isRunning && !isRconConnected && (
         <NoticeBanner variant="warning" icon={ShieldAlert}>
@@ -337,7 +337,7 @@ export function CommandInput() {
           }}
           placeholder="输入服务器命令... (如 /say hello)"
           disabled={!isRunning}
-          className="h-8 min-w-0 flex-1 bg-transparent font-mono text-mcs-xs text-mcs-text-default outline-none placeholder:text-mcs-text-subtle disabled:cursor-not-allowed disabled:opacity-50"
+          className="h-8 min-w-0 flex-1 rounded-mcs-sm border border-input bg-mcs-bg-subtle px-2.5 font-mono text-mcs-xs text-mcs-text-default transition-colors outline-none placeholder:text-mcs-text-subtle focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
           aria-label="服务器命令输入"
         />
         <IconButton

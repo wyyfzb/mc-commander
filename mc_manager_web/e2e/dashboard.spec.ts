@@ -23,17 +23,18 @@ async function setupConnection(page: Page) {
 }
 
 test.describe('仪表盘', () => {
-  test('统计卡渲染：顶部四卡 + 右栏五卡 + 健康标签 + 实时数据', async ({ page }) => {
+  test('统计卡渲染：顶部三卡 + 右栏两卡 + 健康标签 + 实时数据', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/dashboard')
-    // 顶部四卡 + 右栏卡标题
-    for (const title of ['在线玩家', 'TPS', 'CPU', '内存', 'MC 时钟 · 世界控制', '事件与待办', '公告发送', '实例运行信息']) {
+    // 顶部三卡 + 右栏卡标题
+    for (const title of ['在线玩家', '资源使用', '实例信息', 'MC 时钟 · 世界控制', '公告发送']) {
       await expect(page.getByText(title).first()).toBeVisible()
     }
     // 健康标签与实时数据
     await expect(page.getByText('健康')).toBeVisible()
     await expect(page.getByText('20.0')).toBeVisible()
-    await expect(page.getByText('3/20').first()).toBeVisible()
+    await expect(page.getByText('3', { exact: true }).first()).toBeVisible()
+    await expect(page.getByText('/20').first()).toBeVisible()
     await expect(page.getByText('OP 1/3')).toBeVisible()
     await expect(page.getByText('2h 0m')).toBeVisible()
     await expect(page.getByText('2d 0h')).toBeVisible()
@@ -67,13 +68,6 @@ test.describe('仪表盘', () => {
     await page.getByRole('button', { name: '发送公告' }).click()
     await sayReq
     await expect(page.getByLabel('公告内容')).toHaveValue('')
-  })
-
-  test('事件卡「全部动态」直达通知抽屉（跨组件共享状态）', async ({ page }) => {
-    await setupConnection(page)
-    await page.goto('/dashboard')
-    await page.getByRole('button', { name: '全部动态' }).click()
-    await expect(page.getByRole('heading', { name: '通知' })).toBeVisible()
   })
 
   test('在线玩家卡「全部」跳转玩家页（列表钻入）', async ({ page }) => {

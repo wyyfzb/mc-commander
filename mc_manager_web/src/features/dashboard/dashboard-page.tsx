@@ -1,14 +1,11 @@
 import { useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, RefreshCw, ServerOff } from 'lucide-react'
-import { BigStatCards, PlayersCard, RuntimeInfoCard, DiskUsageCard } from './components/stat-cards'
+import { BigStatCards, PlayersCard, RuntimeInfoCard } from './components/stat-cards'
 import { ServerTerminal } from './components/server-terminal'
 import { CommandInput } from './components/command-input'
 import { McClockCard } from './components/mc-clock-card'
-import { EventsCard } from './components/events-card'
 import { AnnouncementCard } from './components/announcement-card'
-import { RecentBackupsCard } from './components/recent-backups-card'
-import { useMetricHistory } from './use-metric-history'
 import { useInstanceStatus, useSystemStats, queryKeys } from '@/api/queries'
 import { useServerStore } from '@/stores/server'
 import { EmptyState } from '@/components/mcs/empty-state'
@@ -18,7 +15,7 @@ import { useNavigate } from 'react-router'
 
 /**
  * 仪表盘驾驶舱
- * 顶部大数字四卡 → 终端主体 + 右栏五卡（MC 时钟·世界控制 / 事件与待办 / 公告发送 / 在线玩家 / 运行信息）
+ * 顶部三卡（在线玩家 / 资源使用 / 实例信息）→ 终端主体 + 右栏卡（MC 时钟·世界控制 / 公告发送）
  * 数据流：Query 轮询（实例 30s / 系统资源 5s）→ server store → WS 事件即时合并
  */
 export function DashboardPage() {
@@ -48,7 +45,6 @@ export function DashboardPage() {
     }
   }, [lastStatusEvent, instanceId, queryClient])
 
-  const history = useMetricHistory()
   const navigate = useNavigate()
 
   // B17 首屏骨架：仅 status 未到（Query 加载中）时显示，WS 已送达则直出数据
@@ -85,10 +81,14 @@ export function DashboardPage() {
         </NoticeBanner>
       )}
 
-      {/* 顶部大数字四卡 */}
-      <BigStatCards history={history} isLoading={statusLoading} />
+      {/* 顶部三卡：在线玩家 / 资源使用 / 实例运行信息 */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
+        <PlayersCard />
+        <BigStatCards isLoading={statusLoading} />
+        <RuntimeInfoCard />
+      </div>
 
-      {/* 终端主体 + 右栏五卡 */}
+      {/* 终端主体 + 右栏卡 */}
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_336px]">
         <div className="flex min-h-0 flex-col gap-4">
           <ServerTerminal isLoading={statusLoading} />
@@ -96,12 +96,7 @@ export function DashboardPage() {
         </div>
         <aside className="flex min-h-0 flex-col gap-4 overflow-y-auto pr-1">
           <McClockCard />
-          <RecentBackupsCard />
-          <EventsCard />
           <AnnouncementCard />
-          <PlayersCard />
-          <DiskUsageCard />
-          <RuntimeInfoCard />
         </aside>
       </div>
     </div>

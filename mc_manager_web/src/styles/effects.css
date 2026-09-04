@@ -1,0 +1,138 @@
+/**
+ * 视觉效果层（v2 深空工作台）
+ * 入场编排（一次性 ≤450ms）/ 常驻微动效（流光·脉冲·呼吸辉光）/ 背景纹理（噪点·方块网格·环境光）
+ * 纪律：
+ *   - 交互反馈仍走 duration-mcs-fast/base（≤300ms），本层 slow 档仅限一次性入场与氛围动画
+ *   - 纹理 opacity ≤3.5%：消除纯色渐变的塑料感，不喧宾夺主
+ *   - 消费 --mcs-* 语义 token，不引入新色值；reduced-motion 由 index.css 全局降级兜底
+ */
+
+/* ── 入场编排（both 保证 delay 期间保持初始不可见态）── */
+@keyframes mcs-fade-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes mcs-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes mcs-scale-in {
+  from { opacity: 0; transform: scale(0.95) translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
+.animate-mcs-fade-up { animation: mcs-fade-up var(--mcs-motion-slow) var(--mcs-ease-out) both; }
+.animate-mcs-fade-in { animation: mcs-fade-in var(--mcs-motion-base) var(--mcs-ease-out) both; }
+.animate-mcs-scale-in { animation: mcs-scale-in var(--mcs-motion-slow) var(--mcs-ease-spring) both; }
+
+/* 网格 stagger：60ms 步进，≤6 档（配 animate-mcs-fade-up 使用） */
+.mcs-delay-1 { animation-delay: 60ms; }
+.mcs-delay-2 { animation-delay: 120ms; }
+.mcs-delay-3 { animation-delay: 180ms; }
+.mcs-delay-4 { animation-delay: 240ms; }
+.mcs-delay-5 { animation-delay: 300ms; }
+.mcs-delay-6 { animation-delay: 360ms; }
+
+/* ── 常驻微动效（低频呼吸/循环，装饰性，非交互反馈）── */
+@keyframes mcs-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+@keyframes mcs-pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+@keyframes mcs-glow-breathe {
+  0%, 100% { box-shadow: var(--mcs-glow-accent); }
+  50% { box-shadow: var(--mcs-glow-accent-strong); }
+}
+
+.animate-mcs-pulse-soft { animation: mcs-pulse-soft 2.4s var(--mcs-ease-out) infinite; }
+.animate-mcs-shimmer { animation: mcs-shimmer 2s linear infinite; }
+.animate-mcs-glow-breathe { animation: mcs-glow-breathe 3.2s ease-in-out infinite; }
+
+/* 进度条流光：微弱高光带循环扫过，示意「进行中」而非装饰（叠在进度填充条上） */
+.mcs-progress-sheen { position: relative; overflow: hidden; }
+.mcs-progress-sheen::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 20%, color-mix(in oklch, var(--mcs-text-default) 16%, transparent) 50%, transparent 80%);
+  background-size: 200% 100%;
+  animation: mcs-shimmer 2.4s linear infinite;
+}
+
+/* ── 背景纹理与氛围 ── */
+
+/* 环境光页面底：品牌翠绿 + 末地紫双光晕自顶部洒落（多层背景，无额外 DOM；
+   与 bg-default 同写在同一元素的 background 上，勿再叠 bg-mcs-bg-default 类） */
+.mcs-shell-bg {
+  background:
+    radial-gradient(640px 340px at 16% -10%, color-mix(in oklch, var(--mcs-accent) 6%, transparent), transparent 70%),
+    radial-gradient(960px 500px at 88% -14%, color-mix(in oklch, var(--mcs-dimension-end) 4%, transparent), transparent 72%),
+    var(--mcs-bg-default);
+}
+
+/* 噪点薄纱：feTurbulence 静态纹理压住大面积渐变的塑料感；盖内容不挡交互 */
+.mcs-grain { position: relative; }
+.mcs-grain::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.6'/%3E%3C/svg%3E");
+  background-size: 160px 160px;
+  opacity: 0.022;
+}
+.light .mcs-grain::after { opacity: 0.035; }
+
+/* 方块网格底纹（MC 方块世界语义）：24px 网格，仅装饰性大面积背景（登录页/空态） */
+.mcs-grid-bg {
+  background-image:
+    linear-gradient(to bottom, color-mix(in oklch, var(--mcs-text-default) 3.5%, transparent) 1px, transparent 1px),
+    linear-gradient(to right, color-mix(in oklch, var(--mcs-text-default) 3.5%, transparent) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+/* 网格径向渐隐：只在中上部显现，边缘融进底色（叠在 .mcs-grid-bg 之上） */
+.mcs-grid-fade {
+  -webkit-mask-image: radial-gradient(ellipse 90% 70% at 50% 8%, black 24%, transparent 72%);
+  mask-image: radial-gradient(ellipse 90% 70% at 50% 8%, black 24%, transparent 72%);
+}
+
+/* ── 卡片层手法 ── */
+
+/* CTA 实底：品牌翠绿同色相渐变（配合 shadow-mcs-accent-button 使用） */
+.mcs-bg-accent-gradient { background-image: var(--mcs-gradient-accent); }
+
+/* 顶部受光线：1px 渐变高光自左右边缘向中央增强（hero 卡强调用，避开圆角区） */
+.mcs-edge-top::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 12%;
+  right: 12%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, color-mix(in oklch, var(--mcs-text-default) 16%, transparent), transparent);
+  pointer-events: none;
+}
+
+/* 可交互卡 hover：上浮 1px + 边框亮起 + 阴影升档（可点击卡/入口卡使用） */
+.mcs-card-hover {
+  transition:
+    transform var(--mcs-motion-fast) var(--mcs-ease-snappy),
+    border-color var(--mcs-motion-fast) var(--mcs-ease-snappy),
+    box-shadow var(--mcs-motion-fast) var(--mcs-ease-snappy);
+}
+.mcs-card-hover:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in oklch, var(--mcs-text-default) 14%, transparent);
+  box-shadow: var(--mcs-shadow-raised);
+}
+
+/* ── 数字 display（mono + 等宽数字 + 600 字重；仅数字面板，CJK 正文不用）── */
+.mcs-num {
+  font-family: var(--mcs-font-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
