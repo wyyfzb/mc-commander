@@ -459,8 +459,11 @@ describe('_startAndVerify 失败与超时', () => {
 
     // 回滚把备份的旧 JAR 覆盖回当前 jarFile（已替换为 server-1.21.4.jar）
     expect(fs.readFileSync(path.join(tmpDir, 'server-1.21.4.jar'), 'utf8')).toBe('OLD_JAR_CONTENT');
-    // 临时备份 JAR 已清理
-    expect(fs.readdirSync(tmpDir)).not.toContain('._upgrade_backup_server-1.20.4.jar');
+    // 临时备份 JAR 由 _doRollback finally 内异步 unlink 清理（fire-and-forget），
+    // 与回滚 resolve 之间无同步屏障——waitFor 轮询等待落盘完成再断言
+    await vi.waitFor(() =>
+      expect(fs.readdirSync(tmpDir)).not.toContain('._upgrade_backup_server-1.20.4.jar')
+    );
     // DB：replace 阶段写新版本，回滚阶段恢复原版本
     expect(InstanceModel.update).toHaveBeenCalledWith('inst-1', {
       jarFile: 'server-1.21.4.jar',
@@ -597,8 +600,10 @@ describe('_doRollback 分支行为', () => {
     );
     const stages = progressStages(manager);
     expect(stages[stages.length - 1]).toBe(UPGRADE_STAGES.FAILED);
-    // 临时备份 JAR 仍被 finally 清理
-    expect(fs.readdirSync(tmpDir)).not.toContain('._upgrade_backup_server-1.20.4.jar');
+    // 临时备份 JAR 仍被 finally 清理（异步 unlink，waitFor 与落盘同步）
+    await vi.waitFor(() =>
+      expect(fs.readdirSync(tmpDir)).not.toContain('._upgrade_backup_server-1.20.4.jar')
+    );
   });
 
   it('备份恢复（restoreBackup）失败不阻塞主流程：原错误照常上抛', async () => {
