@@ -72,3 +72,35 @@ export type AuthSessionItem = z.infer<typeof authSessionItemSchema>
 export type AuthSessionsResponse = z.infer<typeof authSessionsResponseSchema>
 export type AuthSessionKickResponse = z.infer<typeof authSessionKickResponseSchema>
 export type ApiKeyRotateResponse = z.infer<typeof apiKeyRotateResponseSchema>
+
+// ---------------------------------------------------------------------------
+// 输入侧契约（issue 428）
+//
+// 凭据端点入参只锁「形状」（字段存在 + string 类型）；密码强度（8-128 位）
+// 校验留在路由层，且必须置于以下既有安全语义之后：
+// - setup：未证明所有权（SetupToken 403）不得泄露后续校验语义，403 先于 400
+// - login：弱密码属凭据错误（401 + 失败锁定计数），升为 400 会挪动锁定挂靠点
+// - 改密：旧密 401 校验先于新密强度 400，错误呈现顺序保持
+// 因此 schema 不加 min/max 长度约束——长度约束的显式持有方是路由层
+// PASSWORD_MIN / PASSWORD_MAX 常量。
+// ---------------------------------------------------------------------------
+
+/** setup 请求体：首访设密（仅未设密时可用） */
+export const authSetupRequestBodySchema = z.object({
+  password: z.string(),
+})
+
+/** login 请求体：密码换会话令牌 */
+export const authLoginRequestBodySchema = z.object({
+  password: z.string(),
+})
+
+/** 改密请求体：验旧密 + 设新密 */
+export const authPasswordChangeRequestBodySchema = z.object({
+  oldPassword: z.string(),
+  newPassword: z.string(),
+})
+
+export type AuthSetupRequestBody = z.infer<typeof authSetupRequestBodySchema>
+export type AuthLoginRequestBody = z.infer<typeof authLoginRequestBodySchema>
+export type AuthPasswordChangeRequestBody = z.infer<typeof authPasswordChangeRequestBodySchema>

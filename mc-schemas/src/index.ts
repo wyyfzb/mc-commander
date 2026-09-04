@@ -280,6 +280,9 @@ export {
   authSessionsResponseSchema,
   authSessionKickResponseSchema,
   apiKeyRotateResponseSchema,
+  authSetupRequestBodySchema,
+  authLoginRequestBodySchema,
+  authPasswordChangeRequestBodySchema,
   type AuthSessionResponse,
   type AuthSetupResponse,
   type AuthStatusResponse,
@@ -289,4 +292,7 @@ export {
   type AuthSessionsResponse,
   type AuthSessionKickResponse,
   type ApiKeyRotateResponse,
+  type AuthSetupRequestBody,
+  type AuthLoginRequestBody,
+  type AuthPasswordChangeRequestBody,
 } from './auth'
