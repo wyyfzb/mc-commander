@@ -287,3 +287,17 @@ async function shutdown(signal) {
 
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
+
+// 进程级兜底最后防线（asyncHandler 请求级防护之后的纵深）：uncaughtException /
+// unhandledRejection 若无兜底，Node 15+ 默认直接终止进程——任何漏防点（如未来
+// 路由漏用 asyncHandler）都会让主进程无日志崩溃，所有 MC 实例托管断连（一键部署
+// 可由 systemd 自愈，手动部署场景面板失联且不自愈）。记录结构化错误日志（含堆栈）
+// 后复用 shutdown() 优雅退出（停实例落盘、关库），禁止静默吞异常继续运行
+process.on('uncaughtException', (err) => {
+  logger.error('[Fatal] Uncaught exception:', err instanceof Error ? (err.stack || err.message) : String(err));
+  shutdown('uncaughtException');
+});
+process.on('unhandledRejection', (reason) => {
+  logger.error('[Fatal] Unhandled rejection:', reason instanceof Error ? (reason.stack || reason.message) : String(reason));
+  shutdown('unhandledRejection');
+});
