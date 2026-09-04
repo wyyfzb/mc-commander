@@ -316,4 +316,37 @@ describe('PlayerTable · 列头排序', () => {
     await user.click(screen.getByRole('button', { name: '玩家' }))
     expect(screen.getByRole('button', { name: '玩家' })).toHaveTextContent('↓')
   })
+
+  // 回归锁（issue #472 / PR #473 沉淀缺口）：v9 未注册 sortedRowModel 时
+  // getRowModel() 返回预排序模型——箭头翻转但行序纹丝不动。此用例断言
+  // 行序真实变化：升序 Alex 在前、降序 Steve 在前（修复前升序仍是 Steve 在前）
+  const playerNameOrder = () =>
+    [...document.querySelectorAll('tbody tr')].map((tr) =>
+      tr.textContent?.includes('Steve') ? 'Steve' : 'Alex',
+    )
+
+  it('升序点击后行序真实重排：Alex（字母序在前）排到 Steve 之前', async () => {
+    const user = userEvent.setup()
+    setup({
+      players: [makePlayer(), makePlayer({ name: 'Alex', uuid: '00000000-0000-4000-8000-000000000003' })],
+    })
+    // 修复前：getRowModel() 恒为 core 模型，行序保持传入序 [Steve, Alex]
+    expect(playerNameOrder()).toEqual(['Steve', 'Alex'])
+
+    await user.click(screen.getByRole('button', { name: '玩家' }))
+    expect(screen.getByRole('button', { name: '玩家' })).toHaveTextContent('↑')
+    expect(playerNameOrder()).toEqual(['Alex', 'Steve'])
+  })
+
+  it('再次点击切换降序后行序反转回传入序', async () => {
+    const user = userEvent.setup()
+    setup({
+      players: [makePlayer(), makePlayer({ name: 'Alex', uuid: '00000000-0000-4000-8000-000000000003' })],
+    })
+    await user.click(screen.getByRole('button', { name: '玩家' }))
+    expect(playerNameOrder()).toEqual(['Alex', 'Steve'])
+    await user.click(screen.getByRole('button', { name: '玩家' }))
+    expect(screen.getByRole('button', { name: '玩家' })).toHaveTextContent('↓')
+    expect(playerNameOrder()).toEqual(['Steve', 'Alex'])
+  })
 })
