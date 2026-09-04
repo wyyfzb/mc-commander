@@ -428,7 +428,7 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
           <div
             role="search"
             aria-label="终端内容搜索"
-            className="absolute right-2 top-2 z-10 flex items-center gap-1 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-default p-1 shadow-sm"
+            className="absolute right-2 top-2 z-10 flex items-center gap-1 rounded-mcs-md border border-mcs-border-muted bg-popover p-1 shadow-mcs-raised"
           >
             <Input
               value={search.query}
