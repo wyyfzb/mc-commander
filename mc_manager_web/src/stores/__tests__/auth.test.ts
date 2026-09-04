@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { afterEach, describe, it, expect, beforeEach, vi } from 'vitest'
 import { useAuthStore, getStoredSession, clearSessionAndDispatchExpired, SESSION_EXPIRED_EVENT } from '../auth'
 
 describe('auth store（会话凭据持久化）', () => {
@@ -48,5 +48,82 @@ describe('auth store（会话凭据持久化）', () => {
     expect(useAuthStore.getState().session).toBeNull()
     expect(listener).toHaveBeenCalledTimes(1)
     window.removeEventListener(SESSION_EXPIRED_EVENT, listener)
+  })
+})
+
+describe('auth store 初始化恢复分支（模块重载逐态验证）', () => {
+  // readInitialSession 仅在模块首次导入（store 创建期）执行一次，
+  // 各恢复分支须 vi.resetModules() 重建模块后逐态注入 localStorage 验证
+  beforeEach(() => {
+    vi.resetModules()
+    localStorage.clear()
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('空 localStorage → 未登录（!raw 分支）', async () => {
+    const mod = await import('../auth')
+    expect(mod.useAuthStore.getState().session).toBeNull()
+  })
+
+  it('合法持久化会话 → 三字段校验通过并恢复', async () => {
+    localStorage.setItem('mcs-session', JSON.stringify({ token: 'tok-r', sessionId: 'sess-r', expiresAt: '2026-01-01T00:00:00.000Z' }))
+    const mod = await import('../auth')
+    expect(mod.useAuthStore.getState().session).toEqual({ token: 'tok-r', sessionId: 'sess-r', expiresAt: '2026-01-01T00:00:00.000Z' })
+  })
+
+  it('token 非字符串 → 按未登录处理（首字段校验失败）', async () => {
+    localStorage.setItem('mcs-session', JSON.stringify({ token: 1, sessionId: 'sess-r', expiresAt: '2026-01-01T00:00:00.000Z' }))
+    const mod = await import('../auth')
+    expect(mod.useAuthStore.getState().session).toBeNull()
+  })
+
+  it('sessionId 非字符串 → 按未登录处理（中段校验短路）', async () => {
+    localStorage.setItem('mcs-session', JSON.stringify({ token: 'tok-r', sessionId: null, expiresAt: '2026-01-01T00:00:00.000Z' }))
+    const mod = await import('../auth')
+    expect(mod.useAuthStore.getState().session).toBeNull()
+  })
+
+  it('expiresAt 非字符串 → 按未登录处理（末字段校验失败）', async () => {
+    localStorage.setItem('mcs-session', JSON.stringify({ token: 'tok-r', sessionId: 'sess-r', expiresAt: 123 }))
+    const mod = await import('../auth')
+    expect(mod.useAuthStore.getState().session).toBeNull()
+  })
+
+  it('损坏 JSON → 解析异常按未登录处理（catch 分支）', async () => {
+    localStorage.setItem('mcs-session', '{not-json')
+    const mod = await import('../auth')
+    expect(mod.useAuthStore.getState().session).toBeNull()
+  })
+
+  it('setSession 持久化失败 → 内存会话仍生效（不因存储异常丢登录态）', async () => {
+    const mod = await import('../auth')
+    const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('quota exceeded')
+    })
+    mod.useAuthStore.getState().setSession({ token: 'tok-q', sessionId: 'sess-q', expiresAt: '2026-01-01T00:00:00.000Z' })
+    expect(mod.useAuthStore.getState().session?.token).toBe('tok-q')
+    spy.mockRestore()
+  })
+
+  it('clearSession 移除失败 → 内存会话仍清空（不因存储异常阻塞登出）', async () => {
+    const mod = await import('../auth')
+    mod.useAuthStore.getState().setSession({ token: 'tok-q', sessionId: 'sess-q', expiresAt: '2026-01-01T00:00:00.000Z' })
+    const spy = vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => {
+      throw new Error('storage unavailable')
+    })
+    mod.useAuthStore.getState().clearSession()
+    expect(mod.useAuthStore.getState().session).toBeNull()
+    spy.mockRestore()
+  })
+
+  it('window 不可用（SSR 形态）→ 仅清会话不派发事件', async () => {
+    const mod = await import('../auth')
+    mod.useAuthStore.getState().setSession({ token: 'tok-q', sessionId: 'sess-q', expiresAt: '2026-01-01T00:00:00.000Z' })
+    vi.stubGlobal('window', undefined)
+    expect(() => mod.clearSessionAndDispatchExpired()).not.toThrow()
+    expect(mod.useAuthStore.getState().session).toBeNull()
   })
 })

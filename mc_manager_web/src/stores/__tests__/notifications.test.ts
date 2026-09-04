@@ -156,3 +156,189 @@ describe('notifications store 定时清理', () => {
     expect(useNotificationStore.getState().items).toHaveLength(100)
   })
 })
+
+describe('notifications store 生命周期（已读/全读/清空）', () => {
+  /** 两条不同类型事件 → 两条未读条目（chat/join 类型不同不互聚） */
+  function seedTwoUnread() {
+    useNotificationStore.getState().dispatchWsEvent({ type: 'playerJoin', data: { name: 'Alex' } })
+    useNotificationStore.getState().dispatchWsEvent({ type: 'playerChat', data: { name: 'Alex', message: 'hi' } })
+  }
+
+  it('markAsRead：单条已读 + 未读计数重算 + 持久化', () => {
+    seedTwoUnread()
+    expect(useNotificationStore.getState().unreadCount).toBe(2)
+
+    const target = useNotificationStore.getState().items[1]!
+    useNotificationStore.getState().markAsRead(target.id)
+
+    const after = useNotificationStore.getState()
+    expect(after.items[1]?.read).toBe(true)
+    expect(after.items[0]?.read).toBe(false)
+    expect(after.unreadCount).toBe(1)
+    const persisted = JSON.parse(localStorage.getItem('mcs-notifications')!) as AppNotification[]
+    expect(persisted.find((n) => n.id === target.id)?.read).toBe(true)
+  })
+
+  it('markAllRead：全部已读 + 未读清零 + 持久化', () => {
+    seedTwoUnread()
+    useNotificationStore.getState().markAllRead()
+
+    const after = useNotificationStore.getState()
+    expect(after.items).toHaveLength(2)
+    expect(after.items.every((n) => n.read)).toBe(true)
+    expect(after.unreadCount).toBe(0)
+    const persisted = JSON.parse(localStorage.getItem('mcs-notifications')!) as AppNotification[]
+    expect(persisted.every((n) => n.read)).toBe(true)
+  })
+
+  it('clearAll：清空条目/未读/告警状态 + 持久化为空', () => {
+    seedTwoUnread()
+    useNotificationStore.getState().dispatchPerformance({ tps: 10 })
+    expect(useNotificationStore.getState().activeAlerts.size).toBe(1)
+
+    useNotificationStore.getState().clearAll()
+
+    const after = useNotificationStore.getState()
+    expect(after.items).toEqual([])
+    expect(after.unreadCount).toBe(0)
+    expect(after.activeAlerts.size).toBe(0)
+    expect(localStorage.getItem('mcs-notifications')).toBe('[]')
+  })
+
+  it('clearAll 清空聚合缓存：旧告警清除后再次越阈重新通知', () => {
+    useNotificationStore.getState().dispatchPerformance({ tps: 10 })
+    useNotificationStore.getState().clearAll()
+
+    useNotificationStore.getState().dispatchPerformance({ tps: 9 })
+    const after = useNotificationStore.getState()
+    expect(after.items).toHaveLength(1)
+    expect(after.items[0]?.type).toBe('lowTps')
+    expect(after.activeAlerts.has('lowTps')).toBe(true)
+  })
+})
+
+describe('notifications store 告警状态机（dispatchPerformance）', () => {
+  it('TPS 低于阈值 → 生成 lowTps 告警并激活状态 + 持久化', () => {
+    useNotificationStore.getState().dispatchPerformance({ tps: 12.5 })
+
+    const s = useNotificationStore.getState()
+    expect(s.items).toHaveLength(1)
+    expect(s.items[0]).toMatchObject({ type: 'lowTps', content: 'TPS 过低: 12.5', count: 1, read: false })
+    expect(s.activeAlerts.has('lowTps')).toBe(true)
+    expect(s.unreadCount).toBe(1)
+    expect(JSON.parse(localStorage.getItem('mcs-notifications')!)).toHaveLength(1)
+  })
+
+  it('持续低 TPS → 跃迁单次：不重复生成通知', () => {
+    useNotificationStore.getState().dispatchPerformance({ tps: 12 })
+    useNotificationStore.getState().dispatchPerformance({ tps: 10 })
+
+    expect(useNotificationStore.getState().items).toHaveLength(1)
+  })
+
+  it('TPS 恢复 → 告警状态清除（恢复通知与告警 30s 窗口内同实体聚合 count+1）', () => {
+    useNotificationStore.getState().dispatchPerformance({ tps: 12 })
+    useNotificationStore.getState().dispatchPerformance({ tps: 20 })
+
+    const s = useNotificationStore.getState()
+    expect(s.activeAlerts.size).toBe(0)
+    expect(s.items).toHaveLength(1)
+    expect(s.items[0]?.count).toBe(2)
+  })
+
+  it('CPU 越阈值 → highCpu；回落 → 状态清除', () => {
+    useNotificationStore.getState().dispatchPerformance({ cpu: 91.5 })
+    let s = useNotificationStore.getState()
+    expect(s.items[0]).toMatchObject({ type: 'highCpu', content: 'CPU 使用率过高: 91.5%' })
+    expect(s.activeAlerts.has('highCpu')).toBe(true)
+
+    useNotificationStore.getState().dispatchPerformance({ cpu: 50 })
+    s = useNotificationStore.getState()
+    expect(s.activeAlerts.size).toBe(0)
+    expect(s.items).toHaveLength(1)
+  })
+
+  it('内存越阈值 → highMemory', () => {
+    useNotificationStore.getState().dispatchPerformance({ memoryPercent: 85.5 })
+
+    const s = useNotificationStore.getState()
+    expect(s.items[0]).toMatchObject({ type: 'highMemory', content: '内存使用率过高: 85.5%' })
+    expect(s.activeAlerts.has('highMemory')).toBe(true)
+  })
+
+  it('指标缺省（全 null）→ 无通知无状态迁移', () => {
+    useNotificationStore.getState().dispatchPerformance({})
+
+    const s = useNotificationStore.getState()
+    expect(s.items).toHaveLength(0)
+    expect(s.activeAlerts.size).toBe(0)
+    expect(s.unreadCount).toBe(0)
+  })
+
+  it('偏好关闭告警类型：状态机照常推进但不生成条目（过滤后空集早退）', () => {
+    useNotificationPreferenceStore.getState().setEnabled('lowTps', false)
+
+    useNotificationStore.getState().dispatchPerformance({ tps: 10 })
+    let s = useNotificationStore.getState()
+    expect(s.items).toHaveLength(0)
+    expect(s.activeAlerts.has('lowTps')).toBe(true)
+
+    useNotificationStore.getState().dispatchPerformance({ tps: 20 })
+    s = useNotificationStore.getState()
+    expect(s.items).toHaveLength(0)
+    expect(s.activeAlerts.size).toBe(0)
+  })
+})
+
+describe('notifications store 初始化恢复与持久化容错（模块重载逐态验证）', () => {
+  // readInitial 仅在模块导入（store 创建期）执行一次，
+  // 恢复分支须 vi.resetModules() 重建模块后逐态注入 localStorage 验证
+  beforeEach(() => {
+    vi.resetModules()
+    localStorage.clear()
+  })
+
+  it('合法持久化数组 → 恢复条目并按 200 上限截断', async () => {
+    const items = Array.from({ length: 250 }, (_, i) => ({
+      id: `n-${i}`,
+      type: 'join',
+      category: 'game',
+      content: `c-${i}`,
+      timestamp: 1_700_000_000_000 + i,
+      count: 1,
+      read: false,
+    }))
+    localStorage.setItem('mcs-notifications', JSON.stringify(items))
+
+    const mod = await import('../notifications')
+    const restored = mod.useNotificationStore.getState().items
+    expect(restored).toHaveLength(200)
+    expect(restored[0]?.id).toBe('n-0')
+  })
+
+  it('损坏 JSON → 回退空数组（不阻塞启动）', async () => {
+    localStorage.setItem('mcs-notifications', '{broken')
+
+    const mod = await import('../notifications')
+    expect(mod.useNotificationStore.getState().items).toEqual([])
+  })
+
+  it('非数组 JSON → 回退空数组（防御非法结构）', async () => {
+    localStorage.setItem('mcs-notifications', '{"legacy":true}')
+
+    const mod = await import('../notifications')
+    expect(mod.useNotificationStore.getState().items).toEqual([])
+  })
+
+  it('持久化失败（配额超限）→ 内存态照常更新且不抛错', () => {
+    const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('quota exceeded')
+    })
+
+    expect(() =>
+      useNotificationStore.getState().dispatchWsEvent({ type: 'playerJoin', data: { name: 'Alex' } }),
+    ).not.toThrow()
+    expect(useNotificationStore.getState().items).toHaveLength(1)
+    spy.mockRestore()
+  })
+})
