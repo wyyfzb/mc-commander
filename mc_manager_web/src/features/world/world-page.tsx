@@ -100,7 +100,7 @@ export function WorldPage() {
         actions={
           <Button variant="outline" size="sm" onClick={() => navigate('/settings/backup')}>
             <Archive aria-hidden />
-            备份世界
+            备份管理
           </Button>
         }
       />

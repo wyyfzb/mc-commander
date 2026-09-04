@@ -9,6 +9,32 @@ import { createServer } from 'node:http'
 const PORT = Number(process.env.MOCK_PORT) || 5198
 
 const now = () => new Date().toISOString()
+
+/** Webhook 演示数据（对齐 @mc-commander/schemas webhook 契约；模块级以支持 POST 后持久） */
+const webhooks = [
+  {
+    id: 1,
+    name: '运维群通知',
+    url: 'https://example.com/webhook/ops',
+    secret: null,
+    events: ['instance.started', 'instance.stopped', 'backup.completed'],
+    instanceId: 'e2e-demo',
+    isEnabled: true,
+    createdAt: '2026-08-01T10:00:00.000Z',
+    updatedAt: '2026-09-01T10:00:00.000Z',
+  },
+  {
+    id: 2,
+    name: '玩家事件流水',
+    url: 'https://example.com/webhook/players',
+    secret: null,
+    events: ['player.joined', 'player.left'],
+    instanceId: null,
+    isEnabled: false,
+    createdAt: '2026-08-15T10:00:00.000Z',
+    updatedAt: '2026-09-02T10:00:00.000Z',
+  },
+]
 const ok = (data, message = 'Success') =>
   JSON.stringify({ status: 'ok', code: 0, message, data, timestamp: now() })
 
@@ -411,6 +437,63 @@ const server = createServer((req, res) => {
       // API Key 轮换（mock：固定返回演示 key；生产为随机生成）
       return res.end(ok({ apiKey: 'mcck-mock-0000-0000-0000-0001' }, 'API Key 已轮换：旧 Key 立即失效，请立即保存新 Key'))
     }
+    // ── Webhook 端点（对齐 @mc-commander/schemas webhook 契约） ──
+    if (path === '/api/v1/webhooks' && req.method === 'GET') {
+      const q = parseQuery(url)
+      const page = Math.max(1, parseInt(q.page) || 1)
+      const pageSize = Math.min(200, Math.max(1, parseInt(q.pageSize) || 20))
+      // 剔除 secret（列表契约不回传密钥）
+      const list = webhooks.map(({ secret: _secret, ...rest }) => rest)
+      return res.end(JSON.stringify({
+        status: 'ok', code: 0, message: 'Success',
+        data: list.slice((page - 1) * pageSize, page * pageSize),
+        pagination: { total: list.length, page, pageSize, totalPages: Math.ceil(list.length / pageSize) || 1 },
+        timestamp: now(),
+      }))
+    }
+    if (path === '/api/v1/webhooks/event-types') {
+      return res.end(ok(['instance.started', 'instance.stopped', 'backup.completed', 'player.joined', 'player.left']))
+    }
+    if (path === '/api/v1/webhooks' && req.method === 'POST') {
+      let created
+      try {
+        const payload = JSON.parse(body || '{}')
+        created = {
+          id: webhooks.length + 1,
+          name: payload.name ?? '新建 Webhook',
+          url: payload.url ?? 'https://example.com/webhook/new',
+          secret: payload.secret ?? null,
+          events: payload.events ?? [],
+          instanceId: payload.instanceId ?? null,
+          isEnabled: payload.isEnabled ?? true,
+          createdAt: now(),
+          updatedAt: now(),
+        }
+      } catch {
+        created = webhooks[0]
+      }
+      webhooks.push(created)
+      return res.end(ok(created))
+    }
+    if (/^\/api\/v1\/webhooks\/\d+\/test$/.test(path) && req.method === 'POST') {
+      return res.end(ok({ success: true, statusCode: 200, durationMs: 120, error: null }))
+    }
+    if (/^\/api\/v1\/webhooks\/\d+\/deliveries$/.test(path)) {
+      const q = parseQuery(url)
+      const page = Math.max(1, parseInt(q.page) || 1)
+      const pageSize = Math.min(200, Math.max(1, parseInt(q.pageSize) || 20))
+      const deliveries = [
+        { id: 1, webhookId: 1, event: 'instance.started', statusCode: 200, ok: true, durationMs: 110, createdAt: new Date(Date.now() - 3600_000).toISOString(), responseBody: null },
+        { id: 2, webhookId: 1, event: 'backup.completed', statusCode: 502, ok: false, durationMs: 3000, createdAt: new Date(Date.now() - 86_400_000).toISOString(), responseBody: 'Bad Gateway' },
+      ]
+      return res.end(JSON.stringify({
+        status: 'ok', code: 0, message: 'Success',
+        data: deliveries.slice((page - 1) * pageSize, page * pageSize),
+        pagination: { total: deliveries.length, page, pageSize, totalPages: Math.ceil(deliveries.length / pageSize) || 1 },
+        timestamp: now(),
+      }))
+    }
+    if (/^\/api\/v1\/webhooks\/\d+$/.test(path) && req.method === 'DELETE') return res.end(ok(null))
     if (path === '/api/v1/instances') return res.end(ok([instance]))
     if (path === '/api/v1/instances/e2e-demo') {
       // PUT：实例配置更新（general-panel autoRestart 用；合并白名单字段）
