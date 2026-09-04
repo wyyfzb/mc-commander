@@ -578,10 +578,12 @@ const server = createServer((req, res) => {
       return res.end(ok(dirPath === '/world' ? worldDirList : rootFileList))
     }
 
-    // ── 审计域（操作日志 + 命令历史：action/时间过滤 + 分页信封）──
+    // ── 审计域（操作日志 + 命令历史：action/时间过滤 + order 排序 + 分页信封）──
     if (path === '/api/v1/audit-logs' || path === '/api/v1/command-history') {
       const q = parseQuery(url)
-      const hoursAgo = (h) => new Date(Date.now() - h * 3600000).toISOString()
+      // 对齐真服务端口径：SQLite CURRENT_TIMESTAMP = UTC「YYYY-MM-DD HH:MM:SS」（空格分隔，
+      // 无时区标记）；ISO「T」分隔会与前端按该口径构造的 startTime/endTime 字符串比较失配
+      const hoursAgo = (h) => new Date(Date.now() - h * 3600000).toISOString().replace('T', ' ').slice(0, 19)
       const auditLogs = [
         { id: 1, instanceId: 'e2e-demo', action: 'INSTANCE_START', targetType: 'instance', targetId: 'e2e-demo', detail: { reason: '手动启动' }, source: 'web', createdAt: hoursAgo(30) },
         { id: 2, instanceId: 'e2e-demo', action: 'PLAYER_OP', targetType: 'player', targetId: 'Steve', detail: { by: 'admin' }, source: 'rcon', createdAt: hoursAgo(20) },
@@ -598,8 +600,11 @@ const server = createServer((req, res) => {
       const isAudit = path === '/api/v1/audit-logs'
       let list = isAudit ? auditLogs : commandHistory
       if (isAudit && q.action) list = list.filter((l) => l.action === q.action)
-      if (isAudit && q.startTime) list = list.filter((l) => l.createdAt >= q.startTime)
-      if (isAudit && q.endTime) list = list.filter((l) => l.createdAt <= q.endTime)
+      if (q.startTime) list = list.filter((l) => l.createdAt >= q.startTime)
+      if (q.endTime) list = list.filter((l) => l.createdAt <= q.endTime)
+      // order：asc 正序 / desc 倒序（缺省倒序，对齐 audit.model.js ORDER BY id 方向）
+      if (q.order === 'asc') list = [...list].sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      else list = [...list].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       const page = Math.max(1, parseInt(q.page) || 1)
       const pageSize = Math.min(200, Math.max(1, parseInt(q.pageSize) || 20))
       const total = list.length
