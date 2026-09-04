@@ -369,7 +369,7 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
 
   return (
     <section
-      className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-mcs-md border border-mcs-border-muted"
+      className="animate-mcs-fade-up mcs-delay-4 flex min-h-0 flex-1 flex-col overflow-hidden rounded-mcs-md border border-mcs-border-muted shadow-mcs-card"
       style={{ background: 'var(--mcs-terminal-bg)' }}
     >
       {/* 工具栏（实底，玻璃禁区内） */}
@@ -428,7 +428,7 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
           <div
             role="search"
             aria-label="终端内容搜索"
-            className="absolute right-2 top-2 z-10 flex items-center gap-1 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-default p-1 shadow-sm"
+            className="absolute right-2 top-2 z-10 flex items-center gap-1 rounded-mcs-md border border-mcs-border-muted bg-popover p-1 shadow-mcs-raised"
           >
             <Input
               value={search.query}

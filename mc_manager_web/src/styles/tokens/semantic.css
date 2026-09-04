@@ -6,7 +6,7 @@
  */
 :root {
   /* ── 背景（明度层级词表）── */
-  --mcs-bg-default: var(--ref-dark-bg);         /* 页面底 */
+  --mcs-bg-default: var(--ref-dark-canvas);     /* 页面底（v2 深空画布） */
   --mcs-bg-muted: var(--ref-dark-card);         /* 卡片/容器 */
   --mcs-bg-subtle: var(--ref-dark-base);        /* 深嵌区（终端/代码块） */
   --mcs-bg-emphasis: var(--ref-dark-popover);   /* 弹窗/下拉 */
@@ -68,6 +68,19 @@
   --mcs-scrim: var(--ref-scrim);
   --mcs-scrim-subtle: var(--ref-scrim-subtle);
 
+  /* ── 光影（v2 深空工作台：投影墨 + 顶部内高光构成「受光面」；
+        card=平面卡 / raised=悬浮下拉 / overlay=弹窗浮层；辉光仅限 CTA/激活/危险场景）── */
+  --mcs-shadow-card: inset 0 1px 0 var(--ref-highlight-top), 0 1px 3px var(--ref-shadow-ink-soft), 0 10px 32px -8px var(--ref-shadow-ink);
+  --mcs-shadow-raised: inset 0 1px 0 var(--ref-highlight-top), 0 2px 6px var(--ref-shadow-ink-soft), 0 12px 32px -8px var(--ref-shadow-ink);
+  --mcs-shadow-overlay: inset 0 1px 0 var(--ref-highlight-top-strong), 0 16px 48px -12px var(--ref-shadow-ink), 0 32px 96px -24px var(--ref-shadow-ink);
+  --mcs-shadow-accent-button: inset 0 1px 0 var(--ref-highlight-on-accent), 0 1px 2px var(--ref-shadow-ink-soft), 0 4px 16px -4px color-mix(in oklch, var(--ref-accent) 40%, transparent);
+  --mcs-glow-accent: 0 0 16px color-mix(in oklch, var(--ref-accent) 30%, transparent);
+  --mcs-glow-accent-strong: 0 0 28px color-mix(in oklch, var(--ref-accent) 42%, transparent);
+  --mcs-glow-error: 0 0 16px color-mix(in oklch, var(--ref-error) 28%, transparent);
+
+  /* ── 品牌 accent 渐变（CTA 实底：同色相明度渐变，135deg 亮左上）── */
+  --mcs-gradient-accent: linear-gradient(135deg, var(--ref-accent-hover), var(--ref-accent) 55%, color-mix(in oklch, var(--ref-accent) 90%, var(--ref-dark-base)));
+
   /* ── 间距（8px 网格）── */
   --mcs-space-1: 4px;
   --mcs-space-2: 8px;
@@ -79,12 +92,12 @@
   --mcs-space-10: 40px;
   --mcs-space-12: 48px;
 
-  /* ── 圆角（纪律：卡片 ≤8px / 面板 ≤4px / 弹窗 ≤12px / 全应用 ≤16px）── */
-  --mcs-radius-xs: 4px;   /* 面板/输入框 */
-  --mcs-radius-sm: 6px;   /* 小控件 */
-  --mcs-radius-md: 8px;   /* 卡片上限 */
-  --mcs-radius-lg: 12px;  /* 弹窗上限 */
-  --mcs-radius-xl: 16px;  /* 全应用上限 */
+  /* ── 圆角（v2 整体上调一档：面板 6 / 控件 8 / 卡片 12 / 弹窗 16 / 全应用上限 20）── */
+  --mcs-radius-xs: 6px;   /* 面板/输入框 */
+  --mcs-radius-sm: 8px;   /* 小控件 */
+  --mcs-radius-md: 12px;  /* 卡片 */
+  --mcs-radius-lg: 16px;  /* 弹窗 */
+  --mcs-radius-xl: 20px;  /* 全应用上限 */
 
   /* ── 字体（CJK 规范：偶数字号 ≤7 档 / 行高 1.6-1.7 / 字重 400-600）── */
   --mcs-font-sans: 'Noto Sans SC Subset', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
@@ -96,6 +109,7 @@
   --mcs-font-size-lg: 18px;   /* 模块标题 */
   --mcs-font-size-xl: 22px;   /* 页面标题 */
   --mcs-font-size-2xl: 24px;  /* 页面大标题 */
+  --mcs-font-size-display: 30px; /* 数字 display 档（mono + tnum，仅 KPI/时钟等数字面板，非文字标题） */
   --mcs-font-weight-regular: 400;
   --mcs-font-weight-medium: 500;
   --mcs-font-weight-semibold: 600;
@@ -113,10 +127,14 @@
   --mcs-terminal-warning: var(--ref-warning);
   --mcs-terminal-accent: var(--ref-accent);
 
-  /* ── 动效（≤300ms，只动 transform/opacity，quint easing）── */
+  /* ── 动效（交互反馈 ≤300ms 只动 transform/opacity；slow 450ms 仅限一次性入场编排；
+        spring 轻微过冲仅限弹层/卡片入场，禁止用于循环动画）── */
   --mcs-motion-fast: 150ms;      /* hover */
-  --mcs-motion-base: 300ms;      /* 标准上限 */
+  --mcs-motion-base: 300ms;      /* 交互反馈上限 */
+  --mcs-motion-slow: 450ms;      /* 入场编排/氛围动画 */
   --mcs-ease-snappy: cubic-bezier(0.22, 1, 0.36, 1);
+  --mcs-ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --mcs-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 
   /* ── 密度（compact 数据密集 32px / default 舒适 40px）── */
   --mcs-density-row: 40px;          /* 表格行高（[data-density=compact] 覆盖为 32px） */
@@ -178,4 +196,14 @@
   --mcs-state-hover: var(--ref-state-hover-light);
   --mcs-state-focus: var(--ref-state-focus-light);
   --mcs-state-pressed: var(--ref-state-pressed-light);
+
+  /* 亮色光影：暗底的「内高光」手法不适用，改低强度冷灰投影；辉光同源 accent-light */
+  --mcs-shadow-card: 0 1px 2px var(--ref-shadow-ink-light-soft), 0 4px 12px -4px var(--ref-shadow-ink-light);
+  --mcs-shadow-raised: 0 2px 4px var(--ref-shadow-ink-light-soft), 0 8px 24px -6px var(--ref-shadow-ink-light);
+  --mcs-shadow-overlay: 0 12px 32px -8px var(--ref-shadow-ink-light), 0 24px 64px -16px var(--ref-shadow-ink-light);
+  --mcs-shadow-accent-button: inset 0 1px 0 var(--ref-highlight-on-accent), 0 1px 2px var(--ref-shadow-ink-light-soft), 0 4px 16px -4px color-mix(in oklch, var(--ref-accent-light) 45%, transparent);
+  --mcs-glow-accent: 0 0 16px color-mix(in oklch, var(--ref-accent-light) 38%, transparent);
+  --mcs-glow-accent-strong: 0 0 28px color-mix(in oklch, var(--ref-accent-light) 50%, transparent);
+  --mcs-glow-error: 0 0 16px color-mix(in oklch, var(--ref-error-light) 28%, transparent);
+  --mcs-gradient-accent: linear-gradient(135deg, var(--ref-accent-light), color-mix(in oklch, var(--ref-accent-light) 92%, var(--ref-success-light)));
 }

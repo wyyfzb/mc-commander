@@ -87,7 +87,7 @@ export function DataTableShell({
 
   return (
     <div className={className ?? 'flex min-h-0 flex-1 flex-col'}>
-      <div className="min-h-0 flex-1 overflow-auto rounded-mcs-md border border-mcs-border-muted">
+      <div className="min-h-0 flex-1 overflow-auto rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted shadow-mcs-card">
         <table className="w-full text-mcs-sm">
           {header}
           {isLoading

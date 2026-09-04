@@ -26,7 +26,7 @@ import { useSendCommand } from '@/hooks/use-send-command'
  *   （色相环角度差约 148 度，远超 40 度最小辨识阈值），观感可接受，无需额外调档。
  */
 
-const ARC_PATH = 'M 30 128 A 110 110 0 0 1 250 128'
+const ARC_PATH = 'M 30 152 A 110 110 0 0 1 250 152'
 const ARC_LEN = Math.PI * 110
 
 /** tick 0-24000 → 昼夜分档（边界 13000 与 worldTimePhase「黄昏」对齐）+ 当前半段进度 */
@@ -48,6 +48,8 @@ const WEATHER_PRESETS = [
   { key: 'rain', label: '雨天', cmd: 'weather rain' },
   { key: 'thunder', label: '雷暴', cmd: 'weather thunder' },
 ] as const
+
+type WeatherKey = (typeof WEATHER_PRESETS)[number]['key']
 
 const TIME_PRESETS = [
   { key: 'day', label: '白天', cmd: 'time set day', tick: 1000 },
@@ -87,15 +89,23 @@ export function McClockCard() {
   const anchored = anchorRef.current && rawTick != null ? anchorRef.current.tick : null
   const tick = anchored != null ? interpolateTick(anchored, anchorRef.current!.at, now, isRunning) : null
   /* eslint-enable react/refs, react/purity */
-  const cycle = tick != null ? dayCycle(tick) : null
-  const phase = worldTimePhase(tick)
   const weather = status?.weather ?? null
   const worldDay = status?.worldDay ?? null
   const rcon = status?.isRconConnected ?? false
   const canControl = isRunning && rcon && tick != null
 
+  // 乐观更新窗口（对齐 Flutter 版 _weatherOptimisticUntil/_timeOptimisticUntil）：
+  // 点击天气/时间 chip 后本地立即生效（图示/按钮即时联动），窗口内忽略服务器覆盖防抖，
+  // 窗口外回落到服务器真实状态（WS 推送）——图示区/按钮区/服务器三联同步
+  const [optimistic, setOptimistic] = useState<{ weather?: WeatherKey; timeTick?: number; until: number }>({ until: 0 })
+  const optimisticActive = now < optimistic.until
+  const displayWeather = optimisticActive && optimistic.weather ? optimistic.weather : weather
+  const displayTick = optimisticActive && optimistic.timeTick != null ? optimistic.timeTick : tick
+  const cycle = displayTick != null ? dayCycle(displayTick) : null
+  const phase = worldTimePhase(displayTick)
+
   return (
-    <section className="flex shrink-0 flex-col rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted p-4">
+    <section className="animate-mcs-fade-up mcs-delay-5 mcs-edge-top relative flex shrink-0 flex-col rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted p-4 shadow-mcs-card">
       <header className="flex items-center justify-between gap-2">
         <h3 className="text-mcs-sm font-medium text-mcs-text-muted">MC 时钟 · 世界控制</h3>
         <span className="flex size-6 items-center justify-center rounded-full border border-mcs-border-muted text-mcs-text-muted">
@@ -105,10 +115,10 @@ export function McClockCard() {
 
       {/* 半圆弧昼夜进度（白天橙 / 夜晚靛；0-24000 全周期标尺） */}
       <svg
-        viewBox="0 0 280 148"
+        viewBox="0 0 280 160"
         className="mt-1 w-full"
         role="img"
-        aria-label={`世界时间：${phase}${tick != null ? `，${Math.round(tick)} tick` : ''}，天气：${weather ? WEATHER_LABEL[weather].label : '未知'}，第 ${worldDay ?? '--'} 天`}
+        aria-label={`世界时间：${phase}${displayTick != null ? `，${Math.round(displayTick)} tick` : ''}，天气：${displayWeather ? WEATHER_LABEL[displayWeather].label : '未知'}，第 ${worldDay ?? '--'} 天`}
       >
         <path d={ARC_PATH} fill="none" stroke="var(--mcs-border-muted)" strokeWidth={5} strokeLinecap="round" />
         {cycle && (
@@ -122,53 +132,80 @@ export function McClockCard() {
             style={{ transition: 'stroke-dasharray 0.3s linear, stroke 0.3s ease' }}
           />
         )}
-        <circle cx={140} cy={20} r={13} fill="var(--mcs-bg-default)" stroke="var(--mcs-border-default)" strokeWidth={1.5} />
-        {/* 日月 orb：嵌套 lucide 图标（合法嵌套 SVG），随昼夜切换 */}
+        {/* 日月 orb 沿弧线跟随进度条头部移动（模拟日出→正午→日落轨迹）：圆心 (140,152) 半径 110，progress 0→1 对应角度 π→0 */}
         {(() => {
+          const p = cycle?.progress ?? 0.5
+          const theta = Math.PI * (1 - p)
+          const orbX = 140 + 110 * Math.cos(theta)
+          const orbY = 152 - 110 * Math.sin(theta)
           const OrbIcon = cycle?.day ? Sun : Moon
+          const orbColor = cycle?.day ? 'var(--mcs-warning-fg)' : 'var(--mcs-info-fg)'
           return (
-            <OrbIcon
-              x={132}
-              y={12}
-              width={16}
-              height={16}
-              stroke={cycle?.day ? 'var(--mcs-warning-fg)' : 'var(--mcs-info-fg)'}
-              aria-hidden
-            />
+            <>
+              {/* 光晕：弧线色半透明大圆，将 orb 从弧线/背景中托出 */}
+              <circle cx={orbX} cy={orbY} r={18} fill={orbColor} opacity={0.16} />
+              <circle cx={orbX} cy={orbY} r={13} fill="var(--mcs-bg-default)" stroke={orbColor} strokeWidth={2} />
+              <OrbIcon
+                x={orbX - 9}
+                y={orbY - 9}
+                width={18}
+                height={18}
+                stroke={orbColor}
+                aria-hidden
+              />
+              {/* 阶段文字 pill 底衬：弧线上悬浮小字识别度低，加圆角底衬托底 */}
+              <rect
+                x={orbX - 15}
+                y={orbY - 27}
+                width={30}
+                height={15}
+                rx={7.5}
+                fill="var(--mcs-bg-muted)"
+                stroke="var(--mcs-border-muted)"
+              />
+              <text
+                x={orbX}
+                y={orbY - 16}
+                textAnchor="middle"
+                fontSize={10}
+                fontWeight={600}
+                fill={orbColor}
+              >
+                {phase}
+              </text>
+            </>
           )
         })()}
-        <text
-          x={140}
-          y={4}
-          textAnchor="middle"
-          fontSize={10}
-          fontWeight={600}
-          fill={cycle?.day ? 'var(--mcs-warning-fg)' : 'var(--mcs-info-fg)'}
-        >
-          {phase}
-        </text>
-        <text x={140} y={92} textAnchor="middle" fontSize={13} fontWeight={600} fill="var(--mcs-text-default)">
-          {weather ? WEATHER_LABEL[weather].label : '--'}
+        <text x={140} y={88} textAnchor="middle" fontSize={16} fontWeight={600} fill="var(--mcs-text-default)">
+          {displayWeather ? WEATHER_LABEL[displayWeather].label : '--'}
         </text>
         {/* 天气图标：未知天气用 Cloudy 占位（aria 由外层 svg label 承载） */}
         {(() => {
-          const WeatherIcon = weather ? WEATHER_LABEL[weather].Icon : Cloudy
-          return <WeatherIcon x={128} y={100} width={24} height={24} stroke="var(--mcs-text-muted)" aria-hidden />
+          const WeatherIcon = displayWeather ? WEATHER_LABEL[displayWeather].Icon : Cloudy
+          return <WeatherIcon x={124} y={92} width={32} height={32} stroke="var(--mcs-text-muted)" aria-hidden />
         })()}
-        <text x={140} y={141} textAnchor="middle" fontSize={14} fontWeight={650} fill="var(--mcs-text-muted)">
+        <text x={140} y={140} textAnchor="middle" fontSize={14} fontWeight={650} fill="var(--mcs-text-muted)">
           第 {worldDay ?? '--'} 天
         </text>
       </svg>
 
-      {/* tick 标尺 0 —— 当前 —— 24000（px-[10.7%] 使 0/24000 与上方弧端点对齐：弧 viewBox 两端各留 30/280） */}
-      <div className="mt-1 flex items-center gap-2 px-[10.7%] font-mono text-mcs-2xs text-mcs-text-subtle">
-        <span>0</span>
-        <span className="h-px flex-1 border-t border-dashed border-mcs-border-muted" />
-        <span className="tnum font-medium" style={{ color: 'var(--mcs-warning-fg)' }}>
-          {tick != null ? `${Math.round(tick)} tick` : '-- tick'}
-        </span>
-        <span className="h-px flex-1 border-t border-dashed border-mcs-border-muted" />
-        <span>24000</span>
+      {/* tick 标尺 0 —— 当前 —— 24000（绝对定位：0/24000 居中于弧端点 x=30/250，当前值居中于弧线进度点） */}
+      <div className="relative mt-1 h-4 font-mono text-mcs-2xs text-mcs-text-subtle">
+        <span className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 border-t border-dashed border-mcs-border-muted" />
+        <span className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2" style={{ left: `${(30 / 280) * 100}%` }}>0</span>
+        {displayTick != null && (
+          <span
+            className="tnum absolute top-1/2 -translate-x-1/2 -translate-y-1/2 font-medium"
+            style={{
+              // 居中于两端点（0/24000）正中间，与左右数值形成对称锚点
+              left: '50%',
+              color: 'var(--mcs-warning-fg)',
+            }}
+          >
+            {Math.round(displayTick)} tick
+          </span>
+        )}
+        <span className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2" style={{ left: `${(250 / 280) * 100}%` }}>24000</span>
       </div>
 
       {/* 天气 */}
@@ -179,9 +216,12 @@ export function McClockCard() {
             <Chip
               key={w.key}
               tone="default"
-              selected={weather === w.key}
+              selected={displayWeather === w.key}
               disabled={!canControl}
-              onClick={() => { send(w.cmd) }}
+              onClick={() => {
+                setOptimistic({ weather: w.key, timeTick: optimistic.timeTick, until: Date.now() + 3000 })
+                send(w.cmd)
+              }}
               className="flex-1"
             >
               {w.label}
@@ -198,9 +238,12 @@ export function McClockCard() {
             <Chip
               key={p.key}
               tone="default"
-              selected={worldTimePhase(p.tick) === phase && tick != null}
+              selected={worldTimePhase(p.tick) === phase && displayTick != null}
               disabled={!canControl}
-              onClick={() => { send(p.cmd) }}
+              onClick={() => {
+                setOptimistic({ weather: optimistic.weather, timeTick: p.tick, until: Date.now() + 3000 })
+                send(p.cmd)
+              }}
               className="flex-1"
             >
               {p.label}
@@ -209,9 +252,11 @@ export function McClockCard() {
         </div>
       </div>
 
-      <p className="mt-2 text-mcs-2xs text-mcs-text-subtle">
-        {rcon ? '点击即发送命令并联动时钟（运行中本地秒级插值推进）' : '需启用 RCON 才能控制世界时间与天气'}
-      </p>
+      {!rcon && (
+        <p className="mt-2 text-mcs-2xs text-mcs-text-subtle">
+          需启用 RCON 才能控制世界时间与天气
+        </p>
+      )}
     </section>
   )
 }

@@ -1,20 +1,13 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { BigStatCards, PlayersCard, RuntimeInfoCard, tpsColor } from '../components/stat-cards'
 import { useServerStore } from '@/stores/server'
 import { mockInstanceStatus } from '@/test/mocks/handlers'
 
-// ECharts 在 jsdom 无 canvas：sparkline 在组件测试中替换为空实现（E2E 覆盖真实渲染）
-vi.mock('@/components/mcs/sparkline', () => ({
-  Sparkline: () => null,
-}))
-
 /**
- * 统计卡组件测试：TPS 阈值变色 / 顶部四卡大数字 / 在线玩家整行可点 / 运行信息
+ * 统计卡组件测试：TPS 阈值变色 / 资源卡三行 / 在线玩家整行可点 / 运行信息
  */
-
-const emptyHistory = { cpu: [], mem: [], tps: [] }
 
 function setState(status = mockInstanceStatus) {
   useServerStore.setState({
@@ -41,55 +34,35 @@ describe('tpsColor 阈值规则（≥19 健康 / 15-19 卡顿 / <15 严重）', 
   })
 })
 
-describe('BigStatCards 顶部四卡', () => {
+describe('BigStatCards 资源卡', () => {
   beforeEach(() => setState())
 
-  it('在线玩家大数字 + online/max + 头像帽', () => {
-    render(<BigStatCards history={emptyHistory} />)
-    expect(screen.getByText('3')).toBeInTheDocument()
-    expect(screen.getByText('3/20')).toBeInTheDocument()
-    expect(screen.getByText('OP 1 · 入睡 1 · 今日新增 2')).toBeInTheDocument()
-  })
-
-  it('TPS 大数字 + 健康标签 + CPU/内存数值与进度条', () => {
-    render(<BigStatCards history={emptyHistory} />)
+  it('TPS 信息 + 健康标签 + CPU/内存/磁盘数值与进度条', () => {
+    render(<BigStatCards />)
     expect(screen.getByText('20.0')).toBeInTheDocument()
     expect(screen.getByText('健康')).toBeInTheDocument()
     expect(screen.getByText('12.5')).toBeInTheDocument()
     expect(screen.getByText('4 核')).toBeInTheDocument()
     expect(screen.getByText('4.2')).toBeInTheDocument()
     expect(screen.getByText((content) => content.includes('/ 16G'))).toBeInTheDocument()
-    // 进度条语义
-    expect(screen.getAllByRole('progressbar').length).toBe(2)
+    expect(screen.getByText('磁盘')).toBeInTheDocument()
+    // 进度条语义：CPU/内存/磁盘三行
+    expect(screen.getAllByRole('progressbar').length).toBe(3)
   })
 
   it('TPS 卡顿显示「卡顿」+ warning 色', () => {
     setState({ ...mockInstanceStatus, tps: 17 })
-    render(<BigStatCards history={emptyHistory} />)
+    render(<BigStatCards />)
     expect(screen.getByText('卡顿')).toBeInTheDocument()
     expect(screen.getByText('17.0').className).toContain('text-mcs-warning-fg')
   })
 
-  it('未运行时 TPS 显示 -- 且无健康标签', () => {
+  it('未运行时无 TPS 信息与健康标签', () => {
     setState({ ...mockInstanceStatus, isRunning: false, tps: 0 })
-    render(<BigStatCards history={emptyHistory} />)
+    render(<BigStatCards />)
     expect(screen.queryByText('健康')).not.toBeInTheDocument()
     expect(screen.queryByText('卡顿')).not.toBeInTheDocument()
-    expect(screen.getByText('--')).toBeInTheDocument()
-  })
-
-  it('在线玩家超过 3 人时显示头像帽 +N', () => {
-    setState({
-      ...mockInstanceStatus,
-      playerCount: 5,
-      opNames: ['Steve'],
-      sleepingPlayerNames: ['Alex', 'Bob'],
-      awakePlayerNames: ['Charlie', 'Dave'],
-    })
-    render(<BigStatCards history={emptyHistory} />)
-    expect(screen.getByText('5')).toBeInTheDocument()
-    // 5 人去重后渲染前 3 个头像 + 1 个 +2 头像帽
-    expect(screen.getByText('+2')).toBeInTheDocument()
+    expect(screen.queryByText('--')).not.toBeInTheDocument()
   })
 
   it('totalMemory 为 0 时内存进度条兜底为 0', () => {
@@ -100,14 +73,10 @@ describe('BigStatCards 顶部四卡', () => {
       socketConnected: true,
       lastStatusEvent: null,
     })
-    render(<BigStatCards history={emptyHistory} />)
+    render(<BigStatCards />)
     expect(screen.getByText('0%')).toBeInTheDocument()
     expect(screen.getByText('0.0')).toBeInTheDocument()
     expect(screen.getByText((c) => c.includes('/ 0G'))).toBeInTheDocument()
-  })
-
-  it('history 为空数组时 sparkline 正常渲染不报错', () => {
-    expect(() => render(<BigStatCards history={{ cpu: [], mem: [], tps: [] }} />)).not.toThrow()
   })
 })
 
@@ -123,7 +92,9 @@ describe('PlayersCard（右栏可点行）', () => {
 
   it('正常态：online/max + OP 徽章 + 每行直达详情 + 入睡/清醒计数', () => {
     renderCard()
-    expect(screen.getByText('3/20')).toBeInTheDocument()
+    // 主数字分母独立节点（值大/分母小淡的分层排版），分别断言
+    expect(screen.getByText('3')).toBeInTheDocument()
+    expect(screen.getByText('/20')).toBeInTheDocument()
     expect(screen.getByText('OP 1/3')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '查看 Steve 详情' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '查看 Alex 详情' })).toBeInTheDocument()

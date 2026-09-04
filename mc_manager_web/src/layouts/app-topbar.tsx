@@ -1,4 +1,4 @@
-import { Bell, KeyRound, LogOut, Menu, Moon, Search, Server, Settings, Sun, UserRound } from 'lucide-react'
+import { Bell, Copy, KeyRound, LogOut, Menu, Moon, Search, Server, Settings, Sun, UserRound } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
@@ -22,6 +22,7 @@ import { useConnectionStore } from '@/stores/connection'
 import { useAuthStore } from '@/stores/auth'
 import { logout } from '@/api/auth'
 import { useInstances } from '@/api/queries'
+import { copyText } from '@/lib/clipboard'
 
 /**
  * AppTopBar —— 主顶栏（设计文档 §3.1）
@@ -95,11 +96,25 @@ export function AppTopBar() {
         <Menu aria-hidden />
       </IconButton>
 
-      {/* 服务器地址（B15：原型顶栏地址 chip；延迟由状态点语义覆盖） */}
+      {/* 服务器地址（B15：原型顶栏地址 chip；带复制按钮，方便发给玩家直连） */}
       {status?.address && (
-        <span className="hidden items-center gap-1.5 rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-muted px-2 py-1 font-mono text-mcs-2xs text-mcs-text-muted lg:inline-flex">
+        <span className="hidden items-center gap-1 rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-muted py-1 pr-1 pl-2 font-mono text-mcs-2xs text-mcs-text-muted lg:inline-flex">
           <Server className="size-3" aria-hidden />
-          {status.address}
+          <span title="MC 客户端连接地址（含端口）">{status.address}</span>
+          <button
+            type="button"
+            onClick={() =>
+              void copyText(status.address).then((ok) => {
+                if (ok) toast.success('服务器地址已复制', { duration: 1500 })
+                else toast.error('复制失败，请手动复制')
+              })
+            }
+            aria-label="复制服务器地址"
+            title="复制地址发给玩家"
+            className="rounded-mcs-xs p-1 text-mcs-text-subtle transition-colors hover:bg-mcs-bg-hover hover:text-mcs-text-default focus-visible:outline-2 focus-visible:outline-mcs-focus-ring focus-visible:outline-offset-1"
+          >
+            <Copy className="size-3" aria-hidden />
+          </button>
         </span>
       )}
 

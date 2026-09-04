@@ -8,6 +8,7 @@
 @import './styles/tokens/theme.css';
 @import './styles/fonts.css';
 @import './styles/glass.css';
+@import './styles/effects.css';
 @import './styles/density.css';
 
 @custom-variant dark (&:is(.dark *));
@@ -68,9 +69,20 @@
     --text-mcs-lg: var(--mcs-font-size-lg);
     --text-mcs-xl: var(--mcs-font-size-xl);
     --text-mcs-2xl: var(--mcs-font-size-2xl);
+    --text-mcs-display: var(--mcs-font-size-display);
     --duration-mcs-fast: var(--mcs-motion-fast);
     --duration-mcs-base: var(--mcs-motion-base);
+    --duration-mcs-slow: var(--mcs-motion-slow);
     --ease-mcs-snappy: var(--mcs-ease-snappy);
+    --ease-mcs-out: var(--mcs-ease-out);
+    --ease-mcs-spring: var(--mcs-ease-spring);
+    --shadow-mcs-card: var(--mcs-shadow-card);
+    --shadow-mcs-raised: var(--mcs-shadow-raised);
+    --shadow-mcs-overlay: var(--mcs-shadow-overlay);
+    --shadow-mcs-accent-button: var(--mcs-shadow-accent-button);
+    --shadow-mcs-glow-accent: var(--mcs-glow-accent);
+    --shadow-mcs-glow-accent-strong: var(--mcs-glow-accent-strong);
+    --shadow-mcs-glow-error: var(--mcs-glow-error);
 }
 
 /* shadcn/nova 的 @theme inline 映射：--color-* 工具类 → 组件变量（值由 theme.css 提供） */
@@ -155,6 +167,38 @@
   /* 长文本行高 1.7-1.8 */
   .prose-long {
     line-height: var(--mcs-line-height-body-long);
+  }
+
+  /* 全局滚动条：细 + 圆角 + 融底（Windows 原生粗滚动条是廉价感来源）；hover 亮起 */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklch, var(--mcs-text-default) 18%, transparent) transparent;
+  }
+  /* xterm 无障碍树：库 css 硬编码 monospace 且晚于本文件加载，!important 保证覆盖为 mono token */
+  .xterm .xterm-accessibility-tree {
+    font-family: var(--mcs-font-mono) !important;
+  }
+  /* 终端为只读回显（命令走输入行），隐藏光标避免「可输入」误导；
+     xterm 6 运行时内联写 display（blink 机制），须 !important 覆盖 */
+  .xterm .xterm-cursor {
+    display: none !important;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    border: 3px solid transparent;
+    background-clip: padding-box;
+    background-color: color-mix(in oklch, var(--mcs-text-default) 18%, transparent);
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in oklch, var(--mcs-text-default) 30%, transparent);
+  }
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner {
+    background: transparent;
   }
 }
 

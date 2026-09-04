@@ -23,17 +23,18 @@ async function setupConnection(page: Page) {
 }
 
 test.describe('仪表盘', () => {
-  test('统计卡渲染：顶部四卡 + 右栏五卡 + 健康标签 + 实时数据', async ({ page }) => {
+  test('统计卡渲染：顶部三卡 + 右栏两卡 + 健康标签 + 实时数据', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/dashboard')
-    // 顶部四卡 + 右栏卡标题
-    for (const title of ['在线玩家', 'TPS', 'CPU', '内存', 'MC 时钟 · 世界控制', '事件与待办', '公告发送', '实例运行信息']) {
+    // 顶部三卡 + 右栏卡标题
+    for (const title of ['在线玩家', '资源使用', '实例信息', 'MC 时钟 · 世界控制', '公告发送']) {
       await expect(page.getByText(title).first()).toBeVisible()
     }
     // 健康标签与实时数据
     await expect(page.getByText('健康')).toBeVisible()
     await expect(page.getByText('20.0')).toBeVisible()
-    await expect(page.getByText('3/20').first()).toBeVisible()
+    // v2 大数/小数分层：外层 span 完整文本为「在线/上限」整体，断言合并串
+    await expect(page.getByText('3/20', { exact: true })).toBeVisible()
     await expect(page.getByText('OP 1/3')).toBeVisible()
     await expect(page.getByText('2h 0m')).toBeVisible()
     await expect(page.getByText('2d 0h')).toBeVisible()
@@ -56,24 +57,20 @@ test.describe('仪表盘', () => {
     await nightReq
   })
 
-  test('公告发送：模板填充 → 发送 say → 清空', async ({ page }) => {
+  test('公告发送：预设胶囊填充 → 发送 → 二次确认 → say → 清空', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/dashboard')
-    await page.getByRole('button', { name: /服务器将在 5 分钟后重启/ }).click()
+    // 胶囊显示预设名（同名还有编辑/删除按钮，exact 避免子串匹配）
+    await page.getByRole('button', { name: '重启预告', exact: true }).click()
     await expect(page.getByLabel('公告内容')).toHaveValue('服务器将在 5 分钟后重启，请及时停靠')
     const sayReq = page.waitForRequest(
       (r) => r.url().includes('/command') && String(r.postDataJSON()?.command).includes('say 服务器将在'),
     )
     await page.getByRole('button', { name: '发送公告' }).click()
+    // 二次确认弹窗
+    await page.getByRole('button', { name: '发送', exact: true }).click()
     await sayReq
     await expect(page.getByLabel('公告内容')).toHaveValue('')
-  })
-
-  test('事件卡「全部动态」直达通知抽屉（跨组件共享状态）', async ({ page }) => {
-    await setupConnection(page)
-    await page.goto('/dashboard')
-    await page.getByRole('button', { name: '全部动态' }).click()
-    await expect(page.getByRole('heading', { name: '通知' })).toBeVisible()
   })
 
   test('在线玩家卡「全部」跳转玩家页（列表钻入）', async ({ page }) => {
