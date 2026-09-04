@@ -26,7 +26,7 @@ import { useAuditLogs, useCommandHistory } from '@/api/queries'
 import type { AuditLogItem, CommandHistoryItem } from '@/api/types'
 import { QUICK_RANGES, isRangeInverted, quickRangeDates, toServerEnd, toServerStart, type QuickRange } from './time-range'
 import { ACTION_LABELS, getActionLabel } from './action-labels'
-import { AUDIT_EXPORT_MAX_ROWS, exportAuditLogsToExcel } from './audit-export'
+import { AUDIT_EXPORT_MAX_ROWS, exportAuditLogsToExcel, exportCommandHistoryToExcel } from './audit-export'
 
 /** 时间列：合法 ISO 走统一收口格式（MM-dd HH:mm:ss）；非法输入原样返回（保留审计原始值兜底） */
 function formatTime(iso: string): string {
@@ -323,6 +323,26 @@ export function AuditPage() {
 
   const refreshing = auditQuery.isFetching || cmdQuery.isFetching
 
+  // 命令历史导出（issue 403）：筛选口径与 cmdQuery 一致（时间起止 + 倒置防护），
+  // 服务端固定最新优先；失败 toast 与审计日志导出口径一致
+  const [cmdExporting, setCmdExporting] = useState(false)
+  const handleCmdExport = async () => {
+    setCmdExporting(true)
+    try {
+      await exportCommandHistoryToExcel(
+        config,
+        {
+          startTime: cmdStart && !cmdRangeInvalid ? toServerStart(cmdStart) : undefined,
+          endTime: cmdEnd && !cmdRangeInvalid ? toServerEnd(cmdEnd) : undefined,
+        },
+      )
+    } catch {
+      toast.error('导出失败，请重试')
+    } finally {
+      setCmdExporting(false)
+    }
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col gap-4 p-4">
       <PageHeader
@@ -537,6 +557,23 @@ export function AuditPage() {
                 清空时间
               </Button>
             )}
+
+            <span className="h-5 w-px shrink-0 bg-mcs-border-muted" aria-hidden />
+
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8"
+              onClick={() => void handleCmdExport()}
+              disabled={cmdExporting}
+              data-testid="cmd-export"
+            >
+              <Download aria-hidden />
+              导出
+            </Button>
+            <span className="text-mcs-2xs text-mcs-text-subtle">
+              最多导出 {AUDIT_EXPORT_MAX_ROWS} 条（时间最新优先）
+            </span>
           </div>
 
           {cmdRangeInvalid && (

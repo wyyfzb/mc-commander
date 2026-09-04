@@ -90,12 +90,18 @@ async function getPaperDownload(mcVersion) {
  * 部署进度发射 + 进行中注册表同步（单一出口）：
  * - 事件 payload 附带实例归属（instanceId/instanceName 等），前端据此在刷新后
  *   恢复「部署中」显示（部署实例未入库，订阅过滤不适用，走全局广播）
- * - 注册表（serverManager.activeDeploys）供 websocket 连接建立时补发
+ * - 注册表（serverManager.activeDeploys）供 websocket 连接建立时补发，
+ *   仅承载进行中阶段：终态（complete/error）只推送不写回——否则 WS 连接
+ *   建立时会对已结束的部署重复补发历史终态，且注册表随部署次数累积残留
  * @param {{ instanceId: string, instanceName: string, type: string, mcVersion: string }|null} meta
  */
+const TERMINAL_DEPLOY_STAGES = new Set(['complete', 'error']);
+
 function trackDeployProgress(serverManager, meta, payload) {
   if (meta) {
-    serverManager.activeDeploys?.set(meta.instanceId, { ...meta, stage: payload.stage, percent: payload.percent });
+    if (!TERMINAL_DEPLOY_STAGES.has(payload.stage)) {
+      serverManager.activeDeploys?.set(meta.instanceId, { ...meta, stage: payload.stage, percent: payload.percent });
+    }
     serverManager.emit('deployProgress', { ...payload, ...meta });
   } else {
     serverManager.emit('deployProgress', payload);
