@@ -1,14 +1,9 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { BigStatCards, PlayersCard, RuntimeInfoCard, tpsColor } from '../components/stat-cards'
 import { useServerStore } from '@/stores/server'
 import { mockInstanceStatus } from '@/test/mocks/handlers'
-
-// ECharts 在 jsdom 无 canvas：sparkline 在组件测试中替换为空实现（E2E 覆盖真实渲染）
-vi.mock('@/components/mcs/sparkline', () => ({
-  Sparkline: () => null,
-}))
 
 /**
  * 统计卡组件测试：TPS 阈值变色 / 资源卡三行 / 在线玩家整行可点 / 运行信息

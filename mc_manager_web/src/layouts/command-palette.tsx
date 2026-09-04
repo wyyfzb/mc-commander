@@ -136,7 +136,7 @@ export function CommandPalette() {
     }
   }
 
-  /** 备份：非破坏性直接执行（与 recent-backups-card 同语义） */
+  /** 备份：非破坏性直接执行 */
   const runBackup = async () => {
     try {
       await createBackupMutation.mutateAsync()

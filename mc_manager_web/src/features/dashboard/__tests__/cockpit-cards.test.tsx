@@ -7,14 +7,12 @@ import { Toaster } from 'sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { handlers } from '@/test/mocks/handlers'
 import { McClockCard, dayCycle, interpolateTick } from '../components/mc-clock-card'
-import { EventsCard } from '../components/events-card'
 import { AnnouncementCard } from '../components/announcement-card'
 import { useServerStore } from '@/stores/server'
 import { useConnectionStore } from '@/stores/connection'
 import { useTerminalStore } from '@/stores/terminal'
 import { useUiStore } from '@/stores/ui'
 import { useNotificationStore } from '@/stores/notifications'
-import type { AppNotification } from '@/lib/notifications'
 import { mockInstanceStatus } from '@/test/mocks/handlers'
 
 /**
@@ -96,36 +94,6 @@ describe('McClockCard 世界控制', () => {
     renderWithProviders(<McClockCard />)
     expect(screen.getByRole('button', { name: '晴天' })).toBeDisabled()
     expect(screen.getByRole('button', { name: '白天' })).toBeDisabled()
-  })
-})
-
-describe('EventsCard 事件与待办', () => {
-  const item = (id: string, read: boolean, content = `事件 ${id}`): AppNotification =>
-    ({ id, type: 'join', category: 'game', content, timestamp: Date.now(), count: 1, read })
-
-  it('未读角标 + 最新事件行；点「全部」开通知抽屉', () => {
-    useNotificationStore.setState({
-      items: [item('a', false, 'Steve 加入服务器'), item('b', true, 'Alex 加入服务器')],
-      unreadCount: 1,
-    })
-    renderWithProviders(<EventsCard />)
-    expect(screen.getByText('1 未读')).toBeInTheDocument()
-    expect(screen.getByText('Steve 加入服务器')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '全部动态' }))
-    expect(useUiStore.getState().notificationsOpen).toBe(true)
-  })
-
-  it('点击事件行标记已读并开抽屉', () => {
-    useNotificationStore.setState({ items: [item('a', false, 'Steve 加入服务器')], unreadCount: 1 })
-    renderWithProviders(<EventsCard />)
-    fireEvent.click(screen.getByRole('button', { name: /Steve 加入服务器/ }))
-    expect(useUiStore.getState().notificationsOpen).toBe(true)
-    expect(useNotificationStore.getState().items[0]?.read).toBe(true)
-  })
-
-  it('空态显示「暂无动态」', () => {
-    renderWithProviders(<EventsCard />)
-    expect(screen.getByText('暂无动态')).toBeInTheDocument()
   })
 })
 
