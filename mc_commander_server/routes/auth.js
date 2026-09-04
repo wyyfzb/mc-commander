@@ -1,6 +1,16 @@
 import { Router } from 'express';
 import config from '../config.js';
-import { success, error, ErrorCodes } from '../utils/response.js';
+import { error, ErrorCodes } from '../utils/response.js';
+import {
+  authStatusResponseSchema,
+  authSetupResponseSchema,
+  authSessionResponseSchema,
+  authPasswordChangeResponseSchema,
+  authLogoutResponseSchema,
+  authSessionsResponseSchema,
+  authSessionKickResponseSchema,
+} from '@mc-commander/schemas';
+import { validatedSuccess } from '../middleware/validate.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
 import { AdminAccountModel, AdminSessionModel } from '../db/index.js';
 import { hashPassword, verifyPassword, hashToken, generateSessionToken, needsRehash } from '../utils/password.js';
@@ -122,7 +132,7 @@ export function createAuthRoutes() {
 
   // GET /api/v1/auth/status —— 公开：登录页首屏探测
   router.get('/auth/status', (req, res) => {
-    res.json(success({ hasPassword: AdminAccountModel.isConfigured() }));
+    res.json(validatedSuccess(authStatusResponseSchema, { hasPassword: AdminAccountModel.isConfigured() }));
   });
 
   // POST /api/v1/auth/setup —— 公开：首访设密（幂等防护：已设密 409；所有权证明：SETUP_TOKEN）
@@ -163,7 +173,7 @@ export function createAuthRoutes() {
       // 设密即登录：首访向导完成直达面板
       const session = createSession(req);
       recordAudit({ action: AuditActions.AUTH_SETUP, targetType: 'admin', targetId: '1', detail: null });
-      res.json(success({ hasPassword: true, ...session }));
+      res.json(validatedSuccess(authSetupResponseSchema, { hasPassword: true, ...session }));
     } catch (err) {
       next(err);
     }
@@ -200,7 +210,7 @@ export function createAuthRoutes() {
         targetId: '1',
         detail: { ip: clientIp(req), userAgent: req.headers['user-agent']?.slice(0, 100) || null, rehashed },
       });
-      res.json(success(session));
+      res.json(validatedSuccess(authSessionResponseSchema, session));
     } catch (err) {
       next(err);
     }
@@ -233,7 +243,7 @@ export function createAuthRoutes() {
           targetId: '1',
           detail: { kickedSessions: kicked },
         });
-        res.json(success({ ok: true, kickedSessions: kicked }));
+        res.json(validatedSuccess(authPasswordChangeResponseSchema, { ok: true, kickedSessions: kicked }));
       } else {
         // API Key 通道改密：无当前会话可保留，全部会话失效
         const kicked = AdminSessionModel.deleteAllExcept('__none__');
@@ -243,7 +253,7 @@ export function createAuthRoutes() {
           targetId: '1',
           detail: { kickedSessions: kicked, via: 'apiKey' },
         });
-        res.json(success({ ok: true, kickedSessions: kicked }));
+        res.json(validatedSuccess(authPasswordChangeResponseSchema, { ok: true, kickedSessions: kicked }));
       }
     } catch (err) {
       next(err);
@@ -258,7 +268,7 @@ export function createAuthRoutes() {
       }
       AdminSessionModel.deleteById(req.auth.sessionId);
       recordAudit({ action: AuditActions.AUTH_LOGOUT, targetType: 'admin', targetId: '1', detail: null });
-      res.json(success({ ok: true }));
+      res.json(validatedSuccess(authLogoutResponseSchema, { ok: true }));
     } catch (err) {
       next(err);
     }
@@ -276,7 +286,7 @@ export function createAuthRoutes() {
         expiresAt: s.expires_at,
         current: req.auth?.source === 'session' && req.auth.sessionId === s.id,
       }));
-      res.json(success({ sessions }));
+      res.json(validatedSuccess(authSessionsResponseSchema, { sessions }));
     } catch (err) {
       next(err);
     }
@@ -296,7 +306,7 @@ export function createAuthRoutes() {
         targetId: id,
         detail: { current: req.auth?.sessionId === id },
       });
-      res.json(success({ ok: true, current: req.auth?.sessionId === id }));
+      res.json(validatedSuccess(authSessionKickResponseSchema, { ok: true, current: req.auth?.sessionId === id }));
     } catch (err) {
       next(err);
     }

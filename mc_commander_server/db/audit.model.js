@@ -29,6 +29,7 @@ export class AuditLogModel {
       page = 1, pageSize = 20,
       instanceId, action, targetType,
       startTime, endTime, source,
+      order = 'desc',
     } = options;
 
     let where = [];
@@ -62,10 +63,13 @@ export class AuditLogModel {
     const whereClause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
     const offset = (page - 1) * pageSize;
 
+    // 排序方向白名单（issue 383）：缺省/非法值回落 DESC，与历史行为完全一致
+    const direction = order === 'asc' ? 'ASC' : 'DESC';
+
     const rows = db.prepare(`
       SELECT * FROM audit_logs
       ${whereClause}
-      ORDER BY id DESC
+      ORDER BY id ${direction}
       LIMIT ? OFFSET ?
     `).all(...params, pageSize, offset);
 

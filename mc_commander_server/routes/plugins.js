@@ -3,8 +3,24 @@ import multer from 'multer';
 import os from 'os';
 import fs from 'fs';
 import path from 'path';
-import { success, error, AppError, ErrorCodes } from '../utils/response.js';
+import { error, AppError, ErrorCodes } from '../utils/response.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
+import {
+  marketSearchRequestSchema,
+  marketVersionsRequestSchema,
+  pluginOverwriteQuerySchema,
+  marketInstallRequestSchema,
+  pluginEnabledRequestSchema,
+  marketSearchResultSchema,
+  marketVersionsResultSchema,
+  marketInstallResultSchema,
+  pluginUpdateCheckResultSchema,
+  pluginListSchema,
+  pluginUploadResultSchema,
+  pluginToggleResultSchema,
+  pluginDeleteResultSchema,
+} from '@mc-commander/schemas';
+import { validateBody, validateQuery, validatedSuccess } from '../middleware/validate.js';
 import { listPlugins, setPluginEnabled, deletePlugin, uploadPlugin } from '../services/plugin.service.js';
 import { searchMarketPlugins, getMarketProjectVersions, installPluginFromMarket, checkPluginUpdates } from '../services/market.service.js';
 import config from '../config.js';
@@ -90,7 +106,9 @@ export function createPluginRoutes(serverManager) {
   // ── 市场延伸（feat-8）：必须在 :file 参数路由之前注册 ──────────
 
   // GET /api/v1/instances/:id/plugins/market/search?q=&offset=&limit=&game_version=&loader=
-  router.get('/instances/:id/plugins/market/search', async (req, res, next) => {
+  // 查询契约（issue 391）：q/game_version/loader 归一校验；offset/limit 为分页参数
+  // 按 issue 391 边界透传，既有手写解析不动（#392 分页 util 后续统一）
+  router.get('/instances/:id/plugins/market/search', validateQuery(marketSearchRequestSchema), async (req, res, next) => {
     try {
       const serverPath = requireInstance(req.params.id);
       if (!serverPath) {
@@ -103,14 +121,14 @@ export function createPluginRoutes(serverManager) {
         gameVersion: req.query.game_version ?? null,
         loader: req.query.loader ?? null,
       });
-      res.json(success(result));
+      res.json(validatedSuccess(marketSearchResultSchema, result));
     } catch (err) {
       next(err);
     }
   });
 
   // GET /api/v1/instances/:id/plugins/market/projects/:slug/versions?game_version=&loader=
-  router.get('/instances/:id/plugins/market/projects/:slug/versions', async (req, res, next) => {
+  router.get('/instances/:id/plugins/market/projects/:slug/versions', validateQuery(marketVersionsRequestSchema), async (req, res, next) => {
     try {
       const serverPath = requireInstance(req.params.id);
       if (!serverPath) {
@@ -120,21 +138,21 @@ export function createPluginRoutes(serverManager) {
         gameVersion: req.query.game_version ?? null,
         loader: req.query.loader ?? null,
       });
-      res.json(success(result));
+      res.json(validatedSuccess(marketVersionsResultSchema, result));
     } catch (err) {
       next(err);
     }
   });
 
   // POST /api/v1/instances/:id/plugins/market/install  body: { slug, versionNumber }；?overwrite=true 显式覆盖
-  router.post('/instances/:id/plugins/market/install', async (req, res, next) => {
+  router.post('/instances/:id/plugins/market/install', validateQuery(pluginOverwriteQuerySchema), validateBody(marketInstallRequestSchema), async (req, res, next) => {
     try {
       const { id } = req.params;
       const serverPath = requireInstance(id);
       if (!serverPath) {
         return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND, 'Instance not found'));
       }
-      const { slug, versionNumber } = req.body || {};
+      const { slug, versionNumber } = req.body;
       const overwrite = req.query.overwrite === 'true';
       const result = await installPluginFromMarket(serverPath, { slug, versionNumber }, { overwrite });
       recordAudit({
@@ -150,7 +168,7 @@ export function createPluginRoutes(serverManager) {
           overwritten: result.overwritten,
         },
       });
-      res.status(result.overwritten ? 200 : 201).json(success(result));
+      res.status(result.overwritten ? 200 : 201).json(validatedSuccess(marketInstallResultSchema, result));
     } catch (err) {
       next(err);
     }
@@ -167,7 +185,7 @@ export function createPluginRoutes(serverManager) {
         return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND, 'Instance not found'));
       }
       const result = await checkPluginUpdates(serverPath);
-      res.json(success(result));
+      res.json(validatedSuccess(pluginUpdateCheckResultSchema, result));
     } catch (err) {
       next(err);
     }
@@ -180,7 +198,7 @@ export function createPluginRoutes(serverManager) {
       if (!serverPath) {
         return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND, 'Instance not found'));
       }
-      res.json(success(listPlugins(serverPath)));
+      res.json(validatedSuccess(pluginListSchema, listPlugins(serverPath)));
     } catch (err) {
       next(err);
     }
@@ -189,7 +207,15 @@ export function createPluginRoutes(serverManager) {
   // POST /api/v1/instances/:id/plugins/upload  multipart 字段 file；?overwrite=true 显式覆盖
   router.post('/instances/:id/plugins/upload', (req, res, next) => {
     pluginUpload.single('file')(req, res, (err) => handleMulterError(err, next));
-  }, (req, res, next) => {
+  }, validateQuery(pluginOverwriteQuerySchema, {
+    // multer diskStorage 已落盘：schema 拒绝非法 overwrite（非 true/false 枚举）
+    // 时在 400 前清理临时文件，防止磁盘残留（#397 回归修复，issue 391）
+    onError: (req) => {
+      if (req.file?.path) {
+        try { fs.unlinkSync(req.file.path); } catch {}
+      }
+    },
+  }), (req, res, next) => {
     const uploaded = req.file;
     try {
       const { id } = req.params;
@@ -209,7 +235,7 @@ export function createPluginRoutes(serverManager) {
         targetId: result.file,
         detail: { sizeBytes: result.sizeBytes, overwritten: result.overwritten },
       });
-      res.status(result.overwritten ? 200 : 201).json(success(result));
+      res.status(result.overwritten ? 200 : 201).json(validatedSuccess(pluginUploadResultSchema, result));
     } catch (err) {
       next(err);
     } finally {
@@ -218,17 +244,15 @@ export function createPluginRoutes(serverManager) {
   });
 
   // PUT /api/v1/instances/:id/plugins/:file/enabled  body: { enabled: boolean }
-  router.put('/instances/:id/plugins/:file/enabled', (req, res, next) => {
+  // 请求体契约（issue 391）：enabled 布尔守护由 pluginEnabledRequestSchema 统一
+  router.put('/instances/:id/plugins/:file/enabled', validateBody(pluginEnabledRequestSchema), (req, res, next) => {
     try {
       const { id, file } = req.params;
       const serverPath = requireInstance(id);
       if (!serverPath) {
         return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND, 'Instance not found'));
       }
-      const { enabled } = req.body || {};
-      if (typeof enabled !== 'boolean') {
-        return res.status(400).json(error(ErrorCodes.VALIDATION_ERROR, 'enabled must be a boolean'));
-      }
+      const { enabled } = req.body;
       const result = setPluginEnabled(serverPath, file, enabled);
       recordAudit({
         instanceId: id,
@@ -237,7 +261,7 @@ export function createPluginRoutes(serverManager) {
         targetId: file,
         detail: { from: file, to: result.file },
       });
-      res.json(success(result));
+      res.json(validatedSuccess(pluginToggleResultSchema, result));
     } catch (err) {
       next(err);
     }
@@ -259,7 +283,7 @@ export function createPluginRoutes(serverManager) {
         targetId: file,
         detail: null,
       });
-      res.json(success(result));
+      res.json(validatedSuccess(pluginDeleteResultSchema, result));
     } catch (err) {
       next(err);
     }

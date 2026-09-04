@@ -34,6 +34,45 @@ export function validateBody(schema) {
   };
 }
 
+/**
+ * 请求查询参数校验（issue 391）：与 validateBody 同一契约（400 VALIDATION_ERROR
+ * + 结构化 details），成功时把归一化结果回写 req.query（剥离未知字段，
+ * 分页参数在 schema 内作字符串透传，交由 #392 parsePagination 解析）。
+ *
+ * Express 5 中 req.query 定义在 Request 原型上（defineGetter，只读），
+ * 直接赋值在 ESM 严格模式下抛 TypeError，因此用实例级 own property
+ * 覆盖（defineProperty 合法且对下游 handler 完全透明）。
+ *
+ * options.onError(req)：校验失败时在 400 响应前调用的清理钩子。上传路由
+ * （multer diskStorage）文件已落盘，校验失败必须清理临时文件防止磁盘残留
+ * （原 handler 内 unlinkSync 清理语义由钩子承接，安全性只增不减）。
+ */
+export function validateQuery(schema, options = {}) {
+  return (req, res, next) => {
+    const result = schema.safeParse(req.query ?? {});
+    if (!result.success) {
+      if (typeof options.onError === 'function') {
+        try {
+          options.onError(req);
+        } catch (cleanupErr) {
+          logger.error('[validate] 查询校验失败清理钩子异常:', cleanupErr);
+        }
+      }
+      const messages = result.error.issues.map((i) => i.message);
+      return res.status(400).json(
+        error(ErrorCodes.VALIDATION_ERROR, messages.join('; '), formatIssues(result.error))
+      );
+    }
+    Object.defineProperty(req, 'query', {
+      value: result.data,
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
+    next();
+  };
+}
+
 /** 成功响应 + 契约观测：信封结构与 success() 完全一致，data 漂移时打错误日志 */
 export function validatedSuccess(schema, data, message = 'Success') {
   const result = schema.safeParse(data);

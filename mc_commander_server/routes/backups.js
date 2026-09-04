@@ -2,13 +2,14 @@ import { Router } from 'express';
 import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
-import { success, successPaginated, ErrorCodes, AppError } from '../utils/response.js';
+import { ErrorCodes, AppError } from '../utils/response.js';
+import { parsePagination } from '../utils/pagination.js';
 import { BackupModel } from '../db/backup.model.js';
 import { BackupService, resolveContained } from '../services/backup.service.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
 import config from '../config.js';
-import { backupCreateRequestSchema } from '@mc-commander/schemas';
-import { validateBody } from '../middleware/validate.js';
+import { backupCreateRequestSchema, backupItemSchema, nullDataSchema } from '@mc-commander/schemas';
+import { validateBody, validatedSuccess, validatedSuccessPaginated } from '../middleware/validate.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { logger } from '../utils/logger.js';
 
@@ -33,10 +34,7 @@ export function createBackupRoutes(serverManager) {
   // find-021：列表响应数据来自模型层显式列查询（不含 file_path 本地路径）
   router.get('/instances/:instanceId/backups', asyncHandler(async (req, res) => {
     const { instanceId } = req.params;
-    let page = parseInt(req.query.page) || 1;
-    let pageSize = parseInt(req.query.pageSize) || 20;
-    page = Math.max(1, Math.min(page, 1000));
-    pageSize = Math.max(1, Math.min(pageSize, 100));
+    const { page, pageSize } = parsePagination(req.query, { maxPageSize: 100 });
     const type = req.query.type;
     const status = req.query.status;
 
@@ -48,7 +46,7 @@ export function createBackupRoutes(serverManager) {
       status
     });
 
-    res.json(successPaginated(result.backups, result.total, page, pageSize));
+    res.json(validatedSuccessPaginated(backupItemSchema, result.backups, result.total, page, pageSize));
   }));
 
   // find-021：详情响应不含 file_path（模型层显式列查询）
@@ -59,7 +57,7 @@ export function createBackupRoutes(serverManager) {
       throw new AppError(ErrorCodes.BACKUP_NOT_FOUND);
     }
 
-    res.json(success(backup));
+    res.json(validatedSuccess(backupItemSchema, backup));
   }));
 
   router.post('/instances/:instanceId/backups', validateBody(backupCreateRequestSchema), asyncHandler(async (req, res) => {
@@ -83,7 +81,7 @@ export function createBackupRoutes(serverManager) {
     });
 
     recordAudit({ instanceId, action: AuditActions.BACKUP_CREATE, targetType: 'backup', targetId: String(backup.id) });
-    res.status(201).json(success(backup, 'Backup created successfully'));
+    res.status(201).json(validatedSuccess(backupItemSchema, backup, 'Backup created successfully'));
   }));
 
   router.post('/backups/:id/restore', asyncHandler(async (req, res) => {
@@ -116,7 +114,7 @@ export function createBackupRoutes(serverManager) {
     recordAudit({ instanceId: backup.instanceId, action: AuditActions.BACKUP_RESTORE, targetType: 'backup', targetId: req.params.id });
     await backupService.restoreBackup(req.params.id);
 
-    res.status(202).json(success(null, 'Restore started'));
+    res.status(202).json(validatedSuccess(nullDataSchema, null, 'Restore started'));
   }));
 
   router.delete('/backups/:id', asyncHandler(async (req, res) => {
@@ -134,7 +132,7 @@ export function createBackupRoutes(serverManager) {
 
     recordAudit({ instanceId: backup.instanceId, action: AuditActions.BACKUP_DELETE, targetType: 'backup', targetId: req.params.id });
     await backupService.deleteBackup(req.params.id);
-    res.json(success(null, 'Backup deleted successfully'));
+    res.json(validatedSuccess(nullDataSchema, null, 'Backup deleted successfully'));
   }));
 
   // feat-1: 备份下载（流式 tar.gz）

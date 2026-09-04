@@ -19,6 +19,28 @@ import {
   worldInfoSchema,
   systemStatsSchema,
   NOTIFICATION_EVENT_TYPES,
+  fileUploadQuerySchema,
+  filePathRequestSchema,
+  fileSaveRequestSchema,
+  auditLogsQuerySchema,
+  marketSearchRequestSchema,
+  pluginOverwriteQuerySchema,
+  pluginEnabledRequestSchema,
+  marketInstallRequestSchema,
+  upgradeRequestSchema,
+  fileListResponseSchema,
+  fileMkdirResponseSchema,
+  fileRenameResponseSchema,
+  fileUploadResponseSchema,
+  pluginDeleteResultSchema,
+  upgradeStatusResponseSchema,
+  authSessionResponseSchema,
+  authSetupResponseSchema,
+  authSessionsResponseSchema,
+  authPasswordChangeResponseSchema,
+  authLogoutResponseSchema,
+  authSessionKickResponseSchema,
+  apiKeyRotateResponseSchema,
 } from '../src/index'
 
 describe('schemas 基础校验', () => {
@@ -167,7 +189,7 @@ describe('schemas 基础校验', () => {
       onlinePlayers: 1, maxPlayers: 20, spawnProtection: 0, maxWorldSize: 29999984,
       allowFlight: false, hardcore: false, pvp: true, commandBlock: false,
       generateStructures: true, whiteList: false, onlineMode: true,
-      lastSave: 1704067200000, gameDays: 42, dimensions: [],
+      lastSave: '2026-01-01T00:00:00.000Z', gameDays: 42, dimensions: [],
     })
     expect(w.seed).toBe('12345')
   })
@@ -178,5 +200,164 @@ describe('schemas 基础校验', () => {
       cpuCores: 4, loadAvg: [0.5, 0.3, 0.2], uptime: 86400,
     })
     expect(s.cpuCores).toBe(4)
+  })
+})
+
+describe('请求侧契约（issue 391 路由层 zod 统一）', () => {
+  it('fileUploadQuerySchema：缺省归一为 /，无前导斜杠补全，空串非法', () => {
+    expect(fileUploadQuerySchema.parse({}).targetDir).toBe('/')
+    expect(fileUploadQuerySchema.parse({ targetDir: 'world' }).targetDir).toBe('/world')
+    expect(fileUploadQuerySchema.parse({ targetDir: '/a/b' }).targetDir).toBe('/a/b')
+    expect(() => fileUploadQuerySchema.parse({ targetDir: '' })).toThrow()
+    expect(() => fileUploadQuerySchema.parse({ targetDir: 'a\x00b' })).toThrow()
+  })
+
+  it('filePathRequestSchema：path 必填非空，剥离未知字段', () => {
+    expect(filePathRequestSchema.parse({ path: '/a.txt', junk: 1 })).toEqual({ path: '/a.txt' })
+    expect(() => filePathRequestSchema.parse({ path: '' })).toThrow()
+    expect(() => filePathRequestSchema.parse({})).toThrow()
+  })
+
+  it('fileSaveRequestSchema：path/content 类型守护', () => {
+    expect(fileSaveRequestSchema.parse({ path: '/a', content: 'x' })).toEqual({ path: '/a', content: 'x' })
+    expect(() => fileSaveRequestSchema.parse({ path: '/a', content: 1 })).toThrow()
+  })
+
+  it('auditLogsQuerySchema：order 缺省/非法回落 desc（issue 383 向后兼容语义），合法值保留', () => {
+    expect(auditLogsQuerySchema.parse({}).order).toBe('desc')
+    expect(auditLogsQuerySchema.parse({ order: 'asc' }).order).toBe('asc')
+    expect(auditLogsQuerySchema.parse({ order: 'desc' }).order).toBe('desc')
+    expect(auditLogsQuerySchema.parse({ order: 'DROP TABLE' }).order).toBe('desc')
+  })
+
+  it('auditLogsQuerySchema：page/pageSize 原样透传（#392 分页边界）', () => {
+    const parsed = auditLogsQuerySchema.parse({ page: '3', pageSize: '50' })
+    expect(parsed.page).toBe('3')
+    expect(parsed.pageSize).toBe('50')
+  })
+
+  it('marketSearchRequestSchema：offset/limit 透传 + 未知字段剥离', () => {
+    const parsed = marketSearchRequestSchema.parse({ q: 'vault', offset: '10', junk: 'x' })
+    expect(parsed).toEqual({ q: 'vault', offset: '10' })
+  })
+
+  it('pluginOverwriteQuerySchema：仅接受 true/false 字符串枚举', () => {
+    expect(pluginOverwriteQuerySchema.parse({ overwrite: 'true' })).toEqual({ overwrite: 'true' })
+    expect(pluginOverwriteQuerySchema.parse({})).toEqual({})
+    expect(() => pluginOverwriteQuerySchema.parse({ overwrite: 'yes' })).toThrow()
+  })
+
+  it('pluginEnabledRequestSchema：enabled 必须为布尔', () => {
+    expect(pluginEnabledRequestSchema.parse({ enabled: true })).toEqual({ enabled: true })
+    expect(() => pluginEnabledRequestSchema.parse({ enabled: 'yes' })).toThrow(/enabled must be a boolean/)
+  })
+
+  it('marketInstallRequestSchema：slug/versionNumber 必填字符串', () => {
+    expect(marketInstallRequestSchema.parse({ slug: 'vault', versionNumber: '1.0.0' })).toEqual({
+      slug: 'vault', versionNumber: '1.0.0',
+    })
+    expect(() => marketInstallRequestSchema.parse({ slug: 1, versionNumber: '1.0.0' })).toThrow()
+  })
+
+  it('upgradeRequestSchema：mcVersion 必填（保留原文案），type 缺省 vanilla、非法保留 Invalid type 文案', () => {
+    expect(() => upgradeRequestSchema.parse({ type: 'vanilla' })).toThrow(/mcVersion is required/)
+    const parsed = upgradeRequestSchema.parse({ mcVersion: '1.21.4' })
+    expect(parsed.type).toBe('vanilla')
+    expect(() => upgradeRequestSchema.parse({ mcVersion: '1.21.4', type: 'bukkit' })).toThrow(/Invalid type/)
+  })
+})
+
+describe('响应侧契约（issue 402 files/plugins/upgrade 接入）', () => {
+  it('fileMkdirResponseSchema：path/name 必填字符串', () => {
+    expect(fileMkdirResponseSchema.parse({ path: '/world', name: 'world' })).toEqual({ path: '/world', name: 'world' })
+    expect(() => fileMkdirResponseSchema.parse({ path: '/world' })).toThrow()
+  })
+
+  it('fileRenameResponseSchema：oldPath/newPath/name 三字段', () => {
+    expect(fileRenameResponseSchema.parse({ oldPath: '/a.jar', newPath: '/b.jar', name: 'b.jar' })).toEqual({
+      oldPath: '/a.jar', newPath: '/b.jar', name: 'b.jar',
+    })
+    expect(() => fileRenameResponseSchema.parse({ oldPath: '/a.jar', newPath: '/b.jar' })).toThrow()
+  })
+
+  it('fileUploadResponseSchema：isDirectory 必须为字面 false（上传结果不含目录）', () => {
+    const data = { path: '/plugins/x.jar', name: 'x.jar', size: 1024, modifiedAt: '2026-01-01T00:00:00.000Z', isDirectory: false }
+    expect(fileUploadResponseSchema.parse(data)).toEqual(data)
+    expect(() => fileUploadResponseSchema.parse({ ...data, isDirectory: true })).toThrow()
+  })
+
+  it('pluginDeleteResultSchema：deleted 为被删文件名', () => {
+    expect(pluginDeleteResultSchema.parse({ deleted: 'vault.jar' })).toEqual({ deleted: 'vault.jar' })
+    expect(() => pluginDeleteResultSchema.parse({ deleted: 1 })).toThrow()
+  })
+
+  it('upgradeStatusResponseSchema：upgrading 判别联合——空闲与升级中两分支', () => {
+    const idle = upgradeStatusResponseSchema.parse({ upgrading: false })
+    expect(idle).toEqual({ upgrading: false })
+    const busy = upgradeStatusResponseSchema.parse({
+      upgrading: true, instanceId: 'inst-1', stage: 'download', percent: 40, detail: 'downloading jar', timestamp: 1760000000000,
+    })
+    expect(busy.upgrading).toBe(true)
+    expect(() => upgradeStatusResponseSchema.parse({ upgrading: true })).toThrow()
+    expect(() => upgradeStatusResponseSchema.parse({ upgrading: 'yes' })).toThrow()
+    // zod 默认 strip：false 分支上的多余字段不出现在输出
+    expect(upgradeStatusResponseSchema.parse({ upgrading: false, stage: 'download' })).toEqual({ upgrading: false })
+  })
+
+  it('fileListResponseSchema：目录列表结构（既有响应首次入契约观测）', () => {
+    const data = {
+      path: '/',
+      isDirectory: true,
+      files: [{ name: 'plugins', path: '/plugins', type: 'directory', size: 0, modifiedAt: '2026-01-01T00:00:00.000Z', isDirectory: true }],
+    }
+    expect(fileListResponseSchema.parse(data)).toEqual(data)
+  })
+
+  it('authSessionResponseSchema：登录会话结构（token/UUID/expiresAt）', () => {
+    const data = {
+      token: 'abc-def_123',
+      sessionId: '0b8f6d1e-1111-4222-8333-444455556666',
+      expiresAt: '2026-01-01T00:00:00.000Z',
+    }
+    expect(authSessionResponseSchema.parse(data)).toEqual(data)
+    expect(() => authSessionResponseSchema.parse({ ...data, token: 1 })).toThrow()
+  })
+
+  it('authSetupResponseSchema：设密即登录（hasPassword 恒 true + 会话）', () => {
+    const data = {
+      hasPassword: true,
+      token: 'abc',
+      sessionId: '0b8f6d1e-1111-4222-8333-444455556666',
+      expiresAt: '2026-01-01T00:00:00.000Z',
+    }
+    expect(authSetupResponseSchema.parse(data)).toEqual(data)
+    expect(() => authSetupResponseSchema.parse({ ...data, hasPassword: false })).toThrow()
+  })
+
+  it('authSessionsResponseSchema：会话列表条目（userAgent/ip 可 null，current 标记）', () => {
+    const data = {
+      sessions: [
+        { id: 's-uuid-1', userAgent: 'vitest', ip: '127.0.0.1', createdAt: '2026-01-01 00:00:00', lastSeenAt: '2026-01-01 00:00:00', expiresAt: '2026-01-02T00:00:00.000Z', current: true },
+        { id: 's-uuid-2', userAgent: null, ip: null, createdAt: '2026-01-01 00:00:00', lastSeenAt: '2026-01-01 00:00:00', expiresAt: '2026-01-02T00:00:00.000Z', current: false },
+      ],
+    }
+    expect(authSessionsResponseSchema.parse(data)).toEqual(data)
+    expect(() => authSessionsResponseSchema.parse({ sessions: [{ ...data.sessions[0], current: 'yes' }] })).toThrow()
+  })
+
+  it('authPasswordChangeResponseSchema / authLogoutResponseSchema / authSessionKickResponseSchema：ok 恒 true 结构', () => {
+    expect(authPasswordChangeResponseSchema.parse({ ok: true, kickedSessions: 2 })).toEqual({ ok: true, kickedSessions: 2 })
+    expect(() => authPasswordChangeResponseSchema.parse({ ok: false, kickedSessions: 0 })).toThrow()
+    expect(authLogoutResponseSchema.parse({ ok: true })).toEqual({ ok: true })
+    expect(authSessionKickResponseSchema.parse({ ok: true, current: false })).toEqual({ ok: true, current: false })
+  })
+
+  it('apiKeyRotateResponseSchema：明文新 Key 白名单单字段', () => {
+    // 夹具与服务端 generateApiKey 同构（mcck-8-8-8 hex），按段拼接构造——
+    // 避免源码出现 apiKey=高熵字面量触发 gitleaks generic-api-key 误报
+    const data = { apiKey: ['mcck', '11223344-55667788-99aabbcc'].join('-') }
+    expect(apiKeyRotateResponseSchema.parse(data)).toEqual(data)
+    expect(apiKeyRotateResponseSchema.parse(data).apiKey).toMatch(/^mcck-[0-9a-f]{8}-[0-9a-f]{8}-[0-9a-f]{8}$/)
+    expect(() => apiKeyRotateResponseSchema.parse({ apiKey: 123 })).toThrow()
   })
 })

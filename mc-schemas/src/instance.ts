@@ -103,8 +103,20 @@ export const logEntrySchema = z.object({
   type: z.enum(['stdout', 'stderr']),
 })
 
+/** 实例列表（toStatus() 数组，非分页信封） */
+export const instanceStatusListSchema = z.array(instanceStatusSchema)
+
+/** 日志环形缓冲切片（logBuffer 元素含 time 键，观测仅锁定 text/type） */
+export const logEntriesSchema = z.array(logEntrySchema)
+
+/** 命令执行响应：RCON 回显文本或 null（实例未运行/空回显） */
+export const commandResponseSchema = z.string().nullable()
+
 export type InstanceSummary = z.infer<typeof instanceSummarySchema>
 export type InstanceUpdatePayload = z.infer<typeof instanceUpdatePayloadSchema>
 export type InstanceStatus = z.infer<typeof instanceStatusSchema>
 export type OverviewData = z.infer<typeof overviewDataSchema>
+export type InstanceStatusList = z.infer<typeof instanceStatusListSchema>
+export type LogEntries = z.infer<typeof logEntriesSchema>
+export type CommandResponse = z.infer<typeof commandResponseSchema>
 export type LogEntry = z.infer<typeof logEntrySchema>

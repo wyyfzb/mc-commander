@@ -10,6 +10,8 @@ export interface AuditQueryParams {
   source?: string
   page?: number
   pageSize?: number
+  /** 时间排序（issue 383）：asc 正序 / desc 倒序；desc 为服务端默认，不传以保持请求最短 */
+  order?: 'asc' | 'desc'
 }
 
 /** 统一查询串构造（两通道共用；空值不编码） */
@@ -23,6 +25,7 @@ export function buildAuditQuery(params: AuditQueryParams): string {
   if (params.source) qs.set('source', params.source)
   if (params.page) qs.set('page', String(params.page))
   if (params.pageSize) qs.set('pageSize', String(params.pageSize))
+  if (params.order) qs.set('order', params.order)
   const q = qs.toString()
   return q ? `?${q}` : ''
 }

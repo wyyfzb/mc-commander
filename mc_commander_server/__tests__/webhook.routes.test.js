@@ -212,4 +212,26 @@ describe('Webhook 路由', () => {
     });
     expect(res.status).toBe(200);
   });
+
+  // ── 分页参数回归（parsePagination 统一收口，issue 388）──
+  it('GET /webhooks 分页参数透传', async () => {
+    const res = await request(getApp()).get('/api/v1/webhooks?page=2&pageSize=5');
+    expect(res.status).toBe(200);
+    expect(res.body.pagination.page).toBe(2);
+    expect(res.body.pagination.pageSize).toBe(5);
+  });
+
+  it('GET /webhooks page 越界钳制到 1000（webhooks 侧补齐上限，唯一行为加固）', async () => {
+    const res = await request(getApp()).get('/api/v1/webhooks?page=9999&pageSize=999');
+    expect(res.status).toBe(200);
+    expect(res.body.pagination.page).toBe(1000);
+    expect(res.body.pagination.pageSize).toBe(200);
+  });
+
+  it('GET /webhooks 非法分页参数回落默认', async () => {
+    const res = await request(getApp()).get('/api/v1/webhooks?page=abc&pageSize=xyz');
+    expect(res.status).toBe(200);
+    expect(res.body.pagination.page).toBe(1);
+    expect(res.body.pagination.pageSize).toBe(20);
+  });
 });

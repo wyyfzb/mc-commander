@@ -3520,7 +3520,7 @@ const booleanType = ZodBoolean.create;
 ZodDate.create;
 ZodSymbol.create;
 ZodUndefined.create;
-ZodNull.create;
+const nullType = ZodNull.create;
 ZodAny.create;
 const unknownType = ZodUnknown.create;
 ZodNever.create;
@@ -3529,10 +3529,10 @@ const arrayType = ZodArray.create;
 const objectType = ZodObject.create;
 ZodObject.strictCreate;
 const unionType = ZodUnion.create;
-ZodDiscriminatedUnion.create;
+const discriminatedUnionType = ZodDiscriminatedUnion.create;
 ZodIntersection.create;
 ZodTuple.create;
-ZodRecord.create;
+const recordType = ZodRecord.create;
 ZodMap.create;
 ZodSet.create;
 ZodFunction.create;
@@ -3583,6 +3583,8 @@ const apiErrorEnvelopeSchema = objectType({
 	details: unknownType(),
 	timestamp: stringType()
 });
+/** 无载荷操作的成功响应 data（启动/停止/删除/解封等副作用端点固定返回 null） */
+const nullDataSchema = nullType();
 //#endregion
 //#region src/player.ts
 const playerDimensionSchema = enumType([
@@ -3708,6 +3710,25 @@ const playerSchema = objectType({
 	sessions: arrayType(playerSessionSchema),
 	stats: playerStatsSchema
 });
+/** 玩家列表（在线 + 离线混合，非分页信封） */
+const playerListSchema = arrayType(playerSchema);
+/**
+* 玩家详情端点响应（观测边界：核心字段严格，RCON 动态字段透传）。
+* 详情聚合 baseInfo 与 RCON 实时采集，后者字段集随实例状态浮动，
+* 故仅锁定身份与时长等稳定字段，zod 默认忽略未声明键。
+*/
+const playerDetailsResponseSchema = objectType({
+	name: stringType(),
+	uuid: stringType(),
+	isOnline: booleanType(),
+	isOp: booleanType(),
+	isWhitelisted: booleanType(),
+	isBanned: booleanType(),
+	totalPlayTime: numberType(),
+	lastSeen: stringType().nullable()
+});
+/** 封禁操作响应（临时封禁返回到期时间，永久/未传时长为 null） */
+const banResponseBodySchema = objectType({ expiresAt: numberType().nullable() });
 /** 封禁记录 */
 const banRecordSchema = objectType({
 	targetType: enumType(["player", "ip"]),
@@ -3718,6 +3739,8 @@ const banRecordSchema = objectType({
 	expiresAt: numberType().nullable(),
 	createdAt: stringType()
 });
+/** 封禁记录列表（生效中在前 + 历史，非分页信封） */
+const banRecordListSchema = arrayType(banRecordSchema);
 /** 封禁请求体 */
 const banRequestBodySchema = objectType({
 	reason: stringType().optional(),
@@ -3828,6 +3851,12 @@ const logEntrySchema = objectType({
 	text: stringType(),
 	type: enumType(["stdout", "stderr"])
 });
+/** 实例列表（toStatus() 数组，非分页信封） */
+const instanceStatusListSchema = arrayType(instanceStatusSchema);
+/** 日志环形缓冲切片（logBuffer 元素含 time 键，观测仅锁定 text/type） */
+const logEntriesSchema = arrayType(logEntrySchema);
+/** 命令执行响应：RCON 回显文本或 null（实例未运行/空回显） */
+const commandResponseSchema = stringType().nullable();
 //#endregion
 //#region src/backup.ts
 const backupItemSchema = objectType({
@@ -3932,8 +3961,12 @@ const WS_EVENT_TYPES = [
 	"taskFailed",
 	"webhookDeliveryFailed",
 	"deployProgress",
+	"deployComplete",
+	"deployFailed",
 	"circuit_breaker",
 	"upgradeProgress",
+	"upgradeComplete",
+	"upgradeFailed",
 	"systemStatsUpdate",
 	"error"
 ];
@@ -4047,10 +4080,12 @@ const worldInfoSchema = objectType({
 	generateStructures: booleanType(),
 	whiteList: booleanType(),
 	onlineMode: booleanType(),
-	lastSave: numberType().nullable(),
+	lastSave: stringType().nullable(),
 	gameDays: numberType().nullable(),
 	dimensions: arrayType(worldDimensionSchema)
 });
+/** server.properties 键值对（GET /properties 全量响应，值均为 properties 文件文本） */
+const serverPropertiesSchema = recordType(stringType(), stringType());
 const updatePropertiesResponseSchema = objectType({ restartRequired: arrayType(stringType()) });
 //#endregion
 //#region src/files.ts
@@ -4088,6 +4123,45 @@ const fileSaveResponseSchema = objectType({
 	size: numberType(),
 	modifiedAt: stringType()
 });
+const fileMkdirResponseSchema = objectType({
+	path: stringType(),
+	name: stringType()
+});
+const fileRenameResponseSchema = objectType({
+	oldPath: stringType(),
+	newPath: stringType(),
+	name: stringType()
+});
+const fileUploadResponseSchema = objectType({
+	path: stringType(),
+	name: stringType(),
+	size: numberType(),
+	modifiedAt: stringType(),
+	isDirectory: literalType(false)
+});
+/** GET /instances/:id/files 目录列表查询：path 缺省归一为 '/'（与既有行为一致） */
+const fileListRequestSchema = objectType({ path: stringType().optional().default("/") });
+/** GET download / GET content / DELETE files 查询：path 必填非空 */
+const filePathRequestSchema = objectType({ path: stringType({ required_error: "File path is required" }).min(1, "File path is required") });
+/** PUT /instances/:id/files/content 保存内容请求体 */
+const fileSaveRequestSchema = objectType({
+	path: stringType({ required_error: "File path and content are required" }).min(1, "File path is required"),
+	content: stringType({ required_error: "File path and content are required" })
+});
+/** POST /instances/:id/files/mkdir 新建目录请求体 */
+const fileMkdirRequestSchema = objectType({ path: stringType({ required_error: "Directory path is required" }).min(1, "Directory path is required") });
+/** POST /instances/:id/files/rename 重命名请求体 */
+const fileRenameRequestSchema = objectType({
+	path: stringType({ required_error: "Old path and new path are required" }).min(1, "Old path and new path are required"),
+	newPath: stringType({ required_error: "Old path and new path are required" }).min(1, "Old path and new path are required")
+});
+/**
+* POST /instances/:id/files/upload 查询（?targetDir=，可选缺省 '/'）。
+* 归一化语义与既有路由一致：拒绝控制字符、空串非法、补全前导 '/'；
+* 控制字符判定用完整 [^\x00-\x1f] 类（原路由内联正则缺方括号为字面
+* 三字符序列匹配，收敛到 schema 顺带修正，安全性只增不减）。
+*/
+const fileUploadQuerySchema = objectType({ targetDir: stringType().min(1, "Invalid targetDir").refine((v) => !/[\x00-\x1f]/.test(v), "Invalid targetDir").transform((v) => v.startsWith("/") ? v : `/${v}`).optional().default("/") });
 //#endregion
 //#region src/audit.ts
 const auditLogItemSchema = objectType({
@@ -4109,6 +4183,33 @@ const commandHistoryItemSchema = objectType({
 	response: stringType().nullable(),
 	durationMs: numberType().nullable(),
 	createdAt: stringType()
+});
+/**
+* GET /audit-logs 查询契约。
+* - order：仅 asc/desc；缺省/非法回落 desc（issue 383 明确的向后兼容语义，
+*   catch 表达，不升级为 400）。
+* - page/pageSize：分页参数，按 issue 391 边界保持 #392 parsePagination
+*   既有解析不动，schema 仅作字符串透传避免归一化剥离。
+*/
+const auditLogsQuerySchema = objectType({
+	instanceId: stringType().optional(),
+	action: stringType().optional(),
+	targetType: stringType().optional(),
+	startTime: stringType().optional(),
+	endTime: stringType().optional(),
+	source: stringType().optional(),
+	order: enumType(["asc", "desc"]).optional().default("desc").catch("desc"),
+	page: stringType().optional(),
+	pageSize: stringType().optional()
+});
+/** GET /command-history 查询契约（page/pageSize 同上透传） */
+const commandHistoryQuerySchema = objectType({
+	instanceId: stringType().optional(),
+	startTime: stringType().optional(),
+	endTime: stringType().optional(),
+	source: stringType().optional(),
+	page: stringType().optional(),
+	pageSize: stringType().optional()
 });
 //#endregion
 //#region src/webhook.ts
@@ -4186,7 +4287,11 @@ const deployProgressSchema = objectType({
 	percent: numberType(),
 	transferred: numberType(),
 	total: numberType(),
-	error: stringType().optional()
+	error: stringType().optional(),
+	instanceId: stringType().optional(),
+	instanceName: stringType().optional(),
+	type: stringType().optional(),
+	mcVersion: stringType().optional()
 });
 const upgradeStageSchema = enumType([
 	"backup",
@@ -4204,13 +4309,20 @@ const upgradeProgressSchema = objectType({
 	detail: stringType(),
 	timestamp: numberType()
 });
+/**
+* POST /instances/:id/upgrade 请求体契约（issue 391 接入路由层）。
+* - mcVersion 缺省消息保留原路由文案；点分版本白名单（MC_VERSION_REGEX）
+*   属服务层纵深防御口径，保持在路由/服务层校验，schema 只做类型与必填。
+* - type 枚举错误消息保留原路由 'Invalid type' 文案（errorMap 保留既有
+*   断言与前端提示兼容），缺省归一为 vanilla（与原解构默认值一致）。
+*/
 const upgradeRequestSchema = objectType({
-	mcVersion: stringType(),
+	mcVersion: stringType({ required_error: "mcVersion is required" }),
 	type: enumType([
 		"vanilla",
 		"paper",
 		"purpur"
-	]).optional()
+	], { errorMap: () => ({ message: "Invalid type. Must be one of: vanilla, paper, purpur" }) }).default("vanilla")
 });
 const upgradeStartResponseSchema = objectType({
 	message: stringType(),
@@ -4218,6 +4330,19 @@ const upgradeStartResponseSchema = objectType({
 	mcVersion: stringType(),
 	type: stringType()
 });
+/**
+* GET /instances/:id/upgrade/status 响应契约（issue 402 响应侧接入）。
+* upgrading 为判别字段：升级中 = 进度对象展开（与 upgradeProgressSchema 同构），
+* 空闲 = 仅布尔 false（与路由 null progress 分支一致）。
+*/
+const upgradeStatusResponseSchema = discriminatedUnionType("upgrading", [objectType({ upgrading: literalType(false) }), objectType({
+	upgrading: literalType(true),
+	instanceId: stringType(),
+	stage: upgradeStageSchema,
+	percent: numberType(),
+	detail: stringType(),
+	timestamp: numberType()
+})]);
 //#endregion
 //#region src/plugin.ts
 const pluginMetaSchema = objectType({
@@ -4262,6 +4387,7 @@ const pluginToggleResultSchema = objectType({
 	file: stringType(),
 	enabled: booleanType()
 });
+const pluginDeleteResultSchema = objectType({ deleted: stringType() });
 const pluginUploadResultSchema = objectType({
 	file: stringType(),
 	sizeBytes: numberType(),
@@ -4319,6 +4445,35 @@ const marketInstallResultSchema = pluginUploadResultSchema.extend({
 	source: stringType(),
 	originalFileName: stringType()
 });
+/**
+* GET /instances/:id/plugins/market/search 查询契约。
+* offset/limit 为分页参数，按 issue 391 边界保持既有手写解析不动
+* （由 #392 分页 util 后续统一），schema 仅作字符串透传避免归一化剥离。
+*/
+const marketSearchRequestSchema = objectType({
+	q: stringType().optional(),
+	offset: stringType().optional(),
+	limit: stringType().optional(),
+	game_version: stringType().optional(),
+	loader: stringType().optional()
+});
+/** GET /instances/:id/plugins/market/projects/:slug/versions 查询契约 */
+const marketVersionsRequestSchema = objectType({
+	game_version: stringType().optional(),
+	loader: stringType().optional()
+});
+/**
+* overwrite 查询参数契约：与既有 `=== 'true'` 判定同域（字符串枚举），
+* 非法值从「静默按 false 处理」收紧为 400（前端仅发送 'true' 或缺省，不受影响）。
+*/
+const pluginOverwriteQuerySchema = objectType({ overwrite: enumType(["true", "false"]).optional() });
+/** POST /instances/:id/plugins/market/install 请求体契约 */
+const marketInstallRequestSchema = objectType({
+	slug: stringType(),
+	versionNumber: stringType()
+});
+/** PUT /instances/:id/plugins/:file/enabled 请求体契约 */
+const pluginEnabledRequestSchema = objectType({ enabled: booleanType({ invalid_type_error: "enabled must be a boolean" }) });
 //#endregion
 //#region src/system.ts
 const diskInfoSchema = objectType({
@@ -4349,4 +4504,49 @@ const updateCheckResultSchema = objectType({
 	url: stringType().optional()
 });
 //#endregion
-export { NOTIFICATION_EVENT_TYPES, WS_EVENT_TYPES, apiEnvelopeSchema, apiErrorEnvelopeSchema, auditLogItemSchema, backupCreateRequestSchema, backupItemSchema, banRecordSchema, banRequestBodySchema, commandHistoryItemSchema, deployProgressSchema, deployRequestSchema, deployResultSchema, diskInfoSchema, diskUsageSchema, fileContentResponseSchema, fileEntrySchema, fileInfoResponseSchema, fileListResponseSchema, fileSaveResponseSchema, instanceStatusSchema, instanceSummarySchema, instanceUpdatePayloadSchema, inventoryItemSchema, ipHistoryEntrySchema, logEntrySchema, makeApiEnvelopeSchema, marketInstallResultSchema, marketSearchHitSchema, marketSearchResultSchema, marketVersionFileSchema, marketVersionSchema, marketVersionsResultSchema, overviewDataSchema, paginationSchema, playerDimensionSchema, playerEventSchema, playerGameModeSchema, playerInventorySchema, playerPositionSchema, playerPotionEffectSchema, playerSchema, playerSessionSchema, playerStatsSchema, pluginInfoSchema, pluginListSchema, pluginMetaSchema, pluginToggleResultSchema, pluginUpdateCheckResultSchema, pluginUpdateStatusSchema, pluginUploadResultSchema, scheduledTaskSchema, scheduledTaskTypeSchema, spawnPointSchema, systemStatsSchema, taskCreatePayloadSchema, taskRunHistorySchema, taskRunStatusSchema, taskUpdatePayloadSchema, updateCheckResultSchema, updatePropertiesResponseSchema, upgradeProgressSchema, upgradeRequestSchema, upgradeStageSchema, upgradeStartResponseSchema, versionsResponseSchema, weatherTypeSchema, webhookCreatePayloadSchema, webhookDeliverySchema, webhookSchema, webhookTestResultSchema, worldDimensionSchema, worldInfoSchema, wsBackupPayloadSchema, wsEventTypeSchema, wsLogPayloadSchema, wsMessageSchema, wsPerformancePayloadSchema, wsPlayerEventPayloadSchema, wsStatusEventPayloadSchema, wsStatusSnapshotSchema, wsWeatherPayloadSchema };
+//#region src/auth.ts
+/**
+* 认证与 API Key 域响应契约（issue 414）
+*
+* - 会话令牌为 base64url 明文交客户端（服务端仅存 SHA-256 摘要）；sessionId 为 UUID 字符串
+* - login 会话结构与 sessions 列表条目分开定义（字段语义不同：前者含明文 token，后者含 current 标记）
+* - apiKey 轮换响应白名单化：明文新 Key 出参仅允许 apiKey 单字段，防结构漂移导致意外泄漏
+*/
+/** login 成功响应：新会话（明文 token + UUID 会话 id + 过期时间 ISO） */
+const authSessionResponseSchema = objectType({
+	token: stringType(),
+	sessionId: stringType(),
+	expiresAt: stringType()
+});
+/** setup 成功响应：设密即登录（hasPassword 恒 true + 新会话） */
+const authSetupResponseSchema = authSessionResponseSchema.extend({ hasPassword: literalType(true) });
+/** status 探测响应：是否已设密（登录页首屏） */
+const authStatusResponseSchema = objectType({ hasPassword: booleanType() });
+/** 改密成功响应（会话通道与 API Key 通道同构：kickedSessions 为被踢会话数） */
+const authPasswordChangeResponseSchema = objectType({
+	ok: literalType(true),
+	kickedSessions: numberType()
+});
+/** 登出成功响应 */
+const authLogoutResponseSchema = objectType({ ok: literalType(true) });
+/** 会话列表条目（id 为 UUID；userAgent/ip 允许 null；current 标记当前会话） */
+const authSessionItemSchema = objectType({
+	id: stringType(),
+	userAgent: stringType().nullable(),
+	ip: stringType().nullable(),
+	createdAt: stringType(),
+	lastSeenAt: stringType(),
+	expiresAt: stringType(),
+	current: booleanType()
+});
+/** 会话列表响应（踢单设备 UI 数据源） */
+const authSessionsResponseSchema = objectType({ sessions: arrayType(authSessionItemSchema) });
+/** 踢单设备成功响应（current 标记被踢的是否为当前会话） */
+const authSessionKickResponseSchema = objectType({
+	ok: literalType(true),
+	current: booleanType()
+});
+/** API Key 轮换成功响应（明文新 Key 白名单单字段） */
+const apiKeyRotateResponseSchema = objectType({ apiKey: stringType() });
+//#endregion
+export { NOTIFICATION_EVENT_TYPES, WS_EVENT_TYPES, apiEnvelopeSchema, apiErrorEnvelopeSchema, apiKeyRotateResponseSchema, auditLogItemSchema, auditLogsQuerySchema, authLogoutResponseSchema, authPasswordChangeResponseSchema, authSessionItemSchema, authSessionKickResponseSchema, authSessionResponseSchema, authSessionsResponseSchema, authSetupResponseSchema, authStatusResponseSchema, backupCreateRequestSchema, backupItemSchema, banRecordListSchema, banRecordSchema, banRequestBodySchema, banResponseBodySchema, commandHistoryItemSchema, commandHistoryQuerySchema, commandResponseSchema, deployProgressSchema, deployRequestSchema, deployResultSchema, diskInfoSchema, diskUsageSchema, fileContentResponseSchema, fileEntrySchema, fileInfoResponseSchema, fileListRequestSchema, fileListResponseSchema, fileMkdirRequestSchema, fileMkdirResponseSchema, filePathRequestSchema, fileRenameRequestSchema, fileRenameResponseSchema, fileSaveRequestSchema, fileSaveResponseSchema, fileUploadQuerySchema, fileUploadResponseSchema, instanceStatusListSchema, instanceStatusSchema, instanceSummarySchema, instanceUpdatePayloadSchema, inventoryItemSchema, ipHistoryEntrySchema, logEntriesSchema, logEntrySchema, makeApiEnvelopeSchema, marketInstallRequestSchema, marketInstallResultSchema, marketSearchHitSchema, marketSearchRequestSchema, marketSearchResultSchema, marketVersionFileSchema, marketVersionSchema, marketVersionsRequestSchema, marketVersionsResultSchema, nullDataSchema, overviewDataSchema, paginationSchema, playerDetailsResponseSchema, playerDimensionSchema, playerEventSchema, playerGameModeSchema, playerInventorySchema, playerListSchema, playerPositionSchema, playerPotionEffectSchema, playerSchema, playerSessionSchema, playerStatsSchema, pluginDeleteResultSchema, pluginEnabledRequestSchema, pluginInfoSchema, pluginListSchema, pluginMetaSchema, pluginOverwriteQuerySchema, pluginToggleResultSchema, pluginUpdateCheckResultSchema, pluginUpdateStatusSchema, pluginUploadResultSchema, scheduledTaskSchema, scheduledTaskTypeSchema, serverPropertiesSchema, spawnPointSchema, systemStatsSchema, taskCreatePayloadSchema, taskRunHistorySchema, taskRunStatusSchema, taskUpdatePayloadSchema, updateCheckResultSchema, updatePropertiesResponseSchema, upgradeProgressSchema, upgradeRequestSchema, upgradeStageSchema, upgradeStartResponseSchema, upgradeStatusResponseSchema, versionsResponseSchema, weatherTypeSchema, webhookCreatePayloadSchema, webhookDeliverySchema, webhookSchema, webhookTestResultSchema, worldDimensionSchema, worldInfoSchema, wsBackupPayloadSchema, wsEventTypeSchema, wsLogPayloadSchema, wsMessageSchema, wsPerformancePayloadSchema, wsPlayerEventPayloadSchema, wsStatusEventPayloadSchema, wsStatusSnapshotSchema, wsWeatherPayloadSchema };

@@ -245,7 +245,7 @@ export const mockWorldInfo: WorldInfo = {
   generateStructures: true,
   whiteList: false,
   onlineMode: true,
-  lastSave: new Date(Date.now() - 5 * 60_000).getTime(),
+  lastSave: new Date(Date.now() - 5 * 60_000).toISOString(),
   gameDays: 42,
   dimensions: [
     { name: '主世界', icon: '🌍', playerCount: 2 },
@@ -764,6 +764,19 @@ export const handlers = [
         timestamp: new Date().toISOString(),
       },
       { status: 409 },
+    ),
+  ),
+  // 40000 校验失败场景：HTTP 400 错误信封（信封级 GET 请求路径测试）
+  http.get('*/api/v1/bad-request-probe', () =>
+    HttpResponse.json(
+      {
+        status: 'error',
+        code: 40000,
+        message: 'Validation Error',
+        details: null,
+        timestamp: new Date().toISOString(),
+      },
+      { status: 400 },
     ),
   ),
 

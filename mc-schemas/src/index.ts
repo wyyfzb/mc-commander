@@ -9,15 +9,21 @@ export {
   apiEnvelopeSchema,
   apiErrorEnvelopeSchema,
   makeApiEnvelopeSchema,
+  nullDataSchema,
   type Pagination,
   type ApiEnvelope,
   type ApiErrorEnvelope,
+  type NullData,
 } from './envelope'
 
 // 玩家
 export {
   playerSchema,
+  playerListSchema,
+  playerDetailsResponseSchema,
   banRecordSchema,
+  banRecordListSchema,
+  banResponseBodySchema,
   banRequestBodySchema,
   spawnPointSchema,
   playerPositionSchema,
@@ -32,7 +38,11 @@ export {
   playerGameModeSchema,
   weatherTypeSchema,
   type Player,
+  type PlayerList,
+  type PlayerDetailsResponse,
   type BanRecord,
+  type BanRecordList,
+  type BanResponseBody,
   type BanRequestBody,
   type SpawnPoint,
   type PlayerPosition,
@@ -52,14 +62,20 @@ export {
 export {
   instanceSummarySchema,
   instanceStatusSchema,
+  instanceStatusListSchema,
   instanceUpdatePayloadSchema,
   overviewDataSchema,
   logEntrySchema,
+  logEntriesSchema,
+  commandResponseSchema,
   type InstanceSummary,
   type InstanceStatus,
+  type InstanceStatusList,
   type InstanceUpdatePayload,
   type OverviewData,
   type LogEntry,
+  type LogEntries,
+  type CommandResponse,
 } from './instance'
 
 // 备份
@@ -114,9 +130,11 @@ export {
 export {
   worldInfoSchema,
   worldDimensionSchema,
+  serverPropertiesSchema,
   updatePropertiesResponseSchema,
   type WorldInfo,
   type WorldDimension,
+  type ServerPropertiesMap,
   type ServerProperties,
   type UpdatePropertiesResponse,
 } from './world'
@@ -128,17 +146,37 @@ export {
   fileInfoResponseSchema,
   fileContentResponseSchema,
   fileSaveResponseSchema,
+  fileMkdirResponseSchema,
+  fileRenameResponseSchema,
+  fileUploadResponseSchema,
+  fileListRequestSchema,
+  filePathRequestSchema,
+  fileSaveRequestSchema,
+  fileMkdirRequestSchema,
+  fileRenameRequestSchema,
+  fileUploadQuerySchema,
   type FileEntry,
   type FileListResponse,
   type FileInfoResponse,
   type FileContentResponse,
   type FileSaveResponse,
+  type FileMkdirResponse,
+  type FileRenameResponse,
+  type FileUploadResponse,
+  type FileListRequest,
+  type FilePathRequest,
+  type FileSaveRequest,
+  type FileMkdirRequest,
+  type FileRenameRequest,
+  type FileUploadQuery,
 } from './files'
 
 // 审计
 export {
   auditLogItemSchema,
   commandHistoryItemSchema,
+  auditLogsQuerySchema,
+  commandHistoryQuerySchema,
   type AuditLogItem,
   type CommandHistoryItem,
 } from './audit'
@@ -165,6 +203,7 @@ export {
   upgradeProgressSchema,
   upgradeRequestSchema,
   upgradeStartResponseSchema,
+  upgradeStatusResponseSchema,
   type VersionsResponse,
   type DeployRequest,
   type DeployResult,
@@ -173,6 +212,7 @@ export {
   type UpgradeProgress,
   type UpgradeRequest,
   type UpgradeStartResponse,
+  type UpgradeStatusResponse,
 } from './deploy'
 
 // 插件
@@ -183,6 +223,7 @@ export {
   pluginUpdateStatusSchema,
   pluginUpdateCheckResultSchema,
   pluginToggleResultSchema,
+  pluginDeleteResultSchema,
   pluginUploadResultSchema,
   marketSearchHitSchema,
   marketSearchResultSchema,
@@ -190,12 +231,18 @@ export {
   marketVersionSchema,
   marketVersionsResultSchema,
   marketInstallResultSchema,
+  marketSearchRequestSchema,
+  marketVersionsRequestSchema,
+  pluginOverwriteQuerySchema,
+  marketInstallRequestSchema,
+  pluginEnabledRequestSchema,
   type PluginMeta,
   type PluginInfo,
   type PluginList,
   type PluginUpdateStatus,
   type PluginUpdateCheckResult,
   type PluginToggleResult,
+  type PluginDeleteResult,
   type PluginUploadResult,
   type MarketSearchHit,
   type MarketSearchResult,
@@ -203,6 +250,11 @@ export {
   type MarketVersion,
   type MarketVersionsResult,
   type MarketInstallResult,
+  type MarketSearchRequest,
+  type MarketVersionsRequest,
+  type PluginOverwriteQuery,
+  type MarketInstallRequest,
+  type PluginEnabledRequest,
 } from './plugin'
 
 // 系统
@@ -216,3 +268,25 @@ export {
   type SystemStats,
   type UpdateCheckResult,
 } from './system'
+
+// 认证与 API Key
+export {
+  authSessionResponseSchema,
+  authSetupResponseSchema,
+  authStatusResponseSchema,
+  authPasswordChangeResponseSchema,
+  authLogoutResponseSchema,
+  authSessionItemSchema,
+  authSessionsResponseSchema,
+  authSessionKickResponseSchema,
+  apiKeyRotateResponseSchema,
+  type AuthSessionResponse,
+  type AuthSetupResponse,
+  type AuthStatusResponse,
+  type AuthPasswordChangeResponse,
+  type AuthLogoutResponse,
+  type AuthSessionItem,
+  type AuthSessionsResponse,
+  type AuthSessionKickResponse,
+  type ApiKeyRotateResponse,
+} from './auth'
