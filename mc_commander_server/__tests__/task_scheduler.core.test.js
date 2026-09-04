@@ -6,6 +6,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 vi.mock('../config.js', () => ({
   default: {
     panelBackup: { enabled: false, cron: '0 4 * * *' },
+    retentionPrune: { enabled: false, cron: '30 4 * * *', auditLogDays: 90, webhookDeliveryDays: 30 },
     backupInProgressTimeoutMs: 30 * 60 * 1000,
     logLevel: 'debug',
     dataDir: './data',
@@ -39,6 +40,12 @@ vi.mock('../services/backup.service.js', () => ({
 }));
 vi.mock('../services/panel-backup.service.js', () => ({
   runPanelBackupCycle: vi.fn(),
+}));
+vi.mock('../db/audit.model.js', () => ({
+  AuditLogModel: { prune: vi.fn(() => 0) },
+}));
+vi.mock('../db/webhook.model.js', () => ({
+  WebhookModel: { pruneDeliveries: vi.fn(() => 0) },
 }));
 
 import { TaskScheduler } from '../services/task_scheduler.js';
