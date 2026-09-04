@@ -467,7 +467,13 @@ export function OverviewTab({ player, isRconConnected, bans, onAction, onOpenBan
               ? `即将踢出 ${player.name}`
               : `即将解封 ${confirmAction?.split('-')[2] ?? ''}`
         }
-        warning={confirmAction === 'clearinv' ? '此操作不可撤销，所有物品将被永久删除' : '此操作不可撤销'}
+        warning={
+          confirmAction === 'clearinv'
+            ? '此操作不可撤销，所有物品将被永久删除'
+            : confirmAction === 'kick'
+              ? '玩家可随时重新加入服务器'
+              : '此操作不可撤销'
+        }
         confirmText="确认操作"
         danger
         onConfirm={async () => {

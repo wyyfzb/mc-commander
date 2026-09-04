@@ -248,59 +248,6 @@ export function CommandInput() {
           RCON 未启用，命令已发送但响应不可见
         </NoticeBanner>
       )}
-      {/* 快捷 chips */}
-      {presets.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          {presets.map((preset) => {
-            const name = preset.split(' ')[0]?.replace('/', '') ?? ''
-            const Icon = iconForCommand(name)
-            const colorClass = colorForCommand(name)
-            const display = preset.length > 26 ? `${preset.slice(0, 24)}...` : preset
-            return (
-              <span
-                key={preset}
-                className="inline-flex items-center gap-1 rounded-mcs-sm border border-mcs-border-default bg-mcs-bg-default px-2 py-1 text-mcs-xs text-mcs-text-muted transition-colors hover:bg-mcs-state-hover"
-              >
-                <Icon className={`size-3 ${colorClass}`} aria-hidden />
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      className="cursor-pointer font-mono hover:text-mcs-text-default"
-                      onClick={() => setValue(preset)}
-                    >
-                      {display}
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="top">{preset}</TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      aria-label={`发送 ${preset}`}
-                      className="cursor-pointer text-mcs-text-subtle hover:text-mcs-success-fg"
-                      onClick={() => send(preset)}
-                    >
-                      <Play className="size-3" aria-hidden />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="top">立即发送</TooltipContent>
-                </Tooltip>
-                <button
-                  type="button"
-                  aria-label={`删除 ${preset}`}
-                  className="cursor-pointer text-mcs-text-subtle hover:text-mcs-error-fg"
-                  onClick={() => setDeleteTarget(preset)}
-                >
-                  <X className="size-3" aria-hidden />
-                </button>
-              </span>
-            )
-          })}
-        </div>
-      )}
-
       {/* 历史导航状态指示器 */}
       {navStatus && navRef.current != null && (
         <div className={"flex items-center gap-1 text-mcs-2xs " + (navStatus.status === 'sent' ? 'text-mcs-success-fg' : 'text-mcs-error-fg')}>
@@ -391,6 +338,60 @@ export function CommandInput() {
           </div>
         )}
       </div>
+
+      {/* 快捷 chips：输入行下方（输入为主、快捷为辅的视觉层级）；播放/删除小图标以 -m-1/p-1
+          扩大命中区（12px 视觉 → 20px 热区），视觉密度不变 */}
+      {presets.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {presets.map((preset) => {
+            const name = preset.split(' ')[0]?.replace('/', '') ?? ''
+            const Icon = iconForCommand(name)
+            const colorClass = colorForCommand(name)
+            const display = preset.length > 26 ? `${preset.slice(0, 24)}...` : preset
+            return (
+              <span
+                key={preset}
+                className="inline-flex items-center gap-1 rounded-mcs-sm border border-mcs-border-default bg-mcs-bg-default px-2 py-1 text-mcs-xs text-mcs-text-muted transition-colors hover:bg-mcs-state-hover"
+              >
+                <Icon className={`size-3 ${colorClass}`} aria-hidden />
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      className="cursor-pointer font-mono hover:text-mcs-text-default"
+                      onClick={() => setValue(preset)}
+                    >
+                      {display}
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">{preset}</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label={`发送 ${preset}`}
+                      className="-m-1 cursor-pointer p-1 text-mcs-text-subtle hover:text-mcs-success-fg"
+                      onClick={() => send(preset)}
+                    >
+                      <Play className="size-3" aria-hidden />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">立即发送</TooltipContent>
+                </Tooltip>
+                <button
+                  type="button"
+                  aria-label={`删除 ${preset}`}
+                  className="-m-1 cursor-pointer p-1 text-mcs-text-subtle hover:text-mcs-error-fg"
+                  onClick={() => setDeleteTarget(preset)}
+                >
+                  <X className="size-3" aria-hidden />
+                </button>
+              </span>
+            )
+          })}
+        </div>
+      )}
 
       {/* 删除快捷指令：二次确认（danger 标红确认键） */}
       <ConfirmDialog

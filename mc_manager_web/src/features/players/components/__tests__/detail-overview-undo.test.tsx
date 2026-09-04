@@ -92,11 +92,13 @@ describe('OverviewTab 可逆操作 undo toast', () => {
     expect(screen.queryByText('确认移除白名单')).not.toBeInTheDocument()
   })
 
-  it('踢人按钮仍走确认弹窗（不直接执行）', () => {
+  it('踢人按钮仍走确认弹窗（不直接执行）；提示为可逆说明而非不可撤销', () => {
     renderOverview(makePlayer({ isOp: false }))
 
     fireEvent.click(screen.getByText('踢出'))
     expect(screen.getByText('确认踢出')).toBeInTheDocument()
+    expect(screen.getByText('玩家可随时重新加入服务器')).toBeInTheDocument()
+    expect(screen.queryByText('此操作不可撤销')).not.toBeInTheDocument()
     expect(mockAction).not.toHaveBeenCalled()
   })
 
