@@ -148,7 +148,7 @@ export function BigStatCards({
                 </span>
               </>
             ) : (
-              <span className="text-mcs-sm font-medium text-mcs-text-subtle">暂无磁盘数据</span>
+              <span className="font-sans text-mcs-sm font-medium text-mcs-text-subtle">暂无磁盘数据</span>
             )
           }
           percent={primary?.percent ?? 0}
