@@ -374,7 +374,7 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
     >
       {/* 工具栏（实底，玻璃禁区内） */}
       <div className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-mcs-border-muted bg-mcs-bg-muted px-2">
-        <InstanceControls compact />
+        <InstanceControls />
         <div className="flex items-center gap-1">
           <IconButton
             tooltip="搜索终端内容（Ctrl+F）"

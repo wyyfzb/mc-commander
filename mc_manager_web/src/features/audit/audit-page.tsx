@@ -17,6 +17,7 @@ import { useConnectionStore } from '@/stores/connection'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { FilterSelect } from '@/components/mcs/filter-select'
 import { StatusPill } from '@/components/mcs/status-pill'
 import { formatDateTime, formatDurationMs } from '@/lib/format'
@@ -137,9 +138,24 @@ function CmdBody({ cmds }: { cmds: CommandHistoryItem[] }) {
           <td className="whitespace-nowrap px-3 py-2 text-mcs-text-default font-mono text-mcs-xs">{formatTime(cmd.createdAt)}</td>
           <td className="px-3 py-2 font-mono text-mcs-text-default">{cmd.command}</td>
           <td className="px-3 py-2">
-            <StatusPill tone={cmd.success ? 'success' : 'error'}>
-              {cmd.success ? '成功' : '失败'}
-            </StatusPill>
+            {cmd.success || !cmd.response ? (
+              <StatusPill tone={cmd.success ? 'success' : 'error'}>
+                {cmd.success ? '成功' : '失败'}
+              </StatusPill>
+            ) : (
+              /* 失败行：response 携带原因时 hover 展示（与任务列表失败行同模式） */
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="cursor-help underline decoration-dashed underline-offset-2">
+                    <StatusPill tone="error">失败</StatusPill>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-xs">
+                  <p className="text-mcs-xs font-medium text-mcs-error-fg">失败原因</p>
+                  <p className="mt-1 text-xs text-mcs-text-default">{cmd.response}</p>
+                </TooltipContent>
+              </Tooltip>
+            )}
           </td>
           <td className="px-3 py-2 text-mcs-text-subtle">{cmd.source}</td>
           <td className="px-3 py-2 text-mcs-text-subtle font-mono text-mcs-xs">{formatDurationMs(cmd.durationMs)}</td>
