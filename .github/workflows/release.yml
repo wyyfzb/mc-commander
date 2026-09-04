@@ -34,9 +34,88 @@ jobs:
           npm ci --omit=dev
           mkdir -p public
           cp -r ../mc_manager_web/dist/* public/
-          tar -czf ../mc-commander-server-${{ github.ref_name }}.tar.gz \
+
+      # 共享契约包 dist 随仓库跟踪，发布前仍强制重建，防止 src/dist 漂移进入发布产物
+      - name: 构建共享契约包
+        working-directory: mc-schemas
+        run: |
+          npm ci
+          npm run build
+
+      # @mc-commander/schemas 以 file:../mc-schemas 引用，位于服务端目录之外，
+      # 直接打包会产出「安装全绿但启动即崩」的悬空依赖 tarball（npm ci 静默建死链）。
+      # 组装 staging：内联 mc-schemas 完整包（源码 + dist），并把 package.json /
+      # package-lock.json 中的依赖路径同步重写为 tarball 内相对引用 file:./mc-schemas
+      - name: 组装发布 staging（内联共享契约包）
+        run: |
+          rm -rf .staging
+          mkdir -p .staging
+          tar -cf - -C mc_commander_server \
             --exclude=node_modules --exclude=data --exclude=backups --exclude=servers --exclude=.env \
-            .
+            . | tar -xf - -C .staging
+          mkdir -p .staging/mc-schemas
+          tar -cf - -C mc-schemas --exclude=node_modules . | tar -xf - -C .staging/mc-schemas
+          node <<'EOF'
+          const fs = require('fs');
+          const pkgPath = '.staging/package.json';
+          const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+          if (pkg.dependencies['@mc-commander/schemas'] !== 'file:../mc-schemas') {
+            throw new Error('package.json 未命中预期的 file:../mc-schemas 依赖，staging 前提不成立');
+          }
+          pkg.dependencies['@mc-commander/schemas'] = 'file:./mc-schemas';
+          fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
+          const lockPath = '.staging/package-lock.json';
+          const lock = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
+          const rootDeps = lock.packages && lock.packages[''].dependencies;
+          if (!rootDeps || rootDeps['@mc-commander/schemas'] !== 'file:../mc-schemas') {
+            throw new Error('package-lock.json 根依赖未命中预期 file:../mc-schemas');
+          }
+          rootDeps['@mc-commander/schemas'] = 'file:./mc-schemas';
+          const linkEntry = lock.packages['node_modules/@mc-commander/schemas'];
+          if (!linkEntry || linkEntry.resolved !== '../mc-schemas') {
+            throw new Error('package-lock.json 链接条目未命中预期 ../mc-schemas');
+          }
+          linkEntry.resolved = 'mc-schemas';
+          const targetEntry = lock.packages['../mc-schemas'];
+          if (!targetEntry) {
+            throw new Error('package-lock.json 缺少 file 目标条目 ../mc-schemas');
+          }
+          delete lock.packages['../mc-schemas'];
+          lock.packages['mc-schemas'] = targetEntry;
+          delete targetEntry.devDependencies;
+          // 内联包按运行时发布物瘦身：npm 对 project 内 file: 目标按内嵌包校验，
+          // devDependencies 会参与 lock 同步检查——剥离后与 --omit=dev 安装语义一致
+          const vendorPkgPath = '.staging/mc-schemas/package.json';
+          const vendorPkg = JSON.parse(fs.readFileSync(vendorPkgPath, 'utf8'));
+          delete vendorPkg.devDependencies;
+          delete vendorPkg.scripts;
+          fs.writeFileSync(vendorPkgPath, JSON.stringify(vendorPkg, null, 2) + '\n');
+          fs.writeFileSync(lockPath, JSON.stringify(lock, null, 2) + '\n');
+          console.log('依赖路径重写完成: file:../mc-schemas -> file:./mc-schemas');
+          EOF
+
+      # 模拟用户解包后的安装流程，防止再次发布「安装全绿但服务无法启动」的产物
+      - name: 发布前 sanity check
+        run: |
+          cd .staging
+          npm ci --omit=dev
+          node -e "const schemas = require('@mc-commander/schemas'); const keys = Object.keys(schemas); if (!keys.length) throw new Error('schemas 加载为空对象'); console.log('sanity check 通过: @mc-commander/schemas 加载成功，' + keys.length + ' 个导出')"
+
+      - name: 打包 tarball
+        run: |
+          tar -czf mc-commander-server-${{ github.ref_name }}.tar.gz \
+            --exclude=node_modules --exclude=data --exclude=backups --exclude=servers --exclude=.env \
+            -C .staging .
+
+      - name: 产物敏感排除自检
+        run: |
+          LEAKS=$(tar -tzf mc-commander-server-${{ github.ref_name }}.tar.gz | grep -E '(^|/)(node_modules|data|backups|servers|\.env)(/|$)' || true)
+          if [ -n "$LEAKS" ]; then
+            echo "发现敏感路径进入发布产物："
+            echo "$LEAKS"
+            exit 1
+          fi
+          echo '敏感排除自检通过'
 
       - name: 生成 SHA256SUMS
         run: sha256sum mc-commander-server-${{ github.ref_name }}.tar.gz > SHA256SUMS.txt
