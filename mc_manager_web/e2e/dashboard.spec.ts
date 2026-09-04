@@ -57,7 +57,7 @@ test.describe('仪表盘', () => {
     await nightReq
   })
 
-  test('公告发送：模板填充 → 发送 say → 清空', async ({ page }) => {
+  test('公告发送：模板填充 → 发送 → 二次确认 → say → 清空', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/dashboard')
     await page.getByRole('button', { name: /服务器将在 5 分钟后重启/ }).click()
@@ -66,6 +66,8 @@ test.describe('仪表盘', () => {
       (r) => r.url().includes('/command') && String(r.postDataJSON()?.command).includes('say 服务器将在'),
     )
     await page.getByRole('button', { name: '发送公告' }).click()
+    // 二次确认弹窗
+    await page.getByRole('button', { name: '发送', exact: true }).click()
     await sayReq
     await expect(page.getByLabel('公告内容')).toHaveValue('')
   })
