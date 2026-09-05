@@ -257,7 +257,9 @@ describe('Status Routes', () => {
     it('should return 404 for non-existent instance', async () => {
       mockManager.getInstance.mockReturnValue(undefined);
 
-      const res = await request(app).put('/api/instances/nope').send({ startCommand: 'java' });
+      // 载荷用合法空对象：输入侧 schema（issue 486）前置于实例存在性检查
+      // （与 files/plugins 契约端点同构），非法载荷会先落到 400 而非 404
+      const res = await request(app).put('/api/instances/nope').send({});
 
       expect(res.status).toBe(404);
     });
