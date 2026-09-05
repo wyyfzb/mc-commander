@@ -244,12 +244,13 @@ describe('服务层路径收口（真实临时目录 + 真实 fs）', () => {
     await expect(service.upgrade('inst-1', '1.21.4', 'vanilla')).rejects.toThrow(
       /Download host not allowed: evil\.example\.com/
     );
-    // 污染 URL 未产生任何写入（回滚回写仅 mcVersion，无 jarFile 入库）
+    // 污染 URL 未产生任何写入（回滚仅恢复升级前旧 jarFile 名——污染上下文的
+    // 新版本文件名从未入库，#539）
     expect(fs.readdirSync(tmpDir)).toEqual([]);
-    expect(InstanceModel.update).not.toHaveBeenCalledWith(
-      'inst-1',
-      expect.objectContaining({ jarFile: expect.any(String) })
-    );
+    expect(InstanceModel.update).not.toHaveBeenCalledWith('inst-1', {
+      jarFile: 'server-1.21.4.jar',
+      mcVersion: '1.21.4',
+    });
   });
 
   it('全链路成功：白名单域下载落盘在实例目录内，jarFile 入库值合规', async () => {

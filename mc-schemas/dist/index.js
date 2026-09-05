@@ -4447,7 +4447,8 @@ const marketSearchResultSchema = objectType({
 const marketVersionFileSchema = objectType({
 	url: stringType().nullable(),
 	filename: stringType(),
-	size: numberType()
+	size: numberType(),
+	sha512: stringType().nullable()
 });
 const marketVersionSchema = objectType({
 	versionNumber: stringType(),

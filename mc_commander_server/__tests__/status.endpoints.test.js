@@ -16,6 +16,8 @@ vi.mock('../db/index.js', () => ({
   },
   BackupModel: {
     deleteByInstance: vi.fn(),
+    resetStaleInProgress: vi.fn(),
+    findAll: vi.fn(),
   },
 }));
 
@@ -139,6 +141,10 @@ describe('Status Routes · 端点缺口收口', () => {
       if (dir === config.backupsDir) return statfsSample(2359296); // 10%
       throw new Error('unexpected statfs path');
     });
+
+    // BackupModel.findAll 默认空集（无进行中备份）——DELETE 互斥检查放行；
+    // 备份互斥用例按需覆盖为分状态计数
+    BackupModel.findAll.mockReturnValue({ backups: [], total: 0 });
 
     app = express();
     app.use(express.json());
@@ -709,6 +715,109 @@ describe('Status Routes · 端点缺口收口', () => {
       expect(res.status).toBe(200);
       expect(mockManager.instances.size).toBe(0);
       expect(recordAudit).toHaveBeenCalled();
+    });
+
+    // ── 备份互斥（#530）：creating/restoring 进行中拒绝卸载，防恢复竞争数据事故 ──
+    it('restoring 记录存在 → 409 拒绝：不触碰实例目录/快照目录/任何 DB 记录', async () => {
+      const instance = {
+        id: 's1',
+        serverPath: INSTANCE_PATH,
+        isRunning: false,
+        cancelRestart: vi.fn(),
+        process: null,
+      };
+      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.instances.set('s1', instance);
+      fs.existsSync.mockImplementation((p) => p === INSTANCE_PATH || p === backupDir);
+      BackupModel.findAll.mockImplementation(({ status }) => ({
+        backups: [], total: status === 'restoring' ? 1 : 0,
+      }));
+
+      const res = await request(app).delete('/api/instances/s1');
+
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe(40901);
+      expect(res.body.message).toBe('备份进行中，请等待完成后再删除实例');
+      // 拒绝为纯前置检查：目录/快照/DB/内存/审计零触碰
+      expect(fs.rmSync).not.toHaveBeenCalled();
+      expect(BackupModel.deleteByInstance).not.toHaveBeenCalled();
+      expect(InstanceModel.delete).not.toHaveBeenCalled();
+      expect(mockManager.instances.size).toBe(1);
+      expect(recordAudit).not.toHaveBeenCalled();
+    });
+
+    it('creating 记录存在 → 409 拒绝（在线备份中卸载同被拦下）', async () => {
+      const instance = {
+        id: 's1',
+        serverPath: INSTANCE_PATH,
+        isRunning: false,
+        cancelRestart: vi.fn(),
+        process: null,
+      };
+      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.instances.set('s1', instance);
+      BackupModel.findAll.mockImplementation(({ status }) => ({
+        backups: [], total: status === 'creating' ? 1 : 0,
+      }));
+
+      const res = await request(app).delete('/api/instances/s1');
+
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe(40901);
+      expect(fs.rmSync).not.toHaveBeenCalled();
+      expect(BackupModel.deleteByInstance).not.toHaveBeenCalled();
+      expect(InstanceModel.delete).not.toHaveBeenCalled();
+    });
+
+    it('卡死记录先经 resetStaleInProgress 按语义重置，重置后无进行中记录 → 正常卸载（三清回归）', async () => {
+      const instance = {
+        id: 's1',
+        serverPath: INSTANCE_PATH,
+        isRunning: false,
+        cancelRestart: vi.fn(),
+        process: null,
+      };
+      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.instances.set('s1', instance);
+      fs.existsSync.mockImplementation((p) => p === INSTANCE_PATH || p === backupDir);
+      BackupModel.resetStaleInProgress.mockReturnValue(1);
+      // findAll 默认 total=0：stale 重置后互斥放行
+
+      const res = await request(app).delete('/api/instances/s1');
+
+      expect(res.status).toBe(200);
+      expect(BackupModel.resetStaleInProgress).toHaveBeenCalledWith({
+        maxAgeMs: config.backupInProgressTimeoutMs, instanceId: 's1',
+      });
+      expect(fs.rmSync).toHaveBeenCalledWith(INSTANCE_PATH, { recursive: true, force: true });
+      expect(fs.rmSync).toHaveBeenCalledWith(backupDir, { recursive: true, force: true });
+      expect(BackupModel.deleteByInstance).toHaveBeenCalledWith('s1');
+      expect(InstanceModel.delete).toHaveBeenCalledWith('s1');
+    });
+
+    it('检查置于停机等待之后：运行中实例先 stopGracefully 再命中互斥 → 409', async () => {
+      const instance = {
+        id: 's1',
+        serverPath: INSTANCE_PATH,
+        isRunning: true,
+        cancelRestart: vi.fn(),
+        stopGracefully: vi.fn().mockResolvedValue(),
+        process: null,
+      };
+      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.instances.set('s1', instance);
+      BackupModel.findAll.mockImplementation(({ status }) => ({
+        backups: [], total: status === 'restoring' ? 1 : 0,
+      }));
+
+      const res = await request(app).delete('/api/instances/s1');
+
+      expect(res.status).toBe(409);
+      // 停机等待先行（删前必停的既有语义保留），互斥检查紧贴删除动作消除 TOCTOU 窗口
+      expect(instance.stopGracefully).toHaveBeenCalledTimes(1);
+      expect(instance.cancelRestart).toHaveBeenCalledTimes(1);
+      expect(fs.rmSync).not.toHaveBeenCalled();
+      expect(BackupModel.deleteByInstance).not.toHaveBeenCalled();
     });
   });
 

@@ -20,12 +20,14 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import crypto from 'crypto';
 import { PassThrough } from 'stream';
 import { pipeline } from 'stream/promises';
 import got from 'got';
 import { AppError, ErrorCodes } from '../utils/response.js';
 import { uploadPlugin, listPlugins } from './plugin.service.js';
 import { getServerVersion } from '../utils/version.js';
+import { logger } from '../utils/logger.js';
 
 const MODRINTH_API_BASE = 'https://api.modrinth.com/v2';
 
@@ -256,6 +258,8 @@ export async function getMarketProjectVersions(slug, { gameVersion = null, loade
                 url: typeof primary.url === 'string' ? primary.url : null,
                 filename: typeof primary.filename === 'string' ? primary.filename : null,
                 size: typeof primary.size === 'number' ? primary.size : 0,
+                // Modrinth 官方 sha512（hex）：下载完整性校验数据源；上游缺省/非法时置 null（降级放行）
+                sha512: typeof primary.hashes?.sha512 === 'string' ? primary.hashes.sha512 : null,
               }
             : null,
         };
@@ -303,9 +307,11 @@ export function sanitizeMarketFileName(filename, { slug, versionNumber }) {
 }
 
 /**
- * 下载 Modrinth CDN 文件到临时目录，返回临时文件路径。
+ * 下载 Modrinth CDN 文件到临时目录，返回 { tmpPath, sha512 }。
  * - 域名白名单：url 必须以 https://cdn.modrinth.com/ 开头
  * - Content-Length 预检 + 流式实时计数双保险，超过 100MB 立刻中断
+ * - 流式计算 sha512（与字节数统计同层挂载，无需二次读盘）；
+ *   超限断流/下载失败等错误路径不产出哈希（仅成功返回）
  * - 失败路径统一清理半成品（临时文件由调用方或本函数兜底删除）
  */
 export async function downloadMarketFile(url) {
@@ -330,12 +336,15 @@ export async function downloadMarketFile(url) {
   });
 
   // 计数中间层：流式实时统计字节数，超限立刻断流（比 Content-Length 预检更可靠——
-  // 分块传输/代理场景下 Content-Length 可能缺失或失真）
+  // 分块传输/代理场景下 Content-Length 可能缺失或失真）；
+  // 同一 data 事件内顺带喂入 sha512，边下边算零额外 IO
   let transferred = 0;
   let sizeExceeded = false;
+  const hash = crypto.createHash('sha512');
   const counter = new PassThrough();
   counter.on('data', (chunk) => {
     if (sizeExceeded) return;
+    hash.update(chunk);
     transferred += chunk.length;
     if (transferred > MARKET_DOWNLOAD_MAX_SIZE) {
       sizeExceeded = true;
@@ -347,7 +356,7 @@ export async function downloadMarketFile(url) {
 
   try {
     await pipeline(source, counter, fs.createWriteStream(tmpPath));
-    return tmpPath;
+    return { tmpPath, sha512: hash.digest('hex') };
   } catch (err) {
     try { fs.unlinkSync(tmpPath); } catch { /* 半成品清理失败可忽略 */ }
     if (err instanceof AppError) throw err;
@@ -385,8 +394,21 @@ export async function installPluginFromMarket(serverPath, { slug, versionNumber 
       'Version has no downloadable file');
   }
 
-  const tmpPath = await downloadMarketFile(target.file.url);
+  const { tmpPath, sha512: actualSha512 } = await downloadMarketFile(target.file.url);
   try {
+    // sha512 完整性闸门（供应链防护）：与 Modrinth 官方哈希比对后再落盘，
+    // 拦截截断/位翻转/文件头完好的损坏 jar。文案只含文件名不含哈希明细
+    // （避免哈希值进入日志/前端渲染面）。上游未提供哈希时降级放行，
+    // 不新增阻断面（与「缺 hashes 字段的旧版本/异常上游」保持兼容）。
+    const expectedSha512 = target.file.sha512;
+    if (expectedSha512) {
+      if (actualSha512 !== expectedSha512.toLowerCase()) {
+        throw new AppError(ErrorCodes.MARKET_CHECKSUM_MISMATCH,
+          `File integrity check failed: ${target.file.filename}`);
+      }
+    } else {
+      logger.info(`Market install skipped sha512 check (upstream provided no hash): ${target.file.filename}`);
+    }
     const fileName = sanitizeMarketFileName(target.file.filename, { slug, versionNumber });
     const result = uploadPlugin(serverPath, tmpPath, fileName, { overwrite });
     return {
