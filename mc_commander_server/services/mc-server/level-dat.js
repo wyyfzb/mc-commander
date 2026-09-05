@@ -2,10 +2,10 @@
  * 世界存档数据读取域 —— 自 mc_server.js McServer 类纯搬移（issue 490 治理线·服务端第一阶段）
  * 职责：level.dat / world_gen_settings.dat / weather.dat 的 NBT 解析（新旧 MC 版本兼容）、
  *       世界目录定位（level-name 服务层兜底校验）、存档大小与保存时间读取。
- * 挂载方式：mc_server.js 顶部 import 后经 Object.assign(MCServerManager.prototype, levelDat)
+ * 挂载方式：mc_server.js 顶部 import 后经 Object.assign(MCServerInstance.prototype, levelDat)
  * 注入原型——函数体内 this 语义与类内定义完全一致（实例方法调用时 this 绑定实例），
  * 全部调用点零改动，对外接口零变化；isPathContained 采用 utils/player-utils.js 全仓公共实现
- * （与 mc_server.js 本地副本逐字相同，双份重复公共化）。
+ * （mc_server.js 原有逐字副本已由 issue 499 收敛至本单源）。
  */
 import path from 'path';
 import fs from 'fs';
