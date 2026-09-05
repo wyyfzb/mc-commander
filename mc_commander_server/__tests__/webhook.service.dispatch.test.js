@@ -1,7 +1,7 @@
 /**
  * WebhookService 分发主链补测（issue #410）
  * 覆盖 dispatch → _deliver → 重试 → 落库 → 失败通知全链路：
- * 事件/实例过滤、背压（MAX_CONCURRENT_PER_WEBHOOK=5）、指数退避（1s→5s，vi.useFakeTimers 锁定时序）、
+ * 事件/实例过滤、背压（MAX_CONCURRENT_PER_WEBHOOK=5，丢弃落 skipped 投递记录）、指数退避（1s→5s，vi.useFakeTimers 锁定时序）、
  * 4xx 短路、重试耗尽落库（attempts/durationMs）、失败通知去重（首次通知/重复抑制/成功恢复）、
  * _sign HMAC-SHA256 契约（硬编码期望值）、_truncateBody 边界、SSRF 拦截落库、事件桥接映射。
  *
@@ -446,7 +446,14 @@ describe('WebhookService 背压保护（issue #410）', () => {
     }
 
     expect(postImpl.current).toHaveBeenCalledTimes(5);
-    expect(deliveriesOf(hook.id)).toHaveLength(5);
+    // 前 5 个事件 pending 挂起；第 6 个事件背压丢弃落 skipped 记录（issue 526 可观测性）
+    const rows = deliveriesOf(hook.id);
+    expect(rows.filter((r) => r.status === 'pending')).toHaveLength(5);
+    const skippedRows = rows.filter((r) => r.status === 'skipped');
+    expect(skippedRows).toHaveLength(1);
+    expect(skippedRows[0].response_body).toBe('backpressure: 5 concurrent');
+    expect(skippedRows[0].attempts).toBe(0);
+    expect(skippedRows[0].duration_ms).toBe(0);
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Backpressure'));
 
     // 释放全部挂起投递 → 全部成功落库，背压计数归零（finally 释放）
@@ -455,15 +462,111 @@ describe('WebhookService 背压保护（issue #410）', () => {
       expect(deliveriesOf(hook.id).filter((r) => r.status === 'success')).toHaveLength(5);
     });
 
-    // 计数已释放：再次 dispatch 正常投递
+    // 计数已释放：再次 dispatch 正常投递（skipped 丢弃记录不占投递槽）
     postImpl.current = async () => ({ statusCode: 200, body: 'ok' });
     await WebhookService.dispatch('player.join', { instanceId: 'inst-1' });
     await vi.waitFor(() => {
-      expect(deliveriesOf(hook.id)).toHaveLength(6);
+      expect(deliveriesOf(hook.id).filter((r) => r.status === 'success')).toHaveLength(6);
     });
+    await vi.waitFor(() => {
+      expect(deliveriesOf(hook.id).filter((r) => r.status === 'skipped')).toHaveLength(1);
+    });
+  });
+
+  it('背压丢弃落 skipped 投递记录：event/instance/payload 可查，attempts=0 durationMs=0，不发起投递（issue 526）', async () => {
+    const hook = createHook({ events: ['player.join'] });
+    const gates = [];
+    postImpl.current = vi.fn(() => new Promise((r) => gates.push(r)));
+
+    // 占满 5 个并发槽
+    for (let i = 0; i < 5; i++) {
+      await WebhookService.dispatch('player.join', { instanceId: 'inst-1' });
+      await new Promise((r) => setImmediate(r));
+    }
+    // 第 6 个事件被背压丢弃
+    await WebhookService.dispatch('player.join', { instanceId: 'inst-1', player: 'Steve' });
+    await new Promise((r) => setImmediate(r));
+
+    expect(postImpl.current).toHaveBeenCalledTimes(5);
+    const skippedRows = deliveriesOf(hook.id).filter((r) => r.status === 'skipped');
+    expect(skippedRows).toHaveLength(1);
+    const row = skippedRows[0];
+    expect(row.webhook_id).toBe(hook.id);
+    expect(row.event_type).toBe('player.join');
+    expect(row.instance_id).toBe('inst-1');
+    expect(JSON.parse(row.payload)).toEqual({ instanceId: 'inst-1', player: 'Steve' });
+    expect(row.response_body).toBe('backpressure: 5 concurrent');
+    expect(row.attempts).toBe(0);
+    expect(row.duration_ms).toBe(0);
+    expect(row.response_status).toBeNull();
+
+    gates.forEach((g) => g({ statusCode: 200, body: 'ok' }));
+    await new Promise((r) => setImmediate(r));
+  });
+
+  it('背压持续期间每个被丢弃事件各落一条记录；槽释放后恢复投递（issue 526）', async () => {
+    const hook = createHook();
+    const gates = [];
+    postImpl.current = vi.fn(() => new Promise((r) => gates.push(r)));
+
+    for (let i = 0; i < 5; i++) {
+      await WebhookService.dispatch('player.join', {});
+      await new Promise((r) => setImmediate(r));
+    }
+    // 槽占满期间再丢 2 个事件：各落一条 skipped 记录
+    await WebhookService.dispatch('player.join', { seq: 6 });
+    await new Promise((r) => setImmediate(r));
+    await WebhookService.dispatch('player.join', { seq: 7 });
+    await new Promise((r) => setImmediate(r));
+
+    const skippedRows = deliveriesOf(hook.id).filter((r) => r.status === 'skipped');
+    expect(skippedRows).toHaveLength(2);
+    expect(JSON.parse(skippedRows[0].payload)).toEqual({ seq: 6 });
+    expect(JSON.parse(skippedRows[1].payload)).toEqual({ seq: 7 });
+    expect(skippedRows[0].response_body).toBe('backpressure: 5 concurrent');
+    expect(skippedRows[1].response_body).toBe('backpressure: 5 concurrent');
+
+    // 释放后计数归零：恢复投递（waitFor 等 success 落库 + flush 让 finally 减计数完成）
+    gates.forEach((g) => g({ statusCode: 200, body: 'ok' }));
+    await vi.waitFor(() => {
+      expect(deliveriesOf(hook.id).filter((r) => r.status === 'success')).toHaveLength(5);
+    });
+    await new Promise((r) => setImmediate(r));
+    postImpl.current = async () => ({ statusCode: 200, body: 'ok' });
+    await WebhookService.dispatch('player.join', { seq: 8 });
     await vi.waitFor(() => {
       expect(deliveriesOf(hook.id).filter((r) => r.status === 'success')).toHaveLength(6);
     });
+  });
+
+  it('落记录抛错不中断 dispatch：退化为仅告警，事件仍被跳过不投递（issue 526）', async () => {
+    const hook = createHook();
+    const gates = [];
+    postImpl.current = vi.fn(() => new Promise((r) => gates.push(r)));
+
+    for (let i = 0; i < 5; i++) {
+      await WebhookService.dispatch('player.join', {});
+      await new Promise((r) => setImmediate(r));
+    }
+
+    // 仅 skipped 记录落库抛错：被 catch 兜底，dispatch 正常完成
+    const cdOriginal = WebhookModel.createDelivery.bind(WebhookModel);
+    vi.spyOn(WebhookModel, 'createDelivery').mockImplementation((data) => {
+      if (data.status === 'skipped') throw new Error('disk full');
+      return cdOriginal(data);
+    });
+
+    await expect(WebhookService.dispatch('player.join', { seq: 6 })).resolves.toBeUndefined();
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to record skipped delivery'),
+    );
+    expect(postImpl.current).toHaveBeenCalledTimes(5); // 事件仍被跳过，不发起投递
+    expect(deliveriesOf(hook.id).filter((r) => r.status === 'skipped')).toHaveLength(0);
+
+    // 释放挂起投递，避免悬空 promise 跨用例落库
+    gates.forEach((g) => g({ statusCode: 200, body: 'ok' }));
+    await new Promise((r) => setImmediate(r));
   });
 });
 
