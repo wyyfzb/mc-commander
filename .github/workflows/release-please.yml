@@ -1,0 +1,26 @@
+# Release Please（发版流程自动化）
+
+# 解析 main 上 Conventional Commits（fix→patch / feat→minor / !→major），
+# 维护一个 Release PR（bump 双包 version + lock + schemas + README + 生成 CHANGELOG.md）。
+# 合并 Release PR 后人工打 tag（git tag vX.Y.Z && git push origin vX.Y.Z）——
+# tag 推送触发 release.yml 完成构建与 GitHub Release 发布。
+# Release PR 由 GITHUB_TOKEN 开启，按 GitHub 防循环机制不触发 CI，
+# 属机械 bump 提交，豁免交叉审查；合并该 PR 即代表发版确认。
+name: Release Please
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@v4
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
