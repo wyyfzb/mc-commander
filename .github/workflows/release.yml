@@ -149,22 +149,35 @@ jobs:
             mc-commander-server-${{ github.ref_name }}.tar.gz
             SHA256SUMS.txt
 
-      # 产物 sha256 自动回写 deploy 脚本并开 PR（消除手工「下载→算值→改脚本→提交」链路）
-      - name: 回写 deploy 脚本 sha256
+      # 产物 sha256 与默认安装版本自动回写 deploy 脚本（消除手工「下载→算值→改脚本→提交」链路）
+      - name: 回写 deploy 脚本 sha256 与版本
         run: |
           SHA=$(cut -d' ' -f1 SHA256SUMS.txt)
           sed -i "s/^EXPECTED_PACKAGE_SHA256=\"\${PACKAGE_SHA256:-[a-f0-9]\{64\}\}\"/EXPECTED_PACKAGE_SHA256=\"\${PACKAGE_SHA256:-$SHA}\"/" \
             mc_commander_server/scripts/deploy-mc-commander.sh
           grep -q "$SHA" mc_commander_server/scripts/deploy-mc-commander.sh
+          sed -i "s/^BRANCH=\"\${BRANCH:-v[0-9]*\.[0-9]*\.[0-9]*}\"/BRANCH=\"\${BRANCH:-${{ github.ref_name }}}\"/" \
+            mc_commander_server/scripts/deploy-mc-commander.sh
+          grep -q "BRANCH:-${{ github.ref_name }}" mc_commander_server/scripts/deploy-mc-commander.sh
 
       - name: 创建 sha256 回写 PR
+        id: cpr
         uses: peter-evans/create-pull-request@v8
         with:
-          commit-message: "chore(deploy): ${{ github.ref_name }} Release 产物 sha256 自动回写"
-          title: "chore(deploy): ${{ github.ref_name }} Release 产物 sha256 自动回写"
-          body: "CI 自动生成：下载地址见 [Release ${{ github.ref_name }}](https://github.com/wyyfzb/mc-commander/releases/tag/${{ github.ref_name }})，合并后 deploy 脚本内嵌校验值与产物一致。"
+          commit-message: "chore(deploy): ${{ github.ref_name }} Release 产物 sha256 与默认版本自动回写"
+          title: "chore(deploy): ${{ github.ref_name }} Release 产物 sha256 与默认版本自动回写"
+          body: "CI 自动生成：下载地址见 [Release ${{ github.ref_name }}](https://github.com/wyyfzb/mc-commander/releases/tag/${{ github.ref_name }})。回写 deploy 脚本内嵌校验值与默认安装版本（BRANCH），使其与最新产物一致。"
           branch: auto/sha256-${{ github.ref_name }}
           base: main
+
+      # 回写 PR 为机械单行锚点更新（豁免审查），自动合并消除人工步；
+      # main 无分支保护，GITHUB_TOKEN 可合并自己创建的 PR（不能 approve 但 merge 无 review 要求）
+      - name: 自动合并回写 PR
+        if: steps.cpr.outputs.pr_number != ''
+        run: gh pr merge "${{ steps.cpr.outputs.pr_number }}" --squash --delete-branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
 
   # gitee 镜像同步（需配置仓库变量 ENABLE_GITEE_MIRROR=true 与 Secret GITEE_SSH_KEY）
   mirror:
