@@ -5,11 +5,11 @@
   "packages": {
     "mc_commander_server": {
       "extra-files": [
-        "mc_manager_web/package.json",
-        "mc_manager_web/package-lock.json",
-        "mc-schemas/package.json",
-        "README.md",
-        "mc_commander_server/README.md"
+        "/mc_manager_web/package.json",
+        "/mc_manager_web/package-lock.json",
+        "/mc-schemas/package.json",
+        "/README.md",
+        "/mc_commander_server/README.md"
       ]
     }
   }
