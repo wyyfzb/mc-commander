@@ -1,3 +1,4 @@
+import fs from 'node:fs'
 import path from 'node:path'
 import { test, expect, type Page } from '@playwright/test'
 
@@ -11,6 +12,9 @@ const SHOT_DIR = path.join(process.cwd(), 'test-results', 'shots')
 function maybeShot(page: Page, name: string) {
   return process.env.E2E_SHOT ? page.screenshot({ path: path.join(SHOT_DIR, name) }) : undefined
 }
+
+// 包版本（about-panel 由 vite define 编译期注入同源值），不逐版本改断言
+const APP_VERSION = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf-8')).version
 
 /** 注入连接配置（mock 假 key，mock server 不校验）——严禁真实服务器信息 */
 async function setupConnection(page: Page) {
@@ -108,7 +112,7 @@ test.describe('设置页', () => {
     await setupConnection(page)
     await page.goto('/settings/about')
     await expect(page.getByRole('heading', { name: 'MC Commander' })).toBeVisible()
-    await expect(page.getByText('v0.1.0')).toBeVisible()
+    await expect(page.getByText(`v${APP_VERSION}`)).toBeVisible()
     await expect(page.getByText('开源项目', { exact: true })).toBeVisible()
     await expect(page.getByText('基于 AGPL-3.0 协议开源')).toBeVisible()
     // 外链（GitHub 主仓与 Gitee 镜像）

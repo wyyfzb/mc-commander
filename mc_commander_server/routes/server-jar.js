@@ -19,11 +19,13 @@ import {
   assertSizeWithinLimit,
 } from '../utils/jar-download-guard.js';
 import { logger } from '../utils/logger.js';
+import { getServerVersion } from '../utils/version.js';
 
 const mcCoreManager = new MinecraftServerManager(new NodeAdapter());
 
 const PAPER_API_BASE = 'https://api.papermc.io/v3';
-const PAPER_USER_AGENT = 'MC_Commander/0.1.0 (https://github.com/wyyfzb/mc-commander)';
+// 版本号单一来源：package.json（见 utils/version.js）
+const PAPER_USER_AGENT = `MC_Commander/${getServerVersion()} (https://github.com/wyyfzb/mc-commander)`;
 
 async function getPaperVersions() {
   const data = await got(`${PAPER_API_BASE}/projects/paper`, {
@@ -114,7 +116,7 @@ async function downloadWithProgress(url, destPath, serverManager, stage = 'downl
     const stream = got.stream(url, {
       timeout: { request: 120000 },
       retry: { limit: 2 },
-      headers: { 'User-Agent': 'MC_Commander/0.1.0 (https://github.com/wyyfzb/mc-commander)' }
+      headers: { 'User-Agent': PAPER_USER_AGENT }
     });
 
     /** 中止：清理半成品 + 断流 + reject（promise 已 settle 时 reject 为 no-op） */

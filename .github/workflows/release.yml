@@ -21,6 +21,27 @@ jobs:
           cache: npm
           cache-dependency-path: mc_manager_web/package-lock.json
 
+      # 版本链校验（发布卫生）：产物 = HEAD 构建，要求 tag → 仓库 → 产物三者一致。
+      # bump 动作前置到打 tag 流程（先 bump 双包 version 合并，再打 tag），
+      # 打错 tag 版本号时构建前即中止，避免发布错误版本号的产物
+      - name: 校验 tag 与双包 version 一致
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          node <<'EOF'
+          const fs = require('fs');
+          const expect = process.env.REF_NAME.replace(/^v/, '');
+          const paths = ['mc_commander_server/package.json', 'mc_manager_web/package.json'];
+          const bad = paths.filter((p) => JSON.parse(fs.readFileSync(p, 'utf8')).version !== expect);
+          if (bad.length) {
+            console.error(`版本链不一致：tag=${process.env.REF_NAME}，双包 version 应为 ${expect}`);
+            bad.forEach((p) => console.error(`  ${p}: ${JSON.parse(fs.readFileSync(p, 'utf8')).version}`));
+            console.error(`请先 bump 双包 version 至 ${expect} 并合并，再打 tag ${process.env.REF_NAME}`);
+            process.exit(1);
+          }
+          console.log(`版本链校验通过: tag ${process.env.REF_NAME} ↔ 双包 version ${expect}`);
+          EOF
+
       # 前端构建 → 产物进入服务端 public/（同源托管）
       - name: 构建前端
         working-directory: mc_manager_web

@@ -27,6 +27,7 @@ import {
 import { validateBody, validatedSuccess } from '../middleware/validate.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { logger } from '../utils/logger.js';
+import { getServerVersion } from '../utils/version.js';
 
 // ── 磁盘使用率（feat-5 运维韧性）：fs.statfsSync 零新增依赖，10s 缓存 ──
 let _diskCache = { ts: 0, result: null };
@@ -167,7 +168,7 @@ export function createStatusRoutes(serverManager) {
     const cpuUsagePercent = getSystemCpuUsage();
 
     res.json(validatedSuccess(overviewDataSchema, {
-      version: '0.1.0',
+      version: getServerVersion(),
       instanceCount: instances.length,
       runningCount: instances.filter(i => i.isRunning).length,
       totalPlayers,

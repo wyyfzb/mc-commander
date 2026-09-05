@@ -9,8 +9,8 @@ import { describe, it, expect } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import { AboutPanel } from '../about-panel'
 
-// 与 vite define 同源（package.json version），避免逐版本改断言
-const APP_VERSION = '0.1.0'
+// 与组件同源（vite define 注入，随 package.json version 走），避免逐版本改断言
+const APP_VERSION = __APP_VERSION__
 
 const REPO_URL = 'https://github.com/wyyfzb/mc-commander'
 const GITEE_REPO_URL = 'https://gitee.com/wyyfzb/mc-commander'
