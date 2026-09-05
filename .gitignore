@@ -112,6 +112,9 @@ mc-schemas/dist/*.map
 out/
 node_modules/
 
+# Release workflow 组装树（release.yml 本地 staging 目录，禁止入库）
+.staging/
+
 # 临时与备份文件
 *.tmp
 *.bak
