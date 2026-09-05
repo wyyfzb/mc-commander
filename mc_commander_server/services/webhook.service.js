@@ -79,6 +79,26 @@ export class WebhookService {
       const current = _concurrentCount.get(webhook.id) || 0;
       if (current >= MAX_CONCURRENT_PER_WEBHOOK) {
         logger.warn(`[Webhook] Backpressure: skipping webhook #${webhook.id} (${current} concurrent)`);
+        // 背压丢弃落投递记录（与 SSRF 拦截路径观测粒度对齐）：attempts=0 标记投递从未尝试，
+        // responseBody 携带丢弃原因与当时并发数，排障时区分「事件未产生」与「背压丢弃」。
+        // 落记录失败不中断分发循环——可观测性增强不得引入新的投递失败面
+        try {
+          const deliveryId = WebhookModel.createDelivery({
+            webhookId: webhook.id,
+            eventType,
+            instanceId: payload.instanceId || null,
+            payload,
+            status: 'skipped',
+          });
+          // createDelivery 对 attempts 有 || 1 兜底，0 须经 updateDelivery 显式落库
+          WebhookModel.updateDelivery(deliveryId, {
+            responseBody: `backpressure: ${current} concurrent`,
+            durationMs: 0,
+            attempts: 0,
+          });
+        } catch (err) {
+          logger.warn(`[Webhook] Failed to record skipped delivery for #${webhook.id}: ${err.message}`);
+        }
         continue;
       }
 
