@@ -521,6 +521,23 @@ export function createStatusRoutes(serverManager) {
         }
       }
 
+      // 1.5 备份互斥前置检查：实例存在 creating/restoring 备份记录时拒绝卸载。
+      //    恢复是 fire-and-forget 后台任务（耗时随世界规模可达分钟级），删除与其
+      //    并发的两条竞争终态均为数据事故：删除落在恢复 rename 之后 → 失败回滚
+      //    把已删实例目录整体还原（已删实例"复活"）；落在 rsync 复制中 → 源消失
+      //    以 exit 24 退出被 okCodes 容忍（半复制当成功，pre_restore 被永久清除，
+      //    原始世界不可逆丢失）。复用 backup.service.js 同款互斥语义（卡死恢复 +
+      //    busyCount）；置于停机等待之后、首个 rmSync 之前——停机期间新启动的
+      //    备份/恢复同样被拦下，且检查到删除间无 await（better-sqlite3 同步）无
+      //    TOCTOU 窗口；被拒请求不触碰实例目录、快照目录与任何 DB 记录。
+      BackupModel.resetStaleInProgress({ maxAgeMs: config.backupInProgressTimeoutMs, instanceId: req.params.id });
+      const busyCount =
+        BackupModel.findAll({ instanceId: req.params.id, status: 'creating' }).total +
+        BackupModel.findAll({ instanceId: req.params.id, status: 'restoring' }).total;
+      if (busyCount > 0) {
+        return res.status(409).json(error(ErrorCodes.BACKUP_IN_PROGRESS, '备份进行中，请等待完成后再删除实例'));
+      }
+
       const instancePath = instance.serverPath;
 
       // 2. 先删除实例文件夹（含 instance.json）。文件删除必须前置：若先删内存/DB
