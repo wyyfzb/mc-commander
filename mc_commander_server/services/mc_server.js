@@ -11,7 +11,7 @@ import { InstanceModel, CommandHistoryModel } from '../db/index.js';
 import { atomicWriteFile } from '../utils/fs-utils.js';
 import { reconcileTempBans } from '../utils/ban-reconcile.js';
 // offline uuid / stats 时长读取全仓公共实现（与 routes/players.js 共用 player-utils.js）
-import { offlineUuid as computeOfflineUuid, getTotalPlayTime } from '../utils/player-utils.js';
+import { isPathContained, offlineUuid as computeOfflineUuid, getTotalPlayTime } from '../utils/player-utils.js';
 import * as levelDat from './mc-server/level-dat.js';
 import * as outputParser from './mc-server/output-parser.js';
 import { logger } from '../utils/logger.js';
@@ -47,16 +47,6 @@ export { atomicWriteFile };
 // 日志单行最大长度：超长行截断并加标记，防超长输出（崩溃堆栈/异常打印）撑爆
 // logBuffer 与 WebSocket 广播（find-023-server 单行截断）。
 const LOG_LINE_MAX_LENGTH = 4096;
-
-/// 路径包含校验（服务层统一兜底，find-006/007/004/extra-1/find-008-read 共用模式）：
-/// ①path.resolve 归一化；②严格前缀校验（相等排除 + base + path.sep 边界）。
-/// targetPath 为相对路径时以 basePath 为基准解析（与 spawn cwd=serverPath 的
-/// 相对路径解析语义一致）。返回是否位于 base 内。
-function isPathContained(basePath, targetPath) {
-  const base = path.resolve(basePath);
-  const target = path.resolve(base, targetPath);
-  return target === base || target.startsWith(base + path.sep);
-}
 
 /// 单行日志截断：按行截断超过 LOG_LINE_MAX_LENGTH 的行，超长部分加 "…[truncated]" 标记。
 function truncateLogText(text) {
