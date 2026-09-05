@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.3.0](https://github.com/wyyfzb/mc-commander/compare/v1.2.1...v1.3.0) (2026-09-05)
+
+
+### Features
+
+* **market:** 市场安装链路接入 Modrinth sha512 完整性校验 ([#538](https://github.com/wyyfzb/mc-commander/issues/538)) ([9dbc277](https://github.com/wyyfzb/mc-commander/commit/9dbc277c417eb4a07808c89ea2cc5d6a7a272eca)), closes [#537](https://github.com/wyyfzb/mc-commander/issues/537)
+
+
+### Bug Fixes
+
+* **config:** 数值环境变量统一收口——非法值启动 fail-fast 拒绝启动 ([#536](https://github.com/wyyfzb/mc-commander/issues/536)) ([09fb554](https://github.com/wyyfzb/mc-commander/commit/09fb55412f04948420f9649f20359645080b24e8)), closes [#535](https://github.com/wyyfzb/mc-commander/issues/535)
+* **status:** 实例卸载增加备份进行中互斥检查，防恢复竞争致数据事故 ([#533](https://github.com/wyyfzb/mc-commander/issues/533)) ([067b1b1](https://github.com/wyyfzb/mc-commander/commit/067b1b1c96f7e2747232b1057bad82afd7a3f8df)), closes [#530](https://github.com/wyyfzb/mc-commander/issues/530)
+* **upgrade:** 升级回滚路径 jarFile 名实一致化（DB 回写+错位副本清理+内存同步） ([#540](https://github.com/wyyfzb/mc-commander/issues/540)) ([1722778](https://github.com/wyyfzb/mc-commander/commit/1722778e1952d933a4a526418266c364b433ca4e)), closes [#539](https://github.com/wyyfzb/mc-commander/issues/539)
+
 ## [1.2.1](https://github.com/wyyfzb/mc-commander/compare/v1.2.0...v1.2.1) (2026-09-05)
 
 
