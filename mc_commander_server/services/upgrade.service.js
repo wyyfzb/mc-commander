@@ -16,6 +16,7 @@ import {
   assertSizeWithinLimit,
 } from '../utils/jar-download-guard.js';
 import { logger } from '../utils/logger.js';
+import { getServerVersion } from '../utils/version.js';
 
 const VALID_TYPES = new Set(['vanilla', 'paper', 'purpur']);
 
@@ -85,7 +86,8 @@ const UPGRADE_STAGES = {
   ROLLED_BACK: 'rolled_back',
 };
 
-const PAPER_USER_AGENT = 'MC_Commander/0.1.0 (https://github.com/wyyfzb/mc-commander)';
+// 版本号单一来源：package.json（见 utils/version.js）
+const PAPER_USER_AGENT = `MC_Commander/${getServerVersion()} (https://github.com/wyyfzb/mc-commander)`;
 
 export { UPGRADE_STAGES, VALID_TYPES };
 

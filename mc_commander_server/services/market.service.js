@@ -25,6 +25,7 @@ import { pipeline } from 'stream/promises';
 import got from 'got';
 import { AppError, ErrorCodes } from '../utils/response.js';
 import { uploadPlugin, listPlugins } from './plugin.service.js';
+import { getServerVersion } from '../utils/version.js';
 
 const MODRINTH_API_BASE = 'https://api.modrinth.com/v2';
 
@@ -32,7 +33,8 @@ const MODRINTH_API_BASE = 'https://api.modrinth.com/v2';
 const MODRINTH_CDN_PREFIX = 'https://cdn.modrinth.com/';
 
 /// Modrinth 要求 UA 可识别且带联系方式（文档 §Rate Limit）
-const USER_AGENT = 'MC_Commander/0.1.0 (+https://github.com/wyyfzb/mc-commander)';
+// 版本号单一来源：package.json（见 utils/version.js）
+const USER_AGENT = `MC_Commander/${getServerVersion()} (+https://github.com/wyyfzb/mc-commander)`;
 
 /// API 请求超时（元数据接口）/ 下载超时（CDN 大文件）
 const API_TIMEOUT_MS = 15_000;

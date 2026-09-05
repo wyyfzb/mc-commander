@@ -11,6 +11,11 @@ import {
   commandResponseSchema,
   instanceStatusListSchema,
   instanceStatusSchema,
+  instanceCommandRequestBodySchema,
+  instanceEulaRequestBodySchema,
+  instancePropertiesRequestBodySchema,
+  instanceSettingsRequestBodySchema,
+  instanceStartRequestBodySchema,
   logEntriesSchema,
   nullDataSchema,
   overviewDataSchema,
@@ -19,9 +24,10 @@ import {
   updatePropertiesResponseSchema,
   worldInfoSchema,
 } from '@mc-commander/schemas';
-import { validatedSuccess } from '../middleware/validate.js';
+import { validateBody, validatedSuccess } from '../middleware/validate.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { logger } from '../utils/logger.js';
+import { getServerVersion } from '../utils/version.js';
 
 // ── 磁盘使用率（feat-5 运维韧性）：fs.statfsSync 零新增依赖，10s 缓存 ──
 let _diskCache = { ts: 0, result: null };
@@ -162,7 +168,7 @@ export function createStatusRoutes(serverManager) {
     const cpuUsagePercent = getSystemCpuUsage();
 
     res.json(validatedSuccess(overviewDataSchema, {
-      version: '0.1.0',
+      version: getServerVersion(),
       instanceCount: instances.length,
       runningCount: instances.filter(i => i.isRunning).length,
       totalPlayers,
@@ -228,7 +234,8 @@ export function createStatusRoutes(serverManager) {
 
   // PUT /api/instances/:id - 更新实例配置（启动命令/JVM 参数等）
   // 同步更新数据库持久化记录与内存中运行实例的字段，下次 start() 生效
-  router.put('/instances/:id', asyncHandler(async (req, res) => {
+  // 输入侧契约（issue 486）：形状/类型 schema 前置，业务语义（javaPath 可执行性等）仍由下方路由层持有
+  router.put('/instances/:id', validateBody(instanceSettingsRequestBodySchema), asyncHandler(async (req, res) => {
     const instance = serverManager.getInstance(req.params.id);
     if (!instance) {
       return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND));
@@ -331,7 +338,9 @@ export function createStatusRoutes(serverManager) {
   }));
 
   // POST /api/instances/:id/start
-  router.post('/instances/:id/start', asyncHandler(async (req, res) => {
+  // 输入侧契约（issue 486）：startCommand 禁用键 schema 前置 400（find-002）；
+  // 下方路由层原判断保留作纵深防御（中间件被移除时仍封堵 RCE）
+  router.post('/instances/:id/start', validateBody(instanceStartRequestBodySchema), asyncHandler(async (req, res) => {
     const instance = serverManager.getInstance(req.params.id);
     if (!instance) {
       return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND));
@@ -385,7 +394,8 @@ export function createStatusRoutes(serverManager) {
   }));
 
   // POST /api/instances/:id/command
-  router.post('/instances/:id/command', asyncHandler(async (req, res) => {
+  // 输入侧契约（issue 486）：非空字符串 + 长度上限 schema 前置（仅拒收类型/长度非法，行为零变化）
+  router.post('/instances/:id/command', validateBody(instanceCommandRequestBodySchema), asyncHandler(async (req, res) => {
     const { command } = req.body;
     if (!command) {
       return res.status(400).json(error(ErrorCodes.VALIDATION_ERROR, 'Command is required'));
@@ -583,7 +593,9 @@ export function createStatusRoutes(serverManager) {
   }
 
   // PUT /api/instances/:id/properties - 更新 server.properties
-  router.put('/instances/:id/properties', asyncHandler(async (req, res) => {
+  // 输入侧契约（issue 486）：对象形状 schema 前置（passthrough 保留全部属性键，
+  // 数组/标量/null 在 schema 层拒绝），下游属性值语义校验不变
+  router.put('/instances/:id/properties', validateBody(instancePropertiesRequestBodySchema), asyncHandler(async (req, res) => {
     const instance = serverManager.getInstance(req.params.id);
     if (!instance) {
       logger.warn(`[PUT properties] Instance not found: ${req.params.id}`);
@@ -752,7 +764,7 @@ export function createStatusRoutes(serverManager) {
   }));
 
   // POST /api/instances/:id/eula - 写入 EULA 协议确认
-  router.post('/instances/:id/eula', asyncHandler(async (req, res) => {
+  router.post('/instances/:id/eula', validateBody(instanceEulaRequestBodySchema), asyncHandler(async (req, res) => {
     const instance = serverManager.getInstance(req.params.id);
     if (!instance) {
       return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND));
