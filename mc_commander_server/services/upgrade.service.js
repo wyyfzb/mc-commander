@@ -349,10 +349,12 @@ export class UpgradeService {
       const instance = this.serverManager.getInstance(instanceId);
       if (!instance) return;
 
-      // 恢复旧 JAR（jarFile 为 DB 值，路径同样收口，防回滚覆盖逃逸实例目录）
+      // 恢复旧 JAR（jarFile 为 DB 值，路径同样收口，防回滚覆盖逃逸实例目录）。
+      // 异步复制（#520）：50MB 级 JAR 同步 copyFileSync 会阻塞事件循环
+      // 数百毫秒（期间 RCON/WS/全部请求延迟），与同链路其余异步 IO 风格对齐
       if (oldJarPath && fs.existsSync(oldJarPath)) {
         const currentJar = assertSafeInstancePath(instance.serverPath, instance.jarFile);
-        fs.copyFileSync(oldJarPath, currentJar);
+        await fs.promises.copyFile(oldJarPath, currentJar);
       }
 
       // DB 回写旧版本
@@ -361,8 +363,9 @@ export class UpgradeService {
         InstanceModel.update(instanceId, { mcVersion: instance._originalMcVersion });
       }
     } finally {
-      // 清理临时旧 JAR
-      if (oldJarPath) fs.unlink(oldJarPath, () => {});
+      // 清理临时旧 JAR（await：回滚完成（含清理）后才 resolve，
+      // 调用方不会在临时备份仍在磁盘时提前推进 cleanup，#520）
+      if (oldJarPath) await fs.promises.unlink(oldJarPath).catch(() => {});
     }
   }
 
@@ -435,9 +438,9 @@ export class UpgradeService {
 
       // 阶段 3：替换 JAR
       this._emitProgress(instanceId, UPGRADE_STAGES.REPLACE, 0, '正在替换 JAR...');
-      // 备份旧 JAR
+      // 备份旧 JAR（异步复制对齐同链路 IO 风格，#520）
       if (fs.existsSync(oldJarPath)) {
-        fs.copyFileSync(oldJarPath, backupJarPath);
+        await fs.promises.copyFile(oldJarPath, backupJarPath);
       }
       // 更新 DB：jarFile + mcVersion
       const { InstanceModel } = await import('../db/index.js');
@@ -451,8 +454,14 @@ export class UpgradeService {
       await this._startAndVerify(instanceId);
       this._emitProgress(instanceId, UPGRADE_STAGES.COMPLETED, 100, '升级完成');
 
-      // 清理
+      // 清理：回滚源副本 + 被替换的旧版本 jar（#520：升级成功后实例目录
+      // 仅保留当前版本 jar，避免多次升级累积磁盘垃圾；失败/回滚路径不删，
+      // 回滚源仍需可用。同路径守卫：路由层已拒同版本升级，直调服务层时
+      // oldJarPath 可能与 newJarPath 相同，此时旧 jar 本体即新 jar，不可删）
       fs.unlink(backupJarPath, () => {});
+      if (oldJarPath !== newJarPath) {
+        fs.unlink(oldJarPath, () => {});
+      }
       this._activeUpgrades.delete(instanceId);
     } catch (err) {
       // 回滚
