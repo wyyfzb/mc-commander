@@ -274,8 +274,10 @@ describe('失败/回滚路径：旧 jar 保留与回滚完成语义（#520）', 
     // _doRollback finally await unlink：调用方收到 reject 时清理已同步完成，
     // 无需 waitFor（修复前 fire-and-forget 需轮询，此为 await 语义的直接证据）
     expect(fs.existsSync(BACKUP_JAR())).toBe(false);
-    // 回滚恢复语义保持：当前 jarFile（server-1.21.4.jar）内容为备份的旧 jar 内容
-    expect(fs.readFileSync(path.join(tmpDir, 'server-1.21.4.jar'), 'utf8')).toBe('OLD_JAR_CONTENT');
+    // 回滚恢复语义（#539）：旧 jar 本体内容=备份旧内容，错位副本（新名）已删，
+    // 实例目录旧版本 jar 本体唯一
+    expect(fs.readFileSync(OLD_JAR(), 'utf8')).toBe('OLD_JAR_CONTENT');
+    expect(fs.existsSync(path.join(tmpDir, 'server-1.21.4.jar'))).toBe(false);
   });
 });
 
@@ -297,16 +299,12 @@ describe('复制异步化：零 copyFileSync、promises.copyFile 参数正确', 
     // 同步 API 已彻底退出升级链路
     expect(syncCopySpy).not.toHaveBeenCalled();
 
-    // 异步复制恰好两次：replace 阶段备份 + 回滚恢复
+    // 异步复制恰好两次：replace 阶段备份 + 回滚恢复（目标=旧 jar 本体路径，#539）
     expect(asyncCopySpy).toHaveBeenCalledTimes(2);
     expect(asyncCopySpy).toHaveBeenNthCalledWith(1, OLD_JAR(), BACKUP_JAR());
-    expect(asyncCopySpy).toHaveBeenNthCalledWith(
-      2,
-      BACKUP_JAR(),
-      path.join(tmpDir, 'server-1.21.4.jar')
-    );
+    expect(asyncCopySpy).toHaveBeenNthCalledWith(2, BACKUP_JAR(), OLD_JAR());
 
-    // 复制语义（内容恢复）由真实 fs 保证：当前 jarFile 内容 = 旧 jar 内容
-    expect(fs.readFileSync(path.join(tmpDir, 'server-1.21.4.jar'), 'utf8')).toBe('OLD_JAR_CONTENT');
+    // 复制语义（内容恢复）由真实 fs 保证：旧 jar 本体内容 = 备份的旧内容
+    expect(fs.readFileSync(OLD_JAR(), 'utf8')).toBe('OLD_JAR_CONTENT');
   });
 });
