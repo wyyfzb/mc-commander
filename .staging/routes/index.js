@@ -1,0 +1,110 @@
+import { Router } from 'express';
+import { readFileSync } from 'node:fs';
+import { createStatusRoutes } from './status.js';
+import { createPlayerRoutes } from './players.js';
+import { createBackupRoutes } from './backups.js';
+import { createTaskRoutes } from './tasks.js';
+import { createFileRoutes } from './files.js';
+import { createServerJarRoutes } from './server-jar.js';
+import { createKeyRoutes } from './keys.js';
+import { createAuditRoutes } from './audit.js';
+import { createWebhookRoutes } from './webhooks.js';
+import { createUpgradeRoutes } from './upgrade.js';
+import { createPluginRoutes } from './plugins.js';
+import { createAuthRoutes } from './auth.js';
+import { success } from '../utils/response.js';
+import config from '../config.js';
+import { notFoundHandler } from '../middleware/error_handler.js';
+
+/** 版本号单一来源：package.json（/health、check-update、启动横幅共用，杜绝三处硬编码漂移） */
+const SERVER_VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf-8')).version;
+
+export function setupRoutes(app, serverManager, taskScheduler) {
+  // 轻量健康检查：仅返回存活与版本（P2-9 信息暴露收口：未认证的 /health
+  // 不再暴露 instanceCount/nodeVersion/uptime 运行细节；check-update 依赖的
+  // version 保留），不调用 getAllInstances()
+  app.get('/health', (req, res) => {
+    res.json(success({
+      status: 'ok',
+      version: SERVER_VERSION,
+    }));
+  });
+
+  const v1Router = Router();
+
+  v1Router.use('/', createStatusRoutes(serverManager));
+  v1Router.use('/', createPlayerRoutes(serverManager));
+  v1Router.use('/', createBackupRoutes(serverManager));
+  v1Router.use('/', createTaskRoutes(serverManager, taskScheduler));
+  v1Router.use('/', createFileRoutes(serverManager));
+  v1Router.use('/', createServerJarRoutes(serverManager));
+  v1Router.use('/', createKeyRoutes());
+  v1Router.use('/', createAuditRoutes());
+  v1Router.use('/', createWebhookRoutes());
+  v1Router.use('/', createUpgradeRoutes(serverManager));
+  v1Router.use('/', createPluginRoutes(serverManager));
+  v1Router.use('/', createAuthRoutes());
+
+  // GET /api/v1/check-update —— 面板更新检查（Node 内置 fetch，零新增依赖）
+  v1Router.get('/check-update', async (req, res, next) => {
+    try {
+      const pkgName = config.npmPkgName;
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 5000);
+      const npmRes = await fetch(`https://registry.npmjs.org/${pkgName}/latest`, { signal: ctrl.signal });
+      clearTimeout(timer);
+      if (!npmRes.ok) throw new Error(`npm registry ${npmRes.status}`);
+      const pkg = await npmRes.json();
+      const current = SERVER_VERSION;
+      const latest = pkg.version || null;
+      res.json(success({
+        current,
+        latest,
+        hasUpdate: latest !== null && latest !== current,
+        url: latest ? `https://www.npmjs.com/package/${pkgName}/v/${latest}` : undefined,
+      }));
+    } catch (e) {
+      // 网络不可达不报错
+      if (e.name === 'AbortError' || e.code === 'UND_ERR_CONNECTABLE') {
+        res.json(success({ current: SERVER_VERSION, latest: null, hasUpdate: false, offline: true }));
+      } else {
+        next(e);
+      }
+    }
+  });
+
+  v1Router.get('/', (req, res) => {
+    res.json(success({
+      version: 'v1',
+      endpoints: [
+        '/overview',
+        '/instances',
+        '/instances/:id',
+        '/instances/:id/start',
+        '/instances/:id/stop',
+        '/instances/:id/restart',
+        '/instances/:id/command',
+        '/instances/:id/logs',
+        '/instances/:id/properties',
+        '/instances/:id/world',
+        '/instances/:id/players',
+        '/instances/:id/backups',
+        '/instances/:id/tasks',
+        '/instances/:id/files/mkdir',
+        '/instances/:id/files/rename',
+        '/instances/:id/files/upload',
+        '/webhooks',
+        '/webhooks/:id',
+        '/webhooks/:id/test',
+        '/webhooks/:id/deliveries',
+        '/instances/:id/upgrade',
+        '/instances/:id/upgrade/status',
+        '/check-update',
+      ]
+    }));
+  });
+
+  app.use('/api/v1', v1Router);
+
+  app.use(notFoundHandler);
+}

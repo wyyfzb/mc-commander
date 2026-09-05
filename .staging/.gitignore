@@ -1,0 +1,16 @@
+node_modules/
+.env
+servers/
+data/
+backups/
+*.log
+dist/
+# 前端静态产物（M7：构建时由 build-release.sh 从 mc_manager_web/dist 复制）
+public/
+coverage/
+npm-debug.log*
+*.pid
+server.log
+# 部署脚本临时下载文件
+.tmp_archive.zip
+.tmp_extract/
