@@ -33,7 +33,7 @@ const VERSION: MarketVersion = {
   downloads: 100,
   gameVersions: ['1.21.4', '1.21.3', '1.21.2', '1.21.1'],
   loaders: ['paper', 'fabric'],
-  file: { url: null, filename: 'FakeCore-1.0.0.jar', size: 4605977 },
+  file: { url: null, filename: 'FakeCore-1.0.0.jar', size: 4605977, sha512: null },
 }
 
 function renderCard(overrides: Partial<Parameters<typeof MarketHitCard>[0]> = {}) {

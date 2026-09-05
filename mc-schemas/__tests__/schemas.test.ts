@@ -24,6 +24,7 @@ import {
   fileSaveRequestSchema,
   auditLogsQuerySchema,
   marketSearchRequestSchema,
+  marketVersionsResultSchema,
   pluginOverwriteQuerySchema,
   pluginEnabledRequestSchema,
   marketInstallRequestSchema,
@@ -262,6 +263,44 @@ describe('请求侧契约（issue 391 路由层 zod 统一）', () => {
       slug: 'vault', versionNumber: '1.0.0',
     })
     expect(() => marketInstallRequestSchema.parse({ slug: 1, versionNumber: '1.0.0' })).toThrow()
+  })
+
+  it('marketVersionsResultSchema：file.sha512 透传（上游缺省为 null；未知字段剥离）', () => {
+    const withHash = marketVersionsResultSchema.parse({
+      projectSlug: 'vault', cached: false,
+      versions: [{
+        versionNumber: '1.0.0', versionType: 'release', name: 'Vault 1.0.0',
+        changelog: null, datePublished: '2026-01-01T00:00:00Z', downloads: 1,
+        gameVersions: ['1.21.4'], loaders: ['paper'],
+        file: {
+          url: 'https://cdn.modrinth.com/data/v/versions/a/vault.jar',
+          filename: 'vault.jar', size: 100, sha512: 'ab'.repeat(32), junk: 'x',
+        },
+      }],
+    })
+    expect(withHash.versions[0]?.file).toEqual({
+      url: 'https://cdn.modrinth.com/data/v/versions/a/vault.jar',
+      filename: 'vault.jar', size: 100, sha512: 'ab'.repeat(32),
+    })
+    const withoutHash = marketVersionsResultSchema.parse({
+      projectSlug: 'vault', cached: false,
+      versions: [{
+        versionNumber: '1.0.0', versionType: 'release', name: null,
+        changelog: null, datePublished: null, downloads: 0,
+        gameVersions: [], loaders: [],
+        file: { url: null, filename: 'vault.jar', size: 0, sha512: null },
+      }],
+    })
+    expect(withoutHash.versions[0]?.file?.sha512).toBeNull()
+    expect(() => marketVersionsResultSchema.parse({
+      projectSlug: 'vault', cached: false,
+      versions: [{
+        versionNumber: '1.0.0', versionType: 'release', name: null,
+        changelog: null, datePublished: null, downloads: 0,
+        gameVersions: [], loaders: [],
+        file: { url: null, filename: 'vault.jar', size: 0, sha512: 123 },
+      }],
+    })).toThrow()
   })
 
   it('upgradeRequestSchema：mcVersion 必填（保留原文案），type 缺省 vanilla、非法保留 Invalid type 文案', () => {

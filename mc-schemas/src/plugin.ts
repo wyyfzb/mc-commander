@@ -87,6 +87,8 @@ export const marketVersionFileSchema = z.object({
   url: z.string().nullable(),
   filename: z.string(),
   size: z.number(),
+  // Modrinth 官方 sha512（hex）：下载完整性校验的数据源；上游缺省时为 null（降级放行）
+  sha512: z.string().nullable(),
 })
 
 export const marketVersionSchema = z.object({

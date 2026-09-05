@@ -73,6 +73,8 @@ export const ErrorCodes = {
   MARKET_VERSION_NOT_FOUND: { code: 40413, message: 'Version not found on Modrinth', status: 404 },
   // Modrinth 上游错误（搜索/版本/下载任一环节，保留 502 语义）
   MARKET_UPSTREAM_ERROR: { code: 50301, message: 'Modrinth upstream error', status: 502 },
+  // 市场下载文件 sha512 校验不匹配：与 Modrinth 官方哈希比对失败，拒绝安装（供应链完整性闸门）
+  MARKET_CHECKSUM_MISMATCH: { code: 40014, message: 'Market file integrity check failed', status: 400 },
 
   // RCON 不可用（命令路由需要 RCON 响应但连接未启用或已断开）
   RCON_UNAVAILABLE: { code: 50302, message: 'RCON not available', status: 503 },
