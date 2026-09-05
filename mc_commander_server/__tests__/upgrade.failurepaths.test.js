@@ -11,8 +11,9 @@
  *    createBackup 异常、300s 备份超时
  * ④ _startAndVerify：首启 crash、他实例状态隔离、实例内存缺失、start 同步
  *    抛错/异步拒绝、120s 校验超时
- * ⑤ _doRollback：恢复旧 JAR + DB 版本回写、oldJarPath 为空跳过复制、
- *    _originalMcVersion 缺失跳过回写、回滚自身失败兜底日志、备份恢复失败不阻塞
+ * ⑤ _doRollback：恢复旧 JAR 至旧本体路径 + DB jarFile/mcVersion 回写
+ *    （#539）、oldJarPath 为空跳过复制、_originalMcVersion/oldJarFile 缺失
+ *    跳过回写、回滚自身失败兜底日志、备份恢复失败不阻塞
  *
  * 网络隔离：got 全量 mock（json/stream 行为按用例注入），CI 离线确定性。
  * 超时用例用 vi fake timers；其余用真实临时目录 + 真实 fs。
@@ -367,8 +368,11 @@ describe('_createBackupAndWait 失败与超时', () => {
     const stages = progressStages(manager);
     expect(stages[stages.length - 1]).toBe(UPGRADE_STAGES.FAILED);
     expect(stages).toContain(UPGRADE_STAGES.ROLLED_BACK);
-    // 回滚 DB 回写：_originalMcVersion 已在编排前记录
-    expect(InstanceModel.update).toHaveBeenCalledWith('inst-1', { mcVersion: '1.20.4' });
+    // 回滚 DB 回写：恢复旧 jarFile 名 + 旧版本（#539；备份失败时 jarFile 未切换，幂等恢复）
+    expect(InstanceModel.update).toHaveBeenCalledWith('inst-1', {
+      jarFile: 'server-1.20.4.jar',
+      mcVersion: '1.20.4',
+    });
   });
 
   it('backupFailed 事件缺 error 字段 → 兜底消息 Backup failed', async () => {
@@ -457,19 +461,24 @@ describe('_startAndVerify 失败与超时', () => {
     expect(stages).toContain(UPGRADE_STAGES.ROLLED_BACK);
     expect(stages[stages.length - 1]).toBe(UPGRADE_STAGES.FAILED);
 
-    // 回滚把备份的旧 JAR 覆盖回当前 jarFile（已替换为 server-1.21.4.jar）
-    expect(fs.readFileSync(path.join(tmpDir, 'server-1.21.4.jar'), 'utf8')).toBe('OLD_JAR_CONTENT');
+    // 回滚把备份的旧 JAR 恢复回旧 jar 本体路径（#539：目标不再是被切换的新名）
+    expect(fs.readFileSync(path.join(tmpDir, 'server-1.20.4.jar'), 'utf8')).toBe('OLD_JAR_CONTENT');
+    // 错位副本（新名 jar）已删：旧版本 jar 本体唯一
+    expect(fs.existsSync(path.join(tmpDir, 'server-1.21.4.jar'))).toBe(false);
     // 临时备份 JAR 由 _doRollback finally 内异步 unlink 清理（fire-and-forget），
     // 与回滚 resolve 之间无同步屏障——waitFor 轮询等待落盘完成再断言
     await vi.waitFor(() =>
       expect(fs.readdirSync(tmpDir)).not.toContain('._upgrade_backup_server-1.20.4.jar')
     );
-    // DB：replace 阶段写新版本，回滚阶段恢复原版本
+    // DB：replace 阶段写新版本，回滚阶段恢复旧 jarFile 名 + 原版本（#539）
     expect(InstanceModel.update).toHaveBeenCalledWith('inst-1', {
       jarFile: 'server-1.21.4.jar',
       mcVersion: '1.21.4',
     });
-    expect(InstanceModel.update).toHaveBeenCalledWith('inst-1', { mcVersion: '1.20.4' });
+    expect(InstanceModel.update).toHaveBeenCalledWith('inst-1', {
+      jarFile: 'server-1.20.4.jar',
+      mcVersion: '1.20.4',
+    });
   });
 
   it('他实例的 instance:status 事件被忽略，本实例 ready 后完成升级', async () => {
@@ -557,21 +566,24 @@ describe('_startAndVerify 失败与超时', () => {
 // ── ⑤ 回滚域 ──
 
 describe('_doRollback 分支行为', () => {
-  it('oldJarPath 为空：跳过 JAR 复制但仍按 _originalMcVersion 回写 DB', async () => {
+  it('oldJarPath 为空：跳过 JAR 复制但仍按旧名+旧版本回写 DB', async () => {
     const manager = createMockServerManager();
     const service = new UpgradeService(manager);
     manager._instance._originalMcVersion = '1.20.4';
 
-    await service._doRollback('inst-1', null, null);
+    await service._doRollback('inst-1', null, null, 'server-1.20.4.jar');
 
-    expect(InstanceModel.update).toHaveBeenCalledWith('inst-1', { mcVersion: '1.20.4' });
+    expect(InstanceModel.update).toHaveBeenCalledWith('inst-1', {
+      jarFile: 'server-1.20.4.jar',
+      mcVersion: '1.20.4',
+    });
   });
 
   it('_originalMcVersion 缺失：跳过 DB 回写', async () => {
     const manager = createMockServerManager();
     const service = new UpgradeService(manager);
 
-    await service._doRollback('inst-1', null, null);
+    await service._doRollback('inst-1', null, null, 'server-1.20.4.jar');
 
     expect(InstanceModel.update).not.toHaveBeenCalled();
   });

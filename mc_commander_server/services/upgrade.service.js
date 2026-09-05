@@ -342,25 +342,56 @@ export class UpgradeService {
   }
 
   /**
-   * 回滚：恢复旧 JAR + DB 回写
+   * 回滚：恢复旧 JAR + DB/内存回写（#539）
+   *
+   * 回滚终态三者自洽：DB { jarFile: 旧名, mcVersion: 旧版本 } + 磁盘旧版本
+   * jar 本体唯一（旧名内容=旧版本）+ 内存实例同步。阶段 3 已把 DB/内存
+   * jarFile 切到新版本文件名，故旧 jar 文件名必须经参数传入（调用方在
+   * 编排入口捕获的 oldJarFile），不可读 instance.jarFile（已是新名）。
+   * @param {string} instanceId
+   * @param {string|null} oldJarPath - 回滚源副本（阶段 3 备份的旧 jar）；
+   *   null 或不存在时跳过恢复复制（阶段 3 前失败时无副本可恢复）
+   * @param {string|null} _backupId - 备份 ID（预留，当前未用）
+   * @param {string} [oldJarFile] - 升级前旧 jar 文件名；缺省时跳过恢复
+   *   复制、错位副本清理与 DB/内存回写（仅剩临时副本清理兜底）
    */
-  async _doRollback(instanceId, oldJarPath, _backupId) {
+  async _doRollback(instanceId, oldJarPath, _backupId, oldJarFile) {
     try {
       const instance = this.serverManager.getInstance(instanceId);
       if (!instance) return;
 
-      // 恢复旧 JAR（jarFile 为 DB 值，路径同样收口，防回滚覆盖逃逸实例目录）。
+      // 恢复旧 JAR：目标改为旧 jar 本体路径（#539）。修复前目标是
+      // instance.jarFile——阶段 3 后已是新版本文件名，旧内容被拷到新名上
+      // 产生「新名旧内容」jar，破坏 server-{mcVersion}.jar 命名约定。
       // 异步复制（#520）：50MB 级 JAR 同步 copyFileSync 会阻塞事件循环
       // 数百毫秒（期间 RCON/WS/全部请求延迟），与同链路其余异步 IO 风格对齐
-      if (oldJarPath && fs.existsSync(oldJarPath)) {
-        const currentJar = assertSafeInstancePath(instance.serverPath, instance.jarFile);
-        await fs.promises.copyFile(oldJarPath, currentJar);
+      if (oldJarPath && oldJarFile && fs.existsSync(oldJarPath)) {
+        const restoreTarget = assertSafeInstancePath(instance.serverPath, oldJarFile);
+        await fs.promises.copyFile(oldJarPath, restoreTarget);
       }
 
-      // DB 回写旧版本
-      if (instance._originalMcVersion) {
+      // 错位副本清理（#539）：阶段 3 后磁盘上新版本文件名 jar（新版本内容，
+      // 即首启失败的那个）不再属于回滚终态，删除使旧版本 jar 本体唯一，
+      // 后续备份快照不再冗余收录。同名守卫：阶段 3 前失败（jarFile 未切换）
+      // 或同版本直调时二者同名，无错位副本可删。删除失败不阻塞回滚主流程。
+      if (oldJarFile && instance.jarFile !== oldJarFile) {
+        const misplacedJar = assertSafeInstancePath(instance.serverPath, instance.jarFile);
+        await fs.promises.unlink(misplacedJar).catch(() => {});
+      }
+
+      // DB/内存回写旧版本（#539）：jarFile 一并回写——修复前仅回写
+      // mcVersion，DB jarFile 保持阶段 3 写入的新版本文件名，与磁盘/内存
+      // 三者错位，备份快照 --exclude 随之失效（排除新名、收录残留旧本体）。
+      // 内存同步：修复前回滚后内存 jarFile/mcVersion 仍指向新版本，错位
+      // 副本已删时再次启动将找不到 jar 文件
+      if (oldJarFile && instance._originalMcVersion) {
         const { InstanceModel } = await import('../db/index.js');
-        InstanceModel.update(instanceId, { mcVersion: instance._originalMcVersion });
+        InstanceModel.update(instanceId, {
+          jarFile: oldJarFile,
+          mcVersion: instance._originalMcVersion,
+        });
+        instance.jarFile = oldJarFile;
+        instance.mcVersion = instance._originalMcVersion;
       }
     } finally {
       // 清理临时旧 JAR（await：回滚完成（含清理）后才 resolve，
@@ -467,7 +498,7 @@ export class UpgradeService {
       // 回滚
       this._emitProgress(instanceId, UPGRADE_STAGES.ROLLED_BACK, 0, `升级失败: ${err.message}，正在回滚...`);
       try {
-        await this._doRollback(instanceId, backupJarPath, backupId);
+        await this._doRollback(instanceId, backupJarPath, backupId, oldJarFile);
         // 回滚后尝试恢复备份
         if (backupId) {
           try {
