@@ -65,6 +65,7 @@ export const ErrorCode = {
   MARKET_PROJECT_NOT_FOUND: 40412,
   MARKET_VERSION_NOT_FOUND: 40413,
   MARKET_UPSTREAM_ERROR: 50301,
+  MARKET_CHECKSUM_MISMATCH: 40014,
 
   // RCON 不可用（命令路由需要 RCON 响应但连接未启用或已断开）
   RCON_UNAVAILABLE: 50302,
@@ -111,6 +112,7 @@ const LOCALIZED_MESSAGES: Partial<Record<ErrorCodeValue, string>> = {
   [ErrorCode.MARKET_PROJECT_NOT_FOUND]: '插件市场：Modrinth 上未找到该项目（可能已下架）',
   [ErrorCode.MARKET_VERSION_NOT_FOUND]: '插件市场：Modrinth 上未找到该版本',
   [ErrorCode.MARKET_UPSTREAM_ERROR]: '插件市场：Modrinth 服务暂时不可用，请稍后再试',
+  [ErrorCode.MARKET_CHECKSUM_MISMATCH]: '插件市场：文件完整性校验失败，安装已拒绝（下载可能损坏，请重试）',
   [ErrorCode.RCON_UNAVAILABLE]: 'RCON 未启用或连接已断开，请在 server.properties 启用 RCON',
   [ErrorCode.UPGRADE_IN_PROGRESS]: '已有升级任务进行中',
   [ErrorCode.UPGRADE_VERSION_SAME]: '目标版本与当前版本相同',
