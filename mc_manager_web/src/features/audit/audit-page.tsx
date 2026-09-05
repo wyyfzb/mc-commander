@@ -11,159 +11,23 @@
  */
 import { useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router'
-import { Download, RefreshCw, X } from 'lucide-react'
+import { RefreshCw, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { useConnectionStore } from '@/stores/connection'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { FilterSelect } from '@/components/mcs/filter-select'
-import { StatusPill } from '@/components/mcs/status-pill'
-import { formatDateTime, formatDurationMs } from '@/lib/format'
 import { PageHeader } from '@/components/mcs/page-header'
 import { DataTableShell } from '@/components/mcs/data-table-shell'
 import { useAuditLogs, useCommandHistory } from '@/api/queries'
-import type { AuditLogItem, CommandHistoryItem } from '@/api/types'
 import { QUICK_RANGES, isRangeInverted, quickRangeDates, toServerEnd, toServerStart, type QuickRange } from './time-range'
-import { ACTION_LABELS, actionFilterOptions, getActionLabel } from './action-labels'
-import { AUDIT_EXPORT_MAX_ROWS, exportAuditLogsToExcel, exportCommandHistoryToExcel } from './audit-export'
-
-/** 时间列：合法 ISO 走统一收口格式（MM-dd HH:mm:ss）；非法输入原样返回（保留审计原始值兜底） */
-function formatTime(iso: string): string {
-  if (Number.isNaN(new Date(iso).getTime())) return iso
-  return formatDateTime(iso)
-}
-
-/** 详情对象常见键的中文标签（未映射键原样展示；新增键按需补充） */
-const DETAIL_KEY_LABELS: Record<string, string> = {
-  reason: '原因',
-  by: '操作人',
-  key: '配置项',
-  sizeBytes: '大小',
-  name: '名称',
-  id: 'ID',
-}
-
-/** 值字符串化：嵌套对象/数组降级 JSON（审计详情只出现标量，兜底） */
-function detailValue(v: unknown): string {
-  if (v === null || v === undefined) return ''
-  if (typeof v === 'object') return JSON.stringify(v)
-  return String(v)
-}
-
-/**
- * 详情列人性化：对象 →「标签: 值 · 标签: 值」；key+from+to 三件套合并为
- * 「key值: from → to」；字符串原样；空值 '-'（替代裸 JSON.stringify）
- */
-function formatAuditDetail(detail: unknown): string {
-  if (detail === null || detail === undefined || detail === '') return '-'
-  if (typeof detail !== 'object') return String(detail)
-  const entries = Object.entries(detail as Record<string, unknown>).filter(([, v]) => v !== null && v !== undefined && v !== '')
-  if (entries.length === 0) return '-'
-  const get = (k: string) => detailValue((detail as Record<string, unknown>)[k])
-  const parts: string[] = []
-  if (get('from') !== '' && get('to') !== '') {
-    const key = get('key')
-    parts.push(key ? `${key}: ${get('from')} → ${get('to')}` : `${get('from')} → ${get('to')}`)
-  }
-  for (const [k, v] of entries) {
-    if (k === 'from' || k === 'to' || (k === 'key' && get('from') !== '')) continue
-    const label = DETAIL_KEY_LABELS[k] ?? k
-    const value = detailValue(v)
-    if (value) parts.push(`${label}: ${value}`)
-  }
-  return parts.join(' · ')
-}
-
-const AUDIT_COLUMNS = 4
-const CMD_COLUMNS = 5
+import { ACTION_LABELS } from './action-labels'
+import { exportAuditLogsToExcel, exportCommandHistoryToExcel } from './audit-export'
+import { AuditHeader, AuditBody, CmdHeader, CmdBody, AUDIT_COLUMNS, CMD_COLUMNS } from './audit-tables'
+import { AuditFilterBar } from './audit-filter-bar'
+import { CmdFilterBar } from './cmd-filter-bar'
 
 /** URL 日期参数校验：仅接受 yyyy-MM-dd（与 input type=date 值同构，非法值回退默认不过滤） */
 const DATE_PARAM_RE = /^\d{4}-\d{2}-\d{2}$/
-
-/** 审计日志表头 */
-function AuditHeader() {
-  return (
-    <thead className="sticky top-0 bg-mcs-bg-muted">
-      <tr className="border-b border-mcs-border-muted text-left">
-        <th scope="col" className="px-3 py-2 font-medium text-mcs-text-subtle">时间</th>
-        <th scope="col" className="px-3 py-2 font-medium text-mcs-text-subtle">操作</th>
-        <th scope="col" className="px-3 py-2 font-medium text-mcs-text-subtle">目标</th>
-        <th scope="col" className="px-3 py-2 font-medium text-mcs-text-subtle">详情</th>
-      </tr>
-    </thead>
-  )
-}
-
-/** 审计日志表体 */
-function AuditBody({ logs }: { logs: AuditLogItem[] }) {
-  return (
-    <tbody>
-      {logs.map((log) => (
-        <tr key={log.id} className="border-b border-mcs-border-muted last:border-b-0">
-          <td className="whitespace-nowrap px-3 py-2 text-mcs-text-default font-mono text-mcs-xs">{formatTime(log.createdAt)}</td>
-          <td className="px-3 py-2 text-mcs-text-default">{getActionLabel(log.action)}</td>
-          <td className="px-3 py-2 text-mcs-text-default">{log.targetType ? `${log.targetType}${log.targetId ? `: ${log.targetId}` : ''}` : '-'}</td>
-          <td className="max-w-xs truncate px-3 py-2 text-mcs-text-subtle" title={typeof log.detail === 'object' ? JSON.stringify(log.detail) : undefined}>
-            {formatAuditDetail(log.detail)}
-          </td>
-        </tr>
-      ))}
-    </tbody>
-  )
-}
-
-/** 命令历史表头 */
-function CmdHeader() {
-  return (
-    <thead className="sticky top-0 bg-mcs-bg-muted">
-      <tr className="border-b border-mcs-border-muted text-left">
-        <th scope="col" className="px-3 py-2 font-medium text-mcs-text-subtle">时间</th>
-        <th scope="col" className="px-3 py-2 font-medium text-mcs-text-subtle">命令</th>
-        <th scope="col" className="px-3 py-2 font-medium text-mcs-text-subtle">结果</th>
-        <th scope="col" className="px-3 py-2 font-medium text-mcs-text-subtle">来源</th>
-        <th scope="col" className="px-3 py-2 font-medium text-mcs-text-subtle">耗时</th>
-      </tr>
-    </thead>
-  )
-}
-
-/** 命令历史表体 */
-function CmdBody({ cmds }: { cmds: CommandHistoryItem[] }) {
-  return (
-    <tbody>
-      {cmds.map((cmd) => (
-        <tr key={cmd.id} className="border-b border-mcs-border-muted last:border-b-0">
-          <td className="whitespace-nowrap px-3 py-2 text-mcs-text-default font-mono text-mcs-xs">{formatTime(cmd.createdAt)}</td>
-          <td className="px-3 py-2 font-mono text-mcs-text-default">{cmd.command}</td>
-          <td className="px-3 py-2">
-            {cmd.success || !cmd.response ? (
-              <StatusPill tone={cmd.success ? 'success' : 'error'}>
-                {cmd.success ? '成功' : '失败'}
-              </StatusPill>
-            ) : (
-              /* 失败行：response 携带原因时 hover 展示（与任务列表失败行同模式） */
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="cursor-help underline decoration-dashed underline-offset-2">
-                    <StatusPill tone="error">失败</StatusPill>
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="max-w-xs">
-                  <p className="text-mcs-xs font-medium text-mcs-error-fg">失败原因</p>
-                  <p className="mt-1 text-xs text-mcs-text-default">{cmd.response}</p>
-                </TooltipContent>
-              </Tooltip>
-            )}
-          </td>
-          <td className="px-3 py-2 text-mcs-text-subtle">{cmd.source}</td>
-          <td className="px-3 py-2 text-mcs-text-subtle font-mono text-mcs-xs">{formatDurationMs(cmd.durationMs)}</td>
-        </tr>
-      ))}
-    </tbody>
-  )
-}
 
 export function AuditPage() {
   // ── 筛选状态 URL 持久化（issue 381）：state 为唯一真源，URL 为镜像 ──
@@ -428,107 +292,22 @@ export function AuditPage() {
         </TabsList>
 
         <TabsContent value="audit" className="min-h-0 flex-1 flex flex-col gap-3 mt-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <FilterSelect
-              label="操作类型"
-              value={auditAction}
-              options={actionFilterOptions()}
-              onChange={(v) => {
-                setAuditAction(v)
-                setAuditPage(1)
-              }}
-              className="w-44"
-            />
-
-            <span className="h-5 w-px shrink-0 bg-mcs-border-muted" aria-hidden />
-
-            <div className="flex items-center gap-1" role="group" aria-label="快捷时间范围">
-              {QUICK_RANGES.map((q) => {
-                const active = activeQuick?.key === q.key
-                return (
-                  <Button
-                    key={q.key}
-                    size="sm"
-                    className="h-8"
-                    variant={active ? 'default' : 'outline'}
-                    aria-pressed={active}
-                    onClick={() => applyQuick(q)}
-                  >
-                    {q.label}
-                  </Button>
-                )
-              })}
-            </div>
-
-            <span className="h-5 w-px shrink-0 bg-mcs-border-muted" aria-hidden />
-
-            <div className="flex items-center gap-1.5">
-              <Input
-                type="date"
-                className="w-36 text-mcs-xs"
-                value={auditStart}
-                max={auditEnd || undefined}
-                onChange={(e) => changeDate('start', e.target.value)}
-                aria-label="开始日期"
-              />
-              <span className="text-mcs-xs text-mcs-text-subtle">至</span>
-              <Input
-                type="date"
-                className="w-36 text-mcs-xs"
-                value={auditEnd}
-                min={auditStart || undefined}
-                onChange={(e) => changeDate('end', e.target.value)}
-                aria-label="结束日期"
-              />
-            </div>
-
-            {hasTimeRange && (
-              <Button size="sm" variant="ghost" onClick={clearTimeRange}>
-                <X aria-hidden />
-                清空时间
-              </Button>
-            )}
-
-            <span className="h-5 w-px shrink-0 bg-mcs-border-muted" aria-hidden />
-
-            <div className="flex items-center gap-1" role="group" aria-label="时间排序">
-              <Button
-                size="sm"
-                className="h-8"
-                variant={auditOrder === 'desc' ? 'default' : 'outline'}
-                aria-pressed={auditOrder === 'desc'}
-                onClick={() => setAuditOrder('desc')}
-              >
-                最新优先
-              </Button>
-              <Button
-                size="sm"
-                className="h-8"
-                variant={auditOrder === 'asc' ? 'default' : 'outline'}
-                aria-pressed={auditOrder === 'asc'}
-                onClick={() => setAuditOrder('asc')}
-              >
-                最早优先
-              </Button>
-            </div>
-
-            <span className="h-5 w-px shrink-0 bg-mcs-border-muted" aria-hidden />
-
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8"
-              onClick={() => void handleExport()}
-              disabled={exporting}
-              data-testid="audit-export"
-            >
-              <Download aria-hidden />
-              导出
-            </Button>
-            <span className="text-mcs-2xs text-mcs-text-subtle">
-              最多导出 {AUDIT_EXPORT_MAX_ROWS} 条（时间最新优先）
-            </span>
-          </div>
+          <AuditFilterBar
+            auditAction={auditAction}
+            setAuditAction={setAuditAction}
+            setAuditPage={setAuditPage}
+            activeQuick={activeQuick}
+            applyQuick={applyQuick}
+            auditStart={auditStart}
+            auditEnd={auditEnd}
+            changeDate={changeDate}
+            hasTimeRange={hasTimeRange}
+            clearTimeRange={clearTimeRange}
+            auditOrder={auditOrder}
+            setAuditOrder={setAuditOrder}
+            exporting={exporting}
+            handleExport={handleExport}
+          />
 
           {rangeInvalid && (
             <p role="alert" className="text-mcs-xs text-mcs-error-fg">
@@ -566,72 +345,17 @@ export function AuditPage() {
         </TabsContent>
 
         <TabsContent value="commands" className="min-h-0 flex-1 flex flex-col gap-3 mt-3">
-          {/* 时间筛选栏（issue 385）：样式与交互对齐审计日志 tab，倒置防护复用同一逻辑 */}
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-1" role="group" aria-label="快捷时间范围">
-              {QUICK_RANGES.map((q) => {
-                const active = activeQuickCmd?.key === q.key
-                return (
-                  <Button
-                    key={q.key}
-                    size="sm"
-                    className="h-8"
-                    variant={active ? 'default' : 'outline'}
-                    aria-pressed={active}
-                    onClick={() => applyQuickCmd(q)}
-                  >
-                    {q.label}
-                  </Button>
-                )
-              })}
-            </div>
-
-            <span className="h-5 w-px shrink-0 bg-mcs-border-muted" aria-hidden />
-
-            <div className="flex items-center gap-1.5">
-              <Input
-                type="date"
-                className="w-36 text-mcs-xs"
-                value={cmdStart}
-                max={cmdEnd || undefined}
-                onChange={(e) => changeCmdDate('start', e.target.value)}
-                aria-label="开始日期"
-              />
-              <span className="text-mcs-xs text-mcs-text-subtle">至</span>
-              <Input
-                type="date"
-                className="w-36 text-mcs-xs"
-                value={cmdEnd}
-                min={cmdStart || undefined}
-                onChange={(e) => changeCmdDate('end', e.target.value)}
-                aria-label="结束日期"
-              />
-            </div>
-
-            {cmdHasTimeRange && (
-              <Button size="sm" variant="ghost" onClick={clearCmdTimeRange}>
-                <X aria-hidden />
-                清空时间
-              </Button>
-            )}
-
-            <span className="h-5 w-px shrink-0 bg-mcs-border-muted" aria-hidden />
-
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8"
-              onClick={() => void handleCmdExport()}
-              disabled={cmdExporting}
-              data-testid="cmd-export"
-            >
-              <Download aria-hidden />
-              导出
-            </Button>
-            <span className="text-mcs-2xs text-mcs-text-subtle">
-              最多导出 {AUDIT_EXPORT_MAX_ROWS} 条（时间最新优先）
-            </span>
-          </div>
+          <CmdFilterBar
+            activeQuickCmd={activeQuickCmd}
+            applyQuickCmd={applyQuickCmd}
+            cmdStart={cmdStart}
+            cmdEnd={cmdEnd}
+            changeCmdDate={changeCmdDate}
+            cmdHasTimeRange={cmdHasTimeRange}
+            clearCmdTimeRange={clearCmdTimeRange}
+            cmdExporting={cmdExporting}
+            handleCmdExport={handleCmdExport}
+          />
 
           {cmdRangeInvalid && (
             <p role="alert" className="text-mcs-xs text-mcs-error-fg">
