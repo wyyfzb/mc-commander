@@ -14,7 +14,7 @@ import path from 'path';
 const LEVEL_NAME_REGEX = /^[A-Za-z0-9_-]+$/;
 
 /** 路径包含校验（服务层兜底）：resolve 归一化后必须位于 base 之下 */
-function isPathContained(basePath, targetPath) {
+export function isPathContained(basePath, targetPath) {
   const base = path.resolve(basePath);
   const target = path.resolve(base, targetPath);
   return target === base || target.startsWith(base + path.sep);
