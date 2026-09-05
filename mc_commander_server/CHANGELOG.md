@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.2.1](https://github.com/wyyfzb/mc-commander/compare/v1.2.0...v1.2.1) (2026-09-05)
+
+
+### Bug Fixes
+
+* **server:** upgrade.service.js 升级成功旧 jar 残留清理 + 备份/回滚复制异步化 ([#525](https://github.com/wyyfzb/mc-commander/issues/525)) ([3f3c1cb](https://github.com/wyyfzb/mc-commander/commit/3f3c1cbe772e5431af8abf0dfba6aee1ea0f5f4a))
+* **server:** webhook 背压跳过事件落投递记录——丢弃事件可观测 ([#528](https://github.com/wyyfzb/mc-commander/issues/528)) ([7f2c88d](https://github.com/wyyfzb/mc-commander/commit/7f2c88db6fddf02240977638f3a5c325fe0037dd))
+
 ## [1.2.0](https://github.com/wyyfzb/mc-commander/compare/v1.1.0...v1.2.0) (2026-09-05)
 
 
