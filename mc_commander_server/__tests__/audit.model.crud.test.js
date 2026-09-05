@@ -59,7 +59,8 @@ vi.mock('../db/database.js', () => ({
 
 const { AuditLogModel, CommandHistoryModel } = await import('../db/audit.model.js');
 
-// 直接插入受控 created_at 的行（ISO 格式与 prune 的 toISOString cutoff 同域可比）
+// 直接插入受控 created_at 的行（取跨年远边界值：与 prune cutoff 的先后由日期前缀唯一决定，
+// 不受时间分隔符格式影响；cutoff 同日的边界行为由 prune.cutoff.test.js 锁定，issue 541）
 function insertAuditRaw(overrides = {}) {
   const o = {
     instance_id: 's1', action: 'INSTANCE_START', target_type: null, target_id: null,

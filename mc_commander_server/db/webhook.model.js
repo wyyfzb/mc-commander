@@ -3,6 +3,7 @@
  * Secret 脱敏：API 返回 ********；findByIdInternal 返回原始 secret 供签名
  */
 import { getDb } from './database.js';
+import { sqliteCutoff } from './sqlite-time.js';
 
 export class WebhookModel {
   static create(data) {
@@ -153,7 +154,8 @@ export class WebhookModel {
 
   static pruneDeliveries(olderThanDays = 30) {
     const db = getDb();
-    const cutoff = new Date(Date.now() - olderThanDays * 86_400_000).toISOString();
+    // cutoff 与 created_at（CURRENT_TIMESTAMP 产出）字节级同构，同日边界不再因格式偏差误删（issue 541）
+    const cutoff = sqliteCutoff(olderThanDays);
     const result = db.prepare('DELETE FROM webhook_deliveries WHERE created_at < ?').run(cutoff);
     return result.changes;
   }

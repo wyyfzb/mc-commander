@@ -1,4 +1,5 @@
 import { getDb } from './database.js';
+import { sqliteCutoff } from './sqlite-time.js';
 
 export class AuditLogModel {
   static create(data) {
@@ -82,7 +83,8 @@ export class AuditLogModel {
 
   static prune(olderThanDays = 90) {
     const db = getDb();
-    const cutoff = new Date(Date.now() - olderThanDays * 86_400_000).toISOString();
+    // cutoff 与 created_at（CURRENT_TIMESTAMP 产出）字节级同构，同日边界不再因格式偏差误删（issue 541）
+    const cutoff = sqliteCutoff(olderThanDays);
     const result = db.prepare('DELETE FROM audit_logs WHERE created_at < ?').run(cutoff);
     return result.changes;
   }
@@ -175,7 +177,8 @@ export class CommandHistoryModel {
 
   static prune(olderThanDays = 90) {
     const db = getDb();
-    const cutoff = new Date(Date.now() - olderThanDays * 86_400_000).toISOString();
+    // cutoff 与 created_at（CURRENT_TIMESTAMP 产出）字节级同构，同日边界不再因格式偏差误删（issue 541）
+    const cutoff = sqliteCutoff(olderThanDays);
     const result = db.prepare('DELETE FROM command_history WHERE created_at < ?').run(cutoff);
     return result.changes;
   }
