@@ -32,6 +32,10 @@ const TONE_CLASSES: Record<ChipTone, string> = {
     'border-mcs-purple-border bg-mcs-purple-bg-subtle text-mcs-purple-fg',
 }
 
+/** 选中态：边界承担「已选中」的可辨识信息 → 强档描边（弱档仅装饰） */
+const SELECTED_CLASSES =
+  'border-mcs-accent-border-strong bg-mcs-accent-bg-subtle text-mcs-accent-fg'
+
 interface ChipProps {
   tone?: ChipTone
   /** 选中态（accent 强调）；仅切换类 chip 使用 */
@@ -63,7 +67,7 @@ export function Chip({
 }: ChipProps) {
   const base =
     'inline-flex h-6 max-w-full items-center justify-center gap-1 truncate rounded-mcs-sm border px-2 text-mcs-xs transition-colors'
-  const toneClass = selected ? TONE_CLASSES.accent : TONE_CLASSES[tone]
+  const toneClass = selected ? SELECTED_CLASSES : TONE_CLASSES[tone]
   const state =
     onClick != null
       ? 'cursor-pointer select-none hover:bg-mcs-state-hover disabled:cursor-not-allowed disabled:opacity-50'

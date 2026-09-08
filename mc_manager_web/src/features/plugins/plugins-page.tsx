@@ -276,10 +276,10 @@ export function PluginsPage() {
       {/* 拖放高亮遮罩 */}
       {dragActive && (
         <div
-          className="pointer-events-none absolute inset-2 z-30 flex items-center justify-center rounded-mcs-md border-2 border-dashed border-mcs-accent bg-mcs-accent/5"
+          className="pointer-events-none absolute inset-2 z-30 flex items-center justify-center rounded-mcs-md border-2 border-dashed border-mcs-accent-border-strong bg-mcs-accent/5"
           data-testid="drop-overlay"
         >
-          <div className="flex flex-col items-center gap-2 text-mcs-accent">
+          <div className="flex flex-col items-center gap-2 text-mcs-accent-fg">
             <ArrowUpFromLine className="size-8" aria-hidden />
             <p className="text-mcs-sm font-medium">松开以上传插件（.jar）</p>
           </div>

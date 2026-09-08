@@ -64,7 +64,7 @@ export function DeployStepServer({
                 className={cn(
                   'flex cursor-pointer flex-col gap-0.5 rounded-mcs-sm border px-2.5 py-2 transition-colors',
                   selected
-                    ? 'border-mcs-accent bg-mcs-accent-bg-subtle text-mcs-text-default'
+                    ? 'border-mcs-accent-border-strong bg-mcs-accent-bg-subtle text-mcs-text-default'
                     : 'border-mcs-border-default text-mcs-text-muted hover:bg-mcs-bg-hover',
                 )}
               >
@@ -187,7 +187,7 @@ export function DeployStepConfig({
       <div className="flex flex-col gap-2">
         <Label>内存分配</Label>
         <div className="flex items-baseline gap-2">
-          <span className="font-mono text-mcs-2xl font-bold text-mcs-accent">
+          <span className="font-mono text-mcs-2xl font-bold text-mcs-accent-fg">
             {memoryToGB(form.memory).toFixed(1)} GB
           </span>
           <span className="text-mcs-sm text-mcs-text-subtle">

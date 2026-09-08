@@ -50,7 +50,7 @@
   --mcs-accent-fg: var(--ref-accent);                /* accent 做文字/图标 */
   --mcs-accent-bg-subtle: color-mix(in oklch, var(--ref-accent) 12%, transparent); /* 激活态容器底 */
   --mcs-accent-border: color-mix(in oklch, var(--ref-accent) 25%, transparent);    /* 装饰描边：不承担可辨识信息 */
-  --mcs-accent-border-strong: color-mix(in oklch, var(--ref-accent) 70%, transparent); /* 交互边界/状态描边：最差 4.81:1（对激活态 tint 内面） */
+  --mcs-accent-border-strong: color-mix(in oklch, var(--ref-accent) 70%, transparent); /* 交互边界/状态描边：最差 4.32:1（对 bg-emphasis） */
 
   /* ── 焦点指示（≥3:1 实测：info 对暗底 9.0:1）── */
   --mcs-focus-ring: var(--ref-info);
@@ -186,7 +186,7 @@
   --mcs-accent-fg: var(--ref-success-light);       /* 绿做文字时换深档（5.0:1） */
   --mcs-accent-bg-subtle: color-mix(in oklch, var(--ref-accent-light) 15%, transparent);
   --mcs-accent-border: color-mix(in oklch, var(--ref-accent-light) 30%, transparent);  /* 装饰描边：不承担可辨识信息 */
-  /* 交互边界/状态描边：亮色 accent 过浅（实心也仅 1.33:1），必须换深绿系才可能 ≥3:1（最差 4.11:1，对 tint 内面） */
+  /* 交互边界/状态描边：亮色 accent 过浅（实心也仅 1.33:1），必须换深绿系才可能 ≥3:1（最差 4.14:1，对 bg-hover） */
   --mcs-accent-border-strong: color-mix(in oklch, var(--ref-success-light) 80%, transparent);
 
   --mcs-focus-ring: var(--ref-info-light);

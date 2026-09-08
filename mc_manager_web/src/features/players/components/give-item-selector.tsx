@@ -53,7 +53,7 @@ const ItemCell = memo(function ItemCell({
       className={cn(
         'relative flex flex-col items-center gap-0.5 rounded-mcs-sm border px-1 pb-1 pt-1 transition-colors',
         isSelected
-          ? 'border-mcs-accent-border bg-mcs-accent-bg-subtle'
+          ? 'border-mcs-accent-border-strong bg-mcs-accent-bg-subtle'
           : 'border-mcs-border-subtle bg-mcs-bg-muted hover:border-mcs-border-default',
       )}
     >

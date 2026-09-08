@@ -65,7 +65,7 @@ export function MarketHitCard({
   return (
     <li
       className={`rounded-mcs-md border bg-mcs-bg-default transition-colors duration-mcs-base ${
-        expanded ? 'border-mcs-accent/50' : 'border-mcs-border-muted hover:border-mcs-border-strong'
+        expanded ? 'border-mcs-accent-border-strong' : 'border-mcs-border-muted hover:border-mcs-border-strong'
       }`}
       data-testid="market-hit"
     >

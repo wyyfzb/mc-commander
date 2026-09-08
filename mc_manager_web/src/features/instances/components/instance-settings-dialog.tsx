@@ -284,7 +284,7 @@ export function InstanceSettingsDialog({
           <div className="flex flex-col gap-1.5">
             <span className="text-mcs-md font-semibold text-mcs-text-default">内存分配</span>
             <p>
-              <span className="font-mono text-mcs-2xl font-bold text-mcs-accent">
+              <span className="font-mono text-mcs-2xl font-bold text-mcs-accent-fg">
                 {allocatedMemory.toFixed(1)} GB
               </span>
               <span className="ml-1 text-mcs-sm text-mcs-text-subtle">/ {totalMax.toFixed(1)} GB</span>
@@ -320,7 +320,7 @@ export function InstanceSettingsDialog({
           {/* ── 生成的启动命令预览 ── */}
           <div className="flex flex-col gap-1.5">
             <span className="text-mcs-xs font-semibold text-mcs-text-muted">生成的启动命令</span>
-            <pre className="w-full overflow-x-auto whitespace-pre-wrap break-all rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-default p-3 font-mono text-mcs-xs text-mcs-accent">
+            <pre className="w-full overflow-x-auto whitespace-pre-wrap break-all rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-default p-3 font-mono text-mcs-xs text-mcs-accent-fg">
               {startCommandPreview}
             </pre>
           </div>
@@ -386,7 +386,7 @@ export function InstanceSettingsDialog({
                     ] as [string, string][]
                   ).map(([arg, desc]) => (
                     <div key={arg} className="flex items-baseline gap-2">
-                      <dt className="w-30 shrink-0 truncate font-mono text-mcs-xs text-mcs-accent" title={arg}>
+                      <dt className="w-30 shrink-0 truncate font-mono text-mcs-xs text-mcs-accent-fg" title={arg}>
                         {arg}
                       </dt>
                       <dd className="min-w-0 flex-1 text-mcs-xs text-mcs-text-muted">{desc}</dd>

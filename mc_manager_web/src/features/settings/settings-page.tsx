@@ -54,7 +54,7 @@ export function SettingsPage() {
               className={cn(
                 'flex items-center justify-center gap-2 rounded-mcs-sm border px-2 py-2 text-mcs-sm transition-colors md:justify-start md:px-2.5',
                 active
-                  ? 'border-mcs-accent-border bg-mcs-accent-bg-subtle font-semibold text-mcs-accent-fg'
+                  ? 'border-mcs-accent-border-strong bg-mcs-accent-bg-subtle font-semibold text-mcs-accent-fg'
                   : 'border-transparent font-medium text-mcs-text-muted hover:bg-mcs-bg-hover hover:text-mcs-text-default',
               )}
             >

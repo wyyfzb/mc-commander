@@ -310,7 +310,7 @@ export function EmergencyPage() {
                 onKeyDown={(e) => e.key === 'Enter' && void sendCommand()}
                 placeholder="输入命令…"
                 aria-label="终端命令输入"
-                className="h-12 min-w-0 flex-1 rounded-mcs-md border border-mcs-border-default bg-mcs-bg-muted px-3 font-mono text-mcs-sm text-mcs-text-default outline-none placeholder:text-mcs-text-subtle focus:border-mcs-accent"
+                className="h-12 min-w-0 flex-1 rounded-mcs-md border border-mcs-border-default bg-mcs-bg-muted px-3 font-mono text-mcs-sm text-mcs-text-default outline-none placeholder:text-mcs-text-subtle focus:border-mcs-accent-border focus:ring-1 focus:ring-mcs-focus-ring"
               />
               <Button className="h-12 px-5" disabled={!isRunning} onClick={() => void sendCommand()}>
                 发送

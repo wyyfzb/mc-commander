@@ -233,7 +233,7 @@ export function MarketSheet({ open, onOpenChange, instanceId, initialQuery = nul
       >
         <SheetHeader className="border-b border-mcs-border-muted px-5 py-4">
           <SheetTitle className="flex items-center gap-2 text-mcs-text-default">
-            <Package className="size-4 text-mcs-accent" aria-hidden />
+            <Package className="size-4 text-mcs-accent-fg" aria-hidden />
             插件市场
             {cached && <StatusPill tone="muted">缓存</StatusPill>}
           </SheetTitle>

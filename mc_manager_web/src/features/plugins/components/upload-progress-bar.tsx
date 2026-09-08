@@ -20,7 +20,7 @@ export function UploadProgressBar({ uploading, queueRemaining, onCancel }: Uploa
       data-testid="upload-progress"
       aria-live="polite"
     >
-      <FileText className="size-4 shrink-0 text-mcs-accent" aria-hidden />
+      <FileText className="size-4 shrink-0 text-mcs-accent-fg" aria-hidden />
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-2">
           <p className="truncate text-mcs-sm text-mcs-text-default" title={uploading.name}>

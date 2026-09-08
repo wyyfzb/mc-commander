@@ -149,7 +149,7 @@ export function PlayerDetailPanel({
               <TabsTrigger
                 key={tab}
                 value={tab}
-                className="h-9 rounded-none border-b-2 border-transparent px-3 text-mcs-xs data-[state=active]:border-mcs-accent data-[state=active]:text-mcs-text-default data-[state=active]:shadow-none"
+                className="h-9 rounded-none border-b-2 border-transparent px-3 text-mcs-xs data-[state=active]:border-mcs-accent-border-strong data-[state=active]:text-mcs-text-default data-[state=active]:shadow-none"
               >
                 {label}
               </TabsTrigger>

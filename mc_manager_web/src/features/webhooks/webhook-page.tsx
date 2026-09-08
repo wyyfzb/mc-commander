@@ -307,7 +307,7 @@ export default function WebhookPage() {
                     className={cn(
                       'rounded-mcs-xs border px-2 py-0.5 text-mcs-2xs transition-colors cursor-pointer',
                       form.platform === p.key
-                        ? 'border-mcs-accent-border bg-mcs-accent-bg-subtle text-mcs-accent-fg'
+                        ? 'border-mcs-accent-border-strong bg-mcs-accent-bg-subtle text-mcs-accent-fg'
                         : 'border-mcs-border-default text-mcs-text-muted hover:border-mcs-border-strong hover:text-mcs-text-default',
                     )}
                   >
@@ -374,7 +374,7 @@ export default function WebhookPage() {
                     className={cn(
                       'rounded-mcs-xs border px-2 py-0.5 text-mcs-2xs transition-colors cursor-pointer',
                       form.events.includes(evt)
-                        ? 'border-mcs-accent-border bg-mcs-accent-bg-subtle text-mcs-accent-fg'
+                        ? 'border-mcs-accent-border-strong bg-mcs-accent-bg-subtle text-mcs-accent-fg'
                         : 'border-mcs-border-muted text-mcs-text-subtle hover:border-mcs-border-default',
                     )}
                   >

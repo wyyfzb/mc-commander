@@ -145,7 +145,7 @@ export function EffectForm({ player, batchTargets, isBatchMode, isRconConnected,
                       className={cn(
                         'inline-flex items-center gap-1 rounded-mcs-sm border px-2 py-0.5 text-mcs-xs transition-colors',
                         effectId === e.effectId
-                          ? 'border-mcs-accent bg-mcs-accent-bg-subtle text-mcs-accent-fg'
+                          ? 'border-mcs-accent-border-strong bg-mcs-accent-bg-subtle text-mcs-accent-fg'
                           : 'border-mcs-border-default bg-mcs-bg-default text-mcs-text-default hover:bg-mcs-bg-hover',
                       )}
                     >

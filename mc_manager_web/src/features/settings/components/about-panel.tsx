@@ -74,7 +74,7 @@ export function AboutPanel(_props: AboutPanelProps) {
       <section className="rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted shadow-mcs-card">
         <header className="flex items-center gap-3 border-b border-mcs-border-subtle px-4 py-3">
           <span className="flex size-8 shrink-0 items-center justify-center rounded-mcs-sm bg-mcs-accent-bg-subtle">
-            <LinkIcon className="size-4 text-mcs-accent" aria-hidden />
+            <LinkIcon className="size-4 text-mcs-accent-fg" aria-hidden />
           </span>
           <h3 className="text-mcs-md font-semibold">相关链接</h3>
         </header>

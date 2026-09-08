@@ -81,7 +81,7 @@ export function SummonForm({ isRconConnected, onAction }: ActionFormProps) {
                   className={cn(
                     'rounded-mcs-sm border px-2 py-0.5 text-mcs-xs transition-colors',
                     selectedEntity?.id === e.id
-                      ? 'border-mcs-accent bg-mcs-accent-bg-subtle text-mcs-accent-fg'
+                      ? 'border-mcs-accent-border-strong bg-mcs-accent-bg-subtle text-mcs-accent-fg'
                       : 'border-mcs-border-default bg-mcs-bg-default text-mcs-text-default hover:bg-mcs-bg-hover',
                   )}
                 >

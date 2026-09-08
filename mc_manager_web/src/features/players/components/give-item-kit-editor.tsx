@@ -62,7 +62,7 @@ export function KitTab({
       <button
         type="button"
         onClick={onNew}
-        className="flex items-center gap-2.5 rounded-mcs-md border border-dashed border-mcs-accent-border bg-mcs-accent-bg-subtle px-3 py-2.5 text-left transition-colors hover:bg-mcs-bg-hover"
+        className="flex items-center gap-2.5 rounded-mcs-md border border-dashed border-mcs-accent-border-strong bg-mcs-accent-bg-subtle px-3 py-2.5 text-left transition-colors hover:bg-mcs-bg-hover"
       >
         <span className="flex size-9 shrink-0 items-center justify-center rounded-mcs-sm bg-mcs-accent-bg-subtle">
           <Plus className="size-4 text-mcs-accent-fg" aria-hidden />
@@ -258,7 +258,7 @@ export function KitEditorDialog({
                 className={cn(
                   'flex size-6 items-center justify-center rounded-mcs-xs text-mcs-sm transition-colors',
                   icon === emoji
-                    ? 'border border-mcs-accent-border bg-mcs-accent-bg-subtle'
+                    ? 'border border-mcs-accent-border-strong bg-mcs-accent-bg-subtle'
                     : 'border border-transparent bg-mcs-bg-muted hover:bg-mcs-bg-hover',
                 )}
               >

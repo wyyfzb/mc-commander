@@ -124,7 +124,7 @@ export function WorldInfoCard({ world, isLoading, onRefresh, className }: WorldI
     >
       <header className="flex items-center gap-3 border-b border-mcs-border-subtle px-4 py-3">
         <span className="flex size-8 shrink-0 items-center justify-center rounded-mcs-sm bg-mcs-accent-bg-subtle">
-          <Globe className="size-4 text-mcs-accent" aria-hidden />
+          <Globe className="size-4 text-mcs-accent-fg" aria-hidden />
         </span>
         <h3 className="text-mcs-md font-semibold">世界信息</h3>
         <div className="ml-auto">

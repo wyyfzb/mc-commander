@@ -54,7 +54,7 @@ function ModeCard({
       className={cn(
         'flex flex-1 flex-col items-start gap-2 rounded-mcs-md border p-4 text-left transition-colors',
         active
-          ? 'border-mcs-accent bg-mcs-accent-bg-subtle shadow-mcs-card'
+          ? 'border-mcs-accent-border-strong bg-mcs-accent-bg-subtle shadow-mcs-card'
           : 'border-mcs-border-muted bg-mcs-bg-muted shadow-mcs-card hover:bg-mcs-bg-hover',
       )}
     >

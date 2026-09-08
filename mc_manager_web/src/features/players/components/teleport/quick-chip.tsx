@@ -22,7 +22,7 @@ export function QuickChip({ name, coords, icon, onClick, disabled, onDelete, onE
         className="flex min-w-0 flex-col items-start gap-0.5 text-left disabled:cursor-not-allowed disabled:opacity-50"
       >
         <span className="inline-flex items-center gap-1 text-mcs-xs font-medium text-mcs-text-default">
-          <span className="text-mcs-accent" aria-hidden>
+          <span className="text-mcs-accent-fg" aria-hidden>
             {icon}
           </span>
           {name}

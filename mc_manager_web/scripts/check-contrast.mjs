@@ -166,11 +166,19 @@ for (const [scopeName, vars] of [
 
   // 9. accent 强档边界 × 背景（交互控件边界/状态描边 ≥3:1，须按合成后颜色算）
   //    弱档 --mcs-accent-border 仅作装饰（亮色 1.10:1 / 暗色 1.69:1），不得用于控件边界
-  for (const bgKey of ['bg-default', 'bg-muted']) {
-    const fg = parseColor(vars.get('--mcs-accent-border-strong'), vars, refVars)
+  const strongBorder = parseColor(vars.get('--mcs-accent-border-strong'), vars, refVars)
+  for (const bgKey of BG_KEYS) {
     const bg = parseColor(vars.get(`--mcs-${bgKey}`), vars, refVars)
-    const effective = composite(fg.color, bg.color, fg.alpha)
+    const effective = composite(strongBorder.color, bg.color, strongBorder.alpha)
     check(`accent-border-strong on ${bgKey}`, wcagContrast(effective, bg.color), 3.0)
+  }
+  // 9b. 选中态内面（accent tint 叠页面底）：强档描边的实际落点（选中 chip/物品格/导航项）
+  {
+    const page = parseColor(vars.get('--mcs-bg-default'), vars, refVars)
+    const tint = parseColor(vars.get('--mcs-accent-bg-subtle'), vars, refVars)
+    const face = composite(tint.color, page.color, tint.alpha)
+    const effective = composite(strongBorder.color, face, strongBorder.alpha)
+    check('accent-border-strong on accent-bg-subtle', wcagContrast(effective, face), 3.0)
   }
 }
 

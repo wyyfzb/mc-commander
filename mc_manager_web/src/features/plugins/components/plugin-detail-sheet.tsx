@@ -102,7 +102,7 @@ export function PluginDetailSheet({ plugin, open, onOpenChange, onToggle, toggli
                       href={meta.website}
                       target="_blank"
                       rel="noreferrer noopener"
-                      className="inline-flex items-center gap-1 text-mcs-accent hover:underline"
+                      className="inline-flex items-center gap-1 text-mcs-accent-fg hover:underline"
                     >
                       <Globe className="size-3.5" aria-hidden />
                       {meta.website}
