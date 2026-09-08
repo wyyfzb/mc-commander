@@ -18,7 +18,8 @@
     "test:e2e": "playwright test",
     "check:contrast": "node scripts/check-contrast.mjs",
     "check:tokens": "node scripts/gen-token-colors.mjs",
-    "check:design-tokens": "node scripts/check-design-tokens.mjs"
+    "check:design-tokens": "node scripts/check-design-tokens.mjs",
+    "check:size": "node scripts/check-bundle-size.mjs"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",

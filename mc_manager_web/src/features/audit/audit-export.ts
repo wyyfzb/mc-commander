@@ -6,7 +6,6 @@
  * 写入工作表前按页面当前排序口径回排（asc 反转）；
  * 命令历史服务端固定最新优先（无 order 参数），导出内容与服务端返回顺序一致（issue 403）
  */
-import ExcelJS from 'exceljs'
 import { apiGetAuditLogsPage, apiGetCommandHistoryPage, type AuditQueryParams } from '@/api/audit'
 import type { ConnectionConfig } from '@/api/client'
 import type { AuditLogItem, CommandHistoryItem } from '@/api/types'
@@ -109,7 +108,9 @@ export async function exportAuditLogsToExcel(
   const fetched = await fetchAuditExportRows(config, params)
   const rows = arrangeRowsForExport(fetched, order)
 
-  const workbook = new ExcelJS.Workbook()
+  // exceljs 约 900KB：按需加载，避免整块计入审计页首访体积（只有点导出才付这份代价）
+  const exceljs = await import('exceljs')
+  const workbook = new exceljs.Workbook()
   const sheet = workbook.addWorksheet('审计日志')
 
   sheet.columns = [
@@ -152,7 +153,9 @@ export async function exportCommandHistoryToExcel(
 ): Promise<void> {
   const rows = await fetchCommandExportRows(config, params)
 
-  const workbook = new ExcelJS.Workbook()
+  // exceljs 约 900KB：按需加载（同 exportAuditLogsToExcel）
+  const exceljs = await import('exceljs')
+  const workbook = new exceljs.Workbook()
   const sheet = workbook.addWorksheet('命令历史')
 
   sheet.columns = [

@@ -138,6 +138,8 @@ jobs:
       - run: npm ci
       # build 内含 tsc -b（类型检查），产物供 preview e2e 复用（E2E_SERVER=preview）
       - run: npm run build
+      # 首屏/路由首访体积门禁（gzip）：复用上面的构建产物，拦截重依赖回流高频路由
+      - run: npm run check:size
       - name: 缓存 Playwright 浏览器
         uses: actions/cache@v6
         with:
