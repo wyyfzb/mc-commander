@@ -27,12 +27,16 @@ export function DegradationBanners() {
     <div className="flex shrink-0 flex-col gap-1.5 px-4 pt-2">
       {wsDown && (
         <NoticeBanner variant="error" icon={WifiOff}>
-          <span className="flex items-center gap-2">
-            <b>WebSocket 已断开</b> · 已降级 HTTP 轮询（每 5s），数据仍可用
+          {/* 层级分离：文案靠左成一体，重连按钮独立右侧动作为实心边界按钮，
+              不再以同色 inline ghost 融入提示文字 */}
+          <span className="flex items-center justify-between gap-3">
+            <span className="min-w-0">
+              <b>WebSocket 已断开</b> · 已降级 HTTP 轮询（每 5s），数据仍可用
+            </span>
             <Button
-              variant="ghost"
+              variant="outline"
               size="sm"
-              className="h-6 px-1.5 text-mcs-2xs text-mcs-error-fg"
+              className="h-6 shrink-0 border-mcs-error-border bg-mcs-bg-default text-mcs-2xs text-mcs-error-fg hover:bg-mcs-bg-hover"
               onClick={() => void getSocketSingleton()?.connect()}
             >
               <RefreshCw className="size-3" aria-hidden />

@@ -141,10 +141,18 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
     }
   }, [instanceId, logsQuery.data, fillHistory])
 
-  // 实例切换 → store 清空旧缓冲；搜索装饰对应旧缓冲一并清除（外部系统调用，无 setState）
+  // 实例切换 → store 清空旧缓冲；xterm 必须同步 clear + 重置增量计数，
+  // 否则 buffer 归零瞬间「等待服务器日志」占位浮在旧实例日志上重叠，
+  // 且旧日志残留污染新实例视图（fillHistory 回填后从 0 重渲染）
   useEffect(() => {
     pushNothing(instanceId)
     searchAddonRef.current?.clearDecorations()
+    const term = xtermRef.current
+    if (term) {
+      term.clear()
+      renderedCountRef.current = 0
+      stoppedMarkRef.current = false
+    }
   }, [instanceId, pushNothing])
 
   // xterm 初始化（一次）
@@ -374,7 +382,7 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
     >
       {/* 工具栏（实底，玻璃禁区内） */}
       <div className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-mcs-border-muted bg-mcs-bg-muted px-2">
-        <InstanceControls compact />
+        <InstanceControls />
         <div className="flex items-center gap-1">
           <IconButton
             tooltip="搜索终端内容（Ctrl+F）"
@@ -428,7 +436,7 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
           <div
             role="search"
             aria-label="终端内容搜索"
-            className="absolute right-2 top-2 z-10 flex items-center gap-1 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-default p-1 shadow-sm"
+            className="absolute right-2 top-2 z-10 flex items-center gap-1 rounded-mcs-md border border-mcs-border-muted bg-popover p-1 shadow-mcs-raised"
           >
             <Input
               value={search.query}

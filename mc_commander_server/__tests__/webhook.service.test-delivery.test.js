@@ -35,7 +35,8 @@ beforeAll(() => {
 
   db.exec(`CREATE TABLE IF NOT EXISTS webhooks (
     id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, url TEXT NOT NULL,
-    secret TEXT, events TEXT DEFAULT '[]', instance_id TEXT, is_enabled INTEGER DEFAULT 1,
+    secret TEXT, platform TEXT NOT NULL DEFAULT 'generic', events TEXT DEFAULT '[]',
+    instance_id TEXT, is_enabled INTEGER DEFAULT 1,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP
   )`);
   db.exec(`CREATE TABLE IF NOT EXISTS webhook_deliveries (

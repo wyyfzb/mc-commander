@@ -30,6 +30,7 @@ beforeAll(() => {
       name TEXT NOT NULL,
       url TEXT NOT NULL,
       secret TEXT,
+      platform TEXT NOT NULL DEFAULT 'generic',
       events TEXT DEFAULT '[]',
       instance_id TEXT,
       is_enabled INTEGER DEFAULT 1,

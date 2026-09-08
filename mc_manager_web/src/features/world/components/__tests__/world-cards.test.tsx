@@ -150,12 +150,14 @@ describe('WorldInfoCard', () => {
     for (const label of labels) {
       expect(screen.getByText(label)).toBeInTheDocument()
     }
-    // 值渲染
+    // 值渲染（mcs-num 数字与 CJK/Latin 单位拆分为独立 span，分别断言）
     expect(screen.getByText('虚构测试世界')).toBeInTheDocument()
     expect(screen.getByText('默认')).toBeInTheDocument()
-    expect(screen.getByText('42 天')).toBeInTheDocument()
+    expect(screen.getByText('42')).toBeInTheDocument()
+    expect(screen.getByText('天')).toBeInTheDocument()
     expect(screen.getByText('3/20')).toBeInTheDocument()
-    expect(screen.getByText('3.2 GB')).toBeInTheDocument()
+    expect(screen.getByText('3.2')).toBeInTheDocument()
+    expect(screen.getByText('GB')).toBeInTheDocument()
     // 难度/模式 PillBadge 文本
     expect(screen.getByText('普通')).toBeInTheDocument()
     expect(screen.getByText('生存')).toBeInTheDocument()
@@ -220,7 +222,7 @@ describe('WorldInfoCard', () => {
   it('gameDays null 时显示「不可用」而非数字', () => {
     render(<WorldInfoCard world={makeWorld({ gameDays: null })} isLoading={false} onRefresh={() => {}} />)
     expect(screen.getByText('不可用')).toBeInTheDocument()
-    expect(screen.queryByText('42 天')).not.toBeInTheDocument()
+    expect(screen.queryByText('42')).not.toBeInTheDocument()
   })
 
   it('点击刷新按钮触发 onRefresh；加载中禁用时点击不触发', () => {

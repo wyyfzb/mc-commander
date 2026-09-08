@@ -10,6 +10,7 @@ import { LastOutputDialog } from '@/components/mcs/last-output-dialog'
 import { useUiStore } from '@/stores/ui'
 import { useServerStore } from '@/stores/server'
 import { useInstances } from '@/api/queries'
+import { useNotificationToasts } from '@/hooks/use-notification-toasts'
 import { useServerSocket } from '@/hooks/use-server-socket'
 
 /**
@@ -40,6 +41,8 @@ export function AppShell() {
 
   // WS 实时层（全局挂载：通知/状态/日志跨页面共享）
   useServerSocket(instanceId)
+  // 游戏内事件 toast 播报（通知中心之外的一过性即时反馈）
+  useNotificationToasts()
 
   return (
     <div data-density={density} className="mcs-shell-bg mcs-grain flex h-dvh overflow-hidden text-mcs-text-default">

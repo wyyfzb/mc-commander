@@ -11,7 +11,7 @@ import { success, successPaginated, error, ErrorCodes } from '../utils/response.
 import { recordAudit, AuditActions } from '../utils/audit.js';
 import { WebhookService, WEBHOOK_EVENT_TYPES } from '../services/webhook.service.js';
 import { checkPublicUrl } from '../utils/url-guard.js';
-import { webhookCreatePayloadSchema, webhookSchema } from '@mc-commander/schemas';
+import { webhookCreatePayloadSchema, webhookSchema, WEBHOOK_PLATFORMS } from '@mc-commander/schemas';
 import { validateBody, validatedSuccess, validatedSuccessPaginated } from '../middleware/validate.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { parsePagination } from '../utils/pagination.js';
@@ -51,7 +51,7 @@ export function createWebhookRoutes() {
 
   // POST /webhooks — 创建
   router.post('/webhooks', validateBody(webhookCreatePayloadSchema), asyncHandler(async (req, res) => {
-    const { name, url, secret, events, instanceId, isEnabled } = req.body;
+    const { name, url, secret, platform, events, instanceId, isEnabled } = req.body;
 
     if (!validateUrl(url)) {
       return res.status(400).json(error(ErrorCodes.WEBHOOK_INVALID_URL));
@@ -69,7 +69,7 @@ export function createWebhookRoutes() {
       }
     }
 
-    const webhook = WebhookModel.create({ name, url, secret: secret || null, events: events || [], instanceId: instanceId || null, isEnabled });
+    const webhook = WebhookModel.create({ name, url, secret: secret || null, platform, events: events || [], instanceId: instanceId || null, isEnabled });
     recordAudit({ action: AuditActions.WEBHOOK_CREATE, targetType: 'webhook', targetId: String(webhook.id), detail: { name, url } });
     res.json(validatedSuccess(webhookSchema, webhook, 'Webhook 创建成功'));
   }));
@@ -82,9 +82,13 @@ export function createWebhookRoutes() {
       return res.status(404).json(error(ErrorCodes.WEBHOOK_NOT_FOUND));
     }
 
-    const { name, url, secret, events, instanceId, isEnabled } = req.body;
+    const { name, url, secret, platform, events, instanceId, isEnabled } = req.body;
     if (url && !validateUrl(url)) {
       return res.status(400).json(error(ErrorCodes.WEBHOOK_INVALID_URL));
+    }
+    // update 无 validateBody 守卫，platform 枚举此处手动校验
+    if (platform !== undefined && !WEBHOOK_PLATFORMS.includes(platform)) {
+      return res.status(400).json(error(ErrorCodes.WEBHOOK_INVALID_EVENTS, `无效渠道预设: ${platform}`));
     }
     // SSRF 防护：拒绝指向私网/环回/保留地址的 URL（含 DNS 解析校验）
     if (url) {
@@ -105,6 +109,7 @@ export function createWebhookRoutes() {
     if (name !== undefined) data.name = name;
     if (url !== undefined) data.url = url;
     if (secret !== undefined) data.secret = secret;
+    if (platform !== undefined) data.platform = platform;
     if (events !== undefined) data.events = events;
     if (instanceId !== undefined) data.instanceId = instanceId;
     if (isEnabled !== undefined) data.isEnabled = isEnabled;

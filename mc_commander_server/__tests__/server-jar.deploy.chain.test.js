@@ -356,9 +356,9 @@ describe('POST /instances/deploy · Paper 主链', () => {
     expect(stages).toContain('download_complete');
     expect(stages).toContain('first_launch');
     expect(stages[stages.length - 1]).toBe('complete');
-    // 观察项（issue 415 PR 留档）：L557 先 delete 终态条目，但 complete 事件携
-    // meta 经 trackDeployProgress 重新 set 回注册表——测试锁定当前实际行为
-    expect(manager.activeDeploys.get(instanceId)).toMatchObject({ stage: 'complete' });
+    // 终态（complete）只推送不写回：注册表不留残留（WS 补发只针对进行中）
+    expect(manager.activeDeploys.get(instanceId)).toBeUndefined();
+    expect(manager.activeDeploys.size).toBe(0);
   });
 
   it('paper：无可用构建（builds 空）→ 502 No Paper build found + 实例目录清理 + error 事件', async () => {
@@ -375,6 +375,8 @@ describe('POST /instances/deploy · Paper 主链', () => {
     expect(fs.existsSync(`${testState.serversDir}/${instanceId}`)).toBe(false); // 失败路径清理
     const errEvt = manager.emit.mock.calls.map(([, evt]) => evt).find((e) => e.stage === 'error');
     expect(errEvt).toMatchObject({ stage: 'error', instanceId });
+    // error 终态同样只推送不写回：注册表不留残留
+    expect(manager.activeDeploys.get(instanceId)).toBeUndefined();
   });
 
   it('paper：build 无 downloads 字段 → 回退 v2 URL 直链下载（无上游摘要，跳过校验）', async () => {
@@ -428,6 +430,103 @@ describe('POST /instances/deploy · Paper 主链', () => {
     expect(res.body.message).toContain('exceeds size limit');
     const instanceId = lastDeployInstanceId();
     expect(fs.existsSync(`${testState.serversDir}/${instanceId}`)).toBe(false);
+  });
+});
+
+describe('部署注册表终态语义（issue 420）', () => {
+  function setPaperChain({ badSha = false } = {}) {
+    gotState.jsonTable = {
+      'projects/paper/versions': {
+        builds: [{
+          id: 42,
+          channel: 'STABLE',
+          downloads: {
+            'server:default': {
+              name: 'paper-1.21.4-42.jar',
+              url: `${PAPER_URL}/d/42`,
+              sha256: badSha ? 'deadbeef'.repeat(8) : JAR_SHA256,
+            },
+          },
+        }],
+      },
+    };
+  }
+
+  it('进行中阶段注册表随 stage 同步更新，终态不再写回（写入轨迹断言）', async () => {
+    setPaperChain();
+    const { app, manager } = buildApp();
+
+    // 包装注册表 set 记录写入轨迹：终态 delete 后 Map 已清空，事后回放
+    // emit.mock.calls 无法还原「事件发射时点」的注册表中间态，只有写入侧
+    // 轨迹能证明 trackDeployProgress 的逐阶段写回行为
+    const setTrace = [];
+    const origSet = manager.activeDeploys.set.bind(manager.activeDeploys);
+    manager.activeDeploys.set = (k, v) => {
+      setTrace.push({ instanceId: k, ...v });
+      return origSet(k, v);
+    };
+
+    const res = await request(app)
+      .post('/api/instances/deploy')
+      .send({ type: 'paper', mcVersion: '1.21.4', instanceName: 'Registry Life Server' });
+    expect(res.status).toBe(200);
+    const instanceId = res.body.data.id;
+
+    // 进行中阶段照常写注册表（受理 download → 进度 download → download_complete → first_launch）
+    const stages = setTrace.map((t) => t.stage);
+    expect(stages[0]).toBe('download');
+    expect(stages).toContain('download_complete');
+    expect(stages).toContain('first_launch');
+    expect(setTrace.every((t) => t.instanceId === instanceId)).toBe(true);
+    const progressEntry = setTrace.find((t) => t.stage === 'download' && t.percent > 0);
+    expect(progressEntry).toMatchObject({ stage: 'download', percent: 0.5 });
+    // 终态 complete 事件已发射，但从未触发 set（注册表只承载进行中阶段）
+    expect(manager.emit.mock.calls.map(([, evt]) => evt.stage)).toContain('complete');
+    expect(stages).not.toContain('complete');
+    expect(stages).not.toContain('error');
+    expect(manager.activeDeploys.size).toBe(0);
+  });
+
+  it('complete 终态后注册表为空：WS 连接建立补发零条终态事件（注册表消费语义）', async () => {
+    setPaperChain();
+    const { app, manager } = buildApp();
+
+    const res = await request(app)
+      .post('/api/instances/deploy')
+      .send({ type: 'paper', mcVersion: '1.21.4', instanceName: 'Snapshot Server' });
+    expect(res.status).toBe(200);
+    const instanceId = res.body.data.id;
+
+    // websocket.js 连接建立时遍历 activeDeploys.values() 补发——终态后注册表为空，
+    // 等价于新连接不对已完成部署补发历史终态；进行中快照结构含完整 meta 归属
+    expect(manager.activeDeploys.size).toBe(0);
+    const inFlightEvt = manager.emit.mock.calls.map(([, evt]) => evt)
+      .find((e) => e.stage === 'first_launch');
+    expect(inFlightEvt).toMatchObject({
+      instanceId,
+      instanceName: 'Snapshot Server',
+      type: 'paper',
+      mcVersion: '1.21.4',
+    });
+  });
+
+  it('sha 校验失败 → error 终态事件发射时点注册表已清空（失败路径 delete 先于 emit）', async () => {
+    setPaperChain({ badSha: true });
+    const { app, manager } = buildApp();
+
+    const res = await request(app)
+      .post('/api/instances/deploy')
+      .send({ type: 'paper', mcVersion: '1.21.4', instanceName: 'Sha Fail Server' });
+    expect(res.status).toBe(502);
+    const instanceId = lastDeployInstanceId();
+
+    // download 首事件已写入 entry（受理即入注册表），sha 校验失败进入 catch：
+    // :580 delete 先清 entry，:581 error 终态只推送不写回——发射时点注册表必为空
+    const downloadEvt = manager.emit.mock.calls.map(([, evt]) => evt).find((e) => e.stage === 'download');
+    expect(downloadEvt).toMatchObject({ instanceId });
+    expect(manager.emit.mock.calls.find(([, evt]) => evt.stage === 'error')).toBeTruthy();
+    expect(manager.activeDeploys.get(instanceId)).toBeUndefined();
+    expect(manager.activeDeploys.size).toBe(0);
   });
 });
 

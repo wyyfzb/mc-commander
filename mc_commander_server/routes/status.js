@@ -11,6 +11,11 @@ import {
   commandResponseSchema,
   instanceStatusListSchema,
   instanceStatusSchema,
+  instanceCommandRequestBodySchema,
+  instanceEulaRequestBodySchema,
+  instancePropertiesRequestBodySchema,
+  instanceSettingsRequestBodySchema,
+  instanceStartRequestBodySchema,
   logEntriesSchema,
   nullDataSchema,
   overviewDataSchema,
@@ -19,9 +24,11 @@ import {
   updatePropertiesResponseSchema,
   worldInfoSchema,
 } from '@mc-commander/schemas';
-import { validatedSuccess } from '../middleware/validate.js';
+import { validateBody, validatedSuccess } from '../middleware/validate.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { logger } from '../utils/logger.js';
+import { getServerVersion } from '../utils/version.js';
+import { getPropertiesView, applyPropertyUpdates } from '../services/instance-properties.service.js';
 
 // ── 磁盘使用率（feat-5 运维韧性）：fs.statfsSync 零新增依赖，10s 缓存 ──
 let _diskCache = { ts: 0, result: null };
@@ -162,7 +169,7 @@ export function createStatusRoutes(serverManager) {
     const cpuUsagePercent = getSystemCpuUsage();
 
     res.json(validatedSuccess(overviewDataSchema, {
-      version: '0.1.0',
+      version: getServerVersion(),
       instanceCount: instances.length,
       runningCount: instances.filter(i => i.isRunning).length,
       totalPlayers,
@@ -228,7 +235,8 @@ export function createStatusRoutes(serverManager) {
 
   // PUT /api/instances/:id - 更新实例配置（启动命令/JVM 参数等）
   // 同步更新数据库持久化记录与内存中运行实例的字段，下次 start() 生效
-  router.put('/instances/:id', asyncHandler(async (req, res) => {
+  // 输入侧契约（issue 486）：形状/类型 schema 前置，业务语义（javaPath 可执行性等）仍由下方路由层持有
+  router.put('/instances/:id', validateBody(instanceSettingsRequestBodySchema), asyncHandler(async (req, res) => {
     const instance = serverManager.getInstance(req.params.id);
     if (!instance) {
       return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND));
@@ -331,7 +339,9 @@ export function createStatusRoutes(serverManager) {
   }));
 
   // POST /api/instances/:id/start
-  router.post('/instances/:id/start', asyncHandler(async (req, res) => {
+  // 输入侧契约（issue 486）：startCommand 禁用键 schema 前置 400（find-002）；
+  // 下方路由层原判断保留作纵深防御（中间件被移除时仍封堵 RCE）
+  router.post('/instances/:id/start', validateBody(instanceStartRequestBodySchema), asyncHandler(async (req, res) => {
     const instance = serverManager.getInstance(req.params.id);
     if (!instance) {
       return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND));
@@ -385,7 +395,8 @@ export function createStatusRoutes(serverManager) {
   }));
 
   // POST /api/instances/:id/command
-  router.post('/instances/:id/command', asyncHandler(async (req, res) => {
+  // 输入侧契约（issue 486）：非空字符串 + 长度上限 schema 前置（仅拒收类型/长度非法，行为零变化）
+  router.post('/instances/:id/command', validateBody(instanceCommandRequestBodySchema), asyncHandler(async (req, res) => {
     const { command } = req.body;
     if (!command) {
       return res.status(400).json(error(ErrorCodes.VALIDATION_ERROR, 'Command is required'));
@@ -425,165 +436,24 @@ export function createStatusRoutes(serverManager) {
   });
 
   // GET /api/instances/:id/properties - 获取 server.properties
+  // 展示视图（重读文件 → 运行状态型属性覆盖 → 敏感键掩码）见
+  // services/instance-properties.service.js getPropertiesView（issue 514 分层治理）。
   router.get('/instances/:id/properties', async (req, res) => {
     const instance = serverManager.getInstance(req.params.id);
     if (!instance) {
       return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND));
     }
-    // 每次重新读取文件而非直接返回内存缓存：游戏内命令（如 /whitelist on）
-    // 会写回 server.properties，内存缓存不会自动更新，重读文件才能同步。
-    try {
-      const fresh = instance._loadProperties();
-      if (fresh && Object.keys(fresh).length > 0) {
-        instance.properties = fresh;
-      }
-    } catch {}
-    const props = { ...instance.properties };
-
-    // 运行状态型属性：游戏内 /difficulty、/defaultgamemode 只改 level.dat，
-    // 不写回 server.properties，读取运行中真实值覆盖，否则客户端读到旧值（多端同步）。
-    // difficulty 优先 RCON 实时查询、level.dat 兜底；gamemode 读 level.dat。
-    // readDifficulty 服务层已捕获 RCON/level.dat 预期失败并回退文件值，此处再兜底
-    // 意外异常：难度缺失不影响 properties 主体响应（Express 4 下未捕获 rejection
-    // 会挂起请求并可能终止进程，见上方 asyncHandler 注释）。
-    try {
-      const difficulty = await instance.readDifficulty();
-      if (difficulty) props['difficulty'] = difficulty;
-    } catch {}
-    const gameMode = instance._readGameTypeFromLevelDat();
-    if (gameMode) props['gamemode'] = gameMode;
-
-    // find-015：敏感属性（rcon.password 等）以占位符掩码返回，防止密码与
-    // 网络配置泄露给 API 调用方；客户端原样回传占位符时 PUT 视为未修改。
-    for (const key of Object.keys(props)) {
-      if (SENSITIVE_PROPERTIES.has(key)) {
-        props[key] = SENSITIVE_PLACEHOLDER;
-      }
-    }
-
+    const props = await getPropertiesView(instance);
     res.json(validatedSuccess(serverPropertiesSchema, props));
   });
 
-  // 支持运行中通过斜杠命令修改的 server.properties 属性 → 命令构造。
-  // MC 服务器运行时不重新加载 server.properties 文件（启动时读取），
-  // 仅以下属性可通过命令运行中生效；其余属性（pvp、max-players、online-mode 等）
-  // 修改后需重启服务器。
-  const RUNTIME_COMMAND_MAP = {
-    'white-list': (v) =>
-      String(v).toLowerCase() === 'true' ? 'whitelist on' : 'whitelist off',
-    'enforce-whitelist': (v) =>
-      String(v).toLowerCase() === 'true'
-        ? 'whitelist enforce on'
-        : 'whitelist enforce off',
-    'difficulty': (v) => `difficulty ${v}`,
-    'gamemode': (v) => `defaultgamemode ${v}`,
-  };
-
-  // ── find-018 / find-015：PUT /properties 键白名单与值校验 ──
-  // 普通可写属性键白名单（前端世界属性页暴露 + MC 26.x 常用键，保持新旧版本
-  // 兼容的宽松策略：对已知属性尽量放行，未知键才拒绝）。
-  const WRITABLE_PROPERTIES = new Set([
-    // 世界
-    'level-name', 'level-type', 'level-seed', 'generator-settings',
-    'difficulty', 'gamemode', 'force-gamemode', 'hardcore', 'pvp',
-    'allow-flight', 'allow-nether', 'spawn-monsters', 'spawn-npcs',
-    'spawn-animals', 'spawn-protection', 'max-world-size', 'generate-structures',
-    // 玩家/性能
-    'max-players', 'view-distance', 'simulation-distance',
-    'player-idle-timeout', 'max-tick-time', 'network-compression-threshold',
-    'rate-limit', 'entity-broadcast-range-percentage', 'function-permission-level',
-    'op-permission-level', 'sync-chunk-writes', 'use-native-transport',
-    'enable-jmx-monitoring',
-    // 展示/交互
-    'motd', 'hide-online-players', 'enforce-secure-profile',
-    'prevent-proxy-connections', 'log-ips', 'broadcast-console-to-ops',
-    'broadcast-rcon-to-ops', 'snooper-enabled',
-    // 资源包/内容过滤
-    'require-resource-pack', 'resource-pack', 'resource-pack-sha1',
-    'resource-pack-prompt', 'initial-enabled-packs', 'initial-disabled-packs',
-    'text-filtering-config',
-  ]);
-
-  // 布尔型属性：仅接受 true/false
-  const BOOLEAN_PROPERTIES = new Set([
-    'white-list', 'enforce-whitelist', 'force-gamemode', 'hardcore', 'pvp',
-    'allow-flight', 'allow-nether', 'spawn-monsters', 'spawn-npcs',
-    'spawn-animals', 'generate-structures', 'hide-online-players',
-    'enforce-secure-profile', 'prevent-proxy-connections', 'log-ips',
-    'sync-chunk-writes', 'use-native-transport', 'broadcast-console-to-ops',
-    'broadcast-rcon-to-ops', 'snooper-enabled', 'enable-jmx-monitoring',
-    'require-resource-pack',
-  ]);
-
-  // 数值型属性：仅接受整数（max-tick-time / network-compression-threshold
-  // 允许 -1 表示禁用/不限制）
-  const NUMERIC_PROPERTIES = new Set([
-    'max-players', 'view-distance', 'simulation-distance',
-    'player-idle-timeout', 'max-tick-time', 'network-compression-threshold',
-    'rate-limit', 'entity-broadcast-range-percentage', 'function-permission-level',
-    'op-permission-level', 'spawn-protection', 'max-world-size',
-  ]);
-
-  // 敏感属性禁止 API 写入：enable-rcon/rcon.password/rcon.port 为 RCON
-  // 远程控制通道，enable-query/enable-status 暴露服务器信息，enable-command-block
-  // 绕过命令权限分级，online-mode 为正版验证，server-port/server-ip 控制
-  // 网络暴露面。GET 时以占位符掩码返回，PUT 提交占位符视为未修改
-  // （沿用磁盘现值），提交其余值一律 400 拒绝。
-  const SENSITIVE_PROPERTIES = new Set([
-    'enable-rcon', 'rcon.password', 'rcon.port',
-    'enable-query', 'enable-status', 'enable-command-block',
-    'online-mode', 'server-port', 'server-ip',
-  ]);
-  const SENSITIVE_PLACEHOLDER = '********';
-
-  // 可写键 = 普通可写键 + 运行期命令键（并集，保证 RUNTIME_COMMAND_MAP
-  // 四键即使未出现在普通键集中也允许写入）
-  const ALLOWED_PROPERTY_KEYS = new Set([
-    ...WRITABLE_PROPERTIES,
-    ...Object.keys(RUNTIME_COMMAND_MAP),
-  ]);
-
-  // find-018：单键值校验。返回 { ok: true, value } 或 { ok: false, reason }
-  function validatePropertyValue(key, rawValue) {
-    if (rawValue === null || rawValue === undefined || typeof rawValue === 'object') {
-      return { ok: false, reason: '值必须是标量' };
-    }
-    const value = String(rawValue);
-    if (BOOLEAN_PROPERTIES.has(key)) {
-      const lowered = value.toLowerCase();
-      if (lowered !== 'true' && lowered !== 'false') {
-        return { ok: false, reason: '布尔属性仅接受 true/false' };
-      }
-      return { ok: true, value };
-    }
-    if (NUMERIC_PROPERTIES.has(key)) {
-      if (!/^-?\d+$/.test(value)) {
-        return { ok: false, reason: '数值属性仅接受整数' };
-      }
-      return { ok: true, value };
-    }
-    if (key === 'level-name') {
-      // 根治路径穿越入口：level-name 会拼入世界目录路径
-      if (!/^[A-Za-z0-9_-]+$/.test(value)) {
-        return { ok: false, reason: 'level-name 仅接受字母数字、下划线与连字符' };
-      }
-      return { ok: true, value };
-    }
-    // 字符串属性拒绝真实换行（防 server.properties 行注入；
-    // motd 的字面 \n 转义序列不包含真实换行，不受影响）
-    if (/[\n\r]/.test(value)) {
-      return { ok: false, reason: '字符串属性不允许包含换行符' };
-    }
-    // 运行期命令键的值会拼入下发给 MC 控制台的命令，限制字符集防命令注入
-    // （white-list/enforce-whitelist 已在布尔分支处理；difficulty/gamemode 走这里）
-    if (RUNTIME_COMMAND_MAP[key] && !/^[a-zA-Z0-9_:-]+$/.test(value)) {
-      return { ok: false, reason: '值包含非法字符' };
-    }
-    return { ok: true, value };
-  }
-
   // PUT /api/instances/:id/properties - 更新 server.properties
-  router.put('/instances/:id/properties', asyncHandler(async (req, res) => {
+  // 输入侧契约（issue 486）：对象形状 schema 前置（passthrough 保留全部属性键，
+  // 数组/标量/null 在 schema 层拒绝），下游属性值语义校验不变。
+  // 键白名单/敏感键占位符短路/单键值校验/写盘与重启联动编排见
+  // services/instance-properties.service.js（issue 514 分层治理），路由层降为
+  // 薄编排：参数解析 → service 调用 → 响应包装。
+  router.put('/instances/:id/properties', validateBody(instancePropertiesRequestBodySchema), asyncHandler(async (req, res) => {
     const instance = serverManager.getInstance(req.params.id);
     if (!instance) {
       logger.warn(`[PUT properties] Instance not found: ${req.params.id}`);
@@ -603,82 +473,19 @@ export function createStatusRoutes(serverManager) {
       return res.status(500).json(error(ErrorCodes.SERVER_ERROR, '服务端版本过旧，请重启服务端以加载最新代码'));
     }
 
-    // 重读磁盘并刷新缓存（与 GET /properties 同款模式）：游戏内命令（如
-    // /whitelist on）或 files 路由编辑会写回 server.properties，内存缓存不会
-    // 自动更新。以陈旧缓存为 diff 基线会把磁盘真实变更掩盖：漏发运行中命令、
-    // 漏报 restartRequired，且 saveProperties 的写入合并基线是磁盘内容，
-    // 两份不一致的快照会导致游戏内改动被静默回滚。
-    try {
-      const fresh = instance._loadProperties();
-      if (fresh && Object.keys(fresh).length > 0) {
-        instance.properties = fresh;
-      }
-    } catch {}
-    const oldProps = { ...instance.properties };
-
-    // find-018/find-015：键白名单 + 敏感键占位符 + 值校验。
-    // 任一非法键/非法值整体 400 拒绝（原子性，不落盘部分修改）。
-    const validated = {};
-    const rejectedKeys = [];
-    for (const [key, rawValue] of Object.entries(newProps)) {
-      // 敏感键：提交占位符视为未修改（沿用磁盘现值），其余值一律拒绝写入
-      if (SENSITIVE_PROPERTIES.has(key)) {
-        if (rawValue === SENSITIVE_PLACEHOLDER) continue;
-        rejectedKeys.push(key);
-        logger.warn(`[PUT properties] 拒绝写入敏感属性: ${key}`);
-        continue;
-      }
-      // 键白名单：仅允许世界属性页暴露的键 + 运行期命令键
-      if (!ALLOWED_PROPERTY_KEYS.has(key)) {
-        rejectedKeys.push(key);
-        logger.warn(`[PUT properties] 拒绝未知属性键: ${key}`);
-        continue;
-      }
-      const result = validatePropertyValue(key, rawValue);
-      if (!result.ok) {
-        rejectedKeys.push(key);
-        logger.warn(`[PUT properties] 属性值校验失败 ${key}: ${result.reason}`);
-        continue;
-      }
-      validated[key] = result.value;
-    }
-    if (rejectedKeys.length > 0) {
-      return res.status(400).json(error(ErrorCodes.VALIDATION_ERROR, `存在不允许写入或校验失败的属性: ${rejectedKeys.join(', ')}`));
+    const outcome = await applyPropertyUpdates(instance, newProps);
+    if (!outcome.ok) {
+      return res.status(400).json(error(ErrorCodes.VALIDATION_ERROR, `存在不允许写入或校验失败的属性: ${outcome.rejectedKeys.join(', ')}`));
     }
     // 全部为占位符/空提交：无实际变更，直接返回
-    if (Object.keys(validated).length === 0) {
+    if (!outcome.applied) {
       return res.json(validatedSuccess(updatePropertiesResponseSchema, { restartRequired: [] }, 'Properties updated'));
-    }
-
-    instance.saveProperties(validated);
-
-    // 对比新旧属性，区分「可运行中生效（下发命令）」与「需重启服务器」
-    const changedKeys = Object.keys(validated).filter(
-      (k) => oldProps[k] !== validated[k],
-    );
-    const runtimeChanged = changedKeys.filter((k) => RUNTIME_COMMAND_MAP[k]);
-    // 仅在服务器运行时才提示需重启（未运行时下次启动自然生效）
-    const restartRequired = instance.isRunning
-      ? changedKeys.filter((k) => !RUNTIME_COMMAND_MAP[k])
-      : [];
-
-    // 服务器运行时，对支持运行中修改的属性下发斜杠命令，保证客户端修改立即生效
-    if (instance.isRunning && runtimeChanged.length > 0) {
-      for (const key of runtimeChanged) {
-        const cmd = RUNTIME_COMMAND_MAP[key](validated[key]);
-        try {
-          await instance.sendCommand(cmd);
-          logger.info(`[PUT properties] 下发运行中命令: ${cmd}`);
-        } catch (e) {
-          logger.warn(`[PUT properties] 命令 ${cmd} 下发失败: ${e.message}`);
-        }
-      }
     }
 
     logger.info(`[PUT properties] Saved successfully, instance.properties now has ${Object.keys(instance.properties).length} keys`);
     recordAudit({ instanceId: req.params.id, action: 'CONFIG_CHANGE', targetType: 'instance', targetId: req.params.id, detail: { field: 'properties' } });
-    res.json(validatedSuccess(updatePropertiesResponseSchema, { restartRequired }, restartRequired.length > 0
-      ? `Properties updated, ${restartRequired.length} 项需重启服务器生效`
+    res.json(validatedSuccess(updatePropertiesResponseSchema, { restartRequired: outcome.restartRequired }, outcome.restartRequired.length > 0
+      ? `Properties updated, ${outcome.restartRequired.length} 项需重启服务器生效`
       : 'Properties updated'));
   }));
 
@@ -712,6 +519,23 @@ export function createStatusRoutes(serverManager) {
             proc.once('exit', () => { clearTimeout(timer); resolve(); });
           });
         }
+      }
+
+      // 1.5 备份互斥前置检查：实例存在 creating/restoring 备份记录时拒绝卸载。
+      //    恢复是 fire-and-forget 后台任务（耗时随世界规模可达分钟级），删除与其
+      //    并发的两条竞争终态均为数据事故：删除落在恢复 rename 之后 → 失败回滚
+      //    把已删实例目录整体还原（已删实例"复活"）；落在 rsync 复制中 → 源消失
+      //    以 exit 24 退出被 okCodes 容忍（半复制当成功，pre_restore 被永久清除，
+      //    原始世界不可逆丢失）。复用 backup.service.js 同款互斥语义（卡死恢复 +
+      //    busyCount）；置于停机等待之后、首个 rmSync 之前——停机期间新启动的
+      //    备份/恢复同样被拦下，且检查到删除间无 await（better-sqlite3 同步）无
+      //    TOCTOU 窗口；被拒请求不触碰实例目录、快照目录与任何 DB 记录。
+      BackupModel.resetStaleInProgress({ maxAgeMs: config.backupInProgressTimeoutMs, instanceId: req.params.id });
+      const busyCount =
+        BackupModel.findAll({ instanceId: req.params.id, status: 'creating' }).total +
+        BackupModel.findAll({ instanceId: req.params.id, status: 'restoring' }).total;
+      if (busyCount > 0) {
+        return res.status(409).json(error(ErrorCodes.BACKUP_IN_PROGRESS, '备份进行中，请等待完成后再删除实例'));
       }
 
       const instancePath = instance.serverPath;
@@ -752,7 +576,7 @@ export function createStatusRoutes(serverManager) {
   }));
 
   // POST /api/instances/:id/eula - 写入 EULA 协议确认
-  router.post('/instances/:id/eula', asyncHandler(async (req, res) => {
+  router.post('/instances/:id/eula', validateBody(instanceEulaRequestBodySchema), asyncHandler(async (req, res) => {
     const instance = serverManager.getInstance(req.params.id);
     if (!instance) {
       return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND));
@@ -847,7 +671,8 @@ export function createStatusRoutes(serverManager) {
       gameDays,
       dimensions: [
         { name: '主世界', icon: '🌍', playerCount: dimCounts.overworld },
-        { name: '地狱', icon: '🔥', playerCount: dimCounts.nether },
+        // 「下界」为 MC 官方中文译名（“地狱”系旧俗称，服务端展示文案对齐）
+        { name: '下界', icon: '🔥', playerCount: dimCounts.nether },
         { name: '末地', icon: '🟣', playerCount: dimCounts.end }
       ]
     };

@@ -9,8 +9,8 @@ export class WebhookModel {
     const db = getDb();
     const eventsJson = JSON.stringify(data.events || []);
     const result = db.prepare(`
-      INSERT INTO webhooks (name, url, secret, events, instance_id, is_enabled)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO webhooks (name, url, secret, events, instance_id, is_enabled, platform)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(
       data.name,
       data.url,
@@ -18,6 +18,7 @@ export class WebhookModel {
       eventsJson,
       data.instanceId || null,
       data.isEnabled !== undefined ? (data.isEnabled ? 1 : 0) : 1,
+      data.platform || 'generic',
     );
     return this.findById(result.lastInsertRowid);
   }
@@ -30,6 +31,7 @@ export class WebhookModel {
     if (data.name !== undefined) { sets.push('name = ?'); params.push(data.name); }
     if (data.url !== undefined) { sets.push('url = ?'); params.push(data.url); }
     if (data.secret !== undefined) { sets.push('secret = ?'); params.push(data.secret); }
+    if (data.platform !== undefined) { sets.push('platform = ?'); params.push(data.platform); }
     if (data.events !== undefined) { sets.push('events = ?'); params.push(JSON.stringify(data.events)); }
     if (data.instanceId !== undefined) { sets.push('instance_id = ?'); params.push(data.instanceId); }
     if (data.isEnabled !== undefined) { sets.push('is_enabled = ?'); params.push(data.isEnabled ? 1 : 0); }
@@ -169,6 +171,7 @@ export class WebhookModel {
       name: row.name,
       url: row.url,
       secret: maskSecret ? '********' : (row.secret || null),
+      platform: row.platform || 'generic',
       events,
       instanceId: row.instance_id,
       isEnabled: !!row.is_enabled,

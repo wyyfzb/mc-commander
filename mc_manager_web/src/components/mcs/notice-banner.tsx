@@ -33,7 +33,8 @@ export function NoticeBanner({ variant, icon: Icon, children, className }: Notic
       )}
     >
       {Icon && <Icon className="mt-px size-3.5 shrink-0" aria-hidden />}
-      <span>{children}</span>
+      {/* flex-1：内容区占满剩余宽度，children 内可做两端对齐的操作区布局 */}
+      <span className="flex-1">{children}</span>
     </div>
   )
 }

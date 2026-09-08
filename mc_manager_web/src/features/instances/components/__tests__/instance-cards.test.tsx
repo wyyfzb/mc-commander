@@ -58,6 +58,13 @@ describe('InstanceCards', () => {
     expect(screen.getByText('已停止')).toBeInTheDocument()
   })
 
+  it('世界指标走 formatWorldSize 统一格式化（mock worldSize=1.2GB 字符串 → 1.2 GB）', () => {
+    render(<InstanceCards {...baseProps()} />)
+    // 有详情的卡显示格式化值；无详情卡显示 —（数量随 fixture detailStatuses 覆盖度变化，≥1 即证明格式化生效）
+    expect(screen.getAllByText('1.2 GB').length).toBeGreaterThanOrEqual(1)
+    expect(screen.queryByText('1.2GB')).not.toBeInTheDocument()
+  })
+
   it('升级中徽标：store 有非终态进度时显示（issue 352）', () => {
     act(() => {
       useUpgradeStore.setState({

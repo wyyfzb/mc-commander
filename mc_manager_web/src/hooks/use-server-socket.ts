@@ -78,7 +78,18 @@ export function useServerSocket(instanceId: string | null) {
 
     let socket = socketSingleton
     if (!socket) {
-      socket = new McSocket({ apiKey, baseUrl, sessionToken })
+      socket = new McSocket({
+        apiKey,
+        baseUrl,
+        sessionToken,
+        // 连接生命周期边沿（UXT-4）：断线即时置 false（激活「延迟刷新」降级态
+        // 与降级横幅——此前 socketConnected 只在 effect 挂载/卸载时置位，断线
+        // 永远感知不到，degraded 态是死码）；重连成功 onopen 置回 true
+        onStateChange: ({ open }) => {
+          setSocketConnected(open)
+          if (open) setHasConnectedOnce(true)
+        },
+      })
       socketSingleton = socket
     }
 
@@ -185,6 +196,10 @@ export function useServerSocket(instanceId: string | null) {
                   action: { label: '查看末尾日志', onClick: () => setLastOutputInstanceId(crashedInstanceId) },
                 },
               )
+            } else {
+              // started/stopped/ready/save 常规跃迁：入通知中心（文案映射见
+              // lib/notifications buildNotifications），不弹 toast 防打断
+              dispatchWsEvent({ type: 'status', data: msg.data as Record<string, unknown>, instanceId: msg.instanceId })
             }
           } else {
             applyWsSnapshot(msg.instanceId, {

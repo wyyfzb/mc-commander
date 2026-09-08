@@ -35,7 +35,7 @@ test.describe('世界页', () => {
     await expect(page.getByText('普通')).toBeVisible()
     await expect(page.getByText('生存', { exact: true })).toBeVisible()
     // 维度卡 3 张
-    for (const name of ['主世界', '地狱', '末地']) {
+    for (const name of ['主世界', '下界', '末地']) {
       await expect(page.getByText(name)).toBeVisible()
     }
     await maybeShot(page, 'world-info-dark.png')

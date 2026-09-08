@@ -139,6 +139,18 @@ describe('ServerTerminal', () => {
     expect(useTerminalStore.getState().buffer).toHaveLength(0)
   })
 
+  it('实例切换同步清空 xterm——占位不再浮在旧实例日志上（重叠回归）', async () => {
+    renderTerminal()
+    await waitFor(() => expect(useTerminalStore.getState().buffer.length).toBeGreaterThan(0))
+    const clearCountBefore = xtermStub.events.filter((e) => e.op === 'clear').length
+    act(() => {
+      useServerStore.setState({ instanceId: 'other' })
+    })
+    // store 缓冲随 setInstance 归零，xterm 必须出现新的 clear 事件（旧日志不得残留）
+    await waitFor(() => expect(useTerminalStore.getState().instanceId).toBe('other'))
+    expect(xtermStub.events.filter((e) => e.op === 'clear').length).toBeGreaterThan(clearCountBefore)
+  })
+
   it('不带修饰键的 L 不清屏', async () => {
     renderTerminal()
     await waitFor(() => expect(useTerminalStore.getState().buffer.length).toBeGreaterThan(0))

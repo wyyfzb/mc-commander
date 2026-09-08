@@ -13,6 +13,8 @@ import {
   formatStartTime,
   formatUtcNaive,
   formatUptime,
+  formatWorldSize,
+  worldSizeParts,
   worldTimePhase,
 } from '../format'
 
@@ -152,6 +154,26 @@ describe('formatStartTime / formatLogFileName / worldTimePhase', () => {
     expect(worldTimePhase(15000)).toBe('夜晚')
     expect(worldTimePhase(22000)).toBe('午夜')
     expect(worldTimePhase(null)).toBe('--')
+  })
+
+  it('worldSizeParts：<1GB 换 MB，≥1GB 保留一位 GB，异常值回退 0 GB', () => {
+    // 实测场景：643MB 存档（0.6279296875 GB）旧实现渲染「0.6」易误读为 0
+    expect(worldSizeParts(0.6279296875)).toEqual({ value: '643', unit: 'MB' })
+    expect(worldSizeParts(3.2)).toEqual({ value: '3.2', unit: 'GB' })
+    expect(worldSizeParts(1)).toEqual({ value: '1.0', unit: 'GB' })
+    expect(worldSizeParts(0)).toEqual({ value: '0', unit: 'GB' })
+    expect(worldSizeParts(null)).toEqual({ value: '0', unit: 'GB' })
+    expect(worldSizeParts(Number.NaN)).toEqual({ value: '0', unit: 'GB' })
+  })
+
+  it('formatWorldSize：兼容 number 与数字字符串（两端契约类型不一），空/非法回退 —', () => {
+    expect(formatWorldSize(0.6279296875)).toBe('643 MB')
+    expect(formatWorldSize(3.2)).toBe('3.2 GB')
+    expect(formatWorldSize('1.2GB')).toBe('1.2 GB')
+    expect(formatWorldSize('0.03')).toBe('31 MB')
+    expect(formatWorldSize(null)).toBe('—')
+    expect(formatWorldSize('')).toBe('—')
+    expect(formatWorldSize('N/A')).toBe('—')
   })
 })
 

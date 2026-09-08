@@ -160,7 +160,7 @@ export function EmergencyPage() {
         {tab === 'overview' && (
           <div className="flex flex-col gap-3">
             {/* TPS 大字（状态查询失败时明确报错，不呈现为假死的「—」） */}
-            <section className="flex flex-col items-center rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted py-5">
+            <section className="mcs-edge-top relative flex flex-col items-center rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted py-5 shadow-mcs-card">
               {status.isError && !status.isLoading ? (
                 <>
                   <AlertTriangle className="size-8 text-mcs-error-fg" aria-hidden />
@@ -173,7 +173,7 @@ export function EmergencyPage() {
               ) : (
                 <>
                   <span
-                    className={cn('tnum text-mcs-2xl font-semibold leading-none', healthy ? 'text-mcs-success-fg' : 'text-mcs-warning-fg')}
+                    className={cn('mcs-num text-mcs-display leading-none', healthy ? 'text-mcs-success-fg' : 'text-mcs-warning-fg')}
                   >
                     {st?.tps != null ? st.tps.toFixed(1) : '—'}
                   </span>
@@ -229,7 +229,7 @@ export function EmergencyPage() {
             </section>
 
             {/* 迷你终端（日志查询失败时明确报错） */}
-            <section className="flex flex-col rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-subtle">
+            <section className="flex flex-col rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-subtle shadow-mcs-card">
               <div className="flex items-center gap-1.5 border-b border-mcs-border-muted px-3 py-2">
                 <span className="size-1.5 rounded-full bg-mcs-success-fg" aria-hidden />
                 <span className="font-mono text-mcs-xs tracking-wider text-mcs-text-subtle">SERVER CONSOLE</span>
@@ -262,7 +262,7 @@ export function EmergencyPage() {
             {onlinePlayers.map((p) => (
               <div
                 key={p.name}
-                className="flex items-center gap-3 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted px-3 py-3"
+                className="flex items-center gap-3 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted px-3 py-3 shadow-mcs-card"
               >
                 <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-mcs-accent-bg-subtle text-mcs-sm font-semibold text-mcs-accent-fg">
                   {p.name?.charAt(0).toUpperCase()}
@@ -286,7 +286,7 @@ export function EmergencyPage() {
 
         {tab === 'console' && (
           <div className="flex flex-col gap-2">
-            <div className="flex flex-col rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-subtle">
+            <div className="flex flex-col rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-subtle shadow-mcs-card">
               <div className="border-b border-mcs-border-muted px-3 py-2 font-mono text-mcs-2xs tracking-wider text-mcs-text-subtle">
                 SERVER CONSOLE
               </div>
@@ -401,7 +401,7 @@ export function EmergencyPage() {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="text-center">
-      <div className="tnum text-mcs-md font-semibold">{value}</div>
+      <div className="mcs-num text-mcs-md leading-none font-semibold">{value}</div>
       <div className="mt-0.5 text-mcs-2xs text-mcs-text-subtle">{label}</div>
     </div>
   )

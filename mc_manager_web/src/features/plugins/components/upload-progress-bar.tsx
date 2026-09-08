@@ -16,7 +16,7 @@ interface UploadProgressBarProps {
 export function UploadProgressBar({ uploading, queueRemaining, onCancel }: UploadProgressBarProps) {
   return (
     <div
-      className="flex items-center gap-3 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted px-4 py-3"
+      className="flex items-center gap-3 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted px-4 py-3 shadow-mcs-card"
       data-testid="upload-progress"
       aria-live="polite"
     >

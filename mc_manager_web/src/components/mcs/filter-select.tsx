@@ -1,4 +1,5 @@
-import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select'
+import type { ReactNode } from 'react'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 
 /**
@@ -7,10 +8,14 @@ import { cn } from '@/lib/utils'
  * 筛选生效（值 ≠ 全部）时切换 accent 激活态（subtle 底 + accent 前景 + accent 边框）；
  * 「全部」项由组件按 allValue 统一注入（Radix 不允许空串 item value，
  * 内部用哨兵转换，对外契约仍是调用方的 allValue）
+ * 分组：option.group 非空时按 group 名聚簇渲染（SelectGroup/SelectLabel），
+ * 组序按选项首次出现顺序；不传 group 保持平铺（兼容既有调用方）
  */
 export interface FilterOption {
   value: string
   label: string
+  /** 分组标题（可选）：同组选项聚簇渲染，组序按首次出现顺序 */
+  group?: string
 }
 
 interface FilterSelectProps {
@@ -27,6 +32,44 @@ interface FilterSelectProps {
 }
 
 const ALL_ITEM_VALUE = '__filter_all__'
+
+/** 选项渲染：带 group 时按组聚簇（SelectGroup+SelectLabel），否则平铺（兼容旧调用方） */
+function renderGroupedOptions(options: ReadonlyArray<FilterOption>): ReactNode {
+  const grouped = options.some((o) => o.group)
+  if (!grouped) {
+    return options.map((option) => (
+      <SelectItem key={option.value} value={option.value}>
+        {option.label}
+      </SelectItem>
+    ))
+  }
+  const nodes: ReactNode[] = []
+  // 组序按选项首次出现顺序；无 group 的选项平铺在末尾
+  const groupOrder = [...new Set(options.map((o) => o.group).filter(Boolean) as string[])]
+  for (const group of groupOrder) {
+    const items = options.filter((o) => o.group === group)
+    nodes.push(
+      <SelectGroup key={group}>
+        <SelectLabel>{group}</SelectLabel>
+        {items.map((option) => (
+          <SelectItem key={option.value} value={option.value}>
+            {option.label}
+          </SelectItem>
+        ))}
+      </SelectGroup>,
+    )
+  }
+  for (const option of options) {
+    if (!option.group) {
+      nodes.push(
+        <SelectItem key={option.value} value={option.value}>
+          {option.label}
+        </SelectItem>,
+      )
+    }
+  }
+  return nodes
+}
 
 export function FilterSelect({
   label,
@@ -60,11 +103,7 @@ export function FilterSelect({
       </SelectTrigger>
       <SelectContent position="popper" sideOffset={4}>
         <SelectItem value={ALL_ITEM_VALUE}>全部</SelectItem>
-        {mergedOptions.map((option) => (
-          <SelectItem key={option.value} value={option.value}>
-            {option.label}
-          </SelectItem>
-        ))}
+        {renderGroupedOptions(mergedOptions)}
       </SelectContent>
     </Select>
   )

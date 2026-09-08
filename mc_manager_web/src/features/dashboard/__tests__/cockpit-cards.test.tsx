@@ -4,16 +4,15 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { setupServer } from 'msw/node'
 import { Toaster } from 'sonner'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { handlers } from '@/test/mocks/handlers'
 import { McClockCard, dayCycle, interpolateTick } from '../components/mc-clock-card'
-import { EventsCard } from '../components/events-card'
 import { AnnouncementCard } from '../components/announcement-card'
 import { useServerStore } from '@/stores/server'
 import { useConnectionStore } from '@/stores/connection'
 import { useTerminalStore } from '@/stores/terminal'
 import { useUiStore } from '@/stores/ui'
 import { useNotificationStore } from '@/stores/notifications'
-import type { AppNotification } from '@/lib/notifications'
 import { mockInstanceStatus } from '@/test/mocks/handlers'
 
 /**
@@ -27,8 +26,10 @@ afterAll(() => server.close())
 function renderWithProviders(ui: ReactNode) {
   return render(
     <QueryClientProvider client={new QueryClient()}>
-      {ui}
-      <Toaster />
+      <TooltipProvider>
+        {ui}
+        <Toaster />
+      </TooltipProvider>
     </QueryClientProvider>,
   )
 }
@@ -96,48 +97,47 @@ describe('McClockCard 世界控制', () => {
   })
 })
 
-describe('EventsCard 事件与待办', () => {
-  const item = (id: string, read: boolean, content = `事件 ${id}`): AppNotification =>
-    ({ id, type: 'join', category: 'game', content, timestamp: Date.now(), count: 1, read })
-
-  it('未读角标 + 最新事件行；点「全部」开通知抽屉', () => {
-    useNotificationStore.setState({
-      items: [item('a', false, 'Steve 加入服务器'), item('b', true, 'Alex 加入服务器')],
-      unreadCount: 1,
-    })
-    renderWithProviders(<EventsCard />)
-    expect(screen.getByText('1 未读')).toBeInTheDocument()
-    expect(screen.getByText('Steve 加入服务器')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '全部动态' }))
-    expect(useUiStore.getState().notificationsOpen).toBe(true)
-  })
-
-  it('点击事件行标记已读并开抽屉', () => {
-    useNotificationStore.setState({ items: [item('a', false, 'Steve 加入服务器')], unreadCount: 1 })
-    renderWithProviders(<EventsCard />)
-    fireEvent.click(screen.getByRole('button', { name: /Steve 加入服务器/ }))
-    expect(useUiStore.getState().notificationsOpen).toBe(true)
-    expect(useNotificationStore.getState().items[0]?.read).toBe(true)
-  })
-
-  it('空态显示「暂无动态」', () => {
-    renderWithProviders(<EventsCard />)
-    expect(screen.getByText('暂无动态')).toBeInTheDocument()
-  })
-})
-
 describe('AnnouncementCard 公告发送', () => {
-  it('模板填充 → Ctrl+Enter 发送 say 公告 → 清空输入并回显终端', async () => {
+  it('预设胶囊填充 → Ctrl+Enter → 确认弹窗确认 → 发送 say 公告 → 清空输入并回显终端', async () => {
     renderWithProviders(<AnnouncementCard />)
-    fireEvent.click(screen.getByRole('button', { name: /服务器将在 5 分钟后重启/ }))
+    fireEvent.click(screen.getByRole('button', { name: '重启预告' }))
     const input = screen.getByLabelText('公告内容')
     expect(input).toHaveValue('服务器将在 5 分钟后重启，请及时停靠')
     fireEvent.keyDown(input, { key: 'Enter', ctrlKey: true })
+    // 二次确认：确认前不发送
+    expect(useTerminalStore.getState().buffer.some((e) => e.text.includes('say 服务器将在'))).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: /^发送$/ }))
     await waitFor(() =>
       expect(useTerminalStore.getState().buffer.some((e) => e.text.includes('say 服务器将在'))).toBe(true),
     )
     expect(input).toHaveValue('')
     expect(useTerminalStore.getState().buffer.some((e) => e.text.includes('say 服务器将在'))).toBe(true)
+  })
+
+  it('预设管理：添加 → 胶囊与持久化；删除 → 胶囊消失', () => {
+    renderWithProviders(<AnnouncementCard />)
+    // 添加预设（名称+文案）
+    fireEvent.click(screen.getByRole('button', { name: '添加预设' }))
+    fireEvent.change(screen.getByLabelText('预设名'), { target: { value: '活动预告' } })
+    fireEvent.change(screen.getByLabelText('公告文案'), { target: { value: '周末活动即将开始' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    expect(screen.getByRole('button', { name: '活动预告' })).toBeInTheDocument()
+    const stored = JSON.parse(localStorage.getItem('mcs-announcement-presets') ?? '[]') as { name: string }[]
+    expect(stored.some((p) => p.name === '活动预告')).toBe(true)
+    // 删除预设：经二次确认
+    fireEvent.click(screen.getByRole('button', { name: '删除预设 活动预告' }))
+    fireEvent.click(screen.getByRole('button', { name: /^删除$/ }))
+    expect(screen.queryByRole('button', { name: '活动预告' })).not.toBeInTheDocument()
+  })
+
+  it('确认弹窗取消：不发送命令', () => {
+    renderWithProviders(<AnnouncementCard />)
+    fireEvent.click(screen.getByRole('button', { name: '重启预告' }))
+    const input = screen.getByLabelText('公告内容')
+    fireEvent.keyDown(input, { key: 'Enter', ctrlKey: true })
+    fireEvent.click(screen.getByRole('button', { name: /^取消$/ }))
+    expect(useTerminalStore.getState().buffer.length).toBe(0)
+    expect(input).toHaveValue('服务器将在 5 分钟后重启，请及时停靠')
   })
 
   it('空输入不发命令', () => {

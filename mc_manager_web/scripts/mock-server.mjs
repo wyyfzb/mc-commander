@@ -2,13 +2,42 @@
  * E2E mock 服务端（Playwright webServer 依赖，端口 5198）
  * 模拟 MC Commander 服务端 API 契约（信封格式与字段对齐 routes/*）。
  * 数据为结构占位 mock，严禁真实服务器信息（项目规则 8）。
- * 不实现 WS：页面在无 WS 时走 HTTP 轮询正常渲染（E2E 断言不依赖实时事件）。
+ * WS：最小握手 + subscribe 快照 + ping/pong（对齐 index.js handleProtocols
+ * 与 websocket.js 消息契约；手写 RFC 6455 握手避免引入 ws 依赖——web 包
+ * devDeps 无 ws，mock 端点不需要完整实现）。
  */
 import { createServer } from 'node:http'
+import { createHash } from 'node:crypto'
 
 const PORT = Number(process.env.MOCK_PORT) || 5198
 
 const now = () => new Date().toISOString()
+
+/** Webhook 演示数据（对齐 @mc-commander/schemas webhook 契约；模块级以支持 POST 后持久） */
+const webhooks = [
+  {
+    id: 1,
+    name: '运维群通知',
+    url: 'https://example.com/webhook/ops',
+    secret: null,
+    events: ['instance.started', 'instance.stopped', 'backup.completed'],
+    instanceId: 'e2e-demo',
+    isEnabled: true,
+    createdAt: '2026-08-01T10:00:00.000Z',
+    updatedAt: '2026-09-01T10:00:00.000Z',
+  },
+  {
+    id: 2,
+    name: '玩家事件流水',
+    url: 'https://example.com/webhook/players',
+    secret: null,
+    events: ['player.joined', 'player.left'],
+    instanceId: null,
+    isEnabled: false,
+    createdAt: '2026-08-15T10:00:00.000Z',
+    updatedAt: '2026-09-02T10:00:00.000Z',
+  },
+]
 const ok = (data, message = 'Success') =>
   JSON.stringify({ status: 'ok', code: 0, message, data, timestamp: now() })
 
@@ -93,6 +122,10 @@ const systemStats = {
   cpuCores: 4,
   loadAvg: [0.1, 0.2, 0.15],
   uptime: 86400,
+  diskUsage: {
+    primary: { mountpoint: '/', totalGB: 39, usedGB: 5.5, percent: 14.2 },
+    all: [{ mountpoint: '/', totalGB: 39, usedGB: 5.5, percent: 14.2 }],
+  },
 }
 
 const logs = [
@@ -128,7 +161,7 @@ const worldInfo = {
   gameDays: 42,
   dimensions: [
     { name: '主世界', icon: '🌍', playerCount: 2 },
-    { name: '地狱', icon: '🔥', playerCount: 1 },
+    { name: '下界', icon: '🔥', playerCount: 1 },
     { name: '末地', icon: '🟣', playerCount: 0 },
   ],
 }
@@ -370,6 +403,34 @@ const bans = [
   },
 ]
 
+/** 插件演示数据（模块级以支持 enabled 状态在 PUT 后持久） */
+const plugins = [
+  {
+    file: 'EssentialsX-2.20.1.jar',
+    name: 'EssentialsX',
+    enabled: true,
+    sizeBytes: 2_201_600,
+    mtimeMs: Date.now() - 86_400_000,
+    meta: { name: 'EssentialsX', version: '2.20.1', main: 'com.earth2me.essentials.Essentials', apiVersion: '1.13', description: '提供基础指令与权限管理', authors: ['EssentialsX Team'], depend: [], softdepend: ['Vault'] },
+  },
+  {
+    file: 'Vault.jar',
+    name: 'Vault',
+    enabled: true,
+    sizeBytes: 331_264,
+    mtimeMs: Date.now() - 2 * 86_400_000,
+    meta: { name: 'Vault', version: '1.7.3', main: 'net.milkbowl.vault.Vault', apiVersion: null, description: '经济与权限抽象层', authors: ['Sleaker'], depend: [], softdepend: [] },
+  },
+  {
+    file: 'WorldEdit.jar',
+    name: 'WorldEdit',
+    enabled: false,
+    sizeBytes: 8_912_896,
+    mtimeMs: Date.now() - 7 * 86_400_000,
+    meta: { name: 'WorldEdit', version: '7.3.0', main: 'com.sk89q.worldedit.bukkit.WorldEditPlugin', apiVersion: '1.17', description: '世界编辑工具', authors: ['EngineHub'], depend: [], softdepend: ['CommandBook'] },
+  },
+]
+
 const server = createServer((req, res) => {
   const url = req.url ?? ''
   const path = url.split('?')[0]
@@ -410,6 +471,91 @@ const server = createServer((req, res) => {
     if (path === '/api/v1/rotate-key' && req.method === 'POST') {
       // API Key 轮换（mock：固定返回演示 key；生产为随机生成）
       return res.end(ok({ apiKey: 'mcck-mock-0000-0000-0000-0001' }, 'API Key 已轮换：旧 Key 立即失效，请立即保存新 Key'))
+    }
+    // ── Webhook 端点（对齐 @mc-commander/schemas webhook 契约） ──
+    if (path === '/api/v1/webhooks' && req.method === 'GET') {
+      const q = parseQuery(url)
+      const page = Math.max(1, parseInt(q.page) || 1)
+      const pageSize = Math.min(200, Math.max(1, parseInt(q.pageSize) || 20))
+      // 剔除 secret（列表契约不回传密钥）
+      const list = webhooks.map(({ secret: _secret, ...rest }) => rest)
+      return res.end(JSON.stringify({
+        status: 'ok', code: 0, message: 'Success',
+        data: list.slice((page - 1) * pageSize, page * pageSize),
+        pagination: { total: list.length, page, pageSize, totalPages: Math.ceil(list.length / pageSize) || 1 },
+        timestamp: now(),
+      }))
+    }
+    if (path === '/api/v1/webhooks/event-types') {
+      return res.end(ok(['instance.started', 'instance.stopped', 'backup.completed', 'player.joined', 'player.left']))
+    }
+    if (path === '/api/v1/webhooks' && req.method === 'POST') {
+      let created
+      try {
+        const payload = JSON.parse(body || '{}')
+        created = {
+          id: webhooks.length + 1,
+          name: payload.name ?? '新建 Webhook',
+          url: payload.url ?? 'https://example.com/webhook/new',
+          secret: payload.secret ?? null,
+          events: payload.events ?? [],
+          instanceId: payload.instanceId ?? null,
+          isEnabled: payload.isEnabled ?? true,
+          createdAt: now(),
+          updatedAt: now(),
+        }
+      } catch {
+        created = webhooks[0]
+      }
+      webhooks.push(created)
+      return res.end(ok(created))
+    }
+    if (/^\/api\/v1\/webhooks\/\d+\/test$/.test(path) && req.method === 'POST') {
+      return res.end(ok({ success: true, statusCode: 200, durationMs: 120, error: null }))
+    }
+    if (/^\/api\/v1\/webhooks\/\d+\/deliveries$/.test(path)) {
+      const q = parseQuery(url)
+      const page = Math.max(1, parseInt(q.page) || 1)
+      const pageSize = Math.min(200, Math.max(1, parseInt(q.pageSize) || 20))
+      // 字段对齐 webhookDeliverySchema（eventType/responseStatus/status）；payload=事件发送内容示例（虚构数据）
+      const deliveries = [
+        { id: 1, webhookId: 1, eventType: 'instance.started', instanceId: 'e2e-demo', payload: { event: 'instance.started', instance: 'E2E 演示实例', timestamp: Date.now() - 3600_000 }, status: 'success', responseStatus: 200, durationMs: 110, attempts: 1, createdAt: new Date(Date.now() - 3600_000).toISOString(), responseBody: '{"ok":true}' },
+        { id: 2, webhookId: 1, eventType: 'backup.completed', instanceId: 'e2e-demo', payload: { event: 'backup.completed', file: 'world-backup-test.zip', size: 1024 }, status: 'failed', responseStatus: 502, durationMs: 3000, attempts: 3, createdAt: new Date(Date.now() - 86_400_000).toISOString(), responseBody: 'Bad Gateway' },
+      ]
+      return res.end(JSON.stringify({
+        status: 'ok', code: 0, message: 'Success',
+        data: deliveries.slice((page - 1) * pageSize, page * pageSize),
+        pagination: { total: deliveries.length, page, pageSize, totalPages: Math.ceil(deliveries.length / pageSize) || 1 },
+        timestamp: now(),
+      }))
+    }
+    if (/^\/api\/v1\/webhooks\/\d+$/.test(path) && req.method === 'DELETE') return res.end(ok(null))
+    // ── 插件域（对齐 @mc-commander/schemas plugin 契约；数据见模块级 plugins） ──
+    if (path === '/api/v1/instances/e2e-demo/plugins' && req.method === 'GET') {
+      return res.end(ok({ plugins }))
+    }
+    if (/^\/api\/v1\/instances\/e2e-demo\/plugins\/[^/]+\/enabled$/.test(path) && req.method === 'PUT') {
+      let target = null
+      try {
+        const file = decodeURIComponent(path.split('/')[6])
+        const { enabled } = JSON.parse(body || '{}')
+        target = plugins.find((p) => p.file === file)
+        if (target) target.enabled = Boolean(enabled)
+      } catch {}
+      return res.end(ok({ ok: Boolean(target) }))
+    }
+    if (/^\/api\/v1\/instances\/e2e-demo\/plugins\/[^/]+$/.test(path) && req.method === 'DELETE') {
+      return res.end(ok({ ok: true }))
+    }
+    if (path === '/api/v1/instances/e2e-demo/plugins/check-updates' && req.method === 'POST') {
+      return res.end(ok({ results: plugins.map((p) => ({
+        file: p.file, name: p.name, installedVersion: p.meta?.version ?? null, enabled: p.enabled,
+        matched: true, slug: p.name.toLowerCase(), title: p.name, iconUrl: null,
+        latestVersion: p.meta?.version ?? '1.0.0', updateAvailable: false, hasNewer: false,
+      })) }))
+    }
+    if (/^\/api\/v1\/instances\/e2e-demo\/plugins\/market\/search$/.test(path) && req.method === 'GET') {
+      return res.end(ok({ hits: [], total: 0 }))
     }
     if (path === '/api/v1/instances') return res.end(ok([instance]))
     if (path === '/api/v1/instances/e2e-demo') {
@@ -578,10 +724,12 @@ const server = createServer((req, res) => {
       return res.end(ok(dirPath === '/world' ? worldDirList : rootFileList))
     }
 
-    // ── 审计域（操作日志 + 命令历史：action/时间过滤 + 分页信封）──
+    // ── 审计域（操作日志 + 命令历史：action/时间过滤 + order 排序 + 分页信封）──
     if (path === '/api/v1/audit-logs' || path === '/api/v1/command-history') {
       const q = parseQuery(url)
-      const hoursAgo = (h) => new Date(Date.now() - h * 3600000).toISOString()
+      // 对齐真服务端口径：SQLite CURRENT_TIMESTAMP = UTC「YYYY-MM-DD HH:MM:SS」（空格分隔，
+      // 无时区标记）；ISO「T」分隔会与前端按该口径构造的 startTime/endTime 字符串比较失配
+      const hoursAgo = (h) => new Date(Date.now() - h * 3600000).toISOString().replace('T', ' ').slice(0, 19)
       const auditLogs = [
         { id: 1, instanceId: 'e2e-demo', action: 'INSTANCE_START', targetType: 'instance', targetId: 'e2e-demo', detail: { reason: '手动启动' }, source: 'web', createdAt: hoursAgo(30) },
         { id: 2, instanceId: 'e2e-demo', action: 'PLAYER_OP', targetType: 'player', targetId: 'Steve', detail: { by: 'admin' }, source: 'rcon', createdAt: hoursAgo(20) },
@@ -598,8 +746,11 @@ const server = createServer((req, res) => {
       const isAudit = path === '/api/v1/audit-logs'
       let list = isAudit ? auditLogs : commandHistory
       if (isAudit && q.action) list = list.filter((l) => l.action === q.action)
-      if (isAudit && q.startTime) list = list.filter((l) => l.createdAt >= q.startTime)
-      if (isAudit && q.endTime) list = list.filter((l) => l.createdAt <= q.endTime)
+      if (q.startTime) list = list.filter((l) => l.createdAt >= q.startTime)
+      if (q.endTime) list = list.filter((l) => l.createdAt <= q.endTime)
+      // order：asc 正序 / desc 倒序（缺省倒序，对齐 audit.model.js ORDER BY id 方向）
+      if (q.order === 'asc') list = [...list].sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      else list = [...list].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       const page = Math.max(1, parseInt(q.page) || 1)
       const pageSize = Math.min(200, Math.max(1, parseInt(q.pageSize) || 20))
       const total = list.length
@@ -638,6 +789,126 @@ const server = createServer((req, res) => {
     res.statusCode = 404
     res.end(JSON.stringify({ status: 'error', code: 40400, message: 'Not found', details: null, timestamp: now() }))
   })
+})
+
+// ── 最小 WS 端点（对齐真实服务端契约）──────────────────────────────
+// 鉴权与真实端一致从 subprotocol 提取（e2e 专用令牌恒放行——mock 不做凭据校验）
+const WS_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11'
+const authProtocol = (protocols) =>
+  protocols.find((p) => p.startsWith('mc-commander-apikey.') || p.startsWith('mc-commander-session.')) ?? null
+
+/** 帧解码：客户端→服务端仅小载荷文本帧（subscribe/ping），掩码必处理 */
+function decodeFrame(buf) {
+  if (buf.length < 2) return null
+  const opcode = buf[0] & 0x0f
+  let len = buf[1] & 0x7f
+  let off = 2
+  if (len === 126) {
+    if (buf.length < 4) return null
+    len = buf.readUInt16BE(2)
+    off = 4
+  } else if (len === 127) {
+    if (buf.length < 10) return null
+    len = Number(buf.readBigUInt64BE(2))
+    off = 10
+  }
+  const masked = (buf[1] & 0x80) !== 0
+  let mask = null
+  if (masked) {
+    mask = buf.subarray(off, off + 4)
+    off += 4
+  }
+  const payload = buf.subarray(off, off + len)
+  if (masked) {
+    const unmasked = Buffer.from(payload)
+    for (let i = 0; i < unmasked.length; i++) unmasked[i] ^= mask[i & 3]
+    return { opcode, text: unmasked.toString('utf8') }
+  }
+  return { opcode, text: payload.toString('utf8') }
+}
+
+/** 帧编码：服务端→客户端文本帧不掩码 */
+function encodeTextFrame(text) {
+  const payload = Buffer.from(text, 'utf8')
+  let header
+  if (payload.length < 126) {
+    header = Buffer.from([0x81, payload.length])
+  } else if (payload.length < 65536) {
+    header = Buffer.alloc(4)
+    header[0] = 0x81
+    header[1] = 126
+    header.writeUInt16BE(payload.length, 2)
+  } else {
+    header = Buffer.alloc(10)
+    header[0] = 0x81
+    header[1] = 127
+    header.writeBigUInt64BE(BigInt(payload.length), 2)
+  }
+  return Buffer.concat([header, payload])
+}
+
+const wsSockets = new Set()
+
+server.on('upgrade', (req, socket) => {
+  const url = req.url ?? ''
+  if (!url.startsWith('/ws')) return socket.destroy()
+  const protocols = String(req.headers['sec-websocket-protocol'] ?? '').split(',').map((s) => s.trim()).filter(Boolean)
+  const chosen = authProtocol(protocols)
+  if (!chosen) {
+    // 与真实端 handleProtocols 返回 false 一致：拒绝无凭据握手
+    socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n')
+    return socket.destroy()
+  }
+  const key = req.headers['sec-websocket-key']
+  const accept = createHash('sha1').update(key + WS_GUID).digest('base64')
+  socket.write(
+    `HTTP/1.1 101 Switching Protocols\r\n` +
+      `Upgrade: websocket\r\nConnection: Upgrade\r\n` +
+      `Sec-WebSocket-Accept: ${accept}\r\n` +
+      `Sec-WebSocket-Protocol: ${chosen}\r\n\r\n`,
+  )
+  socket.setNoDelay(true)
+  wsSockets.add(socket)
+  socket.on('data', (buf) => {
+    // 一个 TCP 段可能含多帧（客户端限速下实际只有单帧，够用）
+    let frame
+    try {
+      frame = decodeFrame(buf)
+    } catch {
+      return
+    }
+    if (!frame || frame.opcode !== 0x1) return
+    let msg
+    try {
+      msg = JSON.parse(frame.text)
+    } catch {
+      return
+    }
+    if (msg.type === 'ping') {
+      socket.write(encodeTextFrame(JSON.stringify({ type: 'pong', timestamp: Date.now() })))
+      return
+    }
+    if (msg.type === 'subscribe' && msg.instanceId) {
+      // 订阅即回 status 快照（对齐 websocket.js subscribe 分支）
+      socket.write(
+        encodeTextFrame(
+          JSON.stringify({
+            type: 'status',
+            instanceId: msg.instanceId,
+            data: {
+              status: instance.isRunning ? 'running' : 'stopped',
+              isRunning: instance.isRunning,
+              players: instance.players,
+              tps: instance.tps,
+            },
+            timestamp: Date.now(),
+          }),
+        ),
+      )
+    }
+  })
+  socket.on('close', () => wsSockets.delete(socket))
+  socket.on('error', () => wsSockets.delete(socket))
 })
 
 server.listen(PORT, () => {

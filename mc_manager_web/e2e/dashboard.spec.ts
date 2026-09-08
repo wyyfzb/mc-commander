@@ -57,15 +57,18 @@ test.describe('仪表盘', () => {
     await nightReq
   })
 
-  test('公告发送：模板填充 → 发送 say → 清空', async ({ page }) => {
+  test('公告发送：预设胶囊填充 → 发送 → 二次确认 → say → 清空', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/dashboard')
-    await page.getByRole('button', { name: /服务器将在 5 分钟后重启/ }).click()
+    // 胶囊显示预设名（同名还有编辑/删除按钮，exact 避免子串匹配）
+    await page.getByRole('button', { name: '重启预告', exact: true }).click()
     await expect(page.getByLabel('公告内容')).toHaveValue('服务器将在 5 分钟后重启，请及时停靠')
     const sayReq = page.waitForRequest(
       (r) => r.url().includes('/command') && String(r.postDataJSON()?.command).includes('say 服务器将在'),
     )
     await page.getByRole('button', { name: '发送公告' }).click()
+    // 二次确认弹窗
+    await page.getByRole('button', { name: '发送', exact: true }).click()
     await sayReq
     await expect(page.getByLabel('公告内容')).toHaveValue('')
   })
@@ -126,10 +129,11 @@ test.describe('仪表盘', () => {
     await expect(page.getByRole('button', { name: /全部已读/ })).toBeDisabled()
   })
 
-  test('顶栏状态点：连接后显示已连接', async ({ page }) => {
+  test('顶栏状态点：WS 连接后显示已连接', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/dashboard')
-    // WS 未连通（mock server 无 WS）→ 状态点为连接中/未连接；实例选择器显示实例名
+    // mock server 提供 /ws 端点（握手鉴权 + 订阅快照）→ 状态点应为已连接
+    await expect(page.getByText('已连接').first()).toBeVisible({ timeout: 10_000 })
     await expect(page.getByText('E2E 演示实例').first()).toBeVisible()
   })
 

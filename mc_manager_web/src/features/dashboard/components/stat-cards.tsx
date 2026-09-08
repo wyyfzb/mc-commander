@@ -138,17 +138,19 @@ export function BigStatCards({
         />
         <ResourceRow
           label="磁盘"
+          eyebrow={
+            primary ? (
+              <StatusPill tone="muted" className="text-mcs-2xs">{primary.percent.toFixed(1)}%</StatusPill>
+            ) : undefined
+          }
           value={
             primary ? (
               <>
-                {primary.percent.toFixed(1)}
-                <span className="text-mcs-sm font-medium text-mcs-text-subtle">%</span>
-                <span className="ml-1 text-mcs-2xs font-normal text-mcs-text-subtle">
-                  {primary.usedGB}G / {primary.totalGB}G
-                </span>
+                {primary.usedGB}
+                <span className="text-mcs-sm font-medium text-mcs-text-subtle"> / {primary.totalGB}G</span>
               </>
             ) : (
-              <span className="text-mcs-sm font-medium text-mcs-text-subtle">暂无磁盘数据</span>
+              <span className="font-sans text-mcs-sm font-medium text-mcs-text-subtle">暂无磁盘数据</span>
             )
           }
           percent={primary?.percent ?? 0}
@@ -379,8 +381,11 @@ export function RuntimeInfoCard() {
       icon: Play,
     },
     {
+      // 绝对时间（与启动时间同格式）；相对时间降级为悬停提示——「刚刚」类
+      // 模糊值无法核对存档是否如期发生
       label: '上次存档',
-      value: formatRelativeTime(status?.lastSave),
+      value: formatStartTime(status?.lastSave),
+      tooltip: status?.lastSave ? `相对时间：${formatRelativeTime(status.lastSave)}` : undefined,
       icon: Save,
     },
   ]
@@ -398,12 +403,13 @@ export function RuntimeInfoCard() {
       className="animate-mcs-fade-up mcs-delay-3"
       eyebrow={
         versionText ? (
-          <span className="tnum text-mcs-xs font-medium text-mcs-text-muted">{versionText}</span>
+          <StatusPill tone="muted" className="tnum text-mcs-2xs">{versionText}</StatusPill>
         ) : undefined
       }
     >
       <div className="flex items-center justify-between gap-2">
-        <p className="text-mcs-xs text-mcs-text-subtle">本次运行时长</p>
+        {/* 停止态下数值为 —（本次会话已结束），label 同步改「上次」避免语义误导 */}
+        <p className="text-mcs-xs text-mcs-text-subtle">{isRunning ? '本次运行时长' : '上次运行时长'}</p>
         <p className={cn('mcs-num text-mcs-lg', !isRunning && 'text-mcs-text-subtle')}>
           {formatUptime(isRunning ? uptime : null)}
         </p>

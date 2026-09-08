@@ -24,6 +24,7 @@ import {
   fileSaveRequestSchema,
   auditLogsQuerySchema,
   marketSearchRequestSchema,
+  marketVersionsResultSchema,
   pluginOverwriteQuerySchema,
   pluginEnabledRequestSchema,
   marketInstallRequestSchema,
@@ -41,6 +42,11 @@ import {
   authLogoutResponseSchema,
   authSessionKickResponseSchema,
   apiKeyRotateResponseSchema,
+  instanceSettingsRequestBodySchema,
+  instanceStartRequestBodySchema,
+  instanceCommandRequestBodySchema,
+  instancePropertiesRequestBodySchema,
+  instanceEulaRequestBodySchema,
 } from '../src/index'
 
 describe('schemas 基础校验', () => {
@@ -259,6 +265,44 @@ describe('请求侧契约（issue 391 路由层 zod 统一）', () => {
     expect(() => marketInstallRequestSchema.parse({ slug: 1, versionNumber: '1.0.0' })).toThrow()
   })
 
+  it('marketVersionsResultSchema：file.sha512 透传（上游缺省为 null；未知字段剥离）', () => {
+    const withHash = marketVersionsResultSchema.parse({
+      projectSlug: 'vault', cached: false,
+      versions: [{
+        versionNumber: '1.0.0', versionType: 'release', name: 'Vault 1.0.0',
+        changelog: null, datePublished: '2026-01-01T00:00:00Z', downloads: 1,
+        gameVersions: ['1.21.4'], loaders: ['paper'],
+        file: {
+          url: 'https://cdn.modrinth.com/data/v/versions/a/vault.jar',
+          filename: 'vault.jar', size: 100, sha512: 'ab'.repeat(32), junk: 'x',
+        },
+      }],
+    })
+    expect(withHash.versions[0]?.file).toEqual({
+      url: 'https://cdn.modrinth.com/data/v/versions/a/vault.jar',
+      filename: 'vault.jar', size: 100, sha512: 'ab'.repeat(32),
+    })
+    const withoutHash = marketVersionsResultSchema.parse({
+      projectSlug: 'vault', cached: false,
+      versions: [{
+        versionNumber: '1.0.0', versionType: 'release', name: null,
+        changelog: null, datePublished: null, downloads: 0,
+        gameVersions: [], loaders: [],
+        file: { url: null, filename: 'vault.jar', size: 0, sha512: null },
+      }],
+    })
+    expect(withoutHash.versions[0]?.file?.sha512).toBeNull()
+    expect(() => marketVersionsResultSchema.parse({
+      projectSlug: 'vault', cached: false,
+      versions: [{
+        versionNumber: '1.0.0', versionType: 'release', name: null,
+        changelog: null, datePublished: null, downloads: 0,
+        gameVersions: [], loaders: [],
+        file: { url: null, filename: 'vault.jar', size: 0, sha512: 123 },
+      }],
+    })).toThrow()
+  })
+
   it('upgradeRequestSchema：mcVersion 必填（保留原文案），type 缺省 vanilla、非法保留 Invalid type 文案', () => {
     expect(() => upgradeRequestSchema.parse({ type: 'vanilla' })).toThrow(/mcVersion is required/)
     const parsed = upgradeRequestSchema.parse({ mcVersion: '1.21.4' })
@@ -359,5 +403,69 @@ describe('响应侧契约（issue 402 files/plugins/upgrade 接入）', () => {
     expect(apiKeyRotateResponseSchema.parse(data)).toEqual(data)
     expect(apiKeyRotateResponseSchema.parse(data).apiKey).toMatch(/^mcck-[0-9a-f]{8}-[0-9a-f]{8}-[0-9a-f]{8}$/)
     expect(() => apiKeyRotateResponseSchema.parse({ apiKey: 123 })).toThrow()
+  })
+})
+
+describe('实例控制面输入侧契约（issue 486 五 body 端点）', () => {
+  it('instanceSettingsRequestBodySchema：白名单字段形状锁定，未知字段剥离', () => {
+    const parsed = instanceSettingsRequestBodySchema.parse({
+      name: 'survival', maxMemory: '4G', autoRestart: true, jvmArgs: ['-Xmx4G'], junk: 1,
+    })
+    expect(parsed).toEqual({ name: 'survival', maxMemory: '4G', autoRestart: true, jvmArgs: ['-Xmx4G'] })
+    expect(instanceSettingsRequestBodySchema.parse({})).toEqual({})
+  })
+
+  it('instanceSettingsRequestBodySchema：startCommand 仅允许 null 清除，字符串/其他类型拒收（原文案）', () => {
+    expect(instanceSettingsRequestBodySchema.parse({ startCommand: null })).toEqual({ startCommand: null })
+    expect(() => instanceSettingsRequestBodySchema.parse({ startCommand: 'java -jar' }))
+      .toThrow(/startCommand 已不再支持通过 API 更新/)
+  })
+
+  it('instanceSettingsRequestBodySchema：jvmArgs 非字符串数组拒收，内存字段非字符串拒收', () => {
+    expect(() => instanceSettingsRequestBodySchema.parse({ jvmArgs: 'not-array' })).toThrow()
+    expect(() => instanceSettingsRequestBodySchema.parse({ jvmArgs: ['-Xmx4G', 42] })).toThrow()
+    expect(() => instanceSettingsRequestBodySchema.parse({ maxMemory: 4 })).toThrow()
+    expect(() => instanceSettingsRequestBodySchema.parse({ autoRestart: 'yes' })).toThrow()
+    // null 清除语义（与既有路由层一致）：javaPath/jarFile/description 放行，
+    // maxMemory/minMemory/name/jvmArgs 拒收（jvmArgs null 原行为即 400）
+    expect(instanceSettingsRequestBodySchema.parse({ javaPath: null })).toEqual({ javaPath: null })
+    expect(instanceSettingsRequestBodySchema.parse({ jarFile: null })).toEqual({ jarFile: null })
+    expect(instanceSettingsRequestBodySchema.parse({ description: null })).toEqual({ description: null })
+    expect(() => instanceSettingsRequestBodySchema.parse({ maxMemory: null })).toThrow()
+    expect(() => instanceSettingsRequestBodySchema.parse({ name: null })).toThrow()
+    expect(() => instanceSettingsRequestBodySchema.parse({ jvmArgs: null })).toThrow()
+  })
+
+  it('instanceStartRequestBodySchema：禁用键契约——startCommand 任何值（含 null）拒收，未知字段剥离', () => {
+    expect(instanceStartRequestBodySchema.parse({})).toEqual({})
+    expect(instanceStartRequestBodySchema.parse({ junk: 1 })).toEqual({})
+    expect(() => instanceStartRequestBodySchema.parse({ startCommand: 'java -jar' }))
+      .toThrow(/startCommand 已不再支持通过 API 传入/)
+    expect(() => instanceStartRequestBodySchema.parse({ startCommand: null })).toThrow()
+  })
+
+  it('instanceCommandRequestBodySchema：非空字符串（原文案）+ 长度上限，合法命令透传', () => {
+    expect(instanceCommandRequestBodySchema.parse({ command: 'say hi' })).toEqual({ command: 'say hi' })
+    expect(instanceCommandRequestBodySchema.parse({ command: '/list' })).toEqual({ command: '/list' })
+    expect(() => instanceCommandRequestBodySchema.parse({})).toThrow(/Command is required/)
+    expect(() => instanceCommandRequestBodySchema.parse({ command: '' })).toThrow(/Command is required/)
+    expect(() => instanceCommandRequestBodySchema.parse({ command: 123 })).toThrow(/Command must be a string/)
+    expect(() => instanceCommandRequestBodySchema.parse({ command: 'x'.repeat(2001) })).toThrow()
+    expect(instanceCommandRequestBodySchema.parse({ command: 'x'.repeat(2000) }).command).toHaveLength(2000)
+  })
+
+  it('instancePropertiesRequestBodySchema：passthrough 保留全部属性键，数组/标量/null 拒收（原文案）', () => {
+    const props = { difficulty: 'hard', 'view-distance': '12', 'allow-nether': 'true' }
+    expect(instancePropertiesRequestBodySchema.parse(props)).toEqual(props)
+    expect(() => instancePropertiesRequestBodySchema.parse(['difficulty'])).toThrow()
+    expect(() => instancePropertiesRequestBodySchema.parse('hard')).toThrow(/请求体必须是 JSON 对象/)
+    expect(() => instancePropertiesRequestBodySchema.parse(null)).toThrow(/请求体必须是 JSON 对象/)
+  })
+
+  it('instanceEulaRequestBodySchema：agreed 必须为布尔（原文案）', () => {
+    expect(instanceEulaRequestBodySchema.parse({ agreed: true })).toEqual({ agreed: true })
+    expect(instanceEulaRequestBodySchema.parse({ agreed: false })).toEqual({ agreed: false })
+    expect(() => instanceEulaRequestBodySchema.parse({})).toThrow(/agreed must be a boolean/)
+    expect(() => instanceEulaRequestBodySchema.parse({ agreed: 'yes' })).toThrow(/agreed must be a boolean/)
   })
 })

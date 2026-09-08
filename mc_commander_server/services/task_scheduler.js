@@ -3,6 +3,8 @@ import path from 'path';
 import { ScheduledTaskModel } from '../db/scheduled_task.model.js';
 import { BanModel } from '../db/ban.model.js';
 import { BackupModel } from '../db/backup.model.js';
+import { AuditLogModel, CommandHistoryModel } from '../db/audit.model.js';
+import { WebhookModel } from '../db/webhook.model.js';
 import { BackupService } from './backup.service.js';
 import { runPanelBackupCycle } from './panel-backup.service.js';
 import config from '../config.js';
@@ -22,6 +24,7 @@ export class TaskScheduler {
     this.interval = null;
     this.lastCheckMinute = -1;
     this.panelBackupCron = null;
+    this.retentionPruneCron = null;
   }
 
   start() {
@@ -37,6 +40,14 @@ export class TaskScheduler {
     this.checkAndRunTasks();
 
     this.startPanelBackupCron();
+
+    // 保留策略首执行（issue #472）：不等到首个 cron 触发点（默认次日凌晨），
+    // 启动即收敛一次存量增长；失败仅记日志不阻塞调度器启动
+    if (config.retentionPrune.enabled) {
+      this.runRetentionPrune('startup');
+    }
+
+    this.startRetentionPruneCron();
   }
 
   stop() {
@@ -49,7 +60,58 @@ export class TaskScheduler {
       this.panelBackupCron.stop();
       this.panelBackupCron = null;
     }
+    if (this.retentionPruneCron) {
+      this.retentionPruneCron.stop();
+      this.retentionPruneCron = null;
+    }
     logger.info('Task scheduler stopped');
+  }
+
+  // append-only 表保留清理（独立 croner 实例）：与面板快照同型——不进用户
+  // 定时任务体系，DB/清理故障不影响用户任务调度主循环
+  startRetentionPruneCron() {
+    if (!config.retentionPrune.enabled) return;
+    try {
+      this.retentionPruneCron = new Cron(config.retentionPrune.cron, () => {
+        this.runRetentionPrune('cron');
+      });
+    } catch (err) {
+      logger.error('Retention prune cron register failed:', err.message);
+    }
+  }
+
+  /**
+   * 执行一轮保留清理：审计日志、webhook 投递记录与命令历史三张 append-only 表
+   * 分别 try/catch——单表失败不拖累其余表，返回删除计数供日志与测试断言。
+   * @param {'startup'|'cron'} trigger 触发来源（日志归因用）
+   * @returns {{auditDeleted: number, webhookDeleted: number, commandHistoryDeleted: number, failed: string[]}}
+   */
+  runRetentionPrune(trigger = 'manual') {
+    const result = { auditDeleted: 0, webhookDeleted: 0, commandHistoryDeleted: 0, failed: [] };
+    try {
+      result.auditDeleted = AuditLogModel.prune(config.retentionPrune.auditLogDays);
+    } catch (err) {
+      result.failed.push('audit');
+      logger.error(`[RetentionPrune] audit_logs prune failed (${trigger}):`, err.message);
+    }
+    try {
+      result.webhookDeleted = WebhookModel.pruneDeliveries(config.retentionPrune.webhookDeliveryDays);
+    } catch (err) {
+      result.failed.push('webhook');
+      logger.error(`[RetentionPrune] webhook_deliveries prune failed (${trigger}):`, err.message);
+    }
+    try {
+      result.commandHistoryDeleted = CommandHistoryModel.prune(config.retentionPrune.commandHistoryDays);
+    } catch (err) {
+      result.failed.push('command_history');
+      logger.error(`[RetentionPrune] command_history prune failed (${trigger}):`, err.message);
+    }
+    if (result.failed.length === 0) {
+      logger.info(
+        `[RetentionPrune] ok (${trigger}): audit_logs -${result.auditDeleted}, webhook_deliveries -${result.webhookDeleted}, command_history -${result.commandHistoryDeleted}`
+      );
+    }
+    return result;
   }
 
   // 面板库每日快照（独立 croner 实例）：不进用户定时任务体系——面板库

@@ -51,10 +51,12 @@ const WEATHER_PRESETS = [
 
 type WeatherKey = (typeof WEATHER_PRESETS)[number]['key']
 
+// cmd 全部走 vanilla 合法值：/time set 只认 day/noon/night/midnight 关键字，
+// 黄昏（sunset）非原生 → 用数值 tick 直设（12000 与 worldTimePhase 黄昏档对齐）
 const TIME_PRESETS = [
   { key: 'day', label: '白天', cmd: 'time set day', tick: 1000 },
   { key: 'noon', label: '正午', cmd: 'time set noon', tick: 6000 },
-  { key: 'evening', label: '黄昏', cmd: 'time set sunset', tick: 12000 },
+  { key: 'evening', label: '黄昏', cmd: 'time set 12000', tick: 12000 },
   { key: 'night', label: '夜晚', cmd: 'time set night', tick: 13000 },
   { key: 'midnight', label: '午夜', cmd: 'time set midnight', tick: 18000 },
 ] as const
@@ -252,11 +254,6 @@ export function McClockCard() {
         </div>
       </div>
 
-      {!rcon && (
-        <p className="mt-2 text-mcs-2xs text-mcs-text-subtle">
-          需启用 RCON 才能控制世界时间与天气
-        </p>
-      )}
     </section>
   )
 }

@@ -38,13 +38,14 @@ export NEEDRESTART_MODE=a
 MC_COMMANDER_DIR="${MC_COMMANDER_DIR:-/opt/mc-commander}"
 # 默认锁定具体发布标签（vX.Y.Z），避免 master 可变分支被投毒/误覆盖后影响安装；
 # 仍保留 BRANCH 环境变量覆盖（例如 BRANCH=master 或指定 commit），但可变分支场景必须配合 PACKAGE_SHA256
-BRANCH="${BRANCH:-v0.1.0}"
+BRANCH="${BRANCH:-v1.2.0}"
 # GitHub Release 资产为权威来源（CI 构建）；国内网络可通过 PACKAGE_URL 覆盖为 gitee 镜像
 PACKAGE_URL="${PACKAGE_URL:-https://github.com/wyyfzb/mc-commander/releases/download/${BRANCH}/mc-commander-server-${BRANCH}.tar.gz}"
 # 预期代码包 sha256（强制完整性校验，防篡改/防发布版本错配）。
-# 当前值为本地构建参考值，发布新版本时必须按脚本头部注释流程同步更新；
+# 当前值与 BRANCH 默认值保持一致（对应最近一次含产物的 Release），
+# 新版本发布后由 release.yml 回写 PR 自动同步更新，无需手工维护；
 # 自定义 PACKAGE_URL 时通过 PACKAGE_SHA256 环境变量提供对应文件的 sha256
-EXPECTED_PACKAGE_SHA256="${PACKAGE_SHA256:-82193196194e514c2334dd8bb4949040682afe61c58f218419baef5ce0fccadf}"
+EXPECTED_PACKAGE_SHA256="${PACKAGE_SHA256:-544a34879c5c907182136106a0e5307d04c48389c86cae298bd510c237c8c526}"
 
 log()  { echo "[$(date '+%H:%M:%S')] $*"; }
 warn() { echo "[WARN] $*"; }

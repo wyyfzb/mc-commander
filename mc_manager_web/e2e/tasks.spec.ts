@@ -50,7 +50,8 @@ test.describe('任务页', () => {
     await page.getByLabel('任务名称').fill('E2E 占位任务')
     await page.getByRole('button', { name: '每天 4:00' }).click()
     await expect(page.getByLabel('Cron 表达式')).toHaveValue('0 4 * * *')
-    await expect(page.getByText('04:00每天执行')).toBeVisible()
+    // 收窄到 dialog：任务列表行内也渲染 cronDescription（UX 走查新增），全局 getByText 会 strict violation
+    await expect(page.getByRole('dialog').getByText('04:00每天执行')).toBeVisible()
     // 创建 → 成功 toast
     await page.getByRole('button', { name: '创建' }).click()
     await expect(page.getByText('任务已创建')).toBeVisible()
@@ -75,11 +76,12 @@ test.describe('任务页', () => {
     await page.getByRole('combobox', { name: '分' }).click()
     await page.getByRole('option', { name: '每30分' }).click()
     await expect(page.getByLabel('Cron 表达式')).toHaveValue('*/30 * * * *')
-    await expect(page.getByText('每30分钟每天执行')).toBeVisible()
+    // 收窄到 dialog：列表行内同文本（mock 任务 */30 * * * *）会致 strict violation
+    await expect(page.getByRole('dialog').getByText('每30分钟每天执行')).toBeVisible()
     // 点选周一 chip → 表达式回写周字段，描述切换为每周一
     await page.getByRole('button', { name: '周一', exact: true }).click()
     await expect(page.getByLabel('Cron 表达式')).toHaveValue('*/30 * * * 1')
-    await expect(page.getByText('每30分钟每周一执行')).toBeVisible()
+    await expect(page.getByRole('dialog').getByText('每30分钟每周一执行')).toBeVisible()
     await maybeShot(page, 'tasks-cron-editor-dark.png')
   })
 

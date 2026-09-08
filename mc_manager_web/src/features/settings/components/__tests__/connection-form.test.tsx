@@ -84,12 +84,13 @@ describe('ConnectionForm 渲染', () => {
     expect(screen.getByText('未连接')).toBeInTheDocument()
   })
 
-  it('onboarding variant：大标题 + 副标题，无状态行', () => {
+  it('onboarding variant：大标题 + 副标题，无状态行，保存按钮文案对齐进入面板行为', () => {
     useConnectionStore.setState({ baseUrl: 'https://192.168.1.100:25566', apiKey: 'k', status: 'ready' })
     renderForm({ variant: 'onboarding' })
     expect(screen.getByRole('heading', { name: '连接你的服务器' })).toBeInTheDocument()
     expect(screen.queryByText('已连接')).not.toBeInTheDocument()
     expect(screen.queryByText('未连接')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '连接并进入面板' })).toBeInTheDocument()
   })
 
   it('API Key 默认掩码（password），眼睛按钮切换明文', async () => {

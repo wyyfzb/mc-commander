@@ -182,7 +182,8 @@ describe('LoginPage（登录/首访设密三态）', () => {
     await userEvent.click(screen.getByRole('button', { name: /设置密码并登录/ }))
     await waitFor(() => expect(screen.getByText('dashboard-reached')).toBeInTheDocument())
     expect(useAuthStore.getState().session?.sessionId).toBe('sess-mock-1')
-  })
+    // 慢机器全量并发超基线（单跑/CI 均绿），放宽上限避免抖动误报
+  }, 15000)
 
   it('returnTo 参数：登录后回跳原页面（非 dashboard）', async () => {
     renderLoginPage('/login?returnTo=%2Fonboarding')

@@ -33,6 +33,9 @@ const WS_OPEN = 1
 const MAX_RECONNECT_DELAY_MS = 30_000
 const RECONNECT_BASE_DELAY_MS = 1_000
 const LAST_EVENT_KEY_PREFIX = 'mcs-ws-last-event'
+/** 连接挂起超时：CONNECTING 态超过该时长视为死连接（UXT-4——首连挂起时
+ *  原生 WebSocket 可能既不 open 也不 error，UI 会永远停留在「连接中」） */
+export const WS_CONNECT_TIMEOUT_MS = 15_000
 
 type MessageHandler = (msg: WsMessage) => void
 
@@ -46,6 +49,8 @@ interface McSocketOptions {
   /** 管理员会话令牌（安全主线：浏览器登录后与 HTTP Bearer 同源凭据） */
   sessionToken?: string | null
   WebSocketImpl?: WebSocketCtor
+  /** 连接生命周期回调（open/close 边沿；UI 指示器与降级横幅的数据源） */
+  onStateChange?: (state: { open: boolean }) => void
 }
 
 /** WS 鉴权 subprotocol 前缀（与服务端 handleProtocols 对齐） */
@@ -73,13 +78,16 @@ export class McSocket {
   private subscribedSent = new Set<string>()
   private reconnectAttempts = 0
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
+  private connectTimeoutTimer: ReturnType<typeof setTimeout> | null = null
   private closedByUser = false
+  private readonly onStateChange: McSocketOptions['onStateChange']
 
   constructor(options: McSocketOptions) {
     this.apiKey = options.apiKey
     this.sessionToken = options.sessionToken ?? null
     this.url = options.url ?? deriveWsUrl(options.baseUrl)
     this.WebSocketImpl = options.WebSocketImpl ?? (WebSocket as unknown as WebSocketCtor)
+    this.onStateChange = options.onStateChange
   }
 
   /** 比对连接凭据是否一致（单例复用方检测凭据变更：改密/踢单设备/换账号/登出） */
@@ -107,14 +115,28 @@ export class McSocket {
     const promise = new Promise<void>((resolve, reject) => {
       const ws = new this.WebSocketImpl(this.url, [protocol])
       this.ws = ws
+      // 连接挂起看门狗（UXT-4）：CONNECTING 超时视为死连接，主动 close
+      // （close 回调清锚点并进入指数退避重连）——否则 UI 永远停在「连接中」
+      this.connectTimeoutTimer = setTimeout(() => {
+        if (this.ws === ws && ws.readyState === WS_CONNECTING) {
+          try {
+            ws.close()
+          } catch {
+            // 竞态安全：close 失败仍走 reject，由上层重建
+          }
+          reject(new Error('WebSocket 连接超时'))
+        }
+      }, WS_CONNECT_TIMEOUT_MS)
 
       ws.onopen = () => {
+        this.clearConnectTimeout()
         this.reconnectAttempts = 0
         // 新连接：清发送标记后重发全部订阅（携带各实例断线补齐游标）
         this.subscribedSent.clear()
         for (const instanceId of this.subscribed) {
           this.sendSubscribe(instanceId)
         }
+        this.onStateChange?.({ open: true })
         resolve()
       }
       ws.onmessage = (ev) => {
@@ -133,8 +155,10 @@ export class McSocket {
         }
       }
       ws.onclose = (ev) => {
+        this.clearConnectTimeout()
         // 连接已终止：幂等锚点失效，允许后续 connect() 重建
         this.clearConnectPromise(promise)
+        this.onStateChange?.({ open: false })
         if (!this.closedByUser) {
           this.scheduleReconnect()
         }
@@ -178,8 +202,10 @@ export class McSocket {
       clearTimeout(this.reconnectTimer)
       this.reconnectTimer = null
     }
+    this.clearConnectTimeout()
     this.connectPromise = null
     this.disposeSocket()
+    this.onStateChange?.({ open: false })
   }
 
   get isOpen(): boolean {
@@ -224,6 +250,13 @@ export class McSocket {
       localStorage.setItem(`${LAST_EVENT_KEY_PREFIX}-${instanceId}`, String(eventId))
     } catch {
       // 忽略持久化失败
+    }
+  }
+
+  private clearConnectTimeout(): void {
+    if (this.connectTimeoutTimer) {
+      clearTimeout(this.connectTimeoutTimer)
+      this.connectTimeoutTimer = null
     }
   }
 

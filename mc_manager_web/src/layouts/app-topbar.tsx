@@ -154,11 +154,12 @@ export function AppTopBar() {
         className="ml-auto w-44 justify-between gap-2 text-mcs-sm text-mcs-text-subtle sm:w-56"
         onClick={() => setCommandPaletteOpen(true)}
       >
-        <span className="inline-flex items-center gap-2">
-          <Search className="size-3.5" aria-hidden />
-          搜索或执行命令…
+        {/* 窄窗口防错位：文案区可截断收缩（min-w-0 + truncate），kbd 徽标 shrink-0 永不换行 */}
+        <span className="inline-flex min-w-0 flex-1 items-center gap-2">
+          <Search className="size-3.5 shrink-0" aria-hidden />
+          <span className="truncate">搜索或执行命令…</span>
         </span>
-        <kbd className="pointer-events-none inline-flex h-5 items-center gap-0.5 rounded border border-mcs-border-default bg-mcs-bg-default px-1.5 font-mono text-mcs-2xs font-medium text-mcs-text-muted">
+        <kbd className="pointer-events-none inline-flex h-5 shrink-0 items-center gap-0.5 rounded border border-mcs-border-default bg-mcs-bg-default px-1.5 font-mono text-mcs-2xs font-medium whitespace-nowrap text-mcs-text-muted">
           Ctrl K
         </kbd>
       </Button>
@@ -218,14 +219,15 @@ export function AppTopBar() {
           ) : (
             <DropdownMenuItem
               onClick={() => {
-                useAuthStore.getState().clearSession()
-                useConnectionStore.getState().refreshStatus()
+                // API Key 直连登出=清除本浏览器凭据（该通道无服务端会话，无需调 logout API）；不清则 /login 守卫弹回
+                useConnectionStore.getState().setConfig({ apiKey: '' })
+                toast.info('已退出登录')
                 navigate('/login', { replace: true })
               }}
-              className="gap-2"
+              className="gap-2 text-mcs-error-fg focus:text-mcs-error-fg"
             >
               <LogOut className="size-4" aria-hidden />
-              改用密码登录
+              退出登录
             </DropdownMenuItem>
           )}
         </DropdownMenuContent>

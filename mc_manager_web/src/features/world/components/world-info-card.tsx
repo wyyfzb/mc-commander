@@ -9,6 +9,7 @@ import { Globe, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
+import { worldSizeParts } from '@/lib/format'
 import type { WorldInfo } from '@/api/types'
 
 // ── 展示映射 ──
@@ -103,6 +104,8 @@ export interface WorldInfoCardProps {
   world: WorldInfo | null
   isLoading: boolean
   onRefresh: () => void
+  /** 入场 stagger（页面组合处注入） */
+  className?: string
 }
 
 /** 存档大小进度（sizeGB/10 clamp，0-100%） */
@@ -111,9 +114,14 @@ export function sizeProgress(sizeGB: number): number {
 }
 
 /** 世界信息卡：9 行只读信息（名称/类型/种子/存档大小/游戏天数/难度/游戏模式/视野距离/在线玩家） */
-export function WorldInfoCard({ world, isLoading, onRefresh }: WorldInfoCardProps) {
+export function WorldInfoCard({ world, isLoading, onRefresh, className }: WorldInfoCardProps) {
   return (
-    <section className="rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted">
+    <section
+      className={cn(
+        'mcs-edge-top relative rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted shadow-mcs-card',
+        className,
+      )}
+    >
       <header className="flex items-center gap-3 border-b border-mcs-border-subtle px-4 py-3">
         <span className="flex size-8 shrink-0 items-center justify-center rounded-mcs-sm bg-mcs-accent-bg-subtle">
           <Globe className="size-4 text-mcs-accent" aria-hidden />
@@ -157,7 +165,15 @@ export function WorldInfoCard({ world, isLoading, onRefresh }: WorldInfoCardProp
               </span>
             </InfoRow>
             <InfoRow label="存档大小">
-              <span className="tnum">{world.sizeGB.toFixed(1)} GB</span>
+              {(() => {
+                const size = worldSizeParts(world.sizeGB)
+                return (
+                  <>
+                    <span className="mcs-num text-mcs-sm leading-none">{size.value}</span>
+                    <span className="text-mcs-xs text-mcs-text-subtle"> {size.unit}</span>
+                  </>
+                )
+              })()}
               <span
                 role="progressbar"
                 aria-label="存档大小进度"
@@ -173,7 +189,16 @@ export function WorldInfoCard({ world, isLoading, onRefresh }: WorldInfoCardProp
                 />
               </span>
             </InfoRow>
-            <InfoRow label="游戏天数">{world.gameDays != null ? `${world.gameDays} 天` : '不可用'}</InfoRow>
+            <InfoRow label="游戏天数">
+              {world.gameDays != null ? (
+                <>
+                  <span className="mcs-num text-mcs-sm leading-none">{world.gameDays}</span>
+                  <span className="text-mcs-xs text-mcs-text-subtle"> 天</span>
+                </>
+              ) : (
+                '不可用'
+              )}
+            </InfoRow>
             <InfoRow label="难度">
               <StatusPill tone={difficultyTone(world.difficulty)}>{formatDifficulty(world.difficulty)}</StatusPill>
             </InfoRow>
@@ -181,10 +206,10 @@ export function WorldInfoCard({ world, isLoading, onRefresh }: WorldInfoCardProp
               <StatusPill tone={gameModeTone(world.gameMode)}>{formatGameMode(world.gameMode)}</StatusPill>
             </InfoRow>
             <InfoRow label="视野距离">
-              <span className="tnum">{world.viewDistance}</span>
+              <span className="mcs-num text-mcs-sm leading-none">{world.viewDistance}</span>
             </InfoRow>
             <InfoRow label="在线玩家">
-              <span className="tnum">
+              <span className="mcs-num text-mcs-sm leading-none">
                 {world.onlinePlayers}/{world.maxPlayers}
               </span>
             </InfoRow>

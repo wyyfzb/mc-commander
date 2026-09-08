@@ -62,7 +62,7 @@ export function CronEditor({ value, onChange }: { value: string; onChange: (v: s
   }
 
   return (
-    <div className="rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted p-2">
+    <div className="rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted p-2 shadow-mcs-card">
       <p className="text-mcs-xs font-medium text-mcs-text-subtle">可视化编辑</p>
       {/* 四字段 Select（分/时/日/月） */}
       <div className="mt-1.5 grid grid-cols-4 gap-1.5">

@@ -1,6 +1,6 @@
 {
   "name": "mc-commander-server",
-  "version": "0.1.0",
+  "version": "1.2.1",
   "description": "MC_Commander - Self-hosted Minecraft Server Manager",
   "type": "module",
   "main": "index.js",
@@ -20,6 +20,9 @@
   ],
   "author": "MC_Commander Team",
   "license": "AGPL-3.0-or-later",
+  "engines": {
+    "node": ">=22"
+  },
   "dependencies": {
     "@mc-commander/schemas": "file:../mc-schemas",
     "adm-zip": "^0.6.0",

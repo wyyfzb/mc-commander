@@ -29,7 +29,7 @@ type BusyAction = '启动' | '停止' | '重启' | '保存' | null
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
-export function InstanceControls({ compact = false }: { compact?: boolean }) {
+export function InstanceControls() {
   const queryClient = useQueryClient()
   const config = useConnectionStore()
   const status = useServerStore((s) => s.status)
@@ -198,7 +198,7 @@ export function InstanceControls({ compact = false }: { compact?: boolean }) {
             <TooltipTrigger asChild>
               <Button
                 variant={b.action === '停止' ? 'destructive' : 'ghost'}
-                size="icon-sm"
+                size="sm"
                 disabled={b.disabled}
                 aria-label={b.action}
                 onClick={() => {
@@ -214,7 +214,9 @@ export function InstanceControls({ compact = false }: { compact?: boolean }) {
                 ) : (
                   <b.icon className={`size-4 ${b.color}`} aria-hidden />
                 )}
-                {!compact && <span className="ml-1.5 text-mcs-xs">{b.action}</span>}
+                {/* 文字标签（≥480px 显示）：启停为低频高危操作，文字消除图标歧义；
+                    窄视口回退纯图标（tooltip 兜底） */}
+                <span className="hidden text-mcs-xs min-[480px]:inline">{b.action}</span>
               </Button>
             </TooltipTrigger>
             <TooltipContent side="bottom">{b.action}</TooltipContent>

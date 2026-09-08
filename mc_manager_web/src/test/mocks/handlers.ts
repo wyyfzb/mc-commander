@@ -249,7 +249,7 @@ export const mockWorldInfo: WorldInfo = {
   gameDays: 42,
   dimensions: [
     { name: '主世界', icon: '🌍', playerCount: 2 },
-    { name: '地狱', icon: '🔥', playerCount: 1 },
+    { name: '下界', icon: '🔥', playerCount: 1 },
     { name: '末地', icon: '🟣', playerCount: 0 },
   ],
 }

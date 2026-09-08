@@ -100,7 +100,7 @@ export function WorldPage() {
         actions={
           <Button variant="outline" size="sm" onClick={() => navigate('/settings/backup')}>
             <Archive aria-hidden />
-            备份世界
+            备份管理
           </Button>
         }
       />
@@ -139,12 +139,16 @@ export function WorldPage() {
           world={worldQuery.data ?? null}
           isLoading={worldQuery.isLoading}
           onRefresh={() => void worldQuery.refetch()}
+          className="animate-mcs-fade-up mcs-delay-1"
         />
-        <DimensionCards dimensions={worldQuery.data?.dimensions} />
+        <DimensionCards
+          dimensions={worldQuery.data?.dimensions}
+          className="animate-mcs-fade-up mcs-delay-2"
+        />
       </div>
 
       {/* ── 右栏：属性 / 游戏规则 Tabs ── */}
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted shadow-mcs-card">
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as WorldTab)} className="flex h-full min-h-0 flex-col">
           <TabsList variant="line" className="h-10 shrink-0 justify-start gap-0 border-b border-mcs-border-muted px-2 py-0">
             <TabsTrigger

@@ -2,52 +2,21 @@
  * OverviewTab —— 详情概览 Tab
  * 分区顺序：操作按钮组 → 状态条 → 药水效果 → 基本信息 → 封禁记录 → 行为状态 → 统计 → IP 登录历史
  * 可逆操作（OP/白名单切换）直接执行 + 5s undo toast；不可逆操作保留确认弹窗
+ * 操作按钮组/常量与格式化工具/展示子件拆分至 overview-actions.tsx、detail-overview-format.ts、overview-cells.tsx（issue 489）
  */
 import { useState, useCallback, useRef, type ReactNode } from 'react'
-import {
-  Ban,
-  Feather,
-  Flame,
-  Gamepad2,
-  HeartPulse,
-  MessageSquare,
-  MoveDown,
-  PackageX,
-  ShieldCheck,
-  ShieldX,
-  Snowflake,
-  UserX,
-  Wind,
-  Zap,
-} from 'lucide-react'
+import { Feather, Flame, MoveDown, Snowflake, Wind, Zap } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { toast } from 'sonner'
 import { getFriendlyErrorText } from '@/api/errors'
 import { formatBanRemaining } from '@/lib/mc-ban'
 import { formatRelativeTime } from '@/lib/format'
 import type { BanRecord, Player } from '@/api/types'
 import type { PlayerActionRequest } from '../mutations'
-
-const GAME_MODE_LABELS: Record<string, string> = {
-  survival: '生存',
-  creative: '创造',
-  adventure: '冒险',
-  spectator: '旁观',
-}
-
-const DIMENSION_LABELS: Record<string, string> = {
-  overworld: '主世界',
-  nether: '下界',
-  end: '末地',
-}
+import { DIMENSION_LABELS, GAME_MODE_LABELS, formatEffectDuration, formatPlayTime, toRomanLabel } from './detail-overview-format'
+import { InfoCell, Section, StatCell } from './overview-cells'
+import { OverviewActions } from './overview-actions'
 
 interface OverviewTabProps {
   instanceId: string
@@ -111,8 +80,6 @@ export function OverviewTab({ player, isRconConnected, bans, onAction, onOpenBan
     [onAction],
   )
 
-  const gamemodeCommand = (mode: string) => ({ kind: 'command', command: `gamemode ${mode} ${player.name}` }) as PlayerActionRequest
-
   const playerBans = bans.filter(
     (b) => b.targetType === 'player' && b.target === player.name,
   )
@@ -135,168 +102,16 @@ export function OverviewTab({ player, isRconConnected, bans, onAction, onOpenBan
   return (
     <div className="flex flex-col gap-4">
       {/* ── 操作按钮组（三组语义分区——状态切换 | 游戏干预 | 危险）── */}
-      <div className="flex flex-wrap items-center gap-1.5">
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={running !== null}
-          onClick={() =>
-            void (player.isOp
-              ? runReversibleAction(
-                  'deop',
-                  { kind: 'deop', playerName: player.name },
-                  { kind: 'op', playerName: player.name },
-                  `已取消 ${player.name} 的 OP`,
-                  `已恢复 ${player.name} 的 OP`,
-                )
-              : runReversibleAction(
-                  'op',
-                  { kind: 'op', playerName: player.name },
-                  { kind: 'deop', playerName: player.name },
-                  `已设置 ${player.name} 为 OP`,
-                  `已取消 ${player.name} 的 OP`,
-                ))
-          }
-        >
-          {player.isOp ? <ShieldX aria-hidden /> : <ShieldCheck aria-hidden />}
-          {player.isOp ? '取消OP' : '设为OP'}
-        </Button>
-
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={running !== null}
-          onClick={() =>
-            void (player.isWhitelisted
-              ? runReversibleAction(
-                  'whitelistRemove',
-                  { kind: 'whitelistRemove', playerName: player.name },
-                  { kind: 'whitelistAdd', playerName: player.name },
-                  `已移除 ${player.name} 的白名单`,
-                  `已恢复 ${player.name} 的白名单`,
-                )
-              : runReversibleAction(
-                  'whitelistAdd',
-                  { kind: 'whitelistAdd', playerName: player.name },
-                  { kind: 'whitelistRemove', playerName: player.name },
-                  `已添加 ${player.name} 至白名单`,
-                  `已移除 ${player.name} 的白名单`,
-                ))
-          }
-        >
-          {player.isWhitelisted ? <ShieldX aria-hidden /> : <ShieldCheck aria-hidden />}
-          {player.isWhitelisted ? '移除白名单' : '加入白名单'}
-        </Button>
-
-        <span className="h-5 w-px shrink-0 bg-mcs-border-muted" aria-hidden />
-
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" disabled={!player.isOnline}>
-              <Gamepad2 aria-hidden />
-              游戏模式
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            {Object.entries(GAME_MODE_LABELS).map(([value, label]) => (
-              <DropdownMenuItem
-                key={value}
-                disabled={player.gameMode === value}
-                onClick={() =>
-                  void runAction(`gamemode-${value}`, gamemodeCommand(value), `已切换 ${player.name} 至${label}模式`)
-                }
-              >
-                {label}
-                {player.gameMode === value && ' ✓'}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!player.isOnline}
-              onClick={() =>
-                void runAction('heal', {
-                  kind: 'command',
-                  command: `effect give ${player.name} minecraft:instant_health 1 255`,
-                })
-              }
-            >
-              <HeartPulse aria-hidden />
-              治疗
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>立即恢复生命（instant_health 255 级）</TooltipContent>
-        </Tooltip>
-
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!player.isOnline}
-              onClick={() =>
-                void runAction('feed', {
-                  kind: 'command',
-                  command: `effect give ${player.name} minecraft:saturation 30 255`,
-                })
-              }
-            >
-              <HeartPulse aria-hidden />
-              喂饱
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>恢复饥饿值（saturation 30s 255 级）</TooltipContent>
-        </Tooltip>
-
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={!player.isOnline}
-          onClick={() => setMessageOpen(true)}
-        >
-          <MessageSquare aria-hidden />
-          发送消息
-        </Button>
-
-        <span className="h-5 w-px shrink-0 bg-mcs-border-muted" aria-hidden />
-
-        <Button
-          variant="outline"
-          size="sm"
-          className="border-mcs-error-border text-mcs-error-fg hover:bg-mcs-bg-hover"
-          disabled={!player.isOnline}
-          onClick={() => setConfirmAction('clearinv')}
-        >
-          <PackageX aria-hidden />
-          清空背包
-        </Button>
-
-        <Button
-          variant="outline"
-          size="sm"
-          className="border-mcs-error-border text-mcs-error-fg hover:bg-mcs-bg-hover"
-          disabled={!player.isOnline}
-          onClick={() => setConfirmAction('kick')}
-        >
-          <UserX aria-hidden />
-          踢出
-        </Button>
-
-        <Button
-          variant="outline"
-          size="sm"
-          className="border-mcs-error-border text-mcs-error-fg hover:bg-mcs-bg-hover"
-          onClick={() => onOpenBanDialog(player)}
-        >
-          <Ban aria-hidden />
-          封禁…
-        </Button>
-      </div>
+      <OverviewActions
+        player={player}
+        running={running}
+        runAction={runAction}
+        runReversibleAction={runReversibleAction}
+        onSendMessage={() => setMessageOpen(true)}
+        onClearInventory={() => setConfirmAction('clearinv')}
+        onKick={() => setConfirmAction('kick')}
+        onOpenBanDialog={onOpenBanDialog}
+      />
 
       {/* ── 状态条（仅在线）── */}
       {player.isOnline && (
@@ -467,7 +282,13 @@ export function OverviewTab({ player, isRconConnected, bans, onAction, onOpenBan
               ? `即将踢出 ${player.name}`
               : `即将解封 ${confirmAction?.split('-')[2] ?? ''}`
         }
-        warning={confirmAction === 'clearinv' ? '此操作不可撤销，所有物品将被永久删除' : '此操作不可撤销'}
+        warning={
+          confirmAction === 'clearinv'
+            ? '此操作不可撤销，所有物品将被永久删除'
+            : confirmAction === 'kick'
+              ? '玩家可随时重新加入服务器'
+              : '此操作不可撤销'
+        }
         confirmText="确认操作"
         danger
         onConfirm={async () => {
@@ -524,59 +345,6 @@ export function OverviewTab({ player, isRconConnected, bans, onAction, onOpenBan
       )}
     </div>
   )
-}
-
-function Section({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <h4 className="text-mcs-xs font-medium text-mcs-text-subtle">{title}</h4>
-      {children}
-    </div>
-  )
-}
-
-function InfoCell({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
-  return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-mcs-2xs text-mcs-text-subtle">{label}</span>
-      <span className={mono ? 'font-mono text-mcs-xs text-mcs-text-default' : 'text-mcs-xs text-mcs-text-default'}>
-        {value}
-      </span>
-    </div>
-  )
-}
-
-function StatCell({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex flex-col gap-0.5 rounded-mcs-xs bg-mcs-bg-muted px-2 py-1.5">
-      <span className="text-mcs-2xs text-mcs-text-subtle">{label}</span>
-      <span className="font-mono text-mcs-sm font-medium tabular-nums text-mcs-text-default">{value}</span>
-    </div>
-  )
-}
-
-/** 等级罗马数字（II/III…） */
-function toRomanLabel(level: number): string {
-  const romans = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X']
-  return romans[level - 1] ?? String(level)
-}
-
-/** 药水剩余时长（秒 → m:ss 或 无限） */
-function formatEffectDuration(seconds: number): string {
-  if (seconds < 0) return '∞'
-  const m = Math.floor(seconds / 60)
-  const s = seconds % 60
-  return `${m}:${String(s).padStart(2, '0')}`
-}
-
-/** 时长格式（X天X小时/X小时X分/X分） */
-function formatPlayTime(seconds: number): string {
-  const days = Math.floor(seconds / 86_400)
-  const hours = Math.floor((seconds % 86_400) / 3600)
-  const minutes = Math.floor((seconds % 3600) / 60)
-  if (days > 0) return `${days}天${hours}小时`
-  if (hours > 0) return `${hours}小时${minutes}分`
-  return `${minutes}分`
 }
 
 // 保留引用（批量模式头像堆叠等未来扩展）

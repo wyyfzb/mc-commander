@@ -25,6 +25,7 @@ import {
   type TaskTypeTone,
 } from '@/lib/mc-deploy'
 import { useNow } from '@/hooks/use-now'
+import { cronDescription } from '@/lib/mc-cron'
 import type { ScheduledTask } from '@/api/types'
 
 export interface TaskListProps {
@@ -82,7 +83,7 @@ export function TaskList({
   // 列表级单一倒计时时钟（每行独立 useNow 会每行一个 60s 定时器）
   const now = useNow()
   return (
-    <div className="overflow-hidden rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted">
+    <div className="overflow-hidden rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted shadow-mcs-card">
       {isLoading ? (
         /* 骨架行 */
         <div data-testid="task-skeletons" className="space-y-1 p-4" aria-label="加载任务中">
@@ -172,10 +173,14 @@ function TaskRow({
           </StatusPill>
         </div>
 
-        {/* cron mono + 命令（有则 Terminal 图标） */}
+        {/* cron mono + 中文可读描述（cronDescription 与编辑器预览同源）+ 命令（有则 Terminal 图标） */}
         <div className="mt-1 flex min-w-0 items-center gap-1.5 text-mcs-xs">
           <Timer className="size-3 shrink-0 text-mcs-text-subtle" aria-hidden />
           <span className="shrink-0 font-mono text-mcs-text-muted">{task.cronExpression}</span>
+          {(() => {
+            const desc = cronDescription(task.cronExpression)
+            return desc ? <span className="shrink-0 text-mcs-text-subtle">{desc}</span> : null
+          })()}
           {task.command !== null && task.command.length > 0 && (
             <>
               <Terminal className="size-3 shrink-0 text-mcs-text-subtle" aria-hidden />

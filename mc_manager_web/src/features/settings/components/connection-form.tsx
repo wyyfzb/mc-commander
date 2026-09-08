@@ -172,6 +172,12 @@ export function ConnectionForm({ variant = 'settings', onSaved }: ConnectionForm
     }
   }
 
+  // onboarding 语境下保存即跨入面板，按钮文案对齐行为；settings 语境存完留在原地
+  const saveLabels =
+    variant === 'onboarding'
+      ? { idle: '连接并进入面板', busy: '连接中...' }
+      : { idle: '保存连接', busy: '保存中...' }
+
   const formFields = (
     <>
       <div className="flex flex-col gap-2">
@@ -245,7 +251,7 @@ export function ConnectionForm({ variant = 'settings', onSaved }: ConnectionForm
         </Button>
         <Button type="button" className="flex-1" onClick={() => void handleSave()} disabled={testing || saving}>
           {saving ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Save className="size-4" aria-hidden />}
-          {saving ? '保存中...' : '保存连接'}
+          {saving ? saveLabels.busy : saveLabels.idle}
         </Button>
       </div>
     </>
@@ -282,7 +288,7 @@ export function ConnectionForm({ variant = 'settings', onSaved }: ConnectionForm
 
       <div
         className={cn(
-          'flex flex-col gap-5 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted p-6',
+          'flex flex-col gap-5 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted p-6 shadow-mcs-card',
           variant === 'settings' && 'mt-4',
         )}
       >

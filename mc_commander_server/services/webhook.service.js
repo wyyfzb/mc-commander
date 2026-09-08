@@ -2,6 +2,8 @@
  * Webhook 投递服务
  * - fire-and-forget：不阻塞业务流程
  * - HMAC-SHA256 签名（兼容 GitHub/Discord webhook 格式）
+ * - 国内渠道预设：飞书/钉钉/企微群机器人、Server酱/PushPlus 个人推送
+ *   （各平台签名协议与消息体特化，platform 字段驱动 + URL 域名兜底）
  * - 指数退避重试（1s → 5s → 25s，最多 3 次）
  * - 背压保护（单 webhook 最大 5 并发）
  */
@@ -79,6 +81,26 @@ export class WebhookService {
       const current = _concurrentCount.get(webhook.id) || 0;
       if (current >= MAX_CONCURRENT_PER_WEBHOOK) {
         logger.warn(`[Webhook] Backpressure: skipping webhook #${webhook.id} (${current} concurrent)`);
+        // 背压丢弃落投递记录（与 SSRF 拦截路径观测粒度对齐）：attempts=0 标记投递从未尝试，
+        // responseBody 携带丢弃原因与当时并发数，排障时区分「事件未产生」与「背压丢弃」。
+        // 落记录失败不中断分发循环——可观测性增强不得引入新的投递失败面
+        try {
+          const deliveryId = WebhookModel.createDelivery({
+            webhookId: webhook.id,
+            eventType,
+            instanceId: payload.instanceId || null,
+            payload,
+            status: 'skipped',
+          });
+          // createDelivery 对 attempts 有 || 1 兜底，0 须经 updateDelivery 显式落库
+          WebhookModel.updateDelivery(deliveryId, {
+            responseBody: `backpressure: ${current} concurrent`,
+            durationMs: 0,
+            attempts: 0,
+          });
+        } catch (err) {
+          logger.warn(`[Webhook] Failed to record skipped delivery for #${webhook.id}: ${err.message}`);
+        }
         continue;
       }
 
@@ -142,9 +164,13 @@ export class WebhookService {
           const timestamp = Math.floor(Date.now() / 1000).toString();
           const payloadStr = JSON.stringify(payload);
           const signature = this._sign(webhook.secret, timestamp, payloadStr);
+          // 渠道预设：平台特化格式（含官方签名/消息体）；generic 维持原 payload
+          const platformRequest = this._buildPlatformRequest(webhook, eventType, payload);
+          const requestBody = platformRequest ? platformRequest.body : payload;
+          const requestUrl = platformRequest ? platformRequest.url : webhook.url;
 
-          const response = await got.post(webhook.url, {
-            json: payload,
+          const response = await got.post(requestUrl, {
+            json: requestBody,
             headers: {
               'Content-Type': 'application/json',
               'X-MC-Event': eventType,
@@ -240,12 +266,18 @@ export class WebhookService {
     const startTime = Date.now();
 
     try {
+      // 平台特化格式（与真实事件投递同路径）：飞书/钉钉等对通用 payload 会因
+      // 缺 msg_type/签名不符拒收，测试投递必须按渠道预设构造，否则按钮永远失真
+      const platformRequest = this._buildPlatformRequest(webhook, 'ping', payload);
+      const requestBody = platformRequest ? platformRequest.body : payload;
+      const requestUrl = platformRequest ? platformRequest.url : webhook.url;
+
       const timestamp = Math.floor(Date.now() / 1000).toString();
       const payloadStr = JSON.stringify(payload);
       const signature = this._sign(webhook.secret, timestamp, payloadStr);
 
-      const response = await got.post(webhook.url, {
-        json: payload,
+      const response = await got.post(requestUrl, {
+        json: requestBody,
         headers: {
           'Content-Type': 'application/json',
           'X-MC-Event': 'ping',
@@ -307,6 +339,104 @@ export class WebhookService {
 
   static _sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /** 平台判定：webhooks.platform 显式字段（迁移 v11 已按 URL 推断过存量行，generic=纯用户显式选择） */
+  static _resolvePlatform(webhook) {
+    return webhook.platform && webhook.platform !== 'generic' ? webhook.platform : 'generic';
+  }
+
+  /** 通用消息文案：title=事件短句；text=带来源前缀的完整文本（IM 群机器人用） */
+  static _platformMessage(eventType, payload) {
+    const d = payload ?? {};
+    const EVENT_TEXT = {
+      'player.join': () => `${d.name ?? '玩家'} 加入了游戏`,
+      'player.leave': () => `${d.name ?? '玩家'} 离开了游戏`,
+      'player.death': () => `${d.name ?? '玩家'} ${d.cause ?? '死亡'}`,
+      'player.respawn': () => `${d.name ?? '玩家'} 已重生`,
+      'player.chat': () => `${d.name ?? '玩家'}: ${d.message ?? ''}`,
+      'player.sleep': () => `${d.name ?? '玩家'} ${d.sleeping ? '入睡了' : '醒来了'}`,
+      'player.achievement': () => `${d.name ?? '玩家'} 获得成就 [${d.advancement ?? ''}]`,
+      'instance.start': () => '服务器已启动',
+      'instance.stop': () => '服务器已停止',
+      'instance.crash': () => `服务器意外退出${d.autoRestart ? '，正在自动重启' : ''}`,
+      'instance.ready': () => '服务器已就绪',
+      'instance.save': () => '世界已保存',
+      'ping': () => '测试投递（收到此条说明渠道配置生效）',
+    };
+    const title = EVENT_TEXT[eventType]?.() ?? `事件 ${eventType}`;
+    const instance = d.instanceId
+      ? `实例：${WebhookService._serverManager?.getInstance?.(d.instanceId)?.name ?? d.instanceId}`
+      : null;
+    return { title, text: `【MC_Commander】${title}${instance ? `\n${instance}` : ''}` };
+  }
+
+  /** 兼容别名：既有飞书测试引用 */
+  static _feishuText(eventType, payload) {
+    return this._platformMessage(eventType, payload).text;
+  }
+
+  /**
+   * 按渠道预设构造投递请求（url/body）。
+   * 各平台签名协议与消息体互不兼容：
+   * - 飞书：key=`${timestamp}\n${secret}`、data 空串、base64，timestamp/sign 置于 body 字段；
+   *   请求头不参与校验——不适配则签名校验拒收（code 19021），投递 HTTP 200 但消息不出群
+   * - 钉钉：key=secret、data=`${timestamp}\n${secret}`、base64+URL 编码，
+   *   timestamp（毫秒）/sign 拼接在 URL 查询参数
+   * - 企微/Server酱/PushPlus：无签名；PushPlus 的 token 走 secret 字段进 body
+   * generic 平台维持项目通用格式（payload 原样 + X-MC-Signature 请求头）
+   */
+  static _buildPlatformRequest(webhook, eventType, payload) {
+    const platform = this._resolvePlatform(webhook);
+    if (platform === 'generic') return null;
+
+    const { title, text } = this._platformMessage(eventType, payload);
+
+    if (platform === 'feishu') {
+      const body = { msg_type: 'text', content: { text } };
+      if (webhook.secret) {
+        const timestamp = Math.floor(Date.now() / 1000).toString();
+        body.timestamp = timestamp;
+        body.sign = crypto
+          .createHmac('sha256', `${timestamp}\n${webhook.secret}`)
+          .update('')
+          .digest('base64');
+      }
+      return { url: webhook.url, body };
+    }
+
+    if (platform === 'dingtalk') {
+      let url = webhook.url;
+      if (webhook.secret) {
+        const timestamp = Date.now().toString();
+        const sign = crypto
+          .createHmac('sha256', webhook.secret)
+          .update(`${timestamp}\n${webhook.secret}`)
+          .digest('base64');
+        const joiner = url.includes('?') ? '&' : '?';
+        url = `${url}${joiner}timestamp=${timestamp}&sign=${encodeURIComponent(sign)}`;
+      }
+      return { url, body: { msgtype: 'text', text: { content: text } } };
+    }
+
+    if (platform === 'wecom') {
+      return { url: webhook.url, body: { msgtype: 'text', text: { content: text } } };
+    }
+
+    if (platform === 'serverchan') {
+      // Server酱：SendKey 已含在 URL 中；title 必填不能含换行，正文走 desp
+      return { url: webhook.url, body: { title: `【MC_Commander】${title}`, desp: text } };
+    }
+
+    if (platform === 'pushplus') {
+      // PushPlus：token 由用户填在密钥字段（secret），随 body 传递；txt 模板适配纯文本通知
+      return {
+        url: webhook.url,
+        body: { token: webhook.secret || '', title: `【MC_Commander】${title}`, content: text, template: 'txt' },
+      };
+    }
+
+    return null;
   }
 }
 

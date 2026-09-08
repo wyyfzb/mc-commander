@@ -1,14 +1,10 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { BigStatCards, PlayersCard, RuntimeInfoCard, tpsColor } from '../components/stat-cards'
 import { useServerStore } from '@/stores/server'
 import { mockInstanceStatus } from '@/test/mocks/handlers'
-
-// ECharts 在 jsdom 无 canvas：sparkline 在组件测试中替换为空实现（E2E 覆盖真实渲染）
-vi.mock('@/components/mcs/sparkline', () => ({
-  Sparkline: () => null,
-}))
+import { formatStartTime } from '@/lib/format'
 
 /**
  * 统计卡组件测试：TPS 阈值变色 / 资源卡三行 / 在线玩家整行可点 / 运行信息
@@ -165,7 +161,9 @@ describe('RuntimeInfoCard', () => {
     expect(screen.getByText('2h 0m')).toBeInTheDocument() // 7200s
     expect(screen.getByText('1d 0h')).toBeInTheDocument() // 86400s=1天整
     expect(screen.getByText('上次存档')).toBeInTheDocument()
-    expect(screen.getByText('5分钟前')).toBeInTheDocument()
+    // 上次存档改绝对时间显示（「5分钟前」类模糊值降级为悬停提示）
+    expect(screen.getByText(formatStartTime(mockInstanceStatus.lastSave))).toBeInTheDocument()
+    expect(screen.queryByText('5分钟前')).not.toBeInTheDocument()
   })
 
   it('未运行时显示「未运行」', () => {

@@ -1,6 +1,6 @@
 <p align="center">
   <img src="https://img.shields.io/github/actions/workflow/status/wyyfzb/mc-commander/ci.yml?branch=main&style=flat-square&label=CI" alt="CI">
-  <img src="https://img.shields.io/badge/version-0.1.0--preview-orange?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-1.2.1?style=flat-square" alt="Version"> <!-- x-release-please-version -->
   <img src="https://img.shields.io/badge/license-AGPL--3.0-green?style=flat-square" alt="License">
 </p>
 
@@ -15,17 +15,17 @@ MC_Commander 是一个自托管的 Minecraft 服务器管理工具。**核心定
 
 > 以下截图为示例环境（虚构数据）渲染效果，实际面板展示你的服务器真实状态。
 
-| 仪表盘 | 实例列表 |
+| 仪表盘 |
+|---|
+| ![仪表盘](docs/screenshots/dashboard.png) |
+
+| 备份管理 | 实例列表 |
 |---|---|
-| ![仪表盘](docs/screenshots/dashboard.png) | ![实例列表](docs/screenshots/instances.png) |
+| ![备份管理](docs/screenshots/backup.png) | ![实例列表](docs/screenshots/instances.png) |
 
 | 文件管理 | 玩家管理 |
 |---|---|
 | ![文件管理](docs/screenshots/files.png) | ![玩家管理](docs/screenshots/players.png) |
-
-| 备份管理 |
-|---|
-| ![备份管理](docs/screenshots/backup.png) |
 
 > 其余页面（世界/任务/插件/Webhook/审计/设置）截图待补充；完整操作流程见 [docs/user-guide.md](docs/user-guide.md)。
 
@@ -34,36 +34,38 @@ MC_Commander 是一个自托管的 Minecraft 服务器管理工具。**核心定
 ## 功能特性
 
 ### 玩家管理（免命令图形化）
-- **可视化给予物品** — 212 种物品 9 大分类 + 43 种附魔（按物品过滤、冲突禁用）+ 20 种药水（3 种瓶型/等级/时长）+ 6 套预设礼包（可自定义增删）；命令按 MC 版本三格式自适应（1.21.2+/26.x、1.20.5-1.21.1、≤1.20.4），附命令预览与复制
+- **可视化给予物品** — 200 余种物品 9 大分类 + 40 余种附魔（按物品过滤、冲突禁用）+ 20 余种药水（3 种瓶型/等级/时长）+ 6 套预设礼包（可自定义增删）；命令按 MC 版本三格式自适应（1.21.2+/26.x、1.20.5-1.21.1、≤1.20.4），附命令预览与复制
 - **可视化传送** — 传送到玩家 / 坐标表单（默认填当前位置）/ 世界出生点 / 个人复活点 / 主世界原点 / 自定义快捷点（持久化），支持修改世界出生点
 - **封禁/解封** — 玩家/IP 双类型、6 档时长（1 小时~永久，**临时封禁服务端自实现**，不依赖插件）、9 个预设理由+自定义、可附加踢出；封禁记录弹窗与详情区块（30 秒自动刷新）
 - **批量操作** — 批量传送/给予/白名单/OP/清空背包/切换模式/踢出，自动跳过离线玩家
 - 踢出、OP/取消 OP、白名单增删（离线玩家也有效）、切换游戏模式、清空背包、治疗/喂饱（效果命令封装）、私聊、玩家详情 5-Tab 浮层（概览/物品栏/传送/给予物品/日志）、**Excel 导出**
 
 ### 世界与服务器
-- **server.properties 全表单化** — 66 个已知属性（玩法/世界生成/服务器设置三大类）可视化编辑，**未知属性自动追加**（自动识别布尔/数值），保存提示需重启项，热改属性服务端自动转命令即时生效
+- **server.properties 全表单化** — 80 余个已知属性（玩法/世界生成/服务器设置三大类）可视化编辑，**未知属性自动追加**（自动识别布尔/数值），保存提示需重启项，热改属性服务端自动转命令即时生效
 - **游戏规则** — 全量 gamerule 查询/行级编辑，命令输出双版本解析（MC 26.x 与旧版）
-- **仪表盘** — 实时状态卡片、MC 时钟、日志流、**公告发送**（say/tellraw 自动转义）、**天气/时间分段按钮**（乐观更新）、快捷命令 chips（持久化）、命令自动补全（52 条 12 分类）、EULA 引导、断线重连 Banner
+- **仪表盘** — 实时状态卡片、MC 时钟、日志流、**公告发送**（say/tellraw 自动转义）、**天气/时间分段按钮**（乐观更新）、快捷命令 chips（持久化）、命令自动补全（50 余条 12 分类）、EULA 引导、断线重连 Banner
 - **定时任务** — 重启/备份/执行命令/停止/启动 5 种类型，cron **可视化编辑器**（分/时/日/月/周）+ 8 个预设模板，立即执行，最近运行状态回显
 - **文件管理** — 在线浏览/编辑，Monaco 全屏编辑器（语法高亮/行号/多步撤销重做/Ctrl+S/CRLF 保真/脏标记拦截），删除确认
 
 ### 部署与运维
+- **进程级异常兜底** — 未捕获异常/拒绝（uncaughtException/unhandledRejection）记录结构化错误日志（含堆栈）后自动优雅停机（停实例落盘、关库），避免无日志静默崩溃导致所有实例托管断连
 - **一键部署** — Vanilla/Paper/Fabric/Forge/Purpur 五种服务端类型，自动下载 JAR（实时进度）、Java 版本检测、首次启动配置、失败可重试
 - **Aikar's Flags JVM 优化** — 一键生成 G1GC 优化参数集，内存滑块带推荐值
 - **备份管理** — **目录快照 + 增量传输**（Linux rsync `--link-dest` 硬链接快照：未变化文件零拷贝；Windows rsync 优先、自动降级 robocopy 全量镜像）、**实例级备份**（世界+配置+插件全量，自动排除日志/加载器依赖/jar，兼容 26.x 新布局与旧版 Bukkit 维度目录）、在线备份原子序列（save-off→save-all flush→save-on）、恢复异步化（后台执行 + 进度事件 + 自动回滚 + 快照预检 + level.dat 完整性校验）、**自动清理**（数量/天数双上限）、磁盘预检与快照完整性校验（SQLite 持久化；旧 zip 备份保留可删、恢复拒绝）、**面板自身数据快照**（SQLite 在线备份 API 每日快照至 `backups/panel/`，保留策略与实例备份一致，恢复步骤见 ADR-0005；`.env` 不入自动备份，手动备份指引见 ADR）
 - **性能监控** — CPU/内存/TPS 采集，WebSocket 实时推送
 
 ### 实时与可靠性
-- **WebSocket 实时推送**（23 种事件）— 日志流、状态、玩家加入/离开/死亡/复活/成就/聊天/入睡、TPS/性能、天气、玩家状态（血量/坐标）、备份/恢复进度（含恢复异步化三事件与跳过提示）、部署进度
+- **WebSocket 实时推送**（30 余种事件）— 日志流、状态、玩家加入/离开/死亡/复活/成就/聊天/入睡、TPS/性能、天气、玩家状态（血量/坐标）、备份/恢复进度（含恢复异步化三事件与跳过提示）、部署/升级进度、系统资源统计
 - **通知事件落库 + 断线补齐** — 通知类事件广播前持久化，客户端重连携带 lastEventId 重放断线期间事件（重启不丢近期事件）
 - **WebSocket 优先 + HTTP 保底轮询** — WS 断开自动降级轮询（间隔可配置）；心跳保活（30s ping）清理死连接，广播背压保护防慢客户端拖垮内存
 - **通知系统** — 游戏事件/管理命令/服务器告警（severity 分级：崩溃/备份失败→error、资源告警→warning），Toast（时长分级/底部堆叠/图标/动画规范化）+ 系统通知，逐项可配开关；去重组合键（类型+实体）聚合计数 ×N 防刷屏；**通知中心交互闭环**（未读/已读/清除/角标）；历史持久化重启不丢；备份失败全程可见（含定时备份 setup 阶段）；批量死亡事件 5s 窗口聚合（团灭只广播一条）
+- **Webhook 国内渠道预设** — 飞书/钉钉/企微/Server酱/PushPlus 五渠道开箱即用，按各平台官方协议自动构造签名与消息体（飞书 body 内加签、钉钉 URL 参数加签），表单 URL/密钥字段随渠道联动，服务器事件可推送到手机 IM
 
 ## 快速开始
 
 ### 服务端部署
 
-需要 **Node.js 22+** 和 **Java 17/21/25**（部署脚本会自动安装）。
+需要 **Node.js 22+** 和 **Java 17/21/25**（部署脚本会自动安装）。双包 package.json 均已声明 `engines`（node>=22）并启用 engine-strict，低版本 Node 执行 `npm install` 会直接报错拒绝安装，避免装完依赖运行时才崩溃。
 
 #### 方式一：Linux 一键部署（推荐）
 
@@ -85,16 +87,22 @@ git clone https://github.com/wyyfzb/mc-commander.git
 cd mc-commander/mc_commander_server
 
 npm install
-cp .env.example .env   # 编辑 .env，设置 API_KEY（必填）
+cp .env.example .env   # 编辑 .env，设置 API Key（两种部署口径见下）
 
 npm start
 ```
+
+**API Key 部署口径（二选一）**：
+- **明文自动迁移（推荐）**：`.env` 中设置 `API_KEY=<你的密钥>`，首次启动自动计算 SHA-256 并改写为 `API_KEY_HASH=<sha256hex>` 哈希存储，明文行随即移除（迁移失败时日志提示手动替换）；生产环境（`NODE_ENV=production`）下弱密钥（长度 <16 或纯重复字符）阻断启动，`ALLOW_WEAK_KEY=1` 可临时豁免（仅限开发联调，严禁生产开启）。
+- **纯 HASH 零明文落盘**：直接写入 `API_KEY_HASH=<sha256hex>`（如 `printf '%s' '你的密钥' | sha256sum` 生成），不配置明文 `API_KEY`。
+
+启动校验以 `API_KEY_HASH` 为准：两种方式最终都未设置（或迁移失败）时，服务端打印错误横幅并以 `exit(1)` 拒绝启动。
 
 服务端默认运行在 `http://localhost:25566`
 
 ### Web 前端运行
 
-需要 **Node.js 22+**。
+需要 **Node.js 22+**（`npm install` 受 engines 门禁强制校验，低版本 Node 直接报错拒绝安装）。
 
 ```bash
 cd mc_manager_web
@@ -194,7 +202,7 @@ ws.onmessage = (event) => {
 };
 ```
 
-支持 **23 种事件类型**：`log`、`status`、`performanceUpdate`、`weatherUpdate`、`playerStatsUpdate`、`playerJoin`、`playerLeave`、`playerDeath`、`playerRespawn`、`playerChat`、`playerSleep`、`achievement`、`backupStart`、`backupComplete`、`backupFailed`、`backupSkipped`、`restoreStart`、`restoreComplete`、`restoreFailed`、`taskExecute`、`deployProgress`、`error`
+支持 **30 余种事件类型**，按域分组：日志/状态（`log`、`status`、`performanceUpdate`、`weatherUpdate`、`systemStatsUpdate`）、玩家（`playerJoin`、`playerLeave`、`playerDeath`、`playerRespawn`、`playerChat`、`playerSleep`、`achievement`、`playerStatsUpdate`）、备份/恢复（`backupStart`、`backupComplete`、`backupFailed`、`backupSkipped`、`restoreStart`、`restoreComplete`、`restoreFailed`）、任务/部署/升级（`taskExecute`、`taskFailed`、`deployProgress`、`deployComplete`、`deployFailed`、`upgradeProgress`、`upgradeComplete`、`upgradeFailed`）、可靠性（`webhookDeliveryFailed`、`circuit_breaker`、`error`）。完整清单以 [`websocket.js`](mc_commander_server/websocket.js) 的 `WSEvents` 枚举为单一事实源。
 
 > `tpsUpdate` 已并入 `performanceUpdate`（payload 含 tps 字段，避免双广播冗余）；`playerDeath` 批量场景为聚合格式 `{players: [...], count: N}`（5s 窗口）；`deployProgress` 进度节流 ≥1% 才发射。
 
@@ -217,12 +225,17 @@ ws.onmessage = (event) => {
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
-| `API_KEY` | （必填） | API 认证密钥 |
+| `API_KEY` | （与 `API_KEY_HASH` 二选一） | API 认证密钥（明文）：首次启动自动迁移为 `API_KEY_HASH` 哈希存储并移除明文行；生产环境弱密钥（长度 <16 或纯重复字符）阻断启动（`ALLOW_WEAK_KEY` 可临时豁免，严禁生产开启） |
+| `API_KEY_HASH` | （与 `API_KEY` 二选一，启动校验以本值为准） | API 认证密钥的 SHA-256 哈希（零明文落盘口径，如 `printf '%s' '<密钥>' \| sha256sum` 生成）；最终都未设置时启动报错 `exit(1)` |
 | `SETUP_TOKEN` | （未配置） | 首访设密所有权证明（一次性）：配置后 `POST /auth/setup` 必须携带 `Authorization: SetupToken <token>`，校验通过立即作废（内存 + 本行移除）；部署脚本首次部署自动生成，未配置 = 不校验（仅建议本机/可信网络使用） |
+| `HOST` | `127.0.0.1` | 服务监听地址：公网部署需显式设 `0.0.0.0`（默认仅本机） |
+| `TRUST_PROXY` | `1` | 信任反向代理层数（Express trust proxy）：默认 1 兼容 nginx/CDN 反代，设 0 不信任代理头（`req.ip` = 直连 IP）；仅影响 `req.ip` 解析，登录锁定键始终取直连 IP |
 | `PORT` | `25566` | 服务端口 |
 | `SERVERS_DIR` | `./servers` | MC 实例数据目录 |
 | `DATA_DIR` | `./data` | SQLite 数据库目录 |
 | `BACKUPS_DIR` | `./backups` | 备份存储目录 |
+| `PUBLIC_DIR` | `./public` | 前端静态产物目录（锚定服务端安装目录而非工作目录，一般无需修改） |
+| `BODY_LIMIT_JSON` | `1mb` | 认证前 JSON body 大小上限（body-parser limit 语法）；文件上传走 multipart 独立通道不受此值影响 |
 | `BACKUP_RETENTION_MAX` | `10` | 每实例保留备份数量上限（超出自动清理） |
 | `BACKUP_RETENTION_DAYS` | `30` | 备份最大保留天数（超出自动清理） |
 | `PANEL_BACKUP_ENABLED` | `true` | 面板自身数据每日快照开关（SQLite 在线快照至 `backups/panel/`） |
@@ -231,8 +244,18 @@ ws.onmessage = (event) => {
 | `BACKUP_SPAWN_TIMEOUT_MS` | `3600000` | 备份/恢复子进程超时上限（默认按规模动态计算） |
 | `BACKUP_IN_PROGRESS_TIMEOUT_MS` | `3600000` | 进行中备份/恢复记录卡死判定阈值（崩溃后自动重置） |
 | `LOG_LEVEL` | `info` | 日志级别 (debug/info/warn/error) |
+| `ADMIN_SESSION_TTL_HOURS` | `168` | 管理员会话滑动有效期（小时）：每次认证触达续期，续期上限受 `ADMIN_SESSION_ABSOLUTE_TTL_DAYS` 约束 |
+| `ADMIN_SESSION_ABSOLUTE_TTL_DAYS` | `30` | 会话绝对存活期（天）：自创建起超过即强制重登（限制被窃取令牌的永久有效窗口）；设 0 关闭（不建议） |
+| `ADMIN_SESSION_MAX_SESSIONS` | `5` | 每用户会话并发上限：新登录挤掉最旧会话 |
+| `AUTH_LOGIN_MAX_FAILS` | `10` | 登录失败锁定阈值（按账号/来源 IP 内存级计数，重启即清零） |
+| `AUTH_LOGIN_LOCK_MS` | `300000` | 登录失败锁定时长（毫秒） |
 | `RATE_LIMIT_WINDOW` | `60000` | 速率限制窗口（毫秒） |
-| `RATE_LIMIT_MAX` | `100` | 窗口内最大请求数 |
+| `RATE_LIMIT_MAX` | `240` | 窗口内最大请求数（认证前按 IP 计数；默认兼顾前端多标签页轮询 ≈72-96 req/min 不误伤） |
+| `CRASH_LOOP_WINDOW_MS` | `300000` | 崩溃循环熔断滑动窗口（毫秒） |
+| `CRASH_LOOP_MAX_CRASHES` | `5` | 窗口内连续崩溃次数阈值：达到即自动禁用该实例 autoRestart |
+| `AUTO_START_DELAY_MS` | `3000` | 面板重启后自动恢复实例的间隔（毫秒） |
+| `DISK_WARNING_PERCENT` | `85` | 磁盘使用率告警阈值（百分比，warning 级通知） |
+| `DISK_ERROR_PERCENT` | `95` | 磁盘使用率告警阈值（百分比，error 级通知） |
 
 ## 技术栈
 
@@ -275,7 +298,7 @@ mc-commander/
 ├── mc_commander_server/      # Node.js 后端
 │   ├── index.js          # 入口 (Express + WebSocketServer)
 │   ├── config.js         # 配置加载 (.env)
-│   ├── websocket.js      # WebSocket 事件广播（23 种事件；通知落库/断线补齐/心跳/背压）
+│   ├── websocket.js      # WebSocket 事件广播（30 余种事件；通知落库/断线补齐/心跳/背压）
 │   ├── routes/           # API 路由（status/players/backups/tasks/files/server-jar/keys）
 │   ├── services/         # 业务逻辑（mc_server/backup/task_scheduler）
 │   ├── middleware/       # 中间件（auth/cors/error_handler/rate_limit）
@@ -309,7 +332,7 @@ mc-commander/
 ## 开发与测试
 
 ```bash
-# 服务端（vitest，473+ 用例）
+# 服务端（vitest，1700+ 用例）
 cd mc_commander_server
 npm install
 npm run dev        # 热重载开发
@@ -320,13 +343,13 @@ cd mc_manager_web
 npm install
 npm run dev        # 开发（默认 5199，代理指向 25566）
 
-# 前端单测（vitest，598 用例）/ 类型检查 / lint / 生产构建
+# 前端单测（vitest，1300+ 用例）/ 类型检查 / lint / 生产构建
 npm test
 npx tsc --noEmit
 npm run lint
 npm run build
 
-# E2E（自动起 mock 服务 + dev server；59 用例 / 10 spec）
+# E2E（自动起 mock 服务 + dev server；60+ 用例 / 11 spec）
 npm run test:e2e
 ```
 

@@ -148,6 +148,25 @@ export function worldTimePhase(worldTime: number | null | undefined): string {
   return '午夜'
 }
 
+/**
+ * 存档大小（GB 数值）→ 数值与单位拆分（CJK 单位拆出 mcs-num 的展示约定）。
+ * <1GB 换 MB（0.6279 GB 显示「643 MB」而非误导性的「0.6」）；≥1GB 保留一位小数 GB
+ */
+export function worldSizeParts(sizeGB: number | null | undefined): { value: string; unit: string } {
+  if (sizeGB == null || !Number.isFinite(sizeGB) || sizeGB <= 0) return { value: '0', unit: 'GB' }
+  if (sizeGB < 1) return { value: String(Math.round(sizeGB * 1024)), unit: 'MB' }
+  return { value: sizeGB.toFixed(1), unit: 'GB' }
+}
+
+/** 存档大小统一展示（实例卡/世界页共用）：兼容 number 与数字字符串（UXT-17 两端类型不一） */
+export function formatWorldSize(raw: string | number | null | undefined): string {
+  if (raw == null || raw === '') return '—'
+  const gb = typeof raw === 'number' ? raw : parseFloat(raw)
+  if (Number.isNaN(gb)) return '—'
+  const { value, unit } = worldSizeParts(gb)
+  return `${value} ${unit}`
+}
+
 /** 秒基聚合分解共享核心（负值按 0 处理）：formatDurationSec/Full 两套输出语义共用 */
 function decomposeSeconds(sec: number): { h: number; m: number; s: number } {
   const total = Math.max(0, Math.floor(sec))

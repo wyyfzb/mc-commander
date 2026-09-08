@@ -12,6 +12,39 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  schemas:
+    name: 契约包（schemas 测试 + dist 同步守卫）
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'push' ||
+      !github.event.pull_request.draft
+    defaults:
+      run:
+        working-directory: mc-schemas
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mc-schemas/package-lock.json
+      - run: npm ci
+      - run: npm test
+      # dist 同步守卫：dist/index.js 是服务端运行时消费物（server 经
+      # file: link + main 字段解析到 dist，前端则经 vite alias 直读 src），
+      # 改 src 不重建 dist 时其余 job 全绿但服务端消费陈旧契约——故对
+      # 提交版 dist 做重建 byte 级比对，漂移即红（本地与 CI 均验证过
+      # rolldown 确定性输出，跨环境不一致时改用「重建产物参与测试」等价守卫）
+      - name: dist 同步守卫（重建产物与提交版 byte 级比对）
+        run: |
+          cp dist/index.js "$RUNNER_TEMP/dist-committed.js"
+          npm run build
+          if ! cmp -s "$RUNNER_TEMP/dist-committed.js" dist/index.js; then
+            echo "::error file=mc-schemas/dist/index.js::提交的 dist 与 src 重建产物不一致——改 src 后必须 npm run build 并一并提交 dist（服务端运行时消费 dist）"
+            diff "$RUNNER_TEMP/dist-committed.js" dist/index.js | head -20 || true
+            exit 1
+          fi
+
   server:
     name: 服务端（lint + test）
     runs-on: ubuntu-latest

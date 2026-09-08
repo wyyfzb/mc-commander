@@ -31,17 +31,22 @@ const SESSION_TOUCH_INTERVAL_MS = 60_000;
  */
 function isAbsolutelyExpired(session) {
   const absoluteTtlMs = config.adminSession.absoluteTtlMs;
-  if (!absoluteTtlMs) return false; // 0/负值 = 关闭绝对过期（不建议）
+  if (!(absoluteTtlMs > 0)) return false; // 0/负值 = 关闭绝对过期（不建议）
   return Date.now() >= new Date(session.created_at).getTime() + absoluteTtlMs;
 }
 
 /**
  * 滑动续期目标过期时间（P2-11）：不超过 created_at + absoluteTtlMs 上限，
  * 防止活跃会话的续期无限推迟绝对重登边界。
+ * absoluteTtlMs 为 0/负值（关闭绝对过期）时不参与 cap，与 isAbsolutelyExpired
+ * 的守卫语义一致：否则 absolute = created_at（过去时刻）会把续期目标写回
+ * 创建时刻，下一次请求即被判过期删除——「关闭绝对过期」退化为会话自毁。
  */
-function slidingExpiry(session) {
+export function slidingExpiry(session) {
   const sliding = Date.now() + config.adminSession.ttlMs;
-  const absolute = new Date(session.created_at).getTime() + config.adminSession.absoluteTtlMs;
+  const absoluteTtlMs = config.adminSession.absoluteTtlMs;
+  if (!(absoluteTtlMs > 0)) return new Date(sliding).toISOString();
+  const absolute = new Date(session.created_at).getTime() + absoluteTtlMs;
   return new Date(Math.min(sliding, absolute)).toISOString();
 }
 

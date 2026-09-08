@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import express from 'express';
 import request from 'supertest';
 import fs from 'fs';
@@ -155,6 +155,84 @@ describe('认证中间件', () => {
     expect(res.status).toBe(401);
     expect(res.body.code).toBe(40103);
     expect(AdminSessionModel.getById(session.id)).toBeNull();
+  });
+});
+
+describe('滑动续期绝对过期 cap 语义（absoluteTtlMs 0/负值守卫）', () => {
+  // 守卫回归：absoluteTtlMs=0（文档化关闭语义）时 slidingExpiry 曾无守卫，
+  // Math.min 把续期目标写回 created_at → touch 后下一请求即自毁
+  const originalAdminSession = { ...config.adminSession };
+
+  afterEach(() => {
+    Object.assign(config.adminSession, originalAdminSession);
+  });
+
+  /** 构造一条需要续期的活跃会话（last_seen_at 超过 60s 触达节流阈值） */
+  function seedTouchableSession() {
+    const token = generateSessionToken();
+    const session = AdminSessionModel.create({
+      tokenHash: hashToken(token),
+      userAgent: 'vitest-cap',
+      ip: '127.0.0.1',
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    });
+    db.prepare(
+      "UPDATE admin_sessions SET created_at = ?, last_seen_at = ? WHERE id = ?",
+    ).run(
+      new Date(Date.now() - 120_000).toISOString(),
+      new Date(Date.now() - 120_000).toISOString(),
+      session.id,
+    );
+    return token;
+  }
+
+  it('absoluteTtlMs=0（关闭绝对过期）：touch 续期正常，会话不自毁', async () => {
+    config.adminSession.absoluteTtlMs = 0;
+    config.adminSession.ttlMs = 3_600_000; // 1h 滑动窗口，便于断言远期
+    const token = seedTouchableSession();
+    const res = await request(app).get('/api/v1/protected').set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    const session = AdminSessionModel.findByTokenHash(hashToken(token));
+    expect(session).not.toBeNull();
+    // 续期目标 = now + ttlMs，不受已关闭的绝对过期削减
+    expect(new Date(session.expires_at).getTime()).toBeGreaterThan(Date.now() + 3_000_000);
+  });
+
+  it('absoluteTtlMs 为负值：与 0 同守卫（关闭语义）', async () => {
+    config.adminSession.absoluteTtlMs = -1;
+    config.adminSession.ttlMs = 3_600_000;
+    const token = seedTouchableSession();
+    const res = await request(app).get('/api/v1/protected').set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(new Date(AdminSessionModel.findByTokenHash(hashToken(token)).expires_at).getTime())
+      .toBeGreaterThan(Date.now() + 3_000_000);
+  });
+
+  it('默认 30 天 cap 保留：续期目标不超过 created_at + absoluteTtlMs', async () => {
+    config.adminSession.absoluteTtlMs = 30 * 86400_000;
+    config.adminSession.ttlMs = 100 * 86400_000; // 滑动窗口远超绝对上限
+    const token = seedTouchableSession();
+    const res = await request(app).get('/api/v1/protected').set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    const session = AdminSessionModel.findByTokenHash(hashToken(token));
+    const createdPlusCap = new Date(session.created_at).getTime() + 30 * 86400_000;
+    // 续期被 cap 压回绝对重登边界附近（±2s 容差吸收执行耗时）
+    expect(new Date(session.expires_at).getTime()).toBeLessThanOrEqual(createdPlusCap + 2_000);
+    expect(new Date(session.expires_at).getTime()).toBeGreaterThan(createdPlusCap - 2_000);
+  });
+
+  it('createSession 初始 expiresAt 同样受绝对 cap 封顶（TTL_HOURS > ABSOLUTE_TTL_DAYS）', async () => {
+    config.adminSession.absoluteTtlMs = 1 * 86400_000; // 1 天绝对上限
+    config.adminSession.ttlMs = 100 * 86400_000; // 滑动 TTL 远超上限
+    const testPassword = ['cap-init', 'pass', '9'].join('-');
+    AdminAccountModel.setPassword(hashPassword(testPassword));
+    const login = await request(app).post('/api/v1/auth/login').send({ password: testPassword });
+    expect(login.status).toBe(200);
+    const session = AdminSessionModel.getById(login.body.data.sessionId);
+    // 初始 cap 以登录时刻为基准（createSession 内部用 ISO now 计算，无
+    // created_at 空格格式的本地时区解析偏差，故断言锚定 Date.now()）
+    expect(new Date(session.expires_at).getTime()).toBeLessThanOrEqual(Date.now() + 86400_000 + 2_000);
+    expect(new Date(session.expires_at).getTime()).toBeGreaterThan(Date.now() + 86400_000 - 2_000);
   });
 });
 

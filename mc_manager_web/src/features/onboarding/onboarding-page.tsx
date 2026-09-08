@@ -6,7 +6,7 @@
  * - 路由保护：AppShell loader 在 status=unconfigured 时 redirect /onboarding
  */
 import { useState } from 'react'
-import { useNavigate } from 'react-router'
+import { Link, useNavigate } from 'react-router'
 import { Check, Container, Copy, Lightbulb, Package, Server, Terminal } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -54,8 +54,8 @@ function ModeCard({
       className={cn(
         'flex flex-1 flex-col items-start gap-2 rounded-mcs-md border p-4 text-left transition-colors',
         active
-          ? 'border-mcs-accent bg-mcs-accent-bg-subtle'
-          : 'border-mcs-border-muted bg-mcs-bg-muted hover:bg-mcs-bg-hover',
+          ? 'border-mcs-accent bg-mcs-accent-bg-subtle shadow-mcs-card'
+          : 'border-mcs-border-muted bg-mcs-bg-muted shadow-mcs-card hover:bg-mcs-bg-hover',
       )}
     >
       <Icon
@@ -147,7 +147,7 @@ export function OnboardingPage() {
 
         {/* ── 部署指南（随选择切换） ── */}
         {mode !== 'already' && (
-          <div className="mb-4 flex flex-col gap-3 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted p-4">
+          <div className="mb-4 flex flex-col gap-3 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted p-4 shadow-mcs-card">
             {mode === 'windows' && (
               <>
                 <div className="flex items-center gap-2">
@@ -232,17 +232,25 @@ export function OnboardingPage() {
           }}
         />
 
-        {/* 底部：部署文档入口（引导语与动作紧邻居中，语义连贯） */}
-        <div className="mt-6 flex items-center justify-center gap-1.5 border-t border-mcs-border-muted pt-4">
-          <span className="text-mcs-2xs text-mcs-text-subtle">遇到问题？</span>
-          <a
-            href="https://gitee.com/wyyfzb/mc-commander"
-            target="_blank"
-            rel="noreferrer"
+        {/* 底部：登录页经「前往连接引导」单向跳入此处，需提供返回入口 */}
+        <div className="mt-6 flex flex-col items-center gap-1.5 border-t border-mcs-border-muted pt-4">
+          <Link
+            to="/login"
             className="text-mcs-xs font-semibold text-mcs-accent-fg transition-colors hover:underline"
           >
-            查看部署文档 →
-          </a>
+            ← 返回登录页
+          </Link>
+          <p className="text-mcs-2xs text-mcs-text-subtle">
+            遇到问题？{' '}
+            <a
+              href="https://gitee.com/wyyfzb/mc-commander"
+              target="_blank"
+              rel="noreferrer"
+              className="font-semibold text-mcs-accent-fg transition-colors hover:underline"
+            >
+              查看部署文档 →
+            </a>
+          </p>
         </div>
       </div>
     </div>
