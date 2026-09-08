@@ -51,6 +51,7 @@
     --color-mcs-accent-fg: var(--mcs-accent-fg);
     --color-mcs-accent-bg-subtle: var(--mcs-accent-bg-subtle);
     --color-mcs-accent-border: var(--mcs-accent-border);
+    --color-mcs-accent-border-strong: var(--mcs-accent-border-strong);
     --color-mcs-focus-ring: var(--mcs-focus-ring);
     --color-mcs-state-hover: var(--mcs-state-hover);
     --color-mcs-state-focus: var(--mcs-state-focus);

@@ -163,6 +163,15 @@ for (const [scopeName, vars] of [
       check(`dimension-${dim} on ${bgKey}`, ratio, 3.0)
     }
   }
+
+  // 9. accent 强档边界 × 背景（交互控件边界/状态描边 ≥3:1，须按合成后颜色算）
+  //    弱档 --mcs-accent-border 仅作装饰（亮色 1.10:1 / 暗色 1.69:1），不得用于控件边界
+  for (const bgKey of ['bg-default', 'bg-muted']) {
+    const fg = parseColor(vars.get('--mcs-accent-border-strong'), vars, refVars)
+    const bg = parseColor(vars.get(`--mcs-${bgKey}`), vars, refVars)
+    const effective = composite(fg.color, bg.color, fg.alpha)
+    check(`accent-border-strong on ${bgKey}`, wcagContrast(effective, bg.color), 3.0)
+  }
 }
 
 console.log(`\n──────────────────────────────`)

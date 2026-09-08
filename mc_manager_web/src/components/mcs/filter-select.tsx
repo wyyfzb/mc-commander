@@ -93,7 +93,8 @@ export function FilterSelect({
         aria-label={label}
         className={cn(
           'w-40',
-          active && 'border-mcs-accent-border bg-mcs-accent-bg-subtle text-mcs-accent-fg',
+          // 激活态边界用强档：控件边界须 ≥3:1，弱档 accent-border 亮色仅 1.10:1
+          active && 'border-mcs-accent-border-strong bg-mcs-accent-bg-subtle text-mcs-accent-fg',
           className,
         )}
       >
