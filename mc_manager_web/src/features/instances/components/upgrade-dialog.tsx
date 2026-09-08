@@ -189,7 +189,7 @@ export function UpgradeDialog({ instance, open, onOpenChange }: UpgradeDialogPro
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
               <div>
                 <p className="font-medium">升级须知</p>
-                <p className="mt-1 text-mcs-text-subtle">
+                <p className="mt-1 text-mcs-text-muted">
                   升级前自动创建备份，随后下载并替换服务端 JAR，启动校验失败将自动回滚。
                 </p>
               </div>
@@ -220,8 +220,8 @@ export function UpgradeDialog({ instance, open, onOpenChange }: UpgradeDialogPro
             <div
               className={`rounded-mcs-sm border p-4 ${
                 isSuccess
-                  ? 'border-mcs-success-fg/20 bg-mcs-success-bg-subtle'
-                  : 'border-mcs-error-fg/20 bg-mcs-error-bg-subtle'
+                  ? 'border-mcs-success-border bg-mcs-bg-muted'
+                  : 'border-mcs-error-border bg-mcs-bg-muted'
               }`}
             >
               <div className="flex items-center gap-2">

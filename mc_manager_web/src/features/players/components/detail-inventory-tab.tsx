@@ -204,7 +204,7 @@ function InventorySlot({ item, variant = 'default' }: { item: InventoryItem | nu
             ...(item.enchanted ? { boxShadow: '0 0 5px 0 var(--mcs-purple-fg)' } : {}),
           }}
           className={cn(
-            'relative block cursor-help rounded-mcs-xs border transition-colors hover:border-mcs-accent',
+            'relative block cursor-help rounded-mcs-xs border transition-colors hover:border-mcs-accent-border-strong',
             variant === 'ender' ? 'border-mcs-purple-border bg-mcs-purple-bg-subtle' : 'border-mcs-border-default bg-mcs-bg-muted',
             item.enchanted && 'border-mcs-purple-border',
           )}
@@ -275,7 +275,7 @@ function EmptyState({ icon: Icon, message, subtext }: { icon: LucideIcon; messag
     <div className="flex w-full flex-col items-center gap-2 rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-default px-6 py-10">
       <Icon className="size-8 text-mcs-text-subtle" aria-hidden />
       <p className="text-mcs-sm text-mcs-text-subtle">{message}</p>
-      {subtext && <p className="text-mcs-xs text-mcs-text-subtle/80">{subtext}</p>}
+      {subtext && <p className="text-mcs-xs text-mcs-text-subtle">{subtext}</p>}
     </div>
   )
 }

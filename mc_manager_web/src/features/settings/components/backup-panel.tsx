@@ -316,7 +316,7 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
             value={restoreInput}
             onChange={(e) => setRestoreInput(e.target.value)}
             placeholder={instanceName}
-            className="h-9 rounded-mcs-md border border-mcs-error-border bg-mcs-bg-default px-3 font-mono text-mcs-sm text-mcs-text-default outline-none placeholder:text-mcs-text-subtle focus:border-mcs-error-fg"
+            className="h-9 rounded-mcs-md border border-mcs-border-default bg-mcs-bg-default px-3 font-mono text-mcs-sm text-mcs-text-default outline-none placeholder:text-mcs-text-subtle focus:border-mcs-error-fg focus:ring-1 focus:ring-mcs-focus-ring"
           />
         </div>
       </ConfirmDialog>

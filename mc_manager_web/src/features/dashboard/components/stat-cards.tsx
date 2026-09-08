@@ -192,7 +192,7 @@ function ResourceRow({
       >
         <div
           className="mcs-progress-sheen h-full rounded-full transition-[width] duration-mcs-base ease-mcs-snappy"
-          style={{ width: `${p}%`, background: barColor ?? 'var(--mcs-accent)' }}
+          style={{ width: `${p}%`, background: barColor ?? 'var(--mcs-success-fg)' }}
         />
       </div>
     </div>

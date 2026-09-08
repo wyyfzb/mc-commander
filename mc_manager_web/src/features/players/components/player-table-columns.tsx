@@ -231,7 +231,7 @@ export function buildPlayerColumns({
           )
         }
         const color =
-          ping < 50 ? 'var(--mcs-accent)' : ping < 150 ? 'var(--mcs-warning-fg)' : 'var(--mcs-error-fg)'
+          ping < 50 ? 'var(--mcs-success-fg)' : ping < 150 ? 'var(--mcs-warning-fg)' : 'var(--mcs-error-fg)'
         return (
           <span className="inline-flex items-center justify-end gap-1.5 font-mono text-mcs-xs tabular-nums text-mcs-text-muted">
             <span className="inline-block size-1.5 shrink-0 rounded-full" style={{ backgroundColor: color }} aria-hidden />

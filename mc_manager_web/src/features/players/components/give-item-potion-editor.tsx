@@ -69,7 +69,8 @@ export function PotionPanel({
           className="size-3.5 shrink-0 rounded-mcs-xs"
           style={{ backgroundColor: color }}
         />
-        <span className="truncate text-mcs-xs font-semibold" style={{ color }}>
+        {/* 数据色只作色点/描边：MC 药水色作文字时亮暗各有约半数不达 4.5:1（亮 1.09–2.24 / 暗 1.26–1.48） */}
+        <span className="truncate text-mcs-xs font-semibold text-mcs-text-default">
           药水 · {effect.name}
         </span>
         <span className="shrink-0 text-mcs-2xs text-mcs-text-subtle">

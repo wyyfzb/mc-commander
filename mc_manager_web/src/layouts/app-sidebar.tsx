@@ -50,11 +50,17 @@ const PRIMARY_NAV: NavItem[] = [
 const BOTTOM_NAV: NavItem[] = [{ to: '/settings', label: '设置', icon: Settings }]
 
 /**
- * FocusTrap —— WAI-ARIA 焦点陷阱
- * 打开时 Tab 循环在容器内；关闭后焦点还原到触发按钮。
+ * useFocusTrap —— WAI-ARIA 焦点陷阱（hook 形式）
+ * 返回的 keydown 处理器须挂在**包含容器在内的祖先**上：React 合成事件沿 fiber 祖先链传播，
+ * 挂在兄弟哨兵节点上的处理器永远收不到容器内的事件（Escape/Tab 均失效）。
+ * 打开时 Tab 循环在容器内、Escape 关闭；关闭后焦点还原到触发按钮。
  * 仅用于移动端抽屉（<768px），桌面侧栏无需焦点陷阱。
  */
-function FocusTrap({ active, containerRef, onDeactivate }: { active: boolean; containerRef: React.RefObject<HTMLElement | null>; onDeactivate: () => void }) {
+function useFocusTrap(
+  active: boolean,
+  containerRef: React.RefObject<HTMLElement | null>,
+  onDeactivate: () => void,
+) {
   const previousFocusRef = useRef<HTMLElement | null>(null)
 
   // 保存/还原焦点
@@ -96,9 +102,7 @@ function FocusTrap({ active, containerRef, onDeactivate }: { active: boolean; co
     }
   }, [active, containerRef, onDeactivate])
 
-  if (!active) return null
-  // 不可见哨兵：接收焦点但不占空间
-  return <div onKeyDown={handleKeyDown} tabIndex={-1} style={{ position: 'absolute', width: 0, height: 0, overflow: 'hidden' }} />
+  return handleKeyDown
 }
 
 interface AppSidebarProps {
@@ -113,6 +117,7 @@ export function AppSidebar({ collapsed, mobileNavOpen, onMobileNavClose }: AppSi
   const current = instancesQuery.data?.find((i) => i.id === instanceId)
   const mobileDrawerRef = useRef<HTMLElement | null>(null)
   const toggleSidebar = useUiStore((s) => s.toggleSidebar)
+  const handleDrawerKeyDown = useFocusTrap(mobileNavOpen, mobileDrawerRef, onMobileNavClose)
 
   const nav = (
     <>
@@ -149,7 +154,7 @@ export function AppSidebar({ collapsed, mobileNavOpen, onMobileNavClose }: AppSi
             <span
               className={cn(
                 'size-2 shrink-0 rounded-full',
-                current.isRunning ? 'bg-mcs-accent shadow-mcs-glow-accent' : 'bg-mcs-text-subtle',
+                current.isRunning ? 'bg-mcs-success-fg shadow-mcs-glow-accent' : 'bg-mcs-text-subtle',
               )}
               aria-hidden
             />
@@ -182,8 +187,11 @@ export function AppSidebar({ collapsed, mobileNavOpen, onMobileNavClose }: AppSi
         {nav}
       </aside>
 
-      {/* 移动端抽屉（<768px）：fixed 覆盖层 + 遮罩 */}
-      <div className={cn('fixed inset-0 z-50 md:hidden', !mobileNavOpen && 'pointer-events-none')}>
+      {/* 移动端抽屉（<768px）：fixed 覆盖层 + 遮罩；关闭态 inert 移出焦点顺序 */}
+      <div
+        className={cn('fixed inset-0 z-50 md:hidden', !mobileNavOpen && 'pointer-events-none')}
+        onKeyDown={handleDrawerKeyDown}
+      >
         <div
           className={cn(
             'absolute inset-0 bg-mcs-scrim transition-opacity duration-mcs-base',
@@ -201,8 +209,8 @@ export function AppSidebar({ collapsed, mobileNavOpen, onMobileNavClose }: AppSi
           )}
           aria-label="主导航（移动端）"
           aria-hidden={!mobileNavOpen}
+          inert={!mobileNavOpen}
         >
-          <FocusTrap active={mobileNavOpen} containerRef={mobileDrawerRef} onDeactivate={onMobileNavClose} />
           <BrandRow collapsed={false} />
           {nav}
         </aside>

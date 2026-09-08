@@ -139,7 +139,7 @@ export function EnchantPanel({
                   I-{toRoman(ench.maxLevel)}
                 </span>
                 {ench.isNew121 && (
-                  <span className="shrink-0 rounded-mcs-xs border border-mcs-orange-border bg-mcs-orange-bg-subtle px-1 text-mcs-2xs font-medium text-mcs-orange-fg">
+                  <span className="shrink-0 rounded-mcs-xs border border-mcs-warning-border bg-mcs-warning-bg-subtle px-1 text-mcs-2xs font-medium text-mcs-warning-fg">
                     1.21+
                   </span>
                 )}
