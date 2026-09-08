@@ -3,10 +3,12 @@
  * normalizeDateDigits 分段/补零；isCompleteIsoDate 日历有效性；
  * 组件交互：完整值上抛、输入中不上抛、清空上抛 ''、失焦回退不完整草稿
  */
+import { useState } from 'react'
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { DateTextInput, normalizeDateDigits, isCompleteIsoDate } from '../date-text-input'
+import { dayLabel, todayIso } from '@/lib/mc-calendar'
 
 describe('normalizeDateDigits', () => {
   it('空 → 空串', () => {
@@ -104,5 +106,100 @@ describe('DateTextInput 交互', () => {
     expect(onChange).not.toHaveBeenCalled()
     fireEvent.blur(input)
     expect(onChange).toHaveBeenCalledWith('2026-09-01')
+  })
+
+  it('日历弹层：打开后选日上抛 ISO 并收起，触发器 aria-expanded 跟随开合', async () => {
+    const onChange = vi.fn()
+    const user = userEvent.setup()
+    render(<DateTextInput value="" onChange={onChange} ariaLabel="开始日期" />)
+    const trigger = screen.getByRole('button', { name: '打开日历' })
+    expect(screen.queryByRole('grid')).toBeNull()
+    expect(trigger).toHaveAttribute('aria-expanded', 'false')
+
+    await user.click(trigger)
+    expect(trigger).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('grid')).toBeVisible()
+
+    await user.click(screen.getByRole('button', { name: dayLabel(todayIso()) }))
+    expect(onChange).toHaveBeenCalledWith(todayIso())
+    expect(screen.queryByRole('grid')).toBeNull()
+  })
+
+  it('日历弹层：已提交值高亮为选中格，清除上抛空串', async () => {
+    const onChange = vi.fn()
+    const user = userEvent.setup()
+    render(<DateTextInput value="2026-09-15" onChange={onChange} ariaLabel="结束日期" />)
+    await user.click(screen.getByRole('button', { name: '打开日历' }))
+    const cell = screen.getByRole('gridcell', { selected: true })
+    expect(within(cell).getByRole('button', { name: '2026年9月15日 星期二' })).toBeVisible()
+
+    await user.click(screen.getByRole('button', { name: '清除' }))
+    expect(onChange).toHaveBeenCalledWith('')
+  })
+
+  it('日历选中后草稿让位：受控父级更新值后输入框显示所选日期', async () => {
+    const user = userEvent.setup()
+    function Harness() {
+      const [v, setV] = useState('')
+      return <DateTextInput value={v} onChange={setV} ariaLabel="开始日期" />
+    }
+    render(<Harness />)
+    const input = screen.getByLabelText('开始日期')
+    // 先键入一段不完整草稿，再从日历选日 → 草稿必须让位于所选值
+    await user.type(input, '2026')
+    expect(input).toHaveValue('2026')
+    await user.click(screen.getByRole('button', { name: '打开日历' }))
+    await user.click(screen.getByRole('button', { name: dayLabel(todayIso()) }))
+    expect(input).toHaveValue(todayIso())
+  })
+
+  it('全选替换：粘贴更短/更长串都以新内容为准，不残留旧值片段（回归）', async () => {
+    const user = userEvent.setup()
+    function Harness() {
+      const [v, setV] = useState('2026-09-15')
+      return <DateTextInput value={v} onChange={setV} ariaLabel="开始日期" />
+    }
+    render(<Harness />)
+    const input = screen.getByLabelText('开始日期')
+
+    // 更短：旧实现按长度判「末端删除」，会留下旧值前缀 2026
+    await user.click(input)
+    await user.keyboard('{Control>}a{/Control}')
+    await user.paste('2025')
+    expect(input).toHaveValue('2025')
+
+    // 更长：旧实现按长度判「末端追加」，会把新串尾巴接在旧值后面（2024-01）
+    await user.keyboard('{Control>}a{/Control}')
+    await user.paste('2025-01')
+    expect(input).toHaveValue('2025-01')
+
+    // 整串替换为另一完整日期
+    await user.keyboard('{Control>}a{/Control}')
+    await user.paste('2024-12-31')
+    expect(input).toHaveValue('2024-12-31')
+  })
+
+  it('错误态只落在「输满 8 位但日历非法」：键入中途不标红', async () => {
+    const user = userEvent.setup()
+    render(<DateTextInput value="" onChange={vi.fn()} ariaLabel="开始日期" />)
+    const input = screen.getByLabelText('开始日期')
+
+    await user.type(input, '2026')
+    expect(input).not.toHaveAttribute('aria-invalid')
+
+    // 补到 8 位但日历非法（2 月 31 日）→ 标红
+    await user.type(input, '0231')
+    expect(input).toHaveAttribute('aria-invalid', 'true')
+  })
+
+  it('有值时输入框呈激活态（与 FilterSelect 一致），触发器带 aria-haspopup', () => {
+    render(<DateTextInput value="2026-09-15" onChange={vi.fn()} ariaLabel="开始日期" />)
+    const input = screen.getByLabelText('开始日期')
+    const classes = input.className.split(/\s+/)
+    // 边界用强档 accent：弱档 accent-border 亮色仅 1.10:1、暗色 1.69:1，低于交互边界 ≥3:1
+    expect(classes).toContain('bg-mcs-accent-bg-subtle')
+    expect(classes).toContain('border-mcs-accent-border-strong')
+    expect(classes).not.toContain('border-mcs-accent-border')
+    expect(screen.getByRole('button', { name: '打开日历' })).toHaveAttribute('aria-haspopup', 'dialog')
   })
 })
