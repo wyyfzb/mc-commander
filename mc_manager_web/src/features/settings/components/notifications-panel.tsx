@@ -76,9 +76,9 @@ export function NotificationsPanel() {
             </div>
             {/* 表格：事件 | 严重度 | 站内 */}
             <div className="grid grid-cols-[1fr_auto_auto] items-center gap-x-4 px-4 pb-1 pt-2.5">
-              <span className="text-mcs-2xs font-semibold tracking-wide text-mcs-text-subtle">事件</span>
-              <span className="w-12 text-mcs-2xs font-semibold tracking-wide text-mcs-text-subtle">严重度</span>
-              <span className="w-10 text-mcs-2xs font-semibold tracking-wide text-mcs-text-subtle">站内</span>
+              <span className="text-mcs-2xs font-semibold text-mcs-text-subtle">事件</span>
+              <span className="w-12 text-mcs-2xs font-semibold text-mcs-text-subtle">严重度</span>
+              <span className="w-10 text-mcs-2xs font-semibold text-mcs-text-subtle">站内</span>
             </div>
             <div className="flex flex-col">
               {types.map((type) => {

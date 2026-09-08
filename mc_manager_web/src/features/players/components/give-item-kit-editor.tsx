@@ -296,7 +296,7 @@ export function KitEditorDialog({
                   return (
                     <div
                       key={`${entry.id}-${index}`}
-                      className="flex w-[200px] shrink-0 items-center gap-1 rounded-mcs-sm border border-mcs-border-subtle bg-mcs-bg-muted py-1 pl-1 pr-1.5"
+                      className="flex w-50 shrink-0 items-center gap-1 rounded-mcs-sm border border-mcs-border-subtle bg-mcs-bg-muted py-1 pl-1 pr-1.5"
                     >
                       {item ? (
                         <img

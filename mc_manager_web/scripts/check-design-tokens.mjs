@@ -7,7 +7,7 @@
  *   3. transition-all
  *   4. duration-{数字}（非 token 的硬编码时长）
  *   5. rounded-[ 任意值圆角
- *   6. Tailwind 原生字号 3xl 及以上（字号 token 体系上限 --mcs-font-size-2xl，KPI/大字一律 ≤ 2xl）
+ *   6. Tailwind 原生字号 3xl 及以上（原生字号上限 2xl；数字面板可走 --mcs-font-size-display（30px），须与 .mcs-num 同用）
  *   7. 紧急页（src/features/emergency/）字重 bold 及以上（触控页字重限定 400-600）
  * 发现违规 → 输出 文件:行号 → 非零退出码（阻止合并）
  */

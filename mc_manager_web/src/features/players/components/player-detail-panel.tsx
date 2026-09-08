@@ -65,7 +65,7 @@ export function PlayerDetailPanel({
 
   return (
     <aside
-      className="flex w-[420px] shrink-0 flex-col border-l border-mcs-border-default bg-mcs-bg-default"
+      className="flex w-105 shrink-0 flex-col border-l border-mcs-border-default bg-mcs-bg-default"
       aria-label="玩家详情面板"
     >
       {/* ── 头部 ── */}

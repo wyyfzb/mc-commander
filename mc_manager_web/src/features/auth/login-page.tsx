@@ -198,13 +198,13 @@ export function LoginPage() {
         {/* 57.6px = 标题 22px + 副标题 14px 两行行高之和（1.6 行高系数），字号档位调整时需同步 */}
         <BrandLogo className="h-[57.6px] w-auto text-mcs-text-default" />
         <div>
-          <h1 className="text-mcs-xl font-bold tracking-tight text-mcs-text-default">MC Commander</h1>
+          <h1 className="text-mcs-xl font-semibold text-mcs-text-default">MC Commander</h1>
           <p className="text-mcs-sm text-mcs-text-subtle">Minecraft 服务器管理面板</p>
         </div>
       </div>
 
       {/* 登录卡片（浮起面：卡阴影 + 顶部受光线；stagger 入场跟随品牌区） */}
-      <main className="animate-mcs-fade-up mcs-delay-1 mcs-edge-top relative z-10 w-full max-w-md rounded-mcs-lg border border-mcs-border-muted bg-mcs-bg-muted p-6 shadow-mcs-card">
+      <main className="animate-mcs-fade-up mcs-delay-1 mcs-edge-top relative z-10 w-full max-w-md rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted p-6 shadow-mcs-card">
         <div className="mb-5">
           <h2 className="text-mcs-md font-semibold text-mcs-text-default">{heading}</h2>
           <p className="mt-1 text-mcs-xs text-mcs-text-subtle">

@@ -1,7 +1,7 @@
 /**
  * 玻璃工具类（设计文档 §4.4，风格 A：简约+克制玻璃）
  * 允许面：侧栏/顶栏、命令面板、弹窗/toast —— 全页 ≤2-3 处、单 Z 层
- * 纪律：blur ≤20px、底色 alpha ≤0.3；表格/终端/表单/图表一律实底（禁区）
+ * 纪律：blur ≤20px、底色 alpha ≤0.7（toast ≤0.85）；表格/终端/表单/图表一律实底（禁区）
  * 兜底：无 backdrop-filter 实底；prefers-reduced-transparency 降级磨砂
  */
 

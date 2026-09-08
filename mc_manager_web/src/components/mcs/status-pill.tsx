@@ -56,7 +56,7 @@ export function StatusPill({
       data-status-variant={variant}
       title={title}
       className={clsx(
-        'inline-flex h-5 shrink-0 items-center rounded-mcs-xl border px-2 text-xs font-medium whitespace-nowrap',
+        'inline-flex h-5 shrink-0 items-center rounded-full border px-2 text-xs font-medium whitespace-nowrap',
         toneClass,
         className,
       )}

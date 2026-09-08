@@ -220,7 +220,7 @@ export function NotificationDrawer({ open, onOpenChange }: NotificationDrawerPro
                   type="button"
                   onClick={jumpToInstance}
                   className={cn(
-                    'flex max-w-[260px] flex-col gap-1 rounded-mcs-sm border px-3 py-2 text-left',
+                    'flex max-w-65 flex-col gap-1 rounded-mcs-sm border px-3 py-2 text-left',
                     isGame
                       ? 'self-start rounded-bl-mcs-xs'
                       : 'self-end rounded-br-mcs-xs bg-mcs-bg-hover',

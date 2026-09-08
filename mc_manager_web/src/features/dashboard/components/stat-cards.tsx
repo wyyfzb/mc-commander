@@ -228,7 +228,7 @@ export function PlayersCard() {
     >
       <span
         className={cn(
-          'flex size-5 shrink-0 items-center justify-center rounded-full text-mcs-2xs font-bold',
+          'flex size-5 shrink-0 items-center justify-center rounded-full text-mcs-2xs font-semibold',
           isSleeping
             ? 'bg-mcs-info-bg-subtle text-mcs-info-fg'
             : 'bg-mcs-accent-bg-subtle text-mcs-success-fg',
@@ -346,7 +346,7 @@ export function PlayersCard() {
               OP {opCount}/{online}
             </StatusPill>
             {opNames.length > 0 && (
-              <span className="max-w-[140px] truncate text-mcs-2xs text-mcs-warning-fg">
+              <span className="max-w-35 truncate text-mcs-2xs text-mcs-warning-fg">
                 {opNames.slice(0, 2).join(', ')}
                 {opNames.length > 2 ? '…' : ''}
               </span>

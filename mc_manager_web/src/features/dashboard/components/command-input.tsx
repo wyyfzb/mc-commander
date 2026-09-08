@@ -312,7 +312,7 @@ export function CommandInput() {
         {/* 补全下拉 */}
         {completions.length > 0 && (
           <div
-            className="absolute bottom-full left-0 right-0 z-10 mb-1 max-h-44 overflow-y-auto rounded-mcs-sm border border-mcs-border-default bg-mcs-bg-emphasis p-1 shadow-lg"
+            className="absolute bottom-full left-0 right-0 z-10 mb-1 max-h-44 overflow-y-auto rounded-mcs-sm border border-mcs-border-default bg-mcs-bg-emphasis p-1 shadow-mcs-raised"
             role="listbox"
             aria-label="命令补全"
           >

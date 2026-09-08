@@ -52,9 +52,9 @@ export function AboutPanel(_props: AboutPanelProps) {
     <div className="flex flex-col gap-3">
       {/* ── 应用信息：应用名 + 副标题 + 版本徽章 ── */}
       <section className="flex flex-col items-center gap-1.5 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted px-4 py-6 shadow-mcs-card">
-        <h3 className="text-mcs-xl font-bold text-mcs-text-default tracking-tight">MC Commander</h3>
+        <h3 className="text-mcs-xl font-semibold text-mcs-text-default">MC Commander</h3>
         <p className="text-mcs-sm text-mcs-text-muted">自托管 Minecraft 服务器管理客户端</p>
-        <span className="mt-1 inline-flex h-5 items-center rounded-mcs-xl border border-mcs-accent-border bg-mcs-accent-bg-subtle px-2 font-mono text-mcs-xs font-semibold text-mcs-accent-fg">
+        <span className="mt-1 inline-flex h-5 items-center rounded-full border border-mcs-accent-border bg-mcs-accent-bg-subtle px-2 font-mono text-mcs-xs font-semibold text-mcs-accent-fg">
           v{__APP_VERSION__}
         </span>
       </section>

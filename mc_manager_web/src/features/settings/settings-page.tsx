@@ -40,7 +40,7 @@ export function SettingsPage() {
         aria-label="设置子导航"
         className="flex w-12 shrink-0 flex-col gap-1 self-start rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted p-2 shadow-mcs-card md:w-50"
       >
-        <p className="hidden px-2 py-1.5 text-mcs-2xs font-semibold tracking-wider text-mcs-text-subtle md:block">
+        <p className="hidden px-2 py-1.5 text-mcs-2xs font-semibold text-mcs-text-subtle md:block">
           设置
         </p>
         {SUB_NAV.map(({ to, label, icon: Icon }) => {

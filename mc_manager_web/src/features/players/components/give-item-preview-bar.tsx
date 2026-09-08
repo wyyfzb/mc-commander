@@ -103,7 +103,7 @@ export function SelectedItemsBar({
         return (
           <div
             key={entry.item.id}
-            className="flex w-[240px] shrink-0 items-center gap-1 rounded-mcs-sm border border-mcs-border-subtle bg-mcs-bg-muted py-1 pl-1 pr-1.5"
+            className="flex w-60 shrink-0 items-center gap-1 rounded-mcs-sm border border-mcs-border-subtle bg-mcs-bg-muted py-1 pl-1 pr-1.5"
             style={
               isPotionOpen && effect
                 ? { borderColor: effectColorHex(effect) }
