@@ -82,7 +82,7 @@ test.describe('onboarding', () => {
     // 同源托管（无跨域），开发/E2E 场景经 proxy 转发为既定模式
     await page.getByRole('textbox', { name: '面板地址' }).fill('http://localhost:5199')
     await page.getByRole('textbox', { name: 'API Key' }).fill('e2e-mock-key-0000000000')
-    await page.getByRole('button', { name: '保存连接' }).click()
+    await page.getByRole('button', { name: '连接并进入面板' }).click()
     await expect(page.getByText('连接配置已保存')).toBeVisible()
     // 跳转面板（桌面侧栏 + 移动抽屉双渲染，取任一）
     await expect(page).toHaveURL(/\/dashboard/)

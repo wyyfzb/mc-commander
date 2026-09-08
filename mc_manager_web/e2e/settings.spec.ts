@@ -45,8 +45,8 @@ test.describe('设置页', () => {
     // 表单字段（面板地址 + API Key）
     await expect(page.getByRole('textbox', { name: '面板地址' })).toBeVisible()
     await expect(page.getByRole('textbox', { name: 'API Key' })).toBeVisible()
-    // 已配置状态行
-    await expect(page.getByText('已连接')).toBeVisible()
+    // 已配置状态行（顶栏状态点同名文本亦为「已连接」，取首个避免 strict 违规）
+    await expect(page.getByText('已连接').first()).toBeVisible()
     // 填地址 → 测试连接（走 dev proxy 到 mock，成功）
     await page.getByRole('textbox', { name: '面板地址' }).fill('http://localhost:5199')
     await page.getByRole('button', { name: '测试连接' }).click()
