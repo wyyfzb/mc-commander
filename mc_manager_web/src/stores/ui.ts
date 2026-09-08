@@ -4,14 +4,11 @@ import { migrateFromLegacyKeys, STORAGE_KEY } from '@/lib/migrate-ui-keys'
 
 /**
  * 全局 UI 态（zustand persist，设计文档 §二/5.1）
- * 主题 / 界面密度 / 终端自动滚动 / 命令确认偏好 —— localStorage 持久化
+ * 主题 / 终端自动滚动 / 命令确认偏好 —— localStorage 持久化
  * 侧栏折叠 / 命令面板 / 通知抽屉 / 移动端导航 —— 纯会话态，不持久化
  */
 
 export type ThemeMode = 'dark' | 'light'
-
-/** 界面密度档（density.css：default 40px 舒适 / compact 32px 密集） */
-export type DensityMode = 'default' | 'compact'
 
 interface UiState {
   theme: ThemeMode
@@ -23,8 +20,6 @@ interface UiState {
   mobileNavOpen: boolean
   /** 末尾日志弹窗（崩溃/熔断 toast「查看末尾日志」入口；存实例 id，null=关） */
   lastOutputInstanceId: string | null
-  /** 界面密度（B5：density.css 联动，compact 32px 密集行） */
-  density: DensityMode
   /** 终端自动滚动（B5：新日志自动滚动到底部；关闭后不跟随） */
   terminalAutoScroll: boolean
   /** 命令执行二次确认（B5：危险命令执行前弹确认；终端专家通道除外） */
@@ -37,7 +32,6 @@ interface UiState {
   setLastOutputInstanceId: (id: string | null) => void
   toggleMobileNav: () => void
   setMobileNavOpen: (open: boolean) => void
-  setDensity: (density: DensityMode) => void
   setTerminalAutoScroll: (enabled: boolean) => void
   setConfirmCommands: (enabled: boolean) => void
 }
@@ -61,7 +55,6 @@ export const useUiStore = create<UiState>()(
       notificationsOpen: false,
       mobileNavOpen: false,
       lastOutputInstanceId: null,
-      density: 'default',
       terminalAutoScroll: true,
       confirmCommands: false,
       setTheme: (theme) => set({ theme }),
@@ -72,7 +65,6 @@ export const useUiStore = create<UiState>()(
       setLastOutputInstanceId: (id) => set({ lastOutputInstanceId: id }),
       toggleMobileNav: () => set((s) => ({ mobileNavOpen: !s.mobileNavOpen })),
       setMobileNavOpen: (open) => set({ mobileNavOpen: open }),
-      setDensity: (density) => set({ density }),
       setTerminalAutoScroll: (enabled) => set({ terminalAutoScroll: enabled }),
       setConfirmCommands: (enabled) => set({ confirmCommands: enabled }),
     }),
@@ -82,7 +74,6 @@ export const useUiStore = create<UiState>()(
       /** 仅持久化用户偏好，不持久化会话态 */
       partialize: (state) => ({
         theme: state.theme,
-        density: state.density,
         terminalAutoScroll: state.terminalAutoScroll,
         confirmCommands: state.confirmCommands,
       }),

@@ -1,6 +1,6 @@
 /**
  * 视觉效果层（v2 深空工作台）
- * 入场编排（一次性 ≤450ms）/ 常驻微动效（流光·脉冲·呼吸辉光）/ 背景纹理（噪点·方块网格·环境光）
+ * 入场编排（一次性 ≤450ms）/ 骨架流光 / 背景纹理（噪点·方块网格·环境光）
  * 纪律：
  *   - 交互反馈仍走 duration-mcs-fast/base（≤300ms），本层 slow 档仅限一次性入场与氛围动画
  *   - 纹理 opacity ≤3.5%：消除纯色渐变的塑料感，不喧宾夺主
@@ -12,18 +12,8 @@
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: none; }
 }
-@keyframes mcs-fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-@keyframes mcs-scale-in {
-  from { opacity: 0; transform: scale(0.95) translateY(4px); }
-  to { opacity: 1; transform: none; }
-}
 
 .animate-mcs-fade-up { animation: mcs-fade-up var(--mcs-motion-slow) var(--mcs-ease-out) both; }
-.animate-mcs-fade-in { animation: mcs-fade-in var(--mcs-motion-base) var(--mcs-ease-out) both; }
-.animate-mcs-scale-in { animation: mcs-scale-in var(--mcs-motion-slow) var(--mcs-ease-spring) both; }
 
 /* 网格 stagger：60ms 步进，≤6 档（配 animate-mcs-fade-up 使用） */
 .mcs-delay-1 { animation-delay: 60ms; }
@@ -33,23 +23,13 @@
 .mcs-delay-5 { animation-delay: 300ms; }
 .mcs-delay-6 { animation-delay: 360ms; }
 
-/* ── 常驻微动效（低频呼吸/循环，装饰性，非交互反馈）── */
+/* ── 常驻微动效（骨架屏流光；装饰性，非交互反馈）── */
 @keyframes mcs-shimmer {
   from { background-position: 200% 0; }
   to { background-position: -200% 0; }
 }
-@keyframes mcs-pulse-soft {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
-}
-@keyframes mcs-glow-breathe {
-  0%, 100% { box-shadow: var(--mcs-glow-accent); }
-  50% { box-shadow: var(--mcs-glow-accent-strong); }
-}
 
-.animate-mcs-pulse-soft { animation: mcs-pulse-soft 2.4s var(--mcs-ease-out) infinite; }
 .animate-mcs-shimmer { animation: mcs-shimmer 2s linear infinite; }
-.animate-mcs-glow-breathe { animation: mcs-glow-breathe 3.2s ease-in-out infinite; }
 
 /* 进度条流光：微弱高光带循环扫过，示意「进行中」而非装饰（叠在进度填充条上） */
 .mcs-progress-sheen { position: relative; overflow: hidden; }
@@ -115,19 +95,6 @@
   height: 1px;
   background: linear-gradient(90deg, transparent, color-mix(in oklch, var(--mcs-text-default) 16%, transparent), transparent);
   pointer-events: none;
-}
-
-/* 可交互卡 hover：上浮 1px + 边框亮起 + 阴影升档（可点击卡/入口卡使用） */
-.mcs-card-hover {
-  transition:
-    transform var(--mcs-motion-fast) var(--mcs-ease-snappy),
-    border-color var(--mcs-motion-fast) var(--mcs-ease-snappy),
-    box-shadow var(--mcs-motion-fast) var(--mcs-ease-snappy);
-}
-.mcs-card-hover:hover {
-  transform: translateY(-1px);
-  border-color: color-mix(in oklch, var(--mcs-text-default) 14%, transparent);
-  box-shadow: var(--mcs-shadow-raised);
 }
 
 /* ── 数字 display（mono + 等宽数字 + 600 字重；仅数字面板，CJK 正文不用）── */

@@ -125,7 +125,7 @@ export function PlayerTable({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto" data-density="compact">
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto">
         <table className="w-full border-collapse text-left" style={{ tableLayout: 'fixed' }}>
           <thead className="sticky top-0 z-10 bg-mcs-bg-default">
             {table.getHeaderGroups().map((headerGroup) => (

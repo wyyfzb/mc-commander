@@ -7,7 +7,6 @@ export const STORAGE_KEY = 'mcs-ui-preferences'
 
 const OLD_KEYS: Record<string, string> = {
   theme: 'mcs-theme',
-  density: 'mcs-density',
   terminalAutoScroll: 'mcs-terminal-autoscroll',
   confirmCommands: 'mcs-confirm-commands',
 }
@@ -25,8 +24,6 @@ export function migrateFromLegacyKeys(): Record<string, unknown> | null {
       if (val === null) continue
       if (field === 'theme') {
         if (val === 'dark' || val === 'light') migrated.theme = val
-      } else if (field === 'density') {
-        if (val === 'default' || val === 'compact') migrated.density = val
       } else {
         // 布尔字段：仅迁移合法值（'true'/'false'），跳过损坏数据
         if (val === 'true' || val === 'false') migrated[field] = val === 'true'

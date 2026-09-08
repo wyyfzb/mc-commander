@@ -138,7 +138,7 @@ export function DatePickerCalendar({ value, onSelect, onClear }: DatePickerCalen
                     aria-current={isToday ? 'date' : undefined}
                     onClick={() => onSelect(iso)}
                     className={cn(
-                      'flex size-7 items-center justify-center rounded-mcs-xs text-mcs-xs tabular-nums transition-colors outline-none focus-visible:outline-2 focus-visible:outline-mcs-focus-ring focus-visible:outline-offset-1',
+                      'flex size-7 items-center justify-center rounded-mcs-xs text-mcs-xs tabular-nums transition-colors focus-visible:outline-2 focus-visible:outline-mcs-focus-ring focus-visible:outline-offset-1',
                       selected
                         // 亮色下实心 accent 对弹层底仅 1.33:1，靠强档描边补足选中态的 ≥3:1 可辨识性
                         ? 'bg-mcs-accent font-medium text-mcs-on-accent ring-1 ring-mcs-accent-border-strong'

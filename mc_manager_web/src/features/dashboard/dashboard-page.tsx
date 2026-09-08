@@ -62,7 +62,7 @@ export function DashboardPage() {
   }
 
   return (
-    <div className="flex h-full flex-col gap-4 overflow-y-auto p-4" data-density="default">
+    <div className="flex h-full flex-col gap-4 overflow-y-auto p-4">
       {/* 状态查询失败横幅（避免卡片静默显示 0 被误读为真实状态） */}
       {statusQuery.isError && !statusLoading && (
         <NoticeBanner variant="error" icon={AlertTriangle}>

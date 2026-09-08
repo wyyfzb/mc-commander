@@ -51,8 +51,12 @@ npm run dev                  # node --watch 热重载
 
 ## 工程纪律
 
-- **设计 token**：前端颜色/间距/圆角一律使用 `src/styles/` 的 `--mcs-*` CSS token，
-  禁止组件内硬编码色值，禁止引入未 token 化的第三方 UI 库。
+- **设计 token**：前端颜色/圆角/字号/动效/光影一律使用 `src/styles/` 的 `--mcs-*` CSS token
+  （经 `src/index.css` 的 `@theme` 注册为工具类），禁止组件内硬编码色值，禁止引入未 token 化的第三方 UI 库。
+- **间距**：不设 `--mcs-space-*`，统一走 Tailwind 默认 4px 刻度（`--spacing` 0.25rem）；
+  结构间距必须 4px 倍数，组件内微节奏（2px 档）须在 PR 说明理由。
+- **焦点可见**：交互元素禁止用 `outline-none` 抵消 `focus-visible:outline-*`
+  （Tailwind utilities 同层，`outline-none` 会把 `outline-style` 钉死为 `none`，焦点环实测不可见）。
 - **测试数据**：测试与文档中严禁出现真实服务器信息（IP / API Key / 真实玩家数据），
   一律使用虚构数据（`1.2.3.4`、TEST-NET 网段、Steve/Alex 等官方示例名）。
 - **MC 版本兼容**：排查问题优先考虑 MC 26.x 新版与旧版在目录结构、数据格式、

@@ -82,16 +82,8 @@
   /* ── 品牌 accent 渐变（CTA 实底：同色相明度渐变，135deg 亮左上）── */
   --mcs-gradient-accent: linear-gradient(135deg, var(--ref-accent-hover), var(--ref-accent) 55%, color-mix(in oklch, var(--ref-accent) 90%, var(--ref-dark-base)));
 
-  /* ── 间距（8px 网格）── */
-  --mcs-space-1: 4px;
-  --mcs-space-2: 8px;
-  --mcs-space-3: 12px;
-  --mcs-space-4: 16px;
-  --mcs-space-5: 20px;
-  --mcs-space-6: 24px;
-  --mcs-space-8: 32px;
-  --mcs-space-10: 40px;
-  --mcs-space-12: 48px;
+  /* 间距不设 token：统一走 Tailwind 默认 4px 刻度（--spacing 0.25rem），
+     结构间距必须 4px 倍数、组件内微节奏允许 2px 档（纪律见 AGENTS.md） */
 
   /* ── 圆角（v2 整体上调一档：面板 6 / 控件 8 / 卡片 12 / 弹窗 16 / 全应用上限 20）── */
   --mcs-radius-xs: 6px;   /* 面板/输入框 */
@@ -100,10 +92,10 @@
   --mcs-radius-lg: 16px;  /* 弹窗 */
   --mcs-radius-xl: 20px;  /* 全应用上限 */
 
-  /* ── 字体（CJK 规范：偶数字号 ≤7 档 / 行高 1.6-1.7 / 字重 400-600）── */
+  /* ── 字体（CJK 规范：偶数字号 ≤7 档 / 正文行高 1.6；字重与标题行高走 Tailwind font-medium/semibold、leading-*）── */
   --mcs-font-sans: 'Noto Sans SC Subset', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
   --mcs-font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
-  --mcs-font-size-2xs: 10px;  /* 标签 */
+  --mcs-font-size-2xs: 10px;  /* 角标/单位/mono 元数据，禁用于中文正文 */
   --mcs-font-size-xs: 12px;   /* 辅助 */
   --mcs-font-size-sm: 14px;   /* 正文基准 */
   --mcs-font-size-md: 16px;   /* 按钮/二级标题 */
@@ -111,13 +103,7 @@
   --mcs-font-size-xl: 22px;   /* 页面标题 */
   --mcs-font-size-2xl: 24px;  /* 页面大标题 */
   --mcs-font-size-display: 30px; /* 数字 display 档（mono + tnum，仅 KPI/时钟等数字面板，非文字标题） */
-  --mcs-font-weight-regular: 400;
-  --mcs-font-weight-medium: 500;
-  --mcs-font-weight-semibold: 600;
   --mcs-line-height-body: 1.6;
-  --mcs-line-height-body-long: 1.7;
-  --mcs-line-height-heading: 1.3;
-  --mcs-line-height-tight: 1.2;
 
   /* ── 终端专用（设计文档 4.6：ServerTerminal 独立深底，与基面同阶，主题无关）── */
   --mcs-terminal-bg: oklch(0.1663 0.0262 269.37);     /* 基面深底（亮暗同值） */
@@ -128,19 +114,12 @@
   --mcs-terminal-warning: var(--ref-warning);
   --mcs-terminal-accent: var(--ref-accent);
 
-  /* ── 动效（交互反馈 ≤300ms 只动 transform/opacity；slow 450ms 仅限一次性入场编排；
-        spring 轻微过冲仅限弹层/卡片入场，禁止用于循环动画）── */
+  /* ── 动效（交互反馈 ≤300ms 只动 transform/opacity；slow 450ms 仅限一次性入场编排）── */
   --mcs-motion-fast: 150ms;      /* hover */
   --mcs-motion-base: 300ms;      /* 交互反馈上限 */
   --mcs-motion-slow: 450ms;      /* 入场编排/氛围动画 */
   --mcs-ease-snappy: cubic-bezier(0.22, 1, 0.36, 1);
   --mcs-ease-out: cubic-bezier(0, 0, 0.2, 1);
-  --mcs-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-
-  /* ── 密度（compact 数据密集 32px / default 舒适 40px）── */
-  --mcs-density-row: 40px;          /* 表格行高（[data-density=compact] 覆盖为 32px） */
-  --mcs-density-cell-padding-x: 16px;
-  --mcs-density-toolbar: 40px;      /* 工具栏/批量操作条高度联动 */
 }
 
 .light {

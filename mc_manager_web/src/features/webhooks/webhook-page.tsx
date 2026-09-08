@@ -308,7 +308,7 @@ export default function WebhookPage() {
                       'rounded-mcs-xs border px-2 py-0.5 text-mcs-2xs transition-colors cursor-pointer',
                       form.platform === p.key
                         ? 'border-mcs-accent-border-strong bg-mcs-accent-bg-subtle text-mcs-accent-fg'
-                        : 'border-mcs-border-default text-mcs-text-muted hover:border-mcs-border-strong hover:text-mcs-text-default',
+                        : 'border-mcs-border-default text-mcs-text-muted hover:border-mcs-border-default hover:text-mcs-text-default',
                     )}
                   >
                     {p.label}

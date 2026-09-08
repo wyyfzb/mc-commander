@@ -33,8 +33,6 @@ export function GeneralPanel(_props: GeneralPanelProps) {
   const queryClient = useQueryClient()
   const theme = useUiStore((s) => s.theme)
   const setTheme = useUiStore((s) => s.setTheme)
-  const density = useUiStore((s) => s.density)
-  const setDensity = useUiStore((s) => s.setDensity)
   const terminalAutoScroll = useUiStore((s) => s.terminalAutoScroll)
   const setTerminalAutoScroll = useUiStore((s) => s.setTerminalAutoScroll)
   const confirmCommands = useUiStore((s) => s.confirmCommands)
@@ -122,18 +120,6 @@ export function GeneralPanel(_props: GeneralPanelProps) {
         </div>
 
         {/* 三项偏好（本地持久化即时生效） */}
-        <div className="flex items-center gap-3 border-t border-mcs-border-subtle py-3">
-          <div className="min-w-0 flex-1">
-            <div className="text-mcs-sm font-semibold text-mcs-text-default">紧凑密度</div>
-            <div className="mt-0.5 text-mcs-xs text-mcs-text-subtle">列表行高 32px（默认 40px），数据密集区更紧凑</div>
-          </div>
-          <Switch
-            checked={density === 'compact'}
-            onCheckedChange={(checked) => setDensity(checked ? 'compact' : 'default')}
-            aria-label="紧凑密度"
-          />
-        </div>
-
         <div className="flex items-center gap-3 border-t border-mcs-border-subtle py-3">
           <div className="min-w-0 flex-1">
             <div className="text-mcs-sm font-semibold text-mcs-text-default">终端自动滚动</div>

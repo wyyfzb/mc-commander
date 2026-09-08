@@ -65,7 +65,7 @@ export function MarketHitCard({
   return (
     <li
       className={`rounded-mcs-md border bg-mcs-bg-default transition-colors duration-mcs-base ${
-        expanded ? 'border-mcs-accent-border-strong' : 'border-mcs-border-muted hover:border-mcs-border-strong'
+        expanded ? 'border-mcs-accent-border-strong' : 'border-mcs-border-muted hover:border-mcs-border-default'
       }`}
       data-testid="market-hit"
     >
@@ -133,7 +133,7 @@ export function MarketHitCard({
               正在获取版本列表…
             </div>
           ) : panel?.error ? (
-            <p className="py-1.5 text-mcs-xs text-mcs-danger">{panel.error}</p>
+            <p className="py-1.5 text-mcs-xs text-mcs-error-fg">{panel.error}</p>
           ) : panel && panel.versions.length === 0 ? (
             <p className="py-1.5 text-mcs-xs text-mcs-text-subtle">
               当前过滤条件下没有可安装的版本（可尝试放宽版本/加载器过滤）

@@ -9,7 +9,6 @@
 @import './styles/fonts.css';
 @import './styles/glass.css';
 @import './styles/effects.css';
-@import './styles/density.css';
 
 @custom-variant dark (&:is(.dark *));
 
@@ -52,6 +51,14 @@
     --color-mcs-accent-bg-subtle: var(--mcs-accent-bg-subtle);
     --color-mcs-accent-border: var(--mcs-accent-border);
     --color-mcs-accent-border-strong: var(--mcs-accent-border-strong);
+    /* 终端专用调色板（主题无关深底；command-preview 等终端场景消费） */
+    --color-mcs-terminal-bg: var(--mcs-terminal-bg);
+    --color-mcs-terminal-fg: var(--mcs-terminal-fg);
+    --color-mcs-terminal-fg-bright: var(--mcs-terminal-fg-bright);
+    --color-mcs-terminal-subtle: var(--mcs-terminal-subtle);
+    --color-mcs-terminal-accent: var(--mcs-terminal-accent);
+    --color-mcs-terminal-error: var(--mcs-terminal-error);
+    --color-mcs-terminal-warning: var(--mcs-terminal-warning);
     --color-mcs-focus-ring: var(--mcs-focus-ring);
     --color-mcs-state-hover: var(--mcs-state-hover);
     --color-mcs-state-focus: var(--mcs-state-focus);
@@ -76,7 +83,6 @@
     --duration-mcs-slow: var(--mcs-motion-slow);
     --ease-mcs-snappy: var(--mcs-ease-snappy);
     --ease-mcs-out: var(--mcs-ease-out);
-    --ease-mcs-spring: var(--mcs-ease-spring);
     --shadow-mcs-card: var(--mcs-shadow-card);
     --shadow-mcs-raised: var(--mcs-shadow-raised);
     --shadow-mcs-overlay: var(--mcs-shadow-overlay);
@@ -99,11 +105,6 @@
     --color-sidebar-primary: var(--sidebar-primary);
     --color-sidebar-foreground: var(--sidebar-foreground);
     --color-sidebar: var(--sidebar);
-    --color-chart-5: var(--chart-5);
-    --color-chart-4: var(--chart-4);
-    --color-chart-3: var(--chart-3);
-    --color-chart-2: var(--chart-2);
-    --color-chart-1: var(--chart-1);
     --color-ring: var(--ring);
     --color-input: var(--input);
     --color-border: var(--border);
@@ -164,10 +165,6 @@
   /* 禁中文斜体（无 italic 字库） */
   em, i, cite {
     font-style: normal;
-  }
-  /* 长文本行高 1.7-1.8 */
-  .prose-long {
-    line-height: var(--mcs-line-height-body-long);
   }
 
   /* 全局滚动条：细 + 圆角 + 融底（Windows 原生粗滚动条是廉价感来源）；hover 亮起 */

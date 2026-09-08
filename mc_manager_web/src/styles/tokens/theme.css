@@ -25,21 +25,13 @@
   --accent: var(--mcs-bg-hover);
   --accent-foreground: var(--mcs-text-default);
 
-  /* destructive = 深红实底按钮（严禁亮色实底+白字：白字对深红 7.4:1 达标） */
+  /* destructive = 危险操作语义色（按钮实际用 10-20% tint 底 + 文字色，非实底） */
   --destructive: var(--ref-destructive);
-  --destructive-foreground: oklch(0.985 0 0);
 
   /* border=装饰发丝线（卡片描边/分隔线，豁免）；input=交互边框（≥3:1 达标） */
   --border: var(--mcs-border-muted);
   --input: var(--mcs-border-default);
   --ring: var(--mcs-focus-ring);
-
-  /* 图表色板（M1 预映射状态色共用色源；P0 洞察仪表盘时按色相环 ≥40° 采样细化） */
-  --chart-1: var(--mcs-success-fg);
-  --chart-2: var(--mcs-info-fg);
-  --chart-3: var(--mcs-purple-fg);
-  --chart-4: var(--mcs-warning-fg);
-  --chart-5: var(--mcs-orange-fg);
 
   --radius: var(--mcs-radius-md);
 

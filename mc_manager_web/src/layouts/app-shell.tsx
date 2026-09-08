@@ -26,7 +26,6 @@ export function AppShell() {
   const sidebarCollapsed = useUiStore((s) => s.sidebarCollapsed)
   const mobileNavOpen = useUiStore((s) => s.mobileNavOpen)
   const setMobileNavOpen = useUiStore((s) => s.setMobileNavOpen)
-  const density = useUiStore((s) => s.density)
   const instanceId = useServerStore((s) => s.instanceId)
   const setInstanceId = useServerStore((s) => s.setInstanceId)
 
@@ -45,7 +44,7 @@ export function AppShell() {
   useNotificationToasts()
 
   return (
-    <div data-density={density} className="mcs-shell-bg mcs-grain flex h-dvh overflow-hidden text-mcs-text-default">
+    <div className="mcs-shell-bg mcs-grain flex h-dvh overflow-hidden text-mcs-text-default">
       {/* 无障碍（P5）：键盘 Tab 首站跳过侧栏/顶栏直达内容区，平时移出屏外 */}
       <a
         href="#main-content"

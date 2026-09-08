@@ -78,7 +78,7 @@ export function PluginRow({ plugin, checked, onCheckedChange, toggling, deleting
             <button
               type="button"
               data-testid="update-badge"
-              className="rounded-full bg-mcs-accent-bg-subtle px-2 py-0.5 text-mcs-2xs font-medium text-mcs-accent-fg transition-colors duration-mcs-fast hover:bg-mcs-accent-bg"
+              className="rounded-full bg-mcs-accent-bg-subtle px-2 py-0.5 text-mcs-2xs font-medium text-mcs-accent-fg transition-colors duration-mcs-fast hover:bg-mcs-state-hover"
               onClick={(e) => {
                 e.stopPropagation()
                 onUpdate(plugin)
