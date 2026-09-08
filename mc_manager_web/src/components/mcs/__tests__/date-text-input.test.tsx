@@ -75,4 +75,34 @@ describe('DateTextInput 交互', () => {
     fireEvent.blur(input)
     expect(input).toHaveValue('2026-01-01')
   })
+
+  it('逐位键入两位月份与两位日期 → 分段正确且只上抛一次（回归：补零显示曾被当成用户输入）', async () => {
+    const cases = [
+      ['20261007', '2026-10-07'],
+      ['20260917', '2026-09-17'],
+      ['20261231', '2026-12-31'],
+      ['20260101', '2026-01-01'],
+    ] as const
+    for (const [typed, expected] of cases) {
+      const onChange = vi.fn()
+      const user = userEvent.setup()
+      const { unmount } = render(<DateTextInput value="" onChange={onChange} ariaLabel="逐位日期" />)
+      await user.type(screen.getByLabelText('逐位日期'), typed)
+      expect(onChange).toHaveBeenLastCalledWith(expected)
+      expect(onChange).toHaveBeenCalledTimes(1)
+      unmount()
+    }
+  })
+
+  it('末位日期只键入一位时先不上抛，失焦补零后上抛', async () => {
+    const onChange = vi.fn()
+    const user = userEvent.setup()
+    render(<DateTextInput value="" onChange={onChange} ariaLabel="起始日期" />)
+    const input = screen.getByLabelText('起始日期')
+    await user.type(input, '2026091')
+    expect(input).toHaveValue('2026-09-01')
+    expect(onChange).not.toHaveBeenCalled()
+    fireEvent.blur(input)
+    expect(onChange).toHaveBeenCalledWith('2026-09-01')
+  })
 })
