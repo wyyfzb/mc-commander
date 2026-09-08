@@ -25,8 +25,9 @@
   --accent: var(--mcs-bg-hover);
   --accent-foreground: var(--mcs-text-default);
 
-  /* destructive = 危险操作语义色（按钮实际用 10-20% tint 底 + 文字色，非实底） */
-  --destructive: var(--ref-destructive);
+  /* destructive = 危险操作语义色（按钮/徽标实际用 10-30% tint 底 + 文字色，非实底）：
+     取随明暗主题换值的语义档；明暗同值的深红作文字在暗色面上仅 1.78-2.81:1 */
+  --destructive: var(--mcs-error-fg);
 
   /* border=装饰发丝线（卡片描边/分隔线，豁免）；input=交互边框（≥3:1 达标） */
   --border: var(--mcs-border-muted);

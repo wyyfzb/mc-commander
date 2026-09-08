@@ -208,7 +208,7 @@ export function EffectForm({ player, batchTargets, isBatchMode, isRconConnected,
       )}
 
       {effectMode === 'clear' && (
-        <div className="rounded-mcs-sm border border-mcs-warning-bg-subtle bg-mcs-warning-bg-subtle p-3">
+        <div className="rounded-mcs-sm border border-mcs-warning-border bg-mcs-warning-bg-subtle p-3">
           <div className="flex items-start gap-2 text-mcs-xs text-mcs-warning-fg">
             <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
             <span>将清除目标玩家的全部状态效果，包括正向增益效果。</span>

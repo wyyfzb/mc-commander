@@ -54,6 +54,11 @@ describe('token 引用完整性', () => {
     expect(dangling).toEqual([])
   })
 
+  it('theme 层只引用 --mcs-* 语义 token（禁止越层直取 --ref-*）', () => {
+    const refVars = [...referencedVars(theme)].filter((v) => v.startsWith('--ref-'))
+    expect(refVars).toEqual([])
+  })
+
   it('语义层不允许直接写色值字面量（全部经 reference 层）', () => {
     const colorLiterals = semantic.match(/(#[0-9a-fA-F]{3,8}|rgba?\(|oklch\(|hsl\()/g) ?? []
     // color-mix(in oklch, ...) 允许（基于 reference 变量的混合表达式）
@@ -100,19 +105,33 @@ describe('组件源码禁硬编码色值', () => {
     )
   })
 
-  it('业务/布局组件与 mcs 组件无 hex/rgb 硬编码（允许 var(--mcs-*) 与 shadcn 组件变量）', () => {
+  it('业务/布局组件与 mcs 组件无 hex/rgb/oklch 硬编码（允许 var(--mcs-*) 与 shadcn 组件变量）', () => {
     const violations: string[] = []
+    // 先剥离 var(...) 表达式（含 fallback 嵌套）再判定颜色上下文：
+    // 整行含 var(-- 就跳过会让「token 与字面量同行」的写法逃检
+    const stripVar = (line: string): string => {
+      let out = line
+      for (let i = 0; i < 10 && out.includes('var('); i++) {
+        const next = out.replace(/var\([^()]*\)/g, '')
+        if (next === out) break
+        out = next
+      }
+      return out
+    }
     for (const file of collectTsxTs(join(srcDir, '..'))) {
       const content = readFileSync(file, 'utf-8')
-      // 排除颜色空间 API 单词误报：matchColor 等
-      const lines = content.split('\n')
-      lines.forEach((line, i) => {
+      content.split('\n').forEach((line, i) => {
+        const code = stripVar(line)
         // hex 颜色字面量
-        if (/#[0-9a-fA-F]{3,8}\b/.test(line) && !line.includes('var(--')) {
+        if (/#[0-9a-fA-F]{3,8}\b/.test(code)) {
           violations.push(`${file}:${i + 1}: ${line.trim()}`)
         }
-        // rgb()/hsl() 字面量（oklch() 允许出现在 CSS 注释/无）
-        if (/\b(rgba?|hsla?)\(/.test(line)) {
+        // rgb()/hsl() 字面量
+        if (/\b(rgba?|hsla?)\(/.test(code)) {
+          violations.push(`${file}:${i + 1}: ${line.trim()}`)
+        }
+        // oklch 字面量（color-mix(in oklch, var(--mcs-*) …) 基于 token 的混合表达式豁免）
+        if (/\boklch\(/.test(code) && !/color-mix\(in oklch/.test(code)) {
           violations.push(`${file}:${i + 1}: ${line.trim()}`)
         }
       })

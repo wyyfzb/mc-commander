@@ -12,6 +12,8 @@
  *   8. 焦点可见性：outline-none 与 focus-visible:outline-* 同处 utilities 层会互相抵消
  *      （outline-style 恒为 none，焦点环零绘制），未补 ring 兜底即报错
  *   9. 未注册的 mcs-* 工具类：@theme 未注册 → Tailwind 静默不生成任何规则（语义丢失）
+ *  10. token 角色越界：填充档（tint/brand）作边框或文字 → 边界不可见（1.00-1.40:1）
+ *  11. alpha 修饰符越界：文字/边界档叠加 /NN → 跌破实测对比度下限（3.32:1）
  * 类名提取覆盖 className="..."、className={cn(...)}、模板字面量、对象映射值（如 tone: 'bg-...'），
  * 不留「只在 className 字面属性里才检查」的盲区。
  * 发现违规 → 输出 文件:行号 → 非零退出码（阻止合并）
@@ -59,15 +61,74 @@ function extractLiterals(line) {
   return out
 }
 
-/** 未注册 token 类：prefix-mcs-name 必须能在 @theme/effects 注册集里找到同名条目 */
-function checkTokenRegistration(classes, filePath, lineNum) {
+/** 解析一条类名 → { prefix, name, alpha }；非 token 类返回 null（剥离变体前缀、!、alpha 修饰符） */
+function parseTokenClass(raw) {
+  if (!raw.includes('-mcs-')) return null
+  if (raw.includes('(') || raw.includes('--')) return null // var(--mcs-*) / color-mix 等非类名
+  const body = raw.replace(/!$/, '')
+  const alphaMatch = body.match(/\/(\d+|\[[^\]]+\])$/)
+  const base = alphaMatch ? body.slice(0, -alphaMatch[0].length) : body
+  const m = base.slice(base.lastIndexOf(':') + 1).match(/^([a-z-]+)-mcs-([a-z0-9-]+)$/)
+  if (!m) return null
+  return { prefix: m[1], name: m[2], alpha: alphaMatch ? alphaMatch[1] : null }
+}
+
+/** 该 token 名是否颜色档（文字档/圆角档/动效档等同名前缀不算） */
+function isColorToken(prefix, name) {
+  if (prefix === 'rounded' || prefix.startsWith('rounded-')) return false
+  if (prefix === 'duration' || prefix === 'ease' || prefix === 'animate') return false
+  if (prefix === 'text') return REGISTERED.color.has(name) && !REGISTERED.text.has(name)
+  if (prefix === 'shadow') return REGISTERED.color.has(name) && !REGISTERED.shadow.has(name)
+  return REGISTERED.color.has(name)
+}
+
+/** token 角色（按命名公式推导，新增 token 自动归类；unknown 不参与角色矩阵） */
+function roleOf(name) {
+  if (name === 'focus-ring') return 'ring'
+  if (name.startsWith('dimension-')) return 'graphic'
+  if (name === 'terminal-bg') return 'surface'
+  if (name.endsWith('-bg-subtle') || name.startsWith('state-') || name.startsWith('scrim')) return 'tint'
+  if (name.startsWith('bg-')) return 'surface'
+  if (name === 'accent' || name === 'accent-hover') return 'brand'
+  if (name.endsWith('-fg') || name === 'on-accent' || name.startsWith('text-') || name.startsWith('terminal-')) return 'text'
+  if (name.startsWith('border-') || name.endsWith('-border') || name.endsWith('-border-strong')) return 'border'
+  return 'unknown'
+}
+
+/**
+ * 角色矩阵（G5）：前缀 → 允许的角色
+ * 豁免口径（写进矩阵而非散落注释）：
+ *   surface 作 border/ring —— 用页面底色画「间隔环」（头像描边等）；
+ *   text 作 border/ring —— 状态 fg 作可见描边（*-border 为 25% alpha，不承担可辨识边界）；
+ *   text/border/graphic 作 bg —— ≤8px 色点、进度条、1px 分隔线的图形填充（系统无 fill 档）。
+ * 未列出的前缀不参与矩阵（如 from-/via-/to- 渐变档）。
+ */
+const ROLE_MATRIX = {
+  border: new Set(['border', 'ring', 'text', 'surface']),
+  outline: new Set(['border', 'ring', 'text', 'surface']),
+  divide: new Set(['border', 'ring', 'text', 'surface']),
+  ring: new Set(['border', 'ring', 'text', 'surface']),
+  text: new Set(['text']),
+  bg: new Set(['surface', 'tint', 'brand', 'text', 'border', 'graphic']),
+  fill: new Set(['surface', 'tint', 'brand', 'text', 'border', 'graphic']),
+  stroke: new Set(['surface', 'tint', 'brand', 'text', 'border', 'graphic']),
+}
+
+/**
+ * alpha 修饰符白名单（G4）：仅「不透明填充档」可叠加透明度
+ * （bg-mcs-bg-muted/40 斑马纹、bg-mcs-accent/5 拖拽罩）。
+ * 文字/边界档禁止（text-mcs-text-subtle/80 实测 3.32:1）；已 alpha 的 tint 档禁止二次叠加。
+ */
+const ALPHA_ALLOW_PREFIX = new Set(['bg', 'fill', 'stroke'])
+const ALPHA_ALLOW_ROLE = new Set(['surface', 'brand'])
+
+/** token 类三查：注册（G2）→ 角色矩阵（G5）→ alpha 白名单（G4） */
+function checkTokenClasses(classes, filePath, lineNum) {
   for (const raw of classes.split(/\s+/)) {
-    if (!raw.includes('-mcs-')) continue
-    if (raw.includes('(') || raw.includes('--')) continue // var(--mcs-*) 等非类名
-    const body = raw.replace(/\/\d+$/, '').slice(raw.replace(/\/\d+$/, '').lastIndexOf(':') + 1)
-    const m = body.match(/^([a-z-]+)-mcs-([a-z0-9-]+)$/)
-    if (!m) continue
-    const [, prefix, name] = m
+    const parsed = parseTokenClass(raw)
+    if (!parsed) continue
+    const { prefix, name, alpha } = parsed
+
     let ok
     if (prefix === 'rounded' || prefix.startsWith('rounded-')) ok = REGISTERED.radius.has(name)
     else if (prefix === 'duration') ok = REGISTERED.duration.has(name)
@@ -78,6 +139,19 @@ function checkTokenRegistration(classes, filePath, lineNum) {
     else ok = COLOR_PREFIXES.has(prefix) && REGISTERED.color.has(name)
     if (!ok) {
       console.log(`${filePath}:${lineNum + 1}: ${raw} 未在 @theme/effects 注册 → Tailwind 不生成任何规则（语义静默丢失）`)
+      violations++
+      continue
+    }
+    if (!isColorToken(prefix, name)) continue
+
+    const role = roleOf(name)
+    const allowed = ROLE_MATRIX[prefix]
+    if (allowed && role !== 'unknown' && !allowed.has(role)) {
+      console.log(`${filePath}:${lineNum + 1}: ${raw} 角色越界 → --mcs-${name} 是 ${role} 档，不可作 ${prefix}-（改用同族 -fg/-border 档或 border-default；角色表见本文件 ROLE_MATRIX）`)
+      violations++
+    }
+    if (alpha !== null && !(ALPHA_ALLOW_PREFIX.has(prefix) && ALPHA_ALLOW_ROLE.has(role))) {
+      console.log(`${filePath}:${lineNum + 1}: ${raw} 不可叠加 alpha → 仅不透明填充档（bg- 前缀 + surface/brand 角色）可加 /NN`)
       violations++
     }
   }
@@ -147,8 +221,8 @@ function checkClasses(filePath, lineNum, classes, isEmergencyPage) {
     console.log(`${filePath}:${lineNum + 1}: outline-none 与 focus-visible:outline-* 互相抵消（焦点环不绘制）→ 删 outline-none 或补 focus-visible:ring-*`)
     violations++
   }
-  // 10. 未注册 token 类（语义静默丢失）
-  checkTokenRegistration(classes, filePath, lineNum)
+  // 10. 未注册 token 类 / 角色越界 / alpha 越界（语义静默丢失与对比度跌破）
+  checkTokenClasses(classes, filePath, lineNum)
 }
 
 /** 在单行中提取类名串并逐条检测（覆盖 cn(...)/模板串/对象值，不限 className= 字面属性） */
@@ -195,4 +269,4 @@ if (violations > 0) {
   console.error(`\n✗ 发现 ${violations} 处设计 token 违规（设计规范 §4.5）`)
   process.exit(1)
 }
-console.log('✓ 设计 token 完整性检查通过（色板类/dark:/transition-all/duration-数字/rounded-任意值/字号上限/紧急页字重/焦点可见性/未注册 token 类）')
+console.log('✓ 设计 token 完整性检查通过（色板类/dark:/transition-all/duration-数字/rounded-任意值/字号上限/紧急页字重/焦点可见性/未注册 token 类/token 角色矩阵/alpha 白名单）')

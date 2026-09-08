@@ -66,9 +66,6 @@
   --ref-on-accent: oklch(0.2664 0.0628 152.93);   /* #052E16 深绿黑（亮色 accent 上的文字） */
   --ref-on-accent-dark: oklch(0.1663 0.0262 269.37); /* 暗色 accent 上的文字 = 基面 */
 
-  /* ── 破坏性操作深红底（destructive 按钮实底：白字 7.4:1 达标，铁律豁免项）── */
-  --ref-destructive: oklch(0.4865 0.1853 27.42);  /* #991B1B red-800，暗亮同值 */
-
   /* ── 维度三色（Flutter 玩家页维度语义色 #4EC9B0/#F48771/#C586C0 的 OKLCH 等价；
         8px 色点小图形用途，暗底 ≥3:1）── */
   --ref-dimension-overworld: oklch(0.7603 0.1152 177.17);      /* 主世界青绿 */
