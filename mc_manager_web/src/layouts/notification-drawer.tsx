@@ -140,7 +140,7 @@ export function NotificationDrawer({ open, onOpenChange }: NotificationDrawerPro
       <SheetContent
         side="right"
         showCloseButton={false}
-        className="flex w-96 max-w-full flex-col bg-mcs-bg-emphasis p-0 shadow-mcs-overlay"
+        className="flex w-96 max-w-full flex-col p-0 shadow-mcs-overlay"
       >
         <SheetHeader className="flex-row items-center justify-between border-b border-mcs-border-muted py-3 pl-4 pr-3">
           <SheetTitle className="flex items-center gap-2 text-mcs-md">

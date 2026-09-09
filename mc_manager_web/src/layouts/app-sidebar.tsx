@@ -179,7 +179,7 @@ export function AppSidebar({ collapsed, mobileNavOpen, onMobileNavClose }: AppSi
           会改变交互语义）→ 保留宽度过渡，用 contain 把重排/重绘限制在侧栏内部 */}
       <aside
         className={cn(
-          'hidden h-full shrink-0 flex-col overflow-hidden border-r border-mcs-border-default contain-[layout_paint] md:flex',
+          'hidden h-full shrink-0 flex-col overflow-hidden border-r border-mcs-border-muted contain-[layout_paint] md:flex',
           'bg-mcs-bg-muted',
           'transition-[width] duration-mcs-base ease-mcs-snappy',
           collapsed ? 'w-14' : 'w-52',
@@ -206,7 +206,7 @@ export function AppSidebar({ collapsed, mobileNavOpen, onMobileNavClose }: AppSi
         <aside
           ref={mobileDrawerRef}
           className={cn(
-            'relative inset-y-0 left-0 flex w-64 flex-col border-r border-mcs-border-default bg-mcs-bg-muted',
+            'relative inset-y-0 left-0 flex w-64 flex-col border-r border-mcs-border-muted bg-mcs-bg-muted',
             'transition-transform duration-mcs-base ease-mcs-snappy',
             mobileNavOpen ? 'translate-x-0' : '-translate-x-full',
           )}
