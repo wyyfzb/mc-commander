@@ -66,7 +66,7 @@ export function AuditFilterBar({
               key={q.key}
               size="sm"
               className="h-8"
-              variant={active ? 'default' : 'outline'}
+              variant={active ? 'selected' : 'outline'}
               aria-pressed={active}
               onClick={() => applyQuick(q)}
             >
@@ -107,7 +107,7 @@ export function AuditFilterBar({
         <Button
           size="sm"
           className="h-8"
-          variant={auditOrder === 'desc' ? 'default' : 'outline'}
+          variant={auditOrder === 'desc' ? 'selected' : 'outline'}
           aria-pressed={auditOrder === 'desc'}
           onClick={() => setAuditOrder('desc')}
         >
@@ -116,7 +116,7 @@ export function AuditFilterBar({
         <Button
           size="sm"
           className="h-8"
-          variant={auditOrder === 'asc' ? 'default' : 'outline'}
+          variant={auditOrder === 'asc' ? 'selected' : 'outline'}
           aria-pressed={auditOrder === 'asc'}
           onClick={() => setAuditOrder('asc')}
         >

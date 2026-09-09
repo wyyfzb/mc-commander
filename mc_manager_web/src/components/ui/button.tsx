@@ -15,6 +15,10 @@ const buttonVariants = cva(
         outline:
           // 亮色主题用交互边框（--mcs-border-default）：--border 为 8% 发丝线，可交互元素边界不达标（独立审查必改项）
           "border-input bg-background hover:bg-muted hover:border-foreground/25 hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
+        // 选中态（筛选开关/分段控件）：淡底 + 强档描边 + accent 文字，与 Chip 选中态同口径。
+        // 实底渐变+辉光只给每页唯一主操作，开关借 CTA 会让一屏出现多个发光实底绿
+        selected:
+          "border-mcs-accent-border-strong bg-mcs-accent-bg-subtle text-mcs-accent-fg hover:bg-mcs-state-hover active:bg-mcs-state-pressed",
         secondary:
           "bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground",
         ghost:

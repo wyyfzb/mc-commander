@@ -88,9 +88,9 @@
   --mcs-shadow-raised: inset 0 1px 0 var(--ref-highlight-top), 0 2px 6px var(--ref-shadow-ink-soft), 0 12px 32px -8px var(--ref-shadow-ink);
   --mcs-shadow-overlay: inset 0 1px 0 var(--ref-highlight-top-strong), 0 16px 48px -12px var(--ref-shadow-ink), 0 32px 96px -24px var(--ref-shadow-ink);
   --mcs-shadow-thumb: 0 1px 2px var(--ref-shadow-ink-soft);   /* 小控件浮起（开关柄/滑块柄） */
-  --mcs-shadow-accent-button: inset 0 1px 0 var(--ref-highlight-on-accent), 0 1px 2px var(--ref-shadow-ink-soft), 0 4px 16px -4px color-mix(in oklch, var(--ref-accent) 40%, transparent);
+  --mcs-shadow-accent-button: inset 0 1px 0 var(--ref-highlight-on-accent), 0 1px 2px var(--ref-shadow-ink-soft), 0 4px 16px -4px color-mix(in oklch, var(--ref-accent) 25%, transparent);
   --mcs-glow-accent: 0 0 16px color-mix(in oklch, var(--ref-accent) 30%, transparent);
-  --mcs-glow-accent-strong: 0 0 28px color-mix(in oklch, var(--ref-accent) 42%, transparent);
+  --mcs-glow-accent-strong: 0 0 28px color-mix(in oklch, var(--ref-accent) 30%, transparent);
   --mcs-glow-error: 0 0 16px color-mix(in oklch, var(--ref-error) 28%, transparent);
 
   /* ── 品牌 accent 渐变（CTA 实底：同色相明度渐变，135deg 亮左上）── */
@@ -200,9 +200,9 @@
   --mcs-shadow-raised: 0 2px 4px var(--ref-shadow-ink-light-soft), 0 8px 24px -6px var(--ref-shadow-ink-light);
   --mcs-shadow-overlay: 0 12px 32px -8px var(--ref-shadow-ink-light), 0 24px 64px -16px var(--ref-shadow-ink-light);
   --mcs-shadow-thumb: 0 1px 2px var(--ref-shadow-ink-light-soft);
-  --mcs-shadow-accent-button: inset 0 1px 0 var(--ref-highlight-on-accent), 0 1px 2px var(--ref-shadow-ink-light-soft), 0 4px 16px -4px color-mix(in oklch, var(--ref-accent-light) 45%, transparent);
+  --mcs-shadow-accent-button: inset 0 1px 0 var(--ref-highlight-on-accent), 0 1px 2px var(--ref-shadow-ink-light-soft), 0 4px 16px -4px color-mix(in oklch, var(--ref-accent-light) 28%, transparent);
   --mcs-glow-accent: 0 0 16px color-mix(in oklch, var(--ref-accent-light) 38%, transparent);
-  --mcs-glow-accent-strong: 0 0 28px color-mix(in oklch, var(--ref-accent-light) 50%, transparent);
+  --mcs-glow-accent-strong: 0 0 28px color-mix(in oklch, var(--ref-accent-light) 35%, transparent);
   --mcs-glow-error: 0 0 16px color-mix(in oklch, var(--ref-error-light) 28%, transparent);
   --mcs-gradient-accent: linear-gradient(135deg, var(--ref-accent-light), color-mix(in oklch, var(--ref-accent-light) 92%, var(--ref-success-light)));
 }

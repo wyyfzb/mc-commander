@@ -79,7 +79,7 @@ export function ExperienceForm({ player, batchTargets, isBatchMode, isRconConnec
         <div className="flex gap-1.5">
           <Button
             type="button"
-            variant={mode === 'points' ? 'default' : 'outline'}
+            variant={mode === 'points' ? 'selected' : 'outline'}
             size="sm"
             onClick={() => setMode('points')}
             aria-pressed={mode === 'points'}
@@ -89,7 +89,7 @@ export function ExperienceForm({ player, batchTargets, isBatchMode, isRconConnec
           </Button>
           <Button
             type="button"
-            variant={mode === 'levels' ? 'default' : 'outline'}
+            variant={mode === 'levels' ? 'selected' : 'outline'}
             size="sm"
             onClick={() => setMode('levels')}
             aria-pressed={mode === 'levels'}
@@ -108,7 +108,7 @@ export function ExperienceForm({ player, batchTargets, isBatchMode, isRconConnec
             <Button
               key={act}
               type="button"
-              variant={action === act ? 'default' : 'outline'}
+              variant={action === act ? 'selected' : 'outline'}
               size="sm"
               onClick={() => setAction(act)}
               aria-pressed={action === act}

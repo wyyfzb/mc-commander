@@ -97,7 +97,7 @@ export function EffectForm({ player, batchTargets, isBatchMode, isRconConnected,
       <div className="flex gap-1.5">
         <Button
           type="button"
-          variant={effectMode === 'give' ? 'default' : 'outline'}
+          variant={effectMode === 'give' ? 'selected' : 'outline'}
           size="sm"
           onClick={() => setEffectMode('give')}
           aria-pressed={effectMode === 'give'}
@@ -107,7 +107,7 @@ export function EffectForm({ player, batchTargets, isBatchMode, isRconConnected,
         </Button>
         <Button
           type="button"
-          variant={effectMode === 'clear' ? 'default' : 'outline'}
+          variant={effectMode === 'clear' ? 'selected' : 'outline'}
           size="sm"
           onClick={() => setEffectMode('clear')}
           aria-pressed={effectMode === 'clear'}
@@ -170,7 +170,7 @@ export function EffectForm({ player, batchTargets, isBatchMode, isRconConnected,
                   <Button
                     key={l}
                     type="button"
-                    variant={level === l ? 'default' : 'outline'}
+                    variant={level === l ? 'selected' : 'outline'}
                     size="sm"
                     className="h-7 px-2.5 text-mcs-xs"
                     onClick={() => setLevel(l)}
@@ -192,7 +192,7 @@ export function EffectForm({ player, batchTargets, isBatchMode, isRconConnected,
                   <Button
                     key={preset.label}
                     type="button"
-                    variant={durationSeconds === preset.seconds ? 'default' : 'outline'}
+                    variant={durationSeconds === preset.seconds ? 'selected' : 'outline'}
                     size="sm"
                     className="h-7 px-2.5 text-mcs-xs"
                     onClick={() => setDurationSeconds(preset.seconds)}

@@ -42,7 +42,7 @@ export function CmdFilterBar({
               key={q.key}
               size="sm"
               className="h-8"
-              variant={active ? 'default' : 'outline'}
+              variant={active ? 'selected' : 'outline'}
               aria-pressed={active}
               onClick={() => applyQuickCmd(q)}
             >
