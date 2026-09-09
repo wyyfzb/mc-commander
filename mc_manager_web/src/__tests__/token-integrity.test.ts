@@ -7,7 +7,7 @@ import { join } from 'node:path'
  * 1. semantic.css 引用的所有 --ref-* 必须已在 reference.css 定义
  * 2. theme.css / @theme inline 引用的所有 --mcs-* 必须已在 semantic.css 定义
  * 3. 组件源码（styles/、components/ui/、test/ 除外）禁止硬编码色值
- * 4. 玻璃预算：同屏 ≤2 层（顶栏 chrome + 确认弹窗 overlay），防视觉异质回潮
+ * 4. 玻璃预算：全站各 1 处（顶栏 chrome + 确认弹窗 overlay），防视觉异质回潮
  */
 
 const srcDir = join(import.meta.dirname, '..')
@@ -86,18 +86,16 @@ describe('组件源码禁硬编码色值', () => {
     return out
   }
 
-  it('玻璃预算：同屏 ≤2 层（顶栏 chrome 1 处 + 确认弹窗 overlay 1 处）', () => {
-    // 审计 S26 收尾：侧栏/通知抽屉/toast 一律实底；此处按「引用该类的组件文件」计数
-    const usersOf = (cls: string): string[] => {
-      const out: string[] = []
-      for (const file of collectTsxTs(srcDir)) {
-        if (!file.endsWith('.tsx')) continue
-        if (readFileSync(file, 'utf-8').includes(cls)) out.push(file)
-      }
-      return out
-    }
-    const chrome = usersOf('glass-chrome')
-    const overlay = usersOf('glass-overlay')
+  it('玻璃预算：全站各 1 处（顶栏 chrome + 确认弹窗 overlay）', () => {
+    // 审计 S26 收尾：侧栏/通知抽屉/toast 一律实底。
+    // 计数口径与 check-design-tokens.mjs 第 17 条一致：按「类名引用次数」而非文件数
+    // （同一文件出现两次同样超标；该脚本的扫描范围更宽，含 .ts 与 e2e/）
+    const refsOf = (cls: string): string[] =>
+      collectTsxTs(srcDir)
+        .filter((f) => /\.tsx?$/.test(f))
+        .flatMap((f) => Array<string>(readFileSync(f, 'utf-8').match(new RegExp(cls, 'g'))?.length ?? 0).fill(f))
+    const chrome = refsOf('glass-chrome')
+    const overlay = refsOf('glass-overlay')
     expect(chrome).toHaveLength(1)
     expect(chrome[0]).toContain('app-topbar')
     expect(overlay).toHaveLength(1)

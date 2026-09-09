@@ -1,11 +1,11 @@
 /**
  * 设计 token 完整性守门脚本（设计文档 §4.5 token 纪律）
  * 用法：node scripts/check-design-tokens.mjs
- * 检测范围（排除 src/components/ui/ shadcn 组件）：
+ * 逐行检查（第 1–11 条，排除 src/components/ui/）：
  *   1. Tailwind 原始色板类（text-{color}/bg-{color}/border-{color}/ring-{color}）
  *   2. dark: 前缀类
- *   3. transition-all
- *   4. duration-{数字}（非 token 的硬编码时长）
+ *   3. transition-all（ui/ 由第 20 条覆盖）
+ *   4. duration-{数字}（非 token 的硬编码时长；ui/ 由第 20 条覆盖）
  *   5. rounded-[ 任意值圆角
  *   6. Tailwind 原生字号 3xl 及以上（原生字号上限 2xl；数字面板可走 --mcs-font-size-display（30px），须与 .mcs-num 同用）
  *   7. 紧急页（src/features/emergency/）字重 bold 及以上（触控页字重限定 400-600）
@@ -14,11 +14,16 @@
  *   9. 未注册的 mcs-* 工具类：@theme 未注册 → Tailwind 静默不生成任何规则（语义丢失）
  *  10. token 角色越界：填充档（tint/brand）作边框或文字 → 边界不可见（1.00-1.40:1）
  *  11. alpha 修饰符越界：文字/边界档叠加 /NN → 跌破实测对比度下限（3.32:1）
- *  12. 未定义类：源码使用但项目 CSS 未定义、@theme 未注册 → Tailwind 不生成规则（静默无效果）；
- *      本项含 src/components/ui/（shadcn 基座里的失效类同样是缺陷）
+ * 全仓检查（第 12–20 条，含 src/components/ui/ 与 e2e/）：
+ *  12. 未定义类：源码使用但项目 CSS 未定义、@theme 未注册 → Tailwind 不生成规则（静默无效果）
  *  13. 死类：项目 CSS 定义但全仓 0 使用 → 报错（`@reserved` 注释可豁免）
  *  14. 死 token：semantic.css 定义但全仓 0 消费 → 报错（删除，或加 `@reserved` 注释说明预留原因）
  *  15. 内容面 tint 叠加：同元素出现 ≥2 个 `bg-mcs-*-bg-subtle`，或内容面 tint 与玻璃面同元素 → 报错
+ *  16. Z 轴阶梯：禁裸 z-<数字>（类名 / 内联 zIndex / CSS z-index）
+ *  17. 玻璃预算：全站各 1 处（顶栏 glass-chrome + 覆盖层 glass-overlay）
+ *  18. 危险语义色禁半透明底：bg-destructive/<alpha>
+ *  19. 内容面 tint 必须不透明
+ *  20. 布局属性动画（transition-all）与数字时长档（duration-<数字>），含 ui/ 基座
  * 类名提取覆盖 className="..."、className={cn(...)}、模板字面量、对象映射值（如 tone: 'bg-...'），
  * 不留「只在 className 字面属性里才检查」的盲区。
  * 发现违规 → 输出 文件:行号 → 非零退出码（阻止合并）
@@ -90,11 +95,12 @@ function isColorToken(prefix, name) {
 /** token 角色（按命名公式推导，新增 token 自动归类；unknown 不参与角色矩阵） */
 function roleOf(name) {
   if (name === 'focus-ring') return 'ring'
+  // 顺序敏感：tint 判定必须先于 dimension-（维度色也有 -bg-subtle 内容面档）
+  if (name.endsWith('-bg-subtle') || name.startsWith('state-') || name.startsWith('scrim')) return 'tint'
   if (name.startsWith('dimension-')) return 'graphic'
   if (name === 'terminal-bg') return 'surface'
-  if (name.endsWith('-bg-subtle') || name.startsWith('state-') || name.startsWith('scrim')) return 'tint'
   if (name.startsWith('bg-')) return 'surface'
-  if (name === 'accent' || name === 'accent-hover') return 'brand'
+  if (name === 'accent') return 'brand'
   if (name.endsWith('-fg') || name === 'on-accent' || name.startsWith('text-') || name.startsWith('terminal-')) return 'text'
   if (name.startsWith('border-') || name.endsWith('-border') || name.endsWith('-border-strong')) return 'border'
   return 'unknown'
@@ -281,14 +287,6 @@ walkDir(srcDir)
 //           或 ② 由 index.css 注册派生的工具类在源码被使用。
 // 与逐行检查的区别：本段**不排除** src/components/ui/——基座里的失效类同样是缺陷
 // （`--ease-mcs-spring` 曾在 ui/dialog.tsx 静默失效即因此逃检）。
-/** 非类名同形标识符：localStorage 键 / 自定义事件名 / Monaco 主题 id */
-const NON_CLASS_MCS_IDENTIFIERS = new Set([
-  'mcs-session', 'mcs-connection', 'mcs-ui-preferences', 'mcs-theme', 'mcs-notifications',
-  'mcs-notification-preferences', 'mcs-command-presets', 'mcs-command-history',
-  'mcs-command-history-status', 'mcs-announcement-presets', 'mcs-terminal-autoscroll',
-  'mcs-confirm-commands', 'mcs-ws-last-event', 'mcs-dark',
-])
-
 /** 注册名 → 生成的工具类（如 color-mcs-bg-default → bg-mcs-bg-default/text-mcs-bg-default/…） */
 const UTILITY_COLOR_PREFIXES = ['bg', 'text', 'border', 'ring', 'outline', 'fill', 'stroke', 'divide', 'decoration', 'caret', 'from', 'via', 'to']
 const UTILITY_RADIUS_PREFIXES = ['rounded', 'rounded-t', 'rounded-b', 'rounded-l', 'rounded-r', 'rounded-tl', 'rounded-tr', 'rounded-bl', 'rounded-br', 'rounded-s', 'rounded-e', 'rounded-ss', 'rounded-se', 'rounded-es', 'rounded-ee']
@@ -353,31 +351,43 @@ for (const f of G9_FILES) {
 }
 
 // 源码类名（严格形状；动态模板取前缀，如 mcs-delay-${i} → mcs-delay-）
-const usedClasses = new Map() // class → 首个出现文件
+// classContext：该字面量所在行是否像类名上下文（className/cn/cva/clsx）——
+// 用于把「形如 mcs-x 的存储键/事件名/测试夹具」与真正的裸类名区分开
+const CLASS_CONTEXT = /className|class=|\bcn\(|\bcva\(|\bclsx\(/
+const usedClasses = new Map() // class → { file, classContext }
 const usedPrefixes = new Set()
 for (const f of G9_FILES) {
   if (f.endsWith('.css')) continue
-  const text = readFileSync(f, 'utf-8')
-  for (const lit of text.matchAll(/(["'`])([^"'`\n]*)\1/g)) {
-    for (const raw of lit[2].split(/\s+/)) {
-      const body = raw.replace(/^.*:/, '').replace(/!$/, '').replace(/\/[\d[\].]+$/, '')
-      if (!body) continue
-      const dyn = body.match(/^((?:mcs|glass|animate-mcs|[a-z-]*-mcs)-[a-z0-9-]*)\$\{/)
-      if (dyn) { usedPrefixes.add(dyn[1]); continue }
-      if (!/^(?:[a-z-]*-)?(?:mcs|glass)-[a-z0-9-]+$/.test(body)) continue
-      if (!usedClasses.has(body)) usedClasses.set(body, relative(root, f))
+  const relFile = relative(root, f)
+  for (const line of readFileSync(f, 'utf-8').split('\n')) {
+    const classContext = CLASS_CONTEXT.test(line)
+    for (const lit of line.matchAll(/(["'`])([^"'`\n]*)\1/g)) {
+      for (const raw of lit[2].split(/\s+/)) {
+        const body = raw.replace(/^.*:/, '').replace(/!$/, '').replace(/\/[\d[\].]+$/, '')
+        if (!body) continue
+        const dyn = body.match(/^((?:mcs|glass|animate-mcs|[a-z-]*-mcs)-[a-z0-9-]*)\$\{/)
+        if (dyn) { usedPrefixes.add(dyn[1]); continue }
+        if (!/^(?:[a-z-]*-)?(?:mcs|glass)-[a-z0-9-]+$/.test(body)) continue
+        const info = usedClasses.get(body)
+        if (!info) usedClasses.set(body, { file: relFile, classContext })
+        else if (classContext) info.classContext = true
+      }
     }
   }
 }
 const isUsed = (cls) => usedClasses.has(cls) || [...usedPrefixes].some((p) => cls.startsWith(p))
 
 // 12. 未定义类（含 ui/）：既未定义也未注册 → Tailwind 静默不生成
-for (const [cls, file] of usedClasses) {
+for (const [cls, info] of usedClasses) {
   if (definedClasses.has(cls) || registeredUtilities.has(cls)) continue
-  if (NON_CLASS_MCS_IDENTIFIERS.has(cls)) continue
-  // 非 ui/ 的 *-mcs-* 工具类已由逐行检查（G2）覆盖，避免重复报
-  if (/^[a-z-]+-mcs-/.test(cls) && !file.replace(/\\/g, '/').includes(EXCLUDE_DIR)) continue
-  console.log(`${file}: ${cls} 未定义/未注册 → 项目 CSS 无此选择器且 @theme 无此注册，类名静默无效果`)
+  if (/^[a-z-]+-mcs-/.test(cls)) {
+    // 非 ui/ 的 *-mcs-* 工具类已由逐行检查（G2）覆盖，避免重复报
+    if (!info.file.replace(/\\/g, '/').includes(EXCLUDE_DIR)) continue
+  } else if (!info.classContext) {
+    // 裸 mcs-*/glass-* 标识符（localStorage 键、事件名、测试夹具）不是类名，不进判定
+    continue
+  }
+  console.log(`${info.file}: ${cls} 未定义/未注册 → 项目 CSS 无此选择器且 @theme 无此注册，类名静默无效果`)
   violations++
 }
 for (const p of usedPrefixes) {
@@ -393,7 +403,7 @@ for (const [cls, info] of deadClasses) {
   violations++
 }
 
-// 14. 死 token：semantic.css 定义但 0 消费（警告，不阻塞）
+// 14. 死 token：semantic.css 定义但 0 消费 → 报错（@reserved 是唯一豁免口径）
 const semanticLines = readFileSync(semanticPath, 'utf-8').split('\n')
 const tokenNames = [...new Set([...semanticLines.join('\n').matchAll(/(--mcs-[\w-]+)\s*:/g)].map((m) => m[1]))]
 // 定义层/注册层之外的全文（用于 ① 字面量引用判定）
@@ -459,8 +469,9 @@ for (const f of G9_FILES) {
   })
 }
 
-// 17. 玻璃预算：同屏 ≤2 层 —— 常驻 1 处（顶栏 chrome）+ 覆盖层 1 处（确认弹窗 overlay）
-//     计数口径：非注释的类名引用，.ts/.tsx 均计（避免注释或 .ts 引用逃检/误报）
+// 17. 玻璃预算：全站各 1 处（顶栏 chrome + 覆盖层 overlay）——「同屏 ≤2 层」的静态口径，
+//     运行时同屏无法静态判定，故收紧为「全站各 1 处」，见 src/styles/glass.css
+//     计数口径：非注释的类名引用次数（.ts/.tsx 均计，跳过 __tests__ 与 .css）
 const GLASS_BUDGET = { chrome: 1, overlay: 1, toast: 0 }
 const glassCount = new Map()
 for (const f of G9_FILES) {
@@ -505,10 +516,10 @@ for (const [i, line] of semanticLines.entries()) {
   }
 }
 
-// 20. 布局属性动画与数字时长档（含 ui/ 基座）：transition-all 会连带 width/height/margin
-//     逐帧重排；时长一律走 --mcs-motion-*（fast 150 / base 300）
+// 20. 布局属性动画与数字时长档（仅 ui/ 基座：非 ui/ 已由第 3/4 条逐行覆盖，此处不重复报）
+//     transition-all 会连带 width/height/margin 逐帧重排；时长一律走 --mcs-motion-*（fast 150 / base 300）
 for (const f of G9_FILES) {
-  if (f.endsWith('.css') || f.includes('__tests__') || f.includes(`${sep}e2e${sep}`)) continue
+  if (!f.replace(/\\/g, '/').includes(EXCLUDE_DIR)) continue
   const lines = readFileSync(f, 'utf-8').split('\n')
   lines.forEach((line, i) => {
     const code = codeOnly(line)
@@ -520,7 +531,7 @@ for (const f of G9_FILES) {
           console.log(`${relative(root, f)}:${i + 1}: transition-all → 改用 transition / transition-colors（避免布局属性参与过渡）`)
           violations++
         } else if (/^duration-\d+$/.test(body)) {
-          console.log(`${relative(root, f)}:${i + 1}: ${body} 数字时长档 → 改用 duration-mcs-fast/base`)
+          console.log(`${relative(root, f)}:${i + 1}: ${body} 数字时长档 → 改用 duration-mcs-fast/base/slow`)
           violations++
         }
       }
@@ -532,4 +543,4 @@ if (violations > 0) {
   console.error(`\n✗ 发现 ${violations} 处设计 token 违规（设计规范 §4.5）`)
   process.exit(1)
 }
-console.log('✓ 设计 token 完整性检查通过（色板类/dark:/transition-all/duration-数字/rounded-任意值/字号上限/紧急页字重/焦点可见性/未注册 token 类/token 角色矩阵/alpha 白名单/未定义类/死类/死 token/Z 轴阶梯/玻璃预算/危险半透明底）')
+console.log('✓ 设计 token 完整性检查通过（色板类/dark:/transition-all/duration-数字/rounded-任意值/字号上限/紧急页字重/焦点可见性/未注册 token 类/token 角色矩阵/alpha 白名单/未定义类/死类/死 token/内容面 tint 叠加/Z 轴阶梯/玻璃预算/危险半透明底/内容面 tint 不透明/布局属性动画）')

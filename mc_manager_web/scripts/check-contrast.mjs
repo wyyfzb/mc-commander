@@ -153,7 +153,6 @@ for (const [scopeName, vars] of [
   console.log(`\n════ ${scopeName}主题 ════`)
 
   // 面集合：5 个语义底色 + 玻璃面（glass.css 规格 × scrim 后的卡片/弹窗底，取最差合成）
-  const pageBg = parseColor(vars.get('--mcs-bg-default'), vars, refVars)
   const scrim = parseColor(vars.get('--mcs-scrim'), vars, refVars)
   const glassSurfaces = readGlassSpecs(scopeName === '亮色').map((spec) => {
     const glass = parseColor(vars.get(spec.token), vars, refVars)
@@ -170,9 +169,8 @@ for (const [scopeName, vars] of [
   ]
   // 面 × 前景：取该面上所有候选底的最差对比度
   const worstOn = (fgColor, candidates) => Math.min(...candidates.map((bg) => wcagContrast(fgColor, bg)))
-  void pageBg
 
-  // 1. 文字三级 × 面（正文 ≥4.5:1，含 subtle）
+  // 1. 文字两级 × 面（正文 ≥4.5:1）
   for (const textKey of ['text-default', 'text-muted']) {
     const fg = parseColor(vars.get(`--mcs-${textKey}`), vars, refVars)
     for (const [name, candidates] of surfaces) check(`${textKey} on ${name}`, worstOn(fg.color, candidates), 4.5)
