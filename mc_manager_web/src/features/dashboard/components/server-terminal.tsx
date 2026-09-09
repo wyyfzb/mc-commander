@@ -189,6 +189,10 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
 
     const onResize = () => fit.fit()
     window.addEventListener('resize', onResize)
+    // 容器尺寸变化同样要 refit：停止状态条显隐会挤压终端区高度而 window 不变，
+    // 画布保持旧高度会溢出容器，绝对定位层盖住状态条（UXT-24 实测）
+    const ro = new ResizeObserver(() => fit.fit())
+    ro.observe(containerRef.current)
 
     // 自动滚动：用户上滚 >60px 暂停，回到底部恢复；偏好关闭（B5）则恒不跟随
     term.onScroll(() => {
@@ -202,6 +206,7 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
 
     return () => {
       window.removeEventListener('resize', onResize)
+      ro.disconnect()
       // addon 随 term.dispose 一并释放；refs 同步置空避免悬垂
       term.dispose()
       xtermRef.current = null
@@ -223,6 +228,12 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
   useEffect(() => {
     const term = xtermRef.current
     if (!term) return
+    // 缓冲归零联动清屏：启动/重启路径经 store.resetForRestart 清缓冲，
+    // xterm 画布必须同步清——否则当次运行的新日志追加在上一轮渲染行后残留（UXT-24）
+    if (buffer.length === 0 && renderedCountRef.current > 0) {
+      term.clear()
+      renderedCountRef.current = 0
+    }
     if (showJvmWarningsRef.current !== showJvmWarnings) {
       showJvmWarningsRef.current = showJvmWarnings
       term.clear()
@@ -408,7 +419,7 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
       </div>
 
       {/* 终端区 */}
-      <div className="relative min-h-0 flex-1">
+      <div className="relative min-h-0 flex-1 overflow-hidden">
         {/* 搜索条（右上浮层）：Enter/下按钮向后、Shift+Enter/上按钮向前、Esc 关闭清除高亮回焦点终端 */}
         {search.open && (
           <div
