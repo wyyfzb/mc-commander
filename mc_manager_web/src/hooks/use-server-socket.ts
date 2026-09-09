@@ -181,6 +181,9 @@ export function useServerSocket(instanceId: string | null) {
             }
             // 实例列表状态变化时刷新列表（runningCount 等）
             void queryClient.invalidateQueries({ queryKey: queryKeys.instances() })
+            // 详情同步失效：isRunning 镜像自详情 query（server store），只刷列表会让
+            // 面板外停止（如终端输 stop）后的停止状态条滞后到 30s 轮询才翻转
+            void queryClient.invalidateQueries({ queryKey: queryKeys.instance(msg.instanceId) })
             // critical 事件（当前实例）：入通知中心 + 持久 toast（手动关闭防错过）
             if (ev === 'crash' || ev === 'circuit_breaker') {
               dispatchWsEvent({ type: 'status', data: msg.data as Record<string, unknown>, instanceId: msg.instanceId })

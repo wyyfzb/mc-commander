@@ -6,6 +6,7 @@ import { useServerSocket, getSocketSingleton } from '../use-server-socket'
 import { useConnectionStore } from '@/stores/connection'
 import { useAuthStore, type StoredSession } from '@/stores/auth'
 import { useNotificationStore } from '@/stores/notifications'
+import { queryKeys } from '@/api/queries'
 import type { WebSocketLike, WebSocketCtor } from '@/api/ws'
 
 /**
@@ -69,9 +70,11 @@ function createWrapper() {
   const qc = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   })
-  return function Wrapper({ children }: { children: ReactNode }) {
+  const wrapper = function Wrapper({ children }: { children: ReactNode }) {
     return <QueryClientProvider client={qc}>{children}</QueryClientProvider>
   }
+  // 暴露 qc：断言事件分支的 query 失效行为用
+  return Object.assign(wrapper, { qc })
 }
 
 /** 读取某个 FakeWebSocket 已发送的 subscribe 消息 */
@@ -323,5 +326,29 @@ describe('useServerSocket（状态跃迁通知接线）', () => {
     })
     const items = useNotificationStore.getState().items
     expect(items[0]?.type).toBe('serverCrash')
+  })
+
+  it('status 跃迁同步失效当前实例详情 query（isRunning 源头；只刷列表会让停止状态条滞后到 30s 轮询）', async () => {
+    useConnectionStore.setState({ baseUrl: '', apiKey: 'k1', status: 'ready' })
+    const wrapper = createWrapper()
+    const { qc } = wrapper
+    // 预置详情/列表缓存，模拟面板已加载态
+    qc.setQueryData(queryKeys.instance('i-1'), { isRunning: true })
+    qc.setQueryData(queryKeys.instances(), [])
+    renderHook(() => useServerSocket('i-1'), { wrapper })
+    await waitFor(() => expect(FakeWebSocket.instances.length).toBe(1))
+    const ws = FakeWebSocket.instances[0]!
+    act(() => {
+      ws.open()
+    })
+    await flushMicrotasks()
+
+    act(() => {
+      ws.receive({ type: 'status', instanceId: 'i-1', data: { event: 'stopped' } })
+    })
+
+    // 详情与列表都进入失效态：详情 refetch 后 isRunning 翻转，停止状态条即时出现
+    expect(qc.getQueryState(queryKeys.instance('i-1'))?.isInvalidated).toBe(true)
+    expect(qc.getQueryState(queryKeys.instances())?.isInvalidated).toBe(true)
   })
 })
