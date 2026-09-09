@@ -53,6 +53,10 @@ npm run dev                  # node --watch 热重载
 
 - **设计 token**：前端颜色/圆角/字号/动效/光影一律使用 `src/styles/` 的 `--mcs-*` CSS token
   （经 `src/index.css` 的 `@theme` 注册为工具类），禁止组件内硬编码色值，禁止引入未 token 化的第三方 UI 库。
+- **tint 两类**：承载文字/图标的内容面（`--mcs-{status,accent}-bg-subtle`）**必须不透明**
+  （`color-mix(色 N%, 卡片底)`）——半透明 tint 的有效色随宿主面漂移，最亮浮层上文字会跌破 4.5:1；
+  不承载文字的交互覆盖层（`--mcs-state-hover/focus/pressed`、`--mcs-scrim*`）保持半透明。
+  同一元素只允许一个背景来源（内容面 tint 不得互相叠加，也不得与玻璃面同元素）。
 - **间距**：不设 `--mcs-space-*`，统一走 Tailwind 默认 4px 刻度（`--spacing` 0.25rem）；
   结构间距必须 4px 倍数，组件内微节奏（2px 档）须在 PR 说明理由。
 - **焦点可见**：交互元素禁止用 `outline-none` 抵消 `focus-visible:outline-*`

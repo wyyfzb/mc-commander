@@ -18,6 +18,7 @@
  *      本项含 src/components/ui/（shadcn 基座里的失效类同样是缺陷）
  *  13. 死类：项目 CSS 定义但全仓 0 使用 → 报错（`@reserved` 注释可豁免）
  *  14. 死 token：semantic.css 定义但全仓 0 消费 → 报错（删除，或加 `@reserved` 注释说明预留原因）
+ *  15. 内容面 tint 叠加：同元素出现 ≥2 个 `bg-mcs-*-bg-subtle`，或内容面 tint 与玻璃面同元素 → 报错
  * 类名提取覆盖 className="..."、className={cn(...)}、模板字面量、对象映射值（如 tone: 'bg-...'），
  * 不留「只在 className 字面属性里才检查」的盲区。
  * 发现违规 → 输出 文件:行号 → 非零退出码（阻止合并）
@@ -227,6 +228,12 @@ function checkClasses(filePath, lineNum, classes, isEmergencyPage) {
   }
   // 10. 未注册 token 类 / 角色越界 / alpha 越界（语义静默丢失与对比度跌破）
   checkTokenClasses(classes, filePath, lineNum)
+  // 11. 内容面 tint 不得叠加：不透明 tint 叠加无意义（后者覆盖前者），叠玻璃面同理（背景由后写者决定）
+  const contentTints = classes.match(/\bbg-mcs-[\w-]+-bg-subtle\b/g)
+  if (contentTints && (contentTints.length > 1 || /\bglass-(chrome|overlay|toast)\b/.test(classes))) {
+    console.log(`${filePath}:${lineNum + 1}: ${contentTints.join(' + ')}${contentTints.length > 1 ? ' 内容面 tint 叠加' : ' 与玻璃面同元素'} → 同一元素只允许一个背景来源（不透明 tint 会互相覆盖）`)
+    violations++
+  }
 }
 
 /** 在单行中提取类名串并逐条检测（覆盖 cn(...)/模板串/对象值，不限 className= 字面属性） */

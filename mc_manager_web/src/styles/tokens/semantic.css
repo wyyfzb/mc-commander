@@ -22,22 +22,24 @@
   --mcs-border-muted: var(--ref-border-hairline);         /* 装饰发丝线（豁免） */
   --mcs-border-subtle: var(--ref-border-hairline-subtle); /* 装饰弱线（豁免） */
 
-  /* ── 状态六色（fg = 文字/描边/图标；bg-subtle = 12% alpha 容器底；border = 25% alpha）
-       铁律：亮色只做文字/描边/图标，容器底一律该色 12% 深底，严禁亮色实底+白字 ── */
+  /* ── 状态六色（fg = 文字/描边/图标；bg-subtle = 不透明容器底，承载文字；border = 25% alpha）
+       铁律：亮色只做文字/描边/图标，容器底一律该色深底，严禁亮色实底+白字。
+       bg-subtle 不透明：半透明 tint 的有效色随宿主面变化，最亮浮层（弹窗 L=0.325）上
+       状态文字会跌破 4.5:1（实测 error 3.82 / purple 3.80）；锚定基面后与宿主面无关 ── */
   --mcs-success-fg: var(--ref-success);
-  --mcs-success-bg-subtle: color-mix(in oklch, var(--ref-success) 12%, transparent);
+  --mcs-success-bg-subtle: color-mix(in oklch, var(--ref-success) 12%, var(--ref-dark-base));
   --mcs-success-border: color-mix(in oklch, var(--ref-success) 25%, transparent);
   --mcs-warning-fg: var(--ref-warning);
-  --mcs-warning-bg-subtle: color-mix(in oklch, var(--ref-warning) 12%, transparent);
+  --mcs-warning-bg-subtle: color-mix(in oklch, var(--ref-warning) 12%, var(--ref-dark-base));
   --mcs-warning-border: color-mix(in oklch, var(--ref-warning) 25%, transparent);
   --mcs-error-fg: var(--ref-error);
-  --mcs-error-bg-subtle: color-mix(in oklch, var(--ref-error) 12%, transparent);
+  --mcs-error-bg-subtle: color-mix(in oklch, var(--ref-error) 12%, var(--ref-dark-base));
   --mcs-error-border: color-mix(in oklch, var(--ref-error) 25%, transparent);
   --mcs-info-fg: var(--ref-info);
-  --mcs-info-bg-subtle: color-mix(in oklch, var(--ref-info) 12%, transparent);
+  --mcs-info-bg-subtle: color-mix(in oklch, var(--ref-info) 12%, var(--ref-dark-base));
   --mcs-info-border: color-mix(in oklch, var(--ref-info) 25%, transparent);
   --mcs-purple-fg: var(--ref-purple);
-  --mcs-purple-bg-subtle: color-mix(in oklch, var(--ref-purple) 12%, transparent);
+  --mcs-purple-bg-subtle: color-mix(in oklch, var(--ref-purple) 12%, var(--ref-dark-base));
   --mcs-purple-border: color-mix(in oklch, var(--ref-purple) 25%, transparent);
   --mcs-orange-fg: var(--ref-orange);
 
@@ -45,7 +47,7 @@
   --mcs-accent: var(--ref-accent);
   --mcs-on-accent: var(--ref-on-accent-dark);        /* accent 实底上的文字 */
   --mcs-accent-fg: var(--ref-accent);                /* accent 做文字/图标 */
-  --mcs-accent-bg-subtle: color-mix(in oklch, var(--ref-accent) 12%, transparent); /* 激活态容器底 */
+  --mcs-accent-bg-subtle: color-mix(in oklch, var(--ref-accent) 12%, var(--ref-dark-base)); /* 激活态容器底（不透明，同状态色族） */
   --mcs-accent-border: color-mix(in oklch, var(--ref-accent) 25%, transparent);    /* 装饰描边：不承担可辨识信息 */
   --mcs-accent-border-strong: color-mix(in oklch, var(--ref-accent) 70%, transparent); /* 交互边界/状态描边：最差 4.32:1（对 bg-emphasis） */
 
@@ -139,26 +141,26 @@
   --mcs-border-subtle: var(--ref-border-hairline-light-subtle);
 
   --mcs-success-fg: var(--ref-success-light);
-  --mcs-success-bg-subtle: color-mix(in oklch, var(--ref-success-light) 10%, transparent);
+  --mcs-success-bg-subtle: color-mix(in oklch, var(--ref-success-light) 10%, var(--ref-light-card));
   --mcs-success-border: color-mix(in oklch, var(--ref-success-light) 25%, transparent);
   --mcs-warning-fg: var(--ref-warning-light);
-  --mcs-warning-bg-subtle: color-mix(in oklch, var(--ref-warning-light) 10%, transparent);
+  --mcs-warning-bg-subtle: color-mix(in oklch, var(--ref-warning-light) 10%, var(--ref-light-card));
   --mcs-warning-border: color-mix(in oklch, var(--ref-warning-light) 25%, transparent);
   --mcs-error-fg: var(--ref-error-light);
-  --mcs-error-bg-subtle: color-mix(in oklch, var(--ref-error-light) 10%, transparent);
+  --mcs-error-bg-subtle: color-mix(in oklch, var(--ref-error-light) 10%, var(--ref-light-card));
   --mcs-error-border: color-mix(in oklch, var(--ref-error-light) 25%, transparent);
   --mcs-info-fg: var(--ref-info-light);
-  --mcs-info-bg-subtle: color-mix(in oklch, var(--ref-info-light) 10%, transparent);
+  --mcs-info-bg-subtle: color-mix(in oklch, var(--ref-info-light) 10%, var(--ref-light-card));
   --mcs-info-border: color-mix(in oklch, var(--ref-info-light) 25%, transparent);
   --mcs-purple-fg: var(--ref-purple-light);
-  --mcs-purple-bg-subtle: color-mix(in oklch, var(--ref-purple-light) 10%, transparent);
+  --mcs-purple-bg-subtle: color-mix(in oklch, var(--ref-purple-light) 10%, var(--ref-light-card));
   --mcs-purple-border: color-mix(in oklch, var(--ref-purple-light) 25%, transparent);
   --mcs-orange-fg: var(--ref-orange-light);
 
   --mcs-accent: var(--ref-accent-light);
   --mcs-on-accent: var(--ref-on-accent);           /* 深绿黑字（10.6:1） */
   --mcs-accent-fg: var(--ref-success-light);       /* 绿做文字时换深档（5.0:1） */
-  --mcs-accent-bg-subtle: color-mix(in oklch, var(--ref-accent-light) 15%, transparent);
+  --mcs-accent-bg-subtle: color-mix(in oklch, var(--ref-accent-light) 15%, var(--ref-light-card)); /* 不透明容器底 */
   --mcs-accent-border: color-mix(in oklch, var(--ref-accent-light) 30%, transparent);  /* 装饰描边：不承担可辨识信息 */
   /* 交互边界/状态描边：亮色 accent 过浅（实心也仅 1.33:1），必须换深绿系才可能 ≥3:1（最差 4.14:1，对 bg-hover） */
   --mcs-accent-border-strong: color-mix(in oklch, var(--ref-success-light) 80%, transparent);

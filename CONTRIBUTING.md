@@ -74,9 +74,12 @@ CI 会在 PR 上运行与服务端/前端两套完整检查 + e2e + 密钥扫描
 
 - 颜色/圆角/字号/动效/光影使用 `src/styles/` 的 `--mcs-*` 设计 token，**禁止硬编码色值**；
   间距不设 token，统一走 Tailwind 默认 4px 刻度（结构间距 4px 倍数）
+- 内容面 tint（`--mcs-{status,accent}-bg-subtle`，承载文字）**必须不透明**；
+  交互覆盖层（`--mcs-state-*`、`--mcs-scrim*`）保持半透明；同一元素只允许一个背景来源
 - 交互元素禁用 `outline-none` 抵消 `focus-visible:outline-*`（会导致焦点环不可见）
 - 组件风格遵循既有 shadcn-ui + `components/mcs/` 模式
 - 数据密集区域用实底背景；玻璃拟态仅用于侧栏/顶栏/命令面板/弹窗/toast
+  （alpha ≤0.7；toast 与亮色弹窗 ≤0.85）
 
 ## 行为准则
 

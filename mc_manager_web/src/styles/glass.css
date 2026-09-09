@@ -1,7 +1,7 @@
 /**
  * 玻璃工具类（设计文档 §4.4，风格 A：简约+克制玻璃）
  * 允许面：侧栏/顶栏、命令面板、弹窗/toast —— 全页 ≤2-3 处、单 Z 层
- * 纪律：blur ≤20px、底色 alpha ≤0.7（toast ≤0.85）；表格/终端/表单/图表一律实底（禁区）
+ * 纪律：blur ≤20px、底色 alpha ≤0.7（toast 与亮色 overlay ≤0.85）；表格/终端/表单/图表一律实底（禁区）
  * 兜底：无 backdrop-filter 实底；prefers-reduced-transparency 降级磨砂
  */
 
@@ -17,6 +17,12 @@
   background: color-mix(in oklch, var(--mcs-bg-emphasis) 70%, transparent);
   -webkit-backdrop-filter: blur(16px) saturate(1.1);
   backdrop-filter: blur(16px) saturate(1.1);
+}
+
+/* 亮色弹窗玻璃：遮罩后的底偏暗（70% 白叠 scrim 后仅 #d8d9dc），次级文字实测 3.81:1；
+   提到 0.85 后 4.56:1。暗色 70% 已达 5.06:1，不改 */
+.light .glass-overlay {
+  background: color-mix(in oklch, var(--mcs-bg-emphasis) 85%, transparent);
 }
 
 /* toast 玻璃 */
