@@ -13,7 +13,7 @@ function Switch({
     <SwitchPrimitive.Root
       data-slot="switch"
       className={cn(
-        "peer inline-flex h-5 w-9 shrink-0 items-center rounded-full border border-transparent shadow-xs transition-all outline-none",
+        "peer inline-flex h-5 w-9 shrink-0 items-center rounded-full border border-transparent shadow-xs transition-colors outline-none",
         // 未选中态需轨道背景（--mcs-border-default）：透明轨道在明暗主题均不可见（独立审查必改项）
         "data-unchecked:bg-input data-checked:bg-primary data-checked:shadow-in",
         "focus-visible:ring-1 focus-visible:ring-ring",

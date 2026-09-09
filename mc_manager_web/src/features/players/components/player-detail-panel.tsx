@@ -65,7 +65,7 @@ export function PlayerDetailPanel({
 
   return (
     <aside
-      className="flex w-105 shrink-0 flex-col border-l border-mcs-border-default bg-mcs-bg-default max-lg:absolute max-lg:inset-0 max-lg:z-(--mcs-z-modal) max-lg:w-full max-lg:border-l-0 max-lg:shadow-mcs-overlay"
+      className="flex w-105 shrink-0 flex-col border-l border-mcs-border-default bg-mcs-bg-default max-lg:absolute max-lg:inset-0 max-lg:z-(--mcs-z-modal) max-lg:w-full max-lg:border-l-0 max-lg:ring-1 max-lg:ring-mcs-border-default max-lg:shadow-mcs-overlay"
       aria-label="玩家详情面板"
     >
       {/* ── 头部 ── */}

@@ -505,6 +505,29 @@ for (const [i, line] of semanticLines.entries()) {
   }
 }
 
+// 20. 布局属性动画与数字时长档（含 ui/ 基座）：transition-all 会连带 width/height/margin
+//     逐帧重排；时长一律走 --mcs-motion-*（fast 150 / base 300）
+for (const f of G9_FILES) {
+  if (f.endsWith('.css') || f.includes('__tests__') || f.includes(`${sep}e2e${sep}`)) continue
+  const lines = readFileSync(f, 'utf-8').split('\n')
+  lines.forEach((line, i) => {
+    const code = codeOnly(line)
+    if (!code) return
+    for (const lit of code.matchAll(/(["'`])([^"'`\n]*)\1/g)) {
+      for (const raw of lit[2].split(/\s+/)) {
+        const body = raw.replace(/^.*:/, '').replace(/!$/, '')
+        if (body === 'transition-all') {
+          console.log(`${relative(root, f)}:${i + 1}: transition-all → 改用 transition / transition-colors（避免布局属性参与过渡）`)
+          violations++
+        } else if (/^duration-\d+$/.test(body)) {
+          console.log(`${relative(root, f)}:${i + 1}: ${body} 数字时长档 → 改用 duration-mcs-fast/base`)
+          violations++
+        }
+      }
+    }
+  })
+}
+
 if (violations > 0) {
   console.error(`\n✗ 发现 ${violations} 处设计 token 违规（设计规范 §4.5）`)
   process.exit(1)
