@@ -42,10 +42,7 @@
     --color-mcs-purple-bg-subtle: var(--mcs-purple-bg-subtle);
     --color-mcs-purple-border: var(--mcs-purple-border);
     --color-mcs-orange-fg: var(--mcs-orange-fg);
-    --color-mcs-orange-bg-subtle: var(--mcs-orange-bg-subtle);
-    --color-mcs-orange-border: var(--mcs-orange-border);
     --color-mcs-accent: var(--mcs-accent);
-    --color-mcs-accent-hover: var(--mcs-accent-hover);
     --color-mcs-on-accent: var(--mcs-on-accent);
     --color-mcs-accent-fg: var(--mcs-accent-fg);
     --color-mcs-accent-bg-subtle: var(--mcs-accent-bg-subtle);
@@ -64,7 +61,6 @@
     --color-mcs-state-focus: var(--mcs-state-focus);
     --color-mcs-state-pressed: var(--mcs-state-pressed);
     --color-mcs-scrim: var(--mcs-scrim);
-    --color-mcs-scrim-subtle: var(--mcs-scrim-subtle);
     --radius-mcs-xs: var(--mcs-radius-xs);
     --radius-mcs-sm: var(--mcs-radius-sm);
     --radius-mcs-md: var(--mcs-radius-md);

@@ -40,12 +40,9 @@
   --mcs-purple-bg-subtle: color-mix(in oklch, var(--ref-purple) 12%, transparent);
   --mcs-purple-border: color-mix(in oklch, var(--ref-purple) 25%, transparent);
   --mcs-orange-fg: var(--ref-orange);
-  --mcs-orange-bg-subtle: color-mix(in oklch, var(--ref-orange) 12%, transparent);
-  --mcs-orange-border: color-mix(in oklch, var(--ref-orange) 25%, transparent);
 
   /* ── 品牌 accent（P6 品牌克制：全界面彩色像素 <5%，只给 CTA/激活态/品牌元素）── */
   --mcs-accent: var(--ref-accent);
-  --mcs-accent-hover: var(--ref-accent-hover);
   --mcs-on-accent: var(--ref-on-accent-dark);        /* accent 实底上的文字 */
   --mcs-accent-fg: var(--ref-accent);                /* accent 做文字/图标 */
   --mcs-accent-bg-subtle: color-mix(in oklch, var(--ref-accent) 12%, transparent); /* 激活态容器底 */
@@ -62,12 +59,11 @@
 
   /* ── 状态层（M3 State Layer：hover 8% / focus 12% / pressed 12%）── */
   --mcs-state-hover: var(--ref-state-hover);
-  --mcs-state-focus: var(--ref-state-focus);
-  --mcs-state-pressed: var(--ref-state-pressed);
+  --mcs-state-focus: var(--ref-state-focus);        /* @reserved 待接线：状态层三档当前仅 hover 在用（审计 S23） */
+  --mcs-state-pressed: var(--ref-state-pressed);    /* @reserved 同上 */
 
-  /* ── 遮罩（弹窗/抽屉背板；原始值见 reference 层 --ref-scrim*）── */
+  /* ── 遮罩（弹窗/抽屉背板；原始值见 reference 层 --ref-scrim）── */
   --mcs-scrim: var(--ref-scrim);
-  --mcs-scrim-subtle: var(--ref-scrim-subtle);
 
   /* ── 光影（v2 深空工作台：投影墨 + 顶部内高光构成「受光面」；
         card=平面卡 / raised=悬浮下拉 / overlay=弹窗浮层；辉光仅限 CTA/激活/危险场景）── */
@@ -90,7 +86,7 @@
   --mcs-radius-sm: 8px;   /* 小控件 */
   --mcs-radius-md: 12px;  /* 卡片 */
   --mcs-radius-lg: 16px;  /* 弹窗 */
-  --mcs-radius-xl: 20px;  /* 全应用上限 */
+  --mcs-radius-xl: 20px;  /* @reserved 全应用上限档（当前 0 消费，保留档位语义） */
 
   /* ── 字体（CJK 规范：偶数字号 ≤7 档 / 正文行高 1.6；字重与标题行高走 Tailwind font-medium/semibold、leading-*）── */
   --mcs-font-sans: 'Noto Sans SC Subset', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
@@ -158,11 +154,8 @@
   --mcs-purple-bg-subtle: color-mix(in oklch, var(--ref-purple-light) 10%, transparent);
   --mcs-purple-border: color-mix(in oklch, var(--ref-purple-light) 25%, transparent);
   --mcs-orange-fg: var(--ref-orange-light);
-  --mcs-orange-bg-subtle: color-mix(in oklch, var(--ref-orange-light) 10%, transparent);
-  --mcs-orange-border: color-mix(in oklch, var(--ref-orange-light) 25%, transparent);
 
   --mcs-accent: var(--ref-accent-light);
-  --mcs-accent-hover: color-mix(in oklch, var(--ref-accent-light) 88%, white);
   --mcs-on-accent: var(--ref-on-accent);           /* 深绿黑字（10.6:1） */
   --mcs-accent-fg: var(--ref-success-light);       /* 绿做文字时换深档（5.0:1） */
   --mcs-accent-bg-subtle: color-mix(in oklch, var(--ref-accent-light) 15%, transparent);
@@ -178,8 +171,8 @@
   --mcs-dimension-end: var(--ref-dimension-end-light);
 
   --mcs-state-hover: var(--ref-state-hover-light);
-  --mcs-state-focus: var(--ref-state-focus-light);
-  --mcs-state-pressed: var(--ref-state-pressed-light);
+  --mcs-state-focus: var(--ref-state-focus-light);       /* @reserved 待接线（同暗色档） */
+  --mcs-state-pressed: var(--ref-state-pressed-light);   /* @reserved 待接线（同暗色档） */
 
   /* 亮色光影：暗底的「内高光」手法不适用，改低强度冷灰投影；辉光同源 accent-light */
   --mcs-shadow-card: 0 1px 2px var(--ref-shadow-ink-light-soft), 0 4px 12px -4px var(--ref-shadow-ink-light);

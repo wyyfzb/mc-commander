@@ -123,9 +123,14 @@ for (const [scopeName, vars] of [
   }
 
   // 3. 状态色 fg × 自身容器底（合成后 ≥3:1，描边/图形最低标准）
+  //    仅对存在 -bg-subtle 档的状态色校验（如 orange 家族按审计可选 #5 只保留 fg 档）
   for (const status of STATUS_KEYS) {
     const fgRaw = vars.get(`--mcs-${status}-fg`)
     const bgSubRaw = vars.get(`--mcs-${status}-bg-subtle`)
+    if (bgSubRaw === undefined) {
+      console.log(`· ${status}-fg on ${status}-bg-subtle`.padEnd(53) + `  跳过（该色族无 -bg-subtle 档）`)
+      continue
+    }
     const fg = parseColor(fgRaw, vars, refVars)
     const bgSub = parseColor(bgSubRaw, vars, refVars)
     // 容器底本身是 alpha 色，叠在页面底上

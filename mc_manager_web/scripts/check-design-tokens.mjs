@@ -17,7 +17,7 @@
  *  12. 未定义类：源码使用但项目 CSS 未定义、@theme 未注册 → Tailwind 不生成规则（静默无效果）；
  *      本项含 src/components/ui/（shadcn 基座里的失效类同样是缺陷）
  *  13. 死类：项目 CSS 定义但全仓 0 使用 → 报错（`@reserved` 注释可豁免）
- *  14. 死 token：semantic.css 定义但全仓 0 消费 → 警告（删除/接线属 token 层决策，不阻塞合并）
+ *  14. 死 token：semantic.css 定义但全仓 0 消费 → 报错（删除，或加 `@reserved` 注释说明预留原因）
  * 类名提取覆盖 className="..."、className={cn(...)}、模板字面量、对象映射值（如 tone: 'bg-...'），
  * 不留「只在 className 字面属性里才检查」的盲区。
  * 发现违规 → 输出 文件:行号 → 非零退出码（阻止合并）
@@ -390,10 +390,13 @@ for (const [cls, info] of deadClasses) {
 const semanticLines = readFileSync(semanticPath, 'utf-8').split('\n')
 const tokenNames = [...new Set([...semanticLines.join('\n').matchAll(/(--mcs-[\w-]+)\s*:/g)].map((m) => m[1]))]
 // 定义层/注册层之外的全文（用于 ① 字面量引用判定）
+// index.css 只剔除 @theme 注册行，保留 base 层的真实消费（如 line-height: var(--mcs-line-height-body)）
+const REGISTRATION_LINE = /^\s*--[\w-]+\s*:\s*var\(--mcs-[\w-]+\);\s*$/gm
 let outsideText = ''
 for (const f of G9_FILES) {
-  if (f === semanticPath || f === indexPath) continue
-  outsideText += readFileSync(f, 'utf-8') + '\n'
+  if (f === semanticPath) continue
+  const text = readFileSync(f, 'utf-8')
+  outsideText += (f === indexPath ? text.replace(REGISTRATION_LINE, '') : text) + '\n'
 }
 const deadTokens = []
 for (const token of tokenNames) {
@@ -405,12 +408,13 @@ for (const token of tokenNames) {
   if (!literalRef && !classRef) deadTokens.push(token)
 }
 if (deadTokens.length > 0) {
-  console.log(`\n⚠ 死 token ${deadTokens.length} 个（semantic.css 定义但全仓 0 消费，删除/接线待裁决）：`)
+  console.log(`\n✗ 死 token ${deadTokens.length} 个（semantic.css 定义但全仓 0 消费）→ 删除，或加 @reserved 注释说明预留原因：`)
   for (const t of deadTokens) console.log(`   ${t}`)
+  violations += deadTokens.length
 }
 
 if (violations > 0) {
   console.error(`\n✗ 发现 ${violations} 处设计 token 违规（设计规范 §4.5）`)
   process.exit(1)
 }
-console.log('✓ 设计 token 完整性检查通过（色板类/dark:/transition-all/duration-数字/rounded-任意值/字号上限/紧急页字重/焦点可见性/未注册 token 类/token 角色矩阵/alpha 白名单/未定义类/死类；死 token 仅警告）')
+console.log('✓ 设计 token 完整性检查通过（色板类/dark:/transition-all/duration-数字/rounded-任意值/字号上限/紧急页字重/焦点可见性/未注册 token 类/token 角色矩阵/alpha 白名单/未定义类/死类/死 token）')
