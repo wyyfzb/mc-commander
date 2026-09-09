@@ -142,14 +142,17 @@ export function PlayerDetailPanel({
         onValueChange={(v) => setDetailTab(v as PlayerDetailTab)}
         className="border-b border-mcs-border-muted px-2"
       >
-        <TabsList className="h-9 justify-start gap-0 overflow-x-auto rounded-none bg-transparent p-0">
+        {/* 窄屏 3 列网格（6 档 2 行 / 批量 3 档 1 行），lg 起恢复单行 flex。
+            不用横向滚动容器：overflow-x:auto 会把 10px 滚动条算进行高，
+            连带裁掉标签底部、激活下划线与焦点环（实测 36px 行高只剩 26px） */}
+        <TabsList className="grid h-auto min-h-9 w-full grid-cols-3 gap-0 rounded-none bg-transparent p-0 group-data-horizontal/tabs:h-auto lg:flex lg:flex-wrap lg:justify-start">
           {tabs.map((tab) => {
             const label = DETAIL_TAB_LABELS.find((t) => t.value === tab)?.label ?? tab
             return (
               <TabsTrigger
                 key={tab}
                 value={tab}
-                className="h-9 shrink-0 rounded-none border-b-2 border-transparent px-3 text-mcs-xs data-[state=active]:border-mcs-accent-border-strong data-[state=active]:text-mcs-text-default data-[state=active]:shadow-none"
+                className="h-9 shrink-0 rounded-none border-b-2 border-transparent px-2 text-mcs-xs data-[state=active]:border-mcs-accent-border-strong data-[state=active]:text-mcs-text-default data-[state=active]:shadow-none lg:px-3"
               >
                 {label}
               </TabsTrigger>
