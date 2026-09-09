@@ -520,6 +520,12 @@ WantedBy=multi-user.target
 EOF
   systemctl daemon-reload
   systemctl enable mc-commander
+  # UXT-15 提示：重启面板不再导致运行中实例失联（pid 文件接管机制会恢复运行态），
+  # 但接管实例的控制台管道不可恢复——命令需 RCON，无 RCON 的实例只能强制终止
+  if pgrep -f 'servers/.*/server\.jar' >/dev/null 2>&1; then
+    warn "检测到运行中的 MC 实例：面板重启后将自动接管（运行态恢复，日志从接管时刻起）"
+    warn "接管实例的命令需启用 RCON；未启用 RCON 的实例将只能强制终止"
+  fi
   systemctl restart mc-commander
   log "已注册并启动 systemd 服务: mc-commander（以专用低权限用户 mc-commander 运行）"
 elif command -v pm2 &>/dev/null; then

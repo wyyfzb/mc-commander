@@ -233,8 +233,11 @@ export function _attachExitListener() {
     // 关闭前的最终存档已落盘（graceful stop 保存世界）：标记大小缓存失效
     this._worldSizeDirty = true;
     this._stopStatsCollection();
-    this._rconCleanup();
-    // 服务器关闭时所有在线玩家视为离开（记录"离开服务器"事件 + 保存数据）
+  this._rconCleanup();
+  // pid 文件随进程退出删除：残留文件会在下次面板启动时被 adopt 验活自然清理，
+  // 此处主动删是让「进程活着但面板误判」的窗口内不留过时线索
+  this._removePidFile();
+  // 服务器关闭时所有在线玩家视为离开（记录"离开服务器"事件 + 保存数据）
     for (const name of [...this.players.keys()]) {
       this._handlePlayerLeave(name);
     }

@@ -133,8 +133,9 @@ export function _stopStatsCollection() {
 }
 
 export function _collectStats() {
-  if (!this.process || !this.isRunning) return;
-  const pid = this.process.pid;
+  // 接管实例（adopted）：管道不可恢复但 pid 有效（pid 文件记录），采样照常
+  if ((!this.process && !this.adopted) || !this.isRunning) return;
+  const pid = this.process?.pid ?? this.adoptedPid;
   if (!pid) return;
 
   const platform = process.platform;
@@ -262,7 +263,8 @@ export async function _collectMspt() {
 ///   - 从 level.dat 读取天气状态（自然天气变化不会产生日志，必须轮询）
 /// 任何值变化时推送 performanceUpdate / weatherUpdate 事件给前端。
 export async function _collectWorldState() {
-  if (!this.process || !this.isRunning) return;
+  // 接管实例仅走 RCON 查询（无管道依赖），与常规实例同语义
+  if ((!this.process && !this.adopted) || !this.isRunning) return;
 
   let changed = false;
 

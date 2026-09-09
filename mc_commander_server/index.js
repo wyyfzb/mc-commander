@@ -19,6 +19,7 @@ import { setupStaticServe } from './middleware/static_serve.js';
 import cors from './middleware/cors.js';
 import { setupRoutes } from './routes/index.js';
 import { MCServerManager } from './services/mc_server.js';
+import { adoptOrphanInstances } from './services/mc-server/adopt.js';
 import { TaskScheduler } from './services/task_scheduler.js';
 import { setupWebSocket } from './websocket.js';
 import { BackupModel } from './db/backup.model.js';
@@ -120,6 +121,16 @@ const wss = new WebSocketServer({
 app.set('trust proxy', config.trustProxy);
 
 const serverManager = new MCServerManager();
+
+// 孤儿实例接管（UXT-15）：面板重启后扫描各实例 pid 文件，验活接管仍在运行的
+// MC 进程（恢复运行态/RCON/停止能力）。必须先于 autoStart 错峰启动执行——
+// 接管置 isRunning=true 后，autoStart 的已运行跳过检查天然防止双开。
+// 失败不阻塞面板启动（接管缺失退化为旧行为：实例失联显示已停止）
+try {
+  adoptOrphanInstances(serverManager);
+} catch (err) {
+  logger.error('[Adopt] Orphan adoption failed (panel starts without adopt):', err.message);
+}
 
 const taskScheduler = new TaskScheduler(serverManager);
 
