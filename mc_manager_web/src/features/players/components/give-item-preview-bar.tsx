@@ -123,7 +123,7 @@ export function SelectedItemsBar({
                   type="button"
                   onClick={() => onSetItemCount(entry.item.id, entry.count - 1)}
                   aria-label={`减少 ${entry.item.name} 数量`}
-                  className="rounded-mcs-xs p-0.5 text-mcs-text-muted hover:bg-mcs-bg-hover hover:text-mcs-text-default"
+                  className="rounded-mcs-xs p-0.5 text-mcs-text-muted hover:bg-mcs-state-hover hover:text-mcs-text-default"
                 >
                   <Minus className="size-3" aria-hidden />
                 </button>
@@ -134,7 +134,7 @@ export function SelectedItemsBar({
                   type="button"
                   onClick={() => onSetItemCount(entry.item.id, entry.count + 1)}
                   aria-label={`增加 ${entry.item.name} 数量`}
-                  className="rounded-mcs-xs p-0.5 text-mcs-text-muted hover:bg-mcs-bg-hover hover:text-mcs-text-default"
+                  className="rounded-mcs-xs p-0.5 text-mcs-text-muted hover:bg-mcs-state-hover hover:text-mcs-text-default"
                 >
                   <Plus className="size-3" aria-hidden />
                 </button>
@@ -180,7 +180,7 @@ export function SelectedItemsBar({
                 <button
                   type="button"
                   aria-label={`${entry.item.name} 快速数量`}
-                  className="shrink-0 rounded-mcs-xs p-0.5 text-mcs-text-subtle hover:bg-mcs-bg-hover hover:text-mcs-text-default"
+                  className="shrink-0 rounded-mcs-xs p-0.5 text-mcs-text-muted hover:bg-mcs-state-hover hover:text-mcs-text-default"
                 >
                   <ChevronDown className="size-3.5" aria-hidden />
                 </button>
@@ -197,7 +197,7 @@ export function SelectedItemsBar({
               type="button"
               onClick={() => onToggleItem(entry.item)}
               aria-label={`移除 ${entry.item.name}`}
-              className="shrink-0 rounded-mcs-xs p-0.5 text-mcs-text-subtle hover:bg-mcs-bg-hover hover:text-mcs-text-default"
+              className="shrink-0 rounded-mcs-xs p-0.5 text-mcs-text-muted hover:bg-mcs-state-hover hover:text-mcs-text-default"
             >
               <X className="size-3" aria-hidden />
             </button>
@@ -237,14 +237,14 @@ export function FooterSummary({
           <p className="text-mcs-sm text-mcs-text-default">
             已选 {entries.length} 种物品，共 {totalCount} 个
           </p>
-          <p className="text-mcs-xs text-mcs-text-subtle">
+          <p className="text-mcs-xs text-mcs-text-muted">
             {enchItemCount > 0
               ? `将执行 ${entries.length} 条 give 命令（含 ${enchItemCount} 个附魔物品）`
               : `将执行 ${entries.length} 条 give 命令`}
           </p>
         </div>
       ) : (
-        <p className="text-mcs-sm text-mcs-text-subtle">请点击上方物品添加</p>
+        <p className="text-mcs-sm text-mcs-text-muted">请点击上方物品添加</p>
       )}
       <Button
         size="sm"

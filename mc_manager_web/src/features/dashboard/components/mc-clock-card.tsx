@@ -192,7 +192,7 @@ export function McClockCard() {
       </svg>
 
       {/* tick 标尺 0 —— 当前 —— 24000（绝对定位：0/24000 居中于弧端点 x=30/250，当前值居中于弧线进度点） */}
-      <div className="relative mt-1 h-4 font-mono text-mcs-2xs text-mcs-text-subtle">
+      <div className="relative mt-1 h-4 font-mono text-mcs-2xs text-mcs-text-muted">
         <span className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 border-t border-dashed border-mcs-border-muted" />
         <span className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2" style={{ left: `${(30 / 280) * 100}%` }}>0</span>
         {displayTick != null && (
@@ -212,7 +212,7 @@ export function McClockCard() {
 
       {/* 天气 */}
       <div className="mt-2 flex items-center gap-2">
-        <span className="flex w-8 shrink-0 items-center text-mcs-2xs text-mcs-text-subtle">天气</span>
+        <span className="flex w-8 shrink-0 items-center text-mcs-2xs text-mcs-text-muted">天气</span>
         <div className="flex flex-1 gap-1.5">
           {WEATHER_PRESETS.map((w) => (
             <Chip
@@ -234,7 +234,7 @@ export function McClockCard() {
 
       {/* 时间 */}
       <div className="mt-1.5 flex items-center gap-2">
-        <span className="flex w-8 shrink-0 items-center text-mcs-2xs text-mcs-text-subtle">时间</span>
+        <span className="flex w-8 shrink-0 items-center text-mcs-2xs text-mcs-text-muted">时间</span>
         <div className="flex flex-1 gap-1.5">
           {TIME_PRESETS.map((p) => (
             <Chip

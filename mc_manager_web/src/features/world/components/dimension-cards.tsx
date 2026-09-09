@@ -1,9 +1,8 @@
 /**
  * 维度卡
- * 每张卡：左 4px 维度语义色条 + 36px emoji 圆图标（同色 12% 浅底）+ 维度名 + 在线玩家
- * 颜色全部走 --mcs-dimension-* 语义 token（semantic.css 已定义，但未注册 Tailwind
- * 工具类，故以 inline var() 引用——与 stat-cards 的 colorVar 同模式，无硬编码色值；
- * 图标浅底以 color-mix 复现 --mcs-*-bg-subtle 的 12% alpha 模式）
+ * 每张卡：左 4px 维度语义色条 + 36px emoji 圆图标（同色浅底）+ 维度名 + 在线玩家
+ * 颜色全部走 --mcs-dimension-* 语义 token 的工具类（index.css 已注册），
+ * 浅底用不透明 --mcs-dimension-*-bg-subtle（与状态色族同口径）
  * 空 dimensions 返回 null（区块标题由父组件按需渲染）
  */
 import type { WorldInfo } from '@/api/types'
@@ -27,18 +26,18 @@ export function dimEnglishName(name: string): string {
   return name
 }
 
-/** 维度语义色 token（左色条） */
-const DIMENSION_VAR: Record<DimensionKind, string> = {
-  overworld: 'var(--mcs-dimension-overworld)',
-  nether: 'var(--mcs-dimension-nether)',
-  end: 'var(--mcs-dimension-end)',
+/** 维度语义色工具类（左色条） */
+const DIMENSION_BAR: Record<DimensionKind, string> = {
+  overworld: 'bg-mcs-dimension-overworld',
+  nether: 'bg-mcs-dimension-nether',
+  end: 'bg-mcs-dimension-end',
 }
 
-/** 维度同色浅底（复现 --mcs-*-bg-subtle 的 12% alpha 模式） */
+/** 维度同色浅底工具类（不透明，锚定基面） */
 const DIMENSION_BG_SUBTLE: Record<DimensionKind, string> = {
-  overworld: 'color-mix(in oklch, var(--mcs-dimension-overworld) 12%, transparent)',
-  nether: 'color-mix(in oklch, var(--mcs-dimension-nether) 12%, transparent)',
-  end: 'color-mix(in oklch, var(--mcs-dimension-end) 12%, transparent)',
+  overworld: 'bg-mcs-dimension-overworld-bg-subtle',
+  nether: 'bg-mcs-dimension-nether-bg-subtle',
+  end: 'bg-mcs-dimension-end-bg-subtle',
 }
 
 export interface DimensionCardsProps {
@@ -63,18 +62,15 @@ export function DimensionCards({ dimensions, className }: DimensionCardsProps) {
             className="flex overflow-hidden rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted shadow-mcs-card"
           >
             {/* 左 4px 垂直维度色条（维度语义色 token） */}
-            <span
-              aria-hidden
-              data-dimension-bar
-              className="w-1 shrink-0"
-              style={{ backgroundColor: DIMENSION_VAR[kind] }}
-            />
+            <span aria-hidden data-dimension-bar className={cn('w-1 shrink-0', DIMENSION_BAR[kind])} />
             <div className="flex min-w-0 flex-1 items-center gap-3 p-3">
               {/* 36px emoji 圆图标（同色浅底） */}
               <span
                 aria-hidden
-                className="flex size-9 shrink-0 items-center justify-center rounded-full text-mcs-lg"
-                style={{ backgroundColor: DIMENSION_BG_SUBTLE[kind] }}
+                className={cn(
+                  'flex size-9 shrink-0 items-center justify-center rounded-full text-mcs-lg',
+                  DIMENSION_BG_SUBTLE[kind],
+                )}
               >
                 {dim.icon}
               </span>

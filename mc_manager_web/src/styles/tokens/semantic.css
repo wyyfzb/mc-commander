@@ -10,12 +10,12 @@
   --mcs-bg-muted: var(--ref-dark-card);         /* 卡片/容器 */
   --mcs-bg-subtle: var(--ref-dark-base);        /* 深嵌区（终端/代码块） */
   --mcs-bg-emphasis: var(--ref-dark-popover);   /* 弹窗/下拉 */
-  --mcs-bg-hover: var(--ref-dark-hover);        /* 悬浮面 */
+  --mcs-bg-secondary: var(--ref-dark-secondary); /* 次级面：chip/进度轨道/交替行（暗色比卡片亮一档、亮色比卡片压灰一档） */
 
-  /* ── 文字 ── */
+  /* ── 文字（两级：default 主 / muted 次；单一「次要文字」档取高余量值，
+        全程 ≥6:1，宿主面（玻璃/tint/密集表格）变化不会跌破 AA）── */
   --mcs-text-default: var(--ref-dark-text-default);
   --mcs-text-muted: var(--ref-dark-text-muted);
-  --mcs-text-subtle: var(--ref-dark-text-subtle);   /* 次要文字（WCAG AA ≥4.5:1） */
 
   /* ── 边框 ── */
   --mcs-border-default: var(--ref-border-interactive);    /* 交互组件边界（≥3:1） */
@@ -35,6 +35,7 @@
   --mcs-error-fg: var(--ref-error);
   --mcs-error-bg-subtle: color-mix(in oklch, var(--ref-error) 12%, var(--ref-dark-base));
   --mcs-error-border: color-mix(in oklch, var(--ref-error) 25%, transparent);
+  --mcs-error-border-strong: color-mix(in oklch, var(--ref-error) 80%, transparent); /* 危险控件可见边界（≥3:1） */
   --mcs-info-fg: var(--ref-info);
   --mcs-info-bg-subtle: color-mix(in oklch, var(--ref-info) 12%, var(--ref-dark-base));
   --mcs-info-border: color-mix(in oklch, var(--ref-info) 25%, transparent);
@@ -58,20 +59,35 @@
   --mcs-dimension-overworld: var(--ref-dimension-overworld);
   --mcs-dimension-nether: var(--ref-dimension-nether);
   --mcs-dimension-end: var(--ref-dimension-end);
+  /* 维度浅底：内容面 tint 同状态色族，不透明锚定基面（半透明会随宿主面漂移） */
+  --mcs-dimension-overworld-bg-subtle: color-mix(in oklch, var(--ref-dimension-overworld) 12%, var(--ref-dark-base));
+  --mcs-dimension-nether-bg-subtle: color-mix(in oklch, var(--ref-dimension-nether) 12%, var(--ref-dark-base));
+  --mcs-dimension-end-bg-subtle: color-mix(in oklch, var(--ref-dimension-end) 12%, var(--ref-dark-base));
 
   /* ── 状态层（M3 State Layer：hover 8% / focus 12% / pressed 12%）── */
   --mcs-state-hover: var(--ref-state-hover);
-  --mcs-state-focus: var(--ref-state-focus);        /* @reserved 待接线：状态层三档当前仅 hover 在用（审计 S23） */
-  --mcs-state-pressed: var(--ref-state-pressed);    /* @reserved 同上 */
+  --mcs-state-focus: var(--ref-state-focus);
+  --mcs-state-pressed: var(--ref-state-pressed);
 
   /* ── 遮罩（弹窗/抽屉背板；原始值见 reference 层 --ref-scrim）── */
   --mcs-scrim: var(--ref-scrim);
+
+  /* ── Z 轴阶梯（全站唯一来源，主题无关；消费写法 z-(--mcs-z-modal)）
+        跨层关系固定：局部 < 遮罩 < 弹窗 < 下拉 < 提示 < 通知；禁裸 z-<数字>。
+        下拉必须高于弹窗：Radix 弹层挂在 body 末尾，弹窗内的 Select/下拉要盖过遮罩才可点 ── */
+  --mcs-z-local: 10;     /* 局部叠放：内容盖装饰、卡内浮层、粘性表头 */
+  --mcs-z-overlay: 40;   /* 全屏遮罩、全屏面板（移动抽屉背板、编辑器全屏） */
+  --mcs-z-modal: 50;     /* 弹窗、抽屉面板、确认框 */
+  --mcs-z-dropdown: 60;  /* 下拉/气泡/选择器/自动完成（可开在弹窗内） */
+  --mcs-z-tooltip: 70;   /* 提示气泡（须盖过弹窗与下拉） */
+  --mcs-z-toast: 80;     /* 通知/跳转链接（永远最上） */
 
   /* ── 光影（v2 深空工作台：投影墨 + 顶部内高光构成「受光面」；
         card=平面卡 / raised=悬浮下拉 / overlay=弹窗浮层；辉光仅限 CTA/激活/危险场景）── */
   --mcs-shadow-card: inset 0 1px 0 var(--ref-highlight-top), 0 1px 3px var(--ref-shadow-ink-soft), 0 10px 32px -8px var(--ref-shadow-ink);
   --mcs-shadow-raised: inset 0 1px 0 var(--ref-highlight-top), 0 2px 6px var(--ref-shadow-ink-soft), 0 12px 32px -8px var(--ref-shadow-ink);
   --mcs-shadow-overlay: inset 0 1px 0 var(--ref-highlight-top-strong), 0 16px 48px -12px var(--ref-shadow-ink), 0 32px 96px -24px var(--ref-shadow-ink);
+  --mcs-shadow-thumb: 0 1px 2px var(--ref-shadow-ink-soft);   /* 小控件浮起（开关柄/滑块柄） */
   --mcs-shadow-accent-button: inset 0 1px 0 var(--ref-highlight-on-accent), 0 1px 2px var(--ref-shadow-ink-soft), 0 4px 16px -4px color-mix(in oklch, var(--ref-accent) 40%, transparent);
   --mcs-glow-accent: 0 0 16px color-mix(in oklch, var(--ref-accent) 30%, transparent);
   --mcs-glow-accent-strong: 0 0 28px color-mix(in oklch, var(--ref-accent) 42%, transparent);
@@ -130,11 +146,10 @@
      主题无关的 --mcs-terminal-* 专用 token（设计文档：ServerTerminal 独立深底） */
   --mcs-bg-subtle: var(--ref-light-bg);
   --mcs-bg-emphasis: var(--ref-light-popover);
-  --mcs-bg-hover: var(--ref-light-hover);
+  --mcs-bg-secondary: var(--ref-light-secondary);
 
   --mcs-text-default: var(--ref-light-text-default);
   --mcs-text-muted: var(--ref-light-text-muted);
-  --mcs-text-subtle: var(--ref-light-text-subtle);
 
   --mcs-border-default: var(--ref-border-interactive-light);
   --mcs-border-muted: var(--ref-border-hairline-light);
@@ -149,6 +164,7 @@
   --mcs-error-fg: var(--ref-error-light);
   --mcs-error-bg-subtle: color-mix(in oklch, var(--ref-error-light) 10%, var(--ref-light-card));
   --mcs-error-border: color-mix(in oklch, var(--ref-error-light) 25%, transparent);
+  --mcs-error-border-strong: color-mix(in oklch, var(--ref-error-light) 80%, transparent);
   --mcs-info-fg: var(--ref-info-light);
   --mcs-info-bg-subtle: color-mix(in oklch, var(--ref-info-light) 10%, var(--ref-light-card));
   --mcs-info-border: color-mix(in oklch, var(--ref-info-light) 25%, transparent);
@@ -162,7 +178,7 @@
   --mcs-accent-fg: var(--ref-success-light);       /* 绿做文字时换深档（5.0:1） */
   --mcs-accent-bg-subtle: color-mix(in oklch, var(--ref-accent-light) 15%, var(--ref-light-card)); /* 不透明容器底 */
   --mcs-accent-border: color-mix(in oklch, var(--ref-accent-light) 30%, transparent);  /* 装饰描边：不承担可辨识信息 */
-  /* 交互边界/状态描边：亮色 accent 过浅（实心也仅 1.33:1），必须换深绿系才可能 ≥3:1（最差 4.14:1，对 bg-hover） */
+  /* 交互边界/状态描边：亮色 accent 过浅（实心也仅 1.33:1），必须换深绿系才可能 ≥3:1（最差 4.14:1，对 bg-secondary） */
   --mcs-accent-border-strong: color-mix(in oklch, var(--ref-success-light) 80%, transparent);
 
   --mcs-focus-ring: var(--ref-info-light);
@@ -171,15 +187,19 @@
   --mcs-dimension-overworld: var(--ref-dimension-overworld-light);
   --mcs-dimension-nether: var(--ref-dimension-nether-light);
   --mcs-dimension-end: var(--ref-dimension-end-light);
+  --mcs-dimension-overworld-bg-subtle: color-mix(in oklch, var(--ref-dimension-overworld-light) 10%, var(--ref-light-card));
+  --mcs-dimension-nether-bg-subtle: color-mix(in oklch, var(--ref-dimension-nether-light) 10%, var(--ref-light-card));
+  --mcs-dimension-end-bg-subtle: color-mix(in oklch, var(--ref-dimension-end-light) 10%, var(--ref-light-card));
 
   --mcs-state-hover: var(--ref-state-hover-light);
-  --mcs-state-focus: var(--ref-state-focus-light);       /* @reserved 待接线（同暗色档） */
-  --mcs-state-pressed: var(--ref-state-pressed-light);   /* @reserved 待接线（同暗色档） */
+  --mcs-state-focus: var(--ref-state-focus-light);
+  --mcs-state-pressed: var(--ref-state-pressed-light);
 
   /* 亮色光影：暗底的「内高光」手法不适用，改低强度冷灰投影；辉光同源 accent-light */
   --mcs-shadow-card: 0 1px 2px var(--ref-shadow-ink-light-soft), 0 4px 12px -4px var(--ref-shadow-ink-light);
   --mcs-shadow-raised: 0 2px 4px var(--ref-shadow-ink-light-soft), 0 8px 24px -6px var(--ref-shadow-ink-light);
   --mcs-shadow-overlay: 0 12px 32px -8px var(--ref-shadow-ink-light), 0 24px 64px -16px var(--ref-shadow-ink-light);
+  --mcs-shadow-thumb: 0 1px 2px var(--ref-shadow-ink-light-soft);
   --mcs-shadow-accent-button: inset 0 1px 0 var(--ref-highlight-on-accent), 0 1px 2px var(--ref-shadow-ink-light-soft), 0 4px 16px -4px color-mix(in oklch, var(--ref-accent-light) 45%, transparent);
   --mcs-glow-accent: 0 0 16px color-mix(in oklch, var(--ref-accent-light) 38%, transparent);
   --mcs-glow-accent-strong: 0 0 28px color-mix(in oklch, var(--ref-accent-light) 50%, transparent);

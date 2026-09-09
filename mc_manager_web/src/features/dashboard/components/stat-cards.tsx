@@ -15,7 +15,7 @@ import { cn } from '@/lib/utils'
 
 /** TPS 阈值（≥19 健康 / 15-19 卡顿 / <15 严重卡顿） */
 export function tpsColor(tps: number | null, isRunning: boolean): string {
-  if (!isRunning || tps == null) return 'text-mcs-text-subtle'
+  if (!isRunning || tps == null) return 'text-mcs-text-muted'
   if (tps >= 19) return 'text-mcs-success-fg'
   if (tps >= 15) return 'text-mcs-warning-fg'
   return 'text-mcs-error-fg'
@@ -108,7 +108,7 @@ export function BigStatCards({
             <span className={cn('mcs-num text-mcs-md leading-none', tpsColor(tps, isRunning))}>
               {tps != null ? tps.toFixed(1) : '--'}
             </span>
-            <span className="text-mcs-2xs text-mcs-text-subtle">TPS</span>
+            <span className="text-mcs-2xs text-mcs-text-muted">TPS</span>
           </span>
         ) : undefined
       }
@@ -120,7 +120,7 @@ export function BigStatCards({
           value={
             <>
               {cpu.toFixed(1)}
-              <span className="text-mcs-sm font-medium text-mcs-text-subtle">%</span>
+              <span className="text-mcs-sm font-medium text-mcs-text-muted">%</span>
             </>
           }
           percent={cpu}
@@ -131,7 +131,7 @@ export function BigStatCards({
           value={
             <>
               {memUsed.toFixed(1)}
-              <span className="text-mcs-sm font-medium text-mcs-text-subtle"> / {memTotal.toFixed(0)}G</span>
+              <span className="text-mcs-sm font-medium text-mcs-text-muted"> / {memTotal.toFixed(0)}G</span>
             </>
           }
           percent={memPct}
@@ -147,10 +147,10 @@ export function BigStatCards({
             primary ? (
               <>
                 {primary.usedGB}
-                <span className="text-mcs-sm font-medium text-mcs-text-subtle"> / {primary.totalGB}G</span>
+                <span className="text-mcs-sm font-medium text-mcs-text-muted"> / {primary.totalGB}G</span>
               </>
             ) : (
-              <span className="font-sans text-mcs-sm font-medium text-mcs-text-subtle">暂无磁盘数据</span>
+              <span className="font-sans text-mcs-sm font-medium text-mcs-text-muted">暂无磁盘数据</span>
             )
           }
           percent={primary?.percent ?? 0}
@@ -188,11 +188,11 @@ function ResourceRow({
         aria-valuenow={Math.round(p)}
         aria-valuemin={0}
         aria-valuemax={100}
-        className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-mcs-bg-emphasis"
+        className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-mcs-bg-secondary"
       >
         <div
-          className="mcs-progress-sheen h-full rounded-full transition-[width] duration-mcs-base ease-mcs-snappy"
-          style={{ width: `${p}%`, background: barColor ?? 'var(--mcs-success-fg)' }}
+          className="mcs-progress-sheen h-full w-full rounded-full transition-transform duration-mcs-base ease-mcs-snappy"
+          style={{ transform: `translateX(${p - 100}%)`, background: barColor ?? 'var(--mcs-success-fg)' }}
         />
       </div>
     </div>
@@ -258,12 +258,12 @@ export function PlayersCard() {
         <b className="tnum font-semibold">{count}</b>
       </div>
       {names.length === 0 ? (
-        <span className="pt-1 text-mcs-2xs text-mcs-text-subtle">—</span>
+        <span className="pt-1 text-mcs-2xs text-mcs-text-muted">—</span>
       ) : (
         <ol className="flex flex-col">
           {names.slice(0, MAX_COLUMN_ROWS).map((name) => renderPlayerRow(name, isSleeping))}
           {names.length > MAX_COLUMN_ROWS && (
-            <li className="px-1.5 py-0.5 text-mcs-2xs text-mcs-text-subtle">
+            <li className="px-1.5 py-0.5 text-mcs-2xs text-mcs-text-muted">
               +{names.length - MAX_COLUMN_ROWS}
             </li>
           )}
@@ -278,10 +278,10 @@ export function PlayersCard() {
   )
 
   const body = !isRunning ? (
-    <p className="py-1 text-mcs-xs text-mcs-text-subtle">实例已停止，暂无玩家数据</p>
+    <p className="py-1 text-mcs-xs text-mcs-text-muted">实例已停止，暂无玩家数据</p>
   ) : names.length === 0 ? (
     <div className="flex items-center gap-2 py-1">
-      <p className="text-mcs-xs text-mcs-text-subtle">
+      <p className="text-mcs-xs text-mcs-text-muted">
         {rconConnected ? '暂无玩家在线' : '需启用 RCON 才能读取在线玩家'}
       </p>
       {!rconConnected && (
@@ -334,9 +334,9 @@ export function PlayersCard() {
         <div className="flex flex-col gap-0.5">
           <span className="mcs-num text-mcs-display leading-none">
             {online}
-            <span className="text-mcs-lg font-normal text-mcs-text-subtle">/{max}</span>
+            <span className="text-mcs-lg font-normal text-mcs-text-muted">/{max}</span>
           </span>
-          <span className="text-mcs-2xs text-mcs-text-subtle">
+          <span className="text-mcs-2xs text-mcs-text-muted">
             今日新增 {status?.todayNewPlayers ?? 0}
           </span>
         </div>
@@ -409,8 +409,8 @@ export function RuntimeInfoCard() {
     >
       <div className="flex items-center justify-between gap-2">
         {/* 停止态下数值为 —（本次会话已结束），label 同步改「上次」避免语义误导 */}
-        <p className="text-mcs-xs text-mcs-text-subtle">{isRunning ? '本次运行时长' : '上次运行时长'}</p>
-        <p className={cn('mcs-num text-mcs-lg', !isRunning && 'text-mcs-text-subtle')}>
+        <p className="text-mcs-xs text-mcs-text-muted">{isRunning ? '本次运行时长' : '上次运行时长'}</p>
+        <p className={cn('mcs-num text-mcs-lg', !isRunning && 'text-mcs-text-muted')}>
           {formatUptime(isRunning ? uptime : null)}
         </p>
       </div>
@@ -418,7 +418,7 @@ export function RuntimeInfoCard() {
         {infoLines.map((line) => (
           <div key={line.label} className="flex items-center justify-between text-mcs-xs" title={line.tooltip}>
             <span className="flex items-center gap-1.5 text-mcs-text-muted">
-              <line.icon className="size-3 text-mcs-text-subtle" aria-hidden />
+              <line.icon className="size-3 text-mcs-text-muted" aria-hidden />
               {line.label}
             </span>
             <span className="tnum font-medium">{line.value}</span>

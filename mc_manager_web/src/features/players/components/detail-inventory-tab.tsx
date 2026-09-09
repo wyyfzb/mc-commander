@@ -80,7 +80,7 @@ export function InventoryTab({ player }: InventoryTabProps) {
               'rounded-mcs-xs px-3 py-1 text-mcs-xs transition-colors',
               subTab === t.value
                 ? 'bg-mcs-accent-bg-subtle font-medium text-mcs-accent-fg'
-                : 'text-mcs-text-subtle hover:text-mcs-text-default',
+                : 'text-mcs-text-muted hover:text-mcs-text-default',
             )}
           >
             {t.label}
@@ -122,7 +122,7 @@ function PlayerInventoryPanel({ inventory }: { inventory: PlayerInventory }) {
         {equipmentItems.map((item, i) => (
           <div key={equipmentLabels[i]} className="flex flex-col items-center gap-1">
             <InventorySlot item={item} />
-            <span className="text-mcs-2xs text-mcs-text-subtle">{equipmentLabels[i]}</span>
+            <span className="text-mcs-2xs text-mcs-text-muted">{equipmentLabels[i]}</span>
           </div>
         ))}
       </div>
@@ -169,7 +169,7 @@ function EnderChestPanel({ inventory }: { inventory: PlayerInventory }) {
         <SlotStat label="空位" value={`${27 - used}`} accent />
       </div>
 
-      <p className="text-mcs-2xs text-mcs-text-subtle">末影箱数据来自玩家存档（playerdata EnderItems）</p>
+      <p className="text-mcs-2xs text-mcs-text-muted">末影箱数据来自玩家存档（playerdata EnderItems）</p>
     </div>
   )
 }
@@ -273,9 +273,9 @@ function SlotIcon({ item }: { item: InventoryItem }) {
 function EmptyState({ icon: Icon, message, subtext }: { icon: LucideIcon; message: string; subtext?: string }) {
   return (
     <div className="flex w-full flex-col items-center gap-2 rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-default px-6 py-10">
-      <Icon className="size-8 text-mcs-text-subtle" aria-hidden />
-      <p className="text-mcs-sm text-mcs-text-subtle">{message}</p>
-      {subtext && <p className="text-mcs-xs text-mcs-text-subtle">{subtext}</p>}
+      <Icon className="size-8 text-mcs-text-muted" aria-hidden />
+      <p className="text-mcs-sm text-mcs-text-muted">{message}</p>
+      {subtext && <p className="text-mcs-xs text-mcs-text-muted">{subtext}</p>}
     </div>
   )
 }
@@ -309,7 +309,7 @@ function NoticeBanner({
 function SlotStat({ label, value, accent = false }: { label: string; value: string; accent?: boolean }) {
   return (
     <span className="flex flex-col items-center gap-0.5 rounded-mcs-xs bg-mcs-bg-muted px-2.5 py-1">
-      <span className="text-mcs-2xs text-mcs-text-subtle">{label}</span>
+      <span className="text-mcs-2xs text-mcs-text-muted">{label}</span>
       <span
         className={cn(
           'font-mono text-mcs-xs font-semibold tabular-nums',

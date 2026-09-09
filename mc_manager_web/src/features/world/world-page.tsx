@@ -132,9 +132,9 @@ export function WorldPage() {
       )}
 
       {/* ── 主体：左栏信息卡 + 右栏 Tabs ── */}
-      <div className="flex min-h-0 flex-1 gap-4">
-      {/* 左栏：世界信息 + 维度卡（320px 固定宽） */}
-      <div className="flex w-80 shrink-0 flex-col gap-4 overflow-y-auto">
+      <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row">
+      {/* 左栏：世界信息 + 维度卡（窄屏整宽堆叠并限高内滚，lg 起固定 320px） */}
+      <div className="flex min-h-0 w-full shrink-0 flex-col gap-4 overflow-y-auto max-lg:max-h-[45%] lg:w-80">
         <WorldInfoCard
           world={worldQuery.data ?? null}
           isLoading={worldQuery.isLoading}

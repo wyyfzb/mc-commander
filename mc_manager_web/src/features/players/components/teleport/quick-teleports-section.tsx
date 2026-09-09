@@ -110,7 +110,7 @@ export function QuickTeleportsSection({
         <button
           type="button"
           onClick={onAddClick}
-          className="inline-flex items-center gap-1 rounded-mcs-md border border-mcs-accent-border-strong bg-mcs-accent-bg-subtle px-2.5 py-1.5 text-mcs-xs font-medium text-mcs-accent-fg transition-colors hover:bg-mcs-bg-hover"
+          className="inline-flex items-center gap-1 rounded-mcs-md border border-mcs-accent-border-strong bg-mcs-accent-bg-subtle px-2.5 py-1.5 text-mcs-xs font-medium text-mcs-accent-fg transition-colors hover:bg-mcs-state-hover"
         >
           <Plus className="size-3.5" aria-hidden />
           添加快捷传送点

@@ -122,7 +122,7 @@ const ROLE_MATRIX = {
 /**
  * alpha 修饰符白名单（G4）：仅「不透明填充档」可叠加透明度
  * （bg-mcs-bg-muted/40 斑马纹、bg-mcs-accent/5 拖拽罩）。
- * 文字/边界档禁止（text-mcs-text-subtle/80 实测 3.32:1）；已 alpha 的 tint 档禁止二次叠加。
+ * 文字/边界档禁止加 alpha 修饰符；已 alpha 的 tint 档禁止二次叠加。
  */
 const ALPHA_ALLOW_PREFIX = new Set(['bg', 'fill', 'stroke'])
 const ALPHA_ALLOW_ROLE = new Set(['surface', 'brand'])
@@ -420,8 +420,93 @@ if (deadTokens.length > 0) {
   violations += deadTokens.length
 }
 
+// 16. Z 轴阶梯：禁裸 z-<数字>（须走 z-(--mcs-z-*) 语义阶梯，否则靠 DOM 顺序决胜）
+//     覆盖：类名（含 -z- 负值、z-[n]）、内联 style 的 zIndex、CSS 的 z-index（注释行剥除）
+const RAW_Z = /^-?z-(?:\d+|\[\d+\])$/
+const Z_HINT = 'z-(--mcs-z-{local|overlay|modal|dropdown|tooltip|toast})'
+/** 剥掉单行块注释，并跳过整行注释（避免注释里的示例被当成违规） */
+function codeOnly(line) {
+  const out = line.replace(/\/\*.*?\*\//g, '')
+  return /^\s*(\/\/|\*)/.test(out) ? '' : out
+}
+for (const f of G9_FILES) {
+  const lines = readFileSync(f, 'utf-8').split('\n')
+  if (f.endsWith('.css')) {
+    lines.forEach((line, i) => {
+      if (/z-index:\s*\d+/.test(codeOnly(line))) {
+        console.log(`${relative(root, f)}:${i + 1}: 裸 z-index 数值 → 改用 var(--mcs-z-*)`)
+        violations++
+      }
+    })
+    continue
+  }
+  lines.forEach((line, i) => {
+    const code = codeOnly(line)
+    if (!code) return
+    if (/zIndex:\s*\d+/.test(code)) {
+      console.log(`${relative(root, f)}:${i + 1}: 内联 zIndex 数值 → 改用 var(--mcs-z-*)`)
+      violations++
+    }
+    for (const lit of code.matchAll(/(["'`])([^"'`\n]*)\1/g)) {
+      for (const raw of lit[2].split(/\s+/)) {
+        const body = raw.replace(/^.*:/, '').replace(/!$/, '')
+        if (RAW_Z.test(body)) {
+          console.log(`${relative(root, f)}:${i + 1}: ${body} 裸 z 轴数值 → 改用 ${Z_HINT}`)
+          violations++
+        }
+      }
+    }
+  })
+}
+
+// 17. 玻璃预算：同屏 ≤2 层 —— 常驻 1 处（顶栏 chrome）+ 覆盖层 1 处（确认弹窗 overlay）
+//     计数口径：非注释的类名引用，.ts/.tsx 均计（避免注释或 .ts 引用逃检/误报）
+const GLASS_BUDGET = { chrome: 1, overlay: 1, toast: 0 }
+const glassCount = new Map()
+for (const f of G9_FILES) {
+  if (f.endsWith('.css') || f.includes('__tests__')) continue
+  for (const line of readFileSync(f, 'utf-8').split('\n')) {
+    const code = codeOnly(line)
+    if (!code) continue
+    for (const m of code.matchAll(/\bglass-(chrome|overlay|toast)\b/g)) {
+      glassCount.set(m[1], (glassCount.get(m[1]) ?? 0) + 1)
+    }
+  }
+}
+for (const [kind, count] of glassCount) {
+  const budget = GLASS_BUDGET[kind] ?? 0
+  if (count > budget) {
+    console.log(`玻璃预算超标：glass-${kind} ${count} 处（预算 ${budget}）→ 预算说明见 src/styles/glass.css`)
+    violations += count - budget
+  }
+}
+
+// 18. 危险语义色禁止半透明底：bg-destructive/NN 与 bg-destructive/[N] 承载文字，暗色最亮面上 3.39–4.44:1
+for (const f of G9_FILES) {
+  if (f.endsWith('.css')) continue
+  const lines = readFileSync(f, 'utf-8').split('\n')
+  lines.forEach((line, i) => {
+    if (/\bbg-destructive\/(?:[\d.]+|\[[\d.]+\])/.test(codeOnly(line))) {
+      console.log(`${relative(root, f)}:${i + 1}: bg-destructive/<alpha> 半透明危险底 → 改用不透明 bg-mcs-error-bg-subtle + border-mcs-error-border-strong`)
+      violations++
+    }
+  })
+}
+
+// 19. 内容面 tint 必须不透明：--mcs-*-bg-subtle 承载文字/图标，半透明会随宿主面漂移
+//     判定用「含 alpha 语法」黑名单（transparent / rgba / hsla / 8 位 hex / oklch 斜杠 alpha）
+const hasAlphaSyntax = (value) =>
+  /\btransparent\b|\brgba?\(|\bhsla?\(|#[0-9a-fA-F]{8}\b|\/\s*[\d.]+%?\s*\)/.test(value)
+for (const [i, line] of semanticLines.entries()) {
+  const m = line.match(/(--mcs-[\w-]+-bg-subtle)\s*:\s*([^;]+);/)
+  if (m && hasAlphaSyntax(m[2])) {
+    console.log(`${relative(root, semanticPath)}:${i + 1}: ${m[1]} 含半透明值 → 内容面 tint 必须不透明（color-mix(色 N%, 基面)）`)
+    violations++
+  }
+}
+
 if (violations > 0) {
   console.error(`\n✗ 发现 ${violations} 处设计 token 违规（设计规范 §4.5）`)
   process.exit(1)
 }
-console.log('✓ 设计 token 完整性检查通过（色板类/dark:/transition-all/duration-数字/rounded-任意值/字号上限/紧急页字重/焦点可见性/未注册 token 类/token 角色矩阵/alpha 白名单/未定义类/死类/死 token）')
+console.log('✓ 设计 token 完整性检查通过（色板类/dark:/transition-all/duration-数字/rounded-任意值/字号上限/紧急页字重/焦点可见性/未注册 token 类/token 角色矩阵/alpha 白名单/未定义类/死类/死 token/Z 轴阶梯/玻璃预算/危险半透明底）')

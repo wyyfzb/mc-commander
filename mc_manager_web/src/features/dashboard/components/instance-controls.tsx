@@ -216,7 +216,7 @@ export function InstanceControls() {
                 )}
                 {/* 文字标签（≥480px 显示）：启停为低频高危操作，文字消除图标歧义；
                     窄视口回退纯图标（tooltip 兜底） */}
-                <span className="hidden text-mcs-xs min-[480px]:inline">{b.action}</span>
+                <span className="hidden text-mcs-xs xs:inline">{b.action}</span>
               </Button>
             </TooltipTrigger>
             <TooltipContent side="bottom">{b.action}</TooltipContent>

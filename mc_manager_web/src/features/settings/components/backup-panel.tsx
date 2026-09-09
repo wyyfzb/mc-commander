@@ -187,7 +187,7 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
       </div>
 
       {/* 快照机制说明（subtle 小字；保留策略服务端可配且 API 未暴露，不硬编码数值——避免与服务端实际配置漂移） */}
-      <p className="px-4 text-mcs-xs text-mcs-text-subtle">
+      <p className="px-4 text-mcs-xs text-mcs-text-muted">
         快照备份：未修改文件零拷贝增量传输，超出保留策略自动清理（默认保留策略见服务端配置）
       </p>
 
@@ -296,7 +296,7 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
           </div>
           {restoreTarget && (
             <div className="flex items-center gap-1.5">
-              <CalendarClock className="size-3 shrink-0 text-mcs-text-subtle" aria-hidden />
+              <CalendarClock className="size-3 shrink-0 text-mcs-text-muted" aria-hidden />
               <span>
                 快照时间：{[formatBackupDate(restoreTarget.createdAt), formatBackupSize(restoreTarget.size)].filter(Boolean).join(' · ')}
               </span>
@@ -316,7 +316,7 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
             value={restoreInput}
             onChange={(e) => setRestoreInput(e.target.value)}
             placeholder={instanceName}
-            className="h-9 rounded-mcs-md border border-mcs-border-default bg-mcs-bg-default px-3 font-mono text-mcs-sm text-mcs-text-default outline-none placeholder:text-mcs-text-subtle focus:border-mcs-error-fg focus:ring-1 focus:ring-mcs-focus-ring"
+            className="h-9 rounded-mcs-md border border-mcs-border-default bg-mcs-bg-default px-3 font-mono text-mcs-sm text-mcs-text-default outline-none placeholder:text-mcs-text-muted focus:border-mcs-error-fg focus:ring-1 focus:ring-mcs-focus-ring"
           />
         </div>
       </ConfirmDialog>

@@ -175,15 +175,15 @@ function TaskRow({
 
         {/* cron mono + 中文可读描述（cronDescription 与编辑器预览同源）+ 命令（有则 Terminal 图标） */}
         <div className="mt-1 flex min-w-0 items-center gap-1.5 text-mcs-xs">
-          <Timer className="size-3 shrink-0 text-mcs-text-subtle" aria-hidden />
+          <Timer className="size-3 shrink-0 text-mcs-text-muted" aria-hidden />
           <span className="shrink-0 font-mono text-mcs-text-muted">{task.cronExpression}</span>
           {(() => {
             const desc = cronDescription(task.cronExpression)
-            return desc ? <span className="shrink-0 text-mcs-text-subtle">{desc}</span> : null
+            return desc ? <span className="shrink-0 text-mcs-text-muted">{desc}</span> : null
           })()}
           {task.command !== null && task.command.length > 0 && (
             <>
-              <Terminal className="size-3 shrink-0 text-mcs-text-subtle" aria-hidden />
+              <Terminal className="size-3 shrink-0 text-mcs-text-muted" aria-hidden />
               <span className="truncate font-mono text-mcs-text-muted" title={task.command}>
                 {task.command}
               </span>

@@ -30,8 +30,8 @@ describe('tpsColor 阈值规则（≥19 健康 / 15-19 卡顿 / <15 严重）', 
   })
 
   it('未运行或 TPS 缺失 → 灰', () => {
-    expect(tpsColor(null, false)).toBe('text-mcs-text-subtle')
-    expect(tpsColor(20, false)).toBe('text-mcs-text-subtle')
+    expect(tpsColor(null, false)).toBe('text-mcs-text-muted')
+    expect(tpsColor(20, false)).toBe('text-mcs-text-muted')
   })
 })
 

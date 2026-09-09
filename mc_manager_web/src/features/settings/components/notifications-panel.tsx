@@ -41,7 +41,7 @@ export function NotificationsPanel() {
     <div className="flex flex-col gap-4">
       {/* 顶部描述 + 右上实时保存提示 */}
       <div className="flex items-center justify-between gap-4">
-        <p className="min-w-0 text-mcs-sm text-mcs-text-subtle">设置各类通知的站内推送（严重度仅作展示分级）。</p>
+        <p className="min-w-0 text-mcs-sm text-mcs-text-muted">设置各类通知的站内推送（严重度仅作展示分级）。</p>
         <div className="flex shrink-0 items-center gap-1.5">
           <CheckCircle2 className="size-3.5 text-mcs-success-fg" aria-hidden />
           <span className="text-mcs-sm text-mcs-text-muted">修改即时保存</span>
@@ -76,9 +76,9 @@ export function NotificationsPanel() {
             </div>
             {/* 表格：事件 | 严重度 | 站内 */}
             <div className="grid grid-cols-[1fr_auto_auto] items-center gap-x-4 px-4 pb-1 pt-2.5">
-              <span className="text-mcs-2xs font-semibold text-mcs-text-subtle">事件</span>
-              <span className="w-12 text-mcs-2xs font-semibold text-mcs-text-subtle">严重度</span>
-              <span className="w-10 text-mcs-2xs font-semibold text-mcs-text-subtle">站内</span>
+              <span className="text-mcs-2xs font-semibold text-mcs-text-muted">事件</span>
+              <span className="w-12 text-mcs-2xs font-semibold text-mcs-text-muted">严重度</span>
+              <span className="w-10 text-mcs-2xs font-semibold text-mcs-text-muted">站内</span>
             </div>
             <div className="flex flex-col">
               {types.map((type) => {

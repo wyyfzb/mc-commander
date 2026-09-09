@@ -55,14 +55,14 @@ export function PluginDetailSheet({ plugin, open, onOpenChange, onToggle, toggli
 
           {/* 基本信息 */}
           <section className="space-y-2.5" aria-label="基本信息">
-            <h3 className="flex items-center gap-1.5 text-mcs-xs font-semibold text-mcs-text-subtle">
+            <h3 className="flex items-center gap-1.5 text-mcs-xs font-semibold text-mcs-text-muted">
               <Layers className="size-3.5" aria-hidden />
               基本信息
             </h3>
             <dl className="grid grid-cols-[auto_1fr] items-baseline gap-x-4 gap-y-2 text-mcs-sm">
               {meta?.version && (
                 <>
-                  <dt className="shrink-0 text-mcs-text-subtle">版本</dt>
+                  <dt className="shrink-0 text-mcs-text-muted">版本</dt>
                   <dd className="text-mcs-text-default">
                     <StatusPill tone="muted">v{meta.version}</StatusPill>
                   </dd>
@@ -70,7 +70,7 @@ export function PluginDetailSheet({ plugin, open, onOpenChange, onToggle, toggli
               )}
               {meta?.apiVersion && (
                 <>
-                  <dt className="shrink-0 text-mcs-text-subtle">API 版本</dt>
+                  <dt className="shrink-0 text-mcs-text-muted">API 版本</dt>
                   <dd className="text-mcs-text-default">
                     <StatusPill tone="info">API {meta.apiVersion}</StatusPill>
                   </dd>
@@ -78,25 +78,25 @@ export function PluginDetailSheet({ plugin, open, onOpenChange, onToggle, toggli
               )}
               {meta?.load && (
                 <>
-                  <dt className="shrink-0 text-mcs-text-subtle">加载时机</dt>
+                  <dt className="shrink-0 text-mcs-text-muted">加载时机</dt>
                   <dd className="text-mcs-text-default">{LOAD_LABEL[meta.load] ?? meta.load}</dd>
                 </>
               )}
               {meta?.main && (
                 <>
-                  <dt className="shrink-0 text-mcs-text-subtle">主类</dt>
+                  <dt className="shrink-0 text-mcs-text-muted">主类</dt>
                   <dd className="break-all font-mono text-mcs-xs text-mcs-text-muted">{meta.main}</dd>
                 </>
               )}
               {(meta?.authors?.length ?? 0) > 0 && (
                 <>
-                  <dt className="shrink-0 text-mcs-text-subtle">作者</dt>
+                  <dt className="shrink-0 text-mcs-text-muted">作者</dt>
                   <dd className="text-mcs-text-default">{meta!.authors.join('、')}</dd>
                 </>
               )}
               {meta?.website && (
                 <>
-                  <dt className="shrink-0 text-mcs-text-subtle">官网</dt>
+                  <dt className="shrink-0 text-mcs-text-muted">官网</dt>
                   <dd>
                     <a
                       href={meta.website}
@@ -117,10 +117,10 @@ export function PluginDetailSheet({ plugin, open, onOpenChange, onToggle, toggli
           {/* 依赖 */}
           {((meta?.depend?.length ?? 0) > 0 || (meta?.softdepend?.length ?? 0) > 0) && (
             <section className="space-y-2.5" aria-label="依赖关系">
-              <h3 className="text-mcs-xs font-semibold text-mcs-text-subtle">依赖关系</h3>
+              <h3 className="text-mcs-xs font-semibold text-mcs-text-muted">依赖关系</h3>
               {(meta?.depend?.length ?? 0) > 0 && (
                 <div className="space-y-1">
-                  <p className="text-mcs-xs text-mcs-text-subtle">硬依赖（缺失时插件无法加载）</p>
+                  <p className="text-mcs-xs text-mcs-text-muted">硬依赖（缺失时插件无法加载）</p>
                   <div className="flex flex-wrap gap-1.5">
                     {meta!.depend.map((d) => (
                       <StatusPill key={d} tone="warning">{d}</StatusPill>
@@ -130,7 +130,7 @@ export function PluginDetailSheet({ plugin, open, onOpenChange, onToggle, toggli
               )}
               {(meta?.softdepend?.length ?? 0) > 0 && (
                 <div className="space-y-1">
-                  <p className="text-mcs-xs text-mcs-text-subtle">软依赖（缺失不影响加载）</p>
+                  <p className="text-mcs-xs text-mcs-text-muted">软依赖（缺失不影响加载）</p>
                   <div className="flex flex-wrap gap-1.5">
                     {meta!.softdepend.map((d) => (
                       <StatusPill key={d} tone="muted">{d}</StatusPill>
@@ -143,15 +143,15 @@ export function PluginDetailSheet({ plugin, open, onOpenChange, onToggle, toggli
 
           {/* 文件信息 */}
           <section className="space-y-2.5" aria-label="文件信息">
-            <h3 className="text-mcs-xs font-semibold text-mcs-text-subtle">文件信息</h3>
+            <h3 className="text-mcs-xs font-semibold text-mcs-text-muted">文件信息</h3>
             <dl className="grid grid-cols-[auto_1fr] items-baseline gap-x-4 gap-y-2 text-mcs-sm">
-              <dt className="shrink-0 text-mcs-text-subtle">大小</dt>
+              <dt className="shrink-0 text-mcs-text-muted">大小</dt>
               <dd className="text-mcs-text-default">{formatFileSize(plugin.sizeBytes)}</dd>
-              <dt className="shrink-0 text-mcs-text-subtle">修改时间</dt>
+              <dt className="shrink-0 text-mcs-text-muted">修改时间</dt>
               <dd className="text-mcs-text-default">
                 {formatModifiedAt(new Date(plugin.mtimeMs).toISOString())}
               </dd>
-              <dt className="shrink-0 text-mcs-text-subtle">路径</dt>
+              <dt className="shrink-0 text-mcs-text-muted">路径</dt>
               <dd className="break-all font-mono text-mcs-xs text-mcs-text-muted">plugins/{plugin.file}</dd>
             </dl>
           </section>
@@ -181,7 +181,7 @@ export function PluginDetailSheet({ plugin, open, onOpenChange, onToggle, toggli
               </Button>
             )}
           </div>
-          <p className="-mt-3 text-center text-mcs-xs text-mcs-text-subtle">
+          <p className="-mt-3 text-center text-mcs-xs text-mcs-text-muted">
             启停与增删在重启实例后生效（Bukkit 插件仅启动时加载）
           </p>
         </div>

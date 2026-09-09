@@ -4,7 +4,7 @@ import type { ReactNode } from 'react'
 export function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <h4 className="text-mcs-xs font-medium text-mcs-text-subtle">{title}</h4>
+      <h4 className="text-mcs-xs font-medium text-mcs-text-muted">{title}</h4>
       {children}
     </div>
   )

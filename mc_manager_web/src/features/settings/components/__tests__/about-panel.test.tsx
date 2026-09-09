@@ -68,6 +68,6 @@ describe('AboutPanel 版权', () => {
     const copyright = screen.getByText('© 2026 MC_Commander · 社区开源项目')
     expect(copyright).toBeInTheDocument()
     expect(copyright.classList.contains('text-center')).toBe(true)
-    expect(copyright.classList.contains('text-mcs-text-subtle')).toBe(true)
+    expect(copyright.classList.contains('text-mcs-text-muted')).toBe(true)
   })
 })

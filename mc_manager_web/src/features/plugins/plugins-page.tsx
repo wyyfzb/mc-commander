@@ -276,7 +276,7 @@ export function PluginsPage() {
       {/* 拖放高亮遮罩 */}
       {dragActive && (
         <div
-          className="pointer-events-none absolute inset-2 z-30 flex items-center justify-center rounded-mcs-md border-2 border-dashed border-mcs-accent-border-strong bg-mcs-accent/5"
+          className="pointer-events-none absolute inset-2 z-(--mcs-z-overlay) flex items-center justify-center rounded-mcs-md border-2 border-dashed border-mcs-accent-border-strong bg-mcs-accent/5"
           data-testid="drop-overlay"
         >
           <div className="flex flex-col items-center gap-2 text-mcs-accent-fg">
@@ -447,7 +447,7 @@ export function PluginsPage() {
         <div className="flex flex-col items-center gap-1.5 px-4 py-12 text-center text-mcs-text-muted">
           <Search className="size-8 opacity-60" aria-hidden />
           <p className="mt-1 text-mcs-sm">无匹配插件</p>
-          <p className="text-mcs-xs text-mcs-text-subtle">换个关键词试试</p>
+          <p className="text-mcs-xs text-mcs-text-muted">换个关键词试试</p>
         </div>
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto">

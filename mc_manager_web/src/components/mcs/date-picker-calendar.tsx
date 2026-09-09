@@ -115,7 +115,7 @@ export function DatePickerCalendar({ value, onSelect, onClear }: DatePickerCalen
               key={label}
               role="columnheader"
               aria-label={`星期${label}`}
-              className="flex h-6 items-center justify-center text-mcs-xs text-mcs-text-subtle"
+              className="flex h-6 items-center justify-center text-mcs-xs text-mcs-text-muted"
             >
               {label}
             </div>
@@ -143,8 +143,8 @@ export function DatePickerCalendar({ value, onSelect, onClear }: DatePickerCalen
                         // 亮色下实心 accent 对弹层底仅 1.33:1，靠强档描边补足选中态的 ≥3:1 可辨识性
                         ? 'bg-mcs-accent font-medium text-mcs-on-accent ring-1 ring-mcs-accent-border-strong'
                         : cn(
-                            'hover:bg-mcs-bg-hover',
-                            outside ? 'text-mcs-text-subtle' : 'text-mcs-text-default',
+                            'hover:bg-mcs-state-hover',
+                            outside ? 'text-mcs-text-muted' : 'text-mcs-text-default',
                             // 今天标记：subtle 底 + accent 文字（accent-border 环实测对比度不足 3:1，弃用）
                             isToday && 'bg-mcs-accent-bg-subtle text-mcs-accent-fg',
                           ),

@@ -213,7 +213,7 @@ export function GamerulePanel({ instanceId, mcVersion, isRconConnected, onSendCo
             ))}
           </div>
         ) : filtered.length === 0 ? (
-          <p className="py-8 text-center text-mcs-xs text-mcs-text-subtle">无匹配规则</p>
+          <p className="py-8 text-center text-mcs-xs text-mcs-text-muted">无匹配规则</p>
         ) : (
           <div className="flex flex-col">
             {filtered.map((def) => (
@@ -271,11 +271,11 @@ function RuleRow({
       <span className="w-56 shrink-0 truncate font-mono text-mcs-xs text-mcs-text-default" title={def.name}>
         {def.name}
       </span>
-      <span className="min-w-0 flex-1 truncate text-mcs-2xs text-mcs-text-subtle" title={def.desc}>
+      <span className="min-w-0 flex-1 truncate text-mcs-2xs text-mcs-text-muted" title={def.desc}>
         {def.desc}
       </span>
 
-      {isDefault && !isEditing && <span className="shrink-0 text-mcs-2xs text-mcs-text-subtle">默认</span>}
+      {isDefault && !isEditing && <span className="shrink-0 text-mcs-2xs text-mcs-text-muted">默认</span>}
 
       <div className="flex w-44 shrink-0 items-center justify-end">
         {isBool ? (

@@ -189,7 +189,7 @@ function TeleportTabContent({
 
       {/* RCON 不可用时在线操作提示 */}
       {!isRconConnected && (
-        <p className="text-mcs-xs text-mcs-text-subtle">提示：RCON 未连接，在线操作可能失败（需启用 RCON）</p>
+        <p className="text-mcs-xs text-mcs-text-muted">提示：RCON 未连接，在线操作可能失败（需启用 RCON）</p>
       )}
 
       <WorldSpawnDialogs

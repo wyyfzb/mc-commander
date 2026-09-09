@@ -137,7 +137,7 @@ function BanFormContent({
                 'flex cursor-pointer items-center gap-2 rounded-mcs-sm border px-3 py-1.5 text-mcs-sm transition-colors',
                 targetType === 'player'
                   ? 'border-mcs-accent-border-strong bg-mcs-accent-bg-subtle text-mcs-text-default'
-                  : 'border-mcs-border-default text-mcs-text-muted hover:bg-mcs-bg-hover',
+                  : 'border-mcs-border-default text-mcs-text-muted hover:bg-mcs-state-hover',
               )}
             >
               <RadioGroupItem value="player" className="sr-only" />
@@ -149,7 +149,7 @@ function BanFormContent({
                 !ipAvailable && 'cursor-not-allowed opacity-50',
                 targetType === 'ip'
                   ? 'border-mcs-accent-border-strong bg-mcs-accent-bg-subtle text-mcs-text-default'
-                  : 'border-mcs-border-default text-mcs-text-muted hover:bg-mcs-bg-hover',
+                  : 'border-mcs-border-default text-mcs-text-muted hover:bg-mcs-state-hover',
               )}
             >
               <RadioGroupItem value="ip" className="sr-only" disabled={!ipAvailable} />
@@ -157,7 +157,7 @@ function BanFormContent({
             </label>
           </RadioGroup>
           {!ipAvailable && (
-            <p className="text-mcs-xs text-mcs-text-subtle">该玩家暂无 IP 信息，无法 IP 封禁</p>
+            <p className="text-mcs-xs text-mcs-text-muted">该玩家暂无 IP 信息，无法 IP 封禁</p>
           )}
         </div>
 
@@ -175,7 +175,7 @@ function BanFormContent({
                   'rounded-mcs-sm border px-2.5 py-1 text-mcs-xs transition-colors',
                   durationIndex === i
                     ? 'border-mcs-accent-border-strong bg-mcs-accent-bg-subtle text-mcs-text-default'
-                    : 'border-mcs-border-default text-mcs-text-muted hover:bg-mcs-bg-hover',
+                    : 'border-mcs-border-default text-mcs-text-muted hover:bg-mcs-state-hover',
                 )}
               >
                 {option.label}
@@ -198,7 +198,7 @@ function BanFormContent({
                   'rounded-mcs-sm border px-2.5 py-1 text-mcs-xs transition-colors',
                   reasonIndex === i
                     ? 'border-mcs-accent-border-strong bg-mcs-accent-bg-subtle text-mcs-text-default'
-                    : 'border-mcs-border-default text-mcs-text-muted hover:bg-mcs-bg-hover',
+                    : 'border-mcs-border-default text-mcs-text-muted hover:bg-mcs-state-hover',
                 )}
               >
                 {reason}

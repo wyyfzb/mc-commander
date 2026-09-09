@@ -16,6 +16,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { formatWorldSize } from '@/lib/format'
 import { StatusPill } from '@/components/mcs/status-pill'
+import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { EmptyState } from '@/components/mcs/empty-state'
 import { useUpgradeStore } from '@/stores/upgrade'
 import type { InstancePhase } from '@/stores/server'
@@ -209,16 +210,14 @@ function InstanceCard({
 
       {/* 熔断告警行（feat-5） */}
       {detail?.circuitBreakerTripped && (
-        <div className="flex items-center gap-1.5 rounded-mcs-sm border border-mcs-error-border bg-mcs-error-bg-subtle px-2.5 py-1.5 text-mcs-xs text-mcs-error-fg">
-          <ShieldAlert className="size-3.5 shrink-0" aria-hidden />
-          <span>崩溃循环熔断已触发，自动重启已禁用</span>
-        </div>
+        <NoticeBanner variant="error" icon={ShieldAlert}>
+          崩溃循环熔断已触发，自动重启已禁用
+        </NoticeBanner>
       )}
       {detail && !detail.circuitBreakerTripped && detail.consecutiveCrashes > 0 && (
-        <div className="flex items-center gap-1.5 rounded-mcs-sm border border-mcs-warning-border bg-mcs-warning-bg-subtle px-2.5 py-1.5 text-mcs-xs text-mcs-warning-fg">
-          <ShieldAlert className="size-3.5 shrink-0" aria-hidden />
-          <span>近期崩溃 {detail.consecutiveCrashes} 次</span>
-        </div>
+        <NoticeBanner variant="warning" icon={ShieldAlert}>
+          近期崩溃 {detail.consecutiveCrashes} 次
+        </NoticeBanner>
       )}
 
       {/* 操作行：启停（phase 中间态禁用：starting/stopping spinner，WS 确认后解锁 issue 334）/
@@ -304,7 +303,7 @@ function InstanceCard({
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0">
-      <div className="text-mcs-2xs text-mcs-text-subtle">{label}</div>
+      <div className="text-mcs-2xs text-mcs-text-muted">{label}</div>
       <div className="mcs-num truncate text-mcs-sm leading-none font-semibold text-mcs-text-default" title={value}>
         {value}
       </div>

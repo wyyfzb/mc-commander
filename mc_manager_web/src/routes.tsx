@@ -16,7 +16,7 @@ import {
 /**
  * 路由表（react-router v8 data mode）
  * - 路由必须静态定义（v8 data mode 约定）；URL 深链接/刷新保持原生支持
- * - 性能：页面组件 route-level React.lazy（Monaco/echarts 随页 chunk 懒加载）；
+ * - 性能：页面组件 route-level React.lazy（Monaco 随页 chunk 懒加载）；
  *   AppShell 与设置子页不 lazy（布局核心 + 设置页高频轻量）
  */
 

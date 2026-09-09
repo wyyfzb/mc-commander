@@ -30,7 +30,7 @@ export function Stepper({ step }: { step: number }) {
                   ? 'border-mcs-accent-border-strong bg-mcs-accent text-mcs-on-accent'
                   : i === step
                     ? 'border-mcs-accent-border-strong bg-mcs-accent-bg-subtle text-mcs-accent-fg'
-                    : 'border-mcs-border-default text-mcs-text-subtle',
+                    : 'border-mcs-border-default text-mcs-text-muted',
               )}
             >
               {i < step ? <Check className="size-3" aria-hidden /> : i + 1}
@@ -39,7 +39,7 @@ export function Stepper({ step }: { step: number }) {
               aria-current={i === step ? 'step' : undefined}
               className={cn(
                 'text-mcs-sm whitespace-nowrap',
-                i === step ? 'text-mcs-text-default' : 'text-mcs-text-subtle',
+                i === step ? 'text-mcs-text-default' : 'text-mcs-text-muted',
               )}
             >
               {label}

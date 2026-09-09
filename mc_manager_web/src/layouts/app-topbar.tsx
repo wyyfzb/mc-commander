@@ -111,7 +111,7 @@ export function AppTopBar() {
             }
             aria-label="复制服务器地址"
             title="复制地址发给玩家"
-            className="rounded-mcs-xs p-1 text-mcs-text-subtle transition-colors hover:bg-mcs-bg-hover hover:text-mcs-text-default focus-visible:outline-2 focus-visible:outline-mcs-focus-ring focus-visible:outline-offset-1"
+            className="rounded-mcs-xs p-1 text-mcs-text-muted transition-colors hover:bg-mcs-state-hover hover:text-mcs-text-default focus-visible:outline-2 focus-visible:outline-mcs-focus-ring focus-visible:outline-offset-1"
           >
             <Copy className="size-3" aria-hidden />
           </button>
@@ -121,9 +121,9 @@ export function AppTopBar() {
       {/* 实例选择器（真实实例列表） */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" className="gap-1.5 text-mcs-sm font-medium">
-            <Server className="size-4 text-mcs-text-muted" aria-hidden />
-            {currentInstanceName}
+          <Button variant="ghost" className="max-w-32 gap-1.5 text-mcs-sm font-medium">
+            <Server className="size-4 shrink-0 text-mcs-text-muted" aria-hidden />
+            <span className="truncate">{currentInstanceName}</span>
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-56">
@@ -151,15 +151,15 @@ export function AppTopBar() {
       {/* 全局搜索（Cmd+K） */}
       <Button
         variant="outline"
-        className="ml-auto w-44 justify-between gap-2 text-mcs-sm text-mcs-text-subtle sm:w-56"
+        className="ml-auto w-9 justify-center gap-2 text-mcs-sm text-mcs-text-muted xs:w-44 xs:justify-between sm:w-56"
         onClick={() => setCommandPaletteOpen(true)}
       >
         {/* 窄窗口防错位：文案区可截断收缩（min-w-0 + truncate），kbd 徽标 shrink-0 永不换行 */}
         <span className="inline-flex min-w-0 flex-1 items-center gap-2">
           <Search className="size-3.5 shrink-0" aria-hidden />
-          <span className="truncate">搜索或执行命令…</span>
+          <span className="hidden truncate xs:inline">搜索或执行命令…</span>
         </span>
-        <kbd className="pointer-events-none inline-flex h-5 shrink-0 items-center gap-0.5 rounded border border-mcs-border-default bg-mcs-bg-default px-1.5 font-mono text-mcs-2xs font-medium whitespace-nowrap text-mcs-text-muted">
+        <kbd className="pointer-events-none hidden h-5 shrink-0 items-center gap-0.5 rounded border border-mcs-border-default bg-mcs-bg-default px-1.5 font-mono text-mcs-2xs font-medium whitespace-nowrap text-mcs-text-muted xs:inline-flex">
           Ctrl K
         </kbd>
       </Button>
@@ -235,6 +235,7 @@ export function AppTopBar() {
 
       {/* 主题切换 */}
       <IconButton
+        className="hidden xs:inline-flex"
         tooltip={theme === 'dark' ? '切换到亮色主题' : '切换到深色主题'}
         tooltipSide="bottom"
         onClick={toggleTheme}

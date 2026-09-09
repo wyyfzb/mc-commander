@@ -11,8 +11,8 @@ import type { ChipTone } from './chip'
  */
 
 const STATUS_CLASSES: Record<ChipTone, string> = {
-  default: 'border-mcs-border-muted bg-mcs-bg-subtle text-mcs-text-subtle',
-  muted: 'border-mcs-border-muted bg-mcs-bg-subtle text-mcs-text-subtle',
+  default: 'border-mcs-border-muted bg-mcs-bg-subtle text-mcs-text-muted',
+  muted: 'border-mcs-border-muted bg-mcs-bg-subtle text-mcs-text-muted',
   accent: 'border-mcs-accent-border bg-mcs-accent-bg-subtle text-mcs-accent-fg',
   success: 'border-mcs-success-border bg-mcs-success-bg-subtle text-mcs-success-fg',
   warning: 'border-mcs-warning-border bg-mcs-warning-bg-subtle text-mcs-warning-fg',
@@ -23,7 +23,7 @@ const STATUS_CLASSES: Record<ChipTone, string> = {
 
 const OUTLINE_CLASSES: Record<ChipTone, string> = {
   default: 'border-mcs-border-muted text-mcs-text-default',
-  muted: 'border-mcs-border-muted text-mcs-text-subtle',
+  muted: 'border-mcs-border-muted text-mcs-text-muted',
   accent: 'border-mcs-accent-border text-mcs-accent-fg',
   success: 'border-mcs-success-border text-mcs-success-fg',
   warning: 'border-mcs-warning-border text-mcs-warning-fg',

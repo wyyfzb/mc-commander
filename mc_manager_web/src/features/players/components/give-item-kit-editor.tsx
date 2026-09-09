@@ -62,14 +62,14 @@ export function KitTab({
       <button
         type="button"
         onClick={onNew}
-        className="flex items-center gap-2.5 rounded-mcs-md border border-dashed border-mcs-accent-border-strong bg-mcs-accent-bg-subtle px-3 py-2.5 text-left transition-colors hover:bg-mcs-bg-hover"
+        className="flex items-center gap-2.5 rounded-mcs-md border border-dashed border-mcs-accent-border-strong bg-mcs-accent-bg-subtle px-3 py-2.5 text-left transition-colors hover:bg-mcs-state-hover"
       >
         <span className="flex size-9 shrink-0 items-center justify-center rounded-mcs-sm bg-mcs-accent-bg-subtle">
           <Plus className="size-4 text-mcs-accent-fg" aria-hidden />
         </span>
         <span className="min-w-0 flex-1">
           <span className="block text-mcs-sm font-semibold text-mcs-accent-fg">新建礼包</span>
-          <span className="block text-mcs-xs text-mcs-text-subtle">点击创建自定义物品礼包</span>
+          <span className="block text-mcs-xs text-mcs-text-muted">点击创建自定义物品礼包</span>
         </span>
       </button>
 
@@ -87,7 +87,7 @@ export function KitTab({
             <div className="truncate text-mcs-sm font-medium text-mcs-text-default">
               {kit.name}
             </div>
-            <div className="truncate text-mcs-xs text-mcs-text-subtle">
+            <div className="truncate text-mcs-xs text-mcs-text-muted">
               {kit.desc || `含 ${kit.items.length} 件物品`}
             </div>
           </div>
@@ -212,7 +212,7 @@ export function KitEditorDialog({
   return (
     <>
       <Dialog open onOpenChange={handleOpenChange}>
-      <DialogContent className="bg-mcs-bg-default max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{isNew ? '新建礼包' : '编辑礼包'}</DialogTitle>
           <DialogDescription className="sr-only">
@@ -224,7 +224,7 @@ export function KitEditorDialog({
           {/* 名称 + 图标 */}
           <div className="flex items-start gap-3">
             <div className="flex w-16 shrink-0 flex-col gap-1">
-              <span className="text-mcs-xs text-mcs-text-subtle">图标</span>
+              <span className="text-mcs-xs text-mcs-text-muted">图标</span>
               <input
                 value={icon}
                 onChange={(e) => setIcon(e.target.value)}
@@ -234,14 +234,14 @@ export function KitEditorDialog({
               />
             </div>
             <div className="min-w-0 flex-1">
-              <span className="text-mcs-xs text-mcs-text-subtle">名称</span>
+              <span className="text-mcs-xs text-mcs-text-muted">名称</span>
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 aria-label="礼包名称"
                 placeholder="如：新手起步包"
                 maxLength={20}
-                className="mt-1 h-9 w-full rounded-mcs-sm border border-mcs-border-default bg-mcs-bg-default px-2.5 text-mcs-sm text-mcs-text-default placeholder:text-mcs-text-subtle focus:border-mcs-accent-border focus:outline-none focus:ring-1 focus:ring-mcs-focus-ring"
+                className="mt-1 h-9 w-full rounded-mcs-sm border border-mcs-border-default bg-mcs-bg-default px-2.5 text-mcs-sm text-mcs-text-default placeholder:text-mcs-text-muted focus:border-mcs-accent-border focus:outline-none focus:ring-1 focus:ring-mcs-focus-ring"
               />
             </div>
           </div>
@@ -259,7 +259,7 @@ export function KitEditorDialog({
                   'flex size-6 items-center justify-center rounded-mcs-xs text-mcs-sm transition-colors',
                   icon === emoji
                     ? 'border border-mcs-accent-border-strong bg-mcs-accent-bg-subtle'
-                    : 'border border-transparent bg-mcs-bg-muted hover:bg-mcs-bg-hover',
+                    : 'border border-transparent bg-mcs-bg-muted hover:bg-mcs-state-hover',
                 )}
               >
                 {emoji}
@@ -269,7 +269,7 @@ export function KitEditorDialog({
 
           {/* 描述 */}
           <div className="flex flex-col gap-1">
-            <span className="text-mcs-xs text-mcs-text-subtle">描述（可选）</span>
+            <span className="text-mcs-xs text-mcs-text-muted">描述（可选）</span>
             <textarea
               value={desc}
               onChange={(e) => setDesc(e.target.value)}
@@ -277,7 +277,7 @@ export function KitEditorDialog({
               placeholder="如：木镐+石剑+面包×16"
               rows={2}
               maxLength={60}
-              className="resize-none rounded-mcs-sm border border-mcs-border-default bg-mcs-bg-default px-2.5 py-1.5 text-mcs-sm text-mcs-text-default placeholder:text-mcs-text-subtle focus:border-mcs-accent-border focus:outline-none focus:ring-1 focus:ring-mcs-focus-ring"
+              className="resize-none rounded-mcs-sm border border-mcs-border-default bg-mcs-bg-default px-2.5 py-1.5 text-mcs-sm text-mcs-text-default placeholder:text-mcs-text-muted focus:border-mcs-accent-border focus:outline-none focus:ring-1 focus:ring-mcs-focus-ring"
             />
           </div>
 
@@ -288,7 +288,7 @@ export function KitEditorDialog({
             </span>
             {items.length === 0 ? (
               /* 空态：纯文本主流写法（同 task-dialog「暂无执行记录」），dashed 孤例已消除 */
-              <p className="text-mcs-xs text-mcs-text-subtle">未添加物品，请从下方选择</p>
+              <p className="text-mcs-xs text-mcs-text-muted">未添加物品，请从下方选择</p>
             ) : (
               <div className="flex max-h-28 flex-wrap gap-1.5 overflow-y-auto">
                 {items.map((entry, index) => {
@@ -308,7 +308,7 @@ export function KitEditorDialog({
                           className="shrink-0 select-none"
                         />
                       ) : (
-                        <span className="flex size-[22px] shrink-0 items-center justify-center rounded-mcs-xs bg-mcs-error-bg-subtle font-mono text-mcs-2xs text-mcs-error-fg">
+                        <span className="flex size-5.5 shrink-0 items-center justify-center rounded-mcs-xs bg-mcs-error-bg-subtle font-mono text-mcs-2xs text-mcs-error-fg">
                           ?
                         </span>
                       )}
@@ -321,7 +321,7 @@ export function KitEditorDialog({
                             type="button"
                             onClick={() => setItemCount(index, entry.count - 1)}
                             aria-label={`减少 ${item?.name ?? entry.id} 数量`}
-                            className="rounded-mcs-xs p-0.5 text-mcs-text-muted hover:bg-mcs-bg-hover hover:text-mcs-text-default"
+                            className="rounded-mcs-xs p-0.5 text-mcs-text-muted hover:bg-mcs-state-hover hover:text-mcs-text-default"
                           >
                             <Minus className="size-3" aria-hidden />
                           </button>
@@ -332,7 +332,7 @@ export function KitEditorDialog({
                             type="button"
                             onClick={() => setItemCount(index, entry.count + 1)}
                             aria-label={`增加 ${item?.name ?? entry.id} 数量`}
-                            className="rounded-mcs-xs p-0.5 text-mcs-text-muted hover:bg-mcs-bg-hover hover:text-mcs-text-default"
+                            className="rounded-mcs-xs p-0.5 text-mcs-text-muted hover:bg-mcs-state-hover hover:text-mcs-text-default"
                           >
                             <Plus className="size-3" aria-hidden />
                           </button>
@@ -342,7 +342,7 @@ export function KitEditorDialog({
                         type="button"
                         onClick={() => removeItem(index)}
                         aria-label={`移除 ${item?.name ?? entry.id}`}
-                        className="shrink-0 rounded-mcs-xs p-0.5 text-mcs-text-subtle hover:bg-mcs-bg-hover hover:text-mcs-text-default"
+                        className="shrink-0 rounded-mcs-xs p-0.5 text-mcs-text-muted hover:bg-mcs-state-hover hover:text-mcs-text-default"
                       >
                         <X className="size-3" aria-hidden />
                       </button>
@@ -357,7 +357,7 @@ export function KitEditorDialog({
           <div className="flex flex-col gap-1.5">
             <div className="flex items-baseline justify-between">
               <span className="text-mcs-xs font-medium text-mcs-text-default">添加物品</span>
-              <span className="text-mcs-2xs text-mcs-text-subtle">找到 {filteredItems.length} 个</span>
+              <span className="text-mcs-2xs text-mcs-text-muted">找到 {filteredItems.length} 个</span>
             </div>
             <SearchInput
               value={search}
@@ -376,7 +376,7 @@ export function KitEditorDialog({
                     'shrink-0 rounded-full px-2 py-0.5 text-mcs-xs transition-colors',
                     category === cat
                       ? 'bg-mcs-accent-bg-subtle font-medium text-mcs-accent-fg'
-                      : 'text-mcs-text-muted hover:bg-mcs-bg-hover hover:text-mcs-text-default',
+                      : 'text-mcs-text-muted hover:bg-mcs-state-hover hover:text-mcs-text-default',
                   )}
                 >
                   {cat}
@@ -385,7 +385,7 @@ export function KitEditorDialog({
             </div>
             <div className="max-h-48 overflow-y-auto">
               {filteredItems.length === 0 ? (
-                <p className="py-6 text-center text-mcs-xs text-mcs-text-subtle">
+                <p className="py-6 text-center text-mcs-xs text-mcs-text-muted">
                   没有找到匹配的物品
                 </p>
               ) : (
@@ -417,7 +417,7 @@ export function KitEditorDialog({
         </div>
 
         <DialogFooter>
-          <span className="mr-auto text-mcs-xs text-mcs-text-subtle">共 {items.length} 件物品</span>
+          <span className="mr-auto text-mcs-xs text-mcs-text-muted">共 {items.length} 件物品</span>
           <Button variant="outline" onClick={() => handleOpenChange(false)}>
             取消
           </Button>

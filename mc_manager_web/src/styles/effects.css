@@ -15,13 +15,14 @@
 
 .animate-mcs-fade-up { animation: mcs-fade-up var(--mcs-motion-slow) var(--mcs-ease-out) both; }
 
-/* 网格 stagger：60ms 步进，≤6 档（配 animate-mcs-fade-up 使用） */
-.mcs-delay-1 { animation-delay: 60ms; }
-.mcs-delay-2 { animation-delay: 120ms; }
-.mcs-delay-3 { animation-delay: 180ms; }
-.mcs-delay-4 { animation-delay: 240ms; }
-.mcs-delay-5 { animation-delay: 300ms; }
-.mcs-delay-6 { animation-delay: 360ms; }
+/* 网格 stagger：40ms 步进，≤6 档（配 animate-mcs-fade-up 使用）；
+   末档总时长 240+450=690ms，压住「入场编排 ≤700ms」的体感上限 */
+.mcs-delay-1 { animation-delay: 40ms; }
+.mcs-delay-2 { animation-delay: 80ms; }
+.mcs-delay-3 { animation-delay: 120ms; }
+.mcs-delay-4 { animation-delay: 160ms; }
+.mcs-delay-5 { animation-delay: 200ms; }
+.mcs-delay-6 { animation-delay: 240ms; }
 
 /* ── 常驻微动效（骨架屏流光；装饰性，非交互反馈）── */
 @keyframes mcs-shimmer {
@@ -31,15 +32,20 @@
 
 .animate-mcs-shimmer { animation: mcs-shimmer 2s linear infinite; }
 
-/* 进度条流光：微弱高光带循环扫过，示意「进行中」而非装饰（叠在进度填充条上） */
+/* 进度条流光：微弱高光带循环扫过，示意「进行中」而非装饰（叠在进度填充条上）。
+   填充条已改 w-full + translateX，流光位移必须按固定 px 计（百分比会随轨道宽度放大）── */
+@keyframes mcs-sheen {
+  from { background-position: 100px 0; }
+  to { background-position: -100px 0; }
+}
 .mcs-progress-sheen { position: relative; overflow: hidden; }
 .mcs-progress-sheen::after {
   content: '';
   position: absolute;
   inset: 0;
   background: linear-gradient(100deg, transparent 20%, color-mix(in oklch, var(--mcs-text-default) 16%, transparent) 50%, transparent 80%);
-  background-size: 200% 100%;
-  animation: mcs-shimmer 2.4s linear infinite;
+  background-size: 100px 100%;
+  animation: mcs-sheen 2.4s linear infinite;
 }
 
 /* ── 背景纹理与氛围 ── */
@@ -59,7 +65,7 @@
   content: '';
   position: absolute;
   inset: 0;
-  z-index: 1;
+  z-index: var(--mcs-z-local);
   pointer-events: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.6'/%3E%3C/svg%3E");
   background-size: 160px 160px;

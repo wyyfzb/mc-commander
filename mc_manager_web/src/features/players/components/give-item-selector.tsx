@@ -82,7 +82,7 @@ const ItemCell = memo(function ItemCell({
         {item.name}
       </span>
       <span
-        className="w-full truncate text-center font-mono text-mcs-2xs text-mcs-text-subtle"
+        className="w-full truncate text-center font-mono text-mcs-2xs text-mcs-text-muted"
         title={fullItemId(item.id)}
       >
         {item.id}
@@ -175,7 +175,7 @@ export function ItemSelector({
 
       {/* 分类 chips + 匹配数 */}
       <div className="flex items-center gap-2">
-        <span className="shrink-0 text-mcs-2xs text-mcs-text-subtle">
+        <span className="shrink-0 text-mcs-2xs text-mcs-text-muted">
           找到 {filteredItems.length} 个物品
         </span>
         <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto">
@@ -188,7 +188,7 @@ export function ItemSelector({
                 'shrink-0 rounded-full px-2 py-0.5 text-mcs-xs transition-colors',
                 activeCategory === cat
                   ? 'bg-mcs-accent-bg-subtle font-medium text-mcs-accent-fg'
-                  : 'text-mcs-text-muted hover:bg-mcs-bg-hover hover:text-mcs-text-default',
+                  : 'text-mcs-text-muted hover:bg-mcs-state-hover hover:text-mcs-text-default',
               )}
             >
               {cat}
@@ -200,8 +200,8 @@ export function ItemSelector({
       {/* 物品网格 */}
       {filteredItems.length === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-1.5 py-8">
-          <Terminal className="size-6 text-mcs-text-subtle" aria-hidden />
-          <p className="text-mcs-sm text-mcs-text-subtle">没有找到匹配的物品</p>
+          <Terminal className="size-6 text-mcs-text-muted" aria-hidden />
+          <p className="text-mcs-sm text-mcs-text-muted">没有找到匹配的物品</p>
         </div>
       ) : (
         <div className="grid flex-1 grid-cols-4 content-start gap-1.5 overflow-y-auto pb-1 sm:grid-cols-5 lg:grid-cols-6" data-testid="give-item-grid">

@@ -1,11 +1,12 @@
 /**
  * 玻璃工具类（设计文档 §4.4，风格 A：简约+克制玻璃）
- * 允许面：侧栏/顶栏、命令面板、弹窗/toast —— 全页 ≤2-3 处、单 Z 层
- * 纪律：blur ≤20px、底色 alpha ≤0.7（toast 与亮色 overlay ≤0.85）；表格/终端/表单/图表一律实底（禁区）
+ * 预算（审计 S26 收尾）：同屏 ≤2 层 —— 常驻 1 处（顶栏 chrome）+ 覆盖层 1 处（确认弹窗 overlay）；
+ * 侧栏/通知抽屉/toast 一律实底（玻璃内含滚动容器时 backdrop 每次重绘都要重算模糊）
+ * 纪律：blur ≤20px、底色 alpha ≤0.7（亮色 overlay ≤0.85）；表格/终端/表单/图表一律实底（禁区）
  * 兜底：无 backdrop-filter 实底；prefers-reduced-transparency 降级磨砂
  */
 
-/* 顶栏/侧栏玻璃（Mica 式：轻 tint + 小 blur） */
+/* 顶栏玻璃（Mica 式：轻 tint + 小 blur） */
 .glass-chrome {
   background: color-mix(in oklch, var(--mcs-bg-default) 70%, transparent);
   -webkit-backdrop-filter: blur(20px) saturate(1.2);
@@ -25,22 +26,12 @@
   background: color-mix(in oklch, var(--mcs-bg-emphasis) 85%, transparent);
 }
 
-/* toast 玻璃 */
-.glass-toast {
-  background: color-mix(in oklch, var(--mcs-bg-emphasis) 85%, transparent);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
-}
-
 /* 实底兜底：浏览器不支持 backdrop-filter */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .glass-chrome,
-  .glass-overlay,
-  .glass-toast {
+  .glass-chrome {
     background: var(--mcs-bg-default);
   }
-  .glass-overlay,
-  .glass-toast {
+  .glass-overlay {
     background: var(--mcs-bg-emphasis);
   }
 }
@@ -48,14 +39,12 @@
 /* 透明偏好：降级为实底磨砂 */
 @media (prefers-reduced-transparency: reduce) {
   .glass-chrome,
-  .glass-overlay,
-  .glass-toast {
+  .glass-overlay {
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
     background: var(--mcs-bg-default);
   }
-  .glass-overlay,
-  .glass-toast {
+  .glass-overlay {
     background: var(--mcs-bg-emphasis);
   }
 }

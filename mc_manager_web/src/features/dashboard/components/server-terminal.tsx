@@ -425,7 +425,7 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
           <div
             role="search"
             aria-label="终端内容搜索"
-            className="absolute right-2 top-2 z-10 flex items-center gap-1 rounded-mcs-md border border-mcs-border-muted bg-popover p-1 shadow-mcs-raised"
+            className="absolute right-2 top-2 z-(--mcs-z-local) flex items-center gap-1 rounded-mcs-md border border-mcs-border-muted bg-popover p-1 shadow-mcs-raised"
           >
             <Input
               value={search.query}
@@ -492,7 +492,7 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
             ))}
           </div>
         ) : buffer.length === 0 ? (
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center gap-2 text-mcs-text-subtle">
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center gap-2 text-mcs-text-muted">
             <TerminalSquare className="size-4" aria-hidden />
             <span className="text-mcs-xs">等待服务器日志...</span>
           </div>
@@ -503,7 +503,7 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
           短暂为 false 的竞态会让「运行中」实例永久残留停止标记（UXT-24 实测） */}
       {!isRunning && buffer.length > 0 && (
         <div
-          className="shrink-0 border-t border-mcs-border-muted bg-mcs-bg-muted px-3 py-1.5 text-center text-mcs-2xs italic text-mcs-text-subtle"
+          className="shrink-0 border-t border-mcs-border-muted bg-mcs-bg-muted px-3 py-1.5 text-center text-mcs-2xs italic text-mcs-text-muted"
           role="status"
         >
           —— 实例已停止，以上为最后日志 ——

@@ -75,7 +75,7 @@ function defineMcsDarkTheme() {
   const bgSubtle = cssVarToHex('--mcs-bg-subtle')
   const bgDefault = cssVarToHex('--mcs-bg-default')
   const borderSubtle = cssVarToHex('--mcs-border-subtle')
-  const textSubtle = cssVarToHex('--mcs-text-subtle')
+  const textMuted = cssVarToHex('--mcs-text-muted')
   const accent = cssVarToHex('--mcs-accent')
   if (!bgSubtle) return
   monaco.editor.defineTheme('mcs-dark', {
@@ -86,7 +86,7 @@ function defineMcsDarkTheme() {
       'editor.background': bgSubtle,
       'editor.lineHighlightBackground': bgDefault || bgSubtle,
       'editor.lineHighlightBorder': borderSubtle || 'transparent',
-      ...(textSubtle ? { 'editorLineNumber.foreground': textSubtle } : {}),
+      ...(textMuted ? { 'editorLineNumber.foreground': textMuted } : {}),
       ...(accent ? { 'editorCursor.foreground': accent } : {}),
     },
   })
@@ -194,8 +194,8 @@ export function MonacoEditorPane({
   if (!path) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-2 bg-mcs-bg-subtle">
-        <FileEdit className="size-6 text-mcs-text-subtle" aria-hidden />
-        <p className="text-mcs-sm text-mcs-text-subtle">选择文件进行编辑</p>
+        <FileEdit className="size-6 text-mcs-text-muted" aria-hidden />
+        <p className="text-mcs-sm text-mcs-text-muted">选择文件进行编辑</p>
       </div>
     )
   }
@@ -247,7 +247,7 @@ export function MonacoEditorPane({
         >
           <Save aria-hidden />
           {isSaving ? '保存中…' : '保存'}
-          <kbd className="rounded-mcs-xs border border-mcs-border-muted bg-mcs-bg-muted px-1 font-mono text-mcs-2xs text-mcs-text-subtle">
+          <kbd className="rounded-mcs-xs border border-mcs-border-muted bg-mcs-bg-muted px-1 font-mono text-mcs-2xs text-mcs-text-muted">
             Ctrl+S
           </kbd>
         </Button>

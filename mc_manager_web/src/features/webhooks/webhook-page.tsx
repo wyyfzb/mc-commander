@@ -243,7 +243,7 @@ export default function WebhookPage() {
                 {/* 行主体=设置入口（弹窗含测试/日志/删除）；行内独立控件仅剩启用开关 */}
                 <button
                   type="button"
-                  className="min-w-0 flex-1 cursor-pointer rounded-mcs-xs py-1 text-left hover:bg-mcs-bg-hover focus-visible:bg-mcs-bg-hover"
+                  className="min-w-0 flex-1 cursor-pointer rounded-mcs-xs py-1 text-left hover:bg-mcs-state-hover focus-visible:bg-mcs-state-focus"
                   aria-haspopup="dialog"
                   aria-label={`设置 ${w.name}`}
                   onClick={() => openEdit(w)}
@@ -260,7 +260,7 @@ export default function WebhookPage() {
                     </span>
                   )}
                   {w.events.length === 0 && (
-                    <p className="mt-1 text-mcs-2xs text-mcs-text-subtle">订阅全部事件</p>
+                    <p className="mt-1 text-mcs-2xs text-mcs-text-muted">订阅全部事件</p>
                   )}
                 </button>
                 <Switch
@@ -277,7 +277,7 @@ export default function WebhookPage() {
 
       {/* ── 新建/编辑对话框 ── */}
       <Dialog open={showDialog} onOpenChange={(open) => { if (!open) tryCloseDialog() }}>
-        <DialogContent className="bg-mcs-bg-default sm:max-w-lg">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>{editTarget ? '编辑 Webhook' : '新建 Webhook'}</DialogTitle>
             <DialogDescription>{editTarget ? '修改 Webhook 配置' : '创建新的外部通知通道'}</DialogDescription>
@@ -375,14 +375,14 @@ export default function WebhookPage() {
                       'rounded-mcs-xs border px-2 py-0.5 text-mcs-2xs transition-colors cursor-pointer',
                       form.events.includes(evt)
                         ? 'border-mcs-accent-border-strong bg-mcs-accent-bg-subtle text-mcs-accent-fg'
-                        : 'border-mcs-border-muted text-mcs-text-subtle hover:border-mcs-border-default',
+                        : 'border-mcs-border-muted text-mcs-text-muted hover:border-mcs-border-default',
                     )}
                   >
                     {fmtEvt(evt)}
                   </button>
                 ))}
               </div>
-              <p className="text-mcs-2xs text-mcs-text-subtle">未选择 = 订阅全部事件</p>
+              <p className="text-mcs-2xs text-mcs-text-muted">未选择 = 订阅全部事件</p>
             </div>
             {/* 启用状态由列表行 Switch 承载，弹窗不再重复开关 */}
             {/* ── 投递操作区（仅编辑已有 webhook：测试 / 日志 / 删除）── */}
@@ -413,7 +413,7 @@ export default function WebhookPage() {
                     </Button>
                   </div>
                 </div>
-                <p className="text-mcs-2xs text-mcs-text-subtle">投递日志</p>
+                <p className="text-mcs-2xs text-mcs-text-muted">投递日志</p>
                 {deliveriesLoading ? (
                   <div className="space-y-1" aria-label="加载投递日志中">
                     {Array.from({ length: 3 }, (_, i) => (
@@ -429,7 +429,7 @@ export default function WebhookPage() {
                     </Button>
                   </div>
                 ) : deliveries.length === 0 ? (
-                  <p className="text-mcs-xs text-mcs-text-subtle">暂无投递记录</p>
+                  <p className="text-mcs-xs text-mcs-text-muted">暂无投递记录</p>
                 ) : (
                   <div className="flex max-h-60 flex-col gap-1 overflow-y-auto">
                     {deliveries.map((d: WebhookDelivery) => {
@@ -440,13 +440,13 @@ export default function WebhookPage() {
                         <div key={d.id}>
                           <button
                             type="button"
-                            className="flex w-full cursor-pointer items-center justify-between rounded-mcs-xs bg-mcs-bg-default px-2 py-1.5 text-left text-mcs-xs hover:bg-mcs-bg-hover"
+                            className="flex w-full cursor-pointer items-center justify-between rounded-mcs-xs bg-mcs-bg-default px-2 py-1.5 text-left text-mcs-xs hover:bg-mcs-state-hover"
                             aria-expanded={deliveryExpanded}
                             onClick={() => setExpandedDeliveryId(deliveryExpanded ? null : d.id)}
                           >
                             <div>
                               <span className="font-medium text-mcs-text-default">{fmtEvt(d.eventType)}</span>
-                              <span className="ml-2 text-mcs-text-subtle">
+                              <span className="ml-2 text-mcs-text-muted">
                                 {d.responseStatus ? String(d.responseStatus) : d.status}
                                 {d.durationMs != null ? ` ${String(d.durationMs)}ms` : ''}
                                 {d.attempts > 1 ? ` ${d.attempts}次` : ''}
@@ -460,17 +460,17 @@ export default function WebhookPage() {
                           </button>
                           {deliveryExpanded && (
                             <div className="mt-1 flex flex-col gap-1">
-                              <p className="text-mcs-2xs font-medium text-mcs-text-subtle">发送内容</p>
+                              <p className="text-mcs-2xs font-medium text-mcs-text-muted">发送内容</p>
                               {sentSummary ? (
                                 <pre data-testid={`delivery-payload-${d.id}`} className="max-h-40 whitespace-pre-wrap break-all overflow-y-auto rounded-mcs-xs bg-mcs-bg-subtle px-2 py-1.5 font-mono text-mcs-2xs text-mcs-text-muted">{sentSummary}</pre>
                               ) : (
-                                <p data-testid={`delivery-payload-${d.id}`} className="px-2 py-1 text-mcs-2xs text-mcs-text-subtle">无发送内容</p>
+                                <p data-testid={`delivery-payload-${d.id}`} className="px-2 py-1 text-mcs-2xs text-mcs-text-muted">无发送内容</p>
                               )}
-                              <p className="text-mcs-2xs font-medium text-mcs-text-subtle">响应内容</p>
+                              <p className="text-mcs-2xs font-medium text-mcs-text-muted">响应内容</p>
                               {summary ? (
                                 <pre data-testid={`delivery-response-${d.id}`} className="whitespace-pre-wrap break-all rounded-mcs-xs bg-mcs-bg-subtle px-2 py-1.5 font-mono text-mcs-2xs text-mcs-text-muted">{summary}</pre>
                               ) : (
-                                <p data-testid={`delivery-response-${d.id}`} className="px-2 py-1 text-mcs-2xs text-mcs-text-subtle">无响应体</p>
+                                <p data-testid={`delivery-response-${d.id}`} className="px-2 py-1 text-mcs-2xs text-mcs-text-muted">无响应体</p>
                               )}
                             </div>
                           )}

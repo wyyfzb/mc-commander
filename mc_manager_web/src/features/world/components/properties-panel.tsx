@@ -206,7 +206,7 @@ export function PropertiesPanel({ properties, isLoading, onSave, onEditingChange
       {/* ── 头部：标题 + 编辑/取消/保存 ── */}
       <div className="flex items-center gap-2">
         <span className="text-mcs-sm font-semibold text-mcs-text-default">服务器属性</span>
-        <span className="text-mcs-2xs text-mcs-text-subtle">server.properties</span>
+        <span className="text-mcs-2xs text-mcs-text-muted">server.properties</span>
         {!isEditing ? (
           <Button variant="outline" size="sm" className="ml-auto" onClick={startEditing} disabled={isLoading || !properties}>
             <Pencil aria-hidden />
@@ -268,7 +268,7 @@ export function PropertiesPanel({ properties, isLoading, onSave, onEditingChange
                 className="flex items-baseline gap-2 border-b border-mcs-border-subtle px-1 py-1.5 last:border-b-0"
               >
                 <span className="shrink-0 text-mcs-xs font-medium text-mcs-text-default">{item.label}</span>
-                <span className="min-w-0 flex-1 truncate font-mono text-mcs-2xs text-mcs-text-subtle">
+                <span className="min-w-0 flex-1 truncate font-mono text-mcs-2xs text-mcs-text-muted">
                   {item.oldValue} <span className="text-mcs-text-default">→</span> {item.newValue}
                 </span>
               </div>
@@ -315,7 +315,7 @@ export function PropertiesPanel({ properties, isLoading, onSave, onEditingChange
             ))}
           </div>
         ) : filteredRows.length === 0 ? (
-          <p className="py-8 text-center text-mcs-xs text-mcs-text-subtle">无匹配属性</p>
+          <p className="py-8 text-center text-mcs-xs text-mcs-text-muted">无匹配属性</p>
         ) : (
           <div className="flex flex-col">
             {filteredRows.map((def) => (
@@ -359,7 +359,7 @@ function PropertyRow({
           {isSensitive && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <Lock className="size-3 shrink-0 text-mcs-text-subtle" aria-label="敏感属性" />
+                <Lock className="size-3 shrink-0 text-mcs-text-muted" aria-label="敏感属性" />
               </TooltipTrigger>
               <TooltipContent>安全敏感项不可通过面板修改，请在服务器上直接编辑 server.properties</TooltipContent>
             </Tooltip>
@@ -370,7 +370,7 @@ function PropertyRow({
             </span>
           )}
         </div>
-        <div className="truncate text-mcs-2xs text-mcs-text-subtle" title={def.desc}>
+        <div className="truncate text-mcs-2xs text-mcs-text-muted" title={def.desc}>
           {def.label} · {def.desc}
         </div>
       </div>
@@ -378,7 +378,7 @@ function PropertyRow({
       <div className="flex w-44 shrink-0 justify-end">
         {isSensitive ? (
           // 敏感键：只读占位符（编辑态也锁定）
-          <span className="inline-flex items-center gap-1 rounded-mcs-xs bg-mcs-bg-muted px-2 py-1 font-mono text-mcs-xs text-mcs-text-subtle">
+          <span className="inline-flex items-center gap-1 rounded-mcs-xs bg-mcs-bg-muted px-2 py-1 font-mono text-mcs-xs text-mcs-text-muted">
             <Lock className="size-3" aria-hidden />
             {SENSITIVE_PROPERTY_PLACEHOLDER}
           </span>

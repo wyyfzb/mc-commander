@@ -166,7 +166,7 @@ export function AnnouncementCard() {
             <button
               type="button"
               aria-label={`编辑预设 ${preset.name}`}
-              className="cursor-pointer text-mcs-text-subtle hover:text-mcs-text-default"
+              className="cursor-pointer text-mcs-text-muted hover:text-mcs-text-default"
               onClick={() => openEditPreset(index)}
             >
               <Pencil className="size-3" aria-hidden />
@@ -174,7 +174,7 @@ export function AnnouncementCard() {
             <button
               type="button"
               aria-label={`删除预设 ${preset.name}`}
-              className="cursor-pointer text-mcs-text-subtle hover:text-mcs-error-fg"
+              className="cursor-pointer text-mcs-text-muted hover:text-mcs-error-fg"
               onClick={() => setDeleteIndex(index)}
             >
               <X className="size-3" aria-hidden />
@@ -184,7 +184,7 @@ export function AnnouncementCard() {
         <button
           type="button"
           aria-label="添加预设"
-          className="inline-flex cursor-pointer items-center gap-1 rounded-mcs-sm border border-dashed border-mcs-border-default px-2 py-1 text-mcs-xs text-mcs-text-subtle transition-colors hover:text-mcs-text-default"
+          className="inline-flex cursor-pointer items-center gap-1 rounded-mcs-sm border border-dashed border-mcs-border-default px-2 py-1 text-mcs-xs text-mcs-text-muted transition-colors hover:text-mcs-text-default"
           onClick={openNewPreset}
         >
           <Plus className="size-3" aria-hidden />

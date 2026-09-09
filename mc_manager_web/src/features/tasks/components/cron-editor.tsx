@@ -63,7 +63,7 @@ export function CronEditor({ value, onChange }: { value: string; onChange: (v: s
 
   return (
     <div className="rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted p-2 shadow-mcs-card">
-      <p className="text-mcs-xs font-medium text-mcs-text-subtle">可视化编辑</p>
+      <p className="text-mcs-xs font-medium text-mcs-text-muted">可视化编辑</p>
       {/* 四字段 Select（分/时/日/月） */}
       <div className="mt-1.5 grid grid-cols-4 gap-1.5">
         {SELECT_FIELDS.map((field, idx) => {
@@ -75,7 +75,7 @@ export function CronEditor({ value, onChange }: { value: string; onChange: (v: s
             : [{ label: `自定义: ${current}`, value: current }, ...options]
           return (
             <div key={field.key} className="min-w-0">
-              <p className="mb-1 text-mcs-2xs text-mcs-text-subtle">{field.label}</p>
+              <p className="mb-1 text-mcs-2xs text-mcs-text-muted">{field.label}</p>
               <Select value={current} onValueChange={(v) => updateField(idx, v)}>
                 <SelectTrigger size="sm" aria-label={field.label} className="w-full px-1.5">
                   <SelectValue />
@@ -94,7 +94,7 @@ export function CronEditor({ value, onChange }: { value: string; onChange: (v: s
       </div>
       {/* 周字段 chip 多选 */}
       <div className="mt-2">
-        <p className="mb-1.5 text-mcs-2xs text-mcs-text-subtle">周</p>
+        <p className="mb-1.5 text-mcs-2xs text-mcs-text-muted">周</p>
         <div className="flex flex-wrap gap-1">
           {WEEKDAY_CHIPS.map((chip) => (
             <Chip

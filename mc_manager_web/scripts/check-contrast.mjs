@@ -98,13 +98,13 @@ const refVars = extractVars(reference)
 const semanticScopes = resolveScopes(semantic)
 
 const STATUS_KEYS = ['success', 'warning', 'error', 'info', 'purple', 'orange']
-const BG_KEYS = ['bg-default', 'bg-muted', 'bg-subtle', 'bg-emphasis', 'bg-hover']
+const BG_KEYS = ['bg-default', 'bg-muted', 'bg-subtle', 'bg-emphasis', 'bg-secondary']
 
 /**
  * 玻璃面规格直接从 glass.css 读取（单一事实源）：{ name, token, alpha }
  * .light 规则覆盖同名基础规则；模态玻璃（overlay/toast）的底是「scrim 之后的背景」
  */
-const MODAL_GLASS = new Set(['glass-overlay', 'glass-toast'])
+const MODAL_GLASS = new Set(['glass-overlay'])
 function readGlassSpecs(isLight) {
   const css = readFileSync(join(root, 'src/styles/glass.css'), 'utf-8')
   const base = new Map()
@@ -173,7 +173,7 @@ for (const [scopeName, vars] of [
   void pageBg
 
   // 1. 文字三级 × 面（正文 ≥4.5:1，含 subtle）
-  for (const textKey of ['text-default', 'text-muted', 'text-subtle']) {
+  for (const textKey of ['text-default', 'text-muted']) {
     const fg = parseColor(vars.get(`--mcs-${textKey}`), vars, refVars)
     for (const [name, candidates] of surfaces) check(`${textKey} on ${name}`, worstOn(fg.color, candidates), 4.5)
   }
@@ -260,6 +260,26 @@ for (const [scopeName, vars] of [
     check('accent-border-strong on accent-bg-subtle', wcagContrast(effective, face), 3.0)
   }
 
+  // 9c. 危险控件边界（--mcs-error-border-strong）：控件边界 ≥3:1（WCAG 1.4.11），
+  //     落点 = 页面/卡片/弹窗底 + 自身状态底（危险按钮、危险徽章）
+  {
+    const dangerBorder = parseColor(vars.get('--mcs-error-border-strong'), vars, refVars)
+    for (const bgKey of ['bg-default', 'bg-muted', 'bg-emphasis']) {
+      const bg = parseColor(vars.get(`--mcs-${bgKey}`), vars, refVars)
+      check(
+        `error-border-strong on ${bgKey}`,
+        wcagContrast(composite(dangerBorder.color, bg.color, dangerBorder.alpha), bg.color),
+        3.0,
+      )
+    }
+    const tint = parseColor(vars.get('--mcs-error-bg-subtle'), vars, refVars)
+    check(
+      'error-border-strong on error-bg-subtle',
+      wcagContrast(composite(dangerBorder.color, tint.color, dangerBorder.alpha), tint.color),
+      3.0,
+    )
+  }
+
   // 10. theme 层 slot 对（shadcn 组件真实用法：ui/ 里的 text-destructive / muted-foreground / ring / input）
   {
     const pairs = [
@@ -267,7 +287,7 @@ for (const [scopeName, vars] of [
       ['error-fg on bg-muted (text-destructive)', '--mcs-error-fg', '--mcs-bg-muted', 4.5],
       ['error-fg on bg-emphasis (text-destructive)', '--mcs-error-fg', '--mcs-bg-emphasis', 4.5],
       ['text-muted on bg-emphasis (muted-foreground)', '--mcs-text-muted', '--mcs-bg-emphasis', 4.5],
-      ['text-default on bg-hover (accent-foreground)', '--mcs-text-default', '--mcs-bg-hover', 4.5],
+      ['text-default on bg-secondary (secondary-foreground)', '--mcs-text-default', '--mcs-bg-secondary', 4.5],
       ['focus-ring on bg-emphasis (ring)', '--mcs-focus-ring', '--mcs-bg-emphasis', 3.0],
       ['border-default on bg-emphasis (input)', '--mcs-border-default', '--mcs-bg-emphasis', 3.0],
     ]

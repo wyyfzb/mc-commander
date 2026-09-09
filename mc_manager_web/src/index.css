@@ -12,6 +12,11 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* 自定义断点：窄窗口档（原 min-[480px] 任意值变体收敛为语义断点） */
+@theme {
+    --breakpoint-xs: 30rem;
+}
+
 /* MCS 语义 token 工具类注册：text-mcs-* / bg-mcs-* / border-mcs-* / rounded-mcs-* 等
    （inline：变量值随 .light/.dark 动态解析） */
 @theme inline {
@@ -19,10 +24,9 @@
     --color-mcs-bg-muted: var(--mcs-bg-muted);
     --color-mcs-bg-subtle: var(--mcs-bg-subtle);
     --color-mcs-bg-emphasis: var(--mcs-bg-emphasis);
-    --color-mcs-bg-hover: var(--mcs-bg-hover);
+    --color-mcs-bg-secondary: var(--mcs-bg-secondary);
     --color-mcs-text-default: var(--mcs-text-default);
     --color-mcs-text-muted: var(--mcs-text-muted);
-    --color-mcs-text-subtle: var(--mcs-text-subtle);
     --color-mcs-border-default: var(--mcs-border-default);
     --color-mcs-border-muted: var(--mcs-border-muted);
     --color-mcs-border-subtle: var(--mcs-border-subtle);
@@ -35,6 +39,7 @@
     --color-mcs-error-fg: var(--mcs-error-fg);
     --color-mcs-error-bg-subtle: var(--mcs-error-bg-subtle);
     --color-mcs-error-border: var(--mcs-error-border);
+    --color-mcs-error-border-strong: var(--mcs-error-border-strong);
     --color-mcs-info-fg: var(--mcs-info-fg);
     --color-mcs-info-bg-subtle: var(--mcs-info-bg-subtle);
     --color-mcs-info-border: var(--mcs-info-border);
@@ -56,6 +61,12 @@
     --color-mcs-terminal-accent: var(--mcs-terminal-accent);
     --color-mcs-terminal-error: var(--mcs-terminal-error);
     --color-mcs-terminal-warning: var(--mcs-terminal-warning);
+    --color-mcs-dimension-overworld: var(--mcs-dimension-overworld);
+    --color-mcs-dimension-nether: var(--mcs-dimension-nether);
+    --color-mcs-dimension-end: var(--mcs-dimension-end);
+    --color-mcs-dimension-overworld-bg-subtle: var(--mcs-dimension-overworld-bg-subtle);
+    --color-mcs-dimension-nether-bg-subtle: var(--mcs-dimension-nether-bg-subtle);
+    --color-mcs-dimension-end-bg-subtle: var(--mcs-dimension-end-bg-subtle);
     --color-mcs-focus-ring: var(--mcs-focus-ring);
     --color-mcs-state-hover: var(--mcs-state-hover);
     --color-mcs-state-focus: var(--mcs-state-focus);
@@ -83,6 +94,7 @@
     --shadow-mcs-card: var(--mcs-shadow-card);
     --shadow-mcs-raised: var(--mcs-shadow-raised);
     --shadow-mcs-overlay: var(--mcs-shadow-overlay);
+    --shadow-mcs-thumb: var(--mcs-shadow-thumb);
     --shadow-mcs-accent-button: var(--mcs-shadow-accent-button);
     --shadow-mcs-glow-accent: var(--mcs-glow-accent);
     --shadow-mcs-glow-accent-strong: var(--mcs-glow-accent-strong);
@@ -120,13 +132,15 @@
     --color-card: var(--card);
     --color-foreground: var(--foreground);
     --color-background: var(--background);
-    --radius-sm: calc(var(--radius) * 0.6);
-    --radius-md: calc(var(--radius) * 0.8);
-    --radius-lg: var(--radius);
-    --radius-xl: calc(var(--radius) * 1.4);
-    --radius-2xl: calc(var(--radius) * 1.8);
-    --radius-3xl: calc(var(--radius) * 2.2);
-    --radius-4xl: calc(var(--radius) * 2.6);
+    /* 单轨：shadcn 派生档直接绑 MCS 圆角档位。原 calc 派生（7.2/9.6/16.8/31.2px）
+       无一落在 6/8/12/16/20 档上，且 2xl 以上随 --radius 无上限放大 → 统一封到 lg */
+    --radius-sm: var(--mcs-radius-xs);   /* 6px */
+    --radius-md: var(--mcs-radius-sm);   /* 8px */
+    --radius-lg: var(--mcs-radius-md);   /* 12px */
+    --radius-xl: var(--mcs-radius-lg);   /* 16px */
+    --radius-2xl: var(--mcs-radius-lg);
+    --radius-3xl: var(--mcs-radius-lg);
+    --radius-4xl: var(--mcs-radius-lg);
 }
 
 /* 深色优先（P4）：html 默认 .dark；切亮色时替换为 .light（见 useTheme） */
@@ -212,5 +226,8 @@ input[type="password"]::-ms-clear {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    /* delay 不归零时，mcs-delay-6(360ms) + both 仍先隐藏 360ms（审计 S29） */
+    animation-delay: 0.01ms !important;
+    transition-delay: 0.01ms !important;
   }
 }

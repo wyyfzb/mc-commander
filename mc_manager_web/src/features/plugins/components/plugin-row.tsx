@@ -33,7 +33,7 @@ export function PluginRow({ plugin, checked, onCheckedChange, toggling, deleting
 
   return (
     <li
-      className="flex cursor-pointer items-start gap-3 p-4 transition-colors hover:bg-mcs-bg-hover"
+      className="flex cursor-pointer items-start gap-3 p-4 transition-colors hover:bg-mcs-state-hover"
       onClick={onOpenDetail}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -89,14 +89,14 @@ export function PluginRow({ plugin, checked, onCheckedChange, toggling, deleting
             </button>
           )}
         </div>
-        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-mcs-xs text-mcs-text-subtle">
+        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-mcs-xs text-mcs-text-muted">
           <span className="truncate font-mono" title={plugin.file}>{plugin.file}</span>
           <span>{formatFileSize(plugin.sizeBytes)}</span>
           <span>{formatModifiedAt(new Date(plugin.mtimeMs).toISOString())} 修改</span>
           {authors.length > 0 && <span className="truncate">作者 {authors.join(', ')}</span>}
         </div>
         {depend.length > 0 && (
-          <div className="mt-1 text-mcs-xs text-mcs-text-subtle">
+          <div className="mt-1 text-mcs-xs text-mcs-text-muted">
             依赖：{depend.join('、')}
             <span className="ml-1 opacity-70">（不做自动解析，缺失时插件可能无法加载）</span>
           </div>

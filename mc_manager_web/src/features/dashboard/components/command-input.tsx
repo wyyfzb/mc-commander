@@ -287,7 +287,7 @@ export function CommandInput() {
           }}
           placeholder="输入服务器命令... (如 /say hello)"
           disabled={!isRunning}
-          className="h-8 min-w-0 flex-1 rounded-mcs-sm border border-input bg-mcs-bg-subtle py-0 pr-2.5 pl-7 font-mono text-mcs-xs text-mcs-text-default transition-colors outline-none placeholder:text-mcs-text-subtle focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+          className="h-8 min-w-0 flex-1 rounded-mcs-sm border border-input bg-mcs-bg-subtle py-0 pr-2.5 pl-7 font-mono text-mcs-xs text-mcs-text-default transition-colors outline-none placeholder:text-mcs-text-muted focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
           aria-label="服务器命令输入"
         />
         {/* shell 语义前缀：内嵌输入框内 */}
@@ -312,7 +312,7 @@ export function CommandInput() {
         {/* 补全下拉 */}
         {completions.length > 0 && (
           <div
-            className="absolute bottom-full left-0 right-0 z-10 mb-1 max-h-44 overflow-y-auto rounded-mcs-sm border border-mcs-border-default bg-mcs-bg-emphasis p-1 shadow-mcs-raised"
+            className="absolute bottom-full left-0 right-0 z-(--mcs-z-dropdown) mb-1 max-h-44 overflow-y-auto rounded-mcs-sm border border-mcs-border-default bg-mcs-bg-emphasis p-1 shadow-mcs-raised"
             role="listbox"
             aria-label="命令补全"
           >
@@ -331,7 +331,7 @@ export function CommandInput() {
                 >
                   <Icon className="size-3 text-mcs-accent-fg" aria-hidden />
                   <span className="font-mono">{item.text}</span>
-                  {item.usage && <span className="ml-auto truncate text-mcs-text-subtle">{item.usage}</span>}
+                  {item.usage && <span className="ml-auto truncate text-mcs-text-muted">{item.usage}</span>}
                 </button>
               )
             })}
@@ -371,7 +371,7 @@ export function CommandInput() {
                     <button
                       type="button"
                       aria-label={`发送 ${preset}`}
-                      className="-m-1 cursor-pointer p-1 text-mcs-text-subtle hover:text-mcs-success-fg"
+                      className="-m-1 cursor-pointer p-1 text-mcs-text-muted hover:text-mcs-success-fg"
                       onClick={() => send(preset)}
                     >
                       <Play className="size-3" aria-hidden />
@@ -382,7 +382,7 @@ export function CommandInput() {
                 <button
                   type="button"
                   aria-label={`删除 ${preset}`}
-                  className="-m-1 cursor-pointer p-1 text-mcs-text-subtle hover:text-mcs-error-fg"
+                  className="-m-1 cursor-pointer p-1 text-mcs-text-muted hover:text-mcs-error-fg"
                   onClick={() => setDeleteTarget(preset)}
                 >
                   <X className="size-3" aria-hidden />

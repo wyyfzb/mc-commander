@@ -205,12 +205,12 @@ export function UpgradeDialog({ instance, open, onOpenChange }: UpgradeDialogPro
                   {UPGRADE_STAGE_LABELS[progress.stage]}
                 </span>
                 {progress.percent > 0 && (
-                  <span className="text-xs text-mcs-text-subtle">{progress.percent}%</span>
+                  <span className="text-xs text-mcs-text-muted">{progress.percent}%</span>
                 )}
               </div>
               {progress.percent > 0 && <ProgressBar percent={progress.percent} />}
               {progress.detail && (
-                <p className="text-xs text-mcs-text-subtle">{progress.detail}</p>
+                <p className="text-xs text-mcs-text-muted">{progress.detail}</p>
               )}
             </div>
           )}

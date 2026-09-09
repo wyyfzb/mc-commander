@@ -65,7 +65,7 @@ export function PlayerDetailPanel({
 
   return (
     <aside
-      className="flex w-105 shrink-0 flex-col border-l border-mcs-border-default bg-mcs-bg-default"
+      className="flex w-105 shrink-0 flex-col border-l border-mcs-border-default bg-mcs-bg-default max-lg:absolute max-lg:inset-0 max-lg:z-(--mcs-z-modal) max-lg:w-full max-lg:border-l-0 max-lg:shadow-mcs-overlay"
       aria-label="玩家详情面板"
     >
       {/* ── 头部 ── */}
@@ -84,14 +84,14 @@ export function PlayerDetailPanel({
                 />
               ))}
               {batchTargets.length > 4 && (
-                <span className="inline-flex size-[26px] items-center justify-center rounded-mcs-sm bg-mcs-bg-hover text-mcs-2xs font-medium text-mcs-text-muted ring-2 ring-mcs-bg-default">
+                <span className="inline-flex size-6.5 items-center justify-center rounded-mcs-sm bg-mcs-bg-secondary text-mcs-2xs font-medium text-mcs-text-muted ring-2 ring-mcs-bg-default">
                   +{batchTargets.length - 4}
                 </span>
               )}
             </div>
             <div className="min-w-0">
               <div className="text-mcs-sm font-medium text-mcs-text-default">已选择 {batchTargets.length} 名玩家</div>
-              <div className="max-h-10 truncate text-mcs-xs text-mcs-text-subtle">
+              <div className="max-h-10 truncate text-mcs-xs text-mcs-text-muted">
                 {batchTargets.map((p) => p.name).join('、')}
               </div>
             </div>
@@ -114,7 +114,7 @@ export function PlayerDetailPanel({
                     'shrink-0 rounded-full px-1.5 text-mcs-2xs',
                     effectivePlayer.isOnline
                       ? 'bg-mcs-success-bg-subtle text-mcs-success-fg'
-                      : 'bg-mcs-bg-hover text-mcs-text-muted',
+                      : 'bg-mcs-bg-secondary text-mcs-text-muted',
                   )}
                 >
                   {effectivePlayer.isOnline ? '在线' : '离线'}
@@ -125,11 +125,11 @@ export function PlayerDetailPanel({
                   </span>
                 )}
               </div>
-              <div className="truncate font-mono text-mcs-2xs text-mcs-text-subtle">{effectivePlayer.uuid}</div>
+              <div className="truncate font-mono text-mcs-2xs text-mcs-text-muted">{effectivePlayer.uuid}</div>
             </div>
           </div>
         ) : (
-          <div className="flex flex-1 items-center text-mcs-sm text-mcs-text-subtle">加载中…</div>
+          <div className="flex flex-1 items-center text-mcs-sm text-mcs-text-muted">加载中…</div>
         )}
         <Button variant="ghost" size="icon-sm" onClick={closeDetail} aria-label="关闭详情面板">
           <X aria-hidden />
@@ -142,14 +142,14 @@ export function PlayerDetailPanel({
         onValueChange={(v) => setDetailTab(v as PlayerDetailTab)}
         className="border-b border-mcs-border-muted px-2"
       >
-        <TabsList className="h-9 justify-start gap-0 rounded-none bg-transparent p-0">
+        <TabsList className="h-9 justify-start gap-0 overflow-x-auto rounded-none bg-transparent p-0">
           {tabs.map((tab) => {
             const label = DETAIL_TAB_LABELS.find((t) => t.value === tab)?.label ?? tab
             return (
               <TabsTrigger
                 key={tab}
                 value={tab}
-                className="h-9 rounded-none border-b-2 border-transparent px-3 text-mcs-xs data-[state=active]:border-mcs-accent-border-strong data-[state=active]:text-mcs-text-default data-[state=active]:shadow-none"
+                className="h-9 shrink-0 rounded-none border-b-2 border-transparent px-3 text-mcs-xs data-[state=active]:border-mcs-accent-border-strong data-[state=active]:text-mcs-text-default data-[state=active]:shadow-none"
               >
                 {label}
               </TabsTrigger>

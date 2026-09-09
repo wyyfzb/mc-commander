@@ -97,7 +97,7 @@ export function MarketHitCard({
             <span className="truncate text-mcs-sm font-medium text-mcs-text-default" title={title}>
               {title}
             </span>
-            {hit.author && <span className="text-mcs-xs text-mcs-text-subtle">{hit.author}</span>}
+            {hit.author && <span className="text-mcs-xs text-mcs-text-muted">{hit.author}</span>}
             {/* 已安装同名提示（按净化文件名比对） */}
             <StatusPill tone="success">↓ {formatCompact(hit.downloads)}</StatusPill>
           </div>
@@ -111,7 +111,7 @@ export function MarketHitCard({
               <StatusPill key={c} tone="muted">{c}</StatusPill>
             ))}
             {hit.dateModified && (
-              <span className="text-mcs-xs text-mcs-text-subtle">
+              <span className="text-mcs-xs text-mcs-text-muted">
                 {formatRelativeTime(hit.dateModified)} 更新
               </span>
             )}
@@ -119,7 +119,7 @@ export function MarketHitCard({
         </div>
 
         <ChevronDown
-          className={`mt-1 size-4 shrink-0 text-mcs-text-subtle transition-transform duration-mcs-base ${expanded ? 'rotate-180' : ''}`}
+          className={`mt-1 size-4 shrink-0 text-mcs-text-muted transition-transform duration-mcs-base ${expanded ? 'rotate-180' : ''}`}
           aria-hidden
         />
       </button>
@@ -128,14 +128,14 @@ export function MarketHitCard({
       {expanded && (
         <div className="border-t border-mcs-border-muted bg-mcs-bg-muted/40 px-3 py-2.5" data-testid="market-versions">
           {panel?.loading ? (
-            <div className="flex items-center gap-2 py-2 text-mcs-xs text-mcs-text-subtle" aria-busy="true">
+            <div className="flex items-center gap-2 py-2 text-mcs-xs text-mcs-text-muted" aria-busy="true">
               <Loader2 className="size-3.5 animate-spin" aria-hidden />
               正在获取版本列表…
             </div>
           ) : panel?.error ? (
             <p className="py-1.5 text-mcs-xs text-mcs-error-fg">{panel.error}</p>
           ) : panel && panel.versions.length === 0 ? (
-            <p className="py-1.5 text-mcs-xs text-mcs-text-subtle">
+            <p className="py-1.5 text-mcs-xs text-mcs-text-muted">
               当前过滤条件下没有可安装的版本（可尝试放宽版本/加载器过滤）
             </p>
           ) : panel ? (
@@ -146,7 +146,7 @@ export function MarketHitCard({
                 return (
                   <li
                     key={v.versionNumber}
-                    className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-mcs-sm px-2 py-1.5 hover:bg-mcs-bg-hover"
+                    className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-mcs-sm px-2 py-1.5 hover:bg-mcs-state-hover"
                   >
                     <span className="font-mono text-mcs-xs text-mcs-text-default" title={v.name ?? v.versionNumber}>
                       {v.versionNumber}
@@ -165,11 +165,11 @@ export function MarketHitCard({
                         {l}
                       </StatusPill>
                     ))}
-                    <span className="text-mcs-xs text-mcs-text-subtle">
+                    <span className="text-mcs-xs text-mcs-text-muted">
                       {formatFileSize(v.file.size)}
                       {v.datePublished && ` · ${formatRelativeTime(v.datePublished)}`}
                     </span>
-                    <span className="min-w-0 truncate text-mcs-xs text-mcs-text-subtle" title={v.gameVersions.join(', ')}>
+                    <span className="min-w-0 truncate text-mcs-xs text-mcs-text-muted" title={v.gameVersions.join(', ')}>
                       兼容 {v.gameVersions.length > 3 ? `${v.gameVersions.slice(0, 3).join(', ')} 等` : v.gameVersions.join(', ') || '—'}
                     </span>
                     <div className="ml-auto flex items-center gap-1.5">
@@ -178,7 +178,7 @@ export function MarketHitCard({
                           href={`https://modrinth.com/project/${hit.slug}`}
                           target="_blank"
                           rel="noreferrer noopener"
-                          className="inline-flex size-7 items-center justify-center rounded-mcs-sm text-mcs-text-subtle transition-colors hover:bg-mcs-bg-hover hover:text-mcs-text-default"
+                          className="inline-flex size-7 items-center justify-center rounded-mcs-sm text-mcs-text-muted transition-colors hover:bg-mcs-state-hover hover:text-mcs-text-default"
                           onClick={(e) => e.stopPropagation()}
                           aria-label={`在 Modrinth 打开 ${title}`}
                           title="在 Modrinth 打开"

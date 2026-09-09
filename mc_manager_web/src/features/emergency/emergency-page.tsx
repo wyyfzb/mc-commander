@@ -148,7 +148,7 @@ export function EmergencyPage() {
           )}
         >
           <span
-            className={cn('size-1.5 rounded-full', healthy ? 'bg-mcs-success-fg' : isRunning ? 'bg-mcs-warning-fg' : 'bg-mcs-text-subtle')}
+            className={cn('size-1.5 rounded-full', healthy ? 'bg-mcs-success-fg' : isRunning ? 'bg-mcs-warning-fg' : 'bg-mcs-text-muted')}
             aria-hidden
           />
           {isRunning ? (healthy ? '健康' : '卡顿') : '已停止'}
@@ -177,7 +177,7 @@ export function EmergencyPage() {
                   >
                     {st?.tps != null ? st.tps.toFixed(1) : '—'}
                   </span>
-                  <span className="mt-1.5 text-mcs-2xs tracking-[0.2em] text-mcs-text-subtle">
+                  <span className="mt-1.5 text-mcs-2xs tracking-[0.2em] text-mcs-text-muted">
                     TPS{isRunning ? ' · 运行中' : ' · 已停止'}
                   </span>
                   <div className="mt-4 flex w-full justify-around">
@@ -232,7 +232,7 @@ export function EmergencyPage() {
             <section className="flex flex-col rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-subtle shadow-mcs-card">
               <div className="flex items-center gap-1.5 border-b border-mcs-border-muted px-3 py-2">
                 <span className="size-1.5 rounded-full bg-mcs-success-fg" aria-hidden />
-                <span className="font-mono text-mcs-xs tracking-wider text-mcs-text-subtle">SERVER CONSOLE</span>
+                <span className="font-mono text-mcs-xs tracking-wider text-mcs-text-muted">SERVER CONSOLE</span>
               </div>
               <div className="min-h-24 px-3 py-2 font-mono text-mcs-2xs leading-relaxed text-mcs-text-muted">
                 {logsQuery.isError && !logsQuery.isLoading ? (
@@ -240,7 +240,7 @@ export function EmergencyPage() {
                 ) : (
                   <>
                     {(lastLogs.length === 0 || !isRunning) && (
-                      <p className="text-mcs-text-subtle">{isRunning ? '暂无日志输出…' : '服务器已停止，启动后可查看日志'}</p>
+                      <p className="text-mcs-text-muted">{isRunning ? '暂无日志输出…' : '服务器已停止，启动后可查看日志'}</p>
                     )}
                     {lastLogs.map((l, i) => (
                       <p key={i} className="line-clamp-2" title={l.text}>{l.text}</p>
@@ -255,14 +255,14 @@ export function EmergencyPage() {
         {tab === 'players' && (
           <div className="flex flex-col gap-2">
             {onlinePlayers.length === 0 && (
-              <p className="py-8 text-center text-mcs-sm text-mcs-text-subtle">
+              <p className="py-8 text-center text-mcs-sm text-mcs-text-muted">
                 {isRunning ? '当前没有在线玩家' : '服务器已停止'}
               </p>
             )}
             {onlinePlayers.map((p) => (
               <div
                 key={p.name}
-                className="flex items-center gap-3 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted px-3 py-3 shadow-mcs-card"
+                className="flex items-center gap-3 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted p-3 shadow-mcs-card"
               >
                 <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-mcs-accent-bg-subtle text-mcs-sm font-semibold text-mcs-accent-fg">
                   {p.name?.charAt(0).toUpperCase()}
@@ -287,7 +287,7 @@ export function EmergencyPage() {
         {tab === 'console' && (
           <div className="flex flex-col gap-2">
             <div className="flex flex-col rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-subtle shadow-mcs-card">
-              <div className="border-b border-mcs-border-muted px-3 py-2 font-mono text-mcs-2xs tracking-wider text-mcs-text-subtle">
+              <div className="border-b border-mcs-border-muted px-3 py-2 font-mono text-mcs-2xs tracking-wider text-mcs-text-muted">
                 SERVER CONSOLE
               </div>
               <div className="min-h-40 px-3 py-2 font-mono text-mcs-2xs leading-relaxed text-mcs-text-muted">
@@ -295,7 +295,7 @@ export function EmergencyPage() {
                   <p className="text-mcs-error-fg">日志获取失败，正在重试…</p>
                 ) : (
                   <>
-                    {lastLogs.length === 0 && <p className="text-mcs-text-subtle">暂无日志</p>}
+                    {lastLogs.length === 0 && <p className="text-mcs-text-muted">暂无日志</p>}
                     {lastLogs.map((l, i) => (
                       <p key={i} className="line-clamp-2" title={l.text}>{l.text}</p>
                     ))}
@@ -310,7 +310,7 @@ export function EmergencyPage() {
                 onKeyDown={(e) => e.key === 'Enter' && void sendCommand()}
                 placeholder="输入命令…"
                 aria-label="终端命令输入"
-                className="h-12 min-w-0 flex-1 rounded-mcs-md border border-mcs-border-default bg-mcs-bg-muted px-3 font-mono text-mcs-sm text-mcs-text-default outline-none placeholder:text-mcs-text-subtle focus:border-mcs-accent-border focus:ring-1 focus:ring-mcs-focus-ring"
+                className="h-12 min-w-0 flex-1 rounded-mcs-md border border-mcs-border-default bg-mcs-bg-muted px-3 font-mono text-mcs-sm text-mcs-text-default outline-none placeholder:text-mcs-text-muted focus:border-mcs-accent-border focus:ring-1 focus:ring-mcs-focus-ring"
               />
               <Button className="h-12 px-5" disabled={!isRunning} onClick={() => void sendCommand()}>
                 发送
@@ -402,7 +402,7 @@ function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="text-center">
       <div className="mcs-num text-mcs-md leading-none font-semibold">{value}</div>
-      <div className="mt-0.5 text-mcs-2xs text-mcs-text-subtle">{label}</div>
+      <div className="mt-0.5 text-mcs-2xs text-mcs-text-muted">{label}</div>
     </div>
   )
 }

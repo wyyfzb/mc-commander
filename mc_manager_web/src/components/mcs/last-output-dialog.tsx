@@ -85,7 +85,7 @@ export function LastOutputDialog() {
         <div className="relative min-h-40">
           {loading ? (
             <div
-              className="flex min-h-40 flex-col items-center justify-center gap-2 text-mcs-text-subtle"
+              className="flex min-h-40 flex-col items-center justify-center gap-2 text-mcs-text-muted"
               role="status"
               aria-label="加载末尾日志中"
             >
@@ -93,7 +93,7 @@ export function LastOutputDialog() {
               <p className="text-mcs-xs">正在获取末尾日志…</p>
             </div>
           ) : error ? (
-            <div className="flex min-h-40 flex-col items-center justify-center gap-2 text-mcs-text-subtle">
+            <div className="flex min-h-40 flex-col items-center justify-center gap-2 text-mcs-text-muted">
               <p className="text-mcs-xs text-mcs-error-fg">获取失败：{error}</p>
               <Button
                 variant="outline"
@@ -113,7 +113,7 @@ export function LastOutputDialog() {
               {truncated}
             </pre>
           ) : (
-            <p className="flex min-h-40 items-center justify-center text-mcs-xs text-mcs-text-subtle">
+            <p className="flex min-h-40 items-center justify-center text-mcs-xs text-mcs-text-muted">
               暂无日志输出（服务端未上报 lastOutput）
             </p>
           )}

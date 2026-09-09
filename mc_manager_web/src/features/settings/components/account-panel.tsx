@@ -24,6 +24,7 @@ import {
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { DangerButton } from '@/components/mcs/danger-button'
+import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { LoadingButton } from '@/components/mcs/loading-button'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -89,7 +90,7 @@ function SectionCard({
         </div>
         <div>
           <h3 className="text-mcs-sm font-semibold text-mcs-text-default">{title}</h3>
-          <p className="mt-0.5 text-mcs-2xs text-mcs-text-subtle">{description}</p>
+          <p className="mt-0.5 text-mcs-2xs text-mcs-text-muted">{description}</p>
         </div>
       </div>
       {children}
@@ -230,7 +231,7 @@ export function AccountPanel() {
             </StatusPill>
           )}
           {session?.expiresAt && (
-            <span className="inline-flex items-center gap-1 text-mcs-2xs text-mcs-text-subtle">
+            <span className="inline-flex items-center gap-1 text-mcs-2xs text-mcs-text-muted">
               <Clock className="size-3" aria-hidden />
               会话到期：{formatDateTime(session.expiresAt)}（活动自动续期）
             </span>
@@ -308,12 +309,9 @@ export function AccountPanel() {
           )}
 
           {changeError && (
-            <p
-              role="alert"
-              className="sm:col-span-3 rounded-mcs-sm border border-mcs-error-border bg-mcs-error-bg-subtle px-2.5 py-2 text-mcs-xs text-mcs-error-fg"
-            >
+            <NoticeBanner variant="error" role="alert" className="sm:col-span-3">
               {changeError}
-            </p>
+            </NoticeBanner>
           )}
 
           <div className="sm:col-span-3">
@@ -331,7 +329,7 @@ export function AccountPanel() {
         description="所有已登录设备；发现异常登录可立即下线（最长 7 天未活动自动过期）"
       >
         {sessionsQuery.isLoading ? (
-          <div className="flex items-center justify-center gap-2 py-8 text-mcs-xs text-mcs-text-subtle" role="status">
+          <div className="flex items-center justify-center gap-2 py-8 text-mcs-xs text-mcs-text-muted" role="status">
             <Loader2 className="size-4 animate-spin" aria-hidden />
             正在加载会话列表…
           </div>
@@ -378,7 +376,7 @@ export function AccountPanel() {
                           </StatusPill>
                         )}
                       </div>
-                      <p className="mt-0.5 max-w-52 truncate text-mcs-2xs text-mcs-text-subtle" title={s.userAgent ?? undefined}>
+                      <p className="mt-0.5 max-w-52 truncate text-mcs-2xs text-mcs-text-muted" title={s.userAgent ?? undefined}>
                         登录于 {formatDateTime(s.createdAt)}
                       </p>
                     </TableCell>
@@ -397,7 +395,7 @@ export function AccountPanel() {
                         size="icon-sm"
                         aria-label={`下线会话（${describeUserAgent(s.userAgent)}）`}
                         onClick={() => setKickTarget(String(s.id))}
-                        className="text-mcs-text-subtle hover:text-mcs-error-fg"
+                        className="text-mcs-text-muted hover:text-mcs-error-fg"
                       >
                         <Trash2 className="size-3.5" aria-hidden />
                       </Button>

@@ -2,7 +2,7 @@
 export function CoordField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-center text-mcs-2xs font-medium text-mcs-text-subtle">{label}</span>
+      <span className="text-center text-mcs-2xs font-medium text-mcs-text-muted">{label}</span>
       <input
         type="number"
         step="any"

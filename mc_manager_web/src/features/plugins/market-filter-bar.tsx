@@ -56,7 +56,7 @@ export function MarketFilterBar({
       />
       <div className="flex items-center gap-2">
         <Select value={loader} onValueChange={onLoaderChange}>
-          <SelectTrigger size="sm" className="w-[130px]" aria-label="按加载器过滤">
+          <SelectTrigger size="sm" className="w-32.5" aria-label="按加载器过滤">
             <SelectValue placeholder="全部加载器" />
           </SelectTrigger>
           <SelectContent>
@@ -85,7 +85,7 @@ export function MarketFilterBar({
         </Button>
       </div>
       {totalHits > 0 && (
-        <p className="text-mcs-xs text-mcs-text-subtle" aria-live="polite">
+        <p className="text-mcs-xs text-mcs-text-muted" aria-live="polite">
           共 {totalHits.toLocaleString()} 个结果
         </p>
       )}

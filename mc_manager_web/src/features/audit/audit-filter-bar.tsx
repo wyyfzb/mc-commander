@@ -85,7 +85,7 @@ export function AuditFilterBar({
           placeholder="开始日期 如 2026-09-01"
           ariaLabel="开始日期"
         />
-        <span className="text-mcs-xs text-mcs-text-subtle">至</span>
+        <span className="text-mcs-xs text-mcs-text-muted">至</span>
         <DateTextInput
           value={auditEnd}
           onChange={(v) => changeDate('end', v)}
@@ -137,7 +137,7 @@ export function AuditFilterBar({
         <Download aria-hidden />
         导出
       </Button>
-      <span className="text-mcs-2xs text-mcs-text-subtle">
+      <span className="text-mcs-2xs text-mcs-text-muted">
         最多导出 {AUDIT_EXPORT_MAX_ROWS} 条（时间最新优先）
       </span>
     </div>

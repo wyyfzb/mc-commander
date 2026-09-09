@@ -32,7 +32,7 @@ export function DeleteConfirmDialog({ target, loading, onConfirm, onClose }: Del
     >
       <div className="py-1">
         <p
-          className="truncate rounded-mcs-xs bg-mcs-bg-muted px-2 py-1 font-mono text-mcs-2xs text-mcs-text-subtle"
+          className="truncate rounded-mcs-xs bg-mcs-bg-muted px-2 py-1 font-mono text-mcs-2xs text-mcs-text-muted"
           title={target?.path}
         >
           {target?.path}

@@ -76,7 +76,7 @@ export function Pagination({
   return (
     <div className="flex items-center justify-between border-t border-mcs-border-muted px-4 py-2">
       {/* 左侧：信息 + 可选的每页条数 */}
-      <div className="flex items-center gap-2 text-mcs-xs text-mcs-text-subtle">
+      <div className="flex items-center gap-2 text-mcs-xs text-mcs-text-muted">
         {variant === 'numbers' && showPageSizeSelector && (
           <>
             每页
@@ -114,7 +114,7 @@ export function Pagination({
             </IconButton>
             {pageNumbers.map((n, i) =>
               n === '…' ? (
-                <span key={`gap${i}`} className="px-1 text-mcs-xs text-mcs-text-subtle">…</span>
+                <span key={`gap${i}`} className="px-1 text-mcs-xs text-mcs-text-muted">…</span>
               ) : (
                 <Button
                   key={n}

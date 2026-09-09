@@ -121,7 +121,7 @@ export function AppSidebar({ collapsed, mobileNavOpen, onMobileNavClose }: AppSi
 
   const nav = (
     <>
-      <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-2 py-2">
+      <nav className="flex flex-1 flex-col gap-1 overflow-y-auto p-2">
         {PRIMARY_NAV.map(({ to, label, icon: Icon }) => (
           <SidebarLink
             key={to}
@@ -134,7 +134,7 @@ export function AppSidebar({ collapsed, mobileNavOpen, onMobileNavClose }: AppSi
         ))}
       </nav>
 
-      <nav className="flex flex-col gap-1 border-t border-mcs-border-muted px-2 py-2">
+      <nav className="flex flex-col gap-1 border-t border-mcs-border-muted p-2">
         {BOTTOM_NAV.map(({ to, label, icon: Icon }) => (
           <SidebarLink
             key={to}
@@ -154,7 +154,7 @@ export function AppSidebar({ collapsed, mobileNavOpen, onMobileNavClose }: AppSi
             <span
               className={cn(
                 'size-2 shrink-0 rounded-full',
-                current.isRunning ? 'bg-mcs-success-fg shadow-mcs-glow-accent' : 'bg-mcs-text-subtle',
+                current.isRunning ? 'bg-mcs-success-fg shadow-mcs-glow-accent' : 'bg-mcs-text-muted',
               )}
               aria-hidden
             />
@@ -162,7 +162,7 @@ export function AppSidebar({ collapsed, mobileNavOpen, onMobileNavClose }: AppSi
               <div className="truncate text-mcs-xs font-semibold text-mcs-text-default">
                 {current.name}
               </div>
-              <div className="truncate font-mono text-mcs-2xs text-mcs-text-subtle">
+              <div className="truncate font-mono text-mcs-2xs text-mcs-text-muted">
                 {current.isRunning ? '运行中' : '已停止'} · {current.playerCount} 人在线
               </div>
             </div>
@@ -174,10 +174,13 @@ export function AppSidebar({ collapsed, mobileNavOpen, onMobileNavClose }: AppSi
 
   return (
     <>
-      {/* 桌面侧栏（≥768px）；overflow-hidden 让常驻文字随宽度过渡裁剪（防收起中溢出） */}
+      {/* 桌面侧栏（≥768px）；overflow-hidden 让常驻文字随宽度过渡裁剪（防收起中溢出）
+          宽度过渡是布局属性：收起/展开要重排兄弟节点，transform 无法替代（除非改「滑出浮层」模型，
+          会改变交互语义）→ 保留宽度过渡，用 contain 把重排/重绘限制在侧栏内部 */}
       <aside
         className={cn(
-          'glass-chrome hidden h-full shrink-0 flex-col overflow-hidden border-r border-mcs-border-muted md:flex',
+          'hidden h-full shrink-0 flex-col overflow-hidden border-r border-mcs-border-default contain-[layout_paint] md:flex',
+          'bg-mcs-bg-muted',
           'transition-[width] duration-mcs-base ease-mcs-snappy',
           collapsed ? 'w-14' : 'w-52',
         )}
@@ -189,7 +192,7 @@ export function AppSidebar({ collapsed, mobileNavOpen, onMobileNavClose }: AppSi
 
       {/* 移动端抽屉（<768px）：fixed 覆盖层 + 遮罩；关闭态 inert 移出焦点顺序 */}
       <div
-        className={cn('fixed inset-0 z-50 md:hidden', !mobileNavOpen && 'pointer-events-none')}
+        className={cn('fixed inset-0 z-(--mcs-z-overlay) md:hidden', !mobileNavOpen && 'pointer-events-none')}
         onKeyDown={handleDrawerKeyDown}
       >
         <div
@@ -203,7 +206,7 @@ export function AppSidebar({ collapsed, mobileNavOpen, onMobileNavClose }: AppSi
         <aside
           ref={mobileDrawerRef}
           className={cn(
-            'glass-chrome relative inset-y-0 left-0 flex w-64 flex-col border-r border-mcs-border-muted',
+            'relative inset-y-0 left-0 flex w-64 flex-col border-r border-mcs-border-default bg-mcs-bg-muted',
             'transition-transform duration-mcs-base ease-mcs-snappy',
             mobileNavOpen ? 'translate-x-0' : '-translate-x-full',
           )}
@@ -302,10 +305,10 @@ function SidebarLink({
         cn(
           'relative flex h-8 items-center gap-2.5 rounded-mcs-sm px-2.5 text-mcs-sm font-medium',
           'text-mcs-text-muted transition-colors duration-mcs-fast',
-          'hover:bg-mcs-state-hover hover:text-mcs-text-default',
+          'hover:bg-mcs-state-hover active:bg-mcs-state-pressed hover:text-mcs-text-default',
           'focus-visible:outline-2',
           // 激活指示条：2px accent 左缘 inset（伪元素常驻 + opacity 过渡，避免 display 切换不可过渡）
-          'before:pointer-events-none before:absolute before:inset-y-1 before:left-0 before:w-0.5 before:rounded-full before:bg-mcs-accent before:opacity-0 before:transition-opacity before:duration-mcs-fast',
+          'before:pointer-events-none before:absolute before:inset-y-1 before:left-0 before:w-0.5 before:rounded-full before:bg-mcs-accent-fg before:opacity-0 before:transition-opacity before:duration-mcs-fast',
           isActive && 'bg-mcs-accent-bg-subtle text-mcs-accent-fg before:opacity-100',
           collapsed && 'justify-center px-0',
         )

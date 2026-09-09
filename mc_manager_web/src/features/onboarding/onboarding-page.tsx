@@ -55,7 +55,7 @@ function ModeCard({
         'flex flex-1 flex-col items-start gap-2 rounded-mcs-md border p-4 text-left transition-colors',
         active
           ? 'border-mcs-accent-border-strong bg-mcs-accent-bg-subtle shadow-mcs-card'
-          : 'border-mcs-border-muted bg-mcs-bg-muted shadow-mcs-card hover:bg-mcs-bg-hover',
+          : 'border-mcs-border-muted bg-mcs-bg-muted shadow-mcs-card hover:bg-mcs-state-hover',
       )}
     >
       <Icon
@@ -63,7 +63,7 @@ function ModeCard({
         aria-hidden
       />
       <span className="text-mcs-sm font-semibold text-mcs-text-default">{title}</span>
-      <span className="text-mcs-xs text-mcs-text-subtle">{description}</span>
+      <span className="text-mcs-xs text-mcs-text-muted">{description}</span>
     </button>
   )
 }
@@ -85,7 +85,7 @@ function CommandBlock({ command, ariaLabel }: { command: string; ariaLabel: stri
         type="button"
         onClick={() => void copy()}
         aria-label={ariaLabel}
-        className="shrink-0 rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-subtle p-2 text-mcs-text-muted hover:bg-mcs-bg-hover hover:text-mcs-text-default"
+        className="shrink-0 rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-subtle p-2 text-mcs-text-muted hover:bg-mcs-state-hover hover:text-mcs-text-default"
       >
         <Copy className="size-3.5" aria-hidden />
       </button>
@@ -240,7 +240,7 @@ export function OnboardingPage() {
           >
             ← 返回登录页
           </Link>
-          <p className="text-mcs-2xs text-mcs-text-subtle">
+          <p className="text-mcs-2xs text-mcs-text-muted">
             遇到问题？{' '}
             <a
               href="https://gitee.com/wyyfzb/mc-commander"

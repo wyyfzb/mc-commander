@@ -152,7 +152,7 @@ export function WorldInfoCard({ world, isLoading, onRefresh, className }: WorldI
             ))}
           </div>
         ) : !world ? (
-          <p className="py-8 text-center text-mcs-xs text-mcs-text-subtle">暂无世界信息</p>
+          <p className="py-8 text-center text-mcs-xs text-mcs-text-muted">暂无世界信息</p>
         ) : (
           <dl className="flex flex-col">
             <InfoRow label="世界名称">
@@ -170,7 +170,7 @@ export function WorldInfoCard({ world, isLoading, onRefresh, className }: WorldI
                 return (
                   <>
                     <span className="mcs-num text-mcs-sm leading-none">{size.value}</span>
-                    <span className="text-mcs-xs text-mcs-text-subtle"> {size.unit}</span>
+                    <span className="text-mcs-xs text-mcs-text-muted"> {size.unit}</span>
                   </>
                 )
               })()}
@@ -180,7 +180,7 @@ export function WorldInfoCard({ world, isLoading, onRefresh, className }: WorldI
                 aria-valuemin={0}
                 aria-valuemax={10}
                 aria-valuenow={Math.min(Math.max(world.sizeGB, 0), 10)}
-                className="h-1.5 w-20 overflow-hidden rounded-mcs-xs bg-mcs-bg-subtle"
+                className="h-1.5 w-20 overflow-hidden rounded-mcs-xs bg-mcs-bg-secondary"
               >
                 <span
                   aria-hidden
@@ -193,7 +193,7 @@ export function WorldInfoCard({ world, isLoading, onRefresh, className }: WorldI
               {world.gameDays != null ? (
                 <>
                   <span className="mcs-num text-mcs-sm leading-none">{world.gameDays}</span>
-                  <span className="text-mcs-xs text-mcs-text-subtle"> 天</span>
+                  <span className="text-mcs-xs text-mcs-text-muted"> 天</span>
                 </>
               ) : (
                 '不可用'

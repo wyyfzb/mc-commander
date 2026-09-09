@@ -120,7 +120,7 @@ export function buildPlayerColumns({
                 </span>
                 {p.isOp && <ShieldCheck className="size-3.5 shrink-0 text-mcs-purple-fg" aria-label="OP" />}
                 {p.isAfk && (
-                  <span className="shrink-0 rounded-mcs-xs bg-mcs-bg-hover px-1 text-mcs-2xs text-mcs-text-muted">
+                  <span className="shrink-0 rounded-mcs-xs bg-mcs-bg-secondary px-1 text-mcs-2xs text-mcs-text-muted">
                     AFK
                   </span>
                 )}
@@ -138,7 +138,7 @@ export function buildPlayerColumns({
                 )}
               </div>
               {p.isOnline && p.ip && (
-                <div className="truncate font-mono text-mcs-2xs text-mcs-text-subtle">{p.ip}</div>
+                <div className="truncate font-mono text-mcs-2xs text-mcs-text-muted">{p.ip}</div>
               )}
             </div>
           </div>
@@ -173,7 +173,7 @@ export function buildPlayerColumns({
             {meta.label}
           </span>
         ) : (
-          <span className="text-mcs-xs text-mcs-text-subtle">--</span>
+          <span className="text-mcs-xs text-mcs-text-muted">--</span>
         )
       },
       size: 96,
@@ -188,7 +188,7 @@ export function buildPlayerColumns({
             {Math.round(pos.x)}, {Math.round(pos.y)}, {Math.round(pos.z)}
           </span>
         ) : (
-          <span className="text-mcs-xs text-mcs-text-subtle">--</span>
+          <span className="text-mcs-xs text-mcs-text-muted">--</span>
         )
       },
       size: 120,
@@ -224,7 +224,7 @@ export function buildPlayerColumns({
           return (
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="cursor-help text-mcs-xs text-mcs-text-subtle">需插件</span>
+                <span className="cursor-help text-mcs-xs text-mcs-text-muted">需插件</span>
               </TooltipTrigger>
               <TooltipContent>原版 RCON 不暴露玩家 ping</TooltipContent>
             </Tooltip>

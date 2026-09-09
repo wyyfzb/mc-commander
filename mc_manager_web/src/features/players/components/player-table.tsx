@@ -127,7 +127,7 @@ export function PlayerTable({
     <div className="flex min-h-0 flex-1 flex-col">
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto">
         <table className="w-full border-collapse text-left" style={{ tableLayout: 'fixed' }}>
-          <thead className="sticky top-0 z-10 bg-mcs-bg-default">
+          <thead className="sticky top-0 z-(--mcs-z-local) bg-mcs-bg-default">
             {table.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id} className="border-b border-mcs-border-muted">
                 {headerGroup.headers.map((header) => {
@@ -139,7 +139,7 @@ export function PlayerTable({
                       scope="col"
                       style={{ width: header.getSize() }}
                       className={cn(
-                        'h-9 px-2 text-mcs-xs font-medium text-mcs-text-subtle',
+                        'h-9 px-2 text-mcs-xs font-medium text-mcs-text-muted',
                         rightAlign && 'text-right',
                       )}
                     >
@@ -200,7 +200,7 @@ export function PlayerTable({
         </table>
         {isError && !isLoading && allRows.length === 0 ? (
           <div className="flex h-40 flex-col items-center justify-center gap-2">
-            <CircleAlert className="size-6 text-mcs-text-subtle" aria-hidden />
+            <CircleAlert className="size-6 text-mcs-text-muted" aria-hidden />
             <p className="text-mcs-sm text-mcs-text-muted">加载玩家列表失败</p>
             {onRetry && (
               <Button variant="outline" size="sm" onClick={onRetry}>
@@ -209,7 +209,7 @@ export function PlayerTable({
             )}
           </div>
         ) : !isLoading && allRows.length === 0 ? (
-          <div className="flex h-40 flex-col items-center justify-center gap-2 text-mcs-sm text-mcs-text-subtle">
+          <div className="flex h-40 flex-col items-center justify-center gap-2 text-mcs-sm text-mcs-text-muted">
             {totalCount === 0 ? '暂无在线玩家' : '没有匹配的玩家'}
             {totalCount > 0 && onClearFilter && (
               <Button variant="outline" size="sm" onClick={onClearFilter} data-testid="players-clear-filter">

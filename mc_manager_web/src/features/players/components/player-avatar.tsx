@@ -61,7 +61,7 @@ export function PlayerAvatar({ name, isOnline, isFakePlayer = false, size = 32, 
   return (
     <span
       className={cn(
-        'inline-flex shrink-0 select-none items-center justify-center rounded-mcs-sm bg-mcs-bg-hover font-medium text-mcs-text-muted',
+        'inline-flex shrink-0 select-none items-center justify-center rounded-mcs-sm bg-mcs-bg-secondary font-medium text-mcs-text-muted',
         !isOnline && 'opacity-60 grayscale',
         className,
       )}

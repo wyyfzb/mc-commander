@@ -41,11 +41,11 @@ export function EmptyState({
     >
       {Icon && (
         <span className="flex size-16 items-center justify-center rounded-mcs-md bg-mcs-bg-muted shadow-mcs-card ring-1 ring-mcs-border-muted">
-          <Icon className="size-7 text-mcs-text-subtle" aria-hidden />
+          <Icon className="size-7 text-mcs-text-muted" aria-hidden />
         </span>
       )}
       <p className="text-mcs-sm font-medium text-mcs-text-muted">{title}</p>
-      {hint && <p className="text-mcs-xs text-mcs-text-subtle">{hint}</p>}
+      {hint && <p className="text-mcs-xs text-mcs-text-muted">{hint}</p>}
       {action && (
         <Button
           variant={actionVariant === 'greenFilled' ? 'default' : 'outline'}

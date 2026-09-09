@@ -85,7 +85,7 @@ export function AboutPanel(_props: AboutPanelProps) {
               href={href}
               target="_blank"
               rel="noreferrer"
-              className="flex items-center gap-3 rounded-mcs-sm border border-mcs-border-subtle bg-mcs-bg-subtle px-3 py-2.5 transition-colors hover:bg-mcs-bg-hover"
+              className="flex items-center gap-3 rounded-mcs-sm border border-mcs-border-subtle bg-mcs-bg-subtle px-3 py-2.5 transition-colors hover:bg-mcs-state-hover"
             >
               <span
                 className={`flex size-9 shrink-0 items-center justify-center rounded-mcs-sm ${iconClass}`}
@@ -94,16 +94,16 @@ export function AboutPanel(_props: AboutPanelProps) {
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block text-mcs-sm font-semibold text-mcs-text-default">{title}</span>
-                <span className="block text-mcs-xs text-mcs-text-subtle">{subtitle}</span>
+                <span className="block text-mcs-xs text-mcs-text-muted">{subtitle}</span>
               </span>
-              <ChevronRight className="size-4 shrink-0 text-mcs-text-subtle" aria-hidden />
+              <ChevronRight className="size-4 shrink-0 text-mcs-text-muted" aria-hidden />
             </a>
           ))}
         </div>
       </section>
 
       {/* ── 版权（居中 subtle）── */}
-      <p className="py-2 text-center text-mcs-xs text-mcs-text-subtle">
+      <p className="py-2 text-center text-mcs-xs text-mcs-text-muted">
         © 2026 MC_Commander · 社区开源项目
       </p>
     </div>

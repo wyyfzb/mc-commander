@@ -36,7 +36,7 @@ export function DegradationBanners() {
             <Button
               variant="outline"
               size="sm"
-              className="h-6 shrink-0 border-mcs-error-border bg-mcs-bg-default text-mcs-2xs text-mcs-error-fg hover:bg-mcs-bg-hover"
+              className="h-6 shrink-0 border-mcs-error-border bg-mcs-bg-default text-mcs-2xs text-mcs-error-fg hover:bg-mcs-state-hover"
               onClick={() => void getSocketSingleton()?.connect()}
             >
               <RefreshCw className="size-3" aria-hidden />

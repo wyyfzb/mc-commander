@@ -197,7 +197,7 @@ export function ConnectionForm({ variant = 'settings', onSaved }: ConnectionForm
         {urlError !== '' && (
           <p className="text-mcs-xs text-mcs-error-fg">{urlError}</p>
         )}
-        <p className="text-mcs-xs text-mcs-text-subtle">
+        <p className="text-mcs-xs text-mcs-text-muted">
           支持 http/https 协议；局域网自建服务器推荐内网地址
         </p>
       </div>
@@ -209,7 +209,7 @@ export function ConnectionForm({ variant = 'settings', onSaved }: ConnectionForm
             type="button"
             onClick={() => void handleRotate()}
             disabled={rotating || testing || saving}
-            className="inline-flex items-center gap-1 rounded-mcs-sm text-mcs-2xs font-medium text-mcs-text-subtle transition-colors hover:text-mcs-text-default disabled:opacity-50"
+            className="inline-flex items-center gap-1 rounded-mcs-sm text-mcs-2xs font-medium text-mcs-text-muted transition-colors hover:text-mcs-text-default disabled:opacity-50"
           >
             <RefreshCw className={cn('size-3', rotating && 'animate-spin')} aria-hidden />
             {rotating ? '生成中...' : '重新生成'}
@@ -234,7 +234,7 @@ export function ConnectionForm({ variant = 'settings', onSaved }: ConnectionForm
             type="button"
             onClick={() => setShowApiKey((v) => !v)}
             aria-label={showApiKey ? '隐藏 API Key' : '显示 API Key'}
-            className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-mcs-text-subtle transition-colors hover:text-mcs-text-default"
+            className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-mcs-text-muted transition-colors hover:text-mcs-text-default"
           >
             {showApiKey ? <EyeOff className="size-4" aria-hidden /> : <Eye className="size-4" aria-hidden />}
           </button>
@@ -276,12 +276,12 @@ export function ConnectionForm({ variant = 'settings', onSaved }: ConnectionForm
           )}
         >
           <span
-            className={cn('size-2 rounded-full', isConnected ? 'bg-mcs-success-fg' : 'bg-mcs-text-subtle')}
+            className={cn('size-2 rounded-full', isConnected ? 'bg-mcs-success-fg' : 'bg-mcs-text-muted')}
             aria-hidden
           />
           <span className="text-mcs-sm font-medium">{isConnected ? '已连接' : '未连接'}</span>
           {isConnected && latencyMs != null && (
-            <span className="text-mcs-2xs text-mcs-text-subtle">连接正常 · 延迟 {latencyMs}ms</span>
+            <span className="text-mcs-2xs text-mcs-text-muted">连接正常 · 延迟 {latencyMs}ms</span>
           )}
         </div>
       )}

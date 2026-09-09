@@ -84,7 +84,7 @@ export function GeneralPanel(_props: GeneralPanelProps) {
           <div className="flex items-center gap-3 border-b border-mcs-border-subtle py-3 last:border-b-0">
             <div className="min-w-0 flex-1">
               <div className="text-mcs-sm font-semibold text-mcs-text-default">意外停止自动重启</div>
-              <div className="mt-0.5 text-mcs-xs text-mcs-text-subtle">
+              <div className="mt-0.5 text-mcs-xs text-mcs-text-muted">
                 服务器意外崩溃/退出后自动重启（手动停止不触发）
               </div>
             </div>
@@ -97,7 +97,7 @@ export function GeneralPanel(_props: GeneralPanelProps) {
         ) : (
           <div className="border-b border-mcs-border-subtle py-3 last:border-b-0">
             <div className="text-mcs-sm font-semibold text-mcs-text-default">意外停止自动重启</div>
-            <p className="mt-0.5 text-mcs-xs text-mcs-text-subtle">
+            <p className="mt-0.5 text-mcs-xs text-mcs-text-muted">
               未选择实例 — 自动重启为服务器实例配置，选择实例后可修改
             </p>
           </div>
@@ -106,7 +106,7 @@ export function GeneralPanel(_props: GeneralPanelProps) {
         <div className="flex items-center gap-3 py-3">
           <div className="min-w-0 flex-1">
             <div className="text-mcs-sm font-semibold text-mcs-text-default">界面主题</div>
-            <div className="mt-0.5 text-mcs-xs text-mcs-text-subtle">深色/浅色主题切换</div>
+            <div className="mt-0.5 text-mcs-xs text-mcs-text-muted">深色/浅色主题切换</div>
           </div>
           <Select value={theme} onValueChange={handleThemeChange}>
             <SelectTrigger className="w-24" aria-label="界面主题">
@@ -123,7 +123,7 @@ export function GeneralPanel(_props: GeneralPanelProps) {
         <div className="flex items-center gap-3 border-t border-mcs-border-subtle py-3">
           <div className="min-w-0 flex-1">
             <div className="text-mcs-sm font-semibold text-mcs-text-default">终端自动滚动</div>
-            <div className="mt-0.5 text-mcs-xs text-mcs-text-subtle">新日志自动滚动到底部（关闭后停留在当前位置）</div>
+            <div className="mt-0.5 text-mcs-xs text-mcs-text-muted">新日志自动滚动到底部（关闭后停留在当前位置）</div>
           </div>
           <Switch
             checked={terminalAutoScroll}
@@ -135,7 +135,7 @@ export function GeneralPanel(_props: GeneralPanelProps) {
         <div className="flex items-center gap-3 border-t border-mcs-border-subtle py-3">
           <div className="min-w-0 flex-1">
             <div className="text-mcs-sm font-semibold text-mcs-text-default">命令执行二次确认</div>
-            <div className="mt-0.5 text-mcs-xs text-mcs-text-subtle">危险命令执行前弹确认（终端输入不受影响）</div>
+            <div className="mt-0.5 text-mcs-xs text-mcs-text-muted">危险命令执行前弹确认（终端输入不受影响）</div>
           </div>
           <Switch
             checked={confirmCommands}

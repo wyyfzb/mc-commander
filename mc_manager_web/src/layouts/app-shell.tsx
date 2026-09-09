@@ -48,7 +48,7 @@ export function AppShell() {
       {/* 无障碍（P5）：键盘 Tab 首站跳过侧栏/顶栏直达内容区，平时移出屏外 */}
       <a
         href="#main-content"
-        className="absolute left-3 top-3 z-50 -translate-y-24 rounded-mcs-sm bg-mcs-bg-emphasis px-3 py-2 text-mcs-sm font-medium text-mcs-text-default shadow-mcs-raised ring-1 ring-mcs-border-default transition-transform duration-mcs-fast focus-visible:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mcs-focus-ring"
+        className="absolute left-3 top-3 z-(--mcs-z-toast) -translate-y-24 rounded-mcs-sm bg-mcs-bg-emphasis px-3 py-2 text-mcs-sm font-medium text-mcs-text-default shadow-mcs-raised ring-1 ring-mcs-border-default transition-transform duration-mcs-fast focus-visible:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mcs-focus-ring"
       >
         跳到主要内容
       </a>

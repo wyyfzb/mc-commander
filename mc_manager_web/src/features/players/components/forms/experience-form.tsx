@@ -75,7 +75,7 @@ export function ExperienceForm({ player, batchTargets, isBatchMode, isRconConnec
 
       {/* 模式切换 */}
       <div className="space-y-1.5">
-        <Label className="text-mcs-xs text-mcs-text-subtle">类型</Label>
+        <Label className="text-mcs-xs text-mcs-text-muted">类型</Label>
         <div className="flex gap-1.5">
           <Button
             type="button"
@@ -102,7 +102,7 @@ export function ExperienceForm({ player, batchTargets, isBatchMode, isRconConnec
 
       {/* 操作 */}
       <div className="space-y-1.5">
-        <Label className="text-mcs-xs text-mcs-text-subtle">操作</Label>
+        <Label className="text-mcs-xs text-mcs-text-muted">操作</Label>
         <div className="flex gap-1.5">
           {([['add', '给予'], ['set', '设置'], ['remove', '移除']] as const).map(([act, label]) => (
             <Button
@@ -122,7 +122,7 @@ export function ExperienceForm({ player, batchTargets, isBatchMode, isRconConnec
 
       {/* 数值 */}
       <div className="space-y-1.5">
-        <Label className="text-mcs-xs text-mcs-text-subtle">
+        <Label className="text-mcs-xs text-mcs-text-muted">
           {mode === 'levels' ? '等级数' : '经验值'}
         </Label>
         <Input

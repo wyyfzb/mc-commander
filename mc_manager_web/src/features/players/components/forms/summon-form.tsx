@@ -70,7 +70,7 @@ export function SummonForm({ isRconConnected, onAction }: ActionFormProps) {
       <div className="max-h-52 space-y-2.5 overflow-auto pr-1">
         {Array.from(entitiesByCategory.entries()).map(([category, entities]) => (
           <div key={category}>
-            <div className="mb-1 text-mcs-2xs font-medium text-mcs-text-subtle">{category}（{entities.length}）</div>
+            <div className="mb-1 text-mcs-2xs font-medium text-mcs-text-muted">{category}（{entities.length}）</div>
             <div className="flex flex-wrap gap-1">
               {entities.map((e) => (
                 <button
@@ -82,7 +82,7 @@ export function SummonForm({ isRconConnected, onAction }: ActionFormProps) {
                     'rounded-mcs-sm border px-2 py-0.5 text-mcs-xs transition-colors',
                     selectedEntity?.id === e.id
                       ? 'border-mcs-accent-border-strong bg-mcs-accent-bg-subtle text-mcs-accent-fg'
-                      : 'border-mcs-border-default bg-mcs-bg-default text-mcs-text-default hover:bg-mcs-bg-hover',
+                      : 'border-mcs-border-default bg-mcs-bg-default text-mcs-text-default hover:bg-mcs-state-hover',
                   )}
                 >
                   {e.name}
@@ -96,7 +96,7 @@ export function SummonForm({ isRconConnected, onAction }: ActionFormProps) {
       {/* 选中实体名称 */}
       {selectedEntity && (
         <div className="flex items-center gap-2 rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-muted px-3 py-2">
-          <span className="text-mcs-2xs text-mcs-text-subtle">已选：</span>
+          <span className="text-mcs-2xs text-mcs-text-muted">已选：</span>
           <span className="text-mcs-sm font-medium text-mcs-text-default">{selectedEntity.name}</span>
           <span className="font-mono text-mcs-2xs text-mcs-text-muted">minecraft:{selectedEntity.id}</span>
         </div>
@@ -104,7 +104,7 @@ export function SummonForm({ isRconConnected, onAction }: ActionFormProps) {
 
       {/* 坐标 */}
       <div className="space-y-1.5">
-        <Label className="text-mcs-xs text-mcs-text-subtle">召唤坐标</Label>
+        <Label className="text-mcs-xs text-mcs-text-muted">召唤坐标</Label>
         <div className="grid grid-cols-3 gap-2">
           {[
             { label: 'X', value: x, set: setX, placeholder: '~ 或数字' },

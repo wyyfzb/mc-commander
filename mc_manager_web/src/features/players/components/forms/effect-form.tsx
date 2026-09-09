@@ -134,7 +134,7 @@ export function EffectForm({ player, batchTargets, isBatchMode, isRconConnected,
           <div className="max-h-48 space-y-3 overflow-auto pr-1">
             {effectsByCategory.map((group) => (
               <div key={group.category}>
-                <div className="mb-1 text-mcs-2xs font-medium text-mcs-text-subtle">{group.category}</div>
+                <div className="mb-1 text-mcs-2xs font-medium text-mcs-text-muted">{group.category}</div>
                 <div className="flex flex-wrap gap-1">
                   {group.effects.map((e) => (
                     <button
@@ -146,7 +146,7 @@ export function EffectForm({ player, batchTargets, isBatchMode, isRconConnected,
                         'inline-flex items-center gap-1 rounded-mcs-sm border px-2 py-0.5 text-mcs-xs transition-colors',
                         effectId === e.effectId
                           ? 'border-mcs-accent-border-strong bg-mcs-accent-bg-subtle text-mcs-accent-fg'
-                          : 'border-mcs-border-default bg-mcs-bg-default text-mcs-text-default hover:bg-mcs-bg-hover',
+                          : 'border-mcs-border-default bg-mcs-bg-default text-mcs-text-default hover:bg-mcs-state-hover',
                       )}
                     >
                       <span
@@ -164,7 +164,7 @@ export function EffectForm({ player, batchTargets, isBatchMode, isRconConnected,
           {/* 等级 */}
           {selectedEffect && !selectedEffect.isInstant && (
             <div className="space-y-1.5">
-              <Label className="text-mcs-xs text-mcs-text-subtle">等级</Label>
+              <Label className="text-mcs-xs text-mcs-text-muted">等级</Label>
               <div className="flex gap-1">
                 {levelOptions.map((l) => (
                   <Button
@@ -186,7 +186,7 @@ export function EffectForm({ player, batchTargets, isBatchMode, isRconConnected,
           {/* 时长 */}
           {selectedEffect && !selectedEffect.isInstant && (
             <div className="space-y-1.5">
-              <Label className="text-mcs-xs text-mcs-text-subtle">持续时间</Label>
+              <Label className="text-mcs-xs text-mcs-text-muted">持续时间</Label>
               <div className="flex flex-wrap gap-1">
                 {DURATION_PRESETS.map((preset) => (
                   <Button

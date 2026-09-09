@@ -26,7 +26,7 @@ export function UploadProgressBar({ uploading, queueRemaining, onCancel }: Uploa
           <p className="truncate text-mcs-sm text-mcs-text-default" title={uploading.name}>
             正在上传 {uploading.name}
             {queueRemaining > 1 && (
-              <span className="ml-1.5 text-mcs-xs text-mcs-text-subtle">（队列剩余 {queueRemaining - 1} 个）</span>
+              <span className="ml-1.5 text-mcs-xs text-mcs-text-muted">（队列剩余 {queueRemaining - 1} 个）</span>
             )}
           </p>
           <span className="text-mcs-xs tabular-nums text-mcs-text-muted">{uploading.pct}%</span>
@@ -37,11 +37,11 @@ export function UploadProgressBar({ uploading, queueRemaining, onCancel }: Uploa
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={uploading.pct}
-          className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-mcs-bg-hover"
+          className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-mcs-bg-secondary"
         >
           <div
-            className="h-full rounded-full bg-mcs-accent transition-[width] duration-mcs-base"
-            style={{ width: `${uploading.pct}%` }}
+            className="h-full w-full rounded-full bg-mcs-accent transition-transform duration-mcs-base"
+            style={{ transform: `translateX(${uploading.pct - 100}%)` }}
           />
         </div>
       </div>

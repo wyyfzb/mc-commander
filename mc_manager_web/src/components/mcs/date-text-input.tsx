@@ -136,8 +136,8 @@ export function DateTextInput({ value, onChange, placeholder = '点击输入日�
             aria-expanded={open}
             aria-haspopup="dialog"
             className={cn(
-              'absolute top-1/2 right-1 inline-flex size-7 -translate-y-1/2 items-center justify-center rounded-mcs-xs transition-colors hover:bg-mcs-bg-hover focus-visible:outline-2 focus-visible:outline-mcs-focus-ring',
-              active ? 'text-mcs-accent-fg' : 'text-mcs-text-subtle hover:text-mcs-text-default',
+              'absolute top-1/2 right-1 inline-flex size-7 -translate-y-1/2 items-center justify-center rounded-mcs-xs transition-colors hover:bg-mcs-state-hover focus-visible:outline-2 focus-visible:outline-mcs-focus-ring',
+              active ? 'text-mcs-accent-fg' : 'text-mcs-text-muted hover:text-mcs-text-default',
             )}
           >
             <CalendarDays className="size-3.5" aria-hidden />

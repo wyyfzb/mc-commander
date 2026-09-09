@@ -17,7 +17,7 @@ const TONE_CLASSES: Record<ChipTone, string> = {
   default:
     'border-mcs-border-muted bg-mcs-bg-default text-mcs-text-muted',
   muted:
-    'border-mcs-border-muted bg-mcs-bg-subtle text-mcs-text-subtle',
+    'border-mcs-border-muted bg-mcs-bg-subtle text-mcs-text-muted',
   accent:
     'border-mcs-accent-border bg-mcs-accent-bg-subtle text-mcs-accent-fg',
   success:
@@ -70,7 +70,7 @@ export function Chip({
   const toneClass = selected ? SELECTED_CLASSES : TONE_CLASSES[tone]
   const state =
     onClick != null
-      ? 'cursor-pointer select-none hover:bg-mcs-state-hover disabled:cursor-not-allowed disabled:opacity-50'
+      ? 'cursor-pointer select-none hover:bg-mcs-state-hover active:bg-mcs-state-pressed disabled:cursor-not-allowed disabled:opacity-50'
       : ''
   const all = (...parts: ClassValue[]) => clsx(parts)
 

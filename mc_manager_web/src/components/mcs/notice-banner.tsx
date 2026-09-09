@@ -20,12 +20,14 @@ interface NoticeBannerProps {
   icon?: LucideIcon
   children: ReactNode
   className?: string
+  /** 播报角色：错误/失败用 alert（打断式），普通提示用 status（默认） */
+  role?: 'status' | 'alert'
 }
 
-export function NoticeBanner({ variant, icon: Icon, children, className }: NoticeBannerProps) {
+export function NoticeBanner({ variant, icon: Icon, children, className, role = 'status' }: NoticeBannerProps) {
   return (
     <div
-      role="status"
+      role={role}
       className={cn(
         'flex items-start gap-1.5 rounded-mcs-sm border px-2.5 py-1.5 text-mcs-xs',
         VARIANT_CLASSES[variant],

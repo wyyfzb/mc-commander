@@ -22,7 +22,7 @@ export function PlayerRow({
     <tr
       className={cn(
         'cursor-pointer border-b border-mcs-border-subtle transition-colors',
-        selected ? 'bg-mcs-accent-bg-subtle' : 'hover:bg-mcs-bg-hover',
+        selected ? 'bg-mcs-accent-bg-subtle' : 'hover:bg-mcs-state-hover active:bg-mcs-state-pressed',
         (p.isBanned || p.isIpBanned) && 'bg-mcs-error-bg-subtle',
       )}
       style={{ height: ROW_HEIGHT }}
