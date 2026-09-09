@@ -510,6 +510,10 @@ Type=simple
 User=mc-commander
 # 生产模式：启用 NODE_ENV 门控行为（严格错误掩码、弱密钥校验等），避免环境不一致
 Environment=NODE_ENV=production
+# 只向面板主进程发停止信号，不波及同 cgroup 的 MC 实例——面板停机不停实例
+# （owner 2026-09-09 拍板），实例由下次启动的 pid 文件接管。默认 control-group
+# 会把实例一并 SIGTERM 杀掉，使该语义失效
+KillMode=process
 WorkingDirectory=$MC_COMMANDER_DIR
 ExecStart=$(which node) index.js
 Restart=always
@@ -520,7 +524,7 @@ WantedBy=multi-user.target
 EOF
   systemctl daemon-reload
   systemctl enable mc-commander
-  # UXT-15 提示：重启面板不再导致运行中实例失联（pid 文件接管机制会恢复运行态），
+  # 面板停机不停实例（owner 2026-09-09 拍板）：重启后面板按 pid 文件接管运行态，
   # 但接管实例的控制台管道不可恢复——命令需 RCON，无 RCON 的实例只能强制终止
   if pgrep -f 'servers/.*/server\.jar' >/dev/null 2>&1; then
     warn "检测到运行中的 MC 实例：面板重启后将自动接管（运行态恢复，日志从接管时刻起）"

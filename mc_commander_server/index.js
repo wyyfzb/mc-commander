@@ -270,15 +270,13 @@ server.listen(config.port, config.host, () => {
   logger.info(`========================================`);
 });
 
-// 优雅停机：停实例 → 关 WS → 关 DB → 关 HTTP，确保 WAL 刷盘且连接不泄漏
+// 优雅停机：只关面板自身资源（调度器/WS/DB/HTTP），不停 MC 实例——实例
+// detached 运行且 pid 文件已随 start() 落盘，面板退出后继续服务玩家，下次启动
+// 由 adoptOrphanInstances 接管（owner 2026-09-09 拍板：面板停机不停实例）。
+// 边界：面板不在线期间实例崩溃无自动重启（autoRestart 依赖面板进程）。
 async function shutdown(signal) {
-  logger.info(`${signal} received, shutting down...`);
+  logger.info(`${signal} received, shutting down (MC instances keep running)...`);
   taskScheduler.stop();
-  try {
-    await serverManager.stopAll({ timeout: 8000 });
-  } catch (e) {
-    logger.error('Failed to stop instances gracefully:', e.message);
-  }
   wss.close(() => {
     logger.info('WebSocket server closed');
     try {
@@ -301,9 +299,9 @@ process.on('SIGINT', () => shutdown('SIGINT'));
 
 // 进程级兜底最后防线（asyncHandler 请求级防护之后的纵深）：uncaughtException /
 // unhandledRejection 若无兜底，Node 15+ 默认直接终止进程——任何漏防点（如未来
-// 路由漏用 asyncHandler）都会让主进程无日志崩溃，所有 MC 实例托管断连（一键部署
-// 可由 systemd 自愈，手动部署场景面板失联且不自愈）。记录结构化错误日志（含堆栈）
-// 后复用 shutdown() 优雅退出（停实例落盘、关库），禁止静默吞异常继续运行
+// 路由漏用 asyncHandler）都会让主进程无日志崩溃，面板失联且不自愈（一键部署
+// 可由 systemd 自愈）。记录结构化错误日志（含堆栈）后复用 shutdown() 退出——
+// 崩溃路径同样不停 MC 实例（进程继续服务玩家，重启后接管），禁止静默吞异常继续运行
 process.on('uncaughtException', (err) => {
   logger.error('[Fatal] Uncaught exception:', err instanceof Error ? (err.stack || err.message) : String(err));
   shutdown('uncaughtException');

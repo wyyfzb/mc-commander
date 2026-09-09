@@ -167,17 +167,18 @@ describe('进程级兜底（uncaughtException/unhandledRejection）', () => {
     }
   });
 
-  it('uncaughtException：结构化错误日志（含堆栈）→ 停调度器 → 停实例 → 关库 → exit(0)', async () => {
+  it('uncaughtException：结构化错误日志（含堆栈）→ 停调度器 → 关库 → exit(0)，不停 MC 实例', async () => {
     await resetAndImport();
     fatalHandler('uncaughtException')(new Error('boom-uncaught'));
 
     expect(stderrSpy).toHaveBeenCalledWith(expect.stringContaining('[Fatal] Uncaught exception:'));
     expect(stderrSpy).toHaveBeenCalledWith(expect.stringContaining('boom-uncaught')); // Error 堆栈含 message
 
-    // shutdown 是 async：同步执行到 await stopAll 挂起，setImmediate 后全链落地
+    // shutdown 同步执行调度器停止，随后回调链落地
     await new Promise((resolve) => setImmediate(resolve));
     expect(h.scheduler.stop).toHaveBeenCalledTimes(1); // 定时任务先停
-    expect(h.manager.stopAll).toHaveBeenCalledTimes(1); // MC 实例优雅停机落盘
+    // 面板停机不停实例（owner 2026-09-09 拍板）：实例继续服务玩家，重启后接管
+    expect(h.manager.stopAll).not.toHaveBeenCalled();
     expect(h.db.close).toHaveBeenCalledTimes(1); // 数据库关闭（WAL 刷盘）
     expect(exitSpy).toHaveBeenCalledWith(0); // 优雅退出而非无日志崩溃
   });
@@ -190,17 +191,17 @@ describe('进程级兜底（uncaughtException/unhandledRejection）', () => {
     expect(stderrSpy).toHaveBeenCalledWith(expect.stringContaining('raw-string-error'));
 
     await new Promise((resolve) => setImmediate(resolve));
-    expect(h.manager.stopAll).toHaveBeenCalledTimes(1);
+    expect(h.manager.stopAll).not.toHaveBeenCalled();
     expect(exitSpy).toHaveBeenCalledWith(0);
   });
 
-  it('先记录日志后停机：日志先于 stopAll，且进程不静默吞异常继续运行', async () => {
+  it('先记录日志后停机：日志先于停机流程，且进程不静默吞异常继续运行', async () => {
     await resetAndImport();
     fatalHandler('uncaughtException')(new Error('ordering-check'));
 
     const logIdx = stderrSpy.mock.calls.findIndex(([chunk]) => String(chunk).includes('[Fatal] Uncaught exception:'));
     expect(logIdx).toBeGreaterThanOrEqual(0);
-    expect(stderrSpy.mock.invocationCallOrder[logIdx]).toBeLessThan(h.manager.stopAll.mock.invocationCallOrder[0]);
+    expect(stderrSpy.mock.invocationCallOrder[logIdx]).toBeLessThan(h.scheduler.stop.mock.invocationCallOrder[0]);
 
     await new Promise((resolve) => setImmediate(resolve));
     expect(exitSpy).toHaveBeenCalled(); // 停机流程已启动，不存在吞异常后继续运行的路径
@@ -215,7 +216,7 @@ describe('进程级兜底（uncaughtException/unhandledRejection）', () => {
 
     await new Promise((resolve) => setImmediate(resolve));
     expect(h.scheduler.stop).toHaveBeenCalledTimes(1);
-    expect(h.manager.stopAll).toHaveBeenCalledTimes(1);
+    expect(h.manager.stopAll).not.toHaveBeenCalled();
     expect(h.db.close).toHaveBeenCalledTimes(1);
     expect(exitSpy).toHaveBeenCalledWith(0);
   });
@@ -228,7 +229,18 @@ describe('进程级兜底（uncaughtException/unhandledRejection）', () => {
     expect(stderrSpy).toHaveBeenCalledWith(expect.stringContaining('raw-rejection-reason'));
 
     await new Promise((resolve) => setImmediate(resolve));
-    expect(h.manager.stopAll).toHaveBeenCalledTimes(1);
+    expect(h.manager.stopAll).not.toHaveBeenCalled();
+    expect(exitSpy).toHaveBeenCalledWith(0);
+  });
+
+  it('SIGTERM（systemctl stop/restart）：关面板资源退出，不停 MC 实例（重启后接管）', async () => {
+    await resetAndImport();
+    fatalHandler('SIGTERM')();
+
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(h.scheduler.stop).toHaveBeenCalledTimes(1);
+    expect(h.manager.stopAll).not.toHaveBeenCalled();
+    expect(h.db.close).toHaveBeenCalledTimes(1);
     expect(exitSpy).toHaveBeenCalledWith(0);
   });
 });
