@@ -114,12 +114,14 @@
   --mcs-terminal-warning: var(--ref-warning);
   --mcs-terminal-accent: var(--ref-accent);
 
-  /* ── 动效（交互反馈 ≤300ms 只动 transform/opacity；slow 450ms 仅限一次性入场编排）── */
+  /* ── 动效（交互反馈 ≤300ms 只动 transform/opacity；slow 450ms 仅限一次性入场编排；
+        spring 轻微过冲仅限弹层/卡片入场，禁止用于循环动画）── */
   --mcs-motion-fast: 150ms;      /* hover */
   --mcs-motion-base: 300ms;      /* 交互反馈上限 */
   --mcs-motion-slow: 450ms;      /* 入场编排/氛围动画 */
   --mcs-ease-snappy: cubic-bezier(0.22, 1, 0.36, 1);
   --mcs-ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --mcs-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);  /* 弹层入场（ui/dialog.tsx 唯一消费点） */
 }
 
 .light {
@@ -189,3 +191,4 @@
   --mcs-glow-error: 0 0 16px color-mix(in oklch, var(--ref-error-light) 28%, transparent);
   --mcs-gradient-accent: linear-gradient(135deg, var(--ref-accent-light), color-mix(in oklch, var(--ref-accent-light) 92%, var(--ref-success-light)));
 }
+

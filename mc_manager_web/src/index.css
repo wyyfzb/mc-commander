@@ -83,6 +83,7 @@
     --duration-mcs-slow: var(--mcs-motion-slow);
     --ease-mcs-snappy: var(--mcs-ease-snappy);
     --ease-mcs-out: var(--mcs-ease-out);
+    --ease-mcs-spring: var(--mcs-ease-spring);
     --shadow-mcs-card: var(--mcs-shadow-card);
     --shadow-mcs-raised: var(--mcs-shadow-raised);
     --shadow-mcs-overlay: var(--mcs-shadow-overlay);
