@@ -294,6 +294,49 @@ export class MCServerInstance extends EventEmitter {
     this._detectPublicIp();
     // 启动时读取世界出生点（纯文件 I/O，不阻塞）
     this._readWorldSpawnFromLevelDat();
+    // 面板（重）启动时从 latest.log 回填当次运行日志（UXT-24），见方法注释
+    this._loadLogBufferFromLatestLog();
+  }
+
+  /// 面板（重）启动时从 vanilla 的 latest.log 回填日志缓冲（UXT-24）：
+  /// logBuffer 是纯内存态，面板重启即清空——运行中实例的当次运行日志
+  /// （含启动段）随面板重启从终端消失，孤儿接管（UXT-15）场景同样断档。
+  /// latest.log 由 MC 自身每次启动重写、持续落盘，天然就是「当次运行」
+  /// 的权威日志；取尾部至多 1000 行（与 logBuffer 滚动上限一致）注入。
+  /// start() 的 _initializeRuntimeState 仍会清空缓冲：新一次运行从空开始，
+  /// 与 vanilla 重写 latest.log 的行为一致。只读尾部 2MB 按行切分，
+  /// 避免长运行服务器全文件读入内存。
+  _loadLogBufferFromLatestLog() {
+    const logPath = path.join(this.serverPath, 'logs', 'latest.log');
+    try {
+      if (!fs.existsSync(logPath)) return;
+      const size = fs.statSync(logPath).size;
+      if (size === 0) return;
+      const readBytes = Math.min(size, 2 * 1024 * 1024);
+      const buf = Buffer.alloc(readBytes);
+      const fd = fs.openSync(logPath, 'r');
+      try {
+        fs.readSync(fd, buf, 0, readBytes, size - readBytes);
+      } finally {
+        fs.closeSync(fd);
+      }
+      let text = buf.toString('utf8');
+      // 非整块起点时首行可能被截断（含 UTF-8 多字节边界），丢弃首行残段
+      if (readBytes < size) {
+        const firstNewline = text.indexOf('\n');
+        if (firstNewline >= 0) text = text.slice(firstNewline + 1);
+      }
+      const lines = text
+        .split('\n')
+        .map((l) => l.replace(/\r$/, ''))
+        .filter((l) => l.trim().length > 0)
+        .slice(-1000);
+      if (lines.length === 0) return;
+      this.logBuffer = lines.map((l) => ({ time: Date.now(), text: l, type: 'stdout' }));
+      logger.info(`[${this.id}] Restored ${lines.length} log line(s) from latest.log`);
+    } catch (e) {
+      logger.warn(`[${this.id}] Failed to restore logs from latest.log:`, e.message);
+    }
   }
 
   /// 世界出生点缓存（从 level.dat 读取）。

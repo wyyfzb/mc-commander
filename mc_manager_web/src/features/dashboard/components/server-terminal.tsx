@@ -99,8 +99,6 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
   const renderedCountRef = useRef(0)
   const autoScrollRef = useRef(true)
   const srLiveRef = useRef<HTMLDivElement>(null)
-  // 停止标记行：一旦写入（或随全量重写清屏消失）由增量渲染按运行态补写，两处共用标记防重复
-  const stoppedMarkRef = useRef(false)
   const theme = useUiStore((s) => s.theme)
   const autoScrollEnabled = useUiStore((s) => s.terminalAutoScroll)
   // onScroll 注册于 mount effect，闭包捕获首渲染值——ref 同步最新偏好
@@ -151,7 +149,6 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
     if (term) {
       term.clear()
       renderedCountRef.current = 0
-      stoppedMarkRef.current = false
     }
   }, [instanceId, pushNothing])
 
@@ -230,8 +227,6 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
       showJvmWarningsRef.current = showJvmWarnings
       term.clear()
       renderedCountRef.current = 0
-      // 停止标记行随 clear 消失，重写后按当前运行态补写
-      stoppedMarkRef.current = false
     }
     const rendered = renderedCountRef.current
     if (buffer.length === rendered) return
@@ -244,11 +239,6 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
       term.write(`\x1b[${bold}${ansi}m${entry.text}\x1b[0m\r\n`)
     }
     renderedCountRef.current = buffer.length
-    // 眼睛切换重写后：停止态补写标记行（主路径停止标记由下方 effect 负责，标记防重复）
-    if (!isRunning && buffer.length > 0 && !stoppedMarkRef.current) {
-      term.write('\x1b[3m—— 实例已停止，以上为最后日志 ——\x1b[0m\r\n')
-      stoppedMarkRef.current = true
-    }
     if (autoScrollRef.current) {
       term.scrollToBottom()
     }
@@ -260,25 +250,13 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
       }).map((e) => (e as TerminalLogEntry).text)
       srLiveRef.current.textContent = allVisible.slice(-SR_LINE_COUNT).join('\n')
     }
-  }, [buffer, showJvmWarnings, isRunning])
-
-  // 停止标记行：实例停止且缓冲非空时追加（主路径：运行→停止；重写后补写由增量渲染负责）
-  useEffect(() => {
-    const term = xtermRef.current
-    if (!term) return
-    if (!isRunning && buffer.length > 0 && !stoppedMarkRef.current) {
-      term.write('\x1b[3m—— 实例已停止，以上为最后日志 ——\x1b[0m\r\n')
-      stoppedMarkRef.current = true
-    }
-    if (isRunning) stoppedMarkRef.current = false
-  }, [isRunning, buffer.length])
+  }, [buffer, showJvmWarnings])
 
   // 清空（工具栏按钮 + Ctrl+L 共用）
   const handleClear = useCallback(() => {
     clearTerminal()
     xtermRef.current?.clear()
     renderedCountRef.current = 0
-    stoppedMarkRef.current = false
     // 缓冲已清空，搜索高亮/计数随之失效
     searchAddonRef.current?.clearDecorations()
     setSearch((s) => ({ ...s, result: null }))
@@ -509,6 +487,17 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
           </div>
         ) : null}
       </div>
+      {/* 停止状态条：随 isRunning 显隐的 DOM 元素而非 xterm 画布内容——
+          画布只追加不可擦除，旧实现把标记行写进画布，刷新时 isRunning
+          短暂为 false 的竞态会让「运行中」实例永久残留停止标记（UXT-24 实测） */}
+      {!isRunning && buffer.length > 0 && (
+        <div
+          className="shrink-0 border-t border-mcs-border-muted bg-mcs-bg-muted px-3 py-1.5 text-center text-mcs-2xs italic text-mcs-text-subtle"
+          role="status"
+        >
+          —— 实例已停止，以上为最后日志 ——
+        </div>
+      )}
     </section>
   )
 }

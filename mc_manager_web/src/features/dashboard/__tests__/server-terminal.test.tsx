@@ -325,4 +325,17 @@ describe('ServerTerminal JVM 眼睛切换（P2-27 复现修复）', () => {
     const rewrittenBack = writesAfterLastClear()
     expect(rewrittenBack.some((t) => t.includes('restricted method'))).toBe(false)
   })
+
+  it('停止态且缓冲非空 → 显示「实例已停止」状态条；运行中不显示（UXT-24：DOM 状态条随运行态显隐，不再写画布残留）', async () => {
+    useServerStore.setState({ status: { isRunning: false } as never })
+    useTerminalStore.setState({
+      buffer: [{ text: '[19:37:44] Stopping server', level: 'info', jvmWarning: false }],
+    } as never)
+    renderTerminal()
+    expect(screen.getByRole('status').textContent).toContain('实例已停止')
+
+    // 翻转为运行中 → 状态条随显隐消失（旧实现写入 xterm 画布后无法擦除，刷新竞态下运行中残留停止标记）
+    useServerStore.setState({ status: { isRunning: true } as never })
+    await waitFor(() => expect(screen.queryByRole('status')).toBeNull())
+  })
 })
