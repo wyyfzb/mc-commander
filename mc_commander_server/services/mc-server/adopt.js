@@ -7,10 +7,10 @@
  *
  * 机制：start() 成功后落 pid 文件（<serverPath>/.mc-commander-pid）；
  * 面板启动时（autoStart 错峰之前）扫描 pid 文件验活，存活则「接管」——
- * 恢复运行态显示与 RCON/统计/停止能力。stdout/stdin 管道随面板死亡而失效，
- * 不可恢复：接管实例的日志从接管时刻起、命令仅 RCON 通道、退出感知由
- * 看门狗轮询替代 exit 事件。接管先于 autoStart 完成，其 isRunning=true
- * 使 autoStart 的已运行跳过检查天然防双开。
+ * 恢复运行态显示与 RCON/统计/停止能力。stdout/stdin 管道随面板死亡而失效
+ * 且不可重连：命令仅 RCON 通道、退出感知由看门狗轮询替代 exit 事件；日志
+ * 由 log-tail 域续读 latest.log（接管对用户无感）。接管先于 autoStart 完成，
+ * 其 isRunning=true 使 autoStart 的已运行跳过检查天然防双开。
  */
 
 import path from 'path';
@@ -71,7 +71,7 @@ export function _isPidAlive(pid) {
 
 /**
  * 尝试从 pid 文件接管孤儿进程。成功：恢复运行态（isRunning/startTime/统计/
- * 日志占位行/看门狗）并广播 started；pid 文件缺失或进程已死：清理残留返回 false。
+ * 日志续读/看门狗）并广播 started；pid 文件缺失或进程已死：清理残留返回 false。
  * 不改变 autoStart 数据——接管实例 autoStart 标记保持原值。
  */
 export function adoptFromPidFile() {
@@ -91,8 +91,9 @@ export function adoptFromPidFile() {
   // startTime 用 pid 文件写入时刻近似（真实 spawn 时刻略早，误差 ≤ 一轮 start 时长）
   this.startTime = rec.startedAt || Date.now();
   this._manualStop = false;
-  this.logBuffer = [{ time: Date.now(), type: 'stdout', text: `[服务器] 面板重启，已接管运行中的实例进程 (pid ${rec.pid})。控制台管道不可恢复：日志从本时刻起，命令请走 RCON。` }];
-  this.lastOutput = this.logBuffer[0].text;
+  // 日志续读：stdout 管道不可重连，改读 latest.log 尾部（构造期已回填当次运行
+  // 日志，故续读从文件末尾起），接管对用户无感——终端不注入任何提示行
+  this._startAdoptedLogTail();
   this._startStatsCollection();
   this._startAdoptWatchdog();
   logger.info(`[${this.id}] Adopted orphan server process (pid ${rec.pid})`);
@@ -121,6 +122,7 @@ export function _startAdoptWatchdog(intervalMs = ADOPT_WATCHDOG_INTERVAL_MS) {
     this.adoptedPid = null;
     this._removePidFile();
     this._stopStatsCollection();
+    this._stopAdoptedLogTail();
     this._rconCleanup();
     this._worldSizeDirty = true;
     for (const name of [...this.players.keys()]) this._handlePlayerLeave(name);

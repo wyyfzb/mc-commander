@@ -62,6 +62,8 @@ function makeInstance(name) {
   inst.adopted = false;
   inst.adoptedPid = null;
   inst._adoptTimer = null;
+  inst._logTailTimer = null;
+  inst._logTailState = null;
   inst.process = null;
   inst.logBuffer = [];
   inst.players = new Map();
@@ -102,7 +104,7 @@ describe('pid 文件 CRUD', () => {
 });
 
 describe('adoptFromPidFile 接管', () => {
-  it('活 pid → 接管：运行态恢复、接管标记、日志占位、started 广播', () => {
+  it('活 pid → 接管：运行态恢复、接管标记、日志续读、started 广播（终端不注入提示行）', () => {
     const inst = makeInstance('adopt-alive');
     fs.writeFileSync(
       path.join(inst.serverPath, PID_FILE_NAME),
@@ -119,9 +121,12 @@ describe('adoptFromPidFile 接管', () => {
     expect(inst.adoptedPid).toBe(ALIVE_PID);
     expect(inst.process).toBeNull();
     expect(inst.startTime).toBeLessThanOrEqual(Date.now());
-    expect(inst.logBuffer[0].text).toContain('接管');
+    // 接管对用户无感：不向终端注入任何提示行（日志由 log-tail 续读 latest.log）
+    expect(inst.logBuffer).toHaveLength(0);
+    expect(inst._logTailTimer).not.toBeNull();
     expect(events.some((e) => e.event === 'started')).toBe(true);
     inst._stopAdoptWatchdog();
+    inst._stopAdoptedLogTail();
     inst._stopStatsCollection();
   });
 
@@ -152,6 +157,7 @@ describe('adoptFromPidFile 接管', () => {
     expect(adoptOrphanInstances(manager)).toBe(1);
     expect(inst.isRunning).toBe(true);
     inst._stopAdoptWatchdog();
+    inst._stopAdoptedLogTail();
     inst._stopStatsCollection();
   });
 });

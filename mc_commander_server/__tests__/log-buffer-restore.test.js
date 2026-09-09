@@ -83,4 +83,16 @@ describe('latest.log 回填（面板启动恢复当次运行日志）', () => {
     const inst = makeInstance('restore-none', null);
     expect(inst.logBuffer).toHaveLength(0);
   });
+
+  it('噪音行（RCON 线程/监听器）回填时被过滤——与实时推送口径一致', () => {
+    const inst = makeInstance('restore-noise', [
+      '[19:35:19] [Server thread/INFO]: Done (0.534s)! For help, type "help"',
+      '[19:35:20] [RCON Listener #1/INFO]: RCON running on 0.0.0.0:25575',
+      '[19:35:21] [RCON Client /127.0.0.1 #2/INFO]: Thread RCON Client started',
+      '[19:35:22] [Server thread/INFO]: Steve joined the game',
+    ]);
+    expect(inst.logBuffer).toHaveLength(2);
+    expect(inst.logBuffer[0].text).toContain('Done (0.534s)');
+    expect(inst.logBuffer[1].text).toContain('Steve joined the game');
+  });
 });

@@ -17,6 +17,7 @@ import * as outputParser from './mc-server/output-parser.js';
 import * as statsCollector from './mc-server/stats-collector.js';
 import * as startLifecycle from './mc-server/start-lifecycle.js';
 import * as adopt from './mc-server/adopt.js';
+import * as logTail from './mc-server/log-tail.js';
 import { logger } from '../utils/logger.js';
 
 // 原子写统一走 utils/fs-utils.js 公共实现（写唯一 .tmp 再 rename，失败清残留）。
@@ -205,9 +206,10 @@ export class MCServerManager extends EventEmitter {
     return Array.from(this.instances.values()).map(i => i.toStatus());
   }
 
-  // 优雅停止全部运行中实例：等待 stop 命令送达 + MC 正常退出，
-  // 超时兜底强杀，避免停机（systemctl stop / Ctrl+C）时 MC 子进程
-  // 残留为孤儿、在线玩家数据（离开事件/60s 保存）丢失。
+  // 显式停止全部运行中实例：等待 stop 命令送达 + MC 正常退出，超时兜底强杀，
+  // 避免残留孤儿进程、在线玩家数据（离开事件/60s 保存）丢失。
+  // 注意：面板停机（SIGTERM/SIGINT/崩溃）已不调用本方法——停机不停实例，
+  // 由下次启动的 adoptOrphanInstances 接管（owner 2026-09-09 拍板）。
   async stopAll({ timeout = 8000 } = {}) {
     await Promise.all(
       Array.from(this.instances.values())
@@ -244,6 +246,9 @@ export class MCServerInstance extends EventEmitter {
     this.adopted = false;
     this.adoptedPid = null;
     this._adoptTimer = null;
+    // 接管实例日志续读（log-tail 域）：定时器与读取游标
+    this._logTailTimer = null;
+    this._logTailState = null;
     this.startTime = null;
     this.logBuffer = [];
     this.players = new Map();
@@ -326,9 +331,8 @@ export class MCServerInstance extends EventEmitter {
         const firstNewline = text.indexOf('\n');
         if (firstNewline >= 0) text = text.slice(firstNewline + 1);
       }
-      const lines = text
+      const lines = this._filterLogNoise(text.replace(/\r/g, ''))
         .split('\n')
-        .map((l) => l.replace(/\r$/, ''))
         .filter((l) => l.trim().length > 0)
         .slice(-1000);
       if (lines.length === 0) return;
@@ -2059,6 +2063,10 @@ Object.assign(MCServerInstance.prototype, outputParser);
 // 模块函数体内 this 语义与类内定义完全一致（实例方法调用时 this 绑定实例），
 // 全部调用点零改动，对外接口零变化。
 Object.assign(MCServerInstance.prototype, statsCollector);
+
+// 接管实例日志续读域挂载（UXT-15 后续）：log-tail 模块经原型注入复用，
+// 接管实例改读 latest.log 尾部以恢复日志与事件解析（详见模块头注释）。
+Object.assign(MCServerInstance.prototype, logTail);
 
 // 孤儿进程接管域挂载（UXT-15 根修）：pid 文件与面板重启后接管，机制见 adopt.js 头注释。
 Object.assign(MCServerInstance.prototype, adopt);
