@@ -53,13 +53,14 @@ npm run dev                  # node --watch 热重载
 
 - **设计 token**：前端颜色/圆角/字号/动效/光影一律使用 `src/styles/` 的 `--mcs-*` CSS token
   （经 `src/index.css` 的 `@theme` 注册为工具类），禁止组件内硬编码色值，禁止引入未 token 化的第三方 UI 库。
-  文字只有两级（`--mcs-text-default` / `--mcs-text-muted`）、交互悬浮只有一档（`--mcs-state-hover`，
+  文字只有两级（`--mcs-text-default` / `--mcs-text-muted`；终端专用 `--mcs-terminal-*` 是独立深底调色板，
+  不占文字档位）、交互悬浮只有一档（`--mcs-state-hover`，
   `--mcs-bg-secondary` 是静态次级面不是 hover 态）；圆角只有一套档位（6/8/12/16px，
   shadcn 的 `--radius-*` 直接绑定 `--mcs-radius-*`）。
 - **tint 两类**：承载文字/图标的内容面（`--mcs-{status,accent,dimension}-bg-subtle`）**必须不透明**
   （`color-mix(色 N%, 基面)`）——半透明 tint 的有效色随宿主面漂移，最亮浮层上文字会跌破 4.5:1；
   不承载文字的交互覆盖层（`--mcs-state-hover/focus/pressed`、`--mcs-scrim*`）保持半透明。
-  同一元素只允许一个背景来源（内容面 tint 不得互相叠加，也不得与玻璃面同元素）；
+  同一元素只允许一个内容面 tint（内容面 tint 不得互相叠加，也不得与玻璃面同元素）；
   危险语义色底（`--mcs-error-bg-subtle`）同样不透明，禁 `bg-destructive/<alpha>`。
 - **间距**：不设 `--mcs-space-*`，统一走 Tailwind 默认 4px 刻度（`--spacing` 0.25rem）；
   结构间距必须 4px 倍数，组件内微节奏（2px 档）须在 PR 说明理由。
@@ -70,6 +71,7 @@ npm run dev                  # node --watch 热重载
   local 10 / overlay 40 / modal 50 / dropdown 60 / tooltip 70 / toast 80；
   下拉必须高于弹窗——Radix 弹层挂在 body 末尾，弹窗内的 Select 要盖过遮罩才可点）。
 - **玻璃预算**：同屏 ≤2 层——常驻 1 处（顶栏 `glass-chrome`）+ 覆盖层 1 处（确认弹窗 `glass-overlay`）；
+  门禁按「全站各 1 处」的静态口径校验（同屏无法静态判定），见 `check-design-tokens.mjs` 第 17 条；
   侧栏/通知抽屉/toast 一律实底（玻璃内含滚动容器时 backdrop 每次重绘都要重算模糊）。
 - **焦点可见**：交互元素禁止用 `outline-none` 抵消 `focus-visible:outline-*`
   （Tailwind utilities 同层，`outline-none` 会把 `outline-style` 钉死为 `none`，焦点环实测不可见）；

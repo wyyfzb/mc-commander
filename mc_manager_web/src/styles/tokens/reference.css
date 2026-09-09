@@ -17,7 +17,7 @@
   --ref-dark-popover: oklch(0.325 0.0262 269.37);    /* 弹窗（L=0.325） */
   --ref-dark-border: oklch(0.37 0.0262 269.37);      /* 装饰线参考（L=0.37，见 --ref-border-interactive） */
 
-  /* ── 暗色文字三级（全层背景 ≥4.5:1，WCAG AA）── */
+  /* ── 暗色文字参考档（default/muted 两级对全部背景 ≥4.5:1；subtle 仅供终端深底）── */
   --ref-dark-text-default: oklch(0.9588 0.0086 247.92);  /* #EDF2F7 */
   --ref-dark-text-muted: oklch(0.816 0.0261 255.58);     /* #B8C4D4 */
   --ref-dark-text-subtle: oklch(0.695 0.0407 257.42);    /* 终端次级文字（--mcs-terminal-subtle 专用） */

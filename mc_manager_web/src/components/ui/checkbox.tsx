@@ -1,10 +1,7 @@
 "use client"
 
-/*
- * shadcn/ui 基础组件 —— rounded-mcs-xs 为合法派生用法：
- * Checkbox 固定 16px 尺寸，4px 圆角为 Radix 上游标准比例，非设计 token 适用场景。
- * 详见 mc_manager_web/docs/design-review-guidelines.md §圆角守门规则
- */
+/* shadcn/ui 基础组件 —— 圆角走最小 token 档（--mcs-radius-xs 6px）：
+ * Radix 上游用 4px 任意值，与圆角单轨冲突，16px 固定尺寸控件取最小档即可 */
 
 import * as React from "react"
 import { Checkbox as CheckboxPrimitive } from "radix-ui"

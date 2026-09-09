@@ -23,7 +23,7 @@
 |------|------|----------|
 | `scroll-area.tsx` | `rounded-[inherit]` | Viewport 继承父容器圆角，无法用 token 表达 |
 | `input-group.tsx` | `rounded-[calc(var(--radius)-Npx)]` | 内嵌按钮/键盘需比容器圆角小 Npx 视觉内嵌 |
-| `checkbox.tsx` | `rounded-[4px]` | 固定 16px 尺寸，4px 为 Radix 上游标准比例 |
-| `tooltip.tsx` | `rounded-[2px]` | 箭头旋转 45° 形成菱形，2px 保持尖端锐利 |
+
+注：checkbox（`rounded-mcs-xs`）与 tooltip 箭头（`rounded-xs`）已改用 token/内置档，不再需要豁免。
 
 审查新 PR 时，`components/ui/` 下新增的 `rounded-[...]` 需确认属于上述派生模式或补充豁免理由；`features/` 下任何 `rounded-[...]` 均应驳回。

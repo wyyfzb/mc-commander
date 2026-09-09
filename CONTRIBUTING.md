@@ -77,14 +77,14 @@ CI 会在 PR 上运行与服务端/前端两套完整检查 + e2e + 密钥扫描
   文字两级（`text-mcs-text-default` / `text-mcs-text-muted`）、悬浮一档（`bg-mcs-state-hover`）、
   圆角一套档位（6/8/12/16px）
 - 内容面 tint（`--mcs-{status,accent,dimension}-bg-subtle`，承载文字）**必须不透明**；
-  交互覆盖层（`--mcs-state-*`、`--mcs-scrim*`）保持半透明；同一元素只允许一个背景来源；
+  交互覆盖层（`--mcs-state-*`、`--mcs-scrim*`）保持半透明；同一元素只允许一个内容面 tint；
   危险底用 `bg-mcs-error-bg-subtle`（禁 `bg-destructive/<alpha>`）
 - 交互元素禁用 `outline-none` 抵消 `focus-visible:outline-*`（会导致焦点环不可见）；
   菜单/选项项须带 `focus:outline-2 focus:-outline-offset-2 focus:outline-mcs-focus-ring`
 - Z 轴禁裸 `z-<数字>`，用 `z-(--mcs-z-*)` 阶梯
 - 组件风格遵循既有 shadcn-ui + `components/mcs/` 模式
 - 数据密集区域用实底背景；玻璃同屏 ≤2 层（顶栏 `glass-chrome` + 确认弹窗 `glass-overlay`，
-  alpha ≤0.7；亮色 overlay ≤0.85），侧栏/抽屉/toast 用实底
+  alpha ≤0.7；亮色 overlay ≤0.85），侧栏/抽屉/toast 用实底；门禁按「全站各 1 处」静态校验
 
 ## 行为准则
 

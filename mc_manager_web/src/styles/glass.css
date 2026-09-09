@@ -1,6 +1,7 @@
 /**
  * 玻璃工具类（设计文档 §4.4，风格 A：简约+克制玻璃）
  * 预算（审计 S26 收尾）：同屏 ≤2 层 —— 常驻 1 处（顶栏 chrome）+ 覆盖层 1 处（确认弹窗 overlay）；
+ * 门禁按「全站各 1 处」静态口径校验（同屏无法静态判定，见 check-design-tokens.mjs 第 17 条）；
  * 侧栏/通知抽屉/toast 一律实底（玻璃内含滚动容器时 backdrop 每次重绘都要重算模糊）
  * 纪律：blur ≤20px、底色 alpha ≤0.7（亮色 overlay ≤0.85）；表格/终端/表单/图表一律实底（禁区）
  * 兜底：无 backdrop-filter 实底；prefers-reduced-transparency 降级磨砂
