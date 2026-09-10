@@ -39,10 +39,17 @@ describe('toIsoUtc', () => {
     expect(toIsoUtc(Date.UTC(2026, 8, 10, 16, 55, 36))).toBe('2026-09-10T16:55:36.000Z');
   });
 
-  it('非有限数值返回 null（在 Date 构造抛 RangeError 前拦下）', () => {
+  it('非有限与越界数值一律返回 null（Date 构造抛 RangeError 的两档）', () => {
+    // 非有限：NaN / ±Infinity
     for (const v of [NaN, Infinity, -Infinity]) {
       expect(toIsoUtc(v)).toBeNull();
     }
+    // 有限但越界（|v| > 8.64e15）：Number.isFinite 拦不住，须由 getTime() 判 NaN
+    for (const v of [8.64e15 + 1, 1e16, 1e300, Number.MAX_SAFE_INTEGER]) {
+      expect(toIsoUtc(v)).toBeNull();
+    }
+    // 边界值本身仍是合法时刻
+    expect(toIsoUtc(8.64e15)).not.toBeNull();
   });
 
   it('空值一律返回 null', () => {
