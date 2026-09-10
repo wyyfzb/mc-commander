@@ -5,6 +5,7 @@ import { BigStatCards, PlayersCard, RuntimeInfoCard } from './components/stat-ca
 import { ServerTerminal } from './components/server-terminal'
 import { CommandInput } from './components/command-input'
 import { McClockCard } from './components/mc-clock-card'
+import { RecentBackupsCard } from './components/recent-backups-card'
 import { AnnouncementCard } from './components/announcement-card'
 import { useInstanceStatus, useSystemStats, queryKeys } from '@/api/queries'
 import { useServerStore } from '@/stores/server'
@@ -15,7 +16,7 @@ import { useNavigate } from 'react-router'
 
 /**
  * 仪表盘驾驶舱
- * 顶部三卡（在线玩家 / 资源使用 / 实例信息）→ 终端主体 + 右栏卡（MC 时钟·世界控制 / 公告发送）
+ * 顶部三卡（在线玩家 / 资源使用 / 实例信息）→ 终端主体 + 右栏卡（MC 时钟·世界控制 / 最近备份 / 公告发送）
  * 数据流：Query 轮询（实例 30s / 系统资源 5s）→ server store → WS 事件即时合并
  */
 export function DashboardPage() {
@@ -96,6 +97,8 @@ export function DashboardPage() {
         </div>
         <aside className="flex min-h-0 flex-col gap-4 overflow-y-auto pr-1">
           <McClockCard />
+          {/* 状态 → 数据安全 → 主动操作：备份卡排在公告发送之前（蓝本同序） */}
+          <RecentBackupsCard />
           <AnnouncementCard />
         </aside>
       </div>

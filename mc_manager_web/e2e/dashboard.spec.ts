@@ -23,11 +23,18 @@ async function setupConnection(page: Page) {
 }
 
 test.describe('仪表盘', () => {
-  test('统计卡渲染：顶部三卡 + 右栏两卡 + 健康标签 + 实时数据', async ({ page }) => {
+  test('统计卡渲染：顶部三卡 + 右栏三卡 + 健康标签 + 实时数据', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/dashboard')
     // 顶部三卡 + 右栏卡标题
-    for (const title of ['在线玩家', '资源使用', '实例信息', 'MC 时钟 · 世界控制', '公告发送']) {
+    for (const title of [
+      '在线玩家',
+      '资源使用',
+      '实例信息',
+      'MC 时钟 · 世界控制',
+      '最近备份',
+      '公告发送',
+    ]) {
       await expect(page.getByText(title).first()).toBeVisible()
     }
     // 健康标签与实时数据
@@ -39,6 +46,18 @@ test.describe('仪表盘', () => {
     await expect(page.getByText('2h 0m')).toBeVisible()
     await expect(page.getByText('2d 0h')).toBeVisible()
     await expect(page.getByText('第 42 天')).toBeVisible()
+  })
+
+  test('最近备份卡：渲染备份行 + 旧格式徽章，「全部」跳转设置页备份子路由', async ({ page }) => {
+    await setupConnection(page)
+    await page.goto('/dashboard')
+    await expect(page.getByText('手动备份 2026-08-14')).toBeVisible()
+    await expect(page.getByText('旧格式压缩包')).toBeVisible()
+    await expect(page.getByText('旧格式', { exact: true })).toBeVisible()
+    // 入口必须落在真实子路由 /settings/backup（历史上曾指向不存在的 /settings/backups）
+    await page.getByRole('button', { name: '查看全部备份' }).click()
+    await expect(page).toHaveURL(/\/settings\/backup$/)
+    await expect(page.getByText('备份管理').first()).toBeVisible()
   })
 
   test('MC 时钟·世界控制：天气/时间按钮点击即发命令', async ({ page }) => {
