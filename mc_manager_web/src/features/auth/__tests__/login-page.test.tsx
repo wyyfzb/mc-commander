@@ -192,4 +192,55 @@ describe('LoginPage（登录/首访设密三态）', () => {
     await userEvent.click(screen.getByRole('button', { name: /登录/ }))
     await waitFor(() => expect(screen.getByText('onboarding-reached')).toBeInTheDocument())
   })
+
+  // ── 面板地址写回（分域部署回归锁）──
+
+  it('用户未触碰地址：登录成功不得用空串覆盖已配置的面板地址', async () => {
+    useConnectionStore.getState().setConfig({ baseUrl: 'http://192.168.1.100:25566' })
+    renderLoginPage()
+    await waitFor(() => expect(screen.getByLabelText('管理员密码')).toBeInTheDocument())
+
+    await userEvent.type(screen.getByLabelText('管理员密码'), 'correct-horse')
+    await userEvent.click(screen.getByRole('button', { name: /登录/ }))
+    await waitFor(() => expect(screen.getByText('dashboard-reached')).toBeInTheDocument())
+
+    // 修复前：setConfig({ baseUrl: '' }) 里的空串不是 nullish，`??` 挡不住，
+    // 已配置地址被抹成同源——分域部署下次进面板就找不到服务端
+    expect(useConnectionStore.getState().baseUrl).toBe('http://192.168.1.100:25566')
+    expect(JSON.parse(localStorage.getItem('mcs-connection') ?? '{}').baseUrl).toBe(
+      'http://192.168.1.100:25566',
+    )
+    expect(useConnectionStore.getState().status).toBe('ready')
+
+    useConnectionStore.getState().setConfig({ baseUrl: '' })
+  })
+
+  it('用户显式填写地址：登录成功后按填写值写回', async () => {
+    let probes = 0
+    server.use(
+      http.get('*/api/v1/auth/status', () => {
+        probes += 1
+        // 首挂载（同源）失败 → 不可达态才出现「连接其他面板地址」入口
+        return probes === 1 ? HttpResponse.error() : okEnvelope({ hasPassword: true })
+      }),
+    )
+    renderLoginPage()
+    await waitFor(() => expect(screen.getByText('连接失败')).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: /尝试连接其他面板地址/ }))
+    await userEvent.type(
+      screen.getByLabelText('面板服务端地址（用于面板网页与服务端分开部署的场景）'),
+      'http://192.168.1.100:25566',
+    )
+    await userEvent.click(screen.getByRole('button', { name: '连接' }))
+    await waitFor(() => expect(screen.getByLabelText('管理员密码')).toBeInTheDocument())
+
+    await userEvent.type(screen.getByLabelText('管理员密码'), 'correct-horse')
+    await userEvent.click(screen.getByRole('button', { name: /登录/ }))
+    await waitFor(() => expect(screen.getByText('dashboard-reached')).toBeInTheDocument())
+
+    expect(useConnectionStore.getState().baseUrl).toBe('http://192.168.1.100:25566')
+
+    useConnectionStore.getState().setConfig({ baseUrl: '' })
+  })
 })

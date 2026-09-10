@@ -86,6 +86,8 @@ export function LoginPage() {
   const [submitting, setSubmitting] = useState(false)
   const [errorText, setErrorText] = useState('')
   const probeSeq = useRef(0)
+  /** 用户是否显式处置过面板地址（见 handleAuthSuccess：未处置则不写回，避免空串覆盖已存地址） */
+  const addressSettled = useRef(false)
 
   const strength = assessPasswordStrength(password)
 
@@ -112,10 +114,18 @@ export function LoginPage() {
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- baseUrl 变化由探测按钮显式驱动
   }, [probe])
 
-  /** 登录/设密成功：写会话 → 同步连接状态（setConfig 内含凭据重算）→ 回跳 */
+  /**
+   * 登录/设密成功：写会话 → 同步连接状态 → 回跳。
+   * 地址只在用户显式处置过（改过输入框 / 点过「恢复默认地址」）时写回：
+   * 未触碰时的空串会经 setConfig 覆盖 localStorage 里的已配置地址
+   * （stores/connection.ts 用 `??` 只挡 null/undefined，挡不住空串），
+   * 分域部署下次进面板就找不到服务端了
+   */
   const handleAuthSuccess = (token: string, sessionId: string, expiresAt: string) => {
     useAuthStore.getState().setSession({ token, sessionId, expiresAt })
-    useConnectionStore.getState().setConfig({ baseUrl })
+    const connection = useConnectionStore.getState()
+    if (addressSettled.current) connection.setConfig({ baseUrl })
+    else connection.refreshStatus()
     toast.success(phase === 'setup' ? '管理员密码设置成功' : '登录成功')
     navigate(returnTo.startsWith('/') ? returnTo : '/dashboard', { replace: true })
   }
@@ -257,6 +267,7 @@ export function LoginPage() {
                   variant="outline"
                   className="h-10 flex-1"
                   onClick={() => {
+                    addressSettled.current = true
                     setBaseUrl('')
                     void probe('')
                   }}
@@ -285,7 +296,10 @@ export function LoginPage() {
                     <Input
                       id="base-url"
                       value={baseUrl}
-                      onChange={(e) => setBaseUrl(e.target.value.trim())}
+                      onChange={(e) => {
+                        addressSettled.current = true
+                        setBaseUrl(e.target.value.trim())
+                      }}
                       placeholder="http://your-server:25566"
                       className="h-8 font-mono text-mcs-xs"
                     />
