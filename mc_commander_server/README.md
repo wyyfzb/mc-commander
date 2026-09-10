@@ -9,7 +9,7 @@
 - **多实例管理** — 启动/停止/重启 MC 服务器
 - **一键部署** — 支持 Vanilla/Paper/Fabric/Forge/Purpur，自动下载+Java 检测+首次启动配置
 - **RCON 命令** — 基于 rcon-client，串行队列、持久连接、超时处理，命令失败短语解析（防前端假成功）
-- **WebSocket 实时推送** — 19 种事件类型（含部署进度），Subprotocol 鉴权；**通知事件落库 + lastEventId 断线补齐**（断线/重启期间事件不丢）、心跳保活（30s ping 清理死连接）、广播背压保护、批量死亡事件 5s 窗口聚合（团灭只广播一条）
+- **WebSocket 实时推送** — 32 种事件类型（含部署进度），Subprotocol 鉴权；**通知事件落库 + lastEventId 断线补齐**（断线/重启期间事件不丢）、心跳保活（30s ping 清理死连接）、广播背压保护、批量死亡事件 5s 窗口聚合（团灭只广播一条）
 - **玩家管理** — OP/踢出/封禁/白名单 + 批量命令；**临时封禁自实现**（temp_bans 表 + 到期自动解封，不依赖插件）
 - **封禁记录** — 合并临时封禁（temp_bans）与原版永久封禁（banned-players.json / banned-ips.json），去重展示
 - **玩家洞察** — 物品栏/末影箱（NBT 解析）、成就/死亡/入睡事件、会话时间线、level.dat 读取（难度/出生点/天气，兼容 26.x 新旧格式）
@@ -30,7 +30,7 @@
 在目标 Linux 服务器上执行：
 
 ```bash
-curl -fsSL -o /tmp/deploy-mc-commander.sh https://gitee.com/wyyfzb/mc_commander/raw/main/mc_commander_server/scripts/deploy-mc-commander.sh
+curl -fsSL -o /tmp/deploy-mc-commander.sh https://gitee.com/wyyfzb/mc-commander/raw/main/mc_commander_server/scripts/deploy-mc-commander.sh
 sudo bash /tmp/deploy-mc-commander.sh
 ```
 
@@ -67,7 +67,7 @@ npm start
 部署脚本幂等，发布新版本后重新执行同一脚本即完成升级：
 
 ```bash
-curl -fsSL -o /tmp/deploy-mc-commander.sh https://gitee.com/wyyfzb/mc_commander/raw/main/mc_commander_server/scripts/deploy-mc-commander.sh
+curl -fsSL -o /tmp/deploy-mc-commander.sh https://gitee.com/wyyfzb/mc-commander/raw/main/mc_commander_server/scripts/deploy-mc-commander.sh
 sudo bash /tmp/deploy-mc-commander.sh
 ```
 
@@ -237,6 +237,20 @@ stage 取值：`download` / `download_complete` / `forge_install` / `first_launc
 
 > 备份 = `backups/<instanceId>/<名称>-<时间戳>/` 目录快照：Linux 用 `rsync -a --link-dest=<上一快照>` 硬链接增量（需安装 rsync，`apt-get install -y rsync`；实例目录与备份目录须同文件系统），Windows 优先 MSYS2 rsync、未安装时自动降级 robocopy `/MIR` 全量镜像。`size` 为快照逻辑大小（恢复所需容量）。改造前的 zip 备份 `format='zip'` 仅可删除。
 
+**面板自身数据**（`data/mc_commander.db`）每日自动快照至 `backups/panel/`，保留策略与实例备份一致。
+`.env` 不纳入自动备份（含认证凭据，且备份产物可经 API 下载），部署或改建后请手动复制一份留存。
+
+面板库快照还原步骤：
+
+1. 停止面板进程（运行中覆盖会导致 WAL 半写，还原后数据损坏）
+2. 留存现场：把 `data/mc_commander.db` 及 `-wal` / `-shm` 残留移出 `data/`（勿覆盖旧快照目录）
+3. 将 `backups/panel/` 中目标快照复制为 `data/mc_commander.db`
+4. 确认 `data/` 下无 `-wal` / `-shm` 残留（有则删除——旧 WAL 与还原库不匹配）
+5. 启动面板，验证登录与实例列表完整性
+6. 确认无误后清理第 2 步留存的现场文件
+
+> 快照还原的是**面板配置**；实例世界数据请用实例备份还原，两者相互独立。
+
 ### 定时任务
 
 | 方法 | 端点 | 说明 |
@@ -267,7 +281,7 @@ stage 取值：`download` / `download_complete` / `forge_install` / `first_launc
 {"type": "subscribe", "instanceId": "your-instance-id", "lastEventId": 42}
 ```
 
-**事件**（共 19 种）:
+**事件**（共 32 种）:
 
 > 通知类事件（玩家/备份/任务）在广播前**落库**（`notification_events` 表）并携带自增 `id` 字段；客户端记录最后收到的 `id`，重连时通过 `lastEventId` 补齐断线期间事件。高频事件（log/status 快照/performance/weather）不落库。
 
@@ -347,4 +361,4 @@ npm test        # vitest
 
 ## License
 
-MIT
+AGPL-3.0-or-later（见仓库根 [LICENSE](../LICENSE)）

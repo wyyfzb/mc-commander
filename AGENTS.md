@@ -51,6 +51,8 @@ npm run dev                  # node --watch 热重载
 
 ## 工程纪律
 
+> 本节前端路径均相对 `mc_manager_web/`（如 `src/styles/`、`components/mcs/`、`scripts/check-design-tokens.mjs`）。
+
 - **设计 token**：前端颜色/圆角/字号/动效/光影一律使用 `src/styles/` 的 `--mcs-*` CSS token
   （经 `src/index.css` 的 `@theme` 注册为工具类），禁止组件内硬编码色值，禁止引入未 token 化的第三方 UI 库。
   文字只有两级（`--mcs-text-default` / `--mcs-text-muted`；终端专用 `--mcs-terminal-*` 是独立深底调色板，
