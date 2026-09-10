@@ -89,6 +89,12 @@ cd mc-commander/mc_commander_server
 npm install
 cp .env.example .env   # 编辑 .env，设置 API Key（两种部署口径见下）
 
+# （可选）同源托管 Web 前端：public/index.html 存在时服务端自动托管前端
+# （含 SPA 深链接兜底），目录可用 PUBLIC_DIR 覆盖；不做这一步则只跑后端 API
+(cd ../mc_manager_web && npm install && npm run build)
+mkdir -p public
+cp -r ../mc_manager_web/dist/. public/
+
 npm start
 ```
 
