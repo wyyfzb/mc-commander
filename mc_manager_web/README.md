@@ -1,6 +1,6 @@
 # MC Commander Web 端（mc_manager_web）
 
-MC_Commander 的 Web 管理面板。技术栈与设计规范见 `../docs/2026-08-14-web-app-design.md`。
+MC_Commander 的 Web 管理面板。设计规范与审查准则见 [docs/design-review-guidelines.md](docs/design-review-guidelines.md)。
 
 ## 技术栈
 
@@ -32,8 +32,8 @@ src/
 ├── test/           # Vitest setup + MSW handlers
 ├── routes.tsx      # react-router v8 data mode 路由表
 └── main.tsx        # 入口（QueryClient + Tooltip + Router + Toaster）
-e2e/                # Playwright E2E（冒烟 + 截图 → ../.ai/vision/m1/）
-scripts/            # gen-token-colors（色值生成）/ check-contrast（对比度校验）
+e2e/                # Playwright E2E（冒烟；视觉截图走 `npm run capture`，输出到 gitignore 的 .ai/vision/）
+scripts/            # gen-token-colors（色值生成）/ check-contrast（对比度校验）/ check-design-tokens（token 门禁）/ capture（截图）
 ```
 
 ## 设计纪律（CLAUDE.md 规则 1/13/14 强制）
