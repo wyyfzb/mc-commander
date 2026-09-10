@@ -106,4 +106,16 @@ test.describe('桌面端回归（B1 响应式不改桌面）', () => {
     await expect(page.getByRole('complementary', { name: '主导航' })).toBeVisible()
     await expect(page.getByRole('button', { name: '打开导航菜单' })).toBeHidden()
   })
+
+  test('紧急页桌面宽度下收窄为手机列（不再被拉伸成整屏）', async ({ page }) => {
+    await setupConnection(page)
+    await page.goto('/emergency')
+    // 顶栏是这个全高列的整宽子元素：量它即量到列宽（不耦合类名）
+    const header = page.locator('header').first()
+    await expect(header).toBeVisible()
+    const box = await header.boundingBox()
+    expect(box?.width ?? 0).toBeLessThanOrEqual(448)
+    // 上限落在容器自身的 max-w-md (448px) 上；窄视口按 w-full 收缩，行为不变
+    expect(await header.locator('..').evaluate((el) => getComputedStyle(el).maxWidth)).toBe('448px')
+  })
 })
