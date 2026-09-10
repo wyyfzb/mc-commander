@@ -13,9 +13,13 @@ const NAIVE_UTC_RE = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(\.\d+)?$/;
 /**
  * 将 SQLite 的无时区 UTC 字符串补 Z 转为 ISO8601（带时区标记）。
  * 空值返回 null；已带时区标记或非该格式的输入原样返回，避免二次破坏。
+ * 数值按 **epoch 毫秒** 处理（与 toDbUtcString 同口径）：否则 String(v) 过不了
+ * naive 正则会被原样返回，下游 Date.parse 得 NaN → parseDbTime 当成「极旧」，
+ * 而不是该时刻。
  */
 export function toIsoUtc(value) {
   if (!value) return null;
+  if (typeof value === 'number') return Number.isFinite(value) ? new Date(value).toISOString() : null;
   const s = String(value).trim();
   return NAIVE_UTC_RE.test(s) ? new Date(s.replace(' ', 'T') + 'Z').toISOString() : s;
 }

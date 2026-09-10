@@ -35,6 +35,16 @@ describe('toIsoUtc', () => {
     expect(toIsoUtc('不是时间')).toBe('不是时间');
   });
 
+  it('epoch 毫秒数值按时刻处理（不是 String(v) 原样透传）', () => {
+    expect(toIsoUtc(Date.UTC(2026, 8, 10, 16, 55, 36))).toBe('2026-09-10T16:55:36.000Z');
+  });
+
+  it('非有限数值返回 null（在 Date 构造抛 RangeError 前拦下）', () => {
+    for (const v of [NaN, Infinity, -Infinity]) {
+      expect(toIsoUtc(v)).toBeNull();
+    }
+  });
+
   it('空值一律返回 null', () => {
     for (const v of [null, undefined, '', 0]) {
       expect(toIsoUtc(v)).toBeNull();
@@ -59,6 +69,11 @@ describe('parseDbTime', () => {
     expect(parseDbTime(undefined)).toBe(0);
     expect(parseDbTime('')).toBe(0);
     expect(parseDbTime('garbage')).toBe(0);
+  });
+
+  it('epoch 毫秒入参返回该时刻本身（回归：原实现经 String(v) 得 NaN → 0）', () => {
+    const t = Date.UTC(2026, 8, 10, 16, 55, 36);
+    expect(parseDbTime(t)).toBe(t);
   });
 
   it('回归语义：刚写入的 UTC 时刻不会被当成 1 小时前的陈旧记录', () => {
