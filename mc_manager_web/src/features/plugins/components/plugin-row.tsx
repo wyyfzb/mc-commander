@@ -36,6 +36,9 @@ export function PluginRow({ plugin, checked, onCheckedChange, toggling, deleting
       className="flex cursor-pointer items-start gap-3 p-4 transition-colors hover:bg-mcs-state-hover"
       onClick={onOpenDetail}
       onKeyDown={(e) => {
+        // 只处理落在行本身的激活键：行内控件（复选框/「可更新」徽章/操作按钮）自行处理。
+        // 缺此守卫时行会抢走它们的空格——在徽章上按空格跳市场失败，反倒打开了详情面板
+        if (e.target !== e.currentTarget) return
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault()
           onOpenDetail()
