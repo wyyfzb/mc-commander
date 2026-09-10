@@ -39,6 +39,11 @@ describe('toIsoUtc', () => {
     expect(toIsoUtc(Date.UTC(2026, 8, 10, 16, 55, 36))).toBe('2026-09-10T16:55:36.000Z');
   });
 
+  it('Date 对象按时刻处理（与 toDbUtcString 对称；原实现会透传 toString() 本地化长串）', () => {
+    expect(toIsoUtc(new Date(Date.UTC(2026, 8, 10, 16, 55, 36)))).toBe('2026-09-10T16:55:36.000Z');
+    expect(toIsoUtc(new Date('not a date'))).toBeNull();
+  });
+
   it('非有限与越界数值一律返回 null（Date 构造抛 RangeError 的两档）', () => {
     // 非有限：NaN / ±Infinity
     for (const v of [NaN, Infinity, -Infinity]) {

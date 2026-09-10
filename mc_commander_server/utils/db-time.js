@@ -13,15 +13,16 @@ const NAIVE_UTC_RE = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(\.\d+)?$/;
 /**
  * 将 SQLite 的无时区 UTC 字符串补 Z 转为 ISO8601（带时区标记）。
  * 空值返回 null；已带时区标记或非该格式的输入原样返回，避免二次破坏。
- * 数值按 **epoch 毫秒** 处理（与 toDbUtcString 的数值语义一致；`0` 因空值早退
- * 返回 null 属既有口径）：否则 String(v) 过不了 naive 正则会被原样返回，下游
- * Date.parse 得 NaN → parseDbTime 当成「极旧」。越界数值（|v| > 8.64e15）同样
- * 返回 null——Date 构造会抛 RangeError，不能让它漏成异常。
+ * `Date` / 数值（epoch 毫秒）按**时刻**处理，与 toDbUtcString 的入参口径对齐
+ * （`0` 因空值早退返回 null 是唯一例外）。不加这层会漏成怪结果：数值经 String(v)
+ * 原样透传，下游 Date.parse 得 NaN → parseDbTime 当成「极旧」；Date 对象则变成
+ * toString() 的本地化长串。无法表示的时刻（非有限、越界 |v| > 8.64e15、Invalid
+ * Date）一律返回 null——构造/序列化会抛 RangeError，不能让它漏成异常。
  */
 export function toIsoUtc(value) {
   if (!value) return null;
-  if (typeof value === 'number') {
-    const d = new Date(value);
+  if (value instanceof Date || typeof value === 'number') {
+    const d = value instanceof Date ? value : new Date(value);
     return Number.isNaN(d.getTime()) ? null : d.toISOString();
   }
   const s = String(value).trim();
