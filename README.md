@@ -378,8 +378,8 @@ mc-commander/
 | 平台 | 支持状态 |
 |------|---------|
 | Linux | ✅ 全支持（推荐部署环境，一键部署脚本面向 Ubuntu/Debian） |
-| Windows | ⚠️ 实验性——官方部署脚本与发布包面向 Linux，需手动部署并自行构建前端产物（better-sqlite3 13.x 已随包提供 win32 预编译产物，无需本机构建工具链）；无 systemd 服务托管（开机自启需自行配置），未装 rsync 时备份降级为 robocopy 全量镜像；建议使用 WSL2 以获得与 Linux 一致体验 |
-| macOS | ✅ 支持（同 Windows：官方发布包面向 Linux，需自行构建前端产物；better-sqlite3 13.x 已随包提供 macOS 预编译产物） |
+| Windows | ⚠️ 实验性——官方部署脚本与发布包面向 Linux（脚本注册的 systemd 单元不覆盖 Windows），需手动部署并自行构建前端产物（better-sqlite3 13.x 已随包提供 win32 预编译产物，无需本机构建工具链）；未装 rsync 时备份降级为 robocopy 全量镜像；建议使用 WSL2 以获得与 Linux 一致体验 |
+| macOS | ✅ 支持（与 Windows 同为手动部署：官方发布包面向 Linux、无服务托管，需自行构建前端产物；better-sqlite3 13.x 已随包提供 macOS 预编译产物） |
 
 > 部署脚本（`方式一：Linux 一键部署`）仅面向 Linux；Windows / macOS 请走手动部署路径。
 
