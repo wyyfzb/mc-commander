@@ -114,15 +114,20 @@ export function InstancesPage() {
 
   // ── 深链接：?tab=deploy 打开部署向导；URL 为单一事实源 ──
   // 只在挂载时读一次会漏掉同路由再点（如顶栏「暂无实例，前往部署」）与前进/后退两路，
-  // 表现为 URL 已变而向导不开（点击无反应）
+  // 表现为 URL 已变而向导不开（点击无反应）。
+  // 写入语义：打开 push 一条历史（后退即关弹窗）；关闭 replace，避免「开→关」堆两条、
+  // 也避免用户后退时把已关掉的向导又弹回来（?focus= 清理同用 replace）
   const deployOpen = searchParams.get('tab') === 'deploy'
   const setDeployOpenDeep = (open: boolean) => {
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev)
-      if (open) next.set('tab', 'deploy')
-      else next.delete('tab')
-      return next
-    })
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        if (open) next.set('tab', 'deploy')
+        else next.delete('tab')
+        return next
+      },
+      open ? undefined : { replace: true },
+    )
   }
 
   const instances = instancesQuery.data ?? []

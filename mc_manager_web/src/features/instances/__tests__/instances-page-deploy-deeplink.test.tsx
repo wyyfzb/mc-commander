@@ -8,6 +8,7 @@
  */
 import { describe, it, expect, beforeEach, afterAll, beforeAll } from 'vitest'
 import { render, screen, act } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { setupServer } from 'msw/node'
 import { createMemoryRouter, RouterProvider } from 'react-router'
@@ -90,5 +91,21 @@ describe('InstancesPage ?tab=deploy 深链', () => {
       await router.navigate(1)
     })
     expect(await screen.findByRole('dialog', { name: '部署新实例' })).toBeInTheDocument()
+  })
+
+  it('关闭向导用 replace：参数从 URL 移除，且后退不会把已关掉的向导弹回来', async () => {
+    const user = userEvent.setup()
+    const router = renderPage('/instances?tab=deploy')
+    expect(await screen.findByRole('dialog', { name: '部署新实例' })).toBeInTheDocument()
+
+    await user.keyboard('{Escape}')
+    expect(deployDialog()).not.toBeInTheDocument()
+    expect(router.state.location.search).toBe('')
+
+    await act(async () => {
+      await router.navigate(-1)
+    })
+    expect(deployDialog()).not.toBeInTheDocument()
+    expect(router.state.location.search).toBe('')
   })
 })

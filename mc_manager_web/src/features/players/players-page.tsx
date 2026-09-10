@@ -4,7 +4,7 @@
  * - 右：详情面板（5 Tab；批量模式仅传送/给予）
  * - 底部浮动批量操作条（选中时出现）
  * - URL 深链接：?q=<搜索词>&mode=<状态>&player=<玩家名>（可分享、可刷新保持）
- * - 数据流：usePlayers 5s 轮询 + WS 事件 invalidate（use-server-socket 全局分派）
+ * - 数据流：usePlayers 30s 保底轮询 + WS 事件 invalidate（use-server-socket 全局分派）
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router'

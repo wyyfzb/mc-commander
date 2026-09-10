@@ -357,7 +357,9 @@ describe('ConnectionForm 登录会话凭据（有会话时 API Key 可空）', (
     setSession()
     renderForm()
     expect(
-      screen.getByText('已登录：浏览器用登录会话鉴权，此处可留空；API Key 供自动化脚本直连使用'),
+      screen.getByText(
+        '已登录：浏览器用登录会话鉴权，此处可留空；API Key 是无登录会话的客户端（自动化脚本等）用的凭据',
+      ),
     ).toBeInTheDocument()
   })
 
@@ -408,7 +410,7 @@ describe('ConnectionForm 登录会话凭据（有会话时 API Key 可空）', (
     expect(useConnectionStore.getState().baseUrl).toBe('')
   })
 
-  it('测试连接命中 40103：提示「目标不接受当前登录会话」且不拆本机会话（会话保留、无全局登出）', async () => {
+  it('测试连接命中 40103：提示可兑现的出路且不拆本机会话（会话保留、无全局登出）', async () => {
     setSession()
     server.use(
       http.get('*/api/v1/overview', () =>
@@ -427,6 +429,9 @@ describe('ConnectionForm 登录会话凭据（有会话时 API Key 可空）', (
       await user.click(screen.getByRole('button', { name: '测试连接' }))
 
       expect(await screen.findByText(/目标地址不接受当前登录会话/)).toBeInTheDocument()
+      // 有会话时客户端只发 Bearer、Key 不进请求——提示不得让用户去「填 API Key」
+      expect(screen.getByText(/重新登录/)).toBeInTheDocument()
+      expect(screen.queryByText(/填写.*API Key/)).not.toBeInTheDocument()
       expect(expiredListener).not.toHaveBeenCalled()
       expect(useAuthStore.getState().session?.token).toBe('sess-token-abc')
     } finally {
