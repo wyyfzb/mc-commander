@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import express from 'express';
 import request from 'supertest';
 import fs from 'fs';
@@ -159,6 +159,17 @@ describe('Status Routes · 端点缺口收口', () => {
 
   // ── GET /system-stats：云服务器系统级资源占用（独立轮询端点）──
   describe('GET /api/system-stats', () => {
+    // 本 describe 覆盖 Linux /proc/stat 语义（其他平台回退 loadavg 估算）。
+    // 固定 platform 使任意宿主都能覆盖目标分支；CI 在 Linux 上真跑同一路径。
+    let origPlatform;
+    beforeEach(() => {
+      origPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+      Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
+    });
+    afterEach(() => {
+      Object.defineProperty(process, 'platform', origPlatform);
+    });
+
     it('成功：八字段精确断言（CPU 冷采样为 0 + 内存换算 + 磁盘三目录聚合降序）', async () => {
       __state.procStatContent = 'cpu  100 0 100 500 0 0 0 0 0 0';
       const res = await request(app).get('/api/system-stats');

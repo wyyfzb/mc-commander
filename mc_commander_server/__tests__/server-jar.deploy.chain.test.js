@@ -772,38 +772,46 @@ describe('runFirstLaunch 首启行为', () => {
   });
 
   it('首启 60s 超时 → 按进程组终止（kill(-pid, SIGKILL)）+ 单进程兜底 + 部署完成', async () => {
-    testState.spawnBehavior = 'hang';
-    const killSpy = vi.spyOn(process, 'kill').mockReturnValue(true);
-    const { app } = buildApp();
+    // 进程树终止按 process.platform 分支：win32 走 taskkill /T，其他平台走 kill(-pid)。
+    // 本用例断言的是后者，固定 platform 才能在任意宿主覆盖该分支（CI 在 Linux 真跑同一路径）。
+    const origPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+    Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
+    try {
+      testState.spawnBehavior = 'hang';
+      const killSpy = vi.spyOn(process, 'kill').mockReturnValue(true);
+      const { app } = buildApp();
 
-    const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
-    const pending = request(app)
-      .post('/api/instances/deploy')
-      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Timeout Server', eula: true });
-    // supertest Test 为惰性 thenable：Promise.resolve 触发 then → 立即发起请求
-    const inflight = Promise.resolve(pending);
+      const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
+      const pending = request(app)
+        .post('/api/instances/deploy')
+        .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Timeout Server', eula: true });
+      // supertest Test 为惰性 thenable：Promise.resolve 触发 then → 立即发起请求
+      const inflight = Promise.resolve(pending);
 
-    // 轮询等待 runFirstLaunch 注册 60s 首启定时器（真实 IO 链在 tmp 目录毫秒级完成）
-    let timeoutCall = null;
-    for (let i = 0; i < 200 && !timeoutCall; i++) {
-      await new Promise((r) => setTimeout(r, 5));
-      timeoutCall = setTimeoutSpy.mock.calls.find(([, ms]) => ms === 60000) || null;
+      // 轮询等待 runFirstLaunch 注册 60s 首启定时器（真实 IO 链在 tmp 目录毫秒级完成）
+      let timeoutCall = null;
+      for (let i = 0; i < 200 && !timeoutCall; i++) {
+        await new Promise((r) => setTimeout(r, 5));
+        timeoutCall = setTimeoutSpy.mock.calls.find(([, ms]) => ms === 60000) || null;
+      }
+      expect(timeoutCall, 'runFirstLaunch 应注册 60s 首启定时器').not.toBeNull();
+
+      // 模拟 60s 到期：取消真实定时器后手动触发超时回调（进程树终止 + resolve）
+      const callIdx = setTimeoutSpy.mock.calls.findIndex(([, ms]) => ms === 60000);
+      clearTimeout(setTimeoutSpy.mock.results[callIdx].value);
+      timeoutCall[0]();
+
+      const res = await inflight;
+      expect(res.status).toBe(200);
+      expect(res.body.data.id).toMatch(/^vanilla-[0-9a-f]{8}$/);
+      // 进程树终止：Linux/macOS spawn 带 detached（pid 即 PGID）→ 负 pid 发组信号
+      expect(killSpy).toHaveBeenCalledWith(-42424, 'SIGKILL');
+      // 单进程 SIGKILL 兜底
+      const { spawn } = await import('child_process');
+      expect(spawn.mock.results[0].value.kill).toHaveBeenCalledWith('SIGKILL');
+    } finally {
+      Object.defineProperty(process, 'platform', origPlatform);
     }
-    expect(timeoutCall, 'runFirstLaunch 应注册 60s 首启定时器').not.toBeNull();
-
-    // 模拟 60s 到期：取消真实定时器后手动触发超时回调（进程树终止 + resolve）
-    const callIdx = setTimeoutSpy.mock.calls.findIndex(([, ms]) => ms === 60000);
-    clearTimeout(setTimeoutSpy.mock.results[callIdx].value);
-    timeoutCall[0]();
-
-    const res = await inflight;
-    expect(res.status).toBe(200);
-    expect(res.body.data.id).toMatch(/^vanilla-[0-9a-f]{8}$/);
-    // 进程树终止：Linux/macOS spawn 带 detached（pid 即 PGID）→ 负 pid 发组信号
-    expect(killSpy).toHaveBeenCalledWith(-42424, 'SIGKILL');
-    // 单进程 SIGKILL 兜底
-    const { spawn } = await import('child_process');
-    expect(spawn.mock.results[0].value.kill).toHaveBeenCalledWith('SIGKILL');
   });
 });
 

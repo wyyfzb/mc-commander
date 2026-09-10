@@ -367,12 +367,20 @@ describe('_collectStats 门控与平台分支', () => {
   });
 
   it('Linux 分支：委派 _collectLinuxStats(pid)', () => {
-    const inst = makeBareInstance();
-    const linux = vi.spyOn(inst, '_collectLinuxStats').mockImplementation(() => {});
-    inst._collectStats();
-    expect(linux).toHaveBeenCalledTimes(1);
-    expect(linux).toHaveBeenCalledWith(4242);
-    expect(exec).not.toHaveBeenCalled();
+    // 实现按 process.platform 分支，固定为 linux 才能在任意宿主覆盖该分支
+    // （同 describe 的 win32 用例用同一手法）。
+    const origPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+    Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
+    try {
+      const inst = makeBareInstance();
+      const linux = vi.spyOn(inst, '_collectLinuxStats').mockImplementation(() => {});
+      inst._collectStats();
+      expect(linux).toHaveBeenCalledTimes(1);
+      expect(linux).toHaveBeenCalledWith(4242);
+      expect(exec).not.toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(process, 'platform', origPlatform);
+    }
   });
 });
 

@@ -16,6 +16,11 @@
  * 行为锚定说明：expandGlob 对绝对 glob 模式按相对 CWD 语义逐段展开
  * （walk 自空串起拼段，'/usr/...' 模式实际探测 'usr/...'），本文件按该
  * 现行为构建探测树，固定单元逻辑本身（通配展开与存在性校验）。
+ *
+ * 平台约束：上述探测树的键、以及 expandGlob 的展开结果，均按 POSIX 分隔符
+ * 构造；而实现内部用 path.join 拼路径——Windows 宿主上会产生 '\' 与键不匹配，
+ * 用例在此平台不成立。故除纯函数矩阵（getRecommendedJavaVersion）外，其余
+ * describe 统一 skipIf(win32)；Linux CI 覆盖同一批分支，覆盖面不受影响。
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
@@ -201,7 +206,7 @@ describe('getRecommendedJavaVersion —— MC 版本到推荐 Java 的映射矩�
   });
 });
 
-describe('getAllJavaVersions · JAVA_HOME 探测与 java -version 输出解析', () => {
+describe.skipIf(process.platform === 'win32')('getAllJavaVersions · JAVA_HOME 探测与 java -version 输出解析', () => {
   const JDK17 = '/opt/jdk-17';
 
   function setupJavaHome(home, javaBin, spec) {
@@ -307,7 +312,7 @@ function buildLinuxTree() {
   // java-30：通配命中但 readdir 失败 → 该分支静默跳过
 }
 
-describe('getAllJavaVersions · Linux glob 探测（expandGlob 注入）', () => {
+describe.skipIf(process.platform === 'win32')('getAllJavaVersions · Linux glob 探测（expandGlob 注入）', () => {
   it('多发行版目录经通配展开全部识别，未命中/空壳/损坏目录全部排除', () => {
     buildLinuxTree();
     const found = getAllJavaVersions();
@@ -380,7 +385,7 @@ describe('getAllJavaVersions · Linux glob 探测（expandGlob 注入）', () =>
   });
 });
 
-describe('getAllJavaVersions · Windows 平台分支', () => {
+describe.skipIf(process.platform === 'win32')('getAllJavaVersions · Windows 平台分支', () => {
   it('JAVA_HOME / Program Files 通配 / where 多行去重', () => {
     osState.platform.mockImplementation(() => 'win32');
     process.env.JAVA_HOME = 'C:/jdk-21';
@@ -413,7 +418,7 @@ describe('getAllJavaVersions · Windows 平台分支', () => {
   });
 });
 
-describe('getAllJavaVersions · macOS 平台分支', () => {
+describe.skipIf(process.platform === 'win32')('getAllJavaVersions · macOS 平台分支', () => {
   it('JavaVirtualMachines 通配探测', () => {
     osState.platform.mockImplementation(() => 'darwin');
     addDir('Library');
@@ -435,7 +440,7 @@ describe('getAllJavaVersions · macOS 平台分支', () => {
   });
 });
 
-describe('findJavaPath —— 精确匹配 / 较新回退 / 默认回退三级策略', () => {
+describe.skipIf(process.platform === 'win32')('findJavaPath —— 精确匹配 / 较新回退 / 默认回退三级策略', () => {
   it('存在精确匹配版本 → 直接返回该路径', () => {
     process.env.JAVA_HOME = '/opt/jdk-17';
     addDir('/opt/jdk-17');
