@@ -89,6 +89,14 @@ test.describe('移动端侧栏抽屉', () => {
     await page.mouse.click(360, 400)
     await expect(page.getByRole('complementary', { name: '主导航（移动端）' })).toBeHidden()
   })
+
+  test('顶栏搜索按钮在窄屏仍有可访问名（文案与 kbd 均被 xs 断点隐藏）', async ({ page }) => {
+    await setupConnection(page)
+    await page.goto('/dashboard')
+    // <480px 时「搜索或执行命令…」与 Ctrl K 徽标都 display:none，
+    // 图标 aria-hidden → 没有 aria-label 就是无名按钮
+    await expect(page.getByRole('button', { name: '搜索或执行命令', exact: true })).toBeVisible()
+  })
 })
 
 test.describe('桌面端回归（B1 响应式不改桌面）', () => {

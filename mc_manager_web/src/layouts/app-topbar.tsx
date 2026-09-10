@@ -151,6 +151,8 @@ export function AppTopBar() {
       {/* 全局搜索（Cmd+K） */}
       <Button
         variant="outline"
+        // 窄窗口文案被 hidden xs:inline 隐藏后按钮无可访问名（图标 aria-hidden）→ 显式补名
+        aria-label="搜索或执行命令"
         className="ml-auto w-9 justify-center gap-2 text-mcs-sm text-mcs-text-muted xs:w-44 xs:justify-between sm:w-56"
         onClick={() => setCommandPaletteOpen(true)}
       >
