@@ -139,6 +139,27 @@ journalctl -u mc-commander -b --no-pager
 
 提示：error 除 journal 外仍落盘 `data/logs/error.log`（即 `DATA_DIR/logs/error.log`），便于 journal 轮转后回溯历史错误；`LOG_LEVEL` 默认 `info` 已含全部常规运行信息，无需另行配置日志文件。
 
+## 忘记管理员密码
+
+密码只以哈希落库、无法反解，也没有环境变量式重置开关（避免把重置能力留在 `.env` 里
+长期暴露）。恢复方式是把管理员账号与会话清空，让面板回到首访设密流程：
+
+```bash
+# 1) 停止服务（systemd: systemctl stop mc-commander；否则先 Ctrl-C）
+
+# 2) 清空管理员账号与会话（库文件默认 data/mc_commander.db，DATA_DIR 可改目录）
+sqlite3 data/mc_commander.db "DELETE FROM admin_account; DELETE FROM admin_sessions;"
+
+# 3) 重启服务，访问面板按首访向导重设密码
+```
+
+- 只删这两张表：实例、备份、定时任务、审计记录都不受影响。
+- **会话必须一并清空**：直接改库不经过改密接口，已有令牌不会自动失效；留着等于旧令牌
+  仍能登录。
+- 配置了 `SETUP_TOKEN` 的部署（公网建议配置），重设密码时须先输入该令牌，见
+  [SECURITY.md](../SECURITY.md) 的信任模型一节。
+- 若机器上没有 `sqlite3`，用任意 SQLite 客户端打开同一文件执行同样两条语句即可。
+
 ## API 文档
 
 ### 认证
