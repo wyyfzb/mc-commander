@@ -41,6 +41,15 @@ if [ "$SKIP_SCHEMAS" -eq 0 ]; then
   # dist 同步守卫（与 ci.yml schemas job 同款）：重建产物与提交版 byte 级比对，
   # 漂移即失败。rolldown 输出确定，同步时本步不会改写工作区。
   DIST_COMMITTED="$(mktemp)"
+  if [ ! -f dist/index.js ]; then
+    # dist/index.js 是提交物（服务端运行时消费）：缺失时比对无基准，且 fail 在
+    # cp 上只会得到 `cp: cannot stat`，读不出「该做什么」（工作区清理误删时会遇到）
+    echo "错误：mc-schemas/dist/index.js 不存在，无法做重建比对"
+    echo "      该文件是提交物（服务端运行时消费 dist），执行 npm run build 重建即可；"
+    echo "      若是误删，也可用 git checkout -- mc-schemas/dist/index.js 还原"
+    rm -f "$DIST_COMMITTED"
+    exit 1
+  fi
   cp dist/index.js "$DIST_COMMITTED"
   npm run build >/dev/null
   if ! cmp -s "$DIST_COMMITTED" dist/index.js; then
