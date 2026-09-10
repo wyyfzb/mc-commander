@@ -125,7 +125,9 @@ export function EmergencyPage() {
   const lastLogs = (logsQuery.data ?? []).slice(-12)
 
   return (
-    <div className="flex h-dvh flex-col bg-mcs-bg-default text-mcs-text-default">
+    // 本页是移动端单手视图：桌面宽度下若无上限，卡片与按钮会被拉到 700px+ 宽、
+    // 触控热区间距失真；max-w-md 居中后桌面呈现为手机列，窄屏（<448px）行为不变
+    <div className="mx-auto flex h-dvh w-full max-w-md flex-col bg-mcs-bg-default text-mcs-text-default">
       {/* 顶栏：实例名 + 健康 chip */}
       <header className="flex h-12 shrink-0 items-center gap-2 border-b border-mcs-border-muted px-4">
         {/* 44px 触控热区内嵌 10px 视觉点（该页触控纪律 ≥44px） */}
