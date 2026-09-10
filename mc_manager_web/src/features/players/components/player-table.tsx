@@ -14,7 +14,6 @@ import {
   type ColumnDef,
   type SortingState,
 } from '@tanstack/react-table'
-import { CircleAlert } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Pagination } from '@/components/mcs/pagination'
 import { Button } from '@/components/ui/button'
@@ -32,9 +31,6 @@ interface PlayerTableProps {
   /** 已过滤+排序的玩家列表 */
   players: Player[]
   isLoading: boolean
-  /** 加载失败时显示错误提示 + 重试按钮 */
-  isError?: boolean
-  onRetry?: () => void
   /** 未筛选总数（空态双文案判断：0=暂无玩家，>0=无匹配） */
   totalCount: number
   /** 无匹配空态的清空筛选回调（有筛选时展示 CTA，issue 343） */
@@ -51,8 +47,6 @@ interface PlayerTableProps {
 export function PlayerTable({
   players,
   isLoading,
-  isError,
-  onRetry,
   totalCount,
   onClearFilter,
   isRconConnected,
@@ -204,17 +198,9 @@ export function PlayerTable({
             {!isLoading && pageSize === -1 && bottomPadding > 0 && <tr style={{ height: bottomPadding }} aria-hidden />}
           </tbody>
         </table>
-        {isError && !isLoading && allRows.length === 0 ? (
-          <div className="flex h-40 flex-col items-center justify-center gap-2">
-            <CircleAlert className="size-6 text-mcs-text-muted" aria-hidden />
-            <p className="text-mcs-sm text-mcs-text-muted">加载玩家列表失败</p>
-            {onRetry && (
-              <Button variant="outline" size="sm" onClick={onRetry}>
-                重试
-              </Button>
-            )}
-          </div>
-        ) : !isLoading && allRows.length === 0 ? (
+        {/* 错误态由页面持有（players-page 在 isError 时用 EmptyState 替换整张表，
+            避免错误被呈现为「暂无在线玩家」的误导空态），表格不再自带第二套错误 UI */}
+        {!isLoading && allRows.length === 0 ? (
           <div className="flex h-40 flex-col items-center justify-center gap-2 text-mcs-sm text-mcs-text-muted">
             {totalCount === 0 ? '暂无在线玩家' : '没有匹配的玩家'}
             {totalCount > 0 && onClearFilter && (

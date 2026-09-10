@@ -2,15 +2,16 @@
  * 玩家页集成测试：表格渲染/筛选/行点击详情/批量选择/深链接
  * MSW 拦截（mockPlayers 结构占位数据，无真实服务器信息）
  */
-import { describe, it, expect, beforeEach, afterAll, beforeAll } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, afterAll, beforeAll } from 'vitest'
 import { render, screen, fireEvent, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { HttpResponse, http } from 'msw'
 import { setupServer } from 'msw/node'
 import { createMemoryRouter, RouterProvider } from 'react-router'
 import { Toaster } from 'sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import { handlers } from '@/test/mocks/handlers'
+import { handlers, mockPlayers } from '@/test/mocks/handlers'
 import { PlayersPage } from '../players-page'
 import { usePlayersUiStore } from '../store'
 import { useConnectionStore } from '@/stores/connection'
@@ -18,6 +19,7 @@ import { useServerStore } from '@/stores/server'
 
 const server = setupServer(...handlers)
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
+afterEach(() => server.resetHandlers())
 afterAll(() => server.close())
 
 function renderPage(initialPath = '/players') {
@@ -57,6 +59,31 @@ beforeEach(() => {
 })
 
 describe('PlayersPage', () => {
+  it('列表加载失败：错误态替换整张表（不呈现为「暂无在线玩家」），可重试', async () => {
+    let calls = 0
+    server.use(
+      http.get('*/api/v1/instances/:id/players', () => {
+        calls += 1
+        return calls === 1
+          ? HttpResponse.json(
+              { status: 'error', code: 50000, message: '内部错误', details: null, timestamp: '' },
+              { status: 500 },
+            )
+          : HttpResponse.json({ status: 'ok', code: 0, message: 'Success', data: mockPlayers, timestamp: '' })
+      }),
+    )
+    const user = userEvent.setup()
+    renderPage()
+
+    expect(await screen.findByText('加载失败')).toBeInTheDocument()
+    expect(screen.getByText(/无法获取玩家列表/)).toBeInTheDocument()
+    // 错误不得被呈现为误导性空态（玩家表整体不渲染）
+    expect(screen.queryByText('暂无在线玩家')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '重试' }))
+    expect(await screen.findByText('Steve')).toBeInTheDocument()
+  })
+
   it('渲染玩家表格（在线/离线/封禁/假人）', async () => {
     renderPage()
     expect(await screen.findByText('Steve')).toBeInTheDocument()

@@ -2,7 +2,7 @@
  * PlayerTable 行为级测试（issue 466：组件拆分等价性回归锁）
  * 拆分（player-table-columns/row/dialogs/config）后锁定原有交互语义，覆盖：
  * - 表头 10 列渲染与加载骨架行
- * - 错误态（重试）与空态双文案（0=暂无玩家 / >0=无匹配 + 清空筛选 CTA）
+ * - 空态双文案（0=暂无玩家 / >0=无匹配 + 清空筛选 CTA）；错误态由页面持有，本组件不渲染
  * - 行元数据：OP/白名单/封禁徽标、离线态；行点击（指针便利）与名字按钮（键盘入口）打开详情
  * - 选择列：勾选写入 store、阻断行点击冒泡
  * - 行内菜单：详情/传送入口、OP 确认流（onAction kind=op）、踢出确认流（kind=kick + onKicked）、离线禁用
@@ -73,12 +73,10 @@ function makePlayer(overrides: Partial<Player> = {}): Player {
 interface SetupOpts {
   players?: Player[]
   isLoading?: boolean
-  isError?: boolean
   totalCount?: number
 }
 
-function setup({ players, isLoading = false, isError = false, totalCount = 0 }: SetupOpts = {}) {
-  const onRetry = vi.fn()
+function setup({ players, isLoading = false, totalCount = 0 }: SetupOpts = {}) {
   const onClearFilter = vi.fn()
   const onOpenDetail = vi.fn()
   const onOpenBan = vi.fn()
@@ -89,8 +87,6 @@ function setup({ players, isLoading = false, isError = false, totalCount = 0 }: 
       <PlayerTable
         players={players ?? [makePlayer()]}
         isLoading={isLoading}
-        isError={isError}
-        onRetry={onRetry}
         totalCount={totalCount}
         onClearFilter={onClearFilter}
         isRconConnected
@@ -101,7 +97,7 @@ function setup({ players, isLoading = false, isError = false, totalCount = 0 }: 
       />
     </TooltipProvider>,
   )
-  return { view, onRetry, onClearFilter, onOpenDetail, onOpenBan, onAction, onKicked }
+  return { view, onClearFilter, onOpenDetail, onOpenBan, onAction, onKicked }
 }
 
 beforeEach(() => {
@@ -131,15 +127,7 @@ describe('PlayerTable · 表头与加载态', () => {
 
 // ── 错误态与空态 ──
 
-describe('PlayerTable · 错误态与空态', () => {
-  it('isError 且无数据时展示失败提示，点击重试回调 onRetry', async () => {
-    const user = userEvent.setup()
-    const { onRetry } = setup({ isError: true, players: [] })
-    expect(screen.getByText('加载玩家列表失败')).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: '重试' }))
-    expect(onRetry).toHaveBeenCalledTimes(1)
-  })
-
+describe('PlayerTable · 空态', () => {
   it('totalCount=0 空态展示「暂无在线玩家」且无清空筛选 CTA', () => {
     setup({ players: [], totalCount: 0 })
     expect(screen.getByText('暂无在线玩家')).toBeInTheDocument()
