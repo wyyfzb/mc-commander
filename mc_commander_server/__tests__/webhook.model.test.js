@@ -1,14 +1,17 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import Database from 'better-sqlite3';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
+import { toDbUtcString } from '../utils/db-time.js';
 
-const TEST_DIR = './test-webhook-model-data';
+// 系统临时目录（勿落服务端工作目录）：error-codes.contract.test.js 会递归扫描
+// 该目录树，本文件建/删目录会与扫描并发撞 ENOENT，随机让整个契约检查变红
+const TEST_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'mcs-webhook-model-'));
 
 let db;
 
 beforeAll(() => {
-  if (!fs.existsSync(TEST_DIR)) fs.mkdirSync(TEST_DIR, { recursive: true });
   db = new Database(path.join(TEST_DIR, 'test.db'));
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
@@ -183,12 +186,29 @@ describe('WebhookModel', () => {
   });
 
   it('pruneDeliveries 清理旧投递日志', () => {
-    // 插入一个「旧」投递日志（直接 SQL 模拟）
+    // 与生产同口径：CURRENT_TIMESTAMP 的 naive UTC 串（写 ISO 会让 cutoff 口径错配不可见）
     db.prepare(`
       INSERT INTO webhook_deliveries (webhook_id, event_type, payload, status, created_at)
-      VALUES (?, 'ping', '{}', 'success', '2020-01-01T00:00:00Z')
+      VALUES (?, 'ping', '{}', 'success', '2020-01-01 00:00:00')
     `).run(1);
     const pruned = WebhookModel.pruneDeliveries(30);
     expect(pruned).toBeGreaterThanOrEqual(1);
+  });
+
+  it('pruneDeliveries 边界：cutoff 当日但晚于 cutoff 时刻的投递必须保留', () => {
+    const cutoffMs = Date.now() - 30 * 86_400_000;
+    const ins = db.prepare(`
+      INSERT INTO webhook_deliveries (webhook_id, event_type, payload, status, created_at)
+      VALUES (?, 'ping', '{}', 'success', ?)
+    `);
+    const keepId = ins.run(1, toDbUtcString(cutoffMs + 1_000)).lastInsertRowid;
+    const dropId = ins.run(1, toDbUtcString(cutoffMs - 1_000)).lastInsertRowid;
+    const exists = (id) =>
+      Boolean(db.prepare('SELECT id FROM webhook_deliveries WHERE id = ?').get(id));
+
+    WebhookModel.pruneDeliveries(30);
+    // cutoff 若用 toISOString()，同日记录的 ' '(0x20) < 'T'(0x54) 会让 keepId 被误删
+    expect(exists(keepId)).toBe(true);
+    expect(exists(dropId)).toBe(false);
   });
 });

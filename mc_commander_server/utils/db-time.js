@@ -27,3 +27,17 @@ export function toIsoUtc(value) {
 export function parseDbTime(value) {
   return Date.parse(toIsoUtc(value)) || 0;
 }
+
+/**
+ * Date / epoch → SQLite CURRENT_TIMESTAMP 口径的无时区 UTC 串（'YYYY-MM-DD HH:MM:SS'）。
+ *
+ * 专供与 created_at 这类 **naive 列做字符串比较** 的场合（保留策略 cutoff、区间过滤）。
+ * 直接用 `toISOString()` 当 cutoff 会在**同一天**上判错：比较到第 11 位时
+ * `' '`(0x20) < `'T'`(0x54) 恒成立，于是 cutoff 当日的记录整日被判为「更旧」
+ * 而被多删（最多约一天）。日期部分相同则时间部分才参与比较，才是真实时间序。
+ * 无法解析返回 null（调用方应显式处理，勿把 null 当 cutoff 使用）。
+ */
+export function toDbUtcString(value) {
+  const d = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 19).replace('T', ' ');
+}

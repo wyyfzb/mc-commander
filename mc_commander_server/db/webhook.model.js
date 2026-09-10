@@ -3,7 +3,7 @@
  * Secret 脱敏：API 返回 ********；findByIdInternal 返回原始 secret 供签名
  */
 import { getDb } from './database.js';
-import { toIsoUtc } from '../utils/db-time.js';
+import { toIsoUtc, toDbUtcString } from '../utils/db-time.js';
 
 export class WebhookModel {
   static create(data) {
@@ -156,7 +156,8 @@ export class WebhookModel {
 
   static pruneDeliveries(olderThanDays = 30) {
     const db = getDb();
-    const cutoff = new Date(Date.now() - olderThanDays * 86_400_000).toISOString();
+    // 同 AuditLogModel.prune：cutoff 与列必须同口径（naive UTC 串）
+    const cutoff = toDbUtcString(Date.now() - olderThanDays * 86_400_000);
     const result = db.prepare('DELETE FROM webhook_deliveries WHERE created_at < ?').run(cutoff);
     return result.changes;
   }

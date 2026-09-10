@@ -80,7 +80,15 @@ describe('错误码契约：码值唯一性', () => {
 
 describe('错误码契约：僵尸码检测', () => {
   beforeAll(() => {
-    sourceContents = collectJsFiles(SRC_DIR).map((f) => fs.readFileSync(f, 'utf-8'));
+    // 读盘同样容错：文件可能在 readdir 与 readFile 之间被并发用例清理。
+    // 读失败按空串计——只可能漏判引用（红），不会静默放行。
+    sourceContents = collectJsFiles(SRC_DIR).map((f) => {
+      try {
+        return fs.readFileSync(f, 'utf-8');
+      } catch {
+        return '';
+      }
+    });
   });
 
   it('每个已定义的 ErrorCodes 键在源码中被引用（无僵尸码）', () => {

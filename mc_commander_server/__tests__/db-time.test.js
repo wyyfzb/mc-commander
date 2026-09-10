@@ -10,7 +10,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { toIsoUtc, parseDbTime } from '../utils/db-time.js';
+import { toIsoUtc, parseDbTime, toDbUtcString } from '../utils/db-time.js';
 
 describe('toIsoUtc', () => {
   it('无时区标记的 UTC 串补 Z 转 ISO8601（空格分隔）', () => {
@@ -69,6 +69,36 @@ describe('parseDbTime', () => {
     const ts = parseDbTime(sqliteNow);
     const cutoff = Date.now() - 60 * 60 * 1000;
     expect(ts).toBeGreaterThan(cutoff);
+  });
+});
+
+// ── toDbUtcString：cutoff 必须与 naive 列同口径 ──
+//
+// 保留策略（prune）拿 cutoff 与 created_at 做**字符串**比较。若 cutoff 用
+// toISOString()，同一天的记录在第 11 位比较时 ' '(0x20) < 'T'(0x54) 恒成立，
+// 整日被判为「更旧」而被多删（最多约一天）——本组用例锁住正确口径。
+describe('toDbUtcString', () => {
+  it('Date → CURRENT_TIMESTAMP 口径（秒级、空格分隔、UTC）', () => {
+    expect(toDbUtcString(new Date(Date.UTC(2026, 8, 10, 16, 55, 36, 789)))).toBe('2026-09-10 16:55:36');
+  });
+
+  it('epoch 毫秒入参等价', () => {
+    expect(toDbUtcString(Date.UTC(2026, 0, 1, 0, 0, 0))).toBe('2026-01-01 00:00:00');
+  });
+
+  it('结果是真时间序：同一天内较早时刻字符串更小；ISO 形态则会判错', () => {
+    const early = toDbUtcString(Date.UTC(2026, 8, 10, 1, 0, 0));
+    const late = toDbUtcString(Date.UTC(2026, 8, 10, 23, 0, 0));
+    expect(early < late).toBe(true);
+    // 反证：cutoff 若取 ISO 形态，同一天 23:00 的记录与 01:00 的 cutoff 比较时
+    // 在第 11 位 ' '(0x20) < 'T'(0x54) 直接判小 → 明明更晚却算「更旧」被删
+    const isoCutoff = new Date(Date.UTC(2026, 8, 10, 1, 0, 0)).toISOString();
+    expect(late < isoCutoff).toBe(true);
+    expect(early < isoCutoff).toBe(true);
+  });
+
+  it('无法解析返回 null（调用方不得拿它当 cutoff）', () => {
+    expect(toDbUtcString('garbage')).toBeNull();
   });
 });
 
