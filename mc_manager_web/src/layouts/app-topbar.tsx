@@ -86,8 +86,11 @@ export function AppTopBar() {
     indicator = 'connected'
   }
 
+  // 无匹配实例时不得假造「默认实例」这类并不存在的名字：区分「一个实例都没有」与「尚未选中」
+  const instanceList = instancesQuery.data ?? []
   const currentInstanceName =
-    instancesQuery.data?.find((i) => i.id === instanceId)?.name ?? '默认实例'
+    instanceList.find((i) => i.id === instanceId)?.name ??
+    (instanceList.length === 0 ? '暂无实例' : '未选择实例')
 
   return (
     <header className="glass-chrome flex h-12 shrink-0 items-center gap-2 border-b border-mcs-border-muted px-3">

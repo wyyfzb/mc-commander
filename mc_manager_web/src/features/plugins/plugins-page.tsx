@@ -144,7 +144,7 @@ export function PluginsPage() {
         icon={Package}
         title="暂无服务器实例"
         hint="请先在服务端创建 MC 服务器实例"
-        action={{ label: '前往实例管理', onClick: () => navigate('/instances') }}
+        action={{ label: '部署新实例', onClick: () => navigate('/instances?tab=deploy') }}
       />
     )
   }

@@ -16,7 +16,7 @@ import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { setupServer } from 'msw/node'
 import { http, HttpResponse } from 'msw'
-import { createMemoryRouter, RouterProvider } from 'react-router'
+import { createMemoryRouter, RouterProvider, useLocation } from 'react-router'
 import { Toaster, toast } from 'sonner'
 import { PluginsPage } from '../plugins-page'
 import { useConnectionStore } from '@/stores/connection'
@@ -176,10 +176,17 @@ function renderPage() {
           </QueryClientProvider>
         ),
       },
+      // 空态 CTA 的落点（回显 path+search，用于断言深链参数）
+      { path: '/instances', element: <ReachedInstances /> },
     ],
     { initialEntries: ['/plugins'] },
   )
   return render(<RouterProvider router={router} />)
+}
+
+function ReachedInstances() {
+  const location = useLocation()
+  return <div>{`reached:${location.pathname}${location.search}`}</div>
 }
 
 beforeEach(() => {
@@ -227,11 +234,14 @@ describe('PluginsPage 列表渲染', () => {
     expect(screen.getByText(/共 6 个（启用 2 \/ 禁用 4）/)).toBeInTheDocument()
   })
 
-  it('无实例时空态引导：暂无服务器实例 CTA', () => {
+  it('无实例时空态引导：暂无服务器实例 CTA 直达部署向导', async () => {
+    const user = userEvent.setup()
     useServerStore.setState({ instanceId: null })
     renderPage()
     expect(screen.getByText('暂无服务器实例')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '前往实例管理' })).toBeInTheDocument()
+    // 零实例场景唯一有用的动作是建实例 → 深链直达部署向导（此前只跳 /instances 列表页）
+    await user.click(screen.getByRole('button', { name: '部署新实例' }))
+    expect(screen.getByText('reached:/instances?tab=deploy')).toBeInTheDocument()
   })
 })
 

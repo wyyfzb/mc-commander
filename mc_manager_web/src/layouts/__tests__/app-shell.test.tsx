@@ -70,6 +70,13 @@ describe('AppShell', () => {
     expect(screen.getByText('未连接')).toBeInTheDocument()
   })
 
+  it('零实例时顶栏实例名如实显示，不假造「默认实例」', () => {
+    renderShell()
+    // 实例列表空 → 名字位显示状态而非并不存在的实例名
+    expect(screen.getByText('暂无实例')).toBeInTheDocument()
+    expect(screen.queryByText('默认实例')).not.toBeInTheDocument()
+  })
+
   it('点击侧栏导航跳转对应页面（玩家页：搜索框/筛选/表格）', async () => {
     renderShell()
     fireEvent.click(screen.getByRole('link', { name: /玩家/ }))
