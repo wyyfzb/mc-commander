@@ -211,6 +211,15 @@ describe('PlayerTable · 行交互', () => {
     // 行是 row 角色、不承载激活语义：整行可点属指针便利，非键盘入口
     await user.click(dataRowOf())
     expect(onOpenDetail).toHaveBeenCalledWith('Steve')
+    expect(onOpenDetail).toHaveBeenCalledTimes(1)
+  })
+
+  it('鼠标点击玩家名按钮只打开一次详情（按钮与行的 onClick 不得叠加）', async () => {
+    const user = userEvent.setup()
+    const { onOpenDetail } = setup()
+    await user.click(screen.getByRole('button', { name: '查看 Steve 详情' }))
+    // 按钮若不去冒泡，会连同 <tr> 的 onClick 一起触发两次
+    expect(onOpenDetail).toHaveBeenCalledTimes(1)
   })
 
   it('玩家名按钮是键盘入口：聚焦后回车打开详情', async () => {
@@ -220,6 +229,7 @@ describe('PlayerTable · 行交互', () => {
     nameButton.focus()
     await user.keyboard('{Enter}')
     expect(onOpenDetail).toHaveBeenCalledWith('Steve')
+    expect(onOpenDetail).toHaveBeenCalledTimes(1)
   })
 
   it('玩家名按钮空格同样激活（原生 button 语义，不依赖行级按键处理）', async () => {
@@ -229,14 +239,16 @@ describe('PlayerTable · 行交互', () => {
     nameButton.focus()
     await user.keyboard(' ')
     expect(onOpenDetail).toHaveBeenCalledWith('Steve')
+    expect(onOpenDetail).toHaveBeenCalledTimes(1)
   })
 
   it('表格行不可聚焦且不伪造交互角色（table 祖先下 <tr> 只允许 row）', () => {
     setup()
     const dataRow = dataRowOf()
     expect(dataRow).not.toHaveAttribute('tabindex')
-    expect(dataRow).not.toHaveAttribute('role')
-    expect(dataRow).not.toHaveAttribute('aria-label')
+    // 显式 role="row" 冗余但合法，故只拒绝交互角色；不可聚焦的行上 aria-label
+    // 既无用也无害，真正要守的是「行没有变成可聚焦的假控件」
+    expect(dataRow.getAttribute('role') ?? 'row').toBe('row')
   })
 
   it('勾选行复选框写入 store 且不触发行点击打开详情', async () => {
