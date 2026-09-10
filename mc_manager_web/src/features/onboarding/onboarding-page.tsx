@@ -1,7 +1,7 @@
 /**
  * OnboardingPage —— 首次使用引导页
- * - SSH 自动部署不在 Web 端提供；部署方式三选一：
- *   Windows 一键包（推荐，描述性引导）/ Docker（镜像命令，发布后可用）/ 手动 Node 22+（Linux 一键脚本，真实可用）
+ * - SSH 自动部署不在 Web 端提供；部署方式按**发布物实际提供的能力**陈列：
+ *   已有服务端 / Windows 手动部署（Node 22+）/ Linux 一键脚本 / Docker（明确不提供，说明边界）
  * - 连接表单复用 ConnectionForm variant onboarding；保存成功（setConfig → status ready）→ 跳转 /dashboard
  * - 路由保护：AppShell loader 在 status=unconfigured 时 redirect /onboarding
  */
@@ -20,9 +20,13 @@ type DeployMode = 'already' | 'windows' | 'docker' | 'manual'
 const DEPLOY_COMMAND =
   'sudo su -c "curl -fsSL https://gitee.com/wyyfzb/mc-commander/raw/main/mc_commander_server/scripts/deploy-mc-commander.sh | bash"'
 
-/** Docker 部署命令（官方镜像发布后可用；国内镜像加速见部署文档） */
-const DOCKER_COMMAND =
-  'docker run -d --name mc-commander -p 25566:25566 -v mcs-data:/app/data ghcr.io/mc-commander/mc-commander:latest'
+/** Windows 手动部署步骤（发布物不含 Windows 包，只能手跑；面板本身跨平台可用） */
+const WINDOWS_STEPS = [
+  '安装 Node.js 22+（nodejs.org 下载 LTS 安装包）',
+  '克隆仓库并进入服务端目录：git clone https://github.com/wyyfzb/mc-commander.git',
+  '复制 .env.example 为 .env 并填入 API_KEY（PowerShell：Copy-Item .env.example .env）',
+  '执行 npm install 与 npm start，浏览器打开 http://localhost:25566',
+]
 
 const MANUAL_POINTS = [
   '脚本会自动安装 Java 17/21/25 和 Node.js 22+，无需手动准备环境',
@@ -122,8 +126,8 @@ export function OnboardingPage() {
           <ModeCard
             mode="windows"
             active={mode === 'windows'}
-            title="Windows 一键包"
-            description="绿色免安装 · 双击即用 · 内置 Node 与前端"
+            title="Windows 部署"
+            description="手动步骤 · 自备 Node 22+"
             icon={Package}
             onSelect={setMode}
           />
@@ -131,7 +135,7 @@ export function OnboardingPage() {
             mode="docker"
             active={mode === 'docker'}
             title="Docker"
-            description="一条命令起服务 · 数据卷分离"
+            description="暂不提供 · 见不做清单"
             icon={Container}
             onSelect={setMode}
           />
@@ -153,21 +157,21 @@ export function OnboardingPage() {
                 <div className="flex items-center gap-2">
                   <Package className="size-3.5 text-mcs-text-muted" aria-hidden />
                   <span className="text-mcs-xs font-medium text-mcs-text-muted">
-                    Windows 绿色免安装包
+                    Windows 手动部署（Node 22+）
                   </span>
                 </div>
                 <ol className="flex list-inside list-decimal flex-col gap-1.5 text-mcs-xs text-mcs-text-muted">
-                  <li>在项目发布页下载 Windows 一键包（内置 Node.js 与前端）</li>
-                  <li>解压后双击 <code className="font-mono text-mcs-text-default">start.bat</code> 启动</li>
-                  <li>浏览器打开 <code className="font-mono text-mcs-text-default">http://localhost:25566</code> 进入引导</li>
+                  {WINDOWS_STEPS.map((step) => (
+                    <li key={step}>{step}</li>
+                  ))}
                 </ol>
                 <div
                   role="note"
-                  className="flex items-start gap-2 rounded-mcs-sm border border-mcs-success-border bg-mcs-success-bg-subtle px-2.5 py-2"
+                  className="flex items-start gap-2 rounded-mcs-sm border border-mcs-warning-border bg-mcs-warning-bg-subtle px-2.5 py-2"
                 >
-                  <Lightbulb className="mt-0.5 size-4 shrink-0 text-mcs-success-fg" aria-hidden />
+                  <Lightbulb className="mt-0.5 size-4 shrink-0 text-mcs-warning-fg" aria-hidden />
                   <p className="text-mcs-xs text-mcs-text-muted">
-                    一键包随发布版本提供；当前开发版本请使用「手动部署」方式。
+                    未提供 Windows 一键包：当前发布物只有 Linux tarball，Windows 请按上述步骤手动部署。
                   </p>
                 </div>
               </>
@@ -177,17 +181,21 @@ export function OnboardingPage() {
                 <div className="flex items-center gap-2">
                   <Container className="size-3.5 text-mcs-text-muted" aria-hidden />
                   <span className="text-mcs-xs font-medium text-mcs-text-muted">
-                    Docker 部署
+                    Docker：暂不提供
                   </span>
                 </div>
-                <CommandBlock command={DOCKER_COMMAND} ariaLabel="复制 Docker 部署命令" />
+                <p className="text-mcs-xs text-mcs-text-muted">
+                  路线图的「不做清单」明确不做容器化（与轻量自托管定位冲突），故这里不给出
+                  <code className="font-mono text-mcs-text-default">docker run</code> 命令。
+                </p>
                 <div
                   role="note"
                   className="flex items-start gap-2 rounded-mcs-sm border border-mcs-warning-border bg-mcs-warning-bg-subtle px-2.5 py-2"
                 >
                   <Lightbulb className="mt-0.5 size-4 shrink-0 text-mcs-warning-fg" aria-hidden />
                   <p className="text-mcs-xs text-mcs-text-muted">
-                    官方镜像下载即将提供，当前请使用「手动部署」方式。
+                    替代路径：用 Linux 一键脚本或 Windows 手动部署；如需自行容器化，可基于 Node 22
+                    官方镜像构建（服务端 + public/ 前端产物）。
                   </p>
                 </div>
               </>

@@ -46,14 +46,16 @@ test.describe('onboarding', () => {
     await expect(page).toHaveURL(/\/dashboard/)
   })
 
-  test('手动部署（三选一）：命令展示 + 复制 + 要点', async ({ page }) => {
+  test('部署方式切换（四选一）：Windows 步骤 / Docker 边界 / 手动命令 + 要点', async ({ page }) => {
     await clearConnection(page)
     await page.goto('/onboarding')
-    // 三选一卡片：Windows 一键包 / Docker / 手动
-    await page.getByRole('button', { name: 'Windows 一键包' }).click()
-    await expect(page.getByText('Windows 绿色免安装包')).toBeVisible()
+    // 四张卡片：已有服务端 / Windows 部署 / Docker / 手动
+    await page.getByRole('button', { name: 'Windows 部署' }).click()
+    await expect(page.getByText('Windows 手动部署（Node 22+）')).toBeVisible()
+    await maybeShot(page, 'onboarding-windows-dark.png')
     await page.getByRole('button', { name: 'Docker' }).click()
-    await expect(page.getByText(/docker run -d --name mc-commander/)).toBeVisible()
+    await expect(page.getByText(/不做容器化/)).toBeVisible()
+    await maybeShot(page, 'onboarding-docker-dark.png')
     // 手动（Node 22+）：Linux 一键命令与要点
     await page.getByRole('button', { name: /手动（Node 22\+）/ }).click()
     await expect(page.getByText('Linux 一键部署命令')).toBeVisible()
