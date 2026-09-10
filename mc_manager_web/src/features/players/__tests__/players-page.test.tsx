@@ -156,13 +156,15 @@ describe('PlayersPage', () => {
   it('深链接 ?player=Steve 打开详情', async () => {
     renderPage('/players?player=Steve')
     expect(await screen.findByText('基本信息')).toBeInTheDocument()
+    // 宽屏（默认 matchMedia 全 false）走内联右栏，不得退化成 Sheet
+    expect(screen.queryByRole('dialog')).toBeNull()
   })
 
-  it('窄屏详情面板以 dialog 承载（role=dialog + 可访问名），不再是裸覆盖层', async () => {
+  it('lg 以下（含平板）详情面板以 dialog 承载（role=dialog + 可访问名），不再是裸覆盖层', async () => {
     const orig = window.matchMedia
-    // 窄屏模拟：仅移动断点命中（其余查询保持 false）
+    // 平板/窄屏模拟：仅「lg 以下」断点命中（其余查询保持 false，与内联态用例互不干扰）
     window.matchMedia = ((query: string) => ({
-      matches: query === '(max-width: 767px)',
+      matches: query === '(max-width: 1023px)',
       media: query,
       onchange: null,
       addListener: () => {},

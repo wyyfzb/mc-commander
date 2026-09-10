@@ -275,7 +275,7 @@ export function DeployStepConfirm({
         <p className="pl-6 text-mcs-xs text-mcs-text-muted">
           {eulaAgreed
             ? '同意后写入 eula.txt（eula=true），部署完成后自动启动服务器。'
-            : '未勾选也可部署：不写入 eula.txt、部署后不自动启动；需在实例详情同意 EULA 后才能启动服务器。'}
+            : '未勾选也可部署：eula.txt 记为 eula=false，部署后不自动启动；需在实例详情同意 EULA 后才能启动服务器。'}
         </p>
       </div>
     </div>

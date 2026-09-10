@@ -721,7 +721,7 @@ describe('generateServerProperties 落盘契约', () => {
 
     expect(res.status).toBe(200);
     const instanceId = res.body.data.id;
-    // 面板不得代替用户表达同意：未同意即 eula=false，且 MС 首启强制要求 true 故必须跳过
+    // 面板不得代替用户表达同意：未同意即 eula=false，且 MC 首启强制要求 true 故必须跳过
     expect(fs.readFileSync(`${testState.serversDir}/${instanceId}/eula.txt`, 'utf8')).toBe('eula=false\n');
     const stages = manager.emit.mock.calls.map(([, evt]) => evt.stage);
     expect(stages).not.toContain('first_launch');

@@ -37,7 +37,7 @@ import { BatchBar } from './components/batch-bar'
 import { BanDialog } from './components/ban-dialog'
 import { BanRecordsDialog } from './components/ban-records-dialog'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
-import { useMediaQuery, BREAKPOINT_MOBILE } from '@/hooks/use-media-query'
+import { useMediaQuery, BREAKPOINT_BELOW_LG } from '@/hooks/use-media-query'
 
 /** data 未就绪时的稳定空数组（避免 ?? [] 每次渲染新建引用、污染下游 useMemo） */
 const NO_PLAYERS: Player[] = []
@@ -61,8 +61,9 @@ export function PlayersPage() {
   const resetForInstance = usePlayersUiStore((s) => s.resetForInstance)
   const closeDetail = usePlayersUiStore((s) => s.closeDetail)
   const selectedUuids = usePlayersUiStore((s) => s.selectedUuids)
-  // 窄屏详情改由 Sheet 承载：此前是无 dialog 语义/无焦点约束的 CSS 覆盖层（键盘可 Tab 到被遮挡的行）
-  const isMobile = useMediaQuery(BREAKPOINT_MOBILE)
+  // lg 以下容器里没有并列空间（面板 w-105 会把表格压到百 px 级），详情改由 Sheet 承载：
+  // 既免去旧 CSS 覆盖层无 dialog 语义/无焦点约束的问题，也不挤压表格与筛选栏
+  const isSheetLayout = useMediaQuery(BREAKPOINT_BELOW_LG)
 
   const playersQuery = usePlayers(instanceId)
   const statusQuery = useInstanceStatus(instanceId)
@@ -224,8 +225,8 @@ export function PlayersPage() {
           )}
         </div>
 
-        {/* 右栏：详情面板（桌面内联；窄屏移入 Sheet，见下） */}
-        {detail !== null && !isMobile && (
+        {/* 右栏：详情面板（lg 及以上内联并列；lg 以下移入 Sheet，见下） */}
+        {detail !== null && !isSheetLayout && (
           <PlayerDetailPanel
             instanceId={instanceId ?? ''}
             player={detailPlayer}
@@ -239,8 +240,8 @@ export function PlayersPage() {
         )}
       </div>
 
-      {/* 窄屏：详情面板以 Sheet（Radix Dialog）承载，获得 role=dialog / aria-modal / 焦点陷阱 / Esc 关闭 / 背景 inert */}
-      {detail !== null && isMobile && (
+      {/* lg 以下（含平板）：详情面板以 Sheet（Radix Dialog）承载，获得 role=dialog / aria-modal / 焦点陷阱 / Esc 关闭 / 背景 inert */}
+      {detail !== null && isSheetLayout && (
         <Sheet open onOpenChange={(open) => { if (!open) closeDetail() }}>
           <SheetContent side="right" showCloseButton={false} className="w-full! gap-0 p-0 sm:max-w-none!">
             <SheetTitle className="sr-only">

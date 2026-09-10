@@ -114,7 +114,7 @@ describe('DeployDialog', () => {
     // EULA 不再阻断部署：未勾选时主操作为「仅部署」（可点），勾选后变「部署并启动」
     expect(screen.getByRole('button', { name: '仅部署' })).toBeEnabled()
     expect(
-      screen.getByText('未勾选也可部署：不写入 eula.txt、部署后不自动启动；需在实例详情同意 EULA 后才能启动服务器。'),
+      screen.getByText('未勾选也可部署：eula.txt 记为 eula=false，部署后不自动启动；需在实例详情同意 EULA 后才能启动服务器。'),
     ).toBeInTheDocument()
     await user.click(screen.getByRole('checkbox', { name: /Minecraft EULA/ }))
     expect(screen.getByRole('button', { name: '部署并启动' })).toBeEnabled()
