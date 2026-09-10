@@ -9,7 +9,7 @@
 import { apiGetAuditLogsPage, apiGetCommandHistoryPage, type AuditQueryParams } from '@/api/audit'
 import type { ConnectionConfig } from '@/api/client'
 import type { AuditLogItem, CommandHistoryItem } from '@/api/types'
-import { formatDurationMs } from '@/lib/format'
+import { formatDurationMs, formatFullDateTime } from '@/lib/format'
 import { getActionLabel } from './action-labels'
 
 export const AUDIT_EXPORT_MAX_ROWS = 1000
@@ -126,7 +126,9 @@ export async function exportAuditLogsToExcel(
 
   for (const item of rows) {
     sheet.addRow({
-      createdAt: item.createdAt,
+      // 服务端下发 ISO8601，导出按本地时区格式化到秒（与页面时间列同口径；
+      // 直写 ISO 会让列宽溢出且带 Z 后缀，人类阅读/Excel 排序都不友好）
+      createdAt: formatFullDateTime(item.createdAt),
       action: getActionLabel(item.action),
       source: item.source,
       target: targetText(item),
@@ -170,7 +172,7 @@ export async function exportCommandHistoryToExcel(
 
   for (const item of rows) {
     sheet.addRow({
-      createdAt: item.createdAt,
+      createdAt: formatFullDateTime(item.createdAt),
       command: item.command,
       result: item.success ? '成功' : '失败',
       source: item.source,

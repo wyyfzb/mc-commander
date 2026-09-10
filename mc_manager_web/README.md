@@ -42,7 +42,7 @@ scripts/            # gen-token-colors（色值生成）/ check-contrast（对�
 - token 三层单向依赖：reference（原始值，组件禁用）← semantic（--mcs-*，组件唯一合法来源）← theme（shadcn 映射）
 - 玻璃仅侧栏/顶栏/命令面板/弹窗（blur ≤20px、alpha ≤0.3），表格/终端/表单/图表实底
 - 深色优先：html 默认 `.dark`，`.light` 为亮色覆盖
-- 新页面/大改必须过四重审查（功能等价清单/对比度脚本/截图+vision-bridge/独立子代理 8 维度审查）
+- 新页面/大改必须过四重审查（功能等价清单/对比度脚本/截图视觉审查/独立子代理 8 维度审查）
 
 ## 连接配置
 

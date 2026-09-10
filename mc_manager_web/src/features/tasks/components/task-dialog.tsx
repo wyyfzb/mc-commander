@@ -34,8 +34,8 @@ import { Switch } from '@/components/ui/switch'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { Chip } from '@/components/mcs/chip'
 import { CRON_PRESETS, cronDescription, formatNextRun } from '@/lib/mc-cron'
-import { formatDurationMs, formatUtcNaive } from '@/lib/format'
-import { TASK_TYPE_OPTIONS, type TaskType } from '@/lib/mc-deploy'
+import { formatDurationMs } from '@/lib/format'
+import { TASK_TYPE_OPTIONS, formatTaskDate, type TaskType } from '@/lib/mc-deploy'
 import { CronEditor } from './cron-editor'
 import { useTaskHistory } from '../queries'
 import type { ScheduledTask, TaskCreatePayload, TaskRunHistory } from '@/api/types'
@@ -326,7 +326,7 @@ function TaskRunHistory({ taskId }: { taskId: number }) {
                 <div className="flex items-center gap-1.5 text-mcs-xs">
                   <span className={`size-1.5 shrink-0 rounded-full ${meta.dot}`} aria-hidden />
                   <span className={meta.text}>{meta.label}</span>
-                  <span className="text-mcs-text-muted">{formatUtcNaive(run.runAt)}</span>
+                  <span className="text-mcs-text-muted">{formatTaskDate(run.runAt)}</span>
                   {run.durationMs !== null && (
                     <span className="text-mcs-text-muted">· {formatDurationMs(run.durationMs)}</span>
                   )}

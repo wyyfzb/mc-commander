@@ -95,18 +95,6 @@ export function formatClock(
   return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`
 }
 
-/**
- * SQLite CURRENT_TIMESTAMP（UTC 无时区标记，如 "2026-08-15 01:05:00"）→ 本地 MM-dd HH:mm。
- * 兼容已带 T（含时区标记）的 ISO 输入；解析失败原样返回输入（展示服务端原始值兜底）。
- */
-export function formatUtcNaive(utcNaive: string): string {
-  const d = new Date(
-    utcNaive.includes('T') ? utcNaive : `${utcNaive.replace(' ', 'T')}Z`,
-  )
-  if (Number.isNaN(d.getTime())) return utcNaive
-  return `${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`
-}
-
 /** 通知时间：今天 HH:mm / 昨天 HH:mm / 更早 MM-dd HH:mm */
 export function formatNotificationTime(timestamp: number, now = Date.now()): string {
   const d = new Date(timestamp)

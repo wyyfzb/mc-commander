@@ -11,7 +11,6 @@ import {
   formatNotificationTime,
   formatRelativeTime,
   formatStartTime,
-  formatUtcNaive,
   formatUptime,
   formatWorldSize,
   worldSizeParts,
@@ -113,24 +112,6 @@ describe('formatClock（HH:mm）', () => {
     expect(formatClock(null)).toBe('--')
     expect(formatClock('not-a-date')).toBe('--')
     expect(formatClock(undefined, '现在')).toBe('现在')
-  })
-})
-
-describe('formatUtcNaive（SQLite CURRENT_TIMESTAMP → MM-dd HH:mm）', () => {
-  // 往返构造：本地时刻 → toISOString（UTC）→ 去 Z/换空格模拟 SQLite 存储，断言还原回同一本地时刻
-  it('UTC naive 字符串按 UTC 解析后转本地；空格分隔', () => {
-    const local = new Date(2026, 7, 14, 9, 5)
-    const sqliteTs = local.toISOString().slice(0, 19).replace('T', ' ')
-    expect(formatUtcNaive(sqliteTs)).toBe('08-14 09:05')
-  })
-  it('兼容已带 T 的 ISO 输入', () => {
-    const local = new Date(2026, 7, 14, 9, 5)
-    // 保留 Z 时区标记：无标记的 T 形式被 JS 按本地时区解析，断言会随机器时区漂移
-    const iso = local.toISOString()
-    expect(formatUtcNaive(iso)).toBe('08-14 09:05')
-  })
-  it('解析失败原样返回输入', () => {
-    expect(formatUtcNaive('not-a-date')).toBe('not-a-date')
   })
 })
 
