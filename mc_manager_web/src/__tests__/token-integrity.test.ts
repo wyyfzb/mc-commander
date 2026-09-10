@@ -115,10 +115,20 @@ describe('组件源码禁硬编码色值', () => {
       }
       return out
     }
+    // issue/PR 引用不是色值：3~4 位纯数字恰好也是合法 hex 写法，注释里的
+    // `issue #383`、`(#273)`、`fixes #12` 会被下面那条 hex 规则误判（已误报过一次）。
+    // 只剥离「引用编号」形态——`#383abc` 这类带字母的仍按色值报出。
+    const stripIssueRefs = (line: string): string =>
+      line
+        .replace(
+          /\b(?:issues?|pr|pull request|fix(?:e[sd])?|close[sd]?|resolve[sd]?)\s*#\d+(?![0-9a-fA-F])/gi,
+          '',
+        )
+        .replace(/\(#\d+(?![0-9a-fA-F])\)/g, '')
     for (const file of collectTsxTs(join(srcDir, '..'))) {
       const content = readFileSync(file, 'utf-8')
       content.split('\n').forEach((line, i) => {
-        const code = stripVar(line)
+        const code = stripIssueRefs(stripVar(line))
         // hex 颜色字面量
         if (/#[0-9a-fA-F]{3,8}\b/.test(code)) {
           violations.push(`${file}:${i + 1}: ${line.trim()}`)
