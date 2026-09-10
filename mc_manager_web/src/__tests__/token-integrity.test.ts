@@ -32,6 +32,40 @@ function referencedVars(css: string): Set<string> {
   return names
 }
 
+/**
+ * 剥离注释里的 issue/PR 引用编号（`issue #383`、`fixes #12`、`PR #473`）。
+ *
+ * 3~4 位纯数字恰好也是合法的 hex 写法，不剥离就会被下面的色值规则误报——分页
+ * 注释里的 `issue #383` 已误报过一次。只剥离带引用关键词的形态：`#383abc` 这类
+ * 带字母的仍按色值报出；无关键词的裸 `#123` 也仍报（宁可误报不漏报——误报的
+ * 代价是补个关键词，漏报的代价是硬编码色值进了仓库）。
+ */
+function stripIssueRefs(line: string): string {
+  return line.replace(
+    /\b(?:issues?|pr|pull request|fix(?:e[sd])?|close[sd]?|resolve[sd]?)\s*#\d+(?![0-9a-fA-F])/gi,
+    '',
+  )
+}
+
+describe('色值扫描的引用编号剥离', () => {
+  it('引用编号被剥离（不再被当成 hex 色值）', () => {
+    for (const line of [
+      '// 回归锁（issue #472 / PR #473 沉淀缺口）',
+      '// fixes #12',
+      '// 详见 issue #383 同源',
+      '// Closes #9',
+    ]) {
+      expect(stripIssueRefs(line), line).not.toMatch(/#[0-9a-fA-F]{3,8}\b/)
+    }
+  })
+
+  it('真色值一字不动（剥离不得放宽色值判定）', () => {
+    for (const line of ["const c = '#fff'", 'color: #000000', '`#ff0000`', '#383a0f', 'issue #383abc']) {
+      expect(stripIssueRefs(line), line).toMatch(/#[0-9a-fA-F]{3,8}\b/)
+    }
+  })
+})
+
 describe('token 引用完整性', () => {
   const reference = readCss('styles/tokens/reference.css')
   const semantic = readCss('styles/tokens/semantic.css')
@@ -115,16 +149,6 @@ describe('组件源码禁硬编码色值', () => {
       }
       return out
     }
-    // issue/PR 引用不是色值：3~4 位纯数字恰好也是合法 hex 写法，注释里的
-    // `issue #383`、`(#273)`、`fixes #12` 会被下面那条 hex 规则误判（已误报过一次）。
-    // 只剥离「引用编号」形态——`#383abc` 这类带字母的仍按色值报出。
-    const stripIssueRefs = (line: string): string =>
-      line
-        .replace(
-          /\b(?:issues?|pr|pull request|fix(?:e[sd])?|close[sd]?|resolve[sd]?)\s*#\d+(?![0-9a-fA-F])/gi,
-          '',
-        )
-        .replace(/\(#\d+(?![0-9a-fA-F])\)/g, '')
     for (const file of collectTsxTs(join(srcDir, '..'))) {
       const content = readFileSync(file, 'utf-8')
       content.split('\n').forEach((line, i) => {
