@@ -9,23 +9,30 @@ MC_Commander 是一个自托管的 Minecraft 服务器管理面板：不装插�
 |---|---|
 | `mc_manager_web/` | Web 前端（React 19 / TypeScript strict / Tailwind v4 / shadcn-ui / TanStack Query / zustand） |
 | `mc_commander_server/` | 服务端（Express / WebSocket / better-sqlite3 / RCON 双通道 / cron 调度） |
+| `mc-schemas/` | 共享契约包（zod，包名 `@mc-commander/schemas`）：web 经 vite alias 直读 `src`，服务端经 `file:` 链接消费 `dist` |
 | `scripts/` | 通用脚本（`local-check.sh` 一键本地检查） |
-| `docs/` | 架构说明、路线图、架构决策记录（ADR） |
+| `docs/` | 使用者文档（`architecture.md` 架构说明、`user-guide.md` 用户指南）；开发意图类（ADR/审查报告/任务清单）不入库，走本机 `.ai/` |
 
-两个子项目各自独立安装依赖（无 workspace），分别 `npm ci`。
+三个包各自独立安装依赖（无 workspace 根），分别 `npm ci`。**改动 `mc-schemas/src` 后必须
+`npm run build` 重建 `dist/` 并一并提交**——服务端运行时消费的是 `dist`，前端读的是 `src`，
+不重建会让服务端静默使用旧契约（`local-check.sh` 与 CI 均有 dist 同步守卫拦截）。
 
 ## 常用命令
 
 ```bash
-# 一键检查（服务端 lint+test + 前端 lint+tsc+test）
+# 一键检查（契约包 + 服务端 + 前端：lint / 类型检查 / 全量 test）
 bash scripts/local-check.sh
+
+# 契约包（mc-schemas/ 下）——改 src 后必须 build 并提交 dist
+npm ci && npm test
+npm run build
 
 # 前端（mc_manager_web/ 下）
 npm ci                       # 安装依赖
 npm run dev                  # Vite 开发服务器
 npx vitest run <文件>        # 只跑相关测试文件
 npm run test                 # vitest 全量
-npx tsc -b                   # 类型检查（strict）
+npx tsc -b --noEmit          # 类型检查（strict）
 npm run build                # 生产构建（tsc -b + vite build）
 npm run test:e2e             # Playwright e2e（自动起 mock 后端 + dev server）
 
@@ -41,9 +48,10 @@ npm run dev                  # node --watch 热重载
 
 | 改动范围 | 验证内容 |
 |---|---|
-| 前端 | `npx tsc -b` + `npm run lint` + `npm run test`（全量） |
+| 前端 | `npx tsc -b --noEmit` + `npm run lint` + `npm run test`（全量） |
 | 服务端 | `npm run lint` + `npm test`（全量） |
-| 跨端 | 两者都跑；一键路径 `bash scripts/local-check.sh` |
+| 契约包 | `npm test` + `npm run build`（dist 与 src 同步） |
+| 跨端 | 以上都跑；一键路径 `bash scripts/local-check.sh` |
 
 - 涉及页面渲染 / 展示文案的改动，加跑相关 e2e spec（`npx playwright test <spec>`）。
 - 全量 e2e 由 CI 兜底，本地按需。

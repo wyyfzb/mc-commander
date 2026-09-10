@@ -27,7 +27,7 @@ MC_Commander 由两部分组成：**服务端**（Node.js，部署在 Minecraft 
   （rsync `--link-dest`，Windows 降级 robocopy）
 - **定时任务**：`services/task_scheduler.js`（croner）—— 5 类任务 + 临时封禁到期轮询
 - **数据**：better-sqlite3（实例/备份/计划任务/封禁记录），schema 迁移见 `db/database.js`
-- **实时**：`websocket.js` —— 23 种事件广播、断线补齐、心跳保活、背压保护
+- **实时**：`websocket.js` —— 32 种事件广播、断线补齐、心跳保活、背压保护
 
 ## Web 前端（mc_manager_web/）
 

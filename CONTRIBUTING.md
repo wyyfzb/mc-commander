@@ -16,10 +16,15 @@
 
 ```bash
 git clone <仓库地址>
-cd mc_commander
+cd mc-commander
+
+# 共享契约包（服务端运行时消费其构建产物 dist，须先装）
+cd mc-schemas
+npm ci
+npm test
 
 # 服务端
-cd mc_commander_server
+cd ../mc_commander_server
 cp .env.example .env       # 按需修改（本地默认即可跑测试）
 npm ci
 npm test
@@ -31,7 +36,12 @@ npm run build              # 或 npm run dev 起开发服务器
 npm run test
 ```
 
-两个子项目相互独立，各自安装依赖（无 workspace）。
+三个包相互独立，各自安装依赖（无 workspace 根）。
+
+`mc-schemas` 是 web 与服务端共用的 zod 契约包：改动其 `src/` 后必须 `npm run build`
+重建 `dist/` 并连同源码一并提交——服务端运行时经 `file:` 链接消费 `dist`，前端则经
+vite alias 直读 `src`，不重建会让服务端静默使用旧契约（本地一键检查与 CI 均有
+dist 同步守卫拦截）。
 
 ## 开发工作流
 
@@ -49,18 +59,19 @@ npm run test
 
 | 级别 | 场景 | 内容 |
 |---|---|---|
-| L1 | 单文件/小改动 | `npx tsc -b` + 相关测试文件 |
+| L1 | 单文件/小改动 | `npx tsc -b --noEmit` + 相关测试文件 |
 | L2 | 组件/交互改动 | L1 + 前端 `npm run test` 全量 |
 | L3 | 里程碑/收尾 | L2 + 按需 e2e + 服务端 `npm test` + `npm run build` |
 
-一键本地检查（lint + test 全量）：
+一键本地检查（契约包 + 服务端 + 前端，lint + 类型检查 + test 全量）：
 
 ```bash
-bash scripts/local-check.sh            # Git Bash / Linux / macOS
-# 或 --skip-frontend 仅跑服务端
+bash scripts/local-check.sh                     # Git Bash / Linux / macOS
+bash scripts/local-check.sh --skip-frontend     # 仅契约包 + 服务端
+bash scripts/local-check.sh --skip-schemas      # 跳过契约包
 ```
 
-CI 会在 PR 上运行与服务端/前端两套完整检查 + e2e + 密钥扫描，本地建议至少跑过 L1。
+CI 会在 PR 上运行三套完整检查 + e2e + 密钥扫描，本地建议至少跑过 L1。
 
 ### 测试约定
 

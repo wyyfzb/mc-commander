@@ -52,10 +52,5 @@ scripts/            # gen-token-colors（色值生成）/ check-contrast（对�
 
 ## 里程碑状态
 
-- **M1 地基 ✅（2026-08-14）**：Vite/React/TS 骨架、token 体系（OKLCH 三层 + 116 组合对比度全达标）、AppShell（顶栏/侧栏/Cmd+K）、API 数据层（HTTP+WS 连通验证）、测试基座（23 Vitest + 5 Playwright 全绿）
-- M2 仪表盘：统计卡 + xterm 终端 + 启停管理 + 通知抽屉
-- M3 玩家（最重）：表格/详情/给予/传送/封禁 + NBT 命令迁移
-- M4 世界/文件：66 属性表单 + 三栏文件管理器 + Monaco
-- M5 任务/实例：cron 编辑器 + 部署 Stepper
-- M6 设置/onboarding/PWA/响应式
-- M7 服务端配套：Express 静态托管 + SPA fallback
+M1-M7 已全部完成，当前版本 **v1.2.1**（AGPL-3.0）。里程碑与架构决策的过程记录维护在
+Basic Memory 图谱（personal 项目 `mc-commander/`），仓库内只保留使用与架构文档。

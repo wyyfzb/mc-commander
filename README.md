@@ -108,7 +108,7 @@ npm start
 cd mc_manager_web
 npm install
 
-npm run dev      # 开发运行（默认 http://localhost:5199，代理指向 25566）
+npm run dev      # 开发运行（默认 http://localhost:5173，代理指向 25566）
 npm run build    # 生产构建（tsc -b + vite build）
 npm run preview  # 预览生产构建
 ```
@@ -266,7 +266,6 @@ ws.onmessage = (event) => {
 | 状态管理 | zustand（含 persist）+ TanStack Query（服务端状态） |
 | 路由 | react-router |
 | 数据表格 | TanStack Table + Virtual |
-| 图表 | ECharts |
 | 代码编辑器 | Monaco Editor |
 | 终端 | xterm.js |
 | 测试 | Vitest + Testing Library（单测）、Playwright（e2e）、MSW（mock） |
@@ -342,15 +341,15 @@ npm test
 # Web 前端
 cd mc_manager_web
 npm install
-npm run dev        # 开发（默认 5199，代理指向 25566）
+npm run dev        # 开发（默认 5173，代理指向 25566）
 
-# 前端单测（vitest，1300+ 用例）/ 类型检查 / lint / 生产构建
+# 前端单测（vitest，1400+ 用例）/ 类型检查 / lint / 生产构建
 npm test
-npx tsc --noEmit
+npx tsc -b --noEmit
 npm run lint
 npm run build
 
-# E2E（自动起 mock 服务 + dev server；60+ 用例 / 11 spec）
+# E2E（自动起 mock 服务 + dev server；12 spec）
 npm run test:e2e
 ```
 
@@ -360,11 +359,14 @@ PR 会自动跑 GitHub Actions（lint / typecheck / 单测 / e2e / 密钥扫描�
 本地一键执行等价检查：
 
 ```bash
-# 服务端 lint+test + 前端 lint+tsc+test（Git Bash / Linux / macOS）
+# 契约包 + 服务端 + 前端：lint / 类型检查 / 单测 / 设计与对比度守门（Git Bash / Linux / macOS）
 bash scripts/local-check.sh
 
 # 仅服务端（前端依赖未安装时适用）
 bash scripts/local-check.sh --skip-frontend
+
+# 跳过契约包（未改动 mc-schemas 时可省一步）
+bash scripts/local-check.sh --skip-schemas
 ```
 
 详细贡献流程见 [CONTRIBUTING.md](CONTRIBUTING.md)。
