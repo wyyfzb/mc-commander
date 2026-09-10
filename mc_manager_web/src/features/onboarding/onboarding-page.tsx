@@ -216,7 +216,7 @@ export function OnboardingPage() {
           >
             ← 返回登录页
           </Link>
-          <p className="text-mcs-2xs text-mcs-text-muted">
+          <p className="text-mcs-xs text-mcs-text-muted">
             遇到问题？{' '}
             <a
               href="https://gitee.com/wyyfzb/mc-commander"
