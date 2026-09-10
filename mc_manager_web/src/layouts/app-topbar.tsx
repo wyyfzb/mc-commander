@@ -53,16 +53,20 @@ export function AppTopBar() {
 
   const handleLogout = async () => {
     setLoggingOut(true)
+    // 登出会一并清掉本机保存的 API Key（不可从浏览器恢复）——如实告知，不让用户在别处才发现
+    const hadApiKey = Boolean(useConnectionStore.getState().apiKey)
+    const doneToast = hadApiKey ? '已退出登录，本机保存的 API Key 已一并清除' : '已退出登录'
     try {
       if (sessionToken) {
         await logout({ baseUrl: useConnectionStore.getState().baseUrl, apiKey })
       }
       clearLocalCredentials()
-      toast.info('已退出登录')
+      toast.info(doneToast)
       navigate('/login', { replace: true })
     } catch {
       // 服务端登出失败不阻塞本地登出（令牌已不可用）
       clearLocalCredentials()
+      toast.info(doneToast)
       navigate('/login', { replace: true })
     } finally {
       setLoggingOut(false)

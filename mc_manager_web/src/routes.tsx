@@ -1,8 +1,10 @@
 import { lazy } from 'react'
 import { createBrowserRouter, redirect } from 'react-router'
+import { toast } from 'sonner'
 import { AppShell } from '@/layouts/app-shell'
 import { useConnectionStore } from '@/stores/connection'
 import { useAuthStore, SESSION_EXPIRED_EVENT } from '@/stores/auth'
+import { shouldRedirectToLoginAfterSessionExpiry } from '@/lib/session-expiry'
 import {
   AboutSettingsPage,
   AccountSettingsPage,
@@ -134,13 +136,18 @@ export const router = createBrowserRouter([
  * 此处用 router.navigate 跳登录页——不依赖组件树，与 history/hash 路由模式无关。
  * 清会话由派发方（clearSessionAndDispatchExpired）完成，这里补一次 status 重算
  * 并带上 returnTo 便于登录后回跳。
+ * 例外：本机仍持有 API Key（status 仍 ready）时不跳——那是「Key 顶上继续用」的通道，
+ * 跳了反而被 requireUnconfigured 弹回仪表盘（用户被无声挪页），只轻提示一句。
  */
 if (typeof window !== 'undefined') {
   window.addEventListener(SESSION_EXPIRED_EVENT, () => {
     useConnectionStore.getState().refreshStatus()
+    const { status } = useConnectionStore.getState()
     const current = router.state.location.pathname
-    // 已在登录页/引导页时不再跳转（避免循环）
-    if (current === '/login' || current === '/onboarding') return
+    if (!shouldRedirectToLoginAfterSessionExpiry(status, current)) {
+      if (status === 'ready') toast.info('登录会话已过期，已转为使用本机保存的 API Key')
+      return
+    }
     const search = new URLSearchParams()
     if (current && current !== '/') search.set('returnTo', current)
     const qs = search.toString()

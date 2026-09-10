@@ -419,8 +419,9 @@ export function AccountPanel() {
           type="button"
           size="sm"
           onClick={() => setLogoutOpen(true)}
-          disabled={!session?.token}
-          title={session?.token ? undefined : 'API Key 直连无会话可登出'}
+          // 会话与 API Key 任一存在都可清（描述承诺的是「全部凭据」，那就得对两种凭据都可达）
+          disabled={!session?.token && !apiKey}
+          title={session?.token || apiKey ? undefined : '本机已无凭据可清除'}
         >
           <LogOut className="size-3.5" aria-hidden />
           退出登录

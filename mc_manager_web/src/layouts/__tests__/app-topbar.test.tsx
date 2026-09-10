@@ -10,7 +10,7 @@
 import { describe, it, expect, beforeEach, afterEach, afterAll, beforeAll } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { createMemoryRouter, RouterProvider } from 'react-router'
+import { createMemoryRouter, redirect, RouterProvider } from 'react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { HttpResponse, http } from 'msw'
@@ -30,7 +30,17 @@ function renderTopbar() {
   const router = createMemoryRouter(
     [
       { path: '/', element: <AppTopBar /> },
-      { path: '/login', element: <div>登录页占位</div> },
+      { path: '/dashboard', element: <div>仪表盘占位</div> },
+      {
+        path: '/login',
+        // 复刻 routes.tsx 的 requireUnconfigured 守卫：仍有凭据时弹回仪表盘。
+        // 不写这条，测试里的「落到 /login」断言在回退态下同样通过（=空转，复现不了弹回）
+        loader: () =>
+          useAuthStore.getState().session?.token || useConnectionStore.getState().apiKey
+            ? redirect('/dashboard')
+            : null,
+        element: <div>登录页占位</div>,
+      },
     ],
     { initialEntries: ['/'] },
   )
