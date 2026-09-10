@@ -119,7 +119,53 @@ npm run build    # 生产构建（tsc -b + vite build）
 npm run preview  # 预览生产构建
 ```
 
-首次打开引导页配置服务器地址与 API Key 即可使用。
+首次打开引导页按向导设置管理员密码（如服务端配置了 `SETUP_TOKEN`，按提示输入）即可使用。
+
+### HTTPS 反向代理（Nginx / Caddy）
+
+面板自身只监听 HTTP（默认 25566），生产环境建议置于反向代理之后终止 TLS——PWA 安装、
+剪贴板等浏览器能力要求安全上下文（HTTPS 或 localhost），公网纯 HTTP 部署会缺失这些能力。
+
+**Nginx**（`/ws` 必须单独声明 upgrade 头，否则 WebSocket 握手失败）：
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name mc.example.com;
+    ssl_certificate     /etc/letsencrypt/live/mc.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/mc.example.com/privkey.pem;
+
+    location /ws {
+        proxy_pass http://127.0.0.1:25566;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 3600s;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:25566;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+**Caddy v2**（自动申请证书，WebSocket 升级开箱可用）：
+
+```caddyfile
+mc.example.com {
+    reverse_proxy 127.0.0.1:25566
+}
+```
+
+- 前端产物放进 `public/` 后与 API 同源托管在 25566，故**只需代理一个端口**。
+- `TRUST_PROXY`（默认 `1`）对应单层反代；多级代理（CDN + Nginx 等）按层数调大，设 `0`
+  则忽略转发头。该值只影响 `req.ip` 解析；**登录失败锁定键始终取直连 IP**（反代后即代理
+  自身地址），故建议在代理层再加一层登录限流。
 
 ## 创建 MC 实例
 
