@@ -278,6 +278,12 @@ describe('getAllJavaVersions · JAVA_HOME 探测与 java -version 输出解析',
     process.env.JAVA_HOME = '/opt/missing-jdk';
     expect(getAllJavaVersions()).toEqual([]);
   });
+
+  it('JAVA_HOME 带尾斜杠同样命中（path.join 归一，不产生重复分隔符）', () => {
+    setupJavaHome(JDK17, `${JDK17}/bin/java`, { out: 'openjdk version "17.0.1"' });
+    process.env.JAVA_HOME = `${JDK17}/`;
+    expect(getAllJavaVersions()).toEqual([{ version: '17', path: norm(`${JDK17}/bin/java`) }]);
+  });
 });
 
 // Linux glob 探测树（expandGlob 相对 CWD 语义的现行为锚定，见文件头说明）
