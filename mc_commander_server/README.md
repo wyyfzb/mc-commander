@@ -48,9 +48,9 @@ npm install
 cp .env.example .env
 # 编辑 .env，设置 API_KEY（必填）
 
-# （可选）整合 Web 前端：构建 dist 产物复制到 public/
-# public/index.html 存在时服务端自动同源托管前端（含 SPA 深链接兜底），
-# 目录位置可用 PUBLIC_DIR 环境变量覆盖；不部署则保持纯后端行为
+# 构建 Web 前端并放进 public/（面板界面必需：public/index.html 不存在时
+# 静态层整体不挂载，浏览器访问只有 404 JSON；目录可用 PUBLIC_DIR 覆盖）
+(cd ../mc_manager_web && npm install && npm run build)
 mkdir -p public
 cp -r ../mc_manager_web/dist/. public/
 

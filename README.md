@@ -89,8 +89,10 @@ cd mc-commander/mc_commander_server
 npm install
 cp .env.example .env   # 编辑 .env，设置 API Key（两种部署口径见下）
 
-# （可选）同源托管 Web 前端：public/index.html 存在时服务端自动托管前端
-# （含 SPA 深链接兜底），目录可用 PUBLIC_DIR 覆盖；不做这一步则只跑后端 API
+# 构建前端产物并放入 public/（面板界面由它托管：public/index.html 不存在时
+# 服务端只提供 API，浏览器访问 25566 拿不到界面）；目录可用 PUBLIC_DIR 覆盖
+# Windows（PowerShell）等价：cd ../mc_manager_web; npm install; npm run build;
+# cd ../mc_commander_server; mkdir public -Force; Copy-Item ../mc_manager_web/dist/* public/ -Recurse -Force
 (cd ../mc_manager_web && npm install && npm run build)
 mkdir -p public
 cp -r ../mc_manager_web/dist/. public/
@@ -376,7 +378,7 @@ mc-commander/
 | 平台 | 支持状态 |
 |------|---------|
 | Linux | ✅ 全支持（推荐部署环境，一键部署脚本面向 Ubuntu/Debian） |
-| Windows | ⚠️ 实验性——官方部署脚本与发布包面向 Linux，Windows 需按「手动部署」自行构建前端产物并装依赖（better-sqlite3 13.x 已随包提供 win32 预编译产物，无需本机构建工具链）；建议使用 WSL2 以获得与 Linux 一致体验 |
+| Windows | ⚠️ 实验性——官方部署脚本与发布包面向 Linux，需手动部署并自行构建前端产物（better-sqlite3 13.x 已随包提供 win32 预编译产物，无需本机构建工具链）；无 systemd 服务托管（开机自启需自行配置），未装 rsync 时备份降级为 robocopy 全量镜像；建议使用 WSL2 以获得与 Linux 一致体验 |
 | macOS | ✅ 支持（同 Windows：官方发布包面向 Linux，需自行构建前端产物；better-sqlite3 13.x 已随包提供 macOS 预编译产物） |
 
 > 部署脚本（`方式一：Linux 一键部署`）仅面向 Linux；Windows / macOS 请走手动部署路径。
