@@ -4,6 +4,7 @@ import os from 'os';
 import fs from 'fs';
 import config from './config.js';
 import { logger } from './utils/logger.js';
+import { parseDbTime } from './utils/db-time.js';
 
 export const WSEvents = {
   LOG: 'log',
@@ -338,7 +339,9 @@ export function setupWebSocket(wss, serverManager) {
           type: ev.type,
           instanceId: ev.instance_id,
           data: JSON.parse(ev.data || '{}'),
-          timestamp: Date.parse(ev.created_at) || Date.now(),
+          // parseDbTime 归一化：created_at 是无时区标记的 UTC 串，
+          // 直接 Date.parse 在非 UTC 时区下会把补发事件的时间整体偏移。
+          timestamp: parseDbTime(ev.created_at) || Date.now(),
         }));
       }
       if (events.length > 0) {
