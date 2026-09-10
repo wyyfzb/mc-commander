@@ -349,7 +349,10 @@ describe('认证路由 - login/logout/sessions', () => {
 });
 
 describe('认证路由 - 改密与登录锁定', () => {
-  it('改密：验旧密；成功后其余会话被踢、当前保留；新密码可登录', async () => {
+  // scrypt(N=2^17) 每次数百毫秒 × 本用例多次哈希/校验，全量并发下会越过 vitest
+  // 默认 5s（实测 5.3s，单独跑 3.6s）——属负载超时而非逻辑失败，故显式放宽；
+  // 不为测试下调 scrypt 成本（安全参数不向测试让路）。
+  it('改密：验旧密；成功后其余会话被踢、当前保留；新密码可登录', { timeout: 20_000 }, async () => {
     AdminAccountModel.setPassword(hashPassword('old-pass-1234'));
     const a = (await request(app).post('/api/v1/auth/login').send({ password: 'old-pass-1234' })).body.data;
     const b = (await request(app).post('/api/v1/auth/login').send({ password: 'old-pass-1234' })).body.data;

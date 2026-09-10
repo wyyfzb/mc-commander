@@ -3,6 +3,7 @@
  * Secret 脱敏：API 返回 ********；findByIdInternal 返回原始 secret 供签名
  */
 import { getDb } from './database.js';
+import { toIsoUtc } from '../utils/db-time.js';
 
 export class WebhookModel {
   static create(data) {
@@ -175,8 +176,9 @@ export class WebhookModel {
       events,
       instanceId: row.instance_id,
       isEnabled: !!row.is_enabled,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
+      // created_at/updated_at 为无时区 UTC 串，下发前归一化（前端按本地时区换算才正确）
+      createdAt: toIsoUtc(row.created_at),
+      updatedAt: toIsoUtc(row.updated_at),
     };
   }
 
@@ -197,7 +199,7 @@ export class WebhookModel {
       responseBody: row.response_body,
       durationMs: row.duration_ms,
       attempts: row.attempts,
-      createdAt: row.created_at,
+      createdAt: toIsoUtc(row.created_at),
     };
   }
 }

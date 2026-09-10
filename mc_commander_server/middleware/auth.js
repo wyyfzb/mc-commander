@@ -2,6 +2,7 @@ import config from '../config.js';
 import { ErrorCodes, error } from '../utils/response.js';
 import { AdminSessionModel } from '../db/index.js';
 import { hashToken, safeEqual } from '../utils/password.js';
+import { parseDbTime } from '../utils/db-time.js';
 
 /** 恒时比对 API Key：对入站明文做 SHA-256 后与存储的哈希比较。
  * safeEqual 复用 utils/password.js 的 SHA-256 归一化实现（P2-6：
@@ -25,6 +26,18 @@ const PUBLIC_ENDPOINTS = new Set(['/v1/auth/status', '/v1/auth/login', '/v1/auth
 const SESSION_TOUCH_INTERVAL_MS = 60_000;
 
 /**
+ * 会话创建时刻（epoch ms）。created_at 由 SQLite CURRENT_TIMESTAMP 写入——无时区
+ * 标记的 UTC 串，必须经 parseDbTime 归一化：裸 new Date() 按本地时区解释，UTC+8
+ * 下会把绝对过期边界前移 8 小时。
+ * 取不到（列缺失/格式异常）返回 0，调用方按「不施加绝对上限」处理——不据此把
+ * 会话判死，否则旧库缺列时全部会话会在下一次请求即失效（admin 会被锁在门外，
+ * 只能走 API Key 通道自救）；主过期由 expires_at 兜底不受影响。
+ */
+function sessionCreatedAt(session) {
+  return parseDbTime(session.created_at);
+}
+
+/**
  * 会话绝对过期判定（P2-11）：无论滑动续期多久，自创建起超过
  * absoluteTtlMs 后会话必须重新登录（限制被窃取令牌的永久有效窗口）。
  * @returns {boolean} true = 已达绝对过期
@@ -32,7 +45,9 @@ const SESSION_TOUCH_INTERVAL_MS = 60_000;
 function isAbsolutelyExpired(session) {
   const absoluteTtlMs = config.adminSession.absoluteTtlMs;
   if (!(absoluteTtlMs > 0)) return false; // 0/负值 = 关闭绝对过期（不建议）
-  return Date.now() >= new Date(session.created_at).getTime() + absoluteTtlMs;
+  const createdAt = sessionCreatedAt(session);
+  if (!createdAt) return false;
+  return Date.now() >= createdAt + absoluteTtlMs;
 }
 
 /**
@@ -41,13 +56,15 @@ function isAbsolutelyExpired(session) {
  * absoluteTtlMs 为 0/负值（关闭绝对过期）时不参与 cap，与 isAbsolutelyExpired
  * 的守卫语义一致：否则 absolute = created_at（过去时刻）会把续期目标写回
  * 创建时刻，下一次请求即被判过期删除——「关闭绝对过期」退化为会话自毁。
+ * created_at 取不到时同样不 cap（见 sessionCreatedAt）。
  */
 export function slidingExpiry(session) {
   const sliding = Date.now() + config.adminSession.ttlMs;
   const absoluteTtlMs = config.adminSession.absoluteTtlMs;
   if (!(absoluteTtlMs > 0)) return new Date(sliding).toISOString();
-  const absolute = new Date(session.created_at).getTime() + absoluteTtlMs;
-  return new Date(Math.min(sliding, absolute)).toISOString();
+  const createdAt = sessionCreatedAt(session);
+  if (!createdAt) return new Date(sliding).toISOString();
+  return new Date(Math.min(sliding, createdAt + absoluteTtlMs)).toISOString();
 }
 
 export function authMiddleware(req, res, next) {
@@ -91,7 +108,8 @@ export function authMiddleware(req, res, next) {
       return res.status(401).json(error(ErrorCodes.AUTH_SESSION_EXPIRED, '会话已达到最长存活期，请重新登录'));
     }
     // 滑动续期（节流写库；上限 cap 在绝对过期边界，P2-11）
-    if (Date.now() - new Date(session.last_seen_at).getTime() > SESSION_TOUCH_INTERVAL_MS) {
+    // last_seen_at 同为无时区 UTC 串，裸解析在 UTC+8 下恒判「已超 60s」→ 节流失效（每请求写库）
+    if (Date.now() - parseDbTime(session.last_seen_at) > SESSION_TOUCH_INTERVAL_MS) {
       AdminSessionModel.touch(session.id, slidingExpiry(session));
     }
     req.auth = { source: 'session', sessionId: session.id, userAgent: session.user_agent, ip: session.ip };

@@ -35,12 +35,13 @@ describe('TaskRunHistoryModel（issue #299）', () => {
     setRows([]);
   });
 
-  it('_toCamel 映射 snake_case 行，缺省 error/durationMs 回退 null', () => {
+  it('_toCamel 映射 snake_case 行、run_at 归一化为 ISO8601，缺省 error/durationMs 回退 null', () => {
     expect(TaskRunHistoryModel._toCamel({
       id: 1, task_id: 9, run_at: '2026-09-02 12:00:00',
       status: 'failed', error: 'boom', duration_ms: 1500,
     })).toEqual({
-      id: 1, taskId: 9, runAt: '2026-09-02 12:00:00',
+      // run_at 是 CURRENT_TIMESTAMP 的无时区 UTC 串，下发前补 Z（前端 new Date() 才能正确换算本地时区）
+      id: 1, taskId: 9, runAt: '2026-09-02T12:00:00.000Z',
       status: 'failed', error: 'boom', durationMs: 1500,
     });
     expect(TaskRunHistoryModel._toCamel({

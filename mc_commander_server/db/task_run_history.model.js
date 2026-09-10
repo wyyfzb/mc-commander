@@ -1,4 +1,5 @@
 import { getDb } from './database.js';
+import { toIsoUtc } from '../utils/db-time.js';
 
 /**
  * 定时任务执行历史模型（task_run_history 表，append-only）。
@@ -46,7 +47,8 @@ export class TaskRunHistoryModel {
     return {
       id: row.id,
       taskId: row.task_id,
-      runAt: row.run_at,
+      // run_at 为 CURRENT_TIMESTAMP 写入的无时区 UTC 串，下发前归一化（否则前端按本地时区解析偏移）
+      runAt: toIsoUtc(row.run_at),
       status: row.status,
       error: row.error ?? null,
       durationMs: row.duration_ms ?? null,

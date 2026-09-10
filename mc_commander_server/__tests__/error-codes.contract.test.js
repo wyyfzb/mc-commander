@@ -15,9 +15,18 @@ import path from 'path';
 const SRC_DIR = path.resolve(__dirname, '..');
 const REPO_ROOT = path.resolve(__dirname, '../..');
 
-/** 递归获取目录下所有 .js 文件（排除 node_modules） */
+/** 递归获取目录下所有 .js 文件（排除 node_modules）。
+ *  目录扫描失败即跳过该支：并发用例可能在扫描间隙清理临时目录，让整个契约检查
+ *  因 ENOENT 变红没有意义；真扫不到源码时下方「无僵尸码」会因全部键未命中而失败，
+ *  不会静默放行。 */
 function collectJsFiles(dir, files = []) {
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+  let entries;
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return files;
+  }
+  for (const entry of entries) {
     if (entry.name === 'node_modules' || entry.name === 'coverage') continue;
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) collectJsFiles(full, files);

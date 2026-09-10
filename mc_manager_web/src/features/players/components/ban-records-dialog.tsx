@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { toast } from 'sonner'
 import { getFriendlyErrorText } from '@/api/errors'
+import { formatDateTime } from '@/lib/format'
 import { queryKeys } from '@/api/queries'
 import { usePlayerBans } from '../queries'
 import type { BanRecord } from '@/api/types'
@@ -171,7 +172,7 @@ function BanTimeText({ ban }: { ban: BanRecord }) {
       </span>
     )
   }
-  return ban.createdAt.length >= 16 ? (
-    <span className="text-mcs-xs text-mcs-text-muted">封禁于 {ban.createdAt.substring(0, 16)}</span>
-  ) : null
+  // 服务端下发 ISO8601（带 Z），按本地时区格式化；此前直接截断原串，展示的是 UTC 墙上时间
+  if (!ban.createdAt) return null
+  return <span className="text-mcs-xs text-mcs-text-muted">封禁于 {formatDateTime(ban.createdAt)}</span>
 }

@@ -19,6 +19,7 @@ import { AdminAccountModel, AdminSessionModel } from '../db/index.js';
 import { needsRehash, hashPassword, verifyPassword, hashToken, generateSessionToken } from '../utils/password.js';
 import { slidingExpiry } from '../middleware/auth.js';
 import { isSetupTokenRequired, verifySetupToken, consumeSetupToken } from '../utils/setup-token.js';
+import { toIsoUtc } from '../utils/db-time.js';
 import { logger } from '../utils/logger.js';
 
 /**
@@ -291,8 +292,10 @@ export function createAuthRoutes() {
         id: s.id,
         userAgent: s.user_agent,
         ip: s.ip,
-        createdAt: s.created_at,
-        lastSeenAt: s.last_seen_at,
+        // created_at/last_seen_at 是 CURRENT_TIMESTAMP 的无时区 UTC 串，
+        // 下发前归一化（expires_at 由应用写 ISO，原样通过）
+        createdAt: toIsoUtc(s.created_at),
+        lastSeenAt: toIsoUtc(s.last_seen_at),
         expiresAt: s.expires_at,
         current: req.auth?.source === 'session' && req.auth.sessionId === s.id,
       }));

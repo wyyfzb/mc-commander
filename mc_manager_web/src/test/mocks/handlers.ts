@@ -542,7 +542,7 @@ export const handlers = [
         {
           id: 12,
           taskId: 1,
-          runAt: '2026-09-02 04:00:05',
+          runAt: '2026-09-02T04:00:05.000Z',
           status: 'success',
           error: null,
           durationMs: 850,
@@ -550,7 +550,7 @@ export const handlers = [
         {
           id: 11,
           taskId: 1,
-          runAt: '2026-09-01 04:00:03',
+          runAt: '2026-09-01T04:00:03.000Z',
           status: 'failed',
           error: 'RCON 不可用（虚构占位文案）',
           durationMs: 3000,
@@ -558,7 +558,7 @@ export const handlers = [
         {
           id: 10,
           taskId: 1,
-          runAt: '2026-08-31 04:00:01',
+          runAt: '2026-08-31T04:00:01.000Z',
           status: 'skipped',
           error: null,
           durationMs: null,

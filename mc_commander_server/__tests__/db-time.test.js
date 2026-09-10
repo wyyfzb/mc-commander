@@ -2,10 +2,14 @@
 //
 // 断言一律与显式 UTC 时刻比较，**不依赖运行机器的时区**——这正是缺陷的
 // 要害：SQLite 的 'YYYY-MM-DD HH:MM:SS' 无时区标记，Date.parse 会按本地
-// 时区解释，UTC+8 下整体偏移 8 小时。若有人改回裸 Date.parse，本文件在
-// 任何时区的 CI 上都会红。
+// 时区解释，UTC+8 下整体偏移 8 小时。
+//
+// ⚠️ 注意鉴别力边界：上面这些断言在 UTC 宿主（CI 默认）上**无法区分**归一化
+// 实现与裸 Date.parse（两者结果相同）。故末尾另有「时区不变性」用例，在子进程
+// 固定 TZ=Asia/Shanghai 复算——改回裸解析时它才会在任意时区的 CI 上变红。
 
 import { describe, it, expect } from 'vitest';
+import { execFileSync } from 'node:child_process';
 import { toIsoUtc, parseDbTime } from '../utils/db-time.js';
 
 describe('toIsoUtc', () => {
@@ -65,5 +69,32 @@ describe('parseDbTime', () => {
     const ts = parseDbTime(sqliteNow);
     const cutoff = Date.now() - 60 * 60 * 1000;
     expect(ts).toBeGreaterThan(cutoff);
+  });
+});
+
+// ── 时区不变性（本文件唯一具备跨时区鉴别力的用例）──
+//
+// 前面所有断言拿显式 UTC 常量比较，在 UTC 宿主上裸解析恰好给出同一值，
+// 即 CI（默认 UTC）会放行「改回裸 Date.parse」的回退。本用例在子进程里
+// 固定 TZ=Asia/Shanghai 复算，两条断言分别锁住「该时区下裸解析确实偏移」
+// （前提）与「本模块不受宿主时区影响」（结论）。
+describe('时区不变性（子进程强制 TZ=Asia/Shanghai）', () => {
+  it('UTC+8 下裸解析偏移 8 小时，本模块不偏移', () => {
+    const modUrl = new URL('../utils/db-time.js', import.meta.url).href;
+    const script = `
+      const m = await import(${JSON.stringify(modUrl)});
+      console.log(JSON.stringify({
+        naive: Date.parse('2026-09-10 16:55:36'),
+        normalized: m.parseDbTime('2026-09-10 16:55:36'),
+        expected: Date.UTC(2026, 8, 10, 16, 55, 36),
+      }));
+    `;
+    const stdout = execFileSync(process.execPath, ['--input-type=module', '-e', script], {
+      encoding: 'utf8',
+      env: { ...process.env, TZ: 'Asia/Shanghai' },
+    });
+    const { naive, normalized, expected } = JSON.parse(stdout.trim());
+    expect(naive).not.toBe(expected); // 前提：若无此偏移，说明 TZ 未生效，本用例失去鉴别力
+    expect(normalized).toBe(expected);
   });
 });

@@ -1,4 +1,5 @@
 import { getDb } from './database.js';
+import { toIsoUtc } from '../utils/db-time.js';
 
 export class AuditLogModel {
   static create(data) {
@@ -101,7 +102,8 @@ export class AuditLogModel {
       targetId: row.target_id,
       detail,
       source: row.source,
-      createdAt: row.created_at,
+      // created_at 是无时区 UTC 串，下发前归一化（前端 new Date() 才能正确换算本地时区）
+      createdAt: toIsoUtc(row.created_at),
     };
   }
 }
@@ -190,7 +192,7 @@ export class CommandHistoryModel {
       success: !!row.success,
       response: row.response,
       durationMs: row.duration_ms,
-      createdAt: row.created_at,
+      createdAt: toIsoUtc(row.created_at),
     };
   }
 }
