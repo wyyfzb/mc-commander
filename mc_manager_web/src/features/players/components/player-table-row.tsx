@@ -1,6 +1,10 @@
 /**
  * PlayerRow —— 玩家表格行（自 player-table.tsx 拆出，纯搬移零行为变更）
- * 行点击/键盘打开详情；选择列与操作列阻断行点击冒泡
+ *
+ * 行点击只服务指针便利（整行可点）；**键盘/读屏入口是玩家名列的详情按钮**：
+ * `<table>` 祖先下的 `<tr>` 只允许 `row` 角色（ARIA in HTML），加交互角色会
+ * 把行从表格结构中摘出去，故行本身不聚焦、不处理按键——否则读屏用户既得不到
+ * 可激活语义，又要在每行多停一个 Tab 位。选择列与操作列阻断行点击冒泡。
  */
 import { flexRender } from '@tanstack/react-table'
 import type { Row } from '@tanstack/react-table'
@@ -26,16 +30,7 @@ export function PlayerRow({
         (p.isBanned || p.isIpBanned) && 'bg-mcs-error-bg-subtle',
       )}
       style={{ height: ROW_HEIGHT }}
-      tabIndex={0}
-      aria-label={`查看 ${p.name} 详情`}
       onClick={() => onOpenDetail(p.name)}
-      onKeyDown={(e) => {
-        // 只响应落在行本身上的回车：行内复选框/操作按钮自行处理按键，
-        // 否则空格会被行吞掉（键盘用户无法勾选玩家）、回车会二次触发
-        if (e.key !== 'Enter' || e.target !== e.currentTarget) return
-        e.preventDefault()
-        onOpenDetail(p.name)
-      }}
     >
       {row.getVisibleCells().map((cell) => (
         <td

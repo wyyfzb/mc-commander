@@ -3,7 +3,7 @@
  * 拆分（player-table-columns/row/dialogs/config）后锁定原有交互语义，覆盖：
  * - 表头 10 列渲染与加载骨架行
  * - 错误态（重试）与空态双文案（0=暂无玩家 / >0=无匹配 + 清空筛选 CTA）
- * - 行元数据：OP/白名单/封禁徽标、离线态；行点击与键盘 Enter 打开详情
+ * - 行元数据：OP/白名单/封禁徽标、离线态；行点击（指针便利）与名字按钮（键盘入口）打开详情
  * - 选择列：勾选写入 store、阻断行点击冒泡
  * - 行内菜单：详情/传送入口、OP 确认流（onAction kind=op）、踢出确认流（kind=kick + onKicked）、离线禁用
  * - 列头单列排序（Web 增强箭头）
@@ -197,21 +197,46 @@ describe('PlayerTable · 行元数据渲染', () => {
   })
 })
 
+/** 取玩家名按钮所在的数据行（行不再是 row 角色时本助手也依然可用，便于定位失败原因） */
+function dataRowOf(name = 'Steve'): HTMLElement {
+  const row = screen.getByRole('button', { name: `查看 ${name} 详情` }).closest('tr')
+  expect(row).not.toBeNull()
+  return row as HTMLElement
+}
+
 describe('PlayerTable · 行交互', () => {
-  it('行点击打开详情（onOpenDetail 透传玩家名）', async () => {
+  it('行任意位置点击打开详情（指针便利，onOpenDetail 透传玩家名）', async () => {
     const user = userEvent.setup()
     const { onOpenDetail } = setup()
-    await user.click(screen.getByRole('row', { name: '查看 Steve 详情' }))
+    // 行是 row 角色、不承载激活语义：整行可点属指针便利，非键盘入口
+    await user.click(dataRowOf())
     expect(onOpenDetail).toHaveBeenCalledWith('Steve')
   })
 
-  it('行聚焦后 Enter 键盘打开详情（键盘可达路径）', async () => {
+  it('玩家名按钮是键盘入口：聚焦后回车打开详情', async () => {
     const user = userEvent.setup()
     const { onOpenDetail } = setup()
-    const row = screen.getByRole('row', { name: '查看 Steve 详情' })
-    row.focus()
+    const nameButton = screen.getByRole('button', { name: '查看 Steve 详情' })
+    nameButton.focus()
     await user.keyboard('{Enter}')
     expect(onOpenDetail).toHaveBeenCalledWith('Steve')
+  })
+
+  it('玩家名按钮空格同样激活（原生 button 语义，不依赖行级按键处理）', async () => {
+    const user = userEvent.setup()
+    const { onOpenDetail } = setup()
+    const nameButton = screen.getByRole('button', { name: '查看 Steve 详情' })
+    nameButton.focus()
+    await user.keyboard(' ')
+    expect(onOpenDetail).toHaveBeenCalledWith('Steve')
+  })
+
+  it('表格行不可聚焦且不伪造交互角色（table 祖先下 <tr> 只允许 row）', () => {
+    setup()
+    const dataRow = dataRowOf()
+    expect(dataRow).not.toHaveAttribute('tabindex')
+    expect(dataRow).not.toHaveAttribute('role')
+    expect(dataRow).not.toHaveAttribute('aria-label')
   })
 
   it('勾选行复选框写入 store 且不触发行点击打开详情', async () => {

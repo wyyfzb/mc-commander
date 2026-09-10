@@ -115,12 +115,18 @@ describe('PlayersPage', () => {
     expect(screen.queryByText('基本信息')).not.toBeInTheDocument()
   })
 
-  it('键盘 Enter 打开行详情（空格保留给行内控件）', async () => {
+  it('键盘 Enter 打开行详情（入口是玩家名按钮，行本身不再响应按键）', async () => {
+    const user = userEvent.setup()
     renderPage()
     await screen.findByText('Steve')
     const row = screen.getByText('Steve').closest('tr')!
     row.focus()
+    // 行是 row 角色、不可聚焦于交互语义：回车落在行上不打开详情
     fireEvent.keyDown(row, { key: 'Enter' })
+    expect(screen.queryByText('基本信息')).not.toBeInTheDocument()
+    // 行内真控件才是键盘入口（原生 button：回车与空格都可激活）
+    screen.getByRole('button', { name: '查看 Steve 详情' }).focus()
+    await user.keyboard('{Enter}')
     expect(await screen.findByRole('button', { name: /取消OP|设为OP/ })).toBeInTheDocument()
   })
 

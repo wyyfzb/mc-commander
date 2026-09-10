@@ -119,14 +119,22 @@ export function buildPlayerColumns({
             <PlayerAvatar name={p.name} isOnline={p.isOnline} isFakePlayer={p.isFakePlayer} size={28} />
             <div className="min-w-0">
               <div className="flex items-center gap-1.5">
-                <span
+                <button
+                  type="button"
                   className={cn(
-                    'truncate text-mcs-sm font-medium',
+                    // 与其余单元格文字同款，仅补回 button 被 UA 设成居中所丢的对齐与指针
+                    'cursor-pointer truncate text-left text-mcs-sm font-medium',
                     banned ? 'text-mcs-error-fg' : p.isOnline ? 'text-mcs-text-default' : 'text-mcs-text-muted',
                   )}
+                  aria-label={`查看 ${p.name} 详情`}
+                  onClick={(e) => {
+                    // 行级 onClick 只服务指针便利；此处已处理，阻止冒泡避免重复调用
+                    e.stopPropagation()
+                    onOpenDetail(p.name)
+                  }}
                 >
                   {p.name}
-                </span>
+                </button>
                 {p.isOp && <ShieldCheck className="size-3.5 shrink-0 text-mcs-purple-fg" aria-label="OP" />}
                 {p.isAfk && (
                   <span className="shrink-0 rounded-mcs-xs bg-mcs-bg-secondary px-1 text-mcs-2xs text-mcs-text-muted">
