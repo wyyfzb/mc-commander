@@ -1,6 +1,6 @@
 /**
  * RecentBackupsCard —— 仪表盘右栏「最近备份」卡片
- * - 最近 5 条备份：状态图标（tone 浅底）+ 名称 + 时间·大小 + 状态徽章
+ * - 最近 3 条备份：状态图标（tone 浅底）+ 名称 + 时间·大小 + 状态徽章
  * - 数据复用备份域 hooks：useBackups（30s 轮询）＋ useBackupEventRefresh（备份/恢复 WS 通知即时失效）
  * - 「立即备份」在有在途备份（creating/restoring）时禁用，与备份页互斥状态机同口径
  * - 入口统一指向设置页备份子路由（真实路由为 /settings/backup）
@@ -23,8 +23,12 @@ import {
 } from '@/lib/mc-backup'
 import { useBackups, useCreateBackup, useBackupEventRefresh } from '@/features/settings/queries'
 
-/** 卡片展示条数上限（服务端列表已按时间倒序） */
-const MAX_ITEMS = 5
+/**
+ * 卡片展示条数上限（服务端列表已按时间倒序）。
+ * 取 3 而非 5：右栏是可滚动窄列，条数越多越把下方的公告发送卡推离首屏；
+ * 完整列表在备份页（最近 10 条 + 展开），卡上「全部」一步可达
+ */
+const MAX_ITEMS = 3
 /** 备份管理页（设置子路由） */
 const BACKUP_PAGE = '/settings/backup'
 
@@ -126,6 +130,8 @@ export function RecentBackupsCard() {
           loading={createMutation.isPending}
           loadingText="备份中..."
           disabled={hasInProgress}
+          // 禁用原因外显：无提示会让服主以为按钮坏了（与备份页同口径）
+          title={hasInProgress ? '已有备份或恢复在进行中，请稍候' : undefined}
           onClick={() => void handleCreate()}
         >
           <CloudUpload className="size-3.5" aria-hidden />
@@ -146,11 +152,10 @@ function BackupMiniRow({ backup }: { backup: BackupItem }) {
     .join(' · ')
 
   return (
-    <div className="flex items-center gap-2 px-1.5 py-1.5">
+    <div className="flex items-center gap-2 py-1.5">
       <span
         className={
-          'flex size-6 shrink-0 items-center justify-center rounded-mcs-xs border ' +
-          TONE_CLASSES[tone]
+          'flex size-6 shrink-0 items-center justify-center rounded-mcs-xs ' + TONE_CLASSES[tone]
         }
         aria-hidden
       >

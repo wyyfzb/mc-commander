@@ -172,8 +172,33 @@ describe('RecentBackupsCard', () => {
     renderCard()
     await waitFor(() => expect(screen.getByText('进行中的备份')).toBeInTheDocument())
 
-    expect(screen.getByRole('button', { name: /立即备份/ })).toBeDisabled()
+    const btn = screen.getByRole('button', { name: /立即备份/ })
+    expect(btn).toBeDisabled()
+    // 禁用原因外显（无提示会被读作「按钮坏了」）
+    expect(btn).toHaveAttribute('title', '已有备份或恢复在进行中，请稍候')
     expect(screen.getByText('备份中')).toBeInTheDocument()
+  })
+
+  it('立即备份失败：toast 给出失败原因，不静默', async () => {
+    const user = userEvent.setup()
+    server.use(
+      http.post(BACKUPS_URL, () =>
+        HttpResponse.json(
+          {
+            status: 'error',
+            code: 50001,
+            message: '备份任务创建失败',
+            details: null,
+            timestamp: '2026-08-15T00:00:00.000Z',
+          },
+          { status: 500 },
+        ),
+      ),
+    )
+    await renderReady()
+
+    await user.click(screen.getByRole('button', { name: /立即备份/ }))
+    await waitFor(() => expect(screen.getByText(/操作失败/)).toBeInTheDocument())
   })
 
   it('「全部」跳转到设置页备份子路由（/settings/backup）', async () => {
