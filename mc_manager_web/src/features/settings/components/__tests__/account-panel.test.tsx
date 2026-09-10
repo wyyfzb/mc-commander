@@ -1,12 +1,11 @@
 /**
- * AccountPanel 测试（账号与安全面板——修改密码表单脏状态守卫）：
- * - 表单为空（dirty=false）→ 导航直接放行
- * - 输入一半（dirty）→ 导航被拦截弹「未保存」确认；留下回滚、离开放行
- * - 提交成功：toast + 表单清空（dirty 自动解除）→ 再导航不被拦截
+ * AccountPanel 测试（账号与安全面板）：
+ * - 修改密码脏状态守卫：空表单放行 / 半填拦截 / 提交成功解除
+ * - 退出登录：会话与残留 API Key 一并清除并落到 /login（只清会话会被 requireUnconfigured 弹回）
  * mock 数据为结构占位（虚构凭据），严禁真实服务器信息
  */
 import { describe, it, expect, beforeEach, afterAll, beforeAll } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, Link, RouterProvider } from 'react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -40,6 +39,7 @@ function renderPanel() {
         ),
       },
       { path: '/settings/general', element: <div>其他页面</div> },
+      { path: '/login', element: <div>登录页占位</div> },
     ],
     { initialEntries: ['/settings/account'] },
   )
@@ -49,6 +49,7 @@ function renderPanel() {
       <Toaster />
     </QueryClientProvider>,
   )
+  return router
 }
 
 beforeEach(() => {
@@ -124,5 +125,30 @@ describe('AccountPanel 修改密码脏状态守卫', () => {
     await user.click(screen.getByText('前往其他页'))
     expect(await screen.findByText('其他页面')).toBeInTheDocument()
     expect(screen.queryByText('密码修改尚未提交')).not.toBeInTheDocument()
+  })
+})
+
+describe('AccountPanel 登出', () => {
+  it('退出登录：会话与残留 API Key 一并清除并落到 /login（只清会话会被守卫弹回）', async () => {
+    useAuthStore.setState({
+      session: {
+        token: 'sess-token-abc',
+        sessionId: 'sess-mock-1',
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      },
+    })
+    const user = userEvent.setup()
+    const router = renderPanel()
+
+    // 卡片里的登出按钮 → 确认弹窗（两处同名，按弹窗内定位）
+    await user.click(screen.getAllByRole('button', { name: '退出登录' })[0]!)
+    const dialog = await screen.findByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: '退出登录' }))
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/login'))
+    expect(useAuthStore.getState().session).toBeNull()
+    // 本机 API Key 同批清除：否则 status 仍 ready、/login 被弹回（toast 说已登出人还在面板里）
+    expect(useConnectionStore.getState().apiKey).toBe('')
+    expect(useConnectionStore.getState().status).toBe('unconfigured')
   })
 })

@@ -23,6 +23,7 @@ import { useAuthStore } from '@/stores/auth'
 import { logout } from '@/api/auth'
 import { useInstances } from '@/api/queries'
 import { copyText } from '@/lib/clipboard'
+import { clearLocalCredentials } from '@/lib/logout'
 
 /**
  * AppTopBar —— 主顶栏（设计文档 §3.1）
@@ -56,14 +57,12 @@ export function AppTopBar() {
       if (sessionToken) {
         await logout({ baseUrl: useConnectionStore.getState().baseUrl, apiKey })
       }
-      useAuthStore.getState().clearSession()
-      useConnectionStore.getState().refreshStatus()
+      clearLocalCredentials()
       toast.info('已退出登录')
       navigate('/login', { replace: true })
     } catch {
       // 服务端登出失败不阻塞本地登出（令牌已不可用）
-      useAuthStore.getState().clearSession()
-      useConnectionStore.getState().refreshStatus()
+      clearLocalCredentials()
       navigate('/login', { replace: true })
     } finally {
       setLoggingOut(false)
@@ -238,8 +237,9 @@ export function AppTopBar() {
           ) : (
             <DropdownMenuItem
               onClick={() => {
-                // API Key 直连登出=清除本浏览器凭据（该通道无服务端会话，无需调 logout API）；不清则 /login 守卫弹回
-                useConnectionStore.getState().setConfig({ apiKey: '' })
+                // API Key 直连登出=清除本浏览器凭据（该通道无服务端会话，无需调 logout API）；
+                // 不清则 /login 守卫弹回（与会话分支共用同一处置）
+                clearLocalCredentials()
                 toast.info('已退出登录')
                 navigate('/login', { replace: true })
               }}

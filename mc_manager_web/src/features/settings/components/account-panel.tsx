@@ -48,6 +48,7 @@ import { useUnsavedGuard } from '@/hooks/use-unsaved-guard'
 import { useAuthStore } from '@/stores/auth'
 import { useConnectionStore } from '@/stores/connection'
 import { formatRelativeTime, formatStartTime as formatDateTime } from '@/lib/format'
+import { clearLocalCredentials } from '@/lib/logout'
 import {
   assessPasswordStrength,
   STRENGTH_BAR_STYLES,
@@ -186,8 +187,8 @@ export function AccountPanel() {
   const [loggingOut, setLoggingOut] = useState(false)
 
   const handleLogoutLocal = (message: string) => {
-    useAuthStore.getState().clearSession()
-    useConnectionStore.getState().refreshStatus()
+    // 本机侧登出＝清空全部凭据（会话 + API Key），与会话被自己踢下线/顶栏登出同口径
+    clearLocalCredentials()
     toast.info(message)
     navigate('/login', { replace: true })
   }
@@ -412,7 +413,7 @@ export function AccountPanel() {
       <SectionCard
         icon={LogOut}
         title="退出登录"
-        description="删除当前浏览器会话；API Key 直连不受影响"
+        description="清除本浏览器保存的全部凭据（登录会话与 API Key），下次访问需重新登录或重新配置连接"
       >
         <DangerButton
           type="button"
@@ -449,7 +450,7 @@ export function AccountPanel() {
         open={logoutOpen}
         onOpenChange={setLogoutOpen}
         title="退出登录？"
-        description="当前浏览器会话将被删除，下次访问需重新输入管理员密码。"
+        description="将清除本浏览器保存的全部凭据（登录会话与 API Key），下次访问需重新登录或重新配置连接。"
         confirmText="退出登录"
         danger
         loading={loggingOut}

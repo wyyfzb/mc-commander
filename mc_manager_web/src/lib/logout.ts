@@ -1,0 +1,17 @@
+/**
+ * 退出登录（本机侧）——一次性清除本浏览器持有的**全部**凭据：登录会话 + API Key。
+ * 两者必须一起清：只清会话时，残留的 API Key 会让 connection.status 保持 ready，
+ * 随后的 `/login` 被 requireUnconfigured 弹回（于是出现「toast 说已退出登录、人还在面板里」），
+ * 用户也就再没有「清空本机凭据」的入口——换面板、重新登录两条路都走不通。
+ * 与 API Key 直连分支的既有口径一致（该分支登出即清 Key）。
+ * 不适用：40103 会话过期的全局处置（`stores/auth` 的 clearSessionAndDispatchExpired）——
+ * 那条通道的语义是「Key 顶上继续用」，不是用户主动登出。
+ */
+import { useAuthStore } from '@/stores/auth'
+import { useConnectionStore } from '@/stores/connection'
+
+export function clearLocalCredentials(): void {
+  useAuthStore.getState().clearSession()
+  // setConfig 内部按剩余凭据重算 status（此处只剩空串 → unconfigured），无需再 refreshStatus
+  useConnectionStore.getState().setConfig({ apiKey: '' })
+}

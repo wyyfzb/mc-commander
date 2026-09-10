@@ -429,8 +429,9 @@ describe('ConnectionForm 登录会话凭据（有会话时 API Key 可空）', (
       await user.click(screen.getByRole('button', { name: '测试连接' }))
 
       expect(await screen.findByText(/目标地址不接受当前登录会话/)).toBeInTheDocument()
-      // 有会话时客户端只发 Bearer、Key 不进请求——提示不得让用户去「填 API Key」
-      expect(screen.getByText(/重新登录/)).toBeInTheDocument()
+      // 有会话时客户端只发 Bearer、Key 不进请求，且 Key 也无法经本表单清空（保存前强制测试必失败）
+      // → 提示里不得出现「填 API Key / 清空 Key」这类本界面做不到的动作，只能指向退出登录
+      expect(screen.getByText(/退出登录会清除本机凭据/)).toBeInTheDocument()
       expect(screen.queryByText(/填写.*API Key/)).not.toBeInTheDocument()
       expect(expiredListener).not.toHaveBeenCalled()
       expect(useAuthStore.getState().session?.token).toBe('sess-token-abc')

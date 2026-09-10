@@ -91,11 +91,12 @@ export function ConnectionForm({ variant = 'settings', onSaved }: ConnectionForm
       setTestedOk(false)
       // 服务端返回错误信封（如 API Key 无效）→ 友好文案；网络/超时 → 通用失败提示。
       // 40103 且本机有会话时，真实原因是「目标地址不认这条登录会话」——此时提示「填 API Key」
-      // 不可兑现（有会话时客户端只发 Bearer，Key 不进请求），只给两条走得通的路
+      // 不可兑现（有会话时客户端只发 Bearer，Key 不进请求），且 Key 也不能在表单里清空
+      // （保存前强制测试会失败），故只给真正可执行的下一步：退出登录（会一并清本机凭据）
       const reason =
         e instanceof ApiError
           ? e.code === ErrorCode.AUTH_SESSION_EXPIRED && hasSession
-            ? '目标地址不接受当前登录会话：同一面板请重新登录；换面板需先清空本机 API Key 并退出登录'
+            ? '目标地址不接受当前登录会话：退出登录会清除本机凭据，之后可重新登录或到连接引导连接其他面板'
             : getFriendlyErrorText(e)
           : '连接失败，请检查配置'
       if (!opts?.silentFailure) {

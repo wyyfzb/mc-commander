@@ -4,12 +4,13 @@
  * - 列表未到（加载中）→ 中性占位，不得谎报「一个实例都没有」
  * - 列表请求失败 → 「实例列表加载失败」，同样不谎报空
  * - 有实例但未选中 → 「未选择实例」（也不得假造并不存在的实例名）
+ * - 退出登录：会话 + 残留 API Key 一并清除并落到 /login（只清会话会被守卫弹回、toast 失真）
  * MSW 拦截实例列表（结构占位虚构数据，严禁真实服务器信息）
  */
 import { describe, it, expect, beforeEach, afterEach, afterAll, beforeAll } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router'
+import { createMemoryRouter, RouterProvider } from 'react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { HttpResponse, http } from 'msw'
@@ -18,6 +19,7 @@ import { handlers } from '@/test/mocks/handlers'
 import { AppTopBar } from '../app-topbar'
 import { useConnectionStore } from '@/stores/connection'
 import { useServerStore } from '@/stores/server'
+import { useAuthStore } from '@/stores/auth'
 
 const server = setupServer(...handlers)
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
@@ -25,15 +27,21 @@ afterAll(() => server.close())
 
 function renderTopbar() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  return render(
+  const router = createMemoryRouter(
+    [
+      { path: '/', element: <AppTopBar /> },
+      { path: '/login', element: <div>登录页占位</div> },
+    ],
+    { initialEntries: ['/'] },
+  )
+  render(
     <QueryClientProvider client={qc}>
       <TooltipProvider>
-        <MemoryRouter>
-          <AppTopBar />
-        </MemoryRouter>
+        <RouterProvider router={router} />
       </TooltipProvider>
     </QueryClientProvider>,
   )
+  return router
 }
 
 /** 打开实例选择器下拉（按可访问名定位触发器） */
@@ -93,5 +101,23 @@ describe('AppTopBar 实例名三态', () => {
     renderTopbar()
     expect(await screen.findByText('未选择实例')).toBeInTheDocument()
     expect(screen.queryByText('暂无实例')).not.toBeInTheDocument()
+  })
+
+  it('退出登录：会话与残留 API Key 一并清除并落到 /login（只清会话会被守卫弹回）', async () => {
+    useAuthStore.setState({
+      session: { token: 'sess-token-abc', sessionId: 'sess-mock-1', expiresAt: new Date(Date.now() + 60_000).toISOString() },
+    })
+    useConnectionStore.setState({ baseUrl: '', apiKey: 'stored-key-abc', status: 'ready' })
+    const user = userEvent.setup()
+    const router = renderTopbar()
+
+    await user.click(screen.getByRole('button', { name: '管理员菜单' }))
+    await user.click(await screen.findByRole('menuitem', { name: '退出登录' }))
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/login'))
+    expect(useAuthStore.getState().session).toBeNull()
+    expect(useConnectionStore.getState().apiKey).toBe('')
+    // 凭据全清 → 未配置态：requireUnconfigured 不再把 /login 弹回面板
+    expect(useConnectionStore.getState().status).toBe('unconfigured')
   })
 })
