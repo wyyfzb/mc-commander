@@ -28,6 +28,7 @@ import { formatRelativeTime } from '@/lib/format'
 import { formatBanRemaining } from '@/lib/mc-ban'
 import type { Player } from '@/api/types'
 import type { PlayerDetailTab } from '../store'
+import { paginatePlayerRows } from '../player-pagination'
 import { PlayerAvatar } from './player-avatar'
 import { HeartsArmor } from './hearts-armor'
 import { DIMENSION_META, GAME_MODE_LABELS, features } from './player-table-config'
@@ -85,13 +86,8 @@ export function buildPlayerColumns({
       header: ({ table }) => {
         // 分页由外层手动切片（table 未注册分页 feature，其 rows 是全量），
         // 故此处按同一规则复算当前页，避免「全选当前页」实际选中全部筛选结果
-        const rows = table.getRowModel().rows
-        const pageCount = pageSize === -1 ? 1 : Math.max(1, Math.ceil(rows.length / pageSize))
-        const safePageIndex = Math.min(pageIndex, pageCount - 1)
-        const pageIds =
-          pageSize === -1
-            ? rows.map((r) => r.original.uuid)
-            : rows.slice(safePageIndex * pageSize, (safePageIndex + 1) * pageSize).map((r) => r.original.uuid)
+        const pageIds = paginatePlayerRows(table.getRowModel().rows, pageSize, pageIndex).rows
+          .map((r) => r.original.uuid)
         const allSelected = pageIds.length > 0 && pageIds.every((u) => selectedSet.has(u))
         const someSelected = pageIds.some((u) => selectedSet.has(u))
         return (

@@ -22,6 +22,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import type { Player } from '@/api/types'
 import { usePlayersUiStore, type PlayerDetailTab } from '../store'
 import type { PlayerActionRequest } from '../mutations'
+import { paginatePlayerRows } from '../player-pagination'
 import { PAGE_SIZE_OPTIONS, ROW_HEIGHT, features } from './player-table-config'
 import { buildPlayerColumns, type ConfirmToggleState } from './player-table-columns'
 import { PlayerRow } from './player-table-row'
@@ -103,10 +104,12 @@ export function PlayerTable({
   )
 
   const allRows = table.getRowModel().rows
-  const totalPages = pageSize === -1 ? 1 : Math.max(1, Math.ceil(allRows.length / pageSize))
-  const safePageIndex = Math.min(pageIndex, totalPages - 1)
-  const visibleRows =
-    pageSize === -1 ? allRows : allRows.slice(safePageIndex * pageSize, (safePageIndex + 1) * pageSize)
+  // 切片口径与表头「全选当前页」共用同一实现（player-pagination），勿就地重写
+  const { rows: visibleRows, pageCount: totalPages, safePageIndex } = paginatePlayerRows(
+    allRows,
+    pageSize,
+    pageIndex,
+  )
 
   // TanStack Virtual 自管内部缓存，与 React Compiler 互斥（官方不兼容清单），不可自动 memo 化
   // eslint-disable-next-line react/incompatible-library
