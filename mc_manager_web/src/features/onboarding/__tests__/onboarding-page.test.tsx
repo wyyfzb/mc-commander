@@ -62,7 +62,7 @@ describe('OnboardingPage · 默认态（跳过部署指南）', () => {
     expect(screen.getByRole('button', { name: /Windows 手动部署/ })).toBeInTheDocument()
     // 不提供官方镜像 → 不占卡片位，只在卡片区下方如实说明
     expect(screen.queryByRole('button', { name: /Docker/ })).not.toBeInTheDocument()
-    expect(screen.getByText(/不含 Docker 部署方式/)).toBeInTheDocument()
+    expect(screen.getByText(/Docker 不在支持范围内/)).toBeInTheDocument()
     expect(screen.getByTestId('connection-form')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '← 返回登录页' })).toHaveAttribute('href', '/login')
     expect(screen.getByRole('link', { name: '查看部署文档 →' })).toHaveAttribute('href', 'https://gitee.com/wyyfzb/mc-commander')

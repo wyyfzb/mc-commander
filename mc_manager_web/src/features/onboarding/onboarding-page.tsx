@@ -7,7 +7,7 @@
  */
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router'
-import { Check, Copy, Lightbulb, Package, Server, Terminal } from 'lucide-react'
+import { AlertTriangle, Check, Copy, Lightbulb, Package, Server, Terminal } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { copyText } from '@/lib/clipboard'
@@ -28,7 +28,7 @@ const DEPLOY_COMMAND =
  */
 const WINDOWS_STEPS = [
   '安装 Node.js 22+（nodejs.org 下载 LTS 安装包）',
-  '克隆仓库并进入前端目录：git clone https://github.com/wyyfzb/mc-commander.git，cd mc-commander/mc_manager_web',
+  '克隆仓库并进入前端目录：git clone https://github.com/wyyfzb/mc-commander.git，cd mc-commander/mc_manager_web（未安装 git 时可从仓库主页下载 ZIP 解压）',
   '构建前端产物：npm install，npm run build',
   '把产物放进服务端目录：cd ../mc_commander_server，mkdir public -Force，Copy-Item ../mc_manager_web/dist/* public/ -Recurse -Force',
   '配置密钥：Copy-Item .env.example .env，编辑 .env 填入 API_KEY',
@@ -37,7 +37,7 @@ const WINDOWS_STEPS = [
 
 const LINUX_POINTS = [
   '脚本会自动安装 Java 17/21/25 和 Node.js 22+，无需手动准备环境',
-  '部署完成后会输出「面板地址」和「API Key」，请妥善保存',
+  '脚本结束时打印服务器地址、端口与「API Key」，请妥善保存',
   '服务端默认运行在 25566 端口，安装目录为 /opt/mc-commander',
 ]
 
@@ -147,8 +147,8 @@ export function OnboardingPage() {
             onSelect={setMode}
           />
         </div>
-        <p className="mb-4 text-mcs-2xs text-mcs-text-muted">
-          不含 Docker 部署方式：本面板不提供官方镜像，请用上方任一方式部署。
+        <p className="mb-4 text-mcs-xs text-mcs-text-muted">
+          Docker 不在支持范围内：官方不提供镜像，请用上方任一方式部署。
         </p>
 
         {/* ── 部署指南（随选择切换） ── */}
@@ -162,12 +162,12 @@ export function OnboardingPage() {
                     Windows 手动部署（Node 22+）
                   </span>
                 </div>
-                <ol className="flex list-inside list-decimal flex-col gap-1.5 text-mcs-xs text-mcs-text-muted">
+                <ol className="flex list-decimal flex-col gap-1.5 pl-4 text-mcs-xs text-mcs-text-muted">
                   {WINDOWS_STEPS.map((step) => (
                     <li key={step}>{step}</li>
                   ))}
                 </ol>
-                <NoticeBanner variant="warning" icon={Lightbulb}>
+                <NoticeBanner variant="warning" icon={AlertTriangle}>
                   未提供 Windows 安装包：官方部署脚本面向 Linux，Windows 请按上述步骤手动部署（第 3-4
                   步构建前端产物不可省，否则 :25566 只有接口没有界面）；遇到环境问题建议改用 WSL2
                   走 Linux 一键脚本。

@@ -51,7 +51,7 @@ test.describe('onboarding', () => {
     await page.goto('/onboarding')
     // 三张卡片：已有服务端 / Linux 一键部署 / Windows 手动部署；Docker 只占一行说明
     await expect(page.getByRole('button', { name: 'Docker' })).toHaveCount(0)
-    await expect(page.getByText(/不含 Docker 部署方式/)).toBeVisible()
+    await expect(page.getByText(/Docker 不在支持范围内/)).toBeVisible()
     await page.getByRole('button', { name: 'Windows 手动部署' }).click()
     await expect(page.getByText('Windows 手动部署（Node 22+）')).toBeVisible()
     // 前端产物构建是必需步骤（缺失时 :25566 只有接口没有界面）
