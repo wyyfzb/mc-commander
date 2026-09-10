@@ -37,12 +37,7 @@ import {
   useUploadFile,
 } from './queries'
 import { EmptyState } from '@/components/mcs/empty-state'
-
-/** 父目录（'/' 前缀风格；与 files/queries.ts 的 parentDirOf 同规则） */
-function parentDirOf(path: string): string {
-  const idx = path.lastIndexOf('/')
-  return idx <= 0 ? '/' : path.slice(0, idx)
-}
+import { parentDirOf } from './path-utils'
 
 /** 名称校验：返回错误文案（null=通过）；空值/路径分隔符（文案与原实现逐字一致） */
 function entryNameError(name: string, label: string): string | null {
