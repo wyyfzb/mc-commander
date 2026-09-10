@@ -18,11 +18,12 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { cn } from '@/lib/utils'
-import { ApiError, apiGet, apiPost } from '@/api/client'
+import { ApiError, apiPost, apiRequest } from '@/api/client'
 import type { OverviewData } from '@/api/types'
-import { getFriendlyErrorText } from '@/api/errors'
+import { ErrorCode, getFriendlyErrorText } from '@/api/errors'
 import { normalizeBaseUrl, needsHttpPlaintextWarning } from '@/lib/mc-connection'
 import { useUnsavedGuard } from '@/hooks/use-unsaved-guard'
+import { useAuthStore } from '@/stores/auth'
 import { useConnectionStore } from '@/stores/connection'
 import type { ConnectionFormProps } from './contracts'
 
@@ -33,6 +34,9 @@ export function ConnectionForm({ variant = 'settings', onSaved }: ConnectionForm
   const storedBaseUrl = useConnectionStore((s) => s.baseUrl)
   const storedApiKey = useConnectionStore((s) => s.apiKey)
   const status = useConnectionStore((s) => s.status)
+  /** 浏览器登录会话（与 API Key 并列的第二条凭据；有它就已具备连接能力） */
+  const session = useAuthStore((s) => s.session)
+  const hasSession = Boolean(session?.token)
 
   const [url, setUrl] = useState(storedBaseUrl)
   const [apiKey, setApiKey] = useState(storedApiKey)
@@ -54,11 +58,15 @@ export function ConnectionForm({ variant = 'settings', onSaved }: ConnectionForm
   // 状态行即时反馈：保存过（ready）或测试连接成功 → 已连接
   const isConnected = status === 'ready' || testedOk
 
-  /** 空值校验（测试/保存前置）——行内提示，对齐 deploy-dialog 范式 */
+  /**
+   * 空值校验（测试/保存前置）——行内提示，对齐 deploy-dialog 范式。
+   * API Key 只在「无登录会话」时必填：有会话时客户端走 Bearer（双通道互斥，Key 不参与请求），
+   * 仍强制填写会把密码登录用户挡在门外——他们手上没有服务端 .env 里的 Key，连地址都改不了
+   */
   function ensureFilled(): boolean {
     let valid = true
     if (url.trim() === '') { setUrlError('请填写服务器地址'); valid = false } else { setUrlError('') }
-    if (apiKey.trim() === '') { setKeyError('请填写 API Key'); valid = false } else { setKeyError('') }
+    if (!hasSession && apiKey.trim() === '') { setKeyError('请填写 API Key'); valid = false } else { setKeyError('') }
     return valid
   }
 
@@ -70,14 +78,24 @@ export function ConnectionForm({ variant = 'settings', onSaved }: ConnectionForm
     setTesting(true)
     try {
       const t0 = performance.now()
-      await apiGet<OverviewData>('/api/v1/overview', { baseUrl: base, apiKey })
+      // 探测语义：目标可能是别的面板，不因它返回 40103 就拆掉当前会话（见 client.ignoreSessionExpiry）
+      await apiRequest<OverviewData>(
+        '/api/v1/overview',
+        { baseUrl: base, apiKey },
+        { method: 'GET', ignoreSessionExpiry: true },
+      )
       setLatencyMs(Math.round(performance.now() - t0))
       setTestedOk(true)
       return { ok: true }
     } catch (e) {
       setTestedOk(false)
       // 服务端返回错误信封（如 API Key 无效）→ 友好文案；网络/超时 → 通用失败提示
-      const reason = e instanceof ApiError ? getFriendlyErrorText(e) : '连接失败，请检查配置'
+      const reason =
+        e instanceof ApiError && e.code === ErrorCode.AUTH_SESSION_EXPIRED
+          ? '目标地址不接受当前登录会话（可能不是同一个面板，请填写该面板的 API Key）'
+          : e instanceof ApiError
+            ? getFriendlyErrorText(e)
+            : '连接失败，请检查配置'
       if (!opts?.silentFailure) {
         toast.error(`连接测试失败：${reason}`)
       }
@@ -242,6 +260,11 @@ export function ConnectionForm({ variant = 'settings', onSaved }: ConnectionForm
         {keyError !== '' && (
           <p className="text-mcs-xs text-mcs-error-fg">{keyError}</p>
         )}
+        <p className="text-mcs-xs text-mcs-text-muted">
+          {hasSession
+            ? '已登录：浏览器用登录会话鉴权，此处可留空；API Key 供自动化脚本直连使用'
+            : '当前无登录会话：必须填写 API Key 才能连接'}
+        </p>
       </div>
 
       <div className="flex gap-3">

@@ -48,6 +48,11 @@ interface ApiRequestOptions {
   timeoutMs?: number
   /** 额外请求头（如 setup 阶段的 Authorization: SetupToken；与认证头叠加，不覆盖常规认证头键） */
   extraHeaders?: Record<string, string>
+  /**
+   * 探测类请求（连接测试）：目标地址是用户正在评估的面板，未必是当前会话所属面板，
+   * 它返回的会话过期码不能拆掉当前会话（否则「测一下别的地址」会把人踢下线）
+   */
+  ignoreSessionExpiry?: boolean
 }
 
 function buildUrl(config: ConnectionConfig, path: string): string {
@@ -111,7 +116,7 @@ async function requestEnvelope<T>(
       try {
         const errPayload = (await res.json()) as ApiErrorEnvelope
         if (errPayload.status === 'error') {
-          if (errPayload.code === AUTH_SESSION_EXPIRED_CODE) handleSessionExpired()
+          if (errPayload.code === AUTH_SESSION_EXPIRED_CODE && !options.ignoreSessionExpiry) handleSessionExpired()
           throw new ApiError(errPayload.code, res.status, errPayload.message, errPayload.details)
         }
       } catch (e) {

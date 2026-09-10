@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
 import { setupServer } from 'msw/node'
 import { handlers, mockOverview } from '@/test/mocks/handlers'
-import { apiGet, apiGetEnvelope, apiPost, ApiError, NetworkError, type ConnectionConfig } from '../client'
+import { apiGet, apiGetEnvelope, apiPost, apiRequest, ApiError, NetworkError, type ConnectionConfig } from '../client'
 import { useAuthStore, SESSION_EXPIRED_EVENT } from '@/stores/auth'
 
 const server = setupServer(...handlers)
@@ -126,6 +126,25 @@ describe('API 客户端双通道凭据（安全主线）', () => {
       expect(listener).toHaveBeenCalledTimes(1)
     } finally {
       window.removeEventListener(SESSION_EXPIRED_EVENT, listener)
+    }
+  })
+
+  it('探测请求（ignoreSessionExpiry）：40103 照抛错误但不拆当前会话、不派发事件', async () => {
+    const expiresAt = new Date(Date.now() + 60_000).toISOString()
+    useAuthStore.getState().setSession({ token: 'tok-probe', sessionId: 'sess-mock-2', expiresAt })
+    const listener = vi.fn()
+    window.addEventListener(SESSION_EXPIRED_EVENT, listener)
+    try {
+      await expect(
+        apiRequest('/api/v1/session-expired-probe', config, { method: 'GET', ignoreSessionExpiry: true }),
+      ).rejects.toMatchObject({ code: 40103 })
+      // 目标地址未必是当前会话所属面板，其会话码不能拆掉本机会话
+      expect(useAuthStore.getState().session?.token).toBe('tok-probe')
+      expect(localStorage.getItem('mcs-session')).toContain('tok-probe')
+      expect(listener).not.toHaveBeenCalled()
+    } finally {
+      window.removeEventListener(SESSION_EXPIRED_EVENT, listener)
+      useAuthStore.getState().clearSession()
     }
   })
 })
