@@ -32,13 +32,16 @@ function referencedVars(css: string): Set<string> {
   return names
 }
 
+/** hex 色值字面量（扫描、剥离的正反用例共用同一常量，避免改一处漏一处） */
+const HEX_LITERAL_RE = /#[0-9a-fA-F]{3,8}\b/
+
 /**
- * 剥离注释里的 issue/PR 引用编号（`issue #383`、`fixes #12`、`PR #473`）。
+ * 剥离注释里的 issue/PR 引用编号（`issue #383`、`fixes #412`、`PR #473`）。
  *
- * 3~4 位纯数字恰好也是合法的 hex 写法，不剥离就会被下面的色值规则误报——分页
- * 注释里的 `issue #383` 已误报过一次。只剥离带引用关键词的形态：`#383abc` 这类
- * 带字母的仍按色值报出；无关键词的裸 `#123` 也仍报（宁可误报不漏报——误报的
- * 代价是补个关键词，漏报的代价是硬编码色值进了仓库）。
+ * 3~8 位十六进制字符（含纯数字）恰好也可能构成合法 hex 写法，不剥离就会被下面的
+ * 色值规则误报——分页注释里的 `issue #383` 已误报过一次。只剥离带引用关键词的形态：
+ * `#383abc` 这类带字母的仍按色值报出；无关键词的裸 `#123` 也仍报（宁可误报不漏报——
+ * 误报的代价是补个关键词，漏报的代价是硬编码色值进了仓库）。
  */
 function stripIssueRefs(line: string): string {
   return line.replace(
@@ -49,19 +52,20 @@ function stripIssueRefs(line: string): string {
 
 describe('色值扫描的引用编号剥离', () => {
   it('引用编号被剥离（不再被当成 hex 色值）', () => {
+    // 编号须 ≥3 位：1~2 位本就匹配不到 HEX_LITERAL_RE，那样断不出剥离是否生效
     for (const line of [
       '// 回归锁（issue #472 / PR #473 沉淀缺口）',
-      '// fixes #12',
+      '// fixes #412',
       '// 详见 issue #383 同源',
-      '// Closes #9',
+      '// Closes #419',
     ]) {
-      expect(stripIssueRefs(line), line).not.toMatch(/#[0-9a-fA-F]{3,8}\b/)
+      expect(stripIssueRefs(line), line).not.toMatch(HEX_LITERAL_RE)
     }
   })
 
   it('真色值一字不动（剥离不得放宽色值判定）', () => {
     for (const line of ["const c = '#fff'", 'color: #000000', '`#ff0000`', '#383a0f', 'issue #383abc']) {
-      expect(stripIssueRefs(line), line).toMatch(/#[0-9a-fA-F]{3,8}\b/)
+      expect(stripIssueRefs(line), line).toMatch(HEX_LITERAL_RE)
     }
   })
 })
@@ -154,7 +158,7 @@ describe('组件源码禁硬编码色值', () => {
       content.split('\n').forEach((line, i) => {
         const code = stripIssueRefs(stripVar(line))
         // hex 颜色字面量
-        if (/#[0-9a-fA-F]{3,8}\b/.test(code)) {
+        if (HEX_LITERAL_RE.test(code)) {
           violations.push(`${file}:${i + 1}: ${line.trim()}`)
         }
         // rgb()/hsl() 字面量
