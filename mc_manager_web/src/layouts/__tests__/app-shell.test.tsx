@@ -70,10 +70,10 @@ describe('AppShell', () => {
     expect(screen.getByText('未连接')).toBeInTheDocument()
   })
 
-  it('零实例时顶栏实例名如实显示，不假造「默认实例」', () => {
+  it('实例列表未就绪时顶栏不假造实例名（空/失败/加载三态断言见 app-topbar.test.tsx）', () => {
     renderShell()
-    // 实例列表空 → 名字位显示状态而非并不存在的实例名
-    expect(screen.getByText('暂无实例')).toBeInTheDocument()
+    // 本文件未挂 MSW 且连接未配置 → 列表永不就绪，名字位应是中性占位而非编造的实例名
+    expect(screen.getByText('加载中…')).toBeInTheDocument()
     expect(screen.queryByText('默认实例')).not.toBeInTheDocument()
   })
 

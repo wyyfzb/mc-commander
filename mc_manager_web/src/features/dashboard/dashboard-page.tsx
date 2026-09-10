@@ -17,7 +17,7 @@ import { useNavigate } from 'react-router'
 /**
  * 仪表盘驾驶舱
  * 顶部三卡（在线玩家 / 资源使用 / 实例信息）→ 终端主体 + 右栏卡（MC 时钟·世界控制 / 最近备份 / 公告发送）
- * 数据流：Query 轮询（实例 30s / 系统资源 5s）→ server store → WS 事件即时合并
+ * 数据流：Query 轮询（实例与系统资源同为保底 30s，见 queries.ts 常量）→ server store → WS 事件即时合并
  */
 export function DashboardPage() {
   const queryClient = useQueryClient()
@@ -56,7 +56,7 @@ export function DashboardPage() {
       <EmptyState
         icon={ServerOff}
         title="暂无服务器实例"
-        hint="请先在服务端创建 MC 服务器实例"
+        hint="使用部署向导创建第一个实例"
         action={{ label: '部署新实例', onClick: () => navigate('/instances?tab=deploy') }}
       />
     )

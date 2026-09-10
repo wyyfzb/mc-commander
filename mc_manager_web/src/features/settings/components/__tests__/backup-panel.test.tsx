@@ -70,7 +70,7 @@ describe('BackupPanel 空态', () => {
   it('instanceId=null：无实例空态（复用其他页同文案）', () => {
     renderPanel(null)
     expect(screen.getByText('暂无服务器实例')).toBeInTheDocument()
-    expect(screen.getByText('请先在服务端创建 MC 服务器实例')).toBeInTheDocument()
+    expect(screen.getByText('使用部署向导创建第一个实例')).toBeInTheDocument()
     expect(screen.queryByText('备份管理')).not.toBeInTheDocument()
   })
 

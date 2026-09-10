@@ -86,11 +86,20 @@ export function AppTopBar() {
     indicator = 'connected'
   }
 
-  // 无匹配实例时不得假造「默认实例」这类并不存在的名字：区分「一个实例都没有」与「尚未选中」
+  // 无匹配实例时不得假造「默认实例」这类并不存在的名字；也不得把「列表还没到」
+  // （加载中/请求失败）谎报成「一个实例都没有」——三种缺位各有诚实占位
   const instanceList = instancesQuery.data ?? []
-  const currentInstanceName =
-    instanceList.find((i) => i.id === instanceId)?.name ??
-    (instanceList.length === 0 ? '暂无实例' : '未选择实例')
+  const selectedInstanceName = instanceList.find((i) => i.id === instanceId)?.name
+  const instanceNameFallback =
+    instanceList.length > 0
+      ? '未选择实例'
+      : instancesQuery.isError
+        ? '实例列表加载失败'
+        : instancesQuery.isPending
+          ? '加载中…'
+          : '暂无实例'
+  const currentInstanceName = selectedInstanceName ?? instanceNameFallback
+  const noInstances = instancesQuery.isSuccess && instanceList.length === 0
 
   return (
     <header className="glass-chrome flex h-12 shrink-0 items-center gap-2 border-b border-mcs-border-muted px-3">
@@ -131,12 +140,17 @@ export function AppTopBar() {
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-56">
           <DropdownMenuLabel>服务器实例</DropdownMenuLabel>
-          {(instancesQuery.data ?? []).length === 0 && (
+          {/* 仅「确实一个实例都没有」才推去部署向导；列表未到/失败时不假装没有实例 */}
+          {noInstances && (
             <DropdownMenuItem onClick={() => navigate('/instances?tab=deploy')}>
               暂无实例，前往部署
             </DropdownMenuItem>
           )}
-          {(instancesQuery.data ?? []).map((inst) => (
+          {instancesQuery.isError && <DropdownMenuItem disabled>实例列表加载失败</DropdownMenuItem>}
+          {instancesQuery.isPending && (
+            <DropdownMenuItem disabled>正在加载实例列表…</DropdownMenuItem>
+          )}
+          {instanceList.map((inst) => (
             <DropdownMenuItem
               key={inst.id}
               onClick={() => switchInstance(inst.id)}

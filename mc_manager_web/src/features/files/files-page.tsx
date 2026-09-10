@@ -141,7 +141,7 @@ export function FilesPage() {
       <EmptyState
         icon={ServerOff}
         title="暂无服务器实例"
-        hint="请先在服务端创建 MC 服务器实例"
+        hint="使用部署向导创建第一个实例"
         action={{ label: '部署新实例', onClick: () => navigate('/instances?tab=deploy') }}
       />
     )

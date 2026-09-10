@@ -126,7 +126,7 @@ describe('EmergencyPage · 仪表 Tab 渲染', () => {
     expect(screen.getByText('20.0')).toBeInTheDocument()
     expect(screen.getByText('2/20')).toBeInTheDocument()
     expect(screen.getByText('12.5%')).toBeInTheDocument()
-    expect(screen.getByText('2.1G')).toBeInTheDocument()
+    expect(screen.getByText('2.1 GB')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '重启' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '停止' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '存档' })).toBeInTheDocument()

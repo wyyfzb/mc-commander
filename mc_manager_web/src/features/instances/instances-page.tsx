@@ -67,7 +67,6 @@ export function InstancesPage() {
 
   // ── 对话框状态 ──
   const [searchParams, setSearchParams] = useSearchParams()
-  const [deployOpen, setDeployOpen] = useState(() => searchParams.get('tab') === 'deploy')
   const [settingsTarget, setSettingsTarget] = useState<InstanceSummary | null>(null)
   const [upgradeTarget, setUpgradeTarget] = useState<InstanceSummary | null>(null)
   const [uninstallTarget, setUninstallTarget] = useState<InstanceSummary | null>(null)
@@ -113,9 +112,11 @@ export function InstancesPage() {
     })
   }
 
-  // ── 深链接：?tab=deploy 打开部署向导；写入 URL 保持全站一致性 ──
+  // ── 深链接：?tab=deploy 打开部署向导；URL 为单一事实源 ──
+  // 只在挂载时读一次会漏掉同路由再点（如顶栏「暂无实例，前往部署」）与前进/后退两路，
+  // 表现为 URL 已变而向导不开（点击无反应）
+  const deployOpen = searchParams.get('tab') === 'deploy'
   const setDeployOpenDeep = (open: boolean) => {
-    setDeployOpen(open)
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev)
       if (open) next.set('tab', 'deploy')

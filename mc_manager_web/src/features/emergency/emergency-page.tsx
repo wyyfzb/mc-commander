@@ -185,7 +185,7 @@ export function EmergencyPage() {
                   <div className="mt-4 flex w-full justify-around">
                     <Stat label="在线" value={`${st?.playerCount ?? 0}/${st?.maxPlayers ?? 20}`} />
                     <Stat label="CPU" value={`${st?.cpuUsage ?? 0}%`} />
-                    <Stat label="内存" value={`${st?.memoryUsage ?? 0}G`} />
+                    <Stat label="内存" value={`${st?.memoryUsage ?? 0} GB`} />
                   </div>
                 </>
               )}
