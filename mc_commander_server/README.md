@@ -143,13 +143,24 @@ journalctl -u mc-commander -b --no-pager
 
 ### 认证
 
-所有请求通过 Header 携带 API Key：
+HTTP 提供两条通道，**管理员会话（Bearer）是面板的安全主线**：
 
-```
+```http
+# 通道一：API Key（脚本 / 外部集成）
 X-API-Key: your-api-key
+
+# 通道二：管理员会话令牌（面板登录后自动携带；不再把明文 Key 存进浏览器）
+Authorization: Bearer <session-token>
 ```
 
-WebSocket 通过 Subprotocol 鉴权：`mc-commander-apikey.your-api-key`
+- **API Key**：按 `API_KEY_HASH` 校验（见上文部署口径），`POST /api/v1/rotate-key` 可轮换。
+- **管理员会话**：`POST /api/v1/auth/setup` 首次设置管理员密码，`POST /api/v1/auth/login`
+  换取令牌，`PUT /api/v1/auth/password` 改密；令牌仅以 SHA-256 落库，滑动有效期默认 7 天
+  （`ADMIN_SESSION_TTL_HOURS`），自创建起 30 天强制重登（`ADMIN_SESSION_ABSOLUTE_TTL_DAYS`）。
+- 两条通道都不可用时返回 401，错误信息同时提示两种凭据形态。
+
+WebSocket 经 Subprotocol 鉴权，与 HTTP 同源：`mc-commander-apikey.<key>`（API Key）
+或 `mc-commander-session.<token>`（会话令牌）。
 
 ### 基础路径
 
@@ -318,31 +329,67 @@ mc_commander_server/
 ├── index.js              # 入口 (Express + WebSocketServer)
 ├── config.js             # 配置加载 (.env)
 ├── websocket.js          # WebSocket 事件广播（通知落库/断线补齐/心跳/背压保护）
-├── routes/               # API 路由
+├── routes/               # API 路由（统一挂 /api/v1）
+│   ├── index.js          # v1 路由装配
 │   ├── status.js         # 实例状态/属性/世界/日志
 │   ├── server-jar.js     # MC 服务端部署（minecraft-core + got + Paper v3）
 │   ├── players.js        # 玩家管理 + 封禁（临时封禁自实现 + 封禁记录合并）
+│   ├── plugins.js        # 插件管理 + Modrinth 市场（搜索/版本/一键安装/更新检测）
 │   ├── backups.js        # 备份管理
 │   ├── tasks.js          # 定时任务
-│   └── files.js          # 文件管理（二进制/编码防护 + 列表文件同步）
+│   ├── files.js          # 文件管理（二进制/编码防护 + 列表文件同步）
+│   ├── webhooks.js       # Webhook CRUD + 事件类型
+│   ├── audit.js          # 审计日志查询
+│   ├── auth.js           # 管理员 setup/login/改密/会话状态（安全主线）
+│   ├── keys.js           # API Key 轮换
+│   └── upgrade.js        # 实例版本升级（P0-4）
 ├── services/             # 业务逻辑
 │   ├── mc_server.js      # MC 实例管理 + RCON（rcon-client，从 SQLite 加载；死亡事件聚合）
+│   ├── mc-server/        # 启动生命周期 / 输出解析 / 日志尾随 / 状态采集 / 世界数据
 │   ├── backup.service.js # 备份操作（目录快照 + rsync/robocopy 增量）
+│   ├── panel-backup.service.js # 面板自身数据备份（SQLite 在线快照）
+│   ├── plugin.service.js # 插件扫描 / 启停 / 市场安装（feat-8）
+│   ├── market.service.js # Modrinth 市场客户端
+│   ├── instance-properties.service.js # server.properties 读写（issue 514）
+│   ├── upgrade.service.js # 实例版本升级
+│   ├── webhook.service.js # Webhook 投递（重试 + 投递日志）
 │   └── task_scheduler.js # Cron 调度（croner）+ 临时封禁到期自动解封
-├── middleware/            # 中间件
-│   ├── auth.js           # API Key 认证
+├── middleware/           # 中间件
+│   ├── auth.js           # 双通道认证（API Key / Bearer 会话）+ WS 子协议
+│   ├── validate.js       # zod 请求校验（@mc-commander/schemas）
+│   ├── static_serve.js   # 前端 dist 同源托管（含 SPA 深链接兜底）
 │   ├── cors.js           # CORS
 │   ├── error_handler.js  # 错误处理 + 404
 │   └── rate_limit.js     # 频率限制
 ├── db/                   # 数据库
 │   ├── database.js       # SQLite 初始化（含 notification_events 通知事件表）
+│   ├── index.js          # 模型统一导出
 │   ├── instance.model.js # 实例模型（CRUD + JSON 迁移）
+│   ├── admin.model.js    # 管理员账号 + 会话模型（安全主线）
 │   ├── backup.model.js   # 备份模型
 │   ├── scheduled_task.model.js # 任务模型
-│   └── ban.model.js      # 临时封禁模型（temp_bans 表）
-└── utils/                # 工具
+│   ├── task_run_history.model.js # 任务执行历史（append-only）
+│   ├── ban.model.js      # 临时封禁模型（temp_bans 表）
+│   ├── audit.model.js    # 审计日志 + 命令历史模型（含保留清理）
+│   └── webhook.model.js  # Webhook 模型（CRUD + 投递日志）
+└── utils/                # 工具（全仓公共单一实现，勿另起副本）
     ├── response.js       # 统一响应格式 + 错误码
-    └── java-detector.js  # Java 版本检测（版本矩阵+回退）
+    ├── db-time.js        # SQLite 时间归一化（naive UTC 串 ↔ ISO / epoch）
+    ├── java-detector.js  # Java 版本检测（版本矩阵 + 回退）
+    ├── player-utils.js   # 玩家工具（离线 UUID 的唯一实现）
+    ├── password.js       # 管理员密码哈希 / 定时安全比较
+    ├── setup-token.js    # 首启一次性授权令牌（SETUP_TOKEN）
+    ├── weak-key.js       # 弱 API Key 检测
+    ├── url-guard.js      # URL SSRF 防护
+    ├── fs-utils.js       # 原子写文件（tmp + rename）
+    ├── jar-download-guard.js # JAR 下载完整性校验
+    ├── command-mask.js   # 命令历史敏感参数脱敏
+    ├── ban-reconcile.js  # 实例启动前 tempban 对账（banned-players.json ↔ DB）
+    ├── audit.js          # 审计写入入口（AuditActions 词表）
+    ├── pagination.js     # 分页参数解析（前端路由统一口径）
+    ├── asyncHandler.js   # async 路由包装（统一错误捕获）
+    ├── logger.js         # console 封装 + 文件日志 + 轮转
+    └── version.js        # 版本号单一来源（package.json）
 ```
 
 ## 测试
