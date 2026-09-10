@@ -3,7 +3,7 @@ import { test, expect, type Page } from '@playwright/test'
 
 /**
  * onboarding E2E（无配置时 /dashboard 重定向 /onboarding）
- * 验收：重定向守卫 / 部署方式二选一 / 手动部署命令展示 / 连接表单保存 → 进入面板
+ * 验收：重定向守卫 / 部署方式三选一（Docker 仅一行说明）/ 手动部署命令展示 / 连接表单保存 → 进入面板
  */
 
 // 可选截图（调试用）：设 E2E_SHOT=1 时输出到 test-results/shots/，默认关闭
@@ -46,18 +46,19 @@ test.describe('onboarding', () => {
     await expect(page).toHaveURL(/\/dashboard/)
   })
 
-  test('部署方式切换（四选一）：Windows 步骤 / Docker 边界 / 手动命令 + 要点', async ({ page }) => {
+  test('部署方式切换（三选一）：Windows 步骤 / Linux 命令 + 要点', async ({ page }) => {
     await clearConnection(page)
     await page.goto('/onboarding')
-    // 四张卡片：已有服务端 / Windows 部署 / Docker / 手动
-    await page.getByRole('button', { name: 'Windows 部署' }).click()
+    // 三张卡片：已有服务端 / Linux 一键部署 / Windows 手动部署；Docker 只占一行说明
+    await expect(page.getByRole('button', { name: 'Docker' })).toHaveCount(0)
+    await expect(page.getByText(/不含 Docker 部署方式/)).toBeVisible()
+    await page.getByRole('button', { name: 'Windows 手动部署' }).click()
     await expect(page.getByText('Windows 手动部署（Node 22+）')).toBeVisible()
+    // 前端产物构建是必需步骤（缺失时 :25566 只有接口没有界面）
+    await expect(page.getByText(/npm run build/)).toBeVisible()
     await maybeShot(page, 'onboarding-windows-dark.png')
-    await page.getByRole('button', { name: 'Docker' }).click()
-    await expect(page.getByText(/不做容器化/)).toBeVisible()
-    await maybeShot(page, 'onboarding-docker-dark.png')
-    // 手动（Node 22+）：Linux 一键命令与要点
-    await page.getByRole('button', { name: /手动（Node 22\+）/ }).click()
+    // Linux 一键部署：命令与要点
+    await page.getByRole('button', { name: 'Linux 一键部署' }).click()
     await expect(page.getByText('Linux 一键部署命令')).toBeVisible()
     await expect(page.getByText(/sudo su -c "curl -fsSL/)).toBeVisible()
     await expect(
