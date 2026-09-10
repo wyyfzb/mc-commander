@@ -40,9 +40,10 @@ function sessionCreatedAt(session) {
 /**
  * 会话绝对过期判定（P2-11）：无论滑动续期多久，自创建起超过
  * absoluteTtlMs 后会话必须重新登录（限制被窃取令牌的永久有效窗口）。
+ * 导出供跨时区用例直接断言（`auth-session-time.test.js` 在子进程固定 TZ 复算）。
  * @returns {boolean} true = 已达绝对过期
  */
-function isAbsolutelyExpired(session) {
+export function isAbsolutelyExpired(session) {
   const absoluteTtlMs = config.adminSession.absoluteTtlMs;
   if (!(absoluteTtlMs > 0)) return false; // 0/负值 = 关闭绝对过期（不建议）
   const createdAt = sessionCreatedAt(session);

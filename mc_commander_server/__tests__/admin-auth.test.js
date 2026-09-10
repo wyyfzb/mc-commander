@@ -21,6 +21,7 @@ import { hashPassword, verifyPassword, hashToken, generateSessionToken } from '.
 import { authMiddleware, authenticateWebSocket } from '../middleware/auth.js';
 import { createAuthRoutes, resetLoginLockState } from '../routes/auth.js';
 import { errorHandler } from '../middleware/error_handler.js';
+import { parseDbTime } from '../utils/db-time.js';
 
 // 测试用明文 Key（与 vitest.config.js 中 API_KEY 一致）
 const TEST_PLAINTEXT_KEY = 'test-api-key-for-unit-tests';
@@ -167,6 +168,9 @@ describe('滑动续期绝对过期 cap 语义（absoluteTtlMs 0/负值守卫）'
     Object.assign(config.adminSession, originalAdminSession);
   });
 
+  /** production 同款口径：SQLite CURRENT_TIMESTAMP 的无时区 UTC 串（秒级、空格分隔） */
+  const naive = (msAgo) => new Date(Date.now() - msAgo).toISOString().replace('T', ' ').slice(0, 19);
+
   /** 构造一条需要续期的活跃会话（last_seen_at 超过 60s 触达节流阈值） */
   function seedTouchableSession() {
     const token = generateSessionToken();
@@ -176,13 +180,12 @@ describe('滑动续期绝对过期 cap 语义（absoluteTtlMs 0/负值守卫）'
       ip: '127.0.0.1',
       expiresAt: new Date(Date.now() + 60_000).toISOString(),
     });
+    // 时间列一律写 CURRENT_TIMESTAMP 口径（而非 ISO）：用 ISO 种子时裸
+    // new Date() 在任何时区下都恰好解析正确，缺陷会整体逃逸——这正是该缺陷
+    // 第一次漏网的原因。改用同口径后，「调用点回退到裸解析」在非 UTC 宿主上会红。
     db.prepare(
-      "UPDATE admin_sessions SET created_at = ?, last_seen_at = ? WHERE id = ?",
-    ).run(
-      new Date(Date.now() - 120_000).toISOString(),
-      new Date(Date.now() - 120_000).toISOString(),
-      session.id,
-    );
+      'UPDATE admin_sessions SET created_at = ?, last_seen_at = ? WHERE id = ?',
+    ).run(naive(120_000), naive(120_000), session.id);
     return token;
   }
 
@@ -215,7 +218,8 @@ describe('滑动续期绝对过期 cap 语义（absoluteTtlMs 0/负值守卫）'
     const res = await request(app).get('/api/v1/protected').set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     const session = AdminSessionModel.findByTokenHash(hashToken(token));
-    const createdPlusCap = new Date(session.created_at).getTime() + 30 * 86400_000;
+    // created_at 是 CURRENT_TIMESTAMP 的无时区 UTC 串，断言侧同样经 parseDbTime 归一化
+    const createdPlusCap = parseDbTime(session.created_at) + 30 * 86400_000;
     // 续期被 cap 压回绝对重登边界附近（±2s 容差吸收执行耗时）
     expect(new Date(session.expires_at).getTime()).toBeLessThanOrEqual(createdPlusCap + 2_000);
     expect(new Date(session.expires_at).getTime()).toBeGreaterThan(createdPlusCap - 2_000);
@@ -233,6 +237,57 @@ describe('滑动续期绝对过期 cap 语义（absoluteTtlMs 0/负值守卫）'
     // created_at 空格格式的本地时区解析偏差，故断言锚定 Date.now()）
     expect(new Date(session.expires_at).getTime()).toBeLessThanOrEqual(Date.now() + 86400_000 + 2_000);
     expect(new Date(session.expires_at).getTime()).toBeGreaterThan(Date.now() + 86400_000 - 2_000);
+  });
+
+  // 该降级语义（见 middleware/auth.js 的 sessionCreatedAt 注释）此前无任何用例守住，
+  // 而它是「旧库缺列时 admin 不被锁在门外」的唯一依据——反过来也意味着该会话不再受
+  // 30 天绝对上限约束，仅剩滑动 TTL 兜底，属有意为之的取舍，必须钉死。
+  it('created_at 取不到（NULL/旧库缺列）：不施加绝对上限，会话不被判死且续期不被 cap 削减', async () => {
+    config.adminSession.absoluteTtlMs = 1 * 86400_000; // 1 天绝对上限
+    config.adminSession.ttlMs = 7 * 86400_000;
+    const token = seedTouchableSession();
+    db.prepare('UPDATE admin_sessions SET created_at = NULL WHERE token_hash = ?').run(hashToken(token));
+
+    const res = await request(app).get('/api/v1/protected').set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+
+    const session = AdminSessionModel.findByTokenHash(hashToken(token));
+    // 若把取不到当作 epoch 0，续期目标会被 cap 写回创建时刻 → 下一请求即自毁
+    expect(new Date(session.expires_at).getTime()).toBeGreaterThan(Date.now() + 6 * 86400_000);
+  });
+
+  // 60s 写库节流此前无用例：last_seen_at 同为无时区串，裸解析在 UTC+8 下恒判
+  // 「已超 60s」，每个已认证请求都写一次库（性能回退而非功能错，CI 在 UTC 下不体现）。
+  it('续期写库节流：last_seen_at 在阈值内不写库，超阈值才写', async () => {
+    config.adminSession.absoluteTtlMs = 30 * 86400_000;
+    const mkSession = () => {
+      const token = generateSessionToken();
+      const s = AdminSessionModel.create({
+        tokenHash: hashToken(token),
+        userAgent: 'vitest-throttle',
+        ip: '127.0.0.1',
+        expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+      });
+      return { token, id: s.id };
+    };
+    const hit = async (token) =>
+      (await request(app).get('/api/v1/protected').set('Authorization', `Bearer ${token}`)).status;
+
+    // ① 刚刚触达过（5s 前）→ 节流命中，touch 不应改写 expires_at
+    const a = mkSession();
+    db.prepare('UPDATE admin_sessions SET created_at = ?, last_seen_at = ? WHERE id = ?')
+      .run(naive(86_400_000), naive(5_000), a.id);
+    const beforeA = AdminSessionModel.getById(a.id).expires_at;
+    expect(await hit(a.token)).toBe(200);
+    expect(AdminSessionModel.getById(a.id).expires_at).toBe(beforeA);
+
+    // ② 超出阈值（120s 前）→ 续期写库，expires_at 被推到 now + ttlMs（默认 7 天）
+    const b = mkSession();
+    db.prepare('UPDATE admin_sessions SET created_at = ?, last_seen_at = ? WHERE id = ?')
+      .run(naive(86_400_000), naive(120_000), b.id);
+    const beforeB = AdminSessionModel.getById(b.id).expires_at;
+    expect(await hit(b.token)).toBe(200);
+    expect(AdminSessionModel.getById(b.id).expires_at).not.toBe(beforeB);
   });
 });
 

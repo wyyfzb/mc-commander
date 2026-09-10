@@ -94,7 +94,7 @@ describe('时区不变性（子进程强制 TZ=Asia/Shanghai）', () => {
       env: { ...process.env, TZ: 'Asia/Shanghai' },
     });
     const { naive, normalized, expected } = JSON.parse(stdout.trim());
-    expect(naive).not.toBe(expected); // 前提：若无此偏移，说明 TZ 未生效，本用例失去鉴别力
+    expect(naive, 'TZ=Asia/Shanghai 未生效，本用例失去鉴别力（应修复子进程环境，而非放宽本断言）').not.toBe(expected); // 前提：若无此偏移，TZ 未生效
     expect(normalized).toBe(expected);
   });
 });

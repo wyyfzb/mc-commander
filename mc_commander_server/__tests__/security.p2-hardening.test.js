@@ -43,6 +43,7 @@ import {
 import { authMiddleware, authenticateWebSocket } from '../middleware/auth.js';
 import { createAuthRoutes, resetLoginLockState } from '../routes/auth.js';
 import { errorHandler } from '../middleware/error_handler.js';
+import { parseDbTime } from '../utils/db-time.js';
 
 let app;
 let db;
@@ -165,7 +166,9 @@ describe('P2-7 body 限制与 413 映射', () => {
 describe('P2-11 会话 30 天绝对过期', () => {
   function seedSession({ createdAtOffsetMs = 0, expiresInMs = 60_000 } = {}) {
     const token = generateSessionToken();
-    const created = new Date(Date.now() + createdAtOffsetMs).toISOString();
+    // production 同口径：CURRENT_TIMESTAMP 的无时区 UTC 串（写 ISO 会让裸解析
+    // 在任何时区下恰好正确，中间件的时区缺陷无法被测出）
+    const created = new Date(Date.now() + createdAtOffsetMs).toISOString().replace('T', ' ').slice(0, 19);
     AdminSessionModel.create({
       tokenHash: hashToken(token),
       userAgent: 'vitest-p2',
@@ -222,7 +225,8 @@ describe('P2-11 会话 30 天绝对过期', () => {
 
     const touched = AdminSessionModel.getById(session.id);
     const expiresAt = new Date(touched.expires_at).getTime();
-    const absoluteLimit = new Date(touched.created_at).getTime() + config.adminSession.absoluteTtlMs;
+    // created_at 为 CURRENT_TIMESTAMP 的无时区 UTC 串，断言侧同经 parseDbTime 归一化
+    const absoluteLimit = parseDbTime(touched.created_at) + config.adminSession.absoluteTtlMs;
     expect(expiresAt).toBeLessThanOrEqual(absoluteLimit);
     // 且确实被续期过（长于剩余滑动窗口起点）
     expect(expiresAt).toBeGreaterThan(Date.now());
