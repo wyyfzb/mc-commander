@@ -65,6 +65,12 @@ describe('InstanceCards', () => {
     expect(screen.queryByText('1.2GB')).not.toBeInTheDocument()
   })
 
+  it('JVM 堆指标带 GB 单位，与同行「世界」口径一致（此前写作 3.2G）', () => {
+    render(<InstanceCards {...baseProps()} />)
+    expect(screen.getAllByText('3.2 GB').length).toBeGreaterThanOrEqual(1)
+    expect(screen.queryByText('3.2G')).not.toBeInTheDocument()
+  })
+
   it('升级中徽标：store 有非终态进度时显示（issue 352）', () => {
     act(() => {
       useUpgradeStore.setState({

@@ -200,11 +200,15 @@ function InstanceCard({
         {isRunning ? `运行中 · ${playerCount} 人在线` : '已停止'}
       </p>
 
-      {/* 指标行（在线/TPS/JVM 堆/世界大小；详情缺省 —） */}
+      {/* 指标行（在线/TPS/JVM 堆/世界大小；详情缺省 —）
+          JVM 堆单位与同行「世界」统一为 GB（此前 3.2G / 1.2 GB 两种写法并排） */}
       <div className="grid grid-cols-4 gap-2 rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-default px-3 py-2 shadow-mcs-card">
         <Metric label="在线" value={isRunning ? `${playerCount}` : '—'} />
         <Metric label="TPS" value={isRunning && detail?.tps != null ? detail.tps.toFixed(1) : '—'} />
-        <Metric label="JVM 堆" value={isRunning && detail?.memoryUsage != null ? `${detail.memoryUsage}G` : '—'} />
+        <Metric
+          label="JVM 堆"
+          value={isRunning && detail?.memoryUsage != null ? `${detail.memoryUsage} GB` : '—'}
+        />
         <Metric label="世界" value={formatWorldSize(detail?.worldSize)} />
       </div>
 
