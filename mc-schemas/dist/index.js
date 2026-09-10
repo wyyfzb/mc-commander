@@ -4313,7 +4313,8 @@ const deployRequestSchema = objectType({
 	mcVersion: stringType(),
 	instanceName: stringType(),
 	maxMemory: stringType().optional(),
-	loaderVersion: stringType().optional()
+	loaderVersion: stringType().optional(),
+	eula: booleanType().optional()
 });
 const deployResultSchema = objectType({
 	id: stringType(),

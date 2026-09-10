@@ -273,14 +273,10 @@ export function DeployStepConfirm({
           <span>我已阅读并同意 Minecraft EULA（Mojang 最终用户许可协议）</span>
         </label>
         <p className="pl-6 text-mcs-xs text-mcs-text-muted">
-          同意后将写入 eula.txt（eula=true），部署完成后自动启动服务器。
+          {eulaAgreed
+            ? '同意后写入 eula.txt（eula=true），部署完成后自动启动服务器。'
+            : '未勾选也可部署：不写入 eula.txt、部署后不自动启动；需在实例详情同意 EULA 后才能启动服务器。'}
         </p>
-        {!eulaAgreed && (
-          <p className="flex items-center gap-1.5 pl-6 text-mcs-xs text-mcs-warning-fg">
-            <Info className="size-3.5 shrink-0" aria-hidden />
-            请先同意 EULA：未同意时无法启动服务器
-          </p>
-        )}
       </div>
     </div>
   )

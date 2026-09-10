@@ -46,6 +46,9 @@ interface PlayerColumnsDeps {
   toggleSelectPage: (pageUuids: string[]) => void
   setConfirmToggle: (v: ConfirmToggleState | null) => void
   setKickTarget: (v: Player | null) => void
+  /** 分页状态（-1 = 「全部」档）：表头全选只能作用于当前页，见 select 列 header */
+  pageSize: number
+  pageIndex: number
 }
 
 /** 在线时长短格式（Xh Ym） */
@@ -72,20 +75,30 @@ export function buildPlayerColumns({
   toggleSelectPage,
   setConfirmToggle,
   setKickTarget,
+  pageSize,
+  pageIndex,
 }: PlayerColumnsDeps): ColumnDef<typeof features, Player>[] {
   return [
     {
       id: 'select',
       enableSorting: false, // 无排序语义，且避免排序按钮嵌套 Checkbox（非法 HTML）
       header: ({ table }) => {
-        const pageIds = table.getRowModel().rows.map((r) => r.original.uuid)
+        // 分页由外层手动切片（table 未注册分页 feature，其 rows 是全量），
+        // 故此处按同一规则复算当前页，避免「全选当前页」实际选中全部筛选结果
+        const rows = table.getRowModel().rows
+        const pageCount = pageSize === -1 ? 1 : Math.max(1, Math.ceil(rows.length / pageSize))
+        const safePageIndex = Math.min(pageIndex, pageCount - 1)
+        const pageIds =
+          pageSize === -1
+            ? rows.map((r) => r.original.uuid)
+            : rows.slice(safePageIndex * pageSize, (safePageIndex + 1) * pageSize).map((r) => r.original.uuid)
         const allSelected = pageIds.length > 0 && pageIds.every((u) => selectedSet.has(u))
         const someSelected = pageIds.some((u) => selectedSet.has(u))
         return (
           <Checkbox
             checked={allSelected ? true : someSelected ? 'indeterminate' : false}
             onCheckedChange={() => toggleSelectPage(pageIds)}
-            aria-label="全选当前页"
+            aria-label={pageSize === -1 ? '全选全部筛选结果' : '全选当前页'}
           />
         )
       },

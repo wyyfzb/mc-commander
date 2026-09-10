@@ -36,6 +36,8 @@ import { PlayerDetailPanel } from './components/player-detail-panel'
 import { BatchBar } from './components/batch-bar'
 import { BanDialog } from './components/ban-dialog'
 import { BanRecordsDialog } from './components/ban-records-dialog'
+import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
+import { useMediaQuery, BREAKPOINT_MOBILE } from '@/hooks/use-media-query'
 
 /** data 未就绪时的稳定空数组（避免 ?? [] 每次渲染新建引用、污染下游 useMemo） */
 const NO_PLAYERS: Player[] = []
@@ -57,7 +59,10 @@ export function PlayersPage() {
   const openPlayerDetail = usePlayersUiStore((s) => s.openPlayerDetail)
   const openBatchDetail = usePlayersUiStore((s) => s.openBatchDetail)
   const resetForInstance = usePlayersUiStore((s) => s.resetForInstance)
+  const closeDetail = usePlayersUiStore((s) => s.closeDetail)
   const selectedUuids = usePlayersUiStore((s) => s.selectedUuids)
+  // 窄屏详情改由 Sheet 承载：此前是无 dialog 语义/无焦点约束的 CSS 覆盖层（键盘可 Tab 到被遮挡的行）
+  const isMobile = useMediaQuery(BREAKPOINT_MOBILE)
 
   const playersQuery = usePlayers(instanceId)
   const statusQuery = useInstanceStatus(instanceId)
@@ -219,8 +224,8 @@ export function PlayersPage() {
           )}
         </div>
 
-        {/* 右栏：详情面板 */}
-        {detail !== null && (
+        {/* 右栏：详情面板（桌面内联；窄屏移入 Sheet，见下） */}
+        {detail !== null && !isMobile && (
           <PlayerDetailPanel
             instanceId={instanceId ?? ''}
             player={detailPlayer}
@@ -233,6 +238,28 @@ export function PlayersPage() {
           />
         )}
       </div>
+
+      {/* 窄屏：详情面板以 Sheet（Radix Dialog）承载，获得 role=dialog / aria-modal / 焦点陷阱 / Esc 关闭 / 背景 inert */}
+      {detail !== null && isMobile && (
+        <Sheet open onOpenChange={(open) => { if (!open) closeDetail() }}>
+          <SheetContent side="right" showCloseButton={false} className="w-full! gap-0 p-0 sm:max-w-none!">
+            <SheetTitle className="sr-only">
+              {detail.batchMode ? `批量操作 ${selectedPlayers.length} 名玩家` : `${detailPlayer?.name ?? '玩家'} 详情`}
+            </SheetTitle>
+            <PlayerDetailPanel
+              variant="overlay"
+              instanceId={instanceId ?? ''}
+              player={detailPlayer}
+              batchTargets={detail.batchMode ? selectedPlayers : []}
+              isBatchMode={detail.batchMode}
+              isRconConnected={isRconConnected}
+              mcVersion={mcVersion}
+              onAction={handleAction}
+              onOpenBanDialog={setBanTarget}
+            />
+          </SheetContent>
+        </Sheet>
+      )}
 
       {/* 封禁对话框 */}
       {banTarget && (

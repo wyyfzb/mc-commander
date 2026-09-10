@@ -335,7 +335,7 @@ describe('POST /instances/deploy · Paper 主链', () => {
 
     const res = await request(app)
       .post('/api/instances/deploy')
-      .send({ type: 'paper', mcVersion: '1.21.4', instanceName: 'Paper Chain Server' });
+      .send({ type: 'paper', mcVersion: '1.21.4', instanceName: 'Paper Chain Server', eula: true });
 
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('ok');
@@ -468,7 +468,7 @@ describe('部署注册表终态语义（issue 420）', () => {
 
     const res = await request(app)
       .post('/api/instances/deploy')
-      .send({ type: 'paper', mcVersion: '1.21.4', instanceName: 'Registry Life Server' });
+      .send({ type: 'paper', mcVersion: '1.21.4', instanceName: 'Registry Life Server', eula: true });
     expect(res.status).toBe(200);
     const instanceId = res.body.data.id;
 
@@ -493,7 +493,7 @@ describe('部署注册表终态语义（issue 420）', () => {
 
     const res = await request(app)
       .post('/api/instances/deploy')
-      .send({ type: 'paper', mcVersion: '1.21.4', instanceName: 'Snapshot Server' });
+      .send({ type: 'paper', mcVersion: '1.21.4', instanceName: 'Snapshot Server', eula: true });
     expect(res.status).toBe(200);
     const instanceId = res.body.data.id;
 
@@ -689,13 +689,13 @@ describe('generateServerProperties 落盘契约', () => {
     expect(pwd[1]).toHaveLength(16);
   });
 
-  it('instance.json 与 eula.txt 契约（部署产物可直接启动）', async () => {
+  it('instance.json 与 eula.txt 契约（已同意 EULA 时部署产物可直接启动）', async () => {
     testState.latestBuild = { downloads: { application: { url: 'https://example.invalid/jar/server.jar' } } };
     const { app } = buildApp();
 
     const res = await request(app)
       .post('/api/instances/deploy')
-      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Eula Contract Server' });
+      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Eula Contract Server', eula: true });
 
     const instanceId = res.body.data.id;
     expect(fs.readFileSync(`${testState.serversDir}/${instanceId}/eula.txt`, 'utf8')).toBe('eula=true\n');
@@ -710,6 +710,37 @@ describe('generateServerProperties 落盘契约', () => {
       javaPath: '/usr/bin/java',
     });
   });
+
+  it('未同意 EULA（字段缺省）：写 eula=false、跳过首启，部署仍成功', async () => {
+    testState.latestBuild = { downloads: { application: { url: 'https://example.invalid/jar/server.jar' } } };
+    const { app, manager } = buildApp();
+
+    const res = await request(app)
+      .post('/api/instances/deploy')
+      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'No Consent Server' });
+
+    expect(res.status).toBe(200);
+    const instanceId = res.body.data.id;
+    // 面板不得代替用户表达同意：未同意即 eula=false，且 MС 首启强制要求 true 故必须跳过
+    expect(fs.readFileSync(`${testState.serversDir}/${instanceId}/eula.txt`, 'utf8')).toBe('eula=false\n');
+    const stages = manager.emit.mock.calls.map(([, evt]) => evt.stage);
+    expect(stages).not.toContain('first_launch');
+    expect(stages[stages.length - 1]).toBe('complete');
+  });
+
+  it('未同意 EULA（显式 false）：同样写 eula=false 且不首启', async () => {
+    testState.latestBuild = { downloads: { application: { url: 'https://example.invalid/jar/server.jar' } } };
+    const { app, manager } = buildApp();
+
+    const res = await request(app)
+      .post('/api/instances/deploy')
+      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Explicit Decline Server', eula: false });
+
+    expect(res.status).toBe(200);
+    const instanceId = res.body.data.id;
+    expect(fs.readFileSync(`${testState.serversDir}/${instanceId}/eula.txt`, 'utf8')).toBe('eula=false\n');
+    expect(manager.emit.mock.calls.map(([, evt]) => evt.stage)).not.toContain('first_launch');
+  });
 });
 
 describe('runFirstLaunch 首启行为', () => {
@@ -723,7 +754,7 @@ describe('runFirstLaunch 首启行为', () => {
 
     const res = await request(app)
       .post('/api/instances/deploy')
-      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Exit1 Server' });
+      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Exit1 Server', eula: true });
 
     expect(res.status).toBe(200);
     expect(res.body.data.id).toMatch(/^vanilla-[0-9a-f]{8}$/);
@@ -735,7 +766,7 @@ describe('runFirstLaunch 首启行为', () => {
 
     const res = await request(app)
       .post('/api/instances/deploy')
-      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Spawn Error Server' });
+      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Spawn Error Server', eula: true });
 
     expect(res.status).toBe(200);
   });
@@ -748,7 +779,7 @@ describe('runFirstLaunch 首启行为', () => {
     const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
     const pending = request(app)
       .post('/api/instances/deploy')
-      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Timeout Server' });
+      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Timeout Server', eula: true });
     // supertest Test 为惰性 thenable：Promise.resolve 触发 then → 立即发起请求
     const inflight = Promise.resolve(pending);
 

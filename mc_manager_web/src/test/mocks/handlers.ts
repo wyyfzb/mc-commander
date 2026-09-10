@@ -397,7 +397,7 @@ export const mockBans: BanRecord[] = [  {
 ]
 
 /** 部署失败开关（测试注入：结构占位，非真实错误） */
-export const deployMock = { shouldFail: false }
+export const deployMock: { shouldFail: boolean; lastBody: { eula?: boolean } | null } = { shouldFail: false, lastBody: null }
 
 /** 实例列表运行态开关（测试注入：false → 卡片显示启动按钮，供 EULA 首启用例） */
 export const instanceListMock = { running: true }
@@ -683,7 +683,9 @@ export const handlers = [
       instanceName?: string
       maxMemory?: string
       loaderVersion?: string
+      eula?: boolean
     }
+    deployMock.lastBody = body
     return ok({
       id: 'inst-deploy-001',
       name: body.instanceName ?? '新实例',

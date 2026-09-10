@@ -564,7 +564,7 @@ describe('win32 平台分支与首启输出', () => {
       const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
       const pending = request(app)
         .post('/api/instances/deploy')
-        .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Win Server' });
+        .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Win Server', eula: true });
       const inflight = Promise.resolve(pending);
 
       let timeoutCall = null;

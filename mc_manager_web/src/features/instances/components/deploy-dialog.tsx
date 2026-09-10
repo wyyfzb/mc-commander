@@ -5,8 +5,8 @@
  *   + fabric/forge loader Select；步骤② 名称 + 内存档位；步骤③ 确认摘要 + EULA
  * - 自动回填：版本/加载器列表就绪回填首个；系统内存 → 推荐档位（用户手动调整后不覆盖），
  *   回填值同步基线不算 dirty
- * - 部署成功且已勾选 EULA：自动同意 EULA（POST /eula）+ 发启动指令（POST /start），
- *   结果块展示启动状态（首启闭环，issue 312）
+ * - EULA 同意随部署请求下发（服务端据此写 eula.txt）；部署成功且已同意时发启动指令
+ *   （POST /start），结果块展示启动状态（首启闭环，issue 312）
  * - 视图状态机：部署中 → 成功 → 失败 → 表单三步；恢复场景保留进行中进度（issue 352）；
  *   部署中禁用上一步与关闭（ESC/遮罩拦截）
  * - dirty 关闭拦截：表单与基线对比（自动回填的版本/加载器同步基线，不误判 dirty）
@@ -183,6 +183,8 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
       mcVersion: form.version,
       instanceName: form.name.trim(),
       maxMemory: form.memory,
+      // EULA 同意随请求下发：服务端据此写 eula.txt（未同意写 false 且不首启）
+      eula: eulaAgreed,
     }
     if ((form.type === 'fabric' || form.type === 'forge') && form.loader !== '') {
       payload.loaderVersion = form.loader
@@ -192,11 +194,10 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
       const deployed = await deployMutation.mutateAsync(payload)
       setResult(deployed)
       finishDeploy({ ok: true, instanceId: deployed.id })
-      // 首启闭环（issue 312）：已同意 EULA → 写入 eula.txt + 发启动指令（启动异步，状态在仪表盘/终端可见）
+      // 首启闭环（issue 312）：EULA 已随部署请求写入，这里只需发启动指令（启动异步，状态在仪表盘/终端可见）
       if (eulaAgreed) {
         setAutoStart('pending')
         try {
-          await apiPost(`/api/v1/instances/${deployed.id}/eula`, config, { agreed: true })
           await apiPost(`/api/v1/instances/${deployed.id}/start`, config)
           setAutoStart('ok')
           toast.success('部署完成，服务器开始启动')
@@ -341,9 +342,12 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
                   下一步
                 </Button>
               ) : (
-                <Button onClick={() => void handleDeploy()} disabled={!eulaAgreed} aria-label="部署并启动">
+                <Button
+                  onClick={() => void handleDeploy()}
+                  aria-label={eulaAgreed ? '部署并启动' : '仅部署'}
+                >
                   <CloudDownload className="size-4" aria-hidden />
-                  部署并启动
+                  {eulaAgreed ? '部署并启动' : '仅部署'}
                 </Button>
               )}
             </DialogFooter>

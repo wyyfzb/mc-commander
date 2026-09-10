@@ -85,8 +85,11 @@ export function PlayerTable({
         toggleSelectPage,
         setConfirmToggle,
         setKickTarget,
+        pageSize,
+        pageIndex,
       }),
-    [selectedSet, onOpenDetail, onOpenBan, toggleSelect, toggleSelectPage],
+    // pageSize/pageIndex 参与表头全选范围计算，变更须重建列以刷新表头勾选态
+    [selectedSet, onOpenDetail, onOpenBan, toggleSelect, toggleSelectPage, pageSize, pageIndex],
   )
 
   const table = useTable(

@@ -30,10 +30,11 @@ export function PlayerRow({
       aria-label={`查看 ${p.name} 详情`}
       onClick={() => onOpenDetail(p.name)}
       onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault()
-          onOpenDetail(p.name)
-        }
+        // 只响应落在行本身上的回车：行内复选框/操作按钮自行处理按键，
+        // 否则空格会被行吞掉（键盘用户无法勾选玩家）、回车会二次触发
+        if (e.key !== 'Enter' || e.target !== e.currentTarget) return
+        e.preventDefault()
+        onOpenDetail(p.name)
       }}
     >
       {row.getVisibleCells().map((cell) => (

@@ -129,6 +129,8 @@ function FileListRow({
       aria-label={isDir ? `打开目录 ${entry.name}` : editable ? `选择文件 ${entry.name}` : `文件 ${entry.name}（二进制，可下载）`}
       onClick={handleRowClick}
       onKeyDown={(e) => {
+        // role="button" 行只处理落在行本身的激活键；行内图标按钮的冒泡不再触发行打开
+        if (e.target !== e.currentTarget) return
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault()
           handleRowClick()

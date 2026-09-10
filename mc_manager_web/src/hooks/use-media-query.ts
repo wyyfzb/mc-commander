@@ -1,7 +1,7 @@
 /**
- * useMediaQuery —— 响应式媒体查询 hook（自 files-page.tsx 迁出，纯移动零行为变更）
+ * useMediaQuery —— 响应式媒体查询 hook
  * - useSyncExternalStore：无 setState-in-effect 级联，首渲染即真实值
- * - 断点常量与 Tailwind md/lg 断点对齐（files 页双栏降级用）
+ * - 断点常量与 Tailwind md/lg 断点对齐（files 双栏、玩家详情面板窄屏降级共用）
  */
 import { useSyncExternalStore } from 'react'
 

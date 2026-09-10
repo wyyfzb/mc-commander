@@ -2,6 +2,7 @@
  * PlayerDetailPanel —— 详情面板壳（Master-Detail 右栏）
  * - 单个模式：头像+名字+状态徽章+UUID + 5 Tab（概览/物品栏/传送/给予物品/日志）
  * - 批量模式：堆叠头像+「已选择 N 名玩家」+目标名单，仅保留 传送/给予物品 Tab
+ * - 承载方式见 variant：桌面内联右栏 / 窄屏由 Sheet 承载（此前窄屏是无 dialog 语义的覆盖层）
  * - 打开期间封禁记录 30s 轮询
  */
 import { X } from 'lucide-react'
@@ -31,6 +32,11 @@ interface PlayerDetailPanelProps {
   mcVersion: string
   onAction: (req: PlayerActionRequest) => Promise<void>
   onOpenBanDialog: (player: Player) => void
+  /**
+   * inline：桌面内联右栏（自带宽度与左边框）
+   * overlay：窄屏由 Sheet 承载（宽度/边框/遮罩/焦点陷阱归 Sheet，本组件只出内容）
+   */
+  variant?: 'inline' | 'overlay'
 }
 
 /** 批量模式下保留的 Tab（只保留传送/给予路径） */
@@ -45,6 +51,7 @@ export function PlayerDetailPanel({
   mcVersion,
   onAction,
   onOpenBanDialog,
+  variant = 'inline',
 }: PlayerDetailPanelProps) {
   const detail = usePlayersUiStore((s) => s.detail)
   const closeDetail = usePlayersUiStore((s) => s.closeDetail)
@@ -65,7 +72,12 @@ export function PlayerDetailPanel({
 
   return (
     <aside
-      className="flex w-105 shrink-0 flex-col border-l border-mcs-border-default bg-mcs-bg-default max-lg:absolute max-lg:inset-0 max-lg:z-(--mcs-z-modal) max-lg:w-full max-lg:border-l-0 max-lg:ring-1 max-lg:ring-mcs-border-default max-lg:shadow-mcs-overlay"
+      className={cn(
+        'flex min-h-0 flex-col bg-mcs-bg-default',
+        variant === 'inline'
+          ? 'w-105 shrink-0 border-l border-mcs-border-default'
+          : 'h-full w-full overflow-hidden',
+      )}
       aria-label="玩家详情面板"
     >
       {/* ── 头部 ── */}

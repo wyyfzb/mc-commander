@@ -115,7 +115,7 @@ describe('PlayersPage', () => {
     expect(screen.queryByText('基本信息')).not.toBeInTheDocument()
   })
 
-  it('键盘 Enter/Space 打开行详情（无障碍键盘路径）', async () => {
+  it('键盘 Enter 打开行详情（空格保留给行内控件）', async () => {
     renderPage()
     await screen.findByText('Steve')
     const row = screen.getByText('Steve').closest('tr')!
@@ -156,6 +156,29 @@ describe('PlayersPage', () => {
   it('深链接 ?player=Steve 打开详情', async () => {
     renderPage('/players?player=Steve')
     expect(await screen.findByText('基本信息')).toBeInTheDocument()
+  })
+
+  it('窄屏详情面板以 dialog 承载（role=dialog + 可访问名），不再是裸覆盖层', async () => {
+    const orig = window.matchMedia
+    // 窄屏模拟：仅移动断点命中（其余查询保持 false）
+    window.matchMedia = ((query: string) => ({
+      matches: query === '(max-width: 767px)',
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    })) as unknown as typeof window.matchMedia
+    try {
+      renderPage('/players?player=Steve')
+      // 轮询到列表就绪后的可访问名（标题取玩家名，SR 可播报上下文）
+      const dialog = await screen.findByRole('dialog', { name: /Steve 详情/ })
+      expect(within(dialog).getByText('基本信息')).toBeInTheDocument()
+    } finally {
+      window.matchMedia = orig
+    }
   })
 
   it('封禁记录弹窗：全量列表 + 解封确认', async () => {

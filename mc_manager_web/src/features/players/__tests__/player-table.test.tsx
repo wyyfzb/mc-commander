@@ -225,6 +225,40 @@ describe('PlayerTable · 行交互', () => {
   })
 })
 
+// ── 选择范围（分页语义）与行内控件键盘 ──
+
+describe('PlayerTable · 选择范围与行内键盘', () => {
+  it('行内复选框聚焦后按空格：写入选择且不打开详情（行不再吞掉空格）', async () => {
+    const user = userEvent.setup()
+    const { onOpenDetail } = setup()
+    const checkbox = screen.getByRole('checkbox', { name: '选择 Steve' })
+    checkbox.focus()
+    await user.keyboard(' ')
+    expect(usePlayersUiStore.getState().selectedUuids).toEqual([
+      '00000000-0000-4000-8000-000000000002',
+    ])
+    expect(onOpenDetail).not.toHaveBeenCalled()
+  })
+
+  it('表头「全选当前页」只选中当前页（25 名玩家 / 每页 20 → 选中 20 名）', async () => {
+    const user = userEvent.setup()
+    const players = Array.from({ length: 25 }, (_, i) =>
+      makePlayer({
+        name: `P${i + 1}`,
+        uuid: `00000000-0000-4000-8000-0000000000${String(i + 1).padStart(2, '0')}`,
+      }),
+    )
+    setup({ players, totalCount: players.length })
+    await user.click(screen.getByRole('checkbox', { name: '全选当前页' }))
+    const selected = usePlayersUiStore.getState().selectedUuids
+    // 表头只作用于当前页：不得把第 21 名及以后的筛选结果一并选中
+    expect(selected).toHaveLength(20)
+    expect(selected).toContain(players[0]!.uuid)
+    expect(selected).toContain(players[19]!.uuid)
+    expect(selected).not.toContain(players[20]!.uuid)
+  })
+})
+
 // ── 行内操作菜单 ──
 
 async function openMenu(user: ReturnType<typeof userEvent.setup>, name: string) {
