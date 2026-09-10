@@ -226,24 +226,23 @@ export function PlayerTable({
         ) : null}
       </div>
 
-      {/* 分页器（非「全部」档）——统一 Pagination 组件 */}
-      {pageSize !== -1 && (
-        <Pagination
-          page={safePageIndex + 1}
-          totalPages={totalPages}
-          totalItems={allRows.length}
-          onPageChange={(p) => setPageIndex(p - 1)}
-          variant="numbers"
-          pageSize={pageSize}
-          pageSizeOptions={[...PAGE_SIZE_OPTIONS.filter((s) => s !== -1)]}
-          onPageSizeChange={(size) => {
-            setPageSize(size as (typeof PAGE_SIZE_OPTIONS)[number])
-            setPageIndex(0)
-          }}
-          showAllOption
-          showPageSizeSelector
-        />
-      )}
+      {/* 分页器常驻：切到「全部」档只换数据源（虚拟滚动）；分页栏若一并消失，
+          用户就没有选回其他每页条数的入口（只能刷新页面） */}
+      <Pagination
+        page={safePageIndex + 1}
+        totalPages={totalPages}
+        totalItems={allRows.length}
+        onPageChange={(p) => setPageIndex(p - 1)}
+        variant="numbers"
+        pageSize={pageSize}
+        pageSizeOptions={[...PAGE_SIZE_OPTIONS.filter((s) => s !== -1)]}
+        onPageSizeChange={(size) => {
+          setPageSize(size as (typeof PAGE_SIZE_OPTIONS)[number])
+          setPageIndex(0)
+        }}
+        showAllOption
+        showPageSizeSelector
+      />
 
       <PlayerConfirmDialogs
         confirmToggle={confirmToggle}

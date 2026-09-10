@@ -421,3 +421,24 @@ describe('PlayerTable · 列头排序', () => {
     expect(playerNameOrder()).toEqual(['Steve', 'Alex'])
   })
 })
+
+// ── 分页栏常驻（「全部」档是单向门缺陷的回归锁）──
+
+describe('PlayerTable · 分页栏', () => {
+  it('切到「全部」档分页栏仍在，可切回其他每页条数', async () => {
+    const user = userEvent.setup()
+    setup({
+      players: [makePlayer(), makePlayer({ name: 'Alex', uuid: '00000000-0000-4000-8000-000000000003' })],
+    })
+
+    await user.selectOptions(screen.getByLabelText('每页行数'), '-1')
+    // 历史缺陷：pageSize === -1 时整条分页栏被条件渲染掉，
+    // 「全部」是单向门——切进去就再也选不回 10/20/50，只能刷新页面
+    expect(screen.getByLabelText('每页行数')).toHaveValue('-1')
+    expect(screen.getByText(/共 2 条/)).toBeInTheDocument()
+
+    await user.selectOptions(screen.getByLabelText('每页行数'), '20')
+    expect(screen.getByLabelText('每页行数')).toHaveValue('20')
+    expect(screen.getByText('Steve')).toBeInTheDocument()
+  })
+})
