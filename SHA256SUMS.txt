@@ -1,1 +1,0 @@
-82193196194e514c2334dd8bb4949040682afe61c58f218419baef5ce0fccadf  mc-commander-server-v1.0.0.tar.gz
