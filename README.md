@@ -376,8 +376,8 @@ mc-commander/
 | 平台 | 支持状态 |
 |------|---------|
 | Linux | ✅ 全支持（推荐部署环境，一键部署脚本面向 Ubuntu/Debian） |
-| Windows | ⚠️ 实验性——服务端依赖 better-sqlite3 原生编译（Node 22 预编译产物可能缺失，需本机构建工具链）；建议使用 WSL2 以获得与 Linux 一致体验 |
-| macOS | ✅ 支持（better-sqlite3 原生编译通常可直接完成） |
+| Windows | ⚠️ 实验性——官方部署脚本与发布包面向 Linux，Windows 需按「手动部署」自行构建前端产物并装依赖（better-sqlite3 13.x 已随包提供 win32 预编译产物，无需本机构建工具链）；建议使用 WSL2 以获得与 Linux 一致体验 |
+| macOS | ✅ 支持（同 Windows：官方发布包面向 Linux，需自行构建前端产物；better-sqlite3 13.x 已随包提供 macOS 预编译产物） |
 
 > 部署脚本（`方式一：Linux 一键部署`）仅面向 Linux；Windows / macOS 请走手动部署路径。
 
