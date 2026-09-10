@@ -57,7 +57,7 @@ MC_Commander 是一个自托管的 Minecraft 服务器管理面板：**无需安
 
 **预期结果**：实例出现在实例列表，显示名称与状态（已停止）。
 
-![实例列表](screenshots/instances.png)
+![实例列表](../screenshots/instances.png)
 
 ---
 
@@ -70,7 +70,7 @@ MC_Commander 是一个自托管的 Minecraft 服务器管理面板：**无需安
 - 玩家在游戏内通过 `<服务器地址>:25565` 连接（地址见仪表盘顶栏）；
 - 首次启动如遇 EULA 未同意，面板会弹出协议确认对话框，同意后自动写入并重启。
 
-![仪表盘](screenshots/dashboard.png)
+![仪表盘](../screenshots/dashboard.png)
 
 ---
 
@@ -92,7 +92,7 @@ MC_Commander 是一个自托管的 Minecraft 服务器管理面板：**无需安
 - **图形化操作**：传送、给予物品（含附魔/药水/自定义 NBT）、封禁/解封、白名单、OP、踢出、清空背包——全部由面板自动生成命令，无需手敲 MC 命令；
 - **筛选与搜索**：按状态/模式/维度过滤，支持批量操作（如批量给予、批量踢出）。
 
-![玩家管理](screenshots/players.png)
+![玩家管理](../screenshots/players.png)
 
 ### 文件管理
 
@@ -102,7 +102,7 @@ MC_Commander 是一个自托管的 Minecraft 服务器管理面板：**无需安
 - 双击文本文件在浏览器内编辑（内置编辑器，`Ctrl+S` 保存），如调整 `server.properties`、`ops.json`；
 - 上传/下载/重命名/新建，删除高危目录有红色确认提示。
 
-![文件管理](screenshots/files.png)
+![文件管理](../screenshots/files.png)
 
 ### 备份
 
@@ -112,7 +112,7 @@ MC_Commander 是一个自托管的 Minecraft 服务器管理面板：**无需安
 - **恢复备份**：从列表选择备份一键恢复（恢复前自动二次确认）；
 - **下载**：备份可下载到本机做离机容灾。
 
-![备份](screenshots/backup.png)
+![备份](../screenshots/backup.png)
 
 ### 审计日志
 

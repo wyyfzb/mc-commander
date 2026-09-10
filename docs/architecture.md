@@ -24,7 +24,7 @@ MC_Commander 由两部分组成：**服务端**（Node.js，部署在 Minecraft 
 - **部署**：`routes/server-jar.js` —— PaperMC API 拉取版本清单/下载 jar（进度事件）、
   首启 eula/properties 生成、Forge installServer 支持
 - **备份**：`services/backup.service.js` —— 目录快照 + 硬链接增量
-  （rsync `--link-dest`，Windows 降级 robocopy；见 ADR-0003）
+  （rsync `--link-dest`，Windows 降级 robocopy）
 - **定时任务**：`services/task_scheduler.js`（croner）—— 5 类任务 + 临时封禁到期轮询
 - **数据**：better-sqlite3（实例/备份/计划任务/封禁记录），schema 迁移见 `db/database.js`
 - **实时**：`websocket.js` —— 23 种事件广播、断线补齐、心跳保活、背压保护
