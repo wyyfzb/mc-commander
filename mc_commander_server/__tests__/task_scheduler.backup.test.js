@@ -65,6 +65,11 @@ describe('TaskScheduler - backup 任务分支（互斥跳过 + 失败可见性�
       's1',
       expect.objectContaining({ type: 'scheduled', createdBy: 'scheduler', taskId: 10 })
     );
+    // 名字里的时刻取本地时区（与列表按本地时区渲染 createdAt 同口径，不带 Z）
+    const d = new Date();
+    const localDay = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const payload = scheduler.backupService.createBackup.mock.calls.at(-1)[1];
+    expect(payload.name).toMatch(new RegExp(`^每日备份 ${localDay}T\\d{2}-\\d{2}-\\d{2}-\\d{3}$`));
     // 触发时只刷新时间戳（不带 status 第三参）
     expect(ScheduledTaskModel.updateLastRun).toHaveBeenCalledWith(10, expect.any(String));
     // success 不再由调度器 .then 回写（createBackup resolve 早于快照完成，

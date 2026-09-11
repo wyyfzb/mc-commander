@@ -13,6 +13,10 @@ const PORT = Number(process.env.MOCK_PORT) || 5198
 
 const now = () => new Date().toISOString()
 
+/** 本地时区日期键（与服务端 utils/local-date.js 同口径；toISOString 是 UTC，东八区凌晨会写成昨天） */
+const localDateKey = (d = new Date()) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
 /** Webhook 演示数据（对齐 @mc-commander/schemas webhook 契约；模块级以支持 POST 后持久） */
 const webhooks = [
   {
@@ -663,9 +667,9 @@ const server = createServer((req, res) => {
         return res.end(ok({
           id: 23,
           instanceId: 'e2e-demo',
-          // 与服务端默认命名同源（routes/backups.js：未传 name 时用 Backup_YYYY-MM-DD），
+          // 与服务端默认命名同源（routes/backups.js：未传 name 时用 Backup_<本地日期>），
           // 与 createdAt 同刻生成，不再写死日期
-          name: `Backup_${new Date().toISOString().slice(0, 10)}`,
+          name: `Backup_${localDateKey()}`,
           description: null,
           type: 'manual',
           size: 0,

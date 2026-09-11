@@ -1,5 +1,6 @@
 import { http, HttpResponse } from 'msw'
 import { LEGACY_GAMERULES } from '@/lib/mc-gamerules'
+import { todayIso } from '@/lib/mc-calendar'
 import type {
   BackupItem,
   BanRecord,
@@ -489,8 +490,9 @@ const backupHandlers = [
     ok({
       id: 12,
       instanceId: 'demo',
-      // 与服务端默认命名同源（routes/backups.js：未传 name 时用 Backup_YYYY-MM-DD）
-      name: `Backup_${new Date().toISOString().slice(0, 10)}`,
+      // 与服务端默认命名同源（routes/backups.js：未传 name 时用 Backup_<本地日期>，
+      // 见服务端 utils/local-date.js——UTC 口径会在东八区凌晨写成昨天）
+      name: `Backup_${todayIso()}`,
       description: null,
       type: 'manual',
       size: 0,

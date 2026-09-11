@@ -6,6 +6,7 @@ import { BackupModel } from '../db/backup.model.js';
 import { ScheduledTaskModel } from '../db/scheduled_task.model.js';
 import { AppError, ErrorCodes } from '../utils/response.js';
 import { logger } from '../utils/logger.js';
+import { localTimestamp } from '../utils/local-date.js';
 
 // 世界目录名白名单（find-004）：与路由层 server.properties level-name 校验
 // 一致（^[A-Za-z0-9_-]+$），单段字符集禁止 / \ . 等路径分隔/穿越字符。
@@ -299,7 +300,9 @@ export class BackupService {
     // 创建备份记录
     const backupRecord = BackupModel.create({
       instanceId,
-      name: name || `Backup ${timestamp}`,
+      // 用户可见名取本地时刻（与列表按本地时区渲染 createdAt 同口径，见 utils/local-date.js）；
+      // 快照目录名仍用 UTC ISO——那是路径唯一性/排序用的，不面向用户
+      name: name || `Backup ${localTimestamp()}`,
       description: description || '',
       type,
       status: 'creating',

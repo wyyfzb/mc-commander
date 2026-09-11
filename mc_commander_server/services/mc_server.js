@@ -10,6 +10,7 @@ import config from '../config.js';
 import { InstanceModel, CommandHistoryModel } from '../db/index.js';
 import { atomicWriteFile } from '../utils/fs-utils.js';
 import { maskSensitiveCommand } from '../utils/command-mask.js';
+import { localDateKey } from '../utils/local-date.js';
 // offline uuid / stats 时长读取全仓公共实现（与 routes/players.js 共用 player-utils.js）
 import { isPathContained, offlineUuid as computeOfflineUuid, getTotalPlayTime } from '../utils/player-utils.js';
 import * as levelDat from './mc-server/level-dat.js';
@@ -1237,9 +1238,9 @@ export class MCServerInstance extends EventEmitter {
     return count;
   }
 
+  /// 本地时区日期键（「今日新增」缓存的分桶键，见 utils/local-date.js）
   _todayKey() {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    return localDateKey();
   }
 
   /// 获取累计运行时长（秒）：数据库持久化的累计值 + 本次运行时长

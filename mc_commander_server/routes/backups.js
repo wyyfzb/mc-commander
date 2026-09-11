@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import { ErrorCodes, AppError } from '../utils/response.js';
 import { parsePagination } from '../utils/pagination.js';
+import { localDateKey } from '../utils/local-date.js';
 import { BackupModel } from '../db/backup.model.js';
 import { BackupService, resolveContained } from '../services/backup.service.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
@@ -75,7 +76,8 @@ export function createBackupRoutes(serverManager) {
     }
 
     const backup = await backupService.createBackup(instanceId, {
-      name: name || `Backup_${new Date().toISOString().slice(0, 10)}`,
+      // 默认名用服务器本地日期（与列表按本地时区渲染 createdAt 同口径，见 utils/local-date.js）
+      name: name || `Backup_${localDateKey()}`,
       description: description || '',
       type: 'manual',
     });
