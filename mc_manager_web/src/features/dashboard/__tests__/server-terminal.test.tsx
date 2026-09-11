@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterAll, beforeAll, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, afterAll, beforeAll, vi } from 'vitest'
 import { render, fireEvent, waitFor, screen, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -93,6 +93,8 @@ vi.mock('@xterm/addon-search', () => ({
 const server = setupServer(...handlers)
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
 afterAll(() => server.close())
+// 用例中途断言失败时体内的还原语句不会执行，间谍会残留给后续用例——集中还原
+afterEach(() => vi.restoreAllMocks())
 
 beforeEach(() => {
   xtermStub.customKeyHandlers.length = 0
@@ -186,6 +188,21 @@ describe('ServerTerminal 终端内搜索', () => {
     expect(screen.getByRole('textbox', { name: '搜索终端内容' })).toHaveFocus()
     await user.click(screen.getByRole('button', { name: '关闭搜索' }))
     expect(screen.queryByRole('search')).not.toBeInTheDocument()
+  })
+
+  it('搜索按钮 tooltip 的快捷键按平台取词（macOS 是 ⌘，其余是 Ctrl）', async () => {
+    const user = userEvent.setup()
+    const { unmount } = renderTerminal()
+    // jsdom 平台为 Linux：提示须与 handler 接受的修饰键（ctrl||meta）一致，
+    // 也不能给 mac 用户按不出来的键
+    await user.hover(screen.getByRole('button', { name: '搜索终端内容' }))
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('搜索终端内容（Ctrl+F）')
+
+    unmount()
+    vi.spyOn(navigator, 'platform', 'get').mockReturnValue('MacIntel')
+    renderTerminal()
+    await user.hover(screen.getByRole('button', { name: '搜索终端内容' }))
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('搜索终端内容（⌘+F）')
   })
 
   it('Ctrl+F 经 attachCustomKeyEventHandler 拦截：preventDefault + 打开搜索条（返回 false 阻断 xterm 处理）', () => {

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { describe, it, expect, beforeEach, beforeAll, afterAll } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { setupServer } from 'msw/node'
@@ -22,6 +22,9 @@ import { mockInstanceStatus } from '@/test/mocks/handlers'
 const server = setupServer(...handlers)
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
 afterAll(() => server.close())
+// 用例中途断言失败时体内的还原语句不会执行，间谍会残留给后续用例（如平台 spy 让
+// 后面的 placeholder 断言读到 ⌘）——集中在此还原，失败不放大成无关用例连带红
+afterEach(() => vi.restoreAllMocks())
 
 function renderWithProviders(ui: ReactNode) {
   return render(
@@ -138,6 +141,23 @@ describe('AnnouncementCard 公告发送', () => {
     fireEvent.click(screen.getByRole('button', { name: /^取消$/ }))
     expect(useTerminalStore.getState().buffer.length).toBe(0)
     expect(input).toHaveValue('服务器将在 5 分钟后重启，请及时停靠')
+  })
+
+  it('公告框 placeholder 的发送快捷键按平台取词（macOS 是 ⌘，其余是 Ctrl）', () => {
+    const { unmount } = renderWithProviders(<AnnouncementCard />)
+    // jsdom 平台为 Linux：提示须与 handler 接受的修饰键（ctrl||meta）一致
+    expect(screen.getByLabelText('公告内容')).toHaveAttribute(
+      'placeholder',
+      '输入公告内容…（Ctrl+Enter 发送，支持多行）',
+    )
+
+    unmount()
+    vi.spyOn(navigator, 'platform', 'get').mockReturnValue('MacIntel')
+    renderWithProviders(<AnnouncementCard />)
+    expect(screen.getByLabelText('公告内容')).toHaveAttribute(
+      'placeholder',
+      '输入公告内容…（⌘+Enter 发送，支持多行）',
+    )
   })
 
   it('空输入不发命令', () => {

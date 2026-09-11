@@ -17,6 +17,7 @@ import { useInstanceLogs } from '@/api/queries'
 import { apiGet } from '@/api/client'
 import { getFriendlyErrorText } from '@/api/errors'
 import { formatLogFileName } from '@/lib/format'
+import { primaryModifierLabel } from '@/lib/platform'
 import { copyText } from '@/lib/clipboard'
 import { useUiStore } from '@/stores/ui'
 import type { LogEntry } from '@/api/types'
@@ -27,7 +28,7 @@ import type { LogLevel, TerminalLogEntry } from '@/lib/terminal-log'
  * - 独立深底（--mcs-bg-subtle）+ 等宽；级别四色编码（无文字前缀，仅颜色）
  * - 缓冲 2000 条（store，切页不丢）；自动滚动（上滚 >60px 暂停）
  * - JVM 警告默认隐藏（眼睛切换）；清空；下载日志；终端内搜索
- *   （放大镜/Ctrl+F 打开，SearchAddon 装饰高亮 + n/m 计数，Esc 关闭清除回焦点）
+ *   （放大镜 / Ctrl/⌘+F 打开，SearchAddon 装饰高亮 + n/m 计数，Esc 关闭清除回焦点）
  */
 
 /** 级别 → ANSI 前景色序号（xterm theme 调色板映射 token） */
@@ -117,7 +118,7 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
   const showJvmWarningsRef = useRef(showJvmWarnings)
   const [downloading, setDownloading] = useState(false)
   const [copied, setCopied] = useState(false)
-  // 终端内搜索（SearchAddon；canvas 渲染下浏览器原生 Ctrl+F 对终端内容无效）
+  // 终端内搜索（SearchAddon；canvas 渲染下浏览器原生 Ctrl/⌘+F 对终端内容无效）
   // 状态收敛单对象：实例切换时在渲染期整体重置（React 官方 adjusting-state 模式，避免 effect 级联 setState）
   const searchAddonRef = useRef<SearchAddon | null>(null)
   const [search, setSearch] = useState<{
@@ -170,8 +171,8 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
     const searchAddon = new SearchAddon()
     term.loadAddon(searchAddon)
     searchAddon.onDidChangeResults((r) => setSearch((s) => ({ ...s, result: { resultIndex: r.resultIndex, resultCount: r.resultCount } })))
-    // Ctrl+F：仅终端聚焦时生效（attachCustomKeyEventHandler 只在 xterm 持有焦点时触发，
-    // dashboard 其他区域浏览器原生查找不受影响）。canvas 渲染下原生 Ctrl+F 对终端内容
+    // Ctrl/⌘+F：仅终端聚焦时生效（attachCustomKeyEventHandler 只在 xterm 持有焦点时触发，
+    // dashboard 其他区域浏览器原生查找不受影响）。canvas 渲染下原生 Ctrl/⌘+F 对终端内容
     // 无法命中，preventDefault 抑制浏览器查找弹窗并转为打开终端内搜索。
     term.attachCustomKeyEventHandler((e) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
@@ -263,7 +264,7 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
     }
   }, [buffer, showJvmWarnings])
 
-  // 清空（工具栏按钮 + Ctrl+L 共用）
+  // 清空（工具栏按钮 + Ctrl/⌘+L 共用）
   const handleClear = useCallback(() => {
     clearTerminal()
     xtermRef.current?.clear()
@@ -295,7 +296,7 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
     })
   }, [buffer])
 
-  // Ctrl+L 清屏（P0 服主肌肉记忆；window capture 覆盖输入框焦点，dashboard 内任意位置生效）
+  // Ctrl/⌘+L 清屏（P0 服主肌肉记忆；window capture 覆盖输入框焦点，dashboard 内任意位置生效）
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'l') {
@@ -374,7 +375,7 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
         <InstanceControls />
         <div className="flex items-center gap-1">
           <IconButton
-            tooltip="搜索终端内容（Ctrl+F）"
+            tooltip={`搜索终端内容（${primaryModifierLabel()}+F）`}
             tooltipSide="bottom"
             onClick={() => setSearch((s) => ({ ...s, open: !s.open }))}
             aria-label="搜索终端内容"

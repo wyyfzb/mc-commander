@@ -9,11 +9,12 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useSendCommand } from '@/hooks/use-send-command'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
+import { primaryModifierLabel } from '@/lib/platform'
 
 /**
  * 公告发送卡
  * - say 全服广播：预设胶囊填充 → 发送 → 命令回显终端
- * - 多行文本域：Enter 换行，Ctrl+Enter 发送；多行公告用 tellraw（JSON 文本组件）
+ * - 多行文本域：Enter 换行，Ctrl/⌘+Enter 发送；多行公告用 tellraw（JSON 文本组件）
  * - 广播影响全体在线玩家：发送前 ConfirmDialog 二次确认（Tasteful Friction）
  * - 预设（名称+文案）localStorage 持久化，可增删改（与命令快捷指令同模式）
  */
@@ -136,7 +137,7 @@ export function AnnouncementCard() {
           // 文本域：Enter 换行（多行公告），Ctrl/Cmd+Enter 发送（同样经二次确认）
           if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') requestSend()
         }}
-        placeholder="输入公告内容…（Ctrl+Enter 发送，支持多行）"
+        placeholder={`输入公告内容…（${primaryModifierLabel()}+Enter 发送，支持多行）`}
         disabled={!isRunning}
         aria-label="公告内容"
         className="min-h-16 w-full"
