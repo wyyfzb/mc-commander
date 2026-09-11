@@ -29,8 +29,8 @@ export interface SessionExpiryRouter {
 }
 
 /**
- * 注册全局会话过期监听（模块级一次）。
- * @returns 注销函数（测试与热更新用）
+ * 注册全局会话过期监听（生产在 routes.tsx 模块求值时调用一次，不注销）。
+ * @returns 注销函数——供测试逐例摘除监听（jsdom 的 window 跨用例共享）
  */
 export function installSessionExpiryHandler(router: SessionExpiryRouter): () => void {
   const handler = () => {

@@ -1,5 +1,5 @@
 /**
- * InstanceRequiredState —— 「本页所需的实例当前不可用」的统一门（6 个页面共用）
+ * InstanceRequiredState —— 「本页所需的实例当前不可用」的统一门（7 处页面/面板共用）
  *
  * 原先各页各自 gate 在 `!instanceId` 上、一律渲染「暂无服务器实例 + 去部署向导」，
  * 而 `instanceId` 初值为 null、app-shell 只在**列表就绪后**才自动选第一个实例：

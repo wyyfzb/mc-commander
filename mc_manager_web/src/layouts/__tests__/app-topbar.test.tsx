@@ -7,11 +7,12 @@
  * - 退出登录：会话 + 残留 API Key 一并清除并落到 /login（只清会话会被守卫弹回、toast 失真）
  * MSW 拦截实例列表（结构占位虚构数据，严禁真实服务器信息）
  */
-import { describe, it, expect, beforeEach, afterEach, afterAll, beforeAll } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, afterAll, beforeAll, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, redirect, RouterProvider } from 'react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { Toaster, toast } from 'sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { HttpResponse, http } from 'msw'
 import { setupServer } from 'msw/node'
@@ -48,6 +49,7 @@ function renderTopbar() {
     <QueryClientProvider client={qc}>
       <TooltipProvider>
         <RouterProvider router={router} />
+        <Toaster />
       </TooltipProvider>
     </QueryClientProvider>,
   )
@@ -111,6 +113,24 @@ describe('AppTopBar 实例名三态', () => {
     renderTopbar()
     expect(await screen.findByText('未选择实例')).toBeInTheDocument()
     expect(screen.queryByText('暂无实例')).not.toBeInTheDocument()
+  })
+
+  it('仅 API Key（无会话）：登出并如实报告 Key 已一并清除', async () => {
+    const infoSpy = vi.spyOn(toast, 'info')
+    useAuthStore.setState({ session: null })
+    useConnectionStore.setState({ baseUrl: '', apiKey: 'stored-key-abc', status: 'ready' })
+    const user = userEvent.setup()
+    const router = renderTopbar()
+
+    // 该通道无服务端会话：菜单里只有 Key 直连分支的「退出登录」
+    await user.click(screen.getByRole('button', { name: 'API Key 直连状态' }))
+    await user.click(await screen.findByRole('menuitem', { name: '退出登录' }))
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/login'))
+    expect(useConnectionStore.getState().apiKey).toBe('')
+    // 文案求值必须在清凭据之前：清完再取会恒判「没清过」，本分支就永远只说「已退出登录」
+    expect(infoSpy).toHaveBeenCalledWith('已退出登录，本机保存的 API Key 已一并清除')
+    infoSpy.mockRestore()
   })
 
   it('退出登录：会话与残留 API Key 一并清除并落到 /login（只清会话会被守卫弹回）', async () => {

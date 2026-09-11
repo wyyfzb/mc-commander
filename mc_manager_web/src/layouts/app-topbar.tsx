@@ -242,8 +242,10 @@ export function AppTopBar() {
               onClick={() => {
                 // API Key 直连登出=清除本浏览器凭据（该通道无服务端会话，无需调 logout API）；
                 // 不清则 /login 守卫弹回（与会话分支共用同一处置）
+                // 先取文案再清凭据：清完 Key 就没了，后取会恒判为「没清过」
+                const doneToast = logoutToastText(Boolean(useConnectionStore.getState().apiKey))
                 clearLocalCredentials()
-                toast.info(logoutToastText(Boolean(useConnectionStore.getState().apiKey)))
+                toast.info(doneToast)
                 navigate('/login', { replace: true })
               }}
               className="gap-2 text-mcs-error-fg focus:text-mcs-error-fg"
