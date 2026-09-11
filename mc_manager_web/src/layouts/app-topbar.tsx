@@ -24,6 +24,7 @@ import { logout } from '@/api/auth'
 import { useInstances } from '@/api/queries'
 import { copyText } from '@/lib/clipboard'
 import { clearLocalCredentials, logoutToastText } from '@/lib/logout'
+import { primaryModifierLabel } from '@/lib/platform'
 
 /**
  * AppTopBar —— 主顶栏（设计文档 §3.1）
@@ -181,7 +182,7 @@ export function AppTopBar() {
           <span className="hidden truncate xs:inline">搜索或执行命令…</span>
         </span>
         <kbd className="pointer-events-none hidden h-5 shrink-0 items-center gap-0.5 rounded border border-mcs-border-default bg-mcs-bg-default px-1.5 font-mono text-mcs-2xs font-medium whitespace-nowrap text-mcs-text-muted xs:inline-flex">
-          Ctrl K
+          {primaryModifierLabel()} K
         </kbd>
       </Button>
 

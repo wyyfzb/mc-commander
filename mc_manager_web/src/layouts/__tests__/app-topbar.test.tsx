@@ -119,6 +119,20 @@ describe('AppTopBar 实例名三态', () => {
     expect(screen.queryByText('暂无实例')).not.toBeInTheDocument()
   })
 
+  it('搜索按钮的快捷键提示按平台取词（macOS 是 ⌘，其余是 Ctrl）', () => {
+    renderTopbar()
+    // jsdom 的平台是 Linux：提示必须与 handler 接受的按键一致，且不能给 mac 用户错误提示
+    expect(screen.getByRole('button', { name: '搜索或执行命令' })).toHaveTextContent('Ctrl K')
+  })
+
+  it('macOS 平台下提示改为 ⌘ K', () => {
+    vi.spyOn(navigator, 'platform', 'get').mockReturnValue('MacIntel')
+    renderTopbar()
+    const trigger = screen.getByRole('button', { name: '搜索或执行命令' })
+    expect(trigger).toHaveTextContent('⌘ K')
+    expect(trigger).not.toHaveTextContent('Ctrl K')
+  })
+
   it('仅 API Key（无会话）：登出并如实报告 Key 已一并清除', async () => {
     const infoSpy = vi.spyOn(toast, 'info')
     useAuthStore.setState({ session: null })
