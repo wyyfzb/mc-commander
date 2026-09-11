@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, RefreshCw, ServerOff } from 'lucide-react'
+import { AlertTriangle, RefreshCw } from 'lucide-react'
 import { BigStatCards, PlayersCard, RuntimeInfoCard } from './components/stat-cards'
 import { ServerTerminal } from './components/server-terminal'
 import { CommandInput } from './components/command-input'
@@ -9,10 +9,9 @@ import { RecentBackupsCard } from './components/recent-backups-card'
 import { AnnouncementCard } from './components/announcement-card'
 import { useInstanceStatus, useSystemStats, queryKeys } from '@/api/queries'
 import { useServerStore } from '@/stores/server'
-import { EmptyState } from '@/components/mcs/empty-state'
+import { InstanceRequiredState } from '@/features/instances/components/instance-required-state'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { Button } from '@/components/ui/button'
-import { useNavigate } from 'react-router'
 
 /**
  * 仪表盘驾驶舱
@@ -46,20 +45,12 @@ export function DashboardPage() {
     }
   }, [lastStatusEvent, instanceId, queryClient])
 
-  const navigate = useNavigate()
-
   // B17 首屏骨架：仅 status 未到（Query 加载中）时显示，WS 已送达则直出数据
   const statusLoading = statusQuery.isLoading && status === null
 
+  // 无实例门：加载中/加载失败/真空态/待选中四态各自诚实（见 InstanceRequiredState）
   if (!instanceId) {
-    return (
-      <EmptyState
-        icon={ServerOff}
-        title="暂无服务器实例"
-        hint="使用部署向导创建第一个实例"
-        action={{ label: '部署新实例', onClick: () => navigate('/instances?tab=deploy') }}
-      />
-    )
+    return <InstanceRequiredState />
   }
 
   return (

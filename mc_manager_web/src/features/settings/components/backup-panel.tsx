@@ -51,6 +51,7 @@ import { useBackupEventRefresh, useBackups, useCreateBackup, useDeleteBackup, us
 import { useInstances } from '@/api/queries'
 import type { BackupPanelProps } from './contracts'
 import { EmptyState } from '@/components/mcs/empty-state'
+import { InstanceRequiredState } from '@/features/instances/components/instance-required-state'
 
 /**
  * 下载文件名：快照名 + 创建时间戳（紧凑 yyyyMMdd-HHmm，随本地时区）+ .tar.gz。
@@ -95,16 +96,9 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
   const instanceName = instancesQuery.data?.find((i) => i.id === instanceId)?.name ?? ''
   const restoreInputMatches = restoreInput.trim() === instanceName
 
-  // 无实例空态（与定时任务页同文案）
+  // 无实例门：加载中/加载失败/真空态/待选中四态各自诚实（见 InstanceRequiredState）
   if (!instanceId) {
-    return (
-      <EmptyState
-        icon={ServerOff}
-        title="暂无服务器实例"
-        hint="使用部署向导创建第一个实例"
-        action={{ label: '部署新实例', onClick: () => navigate('/instances?tab=deploy') }}
-      />
-    )
+    return <InstanceRequiredState />
   }
 
   const backups = backupsQuery.data ?? []

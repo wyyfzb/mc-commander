@@ -236,9 +236,15 @@ describe('PluginsPage 列表渲染', () => {
 
   it('无实例时空态引导：暂无服务器实例 CTA 直达部署向导', async () => {
     const user = userEvent.setup()
+    // 本地 server 不含 /instances（onUnhandledRequest: error）：显式覆写为「确实零实例」
+    server.use(
+      http.get('/api/v1/instances', () =>
+        HttpResponse.json({ status: 'ok', code: 0, message: 'ok', data: [] }),
+      ),
+    )
     useServerStore.setState({ instanceId: null })
     renderPage()
-    expect(screen.getByText('暂无服务器实例')).toBeInTheDocument()
+    expect(await screen.findByText('暂无服务器实例')).toBeInTheDocument()
     // 零实例场景唯一有用的动作是建实例 → 深链直达部署向导（此前只跳 /instances 列表页）
     await user.click(screen.getByRole('button', { name: '部署新实例' }))
     expect(screen.getByText('reached:/instances?tab=deploy')).toBeInTheDocument()

@@ -67,11 +67,18 @@ beforeEach(() => {
 })
 
 describe('BackupPanel 空态', () => {
-  it('instanceId=null：无实例空态（复用其他页同文案）', () => {
+  it('instanceId=null 且列表为空：真零实例空态（复用其他页同文案）', async () => {
+    server.use(http.get('*/api/v1/instances', () => okEnvelope([])))
     renderPanel(null)
-    expect(screen.getByText('暂无服务器实例')).toBeInTheDocument()
+    expect(await screen.findByText('暂无服务器实例')).toBeInTheDocument()
     expect(screen.getByText('使用部署向导创建第一个实例')).toBeInTheDocument()
     expect(screen.queryByText('备份管理')).not.toBeInTheDocument()
+  })
+
+  it('instanceId=null 但实例列表非空：过渡占位，不谎报零实例（app-shell 尚未选中首帧）', async () => {
+    renderPanel(null)
+    expect(await screen.findByText('正在载入服务器实例…')).toBeInTheDocument()
+    expect(screen.queryByText('暂无服务器实例')).not.toBeInTheDocument()
   })
 
   it('列表为空：引导文案 +「配置定时备份」跳转 /tasks', async () => {

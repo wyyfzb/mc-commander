@@ -26,7 +26,6 @@ import {
   Store,
   Trash2,
 } from 'lucide-react'
-import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
 import { getFriendlyErrorText } from '@/api/errors'
 import type { PluginInfo } from '@/api/types'
@@ -36,6 +35,7 @@ import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { EmptyState } from '@/components/mcs/empty-state'
+import { InstanceRequiredState } from '@/features/instances/components/instance-required-state'
 import { PageHeader } from '@/components/mcs/page-header'
 import { useServerStore } from '@/stores/server'
 import { useConnectionStore } from '@/stores/connection'
@@ -50,7 +50,6 @@ import { UploadProgressBar } from './components/upload-progress-bar'
 
 export function PluginsPage() {
   const instanceId = useServerStore((s) => s.instanceId)
-  const navigate = useNavigate()
 
   const pluginsQuery = usePlugins(instanceId)
   const toggleMutation = useTogglePlugin(instanceId)
@@ -138,15 +137,9 @@ export function PluginsPage() {
     [plugins, selected],
   )
 
+  // 无实例门：加载中/加载失败/真空态/待选中四态各自诚实（见 InstanceRequiredState）
   if (!instanceId) {
-    return (
-      <EmptyState
-        icon={Package}
-        title="暂无服务器实例"
-        hint="使用部署向导创建第一个实例"
-        action={{ label: '部署新实例', onClick: () => navigate('/instances?tab=deploy') }}
-      />
-    )
+    return <InstanceRequiredState />
   }
 
   /**

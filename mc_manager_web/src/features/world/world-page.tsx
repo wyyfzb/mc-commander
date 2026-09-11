@@ -9,7 +9,7 @@
  * - 实例切换：query key 含 instanceId，自动切换；无实例显示空态
  */
 import { useState } from 'react'
-import { AlertTriangle, Archive, RefreshCw, ServerOff } from 'lucide-react'
+import { AlertTriangle, Archive, RefreshCw } from 'lucide-react'
 import { useSearchParams } from 'react-router'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
@@ -25,7 +25,7 @@ import { DimensionCards } from './components/dimension-cards'
 import { PropertiesPanel } from './components/properties-panel'
 import { GamerulePanel } from './components/gamerule-panel'
 import { useServerProperties, useUpdateProperties, useWorldInfo } from './queries'
-import { EmptyState } from '@/components/mcs/empty-state'
+import { InstanceRequiredState } from '@/features/instances/components/instance-required-state'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { PageHeader } from '@/components/mcs/page-header'
 import { useQueryClient } from '@tanstack/react-query'
@@ -47,15 +47,9 @@ export function WorldPage() {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
 
+  // 无实例门：加载中/加载失败/真空态/待选中四态各自诚实（见 InstanceRequiredState）
   if (!instanceId) {
-    return (
-      <EmptyState
-        icon={ServerOff}
-        title="暂无服务器实例"
-        hint="使用部署向导创建第一个实例"
-        action={{ label: '部署新实例', onClick: () => navigate('/instances?tab=deploy') }}
-      />
-    )
+    return <InstanceRequiredState />
   }
 
   const isRconConnected = statusQuery.data?.isRconConnected ?? false
