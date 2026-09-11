@@ -5,6 +5,7 @@
 import { Download, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { DateTextInput } from '@/components/mcs/date-text-input'
+import { useRadioGroup } from '@/hooks/use-radio-group'
 import { QUICK_RANGES, type QuickRange } from './time-range'
 import { AUDIT_EXPORT_MAX_ROWS } from './audit-export'
 
@@ -31,11 +32,22 @@ export function CmdFilterBar({
   cmdExporting,
   handleCmdExport,
 }: CmdFilterBarProps) {
+  // 快捷时间范围是单选组（可清空 → 无选中是合法态），语义与方向键由 hook 统一提供
+  const quickGroup = useRadioGroup<string>({
+    label: '快捷时间范围',
+    value: activeQuickCmd?.key ?? null,
+    values: QUICK_RANGES.map((q) => q.key),
+    onChange: (key) => {
+      const q = QUICK_RANGES.find((r) => r.key === key)
+      if (q) applyQuickCmd(q)
+    },
+  })
+
   return (
     <div className="flex flex-wrap items-center gap-2">
       {/* 时间筛选栏（issue 385）：样式与交互对齐审计日志 tab，倒置防护复用同一逻辑 */}
-      <div className="flex items-center gap-1" role="group" aria-label="快捷时间范围">
-        {QUICK_RANGES.map((q) => {
+      <div className="flex items-center gap-1" {...quickGroup.groupProps}>
+        {QUICK_RANGES.map((q, index) => {
           const active = activeQuickCmd?.key === q.key
           return (
             <Button
@@ -43,7 +55,7 @@ export function CmdFilterBar({
               size="sm"
               className="h-8"
               variant={active ? 'selected' : 'outline'}
-              aria-pressed={active}
+              {...quickGroup.itemProps(index)}
               onClick={() => applyQuickCmd(q)}
             >
               {q.label}

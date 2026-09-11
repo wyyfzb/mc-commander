@@ -64,17 +64,21 @@ test.describe('仪表盘', () => {
   test('MC 时钟·世界控制：天气/时间按钮点击即发命令', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/dashboard')
+    // 天气/时间是互斥单选组（role=radio + aria-checked），非按钮
+    await expect(page.getByRole('radio', { name: '晴天' })).toHaveAttribute('aria-checked', 'true')
     // 成功反馈已静默（终端回显为反馈源），以命令请求实际发出为断言信号
     const rainReq = page.waitForRequest(
       (r) => r.url().includes('/command') && String(r.postDataJSON()?.command).includes('weather rain'),
     )
-    await page.getByRole('button', { name: '雨天' }).click()
+    await page.getByRole('radio', { name: '雨天' }).click()
     await rainReq
+    await expect(page.getByRole('radio', { name: '雨天' })).toHaveAttribute('aria-checked', 'true')
     const nightReq = page.waitForRequest(
       (r) => r.url().includes('/command') && String(r.postDataJSON()?.command).includes('time set night'),
     )
-    await page.getByRole('button', { name: '夜晚' }).click()
+    await page.getByRole('radio', { name: '夜晚' }).click()
     await nightReq
+    await expect(page.getByRole('radio', { name: '夜晚' })).toHaveAttribute('aria-checked', 'true')
   })
 
   test('公告发送：预设胶囊填充 → 发送 → 二次确认 → say → 清空', async ({ page }) => {

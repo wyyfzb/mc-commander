@@ -5,7 +5,7 @@
  * mock 数据为结构占位（虚构玩家 Steve），严禁真实玩家/服务器信息
  */
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, within, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { BanDialog } from '../ban-dialog'
 import type { Player } from '@/api/types'
@@ -71,7 +71,7 @@ function renderDialog() {
 }
 
 async function typeCustomReason(user: ReturnType<typeof userEvent.setup>, text: string) {
-  await user.click(screen.getByRole('button', { name: '其他' }))
+  await user.click(screen.getByRole('radio', { name: '其他' }))
   await user.type(screen.getByPlaceholderText(/自定义理由/), text)
 }
 
@@ -95,7 +95,7 @@ describe('BanDialog 干净状态关闭', { timeout: 15000 }, () => {
   it('切到「其他」但未输入：取消直接关闭（空输入回退默认理由，无可丢失内容）', async () => {
     const user = userEvent.setup()
     const { onOpenChange } = renderDialog()
-    await user.click(screen.getByRole('button', { name: '其他' }))
+    await user.click(screen.getByRole('radio', { name: '其他' }))
     await user.click(screen.getByRole('button', { name: '取消' }))
     expect(onOpenChange).toHaveBeenCalledWith(false)
     expect(screen.queryByText('放弃未保存的修改？')).not.toBeInTheDocument()
@@ -135,7 +135,7 @@ describe('BanDialog 自定义理由关闭拦截', { timeout: 15000 }, () => {
     const user = userEvent.setup()
     const { onOpenChange } = renderDialog()
     await typeCustomReason(user, '用语不当')
-    await user.click(screen.getByRole('button', { name: '作弊' }))
+    await user.click(screen.getByRole('radio', { name: '作弊' }))
     await user.click(screen.getByRole('button', { name: '取消' }))
     expect(onOpenChange).toHaveBeenCalledWith(false)
     expect(screen.queryByText('放弃未保存的修改？')).not.toBeInTheDocument()
@@ -148,5 +148,25 @@ describe('BanDialog 自定义理由关闭拦截', { timeout: 15000 }, () => {
     await user.click(screen.getByRole('button', { name: '取消' }))
     expect(onOpenChange).toHaveBeenCalledWith(false)
     expect(screen.queryByText('放弃未保存的修改？')).not.toBeInTheDocument()
+  })
+
+  describe('BanDialog 单选组键盘模型（J55）', { timeout: 15000 }, () => {
+    it('时长/理由是单选组：方向键移动即选中且焦点跟随（含回绕）', () => {
+      renderDialog()
+
+      const durationGroup = screen.getByRole('radiogroup', { name: '封禁时长' })
+      const durations = within(durationGroup).getAllByRole('radio')
+      expect(durations[0]).toHaveAttribute('aria-checked', 'true')
+      expect(durations[0]).toHaveAttribute('tabindex', '0')
+      fireEvent.keyDown(durationGroup, { key: 'ArrowRight' })
+      expect(durations[1]).toHaveAttribute('aria-checked', 'true')
+      expect(document.activeElement).toBe(durations[1])
+
+      const reasonGroup = screen.getByRole('radiogroup', { name: '封禁理由' })
+      const reasons = within(reasonGroup).getAllByRole('radio')
+      expect(reasons[0]).toHaveAttribute('aria-checked', 'true')
+      fireEvent.keyDown(reasonGroup, { key: 'ArrowLeft' }) // 首项左移回绕到末项
+      expect(reasons[reasons.length - 1]).toHaveAttribute('aria-checked', 'true')
+    })
   })
 })

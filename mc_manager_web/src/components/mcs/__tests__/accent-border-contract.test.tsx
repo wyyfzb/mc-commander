@@ -6,7 +6,7 @@
  * 新增交互控件时请在此补一条断言——契约失败即回归。
  */
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import { Chip } from '../chip'
 import { StatusPill } from '../status-pill'
 import { FilterSelect } from '../filter-select'
@@ -154,9 +154,13 @@ describe('accent 描边角色契约', () => {
     const radio = screen.getByRole('radio', { name: '玩家封禁' })
     expectStrong(radio.closest('label') as HTMLElement)
 
-    // 时长 / 理由：所有 aria-pressed 选中项
-    const pressed = screen.getAllByRole('button', { pressed: true })
-    expect(pressed.length).toBeGreaterThanOrEqual(2)
-    for (const btn of pressed) expectStrong(btn)
+    // 时长 / 理由：两组 chip（单选组角色）各自的选中项
+    const checked = ['封禁时长', '封禁理由'].flatMap((name) =>
+      within(screen.getByRole('radiogroup', { name }))
+        .getAllByRole('radio')
+        .filter((el) => el.getAttribute('aria-checked') === 'true'),
+    )
+    expect(checked.length).toBeGreaterThanOrEqual(2)
+    for (const btn of checked) expectStrong(btn)
   })
 })

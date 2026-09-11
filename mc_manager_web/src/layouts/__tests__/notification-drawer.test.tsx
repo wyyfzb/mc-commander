@@ -111,7 +111,7 @@ describe('NotificationDrawer severity 筛选（issue 344）', () => {
     useNotificationStore.setState({ items: [], unreadCount: 0, activeAlerts: new Set() })
     renderDrawer()
     expect(screen.getByText('暂无动态')).toBeInTheDocument()
-    expect(screen.queryByRole('group', { name: '按严重度筛选' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('radiogroup', { name: '按严重度筛选' })).not.toBeInTheDocument()
   })
 
   it('有通知：渲染 4 个筛选 chip，默认「全部」展示全部条目', () => {
@@ -124,10 +124,10 @@ describe('NotificationDrawer severity 筛选（issue 344）', () => {
       unreadCount: 3,
     })
     renderDrawer()
-    const group = screen.getByRole('group', { name: '按严重度筛选' })
-    expect(within(group).getByRole('button', { name: '全部通知' })).toHaveAttribute('aria-pressed', 'true')
+    const group = screen.getByRole('radiogroup', { name: '按严重度筛选' })
+    expect(within(group).getByRole('radio', { name: '全部通知' })).toHaveAttribute('aria-checked', 'true')
     for (const label of ['严重通知', '警告通知', '提示通知']) {
-      expect(within(group).getByRole('button', { name: label })).toHaveAttribute('aria-pressed', 'false')
+      expect(within(group).getByRole('radio', { name: label })).toHaveAttribute('aria-checked', 'false')
     }
     expect(screen.getByText('通知内容 1')).toBeInTheDocument()
     expect(screen.getByText('通知内容 2')).toBeInTheDocument()
@@ -145,11 +145,11 @@ describe('NotificationDrawer severity 筛选（issue 344）', () => {
       unreadCount: 3,
     })
     renderDrawer()
-    await user.click(screen.getByRole('button', { name: '严重通知' }))
+    await user.click(screen.getByRole('radio', { name: '严重通知' }))
     expect(screen.getByText('通知内容 1')).toBeInTheDocument()
     expect(screen.queryByText('通知内容 2')).not.toBeInTheDocument()
     expect(screen.queryByText('通知内容 3')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '严重通知' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('radio', { name: '严重通知' })).toHaveAttribute('aria-checked', 'true')
   })
 
   it('筛选无结果：显示「该严重度下暂无通知」而非「暂无动态」', async () => {
@@ -159,7 +159,7 @@ describe('NotificationDrawer severity 筛选（issue 344）', () => {
       unreadCount: 1,
     })
     renderDrawer()
-    await user.click(screen.getByRole('button', { name: '严重通知' }))
+    await user.click(screen.getByRole('radio', { name: '严重通知' }))
     expect(screen.getByText('该严重度下暂无通知')).toBeInTheDocument()
     expect(screen.queryByText('暂无动态')).not.toBeInTheDocument()
   })
@@ -257,5 +257,23 @@ describe('NOTIFICATION_TONE 类型 → 语义档', () => {
     }
     // 全量覆盖：不多不少（新增通知类型忘了归档会被这条拦下）
     expect(Object.keys(NOTIFICATION_TONE)).toHaveLength(29)
+  })
+
+  describe('NotificationDrawer 严重度单选组键盘模型（J55）', () => {
+    it('方向键在严重度筛选内移动即选中且焦点跟随', () => {
+      useNotificationStore.setState({
+        items: [makeItem({ type: 'serverCrash', category: 'server' })],
+        unreadCount: 1,
+      })
+      renderDrawer()
+      const group = screen.getByRole('radiogroup', { name: '按严重度筛选' })
+      const chips = within(group).getAllByRole('radio')
+      expect(chips[0]).toHaveAttribute('aria-checked', 'true') // 默认「全部」
+
+      fireEvent.keyDown(group, { key: 'ArrowRight' })
+      expect(chips[1]).toHaveAttribute('aria-checked', 'true')
+      expect(chips[0]).toHaveAttribute('aria-checked', 'false')
+      expect(document.activeElement).toBe(chips[1])
+    })
   })
 })

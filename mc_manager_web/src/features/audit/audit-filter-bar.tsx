@@ -6,6 +6,7 @@ import { Download, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { DateTextInput } from '@/components/mcs/date-text-input'
 import { FilterSelect } from '@/components/mcs/filter-select'
+import { useRadioGroup } from '@/hooks/use-radio-group'
 import { QUICK_RANGES, type QuickRange } from './time-range'
 import { actionFilterOptions } from './action-labels'
 import { AUDIT_EXPORT_MAX_ROWS } from './audit-export'
@@ -43,6 +44,23 @@ export function AuditFilterBar({
   exporting,
   handleExport,
 }: AuditFilterBarProps) {
+  // 两个互斥筛选都是单选组：容器/项语义与方向键由 hook 统一提供（无选中＝合法态）
+  const quickGroup = useRadioGroup<string>({
+    label: '快捷时间范围',
+    value: activeQuick?.key ?? null,
+    values: QUICK_RANGES.map((q) => q.key),
+    onChange: (key) => {
+      const q = QUICK_RANGES.find((r) => r.key === key)
+      if (q) applyQuick(q)
+    },
+  })
+  const orderGroup = useRadioGroup<'asc' | 'desc'>({
+    label: '时间排序',
+    value: auditOrder,
+    values: ['desc', 'asc'],
+    onChange: setAuditOrder,
+  })
+
   return (
     <div className="flex flex-wrap items-center gap-2">
       <FilterSelect
@@ -58,8 +76,8 @@ export function AuditFilterBar({
 
       <span className="h-5 w-px shrink-0 bg-mcs-border-muted" aria-hidden />
 
-      <div className="flex items-center gap-1" role="group" aria-label="快捷时间范围">
-        {QUICK_RANGES.map((q) => {
+      <div className="flex items-center gap-1" {...quickGroup.groupProps}>
+        {QUICK_RANGES.map((q, index) => {
           const active = activeQuick?.key === q.key
           return (
             <Button
@@ -67,7 +85,7 @@ export function AuditFilterBar({
               size="sm"
               className="h-8"
               variant={active ? 'selected' : 'outline'}
-              aria-pressed={active}
+              {...quickGroup.itemProps(index)}
               onClick={() => applyQuick(q)}
             >
               {q.label}
@@ -103,12 +121,12 @@ export function AuditFilterBar({
 
       <span className="h-5 w-px shrink-0 bg-mcs-border-muted" aria-hidden />
 
-      <div className="flex items-center gap-1" role="group" aria-label="时间排序">
+      <div className="flex items-center gap-1" {...orderGroup.groupProps}>
         <Button
           size="sm"
           className="h-8"
           variant={auditOrder === 'desc' ? 'selected' : 'outline'}
-          aria-pressed={auditOrder === 'desc'}
+          {...orderGroup.itemProps(0)}
           onClick={() => setAuditOrder('desc')}
         >
           最新优先
@@ -117,7 +135,7 @@ export function AuditFilterBar({
           size="sm"
           className="h-8"
           variant={auditOrder === 'asc' ? 'selected' : 'outline'}
-          aria-pressed={auditOrder === 'asc'}
+          {...orderGroup.itemProps(1)}
           onClick={() => setAuditOrder('asc')}
         >
           最早优先

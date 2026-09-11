@@ -8,12 +8,13 @@
  * 全部数据为虚构占位，无真实服务器信息。
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryRouter, RouterProvider } from 'react-router'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { AuditPage } from '../audit-page'
+import { quickRangeDates } from '../time-range'
 
 const { cmdExportImpl, cmdExportCalls } = vi.hoisted(() => ({
   cmdExportImpl: { current: (() => Promise.resolve()) as (...args: unknown[]) => Promise<void> },
@@ -135,5 +136,40 @@ describe('AuditPage 命令历史导出入口（issue 403）', () => {
     await waitFor(() => expect(screen.getByTestId('cmd-export')).not.toBeDisabled())
     // 页面仍完整渲染（空态文案在）
     expect(screen.getByText('暂无记录')).toBeInTheDocument()
+  })
+})
+
+describe('AuditPage 命令历史筛选栏（快捷时间范围单选组）', () => {
+  it('方向键移动即选中：aria-checked 与焦点同随，起止日期同步落值', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    const group = await screen.findByRole('radiogroup', { name: '快捷时间范围' })
+    const radios = within(group).getAllByRole('radio')
+    expect(radios.map((r) => r.textContent)).toEqual(['今天', '近 7 天', '近 30 天'])
+
+    // 快捷范围可清空 → 无选中是合法态：不谎报选中，但停靠首项（roving tabindex）
+    for (const radio of radios) expect(radio).toHaveAttribute('aria-checked', 'false')
+    expect(radios[0]).toHaveAttribute('tabindex', '0')
+    expect(radios[1]).toHaveAttribute('tabindex', '-1')
+
+    radios[0]!.focus()
+    await user.keyboard('{ArrowRight}')
+
+    expect(radios[1]).toHaveAttribute('aria-checked', 'true')
+    expect(radios[0]).toHaveAttribute('aria-checked', 'false')
+    expect(radios[1]).toHaveFocus()
+    // 选中即筛选生效：起止日期按「近 7 天」区间落值（today-6 → today）
+    const expected = quickRangeDates(6)
+    expect(screen.getByLabelText('开始日期')).toHaveValue(expected.start)
+    expect(screen.getByLabelText('结束日期')).toHaveValue(expected.end)
+
+    // End 跳到末项并选中；方向键回退同样即时生效
+    await user.keyboard('{End}')
+    expect(radios[2]).toHaveAttribute('aria-checked', 'true')
+    expect(radios[1]).toHaveAttribute('aria-checked', 'false')
+    await user.keyboard('{ArrowLeft}')
+    expect(radios[1]).toHaveAttribute('aria-checked', 'true')
+    expect(radios[1]).toHaveFocus()
   })
 })

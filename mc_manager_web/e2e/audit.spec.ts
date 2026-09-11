@@ -39,13 +39,39 @@ test.describe('审计页', () => {
     await expect(page.getByRole('tab', { name: '命令历史' })).toBeVisible()
 
     for (const quick of ['今天', '近 7 天', '近 30 天']) {
-      await expect(page.getByRole('button', { name: quick })).toBeVisible()
+      await expect(page.getByRole('radio', { name: quick })).toBeVisible()
     }
     await expect(page.getByLabel('开始日期')).toBeVisible()
     await expect(page.getByLabel('结束日期')).toBeVisible()
     await expect(page.getByRole('button', { name: '打开日历' })).toHaveCount(2)
 
     await maybeShot(page, 'audit-list.png')
+  })
+
+  test('快捷区间是单选组：方向键移动即选中，组内恒单一 Tab 停靠点', async ({ page }) => {
+    await setupConnection(page)
+    await page.goto('/audit')
+
+    const group = page.getByRole('radiogroup', { name: '快捷时间范围' })
+    const today = group.getByRole('radio', { name: '今天' })
+    const week = group.getByRole('radio', { name: '近 7 天' })
+    // 初始无筛选（可清空 → 无选中是合法态）：停靠点落首项但不谎报选中
+    await expect(today).toHaveAttribute('aria-checked', 'false')
+    await expect(today).toHaveAttribute('tabindex', '0')
+    await expect(week).toHaveAttribute('tabindex', '-1')
+
+    await today.focus()
+    await page.keyboard.press('ArrowRight')
+    await expect(week).toHaveAttribute('aria-checked', 'true')
+    await expect(week).toBeFocused()
+    // roving tabindex 随选中项迁移（真实浏览器的 Tab 跳过行为 jsdom 验不了）
+    await expect(week).toHaveAttribute('tabindex', '0')
+    await expect(today).toHaveAttribute('tabindex', '-1')
+    await expect(group.locator('[tabindex="0"]')).toHaveCount(1)
+    // Tab 不被吞：从选中项按一次 Tab 直接离开整组（否则键盘用户被困在组里）
+    await page.keyboard.press('Tab')
+    await expect(group.locator(':focus')).toHaveCount(0)
+    await expect(page.getByLabel('开始日期')).not.toHaveValue('')
   })
 
   test('日历弹层：打开月历 → 选今天 → 回填开始日期并收起', async ({ page }) => {
@@ -56,7 +82,7 @@ test.describe('审计页', () => {
     await expect(start).toHaveValue('')
 
     await page.getByRole('button', { name: '打开日历' }).first().click()
-    // 弹层内查询：筛选栏的快捷区间也有「今天」按钮，必须按弹层作用域定位
+    // 弹层内查询：筛选栏的快捷区间也有「今天」选项，必须按弹层作用域定位
     const popover = page.locator('[data-slot="popover-content"]')
     const grid = popover.getByRole('grid')
     await expect(grid).toBeVisible()

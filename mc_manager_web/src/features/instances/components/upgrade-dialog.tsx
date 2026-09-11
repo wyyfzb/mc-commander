@@ -15,6 +15,7 @@ import { useServerStore } from '@/stores/server'
 import { apiUpgradeInstance, apiGetUpgradeStatus } from '@/api/instances'
 import { getFriendlyErrorText } from '@/api/errors'
 import { getSocketSingleton } from '@/hooks/use-server-socket'
+import { useRadioGroup } from '@/hooks/use-radio-group'
 import { useUpgradeStore, UPGRADE_STAGE_LABELS, clearUpgradeProgress, applyUpgradeProgress } from '@/stores/upgrade'
 import { useServerVersions } from '../queries'
 import type { InstanceStatus, UpgradeStage } from '@/api/types'
@@ -146,6 +147,14 @@ export function UpgradeDialog({ instance, open, onOpenChange }: UpgradeDialogPro
     setMcVersion('')
   }
 
+  // 服务端类型是单选组：语义与方向键由 hook 统一提供（切换仍走 handleTypeChange 以连带重置版本）
+  const typeGroup = useRadioGroup<'vanilla' | 'paper' | 'purpur'>({
+    label: '服务端类型',
+    value: type,
+    values: SERVER_TYPES.map((t) => t.value),
+    onChange: handleTypeChange,
+  })
+
   const handleUpgrade = async () => {
     if (!mcVersion || mcVersion === instance.mcVersion) return
     setStarting(true)
@@ -245,13 +254,13 @@ export function UpgradeDialog({ instance, open, onOpenChange }: UpgradeDialogPro
             <div className="space-y-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">服务端类型</label>
-                <div className="grid grid-cols-3 gap-2">
-                  {SERVER_TYPES.map((t) => (
+                <div className="grid grid-cols-3 gap-2" {...typeGroup.groupProps}>
+                  {SERVER_TYPES.map((t, index) => (
                     <button
                       key={t.value}
                       type="button"
+                      {...typeGroup.itemProps(index)}
                       onClick={() => handleTypeChange(t.value)}
-                      aria-pressed={type === t.value}
                       className={`rounded-mcs-sm border p-2 text-center text-sm transition-colors ${
                         type === t.value
                           ? 'border-mcs-accent-fg bg-mcs-accent-bg-subtle text-mcs-accent-fg'

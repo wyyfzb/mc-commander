@@ -180,9 +180,9 @@ describe('PlayersPage', () => {
     await user.click(await screen.findByText('封禁…'))
     expect(await screen.findByText('封禁 Steve')).toBeInTheDocument()
     // 时长档 6 项与理由 9 项渲染
-    expect(screen.getByRole('button', { name: '1小时' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '永久' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '作弊' })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: '1小时' })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: '永久' })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: '作弊' })).toBeInTheDocument()
   })
 
   it('批量选择出现底部操作条（9 动作）', async () => {

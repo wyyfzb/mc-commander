@@ -9,7 +9,7 @@
  * 全部数据为虚构占位，无真实服务器信息。
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryRouter, RouterProvider } from 'react-router'
@@ -81,8 +81,8 @@ describe('AuditPage 时间排序切换（issue 383）', () => {
     renderPage()
 
     await waitFor(() => expect(screen.getByText('暂无记录')).toBeInTheDocument())
-    expect(screen.getByRole('button', { name: '最新优先' })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByRole('button', { name: '最早优先' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('radio', { name: '最新优先' })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByRole('radio', { name: '最早优先' })).toHaveAttribute('aria-checked', 'false')
     // desc 为服务端默认：查询参数不携带 order（与历史请求形态一致）
     expect(auditParams.order).toBeUndefined()
   })
@@ -91,9 +91,9 @@ describe('AuditPage 时间排序切换（issue 383）', () => {
     const user = userEvent.setup()
     const router = renderPage()
 
-    await user.click(screen.getByRole('button', { name: '最早优先' }))
+    await user.click(screen.getByRole('radio', { name: '最早优先' }))
     await waitFor(() => expect(router.state.location.search).toBe('?order=asc'))
-    expect(screen.getByRole('button', { name: '最早优先' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('radio', { name: '最早优先' })).toHaveAttribute('aria-checked', 'true')
     expect(auditParams.order).toBe('asc')
   })
 
@@ -101,7 +101,7 @@ describe('AuditPage 时间排序切换（issue 383）', () => {
     renderPage('/audit?order=asc')
 
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: '最早优先' })).toHaveAttribute('aria-pressed', 'true'),
+      expect(screen.getByRole('radio', { name: '最早优先' })).toHaveAttribute('aria-checked', 'true'),
     )
     expect(auditParams.order).toBe('asc')
   })
@@ -110,7 +110,7 @@ describe('AuditPage 时间排序切换（issue 383）', () => {
     renderPage('/audit?order=newest')
 
     await waitFor(() => expect(screen.getByText('暂无记录')).toBeInTheDocument())
-    expect(screen.getByRole('button', { name: '最新优先' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('radio', { name: '最新优先' })).toHaveAttribute('aria-checked', 'true')
     expect(auditParams.order).toBeUndefined()
   })
 
@@ -122,7 +122,7 @@ describe('AuditPage 时间排序切换（issue 383）', () => {
     expect(auditParams.action).toBe('INSTANCE_START')
 
     // 切到正序：page 参数消失（重置第 1 页），action 筛选保留
-    await user.click(screen.getByRole('button', { name: '最早优先' }))
+    await user.click(screen.getByRole('radio', { name: '最早优先' }))
     await waitFor(() => expect(router.state.location.search).toBe('?action=INSTANCE_START&order=asc'))
     expect(auditParams.page).toBe(1)
     expect(auditParams.action).toBe('INSTANCE_START')
@@ -134,11 +134,25 @@ describe('AuditPage 时间排序切换（issue 383）', () => {
     const router = renderPage('/audit?order=asc')
 
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: '最早优先' })).toHaveAttribute('aria-pressed', 'true'),
+      expect(screen.getByRole('radio', { name: '最早优先' })).toHaveAttribute('aria-checked', 'true'),
     )
 
-    await user.click(screen.getByRole('button', { name: '最新优先' }))
+    await user.click(screen.getByRole('radio', { name: '最新优先' }))
     await waitFor(() => expect(router.state.location.search).toBe(''))
     expect(auditParams.order).toBeUndefined()
   })
+
+  it('排序单选组：方向键移动即选中，aria-checked 与焦点同步', () => {
+    renderPage()
+    const group = screen.getByRole('radiogroup', { name: '时间排序' })
+    const [desc, asc] = within(group).getAllByRole('radio')
+    expect(desc).toHaveAttribute('aria-checked', 'true')
+
+    fireEvent.keyDown(group, { key: 'ArrowRight' })
+    expect(asc).toHaveAttribute('aria-checked', 'true')
+    expect(desc).toHaveAttribute('aria-checked', 'false')
+    expect(asc).toHaveAttribute('tabindex', '0')
+    expect(document.activeElement).toBe(asc)
+  })
+
 })

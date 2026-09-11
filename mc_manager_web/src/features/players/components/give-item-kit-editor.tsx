@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/dialog'
 import { SearchInput } from '@/components/mcs/search-input'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
+import { useRadioGroup } from '@/hooks/use-radio-group'
 import { cn } from '@/lib/utils'
 import {
   ITEM_CATEGORIES,
@@ -143,6 +144,14 @@ export function KitEditorDialog({
   const [category, setCategory] = useState<string>('全部')
   const [confirmClose, setConfirmClose] = useState(false)
 
+  // 图标预设是单选组（新建礼包时可为空 → 无选中是合法态）
+  const iconGroup = useRadioGroup<string>({
+    label: '礼包图标',
+    value: icon === '' ? null : icon,
+    values: KIT_ICON_PRESETS,
+    onChange: setIcon,
+  })
+
   /** 礼包相对初始值是否有改动（dirty 关闭拦截依据；items 逐件深比较） */
   const dirty =
     name !== initial.name ||
@@ -246,15 +255,15 @@ export function KitEditorDialog({
             </div>
           </div>
 
-          {/* emoji 预设 */}
-          <div className="flex flex-wrap gap-1">
-            {KIT_ICON_PRESETS.map((emoji) => (
+          {/* emoji 预设（单选组：每个图标自带可访问名） */}
+          <div className="flex flex-wrap gap-1" {...iconGroup.groupProps}>
+            {KIT_ICON_PRESETS.map((emoji, index) => (
               <button
                 key={emoji}
                 type="button"
+                {...iconGroup.itemProps(index)}
                 onClick={() => setIcon(emoji)}
                 aria-label={`选择图标 ${emoji}`}
-                aria-pressed={icon === emoji}
                 className={cn(
                   'flex size-6 items-center justify-center rounded-mcs-xs text-mcs-sm transition-colors',
                   icon === emoji

@@ -43,6 +43,7 @@ import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/mcs/chip'
 import { SEMANTIC_TONE_CLASSES, type SemanticTone, type ToneClasses } from '@/components/mcs/tone'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
+import { useRadioGroup } from '@/hooks/use-radio-group'
 import { useNotificationStore } from '@/stores/notifications'
 import { formatNotificationTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -144,6 +145,12 @@ export function NotificationDrawer({ open, onOpenChange }: NotificationDrawerPro
   const markAllRead = useNotificationStore((s) => s.markAllRead)
   const clearAll = useNotificationStore((s) => s.clearAll)
   const [severityFilter, setSeverityFilter] = useState<'all' | NotificationSeverity>('all')
+  const severityGroup = useRadioGroup<'all' | NotificationSeverity>({
+    label: '按严重度筛选',
+    value: severityFilter,
+    values: SEVERITY_FILTERS.map((f) => f.value),
+    onChange: setSeverityFilter,
+  })
   const [confirmClearOpen, setConfirmClearOpen] = useState(false)
 
   // 筛选仅作用于列表展示；未读徽章/全部已读语义仍是全局（不随筛选变）
@@ -196,14 +203,15 @@ export function NotificationDrawer({ open, onOpenChange }: NotificationDrawerPro
           </div>
         </SheetHeader>
 
-        {/* severity 筛选 chips（有通知时才出现，避免空态噪音） */}
+        {/* severity 筛选 chips（有通知时才出现，避免空态噪音；单选组：语义与方向键走 hook） */}
         {items.length > 0 && (
-          <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-mcs-border-muted px-4 py-2" role="group" aria-label="按严重度筛选">
-            {SEVERITY_FILTERS.map((f) => (
+          <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-mcs-border-muted px-4 py-2" {...severityGroup.groupProps}>
+            {SEVERITY_FILTERS.map((f, index) => (
               <Chip
                 key={f.value}
                 tone={f.tone}
                 selected={severityFilter === f.value}
+                {...severityGroup.itemProps(index)}
                 onClick={() => setSeverityFilter(f.value)}
                 ariaLabel={`${f.label}通知`}
               >

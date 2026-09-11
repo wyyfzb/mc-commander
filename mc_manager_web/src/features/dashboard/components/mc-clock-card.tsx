@@ -12,6 +12,7 @@ import { worldTimePhase } from '@/lib/format'
 import { Chip } from '@/components/mcs/chip'
 import { useServerStore } from '@/stores/server'
 import { useSendCommand } from '@/hooks/use-send-command'
+import { useRadioGroup } from '@/hooks/use-radio-group'
 
 /**
  * MC 时钟 · 世界控制卡
@@ -105,6 +106,39 @@ export function McClockCard() {
   const displayTick = optimisticActive && optimistic.timeTick != null ? optimistic.timeTick : tick
   const cycle = displayTick != null ? dayCycle(displayTick) : null
   const phase = worldTimePhase(displayTick)
+
+  // 天气/时间两组 chip 是互斥单选：当前世界状态即「选中」，点击发命令（不可控时 on* 直接返回）
+  /* eslint-disable react/purity -- 两处置 Date.now() 都只在用户事件（点击/方向键）里取当下时刻，
+     乐观窗口以此为基准是本意；经 useRadioGroup 的 onChange 形参传递后，编译器无法判定它不在渲染期执行 */
+  const applyWeather = (key: WeatherKey) => {
+    if (!canControl) return
+    const preset = WEATHER_PRESETS.find((w) => w.key === key)
+    if (!preset) return
+    setOptimistic({ weather: preset.key, timeTick: optimistic.timeTick, until: Date.now() + 3000 })
+    send(preset.cmd)
+  }
+  const applyTime = (key: string) => {
+    if (!canControl) return
+    const preset = TIME_PRESETS.find((p) => p.key === key)
+    if (!preset) return
+    setOptimistic({ weather: optimistic.weather, timeTick: preset.tick, until: Date.now() + 3000 })
+    send(preset.cmd)
+  }
+  /* eslint-enable react/purity */
+  const weatherGroup = useRadioGroup<WeatherKey>({
+    label: '天气',
+    value: displayWeather ?? null,
+    values: WEATHER_PRESETS.map((w) => w.key),
+    onChange: applyWeather,
+  })
+  const activeTimeKey =
+    displayTick != null ? (TIME_PRESETS.find((p) => worldTimePhase(p.tick) === phase)?.key ?? null) : null
+  const timeGroup = useRadioGroup<string>({
+    label: '时间',
+    value: activeTimeKey,
+    values: TIME_PRESETS.map((p) => p.key),
+    onChange: applyTime,
+  })
 
   return (
     <section className="animate-mcs-fade-up mcs-delay-5 mcs-edge-top relative flex shrink-0 flex-col rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted p-4 shadow-mcs-card">
@@ -213,17 +247,15 @@ export function McClockCard() {
       {/* 天气 */}
       <div className="mt-2 flex items-center gap-2">
         <span className="flex w-8 shrink-0 items-center text-mcs-2xs text-mcs-text-muted">天气</span>
-        <div className="flex flex-1 gap-1.5">
-          {WEATHER_PRESETS.map((w) => (
+        <div className="flex flex-1 gap-1.5" {...weatherGroup.groupProps}>
+          {WEATHER_PRESETS.map((w, index) => (
             <Chip
               key={w.key}
               tone="default"
               selected={displayWeather === w.key}
               disabled={!canControl}
-              onClick={() => {
-                setOptimistic({ weather: w.key, timeTick: optimistic.timeTick, until: Date.now() + 3000 })
-                send(w.cmd)
-              }}
+              {...weatherGroup.itemProps(index)}
+              onClick={() => applyWeather(w.key)}
               className="flex-1"
             >
               {w.label}
@@ -235,17 +267,15 @@ export function McClockCard() {
       {/* 时间 */}
       <div className="mt-1.5 flex items-center gap-2">
         <span className="flex w-8 shrink-0 items-center text-mcs-2xs text-mcs-text-muted">时间</span>
-        <div className="flex flex-1 gap-1.5">
-          {TIME_PRESETS.map((p) => (
+        <div className="flex flex-1 gap-1.5" {...timeGroup.groupProps}>
+          {TIME_PRESETS.map((p, index) => (
             <Chip
               key={p.key}
               tone="default"
               selected={worldTimePhase(p.tick) === phase && displayTick != null}
               disabled={!canControl}
-              onClick={() => {
-                setOptimistic({ weather: optimistic.weather, timeTick: p.tick, until: Date.now() + 3000 })
-                send(p.cmd)
-              }}
+              {...timeGroup.itemProps(index)}
+              onClick={() => applyTime(p.key)}
               className="flex-1"
             >
               {p.label}

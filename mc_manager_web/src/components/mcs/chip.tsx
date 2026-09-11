@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import type { ReactNode, Ref } from 'react'
 import { cn } from '@/lib/utils'
 import { toneClasses } from './tone'
 
@@ -8,6 +8,9 @@ import { toneClasses } from './tone'
  * - 有 onClick + selected → 切换按钮（aria-pressed）
  * - 有 onClick 无 selected → 动作按钮（模板填充等）
  * - 只读状态展示请用 StatusPill（同一 tone 词表，形状与档位不同）
+ *
+ * 作为**单选组成员**时由 `useRadioGroup().itemProps(i)` 展开传入 role/aria-checked/tabIndex/ref：
+ * 此时按 radio 渲染、不再发 aria-pressed（两套语义互斥，同时出现读屏会播报矛盾信息）。
  */
 
 export type ChipTone = 'default' | 'muted' | 'accent' | 'success' | 'warning' | 'error' | 'info' | 'purple'
@@ -47,6 +50,11 @@ interface ChipProps {
   /** 指针事件透传（命令预览悬停等场景） */
   onPointerEnter?: (e: React.PointerEvent) => void
   onPointerLeave?: (e: React.PointerEvent) => void
+  /** 单选组成员语义（由 useRadioGroup 展开传入；给了 role 就不再发 aria-pressed） */
+  role?: 'radio'
+  'aria-checked'?: boolean
+  tabIndex?: number
+  ref?: Ref<HTMLButtonElement>
 }
 
 export function Chip({
@@ -60,6 +68,10 @@ export function Chip({
   children,
   onPointerEnter,
   onPointerLeave,
+  role,
+  'aria-checked': ariaChecked,
+  tabIndex,
+  ref,
 }: ChipProps) {
   const base =
     'inline-flex h-6 max-w-full items-center justify-center gap-1 truncate rounded-mcs-sm border px-2 text-mcs-xs transition-colors'
@@ -73,11 +85,15 @@ export function Chip({
     return (
       <button
         type="button"
+        ref={ref}
         onClick={onClick}
         onPointerEnter={onPointerEnter}
         onPointerLeave={onPointerLeave}
         disabled={disabled}
-        aria-pressed={selected != null ? (selected ? 'true' : 'false') : undefined}
+        role={role}
+        aria-checked={role === 'radio' ? ariaChecked : undefined}
+        aria-pressed={role === 'radio' ? undefined : selected != null ? (selected ? 'true' : 'false') : undefined}
+        tabIndex={tabIndex}
         aria-label={ariaLabel}
         title={title}
         className={cn(base, toneClass, state, className)}

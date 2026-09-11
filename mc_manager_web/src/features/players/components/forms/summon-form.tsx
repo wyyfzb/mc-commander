@@ -12,6 +12,7 @@ import { SearchInput } from '@/components/mcs/search-input'
 import { CommandPreview } from '@/components/mcs/command-preview'
 import { LoadingButton } from '@/components/mcs/loading-button'
 import { Label } from '@/components/ui/label'
+import { useRadioGroup } from '@/hooks/use-radio-group'
 import { cn } from '@/lib/utils'
 import { searchEntities, type McEntity } from '@/lib/mc-entities'
 import type { ActionFormProps } from './types'
@@ -32,6 +33,19 @@ export function SummonForm({ isRconConnected, onAction }: ActionFormProps) {
     list.push(e)
     entitiesByCategory.set(e.category, list)
   }
+
+  // 实体网格按分类渲染成多段，语义上是一个单选组：按渲染顺序压平定下标
+  const entityValues = filteredEntities.map((e) => e.id)
+  const entityIndexById = new Map(entityValues.map((id, i) => [id, i]))
+  const entityGroup = useRadioGroup<string>({
+    label: '实体',
+    value: selectedEntity?.id ?? null,
+    values: entityValues,
+    onChange: (id) => {
+      const picked = filteredEntities.find((e) => e.id === id)
+      if (picked) setSelectedEntity(picked)
+    },
+  })
 
   function buildCommand(): string {
     if (!selectedEntity) return ''
@@ -66,8 +80,8 @@ export function SummonForm({ isRconConnected, onAction }: ActionFormProps) {
         size="sm"
       />
 
-      {/* 实体选择网格 */}
-      <div className="max-h-52 space-y-2.5 overflow-auto pr-1">
+      {/* 实体选择网格（跨分类的一个单选组） */}
+      <div className="max-h-52 space-y-2.5 overflow-auto pr-1" {...entityGroup.groupProps}>
         {Array.from(entitiesByCategory.entries()).map(([category, entities]) => (
           <div key={category}>
             <div className="mb-1 text-mcs-2xs font-medium text-mcs-text-muted">{category}（{entities.length}）</div>
@@ -76,8 +90,8 @@ export function SummonForm({ isRconConnected, onAction }: ActionFormProps) {
                 <button
                   key={e.id}
                   type="button"
+                  {...entityGroup.itemProps(entityIndexById.get(e.id) ?? 0)}
                   onClick={() => setSelectedEntity(e)}
-                  aria-pressed={selectedEntity?.id === e.id}
                   className={cn(
                     'rounded-mcs-sm border px-2 py-0.5 text-mcs-xs transition-colors',
                     selectedEntity?.id === e.id
