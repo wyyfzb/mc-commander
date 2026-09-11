@@ -31,7 +31,7 @@ src/
 ├── components/     # ui/（shadcn 基座）+ mcs/（MCS 设计语言组件）
 ├── features/       # 领域目录：dashboard/ players/ world/ files/ tasks/ instances/ plugins/ webhooks/
 │                   #           audit/ settings/ onboarding/ emergency/ auth/
-├── layouts/        # AppShell（顶栏/侧栏/Cmd+K 命令面板）
+├── layouts/        # AppShell（顶栏/侧栏/Ctrl/⌘+K 命令面板）
 ├── stores/         # zustand：auth（会话令牌）/ connection（面板地址 + API Key）/ ui（主题/侧栏/面板）
 │                   #          + server / deploy / notifications / terminal / upgrade / command-bus
 ├── styles/         # token 三层：tokens/reference.css → semantic.css（--mcs-*）→ theme.css（shadcn 映射）+ glass/density/fonts

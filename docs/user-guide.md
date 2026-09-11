@@ -99,7 +99,7 @@ MC_Commander 是一个自托管的 Minecraft 服务器管理面板：**无需安
 **操作路径**：侧栏「文件」。
 
 - 浏览服务器目录（配置文件、世界文件、插件目录等）；
-- 双击文本文件在浏览器内编辑（内置编辑器，`Ctrl+S` 保存），如调整 `server.properties`、`ops.json`；
+- 双击文本文件在浏览器内编辑（内置编辑器，`Ctrl/⌘+S` 保存），如调整 `server.properties`、`ops.json`；
 - 上传/下载/重命名/新建，删除高危目录有红色确认提示。
 
 ![文件管理](../screenshots/files.png)
