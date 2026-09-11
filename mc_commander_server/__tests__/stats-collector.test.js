@@ -1,7 +1,7 @@
 /**
  * stats-collector 实例统计采集域模块行为级测试（issue 510 补测）
  * - 调度链：串行化递归 setTimeout + 代际 epoch 防双链（fake timers 推钟）
- * - 系统采集：/proc fixture 驱动差分 CPU 计算 + win32 wmic 分支 + ps 兜底
+ * - 系统采集：/proc fixture 驱动差分 CPU 计算 + win32 PowerShell 分支 + ps 兜底
  * - MSPT：tick query 主路径 + TPS 回退反推（真实 isRconConnected getter 链路）
  * - 世界状态：三级时间 fallback 链 + weather.dat 真实 NBT fixture
  * - 玩家采集：RCON 响应解析 / 入睡事件 / 计数聚合 / 错误隔离
@@ -35,7 +35,7 @@ vi.mock('../config.js', async () => {
   };
 });
 
-// exec 仅在 win32 wmic 分支与 Linux ps 兜底分支使用；保留其余 named exports 真实实现
+// exec 仅在 win32 PowerShell 分支与 Linux ps 兜底分支使用；保留其余 named exports 真实实现
 vi.mock('child_process', async (importOriginal) => {
   const actual = await importOriginal();
   return { ...actual, exec: vi.fn() };
@@ -57,6 +57,7 @@ import {
   _collectPlayerStats,
 } from '../services/mc-server/stats-collector.js';
 import { MCServerInstance } from '../services/mc_server.js';
+import { logger } from '../utils/logger.js';
 
 const tmpBase = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-stats-collector-fixture-'));
 
@@ -321,11 +322,12 @@ describe('_collectStats 门控与平台分支', () => {
     const origPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
     Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
     try {
-      exec.mockImplementation((cmd, ...rest) => {
-        const cb = rest[rest.length - 1];
+      exec.mockImplementation((cmd, opts, cb) => {
         // WMIC 自 Win11 24H2 起不随系统提供，改走 PowerShell（命令形态是契约的一部分）
         expect(cmd).toContain('powershell');
         expect(cmd).toContain('Get-Process -Id 4242');
+        // windowsHide：面板以 Windows 服务方式运行时不得每轮闪控制台窗口
+        expect(opts).toMatchObject({ timeout: 8000, windowsHide: true });
         cb(null, '{"WorkingSet64":1867776000,"CPU":12.5}');
       });
       inst._collectStats();
@@ -352,10 +354,11 @@ describe('_collectStats 门控与平台分支', () => {
     const origPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
     Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
     try {
-      inst._lastCpuTime = { cpu: 10.5, sys: 0, time: Date.now() - 2000 };
+      // cpuDiff = 11.5s / elapsed 1s = 1150%（多核并行的进程也按单进程口径截断）；
+      // 输入须明显越过上限：恰好 100% 时删掉截断照样通过，用例等于没锁住
+      inst._lastCpuTime = { cpu: 1.0, sys: 0, time: Date.now() - 1000 };
       exec.mockImplementation((cmd, ...rest) => rest[rest.length - 1](null, '{"WorkingSet64":1073741824,"CPU":12.5}'));
       inst._collectStats();
-      // cpuDiff = 2s / elapsed 2s = 100% → 上限截断（多核并行的进程也按单进程口径）
       expect(inst._cpuUsage).toBe(100);
       expect(inst._lastCpuTime.cpu).toBe(12.5);
     } finally {
@@ -387,6 +390,53 @@ describe('_collectStats 门控与平台分支', () => {
       inst4._collectStats();
       expect(perf4).toHaveLength(0);
     } finally {
+      Object.defineProperty(process, 'platform', origPlatform);
+    }
+  });
+
+  it('win32 分支：监听器抛错不逃逸出 exec 回调（否则命中进程级兜底把面板拉停）', () => {
+    const origPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+    try {
+      const inst = makeBareInstance();
+      inst.on('performanceUpdate', () => {
+        throw new Error('broadcast failed');
+      });
+      exec.mockImplementation((cmd, ...rest) => rest[rest.length - 1](null, '{"WorkingSet64":1073741824,"CPU":1}'));
+      // exec 回调里抛错无人接管，只能在这里就地吞掉：采集照常、只丢这次广播
+      expect(() => inst._collectStats()).not.toThrow();
+      expect(inst._memoryUsage).toBe(1);
+    } finally {
+      Object.defineProperty(process, 'platform', origPlatform);
+    }
+  });
+
+  it('win32 分支：采集失败只在转折处告警一次（避免每 5s 刷屏）', () => {
+    const origPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    try {
+      const inst = makeBareInstance();
+      const fail = (cmd, ...rest) => rest[rest.length - 1](new Error('Access is denied'), '');
+      exec.mockImplementation(fail);
+      inst._collectStats();
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0][0]).toContain('Access is denied');
+      expect(warn.mock.calls[0][0]).toContain('4242');
+      inst._collectStats();
+      expect(warn).toHaveBeenCalledTimes(1); // 持续失败不重复告警
+
+      // 恢复成功后再次失败：仍会告警（不是「一辈子只报一次」）
+      exec.mockImplementation((cmd, ...rest) =>
+        rest[rest.length - 1](null, '{"WorkingSet64":1073741824,"CPU":1}'),
+      );
+      inst._collectStats();
+      expect(warn).toHaveBeenCalledTimes(1);
+      exec.mockImplementation(fail);
+      inst._collectStats();
+      expect(warn).toHaveBeenCalledTimes(2);
+    } finally {
+      warn.mockRestore();
       Object.defineProperty(process, 'platform', origPlatform);
     }
   });
@@ -476,8 +526,17 @@ describe('_collectLinuxStats：/proc fixture 驱动差分 CPU 计算', () => {
   });
 
   it('系统时间零增量分支：瞬时占用率记 0', () => {
+    // fixture 必须与实现同为秒口径且 cpu 增量非负，否则先被 cpuDiff<0 拦下，
+    // 「sysDiff 为零」这条分支实际零覆盖（用例名与断言不符）
     const inst = makeBareInstance();
-    inst._lastCpuTime = { cpu: 10, sys: SYS_TOTAL, time: Date.now() - 2000 };
+    inst._lastCpuTime = { cpu: 1.0, sys: SYS_TOTAL / 100, time: Date.now() - 2000 };
+    inst._collectLinuxStats(PID);
+    expect(inst._cpuUsage).toBe(0);
+  });
+
+  it('系统时间负增量（计数器回退）：瞬时占用率记 0，不出负数', () => {
+    const inst = makeBareInstance();
+    inst._lastCpuTime = { cpu: 1.0, sys: SYS_TOTAL / 100 + 10, time: Date.now() - 2000 };
     inst._collectLinuxStats(PID);
     expect(inst._cpuUsage).toBe(0);
   });

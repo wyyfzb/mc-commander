@@ -140,29 +140,38 @@ export function _collectStats() {
 
   const platform = process.platform;
   if (platform === 'win32') {
-    // Windows 走 PowerShell 取进程指标：WMIC 自 Win11 24H2 起不随系统提供（本机实测
-    // `wmic` 已不是可执行命令），原 wmic 分支在现代 Windows 上静默失败——exec 报错即
-    // 早退，内存指标恒为初值 0、CPU 从未被采集过。
+    // Windows 走 PowerShell 取进程指标：WMIC 自 Win11 24H2 起不随系统提供，
+    // 原 wmic 分支在现代 Windows 上静默失败——exec 报错即早退，内存指标恒为初值 0、
+    // CPU 从未被采集过。
     // 一次取回 WorkingSet（字节）与累计 CPU 时间（秒，Get-Process 的 CPU 属性），后者与
     // Linux 的 utime+stime 同语义，统一交给 _applyCpuSecondsSample 做差分。
+    // windowsHide：面板以 Windows 服务方式运行时，否则每轮采集闪一次控制台窗口
     const cmd = `powershell -NoProfile -NonInteractive -Command "Get-Process -Id ${pid} | Select-Object WorkingSet64,CPU | ConvertTo-Json -Compress"`;
-    exec(cmd, { timeout: 8000 }, (err, stdout) => {
-      if (err) return;
-      let info;
-      try {
-        info = JSON.parse(String(stdout).trim());
-      } catch {
+    exec(cmd, { timeout: 8000, windowsHide: true }, (err, stdout) => {
+      if (err) {
+        // 静默失败正是本平台指标长期缺失无人察觉的原因（如权限不足读不到他人进程）：
+        // 只在「正常→失败」的转折处告警一次，避免每 5s 刷屏
+        if (!this._win32StatsError) {
+          this._win32StatsError = true;
+          logger.warn(`[${this.id}] Windows 实例指标采集失败（pid ${pid}）: ${err.message}`);
+        }
         return;
       }
-      const workingSet = Number(info?.WorkingSet64);
-      if (Number.isFinite(workingSet) && workingSet > 0) {
-        // 与 Linux 分支同口径保留两位小数（此前 win32/macOS 未舍入，会渲染长浮点）
-        this._memoryUsage = Math.round(workingSet / (1024 * 1024 * 1024) * 100) / 100;
-      }
-      // CPU 可能为 null（受保护进程）：不能当成 0 建立基线——那会把下一个采样的差值放大成假高占用
-      const cpuSeconds = info?.CPU == null ? null : Number(info.CPU);
-      if (cpuSeconds !== null && Number.isFinite(cpuSeconds)) this._applyCpuSecondsSample(cpuSeconds);
-      this._emitPerformance();
+      this._win32StatsError = false;
+      // 任何异常（解析失败、监听器抛错）都不得逃逸出 exec 回调：那里无人接管，
+      // 会命中进程级 uncaughtException 兜底把面板整个拉停；此处失败仅丢一次采样
+      try {
+        const info = JSON.parse(String(stdout).trim());
+        const workingSet = Number(info?.WorkingSet64);
+        if (Number.isFinite(workingSet) && workingSet > 0) {
+          // 与 Linux 分支同口径保留两位小数
+          this._memoryUsage = Math.round(workingSet / (1024 * 1024 * 1024) * 100) / 100;
+        }
+        // CPU 可能为 null（受保护进程）：不能当成 0 建立基线——那会把下一个采样的差值放大成假高占用
+        const cpuSeconds = info?.CPU == null ? null : Number(info.CPU);
+        if (cpuSeconds !== null && Number.isFinite(cpuSeconds)) this._applyCpuSecondsSample(cpuSeconds);
+        this._emitPerformance();
+      } catch {}
     });
   } else {
     // Linux: 从 /proc/[pid]/stat 读取 CPU 时间，计算瞬时使用率
