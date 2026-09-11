@@ -110,12 +110,25 @@ test.describe('桌面端回归（B1 响应式不改桌面）', () => {
   test('紧急页桌面宽度下收窄为手机列（不再被拉伸成整屏）', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/emergency')
-    // 顶栏是这个全高列的整宽子元素：量它即量到列宽（不耦合类名）
+    // 顶栏是这个全高列的整宽子元素：量它即量到列宽（不耦合类名与 DOM 层级）
     const header = page.locator('header').first()
     await expect(header).toBeVisible()
-    const box = await header.boundingBox()
-    expect(box?.width ?? 0).toBeLessThanOrEqual(448)
-    // 上限落在容器自身的 max-w-md (448px) 上；窄视口按 w-full 收缩，行为不变
-    expect(await header.locator('..').evaluate((el) => getComputedStyle(el).maxWidth)).toBe('448px')
+
+    // 桌面视口：列宽落在上限（max-w-md = 448px）上，不再随视口拉伸。
+    // 下界贴着上限取值：只排除「列被压窄」的回归，上界仍钉住设计上限
+    const desktop = await header.boundingBox()
+    const width = desktop?.width ?? 0
+    expect(width).toBeGreaterThan(400)
+    expect(width).toBeLessThanOrEqual(448)
+    // 居中呈现为手机列：左右留白对称（贴左/贴右同样是「没在做手机列」）
+    const viewportWidth = page.viewportSize()?.width ?? 0
+    const centerOffset = Math.abs((desktop?.x ?? 0) + width / 2 - viewportWidth / 2)
+    expect(centerOffset).toBeLessThan(2)
+
+    // 窄视口：上限不参与，列铺满视口（上限不该压坏窄屏布局）
+    await page.setViewportSize({ width: 375, height: 812 })
+    const narrow = await header.boundingBox()
+    expect(narrow?.width ?? 0).toBeGreaterThan(360)
+    expect(narrow?.width ?? 0).toBeLessThanOrEqual(375)
   })
 })
