@@ -35,6 +35,7 @@ import {
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
+import { toneClasses } from '@/components/mcs/tone'
 
 const EVENT_LABELS: Record<string, string> = {
   'player.join': '玩家加入', 'player.leave': '玩家离开', 'player.death': '玩家死亡',
@@ -220,7 +221,7 @@ export default function WebhookPage() {
 
       {/* ── 错误提示 ── */}
       {error && (
-        <div className="rounded-mcs-sm border border-mcs-error-border bg-mcs-error-bg-subtle px-3 py-2 text-mcs-sm text-mcs-error-fg">
+        <div className={`rounded-mcs-sm border px-3 py-2 text-mcs-sm ${toneClasses('error')}`}>
           {getFriendlyErrorText(error)}
         </div>
       )}

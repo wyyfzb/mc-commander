@@ -19,6 +19,7 @@ import { cn } from '@/lib/utils'
 import { fullItemId, itemImageUrl } from '@/lib/mc-items'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import type { InventoryItem, Player, PlayerInventory } from '@/api/types'
+import { toneClasses } from '@/components/mcs/tone'
 
 export interface InventoryTabProps {
   player: Player
@@ -295,8 +296,8 @@ function NoticeBanner({
       className={cn(
         'flex items-center gap-1.5 rounded-mcs-xs border px-2.5 py-1.5 text-mcs-xs',
         variant === 'info'
-          ? 'border-mcs-info-border bg-mcs-info-bg-subtle text-mcs-info-fg'
-          : 'border-mcs-warning-border bg-mcs-warning-bg-subtle text-mcs-warning-fg',
+          ? toneClasses('info')
+          : toneClasses('warning'),
       )}
     >
       <Icon className="size-3.5 shrink-0" aria-hidden />

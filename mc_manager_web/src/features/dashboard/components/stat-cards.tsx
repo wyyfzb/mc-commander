@@ -249,7 +249,7 @@ export function PlayersCard() {
           'flex size-5 shrink-0 items-center justify-center rounded-full text-mcs-2xs font-semibold',
           isSleeping
             ? 'bg-mcs-info-bg-subtle text-mcs-info-fg'
-            : 'bg-mcs-accent-bg-subtle text-mcs-success-fg',
+            : 'bg-mcs-accent-bg-subtle text-mcs-accent-fg',
         )}
         aria-hidden
       >

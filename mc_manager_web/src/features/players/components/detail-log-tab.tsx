@@ -31,6 +31,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { SEMANTIC_TONE_CLASSES, type SemanticTone } from '@/components/mcs/tone'
 import { formatClock, formatDurationSec, formatDurationSecFull, formatFullDateTime } from '@/lib/format'
 import type { Player, PlayerEvent, PlayerSession } from '@/api/types'
 
@@ -60,50 +61,27 @@ interface OfflineNode {
   end: string
 }
 
+/** 事件中性档（离开：无成败含义，压低存在感）——三件套拆给图标与徽章两处用 */
+const EVENT_NEUTRAL = {
+  color: 'text-mcs-text-muted',
+  badge: 'border-mcs-border-muted bg-mcs-bg-muted',
+}
+
+/** 语义档 → 事件行用的「前景 + 描边填充」（色值取自 components/mcs/tone，勿在此手抄） */
+function eventTone(tone: SemanticTone) {
+  const c = SEMANTIC_TONE_CLASSES[tone]
+  return { color: c.text, badge: `${c.border} ${c.bg}` }
+}
+
 /** 事件类型 → 语义色+图标+中文标签（契约映射，--mcs-* token） */
 const EVENT_META: Record<string, { label: string; icon: LucideIcon; color: string; badge: string }> = {
-  join: {
-    label: '进入',
-    icon: LogIn,
-    color: 'text-mcs-success-fg',
-    badge: 'border-mcs-success-border bg-mcs-success-bg-subtle',
-  },
-  leave: {
-    label: '离开',
-    icon: LogOut,
-    color: 'text-mcs-text-muted',
-    badge: 'border-mcs-border-muted bg-mcs-bg-muted',
-  },
-  death: {
-    label: '死亡',
-    icon: Skull,
-    color: 'text-mcs-error-fg',
-    badge: 'border-mcs-error-border bg-mcs-error-bg-subtle',
-  },
-  respawn: {
-    label: '复活',
-    icon: RotateCcw,
-    color: 'text-mcs-info-fg',
-    badge: 'border-mcs-info-border bg-mcs-info-bg-subtle',
-  },
-  achievement: {
-    label: '获得进度',
-    icon: Star,
-    color: 'text-mcs-accent-fg',
-    badge: 'border-mcs-accent-border bg-mcs-accent-bg-subtle',
-  },
-  sleep: {
-    label: '入睡',
-    icon: Moon,
-    color: 'text-mcs-purple-fg',
-    badge: 'border-mcs-purple-border bg-mcs-purple-bg-subtle',
-  },
-  wake: {
-    label: '起床',
-    icon: Sunrise,
-    color: 'text-mcs-warning-fg',
-    badge: 'border-mcs-warning-border bg-mcs-warning-bg-subtle',
-  },
+  join: { label: '进入', icon: LogIn, ...eventTone('success') },
+  leave: { label: '离开', icon: LogOut, ...EVENT_NEUTRAL },
+  death: { label: '死亡', icon: Skull, ...eventTone('error') },
+  respawn: { label: '复活', icon: RotateCcw, ...eventTone('info') },
+  achievement: { label: '获得进度', icon: Star, ...eventTone('accent') },
+  sleep: { label: '入睡', icon: Moon, ...eventTone('purple') },
+  wake: { label: '起床', icon: Sunrise, ...eventTone('warning') },
 }
 
 const EMPTY_STATS = {
@@ -282,7 +260,7 @@ function SessionRow({
 
 /** 单个事件行：图标 + 标签 + 消息 + 完整时间（语义色按契约映射） */
 function EventRow({ event }: { event: PlayerEvent }) {
-  const meta = EVENT_META[event.type] ?? { label: '事件', icon: Circle, color: 'text-mcs-text-muted', badge: 'border-mcs-border-muted bg-mcs-bg-muted' }
+  const meta = EVENT_META[event.type] ?? { label: '事件', icon: Circle, ...EVENT_NEUTRAL }
   const Icon = meta.icon
   // 成就/挑战消息去前缀（JS String.replace 仅替换首个匹配）
   const message =

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { clsx, type ClassValue } from 'clsx'
+import { toneClasses } from './tone'
 // 不用 twMerge：mcs-* 自定义 token 类会被 tailwind-merge 误判为 text-*/bg-* 同组冲突，
 // 吞掉 tone 色类（text-mcs-warning-fg 会被 text-mcs-xs 覆盖删除）；clsx 保留全部类，
 // 冲突由 CSS 层解决（color 与 font-size 本就不同组，互不冲突）
@@ -9,27 +10,25 @@ import { clsx, type ClassValue } from 'clsx'
  * - 无 onClick → 静态展示 chip（tone 决定语义色）
  * - 有 onClick + selected → 切换按钮（aria-pressed）
  * - 有 onClick 无 selected → 动作按钮（模板填充等）
+ * - 只读状态展示请用 StatusPill（同一 tone 词表，形状与档位不同）
  */
 
 export type ChipTone = 'default' | 'muted' | 'accent' | 'success' | 'warning' | 'error' | 'info' | 'purple'
 
+/** 中性两档：Chip 的静态面用 bg-default、次级用 bg-subtle（语义六色走共用词表 mcs/tone） */
+const NEUTRAL_TONE_CLASSES: Record<'default' | 'muted', string> = {
+  default: 'border-mcs-border-muted bg-mcs-bg-default text-mcs-text-muted',
+  muted: 'border-mcs-border-muted bg-mcs-bg-subtle text-mcs-text-muted',
+}
+
 const TONE_CLASSES: Record<ChipTone, string> = {
-  default:
-    'border-mcs-border-muted bg-mcs-bg-default text-mcs-text-muted',
-  muted:
-    'border-mcs-border-muted bg-mcs-bg-subtle text-mcs-text-muted',
-  accent:
-    'border-mcs-accent-border bg-mcs-accent-bg-subtle text-mcs-accent-fg',
-  success:
-    'border-mcs-success-border bg-mcs-success-bg-subtle text-mcs-success-fg',
-  warning:
-    'border-mcs-warning-border bg-mcs-warning-bg-subtle text-mcs-warning-fg',
-  error:
-    'border-mcs-error-border bg-mcs-error-bg-subtle text-mcs-error-fg',
-  info:
-    'border-mcs-info-border bg-mcs-info-bg-subtle text-mcs-info-fg',
-  purple:
-    'border-mcs-purple-border bg-mcs-purple-bg-subtle text-mcs-purple-fg',
+  ...NEUTRAL_TONE_CLASSES,
+  accent: toneClasses('accent'),
+  success: toneClasses('success'),
+  warning: toneClasses('warning'),
+  error: toneClasses('error'),
+  info: toneClasses('info'),
+  purple: toneClasses('purple'),
 }
 
 /** 选中态：边界承担「已选中」的可辨识信息 → 强档描边（弱档仅装饰） */

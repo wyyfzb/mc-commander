@@ -26,6 +26,7 @@ import jsonWorker from 'monaco-editor/language/json/json.worker?worker'
 import { FileEdit, RotateCcw, Save, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { toneClasses } from '@/components/mcs/tone'
 
 // ── Monaco worker 配置（Vite 必需，否则控制台报错 "Could not create web worker"）──
 // self.MonacoEnvironment 由 monaco-editor 的 d.ts 声明为全局（Environment 接口），
@@ -217,7 +218,7 @@ export function MonacoEditorPane({
           </span>
         )}
         {dirty && (
-          <span className="rounded-mcs-xs border border-mcs-warning-border bg-mcs-warning-bg-subtle px-1.5 py-px text-mcs-2xs font-semibold text-mcs-warning-fg">
+          <span className={`rounded-mcs-xs border px-1.5 py-px text-mcs-2xs font-semibold ${toneClasses('warning')}`}>
             未保存
           </span>
         )}

@@ -72,6 +72,12 @@ npm run dev                  # node --watch 热重载
   不承载文字的交互覆盖层（`--mcs-state-hover/focus/pressed`、`--mcs-scrim*`）保持半透明。
   同一元素只允许一个内容面 tint（内容面 tint 不得互相叠加，也不得与玻璃面同元素）；
   危险语义色底（`--mcs-error-bg-subtle`）同样不透明，禁 `bg-destructive/<alpha>`。
+- **标签与状态展示**：只读状态用 `components/mcs/status-pill.tsx`（`StatusPill`），
+  可交互/通用标签用 `components/mcs/chip.tsx`（`Chip`），计数沿用 `StatusPill tone="muted"`
+  ——不存在第三套标签组件，也不要再造（计数徽章若将来有 ≥3 处真实消费者再抽）。
+  语义色唯一声明源是 `components/mcs/tone.ts`（六档 accent/success/warning/error/info/purple，
+  各含 border + bg-subtle + fg）；图标底块、徽章、通知气泡这类不套组件的着色点必须走它，
+  禁止在 feature 里再手写 tone → 类名映射。
 - **间距**：不设 `--mcs-space-*`，统一走 Tailwind 默认 4px 刻度（`--spacing` 0.25rem）；
   结构间距必须 4px 倍数，组件内微节奏（2px 档）须在 PR 说明理由。
   容器档位固定：大面板 `p-6` / 标准卡 `p-4` / 紧凑卡 `p-3` / 横向卡 `px-4 py-3` /

@@ -5,14 +5,15 @@
 import type { LucideIcon } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
+import { toneClasses, type SemanticTone } from '@/components/mcs/tone'
 
-type NoticeVariant = 'info' | 'warning' | 'error' | 'success'
+type NoticeVariant = Extract<SemanticTone, 'info' | 'warning' | 'error' | 'success'>
 
 const VARIANT_CLASSES: Record<NoticeVariant, string> = {
-  info: 'border-mcs-info-border bg-mcs-info-bg-subtle text-mcs-info-fg',
-  warning: 'border-mcs-warning-border bg-mcs-warning-bg-subtle text-mcs-warning-fg',
-  error: 'border-mcs-error-border bg-mcs-error-bg-subtle text-mcs-error-fg',
-  success: 'border-mcs-success-border bg-mcs-success-bg-subtle text-mcs-success-fg',
+  info: toneClasses('info'),
+  warning: toneClasses('warning'),
+  error: toneClasses('error'),
+  success: toneClasses('success'),
 }
 
 interface NoticeBannerProps {

@@ -25,6 +25,7 @@ import {
 import type { PotionConfig } from '@/lib/mc-potions'
 import type { MinecraftItem } from '@/lib/mc-items'
 import { CommandPreview } from './give-item-preview-bar'
+import { toneClasses } from '@/components/mcs/tone'
 
 /** 选中条目的运行时配置（与主组件保持同步） */
 export interface SelectedEntry {
@@ -139,7 +140,7 @@ export function EnchantPanel({
                   I-{toRoman(ench.maxLevel)}
                 </span>
                 {ench.isNew121 && (
-                  <span className="shrink-0 rounded-mcs-xs border border-mcs-warning-border bg-mcs-warning-bg-subtle px-1 text-mcs-2xs font-medium text-mcs-warning-fg">
+                  <span className={`shrink-0 rounded-mcs-xs border px-1 text-mcs-2xs font-medium ${toneClasses('warning')}`}>
                     1.21+
                   </span>
                 )}

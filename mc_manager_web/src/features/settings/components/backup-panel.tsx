@@ -40,6 +40,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { cn } from '@/lib/utils'
 import { StatusPill } from '@/components/mcs/status-pill'
+import { toneClasses } from '@/components/mcs/tone'
 import {
   backupStatusLabel,
   backupStatusTone,
@@ -66,14 +67,6 @@ export function buildBackupDownloadName(backup: Pick<BackupItem, 'name' | 'creat
     ? ''
     : `_${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}`
   return `${backup.name}${stamp}.tar.gz`
-}
-
-/** tone → 徽章类（完整字面量类名，Tailwind 主题色静态生成；全 token 引用） */
-const TONE_CLASSES: Record<ReturnType<typeof backupStatusTone>, string> = {
-  success: 'bg-mcs-success-bg-subtle text-mcs-success-fg border-mcs-success-border',
-  error: 'bg-mcs-error-bg-subtle text-mcs-error-fg border-mcs-error-border',
-  warning: 'bg-mcs-warning-bg-subtle text-mcs-warning-fg border-mcs-warning-border',
-  info: 'bg-mcs-info-bg-subtle text-mcs-info-fg border-mcs-info-border',
 }
 
 export function BackupPanel({ instanceId }: BackupPanelProps) {
@@ -346,7 +339,7 @@ function BackupRow({
 }) {
   const status = backup.status
   const tone = backupStatusTone(status)
-  const toneClasses = TONE_CLASSES[tone]
+  const iconToneClasses = toneClasses(tone)
   const name = backup.name
   const isInProgress = status === 'creating' || status === 'restoring'
   const isLegacy = isLegacyFormat(backup.format)
@@ -387,7 +380,7 @@ function BackupRow({
     <div className="flex items-center gap-3 px-4 py-3">
       {/* 状态图标（tone 浅底；备份中/恢复中转圈，失败 error 图标，其余硬盘图标） */}
       <span
-        className={cn('flex size-9 shrink-0 items-center justify-center rounded-mcs-sm', toneClasses)}
+        className={cn('flex size-9 shrink-0 items-center justify-center rounded-mcs-sm', iconToneClasses)}
         aria-hidden
       >
         {isInProgress ? (

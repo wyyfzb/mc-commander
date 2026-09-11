@@ -11,7 +11,7 @@ import userEvent from '@testing-library/user-event'
 import { useNotificationStore } from '@/stores/notifications'
 import type { AppNotification } from '@/lib/notifications'
 import { useUiStore } from '@/stores/ui'
-import { NotificationDrawer } from '../notification-drawer'
+import { NotificationDrawer, NOTIFICATION_TONE } from '../notification-drawer'
 
 const navigateMock = vi.fn()
 vi.mock('react-router', () => ({
@@ -206,5 +206,56 @@ describe('NotificationDrawer 清除全部确认（issue 344）', () => {
     await user.click(screen.getByRole('button', { name: '清除全部' }))
     await user.click(screen.getByRole('button', { name: '取消' }))
     expect(useNotificationStore.getState().items).toHaveLength(1)
+  })
+})
+// ─── J5：气泡着色取自 components/mcs/tone（防止再退回「各文件手抄一份色值」） ───
+
+describe('NotificationDrawer 语义色来源', () => {
+  it('未读 game 条：底 / 描边 / 图标三处同档，中性事件不占语义六色', () => {
+    useNotificationStore.setState({
+      items: [
+        makeItem({ type: 'join', category: 'game', content: '甲玩家加入了游戏' }),
+        makeItem({ type: 'leave', category: 'game', content: '乙玩家离开了游戏' }),
+      ],
+      unreadCount: 2,
+    })
+    renderDrawer()
+
+    const joinBtn = screen.getByText('甲玩家加入了游戏').closest('button')
+    expect(joinBtn).not.toBeNull()
+    expect(joinBtn!.className).toContain('bg-mcs-success-bg-subtle')
+    expect(joinBtn!.className).toContain('border-mcs-success-border')
+    expect(joinBtn!.querySelector('svg')?.getAttribute('class')).toContain('text-mcs-success-fg')
+
+    // 离开无成败含义 → 中性档（次级底 + 默认描边 + 弱前景）
+    const leaveBtn = screen.getByText('乙玩家离开了游戏').closest('button')
+    expect(leaveBtn).not.toBeNull()
+    expect(leaveBtn!.className).toContain('bg-mcs-bg-secondary')
+    expect(leaveBtn!.className).toContain('border-mcs-border-default')
+    expect(leaveBtn!.querySelector('svg')?.getAttribute('class')).toContain('text-mcs-text-muted')
+  })
+})
+
+// ─── J5：类型 → 语义档的完整映射（改错档位必须变红） ───
+
+describe('NOTIFICATION_TONE 类型 → 语义档', () => {
+  it('29 个通知类型全部归入预期档位，中性档不占语义六色', () => {
+    const expected: Record<string, string[]> = {
+      success: ['join', 'revive', 'serverStart', 'backupComplete', 'restoreComplete', 'deployComplete', 'upgradeComplete'],
+      error: ['death', 'serverCrash', 'circuitBreaker', 'backupFailed', 'restoreFailed', 'taskFailed', 'webhookFailed', 'deployFailed', 'upgradeFailed'],
+      warning: ['lowTps', 'highCpu', 'highMemory', 'backupSkipped'],
+      info: ['chat', 'sleep', 'save', 'weatherChange', 'backupStart', 'restoreStart'],
+      purple: ['achievement'],
+      neutral: ['leave', 'serverStop'],
+    }
+    for (const [tone, types] of Object.entries(expected)) {
+      const actual = Object.entries(NOTIFICATION_TONE)
+        .filter(([, t]) => t === tone)
+        .map(([type]) => type)
+        .sort()
+      expect(actual, `档位 ${tone}`).toEqual([...types].sort())
+    }
+    // 全量覆盖：不多不少（新增通知类型忘了归档会被这条拦下）
+    expect(Object.keys(NOTIFICATION_TONE)).toHaveLength(29)
   })
 })

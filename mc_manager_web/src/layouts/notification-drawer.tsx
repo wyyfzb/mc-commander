@@ -41,6 +41,7 @@ import {
 } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/mcs/chip'
+import { SEMANTIC_TONE_CLASSES, type SemanticTone, type ToneClasses } from '@/components/mcs/tone'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { useNotificationStore } from '@/stores/notifications'
 import { formatNotificationTime } from '@/lib/format'
@@ -69,37 +70,53 @@ const TYPE_ICON: Record<NotificationType, LucideIcon> = {
   upgradeComplete: CheckCircle2, upgradeFailed: XCircle,
 }
 
-/** 类型 → 语义色 token 工具类（气泡图标/边框用） */
-const TYPE_COLOR: Record<NotificationType, { text: string; bg: string; border: string }> = {
-  join: { text: 'text-mcs-success-fg', bg: 'bg-mcs-success-bg-subtle', border: 'border-mcs-success-border' },
-  leave: { text: 'text-mcs-text-muted', bg: 'bg-mcs-bg-secondary', border: 'border-mcs-border-default' },
-  death: { text: 'text-mcs-error-fg', bg: 'bg-mcs-error-bg-subtle', border: 'border-mcs-error-border' },
-  revive: { text: 'text-mcs-success-fg', bg: 'bg-mcs-success-bg-subtle', border: 'border-mcs-success-border' },
-  achievement: { text: 'text-mcs-purple-fg', bg: 'bg-mcs-purple-bg-subtle', border: 'border-mcs-purple-border' },
-  chat: { text: 'text-mcs-info-fg', bg: 'bg-mcs-info-bg-subtle', border: 'border-mcs-info-border' },
-  sleep: { text: 'text-mcs-info-fg', bg: 'bg-mcs-info-bg-subtle', border: 'border-mcs-info-border' },
-  serverStart: { text: 'text-mcs-success-fg', bg: 'bg-mcs-success-bg-subtle', border: 'border-mcs-success-border' },
-  serverStop: { text: 'text-mcs-text-muted', bg: 'bg-mcs-bg-secondary', border: 'border-mcs-border-default' },
-  serverCrash: { text: 'text-mcs-error-fg', bg: 'bg-mcs-error-bg-subtle', border: 'border-mcs-error-border' },
-  circuitBreaker: { text: 'text-mcs-error-fg', bg: 'bg-mcs-error-bg-subtle', border: 'border-mcs-error-border' },
-  save: { text: 'text-mcs-info-fg', bg: 'bg-mcs-info-bg-subtle', border: 'border-mcs-info-border' },
-  lowTps: { text: 'text-mcs-warning-fg', bg: 'bg-mcs-warning-bg-subtle', border: 'border-mcs-warning-border' },
-  highCpu: { text: 'text-mcs-warning-fg', bg: 'bg-mcs-warning-bg-subtle', border: 'border-mcs-warning-border' },
-  highMemory: { text: 'text-mcs-warning-fg', bg: 'bg-mcs-warning-bg-subtle', border: 'border-mcs-warning-border' },
-  weatherChange: { text: 'text-mcs-info-fg', bg: 'bg-mcs-info-bg-subtle', border: 'border-mcs-info-border' },
-  backupStart: { text: 'text-mcs-info-fg', bg: 'bg-mcs-info-bg-subtle', border: 'border-mcs-info-border' },
-  backupComplete: { text: 'text-mcs-success-fg', bg: 'bg-mcs-success-bg-subtle', border: 'border-mcs-success-border' },
-  backupFailed: { text: 'text-mcs-error-fg', bg: 'bg-mcs-error-bg-subtle', border: 'border-mcs-error-border' },
-  backupSkipped: { text: 'text-mcs-warning-fg', bg: 'bg-mcs-warning-bg-subtle', border: 'border-mcs-warning-border' },
-  restoreStart: { text: 'text-mcs-info-fg', bg: 'bg-mcs-info-bg-subtle', border: 'border-mcs-info-border' },
-  restoreComplete: { text: 'text-mcs-success-fg', bg: 'bg-mcs-success-bg-subtle', border: 'border-mcs-success-border' },
-  restoreFailed: { text: 'text-mcs-error-fg', bg: 'bg-mcs-error-bg-subtle', border: 'border-mcs-error-border' },
-  taskFailed: { text: 'text-mcs-error-fg', bg: 'bg-mcs-error-bg-subtle', border: 'border-mcs-error-border' },
-  webhookFailed: { text: 'text-mcs-error-fg', bg: 'bg-mcs-error-bg-subtle', border: 'border-mcs-error-border' },
-  deployComplete: { text: 'text-mcs-success-fg', bg: 'bg-mcs-success-bg-subtle', border: 'border-mcs-success-border' },
-  deployFailed: { text: 'text-mcs-error-fg', bg: 'bg-mcs-error-bg-subtle', border: 'border-mcs-error-border' },
-  upgradeComplete: { text: 'text-mcs-success-fg', bg: 'bg-mcs-success-bg-subtle', border: 'border-mcs-success-border' },
-  upgradeFailed: { text: 'text-mcs-error-fg', bg: 'bg-mcs-error-bg-subtle', border: 'border-mcs-error-border' },
+/** 中性档（进出/停服等无成败含义的事件）：次级底，不占语义六色 */
+const NEUTRAL_TYPE_COLOR: ToneClasses = {
+  text: 'text-mcs-text-muted',
+  bg: 'bg-mcs-bg-secondary',
+  border: 'border-mcs-border-default',
+}
+
+/**
+ * 类型 → 语义档（色值来自 components/mcs/tone，勿在此手抄）。
+ * 用档位名而非类名建表：三处着色（底/边/图标）由一处派生，改档不会漏改其中一处。
+ */
+export const NOTIFICATION_TONE: Record<NotificationType, SemanticTone | 'neutral'> = {
+  join: 'success',
+  leave: 'neutral',
+  death: 'error',
+  revive: 'success',
+  achievement: 'purple',
+  chat: 'info',
+  sleep: 'info',
+  serverStart: 'success',
+  serverStop: 'neutral',
+  serverCrash: 'error',
+  circuitBreaker: 'error',
+  save: 'info',
+  lowTps: 'warning',
+  highCpu: 'warning',
+  highMemory: 'warning',
+  weatherChange: 'info',
+  backupStart: 'info',
+  backupComplete: 'success',
+  backupFailed: 'error',
+  backupSkipped: 'warning',
+  restoreStart: 'info',
+  restoreComplete: 'success',
+  restoreFailed: 'error',
+  taskFailed: 'error',
+  webhookFailed: 'error',
+  deployComplete: 'success',
+  deployFailed: 'error',
+  upgradeComplete: 'success',
+  upgradeFailed: 'error',
+}
+
+/** 气泡图标/边框/底色（三处同档） */
+function notificationColor(type: NotificationType): ToneClasses {
+  const tone = NOTIFICATION_TONE[type]
+  return tone === 'neutral' ? NEUTRAL_TYPE_COLOR : SEMANTIC_TONE_CLASSES[tone]
 }
 
 /** severity 筛选选项（Tasteful Friction：按严重度快速聚焦告警） */
@@ -204,7 +221,7 @@ export function NotificationDrawer({ open, onOpenChange }: NotificationDrawerPro
           ) : (
             visibleItems.map((n) => {
               const Icon = TYPE_ICON[n.type]
-              const color = TYPE_COLOR[n.type]
+              const color = notificationColor(n.type)
               const isGame = n.category === 'game'
               // 关联实例条目可跳转（issue 334）：关闭抽屉 → 实例页 focus 深链接切换
               const jumpToInstance = () => {

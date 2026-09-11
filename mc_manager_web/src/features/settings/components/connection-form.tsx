@@ -26,6 +26,7 @@ import { useUnsavedGuard } from '@/hooks/use-unsaved-guard'
 import { useAuthStore } from '@/stores/auth'
 import { useConnectionStore } from '@/stores/connection'
 import type { ConnectionFormProps } from './contracts'
+import { toneClasses } from '@/components/mcs/tone'
 
 /** 明文警告确认后待执行的挂起动作（null = 无弹窗） */
 type PendingAction = 'save' | 'test' | null
@@ -297,7 +298,7 @@ export function ConnectionForm({ variant = 'settings', onSaved }: ConnectionForm
           className={cn(
             'flex items-center gap-2 rounded-mcs-md border px-4 py-3',
             isConnected
-              ? 'border-mcs-success-border bg-mcs-success-bg-subtle text-mcs-success-fg'
+              ? toneClasses('success')
               : 'border-mcs-border-muted bg-mcs-bg-muted text-mcs-text-muted',
           )}
         >

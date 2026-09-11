@@ -13,6 +13,7 @@ import { DEPLOY_STAGE_LABELS } from '@/stores/deploy'
 import type { DeployProgress, DeployResult } from '@/api/types'
 import type { AutoStartState } from './types'
 import { formatMB } from './utils'
+import { toneClasses } from '@/components/mcs/tone'
 
 /** 部署中视图：进度条 + 阶段文案 + 传输量（进度为 null 时显示不确定占位） */
 export function DeployProgressView({ progress }: { progress: DeployProgress | null }) {
@@ -90,9 +91,9 @@ export function DeploySuccessView({ result, autoStart, onComplete }: DeploySucce
           role="status"
           className={cn(
             'flex items-center gap-2 rounded-mcs-sm border px-3 py-2 text-mcs-sm',
-            autoStart === 'ok' && 'border-mcs-success-border bg-mcs-success-bg-subtle text-mcs-success-fg',
+            autoStart === 'ok' && toneClasses('success'),
             autoStart === 'pending' && 'border-mcs-border-muted bg-mcs-bg-muted text-mcs-text-muted',
-            autoStart === 'failed' && 'border-mcs-warning-border bg-mcs-warning-bg-subtle text-mcs-warning-fg',
+            autoStart === 'failed' && toneClasses('warning'),
           )}
         >
           {autoStart === 'pending' && <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />}

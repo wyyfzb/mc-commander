@@ -9,6 +9,7 @@
  */
 import { ChevronRight, Code, GitBranch, Heart, Link as LinkIcon, MessageSquareWarning, Tag } from 'lucide-react'
 import type { AboutPanelProps } from './contracts'
+import { toneClasses } from '@/components/mcs/tone'
 
 /** 开源仓库主页（GitHub 主仓；Releases/Issues 由子路径拼接） */
 const REPO_URL = 'https://github.com/wyyfzb/mc-commander'
@@ -54,7 +55,7 @@ export function AboutPanel(_props: AboutPanelProps) {
       <section className="flex flex-col items-center gap-1.5 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted px-4 py-6 shadow-mcs-card">
         <h3 className="text-mcs-xl font-semibold text-mcs-text-default">MC Commander</h3>
         <p className="text-mcs-sm text-mcs-text-muted">自托管 Minecraft 服务器管理客户端</p>
-        <span className="mt-1 inline-flex h-5 items-center rounded-full border border-mcs-accent-border bg-mcs-accent-bg-subtle px-2 font-mono text-mcs-xs font-semibold text-mcs-accent-fg">
+        <span className={`mt-1 inline-flex h-5 items-center rounded-full border px-2 font-mono text-mcs-xs font-semibold ${toneClasses('accent')}`}>
           v{__APP_VERSION__}
         </span>
       </section>

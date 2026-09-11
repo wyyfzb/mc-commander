@@ -19,6 +19,11 @@
  *  13. 死类：项目 CSS 定义但全仓 0 使用 → 报错（`@reserved` 注释可豁免）
  *  14. 死 token：semantic.css 定义但全仓 0 消费 → 报错（删除，或加 `@reserved` 注释说明预留原因）
  *  15. 内容面 tint 叠加：同元素出现 ≥2 个 `bg-mcs-*-bg-subtle`，或内容面 tint 与玻璃面同元素 → 报错
+ *      （含词表间接写法：同一次 cn/clsx 或同一模板串里 `toneClasses()` 与字面量 tint 共存）
+ *      ＋ 六档语义色三件套只允许声明在 components/mcs/tone.ts（别处整串写出一档的
+ *      border+bg-subtle+fg 即又抄了一份词表；测试与 tone.ts 自身除外）。
+ *      注：11b/11c 走 walkDir(srcDir)，即**只扫 src/ 且不含 components/ui/**，不覆盖 e2e/ 与
+ *      scripts/；判定面限「同一字面量内整串写全」，容器 border+bg 与子元素 fg 拆写不判
  *  16. Z 轴阶梯：禁裸 z-<数字>（类名 / 内联 zIndex / CSS z-index）
  *  17. 玻璃预算：全站各 1 处（顶栏 glass-chrome + 覆盖层 glass-overlay）
  *  18. 危险语义色禁半透明底：bg-destructive/<alpha>
@@ -250,6 +255,81 @@ function checkLine(filePath, lineNum, line, isEmergencyPage) {
   }
 }
 
+/** 剥掉注释后的正文（一律等长空白替换，保证偏移量↔行号仍与原文对齐）。
+ *  只供本节 11b/11c 使用：1–11 条按原始行判定，注释里的示例仍会命中（既有取舍，未改） */
+function stripComments(content) {
+  return content
+    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
+    // 行注释同样抹成等长空白：会把 https:// 这类串连同其后内容一并吃掉，属「宁漏不误报」的取舍
+    .replace(/\/\/[^\n]*/g, (m) => ' '.repeat(m.length))
+}
+
+/**
+ * 内容面 tint 叠加（词表侧）：`toneClasses()` / `SEMANTIC_TONE_CLASSES[...].bg` 的产出也是
+ * 内容面 tint，与字面量 tint 落在同一处着色（同一次 cn/clsx 调用，或同一个模板串）即叠加。
+ * 逐行数字面量的那条看不见这种间接写法，而语义色收归词表后恰是常见形态。
+ * 启发式边界：跨行按括号配平取实参表；未配平、以及「先赋值再传入」的变量中转过都不判
+ * （宁漏不误报）；同一处嵌套（cn 里套 cn/clsx）只计一次。返回 [{ offset, end }]。
+ */
+function findToneTintOverlaps(content) {
+  const code = stripComments(content)
+  // 80 是属性访问写法（SEMANTIC_TONE_CLASSES[tone].bg）的向后搜索窗口，现网最长约 40 字符
+  const TINT_SOURCE = /toneClasses\(|SEMANTIC_TONE_CLASSES[\s\S]{0,80}?\.bg\b/
+  const TINT_LITERAL = /bg-mcs-[\w-]+-bg-subtle/
+  const hits = []
+  const covered = (offset) => hits.some((h) => offset > h.offset && offset < h.end)
+  /** 已被命中区间整段包住（模板串里套 cn 的情形）→ 同处不再重复计数 */
+  const wraps = (start, end) => hits.some((h) => start <= h.offset && end >= h.end)
+
+  for (const m of code.matchAll(/\b(?:cn|clsx)\(/g)) {
+    if (covered(m.index)) continue
+    const start = m.index + m[0].length
+    let depth = 1
+    let i = start
+    while (i < code.length && depth > 0) {
+      if (code[i] === '(') depth++
+      else if (code[i] === ')') depth--
+      i++
+    }
+    if (depth > 0) continue
+    const args = code.slice(start, i - 1)
+    if (TINT_SOURCE.test(args) && TINT_LITERAL.test(args)) hits.push({ offset: m.index, end: i })
+  }
+
+  // 模板串：同一个串里两种来源并存（cn 之外的常见写法）
+  for (const m of code.matchAll(/`(?:[^`\\]|\\.)*`/g)) {
+    const end = m.index + m[0].length
+    if (covered(m.index) || wraps(m.index, end)) continue
+    if (TINT_SOURCE.test(m[0]) && TINT_LITERAL.test(m[0])) hits.push({ offset: m.index, end })
+  }
+  return hits
+}
+
+/**
+ * 六档语义色的「静态三件套」声明源只有 mcs/tone.ts。
+ * 按空白切词做**整词**比对（不用子串包含）：`border-mcs-accent-border-strong` 是另一档
+ * 描边（选中强调，词表未覆盖的独立形状）、`hover:bg-mcs-*-bg-subtle` 是交互覆盖层而非
+ * 内容面 tint，两者都不算手写三件套，不能被误报。
+ */
+const TONE_TRIAD_NAMES = ['accent', 'success', 'warning', 'error', 'info', 'purple']
+const STRING_LITERAL = /'[^'\n]*'|"[^"\n]*"|`(?:[^`\\]|\\.)*`/g
+
+function findHandwrittenToneTriads(content) {
+  const code = stripComments(content)
+  const hits = []
+  for (const m of code.matchAll(STRING_LITERAL)) {
+    const tokens = new Set(m[0].slice(1, -1).split(/\s+/).filter(Boolean))
+    const tone = TONE_TRIAD_NAMES.find(
+      (t) =>
+        tokens.has(`border-mcs-${t}-border`) &&
+        tokens.has(`bg-mcs-${t}-bg-subtle`) &&
+        tokens.has(`text-mcs-${t}-fg`),
+    )
+    if (tone) hits.push({ offset: m.index, tone })
+  }
+  return hits
+}
+
 function extractViolatingClass(classes, prefix) {
   const parts = classes.split(' ')
   const found = parts.find(c => c.startsWith(prefix))
@@ -273,9 +353,25 @@ function walkDir(dir) {
     const relPath = relative(root, fullPath)
     // 紧急页目录：字重 400-600 断言仅约束该目录（触控页视觉纪律）
     const isEmergencyPage = relPath.split(sep).includes('emergency')
-    const lines = readFileSync(fullPath, 'utf-8').split('\n')
+    const content = readFileSync(fullPath, 'utf-8')
+    const lines = content.split('\n')
     for (let i = 0; i < lines.length; i++) {
       checkLine(relPath, i, lines[i], isEmergencyPage)
+    }
+    // 11b/11c：跨行判定，故在文件层做（逐行版只看得到字面量）
+    const rel = relPath.split(sep).join('/')
+    for (const hit of findToneTintOverlaps(content)) {
+      const lineNum = content.slice(0, hit.offset).split('\n').length
+      console.log(`${relPath}:${lineNum}: 词表 tint（toneClasses/SEMANTIC_TONE_CLASSES）× 字面量 tint 同元素 → 同一元素只允许一个背景来源`)
+      violations++
+    }
+    // 词表自身（它就是声明源）与测试（用例按定义就该断言类名三元组）除外
+    if (!rel.endsWith('components/mcs/tone.ts') && !rel.includes('__tests__')) {
+      for (const hit of findHandwrittenToneTriads(content)) {
+        const lineNum = content.slice(0, hit.offset).split('\n').length
+        console.log(`${relPath}:${lineNum}: 手写 ${hit.tone} 档三件套（border+bg-subtle+fg）→ 语义色声明源只有 components/mcs/tone.ts`)
+        violations++
+      }
     }
   }
 }

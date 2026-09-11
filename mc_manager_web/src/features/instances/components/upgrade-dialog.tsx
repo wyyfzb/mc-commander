@@ -26,6 +26,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { Loader2, ArrowUpCircle, CheckCircle2, RotateCcw, XCircle, AlertTriangle } from 'lucide-react'
+import { toneClasses } from '@/components/mcs/tone'
 
 const SERVER_TYPES = [
   { value: 'vanilla', label: 'Vanilla' },
@@ -184,7 +185,7 @@ export function UpgradeDialog({ instance, open, onOpenChange }: UpgradeDialogPro
 
         <div className="space-y-4">
           {/* 警示条 */}
-          <div className="rounded-mcs-sm border border-mcs-warning-border bg-mcs-warning-bg-subtle p-3 text-sm text-mcs-warning-fg">
+          <div className={`rounded-mcs-sm border p-3 text-sm ${toneClasses('warning')}`}>
             <div className="flex items-start gap-2">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
               <div>

@@ -24,6 +24,7 @@ import { getEnchantmentsForItem } from '@/lib/mc-enchantments'
 import { itemImageUrl, type MinecraftItem } from '@/lib/mc-items'
 import { potionLevelLabel, type PotionEffect } from '@/lib/mc-potions'
 import type { SelectedEntry } from './give-item-enchant-editor'
+import { toneClasses } from '@/components/mcs/tone'
 
 /** 快速数量档 */
 const QUICK_COUNTS = [1, 16, 64, 256, 640, 6400]
@@ -146,7 +147,7 @@ export function SelectedItemsBar({
                     className={cn(
                       'ml-0.5 inline-flex items-center gap-0.5 rounded-mcs-xs border px-1 py-px',
                       enchCount > 0
-                        ? 'border-mcs-purple-border bg-mcs-purple-bg-subtle text-mcs-purple-fg'
+                        ? toneClasses('purple')
                         : 'border-mcs-border-muted text-mcs-text-muted hover:text-mcs-text-default',
                     )}
                   >

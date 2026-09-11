@@ -5,6 +5,7 @@
  * - 「立即备份」在有在途备份（creating/restoring）时禁用，与备份页互斥状态机同口径
  * - 入口统一指向设置页备份子路由（真实路由为 /settings/backup）
  */
+import { clsx } from 'clsx'
 import { useNavigate } from 'react-router'
 import { ArrowRight, CircleAlert, CloudUpload, HardDrive, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -13,6 +14,7 @@ import type { BackupItem } from '@/api/types'
 import { useServerStore } from '@/stores/server'
 import { LoadingButton } from '@/components/mcs/loading-button'
 import { StatusPill } from '@/components/mcs/status-pill'
+import { toneClasses } from '@/components/mcs/tone'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   backupStatusTone,
@@ -31,14 +33,6 @@ import { useBackups, useCreateBackup, useBackupEventRefresh } from '@/features/s
 const MAX_ITEMS = 3
 /** 备份管理页（设置子路由） */
 const BACKUP_PAGE = '/settings/backup'
-
-/** 状态图标 tone 类（与 BackupPanel 的 TONE_CLASSES 同源；Tailwind 只认字面量，勿拼模板串） */
-const TONE_CLASSES: Record<ReturnType<typeof backupStatusTone>, string> = {
-  success: 'bg-mcs-success-bg-subtle text-mcs-success-fg border-mcs-success-border',
-  error: 'bg-mcs-error-bg-subtle text-mcs-error-fg border-mcs-error-border',
-  warning: 'bg-mcs-warning-bg-subtle text-mcs-warning-fg border-mcs-warning-border',
-  info: 'bg-mcs-info-bg-subtle text-mcs-info-fg border-mcs-info-border',
-}
 
 export function RecentBackupsCard() {
   const instanceId = useServerStore((s) => s.instanceId)
@@ -154,9 +148,9 @@ function BackupMiniRow({ backup }: { backup: BackupItem }) {
   return (
     <div className="flex items-center gap-2 py-1.5">
       <span
-        className={
-          'flex size-6 shrink-0 items-center justify-center rounded-mcs-xs ' + TONE_CLASSES[tone]
-        }
+        /* 用 clsx 而非 cn：cn 走 twMerge，会把 text-mcs-*-fg 当字号档与 text-* 尺寸类互吞
+           （本例暂未同串尺寸档，但往基础串里加 text-mcs-xs 就会被静默吃掉） */
+        className={clsx('flex size-6 shrink-0 items-center justify-center rounded-mcs-xs', toneClasses(tone))}
         aria-hidden
       >
         {isInProgress ? (
