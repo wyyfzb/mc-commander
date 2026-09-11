@@ -66,6 +66,9 @@ export function Pagination({
   showPageSizeSelector = false,
 }: PaginationProps) {
   const safePage = Math.max(1, Math.min(page, totalPages || 1))
+  // 单页（含「全部」档、空结果）没有可翻的页：页码组与方向箭头只会暗示「还有别的页」，
+  // 两种模式一并省略；左侧的条数/每页选择器保留——那是「全部」档切回分页的唯一入口
+  const showPager = totalPages > 1
 
   // 页码模式：生成带省略号的页码
   const pageNumbers = useMemo(
@@ -95,15 +98,15 @@ export function Pagination({
           </>
         )}
         {totalItems != null ? (
-          <span>共 {totalItems} 条 · 第 {safePage}/{totalPages} 页</span>
-        ) : totalPages > 0 ? (
+          <span>{showPager ? `共 ${totalItems} 条 · 第 ${safePage}/${totalPages} 页` : `共 ${totalItems} 条`}</span>
+        ) : showPager ? (
           <span>第 {safePage} / {totalPages} 页</span>
         ) : null}
       </div>
 
       {/* 右侧：翻页按钮 */}
       <div className="flex items-center gap-1.5">
-        {variant === 'numbers' ? (
+        {variant === 'numbers' && showPager ? (
           <>
             <IconButton
               disabled={disabled || safePage <= 1}
@@ -138,7 +141,7 @@ export function Pagination({
               <ChevronRight aria-hidden />
             </IconButton>
           </>
-        ) : (
+        ) : variant !== 'numbers' && showPager ? (
           <>
             <Button
               variant="outline"
@@ -157,7 +160,7 @@ export function Pagination({
               下一页
             </Button>
           </>
-        )}
+        ) : null}
       </div>
     </div>
   )

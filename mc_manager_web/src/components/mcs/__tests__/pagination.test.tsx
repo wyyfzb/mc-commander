@@ -4,6 +4,7 @@
  *   （语义值域与全站先例一致：导航/tab 用 page，步骤条用 step）
  * - 上一页/下一页在首/末页禁用（方向语义不能靠「点了没反应」表达）
  * - prev-next 模式无页码按钮，不引入 aria-current
+ * - 总页数 ≤1（含「全部」档、空结果）不渲染翻页控件：箭头/页码会暗示「还有别的页」
  */
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
@@ -42,6 +43,37 @@ describe('Pagination 当前页语义', () => {
 
     expect(screen.getByRole('button', { name: '第 3 页' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByText('第 3 / 3 页')).toBeInTheDocument()
+  })
+
+  it('numbers：总页数=1 时不渲染页码组与箭头，仅保留每页选择器与总数', () => {
+    render(
+      <Pagination
+        page={1}
+        totalPages={1}
+        totalItems={12}
+        onPageChange={() => {}}
+        variant="numbers"
+        pageSize={10}
+        showPageSizeSelector
+        onPageSizeChange={() => {}}
+      />,
+    )
+
+    // 「‹ [1] ›」会让人以为还有别的页；单页没有可翻的页
+    expect(screen.queryByRole('button', { name: '上一页' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '下一页' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^第 \d+ 页$/ })).not.toBeInTheDocument()
+    // 每页选择器必须保留：切到「全部」档后这是切回分页的唯一入口
+    expect(screen.getByLabelText('每页行数')).toBeInTheDocument()
+    expect(screen.getByText('共 12 条')).toBeInTheDocument()
+  })
+
+  it('prev-next：总页数=1 时同样不渲染两个方向按钮', () => {
+    render(<Pagination page={1} totalPages={1} totalItems={3} onPageChange={() => {}} />)
+
+    expect(screen.queryByRole('button', { name: '上一页' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '下一页' })).not.toBeInTheDocument()
+    expect(screen.getByText('共 3 条')).toBeInTheDocument()
   })
 
   it('prev-next：不渲染页码按钮（该模式没有 aria-current 的语义位）', () => {
