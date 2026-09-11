@@ -119,6 +119,14 @@ beforeEach(() => {
 })
 
 describe('EmergencyPage · 仪表 Tab 渲染', () => {
+  it('统计未就绪（memoryUsage=0）时内存显示 —，不报「0 GB」', () => {
+    setStatus({ memoryUsage: 0 })
+    renderPage()
+    // 与 TPS 同用 — 兜底：运行中却报 0 GB 会被读成「内存耗光」
+    expect(screen.queryByText('0 GB')).not.toBeInTheDocument()
+    expect(screen.getByText('内存').parentElement).toHaveTextContent('—')
+  })
+
   it('健康态：TPS 大字 + 健康 chip + 在线/CPU/内存 Stat + 四主按钮', () => {
     renderPage()
     expect(screen.getByText('Survival')).toBeInTheDocument()

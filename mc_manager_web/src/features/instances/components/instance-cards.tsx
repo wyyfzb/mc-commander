@@ -4,7 +4,7 @@
  * - 卡片：状态点（运行 success / 停止 muted）+ 名称 + 「当前」accent 徽章（currentId 命中）
  *   + 副行「运行中 · N 人在线」（success 色）/「已停止」（muted）+ 版本 mono 徽章
  *   （detailStatuses[id]?.mcVersion，组件内不查询；详情在途时仅该卡骨架占位）
- *   + 指标行（在线/TPS/JVM 堆/世界大小，detailStatuses 数据，缺省 —）
+ *   + 指标行（在线/TPS/内存/世界大小，detailStatuses 数据，缺省 —）
  *   + 操作：启停（运行中→停止 danger / 停止→启动 primary，busyId 防重复触发）/
  *     切换（非当前实例）/ 启动配置 / 卸载（danger outlined，卸载中禁用 + 「卸载中」）
  * - 空态：「暂无已安装的实例」+「部署新实例」按钮（onDeploy 与页面头部入口共用）
@@ -200,14 +200,17 @@ function InstanceCard({
         {isRunning ? `运行中 · ${playerCount} 人在线` : '已停止'}
       </p>
 
-      {/* 指标行（在线/TPS/JVM 堆/世界大小；详情缺省 —）
-          JVM 堆单位与同行「世界」统一为 GB（此前 3.2G / 1.2 GB 两种写法并排） */}
+      {/* 指标行（在线/TPS/内存/世界大小；详情缺省 —）
+          单位为 GB，与同行「世界」同口径。标签写「内存」而非「JVM 堆」：
+          服务端采集的 memoryUsage 是进程 RSS/WorkingSet（stats-collector 三平台分支），
+          与堆不是一回事——要显示真实堆需服务端另采指标。
+          统计未就绪初值为 0，此时显示 —：（运行中却报 0 会被读成「内存耗光」） */}
       <div className="grid grid-cols-4 gap-2 rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-default px-3 py-2 shadow-mcs-card">
         <Metric label="在线" value={isRunning ? `${playerCount}` : '—'} />
         <Metric label="TPS" value={isRunning && detail?.tps != null ? detail.tps.toFixed(1) : '—'} />
         <Metric
-          label="JVM 堆"
-          value={isRunning && detail?.memoryUsage != null ? `${detail.memoryUsage} GB` : '—'}
+          label="内存"
+          value={isRunning && detail && detail.memoryUsage > 0 ? `${detail.memoryUsage} GB` : '—'}
         />
         <Metric label="世界" value={formatWorldSize(detail?.worldSize)} />
       </div>

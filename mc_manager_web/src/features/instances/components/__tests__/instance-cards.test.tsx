@@ -65,10 +65,28 @@ describe('InstanceCards', () => {
     expect(screen.queryByText('1.2GB')).not.toBeInTheDocument()
   })
 
-  it('JVM 堆指标带 GB 单位，与同行「世界」口径一致（此前写作 3.2G）', () => {
+  it('内存指标带 GB 单位，与同行「世界」口径一致（标签不写「JVM 堆」：字段实为进程内存）', () => {
     render(<InstanceCards {...baseProps()} />)
     expect(screen.getAllByText('3.2 GB').length).toBeGreaterThanOrEqual(1)
     expect(screen.queryByText('3.2G')).not.toBeInTheDocument()
+    expect(screen.queryByText('JVM 堆')).not.toBeInTheDocument()
+  })
+
+  it('统计未就绪（memoryUsage=0）时内存显示 —，不报「0 GB」', () => {
+    // 只渲染甲服：乙服无详情也会渲染一枚「内存」标签，两枚会让 getByText 歧义
+    render(
+      <InstanceCards
+        {...baseProps({
+          instances: [alpha],
+          detailStatuses: {
+            alpha: { ...mockInstanceStatus, id: 'alpha', name: '虚构甲服', memoryUsage: 0 },
+          },
+        })}
+      />,
+    )
+    // 运行中却显示 0 GB 会被读成「内存耗光」；世界大小同行的缺省写法就是 —
+    expect(screen.queryByText('0 GB')).not.toBeInTheDocument()
+    expect(screen.getByText('内存').parentElement).toHaveTextContent('—')
   })
 
   it('升级中徽标：store 有非终态进度时显示（issue 352）', () => {

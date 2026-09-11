@@ -185,7 +185,11 @@ export function EmergencyPage() {
                   <div className="mt-4 flex w-full justify-around">
                     <Stat label="在线" value={`${st?.playerCount ?? 0}/${st?.maxPlayers ?? 20}`} />
                     <Stat label="CPU" value={`${st?.cpuUsage ?? 0}%`} />
-                    <Stat label="内存" value={`${st?.memoryUsage ?? 0} GB`} />
+                    {/* 未就绪期为 0：显示 0 GB 会被读成「内存耗光」，与 TPS 同用 — 兜底 */}
+                    <Stat
+                      label="内存"
+                      value={st?.memoryUsage != null && st.memoryUsage > 0 ? `${st.memoryUsage} GB` : '—'}
+                    />
                   </div>
                 </>
               )}
