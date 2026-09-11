@@ -3,7 +3,7 @@
  * config 由调用方从 useConnectionStore 传入（与 src/api/tasks.ts 同模式）。
  * 分页信封仅解包 data（pagination 丢失）——前端拉 pageSize=100 后 slice 最近 10 条。
  */
-import { apiDelete, apiGet, apiPost, type ConnectionConfig, ApiError, NetworkError } from './client'
+import { apiDelete, apiDownloadFile, apiGet, apiPost, type ConnectionConfig } from './client'
 import type { BackupItem } from './types'
 
 /** 备份列表（GET /instances/:id/backups?page=&pageSize=；分页信封） */
@@ -38,40 +38,17 @@ export function apiDeleteBackup(config: ConnectionConfig, backupId: number) {
   return apiDelete<null>(`/api/v1/backups/${backupId}`, config)
 }
 
-/** 下载备份（GET /backups/:id/download；流式 tar.gz blob，独立 120s 超时） */
+/**
+ * 下载备份（GET /backups/:id/download；流式 tar.gz blob）。
+ * 走共享下载实现（apiDownloadFile）而不是自实现 fetch：凭据注入（会话 Bearer 优先、
+ * 不适用时才回落 X-API-Key）与 40103 会话过期处置必须与其它请求同口径——
+ * 原先只发 X-API-Key，纯密码登录（本机无 Key）的用户下载备份必然 40101 失败。
+ * 超时沿用 120s（共享实现的默认是 600s，备份体量远小于世界文件），
+ * 响应头的 Content-Disposition 不取——文件名由前端按备份元数据构造。
+ */
 export async function apiDownloadBackup(config: ConnectionConfig, backupId: number): Promise<Blob> {
-  const base = config.baseUrl.replace(/\/+$/, '')
-  const url = `${base}/api/v1/backups/${backupId}/download`
-  const timeout = new AbortController()
-  const timer = setTimeout(() => timeout.abort(), 120_000)
-
-  try {
-    const res = await fetch(url, {
-      method: 'GET',
-      headers: { 'X-API-Key': config.apiKey },
-      signal: timeout.signal,
-    })
-
-    if (!res.ok) {
-      try {
-        const errPayload = await res.json()
-        if (errPayload.status === 'error') {
-          throw new ApiError(errPayload.code, res.status, errPayload.message, errPayload.details)
-        }
-      } catch (e) {
-        if (e instanceof ApiError) throw e
-      }
-      throw new NetworkError(`备份下载失败（HTTP ${res.status}）`)
-    }
-
-    return await res.blob()
-  } catch (e) {
-    if (e instanceof ApiError || e instanceof NetworkError) throw e
-    if (e instanceof DOMException && e.name === 'AbortError') {
-      throw new NetworkError('备份下载超时')
-    }
-    throw e
-  } finally {
-    clearTimeout(timer)
-  }
+  const { blob } = await apiDownloadFile(`/api/v1/backups/${backupId}/download`, config, {
+    timeoutMs: 120_000,
+  })
+  return blob
 }

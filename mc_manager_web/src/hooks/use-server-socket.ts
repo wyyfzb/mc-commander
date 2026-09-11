@@ -11,6 +11,7 @@ import { applyUpgradeProgress } from '@/stores/upgrade'
 import { useNotificationStore } from '@/stores/notifications'
 import { useTerminalStore } from '@/stores/terminal'
 import { useUiStore } from '@/stores/ui'
+import { sessionAppliesToPanel } from '@/lib/mc-connection'
 import type { InstanceSummary } from '@/api/types'
 import type { Player, UpgradeStage, WsMessage } from '@/api/types'
 
@@ -39,8 +40,10 @@ export function useServerSocket(instanceId: string | null) {
   const apiKey = useConnectionStore((s) => s.apiKey)
   const baseUrl = useConnectionStore((s) => s.baseUrl)
   const connectionReady = useConnectionStore((s) => s.status === 'ready')
-  // 安全主线：会话令牌优先于 API Key 作为 WS 鉴权凭据（登录后 session 变更触发重建连接）
-  const sessionToken = useAuthStore((s) => s.session?.token ?? null)
+  // 安全主线：会话令牌优先于 API Key 作为 WS 鉴权凭据（登录后 session 变更触发重建连接）；
+  // 令牌只在签发它的面板上有效，换地址后回落 API Key——否则等于拿 A 的令牌去连 B 的实时通道
+  const session = useAuthStore((s) => s.session)
+  const sessionToken = sessionAppliesToPanel(session, baseUrl) ? (session?.token ?? null) : null
   const applyWsSnapshot = useServerStore((s) => s.applyWsSnapshot)
   const applyWsPerformance = useServerStore((s) => s.applyWsPerformance)
   const applyWsStatusEvent = useServerStore((s) => s.applyWsStatusEvent)

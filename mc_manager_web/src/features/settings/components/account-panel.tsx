@@ -47,6 +47,7 @@ import { getFriendlyErrorText } from '@/api/errors'
 import { useUnsavedGuard } from '@/hooks/use-unsaved-guard'
 import { useAuthStore } from '@/stores/auth'
 import { useConnectionStore } from '@/stores/connection'
+import { sessionAppliesToPanel } from '@/lib/mc-connection'
 import { formatRelativeTime, formatStartTime as formatDateTime } from '@/lib/format'
 import { clearLocalCredentials, logoutToastText } from '@/lib/logout'
 import {
@@ -106,7 +107,12 @@ export function AccountPanel() {
   const session = useAuthStore((s) => s.session)
   const apiKey = useConnectionStore((s) => s.apiKey)
   const baseUrl = useConnectionStore((s) => s.baseUrl)
-  const authed = Boolean(session?.token || apiKey)
+  /**
+   * 登录会话是否属于本面板：令牌只对签发它的面板有效，属于别面板时本页所有
+   * 「会话」语义都要按 API Key 通道呈现，否则界面会声称一个用不上的登录态
+   */
+  const sessionApplies = sessionAppliesToPanel(session, baseUrl)
+  const authed = Boolean(sessionApplies || apiKey)
 
   // ── 活跃会话（30s 轮询；API Key 直连时空态引导） ──
   const sessionsQuery = useQuery({
@@ -201,7 +207,7 @@ export function AccountPanel() {
     // 清 Key 与清会话是同一动作的两半，提示口径与顶栏一致（清到了就说清）
     const doneToast = logoutToastText(Boolean(useConnectionStore.getState().apiKey))
     try {
-      if (session?.token) {
+      if (sessionApplies) {
         await logout({ baseUrl, apiKey })
       }
       handleLogoutLocal(doneToast)
@@ -225,7 +231,7 @@ export function AccountPanel() {
         description="浏览器访问面板所使用的认证通道与凭据状态"
       >
         <div className="flex flex-wrap items-center gap-2.5">
-          {session?.token ? (
+          {sessionApplies ? (
             <StatusPill tone="success" className="gap-1">
               <ShieldCheck className="size-3" aria-hidden />
               管理员会话
@@ -236,14 +242,14 @@ export function AccountPanel() {
               API Key 直连
             </StatusPill>
           )}
-          {session?.expiresAt && (
+          {sessionApplies && session?.expiresAt && (
             <span className="inline-flex items-center gap-1 text-mcs-2xs text-mcs-text-muted">
               <Clock className="size-3" aria-hidden />
               会话到期：{formatDateTime(session.expiresAt)}（活动自动续期）
             </span>
           )}
         </div>
-        {!session?.token && (
+        {!sessionApplies && (
           <p className={`mt-3 flex items-start gap-1.5 rounded-mcs-sm border px-2.5 py-2 text-mcs-2xs ${toneClasses('warning')}`}>
             <TriangleAlert className="mt-0.5 size-3 shrink-0" aria-hidden />
             当前使用明文 API Key 直连。建议退出后使用管理员密码登录（令牌仅存服务端摘要，传输/存储更安全）。
@@ -351,8 +357,8 @@ export function AccountPanel() {
           /* 空态：EmptyState 收敛写法（同 backup-panel），dashed 孤例已消除 */
           <EmptyState
             icon={MonitorSmartphone}
-            title={session?.token ? '暂无活跃会话' : '当前为 API Key 直连，暂无浏览器会话'}
-            hint={session?.token ? undefined : '退出登录后通过密码登录，即可在此管理设备会话'}
+            title={sessionApplies ? '暂无活跃会话' : '当前为 API Key 直连，暂无浏览器会话'}
+            hint={sessionApplies ? undefined : '退出登录后通过密码登录，即可在此管理设备会话'}
           />
         ) : (
           <div className="max-h-96 overflow-y-auto rounded-mcs-md border border-mcs-border-muted">
@@ -424,7 +430,8 @@ export function AccountPanel() {
           type="button"
           size="sm"
           onClick={() => setLogoutOpen(true)}
-          // 会话与 API Key 任一存在都可清（描述承诺的是「全部凭据」，那就得对两种凭据都可达）
+          // 会话与 API Key 任一存在都可清（描述承诺的是「全部凭据」，那就得对两种凭据都可达）；
+          // 这里问的是「本机有没有凭据可清」，故意**不用**面板判据（异面板会话也是本机凭据）
           disabled={!session?.token && !apiKey}
           title={session?.token || apiKey ? undefined : '本机已无凭据可清除'}
         >

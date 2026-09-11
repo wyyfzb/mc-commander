@@ -1,8 +1,7 @@
 import { lazy } from 'react'
 import { createBrowserRouter, redirect } from 'react-router'
 import { AppShell } from '@/layouts/app-shell'
-import { useConnectionStore } from '@/stores/connection'
-import { useAuthStore } from '@/stores/auth'
+import { hasUsableCredentials } from '@/stores/connection'
 import { installSessionExpiryHandler } from '@/lib/session-expiry'
 import {
   AboutSettingsPage,
@@ -59,24 +58,17 @@ const LoginPageLazy = lazy(() =>
 )
 
 /**
- * 凭据判定（安全主线守卫）：API Key（自动化通道）或管理员会话令牌（登录通道）
- * 任一存在即视为已连接。loader 与 React 渲染周期解耦，直接读 store 快照
+ * 连接守卫（D11 演进）：无本面板可用凭据 → 登录页（登录页内含首访设密向导）
+ * 凭据口径见 stores/connection.ts 的 hasUsableCredentials（会话只在签发它的面板上算数）
  */
-function hasCredentials(): boolean {
-  const { apiKey } = useConnectionStore.getState()
-  const { session } = useAuthStore.getState()
-  return Boolean(apiKey || session?.token)
-}
-
-/** 连接守卫（D11 演进）：无任何凭据 → 登录页（登录页内含首访设密向导） */
 function requireConfigured() {
-  if (!hasCredentials()) return redirect('/login')
+  if (!hasUsableCredentials()) return redirect('/login')
   return null
 }
 
 /** 无凭据守卫：已连接时访问登录页/引导页 → 回仪表盘 */
 function requireUnconfigured() {
-  if (hasCredentials()) return redirect('/dashboard')
+  if (hasUsableCredentials()) return redirect('/dashboard')
   return null
 }
 

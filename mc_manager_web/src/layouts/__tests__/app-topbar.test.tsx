@@ -167,4 +167,27 @@ describe('AppTopBar 实例名三态', () => {
     // 凭据全清 → 未配置态：requireUnconfigured 不再把 /login 弹回面板
     expect(useConnectionStore.getState().status).toBe('unconfigured')
   })
+
+  it('会话属于别的面板：按 API Key 直连呈现，登出仍清掉本机那条会话', async () => {
+    useAuthStore.setState({
+      session: {
+        token: 'sess-token-abc',
+        sessionId: 'sess-mock-1',
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+        issuedFor: 'https://panel-a.example.com',
+      },
+    })
+    useConnectionStore.setState({ baseUrl: '', apiKey: 'stored-key-abc', status: 'ready' })
+    const user = userEvent.setup()
+    const router = renderTopbar()
+
+    // 本面板用不上那条会话（异地址不发 Bearer）→ 不得呈现为管理员会话
+    expect(screen.queryByRole('button', { name: '管理员菜单' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'API Key 直连状态' }))
+    expect(await screen.findByText('API Key 直连')).toBeInTheDocument()
+    await user.click(await screen.findByRole('menuitem', { name: '退出登录' }))
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/login'))
+    expect(useAuthStore.getState().session).toBeNull()
+  })
 })

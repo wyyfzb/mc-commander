@@ -23,6 +23,7 @@ import { useAuthStore } from '@/stores/auth'
 import { logout } from '@/api/auth'
 import { useInstances } from '@/api/queries'
 import { copyText } from '@/lib/clipboard'
+import { sessionAppliesToPanel } from '@/lib/mc-connection'
 import { clearLocalCredentials, logoutToastText } from '@/lib/logout'
 import { primaryModifierLabel } from '@/lib/platform'
 
@@ -48,8 +49,11 @@ export function AppTopBar() {
   const unreadCount = useNotificationStore((s) => s.unreadCount)
 
   // 安全主线：用户菜单（会话登录显示管理员身份；API Key 直连显示凭据徽章）
-  const sessionToken = useAuthStore((s) => s.session?.token ?? null)
+  // 会话只在签发它的面板上算数：换地址后按 API Key 直连呈现（见 lib/mc-connection）
+  const session = useAuthStore((s) => s.session)
   const apiKey = useConnectionStore((s) => s.apiKey)
+  const baseUrl = useConnectionStore((s) => s.baseUrl)
+  const sessionToken = sessionAppliesToPanel(session, baseUrl) ? (session?.token ?? null) : null
   const [loggingOut, setLoggingOut] = useState(false)
 
   const handleLogout = async () => {

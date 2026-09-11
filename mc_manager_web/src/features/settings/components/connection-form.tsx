@@ -11,17 +11,18 @@
  */
 import { useState } from 'react'
 import { flushSync } from 'react-dom'
-import { Eye, EyeOff, Loader2, RefreshCw, Save, Wifi } from 'lucide-react'
+import { Eye, EyeOff, Info, Loader2, RefreshCw, Save, Wifi } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
+import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { cn } from '@/lib/utils'
 import { ApiError, apiPost, apiRequest } from '@/api/client'
 import type { OverviewData } from '@/api/types'
 import { ErrorCode, getFriendlyErrorText } from '@/api/errors'
-import { normalizeBaseUrl, needsHttpPlaintextWarning } from '@/lib/mc-connection'
+import { normalizeBaseUrl, needsHttpPlaintextWarning, sessionAppliesToPanel } from '@/lib/mc-connection'
 import { useUnsavedGuard } from '@/hooks/use-unsaved-guard'
 import { useAuthStore } from '@/stores/auth'
 import { useConnectionStore } from '@/stores/connection'
@@ -35,9 +36,8 @@ export function ConnectionForm({ variant = 'settings', onSaved }: ConnectionForm
   const storedBaseUrl = useConnectionStore((s) => s.baseUrl)
   const storedApiKey = useConnectionStore((s) => s.apiKey)
   const status = useConnectionStore((s) => s.status)
-  /** 浏览器登录会话（与 API Key 并列的第二条凭据；有它就已具备连接能力） */
+  /** 浏览器登录会话（与 API Key 并列的第二条凭据；**属于本地址时**才具备连接能力） */
   const session = useAuthStore((s) => s.session)
-  const hasSession = Boolean(session?.token)
 
   const [url, setUrl] = useState(storedBaseUrl)
   const [apiKey, setApiKey] = useState(storedApiKey)
@@ -56,18 +56,25 @@ export function ConnectionForm({ variant = 'settings', onSaved }: ConnectionForm
   // 未保存守卫：切子页/切页面时弹确认，避免静默丢失
   const guard = useUnsavedGuard(dirty)
 
+  /**
+   * 会话对本表单地址是否有效（令牌只对签发它的面板发；换地址即改用 API Key 通道）。
+   * 用表单地址而非已存地址：用户改到别的面板时，提示与校验都要跟着走。
+   */
+  const sessionApplies = sessionAppliesToPanel(session, url)
+  const foreignSession = Boolean(session?.token) && !sessionApplies
+
   // 状态行即时反馈：保存过（ready）或测试连接成功 → 已连接
   const isConnected = status === 'ready' || testedOk
 
   /**
    * 空值校验（测试/保存前置）——行内提示，对齐 deploy-dialog 范式。
-   * API Key 只在「无登录会话」时必填：有会话时客户端走 Bearer（双通道互斥，Key 不参与请求），
+   * API Key 只在该地址没有可用登录会话时必填：有会话时客户端走 Bearer（双通道互斥，Key 不参与请求），
    * 仍强制填写会把密码登录用户挡在门外——他们手上没有服务端 .env 里的 Key，连地址都改不了
    */
   function ensureFilled(): boolean {
     let valid = true
     if (url.trim() === '') { setUrlError('请填写服务器地址'); valid = false } else { setUrlError('') }
-    if (!hasSession && apiKey.trim() === '') { setKeyError('请填写 API Key'); valid = false } else { setKeyError('') }
+    if (!sessionApplies && apiKey.trim() === '') { setKeyError('请填写 API Key'); valid = false } else { setKeyError('') }
     return valid
   }
 
@@ -91,13 +98,13 @@ export function ConnectionForm({ variant = 'settings', onSaved }: ConnectionForm
     } catch (e) {
       setTestedOk(false)
       // 服务端返回错误信封（如 API Key 无效）→ 友好文案；网络/超时 → 通用失败提示。
-      // 40103 且本机有会话时，真实原因是「目标地址不认这条登录会话」——此时提示「填 API Key」
-      // 不可兑现（有会话时客户端只发 Bearer，Key 不进请求），且 Key 也不能在表单里清空
-      // （保存前强制测试会失败），故只给真正可执行的下一步：退出登录（会一并清本机凭据）
+      // 40103 只可能出现在「会话属于本地址」时（异地址不发 Bearer，见 api/client.ts），
+      // 即这条会话真的过期了；此时填 Key 也没用（有可用会话时只发 Bearer），
+      // 故只给可兑现的下一步：退出登录后重新登录
       const reason =
         e instanceof ApiError
-          ? e.code === ErrorCode.AUTH_SESSION_EXPIRED && hasSession
-            ? '目标地址不接受当前登录会话：退出登录会清除本机凭据，之后可重新登录或到连接引导连接其他面板'
+          ? e.code === ErrorCode.AUTH_SESSION_EXPIRED && sessionApplies
+            ? '当前地址的登录会话已过期：退出登录后重新登录该面板即可继续'
             : getFriendlyErrorText(e)
           : '连接失败，请检查配置'
       if (!opts?.silentFailure) {
@@ -222,6 +229,13 @@ export function ConnectionForm({ variant = 'settings', onSaved }: ConnectionForm
         <p className="text-mcs-xs text-mcs-text-muted">
           支持 http/https 协议；局域网自建服务器推荐内网地址
         </p>
+        {foreignSession && (
+          <NoticeBanner variant="info" icon={Info}>
+            当前登录会话属于 <span className="font-mono break-all">{session?.issuedFor}</span>
+            ，本地址将改用 API Key 鉴权（不会因此退出登录）。如需以登录会话管理该面板，
+            请先退出登录，再用该地址登录。
+          </NoticeBanner>
+        )}
       </div>
 
       <div className="flex flex-col gap-2">
@@ -265,9 +279,9 @@ export function ConnectionForm({ variant = 'settings', onSaved }: ConnectionForm
           <p className="text-mcs-xs text-mcs-error-fg">{keyError}</p>
         )}
         <p className="text-mcs-xs text-mcs-text-muted">
-          {hasSession
+          {sessionApplies
             ? '已登录：浏览器用登录会话鉴权，此处可留空；API Key 是无登录会话的客户端（自动化脚本等）用的凭据'
-            : '当前无登录会话：必须填写 API Key 才能连接'}
+            : '当前地址没有可用的登录会话：必须填写 API Key 才能连接'}
         </p>
       </div>
 

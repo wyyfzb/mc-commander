@@ -41,6 +41,11 @@ const webhooks = [
 const ok = (data, message = 'Success') =>
   JSON.stringify({ status: 'ok', code: 0, message, data, timestamp: now() })
 
+/** 本 mock 签发的唯一会话令牌（登录/设密固定返回；鉴权建模见请求入口） */
+const MOCK_SESSION_TOKEN = 'e2e-mock-session-token-0000000001'
+/** 无需凭据即可访问的端点（登录前必须可达，与真实服务端一致） */
+const PUBLIC_PATHS = new Set(['/api/v1/auth/status', '/api/v1/auth/login', '/api/v1/auth/setup'])
+
 /** 解析 URL query 参数（decodeURIComponent 容错） */
 const parseQuery = (url) => {
   const qs = url.split('?')[1] ?? ''
@@ -441,6 +446,15 @@ const server = createServer((req, res) => {
     res.setHeader('Content-Type', 'application/json')
     res.setHeader('Access-Control-Allow-Origin', '*')
 
+    // 会话鉴权最小建模：带 Bearer 的请求，令牌必须是本 mock 签发的（登录/设密固定返回
+    // MOCK_SESSION_TOKEN），否则回 40103。缺少这层校验时，「拿 A 面板的令牌请求 B 面板」
+    // 在 e2e 里永远成功，异面板用例断言不承重。X-API-Key 不校验（mock 无 Key 台账）。
+    const bearer = /^Bearer\s+(.+)$/i.exec(req.headers.authorization ?? '')?.[1]
+    if (bearer && bearer !== MOCK_SESSION_TOKEN && !PUBLIC_PATHS.has(path)) {
+      res.statusCode = 401
+      return res.end(JSON.stringify({ status: 'error', code: 40103, message: '会话已过期，请重新登录', details: null, timestamp: now() }))
+    }
+
     if (path === '/api/v1/overview') return res.end(ok(overview))
     if (path === '/api/v1/system-stats') return res.end(ok(systemStats))
     // ── 安全主线：auth 端点（登录 e2e 用；mock 固定凭据，严禁真实密码） ──
@@ -450,7 +464,7 @@ const server = createServer((req, res) => {
       return res.end(ok({ hasPassword: !fresh }))
     }
     if (path === '/api/v1/auth/login' && req.method === 'POST') {
-      const mockSession = { token: 'e2e-mock-session-token-0000000001', sessionId: 'sess-mock-1', expiresAt: new Date(Date.now() + 7 * 86400000).toISOString() }
+      const mockSession = { token: MOCK_SESSION_TOKEN, sessionId: 'sess-mock-1', expiresAt: new Date(Date.now() + 7 * 86400000).toISOString() }
       try {
         const { password } = JSON.parse(body || '{}')
         if (password !== 'e2e-correct-pass') {
@@ -461,7 +475,7 @@ const server = createServer((req, res) => {
       return res.end(ok(mockSession))
     }
     if (path === '/api/v1/auth/setup' && req.method === 'POST') {
-      return res.end(ok({ hasPassword: true, token: 'e2e-mock-session-token-0000000001', sessionId: 'sess-mock-1', expiresAt: new Date(Date.now() + 7 * 86400000).toISOString() }))
+      return res.end(ok({ hasPassword: true, token: MOCK_SESSION_TOKEN, sessionId: 'sess-mock-1', expiresAt: new Date(Date.now() + 7 * 86400000).toISOString() }))
     }
     if (path === '/api/v1/auth/sessions') {
       return res.end(ok({ sessions: [{ id: 1, userAgent: 'Playwright E2E', ip: '127.0.0.1', createdAt: new Date().toISOString(), lastSeenAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 6 * 86400000).toISOString(), current: true }] }))

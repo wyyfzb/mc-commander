@@ -28,6 +28,7 @@ import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { Label } from '@/components/ui/label'
 import { PasswordInput } from '@/components/ui/password-input'
 import { cn } from '@/lib/utils'
+import { panelAddress } from '@/lib/mc-connection'
 import { fetchAuthStatus, login, setupPassword } from '@/api/auth'
 import { ApiError, NetworkError } from '@/api/client'
 import { getFriendlyErrorText } from '@/api/errors'
@@ -116,14 +117,24 @@ export function LoginPage() {
 
   /**
    * 登录/设密成功：写会话 → 同步连接状态 → 回跳。
+   * 会话绑定「本浏览器将使用的面板地址」（issuedFor）：令牌只对它签发的面板有效，
+   * 换地址后不再发 Bearer、也不会因该面板的 40103 把这次登录踢掉（见 api/client.ts）。
+   * 绑定值取「用户显式填写的地址」或「store 里的已配置地址」——登录请求可能走同源，
+   * 但应用随后用的是 store 里的地址，两者取后者才与客户端判据一致
+   * （也避免「同一面板两个地址」被误判成换了面板）。
    * 地址只在用户显式处置过（改过输入框 / 点过「恢复默认地址」）时写回：
    * 未触碰时的空串会经 setConfig 覆盖 localStorage 里的已配置地址
    * （stores/connection.ts 用 `??` 只挡 null/undefined，挡不住空串），
    * 分域部署下次进面板就找不到服务端了
    */
   const handleAuthSuccess = (token: string, sessionId: string, expiresAt: string) => {
-    useAuthStore.getState().setSession({ token, sessionId, expiresAt })
     const connection = useConnectionStore.getState()
+    useAuthStore.getState().setSession({
+      token,
+      sessionId,
+      expiresAt,
+      issuedFor: panelAddress(addressSettled.current ? baseUrl : connection.baseUrl),
+    })
     if (addressSettled.current) connection.setConfig({ baseUrl })
     else connection.refreshStatus()
     toast.success(phase === 'setup' ? '管理员密码设置成功' : '登录成功')

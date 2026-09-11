@@ -59,6 +59,8 @@ describe('LoginPage（登录/首访设密三态）', () => {
 
     await waitFor(() => expect(screen.getByText('dashboard-reached')).toBeInTheDocument())
     expect(useAuthStore.getState().session?.token).toBe('mock-session-token-0123456789abcdef')
+    // 会话绑定签发面板：同源部署 → 当前站点根（换地址后不再发 Bearer，见 lib/mc-connection）
+    expect(useAuthStore.getState().session?.issuedFor).toBe(window.location.origin)
     // 连接状态同步为 ready（setConfig 内含凭据重算）
     expect(useConnectionStore.getState().status).toBe('ready')
   })
@@ -240,6 +242,8 @@ describe('LoginPage（登录/首访设密三态）', () => {
     await waitFor(() => expect(screen.getByText('dashboard-reached')).toBeInTheDocument())
 
     expect(useConnectionStore.getState().baseUrl).toBe('http://192.168.1.100:25566')
+    // 会话绑定到登录时使用的地址（不是同源根）
+    expect(useAuthStore.getState().session?.issuedFor).toBe('http://192.168.1.100:25566')
 
     useConnectionStore.getState().setConfig({ baseUrl: '' })
   })

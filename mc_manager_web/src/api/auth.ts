@@ -44,9 +44,9 @@ export interface KickSessionData {
   current: boolean
 }
 
-/** 公开端点请求配置：仅需面板地址（无需任何凭据头） */
+/** 公开端点请求配置：仅需面板地址（本机有登录会话也不携带凭据头） */
 function publicConfig(baseUrl: string): ConnectionConfig {
-  return { baseUrl, apiKey: '' }
+  return { baseUrl, apiKey: '', noCredentials: true }
 }
 
 /** GET /auth/status（公开）：登录页探测是否已设密 */

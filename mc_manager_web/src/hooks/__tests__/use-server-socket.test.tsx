@@ -200,6 +200,18 @@ describe('useServerSocket（WS 单例治理，issue #311）', () => {
     expect(FakeWebSocket.instances[1]!.protocols).toEqual(['mc-commander-apikey.k1'])
   })
 
+  it('会话属于别的面板：WS 回落 API Key 通道（不拿 A 的令牌连 B 的实时通道）', async () => {
+    useConnectionStore.setState({ baseUrl: '', apiKey: 'k1', status: 'ready' })
+    useAuthStore.setState({
+      session: { ...makeSession('token-foreign'), issuedFor: 'https://panel-a.example.com' },
+    })
+
+    renderHook(() => useServerSocket('i-1'), { wrapper: createWrapper() })
+
+    await waitFor(() => expect(FakeWebSocket.instances.length).toBe(1))
+    expect(FakeWebSocket.instances[0]!.protocols).toEqual(['mc-commander-apikey.k1'])
+  })
+
   it('effect 重跑（实例切换）不产生双 WebSocket：connect 幂等复用同一连接', async () => {
     useConnectionStore.setState({ baseUrl: '', apiKey: 'k1', status: 'ready' })
     useAuthStore.setState({ session: null })

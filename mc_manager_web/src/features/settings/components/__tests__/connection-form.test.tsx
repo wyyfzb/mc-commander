@@ -59,10 +59,22 @@ beforeEach(() => {
   useAuthStore.setState({ session: null })
 })
 
-/** 造一个未过期的登录会话（结构占位，非真实凭据） */
+/** 造一个未过期的登录会话（结构占位，非真实凭据）；不写签发面板 = 旧会话口径（按适用处理） */
 function setSession(token = 'sess-token-abc') {
   useAuthStore.setState({
     session: { token, sessionId: 'sess-mock-1', expiresAt: new Date(Date.now() + 60_000).toISOString() },
+  })
+}
+
+/** 造一个绑定到指定面板的登录会话（结构占位，非真实凭据） */
+function setBoundSession(issuedFor: string, token = 'sess-token-abc') {
+  useAuthStore.setState({
+    session: {
+      token,
+      sessionId: 'sess-mock-1',
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      issuedFor,
+    },
   })
 }
 
@@ -350,7 +362,7 @@ describe('ConnectionForm 保存', () => {
 describe('ConnectionForm 登录会话凭据（有会话时 API Key 可空）', () => {
   it('无会话：Key 提示「必须填写」', () => {
     renderForm()
-    expect(screen.getByText('当前无登录会话：必须填写 API Key 才能连接')).toBeInTheDocument()
+    expect(screen.getByText('当前地址没有可用的登录会话：必须填写 API Key 才能连接')).toBeInTheDocument()
   })
 
   it('有会话：Key 提示「可留空」（会话优先于 Key）', () => {
@@ -428,11 +440,57 @@ describe('ConnectionForm 登录会话凭据（有会话时 API Key 可空）', (
       await user.type(screen.getByLabelText('面板地址'), 'https://192.168.1.100:25566')
       await user.click(screen.getByRole('button', { name: '测试连接' }))
 
-      expect(await screen.findByText(/目标地址不接受当前登录会话/)).toBeInTheDocument()
-      // 有会话时客户端只发 Bearer、Key 不进请求，且 Key 也无法经本表单清空（保存前强制测试必失败）
-      // → 提示里不得出现「填 API Key / 清空 Key」这类本界面做不到的动作，只能指向退出登录
-      expect(screen.getByText(/退出登录会清除本机凭据/)).toBeInTheDocument()
+      expect(await screen.findByText(/当前地址的登录会话已过期/)).toBeInTheDocument()
+      // 会话适用于本地址时才可能收到 40103；此时填 Key 也没用（有可用会话时只发 Bearer），
+      // 故提示里不得出现「填 API Key / 清空 Key」这类本界面做不到的动作
+      expect(screen.getByText(/退出登录后重新登录该面板/)).toBeInTheDocument()
       expect(screen.queryByText(/(填写|清空|清除).*API Key/)).not.toBeInTheDocument()
+      expect(expiredListener).not.toHaveBeenCalled()
+      expect(useAuthStore.getState().session?.token).toBe('sess-token-abc')
+    } finally {
+      window.removeEventListener(SESSION_EXPIRED_EVENT, expiredListener)
+    }
+  })
+
+  it('会话属于别的面板：地址下方提示本地址将改用 API Key（并给出退出登录后重新登录的出路）', () => {
+    setBoundSession('https://panel-a.example.com')
+    renderForm()
+    expect(screen.getByText(/当前登录会话属于/)).toBeInTheDocument()
+    expect(screen.getByText('https://panel-a.example.com')).toBeInTheDocument()
+    // 本地址没有可用会话 → Key 必填
+    expect(screen.getByText('当前地址没有可用的登录会话：必须填写 API Key 才能连接')).toBeInTheDocument()
+  })
+
+  it('会话属于本地址（含旧会话）：不显示异面板提示', () => {
+    setBoundSession(window.location.origin)
+    renderForm()
+    expect(screen.queryByText(/当前登录会话属于/)).not.toBeInTheDocument()
+    expect(screen.getByText(/已登录：浏览器用登录会话鉴权/)).toBeInTheDocument()
+  })
+
+  it('会话属于别的面板：测试连接改用本地址的 X-API-Key，不拿 A 的令牌换 40103（也不被踢下线）', async () => {
+    setBoundSession('https://panel-a.example.com')
+    let capturedAuth: string | null = null
+    let capturedKey: string | null = null
+    server.use(
+      http.get('*/api/v1/overview', ({ request }) => {
+        capturedAuth = request.headers.get('Authorization')
+        capturedKey = request.headers.get('X-API-Key')
+        return okEnvelope(mockOverview)
+      }),
+    )
+    const expiredListener = vi.fn()
+    window.addEventListener(SESSION_EXPIRED_EVENT, expiredListener)
+    try {
+      const user = userEvent.setup()
+      renderForm()
+      await user.type(screen.getByLabelText('面板地址'), 'https://panel-b.example.com')
+      await user.type(screen.getByLabelText('API Key'), 'key-b')
+      await user.click(screen.getByRole('button', { name: '测试连接' }))
+
+      expect(await screen.findByText('连接成功')).toBeInTheDocument()
+      expect(capturedAuth).toBeNull()
+      expect(capturedKey).toBe('key-b')
       expect(expiredListener).not.toHaveBeenCalled()
       expect(useAuthStore.getState().session?.token).toBe('sess-token-abc')
     } finally {
