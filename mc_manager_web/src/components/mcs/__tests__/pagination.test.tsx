@@ -59,13 +59,24 @@ describe('Pagination 当前页语义', () => {
       />,
     )
 
-    // 「‹ [1] ›」会让人以为还有别的页；单页没有可翻的页
-    expect(screen.queryByRole('button', { name: '上一页' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '下一页' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /^第 \d+ 页$/ })).not.toBeInTheDocument()
+    // 「‹ [1] ›」会让人以为还有别的页；单页没有可翻的页。
+    // 用「组件里一个 button 都没有」做结构断言——按可访问名的负断言会在改名后静默失效
+    expect(screen.queryAllByRole('button')).toHaveLength(0)
     // 每页选择器必须保留：切到「全部」档后这是切回分页的唯一入口
     expect(screen.getByLabelText('每页行数')).toBeInTheDocument()
     expect(screen.getByText('共 12 条')).toBeInTheDocument()
+  })
+
+  it('numbers：totalPages=0（空结果）只报「共 0 条」，不出现「第 1/0 页」', () => {
+    const { container } = render(
+      <Pagination page={1} totalPages={0} totalItems={0} onPageChange={() => {}} variant="numbers" />,
+    )
+
+    expect(screen.queryAllByRole('button')).toHaveLength(0)
+    expect(screen.getByText('共 0 条')).toBeInTheDocument()
+    // 旧实现会渲染「共 0 条 · 第 1/0 页」（safePage 兜底 1、totalPages 为 0）
+    expect(container.textContent).not.toContain('第 1/0 页')
+    expect(container.textContent).not.toMatch(/第\s*\d+\s*\/\s*0\s*页/)
   })
 
   it('prev-next：总页数=1 时同样不渲染两个方向按钮', () => {
@@ -79,7 +90,6 @@ describe('Pagination 当前页语义', () => {
   it('prev-next：不渲染页码按钮（该模式没有 aria-current 的语义位）', () => {
     render(<Pagination page={1} totalPages={3} onPageChange={() => {}} />)
 
-    expect(screen.queryByRole('button', { name: /^第 \d+ 页$/ })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '上一页' })).toBeDisabled()
     // 当前页信息仍以文本送达（第 1 / 3 页）
     expect(screen.getByText('第 1 / 3 页')).toBeInTheDocument()
