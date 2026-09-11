@@ -243,4 +243,35 @@ describe('LoginPage（登录/首访设密三态）', () => {
 
     useConnectionStore.getState().setConfig({ baseUrl: '' })
   })
+
+  it('用户点「恢复默认地址」：登录成功后写回空串（同源），不留先前填的地址', async () => {
+    let probes = 0
+    server.use(
+      http.get('*/api/v1/auth/status', () => {
+        probes += 1
+        // 首挂载（同源）失败 → 不可达态；点「恢复默认地址」后重新探测成功
+        return probes === 1 ? HttpResponse.error() : okEnvelope({ hasPassword: true })
+      }),
+    )
+    renderLoginPage()
+    await waitFor(() => expect(screen.getByText('连接失败')).toBeInTheDocument())
+
+    // 「恢复默认地址」只在地址非空时出现——先按「连接其他面板地址」填一个（这一步即视为显式处置）
+    await userEvent.click(screen.getByRole('button', { name: /尝试连接其他面板地址/ }))
+    await userEvent.type(
+      screen.getByLabelText('面板服务端地址（用于面板网页与服务端分开部署的场景）'),
+      'http://192.168.1.100:25566',
+    )
+    await userEvent.click(screen.getByRole('button', { name: '恢复默认地址' }))
+    await waitFor(() => expect(screen.getByLabelText('管理员密码')).toBeInTheDocument())
+
+    await userEvent.type(screen.getByLabelText('管理员密码'), 'correct-horse')
+    await userEvent.click(screen.getByRole('button', { name: /登录/ }))
+    await waitFor(() => expect(screen.getByText('dashboard-reached')).toBeInTheDocument())
+
+    // 处置过 → 写回重置后的空串（同源）；若重置没生效，这里会是先前填的地址
+    expect(useConnectionStore.getState().baseUrl).toBe('')
+
+    useConnectionStore.getState().setConfig({ baseUrl: '' })
+  })
 })
