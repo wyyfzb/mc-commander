@@ -127,6 +127,8 @@ function FileListRow({
       role="button"
       tabIndex={0}
       aria-label={isDir ? `打开目录 ${entry.name}` : editable ? `选择文件 ${entry.name}` : `文件 ${entry.name}（二进制，可下载）`}
+      // 当前预览文件：底色是视觉线索，语义位由 aria-current 承担（role=button 行不构成列表选中集）
+      aria-current={isSelected ? 'true' : undefined}
       onClick={handleRowClick}
       onKeyDown={(e) => {
         // role="button" 行只处理落在行本身的激活键；行内图标按钮的冒泡不再触发行打开

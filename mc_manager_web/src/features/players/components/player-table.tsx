@@ -143,7 +143,7 @@ export function PlayerTable({
                       // 排序态由 aria-sort 承担：箭头是 aria-hidden 的纯视觉提示，
                       // 不能作为唯一信息源（读屏用户拿不到「当前按哪列排、什么方向」）
                       aria-sort={
-                        canSort
+                        !header.isPlaceholder && canSort
                           ? sorted === 'asc'
                             ? 'ascending'
                             : sorted === 'desc'

@@ -1,7 +1,7 @@
 /**
  * Pagination 可达性语义：
- * - 当前页必须用 `aria-current="page"` 暴露——此前只靠 variant 的底色区分，
- *   读屏完全拿不到、弱视用户也难辨（全站 grep 当时 `aria-current` 只在 tab/面包屑/stepper 有）
+ * - 当前页必须用 `aria-current="page"` 暴露：底色只是视觉线索，读屏拿不到
+ *   （语义值域与全站先例一致：导航/tab 用 page，步骤条用 step）
  * - 上一页/下一页在首/末页禁用（方向语义不能靠「点了没反应」表达）
  * - prev-next 模式无页码按钮，不引入 aria-current
  */
@@ -33,6 +33,15 @@ describe('Pagination 当前页语义', () => {
     unmount()
     render(<Pagination page={2} totalPages={2} onPageChange={onPageChange} variant="numbers" />)
     expect(screen.getByRole('button', { name: '下一页' })).toBeDisabled()
+  })
+
+  it('numbers：page 超出 totalPages 时按钳制后的末页标记（当前态不得静默丢失）', () => {
+    // 残留 page=5 / totalPages=3：左侧信息已按 safePage 显示「第 3 / 3 页」，
+    // 若标记用未钳制的 page，则没有任何页码带 aria-current——当前态从语义层消失
+    render(<Pagination page={5} totalPages={3} onPageChange={() => {}} variant="numbers" />)
+
+    expect(screen.getByRole('button', { name: '第 3 页' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByText('第 3 / 3 页')).toBeInTheDocument()
   })
 
   it('prev-next：不渲染页码按钮（该模式没有 aria-current 的语义位）', () => {
