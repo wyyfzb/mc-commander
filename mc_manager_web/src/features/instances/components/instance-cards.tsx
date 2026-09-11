@@ -201,10 +201,10 @@ function InstanceCard({
       </p>
 
       {/* 指标行（在线/TPS/内存/世界大小；详情缺省 —）
-          单位为 GB，与同行「世界」同口径。标签写「内存」而非「JVM 堆」：
-          服务端采集的 memoryUsage 是进程 RSS/WorkingSet（stats-collector 三平台分支），
-          与堆不是一回事——要显示真实堆需服务端另采指标。
-          统计未就绪初值为 0，此时显示 —：（运行中却报 0 会被读成「内存耗光」） */}
+          这里的 memoryUsage 是**进程驻留内存**（服务端 stats-collector 三平台分支分别取
+          Windows WorkingSet / Linux statm RSS / macOS ps rss），不是 JVM 堆——要显示真实堆
+          需服务端另采指标；数值展示格式与同行「世界」一致（GB，两位以内小数）。
+          统计未就绪初值为 0，此时显示 —（运行中却报 0 会被读成「内存耗光」） */}
       <div className="grid grid-cols-4 gap-2 rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-default px-3 py-2 shadow-mcs-card">
         <Metric label="在线" value={isRunning ? `${playerCount}` : '—'} />
         <Metric label="TPS" value={isRunning && detail?.tps != null ? detail.tps.toFixed(1) : '—'} />

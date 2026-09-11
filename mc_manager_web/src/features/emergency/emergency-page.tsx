@@ -188,7 +188,7 @@ export function EmergencyPage() {
                     {/* 未就绪期为 0：显示 0 GB 会被读成「内存耗光」，与 TPS 同用 — 兜底 */}
                     <Stat
                       label="内存"
-                      value={st?.memoryUsage != null && st.memoryUsage > 0 ? `${st.memoryUsage} GB` : '—'}
+                      value={(st?.memoryUsage ?? 0) > 0 ? `${st?.memoryUsage} GB` : '—'}
                     />
                   </div>
                 </>
