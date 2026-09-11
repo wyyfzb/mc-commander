@@ -51,7 +51,7 @@ function renderCard() {
 /** 渲染卡片并等待列表就绪 */
 async function renderReady() {
   renderCard()
-  await waitFor(() => expect(screen.getByText('手动备份 2026-08-14')).toBeInTheDocument())
+  await waitFor(() => expect(screen.getByText('手动备份')).toBeInTheDocument())
 }
 
 beforeEach(() => {

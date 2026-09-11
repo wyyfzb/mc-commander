@@ -437,7 +437,7 @@ export const mockBackups: BackupItem[] = [
   {
     id: 11,
     instanceId: 'demo',
-    name: '手动备份 2026-08-14',
+    name: '手动备份',
     description: null,
     type: 'manual',
     size: 524_288_000,
@@ -489,7 +489,8 @@ const backupHandlers = [
     ok({
       id: 12,
       instanceId: 'demo',
-      name: '手动备份 2026-08-15',
+      // 与服务端默认命名同源（routes/backups.js：未传 name 时用 Backup_YYYY-MM-DD）
+      name: `Backup_${new Date().toISOString().slice(0, 10)}`,
       description: null,
       type: 'manual',
       size: 0,

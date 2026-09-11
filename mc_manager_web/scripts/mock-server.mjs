@@ -257,7 +257,7 @@ const mockBackups = [
   {
     id: 21,
     instanceId: 'e2e-demo',
-    name: '手动备份 2026-08-14',
+    name: '手动备份',
     description: null,
     type: 'manual',
     size: 524_288_000,
@@ -649,7 +649,9 @@ const server = createServer((req, res) => {
         return res.end(ok({
           id: 23,
           instanceId: 'e2e-demo',
-          name: '手动备份 2026-08-15',
+          // 与服务端默认命名同源（routes/backups.js：未传 name 时用 Backup_YYYY-MM-DD），
+          // 与 createdAt 同刻生成，不再写死日期
+          name: `Backup_${new Date().toISOString().slice(0, 10)}`,
           description: null,
           type: 'manual',
           size: 0,
