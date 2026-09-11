@@ -98,6 +98,10 @@ export default defineConfig({
     exclude: ['e2e/**', 'node_modules/**'],
     css: false, // 组件测试不解析 CSS（token 校验走独立脚本/测试）
     pool: 'threads', // 全量测试 107s → 64s（2026-08-20 实测；Windows 上 threads 显著快于默认 forks）
+    // 单例超时（默认 5s）必须大于 setup.ts 的异步查询上限，否则失败时先被 vitest
+    // 掐断、报「test timed out」而不是 RTL 的「找不到元素」——诊断信息会退化。
+    // 各 describe 里本地的 { timeout: 15000 } 与此同值，保留作兜底（全局若调低仍保 15s）
+    testTimeout: 15_000,
     coverage: {
       provider: 'v8',
       reporter: ['json', 'text'],

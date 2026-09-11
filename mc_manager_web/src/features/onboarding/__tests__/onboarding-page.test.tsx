@@ -202,7 +202,10 @@ describe('OnboardingPage · 命令复制反馈', () => {
     render(<OnboardingPage />)
     fireEvent.click(screen.getByRole('radio', { name: /Linux 一键部署/ }))
     fireEvent.click(screen.getByRole('button', { name: '复制部署命令' }))
-    await vi.waitFor(() => expect(toastSuccess).toHaveBeenCalledWith('命令已复制', { duration: 1500 }))
+    await vi.waitFor(() => expect(toastSuccess).toHaveBeenCalledWith('命令已复制', { duration: 1500 }), {
+      // vi.waitFor 有独立的硬编码 1s 上限，不读 RTL 的 asyncUtilTimeout（J58）
+      timeout: 5000,
+    })
     expect(toastError).not.toHaveBeenCalled()
   })
 
@@ -211,7 +214,10 @@ describe('OnboardingPage · 命令复制反馈', () => {
     render(<OnboardingPage />)
     fireEvent.click(screen.getByRole('radio', { name: /Linux 一键部署/ }))
     fireEvent.click(screen.getByRole('button', { name: '复制部署命令' }))
-    await vi.waitFor(() => expect(toastError).toHaveBeenCalledWith('复制失败，请手动复制'))
+    await vi.waitFor(() => expect(toastError).toHaveBeenCalledWith('复制失败，请手动复制'), {
+      // 同上：vi.waitFor 不吃全局 RTL 上限
+      timeout: 5000,
+    })
     expect(toastSuccess).not.toHaveBeenCalled()
   })
 })

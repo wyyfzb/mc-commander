@@ -95,6 +95,10 @@ npm run dev                  # node --watch 热重载
   （仅靠 `focus:bg-accent` 在弹窗面上只有 1.1:1）。注意：Radix 指针移动也会移动 DOM 焦点，
   实测 Chromium 下 `focus-visible:` 对指针 hover 同样匹配 → 该环在指针悬停时也会出现，
   这是为可访问性接受的取舍，不要为此改回 `outline-hidden`。
+- **测试等待**：异步查询统一吃 `src/test/setup.ts` 的全局 `asyncUtilTimeout`（5s），
+  不要写 per-call `timeout`；vitest 自带的 `vi.waitFor` 有独立硬编码的 1s 上限、不读该配置，
+  等 toast 这类异步续延须显式传 `{ timeout }`；时机语义（防抖、轮询间隔）用 fake timers 断言，
+  不要靠「等多久」来验证。
 - **测试数据**：测试与文档中严禁出现真实服务器信息（IP / API Key / 真实玩家数据），
   一律使用虚构数据（`1.2.3.4`、TEST-NET 网段、Steve/Alex 等官方示例名）。
 - **MC 版本兼容**：排查问题优先考虑 MC 26.x 新版与旧版在目录结构、数据格式、

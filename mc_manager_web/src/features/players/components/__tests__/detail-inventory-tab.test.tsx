@@ -174,7 +174,7 @@ describe('InventoryTab hover tooltip', () => {
     await user.hover(screen.getByAltText('diamond_sword'))
     await waitFor(() => {
       expect(screen.getByText('minecraft:diamond_sword')).toBeInTheDocument()
-    }, { timeout: 3000 })
+    })
     expect(screen.getByText('神剑')).toBeInTheDocument()
     expect(screen.getByText(/数量 ×1/)).toBeInTheDocument()
     expect(screen.getByText(/耐久 80%/)).toBeInTheDocument()
@@ -188,7 +188,7 @@ describe('InventoryTab hover tooltip', () => {
     await user.hover(screen.getByAltText('bread'))
     await waitFor(() => {
       expect(screen.getByText('minecraft:bread')).toBeInTheDocument()
-    }, { timeout: 3000 })
+    })
     expect(screen.getByText(/数量 ×16/)).toBeInTheDocument()
     expect(screen.queryByText(/耐久/)).not.toBeInTheDocument()
     expect(screen.queryByText(/已附魔/)).not.toBeInTheDocument()
