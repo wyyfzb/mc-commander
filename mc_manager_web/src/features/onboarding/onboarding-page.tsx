@@ -10,6 +10,7 @@ import { Link, useNavigate } from 'react-router'
 import { AlertTriangle, Check, Copy, Lightbulb, Package, Server, Terminal } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { nextRadioIndex } from '@/lib/radio-group'
 import { copyText } from '@/lib/clipboard'
 import { BrandLogo } from '@/components/mcs/brand-logo'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
@@ -122,20 +123,16 @@ export function OnboardingPage() {
   const cardRefs = useRef<Partial<Record<DeployMode, HTMLButtonElement | null>>>({})
 
   /**
-   * 单选组方向键模型（APG）：左右/上下移动并即时选中，Home/End 跳首尾，焦点跟随选中。
+   * 单选组方向键模型（APG）：移动即选中，焦点跟随（下标计算与回绕见 lib/radio-group）。
    * 挂在组上而非每张卡上：事件从聚焦的卡片冒泡上来，只需一处分支。
    */
   const handleModeKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    const step =
-      e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0
-    const isEdgeKey = e.key === 'Home' || e.key === 'End'
-    if (step === 0 && !isEdgeKey) return
+    const next = nextRadioIndex(e.key, MODE_ORDER.indexOf(mode), MODE_ORDER.length)
+    if (next === null) return
     e.preventDefault()
-    const next: DeployMode = isEdgeKey
-      ? MODE_ORDER[e.key === 'Home' ? 0 : MODE_ORDER.length - 1]!
-      : MODE_ORDER[(MODE_ORDER.indexOf(mode) + step + MODE_ORDER.length) % MODE_ORDER.length]!
-    setMode(next)
-    cardRefs.current[next]?.focus()
+    const target = MODE_ORDER[next]!
+    setMode(target)
+    cardRefs.current[target]?.focus()
   }
 
   return (
