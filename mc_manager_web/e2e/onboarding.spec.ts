@@ -52,13 +52,13 @@ test.describe('onboarding', () => {
     // 三张卡片：已有服务端 / Linux 一键部署 / Windows 手动部署；Docker 只占一行说明
     await expect(page.getByRole('button', { name: 'Docker' })).toHaveCount(0)
     await expect(page.getByText(/Docker 不在支持范围内/)).toBeVisible()
-    await page.getByRole('button', { name: 'Windows 手动部署' }).click()
+    await page.getByRole('radio', { name: 'Windows 手动部署' }).click()
     await expect(page.getByText('Windows 手动部署（Node 22+）')).toBeVisible()
     // 前端产物构建是必需步骤（缺失时 :25566 只有接口没有界面）
     await expect(page.getByText(/npm run build/)).toBeVisible()
     await maybeShot(page, 'onboarding-windows-dark.png')
     // Linux 一键部署：命令与要点
-    await page.getByRole('button', { name: 'Linux 一键部署' }).click()
+    await page.getByRole('radio', { name: 'Linux 一键部署' }).click()
     await expect(page.getByText('Linux 一键部署命令')).toBeVisible()
     await expect(page.getByText(/sudo su -c "curl -fsSL/)).toBeVisible()
     await expect(
@@ -73,6 +73,33 @@ test.describe('onboarding', () => {
     await expect(docLink).toHaveAttribute('href', 'https://gitee.com/wyyfzb/mc-commander')
     await expect(docLink).toHaveAttribute('target', '_blank')
     await maybeShot(page, 'onboarding-manual-dark.png')
+  })
+
+  test('部署方式是可键盘操作的单选组：方向键移动并即时选中', async ({ page }) => {
+    await clearConnection(page)
+    await page.goto('/onboarding')
+    // jsdom 模拟不出真实的 Tab 顺序与焦点，roving tabindex 必须在真实浏览器里验
+    const group = page.getByRole('radiogroup', { name: '部署方式' })
+    await expect(group.getByRole('radio')).toHaveCount(3)
+    const already = group.getByRole('radio', { name: '已有服务端' })
+    await expect(already).toBeChecked()
+    // roving tabindex：组内恰好一个 Tab 停靠点，且落在选中项上
+    await expect(group.locator('[role="radio"][tabindex="0"]')).toHaveCount(1)
+    await expect(already).toHaveAttribute('tabindex', '0')
+
+    await already.focus()
+    await page.keyboard.press('ArrowRight')
+    await expect(group.getByRole('radio', { name: 'Linux 一键部署' })).toBeChecked()
+    await expect(page.getByText('Linux 一键部署命令')).toBeVisible()
+    // 焦点随选中移动：不移动的话下一次方向键仍从原项出发，键盘用户会「原地打转」
+    const linux = group.getByRole('radio', { name: 'Linux 一键部署' })
+    await expect(linux).toBeFocused()
+    // 停靠点随选中迁移：组内仍只有一个 tabindex=0，且在 Linux 上
+    await expect(group.locator('[role="radio"][tabindex="0"]')).toHaveCount(1)
+    await expect(linux).toHaveAttribute('tabindex', '0')
+
+    await page.keyboard.press('Home')
+    await expect(already).toBeChecked()
   })
 
   test('保存连接：onboarding 表单 → 进入面板', async ({ page }) => {

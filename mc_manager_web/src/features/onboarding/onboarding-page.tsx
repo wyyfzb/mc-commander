@@ -5,7 +5,7 @@
  * - 连接表单复用 ConnectionForm variant onboarding；保存成功（setConfig → status ready）→ 跳转 /dashboard
  * - 路由保护：AppShell loader 在 status=unconfigured 时 redirect /onboarding
  */
-import { useState } from 'react'
+import { useRef, useState, type KeyboardEvent } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { AlertTriangle, Check, Copy, Lightbulb, Package, Server, Terminal } from 'lucide-react'
 import { toast } from 'sonner'
@@ -16,6 +16,9 @@ import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { ConnectionForm } from '@/features/settings/components/connection-form'
 
 type DeployMode = 'already' | 'linux' | 'windows'
+
+/** 单选组内顺序（方向键按此循环；必须与卡片渲染顺序一致） */
+const MODE_ORDER: DeployMode[] = ['already', 'linux', 'windows']
 
 /** Linux 一键部署命令（项目公开仓库脚本地址；gitee 镜像同路径，README 与设置页一致用 main 分支） */
 const DEPLOY_COMMAND =
@@ -41,7 +44,7 @@ const LINUX_POINTS = [
   '服务端默认运行在 25566 端口，安装目录为 /opt/mc-commander',
 ]
 
-/** 部署方式卡片（已有服务端 / Linux 一键 / Windows 手动） */
+/** 部署方式卡片（已有服务端 / Linux 一键 / Windows 手动）——三选一的单选组，非独立开关 */
 function ModeCard({
   mode,
   active,
@@ -49,6 +52,7 @@ function ModeCard({
   description,
   icon: Icon,
   onSelect,
+  buttonRef,
 }: {
   mode: DeployMode
   active: boolean
@@ -56,11 +60,19 @@ function ModeCard({
   description: string
   icon: typeof Server
   onSelect: (mode: DeployMode) => void
+  /** 方向键移动焦点需要拿到 DOM 节点（roving tabindex 由父级统一管理） */
+  buttonRef: (el: HTMLButtonElement | null) => void
 }) {
   return (
     <button
+      ref={buttonRef}
       type="button"
-      aria-pressed={active}
+      // 三选一：语义是单选组（role=radio），不是三枚可各自开关的按钮
+      // （aria-pressed 会让读屏播报「已按下/未按下」，丢掉「3 选 1、当前第几项」）
+      role="radio"
+      aria-checked={active}
+      // roving tabindex：组内只有选中项可 Tab 进入，组内移动交给方向键
+      tabIndex={active ? 0 : -1}
       onClick={() => onSelect(mode)}
       className={cn(
         'flex flex-1 flex-col items-start gap-2 rounded-mcs-md border p-4 text-left transition-colors',
@@ -107,6 +119,24 @@ function CommandBlock({ command, ariaLabel }: { command: string; ariaLabel: stri
 export function OnboardingPage() {
   const navigate = useNavigate()
   const [mode, setMode] = useState<DeployMode>('already')
+  const cardRefs = useRef<Partial<Record<DeployMode, HTMLButtonElement | null>>>({})
+
+  /**
+   * 单选组方向键模型（APG）：左右/上下移动并即时选中，Home/End 跳首尾，焦点跟随选中。
+   * 挂在组上而非每张卡上：事件从聚焦的卡片冒泡上来，只需一处分支。
+   */
+  const handleModeKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    const step =
+      e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0
+    const isEdgeKey = e.key === 'Home' || e.key === 'End'
+    if (step === 0 && !isEdgeKey) return
+    e.preventDefault()
+    const next: DeployMode = isEdgeKey
+      ? MODE_ORDER[e.key === 'Home' ? 0 : MODE_ORDER.length - 1]!
+      : MODE_ORDER[(MODE_ORDER.indexOf(mode) + step + MODE_ORDER.length) % MODE_ORDER.length]!
+    setMode(next)
+    cardRefs.current[next]?.focus()
+  }
 
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center bg-mcs-bg-default p-6">
@@ -120,8 +150,13 @@ export function OnboardingPage() {
           </p>
         </div>
 
-        {/* ── 部署方式选择（三选一）+ Docker 边界说明 ── */}
-        <div className="mb-2 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {/* ── 部署方式选择（三选一单选组）+ Docker 边界说明 ── */}
+        <div
+          role="radiogroup"
+          aria-label="部署方式"
+          onKeyDown={handleModeKeyDown}
+          className="mb-2 grid grid-cols-1 gap-3 sm:grid-cols-3"
+        >
           <ModeCard
             mode="already"
             active={mode === 'already'}
@@ -129,6 +164,9 @@ export function OnboardingPage() {
             description="我已部署，直接连接"
             icon={Server}
             onSelect={setMode}
+            buttonRef={(el) => {
+              cardRefs.current.already = el
+            }}
           />
           <ModeCard
             mode="linux"
@@ -137,6 +175,9 @@ export function OnboardingPage() {
             description="一条命令装好运行环境"
             icon={Terminal}
             onSelect={setMode}
+            buttonRef={(el) => {
+              cardRefs.current.linux = el
+            }}
           />
           <ModeCard
             mode="windows"
@@ -145,6 +186,9 @@ export function OnboardingPage() {
             description="自备 Node 22+ · 分步指引"
             icon={Package}
             onSelect={setMode}
+            buttonRef={(el) => {
+              cardRefs.current.windows = el
+            }}
           />
         </div>
         <p className="mb-4 text-mcs-xs text-mcs-text-muted">
