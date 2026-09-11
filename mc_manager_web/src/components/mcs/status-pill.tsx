@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { clsx } from 'clsx'
+import { cn } from '@/lib/utils'
 import type { ChipTone } from './chip'
 import { toneClasses, toneOutlineClasses } from './tone'
 
@@ -63,7 +63,7 @@ export function StatusPill({
       data-status-tone={tone}
       data-status-variant={variant}
       title={title}
-      className={clsx(
+      className={cn(
         'inline-flex h-5 shrink-0 items-center rounded-full border px-2 text-xs font-medium whitespace-nowrap',
         toneClass,
         className,

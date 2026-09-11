@@ -1,9 +1,6 @@
 import type { ReactNode } from 'react'
-import { clsx, type ClassValue } from 'clsx'
+import { cn } from '@/lib/utils'
 import { toneClasses } from './tone'
-// 不用 twMerge：mcs-* 自定义 token 类会被 tailwind-merge 误判为 text-*/bg-* 同组冲突，
-// 吞掉 tone 色类（text-mcs-warning-fg 会被 text-mcs-xs 覆盖删除）；clsx 保留全部类，
-// 冲突由 CSS 层解决（color 与 font-size 本就不同组，互不冲突）
 
 /**
  * Chip —— 通用标签/切换chip（全 token；Tasteful Friction 系列）
@@ -71,7 +68,6 @@ export function Chip({
     onClick != null
       ? 'cursor-pointer select-none hover:bg-mcs-state-hover active:bg-mcs-state-pressed disabled:cursor-not-allowed disabled:opacity-50'
       : ''
-  const all = (...parts: ClassValue[]) => clsx(parts)
 
   if (onClick != null) {
     return (
@@ -84,7 +80,7 @@ export function Chip({
         aria-pressed={selected != null ? (selected ? 'true' : 'false') : undefined}
         aria-label={ariaLabel}
         title={title}
-        className={all(base, toneClass, state, className)}
+        className={cn(base, toneClass, state, className)}
       >
         {children}
       </button>
@@ -95,7 +91,7 @@ export function Chip({
       title={title}
       onPointerEnter={onPointerEnter}
       onPointerLeave={onPointerLeave}
-      className={all(base, toneClass, className)}
+      className={cn(base, toneClass, className)}
     >
       {children}
     </span>

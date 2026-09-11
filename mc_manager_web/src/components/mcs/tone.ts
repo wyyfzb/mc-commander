@@ -9,11 +9,8 @@
  * `bg-mcs-bg-default` / `bg-mcs-bg-subtle` / `bg-mcs-bg-secondary`，
  * 是刻意的视觉层级差异，统一属设计决策，不由本模块代劳。
  *
- * 注意 `toneClasses()` 的输出含 `text-mcs-*-fg`，而本仓 `cn` 走 twMerge，
- * 会把未知 `text-*` 归入字号档——与 `text-mcs-xs` 等尺寸类同元素混用会互相吞掉
- * （见 chip.tsx 顶部注释）。**新增着色点请用 `clsx`**，或保证同一 `cn` 里没有其它
- * `text-*`。存量仍有多处 `cn` 与尺寸档同串：修它会让字号恢复为设计值（可见变化），
- * 需单独一批配视觉复核，故未混入本次收编。
+ * `toneClasses()` 的输出含 `text-mcs-*-fg`，与 `text-mcs-xs` 等尺寸档同串不会互相吞：
+ * 字号档与颜色档的分组已在 lib/utils.ts 里声明清楚（守卫用例见 lib/__tests__/tailwind-merge.test.ts）。
  */
 
 /** 语义档（六色）：有明确成败/告警含义，需要底+边+前景三者同色系 */

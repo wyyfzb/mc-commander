@@ -5,12 +5,12 @@
  * - 「立即备份」在有在途备份（creating/restoring）时禁用，与备份页互斥状态机同口径
  * - 入口统一指向设置页备份子路由（真实路由为 /settings/backup）
  */
-import { clsx } from 'clsx'
 import { useNavigate } from 'react-router'
 import { ArrowRight, CircleAlert, CloudUpload, HardDrive, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { getFriendlyErrorText } from '@/api/errors'
 import type { BackupItem } from '@/api/types'
+import { cn } from '@/lib/utils'
 import { useServerStore } from '@/stores/server'
 import { LoadingButton } from '@/components/mcs/loading-button'
 import { StatusPill } from '@/components/mcs/status-pill'
@@ -148,9 +148,7 @@ function BackupMiniRow({ backup }: { backup: BackupItem }) {
   return (
     <div className="flex items-center gap-2 py-1.5">
       <span
-        /* 用 clsx 而非 cn：cn 走 twMerge，会把 text-mcs-*-fg 当字号档与 text-* 尺寸类互吞
-           （本例暂未同串尺寸档，但往基础串里加 text-mcs-xs 就会被静默吃掉） */
-        className={clsx('flex size-6 shrink-0 items-center justify-center rounded-mcs-xs', toneClasses(tone))}
+        className={cn('flex size-6 shrink-0 items-center justify-center rounded-mcs-xs', toneClasses(tone))}
         aria-hidden
       >
         {isInProgress ? (
