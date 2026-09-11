@@ -171,7 +171,11 @@ export function _collectStats() {
         const cpuSeconds = info?.CPU == null ? null : Number(info.CPU);
         if (cpuSeconds !== null && Number.isFinite(cpuSeconds)) this._applyCpuSecondsSample(cpuSeconds);
         this._emitPerformance();
-      } catch {}
+      } catch (e) {
+        // 解析失败（真实 PowerShell 输出契约漂移）与监听器抛错都不得逃逸；只留 debug
+        // 而不告警——进程正常退出时的空 stdout 走同一路径，warn 会刷屏
+        logger.debug(`[${this.id}] Windows 实例指标解析/广播失败: ${e.message}`);
+      }
     });
   } else {
     // Linux: 从 /proc/[pid]/stat 读取 CPU 时间，计算瞬时使用率

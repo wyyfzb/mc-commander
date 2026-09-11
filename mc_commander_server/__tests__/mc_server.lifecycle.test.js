@@ -588,6 +588,13 @@ describe('MCServerInstance lifecycle / RCON / stats timers', () => {
       expect(instance._saveTimer).not.toBeNull();
     });
 
+    it('新一轮运行复位采集告警位（否则上一轮的告警位会让新进程首个失败静默）', () => {
+      const instance = createInstance();
+      instance._win32StatsError = true; // 上一轮持续失败留下的状态
+      instance._initializeRuntimeState();
+      expect(instance._win32StatsError).toBe(false);
+    });
+
     it('invokes collectors on their schedules', async () => {
       const instance = createInstance();
       const statsSpy = vi.spyOn(instance, '_collectStats').mockImplementation(() => {});

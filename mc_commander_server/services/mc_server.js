@@ -269,7 +269,8 @@ export class MCServerInstance extends EventEmitter {
     this._rconClient = null;
     this._rconConnecting = null;
     this._lastCpuTime = undefined;
-    // Windows 采集失败告警去重位（见 stats-collector 的 win32 分支）：只报「正常→失败」的转折
+    // Windows 采集告警去重位（见 stats-collector 的 win32 分支）：记的是 exec 层失败，
+    // 只在「正常→失败」的转折处告警一次；每轮运行由 _initializeRuntimeState 复位
     this._win32StatsError = false;
     this._saveTimer = null;
     this._playerStatsTimer = null;  // 玩家血量/坐标/入睡状态采集定时器

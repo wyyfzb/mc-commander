@@ -185,6 +185,8 @@ export function _initializeRuntimeState() {
   }
   this._readWorldSpawnFromLevelDat();
   this._sleepingPlayers = 0;
+  // 新一轮运行重新计数采集告警：否则上一轮留下的「已告警」位会让新进程的首个失败静默
+  this._win32StatsError = false;
   this._startStatsCollection();
 }
 
