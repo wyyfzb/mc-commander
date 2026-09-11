@@ -72,7 +72,11 @@ function instancesOk(data: unknown) {
 }
 
 // server.use 的运行时处理器会累积到后续用例（否则上一例的失败/空列表会串场）
-afterEach(() => server.resetHandlers())
+afterEach(() => {
+  server.resetHandlers()
+  // 间谍残留会让后续用例读到上一例的 toast（用例中途断言失败时尤甚）
+  vi.restoreAllMocks()
+})
 
 beforeEach(() => {
   localStorage.clear()
@@ -130,7 +134,6 @@ describe('AppTopBar 实例名三态', () => {
     expect(useConnectionStore.getState().apiKey).toBe('')
     // 文案求值必须在清凭据之前：清完再取会恒判「没清过」，本分支就永远只说「已退出登录」
     expect(infoSpy).toHaveBeenCalledWith('已退出登录，本机保存的 API Key 已一并清除')
-    infoSpy.mockRestore()
   })
 
   it('退出登录：会话与残留 API Key 一并清除并落到 /login（只清会话会被守卫弹回）', async () => {

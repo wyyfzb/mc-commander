@@ -122,6 +122,8 @@ export function Pagination({
                   size="icon-sm"
                   disabled={disabled}
                   onClick={() => onPageChange(n)}
+                  // 当前页此前只靠 variant 的底色区分（读屏完全拿不到，弱视用户也难辨）
+                  aria-current={safePage === n ? 'page' : undefined}
                   aria-label={`第 ${n} 页`}
                 >
                   {n}

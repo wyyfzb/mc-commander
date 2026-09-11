@@ -376,6 +376,25 @@ describe('PlayerTable · 列头排序', () => {
     expect(screen.getByRole('button', { name: '玩家' })).toHaveTextContent('↓')
   })
 
+  it('排序态经 aria-sort 暴露：none → ascending → descending，不可排序列不设该属性', async () => {
+    const user = userEvent.setup()
+    setup({
+      players: [makePlayer(), makePlayer({ name: 'Alex', uuid: '00000000-0000-4000-8000-000000000003' })],
+    })
+    const nameHeader = () => screen.getByRole('columnheader', { name: '玩家' })
+
+    // 可排序但未排序：none（不是缺失——缺失读不出「这列能排但当前没排」）
+    expect(nameHeader()).toHaveAttribute('aria-sort', 'none')
+    await user.click(screen.getByRole('button', { name: '玩家' }))
+    expect(nameHeader()).toHaveAttribute('aria-sort', 'ascending')
+    await user.click(screen.getByRole('button', { name: '玩家' }))
+    expect(nameHeader()).toHaveAttribute('aria-sort', 'descending')
+    // 其他可排序列仍是 none（排序态不会串到别的列）
+    expect(screen.getByRole('columnheader', { name: '延迟' })).toHaveAttribute('aria-sort', 'none')
+    // 不可排序列（选择列）不设该属性：aria-sort 只对可排序表头有意义
+    expect(screen.getByRole('checkbox', { name: '全选当前页' }).closest('th')).not.toHaveAttribute('aria-sort')
+  })
+
   // 回归锁（issue #472 / PR #473 沉淀缺口）：v9 未注册 sortedRowModel 时
   // getRowModel() 返回预排序模型——箭头翻转但行序纹丝不动。此用例断言
   // 行序真实变化：升序 Alex 在前、降序 Steve 在前（修复前升序仍是 Steve 在前）

@@ -133,11 +133,24 @@ export function PlayerTable({
                 {headerGroup.headers.map((header) => {
                   // 数值列（延迟/在线时长/总时长）表头与 cell 同向右对齐
                   const rightAlign = ['ping', 'onlineDuration', 'totalPlayTime'].includes(header.column.id)
+                  const sorted = header.column.getIsSorted()
+                  const canSort = header.column.getCanSort()
                   return (
                     <th
                       key={header.id}
                       scope="col"
                       style={{ width: header.getSize() }}
+                      // 排序态由 aria-sort 承担：箭头是 aria-hidden 的纯视觉提示，
+                      // 不能作为唯一信息源（读屏用户拿不到「当前按哪列排、什么方向」）
+                      aria-sort={
+                        canSort
+                          ? sorted === 'asc'
+                            ? 'ascending'
+                            : sorted === 'desc'
+                              ? 'descending'
+                              : 'none'
+                          : undefined
+                      }
                       className={cn(
                         'h-9 px-2 text-mcs-xs font-medium text-mcs-text-muted',
                         rightAlign && 'text-right',
@@ -145,7 +158,7 @@ export function PlayerTable({
                     >
                       {header.isPlaceholder
                         ? null
-                        : header.column.getCanSort()
+                        : canSort
                           ? (
                             <button
                               type="button"
@@ -156,8 +169,8 @@ export function PlayerTable({
                               onClick={header.column.getToggleSortingHandler()}
                             >
                               {flexRender(header.column.columnDef.header, header.getContext())}
-                              {header.column.getIsSorted() === 'asc' && <span aria-hidden>↑</span>}
-                              {header.column.getIsSorted() === 'desc' && <span aria-hidden>↓</span>}
+                              {sorted === 'asc' && <span aria-hidden>↑</span>}
+                              {sorted === 'desc' && <span aria-hidden>↓</span>}
                             </button>
                           )
                           : (
