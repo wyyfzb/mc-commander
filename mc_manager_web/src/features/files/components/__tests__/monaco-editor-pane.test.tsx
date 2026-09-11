@@ -7,7 +7,7 @@
  * 3. languageForFile 为纯函数独立 export，直接单测
  * 测试路径全部为虚构示例（示例世界/示例文件名），禁真实服务器数据
  */
-import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import type { MonacoEditorPaneProps } from '../monaco-editor-pane'
 import { MonacoEditorPane, languageForFile } from '../monaco-editor-pane'
@@ -90,6 +90,10 @@ function makeProps(overrides: Partial<MonacoEditorPaneProps> = {}): MonacoEditor
     ...overrides,
   }
 }
+
+afterEach(() => {
+  vi.restoreAllMocks()
+})
 
 beforeEach(() => {
   editorCall.props = null
@@ -247,6 +251,16 @@ describe('头部条', () => {
     expect(save).toBeEnabled()
     fireEvent.click(save)
     expect(onSave).toHaveBeenCalledTimes(1)
+  })
+
+  it('保存提示按平台取词：macOS 显示 ⌘+S（Monaco 的 CtrlCmd 在 mac 即 Cmd）', () => {
+    vi.spyOn(navigator, 'platform', 'get').mockReturnValue('MacIntel')
+    render(<MonacoEditorPane {...makeProps({ path: PATH_PROPERTIES, dirty: true })} />)
+
+    expect(screen.getByText('⌘+S')).toBeInTheDocument()
+    expect(screen.queryByText('Ctrl+S')).not.toBeInTheDocument()
+    // 按钮 title 同口径（悬停提示同样不能给 mac 用户错键位）
+    expect(screen.getByRole('button', { name: /保存/ })).toHaveAttribute('title', '保存（⌘+S）')
   })
 
   it('isSaving=true → 保存按钮禁用并显示「保存中…」', () => {

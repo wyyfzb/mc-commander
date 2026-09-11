@@ -28,7 +28,7 @@ import { primaryModifierLabel } from '@/lib/platform'
 
 /**
  * AppTopBar —— 主顶栏（设计文档 §3.1）
- * 实例选择器 ▸ 全局搜索 (Cmd+K) ▸ 服务器状态点（WS 实时）▸ 通知铃铛（未读徽章+抽屉）▸ 主题切换
+ * 实例选择器 ▸ 全局搜索 (Cmd/Ctrl+K) ▸ 服务器状态点（WS 实时）▸ 通知铃铛（未读徽章+抽屉）▸ 主题切换
  */
 export function AppTopBar() {
   const navigate = useNavigate()
@@ -168,7 +168,7 @@ export function AppTopBar() {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* 全局搜索（Cmd+K） */}
+      {/* 全局搜索（Cmd/Ctrl+K） */}
       <Button
         variant="outline"
         // 窄窗口文案被 hidden xs:inline 隐藏后按钮无可访问名（图标 aria-hidden）→ 显式补名
@@ -182,7 +182,7 @@ export function AppTopBar() {
           <span className="hidden truncate xs:inline">搜索或执行命令…</span>
         </span>
         <kbd className="pointer-events-none hidden h-5 shrink-0 items-center gap-0.5 rounded border border-mcs-border-default bg-mcs-bg-default px-1.5 font-mono text-mcs-2xs font-medium whitespace-nowrap text-mcs-text-muted xs:inline-flex">
-          {primaryModifierLabel()} K
+          {`${primaryModifierLabel()} K`}
         </kbd>
       </Button>
 

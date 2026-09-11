@@ -75,7 +75,6 @@ describe('Pagination 当前页语义', () => {
     expect(screen.queryAllByRole('button')).toHaveLength(0)
     expect(screen.getByText('共 0 条')).toBeInTheDocument()
     // 旧实现会渲染「共 0 条 · 第 1/0 页」（safePage 兜底 1、totalPages 为 0）
-    expect(container.textContent).not.toContain('第 1/0 页')
     expect(container.textContent).not.toMatch(/第\s*\d+\s*\/\s*0\s*页/)
   })
 
@@ -87,9 +86,11 @@ describe('Pagination 当前页语义', () => {
     expect(screen.getByText('共 3 条')).toBeInTheDocument()
   })
 
-  it('prev-next：不渲染页码按钮（该模式没有 aria-current 的语义位）', () => {
+  it('prev-next：只有上一页/下一页两枚按钮，不渲染页码按钮（该模式没有 aria-current 的语义位）', () => {
     render(<Pagination page={1} totalPages={3} onPageChange={() => {}} />)
 
+    // 结构锚定：该模式恰好两枚按钮，多出页码按钮即回归（按可访问名的负断言改名后会静默失效）
+    expect(screen.queryAllByRole('button')).toHaveLength(2)
     expect(screen.getByRole('button', { name: '上一页' })).toBeDisabled()
     // 当前页信息仍以文本送达（第 1 / 3 页）
     expect(screen.getByText('第 1 / 3 页')).toBeInTheDocument()

@@ -18,6 +18,7 @@
  * "monaco-editor/editor/editor.worker?worker"（等价落到同一文件）。
  */
 import { useEffect, useMemo, useRef } from 'react'
+import { primaryModifierLabel } from '@/lib/platform'
 import Editor, { loader } from '@monaco-editor/react'
 import * as monaco from 'monaco-editor'
 import editorWorker from 'monaco-editor/editor/editor.worker?worker'
@@ -243,12 +244,12 @@ export function MonacoEditorPane({
           size="sm"
           onClick={onSave}
           disabled={!dirty || isSaving || isLoading || Boolean(loadError)}
-          title={dirty ? '保存（Ctrl+S）' : '内容未修改，无需保存'}
+          title={dirty ? `保存（${primaryModifierLabel()}+S）` : '内容未修改，无需保存'}
         >
           <Save aria-hidden />
           {isSaving ? '保存中…' : '保存'}
           <kbd className="rounded-mcs-xs border border-mcs-border-muted bg-mcs-bg-muted px-1 font-mono text-mcs-2xs text-mcs-text-muted">
-            Ctrl+S
+            {`${primaryModifierLabel()}+S`}
           </kbd>
         </Button>
       </header>
