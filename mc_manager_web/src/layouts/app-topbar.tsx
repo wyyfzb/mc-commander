@@ -23,7 +23,7 @@ import { useAuthStore } from '@/stores/auth'
 import { logout } from '@/api/auth'
 import { useInstances } from '@/api/queries'
 import { copyText } from '@/lib/clipboard'
-import { clearLocalCredentials } from '@/lib/logout'
+import { clearLocalCredentials, logoutToastText } from '@/lib/logout'
 
 /**
  * AppTopBar —— 主顶栏（设计文档 §3.1）
@@ -54,8 +54,7 @@ export function AppTopBar() {
   const handleLogout = async () => {
     setLoggingOut(true)
     // 登出会一并清掉本机保存的 API Key（不可从浏览器恢复）——如实告知，不让用户在别处才发现
-    const hadApiKey = Boolean(useConnectionStore.getState().apiKey)
-    const doneToast = hadApiKey ? '已退出登录，本机保存的 API Key 已一并清除' : '已退出登录'
+    const doneToast = logoutToastText(Boolean(useConnectionStore.getState().apiKey))
     try {
       if (sessionToken) {
         await logout({ baseUrl: useConnectionStore.getState().baseUrl, apiKey })
@@ -244,7 +243,7 @@ export function AppTopBar() {
                 // API Key 直连登出=清除本浏览器凭据（该通道无服务端会话，无需调 logout API）；
                 // 不清则 /login 守卫弹回（与会话分支共用同一处置）
                 clearLocalCredentials()
-                toast.info('已退出登录')
+                toast.info(logoutToastText(Boolean(useConnectionStore.getState().apiKey)))
                 navigate('/login', { replace: true })
               }}
               className="gap-2 text-mcs-error-fg focus:text-mcs-error-fg"

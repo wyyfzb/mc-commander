@@ -6,19 +6,22 @@
  * - 有实例但 app-shell 尚未选中：过渡占位（不是零实例）
  * mock 数据为虚构示例，严禁真实服务器信息
  */
-import { describe, it, expect, beforeEach, afterAll, beforeAll } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { describe, it, expect, beforeEach, afterEach, afterAll, beforeAll } from 'vitest'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { http, HttpResponse } from 'msw'
 import { setupServer } from 'msw/node'
 import { createMemoryRouter, RouterProvider, useLocation } from 'react-router'
 import { handlers } from '@/test/mocks/handlers'
+import { queryKeys } from '@/api/queries'
 import { useConnectionStore } from '@/stores/connection'
 import { InstanceRequiredState } from '../instance-required-state'
 
 const server = setupServer(...handlers)
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
+// 运行时 handler 会累积到后续用例：不 reset 会让前一例的响应串场（本文件首例故意挂起）
+afterEach(() => server.resetHandlers())
 afterAll(() => server.close())
 
 /** 统一响应信封（结构占位） */
@@ -47,7 +50,9 @@ function renderGate() {
     ],
     { initialEntries: ['/dashboard'] },
   )
-  return render(<RouterProvider router={router} />)
+  render(<RouterProvider router={router} />)
+  // 返回 queryClient 供用例等待「列表真正落地」——只断挂载首帧的话，任何响应都能蒙对
+  return { qc }
 }
 
 beforeEach(() => {
@@ -100,9 +105,11 @@ describe('InstanceRequiredState', () => {
 
   it('有实例但尚未选中：过渡占位（不得当成零实例把人推向部署向导）', async () => {
     // 默认 handlers 返回 1 个实例；app-shell 只在列表就绪后才自动选中，此帧 instanceId 仍为空
-    renderGate()
+    const { qc } = renderGate()
 
-    expect(await screen.findByRole('status')).toHaveTextContent('正在载入服务器实例…')
+    // 等列表结算落地（缓存里确有 1 个实例）再断言：只断首帧时该例区分不了空列表与非空列表
+    await waitFor(() => expect(qc.getQueryData(queryKeys.instances())).toHaveLength(1))
+    expect(screen.getByRole('status')).toHaveTextContent('正在载入服务器实例…')
     expect(screen.queryByText('暂无服务器实例')).not.toBeInTheDocument()
   })
 })

@@ -84,6 +84,20 @@ describe('PlayersPage', () => {
     expect(await screen.findByText('Steve')).toBeInTheDocument()
   })
 
+  it('无实例：实例门替换整页，不谎报「暂无在线玩家」', async () => {
+    server.use(
+      http.get('*/api/v1/instances', () =>
+        HttpResponse.json({ status: 'ok', code: 0, message: 'Success', data: [] }),
+      ),
+    )
+    useServerStore.setState({ instanceId: null })
+    renderPage()
+
+    expect(await screen.findByText('暂无服务器实例')).toBeInTheDocument()
+    // 此前 usePlayers 被 disabled、isLoading=false → 表格显示「暂无在线玩家」（真实病因是没有实例）
+    expect(screen.queryByText('暂无在线玩家')).not.toBeInTheDocument()
+  })
+
   it('渲染玩家表格（在线/离线/封禁/假人）', async () => {
     renderPage()
     expect(await screen.findByText('Steve')).toBeInTheDocument()

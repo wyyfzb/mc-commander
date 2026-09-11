@@ -48,7 +48,7 @@ import { useUnsavedGuard } from '@/hooks/use-unsaved-guard'
 import { useAuthStore } from '@/stores/auth'
 import { useConnectionStore } from '@/stores/connection'
 import { formatRelativeTime, formatStartTime as formatDateTime } from '@/lib/format'
-import { clearLocalCredentials } from '@/lib/logout'
+import { clearLocalCredentials, logoutToastText } from '@/lib/logout'
 import {
   assessPasswordStrength,
   STRENGTH_BAR_STYLES,
@@ -170,9 +170,11 @@ export function AccountPanel() {
       toast.success('会话已下线')
       void queryClient.invalidateQueries({ queryKey: queryKeys.authSessions() })
     } catch (err) {
-      // 踢自己：服务端删除后当前令牌失效 → 本地同步登出
       if (err instanceof ApiError && err.code === 40103) {
-        handleLogoutLocal('当前会话已被下线')
+        // 40103 已由 client.ts 全局处置（清会话 + 派发事件 → routes.tsx 决策跳登录页或保留 Key 续用）：
+        // 此处不再自行清凭据——那会连本机 API Key 一并销毁，与「Key 顶上继续用」的通道语义相反
+        // （自踢成功时服务端返回 200，此分支只在令牌已失效的竞态出现，刷新列表即可）
+        void queryClient.invalidateQueries({ queryKey: queryKeys.authSessions() })
       } else {
         toast.error(`操作失败：${getFriendlyErrorText(err)}`)
       }
@@ -195,14 +197,16 @@ export function AccountPanel() {
 
   const handleLogout = async () => {
     setLoggingOut(true)
+    // 清 Key 与清会话是同一动作的两半，提示口径与顶栏一致（清到了就说清）
+    const doneToast = logoutToastText(Boolean(useConnectionStore.getState().apiKey))
     try {
       if (session?.token) {
         await logout({ baseUrl, apiKey })
       }
-      handleLogoutLocal('已退出登录')
+      handleLogoutLocal(doneToast)
     } catch {
       // 服务端登出失败不阻塞本地登出（令牌已不可用）
-      handleLogoutLocal('已退出登录')
+      handleLogoutLocal(doneToast)
     } finally {
       setLoggingOut(false)
       setLogoutOpen(false)

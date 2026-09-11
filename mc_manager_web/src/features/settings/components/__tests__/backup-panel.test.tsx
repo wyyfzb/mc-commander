@@ -18,6 +18,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router'
 import { Toaster } from 'sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { handlers, mockBackups } from '@/test/mocks/handlers'
+import { queryKeys } from '@/api/queries'
 import { useConnectionStore } from '@/stores/connection'
 import { formatBackupDate, formatBackupSize } from '@/lib/mc-backup'
 import type { BackupItem } from '@/api/types'
@@ -58,7 +59,9 @@ function renderPanel(instanceId: string | null = 'demo') {
     ],
     { initialEntries: ['/settings/backups'] },
   )
-  return render(<RouterProvider router={router} />)
+  render(<RouterProvider router={router} />)
+  // 返回 queryClient 供用例等待「数据真正落地」（只断挂载首帧的话任何响应都能蒙对）
+  return qc
 }
 
 beforeEach(() => {
@@ -76,8 +79,10 @@ describe('BackupPanel 空态', () => {
   })
 
   it('instanceId=null 但实例列表非空：过渡占位，不谎报零实例（app-shell 尚未选中首帧）', async () => {
-    renderPanel(null)
-    expect(await screen.findByText('正在载入服务器实例…')).toBeInTheDocument()
+    const qc = renderPanel(null)
+    // 默认 handlers 返回 1 个实例：等它真正落地再断言，否则空列表也能对上首帧
+    await waitFor(() => expect(qc.getQueryData(queryKeys.instances())).toHaveLength(1))
+    expect(screen.getByText('正在载入服务器实例…')).toBeInTheDocument()
     expect(screen.queryByText('暂无服务器实例')).not.toBeInTheDocument()
   })
 

@@ -16,3 +16,11 @@ export function clearLocalCredentials(): void {
   // setConfig 内部按剩余凭据重算 status（此处只剩空串 → unconfigured），无需再 refreshStatus
   useConnectionStore.getState().setConfig({ apiKey: '' })
 }
+
+/**
+ * 主动登出的 toast 文案：登出会清掉本机保存的 API Key（不可从浏览器恢复），
+ * 清到了就得说清——三处登出入口（顶栏两分支 + 账号面板）共用同一口径。
+ */
+export function logoutToastText(hadApiKey: boolean): string {
+  return hadApiKey ? '已退出登录，本机保存的 API Key 已一并清除' : '已退出登录'
+}

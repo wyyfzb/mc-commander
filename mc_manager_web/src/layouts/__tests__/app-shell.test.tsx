@@ -32,7 +32,7 @@ function renderShell(initialPath = '/dashboard') {
     ],
     { initialEntries: [initialPath] },
   )
-  const qc = new QueryClient()
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={qc}>
       <TooltipProvider>
@@ -78,9 +78,12 @@ describe('AppShell', () => {
   })
 
   it('点击侧栏导航跳转对应页面（玩家页：搜索框/筛选/表格）', async () => {
+    // 玩家页本体要求已选中实例（无实例时展示实例门，见 InstanceRequiredState）
+    useConnectionStore.setState({ apiKey: 'test-key', status: 'ready' })
+    useServerStore.setState({ instanceId: 'demo' })
     renderShell()
     fireEvent.click(screen.getByRole('link', { name: /玩家/ }))
-    // 玩家页：搜索框 + 状态筛选（未配置连接时无数据，筛选栏仍渲染）
+    // 玩家页：搜索框 + 状态筛选（列表即便取不到，筛选栏仍渲染）
     expect(await screen.findByPlaceholderText('搜索玩家名或 UUID…')).toBeInTheDocument()
   })
 

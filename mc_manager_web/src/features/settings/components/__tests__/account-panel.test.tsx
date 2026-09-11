@@ -4,12 +4,13 @@
  * - 退出登录：会话与残留 API Key 一并清除并落到 /login（只清会话会被 requireUnconfigured 弹回）
  * mock 数据为结构占位（虚构凭据），严禁真实服务器信息
  */
-import { describe, it, expect, beforeEach, afterAll, beforeAll } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, afterAll, beforeAll } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, Link, redirect, RouterProvider } from 'react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster, toast as sonnerToast } from 'sonner'
+import { http, HttpResponse } from 'msw'
 import { setupServer } from 'msw/node'
 import { handlers } from '@/test/mocks/handlers'
 import { useAuthStore } from '@/stores/auth'
@@ -18,6 +19,8 @@ import { AccountPanel } from '../account-panel'
 
 const server = setupServer(...handlers)
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
+// 运行时 handler 会累积到后续用例
+afterEach(() => server.resetHandlers())
 afterAll(() => server.close())
 
 /**
@@ -138,6 +141,38 @@ describe('AccountPanel 修改密码脏状态守卫', () => {
 })
 
 describe('AccountPanel 登出', () => {
+  it('踢会话遇到 40103：不销毁本机 API Key，也不强跳登录页（交回全局通道处置）', async () => {
+    useAuthStore.setState({
+      session: {
+        token: 'sess-token-abc',
+        sessionId: 'sess-mock-1',
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      },
+    })
+    let kickCalled = false
+    server.use(
+      http.delete('*/api/v1/auth/sessions/:id', () => {
+        kickCalled = true
+        return HttpResponse.json(
+          { status: 'error', code: 40103, message: '会话已过期', details: null },
+          { status: 401 },
+        )
+      }),
+    )
+    const user = userEvent.setup()
+    const router = renderPanel()
+
+    await user.click(await screen.findByRole('button', { name: /下线会话/ }))
+    const dialog = await screen.findByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: '下线' }))
+    await waitFor(() => expect(kickCalled).toBe(true))
+
+    // 令牌已失效的竞态：40103 归全局通道管（有 Key 就继续用），此处若再清一次会把 Key 一并销毁
+    expect(useConnectionStore.getState().apiKey).toBe('demo-key-123')
+    expect(router.state.location.pathname).toBe('/settings/account')
+    expect(screen.queryByText(/操作失败/)).not.toBeInTheDocument()
+  })
+
   it('退出登录：会话与残留 API Key 一并清除并落到 /login（只清会话会被守卫弹回）', async () => {
     useAuthStore.setState({
       session: {

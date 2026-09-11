@@ -13,6 +13,7 @@ import { AlertTriangle } from 'lucide-react'
 import { getFriendlyErrorText } from '@/api/errors'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/mcs/empty-state'
+import { InstanceRequiredState } from '@/features/instances/components/instance-required-state'
 import { PageHeader } from '@/components/mcs/page-header'
 import {
   Dialog,
@@ -172,6 +173,12 @@ export function PlayersPage() {
     } finally {
       setWhitelistPending(false)
     }
+  }
+
+  // 无实例门：判据是实例列表本身（详见 InstanceRequiredState）——
+  // 此前无实例时 usePlayers 被 disabled，表格会把它显示成「暂无在线玩家」
+  if (!instanceId) {
+    return <InstanceRequiredState />
   }
 
   const isRconConnected = statusQuery.data?.isRconConnected ?? false
