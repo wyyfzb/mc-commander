@@ -51,6 +51,17 @@ describe('BigStatCards 资源卡', () => {
     expect(screen.getAllByRole('progressbar').length).toBe(3)
   })
 
+  it('整机数据未到：CPU/内存显示「暂无数据」，不拿实例口径（进程 RSS / 整机总量）顶替', () => {
+    // 实例状态在（status 有 memoryUsage=3.2 / cpuUsage），但 /system-stats 尚未送达
+    useServerStore.setState({ systemStats: null })
+    render(<BigStatCards />)
+
+    // 混用会渲染成「进程 RSS / 整机总量」的失真比例与百分比
+    expect(screen.getAllByText('暂无数据')).toHaveLength(2)
+    expect(screen.queryByText('3.2')).not.toBeInTheDocument()
+    expect(screen.queryByText((content) => content.includes('/ 16G'))).not.toBeInTheDocument()
+  })
+
   it('TPS 卡顿显示「卡顿」+ warning 色', () => {
     setState({ ...mockInstanceStatus, tps: 17 })
     render(<BigStatCards />)

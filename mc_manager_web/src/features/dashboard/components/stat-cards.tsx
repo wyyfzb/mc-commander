@@ -67,11 +67,14 @@ export function BigStatCards({
   const tps = status?.tps ?? null
   const healthy = isRunning && (tps ?? 0) >= 19
 
-  const cpu = systemStats?.cpuUsage ?? status?.cpuUsage ?? 0
-  const memUsed = systemStats?.memoryUsage ?? status?.memoryUsage ?? 0
-  const memTotal = systemStats?.totalMemory ?? status?.totalMemory ?? 0
+  // 本卡是**整机**资源口径：实例状态里的 memoryUsage 是进程 RSS、cpuUsage 是进程 CPU%，
+  // 与整机口径不同源，不能互为后备（混用会得出「进程内存 / 整机总量」这类失真比例）。
+  // 整机数据未到时如实留空，由渲染层给「暂无数据」——与磁盘行既有做法一致。
+  const cpu = systemStats?.cpuUsage ?? null
+  const memUsed = systemStats?.memoryUsage ?? null
+  const memTotal = systemStats?.totalMemory ?? null
   const cores = systemStats?.cpuCores
-  const memPct = systemStats?.memoryPercent ?? (memTotal > 0 ? (memUsed / memTotal) * 100 : 0)
+  const memPct = systemStats?.memoryPercent ?? (memUsed != null && memTotal ? (memUsed / memTotal) * 100 : 0)
   const diskUsage = systemStats?.diskUsage
   const primary = diskUsage?.primary ?? null
 
@@ -118,21 +121,33 @@ export function BigStatCards({
           label="CPU"
           eyebrow={cores ? <StatusPill tone="muted" className="text-mcs-2xs">{cores} 核</StatusPill> : undefined}
           value={
-            <>
-              {cpu.toFixed(1)}
-              <span className="text-mcs-sm font-medium text-mcs-text-muted">%</span>
-            </>
+            cpu != null ? (
+              <>
+                {cpu.toFixed(1)}
+                <span className="text-mcs-sm font-medium text-mcs-text-muted">%</span>
+              </>
+            ) : (
+              <span className="font-sans text-mcs-sm font-medium text-mcs-text-muted">暂无数据</span>
+            )
           }
-          percent={cpu}
+          percent={cpu ?? 0}
         />
         <ResourceRow
           label="内存"
-          eyebrow={<StatusPill tone="muted" className="text-mcs-2xs">{memPct.toFixed(0)}%</StatusPill>}
+          eyebrow={
+            memUsed != null && memTotal != null ? (
+              <StatusPill tone="muted" className="text-mcs-2xs">{memPct.toFixed(0)}%</StatusPill>
+            ) : undefined
+          }
           value={
-            <>
-              {memUsed.toFixed(1)}
-              <span className="text-mcs-sm font-medium text-mcs-text-muted"> / {memTotal.toFixed(0)}G</span>
-            </>
+            memUsed != null && memTotal != null ? (
+              <>
+                {memUsed.toFixed(1)}
+                <span className="text-mcs-sm font-medium text-mcs-text-muted"> / {memTotal.toFixed(0)}G</span>
+              </>
+            ) : (
+              <span className="font-sans text-mcs-sm font-medium text-mcs-text-muted">暂无数据</span>
+            )
           }
           percent={memPct}
         />
