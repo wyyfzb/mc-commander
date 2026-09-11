@@ -140,23 +140,59 @@ export function _collectStats() {
 
   const platform = process.platform;
   if (platform === 'win32') {
-    const cmd = `wmic process where ProcessId=${pid} get WorkingSetSize,UserModeTime,KernelModeTime /format:csv`;
-    exec(cmd, (err, stdout) => {
+    // Windows 走 PowerShell 取进程指标：WMIC 自 Win11 24H2 起不随系统提供（本机实测
+    // `wmic` 已不是可执行命令），原 wmic 分支在现代 Windows 上静默失败——exec 报错即
+    // 早退，内存指标恒为初值 0、CPU 从未被采集过。
+    // 一次取回 WorkingSet（字节）与累计 CPU 时间（秒，Get-Process 的 CPU 属性），后者与
+    // Linux 的 utime+stime 同语义，统一交给 _applyCpuSecondsSample 做差分。
+    const cmd = `powershell -NoProfile -NonInteractive -Command "Get-Process -Id ${pid} | Select-Object WorkingSet64,CPU | ConvertTo-Json -Compress"`;
+    exec(cmd, { timeout: 8000 }, (err, stdout) => {
       if (err) return;
+      let info;
       try {
-        const lines = stdout.trim().split('\n').filter(l => l.trim());
-        if (lines.length >= 2) {
-          const parts = lines[lines.length - 1].split(',');
-          const workingSet = parseInt(parts[parts.length - 1]) || 0;
-          this._memoryUsage = workingSet / (1024 * 1024 * 1024);
-        }
-        this._emitPerformance();
-      } catch {}
+        info = JSON.parse(String(stdout).trim());
+      } catch {
+        return;
+      }
+      const workingSet = Number(info?.WorkingSet64);
+      if (Number.isFinite(workingSet) && workingSet > 0) {
+        // 与 Linux 分支同口径保留两位小数（此前 win32/macOS 未舍入，会渲染长浮点）
+        this._memoryUsage = Math.round(workingSet / (1024 * 1024 * 1024) * 100) / 100;
+      }
+      // CPU 可能为 null（受保护进程）：不能当成 0 建立基线——那会把下一个采样的差值放大成假高占用
+      const cpuSeconds = info?.CPU == null ? null : Number(info.CPU);
+      if (cpuSeconds !== null && Number.isFinite(cpuSeconds)) this._applyCpuSecondsSample(cpuSeconds);
+      this._emitPerformance();
     });
   } else {
     // Linux: 从 /proc/[pid]/stat 读取 CPU 时间，计算瞬时使用率
     this._collectLinuxStats(pid);
   }
+}
+
+/**
+ * 由两次采样的「累计 CPU 秒数」差分出瞬时 CPU%；单进程上限 100%
+ * （多核并行也按单进程口径截断，与既有 Linux 行为一致）。
+ * @param {number} cpuSeconds 该进程的累计 CPU 秒数
+ * @param {number} [sysSeconds] 整机累计 CPU 秒数（Linux 用；缺省时以「整机时钟有变化」计）
+ */
+export function _applyCpuSecondsSample(cpuSeconds, sysSeconds) {
+  const now = Date.now();
+  const last = this._lastCpuTime;
+  if (last === undefined) {
+    this._lastCpuTime = { cpu: cpuSeconds, sys: sysSeconds ?? 0, time: now };
+    this._cpuUsage = 0;
+    return;
+  }
+  const elapsed = (now - last.time) / 1000; // 秒
+  const cpuDiff = cpuSeconds - last.cpu;
+  const sysDiff = sysSeconds === undefined ? 1 : sysSeconds - last.sys;
+  this._lastCpuTime = { cpu: cpuSeconds, sys: sysSeconds ?? 0, time: now };
+  if (elapsed <= 0 || sysDiff <= 0 || cpuDiff < 0) {
+    this._cpuUsage = 0;
+    return;
+  }
+  this._cpuUsage = Math.max(0, Math.min(100, Math.round((cpuDiff / elapsed) * 100 * 100) / 100));
 }
 
 export function _collectLinuxStats(pid) {
@@ -186,31 +222,9 @@ export function _collectLinuxStats(pid) {
     const cpuLine = sysStat.match(/^cpu\s+([\d\s]+)$/m);
     const sysTotal = cpuLine ? cpuLine[1].trim().split(/\s+/).reduce((a, b) => a + parseInt(b), 0) : 0;
 
-    // 使用 _lastCpuTime 做差分计算瞬时 CPU
-    if (this._lastCpuTime === undefined) {
-      this._lastCpuTime = { cpu: totalCpu, sys: sysTotal, time: Date.now() };
-      this._cpuUsage = 0;
-      this._emitPerformance();
-      return;
-    }
-
-    const last = this._lastCpuTime;
-    const now = Date.now();
-    const elapsed = (now - last.time) / 1000; // 秒
-    const cpuDiff = totalCpu - last.cpu;
-    const sysDiff = sysTotal - last.sys;
-    this._lastCpuTime = { cpu: totalCpu, sys: sysTotal, time: now };
-
-    // clkTck = 100 (标准 Linux)，所以 diff/clkTck = diff/100 秒
+    // 使用 _lastCpuTime 做差分计算瞬时 CPU（Linux 的 utime+stime 以 clock tick 计）
     const clkTck = 100;
-    const cpuSeconds = cpuDiff / clkTck;
-    const sysSeconds = sysDiff / clkTck;
-    // 瞬时 CPU% = cpuSeconds / elapsed / cpuCoreCount * 100
-    // 但单进程不能超过 100%，使用 min(100, ...)
-    const cpuPercent = sysSeconds > 0
-      ? Math.min(100, Math.round((cpuSeconds / elapsed) * 100 * 100) / 100)
-      : 0;
-    this._cpuUsage = Math.max(0, cpuPercent);
+    this._applyCpuSecondsSample(totalCpu / clkTck, sysTotal / clkTck);
     this._emitPerformance();
   } catch {
     // 兜底: 使用 ps 命令
