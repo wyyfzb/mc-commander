@@ -74,7 +74,9 @@ export function BigStatCards({
   const memUsed = systemStats?.memoryUsage ?? null
   const memTotal = systemStats?.totalMemory ?? null
   const cores = systemStats?.cpuCores
-  const memPct = systemStats?.memoryPercent ?? (memUsed != null && memTotal ? (memUsed / memTotal) * 100 : 0)
+  // 无数据时保持 null（不是 0）：0 会被进度条与读屏当成「占用 0%」播报，与「暂无数据」冲突
+  const hasMem = memUsed != null && memTotal != null
+  const memPct = hasMem ? (systemStats?.memoryPercent ?? (memUsed / memTotal) * 100) : null
   const diskUsage = systemStats?.diskUsage
   const primary = diskUsage?.primary ?? null
 
@@ -130,17 +132,17 @@ export function BigStatCards({
               <span className="font-sans text-mcs-sm font-medium text-mcs-text-muted">暂无数据</span>
             )
           }
-          percent={cpu ?? 0}
+          percent={cpu}
         />
         <ResourceRow
           label="内存"
           eyebrow={
-            memUsed != null && memTotal != null ? (
+            memPct != null ? (
               <StatusPill tone="muted" className="text-mcs-2xs">{memPct.toFixed(0)}%</StatusPill>
             ) : undefined
           }
           value={
-            memUsed != null && memTotal != null ? (
+            hasMem ? (
               <>
                 {memUsed.toFixed(1)}
                 <span className="text-mcs-sm font-medium text-mcs-text-muted"> / {memTotal.toFixed(0)}G</span>
@@ -168,7 +170,7 @@ export function BigStatCards({
               <span className="font-sans text-mcs-sm font-medium text-mcs-text-muted">暂无磁盘数据</span>
             )
           }
-          percent={primary?.percent ?? 0}
+          percent={primary?.percent ?? null}
           barColor={primary ? diskBarColor(primary.percent) : undefined}
         />
       </div>
@@ -187,10 +189,11 @@ function ResourceRow({
   label: string
   eyebrow?: React.ReactNode
   value: React.ReactNode
-  percent: number
+  /** null 表示无数据：此时不暴露进度语义（否则读屏播报「0%」，与「暂无数据」文案冲突） */
+  percent: number | null
   barColor?: string
 }) {
-  const p = Math.max(0, Math.min(100, percent))
+  const p = percent == null ? null : Math.max(0, Math.min(100, percent))
   return (
     <div>
       <div className="flex items-center justify-between gap-2">
@@ -198,16 +201,16 @@ function ResourceRow({
         {eyebrow}
         <span className="mcs-num text-mcs-lg leading-none">{value}</span>
       </div>
+      {/* 无数据时保留轨道（避免行高跳动）但不带语义，仅作装饰 */}
       <div
-        role="progressbar"
-        aria-valuenow={Math.round(p)}
-        aria-valuemin={0}
-        aria-valuemax={100}
+        {...(p == null
+          ? { 'aria-hidden': true }
+          : { role: 'progressbar', 'aria-valuenow': Math.round(p), 'aria-valuemin': 0, 'aria-valuemax': 100 })}
         className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-mcs-bg-secondary"
       >
         <div
           className="mcs-progress-sheen h-full w-full rounded-full transition-transform duration-mcs-base ease-mcs-snappy"
-          style={{ transform: `translateX(${p - 100}%)`, background: barColor ?? 'var(--mcs-success-fg)' }}
+          style={{ transform: `translateX(${(p ?? 0) - 100}%)`, background: barColor ?? 'var(--mcs-success-fg)' }}
         />
       </div>
     </div>

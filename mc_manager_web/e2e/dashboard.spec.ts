@@ -157,6 +157,37 @@ test.describe('仪表盘', () => {
     await expect(page.getByText('E2E 演示实例').first()).toBeVisible()
   })
 
+  test('系统资源查询失败：横幅可见，重试后恢复（真实终端子树下的失败渲染路径）', async ({ page }) => {
+    await setupConnection(page)
+    // 拦截优先于代理：让 /system-stats 先 500，再放行真实 mock 后端
+    let failing = true
+    await page.route('**/api/v1/system-stats', (route) => {
+      if (!failing) return route.continue()
+      return route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          status: 'error',
+          code: 50000,
+          message: 'Internal error',
+          data: null,
+          timestamp: new Date().toISOString(),
+        }),
+      })
+    })
+    await page.goto('/dashboard')
+
+    // 出口可见且点名失败来源（此前该失败完全静默，资源卡只会停在「暂无数据」）
+    await expect(page.getByText('系统资源获取失败')).toBeVisible()
+    await expect(page.getByText('服务器状态获取失败')).toHaveCount(0)
+
+    failing = false
+    await page.getByRole('button', { name: '重试' }).click()
+    await expect(page.getByText(/获取失败/)).toHaveCount(0)
+    // 正向断言：资源行真的回填了数据（只看横幅消失，别的渲染分支调整也能蒙对）
+    await expect(page.getByText('暂无数据', { exact: true })).toHaveCount(0)
+  })
+
   test('视觉截图：仪表盘暗色/命令面板/通知抽屉/亮色', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
     await setupConnection(page)

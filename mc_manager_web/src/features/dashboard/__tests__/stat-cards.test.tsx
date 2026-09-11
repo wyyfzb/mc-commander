@@ -47,8 +47,8 @@ describe('BigStatCards 资源卡', () => {
     expect(screen.getByText('4.2')).toBeInTheDocument()
     expect(screen.getByText((content) => content.includes('/ 16G'))).toBeInTheDocument()
     expect(screen.getByText('磁盘')).toBeInTheDocument()
-    // 进度条语义：CPU/内存/磁盘三行
-    expect(screen.getAllByRole('progressbar').length).toBe(3)
+    // 进度条语义：只有拿到数据的行才是 progressbar（本夹具无 diskUsage，磁盘行不带语义）
+    expect(screen.getAllByRole('progressbar')).toHaveLength(2)
   })
 
   it('整机数据未到：CPU/内存显示「暂无数据」，不拿实例口径（进程 RSS / 整机总量）顶替', () => {
@@ -60,6 +60,8 @@ describe('BigStatCards 资源卡', () => {
     expect(screen.getAllByText('暂无数据')).toHaveLength(2)
     expect(screen.queryByText('3.2')).not.toBeInTheDocument()
     expect(screen.queryByText((content) => content.includes('/ 16G'))).not.toBeInTheDocument()
+    // 无数据的行不得暴露进度语义：否则读屏播报「0%」，与可见文案「暂无数据」互相矛盾
+    expect(screen.queryAllByRole('progressbar')).toHaveLength(0)
   })
 
   it('TPS 卡顿显示「卡顿」+ warning 色', () => {
