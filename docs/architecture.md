@@ -38,7 +38,7 @@ MC_Commander 由两部分组成：**服务端**（Node.js，部署在 Minecraft 
 - **技术栈**：React 19 + TypeScript strict + Vite + Tailwind v4（`--mcs-*` 设计 token 体系）+
   shadcn-ui + TanStack Query（服务端状态）+ zustand（客户端状态）
 - **结构**：feature-based —— `src/features/<域>/`（players/instances/world/files/tasks/
-  settings/dashboard/onboarding/emergency/plugins/webhooks/audit/auth），跨域复用下沉
+  settings/dashboard/onboarding/plugins/webhooks/audit/auth），跨域复用下沉
   `src/lib/`、`src/components/mcs/`
 - **通信**：REST（`src/api/`）+ WebSocket 优先、HTTP 轮询保底降级
 - **测试**：vitest + @testing-library + msw（单测 141 文件）；Playwright e2e 12 spec

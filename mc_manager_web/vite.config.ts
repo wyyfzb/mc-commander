@@ -27,8 +27,8 @@ export default defineConfig({
         theme_color: '#0A0E1A',
         background_color: '#0A0E1A',
         display: 'standalone',
-        // PWA 主屏直达紧急视图（移动端处置场景；routes.tsx 同款注释的兑现）
-        start_url: '/emergency',
+        // PWA 主屏直达完整面板（原为 /emergency 移动端处置页，该页已移除）
+        start_url: '/dashboard',
         // 图标用相对路径：随 base 解析（根部署 /pwa-icon.svg；子路径部署
         // 如 /app/ 下为 /app/pwa-icon.svg），manifest 相对 URL 以 manifest
         // 所在目录为基准，两种部署形态均正确

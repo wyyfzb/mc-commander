@@ -30,7 +30,7 @@ src/
 ├── api/            # 数据层：client（信封解析）/ types（服务端契约）/ errors（错误码映射）/ ws / queries
 ├── components/     # ui/（shadcn 基座）+ mcs/（MCS 设计语言组件）
 ├── features/       # 领域目录：dashboard/ players/ world/ files/ tasks/ instances/ plugins/ webhooks/
-│                   #           audit/ settings/ onboarding/ emergency/ auth/
+│                   #           audit/ settings/ onboarding/ auth/
 ├── layouts/        # AppShell（顶栏/侧栏/Ctrl/⌘+K 命令面板）
 ├── stores/         # zustand：auth（会话令牌）/ connection（面板地址 + API Key）/ ui（主题/侧栏/面板）
 │                   #          + server / deploy / notifications / terminal / upgrade / command-bus

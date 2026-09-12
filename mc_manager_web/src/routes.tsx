@@ -50,9 +50,6 @@ const OnboardingPageLazy = lazy(() =>
 const AuditPageLazy = lazy(() =>
   import('@/features/audit/audit-page').then((m) => ({ default: m.AuditPage })),
 )
-const EmergencyPageLazy = lazy(() =>
-  import('@/features/emergency/emergency-page').then((m) => ({ default: m.EmergencyPage })),
-)
 const LoginPageLazy = lazy(() =>
   import('@/features/auth/login-page').then((m) => ({ default: m.LoginPage })),
 )
@@ -113,12 +110,6 @@ export const router = createBrowserRouter([
     path: '/onboarding',
     Component: OnboardingPageLazy,
     loader: requireUnconfigured,
-  },
-  // 移动端紧急视图：独立于 AppShell 的窄屏处置页，PWA 主屏直达
-  {
-    path: '/emergency',
-    Component: EmergencyPageLazy,
-    loader: requireConfigured,
   },
 ])
 

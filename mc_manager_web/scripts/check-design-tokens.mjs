@@ -8,7 +8,7 @@
  *   4. duration-{数字}（非 token 的硬编码时长；ui/ 由第 20 条覆盖）
  *   5. rounded-[ 任意值圆角
  *   6. Tailwind 原生字号 3xl 及以上（原生字号上限 2xl；数字面板可走 --mcs-font-size-display（30px），须与 .mcs-num 同用）
- *   7. 紧急页（src/features/emergency/）字重 bold 及以上（触控页字重限定 400-600）
+ *   7.（空缺保留）原紧急页字重限定：/emergency 页已移除，后续编号不重排以免外部引用失效
  *   8. 焦点可见性：outline-none 与 focus-visible:outline-* 同处 utilities 层会互相抵消
  *      （outline-style 恒为 none，焦点环零绘制），未补 ring 兜底即报错
  *   9. 未注册的 mcs-* 工具类：@theme 未注册 → Tailwind 静默不生成任何规则（语义丢失）
@@ -174,7 +174,7 @@ function checkTokenClasses(classes, filePath, lineNum) {
 }
 
 /** 在单条类名串中检测违规模式 */
-function checkClasses(filePath, lineNum, classes, isEmergencyPage) {
+function checkClasses(filePath, lineNum, classes) {
   // 1. dark: 前缀
   if (/\bdark:\w/.test(classes)) {
     console.log(`${filePath}:${lineNum + 1}: dark: 前缀类 → ${extractViolatingClass(classes, 'dark:')}`)
@@ -220,14 +220,6 @@ function checkClasses(filePath, lineNum, classes, isEmergencyPage) {
     console.log(`${filePath}:${lineNum + 1}: text-${oversize[1]} 超出字号 token 体系 → 请使用 text-mcs-* token（≤ 2xl）或 text-mcs-display（配 .mcs-num）`)
     violations++
   }
-  // 8. 紧急页字重限定 400-600
-  if (isEmergencyPage) {
-    const heavy = classes.match(/\bfont-(bold|extrabold|black)\b/)
-    if (heavy) {
-      console.log(`${filePath}:${lineNum + 1}: font-${heavy[1]} 紧急页字重超限 → 字重限定 400-600（font-normal/medium/semibold）`)
-      violations++
-    }
-  }
   // 9. 焦点可见性：outline-none 会抵消同层的 focus-visible:outline-*（outline-style 恒为 none）
   if (
     /\boutline-none\b/.test(classes) &&
@@ -248,10 +240,10 @@ function checkClasses(filePath, lineNum, classes, isEmergencyPage) {
 }
 
 /** 在单行中提取类名串并逐条检测（覆盖 cn(...)/模板串/对象值，不限 className= 字面属性） */
-function checkLine(filePath, lineNum, line, isEmergencyPage) {
+function checkLine(filePath, lineNum, line) {
   for (const literal of extractLiterals(line)) {
     if (!literal.includes('-') && !literal.includes(':')) continue
-    checkClasses(filePath, lineNum, literal, isEmergencyPage)
+    checkClasses(filePath, lineNum, literal)
   }
 }
 
@@ -351,12 +343,10 @@ function walkDir(dir) {
     if (fullPath.replace(/\\/g, '/').includes(EXCLUDE_DIR)) continue
 
     const relPath = relative(root, fullPath)
-    // 紧急页目录：字重 400-600 断言仅约束该目录（触控页视觉纪律）
-    const isEmergencyPage = relPath.split(sep).includes('emergency')
     const content = readFileSync(fullPath, 'utf-8')
     const lines = content.split('\n')
     for (let i = 0; i < lines.length; i++) {
-      checkLine(relPath, i, lines[i], isEmergencyPage)
+      checkLine(relPath, i, lines[i])
     }
     // 11b/11c：跨行判定，故在文件层做（逐行版只看得到字面量）
     const rel = relPath.split(sep).join('/')
@@ -639,4 +629,4 @@ if (violations > 0) {
   console.error(`\n✗ 发现 ${violations} 处设计 token 违规（设计规范 §4.5）`)
   process.exit(1)
 }
-console.log('✓ 设计 token 完整性检查通过（色板类/dark:/transition-all/duration-数字/rounded-任意值/字号上限/紧急页字重/焦点可见性/未注册 token 类/token 角色矩阵/alpha 白名单/未定义类/死类/死 token/内容面 tint 叠加/Z 轴阶梯/玻璃预算/危险半透明底/内容面 tint 不透明/布局属性动画）')
+console.log('✓ 设计 token 完整性检查通过（色板类/dark:/transition-all/duration-数字/rounded-任意值/字号上限/焦点可见性/未注册 token 类/token 角色矩阵/alpha 白名单/未定义类/死类/死 token/内容面 tint 叠加/Z 轴阶梯/玻璃预算/危险半透明底/内容面 tint 不透明/布局属性动画）')

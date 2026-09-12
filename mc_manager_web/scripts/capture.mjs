@@ -52,7 +52,6 @@ const ROUTES = [
   { path: 'instances', file: 'instances' },
   { path: 'settings/notifications', file: 'settings-notifications' },
   { path: 'settings/backup', file: 'settings-backup' },
-  { path: 'emergency', file: 'emergency' },
 ]
 
 function arg(name, fallback) {
@@ -250,7 +249,7 @@ async function main() {
         document.documentElement.classList.add(t)
         document.documentElement.classList.remove(t === 'dark' ? 'light' : 'dark')
       }
-      // 无 AppShell 页面（onboarding/emergency）无主题 effect，class 须在文档就绪后设置
+      // 无 AppShell 页面（onboarding）无主题 effect，class 须在文档就绪后设置
       if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', applyThemeClass, { once: true })
       } else {

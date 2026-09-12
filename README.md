@@ -340,7 +340,7 @@ mc-commander/
 │   ├── src/
 │   │   ├── main.tsx       # 入口（QueryClient + Tooltip + Router + Toaster）
 │   │   ├── routes.tsx     # 路由表（react-router v8 data mode）
-│   │   ├── features/      # 功能域（dashboard/players/world/files/tasks/instances/settings/onboarding/emergency）
+│   │   ├── features/      # 功能域（dashboard/players/world/files/tasks/instances/settings/onboarding）
 │   │   ├── components/    # 通用组件 + mcs/ 设计系统组件
 │   │   ├── stores/        # zustand store（连接/通知偏好/部署）
 │   │   ├── api/           # REST/WS 客户端 + 类型契约
