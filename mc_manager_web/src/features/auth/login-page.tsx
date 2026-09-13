@@ -78,7 +78,10 @@ export function LoginPage() {
 
   const [phase, setPhase] = useState<Phase>('probing')
   const [baseUrlOpen, setBaseUrlOpen] = useState(false)
-  const [baseUrl, setBaseUrl] = useState('')
+  // 初值取 store 里已配置的地址：探测、登录 POST、会话绑定（issuedFor）三者
+  // 落在同一地址——若初值为空串（同源），store 已配置分域地址时会出现
+  // 「登录打到 A、会话却登记成属于 B」的凭据错配
+  const [baseUrl, setBaseUrl] = useState(() => useConnectionStore.getState().baseUrl)
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   // 首访设密所有权证明（issue 309）：服务端返回 40104 时展示 SETUP_TOKEN 输入框
@@ -119,9 +122,8 @@ export function LoginPage() {
    * 登录/设密成功：写会话 → 同步连接状态 → 回跳。
    * 会话绑定「本浏览器将使用的面板地址」（issuedFor）：令牌只对它签发的面板有效，
    * 换地址后不再发 Bearer、也不会因该面板的 40103 把这次登录踢掉（见 api/client.ts）。
-   * 绑定值取「用户显式填写的地址」或「store 里的已配置地址」——登录请求可能走同源，
-   * 但应用随后用的是 store 里的地址，两者取后者才与客户端判据一致
-   * （也避免「同一面板两个地址」被误判成换了面板）。
+   * baseUrl 初值即 store 里已配置的地址，用户未处置时探测/登录/绑定天然同址；
+   * 显式改过输入框则以填写值为准（绑定值与登录请求仍一致）。
    * 地址只在用户显式处置过（改过输入框 / 点过「恢复默认地址」）时写回：
    * 未触碰时的空串会经 setConfig 覆盖 localStorage 里的已配置地址
    * （stores/connection.ts 用 `??` 只挡 null/undefined，挡不住空串），
