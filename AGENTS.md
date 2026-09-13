@@ -125,5 +125,5 @@ Conventional Commits（`feat`/`fix`/`refactor`/`docs`/`chore`/`test` + scope）�
   ```text
   Co-authored-by: ZCode Agent <noreply@zcode.ai>
   ```
-- **分支与合并**：2026-09-13 起为本地单线开发（远端冻结、多 agent 协作与 PR 流退役），改动经全量自测后直接提交本地 main，不再走特性分支 + PR。
+- **分支与合并**：2026-09-13 起为本地单线开发（远端冻结、多 agent 协作与 PR 流退役），改动经全量自测 + 独立审查后直接提交，不再走特性分支 + PR。提交分支以 owner 当次指令为准（2026-09-13 任务循环授权提交 localdev 分支；push 与合并 main 须 owner 另行授权，操作编排见本地 `.ai/workflows.md`）。
 
