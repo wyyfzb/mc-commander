@@ -13,6 +13,7 @@ import { atomicWriteFile } from '../services/mc_server.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
 import { deployRequestSchema } from '@mc-commander/schemas';
 import { validateBody } from '../middleware/validate.js';
+import { asyncHandler } from '../utils/asyncHandler.js';
 import {
   JAR_DOWNLOAD_MAX_BYTES,
   assertDownloadIntegrity,
@@ -323,7 +324,8 @@ async function runFirstLaunch(instancePath, javaPath, jarFile, maxMemory) {
 export function createServerJarRoutes(serverManager) {
   const router = express.Router();
 
-  router.get('/versions', async (req, res) => {
+  // 上游版本源不可达属可预期失败：catch 统一降级 502（非 500），asyncHandler 作逃逸兜底
+  router.get('/versions', asyncHandler(async (req, res) => {
     const type = (req.query.type || 'vanilla').toLowerCase();
     try {
       if (type === 'paper') {
@@ -377,10 +379,11 @@ export function createServerJarRoutes(serverManager) {
       logger.error(`Failed to fetch ${type} versions:`, e.message);
       return res.status(502).json(error(ErrorCodes.SERVER_ERROR, `Failed to fetch versions: ${e.message}`));
     }
-  });
+  }));
 
   // 部署实例（请求体 schema parse 校验：type 枚举/必填字段由 deployRequestSchema 单源定义）
-  router.post('/instances/deploy', validateBody(deployRequestSchema), async (req, res) => {
+  // 失败路径（下载/写盘/磁盘清理）catch 统一降级 502 并清理，asyncHandler 作逃逸兜底
+  router.post('/instances/deploy', validateBody(deployRequestSchema), asyncHandler(async (req, res) => {
     const { type, mcVersion, instanceName, maxMemory, loaderVersion, eula } = req.body;
     // EULA 只由用户显式同意决定：面板不得代替用户表达同意（未同意同样可完成部署，仅不写 true、不自动首启）
     const eulaAgreed = eula === true;
@@ -596,7 +599,7 @@ export function createServerJarRoutes(serverManager) {
       logger.error(`Failed to deploy ${type} ${mcVersion}:`, e.message);
       return res.status(502).json(error(ErrorCodes.SERVER_ERROR, `Deployment failed: ${e.message}`));
     }
-  });
+  }));
 
   return router;
 }

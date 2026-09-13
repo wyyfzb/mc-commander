@@ -21,6 +21,7 @@ import {
   pluginDeleteResultSchema,
 } from '@mc-commander/schemas';
 import { validateBody, validateQuery, validatedSuccess } from '../middleware/validate.js';
+import { asyncHandler } from '../utils/asyncHandler.js';
 import { listPlugins, setPluginEnabled, deletePlugin, uploadPlugin } from '../services/plugin.service.js';
 import { searchMarketPlugins, getMarketProjectVersions, installPluginFromMarket, checkPluginUpdates } from '../services/market.service.js';
 import config from '../config.js';
@@ -108,88 +109,72 @@ export function createPluginRoutes(serverManager) {
   // GET /api/v1/instances/:id/plugins/market/search?q=&offset=&limit=&game_version=&loader=
   // 查询契约（issue 391）：q/game_version/loader 归一校验；offset/limit 为分页参数
   // 按 issue 391 边界透传，既有手写解析不动（#392 分页 util 后续统一）
-  router.get('/instances/:id/plugins/market/search', validateQuery(marketSearchRequestSchema), async (req, res, next) => {
-    try {
-      const serverPath = requireInstance(req.params.id);
-      if (!serverPath) {
-        return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND, 'Instance not found'));
-      }
-      const result = await searchMarketPlugins({
-        query: req.query.q,
-        offset: typeof req.query.offset === 'string' ? Number.parseInt(req.query.offset, 10) : 0,
-        limit: typeof req.query.limit === 'string' ? Number.parseInt(req.query.limit, 10) : 20,
-        gameVersion: req.query.game_version ?? null,
-        loader: req.query.loader ?? null,
-      });
-      res.json(validatedSuccess(marketSearchResultSchema, result));
-    } catch (err) {
-      next(err);
+  router.get('/instances/:id/plugins/market/search', validateQuery(marketSearchRequestSchema), asyncHandler(async (req, res) => {
+    const serverPath = requireInstance(req.params.id);
+    if (!serverPath) {
+      return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND, 'Instance not found'));
     }
-  });
+    const result = await searchMarketPlugins({
+      query: req.query.q,
+      offset: typeof req.query.offset === 'string' ? Number.parseInt(req.query.offset, 10) : 0,
+      limit: typeof req.query.limit === 'string' ? Number.parseInt(req.query.limit, 10) : 20,
+      gameVersion: req.query.game_version ?? null,
+      loader: req.query.loader ?? null,
+    });
+    res.json(validatedSuccess(marketSearchResultSchema, result));
+  }));
 
   // GET /api/v1/instances/:id/plugins/market/projects/:slug/versions?game_version=&loader=
-  router.get('/instances/:id/plugins/market/projects/:slug/versions', validateQuery(marketVersionsRequestSchema), async (req, res, next) => {
-    try {
-      const serverPath = requireInstance(req.params.id);
-      if (!serverPath) {
-        return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND, 'Instance not found'));
-      }
-      const result = await getMarketProjectVersions(req.params.slug, {
-        gameVersion: req.query.game_version ?? null,
-        loader: req.query.loader ?? null,
-      });
-      res.json(validatedSuccess(marketVersionsResultSchema, result));
-    } catch (err) {
-      next(err);
+  router.get('/instances/:id/plugins/market/projects/:slug/versions', validateQuery(marketVersionsRequestSchema), asyncHandler(async (req, res) => {
+    const serverPath = requireInstance(req.params.id);
+    if (!serverPath) {
+      return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND, 'Instance not found'));
     }
-  });
+    const result = await getMarketProjectVersions(req.params.slug, {
+      gameVersion: req.query.game_version ?? null,
+      loader: req.query.loader ?? null,
+    });
+    res.json(validatedSuccess(marketVersionsResultSchema, result));
+  }));
 
   // POST /api/v1/instances/:id/plugins/market/install  body: { slug, versionNumber }；?overwrite=true 显式覆盖
-  router.post('/instances/:id/plugins/market/install', validateQuery(pluginOverwriteQuerySchema), validateBody(marketInstallRequestSchema), async (req, res, next) => {
-    try {
-      const { id } = req.params;
-      const serverPath = requireInstance(id);
-      if (!serverPath) {
-        return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND, 'Instance not found'));
-      }
-      const { slug, versionNumber } = req.body;
-      const overwrite = req.query.overwrite === 'true';
-      const result = await installPluginFromMarket(serverPath, { slug, versionNumber }, { overwrite });
-      recordAudit({
-        instanceId: id,
-        action: AuditActions.PLUGIN_MARKET_INSTALL,
-        targetType: 'plugin',
-        targetId: result.file,
-        detail: {
-          source: 'modrinth',
-          slug: result.slug,
-          versionNumber: result.versionNumber,
-          sizeBytes: result.sizeBytes,
-          overwritten: result.overwritten,
-        },
-      });
-      res.status(result.overwritten ? 200 : 201).json(validatedSuccess(marketInstallResultSchema, result));
-    } catch (err) {
-      next(err);
+  router.post('/instances/:id/plugins/market/install', validateQuery(pluginOverwriteQuerySchema), validateBody(marketInstallRequestSchema), asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const serverPath = requireInstance(id);
+    if (!serverPath) {
+      return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND, 'Instance not found'));
     }
-  });
+    const { slug, versionNumber } = req.body;
+    const overwrite = req.query.overwrite === 'true';
+    const result = await installPluginFromMarket(serverPath, { slug, versionNumber }, { overwrite });
+    recordAudit({
+      instanceId: id,
+      action: AuditActions.PLUGIN_MARKET_INSTALL,
+      targetType: 'plugin',
+      targetId: result.file,
+      detail: {
+        source: 'modrinth',
+        slug: result.slug,
+        versionNumber: result.versionNumber,
+        sizeBytes: result.sizeBytes,
+        overwritten: result.overwritten,
+      },
+    });
+    res.status(result.overwritten ? 200 : 201).json(validatedSuccess(marketInstallResultSchema, result));
+  }));
 
   // ── 既有插件端点（feat-8 P0-5 最小闭环 + 上传延伸）────────────
 
   // POST /api/v1/instances/:id/plugins/check-updates —— 批量更新检测（读操作，不审计；
   // POST 语义：触发多次上游请求 + 结果非幂等缓存，GET 会被中间层/浏览器误缓存）
-  router.post('/instances/:id/plugins/check-updates', async (req, res, next) => {
-    try {
-      const serverPath = requireInstance(req.params.id);
-      if (!serverPath) {
-        return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND, 'Instance not found'));
-      }
-      const result = await checkPluginUpdates(serverPath);
-      res.json(validatedSuccess(pluginUpdateCheckResultSchema, result));
-    } catch (err) {
-      next(err);
+  router.post('/instances/:id/plugins/check-updates', asyncHandler(async (req, res) => {
+    const serverPath = requireInstance(req.params.id);
+    if (!serverPath) {
+      return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND, 'Instance not found'));
     }
-  });
+    const result = await checkPluginUpdates(serverPath);
+    res.json(validatedSuccess(pluginUpdateCheckResultSchema, result));
+  }));
 
   // GET /api/v1/instances/:id/plugins
   router.get('/instances/:id/plugins', (req, res, next) => {

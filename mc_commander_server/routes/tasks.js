@@ -7,6 +7,7 @@ import { TaskRunHistoryModel } from '../db/task_run_history.model.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
 import { taskCreatePayloadSchema, taskUpdatePayloadSchema, scheduledTaskSchema, taskRunHistorySchema } from '@mc-commander/schemas';
 import { validateBody, validatedSuccess, validatedSuccessPaginated } from '../middleware/validate.js';
+import { asyncHandler } from '../utils/asyncHandler.js';
 
 /**
  * cron 表达式合法性校验（与 task_scheduler 同用 croner 解析器，保证「存得进就能跑」）。
@@ -171,23 +172,20 @@ export function createTaskRoutes(serverManager, taskScheduler) {
   });
   
   // 立即执行任务
-  router.post('/tasks/:id/run', async (req, res, next) => {
-    try {
-      const task = ScheduledTaskModel.findById(req.params.id);
-      
-      if (!task) {
-        throw new AppError(ErrorCodes.TASK_NOT_FOUND);
-      }
-      
-      if (taskScheduler) {
-        await taskScheduler.runTask(task.id);
-      }
-      recordAudit({ instanceId: task.instanceId, action: AuditActions.TASK_EXECUTE, targetType: 'task', targetId: req.params.id });
-      res.json(success(null, 'Task execution triggered'));
-    } catch (err) {
-      next(err);
+  router.post('/tasks/:id/run', asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const task = ScheduledTaskModel.findById(id);
+
+    if (!task) {
+      throw new AppError(ErrorCodes.TASK_NOT_FOUND);
     }
-  });
+
+    if (taskScheduler) {
+      await taskScheduler.runTask(task.id);
+    }
+    recordAudit({ instanceId: task.instanceId, action: AuditActions.TASK_EXECUTE, targetType: 'task', targetId: id });
+    res.json(success(null, 'Task execution triggered'));
+  }));
   
   return router;
 }

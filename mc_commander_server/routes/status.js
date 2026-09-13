@@ -438,14 +438,14 @@ export function createStatusRoutes(serverManager) {
   // GET /api/instances/:id/properties - 获取 server.properties
   // 展示视图（重读文件 → 运行状态型属性覆盖 → 敏感键掩码）见
   // services/instance-properties.service.js getPropertiesView（issue 514 分层治理）。
-  router.get('/instances/:id/properties', async (req, res) => {
+  router.get('/instances/:id/properties', asyncHandler(async (req, res) => {
     const instance = serverManager.getInstance(req.params.id);
     if (!instance) {
       return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND));
     }
     const props = await getPropertiesView(instance);
     res.json(validatedSuccess(serverPropertiesSchema, props));
-  });
+  }));
 
   // PUT /api/instances/:id/properties - 更新 server.properties
   // 输入侧契约（issue 486）：对象形状 schema 前置（passthrough 保留全部属性键，
@@ -597,7 +597,7 @@ export function createStatusRoutes(serverManager) {
   }));
 
   // GET /api/instances/:id/world - 获取世界信息
-  router.get('/instances/:id/world', async (req, res) => {
+  router.get('/instances/:id/world', asyncHandler(async (req, res) => {
     const instance = serverManager.getInstance(req.params.id);
     if (!instance) {
       return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND));
@@ -678,7 +678,7 @@ export function createStatusRoutes(serverManager) {
     };
 
     res.json(validatedSuccess(worldInfoSchema, worldInfo));
-  });
+  }));
 
   return router;
 }

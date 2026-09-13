@@ -41,7 +41,7 @@ describe('routes/index.js 聚合层', () => {
     app = express();
     setupRoutes(app, { instances: new Map() }, {});
     // 与生产组装（index.js L189-191）同序：setupRoutes 之后挂 errorHandler，
-    // check-update 的 next(e) 跳过普通中间件 notFoundHandler 由 errorHandler 接住
+    // check-update 的意外异常经 asyncHandler 透传，跳过普通中间件 notFoundHandler 由 errorHandler 接住
     app.use(errorHandler);
   });
 
@@ -156,7 +156,7 @@ describe('routes/index.js 聚合层', () => {
       expect(res.body.data.hasUpdate).toBe(false);
     });
 
-    it('其他异常（非 AbortError/连接错误）→ next(e) 走错误中间件 500', async () => {
+    it('其他异常（非 AbortError/连接错误）→ 经 asyncHandler 走错误中间件 500', async () => {
       fetchMock.mockRejectedValue(new TypeError('unexpected payload shape'));
 
       const res = await request(app).get('/api/v1/check-update');
