@@ -125,5 +125,5 @@ Conventional Commits（`feat`/`fix`/`refactor`/`docs`/`chore`/`test` + scope）�
   ```text
   Co-authored-by: ZCode Agent <noreply@zcode.ai>
   ```
-- **PR 与分支**：所有非 dependabot 改动均走特性分支 + PR，主干 squash 合并；合并后自动删除特性分支。
+- **分支与合并**：2026-09-13 起为本地单线开发（远端冻结、多 agent 协作与 PR 流退役），改动经全量自测后直接提交本地 main，不再走特性分支 + PR。
 
