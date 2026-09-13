@@ -237,6 +237,8 @@ function TaskRow({
         >
           <Pencil className="size-3.5" aria-hidden />
         </IconButton>
+        {/* 危险操作与普通操作的分组边界（V7）：删除与编辑/执行之间立分隔线 */}
+        <span className="h-5 w-px shrink-0 bg-mcs-border-muted" aria-hidden />
         <IconButton
           aria-label={`${task.name} 删除`}
           className="text-mcs-error-fg hover:bg-mcs-error-bg-subtle hover:text-mcs-error-fg"
