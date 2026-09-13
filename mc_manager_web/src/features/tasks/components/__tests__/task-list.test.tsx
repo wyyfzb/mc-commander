@@ -118,9 +118,14 @@ describe('TaskList 上次运行结果标记', () => {
     expect(screen.getByText('成功')).toBeInTheDocument()
   })
 
-  it('failed → 显示失败标记', () => {
+  it('failed → 显示失败标记', async () => {
     renderOneTask('failed', new Date().toISOString())
     expect(screen.getByText('失败')).toBeInTheDocument()
+
+    // 失败原因 tooltip 内容 break-all：无空格长串（压缩 JSON/路径）不溢出 tooltip 框
+    const user = userEvent.setup()
+    await user.hover(screen.getByText('失败'))
+    expect(await screen.findByText('RCON 不可用')).toHaveClass('break-all')
   })
 
   it('skipped → 显示跳过标记（warning 语义，备份互斥跳过）', () => {

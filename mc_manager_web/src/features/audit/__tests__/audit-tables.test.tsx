@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import type { AuditLogItem } from '@/api/types'
-import { AuditBody } from '../audit-tables'
+import userEvent from '@testing-library/user-event'
+import { TooltipProvider } from '@/components/ui/tooltip'
+import type { AuditLogItem, CommandHistoryItem } from '@/api/types'
+import { AuditBody, CmdBody } from '../audit-tables'
 
 /** 字段结构对齐 mc-schemas 的 auditLogItemSchema，值一律虚构 */
 function makeLog(overrides: Partial<AuditLogItem>): AuditLogItem {
@@ -14,6 +16,21 @@ function makeLog(overrides: Partial<AuditLogItem>): AuditLogItem {
     detail: null,
     source: 'web',
     createdAt: 'not-a-date',
+    ...overrides,
+  }
+}
+
+/** 字段结构对齐 mc-schemas 的 commandHistoryItemSchema，值一律虚构 */
+function makeCmd(overrides: Partial<CommandHistoryItem>): CommandHistoryItem {
+  return {
+    id: 1,
+    instanceId: 'demo',
+    command: 'whitelist add Steve',
+    source: 'web',
+    success: true,
+    response: null,
+    durationMs: 12,
+    createdAt: '2026-01-02T03:04:05Z',
     ...overrides,
   }
 }
@@ -62,5 +79,31 @@ describe('AuditBody（issue 481 拆分后行为级测试）', () => {
     )
     expect(screen.getByText('配置修改')).toBeInTheDocument()
     expect(screen.getByText('extra: {"a":1}')).toBeInTheDocument()
+  })
+})
+
+describe('CmdBody（命令历史表体）', () => {
+  it('失败行 hover tooltip：response 内容 break-all 防长串溢出', async () => {
+    const user = userEvent.setup()
+    render(
+      <TooltipProvider>
+        <table>
+          <CmdBody cmds={[makeCmd({ success: false, response: 'ECONNREFUSED 1.2.3.4' })]} />
+        </table>
+      </TooltipProvider>,
+    )
+    await user.hover(screen.getByText('失败'))
+    expect(await screen.findByText('ECONNREFUSED 1.2.3.4')).toHaveClass('break-all')
+  })
+
+  it('成功行不渲染失败 tooltip', () => {
+    render(
+      <TooltipProvider>
+        <table>
+          <CmdBody cmds={[makeCmd({ success: true })]} />
+        </table>
+      </TooltipProvider>,
+    )
+    expect(screen.queryByText('失败原因')).not.toBeInTheDocument()
   })
 })

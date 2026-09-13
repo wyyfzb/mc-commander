@@ -205,7 +205,8 @@ function TaskRow({
               {task.lastRunStatus === 'failed' && task.lastRunError && (
                 <TooltipContent side="bottom" className="max-w-xs">
                   <p className="text-mcs-xs font-medium text-mcs-error-fg">失败原因</p>
-                  <p className="mt-1 text-xs text-mcs-text-default">{task.lastRunError}</p>
+                  {/* 失败原因可能为无空格长串（压缩 JSON/路径），break-all 防溢出 tooltip 框 */}
+                  <p className="mt-1 text-xs break-all text-mcs-text-default">{task.lastRunError}</p>
                 </TooltipContent>
               )}
             </Tooltip>
