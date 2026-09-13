@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { useUiStore } from '../ui'
 import { migrateFromLegacyKeys } from '@/lib/migrate-ui-keys'
 
@@ -32,16 +32,21 @@ afterEach(() => {
 describe('useUiStore persist', () => {
   it('terminalAutoScroll 写入 localStorage', async () => {
     useUiStore.getState().setTerminalAutoScroll(false)
-    await new Promise((r) => setTimeout(r, 20))
-    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY)!) as { state: { terminalAutoScroll: boolean } }
-    expect(stored.state.terminalAutoScroll).toBe(false)
+    // persist 当前为同步存储（写入随 set 同步完成），waitFor 首查即过；保留是为对将来换异步存储自愈
+    await vi.waitFor(
+      () => {
+        const stored = JSON.parse(localStorage.getItem(STORAGE_KEY)!) as { state: { terminalAutoScroll: boolean } }
+        expect(stored.state.terminalAutoScroll).toBe(false)
+      },
+      { timeout: 5000 },
+    )
   })
 
   it('会话态字段不写入 localStorage', async () => {
     useUiStore.getState().toggleSidebar()
     useUiStore.getState().setCommandPaletteOpen(true)
     useUiStore.getState().setMobileNavOpen(true)
-    await new Promise((r) => setTimeout(r, 20))
+    await vi.waitFor(() => expect(localStorage.getItem(STORAGE_KEY)).not.toBeNull(), { timeout: 5000 })
     const stored = JSON.parse(localStorage.getItem(STORAGE_KEY)!) as Record<string, unknown>
     expect(stored.state).not.toHaveProperty('sidebarCollapsed')
     expect(stored.state).not.toHaveProperty('commandPaletteOpen')
@@ -51,13 +56,17 @@ describe('useUiStore persist', () => {
   it('偏好字段变更触发 localStorage 更新', async () => {
     useUiStore.getState().setTheme('light')
     useUiStore.getState().setConfirmCommands(true)
-    await new Promise((r) => setTimeout(r, 20))
-    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY)!) as {
-      state: { theme: string; terminalAutoScroll: boolean; confirmCommands: boolean }
-    }
-    expect(stored.state.theme).toBe('light')
-    expect(stored.state.terminalAutoScroll).toBe(true)
-    expect(stored.state.confirmCommands).toBe(true)
+    await vi.waitFor(
+      () => {
+        const stored = JSON.parse(localStorage.getItem(STORAGE_KEY)!) as {
+          state: { theme: string; terminalAutoScroll: boolean; confirmCommands: boolean }
+        }
+        expect(stored.state.theme).toBe('light')
+        expect(stored.state.terminalAutoScroll).toBe(true)
+        expect(stored.state.confirmCommands).toBe(true)
+      },
+      { timeout: 5000 },
+    )
   })
 })
 

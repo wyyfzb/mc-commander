@@ -312,9 +312,9 @@ describe('PluginsPage 上传入口', () => {
     await screen.findByText('EssentialsX')
     const input = document.querySelector('input[type="file"]') as HTMLInputElement
     fireEvent.change(input, { target: { files: [new File(['data'], 'note.zip')] } })
-    await new Promise((r) => setTimeout(r, 20))
-    expect(sentXHR).toHaveLength(0)
+    // .jar 过滤在选择处理器内同步判定；提示出现即证明过滤分支已执行
     expect(await screen.findByText('仅支持上传 .jar 插件文件')).toBeInTheDocument()
+    expect(sentXHR).toHaveLength(0)
   })
 })
 
