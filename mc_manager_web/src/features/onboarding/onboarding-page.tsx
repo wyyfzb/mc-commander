@@ -5,12 +5,12 @@
  * - 连接表单复用 ConnectionForm variant onboarding；保存成功（setConfig → status ready）→ 跳转 /dashboard
  * - 路由保护：AppShell loader 在 status=unconfigured 时 redirect /onboarding
  */
-import { useRef, useState, type KeyboardEvent } from 'react'
+import { useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { AlertTriangle, Check, Copy, Lightbulb, Package, Server, Terminal } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import { nextRadioIndex } from '@/lib/radio-group'
+import { useRadioGroup, type RadioGroupItemProps } from '@/hooks/use-radio-group'
 import { copyText } from '@/lib/clipboard'
 import { BrandLogo } from '@/components/mcs/brand-logo'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
@@ -53,7 +53,7 @@ function ModeCard({
   description,
   icon: Icon,
   onSelect,
-  buttonRef,
+  radioProps,
 }: {
   mode: DeployMode
   active: boolean
@@ -61,19 +61,13 @@ function ModeCard({
   description: string
   icon: typeof Server
   onSelect: (mode: DeployMode) => void
-  /** 方向键移动焦点需要拿到 DOM 节点（roving tabindex 由父级统一管理） */
-  buttonRef: (el: HTMLButtonElement | null) => void
+  /** radio 语义（role/aria-checked/roving tabindex/ref）由 useRadioGroup 统一管理 */
+  radioProps: RadioGroupItemProps
 }) {
   return (
     <button
-      ref={buttonRef}
+      {...radioProps}
       type="button"
-      // 三选一：语义是单选组（role=radio），不是三枚可各自开关的按钮
-      // （aria-pressed 会让读屏播报「已按下/未按下」，丢掉「3 选 1、当前第几项」）
-      role="radio"
-      aria-checked={active}
-      // roving tabindex：组内只有选中项可 Tab 进入，组内移动交给方向键
-      tabIndex={active ? 0 : -1}
       onClick={() => onSelect(mode)}
       className={cn(
         'flex flex-1 flex-col items-start gap-2 rounded-mcs-md border p-4 text-left transition-colors',
@@ -120,20 +114,15 @@ function CommandBlock({ command, ariaLabel }: { command: string; ariaLabel: stri
 export function OnboardingPage() {
   const navigate = useNavigate()
   const [mode, setMode] = useState<DeployMode>('already')
-  const cardRefs = useRef<Partial<Record<DeployMode, HTMLButtonElement | null>>>({})
 
-  /**
-   * 单选组方向键模型（APG）：移动即选中，焦点跟随（下标计算与回绕见 lib/radio-group）。
-   * 挂在组上而非每张卡上：事件从聚焦的卡片冒泡上来，只需一处分支。
-   */
-  const handleModeKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    const next = nextRadioIndex(e.key, MODE_ORDER.indexOf(mode), MODE_ORDER.length)
-    if (next === null) return
-    e.preventDefault()
-    const target = MODE_ORDER[next]!
-    setMode(target)
-    cardRefs.current[target]?.focus()
-  }
+  // 单选组接线（roving tabindex + 方向键移动即选中、焦点跟随）统一走 useRadioGroup，
+  // 与 webhook 渠道预设、J55 批次各组共用同一键盘模型
+  const { groupProps, itemProps } = useRadioGroup<DeployMode>({
+    label: '部署方式',
+    value: mode,
+    values: MODE_ORDER,
+    onChange: setMode,
+  })
 
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center bg-mcs-bg-default p-6">
@@ -148,44 +137,33 @@ export function OnboardingPage() {
         </div>
 
         {/* ── 部署方式选择（三选一单选组）+ Docker 边界说明 ── */}
-        <div
-          role="radiogroup"
-          aria-label="部署方式"
-          onKeyDown={handleModeKeyDown}
-          className="mb-2 grid grid-cols-1 gap-3 sm:grid-cols-3"
-        >
+        <div {...groupProps} className="mb-2 grid grid-cols-1 gap-3 sm:grid-cols-3">
           <ModeCard
             mode="already"
-            active={mode === 'already'}
+            active={itemProps(0)['aria-checked']}
             title="已有服务端"
             description="我已部署，直接连接"
             icon={Server}
             onSelect={setMode}
-            buttonRef={(el) => {
-              cardRefs.current.already = el
-            }}
+            radioProps={itemProps(0)}
           />
           <ModeCard
             mode="linux"
-            active={mode === 'linux'}
+            active={itemProps(1)['aria-checked']}
             title="Linux 一键部署"
             description="一条命令装好运行环境"
             icon={Terminal}
             onSelect={setMode}
-            buttonRef={(el) => {
-              cardRefs.current.linux = el
-            }}
+            radioProps={itemProps(1)}
           />
           <ModeCard
             mode="windows"
-            active={mode === 'windows'}
+            active={itemProps(2)['aria-checked']}
             title="Windows 手动部署"
             description="自备 Node 22+ · 分步指引"
             icon={Package}
             onSelect={setMode}
-            buttonRef={(el) => {
-              cardRefs.current.windows = el
-            }}
+            radioProps={itemProps(2)}
           />
         </div>
         <p className="mb-4 text-mcs-xs text-mcs-text-muted">

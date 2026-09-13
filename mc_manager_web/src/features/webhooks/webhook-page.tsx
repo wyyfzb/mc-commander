@@ -6,13 +6,13 @@
  * - 删除确认（ConfirmDialog 危险样式）
  * - 加载骨架行 + 空态 + Toast 反馈
  */
-import { useRef, useState, type KeyboardEvent } from 'react'
+import { useState } from 'react'
 import { Plus, Send, Trash2, Webhook as WebhookIcon, Hourglass, RefreshCw, AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useConnectionStore } from '@/stores/connection'
 import { formatDateTime } from '@/lib/format'
-import { nextRadioIndex } from '@/lib/radio-group'
+import { useRadioGroup } from '@/hooks/use-radio-group'
 import {
   apiGetWebhooks, apiGetWebhookEventTypes, apiCreateWebhook,
   apiUpdateWebhook, apiDeleteWebhook, apiTestWebhook, apiGetWebhookDeliveries,
@@ -86,30 +86,15 @@ export default function WebhookPage() {
   const [form, setForm] = useState({ name: '', url: '', secret: '', platform: 'generic' as string, events: [] as string[], isEnabled: true })
   const [initialForm, setInitialForm] = useState({ name: '', url: '', secret: '', platform: 'generic' as string, events: [] as string[], isEnabled: true })
   const [dialogDirtyConfirm, setDialogDirtyConfirm] = useState(false)
-  const presetRefs = useRef<(HTMLButtonElement | null)[]>([])
-  /**
-   * 当前预设下标。异常值兜底：`platform` 不在清单内时 `findIndex` 为 -1，
-   * 直接拿它去算 tabindex 会让**整组零停靠点**（键盘再也进不了这个组），
-   * 方向键也会错位。此时把停靠点放在首项，但**不谎报选中**——组内确实没有
-   * 哪一项代表当前值（选中态仍由 `form.platform === p.key` 决定）。
-   */
-  const activePresetIndex = Math.max(
-    PLATFORM_PRESETS.findIndex(p => p.key === form.platform),
-    0,
-  )
-
-  /**
-   * 渠道预设是单选组：方向键在组内移动并即时选中、焦点跟随（下标与回绕见 lib/radio-group）。
-   * 少了这段，role=radiogroup 只是「宣告了一个键盘操作不符合模型的组」——比不用该角色更差。
-   */
-  const handlePresetKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    const next = nextRadioIndex(e.key, activePresetIndex, PLATFORM_PRESETS.length)
-    if (next === null) return
-    e.preventDefault()
-    const preset = PLATFORM_PRESETS[next]!
-    setForm(f => ({ ...f, platform: preset.key }))
-    presetRefs.current[next]?.focus()
-  }
+  // 渠道预设单选组接线（roving tabindex + 方向键移动即选中、焦点跟随）统一走
+  // useRadioGroup，与 onboarding 部署方式、J55 批次的 17 组共用同一键盘模型。
+  // 异常值兜底（platform 不在清单内）：停靠点落首项但不谎报选中——hook 内建该归一
+  const { groupProps, itemProps } = useRadioGroup<string>({
+    label: 'Webhook 渠道预设',
+    value: form.platform,
+    values: PLATFORM_PRESETS.map(p => p.key),
+    onChange: (key) => setForm(f => ({ ...f, platform: key })),
+  })
   const urlInvalid = form.url !== '' && !form.url.startsWith('http://') && !form.url.startsWith('https://')
   const formDirty = form.name !== initialForm.name || form.url !== initialForm.url || form.secret !== initialForm.secret
     || form.platform !== initialForm.platform
@@ -322,24 +307,12 @@ export default function WebhookPage() {
             </div>
             <div className="space-y-1.5">
               <Label className="text-mcs-xs text-mcs-text-muted">渠道预设</Label>
-              <div
-                className="flex flex-wrap gap-1"
-                role="radiogroup"
-                aria-label="Webhook 渠道预设"
-                onKeyDown={handlePresetKeyDown}
-              >
+              <div {...groupProps} className="flex flex-wrap gap-1">
                 {PLATFORM_PRESETS.map((p, index) => (
                   <button
                     key={p.key}
                     type="button"
-                    ref={(el) => {
-                      presetRefs.current[index] = el
-                    }}
-                    role="radio"
-                    aria-checked={form.platform === p.key}
-                    // roving tabindex：组内只有选中项可 Tab 进入，组内移动交给方向键
-                    // （异常值下没有选中项，停靠点落在首项，见 activePresetIndex）
-                    tabIndex={index === activePresetIndex ? 0 : -1}
+                    {...itemProps(index)}
                     onClick={() => setForm(f => ({ ...f, platform: p.key }))}
                     className={cn(
                       'rounded-mcs-xs border px-2 py-0.5 text-mcs-2xs transition-colors cursor-pointer',
