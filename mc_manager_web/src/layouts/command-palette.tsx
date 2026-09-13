@@ -30,6 +30,7 @@ import {
   CommandItem,
   CommandList,
   CommandSeparator,
+  CommandShortcut,
 } from '@/components/ui/command'
 import { useUiStore } from '@/stores/ui'
 import { useCommandBus } from '@/stores/command-bus'
@@ -78,6 +79,8 @@ interface PaletteAction {
   label: string
   icon: LucideIcon
   keywords?: string
+  /** 右侧路径提示（导航项的落点面包屑；无落点语义的项不设） */
+  hint?: string
   run: () => void
 }
 
@@ -164,16 +167,16 @@ export function CommandPalette() {
   }
 
   const pageActions: PaletteAction[] = [
-    { label: '仪表盘', icon: LayoutDashboard, keywords: 'dashboard 首页 状态 终端', run: () => go('/dashboard') },
-    { label: '玩家', icon: Users, keywords: 'players 玩家列表 封禁 传送', run: () => go('/players') },
-    { label: '世界', icon: Globe, keywords: 'world 属性 gamelogic 规则', run: () => go('/world') },
-    { label: '文件', icon: FolderOpen, keywords: 'files 文件管理 编辑器', run: () => go('/files') },
-    { label: '任务', icon: CalendarClock, keywords: 'tasks 定时 cron 备份', run: () => go('/tasks') },
-    { label: '插件', icon: Puzzle, keywords: 'plugins 插件市场 modrinth 上传 启用 禁用', run: () => go('/plugins') },
-    { label: '实例', icon: Server, keywords: 'instances 部署 服务器', run: () => go('/instances') },
-    { label: 'Webhook', icon: Webhook, keywords: 'webhooks 通知 推送 钩子', run: () => go('/webhooks') },
-    { label: '审计日志', icon: ScrollText, keywords: 'audit 审计 操作记录 命令历史', run: () => go('/audit') },
-    { label: '设置', icon: Settings, keywords: 'settings 连接 通用 关于', run: () => go('/settings') },
+    { label: '仪表盘', icon: LayoutDashboard, hint: '/dashboard', keywords: 'dashboard 首页 状态 终端', run: () => go('/dashboard') },
+    { label: '玩家', icon: Users, hint: '/players', keywords: 'players 玩家列表 封禁 传送', run: () => go('/players') },
+    { label: '世界', icon: Globe, hint: '/world', keywords: 'world 属性 gamelogic 规则', run: () => go('/world') },
+    { label: '文件', icon: FolderOpen, hint: '/files', keywords: 'files 文件管理 编辑器', run: () => go('/files') },
+    { label: '任务', icon: CalendarClock, hint: '/tasks', keywords: 'tasks 定时 cron 备份', run: () => go('/tasks') },
+    { label: '插件', icon: Puzzle, hint: '/plugins', keywords: 'plugins 插件市场 modrinth 上传 启用 禁用', run: () => go('/plugins') },
+    { label: '实例', icon: Server, hint: '/instances', keywords: 'instances 部署 服务器', run: () => go('/instances') },
+    { label: 'Webhook', icon: Webhook, hint: '/webhooks', keywords: 'webhooks 通知 推送 钩子', run: () => go('/webhooks') },
+    { label: '审计日志', icon: ScrollText, hint: '/audit', keywords: 'audit 审计 操作记录 命令历史', run: () => go('/audit') },
+    { label: '设置', icon: Settings, hint: '/settings', keywords: 'settings 连接 通用 关于', run: () => go('/settings') },
   ]
 
   const themeAction: PaletteAction = {
@@ -225,6 +228,7 @@ export function CommandPalette() {
               >
                 <action.icon className="size-4" aria-hidden />
                 {action.label}
+                {action.hint && <CommandShortcut>{action.hint}</CommandShortcut>}
               </CommandItem>
             ))}
           </CommandGroup>

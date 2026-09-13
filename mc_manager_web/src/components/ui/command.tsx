@@ -31,6 +31,15 @@ function Command({
   )
 }
 
+/** 键位徽标（面板 footer 指引用；与顶栏 kbd 同语言） */
+function Kbd({ children }: { children: React.ReactNode }) {
+  return (
+    <kbd className="inline-flex h-4 min-w-4 items-center justify-center rounded-sm border border-mcs-border-default bg-mcs-bg-default px-1 font-mono text-mcs-2xs font-medium text-mcs-text-muted">
+      {children}
+    </kbd>
+  )
+}
+
 function CommandDialog({
   title = "命令面板",
   description = "输入页面名称或命令…",
@@ -52,12 +61,30 @@ function CommandDialog({
       </DialogHeader>
       <DialogContent
         className={cn(
-          "top-1/3 translate-y-0 overflow-hidden rounded-xl! p-0",
+          // gap-0：DialogContent 基座是 grid gap-4，footer 作为第二个 grid item
+          // 会与列表之间多出 16px 间隙，分隔线须紧贴列表
+          "top-1/3 translate-y-0 gap-0 overflow-hidden rounded-xl! p-0",
           className
         )}
         showCloseButton={showCloseButton}
       >
         {children}
+        {/* 键盘指引 footer：↑↓/↵/Esc 是面板的全部交互键，常驻外显省去猜测 */}
+        <div className="flex items-center gap-4 border-t px-3 py-2 text-mcs-2xs text-mcs-text-muted">
+          <span className="flex items-center gap-1">
+            <Kbd>↑</Kbd>
+            <Kbd>↓</Kbd>
+            选择
+          </span>
+          <span className="flex items-center gap-1">
+            <Kbd>↵</Kbd>
+            确认
+          </span>
+          <span className="flex items-center gap-1">
+            <Kbd>Esc</Kbd>
+            关闭
+          </span>
+        </div>
       </DialogContent>
     </Dialog>
   )
@@ -153,7 +180,7 @@ function CommandItem({
     <CommandPrimitive.Item
       data-slot="command-item"
       className={cn(
-        "group/command-item relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm select-none in-data-[slot=dialog-content]:rounded-lg! data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 data-selected:bg-accent data-selected:text-foreground data-selected:outline-2 data-selected:-outline-offset-2 data-selected:outline-mcs-focus-ring [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 data-selected:*:[svg]:text-foreground",
+        "group/command-item relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm select-none in-data-[slot=dialog-content]:rounded-lg! data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 data-selected:bg-mcs-accent-bg-subtle data-selected:text-mcs-accent-fg data-selected:outline-2 data-selected:-outline-offset-2 data-selected:outline-mcs-focus-ring [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 data-selected:*:[svg]:text-mcs-accent-fg",
         className
       )}
       {...props}
@@ -172,7 +199,7 @@ function CommandShortcut({
     <span
       data-slot="command-shortcut"
       className={cn(
-        "ml-auto text-xs tracking-widest text-muted-foreground group-data-selected/command-item:text-foreground",
+        "ml-auto text-xs tracking-widest text-muted-foreground group-data-selected/command-item:text-mcs-accent-fg",
         className
       )}
       {...props}

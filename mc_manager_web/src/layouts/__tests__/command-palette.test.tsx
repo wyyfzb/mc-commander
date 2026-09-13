@@ -152,3 +152,35 @@ describe('CommandPalette 实例操作分组', () => {
     expect(screen.queryByText(/实例操作 ·/)).not.toBeInTheDocument()
   })
 })
+
+describe('CommandPalette 操作辅助（C2）', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    useUiStore.setState({ commandPaletteOpen: false, lastOutputInstanceId: null })
+    useConnectionStore.setState({ status: 'ready', baseUrl: 'http://localhost:8080', apiKey: 'test-key' })
+    useServerStore.setState({
+      instanceId: 'demo',
+      status: { ...mockInstanceStatus },
+      socketConnected: true,
+      lastStatusEvent: null,
+      phase: {},
+    })
+  })
+
+  it('键盘指引 footer 常驻：↑↓ 选择 / ↵ 确认 / Esc 关闭', async () => {
+    await openPaletteAndFindGroup()
+    expect(screen.getByText('选择')).toBeInTheDocument()
+    expect(screen.getByText('确认')).toBeInTheDocument()
+    expect(screen.getByText('关闭')).toBeInTheDocument()
+    // 键位徽标（kbd 元素）与文字标签并存
+    expect(screen.getByText('↑')).toBeInTheDocument()
+    expect(screen.getByText('Esc')).toBeInTheDocument()
+  })
+
+  it('页面导航项带路径提示（落点面包屑）', async () => {
+    await openPaletteAndFindGroup()
+    // 可访问名随路径提示扩展（icon aria-hidden，仅文本参与命名；JSX 相邻表达式无空白分隔）
+    expect(screen.getByRole('option', { name: /仪表盘\s*\/dashboard/ })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: /设置\s*\/settings/ })).toBeInTheDocument()
+  })
+})
