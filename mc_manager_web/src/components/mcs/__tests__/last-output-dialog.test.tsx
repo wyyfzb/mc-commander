@@ -101,4 +101,20 @@ describe('LastOutputDialog', () => {
     expect(useUiStore.getState().lastOutputInstanceId).toBeNull()
     expect(screen.queryByText('实例末尾日志')).not.toBeInTheDocument()
   })
+
+  it('长行折行显示（C4）：whitespace-pre-wrap + break-all，不横向溢出', async () => {
+    server.use(
+      http.get('*/api/v1/instances/:id', () =>
+        HttpResponse.json({
+          status: 'ok',
+          // 虚构长 JSON 行（如 /give 附魔 NBT 回显）：不折行即横向滚动、行首滚出视野
+          data: { ...mockInstanceStatus, lastOutput: '{"id":"minecraft:diamond_sword","components":{"minecraft:enchantments":{"levels":{"minecraft:sharpness":255}}}}' },
+        }),
+      ),
+    )
+    useUiStore.getState().setLastOutputInstanceId('demo')
+    renderDialog()
+    const pre = await screen.findByTestId('last-output-content')
+    expect(pre).toHaveClass('whitespace-pre-wrap', 'break-all')
+  })
 })
