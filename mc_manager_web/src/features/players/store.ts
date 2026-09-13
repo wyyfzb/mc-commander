@@ -6,6 +6,7 @@
  * 列表数据本体走 TanStack Query（usePlayers），本 store 不存数据。
  */
 import { create } from 'zustand'
+import { persist, createJSONStorage } from 'zustand/middleware'
 import type { Player } from '@/api/types'
 
 export type PlayersFilterMode = 'all' | 'online' | 'offline' | 'op' | 'whitelist' | 'banned'
@@ -145,46 +146,62 @@ interface PlayersUiState {
   resetForInstance: () => void
 }
 
-export const usePlayersUiStore = create<PlayersUiState>((set) => ({
-  selectedUuids: [],
-  filter: { ...DEFAULT_PLAYERS_FILTER },
-  detail: null,
+export const usePlayersUiStore = create<PlayersUiState>()(
+  persist(
+    (set) => ({
+      selectedUuids: [],
+      filter: { ...DEFAULT_PLAYERS_FILTER },
+      detail: null,
 
-  toggleSelect: (uuid) =>
-    set((s) => ({
-      selectedUuids: s.selectedUuids.includes(uuid)
-        ? s.selectedUuids.filter((u) => u !== uuid)
-        : [...s.selectedUuids, uuid],
-    })),
+      toggleSelect: (uuid) =>
+        set((s) => ({
+          selectedUuids: s.selectedUuids.includes(uuid)
+            ? s.selectedUuids.filter((u) => u !== uuid)
+            : [...s.selectedUuids, uuid],
+        })),
 
-  toggleSelectPage: (pageUuids) =>
-    set((s) => {
-      const allSelected = pageUuids.every((u) => s.selectedUuids.includes(u))
-      if (allSelected) {
-        // 全部选中 → 取消本页选中
-        const pageSet = new Set(pageUuids)
-        return { selectedUuids: s.selectedUuids.filter((u) => !pageSet.has(u)) }
-      }
-      // 部分/未选中 → 全选本页（并集去重）
-      const merged = new Set([...s.selectedUuids, ...pageUuids])
-      return { selectedUuids: [...merged] }
+      toggleSelectPage: (pageUuids) =>
+        set((s) => {
+          const allSelected = pageUuids.every((u) => s.selectedUuids.includes(u))
+          if (allSelected) {
+            // 全部选中 → 取消本页选中
+            const pageSet = new Set(pageUuids)
+            return { selectedUuids: s.selectedUuids.filter((u) => !pageSet.has(u)) }
+          }
+          // 部分/未选中 → 全选本页（并集去重）
+          const merged = new Set([...s.selectedUuids, ...pageUuids])
+          return { selectedUuids: [...merged] }
+        }),
+
+      clearSelection: () => set({ selectedUuids: [] }),
+
+      setFilter: (partial) => set((s) => ({ filter: { ...s.filter, ...partial } })),
+
+      resetFilter: () => set({ filter: { ...DEFAULT_PLAYERS_FILTER } }),
+
+      openPlayerDetail: (playerName, tab = 'overview') =>
+        set({ detail: { playerName, tab, batchMode: false } }),
+
+      openBatchDetail: (tab) => set({ detail: { playerName: null, tab, batchMode: true } }),
+
+      setDetailTab: (tab) => set((s) => (s.detail ? { detail: { ...s.detail, tab } } : s)),
+
+      closeDetail: () => set({ detail: null }),
+
+      resetForInstance: () =>
+        set({ selectedUuids: [], filter: { ...DEFAULT_PLAYERS_FILTER }, detail: null }),
     }),
-
-  clearSelection: () => set({ selectedUuids: [] }),
-
-  setFilter: (partial) => set((s) => ({ filter: { ...s.filter, ...partial } })),
-
-  resetFilter: () => set({ filter: { ...DEFAULT_PLAYERS_FILTER } }),
-
-  openPlayerDetail: (playerName, tab = 'overview') =>
-    set({ detail: { playerName, tab, batchMode: false } }),
-
-  openBatchDetail: (tab) => set({ detail: { playerName: null, tab, batchMode: true } }),
-
-  setDetailTab: (tab) => set((s) => (s.detail ? { detail: { ...s.detail, tab } } : s)),
-
-  closeDetail: () => set({ detail: null }),
-
-  resetForInstance: () =>
-    set({ selectedUuids: [], filter: { ...DEFAULT_PLAYERS_FILTER }, detail: null }),
-}))
+    {
+      name: 'mcs-players-ui',
+      storage: createJSONStorage(() => localStorage),
+      /** 仅持久化筛选偏好（刷新/重开浏览器不丢筛选条件）；选中集与详情面板是会话态 */
+      partialize: (state) => ({ filter: state.filter }),
+      // 旧存储缺新字段时以默认值兜底（默认浅合并会让新字段 undefined，
+      // applyPlayersFilter 会把列表静默过滤成空）
+      merge: (persisted, current) => {
+        const stored = (persisted ?? {}) as { filter?: Partial<PlayersFilter> }
+        return { ...current, filter: { ...DEFAULT_PLAYERS_FILTER, ...stored.filter } }
+      },
+    },
+  ),
+)
