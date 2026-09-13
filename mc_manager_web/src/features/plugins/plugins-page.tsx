@@ -26,7 +26,6 @@ import {
   Store,
   Trash2,
 } from 'lucide-react'
-import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
 import { getFriendlyErrorText } from '@/api/errors'
 import type { PluginInfo } from '@/api/types'
@@ -36,6 +35,7 @@ import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { EmptyState } from '@/components/mcs/empty-state'
+import { InstanceRequiredState } from '@/features/instances/components/instance-required-state'
 import { PageHeader } from '@/components/mcs/page-header'
 import { useServerStore } from '@/stores/server'
 import { useConnectionStore } from '@/stores/connection'
@@ -50,7 +50,6 @@ import { UploadProgressBar } from './components/upload-progress-bar'
 
 export function PluginsPage() {
   const instanceId = useServerStore((s) => s.instanceId)
-  const navigate = useNavigate()
 
   const pluginsQuery = usePlugins(instanceId)
   const toggleMutation = useTogglePlugin(instanceId)
@@ -138,15 +137,9 @@ export function PluginsPage() {
     [plugins, selected],
   )
 
+  // 无实例门：加载中/加载失败/真空态/待选中四态各自诚实（见 InstanceRequiredState）
   if (!instanceId) {
-    return (
-      <EmptyState
-        icon={Package}
-        title="暂无服务器实例"
-        hint="请先在服务端创建 MC 服务器实例"
-        action={{ label: '前往实例管理', onClick: () => navigate('/instances') }}
-      />
-    )
+    return <InstanceRequiredState />
   }
 
   /**
@@ -276,10 +269,10 @@ export function PluginsPage() {
       {/* 拖放高亮遮罩 */}
       {dragActive && (
         <div
-          className="pointer-events-none absolute inset-2 z-30 flex items-center justify-center rounded-mcs-md border-2 border-dashed border-mcs-accent bg-mcs-accent/5"
+          className="pointer-events-none absolute inset-2 z-(--mcs-z-overlay) flex items-center justify-center rounded-mcs-md border-2 border-dashed border-mcs-accent-border-strong bg-mcs-accent/5"
           data-testid="drop-overlay"
         >
-          <div className="flex flex-col items-center gap-2 text-mcs-accent">
+          <div className="flex flex-col items-center gap-2 text-mcs-accent-fg">
             <ArrowUpFromLine className="size-8" aria-hidden />
             <p className="text-mcs-sm font-medium">松开以上传插件（.jar）</p>
           </div>
@@ -447,7 +440,7 @@ export function PluginsPage() {
         <div className="flex flex-col items-center gap-1.5 px-4 py-12 text-center text-mcs-text-muted">
           <Search className="size-8 opacity-60" aria-hidden />
           <p className="mt-1 text-mcs-sm">无匹配插件</p>
-          <p className="text-mcs-xs text-mcs-text-subtle">换个关键词试试</p>
+          <p className="text-mcs-xs text-mcs-text-muted">换个关键词试试</p>
         </div>
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto">

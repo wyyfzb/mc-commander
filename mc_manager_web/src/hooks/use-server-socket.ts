@@ -11,6 +11,7 @@ import { applyUpgradeProgress } from '@/stores/upgrade'
 import { useNotificationStore } from '@/stores/notifications'
 import { useTerminalStore } from '@/stores/terminal'
 import { useUiStore } from '@/stores/ui'
+import { sessionAppliesToPanel } from '@/lib/mc-connection'
 import type { InstanceSummary } from '@/api/types'
 import type { Player, UpgradeStage, WsMessage } from '@/api/types'
 
@@ -39,8 +40,10 @@ export function useServerSocket(instanceId: string | null) {
   const apiKey = useConnectionStore((s) => s.apiKey)
   const baseUrl = useConnectionStore((s) => s.baseUrl)
   const connectionReady = useConnectionStore((s) => s.status === 'ready')
-  // 安全主线：会话令牌优先于 API Key 作为 WS 鉴权凭据（登录后 session 变更触发重建连接）
-  const sessionToken = useAuthStore((s) => s.session?.token ?? null)
+  // 安全主线：会话令牌优先于 API Key 作为 WS 鉴权凭据（登录后 session 变更触发重建连接）；
+  // 令牌只在签发它的面板上有效，换地址后回落 API Key——否则等于拿 A 的令牌去连 B 的实时通道
+  const session = useAuthStore((s) => s.session)
+  const sessionToken = sessionAppliesToPanel(session, baseUrl) ? (session?.token ?? null) : null
   const applyWsSnapshot = useServerStore((s) => s.applyWsSnapshot)
   const applyWsPerformance = useServerStore((s) => s.applyWsPerformance)
   const applyWsStatusEvent = useServerStore((s) => s.applyWsStatusEvent)
@@ -78,7 +81,18 @@ export function useServerSocket(instanceId: string | null) {
 
     let socket = socketSingleton
     if (!socket) {
-      socket = new McSocket({ apiKey, baseUrl, sessionToken })
+      socket = new McSocket({
+        apiKey,
+        baseUrl,
+        sessionToken,
+        // 连接生命周期边沿（UXT-4）：断线即时置 false（激活「延迟刷新」降级态
+        // 与降级横幅——此前 socketConnected 只在 effect 挂载/卸载时置位，断线
+        // 永远感知不到，degraded 态是死码）；重连成功 onopen 置回 true
+        onStateChange: ({ open }) => {
+          setSocketConnected(open)
+          if (open) setHasConnectedOnce(true)
+        },
+      })
       socketSingleton = socket
     }
 
@@ -170,6 +184,9 @@ export function useServerSocket(instanceId: string | null) {
             }
             // 实例列表状态变化时刷新列表（runningCount 等）
             void queryClient.invalidateQueries({ queryKey: queryKeys.instances() })
+            // 详情同步失效：isRunning 镜像自详情 query（server store），只刷列表会让
+            // 面板外停止（如终端输 stop）后的停止状态条滞后到 30s 轮询才翻转
+            void queryClient.invalidateQueries({ queryKey: queryKeys.instance(msg.instanceId) })
             // critical 事件（当前实例）：入通知中心 + 持久 toast（手动关闭防错过）
             if (ev === 'crash' || ev === 'circuit_breaker') {
               dispatchWsEvent({ type: 'status', data: msg.data as Record<string, unknown>, instanceId: msg.instanceId })
@@ -185,6 +202,10 @@ export function useServerSocket(instanceId: string | null) {
                   action: { label: '查看末尾日志', onClick: () => setLastOutputInstanceId(crashedInstanceId) },
                 },
               )
+            } else {
+              // started/stopped/ready/save 常规跃迁：入通知中心（文案映射见
+              // lib/notifications buildNotifications），不弹 toast 防打断
+              dispatchWsEvent({ type: 'status', data: msg.data as Record<string, unknown>, instanceId: msg.instanceId })
             }
           } else {
             applyWsSnapshot(msg.instanceId, {

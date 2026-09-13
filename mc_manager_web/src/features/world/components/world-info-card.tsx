@@ -9,6 +9,7 @@ import { Globe, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
+import { worldSizeParts } from '@/lib/format'
 import type { WorldInfo } from '@/api/types'
 
 // ── 展示映射 ──
@@ -123,7 +124,7 @@ export function WorldInfoCard({ world, isLoading, onRefresh, className }: WorldI
     >
       <header className="flex items-center gap-3 border-b border-mcs-border-subtle px-4 py-3">
         <span className="flex size-8 shrink-0 items-center justify-center rounded-mcs-sm bg-mcs-accent-bg-subtle">
-          <Globe className="size-4 text-mcs-accent" aria-hidden />
+          <Globe className="size-4 text-mcs-accent-fg" aria-hidden />
         </span>
         <h3 className="text-mcs-md font-semibold">世界信息</h3>
         <div className="ml-auto">
@@ -151,7 +152,7 @@ export function WorldInfoCard({ world, isLoading, onRefresh, className }: WorldI
             ))}
           </div>
         ) : !world ? (
-          <p className="py-8 text-center text-mcs-xs text-mcs-text-subtle">暂无世界信息</p>
+          <p className="py-8 text-center text-mcs-xs text-mcs-text-muted">暂无世界信息</p>
         ) : (
           <dl className="flex flex-col">
             <InfoRow label="世界名称">
@@ -164,15 +165,22 @@ export function WorldInfoCard({ world, isLoading, onRefresh, className }: WorldI
               </span>
             </InfoRow>
             <InfoRow label="存档大小">
-              <span className="mcs-num text-mcs-sm leading-none">{world.sizeGB.toFixed(1)}</span>
-              <span className="text-mcs-xs text-mcs-text-subtle"> GB</span>
+              {(() => {
+                const size = worldSizeParts(world.sizeGB)
+                return (
+                  <>
+                    <span className="mcs-num text-mcs-sm leading-none">{size.value}</span>
+                    <span className="text-mcs-xs text-mcs-text-muted"> {size.unit}</span>
+                  </>
+                )
+              })()}
               <span
                 role="progressbar"
                 aria-label="存档大小进度"
                 aria-valuemin={0}
                 aria-valuemax={10}
                 aria-valuenow={Math.min(Math.max(world.sizeGB, 0), 10)}
-                className="h-1.5 w-20 overflow-hidden rounded-mcs-xs bg-mcs-bg-subtle"
+                className="h-1.5 w-20 overflow-hidden rounded-mcs-xs bg-mcs-bg-secondary"
               >
                 <span
                   aria-hidden
@@ -185,7 +193,7 @@ export function WorldInfoCard({ world, isLoading, onRefresh, className }: WorldI
               {world.gameDays != null ? (
                 <>
                   <span className="mcs-num text-mcs-sm leading-none">{world.gameDays}</span>
-                  <span className="text-mcs-xs text-mcs-text-subtle"> 天</span>
+                  <span className="text-mcs-xs text-mcs-text-muted"> 天</span>
                 </>
               ) : (
                 '不可用'

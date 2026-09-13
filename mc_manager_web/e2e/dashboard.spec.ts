@@ -23,11 +23,18 @@ async function setupConnection(page: Page) {
 }
 
 test.describe('仪表盘', () => {
-  test('统计卡渲染：顶部三卡 + 右栏两卡 + 健康标签 + 实时数据', async ({ page }) => {
+  test('统计卡渲染：顶部三卡 + 右栏三卡 + 健康标签 + 实时数据', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/dashboard')
     // 顶部三卡 + 右栏卡标题
-    for (const title of ['在线玩家', '资源使用', '实例信息', 'MC 时钟 · 世界控制', '公告发送']) {
+    for (const title of [
+      '在线玩家',
+      '资源使用',
+      '实例信息',
+      'MC 时钟 · 世界控制',
+      '最近备份',
+      '公告发送',
+    ]) {
       await expect(page.getByText(title).first()).toBeVisible()
     }
     // 健康标签与实时数据
@@ -41,20 +48,37 @@ test.describe('仪表盘', () => {
     await expect(page.getByText('第 42 天')).toBeVisible()
   })
 
+  test('最近备份卡：渲染备份行 + 旧格式徽章，「全部」跳转设置页备份子路由', async ({ page }) => {
+    await setupConnection(page)
+    await page.goto('/dashboard')
+    // 精确匹配（非子串）：夹具名一旦重新内嵌日期，这里必须变红
+    await expect(page.getByText('手动备份', { exact: true })).toBeVisible()
+    await expect(page.getByText('旧格式压缩包', { exact: true })).toBeVisible()
+    await expect(page.getByText('旧格式', { exact: true })).toBeVisible()
+    // 入口必须落在真实子路由 /settings/backup（历史上曾指向不存在的 /settings/backups）
+    await page.getByRole('button', { name: '查看全部备份' }).click()
+    await expect(page).toHaveURL(/\/settings\/backup$/)
+    await expect(page.getByText('备份管理').first()).toBeVisible()
+  })
+
   test('MC 时钟·世界控制：天气/时间按钮点击即发命令', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/dashboard')
+    // 天气/时间是互斥单选组（role=radio + aria-checked），非按钮
+    await expect(page.getByRole('radio', { name: '晴天' })).toHaveAttribute('aria-checked', 'true')
     // 成功反馈已静默（终端回显为反馈源），以命令请求实际发出为断言信号
     const rainReq = page.waitForRequest(
       (r) => r.url().includes('/command') && String(r.postDataJSON()?.command).includes('weather rain'),
     )
-    await page.getByRole('button', { name: '雨天' }).click()
+    await page.getByRole('radio', { name: '雨天' }).click()
     await rainReq
+    await expect(page.getByRole('radio', { name: '雨天' })).toHaveAttribute('aria-checked', 'true')
     const nightReq = page.waitForRequest(
       (r) => r.url().includes('/command') && String(r.postDataJSON()?.command).includes('time set night'),
     )
-    await page.getByRole('button', { name: '夜晚' }).click()
+    await page.getByRole('radio', { name: '夜晚' }).click()
     await nightReq
+    await expect(page.getByRole('radio', { name: '夜晚' })).toHaveAttribute('aria-checked', 'true')
   })
 
   test('公告发送：预设胶囊填充 → 发送 → 二次确认 → say → 清空', async ({ page }) => {
@@ -129,11 +153,43 @@ test.describe('仪表盘', () => {
     await expect(page.getByRole('button', { name: /全部已读/ })).toBeDisabled()
   })
 
-  test('顶栏状态点：连接后显示已连接', async ({ page }) => {
+  test('顶栏状态点：WS 连接后显示已连接', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/dashboard')
-    // WS 未连通（mock server 无 WS）→ 状态点为连接中/未连接；实例选择器显示实例名
+    // mock server 提供 /ws 端点（握手鉴权 + 订阅快照）→ 状态点应为已连接
+    await expect(page.getByText('已连接').first()).toBeVisible({ timeout: 10_000 })
     await expect(page.getByText('E2E 演示实例').first()).toBeVisible()
+  })
+
+  test('系统资源查询失败：横幅可见，重试后恢复（真实终端子树下的失败渲染路径）', async ({ page }) => {
+    await setupConnection(page)
+    // 拦截优先于代理：让 /system-stats 先 500，再放行真实 mock 后端
+    let failing = true
+    await page.route('**/api/v1/system-stats', (route) => {
+      if (!failing) return route.continue()
+      return route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          status: 'error',
+          code: 50000,
+          message: 'Internal error',
+          data: null,
+          timestamp: new Date().toISOString(),
+        }),
+      })
+    })
+    await page.goto('/dashboard')
+
+    // 出口可见且点名失败来源（此前该失败完全静默，资源卡只会停在「暂无数据」）
+    await expect(page.getByText('系统资源获取失败')).toBeVisible()
+    await expect(page.getByText('服务器状态获取失败')).toHaveCount(0)
+
+    failing = false
+    await page.getByRole('button', { name: '重试' }).click()
+    await expect(page.getByText(/获取失败/)).toHaveCount(0)
+    // 正向断言：资源行真的回填了数据（只看横幅消失，别的渲染分支调整也能蒙对）
+    await expect(page.getByText('暂无数据', { exact: true })).toHaveCount(0)
   })
 
   test('视觉截图：仪表盘暗色/命令面板/通知抽屉/亮色', async ({ page }) => {

@@ -11,20 +11,23 @@
  */
 import { useState } from 'react'
 import { flushSync } from 'react-dom'
-import { Eye, EyeOff, Loader2, RefreshCw, Save, Wifi } from 'lucide-react'
+import { Eye, EyeOff, Info, Loader2, RefreshCw, Save, Wifi } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
+import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { cn } from '@/lib/utils'
-import { ApiError, apiGet, apiPost } from '@/api/client'
+import { ApiError, apiPost, apiRequest } from '@/api/client'
 import type { OverviewData } from '@/api/types'
-import { getFriendlyErrorText } from '@/api/errors'
-import { normalizeBaseUrl, needsHttpPlaintextWarning } from '@/lib/mc-connection'
+import { ErrorCode, getFriendlyErrorText } from '@/api/errors'
+import { normalizeBaseUrl, needsHttpPlaintextWarning, sessionAppliesToPanel } from '@/lib/mc-connection'
 import { useUnsavedGuard } from '@/hooks/use-unsaved-guard'
+import { useAuthStore } from '@/stores/auth'
 import { useConnectionStore } from '@/stores/connection'
 import type { ConnectionFormProps } from './contracts'
+import { toneClasses } from '@/components/mcs/tone'
 
 /** 明文警告确认后待执行的挂起动作（null = 无弹窗） */
 type PendingAction = 'save' | 'test' | null
@@ -33,6 +36,8 @@ export function ConnectionForm({ variant = 'settings', onSaved }: ConnectionForm
   const storedBaseUrl = useConnectionStore((s) => s.baseUrl)
   const storedApiKey = useConnectionStore((s) => s.apiKey)
   const status = useConnectionStore((s) => s.status)
+  /** 浏览器登录会话（与 API Key 并列的第二条凭据；**属于本地址时**才具备连接能力） */
+  const session = useAuthStore((s) => s.session)
 
   const [url, setUrl] = useState(storedBaseUrl)
   const [apiKey, setApiKey] = useState(storedApiKey)
@@ -51,14 +56,25 @@ export function ConnectionForm({ variant = 'settings', onSaved }: ConnectionForm
   // 未保存守卫：切子页/切页面时弹确认，避免静默丢失
   const guard = useUnsavedGuard(dirty)
 
+  /**
+   * 会话对本表单地址是否有效（令牌只对签发它的面板发；换地址即改用 API Key 通道）。
+   * 用表单地址而非已存地址：用户改到别的面板时，提示与校验都要跟着走。
+   */
+  const sessionApplies = sessionAppliesToPanel(session, url)
+  const foreignSession = Boolean(session?.token) && !sessionApplies
+
   // 状态行即时反馈：保存过（ready）或测试连接成功 → 已连接
   const isConnected = status === 'ready' || testedOk
 
-  /** 空值校验（测试/保存前置）——行内提示，对齐 deploy-dialog 范式 */
+  /**
+   * 空值校验（测试/保存前置）——行内提示，对齐 deploy-dialog 范式。
+   * API Key 只在该地址没有可用登录会话时必填：有会话时客户端走 Bearer（双通道互斥，Key 不参与请求），
+   * 仍强制填写会把密码登录用户挡在门外——他们手上没有服务端 .env 里的 Key，连地址都改不了
+   */
   function ensureFilled(): boolean {
     let valid = true
     if (url.trim() === '') { setUrlError('请填写服务器地址'); valid = false } else { setUrlError('') }
-    if (apiKey.trim() === '') { setKeyError('请填写 API Key'); valid = false } else { setKeyError('') }
+    if (!sessionApplies && apiKey.trim() === '') { setKeyError('请填写 API Key'); valid = false } else { setKeyError('') }
     return valid
   }
 
@@ -70,14 +86,27 @@ export function ConnectionForm({ variant = 'settings', onSaved }: ConnectionForm
     setTesting(true)
     try {
       const t0 = performance.now()
-      await apiGet<OverviewData>('/api/v1/overview', { baseUrl: base, apiKey })
+      // 探测语义：目标可能是别的面板，不因它返回 40103 就拆掉当前会话（见 client.ignoreSessionExpiry）
+      await apiRequest<OverviewData>(
+        '/api/v1/overview',
+        { baseUrl: base, apiKey },
+        { method: 'GET', ignoreSessionExpiry: true },
+      )
       setLatencyMs(Math.round(performance.now() - t0))
       setTestedOk(true)
       return { ok: true }
     } catch (e) {
       setTestedOk(false)
-      // 服务端返回错误信封（如 API Key 无效）→ 友好文案；网络/超时 → 通用失败提示
-      const reason = e instanceof ApiError ? getFriendlyErrorText(e) : '连接失败，请检查配置'
+      // 服务端返回错误信封（如 API Key 无效）→ 友好文案；网络/超时 → 通用失败提示。
+      // 40103 只可能出现在「会话属于本地址」时（异地址不发 Bearer，见 api/client.ts），
+      // 即这条会话真的过期了；此时填 Key 也没用（有可用会话时只发 Bearer），
+      // 故只给可兑现的下一步：退出登录后重新登录
+      const reason =
+        e instanceof ApiError
+          ? e.code === ErrorCode.AUTH_SESSION_EXPIRED && sessionApplies
+            ? '当前地址的登录会话已过期：退出登录后重新登录该面板即可继续'
+            : getFriendlyErrorText(e)
+          : '连接失败，请检查配置'
       if (!opts?.silentFailure) {
         toast.error(`连接测试失败：${reason}`)
       }
@@ -172,6 +201,12 @@ export function ConnectionForm({ variant = 'settings', onSaved }: ConnectionForm
     }
   }
 
+  // onboarding 语境下保存即跨入面板，按钮文案对齐行为；settings 语境存完留在原地
+  const saveLabels =
+    variant === 'onboarding'
+      ? { idle: '连接并进入面板', busy: '连接中...' }
+      : { idle: '保存连接', busy: '保存中...' }
+
   const formFields = (
     <>
       <div className="flex flex-col gap-2">
@@ -191,9 +226,16 @@ export function ConnectionForm({ variant = 'settings', onSaved }: ConnectionForm
         {urlError !== '' && (
           <p className="text-mcs-xs text-mcs-error-fg">{urlError}</p>
         )}
-        <p className="text-mcs-xs text-mcs-text-subtle">
+        <p className="text-mcs-xs text-mcs-text-muted">
           支持 http/https 协议；局域网自建服务器推荐内网地址
         </p>
+        {foreignSession && (
+          <NoticeBanner variant="info" icon={Info}>
+            当前登录会话属于 <span className="font-mono break-all">{session?.issuedFor}</span>
+            ，本地址将改用 API Key 鉴权（不会因此退出登录）。如需以登录会话管理该面板，
+            请先退出登录，再用该地址登录。
+          </NoticeBanner>
+        )}
       </div>
 
       <div className="flex flex-col gap-2">
@@ -203,7 +245,7 @@ export function ConnectionForm({ variant = 'settings', onSaved }: ConnectionForm
             type="button"
             onClick={() => void handleRotate()}
             disabled={rotating || testing || saving}
-            className="inline-flex items-center gap-1 rounded-mcs-sm text-mcs-2xs font-medium text-mcs-text-subtle transition-colors hover:text-mcs-text-default disabled:opacity-50"
+            className="inline-flex items-center gap-1 rounded-mcs-sm text-mcs-2xs font-medium text-mcs-text-muted transition-colors hover:text-mcs-text-default disabled:opacity-50"
           >
             <RefreshCw className={cn('size-3', rotating && 'animate-spin')} aria-hidden />
             {rotating ? '生成中...' : '重新生成'}
@@ -228,7 +270,7 @@ export function ConnectionForm({ variant = 'settings', onSaved }: ConnectionForm
             type="button"
             onClick={() => setShowApiKey((v) => !v)}
             aria-label={showApiKey ? '隐藏 API Key' : '显示 API Key'}
-            className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-mcs-text-subtle transition-colors hover:text-mcs-text-default"
+            className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-mcs-text-muted transition-colors hover:text-mcs-text-default"
           >
             {showApiKey ? <EyeOff className="size-4" aria-hidden /> : <Eye className="size-4" aria-hidden />}
           </button>
@@ -236,6 +278,11 @@ export function ConnectionForm({ variant = 'settings', onSaved }: ConnectionForm
         {keyError !== '' && (
           <p className="text-mcs-xs text-mcs-error-fg">{keyError}</p>
         )}
+        <p className="text-mcs-xs text-mcs-text-muted">
+          {sessionApplies
+            ? '已登录：浏览器用登录会话鉴权，此处可留空；API Key 是无登录会话的客户端（自动化脚本等）用的凭据'
+            : '当前地址没有可用的登录会话：必须填写 API Key 才能连接'}
+        </p>
       </div>
 
       <div className="flex gap-3">
@@ -245,7 +292,7 @@ export function ConnectionForm({ variant = 'settings', onSaved }: ConnectionForm
         </Button>
         <Button type="button" className="flex-1" onClick={() => void handleSave()} disabled={testing || saving}>
           {saving ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Save className="size-4" aria-hidden />}
-          {saving ? '保存中...' : '保存连接'}
+          {saving ? saveLabels.busy : saveLabels.idle}
         </Button>
       </div>
     </>
@@ -265,17 +312,17 @@ export function ConnectionForm({ variant = 'settings', onSaved }: ConnectionForm
           className={cn(
             'flex items-center gap-2 rounded-mcs-md border px-4 py-3',
             isConnected
-              ? 'border-mcs-success-border bg-mcs-success-bg-subtle text-mcs-success-fg'
+              ? toneClasses('success')
               : 'border-mcs-border-muted bg-mcs-bg-muted text-mcs-text-muted',
           )}
         >
           <span
-            className={cn('size-2 rounded-full', isConnected ? 'bg-mcs-success-fg' : 'bg-mcs-text-subtle')}
+            className={cn('size-2 rounded-full', isConnected ? 'bg-mcs-success-fg' : 'bg-mcs-text-muted')}
             aria-hidden
           />
           <span className="text-mcs-sm font-medium">{isConnected ? '已连接' : '未连接'}</span>
           {isConnected && latencyMs != null && (
-            <span className="text-mcs-2xs text-mcs-text-subtle">连接正常 · 延迟 {latencyMs}ms</span>
+            <span className="text-mcs-2xs text-mcs-text-muted">连接正常 · 延迟 {latencyMs}ms</span>
           )}
         </div>
       )}

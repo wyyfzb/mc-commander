@@ -1,4 +1,5 @@
 import { getDb } from './database.js';
+import { toIsoUtc, toDbUtcString } from '../utils/db-time.js';
 
 export class AuditLogModel {
   static create(data) {
@@ -82,7 +83,9 @@ export class AuditLogModel {
 
   static prune(olderThanDays = 90) {
     const db = getDb();
-    const cutoff = new Date(Date.now() - olderThanDays * 86_400_000).toISOString();
+    // cutoff 必须与 created_at 同口径（naive UTC 串）：拿 toISOString() 去比会在
+    // **同一天**上因 ' '(0x20) < 'T'(0x54) 恒成立而误判，把当日记录整日多删
+    const cutoff = toDbUtcString(Date.now() - olderThanDays * 86_400_000);
     const result = db.prepare('DELETE FROM audit_logs WHERE created_at < ?').run(cutoff);
     return result.changes;
   }
@@ -101,7 +104,8 @@ export class AuditLogModel {
       targetId: row.target_id,
       detail,
       source: row.source,
-      createdAt: row.created_at,
+      // created_at 是无时区 UTC 串，下发前归一化（前端 new Date() 才能正确换算本地时区）
+      createdAt: toIsoUtc(row.created_at),
     };
   }
 }
@@ -175,7 +179,8 @@ export class CommandHistoryModel {
 
   static prune(olderThanDays = 90) {
     const db = getDb();
-    const cutoff = new Date(Date.now() - olderThanDays * 86_400_000).toISOString();
+    // 同 AuditLogModel.prune：cutoff 与列必须同口径（naive UTC 串）
+    const cutoff = toDbUtcString(Date.now() - olderThanDays * 86_400_000);
     const result = db.prepare('DELETE FROM command_history WHERE created_at < ?').run(cutoff);
     return result.changes;
   }
@@ -190,7 +195,7 @@ export class CommandHistoryModel {
       success: !!row.success,
       response: row.response,
       durationMs: row.duration_ms,
-      createdAt: row.created_at,
+      createdAt: toIsoUtc(row.created_at),
     };
   }
 }

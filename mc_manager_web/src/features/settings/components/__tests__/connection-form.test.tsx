@@ -17,6 +17,7 @@ import { Toaster, toast as sonnerToast } from 'sonner'
 import { HttpResponse, http } from 'msw'
 import { setupServer } from 'msw/node'
 import { handlers, mockOverview } from '@/test/mocks/handlers'
+import { useAuthStore, SESSION_EXPIRED_EVENT } from '@/stores/auth'
 import { useConnectionStore } from '@/stores/connection'
 import { ConnectionForm } from '../connection-form'
 
@@ -54,7 +55,28 @@ beforeEach(() => {
   localStorage.clear()
   sonnerToast.dismiss()
   useConnectionStore.setState({ baseUrl: '', apiKey: '', status: 'unconfigured' })
+  // 会话是第二条款凭据：逐个用例显式设置，避免上一例的会话泄漏（内存态不随 localStorage.clear 复位）
+  useAuthStore.setState({ session: null })
 })
+
+/** 造一个未过期的登录会话（结构占位，非真实凭据）；不写签发面板 = 旧会话口径（按适用处理） */
+function setSession(token = 'sess-token-abc') {
+  useAuthStore.setState({
+    session: { token, sessionId: 'sess-mock-1', expiresAt: new Date(Date.now() + 60_000).toISOString() },
+  })
+}
+
+/** 造一个绑定到指定面板的登录会话（结构占位，非真实凭据） */
+function setBoundSession(issuedFor: string, token = 'sess-token-abc') {
+  useAuthStore.setState({
+    session: {
+      token,
+      sessionId: 'sess-mock-1',
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      issuedFor,
+    },
+  })
+}
 
 describe('ConnectionForm 渲染', () => {
   it('表单初始化：store 有值 → 地址与 API Key 回填', () => {
@@ -84,12 +106,13 @@ describe('ConnectionForm 渲染', () => {
     expect(screen.getByText('未连接')).toBeInTheDocument()
   })
 
-  it('onboarding variant：大标题 + 副标题，无状态行', () => {
+  it('onboarding variant：大标题 + 副标题，无状态行，保存按钮文案对齐进入面板行为', () => {
     useConnectionStore.setState({ baseUrl: 'https://192.168.1.100:25566', apiKey: 'k', status: 'ready' })
     renderForm({ variant: 'onboarding' })
     expect(screen.getByRole('heading', { name: '连接你的服务器' })).toBeInTheDocument()
     expect(screen.queryByText('已连接')).not.toBeInTheDocument()
     expect(screen.queryByText('未连接')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '连接并进入面板' })).toBeInTheDocument()
   })
 
   it('API Key 默认掩码（password），眼睛按钮切换明文', async () => {
@@ -333,6 +356,146 @@ describe('ConnectionForm 保存', () => {
     expect(s.apiKey).toBe('')
     expect(onSaved).not.toHaveBeenCalled()
     expect(screen.getByText('未连接')).toBeInTheDocument()
+  })
+})
+
+describe('ConnectionForm 登录会话凭据（有会话时 API Key 可空）', () => {
+  it('无会话：Key 提示「必须填写」', () => {
+    renderForm()
+    expect(screen.getByText('当前地址没有可用的登录会话：必须填写 API Key 才能连接')).toBeInTheDocument()
+  })
+
+  it('有会话：Key 提示「可留空」（会话优先于 Key）', () => {
+    setSession()
+    renderForm()
+    expect(
+      screen.getByText(
+        '已登录：浏览器用登录会话鉴权，此处可留空；API Key 是无登录会话的客户端（自动化脚本等）用的凭据',
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('有会话 + Key 留空：保存放行，请求走 Bearer 且不带 X-API-Key，写入地址且不误存空 Key', async () => {
+    setSession()
+    let capturedAuth: string | null = null
+    let capturedKey: string | null = null
+    server.use(
+      http.get('*/api/v1/overview', ({ request }) => {
+        capturedAuth = request.headers.get('Authorization')
+        capturedKey = request.headers.get('X-API-Key')
+        return okEnvelope(mockOverview)
+      }),
+    )
+    const user = userEvent.setup()
+    const { onSaved } = renderForm({ variant: 'settings' })
+
+    await user.type(screen.getByLabelText('面板地址'), 'https://192.168.1.100:25566')
+    await user.click(screen.getByRole('button', { name: '保存连接' }))
+
+    expect(await screen.findByText('连接配置已保存')).toBeInTheDocument()
+    expect(screen.queryByText('请填写 API Key')).not.toBeInTheDocument()
+    expect(capturedAuth).toBe('Bearer sess-token-abc')
+    expect(capturedKey).toBeNull()
+    const s = useConnectionStore.getState()
+    expect(s.baseUrl).toBe('https://192.168.1.100:25566')
+    expect(s.apiKey).toBe('')
+    // 会话即凭据：状态行进位到已连接
+    expect(s.status).toBe('ready')
+    expect(onSaved).toHaveBeenCalledTimes(1)
+  })
+
+  it('无会话 + Key 留空：仍拦截（回归防线，空 Key 不得放行）', async () => {
+    let requested = 0
+    server.use(
+      http.get('*/api/v1/overview', () => {
+        requested += 1
+        return okEnvelope(mockOverview)
+      }),
+    )
+    const user = userEvent.setup()
+    renderForm()
+    await user.type(screen.getByLabelText('面板地址'), 'https://192.168.1.100:25566')
+    await user.click(screen.getByRole('button', { name: '保存连接' }))
+
+    expect(screen.getByText('请填写 API Key')).toBeInTheDocument()
+    expect(requested).toBe(0)
+    expect(useConnectionStore.getState().baseUrl).toBe('')
+  })
+
+  it('测试连接命中 40103：提示可兑现的出路且不拆本机会话（会话保留、无全局登出）', async () => {
+    setSession()
+    server.use(
+      http.get('*/api/v1/overview', () =>
+        HttpResponse.json(
+          { status: 'error', code: 40103, message: '会话不存在或已登出，请重新登录', details: null, timestamp: new Date().toISOString() },
+          { status: 401 },
+        ),
+      ),
+    )
+    const expiredListener = vi.fn()
+    window.addEventListener(SESSION_EXPIRED_EVENT, expiredListener)
+    try {
+      const user = userEvent.setup()
+      renderForm()
+      await user.type(screen.getByLabelText('面板地址'), 'https://192.168.1.100:25566')
+      await user.click(screen.getByRole('button', { name: '测试连接' }))
+
+      expect(await screen.findByText(/当前地址的登录会话已过期/)).toBeInTheDocument()
+      // 会话适用于本地址时才可能收到 40103；此时填 Key 也没用（有可用会话时只发 Bearer），
+      // 故提示里不得出现「填 API Key / 清空 Key」这类本界面做不到的动作
+      expect(screen.getByText(/退出登录后重新登录该面板/)).toBeInTheDocument()
+      expect(screen.queryByText(/(填写|清空|清除).*API Key/)).not.toBeInTheDocument()
+      expect(expiredListener).not.toHaveBeenCalled()
+      expect(useAuthStore.getState().session?.token).toBe('sess-token-abc')
+    } finally {
+      window.removeEventListener(SESSION_EXPIRED_EVENT, expiredListener)
+    }
+  })
+
+  it('会话属于别的面板：地址下方提示本地址将改用 API Key（并给出退出登录后重新登录的出路）', () => {
+    setBoundSession('https://panel-a.example.com')
+    renderForm()
+    expect(screen.getByText(/当前登录会话属于/)).toBeInTheDocument()
+    expect(screen.getByText('https://panel-a.example.com')).toBeInTheDocument()
+    // 本地址没有可用会话 → Key 必填
+    expect(screen.getByText('当前地址没有可用的登录会话：必须填写 API Key 才能连接')).toBeInTheDocument()
+  })
+
+  it('会话属于本地址（含旧会话）：不显示异面板提示', () => {
+    setBoundSession(window.location.origin)
+    renderForm()
+    expect(screen.queryByText(/当前登录会话属于/)).not.toBeInTheDocument()
+    expect(screen.getByText(/已登录：浏览器用登录会话鉴权/)).toBeInTheDocument()
+  })
+
+  it('会话属于别的面板：测试连接改用本地址的 X-API-Key，不拿 A 的令牌换 40103（也不被踢下线）', async () => {
+    setBoundSession('https://panel-a.example.com')
+    let capturedAuth: string | null = null
+    let capturedKey: string | null = null
+    server.use(
+      http.get('*/api/v1/overview', ({ request }) => {
+        capturedAuth = request.headers.get('Authorization')
+        capturedKey = request.headers.get('X-API-Key')
+        return okEnvelope(mockOverview)
+      }),
+    )
+    const expiredListener = vi.fn()
+    window.addEventListener(SESSION_EXPIRED_EVENT, expiredListener)
+    try {
+      const user = userEvent.setup()
+      renderForm()
+      await user.type(screen.getByLabelText('面板地址'), 'https://panel-b.example.com')
+      await user.type(screen.getByLabelText('API Key'), 'key-b')
+      await user.click(screen.getByRole('button', { name: '测试连接' }))
+
+      expect(await screen.findByText('连接成功')).toBeInTheDocument()
+      expect(capturedAuth).toBeNull()
+      expect(capturedKey).toBe('key-b')
+      expect(expiredListener).not.toHaveBeenCalled()
+      expect(useAuthStore.getState().session?.token).toBe('sess-token-abc')
+    } finally {
+      window.removeEventListener(SESSION_EXPIRED_EVENT, expiredListener)
+    }
   })
 })
 

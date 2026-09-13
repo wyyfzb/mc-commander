@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterAll, beforeAll, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, afterAll, beforeAll, vi } from 'vitest'
 import { render, fireEvent, waitFor, screen, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -93,6 +93,8 @@ vi.mock('@xterm/addon-search', () => ({
 const server = setupServer(...handlers)
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
 afterAll(() => server.close())
+// 用例中途断言失败时体内的还原语句不会执行，间谍会残留给后续用例——集中还原
+afterEach(() => vi.restoreAllMocks())
 
 beforeEach(() => {
   xtermStub.customKeyHandlers.length = 0
@@ -139,6 +141,18 @@ describe('ServerTerminal', () => {
     expect(useTerminalStore.getState().buffer).toHaveLength(0)
   })
 
+  it('实例切换同步清空 xterm——占位不再浮在旧实例日志上（重叠回归）', async () => {
+    renderTerminal()
+    await waitFor(() => expect(useTerminalStore.getState().buffer.length).toBeGreaterThan(0))
+    const clearCountBefore = xtermStub.events.filter((e) => e.op === 'clear').length
+    act(() => {
+      useServerStore.setState({ instanceId: 'other' })
+    })
+    // store 缓冲随 setInstance 归零，xterm 必须出现新的 clear 事件（旧日志不得残留）
+    await waitFor(() => expect(useTerminalStore.getState().instanceId).toBe('other'))
+    expect(xtermStub.events.filter((e) => e.op === 'clear').length).toBeGreaterThan(clearCountBefore)
+  })
+
   it('不带修饰键的 L 不清屏', async () => {
     renderTerminal()
     await waitFor(() => expect(useTerminalStore.getState().buffer.length).toBeGreaterThan(0))
@@ -174,6 +188,21 @@ describe('ServerTerminal 终端内搜索', () => {
     expect(screen.getByRole('textbox', { name: '搜索终端内容' })).toHaveFocus()
     await user.click(screen.getByRole('button', { name: '关闭搜索' }))
     expect(screen.queryByRole('search')).not.toBeInTheDocument()
+  })
+
+  it('搜索按钮 tooltip 的快捷键按平台取词（macOS 是 ⌘，其余是 Ctrl）', async () => {
+    const user = userEvent.setup()
+    const { unmount } = renderTerminal()
+    // jsdom 平台为 Linux：提示须与 handler 接受的修饰键（ctrl||meta）一致，
+    // 也不能给 mac 用户按不出来的键
+    await user.hover(screen.getByRole('button', { name: '搜索终端内容' }))
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('搜索终端内容（Ctrl+F）')
+
+    unmount()
+    vi.spyOn(navigator, 'platform', 'get').mockReturnValue('MacIntel')
+    renderTerminal()
+    await user.hover(screen.getByRole('button', { name: '搜索终端内容' }))
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('搜索终端内容（⌘+F）')
   })
 
   it('Ctrl+F 经 attachCustomKeyEventHandler 拦截：preventDefault + 打开搜索条（返回 false 阻断 xterm 处理）', () => {
@@ -312,5 +341,18 @@ describe('ServerTerminal JVM 眼睛切换（P2-27 复现修复）', () => {
     await waitFor(() => expect(writesAfterLastClear()).toHaveLength(2))
     const rewrittenBack = writesAfterLastClear()
     expect(rewrittenBack.some((t) => t.includes('restricted method'))).toBe(false)
+  })
+
+  it('停止态且缓冲非空 → 显示「实例已停止」状态条；运行中不显示（UXT-24：DOM 状态条随运行态显隐，不再写画布残留）', async () => {
+    useServerStore.setState({ status: { isRunning: false } as never })
+    useTerminalStore.setState({
+      buffer: [{ text: '[19:37:44] Stopping server', level: 'info', jvmWarning: false }],
+    } as never)
+    renderTerminal()
+    expect(screen.getByRole('status').textContent).toContain('实例已停止')
+
+    // 翻转为运行中 → 状态条随显隐消失（旧实现写入 xterm 画布后无法擦除，刷新竞态下运行中残留停止标记）
+    useServerStore.setState({ status: { isRunning: true } as never })
+    await waitFor(() => expect(screen.queryByRole('status')).toBeNull())
   })
 })

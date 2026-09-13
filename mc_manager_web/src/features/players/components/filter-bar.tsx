@@ -100,7 +100,7 @@ export function FilterBar({
       </Button>
 
       <div className="ml-auto flex items-center gap-3">
-        <span className="text-mcs-xs text-mcs-text-subtle">
+        <span className="text-mcs-xs text-mcs-text-muted">
           {players.length > 0 && totalCount > 0 && `${players.length} / ${totalCount} 名玩家`}
           {totalCount === 0 && '暂无玩家数据'}
         </span>

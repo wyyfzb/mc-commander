@@ -4,7 +4,8 @@
  */
 import { Download, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { DateTextInput } from '@/components/mcs/date-text-input'
+import { useRadioGroup } from '@/hooks/use-radio-group'
 import { QUICK_RANGES, type QuickRange } from './time-range'
 import { AUDIT_EXPORT_MAX_ROWS } from './audit-export'
 
@@ -31,19 +32,30 @@ export function CmdFilterBar({
   cmdExporting,
   handleCmdExport,
 }: CmdFilterBarProps) {
+  // 快捷时间范围是单选组（可清空 → 无选中是合法态），语义与方向键由 hook 统一提供
+  const quickGroup = useRadioGroup<string>({
+    label: '快捷时间范围',
+    value: activeQuickCmd?.key ?? null,
+    values: QUICK_RANGES.map((q) => q.key),
+    onChange: (key) => {
+      const q = QUICK_RANGES.find((r) => r.key === key)
+      if (q) applyQuickCmd(q)
+    },
+  })
+
   return (
     <div className="flex flex-wrap items-center gap-2">
       {/* 时间筛选栏（issue 385）：样式与交互对齐审计日志 tab，倒置防护复用同一逻辑 */}
-      <div className="flex items-center gap-1" role="group" aria-label="快捷时间范围">
-        {QUICK_RANGES.map((q) => {
+      <div className="flex items-center gap-1" {...quickGroup.groupProps}>
+        {QUICK_RANGES.map((q, index) => {
           const active = activeQuickCmd?.key === q.key
           return (
             <Button
               key={q.key}
               size="sm"
               className="h-8"
-              variant={active ? 'default' : 'outline'}
-              aria-pressed={active}
+              variant={active ? 'selected' : 'outline'}
+              {...quickGroup.itemProps(index)}
               onClick={() => applyQuickCmd(q)}
             >
               {q.label}
@@ -55,22 +67,18 @@ export function CmdFilterBar({
       <span className="h-5 w-px shrink-0 bg-mcs-border-muted" aria-hidden />
 
       <div className="flex items-center gap-1.5">
-        <Input
-          type="date"
-          className="w-36 text-mcs-xs"
+        <DateTextInput
           value={cmdStart}
-          max={cmdEnd || undefined}
-          onChange={(e) => changeCmdDate('start', e.target.value)}
-          aria-label="开始日期"
+          onChange={(v) => changeCmdDate('start', v)}
+          placeholder="开始日期 如 2026-09-01"
+          ariaLabel="开始日期"
         />
-        <span className="text-mcs-xs text-mcs-text-subtle">至</span>
-        <Input
-          type="date"
-          className="w-36 text-mcs-xs"
+        <span className="text-mcs-xs text-mcs-text-muted">至</span>
+        <DateTextInput
           value={cmdEnd}
-          min={cmdStart || undefined}
-          onChange={(e) => changeCmdDate('end', e.target.value)}
-          aria-label="结束日期"
+          onChange={(v) => changeCmdDate('end', v)}
+          placeholder="结束日期"
+          ariaLabel="结束日期"
         />
       </div>
 
@@ -94,7 +102,7 @@ export function CmdFilterBar({
         <Download aria-hidden />
         导出
       </Button>
-      <span className="text-mcs-2xs text-mcs-text-subtle">
+      <span className="text-mcs-2xs text-mcs-text-muted">
         最多导出 {AUDIT_EXPORT_MAX_ROWS} 条（时间最新优先）
       </span>
     </div>

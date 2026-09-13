@@ -9,6 +9,7 @@ import { BackupService } from './backup.service.js';
 import { runPanelBackupCycle } from './panel-backup.service.js';
 import config from '../config.js';
 import { logger } from '../utils/logger.js';
+import { localTimestamp } from '../utils/local-date.js';
 
 /**
  * 定时任务调度器
@@ -316,7 +317,8 @@ export class TaskScheduler {
             // fire-and-forget（resolve 早于快照完成），不能在 .then 写 success
             ScheduledTaskModel.updateLastRun(task.id, nextRunAt);
             this.backupService.createBackup(task.instanceId, {
-              name: task.name ? `${task.name} ${new Date().toISOString().replace(/[:.]/g, '-')}` : undefined,
+              // 名字里的时刻用本地时区（与列表渲染 createdAt 同口径，见 utils/local-date.js）
+              name: task.name ? `${task.name} ${localTimestamp()}` : undefined,
               type: 'scheduled',
               createdBy: 'scheduler',
               taskId: task.id,

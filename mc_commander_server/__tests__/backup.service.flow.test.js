@@ -184,6 +184,21 @@ describe.skipIf(!snapshotTool)(
     expect(cleanupSpy).toHaveBeenCalledWith('s1', config.backupRetention);
   });
 
+  it('未传 name 的默认命名取本地时刻（与列表按本地时区渲染 createdAt 同口径，不带 Z）', async () => {
+    createTestInstance(serversDir);
+    const service = new BackupService(manager);
+    const completeEvent = waitForEvent(manager, 'instance:backupComplete');
+
+    await service.createBackup('s1', {});
+    await completeEvent;
+
+    // 期望值独立按本地分量算出（不复用实现），锁「默认命名的日期/时刻来自本地时区」
+    const d = new Date();
+    const localDay = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const created = MockBackupModel.create.mock.calls.at(-1)[0];
+    expect(created.name).toMatch(new RegExp(`^Backup ${localDay}T\\d{2}-\\d{2}-\\d{2}-\\d{3}$`));
+  });
+
   it('快照失败：状态置 failed、半成品快照目录清理、backupFailed 携带失败原因', async () => {
     createTestInstance(serversDir);
     const service = new BackupService(manager);

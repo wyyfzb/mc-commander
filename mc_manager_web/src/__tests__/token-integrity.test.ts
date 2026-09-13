@@ -7,7 +7,7 @@ import { join } from 'node:path'
  * 1. semantic.css 引用的所有 --ref-* 必须已在 reference.css 定义
  * 2. theme.css / @theme inline 引用的所有 --mcs-* 必须已在 semantic.css 定义
  * 3. 组件源码（styles/、components/ui/、test/ 除外）禁止硬编码色值
- * 4. 玻璃预算：glass-overlay 仅允许 ≤2 处（Sheet 抽屉 + 确认弹窗），防视觉异质回潮
+ * 4. 玻璃预算：全站各 1 处（顶栏 chrome + 确认弹窗 overlay），防视觉异质回潮
  */
 
 const srcDir = join(import.meta.dirname, '..')
@@ -32,6 +32,44 @@ function referencedVars(css: string): Set<string> {
   return names
 }
 
+/** hex 色值字面量（扫描、剥离的正反用例共用同一常量，避免改一处漏一处） */
+const HEX_LITERAL_RE = /#[0-9a-fA-F]{3,8}\b/
+
+/**
+ * 剥离注释里的 issue/PR 引用编号（`issue #383`、`fixes #412`、`PR #473`）。
+ *
+ * 3~8 位十六进制字符（含纯数字）恰好也可能构成合法 hex 写法，不剥离就会被下面的
+ * 色值规则误报——分页注释里的 `issue #383` 已误报过一次。只剥离带引用关键词的形态：
+ * `#383abc` 这类带字母的仍按色值报出；无关键词的裸 `#123` 也仍报（宁可误报不漏报——
+ * 误报的代价是补个关键词，漏报的代价是硬编码色值进了仓库）。
+ */
+function stripIssueRefs(line: string): string {
+  return line.replace(
+    /\b(?:issues?|pr|pull request|fix(?:e[sd])?|close[sd]?|resolve[sd]?)\s*#\d+(?![0-9a-fA-F])/gi,
+    '',
+  )
+}
+
+describe('色值扫描的引用编号剥离', () => {
+  it('引用编号被剥离（不再被当成 hex 色值）', () => {
+    // 编号须 ≥3 位：1~2 位本就匹配不到 HEX_LITERAL_RE，那样断不出剥离是否生效
+    for (const line of [
+      '// 回归锁（issue #472 / PR #473 沉淀缺口）',
+      '// fixes #412',
+      '// 详见 issue #383 同源',
+      '// Closes #419',
+    ]) {
+      expect(stripIssueRefs(line), line).not.toMatch(HEX_LITERAL_RE)
+    }
+  })
+
+  it('真色值一字不动（剥离不得放宽色值判定）', () => {
+    for (const line of ["const c = '#fff'", 'color: #000000', '`#ff0000`', '#383a0f', 'issue #383abc']) {
+      expect(stripIssueRefs(line), line).toMatch(HEX_LITERAL_RE)
+    }
+  })
+})
+
 describe('token 引用完整性', () => {
   const reference = readCss('styles/tokens/reference.css')
   const semantic = readCss('styles/tokens/semantic.css')
@@ -52,6 +90,11 @@ describe('token 引用完整性', () => {
       ...[...referencedVars(index)].filter((v) => v.startsWith('--mcs-')),
     ].filter((v) => v.startsWith('--mcs-') && !mcsDefined.has(v))
     expect(dangling).toEqual([])
+  })
+
+  it('theme 层只引用 --mcs-* 语义 token（禁止越层直取 --ref-*）', () => {
+    const refVars = [...referencedVars(theme)].filter((v) => v.startsWith('--ref-'))
+    expect(refVars).toEqual([])
   })
 
   it('语义层不允许直接写色值字面量（全部经 reference 层）', () => {
@@ -81,38 +124,49 @@ describe('组件源码禁硬编码色值', () => {
     return out
   }
 
-  it('玻璃预算：glass-overlay 组件引用 ≤2 处（仅 Sheet 抽屉 + 确认弹窗豁免）', () => {
-    // 收集 src/ 下引用 glass-overlay 的 .tsx 组件文件（glass.css 定义处不计入）
-    const glassUsers: string[] = []
-    for (const file of collectTsxTs(srcDir)) {
-      if (!file.endsWith('.tsx')) continue
-      if (readFileSync(file, 'utf-8').includes('glass-overlay')) {
-        glassUsers.push(file)
-      }
-    }
-    // 预算超支时报出全部违规文件，便于逐处回归实底
-    expect(glassUsers.length).toBeLessThanOrEqual(2)
-    expect(glassUsers).toEqual(
-      expect.arrayContaining([
-        expect.stringContaining('notification-drawer'),
-        expect.stringContaining('confirm-dialog'),
-      ]),
-    )
+  it('玻璃预算：全站各 1 处（顶栏 chrome + 确认弹窗 overlay）', () => {
+    // 审计 S26 收尾：侧栏/通知抽屉/toast 一律实底。
+    // 计数口径与 check-design-tokens.mjs 第 17 条一致：按「类名引用次数」而非文件数
+    // （同一文件出现两次同样超标；该脚本的扫描范围更宽，含 .ts 与 e2e/）
+    const refsOf = (cls: string): string[] =>
+      collectTsxTs(srcDir)
+        .filter((f) => /\.tsx?$/.test(f))
+        .flatMap((f) => Array<string>(readFileSync(f, 'utf-8').match(new RegExp(cls, 'g'))?.length ?? 0).fill(f))
+    const chrome = refsOf('glass-chrome')
+    const overlay = refsOf('glass-overlay')
+    expect(chrome).toHaveLength(1)
+    expect(chrome[0]).toContain('app-topbar')
+    expect(overlay).toHaveLength(1)
+    expect(overlay[0]).toContain('confirm-dialog')
   })
 
-  it('业务/布局组件与 mcs 组件无 hex/rgb 硬编码（允许 var(--mcs-*) 与 shadcn 组件变量）', () => {
+  it('业务/布局组件与 mcs 组件无 hex/rgb/oklch 硬编码（允许 var(--mcs-*) 与 shadcn 组件变量）', () => {
     const violations: string[] = []
+    // 先剥离 var(...) 表达式（含 fallback 嵌套）再判定颜色上下文：
+    // 整行含 var(-- 就跳过会让「token 与字面量同行」的写法逃检
+    const stripVar = (line: string): string => {
+      let out = line
+      for (let i = 0; i < 10 && out.includes('var('); i++) {
+        const next = out.replace(/var\([^()]*\)/g, '')
+        if (next === out) break
+        out = next
+      }
+      return out
+    }
     for (const file of collectTsxTs(join(srcDir, '..'))) {
       const content = readFileSync(file, 'utf-8')
-      // 排除颜色空间 API 单词误报：matchColor 等
-      const lines = content.split('\n')
-      lines.forEach((line, i) => {
+      content.split('\n').forEach((line, i) => {
+        const code = stripIssueRefs(stripVar(line))
         // hex 颜色字面量
-        if (/#[0-9a-fA-F]{3,8}\b/.test(line) && !line.includes('var(--')) {
+        if (HEX_LITERAL_RE.test(code)) {
           violations.push(`${file}:${i + 1}: ${line.trim()}`)
         }
-        // rgb()/hsl() 字面量（oklch() 允许出现在 CSS 注释/无）
-        if (/\b(rgba?|hsla?)\(/.test(line)) {
+        // rgb()/hsl() 字面量
+        if (/\b(rgba?|hsla?)\(/.test(code)) {
+          violations.push(`${file}:${i + 1}: ${line.trim()}`)
+        }
+        // oklch 字面量（color-mix(in oklch, var(--mcs-*) …) 基于 token 的混合表达式豁免）
+        if (/\boklch\(/.test(code) && !/color-mix\(in oklch/.test(code)) {
           violations.push(`${file}:${i + 1}: ${line.trim()}`)
         }
       })

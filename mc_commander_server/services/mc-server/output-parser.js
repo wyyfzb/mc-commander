@@ -178,8 +178,10 @@ export function _parseOutput(text) {
     }
 
     // ── 聊天事件解析 ──
-    // MC 日志格式: "<Player> message"
-    const chatMatch = line.match(/^<([^\s\]<>[]+)>\s+(.+)/);
+    // MC 日志格式: "<Player> message"；真实服务端输出行带 "[时间] [线程/级别]: " 前缀，
+    // 剥离后再锚定行首——裸聊天行无前缀，剥离为空操作，两种形态均兼容
+    const chatLine = line.replace(/^(?:\[[^\]]*\]\s*)*:\s*/, '');
+    const chatMatch = chatLine.match(/^<([^\s\]<>[]+)>\s+(.+)/);
     if (chatMatch) {
       this.emit('playerChat', { name: chatMatch[1], message: chatMatch[2] });
     }
@@ -188,6 +190,8 @@ export function _parseOutput(text) {
     // "Saving" 是存档开始，"Saved the game" 是存档完成，仅在完成时记录真实时刻
     if (line.includes('Saved the game')) {
       this._lastSaveTime = new Date().toISOString();
+      // 存档落盘=世界体积增长点：标记 _getWorldSize 缓存失效（顶层目录 mtime 感知不到子目录写入）
+      this._worldSizeDirty = true;
       this.emit('status', { event: 'save' });
     }
 
@@ -202,6 +206,8 @@ export function _parseOutput(text) {
     }
 
     if (line.includes('Done') && line.includes('For help, type')) {
+      // 启动完成（世界生成/首次写入结束）：标记存档大小缓存失效
+      this._worldSizeDirty = true;
       this.emit('status', { event: 'ready' });
     }
 

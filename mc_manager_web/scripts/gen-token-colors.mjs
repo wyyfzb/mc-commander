@@ -76,7 +76,6 @@ const LIGHT = {
   popover: '#FFFFFF',
   'text-default': '#1E293B',
   'text-muted': '#475569',
-  'text-subtle': '#64748B',
   'accent-fg': '#16A34A',  // 亮色模式品牌色降饱和 10-30%、提明度 5-10%（对比度验证用）
 }
 for (const [name, hex] of Object.entries(LIGHT)) {

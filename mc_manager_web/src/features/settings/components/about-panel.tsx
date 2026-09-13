@@ -9,6 +9,7 @@
  */
 import { ChevronRight, Code, GitBranch, Heart, Link as LinkIcon, MessageSquareWarning, Tag } from 'lucide-react'
 import type { AboutPanelProps } from './contracts'
+import { toneClasses } from '@/components/mcs/tone'
 
 /** 开源仓库主页（GitHub 主仓；Releases/Issues 由子路径拼接） */
 const REPO_URL = 'https://github.com/wyyfzb/mc-commander'
@@ -52,9 +53,9 @@ export function AboutPanel(_props: AboutPanelProps) {
     <div className="flex flex-col gap-3">
       {/* ── 应用信息：应用名 + 副标题 + 版本徽章 ── */}
       <section className="flex flex-col items-center gap-1.5 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted px-4 py-6 shadow-mcs-card">
-        <h3 className="text-mcs-xl font-bold text-mcs-text-default tracking-tight">MC Commander</h3>
+        <h3 className="text-mcs-xl font-semibold text-mcs-text-default">MC Commander</h3>
         <p className="text-mcs-sm text-mcs-text-muted">自托管 Minecraft 服务器管理客户端</p>
-        <span className="mt-1 inline-flex h-5 items-center rounded-mcs-xl border border-mcs-accent-border bg-mcs-accent-bg-subtle px-2 font-mono text-mcs-xs font-semibold text-mcs-accent-fg">
+        <span className={`mt-1 inline-flex h-5 items-center rounded-full border px-2 font-mono text-mcs-xs font-semibold ${toneClasses('accent')}`}>
           v{__APP_VERSION__}
         </span>
       </section>
@@ -74,7 +75,7 @@ export function AboutPanel(_props: AboutPanelProps) {
       <section className="rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted shadow-mcs-card">
         <header className="flex items-center gap-3 border-b border-mcs-border-subtle px-4 py-3">
           <span className="flex size-8 shrink-0 items-center justify-center rounded-mcs-sm bg-mcs-accent-bg-subtle">
-            <LinkIcon className="size-4 text-mcs-accent" aria-hidden />
+            <LinkIcon className="size-4 text-mcs-accent-fg" aria-hidden />
           </span>
           <h3 className="text-mcs-md font-semibold">相关链接</h3>
         </header>
@@ -85,7 +86,7 @@ export function AboutPanel(_props: AboutPanelProps) {
               href={href}
               target="_blank"
               rel="noreferrer"
-              className="flex items-center gap-3 rounded-mcs-sm border border-mcs-border-subtle bg-mcs-bg-subtle px-3 py-2.5 transition-colors hover:bg-mcs-bg-hover"
+              className="flex items-center gap-3 rounded-mcs-sm border border-mcs-border-subtle bg-mcs-bg-subtle px-3 py-2.5 transition-colors hover:bg-mcs-state-hover"
             >
               <span
                 className={`flex size-9 shrink-0 items-center justify-center rounded-mcs-sm ${iconClass}`}
@@ -94,16 +95,16 @@ export function AboutPanel(_props: AboutPanelProps) {
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block text-mcs-sm font-semibold text-mcs-text-default">{title}</span>
-                <span className="block text-mcs-xs text-mcs-text-subtle">{subtitle}</span>
+                <span className="block text-mcs-xs text-mcs-text-muted">{subtitle}</span>
               </span>
-              <ChevronRight className="size-4 shrink-0 text-mcs-text-subtle" aria-hidden />
+              <ChevronRight className="size-4 shrink-0 text-mcs-text-muted" aria-hidden />
             </a>
           ))}
         </div>
       </section>
 
       {/* ── 版权（居中 subtle）── */}
-      <p className="py-2 text-center text-mcs-xs text-mcs-text-subtle">
+      <p className="py-2 text-center text-mcs-xs text-mcs-text-muted">
         © 2026 MC_Commander · 社区开源项目
       </p>
     </div>

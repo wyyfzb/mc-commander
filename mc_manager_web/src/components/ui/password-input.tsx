@@ -48,7 +48,7 @@ export function PasswordInput({
           type="button"
           onClick={() => setVisible((v) => !v)}
           aria-label={visible ? '隐藏密码' : '显示密码'}
-          className="absolute right-2 top-1/2 -translate-y-1/2 rounded-mcs-sm p-1.5 text-mcs-text-subtle transition-colors hover:bg-mcs-bg-hover hover:text-mcs-text-default"
+          className="absolute right-2 top-1/2 -translate-y-1/2 rounded-mcs-sm p-1.5 text-mcs-text-muted transition-colors hover:bg-mcs-state-hover hover:text-mcs-text-default"
         >
           {visible ? <EyeOff className="size-4" aria-hidden /> : <Eye className="size-4" aria-hidden />}
         </button>

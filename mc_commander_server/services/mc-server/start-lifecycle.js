@@ -185,44 +185,49 @@ export function _initializeRuntimeState() {
   }
   this._readWorldSpawnFromLevelDat();
   this._sleepingPlayers = 0;
+  // 新一轮运行重新计数采集告警：否则上一轮留下的「已告警」位会让新进程的首个失败静默
+  this._win32StatsError = false;
   this._startStatsCollection();
+}
+
+/** 日志噪音行过滤（stdout 管道与接管实例的文件续读共用）：保留 [Rcon: ...]
+ *  命令执行反馈（小写 rcon），过滤线程/监听器/连接等纯系统噪音。 */
+export function _filterLogNoise(text) {
+  return text.split('\n').filter(l => {
+    const trimmed = l.trim();
+    if (!trimmed) return false;
+    if (trimmed.startsWith('[RCON')) return false;              // [RCON Listener/Client #N/INFO]
+    if (trimmed.includes('Thread RCON')) return false;          // Thread RCON Client ... shutting down
+    if (trimmed.includes('RCON Client')) return false;          // RCON Client /127... 连接噪音
+    if (trimmed.includes('RCON Listener')) return false;        // RCON Listener 监听噪音
+    if (trimmed.includes('RCON running on')) return false;      // RCON running on 0.0.0.0:25575
+    if (trimmed.startsWith('WARNING:') && trimmed.includes('java.lang.System')) return false;
+    if (trimmed.startsWith('Starting net.minecraft') && trimmed.includes('BundlerClassPathCapture')) return false;
+    return true;
+  }).join('\n');
+}
+
+/** 日志文本统一摄取入口：stdout 管道、stderr 与接管实例的文件续读共用——
+ *  过滤（stdout 语义）→ 单行截断（find-023-server）→ logBuffer 滚动 + WS 推送
+ *  + 输出解析。三条来源共用可保证接管实例的日志行为与常规实例完全一致。 */
+export function _ingestLogText(text, type = 'stdout') {
+  this.lastOutput = text;
+  const filtered = type === 'stdout' ? this._filterLogNoise(text) : text;
+  if (!filtered.trim()) return;
+  const finalText = truncateLogText(filtered);
+  this.logBuffer.push({ time: Date.now(), text: finalText, type });
+  if (this.logBuffer.length > 1000) this.logBuffer.shift();
+  this.emit('log', { text: finalText, type });
+  if (type === 'stdout') this._parseOutput(finalText);
 }
 
 export function _attachOutputStreamListeners() {
   this.process.stdout.on('data', (data) => {
-    const text = data.toString();
-    this.lastOutput = text;
-
-    // 选择性过滤 RCON 噪音：保留 [Rcon: ...] 命令执行反馈（小写 rcon），
-    // 过滤线程/监听器/连接等纯系统噪音（大写 RCON / Thread RCON / Client / Listener）
-    const filteredLines = text.split('\n').filter(l => {
-      const trimmed = l.trim();
-      if (!trimmed) return false;
-      if (trimmed.startsWith('[RCON')) return false;              // [RCON Listener/Client #N/INFO]
-      if (trimmed.includes('Thread RCON')) return false;          // Thread RCON Client ... shutting down
-      if (trimmed.includes('RCON Client')) return false;          // RCON Client /127... 连接噪音
-      if (trimmed.includes('RCON Listener')) return false;        // RCON Listener 监听噪音
-      if (trimmed.includes('RCON running on')) return false;      // RCON running on 0.0.0.0:25575
-      if (trimmed.startsWith('WARNING:') && trimmed.includes('java.lang.System')) return false;
-      if (trimmed.startsWith('Starting net.minecraft') && trimmed.includes('BundlerClassPathCapture')) return false;
-      return true;
-    }).join('\n');
-    if (!filteredLines.trim()) return;
-    // 单行截断（find-023-server）：超长行截断并加标记，防超长输出撑爆 logBuffer/WS 广播
-    const filteredText = truncateLogText(filteredLines);
-
-    this.logBuffer.push({ time: Date.now(), text: filteredText, type: 'stdout' });
-    if (this.logBuffer.length > 1000) this.logBuffer.shift();
-    this.emit('log', { text: filteredText, type: 'stdout' });
-    this._parseOutput(filteredText);
+    this._ingestLogText(data.toString(), 'stdout');
   });
 
   this.process.stderr.on('data', (data) => {
-    const text = data.toString();
-    // 单行截断（find-023-server）：stderr 同理，超长行截断并加标记
-    const truncated = truncateLogText(text);
-    this.logBuffer.push({ time: Date.now(), text: truncated, type: 'stderr' });
-    this.emit('log', { text: truncated, type: 'stderr' });
+    this._ingestLogText(data.toString(), 'stderr');
   });
 }
 
@@ -230,9 +235,14 @@ export function _attachExitListener() {
   this.process.on('exit', (code) => {
     this.isRunning = false;
     this.process = null;
+    // 关闭前的最终存档已落盘（graceful stop 保存世界）：标记大小缓存失效
+    this._worldSizeDirty = true;
     this._stopStatsCollection();
-    this._rconCleanup();
-    // 服务器关闭时所有在线玩家视为离开（记录"离开服务器"事件 + 保存数据）
+  this._rconCleanup();
+  // pid 文件随进程退出删除：残留文件会在下次面板启动时被 adopt 验活自然清理，
+  // 此处主动删是让「进程活着但面板误判」的窗口内不留过时线索
+  this._removePidFile();
+  // 服务器关闭时所有在线玩家视为离开（记录"离开服务器"事件 + 保存数据）
     for (const name of [...this.players.keys()]) {
       this._handlePlayerLeave(name);
     }

@@ -2,7 +2,6 @@
  * 玩家数据 Excel 导出（浏览器端 exceljs 生成，13 列）
  * 文件名「玩家数据_yyyyMMdd_HHmm.xlsx」
  */
-import ExcelJS from 'exceljs'
 import type { Player } from '@/api/types'
 
 const GAME_MODE_LABELS: Record<string, string> = {
@@ -28,7 +27,9 @@ function buildFilename(date: Date): string {
 
 /** 生成并下载玩家 Excel（13 列） */
 export async function exportPlayersToExcel(players: Player[]): Promise<void> {
-  const workbook = new ExcelJS.Workbook()
+  // exceljs 约 900KB：按需加载，避免整块计入玩家页首访体积（只有点导出才付这份代价）
+  const exceljs = await import('exceljs')
+  const workbook = new exceljs.Workbook()
   const sheet = workbook.addWorksheet('玩家数据')
 
   sheet.columns = [

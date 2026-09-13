@@ -2,15 +2,16 @@
  * 玩家页集成测试：表格渲染/筛选/行点击详情/批量选择/深链接
  * MSW 拦截（mockPlayers 结构占位数据，无真实服务器信息）
  */
-import { describe, it, expect, beforeEach, afterAll, beforeAll } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, afterAll, beforeAll } from 'vitest'
 import { render, screen, fireEvent, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { HttpResponse, http } from 'msw'
 import { setupServer } from 'msw/node'
 import { createMemoryRouter, RouterProvider } from 'react-router'
 import { Toaster } from 'sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import { handlers } from '@/test/mocks/handlers'
+import { handlers, mockPlayers } from '@/test/mocks/handlers'
 import { PlayersPage } from '../players-page'
 import { usePlayersUiStore } from '../store'
 import { useConnectionStore } from '@/stores/connection'
@@ -18,6 +19,7 @@ import { useServerStore } from '@/stores/server'
 
 const server = setupServer(...handlers)
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
+afterEach(() => server.resetHandlers())
 afterAll(() => server.close())
 
 function renderPage(initialPath = '/players') {
@@ -57,6 +59,45 @@ beforeEach(() => {
 })
 
 describe('PlayersPage', () => {
+  it('列表加载失败：错误态替换整张表（不呈现为「暂无在线玩家」），可重试', async () => {
+    let calls = 0
+    server.use(
+      http.get('*/api/v1/instances/:id/players', () => {
+        calls += 1
+        return calls === 1
+          ? HttpResponse.json(
+              { status: 'error', code: 50000, message: '内部错误', details: null, timestamp: '' },
+              { status: 500 },
+            )
+          : HttpResponse.json({ status: 'ok', code: 0, message: 'Success', data: mockPlayers, timestamp: '' })
+      }),
+    )
+    const user = userEvent.setup()
+    renderPage()
+
+    expect(await screen.findByText('加载失败')).toBeInTheDocument()
+    expect(screen.getByText(/无法获取玩家列表/)).toBeInTheDocument()
+    // 错误不得被呈现为误导性空态（玩家表整体不渲染）
+    expect(screen.queryByText('暂无在线玩家')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '重试' }))
+    expect(await screen.findByText('Steve')).toBeInTheDocument()
+  })
+
+  it('无实例：实例门替换整页，不谎报「暂无在线玩家」', async () => {
+    server.use(
+      http.get('*/api/v1/instances', () =>
+        HttpResponse.json({ status: 'ok', code: 0, message: 'Success', data: [] }),
+      ),
+    )
+    useServerStore.setState({ instanceId: null })
+    renderPage()
+
+    expect(await screen.findByText('暂无服务器实例')).toBeInTheDocument()
+    // 此前 usePlayers 被 disabled、isLoading=false → 表格显示「暂无在线玩家」（真实病因是没有实例）
+    expect(screen.queryByText('暂无在线玩家')).not.toBeInTheDocument()
+  })
+
   it('渲染玩家表格（在线/离线/封禁/假人）', async () => {
     renderPage()
     expect(await screen.findByText('Steve')).toBeInTheDocument()
@@ -115,12 +156,18 @@ describe('PlayersPage', () => {
     expect(screen.queryByText('基本信息')).not.toBeInTheDocument()
   })
 
-  it('键盘 Enter/Space 打开行详情（无障碍键盘路径）', async () => {
+  it('键盘 Enter 打开行详情（入口是玩家名按钮，行本身不再响应按键）', async () => {
+    const user = userEvent.setup()
     renderPage()
     await screen.findByText('Steve')
     const row = screen.getByText('Steve').closest('tr')!
     row.focus()
+    // 行是 row 角色、不可聚焦于交互语义：回车落在行上不打开详情
     fireEvent.keyDown(row, { key: 'Enter' })
+    expect(screen.queryByText('基本信息')).not.toBeInTheDocument()
+    // 行内真控件才是键盘入口（原生 button：回车与空格都可激活）
+    screen.getByRole('button', { name: '查看 Steve 详情' }).focus()
+    await user.keyboard('{Enter}')
     expect(await screen.findByRole('button', { name: /取消OP|设为OP/ })).toBeInTheDocument()
   })
 
@@ -133,9 +180,9 @@ describe('PlayersPage', () => {
     await user.click(await screen.findByText('封禁…'))
     expect(await screen.findByText('封禁 Steve')).toBeInTheDocument()
     // 时长档 6 项与理由 9 项渲染
-    expect(screen.getByRole('button', { name: '1小时' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '永久' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '作弊' })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: '1小时' })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: '永久' })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: '作弊' })).toBeInTheDocument()
   })
 
   it('批量选择出现底部操作条（9 动作）', async () => {
@@ -156,6 +203,31 @@ describe('PlayersPage', () => {
   it('深链接 ?player=Steve 打开详情', async () => {
     renderPage('/players?player=Steve')
     expect(await screen.findByText('基本信息')).toBeInTheDocument()
+    // 宽屏（默认 matchMedia 全 false）走内联右栏，不得退化成 Sheet
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('lg 以下（含平板）详情面板以 dialog 承载（role=dialog + 可访问名），不再是裸覆盖层', async () => {
+    const orig = window.matchMedia
+    // 平板/窄屏模拟：仅「lg 以下」断点命中（其余查询保持 false，与内联态用例互不干扰）
+    window.matchMedia = ((query: string) => ({
+      matches: query === '(max-width: 1023px)',
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    })) as unknown as typeof window.matchMedia
+    try {
+      renderPage('/players?player=Steve')
+      // 轮询到列表就绪后的可访问名（标题取玩家名，SR 可播报上下文）
+      const dialog = await screen.findByRole('dialog', { name: /Steve 详情/ })
+      expect(within(dialog).getByText('基本信息')).toBeInTheDocument()
+    } finally {
+      window.matchMedia = orig
+    }
   })
 
   it('封禁记录弹窗：全量列表 + 解封确认', async () => {

@@ -34,8 +34,8 @@ import { Switch } from '@/components/ui/switch'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { Chip } from '@/components/mcs/chip'
 import { CRON_PRESETS, cronDescription, formatNextRun } from '@/lib/mc-cron'
-import { formatDurationMs, formatUtcNaive } from '@/lib/format'
-import { TASK_TYPE_OPTIONS, type TaskType } from '@/lib/mc-deploy'
+import { formatDurationMs } from '@/lib/format'
+import { TASK_TYPE_OPTIONS, formatTaskDate, type TaskType } from '@/lib/mc-deploy'
 import { CronEditor } from './cron-editor'
 import { useTaskHistory } from '../queries'
 import type { ScheduledTask, TaskCreatePayload, TaskRunHistory } from '@/api/types'
@@ -180,15 +180,15 @@ export function TaskDialog({ task, onClose, onSave, saving }: TaskDialogProps) {
               {cronError !== '' && (
                 <p className="text-mcs-xs text-mcs-error-fg">{cronError}</p>
               )}
-              <p className="text-mcs-xs text-mcs-text-subtle">格式：分 时 日 月 周（* 表示任意）</p>
+              <p className="text-mcs-xs text-mcs-text-muted">格式：分 时 日 月 周（* 表示任意）</p>
               {cronDesc.length > 0 && (
-                <p className="flex items-start gap-1 text-mcs-xs text-mcs-text-subtle">
+                <p className="flex items-start gap-1 text-mcs-xs text-mcs-text-muted">
                   <Info className="mt-0.5 size-3 shrink-0" aria-hidden />
                   <span>{cronDesc}</span>
                 </p>
               )}
               {nextRunHint.length > 0 && (
-                <p className="flex items-start gap-1 text-mcs-xs text-mcs-text-subtle">
+                <p className="flex items-start gap-1 text-mcs-xs text-mcs-text-muted">
                   <Info className="mt-0.5 size-3 shrink-0" aria-hidden />
                   <span>下次运行约 {nextRunHint}</span>
                 </p>
@@ -313,7 +313,7 @@ function TaskRunHistory({ taskId }: { taskId: number }) {
           </Button>
         </div>
       ) : !runs || runs.length === 0 ? (
-        <p className="text-mcs-xs text-mcs-text-subtle">暂无执行记录</p>
+        <p className="text-mcs-xs text-mcs-text-muted">暂无执行记录</p>
       ) : (
         <ul
           className="max-h-40 space-y-1.5 overflow-y-auto rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted p-2 shadow-mcs-card"
@@ -326,9 +326,9 @@ function TaskRunHistory({ taskId }: { taskId: number }) {
                 <div className="flex items-center gap-1.5 text-mcs-xs">
                   <span className={`size-1.5 shrink-0 rounded-full ${meta.dot}`} aria-hidden />
                   <span className={meta.text}>{meta.label}</span>
-                  <span className="text-mcs-text-muted">{formatUtcNaive(run.runAt)}</span>
+                  <span className="text-mcs-text-muted">{formatTaskDate(run.runAt)}</span>
                   {run.durationMs !== null && (
-                    <span className="text-mcs-text-subtle">· {formatDurationMs(run.durationMs)}</span>
+                    <span className="text-mcs-text-muted">· {formatDurationMs(run.durationMs)}</span>
                   )}
                 </div>
                 {run.error && (

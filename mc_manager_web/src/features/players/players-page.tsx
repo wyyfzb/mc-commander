@@ -4,7 +4,7 @@
  * - 右：详情面板（5 Tab；批量模式仅传送/给予）
  * - 底部浮动批量操作条（选中时出现）
  * - URL 深链接：?q=<搜索词>&mode=<状态>&player=<玩家名>（可分享、可刷新保持）
- * - 数据流：usePlayers 5s 轮询 + WS 事件 invalidate（use-server-socket 全局分派）
+ * - 数据流：usePlayers 30s 保底轮询 + WS 事件 invalidate（use-server-socket 全局分派）
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router'
@@ -13,6 +13,7 @@ import { AlertTriangle } from 'lucide-react'
 import { getFriendlyErrorText } from '@/api/errors'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/mcs/empty-state'
+import { InstanceRequiredState } from '@/features/instances/components/instance-required-state'
 import { PageHeader } from '@/components/mcs/page-header'
 import {
   Dialog,
@@ -36,6 +37,8 @@ import { PlayerDetailPanel } from './components/player-detail-panel'
 import { BatchBar } from './components/batch-bar'
 import { BanDialog } from './components/ban-dialog'
 import { BanRecordsDialog } from './components/ban-records-dialog'
+import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
+import { useMediaQuery, BREAKPOINT_BELOW_LG } from '@/hooks/use-media-query'
 
 /** data 未就绪时的稳定空数组（避免 ?? [] 每次渲染新建引用、污染下游 useMemo） */
 const NO_PLAYERS: Player[] = []
@@ -57,7 +60,11 @@ export function PlayersPage() {
   const openPlayerDetail = usePlayersUiStore((s) => s.openPlayerDetail)
   const openBatchDetail = usePlayersUiStore((s) => s.openBatchDetail)
   const resetForInstance = usePlayersUiStore((s) => s.resetForInstance)
+  const closeDetail = usePlayersUiStore((s) => s.closeDetail)
   const selectedUuids = usePlayersUiStore((s) => s.selectedUuids)
+  // lg 以下容器里没有并列空间（面板 w-105 会把表格压到百 px 级），详情改由 Sheet 承载：
+  // 既免去旧 CSS 覆盖层无 dialog 语义/无焦点约束的问题，也不挤压表格与筛选栏
+  const isSheetLayout = useMediaQuery(BREAKPOINT_BELOW_LG)
 
   const playersQuery = usePlayers(instanceId)
   const statusQuery = useInstanceStatus(instanceId)
@@ -168,6 +175,12 @@ export function PlayersPage() {
     }
   }
 
+  // 无实例门：判据是实例列表本身（详见 InstanceRequiredState）——
+  // 此前无实例时 usePlayers 被 disabled，表格会把它显示成「暂无在线玩家」
+  if (!instanceId) {
+    return <InstanceRequiredState />
+  }
+
   const isRconConnected = statusQuery.data?.isRconConnected ?? false
   const mcVersion = statusQuery.data?.mcVersion ?? ''
 
@@ -179,7 +192,7 @@ export function PlayersPage() {
       />
 
       {/* 左栏：筛选 + 表格 */}
-      <div className="flex min-h-0 flex-1">
+      <div className="relative flex min-h-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col">
           <FilterBar
             players={filteredPlayers}
@@ -219,8 +232,8 @@ export function PlayersPage() {
           )}
         </div>
 
-        {/* 右栏：详情面板 */}
-        {detail !== null && (
+        {/* 右栏：详情面板（lg 及以上内联并列；lg 以下移入 Sheet，见下） */}
+        {detail !== null && !isSheetLayout && (
           <PlayerDetailPanel
             instanceId={instanceId ?? ''}
             player={detailPlayer}
@@ -233,6 +246,28 @@ export function PlayersPage() {
           />
         )}
       </div>
+
+      {/* lg 以下（含平板）：详情面板以 Sheet（Radix Dialog）承载，获得 role=dialog / aria-modal / 焦点陷阱 / Esc 关闭 / 背景 inert */}
+      {detail !== null && isSheetLayout && (
+        <Sheet open onOpenChange={(open) => { if (!open) closeDetail() }}>
+          <SheetContent side="right" showCloseButton={false} className="w-full! gap-0 p-0 sm:max-w-none!">
+            <SheetTitle className="sr-only">
+              {detail.batchMode ? `批量操作 ${selectedPlayers.length} 名玩家` : `${detailPlayer?.name ?? '玩家'} 详情`}
+            </SheetTitle>
+            <PlayerDetailPanel
+              variant="overlay"
+              instanceId={instanceId ?? ''}
+              player={detailPlayer}
+              batchTargets={detail.batchMode ? selectedPlayers : []}
+              isBatchMode={detail.batchMode}
+              isRconConnected={isRconConnected}
+              mcVersion={mcVersion}
+              onAction={handleAction}
+              onOpenBanDialog={setBanTarget}
+            />
+          </SheetContent>
+        </Sheet>
+      )}
 
       {/* 封禁对话框 */}
       {banTarget && (

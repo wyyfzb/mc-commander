@@ -78,7 +78,7 @@ export function SearchInput({
     <div className={cn('relative', className)}>
       <Search
         className={cn(
-          'pointer-events-none absolute top-1/2 -translate-y-1/2 text-mcs-text-subtle',
+          'pointer-events-none absolute top-1/2 -translate-y-1/2 text-mcs-text-muted',
           s.icon,
           s.iconPos,
         )}
@@ -98,7 +98,7 @@ export function SearchInput({
           onClick={handleClear}
           aria-label="清空搜索"
           className={cn(
-            'absolute top-1/2 -translate-y-1/2 rounded-mcs-xs p-0.5 text-mcs-text-subtle hover:bg-mcs-bg-hover hover:text-mcs-text-default',
+            'absolute top-1/2 -translate-y-1/2 rounded-mcs-xs p-0.5 text-mcs-text-muted hover:bg-mcs-state-hover hover:text-mcs-text-default',
             s.clear,
           )}
         >

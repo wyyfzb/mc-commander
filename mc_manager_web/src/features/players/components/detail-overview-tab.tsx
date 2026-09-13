@@ -173,7 +173,7 @@ export function OverviewTab({ player, isRconConnected, bans, onAction, onOpenBan
       {/* ── 封禁记录区（该玩家名+IP 匹配；生效中可解封）── */}
       <Section title="封禁记录">
         {relatedBans.length === 0 ? (
-          <p className="text-mcs-xs text-mcs-text-subtle">无封禁记录</p>
+          <p className="text-mcs-xs text-mcs-text-muted">无封禁记录</p>
         ) : (
           <div className="flex flex-col gap-2">
             {relatedBans.map((ban, i) => (
@@ -186,9 +186,9 @@ export function OverviewTab({ player, isRconConnected, bans, onAction, onOpenBan
                     <span className={ban.isActive ? 'text-mcs-error-fg' : 'text-mcs-text-muted'}>
                       {ban.isActive ? '生效中' : '已解除'}
                     </span>
-                    <span className="text-mcs-text-subtle"> · {ban.targetType === 'ip' ? 'IP 封禁' : '玩家封禁'} · {ban.reason || '无理由'}</span>
+                    <span className="text-mcs-text-muted"> · {ban.targetType === 'ip' ? 'IP 封禁' : '玩家封禁'} · {ban.reason || '无理由'}</span>
                   </div>
-                  <div className="text-mcs-2xs text-mcs-text-subtle">
+                  <div className="text-mcs-2xs text-mcs-text-muted">
                     {ban.isPermanent
                       ? '永久'
                       : ban.expiresAt
@@ -218,13 +218,13 @@ export function OverviewTab({ player, isRconConnected, bans, onAction, onOpenBan
       {player.isOnline && (
         <Section title="行为状态">
           {activeBehaviors.length === 0 ? (
-            <p className="text-mcs-xs text-mcs-text-subtle">无特殊状态</p>
+            <p className="text-mcs-xs text-mcs-text-muted">无特殊状态</p>
           ) : (
             <div className="flex flex-wrap gap-1.5">
               {activeBehaviors.map((b) => (
                 <span
                   key={b.label}
-                  className="inline-flex items-center gap-1 rounded-mcs-xs bg-mcs-bg-hover px-1.5 py-0.5 text-mcs-xs text-mcs-text-muted"
+                  className="inline-flex items-center gap-1 rounded-mcs-xs bg-mcs-bg-secondary px-1.5 py-0.5 text-mcs-xs text-mcs-text-muted"
                 >
                   {b.icon}
                   {b.label}
@@ -259,7 +259,7 @@ export function OverviewTab({ player, isRconConnected, bans, onAction, onOpenBan
             {player.ipHistory?.map((entry, i) => (
               <div key={`${entry.ip}-${i}`} className="flex items-center justify-between text-mcs-xs">
                 <span className="font-mono text-mcs-text-muted">{entry.ip}</span>
-                <span className="text-mcs-text-subtle">
+                <span className="text-mcs-text-muted">
                   {entry.lastSeen} · {entry.count} 次
                 </span>
               </div>
@@ -335,13 +335,13 @@ export function OverviewTab({ player, isRconConnected, bans, onAction, onOpenBan
           placeholder="输入消息内容…"
           rows={3}
           maxLength={200}
-          className="w-full resize-none rounded-mcs-xs border border-mcs-border-default bg-mcs-bg-default px-2.5 py-2 text-mcs-sm text-mcs-text-default placeholder:text-mcs-text-subtle focus:outline-none focus:ring-1 focus:ring-mcs-focus-ring"
+          className="w-full resize-none rounded-mcs-xs border border-mcs-border-default bg-mcs-bg-default px-2.5 py-2 text-mcs-sm text-mcs-text-default placeholder:text-mcs-text-muted focus:outline-none focus:ring-1 focus:ring-mcs-focus-ring"
         />
       </ConfirmDialog>
 
       {/* RCON 不可用时在线操作提示 */}
       {player.isOnline && !isRconConnected && (
-        <p className="text-mcs-xs text-mcs-text-subtle">提示：RCON 未连接，在线操作可能失败（需启用 RCON）</p>
+        <p className="text-mcs-xs text-mcs-text-muted">提示：RCON 未连接，在线操作可能失败（需启用 RCON）</p>
       )}
     </div>
   )

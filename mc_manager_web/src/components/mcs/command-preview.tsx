@@ -31,7 +31,7 @@ export function CommandPreview({ command }: { command: string }) {
         type="button"
         onClick={() => void copy()}
         aria-label="复制命令"
-        className="shrink-0 rounded-mcs-xs p-0.5 text-mcs-terminal-subtle hover:bg-mcs-bg-hover hover:text-mcs-text-default"
+        className="shrink-0 rounded-mcs-xs p-0.5 text-mcs-terminal-subtle hover:bg-mcs-state-hover hover:text-mcs-text-default"
       >
         <Copy className="size-3" aria-hidden />
       </button>

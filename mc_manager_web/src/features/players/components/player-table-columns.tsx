@@ -28,6 +28,7 @@ import { formatRelativeTime } from '@/lib/format'
 import { formatBanRemaining } from '@/lib/mc-ban'
 import type { Player } from '@/api/types'
 import type { PlayerDetailTab } from '../store'
+import { paginatePlayerRows } from '../player-pagination'
 import { PlayerAvatar } from './player-avatar'
 import { HeartsArmor } from './hearts-armor'
 import { DIMENSION_META, GAME_MODE_LABELS, features } from './player-table-config'
@@ -46,6 +47,9 @@ interface PlayerColumnsDeps {
   toggleSelectPage: (pageUuids: string[]) => void
   setConfirmToggle: (v: ConfirmToggleState | null) => void
   setKickTarget: (v: Player | null) => void
+  /** 分页状态（-1 = 「全部」档）：表头全选只能作用于当前页，见 select 列 header */
+  pageSize: number
+  pageIndex: number
 }
 
 /** 在线时长短格式（Xh Ym） */
@@ -72,20 +76,25 @@ export function buildPlayerColumns({
   toggleSelectPage,
   setConfirmToggle,
   setKickTarget,
+  pageSize,
+  pageIndex,
 }: PlayerColumnsDeps): ColumnDef<typeof features, Player>[] {
   return [
     {
       id: 'select',
       enableSorting: false, // 无排序语义，且避免排序按钮嵌套 Checkbox（非法 HTML）
       header: ({ table }) => {
-        const pageIds = table.getRowModel().rows.map((r) => r.original.uuid)
+        // 分页由外层手动切片（table 未注册分页 feature，其 rows 是全量），
+        // 故此处按同一规则复算当前页，避免「全选当前页」实际选中全部筛选结果
+        const pageIds = paginatePlayerRows(table.getRowModel().rows, pageSize, pageIndex).rows
+          .map((r) => r.original.uuid)
         const allSelected = pageIds.length > 0 && pageIds.every((u) => selectedSet.has(u))
         const someSelected = pageIds.some((u) => selectedSet.has(u))
         return (
           <Checkbox
             checked={allSelected ? true : someSelected ? 'indeterminate' : false}
             onCheckedChange={() => toggleSelectPage(pageIds)}
-            aria-label="全选当前页"
+            aria-label={pageSize === -1 ? '全选全部筛选结果' : '全选当前页'}
           />
         )
       },
@@ -110,17 +119,25 @@ export function buildPlayerColumns({
             <PlayerAvatar name={p.name} isOnline={p.isOnline} isFakePlayer={p.isFakePlayer} size={28} />
             <div className="min-w-0">
               <div className="flex items-center gap-1.5">
-                <span
+                <button
+                  type="button"
                   className={cn(
-                    'truncate text-mcs-sm font-medium',
+                    // 与其余单元格文字同款，仅补回 button 被 UA 设成居中所丢的对齐与指针
+                    'cursor-pointer truncate text-left text-mcs-sm font-medium',
                     banned ? 'text-mcs-error-fg' : p.isOnline ? 'text-mcs-text-default' : 'text-mcs-text-muted',
                   )}
+                  aria-label={`查看 ${p.name} 详情`}
+                  onClick={(e) => {
+                    // 行级 onClick 只服务指针便利；此处已处理，阻止冒泡避免重复调用
+                    e.stopPropagation()
+                    onOpenDetail(p.name)
+                  }}
                 >
                   {p.name}
-                </span>
+                </button>
                 {p.isOp && <ShieldCheck className="size-3.5 shrink-0 text-mcs-purple-fg" aria-label="OP" />}
                 {p.isAfk && (
-                  <span className="shrink-0 rounded-mcs-xs bg-mcs-bg-hover px-1 text-mcs-2xs text-mcs-text-muted">
+                  <span className="shrink-0 rounded-mcs-xs bg-mcs-bg-secondary px-1 text-mcs-2xs text-mcs-text-muted">
                     AFK
                   </span>
                 )}
@@ -138,7 +155,7 @@ export function buildPlayerColumns({
                 )}
               </div>
               {p.isOnline && p.ip && (
-                <div className="truncate font-mono text-mcs-2xs text-mcs-text-subtle">{p.ip}</div>
+                <div className="truncate font-mono text-mcs-2xs text-mcs-text-muted">{p.ip}</div>
               )}
             </div>
           </div>
@@ -173,7 +190,7 @@ export function buildPlayerColumns({
             {meta.label}
           </span>
         ) : (
-          <span className="text-mcs-xs text-mcs-text-subtle">--</span>
+          <span className="text-mcs-xs text-mcs-text-muted">--</span>
         )
       },
       size: 96,
@@ -188,7 +205,7 @@ export function buildPlayerColumns({
             {Math.round(pos.x)}, {Math.round(pos.y)}, {Math.round(pos.z)}
           </span>
         ) : (
-          <span className="text-mcs-xs text-mcs-text-subtle">--</span>
+          <span className="text-mcs-xs text-mcs-text-muted">--</span>
         )
       },
       size: 120,
@@ -224,14 +241,14 @@ export function buildPlayerColumns({
           return (
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="cursor-help text-mcs-xs text-mcs-text-subtle">需插件</span>
+                <span className="cursor-help text-mcs-xs text-mcs-text-muted">需插件</span>
               </TooltipTrigger>
               <TooltipContent>原版 RCON 不暴露玩家 ping</TooltipContent>
             </Tooltip>
           )
         }
         const color =
-          ping < 50 ? 'var(--mcs-accent)' : ping < 150 ? 'var(--mcs-warning-fg)' : 'var(--mcs-error-fg)'
+          ping < 50 ? 'var(--mcs-success-fg)' : ping < 150 ? 'var(--mcs-warning-fg)' : 'var(--mcs-error-fg)'
         return (
           <span className="inline-flex items-center justify-end gap-1.5 font-mono text-mcs-xs tabular-nums text-mcs-text-muted">
             <span className="inline-block size-1.5 shrink-0 rounded-full" style={{ backgroundColor: color }} aria-hidden />

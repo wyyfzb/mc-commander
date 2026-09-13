@@ -98,6 +98,36 @@ describe('auth store 初始化恢复分支（模块重载逐态验证）', () =>
     expect(mod.useAuthStore.getState().session).toBeNull()
   })
 
+  it('带签发面板（issuedFor）的会话 → 原样恢复', async () => {
+    localStorage.setItem(
+      'mcs-session',
+      JSON.stringify({
+        token: 'tok-bind',
+        sessionId: 'sess-bind',
+        expiresAt: '2026-01-01T00:00:00.000Z',
+        issuedFor: 'https://panel-a.example.com',
+      }),
+    )
+    const mod = await import('../auth')
+    expect(mod.useAuthStore.getState().session?.issuedFor).toBe('https://panel-a.example.com')
+  })
+
+  it('旧会话（无 issuedFor）→ 恢复为无签发面板信息（按适用处理，宽限到下次登录）', async () => {
+    localStorage.setItem('mcs-session', JSON.stringify({ token: 'tok-old', sessionId: 'sess-old', expiresAt: '2026-01-01T00:00:00.000Z' }))
+    const mod = await import('../auth')
+    expect(mod.useAuthStore.getState().session?.token).toBe('tok-old')
+    expect(mod.useAuthStore.getState().session?.issuedFor).toBeUndefined()
+  })
+
+  it('issuedFor 为空串/非字符串 → 不写入（等同于旧会话，不产生假面板身份）', async () => {
+    localStorage.setItem(
+      'mcs-session',
+      JSON.stringify({ token: 'tok-e', sessionId: 'sess-e', expiresAt: '2026-01-01T00:00:00.000Z', issuedFor: '' }),
+    )
+    const mod = await import('../auth')
+    expect(mod.useAuthStore.getState().session?.issuedFor).toBeUndefined()
+  })
+
   it('setSession 持久化失败 → 内存会话仍生效（不因存储异常丢登录态）', async () => {
     const mod = await import('../auth')
     const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {

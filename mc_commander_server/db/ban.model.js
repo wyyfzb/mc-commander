@@ -1,4 +1,5 @@
 import { getDb } from './database.js';
+import { toIsoUtc } from '../utils/db-time.js';
 
 /**
  * 临时封禁记录模型（temp_bans 表）。
@@ -17,7 +18,8 @@ export class BanModel {
       reason: row.reason,
       expiresAt: row.expires_at,
       isActive: !!row.is_active,
-      createdAt: row.created_at,
+      // created_at 为无时区 UTC 串（expires_at 是 epoch 整数，无需转换）
+      createdAt: toIsoUtc(row.created_at),
     };
   }
 

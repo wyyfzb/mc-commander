@@ -5,6 +5,8 @@ import type { ReactNode } from 'react'
 import { useServerSocket, getSocketSingleton } from '../use-server-socket'
 import { useConnectionStore } from '@/stores/connection'
 import { useAuthStore, type StoredSession } from '@/stores/auth'
+import { useNotificationStore } from '@/stores/notifications'
+import { queryKeys } from '@/api/queries'
 import type { WebSocketLike, WebSocketCtor } from '@/api/ws'
 
 /**
@@ -68,9 +70,11 @@ function createWrapper() {
   const qc = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   })
-  return function Wrapper({ children }: { children: ReactNode }) {
+  const wrapper = function Wrapper({ children }: { children: ReactNode }) {
     return <QueryClientProvider client={qc}>{children}</QueryClientProvider>
   }
+  // 暴露 qc：断言事件分支的 query 失效行为用
+  return Object.assign(wrapper, { qc })
 }
 
 /** 读取某个 FakeWebSocket 已发送的 subscribe 消息 */
@@ -196,6 +200,18 @@ describe('useServerSocket（WS 单例治理，issue #311）', () => {
     expect(FakeWebSocket.instances[1]!.protocols).toEqual(['mc-commander-apikey.k1'])
   })
 
+  it('会话属于别的面板：WS 回落 API Key 通道（不拿 A 的令牌连 B 的实时通道）', async () => {
+    useConnectionStore.setState({ baseUrl: '', apiKey: 'k1', status: 'ready' })
+    useAuthStore.setState({
+      session: { ...makeSession('token-foreign'), issuedFor: 'https://panel-a.example.com' },
+    })
+
+    renderHook(() => useServerSocket('i-1'), { wrapper: createWrapper() })
+
+    await waitFor(() => expect(FakeWebSocket.instances.length).toBe(1))
+    expect(FakeWebSocket.instances[0]!.protocols).toEqual(['mc-commander-apikey.k1'])
+  })
+
   it('effect 重跑（实例切换）不产生双 WebSocket：connect 幂等复用同一连接', async () => {
     useConnectionStore.setState({ baseUrl: '', apiKey: 'k1', status: 'ready' })
     useAuthStore.setState({ session: null })
@@ -253,5 +269,98 @@ describe('useServerSocket（WS 单例治理，issue #311）', () => {
     // 新连接的 subscribe 携带 lastEventId=42（断线补齐锚点不丢失）
     const subs = sentSubscribe(ws2)
     expect(subs).toEqual([{ type: 'subscribe', instanceId: 'i-1', lastEventId: 42 }])
+  })
+})
+
+describe('useServerSocket（状态跃迁通知接线）', () => {
+  beforeEach(() => {
+    FakeWebSocket.instances = []
+    localStorage.clear()
+    vi.stubGlobal('WebSocket', FakeCtor)
+    useConnectionStore.setState({ baseUrl: '', apiKey: '', status: 'unconfigured' })
+    useAuthStore.setState({ session: null })
+    // notifications store 为全局单例：清内存态防跨用例残留（items/告警状态机）
+    useNotificationStore.setState({ items: [], unreadCount: 0, activeAlerts: new Set() })
+    const { unmount } = renderHook(() => useServerSocket(null), { wrapper: createWrapper() })
+    unmount()
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+  })
+
+  /** 建立已连接的 socket，返回 FakeWebSocket */
+  async function connectReady(instanceId: string) {
+    useConnectionStore.setState({ baseUrl: '', apiKey: 'k1', status: 'ready' })
+    renderHook(() => useServerSocket(instanceId), { wrapper: createWrapper() })
+    await waitFor(() => expect(FakeWebSocket.instances.length).toBe(1))
+    const ws = FakeWebSocket.instances[0]!
+    act(() => {
+      ws.open()
+    })
+    await flushMicrotasks()
+    return ws
+  }
+
+  it('started/stopped 跃迁入通知中心（回归：此前仅 crash/熔断接线）', async () => {
+    const ws = await connectReady('i-1')
+
+    act(() => {
+      ws.receive({ type: 'status', instanceId: 'i-1', data: { event: 'started' } })
+    })
+    const afterStart = useNotificationStore.getState().items
+    expect(afterStart[0]?.type).toBe('serverStart')
+    expect(afterStart[0]?.content).toBe('服务器已启动')
+    expect(afterStart[0]?.instanceId).toBe('i-1')
+
+    act(() => {
+      ws.receive({ type: 'status', instanceId: 'i-1', data: { event: 'stopped' } })
+    })
+    const afterStop = useNotificationStore.getState().items
+    expect(afterStop[0]?.type).toBe('serverStop')
+    expect(afterStop[0]?.content).toBe('服务器已停止')
+    // 持久化同步写入（通知面板数据源）
+    expect(localStorage.getItem('mcs-notifications')).not.toBeNull()
+  })
+
+  it('非当前实例的常规跃迁不入通知中心（维持 issue #334 的 critical-only 取舍）', async () => {
+    const ws = await connectReady('i-1')
+
+    act(() => {
+      ws.receive({ type: 'status', instanceId: 'i-other', data: { event: 'started' } })
+    })
+    expect(useNotificationStore.getState().items.length).toBe(0)
+
+    act(() => {
+      ws.receive({ type: 'status', instanceId: 'i-other', data: { event: 'crash' } })
+    })
+    const items = useNotificationStore.getState().items
+    expect(items[0]?.type).toBe('serverCrash')
+  })
+
+  it('status 跃迁同步失效当前实例详情 query（isRunning 源头；只刷列表会让停止状态条滞后到 30s 轮询）', async () => {
+    useConnectionStore.setState({ baseUrl: '', apiKey: 'k1', status: 'ready' })
+    const wrapper = createWrapper()
+    const { qc } = wrapper
+    // 预置详情/列表缓存，模拟面板已加载态
+    qc.setQueryData(queryKeys.instance('i-1'), { isRunning: true })
+    qc.setQueryData(queryKeys.instances(), [])
+    renderHook(() => useServerSocket('i-1'), { wrapper })
+    await waitFor(() => expect(FakeWebSocket.instances.length).toBe(1))
+    const ws = FakeWebSocket.instances[0]!
+    act(() => {
+      ws.open()
+    })
+    await flushMicrotasks()
+
+    act(() => {
+      ws.receive({ type: 'status', instanceId: 'i-1', data: { event: 'stopped' } })
+    })
+
+    // 详情与列表都进入失效态：详情 refetch 后 isRunning 翻转，停止状态条即时出现
+    expect(qc.getQueryState(queryKeys.instance('i-1'))?.isInvalidated).toBe(true)
+    expect(qc.getQueryState(queryKeys.instances())?.isInvalidated).toBe(true)
   })
 })

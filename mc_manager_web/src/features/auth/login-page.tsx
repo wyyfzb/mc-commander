@@ -24,9 +24,11 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { BrandLogo } from '@/components/mcs/brand-logo'
+import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { Label } from '@/components/ui/label'
 import { PasswordInput } from '@/components/ui/password-input'
 import { cn } from '@/lib/utils'
+import { panelAddress } from '@/lib/mc-connection'
 import { fetchAuthStatus, login, setupPassword } from '@/api/auth'
 import { ApiError, NetworkError } from '@/api/client'
 import { getFriendlyErrorText } from '@/api/errors'
@@ -85,6 +87,8 @@ export function LoginPage() {
   const [submitting, setSubmitting] = useState(false)
   const [errorText, setErrorText] = useState('')
   const probeSeq = useRef(0)
+  /** 用户是否显式处置过面板地址（见 handleAuthSuccess：未处置则不写回，避免空串覆盖已存地址） */
+  const addressSettled = useRef(false)
 
   const strength = assessPasswordStrength(password)
 
@@ -111,10 +115,28 @@ export function LoginPage() {
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- baseUrl 变化由探测按钮显式驱动
   }, [probe])
 
-  /** 登录/设密成功：写会话 → 同步连接状态（setConfig 内含凭据重算）→ 回跳 */
+  /**
+   * 登录/设密成功：写会话 → 同步连接状态 → 回跳。
+   * 会话绑定「本浏览器将使用的面板地址」（issuedFor）：令牌只对它签发的面板有效，
+   * 换地址后不再发 Bearer、也不会因该面板的 40103 把这次登录踢掉（见 api/client.ts）。
+   * 绑定值取「用户显式填写的地址」或「store 里的已配置地址」——登录请求可能走同源，
+   * 但应用随后用的是 store 里的地址，两者取后者才与客户端判据一致
+   * （也避免「同一面板两个地址」被误判成换了面板）。
+   * 地址只在用户显式处置过（改过输入框 / 点过「恢复默认地址」）时写回：
+   * 未触碰时的空串会经 setConfig 覆盖 localStorage 里的已配置地址
+   * （stores/connection.ts 用 `??` 只挡 null/undefined，挡不住空串），
+   * 分域部署下次进面板就找不到服务端了
+   */
   const handleAuthSuccess = (token: string, sessionId: string, expiresAt: string) => {
-    useAuthStore.getState().setSession({ token, sessionId, expiresAt })
-    useConnectionStore.getState().setConfig({ baseUrl })
+    const connection = useConnectionStore.getState()
+    useAuthStore.getState().setSession({
+      token,
+      sessionId,
+      expiresAt,
+      issuedFor: panelAddress(addressSettled.current ? baseUrl : connection.baseUrl),
+    })
+    if (addressSettled.current) connection.setConfig({ baseUrl })
+    else connection.refreshStatus()
     toast.success(phase === 'setup' ? '管理员密码设置成功' : '登录成功')
     navigate(returnTo.startsWith('/') ? returnTo : '/dashboard', { replace: true })
   }
@@ -185,7 +207,7 @@ export function LoginPage() {
         type="button"
         onClick={toggleTheme}
         aria-label={theme === 'dark' ? '切换到亮色主题' : '切换到深色主题'}
-        className="absolute right-4 top-4 z-10 rounded-mcs-md p-2 text-mcs-text-subtle transition-colors hover:bg-mcs-bg-hover hover:text-mcs-text-default"
+        className="absolute right-4 top-4 z-(--mcs-z-local) rounded-mcs-md p-2 text-mcs-text-muted transition-colors hover:bg-mcs-state-hover hover:text-mcs-text-default"
       >
         {theme === 'dark' ? <Sun className="size-4" aria-hidden /> : <Moon className="size-4" aria-hidden />}
       </button>
@@ -194,20 +216,20 @@ export function LoginPage() {
       <div aria-hidden className="mcs-grid-bg mcs-grid-fade pointer-events-none absolute inset-0" />
 
       {/* 顶部品牌区：裸 logo 与侧栏同语言（无装饰容器），放大档位；items-stretch 令 logo 与两行文字等高 */}
-      <div className="animate-mcs-fade-up relative z-10 mb-6 flex items-stretch gap-3">
+      <div className="animate-mcs-fade-up relative z-(--mcs-z-local) mb-6 flex items-stretch gap-3">
         {/* 57.6px = 标题 22px + 副标题 14px 两行行高之和（1.6 行高系数），字号档位调整时需同步 */}
-        <BrandLogo className="h-[57.6px] w-auto text-mcs-text-default" />
+        <BrandLogo className="h-14 w-auto text-mcs-text-default" />
         <div>
-          <h1 className="text-mcs-xl font-bold tracking-tight text-mcs-text-default">MC Commander</h1>
-          <p className="text-mcs-sm text-mcs-text-subtle">Minecraft 服务器管理面板</p>
+          <h1 className="text-mcs-xl font-semibold text-mcs-text-default">MC Commander</h1>
+          <p className="text-mcs-sm text-mcs-text-muted">Minecraft 服务器管理面板</p>
         </div>
       </div>
 
       {/* 登录卡片（浮起面：卡阴影 + 顶部受光线；stagger 入场跟随品牌区） */}
-      <main className="animate-mcs-fade-up mcs-delay-1 mcs-edge-top relative z-10 w-full max-w-md rounded-mcs-lg border border-mcs-border-muted bg-mcs-bg-muted p-6 shadow-mcs-card">
+      <main className="animate-mcs-fade-up mcs-delay-1 mcs-edge-top relative z-(--mcs-z-local) w-full max-w-md rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted p-6 shadow-mcs-card">
         <div className="mb-5">
           <h2 className="text-mcs-md font-semibold text-mcs-text-default">{heading}</h2>
-          <p className="mt-1 text-mcs-xs text-mcs-text-subtle">
+          <p className="mt-1 text-mcs-xs text-mcs-text-muted">
             {phase === 'setup'
               ? '首次使用：设置管理员密码后即可登录管理面板（8–128 位）'
               : phase === 'login'
@@ -221,7 +243,7 @@ export function LoginPage() {
         {/* 探测中骨架 */}
         {phase === 'probing' && (
           <div className="flex flex-col items-center gap-3 py-8" role="status" aria-label="正在探测面板状态">
-            <Loader2 className="size-6 animate-spin text-mcs-text-subtle" aria-hidden />
+            <Loader2 className="size-6 animate-spin text-mcs-text-muted" aria-hidden />
             <div className="w-full space-y-2">
               <Skeleton className="h-9 w-full" />
               <Skeleton className="h-9 w-full" />
@@ -256,6 +278,7 @@ export function LoginPage() {
                   variant="outline"
                   className="h-10 flex-1"
                   onClick={() => {
+                    addressSettled.current = true
                     setBaseUrl('')
                     void probe('')
                   }}
@@ -270,7 +293,7 @@ export function LoginPage() {
                 type="button"
                 onClick={() => setBaseUrlOpen((v) => !v)}
                 aria-expanded={baseUrlOpen}
-                className="flex items-center gap-1 text-mcs-2xs font-medium text-mcs-text-subtle transition-colors hover:text-mcs-text-default"
+                className="flex items-center gap-1 text-mcs-2xs font-medium text-mcs-text-muted transition-colors hover:text-mcs-text-default"
               >
                 <span aria-hidden>{baseUrlOpen ? '▾' : '▸'}</span>
                 尝试连接其他面板地址
@@ -284,7 +307,10 @@ export function LoginPage() {
                     <Input
                       id="base-url"
                       value={baseUrl}
-                      onChange={(e) => setBaseUrl(e.target.value.trim())}
+                      onChange={(e) => {
+                        addressSettled.current = true
+                        setBaseUrl(e.target.value.trim())
+                      }}
                       placeholder="http://your-server:25566"
                       className="h-8 font-mono text-mcs-xs"
                     />
@@ -349,7 +375,7 @@ export function LoginPage() {
                   autoComplete="off"
                   className="font-mono"
                 />
-                <p className="text-mcs-2xs text-mcs-text-subtle">
+                <p className="text-mcs-2xs text-mcs-text-muted">
                   该面板已开启部署保护：公网部署场景下需证明您是部署者（令牌见部署脚本完成输出，用后即作废）。
                 </p>
               </div>
@@ -359,13 +385,9 @@ export function LoginPage() {
             )}
 
             {errorText && (
-              <p
-                role="alert"
-                className="flex items-start gap-1.5 rounded-mcs-sm border border-mcs-error-border bg-mcs-error-bg-subtle px-2.5 py-2 text-mcs-xs text-mcs-error-fg"
-              >
-                <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+              <NoticeBanner variant="error" role="alert" icon={TriangleAlert}>
                 {errorText}
-              </p>
+              </NoticeBanner>
             )}
 
             <Button type="submit" className="h-10 w-full font-semibold" disabled={submitting}>
@@ -382,8 +404,8 @@ export function LoginPage() {
       </main>
 
       {/* 底部辅助链接 */}
-      <footer className="animate-mcs-fade-up mcs-delay-2 relative z-10 mt-6 flex flex-col items-center gap-1.5 text-center">
-        <p className="text-mcs-2xs text-mcs-text-subtle">
+      <footer className="animate-mcs-fade-up mcs-delay-2 relative z-(--mcs-z-local) mt-6 flex flex-col items-center gap-1.5 text-center">
+        <p className="text-mcs-2xs text-mcs-text-muted">
           使用 API Key 直连（自动化 / 运维场景）？{' '}
           <Link
             to="/onboarding"
@@ -392,7 +414,7 @@ export function LoginPage() {
             前往连接引导
           </Link>
         </p>
-        <p className="text-mcs-2xs text-mcs-text-subtle">
+        <p className="text-mcs-2xs text-mcs-text-muted">
           会话可在「设置 → 账号与安全」中随时下线或踢出其他设备
         </p>
       </footer>

@@ -8,6 +8,8 @@
 # UI 原型/预检产物（非项目源码）
 mc-commander-prototype/
 prototype/
+# 灾备交接快照（Agent 台账与仓库副本，仅本机）
+mc-commander-handoff-*/
 mc_manager_web/prototype.html
 mc_manager_web/give-proto.html
 .history/
@@ -112,6 +114,9 @@ mc-schemas/dist/*.map
 out/
 node_modules/
 
+# Release workflow 组装树（release.yml 本地 staging 目录，禁止入库）
+.staging/
+
 # 临时与备份文件
 *.tmp
 *.bak
@@ -156,9 +161,9 @@ screenshots/
 *.jpeg
 *.gif
 *.bmp
-# 用户向导配图白名单（docs/user-guide.md 相对引用，须入库）
-!docs/screenshots/
-!docs/screenshots/*.png
+# 用户向导/README 配图白名单（仓库根 screenshots/，须入库）
+!screenshots/
+!screenshots/*.png
 *.webp
 !archived/mc_manager_app/assets/**
 !mc_manager_web/src/assets/**

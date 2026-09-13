@@ -40,6 +40,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { cn } from '@/lib/utils'
 import { StatusPill } from '@/components/mcs/status-pill'
+import { toneClasses } from '@/components/mcs/tone'
 import {
   backupStatusLabel,
   backupStatusTone,
@@ -51,6 +52,7 @@ import { useBackupEventRefresh, useBackups, useCreateBackup, useDeleteBackup, us
 import { useInstances } from '@/api/queries'
 import type { BackupPanelProps } from './contracts'
 import { EmptyState } from '@/components/mcs/empty-state'
+import { InstanceRequiredState } from '@/features/instances/components/instance-required-state'
 
 /**
  * 下载文件名：快照名 + 创建时间戳（紧凑 yyyyMMdd-HHmm，随本地时区）+ .tar.gz。
@@ -65,14 +67,6 @@ export function buildBackupDownloadName(backup: Pick<BackupItem, 'name' | 'creat
     ? ''
     : `_${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}`
   return `${backup.name}${stamp}.tar.gz`
-}
-
-/** tone → 徽章类（完整字面量类名，Tailwind 主题色静态生成；全 token 引用） */
-const TONE_CLASSES: Record<ReturnType<typeof backupStatusTone>, string> = {
-  success: 'bg-mcs-success-bg-subtle text-mcs-success-fg border-mcs-success-border',
-  error: 'bg-mcs-error-bg-subtle text-mcs-error-fg border-mcs-error-border',
-  warning: 'bg-mcs-warning-bg-subtle text-mcs-warning-fg border-mcs-warning-border',
-  info: 'bg-mcs-info-bg-subtle text-mcs-info-fg border-mcs-info-border',
 }
 
 export function BackupPanel({ instanceId }: BackupPanelProps) {
@@ -95,16 +89,9 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
   const instanceName = instancesQuery.data?.find((i) => i.id === instanceId)?.name ?? ''
   const restoreInputMatches = restoreInput.trim() === instanceName
 
-  // 无实例空态（与定时任务页同文案）
+  // 无实例门：加载中/加载失败/真空态/待选中四态各自诚实（见 InstanceRequiredState）
   if (!instanceId) {
-    return (
-      <EmptyState
-        icon={ServerOff}
-        title="暂无服务器实例"
-        hint="请先在服务端创建 MC 服务器实例"
-        action={{ label: '前往实例管理', onClick: () => navigate('/instances') }}
-      />
-    )
+    return <InstanceRequiredState />
   }
 
   const backups = backupsQuery.data ?? []
@@ -187,7 +174,7 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
       </div>
 
       {/* 快照机制说明（subtle 小字；保留策略服务端可配且 API 未暴露，不硬编码数值——避免与服务端实际配置漂移） */}
-      <p className="px-4 text-mcs-xs text-mcs-text-subtle">
+      <p className="px-4 text-mcs-xs text-mcs-text-muted">
         快照备份：未修改文件零拷贝增量传输，超出保留策略自动清理（默认保留策略见服务端配置）
       </p>
 
@@ -296,7 +283,7 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
           </div>
           {restoreTarget && (
             <div className="flex items-center gap-1.5">
-              <CalendarClock className="size-3 shrink-0 text-mcs-text-subtle" aria-hidden />
+              <CalendarClock className="size-3 shrink-0 text-mcs-text-muted" aria-hidden />
               <span>
                 快照时间：{[formatBackupDate(restoreTarget.createdAt), formatBackupSize(restoreTarget.size)].filter(Boolean).join(' · ')}
               </span>
@@ -316,7 +303,7 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
             value={restoreInput}
             onChange={(e) => setRestoreInput(e.target.value)}
             placeholder={instanceName}
-            className="h-9 rounded-mcs-md border border-mcs-error-border bg-mcs-bg-default px-3 font-mono text-mcs-sm text-mcs-text-default outline-none placeholder:text-mcs-text-subtle focus:border-mcs-error-fg"
+            className="h-9 rounded-mcs-md border border-mcs-border-default bg-mcs-bg-default px-3 font-mono text-mcs-sm text-mcs-text-default outline-none placeholder:text-mcs-text-muted focus:border-mcs-error-fg focus:ring-1 focus:ring-mcs-focus-ring"
           />
         </div>
       </ConfirmDialog>
@@ -352,7 +339,7 @@ function BackupRow({
 }) {
   const status = backup.status
   const tone = backupStatusTone(status)
-  const toneClasses = TONE_CLASSES[tone]
+  const iconToneClasses = toneClasses(tone)
   const name = backup.name
   const isInProgress = status === 'creating' || status === 'restoring'
   const isLegacy = isLegacyFormat(backup.format)
@@ -393,7 +380,7 @@ function BackupRow({
     <div className="flex items-center gap-3 px-4 py-3">
       {/* 状态图标（tone 浅底；备份中/恢复中转圈，失败 error 图标，其余硬盘图标） */}
       <span
-        className={cn('flex size-9 shrink-0 items-center justify-center rounded-mcs-sm', toneClasses)}
+        className={cn('flex size-9 shrink-0 items-center justify-center rounded-mcs-sm', iconToneClasses)}
         aria-hidden
       >
         {isInProgress ? (

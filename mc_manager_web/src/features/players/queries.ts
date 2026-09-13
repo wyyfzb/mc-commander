@@ -1,6 +1,6 @@
 /**
  * 玩家域 TanStack Query hooks
- * - usePlayers：全量玩家列表，5s 轮询，WS 事件 invalidate
+ * - usePlayers：全量玩家列表，30s 保底轮询，WS 事件 invalidate
  * - usePlayerDetails：单玩家详情（列表 RCON 注入的超集字段独立端点）
  * - usePlayerBans：封禁记录，打开期间 30s 轮询
  */

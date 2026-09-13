@@ -8,6 +8,7 @@
  * - ISO「T」分隔格式与该口径字符串比较会失配（'T' 0x54 > ' ' 0x20，
  *   导致当日记录被错误排除），因此前端必须先换算成同格式再传参
  */
+import { toIsoDate } from '@/lib/mc-calendar'
 
 /** 本地日历日区间（yyyy-MM-dd） */
 export interface TimeRange {
@@ -15,11 +16,8 @@ export interface TimeRange {
   end: string
 }
 
-/** Date → 本地日历日 yyyy-MM-dd */
-export function localDateStr(d: Date): string {
-  const p = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
-}
+/** Date → 本地日历日 yyyy-MM-dd（与 lib/mc-calendar 同口径，收编避免双份实现） */
+export const localDateStr = toIsoDate
 
 /** Date → 服务器口径 UTC「YYYY-MM-DD HH:MM:SS」 */
 export function toServerUtc(d: Date): string {

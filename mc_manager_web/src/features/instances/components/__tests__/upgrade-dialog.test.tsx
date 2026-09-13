@@ -9,7 +9,7 @@
  * mock 数据为结构占位虚构（虚构实例/版本），严禁真实服务器信息
  */
 import { describe, it, expect, beforeEach, afterAll, beforeAll, vi } from 'vitest'
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { setupServer } from 'msw/node'
@@ -72,9 +72,9 @@ beforeEach(() => {
 describe('UpgradeDialog', () => {
   it('渲染：类型三卡默认 vanilla + 警示条 + 开始升级禁用（未选版本）', () => {
     renderDialog()
-    expect(screen.getByRole('button', { name: 'Vanilla' })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByRole('button', { name: 'Paper' })).toHaveAttribute('aria-pressed', 'false')
-    expect(screen.getByRole('button', { name: 'Purpur' })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'Vanilla' })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByRole('radio', { name: 'Paper' })).toHaveAttribute('aria-checked', 'false')
+    expect(screen.getByRole('radio', { name: 'Purpur' })).toBeInTheDocument()
     expect(screen.getByText('升级须知')).toBeInTheDocument()
     expect(screen.getByText(/当前版本 1\.21\.1/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '开始升级' })).toBeDisabled()
@@ -106,8 +106,8 @@ describe('UpgradeDialog', () => {
     await selectVersion(user, '1.21.4')
     expect(screen.getByRole('combobox')).toHaveTextContent('1.21.4')
 
-    await user.click(screen.getByRole('button', { name: 'Paper' }))
-    expect(screen.getByRole('button', { name: 'Paper' })).toHaveAttribute('aria-pressed', 'true')
+    await user.click(screen.getByRole('radio', { name: 'Paper' }))
+    expect(screen.getByRole('radio', { name: 'Paper' })).toHaveAttribute('aria-checked', 'true')
     // 版本已重置为占位，且按钮回到禁用
     expect(screen.getByRole('combobox')).toHaveTextContent('选择版本')
     expect(screen.getByRole('button', { name: '开始升级' })).toBeDisabled()
@@ -241,4 +241,20 @@ describe('UpgradeDialog', () => {
     expect(prog!.percent).toBe(90)
     expect(prog!.detail).toBe('正在校验新版本…')
   })
+
+  it('服务端类型单选组：方向键移动即选中，aria-checked 与焦点同步', () => {
+    renderDialog()
+    const group = screen.getByRole('radiogroup', { name: '服务端类型' })
+    const [vanilla, paper, purpur] = within(group).getAllByRole('radio')
+    expect(vanilla).toHaveAttribute('aria-checked', 'true')
+
+    fireEvent.keyDown(group, { key: 'ArrowRight' })
+    expect(paper).toHaveAttribute('aria-checked', 'true')
+    expect(document.activeElement).toBe(paper)
+
+    fireEvent.keyDown(group, { key: 'End' })
+    expect(purpur).toHaveAttribute('aria-checked', 'true')
+    expect(vanilla).toHaveAttribute('aria-checked', 'false')
+  })
+
 })

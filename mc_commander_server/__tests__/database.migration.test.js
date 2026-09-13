@@ -25,8 +25,8 @@ describe('数据库 v5 迁移 - scheduled_tasks.last_run_status', () => {
     fs.rmSync(config.dataDir, { recursive: true, force: true });
   });
 
-  it('user_version 升到 10（v5→v6→v7→v8→v9→v10 连续）', () => {
-    expect(db.pragma('user_version', { simple: true })).toBe(10);
+  it('user_version 升到 11（v5→v6→…→v10→v11 连续）', () => {
+    expect(db.pragma('user_version', { simple: true })).toBe(11);
   });
 
   it('v10：task_run_history 表存在且随任务级联删除', () => {

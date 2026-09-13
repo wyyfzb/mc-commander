@@ -31,6 +31,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { SEMANTIC_TONE_CLASSES, type SemanticTone } from '@/components/mcs/tone'
 import { formatClock, formatDurationSec, formatDurationSecFull, formatFullDateTime } from '@/lib/format'
 import type { Player, PlayerEvent, PlayerSession } from '@/api/types'
 
@@ -60,50 +61,27 @@ interface OfflineNode {
   end: string
 }
 
+/** 事件中性档（离开：无成败含义，压低存在感）——三件套拆给图标与徽章两处用 */
+const EVENT_NEUTRAL = {
+  color: 'text-mcs-text-muted',
+  badge: 'border-mcs-border-muted bg-mcs-bg-muted',
+}
+
+/** 语义档 → 事件行用的「前景 + 描边填充」（色值取自 components/mcs/tone，勿在此手抄） */
+function eventTone(tone: SemanticTone) {
+  const c = SEMANTIC_TONE_CLASSES[tone]
+  return { color: c.text, badge: `${c.border} ${c.bg}` }
+}
+
 /** 事件类型 → 语义色+图标+中文标签（契约映射，--mcs-* token） */
 const EVENT_META: Record<string, { label: string; icon: LucideIcon; color: string; badge: string }> = {
-  join: {
-    label: '进入',
-    icon: LogIn,
-    color: 'text-mcs-success-fg',
-    badge: 'border-mcs-success-border bg-mcs-success-bg-subtle',
-  },
-  leave: {
-    label: '离开',
-    icon: LogOut,
-    color: 'text-mcs-text-muted',
-    badge: 'border-mcs-border-muted bg-mcs-bg-muted',
-  },
-  death: {
-    label: '死亡',
-    icon: Skull,
-    color: 'text-mcs-error-fg',
-    badge: 'border-mcs-error-border bg-mcs-error-bg-subtle',
-  },
-  respawn: {
-    label: '复活',
-    icon: RotateCcw,
-    color: 'text-mcs-info-fg',
-    badge: 'border-mcs-info-border bg-mcs-info-bg-subtle',
-  },
-  achievement: {
-    label: '获得进度',
-    icon: Star,
-    color: 'text-mcs-accent-fg',
-    badge: 'border-mcs-accent-border bg-mcs-accent-bg-subtle',
-  },
-  sleep: {
-    label: '入睡',
-    icon: Moon,
-    color: 'text-mcs-purple-fg',
-    badge: 'border-mcs-purple-border bg-mcs-purple-bg-subtle',
-  },
-  wake: {
-    label: '起床',
-    icon: Sunrise,
-    color: 'text-mcs-warning-fg',
-    badge: 'border-mcs-warning-border bg-mcs-warning-bg-subtle',
-  },
+  join: { label: '进入', icon: LogIn, ...eventTone('success') },
+  leave: { label: '离开', icon: LogOut, ...EVENT_NEUTRAL },
+  death: { label: '死亡', icon: Skull, ...eventTone('error') },
+  respawn: { label: '复活', icon: RotateCcw, ...eventTone('info') },
+  achievement: { label: '获得进度', icon: Star, ...eventTone('accent') },
+  sleep: { label: '入睡', icon: Moon, ...eventTone('purple') },
+  wake: { label: '起床', icon: Sunrise, ...eventTone('warning') },
 }
 
 const EMPTY_STATS = {
@@ -173,7 +151,7 @@ export function LogTab({ player }: LogTabProps) {
     return (
       <div className="flex flex-col items-center gap-2 rounded-mcs-md border border-mcs-border-muted px-6 py-12">
         <History className="size-6 text-mcs-text-muted" aria-hidden />
-        <p className="text-mcs-sm text-mcs-text-subtle">暂无日志数据</p>
+        <p className="text-mcs-sm text-mcs-text-muted">暂无日志数据</p>
       </div>
     )
   }
@@ -202,7 +180,7 @@ export function LogTab({ player }: LogTabProps) {
           <div className="grid flex-1 grid-cols-3 gap-2">
             <StatCell label="总在线" value={formatDurationSec(stats.totalOnline)} />
             <StatCell label="累计登录" value={`${stats.loginCount} 次`} />
-            <StatCell label="已离线" value={formatDurationSec(stats.offlineSince)} color="text-mcs-text-subtle" />
+            <StatCell label="已离线" value={formatDurationSec(stats.offlineSince)} color="text-mcs-text-muted" />
             <StatCell label="死亡" value={`${stats.deathCount} 次`} color="text-mcs-error-fg" />
             <StatCell label="进度" value={`${stats.achievementCount} 个`} color="text-mcs-accent-fg" />
             <StatCell label="入睡" value={`${stats.sleepCount} 次`} color="text-mcs-info-fg" />
@@ -257,7 +235,7 @@ function SessionRow({
         type="button"
         aria-expanded={!collapsed}
         onClick={() => onToggle(index)}
-        className="flex w-full items-center gap-1.5 rounded-mcs-xs px-1.5 py-1 text-left hover:bg-mcs-bg-hover"
+        className="flex w-full items-center gap-1.5 rounded-mcs-xs px-1.5 py-1 text-left hover:bg-mcs-state-hover"
       >
         {collapsed ? (
           <ChevronRight className="size-3.5 shrink-0 text-mcs-text-muted" aria-hidden />
@@ -270,7 +248,7 @@ function SessionRow({
       {!collapsed && (
         <div className="ml-4 border-l border-mcs-border-muted pl-3 pb-1">
           {events.length === 0 ? (
-            <p className="py-1 text-mcs-xs italic text-mcs-text-subtle">（无事件记录）</p>
+            <p className="py-1 text-mcs-xs italic text-mcs-text-muted">（无事件记录）</p>
           ) : (
             events.map((e, i) => <EventRow key={i} event={e} />)
           )}
@@ -282,7 +260,7 @@ function SessionRow({
 
 /** 单个事件行：图标 + 标签 + 消息 + 完整时间（语义色按契约映射） */
 function EventRow({ event }: { event: PlayerEvent }) {
-  const meta = EVENT_META[event.type] ?? { label: '事件', icon: Circle, color: 'text-mcs-text-muted', badge: 'border-mcs-border-muted bg-mcs-bg-muted' }
+  const meta = EVENT_META[event.type] ?? { label: '事件', icon: Circle, ...EVENT_NEUTRAL }
   const Icon = meta.icon
   // 成就/挑战消息去前缀（JS String.replace 仅替换首个匹配）
   const message =
@@ -301,7 +279,7 @@ function EventRow({ event }: { event: PlayerEvent }) {
         {label}
       </span>
       <span className="min-w-0 flex-1 truncate text-mcs-xs text-mcs-text-default">{message}</span>
-      <span className="shrink-0 font-mono text-mcs-2xs text-mcs-text-subtle">{formatFullDateTime(event.timestamp)}</span>
+      <span className="shrink-0 font-mono text-mcs-2xs text-mcs-text-muted">{formatFullDateTime(event.timestamp)}</span>
     </div>
   )
 }
@@ -317,7 +295,7 @@ function OfflineRow({ node }: { node: OfflineNode }) {
       <span className="min-w-0 flex-1 truncate text-mcs-xs text-mcs-text-muted">
         离线 · {formatDurationSecFull(node.durationSec)}
       </span>
-      <span className="shrink-0 font-mono text-mcs-2xs text-mcs-text-subtle">
+      <span className="shrink-0 font-mono text-mcs-2xs text-mcs-text-muted">
         {formatClock(node.start)} ~ {formatClock(node.end)}
       </span>
     </div>
@@ -328,7 +306,7 @@ function OfflineRow({ node }: { node: OfflineNode }) {
 function StatCell({ label, value, color = 'text-mcs-text-default' }: { label: string; value: string; color?: string }) {
   return (
     <div className="flex min-w-0 flex-col gap-0.5 rounded-mcs-xs bg-mcs-bg-muted px-2 py-1.5">
-      <span className="text-mcs-2xs text-mcs-text-subtle">{label}</span>
+      <span className="text-mcs-2xs text-mcs-text-muted">{label}</span>
       <span className={`truncate font-mono text-mcs-sm font-medium tabular-nums ${color}`}>{value}</span>
     </div>
   )

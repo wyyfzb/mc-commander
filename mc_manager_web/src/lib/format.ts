@@ -95,18 +95,6 @@ export function formatClock(
   return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`
 }
 
-/**
- * SQLite CURRENT_TIMESTAMP（UTC 无时区标记，如 "2026-08-15 01:05:00"）→ 本地 MM-dd HH:mm。
- * 兼容已带 T（含时区标记）的 ISO 输入；解析失败原样返回输入（展示服务端原始值兜底）。
- */
-export function formatUtcNaive(utcNaive: string): string {
-  const d = new Date(
-    utcNaive.includes('T') ? utcNaive : `${utcNaive.replace(' ', 'T')}Z`,
-  )
-  if (Number.isNaN(d.getTime())) return utcNaive
-  return `${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`
-}
-
 /** 通知时间：今天 HH:mm / 昨天 HH:mm / 更早 MM-dd HH:mm */
 export function formatNotificationTime(timestamp: number, now = Date.now()): string {
   const d = new Date(timestamp)
@@ -146,6 +134,25 @@ export function worldTimePhase(worldTime: number | null | undefined): string {
   if (t < 13000) return '黄昏'
   if (t < 18000) return '夜晚'
   return '午夜'
+}
+
+/**
+ * 存档大小（GB 数值）→ 数值与单位拆分（CJK 单位拆出 mcs-num 的展示约定）。
+ * <1GB 换 MB（0.6279 GB 显示「643 MB」而非误导性的「0.6」）；≥1GB 保留一位小数 GB
+ */
+export function worldSizeParts(sizeGB: number | null | undefined): { value: string; unit: string } {
+  if (sizeGB == null || !Number.isFinite(sizeGB) || sizeGB <= 0) return { value: '0', unit: 'GB' }
+  if (sizeGB < 1) return { value: String(Math.round(sizeGB * 1024)), unit: 'MB' }
+  return { value: sizeGB.toFixed(1), unit: 'GB' }
+}
+
+/** 存档大小统一展示（实例卡/世界页共用）：兼容 number 与数字字符串（UXT-17 两端类型不一） */
+export function formatWorldSize(raw: string | number | null | undefined): string {
+  if (raw == null || raw === '') return '—'
+  const gb = typeof raw === 'number' ? raw : parseFloat(raw)
+  if (Number.isNaN(gb)) return '—'
+  const { value, unit } = worldSizeParts(gb)
+  return `${value} ${unit}`
 }
 
 /** 秒基聚合分解共享核心（负值按 0 处理）：formatDurationSec/Full 两套输出语义共用 */

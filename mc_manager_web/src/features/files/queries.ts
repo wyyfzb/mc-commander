@@ -16,12 +16,7 @@ import {
   apiUploadFile,
 } from '@/api/files'
 import { useConnectionStore } from '@/stores/connection'
-
-/** 计算文件路径的父目录（与列表请求的 dir 参数格式一致：'/' 前缀风格） */
-function parentDirOf(filePath: string): string {
-  const idx = filePath.lastIndexOf('/')
-  return idx <= 0 ? '/' : filePath.slice(0, idx)
-}
+import { parentDirOf } from './path-utils'
 
 /** 目录列表（无轮询；保存/删除后主动失效，避免轮询打扰编辑） */
 export function useFileList(instanceId: string | null, dir: string) {

@@ -17,6 +17,7 @@ import { useInstanceLogs } from '@/api/queries'
 import { apiGet } from '@/api/client'
 import { getFriendlyErrorText } from '@/api/errors'
 import { formatLogFileName } from '@/lib/format'
+import { primaryModifierLabel } from '@/lib/platform'
 import { copyText } from '@/lib/clipboard'
 import { useUiStore } from '@/stores/ui'
 import type { LogEntry } from '@/api/types'
@@ -27,7 +28,7 @@ import type { LogLevel, TerminalLogEntry } from '@/lib/terminal-log'
  * - 独立深底（--mcs-bg-subtle）+ 等宽；级别四色编码（无文字前缀，仅颜色）
  * - 缓冲 2000 条（store，切页不丢）；自动滚动（上滚 >60px 暂停）
  * - JVM 警告默认隐藏（眼睛切换）；清空；下载日志；终端内搜索
- *   （放大镜/Ctrl+F 打开，SearchAddon 装饰高亮 + n/m 计数，Esc 关闭清除回焦点）
+ *   （放大镜 / Ctrl/⌘+F 打开，SearchAddon 装饰高亮 + n/m 计数，Esc 关闭清除回焦点）
  */
 
 /** 级别 → ANSI 前景色序号（xterm theme 调色板映射 token） */
@@ -99,8 +100,6 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
   const renderedCountRef = useRef(0)
   const autoScrollRef = useRef(true)
   const srLiveRef = useRef<HTMLDivElement>(null)
-  // 停止标记行：一旦写入（或随全量重写清屏消失）由增量渲染按运行态补写，两处共用标记防重复
-  const stoppedMarkRef = useRef(false)
   const theme = useUiStore((s) => s.theme)
   const autoScrollEnabled = useUiStore((s) => s.terminalAutoScroll)
   // onScroll 注册于 mount effect，闭包捕获首渲染值——ref 同步最新偏好
@@ -119,7 +118,7 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
   const showJvmWarningsRef = useRef(showJvmWarnings)
   const [downloading, setDownloading] = useState(false)
   const [copied, setCopied] = useState(false)
-  // 终端内搜索（SearchAddon；canvas 渲染下浏览器原生 Ctrl+F 对终端内容无效）
+  // 终端内搜索（SearchAddon；canvas 渲染下浏览器原生 Ctrl/⌘+F 对终端内容无效）
   // 状态收敛单对象：实例切换时在渲染期整体重置（React 官方 adjusting-state 模式，避免 effect 级联 setState）
   const searchAddonRef = useRef<SearchAddon | null>(null)
   const [search, setSearch] = useState<{
@@ -141,10 +140,17 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
     }
   }, [instanceId, logsQuery.data, fillHistory])
 
-  // 实例切换 → store 清空旧缓冲；搜索装饰对应旧缓冲一并清除（外部系统调用，无 setState）
+  // 实例切换 → store 清空旧缓冲；xterm 必须同步 clear + 重置增量计数，
+  // 否则 buffer 归零瞬间「等待服务器日志」占位浮在旧实例日志上重叠，
+  // 且旧日志残留污染新实例视图（fillHistory 回填后从 0 重渲染）
   useEffect(() => {
     pushNothing(instanceId)
     searchAddonRef.current?.clearDecorations()
+    const term = xtermRef.current
+    if (term) {
+      term.clear()
+      renderedCountRef.current = 0
+    }
   }, [instanceId, pushNothing])
 
   // xterm 初始化（一次）
@@ -165,8 +171,8 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
     const searchAddon = new SearchAddon()
     term.loadAddon(searchAddon)
     searchAddon.onDidChangeResults((r) => setSearch((s) => ({ ...s, result: { resultIndex: r.resultIndex, resultCount: r.resultCount } })))
-    // Ctrl+F：仅终端聚焦时生效（attachCustomKeyEventHandler 只在 xterm 持有焦点时触发，
-    // dashboard 其他区域浏览器原生查找不受影响）。canvas 渲染下原生 Ctrl+F 对终端内容
+    // Ctrl/⌘+F：仅终端聚焦时生效（attachCustomKeyEventHandler 只在 xterm 持有焦点时触发，
+    // dashboard 其他区域浏览器原生查找不受影响）。canvas 渲染下原生 Ctrl/⌘+F 对终端内容
     // 无法命中，preventDefault 抑制浏览器查找弹窗并转为打开终端内搜索。
     term.attachCustomKeyEventHandler((e) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
@@ -184,6 +190,10 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
 
     const onResize = () => fit.fit()
     window.addEventListener('resize', onResize)
+    // 容器尺寸变化同样要 refit：停止状态条显隐会挤压终端区高度而 window 不变，
+    // 画布保持旧高度会溢出容器，绝对定位层盖住状态条（UXT-24 实测）
+    const ro = new ResizeObserver(() => fit.fit())
+    ro.observe(containerRef.current)
 
     // 自动滚动：用户上滚 >60px 暂停，回到底部恢复；偏好关闭（B5）则恒不跟随
     term.onScroll(() => {
@@ -197,6 +207,7 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
 
     return () => {
       window.removeEventListener('resize', onResize)
+      ro.disconnect()
       // addon 随 term.dispose 一并释放；refs 同步置空避免悬垂
       term.dispose()
       xtermRef.current = null
@@ -218,12 +229,16 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
   useEffect(() => {
     const term = xtermRef.current
     if (!term) return
+    // 缓冲归零联动清屏：启动/重启路径经 store.resetForRestart 清缓冲，
+    // xterm 画布必须同步清——否则当次运行的新日志追加在上一轮渲染行后残留（UXT-24）
+    if (buffer.length === 0 && renderedCountRef.current > 0) {
+      term.clear()
+      renderedCountRef.current = 0
+    }
     if (showJvmWarningsRef.current !== showJvmWarnings) {
       showJvmWarningsRef.current = showJvmWarnings
       term.clear()
       renderedCountRef.current = 0
-      // 停止标记行随 clear 消失，重写后按当前运行态补写
-      stoppedMarkRef.current = false
     }
     const rendered = renderedCountRef.current
     if (buffer.length === rendered) return
@@ -236,11 +251,6 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
       term.write(`\x1b[${bold}${ansi}m${entry.text}\x1b[0m\r\n`)
     }
     renderedCountRef.current = buffer.length
-    // 眼睛切换重写后：停止态补写标记行（主路径停止标记由下方 effect 负责，标记防重复）
-    if (!isRunning && buffer.length > 0 && !stoppedMarkRef.current) {
-      term.write('\x1b[3m—— 实例已停止，以上为最后日志 ——\x1b[0m\r\n')
-      stoppedMarkRef.current = true
-    }
     if (autoScrollRef.current) {
       term.scrollToBottom()
     }
@@ -252,25 +262,13 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
       }).map((e) => (e as TerminalLogEntry).text)
       srLiveRef.current.textContent = allVisible.slice(-SR_LINE_COUNT).join('\n')
     }
-  }, [buffer, showJvmWarnings, isRunning])
+  }, [buffer, showJvmWarnings])
 
-  // 停止标记行：实例停止且缓冲非空时追加（主路径：运行→停止；重写后补写由增量渲染负责）
-  useEffect(() => {
-    const term = xtermRef.current
-    if (!term) return
-    if (!isRunning && buffer.length > 0 && !stoppedMarkRef.current) {
-      term.write('\x1b[3m—— 实例已停止，以上为最后日志 ——\x1b[0m\r\n')
-      stoppedMarkRef.current = true
-    }
-    if (isRunning) stoppedMarkRef.current = false
-  }, [isRunning, buffer.length])
-
-  // 清空（工具栏按钮 + Ctrl+L 共用）
+  // 清空（工具栏按钮 + Ctrl/⌘+L 共用）
   const handleClear = useCallback(() => {
     clearTerminal()
     xtermRef.current?.clear()
     renderedCountRef.current = 0
-    stoppedMarkRef.current = false
     // 缓冲已清空，搜索高亮/计数随之失效
     searchAddonRef.current?.clearDecorations()
     setSearch((s) => ({ ...s, result: null }))
@@ -298,7 +296,7 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
     })
   }, [buffer])
 
-  // Ctrl+L 清屏（P0 服主肌肉记忆；window capture 覆盖输入框焦点，dashboard 内任意位置生效）
+  // Ctrl/⌘+L 清屏（P0 服主肌肉记忆；window capture 覆盖输入框焦点，dashboard 内任意位置生效）
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'l') {
@@ -377,7 +375,7 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
         <InstanceControls />
         <div className="flex items-center gap-1">
           <IconButton
-            tooltip="搜索终端内容（Ctrl+F）"
+            tooltip={`搜索终端内容（${primaryModifierLabel()}+F）`}
             tooltipSide="bottom"
             onClick={() => setSearch((s) => ({ ...s, open: !s.open }))}
             aria-label="搜索终端内容"
@@ -422,13 +420,13 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
       </div>
 
       {/* 终端区 */}
-      <div className="relative min-h-0 flex-1">
+      <div className="relative min-h-0 flex-1 overflow-hidden">
         {/* 搜索条（右上浮层）：Enter/下按钮向后、Shift+Enter/上按钮向前、Esc 关闭清除高亮回焦点终端 */}
         {search.open && (
           <div
             role="search"
             aria-label="终端内容搜索"
-            className="absolute right-2 top-2 z-10 flex items-center gap-1 rounded-mcs-md border border-mcs-border-muted bg-popover p-1 shadow-mcs-raised"
+            className="absolute right-2 top-2 z-(--mcs-z-local) flex items-center gap-1 rounded-mcs-md border border-mcs-border-muted bg-popover p-1 shadow-mcs-raised"
           >
             <Input
               value={search.query}
@@ -495,12 +493,23 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
             ))}
           </div>
         ) : buffer.length === 0 ? (
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center gap-2 text-mcs-text-subtle">
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center gap-2 text-mcs-text-muted">
             <TerminalSquare className="size-4" aria-hidden />
             <span className="text-mcs-xs">等待服务器日志...</span>
           </div>
         ) : null}
       </div>
+      {/* 停止状态条：随 isRunning 显隐的 DOM 元素而非 xterm 画布内容——
+          画布只追加不可擦除，旧实现把标记行写进画布，刷新时 isRunning
+          短暂为 false 的竞态会让「运行中」实例永久残留停止标记（UXT-24 实测） */}
+      {!isRunning && buffer.length > 0 && (
+        <div
+          className="shrink-0 border-t border-mcs-border-muted bg-mcs-bg-muted px-3 py-1.5 text-center text-mcs-2xs italic text-mcs-text-muted"
+          role="status"
+        >
+          —— 实例已停止，以上为最后日志 ——
+        </div>
+      )}
     </section>
   )
 }

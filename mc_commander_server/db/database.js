@@ -332,6 +332,25 @@ function createTables() {
     logger.info('Migration: added task_run_history table');
   }
 
+  // 迁移 v11：webhooks 渠道预设。generic=项目通用格式（X-MC-Signature 签名头），
+  // 其余为国内平台特化格式（飞书/钉钉/企微群机器人、Server酱/PushPlus 个人推送）——
+  // 各平台签名协议与消息体互不兼容（详见 webhook.service.js _buildPlatformRequest）。
+  // 存量行按 URL 域名推断归属：飞书/Lark URL 直接落 feishu（该批 webhook 的
+  // secret 已是飞书签名密钥），确保迁移后 generic 成为纯「用户显式选择」语义
+  if (userVersion < 11) {
+    try {
+      db.exec(`ALTER TABLE webhooks ADD COLUMN platform TEXT NOT NULL DEFAULT 'generic'`);
+    } catch (e) {
+      if (!e.message.includes('duplicate column')) throw e;
+    }
+    db.exec(`
+      UPDATE webhooks SET platform = 'feishu'
+      WHERE url LIKE '%open.feishu.cn/%' OR url LIKE '%open.larksuite.com/%'
+    `);
+    db.pragma('user_version = 11');
+    logger.info('Migration: added webhooks.platform column');
+  }
+
   // 管理员账号（安全主线：单管理员密码登录）。单行表 id 恒为 1；
   // totp_secret 预留 TOTP 两步验证挂靠（roadmap）
   db.exec(`

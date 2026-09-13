@@ -4,8 +4,7 @@
  *   → cron mono + 命令（有则 Terminal 图标）→「上次运行/下次运行」时间行 → 右侧启用
  *   Switch / 立即执行 / 编辑 / 删除
  * - TASK_TYPE_TONES：restart→warning / backup→info / command→purple /
- *   stop→error / start→success；tone 类统一 bg-mcs-{tone}-bg-subtle + text-mcs-{tone}-fg +
- *   border-mcs-{tone}-border（token 唯一来源 src/styles/）
+ *   stop→error / start→success；色值统一取自 components/mcs/tone（token 唯一来源 src/styles/）
  * - 时间行 formatTaskDate（MM-DD HH:mm 本地时区；null → '从未'）
  * - 容器：实底卡（风格 A 列表实底，禁 backdrop-blur）+ 行分隔；空态含新建任务按钮；加载骨架行
  */
@@ -16,13 +15,13 @@ import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { StatusPill } from '@/components/mcs/status-pill'
+import { toneClasses } from '@/components/mcs/tone'
 import { EmptyState } from '@/components/mcs/empty-state'
 import {
   TASK_TYPE_LABELS,
   TASK_TYPE_TONES,
   formatNextRunCountdown,
   formatTaskDate,
-  type TaskTypeTone,
 } from '@/lib/mc-deploy'
 import { useNow } from '@/hooks/use-now'
 import { cronDescription } from '@/lib/mc-cron'
@@ -43,15 +42,6 @@ export interface TaskListProps {
   onDelete: (task: ScheduledTask) => void
   /** 空态「新建任务」按钮（页面打开创建对话框） */
   onNewTask: () => void
-}
-
-/** tone → 图标/徽章类（完整字面量类名，Tailwind 主题色静态生成；全 token 引用） */
-const TONE_CLASSES: Record<TaskTypeTone, string> = {
-  warning: 'bg-mcs-warning-bg-subtle text-mcs-warning-fg border-mcs-warning-border',
-  info: 'bg-mcs-info-bg-subtle text-mcs-info-fg border-mcs-info-border',
-  purple: 'bg-mcs-purple-bg-subtle text-mcs-purple-fg border-mcs-purple-border',
-  error: 'bg-mcs-error-bg-subtle text-mcs-error-fg border-mcs-error-border',
-  success: 'bg-mcs-success-bg-subtle text-mcs-success-fg border-mcs-success-border',
 }
 
 /**
@@ -147,7 +137,7 @@ function TaskRow({
   onDelete: (task: ScheduledTask) => void
 }) {
   const tone = TASK_TYPE_TONES[task.type]
-  const toneClasses = TONE_CLASSES[tone]
+  const iconToneClasses = toneClasses(tone)
   const lastRunMeta = LAST_RUN_STATUS[task.lastRunStatus]
   /** 下次执行倒计时文案（null → 保持「从未」） */
   const nextRunCountdown = formatNextRunCountdown(task.nextRunAt, now)
@@ -156,7 +146,7 @@ function TaskRow({
     <div className="flex items-center gap-3 px-4 py-3">
       {/* 36px 类型图标（tone 浅底 + tone 前景） */}
       <span
-        className={cn('flex size-9 shrink-0 items-center justify-center rounded-mcs-sm', toneClasses)}
+        className={cn('flex size-9 shrink-0 items-center justify-center rounded-mcs-sm', iconToneClasses)}
         aria-hidden
       >
         <Clock className="size-4.5" aria-hidden />
@@ -175,15 +165,15 @@ function TaskRow({
 
         {/* cron mono + 中文可读描述（cronDescription 与编辑器预览同源）+ 命令（有则 Terminal 图标） */}
         <div className="mt-1 flex min-w-0 items-center gap-1.5 text-mcs-xs">
-          <Timer className="size-3 shrink-0 text-mcs-text-subtle" aria-hidden />
+          <Timer className="size-3 shrink-0 text-mcs-text-muted" aria-hidden />
           <span className="shrink-0 font-mono text-mcs-text-muted">{task.cronExpression}</span>
           {(() => {
             const desc = cronDescription(task.cronExpression)
-            return desc ? <span className="shrink-0 text-mcs-text-subtle">{desc}</span> : null
+            return desc ? <span className="shrink-0 text-mcs-text-muted">{desc}</span> : null
           })()}
           {task.command !== null && task.command.length > 0 && (
             <>
-              <Terminal className="size-3 shrink-0 text-mcs-text-subtle" aria-hidden />
+              <Terminal className="size-3 shrink-0 text-mcs-text-muted" aria-hidden />
               <span className="truncate font-mono text-mcs-text-muted" title={task.command}>
                 {task.command}
               </span>

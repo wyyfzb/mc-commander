@@ -39,25 +39,26 @@ export function _getWorldSize() {
   const worldPath = path.join(this.serverPath, levelName);
   if (!fs.existsSync(worldPath)) return 0;
 
-  // 带失效机制的缓存（与 _readSeedFromLevelDat 同型）：记录世界目录的
-  // mtimeMs/size，每次调用仅对该目录做一次 statSync 校验，目录结构或存档
-  // 变化（mtime/size 变化）才重算。worldSize 是低频变化数据（仅存档落盘
-  // 时变），若每次轮询都对全树做 readdirSync+statSync 同步遍历，数万文件
-  // 目录单次遍历约 3 秒，会同步阻塞 Node 事件循环（HTTP/WS/RCON/定时器
-  // 全部延迟）。目录被删除/替换（恢复备份、版本升级等）后 mtime/size 变化
-  // 即自动失效重算，对新旧 MC 版本目录结构差异（含 26.x 新增 dimension/
-  // minecraft:* 层级）同样生效，无需版本特判。仅成功时缓存：世界目录
-  // 不存在/遍历失败不缓存，便于世界生成后立即重算。
-  if (this._worldSizeCache !== undefined) {
-    const { value, mtimeMs, size } = this._worldSizeCache;
+  // 失效判定双条件：
+  // ① dirty 标记——存档完成（"Saved the game"）/启动就绪（Done）/进程退出时
+  //    置位（见 output-parser.js 与 start-lifecycle.js）。世界数据写入发生在
+  //    region/ 等子目录、level.dat 为就地改写，world/ 顶层目录 mtime 不随之
+  //    变化，仅靠 ② 判定会让展示值永久陈旧（实测存档 643MB 后仍显示初值）；
+  // ② world/ 顶层目录 stat 变化（mtimeMs/size）——兜底外部替换（恢复备份、
+  //    手动放置存档文件、版本升级目录迁移）等面板不感知的事件。
+  // 重算=全树 stat 遍历，触发频率从每轮询（5s）收敛到每次存档（默认 60s）一次，
+  // 避免大地图（数万文件 ~3s 同步遍历）高频阻塞事件循环。失败时保留旧值下次重试。
+  const cache = this._worldSizeCache;
+  if (cache && !this._worldSizeDirty) {
     try {
       const st = fs.statSync(worldPath);
-      if (st.mtimeMs === mtimeMs && st.size === size) return value;
+      if (st.mtimeMs === cache.mtimeMs && st.size === cache.size) return cache.value;
     } catch {
       // 世界目录被删除/替换 → 缓存失效，重新计算
     }
     this._worldSizeCache = undefined;
   }
+  this._worldSizeDirty = false;
 
   try {
     // 遍历前先取目录 stat 作缓存键：若遍历期间目录发生变化，下次调用
@@ -89,7 +90,8 @@ export function _getWorldSize() {
     return this._worldSizeCache.value;
   } catch (err) {
     logger.warn(`[Instance ${this.id}] 计算存档大小失败:`, err.message);
-    return 0;
+    // 遍历/stat 失败（瞬时 IO 错误等）：回退旧缓存值，避免面板把有效存档显示为 0
+    return this._worldSizeCache?.value ?? 0;
   }
 }
 

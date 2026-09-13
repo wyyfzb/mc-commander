@@ -14,6 +14,7 @@ import express from 'express';
 import request from 'supertest';
 import Database from 'better-sqlite3';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import {
   apiEnvelopeSchema,
@@ -26,11 +27,13 @@ import {
   overviewDataSchema,
 } from '@mc-commander/schemas';
 
-const TEST_DIR = './test-schema-contract-data';
+// 临时库放系统临时目录（与 admin-auth.test.js 同款）：此前落在服务端工作目录内，
+// 而 error-codes.contract.test.js 会递归扫描该目录树——本文件的建/删与扫描并发时
+// readdirSync 撞 ENOENT，整个契约检查随机变红。
+const TEST_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'mcs-schema-contract-'));
 let db;
 
 beforeAll(() => {
-  if (!fs.existsSync(TEST_DIR)) fs.mkdirSync(TEST_DIR, { recursive: true });
   db = new Database(path.join(TEST_DIR, 'test.db'));
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
@@ -41,7 +44,8 @@ beforeAll(() => {
   )`);
   db.exec(`CREATE TABLE IF NOT EXISTS webhooks (
     id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, url TEXT NOT NULL,
-    secret TEXT, events TEXT DEFAULT '[]', instance_id TEXT, is_enabled INTEGER DEFAULT 1,
+    secret TEXT, platform TEXT NOT NULL DEFAULT 'generic', events TEXT DEFAULT '[]',
+    instance_id TEXT, is_enabled INTEGER DEFAULT 1,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (instance_id) REFERENCES instances(id) ON DELETE CASCADE
   )`);

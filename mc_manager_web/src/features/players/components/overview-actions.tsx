@@ -188,7 +188,7 @@ export function OverviewActions({
       <Button
         variant="outline"
         size="sm"
-        className="border-mcs-error-border text-mcs-error-fg hover:bg-mcs-bg-hover"
+        className="border-mcs-error-border text-mcs-error-fg hover:bg-mcs-state-hover"
         disabled={!player.isOnline}
         onClick={onClearInventory}
       >
@@ -199,7 +199,7 @@ export function OverviewActions({
       <Button
         variant="outline"
         size="sm"
-        className="border-mcs-error-border text-mcs-error-fg hover:bg-mcs-bg-hover"
+        className="border-mcs-error-border text-mcs-error-fg hover:bg-mcs-state-hover"
         disabled={!player.isOnline}
         onClick={onKick}
       >
@@ -210,7 +210,7 @@ export function OverviewActions({
       <Button
         variant="outline"
         size="sm"
-        className="border-mcs-error-border text-mcs-error-fg hover:bg-mcs-bg-hover"
+        className="border-mcs-error-border text-mcs-error-fg hover:bg-mcs-state-hover"
         onClick={() => onOpenBanDialog(player)}
       >
         <Ban aria-hidden />

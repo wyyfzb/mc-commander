@@ -1,5 +1,6 @@
 import { http, HttpResponse } from 'msw'
 import { LEGACY_GAMERULES } from '@/lib/mc-gamerules'
+import { todayIso } from '@/lib/mc-calendar'
 import type {
   BackupItem,
   BanRecord,
@@ -249,7 +250,7 @@ export const mockWorldInfo: WorldInfo = {
   gameDays: 42,
   dimensions: [
     { name: '主世界', icon: '🌍', playerCount: 2 },
-    { name: '地狱', icon: '🔥', playerCount: 1 },
+    { name: '下界', icon: '🔥', playerCount: 1 },
     { name: '末地', icon: '🟣', playerCount: 0 },
   ],
 }
@@ -397,7 +398,7 @@ export const mockBans: BanRecord[] = [  {
 ]
 
 /** 部署失败开关（测试注入：结构占位，非真实错误） */
-export const deployMock = { shouldFail: false }
+export const deployMock: { shouldFail: boolean; lastBody: { eula?: boolean } | null } = { shouldFail: false, lastBody: null }
 
 /** 实例列表运行态开关（测试注入：false → 卡片显示启动按钮，供 EULA 首启用例） */
 export const instanceListMock = { running: true }
@@ -437,7 +438,7 @@ export const mockBackups: BackupItem[] = [
   {
     id: 11,
     instanceId: 'demo',
-    name: '手动备份 2026-08-14',
+    name: '手动备份',
     description: null,
     type: 'manual',
     size: 524_288_000,
@@ -489,7 +490,9 @@ const backupHandlers = [
     ok({
       id: 12,
       instanceId: 'demo',
-      name: '手动备份 2026-08-15',
+      // 与服务端默认命名同源（routes/backups.js：未传 name 时用 Backup_<本地日期>，
+      // 见服务端 utils/local-date.js——UTC 口径会在东八区凌晨写成昨天）
+      name: `Backup_${todayIso()}`,
       description: null,
       type: 'manual',
       size: 0,
@@ -542,7 +545,7 @@ export const handlers = [
         {
           id: 12,
           taskId: 1,
-          runAt: '2026-09-02 04:00:05',
+          runAt: '2026-09-02T04:00:05.000Z',
           status: 'success',
           error: null,
           durationMs: 850,
@@ -550,7 +553,7 @@ export const handlers = [
         {
           id: 11,
           taskId: 1,
-          runAt: '2026-09-01 04:00:03',
+          runAt: '2026-09-01T04:00:03.000Z',
           status: 'failed',
           error: 'RCON 不可用（虚构占位文案）',
           durationMs: 3000,
@@ -558,7 +561,7 @@ export const handlers = [
         {
           id: 10,
           taskId: 1,
-          runAt: '2026-08-31 04:00:01',
+          runAt: '2026-08-31T04:00:01.000Z',
           status: 'skipped',
           error: null,
           durationMs: null,
@@ -683,7 +686,9 @@ export const handlers = [
       instanceName?: string
       maxMemory?: string
       loaderVersion?: string
+      eula?: boolean
     }
+    deployMock.lastBody = body
     return ok({
       id: 'inst-deploy-001',
       name: body.instanceName ?? '新实例',

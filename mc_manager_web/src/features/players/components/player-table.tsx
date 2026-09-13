@@ -14,7 +14,6 @@ import {
   type ColumnDef,
   type SortingState,
 } from '@tanstack/react-table'
-import { CircleAlert } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Pagination } from '@/components/mcs/pagination'
 import { Button } from '@/components/ui/button'
@@ -22,6 +21,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import type { Player } from '@/api/types'
 import { usePlayersUiStore, type PlayerDetailTab } from '../store'
 import type { PlayerActionRequest } from '../mutations'
+import { paginatePlayerRows } from '../player-pagination'
 import { PAGE_SIZE_OPTIONS, ROW_HEIGHT, features } from './player-table-config'
 import { buildPlayerColumns, type ConfirmToggleState } from './player-table-columns'
 import { PlayerRow } from './player-table-row'
@@ -31,9 +31,6 @@ interface PlayerTableProps {
   /** 已过滤+排序的玩家列表 */
   players: Player[]
   isLoading: boolean
-  /** 加载失败时显示错误提示 + 重试按钮 */
-  isError?: boolean
-  onRetry?: () => void
   /** 未筛选总数（空态双文案判断：0=暂无玩家，>0=无匹配） */
   totalCount: number
   /** 无匹配空态的清空筛选回调（有筛选时展示 CTA，issue 343） */
@@ -50,8 +47,6 @@ interface PlayerTableProps {
 export function PlayerTable({
   players,
   isLoading,
-  isError,
-  onRetry,
   totalCount,
   onClearFilter,
   isRconConnected,
@@ -85,8 +80,11 @@ export function PlayerTable({
         toggleSelectPage,
         setConfirmToggle,
         setKickTarget,
+        pageSize,
+        pageIndex,
       }),
-    [selectedSet, onOpenDetail, onOpenBan, toggleSelect, toggleSelectPage],
+    // pageSize/pageIndex 参与表头全选范围计算，变更须重建列以刷新表头勾选态
+    [selectedSet, onOpenDetail, onOpenBan, toggleSelect, toggleSelectPage, pageSize, pageIndex],
   )
 
   const table = useTable(
@@ -100,10 +98,12 @@ export function PlayerTable({
   )
 
   const allRows = table.getRowModel().rows
-  const totalPages = pageSize === -1 ? 1 : Math.max(1, Math.ceil(allRows.length / pageSize))
-  const safePageIndex = Math.min(pageIndex, totalPages - 1)
-  const visibleRows =
-    pageSize === -1 ? allRows : allRows.slice(safePageIndex * pageSize, (safePageIndex + 1) * pageSize)
+  // 切片口径与表头「全选当前页」共用同一实现（player-pagination），勿就地重写
+  const { rows: visibleRows, pageCount: totalPages, safePageIndex } = paginatePlayerRows(
+    allRows,
+    pageSize,
+    pageIndex,
+  )
 
   // TanStack Virtual 自管内部缓存，与 React Compiler 互斥（官方不兼容清单），不可自动 memo 化
   // eslint-disable-next-line react/incompatible-library
@@ -125,27 +125,40 @@ export function PlayerTable({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto" data-density="compact">
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto">
         <table className="w-full border-collapse text-left" style={{ tableLayout: 'fixed' }}>
-          <thead className="sticky top-0 z-10 bg-mcs-bg-default">
+          <thead className="sticky top-0 z-(--mcs-z-local) bg-mcs-bg-default">
             {table.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id} className="border-b border-mcs-border-muted">
                 {headerGroup.headers.map((header) => {
                   // 数值列（延迟/在线时长/总时长）表头与 cell 同向右对齐
                   const rightAlign = ['ping', 'onlineDuration', 'totalPlayTime'].includes(header.column.id)
+                  const sorted = header.column.getIsSorted()
+                  const canSort = header.column.getCanSort()
                   return (
                     <th
                       key={header.id}
                       scope="col"
                       style={{ width: header.getSize() }}
+                      // 排序态由 aria-sort 承担：箭头是 aria-hidden 的纯视觉提示，
+                      // 不能作为唯一信息源（读屏用户拿不到「当前按哪列排、什么方向」）
+                      aria-sort={
+                        !header.isPlaceholder && canSort
+                          ? sorted === 'asc'
+                            ? 'ascending'
+                            : sorted === 'desc'
+                              ? 'descending'
+                              : 'none'
+                          : undefined
+                      }
                       className={cn(
-                        'h-9 px-2 text-mcs-xs font-medium text-mcs-text-subtle',
+                        'h-9 px-2 text-mcs-xs font-medium text-mcs-text-muted',
                         rightAlign && 'text-right',
                       )}
                     >
                       {header.isPlaceholder
                         ? null
-                        : header.column.getCanSort()
+                        : canSort
                           ? (
                             <button
                               type="button"
@@ -156,8 +169,8 @@ export function PlayerTable({
                               onClick={header.column.getToggleSortingHandler()}
                             >
                               {flexRender(header.column.columnDef.header, header.getContext())}
-                              {header.column.getIsSorted() === 'asc' && <span aria-hidden>↑</span>}
-                              {header.column.getIsSorted() === 'desc' && <span aria-hidden>↓</span>}
+                              {sorted === 'asc' && <span aria-hidden>↑</span>}
+                              {sorted === 'desc' && <span aria-hidden>↓</span>}
                             </button>
                           )
                           : (
@@ -198,18 +211,10 @@ export function PlayerTable({
             {!isLoading && pageSize === -1 && bottomPadding > 0 && <tr style={{ height: bottomPadding }} aria-hidden />}
           </tbody>
         </table>
-        {isError && !isLoading && allRows.length === 0 ? (
-          <div className="flex h-40 flex-col items-center justify-center gap-2">
-            <CircleAlert className="size-6 text-mcs-text-subtle" aria-hidden />
-            <p className="text-mcs-sm text-mcs-text-muted">加载玩家列表失败</p>
-            {onRetry && (
-              <Button variant="outline" size="sm" onClick={onRetry}>
-                重试
-              </Button>
-            )}
-          </div>
-        ) : !isLoading && allRows.length === 0 ? (
-          <div className="flex h-40 flex-col items-center justify-center gap-2 text-mcs-sm text-mcs-text-subtle">
+        {/* 错误态由页面持有（players-page 在 isError 时用 EmptyState 替换整张表，
+            避免错误被呈现为「暂无在线玩家」的误导空态），表格不再自带第二套错误 UI */}
+        {!isLoading && allRows.length === 0 ? (
+          <div className="flex h-40 flex-col items-center justify-center gap-2 text-mcs-sm text-mcs-text-muted">
             {totalCount === 0 ? '暂无在线玩家' : '没有匹配的玩家'}
             {totalCount > 0 && onClearFilter && (
               <Button variant="outline" size="sm" onClick={onClearFilter} data-testid="players-clear-filter">
@@ -220,24 +225,23 @@ export function PlayerTable({
         ) : null}
       </div>
 
-      {/* 分页器（非「全部」档）——统一 Pagination 组件 */}
-      {pageSize !== -1 && (
-        <Pagination
-          page={safePageIndex + 1}
-          totalPages={totalPages}
-          totalItems={allRows.length}
-          onPageChange={(p) => setPageIndex(p - 1)}
-          variant="numbers"
-          pageSize={pageSize}
-          pageSizeOptions={[...PAGE_SIZE_OPTIONS.filter((s) => s !== -1)]}
-          onPageSizeChange={(size) => {
-            setPageSize(size as (typeof PAGE_SIZE_OPTIONS)[number])
-            setPageIndex(0)
-          }}
-          showAllOption
-          showPageSizeSelector
-        />
-      )}
+      {/* 分页器常驻：切到「全部」档只换数据源（虚拟滚动）；分页栏若一并消失，
+          用户就没有选回其他每页条数的入口（只能刷新页面） */}
+      <Pagination
+        page={safePageIndex + 1}
+        totalPages={totalPages}
+        totalItems={allRows.length}
+        onPageChange={(p) => setPageIndex(p - 1)}
+        variant="numbers"
+        pageSize={pageSize}
+        pageSizeOptions={[...PAGE_SIZE_OPTIONS.filter((s) => s !== -1)]}
+        onPageSizeChange={(size) => {
+          setPageSize(size as (typeof PAGE_SIZE_OPTIONS)[number])
+          setPageIndex(0)
+        }}
+        showAllOption
+        showPageSizeSelector
+      />
 
       <PlayerConfirmDialogs
         confirmToggle={confirmToggle}

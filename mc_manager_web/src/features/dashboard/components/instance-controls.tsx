@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
+import { SEMANTIC_TONE_CLASSES } from '@/components/mcs/tone'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { apiGet, apiPost, ApiError } from '@/api/client'
 import { getFriendlyErrorText } from '@/api/errors'
@@ -157,14 +158,14 @@ export function InstanceControls() {
       action: '启动' as const,
       icon: Play,
       disabled: isRunning || busyAction !== null || startBusy,
-      color: 'text-mcs-success-fg',
+      color: SEMANTIC_TONE_CLASSES.success.text,
       confirm: { title: '启动服务器', description: '确定要启动服务器吗？' },
     },
     {
       action: '停止' as const,
       icon: Square,
       disabled: !isRunning || (busyAction !== null && busyAction !== '停止') || currentPhase !== null,
-      color: 'text-mcs-error-fg',
+      color: SEMANTIC_TONE_CLASSES.error.text,
       confirm: {
         title: '关闭服务器',
         description:
@@ -178,14 +179,14 @@ export function InstanceControls() {
       action: '重启' as const,
       icon: RefreshCw,
       disabled: !isRunning || (busyAction !== null && busyAction !== '重启') || currentPhase !== null,
-      color: 'text-mcs-info-fg',
+      color: SEMANTIC_TONE_CLASSES.info.text,
       confirm: { title: '重启服务器', description: '确定要重启服务器吗？重启期间玩家将断开连接。' },
     },
     {
       action: '保存' as const,
       icon: Save,
       disabled: !isRunning || busyAction !== null || currentPhase !== null,
-      color: 'text-mcs-accent-fg',
+      color: SEMANTIC_TONE_CLASSES.accent.text,
       confirm: null, // 保存无确认直接发送
     },
   ]
@@ -216,7 +217,7 @@ export function InstanceControls() {
                 )}
                 {/* 文字标签（≥480px 显示）：启停为低频高危操作，文字消除图标歧义；
                     窄视口回退纯图标（tooltip 兜底） */}
-                <span className="hidden text-mcs-xs min-[480px]:inline">{b.action}</span>
+                <span className="hidden text-mcs-xs xs:inline">{b.action}</span>
               </Button>
             </TooltipTrigger>
             <TooltipContent side="bottom">{b.action}</TooltipContent>

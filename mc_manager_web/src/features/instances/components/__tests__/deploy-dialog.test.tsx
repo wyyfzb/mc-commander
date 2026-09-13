@@ -60,6 +60,7 @@ beforeEach(() => {
   useConnectionStore.setState({ baseUrl: '', apiKey: 'test-key', status: 'ready' })
   useDeployStore.setState({ progress: null, deploying: false, lastResult: null })
   deployMock.shouldFail = false
+  deployMock.lastBody = null
   startMock.eulaRequired = false
   startMock.shouldFail = false
   startMock.calls = 0
@@ -110,10 +111,11 @@ describe('DeployDialog', () => {
     expect(screen.getByText('推荐 Java')).toBeInTheDocument()
     expect(screen.getByText('21')).toBeInTheDocument()
 
-    // EULA 勾选门控：未勾选时「部署并启动」禁用 + 提示；勾选后可点
-    const deployBtn = screen.getByRole('button', { name: '部署并启动' })
-    expect(deployBtn).toBeDisabled()
-    expect(screen.getByText('请先同意 EULA：未同意时无法启动服务器')).toBeInTheDocument()
+    // EULA 不再阻断部署：未勾选时主操作为「仅部署」（可点），勾选后变「部署并启动」
+    expect(screen.getByRole('button', { name: '仅部署' })).toBeEnabled()
+    expect(
+      screen.getByText('未勾选也可部署：eula.txt 记为 eula=false，部署后不自动启动；需在实例详情同意 EULA 后才能启动服务器。'),
+    ).toBeInTheDocument()
     await user.click(screen.getByRole('checkbox', { name: /Minecraft EULA/ }))
     expect(screen.getByRole('button', { name: '部署并启动' })).toBeEnabled()
 
@@ -124,9 +126,10 @@ describe('DeployDialog', () => {
     expect(screen.getByText('名称：我的生存服')).toBeInTheDocument()
     expect(screen.getByText('服务端：Fabric 1.21.4')).toBeInTheDocument()
     expect(screen.getByText('推荐 Java 版本：21')).toBeInTheDocument()
-    // 首启闭环：自动同意 EULA + 发启动指令，结果块展示启动状态
+    // 首启闭环：EULA 同意随部署请求下发（服务端据此写 eula.txt），随后只发启动指令
     expect(await screen.findByText('已发送启动指令，服务器正在启动（状态可在仪表盘查看）')).toBeInTheDocument()
-    expect(eulaMock.calls).toBe(1)
+    expect(deployMock.lastBody?.eula).toBe(true)
+    expect(eulaMock.calls).toBe(0)
     expect(startMock.calls).toBe(1)
 
     // 完成 → onDeployed(result) + 关闭
@@ -294,8 +297,8 @@ describe('DeployDialog', () => {
     expect(screen.queryByText('请填写实例名称')).not.toBeInTheDocument()
   })
 
-  it('EULA 勾选门控：默认不勾 + 未勾选提示；自动启动失败展示降级提示', async () => {
-    startMock.shouldFail = true // EULA 同意成功但启动指令失败
+  it('EULA 同意随请求下发；自动启动失败展示降级提示', async () => {
+    startMock.shouldFail = true // 同意已随部署下发，但启动指令失败
     renderDialog()
     const user = userEvent.setup()
 
@@ -304,11 +307,12 @@ describe('DeployDialog', () => {
     expect(await screen.findByText('部署成功')).toBeInTheDocument()
     // 自动启动失败：结果块降级提示（部署本身仍成功）
     expect(await screen.findByText('自动启动失败，可稍后在实例页手动启动')).toBeInTheDocument()
-    expect(eulaMock.calls).toBe(1)
+    expect(deployMock.lastBody?.eula).toBe(true)
+    expect(eulaMock.calls).toBe(0)
     expect(startMock.calls).toBe(1)
   })
 
-  it('未勾选 EULA 时不发自动启动请求（部署成功后无启动状态块）', async () => {
+  it('未勾选 EULA 仍可部署：eula=false 下发且不自动启动', async () => {
     renderDialog()
     const user = userEvent.setup()
 
@@ -316,8 +320,10 @@ describe('DeployDialog', () => {
     await user.click(screen.getByRole('button', { name: '下一步' }))
     await user.type(screen.getByLabelText('实例名称'), '我的生存服')
     await user.click(screen.getByRole('button', { name: '下一步' }))
-    // 不勾选 EULA（按钮禁用保护；此处直接断言禁用）
-    expect(screen.getByRole('button', { name: '部署并启动' })).toBeDisabled()
+    // 不勾选 EULA：主操作退化为「仅部署」，不再被禁用（不同意的用户也能完成部署）
+    await user.click(screen.getByRole('button', { name: '仅部署' }))
+    expect(await screen.findByText('部署成功')).toBeInTheDocument()
+    expect(deployMock.lastBody?.eula).toBe(false)
     expect(startMock.calls).toBe(0)
     expect(eulaMock.calls).toBe(0)
   })

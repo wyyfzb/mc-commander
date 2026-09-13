@@ -67,7 +67,6 @@ export function InstancesPage() {
 
   // ── 对话框状态 ──
   const [searchParams, setSearchParams] = useSearchParams()
-  const [deployOpen, setDeployOpen] = useState(() => searchParams.get('tab') === 'deploy')
   const [settingsTarget, setSettingsTarget] = useState<InstanceSummary | null>(null)
   const [upgradeTarget, setUpgradeTarget] = useState<InstanceSummary | null>(null)
   const [uninstallTarget, setUninstallTarget] = useState<InstanceSummary | null>(null)
@@ -113,15 +112,22 @@ export function InstancesPage() {
     })
   }
 
-  // ── 深链接：?tab=deploy 打开部署向导；写入 URL 保持全站一致性 ──
+  // ── 深链接：?tab=deploy 打开部署向导；URL 为单一事实源 ──
+  // 只在挂载时读一次会漏掉同路由再点（如顶栏「暂无实例，前往部署」）与前进/后退两路，
+  // 表现为 URL 已变而向导不开（点击无反应）。
+  // 写入语义：打开 push 一条历史（后退即关弹窗）；关闭 replace，避免「开→关」堆两条、
+  // 也避免用户后退时把已关掉的向导又弹回来（?focus= 清理同用 replace）
+  const deployOpen = searchParams.get('tab') === 'deploy'
   const setDeployOpenDeep = (open: boolean) => {
-    setDeployOpen(open)
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev)
-      if (open) next.set('tab', 'deploy')
-      else next.delete('tab')
-      return next
-    })
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        if (open) next.set('tab', 'deploy')
+        else next.delete('tab')
+        return next
+      },
+      open ? undefined : { replace: true },
+    )
   }
 
   const instances = instancesQuery.data ?? []
@@ -319,7 +325,7 @@ export function InstancesPage() {
             value={uninstallInput}
             onChange={(e) => setUninstallInput(e.target.value)}
             placeholder={uninstallTarget?.name ?? ''}
-            className="h-9 rounded-mcs-md border border-mcs-error-border bg-mcs-bg-default px-3 font-mono text-mcs-sm text-mcs-text-default outline-none placeholder:text-mcs-text-subtle focus:border-mcs-error-fg"
+            className="h-9 rounded-mcs-md border border-mcs-border-default bg-mcs-bg-default px-3 font-mono text-mcs-sm text-mcs-text-default outline-none placeholder:text-mcs-text-muted focus:border-mcs-error-fg focus:ring-1 focus:ring-mcs-focus-ring"
           />
         </div>
       </ConfirmDialog>

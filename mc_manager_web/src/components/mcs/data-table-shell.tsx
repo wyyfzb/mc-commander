@@ -6,6 +6,7 @@
  * children: <tbody>（仅数据就绪时渲染）
  */
 import type { ReactNode } from 'react'
+import { cn } from '@/lib/utils'
 import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyStateVisual, ErrorStateVisual } from '@/components/mcs/data-states'
 import { Pagination, type PaginationProps } from '@/components/mcs/pagination'
@@ -62,7 +63,8 @@ function SkeletonRow({ colSpan, widths }: { colSpan: number; widths: string[] })
     <tr className="border-b border-mcs-border-muted last:border-b-0" aria-hidden>
       {Array.from({ length: colSpan }, (_, i) => (
         <td key={i} className="px-3 py-2">
-          <Skeleton className="h-3.5" style={{ width: widths[i] ?? 'w-24' }} />
+          {/* 宽度按类名下发（props 契约即「宽度 class 数组」）；塞进 style 会被浏览器当非法值丢弃 */}
+          <Skeleton className={cn('h-3.5', widths[i] ?? 'w-24')} />
         </td>
       ))}
     </tr>

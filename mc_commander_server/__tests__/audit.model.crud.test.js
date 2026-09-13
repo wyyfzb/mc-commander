@@ -58,12 +58,14 @@ vi.mock('../db/database.js', () => ({
 }));
 
 const { AuditLogModel, CommandHistoryModel } = await import('../db/audit.model.js');
+const { toDbUtcString } = await import('../utils/db-time.js');
 
-// 直接插入受控 created_at 的行（ISO 格式与 prune 的 toISOString cutoff 同域可比）
+// 直接插入受控 created_at 的行。时间列一律写 CURRENT_TIMESTAMP 口径（naive UTC 串）
+// ——与生产写入同域；若写 ISO，prune 的 cutoff 口径错配恰好不可见（两者同为 ISO 才可比）。
 function insertAuditRaw(overrides = {}) {
   const o = {
     instance_id: 's1', action: 'INSTANCE_START', target_type: null, target_id: null,
-    detail: null, source: 'api', created_at: '2026-06-15T00:00:00.000Z', ...overrides,
+    detail: null, source: 'api', created_at: '2026-06-15 00:00:00', ...overrides,
   };
   const r = db.prepare(`
     INSERT INTO audit_logs (instance_id, action, target_type, target_id, detail, source, created_at)
@@ -75,7 +77,7 @@ function insertAuditRaw(overrides = {}) {
 function insertCommandRaw(overrides = {}) {
   const o = {
     instance_id: 's1', command: 'say hi', source: 'api', success: 1,
-    response: null, duration_ms: null, created_at: '2026-06-15T00:00:00.000Z', ...overrides,
+    response: null, duration_ms: null, created_at: '2026-06-15 00:00:00', ...overrides,
   };
   const r = db.prepare(`
     INSERT INTO command_history (instance_id, command, source, success, response, duration_ms, created_at)
@@ -131,10 +133,10 @@ describe('AuditLogModel.create / findById 真实往返', () => {
 
 describe('AuditLogModel.findAll 过滤组合（真实 AND 语义）', () => {
   beforeAll(() => {
-    insertAuditRaw({ action: 'A1', created_at: '2026-01-01T00:00:00.000Z' });
-    insertAuditRaw({ instance_id: 's2', action: 'A2', target_type: 'player', target_id: 'Steve', source: 'webui', created_at: '2026-02-01T00:00:00.000Z' });
-    insertAuditRaw({ action: 'A2', created_at: '2026-03-01T00:00:00.000Z' });
-    insertAuditRaw({ instance_id: 's2', action: 'A3', source: 'scheduler', created_at: '2026-04-01T00:00:00.000Z' });
+    insertAuditRaw({ action: 'A1', created_at: '2026-01-01 00:00:00' });
+    insertAuditRaw({ instance_id: 's2', action: 'A2', target_type: 'player', target_id: 'Steve', source: 'webui', created_at: '2026-02-01 00:00:00' });
+    insertAuditRaw({ action: 'A2', created_at: '2026-03-01 00:00:00' });
+    insertAuditRaw({ instance_id: 's2', action: 'A3', source: 'scheduler', created_at: '2026-04-01 00:00:00' });
   });
 
   it('instanceId 过滤只命中对应实例', () => {
@@ -159,8 +161,8 @@ describe('AuditLogModel.findAll 过滤组合（真实 AND 语义）', () => {
 
   it('时间窗为闭区间（>= startTime 且 <= endTime）', () => {
     const r = AuditLogModel.findAll({
-      startTime: '2026-02-01T00:00:00.000Z',
-      endTime: '2026-03-01T00:00:00.000Z',
+      startTime: '2026-02-01 00:00:00',
+      endTime: '2026-03-01 00:00:00',
     });
     expect(r.total).toBe(2);
     expect(r.logs.map((l) => l.createdAt)).toEqual([
@@ -178,7 +180,7 @@ describe('AuditLogModel.findAll 过滤组合（真实 AND 语义）', () => {
   it('组合过滤 + 时间窗三者交集', () => {
     const r = AuditLogModel.findAll({
       instanceId: 's2',
-      startTime: '2026-03-01T00:00:00.000Z',
+      startTime: '2026-03-01 00:00:00',
     });
     expect(r.total).toBe(1);
     expect(r.logs[0].action).toBe('A3');
@@ -202,7 +204,7 @@ describe('AuditLogModel.findAll 过滤组合（真实 AND 语义）', () => {
 describe('AuditLogModel.findAll 分页边界', () => {
   beforeAll(() => {
     for (let i = 0; i < 5; i++) {
-      insertAuditRaw({ action: `PAGE-${i}`, created_at: `2026-05-0${i + 1}T00:00:00.000Z` });
+      insertAuditRaw({ action: `PAGE-${i}`, created_at: `2026-05-0${i + 1} 00:00:00` });
     }
   });
 
@@ -231,16 +233,27 @@ describe('AuditLogModel.findAll 分页边界', () => {
 
 describe('AuditLogModel.prune 真实删除计数', () => {
   it('删除超龄行返回 changes 数，未超龄保留', () => {
-    const old1 = insertAuditRaw({ created_at: '2020-01-01T00:00:00.000Z' });
-    const old2 = insertAuditRaw({ created_at: '2020-06-01T00:00:00.000Z' });
+    const old1 = insertAuditRaw({ created_at: '2020-01-01 00:00:00' });
+    const old2 = insertAuditRaw({ created_at: '2020-06-01 00:00:00' });
     // 新鲜行用近期时间（90 天 cutoff 之外不可用 6 月，今天已 9 月）
-    const fresh = insertAuditRaw({ created_at: '2026-09-01T00:00:00.000Z' });
+    const fresh = insertAuditRaw({ created_at: '2026-09-01 00:00:00' });
 
     const deleted = AuditLogModel.prune(90);
     expect(deleted).toBeGreaterThanOrEqual(2);
     expect(AuditLogModel.findById(old1)).toBeNull();
     expect(AuditLogModel.findById(old2)).toBeNull();
     expect(AuditLogModel.findById(fresh)).not.toBeNull();
+  });
+
+  it('边界：cutoff 当日但晚于 cutoff 时刻的行必须保留（字符串比较口径错配回归）', () => {
+    const cutoffMs = Date.now() - 90 * 86_400_000;
+    const justAfter = insertAuditRaw({ created_at: toDbUtcString(cutoffMs + 1_000) });
+    const justBefore = insertAuditRaw({ created_at: toDbUtcString(cutoffMs - 1_000) });
+
+    AuditLogModel.prune(90);
+    // cutoff 若用 toISOString()，同日记录的 ' '(0x20) < 'T'(0x54) 会让 justAfter 被误删
+    expect(AuditLogModel.findById(justAfter)).not.toBeNull();
+    expect(AuditLogModel.findById(justBefore)).toBeNull();
   });
 });
 
@@ -274,9 +287,9 @@ describe('CommandHistoryModel 真实往返与过滤', () => {
   });
 
   it('findAll 过滤 + 恒定降序（无 order 参数，行为锁定）', () => {
-    insertCommandRaw({ instance_id: 's9', command: 'list', created_at: '2026-07-01T00:00:00.000Z' });
-    insertCommandRaw({ instance_id: 's9', command: 'tps', source: 'scheduler', created_at: '2026-07-02T00:00:00.000Z' });
-    insertCommandRaw({ instance_id: 's9', command: 'save-all', created_at: '2026-07-03T00:00:00.000Z' });
+    insertCommandRaw({ instance_id: 's9', command: 'list', created_at: '2026-07-01 00:00:00' });
+    insertCommandRaw({ instance_id: 's9', command: 'tps', source: 'scheduler', created_at: '2026-07-02 00:00:00' });
+    insertCommandRaw({ instance_id: 's9', command: 'save-all', created_at: '2026-07-03 00:00:00' });
 
     const r = CommandHistoryModel.findAll({ instanceId: 's9' });
     expect(r.total).toBe(3);
@@ -287,8 +300,8 @@ describe('CommandHistoryModel 真实往返与过滤', () => {
   it('findAll source + 时间窗组合过滤', () => {
     const r = CommandHistoryModel.findAll({
       source: 'scheduler',
-      startTime: '2026-07-01T00:00:00.000Z',
-      endTime: '2026-07-02T00:00:00.000Z',
+      startTime: '2026-07-01 00:00:00',
+      endTime: '2026-07-02 00:00:00',
     });
     expect(r.total).toBe(1);
     expect(r.commands[0].command).toBe('tps');
@@ -306,12 +319,23 @@ describe('CommandHistoryModel 真实往返与过滤', () => {
   });
 
   it('prune 删除超龄行返回计数，未超龄保留', () => {
-    const old = insertCommandRaw({ created_at: '2020-01-01T00:00:00.000Z' });
-    const fresh = insertCommandRaw({ created_at: '2026-09-01T00:00:00.000Z' });
+    const old = insertCommandRaw({ created_at: '2020-01-01 00:00:00' });
+    const fresh = insertCommandRaw({ created_at: '2026-09-01 00:00:00' });
 
     const deleted = CommandHistoryModel.prune(90);
     expect(deleted).toBeGreaterThanOrEqual(1);
     expect(CommandHistoryModel.findById(old)).toBeNull();
     expect(CommandHistoryModel.findById(fresh)).not.toBeNull();
+  });
+
+  it('边界：cutoff 当日但晚于 cutoff 时刻的行必须保留（字符串比较口径错配回归）', () => {
+    const cutoffMs = Date.now() - 90 * 86_400_000;
+    const justAfter = insertCommandRaw({ created_at: toDbUtcString(cutoffMs + 1_000) });
+    const justBefore = insertCommandRaw({ created_at: toDbUtcString(cutoffMs - 1_000) });
+
+    CommandHistoryModel.prune(90);
+    // cutoff 若用 toISOString()，同日记录的 ' '(0x20) < 'T'(0x54) 会让 justAfter 被误删
+    expect(CommandHistoryModel.findById(justAfter)).not.toBeNull();
+    expect(CommandHistoryModel.findById(justBefore)).toBeNull();
   });
 });

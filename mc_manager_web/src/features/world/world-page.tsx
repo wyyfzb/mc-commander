@@ -9,7 +9,7 @@
  * - 实例切换：query key 含 instanceId，自动切换；无实例显示空态
  */
 import { useState } from 'react'
-import { AlertTriangle, Archive, RefreshCw, ServerOff } from 'lucide-react'
+import { AlertTriangle, Archive, RefreshCw } from 'lucide-react'
 import { useSearchParams } from 'react-router'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
@@ -25,7 +25,7 @@ import { DimensionCards } from './components/dimension-cards'
 import { PropertiesPanel } from './components/properties-panel'
 import { GamerulePanel } from './components/gamerule-panel'
 import { useServerProperties, useUpdateProperties, useWorldInfo } from './queries'
-import { EmptyState } from '@/components/mcs/empty-state'
+import { InstanceRequiredState } from '@/features/instances/components/instance-required-state'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { PageHeader } from '@/components/mcs/page-header'
 import { useQueryClient } from '@tanstack/react-query'
@@ -47,15 +47,9 @@ export function WorldPage() {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
 
+  // 无实例门：加载中/加载失败/真空态/待选中四态各自诚实（见 InstanceRequiredState）
   if (!instanceId) {
-    return (
-      <EmptyState
-        icon={ServerOff}
-        title="暂无服务器实例"
-        hint="请先在服务端创建 MC 服务器实例"
-        action={{ label: '前往实例管理', onClick: () => navigate('/instances') }}
-      />
-    )
+    return <InstanceRequiredState />
   }
 
   const isRconConnected = statusQuery.data?.isRconConnected ?? false
@@ -132,9 +126,9 @@ export function WorldPage() {
       )}
 
       {/* ── 主体：左栏信息卡 + 右栏 Tabs ── */}
-      <div className="flex min-h-0 flex-1 gap-4">
-      {/* 左栏：世界信息 + 维度卡（320px 固定宽） */}
-      <div className="flex w-80 shrink-0 flex-col gap-4 overflow-y-auto">
+      <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row">
+      {/* 左栏：世界信息 + 维度卡（窄屏整宽堆叠并限高内滚，lg 起固定 320px） */}
+      <div className="flex min-h-0 w-full shrink-0 flex-col gap-4 overflow-y-auto max-lg:max-h-[45%] lg:w-80">
         <WorldInfoCard
           world={worldQuery.data ?? null}
           isLoading={worldQuery.isLoading}

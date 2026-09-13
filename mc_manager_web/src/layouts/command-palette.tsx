@@ -258,7 +258,7 @@ export function CommandPalette() {
                     >
                       <Icon className="size-4" aria-hidden />
                       <span className="font-mono text-mcs-xs">{preset}</span>
-                      <Terminal className="ml-auto size-3.5 text-mcs-text-subtle" aria-hidden />
+                      <Terminal className="ml-auto size-3.5 text-mcs-text-muted" aria-hidden />
                     </CommandItem>
                   )
                 })}

@@ -5,9 +5,9 @@
  * - 编辑内容为组件 state，与 query 缓存隔离（保存成功由 mutation 失效列表/内容缓存）
  */
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { ServerOff, MonitorSmartphone } from 'lucide-react'
+import { MonitorSmartphone } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
-import { useSearchParams, useNavigate } from 'react-router'
+import { useSearchParams } from 'react-router'
 import { toast } from 'sonner'
 import { getFriendlyErrorText } from '@/api/errors'
 import { queryKeys } from '@/api/queries'
@@ -24,7 +24,7 @@ import { DeleteConfirmDialog } from './components/delete-confirm-dialog'
 import { NamePromptDialog } from './components/name-prompt-dialog'
 import { RenameDialog } from './components/rename-dialog'
 import { UploadConflictDialog } from './components/upload-conflict-dialog'
-import { useMediaQuery, BREAKPOINT_MOBILE, BREAKPOINT_NARROW } from './use-media-query'
+import { useMediaQuery, BREAKPOINT_MOBILE, BREAKPOINT_NARROW } from '@/hooks/use-media-query'
 import { useFileUpload } from './use-file-upload'
 import { useFileDownload } from './use-file-download'
 import { useFileEditor } from './use-file-editor'
@@ -36,13 +36,8 @@ import {
   useSaveFile,
   useUploadFile,
 } from './queries'
-import { EmptyState } from '@/components/mcs/empty-state'
-
-/** 父目录（'/' 前缀风格；与 files/queries.ts 的 parentDirOf 同规则） */
-function parentDirOf(path: string): string {
-  const idx = path.lastIndexOf('/')
-  return idx <= 0 ? '/' : path.slice(0, idx)
-}
+import { InstanceRequiredState } from '@/features/instances/components/instance-required-state'
+import { parentDirOf } from './path-utils'
 
 /** 名称校验：返回错误文案（null=通过）；空值/路径分隔符（文案与原实现逐字一致） */
 function entryNameError(name: string, label: string): string | null {
@@ -139,17 +134,10 @@ export function FilesPage() {
 
   /** 路由切换守卫：编辑未保存切页确认 */
   const guard = useUnsavedGuard(dirty)
-  const navigate = useNavigate()
 
+  // 无实例门：加载中/加载失败/真空态/待选中四态各自诚实（见 InstanceRequiredState）
   if (!instanceId) {
-    return (
-      <EmptyState
-        icon={ServerOff}
-        title="暂无服务器实例"
-        hint="请先在服务端创建 MC 服务器实例"
-        action={{ label: '前往实例管理', onClick: () => navigate('/instances') }}
-      />
-    )
+    return <InstanceRequiredState />
   }
 
   /** 关闭编辑器：脏则先确认 */

@@ -2,13 +2,20 @@
  * E2E mock 服务端（Playwright webServer 依赖，端口 5198）
  * 模拟 MC Commander 服务端 API 契约（信封格式与字段对齐 routes/*）。
  * 数据为结构占位 mock，严禁真实服务器信息（项目规则 8）。
- * 不实现 WS：页面在无 WS 时走 HTTP 轮询正常渲染（E2E 断言不依赖实时事件）。
+ * WS：最小握手 + subscribe 快照 + ping/pong（对齐 index.js handleProtocols
+ * 与 websocket.js 消息契约；手写 RFC 6455 握手避免引入 ws 依赖——web 包
+ * devDeps 无 ws，mock 端点不需要完整实现）。
  */
 import { createServer } from 'node:http'
+import { createHash } from 'node:crypto'
 
 const PORT = Number(process.env.MOCK_PORT) || 5198
 
 const now = () => new Date().toISOString()
+
+/** 本地时区日期键（与服务端 utils/local-date.js 同口径；toISOString 是 UTC，东八区凌晨会写成昨天） */
+const localDateKey = (d = new Date()) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
 /** Webhook 演示数据（对齐 @mc-commander/schemas webhook 契约；模块级以支持 POST 后持久） */
 const webhooks = [
@@ -37,6 +44,11 @@ const webhooks = [
 ]
 const ok = (data, message = 'Success') =>
   JSON.stringify({ status: 'ok', code: 0, message, data, timestamp: now() })
+
+/** 本 mock 签发的唯一会话令牌（登录/设密固定返回；鉴权建模见请求入口） */
+const MOCK_SESSION_TOKEN = 'e2e-mock-session-token-0000000001'
+/** 无需凭据即可访问的端点（登录前必须可达，与真实服务端一致） */
+const PUBLIC_PATHS = new Set(['/api/v1/auth/status', '/api/v1/auth/login', '/api/v1/auth/setup'])
 
 /** 解析 URL query 参数（decodeURIComponent 容错） */
 const parseQuery = (url) => {
@@ -119,6 +131,10 @@ const systemStats = {
   cpuCores: 4,
   loadAvg: [0.1, 0.2, 0.15],
   uptime: 86400,
+  diskUsage: {
+    primary: { mountpoint: '/', totalGB: 39, usedGB: 5.5, percent: 14.2 },
+    all: [{ mountpoint: '/', totalGB: 39, usedGB: 5.5, percent: 14.2 }],
+  },
 }
 
 const logs = [
@@ -154,7 +170,7 @@ const worldInfo = {
   gameDays: 42,
   dimensions: [
     { name: '主世界', icon: '🌍', playerCount: 2 },
-    { name: '地狱', icon: '🔥', playerCount: 1 },
+    { name: '下界', icon: '🔥', playerCount: 1 },
     { name: '末地', icon: '🟣', playerCount: 0 },
   ],
 }
@@ -250,7 +266,7 @@ const mockBackups = [
   {
     id: 21,
     instanceId: 'e2e-demo',
-    name: '手动备份 2026-08-14',
+    name: '手动备份',
     description: null,
     type: 'manual',
     size: 524_288_000,
@@ -434,6 +450,15 @@ const server = createServer((req, res) => {
     res.setHeader('Content-Type', 'application/json')
     res.setHeader('Access-Control-Allow-Origin', '*')
 
+    // 会话鉴权最小建模：带 Bearer 的请求，令牌必须是本 mock 签发的（登录/设密固定返回
+    // MOCK_SESSION_TOKEN），否则回 40103。缺少这层校验时，「拿 A 面板的令牌请求 B 面板」
+    // 在 e2e 里永远成功，异面板用例断言不承重。X-API-Key 不校验（mock 无 Key 台账）。
+    const bearer = /^Bearer\s+(.+)$/i.exec(req.headers.authorization ?? '')?.[1]
+    if (bearer && bearer !== MOCK_SESSION_TOKEN && !PUBLIC_PATHS.has(path)) {
+      res.statusCode = 401
+      return res.end(JSON.stringify({ status: 'error', code: 40103, message: '会话已过期，请重新登录', details: null, timestamp: now() }))
+    }
+
     if (path === '/api/v1/overview') return res.end(ok(overview))
     if (path === '/api/v1/system-stats') return res.end(ok(systemStats))
     // ── 安全主线：auth 端点（登录 e2e 用；mock 固定凭据，严禁真实密码） ──
@@ -443,7 +468,7 @@ const server = createServer((req, res) => {
       return res.end(ok({ hasPassword: !fresh }))
     }
     if (path === '/api/v1/auth/login' && req.method === 'POST') {
-      const mockSession = { token: 'e2e-mock-session-token-0000000001', sessionId: 'sess-mock-1', expiresAt: new Date(Date.now() + 7 * 86400000).toISOString() }
+      const mockSession = { token: MOCK_SESSION_TOKEN, sessionId: 'sess-mock-1', expiresAt: new Date(Date.now() + 7 * 86400000).toISOString() }
       try {
         const { password } = JSON.parse(body || '{}')
         if (password !== 'e2e-correct-pass') {
@@ -454,7 +479,7 @@ const server = createServer((req, res) => {
       return res.end(ok(mockSession))
     }
     if (path === '/api/v1/auth/setup' && req.method === 'POST') {
-      return res.end(ok({ hasPassword: true, token: 'e2e-mock-session-token-0000000001', sessionId: 'sess-mock-1', expiresAt: new Date(Date.now() + 7 * 86400000).toISOString() }))
+      return res.end(ok({ hasPassword: true, token: MOCK_SESSION_TOKEN, sessionId: 'sess-mock-1', expiresAt: new Date(Date.now() + 7 * 86400000).toISOString() }))
     }
     if (path === '/api/v1/auth/sessions') {
       return res.end(ok({ sessions: [{ id: 1, userAgent: 'Playwright E2E', ip: '127.0.0.1', createdAt: new Date().toISOString(), lastSeenAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 6 * 86400000).toISOString(), current: true }] }))
@@ -510,9 +535,10 @@ const server = createServer((req, res) => {
       const q = parseQuery(url)
       const page = Math.max(1, parseInt(q.page) || 1)
       const pageSize = Math.min(200, Math.max(1, parseInt(q.pageSize) || 20))
+      // 字段对齐 webhookDeliverySchema（eventType/responseStatus/status）；payload=事件发送内容示例（虚构数据）
       const deliveries = [
-        { id: 1, webhookId: 1, event: 'instance.started', statusCode: 200, ok: true, durationMs: 110, createdAt: new Date(Date.now() - 3600_000).toISOString(), responseBody: null },
-        { id: 2, webhookId: 1, event: 'backup.completed', statusCode: 502, ok: false, durationMs: 3000, createdAt: new Date(Date.now() - 86_400_000).toISOString(), responseBody: 'Bad Gateway' },
+        { id: 1, webhookId: 1, eventType: 'instance.started', instanceId: 'e2e-demo', payload: { event: 'instance.started', instance: 'E2E 演示实例', timestamp: Date.now() - 3600_000 }, status: 'success', responseStatus: 200, durationMs: 110, attempts: 1, createdAt: new Date(Date.now() - 3600_000).toISOString(), responseBody: '{"ok":true}' },
+        { id: 2, webhookId: 1, eventType: 'backup.completed', instanceId: 'e2e-demo', payload: { event: 'backup.completed', file: 'world-backup-test.zip', size: 1024 }, status: 'failed', responseStatus: 502, durationMs: 3000, attempts: 3, createdAt: new Date(Date.now() - 86_400_000).toISOString(), responseBody: 'Bad Gateway' },
       ]
       return res.end(JSON.stringify({
         status: 'ok', code: 0, message: 'Success',
@@ -641,7 +667,9 @@ const server = createServer((req, res) => {
         return res.end(ok({
           id: 23,
           instanceId: 'e2e-demo',
-          name: '手动备份 2026-08-15',
+          // 与服务端默认命名同源（routes/backups.js：未传 name 时用 Backup_<本地日期>），
+          // 与 createdAt 同刻生成，不再写死日期
+          name: `Backup_${localDateKey()}`,
           description: null,
           type: 'manual',
           size: 0,
@@ -781,6 +809,126 @@ const server = createServer((req, res) => {
     res.statusCode = 404
     res.end(JSON.stringify({ status: 'error', code: 40400, message: 'Not found', details: null, timestamp: now() }))
   })
+})
+
+// ── 最小 WS 端点（对齐真实服务端契约）──────────────────────────────
+// 鉴权与真实端一致从 subprotocol 提取（e2e 专用令牌恒放行——mock 不做凭据校验）
+const WS_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11'
+const authProtocol = (protocols) =>
+  protocols.find((p) => p.startsWith('mc-commander-apikey.') || p.startsWith('mc-commander-session.')) ?? null
+
+/** 帧解码：客户端→服务端仅小载荷文本帧（subscribe/ping），掩码必处理 */
+function decodeFrame(buf) {
+  if (buf.length < 2) return null
+  const opcode = buf[0] & 0x0f
+  let len = buf[1] & 0x7f
+  let off = 2
+  if (len === 126) {
+    if (buf.length < 4) return null
+    len = buf.readUInt16BE(2)
+    off = 4
+  } else if (len === 127) {
+    if (buf.length < 10) return null
+    len = Number(buf.readBigUInt64BE(2))
+    off = 10
+  }
+  const masked = (buf[1] & 0x80) !== 0
+  let mask = null
+  if (masked) {
+    mask = buf.subarray(off, off + 4)
+    off += 4
+  }
+  const payload = buf.subarray(off, off + len)
+  if (masked) {
+    const unmasked = Buffer.from(payload)
+    for (let i = 0; i < unmasked.length; i++) unmasked[i] ^= mask[i & 3]
+    return { opcode, text: unmasked.toString('utf8') }
+  }
+  return { opcode, text: payload.toString('utf8') }
+}
+
+/** 帧编码：服务端→客户端文本帧不掩码 */
+function encodeTextFrame(text) {
+  const payload = Buffer.from(text, 'utf8')
+  let header
+  if (payload.length < 126) {
+    header = Buffer.from([0x81, payload.length])
+  } else if (payload.length < 65536) {
+    header = Buffer.alloc(4)
+    header[0] = 0x81
+    header[1] = 126
+    header.writeUInt16BE(payload.length, 2)
+  } else {
+    header = Buffer.alloc(10)
+    header[0] = 0x81
+    header[1] = 127
+    header.writeBigUInt64BE(BigInt(payload.length), 2)
+  }
+  return Buffer.concat([header, payload])
+}
+
+const wsSockets = new Set()
+
+server.on('upgrade', (req, socket) => {
+  const url = req.url ?? ''
+  if (!url.startsWith('/ws')) return socket.destroy()
+  const protocols = String(req.headers['sec-websocket-protocol'] ?? '').split(',').map((s) => s.trim()).filter(Boolean)
+  const chosen = authProtocol(protocols)
+  if (!chosen) {
+    // 与真实端 handleProtocols 返回 false 一致：拒绝无凭据握手
+    socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n')
+    return socket.destroy()
+  }
+  const key = req.headers['sec-websocket-key']
+  const accept = createHash('sha1').update(key + WS_GUID).digest('base64')
+  socket.write(
+    `HTTP/1.1 101 Switching Protocols\r\n` +
+      `Upgrade: websocket\r\nConnection: Upgrade\r\n` +
+      `Sec-WebSocket-Accept: ${accept}\r\n` +
+      `Sec-WebSocket-Protocol: ${chosen}\r\n\r\n`,
+  )
+  socket.setNoDelay(true)
+  wsSockets.add(socket)
+  socket.on('data', (buf) => {
+    // 一个 TCP 段可能含多帧（客户端限速下实际只有单帧，够用）
+    let frame
+    try {
+      frame = decodeFrame(buf)
+    } catch {
+      return
+    }
+    if (!frame || frame.opcode !== 0x1) return
+    let msg
+    try {
+      msg = JSON.parse(frame.text)
+    } catch {
+      return
+    }
+    if (msg.type === 'ping') {
+      socket.write(encodeTextFrame(JSON.stringify({ type: 'pong', timestamp: Date.now() })))
+      return
+    }
+    if (msg.type === 'subscribe' && msg.instanceId) {
+      // 订阅即回 status 快照（对齐 websocket.js subscribe 分支）
+      socket.write(
+        encodeTextFrame(
+          JSON.stringify({
+            type: 'status',
+            instanceId: msg.instanceId,
+            data: {
+              status: instance.isRunning ? 'running' : 'stopped',
+              isRunning: instance.isRunning,
+              players: instance.players,
+              tps: instance.tps,
+            },
+            timestamp: Date.now(),
+          }),
+        ),
+      )
+    }
+  })
+  socket.on('close', () => wsSockets.delete(socket))
+  socket.on('error', () => wsSockets.delete(socket))
 })
 
 server.listen(PORT, () => {

@@ -45,8 +45,8 @@ test.describe('设置页', () => {
     // 表单字段（面板地址 + API Key）
     await expect(page.getByRole('textbox', { name: '面板地址' })).toBeVisible()
     await expect(page.getByRole('textbox', { name: 'API Key' })).toBeVisible()
-    // 已配置状态行
-    await expect(page.getByText('已连接')).toBeVisible()
+    // 已配置状态行（顶栏状态点同名文本亦为「已连接」，取首个避免 strict 违规）
+    await expect(page.getByText('已连接').first()).toBeVisible()
     // 填地址 → 测试连接（走 dev proxy 到 mock，成功）
     await page.getByRole('textbox', { name: '面板地址' }).fill('http://localhost:5199')
     await page.getByRole('button', { name: '测试连接' }).click()
@@ -55,6 +55,46 @@ test.describe('设置页', () => {
     await page.getByRole('button', { name: '保存连接' }).click()
     await expect(page.getByText('连接配置已保存')).toBeVisible()
     await maybeShot(page, 'settings-connection-dark.png')
+  })
+
+  test('连接设置：登录会话属于别的面板 → 提示改用 API Key，且不把人踢下线', async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        'mcs-connection',
+        JSON.stringify({ baseUrl: '', apiKey: 'e2e-mock-key-0000000000' }),
+      )
+      // 会话绑定到另一个面板（虚构地址）：本面板用不上它
+      localStorage.setItem(
+        'mcs-session',
+        JSON.stringify({
+          token: 'e2e-foreign-session-token',
+          sessionId: 'e2e-sess-1',
+          expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+          issuedFor: 'https://panel-a.example.com',
+        }),
+      )
+    })
+    await page.goto('/settings/connection')
+    await expect(page.getByText(/当前登录会话属于/)).toBeVisible()
+
+    // 换成本面板地址 + 本面板 Key → 走 API Key 通道测试成功。
+    // 承重：mock 按未知 Bearer 回 40103（见 mock-server.mjs 请求入口），
+    // 旧实现无条件发 A 的令牌，这里拿不到「连接成功」。
+    await page.getByRole('textbox', { name: '面板地址' }).fill('http://localhost:5199')
+    await page.getByRole('textbox', { name: 'API Key' }).fill('e2e-mock-key-0000000000')
+    await page.getByRole('button', { name: '测试连接' }).click()
+    await expect(page.getByText('连接成功')).toBeVisible()
+    await maybeShot(page, 'settings-connection-foreign-session-dark.png')
+
+    // 应用内常规请求这一路（不经过探测的「不因会话过期跳登录」豁免）也不能被踢：
+    // 整页重载触发应用启动路径的请求（连接表单此时是脏的，in-app 导航会被未保存守卫拦下），
+    // 若把 A 的令牌发出去即被 40103 清会话 + 跳登录页
+    await page.goto('/dashboard')
+    await expect(page).toHaveURL(/\/dashboard/)
+    await expect(page.getByText('在线玩家').first()).toBeVisible()
+    expect(await page.evaluate(() => localStorage.getItem('mcs-session'))).toContain(
+      'e2e-foreign-session-token',
+    )
   })
 
   test('通用设置：自动重启开关 + 主题切换', async ({ page }) => {
@@ -91,14 +131,17 @@ test.describe('设置页', () => {
     await expect(page.getByRole('heading', { name: '备份管理', level: 3 })).toBeVisible()
     // 快照机制说明
     await expect(page.getByText('快照备份：未修改文件零拷贝增量传输，超出保留策略自动清理')).toBeVisible()
-    // 列表行（mock 3 条：completed snapshot / zip / failed）
-    await expect(page.getByText('手动备份 2026-08-14')).toBeVisible()
+    // 列表行（mock 3 条：completed snapshot / zip / failed）。三条名称都用精确匹配：
+    // 子串匹配下夹具名重新内嵌日期也照样命中，等于没有防线
+    await expect(page.getByText('手动备份', { exact: true })).toBeVisible()
+    await expect(page.getByText('旧格式压缩包', { exact: true })).toBeVisible()
+    await expect(page.getByText('失败的备份', { exact: true })).toBeVisible()
     await expect(page.getByText('旧格式', { exact: true })).toBeVisible()
     // 立即备份 → creating 行 + toast
     await page.getByRole('button', { name: '立即备份' }).click()
     await expect(page.getByText('备份任务已启动')).toBeVisible()
     // 恢复确认（B3 危险弹窗：红色警示 + 输入实例名确认）→ 取消
-    await page.getByRole('button', { name: '手动备份 2026-08-14 恢复' }).click()
+    await page.getByRole('button', { name: '手动备份 恢复' }).click()
     await expect(page.getByRole('heading', { name: '恢复备份（危险操作）' })).toBeVisible()
     await expect(
       page.getByText(/覆盖当前世界数据，且不可撤销/),

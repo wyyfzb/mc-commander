@@ -23,6 +23,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Textarea } from '@/components/ui/textarea'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
+import { useRadioGroup } from '@/hooks/use-radio-group'
 import { cn } from '@/lib/utils'
 import { BAN_DURATION_OPTIONS, BAN_REASONS, BAN_REASON_FALLBACK, validateBanForm, type BanFormModel } from '@/lib/mc-ban'
 import type { Player } from '@/api/types'
@@ -69,6 +70,19 @@ function BanFormContent({
   const [confirmClose, setConfirmClose] = useState(false)
 
   const ipAvailable = Boolean(player.ip && player.ip.length > 0)
+  // 时长/理由两组都是互斥单选：组语义 + roving tabindex + 方向键由 hook 统一提供
+  const durationGroup = useRadioGroup({
+    label: '封禁时长',
+    value: durationIndex,
+    values: BAN_DURATION_OPTIONS.map((_, i) => i),
+    onChange: setDurationIndex,
+  })
+  const reasonGroup = useRadioGroup({
+    label: '封禁理由',
+    value: reasonIndex,
+    values: BAN_REASONS.map((_, i) => i),
+    onChange: setReasonIndex,
+  })
   const selectedDuration = BAN_DURATION_OPTIONS[durationIndex]
   const selectedReason = BAN_REASONS[reasonIndex] ?? BAN_REASONS[0]
   const finalReason = selectedReason === '其他' ? (customReason.trim() || BAN_REASON_FALLBACK) : selectedReason
@@ -136,8 +150,8 @@ function BanFormContent({
               className={cn(
                 'flex cursor-pointer items-center gap-2 rounded-mcs-sm border px-3 py-1.5 text-mcs-sm transition-colors',
                 targetType === 'player'
-                  ? 'border-mcs-accent bg-mcs-accent-bg-subtle text-mcs-text-default'
-                  : 'border-mcs-border-default text-mcs-text-muted hover:bg-mcs-bg-hover',
+                  ? 'border-mcs-accent-border-strong bg-mcs-accent-bg-subtle text-mcs-text-default'
+                  : 'border-mcs-border-default text-mcs-text-muted hover:bg-mcs-state-hover',
               )}
             >
               <RadioGroupItem value="player" className="sr-only" />
@@ -148,8 +162,8 @@ function BanFormContent({
                 'flex cursor-pointer items-center gap-2 rounded-mcs-sm border px-3 py-1.5 text-mcs-sm transition-colors',
                 !ipAvailable && 'cursor-not-allowed opacity-50',
                 targetType === 'ip'
-                  ? 'border-mcs-accent bg-mcs-accent-bg-subtle text-mcs-text-default'
-                  : 'border-mcs-border-default text-mcs-text-muted hover:bg-mcs-bg-hover',
+                  ? 'border-mcs-accent-border-strong bg-mcs-accent-bg-subtle text-mcs-text-default'
+                  : 'border-mcs-border-default text-mcs-text-muted hover:bg-mcs-state-hover',
               )}
             >
               <RadioGroupItem value="ip" className="sr-only" disabled={!ipAvailable} />
@@ -157,25 +171,25 @@ function BanFormContent({
             </label>
           </RadioGroup>
           {!ipAvailable && (
-            <p className="text-mcs-xs text-mcs-text-subtle">该玩家暂无 IP 信息，无法 IP 封禁</p>
+            <p className="text-mcs-xs text-mcs-text-muted">该玩家暂无 IP 信息，无法 IP 封禁</p>
           )}
         </div>
 
         {/* 时长 6 档 */}
         <div className="flex flex-col gap-2">
           <Label>时长</Label>
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-1.5" {...durationGroup.groupProps}>
             {BAN_DURATION_OPTIONS.map((option, i) => (
               <button
                 key={option.label}
                 type="button"
+                {...durationGroup.itemProps(i)}
                 onClick={() => setDurationIndex(i)}
-                aria-pressed={durationIndex === i}
                 className={cn(
                   'rounded-mcs-sm border px-2.5 py-1 text-mcs-xs transition-colors',
                   durationIndex === i
-                    ? 'border-mcs-accent bg-mcs-accent-bg-subtle text-mcs-text-default'
-                    : 'border-mcs-border-default text-mcs-text-muted hover:bg-mcs-bg-hover',
+                    ? 'border-mcs-accent-border-strong bg-mcs-accent-bg-subtle text-mcs-text-default'
+                    : 'border-mcs-border-default text-mcs-text-muted hover:bg-mcs-state-hover',
                 )}
               >
                 {option.label}
@@ -187,18 +201,18 @@ function BanFormContent({
         {/* 理由 9 项 */}
         <div className="flex flex-col gap-2">
           <Label>理由</Label>
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-1.5" {...reasonGroup.groupProps}>
             {BAN_REASONS.map((reason, i) => (
               <button
                 key={reason}
                 type="button"
+                {...reasonGroup.itemProps(i)}
                 onClick={() => setReasonIndex(i)}
-                aria-pressed={reasonIndex === i}
                 className={cn(
                   'rounded-mcs-sm border px-2.5 py-1 text-mcs-xs transition-colors',
                   reasonIndex === i
-                    ? 'border-mcs-accent bg-mcs-accent-bg-subtle text-mcs-text-default'
-                    : 'border-mcs-border-default text-mcs-text-muted hover:bg-mcs-bg-hover',
+                    ? 'border-mcs-accent-border-strong bg-mcs-accent-bg-subtle text-mcs-text-default'
+                    : 'border-mcs-border-default text-mcs-text-muted hover:bg-mcs-state-hover',
                 )}
               >
                 {reason}

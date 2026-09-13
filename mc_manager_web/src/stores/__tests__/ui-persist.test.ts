@@ -20,7 +20,6 @@ beforeEach(() => {
     commandPaletteOpen: false,
     notificationsOpen: false,
     mobileNavOpen: false,
-    density: 'default',
     terminalAutoScroll: true,
     confirmCommands: false,
   })
@@ -51,14 +50,12 @@ describe('useUiStore persist', () => {
 
   it('偏好字段变更触发 localStorage 更新', async () => {
     useUiStore.getState().setTheme('light')
-    useUiStore.getState().setDensity('compact')
     useUiStore.getState().setConfirmCommands(true)
     await new Promise((r) => setTimeout(r, 20))
     const stored = JSON.parse(localStorage.getItem(STORAGE_KEY)!) as {
-      state: { theme: string; density: string; terminalAutoScroll: boolean; confirmCommands: boolean }
+      state: { theme: string; terminalAutoScroll: boolean; confirmCommands: boolean }
     }
     expect(stored.state.theme).toBe('light')
-    expect(stored.state.density).toBe('compact')
     expect(stored.state.terminalAutoScroll).toBe(true)
     expect(stored.state.confirmCommands).toBe(true)
   })
@@ -72,9 +69,8 @@ describe('migrateFromLegacyKeys', () => {
   it('旧版分散 key 合并为统一格式', () => {
     localStorage.setItem('mcs-theme', 'light')
     localStorage.setItem('mcs-terminal-autoscroll', 'false')
-    localStorage.setItem('mcs-density', 'compact')
     const result = migrateFromLegacyKeys()
-    expect(result).toEqual({ theme: 'light', terminalAutoScroll: false, density: 'compact' })
+    expect(result).toEqual({ theme: 'light', terminalAutoScroll: false })
   })
 
   it('新 key 已存在时跳过迁移', () => {

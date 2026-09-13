@@ -229,6 +229,19 @@ describe('PluginRow · 可更新徽章', () => {
     expect(onOpenDetail).not.toHaveBeenCalled()
   })
 
+  it('聚焦「可更新」徽章按空格：只触发 onUpdate，不触发行打开详情（行级按键须先查 event.target）', async () => {
+    const user = userEvent.setup()
+    const plugin = mkPlugin()
+    const { onUpdate, onOpenDetail } = setup({ plugin, updateInfo: mkUpdateStatus() })
+    const badge = screen.getByTestId('update-badge')
+    badge.focus()
+    await user.keyboard(' ')
+    expect(onUpdate).toHaveBeenCalledTimes(1)
+    // 徽章未包裹 keydown 阻断容器：缺 target 守卫时行会 preventDefault 掉空格，
+    // 徽章自身的激活被吞（onUpdate 不触发），反倒打开详情
+    expect(onOpenDetail).not.toHaveBeenCalled()
+  })
+
   it('hasNewer=false 时不渲染徽章', () => {
     setup({ updateInfo: mkUpdateStatus({ hasNewer: false, updateAvailable: false }) })
     expect(screen.queryByTestId('update-badge')).not.toBeInTheDocument()

@@ -3,14 +3,15 @@
  * Secret 脱敏：API 返回 ********；findByIdInternal 返回原始 secret 供签名
  */
 import { getDb } from './database.js';
+import { toIsoUtc, toDbUtcString } from '../utils/db-time.js';
 
 export class WebhookModel {
   static create(data) {
     const db = getDb();
     const eventsJson = JSON.stringify(data.events || []);
     const result = db.prepare(`
-      INSERT INTO webhooks (name, url, secret, events, instance_id, is_enabled)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO webhooks (name, url, secret, events, instance_id, is_enabled, platform)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(
       data.name,
       data.url,
@@ -18,6 +19,7 @@ export class WebhookModel {
       eventsJson,
       data.instanceId || null,
       data.isEnabled !== undefined ? (data.isEnabled ? 1 : 0) : 1,
+      data.platform || 'generic',
     );
     return this.findById(result.lastInsertRowid);
   }
@@ -30,6 +32,7 @@ export class WebhookModel {
     if (data.name !== undefined) { sets.push('name = ?'); params.push(data.name); }
     if (data.url !== undefined) { sets.push('url = ?'); params.push(data.url); }
     if (data.secret !== undefined) { sets.push('secret = ?'); params.push(data.secret); }
+    if (data.platform !== undefined) { sets.push('platform = ?'); params.push(data.platform); }
     if (data.events !== undefined) { sets.push('events = ?'); params.push(JSON.stringify(data.events)); }
     if (data.instanceId !== undefined) { sets.push('instance_id = ?'); params.push(data.instanceId); }
     if (data.isEnabled !== undefined) { sets.push('is_enabled = ?'); params.push(data.isEnabled ? 1 : 0); }
@@ -153,7 +156,8 @@ export class WebhookModel {
 
   static pruneDeliveries(olderThanDays = 30) {
     const db = getDb();
-    const cutoff = new Date(Date.now() - olderThanDays * 86_400_000).toISOString();
+    // 同 AuditLogModel.prune：cutoff 与列必须同口径（naive UTC 串）
+    const cutoff = toDbUtcString(Date.now() - olderThanDays * 86_400_000);
     const result = db.prepare('DELETE FROM webhook_deliveries WHERE created_at < ?').run(cutoff);
     return result.changes;
   }
@@ -169,11 +173,13 @@ export class WebhookModel {
       name: row.name,
       url: row.url,
       secret: maskSecret ? '********' : (row.secret || null),
+      platform: row.platform || 'generic',
       events,
       instanceId: row.instance_id,
       isEnabled: !!row.is_enabled,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
+      // created_at/updated_at 为无时区 UTC 串，下发前归一化（前端按本地时区换算才正确）
+      createdAt: toIsoUtc(row.created_at),
+      updatedAt: toIsoUtc(row.updated_at),
     };
   }
 
@@ -194,7 +200,7 @@ export class WebhookModel {
       responseBody: row.response_body,
       durationMs: row.duration_ms,
       attempts: row.attempts,
-      createdAt: row.created_at,
+      createdAt: toIsoUtc(row.created_at),
     };
   }
 }

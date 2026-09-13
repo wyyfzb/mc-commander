@@ -38,13 +38,14 @@ export NEEDRESTART_MODE=a
 MC_COMMANDER_DIR="${MC_COMMANDER_DIR:-/opt/mc-commander}"
 # 默认锁定具体发布标签（vX.Y.Z），避免 master 可变分支被投毒/误覆盖后影响安装；
 # 仍保留 BRANCH 环境变量覆盖（例如 BRANCH=master 或指定 commit），但可变分支场景必须配合 PACKAGE_SHA256
-BRANCH="${BRANCH:-v0.1.0}"
+BRANCH="${BRANCH:-v1.2.0}"
 # GitHub Release 资产为权威来源（CI 构建）；国内网络可通过 PACKAGE_URL 覆盖为 gitee 镜像
 PACKAGE_URL="${PACKAGE_URL:-https://github.com/wyyfzb/mc-commander/releases/download/${BRANCH}/mc-commander-server-${BRANCH}.tar.gz}"
 # 预期代码包 sha256（强制完整性校验，防篡改/防发布版本错配）。
-# 当前值为本地构建参考值，发布新版本时必须按脚本头部注释流程同步更新；
+# 当前值与 BRANCH 默认值保持一致（对应最近一次含产物的 Release），
+# 新版本发布后由 release.yml 回写 PR 自动同步更新，无需手工维护；
 # 自定义 PACKAGE_URL 时通过 PACKAGE_SHA256 环境变量提供对应文件的 sha256
-EXPECTED_PACKAGE_SHA256="${PACKAGE_SHA256:-82193196194e514c2334dd8bb4949040682afe61c58f218419baef5ce0fccadf}"
+EXPECTED_PACKAGE_SHA256="${PACKAGE_SHA256:-544a34879c5c907182136106a0e5307d04c48389c86cae298bd510c237c8c526}"
 
 log()  { echo "[$(date '+%H:%M:%S')] $*"; }
 warn() { echo "[WARN] $*"; }
@@ -509,6 +510,10 @@ Type=simple
 User=mc-commander
 # 生产模式：启用 NODE_ENV 门控行为（严格错误掩码、弱密钥校验等），避免环境不一致
 Environment=NODE_ENV=production
+# 只向面板主进程发停止信号，不波及同 cgroup 的 MC 实例——面板停机不停实例
+# （owner 2026-09-09 拍板），实例由下次启动的 pid 文件接管。默认 control-group
+# 会把实例一并 SIGTERM 杀掉，使该语义失效
+KillMode=process
 WorkingDirectory=$MC_COMMANDER_DIR
 ExecStart=$(which node) index.js
 Restart=always
@@ -519,6 +524,12 @@ WantedBy=multi-user.target
 EOF
   systemctl daemon-reload
   systemctl enable mc-commander
+  # 面板停机不停实例（owner 2026-09-09 拍板）：重启后面板按 pid 文件接管运行态，
+  # 但接管实例的控制台管道不可恢复——命令需 RCON，无 RCON 的实例只能强制终止
+  if pgrep -f 'servers/.*/server\.jar' >/dev/null 2>&1; then
+    warn "检测到运行中的 MC 实例：面板重启后将自动接管（运行态恢复，日志从接管时刻起）"
+    warn "接管实例的命令需启用 RCON；未启用 RCON 的实例将只能强制终止"
+  fi
   systemctl restart mc-commander
   log "已注册并启动 systemd 服务: mc-commander（以专用低权限用户 mc-commander 运行）"
 elif command -v pm2 &>/dev/null; then

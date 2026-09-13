@@ -15,7 +15,7 @@ export function UpdateCheckSection() {
   if (isLoading) {
     return (
       <section className="flex items-center gap-3 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted px-4 py-3 shadow-mcs-card">
-        <Loader2 className="size-4 animate-spin text-mcs-text-subtle" aria-hidden />
+        <Loader2 className="size-4 animate-spin text-mcs-text-muted" aria-hidden />
         <span className="text-mcs-sm text-mcs-text-muted">正在检查更新…</span>
       </section>
     )
@@ -36,7 +36,7 @@ export function UpdateCheckSection() {
             {data.offline ? '无法连接更新服务器（离线）' : `当前 v${data.current}`}
           </div>
         </div>
-        {data.offline && <WifiOff className="size-4 text-mcs-text-subtle" aria-hidden />}
+        {data.offline && <WifiOff className="size-4 text-mcs-text-muted" aria-hidden />}
         <button
           type="button"
           onClick={() => void refetch()}

@@ -72,7 +72,7 @@ export function EditorSlot({
     )
   }
   return (
-    <div className="fixed inset-0 z-40 flex flex-col bg-mcs-bg-muted">
+    <div className="fixed inset-0 z-(--mcs-z-overlay) flex flex-col bg-mcs-bg-muted">
       {editor}
     </div>
   )

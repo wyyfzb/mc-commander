@@ -119,11 +119,17 @@ describe('_parseOutput stdout 行解析（真实样本驱动）', () => {
     inst.on('playerChat', e => chats.push(e));
     inst.on('achievement', e => achievements.push(e));
     inst.on('playerRespawn', e => respawns.push(e));
-    // 聊天正则锚定行首（^<），样本用裸聊天行（无日志前缀，如 mcsmp 回显/部分服务端形态）
+    // 聊天两种形态均须识别：裸聊天行（mcsmp 回显/部分服务端）与带日志头的真实服务端输出
     inst._parseOutput('<Steve> hello world');
+    inst._parseOutput('[12:00:00] [Server thread/INFO]: <Alex> hi there');
+    inst._parseOutput('[12:00:00 INFO]: <Alex> paper format');
     inst._parseOutput('[12:00:01] [Server thread/INFO]: Steve has completed the challenge [Sniper Duel]');
     inst._parseOutput('[12:00:02] [Server thread/INFO]: Steve respawned');
-    expect(chats).toEqual([{ name: 'Steve', message: 'hello world' }]);
+    expect(chats).toEqual([
+      { name: 'Steve', message: 'hello world' },
+      { name: 'Alex', message: 'hi there' },
+      { name: 'Alex', message: 'paper format' },
+    ]);
     expect(achievements).toEqual([
       { name: 'Steve', advancement: 'Sniper Duel', isChallenge: true },
     ]);

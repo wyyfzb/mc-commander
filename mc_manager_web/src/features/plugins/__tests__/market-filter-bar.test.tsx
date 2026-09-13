@@ -34,10 +34,7 @@ describe('MarketFilterBar', () => {
     })
     expect(props.onQueryChange).toHaveBeenCalledWith('FakeCore')
     // 防抖（400ms）到期后收到同步值（SearchInput 内部 trim）
-    await waitFor(
-      () => expect(props.onDebouncedChange).toHaveBeenCalledWith('FakeCore'),
-      { timeout: 2000 },
-    )
+    await waitFor(() => expect(props.onDebouncedChange).toHaveBeenCalledWith('FakeCore'))
   })
 
   it('MC 版本输入经 trim 后回调（保留输入首尾空格清理语义）', () => {

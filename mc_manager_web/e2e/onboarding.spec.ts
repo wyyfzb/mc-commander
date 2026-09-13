@@ -3,7 +3,7 @@ import { test, expect, type Page } from '@playwright/test'
 
 /**
  * onboarding E2E（无配置时 /dashboard 重定向 /onboarding）
- * 验收：重定向守卫 / 部署方式二选一 / 手动部署命令展示 / 连接表单保存 → 进入面板
+ * 验收：重定向守卫 / 部署方式三选一（Docker 仅一行说明）/ 手动部署命令展示 / 连接表单保存 → 进入面板
  */
 
 // 可选截图（调试用）：设 E2E_SHOT=1 时输出到 test-results/shots/，默认关闭
@@ -46,16 +46,19 @@ test.describe('onboarding', () => {
     await expect(page).toHaveURL(/\/dashboard/)
   })
 
-  test('手动部署（三选一）：命令展示 + 复制 + 要点', async ({ page }) => {
+  test('部署方式切换（三选一）：Windows 步骤 / Linux 命令 + 要点', async ({ page }) => {
     await clearConnection(page)
     await page.goto('/onboarding')
-    // 三选一卡片：Windows 一键包 / Docker / 手动
-    await page.getByRole('button', { name: 'Windows 一键包' }).click()
-    await expect(page.getByText('Windows 绿色免安装包')).toBeVisible()
-    await page.getByRole('button', { name: 'Docker' }).click()
-    await expect(page.getByText(/docker run -d --name mc-commander/)).toBeVisible()
-    // 手动（Node 22+）：Linux 一键命令与要点
-    await page.getByRole('button', { name: /手动（Node 22\+）/ }).click()
+    // 三张卡片：已有服务端 / Linux 一键部署 / Windows 手动部署；Docker 只占一行说明
+    await expect(page.getByRole('button', { name: 'Docker' })).toHaveCount(0)
+    await expect(page.getByText(/Docker 不在支持范围内/)).toBeVisible()
+    await page.getByRole('radio', { name: 'Windows 手动部署' }).click()
+    await expect(page.getByText('Windows 手动部署（Node 22+）')).toBeVisible()
+    // 前端产物构建是必需步骤（缺失时 :25566 只有接口没有界面）
+    await expect(page.getByText(/npm run build/)).toBeVisible()
+    await maybeShot(page, 'onboarding-windows-dark.png')
+    // Linux 一键部署：命令与要点
+    await page.getByRole('radio', { name: 'Linux 一键部署' }).click()
     await expect(page.getByText('Linux 一键部署命令')).toBeVisible()
     await expect(page.getByText(/sudo su -c "curl -fsSL/)).toBeVisible()
     await expect(
@@ -72,6 +75,33 @@ test.describe('onboarding', () => {
     await maybeShot(page, 'onboarding-manual-dark.png')
   })
 
+  test('部署方式是可键盘操作的单选组：方向键移动并即时选中', async ({ page }) => {
+    await clearConnection(page)
+    await page.goto('/onboarding')
+    // jsdom 模拟不出真实的 Tab 顺序与焦点，roving tabindex 必须在真实浏览器里验
+    const group = page.getByRole('radiogroup', { name: '部署方式' })
+    await expect(group.getByRole('radio')).toHaveCount(3)
+    const already = group.getByRole('radio', { name: '已有服务端' })
+    await expect(already).toBeChecked()
+    // roving tabindex：组内恰好一个 Tab 停靠点，且落在选中项上
+    await expect(group.locator('[role="radio"][tabindex="0"]')).toHaveCount(1)
+    await expect(already).toHaveAttribute('tabindex', '0')
+
+    await already.focus()
+    await page.keyboard.press('ArrowRight')
+    await expect(group.getByRole('radio', { name: 'Linux 一键部署' })).toBeChecked()
+    await expect(page.getByText('Linux 一键部署命令')).toBeVisible()
+    // 焦点随选中移动：不移动的话下一次方向键仍从原项出发，键盘用户会「原地打转」
+    const linux = group.getByRole('radio', { name: 'Linux 一键部署' })
+    await expect(linux).toBeFocused()
+    // 停靠点随选中迁移：组内仍只有一个 tabindex=0，且在 Linux 上
+    await expect(group.locator('[role="radio"][tabindex="0"]')).toHaveCount(1)
+    await expect(linux).toHaveAttribute('tabindex', '0')
+
+    await page.keyboard.press('Home')
+    await expect(already).toBeChecked()
+  })
+
   test('保存连接：onboarding 表单 → 进入面板', async ({ page }) => {
     await clearConnection(page)
     await page.goto('/onboarding')
@@ -82,7 +112,7 @@ test.describe('onboarding', () => {
     // 同源托管（无跨域），开发/E2E 场景经 proxy 转发为既定模式
     await page.getByRole('textbox', { name: '面板地址' }).fill('http://localhost:5199')
     await page.getByRole('textbox', { name: 'API Key' }).fill('e2e-mock-key-0000000000')
-    await page.getByRole('button', { name: '保存连接' }).click()
+    await page.getByRole('button', { name: '连接并进入面板' }).click()
     await expect(page.getByText('连接配置已保存')).toBeVisible()
     // 跳转面板（桌面侧栏 + 移动抽屉双渲染，取任一）
     await expect(page).toHaveURL(/\/dashboard/)

@@ -22,6 +22,19 @@ updates:
       minor-and-patch:
         update-types: [minor, patch]
 
+  # 契约包同样独立安装依赖，其 dist 是服务端运行时消费物：漏掉本目录会让
+  # zod 长期停在旧版本，而两边 schema 行为差异只在运行期暴露
+  - package-ecosystem: npm
+    directory: /mc-schemas
+    schedule:
+      interval: weekly
+    rebase-strategy: auto
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+
   - package-ecosystem: github-actions
     directory: /
     schedule:

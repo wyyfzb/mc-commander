@@ -1,4 +1,5 @@
 import { getDb } from './database.js';
+import { toIsoUtc } from '../utils/db-time.js';
 
 const COLUMN_TO_FIELD = {
   id: 'id',
@@ -53,6 +54,10 @@ function rowToInstance(row) {
       let value = row[col];
       if ((col === 'auto_start' || col === 'auto_restart') && value !== null) {
         value = Boolean(value);
+      }
+      // created_at/updated_at 是 CURRENT_TIMESTAMP 的无时区 UTC 串，下发前归一化
+      if (col === 'created_at' || col === 'updated_at') {
+        value = toIsoUtc(value);
       }
       // jvm_args 存 JSON 数组文本，损坏/非法时回退 null（安全方向：不启动
       // 恶意参数，由服务层校验兜底）

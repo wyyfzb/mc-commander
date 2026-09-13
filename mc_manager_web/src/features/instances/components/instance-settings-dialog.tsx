@@ -7,7 +7,7 @@
  * - 保存调 PUT /instances/:id（白名单 maxMemory/minMemory/jvmArgs/javaPath），成功后 toast +
  *   失效实例详情查询 + 关闭；遗留 startCommand 实例保存时一并传 startCommand:null 清除
  *   （否则 jvmArgs 空数组时 start() 回退旧命令，新配置被静默覆盖）
- * - 弹窗实底（bg-mcs-bg-default）+ 表单输入实底；token 纪律，禁硬编码
+ * - 弹窗面走基座 bg-popover（全站统一）+ 表单输入实底；token 纪律，禁硬编码
  */
 import { useState } from 'react'
 import { ChevronDown, ChevronUp, Gauge, Info, Loader2, Save, Settings } from 'lucide-react'
@@ -262,18 +262,18 @@ export function InstanceSettingsDialog({
   }
 
   const inputClass =
-    'h-9 w-full rounded-mcs-sm border border-mcs-border-default bg-mcs-bg-default px-2.5 text-mcs-sm text-mcs-text-default placeholder:text-mcs-text-subtle focus:border-mcs-accent-border focus:outline-none focus:ring-1 focus:ring-mcs-focus-ring'
+    'h-9 w-full rounded-mcs-sm border border-mcs-border-default bg-mcs-bg-default px-2.5 text-mcs-sm text-mcs-text-default placeholder:text-mcs-text-muted focus:border-mcs-accent-border focus:outline-none focus:ring-1 focus:ring-mcs-focus-ring'
 
   return (
     <Dialog open onOpenChange={(open) => { if (!open && dirty) { setCloseConfirmOpen(true) } else if (!open) { onOpenChange(false) } }}>
-      <DialogContent className="bg-mcs-bg-default max-h-[85vh] overflow-y-auto sm:max-w-lg">
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader className="flex-row items-center gap-3 space-y-0">
           <span className="flex size-9 shrink-0 items-center justify-center rounded-mcs-sm bg-mcs-accent-bg-subtle text-mcs-accent-fg">
             <Settings className="size-4.5" aria-hidden />
           </span>
           <div className="min-w-0">
             <DialogTitle className="text-mcs-lg font-semibold text-mcs-text-default">启动配置</DialogTitle>
-            <DialogDescription className="truncate text-mcs-xs text-mcs-text-subtle">
+            <DialogDescription className="truncate text-mcs-xs text-mcs-text-muted">
               {instance.name}
             </DialogDescription>
           </div>
@@ -284,10 +284,10 @@ export function InstanceSettingsDialog({
           <div className="flex flex-col gap-1.5">
             <span className="text-mcs-md font-semibold text-mcs-text-default">内存分配</span>
             <p>
-              <span className="font-mono text-mcs-2xl font-bold text-mcs-accent">
+              <span className="font-mono text-mcs-2xl font-semibold text-mcs-accent-fg">
                 {allocatedMemory.toFixed(1)} GB
               </span>
-              <span className="ml-1 text-mcs-sm text-mcs-text-subtle">/ {totalMax.toFixed(1)} GB</span>
+              <span className="ml-1 text-mcs-sm text-mcs-text-muted">/ {totalMax.toFixed(1)} GB</span>
             </p>
             <Slider
               aria-label="内存分配"
@@ -297,18 +297,18 @@ export function InstanceSettingsDialog({
               value={[allocatedMemory]}
               onValueChange={([v]) => handleMemoryChange(v!)}
             />
-            <p className="text-mcs-xs text-mcs-text-subtle">拖拽滑块分配该实例可用的最大内存</p>
+            <p className="text-mcs-xs text-mcs-text-muted">拖拽滑块分配该实例可用的最大内存</p>
           </div>
 
           {/* ── Aikar Flags 开关（开启时生成 G1GC 优化参数同步进 jvmArgs）── */}
           <div className="flex items-center gap-3 rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-default px-3 py-2">
             <Gauge
-              className={cn('size-4 shrink-0', useAikarFlags ? 'text-mcs-accent-fg' : 'text-mcs-text-subtle')}
+              className={cn('size-4 shrink-0', useAikarFlags ? 'text-mcs-accent-fg' : 'text-mcs-text-muted')}
               aria-hidden
             />
             <div className="min-w-0 flex-1">
               <p className="text-mcs-sm font-semibold text-mcs-text-default">JVM 优化 (Aikar&apos;s Flags)</p>
-              <p className="text-mcs-xs text-mcs-text-subtle">使用 MCS 社区优化的 G1GC 参数，改善 GC 停顿</p>
+              <p className="text-mcs-xs text-mcs-text-muted">使用 MCS 社区优化的 G1GC 参数，改善 GC 停顿</p>
             </div>
             <Switch
               checked={useAikarFlags}
@@ -320,7 +320,7 @@ export function InstanceSettingsDialog({
           {/* ── 生成的启动命令预览 ── */}
           <div className="flex flex-col gap-1.5">
             <span className="text-mcs-xs font-semibold text-mcs-text-muted">生成的启动命令</span>
-            <pre className="w-full overflow-x-auto whitespace-pre-wrap break-all rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-default p-3 font-mono text-mcs-xs text-mcs-accent">
+            <pre className="w-full overflow-x-auto whitespace-pre-wrap break-all rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-default p-3 font-mono text-mcs-xs text-mcs-accent-fg">
               {startCommandPreview}
             </pre>
           </div>
@@ -330,7 +330,7 @@ export function InstanceSettingsDialog({
             type="button"
             onClick={() => setShowAdvanced((s) => !s)}
             aria-expanded={showAdvanced}
-            className="flex cursor-pointer items-center gap-1 rounded-mcs-sm text-mcs-sm font-medium text-mcs-text-subtle transition-colors hover:bg-mcs-bg-hover hover:text-mcs-text-default"
+            className="flex cursor-pointer items-center gap-1 rounded-mcs-sm text-mcs-sm font-medium text-mcs-text-muted transition-colors hover:bg-mcs-state-hover hover:text-mcs-text-default"
           >
             {showAdvanced ? <ChevronUp className="size-4" aria-hidden /> : <ChevronDown className="size-4" aria-hidden />}
             高级参数
@@ -348,7 +348,7 @@ export function InstanceSettingsDialog({
                   placeholder="java"
                   className={inputClass}
                 />
-                <p className="text-mcs-xs text-mcs-text-subtle">
+                <p className="text-mcs-xs text-mcs-text-muted">
                   留空或填 java 使用系统默认；填路径时需为已存在的 java 可执行文件
                 </p>
               </div>
@@ -364,7 +364,7 @@ export function InstanceSettingsDialog({
                   placeholder={'每行一个 JVM 参数，例如：\n-Xmx4G\n-XX:+UseG1GC'}
                   className={cn(inputClass, 'h-auto min-h-24 resize-y font-mono')}
                 />
-                <p className="text-mcs-xs text-mcs-text-subtle">
+                <p className="text-mcs-xs text-mcs-text-muted">
                   仅支持 -X/-D 前缀参数、-jar 与 nogui；-jar 路径需位于实例目录内
                 </p>
               </div>
@@ -386,7 +386,7 @@ export function InstanceSettingsDialog({
                     ] as [string, string][]
                   ).map(([arg, desc]) => (
                     <div key={arg} className="flex items-baseline gap-2">
-                      <dt className="w-30 shrink-0 truncate font-mono text-mcs-xs text-mcs-accent" title={arg}>
+                      <dt className="w-30 shrink-0 truncate font-mono text-mcs-xs text-mcs-accent-fg" title={arg}>
                         {arg}
                       </dt>
                       <dd className="min-w-0 flex-1 text-mcs-xs text-mcs-text-muted">{desc}</dd>

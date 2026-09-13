@@ -7,6 +7,7 @@ import { CloudOff } from 'lucide-react'
 import { toast } from 'sonner'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
+import { EmptyState } from '@/components/mcs/empty-state'
 import { ApiError } from '@/api/client'
 import { getFriendlyErrorMessage } from '@/api/errors'
 import { MINECRAFT_ITEMS, type MinecraftItem } from '@/lib/mc-items'
@@ -192,13 +193,13 @@ export function GiveItemPanel({
 
   const handleCategoryChange = (cat: string) => { setActiveCategory(cat); setExpandedEnchantId(null); setExpandedPotionId(null) }
 
-  // 单模式离线拦截
+  // 单模式离线拦截：与传送 Tab 离线空态统一走 EmptyState
   if (!isBatchMode && player && !player.isOnline) return (
-    <div className="flex h-full flex-col items-center justify-center gap-2 rounded-mcs-sm border border-mcs-border-muted p-6 text-center">
-      <CloudOff className="size-8 text-mcs-text-subtle" aria-hidden />
-      <p className="text-mcs-sm text-mcs-text-default">玩家已离线，无法给予物品</p>
-      <p className="text-mcs-xs text-mcs-text-subtle">给予物品需要玩家在线</p>
-    </div>
+    <EmptyState
+      icon={CloudOff}
+      title="玩家已离线，无法给予物品"
+      hint="给予物品需要玩家在线"
+    />
   )
 
   return (

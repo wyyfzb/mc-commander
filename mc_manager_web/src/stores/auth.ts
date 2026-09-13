@@ -6,6 +6,7 @@
  *   可用性优先；服务端支持踢单设备/改密全踢，泄露风险可通过会话管理面板处置
  */
 import { create } from 'zustand'
+import { panelAddress } from '@/lib/mc-connection'
 
 const SESSION_STORAGE_KEY = 'mcs-session'
 
@@ -15,6 +16,12 @@ export interface StoredSession {
   sessionId: string
   /** ISO 时间；过期后服务端返回 40103，由全局拦截清会话跳登录 */
   expiresAt: string
+  /**
+   * 签发面板地址（`panelAddress()` 归一后的值）。会话只在签发它的面板有效：
+   * 地址不一致时不发 Bearer（避免拿 A 的令牌打 B 面板换 40103 被踢下线），
+   * 缺失＝旧会话，按适用处理（宽限到下次登录）。
+   */
+  issuedFor?: string
 }
 
 function readInitialSession(): StoredSession | null {
@@ -27,7 +34,14 @@ function readInitialSession(): StoredSession | null {
       typeof parsed.sessionId === 'string' &&
       typeof parsed.expiresAt === 'string'
     ) {
-      return { token: parsed.token, sessionId: parsed.sessionId, expiresAt: parsed.expiresAt }
+      return {
+        token: parsed.token,
+        sessionId: parsed.sessionId,
+        expiresAt: parsed.expiresAt,
+        ...(typeof parsed.issuedFor === 'string' && parsed.issuedFor !== ''
+          ? { issuedFor: parsed.issuedFor }
+          : {}),
+      }
     }
   } catch {
     // 解析失败按未登录处理
@@ -64,6 +78,17 @@ export const useAuthStore = create<AuthState>()((set) => ({
 /** 非 React 上下文读取会话（loader/client.ts 用） */
 export function getStoredSession(): StoredSession | null {
   return useAuthStore.getState().session
+}
+
+/**
+ * 旧会话（无签发面板信息）在本面板被服务端接受后回填签发面板。
+ * 地址能用本机令牌打通，就证明它就是签发方——把「无限宽限」收敛为「一次请求宽限」，
+ * 否则持续使用（7 天滑动续期）的用户永远走不到重新登录，旧症状会一直留在他们身上。
+ */
+export function backfillSessionPanel(baseUrl: string): void {
+  const { session, setSession } = useAuthStore.getState()
+  if (!session?.token || session.issuedFor) return
+  setSession({ ...session, issuedFor: panelAddress(baseUrl) })
 }
 
 /**

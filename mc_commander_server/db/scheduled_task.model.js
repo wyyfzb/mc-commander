@@ -1,6 +1,7 @@
 import { getDb } from './database.js';
 import { TaskRunHistoryModel } from './task_run_history.model.js';
 import { logger } from '../utils/logger.js';
+import { toIsoUtc } from '../utils/db-time.js';
 
 export class ScheduledTaskModel {
   static findAll(options = {}) {
@@ -59,12 +60,14 @@ export class ScheduledTaskModel {
       cronExpression: row.cron_expression,
       command: row.command,
       isEnabled: !!row.is_enabled,
-      lastRunAt: row.last_run_at,
+      // last_run_at/created_at/updated_at 为 CURRENT_TIMESTAMP 的无时区 UTC 串，
+      // 下发前统一归一化为 ISO8601（next_run_at 由调度器写 ISO，经归一化原样通过）
+      lastRunAt: toIsoUtc(row.last_run_at),
       lastRunStatus: row.last_run_status ?? 'never',
       lastRunError: row.last_run_error ?? null,
-      nextRunAt: row.next_run_at,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
+      nextRunAt: toIsoUtc(row.next_run_at),
+      createdAt: toIsoUtc(row.created_at),
+      updatedAt: toIsoUtc(row.updated_at),
     };
   }
 

@@ -17,6 +17,7 @@
 import { useMemo, useState } from 'react'
 import { CloudOff } from 'lucide-react'
 import { toast } from 'sonner'
+import { EmptyState } from '@/components/mcs/empty-state'
 import {
   buildTeleportToCoordsCommand,
   buildTeleportToPlayerCommand,
@@ -62,12 +63,14 @@ export function TeleportTab({
   onAction,
 }: TeleportTabProps) {
   if (!isBatchMode && player !== null && !player.isOnline) {
+    // 与给予物品离线空态统一走 EmptyState（图标/文案/间距同构，高度随容器）
     return (
-      <div className="flex flex-col items-center gap-1.5 py-10">
-        <CloudOff className="size-8 text-mcs-text-subtle" aria-hidden />
-        <p className="text-mcs-sm text-mcs-text-muted">玩家已离线，无法执行传送</p>
-        <p className="text-mcs-xs text-mcs-text-subtle">传送操作需要玩家在线</p>
-      </div>
+      <EmptyState
+        icon={CloudOff}
+        title="玩家已离线，无法执行传送"
+        hint="传送操作需要玩家在线"
+        className="min-h-64"
+      />
     )
   }
   return (
@@ -186,7 +189,7 @@ function TeleportTabContent({
 
       {/* RCON 不可用时在线操作提示 */}
       {!isRconConnected && (
-        <p className="text-mcs-xs text-mcs-text-subtle">提示：RCON 未连接，在线操作可能失败（需启用 RCON）</p>
+        <p className="text-mcs-xs text-mcs-text-muted">提示：RCON 未连接，在线操作可能失败（需启用 RCON）</p>
       )}
 
       <WorldSpawnDialogs

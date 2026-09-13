@@ -17,7 +17,7 @@ export function Stepper({ step }: { step: number }) {
               aria-hidden
               className={cn(
                 'h-px flex-1 rounded-full',
-                i <= step ? 'bg-mcs-accent-border' : 'bg-mcs-border-muted',
+                i <= step ? 'bg-mcs-accent' : 'bg-mcs-border-muted',
               )}
             />
           )}
@@ -27,10 +27,10 @@ export function Stepper({ step }: { step: number }) {
               className={cn(
                 'flex size-5 shrink-0 items-center justify-center rounded-full border text-mcs-xs transition-colors',
                 i < step
-                  ? 'border-mcs-accent bg-mcs-accent text-mcs-on-accent'
+                  ? 'border-mcs-accent-border-strong bg-mcs-accent text-mcs-on-accent'
                   : i === step
-                    ? 'border-mcs-accent bg-mcs-accent-bg-subtle text-mcs-accent-fg'
-                    : 'border-mcs-border-default text-mcs-text-subtle',
+                    ? 'border-mcs-accent-border-strong bg-mcs-accent-bg-subtle text-mcs-accent-fg'
+                    : 'border-mcs-border-default text-mcs-text-muted',
               )}
             >
               {i < step ? <Check className="size-3" aria-hidden /> : i + 1}
@@ -39,7 +39,7 @@ export function Stepper({ step }: { step: number }) {
               aria-current={i === step ? 'step' : undefined}
               className={cn(
                 'text-mcs-sm whitespace-nowrap',
-                i === step ? 'text-mcs-text-default' : 'text-mcs-text-subtle',
+                i === step ? 'text-mcs-text-default' : 'text-mcs-text-muted',
               )}
             >
               {label}

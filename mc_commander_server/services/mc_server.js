@@ -9,12 +9,16 @@ import { parseUncompressed as parseNbtSync } from 'prismarine-nbt';
 import config from '../config.js';
 import { InstanceModel, CommandHistoryModel } from '../db/index.js';
 import { atomicWriteFile } from '../utils/fs-utils.js';
+import { maskSensitiveCommand } from '../utils/command-mask.js';
+import { localDateKey } from '../utils/local-date.js';
 // offline uuid / stats 时长读取全仓公共实现（与 routes/players.js 共用 player-utils.js）
 import { isPathContained, offlineUuid as computeOfflineUuid, getTotalPlayTime } from '../utils/player-utils.js';
 import * as levelDat from './mc-server/level-dat.js';
 import * as outputParser from './mc-server/output-parser.js';
 import * as statsCollector from './mc-server/stats-collector.js';
 import * as startLifecycle from './mc-server/start-lifecycle.js';
+import * as adopt from './mc-server/adopt.js';
+import * as logTail from './mc-server/log-tail.js';
 import { logger } from '../utils/logger.js';
 
 // 原子写统一走 utils/fs-utils.js 公共实现（写唯一 .tmp 再 rename，失败清残留）。
@@ -184,6 +188,7 @@ export class MCServerManager extends EventEmitter {
     instance.on('playerLeave', (data) => this.emit('instance:playerLeave', { instanceId: id, ...data }));
     instance.on('playerDeath', (data) => this.emit('instance:playerDeath', { instanceId: id, ...data }));
     instance.on('playerRespawn', (data) => this.emit('instance:playerRespawn', { instanceId: id, ...data }));
+    instance.on('playerChat', (data) => this.emit('instance:playerChat', { instanceId: id, ...data }));
     instance.on('achievement', (data) => this.emit('instance:achievement', { instanceId: id, ...data }));
     instance.on('tpsUpdate', (data) => this.emit('instance:tpsUpdate', { instanceId: id, ...data }));
     instance.on('performanceUpdate', (data) => this.emit('instance:performanceUpdate', { instanceId: id, ...data }));
@@ -202,9 +207,10 @@ export class MCServerManager extends EventEmitter {
     return Array.from(this.instances.values()).map(i => i.toStatus());
   }
 
-  // 优雅停止全部运行中实例：等待 stop 命令送达 + MC 正常退出，
-  // 超时兜底强杀，避免停机（systemctl stop / Ctrl+C）时 MC 子进程
-  // 残留为孤儿、在线玩家数据（离开事件/60s 保存）丢失。
+  // 显式停止全部运行中实例：等待 stop 命令送达 + MC 正常退出，超时兜底强杀，
+  // 避免残留孤儿进程、在线玩家数据（离开事件/60s 保存）丢失。
+  // 注意：面板停机（SIGTERM/SIGINT/崩溃）已不调用本方法——停机不停实例，
+  // 由下次启动的 adoptOrphanInstances 接管（owner 2026-09-09 拍板）。
   async stopAll({ timeout = 8000 } = {}) {
     await Promise.all(
       Array.from(this.instances.values())
@@ -235,6 +241,15 @@ export class MCServerInstance extends EventEmitter {
     this._manualStop = false;
     this.process = null;
     this.isRunning = false;
+    // 孤儿接管态（UXT-15）：adopted=本实例进程非本面板 spawn、由 pid 文件接管而来。
+    // 接管实例无 stdout/stdin 管道（this.process 保持 null），命令仅 RCON 通道，
+    // 退出感知走看门狗轮询（adopt.js），this.process 众多守卫据此放行。
+    this.adopted = false;
+    this.adoptedPid = null;
+    this._adoptTimer = null;
+    // 接管实例日志续读（log-tail 域）：定时器与读取游标
+    this._logTailTimer = null;
+    this._logTailState = null;
     this.startTime = null;
     this.logBuffer = [];
     this.players = new Map();
@@ -255,6 +270,9 @@ export class MCServerInstance extends EventEmitter {
     this._rconClient = null;
     this._rconConnecting = null;
     this._lastCpuTime = undefined;
+    // Windows 采集告警去重位（见 stats-collector 的 win32 分支）：记的是 exec 层失败，
+    // 只在「正常→失败」的转折处告警一次；每轮运行由 _initializeRuntimeState 复位
+    this._win32StatsError = false;
     this._saveTimer = null;
     this._playerStatsTimer = null;  // 玩家血量/坐标/入睡状态采集定时器
     this._playerStatsEpoch = 0;     // 采集代际：stop 时自增，作废在途回调的续链
@@ -285,6 +303,48 @@ export class MCServerInstance extends EventEmitter {
     this._detectPublicIp();
     // 启动时读取世界出生点（纯文件 I/O，不阻塞）
     this._readWorldSpawnFromLevelDat();
+    // 面板（重）启动时从 latest.log 回填当次运行日志（UXT-24），见方法注释
+    this._loadLogBufferFromLatestLog();
+  }
+
+  /// 面板（重）启动时从 vanilla 的 latest.log 回填日志缓冲（UXT-24）：
+  /// logBuffer 是纯内存态，面板重启即清空——运行中实例的当次运行日志
+  /// （含启动段）随面板重启从终端消失，孤儿接管（UXT-15）场景同样断档。
+  /// latest.log 由 MC 自身每次启动重写、持续落盘，天然就是「当次运行」
+  /// 的权威日志；取尾部至多 1000 行（与 logBuffer 滚动上限一致）注入。
+  /// start() 的 _initializeRuntimeState 仍会清空缓冲：新一次运行从空开始，
+  /// 与 vanilla 重写 latest.log 的行为一致。只读尾部 2MB 按行切分，
+  /// 避免长运行服务器全文件读入内存。
+  _loadLogBufferFromLatestLog() {
+    const logPath = path.join(this.serverPath, 'logs', 'latest.log');
+    try {
+      if (!fs.existsSync(logPath)) return;
+      const size = fs.statSync(logPath).size;
+      if (size === 0) return;
+      const readBytes = Math.min(size, 2 * 1024 * 1024);
+      const buf = Buffer.alloc(readBytes);
+      const fd = fs.openSync(logPath, 'r');
+      try {
+        fs.readSync(fd, buf, 0, readBytes, size - readBytes);
+      } finally {
+        fs.closeSync(fd);
+      }
+      let text = buf.toString('utf8');
+      // 非整块起点时首行可能被截断（含 UTF-8 多字节边界），丢弃首行残段
+      if (readBytes < size) {
+        const firstNewline = text.indexOf('\n');
+        if (firstNewline >= 0) text = text.slice(firstNewline + 1);
+      }
+      const lines = this._filterLogNoise(text.replace(/\r/g, ''))
+        .split('\n')
+        .filter((l) => l.trim().length > 0)
+        .slice(-1000);
+      if (lines.length === 0) return;
+      this.logBuffer = lines.map((l) => ({ time: Date.now(), text: l, type: 'stdout' }));
+      logger.info(`[${this.id}] Restored ${lines.length} log line(s) from latest.log`);
+    } catch (e) {
+      logger.warn(`[${this.id}] Failed to restore logs from latest.log:`, e.message);
+    }
   }
 
   /// 世界出生点缓存（从 level.dat 读取）。
@@ -564,6 +624,9 @@ export class MCServerInstance extends EventEmitter {
 
     // 启动视为非主动停止（自动重启/崩溃恢复均会走这里）
     this._manualStop = false;
+    // 新 spawn 覆盖一切接管残留态（接管实例 restart 必经看门狗确认退出后才到这）
+    this.adopted = false;
+    this.adoptedPid = null;
 
     // 子阶段编排（各阶段实现见 start-lifecycle.js，经原型注入 this 绑定实例）：
     // EULA 检查 → tempban 对账 → world 锁清理 → 启动命令/参数构建（四种来源优先级）
@@ -575,6 +638,8 @@ export class MCServerInstance extends EventEmitter {
 
     const { command, args } = this._resolveStartCommand(startCommand);
     this._spawnServerProcess(command, args);
+    // pid 文件是面板重启后接管孤儿进程的唯一线索（UXT-15），spawn 成功即落盘
+    this._writePidFile();
     this._attachSpawnErrorListener();
     this._attachStdinErrorListener();
     this._initializeRuntimeState();
@@ -715,13 +780,19 @@ export class MCServerInstance extends EventEmitter {
   }
 
   stop() {
-    if (!this.isRunning || !this.process) {
+    if (!this.isRunning || (!this.process && !this.adopted)) {
       throw new Error('Server is not running');
     }
     // 用户主动停止：标记为手动，避免被误判为意外停止而触发自动重启，
     // 并取消重启的延迟启动（用户明确停止后不得 3 秒后被自动拉起）
     this._manualStop = true;
     this.cancelRestart();
+    // 接管实例无控制台管道：统一走优雅停流程（RCON stop / 失败则按平台
+    // 信号或 taskkill 兜底），fire-and-forget 语义与常规 stop 一致
+    if (this.adopted) {
+      this.stopGracefully().catch(() => {});
+      return;
+    }
     this.sendCommand('stop').catch(() => {});
   }
 
@@ -730,7 +801,7 @@ export class MCServerInstance extends EventEmitter {
   // fire-and-forget，停机时 MC 可能收不到命令就随父进程退出成为孤儿，
   // 在线玩家数据（离开事件/60s 保存）随之丢失。
   async stopGracefully({ timeout = 8000 } = {}) {
-    if (!this.isRunning || !this.process) return;
+    if (!this.isRunning || (!this.process && !this.adopted)) return;
     this._manualStop = true;
     this.cancelRestart();
     try {
@@ -738,18 +809,24 @@ export class MCServerInstance extends EventEmitter {
     } catch {
       // 发送失败（RCON 断开等）：直接进入等待/强杀流程
     }
-    if (!this.isRunning || !this.process) return; // 发送阶段就已退出
-    await new Promise((resolve) => {
-      const timer = setTimeout(() => {
-        this.process?.removeListener('exit', onExit);
-        resolve();
-      }, timeout);
-      const onExit = () => {
-        clearTimeout(timer);
-        resolve();
-      };
-      this.process.once('exit', onExit);
-    });
+    if (!this.isRunning) return; // 发送阶段就已退出
+    if (this.adopted) {
+      // 接管实例无 exit 事件：轮询 pid 验活等待，语义与下方 exit 等待一致
+      await this._waitForAdoptedExit(timeout);
+    } else {
+      if (!this.process) return;
+      await new Promise((resolve) => {
+        const timer = setTimeout(() => {
+          this.process?.removeListener('exit', onExit);
+          resolve();
+        }, timeout);
+        const onExit = () => {
+          clearTimeout(timer);
+          resolve();
+        };
+        this.process.once('exit', onExit);
+      });
+    }
     // 超时仍未退出 → 强杀，不留孤儿进程
     if (this.isRunning) {
       try { this.kill(); } catch {}
@@ -772,19 +849,43 @@ export class MCServerInstance extends EventEmitter {
     if (this._restartTimer) clearTimeout(this._restartTimer);
     this._restartTimer = setTimeout(() => {
       this._restartTimer = null;
-      // 延迟窗口内服务器已被其他路径启动 → 放弃
-      if (this.isRunning) return;
-      // 实例目录已被删除（用户卸载）→ 放弃延迟启动
-      if (!fs.existsSync(path.join(this.serverPath, this.jarFile))) {
-        logger.info(`[${this.id}] Restart cancelled: server jar no longer exists`);
-        return;
+      // 接管实例：stop 到进程退出经看门狗轮询感知（最长 ADOPT_WATCHDOG_INTERVAL_MS），
+      // 固定 3s 窗口可能早于死亡——轮询等待退出（上限 10s）后再启动。
+      // 轮询句柄复用 _restartTimer：stop/kill 的 cancelRestart() 可中断等待
+      if (this.adopted && this.isRunning) {
+        const begin = Date.now();
+        const waitAdoptedExit = () => {
+          if (!this.isRunning) {
+            this._restartTimer = null;
+            return this._startAfterRestartWindow();
+          }
+          if (Date.now() - begin >= 10000) {
+            this._restartTimer = null;
+            logger.warn(`[${this.id}] Restart cancelled: adopted process did not exit in time`);
+            return;
+          }
+          this._restartTimer = setTimeout(waitAdoptedExit, 250);
+        };
+        return waitAdoptedExit();
       }
-      try {
-        this.start();
-      } catch (e) {
-        logger.error('Restart failed:', e);
-      }
+      this._startAfterRestartWindow();
     }, 3000);
+  }
+
+  // 延迟窗口届满后的实际启动（窗口内已退出/已取消的守卫在此收敛）
+  _startAfterRestartWindow() {
+    // 延迟窗口内服务器已被其他路径启动 → 放弃
+    if (this.isRunning) return;
+    // 实例目录已被删除（用户卸载）→ 放弃延迟启动
+    if (!fs.existsSync(path.join(this.serverPath, this.jarFile))) {
+      logger.info(`[${this.id}] Restart cancelled: server jar no longer exists`);
+      return;
+    }
+    try {
+      this.start();
+    } catch (e) {
+      logger.error('Restart failed:', e);
+    }
   }
 
   // 取消待执行的延迟启动（用户 stop/kill 实例时调用）
@@ -800,8 +901,11 @@ export class MCServerInstance extends EventEmitter {
     // 并取消重启的延迟启动
     this._manualStop = true;
     this.cancelRestart();
-    if (this.process) {
-      const pid = this.process.pid;
+    // pid 来源：常规实例取子进程句柄；接管实例（管道不可恢复）取 pid 文件记录。
+    // 接管实例杀后的运行态收尾由看门狗轮询完成（检测死亡 → stopped 事件 →
+    // 清 pid 文件），此处不重复清理。
+    const pid = this.process?.pid ?? (this.adopted ? this.adoptedPid : null);
+    if (pid) {
       // 只杀主进程不够：MC 1.18+/26.x 官方 server.jar 为 Bundler 结构，
       // java 主进程（BundlerMain 引导器）经 ProcessBuilder 派生真正运行的
       // 服务器 JVM，主进程被杀后 JVM 成为孤儿继续运行（Linux 被 init 收养
@@ -821,7 +925,9 @@ export class MCServerInstance extends EventEmitter {
         }
       }
       // 单进程 SIGKILL 兜底（进程树杀失败/pid 缺失时仍杀主进程本身）
-      try { this.process.kill('SIGKILL'); } catch {}
+      if (this.process) {
+        try { this.process.kill('SIGKILL'); } catch {}
+      }
     }
     this._rconCleanup();
   }
@@ -845,7 +951,7 @@ export class MCServerInstance extends EventEmitter {
   }
 
   async sendCommand(command) {
-    if (!this.isRunning || !this.process) {
+    if (!this.isRunning || (!this.process && !this.adopted)) {
       throw new Error('Server is not running');
     }
     // 兜底：剥离前导 `/` —— MC 服务器控制台/RCON 不接受 `/` 前缀
@@ -925,6 +1031,11 @@ export class MCServerInstance extends EventEmitter {
         return null;
       }
     }
+    // 接管实例无 stdin 管道（面板重启后接管，stdout/stdin 随旧面板进程消失）：
+    // RCON 不可达时命令没有任何投递通道，如实报错而非静默丢弃
+    if (!this.process && this.adopted) {
+      throw new Error('接管实例无控制台管道且 RCON 未连接，命令未送达——请在实例设置中启用 RCON');
+    }
     this._writeToStdin(command + '\n');
     return null;
     } catch (err) {
@@ -934,7 +1045,8 @@ export class MCServerInstance extends EventEmitter {
       try {
         CommandHistoryModel.create({
           instanceId: this.id,
-          command,
+          // 落库前遮蔽敏感值（用户自由输入的命令可能含密钥；见 utils/command-mask.js）
+          command: maskSensitiveCommand(command),
           source: 'api',
           success: cmdSuccess ? 1 : 0,
           durationMs: Date.now() - cmdStart,
@@ -945,7 +1057,7 @@ export class MCServerInstance extends EventEmitter {
 
   sendCommandWithResponse(command, { timeout = 5000 } = {}) {
     return new Promise((resolve, reject) => {
-      if (!this.isRunning || !this.process) {
+      if (!this.isRunning || (!this.process && !this.adopted)) {
         return reject(new Error('Server is not running'));
       }
 
@@ -1126,9 +1238,9 @@ export class MCServerInstance extends EventEmitter {
     return count;
   }
 
+  /// 本地时区日期键（「今日新增」缓存的分桶键，见 utils/local-date.js）
   _todayKey() {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    return localDateKey();
   }
 
   /// 获取累计运行时长（秒）：数据库持久化的累计值 + 本次运行时长
@@ -1955,3 +2067,10 @@ Object.assign(MCServerInstance.prototype, outputParser);
 // 模块函数体内 this 语义与类内定义完全一致（实例方法调用时 this 绑定实例），
 // 全部调用点零改动，对外接口零变化。
 Object.assign(MCServerInstance.prototype, statsCollector);
+
+// 接管实例日志续读域挂载（UXT-15 后续）：log-tail 模块经原型注入复用，
+// 接管实例改读 latest.log 尾部以恢复日志与事件解析（详见模块头注释）。
+Object.assign(MCServerInstance.prototype, logTail);
+
+// 孤儿进程接管域挂载（UXT-15 根修）：pid 文件与面板重启后接管，机制见 adopt.js 头注释。
+Object.assign(MCServerInstance.prototype, adopt);

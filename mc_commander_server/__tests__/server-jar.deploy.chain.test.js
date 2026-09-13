@@ -335,7 +335,7 @@ describe('POST /instances/deploy · Paper 主链', () => {
 
     const res = await request(app)
       .post('/api/instances/deploy')
-      .send({ type: 'paper', mcVersion: '1.21.4', instanceName: 'Paper Chain Server' });
+      .send({ type: 'paper', mcVersion: '1.21.4', instanceName: 'Paper Chain Server', eula: true });
 
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('ok');
@@ -468,7 +468,7 @@ describe('部署注册表终态语义（issue 420）', () => {
 
     const res = await request(app)
       .post('/api/instances/deploy')
-      .send({ type: 'paper', mcVersion: '1.21.4', instanceName: 'Registry Life Server' });
+      .send({ type: 'paper', mcVersion: '1.21.4', instanceName: 'Registry Life Server', eula: true });
     expect(res.status).toBe(200);
     const instanceId = res.body.data.id;
 
@@ -493,7 +493,7 @@ describe('部署注册表终态语义（issue 420）', () => {
 
     const res = await request(app)
       .post('/api/instances/deploy')
-      .send({ type: 'paper', mcVersion: '1.21.4', instanceName: 'Snapshot Server' });
+      .send({ type: 'paper', mcVersion: '1.21.4', instanceName: 'Snapshot Server', eula: true });
     expect(res.status).toBe(200);
     const instanceId = res.body.data.id;
 
@@ -689,13 +689,13 @@ describe('generateServerProperties 落盘契约', () => {
     expect(pwd[1]).toHaveLength(16);
   });
 
-  it('instance.json 与 eula.txt 契约（部署产物可直接启动）', async () => {
+  it('instance.json 与 eula.txt 契约（已同意 EULA 时部署产物可直接启动）', async () => {
     testState.latestBuild = { downloads: { application: { url: 'https://example.invalid/jar/server.jar' } } };
     const { app } = buildApp();
 
     const res = await request(app)
       .post('/api/instances/deploy')
-      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Eula Contract Server' });
+      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Eula Contract Server', eula: true });
 
     const instanceId = res.body.data.id;
     expect(fs.readFileSync(`${testState.serversDir}/${instanceId}/eula.txt`, 'utf8')).toBe('eula=true\n');
@@ -710,6 +710,37 @@ describe('generateServerProperties 落盘契约', () => {
       javaPath: '/usr/bin/java',
     });
   });
+
+  it('未同意 EULA（字段缺省）：写 eula=false、跳过首启，部署仍成功', async () => {
+    testState.latestBuild = { downloads: { application: { url: 'https://example.invalid/jar/server.jar' } } };
+    const { app, manager } = buildApp();
+
+    const res = await request(app)
+      .post('/api/instances/deploy')
+      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'No Consent Server' });
+
+    expect(res.status).toBe(200);
+    const instanceId = res.body.data.id;
+    // 面板不得代替用户表达同意：未同意即 eula=false，且 MC 首启强制要求 true 故必须跳过
+    expect(fs.readFileSync(`${testState.serversDir}/${instanceId}/eula.txt`, 'utf8')).toBe('eula=false\n');
+    const stages = manager.emit.mock.calls.map(([, evt]) => evt.stage);
+    expect(stages).not.toContain('first_launch');
+    expect(stages[stages.length - 1]).toBe('complete');
+  });
+
+  it('未同意 EULA（显式 false）：同样写 eula=false 且不首启', async () => {
+    testState.latestBuild = { downloads: { application: { url: 'https://example.invalid/jar/server.jar' } } };
+    const { app, manager } = buildApp();
+
+    const res = await request(app)
+      .post('/api/instances/deploy')
+      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Explicit Decline Server', eula: false });
+
+    expect(res.status).toBe(200);
+    const instanceId = res.body.data.id;
+    expect(fs.readFileSync(`${testState.serversDir}/${instanceId}/eula.txt`, 'utf8')).toBe('eula=false\n');
+    expect(manager.emit.mock.calls.map(([, evt]) => evt.stage)).not.toContain('first_launch');
+  });
 });
 
 describe('runFirstLaunch 首启行为', () => {
@@ -723,7 +754,7 @@ describe('runFirstLaunch 首启行为', () => {
 
     const res = await request(app)
       .post('/api/instances/deploy')
-      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Exit1 Server' });
+      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Exit1 Server', eula: true });
 
     expect(res.status).toBe(200);
     expect(res.body.data.id).toMatch(/^vanilla-[0-9a-f]{8}$/);
@@ -735,44 +766,52 @@ describe('runFirstLaunch 首启行为', () => {
 
     const res = await request(app)
       .post('/api/instances/deploy')
-      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Spawn Error Server' });
+      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Spawn Error Server', eula: true });
 
     expect(res.status).toBe(200);
   });
 
   it('首启 60s 超时 → 按进程组终止（kill(-pid, SIGKILL)）+ 单进程兜底 + 部署完成', async () => {
-    testState.spawnBehavior = 'hang';
-    const killSpy = vi.spyOn(process, 'kill').mockReturnValue(true);
-    const { app } = buildApp();
+    // 进程树终止按 process.platform 分支：win32 走 taskkill /T，其他平台走 kill(-pid)。
+    // 本用例断言的是后者，固定 platform 才能在任意宿主覆盖该分支（CI 在 Linux 真跑同一路径）。
+    const origPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+    Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
+    try {
+      testState.spawnBehavior = 'hang';
+      const killSpy = vi.spyOn(process, 'kill').mockReturnValue(true);
+      const { app } = buildApp();
 
-    const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
-    const pending = request(app)
-      .post('/api/instances/deploy')
-      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Timeout Server' });
-    // supertest Test 为惰性 thenable：Promise.resolve 触发 then → 立即发起请求
-    const inflight = Promise.resolve(pending);
+      const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
+      const pending = request(app)
+        .post('/api/instances/deploy')
+        .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Timeout Server', eula: true });
+      // supertest Test 为惰性 thenable：Promise.resolve 触发 then → 立即发起请求
+      const inflight = Promise.resolve(pending);
 
-    // 轮询等待 runFirstLaunch 注册 60s 首启定时器（真实 IO 链在 tmp 目录毫秒级完成）
-    let timeoutCall = null;
-    for (let i = 0; i < 200 && !timeoutCall; i++) {
-      await new Promise((r) => setTimeout(r, 5));
-      timeoutCall = setTimeoutSpy.mock.calls.find(([, ms]) => ms === 60000) || null;
+      // 轮询等待 runFirstLaunch 注册 60s 首启定时器（真实 IO 链在 tmp 目录毫秒级完成）
+      let timeoutCall = null;
+      for (let i = 0; i < 200 && !timeoutCall; i++) {
+        await new Promise((r) => setTimeout(r, 5));
+        timeoutCall = setTimeoutSpy.mock.calls.find(([, ms]) => ms === 60000) || null;
+      }
+      expect(timeoutCall, 'runFirstLaunch 应注册 60s 首启定时器').not.toBeNull();
+
+      // 模拟 60s 到期：取消真实定时器后手动触发超时回调（进程树终止 + resolve）
+      const callIdx = setTimeoutSpy.mock.calls.findIndex(([, ms]) => ms === 60000);
+      clearTimeout(setTimeoutSpy.mock.results[callIdx].value);
+      timeoutCall[0]();
+
+      const res = await inflight;
+      expect(res.status).toBe(200);
+      expect(res.body.data.id).toMatch(/^vanilla-[0-9a-f]{8}$/);
+      // 进程树终止：Linux/macOS spawn 带 detached（pid 即 PGID）→ 负 pid 发组信号
+      expect(killSpy).toHaveBeenCalledWith(-42424, 'SIGKILL');
+      // 单进程 SIGKILL 兜底
+      const { spawn } = await import('child_process');
+      expect(spawn.mock.results[0].value.kill).toHaveBeenCalledWith('SIGKILL');
+    } finally {
+      Object.defineProperty(process, 'platform', origPlatform);
     }
-    expect(timeoutCall, 'runFirstLaunch 应注册 60s 首启定时器').not.toBeNull();
-
-    // 模拟 60s 到期：取消真实定时器后手动触发超时回调（进程树终止 + resolve）
-    const callIdx = setTimeoutSpy.mock.calls.findIndex(([, ms]) => ms === 60000);
-    clearTimeout(setTimeoutSpy.mock.results[callIdx].value);
-    timeoutCall[0]();
-
-    const res = await inflight;
-    expect(res.status).toBe(200);
-    expect(res.body.data.id).toMatch(/^vanilla-[0-9a-f]{8}$/);
-    // 进程树终止：Linux/macOS spawn 带 detached（pid 即 PGID）→ 负 pid 发组信号
-    expect(killSpy).toHaveBeenCalledWith(-42424, 'SIGKILL');
-    // 单进程 SIGKILL 兜底
-    const { spawn } = await import('child_process');
-    expect(spawn.mock.results[0].value.kill).toHaveBeenCalledWith('SIGKILL');
   });
 });
 

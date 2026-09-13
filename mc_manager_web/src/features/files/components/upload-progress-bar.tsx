@@ -32,11 +32,11 @@ export function UploadProgressBar({ uploading, onCancel }: UploadProgressBarProp
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={uploading.pct}
-          className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-mcs-bg-hover"
+          className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-mcs-bg-secondary"
         >
           <div
-            className="h-full rounded-full bg-mcs-accent transition-[width] duration-mcs-base"
-            style={{ width: `${uploading.pct}%` }}
+            className="h-full w-full rounded-full bg-mcs-accent transition-transform duration-mcs-base"
+            style={{ transform: `translateX(${uploading.pct - 100}%)` }}
           />
         </div>
       </div>

@@ -127,16 +127,20 @@ function FileListRow({
       role="button"
       tabIndex={0}
       aria-label={isDir ? `打开目录 ${entry.name}` : editable ? `选择文件 ${entry.name}` : `文件 ${entry.name}（二进制，可下载）`}
+      // 当前预览文件：底色是视觉线索，语义位由 aria-current 承担（role=button 行不构成列表选中集）
+      aria-current={isSelected ? 'true' : undefined}
       onClick={handleRowClick}
       onKeyDown={(e) => {
+        // role="button" 行只处理落在行本身的激活键；行内图标按钮的冒泡不再触发行打开
+        if (e.target !== e.currentTarget) return
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault()
           handleRowClick()
         }
       }}
       className={cn(
-        'flex cursor-pointer items-center gap-3 px-4 py-2 transition-colors duration-mcs-fast focus-visible:bg-mcs-bg-hover',
-        isDir ? 'hover:bg-mcs-bg-hover' : cn('hover:bg-mcs-bg-hover', isSelected && 'bg-mcs-accent-bg-subtle'),
+        'flex cursor-pointer items-center gap-3 px-4 py-2 transition-colors duration-mcs-fast focus-visible:bg-mcs-state-focus',
+        isDir ? 'hover:bg-mcs-state-hover' : cn('hover:bg-mcs-state-hover', isSelected && 'bg-mcs-accent-bg-subtle'),
       )}
     >
       <Icon
@@ -263,7 +267,7 @@ export function FileList({
               type="button"
               aria-label="根目录"
               onClick={() => onOpenDir('/')}
-              className="flex items-center rounded-sm p-0.5 text-mcs-accent-fg transition-colors duration-mcs-fast hover:bg-mcs-bg-hover"
+              className="flex items-center rounded-sm p-0.5 text-mcs-accent-fg transition-colors duration-mcs-fast hover:bg-mcs-state-hover"
             >
               <Home className="size-4" aria-hidden />
             </button>
@@ -271,7 +275,7 @@ export function FileList({
               const isLast = i === crumbs.length - 1
               return (
                 <Fragment key={c.path}>
-                  <ChevronRight className="size-3.5 shrink-0 text-mcs-text-subtle" aria-hidden />
+                  <ChevronRight className="size-3.5 shrink-0 text-mcs-text-muted" aria-hidden />
                   {isLast ? (
                     <span
                       aria-current="page"
@@ -283,7 +287,7 @@ export function FileList({
                     <button
                       type="button"
                       onClick={() => onOpenDir(c.path)}
-                      className="max-w-44 truncate rounded-sm px-1 py-0.5 text-mcs-accent-fg transition-colors duration-mcs-fast hover:bg-mcs-bg-hover"
+                      className="max-w-44 truncate rounded-sm px-1 py-0.5 text-mcs-accent-fg transition-colors duration-mcs-fast hover:bg-mcs-state-hover"
                     >
                       {c.label}
                     </button>

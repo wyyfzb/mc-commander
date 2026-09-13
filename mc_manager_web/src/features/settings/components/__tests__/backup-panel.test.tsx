@@ -18,6 +18,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router'
 import { Toaster } from 'sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { handlers, mockBackups } from '@/test/mocks/handlers'
+import { queryKeys } from '@/api/queries'
 import { useConnectionStore } from '@/stores/connection'
 import { formatBackupDate, formatBackupSize } from '@/lib/mc-backup'
 import type { BackupItem } from '@/api/types'
@@ -58,7 +59,9 @@ function renderPanel(instanceId: string | null = 'demo') {
     ],
     { initialEntries: ['/settings/backups'] },
   )
-  return render(<RouterProvider router={router} />)
+  render(<RouterProvider router={router} />)
+  // 返回 queryClient 供用例等待「数据真正落地」（只断挂载首帧的话任何响应都能蒙对）
+  return qc
 }
 
 beforeEach(() => {
@@ -67,11 +70,20 @@ beforeEach(() => {
 })
 
 describe('BackupPanel 空态', () => {
-  it('instanceId=null：无实例空态（复用其他页同文案）', () => {
+  it('instanceId=null 且列表为空：真零实例空态（复用其他页同文案）', async () => {
+    server.use(http.get('*/api/v1/instances', () => okEnvelope([])))
     renderPanel(null)
-    expect(screen.getByText('暂无服务器实例')).toBeInTheDocument()
-    expect(screen.getByText('请先在服务端创建 MC 服务器实例')).toBeInTheDocument()
+    expect(await screen.findByText('暂无服务器实例')).toBeInTheDocument()
+    expect(screen.getByText('使用部署向导创建第一个实例')).toBeInTheDocument()
     expect(screen.queryByText('备份管理')).not.toBeInTheDocument()
+  })
+
+  it('instanceId=null 但实例列表非空：过渡占位，不谎报零实例（app-shell 尚未选中首帧）', async () => {
+    const qc = renderPanel(null)
+    // 默认 handlers 返回 1 个实例：等它真正落地再断言，否则空列表也能对上首帧
+    await waitFor(() => expect(qc.getQueryData(queryKeys.instances())).toHaveLength(1))
+    expect(screen.getByText('正在载入服务器实例…')).toBeInTheDocument()
+    expect(screen.queryByText('暂无服务器实例')).not.toBeInTheDocument()
   })
 
   it('列表为空：引导文案 +「配置定时备份」跳转 /tasks', async () => {
@@ -92,7 +104,7 @@ describe('BackupPanel 上次备份与列表渲染', () => {
       screen.getByText('快照备份：未修改文件零拷贝增量传输，超出保留策略自动清理（默认保留策略见服务端配置）'),
     ).toBeInTheDocument()
     // 等待列表数据加载完成（标题为静态文案，先于数据渲染）
-    await screen.findByText('手动备份 2026-08-14')
+    await screen.findByText('手动备份')
     const completed = mockBackups.find((b) => b.status === 'completed')!
     const expected = `上次备份：${formatBackupDate(completed.createdAt)} · ${formatBackupSize(completed.size)}`
     expect(screen.getByText(expected)).toBeInTheDocument()
@@ -107,7 +119,7 @@ describe('BackupPanel 上次备份与列表渲染', () => {
 
   it('列表行渲染：名称 / 状态徽章 / 时间·大小 / 旧格式徽章（zip）', async () => {
     renderPanel()
-    await screen.findByText('手动备份 2026-08-14')
+    await screen.findByText('手动备份')
     expect(screen.getByText('旧格式压缩包')).toBeInTheDocument()
     expect(screen.getByText('失败的备份')).toBeInTheDocument()
 
@@ -144,12 +156,12 @@ describe('BackupPanel 恢复', () => {
   it('恢复危险确认（标题/影响说明/实例名输入）：不匹配禁用 → 输入匹配 → 确认 → 成功 toast', async () => {
     const user = userEvent.setup()
     renderPanel()
-    await screen.findByText('手动备份 2026-08-14')
-    await user.click(screen.getByRole('button', { name: '手动备份 2026-08-14 恢复' }))
+    await screen.findByText('手动备份')
+    await user.click(screen.getByRole('button', { name: '手动备份 恢复' }))
     // 红色警示标题 + 影响说明
     expect(screen.getByText('恢复备份（危险操作）')).toBeInTheDocument()
     expect(
-      screen.getByText(/将用备份 “手动备份 2026-08-14” 覆盖当前世界数据，且不可撤销/),
+      screen.getByText(/将用备份 “手动备份” 覆盖当前世界数据，且不可撤销/),
     ).toBeInTheDocument()
     // 输入不匹配 → 确认禁用
     const confirmBtn = screen.getByRole('button', { name: '确认恢复' })
@@ -166,10 +178,10 @@ describe('BackupPanel 恢复', () => {
 
   it('zip 旧格式与 failed 备份：恢复按钮禁用，completed 快照可恢复', async () => {
     renderPanel()
-    await screen.findByText('手动备份 2026-08-14')
+    await screen.findByText('手动备份')
     expect(screen.getByRole('button', { name: '旧格式压缩包 恢复' })).toBeDisabled()
     expect(screen.getByRole('button', { name: '失败的备份 恢复' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: '手动备份 2026-08-14 恢复' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: '手动备份 恢复' })).toBeEnabled()
   })
 
   it('任一行 restoring → 全列表恢复按钮禁用（含其余 completed 行）', async () => {
@@ -195,10 +207,10 @@ describe('BackupPanel 删除', () => {
   it('删除确认对话框 → 确认 → 成功 toast（含备份名）', async () => {
     const user = userEvent.setup()
     renderPanel()
-    await screen.findByText('手动备份 2026-08-14')
-    await user.click(screen.getByRole('button', { name: '手动备份 2026-08-14 删除' }))
-    expect(screen.getByText('删除备份 “手动备份 2026-08-14”？')).toBeInTheDocument()
-    expect(screen.getByText('确定要删除备份 “手动备份 2026-08-14” 吗？')).toBeInTheDocument()
+    await screen.findByText('手动备份')
+    await user.click(screen.getByRole('button', { name: '手动备份 删除' }))
+    expect(screen.getByText('删除备份 “手动备份”？')).toBeInTheDocument()
+    expect(screen.getByText('确定要删除备份 “手动备份” 吗？')).toBeInTheDocument()
     // 不可逆提示以 warning 色小字独立呈现（全站删除确认统一规范）
     expect(screen.getByText('此操作不可撤销')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '删除' }))
@@ -232,7 +244,7 @@ describe('BackupPanel 立即备份', () => {
       }),
     )
     renderPanel()
-    await screen.findByText('手动备份 2026-08-14')
+    await screen.findByText('手动备份')
     await user.click(screen.getByRole('button', { name: '立即备份' }))
     // 在途：禁用 + 备份中...（gate 未放行，状态稳定可断言）
     await waitFor(() => {
@@ -260,7 +272,7 @@ describe('BackupPanel 立即备份', () => {
       ),
     )
     renderPanel()
-    await screen.findByText('手动备份 2026-08-14')
+    await screen.findByText('手动备份')
     await user.click(screen.getByRole('button', { name: '立即备份' }))
     expect(await screen.findByText('操作失败：已有备份任务进行中')).toBeInTheDocument()
   })
@@ -353,8 +365,8 @@ describe('BackupPanel 下载', () => {
   it('completed 快照行可下载：点击 → a[download] 触发（文件名含时间戳）+ ObjectURL 用后即 revoke + 成功 toast', async () => {
     const user = userEvent.setup()
     renderPanel()
-    await screen.findByText('手动备份 2026-08-14')
-    await user.click(screen.getByRole('button', { name: '手动备份 2026-08-14 下载' }))
+    await screen.findByText('手动备份')
+    await user.click(screen.getByRole('button', { name: '手动备份 下载' }))
     expect(await screen.findByText('备份已开始下载')).toBeInTheDocument()
     expect(downloads).toHaveLength(1)
     expect(downloads[0]).toBe(buildBackupDownloadName(mockBackups[0]!))
@@ -366,12 +378,12 @@ describe('BackupPanel 下载', () => {
 
   it('zip 旧格式/failed 行下载禁用 + title 提示；completed 快照可用', async () => {
     renderPanel()
-    await screen.findByText('手动备份 2026-08-14')
+    await screen.findByText('手动备份')
     const zipBtn = screen.getByRole('button', { name: '旧格式压缩包 下载' })
     expect(zipBtn).toBeDisabled()
     expect(zipBtn).toHaveAttribute('title', '旧格式备份不支持下载')
     expect(screen.getByRole('button', { name: '失败的备份 下载' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: '手动备份 2026-08-14 下载' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: '手动备份 下载' })).toBeEnabled()
   })
 
   it('下载中：按钮转圈禁用（title=正在下载...）→ 完成后恢复 + 成功 toast', async () => {
@@ -390,11 +402,11 @@ describe('BackupPanel 下载', () => {
       }),
     )
     renderPanel()
-    await screen.findByText('手动备份 2026-08-14')
-    await user.click(screen.getByRole('button', { name: '手动备份 2026-08-14 下载' }))
+    await screen.findByText('手动备份')
+    await user.click(screen.getByRole('button', { name: '手动备份 下载' }))
     // 在途：禁用 + 转圈图标（gate 未放行，状态稳定可断言）
     await waitFor(() => {
-      const btn = screen.getByRole('button', { name: '手动备份 2026-08-14 下载' })
+      const btn = screen.getByRole('button', { name: '手动备份 下载' })
       expect(btn).toBeDisabled()
       expect(btn.querySelector('.animate-spin')).not.toBeNull()
     })
@@ -402,7 +414,7 @@ describe('BackupPanel 下载', () => {
     expect(await screen.findByText('备份已开始下载')).toBeInTheDocument()
     // 完成后按钮恢复可用
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: '手动备份 2026-08-14 下载' })).toBeEnabled()
+      expect(screen.getByRole('button', { name: '手动备份 下载' })).toBeEnabled()
     })
   })
 
@@ -423,8 +435,8 @@ describe('BackupPanel 下载', () => {
       ),
     )
     renderPanel()
-    await screen.findByText('手动备份 2026-08-14')
-    await user.click(screen.getByRole('button', { name: '手动备份 2026-08-14 下载' }))
+    await screen.findByText('手动备份')
+    await user.click(screen.getByRole('button', { name: '手动备份 下载' }))
     expect(await screen.findByText('下载失败：旧格式备份不支持下载')).toBeInTheDocument()
     // 失败不触发浏览器下载
     expect(downloads).toHaveLength(0)

@@ -1,7 +1,7 @@
 /**
  * stats-collector 实例统计采集域模块行为级测试（issue 510 补测）
  * - 调度链：串行化递归 setTimeout + 代际 epoch 防双链（fake timers 推钟）
- * - 系统采集：/proc fixture 驱动差分 CPU 计算 + win32 wmic 分支 + ps 兜底
+ * - 系统采集：/proc fixture 驱动差分 CPU 计算 + win32 PowerShell 分支 + ps 兜底
  * - MSPT：tick query 主路径 + TPS 回退反推（真实 isRconConnected getter 链路）
  * - 世界状态：三级时间 fallback 链 + weather.dat 真实 NBT fixture
  * - 玩家采集：RCON 响应解析 / 入睡事件 / 计数聚合 / 错误隔离
@@ -35,7 +35,7 @@ vi.mock('../config.js', async () => {
   };
 });
 
-// exec 仅在 win32 wmic 分支与 Linux ps 兜底分支使用；保留其余 named exports 真实实现
+// exec 仅在 win32 PowerShell 分支与 Linux ps 兜底分支使用；保留其余 named exports 真实实现
 vi.mock('child_process', async (importOriginal) => {
   const actual = await importOriginal();
   return { ...actual, exec: vi.fn() };
@@ -57,6 +57,7 @@ import {
   _collectPlayerStats,
 } from '../services/mc-server/stats-collector.js';
 import { MCServerInstance } from '../services/mc_server.js';
+import { logger } from '../utils/logger.js';
 
 const tmpBase = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-stats-collector-fixture-'));
 
@@ -315,64 +316,146 @@ describe('_collectStats 门控与平台分支', () => {
     expect(exec).not.toHaveBeenCalled();
   });
 
-  it('win32 分支：wmic csv 输出解析 WorkingSetSize 转换内存并广播', () => {
+  it('win32 分支：PowerShell JSON 解析 WorkingSet（两位小数）与 CPU 基线并广播', () => {
     const inst = makeBareInstance();
     const perf = collectPerf(inst);
     const origPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
     Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
     try {
-      exec.mockImplementation((cmd, cb) => {
-        expect(cmd).toContain('wmic process where ProcessId=4242');
-        cb(null, 'Node,KernelModeTime,UserModeTime,WorkingSetSize\r\n,node,111,222,1073741824\r\n');
+      exec.mockImplementation((cmd, opts, cb) => {
+        // WMIC 自 Win11 24H2 起不随系统提供，改走 PowerShell（命令形态是契约的一部分）
+        expect(cmd).toContain('powershell');
+        expect(cmd).toContain('Get-Process -Id 4242');
+        // windowsHide：面板以 Windows 服务方式运行时不得每轮闪控制台窗口
+        expect(opts).toMatchObject({ timeout: 8000, windowsHide: true });
+        cb(null, '{"WorkingSet64":1867776000,"CPU":12.5}');
       });
       inst._collectStats();
-      expect(inst._memoryUsage).toBe(1); // 1073741824 bytes = 1 GB
+      expect(inst._memoryUsage).toBe(1.74); // 1867776000 B ≈ 1.74 GB，与 Linux 同口径
+      expect(inst._lastCpuTime.cpu).toBe(12.5); // 首次采样只建立 CPU 基线（秒）
+      expect(inst._cpuUsage).toBe(0);
       expect(perf).toHaveLength(1);
-      // WorkingSetSize 列非数字：parseInt NaN 归零
-      const inst4 = makeBareInstance();
-      exec.mockImplementation((cmd, cb) => cb(null, 'Node,K,U,W\r\n,node,111,222,abc\r\n'));
-      inst4._collectStats();
-      expect(inst4._memoryUsage).toBe(0);
-      expect(collectPerf(inst4)).toHaveLength(0); // inst4 无监听器不比对，仅防未定义
+
+      // 字段缺失/非数字：内存保留旧值，CPU 基线不动
+      const inst2 = makeBareInstance();
+      inst2._memoryUsage = 0.5;
+      exec.mockImplementation((cmd, ...rest) => rest[rest.length - 1](null, '{"WorkingSet64":null,"CPU":null}'));
+      inst2._collectStats();
+      expect(inst2._memoryUsage).toBe(0.5);
+      expect(inst2._cpuUsage).toBe(0);
+      expect(inst2._lastCpuTime).toBeUndefined();
     } finally {
       Object.defineProperty(process, 'platform', origPlatform);
     }
   });
 
-  it('win32 分支：单行输出不更新内存但仍广播；exec 失败与解析异常静默', () => {
+  it('win32 分支：两次采样的 CPU 秒差按 elapsed 折算，单进程超 100% 截断', () => {
+    const inst = makeBareInstance();
+    const origPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+    try {
+      // cpuDiff = 11.5s / elapsed 1s = 1150%（多核并行的进程也按单进程口径截断）；
+      // 输入须明显越过上限：恰好 100% 时删掉截断照样通过，用例等于没锁住
+      inst._lastCpuTime = { cpu: 1.0, sys: 0, time: Date.now() - 1000 };
+      exec.mockImplementation((cmd, ...rest) => rest[rest.length - 1](null, '{"WorkingSet64":1073741824,"CPU":12.5}'));
+      inst._collectStats();
+      expect(inst._cpuUsage).toBe(100);
+      expect(inst._lastCpuTime.cpu).toBe(12.5);
+    } finally {
+      Object.defineProperty(process, 'platform', origPlatform);
+    }
+  });
+
+  it('win32 分支：exec 失败、非 JSON 输出均静默（不广播、不覆盖旧值）', () => {
+    const origPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+    try {
+      const inst2 = makeBareInstance();
+      const perf2 = collectPerf(inst2);
+      exec.mockImplementation((cmd, ...rest) => rest[rest.length - 1](new Error('powershell failed'), ''));
+      inst2._collectStats();
+      expect(perf2).toHaveLength(0);
+
+      const inst3 = makeBareInstance();
+      const perf3 = collectPerf(inst3);
+      inst3._memoryUsage = 0.88;
+      exec.mockImplementation((cmd, ...rest) => rest[rest.length - 1](null, 'not json'));
+      inst3._collectStats();
+      expect(perf3).toHaveLength(0);
+      expect(inst3._memoryUsage).toBe(0.88);
+
+      const inst4 = makeBareInstance();
+      const perf4 = collectPerf(inst4);
+      exec.mockImplementation((cmd, ...rest) => rest[rest.length - 1](null, undefined));
+      inst4._collectStats();
+      expect(perf4).toHaveLength(0);
+    } finally {
+      Object.defineProperty(process, 'platform', origPlatform);
+    }
+  });
+
+  it('win32 分支：监听器抛错不逃逸出 exec 回调（否则命中进程级兜底把面板拉停）', () => {
     const origPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
     Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
     try {
       const inst = makeBareInstance();
-      const perf = collectPerf(inst);
-      exec.mockImplementation((cmd, cb) => cb(null, 'Node,KernelModeTime,UserModeTime,WorkingSetSize\r\n'));
-      inst._collectStats();
-      expect(inst._memoryUsage).toBe(0);
-      expect(perf).toHaveLength(1);
-      // exec 错误：直接返回
-      const inst2 = makeBareInstance();
-      const perf2 = collectPerf(inst2);
-      exec.mockImplementation((cmd, cb) => cb(new Error('wmic failed'), ''));
-      inst2._collectStats();
-      expect(perf2).toHaveLength(0);
-      // stdout 异常形态：catch 吞掉不广播
-      const inst3 = makeBareInstance();
-      const perf3 = collectPerf(inst3);
-      exec.mockImplementation((cmd, cb) => cb(null, undefined));
-      inst3._collectStats();
-      expect(perf3).toHaveLength(0);
+      inst.on('performanceUpdate', () => {
+        throw new Error('broadcast failed');
+      });
+      exec.mockImplementation((cmd, ...rest) => rest[rest.length - 1](null, '{"WorkingSet64":1073741824,"CPU":1}'));
+      // exec 回调里抛错无人接管，只能在这里就地吞掉：采集照常、只丢这次广播
+      expect(() => inst._collectStats()).not.toThrow();
+      expect(inst._memoryUsage).toBe(1);
     } finally {
+      Object.defineProperty(process, 'platform', origPlatform);
+    }
+  });
+
+  it('win32 分支：采集失败只在转折处告警一次（避免每 5s 刷屏）', () => {
+    const origPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    try {
+      const inst = makeBareInstance();
+      const fail = (cmd, ...rest) => rest[rest.length - 1](new Error('Access is denied'), '');
+      exec.mockImplementation(fail);
+      inst._collectStats();
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0][0]).toContain('Access is denied');
+      expect(warn.mock.calls[0][0]).toContain('4242');
+      inst._collectStats();
+      expect(warn).toHaveBeenCalledTimes(1); // 持续失败不重复告警
+
+      // 恢复成功后再次失败：仍会告警（不是「一辈子只报一次」）
+      exec.mockImplementation((cmd, ...rest) =>
+        rest[rest.length - 1](null, '{"WorkingSet64":1073741824,"CPU":1}'),
+      );
+      inst._collectStats();
+      expect(warn).toHaveBeenCalledTimes(1);
+      exec.mockImplementation(fail);
+      inst._collectStats();
+      expect(warn).toHaveBeenCalledTimes(2);
+    } finally {
+      warn.mockRestore();
       Object.defineProperty(process, 'platform', origPlatform);
     }
   });
 
   it('Linux 分支：委派 _collectLinuxStats(pid)', () => {
-    const inst = makeBareInstance();
-    const linux = vi.spyOn(inst, '_collectLinuxStats').mockImplementation(() => {});
-    inst._collectStats();
-    expect(linux).toHaveBeenCalledTimes(1);
-    expect(linux).toHaveBeenCalledWith(4242);
-    expect(exec).not.toHaveBeenCalled();
+    // 实现按 process.platform 分支，固定为 linux 才能在任意宿主覆盖该分支
+    // （同 describe 的 win32 用例用同一手法）。
+    const origPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+    Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
+    try {
+      const inst = makeBareInstance();
+      const linux = vi.spyOn(inst, '_collectLinuxStats').mockImplementation(() => {});
+      inst._collectStats();
+      expect(linux).toHaveBeenCalledTimes(1);
+      expect(linux).toHaveBeenCalledWith(4242);
+      expect(exec).not.toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(process, 'platform', origPlatform);
+    }
   });
 });
 
@@ -423,8 +506,8 @@ describe('_collectLinuxStats：/proc fixture 驱动差分 CPU 计算', () => {
     const inst = makeBareInstance();
     const perf = collectPerf(inst);
     inst._collectLinuxStats(PID);
-    expect(inst._lastCpuTime.cpu).toBe(110); // utime 77 + stime 33
-    expect(inst._lastCpuTime.sys).toBe(SYS_TOTAL);
+    expect(inst._lastCpuTime.cpu).toBe(1.1); // utime 77 + stime 33 = 110 clock tick = 1.1 s
+    expect(inst._lastCpuTime.sys).toBe(SYS_TOTAL / 100); // 秒口径（SYS_TOTAL 为 clock tick）
     expect(inst._cpuUsage).toBe(0);
     // 456000 页 × 4096 B = 1867776000 B ≈ 1.74 GB（两位小数四舍五入）
     expect(inst._memoryUsage).toBe(1.74);
@@ -434,17 +517,26 @@ describe('_collectLinuxStats：/proc fixture 驱动差分 CPU 计算', () => {
 
   it('差分采集：cpu/系统时间增量按 elapsed 折算瞬时占用率', () => {
     const inst = makeBareInstance();
-    inst._lastCpuTime = { cpu: 10, sys: 500, time: Date.now() - 2000 };
+    inst._lastCpuTime = { cpu: 0.1, sys: 5, time: Date.now() - 2000 }; // 秒口径（10 tick / 500 tick）
     inst._collectLinuxStats(PID);
-    // cpuDiff = 100 ticks = 1s；elapsed = 2s → 1/2 = 50%
+    // cpuDiff = 1s；elapsed = 2s → 1/2 = 50%
     expect(inst._cpuUsage).toBe(50);
-    expect(inst._lastCpuTime.cpu).toBe(110);
-    expect(inst._lastCpuTime.sys).toBe(SYS_TOTAL);
+    expect(inst._lastCpuTime.cpu).toBe(1.1); // 秒口径（110 clock tick / 100）
+    expect(inst._lastCpuTime.sys).toBe(SYS_TOTAL / 100); // 秒口径（SYS_TOTAL 为 clock tick）
   });
 
   it('系统时间零增量分支：瞬时占用率记 0', () => {
+    // fixture 必须与实现同为秒口径且 cpu 增量非负，否则先被 cpuDiff<0 拦下，
+    // 「sysDiff 为零」这条分支实际零覆盖（用例名与断言不符）
     const inst = makeBareInstance();
-    inst._lastCpuTime = { cpu: 10, sys: SYS_TOTAL, time: Date.now() - 2000 };
+    inst._lastCpuTime = { cpu: 1.0, sys: SYS_TOTAL / 100, time: Date.now() - 2000 };
+    inst._collectLinuxStats(PID);
+    expect(inst._cpuUsage).toBe(0);
+  });
+
+  it('系统时间负增量（计数器回退）：瞬时占用率记 0，不出负数', () => {
+    const inst = makeBareInstance();
+    inst._lastCpuTime = { cpu: 1.0, sys: SYS_TOTAL / 100 + 10, time: Date.now() - 2000 };
     inst._collectLinuxStats(PID);
     expect(inst._cpuUsage).toBe(0);
   });
@@ -482,7 +574,7 @@ describe('_collectLinuxStats：/proc fixture 驱动差分 CPU 计算', () => {
   it('statm 读取失败：保留旧内存值，CPU 计算不受影响', () => {
     const inst = makeBareInstance();
     inst._memoryUsage = 0.88;
-    inst._lastCpuTime = { cpu: 10, sys: 500, time: Date.now() - 2000 };
+    inst._lastCpuTime = { cpu: 0.1, sys: 5, time: Date.now() - 2000 }; // 秒口径（10 tick / 500 tick）
     statmFixture = null; // /proc/4242/statm 不存在 → 内层 catch
     inst._collectLinuxStats(PID);
     expect(inst._memoryUsage).toBe(0.88);

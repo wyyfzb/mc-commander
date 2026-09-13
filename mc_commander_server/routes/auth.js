@@ -16,8 +16,10 @@ import {
 import { validateBody, validatedSuccess } from '../middleware/validate.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
 import { AdminAccountModel, AdminSessionModel } from '../db/index.js';
-import { hashPassword, verifyPassword, hashToken, generateSessionToken, needsRehash } from '../utils/password.js';
+import { needsRehash, hashPassword, verifyPassword, hashToken, generateSessionToken } from '../utils/password.js';
+import { slidingExpiry } from '../middleware/auth.js';
 import { isSetupTokenRequired, verifySetupToken, consumeSetupToken } from '../utils/setup-token.js';
+import { toIsoUtc } from '../utils/db-time.js';
 import { logger } from '../utils/logger.js';
 
 /**
@@ -118,7 +120,9 @@ function parseSetupTokenHeader(header) {
 
 function createSession(req) {
   const token = generateSessionToken();
-  const expiresAt = new Date(Date.now() + config.adminSession.ttlMs).toISOString();
+  // 初始有效期与滑动续期共用同一 cap 语义（P2-11）：ttlMs 配置大于绝对
+  // 存活期时初始值不越过绝对重登边界（created_at 取 now，见 slidingExpiry）
+  const expiresAt = slidingExpiry({ created_at: new Date().toISOString() });
   const session = AdminSessionModel.create({
     tokenHash: hashToken(token),
     userAgent: req.headers['user-agent']?.slice(0, 200) || null,
@@ -288,8 +292,10 @@ export function createAuthRoutes() {
         id: s.id,
         userAgent: s.user_agent,
         ip: s.ip,
-        createdAt: s.created_at,
-        lastSeenAt: s.last_seen_at,
+        // created_at/last_seen_at 是 CURRENT_TIMESTAMP 的无时区 UTC 串，
+        // 下发前归一化（expires_at 由应用写 ISO，原样通过）
+        createdAt: toIsoUtc(s.created_at),
+        lastSeenAt: toIsoUtc(s.last_seen_at),
         expiresAt: s.expires_at,
         current: req.auth?.source === 'session' && req.auth.sessionId === s.id,
       }));

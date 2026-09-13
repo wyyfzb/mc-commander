@@ -233,7 +233,7 @@ export function MarketSheet({ open, onOpenChange, instanceId, initialQuery = nul
       >
         <SheetHeader className="border-b border-mcs-border-muted px-5 py-4">
           <SheetTitle className="flex items-center gap-2 text-mcs-text-default">
-            <Package className="size-4 text-mcs-accent" aria-hidden />
+            <Package className="size-4 text-mcs-accent-fg" aria-hidden />
             插件市场
             {cached && <StatusPill tone="muted">缓存</StatusPill>}
           </SheetTitle>
@@ -332,7 +332,7 @@ export function MarketSheet({ open, onOpenChange, instanceId, initialQuery = nul
         </div>
 
         {/* ── 底注：安全说明 ── */}
-        <div className="border-t border-mcs-border-muted px-5 py-2.5 text-mcs-xs text-mcs-text-subtle">
+        <div className="border-t border-mcs-border-muted px-5 py-2.5 text-mcs-xs text-mcs-text-muted">
           数据源 modrinth.com（服务端代理转发，面板不出网）；文件经 zip 校验与文件名净化后落入 plugins/
         </div>
       </SheetContent>

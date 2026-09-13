@@ -10,6 +10,12 @@ import { useConnectionStore } from '@/stores/connection'
 import type { InstanceStatus, InstanceSummary, LogEntry, OverviewData, SystemStats, UpdateCheckResult } from './types'
 import { apiGetAuditLogsPage, apiGetCommandHistoryPage, type AuditQueryParams } from './audit'
 
+/**
+ * WS 断开时的保底轮询间隔（毫秒）。单一事实源：degradation-banners 的
+ * 「每 N 秒」文案由此拼接——两处各自写死曾导致横幅长期谎报 5s（实际 30s）
+ */
+export const FALLBACK_POLL_INTERVAL_MS = 30_000
+
 // ── Query key 工厂（分层规范，防冲突）───────────────────────────
 export const queryKeys = {
   all: ['mcs'] as const,
@@ -47,7 +53,7 @@ export function useOverview() {
     queryKey: queryKeys.overview(),
     queryFn: ({ signal }) => apiGet<OverviewData>('/api/v1/overview', config, signal),
     enabled: config.status === 'ready',
-    refetchInterval: 30_000, // 轮询保底（与 WS 事件互补，设计文档 §5.2）
+    refetchInterval: FALLBACK_POLL_INTERVAL_MS, // 轮询保底（与 WS 事件互补，设计文档 §5.2）
   })
 }
 
@@ -58,7 +64,7 @@ export function useSystemStats() {
     queryKey: queryKeys.systemStats(),
     queryFn: ({ signal }) => apiGet<SystemStats>('/api/v1/system-stats', config, signal),
     enabled: config.status === 'ready',
-    refetchInterval: 30_000,
+    refetchInterval: FALLBACK_POLL_INTERVAL_MS,
     staleTime: 30_000,
   })
 }
@@ -71,7 +77,7 @@ export function useInstanceStatus(instanceId: string | null) {
     queryFn: ({ signal }) =>
       apiGet<InstanceStatus>(`/api/v1/instances/${instanceId}`, config, signal),
     enabled: config.status === 'ready' && Boolean(instanceId),
-    refetchInterval: 30_000,
+    refetchInterval: FALLBACK_POLL_INTERVAL_MS,
   })
 }
 
@@ -83,7 +89,7 @@ export function useInstances() {
     queryFn: ({ signal }) =>
       apiGet<InstanceSummary[]>(`/api/v1/instances`, config, signal),
     enabled: config.status === 'ready',
-    refetchInterval: 30_000,
+    refetchInterval: FALLBACK_POLL_INTERVAL_MS,
   })
 }
 

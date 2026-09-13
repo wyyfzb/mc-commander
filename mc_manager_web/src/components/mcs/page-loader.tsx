@@ -11,7 +11,7 @@ export function PageLoader() {
       role="status"
       aria-label="页面加载中"
     >
-      <Loader2 className="size-6 animate-spin text-mcs-text-subtle" aria-hidden />
+      <Loader2 className="size-6 animate-spin text-mcs-text-muted" aria-hidden />
     </div>
   )
 }

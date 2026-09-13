@@ -25,6 +25,7 @@ import {
 import type { PotionConfig } from '@/lib/mc-potions'
 import type { MinecraftItem } from '@/lib/mc-items'
 import { CommandPreview } from './give-item-preview-bar'
+import { toneClasses } from '@/components/mcs/tone'
 
 /** 选中条目的运行时配置（与主组件保持同步） */
 export interface SelectedEntry {
@@ -65,7 +66,7 @@ function EnchantToggle({
       <span
         className={cn(
           'absolute top-1/2 size-2.5 -translate-y-1/2 rounded-full transition-[left,background-color]',
-          on ? 'left-[14px] bg-mcs-purple-fg' : 'left-0.5 bg-mcs-text-subtle',
+          on ? 'left-3.5 bg-mcs-purple-fg' : 'left-0.5 bg-mcs-text-muted',
         )}
       />
     </button>
@@ -106,7 +107,7 @@ export function EnchantPanel({
         <span className="truncate text-mcs-xs font-semibold text-mcs-purple-fg">
           附魔 · {entry.item.name}
         </span>
-        <span className="shrink-0 text-mcs-2xs text-mcs-text-subtle">{available.length} 种可用</span>
+        <span className="shrink-0 text-mcs-2xs text-mcs-text-muted">{available.length} 种可用</span>
         <Button
           variant="ghost"
           size="icon-xs"
@@ -135,11 +136,11 @@ export function EnchantPanel({
                 >
                   {ench.name}
                 </span>
-                <span className="shrink-0 font-mono text-mcs-2xs text-mcs-text-subtle">
+                <span className="shrink-0 font-mono text-mcs-2xs text-mcs-text-muted">
                   I-{toRoman(ench.maxLevel)}
                 </span>
                 {ench.isNew121 && (
-                  <span className="shrink-0 rounded-mcs-xs border border-mcs-orange-border bg-mcs-orange-bg-subtle px-1 text-mcs-2xs font-medium text-mcs-orange-fg">
+                  <span className={`shrink-0 rounded-mcs-xs border px-1 text-mcs-2xs font-medium ${toneClasses('warning')}`}>
                     1.21+
                   </span>
                 )}

@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { ConnectionConfig } from '@/api/client'
+import { sessionAppliesToPanel } from '@/lib/mc-connection'
 import { getStoredSession } from '@/stores/auth'
 
 /**
@@ -33,9 +34,13 @@ function readInitialConfig(): ConnectionConfig {
   return { baseUrl: '', apiKey: '' }
 }
 
-/** 连接就绪判定：API Key 或管理员会话任一存在（auth store 读取，单向依赖无环） */
-function hasCredentials(apiKey: string): boolean {
-  return Boolean(apiKey || getStoredSession()?.token)
+/**
+ * 连接就绪判定：本面板可用的凭据存在——API Key，或**属于本面板**的登录会话
+ * （auth store 读取，单向依赖无环）。会话属于别的面板时不算就绪：
+ * 那时请求跑不通，界面该把用户引到登录/配置，而不是发一串注定 401 的查询。
+ */
+function hasCredentials(config: ConnectionConfig): boolean {
+  return Boolean(config.apiKey) || sessionAppliesToPanel(getStoredSession(), config.baseUrl)
 }
 
 interface ConnectionState extends ConnectionConfig {
@@ -50,7 +55,7 @@ export const useConnectionStore = create<ConnectionState>()((set, get) => {
   const initial = readInitialConfig()
   return {
     ...initial,
-    status: hasCredentials(initial.apiKey) ? 'ready' : 'unconfigured',
+    status: hasCredentials(initial) ? 'ready' : 'unconfigured',
     setConfig: (config) => {
       set((s) => {
         const next = { baseUrl: config.baseUrl ?? s.baseUrl, apiKey: config.apiKey ?? s.apiKey }
@@ -59,12 +64,23 @@ export const useConnectionStore = create<ConnectionState>()((set, get) => {
         } catch {
           // 忽略持久化失败
         }
-        return { ...next, status: hasCredentials(next.apiKey) ? 'ready' : 'unconfigured' }
+        return { ...next, status: hasCredentials(next) ? 'ready' : 'unconfigured' }
       })
     },
     setStatus: (status) => set({ status }),
     refreshStatus: () => {
-      set({ status: hasCredentials(get().apiKey) ? 'ready' : 'unconfigured' })
+      const { baseUrl, apiKey } = get()
+      set({ status: hasCredentials({ baseUrl, apiKey }) ? 'ready' : 'unconfigured' })
     },
   }
 })
+
+/**
+ * 本面板可用的凭据是否存在——路由守卫（loader 在 React 周期外）与 status 共用同一口径。
+ * 不能只看「有没有会话令牌」：会话属于别的面板时它对本面板无效，
+ * 只看令牌会让用户卡在「进得去但所有查询都被禁用」的死角（且 /login 被守卫弹回）。
+ */
+export function hasUsableCredentials(): boolean {
+  const { baseUrl, apiKey } = useConnectionStore.getState()
+  return hasCredentials({ baseUrl, apiKey })
+}

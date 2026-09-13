@@ -4,7 +4,7 @@
  * - 卡片：状态点（运行 success / 停止 muted）+ 名称 + 「当前」accent 徽章（currentId 命中）
  *   + 副行「运行中 · N 人在线」（success 色）/「已停止」（muted）+ 版本 mono 徽章
  *   （detailStatuses[id]?.mcVersion，组件内不查询；详情在途时仅该卡骨架占位）
- *   + 指标行（在线/TPS/JVM 堆/世界大小，detailStatuses 数据，缺省 —）
+ *   + 指标行（在线/TPS/内存/世界大小，detailStatuses 数据，缺省 —）
  *   + 操作：启停（运行中→停止 danger / 停止→启动 primary，busyId 防重复触发）/
  *     切换（非当前实例）/ 启动配置 / 卸载（danger outlined，卸载中禁用 + 「卸载中」）
  * - 空态：「暂无已安装的实例」+「部署新实例」按钮（onDeploy 与页面头部入口共用）
@@ -14,7 +14,9 @@ import { ArrowRightLeft, ArrowUpCircle, Loader2, Play, Server, Settings, ShieldA
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
+import { formatWorldSize } from '@/lib/format'
 import { StatusPill } from '@/components/mcs/status-pill'
+import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { EmptyState } from '@/components/mcs/empty-state'
 import { useUpgradeStore } from '@/stores/upgrade'
 import type { InstancePhase } from '@/stores/server'
@@ -198,26 +200,31 @@ function InstanceCard({
         {isRunning ? `运行中 · ${playerCount} 人在线` : '已停止'}
       </p>
 
-      {/* 指标行（在线/TPS/JVM 堆/世界大小；详情缺省 —） */}
+      {/* 指标行（在线/TPS/内存/世界大小；详情缺省 —）
+          这里的 memoryUsage 是**进程驻留内存**（服务端 stats-collector 三平台分支分别取
+          Windows WorkingSet / Linux statm RSS / macOS ps rss），不是 JVM 堆——要显示真实堆
+          需服务端另采指标。数值以「数字 + GB」展示，精度随采集端平台而异（世界大小另有 MB 档，不与之共用格式化）。
+          统计未就绪初值为 0，此时显示 —（运行中却报 0 会被读成「内存耗光」） */}
       <div className="grid grid-cols-4 gap-2 rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-default px-3 py-2 shadow-mcs-card">
         <Metric label="在线" value={isRunning ? `${playerCount}` : '—'} />
         <Metric label="TPS" value={isRunning && detail?.tps != null ? detail.tps.toFixed(1) : '—'} />
-        <Metric label="JVM 堆" value={isRunning && detail?.memoryUsage != null ? `${detail.memoryUsage}G` : '—'} />
-        <Metric label="世界" value={detail?.worldSize ?? '—'} />
+        <Metric
+          label="内存"
+          value={isRunning && detail && detail.memoryUsage > 0 ? `${detail.memoryUsage} GB` : '—'}
+        />
+        <Metric label="世界" value={formatWorldSize(detail?.worldSize)} />
       </div>
 
       {/* 熔断告警行（feat-5） */}
       {detail?.circuitBreakerTripped && (
-        <div className="flex items-center gap-1.5 rounded-mcs-sm border border-mcs-error-border bg-mcs-error-bg-subtle px-2.5 py-1.5 text-mcs-xs text-mcs-error-fg">
-          <ShieldAlert className="size-3.5 shrink-0" aria-hidden />
-          <span>崩溃循环熔断已触发，自动重启已禁用</span>
-        </div>
+        <NoticeBanner variant="error" icon={ShieldAlert}>
+          崩溃循环熔断已触发，自动重启已禁用
+        </NoticeBanner>
       )}
       {detail && !detail.circuitBreakerTripped && detail.consecutiveCrashes > 0 && (
-        <div className="flex items-center gap-1.5 rounded-mcs-sm border border-mcs-warning-border bg-mcs-warning-bg-subtle px-2.5 py-1.5 text-mcs-xs text-mcs-warning-fg">
-          <ShieldAlert className="size-3.5 shrink-0" aria-hidden />
-          <span>近期崩溃 {detail.consecutiveCrashes} 次</span>
-        </div>
+        <NoticeBanner variant="warning" icon={ShieldAlert}>
+          近期崩溃 {detail.consecutiveCrashes} 次
+        </NoticeBanner>
       )}
 
       {/* 操作行：启停（phase 中间态禁用：starting/stopping spinner，WS 确认后解锁 issue 334）/
@@ -303,7 +310,7 @@ function InstanceCard({
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0">
-      <div className="text-mcs-2xs text-mcs-text-subtle">{label}</div>
+      <div className="text-mcs-2xs text-mcs-text-muted">{label}</div>
       <div className="mcs-num truncate text-mcs-sm leading-none font-semibold text-mcs-text-default" title={value}>
         {value}
       </div>

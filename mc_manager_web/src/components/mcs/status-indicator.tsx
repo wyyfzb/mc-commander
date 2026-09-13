@@ -25,7 +25,7 @@ const STATUS_CONFIG: Record<
     pulse: true,
   },
   disconnected: {
-    dot: 'bg-mcs-text-subtle',
+    dot: 'bg-mcs-text-muted',
     icon: CloudOff,
     label: '未连接',
   },

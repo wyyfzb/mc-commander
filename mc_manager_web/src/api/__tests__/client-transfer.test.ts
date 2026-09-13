@@ -10,6 +10,7 @@ import { describe, it, expect, beforeAll, afterAll, vi, afterEach } from 'vitest
 import { setupServer } from 'msw/node'
 import { http, HttpResponse } from 'msw'
 import { apiDownloadFile, apiUploadFile, apiGet, type ConnectionConfig } from '../client'
+import { panelAddress } from '@/lib/mc-connection'
 import { useAuthStore, SESSION_EXPIRED_EVENT } from '@/stores/auth'
 
 function ok<T>(data: T) {
@@ -30,6 +31,10 @@ afterAll(() => server.close())
 afterEach(() => {
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
+  // 会话是模块级单例：不清会泄漏给同文件后续用例（隐性顺序依赖）
+  useAuthStore.getState().clearSession()
+  // server.use 的覆盖会留到下一个用例（同上，隐性顺序依赖）
+  server.resetHandlers()
 })
 
 const config: ConnectionConfig = { baseUrl: 'http://localhost:25566', apiKey: 'test-key' }
@@ -144,6 +149,58 @@ describe('apiDownloadFile · 错误传播', () => {
       apiDownloadFile('/api/v1/dl', config, { signal: controller.signal }),
     ).rejects.toMatchObject({ name: 'NetworkError', message: '下载已取消' })
   })
+
+  it('下载遇 40103 且会话属于本面板：按会话过期处置（清会话 + 派发事件）', async () => {
+    useAuthStore.setState({
+      session: { token: 'tok-dl', sessionId: 'sess-dl', expiresAt: '2030-01-01T00:00:00.000Z' },
+    })
+    server.use(
+      http.get('*/api/v1/dl', () =>
+        HttpResponse.json(
+          { status: 'error', code: 40103, message: 'session expired', details: null },
+          { status: 401, headers: { 'Content-Type': 'application/json' } },
+        ),
+      ),
+    )
+    const listener = vi.fn()
+    window.addEventListener(SESSION_EXPIRED_EVENT, listener)
+    try {
+      await expect(apiDownloadFile('/api/v1/dl', config)).rejects.toMatchObject({ code: 40103 })
+      expect(useAuthStore.getState().session).toBeNull()
+      expect(listener).toHaveBeenCalledTimes(1)
+    } finally {
+      window.removeEventListener(SESSION_EXPIRED_EVENT, listener)
+    }
+  })
+
+  it('下载遇 40103 但会话属于别的面板：不清会话、不派发事件', async () => {
+    const session = {
+      token: 'tok-dl',
+      sessionId: 'sess-dl',
+      expiresAt: '2030-01-01T00:00:00.000Z',
+      issuedFor: 'https://panel-a.example.com',
+    }
+    useAuthStore.setState({ session })
+    server.use(
+      http.get('*/api/v1/dl', () =>
+        HttpResponse.json(
+          { status: 'error', code: 40103, message: 'session expired', details: null },
+          { status: 401, headers: { 'Content-Type': 'application/json' } },
+        ),
+      ),
+    )
+    const listener = vi.fn()
+    window.addEventListener(SESSION_EXPIRED_EVENT, listener)
+    try {
+      await expect(
+        apiDownloadFile('/api/v1/dl', { baseUrl: 'https://panel-b.example.com', apiKey: 'key-b' }),
+      ).rejects.toMatchObject({ code: 40103 })
+      expect(useAuthStore.getState().session).toEqual(session)
+      expect(listener).not.toHaveBeenCalled()
+    } finally {
+      window.removeEventListener(SESSION_EXPIRED_EVENT, listener)
+    }
+  })
 })
 
 describe('apiUploadFile（XHR 共享实现）', () => {
@@ -179,7 +236,10 @@ describe('apiUploadFile（XHR 共享实现）', () => {
   })
 
   it('上传遇 40103 会话过期：清会话 + 派发全局事件（与 apiRequest 同一处置）', async () => {
-    useAuthStore.getState().clearSession()
+    // 会话过期必须先有会话：40103 只在「令牌属于本目标面板」时才算过期（异面板不动本机登录态）
+    useAuthStore
+      .getState()
+      .setSession({ token: 'tok-upload', sessionId: 'sess-up', expiresAt: new Date(Date.now() + 60_000).toISOString() })
     const listener = vi.fn()
     window.addEventListener(SESSION_EXPIRED_EVENT, listener)
     server.use(
@@ -196,6 +256,36 @@ describe('apiUploadFile（XHR 共享实现）', () => {
       expect(listener).toHaveBeenCalledTimes(1)
     } finally {
       window.removeEventListener(SESSION_EXPIRED_EVENT, listener)
+    }
+  })
+
+  it('上传遇 40103 但会话属于别的面板：不动本机登录态（异面板不得把人踢下线）', async () => {
+    const session = {
+      token: 'tok-other',
+      sessionId: 'sess-other',
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      issuedFor: 'https://panel-a.example.com',
+    }
+    useAuthStore.getState().setSession(session)
+    const listener = vi.fn()
+    window.addEventListener(SESSION_EXPIRED_EVENT, listener)
+    server.use(
+      http.post('*/api/v1/upload', () =>
+        HttpResponse.json(
+          { status: 'error', code: 40103, message: 'session expired', details: null, timestamp: '' },
+          { status: 401 },
+        ),
+      ),
+    )
+    try {
+      await expect(
+        apiUploadFile('/api/v1/upload', { baseUrl: 'https://panel-b.example.com', apiKey: 'key-b' }, file()),
+      ).rejects.toMatchObject({ code: 40103 })
+      expect(useAuthStore.getState().session).toEqual(session)
+      expect(listener).not.toHaveBeenCalled()
+    } finally {
+      window.removeEventListener(SESSION_EXPIRED_EVENT, listener)
+      useAuthStore.getState().clearSession()
     }
   })
 
@@ -222,6 +312,14 @@ describe('apiUploadFile（XHR 共享实现）', () => {
     const promise = apiUploadFile('/api/v1/upload', config, file(), { signal: controller.signal })
     controller.abort() // 外部 signal → xhr.abort() → abort 事件 → reject
     await expect(promise).rejects.toMatchObject({ name: 'NetworkError', message: '上传已取消' })
+  })
+
+  it('上传成功后回填旧会话的签发面板（与 fetch / 下载路径同一口径）', async () => {
+    useAuthStore.setState({
+      session: { token: 'tok-up', sessionId: 'sess-up', expiresAt: '2030-01-01T00:00:00.000Z' },
+    })
+    await apiUploadFile<{ name: string }>('/api/v1/upload', config, file())
+    expect(useAuthStore.getState().session?.issuedFor).toBe(panelAddress(config.baseUrl))
   })
 
   it('网络层失败：NetworkError「网络连接失败」（XHR error 事件路径）', async () => {

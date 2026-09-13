@@ -15,6 +15,7 @@ import { useServerStore } from '@/stores/server'
 import { apiUpgradeInstance, apiGetUpgradeStatus } from '@/api/instances'
 import { getFriendlyErrorText } from '@/api/errors'
 import { getSocketSingleton } from '@/hooks/use-server-socket'
+import { useRadioGroup } from '@/hooks/use-radio-group'
 import { useUpgradeStore, UPGRADE_STAGE_LABELS, clearUpgradeProgress, applyUpgradeProgress } from '@/stores/upgrade'
 import { useServerVersions } from '../queries'
 import type { InstanceStatus, UpgradeStage } from '@/api/types'
@@ -26,6 +27,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { Loader2, ArrowUpCircle, CheckCircle2, RotateCcw, XCircle, AlertTriangle } from 'lucide-react'
+import { toneClasses } from '@/components/mcs/tone'
 
 const SERVER_TYPES = [
   { value: 'vanilla', label: 'Vanilla' },
@@ -145,6 +147,14 @@ export function UpgradeDialog({ instance, open, onOpenChange }: UpgradeDialogPro
     setMcVersion('')
   }
 
+  // 服务端类型是单选组：语义与方向键由 hook 统一提供（切换仍走 handleTypeChange 以连带重置版本）
+  const typeGroup = useRadioGroup<'vanilla' | 'paper' | 'purpur'>({
+    label: '服务端类型',
+    value: type,
+    values: SERVER_TYPES.map((t) => t.value),
+    onChange: handleTypeChange,
+  })
+
   const handleUpgrade = async () => {
     if (!mcVersion || mcVersion === instance.mcVersion) return
     setStarting(true)
@@ -184,12 +194,12 @@ export function UpgradeDialog({ instance, open, onOpenChange }: UpgradeDialogPro
 
         <div className="space-y-4">
           {/* 警示条 */}
-          <div className="rounded-mcs-sm border border-mcs-warning-border bg-mcs-warning-bg-subtle p-3 text-sm text-mcs-warning-fg">
+          <div className={`rounded-mcs-sm border p-3 text-sm ${toneClasses('warning')}`}>
             <div className="flex items-start gap-2">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
               <div>
                 <p className="font-medium">升级须知</p>
-                <p className="mt-1 text-mcs-text-subtle">
+                <p className="mt-1 text-mcs-text-muted">
                   升级前自动创建备份，随后下载并替换服务端 JAR，启动校验失败将自动回滚。
                 </p>
               </div>
@@ -205,12 +215,12 @@ export function UpgradeDialog({ instance, open, onOpenChange }: UpgradeDialogPro
                   {UPGRADE_STAGE_LABELS[progress.stage]}
                 </span>
                 {progress.percent > 0 && (
-                  <span className="text-xs text-mcs-text-subtle">{progress.percent}%</span>
+                  <span className="text-xs text-mcs-text-muted">{progress.percent}%</span>
                 )}
               </div>
               {progress.percent > 0 && <ProgressBar percent={progress.percent} />}
               {progress.detail && (
-                <p className="text-xs text-mcs-text-subtle">{progress.detail}</p>
+                <p className="text-xs text-mcs-text-muted">{progress.detail}</p>
               )}
             </div>
           )}
@@ -220,8 +230,8 @@ export function UpgradeDialog({ instance, open, onOpenChange }: UpgradeDialogPro
             <div
               className={`rounded-mcs-sm border p-4 ${
                 isSuccess
-                  ? 'border-mcs-success-fg/20 bg-mcs-success-bg-subtle'
-                  : 'border-mcs-error-fg/20 bg-mcs-error-bg-subtle'
+                  ? 'border-mcs-success-border bg-mcs-bg-muted'
+                  : 'border-mcs-error-border bg-mcs-bg-muted'
               }`}
             >
               <div className="flex items-center gap-2">
@@ -244,13 +254,13 @@ export function UpgradeDialog({ instance, open, onOpenChange }: UpgradeDialogPro
             <div className="space-y-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">服务端类型</label>
-                <div className="grid grid-cols-3 gap-2">
-                  {SERVER_TYPES.map((t) => (
+                <div className="grid grid-cols-3 gap-2" {...typeGroup.groupProps}>
+                  {SERVER_TYPES.map((t, index) => (
                     <button
                       key={t.value}
                       type="button"
+                      {...typeGroup.itemProps(index)}
                       onClick={() => handleTypeChange(t.value)}
-                      aria-pressed={type === t.value}
                       className={`rounded-mcs-sm border p-2 text-center text-sm transition-colors ${
                         type === t.value
                           ? 'border-mcs-accent-fg bg-mcs-accent-bg-subtle text-mcs-accent-fg'

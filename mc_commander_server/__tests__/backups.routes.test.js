@@ -212,7 +212,9 @@ describe('POST /instances/:instanceId/backups（创建）', () => {
       expect(res.status).toBe(201);
       expect(res.body.code).toBe(0);
       expect(res.body.data.id).toBe(5);
-      const today = new Date().toISOString().slice(0, 10);
+      // 默认名日期取服务器本地时区（J53）：toISOString 是 UTC，UTC+8 的凌晨会写成昨天
+      const now = new Date();
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
       expect(svcCreate).toHaveBeenCalledWith('s1', {
         name: `Backup_${today}`,
         description: '',

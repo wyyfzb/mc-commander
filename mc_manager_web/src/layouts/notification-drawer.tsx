@@ -41,7 +41,9 @@ import {
 } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/mcs/chip'
+import { SEMANTIC_TONE_CLASSES, type SemanticTone, type ToneClasses } from '@/components/mcs/tone'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
+import { useRadioGroup } from '@/hooks/use-radio-group'
 import { useNotificationStore } from '@/stores/notifications'
 import { formatNotificationTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -69,37 +71,53 @@ const TYPE_ICON: Record<NotificationType, LucideIcon> = {
   upgradeComplete: CheckCircle2, upgradeFailed: XCircle,
 }
 
-/** 类型 → 语义色 token 工具类（气泡图标/边框用） */
-const TYPE_COLOR: Record<NotificationType, { text: string; bg: string; border: string }> = {
-  join: { text: 'text-mcs-success-fg', bg: 'bg-mcs-success-bg-subtle', border: 'border-mcs-success-border' },
-  leave: { text: 'text-mcs-text-muted', bg: 'bg-mcs-bg-hover', border: 'border-mcs-border-default' },
-  death: { text: 'text-mcs-error-fg', bg: 'bg-mcs-error-bg-subtle', border: 'border-mcs-error-border' },
-  revive: { text: 'text-mcs-success-fg', bg: 'bg-mcs-success-bg-subtle', border: 'border-mcs-success-border' },
-  achievement: { text: 'text-mcs-purple-fg', bg: 'bg-mcs-purple-bg-subtle', border: 'border-mcs-purple-border' },
-  chat: { text: 'text-mcs-info-fg', bg: 'bg-mcs-info-bg-subtle', border: 'border-mcs-info-border' },
-  sleep: { text: 'text-mcs-info-fg', bg: 'bg-mcs-info-bg-subtle', border: 'border-mcs-info-border' },
-  serverStart: { text: 'text-mcs-success-fg', bg: 'bg-mcs-success-bg-subtle', border: 'border-mcs-success-border' },
-  serverStop: { text: 'text-mcs-text-muted', bg: 'bg-mcs-bg-hover', border: 'border-mcs-border-default' },
-  serverCrash: { text: 'text-mcs-error-fg', bg: 'bg-mcs-error-bg-subtle', border: 'border-mcs-error-border' },
-  circuitBreaker: { text: 'text-mcs-error-fg', bg: 'bg-mcs-error-bg-subtle', border: 'border-mcs-error-border' },
-  save: { text: 'text-mcs-info-fg', bg: 'bg-mcs-info-bg-subtle', border: 'border-mcs-info-border' },
-  lowTps: { text: 'text-mcs-warning-fg', bg: 'bg-mcs-warning-bg-subtle', border: 'border-mcs-warning-border' },
-  highCpu: { text: 'text-mcs-warning-fg', bg: 'bg-mcs-warning-bg-subtle', border: 'border-mcs-warning-border' },
-  highMemory: { text: 'text-mcs-warning-fg', bg: 'bg-mcs-warning-bg-subtle', border: 'border-mcs-warning-border' },
-  weatherChange: { text: 'text-mcs-info-fg', bg: 'bg-mcs-info-bg-subtle', border: 'border-mcs-info-border' },
-  backupStart: { text: 'text-mcs-info-fg', bg: 'bg-mcs-info-bg-subtle', border: 'border-mcs-info-border' },
-  backupComplete: { text: 'text-mcs-success-fg', bg: 'bg-mcs-success-bg-subtle', border: 'border-mcs-success-border' },
-  backupFailed: { text: 'text-mcs-error-fg', bg: 'bg-mcs-error-bg-subtle', border: 'border-mcs-error-border' },
-  backupSkipped: { text: 'text-mcs-warning-fg', bg: 'bg-mcs-warning-bg-subtle', border: 'border-mcs-warning-border' },
-  restoreStart: { text: 'text-mcs-info-fg', bg: 'bg-mcs-info-bg-subtle', border: 'border-mcs-info-border' },
-  restoreComplete: { text: 'text-mcs-success-fg', bg: 'bg-mcs-success-bg-subtle', border: 'border-mcs-success-border' },
-  restoreFailed: { text: 'text-mcs-error-fg', bg: 'bg-mcs-error-bg-subtle', border: 'border-mcs-error-border' },
-  taskFailed: { text: 'text-mcs-error-fg', bg: 'bg-mcs-error-bg-subtle', border: 'border-mcs-error-border' },
-  webhookFailed: { text: 'text-mcs-error-fg', bg: 'bg-mcs-error-bg-subtle', border: 'border-mcs-error-border' },
-  deployComplete: { text: 'text-mcs-success-fg', bg: 'bg-mcs-success-bg-subtle', border: 'border-mcs-success-border' },
-  deployFailed: { text: 'text-mcs-error-fg', bg: 'bg-mcs-error-bg-subtle', border: 'border-mcs-error-border' },
-  upgradeComplete: { text: 'text-mcs-success-fg', bg: 'bg-mcs-success-bg-subtle', border: 'border-mcs-success-border' },
-  upgradeFailed: { text: 'text-mcs-error-fg', bg: 'bg-mcs-error-bg-subtle', border: 'border-mcs-error-border' },
+/** 中性档（进出/停服等无成败含义的事件）：次级底，不占语义六色 */
+const NEUTRAL_TYPE_COLOR: ToneClasses = {
+  text: 'text-mcs-text-muted',
+  bg: 'bg-mcs-bg-secondary',
+  border: 'border-mcs-border-default',
+}
+
+/**
+ * 类型 → 语义档（色值来自 components/mcs/tone，勿在此手抄）。
+ * 用档位名而非类名建表：三处着色（底/边/图标）由一处派生，改档不会漏改其中一处。
+ */
+export const NOTIFICATION_TONE: Record<NotificationType, SemanticTone | 'neutral'> = {
+  join: 'success',
+  leave: 'neutral',
+  death: 'error',
+  revive: 'success',
+  achievement: 'purple',
+  chat: 'info',
+  sleep: 'info',
+  serverStart: 'success',
+  serverStop: 'neutral',
+  serverCrash: 'error',
+  circuitBreaker: 'error',
+  save: 'info',
+  lowTps: 'warning',
+  highCpu: 'warning',
+  highMemory: 'warning',
+  weatherChange: 'info',
+  backupStart: 'info',
+  backupComplete: 'success',
+  backupFailed: 'error',
+  backupSkipped: 'warning',
+  restoreStart: 'info',
+  restoreComplete: 'success',
+  restoreFailed: 'error',
+  taskFailed: 'error',
+  webhookFailed: 'error',
+  deployComplete: 'success',
+  deployFailed: 'error',
+  upgradeComplete: 'success',
+  upgradeFailed: 'error',
+}
+
+/** 气泡图标/边框/底色（三处同档） */
+function notificationColor(type: NotificationType): ToneClasses {
+  const tone = NOTIFICATION_TONE[type]
+  return tone === 'neutral' ? NEUTRAL_TYPE_COLOR : SEMANTIC_TONE_CLASSES[tone]
 }
 
 /** severity 筛选选项（Tasteful Friction：按严重度快速聚焦告警） */
@@ -127,6 +145,12 @@ export function NotificationDrawer({ open, onOpenChange }: NotificationDrawerPro
   const markAllRead = useNotificationStore((s) => s.markAllRead)
   const clearAll = useNotificationStore((s) => s.clearAll)
   const [severityFilter, setSeverityFilter] = useState<'all' | NotificationSeverity>('all')
+  const severityGroup = useRadioGroup<'all' | NotificationSeverity>({
+    label: '按严重度筛选',
+    value: severityFilter,
+    values: SEVERITY_FILTERS.map((f) => f.value),
+    onChange: setSeverityFilter,
+  })
   const [confirmClearOpen, setConfirmClearOpen] = useState(false)
 
   // 筛选仅作用于列表展示；未读徽章/全部已读语义仍是全局（不随筛选变）
@@ -140,7 +164,7 @@ export function NotificationDrawer({ open, onOpenChange }: NotificationDrawerPro
       <SheetContent
         side="right"
         showCloseButton={false}
-        className="glass-overlay flex w-96 max-w-full flex-col p-0"
+        className="flex w-96 max-w-full flex-col p-0 shadow-mcs-overlay"
       >
         <SheetHeader className="flex-row items-center justify-between border-b border-mcs-border-muted py-3 pl-4 pr-3">
           <SheetTitle className="flex items-center gap-2 text-mcs-md">
@@ -179,14 +203,15 @@ export function NotificationDrawer({ open, onOpenChange }: NotificationDrawerPro
           </div>
         </SheetHeader>
 
-        {/* severity 筛选 chips（有通知时才出现，避免空态噪音） */}
+        {/* severity 筛选 chips（有通知时才出现，避免空态噪音；单选组：语义与方向键走 hook） */}
         {items.length > 0 && (
-          <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-mcs-border-muted px-4 py-2" role="group" aria-label="按严重度筛选">
-            {SEVERITY_FILTERS.map((f) => (
+          <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-mcs-border-muted px-4 py-2" {...severityGroup.groupProps}>
+            {SEVERITY_FILTERS.map((f, index) => (
               <Chip
                 key={f.value}
                 tone={f.tone}
                 selected={severityFilter === f.value}
+                {...severityGroup.itemProps(index)}
                 onClick={() => setSeverityFilter(f.value)}
                 ariaLabel={`${f.label}通知`}
               >
@@ -198,13 +223,13 @@ export function NotificationDrawer({ open, onOpenChange }: NotificationDrawerPro
 
         <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-4">
           {visibleItems.length === 0 ? (
-            <div className="flex flex-1 items-center justify-center text-mcs-text-subtle">
+            <div className="flex flex-1 items-center justify-center text-mcs-text-muted">
               {items.length === 0 ? '暂无动态' : '该严重度下暂无通知'}
             </div>
           ) : (
             visibleItems.map((n) => {
               const Icon = TYPE_ICON[n.type]
-              const color = TYPE_COLOR[n.type]
+              const color = notificationColor(n.type)
               const isGame = n.category === 'game'
               // 关联实例条目可跳转（issue 334）：关闭抽屉 → 实例页 focus 深链接切换
               const jumpToInstance = () => {
@@ -220,10 +245,10 @@ export function NotificationDrawer({ open, onOpenChange }: NotificationDrawerPro
                   type="button"
                   onClick={jumpToInstance}
                   className={cn(
-                    'flex max-w-[260px] flex-col gap-1 rounded-mcs-sm border px-3 py-2 text-left',
+                    'flex max-w-65 flex-col gap-1 rounded-mcs-sm border px-3 py-2 text-left',
                     isGame
                       ? 'self-start rounded-bl-mcs-xs'
-                      : 'self-end rounded-br-mcs-xs bg-mcs-bg-hover',
+                      : 'self-end rounded-br-mcs-xs bg-mcs-bg-secondary',
                     isGame && color.bg,
                     n.read
                       ? 'border-mcs-border-muted'
@@ -241,7 +266,7 @@ export function NotificationDrawer({ open, onOpenChange }: NotificationDrawerPro
                     {!n.read && (
                       <span className="size-1.5 rounded-full bg-mcs-accent" aria-hidden />
                     )}
-                    <span className={cn('text-mcs-2xs text-mcs-text-subtle tnum')}>
+                    <span className={cn('text-mcs-2xs text-mcs-text-muted tnum')}>
                       {formatNotificationTime(n.timestamp)}
                     </span>
                   </span>
@@ -274,11 +299,11 @@ export function NotificationDrawer({ open, onOpenChange }: NotificationDrawerPro
               onOpenChange(false)
               navigate('/settings/notifications')
             }}
-            className="flex w-full items-center gap-2 rounded-mcs-sm text-mcs-xs text-mcs-text-muted transition-colors hover:bg-mcs-bg-hover hover:text-mcs-text-default"
+            className="flex w-full items-center gap-2 rounded-mcs-sm text-mcs-xs text-mcs-text-muted transition-colors hover:bg-mcs-state-hover hover:text-mcs-text-default"
           >
             <Settings2 className="size-3.5" aria-hidden />
             偏好设置
-            <span className="ml-auto text-mcs-2xs text-mcs-text-subtle">通知矩阵</span>
+            <span className="ml-auto text-mcs-2xs text-mcs-text-muted">通知矩阵</span>
             <ChevronRight className="size-3.5" aria-hidden />
           </button>
         </footer>

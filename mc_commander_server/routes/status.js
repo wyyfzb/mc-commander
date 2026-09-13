@@ -671,7 +671,8 @@ export function createStatusRoutes(serverManager) {
       gameDays,
       dimensions: [
         { name: '主世界', icon: '🌍', playerCount: dimCounts.overworld },
-        { name: '地狱', icon: '🔥', playerCount: dimCounts.nether },
+        // 「下界」为 MC 官方中文译名（“地狱”系旧俗称，服务端展示文案对齐）
+        { name: '下界', icon: '🔥', playerCount: dimCounts.nether },
         { name: '末地', icon: '🟣', playerCount: dimCounts.end }
       ]
     };

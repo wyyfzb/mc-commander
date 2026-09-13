@@ -1,17 +1,52 @@
 /**
  * 连接配置纯逻辑
  * - normalizeBaseUrl：默认 https 协议 + 去尾斜杠（单输入框语义）
+ * - panelAddress / sessionAppliesToPanel：面板身份与「会话是否属于本面板」判定
  * - isInternalHost：本机/内网地址判断（localhost/::1/127.x/10.x/192.168.x/172.16-31.x）
  * - needsHttpPlaintextWarning：公网 http 明文传输警告判定
  */
 
-/** 规范化面板地址：默认 https 协议 + 去尾斜杠 */
+/** 规范化面板地址：默认 https 协议 + 去尾斜杠（协议前缀大小写不敏感） */
 export function normalizeBaseUrl(input: string): string {
   let url = input.trim()
-  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+  if (!/^https?:\/\//i.test(url)) {
     url = `https://${url}`
   }
   return url.endsWith('/') ? url.slice(0, -1) : url
+}
+
+/**
+ * 面板身份（把登录会话绑定到签发它的面板）。
+ * 空地址＝同源部署，取当前站点根；带路径的地址保留路径——同一主机的两个子路径
+ * 是两个面板，不能被归一。主机大小写由 URL 解析器归一（`origin` 恒小写），
+ * 尾斜杠、协议大小写也一并归一；**路径大小写不折叠**（大小写敏感的服务端上
+ * /MC 与 /mc 是两块面板，折叠会把 A 的令牌发给 B 并误判 40103）。
+ */
+export function panelAddress(baseUrl: string): string {
+  const raw = baseUrl.trim()
+  if (raw === '') {
+    return typeof window !== 'undefined' ? window.location.origin.toLowerCase() : ''
+  }
+  const withScheme = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`
+  try {
+    const url = new URL(withScheme)
+    return `${url.origin}${url.pathname.replace(/\/+$/, '')}`
+  } catch {
+    return withScheme.replace(/\/+$/, '').toLowerCase()
+  }
+}
+
+/**
+ * 会话是否适用于目标面板。会话没记签发面板时（旧 localStorage 会话）按适用处理——
+ * 宽限到下一次请求成功（`backfillSessionPanel()` 会把签发面板补上），
+ * 避免升级后把已在用的人挡在门外。注意空串是「未知」而非「同源」语义。
+ */
+export function sessionAppliesToPanel(
+  session: { token?: string; issuedFor?: string } | null,
+  baseUrl: string,
+): boolean {
+  if (!session?.token) return false
+  return !session.issuedFor || session.issuedFor === panelAddress(baseUrl)
 }
 
 /**

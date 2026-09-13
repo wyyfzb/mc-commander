@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { McSocket, type WebSocketLike, type WebSocketCtor } from '../ws'
+import { McSocket, WS_CONNECT_TIMEOUT_MS, type WebSocketLike, type WebSocketCtor } from '../ws'
 
 /**
  * FakeWebSocket：记录消息并支持脚本化触发事件（契约测试用）
@@ -30,6 +30,9 @@ class FakeWebSocket implements WebSocketLike {
 
   close() {
     this.readyState = 3
+    // 模拟真实 WebSocket：close 异步派发 onclose（McSocket 看门狗/断线
+    // 重连依赖 onclose 驱动，Fake 不派发会让重连链路在测试里死掉）
+    queueMicrotask(() => this.onclose?.({ code: 1006, reason: 'closed by test' }))
   }
 
   /** 测试辅助：模拟握手成功 */
@@ -270,6 +273,75 @@ describe('McSocket（对照服务端 websocket.js 契约）', () => {
         expect(socket.credentialsMatch({ apiKey: 'k1', sessionToken: null })).toBe(true)
         expect(socket.credentialsMatch({ apiKey: 'k1', sessionToken: 't2' })).toBe(false)
       })
+    })
+  })
+
+  describe('连接挂起看门狗与状态回调（UXT-4）', () => {
+    it('CONNECTING 挂起超时：close 被调用、promise 拒绝、进入重连序列', async () => {
+      vi.useFakeTimers()
+      try {
+        const socket = new McSocket({ apiKey: 'k1', WebSocketImpl: FakeCtor })
+        const p = socket.connect()
+        const hung = FakeWebSocket.instances[0]!
+        const closeSpy = vi.spyOn(hung, 'close')
+        const rejection = p.catch((e: Error) => e.message)
+        await vi.advanceTimersByTimeAsync(WS_CONNECT_TIMEOUT_MS)
+        await expect(rejection).resolves.toBe('WebSocket 连接超时')
+        // 死连接被主动关闭（驱动 onclose → 指数退避重连）
+        expect(closeSpy).toHaveBeenCalled()
+        await vi.advanceTimersByTimeAsync(1_000)
+        // 重连已重建新连接
+        expect(FakeWebSocket.instances.length).toBe(2)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('握手正常完成：看门狗不触发（超时后连接仍存活）', async () => {
+      vi.useFakeTimers()
+      try {
+        const socket = new McSocket({ apiKey: 'k1', WebSocketImpl: FakeCtor })
+        const p = socket.connect()
+        FakeWebSocket.instances[0]!.open()
+        await p
+        const closeSpy = vi.spyOn(FakeWebSocket.instances[0]!, 'close')
+        await vi.advanceTimersByTimeAsync(WS_CONNECT_TIMEOUT_MS + 1_000)
+        expect(closeSpy).not.toHaveBeenCalled()
+        expect(socket.isOpen).toBe(true)
+        socket.close()
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('onStateChange：open/close 边沿各派发一次（degraded 态数据源）', async () => {
+      const states: boolean[] = []
+      const socket = new McSocket({
+        apiKey: 'k1',
+        WebSocketImpl: FakeCtor,
+        onStateChange: ({ open }) => states.push(open),
+      })
+      const p = socket.connect()
+      FakeWebSocket.instances[0]!.open()
+      await p
+      FakeWebSocket.instances[0]!.onclose?.({ code: 1006, reason: 'abnormal' })
+      expect(states).toEqual([true, false])
+      socket.close()
+    })
+
+    it('用户主动 close：派发 open=false 但不再自动重连', async () => {
+      const states: boolean[] = []
+      const socket = new McSocket({
+        apiKey: 'k1',
+        WebSocketImpl: FakeCtor,
+        onStateChange: ({ open }) => states.push(open),
+      })
+      const p = socket.connect()
+      FakeWebSocket.instances[0]!.open()
+      await p
+      socket.close()
+      expect(states).toEqual([true, false])
+      expect(FakeWebSocket.instances.length).toBe(1)
     })
   })
 })

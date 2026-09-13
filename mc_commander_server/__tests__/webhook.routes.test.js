@@ -6,9 +6,12 @@ import express from 'express';
 import request from 'supertest';
 import Database from 'better-sqlite3';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 
-const TEST_DIR = './test-webhook-routes-data';
+// 系统临时目录（勿落服务端工作目录）：error-codes.contract.test.js 会递归扫描
+// 该目录树，本文件建/删目录会与扫描并发撞 ENOENT，随机让整个契约检查变红
+const TEST_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'mcs-webhook-routes-'));
 let db;
 
 function createTestApp() {
@@ -20,7 +23,6 @@ function createTestApp() {
 }
 
 beforeAll(() => {
-  if (!fs.existsSync(TEST_DIR)) fs.mkdirSync(TEST_DIR, { recursive: true });
   db = new Database(path.join(TEST_DIR, 'test.db'));
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
@@ -31,7 +33,8 @@ beforeAll(() => {
   )`);
   db.exec(`CREATE TABLE IF NOT EXISTS webhooks (
     id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, url TEXT NOT NULL,
-    secret TEXT, events TEXT DEFAULT '[]', instance_id TEXT, is_enabled INTEGER DEFAULT 1,
+    secret TEXT, platform TEXT NOT NULL DEFAULT 'generic', events TEXT DEFAULT '[]',
+    instance_id TEXT, is_enabled INTEGER DEFAULT 1,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (instance_id) REFERENCES instances(id) ON DELETE CASCADE
   )`);

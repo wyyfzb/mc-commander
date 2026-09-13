@@ -10,6 +10,7 @@ import { LastOutputDialog } from '@/components/mcs/last-output-dialog'
 import { useUiStore } from '@/stores/ui'
 import { useServerStore } from '@/stores/server'
 import { useInstances } from '@/api/queries'
+import { useNotificationToasts } from '@/hooks/use-notification-toasts'
 import { useServerSocket } from '@/hooks/use-server-socket'
 
 /**
@@ -25,7 +26,6 @@ export function AppShell() {
   const sidebarCollapsed = useUiStore((s) => s.sidebarCollapsed)
   const mobileNavOpen = useUiStore((s) => s.mobileNavOpen)
   const setMobileNavOpen = useUiStore((s) => s.setMobileNavOpen)
-  const density = useUiStore((s) => s.density)
   const instanceId = useServerStore((s) => s.instanceId)
   const setInstanceId = useServerStore((s) => s.setInstanceId)
 
@@ -40,13 +40,15 @@ export function AppShell() {
 
   // WS 实时层（全局挂载：通知/状态/日志跨页面共享）
   useServerSocket(instanceId)
+  // 游戏内事件 toast 播报（通知中心之外的一过性即时反馈）
+  useNotificationToasts()
 
   return (
-    <div data-density={density} className="mcs-shell-bg mcs-grain flex h-dvh overflow-hidden text-mcs-text-default">
+    <div className="mcs-shell-bg mcs-grain flex h-dvh overflow-hidden text-mcs-text-default">
       {/* 无障碍（P5）：键盘 Tab 首站跳过侧栏/顶栏直达内容区，平时移出屏外 */}
       <a
         href="#main-content"
-        className="absolute left-3 top-3 z-50 -translate-y-24 rounded-mcs-sm bg-mcs-bg-emphasis px-3 py-2 text-mcs-sm font-medium text-mcs-text-default shadow-mcs-raised ring-1 ring-mcs-border-default transition-transform duration-mcs-fast focus-visible:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mcs-focus-ring"
+        className="absolute left-3 top-3 z-(--mcs-z-toast) -translate-y-24 rounded-mcs-sm bg-mcs-bg-emphasis px-3 py-2 text-mcs-sm font-medium text-mcs-text-default shadow-mcs-raised ring-1 ring-mcs-border-default transition-transform duration-mcs-fast focus-visible:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mcs-focus-ring"
       >
         跳到主要内容
       </a>

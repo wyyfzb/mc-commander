@@ -9,7 +9,7 @@
 - **多实例管理** — 启动/停止/重启 MC 服务器
 - **一键部署** — 支持 Vanilla/Paper/Fabric/Forge/Purpur，自动下载+Java 检测+首次启动配置
 - **RCON 命令** — 基于 rcon-client，串行队列、持久连接、超时处理，命令失败短语解析（防前端假成功）
-- **WebSocket 实时推送** — 19 种事件类型（含部署进度），Subprotocol 鉴权；**通知事件落库 + lastEventId 断线补齐**（断线/重启期间事件不丢）、心跳保活（30s ping 清理死连接）、广播背压保护、批量死亡事件 5s 窗口聚合（团灭只广播一条）
+- **WebSocket 实时推送** — 32 种事件类型（含部署进度），Subprotocol 鉴权；**通知事件落库 + lastEventId 断线补齐**（断线/重启期间事件不丢）、心跳保活（30s ping 清理死连接）、广播背压保护、批量死亡事件 5s 窗口聚合（团灭只广播一条）
 - **玩家管理** — OP/踢出/封禁/白名单 + 批量命令；**临时封禁自实现**（temp_bans 表 + 到期自动解封，不依赖插件）
 - **封禁记录** — 合并临时封禁（temp_bans）与原版永久封禁（banned-players.json / banned-ips.json），去重展示
 - **玩家洞察** — 物品栏/末影箱（NBT 解析）、成就/死亡/入睡事件、会话时间线、level.dat 读取（难度/出生点/天气，兼容 26.x 新旧格式）
@@ -30,7 +30,7 @@
 在目标 Linux 服务器上执行：
 
 ```bash
-curl -fsSL -o /tmp/deploy-mc-commander.sh https://gitee.com/wyyfzb/mc_commander/raw/main/mc_commander_server/scripts/deploy-mc-commander.sh
+curl -fsSL -o /tmp/deploy-mc-commander.sh https://gitee.com/wyyfzb/mc-commander/raw/main/mc_commander_server/scripts/deploy-mc-commander.sh
 sudo bash /tmp/deploy-mc-commander.sh
 ```
 
@@ -48,9 +48,9 @@ npm install
 cp .env.example .env
 # 编辑 .env，设置 API_KEY（必填）
 
-# （可选）整合 Web 前端：构建 dist 产物复制到 public/
-# public/index.html 存在时服务端自动同源托管前端（含 SPA 深链接兜底），
-# 目录位置可用 PUBLIC_DIR 环境变量覆盖；不部署则保持纯后端行为
+# 构建 Web 前端并放进 public/（面板界面必需：public/index.html 不存在时
+# 静态层整体不挂载，浏览器访问只有 404 JSON；目录可用 PUBLIC_DIR 覆盖）
+(cd ../mc_manager_web && npm install && npm run build)
 mkdir -p public
 cp -r ../mc_manager_web/dist/. public/
 
@@ -67,7 +67,7 @@ npm start
 部署脚本幂等，发布新版本后重新执行同一脚本即完成升级：
 
 ```bash
-curl -fsSL -o /tmp/deploy-mc-commander.sh https://gitee.com/wyyfzb/mc_commander/raw/main/mc_commander_server/scripts/deploy-mc-commander.sh
+curl -fsSL -o /tmp/deploy-mc-commander.sh https://gitee.com/wyyfzb/mc-commander/raw/main/mc_commander_server/scripts/deploy-mc-commander.sh
 sudo bash /tmp/deploy-mc-commander.sh
 ```
 
@@ -139,17 +139,49 @@ journalctl -u mc-commander -b --no-pager
 
 提示：error 除 journal 外仍落盘 `data/logs/error.log`（即 `DATA_DIR/logs/error.log`），便于 journal 轮转后回溯历史错误；`LOG_LEVEL` 默认 `info` 已含全部常规运行信息，无需另行配置日志文件。
 
+## 忘记管理员密码
+
+密码只以哈希落库、无法反解，也没有环境变量式重置开关（避免把重置能力留在 `.env` 里
+长期暴露）。恢复方式是把管理员账号与会话清空，让面板回到首访设密流程：
+
+```bash
+# 1) 停止服务（systemd: systemctl stop mc-commander；否则先 Ctrl-C）
+
+# 2) 清空管理员账号与会话（库文件默认 data/mc_commander.db，DATA_DIR 可改目录）
+sqlite3 data/mc_commander.db "DELETE FROM admin_account; DELETE FROM admin_sessions;"
+
+# 3) 重启服务，访问面板按首访向导重设密码
+```
+
+- 只删这两张表：实例、备份、定时任务、审计记录都不受影响。
+- **会话必须一并清空**：直接改库不经过改密接口，已有令牌不会自动失效；留着等于旧令牌
+  仍能登录。
+- 配置了 `SETUP_TOKEN` 的部署（公网建议配置），重设密码时须先输入该令牌，见
+  [SECURITY.md](../SECURITY.md) 的信任模型一节。
+- 若机器上没有 `sqlite3`，用任意 SQLite 客户端打开同一文件执行同样两条语句即可。
+
 ## API 文档
 
 ### 认证
 
-所有请求通过 Header 携带 API Key：
+HTTP 提供两条通道，**管理员会话（Bearer）是面板的安全主线**：
 
-```
+```http
+# 通道一：API Key（脚本 / 外部集成）
 X-API-Key: your-api-key
+
+# 通道二：管理员会话令牌（面板登录后自动携带；不再把明文 Key 存进浏览器）
+Authorization: Bearer <session-token>
 ```
 
-WebSocket 通过 Subprotocol 鉴权：`mc-commander-apikey.your-api-key`
+- **API Key**：按 `API_KEY_HASH` 校验（见上文部署口径），`POST /api/v1/rotate-key` 可轮换。
+- **管理员会话**：`POST /api/v1/auth/setup` 首次设置管理员密码，`POST /api/v1/auth/login`
+  换取令牌，`PUT /api/v1/auth/password` 改密；令牌仅以 SHA-256 落库，滑动有效期默认 7 天
+  （`ADMIN_SESSION_TTL_HOURS`），自创建起 30 天强制重登（`ADMIN_SESSION_ABSOLUTE_TTL_DAYS`）。
+- 两条通道都不可用时返回 401，错误信息同时提示两种凭据形态。
+
+WebSocket 经 Subprotocol 鉴权，与 HTTP 同源：`mc-commander-apikey.<key>`（API Key）
+或 `mc-commander-session.<token>`（会话令牌）。
 
 ### 基础路径
 
@@ -237,6 +269,20 @@ stage 取值：`download` / `download_complete` / `forge_install` / `first_launc
 
 > 备份 = `backups/<instanceId>/<名称>-<时间戳>/` 目录快照：Linux 用 `rsync -a --link-dest=<上一快照>` 硬链接增量（需安装 rsync，`apt-get install -y rsync`；实例目录与备份目录须同文件系统），Windows 优先 MSYS2 rsync、未安装时自动降级 robocopy `/MIR` 全量镜像。`size` 为快照逻辑大小（恢复所需容量）。改造前的 zip 备份 `format='zip'` 仅可删除。
 
+**面板自身数据**（`data/mc_commander.db`）每日自动快照至 `backups/panel/`，保留策略与实例备份一致。
+`.env` 不纳入自动备份（含认证凭据，且备份产物可经 API 下载），部署或改建后请手动复制一份留存。
+
+面板库快照还原步骤：
+
+1. 停止面板进程（运行中覆盖会导致 WAL 半写，还原后数据损坏）
+2. 留存现场：把 `data/mc_commander.db` 及 `-wal` / `-shm` 残留移出 `data/`（勿覆盖旧快照目录）
+3. 将 `backups/panel/` 中目标快照复制为 `data/mc_commander.db`
+4. 确认 `data/` 下无 `-wal` / `-shm` 残留（有则删除——旧 WAL 与还原库不匹配）
+5. 启动面板，验证登录与实例列表完整性
+6. 确认无误后清理第 2 步留存的现场文件
+
+> 快照还原的是**面板配置**；实例世界数据请用实例备份还原，两者相互独立。
+
 ### 定时任务
 
 | 方法 | 端点 | 说明 |
@@ -267,7 +313,7 @@ stage 取值：`download` / `download_complete` / `forge_install` / `first_launc
 {"type": "subscribe", "instanceId": "your-instance-id", "lastEventId": 42}
 ```
 
-**事件**（共 19 种）:
+**事件**（共 32 种）:
 
 > 通知类事件（玩家/备份/任务）在广播前**落库**（`notification_events` 表）并携带自增 `id` 字段；客户端记录最后收到的 `id`，重连时通过 `lastEventId` 补齐断线期间事件。高频事件（log/status 快照/performance/weather）不落库。
 
@@ -304,31 +350,67 @@ mc_commander_server/
 ├── index.js              # 入口 (Express + WebSocketServer)
 ├── config.js             # 配置加载 (.env)
 ├── websocket.js          # WebSocket 事件广播（通知落库/断线补齐/心跳/背压保护）
-├── routes/               # API 路由
+├── routes/               # API 路由（统一挂 /api/v1）
+│   ├── index.js          # v1 路由装配
 │   ├── status.js         # 实例状态/属性/世界/日志
 │   ├── server-jar.js     # MC 服务端部署（minecraft-core + got + Paper v3）
 │   ├── players.js        # 玩家管理 + 封禁（临时封禁自实现 + 封禁记录合并）
+│   ├── plugins.js        # 插件管理 + Modrinth 市场（搜索/版本/一键安装/更新检测）
 │   ├── backups.js        # 备份管理
 │   ├── tasks.js          # 定时任务
-│   └── files.js          # 文件管理（二进制/编码防护 + 列表文件同步）
+│   ├── files.js          # 文件管理（二进制/编码防护 + 列表文件同步）
+│   ├── webhooks.js       # Webhook CRUD + 事件类型
+│   ├── audit.js          # 审计日志查询
+│   ├── auth.js           # 管理员 setup/login/改密/会话状态（安全主线）
+│   ├── keys.js           # API Key 轮换
+│   └── upgrade.js        # 实例版本升级（P0-4）
 ├── services/             # 业务逻辑
 │   ├── mc_server.js      # MC 实例管理 + RCON（rcon-client，从 SQLite 加载；死亡事件聚合）
+│   ├── mc-server/        # 启动生命周期 / 输出解析 / 日志尾随 / 状态采集 / 世界数据
 │   ├── backup.service.js # 备份操作（目录快照 + rsync/robocopy 增量）
+│   ├── panel-backup.service.js # 面板自身数据备份（SQLite 在线快照）
+│   ├── plugin.service.js # 插件扫描 / 启停 / 市场安装（feat-8）
+│   ├── market.service.js # Modrinth 市场客户端
+│   ├── instance-properties.service.js # server.properties 读写（issue 514）
+│   ├── upgrade.service.js # 实例版本升级
+│   ├── webhook.service.js # Webhook 投递（重试 + 投递日志）
 │   └── task_scheduler.js # Cron 调度（croner）+ 临时封禁到期自动解封
-├── middleware/            # 中间件
-│   ├── auth.js           # API Key 认证
+├── middleware/           # 中间件
+│   ├── auth.js           # 双通道认证（API Key / Bearer 会话）+ WS 子协议
+│   ├── validate.js       # zod 请求校验（@mc-commander/schemas）
+│   ├── static_serve.js   # 前端 dist 同源托管（含 SPA 深链接兜底）
 │   ├── cors.js           # CORS
 │   ├── error_handler.js  # 错误处理 + 404
 │   └── rate_limit.js     # 频率限制
 ├── db/                   # 数据库
 │   ├── database.js       # SQLite 初始化（含 notification_events 通知事件表）
+│   ├── index.js          # 模型统一导出
 │   ├── instance.model.js # 实例模型（CRUD + JSON 迁移）
+│   ├── admin.model.js    # 管理员账号 + 会话模型（安全主线）
 │   ├── backup.model.js   # 备份模型
 │   ├── scheduled_task.model.js # 任务模型
-│   └── ban.model.js      # 临时封禁模型（temp_bans 表）
-└── utils/                # 工具
+│   ├── task_run_history.model.js # 任务执行历史（append-only）
+│   ├── ban.model.js      # 临时封禁模型（temp_bans 表）
+│   ├── audit.model.js    # 审计日志 + 命令历史模型（含保留清理）
+│   └── webhook.model.js  # Webhook 模型（CRUD + 投递日志）
+└── utils/                # 工具（全仓公共单一实现，勿另起副本）
     ├── response.js       # 统一响应格式 + 错误码
-    └── java-detector.js  # Java 版本检测（版本矩阵+回退）
+    ├── db-time.js        # SQLite 时间归一化（naive UTC 串 ↔ ISO / epoch）
+    ├── java-detector.js  # Java 版本检测（版本矩阵 + 回退）
+    ├── player-utils.js   # 玩家工具（离线 UUID 的唯一实现）
+    ├── password.js       # 管理员密码哈希 / 定时安全比较
+    ├── setup-token.js    # 首启一次性授权令牌（SETUP_TOKEN）
+    ├── weak-key.js       # 弱 API Key 检测
+    ├── url-guard.js      # URL SSRF 防护
+    ├── fs-utils.js       # 原子写文件（tmp + rename）
+    ├── jar-download-guard.js # JAR 下载完整性校验
+    ├── command-mask.js   # 命令历史敏感参数脱敏
+    ├── ban-reconcile.js  # 实例启动前 tempban 对账（banned-players.json ↔ DB）
+    ├── audit.js          # 审计写入入口（AuditActions 词表）
+    ├── pagination.js     # 分页参数解析（前端路由统一口径）
+    ├── asyncHandler.js   # async 路由包装（统一错误捕获）
+    ├── logger.js         # console 封装 + 文件日志 + 轮转
+    └── version.js        # 版本号单一来源（package.json）
 ```
 
 ## 测试
@@ -347,4 +429,4 @@ npm test        # vitest
 
 ## License
 
-MIT
+AGPL-3.0-or-later（见仓库根 [LICENSE](../LICENSE)）

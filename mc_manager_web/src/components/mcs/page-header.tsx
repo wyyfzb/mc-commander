@@ -27,7 +27,7 @@ export function PageHeader({ title, description, actions, className }: PageHeade
       <div className="min-w-0">
         <h2 className="text-mcs-xl font-semibold text-mcs-text-default">{title}</h2>
         {description != null && (
-          <p className="text-mcs-xs text-mcs-text-subtle">{description}</p>
+          <p className="text-mcs-xs text-mcs-text-muted">{description}</p>
         )}
       </div>
       {actions != null && <div className="shrink-0">{actions}</div>}

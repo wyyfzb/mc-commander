@@ -264,7 +264,7 @@ describe('DimensionCards', () => {
     expect(screen.getByText('🟣')).toBeInTheDocument()
   })
 
-  it('维度色条：按名称匹配维度 token（--mcs-dimension-*）', () => {
+  it('维度色条：按名称匹配维度 token 工具类（bg-mcs-dimension-*）', () => {
     const { container } = render(<DimensionCards dimensions={makeWorld().dimensions} />)
     const cards = container.querySelectorAll('[data-dimension-kind]')
     expect(cards).toHaveLength(3)
@@ -273,10 +273,10 @@ describe('DimensionCards', () => {
       const card = Array.from(cards).find((c) => c.getAttribute('data-dimension-kind') === kind) as HTMLElement
       return card.querySelector('[data-dimension-bar]') as HTMLElement
     }
-    // 主世界青绿 / 下界红橙 / 末地紫（断言引用的是语义 token 变量，非硬编码色值）
-    expect(barOf('overworld').style.backgroundColor).toBe('var(--mcs-dimension-overworld)')
-    expect(barOf('nether').style.backgroundColor).toBe('var(--mcs-dimension-nether)')
-    expect(barOf('end').style.backgroundColor).toBe('var(--mcs-dimension-end)')
+    // 主世界青绿 / 下界红橙 / 末地紫（断言语义 token 工具类，非硬编码色值）
+    expect(barOf('overworld').classList.contains('bg-mcs-dimension-overworld')).toBe(true)
+    expect(barOf('nether').classList.contains('bg-mcs-dimension-nether')).toBe(true)
+    expect(barOf('end').classList.contains('bg-mcs-dimension-end')).toBe(true)
     // 色条宽度 4px（w-1）
     expect(barOf('nether').classList.contains('w-1')).toBe(true)
   })

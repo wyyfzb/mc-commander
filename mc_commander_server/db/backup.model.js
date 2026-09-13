@@ -1,5 +1,6 @@
 import { getDb } from './database.js';
 import { logger } from '../utils/logger.js';
+import { parseDbTime, toIsoUtc } from '../utils/db-time.js';
 
 // 对外查询列白名单（find-021）：显式列出字段，绝不返回 file_path。
 // file_path 是服务器本地磁盘路径，原样下发给 API 客户端会泄露服务器
@@ -67,18 +68,10 @@ export class BackupModel {
   /**
    * 将 DB 的 snake_case 行映射为前端期望的 camelCase 对象。
    * size 保持字节原值，换算由前端完成。
-   * createdAt/updatedAt 转为 ISO8601 带 Z（SQLite CURRENT_TIMESTAMP 为
-   * UTC 且无时区标记，补 Z 后前端 toLocal() 正确换算）。
+   * createdAt/updatedAt 经 toIsoUtc 补 Z 转 ISO8601，前端 toLocal() 才能正确换算。
    */
   static _toCamel(row) {
     if (!row) return null;
-    const toIso = (t) => {
-      if (!t) return null;
-      const s = String(t).trim();
-      return /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}$/.test(s)
-        ? new Date(s.replace(' ', 'T') + 'Z').toISOString()
-        : s;
-    };
     return {
       id: row.id,
       instanceId: row.instance_id,
@@ -89,8 +82,8 @@ export class BackupModel {
       status: row.status,
       worldName: row.world_name,
       format: row.format,
-      createdAt: toIso(row.created_at),
-      updatedAt: toIso(row.updated_at),
+      createdAt: toIsoUtc(row.created_at),
+      updatedAt: toIsoUtc(row.updated_at),
     };
   }
 
@@ -175,7 +168,10 @@ export class BackupModel {
     let resetCount = 0;
 
     for (const row of stale) {
-      const ts = Date.parse(row.updated_at || row.created_at) || 0;
+      // 必须经 parseDbTime 归一化：SQLite 时间是无时区标记的 UTC 串，直接
+      // Date.parse 会按本地时区解释，非 UTC 时区下所有记录都会被误判为陈旧，
+      // 使下方互斥检查（backup.service）的 busyCount 恒为 0。
+      const ts = parseDbTime(row.updated_at || row.created_at);
       if (ts < cutoff) {
         const target = row.status === 'restoring' ? 'completed' : 'failed';
         db.prepare(`UPDATE backups SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)

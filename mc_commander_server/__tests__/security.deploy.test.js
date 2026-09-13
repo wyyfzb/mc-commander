@@ -43,15 +43,15 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
     });
 
     it('PACKAGE_URL 默认锁定具体 tag 而非可变 master 分支', () => {
-      // 默认分支变量不再是 master
-      expect(script).toContain('BRANCH="${BRANCH:-v0.1.0}"');
+      // 默认分支变量不再是 master；默认值锁定具体发布 tag（版本随 Release 回写演进，按模式断言防漂移）
+      expect(script).toMatch(/BRANCH="\$\{BRANCH:-v\d+\.\d+\.\d+\}"/);
       expect(script).not.toContain('BRANCH="${BRANCH:-master}"');
       // 默认 PACKAGE_URL 使用 BRANCH 变量（因此默认解析为固定 tag 的 GitHub Release 资产）
       expect(script).toContain('PACKAGE_URL="${PACKAGE_URL:-https://github.com/wyyfzb/mc-commander/releases/download/${BRANCH}/mc-commander-server-${BRANCH}.tar.gz}"');
     });
 
     it('保留 BRANCH / PACKAGE_SHA256 环境变量覆盖能力', () => {
-      expect(script).toContain('BRANCH="${BRANCH:-v0.1.0}"');
+      expect(script).toMatch(/BRANCH="\$\{BRANCH:-v\d+\.\d+\.\d+\}"/);
       expect(script).toMatch(/EXPECTED_PACKAGE_SHA256="\$\{PACKAGE_SHA256:-/);
     });
   });

@@ -11,8 +11,9 @@ import {
   formatNotificationTime,
   formatRelativeTime,
   formatStartTime,
-  formatUtcNaive,
   formatUptime,
+  formatWorldSize,
+  worldSizeParts,
   worldTimePhase,
 } from '../format'
 
@@ -114,24 +115,6 @@ describe('formatClock（HH:mm）', () => {
   })
 })
 
-describe('formatUtcNaive（SQLite CURRENT_TIMESTAMP → MM-dd HH:mm）', () => {
-  // 往返构造：本地时刻 → toISOString（UTC）→ 去 Z/换空格模拟 SQLite 存储，断言还原回同一本地时刻
-  it('UTC naive 字符串按 UTC 解析后转本地；空格分隔', () => {
-    const local = new Date(2026, 7, 14, 9, 5)
-    const sqliteTs = local.toISOString().slice(0, 19).replace('T', ' ')
-    expect(formatUtcNaive(sqliteTs)).toBe('08-14 09:05')
-  })
-  it('兼容已带 T 的 ISO 输入', () => {
-    const local = new Date(2026, 7, 14, 9, 5)
-    // 保留 Z 时区标记：无标记的 T 形式被 JS 按本地时区解析，断言会随机器时区漂移
-    const iso = local.toISOString()
-    expect(formatUtcNaive(iso)).toBe('08-14 09:05')
-  })
-  it('解析失败原样返回输入', () => {
-    expect(formatUtcNaive('not-a-date')).toBe('not-a-date')
-  })
-})
-
 describe('formatStartTime / formatLogFileName / worldTimePhase', () => {
   it('startTime 本地时区 MM-dd HH:mm；缺失 --；自定义兜底', () => {
     const d = new Date(2026, 7, 14, 9, 30) // 本地时区构造
@@ -152,6 +135,26 @@ describe('formatStartTime / formatLogFileName / worldTimePhase', () => {
     expect(worldTimePhase(15000)).toBe('夜晚')
     expect(worldTimePhase(22000)).toBe('午夜')
     expect(worldTimePhase(null)).toBe('--')
+  })
+
+  it('worldSizeParts：<1GB 换 MB，≥1GB 保留一位 GB，异常值回退 0 GB', () => {
+    // 实测场景：643MB 存档（0.6279296875 GB）旧实现渲染「0.6」易误读为 0
+    expect(worldSizeParts(0.6279296875)).toEqual({ value: '643', unit: 'MB' })
+    expect(worldSizeParts(3.2)).toEqual({ value: '3.2', unit: 'GB' })
+    expect(worldSizeParts(1)).toEqual({ value: '1.0', unit: 'GB' })
+    expect(worldSizeParts(0)).toEqual({ value: '0', unit: 'GB' })
+    expect(worldSizeParts(null)).toEqual({ value: '0', unit: 'GB' })
+    expect(worldSizeParts(Number.NaN)).toEqual({ value: '0', unit: 'GB' })
+  })
+
+  it('formatWorldSize：兼容 number 与数字字符串（两端契约类型不一），空/非法回退 —', () => {
+    expect(formatWorldSize(0.6279296875)).toBe('643 MB')
+    expect(formatWorldSize(3.2)).toBe('3.2 GB')
+    expect(formatWorldSize('1.2GB')).toBe('1.2 GB')
+    expect(formatWorldSize('0.03')).toBe('31 MB')
+    expect(formatWorldSize(null)).toBe('—')
+    expect(formatWorldSize('')).toBe('—')
+    expect(formatWorldSize('N/A')).toBe('—')
   })
 })
 

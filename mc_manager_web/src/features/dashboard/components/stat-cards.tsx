@@ -15,7 +15,7 @@ import { cn } from '@/lib/utils'
 
 /** TPS 阈值（≥19 健康 / 15-19 卡顿 / <15 严重卡顿） */
 export function tpsColor(tps: number | null, isRunning: boolean): string {
-  if (!isRunning || tps == null) return 'text-mcs-text-subtle'
+  if (!isRunning || tps == null) return 'text-mcs-text-muted'
   if (tps >= 19) return 'text-mcs-success-fg'
   if (tps >= 15) return 'text-mcs-warning-fg'
   return 'text-mcs-error-fg'
@@ -67,11 +67,16 @@ export function BigStatCards({
   const tps = status?.tps ?? null
   const healthy = isRunning && (tps ?? 0) >= 19
 
-  const cpu = systemStats?.cpuUsage ?? status?.cpuUsage ?? 0
-  const memUsed = systemStats?.memoryUsage ?? status?.memoryUsage ?? 0
-  const memTotal = systemStats?.totalMemory ?? status?.totalMemory ?? 0
+  // 本卡是**整机**资源口径：实例状态里的 memoryUsage 是进程 RSS、cpuUsage 是进程 CPU%，
+  // 与整机口径不同源，不能互为后备（混用会得出「进程内存 / 整机总量」这类失真比例）。
+  // 整机数据未到时如实留空，由渲染层给「暂无数据」——与磁盘行既有做法一致。
+  const cpu = systemStats?.cpuUsage ?? null
+  const memUsed = systemStats?.memoryUsage ?? null
+  const memTotal = systemStats?.totalMemory ?? null
   const cores = systemStats?.cpuCores
-  const memPct = systemStats?.memoryPercent ?? (memTotal > 0 ? (memUsed / memTotal) * 100 : 0)
+  // 无数据时保持 null（不是 0）：0 会被进度条与读屏当成「占用 0%」播报，与「暂无数据」冲突
+  const hasMem = memUsed != null && memTotal != null
+  const memPct = hasMem ? (systemStats?.memoryPercent ?? (memUsed / memTotal) * 100) : null
   const diskUsage = systemStats?.diskUsage
   const primary = diskUsage?.primary ?? null
 
@@ -108,7 +113,7 @@ export function BigStatCards({
             <span className={cn('mcs-num text-mcs-md leading-none', tpsColor(tps, isRunning))}>
               {tps != null ? tps.toFixed(1) : '--'}
             </span>
-            <span className="text-mcs-2xs text-mcs-text-subtle">TPS</span>
+            <span className="text-mcs-2xs text-mcs-text-muted">TPS</span>
           </span>
         ) : undefined
       }
@@ -118,40 +123,54 @@ export function BigStatCards({
           label="CPU"
           eyebrow={cores ? <StatusPill tone="muted" className="text-mcs-2xs">{cores} 核</StatusPill> : undefined}
           value={
-            <>
-              {cpu.toFixed(1)}
-              <span className="text-mcs-sm font-medium text-mcs-text-subtle">%</span>
-            </>
+            cpu != null ? (
+              <>
+                {cpu.toFixed(1)}
+                <span className="text-mcs-sm font-medium text-mcs-text-muted">%</span>
+              </>
+            ) : (
+              <span className="font-sans text-mcs-sm font-medium text-mcs-text-muted">暂无数据</span>
+            )
           }
           percent={cpu}
         />
         <ResourceRow
           label="内存"
-          eyebrow={<StatusPill tone="muted" className="text-mcs-2xs">{memPct.toFixed(0)}%</StatusPill>}
+          eyebrow={
+            memPct != null ? (
+              <StatusPill tone="muted" className="text-mcs-2xs">{memPct.toFixed(0)}%</StatusPill>
+            ) : undefined
+          }
           value={
-            <>
-              {memUsed.toFixed(1)}
-              <span className="text-mcs-sm font-medium text-mcs-text-subtle"> / {memTotal.toFixed(0)}G</span>
-            </>
+            hasMem ? (
+              <>
+                {memUsed.toFixed(1)}
+                <span className="text-mcs-sm font-medium text-mcs-text-muted"> / {memTotal.toFixed(0)}G</span>
+              </>
+            ) : (
+              <span className="font-sans text-mcs-sm font-medium text-mcs-text-muted">暂无数据</span>
+            )
           }
           percent={memPct}
         />
         <ResourceRow
           label="磁盘"
+          eyebrow={
+            primary ? (
+              <StatusPill tone="muted" className="text-mcs-2xs">{primary.percent.toFixed(1)}%</StatusPill>
+            ) : undefined
+          }
           value={
             primary ? (
               <>
-                {primary.percent.toFixed(1)}
-                <span className="text-mcs-sm font-medium text-mcs-text-subtle">%</span>
-                <span className="ml-1 text-mcs-2xs font-normal text-mcs-text-subtle">
-                  {primary.usedGB}G / {primary.totalGB}G
-                </span>
+                {primary.usedGB}
+                <span className="text-mcs-sm font-medium text-mcs-text-muted"> / {primary.totalGB}G</span>
               </>
             ) : (
-              <span className="font-sans text-mcs-sm font-medium text-mcs-text-subtle">暂无磁盘数据</span>
+              <span className="font-sans text-mcs-sm font-medium text-mcs-text-muted">暂无磁盘数据</span>
             )
           }
-          percent={primary?.percent ?? 0}
+          percent={primary?.percent ?? null}
           barColor={primary ? diskBarColor(primary.percent) : undefined}
         />
       </div>
@@ -170,10 +189,11 @@ function ResourceRow({
   label: string
   eyebrow?: React.ReactNode
   value: React.ReactNode
-  percent: number
+  /** null 表示无数据：此时不暴露进度语义（否则读屏播报「0%」，与「暂无数据」文案冲突） */
+  percent: number | null
   barColor?: string
 }) {
-  const p = Math.max(0, Math.min(100, percent))
+  const p = percent == null ? null : Math.max(0, Math.min(100, percent))
   return (
     <div>
       <div className="flex items-center justify-between gap-2">
@@ -181,16 +201,16 @@ function ResourceRow({
         {eyebrow}
         <span className="mcs-num text-mcs-lg leading-none">{value}</span>
       </div>
+      {/* 无数据时保留轨道（避免行高跳动）但不带语义，仅作装饰 */}
       <div
-        role="progressbar"
-        aria-valuenow={Math.round(p)}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-mcs-bg-emphasis"
+        {...(p == null
+          ? { 'aria-hidden': true }
+          : { role: 'progressbar', 'aria-valuenow': Math.round(p), 'aria-valuemin': 0, 'aria-valuemax': 100 })}
+        className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-mcs-bg-secondary"
       >
         <div
-          className="mcs-progress-sheen h-full rounded-full transition-[width] duration-mcs-base ease-mcs-snappy"
-          style={{ width: `${p}%`, background: barColor ?? 'var(--mcs-accent)' }}
+          className="mcs-progress-sheen h-full w-full rounded-full transition-transform duration-mcs-base ease-mcs-snappy"
+          style={{ transform: `translateX(${(p ?? 0) - 100}%)`, background: barColor ?? 'var(--mcs-success-fg)' }}
         />
       </div>
     </div>
@@ -226,10 +246,10 @@ export function PlayersCard() {
     >
       <span
         className={cn(
-          'flex size-5 shrink-0 items-center justify-center rounded-full text-mcs-2xs font-bold',
+          'flex size-5 shrink-0 items-center justify-center rounded-full text-mcs-2xs font-semibold',
           isSleeping
             ? 'bg-mcs-info-bg-subtle text-mcs-info-fg'
-            : 'bg-mcs-accent-bg-subtle text-mcs-success-fg',
+            : 'bg-mcs-accent-bg-subtle text-mcs-accent-fg',
         )}
         aria-hidden
       >
@@ -256,12 +276,12 @@ export function PlayersCard() {
         <b className="tnum font-semibold">{count}</b>
       </div>
       {names.length === 0 ? (
-        <span className="pt-1 text-mcs-2xs text-mcs-text-subtle">—</span>
+        <span className="pt-1 text-mcs-2xs text-mcs-text-muted">—</span>
       ) : (
         <ol className="flex flex-col">
           {names.slice(0, MAX_COLUMN_ROWS).map((name) => renderPlayerRow(name, isSleeping))}
           {names.length > MAX_COLUMN_ROWS && (
-            <li className="px-1.5 py-0.5 text-mcs-2xs text-mcs-text-subtle">
+            <li className="px-1.5 py-0.5 text-mcs-2xs text-mcs-text-muted">
               +{names.length - MAX_COLUMN_ROWS}
             </li>
           )}
@@ -276,10 +296,10 @@ export function PlayersCard() {
   )
 
   const body = !isRunning ? (
-    <p className="py-1 text-mcs-xs text-mcs-text-subtle">实例已停止，暂无玩家数据</p>
+    <p className="py-1 text-mcs-xs text-mcs-text-muted">实例已停止，暂无玩家数据</p>
   ) : names.length === 0 ? (
     <div className="flex items-center gap-2 py-1">
-      <p className="text-mcs-xs text-mcs-text-subtle">
+      <p className="text-mcs-xs text-mcs-text-muted">
         {rconConnected ? '暂无玩家在线' : '需启用 RCON 才能读取在线玩家'}
       </p>
       {!rconConnected && (
@@ -332,9 +352,9 @@ export function PlayersCard() {
         <div className="flex flex-col gap-0.5">
           <span className="mcs-num text-mcs-display leading-none">
             {online}
-            <span className="text-mcs-lg font-normal text-mcs-text-subtle">/{max}</span>
+            <span className="text-mcs-lg font-normal text-mcs-text-muted">/{max}</span>
           </span>
-          <span className="text-mcs-2xs text-mcs-text-subtle">
+          <span className="text-mcs-2xs text-mcs-text-muted">
             今日新增 {status?.todayNewPlayers ?? 0}
           </span>
         </div>
@@ -344,7 +364,7 @@ export function PlayersCard() {
               OP {opCount}/{online}
             </StatusPill>
             {opNames.length > 0 && (
-              <span className="max-w-[140px] truncate text-mcs-2xs text-mcs-warning-fg">
+              <span className="max-w-35 truncate text-mcs-2xs text-mcs-warning-fg">
                 {opNames.slice(0, 2).join(', ')}
                 {opNames.length > 2 ? '…' : ''}
               </span>
@@ -379,8 +399,11 @@ export function RuntimeInfoCard() {
       icon: Play,
     },
     {
+      // 绝对时间（与启动时间同格式）；相对时间降级为悬停提示——「刚刚」类
+      // 模糊值无法核对存档是否如期发生
       label: '上次存档',
-      value: formatRelativeTime(status?.lastSave),
+      value: formatStartTime(status?.lastSave),
+      tooltip: status?.lastSave ? `相对时间：${formatRelativeTime(status.lastSave)}` : undefined,
       icon: Save,
     },
   ]
@@ -398,13 +421,14 @@ export function RuntimeInfoCard() {
       className="animate-mcs-fade-up mcs-delay-3"
       eyebrow={
         versionText ? (
-          <span className="tnum text-mcs-xs font-medium text-mcs-text-muted">{versionText}</span>
+          <StatusPill tone="muted" className="tnum text-mcs-2xs">{versionText}</StatusPill>
         ) : undefined
       }
     >
       <div className="flex items-center justify-between gap-2">
-        <p className="text-mcs-xs text-mcs-text-subtle">本次运行时长</p>
-        <p className={cn('mcs-num text-mcs-lg', !isRunning && 'text-mcs-text-subtle')}>
+        {/* 停止态下数值为 —（本次会话已结束），label 同步改「上次」避免语义误导 */}
+        <p className="text-mcs-xs text-mcs-text-muted">{isRunning ? '本次运行时长' : '上次运行时长'}</p>
+        <p className={cn('mcs-num text-mcs-lg', !isRunning && 'text-mcs-text-muted')}>
           {formatUptime(isRunning ? uptime : null)}
         </p>
       </div>
@@ -412,7 +436,7 @@ export function RuntimeInfoCard() {
         {infoLines.map((line) => (
           <div key={line.label} className="flex items-center justify-between text-mcs-xs" title={line.tooltip}>
             <span className="flex items-center gap-1.5 text-mcs-text-muted">
-              <line.icon className="size-3 text-mcs-text-subtle" aria-hidden />
+              <line.icon className="size-3 text-mcs-text-muted" aria-hidden />
               {line.label}
             </span>
             <span className="tnum font-medium">{line.value}</span>

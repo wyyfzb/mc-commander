@@ -12,6 +12,9 @@ export const deployRequestSchema = z.object({
   instanceName: z.string(),
   maxMemory: z.string().optional(),
   loaderVersion: z.string().optional(),
+  // EULA 同意（用户动作，非部署配置）：true → 写 eula=true 并执行首启；
+  // 缺省/false → 写 eula=false 且跳过首启，待实例启动流程的 EULA 确认再写
+  eula: z.boolean().optional(),
 })
 
 export const deployResultSchema = z.object({

@@ -102,6 +102,33 @@ test.describe('登录页', () => {
     await expect(page).toHaveURL(/\/login/)
   })
 
+  test('顶栏登出：本机残留 API Key 时也能真正退出（会话 + Key 一并清除）', async ({ page }) => {
+    await clearCredentials(page)
+    await page.goto('/login')
+    await page.getByLabel('管理员密码').fill('e2e-correct-pass')
+    await page.getByRole('button', { name: /登录/ }).click()
+    await expect(page).toHaveURL(/\/dashboard/)
+
+    // 造「会话 + 残留 API Key」的双凭据浏览器（只清会话时凭据仍在 → /login 被守卫弹回、人留在面板里）
+    await page.evaluate(() => {
+      const raw = localStorage.getItem('mcs-connection')
+      const cfg = raw ? (JSON.parse(raw) as { baseUrl?: string }) : {}
+      localStorage.setItem(
+        'mcs-connection',
+        JSON.stringify({ baseUrl: cfg.baseUrl ?? '', apiKey: 'e2e-mock-key-0000000000' }),
+      )
+    })
+    await page.reload()
+    await expect(page).toHaveURL(/\/dashboard/)
+
+    await page.getByRole('button', { name: '管理员菜单' }).click()
+    await page.getByRole('menuitem', { name: '退出登录' }).click()
+    // 凭据全清 → requireUnconfigured 放行，真正落在登录页而不是被弹回仪表盘
+    await expect(page).toHaveURL(/\/login/)
+    await expect(page.getByRole('heading', { name: '管理员登录' })).toBeVisible()
+    expect(await page.evaluate(() => localStorage.getItem('mcs-connection'))).not.toContain('e2e-mock-key')
+  })
+
   test('账号与安全面板：会话列表 + 本机徽章 + 改密表单', async ({ page }) => {
     await clearCredentials(page)
     await page.goto('/login')

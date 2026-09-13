@@ -381,7 +381,9 @@ export function createServerJarRoutes(serverManager) {
 
   // 部署实例（请求体 schema parse 校验：type 枚举/必填字段由 deployRequestSchema 单源定义）
   router.post('/instances/deploy', validateBody(deployRequestSchema), async (req, res) => {
-    const { type, mcVersion, instanceName, maxMemory, loaderVersion } = req.body;
+    const { type, mcVersion, instanceName, maxMemory, loaderVersion, eula } = req.body;
+    // EULA 只由用户显式同意决定：面板不得代替用户表达同意（未同意同样可完成部署，仅不写 true、不自动首启）
+    const eulaAgreed = eula === true;
 
     const instanceId = `${type}-${crypto.randomBytes(4).toString('hex')}`;
     const instancePath = path.join(config.serversDir, instanceId);
@@ -529,7 +531,7 @@ export function createServerJarRoutes(serverManager) {
       };
 
       atomicWriteFile(path.join(instancePath, 'instance.json'), JSON.stringify(instanceConfig, null, 2));
-      fs.writeFileSync(path.join(instancePath, 'eula.txt'), 'eula=true\n');
+      fs.writeFileSync(path.join(instancePath, 'eula.txt'), eulaAgreed ? 'eula=true\n' : 'eula=false\n');
       fs.writeFileSync(path.join(instancePath, 'server.properties'), generateServerProperties(instanceId, mcVersion));
 
       try {
@@ -550,13 +552,17 @@ export function createServerJarRoutes(serverManager) {
         logger.warn(`Failed to write instance to DB:`, dbErr.message);
       }
 
-      trackDeployProgress(serverManager, deployMeta, { stage: 'first_launch', percent: 0, transferred: 0, total: 0 });
-      try {
-        logger.info('Running first launch to generate config...');
-        await runFirstLaunch(instancePath, javaPath, jarFile, ramSize);
-        logger.info('First launch completed');
-      } catch (e) {
-        logger.warn('First launch failed (may require manual setup):', e.message);
+      // 首启用于生成世界与校验 jar，而 MC 首启强制要求 eula=true；
+      // 未同意时跳过，待用户在实例上确认 EULA 后首次启动自然完成，避免写入未获同意的 eula=true
+      if (eulaAgreed) {
+        trackDeployProgress(serverManager, deployMeta, { stage: 'first_launch', percent: 0, transferred: 0, total: 0 });
+        try {
+          logger.info('Running first launch to generate config...');
+          await runFirstLaunch(instancePath, javaPath, jarFile, ramSize);
+          logger.info('First launch completed');
+        } catch (e) {
+          logger.warn('First launch failed (may require manual setup):', e.message);
+        }
       }
 
       serverManager.loadInstances();

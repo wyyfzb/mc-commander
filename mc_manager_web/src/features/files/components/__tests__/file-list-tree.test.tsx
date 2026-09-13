@@ -170,6 +170,14 @@ describe('FileList', () => {
     expect(row.className).toContain('bg-mcs-accent-bg-subtle')
   })
 
+  it('当前预览文件行以 aria-current 暴露（底色只是视觉线索，读屏拿不到）', async () => {
+    renderWithClient(<FileList {...baseFileListProps} selectedPath="/server.properties" />)
+    const current = await screen.findByRole('button', { name: '选择文件 server.properties' })
+    expect(current).toHaveAttribute('aria-current', 'true')
+    // 未选中的行不设该属性（否则「当前项」在语义上等于每行都是）
+    expect(screen.getByRole('button', { name: '选择文件 ops.json' })).not.toHaveAttribute('aria-current')
+  })
+
   // ── feat-9：二进制编辑保护 + 行级下载 ──
 
   /** 含二进制文件的列表项（server.jar / level.dat 混入常规文本文件） */

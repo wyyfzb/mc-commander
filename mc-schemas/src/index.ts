@@ -193,10 +193,13 @@ export {
 
 // Webhook
 export {
+  WEBHOOK_PLATFORMS,
+  webhookPlatformSchema,
   webhookSchema,
   webhookCreatePayloadSchema,
   webhookDeliverySchema,
   webhookTestResultSchema,
+  type WebhookPlatform,
   type Webhook,
   type WebhookCreatePayload,
   type WebhookDelivery,

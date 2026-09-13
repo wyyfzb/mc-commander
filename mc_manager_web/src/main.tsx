@@ -49,7 +49,7 @@ function ThemedToaster() {
       position="top-center"
       toastOptions={{
         classNames: {
-          toast: 'glass-toast! border-mcs-border-default!',
+          toast: 'bg-mcs-bg-emphasis! border-mcs-border-default! shadow-mcs-overlay!',
         },
       }}
     />
