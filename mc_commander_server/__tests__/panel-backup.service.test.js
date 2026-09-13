@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 
@@ -10,6 +10,8 @@ vi.mock('../config.js', async () => {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-panel-backup-'));
   return {
     default: {
+      // .env 伴生副本的来源路径也锚定临时目录（真实 config 指向服务端 .env）
+      envFilePath: path.join(tmpRoot, '.env'),
       dataDir: path.join(tmpRoot, 'data'),
       backupsDir: path.join(tmpRoot, 'backups'),
       panelBackup: {
@@ -33,6 +35,30 @@ import {
 
 function fakeSnapshotName(iso) {
   return `panel-${iso.replace(/[:.]/g, '-')}.db`;
+}
+
+/** 快照名 → .env 伴生副本名（与 service 的配对约定同一表达式） */
+function fakeSidecarName(snapshotName) {
+  return snapshotName.replace(/\.db$/, '.env');
+}
+
+/** 目录内路径拼装 + 边界自检：测试内动态生成文件名的统一入口（杜绝越界拼写） */
+function inDir(dir, name) {
+  const target = path.resolve(dir, name);
+  if (!target.startsWith(dir + path.sep)) throw new Error(`越界文件名: ${name}`);
+  return target;
+}
+
+/** 清空快照与伴生副本（不误伤人工放置的非命名空间文件） */
+function cleanPanelBackupDir() {
+  const dir = getPanelBackupDir();
+  for (const f of fs.readdirSync(dir)) {
+    // .db-wal/.db-shm：只读打开 WAL 模式快照时 SQLite 产生的副文件，一并清理
+    if (f.startsWith('panel-') && (f.endsWith('.db') || f.endsWith('.env')
+      || f.endsWith('.db-wal') || f.endsWith('.db-shm'))) {
+      fs.rmSync(inDir(dir, f), { force: true });
+    }
+  }
 }
 
 // 动态生成 N 天前的文件名内嵌时间戳（保持过去时序，避免硬编码日期随时间失效）
@@ -95,21 +121,16 @@ describe('PanelBackupService', () => {
   });
 
   describe('cleanupPanelSnapshots', () => {
-    // 清理测试隔离：每用例前清空真快照（前面 describe 的产物会干扰数量断言）
+    // 清理测试隔离：每用例前清空真快照与副本（前面 describe 的产物会干扰数量断言）
     beforeEach(() => {
-      const dir = getPanelBackupDir();
-      for (const f of fs.readdirSync(dir)) {
-        if (f.startsWith('panel-') && f.endsWith('.db')) {
-          fs.rmSync(path.join(dir, f), { force: true });
-        }
-      }
+      cleanPanelBackupDir();
     });
 
     it('数量上限：超出部分最旧先删', () => {
       const dir = getPanelBackupDir();
       // 文件名内嵌毫秒时间戳：先固定再创建/断言共用，避免 isoDaysAgo 重复调用毫秒抖动
       const [name5, name4, name3, name2, name1] = [5, 4, 3, 2, 1].map((d) => fakeSnapshotName(isoDaysAgo(d)));
-      for (const n of [name5, name4, name3, name2, name1]) fs.writeFileSync(path.join(dir, n), 'x');
+      for (const n of [name5, name4, name3, name2, name1]) fs.writeFileSync(inDir(dir, n), 'x');
 
       const deleted = cleanupPanelSnapshots({ maxBackups: 3, maxAgeDays: 365 });
 
@@ -121,9 +142,24 @@ describe('PanelBackupService', () => {
       expect(remaining).not.toContain(name4);
     });
 
+    it('数量上限：被删快照的 .env 伴生副本同去留', () => {
+      const dir = getPanelBackupDir();
+      const [name5, name4, name3, name2, name1] = [5, 4, 3, 2, 1].map((d) => fakeSnapshotName(isoDaysAgo(d)));
+      for (const n of [name5, name4, name3, name2, name1]) {
+        fs.writeFileSync(inDir(dir, n), 'x');
+        fs.writeFileSync(inDir(dir, fakeSidecarName(n)), 'env');
+      }
+
+      cleanupPanelSnapshots({ maxBackups: 3, maxAgeDays: 365 });
+
+      expect(fs.existsSync(inDir(dir, fakeSidecarName(name5)))).toBe(false);
+      expect(fs.existsSync(inDir(dir, fakeSidecarName(name4)))).toBe(false);
+      expect(fs.existsSync(inDir(dir, fakeSidecarName(name1)))).toBe(true);
+    });
+
     it('天数上限：mtime 过期的快照删除（mtime 即创建时刻语义）', () => {
       const dir = getPanelBackupDir();
-      const oldPath = path.join(dir, fakeSnapshotName(isoDaysAgo(40)));
+      const oldPath = inDir(dir, fakeSnapshotName(isoDaysAgo(40)));
       fs.writeFileSync(oldPath, 'x');
       // mtime 回拨 40 天（> maxAgeDays 30）
       const aged = new Date(Date.now() - 40 * 86_400_000);
@@ -143,16 +179,73 @@ describe('PanelBackupService', () => {
 
       expect(fs.existsSync(foreign)).toBe(true);
     });
+
+    it('孤儿副本清扫：快照已被手工删除的 .env 伴生副本被清理', () => {
+      const dir = getPanelBackupDir();
+      const orphan = inDir(dir, fakeSidecarName(fakeSnapshotName(isoDaysAgo(2))));
+      fs.writeFileSync(orphan, 'orphan-env');
+
+      cleanupPanelSnapshots({ maxBackups: 10, maxAgeDays: 30 });
+
+      expect(fs.existsSync(orphan)).toBe(false);
+    });
+  });
+
+  describe('env 伴生副本（.env 纳入灾备）', () => {
+    const envPath = () => config.envFilePath;
+
+    afterEach(() => {
+      // 还原 .env 形态（文件/目录）与残留副本，避免泄漏到其它 describe
+      fs.rmSync(envPath(), { force: true, recursive: true });
+      cleanPanelBackupDir();
+    });
+
+    it('当 .env 存在：与快照成对落盘且内容一致', async () => {
+      fs.writeFileSync(envPath(), 'API_KEY_HASH=mock-hash\nSETUP_TOKEN=mock-one-time-token\n');
+
+      const result = await createPanelSnapshot();
+
+      expect(result.envFilePath).toBe(result.filePath.replace(/\.db$/, '.env'));
+      expect(fs.readFileSync(result.envFilePath, 'utf8')).toBe(
+        'API_KEY_HASH=mock-hash\nSETUP_TOKEN=mock-one-time-token\n',
+      );
+    });
+
+    // 副本权限镜像源 .env（0600 凭据纪律）；chmod 在 Windows 上为近似 no-op，
+    // POSIX 位在该平台无意义，按平台跳过（非「平台基线」掩盖：断言语义本身只在 POSIX 可表达）
+    it.skipIf(process.platform === 'win32')('副本权限镜像源 .env（0600 凭据纪律）', async () => {
+      fs.writeFileSync(envPath(), 'API_KEY_HASH=mock-hash\n');
+      fs.chmodSync(envPath(), 0o600);
+
+      const result = await createPanelSnapshot();
+
+      expect(fs.statSync(result.envFilePath).mode & 0o777).toBe(0o600);
+    });
+
+    it('当 .env 不存在（纯环境变量部署）：跳过副本，envFilePath 为 null', async () => {
+      fs.rmSync(envPath(), { force: true });
+
+      const result = await createPanelSnapshot();
+
+      expect(result.envFilePath).toBeNull();
+      expect(fs.existsSync(result.filePath.replace(/\.db$/, '.env'))).toBe(false);
+    });
+
+    it('副本写入失败：连同快照一并回滚，不留「有 db 无 env」的残缺恢复点', async () => {
+      // 用同名目录顶替 .env 文件，使 copyFileSync 稳定抛错（跨平台可控）
+      fs.mkdirSync(envPath(), { recursive: true });
+
+      await expect(createPanelSnapshot()).rejects.toThrow();
+
+      const dir = getPanelBackupDir();
+      const leftovers = fs.readdirSync(dir).filter((f) => f.startsWith('panel-'));
+      expect(leftovers).toHaveLength(0);
+    });
   });
 
   describe('runPanelBackupCycle', () => {
     beforeEach(() => {
-      const dir = getPanelBackupDir();
-      for (const f of fs.readdirSync(dir)) {
-        if (f.startsWith('panel-') && f.endsWith('.db')) {
-          fs.rmSync(path.join(dir, f), { force: true });
-        }
-      }
+      cleanPanelBackupDir();
     });
 
     it('一次周期 = 快照 + 清理，返回删除计数', async () => {

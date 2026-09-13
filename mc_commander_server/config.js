@@ -31,6 +31,9 @@ function intFromEnv(envNames, fallback) {
 }
 
 const config = {
+  // .env 文件路径（dotenv 加载源）：面板备份把它作快照伴生文件收进灾备
+  // （API_KEY_HASH/SETUP_TOKEN 只存于 .env，丢 .env = 管理员无法重新接入）
+  envFilePath: path.join(__dirname, '.env'),
   apiKey: process.env.API_KEY || '',
   apiKeyHash: process.env.API_KEY_HASH || '',
   // 首访设密所有权证明（一次性 SETUP_TOKEN，audit S-P0-1 / issue #309）：
