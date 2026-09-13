@@ -1,8 +1,13 @@
 /**
  * WebSocket 封装（设计文档 §5.1 ws.ts）
  * 契约（服务端 websocket.js）：
- *  - 鉴权：subprotocol `mc-commander-apikey.<apiKey>` 或
- *    `mc-commander-session.<token>`（会话通道，安全主线；握手失败 1008）
+ *  - 鉴权（H2-4b 首帧通道，主线）：连接建立后客户端第一条消息必须是
+ *    {type:'auth', apiKey? | sessionToken?}，服务端校验通过回执
+ *    {type:'auth', ok:true}，失败/超时/首条非 auth 一律 close(1008)。
+ *    1008 + auth 类 reason 为终态：不自动重连（无效凭据重试会把自己
+ *    撞进服务端 IP 封禁），凭据变更由上层凭据比对后重建连接。
+ *    旧 subprotocol 通道（mc-commander-apikey./mc-commander-session.）
+ *    服务端继续接受（向后兼容），客户端不再使用。
  *  - 消息：{type:'subscribe'|'unsubscribe'|'ping', instanceId?, lastEventId?}
  *  - 订阅即回 status 快照；通知事件带自增 id（断线补齐游标，上限 500 条）
  *  - 服务端 30s ping 心跳；客户端消息限速 60 条/分钟
@@ -36,6 +41,9 @@ const LAST_EVENT_KEY_PREFIX = 'mcs-ws-last-event'
 /** 连接挂起超时：CONNECTING 态超过该时长视为死连接（UXT-4——首连挂起时
  *  原生 WebSocket 可能既不 open 也不 error，UI 会永远停留在「连接中」） */
 export const WS_CONNECT_TIMEOUT_MS = 15_000
+/** 鉴权回执等待超时：open 后服务端须在此时限内回 auth 回执（与服务端
+ *  pending 超时同量级；超时主动 close 走重连，服务端正常时不可达） */
+export const WS_AUTH_TIMEOUT_MS = 10_000
 
 type MessageHandler = (msg: WsMessage) => void
 
@@ -53,11 +61,11 @@ interface McSocketOptions {
   onStateChange?: (state: { open: boolean }) => void
 }
 
-/** WS 鉴权 subprotocol 前缀（与服务端 handleProtocols 对齐） */
+/** WS 鉴权 subprotocol 前缀（服务端向后兼容通道仍接受；客户端已改走首帧鉴权） */
 export const WS_APIKEY_PROTOCOL_PREFIX = 'mc-commander-apikey.'
 export const WS_SESSION_PROTOCOL_PREFIX = 'mc-commander-session.'
 
-/** 按凭据选择鉴权 subprotocol（会话优先，回退 API Key） */
+/** 按凭据选择鉴权 subprotocol（会话优先，回退 API Key）——兼容通道用，客户端主线不走 */
 export function resolveAuthProtocol(apiKey: string, sessionToken?: string | null): string | null {
   if (sessionToken) return `${WS_SESSION_PROTOCOL_PREFIX}${sessionToken}`
   if (apiKey) return `${WS_APIKEY_PROTOCOL_PREFIX}${apiKey}`
@@ -79,6 +87,9 @@ export class McSocket {
   private reconnectAttempts = 0
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private connectTimeoutTimer: ReturnType<typeof setTimeout> | null = null
+  private authTimeoutTimer: ReturnType<typeof setTimeout> | null = null
+  /** 首帧鉴权是否已通过（auth-ok 到达前不派发事件、不发送订阅） */
+  private authenticated = false
   private closedByUser = false
   private readonly onStateChange: McSocketOptions['onStateChange']
 
@@ -95,7 +106,7 @@ export class McSocket {
     return this.apiKey === options.apiKey && this.sessionToken === (options.sessionToken ?? null)
   }
 
-  /** 建立连接（subprotocol 鉴权：会话令牌优先，回退 API Key）
+  /** 建立连接并完成首帧鉴权（H2-4b：open 后发 auth 消息，auth-ok 到达才算连上）。
    *  幂等：连接进行中（CONNECTING）或已建立（OPEN）时复用既有 promise，
    *  不再新建 WebSocket —— effect 重跑/重复点重连按钮不会产生双连接、事件不会重复派发 */
   connect(): Promise<void> {
@@ -106,14 +117,13 @@ export class McSocket {
     ) {
       return this.connectPromise
     }
-    const protocol = resolveAuthProtocol(this.apiKey, this.sessionToken)
-    if (!protocol) {
+    if (!this.apiKey && !this.sessionToken) {
       return Promise.reject(new Error('连接凭据未配置（API Key 或会话令牌）'))
     }
     // 重建前清理旧连接：断开/半开的旧 socket 先关掉，事件不再派发，防重连风暴叠加
     this.disposeSocket()
     const promise = new Promise<void>((resolve, reject) => {
-      const ws = new this.WebSocketImpl(this.url, [protocol])
+      const ws = new this.WebSocketImpl(this.url)
       this.ws = ws
       // 连接挂起看门狗（UXT-4）：CONNECTING 超时视为死连接，主动 close
       // （close 回调清锚点并进入指数退避重连）——否则 UI 永远停在「连接中」
@@ -131,17 +141,40 @@ export class McSocket {
       ws.onopen = () => {
         this.clearConnectTimeout()
         this.reconnectAttempts = 0
-        // 新连接：清发送标记后重发全部订阅（携带各实例断线补齐游标）
-        this.subscribedSent.clear()
-        for (const instanceId of this.subscribed) {
-          this.sendSubscribe(instanceId)
+        // 首帧鉴权：open 后立即发 auth（绕过 isOpen 门控直接 send），auth-ok 到达才 resolve/open 派发
+        try {
+          ws.send(
+            JSON.stringify({
+              type: 'auth',
+              ...(this.sessionToken ? { sessionToken: this.sessionToken } : { apiKey: this.apiKey }),
+            }),
+          )
+        } catch {
+          // 发送失败由 onclose 走重连
         }
-        this.onStateChange?.({ open: true })
-        resolve()
+        this.authTimeoutTimer = setTimeout(() => {
+          if (!this.authenticated && this.ws === ws) {
+            try {
+              ws.close()
+            } catch {
+              // 竞态安全：close 失败仍走 reject，由上层重建
+            }
+            reject(new Error('WebSocket 认证超时'))
+          }
+        }, WS_AUTH_TIMEOUT_MS)
       }
       ws.onmessage = (ev) => {
         try {
           const msg = JSON.parse(ev.data) as WsMessage
+          // 鉴权回执：ok 才算连上（失败路径由服务端 close 1008 处理，不回执）
+          if (msg.type === 'auth') {
+            if (msg.ok) {
+              this.finishAuth(ws)
+              resolve()
+            }
+            return
+          }
+          if (!this.authenticated) return
           if (msg.type === 'pong') return
           // 通知事件携带自增 id：更新游标（断线补齐锚点）
           if (msg.eventId !== undefined && msg.instanceId) {
@@ -156,13 +189,22 @@ export class McSocket {
       }
       ws.onclose = (ev) => {
         this.clearConnectTimeout()
+        this.clearAuthTimeout()
         // 连接已终止：幂等锚点失效，允许后续 connect() 重建
+        const wasPending = this.connectPromise === promise
         this.clearConnectPromise(promise)
+        this.authenticated = false
         this.onStateChange?.({ open: false })
+        // 鉴权失败类 1008 为终态：不自动重连——无效凭据的重试会把自己撞进
+        // 服务端 IP 封禁；凭据变更由上层凭据比对后重建连接
+        if (this.isAuthRejection(ev.code, ev.reason)) {
+          if (wasPending) reject(new Error('WebSocket 认证失败'))
+          return
+        }
+        if (wasPending) reject(new Error('WebSocket 连接失败'))
         if (!this.closedByUser) {
           this.scheduleReconnect()
         }
-        void ev
       }
       ws.onerror = () => {
         this.clearConnectPromise(promise)
@@ -172,6 +214,25 @@ export class McSocket {
     })
     this.connectPromise = promise
     return promise
+  }
+
+  /** 鉴权完成：派发 open 边沿 + 重发全部订阅（resolve 由 onmessage 闭包执行） */
+  private finishAuth(ws: WebSocketLike): void {
+    if (this.authenticated || this.ws !== ws) return
+    this.authenticated = true
+    this.clearAuthTimeout()
+    // 新连接：清发送标记后重发全部订阅（携带各实例断线补齐游标）
+    this.subscribedSent.clear()
+    for (const instanceId of this.subscribed) {
+      this.sendSubscribe(instanceId)
+    }
+    this.onStateChange?.({ open: true })
+  }
+
+  /** 认证失败类 1008 终态判断（Unauthorized/Auth timeout/Too many auth failures/
+   *  Session invalidated）——重试只会再次失败并把自己撞进服务端 IP 封禁 */
+  private isAuthRejection(code: number, reason: string): boolean {
+    return code === 1008 && (/auth/i.test(reason) || reason === 'Session invalidated')
   }
 
   /** 订阅实例（幂等；同一连接内不重复发送订阅消息，断线重连自动恢复） */
@@ -209,7 +270,9 @@ export class McSocket {
   }
 
   get isOpen(): boolean {
-    return this.ws?.readyState === WS_OPEN
+    // 「可用」= 首帧鉴权已通过且 socket 处于 OPEN——鉴权前发送的 subscribe 会被
+    // 服务端 pending 管线计数并断开，必须以 authenticated 门控
+    return this.authenticated && this.ws?.readyState === WS_OPEN
   }
 
   /** 读取某实例的断线补齐游标（通知事件自增 id） */
@@ -260,8 +323,17 @@ export class McSocket {
     }
   }
 
+  private clearAuthTimeout(): void {
+    if (this.authTimeoutTimer) {
+      clearTimeout(this.authTimeoutTimer)
+      this.authTimeoutTimer = null
+    }
+  }
+
   /** 清理当前连接：解绑事件处理器（旧 socket 事件不再派发）+ 关闭 + 置空引用 */
   private disposeSocket(): void {
+    this.authenticated = false
+    this.clearAuthTimeout()
     const stale = this.ws
     this.ws = null
     if (!stale) return

@@ -1,8 +1,17 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { McSocket, WS_CONNECT_TIMEOUT_MS, type WebSocketLike, type WebSocketCtor } from '../ws'
+import {
+  McSocket,
+  WS_CONNECT_TIMEOUT_MS,
+  WS_AUTH_TIMEOUT_MS,
+  type WebSocketLike,
+  type WebSocketCtor,
+} from '../ws'
 
 /**
- * FakeWebSocket：记录消息并支持脚本化触发事件（契约测试用）
+ * FakeWebSocket：记录消息并支持脚本化触发事件（契约测试用）。
+ * H2-4b 首帧鉴权：open 后客户端发送 {type:'auth', ...}，服务端回
+ * {type:'auth', ok:true} 后 connect promise 才 resolve。
+ * 凭据值为结构占位（k/t 家族短串，非真实密钥），严禁真实服务器信息
  */
 class FakeWebSocket implements WebSocketLike {
   static instances: FakeWebSocket[] = []
@@ -49,7 +58,7 @@ class FakeWebSocket implements WebSocketLike {
 
 const FakeCtor = FakeWebSocket as unknown as WebSocketCtor
 
-describe('McSocket（对照服务端 websocket.js 契约）', () => {
+describe('McSocket（对照服务端 websocket.js 契约，H2-4b 首帧鉴权）', () => {
   beforeEach(() => {
     FakeWebSocket.instances = []
     localStorage.clear()
@@ -59,83 +68,107 @@ describe('McSocket（对照服务端 websocket.js 契约）', () => {
     vi.restoreAllMocks()
   })
 
-  it('握手携带 subprotocol 鉴权（mc-commander-apikey.<key>）', async () => {
-    const socket = new McSocket({ apiKey: 'secret-key-123', WebSocketImpl: FakeCtor })
+  /** 打开最近一条连接并完成首帧鉴权（断言 auth 消息形态），返回该 FakeWebSocket */
+  async function openAndAuth(
+    _socket: McSocket,
+    p: Promise<void>,
+    authFields: Record<string, unknown> = { apiKey: 'k' },
+  ): Promise<FakeWebSocket> {
+    const ws = FakeWebSocket.instances[FakeWebSocket.instances.length - 1]!
+    ws.open()
+    const authMsg = JSON.parse(ws.sent[0]!) as Record<string, unknown>
+    expect(authMsg.type).toBe('auth')
+    expect(authMsg).toMatchObject(authFields)
+    ws.receive({ type: 'auth', ok: true })
+    await p
+    return ws
+  }
+
+  it('连接不带 subprotocol：open 后首帧发送 {type:auth, apiKey}，auth-ok 后才算连上', async () => {
+    const socket = new McSocket({ apiKey: 'k', WebSocketImpl: FakeCtor })
     const p = socket.connect()
     const ws = FakeWebSocket.instances[0]!
     expect(ws.url).toMatch(/\/ws$/)
-    expect(ws.protocols).toEqual(['mc-commander-apikey.secret-key-123'])
+    // H2-4b：客户端不再经 subprotocol 传凭据（凭据走首帧消息，代理剥离协议头也能连）
+    expect(ws.protocols).toBeUndefined()
+
     ws.open()
+    // auth-ok 之前：未 resolve、isOpen false（防鉴权前发出 subscribe）
+    let resolved = false
+    void p.then(() => {
+      resolved = true
+    })
+    await Promise.resolve()
+    expect(resolved).toBe(false)
+    expect(socket.isOpen).toBe(false)
+
+    const authMsg = JSON.parse(ws.sent[0]!) as Record<string, unknown>
+    expect(authMsg).toEqual({ type: 'auth', apiKey: 'k' })
+    ws.receive({ type: 'auth', ok: true })
     await p
+    expect(resolved).toBe(true)
     expect(socket.isOpen).toBe(true)
   })
 
-  it('会话令牌优先：subprotocol 切换为 mc-commander-session.<token>', async () => {
+  it('首帧 auth 携带 sessionToken（会话令牌优先）', async () => {
     const socket = new McSocket({
-      apiKey: 'secret-key-123',
-      sessionToken: 'session-token-abc',
+      apiKey: 'k',
+      sessionToken: 't1',
       WebSocketImpl: FakeCtor,
     })
     const p = socket.connect()
-    const ws = FakeWebSocket.instances[0]!
-    expect(ws.protocols).toEqual(['mc-commander-session.session-token-abc'])
-    ws.open()
-    await p
+    await openAndAuth(socket, p, { sessionToken: 't1' })
     expect(socket.isOpen).toBe(true)
   })
 
-  it('仅会话令牌（无 API Key）也能握手（密码登录用户）', async () => {
-    const socket = new McSocket({ apiKey: '', sessionToken: 'only-token', WebSocketImpl: FakeCtor })
+  it('仅会话令牌（无 API Key，密码登录用户）也能完成首帧鉴权', async () => {
+    const socket = new McSocket({ apiKey: '', sessionToken: 't1', WebSocketImpl: FakeCtor })
     const p = socket.connect()
-    const ws = FakeWebSocket.instances[0]!
-    expect(ws.protocols).toEqual(['mc-commander-session.only-token'])
-    ws.open()
-    await p
+    await openAndAuth(socket, p, { sessionToken: 't1' })
     expect(socket.isOpen).toBe(true)
   })
 
   it('subscribe 发送 {type:subscribe, instanceId, lastEventId?}；首次无游标不带 lastEventId', async () => {
     const socket = new McSocket({ apiKey: 'k', WebSocketImpl: FakeCtor })
     const p = socket.connect()
-    FakeWebSocket.instances[0]!.open()
-    await p
+    const ws = await openAndAuth(socket, p)
 
     socket.subscribe('instance-1')
-    const msg = JSON.parse(FakeWebSocket.instances[0]!.sent[0]!) as Record<string, unknown>
+    // sent[0] 为 auth 帧，首个业务消息是 subscribe
+    const msg = JSON.parse(ws.sent[1]!) as Record<string, unknown>
     expect(msg).toEqual({ type: 'subscribe', instanceId: 'instance-1' })
   })
 
   it('收到带 eventId 的通知事件后更新游标，重连订阅携带 lastEventId', async () => {
     const socket = new McSocket({ apiKey: 'k', WebSocketImpl: FakeCtor })
     const p = socket.connect()
-    const ws = FakeWebSocket.instances[0]!
-    ws.open()
-    await p
+    const ws = await openAndAuth(socket, p)
 
     socket.subscribe('instance-1')
     ws.receive({ type: 'playerJoin', eventId: 42, instanceId: 'instance-1', data: {} })
 
     // 模拟断开重连：新实例订阅恢复
     socket.close()
-    socket.connect().catch(() => {})
+    const p2 = socket.connect().catch(() => {})
     const ws2 = FakeWebSocket.instances[1]!
     ws2.open()
-    const msg = JSON.parse(ws2.sent[0]!) as Record<string, unknown>
+    ws2.receive({ type: 'auth', ok: true })
+    await p2
+    const msg = JSON.parse(ws2.sent[1]!) as Record<string, unknown>
     expect(msg).toMatchObject({ type: 'subscribe', instanceId: 'instance-1', lastEventId: 42 })
   })
 
-  it('事件处理器收到消息；解绑后不再收到', async () => {
+  it('事件处理器收到消息；解绑后不再收到；auth 回执不派发给 handler', async () => {
     const socket = new McSocket({ apiKey: 'k', WebSocketImpl: FakeCtor })
     const p = socket.connect()
-    FakeWebSocket.instances[0]!.open()
-    await p
+    const ws = await openAndAuth(socket, p)
 
     const handler = vi.fn()
     const off = socket.on(handler)
-    FakeWebSocket.instances[0]!.receive({ type: 'tpsUpdate', instanceId: 'i', data: { tps: 20 } })
+    ws.receive({ type: 'tpsUpdate', instanceId: 'i', data: { tps: 20 } })
     expect(handler).toHaveBeenCalledTimes(1)
     off()
-    FakeWebSocket.instances[0]!.receive({ type: 'tpsUpdate', instanceId: 'i', data: { tps: 19 } })
+    ws.receive({ type: 'tpsUpdate', instanceId: 'i', data: { tps: 19 } })
     expect(handler).toHaveBeenCalledTimes(1)
   })
 
@@ -148,14 +181,14 @@ describe('McSocket（对照服务端 websocket.js 契约）', () => {
     it('connect 幂等：OPEN 后重复调用复用同一 promise，仅创建一个 WebSocket（重连按钮防抖）', async () => {
       const socket = new McSocket({ apiKey: 'k', WebSocketImpl: FakeCtor })
       const p1 = socket.connect()
-      FakeWebSocket.instances[0]!.open()
-      await p1
+      const ws = await openAndAuth(socket, p1)
 
       const p2 = socket.connect()
       expect(p2).toBe(p1)
       expect(FakeWebSocket.instances.length).toBe(1)
       await p2
       expect(socket.isOpen).toBe(true)
+      void ws
     })
 
     it('connect 幂等：CONNECTING 期间重复调用复用同一 promise，不产生双连接', async () => {
@@ -164,8 +197,7 @@ describe('McSocket（对照服务端 websocket.js 契约）', () => {
       const p2 = socket.connect()
       expect(p2).toBe(p1)
       expect(FakeWebSocket.instances.length).toBe(1)
-      FakeWebSocket.instances[0]!.open()
-      await Promise.all([p1, p2])
+      await openAndAuth(socket, p1)
       expect(socket.isOpen).toBe(true)
     })
 
@@ -173,17 +205,16 @@ describe('McSocket（对照服务端 websocket.js 契约）', () => {
       const socket = new McSocket({ apiKey: 'k', WebSocketImpl: FakeCtor })
       const p1 = socket.connect()
       void socket.connect()
-      FakeWebSocket.instances[0]!.open()
-      await p1
+      const ws = await openAndAuth(socket, p1)
 
       const handler = vi.fn()
       socket.on(handler)
       socket.subscribe('i-1')
       expect(handler).toHaveBeenCalledTimes(0) // subscribe 不派发事件给 handler
-      FakeWebSocket.instances[0]!.receive({ type: 'playerJoin', eventId: 1, instanceId: 'i-1', data: {} })
+      ws.receive({ type: 'playerJoin', eventId: 1, instanceId: 'i-1', data: {} })
       expect(handler).toHaveBeenCalledTimes(1)
 
-      const subscribeCount = FakeWebSocket.instances[0]!.sent.filter(
+      const subscribeCount = ws.sent.filter(
         (m) => (JSON.parse(m) as { type: string }).type === 'subscribe',
       ).length
       expect(subscribeCount).toBe(1)
@@ -192,8 +223,7 @@ describe('McSocket（对照服务端 websocket.js 契约）', () => {
     it('close() 后 connect() 可重建（重新登录可再建），旧实例事件不再派发', async () => {
       const socket = new McSocket({ apiKey: 'k', WebSocketImpl: FakeCtor })
       const p1 = socket.connect()
-      FakeWebSocket.instances[0]!.open()
-      await p1
+      const ws1 = await openAndAuth(socket, p1)
 
       socket.close()
       expect(socket.isOpen).toBe(false)
@@ -201,17 +231,17 @@ describe('McSocket（对照服务端 websocket.js 契约）', () => {
       const p2 = socket.connect()
       expect(FakeWebSocket.instances.length).toBe(2)
       const ws2 = FakeWebSocket.instances[1]!
-      expect(ws2.protocols).toEqual(['mc-commander-apikey.k'])
-      ws2.open()
-      await p2
+      // H2-4b：重建连接同样不带 subprotocol，走首帧鉴权
+      expect(ws2.protocols).toBeUndefined()
+      await openAndAuth(socket, p2, { apiKey: 'k' })
       expect(socket.isOpen).toBe(true)
 
       // 旧连接已被清理：即使误触发其事件回调也不会派发（handler 已解绑）
       const handler = vi.fn()
       socket.on(handler)
-      FakeWebSocket.instances[0]!.receive({ type: 'playerJoin', eventId: 2, instanceId: 'i', data: {} })
+      ws1.receive({ type: 'playerJoin', eventId: 2, instanceId: 'i', data: {} })
       expect(handler).toHaveBeenCalledTimes(0)
-      FakeWebSocket.instances[1]!.receive({ type: 'playerJoin', eventId: 3, instanceId: 'i', data: {} })
+      ws2.receive({ type: 'playerJoin', eventId: 3, instanceId: 'i', data: {} })
       expect(handler).toHaveBeenCalledTimes(1)
     })
 
@@ -220,17 +250,15 @@ describe('McSocket（对照服务端 websocket.js 契约）', () => {
       try {
         const socket = new McSocket({ apiKey: 'k', WebSocketImpl: FakeCtor })
         const p = socket.connect()
-        FakeWebSocket.instances[0]!.open()
-        await p
+        await openAndAuth(socket, p)
 
-        // 模拟服务端断开（非用户关闭）
+        // 模拟服务端断开（非用户关闭，非鉴权失败）
         FakeWebSocket.instances[0]!.onclose?.({ code: 1006, reason: 'abnormal' })
         expect(FakeWebSocket.instances.length).toBe(1)
 
         await vi.advanceTimersByTimeAsync(1_000)
         expect(FakeWebSocket.instances.length).toBe(2)
         const ws2 = FakeWebSocket.instances[1]!
-        expect(ws2.protocols).toEqual(['mc-commander-apikey.k'])
         expect(ws2.readyState).toBe(FakeWebSocket.CONNECTING)
         ws2.open()
       } finally {
@@ -243,8 +271,7 @@ describe('McSocket（对照服务端 websocket.js 契约）', () => {
       try {
         const socket = new McSocket({ apiKey: 'k', WebSocketImpl: FakeCtor })
         const p = socket.connect()
-        FakeWebSocket.instances[0]!.open()
-        await p
+        await openAndAuth(socket, p)
 
         // 断线 → 安排重连定时器（1s 后）
         FakeWebSocket.instances[0]!.onclose?.({ code: 1006, reason: '' })
@@ -276,7 +303,7 @@ describe('McSocket（对照服务端 websocket.js 契约）', () => {
     })
   })
 
-  describe('连接挂起看门狗与状态回调（UXT-4）', () => {
+  describe('连接挂起看门狗与状态回调（UXT-4 / H2-4b）', () => {
     it('CONNECTING 挂起超时：close 被调用、promise 拒绝、进入重连序列', async () => {
       vi.useFakeTimers()
       try {
@@ -297,15 +324,77 @@ describe('McSocket（对照服务端 websocket.js 契约）', () => {
       }
     })
 
+    it('鉴权回执等待超时：服务端 open 后不回 auth-ok → close + 拒绝 + 重连', async () => {
+      vi.useFakeTimers()
+      try {
+        const socket = new McSocket({ apiKey: 'k1', WebSocketImpl: FakeCtor })
+        const p = socket.connect()
+        const ws = FakeWebSocket.instances[0]!
+        ws.open() // 发出 auth 后服务端沉默
+        const rejection = p.catch((e: Error) => e.message)
+        await vi.advanceTimersByTimeAsync(WS_AUTH_TIMEOUT_MS + 1)
+        await expect(rejection).resolves.toBe('WebSocket 认证超时')
+        await vi.advanceTimersByTimeAsync(1_000)
+        expect(FakeWebSocket.instances.length).toBe(2)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('鉴权失败（1008 Unauthorized）→ connect 拒绝且不自动重连（防把自己撞进 IP 封禁）', async () => {
+      vi.useFakeTimers()
+      try {
+        const socket = new McSocket({ apiKey: 'bad', WebSocketImpl: FakeCtor })
+        const p = socket.connect()
+        const ws = FakeWebSocket.instances[0]!
+        ws.open()
+        const rejection = p.catch((e: Error) => e.message)
+        ws.onclose?.({ code: 1008, reason: 'Unauthorized' })
+        await expect(rejection).resolves.toBe('WebSocket 认证失败')
+        await vi.advanceTimersByTimeAsync(60_000)
+        // 终态：无重连尝试
+        expect(FakeWebSocket.instances.length).toBe(1)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('会话被踢（1008 Session invalidated）同为终态：不自动重连', async () => {
+      vi.useFakeTimers()
+      try {
+        const socket = new McSocket({ apiKey: 'k1', WebSocketImpl: FakeCtor })
+        const p = socket.connect()
+        await openAndAuth(socket, p, { apiKey: 'k1' })
+        FakeWebSocket.instances[0]!.onclose?.({ code: 1008, reason: 'Session invalidated' })
+        await vi.advanceTimersByTimeAsync(60_000)
+        expect(FakeWebSocket.instances.length).toBe(1)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('消息限流 1008（reason 无 auth 语义）不是终态：仍走自动重连', async () => {
+      vi.useFakeTimers()
+      try {
+        const socket = new McSocket({ apiKey: 'k1', WebSocketImpl: FakeCtor })
+        const p = socket.connect()
+        await openAndAuth(socket, p, { apiKey: 'k1' })
+        FakeWebSocket.instances[0]!.onclose?.({ code: 1008, reason: 'Message rate limit exceeded' })
+        await vi.advanceTimersByTimeAsync(1_000)
+        expect(FakeWebSocket.instances.length).toBe(2)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
     it('握手正常完成：看门狗不触发（超时后连接仍存活）', async () => {
       vi.useFakeTimers()
       try {
         const socket = new McSocket({ apiKey: 'k1', WebSocketImpl: FakeCtor })
         const p = socket.connect()
-        FakeWebSocket.instances[0]!.open()
-        await p
+        await openAndAuth(socket, p, { apiKey: 'k1' })
         const closeSpy = vi.spyOn(FakeWebSocket.instances[0]!, 'close')
-        await vi.advanceTimersByTimeAsync(WS_CONNECT_TIMEOUT_MS + 1_000)
+        await vi.advanceTimersByTimeAsync(WS_CONNECT_TIMEOUT_MS + WS_AUTH_TIMEOUT_MS + 1_000)
         expect(closeSpy).not.toHaveBeenCalled()
         expect(socket.isOpen).toBe(true)
         socket.close()
@@ -322,8 +411,7 @@ describe('McSocket（对照服务端 websocket.js 契约）', () => {
         onStateChange: ({ open }) => states.push(open),
       })
       const p = socket.connect()
-      FakeWebSocket.instances[0]!.open()
-      await p
+      await openAndAuth(socket, p, { apiKey: 'k1' })
       FakeWebSocket.instances[0]!.onclose?.({ code: 1006, reason: 'abnormal' })
       expect(states).toEqual([true, false])
       socket.close()
@@ -337,8 +425,7 @@ describe('McSocket（对照服务端 websocket.js 契约）', () => {
         onStateChange: ({ open }) => states.push(open),
       })
       const p = socket.connect()
-      FakeWebSocket.instances[0]!.open()
-      await p
+      await openAndAuth(socket, p, { apiKey: 'k1' })
       socket.close()
       expect(states).toEqual([true, false])
       expect(FakeWebSocket.instances.length).toBe(1)

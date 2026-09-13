@@ -11,11 +11,13 @@ import type { WebSocketLike, WebSocketCtor } from '@/api/ws'
 
 /**
  * WS 单例治理（issue #311）hook 层测试：
- * - 凭据变更（换 token）→ 旧连接 close、新连接携带新凭据 subprotocol
+ * - 凭据变更（换 token）→ 旧连接 close、新连接首帧 auth 携带新凭据
  * - 登出（session 清空）→ 单例关闭置空、重连定时器清空
  * - 实例切换/effect 重跑 → connect 幂等不产生双 WebSocket
  * - 断线补齐游标（lastEventId）存 localStorage，重建后订阅仍携带
  *
+ * H2-4b 首帧鉴权：open 后客户端发 {type:'auth', ...}，服务端回
+ * {type:'auth', ok:true} 后连接才可用（订阅在鉴权后发出）
  * hook 内 McSocket 默认用全局 WebSocket → vi.stubGlobal 注入 FakeWebSocket
  */
 
@@ -66,6 +68,17 @@ class FakeWebSocket implements WebSocketLike {
 
 const FakeCtor = FakeWebSocket as unknown as WebSocketCtor
 
+/** 模拟握手 + 首帧鉴权完成（服务端回 auth-ok；H2-4b 流程） */
+function openAndAuth(ws: FakeWebSocket) {
+  ws.open()
+  ws.receive({ type: 'auth', ok: true })
+}
+
+/** 读取某个 FakeWebSocket 已发送的首帧 auth 消息 */
+function sentAuth(ws: FakeWebSocket): Record<string, unknown> {
+  return JSON.parse(ws.sent[0]!) as Record<string, unknown>
+}
+
 function createWrapper() {
   const qc = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -108,7 +121,7 @@ describe('useServerSocket（WS 单例治理，issue #311）', () => {
     vi.restoreAllMocks()
   })
 
-  it('凭据变更（换 token）：旧连接 close、新连接携带新凭据 subprotocol', async () => {
+  it('凭据变更（换 token）：旧连接 close、新连接首帧 auth 携带新凭据', async () => {
     useConnectionStore.setState({ baseUrl: '', apiKey: 'k1', status: 'ready' })
     useAuthStore.setState({ session: makeSession('token-old') })
 
@@ -116,11 +129,11 @@ describe('useServerSocket（WS 单例治理，issue #311）', () => {
 
     await waitFor(() => expect(FakeWebSocket.instances.length).toBe(1))
     const ws1 = FakeWebSocket.instances[0]!
-    expect(ws1.protocols).toEqual(['mc-commander-session.token-old'])
     act(() => {
-      ws1.open()
+      openAndAuth(ws1)
     })
     await flushMicrotasks()
+    expect(sentAuth(ws1)).toMatchObject({ type: 'auth', sessionToken: 'token-old' })
 
     // 改密/踢单设备 → session token 变更（zustand setState 触发 effect 重跑）
     act(() => {
@@ -131,7 +144,10 @@ describe('useServerSocket（WS 单例治理，issue #311）', () => {
     expect(ws1.readyState).toBe(3) // 旧连接已 close，不再占用通道
 
     const ws2 = FakeWebSocket.instances[1]!
-    expect(ws2.protocols).toEqual(['mc-commander-session.token-new'])
+    act(() => {
+      openAndAuth(ws2)
+    })
+    expect(sentAuth(ws2)).toMatchObject({ type: 'auth', sessionToken: 'token-new' })
 
     const singleton = getSocketSingleton()
     expect(singleton).not.toBeNull()
@@ -148,7 +164,7 @@ describe('useServerSocket（WS 单例治理，issue #311）', () => {
     await flushMicrotasks()
     expect(FakeWebSocket.instances.length).toBe(1)
     act(() => {
-      FakeWebSocket.instances[0]!.open()
+      openAndAuth(FakeWebSocket.instances[0]!)
     })
     await flushMicrotasks()
 
@@ -175,7 +191,13 @@ describe('useServerSocket（WS 单例治理，issue #311）', () => {
     useAuthStore.setState({ session: makeSession('token-b') })
     await flushMicrotasks()
     expect(FakeWebSocket.instances.length).toBe(2)
-    expect(FakeWebSocket.instances[1]!.protocols).toEqual(['mc-commander-session.token-b'])
+    act(() => {
+      openAndAuth(FakeWebSocket.instances[1]!)
+    })
+    expect(sentAuth(FakeWebSocket.instances[1]!)).toMatchObject({
+      type: 'auth',
+      sessionToken: 'token-b',
+    })
   })
 
   it('登出回退：session 清空但 apiKey 存在时，凭据比对触发重建为 apiKey 通道', async () => {
@@ -185,10 +207,13 @@ describe('useServerSocket（WS 单例治理，issue #311）', () => {
     renderHook(() => useServerSocket('i-1'), { wrapper: createWrapper() })
     await waitFor(() => expect(FakeWebSocket.instances.length).toBe(1))
     act(() => {
-      FakeWebSocket.instances[0]!.open()
+      openAndAuth(FakeWebSocket.instances[0]!)
     })
     await flushMicrotasks()
-    expect(FakeWebSocket.instances[0]!.protocols).toEqual(['mc-commander-session.token-a'])
+    expect(sentAuth(FakeWebSocket.instances[0]!)).toMatchObject({
+      type: 'auth',
+      sessionToken: 'token-a',
+    })
 
     // session 失效（服务端踢出/改密全踢）：sessionToken 变 null，apiKey 仍可用
     act(() => {
@@ -197,7 +222,10 @@ describe('useServerSocket（WS 单例治理，issue #311）', () => {
 
     await waitFor(() => expect(FakeWebSocket.instances.length).toBe(2))
     expect(FakeWebSocket.instances[0]!.readyState).toBe(3)
-    expect(FakeWebSocket.instances[1]!.protocols).toEqual(['mc-commander-apikey.k1'])
+    act(() => {
+      openAndAuth(FakeWebSocket.instances[1]!)
+    })
+    expect(sentAuth(FakeWebSocket.instances[1]!)).toMatchObject({ type: 'auth', apiKey: 'k1' })
   })
 
   it('会话属于别的面板：WS 回落 API Key 通道（不拿 A 的令牌连 B 的实时通道）', async () => {
@@ -209,7 +237,10 @@ describe('useServerSocket（WS 单例治理，issue #311）', () => {
     renderHook(() => useServerSocket('i-1'), { wrapper: createWrapper() })
 
     await waitFor(() => expect(FakeWebSocket.instances.length).toBe(1))
-    expect(FakeWebSocket.instances[0]!.protocols).toEqual(['mc-commander-apikey.k1'])
+    act(() => {
+      openAndAuth(FakeWebSocket.instances[0]!)
+    })
+    expect(sentAuth(FakeWebSocket.instances[0]!)).toMatchObject({ type: 'auth', apiKey: 'k1' })
   })
 
   it('effect 重跑（实例切换）不产生双 WebSocket：connect 幂等复用同一连接', async () => {
@@ -222,7 +253,7 @@ describe('useServerSocket（WS 单例治理，issue #311）', () => {
     })
     await flushMicrotasks()
     act(() => {
-      FakeWebSocket.instances[0]!.open()
+      openAndAuth(FakeWebSocket.instances[0]!)
     })
     await flushMicrotasks()
     expect(FakeWebSocket.instances.length).toBe(1)
@@ -246,7 +277,7 @@ describe('useServerSocket（WS 单例治理，issue #311）', () => {
     await waitFor(() => expect(FakeWebSocket.instances.length).toBe(1))
     const ws1 = FakeWebSocket.instances[0]!
     act(() => {
-      ws1.open()
+      openAndAuth(ws1)
     })
     await flushMicrotasks()
 
@@ -262,7 +293,7 @@ describe('useServerSocket（WS 单例治理，issue #311）', () => {
     await waitFor(() => expect(FakeWebSocket.instances.length).toBe(2))
     const ws2 = FakeWebSocket.instances[1]!
     act(() => {
-      ws2.open()
+      openAndAuth(ws2)
     })
     await flushMicrotasks()
 
@@ -298,7 +329,7 @@ describe('useServerSocket（状态跃迁通知接线）', () => {
     await waitFor(() => expect(FakeWebSocket.instances.length).toBe(1))
     const ws = FakeWebSocket.instances[0]!
     act(() => {
-      ws.open()
+      openAndAuth(ws)
     })
     await flushMicrotasks()
     return ws
@@ -351,7 +382,7 @@ describe('useServerSocket（状态跃迁通知接线）', () => {
     await waitFor(() => expect(FakeWebSocket.instances.length).toBe(1))
     const ws = FakeWebSocket.instances[0]!
     act(() => {
-      ws.open()
+      openAndAuth(ws)
     })
     await flushMicrotasks()
 

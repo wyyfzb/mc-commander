@@ -812,7 +812,10 @@ const server = createServer((req, res) => {
 })
 
 // ── 最小 WS 端点（对齐真实服务端契约）──────────────────────────────
-// 鉴权与真实端一致从 subprotocol 提取（e2e 专用令牌恒放行——mock 不做凭据校验）
+// H2-4b：与真实端一致支持两条鉴权通道——①subprotocol 携带凭据（向后兼容）；
+// ②首帧消息 auth（客户端主线）：无凭据握手放行，第一条消息必须是
+// {type:'auth', ...}，回执 {type:'auth', ok:true} 后才接受订阅
+// （e2e 专用令牌恒放行——mock 不做凭据校验）
 const WS_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11'
 const authProtocol = (protocols) =>
   protocols.find((p) => p.startsWith('mc-commander-apikey.') || p.startsWith('mc-commander-session.')) ?? null
@@ -874,20 +877,19 @@ server.on('upgrade', (req, socket) => {
   if (!url.startsWith('/ws')) return socket.destroy()
   const protocols = String(req.headers['sec-websocket-protocol'] ?? '').split(',').map((s) => s.trim()).filter(Boolean)
   const chosen = authProtocol(protocols)
-  if (!chosen) {
-    // 与真实端 handleProtocols 返回 false 一致：拒绝无凭据握手
-    socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n')
-    return socket.destroy()
-  }
+  const firstFrameAuth = !chosen // 无凭据握手 → 走首帧鉴权通道（客户端主线）
   const key = req.headers['sec-websocket-key']
   const accept = createHash('sha1').update(key + WS_GUID).digest('base64')
   socket.write(
     `HTTP/1.1 101 Switching Protocols\r\n` +
       `Upgrade: websocket\r\nConnection: Upgrade\r\n` +
       `Sec-WebSocket-Accept: ${accept}\r\n` +
-      `Sec-WebSocket-Protocol: ${chosen}\r\n\r\n`,
+      (chosen ? `Sec-WebSocket-Protocol: ${chosen}\r\n` : '') +
+      `\r\n`,
   )
   socket.setNoDelay(true)
+  // 首帧鉴权状态（对齐真实端：鉴权前收到非 auth 消息即断连）
+  let authed = !firstFrameAuth
   wsSockets.add(socket)
   socket.on('data', (buf) => {
     // 一个 TCP 段可能含多帧（客户端限速下实际只有单帧，够用）
@@ -904,6 +906,15 @@ server.on('upgrade', (req, socket) => {
     } catch {
       return
     }
+    if (msg.type === 'auth') {
+      // 首帧鉴权回执（mock 恒放行）：与真实端一致——收到 auth 才回执 ok
+      if (authed) return
+      authed = true
+      socket.write(encodeTextFrame(JSON.stringify({ type: 'auth', ok: true, timestamp: Date.now() })))
+      return
+    }
+    // 鉴权前收到非 auth 消息：与真实端一致断连（暴露鉴权前发消息的客户端回归）
+    if (!authed) return socket.destroy()
     if (msg.type === 'ping') {
       socket.write(encodeTextFrame(JSON.stringify({ type: 'pong', timestamp: Date.now() })))
       return

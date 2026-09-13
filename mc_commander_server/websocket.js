@@ -51,6 +51,7 @@ export const ClientMessages = {
   SUBSCRIBE: 'subscribe',
   UNSUBSCRIBE: 'unsubscribe',
   PING: 'ping',
+  AUTH: 'auth',
 };
 
 // ── find-012 安全加固：资源上限与频率限制 ─────────────────────────────
@@ -65,6 +66,10 @@ export const REPLAY_THROTTLE_MS = 5000;
 // 单连接消息速率限制窗口与上限：窗口内超过上限直接断开（1008），防消息风暴
 export const MESSAGE_RATE_WINDOW_MS = 60000;
 export const MAX_MESSAGES_PER_WINDOW = 60;
+// 首帧鉴权（H2-4b）：pending 连接的 auth 等待超时。pending 连接不在 clients
+// 集合、不受消息速率限制管，但首条消息即定去留（超时/断开/首条处理），无需
+// 消息数护栏
+export const WS_AUTH_TIMEOUT_MS = 10_000;
 
 // 需要持久化的通知类事件：广播前落库，客户端断线重连后按 lastEventId 补齐。
 // 排除高频事件（log / status 快照 / performanceUpdate / tpsUpdate / weatherUpdate /
@@ -184,33 +189,19 @@ export function setupWebSocket(wss, serverManager) {
   const cleanupInterval = setInterval(cleanupNotificationEvents, 24 * 60 * 60 * 1000);
   wss.on('close', () => clearInterval(cleanupInterval));
 
-  wss.on('connection', (ws, req) => {
-    // 凭据由 handleProtocols 在 index.js 中提取并挂载到 req（双通道互斥，客户端只会带其一）
-    const apiKey = req._wsApiKey || null;
-    const sessionToken = req._wsSessionToken || null;
-    // 封禁键取直连 IP（与 HTTP 登录锁定同源，见 utils/credential-lockout.js）
-    const ip = req.socket?.remoteAddress || null;
+  // 首帧鉴权 pending 连接集合（pending 不入 clients，独立容量护栏）
+  const pendingAuth = new Set();
 
-    // 认证失败 IP 临时封禁：锁定窗口内所有尝试一律拒绝（凭据正确也不放行），
-    // 堵住「无限次握手试凭据」的爆破口子（此前 WS 认证失败无任何计数与封禁）
-    if (isCredentialLocked(ip)) {
-      logger.warn(`Rejecting websocket connection: IP locked after auth failures (${ip ?? 'unknown'})`);
-      ws.close(1008, 'Too many auth failures');
-      return;
-    }
+  /** 鉴权失败统一告警（'IP now locked' 一次性标记，不逐请求刷日志） */
+  function logAuthFailure(ip) {
+    const justLocked = recordCredentialFailure(ip);
+    logger.warn(
+      `WebSocket auth failed, closing 1008 (ip=${ip ?? 'unknown'}${justLocked ? ', IP now locked' : ''})`
+    );
+  }
 
-    if (!authenticateWebSocket(apiKey, sessionToken)) {
-      // recordFailure 返回本次是否触发锁定（供一次性告警，不逐请求刷日志）
-      const justLocked = recordCredentialFailure(ip);
-      logger.warn(
-        `WebSocket auth failed, closing 1008 (ip=${ip ?? 'unknown'}${justLocked ? ', IP now locked' : ''})`
-      );
-      ws.close(1008, 'Unauthorized');
-      return;
-    }
-    // 成功即清零：失败计数只衡量「连续失败」
-    clearCredentialFailures(ip);
-
+  /** 鉴权通过后的客户端登记与消息管线（subprotocol 与首帧两条鉴权通道共用） */
+  function setupAuthenticatedClient(ws, { sessionToken }) {
     // 连接数上限：clients 已满（≥ MAX_CONNECTIONS）时拒绝新连接，
     // 防止恶意客户端无限建连耗尽服务端资源
     if (clients.size >= MAX_CONNECTIONS) {
@@ -330,6 +321,87 @@ export function setupWebSocket(wss, serverManager) {
     ws.on('error', (err) => {
       logger.error('WebSocket error:', err);
     });
+  }
+
+  wss.on('connection', (ws, req) => {
+    // 凭据两条通道：① subprotocol 携带（handleProtocols 提取，向后兼容）；
+    // ② 首帧消息 auth（H2-4b 主线：兼容代理剥离 Sec-WebSocket-Protocol 的部署环境）
+    const apiKey = req._wsApiKey || null;
+    const sessionToken = req._wsSessionToken || null;
+    // 封禁键取直连 IP（与 HTTP 登录锁定同源，见 utils/credential-lockout.js）
+    const ip = req.socket?.remoteAddress || null;
+
+    // 认证失败 IP 临时封禁：锁定窗口内所有尝试一律拒绝（凭据正确也不放行），
+    // 堵住「无限次握手/首帧试凭据」的爆破口子
+    if (isCredentialLocked(ip)) {
+      logger.warn(`Rejecting websocket connection: IP locked after auth failures (${ip ?? 'unknown'})`);
+      ws.close(1008, 'Too many auth failures');
+      return;
+    }
+
+    // 通道一（向后兼容）：凭据已在握手层携带，connection 时即完成校验
+    if (apiKey || sessionToken) {
+      if (!authenticateWebSocket(apiKey, sessionToken)) {
+        logAuthFailure(ip);
+        ws.close(1008, 'Unauthorized');
+        return;
+      }
+      clearCredentialFailures(ip);
+      setupAuthenticatedClient(ws, { sessionToken });
+      return;
+    }
+
+    // 通道二（H2-4b 主线）：首帧鉴权——第一条消息必须是 auth；首条非 auth/
+    // 凭据错误/坏 JSON 一律 1008 并计入封禁计数；超时与断开不计数（网络慢≠爆破）
+    if (pendingAuth.size >= MAX_CONNECTIONS) {
+      logger.warn('Rejecting websocket connection: too many pending auth connections');
+      ws.close(1013, 'Too many connections');
+      return;
+    }
+    pendingAuth.add(ws);
+    let settled = false;
+    let authTimer = null;
+    function leavePending() {
+      if (settled) return false;
+      settled = true;
+      pendingAuth.delete(ws);
+      clearTimeout(authTimer);
+      ws.removeListener('message', handleFirstMessage);
+      return true;
+    }
+    authTimer = setTimeout(() => {
+      if (leavePending()) ws.close(1008, 'Auth timeout');
+    }, WS_AUTH_TIMEOUT_MS);
+    function rejectPending(reason) {
+      if (!leavePending()) return;
+      logAuthFailure(ip);
+      ws.close(1008, reason);
+    }
+    function handleFirstMessage(data) {
+      let msg = null;
+      try {
+        msg = JSON.parse(data);
+      } catch {
+        rejectPending('Unauthorized');
+        return;
+      }
+      if (!msg || msg.type !== ClientMessages.AUTH) {
+        rejectPending('Unauthorized');
+        return;
+      }
+      if (!authenticateWebSocket(msg.apiKey || null, msg.sessionToken || null)) {
+        rejectPending('Unauthorized');
+        return;
+      }
+      if (!leavePending()) return;
+      clearCredentialFailures(ip);
+      // 先回执 auth ok 再登记（登记时会补发 activeDeploys 快照——回执必须
+      // 先于快照到达，否则客户端鉴权门控会丢弃部署进度补发）
+      ws.send(JSON.stringify({ type: ClientMessages.AUTH, ok: true, timestamp: Date.now() }));
+      setupAuthenticatedClient(ws, { sessionToken: msg.sessionToken || null });
+    }
+    ws.on('message', handleFirstMessage);
+    ws.on('close', () => leavePending());
   });
 
   /// 断线补齐重放节流：按实例记录最近一次重放时间，窗口内返回 true（应节流）。

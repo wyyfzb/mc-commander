@@ -102,7 +102,10 @@ const wss = new WebSocketServer({
   maxPayload: 1024 * 1024,
   handleProtocols: (protocols, req) => {
     // 双通道 WS 鉴权 subprotocol：API Key（既有）与管理员会话令牌（安全主线）。
-    // 仅提取凭据挂到 req，真实校验在 websocket.js connection 时完成
+    // 仅提取凭据挂到 req，真实校验在 websocket.js connection 时完成。
+    // H2-4b：无凭据 subprotocol 的握手不再拒绝——放行进入「首帧鉴权」通道
+    // （第一条消息必须是 auth，见 websocket.js），兼容代理剥离
+    // Sec-WebSocket-Protocol 头的部署环境；subprotocol 通道保留向后兼容
     for (const p of protocols) {
       if (typeof p === 'string' && p.startsWith('mc-commander-apikey.')) {
         req._wsApiKey = p.slice('mc-commander-apikey.'.length);
@@ -113,7 +116,7 @@ const wss = new WebSocketServer({
         return p;
       }
     }
-    return false;
+    return true;
   },
 });
 

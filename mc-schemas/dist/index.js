@@ -4002,7 +4002,12 @@ const WS_EVENT_TYPES = [
 ];
 const wsEventTypeSchema = enumType(WS_EVENT_TYPES);
 const wsMessageSchema = objectType({
-	type: unionType([wsEventTypeSchema, literalType("pong")]),
+	type: unionType([
+		wsEventTypeSchema,
+		literalType("pong"),
+		literalType("auth")
+	]),
+	ok: booleanType().optional(),
 	eventId: numberType().optional(),
 	instanceId: stringType().optional(),
 	data: unknownType().optional(),
