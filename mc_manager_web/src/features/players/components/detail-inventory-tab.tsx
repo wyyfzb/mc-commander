@@ -232,8 +232,10 @@ function InventorySlot({ item, variant = 'default' }: { item: InventoryItem | nu
       </TooltipTrigger>
       <TooltipContent side="top">
         <span className="flex flex-col gap-0.5">
-          {item.customName && <span className="font-medium">{item.customName}</span>}
-          <span className="font-mono">{fullItemId(item.id)}</span>
+          {/* customName 玩家可控（铁砧限 35 字符但命令/数据包可超），break-all 防长串溢出 tooltip 框 */}
+          {item.customName && <span className="break-all font-medium">{item.customName}</span>}
+          {/* 数据包可引入自定义命名空间 ID 且长度无上限，与 customName 行同防护 */}
+          <span className="break-all font-mono">{fullItemId(item.id)}</span>
           <span>
             {item.count > 1 ? `数量 ×${item.count}` : '数量 ×1'}
             {item.durability != null && ` · 耐久 ${Math.round(clamp01(item.durability) * 100)}%`}

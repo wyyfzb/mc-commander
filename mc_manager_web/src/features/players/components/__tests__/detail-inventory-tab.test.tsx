@@ -193,6 +193,22 @@ describe('InventoryTab hover tooltip', () => {
     expect(screen.queryByText(/耐久/)).not.toBeInTheDocument()
     expect(screen.queryByText(/已附魔/)).not.toBeInTheDocument()
   })
+
+  it('自定义名 break-all：玩家可控长串折行防溢出 tooltip 框（J66）', async () => {
+    const player = samplePlayer()
+    // 混入拉丁无空白段：CJK 串本可逐字折行（min-content=单字宽），拉丁串才真正触发溢出
+    player.inventory!.quickbar[0] = makeItem({
+      id: 'diamond_sword',
+      customName: 'LongCustomNameAaaaaaaaaaaaaaaaaaaaaaaaaaaaaa 通过命令写入的超长自定义名',
+    })
+    const user = userEvent.setup()
+    renderTab(player)
+
+    await user.hover(screen.getByAltText('diamond_sword'))
+    expect(await screen.findByText(/LongCustomNameAaaa/)).toHaveClass('break-all')
+    // 物品 ID 行同防护：数据包可引入自定义命名空间 ID，长度无上限
+    expect(screen.getByText('minecraft:diamond_sword')).toHaveClass('break-all')
+  })
 })
 
 describe('InventoryTab 子 Tab 切换', () => {
