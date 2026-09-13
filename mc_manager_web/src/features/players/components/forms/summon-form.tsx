@@ -34,8 +34,10 @@ export function SummonForm({ isRconConnected, onAction }: ActionFormProps) {
     entitiesByCategory.set(e.category, list)
   }
 
-  // 实体网格按分类渲染成多段，语义上是一个单选组：按渲染顺序压平定下标
-  const entityValues = filteredEntities.map((e) => e.id)
+  // 实体网格按分类渲染成多段，语义上是一个单选组：压平顺序从分组结构派生
+  // （= 渲染顺序 by construction，与源数据「同类连续」排列解耦——数据按 id 重排
+  // 也不会让键盘顺序与渲染顺序分叉，对齐 effect-form 同款做法）
+  const entityValues = Array.from(entitiesByCategory.values()).flat().map((e) => e.id)
   const entityIndexById = new Map(entityValues.map((id, i) => [id, i]))
   const entityGroup = useRadioGroup<string>({
     label: '实体',
