@@ -48,55 +48,23 @@ import { logger } from '../utils/logger.js';
 const PASSWORD_MIN = 8;
 const PASSWORD_MAX = 128;
 
-/// 登录失败锁定（内存级，进程重启即清零；配合全局速率限流双层防护）
-/// 容量上限对齐 rate_limit.js 的 LRU 模式，防止恶意随机 IP 无界撑爆内存
-const LOGIN_FAILURES_MAX_KEYS = 10000;
-const loginFailures = new Map(); // key: ip → { count, lockedUntil, lastSeen }
+/// 登录失败锁定：实现在 utils/credential-lockout.js（HTTP 登录与 WS 握手共享
+/// 同一份封禁状态——攻击者把失败流量分流到不受限通道无法绕开锁定）
+import {
+  isLocked as isLoginLocked,
+  recordFailure as recordLoginFailure,
+  clearFailures as clearLoginFailures,
+  resetForTests as resetLoginLockState,
+  sizeForTests as _getLoginFailuresSize,
+  recordFailureForTests as _recordLoginFailure,
+  isLockedForTests as _isLoginLocked,
+  clearFailuresForTests as _clearLoginFailures,
+} from '../utils/credential-lockout.js';
 
 function clientIp(req) {
   // 登录锁定键始终取直连 IP（socket.remoteAddress），不信任 X-Forwarded-For
   // 代理头可被客户端伪造；req.ip 仍可用于会话记录等非安全场景
   return req.socket?.remoteAddress || null;
-}
-
-function isLoginLocked(ip) {
-  const f = loginFailures.get(ip);
-  return Boolean(f?.lockedUntil && f.lockedUntil > Date.now());
-}
-
-// 超限时淘汰最久未访问的条目（LRU），一次淘汰到上限的 75% 留缓冲
-function evictLoginFailures() {
-  const targetSize = Math.max(1, Math.floor(LOGIN_FAILURES_MAX_KEYS * 0.75));
-  while (loginFailures.size > targetSize) {
-    let oldestKey = null;
-    let oldestSeen = Infinity;
-    for (const [key, f] of loginFailures.entries()) {
-      if (f.lastSeen < oldestSeen) {
-        oldestSeen = f.lastSeen;
-        oldestKey = key;
-      }
-    }
-    if (oldestKey === null) break;
-    loginFailures.delete(oldestKey);
-  }
-}
-
-function recordLoginFailure(ip) {
-  const f = loginFailures.get(ip) || { count: 0, lockedUntil: 0, lastSeen: 0 };
-  f.count += 1;
-  f.lastSeen = Date.now();
-  if (f.count >= config.adminSession.loginLockMaxFails) {
-    f.lockedUntil = Date.now() + config.adminSession.loginLockMs;
-  }
-  loginFailures.set(ip, f);
-  // 容量保护：超限时 LRU 淘汰
-  if (loginFailures.size > LOGIN_FAILURES_MAX_KEYS) {
-    evictLoginFailures();
-  }
-}
-
-function clearLoginFailures(ip) {
-  loginFailures.delete(ip);
 }
 
 function validatePasswordStrength(password) {
@@ -328,27 +296,12 @@ export function createAuthRoutes() {
   return router;
 }
 
-/** 测试钩子：清空登录失败锁定状态（生产代码不调用；进程重启同样等效清零） */
-export function resetLoginLockState() {
-  loginFailures.clear();
-}
-
-/** 测试钩子：获取 loginFailures Map 大小（容量上限验证） */
-export function _getLoginFailuresSize() {
-  return loginFailures.size;
-}
-
-/** 测试钩子：模拟登录失败记录（容量淘汰 + 正常锁定路径测试用） */
-export function _recordLoginFailure(ip) {
-  recordLoginFailure(ip);
-}
-
-/** 测试钩子：查询 IP 是否被锁定 */
-export function _isLoginLocked(ip) {
-  return isLoginLocked(ip);
-}
-
-/** 测试钩子：清除指定 IP 的失败记录 */
-export function _clearLoginFailures(ip) {
-  clearLoginFailures(ip);
-}
+// 测试钩子（历史消费者从本模块导入）：以具名导入同名再导出，实现已收敛至
+// utils/credential-lockout.js
+export {
+  resetLoginLockState,
+  _getLoginFailuresSize,
+  _recordLoginFailure,
+  _isLoginLocked,
+  _clearLoginFailures,
+};

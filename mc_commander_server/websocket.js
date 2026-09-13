@@ -1,4 +1,9 @@
 import { authenticateWebSocket } from './middleware/auth.js';
+import {
+  isLocked as isCredentialLocked,
+  recordFailure as recordCredentialFailure,
+  clearFailures as clearCredentialFailures,
+} from './utils/credential-lockout.js';
 import { getDb } from './db/index.js';
 import os from 'os';
 import fs from 'fs';
@@ -183,11 +188,28 @@ export function setupWebSocket(wss, serverManager) {
     // 凭据由 handleProtocols 在 index.js 中提取并挂载到 req（双通道互斥，客户端只会带其一）
     const apiKey = req._wsApiKey || null;
     const sessionToken = req._wsSessionToken || null;
+    // 封禁键取直连 IP（与 HTTP 登录锁定同源，见 utils/credential-lockout.js）
+    const ip = req.socket?.remoteAddress || null;
+
+    // 认证失败 IP 临时封禁：锁定窗口内所有尝试一律拒绝（凭据正确也不放行），
+    // 堵住「无限次握手试凭据」的爆破口子（此前 WS 认证失败无任何计数与封禁）
+    if (isCredentialLocked(ip)) {
+      logger.warn(`Rejecting websocket connection: IP locked after auth failures (${ip ?? 'unknown'})`);
+      ws.close(1008, 'Too many auth failures');
+      return;
+    }
 
     if (!authenticateWebSocket(apiKey, sessionToken)) {
+      // recordFailure 返回本次是否触发锁定（供一次性告警，不逐请求刷日志）
+      const justLocked = recordCredentialFailure(ip);
+      logger.warn(
+        `WebSocket auth failed, closing 1008 (ip=${ip ?? 'unknown'}${justLocked ? ', IP now locked' : ''})`
+      );
       ws.close(1008, 'Unauthorized');
       return;
     }
+    // 成功即清零：失败计数只衡量「连续失败」
+    clearCredentialFailures(ip);
 
     // 连接数上限：clients 已满（≥ MAX_CONNECTIONS）时拒绝新连接，
     // 防止恶意客户端无限建连耗尽服务端资源

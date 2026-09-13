@@ -3,6 +3,22 @@ import { ErrorCodes, error } from '../utils/response.js';
 import { AdminSessionModel } from '../db/index.js';
 import { hashToken, safeEqual } from '../utils/password.js';
 import { parseDbTime } from '../utils/db-time.js';
+import { logger } from '../utils/logger.js';
+
+/** 直连 IP（日志用；与锁定键同源，不信任可伪造的代理头） */
+function clientIp(req) {
+  return req.socket?.remoteAddress || 'unknown';
+}
+
+/**
+ * 401 分支补日志（H2-4：此前认证失败全静默，爆破不可见）。
+ * 级别分档：无效凭据（key 错 / 令牌未知 / 头缺失）= 潜在攻击信号 → warn；
+ * 会话正常生命周期（到期 / 绝对过期）= 客户端会自动重登 → debug。
+ * 日志只含 IP 与路径，永不记录凭据/令牌本体。
+ */
+function logAuthRejection(req, reason, level = 'warn') {
+  logger[level](`[auth] 401 ${reason} ip=${clientIp(req)} path=${req.path}`);
+}
 
 /** 恒时比对 API Key：对入站明文做 SHA-256 后与存储的哈希比较。
  * safeEqual 复用 utils/password.js 的 SHA-256 归一化实现（P2-6：
@@ -79,6 +95,7 @@ export function authMiddleware(req, res, next) {
   const apiKey = req.headers['x-api-key'];
   if (apiKey != null) {
     if (!verifyApiKey(apiKey)) {
+      logAuthRejection(req, 'invalid API key');
       return res.status(401).json(error(
         ErrorCodes.INVALID_API_KEY,
         'Invalid API Key'
@@ -93,19 +110,23 @@ export function authMiddleware(req, res, next) {
   if (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
     const token = authHeader.slice(7).trim();
     if (!token) {
+      logAuthRejection(req, 'empty bearer token');
       return res.status(401).json(error(ErrorCodes.AUTH_SESSION_EXPIRED, '会话凭据缺失，请重新登录'));
     }
     const session = AdminSessionModel.findByTokenHash(hashToken(token));
     if (!session) {
+      logAuthRejection(req, 'unknown session token');
       return res.status(401).json(error(ErrorCodes.AUTH_SESSION_EXPIRED, '会话不存在或已登出，请重新登录'));
     }
     if (new Date(session.expires_at).getTime() <= Date.now()) {
       AdminSessionModel.deleteById(session.id);
+      logAuthRejection(req, 'session expired', 'debug');
       return res.status(401).json(error(ErrorCodes.AUTH_SESSION_EXPIRED, '会话已过期，请重新登录'));
     }
     // 绝对过期（P2-11）：created_at + 30d 后强制重登，滑动续期不能绕过
     if (isAbsolutelyExpired(session)) {
       AdminSessionModel.deleteById(session.id);
+      logAuthRejection(req, 'session absolute expired', 'debug');
       return res.status(401).json(error(ErrorCodes.AUTH_SESSION_EXPIRED, '会话已达到最长存活期，请重新登录'));
     }
     // 滑动续期（节流写库；上限 cap 在绝对过期边界，P2-11）
@@ -117,6 +138,7 @@ export function authMiddleware(req, res, next) {
     return next();
   }
 
+  logAuthRejection(req, 'missing credentials');
   return res.status(401).json(error(
     ErrorCodes.INVALID_API_KEY,
     'API Key is required. Use X-API-Key header or Bearer session token.'
