@@ -60,10 +60,11 @@ export function usePluginUpload({ instanceId, refreshList }: UsePluginUploadOpti
         signal: controller.signal,
       })
       uploadSucceededRef.current += 1
+      // 落地目录随 toast 外显（与 files 域 toast 带路径同口径；详情页 plugins/{file} 仅次级可见）
       toast.success(
         result.overwritten
-          ? `已覆盖上传 ${file.name}，重启实例后生效`
-          : `已上传 ${file.name}${result.meta?.name ? `（${result.meta.name}）` : ''}，重启实例后生效`,
+          ? `已覆盖上传 ${file.name}，落入 plugins/，重启实例后生效`
+          : `已上传 ${file.name}${result.meta?.name ? `（${result.meta.name}）` : ''}，落入 plugins/，重启实例后生效`,
       )
     } finally {
       uploadAbortRef.current = null

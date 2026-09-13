@@ -361,7 +361,15 @@ export default function WebhookPage() {
             </div>
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label className="text-mcs-xs text-mcs-text-muted">事件过滤</Label>
+                <div className="flex items-center gap-2">
+                  <Label className="text-mcs-xs text-mcs-text-muted">事件过滤</Label>
+                  {/* 选中计数（StatusPill muted 计数口径）；0 时语义由下方「未选择 = 订阅全部事件」提示承担 */}
+                  {form.events.length > 0 && (
+                    <StatusPill tone="muted" className="text-mcs-2xs">
+                      已选 {form.events.length}
+                    </StatusPill>
+                  )}
+                </div>
                 <Button variant="outline" size="sm" className="h-6 text-mcs-2xs" onClick={selectAll}>
                   {eventTypes && form.events.length === eventTypes.length ? '取消全选' : '全选'}
                 </Button>

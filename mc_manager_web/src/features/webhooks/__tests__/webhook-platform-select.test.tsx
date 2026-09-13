@@ -160,3 +160,56 @@ describe('Webhook 渠道预设单选组', () => {
     expect(fireEvent.keyDown(generic, { key: 'Tab' })).toBe(true)
   })
 })
+
+describe('Webhook 事件过滤「已选 N」计数（H1-9）', () => {
+  const EVENT_TYPES = ['player.join', 'player.leave', 'player.death', 'backup.create']
+
+  beforeEach(() => {
+    localStorage.clear()
+    useConnectionStore.setState({ status: 'ready', baseUrl: '', apiKey: 'test-key' })
+    // 既有用例把 event-types mock 为空（chips 不渲染）；本组需要真实 chip 列表
+    server.use(
+      http.get('*/api/v1/webhooks', () => ok([])),
+      http.get('*/api/v1/webhooks/event-types', () => ok(EVENT_TYPES)),
+    )
+  })
+
+  it('未选事件时不显示计数（语义由「未选择 = 订阅全部事件」提示承担）', async () => {
+    const user = userEvent.setup()
+    await openPresetGroup(user)
+    expect(within(screen.getByRole('dialog')).queryByText(/^已选 /)).not.toBeInTheDocument()
+  })
+
+  it('勾选事件后显示已选数量，随勾选/取消联动', async () => {
+    const user = userEvent.setup()
+    await openPresetGroup(user)
+    const dialog = screen.getByRole('dialog')
+
+    // 事件 chips 是显式 aria-pressed 开关按钮（多选集合，非互斥单选）
+    const chips = within(dialog).getAllByRole('button', { pressed: false })
+    expect(chips).toHaveLength(EVENT_TYPES.length)
+    await user.click(chips[0]!)
+    expect(within(dialog).getByText('已选 1')).toBeInTheDocument()
+
+    await user.click(chips[1]!)
+    expect(within(dialog).getByText('已选 2')).toBeInTheDocument()
+
+    // 取消一个 → 计数回落
+    const pressed = within(dialog).getAllByRole('button', { pressed: true })
+    await user.click(pressed[0]!)
+    expect(within(dialog).getByText('已选 1')).toBeInTheDocument()
+  })
+
+  it('全选后计数 = 事件类型总数，按钮翻转为「取消全选」', async () => {
+    const user = userEvent.setup()
+    await openPresetGroup(user)
+    const dialog = screen.getByRole('dialog')
+
+    await user.click(within(dialog).getByRole('button', { name: '全选' }))
+
+    expect(within(dialog).getByRole('button', { name: '取消全选' })).toBeInTheDocument()
+    const pressedCount = within(dialog).getAllByRole('button', { pressed: true }).length
+    expect(pressedCount).toBe(EVENT_TYPES.length)
+    expect(within(dialog).getByText(`已选 ${EVENT_TYPES.length}`)).toBeInTheDocument()
+  })
+})

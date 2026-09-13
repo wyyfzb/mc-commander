@@ -154,7 +154,7 @@ describe('usePluginUpload 顺序队列与进度', () => {
     })
     expect(result.current.uploading).toBeNull()
     expect(result.current.queueRemaining).toBe(0)
-    expect(toast.success).toHaveBeenCalledWith('已上传 DemoA.jar，重启实例后生效')
+    expect(toast.success).toHaveBeenCalledWith('已上传 DemoA.jar，落入 plugins/，重启实例后生效')
     expect(refreshList).toHaveBeenCalledTimes(1)
   })
 
@@ -216,6 +216,8 @@ describe('usePluginUpload 40912 同名冲突', () => {
     expect(result.current.conflict).toBeNull()
     expect(result.current.uploading).toBeNull()
     expect(refreshList).toHaveBeenCalledTimes(1)
+    // 覆盖分支的落地目录提示（与普通分支同款形状）
+    expect(toast.success).toHaveBeenCalledWith('已覆盖上传 DemoA.jar，落入 plugins/，重启实例后生效')
   })
 
   it('skipConflictFile：跳过触发文件后剩余文件继续', async () => {

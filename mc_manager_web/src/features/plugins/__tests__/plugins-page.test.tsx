@@ -303,7 +303,7 @@ describe('PluginsPage 上传入口', () => {
 
     // 完成收尾
     xhr.emitLoad(okUploadEnvelope('DemoX.jar'))
-    expect(await screen.findByText('已上传 DemoX.jar，重启实例后生效')).toBeInTheDocument()
+    expect(await screen.findByText('已上传 DemoX.jar，落入 plugins/，重启实例后生效')).toBeInTheDocument()
     await waitFor(() => expect(screen.queryByRole('progressbar')).not.toBeInTheDocument())
   })
 
