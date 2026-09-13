@@ -104,8 +104,12 @@ export function BatchBar({ selectedPlayers, onOpenBatchDetail, onAction }: Batch
   }
 
   return (
-    // 内联出现在表格上方（accent 激活语言呼应「选择生效中」）；flex-wrap 防窄视口溢出
-    <div className="mb-3 flex flex-wrap items-center gap-1.5 rounded-mcs-md border border-mcs-accent-border bg-mcs-accent-bg-subtle px-3 py-2">
+    // 内联出现在表格上方（accent 激活语言呼应「选择生效中」）；flex-wrap 防窄视口溢出。
+    // aria-busy：批量执行期间按钮只是变灰（视觉线索），读屏需要 busy 信号感知「操作进行中」
+    <div
+      aria-busy={running}
+      className="mb-3 flex flex-wrap items-center gap-1.5 rounded-mcs-md border border-mcs-accent-border bg-mcs-accent-bg-subtle px-3 py-2"
+    >
       <span className="mr-1 whitespace-nowrap text-mcs-sm font-medium text-mcs-accent-fg">
         已选择 {count} 名玩家
       </span>

@@ -208,7 +208,7 @@ describe('BatchBar', () => {
     expect(onAction).toHaveBeenCalledWith({ kind: 'command', command: 'gamemode spectator Steve' })
   })
 
-  it('执行期间全部动作按钮禁用（running 门控），完成后恢复', async () => {
+  it('执行期间全部动作按钮禁用（running 门控），完成后恢复；aria-busy 随执行翻转（J18）', async () => {
     let release!: () => void
     const gate = new Promise<void>((resolve) => {
       release = resolve
@@ -219,9 +219,12 @@ describe('BatchBar', () => {
     await confirmInDialog()
     await waitFor(() => expect(screen.getByRole('button', { name: '传送' })).toBeDisabled())
     expect(screen.getByRole('button', { name: '清空背包' })).toBeDisabled()
+    // 读屏的「操作进行中」信号（J18）：执行中 busy，完成后复位
+    expect(screen.getByText(/已选择 1 名玩家/).parentElement).toHaveAttribute('aria-busy', 'true')
     release()
     await screen.findByText('批量踢出完成：成功 1，失败 0')
     await waitFor(() => expect(screen.getByRole('button', { name: '传送' })).toBeEnabled())
+    expect(screen.getByText(/已选择 1 名玩家/).parentElement).toHaveAttribute('aria-busy', 'false')
   })
 
   it('清除选择：点击后清空 store 选中集', async () => {
