@@ -31,6 +31,7 @@ import {
   createPanelSnapshot,
   cleanupPanelSnapshots,
   runPanelBackupCycle,
+  getLatestSnapshotTime,
 } from '../services/panel-backup.service.js';
 
 function fakeSnapshotName(iso) {
@@ -240,6 +241,27 @@ describe('PanelBackupService', () => {
       const dir = getPanelBackupDir();
       const leftovers = fs.readdirSync(dir).filter((f) => f.startsWith('panel-'));
       expect(leftovers).toHaveLength(0);
+    });
+  });
+
+  describe('getLatestSnapshotTime（停机补跑基线）', () => {
+    it('目录无快照：返回 null', () => {
+      cleanPanelBackupDir();
+      expect(getLatestSnapshotTime()).toBeNull();
+    });
+
+    it('取 mtime 最新的快照（与保留清理同口径，不解析文件名时间戳）', () => {
+      const dir = getPanelBackupDir();
+      const older = inDir(dir, fakeSnapshotName(isoDaysAgo(2)));
+      const newer = inDir(dir, fakeSnapshotName(isoDaysAgo(1)));
+      fs.writeFileSync(older, 'x');
+      fs.writeFileSync(newer, 'x');
+      expect(getLatestSnapshotTime()).toBe(fs.statSync(newer).mtimeMs);
+
+      // mtime 反转（回拨较新文件的 mtime）：口径跟随 mtime 而非文件名
+      const aged = new Date(Date.now() - 3 * 86_400_000);
+      fs.utimesSync(newer, aged, aged);
+      expect(getLatestSnapshotTime()).toBe(fs.statSync(older).mtimeMs);
     });
   });
 

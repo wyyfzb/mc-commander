@@ -6,16 +6,18 @@ import { BackupModel } from '../db/backup.model.js';
 import { AuditLogModel, CommandHistoryModel } from '../db/audit.model.js';
 import { WebhookModel } from '../db/webhook.model.js';
 import { BackupService } from './backup.service.js';
-import { runPanelBackupCycle } from './panel-backup.service.js';
+import { runPanelBackupCycle, getLatestSnapshotTime } from './panel-backup.service.js';
 import config from '../config.js';
 import { logger } from '../utils/logger.js';
 import { localTimestamp } from '../utils/local-date.js';
+import { parseDbTime } from '../utils/db-time.js';
 
 /**
  * 定时任务调度器
  *
  * 使用 croner 库（零依赖、TypeScript 原生、DST 感知）替代手写 CronParser。
  * 保留每分钟轮询机制，确保 DB 中的任务变更（增删改）无需重启即可生效。
+ * 启动时对停机期间错过的触发做一次性补偿（catch-up，见 findMissedTrigger）。
  */
 export class TaskScheduler {
   constructor(serverManager) {
@@ -37,6 +39,11 @@ export class TaskScheduler {
     this.interval = setInterval(() => {
       this.checkAndRunTasks();
     }, 60 * 1000);
+
+    // 停机补跑先行于主循环首轮：窗口与主循环的「当前分钟」不相交，
+    // 次序只体现「先补历史再跑当下」；面板快照补跑同理（croner 只调度未来触发）
+    this.catchUpMissedTriggers();
+    this.catchUpPanelBackup();
 
     this.checkAndRunTasks();
 
@@ -138,6 +145,59 @@ export class TaskScheduler {
     } catch (err) {
       logger.error('[PanelBackup] snapshot failed:', err.message);
     }
+  }
+
+  /**
+   * 用户任务停机补跑：错过的触发合并为一次执行（高频 cron 不逐分钟回放）。
+   * 基线用 last_run_at（失败/跳过同样消费该触发，即「已消费」下界）；
+   * 从未运行的任务用 created_at（停机期间不可能建任务，首触发不会被错过）。
+   */
+  catchUpMissedTriggers() {
+    let tasks;
+    try {
+      tasks = ScheduledTaskModel.getEnabledTasks();
+    } catch (err) {
+      logger.error('Error loading tasks for catch-up:', err);
+      return;
+    }
+    for (const task of tasks) {
+      try {
+        const missed = findMissedTrigger(task.cronExpression, task.lastRunAt ?? task.createdAt);
+        if (!missed) continue;
+        logger.info(
+          `Catch-up: task ${task.name} (${task.type}) missed trigger at ${missed.toISOString()} while panel was down; running once`
+        );
+        this.executeTask(task);
+      } catch (err) {
+        logger.error(`Error catching up task ${task.id}:`, err);
+      }
+    }
+  }
+
+  /**
+   * 面板快照停机补跑：与用户任务同窗口规则，但上界含当前时刻——croner 只调度
+   * 注册之后的触发，启动落在触发分钟内时该次触发没有主循环兜底。基线用最新
+   * 快照 mtime（触发产出文件的时刻，语义同 last_run_at）；从无快照不补跑
+   * （全新安装的首次快照留给首个 cron 触发点，避免启动即建目录写盘的意外）。
+   * 全程 try/catch：start() 的调用方不兜异常，快照基线读取故障（磁盘/权限）
+   * 不得打断后续 cron 注册与主循环。
+   */
+  catchUpPanelBackup() {
+    if (!config.panelBackup.enabled) return;
+    let missed = null;
+    try {
+      const latest = getLatestSnapshotTime();
+      if (latest == null) return;
+      missed = findMissedTrigger(config.panelBackup.cron, latest, new Date(), { includeCurrentMinute: true });
+    } catch (err) {
+      logger.error('Panel backup catch-up check failed:', err.message);
+      return;
+    }
+    if (!missed) return;
+    logger.info(
+      `Catch-up: panel snapshot missed trigger at ${missed.toISOString()} while panel was down; running once`
+    );
+    void this.runPanelBackup();
   }
 
   checkAndRunTasks() {
@@ -401,6 +461,44 @@ export class TaskScheduler {
     }
 
     return getNextRun(task.cronExpression);
+  }
+}
+
+/**
+ * 停机补跑窗口判定：返回 (lastRunAt, 上界) 内**最早**一次 cron 触发，无则 null
+ * （错过的多次触发由调用方合并为一次执行，只需知道「有且自何时」）。
+ *
+ * 下界排除 lastRunAt 本身（该触发已消费）；上界默认为当前分钟起点且**排除**——
+ * 当前分钟的触发由主循环 match 处理，补跑窗口不含它才不会同分钟双触发。
+ * `includeCurrentMinute`（面板快照用）把上界放宽到当前时刻：croner 只调度注册
+ * 之后的触发，启动落在触发分钟内时没有主循环兜底，不放宽就会漏掉该次触发。
+ *
+ * lastRunAt 接受 DB naive 字符串 / Date / epoch 毫秒（经 parseDbTime 归一）；
+ * 空值或 cron 表达式非法返回 null——非法表达式由建任务入口 fail-fast 拦截，
+ * 主循环每分钟也会记错，这里保持静默避免重复刷屏。
+ *
+ * @param {string} cronExpr 标准 5 字段 cron 表达式
+ * @param {string|Date|number} lastRunAt 已消费基线时刻
+ * @param {Date} [now] 当前时刻（测试注入用）
+ * @param {{includeCurrentMinute?: boolean}} [options]
+ * @returns {Date|null}
+ */
+export function findMissedTrigger(cronExpr, lastRunAt, now = new Date(), options = {}) {
+  const lastRunMs = parseDbTime(lastRunAt);
+  if (!lastRunMs) return null;
+  const upperBoundMs = options.includeCurrentMinute
+    ? now.getTime()
+    : (() => {
+      const minuteStart = new Date(now);
+      minuteStart.setSeconds(0, 0);
+      return minuteStart.getTime();
+    })();
+  try {
+    const cron = new Cron(cronExpr, { paused: true });
+    const missed = cron.nextRun(new Date(lastRunMs));
+    return missed && missed.getTime() < upperBoundMs ? missed : null;
+  } catch {
+    return null;
   }
 }
 

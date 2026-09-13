@@ -40,6 +40,19 @@ export function getPanelBackupDir() {
   return dir;
 }
 
+/**
+ * 最新快照的创建时刻（mtime，毫秒）；目录无快照返回 null。
+ * 调度器停机补跑用它作基线：cron 触发不留记录，mtime 即那次触发产出
+ * 文件的时刻——与用户任务 last_run_at 的「已消费时刻」语义一致。
+ */
+export function getLatestSnapshotTime() {
+  const dir = getPanelBackupDir();
+  const mtimes = fs.readdirSync(dir)
+    .filter((f) => SNAPSHOT_NAME_REGEX.test(f))
+    .map((f) => fs.statSync(path.join(dir, f)).mtimeMs);
+  return mtimes.length ? Math.max(...mtimes) : null;
+}
+
 /** 快照文件路径 → .env 伴生副本路径（同生命周期的配对约定） */
 function envSidecarPath(snapshotPath) {
   return snapshotPath.replace(/\.db$/, '.env');

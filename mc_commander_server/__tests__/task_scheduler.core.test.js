@@ -40,6 +40,7 @@ vi.mock('../services/backup.service.js', () => ({
 }));
 vi.mock('../services/panel-backup.service.js', () => ({
   runPanelBackupCycle: vi.fn(),
+  getLatestSnapshotTime: vi.fn(() => null),
 }));
 vi.mock('../db/audit.model.js', () => ({
   AuditLogModel: { prune: vi.fn(() => 0) },
@@ -48,12 +49,13 @@ vi.mock('../db/webhook.model.js', () => ({
   WebhookModel: { pruneDeliveries: vi.fn(() => 0) },
 }));
 
-import { TaskScheduler } from '../services/task_scheduler.js';
+import { TaskScheduler, findMissedTrigger } from '../services/task_scheduler.js';
 import { ScheduledTaskModel } from '../db/scheduled_task.model.js';
 import { BanModel } from '../db/ban.model.js';
-import { runPanelBackupCycle } from '../services/panel-backup.service.js';
+import { runPanelBackupCycle, getLatestSnapshotTime } from '../services/panel-backup.service.js';
 import config from '../config.js';
 import { logger } from '../utils/logger.js';
+import { toDbUtcString } from '../utils/db-time.js';
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -85,7 +87,7 @@ describe('TaskScheduler - 调度主链（启停 / 主循环 / 解封 / 任务分
   // ---------- 启停生命周期 ----------
 
   describe('start / stop 生命周期', () => {
-    it('start：注册 60s 轮询 + 立即执行首轮 + 同秒重复 start 不重复注册', () => {
+    it('start：注册 60s 轮询 + 补跑检查 + 立即执行首轮 + 同秒重复 start 不重复注册', () => {
       vi.useFakeTimers();
       vi.setSystemTime(new Date('2026-09-04T10:30:45'));
 
@@ -93,13 +95,13 @@ describe('TaskScheduler - 调度主链（启停 / 主循环 / 解封 / 任务分
       scheduler.start(); // running 守卫：第二次调用应直接 return
 
       expect(scheduler.running).toBe(true);
-      // 立即首轮只执行一次（若重复注册 interval，后续 advance 会放大差值）
-      expect(ScheduledTaskModel.getEnabledTasks).toHaveBeenCalledTimes(1);
+      // 启动各拉一次：补跑检查 + 主循环首轮（无错过任务时补跑为空转）
+      expect(ScheduledTaskModel.getEnabledTasks).toHaveBeenCalledTimes(2);
 
       vi.advanceTimersByTime(60 * 1000);
-      expect(ScheduledTaskModel.getEnabledTasks).toHaveBeenCalledTimes(2);
-      vi.advanceTimersByTime(60 * 1000);
       expect(ScheduledTaskModel.getEnabledTasks).toHaveBeenCalledTimes(3);
+      vi.advanceTimersByTime(60 * 1000);
+      expect(ScheduledTaskModel.getEnabledTasks).toHaveBeenCalledTimes(4);
     });
 
     it('start：面板快照开关关闭时不注册快照 cron（panelBackupCron 保持 null）', () => {
@@ -581,6 +583,209 @@ describe('TaskScheduler - 调度主链（启停 / 主循环 / 解封 / 任务分
     it('getNextRunTime：任务不存在抛出', () => {
       ScheduledTaskModel.findById.mockReturnValue(null);
       expect(() => scheduler.getNextRunTime(99)).toThrow('Task not found');
+    });
+  });
+
+  // ---------- 停机补跑（catch-up） ----------
+
+  describe('findMissedTrigger（补跑窗口判定）', () => {
+    const now = new Date('2026-09-13T09:10:30');
+
+    it('窗口内存在错过的触发：返回最早一次（基线 48h 前 → 首个错过的 04:00 为前日）', () => {
+      const missed = findMissedTrigger('0 4 * * *', toDbUtcString(new Date(now.getTime() - 48 * 3600e3)), now);
+      expect(missed).not.toBeNull();
+      expect(missed.getHours()).toBe(4);
+      expect(missed.getDate()).toBe(12);
+    });
+
+    it('上界排除当前分钟：触发恰为当前分钟时不判为错过（主循环兜底，防同分钟双触发）', () => {
+      const nowInTriggerMinute = new Date('2026-09-13T04:00:30');
+      const missed = findMissedTrigger(
+        '0 4 * * *',
+        toDbUtcString(new Date(nowInTriggerMinute.getTime() - 24 * 3600e3)),
+        nowInTriggerMinute,
+      );
+      expect(missed).toBeNull();
+    });
+
+    it('includeCurrentMinute：触发分钟在当前时刻之前即判为错过（面板快照无主循环兜底）', () => {
+      const nowInTriggerMinute = new Date('2026-09-13T04:00:30');
+      const missed = findMissedTrigger(
+        '0 4 * * *',
+        toDbUtcString(new Date(nowInTriggerMinute.getTime() - 24 * 3600e3)),
+        nowInTriggerMinute,
+        { includeCurrentMinute: true },
+      );
+      expect(missed.getHours()).toBe(4);
+      expect(missed.getDate()).toBe(13);
+    });
+
+    it('基线恰为上次触发时刻：该触发视为已消费（严格晚于，含当前分钟的宽窗口也不补）', () => {
+      const nowInTriggerMinute = new Date('2026-09-13T04:00:30');
+      // 基线 = 当前分钟起点（今天 04:00 刚消费）→ nextRun 严格晚于基线 = 明日 04:00，
+      // 与「上界排除当前分钟」用例不同排布：这里即使放宽上界也不命中
+      const missed = findMissedTrigger(
+        '0 4 * * *',
+        toDbUtcString(new Date('2026-09-13T04:00:00')),
+        nowInTriggerMinute,
+        { includeCurrentMinute: true },
+      );
+      expect(missed).toBeNull();
+    });
+
+    it('基线为空 / 非法表达式 / 基线在未来：一律 null', () => {
+      expect(findMissedTrigger('0 4 * * *', null, now)).toBeNull();
+      expect(findMissedTrigger('not a cron', toDbUtcString(now), now)).toBeNull();
+      expect(findMissedTrigger('0 4 * * *', new Date(now.getTime() + 3600e3), now)).toBeNull();
+    });
+  });
+
+  describe('用户任务停机补跑', () => {
+    /** 统计补跑日志条数（与主循环触发区分） */
+    const catchUpLogs = () =>
+      logger.info.mock.calls.filter(([msg]) => String(msg).includes('while panel was down')).length;
+
+    it('停机期间错过的触发：启动补跑一次并消费（last_run_at 刷新）', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-09-13T09:10:30'));
+      ScheduledTaskModel.getEnabledTasks.mockReturnValue([
+        {
+          id: 1, name: '每日备份', type: 'backup', cronExpression: '0 4 * * *',
+          lastRunAt: toDbUtcString(new Date(Date.now() - 48 * 3600e3)), instanceId: 'demo',
+        },
+      ]);
+      const executeSpy = vi.spyOn(scheduler, 'executeTask');
+
+      scheduler.start();
+
+      // 当分 09:10 不匹配 04:00 → executeTask 只来自补跑
+      expect(executeSpy).toHaveBeenCalledTimes(1);
+      expect(executeSpy).toHaveBeenCalledWith(expect.objectContaining({ id: 1 }));
+      expect(ScheduledTaskModel.updateLastRun).toHaveBeenCalledWith(1, expect.any(String), 'skipped');
+    });
+
+    it('错过的多次触发合并为一次（高频 cron 不逐分钟回放）', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-09-13T09:10:30'));
+      ScheduledTaskModel.getEnabledTasks.mockReturnValue([
+        {
+          id: 2, name: '每分钟报时', type: 'command', cronExpression: '* * * * *',
+          lastRunAt: toDbUtcString(new Date(Date.now() - 5 * 60e3)), instanceId: 'demo', command: 'say hi',
+        },
+      ]);
+      const executeSpy = vi.spyOn(scheduler, 'executeTask');
+
+      scheduler.start();
+
+      // 补跑 1 次（09:05–09:09 五个错过分钟合并）+ 主循环当前分钟 1 次 = 2
+      expect(executeSpy).toHaveBeenCalledTimes(2);
+      expect(catchUpLogs()).toBe(1);
+    });
+
+    it('从未运行的任务以 created_at 为基线：不会在启动时凭空触发', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-09-13T09:10:30'));
+      ScheduledTaskModel.getEnabledTasks.mockReturnValue([
+        { id: 3, name: '未跑过', type: 'backup', cronExpression: '0 4 * * *', lastRunAt: null, createdAt: toDbUtcString(new Date()), instanceId: 'demo' },
+      ]);
+      const executeSpy = vi.spyOn(scheduler, 'executeTask');
+
+      scheduler.start();
+
+      expect(executeSpy).not.toHaveBeenCalled();
+      expect(catchUpLogs()).toBe(0);
+    });
+
+    it('当前分钟的触发只由主循环执行：补跑不与主循环同分钟双触发', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-09-13T04:00:30'));
+      ScheduledTaskModel.getEnabledTasks.mockReturnValue([
+        {
+          id: 4, name: '每日任务', type: 'backup', cronExpression: '0 4 * * *',
+          lastRunAt: toDbUtcString(new Date(Date.now() - 24 * 3600e3)), instanceId: 'demo',
+        },
+      ]);
+      const executeSpy = vi.spyOn(scheduler, 'executeTask');
+
+      scheduler.start();
+
+      // 昨天 04:00 已消费 → 窗口内无错过；今天 04:00 = 当前分钟 → 主循环独占
+      expect(executeSpy).toHaveBeenCalledTimes(1);
+      expect(catchUpLogs()).toBe(0);
+    });
+
+    it('补跑检查失败仅记日志：不阻塞主循环注册', () => {
+      ScheduledTaskModel.getEnabledTasks.mockImplementation(() => { throw new Error('db locked'); });
+      expect(() => scheduler.catchUpMissedTriggers()).not.toThrow();
+      expect(logger.error).toHaveBeenCalledWith('Error loading tasks for catch-up:', expect.any(Error));
+    });
+  });
+
+  describe('面板快照停机补跑', () => {
+    it('最新快照已错过触发点：启动补跑一次（补跑调用同步发起，无需异步等待）', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-09-13T09:10:30'));
+      config.panelBackup.enabled = true;
+      config.panelBackup.cron = '0 4 * * *';
+      getLatestSnapshotTime.mockReturnValue(Date.now() - 48 * 3600e3);
+
+      scheduler.start();
+
+      expect(runPanelBackupCycle).toHaveBeenCalledTimes(1);
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('panel snapshot missed trigger'));
+    });
+
+    it('启动恰在触发分钟内：includeCurrentMinute 接线使错过的触发仍被补跑', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-09-13T04:00:30'));
+      config.panelBackup.enabled = true;
+      config.panelBackup.cron = '0 4 * * *';
+      // 昨日 04:00 之后的今日 04:00 触发点已被停机吞掉；croner 注册（04:00:30）
+      // 只调度明天 → 补跑若不含当前分钟就会漏掉今天这次
+      getLatestSnapshotTime.mockReturnValue(Date.now() - 24 * 3600e3);
+
+      scheduler.start();
+
+      expect(runPanelBackupCycle).toHaveBeenCalledTimes(1);
+    });
+
+    it('基线读取故障仅记日志：不打断 start() 后续的 cron 注册', () => {
+      config.panelBackup.enabled = true;
+      getLatestSnapshotTime.mockImplementation(() => { throw new Error('EACCES'); });
+
+      expect(() => scheduler.start()).not.toThrow();
+      expect(logger.error).toHaveBeenCalledWith('Panel backup catch-up check failed:', 'EACCES');
+      // 异常隔离：主循环与快照 cron 照常注册
+      expect(scheduler.interval).not.toBeNull();
+      expect(scheduler.panelBackupCron).not.toBeNull();
+    });
+
+    it('最新快照新鲜（本次触发点未到）：不补跑', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-09-13T09:10:30'));
+      config.panelBackup.enabled = true;
+      getLatestSnapshotTime.mockReturnValue(Date.now() - 5 * 60e3);
+
+      scheduler.start();
+
+      expect(runPanelBackupCycle).not.toHaveBeenCalled();
+    });
+
+    it('从无快照不补跑（全新安装首次快照留给 cron 触发点）；开关关闭同样不补跑', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-09-13T09:10:30'));
+      getLatestSnapshotTime.mockReturnValue(null);
+
+      scheduler.start();
+      expect(runPanelBackupCycle).not.toHaveBeenCalled();
+
+      // 开关关闭：catchUpPanelBackup 直接短路
+      config.panelBackup.enabled = false;
+      getLatestSnapshotTime.mockReturnValue(Date.now() - 48 * 3600e3);
+      const fresh = new TaskScheduler(mockManager);
+      fresh.start();
+      fresh.stop();
+      expect(runPanelBackupCycle).not.toHaveBeenCalled();
     });
   });
 });
