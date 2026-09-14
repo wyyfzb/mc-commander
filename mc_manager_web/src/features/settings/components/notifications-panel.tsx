@@ -66,7 +66,7 @@ export function NotificationsPanel() {
             {/* 组头行：folder 图标 + 组名 + 组级批量开关 */}
             <div className="flex items-center gap-2 border-b border-mcs-border-muted px-4 py-3">
               <Folder className="size-4 shrink-0 text-mcs-accent-fg" aria-hidden />
-              <h3 className="min-w-0 flex-1 text-mcs-md font-semibold text-mcs-text-default">{title}</h3>
+              <h3 className="min-w-0 flex-1 text-mcs-lg font-semibold text-mcs-text-default">{title}</h3>
               <Switch
                 checked={anyOn}
                 onCheckedChange={(checked) => setCategoryEnabled(category, checked)}

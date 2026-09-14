@@ -77,7 +77,7 @@ export function GeneralPanel(_props: GeneralPanelProps) {
         <span className="flex size-8 shrink-0 items-center justify-center rounded-mcs-sm bg-mcs-accent-bg-subtle">
           <Settings2 className="size-4 text-mcs-accent-fg" aria-hidden />
         </span>
-        <h3 className="text-mcs-md font-semibold">通用设置</h3>
+        <h3 className="text-mcs-lg font-semibold">通用设置</h3>
       </CardHeader>
 
       <CardBody className="flex flex-col px-4">

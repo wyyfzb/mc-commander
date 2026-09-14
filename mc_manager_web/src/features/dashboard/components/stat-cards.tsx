@@ -107,7 +107,7 @@ export function BigStatCards({
               <CheckCircle2 className="size-3.5" aria-hidden />
               {healthy ? '健康' : '卡顿'}
             </StatusPill>
-            <span className={cn('mcs-num text-mcs-md leading-none', tpsColor(tps, isRunning))}>
+            <span className={cn('mcs-num text-mcs-lg leading-none', tpsColor(tps, isRunning))}>
               {tps != null ? tps.toFixed(1) : '--'}
             </span>
             <span className="text-mcs-2xs text-mcs-text-muted">TPS</span>

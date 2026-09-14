@@ -122,7 +122,7 @@ export function WorldInfoCard({ world, isLoading, onRefresh, className }: WorldI
         <span className="flex size-8 shrink-0 items-center justify-center rounded-mcs-sm bg-mcs-accent-bg-subtle">
           <Globe className="size-4 text-mcs-accent-fg" aria-hidden />
         </span>
-        <h3 className="text-mcs-md font-semibold">世界信息</h3>
+        <h3 className="text-mcs-lg font-semibold">世界信息</h3>
         <div className="ml-auto">
           <Button
             variant="ghost"

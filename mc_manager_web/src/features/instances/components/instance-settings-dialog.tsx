@@ -272,7 +272,7 @@ export function InstanceSettingsDialog({
             <Settings className="size-4.5" aria-hidden />
           </span>
           <div className="min-w-0">
-            <DialogTitle className="text-mcs-lg font-semibold text-mcs-text-default">启动配置</DialogTitle>
+            <DialogTitle className="text-mcs-xl font-semibold text-mcs-text-default">启动配置</DialogTitle>
             <DialogDescription className="truncate text-mcs-xs text-mcs-text-muted">
               {instance.name}
             </DialogDescription>
@@ -282,7 +282,7 @@ export function InstanceSettingsDialog({
         <div className="flex flex-col gap-4">
           {/* ── 内存分配滑块（0.5 GB 步进）── */}
           <div className="flex flex-col gap-1.5">
-            <span className="text-mcs-md font-semibold text-mcs-text-default">内存分配</span>
+            <span className="text-mcs-lg font-semibold text-mcs-text-default">内存分配</span>
             <p>
               <span className="font-mono text-mcs-xl font-semibold text-mcs-accent-fg">
                 {allocatedMemory.toFixed(1)} GB

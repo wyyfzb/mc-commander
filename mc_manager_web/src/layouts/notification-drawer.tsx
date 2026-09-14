@@ -167,7 +167,7 @@ export function NotificationDrawer({ open, onOpenChange }: NotificationDrawerPro
         className="flex w-96 max-w-full flex-col p-0 shadow-mcs-overlay"
       >
         <SheetHeader className="flex-row items-center justify-between border-b border-mcs-border-muted py-3 pl-4 pr-3">
-          <SheetTitle className="flex items-center gap-2 text-mcs-md">
+          <SheetTitle className="flex items-center gap-2 text-mcs-lg">
             通知
             {unreadCount > 0 && (
               <span className="rounded-full bg-mcs-accent px-1.5 py-0.5 text-mcs-2xs font-medium text-mcs-on-accent">
