@@ -7,7 +7,7 @@
  *   3. transition-all（ui/ 由第 20 条覆盖）
  *   4. duration-{数字}（非 token 的硬编码时长；ui/ 由第 20 条覆盖）
  *   5. rounded-[ 任意值圆角
- *   6. Tailwind 原生字号 3xl 及以上（原生字号上限 2xl；本仓文字档上限 text-mcs-xl（22px）；
+ *   6. Tailwind 原生字号 3xl 及以上（原生字号上限 xl；本仓文字档上限 text-mcs-xl（22px）；
  *      数字面板可走 --mcs-font-size-display（30px），须与 .mcs-num 同用，不占文字档位）
  *   7.（空缺保留）原紧急页字重限定：/emergency 页已移除，后续编号不重排以免外部引用失效
  *   8. 焦点可见性：outline-none 与 focus-visible:outline-* 同处 utilities 层会互相抵消
@@ -74,7 +74,8 @@ function readRegistered() {
   const indexCss = readFileSync(join(srcDir, 'index.css'), 'utf-8')
   const effectsCss = readFileSync(join(srcDir, 'styles', 'effects.css'), 'utf-8')
   // keep：Tailwind v4 的配对行高子键（--text-mcs-sm--line-height）会被贪婪捕获成
-  // `sm--line-height`，须排除——否则产出假档名 text-mcs-sm--line-height（未注册 → 误报）
+  // `sm--line-height`。parseTokenClass 对含 `--` 的 raw 先返回 null，故该路径当前不可达，
+  // 保留它是防御性的：注册集本身不该收进子键名，将来正则或解析改动时不会再放出假档名。
   const collect = (css, re, keep = () => true) =>
     new Set([...css.matchAll(re)].map((m) => m[1]).filter(keep))
   return {
@@ -242,7 +243,7 @@ function checkClasses(filePath, lineNum, classes) {
   // 7. Tailwind 原生超大字号（3xl+）
   const oversize = classes.match(/\btext-(3xl|4xl|5xl|6xl|7xl|8xl|9xl)\b/)
   if (oversize) {
-    console.log(`${filePath}:${lineNum + 1}: text-${oversize[1]} 超出字号 token 体系 → 请使用 text-mcs-* token（≤ 2xl）或 text-mcs-display（配 .mcs-num）`)
+    console.log(`${filePath}:${lineNum + 1}: text-${oversize[1]} 超出字号 token 体系 → 请使用 text-mcs-* token（文字档上限 text-mcs-xl）或 text-mcs-display（配 .mcs-num）`)
     violations++
   }
   // 9. 焦点可见性：outline-none 会抵消同层的 focus-visible:outline-*（outline-style 恒为 none）
@@ -538,11 +539,15 @@ for (const f of G9_FILES) {
 // 源码类名（严格形状；动态模板取前缀，如 mcs-delay-${i} → mcs-delay-）
 // classContext：该字面量所在行是否像类名上下文（className/cn/cva/clsx）——
 // 用于把「形如 mcs-x 的存储键/事件名/测试夹具」与真正的裸类名区分开
+// 测试文件（__tests__）不进消费面：它按定义就要写出待断言的类名，且断言把档名拼进模板串
+// （`text-mcs-${tone}-fg`）会登记成通配前缀——曾让 text-mcs-*/bg-mcs-*/border-mcs-* 整族
+// 恒判为「已消费」，第 14 条死 token 门禁对这族完全失效。测试要判定的产物是运行时代码的
+// 消费面，测试自身不构成消费点。
 const CLASS_CONTEXT = /className|class=|\bcn\(|\bcva\(|\bclsx\(/
 const usedClasses = new Map() // class → { file, classContext }
 const usedPrefixes = new Set()
 for (const f of G9_FILES) {
-  if (f.endsWith('.css')) continue
+  if (f.endsWith('.css') || f.includes('__tests__')) continue
   const relFile = relative(root, f)
   for (const line of readFileSync(f, 'utf-8').split('\n')) {
     const classContext = CLASS_CONTEXT.test(line)
@@ -795,9 +800,15 @@ for (const f of GATE_FILES) {
 }
 
 // 23. 页面页头：AppShell 主页面必须有且仅有一个 PageHeader（页头是页面级唯一标题声明点），
-// 23. 页面页头：AppShell 主页面必须有且仅有一个 PageHeader（页头是页面级唯一标题声明点），
-//     且该页标题字号档 ≤3——口径＝页头基座 xl + 卡片标题基座 sm + 标题标签上的显式档。
-//     档位按「heading 标签所在行的 text-mcs-* 类」收集（同行判定，类名换行写看不见，宁漏不误报）。
+//     且该页标题字号档 ≤3——口径＝页头基座 + 卡片标题基座 + 该页自己的标题标签显式档。
+//     判定面＝该页**实际渲染出的标题组件**（静态近似）：页文件 + 其直接引用的页内模块
+//     （覆盖「页 → 卡片组件 → mcs/card 基座」这类标题都在子组件里的现场；再深一层会把
+//     无关模块的标题算进同屏，宁漏不误报）。档位来源两类：
+//       ① 标题标签（h1–h6）行的 text-mcs-*——同行判定，类名换行写看不见；
+//       ② `<*Title/*Header>` 用法的基座档——从组件声明所在文件的组件体内读（体内承载标题的
+//          元素的首个 text-mcs-*），不硬编码档名，基座换档时本条自动跟随。
+//     同文件里的正文、角标、数字档不进判定面：KPI 数字档（lg/display）不是标题档，
+//     收进来会把数字面板误判成「标题档位发散」。
 //     登录页/引导页是全屏品牌入口，不在 AppShell 内、标题由自身 h1 承担，显式豁免。
 //     引导页实测同屏有两个 h1（欢迎区 + 连接表单，不是互斥渲染）——那是该页自身的品牌+表单
 //     结构，本轮口径维持不改；把它拆成 h1+h2 是可见结构变更，与本条要防的
@@ -806,8 +817,68 @@ const APP_SHELL_PAGE_EXEMPT = new Set([
   'src/features/auth/login-page.tsx',
   'src/features/onboarding/onboarding-page.tsx',
 ])
-const HEADING_TAG_LINE = /<h[1-6][\s>]/
 const MCS_SIZE_CLASS = /text-mcs-(2xs|xs|sm|md|lg|xl|display)\b/g
+/** 标题标签所在行（显式字号档的判定行） */
+const HEADING_TAG_LINE = /<h[1-6][\s>]/
+/** 标题组件声明：`function *Title/*Header(`（含 export） */
+const TITLE_FUNCTION_DECL = /(?:export\s+)?function\s+\w+(?:Title|Header)\w*\s*\(/g
+/** 组件体内承载标题的元素：带 className 的 JSX 起始标签（含基座里的 `<Tag`），
+ *  档位取该类名串的首个 text-mcs-* */
+const JSX_TEXT_ELEMENT = /<([a-zA-Z][\w.]*)\b[^\n]*?className=[^\n]*?text-mcs-/
+/** `<*Title/*Header>` 用法（大写开头，故与 `function XxxTitle(` 声明不混） */
+const JSX_TITLE_TAG = /<([A-Z]\w*(?:Title|Header))\b/g
+/** 该文件里各标题组件自身的基座档：取组件体内第一个承载标题的元素行的 text-mcs-* */
+function titleBaseTiers(code) {
+  const facets = []
+  for (const m of code.matchAll(TITLE_FUNCTION_DECL)) {
+    const name = m[0].match(/function\s+(\w+)/)[1]
+    // 参数表的 `{` 不是函数体，先按括号配平跨过参数表，再从体的 `{` 起按花括号配平
+    const parenAt = code.indexOf('(', m.index)
+    let parens = 1
+    let after = parenAt + 1
+    for (; after < code.length && parens > 0; after++) {
+      if (code[after] === '(') parens++
+      else if (code[after] === ')') parens--
+    }
+    const bodyStart = code.indexOf('{', after)
+    if (bodyStart < 0) continue
+    let braces = 0
+    let end = bodyStart
+    for (; end < code.length; end++) {
+      if (code[end] === '{') braces++
+      else if (code[end] === '}' && --braces === 0) break
+    }
+    for (const line of code.slice(bodyStart, end).split('\n')) {
+      if (!JSX_TEXT_ELEMENT.test(line)) continue
+      const tier = [...line.matchAll(MCS_SIZE_CLASS)][0]
+      if (tier) facets.push({ name, tier: tier[1] })
+      break
+    }
+  }
+  return facets
+}
+/** 页内模块路径（`@/x` 走 src/，相对路径按引用文件所在目录解析）；外部包与测试返回 null */
+function resolveLocalModule(fromFile, spec) {
+  const base = spec.startsWith('@/')
+    ? join(srcDir, spec.slice(2))
+    : spec.startsWith('.')
+      ? join(fromFile, '..', spec)
+      : null
+  if (!base) return null
+  for (const candidate of [`${base}.tsx`, `${base}.ts`, join(base, 'index.tsx')]) {
+    if (existsSync(candidate) && !isTestFile(candidate)) return candidate
+  }
+  return null
+}
+/** 该文件引用的页内模块 */
+function localImportsOf(code, fromFile) {
+  const out = []
+  for (const m of code.matchAll(/from\s+['"]([^'"]+)['"]/g)) {
+    const resolved = resolveLocalModule(fromFile, m[1])
+    if (resolved) out.push(resolved)
+  }
+  return out
+}
 for (const f of GATE_FILES) {
   if (f.endsWith('.css') || isTestFile(f)) continue
   const rel = GATE_REL(f)
@@ -818,11 +889,30 @@ for (const f of GATE_FILES) {
     console.log(`${rel}: 页面必须有且仅一个 PageHeader（当前 ${headerCount} 个）→ 标题与描述只在页头声明`)
     violations++
   }
-  const tiers = new Set(['xl'])
-  if (/\bCardTitle\b/.test(code)) tiers.add('sm')
-  for (const line of code.split('\n')) {
-    if (!HEADING_TAG_LINE.test(line)) continue
-    for (const m of line.matchAll(MCS_SIZE_CLASS)) tiers.add(m[1])
+  // 判定面：页文件 + 其直接引用的页内模块
+  const scoped = [f]
+  for (const imported of localImportsOf(code, f)) scoped.push(imported)
+  const moduleCodes = new Map(scoped.map((p) => [p, p === f ? code : stripComments(readFileSync(p, 'utf-8'))]))
+  // 基座名表：判定面内的标题组件声明 + 这些模块再引用的基座（`<CardTitle>` 的档在 mcs/card）
+  for (const p of [...scoped, ...scoped.flatMap((m) => localImportsOf(moduleCodes.get(m), m))]) {
+    if (!moduleCodes.has(p)) moduleCodes.set(p, stripComments(readFileSync(p, 'utf-8')))
+  }
+  const baseTierByName = new Map()
+  for (const moduleCode of moduleCodes.values()) {
+    for (const { name, tier } of titleBaseTiers(moduleCode)) baseTierByName.set(name, tier)
+  }
+  const tiers = new Set()
+  for (const moduleFile of scoped) {
+    for (const line of moduleCodes.get(moduleFile).split('\n')) {
+      if (HEADING_TAG_LINE.test(line)) {
+        const explicit = [...line.matchAll(MCS_SIZE_CLASS)][0]
+        if (explicit) tiers.add(explicit[1])
+      }
+      for (const tag of line.matchAll(JSX_TITLE_TAG)) {
+        const base = baseTierByName.get(tag[1])
+        if (base) tiers.add(base)
+      }
+    }
   }
   if (tiers.size > 3) {
     console.log(`${rel}: 页内标题字号档 ${tiers.size} 档（${[...tiers].sort().join('/')}）→ 同屏标题最多 3 档`)
