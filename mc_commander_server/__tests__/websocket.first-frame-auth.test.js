@@ -12,7 +12,6 @@ import { EventEmitter } from 'events';
 import {
   setupWebSocket,
   WS_AUTH_TIMEOUT_MS,
-  MAX_PENDING_AUTH_MESSAGES,
   ClientMessages,
 } from '../websocket.js';
 import { resetForTests, isLockedForTests } from '../utils/credential-lockout.js';
