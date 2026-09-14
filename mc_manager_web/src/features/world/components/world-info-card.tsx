@@ -57,6 +57,7 @@ export function formatGameMode(gameMode: string): string {
 }
 
 import { StatusPill } from '@/components/mcs/status-pill'
+import { Card, CardBody, CardHeader } from '@/components/mcs/card'
 import type { ChipTone } from '@/components/mcs/chip'
 
 /** 难度 → 状态色（peaceful→info / easy→success / hard→error / 其余→warning） */
@@ -116,13 +117,8 @@ export function sizeProgress(sizeGB: number): number {
 /** 世界信息卡：9 行只读信息（名称/类型/种子/存档大小/游戏天数/难度/游戏模式/视野距离/在线玩家） */
 export function WorldInfoCard({ world, isLoading, onRefresh, className }: WorldInfoCardProps) {
   return (
-    <section
-      className={cn(
-        'mcs-edge-top relative rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted shadow-mcs-card',
-        className,
-      )}
-    >
-      <header className="flex items-center gap-3 border-b border-mcs-border-subtle px-4 py-3">
+    <Card className={cn('mcs-edge-top relative', className)}>
+      <CardHeader className="gap-3 border-b border-mcs-border-subtle px-4 py-3">
         <span className="flex size-8 shrink-0 items-center justify-center rounded-mcs-sm bg-mcs-accent-bg-subtle">
           <Globe className="size-4 text-mcs-accent-fg" aria-hidden />
         </span>
@@ -139,9 +135,9 @@ export function WorldInfoCard({ world, isLoading, onRefresh, className }: WorldI
             <RefreshCw className={cn('size-3.5', isLoading && 'animate-spin')} aria-hidden />
           </Button>
         </div>
-      </header>
+      </CardHeader>
 
-      <div className="px-4 py-2">
+      <CardBody className="px-4 py-2">
         {isLoading ? (
           <div data-testid="world-info-skeleton" className="flex flex-col gap-3 py-2">
             {Array.from({ length: 6 }).map((_, i) => (
@@ -215,7 +211,7 @@ export function WorldInfoCard({ world, isLoading, onRefresh, className }: WorldI
             </InfoRow>
           </dl>
         )}
-      </div>
-    </section>
+      </CardBody>
+    </Card>
   )
 }

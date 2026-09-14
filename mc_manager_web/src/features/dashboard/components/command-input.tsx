@@ -14,6 +14,7 @@ import { useCommandBus } from '@/stores/command-bus'
 import { colorForCommand, completeCommands, iconForCommand, type CompletionItem } from '@/lib/mc-commands'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
+import { Card } from '@/components/mcs/card'
 
 /**
  * 命令输入行
@@ -241,7 +242,7 @@ export function CommandInput() {
   }
 
   return (
-    <section className="animate-mcs-fade-up mcs-delay-5 mcs-edge-top relative flex shrink-0 flex-col gap-2 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted p-3 shadow-mcs-card">
+    <Card className="animate-mcs-fade-up mcs-delay-5 mcs-edge-top relative flex shrink-0 flex-col gap-2 p-3">
       {/* RCON 降级横幅：命令已发送但响应不可见 */}
       {isRunning && !isRconConnected && (
         <NoticeBanner variant="warning" icon={ShieldAlert}>
@@ -407,6 +408,6 @@ export function CommandInput() {
           if (deleteTarget != null) removePreset(deleteTarget)
         }}
       />
-    </section>
+    </Card>
   )
 }

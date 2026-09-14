@@ -23,6 +23,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { formatWorldSize } from '@/lib/format'
 import { StatusPill } from '@/components/mcs/status-pill'
+import { Card } from '@/components/mcs/card'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { EmptyState } from '@/components/mcs/empty-state'
 import { useUpgradeStore } from '@/stores/upgrade'
@@ -160,10 +161,11 @@ function InstanceCard({
     upgradeStage !== 'rolled_back'
 
   return (
-    <div
+    <Card
+      as="div"
       data-instance-id={id}
       className={cn(
-        'mcs-edge-top relative flex flex-col gap-3 rounded-mcs-md border bg-mcs-bg-muted p-4 shadow-mcs-card',
+        'mcs-edge-top relative flex flex-col gap-3 p-4',
         className,
         isCurrent ? 'border-mcs-accent-border' : 'border-mcs-border-muted',
         detail?.circuitBreakerTripped && 'border-mcs-error-border',
@@ -319,7 +321,7 @@ function InstanceCard({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-    </div>
+    </Card>
   )
 }
 

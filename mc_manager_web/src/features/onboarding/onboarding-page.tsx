@@ -12,6 +12,7 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useRadioGroup, type RadioGroupItemProps } from '@/hooks/use-radio-group'
 import { TONE_SELECTED_SURFACE_CLASSES } from '@/components/mcs/tone'
+import { Card } from '@/components/mcs/card'
 import { copyText } from '@/lib/clipboard'
 import { BrandLogo } from '@/components/mcs/brand-logo'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
@@ -66,15 +67,16 @@ function ModeCard({
   radioProps: RadioGroupItemProps
 }) {
   return (
-    <button
+    <Card
+      as="button"
       {...radioProps}
       type="button"
       onClick={() => onSelect(mode)}
       className={cn(
-        'flex flex-1 flex-col items-start gap-2 rounded-mcs-md border p-4 text-left transition-colors',
+        'flex flex-1 flex-col items-start gap-2 border p-4 text-left transition-colors',
         active
-          ? `${TONE_SELECTED_SURFACE_CLASSES} shadow-mcs-card`
-          : 'border-mcs-border-muted bg-mcs-bg-muted shadow-mcs-card hover:bg-mcs-state-hover',
+          ? TONE_SELECTED_SURFACE_CLASSES
+          : 'border-mcs-border-muted bg-mcs-bg-muted hover:bg-mcs-state-hover',
       )}
     >
       <Icon
@@ -83,7 +85,7 @@ function ModeCard({
       />
       <span className="text-mcs-sm font-semibold text-mcs-text-default">{title}</span>
       <span className="text-mcs-xs text-mcs-text-muted">{description}</span>
-    </button>
+    </Card>
   )
 }
 
@@ -173,7 +175,7 @@ export function OnboardingPage() {
 
         {/* ── 部署指南（随选择切换） ── */}
         {mode !== 'already' && (
-          <div className="mb-4 flex flex-col gap-3 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted p-4 shadow-mcs-card">
+          <Card as="div" className="mb-4 flex flex-col gap-3 p-4">
             {mode === 'windows' && (
               <>
                 <div className="flex items-center gap-2">
@@ -216,7 +218,7 @@ export function OnboardingPage() {
                 </NoticeBanner>
               </>
             )}
-          </div>
+          </Card>
         )}
 
         {/* ── 连接表单（复用；保存成功 → 跳转仪表盘） ── */}

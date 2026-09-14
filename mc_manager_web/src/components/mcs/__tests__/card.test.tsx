@@ -1,0 +1,120 @@
+/**
+ * Card 基座测试：
+ * - 卡片面四件套类存在（圆角/描边/卡片底色/卡阴影）
+ * - className 透传且不被吞（布局与内边距档位由调用点持有）
+ * - className 可覆盖基座同名属性（底色/描边按内容语义走），被覆盖基座类不残留
+ * - as 保留调用点元素语义（section/div/main/button）
+ * - CardHeader/CardTitle/CardBody 子块：默认类、className 透传、CardTitle 层级可指定
+ * mock 数据全部为测试占位，无真实服务器信息
+ */
+import { describe, expect, it } from 'vitest'
+import { render } from '@testing-library/react'
+import { Card, CardBody, CardHeader, CardTitle } from '../card'
+
+const SURFACE = ['rounded-mcs-md', 'border', 'border-mcs-border-muted', 'bg-mcs-bg-muted', 'shadow-mcs-card']
+
+describe('Card', () => {
+  it('默认渲染 section 并输出卡片面四件套类', () => {
+    const { container } = render(<Card>内容</Card>)
+    const el = container.querySelector('section') as HTMLElement
+    expect(el).not.toBeNull()
+    for (const c of SURFACE) expect(el.classList.contains(c)).toBe(true)
+    expect(el.textContent).toBe('内容')
+  })
+
+  it('className 透传：布局与内边距类与基座类共存，不被吞', () => {
+    const { container } = render(<Card className="flex min-w-0 flex-col gap-3 p-4">内容</Card>)
+    const el = container.querySelector('section') as HTMLElement
+    for (const c of ['flex', 'min-w-0', 'flex-col', 'gap-3', 'p-4', ...SURFACE]) {
+      expect(el.classList.contains(c)).toBe(true)
+    }
+  })
+
+  it('className 覆盖基座同名属性：调用点胜出且被覆盖的基座类不残留', () => {
+    const { container } = render(
+      <Card className="border-mcs-accent-border bg-mcs-bg-default p-5">内容</Card>,
+    )
+    const el = container.querySelector('section') as HTMLElement
+    expect(el.classList.contains('border-mcs-accent-border')).toBe(true)
+    expect(el.classList.contains('bg-mcs-bg-default')).toBe(true)
+    expect(el.classList.contains('border-mcs-border-muted')).toBe(false)
+    expect(el.classList.contains('bg-mcs-bg-muted')).toBe(false)
+    // 未冲突的基座类保留
+    expect(el.classList.contains('rounded-mcs-md')).toBe(true)
+    expect(el.classList.contains('shadow-mcs-card')).toBe(true)
+  })
+
+  it('as 保留调用点元素语义（div/main/button）', () => {
+    const { container } = render(
+      <>
+        <Card as="div">块</Card>
+        <Card as="main">登录卡</Card>
+        <Card as="button" type="button" role="radio" aria-checked>
+          单选卡
+        </Card>
+      </>,
+    )
+    expect(container.querySelector('div')).not.toBeNull()
+    expect(container.querySelector('main')).not.toBeNull()
+    const button = container.querySelector('button') as HTMLButtonElement
+    expect(button).not.toBeNull()
+    expect(button.getAttribute('role')).toBe('radio')
+    expect(button.getAttribute('aria-checked')).toBe('true')
+  })
+
+  it('role/aria/data-* 钩子透传', () => {
+    const { container } = render(
+      <Card aria-label="统计加载中" role="status" data-testid="card-hook" data-instance-id="demo-1">
+        内容
+      </Card>,
+    )
+    const el = container.querySelector('[data-testid="card-hook"]') as HTMLElement
+    expect(el).not.toBeNull()
+    expect(el.getAttribute('aria-label')).toBe('统计加载中')
+    expect(el.getAttribute('role')).toBe('status')
+    expect(el.dataset.instanceId).toBe('demo-1')
+  })
+})
+
+describe('Card 子块', () => {
+  it('CardHeader 输出横向居中标题行，className 追加', () => {
+    const { container } = render(
+      <CardHeader className="justify-between gap-2">
+        <CardTitle>在线玩家</CardTitle>
+      </CardHeader>,
+    )
+    const header = container.querySelector('header') as HTMLElement
+    for (const c of ['flex', 'items-center', 'justify-between', 'gap-2']) {
+      expect(header.classList.contains(c)).toBe(true)
+    }
+  })
+
+  it('CardTitle 默认 h3，as 可指定层级，字号/色/字重为卡片标题档', () => {
+    const { container } = render(
+      <>
+        <CardTitle>默认层级</CardTitle>
+        <CardTitle as="h2">页内层级</CardTitle>
+      </>,
+    )
+    const h3 = container.querySelector('h3') as HTMLElement
+    expect(h3.textContent).toBe('默认层级')
+    for (const c of ['text-mcs-sm', 'font-medium', 'text-mcs-text-muted']) {
+      expect(h3.classList.contains(c)).toBe(true)
+    }
+    expect(container.querySelector('h2')).not.toBeNull()
+  })
+
+  it('CardTitle className 覆盖字号档（同组后写者胜），颜色档不被吞', () => {
+    const { container } = render(<CardTitle className="text-mcs-2xs">小标题</CardTitle>)
+    const el = container.querySelector('h3') as HTMLElement
+    expect(el.classList.contains('text-mcs-2xs')).toBe(true)
+    expect(el.classList.contains('text-mcs-sm')).toBe(false)
+    expect(el.classList.contains('text-mcs-text-muted')).toBe(true)
+  })
+
+  it('CardBody 零默认类：只带调用点给的类（基座不得改调用点布局）', () => {
+    const { container } = render(<CardBody className="px-4 py-2">内容体</CardBody>)
+    const el = container.querySelector('div') as HTMLElement
+    expect([...el.classList].sort()).toEqual(['px-4', 'py-2'])
+  })
+})

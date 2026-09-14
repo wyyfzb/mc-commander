@@ -8,16 +8,17 @@
  */
 import { CheckCircle2, ExternalLink, Loader2, RefreshCw, WifiOff } from 'lucide-react'
 import { useCheckUpdate } from '@/api/queries'
+import { Card } from '@/components/mcs/card'
 
 export function UpdateCheckSection() {
   const { data, isLoading, isError, refetch } = useCheckUpdate()
 
   if (isLoading) {
     return (
-      <section className="flex items-center gap-3 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted px-4 py-3 shadow-mcs-card">
+      <Card className="flex items-center gap-3 px-4 py-3">
         <Loader2 className="size-4 animate-spin text-mcs-text-muted" aria-hidden />
         <span className="text-mcs-sm text-mcs-text-muted">正在检查更新…</span>
-      </section>
+      </Card>
     )
   }
 
@@ -26,7 +27,7 @@ export function UpdateCheckSection() {
   // 已是最新
   if (!data.hasUpdate) {
     return (
-      <section className="flex items-center gap-3 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted px-4 py-3 shadow-mcs-card">
+      <Card className="flex items-center gap-3 px-4 py-3">
         <span className="flex size-8 shrink-0 items-center justify-center rounded-mcs-sm bg-mcs-success-bg-subtle">
           <CheckCircle2 className="size-4 text-mcs-success-fg" aria-hidden />
         </span>
@@ -45,7 +46,7 @@ export function UpdateCheckSection() {
         >
           <RefreshCw className="size-3.5" aria-hidden />
         </button>
-      </section>
+      </Card>
     )
   }
 

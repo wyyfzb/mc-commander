@@ -18,6 +18,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
+import { Card } from '@/components/mcs/card'
 import { cn } from '@/lib/utils'
 import { ApiError, apiPost, apiRequest } from '@/api/client'
 import type { OverviewData } from '@/api/types'
@@ -327,14 +328,12 @@ export function ConnectionForm({ variant = 'settings', onSaved }: ConnectionForm
         </div>
       )}
 
-      <div
-        className={cn(
-          'flex flex-col gap-5 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted p-6 shadow-mcs-card',
-          variant === 'settings' && 'mt-4',
-        )}
+      <Card
+        as="div"
+        className={cn('flex flex-col gap-5 p-6', variant === 'settings' && 'mt-4')}
       >
         {formFields}
-      </div>
+      </Card>
 
       <ConfirmDialog
         open={pendingAction !== null}

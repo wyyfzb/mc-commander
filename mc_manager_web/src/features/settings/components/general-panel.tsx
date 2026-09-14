@@ -26,6 +26,7 @@ import { useConnectionStore } from '@/stores/connection'
 import { useServerStore } from '@/stores/server'
 import { useUiStore, type ThemeMode } from '@/stores/ui'
 import type { GeneralPanelProps } from './contracts'
+import { Card, CardBody, CardHeader } from '@/components/mcs/card'
 
 export function GeneralPanel(_props: GeneralPanelProps) {
   const instanceId = useServerStore((s) => s.instanceId)
@@ -71,15 +72,15 @@ export function GeneralPanel(_props: GeneralPanelProps) {
   }
 
   return (
-    <section className="rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted shadow-mcs-card">
-      <header className="flex items-center gap-3 border-b border-mcs-border-subtle px-4 py-3">
+    <Card>
+      <CardHeader className="gap-3 border-b border-mcs-border-subtle px-4 py-3">
         <span className="flex size-8 shrink-0 items-center justify-center rounded-mcs-sm bg-mcs-accent-bg-subtle">
           <Settings2 className="size-4 text-mcs-accent-fg" aria-hidden />
         </span>
         <h3 className="text-mcs-md font-semibold">通用设置</h3>
-      </header>
+      </CardHeader>
 
-      <div className="flex flex-col px-4">
+      <CardBody className="flex flex-col px-4">
         {instanceId ? (
           <div className="flex items-center gap-3 border-b border-mcs-border-subtle py-3 last:border-b-0">
             <div className="min-w-0 flex-1">
@@ -143,7 +144,7 @@ export function GeneralPanel(_props: GeneralPanelProps) {
             aria-label="命令执行二次确认"
           />
         </div>
-      </div>
-    </section>
+      </CardBody>
+    </Card>
   )
 }

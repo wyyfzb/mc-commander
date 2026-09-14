@@ -25,6 +25,7 @@ import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { BrandLogo } from '@/components/mcs/brand-logo'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
+import { Card } from '@/components/mcs/card'
 import { Label } from '@/components/ui/label'
 import { PasswordInput } from '@/components/ui/password-input'
 import { cn } from '@/lib/utils'
@@ -228,7 +229,7 @@ export function LoginPage() {
       </div>
 
       {/* 登录卡片（浮起面：卡阴影 + 顶部受光线；stagger 入场跟随品牌区） */}
-      <main className="animate-mcs-fade-up mcs-delay-1 mcs-edge-top relative z-(--mcs-z-local) w-full max-w-md rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted p-6 shadow-mcs-card">
+      <Card as="main" className="animate-mcs-fade-up mcs-delay-1 mcs-edge-top relative z-(--mcs-z-local) w-full max-w-md p-6">
         <div className="mb-5">
           <h2 className="text-mcs-md font-semibold text-mcs-text-default">{heading}</h2>
           <p className="mt-1 text-mcs-xs text-mcs-text-muted">
@@ -408,7 +409,7 @@ export function LoginPage() {
             </Button>
           </form>
         )}
-      </main>
+      </Card>
 
       {/* 底部辅助链接 */}
       <footer className="animate-mcs-fade-up mcs-delay-2 relative z-(--mcs-z-local) mt-6 flex flex-col items-center gap-1.5 text-center">

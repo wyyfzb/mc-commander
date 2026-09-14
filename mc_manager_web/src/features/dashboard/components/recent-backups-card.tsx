@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils'
 import { useServerStore } from '@/stores/server'
 import { LoadingButton } from '@/components/mcs/loading-button'
 import { StatusPill } from '@/components/mcs/status-pill'
+import { Card, CardHeader, CardTitle } from '@/components/mcs/card'
 import { toneClasses } from '@/components/mcs/tone'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -56,9 +57,9 @@ export function RecentBackupsCard() {
   }
 
   return (
-    <section className="animate-mcs-fade-up mcs-delay-6 mcs-edge-top relative flex shrink-0 flex-col gap-3 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted p-4 shadow-mcs-card">
-      <header className="flex items-center justify-between gap-2">
-        <h3 className="text-mcs-sm font-medium text-mcs-text-muted">最近备份</h3>
+    <Card className="animate-mcs-fade-up mcs-delay-6 mcs-edge-top relative flex shrink-0 flex-col gap-3 p-4">
+      <CardHeader className="justify-between gap-2">
+        <CardTitle>最近备份</CardTitle>
         <button
           type="button"
           onClick={() => navigate(BACKUP_PAGE)}
@@ -68,7 +69,7 @@ export function RecentBackupsCard() {
           全部
           <ArrowRight className="size-3" aria-hidden />
         </button>
-      </header>
+      </CardHeader>
 
       {backupsQuery.isLoading ? (
         <div className="space-y-2" aria-label="加载备份中" role="status">
@@ -132,7 +133,7 @@ export function RecentBackupsCard() {
           立即备份
         </LoadingButton>
       </div>
-    </section>
+    </Card>
   )
 }
 

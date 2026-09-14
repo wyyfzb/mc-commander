@@ -4,6 +4,7 @@
  */
 import { FileText, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Card } from '@/components/mcs/card'
 
 interface UploadProgressBarProps {
   /** 上传中条目（顺序队列同一时刻仅一个活跃） */
@@ -15,8 +16,9 @@ interface UploadProgressBarProps {
 
 export function UploadProgressBar({ uploading, queueRemaining, onCancel }: UploadProgressBarProps) {
   return (
-    <div
-      className="flex items-center gap-3 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted px-4 py-3 shadow-mcs-card"
+    <Card
+      as="div"
+      className="flex items-center gap-3 px-4 py-3"
       data-testid="upload-progress"
       aria-live="polite"
     >
@@ -49,6 +51,6 @@ export function UploadProgressBar({ uploading, queueRemaining, onCancel }: Uploa
         <X className="size-3.5" aria-hidden />
         取消
       </Button>
-    </div>
+    </Card>
   )
 }

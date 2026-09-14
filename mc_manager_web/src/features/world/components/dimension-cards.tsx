@@ -7,6 +7,7 @@
  */
 import type { WorldInfo } from '@/api/types'
 import { cn } from '@/lib/utils'
+import { Card } from '@/components/mcs/card'
 
 export type DimensionKind = 'overworld' | 'nether' | 'end'
 
@@ -56,10 +57,10 @@ export function DimensionCards({ dimensions, className }: DimensionCardsProps) {
         const kind = dimensionKind(dim.name)
         const english = dimEnglishName(dim.name)
         return (
-          <section
+          <Card
             key={dim.name}
             data-dimension-kind={kind}
-            className="flex overflow-hidden rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted shadow-mcs-card"
+            className="flex overflow-hidden"
           >
             {/* 左 4px 垂直维度色条（维度语义色 token） */}
             <span aria-hidden data-dimension-bar className={cn('w-1 shrink-0', DIMENSION_BAR[kind])} />
@@ -84,7 +85,7 @@ export function DimensionCards({ dimensions, className }: DimensionCardsProps) {
                 <p className="text-mcs-xs text-mcs-text-muted">在线玩家 {dim.playerCount}</p>
               </div>
             </div>
-          </section>
+          </Card>
         )
       })}
     </div>

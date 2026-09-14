@@ -7,6 +7,7 @@
  * - encoding/loadError 由 contentQuery 派生（派生规则与原实现逐字一致）
  */
 import { getFriendlyErrorText } from '@/api/errors'
+import { Card } from '@/components/mcs/card'
 import type { ThemeMode } from '@/stores/ui'
 import { MonacoEditorPane } from './monaco-editor-pane'
 import { useFileContent } from '../queries'
@@ -66,9 +67,9 @@ export function EditorSlot({
   )
   if (variant === 'desktop') {
     return (
-      <section className="flex h-full min-h-0 w-[45%] shrink-0 flex-col rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted shadow-mcs-card">
+      <Card className="flex h-full min-h-0 w-[45%] shrink-0 flex-col">
         {editor}
-      </section>
+      </Card>
     )
   }
   return (

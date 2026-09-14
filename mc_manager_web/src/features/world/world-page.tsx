@@ -27,6 +27,7 @@ import { GamerulePanel } from './components/gamerule-panel'
 import { useServerProperties, useUpdateProperties, useWorldInfo } from './queries'
 import { InstanceRequiredState } from '@/features/instances/components/instance-required-state'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
+import { Card } from '@/components/mcs/card'
 import { PageHeader } from '@/components/mcs/page-header'
 import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router'
@@ -142,7 +143,7 @@ export function WorldPage() {
       </div>
 
       {/* ── 右栏：属性 / 游戏规则 Tabs ── */}
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted shadow-mcs-card">
+      <Card as="div" className="flex min-h-0 min-w-0 flex-1 flex-col">
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as WorldTab)} className="flex h-full min-h-0 flex-col">
           <TabsList variant="line" className="h-10 shrink-0 justify-start gap-0 border-b border-mcs-border-muted px-2 py-0">
             <TabsTrigger
@@ -177,7 +178,7 @@ export function WorldPage() {
             />
           </TabsContent>
         </Tabs>
-      </div>
+      </Card>
       </div>
 
       {/* ── 属性编辑未保存守卫确认 ── */}

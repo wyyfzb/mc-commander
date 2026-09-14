@@ -17,6 +17,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { StatusPill } from '@/components/mcs/status-pill'
 import { toneClasses } from '@/components/mcs/tone'
 import { EmptyState } from '@/components/mcs/empty-state'
+import { Card } from '@/components/mcs/card'
 import {
   TASK_TYPE_LABELS,
   TASK_TYPE_TONES,
@@ -73,7 +74,7 @@ export function TaskList({
   // 列表级单一倒计时时钟（每行独立 useNow 会每行一个 60s 定时器）
   const now = useNow()
   return (
-    <div className="overflow-hidden rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted shadow-mcs-card">
+    <Card as="div" className="overflow-hidden">
       {isLoading ? (
         /* 骨架行 */
         <div data-testid="task-skeletons" className="space-y-1 p-4" aria-label="加载任务中">
@@ -112,7 +113,7 @@ export function TaskList({
           ))}
         </div>
       )}
-    </div>
+    </Card>
   )
 }
 

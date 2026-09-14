@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useSendCommand } from '@/hooks/use-send-command'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
+import { Card, CardHeader, CardTitle } from '@/components/mcs/card'
 import { primaryModifierLabel } from '@/lib/platform'
 
 /**
@@ -115,9 +116,9 @@ export function AnnouncementCard() {
   }
 
   return (
-    <section className="animate-mcs-fade-up mcs-delay-6 mcs-edge-top relative flex shrink-0 flex-col rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted p-4 shadow-mcs-card">
-      <header className="mb-2 flex items-center gap-2">
-        <h3 className="text-mcs-sm font-medium text-mcs-text-muted">公告发送</h3>
+    <Card className="animate-mcs-fade-up mcs-delay-6 mcs-edge-top relative flex shrink-0 flex-col p-4">
+      <CardHeader className="mb-2 gap-2">
+        <CardTitle>公告发送</CardTitle>
         <Button
           size="sm"
           onClick={requestSend}
@@ -128,7 +129,7 @@ export function AnnouncementCard() {
           <Send className="size-3.5" aria-hidden />
           发送
         </Button>
-      </header>
+      </CardHeader>
 
       <Textarea
         value={text}
@@ -260,6 +261,6 @@ export function AnnouncementCard() {
           {text.trim()}
         </p>
       </ConfirmDialog>
-    </section>
+    </Card>
   )
 }

@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { useNavigate } from 'react-router'
 import { ArrowRight, CheckCircle2, History, MoonStar, Play, Save } from 'lucide-react'
 import { StatusPill } from '@/components/mcs/status-pill'
+import { Card, CardHeader, CardTitle } from '@/components/mcs/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useServerStore } from '@/stores/server'
 import { formatRelativeTime, formatStartTime, formatUptime } from '@/lib/format'
@@ -24,7 +25,8 @@ export function tpsColor(tps: number | null, isRunning: boolean): string {
 /** status 未就绪时的稳定空数组（避免 ?? [] 每次渲染新建引用、污染下游 useMemo） */
 const NO_NAMES: string[] = []
 
-function Card({
+/** 仪表盘统计卡外壳：卡片面 + 标题行（eyebrow 为右上角角标）走 mcs/card 基座 */
+function StatCard({
   title,
   eyebrow,
   eyebrowClass,
@@ -38,18 +40,13 @@ function Card({
   children: React.ReactNode
 }) {
   return (
-    <section
-      className={cn(
-        'mcs-edge-top relative flex min-w-0 flex-1 flex-col gap-3 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted p-4 shadow-mcs-card',
-        className,
-      )}
-    >
-      <header className="flex items-center justify-between gap-2">
-        <h2 className="text-mcs-sm font-medium text-mcs-text-muted">{title}</h2>
+    <Card className={cn('mcs-edge-top relative flex min-w-0 flex-1 flex-col gap-3 p-4', className)}>
+      <CardHeader className="justify-between gap-2">
+        <CardTitle as="h2">{title}</CardTitle>
         {eyebrow && <span className={cn('text-mcs-xs', eyebrowClass)}>{eyebrow}</span>}
-      </header>
+      </CardHeader>
       {children}
-    </section>
+    </Card>
   )
 }
 
@@ -83,8 +80,8 @@ export function BigStatCards({
   // B17 首屏骨架：单卡同构占位（标题条 + 三行进度条）
   if (isLoading) {
     return (
-      <section
-        className="animate-mcs-fade-up mcs-delay-2 mcs-edge-top relative flex min-w-0 flex-col gap-3 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted p-4 shadow-mcs-card"
+      <Card
+        className="animate-mcs-fade-up mcs-delay-2 mcs-edge-top relative flex min-w-0 flex-col gap-3 p-4"
         aria-label="统计加载中"
         role="status"
       >
@@ -95,12 +92,12 @@ export function BigStatCards({
             <Skeleton className="h-1.5 w-full" />
           </div>
         ))}
-      </section>
+      </Card>
     )
   }
 
   return (
-    <Card
+    <StatCard
       title="资源使用"
       className="animate-mcs-fade-up mcs-delay-2"
       eyebrow={
@@ -174,7 +171,7 @@ export function BigStatCards({
           barColor={primary ? diskBarColor(primary.percent) : undefined}
         />
       </div>
-    </Card>
+    </StatCard>
   )
 }
 
@@ -332,7 +329,7 @@ export function PlayersCard() {
   )
 
   return (
-    <Card
+    <StatCard
       title="在线玩家"
       className="animate-mcs-fade-up mcs-delay-1"
       eyebrow={
@@ -373,7 +370,7 @@ export function PlayersCard() {
         )}
       </div>
       {body}
-    </Card>
+    </StatCard>
   )
 }
 
@@ -416,7 +413,7 @@ export function RuntimeInfoCard() {
     : null
 
   return (
-    <Card
+    <StatCard
       title="实例信息"
       className="animate-mcs-fade-up mcs-delay-3"
       eyebrow={
@@ -443,7 +440,7 @@ export function RuntimeInfoCard() {
           </div>
         ))}
       </div>
-    </Card>
+    </StatCard>
   )
 }
 

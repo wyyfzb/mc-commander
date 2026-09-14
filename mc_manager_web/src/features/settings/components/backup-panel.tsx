@@ -40,6 +40,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { cn } from '@/lib/utils'
 import { StatusPill } from '@/components/mcs/status-pill'
+import { Card } from '@/components/mcs/card'
 import { toneClasses } from '@/components/mcs/tone'
 import {
   backupStatusLabel,
@@ -144,7 +145,7 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
   }
 
   return (
-    <div className="overflow-hidden rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted shadow-mcs-card">
+    <Card as="div" className="overflow-hidden">
       {/* 标题：图标 + 备份管理 */}
       <div className="flex items-center gap-2 px-4 pb-3 pt-4">
         <span
@@ -320,7 +321,7 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
         loading={deleteMutation.isPending}
         onConfirm={() => void handleDeleteConfirm()}
       />
-    </div>
+    </Card>
   )
 }
 

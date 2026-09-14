@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { worldTimePhase } from '@/lib/format'
 import { Chip } from '@/components/mcs/chip'
+import { Card, CardHeader, CardTitle } from '@/components/mcs/card'
 import { useServerStore } from '@/stores/server'
 import { useSendCommand } from '@/hooks/use-send-command'
 import { useRadioGroup } from '@/hooks/use-radio-group'
@@ -141,13 +142,13 @@ export function McClockCard() {
   })
 
   return (
-    <section className="animate-mcs-fade-up mcs-delay-5 mcs-edge-top relative flex shrink-0 flex-col rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted p-4 shadow-mcs-card">
-      <header className="flex items-center justify-between gap-2">
-        <h3 className="text-mcs-sm font-medium text-mcs-text-muted">MC 时钟 · 世界控制</h3>
+    <Card className="animate-mcs-fade-up mcs-delay-5 mcs-edge-top relative flex shrink-0 flex-col p-4">
+      <CardHeader className="justify-between gap-2">
+        <CardTitle>MC 时钟 · 世界控制</CardTitle>
         <span className="flex size-6 items-center justify-center rounded-full border border-mcs-border-muted text-mcs-text-muted">
           <Clock className="size-3.5" aria-hidden />
         </span>
-      </header>
+      </CardHeader>
 
       {/* 半圆弧昼夜进度（白天橙 / 夜晚靛；0-24000 全周期标尺） */}
       <svg
@@ -284,6 +285,6 @@ export function McClockCard() {
         </div>
       </div>
 
-    </section>
+    </Card>
   )
 }

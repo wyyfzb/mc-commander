@@ -35,6 +35,7 @@ import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { EmptyState } from '@/components/mcs/empty-state'
+import { Card } from '@/components/mcs/card'
 import { InstanceRequiredState } from '@/features/instances/components/instance-required-state'
 import { PageHeader } from '@/components/mcs/page-header'
 import { useServerStore } from '@/stores/server'
@@ -353,8 +354,9 @@ export function PluginsPage() {
 
       {/* ── 批量操作条 ── */}
       {selected.size > 0 && (
-        <div
-          className="flex flex-wrap items-center gap-2 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted px-4 py-2.5 shadow-mcs-card"
+        <Card
+          as="div"
+          className="flex flex-wrap items-center gap-2 px-4 py-2.5"
           data-testid="batch-bar"
         >
           <span className="text-mcs-sm text-mcs-text-default">
@@ -381,7 +383,7 @@ export function PluginsPage() {
           <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>
             取消选择
           </Button>
-        </div>
+        </Card>
       )}
 
       {/* ── 搜索（多插件时快速定位；过滤不改变统计数字） ── */}
@@ -444,7 +446,7 @@ export function PluginsPage() {
         </div>
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <div className="overflow-hidden rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted shadow-mcs-card">
+          <Card as="div" className="overflow-hidden">
             <ul className="divide-y divide-mcs-border-subtle">
               {filtered.map((plugin) => (
                 <PluginRow
@@ -465,7 +467,7 @@ export function PluginsPage() {
                 />
               ))}
             </ul>
-          </div>
+          </Card>
         </div>
       )}
 
