@@ -21,6 +21,7 @@ trae/
 # Agent 私有配置/技能/MCP（本机工作环境，不入库；AGENTS.md/CLAUDE.md 为社区版入库）
 .claude/
 .ai/
+.agent-teams/
 .zcode/
 .mimosa/
 .workbuddy/
