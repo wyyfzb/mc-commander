@@ -8,6 +8,7 @@
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Card } from '@/components/mcs/card'
 import { EmptyStateVisual, ErrorStateVisual } from '@/components/mcs/data-states'
 import { Pagination, type PaginationProps } from '@/components/mcs/pagination'
 
@@ -89,7 +90,8 @@ export function DataTableShell({
 
   return (
     <div className={className ?? 'flex min-h-0 flex-1 flex-col'}>
-      <div className="min-h-0 flex-1 overflow-auto rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted shadow-mcs-card">
+      {/* 表格外壳即卡片面：走 Card 基座，滚动与伸缩留给调用点 */}
+      <Card as="div" className="min-h-0 flex-1 overflow-auto">
         <table className="w-full text-mcs-sm">
           {header}
           {isLoading
@@ -102,7 +104,7 @@ export function DataTableShell({
                 ? (<tbody><EmptyRow colSpan={columns} text={emptyText} actions={emptyActions} /></tbody>)
               : children}
         </table>
-      </div>
+      </Card>
       {pagination && <Pagination {...pagination} />}
     </div>
   )

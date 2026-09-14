@@ -7,7 +7,8 @@
  *   3. transition-all（ui/ 由第 20 条覆盖）
  *   4. duration-{数字}（非 token 的硬编码时长；ui/ 由第 20 条覆盖）
  *   5. rounded-[ 任意值圆角
- *   6. Tailwind 原生字号 3xl 及以上（原生字号上限 2xl；数字面板可走 --mcs-font-size-display（30px），须与 .mcs-num 同用）
+ *   6. Tailwind 原生字号 3xl 及以上（原生字号上限 2xl；本仓文字档上限 text-mcs-xl（22px）；
+ *      数字面板可走 --mcs-font-size-display（30px），须与 .mcs-num 同用，不占文字档位）
  *   7.（空缺保留）原紧急页字重限定：/emergency 页已移除，后续编号不重排以免外部引用失效
  *   8. 焦点可见性：outline-none 与 focus-visible:outline-* 同处 utilities 层会互相抵消
  *      （outline-style 恒为 none，焦点环零绘制），未补 ring 兜底即报错
@@ -22,17 +23,34 @@
  *      （含词表间接写法：同一次 cn/clsx 或同一模板串里 `toneClasses()` 与字面量 tint 共存）
  *      ＋ 六档语义色三件套只允许声明在 components/mcs/tone.ts（别处整串写出一档的
  *      border+bg-subtle+fg 即又抄了一份词表；测试与 tone.ts 自身除外），accent 的
- *      「选中强调」形态（border-strong+bg-subtle 同串共现，三件套与把 fg 留给子元素的
+ *      「选中强调」形态（border-strong+bg-subtle 同处共现，三件套与把 fg 留给子元素的
  *      两件套容器两种现场同判）同样只允许出自 tone.ts 的 TONE_SELECTED_* 常量。
  *      注：11b/11c 走 walkDir(srcDir)，即**只扫 src/ 且不含 components/ui/**，不覆盖 e2e/ 与
- *      scripts/；两条判定面都限「同一字面量内共现」——三件套要求 border+bg-subtle+fg 全串写全，
- *      选中形态要求 border-strong+bg-subtle 同串（容器在一条串、前景拆到子元素时按容器串判；
- *      跨 cn() 参数拆写两件套则不判，属宁漏不误报，与三件套同款限制）
+ *      scripts/；三条声明源判定（词表 tint 叠加 / 六档三件套 / accent 选中强调）的面都是
+ *      **一次 cn/clsx 调用的实参表**——同一次调用的不同实参拆写与单个字面量内共现同判
+ *      （跨行按括号配平，嵌套调用只取最外层）；模板串另按整串判（cn 之外的常见写法）。
+ *      弱档「容器 border+bg / 子元素 fg」的拆写形态**刻意不判**（口径＝维持现状，词表不收
+ *      弱档容器，代表点 features/players/components/batch-bar.tsx:111）：弱档描边仅装饰
+ *      （暗 25% / 亮 30% alpha），现网 12 处合法着色点覆盖六档语义色，收进判定面只会大面积
+ *      误报——属宁漏不误报。
  *  16. Z 轴阶梯：禁裸 z-<数字>（类名 / 内联 zIndex / CSS z-index）
  *  17. 玻璃预算：全站各 1 处（顶栏 glass-chrome + 覆盖层 glass-overlay）
  *  18. 危险语义色禁半透明底：bg-destructive/<alpha>
  *  19. 内容面 tint 必须不透明
  *  20. 布局属性动画（transition-all）与数字时长档（duration-<数字>），含 ui/ 基座
+ * 六条门禁（第 21–26 条，J23；扫描 src/ 全量，排除项在各条内声明）：
+ *  21. 卡片面类名（配方）只允许声明在 components/mcs/card.tsx——非卡片面但共用
+ *      `shadow-mcs-card` 标记的现场按「登记额度」豁免（额度外的第 N 处即报，豁免的是现场
+ *      而非整个文件）
+ *  22. 标签组件唯一性：只读状态 StatusPill / 可交互 Chip / 计数 CountBadge，禁第四套标签组件、
+ *      已删除的 shadcn ui/badge 引用与重建；判定面是组件声明、模块引用与基座文件存在性
+ *      （行内胶囊着色点不判）
+ *  23. 页面页头：AppShell 主页面必须有且仅有一个 PageHeader，且该页标题字号档 ≤3
+ *  24. 全屏覆盖层必须来自 ui/sheet 或 ui/dialog（禁裸 z-modal 全屏容器 / aside）
+ *  25. 行内 onKeyDown 对空格/回车 preventDefault 前必须判落点（e.target）——否则容器会吞掉
+ *      行内控件自己的激活键；宿主是 input/textarea 时其默认行为属控件自身，不判
+ *  26. 内联 style 的 width/height 必须是数值或含单位字符串（传 Tailwind 类名会被浏览器当
+ *      非法 CSS 丢弃——骨架列宽曾整片失效）
  * 类名提取覆盖 className="..."、className={cn(...)}、模板字面量、对象映射值（如 tone: 'bg-...'），
  * 不留「只在 className 字面属性里才检查」的盲区。
  * 发现违规 → 输出 文件:行号 → 非零退出码（阻止合并）
@@ -55,11 +73,14 @@ const PALETTE_COLORS = new Set([
 function readRegistered() {
   const indexCss = readFileSync(join(srcDir, 'index.css'), 'utf-8')
   const effectsCss = readFileSync(join(srcDir, 'styles', 'effects.css'), 'utf-8')
-  const collect = (css, re) => new Set([...css.matchAll(re)].map((m) => m[1]))
+  // keep：Tailwind v4 的配对行高子键（--text-mcs-sm--line-height）会被贪婪捕获成
+  // `sm--line-height`，须排除——否则产出假档名 text-mcs-sm--line-height（未注册 → 误报）
+  const collect = (css, re, keep = () => true) =>
+    new Set([...css.matchAll(re)].map((m) => m[1]).filter(keep))
   return {
     color: collect(indexCss, /--color-mcs-([\w-]+)\s*:/g),
     radius: collect(indexCss, /--radius-mcs-([\w-]+)\s*:/g),
-    text: collect(indexCss, /--text-mcs-([\w-]+)\s*:/g),
+    text: collect(indexCss, /--text-mcs-([\w-]+)\s*:/g, (name) => !name.endsWith('--line-height')),
     duration: collect(indexCss, /--duration-mcs-([\w-]+)\s*:/g),
     ease: collect(indexCss, /--ease-mcs-([\w-]+)\s*:/g),
     shadow: collect(indexCss, /--shadow-mcs-([\w-]+)\s*:/g),
@@ -261,22 +282,15 @@ function stripComments(content) {
 }
 
 /**
- * 内容面 tint 叠加（词表侧）：`toneClasses()` / `SEMANTIC_TONE_CLASSES[...].bg` 的产出也是
- * 内容面 tint，与字面量 tint 落在同一处着色（同一次 cn/clsx 调用，或同一个模板串）即叠加。
- * 逐行数字面量的那条看不见这种间接写法，而语义色收归词表后恰是常见形态。
- * 启发式边界：跨行按括号配平取实参表；未配平、以及「先赋值再传入」的变量中转过都不判
- * （宁漏不误报）；同一处嵌套（cn 里套 cn/clsx）只计一次。返回 [{ offset, end }]。
+ * 一次 `cn`/`clsx` 调用的实参表（J70）：从 `(` 起按括号配平取到配对右括号，跨行；
+ * 嵌套调用只取最外层（内层实参本就是外层实参的片段，重复计入会让同一处报两次）；
+ * 未配平（写法异常）跳过。语义色形态的三条判定（三件套 / 选中强调 / 词表 tint 叠加）
+ * 都在这张表上做，口径因此统一：**同一次调用的不同实参拆写与单串共现同判**；
+ * 「先赋值再传入」的变量中转过看不见（宁漏不误报）。返回 [{ offset, end, args }]。
  */
-function findToneTintOverlaps(content) {
-  const code = stripComments(content)
-  // 80 是属性访问写法（SEMANTIC_TONE_CLASSES[tone].bg）的向后搜索窗口，现网最长约 40 字符
-  const TINT_SOURCE = /toneClasses\(|SEMANTIC_TONE_CLASSES[\s\S]{0,80}?\.bg\b/
-  const TINT_LITERAL = /bg-mcs-[\w-]+-bg-subtle/
+function cnCallArgTables(code) {
   const hits = []
   const covered = (offset) => hits.some((h) => offset > h.offset && offset < h.end)
-  /** 已被命中区间整段包住（模板串里套 cn 的情形）→ 同处不再重复计数 */
-  const wraps = (start, end) => hits.some((h) => start <= h.offset && end >= h.end)
-
   for (const m of code.matchAll(/\b(?:cn|clsx)\(/g)) {
     if (covered(m.index)) continue
     const start = m.index + m[0].length
@@ -288,14 +302,46 @@ function findToneTintOverlaps(content) {
       i++
     }
     if (depth > 0) continue
-    const args = code.slice(start, i - 1)
-    if (TINT_SOURCE.test(args) && TINT_LITERAL.test(args)) hits.push({ offset: m.index, end: i })
+    hits.push({ offset: m.index, end: i, args: code.slice(start, i - 1) })
+  }
+  return hits
+}
+
+/** 字面量的整词集合（'a b' → {a,b}）；形态判定一律整词比对，不做子串包含 */
+function literalTokens(literal) {
+  return new Set(literal.slice(1, -1).split(/\s+/).filter(Boolean))
+}
+
+/** 实参表里所有字面量的词集合（含嵌套 cn/clsx 与数组/对象实参里的字面量） */
+function argTokens(args) {
+  const tokens = new Set()
+  for (const m of args.matchAll(STRING_LITERAL)) for (const t of literalTokens(m[0])) tokens.add(t)
+  return tokens
+}
+
+/**
+ * 内容面 tint 叠加（词表侧）：`toneClasses()` / `SEMANTIC_TONE_CLASSES[...].bg` 的产出也是
+ * 内容面 tint，与字面量 tint 落在同一处着色（同一次 cn/clsx 调用，或同一个模板串）即叠加。
+ * 逐行数字面量的那条看不见这种间接写法，而语义色收归词表后恰是常见形态。
+ * 返回 [{ offset, end }]。
+ */
+function findToneTintOverlaps(content) {
+  const code = stripComments(content)
+  // 80 是属性访问写法（SEMANTIC_TONE_CLASSES[tone].bg）的向后搜索窗口，现网最长约 40 字符
+  const TINT_SOURCE = /toneClasses\(|SEMANTIC_TONE_CLASSES[\s\S]{0,80}?\.bg\b/
+  const TINT_LITERAL = /bg-mcs-[\w-]+-bg-subtle/
+  const hits = []
+
+  for (const call of cnCallArgTables(code)) {
+    if (TINT_SOURCE.test(call.args) && TINT_LITERAL.test(call.args)) hits.push({ offset: call.offset, end: call.end })
   }
 
-  // 模板串：同一个串里两种来源并存（cn 之外的常见写法）
+  // 模板串：同一个串里两种来源并存（cn 之外的常见写法）；已被 cn 命中区间包住的不重复计数
   for (const m of code.matchAll(/`(?:[^`\\]|\\.)*`/g)) {
     const end = m.index + m[0].length
-    if (covered(m.index) || wraps(m.index, end)) continue
+    const insideCall = hits.some((h) => m.index > h.offset && m.index < h.end)
+    const wrapsCall = hits.some((h) => m.index <= h.offset && end >= h.end)
+    if (insideCall || wrapsCall) continue
     if (TINT_SOURCE.test(m[0]) && TINT_LITERAL.test(m[0])) hits.push({ offset: m.index, end })
   }
   return hits
@@ -303,6 +349,8 @@ function findToneTintOverlaps(content) {
 
 /**
  * 六档语义色的「静态三件套」声明源只有 mcs/tone.ts。
+ * 判定面＝一次 cn/clsx 调用的实参表 ∪ 单个字面量：三件套拆到同一次调用的不同实参里同样算
+ * 手写（J70 扩面），拆到不同调用、不同元素上则看不见（宁漏不误报）。
  * 按空白切词做**整词**比对（不用子串包含）：`border-mcs-accent-border-strong` 是另一档
  * 描边（选中强调，由下面 findHandwrittenSelectedShapes 单独判定）、`hover:bg-mcs-*-bg-subtle`
  * 是交互覆盖层而非内容面 tint，两者都不算手写三件套，不能被误报。
@@ -310,17 +358,27 @@ function findToneTintOverlaps(content) {
 const TONE_TRIAD_NAMES = ['accent', 'success', 'warning', 'error', 'info', 'purple']
 const STRING_LITERAL = /'[^'\n]*'|"[^"\n]*"|`(?:[^`\\]|\\.)*`/g
 
+/** 三件套命中（整词）：返回档名或 undefined */
+function triadToneOf(tokens) {
+  return TONE_TRIAD_NAMES.find(
+    (t) =>
+      tokens.has(`border-mcs-${t}-border`) &&
+      tokens.has(`bg-mcs-${t}-bg-subtle`) &&
+      tokens.has(`text-mcs-${t}-fg`),
+  )
+}
+
 function findHandwrittenToneTriads(content) {
   const code = stripComments(content)
   const hits = []
+  const inside = (offset) => hits.some((h) => offset > h.offset && offset < (h.end ?? h.offset + 1))
+  for (const call of cnCallArgTables(code)) {
+    const tone = triadToneOf(argTokens(call.args))
+    if (tone) hits.push({ offset: call.offset, end: call.end, tone })
+  }
   for (const m of code.matchAll(STRING_LITERAL)) {
-    const tokens = new Set(m[0].slice(1, -1).split(/\s+/).filter(Boolean))
-    const tone = TONE_TRIAD_NAMES.find(
-      (t) =>
-        tokens.has(`border-mcs-${t}-border`) &&
-        tokens.has(`bg-mcs-${t}-bg-subtle`) &&
-        tokens.has(`text-mcs-${t}-fg`),
-    )
+    if (inside(m.index)) continue
+    const tone = triadToneOf(literalTokens(m[0]))
     if (tone) hits.push({ offset: m.index, tone })
   }
   return hits
@@ -328,9 +386,10 @@ function findHandwrittenToneTriads(content) {
 
 /**
  * 选中强调形态（J57）：`border-mcs-accent-border-strong` 与 `bg-mcs-accent-bg-subtle`
- * **同串共现**即为手写选中态。词表的两个形状都由这两个 token 构成——
- * 三件套 `TONE_SELECTED_CLASSES` 与两件套容器 `TONE_SELECTED_SURFACE_CLASSES`
- * （后者把前景留给子元素），故一条判定同时覆盖两种现场；声明源只有 components/mcs/tone.ts。
+ * 同处共现（同一次 cn/clsx 调用的实参表，或单个字面量）即为手写选中态。词表的两个形状都由
+ * 这两个 token 构成——三件套 `TONE_SELECTED_CLASSES` 与两件套容器
+ * `TONE_SELECTED_SURFACE_CLASSES`（后者把前景留给子元素），故一条判定同时覆盖两种现场；
+ * 声明源只有 components/mcs/tone.ts。
  * 仍是**整词**比对：`border-mcs-accent-border`（弱档）是普通内容面描边，
  * 与强档语义不同，不能被子串包含误收。
  * 只有 accent 有「内容面强档」token：`--mcs-error-border-strong` 虽存在，
@@ -341,9 +400,14 @@ const SELECTED_SHAPE_TOKENS = ['border-mcs-accent-border-strong', 'bg-mcs-accent
 function findHandwrittenSelectedShapes(content) {
   const code = stripComments(content)
   const hits = []
+  const inside = (offset) => hits.some((h) => offset > h.offset && offset < (h.end ?? h.offset + 1))
+  const isShape = (tokens) => SELECTED_SHAPE_TOKENS.every((t) => tokens.has(t))
+  for (const call of cnCallArgTables(code)) {
+    if (isShape(argTokens(call.args))) hits.push({ offset: call.offset, end: call.end })
+  }
   for (const m of code.matchAll(STRING_LITERAL)) {
-    const tokens = new Set(m[0].slice(1, -1).split(/\s+/).filter(Boolean))
-    if (SELECTED_SHAPE_TOKENS.every((t) => tokens.has(t))) hits.push({ offset: m.index })
+    if (inside(m.index)) continue
+    if (isShape(literalTokens(m[0]))) hits.push({ offset: m.index })
   }
   return hits
 }
@@ -660,8 +724,220 @@ for (const f of G9_FILES) {
   })
 }
 
+// ── G21–G26（J23 门禁六条）：src/ 全量静态防线 ────────────────────────
+// 前 20 条按各自的扫描集（逐行 1–11 排除 ui/；12–20 含 ui/ 与 e2e/），这六条统一扫 src/ 全量。
+const GATE_FILES = G9_FILES.filter((f) => f.startsWith(srcDir))
+const GATE_REL = (f) => relative(root, f).split(sep).join('/')
+/** 用例按定义就要断言类名/文案（同 11b/11c 的豁免口径），不进判定面 */
+const isTestFile = (f) => f.includes('__tests__')
+const lineAt = (text, offset) => text.slice(0, offset).split('\n').length
+
+// 21. 卡片面类名只在 components/mcs/card.tsx 声明：配方 = rounded-mcs-md + border-mcs-border-muted
+//     + bg-mcs-bg-muted + shadow-mcs-card，以 `shadow-mcs-card`（卡阴影无第二用途）为判定标记；
+//     非卡片面但共用该标记的现场按「登记额度」豁免——额度外的第 N 处即报（豁免的是现场，不豁免
+//     整个文件）。额度是裁定结果而非白名单：7 处里只有「同配方」与「仅共用卡阴影」两种来源，
+//     逐条理由见下表；新写一处卡面会被额度拒收，不因同文件已豁免而放过。
+const CARD_DECLARATION_SOURCE = 'src/components/mcs/card.tsx'
+const CARD_SURFACE_ALLOWLIST = new Map([
+  ['src/components/mcs/empty-state.tsx', 1],                    // 空态插画底座：ring-1 ring-mcs-border-muted 代 border，非卡片面配方
+  ['src/layouts/app-sidebar.tsx', 1],                           // 侧栏实例摘要条：导航区部件，不是页面内容卡片
+  ['src/features/dashboard/components/server-terminal.tsx', 1], // 终端深底面：底色走 --mcs-terminal-*（主题无关），无卡底色
+  ['src/features/instances/components/instance-cards.tsx', 1],  // 卡内数值栅格：rounded-mcs-sm + bg-mcs-bg-default，档位不同
+  ['src/features/settings/settings-page.tsx', 1],               // 设置页子导航轨道：侧向导航，不是内容卡片
+  ['src/features/tasks/components/cron-editor.tsx', 1],         // 表单内嵌块 p-2（非内容分组）
+  ['src/features/tasks/components/task-dialog.tsx', 1],         // 表单内嵌块 p-2（同上）
+])
+for (const f of GATE_FILES) {
+  if (f.endsWith('.css') || isTestFile(f)) continue
+  const rel = GATE_REL(f)
+  if (rel === CARD_DECLARATION_SOURCE) continue
+  const code = stripComments(readFileSync(f, 'utf-8'))
+  const offsets = [...code.matchAll(/shadow-mcs-card/g)].map((m) => m.index)
+  for (const offset of offsets.slice(CARD_SURFACE_ALLOWLIST.get(rel) ?? 0)) {
+    console.log(`${rel}:${lineAt(code, offset)}: 卡片面类名配方（shadow-mcs-card）→ 卡片面只在 components/mcs/card.tsx 声明（AGENTS.md「卡片容器」）；非卡片面的同配方现场须登记豁免额度`)
+    violations++
+  }
+}
+
+// 22. 标签组件唯一性：只读状态 = StatusPill、可交互/通用 = Chip、计数 = CountBadge，
+//     禁第四套标签组件。三条判定面：①除三件基座外新导出 Badge/Pill/Tag 命名的组件或精确的
+//     Chip；②引用已删除的 shadcn ui/badge（模块路径或 `<Badge` 用法，`\b` 保证不误收图标
+//     `BadgeCheck`）；③ui/badge.tsx 文件本身被重建（零引用也算重蹈覆辙）。
+//     `*Chip` 不判：本仓它是领域复合部件名（如快捷传送点 QuickChip：双行内容 + 编辑/删除
+//     按钮，不是标签胶囊）。行内胶囊着色点（通知未读浮标、状态点、更新按钮）形状各异且多为
+//     局部叠加，静态判定会误报，不判。
+const LABEL_COMPONENT_SOURCES = new Set([
+  'src/components/mcs/chip.tsx',
+  'src/components/mcs/status-pill.tsx',
+  'src/components/mcs/count-badge.tsx',
+])
+const LABEL_COMPONENT_DECL = /export\s+(?:function|const)\s+([A-Z]\w*(?:Badge|Pill|Tag)|Chip)\b/g
+const BADGE_MODULE_REF = /(?:components\/ui\/badge|@\/components\/badge)\b|<Badge\b/g
+const RETIRED_BADGE_FILE = join(srcDir, 'components', 'ui', 'badge.tsx')
+if (existsSync(RETIRED_BADGE_FILE)) {
+  console.log(`${GATE_REL(RETIRED_BADGE_FILE)}: 已删除的 shadcn badge 基座被重建 → 状态标签走 StatusPill / Chip / CountBadge`)
+  violations++
+}
+for (const f of GATE_FILES) {
+  if (f.endsWith('.css') || isTestFile(f)) continue
+  const rel = GATE_REL(f)
+  const code = stripComments(readFileSync(f, 'utf-8'))
+  if (!LABEL_COMPONENT_SOURCES.has(rel)) {
+    for (const m of code.matchAll(LABEL_COMPONENT_DECL)) {
+      console.log(`${rel}:${lineAt(code, m.index)}: 新导出标签组件 ${m[1]} → 标签只有 Chip / StatusPill / CountBadge 三件（AGENTS.md「标签与状态展示」）`)
+      violations++
+    }
+  }
+  for (const m of code.matchAll(BADGE_MODULE_REF)) {
+    console.log(`${rel}:${lineAt(code, m.index)}: 引用已删除的 badge 基座 → 状态标签走 StatusPill / Chip / CountBadge`)
+    violations++
+  }
+}
+
+// 23. 页面页头：AppShell 主页面必须有且仅有一个 PageHeader（页头是页面级唯一标题声明点），
+// 23. 页面页头：AppShell 主页面必须有且仅有一个 PageHeader（页头是页面级唯一标题声明点），
+//     且该页标题字号档 ≤3——口径＝页头基座 xl + 卡片标题基座 sm + 标题标签上的显式档。
+//     档位按「heading 标签所在行的 text-mcs-* 类」收集（同行判定，类名换行写看不见，宁漏不误报）。
+//     登录页/引导页是全屏品牌入口，不在 AppShell 内、标题由自身 h1 承担，显式豁免。
+//     引导页实测同屏有两个 h1（欢迎区 + 连接表单，不是互斥渲染）——那是该页自身的品牌+表单
+//     结构，本轮口径维持不改；把它拆成 h1+h2 是可见结构变更，与本条要防的
+//     「AppShell 页漏页头 / 标题档位发散」不同源。
+const APP_SHELL_PAGE_EXEMPT = new Set([
+  'src/features/auth/login-page.tsx',
+  'src/features/onboarding/onboarding-page.tsx',
+])
+const HEADING_TAG_LINE = /<h[1-6][\s>]/
+const MCS_SIZE_CLASS = /text-mcs-(2xs|xs|sm|md|lg|xl|display)\b/g
+for (const f of GATE_FILES) {
+  if (f.endsWith('.css') || isTestFile(f)) continue
+  const rel = GATE_REL(f)
+  if (!/-page\.tsx$/.test(rel) || APP_SHELL_PAGE_EXEMPT.has(rel)) continue
+  const code = stripComments(readFileSync(f, 'utf-8'))
+  const headerCount = [...code.matchAll(/<PageHeader\b/g)].length
+  if (headerCount !== 1) {
+    console.log(`${rel}: 页面必须有且仅一个 PageHeader（当前 ${headerCount} 个）→ 标题与描述只在页头声明`)
+    violations++
+  }
+  const tiers = new Set(['xl'])
+  if (/\bCardTitle\b/.test(code)) tiers.add('sm')
+  for (const line of code.split('\n')) {
+    if (!HEADING_TAG_LINE.test(line)) continue
+    for (const m of line.matchAll(MCS_SIZE_CLASS)) tiers.add(m[1])
+  }
+  if (tiers.size > 3) {
+    console.log(`${rel}: 页内标题字号档 ${tiers.size} 档（${[...tiers].sort().join('/')}）→ 同屏标题最多 3 档`)
+    violations++
+  }
+}
+
+// 24. 全屏覆盖层必须来自 ui/sheet 或 ui/dialog：modal 档（z-modal）的全屏容器（fixed/inset-0）
+//     或 aside 不得在 feature/layout 里裸搭。overlay 档（抽屉背板、移动端全屏编辑器）是遮罩与
+//     局部覆盖、不承担弹窗语义，不在判定面；同行判定，跨行写法看不见（宁漏不误报）。
+const OVERLAY_SOURCES = new Set(['src/components/ui/sheet.tsx', 'src/components/ui/dialog.tsx'])
+for (const f of GATE_FILES) {
+  if (f.endsWith('.css')) continue
+  const rel = GATE_REL(f)
+  if (OVERLAY_SOURCES.has(rel)) continue
+  readFileSync(f, 'utf-8').split('\n').forEach((line, i) => {
+    const code = codeOnly(line)
+    if (!code) return
+    if (
+      /z-\(--mcs-z-modal\)/.test(code) &&
+      (/fixed/.test(code) || /inset-0/.test(code) || /<aside\b/.test(code))
+    ) {
+      console.log(`${rel}:${i + 1}: 裸 z-modal 全屏覆盖层 → 全屏面板走 ui/sheet / ui/dialog`)
+      violations++
+    }
+  })
+}
+
+// 25. 行内 onKeyDown 抢键：对空格/回车调 preventDefault 的处理器必须先判落点
+//     （`e.target !== e.currentTarget` 等），否则容器会吞掉行内控件自己的激活键——
+//     落点写在 preventDefault 的最近外层 if 条件里，故按「preventDefault 的分支条件」判定，
+//     同一次处理器里另有按键分支不误伤（如输入框只对方向键 preventDefault）。
+//     宿主是 input/textarea 时其 Space/Enter 默认行为属控件自身（无冒泡抢键面），不判；
+//     `onKeyDown={handleKeyDown}` 这类具名引用不在「行内」判定面。
+const KEYBOARD_HOST_EXEMPT = /^<(?:input|textarea|Input|Textarea|Select|Combobox)\b/
+const SPACE_ENTER_KEY = /(?:^|[^\w])(?:Enter|Space|Spacebar)(?:[^\w]|$)|['"`] ['"`]/
+/** preventDefault 的最近外层 if 条件里出现空格/回车键名 → 该次拦截属抢键
+ *  （`if (...) {` 与单语句 `if (...) ` 两种写法都认；`e.` 接收者前缀不算条件内容） */
+function interceptsSpaceOrEnter(body) {
+  for (const m of body.matchAll(/preventDefault\s*\(/g)) {
+    const before = body.slice(0, m.index)
+    const cond = /if\s*\(([^()]*(?:\([^()]*\)[^()]*)*)\)\s*\{?\s*[\w$.\s]*$/.exec(before)
+    if (cond && SPACE_ENTER_KEY.test(cond[1])) return true
+  }
+  return false
+}
+/** 该 onKeyDown 属性所在的 JSX 起始标签名（最近的前一个 `<`） */
+function hostTagBefore(content, offset) {
+  const start = content.lastIndexOf('<', offset)
+  const m = start < 0 ? null : content.slice(start, offset).match(/^<\/?[A-Za-z][\w.]*/)
+  return m ? m[0] : ''
+}
+for (const f of GATE_FILES) {
+  if (f.endsWith('.css')) continue
+  const rel = GATE_REL(f)
+  const content = readFileSync(f, 'utf-8')
+  for (const m of content.matchAll(/onKeyDown=/g)) {
+    const brace = content.indexOf('{', m.index)
+    if (brace < 0) continue
+    let depth = 1
+    let i = brace + 1
+    while (i < content.length && depth > 0) {
+      if (content[i] === '{') depth++
+      else if (content[i] === '}') depth--
+      i++
+    }
+    if (depth > 0) continue
+    const body = content.slice(brace + 1, i - 1)
+    if (!interceptsSpaceOrEnter(body)) continue
+    if (/\.target\b/.test(body)) continue
+    if (KEYBOARD_HOST_EXEMPT.test(hostTagBefore(content, m.index))) continue
+    console.log(`${rel}:${lineAt(content, m.index)}: 行内 onKeyDown 对空格/回车 preventDefault 却未判落点 → 先判 e.target（容器会吞掉行内控件自己的激活键）`)
+    violations++
+  }
+}
+
+// 26. 内联 style 的 width/height 必须是数值或含单位字符串：传 Tailwind 类名会被浏览器当非法
+//     CSS 丢弃（骨架列宽曾整片失效）。数值字面量/变量/表达式静态不可判，不判（宁漏不误报）；
+//     模板插值的动态值单位在运行时拼出，同样不判。
+const SIZE_STYLE_KEY = /\b(?:min|max)?(?:width|height)\s*:\s*/gi
+/** 单位必须紧跟数值（`100%` / `2rem`）；裸关键词与无单位零值都是合法 CSS */
+const CSS_LENGTH_OK = /[\d.](?:px|rem|em|%|vh|vw|vmin|vmax|ch|ex|pt|pc|cm|mm|in|q)(?![\w])/i
+const CSS_SIZE_KEYWORD_OK = /^(?:0|auto|fit-content|max-content|min-content|stretch|inherit|initial|unset|revert|none)$/i
+for (const f of GATE_FILES) {
+  if (f.endsWith('.css')) continue
+  const rel = GATE_REL(f)
+  const content = readFileSync(f, 'utf-8')
+  for (const m of content.matchAll(/style=\{\{/g)) {
+    const start = m.index + m[0].length - 1
+    let depth = 1
+    let i = start + 1
+    while (i < content.length && depth > 0) {
+      if (content[i] === '{') depth++
+      else if (content[i] === '}') depth--
+      i++
+    }
+    if (depth > 0) continue
+    const object = content.slice(start + 1, i - 1)
+    for (const k of object.matchAll(SIZE_STYLE_KEY)) {
+      const value = object.slice(k.index + k[0].length).split(/[,}]/)[0].trim()
+      const literal = /^(['"`])([\s\S]*)\1$/.exec(value)
+      if (!literal) continue
+      const inner = literal[2]
+      if (inner.includes('${')) continue
+      if (CSS_SIZE_KEYWORD_OK.test(inner)) continue
+      if (CSS_LENGTH_OK.test(inner)) continue
+      if (/\b(?:calc|var|clamp|min|max)\(/.test(inner)) continue
+      console.log(`${rel}:${lineAt(content, m.index)}: 内联 style 的 ${k[0].trim()} 值「${inner}」不含单位 → 必须是数值或含单位字符串（传类名会被浏览器忽略）`)
+      violations++
+    }
+  }
+}
+
 if (violations > 0) {
   console.error(`\n✗ 发现 ${violations} 处设计 token 违规（设计规范 §4.5）`)
   process.exit(1)
 }
-console.log('✓ 设计 token 完整性检查通过（色板类/dark:/transition-all/duration-数字/rounded-任意值/字号上限/焦点可见性/未注册 token 类/token 角色矩阵/alpha 白名单/未定义类/死类/死 token/内容面 tint 叠加/语义色三件套与选中强调形态声明源/Z 轴阶梯/玻璃预算/危险半透明底/内容面 tint 不透明/布局属性动画）')
+console.log('✓ 设计 token 完整性检查通过（色板类/dark:/transition-all/duration-数字/rounded-任意值/字号上限/焦点可见性/未注册 token 类/token 角色矩阵/alpha 白名单/未定义类/死类/死 token/内容面 tint 叠加/语义色三件套与选中强调形态声明源/Z 轴阶梯/玻璃预算/危险半透明底/内容面 tint 不透明/布局属性动画/卡片面声明源/标签组件唯一性/页面页头与标题档/全屏覆盖层来源/行内抢键落点/内联尺寸单位）')

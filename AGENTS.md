@@ -67,6 +67,10 @@ npm run dev                  # node --watch 热重载
   不占文字档位）、交互悬浮只有一档（`--mcs-state-hover`，
   `--mcs-bg-secondary` 是静态次级面不是 hover 态）；圆角只有一套档位（6/8/12/16px，
   shadcn 的 `--radius-*` 直接绑定 `--mcs-radius-*`）。
+  字号只有 6 个**文字档**（22/18/14/14/12/10，逐档配对行高：xl 1.3 / lg 1.4 / md 1.5 /
+  sm 1.6 / xs 1.5 / 2xs 1.5），两个 14px 档语义不同——`sm` 是正文基准、`md` 是强调正文
+  （同尺寸靠字重与收紧行高区分）；`display`（30px）是**非文字数字档**，只随 `.mcs-num`
+  用于 KPI 等数字面板，不占文字档位。
 - **tint 两类**：承载文字/图标的内容面（`--mcs-{status,accent,dimension}-bg-subtle`）**必须不透明**
   （`color-mix(色 N%, 基面)`）——半透明 tint 的有效色随宿主面漂移，最亮浮层上文字会跌破 4.5:1；
   不承载文字的交互覆盖层（`--mcs-state-hover/focus/pressed`、`--mcs-scrim*`）保持半透明。
@@ -75,7 +79,8 @@ npm run dev                  # node --watch 热重载
 - **标签与状态展示**：只读状态用 `components/mcs/status-pill.tsx`（`StatusPill`），
   可交互/通用标签用 `components/mcs/chip.tsx`（`Chip`），计数用 `components/mcs/count-badge.tsx`
   （`CountBadge`，定位＝数量/条数；不是状态，也不是版本号、百分比与带单位规格值）——只允许这三件，
-  不存在第四套标签组件，也不要再造。
+  不存在第四套标签组件，也不要再造（门禁第 22 条拦新导出的 `*Badge/*Pill/*Tag` 组件、
+  已删除的 shadcn `ui/badge` 的引用与重建）。
   语义色唯一声明源是 `components/mcs/tone.ts`（六档 accent/success/warning/error/info/purple，
   各含 border + bg-subtle + fg；另有 accent 的选中/激活形态 `TONE_SELECTED_CLASSES`
   三件套与 `TONE_SELECTED_SURFACE_CLASSES` 两件套容器——强档描边 `-border-strong`
@@ -84,14 +89,24 @@ npm run dev                  # node --watch 热重载
 - **卡片容器**：卡片容器基座是 `components/mcs/card.tsx`（`Card`/`CardHeader`/`CardTitle`/`CardBody`）
   ——卡片面（圆角 + 描边 + 卡片底色 + 卡阴影）在基座声明，padding 与内部布局（flex/间距）仍由调用点
   按容器档位用 `className` 给；默认元素 `section`，元素语义不同时用 `as` 声明。
+  卡片面配方不得在别处另写一份（门禁第 21 条以 `shadow-mcs-card` 为标记拦截）；现网有 7 处
+  共用该标记的非卡片面现场（空态插画底座、侧栏摘要条、终端深底面、卡内数值栅格、设置页
+  子导航轨道、表单内嵌块 ×2）已在门禁里登记豁免额度——那是在豁免具体现场（额度外的第 N 处
+  照样报错），不是允许新写卡片面。
 - **间距**：不设 `--mcs-space-*`，统一走 Tailwind 默认 4px 刻度（`--spacing` 0.25rem）；
   结构间距必须 4px 倍数，组件内微节奏（2px 档）须在 PR 说明理由。
   容器档位固定：大面板 `p-6` / 标准卡 `p-4` / 紧凑卡 `p-3` / 横向卡 `px-4 py-3` /
   密集条 `px-3 py-2` / 内嵌块 `p-2`；语义告警条一律用 `components/mcs/notice-banner.tsx`
-  （`px-2.5 py-1.5`），多行告警卡用 `p-3`。
+  （`px-2.5 py-1.5`），多行告警卡用 `p-3`。内联 `style` 的 `width`/`height` 必须是数值或含单位
+  字符串——传 Tailwind 类名会被浏览器当非法 CSS 丢弃（门禁第 26 条静态拦截）。
+- **页面结构**：AppShell 主页面有且仅有一个 `components/mcs/page-header.tsx`（`PageHeader`），
+  标题与描述只在页头声明；同屏标题字号档 ≤3（页头 `xl` + 卡片标题 `sm` + 显式档）。
+  登录页/引导页是全屏品牌入口，不在 AppShell 内，由自身 `h1` 承担标题（门禁第 23 条静态拦截）。
 - **Z 轴**：禁裸 `z-<数字>`，一律 `z-(--mcs-z-*)`（阶梯见 `semantic.css`：
   local 10 / overlay 40 / modal 50 / dropdown 60 / tooltip 70 / toast 80；
   下拉必须高于弹窗——Radix 弹层挂在 body 末尾，弹窗内的 Select 要盖过遮罩才可点）。
+  全屏覆盖层（`modal` 档）只出自 `ui/sheet` / `ui/dialog`，禁在 feature/layout 里裸搭
+  全屏容器或 `aside`（门禁第 24 条静态拦截）。
 - **玻璃预算**：同屏 ≤2 层——常驻 1 处（顶栏 `glass-chrome`）+ 覆盖层 1 处（确认弹窗 `glass-overlay`）；
   门禁按「全站各 1 处」的静态口径校验（同屏无法静态判定），见 `check-design-tokens.mjs` 第 17 条；
   侧栏/通知抽屉/toast 一律实底（玻璃内含滚动容器时 backdrop 每次重绘都要重算模糊）。
@@ -101,6 +116,8 @@ npm run dev                  # node --watch 热重载
   （仅靠 `focus:bg-accent` 在弹窗面上只有 1.1:1）。注意：Radix 指针移动也会移动 DOM 焦点，
   实测 Chromium 下 `focus-visible:` 对指针 hover 同样匹配 → 该环在指针悬停时也会出现，
   这是为可访问性接受的取舍，不要为此改回 `outline-hidden`。
+  行内 `onKeyDown` 对空格/回车 `preventDefault` 前必须判落点（`e.target` / `e.currentTarget`），
+  否则容器会吞掉行内控件自己的激活键（门禁第 25 条静态拦截）。
 - **测试等待**：异步查询统一吃 `src/test/setup.ts` 的全局 `asyncUtilTimeout`（5s），
   不要写 per-call `timeout`；vitest 自带的 `vi.waitFor` 有独立硬编码的 1s 上限、不读该配置，
   等 toast 这类异步续延须显式传 `{ timeout }`；时机语义（防抖、轮询间隔）用 fake timers 断言，
