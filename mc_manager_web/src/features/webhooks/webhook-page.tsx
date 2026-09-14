@@ -26,6 +26,8 @@ import { Input } from '@/components/ui/input'
 import { PasswordInput } from '@/components/ui/password-input'
 import { Switch } from '@/components/ui/switch'
 import { StatusPill } from '@/components/mcs/status-pill'
+import { CountBadge } from '@/components/mcs/count-badge'
+import { Card } from '@/components/mcs/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { PageHeader } from '@/components/mcs/page-header'
@@ -216,7 +218,7 @@ export default function WebhookPage() {
       )}
 
       {/* ── 列表容器 ── */}
-      <div className="min-h-0 flex-1 overflow-hidden rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted shadow-mcs-card">
+      <Card as="div" className="min-h-0 flex-1 overflow-hidden">
         {isLoading ? (
           /* 骨架行 */
           <div data-testid="webhook-skeletons" className="space-y-1 p-4" aria-label="加载 Webhook 中">
@@ -288,7 +290,7 @@ export default function WebhookPage() {
             ))}
           </div>
         )}
-      </div>
+      </Card>
 
       {/* ── 新建/编辑对话框 ── */}
       <Dialog open={showDialog} onOpenChange={(open) => { if (!open) tryCloseDialog() }}>
@@ -381,11 +383,11 @@ export default function WebhookPage() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Label className="text-mcs-xs text-mcs-text-muted">事件过滤</Label>
-                  {/* 选中计数（StatusPill muted 计数口径）；0 时语义由下方「未选择 = 订阅全部事件」提示承担 */}
+                  {/* 选中计数（CountBadge 计数口径）；0 时语义由下方「未选择 = 订阅全部事件」提示承担 */}
                   {form.events.length > 0 && (
-                    <StatusPill tone="muted" className="text-mcs-2xs">
+                    <CountBadge className="text-mcs-2xs">
                       已选 {form.events.length}
-                    </StatusPill>
+                    </CountBadge>
                   )}
                 </div>
                 <Button variant="outline" size="sm" className="h-6 text-mcs-2xs" onClick={selectAll}>

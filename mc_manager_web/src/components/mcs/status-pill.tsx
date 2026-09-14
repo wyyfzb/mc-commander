@@ -5,8 +5,8 @@ import { toneClasses, toneOutlineClasses } from './tone'
 
 /**
  * StatusPill —— 只读状态标识药丸（基于 Chip 8-tone 体系）
- * - 专用于只读状态展示（实例状态、命令结果、启用/禁用、计数）
- * - 交互类标签（切换、选择）使用 Chip 组件
+ * - 专用于只读状态展示（实例状态、命令结果、启用/禁用、版本与标签列表）
+ * - 交互类标签（切换、选择）使用 Chip 组件；计数（数量/条数）使用 CountBadge
  * - variant="status"（默认）：带 bg-subtle 填充，用于突出状态
  * - variant="outline"：仅边框，用于低优先级标签/标识
  *
