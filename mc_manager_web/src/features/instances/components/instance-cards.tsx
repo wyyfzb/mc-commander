@@ -5,13 +5,20 @@
  *   + 副行「运行中 · N 人在线」（success 色）/「已停止」（muted）+ 版本 mono 徽章
  *   （detailStatuses[id]?.mcVersion，组件内不查询；详情在途时仅该卡骨架占位）
  *   + 指标行（在线/TPS/内存/世界大小，detailStatuses 数据，缺省 —）
- *   + 操作：启停（运行中→停止 danger / 停止→启动 primary，busyId 防重复触发）/
- *     切换（非当前实例）/ 启动配置 / 卸载（danger outlined，卸载中禁用 + 「卸载中」）
+ *   + 操作（J8 收敛）：主操作最多两个——启停（busyId 防重复触发）/ 切换（非当前实例），
+ *     配置、升级、卸载收进「操作菜单」（弹窗类与破坏性操作，低频；卸载另有输入实例名的强确认）
  * - 空态：「暂无已安装的实例」+「部署新实例」按钮（onDeploy 与页面头部入口共用）
  * - 设计纪律：实底卡（玻璃禁区）+ --mcs-* 语义 token，禁硬编码色值/间距/圆角
  */
-import { ArrowRightLeft, ArrowUpCircle, Loader2, Play, Server, Settings, ShieldAlert, Square, Trash2 } from 'lucide-react'
+import { ArrowRightLeft, ArrowUpCircle, Loader2, MoreHorizontal, Play, Server, Settings, ShieldAlert, Square, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { formatWorldSize } from '@/lib/format'
@@ -31,7 +38,7 @@ export interface InstanceCardsProps {
   detailStatuses: Record<string, InstanceStatus>
   /** 详情加载中的实例 id 集合（仅该卡版本徽章位置显示骨架） */
   loadingIds: ReadonlySet<string>
-  /** 卸载中的实例 id（对应卡卸载按钮禁用 + 「卸载中」） */
+  /** 卸载中的实例 id（该卡操作菜单的「卸载实例」项禁用 + 文案切换为「卸载中」，触发器转 spinner） */
   uninstallingId: string | null
   /** 切换当前实例 */
   onSwitch: (instance: InstanceSummary) => void
@@ -227,8 +234,10 @@ function InstanceCard({
         </NoticeBanner>
       )}
 
-      {/* 操作行：启停（phase 中间态禁用：starting/stopping spinner，WS 确认后解锁 issue 334）/
-           切换（非当前实例）/ 启动配置 / 卸载（卸载中禁用） */}
+      {/* 操作行（J8）：主操作只留启停（状态类，按 phase 中间态禁用：starting/stopping
+          spinner，WS 确认后解锁 issue 334）与切换（非当前实例的导航）；
+          配置/升级/卸载收进操作菜单——弹窗类与破坏性操作低频，且卸载另有输入实例名的强确认，
+          五个按钮平铺会把卡片右下角挤满。菜单项文案对齐各自弹窗标题 */}
       <div className="mt-auto flex items-center justify-end gap-1.5">
         {isRunning ? (
           <Button
@@ -267,40 +276,48 @@ function InstanceCard({
             切换
           </Button>
         )}
-        <Button
-          variant="ghost"
-          size="sm"
-          aria-label={`${name} 启动配置`}
-          title="启动配置"
-          onClick={() => onOpenSettings(instance)}
-        >
-          <Settings aria-hidden />
-          配置
-        </Button>
-        {!isRunning && (
-          <Button
-            variant="ghost"
-            size="sm"
-            aria-label={`升级 ${name}`}
-            title="升级版本"
-            onClick={() => onUpgrade(instance)}
-          >
-            <ArrowUpCircle aria-hidden />
-            升级
-          </Button>
-        )}
-        <Button
-          variant="outline"
-          size="sm"
-          aria-label={`卸载 ${name}`}
-          title="卸载实例"
-          disabled={isUninstalling}
-          onClick={() => onUninstall(instance)}
-          className="border-mcs-error-border text-mcs-error-fg hover:bg-mcs-error-bg-subtle hover:text-mcs-error-fg"
-        >
-          {isUninstalling ? <Loader2 className="animate-spin" aria-hidden /> : <Trash2 aria-hidden />}
-          {isUninstalling ? '卸载中' : '卸载'}
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            {/* 卸载在途时触发器转 spinner + aria-busy：卸载反馈原本挂在行内按钮上，
+                收进菜单后若不在此处承接，卡片面在整段卸载期间无任何进行中信号 */}
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`${name} 操作菜单`}
+              aria-busy={isUninstalling}
+            >
+              {isUninstalling ? (
+                <Loader2 className="animate-spin" aria-hidden />
+              ) : (
+                <MoreHorizontal aria-hidden />
+              )}
+            </Button>
+          </DropdownMenuTrigger>
+          {/* 走 radix 的 onSelect 而非 onClick：DropdownMenuItem 的 disabled 只拦 onSelect
+              （onClick 被原样组合到 DOM 上，仅靠 data-disabled:pointer-events-none 兜底），
+              卸载中的禁用必须由 JS 拦住第二次请求，不能只依赖一条工具类 */}
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={() => onOpenSettings(instance)}>
+              <Settings aria-hidden />
+              启动配置
+            </DropdownMenuItem>
+            {!isRunning && (
+              <DropdownMenuItem onSelect={() => onUpgrade(instance)}>
+                <ArrowUpCircle aria-hidden />
+                升级版本
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              variant="destructive"
+              disabled={isUninstalling}
+              onSelect={() => onUninstall(instance)}
+            >
+              {isUninstalling ? <Loader2 className="animate-spin" aria-hidden /> : <Trash2 aria-hidden />}
+              {isUninstalling ? '卸载中' : '卸载实例'}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </div>
   )

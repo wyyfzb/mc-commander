@@ -32,10 +32,10 @@ test.describe('实例页', () => {
     await expect(page.getByText(/运行中 · \d+ 人在线/).first()).toBeVisible()
     // 版本徽章（detailStatuses 拉取）
     await expect(page.getByText('1.21.4')).toBeVisible()
-    // 当前实例徽章 + 操作按钮
+    // 当前实例徽章 + 操作行（启停主操作 + 操作菜单触发器；配置/升级/卸载已收进菜单）
     await expect(page.getByText('当前')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'E2E 演示实例 启动配置' })).toBeVisible()
-    await expect(page.getByRole('button', { name: '卸载 E2E 演示实例' })).toBeVisible()
+    await expect(page.getByRole('button', { name: '停止 E2E 演示实例' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'E2E 演示实例 操作菜单' })).toBeVisible()
     await maybeShot(page, 'instances-cards-dark.png')
   })
 
@@ -73,7 +73,8 @@ test.describe('实例页', () => {
   test('实例启动配置弹窗：内存/Aikar/高级参数 + 保存关闭', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/instances')
-    await page.getByRole('button', { name: 'E2E 演示实例 启动配置' }).click()
+    await page.getByRole('button', { name: 'E2E 演示实例 操作菜单' }).click()
+    await page.getByRole('menuitem', { name: '启动配置' }).click()
     // 弹窗标题 + 实例名 + 内存预填（mock maxMemory 4096MB → 4.0 GB）
     await expect(page.getByRole('heading', { name: '启动配置' })).toBeVisible()
     await expect(page.getByText('4.0 GB')).toBeVisible()
@@ -95,7 +96,8 @@ test.describe('实例页', () => {
   test('卸载确认：对话框 + 取消', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/instances')
-    await page.getByRole('button', { name: '卸载 E2E 演示实例' }).click()
+    await page.getByRole('button', { name: 'E2E 演示实例 操作菜单' }).click()
+    await page.getByRole('menuitem', { name: '卸载实例' }).click()
     await expect(page.getByRole('heading', { name: '卸载实例' })).toBeVisible()
     await expect(page.getByText(/确定要卸载实例 "E2E 演示实例"/)).toBeVisible()
     // 三条款警告文案
