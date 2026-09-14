@@ -11,6 +11,7 @@ import { AlertTriangle, Check, Copy, Lightbulb, Package, Server, Terminal } from
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useRadioGroup, type RadioGroupItemProps } from '@/hooks/use-radio-group'
+import { TONE_SELECTED_SURFACE_CLASSES } from '@/components/mcs/tone'
 import { copyText } from '@/lib/clipboard'
 import { BrandLogo } from '@/components/mcs/brand-logo'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
@@ -72,7 +73,7 @@ function ModeCard({
       className={cn(
         'flex flex-1 flex-col items-start gap-2 rounded-mcs-md border p-4 text-left transition-colors',
         active
-          ? 'border-mcs-accent-border-strong bg-mcs-accent-bg-subtle shadow-mcs-card'
+          ? `${TONE_SELECTED_SURFACE_CLASSES} shadow-mcs-card`
           : 'border-mcs-border-muted bg-mcs-bg-muted shadow-mcs-card hover:bg-mcs-state-hover',
       )}
     >

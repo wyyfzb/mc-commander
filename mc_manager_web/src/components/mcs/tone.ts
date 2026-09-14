@@ -74,3 +74,23 @@ export function toneOutlineClasses(tone: SemanticTone): string {
   const c = SEMANTIC_TONE_CLASSES[tone]
   return `${c.border} ${c.text}`
 }
+
+/**
+ * 选中/激活态（J57）：强档描边 token（`--mcs-accent-border-strong`，≥3:1）承担
+ * 「已选中」的可辨识信息（弱档仅装饰），与同档内容面 + 同档前景构成第三种词表形状。
+ * token 现状只有 accent 与 error 带强档描边；error 的同形三件套目前只被 ui/button
+ * 的危险变体消费（在门禁扫描范围外），其余四色没有强档 token，故此处只出 accent 常量——
+ * 待有了第二个真实消费者（例如 error 的危险选中态）再谈 `toneStrongClasses(tone)`。
+ *
+ * 两个形状分别对应两种现场：
+ * - `TONE_SELECTED_CLASSES`：整串三件套（可交互卡片/chip 的选中态）
+ * - `TONE_SELECTED_SURFACE_CLASSES`：两件套容器（选中态由子元素/内部控件
+ *   承载前景的槽位，如开关、徽标、text-default 保持中性可读的选项块）
+ *
+ * 本模块须保持零 import：components/ui 基座（button 的 selected 变体）反向消费这里，
+ * 添任何依赖都可能把 ui/ 卷进循环依赖。
+ */
+export const TONE_SELECTED_CLASSES =
+  'border-mcs-accent-border-strong bg-mcs-accent-bg-subtle text-mcs-accent-fg'
+
+export const TONE_SELECTED_SURFACE_CLASSES = 'border-mcs-accent-border-strong bg-mcs-accent-bg-subtle'

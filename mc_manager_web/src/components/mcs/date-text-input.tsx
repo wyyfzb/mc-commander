@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { DatePickerCalendar } from '@/components/mcs/date-picker-calendar'
 import { cn } from '@/lib/utils'
+import { TONE_SELECTED_CLASSES } from '@/components/mcs/tone'
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
@@ -123,7 +124,7 @@ export function DateTextInput({ value, onChange, placeholder = '点击输入日�
         className={cn(
           'pr-8 w-36 text-mcs-xs',
           // 与 FilterSelect 同款「筛选生效可见」激活态；边界用强档 accent（弱档亮色仅 1.10:1，不达交互边界 ≥3:1）
-          active && !draftInvalid && 'border-mcs-accent-border-strong bg-mcs-accent-bg-subtle text-mcs-accent-fg',
+          active && !draftInvalid && TONE_SELECTED_CLASSES,
           className,
         )}
       />

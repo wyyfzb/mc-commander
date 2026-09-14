@@ -25,6 +25,7 @@ import {
 import { SearchInput } from '@/components/mcs/search-input'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { useRadioGroup } from '@/hooks/use-radio-group'
+import { TONE_SELECTED_SURFACE_CLASSES } from '@/components/mcs/tone'
 import { cn } from '@/lib/utils'
 import {
   ITEM_CATEGORIES,
@@ -63,7 +64,10 @@ export function KitTab({
       <button
         type="button"
         onClick={onNew}
-        className="flex items-center gap-2.5 rounded-mcs-md border border-dashed border-mcs-accent-border-strong bg-mcs-accent-bg-subtle px-3 py-2.5 text-left transition-colors hover:bg-mcs-state-hover"
+        className={cn(
+          TONE_SELECTED_SURFACE_CLASSES,
+          'flex items-center gap-2.5 rounded-mcs-md border border-dashed px-3 py-2.5 text-left transition-colors hover:bg-mcs-state-hover',
+        )}
       >
         <span className="flex size-9 shrink-0 items-center justify-center rounded-mcs-sm bg-mcs-accent-bg-subtle">
           <Plus className="size-4 text-mcs-accent-fg" aria-hidden />
@@ -267,7 +271,7 @@ export function KitEditorDialog({
                 className={cn(
                   'flex size-6 items-center justify-center rounded-mcs-xs text-mcs-sm transition-colors',
                   icon === emoji
-                    ? 'border border-mcs-accent-border-strong bg-mcs-accent-bg-subtle'
+                    ? `border ${TONE_SELECTED_SURFACE_CLASSES}`
                     : 'border border-transparent bg-mcs-bg-muted hover:bg-mcs-state-hover',
                 )}
               >

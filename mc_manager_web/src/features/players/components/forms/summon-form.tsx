@@ -14,6 +14,7 @@ import { LoadingButton } from '@/components/mcs/loading-button'
 import { Label } from '@/components/ui/label'
 import { useRadioGroup } from '@/hooks/use-radio-group'
 import { cn } from '@/lib/utils'
+import { TONE_SELECTED_CLASSES } from '@/components/mcs/tone'
 import { searchEntities, type McEntity } from '@/lib/mc-entities'
 import type { ActionFormProps } from './types'
 import { OfflineBanner } from './offline-banner'
@@ -97,7 +98,7 @@ export function SummonForm({ isRconConnected, onAction }: ActionFormProps) {
                   className={cn(
                     'rounded-mcs-sm border px-2 py-0.5 text-mcs-xs transition-colors',
                     selectedEntity?.id === e.id
-                      ? 'border-mcs-accent-border-strong bg-mcs-accent-bg-subtle text-mcs-accent-fg'
+                      ? TONE_SELECTED_CLASSES
                       : 'border-mcs-border-default bg-mcs-bg-default text-mcs-text-default hover:bg-mcs-state-hover',
                   )}
                 >

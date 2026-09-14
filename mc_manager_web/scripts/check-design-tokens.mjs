@@ -21,9 +21,13 @@
  *  15. 内容面 tint 叠加：同元素出现 ≥2 个 `bg-mcs-*-bg-subtle`，或内容面 tint 与玻璃面同元素 → 报错
  *      （含词表间接写法：同一次 cn/clsx 或同一模板串里 `toneClasses()` 与字面量 tint 共存）
  *      ＋ 六档语义色三件套只允许声明在 components/mcs/tone.ts（别处整串写出一档的
- *      border+bg-subtle+fg 即又抄了一份词表；测试与 tone.ts 自身除外）。
+ *      border+bg-subtle+fg 即又抄了一份词表；测试与 tone.ts 自身除外），accent 的
+ *      「选中强调」形态（border-strong+bg-subtle 同串共现，三件套与把 fg 留给子元素的
+ *      两件套容器两种现场同判）同样只允许出自 tone.ts 的 TONE_SELECTED_* 常量。
  *      注：11b/11c 走 walkDir(srcDir)，即**只扫 src/ 且不含 components/ui/**，不覆盖 e2e/ 与
- *      scripts/；判定面限「同一字面量内整串写全」，容器 border+bg 与子元素 fg 拆写不判
+ *      scripts/；两条判定面都限「同一字面量内共现」——三件套要求 border+bg-subtle+fg 全串写全，
+ *      选中形态要求 border-strong+bg-subtle 同串（容器在一条串、前景拆到子元素时按容器串判；
+ *      跨 cn() 参数拆写两件套则不判，属宁漏不误报，与三件套同款限制）
  *  16. Z 轴阶梯：禁裸 z-<数字>（类名 / 内联 zIndex / CSS z-index）
  *  17. 玻璃预算：全站各 1 处（顶栏 glass-chrome + 覆盖层 glass-overlay）
  *  18. 危险语义色禁半透明底：bg-destructive/<alpha>
@@ -300,8 +304,8 @@ function findToneTintOverlaps(content) {
 /**
  * 六档语义色的「静态三件套」声明源只有 mcs/tone.ts。
  * 按空白切词做**整词**比对（不用子串包含）：`border-mcs-accent-border-strong` 是另一档
- * 描边（选中强调，词表未覆盖的独立形状）、`hover:bg-mcs-*-bg-subtle` 是交互覆盖层而非
- * 内容面 tint，两者都不算手写三件套，不能被误报。
+ * 描边（选中强调，由下面 findHandwrittenSelectedShapes 单独判定）、`hover:bg-mcs-*-bg-subtle`
+ * 是交互覆盖层而非内容面 tint，两者都不算手写三件套，不能被误报。
  */
 const TONE_TRIAD_NAMES = ['accent', 'success', 'warning', 'error', 'info', 'purple']
 const STRING_LITERAL = /'[^'\n]*'|"[^"\n]*"|`(?:[^`\\]|\\.)*`/g
@@ -318,6 +322,28 @@ function findHandwrittenToneTriads(content) {
         tokens.has(`text-mcs-${t}-fg`),
     )
     if (tone) hits.push({ offset: m.index, tone })
+  }
+  return hits
+}
+
+/**
+ * 选中强调形态（J57）：`border-mcs-accent-border-strong` 与 `bg-mcs-accent-bg-subtle`
+ * **同串共现**即为手写选中态。词表的两个形状都由这两个 token 构成——
+ * 三件套 `TONE_SELECTED_CLASSES` 与两件套容器 `TONE_SELECTED_SURFACE_CLASSES`
+ * （后者把前景留给子元素），故一条判定同时覆盖两种现场；声明源只有 components/mcs/tone.ts。
+ * 仍是**整词**比对：`border-mcs-accent-border`（弱档）是普通内容面描边，
+ * 与强档语义不同，不能被子串包含误收。
+ * 只有 accent 有「内容面强档」token：`--mcs-error-border-strong` 虽存在，
+ * 但仅 components/ui/button 危险变体使用，而 components/ui 在 walkDir 扫描范围外。
+ */
+const SELECTED_SHAPE_TOKENS = ['border-mcs-accent-border-strong', 'bg-mcs-accent-bg-subtle']
+
+function findHandwrittenSelectedShapes(content) {
+  const code = stripComments(content)
+  const hits = []
+  for (const m of code.matchAll(STRING_LITERAL)) {
+    const tokens = new Set(m[0].slice(1, -1).split(/\s+/).filter(Boolean))
+    if (SELECTED_SHAPE_TOKENS.every((t) => tokens.has(t))) hits.push({ offset: m.index })
   }
   return hits
 }
@@ -357,9 +383,18 @@ function walkDir(dir) {
     }
     // 词表自身（它就是声明源）与测试（用例按定义就该断言类名三元组）除外
     if (!rel.endsWith('components/mcs/tone.ts') && !rel.includes('__tests__')) {
-      for (const hit of findHandwrittenToneTriads(content)) {
+      const triadHits = findHandwrittenToneTriads(content)
+      for (const hit of triadHits) {
         const lineNum = content.slice(0, hit.offset).split('\n').length
         console.log(`${relPath}:${lineNum}: 手写 ${hit.tone} 档三件套（border+bg-subtle+fg）→ 语义色声明源只有 components/mcs/tone.ts`)
+        violations++
+      }
+      // 同一字面量里弱档、强档都写了时两条规则会各命中一次，只报三件套那条（同处不重复计数）
+      const reported = new Set(triadHits.map((h) => h.offset))
+      for (const hit of findHandwrittenSelectedShapes(content)) {
+        if (reported.has(hit.offset)) continue
+        const lineNum = content.slice(0, hit.offset).split('\n').length
+        console.log(`${relPath}:${lineNum}: 手写 accent 选中强调形态（border-strong+bg-subtle）→ 声明源只有 components/mcs/tone.ts 的 TONE_SELECTED_* 常量`)
         violations++
       }
     }
@@ -629,4 +664,4 @@ if (violations > 0) {
   console.error(`\n✗ 发现 ${violations} 处设计 token 违规（设计规范 §4.5）`)
   process.exit(1)
 }
-console.log('✓ 设计 token 完整性检查通过（色板类/dark:/transition-all/duration-数字/rounded-任意值/字号上限/焦点可见性/未注册 token 类/token 角色矩阵/alpha 白名单/未定义类/死类/死 token/内容面 tint 叠加/Z 轴阶梯/玻璃预算/危险半透明底/内容面 tint 不透明/布局属性动画）')
+console.log('✓ 设计 token 完整性检查通过（色板类/dark:/transition-all/duration-数字/rounded-任意值/字号上限/焦点可见性/未注册 token 类/token 角色矩阵/alpha 白名单/未定义类/死类/死 token/内容面 tint 叠加/语义色三件套与选中强调形态声明源/Z 轴阶梯/玻璃预算/危险半透明底/内容面 tint 不透明/布局属性动画）')

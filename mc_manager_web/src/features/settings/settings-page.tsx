@@ -8,6 +8,7 @@ import { Link, Outlet, useLocation } from 'react-router'
 import { BellRing, DatabaseBackup, Info, Link2, ShieldCheck, SlidersHorizontal } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { TONE_SELECTED_CLASSES } from '@/components/mcs/tone'
 import { PageHeader } from '@/components/mcs/page-header'
 import { useServerStore } from '@/stores/server'
 import { ConnectionForm } from './components/connection-form'
@@ -54,7 +55,7 @@ export function SettingsPage() {
               className={cn(
                 'flex items-center justify-center gap-2 rounded-mcs-sm border p-2 text-mcs-sm transition-colors md:justify-start md:px-2.5',
                 active
-                  ? 'border-mcs-accent-border-strong bg-mcs-accent-bg-subtle font-semibold text-mcs-accent-fg'
+                  ? `${TONE_SELECTED_CLASSES} font-semibold`
                   : 'border-transparent font-medium text-mcs-text-muted hover:bg-mcs-state-hover hover:text-mcs-text-default',
               )}
             >

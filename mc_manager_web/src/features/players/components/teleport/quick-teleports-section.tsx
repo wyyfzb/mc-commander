@@ -11,6 +11,8 @@ import {
   type TeleportPoint,
 } from '@/lib/mc-teleport'
 import type { Player } from '@/api/types'
+import { cn } from '@/lib/utils'
+import { TONE_SELECTED_CLASSES } from '@/components/mcs/tone'
 import { QuickChip } from './quick-chip'
 import { Section } from './section'
 import { formatCoords } from './teleport-utils'
@@ -110,7 +112,10 @@ export function QuickTeleportsSection({
         <button
           type="button"
           onClick={onAddClick}
-          className="inline-flex items-center gap-1 rounded-mcs-md border border-mcs-accent-border-strong bg-mcs-accent-bg-subtle px-2.5 py-1.5 text-mcs-xs font-medium text-mcs-accent-fg transition-colors hover:bg-mcs-state-hover"
+          className={cn(
+            TONE_SELECTED_CLASSES,
+            'inline-flex items-center gap-1 rounded-mcs-md border px-2.5 py-1.5 text-mcs-xs font-medium transition-colors hover:bg-mcs-state-hover',
+          )}
         >
           <Plus className="size-3.5" aria-hidden />
           添加快捷传送点

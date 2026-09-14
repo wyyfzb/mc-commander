@@ -35,7 +35,7 @@ import {
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
-import { toneClasses } from '@/components/mcs/tone'
+import { toneClasses, TONE_SELECTED_CLASSES } from '@/components/mcs/tone'
 
 const EVENT_LABELS: Record<string, string> = {
   'player.join': '玩家加入', 'player.leave': '玩家离开', 'player.death': '玩家死亡',
@@ -317,7 +317,7 @@ export default function WebhookPage() {
                     className={cn(
                       'rounded-mcs-xs border px-2 py-0.5 text-mcs-2xs transition-colors cursor-pointer',
                       form.platform === p.key
-                        ? 'border-mcs-accent-border-strong bg-mcs-accent-bg-subtle text-mcs-accent-fg'
+                        ? TONE_SELECTED_CLASSES
                         : 'border-mcs-border-default text-mcs-text-muted hover:border-mcs-border-default hover:text-mcs-text-default',
                     )}
                   >
@@ -392,7 +392,7 @@ export default function WebhookPage() {
                     className={cn(
                       'rounded-mcs-xs border px-2 py-0.5 text-mcs-2xs transition-colors cursor-pointer',
                       form.events.includes(evt)
-                        ? 'border-mcs-accent-border-strong bg-mcs-accent-bg-subtle text-mcs-accent-fg'
+                        ? TONE_SELECTED_CLASSES
                         : 'border-mcs-border-muted text-mcs-text-muted hover:border-mcs-border-default',
                     )}
                   >

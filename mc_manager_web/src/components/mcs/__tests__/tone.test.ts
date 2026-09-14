@@ -8,9 +8,16 @@ import { describe, expect, it } from 'vitest'
 import {
   SEMANTIC_TONES,
   SEMANTIC_TONE_CLASSES,
+  TONE_SELECTED_CLASSES,
+  TONE_SELECTED_SURFACE_CLASSES,
   toneClasses,
   toneOutlineClasses,
 } from '../tone'
+
+/** 类名逐个整词比对（强档描边以弱档为前缀，子串包含会把两者混为一谈） */
+function classTokens(classes: string): Set<string> {
+  return new Set(classes.split(/\s+/).filter(Boolean))
+}
 
 describe('mcs/tone 语义色词表', () => {
   it('六档语义色，每档都是 border + bg-subtle + fg 的完整字面量 token 类', () => {
@@ -39,5 +46,24 @@ describe('mcs/tone 语义色词表', () => {
       expect(SEMANTIC_TONE_CLASSES[tone].bg).toContain('bg-subtle')
       expect(SEMANTIC_TONE_CLASSES[tone].bg).not.toMatch(/\/(\d+|\[)/)
     }
+  })
+
+  it('选中强调形态固定为 accent（其余五档没有内容面强档 token）', () => {
+    const triple = classTokens(TONE_SELECTED_CLASSES)
+    expect(triple).toContain('border-mcs-accent-border-strong')
+    expect(triple).toContain('bg-mcs-accent-bg-subtle')
+    expect(triple).toContain('text-mcs-accent-fg')
+    // 强档描边是「已选中」的可辨识信息（≥3:1）；弱档仅装饰，不得出现在此
+    expect(triple.has('border-mcs-accent-border')).toBe(false)
+    // 内容面 tint 必须不透明，与六档静态三件套同口径
+    expect([...triple].find((t) => t.startsWith('bg-'))).toBe('bg-mcs-accent-bg-subtle')
+  })
+
+  it('两件套容器形态 = 三件套去掉前景（前景由子元素/内部控件承载）', () => {
+    const surface = classTokens(TONE_SELECTED_SURFACE_CLASSES)
+    const expected = classTokens(TONE_SELECTED_CLASSES)
+    expected.delete('text-mcs-accent-fg')
+    expect(surface).toEqual(expected)
+    expect(surface.has('border-mcs-accent-border')).toBe(false)
   })
 })

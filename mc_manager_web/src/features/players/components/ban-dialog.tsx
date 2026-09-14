@@ -25,6 +25,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { useRadioGroup } from '@/hooks/use-radio-group'
 import { cn } from '@/lib/utils'
+import { TONE_SELECTED_SURFACE_CLASSES } from '@/components/mcs/tone'
 import { BAN_DURATION_OPTIONS, BAN_REASONS, BAN_REASON_FALLBACK, validateBanForm, type BanFormModel } from '@/lib/mc-ban'
 import type { Player } from '@/api/types'
 
@@ -150,7 +151,7 @@ function BanFormContent({
               className={cn(
                 'flex cursor-pointer items-center gap-2 rounded-mcs-sm border px-3 py-1.5 text-mcs-sm transition-colors',
                 targetType === 'player'
-                  ? 'border-mcs-accent-border-strong bg-mcs-accent-bg-subtle text-mcs-text-default'
+                  ? `${TONE_SELECTED_SURFACE_CLASSES} text-mcs-text-default`
                   : 'border-mcs-border-default text-mcs-text-muted hover:bg-mcs-state-hover',
               )}
             >
@@ -162,7 +163,7 @@ function BanFormContent({
                 'flex cursor-pointer items-center gap-2 rounded-mcs-sm border px-3 py-1.5 text-mcs-sm transition-colors',
                 !ipAvailable && 'cursor-not-allowed opacity-50',
                 targetType === 'ip'
-                  ? 'border-mcs-accent-border-strong bg-mcs-accent-bg-subtle text-mcs-text-default'
+                  ? `${TONE_SELECTED_SURFACE_CLASSES} text-mcs-text-default`
                   : 'border-mcs-border-default text-mcs-text-muted hover:bg-mcs-state-hover',
               )}
             >
@@ -188,7 +189,7 @@ function BanFormContent({
                 className={cn(
                   'rounded-mcs-sm border px-2.5 py-1 text-mcs-xs transition-colors',
                   durationIndex === i
-                    ? 'border-mcs-accent-border-strong bg-mcs-accent-bg-subtle text-mcs-text-default'
+                    ? `${TONE_SELECTED_SURFACE_CLASSES} text-mcs-text-default`
                     : 'border-mcs-border-default text-mcs-text-muted hover:bg-mcs-state-hover',
                 )}
               >
@@ -211,7 +212,7 @@ function BanFormContent({
                 className={cn(
                   'rounded-mcs-sm border px-2.5 py-1 text-mcs-xs transition-colors',
                   reasonIndex === i
-                    ? 'border-mcs-accent-border-strong bg-mcs-accent-bg-subtle text-mcs-text-default'
+                    ? `${TONE_SELECTED_SURFACE_CLASSES} text-mcs-text-default`
                     : 'border-mcs-border-default text-mcs-text-muted hover:bg-mcs-state-hover',
                 )}
               >

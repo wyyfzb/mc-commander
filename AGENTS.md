@@ -76,8 +76,10 @@ npm run dev                  # node --watch 热重载
   可交互/通用标签用 `components/mcs/chip.tsx`（`Chip`），计数沿用 `StatusPill tone="muted"`
   ——不存在第三套标签组件，也不要再造（计数徽章若将来有 ≥3 处真实消费者再抽）。
   语义色唯一声明源是 `components/mcs/tone.ts`（六档 accent/success/warning/error/info/purple，
-  各含 border + bg-subtle + fg）；图标底块、徽章、通知气泡这类不套组件的着色点必须走它，
-  禁止在 feature 里再手写 tone → 类名映射。
+  各含 border + bg-subtle + fg；另有 accent 的选中/激活形态 `TONE_SELECTED_CLASSES`
+  三件套与 `TONE_SELECTED_SURFACE_CLASSES` 两件套容器——强档描边 `-border-strong`
+  承担「已选中」的可辨识信息，弱档仅装饰）；图标底块、徽章、通知气泡这类不套组件的着色点
+  必须走它，禁止在 feature 里再手写 tone → 类名映射（门禁第 11c 条静态拦截）。
 - **间距**：不设 `--mcs-space-*`，统一走 Tailwind 默认 4px 刻度（`--spacing` 0.25rem）；
   结构间距必须 4px 倍数，组件内微节奏（2px 档）须在 PR 说明理由。
   容器档位固定：大面板 `p-6` / 标准卡 `p-4` / 紧凑卡 `p-3` / 横向卡 `px-4 py-3` /

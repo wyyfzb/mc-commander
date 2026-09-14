@@ -3,6 +3,7 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { Slot } from "radix-ui"
 
 import { cn } from "@/lib/utils"
+import { TONE_SELECTED_CLASSES } from "@/components/mcs/tone"
 
 const buttonVariants = cva(
   "group/button inline-flex shrink-0 items-center justify-center rounded-lg border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap transition select-none focus-visible:outline-2 focus-visible:outline-mcs-focus-ring focus-visible:outline-offset-2 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:outline-2 aria-invalid:outline-destructive/40 aria-invalid:outline-offset-2 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
@@ -18,7 +19,7 @@ const buttonVariants = cva(
         // 选中态（筛选开关/分段控件）：淡底 + 强档描边 + accent 文字，与 Chip 选中态同口径。
         // 实底渐变+辉光只给每页唯一主操作，开关借 CTA 会让一屏出现多个发光实底绿
         selected:
-          "border-mcs-accent-border-strong bg-mcs-accent-bg-subtle text-mcs-accent-fg hover:bg-mcs-state-hover active:bg-mcs-state-pressed",
+          `${TONE_SELECTED_CLASSES} hover:bg-mcs-state-hover active:bg-mcs-state-pressed`,
         secondary:
           "bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground",
         ghost:

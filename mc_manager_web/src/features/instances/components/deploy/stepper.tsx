@@ -5,6 +5,7 @@
 import { Fragment } from 'react'
 import { Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { TONE_SELECTED_CLASSES } from '@/components/mcs/tone'
 import { STEP_LABELS } from './constants'
 
 export function Stepper({ step }: { step: number }) {
@@ -29,7 +30,7 @@ export function Stepper({ step }: { step: number }) {
                 i < step
                   ? 'border-mcs-accent-border-strong bg-mcs-accent text-mcs-on-accent'
                   : i === step
-                    ? 'border-mcs-accent-border-strong bg-mcs-accent-bg-subtle text-mcs-accent-fg'
+                    ? TONE_SELECTED_CLASSES
                     : 'border-mcs-border-default text-mcs-text-muted',
               )}
             >

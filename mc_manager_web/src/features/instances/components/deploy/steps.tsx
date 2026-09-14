@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
+import { TONE_SELECTED_SURFACE_CLASSES } from '@/components/mcs/tone'
 import { SERVER_TYPES, SERVER_TYPE_LABELS, recommendedJavaVersion, type ServerType } from '@/lib/mc-deploy'
 import { SERVER_TYPE_DESCRIPTIONS, SERVER_TYPE_ICONS, MEMORY_OPTIONS } from './constants'
 import type { DeployForm } from './types'
@@ -65,7 +66,7 @@ export function DeployStepServer({
                 className={cn(
                   'flex cursor-pointer flex-col gap-0.5 rounded-mcs-sm border px-2.5 py-2 transition-colors',
                   selected
-                    ? 'border-mcs-accent-border-strong bg-mcs-accent-bg-subtle text-mcs-text-default'
+                    ? `${TONE_SELECTED_SURFACE_CLASSES} text-mcs-text-default`
                     : 'border-mcs-border-default text-mcs-text-muted hover:bg-mcs-state-hover',
                 )}
               >

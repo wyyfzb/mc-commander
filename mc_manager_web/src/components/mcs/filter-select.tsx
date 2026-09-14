@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
+import { TONE_SELECTED_CLASSES } from '@/components/mcs/tone'
 
 /**
  * FilterSelect —— 列表筛选下拉（可复用）
@@ -94,7 +95,7 @@ export function FilterSelect({
         className={cn(
           'w-40',
           // 激活态边界用强档：控件边界须 ≥3:1，弱档 accent-border 亮色仅 1.10:1
-          active && 'border-mcs-accent-border-strong bg-mcs-accent-bg-subtle text-mcs-accent-fg',
+          active && TONE_SELECTED_CLASSES,
           className,
         )}
       >

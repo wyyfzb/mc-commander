@@ -1,6 +1,6 @@
 import type { ReactNode, Ref } from 'react'
 import { cn } from '@/lib/utils'
-import { toneClasses } from './tone'
+import { TONE_SELECTED_CLASSES, toneClasses } from './tone'
 
 /**
  * Chip —— 通用标签/切换chip（全 token；Tasteful Friction 系列）
@@ -30,10 +30,6 @@ const TONE_CLASSES: Record<ChipTone, string> = {
   info: toneClasses('info'),
   purple: toneClasses('purple'),
 }
-
-/** 选中态：边界承担「已选中」的可辨识信息 → 强档描边（弱档仅装饰） */
-const SELECTED_CLASSES =
-  'border-mcs-accent-border-strong bg-mcs-accent-bg-subtle text-mcs-accent-fg'
 
 interface ChipProps {
   tone?: ChipTone
@@ -75,7 +71,7 @@ export function Chip({
 }: ChipProps) {
   const base =
     'inline-flex h-6 max-w-full items-center justify-center gap-1 truncate rounded-mcs-sm border px-2 text-mcs-xs transition-colors'
-  const toneClass = selected ? SELECTED_CLASSES : TONE_CLASSES[tone]
+  const toneClass = selected ? TONE_SELECTED_CLASSES : TONE_CLASSES[tone]
   const state =
     onClick != null
       ? 'cursor-pointer select-none hover:bg-mcs-state-hover active:bg-mcs-state-pressed disabled:cursor-not-allowed disabled:opacity-50'
