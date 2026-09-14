@@ -188,7 +188,7 @@ export function DeployStepConfig({
       <div className="flex flex-col gap-2">
         <Label>内存分配</Label>
         <div className="flex items-baseline gap-2">
-          <span className="font-mono text-mcs-2xl font-semibold text-mcs-accent-fg">
+          <span className="font-mono text-mcs-xl font-semibold text-mcs-accent-fg">
             {memoryToGB(form.memory).toFixed(1)} GB
           </span>
           <span className="text-mcs-sm text-mcs-text-muted">

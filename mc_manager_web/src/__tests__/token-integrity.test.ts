@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync, readdirSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, relative } from 'node:path'
 
 /**
  * Token 引用完整性测试（防复发，对应设计文档 §4.8-1 前置检查）
@@ -172,5 +172,61 @@ describe('组件源码禁硬编码色值', () => {
       })
     }
     expect(violations).toEqual([])
+  })
+})
+
+/**
+ * 字号档位与配对行高（J13 + J56）：档位清单以 semantic.css 为事实源、@theme 注册以
+ * index.css 为事实源，两处必须一一对应——漏一处就退回「小档吃正文 1.6 / 行高被字号类吞掉」
+ * 的老毛病。16px（旧 md）与 24px（旧 2xl）两档已删，末条的零消费断言是该决定的静态防线
+ * （档名拼接写出，避免自身的字面量被算成消费点）。
+ */
+describe('字号档位与配对行高', () => {
+  const indexCss = readCss('index.css')
+  const semanticCss = readCss('styles/tokens/semantic.css')
+  const FONT_SIZE_DECL = /--mcs-font-size-([\w-]+)\s*:\s*([^;]+);/g
+  const tierPx = new Map([...semanticCss.matchAll(FONT_SIZE_DECL)].map((m) => [m[1]!, m[2]!.trim()]))
+  /** 6 个文字档；display 是非文字数字档，不占文字档位 */
+  const TEXT_TIERS = ['2xs', 'xs', 'sm', 'md', 'lg', 'xl']
+
+  it('文字档 6 档 + 数字档 1 档，6 个文字档逐一配对行高', () => {
+    expect([...tierPx.keys()]).toEqual([...TEXT_TIERS, 'display'])
+    for (const tier of TEXT_TIERS) {
+      // 类名拼出来断言：写成模板串会被门禁的动态类名前缀规则（模板串拼类名静默无效果）拦下
+      const decl = '--text-mcs-' + tier
+      expect(indexCss, decl + ' 未配对行高').toContain(decl + '--line-height:')
+    }
+    // 数字档不配对行高：其唯一消费点自带 leading-none（KPI 数字无版式行高需求）
+    expect(indexCss).not.toContain('--text-mcs-display--line-height')
+  })
+
+  it('16px / 24px 两档已删，两个 14px 档同尺寸不同语义', () => {
+    expect([...tierPx.keys()]).not.toContain('2xl')
+    expect([...tierPx.values()]).not.toContain('16px')
+    expect([...tierPx.values()]).not.toContain('24px')
+    expect(tierPx.get('sm')).toBe('14px')
+    expect(tierPx.get('md')).toBe('14px')
+    expect(tierPx.get('xl')).toBe('22px')
+    expect(tierPx.get('display')).toBe('30px')
+  })
+
+  it('已删档位在全仓零消费（src / e2e / scripts）', () => {
+    const needles = ['mcs-' + '2xl', 'font-size-' + '2xl']
+    const hits: string[] = []
+    const walk = (dir: string): void => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        if (['node_modules', 'dist', '__tests__'].includes(entry.name)) continue
+        const full = join(dir, entry.name)
+        if (entry.isDirectory()) {
+          walk(full)
+          continue
+        }
+        if (!/\.(tsx?|mjs|css)$/.test(entry.name)) continue
+        const content = readFileSync(full, 'utf-8')
+        if (needles.some((n) => content.includes(n))) hits.push(relative(srcDir, full))
+      }
+    }
+    walk(join(srcDir, '..'))
+    expect(hits).toEqual([])
   })
 })

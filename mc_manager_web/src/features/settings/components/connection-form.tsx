@@ -303,7 +303,7 @@ export function ConnectionForm({ variant = 'settings', onSaved }: ConnectionForm
     <div className={variant === 'onboarding' ? 'mx-auto w-full max-w-md' : 'w-full'}>
       {variant === 'onboarding' ? (
         <header className="mb-8 text-center">
-          <h1 className="text-mcs-2xl font-semibold text-mcs-text-default">连接你的服务器</h1>
+          <h1 className="text-mcs-xl font-semibold text-mcs-text-default">连接你的服务器</h1>
           <p className="mt-2 text-mcs-sm text-mcs-text-muted">
             输入 MC Commander 面板地址与 API Key，测试并保存连接配置后即可开始使用。
           </p>

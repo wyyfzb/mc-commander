@@ -133,7 +133,7 @@ export function OnboardingPage() {
         {/* ── 欢迎区（品牌 Logo + 标题） ── */}
         <div className="mb-6 text-center">
           <BrandLogo className="mx-auto mb-3 size-12 text-mcs-text-default" label="MC Commander Logo" />
-          <h1 className="text-mcs-2xl font-semibold text-mcs-text-default">欢迎使用 MC Commander</h1>
+          <h1 className="text-mcs-xl font-semibold text-mcs-text-default">欢迎使用 MC Commander</h1>
           <p className="mt-2 text-mcs-sm text-mcs-text-muted">
             自托管 Minecraft 服务器管理面板。首次使用前，请先确认服务端部署状态。
           </p>

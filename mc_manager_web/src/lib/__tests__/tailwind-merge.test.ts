@@ -32,7 +32,7 @@ const COLOR_CLASSES = SEMANTIC_TONES.map((tone) => SEMANTIC_TONE_CLASSES[tone].t
 
 describe('cn 字号/颜色不再互吞', () => {
   it('解析到 index.css 注册的字号 token（守卫本身有效）', () => {
-    expect(REGISTERED_FONT_SIZE_CLASSES.length).toBeGreaterThanOrEqual(8)
+    expect(REGISTERED_FONT_SIZE_CLASSES.length).toBeGreaterThanOrEqual(7)
     expect(REGISTERED_FONT_SIZE_CLASSES).toContain('text-mcs-display')
   })
 

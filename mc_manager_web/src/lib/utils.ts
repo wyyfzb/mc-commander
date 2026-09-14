@@ -13,7 +13,6 @@ const MCS_FONT_SIZE_SUFFIXES = [
   "mcs-md",
   "mcs-lg",
   "mcs-xl",
-  "mcs-2xl",
   "mcs-display",
 ]
 
@@ -24,9 +23,8 @@ const MCS_FONT_SIZE_SUFFIXES = [
  * 登记字号词汇表把尺寸档归还 font-size 组，颜色档仍走默认的颜色组，两者不再互吞。
  * 这是声明词汇表（与 `@theme` 注册 token 同性质），不是逐点打补丁——新页面自动受保护。
  *
- * 同时解除 font-size → leading 的默认互斥：`leading-*` 是覆盖行高的手段，但本仓
- * `--text-mcs-*` **没有**配对行高（见 index.css 的 @theme 段），沿用该规则会让
- * `leading-none` 在字号类后写时被静默删除（实测标签行高 12px → 19.2px）。
+ * 同时解除 font-size → leading 的默认互斥：本仓 `--text-mcs-*` 已配逐档行高，
+ * 沿用该规则会让 `leading-none` 在字号类后写时被静默删除（实测标签行高 12px → 19.2px）。
  * Tailwind v4 本就用 `--tw-leading` 让两者叠加（`leading-*` 写变量、`text-*` 读它），
  * 且产物里 `.leading-*` 一律排在 `.text-*` 之后，同时保留即得行高方的值。
  * 口径边界：带行高修饰的写法（`text-mcs-xs/2`）自带行高，与标准档 `text-sm/6` 同口径，

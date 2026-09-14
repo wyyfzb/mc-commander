@@ -106,17 +106,20 @@
   --mcs-radius-lg: 16px;  /* 弹窗 */
   --mcs-radius-xl: 20px;  /* @reserved 全应用上限档（当前 0 消费，保留档位语义） */
 
-  /* ── 字体（CJK 规范：偶数字号 ≤7 档 / 正文行高 1.6；字重与标题行高走 Tailwind font-medium/semibold、leading-*）── */
+  /* ── 字体（CJK 规范：正文行高 1.6；字重走 Tailwind font-medium/semibold、行高覆盖走 leading-*）
+        文字档 6 档 = 22 / 18 / 14 / 14 / 12 / 10；两个 14px 档语义不同（正文基准 vs 强调正文），
+        16px 与 24px 档已删——文字档上限 22px。display 是**非文字数字档**：
+        mono + tnum + `.mcs-num` 专用（30px），与 --mcs-terminal-* 同理不占文字档位。
+        故「偶数字号 ≤7 档」仍成立（6 文字档 + 1 数字档）── */
   --mcs-font-sans: 'Noto Sans SC Subset', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
   --mcs-font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
   --mcs-font-size-2xs: 10px;  /* 角标/单位/mono 元数据，禁用于中文正文 */
   --mcs-font-size-xs: 12px;   /* 辅助 */
-  --mcs-font-size-sm: 14px;   /* 正文基准 */
-  --mcs-font-size-md: 16px;   /* 按钮/二级标题 */
+  --mcs-font-size-sm: 14px;   /* 正文基准（唯一行高 1.6 的档） */
+  --mcs-font-size-md: 14px;   /* 强调正文：与正文同尺寸，靠字重 + 收紧行高（1.5）区分 */
   --mcs-font-size-lg: 18px;   /* 模块标题 */
-  --mcs-font-size-xl: 22px;   /* 页面标题 */
-  --mcs-font-size-2xl: 24px;  /* 页面大标题 */
-  --mcs-font-size-display: 30px; /* 数字 display 档（mono + tnum，仅 KPI/时钟等数字面板，非文字标题） */
+  --mcs-font-size-xl: 22px;   /* 页面标题（文字档上限） */
+  --mcs-font-size-display: 30px; /* 数字 display 档（mono + tnum，仅 KPI 等数字面板，非文字档位） */
   --mcs-line-height-body: 1.6;
 
   /* ── 终端专用（设计文档 4.6：ServerTerminal 独立深底，与基面同阶，主题无关）── */

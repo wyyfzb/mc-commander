@@ -77,13 +77,21 @@
     --radius-mcs-md: var(--mcs-radius-md);
     --radius-mcs-lg: var(--mcs-radius-lg);
     --radius-mcs-xl: var(--mcs-radius-xl);
+    /* 字号档（6 个文字档 + 1 个非文字数字档）：逐档配对行高，小档不再吃正文 1.6——
+       配对写法见 Tailwind v4 `--text-<档>--line-height`；display 不配对（其消费点自身写
+       leading-none，且字号类与 leading-* 的互斥已在 lib/utils.ts 解除） */
     --text-mcs-2xs: var(--mcs-font-size-2xs);
+    --text-mcs-2xs--line-height: 1.5;
     --text-mcs-xs: var(--mcs-font-size-xs);
+    --text-mcs-xs--line-height: 1.5;
     --text-mcs-sm: var(--mcs-font-size-sm);
+    --text-mcs-sm--line-height: var(--mcs-line-height-body);
     --text-mcs-md: var(--mcs-font-size-md);
+    --text-mcs-md--line-height: 1.5;
     --text-mcs-lg: var(--mcs-font-size-lg);
+    --text-mcs-lg--line-height: 1.4;
     --text-mcs-xl: var(--mcs-font-size-xl);
-    --text-mcs-2xl: var(--mcs-font-size-2xl);
+    --text-mcs-xl--line-height: 1.3;
     --text-mcs-display: var(--mcs-font-size-display);
     --duration-mcs-fast: var(--mcs-motion-fast);
     --duration-mcs-base: var(--mcs-motion-base);

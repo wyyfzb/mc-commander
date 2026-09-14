@@ -284,7 +284,7 @@ export function InstanceSettingsDialog({
           <div className="flex flex-col gap-1.5">
             <span className="text-mcs-md font-semibold text-mcs-text-default">内存分配</span>
             <p>
-              <span className="font-mono text-mcs-2xl font-semibold text-mcs-accent-fg">
+              <span className="font-mono text-mcs-xl font-semibold text-mcs-accent-fg">
                 {allocatedMemory.toFixed(1)} GB
               </span>
               <span className="ml-1 text-mcs-sm text-mcs-text-muted">/ {totalMax.toFixed(1)} GB</span>
