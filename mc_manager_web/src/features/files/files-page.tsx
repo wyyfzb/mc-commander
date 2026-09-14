@@ -12,6 +12,8 @@ import { toast } from 'sonner'
 import { getFriendlyErrorText } from '@/api/errors'
 import { queryKeys } from '@/api/queries'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
+import { PageHeader } from '@/components/mcs/page-header'
+import { Card } from '@/components/mcs/card'
 import { useUnsavedGuard } from '@/hooks/use-unsaved-guard'
 import { useServerStore } from '@/stores/server'
 import { useUiStore } from '@/stores/ui'
@@ -246,6 +248,11 @@ export function FilesPage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-1.5">
+      {/* ── 页头（本页无 p-4 外层容器，标题随主体 p-3 档位对齐） ── */}
+      <div className="shrink-0 px-3 pt-3">
+        <PageHeader title="文件" description="浏览与编辑服务器文件" />
+      </div>
+
       {/* ── 桌面窄窗降级条（≥768px <1024px） ── */}
       {isNarrowDesktop && (
         <div className="shrink-0 px-3 pt-1">
@@ -258,7 +265,7 @@ export function FilesPage() {
       {/* ── 双栏主体 ── */}
       <div className="flex min-h-0 flex-1 gap-3 p-3">
         {/* 左栏：文件列表（桌面/移动同构：面包屑 + 工具栏导航）；flex-1 吃满编辑器以外宽度 */}
-        <section className="flex h-full min-h-0 min-w-0 flex-1 flex-col rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted shadow-mcs-card">
+        <Card className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
           {/* ── 上传进度条（对齐插件页交互：progressbar ARIA + 取消） ── */}
           {uploading && <UploadProgressBar uploading={uploading} onCancel={cancelUpload} />}
           <FileList
@@ -284,7 +291,7 @@ export function FilesPage() {
             onDownload={(entry) => void downloadFile(entry)}
             downloadingPath={downloadingPath}
           />
-        </section>
+        </Card>
 
         {/* 右栏：Monaco 编辑器（桌面端内联，移动端隐藏由全屏覆盖替代） */}
         {!isMobile && (

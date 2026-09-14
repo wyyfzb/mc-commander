@@ -11,6 +11,7 @@ import { useInstanceStatus, useSystemStats, queryKeys } from '@/api/queries'
 import { useServerStore } from '@/stores/server'
 import { InstanceRequiredState } from '@/features/instances/components/instance-required-state'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
+import { PageHeader } from '@/components/mcs/page-header'
 import { Button } from '@/components/ui/button'
 
 /**
@@ -83,6 +84,8 @@ export function DashboardPage() {
 
   return (
     <div className="flex h-full flex-col gap-4 overflow-y-auto p-4">
+      <PageHeader title="仪表盘" description="实例运行状态 · 终端 · 快捷操作" />
+
       {/* 查询失败横幅（避免卡片静默显示 0 / 留在「暂无数据」被误读为真实状态） */}
       {failedSources.length > 0 && !statusLoading && (
         <NoticeBanner variant="error" icon={AlertTriangle}>
