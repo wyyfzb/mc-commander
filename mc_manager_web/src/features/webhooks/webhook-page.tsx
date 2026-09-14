@@ -23,6 +23,7 @@ import type { Webhook, WebhookCreatePayload, WebhookDelivery } from '@/api/types
 import { Button } from '@/components/ui/button'
 import { LoadingButton } from '@/components/mcs/loading-button'
 import { Input } from '@/components/ui/input'
+import { PasswordInput } from '@/components/ui/password-input'
 import { Switch } from '@/components/ui/switch'
 import { StatusPill } from '@/components/mcs/status-pill'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -66,6 +67,9 @@ function platformPreset(platform: string | undefined) {
   // generic 预设常驻清单首位；未命中（异常值）时兜底 generic 行
   return PLATFORM_PRESETS.find(p => p.key === platform) ?? PLATFORM_PRESETS[0]!
 }
+
+/** 密钥需遮蔽的渠道（企业微信/Server酱无需密钥、PushPlus token 走明文便于核对） */
+const MASKED_SECRET_PLATFORMS = ['generic', 'feishu', 'dingtalk']
 
 function fmtEvt(t: string) { return EVENT_LABELS[t] || t }
 
@@ -349,15 +353,29 @@ export default function WebhookPage() {
               <Label htmlFor="webhook-secret" className="text-mcs-xs text-mcs-text-muted">
                 {platformPreset(form.platform).secretLabel}
               </Label>
-              <Input
-                id="webhook-secret"
-                value={form.secret}
-                onChange={e => setForm(f => ({ ...f, secret: e.target.value }))}
-                type={form.platform === 'generic' || form.platform === 'feishu' || form.platform === 'dingtalk' ? 'password' : 'text'}
-                placeholder={editTarget ? '留空保持原密钥不变' : platformPreset(form.platform).secretPlaceholder}
-                disabled={form.platform === 'wecom' || form.platform === 'serverchan'}
-                className="text-mcs-sm"
-              />
+              {/* 遮蔽态才挂显隐切换（签名密钥粘贴后无法自查）；明文态保持 Input，type 分支语义不变。
+                  showCapsLock=false：密钥是粘贴而非键入，大写锁定提醒在此无意义 */}
+              {MASKED_SECRET_PLATFORMS.includes(form.platform) ? (
+                <PasswordInput
+                  id="webhook-secret"
+                  value={form.secret}
+                  onChange={(v) => setForm(f => ({ ...f, secret: v }))}
+                  placeholder={editTarget ? '留空保持原密钥不变' : platformPreset(form.platform).secretPlaceholder}
+                  className="text-mcs-sm"
+                  showCapsLock={false}
+                  revealLabels={{ show: '显示密钥', hide: '隐藏密钥' }}
+                />
+              ) : (
+                <Input
+                  id="webhook-secret"
+                  value={form.secret}
+                  onChange={e => setForm(f => ({ ...f, secret: e.target.value }))}
+                  type="text"
+                  placeholder={editTarget ? '留空保持原密钥不变' : platformPreset(form.platform).secretPlaceholder}
+                  disabled={form.platform === 'wecom' || form.platform === 'serverchan'}
+                  className="text-mcs-sm"
+                />
+              )}
             </div>
             <div className="space-y-2">
               <div className="flex items-center justify-between">

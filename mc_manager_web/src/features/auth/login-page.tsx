@@ -347,6 +347,7 @@ export function LoginPage() {
                 placeholder={phase === 'setup' ? '设置 8–128 位密码' : '输入密码'}
                 autoComplete={phase === 'setup' ? 'new-password' : 'current-password'}
                 autoFocus
+                className="h-10"
               />
             </div>
             {phase === 'setup' && (
@@ -357,9 +358,13 @@ export function LoginPage() {
                 <PasswordInput
                   id="confirm-password"
                   value={confirmPassword}
-                  onChange={setConfirmPassword}
+                  onChange={(v) => {
+                    setConfirmPassword(v)
+                    setErrorText('')
+                  }}
                   placeholder="再次输入密码"
                   autoComplete="new-password"
+                  className="h-10"
                 />
               </div>
             )}
@@ -375,7 +380,7 @@ export function LoginPage() {
                   }}
                   placeholder="粘贴部署输出中的 SETUP_TOKEN"
                   autoComplete="off"
-                  className="font-mono"
+                  className="h-10 font-mono"
                 />
                 <p className="text-mcs-2xs text-mcs-text-muted">
                   该面板已开启部署保护：公网部署场景下需证明您是部署者（令牌见部署脚本完成输出，用后即作废）。

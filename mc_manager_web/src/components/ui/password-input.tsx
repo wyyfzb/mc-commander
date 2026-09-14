@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
  * PasswordInput —— 密码输入统一组件（显隐切换 + CapsLock 提醒）
  * 显隐交互由应用内按钮承载：Edge 注入的原生 reveal 按钮已在 index.css
  * 全局隐藏（须置于 @layer 外，见该处注释）
+ * 高度不在基座（缺省随 ui/input 的 h-8）：需要 h-10 的调用点自备 className，避免与 Input 基座双轨
  */
 export function PasswordInput({
   id,
@@ -17,6 +18,7 @@ export function PasswordInput({
   autoFocus,
   className,
   showCapsLock = true,
+  revealLabels = { show: '显示密码', hide: '隐藏密码' },
 }: {
   id: string
   value: string
@@ -26,6 +28,8 @@ export function PasswordInput({
   autoFocus?: boolean
   className?: string
   showCapsLock?: boolean
+  /** 显隐按钮的可访问名：密钥/token 类字段须传入自身语义，避免读屏把密钥播报成「密码」 */
+  revealLabels?: { show: string; hide: string }
 }) {
   const [visible, setVisible] = useState(false)
   const [capsLock, setCapsLock] = useState(false)
@@ -42,12 +46,12 @@ export function PasswordInput({
           placeholder={placeholder}
           autoComplete={autoComplete}
           autoFocus={autoFocus}
-          className={cn('h-10 pr-10 font-mono', className)}
+          className={cn('pr-10 font-mono', className)}
         />
         <button
           type="button"
           onClick={() => setVisible((v) => !v)}
-          aria-label={visible ? '隐藏密码' : '显示密码'}
+          aria-label={visible ? revealLabels.hide : revealLabels.show}
           className="absolute right-2 top-1/2 -translate-y-1/2 rounded-mcs-sm p-1.5 text-mcs-text-muted transition-colors hover:bg-mcs-state-hover hover:text-mcs-text-default"
         >
           {visible ? <EyeOff className="size-4" aria-hidden /> : <Eye className="size-4" aria-hidden />}
