@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { readFileSync, readdirSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { join, relative } from 'node:path'
 
 /**
@@ -178,8 +178,10 @@ describe('组件源码禁硬编码色值', () => {
 /**
  * 字号档位与配对行高（J13 + J56）：档位清单以 semantic.css 为事实源、@theme 注册以
  * index.css 为事实源，两处必须一一对应——漏一处就退回「小档吃正文 1.6 / 行高被字号类吞掉」
- * 的老毛病。16px（旧 md）与 24px（旧 2xl）两档已删，末条的零消费断言是该决定的静态防线
- * （档名拼接写出，避免自身的字面量被算成消费点）。
+ * 的老毛病。行高值本身也断言（只断言「有配对」挡不住把 md 的 1.5 改成 1.9 这类静默漂移）。
+ * 16px（旧 md）与 24px（旧 2xl）两档已删，末条的零消费断言是该决定的静态防线：
+ * 档名拼接写出（避免自身的字面量被算成消费点），并覆盖产物 CSS——只查源码挡不住
+ * 构建产物里残留的 `.text-mcs-2xl` 规则。
  */
 describe('字号档位与配对行高', () => {
   const indexCss = readCss('index.css')
@@ -188,6 +190,23 @@ describe('字号档位与配对行高', () => {
   const tierPx = new Map([...semanticCss.matchAll(FONT_SIZE_DECL)].map((m) => [m[1]!, m[2]!.trim()]))
   /** 6 个文字档；display 是非文字数字档，不占文字档位 */
   const TEXT_TIERS = ['2xs', 'xs', 'sm', 'md', 'lg', 'xl']
+  /** 逐档期望行高：sm 是唯一走正文基准 1.6 的档（同尺寸的 md 靠收紧到 1.5 作强调正文） */
+  const EXPECTED_LINE_HEIGHT: Record<string, number> = { '2xs': 1.5, xs: 1.5, sm: 1.6, md: 1.5, lg: 1.4, xl: 1.3 }
+  /** semantic.css 的数值型 token（行高可能声明成 var(--mcs-line-height-body)） */
+  const semanticNumber = (name: string): number | null => {
+    const m = semanticCss.match(new RegExp(`${name}\\s*:\\s*([\\d.]+)\\s*;`))
+    return m ? Number(m[1]) : null
+  }
+  /** 该档在 @theme 里注册的配对行高值（变量引用就地解析成数值） */
+  const declaredLineHeight = (tier: string): number | null => {
+    const decl = `--text-mcs-${tier}`
+    // 档名拼接写出：模板串会被门禁的动态类名前缀规则拦下
+    const m = indexCss.match(new RegExp(decl + '--line-height\\s*:\\s*([^;]+);'))
+    if (!m) return null
+    const value = m[1]!.trim()
+    const varRef = value.match(/var\((--mcs-[\w-]+)\)/)
+    return varRef ? semanticNumber(varRef[1]!) : Number(value)
+  }
 
   it('文字档 6 档 + 数字档 1 档，6 个文字档逐一配对行高', () => {
     expect([...tierPx.keys()]).toEqual([...TEXT_TIERS, 'display'])
@@ -200,6 +219,15 @@ describe('字号档位与配对行高', () => {
     expect(indexCss).not.toContain('--text-mcs-display--line-height')
   })
 
+  it('逐档行高值符合期望表（数值漂移即红）', () => {
+    for (const tier of TEXT_TIERS) {
+      expect(declaredLineHeight(tier), `--text-mcs-${tier} 行高`).toBe(EXPECTED_LINE_HEIGHT[tier])
+    }
+    // sm 必须仍引用正文基准变量（换回硬编码数字即脱离单一事实源）
+    expect(indexCss).toContain('--text-mcs-sm--line-height: var(--mcs-line-height-body)')
+    expect(semanticNumber('--mcs-line-height-body')).toBe(EXPECTED_LINE_HEIGHT.sm)
+  })
+
   it('16px / 24px 两档已删，两个 14px 档同尺寸不同语义', () => {
     expect([...tierPx.keys()]).not.toContain('2xl')
     expect([...tierPx.values()]).not.toContain('16px')
@@ -210,7 +238,7 @@ describe('字号档位与配对行高', () => {
     expect(tierPx.get('display')).toBe('30px')
   })
 
-  it('已删档位在全仓零消费（src / e2e / scripts）', () => {
+  it('已删档位在全仓零消费（src / e2e / scripts 与产物 CSS）', () => {
     const needles = ['mcs-' + '2xl', 'font-size-' + '2xl']
     const hits: string[] = []
     const walk = (dir: string): void => {
@@ -228,5 +256,19 @@ describe('字号档位与配对行高', () => {
     }
     walk(join(srcDir, '..'))
     expect(hits).toEqual([])
+
+    // 产物 CSS：源码零引用挡不住构建产物里残留的 `.text-mcs-2xl` 规则（Tailwind 只生成用到的类，
+    // 残留即等价于源码曾有引用）。dist 是构建产物、本地可能未构建，缺失时跳过（CI 先 build）
+    const distDir = join(srcDir, '..', 'dist')
+    const builtCss = existsSync(distDir)
+      ? readdirSync(join(distDir, 'assets'))
+          .filter((name) => name.endsWith('.css'))
+          .map((name) => readFileSync(join(distDir, 'assets', name), 'utf-8'))
+      : []
+    if (builtCss.length > 0) {
+      const deletedClass = '.' + 'text-mcs-' + '2xl'
+      expect(builtCss.some((css) => css.includes(deletedClass)), '产物 CSS 残留 ' + deletedClass).toBe(false)
+      expect(builtCss.some((css) => css.includes('.text-mcs-xl')), '产物 CSS 未见字号档（检查失效）').toBe(true)
+    }
   })
 })

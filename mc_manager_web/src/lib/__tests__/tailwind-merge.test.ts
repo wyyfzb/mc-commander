@@ -69,7 +69,7 @@ describe('cn 字号/颜色不再互吞', () => {
 })
 
 describe('cn 不再静默删除行高', () => {
-  it('字号类后写不吃掉先写的 leading-*（本仓字号无配对行高）', () => {
+  it('字号类后写不吃掉先写的 leading-*（本仓字号档已配行高，两者叠加由 --tw-leading 组合）', () => {
     expect(cn('text-sm leading-none', 'text-mcs-xs')).toBe('leading-none text-mcs-xs')
     expect(cn('leading-none', 'text-mcs-sm')).toBe('leading-none text-mcs-sm')
     expect(cn('leading-relaxed', 'text-mcs-lg')).toBe('leading-relaxed text-mcs-lg')
