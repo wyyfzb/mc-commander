@@ -122,7 +122,7 @@ export function OverviewActions({
             <DropdownMenuItem
               key={value}
               disabled={player.gameMode === value}
-              onClick={() =>
+              onSelect={() =>
                 void runAction(`gamemode-${value}`, gamemodeCommand(value), `已切换 ${player.name} 至${label}模式`)
               }
             >

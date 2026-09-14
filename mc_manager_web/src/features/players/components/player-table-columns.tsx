@@ -300,11 +300,11 @@ export function buildPlayerColumns({
                 <Eye aria-hidden />
                 详情
               </DropdownMenuItem>
-              <DropdownMenuItem disabled={!p.isOnline} onClick={() => onOpenDetail(p.name, 'teleport')}>
+              <DropdownMenuItem disabled={!p.isOnline} onSelect={() => onOpenDetail(p.name, 'teleport')}>
                 <Send aria-hidden />
                 传送
               </DropdownMenuItem>
-              <DropdownMenuItem disabled={!p.isOnline} onClick={() => onOpenDetail(p.name, 'give')}>
+              <DropdownMenuItem disabled={!p.isOnline} onSelect={() => onOpenDetail(p.name, 'give')}>
                 <Gift aria-hidden />
                 给予物品
               </DropdownMenuItem>
@@ -318,7 +318,7 @@ export function buildPlayerColumns({
                 {p.isWhitelisted ? '移除白名单' : '加入白名单'}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem disabled={!p.isOnline} onClick={() => setKickTarget(p)}>
+              <DropdownMenuItem disabled={!p.isOnline} onSelect={() => setKickTarget(p)}>
                 <UserX aria-hidden />
                 踢出
               </DropdownMenuItem>

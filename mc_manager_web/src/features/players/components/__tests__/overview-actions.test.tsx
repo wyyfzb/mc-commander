@@ -115,6 +115,17 @@ describe('OverviewActions 游戏模式菜单', () => {
     await userEvent.setup().click(screen.getByRole('button', { name: /游戏模式/ }))
     expect(screen.getByRole('menuitem', { name: /生存/ }).getAttribute('data-disabled')).not.toBeNull()
   })
+
+  it('当前模式菜单项禁用：点击不触发 runAction（J71：门控由 onSelect 收口，不靠 CSS 兜底）', async () => {
+    const userEvent = (await import('@testing-library/user-event')).default
+    const props = renderActions(makePlayer({ isOnline: true, gameMode: 'survival' }))
+    await userEvent.setup().click(screen.getByRole('button', { name: /游戏模式/ }))
+
+    const current = screen.getByRole('menuitem', { name: /生存/ })
+    // 直派 click 绕过 data-disabled:pointer-events-none 的兜底
+    fireEvent.click(current)
+    expect(props.runAction).not.toHaveBeenCalled()
+  })
 })
 
 describe('OverviewActions OP/白名单切换', () => {

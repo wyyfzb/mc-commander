@@ -65,7 +65,7 @@ export function InventoryTab({ player }: InventoryTabProps) {
 
   return (
     <div className="flex flex-col gap-3">
-      {/* ── 子 Tab 切换器（激活态 accent 底+边框）── */}
+      {/* ── 子 Tab 切换器（激活态 accent 底 + 前景；边界由轨道承载）── */}
       <div
         role="tablist"
         aria-label="物品栏子视图"

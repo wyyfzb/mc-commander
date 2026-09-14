@@ -186,7 +186,8 @@ export function BatchBar({ selectedPlayers, onOpenBatchDetail, onAction }: Batch
           踢出
         </Button>
 
-        <Button variant="ghost" size="icon-sm" onClick={clearSelection} aria-label="清除选择">
+        {/* 执行中禁用：清空选择不能中止已下发的命令，只会让在途执行失去可见面 */}
+        <Button variant="ghost" size="icon-sm" onClick={clearSelection} aria-label="清除选择" disabled={running}>
           <X aria-hidden />
         </Button>
 

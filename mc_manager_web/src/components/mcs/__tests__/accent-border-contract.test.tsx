@@ -2,7 +2,8 @@
  * accent 描边角色契约（UXT-22）
  * 交互控件「激活/选中态」边界一律用强档 --mcs-accent-border-strong（≥3:1，check:contrast 第 9 组覆盖）；
  * 弱档 --mcs-accent-border 仅作装饰描边，不得承担可辨识的控件状态。
- * 显式豁免（状态由文字/图标承载，不在此断言）：StatusPill 只读状态、瞬时 hover 边界。
+ * 显式豁免（状态由文字/图标/底色承载，不在此断言）：StatusPill 只读状态、
+ * InventoryTab 子 Tab 激活态（边界由父容器轨道承载）、瞬时 hover 边界。
  * 新增交互控件时请在此补一条断言——契约失败即回归。
  */
 import { describe, it, expect, vi } from 'vitest'
@@ -13,7 +14,9 @@ import { FilterSelect } from '../filter-select'
 import { DateTextInput } from '../date-text-input'
 import { Stepper } from '@/features/instances/components/deploy/stepper'
 import { BanDialog } from '@/features/players/components/ban-dialog'
-import type { Player } from '@/api/types'
+import { InventoryTab } from '@/features/players/components/detail-inventory-tab'
+import { TooltipProvider } from '@/components/ui/tooltip'
+import type { Player, PlayerInventory } from '@/api/types'
 
 const STRONG = 'border-mcs-accent-border-strong'
 // 强档类名以弱档为前缀，故弱档判定必须显式排除强档（类名拆分后逐 token 比较）
@@ -34,8 +37,26 @@ function expectWeakOnly(el: Element) {
   expect(tokens(el)).not.toContain(STRONG)
 }
 
+/** 断言元素不承载任何 accent 描边（状态由底色 + 前景承载的豁免） */
+function expectNoAccentBorder(el: Element) {
+  expect(tokens(el)).not.toContain(STRONG)
+  expect(tokens(el)).not.toContain(WEAK)
+}
+
+/** 物品栏（子 Tab 分支需要非空 inventory，否则走空态） */
+function makeInventory(): PlayerInventory {
+  return {
+    quickbar: [],
+    main: [],
+    equipment: { helmet: null, chestplate: null, leggings: null, boots: null, offhand: null },
+    enderChest: [],
+    source: 'realtime',
+    partial: false,
+  }
+}
+
 /** 仅测试用结构占位玩家（虚构数据，严禁真实玩家信息） */
-function makePlayer(): Player {
+function makePlayer(overrides: Partial<Player> = {}): Player {
   return {
     name: 'Steve',
     uuid: '00000000-0000-4000-8000-000000000002',
@@ -84,6 +105,7 @@ function makePlayer(): Player {
       achievementCount: 0,
       sleepCount: 0,
     },
+    ...overrides,
   }
 }
 
@@ -139,6 +161,21 @@ describe('accent 描边角色契约', () => {
     expect(container.querySelector('.bg-mcs-accent-border')).toBeNull()
     // 已完成连接线 + 完成圆点实底
     expect(container.querySelectorAll('.bg-mcs-accent')).toHaveLength(2)
+  })
+
+  it('InventoryTab 子 Tab 激活态不带 accent 描边（显式豁免：底色 + 前景承担状态，边界由轨道承载）', () => {
+    render(
+      <TooltipProvider>
+        <InventoryTab player={makePlayer({ inventory: makeInventory() })} />
+      </TooltipProvider>,
+    )
+    const track = screen.getByRole('tablist', { name: '物品栏子视图' })
+    const active = within(track).getByRole('tab', { selected: true })
+    expectNoAccentBorder(active)
+    // 状态可辨识性由底色 + 前景承担（不是靠边界），轨道只挂中性描边
+    expect(tokens(active)).toContain('bg-mcs-accent-bg-subtle')
+    expect(tokens(active)).toContain('text-mcs-accent-fg')
+    expect(tokens(track)).toContain('border-mcs-border-muted')
   })
 
   it('BanDialog 选中项（类型 / 时长 / 理由）用强档描边', () => {

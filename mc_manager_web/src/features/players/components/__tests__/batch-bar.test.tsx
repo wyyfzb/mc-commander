@@ -7,7 +7,7 @@
  * mock 数据为虚构玩家（Steve/Alex），严禁真实玩家/服务器信息
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Toaster, toast as sonnerToast } from 'sonner'
 import { BatchBar } from '../batch-bar'
@@ -231,6 +231,27 @@ describe('BatchBar', () => {
     setup([makePlayer()])
     await user.click(screen.getByRole('button', { name: '清除选择' }))
     expect(usePlayersUiStore.getState().selectedUuids).toEqual([])
+  })
+
+  it('执行期间「清除选择」禁用，点击不清空选中（J67：与同条其余控件同口径）', async () => {
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    onAction.mockImplementation(() => gate)
+    setup([makePlayer()])
+    await user.click(screen.getByRole('button', { name: '踢出' }))
+    await confirmInDialog()
+
+    const clear = screen.getByRole('button', { name: '清除选择' })
+    // fireEvent 直派 click（绕过 userEvent 的 pointer-events 守卫）：禁用态下 handler 不得执行
+    fireEvent.click(clear)
+    expect(usePlayersUiStore.getState().selectedUuids).toEqual(['00000000-0000-4000-8000-000000000002'])
+    await waitFor(() => expect(clear).toBeDisabled())
+
+    release()
+    await screen.findByText('批量踢出完成：成功 1，失败 0')
+    await waitFor(() => expect(screen.getByRole('button', { name: '清除选择' })).toBeEnabled())
   })
 
   it('确认弹窗取消：不执行动作且弹窗关闭', async () => {
