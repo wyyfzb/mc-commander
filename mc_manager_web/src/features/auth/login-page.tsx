@@ -352,14 +352,14 @@ export function LoginPage() {
             {phase === 'setup' && (
               <div className="space-y-2">
                 <Label htmlFor="confirm-password">确认密码</Label>
-                <Input
+                {/* 与上方「管理员密码」同走 PasswordInput：打字错位的风险恰恰落在第二次输入上，
+                    只让第一个框能显隐等于把最容易核对的那半藏起来（J14） */}
+                <PasswordInput
                   id="confirm-password"
-                  type="password"
                   value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  onChange={setConfirmPassword}
                   placeholder="再次输入密码"
                   autoComplete="new-password"
-                  className="h-10 font-mono"
                 />
               </div>
             )}
