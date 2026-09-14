@@ -81,11 +81,31 @@ describe('useRadioGroup', () => {
     expect(screen.getByRole('radio', { name: '今天' })).toHaveAttribute('aria-checked', 'true')
   })
 
-  it('无选中态下方向键从首项起算（不谎报选中，但方向键仍可用）', () => {
+  it('无选中态下第一次方向键落在首项（APG：未选中则焦点落在第一个）', () => {
     const onChange = vi.fn()
     render(<Host initial={null} onChange={onChange} />)
-    fireEvent.keyDown(screen.getByRole('radiogroup', { name: '时间范围' }), { key: 'ArrowRight' })
-    expect(onChange).toHaveBeenCalledWith('week')
+    const group = screen.getByRole('radiogroup', { name: '时间范围' })
+    const today = screen.getByRole('radio', { name: '今天' })
+
+    fireEvent.keyDown(group, { key: 'ArrowRight' })
+
+    expect(onChange).toHaveBeenCalledWith('day')
+    expect(today).toHaveAttribute('aria-checked', 'true')
+    expect(document.activeElement).toBe(today)
+  })
+
+  it('无选中态下反向方向键同样落在首项，Home/End 的绝对落点不受影响', () => {
+    const onChange = vi.fn()
+    const { unmount } = render(<Host initial={null} onChange={onChange} />)
+    fireEvent.keyDown(screen.getByRole('radiogroup', { name: '时间范围' }), { key: 'ArrowLeft' })
+    expect(onChange).toHaveBeenLastCalledWith('day')
+    unmount()
+
+    // End 是绝对落点：无选中时仍直接到末项（归一不得扩大成「一切键都落首项」）
+    const onEndChange = vi.fn()
+    render(<Host initial={null} onChange={onEndChange} />)
+    fireEvent.keyDown(screen.getByRole('radiogroup', { name: '时间范围' }), { key: 'End' })
+    expect(onEndChange).toHaveBeenLastCalledWith('month')
   })
 
   it('无关按键放行：Tab 不选中、也不被 preventDefault（键盘用户不会被困在组里）', () => {

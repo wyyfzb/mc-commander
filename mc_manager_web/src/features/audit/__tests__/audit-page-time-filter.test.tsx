@@ -319,6 +319,11 @@ describe('命令历史 tab 时间筛选（issue 385）', () => {
     const week = radios[1]!
     expect(today).toHaveAttribute('aria-checked', 'false') // 初始无选中
 
+    // 无选中时首次方向键落在首项本身（此前从停靠点 0 再 +1，会落到第 2 项）
+    fireEvent.keyDown(group, { key: 'ArrowRight' })
+    expect(today).toHaveAttribute('aria-checked', 'true')
+    expect(document.activeElement).toBe(today)
+
     fireEvent.keyDown(group, { key: 'ArrowRight' })
     expect(week).toHaveAttribute('aria-checked', 'true')
     expect(document.activeElement).toBe(week)

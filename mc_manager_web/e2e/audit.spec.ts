@@ -61,6 +61,11 @@ test.describe('审计页', () => {
     await expect(week).toHaveAttribute('tabindex', '-1')
 
     await today.focus()
+    // 无选中态：首次方向键落在首项本身（再按一次才到第 2 项）
+    await page.keyboard.press('ArrowRight')
+    await expect(today).toHaveAttribute('aria-checked', 'true')
+    await expect(today).toBeFocused()
+
     await page.keyboard.press('ArrowRight')
     await expect(week).toHaveAttribute('aria-checked', 'true')
     await expect(week).toBeFocused()

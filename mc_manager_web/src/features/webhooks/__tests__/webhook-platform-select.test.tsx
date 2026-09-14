@@ -143,7 +143,9 @@ describe('Webhook 渠道预设单选组', () => {
     // 且不谎报选中：当前值不在清单里，没有哪一项能代表它
     expect(within(group).queryAllByRole('radio', { checked: true })).toHaveLength(0)
 
-    // 停靠点可用：方向键把选择落到清单内第二项
+    // 停靠点可用：无选中态下首次方向键落在首项本身（不跳到第 2 项）
+    fireEvent.keyDown(stops[0]!, { key: 'ArrowRight' })
+    expect(within(group).getByRole('radio', { name: '通用' })).toHaveAttribute('aria-checked', 'true')
     fireEvent.keyDown(stops[0]!, { key: 'ArrowRight' })
     expect(within(group).getByRole('radio', { name: '飞书' })).toHaveAttribute('aria-checked', 'true')
   })

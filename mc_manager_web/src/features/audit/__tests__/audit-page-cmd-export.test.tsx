@@ -154,8 +154,12 @@ describe('AuditPage 命令历史筛选栏（快捷时间范围单选组）', () 
     expect(radios[1]).toHaveAttribute('tabindex', '-1')
 
     radios[0]!.focus()
+    // 无选中态：首次方向键落在首项本身（此前从停靠点 0 再 +1，会落到第 2 项）
     await user.keyboard('{ArrowRight}')
+    expect(radios[0]).toHaveAttribute('aria-checked', 'true')
+    expect(radios[0]).toHaveFocus()
 
+    await user.keyboard('{ArrowRight}')
     expect(radios[1]).toHaveAttribute('aria-checked', 'true')
     expect(radios[0]).toHaveAttribute('aria-checked', 'false')
     expect(radios[1]).toHaveFocus()

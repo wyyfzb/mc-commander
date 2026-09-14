@@ -214,6 +214,10 @@ describe('ActionForms', () => {
     expect(effects[0]).toHaveAttribute('aria-checked', 'false') // 默认未选任何效果
     expect(effects[0]).toHaveAttribute('tabindex', '0') // 停靠点落首项但不谎报选中
     fireEvent.keyDown(effectGroup, { key: 'ArrowRight' })
+    // 无选中：首次方向键落在首项本身（不是停靠点 0 再加一格的第 2 项）
+    expect(effects[0]).toHaveAttribute('aria-checked', 'true')
+    expect(document.activeElement).toBe(effects[0])
+    fireEvent.keyDown(effectGroup, { key: 'ArrowRight' })
     expect(effects[1]).toHaveAttribute('aria-checked', 'true')
     expect(document.activeElement).toBe(effects[1])
     // 操作模式组同样接了线（默认「赋予效果」选中 → 停靠点落它，其余为 -1）
@@ -257,6 +261,10 @@ describe('ActionForms', () => {
 
     const entityGroup = screen.getByRole('radiogroup', { name: '实体' })
     const entities = within(entityGroup).getAllByRole('radio')
+    // 默认未选实体：首次方向键落首项，再按一次才到第 2 项
+    fireEvent.keyDown(entityGroup, { key: 'ArrowRight' })
+    expect(entities[0]).toHaveAttribute('aria-checked', 'true')
+    expect(document.activeElement).toBe(entities[0])
     fireEvent.keyDown(entityGroup, { key: 'ArrowRight' })
     expect(entities[1]).toHaveAttribute('aria-checked', 'true')
     expect(document.activeElement).toBe(entities[1])
