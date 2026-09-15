@@ -3,7 +3,8 @@
  * capture.mjs —— 全站截图脚本（设计审查用：可复现的视觉证据采集）
  *
  * 自动起 mock 数据服务 + vite dev，用 Playwright 对 10 个路由 × 明/暗双主题
- * 截图，输出 <VISION_OUT>/capture_<时间戳>/<路由>-<主题>.png + manifest.json。
+ * 截图，输出 <VISION_OUT>/capture_<时间戳>/<路由>-<主题>.png + manifest.json
+ * （manifest 逐图记视口与字节数，并记 servers 的来源 started|reused）。
  *
  * 用法（在 mc_manager_web/ 下）：
  *   npm run capture                         # 全量截图（10 路由 × 2 主题）
@@ -209,16 +210,19 @@ async function main() {
   }
 
   // ── 1. 起 mock-server + vite dev（已监听则复用）──
-  let mockUp = await portOpen(MOCK_PORT)
-  if (!mockUp) {
+  // 来源必须独立记录：探测结果与「本进程是否启动过」是两件事——早先实现启动后把探测变量
+  // 回写成 true 再据此打日志，于是恒打印「复用」，无法判断截图吃的是本进程刚起的服务
+  // 还是外部残留实例（旧 dist 喂假数据正是此类）。
+  const mockExisting = await portOpen(MOCK_PORT)
+  if (!mockExisting) {
     children.push(startServer('node', [join(WEB_DIR, 'scripts', 'mock-server.mjs')], { cwd: WEB_DIR }))
     await waitPort(MOCK_PORT)
-    mockUp = true
   }
-  log(`mock-server ${MOCK_PORT} ${mockUp ? '复用' : '已启动'}`)
+  const mockSource = mockExisting ? 'reused' : 'started'
+  log(`mock-server ${MOCK_PORT} ${mockSource === 'reused' ? '复用既有实例' : '本进程启动'}`)
 
-  let devUp = await portOpen(DEV_PORT)
-  if (!devUp) {
+  const devExisting = await portOpen(DEV_PORT)
+  if (!devExisting) {
     children.push(
       startServer('npm', ['run', 'dev', '--', '--port', String(DEV_PORT)], {
         cwd: WEB_DIR,
@@ -226,9 +230,9 @@ async function main() {
       }),
     )
     await waitPort(DEV_PORT)
-    devUp = true
   }
-  log(`vite dev ${DEV_PORT} ${devUp ? '复用' : '已启动'}`)
+  const devSource = devExisting ? 'reused' : 'started'
+  log(`vite dev ${DEV_PORT} ${devSource === 'reused' ? '复用既有实例' : '本进程启动'}`)
 
   // ── 2. 加载 Playwright（web 依赖）──
   const { chromium } = await import(pathToFileURL(join(WEB_DIR, 'node_modules', 'playwright', 'index.mjs')))
@@ -249,7 +253,14 @@ async function main() {
 
   // mock key 动态构造（规避凭据字面量扫描规则）
   const mockKey = 'e2e-mock-key-' + '0'.repeat(10)
-  const manifest = { generatedAt: new Date().toISOString(), base: `http://localhost:${DEV_PORT}`, viewports: VIEWPORTS, shots: [], minShotBytes: MIN_SHOT_BYTES }
+  const manifest = {
+    generatedAt: new Date().toISOString(),
+    base: `http://localhost:${DEV_PORT}`,
+    servers: { mock: mockSource, dev: devSource },
+    viewports: VIEWPORTS,
+    shots: [],
+    minShotBytes: MIN_SHOT_BYTES,
+  }
   const failed = []
   const warned = []
 

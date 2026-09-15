@@ -61,6 +61,17 @@
  */
 import { readFileSync, readdirSync, existsSync } from 'node:fs'
 import { join, extname, relative, sep } from 'node:path'
+// 额度/档位采集内核（纯函数；单测见 scripts/__tests__/design-token-rules.test.mjs）。
+// 抽出的动因：这些判定此前只有探针证据、没有单测——额度记错一位会静默放行额度外的第 N 处。
+import {
+  STRING_LITERAL,
+  collectCardSurfaceOffsets,
+  collectHeadingTiers,
+  collectTextBaseHits,
+  lineAt,
+  overQuota,
+  stripComments,
+} from './lib/design-token-rules.mjs'
 
 const root = join(import.meta.dirname, '..')
 const srcDir = join(root, 'src')
@@ -204,11 +215,10 @@ function checkTokenClasses(classes, filePath, lineNum) {
 }
 
 /**
- * text-base 的现场计数与豁免额度（第 27 条在 G21–G27 段判定）。
+ * text-base 的现场豁免额度（第 27 条在 G21–G27 段判定）。
  * 额度是裁定结果而非白名单：唯一来源是移动端输入控件聚焦时的 iOS 自动缩放防护——
  * 其余任何位置（含豁免文件里的第 2 处）都属体系外第 7 个字号。
  */
-const TEXT_BASE_TOKEN = 'text-base'
 const TEXT_BASE_ALLOWLIST = new Map([
   ['src/components/ui/input.tsx', 1],    // 输入框：<16px 时 iOS 聚焦自动放大页面
   ['src/components/ui/textarea.tsx', 1], // 多行输入：同上
@@ -289,15 +299,6 @@ function checkLine(filePath, lineNum, line) {
   }
 }
 
-/** 剥掉注释后的正文（一律等长空白替换，保证偏移量↔行号仍与原文对齐）。
- *  只供本节 11b/11c 使用：1–11 条按原始行判定，注释里的示例仍会命中（既有取舍，未改） */
-function stripComments(content) {
-  return content
-    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
-    // 行注释同样抹成等长空白：会把 https:// 这类串连同其后内容一并吃掉，属「宁漏不误报」的取舍
-    .replace(/\/\/[^\n]*/g, (m) => ' '.repeat(m.length))
-}
-
 /**
  * 一次 `cn`/`clsx` 调用的实参表（J70）：从 `(` 起按括号配平取到配对右括号，跨行；
  * 嵌套调用只取最外层（内层实参本就是外层实参的片段，重复计入会让同一处报两次）；
@@ -373,7 +374,6 @@ function findToneTintOverlaps(content) {
  * 是交互覆盖层而非内容面 tint，两者都不算手写三件套，不能被误报。
  */
 const TONE_TRIAD_NAMES = ['accent', 'success', 'warning', 'error', 'info', 'purple']
-const STRING_LITERAL = /'[^'\n]*'|"[^"\n]*"|`(?:[^`\\]|\\.)*`/g
 
 /** 三件套命中（整词）：返回档名或 undefined */
 function triadToneOf(tokens) {
@@ -753,28 +753,18 @@ const GATE_FILES = G9_FILES.filter((f) => f.startsWith(srcDir))
 const GATE_REL = (f) => relative(root, f).split(sep).join('/')
 /** 用例按定义就要断言类名/文案（同 11b/11c 的豁免口径），不进判定面 */
 const isTestFile = (f) => f.includes('__tests__')
-const lineAt = (text, offset) => text.slice(0, offset).split('\n').length
 
 // 27. 原生 text-base（16px，体系外第 7 个字号）：唯一豁免现场是移动端输入控件。
 //     扫描面含 ui/（豁免现场就在 ui/，逐行检查排除它），故用不含排除项的 G9_FILES；
 //     额度按现场登记（同第 21 条卡片面额度口径）——每个豁免文件放行前 N 处、第 N+1 处
-//     即报，未登记文件一处即报。判定 = 字符串字面量按空白切词后的整词比对，
-//     变体前缀与拼写（`sm:text-base`）看不见（宁漏不误报）。
+//     即报，未登记文件一处即报。采集口径见 lib/design-token-rules.mjs。
 for (const f of G9_FILES) {
   if (f.endsWith('.css') || isTestFile(f)) continue
   const rel = GATE_REL(f)
   const budget = TEXT_BASE_ALLOWLIST.get(rel) ?? 0
-  let seen = 0
-  const lines = readFileSync(f, 'utf-8').split('\n')
-  for (const [i, line] of lines.entries()) {
-    for (const m of line.matchAll(/(["'`])([^"'`\n]*)\1/g)) {
-      for (const word of m[2].split(/\s+/)) {
-        if (word !== TEXT_BASE_TOKEN) continue
-        if (++seen <= budget) continue
-        console.log(`${rel}:${i + 1}: text-base 是体系外第 7 个字号（16px）→ 改用 text-mcs-*；仅移动端输入控件可豁免（ui/input、ui/textarea 各 1 处，额度见本文件 TEXT_BASE_ALLOWLIST）`)
-        violations++
-      }
-    }
+  for (const hit of overQuota(collectTextBaseHits(readFileSync(f, 'utf-8')), budget)) {
+    console.log(`${rel}:${hit.line}: text-base 是体系外第 7 个字号（16px）→ 改用 text-mcs-*；仅移动端输入控件可豁免（ui/input、ui/textarea 各 1 处，额度见本文件 TEXT_BASE_ALLOWLIST）`)
+    violations++
   }
 }
 
@@ -798,8 +788,7 @@ for (const f of GATE_FILES) {
   const rel = GATE_REL(f)
   if (rel === CARD_DECLARATION_SOURCE) continue
   const code = stripComments(readFileSync(f, 'utf-8'))
-  const offsets = [...code.matchAll(/shadow-mcs-card/g)].map((m) => m.index)
-  for (const offset of offsets.slice(CARD_SURFACE_ALLOWLIST.get(rel) ?? 0)) {
+  for (const offset of overQuota(collectCardSurfaceOffsets(code), CARD_SURFACE_ALLOWLIST.get(rel))) {
     console.log(`${rel}:${lineAt(code, offset)}: 卡片面类名配方（shadow-mcs-card）→ 卡片面只在 components/mcs/card.tsx 声明（AGENTS.md「卡片容器」）；非卡片面的同配方现场须登记豁免额度`)
     violations++
   }
@@ -856,7 +845,8 @@ for (const f of GATE_FILES) {
 //     角色→档位的表（`const X = { role: 'text-mcs-xx' } as const`），元素行只写 `X[variant]`，
 //     调用点上的字面量 `variant="..."` 选档、缺省时走参数默认角色——同一组件在不同页面上
 //     可能落进不同档，故档位不能只按组件名记一个值。档位仍不硬编码：改基座的角色表即改口径。
-//     边界（宁漏不误报）：variant 非字面量（表达式/跨行写）与未登记角色不计档；
+//     边界（宁漏不误报）：variant 非字面量（表达式/跨行写）按**缺省角色**计档——调用点实际角色
+//     静态不可判，按缺省角色落档；未登记角色不计档；
 //     字面量的单双引号写法（`variant="label"` / `variant='label'`）语义相同，都按字面量计档
 //     （只认双引号会把单引号调用点误判成缺省角色、静默丢掉另一档）；
 //     基座元素行读不出档（如只有色类、无字号档的 SheetTitle/DialogTitle 一类）同样不计档。
@@ -864,87 +854,11 @@ for (const f of GATE_FILES) {
 //     引导页实测同屏有两个 h1（欢迎区 + 连接表单，不是互斥渲染）——那是该页自身的品牌+表单
 //     结构，本轮口径维持不改；把它拆成 h1+h2 是可见结构变更，与本条要防的
 //     「AppShell 页漏页头 / 标题档位发散」不同源。
+//     档位采集（角色档位表解析、调用点取档）见 lib/design-token-rules.mjs。
 const APP_SHELL_PAGE_EXEMPT = new Set([
   'src/features/auth/login-page.tsx',
   'src/features/onboarding/onboarding-page.tsx',
 ])
-const MCS_SIZE_CLASS = /text-mcs-(2xs|xs|sm|md|lg|xl|display)\b/g
-/** 标题标签所在行（显式字号档的判定行） */
-const HEADING_TAG_LINE = /<h[1-6][\s>]/
-/** 标题组件声明：`function *Title/*Header(`（含 export） */
-const TITLE_FUNCTION_DECL = /(?:export\s+)?function\s+\w+(?:Title|Header)\w*\s*\(/g
-/** 组件体内承载标题的元素：带 className 的 JSX 起始标签（含基座里的 `<Tag`），
- *  档位取该类名串的首个 text-mcs-* */
-const JSX_TEXT_ELEMENT = /<([a-zA-Z][\w.]*)\b[^\n]*?className=[^\n]*?text-mcs-/
-/** `<*Title/*Header>` 用法（大写开头，故与 `function XxxTitle(` 声明不混） */
-const JSX_TITLE_TAG = /<([A-Z]\w*(?:Title|Header))\b/g
-/** 标题组件的角色轴档位表声明：`const NAME = { role: 'text-mcs-档' } as const`
- *  （角色轴基座的事实源——档位不在元素行上，元素行只写 `NAME[variant]`） */
-const ROLE_TIER_MAP_DECL = /const\s+([A-Z]\w*)\s*=\s*\{([\s\S]*?)\}\s*as\s+const/g
-/** 角色轴档位表的条目（角色名 → 字号档；档取 token 名，与标题标签行的档同口径） */
-const ROLE_TIER_ENTRY = /(\w+)\s*:\s*'text-mcs-(2xs|xs|sm|md|lg|xl|display)'/g
-/** 元素行上的角色查表写法 `NAME[param]` */
-const ROLE_LOOKUP = /([A-Z]\w*)\s*\[\s*(\w+)\s*\]/
-/** 调用点上的字面量角色 `variant="label"`（单双引号等义，都算字面量） */
-const VARIANT_LITERAL = /\svariant=["'](\w+)["']/
-/** 该文件里各标题组件自身的基座档。单档基座取组件体内第一个承载标题的元素行的 text-mcs-*；
- *  角色轴基座（元素行写 `NAME[variant]`）读同文件的角色档位表 + 参数默认角色，
- *  调用点再按 `variant="..."` 分类取档。两种都读不出档即不计档（宁漏不误报）。 */
-function titleBaseTiers(code) {
-  const roleMaps = new Map()
-  for (const m of code.matchAll(ROLE_TIER_MAP_DECL)) {
-    const entries = new Map()
-    for (const entry of m[2].matchAll(ROLE_TIER_ENTRY)) entries.set(entry[1], entry[2])
-    if (entries.size > 0) roleMaps.set(m[1], entries)
-  }
-  const facets = []
-  for (const m of code.matchAll(TITLE_FUNCTION_DECL)) {
-    const name = m[0].match(/function\s+(\w+)/)[1]
-    // 参数表的 `{` 不是函数体，先按括号配平跨过参数表，再从体的 `{` 起按花括号配平
-    const parenAt = code.indexOf('(', m.index)
-    let parens = 1
-    let after = parenAt + 1
-    for (; after < code.length && parens > 0; after++) {
-      if (code[after] === '(') parens++
-      else if (code[after] === ')') parens--
-    }
-    const bodyStart = code.indexOf('{', after)
-    if (bodyStart < 0) continue
-    let braces = 0
-    let end = bodyStart
-    for (; end < code.length; end++) {
-      if (code[end] === '{') braces++
-      else if (code[end] === '}' && --braces === 0) break
-    }
-    const body = code.slice(bodyStart, end)
-    const lookup = body.match(ROLE_LOOKUP)
-    const roleTiers = lookup ? roleMaps.get(lookup[1]) : null
-    if (roleTiers) {
-      // 默认角色＝该参数在签名里的默认值（`variant = 'heading'`）
-      const declared = code
-        .slice(parenAt + 1, after - 1)
-        .match(new RegExp(`\\b${lookup[2]}\\s*=\\s*'(\\w+)'`))
-      facets.push({ name, roleTiers, defaultRole: declared ? declared[1] : null })
-      continue
-    }
-    for (const line of body.split('\n')) {
-      if (!JSX_TEXT_ELEMENT.test(line)) continue
-      const tier = [...line.matchAll(MCS_SIZE_CLASS)][0]
-      if (tier) facets.push({ name, tier: tier[1] })
-      break
-    }
-  }
-  return facets
-}
-/** 调用点上该标题实际落的档：单档基座直取；角色轴基座按 `variant="..."` 分类，
- *  无 variant 走默认角色，variant 非字面量或角色未登记则不计档 */
-function baseTierOf(base, tagText) {
-  if (!base.roleTiers) return base.tier
-  const gt = tagText.indexOf('>')
-  const literal = (gt < 0 ? tagText : tagText.slice(0, gt)).match(VARIANT_LITERAL)
-  const role = literal ? literal[1] : base.defaultRole
-  return role ? base.roleTiers.get(role) : undefined
-}
 /** 页内模块路径（`@/x` 走 src/，相对路径按引用文件所在目录解析）；外部包与测试返回 null */
 function resolveLocalModule(fromFile, spec) {
   const base = spec.startsWith('@/')
@@ -985,25 +899,10 @@ for (const f of GATE_FILES) {
   for (const p of [...scoped, ...scoped.flatMap((m) => localImportsOf(moduleCodes.get(m), m))]) {
     if (!moduleCodes.has(p)) moduleCodes.set(p, stripComments(readFileSync(p, 'utf-8')))
   }
-  const baseTierByName = new Map()
-  for (const moduleCode of moduleCodes.values()) {
-    for (const facet of titleBaseTiers(moduleCode)) baseTierByName.set(facet.name, facet)
-  }
-  const tiers = new Set()
-  for (const moduleFile of scoped) {
-    for (const line of moduleCodes.get(moduleFile).split('\n')) {
-      if (HEADING_TAG_LINE.test(line)) {
-        const explicit = [...line.matchAll(MCS_SIZE_CLASS)][0]
-        if (explicit) tiers.add(explicit[1])
-      }
-      for (const tag of line.matchAll(JSX_TITLE_TAG)) {
-        const base = baseTierByName.get(tag[1])
-        if (!base) continue
-        const tier = baseTierOf(base, line.slice(tag.index))
-        if (tier) tiers.add(tier)
-      }
-    }
-  }
+  const tiers = collectHeadingTiers(
+    scoped.map((p) => moduleCodes.get(p)),
+    moduleCodes.values(),
+  )
   if (tiers.size > 3) {
     console.log(`${rel}: 页内标题字号档 ${tiers.size} 档（${[...tiers].sort().join('/')}）→ 同屏标题最多 3 档`)
     violations++
