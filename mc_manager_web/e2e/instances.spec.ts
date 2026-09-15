@@ -119,4 +119,34 @@ test.describe('实例页', () => {
     await page.getByRole('button', { name: '取消' }).click()
     await expect(page).toHaveURL(/\/instances$/)
   })
+
+  test('单实例：两栏网格 + 部署引导块（J21，不把唯一卡片拉成整幅宽度）', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 })
+    await setupConnection(page)
+    await page.goto('/instances')
+
+    // mock 只有 1 个实例：网格为两栏，卡片与引导块等宽并列
+    const grid = page.locator('[data-instance-id]').first().locator('..')
+    expect(await grid.evaluate((el) => getComputedStyle(el).gridTemplateColumns.split(' ').length)).toBe(2)
+    const card = await page.locator('[data-instance-id]').first().boundingBox()
+    const tile = await page.getByTestId('deploy-guide-tile').boundingBox()
+    expect(card).not.toBeNull()
+    expect(tile).not.toBeNull()
+    expect(Math.abs(card!.width - tile!.width)).toBeLessThanOrEqual(1)
+    expect(tile!.x).toBeGreaterThan(card!.x)
+
+    // 引导块入口与页头 CTA 同源（打开同一部署向导）
+    await page.getByRole('button', { name: '打开部署向导' }).click()
+    await expect(page.getByText('选择服务端', { exact: true })).toBeVisible()
+    await page.getByRole('button', { name: '取消' }).click()
+
+    // 窄屏（375）引导块落到卡片下方整幅宽度，无横向溢出
+    await page.setViewportSize({ width: 375, height: 812 })
+    await expect(page.getByTestId('deploy-guide-tile')).toBeVisible()
+    const narrow = await page.evaluate(() => ({
+      scrollWidth: document.documentElement.scrollWidth,
+      clientWidth: document.documentElement.clientWidth,
+    }))
+    expect(narrow.scrollWidth).toBeLessThanOrEqual(narrow.clientWidth)
+  })
 })

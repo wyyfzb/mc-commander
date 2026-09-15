@@ -1,6 +1,6 @@
 /**
  * InstanceCards —— 实例卡片网格
- * - 网格 gap-3 sm:grid-cols-2 xl:grid-cols-3（页面头部由实例页渲染，本组件只负责网格与空态）
+ * - 网格 gap-3 sm:grid-cols-2（多实例 xl:grid-cols-3；单实例放宽为两栏 + 部署引导块，见下）
  * - 卡片：状态点（运行 success / 停止 muted）+ 名称 + 「当前」accent 徽章（currentId 命中）
  *   + 副行「运行中 · N 人在线」（success 色）/「已停止」（muted）+ 版本 mono 徽章
  *   （detailStatuses[id]?.mcVersion，组件内不查询；详情在途时仅该卡骨架占位）
@@ -26,6 +26,7 @@ import { StatusPill } from '@/components/mcs/status-pill'
 import { Card } from '@/components/mcs/card'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { EmptyState } from '@/components/mcs/empty-state'
+import { DeployGuideTile } from './deploy-guide-tile'
 import { useUpgradeStore } from '@/stores/upgrade'
 import type { InstancePhase } from '@/stores/server'
 import type { InstanceStatus, InstanceSummary } from '@/api/types'
@@ -92,7 +93,9 @@ export function InstanceCards({
   }
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+    // 单实例：三列网格只剩最左一格（xl 下右侧约 65% 空白）→ 两栏，右栏放部署引导块；
+    // 多实例维持三列，卡片宽度不随实例数变化
+    <div className={cn('grid gap-3 sm:grid-cols-2', instances.length > 1 && 'xl:grid-cols-3')}>
       {instances.map((instance, index) => (
         <InstanceCard
           key={instance.id}
@@ -112,6 +115,7 @@ export function InstanceCards({
           className={`animate-mcs-fade-up mcs-delay-${Math.min(index + 1, 6)}`}
         />
       ))}
+      {instances.length === 1 && <DeployGuideTile onDeploy={onDeploy} className="animate-mcs-fade-up mcs-delay-2" />}
     </div>
   )
 }
