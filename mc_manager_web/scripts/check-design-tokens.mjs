@@ -38,7 +38,7 @@
  *  18. 危险语义色禁半透明底：bg-destructive/<alpha>
  *  19. 内容面 tint 必须不透明
  *  20. 布局属性动画（transition-all）与数字时长档（duration-<数字>），含 ui/ 基座
- * 六条门禁（第 21–26 条，J23；扫描 src/ 全量，排除项在各条内声明）：
+ * 六条门禁（第 21–27 条，J23/t27；扫描 src/ 全量，排除项在各条内声明）：
  *  21. 卡片面类名（配方）只允许声明在 components/mcs/card.tsx——非卡片面但共用
  *      `shadow-mcs-card` 标记的现场按「登记额度」豁免（额度外的第 N 处即报，豁免的是现场
  *      而非整个文件）
@@ -51,6 +51,9 @@
  *      行内控件自己的激活键；宿主是 input/textarea 时其默认行为属控件自身，不判
  *  26. 内联 style 的 width/height 必须是数值或含单位字符串（传 Tailwind 类名会被浏览器当
  *      非法 CSS 丢弃——骨架列宽曾整片失效）
+ *  27. 原生 text-base（16px，体系外第 7 个字号）：唯一豁免现场是 ui/input.tsx 与
+ *      ui/textarea.tsx 各 1 处（移动端聚焦时 <16px 会触发 iOS 自动缩放），按「登记额度」
+ *      校验——额度外的第 N 处即报（写法同第 21 条卡片面额度）
  * 类名提取覆盖 className="..."、className={cn(...)}、模板字面量、对象映射值（如 tone: 'bg-...'），
  * 不留「只在 className 字面属性里才检查」的盲区。
  * 发现违规 → 输出 文件:行号 → 非零退出码（阻止合并）
@@ -199,6 +202,17 @@ function checkTokenClasses(classes, filePath, lineNum) {
   }
 }
 
+/**
+ * text-base 的现场计数与豁免额度（第 27 条在 G21–G27 段判定）。
+ * 额度是裁定结果而非白名单：唯一来源是移动端输入控件聚焦时的 iOS 自动缩放防护——
+ * 其余任何位置（含豁免文件里的第 2 处）都属体系外第 7 个字号。
+ */
+const TEXT_BASE_TOKEN = 'text-base'
+const TEXT_BASE_ALLOWLIST = new Map([
+  ['src/components/ui/input.tsx', 1],    // 输入框：<16px 时 iOS 聚焦自动放大页面
+  ['src/components/ui/textarea.tsx', 1], // 多行输入：同上
+])
+
 /** 在单条类名串中检测违规模式 */
 function checkClasses(filePath, lineNum, classes) {
   // 1. dark: 前缀
@@ -246,6 +260,7 @@ function checkClasses(filePath, lineNum, classes) {
     console.log(`${filePath}:${lineNum + 1}: text-${oversize[1]} 超出字号 token 体系 → 请使用 text-mcs-* token（文字档上限 text-mcs-xl）或 text-mcs-display（配 .mcs-num）`)
     violations++
   }
+  // 8. 原生的 16px text-base 由第 27 条统一判定（含 ui/ 扫描面与豁免额度），此处不报
   // 9. 焦点可见性：outline-none 会抵消同层的 focus-visible:outline-*（outline-style 恒为 none）
   if (
     /\boutline-none\b/.test(classes) &&
@@ -536,13 +551,15 @@ for (const f of G9_FILES) {
   })
 }
 
-// 源码类名（严格形状；动态模板取前缀，如 mcs-delay-${i} → mcs-delay-）
+// 源码类名（严格形状）
 // classContext：该字面量所在行是否像类名上下文（className/cn/cva/clsx）——
 // 用于把「形如 mcs-x 的存储键/事件名/测试夹具」与真正的裸类名区分开
 // 测试文件（__tests__）不进消费面：它按定义就要写出待断言的类名，且断言把档名拼进模板串
 // （`text-mcs-${tone}-fg`）会登记成通配前缀——曾让 text-mcs-*/bg-mcs-*/border-mcs-* 整族
 // 恒判为「已消费」，第 14 条死 token 门禁对这族完全失效。测试要判定的产物是运行时代码的
 // 消费面，测试自身不构成消费点。
+// usedPrefixes 是「模板串动态拼接类名」的前缀面（`mcs-delay-${i}` 一类）：现网已无此写法，
+// 故当前恒为空集，仅作防御性保留——将来再出现这种拼法时，它的消费与未定义判定仍自动生效。
 const CLASS_CONTEXT = /className|class=|\bcn\(|\bcva\(|\bclsx\(/
 const usedClasses = new Map() // class → { file, classContext }
 const usedPrefixes = new Set()
@@ -729,13 +746,36 @@ for (const f of G9_FILES) {
   })
 }
 
-// ── G21–G26（J23 门禁六条）：src/ 全量静态防线 ────────────────────────
-// 前 20 条按各自的扫描集（逐行 1–11 排除 ui/；12–20 含 ui/ 与 e2e/），这六条统一扫 src/ 全量。
+// ── G21–G27（J23 门禁 + t27 第 27 条）：src/ 全量静态防线 ────────────────────────
+// 前 20 条按各自的扫描集（逐行 1–11 排除 ui/；12–20 含 ui/ 与 e2e/），这些条统一扫 src/ 全量。
 const GATE_FILES = G9_FILES.filter((f) => f.startsWith(srcDir))
 const GATE_REL = (f) => relative(root, f).split(sep).join('/')
 /** 用例按定义就要断言类名/文案（同 11b/11c 的豁免口径），不进判定面 */
 const isTestFile = (f) => f.includes('__tests__')
 const lineAt = (text, offset) => text.slice(0, offset).split('\n').length
+
+// 27. 原生 text-base（16px，体系外第 7 个字号）：唯一豁免现场是移动端输入控件。
+//     扫描面含 ui/（豁免现场就在 ui/，逐行检查排除它），故用不含排除项的 G9_FILES；
+//     额度按现场登记（同第 21 条卡片面额度口径）——每个豁免文件放行前 N 处、第 N+1 处
+//     即报，未登记文件一处即报。判定 = 字符串字面量按空白切词后的整词比对，
+//     变体前缀与拼写（`sm:text-base`）看不见（宁漏不误报）。
+for (const f of G9_FILES) {
+  if (f.endsWith('.css') || isTestFile(f)) continue
+  const rel = GATE_REL(f)
+  const budget = TEXT_BASE_ALLOWLIST.get(rel) ?? 0
+  let seen = 0
+  const lines = readFileSync(f, 'utf-8').split('\n')
+  for (const [i, line] of lines.entries()) {
+    for (const m of line.matchAll(/(["'`])([^"'`\n]*)\1/g)) {
+      for (const word of m[2].split(/\s+/)) {
+        if (word !== TEXT_BASE_TOKEN) continue
+        if (++seen <= budget) continue
+        console.log(`${rel}:${i + 1}: text-base 是体系外第 7 个字号（16px）→ 改用 text-mcs-*；仅移动端输入控件可豁免（ui/input、ui/textarea 各 1 处，额度见本文件 TEXT_BASE_ALLOWLIST）`)
+        violations++
+      }
+    }
+  }
+}
 
 // 21. 卡片面类名只在 components/mcs/card.tsx 声明：配方 = rounded-mcs-md + border-mcs-border-muted
 //     + bg-mcs-bg-muted + shadow-mcs-card，以 `shadow-mcs-card`（卡阴影无第二用途）为判定标记；
@@ -801,6 +841,8 @@ for (const f of GATE_FILES) {
 
 // 23. 页面页头：AppShell 主页面必须有且仅有一个 PageHeader（页头是页面级唯一标题声明点），
 //     且该页标题字号档 ≤3——口径＝页头基座 + 卡片标题基座 + 该页自己的标题标签显式档。
+//     已知取舍：不辨识互斥渲染。设置页 6 个路由子页合计恰好 3 档、正贴上限，
+//     将来任一子面板再加一档就会静默越界（静态近似看不见「同时只渲染其一」）。
 //     判定面＝该页**实际渲染出的标题组件**（静态近似）：页文件 + 其直接引用的页内模块
 //     （覆盖「页 → 卡片组件 → mcs/card 基座」这类标题都在子组件里的现场；再深一层会把
 //     无关模块的标题算进同屏，宁漏不误报）。档位来源两类：
@@ -1030,4 +1072,4 @@ if (violations > 0) {
   console.error(`\n✗ 发现 ${violations} 处设计 token 违规（设计规范 §4.5）`)
   process.exit(1)
 }
-console.log('✓ 设计 token 完整性检查通过（色板类/dark:/transition-all/duration-数字/rounded-任意值/字号上限/焦点可见性/未注册 token 类/token 角色矩阵/alpha 白名单/未定义类/死类/死 token/内容面 tint 叠加/语义色三件套与选中强调形态声明源/Z 轴阶梯/玻璃预算/危险半透明底/内容面 tint 不透明/布局属性动画/卡片面声明源/标签组件唯一性/页面页头与标题档/全屏覆盖层来源/行内抢键落点/内联尺寸单位）')
+console.log('✓ 设计 token 完整性检查通过（色板类/dark:/transition-all/duration-数字/rounded-任意值/字号上限/焦点可见性/未注册 token 类/token 角色矩阵/alpha 白名单/未定义类/死类/死 token/内容面 tint 叠加/语义色三件套与选中强调形态声明源/Z 轴阶梯/text-base 额度/玻璃预算/危险半透明底/内容面 tint 不透明/布局属性动画/卡片面声明源/标签组件唯一性/页面页头与标题档/全屏覆盖层来源/行内抢键落点/内联尺寸单位）')

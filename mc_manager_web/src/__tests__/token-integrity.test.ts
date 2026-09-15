@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { existsSync, readFileSync, readdirSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 
 /**
@@ -176,6 +177,19 @@ describe('组件源码禁硬编码色值', () => {
 })
 
 /**
+ * 产物 CSS 读取（dist 是构建产物、本地可能未构建）：dist 或 assets 缺失时返回空数组，
+ * 调用方按「无产物」跳过。两道守卫都要——只判 dist 时，assets 被清理/半构建会 ENOENT 崩，
+ * 与「缺失时跳过」的口径不符。
+ */
+function builtCssOf(distDir: string): string[] {
+  const assetsDir = join(distDir, 'assets')
+  if (!existsSync(assetsDir)) return []
+  return readdirSync(assetsDir)
+    .filter((name) => name.endsWith('.css'))
+    .map((name) => readFileSync(join(assetsDir, name), 'utf-8'))
+}
+
+/**
  * 字号档位与配对行高（J13 + J56）：档位清单以 semantic.css 为事实源、@theme 注册以
  * index.css 为事实源，两处必须一一对应——漏一处就退回「小档吃正文 1.6 / 行高被字号类吞掉」
  * 的老毛病。行高值本身也断言（只断言「有配对」挡不住把 md 的 1.5 改成 1.9 这类静默漂移）。
@@ -259,16 +273,41 @@ describe('字号档位与配对行高', () => {
 
     // 产物 CSS：源码零引用挡不住构建产物里残留的 `.text-mcs-2xl` 规则（Tailwind 只生成用到的类，
     // 残留即等价于源码曾有引用）。dist 是构建产物、本地可能未构建，缺失时跳过（CI 先 build）
-    const distDir = join(srcDir, '..', 'dist')
-    const builtCss = existsSync(distDir)
-      ? readdirSync(join(distDir, 'assets'))
-          .filter((name) => name.endsWith('.css'))
-          .map((name) => readFileSync(join(distDir, 'assets', name), 'utf-8'))
-      : []
+    const builtCss = builtCssOf(join(srcDir, '..', 'dist'))
     if (builtCss.length > 0) {
       const deletedClass = '.' + 'text-mcs-' + '2xl'
       expect(builtCss.some((css) => css.includes(deletedClass)), '产物 CSS 残留 ' + deletedClass).toBe(false)
       expect(builtCss.some((css) => css.includes('.text-mcs-xl')), '产物 CSS 未见字号档（检查失效）').toBe(true)
+    }
+  })
+
+  it('dist 存在而 assets 缺失（清理/半构建）时不崩，按无产物跳过', () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcs-dist-'))
+    const fakeDist = join(root, 'dist')
+    const fakeAssets = join(fakeDist, 'assets')
+    try {
+      mkdirSync(fakeDist, { recursive: true })
+      expect(() => builtCssOf(fakeDist), 'dist 在而 assets 缺失 → 不得 ENOENT').not.toThrow()
+      expect(builtCssOf(fakeDist)).toEqual([])
+
+      // 半构建：assets 在但为空、或只有非 CSS 文件，同样是「无产物」
+      mkdirSync(fakeAssets, { recursive: true })
+      expect(builtCssOf(fakeDist)).toEqual([])
+      writeFileSync(join(fakeAssets, 'index.js'), '// 无 CSS 产物', 'utf-8')
+      expect(builtCssOf(fakeDist)).toEqual([])
+
+      // 正例：assets 里有 CSS 时必须读到（守卫不得把正常产物一并跳过）
+      writeFileSync(join(fakeAssets, 'index.css'), '.text-mcs-xl{font-size:22px}', 'utf-8')
+      expect(builtCssOf(fakeDist)).toHaveLength(1)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('本机已构建时产物 CSS 被真实读到（守卫不空转）', () => {
+    const realCss = builtCssOf(join(srcDir, '..', 'dist'))
+    if (realCss.length > 0) {
+      expect(realCss.some((css) => css.includes('.text-mcs-xl'))).toBe(true)
     }
   })
 })
