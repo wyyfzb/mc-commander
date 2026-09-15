@@ -11,9 +11,32 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SCRIPT_PATH = path.resolve(__dirname, '../scripts/deploy-mc-commander.sh');
 const script = readFileSync(SCRIPT_PATH, 'utf8');
 
+// bash 定位：Git for Windows 的 bash 常不在 PATH 上（可执行文件在 <Git 安装目录>/usr/bin/bash.exe），
+// 故支持 BASH_BIN 指定绝对路径；缺省按 PATH 查找。
+const BASH_BIN = process.env.BASH_BIN || 'bash';
+
+/**
+ * 运行 bash，并在**无法启动**（ENOENT 等）时抛出带指引的错误。
+ * 归因约束：spawnSync 启动失败时 status=null 且 error 有值，若只断言 status===0，
+ * 报错显示为「expected null to be +0」——把「本机没有 bash」误读成「脚本有语法错误」。
+ * 故启动失败必须先单独归因，并把处置办法写进错误信息。
+ */
+function runBash(args) {
+  const result = spawnSync(BASH_BIN, args, { encoding: 'utf8' });
+  if (result.error) {
+    throw new Error(
+      `无法启动 bash（${BASH_BIN}）：${result.error.code || result.error.message}。` +
+        '这是本机环境缺失，不是 deploy-mc-commander.sh 的问题。' +
+        '处置：把 Git 安装目录下的 usr/bin（或 bin）加入 PATH，' +
+        '或用 BASH_BIN 指定绝对路径重跑，例如：BASH_BIN=<Git 安装目录>/bin/bash.exe npm test',
+    );
+  }
+  return result;
+}
+
 describe('deploy-mc-commander.sh 安全修复回归', () => {
   it('脚本语法检查通过（bash -n）', () => {
-    const result = spawnSync('bash', ['-n', SCRIPT_PATH], { encoding: 'utf8' });
+    const result = runBash(['-n', SCRIPT_PATH]);
     expect(result.status).toBe(0);
     expect(result.stderr).toBe('');
   });

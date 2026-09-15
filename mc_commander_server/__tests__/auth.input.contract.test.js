@@ -64,7 +64,9 @@ function expectValidationError(res, fieldPath) {
   expect(paths).toContain(fieldPath);
 }
 
-describe('auth 输入侧契约 - POST /auth/setup（#428）', () => {
+// 超时口径：冲突用例含 3 次 scrypt（N=131072，单次 ~2800ms），叠加同文件前一例的
+// 密码哈希后，默认 5s 在并发争抢下余量过薄（实测三次命中）→ 显式 15s（与本仓 web 侧口径同值）。
+describe('auth 输入侧契约 - POST /auth/setup（#428）', { timeout: 15_000 }, () => {
   it('缺失 password → 400 统一校验语义（不再落入 handler 隐式 undefined）', async () => {
     const res = await request(app).post('/api/v1/auth/setup').send({});
     expectValidationError(res, 'password');
@@ -97,7 +99,7 @@ describe('auth 输入侧契约 - POST /auth/setup（#428）', () => {
   });
 });
 
-describe('auth 输入侧契约 - POST /auth/login（#428）', () => {
+describe('auth 输入侧契约 - POST /auth/login（#428）', { timeout: 15_000 }, () => {
   it('缺失 password → 400（形状校验，不计入失败锁定）', async () => {
     const res = await request(app).post('/api/v1/auth/login').send({});
     expectValidationError(res, 'password');
@@ -130,7 +132,7 @@ describe('auth 输入侧契约 - POST /auth/login（#428）', () => {
   });
 });
 
-describe('auth 输入侧契约 - PUT /auth/password（#428）', () => {
+describe('auth 输入侧契约 - PUT /auth/password（#428）', { timeout: 15_000 }, () => {
   /** 预置账号并返回有效会话令牌 */
   async function loginToken(password = 'old-pass-1234') {
     AdminAccountModel.setPassword(hashPassword(password));

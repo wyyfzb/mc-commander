@@ -75,7 +75,9 @@ async function setupAndLogin() {
   return login.body.data.token;
 }
 
-describe('auth/keys 响应契约（validatedSuccess 观测）', () => {
+// 超时口径：setup+login 链路每例含 2~3 次 scrypt（N=131072，单次 ~2800ms），
+// 并发争抢下默认 5s 余量过薄 → 显式 15s（与本仓 web 侧口径同值）。
+describe('auth/keys 响应契约（validatedSuccess 观测）', { timeout: 15_000 }, () => {
   it('GET /auth/status：未设密 hasPassword=false 可 parse', async () => {
     const res = await request(app).get('/api/v1/auth/status');
     expect(res.status).toBe(200);
