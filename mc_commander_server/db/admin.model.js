@@ -23,10 +23,14 @@ export class AdminAccountModel {
   }
 
   static setPassword(passwordHash) {
+    // REPLACE 冲突时先删后插，未列出的 totp_secret/created_at 会被清空/重置，故必须 upsert
     getDb()
       .prepare(
-        `INSERT OR REPLACE INTO admin_account (id, password_hash, updated_at)
-         VALUES (1, ?, CURRENT_TIMESTAMP)`,
+        `INSERT INTO admin_account (id, password_hash, updated_at)
+         VALUES (1, ?, CURRENT_TIMESTAMP)
+         ON CONFLICT(id) DO UPDATE SET
+           password_hash = excluded.password_hash,
+           updated_at = CURRENT_TIMESTAMP`,
       )
       .run(passwordHash);
   }
