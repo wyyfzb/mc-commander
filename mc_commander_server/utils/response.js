@@ -14,6 +14,9 @@ export const ErrorCodes = {
   INSTANCE_NOT_FOUND: { code: 40401, message: 'Instance not found', status: 404 },
   INSTANCE_NOT_RUNNING: { code: 40002, message: 'Instance is not running', status: 400 },
   INSTANCE_RUNNING: { code: 40003, message: 'Instance is running', status: 409 },
+
+  // 部署互斥：已有部署在途（部署实例尚未入库，重复发起会产出重复实例目录与 DB 记录）
+  DEPLOY_IN_PROGRESS: { code: 40905, message: 'A deployment is already in progress', status: 409 },
   
   // 备份错误
   BACKUP_NOT_FOUND: { code: 40402, message: 'Backup not found', status: 404 },

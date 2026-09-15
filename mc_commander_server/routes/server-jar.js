@@ -11,8 +11,8 @@ import { getRecommendedJavaVersion, findJavaPath } from '../utils/java-detector.
 import { InstanceModel } from '../db/index.js';
 import { atomicWriteFile } from '../services/mc_server.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
-import { deployRequestSchema } from '@mc-commander/schemas';
-import { validateBody } from '../middleware/validate.js';
+import { deployRequestSchema, deployStatusResponseSchema } from '@mc-commander/schemas';
+import { validateBody, validatedSuccess } from '../middleware/validate.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import {
   JAR_DOWNLOAD_MAX_BYTES,
@@ -96,19 +96,53 @@ async function getPaperDownload(mcVersion) {
  * - 注册表（serverManager.activeDeploys）供 websocket 连接建立时补发，
  *   仅承载进行中阶段：终态（complete/error）只推送不写回——否则 WS 连接
  *   建立时会对已结束的部署重复补发历史终态，且注册表随部署次数累积残留
+ * - 注册表同时是 GET /instances/deploy/status 的进度兜底数据源（WS 断线时
+ *   前端仍能查询服务端真值），故每阶段快照需自包含（含字节数与写入时刻）
  * @param {{ instanceId: string, instanceName: string, type: string, mcVersion: string }|null} meta
  */
 const TERMINAL_DEPLOY_STAGES = new Set(['complete', 'error']);
 
+/**
+ * 在途快照时限（15 分钟）：下载 + Forge 安装（120s）+ 首启（60s）的实测上限远低于此。
+ * 超时未更新的在途快照视为死快照（进程崩溃/被重启打断，终态清理未执行），
+ * 否则前端会永久卡在「部署中」而无法再次发起部署。
+ */
+const MAX_INFLIGHT_DEPLOY_AGE_MS = 15 * 60 * 1000;
+
 function trackDeployProgress(serverManager, meta, payload) {
   if (meta) {
     if (!TERMINAL_DEPLOY_STAGES.has(payload.stage)) {
-      serverManager.activeDeploys?.set(meta.instanceId, { ...meta, stage: payload.stage, percent: payload.percent });
+      serverManager.activeDeploys?.set(meta.instanceId, {
+        ...meta,
+        stage: payload.stage,
+        percent: payload.percent,
+        transferred: payload.transferred,
+        total: payload.total,
+        updatedAt: Date.now(),
+      });
     }
     serverManager.emit('deployProgress', { ...payload, ...meta });
   } else {
     serverManager.emit('deployProgress', payload);
   }
+}
+
+/**
+ * 最近一条在途部署快照（全局至多一条：部署实例尚未入库，
+ * 面板同一时刻只呈现一个部署进度视图）。超出时限的快照按死快照返回 null。
+ */
+function latestInFlightDeploy(serverManager) {
+  let latest = null;
+  for (const dep of serverManager.activeDeploys?.values() ?? []) {
+    if (Date.now() - (dep.updatedAt ?? 0) > MAX_INFLIGHT_DEPLOY_AGE_MS) continue;
+    if (!latest || dep.updatedAt > latest.updatedAt) latest = dep;
+  }
+  return latest;
+}
+
+/** 服务端是否确有部署在途（POST /instances/deploy 的重复部署门控与 GET 端点共用） */
+function isDeployInFlight(serverManager) {
+  return latestInFlightDeploy(serverManager) !== null;
 }
 
 async function downloadWithProgress(url, destPath, serverManager, stage = 'download', { expectedHash = null, maxBytes = JAR_DOWNLOAD_MAX_BYTES, deployMeta = null } = {}) {
@@ -381,10 +415,39 @@ export function createServerJarRoutes(serverManager) {
     }
   }));
 
+  // 部署进度兜底查询（WS 断线/刷新页面时前端仍能取到服务端真值并恢复「部署中」，
+  // 据此禁止重复发起部署）。无部署 / 已终态 / 快照超时一律返回空态 { deploying: false }，
+  // 不用 404（调用方是恢复逻辑，空态才是正常语义）
+  router.get('/instances/deploy/status', (req, res) => {
+    const snapshot = latestInFlightDeploy(serverManager);
+    if (!snapshot) {
+      return res.json(validatedSuccess(deployStatusResponseSchema, { deploying: false }));
+    }
+    return res.json(validatedSuccess(deployStatusResponseSchema, {
+      deploying: true,
+      instanceId: snapshot.instanceId,
+      instanceName: snapshot.instanceName,
+      type: snapshot.type,
+      mcVersion: snapshot.mcVersion,
+      stage: snapshot.stage,
+      percent: snapshot.percent,
+      transferred: snapshot.transferred ?? 0,
+      total: snapshot.total ?? 0,
+      updatedAt: snapshot.updatedAt,
+    }));
+  });
+
   // 部署实例（请求体 schema parse 校验：type 枚举/必填字段由 deployRequestSchema 单源定义）
   // 失败路径（下载/写盘/磁盘清理）catch 统一降级 502 并清理，asyncHandler 作逃逸兜底
   router.post('/instances/deploy', validateBody(deployRequestSchema), asyncHandler(async (req, res) => {
     const { type, mcVersion, instanceName, maxMemory, loaderVersion, eula } = req.body;
+
+    // 重复部署门控（路由层纵深防御）：页面残留的「部署中」进度、重连补发或断线期间的
+    // 兜底查询都可能让客户端误判服务端空闲；此处以服务端注册表为准拒绝并发部署
+    if (isDeployInFlight(serverManager)) {
+      return res.status(409).json(error(ErrorCodes.DEPLOY_IN_PROGRESS, 'A deployment is already in progress'));
+    }
+
     // EULA 只由用户显式同意决定：面板不得代替用户表达同意（未同意同样可完成部署，仅不写 true、不自动首启）
     const eulaAgreed = eula === true;
 
