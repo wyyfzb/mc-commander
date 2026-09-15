@@ -11,6 +11,49 @@ import pkg from './package.json' with { type: 'json' }
 // 开发期经 proxy 转发规避跨域；生产 M7 由 Express 同源托管
 const proxyTarget = process.env.VITE_PROXY_TARGET || 'http://localhost:25566'
 
+// 纯逻辑用例（不碰 DOM/RTL，且**传递依赖**也不碰）：改跑 `node` 环境，省下每文件的 jsdom 构建
+// 与 jest-dom/RTL setup 导入 —— jsdom 环境构建是全量耗时大头（2026-09-15 实测环境累计 ~1046s、
+// setup ~306s）。维护规则：新增纯逻辑用例把路径加进来；若在 node 下报「x is not defined」就把它
+// 移回 dom 项目（失败是**明确报错**，不会静默跳过）。stores 域的 3 个用例暂不放入
+// （其 persist/localStorage 依赖经 jsdom 才成立）。
+const NODE_ENV_TESTS = [
+  'src/__tests__/token-integrity.test.ts',
+  'src/api/__tests__/errors.test.ts',
+  // 注意：`api/__tests__/{audit,files,files-enhanced}` **不能**放这里 —— 它们用相对 URL
+  // （`/api/v1/...`）调 fetch，需要 jsdom 提供的 base URL，在 node 下会报
+  // `TypeError: Failed to parse URL from /api/...`（2026-09-15 实测，已移回 dom 项目）。
+  'src/api/__tests__/players.test.ts',
+  'src/api/__tests__/tasks.test.ts',
+  'src/api/__tests__/world.test.ts',
+  'src/components/mcs/__tests__/tone.test.ts',
+  'src/features/audit/__tests__/time-range.test.ts',
+  'src/features/files/__tests__/path-utils.test.ts',
+  'src/features/instances/components/deploy/__tests__/utils.test.ts',
+  'src/features/players/__tests__/player-pagination.test.ts',
+  'src/features/webhooks/__tests__/webhook-api.test.ts',
+  'src/lib/__tests__/format.test.ts',
+  'src/lib/__tests__/mc-backup.test.ts',
+  'src/lib/__tests__/mc-ban.test.ts',
+  'src/lib/__tests__/mc-batch.test.ts',
+  'src/lib/__tests__/mc-calendar.test.ts',
+  'src/lib/__tests__/mc-commands.test.ts',
+  'src/lib/__tests__/mc-cron.test.ts',
+  'src/lib/__tests__/mc-deploy.test.ts',
+  'src/lib/__tests__/mc-enchantments.test.ts',
+  'src/lib/__tests__/mc-entities.test.ts',
+  'src/lib/__tests__/mc-files.test.ts',
+  'src/lib/__tests__/mc-gamerules.test.ts',
+  'src/lib/__tests__/mc-properties.test.ts',
+  'src/lib/__tests__/mc-teleport.test.ts',
+  'src/lib/__tests__/notifications.test.ts',
+  'src/lib/__tests__/password-strength.test.ts',
+  'src/lib/__tests__/radio-group.test.ts',
+  'src/lib/__tests__/tailwind-merge.test.ts',
+  'src/lib/__tests__/terminal-log.test.ts',
+  'src/test/mocks/__tests__/fixtures.test.ts',
+]
+const DOM_EXCLUDE = ['e2e/**', 'node_modules/**']
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
@@ -92,16 +135,29 @@ export default defineConfig({
     },
   },
   test: {
-    environment: 'jsdom',
-    setupFiles: ['./src/test/setup.ts'],
-    include: ['src/**/*.test.{ts,tsx}'],
-    exclude: ['e2e/**', 'node_modules/**'],
     css: false, // 组件测试不解析 CSS（token 校验走独立脚本/测试）
     pool: 'threads', // 全量测试 107s → 64s（2026-08-20 实测；Windows 上 threads 显著快于默认 forks）
     // 单例超时（默认 5s）必须大于 setup.ts 的异步查询上限，否则失败时先被 vitest
     // 掐断、报「test timed out」而不是 RTL 的「找不到元素」——诊断信息会退化。
     // 各 describe 里本地的 { timeout: 15000 } 与此同值，保留作兜底（全局若调低仍保 15s）
     testTimeout: 15_000,
+    // 测试环境拆分（2026-09-15）：见 NODE_ENV_TESTS 上方说明。两个 project 各自声明环境与 setup，
+    // 纯逻辑用例不再付 jsdom + jest-dom/RTL 的构建代价。
+    projects: [
+      // extends: true —— inline project 默认**不继承**根配置（plugins/resolve.alias 都会丢，
+      // 实测表现为 `Failed to resolve import "@/lib/utils"`），必须显式继承。
+      { extends: true, test: { name: 'unit-node', environment: 'node', include: NODE_ENV_TESTS } },
+      {
+        extends: true,
+        test: {
+          name: 'unit-dom',
+          environment: 'jsdom',
+          setupFiles: ['./src/test/setup.ts'],
+          include: ['src/**/*.test.{ts,tsx}'],
+          exclude: [...DOM_EXCLUDE, ...NODE_ENV_TESTS],
+        },
+      },
+    ],
     coverage: {
       provider: 'v8',
       reporter: ['json', 'text'],
