@@ -1,15 +1,17 @@
 /**
  * 部署进度兜底与重复部署门控测试（J29）：
  * - 刷新/挂载兜底：服务端报告在途 → 恢复部署进度视图，不回落步骤①
- * - 重复部署门控：服务端报告在途 → 实例页「部署新实例」入口禁用（向导不再可打开）
- * - 断线轮询：WS 断开且进度视图在展示时按 FALLBACK_POLL_INTERVAL_MS 轮询；
- *   重连后停轮询（WS 为进度主通道）
+ * - 空态收敛：服务端转为空态（部署完成/15 分钟死快照超时）→ 进度视图与轮询一起停下
+ * - 重复部署门控：服务端在途 → 实例页「部署新实例」入口禁用；门控信号由
+ *   HTTP 快照与 WS deployProgress 两个通道同生命周期维护（终态即释放）
+ * - 断线轮询：socket 未连接且进度视图在展示时按 FALLBACK_POLL_INTERVAL_MS 轮询
+ *   （冷启动从未连上也照轮询）；WS 已连接时不轮询（WS 为进度主通道）
  * - 终态保护：POST 已给出结果时，兜底快照不得把成功结果顶掉
  * MSW 拦截页面依赖的 API；兜底快照用 spy 精确控制返回值与时序。
  * 数据为结构占位虚构内容（严禁真实服务器信息/玩家数据）
  */
 import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll, vi } from 'vitest'
-import { act, render, screen } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { setupServer } from 'msw/node'
 import { createMemoryRouter, RouterProvider } from 'react-router'
@@ -53,13 +55,45 @@ function renderDialog() {
   )
 }
 
+/** 实例页（含部署向导：同屏两个兜底查询观察者，共用同一条 query 缓存） */
+function renderInstancesPage() {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const router = createMemoryRouter(
+    [
+      {
+        path: '/instances',
+        element: (
+          <QueryClientProvider client={qc}>
+            <InstancesPage />
+          </QueryClientProvider>
+        ),
+      },
+    ],
+    { initialEntries: ['/instances'] },
+  )
+  render(<RouterProvider router={router} />)
+  return qc
+}
+
+/**
+ * 推进假时钟并落定 React Query 的订阅通知：只 advance(0) 时查询结果已入缓存，
+ * 但订阅者的重渲染批次不在同一个 act 内，store/DOM 断言会读到旧值
+ */
+async function advanceAndFlush(ms: number) {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(ms)
+    await vi.advanceTimersByTimeAsync(1)
+  })
+}
+
 beforeEach(() => {
   localStorage.clear()
   deployStatusImpl = () => Promise.resolve({ deploying: false })
   vi.spyOn(instancesApi, 'apiGetDeployStatus').mockImplementation(() => deployStatusImpl())
   useConnectionStore.setState({ baseUrl: '', apiKey: 'test-key', status: 'ready' })
   useServerStore.setState({ socketConnected: true, hasConnectedOnce: true })
-  useDeployStore.setState({ progress: null, deploying: false, lastResult: null, recentActiveDeploy: null })
+  // resetDeploy 而非逐字段 setState：门控/进度字段随实现增删，整体复位不残留上一用例
+  useDeployStore.getState().resetDeploy()
 })
 
 afterEach(() => {
@@ -104,9 +138,10 @@ describe('部署进度兜底（J29）', () => {
     expect(useDeployStore.getState().progress?.stage).toBe('complete')
   })
 
-  it('WS 断线且进度在展示：按 FALLBACK_POLL_INTERVAL_MS 轮询；重连后停止', async () => {
+  it('WS 断线且服务端在途：按 FALLBACK_POLL_INTERVAL_MS 轮询；重连后停止', async () => {
     vi.useFakeTimers()
     const spy = vi.spyOn(instancesApi, 'apiGetDeployStatus')
+    deployStatusImpl = () => Promise.resolve(IN_FLIGHT)
     act(() => {
       useServerStore.setState({ socketConnected: false, hasConnectedOnce: true })
       useDeployStore.setState({
@@ -137,26 +172,77 @@ describe('部署进度兜底（J29）', () => {
     })
     expect(spy.mock.calls.length).toBe(afterReconnect)
   })
+  it('冷启动即断线（WS 从未连上）且在途：兜底照常轮询，进度不永久冻结', async () => {
+    vi.useFakeTimers()
+    const spy = vi.spyOn(instancesApi, 'apiGetDeployStatus')
+    deployStatusImpl = () => Promise.resolve(IN_FLIGHT)
+    act(() => {
+      useServerStore.setState({ socketConnected: false, hasConnectedOnce: false })
+    })
+    renderDialog()
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    const afterMount = spy.mock.calls.length
+    expect(afterMount).toBeGreaterThan(0)
+
+    // 轮询不以「曾连接过」为前提：否则冷启动断线时兜底从不启动
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(FALLBACK_POLL_INTERVAL_MS)
+    })
+    expect(spy.mock.calls.length).toBe(afterMount + 1)
+  })
+
+  it('WS 正常连接时兜底不轮询（无冗余请求）', async () => {
+    vi.useFakeTimers()
+    const spy = vi.spyOn(instancesApi, 'apiGetDeployStatus')
+    act(() => {
+      useServerStore.setState({ socketConnected: true })
+      useDeployStore.setState({ deploying: true })
+    })
+    renderDialog()
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    const afterMount = spy.mock.calls.length
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(FALLBACK_POLL_INTERVAL_MS * 2)
+    })
+    expect(spy.mock.calls.length).toBe(afterMount)
+  })
+
+  it('在途 → 空态：进度视图回到步骤①，且轮询一并停下', async () => {
+    vi.useFakeTimers()
+    const spy = vi.spyOn(instancesApi, 'apiGetDeployStatus')
+    deployStatusImpl = () => Promise.resolve(IN_FLIGHT)
+    act(() => {
+      useServerStore.setState({ socketConnected: false, hasConnectedOnce: true })
+    })
+    renderDialog()
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    expect(useDeployStore.getState().deploying).toBe(true)
+
+    // 服务端转为空态：断线期间部署完成，或 15 分钟死快照超时
+    deployStatusImpl = () => Promise.resolve({ deploying: false })
+    await advanceAndFlush(FALLBACK_POLL_INTERVAL_MS)
+
+    expect(useDeployStore.getState().deploying).toBe(false)
+    expect(useDeployStore.getState().progress).toBeNull()
+    expect(screen.getByRole('button', { name: '下一步' })).toBeInTheDocument()
+
+    const afterConverge = spy.mock.calls.length
+    await advanceAndFlush(FALLBACK_POLL_INTERVAL_MS * 2)
+    expect(spy.mock.calls.length).toBe(afterConverge)
+  })
 })
 
 describe('重复部署门控（J29）', () => {
   it('实例页：服务端报告在途 → 「部署新实例」入口禁用，向导不再可打开', async () => {
     deployStatusImpl = () => Promise.resolve(IN_FLIGHT)
-    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    const router = createMemoryRouter(
-      [
-        {
-          path: '/instances',
-          element: (
-            <QueryClientProvider client={qc}>
-              <InstancesPage />
-            </QueryClientProvider>
-          ),
-        },
-      ],
-      { initialEntries: ['/instances'] },
-    )
-    render(<RouterProvider router={router} />)
+    renderInstancesPage()
 
     const blocked = await screen.findByRole('button', { name: '已有部署在进行中' })
     expect(blocked).toBeDisabled()
@@ -172,6 +258,58 @@ describe('重复部署门控（J29）', () => {
     expect(screen.queryByRole('button', { name: /部署/ })).not.toBeInTheDocument()
   })
 
+  it('仅由 WS 观察到的在途部署也禁用入口（门控不依赖 HTTP 快照）', async () => {
+    const spy = vi.spyOn(instancesApi, 'apiGetDeployStatus')
+    renderInstancesPage()
+    // 先让挂载兜底快照（空态）落定：此后只有 WS 报在途
+    await waitFor(() => expect(spy).toHaveBeenCalled())
+    await act(async () => {})
+    expect(await screen.findByRole('button', { name: '部署新实例' })).toBeEnabled()
+
+    act(() => {
+      useDeployStore.getState().applyDeployProgress({
+        stage: 'download',
+        percent: 0.2,
+        transferred: 1,
+        total: 2,
+        instanceName: '生存服',
+      })
+    })
+
+    expect(screen.getByRole('button', { name: '已有部署在进行中' })).toBeDisabled()
+  })
+
+  it('WS 报终态即释放门控：横幅消失后入口恢复可用（状态不误报）', async () => {
+    const spy = vi.spyOn(instancesApi, 'apiGetDeployStatus')
+    renderInstancesPage()
+    await waitFor(() => expect(spy).toHaveBeenCalled())
+    await act(async () => {})
+
+    act(() => {
+      useDeployStore.getState().applyDeployProgress({
+        stage: 'forge_install',
+        percent: 0.45,
+        transferred: 1,
+        total: 2,
+        instanceName: '生存服',
+      })
+    })
+    expect(screen.getByRole('button', { name: '已有部署在进行中' })).toBeDisabled()
+
+    act(() => {
+      useDeployStore.getState().applyDeployProgress({
+        stage: 'complete',
+        percent: 1,
+        transferred: 0,
+        total: 0,
+        instanceName: '生存服',
+      })
+    })
+
+    expect(screen.getByRole('button', { name: '部署新实例' })).toBeEnabled()
+    expect(screen.queryByText(/有实例正在部署/)).not.toBeInTheDocument()
+  })
+
   it('本页自己的部署结束（POST 已响应）后门控解除，服务端残留快照不会永久禁用入口', async () => {
     renderDialog()
     // 本页发起部署并在途
@@ -179,19 +317,19 @@ describe('重复部署门控（J29）', () => {
       useDeployStore.getState().startDeploy()
       useDeployStore.getState().applyDeployStatus(IN_FLIGHT)
     })
-    expect(useDeployStore.getState().recentActiveDeploy).not.toBeNull()
+    expect(useDeployStore.getState().deployInFlight).toBe(true)
 
     // POST 响应落定 → 在途标记清除（服务端快照可能仍是最后一条在途记录）
     act(() => {
       useDeployStore.getState().finishDeploy({ ok: true, instanceId: 'paper-a1b2c3d4' })
     })
-    expect(useDeployStore.getState().recentActiveDeploy).toBeNull()
+    expect(useDeployStore.getState().deployInFlight).toBe(false)
 
     // 残留快照再到（兜底轮询）也不夺回门控：结果已终态
     act(() => {
       useDeployStore.getState().applyDeployStatus(IN_FLIGHT)
     })
-    expect(useDeployStore.getState().recentActiveDeploy).toBeNull()
+    expect(useDeployStore.getState().deployInFlight).toBe(false)
     expect(useDeployStore.getState().lastResult?.ok).toBe(true)
   })
 })

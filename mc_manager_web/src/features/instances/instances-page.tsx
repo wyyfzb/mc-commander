@@ -196,20 +196,25 @@ export function InstancesPage() {
         title="实例管理"
         description={instancesQuery.isLoading ? '管理服务器实例的部署、切换与卸载' : `已安装 ${instances.length} 个实例`}
         actions={
-          <Button
-            size="sm"
-            onClick={() => setDeployOpenDeep(true)}
-            disabled={duplicateDeployBlocked}
-            aria-label={duplicateDeployBlocked ? '已有部署在进行中' : '部署新实例'}
+          /* 禁用按钮带 disabled:pointer-events-none，挂在自己身上的原生 title
+             悬停不到 → 提示挂外层 span（指针事件穿透到 span），tooltip 才可达 */
+          <span
             title={
               duplicateDeployBlocked
                 ? '服务端已有部署在进行中，等待其完成后再发起新部署'
                 : undefined
             }
           >
-            <Rocket aria-hidden />
-            {duplicateDeployBlocked ? '已有部署在进行中' : '部署新实例'}
-          </Button>
+            <Button
+              size="sm"
+              onClick={() => setDeployOpenDeep(true)}
+              disabled={duplicateDeployBlocked}
+              aria-label={duplicateDeployBlocked ? '已有部署在进行中' : '部署新实例'}
+            >
+              <Rocket aria-hidden />
+              {duplicateDeployBlocked ? '已有部署在进行中' : '部署新实例'}
+            </Button>
+          </span>
         }
       />
 

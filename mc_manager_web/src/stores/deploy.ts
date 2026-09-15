@@ -27,14 +27,16 @@ interface DeployState {
   /** 最近一次部署结果（成功实例 id / 失败错误信息） */
   lastResult: { ok: boolean; instanceId?: string; error?: string } | null
   /**
-   * 最近一次「服务端报告在途」的兜底快照（null = 服务端当前无在途部署/尚未查询）。
-   * 与 progress 分离：POST 响应落定后（lastResult 已终态）progress 会被终态覆盖，
-   * 但仍需据它禁止重复发起部署
+   * 服务端在途部署门控（true = 禁止再次发起部署）。与 deploying 分开：
+   * deploying 还含本页 POST 的乐观置位（startDeploy），门控只认服务端真值。
+   * WS deployProgress 与兜底快照两个通道同生命周期（非终态置位、终态/空态释放，
+   * 见 applyDeployProgress / applyDeployStatus）——只由快照单通道写入会让 WS 报完
+   * 终态、横幅消失后入口仍禁用，反向则漏掉仅由 WS 观察到的在途部署
    */
-  recentActiveDeploy: { instanceId: string; instanceName: string } | null
+  deployInFlight: boolean
   /** 应用 WS deployProgress 事件（use-server-socket 调用） */
   applyDeployProgress: (p: DeployProgress) => void
-  /** 应用 HTTP 兜底快照（use-deploy-status-fallback 调用；空态不覆盖本地进度） */
+  /** 应用 HTTP 兜底快照（use-deploy-status-fallback 调用；空态即服务端真值） */
   applyDeployStatus: (status: DeployStatusResponse) => void
   /** 部署开始（POST 发出前调用；进度回 0） */
   startDeploy: () => void
@@ -53,27 +55,26 @@ export const useDeployStore = create<DeployState>()((set) => ({
   progress: null,
   deploying: false,
   lastResult: null,
-  recentActiveDeploy: null,
+  deployInFlight: false,
   // 终态（complete/error）不再延续 deploying：进度视图由 progress 终态驱动到
   // POST 响应落定（finishDeploy），避免刷新恢复场景下终态后 deploying 残留
-  // 导致向导无法关闭（部署中禁关拦截读的就是 deploying）
-  applyDeployProgress: (p) =>
-    set({
-      progress: p,
-      deploying: !isTerminalStage(p.stage),
-    }),
+  // 导致向导无法关闭（部署中禁关拦截读的就是 deploying）。门控随终态一并释放：
+  // 部署可能由别处发起（另一客户端/别的标签页），WS 终态即服务端注册表已结束
+  applyDeployProgress: (p) => {
+    const inFlight = !isTerminalStage(p.stage)
+    return set({ progress: p, deploying: inFlight, deployInFlight: inFlight })
+  },
   // POST 已在本页给出终态结果（lastResult 非空）时兜底快照不再是真值来源：
   // 部署刚结束的窗口内服务端快照可能仍是最后一条在途记录，覆盖会把「部署成功」
   // 视图打回进度视图。快照仅在本次会话尚无结果时补位
   applyDeployStatus: (status) =>
     set((s) => {
-      if (s.lastResult !== null) return s
       if (!status.deploying) {
-        // 空态即服务端真值：清掉残留的在途进度（快照已终态/超时清理），
-        // 但保留 recentActiveDeploy（本轮已确认服务端在途时，前端门控不应被
-        // 一次瞬时空态解除）
-        return { progress: s.deploying ? null : s.progress, deploying: false }
+        // 空态即服务端真值：清掉残留的在途进度与门控（部署已终态/死快照超时），
+        // 否则进度视图与 30s 轮询都不会收敛
+        return { deploying: false, deployInFlight: false, progress: s.deploying ? null : s.progress }
       }
+      if (s.lastResult !== null) return s
       return {
         progress: {
           stage: status.stage,
@@ -87,7 +88,7 @@ export const useDeployStore = create<DeployState>()((set) => ({
           mcVersion: status.mcVersion,
         },
         deploying: true,
-        recentActiveDeploy: { instanceId: status.instanceId, instanceName: status.instanceName },
+        deployInFlight: true,
       }
     }),
   startDeploy: () => set({ progress: null, deploying: true, lastResult: null }),
@@ -96,7 +97,7 @@ export const useDeployStore = create<DeployState>()((set) => ({
   finishDeploy: (result) =>
     set(() => ({
       deploying: false,
-      recentActiveDeploy: null,
+      deployInFlight: false,
       lastResult: result,
       progress:
         result.ok
@@ -104,5 +105,5 @@ export const useDeployStore = create<DeployState>()((set) => ({
           : { stage: 'error', percent: 0, transferred: 0, total: 0, error: result.error },
     })),
   resetDeploy: () =>
-    set({ progress: null, deploying: false, lastResult: null, recentActiveDeploy: null }),
+    set({ progress: null, deploying: false, lastResult: null, deployInFlight: false }),
 }))

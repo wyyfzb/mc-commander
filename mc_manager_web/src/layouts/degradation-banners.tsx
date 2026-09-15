@@ -1,6 +1,8 @@
 /**
  * DegradationBanners —— 降级横幅组（连接降级与数据缺失的诚实提示）
  * - WS 断开：已降级 HTTP 轮询（数据仍可用）+ 手动重连按钮；间隔取自 queries 的常量
+ * - 从未连上（冷启动即断线 / 反代未放行 Upgrade）且连接超宽限期：顶栏只会停在
+ *   「连接中」，这里补齐同一降级事实；判定带宽限期，正常握手期内不闪
  * - WS 断开且服务端有部署在途：写明进度由服务端继续、脚本刷新补位，并明确
  *   「不要重新发起部署」（重复发起会产出重复实例）——本版不支持取消部署，
  *   故不给「取消」类出口，也不承诺做不到的动作
@@ -23,10 +25,10 @@ export function DegradationBanners() {
   const hasConnectedOnce = useServerStore((s) => s.hasConnectedOnce)
   const status = useServerStore((s) => s.status)
   const connectionReady = useConnectionStore((s) => s.status === 'ready')
-  // 部署兜底快照：断线文案据实区分「有无部署在途」
-  const { duplicateDeployBlocked } = useDeployStatusFallback()
+  // 部署兜底快照：断线文案据实区分「有无部署在途」；冷启动断线由连接宽限期兜底
+  const { duplicateDeployBlocked, connectStalled } = useDeployStatusFallback()
 
-  const wsDown = connectionReady && !socketConnected && hasConnectedOnce
+  const wsDown = connectionReady && !socketConnected && (hasConnectedOnce || connectStalled)
   const rconDown = status?.isRunning === true && status.isRconConnected === false
 
   if (!wsDown && !rconDown) return null
@@ -39,9 +41,9 @@ export function DegradationBanners() {
               不再以同色 inline ghost 融入提示文字 */}
           <span className="flex items-center justify-between gap-3">
             <span className="min-w-0">
-              <b>WebSocket 已断开</b> · 已降级为定时刷新（每 {FALLBACK_POLL_INTERVAL_MS / 1000} 秒），数据仍可用
+              <b>{hasConnectedOnce ? 'WebSocket 已断开' : '实时通道未连接'}</b> · 已降级为定时刷新（每 {FALLBACK_POLL_INTERVAL_MS / 1000} 秒），数据仍可用
               {duplicateDeployBlocked &&
-                `；服务端仍有部署在进行，进度每 ${FALLBACK_POLL_INTERVAL_MS / 1000} 秒从服务端刷新，请勿重新发起部署（会重复创建实例）`}
+                `；服务端仍有部署在进行，进度经服务端刷新，请勿重新发起部署（会重复创建实例）`}
             </span>
             <Button
               variant="outline"

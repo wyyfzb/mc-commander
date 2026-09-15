@@ -6,6 +6,9 @@
  * - 断线提示：实时通道断开后写明进度刷新方式，并明确不得重新发起部署
  * 时序确定性：断线场景先等实时通道连上（顶栏「已连接」）再断开，
  * 否则横幅判定（曾连接过 + 当前断开）不成立
+ * 空态收敛（部署完成/死快照超时）不在此复现：真实浏览器里要等满全局 10s
+ * 新鲜期（main.tsx staleTime）才可能重取快照，或等 WS 断线后的 30s 轮询，
+ * 该路径由 deploy-status-fallback.test.tsx 用假时钟精确覆盖
  */
 import { test, expect, type Page } from '@playwright/test'
 
@@ -51,7 +54,8 @@ test.describe('部署进度兜底（J29）', () => {
 
     await expect(page.getByText('WebSocket 已断开').first()).toBeVisible()
     await expect(page.getByText(/请勿重新发起部署（会重复创建实例）/)).toBeVisible()
-    // 文案可兑现：进度仍可由服务端兜底刷新（不是「已冻结」）
-    await expect(page.getByText(/进度每 \d+ 秒从服务端刷新/)).toBeVisible()
+    // 文案可兑现：进度仍由服务端兜底刷新（不是「已冻结」），间隔只声明一次
+    await expect(page.getByText(/进度经服务端刷新/)).toBeVisible()
+    await expect(page.getByText(/每 30 秒/)).toHaveCount(1)
   })
 })
