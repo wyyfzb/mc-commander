@@ -2,6 +2,8 @@
  * PlayerTable 列定义 —— 10 列规格（自 player-table.tsx 拆出，纯搬移零行为变更）
  * 工厂参数化注入选择集与操作回调；依赖常量见 player-table-config.ts
  * 行内菜单交互口径（J15）：OP/白名单切换可逆 → 直执 + 5s 撤销；踢出无逆操作 → 直执 + 普通回执
+ * compact（<1280px 容器）：10 列合计约 1016px，装不下时表格会横向溢出把勾选框与玩家名推出视野，
+ * 故按列价值裁到核心四列（选择/玩家/状态/操作）；被裁列的字段在详情面板仍可查
  */
 import type { ColumnDef } from '@tanstack/react-table'
 import { Ban } from 'lucide-react'
@@ -17,6 +19,9 @@ import { PlayerBadges } from './player-badges'
 import { PlayerRowMenu } from './player-row-menu'
 import { HeartsArmor } from './hearts-armor'
 import { DIMENSION_META, GAME_MODE_LABELS, features } from './player-table-config'
+
+/** 列优先级：容器装不下时按此集合裁剪（保留 选择/玩家/状态/操作 —— 身份、在线状态、行动入口） */
+const SECONDARY_COLUMN_IDS = new Set(['gameMode', 'dimension', 'position', 'ping', 'onlineDuration', 'totalPlayTime'])
 
 /** OP/白名单切换与踢出的行内执行回调（表格持有：执行 + 回执 + 撤销口径） */
 interface PlayerColumnsDeps {
@@ -34,6 +39,8 @@ interface PlayerColumnsDeps {
   /** 分页状态（-1 = 「全部」档）：表头全选只能作用于当前页，见 select 列 header */
   pageSize: number
   pageIndex: number
+  /** 窄容器：只留核心列（免横向滚动把勾选框/玩家名推出视野） */
+  compact: boolean
 }
 
 /** 在线时长短格式（Xh Ym） */
@@ -63,8 +70,9 @@ export function buildPlayerColumns({
   kick,
   pageSize,
   pageIndex,
+  compact,
 }: PlayerColumnsDeps): ColumnDef<typeof features, Player>[] {
-  return [
+  const columns: ColumnDef<typeof features, Player>[] = [
     {
       id: 'select',
       enableSorting: false, // 无排序语义，且避免排序按钮嵌套 Checkbox（非法 HTML）
@@ -267,4 +275,6 @@ export function buildPlayerColumns({
       size: 48,
     },
   ]
+
+  return compact ? columns.filter((c) => !SECONDARY_COLUMN_IDS.has(c.id ?? '')) : columns
 }

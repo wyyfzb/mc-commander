@@ -22,3 +22,7 @@ export const BREAKPOINT_MOBILE = '(max-width: 767px)'
 export const BREAKPOINT_NARROW = '(min-width: 768px) and (max-width: 1023px)'
 /** lg 以下：容器里没有并列空间，一律改由 Sheet 承载（不挤压内容列） */
 export const BREAKPOINT_BELOW_LG = '(max-width: 1023px)'
+/** sm 以下：无横向并排空间，玩家表由表格转行式卡片（J28/C3） */
+export const BREAKPOINT_BELOW_SM = '(max-width: 639px)'
+/** xl 以下：10 列玩家表合计约 1016px，容器装不下时裁到核心列（免横向滚动，J28） */
+export const BREAKPOINT_BELOW_XL = '(max-width: 1279px)'

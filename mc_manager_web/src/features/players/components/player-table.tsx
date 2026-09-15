@@ -4,8 +4,9 @@
  * - 列头点击启用单列排序（Web 增强）；分页 10/20/50/全部（「全部」档 react-virtual 虚拟滚动）
  * - 行内溢出菜单：详情/传送/给予物品/OP 切换/白名单切换/踢出/封禁（设计文档 §3.2 重排）
  * - 行内菜单交互口径（J15）：可逆（OP/白名单）直执 + 5s 撤销，踢出直执（无逆操作）
+ * - 响应式（J28/C3）：<1280px 裁到核心列（免横向滚动）；<640px 整表转行式卡片
  * 单元拆分（纯搬移零行为变更）：列定义 player-table-columns / 行组件 player-table-row /
- * 行菜单 player-row-menu / 共享常量 player-table-config
+ * 行菜单 player-row-menu / 卡片态 player-card-list / 共享常量 player-table-config
  */
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
@@ -19,6 +20,7 @@ import { cn } from '@/lib/utils'
 import { Pagination } from '@/components/mcs/pagination'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { BREAKPOINT_BELOW_SM, BREAKPOINT_BELOW_XL, useMediaQuery } from '@/hooks/use-media-query'
 import type { Player } from '@/api/types'
 import { usePlayersUiStore, type PlayerDetailTab } from '../store'
 import type { PlayerActionRequest } from '../mutations'
@@ -27,6 +29,7 @@ import { paginatePlayerRows } from '../player-pagination'
 import { PAGE_SIZE_OPTIONS, ROW_HEIGHT, features } from './player-table-config'
 import { buildPlayerColumns } from './player-table-columns'
 import { PlayerRow } from './player-table-row'
+import { PlayerCardList, CARD_HEIGHT } from './player-card-list'
 
 interface PlayerTableProps {
   /** 已过滤+排序的玩家列表 */
@@ -65,6 +68,10 @@ export function PlayerTable({
   const scrollRef = useRef<HTMLDivElement>(null)
 
   const selectedSet = useMemo(() => new Set(selectedUuids), [selectedUuids])
+  /** <640px：整表转卡片（列宽再怎么妥协也放不下 10 列） */
+  const isCardLayout = useMediaQuery(BREAKPOINT_BELOW_SM)
+  /** <1280px：10 列合计约 1016px，容器装不下 → 裁到核心列免横向滚动 */
+  const isCompactColumns = useMediaQuery(BREAKPOINT_BELOW_XL)
 
   /**
    * 可逆操作（OP/白名单）：直执 + 5s 撤销。失败回执由页面层（handleAction）承担——
@@ -134,9 +141,22 @@ export function PlayerTable({
         kick,
         pageSize,
         pageIndex,
+        compact: isCompactColumns,
       }),
     // pageSize/pageIndex 参与表头全选范围计算，变更须重建列以刷新表头勾选态
-    [selectedSet, onOpenDetail, onOpenBan, toggleSelect, toggleSelectPage, toggleOp, toggleWhitelist, kick, pageSize, pageIndex],
+    [
+      selectedSet,
+      onOpenDetail,
+      onOpenBan,
+      toggleSelect,
+      toggleSelectPage,
+      toggleOp,
+      toggleWhitelist,
+      kick,
+      pageSize,
+      pageIndex,
+      isCompactColumns,
+    ],
   )
 
   const table = useTable(
@@ -157,12 +177,18 @@ export function PlayerTable({
     pageIndex,
   )
 
+  // 表头全选范围（卡片态的全选入口复用同一口径：-1 档作用于全部筛选结果）
+  const pageRowIds =
+    pageSize === -1 ? allRows.map((r) => r.original.uuid) : visibleRows.map((r) => r.original.uuid)
+  const allSelected = pageRowIds.length > 0 && pageRowIds.every((u) => selectedSet.has(u))
+  const someSelected = pageRowIds.some((u) => selectedSet.has(u))
+
   // TanStack Virtual 自管内部缓存，与 React Compiler 互斥（官方不兼容清单），不可自动 memo 化
   // eslint-disable-next-line react/incompatible-library
   const rowVirtualizer = useVirtualizer({
     count: pageSize === -1 ? allRows.length : 0,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => ROW_HEIGHT,
+    estimateSize: () => (isCardLayout ? CARD_HEIGHT : ROW_HEIGHT),
     overscan: 12,
   })
 
@@ -178,6 +204,26 @@ export function PlayerTable({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto">
+        {/* 窄屏（<640px）表格必然横向溢出：勾选框/玩家名/操作入口都够不着 → 改行式卡片 */}
+        {isCardLayout ? (
+          <PlayerCardList
+            rows={rowsToRender.filter(Boolean) as typeof visibleRows}
+            isLoading={isLoading}
+            selectedSet={selectedSet}
+            selectAllLabel={pageSize === -1 ? '全选全部筛选结果' : '全选当前页'}
+            allSelected={allSelected}
+            someSelected={someSelected}
+            onToggleSelectAll={() => toggleSelectPage(pageRowIds)}
+            toggleSelect={toggleSelect}
+            onOpenDetail={onOpenDetail}
+            onOpenBan={onOpenBan}
+            toggleOp={toggleOp}
+            toggleWhitelist={toggleWhitelist}
+            kick={kick}
+            topPadding={pageSize === -1 ? topPadding : 0}
+            bottomPadding={pageSize === -1 ? bottomPadding : 0}
+          />
+        ) : (
         <table className="w-full border-collapse text-left" style={{ tableLayout: 'fixed' }}>
           <thead className="sticky top-0 z-(--mcs-z-local) bg-mcs-bg-default">
             {table.getHeaderGroups().map((headerGroup) => (
@@ -263,6 +309,7 @@ export function PlayerTable({
             {!isLoading && pageSize === -1 && bottomPadding > 0 && <tr style={{ height: bottomPadding }} aria-hidden />}
           </tbody>
         </table>
+        )}
         {/* 错误态由页面持有（players-page 在 isError 时用 EmptyState 替换整张表，
             避免错误被呈现为「暂无在线玩家」的误导空态），表格不再自带第二套错误 UI */}
         {!isLoading && allRows.length === 0 ? (
