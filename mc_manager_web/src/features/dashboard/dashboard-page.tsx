@@ -84,7 +84,7 @@ export function DashboardPage() {
 
   return (
     <div className="flex h-full flex-col gap-4 overflow-y-auto p-4">
-      <PageHeader title="仪表盘" description="实例运行状态 · 终端 · 快捷操作" />
+      <PageHeader title="仪表盘" description="实例运行状态 · 终端 · 快捷操作" inlineDescription />
 
       {/* 查询失败横幅（避免卡片静默显示 0 / 留在「暂无数据」被误读为真实状态） */}
       {failedSources.length > 0 && !statusLoading && (
@@ -112,13 +112,20 @@ export function DashboardPage() {
         <RuntimeInfoCard />
       </div>
 
-      {/* 终端主体 + 右栏卡 */}
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_336px]">
-        <div className="flex min-h-0 flex-col gap-4">
+      {/* 终端主体 + 右栏卡。
+          单列窄屏（<xl）主栅格必须按内容高度排布：外层是定高 flex 列，`min-h-0 flex-1`
+          会让这一行被压到几像素，行内 flex-1 的终端与右栏 <aside> 一并塌陷（R19：
+          375 下右栏只剩 3.6px 高、三张卡用户完全够不到）。xl 起恢复 min-h-0 flex-1，
+          让终端吃满剩余高度、右栏自身滚动（桌面口径不变）。 */}
+      <div className="grid flex-1 grid-cols-1 gap-4 xl:min-h-0 xl:grid-cols-[minmax(0,1fr)_336px]">
+        <div className="flex flex-col gap-4 xl:min-h-0">
           <ServerTerminal isLoading={statusLoading} />
           <CommandInput />
         </div>
-        <aside className="flex min-h-0 flex-col gap-4 overflow-y-auto pr-1">
+        <aside
+          data-testid="dashboard-aside"
+          className="flex flex-col gap-4 overflow-y-auto pr-1 xl:min-h-0"
+        >
           <McClockCard />
           {/* 状态 → 数据安全 → 主动操作：备份卡排在公告发送之前（蓝本同序） */}
           <RecentBackupsCard />

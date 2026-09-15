@@ -14,9 +14,15 @@ interface PageHeaderProps {
   /** 右侧操作区（按钮组等），省略则不渲染 */
   actions?: ReactNode
   className?: string
+  /**
+   * 描述与标题同行的紧凑版式（截稿页用，如仪表盘——首屏高度要还给终端）。
+   * 仅改排布不改字号档：标题仍 `xl`、描述仍 `xs`，信息不减少。
+   * 窄屏（<640px）保持上下堆叠：标题+描述一行会挤压长描述的可读性。
+   */
+  inlineDescription?: boolean
 }
 
-export function PageHeader({ title, description, actions, className }: PageHeaderProps) {
+export function PageHeader({ title, description, actions, className, inlineDescription }: PageHeaderProps) {
   return (
     <header
       className={cn(
@@ -24,7 +30,7 @@ export function PageHeader({ title, description, actions, className }: PageHeade
         className,
       )}
     >
-      <div className="min-w-0">
+      <div className={cn('min-w-0 flex flex-col', inlineDescription && 'sm:flex-row sm:items-baseline sm:gap-3')}>
         <h2 className="text-mcs-xl font-semibold text-mcs-text-default">{title}</h2>
         {description != null && (
           <p className="text-mcs-xs text-mcs-text-muted">{description}</p>

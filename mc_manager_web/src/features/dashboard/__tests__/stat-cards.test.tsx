@@ -67,6 +67,15 @@ describe('BigStatCards 资源卡', () => {
     expect(screen.getByText('TPS').className).toContain('text-mcs-lg')
   })
 
+  it('顶排卡走紧凑卡档（p-3 / gap-2）：首屏高度必须还给终端', () => {
+    render(<BigStatCards />)
+    const card = screen.getByRole('heading', { name: '资源使用' }).closest('section')
+    expect(card).not.toBeNull()
+    expect(card!.className).toContain('p-3')
+    expect(card!.className).toContain('gap-2')
+    expect(card!.className).not.toContain('p-4')
+  })
+
   it('整机数据未到：CPU/内存显示「暂无数据」，不拿实例口径（进程 RSS / 整机总量）顶替', () => {
     // 实例状态在（status 有 memoryUsage=3.2 / cpuUsage），但 /system-stats 尚未送达
     useServerStore.setState({ systemStats: null })

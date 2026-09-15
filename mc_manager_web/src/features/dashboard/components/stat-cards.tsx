@@ -25,7 +25,9 @@ export function tpsColor(tps: number | null, isRunning: boolean): string {
 /** status 未就绪时的稳定空数组（避免 ?? [] 每次渲染新建引用、污染下游 useMemo） */
 const NO_NAMES: string[] = []
 
-/** 仪表盘统计卡外壳：卡片面 + 标题行（eyebrow 为右上角角标）走 mcs/card 基座 */
+/** 仪表盘统计卡外壳：卡片面 + 标题行（eyebrow 为右上角角标）走 mcs/card 基座。
+ *  内距取紧凑卡档 p-3（而非标准卡 p-4）：顶排三卡是首屏固定占位，p-4 加 gap-3 会把
+ *  终端可见高度压到 388px（1440×900 实测）；行距 gap-2 仍落在 4px 刻度内。 */
 function StatCard({
   title,
   eyebrow,
@@ -40,7 +42,7 @@ function StatCard({
   children: React.ReactNode
 }) {
   return (
-    <Card className={cn('mcs-edge-top relative flex min-w-0 flex-1 flex-col gap-3 p-4', className)}>
+    <Card className={cn('mcs-edge-top relative flex min-w-0 flex-1 flex-col gap-2 p-3', className)}>
       <CardHeader className="justify-between gap-2">
         <CardTitle as="h2" variant="label">{title}</CardTitle>
         {eyebrow && <span className={cn('text-mcs-xs', eyebrowClass)}>{eyebrow}</span>}
@@ -81,7 +83,7 @@ export function BigStatCards({
   if (isLoading) {
     return (
       <Card
-        className="animate-mcs-fade-up mcs-delay-2 mcs-edge-top relative flex min-w-0 flex-col gap-3 p-4"
+        className="animate-mcs-fade-up mcs-delay-2 mcs-edge-top relative flex min-w-0 flex-col gap-2 p-3"
         aria-label="统计加载中"
         role="status"
       >

@@ -66,4 +66,23 @@ describe('PageHeader', () => {
     expect(screen.getByText('基础描述')).toBeInTheDocument()
     expect(screen.getByTestId('extra')).toBeInTheDocument()
   })
+
+  it('inlineDescription：描述与标题同行（≥sm 断点），标题与描述都不减少', () => {
+    const { container } = render(
+      <PageHeader title="仪表盘" description="实例运行状态 · 终端 · 快捷操作" inlineDescription />,
+    )
+    const wrapper = container.querySelector('header > div')
+    expect(wrapper?.className).toContain('sm:flex-row')
+    expect(wrapper?.className).toContain('sm:items-baseline')
+    // 信息不减少：两个节点都还在，且字号档未变（标题 xl / 描述 xs）
+    expect(screen.getByRole('heading', { level: 2 }).className).toContain('text-mcs-xl')
+    expect(screen.getByText('实例运行状态 · 终端 · 快捷操作').className).toContain('text-mcs-xs')
+  })
+
+  it('默认（无 inlineDescription）保持描述换行在标题下方', () => {
+    const { container } = render(<PageHeader title="测试标题" description="描述文本" />)
+    const wrapper = container.querySelector('header > div')
+    expect(wrapper?.className).toContain('flex-col')
+    expect(wrapper?.className).not.toContain('sm:flex-row')
+  })
 })

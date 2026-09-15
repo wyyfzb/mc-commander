@@ -367,7 +367,8 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
 
   return (
     <section
-      className="animate-mcs-fade-up mcs-delay-4 flex min-h-0 flex-1 flex-col overflow-hidden rounded-mcs-md border border-mcs-border-muted shadow-mcs-card"
+      data-testid="server-terminal"
+      className="animate-mcs-fade-up mcs-delay-4 flex min-h-[60vh] flex-1 flex-col overflow-hidden rounded-mcs-md border border-mcs-border-muted shadow-mcs-card xl:min-h-0"
       style={{ background: 'var(--mcs-terminal-bg)' }}
     >
       {/* 工具栏（实底，玻璃禁区内） */}
