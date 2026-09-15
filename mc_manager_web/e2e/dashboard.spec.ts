@@ -48,15 +48,26 @@ test.describe('仪表盘', () => {
     await expect(page.getByText('第 42 天')).toBeVisible()
   })
 
-  test('标题层级与关键数字档：数据卡标签 14px / 区块卡标题 18px / 卡级大数 30px', async ({ page }) => {
+  test('标题层级与关键数字档：数据卡标签 14px/w500/muted、区块卡标题 18px/w600/default、卡级大数 30px', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/dashboard')
-    const fontSizeOf = (locator: Locator) => locator.evaluate((el) => getComputedStyle(el).fontSize)
+    const styleOf = (locator: Locator, prop: string) =>
+      locator.evaluate((el, p) => getComputedStyle(el).getPropertyValue(p), prop)
+    const fontSizeOf = (locator: Locator) => styleOf(locator, 'font-size')
     // 同屏两级标题可辨：数据卡（KPI）标签行留正文档，真区块标题占标题档
     await expect(page.getByRole('heading', { name: '资源使用' })).toBeVisible()
     await expect(page.getByRole('heading', { name: '最近备份' })).toBeVisible()
-    expect(await fontSizeOf(page.getByRole('heading', { name: '资源使用' }))).toBe('14px')
-    expect(await fontSizeOf(page.getByRole('heading', { name: '最近备份' }))).toBe('18px')
+    const label = page.getByRole('heading', { name: '资源使用' })
+    const heading = page.getByRole('heading', { name: '最近备份' })
+    expect(await fontSizeOf(label)).toBe('14px')
+    expect(await fontSizeOf(heading)).toBe('18px')
+    // 配方不止字号：字重与文字色也算一档（body 文字色即 --mcs-text-default）
+    const bodyColor = await styleOf(page.locator('body'), 'color')
+    expect(await styleOf(heading, 'font-weight')).toBe('600')
+    expect(await styleOf(heading, 'color')).toBe(bodyColor)
+    // 数据卡标签必须弱于同卡数值：字重更轻、文字色走 muted 而非正文档
+    expect(await styleOf(label, 'font-weight')).toBe('500')
+    expect(await styleOf(label, 'color')).not.toBe(bodyColor)
     // 关键数字走数字档 display（30px），单位/后缀留在小档
     expect(await fontSizeOf(page.getByText('20.0'))).toBe('30px')
     expect(await fontSizeOf(page.getByText('2h 0m'))).toBe('30px')

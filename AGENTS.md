@@ -101,7 +101,10 @@ npm run dev                  # node --watch 热重载
   （`px-2.5 py-1.5`），多行告警卡用 `p-3`。内联 `style` 的 `width`/`height` 必须是数值或含单位
   字符串——传 Tailwind 类名会被浏览器当非法 CSS 丢弃（门禁第 26 条静态拦截）。
 - **页面结构**：AppShell 主页面有且仅有一个 `components/mcs/page-header.tsx`（`PageHeader`），
-  标题与描述只在页头声明；同屏标题字号档 ≤3（页头 `xl` + 卡片标题 `sm` + 显式档）。
+  标题与描述只在页头声明；同屏标题字号档 ≤3（页头 `xl` + 区块/卡片标题 `lg` + 数据卡标签 `sm` + 显式档）。
+  卡片标题配方（唯一事实源是 `components/mcs/card.tsx` 基座，调用点不再另写一份）：
+  区块/卡片标题 = `lg` + `font-semibold` + `text-mcs-text-default`；数据卡标签 = `sm` + `font-medium`
+  + `text-mcs-text-muted`（标签必须弱于同卡数值）。
   登录页/引导页是全屏品牌入口，不在 AppShell 内，由自身 `h1` 承担标题（门禁第 23 条静态拦截）。
 - **Z 轴**：禁裸 `z-<数字>`，一律 `z-(--mcs-z-*)`（阶梯见 `semantic.css`：
   local 10 / overlay 40 / modal 50 / dropdown 60 / tooltip 70 / toast 80；

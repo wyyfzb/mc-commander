@@ -857,6 +857,8 @@ for (const f of GATE_FILES) {
 //     调用点上的字面量 `variant="..."` 选档、缺省时走参数默认角色——同一组件在不同页面上
 //     可能落进不同档，故档位不能只按组件名记一个值。档位仍不硬编码：改基座的角色表即改口径。
 //     边界（宁漏不误报）：variant 非字面量（表达式/跨行写）与未登记角色不计档；
+//     字面量的单双引号写法（`variant="label"` / `variant='label'`）语义相同，都按字面量计档
+//     （只认双引号会把单引号调用点误判成缺省角色、静默丢掉另一档）；
 //     基座元素行读不出档（如只有色类、无字号档的 SheetTitle/DialogTitle 一类）同样不计档。
 //     登录页/引导页是全屏品牌入口，不在 AppShell 内、标题由自身 h1 承担，显式豁免。
 //     引导页实测同屏有两个 h1（欢迎区 + 连接表单，不是互斥渲染）——那是该页自身的品牌+表单
@@ -883,8 +885,8 @@ const ROLE_TIER_MAP_DECL = /const\s+([A-Z]\w*)\s*=\s*\{([\s\S]*?)\}\s*as\s+const
 const ROLE_TIER_ENTRY = /(\w+)\s*:\s*'text-mcs-(2xs|xs|sm|md|lg|xl|display)'/g
 /** 元素行上的角色查表写法 `NAME[param]` */
 const ROLE_LOOKUP = /([A-Z]\w*)\s*\[\s*(\w+)\s*\]/
-/** 调用点上的字面量角色 `variant="label"` */
-const VARIANT_LITERAL = /\svariant="(\w+)"/
+/** 调用点上的字面量角色 `variant="label"`（单双引号等义，都算字面量） */
+const VARIANT_LITERAL = /\svariant=["'](\w+)["']/
 /** 该文件里各标题组件自身的基座档。单档基座取组件体内第一个承载标题的元素行的 text-mcs-*；
  *  角色轴基座（元素行写 `NAME[variant]`）读同文件的角色档位表 + 参数默认角色，
  *  调用点再按 `variant="..."` 分类取档。两种都读不出档即不计档（宁漏不误报）。 */

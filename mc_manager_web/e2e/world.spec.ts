@@ -28,6 +28,16 @@ test.describe('世界页', () => {
     await page.goto('/world')
     // 世界信息卡：名称/种子/天数
     await expect(page.getByRole('heading', { name: '世界信息' })).toBeVisible()
+    // 手写 h3 与 mcs/card 基座 heading 必须同配方（18px / w600 / text-default），
+    // 否则「同一个 lg 档」存在两套观感，后续迁入基座就不再是零视觉变化
+    const infoTitle = page.getByRole('heading', { name: '世界信息' })
+    const infoStyle = (prop: string) =>
+      infoTitle.evaluate((el, p) => getComputedStyle(el).getPropertyValue(p), prop)
+    expect(await infoStyle('font-size')).toBe('18px')
+    expect(await infoStyle('font-weight')).toBe('600')
+    expect(await infoStyle('color')).toBe(
+      await page.locator('body').evaluate((el) => getComputedStyle(el).color),
+    )
     await expect(page.getByText('演示世界')).toBeVisible()
     await expect(page.getByText('887654321')).toBeVisible()
     await expect(page.getByText('42 天')).toBeVisible()

@@ -69,6 +69,17 @@ const CARD_TITLE_TIER = {
 } as const
 
 /**
+ * 各角色的字重与文字色（字号档在 CARD_TITLE_TIER，两表合起来才是完整配方）。
+ * 基座是配方的唯一声明处：仓内手写的 `h3 text-mcs-lg` 与基座 heading 必须三项同配方，
+ * 否则「同一个 lg 档」会有两套观感，调用点迁入基座也不再是零视觉变化。
+ * label 是数据卡标签行，必须弱于同卡的数值：字重与文字色都不得升到 heading 档。
+ */
+const CARD_TITLE_RECIPE = {
+  heading: 'font-semibold text-mcs-text-default',
+  label: 'font-medium text-mcs-text-muted',
+} as const
+
+/**
  * 卡片标题文字（默认 h3 = 页头 h2 之下的卡片标题档）。
  * 元素语义（as）与层级（className 覆盖基座档）仍由调用点持有：钉死单一层级会让卡片标题
  * 与页头抢级或与子面板并列。
@@ -86,7 +97,7 @@ export function CardTitle({
   children?: ReactNode
 }) {
   return (
-    <Tag className={cn('font-medium text-mcs-text-muted', CARD_TITLE_TIER[variant], className)}>
+    <Tag className={cn(CARD_TITLE_TIER[variant], CARD_TITLE_RECIPE[variant], className)}>
       {children}
     </Tag>
   )
