@@ -248,9 +248,11 @@ export function OnboardingPage() {
           </Card>
         )}
 
-        {/* ── 连接表单（复用；保存成功 → 跳转仪表盘） ── */}
+        {/* ── 连接表单（复用；保存成功 → 跳转仪表盘）
+               标题降为 h2：本页 h1 由上方欢迎区承担，页面级唯一标题不能有两个 ── */}
         <ConnectionForm
           variant="onboarding"
+          headingAs="h2"
           onSaved={() => {
             toast.success('欢迎使用，已进入管理面板')
             navigate('/dashboard')

@@ -851,9 +851,11 @@ for (const f of GATE_FILES) {
 //     （只认双引号会把单引号调用点误判成缺省角色、静默丢掉另一档）；
 //     基座元素行读不出档（如只有色类、无字号档的 SheetTitle/DialogTitle 一类）同样不计档。
 //     登录页/引导页是全屏品牌入口，不在 AppShell 内、标题由自身 h1 承担，显式豁免。
-//     引导页实测同屏有两个 h1（欢迎区 + 连接表单，不是互斥渲染）——那是该页自身的品牌+表单
-//     结构，本轮口径维持不改；把它拆成 h1+h2 是可见结构变更，与本条要防的
-//     「AppShell 页漏页头 / 标题档位发散」不同源。
+//     引导页同屏的第二个标题（连接表单的「连接你的服务器」）由 ConnectionForm 的
+//     `headingAs` 调用点参数降为 h2 —— 页面级唯一 h1 是硬约束，豁免的是「必须有 PageHeader」
+//     这一条，不是「可以有多个 h1」。基座默认仍是 h1（设置子页里它就是该页主标题）。
+//     边界：全站 AppShell 页的主标题是 PageHeader 渲染的 h2，页面级唯一 h1 这条只约束
+//     品牌入口页（登录 / 引导）自己的 h1，不是「全站每页都要有一个 h1」。
 //     档位采集（角色档位表解析、调用点取档）见 lib/design-token-rules.mjs。
 const APP_SHELL_PAGE_EXEMPT = new Set([
   'src/features/auth/login-page.tsx',

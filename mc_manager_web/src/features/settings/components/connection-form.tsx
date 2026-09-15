@@ -33,7 +33,9 @@ import { toneClasses } from '@/components/mcs/tone'
 /** 明文警告确认后待执行的挂起动作（null = 无弹窗） */
 type PendingAction = 'save' | 'test' | null
 
-export function ConnectionForm({ variant = 'settings', onSaved }: ConnectionFormProps) {
+export function ConnectionForm({ variant = 'settings', headingAs = 'h1', onSaved }: ConnectionFormProps) {
+  /** 标题标签由调用点决定：同屏是否已有别的 h1 只有页面知道，组件内不能写死 */
+  const HeadingTag = headingAs
   const storedBaseUrl = useConnectionStore((s) => s.baseUrl)
   const storedApiKey = useConnectionStore((s) => s.apiKey)
   const status = useConnectionStore((s) => s.status)
@@ -303,7 +305,7 @@ export function ConnectionForm({ variant = 'settings', onSaved }: ConnectionForm
     <div className={variant === 'onboarding' ? 'mx-auto w-full max-w-md' : 'w-full'}>
       {variant === 'onboarding' ? (
         <header className="mb-8 text-center">
-          <h1 className="text-mcs-xl font-semibold text-mcs-text-default">连接你的服务器</h1>
+          <HeadingTag className="text-mcs-xl font-semibold text-mcs-text-default">连接你的服务器</HeadingTag>
           <p className="mt-2 text-mcs-sm text-mcs-text-muted">
             输入 MC Commander 面板地址与 API Key，测试并保存连接配置后即可开始使用。
           </p>

@@ -445,9 +445,8 @@ export default function WebhookPage() {
                       测试投递
                     </Button>
                     <Button
-                      variant="outline"
+                      variant="destructive-outline"
                       size="sm"
-                      className="text-mcs-error-fg border-mcs-error-border hover:bg-mcs-error-bg-subtle"
                       onClick={() => setDeleteTarget(editTarget)}
                     >
                       <Trash2 className="size-3.5" aria-hidden />

@@ -50,7 +50,9 @@ test.describe('部署进度兜底（J29）', () => {
     await expect(page.getByRole('banner').getByText('已连接')).toBeVisible()
 
     // 断开实时通道：mock 专用控制端点强制断开 WS（HTTP 兜底仍可用）
-    await page.request.post('http://localhost:5198/api/v1/instances/deploy/drop-ws')
+    // 地址取当前页 origin（= dev/preview server，端口随 MOCK_PORT/DEV_PORT 泳道变化），
+    // 经其 proxy 转发到 mock：硬编码 mock 端口会让非默认泳道下的 spec 变成 ECONNREFUSED 假红
+    await page.request.post(new URL('/api/v1/instances/deploy/drop-ws', page.url()).toString())
 
     await expect(page.getByText('WebSocket 已断开').first()).toBeVisible()
     await expect(page.getByText(/请勿重新发起部署（会重复创建实例）/)).toBeVisible()

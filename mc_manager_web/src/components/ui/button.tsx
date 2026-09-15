@@ -26,6 +26,15 @@ const buttonVariants = cva(
           "hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:hover:bg-muted/50",
         destructive:
           "border-mcs-error-border-strong bg-mcs-error-bg-subtle text-mcs-error-fg hover:shadow-mcs-glow-error focus-visible:outline-mcs-error-fg",
+        // 危险浅档＝outline 档换危险语义：面与中性次操作同源（--mcs-bg-secondary 就是
+        // 「比卡片亮一档/压灰一档」的 chip 面），故同为次操作时两者只差语义色。
+        // 描边与文字取危险色、危险底只在悬停时出现——与实底 destructive 拉开权重，
+        // 避免把低频次操作升格成实底红、在同一屏跟主操作抢视觉唯一性。
+        // 边界取强档：弱档 --mcs-error-border 是 25% 装饰线，不满足控件边界 ≥3:1（同 accent 弱档口径）。
+        // 面档用 token 而非 dark: 覆写：dark: 前缀类在 ui/ 外被门禁拦（token 自带明暗），
+        // 且产物里 dark:* 排在 hover:* 之后，一旦引入 dark: 面档就会吃掉悬停的危险底。
+        "destructive-outline":
+          "border-mcs-error-border-strong bg-mcs-bg-secondary text-mcs-error-fg hover:bg-mcs-error-bg-subtle focus-visible:outline-mcs-error-fg",
         link: "text-primary underline-offset-4 hover:underline",
       },
       size: {

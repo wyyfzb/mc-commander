@@ -46,9 +46,12 @@ export function DegradationBanners() {
                 `；服务端仍有部署在进行，进度经服务端刷新，请勿重新发起部署（会重复创建实例）`}
             </span>
             <Button
-              variant="outline"
+              variant="destructive-outline"
               size="sm"
-              className="h-6 shrink-0 border-mcs-error-border bg-mcs-bg-default text-mcs-2xs text-mcs-error-fg hover:bg-mcs-state-hover"
+              /* 危险色只从变体取；这里只覆盖「面」：它坐在 error 告警条的 tint 面上，
+                 透明底会与横幅融成一片，故换成实底页面面；悬停也留在中性档——
+                 告警条本身就是 error-bg-subtle，悬停换同色会让按钮在横幅上失去轮廓 */
+              className="h-6 shrink-0 bg-mcs-bg-default text-mcs-2xs hover:bg-mcs-state-hover"
               onClick={() => void getSocketSingleton()?.connect()}
             >
               <RefreshCw className="size-3" aria-hidden />

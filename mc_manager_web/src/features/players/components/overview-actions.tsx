@@ -183,9 +183,8 @@ export function OverviewActions({
       <span className="h-5 w-px shrink-0 bg-mcs-border-muted" aria-hidden />
 
       <Button
-        variant="outline"
+        variant="destructive-outline"
         size="sm"
-        className="border-mcs-error-border text-mcs-error-fg hover:bg-mcs-state-hover"
         disabled={!player.isOnline}
         onClick={onClearInventory}
       >
@@ -195,9 +194,8 @@ export function OverviewActions({
 
       {/* 踢出：无逆操作（重新加入由玩家侧发起，命令层回不去）——直执 + 普通回执，不挂假撤销 */}
       <Button
-        variant="outline"
+        variant="destructive-outline"
         size="sm"
-        className="border-mcs-error-border text-mcs-error-fg hover:bg-mcs-state-hover"
         disabled={!player.isOnline}
         onClick={() =>
           void runAction('kick', { kind: 'kick', playerName: player.name }, {
@@ -210,9 +208,8 @@ export function OverviewActions({
       </Button>
 
       <Button
-        variant="outline"
+        variant="destructive-outline"
         size="sm"
-        className="border-mcs-error-border text-mcs-error-fg hover:bg-mcs-state-hover"
         onClick={() => onOpenBanDialog(player)}
       >
         <Ban aria-hidden />

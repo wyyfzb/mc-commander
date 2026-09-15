@@ -48,7 +48,8 @@ test.describe('设置页', () => {
     // 已配置状态行（顶栏状态点同名文本亦为「已连接」，取首个避免 strict 违规）
     await expect(page.getByText('已连接').first()).toBeVisible()
     // 填地址 → 测试连接（走 dev proxy 到 mock，成功）
-    await page.getByRole('textbox', { name: '面板地址' }).fill('http://localhost:5199')
+    // 地址取当前页 origin（端口随 MOCK_PORT/DEV_PORT 泳道变化），不硬编码端口
+    await page.getByRole('textbox', { name: '面板地址' }).fill(new URL(page.url()).origin)
     await page.getByRole('button', { name: '测试连接' }).click()
     await expect(page.getByText('连接成功')).toBeVisible()
     // 保存
@@ -80,7 +81,8 @@ test.describe('设置页', () => {
     // 换成本面板地址 + 本面板 Key → 走 API Key 通道测试成功。
     // 承重：mock 按未知 Bearer 回 40103（见 mock-server.mjs 请求入口），
     // 旧实现无条件发 A 的令牌，这里拿不到「连接成功」。
-    await page.getByRole('textbox', { name: '面板地址' }).fill('http://localhost:5199')
+    // 地址同样取当前页 origin（端口随泳道变化，硬编码端口在非默认泳道下假红）
+    await page.getByRole('textbox', { name: '面板地址' }).fill(new URL(page.url()).origin)
     await page.getByRole('textbox', { name: 'API Key' }).fill('e2e-mock-key-0000000000')
     await page.getByRole('button', { name: '测试连接' }).click()
     await expect(page.getByText('连接成功')).toBeVisible()

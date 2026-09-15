@@ -15,6 +15,7 @@ import { act, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { setupServer } from 'msw/node'
 import { createMemoryRouter, RouterProvider } from 'react-router'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { handlers } from '@/test/mocks/handlers'
 import { DeployDialog } from '../components/deploy-dialog'
 import { InstancesPage } from '../instances-page'
@@ -65,7 +66,9 @@ function renderInstancesPage() {
         path: '/instances',
         element: (
           <QueryClientProvider client={qc}>
-            <InstancesPage />
+            <TooltipProvider>
+              <InstancesPage />
+            </TooltipProvider>
           </QueryClientProvider>
         ),
       },

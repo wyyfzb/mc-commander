@@ -252,17 +252,18 @@ function InstanceCard({
       {/* 操作行（J8）：主操作只留启停（状态类，按 phase 中间态禁用：starting/stopping
           spinner，WS 确认后解锁 issue 334）与切换（非当前实例的导航）；
           配置/升级/卸载收进操作菜单——弹窗类与破坏性操作低频，且卸载另有输入实例名的强确认，
-          五个按钮平铺会把卡片右下角挤满。菜单项文案对齐各自弹窗标题 */}
+          五个按钮平铺会把卡片右下角挤满。菜单项文案对齐各自弹窗标题。
+          「停止」有中断服务与断连玩家的后果，走 destructive 变体；危险语义色只从变体取，
+          不在调用点手写第二份色类（否则变体一改、这里就静默掉队） */}
       <div className="mt-auto flex items-center justify-end gap-1.5">
         {isRunning ? (
           <Button
-            variant="outline"
+            variant="destructive"
             size="sm"
             aria-label={phase === 'stopping' ? `正在停止 ${name}` : `停止 ${name}`}
             title="停止"
             disabled={isBusy || phase !== null}
             onClick={() => onStop(instance)}
-            className="border-mcs-error-border text-mcs-error-fg hover:bg-mcs-error-bg-subtle hover:text-mcs-error-fg"
           >
             {isBusy || phase === 'stopping' ? <Loader2 className="animate-spin" aria-hidden /> : <Square aria-hidden />}
             停止

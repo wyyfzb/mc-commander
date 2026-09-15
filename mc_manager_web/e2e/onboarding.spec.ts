@@ -4,6 +4,7 @@ import { test, expect, type Page } from '@playwright/test'
 /**
  * onboarding E2E（无配置时 /dashboard 重定向 /onboarding）
  * 验收：重定向守卫 / 部署方式三选一（Docker 仅一行说明）/ 手动部署命令展示 / 连接成功后三步清单 / 连接表单保存 → 进入面板
+ *      / 页面级唯一 h1
  */
 
 // 可选截图（调试用）：设 E2E_SHOT=1 时输出到 test-results/shots/，默认关闭
@@ -44,6 +45,16 @@ test.describe('onboarding', () => {
     await setupConnection(page)
     await page.goto('/onboarding')
     await expect(page).toHaveURL(/\/dashboard/)
+  })
+
+  test('页面级唯一 h1：欢迎区是 h1，连接表单标题让位为 h2', async ({ page }) => {
+    await clearConnection(page)
+    await page.goto('/onboarding')
+    // 同屏两个 h1 会让页面失去唯一标题（屏幕阅读器按 h1 定位主内容）；
+    // 默认路径下欢迎区与连接表单同时渲染，二者必须分属不同层级
+    await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1)
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('欢迎使用 MC Commander')
+    await expect(page.getByRole('heading', { level: 2, name: '连接你的服务器' })).toBeVisible()
   })
 
   test('部署方式切换（三选一）：Windows 步骤 / Linux 命令 + 要点', async ({ page }) => {

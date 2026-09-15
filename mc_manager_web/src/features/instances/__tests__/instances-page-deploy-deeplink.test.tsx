@@ -12,6 +12,7 @@ import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { setupServer } from 'msw/node'
 import { createMemoryRouter, RouterProvider } from 'react-router'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { handlers } from '@/test/mocks/handlers'
 import { InstancesPage } from '../instances-page'
 import { useConnectionStore } from '@/stores/connection'
@@ -31,7 +32,9 @@ function renderPage(initialPath = '/instances') {
         path: '/instances',
         element: (
           <QueryClientProvider client={qc}>
-            <InstancesPage />
+            <TooltipProvider>
+              <InstancesPage />
+            </TooltipProvider>
           </QueryClientProvider>
         ),
       },

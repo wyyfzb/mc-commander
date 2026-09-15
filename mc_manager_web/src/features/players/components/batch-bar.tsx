@@ -217,9 +217,8 @@ export function BatchBar({ selectedPlayers, onOpenBatchDetail, onAction }: Batch
 
         {/* 危险类：清空背包不可逆 → 确认；踢出无逆操作但可自愈（玩家可重连）→ 直执 */}
         <Button
-          variant="outline"
+          variant="destructive-outline"
           size="sm"
-          className="border-mcs-error-border text-mcs-error-fg hover:bg-mcs-state-hover"
           onClick={() => setClearinvOpen(true)}
           disabled={running}
         >
@@ -227,9 +226,8 @@ export function BatchBar({ selectedPlayers, onOpenBatchDetail, onAction }: Batch
           清空背包
         </Button>
         <Button
-          variant="outline"
+          variant="destructive-outline"
           size="sm"
-          className="border-mcs-error-border text-mcs-error-fg hover:bg-mcs-state-hover"
           onClick={() => void runBatch('踢出', true, (p) => onAction({ kind: 'kick', playerName: p.name }))}
           disabled={running}
         >

@@ -7,10 +7,11 @@
  * - 保存：normalizeBaseUrl（无协议补 https）→ setConfig + toast + onSaved + 状态行变已连接
  * - API Key 掩码 + 明文切换
  * - onboarding variant：大标题布局、无状态行
+ * - 标题层级（headingAs）：设置子页默认 h1，引导页传 h2 让位给页面级 h1
  * mock 数据为结构占位（虚构地址/密钥），严禁真实服务器信息
  */
 import { describe, it, expect, beforeEach, afterAll, beforeAll, vi } from 'vitest'
-import { act, render, screen } from '@testing-library/react'
+import { act, cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router'
 import { Toaster, toast as sonnerToast } from 'sonner'
@@ -35,11 +36,22 @@ function okEnvelope(data: unknown) {
   })
 }
 
-function renderForm(props: { variant?: 'settings' | 'onboarding'; onSaved?: () => void } = {}) {
+function renderForm(props: {
+  variant?: 'settings' | 'onboarding'
+  headingAs?: 'h1' | 'h2'
+  onSaved?: () => void
+} = {}) {
   const onSaved = props.onSaved ?? vi.fn()
   // useUnsavedGuard 依赖 data router 上下文（useBlocker）
   const router = createMemoryRouter(
-    [{ path: '/', element: <ConnectionForm variant={props.variant} onSaved={onSaved} /> }],
+    [
+      {
+        path: '/',
+        element: (
+          <ConnectionForm variant={props.variant} headingAs={props.headingAs} onSaved={onSaved} />
+        ),
+      },
+    ],
     { initialEntries: ['/'] },
   )
   render(
@@ -113,6 +125,17 @@ describe('ConnectionForm 渲染', () => {
     expect(screen.queryByText('已连接')).not.toBeInTheDocument()
     expect(screen.queryByText('未连接')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '连接并进入面板' })).toBeInTheDocument()
+  })
+
+  it('标题层级：默认 h1（设置子页里它就是该页主标题），headingAs="h2" 时降为二级标题', () => {
+    renderForm({ variant: 'onboarding' })
+    expect(screen.getByRole('heading', { level: 1, name: '连接你的服务器' })).toBeInTheDocument()
+    cleanup()
+
+    // 引导页另有页面级 h1（欢迎区），表单标题必须能让位——否则同屏两个 h1
+    renderForm({ variant: 'onboarding', headingAs: 'h2' })
+    expect(screen.getByRole('heading', { level: 2, name: '连接你的服务器' })).toBeInTheDocument()
+    expect(screen.queryAllByRole('heading', { level: 1 })).toHaveLength(0)
   })
 
   it('API Key 默认掩码（password），眼睛按钮切换明文', async () => {
