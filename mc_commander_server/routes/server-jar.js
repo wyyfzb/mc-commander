@@ -21,6 +21,7 @@ import {
 } from '../utils/jar-download-guard.js';
 import { logger } from '../utils/logger.js';
 import { getServerVersion } from '../utils/version.js';
+import { isDeployInFlight, latestInFlightDeploy } from '../utils/deploy-inflight.js';
 
 const mcCoreManager = new MinecraftServerManager(new NodeAdapter());
 
@@ -97,17 +98,11 @@ async function getPaperDownload(mcVersion) {
  *   仅承载进行中阶段：终态（complete/error）只推送不写回——否则 WS 连接
  *   建立时会对已结束的部署重复补发历史终态，且注册表随部署次数累积残留
  * - 注册表同时是 GET /instances/deploy/status 的进度兜底数据源（WS 断线时
- *   前端仍能查询服务端真值），故每阶段快照需自包含（含字节数与写入时刻）
+ *   前端仍能查询服务端真值），故每阶段快照需自包含（含字节数与写入时刻）；
+ *   读取判据统一走 utils/deploy-inflight.js（含死快照时限）
  * @param {{ instanceId: string, instanceName: string, type: string, mcVersion: string }|null} meta
  */
 const TERMINAL_DEPLOY_STAGES = new Set(['complete', 'error']);
-
-/**
- * 在途快照时限（15 分钟）：下载 + Forge 安装（120s）+ 首启（60s）的实测上限远低于此。
- * 超时未更新的在途快照视为死快照（进程崩溃/被重启打断，终态清理未执行），
- * 否则前端会永久卡在「部署中」而无法再次发起部署。
- */
-const MAX_INFLIGHT_DEPLOY_AGE_MS = 15 * 60 * 1000;
 
 function trackDeployProgress(serverManager, meta, payload) {
   if (meta) {
@@ -125,24 +120,6 @@ function trackDeployProgress(serverManager, meta, payload) {
   } else {
     serverManager.emit('deployProgress', payload);
   }
-}
-
-/**
- * 最近一条在途部署快照（全局至多一条：部署实例尚未入库，
- * 面板同一时刻只呈现一个部署进度视图）。超出时限的快照按死快照返回 null。
- */
-function latestInFlightDeploy(serverManager) {
-  let latest = null;
-  for (const dep of serverManager.activeDeploys?.values() ?? []) {
-    if (Date.now() - (dep.updatedAt ?? 0) > MAX_INFLIGHT_DEPLOY_AGE_MS) continue;
-    if (!latest || dep.updatedAt > latest.updatedAt) latest = dep;
-  }
-  return latest;
-}
-
-/** 服务端是否确有部署在途（POST /instances/deploy 的重复部署门控与 GET 端点共用） */
-function isDeployInFlight(serverManager) {
-  return latestInFlightDeploy(serverManager) !== null;
 }
 
 async function downloadWithProgress(url, destPath, serverManager, stage = 'download', { expectedHash = null, maxBytes = JAR_DOWNLOAD_MAX_BYTES, deployMeta = null } = {}) {

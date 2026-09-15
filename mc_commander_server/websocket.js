@@ -10,6 +10,7 @@ import fs from 'fs';
 import config from './config.js';
 import { logger } from './utils/logger.js';
 import { parseDbTime } from './utils/db-time.js';
+import { inFlightDeploys } from './utils/deploy-inflight.js';
 
 export const WSEvents = {
   LOG: 'log',
@@ -221,9 +222,11 @@ export function setupWebSocket(wss, serverManager) {
 
     // 长任务状态补发：连接建立即推送进行中的部署快照。部署进度是全局事件
     // （部署实例未入库，无订阅语义），刷新页面/重连后前端据此恢复「部署中」
-    // 显示——长阶段（Forge 安装/首启）事件稀疏，仅靠阶段边界广播会零可见
+    // 显示——长阶段（Forge 安装/首启）事件稀疏，仅靠阶段边界广播会零可见。
+    // 读取判据与 GET /instances/deploy/status 同源（utils/deploy-inflight.js）：
+    // 死快照不补发，否则前端会恢复一个早已结束的「部署中」视图
     try {
-      for (const dep of serverManager.activeDeploys?.values() ?? []) {
+      for (const dep of inFlightDeploys(serverManager)) {
         ws.send(JSON.stringify({ type: WSEvents.DEPLOY_PROGRESS, data: dep, timestamp: Date.now() }));
       }
     } catch (err) {

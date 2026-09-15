@@ -144,7 +144,9 @@ describe('WS 首帧鉴权通道（H2-4b）', () => {
   it('鉴权成功：auth ok 回执先于部署快照（客户端鉴权门控不丢补发）', () => {
     // 预置一个进行中部署：setupAuthenticatedClient 登记后立即补发快照，
     // 若回执晚于快照，客户端 authenticated=false 门控会丢弃部署进度
-    serverManager.activeDeploys = new Map([['dep-1', { stage: 'download', percent: 30 }]]);
+    serverManager.activeDeploys = new Map([
+      ['dep-1', { stage: 'download', percent: 30, updatedAt: Date.now() }],
+    ]);
     try {
       const ws = connectFirstFrame();
       ws.emit('message', JSON.stringify({ type: ClientMessages.AUTH, apiKey: TEST_API_KEY }));

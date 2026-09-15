@@ -207,6 +207,7 @@ describe('WebSocket 长任务（部署/升级）通知与补发', () => {
 
   describe('长任务状态补发（刷新/重连恢复）', () => {
     it('连接建立时补发进行中的部署快照（全局事件，无需订阅）', () => {
+      // updatedAt 由 trackDeployProgress 写入；读取判据按它判死快照（utils/deploy-inflight.js）
       serverManager.activeDeploys.set('paper-abc1', {
         instanceId: 'paper-abc1',
         instanceName: '生存服',
@@ -214,6 +215,7 @@ describe('WebSocket 长任务（部署/升级）通知与补发', () => {
         mcVersion: '1.21.4',
         stage: 'forge_install',
         percent: 0,
+        updatedAt: Date.now(),
       });
 
       const ws = connect(wss);
@@ -223,6 +225,23 @@ describe('WebSocket 长任务（部署/升级）通知与补发', () => {
       expect(snapshot.type).toBe(WSEvents.DEPLOY_PROGRESS);
       expect(snapshot.data.instanceId).toBe('paper-abc1');
       expect(snapshot.data.stage).toBe('forge_install');
+    });
+
+    it('死快照（超时限未更新）不补发：与 GET /instances/deploy/status 同口径', () => {
+      serverManager.activeDeploys.set('paper-stale', {
+        instanceId: 'paper-stale',
+        instanceName: '旧部署服',
+        type: 'paper',
+        mcVersion: '1.21.4',
+        stage: 'forge_install',
+        percent: 0,
+        updatedAt: Date.now() - 16 * 60 * 1000,
+      });
+
+      const ws = connect(wss);
+
+      // 补发一个早已结束的「部署中」会让前端误判服务端仍在部署
+      expect(ws.send).not.toHaveBeenCalled();
     });
 
     it('无进行中部署时连接不补发', () => {
