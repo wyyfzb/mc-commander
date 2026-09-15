@@ -23,6 +23,11 @@ import { createAuthRoutes, resetLoginLockState } from '../routes/auth.js';
 import { errorHandler } from '../middleware/error_handler.js';
 import { parseDbTime } from '../utils/db-time.js';
 
+// 超时余量：本文件 10 例含 scrypt(N=131072) 哈希/校验（单次实测 ~270ms，每例 2~7 次）。
+// 5s 默认值是按空载耗时定的，空载够用但并行争抢下没有余量（三泳道同时跑时实测 5758ms 越线）。
+// 文件级放宽到本仓既有 15s 口径；scrypt 强度不因测试下调。
+vi.setConfig({ testTimeout: 15_000 });
+
 // 测试用明文 Key（与 vitest.config.js 中 API_KEY 一致）
 const TEST_PLAINTEXT_KEY = 'test-api-key-for-unit-tests';
 

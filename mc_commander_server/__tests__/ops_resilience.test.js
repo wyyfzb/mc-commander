@@ -4,6 +4,12 @@
  * - 磁盘使用率（getDiskUsage 缓存 + 去重 + statfsSync 返回值）
  * - check-update 端点（npm registry / 离线回退）
  * - autoStart 恢复（面板重启后逐个错峰启动，跳过熔断/已运行/缺失）
+ *
+ * 超时余量：本节里三例在 it() 内动态 import 模块图（routes/index.js 是整棵路由树、
+ * services/mc_server.js 是服务实例图），耗时是模块图求值而非用例逻辑——三泳道并行下
+ * routes/index.js 实测 6910ms，旧 20s 上限在较慢宿主上会被越过（实测 20101ms 为右删失
+ * 下界，即被上限截断）。故这三例显式放到 60s；其余纯逻辑用例保留默认值。
+ * testTimeout 不覆盖 hook：本文件无重 hook，故无需 hookTimeout。
  */
 import { describe, it, expect } from 'vitest';
 
@@ -125,7 +131,7 @@ describe('磁盘使用率 getDiskUsage', () => {
 // ── 3. check-update 端点 ──────────────────────────────────────
 describe('GET /api/v1/check-update', () => {
   // 端点在路由中注册，这里验证配置基础
-  it('端点已注册在路由列表中', { timeout: 20000 }, async () => {
+  it('端点已注册在路由列表中', { timeout: 60_000 }, async () => {
     const { setupRoutes } = await import('../routes/index.js');
     expect(typeof setupRoutes).toBe('function');
   });
@@ -133,7 +139,7 @@ describe('GET /api/v1/check-update', () => {
 
 // ── 4. toStatus 包含韧性字段 ──────────────────────────────────
 describe('toStatus 韧性字段', () => {
-  it('MCServerInstance.toStatus() 包含 autoStart/circuitBreakerTripped/consecutiveCrashes', { timeout: 20000 }, async () => {
+  it('MCServerInstance.toStatus() 包含 autoStart/circuitBreakerTripped/consecutiveCrashes', { timeout: 60_000 }, async () => {
     const { MCServerInstance } = await import('../services/mc_server.js');
     // 构造一个轻量实例（serverPath 不需要真实 JAR）
     const inst = new MCServerInstance({
@@ -156,7 +162,7 @@ describe('toStatus 韧性字段', () => {
     expect(status.consecutiveCrashes).toBe(0);
   });
 
-  it('autoStart=true 时 toStatus 正确反映', { timeout: 20000 }, async () => {
+  it('autoStart=true 时 toStatus 正确反映', { timeout: 60_000 }, async () => {
     const { MCServerInstance } = await import('../services/mc_server.js');
     const inst = new MCServerInstance({
       id: 'test-autostart',
