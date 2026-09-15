@@ -3,7 +3,7 @@
  * config 由调用方从 useConnectionStore 传入（与 src/api/players.ts 同模式）。
  */
 import { apiDelete, apiGet, apiPost, apiPut, type ConnectionConfig } from './client'
-import type { DeployRequest, DeployResult, InstanceStatus, InstanceUpdatePayload, UpgradeRequest, UpgradeStartResponse, VersionsResponse } from './types'
+import type { DeployRequest, DeployResult, DeployStatusResponse, InstanceStatus, InstanceUpdatePayload, UpgradeRequest, UpgradeStartResponse, VersionsResponse } from './types'
 
 /** 服务端版本列表（GET /versions?type=；fabric 额外返回 loaders） */
 export function apiGetServerVersions(config: ConnectionConfig, type: string) {
@@ -15,6 +15,12 @@ export function apiDeployInstance(config: ConnectionConfig, payload: DeployReque
   return apiPost<DeployResult>('/api/v1/instances/deploy', config, payload, {
     timeoutMs: 10 * 60_000,
   })
+}
+
+/** 部署进度兜底查询（GET /instances/deploy/status）；无部署/已终态返回空态 { deploying: false }
+ *  extraQuery 供 e2e mock 切换场景（真实服务端忽略未知查询参数） */
+export function apiGetDeployStatus(config: ConnectionConfig, signal?: AbortSignal, extraQuery = '') {
+  return apiGet<DeployStatusResponse>(`/api/v1/instances/deploy/status${extraQuery}`, config, signal)
 }
 
 /** 卸载实例（DELETE /instances/:id；危险操作由 UI 层确认） */

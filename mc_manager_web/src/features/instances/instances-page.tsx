@@ -29,12 +29,14 @@ import { InstanceSettingsDialog } from './components/instance-settings-dialog'
 import { UpgradeDialog } from './components/upgrade-dialog'
 import { clearUpgradeProgress } from '@/stores/upgrade'
 import { useUninstallInstance } from './queries'
+import { useDeployStatusFallback } from './hooks/use-deploy-status-fallback'
 import { useStartInstanceWithEula } from '@/hooks/use-start-instance-with-eula'
 import { useStopInstance } from '@/hooks/use-instance-stop'
 
 /**
- * 部署进行中横幅（issue 352）：部署实例完成前未入实例列表，卡片网格看不到它——
- * 列表页顶部横幅是刷新后恢复的「最小可见标识」（WS 连接补发 deployProgress）。
+ * 部署进行中横幅（issue 352 + J29）：部署实例完成前未入实例列表，卡片网格看不到它——
+ * 列表页顶部横幅是刷新后恢复的「最小可见标识」（WS 连接补发 deployProgress，
+ * WS 断线期间由 useDeployStatusFallback 轮询服务端快照）。
  * 终态由 deployStore.deploying 收敛（applyDeployProgress 终态不置 deploying）
  */
 function DeployingBanner() {
@@ -58,6 +60,8 @@ export function InstancesPage() {
   const config = useConnectionStore()
   const instanceId = useServerStore((s) => s.instanceId)
   const setInstanceId = useServerStore((s) => s.setInstanceId)
+  // 服务端在途部署兜底快照：挂载/断线后恢复进度显示，并禁止再次发起部署（J29）
+  const { duplicateDeployBlocked } = useDeployStatusFallback()
 
   const instancesQuery = useInstances()
   const uninstallMutation = useUninstallInstance()
@@ -192,9 +196,19 @@ export function InstancesPage() {
         title="实例管理"
         description={instancesQuery.isLoading ? '管理服务器实例的部署、切换与卸载' : `已安装 ${instances.length} 个实例`}
         actions={
-          <Button size="sm" onClick={() => setDeployOpenDeep(true)}>
+          <Button
+            size="sm"
+            onClick={() => setDeployOpenDeep(true)}
+            disabled={duplicateDeployBlocked}
+            aria-label={duplicateDeployBlocked ? '已有部署在进行中' : '部署新实例'}
+            title={
+              duplicateDeployBlocked
+                ? '服务端已有部署在进行中，等待其完成后再发起新部署'
+                : undefined
+            }
+          >
             <Rocket aria-hidden />
-            部署新实例
+            {duplicateDeployBlocked ? '已有部署在进行中' : '部署新实例'}
           </Button>
         }
       />

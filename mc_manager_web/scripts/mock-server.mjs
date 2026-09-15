@@ -711,6 +711,34 @@ const server = createServer((req, res) => {
         maxMemory: '2G',
       }, 'Instance deployed successfully'))
     }
+    // 部署进度兜底快照（对齐 @mc-commander/schemas deployStatusResponseSchema）：
+    // 默认空态；?active=1 或 ?mockInFlight=1 返回在途快照（后者由面板按
+    // localStorage 场景开关追加，供 e2e 复现「刷新/断线后服务端仍在部署」；
+    // 不保存服务端状态 → 用例之间零串扰）。结构占位虚构数据。
+    if (path === '/api/v1/instances/deploy/status') {
+      const q = parseQuery(url)
+      if (q.active === '1' || q.mockInFlight === '1') {
+        return res.end(ok({
+          deploying: true,
+          instanceId: 'paper-a1b2c3d4',
+          instanceName: '新部署实例',
+          type: 'paper',
+          mcVersion: '1.21.4',
+          stage: 'download',
+          percent: 0.45,
+          transferred: 52_428_800,
+          total: 104_857_600,
+          updatedAt: Date.now(),
+        }))
+      }
+      return res.end(ok({ deploying: false }))
+    }
+    // 强制断开全部 WS 连接（mock 专用控制端点：e2e 复现「实时通道断开」边沿，HTTP 不动）
+    if (path === '/api/v1/instances/deploy/drop-ws' && req.method === 'POST') {
+      for (const s of wsSockets) s.destroy()
+      wsSockets.clear()
+      return res.end(ok({ dropped: true }))
+    }
     // ── 世界/属性域 ──
     if (path === '/api/v1/instances/e2e-demo/world') return res.end(ok(worldInfo))
     if (path === '/api/v1/instances/e2e-demo/properties') {

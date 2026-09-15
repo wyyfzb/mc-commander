@@ -1,34 +1,52 @@
 /**
  * DegradationBanners 测试（降级横幅）：
  * - WS 断开（hasConnectedOnce + 未连接）→ error 横幅 + 重连按钮 + 轮询间隔（取 queries 常量）
+ * - WS 断开且服务端有部署在途 → 补写「进度由服务端刷新、勿重新发起部署」（J29 断线提示）
  * - RCON 未连接（运行中实例）→ warning 横幅 + 写明服务器侧动作；不得给界面做不到的出口
  *   （enable-rcon 属安全敏感项，properties-panel 恒渲染只读占位符）
  * - 正常状态 → 不渲染
  */
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router'
 import { useServerStore } from '@/stores/server'
 import { useConnectionStore } from '@/stores/connection'
+import { useDeployStore } from '@/stores/deploy'
 import { FALLBACK_POLL_INTERVAL_MS } from '@/api/queries'
+import * as instancesApi from '@/api/instances'
 import { DegradationBanners } from '../degradation-banners'
+import type { DeployStatusResponse } from '@/api/types'
+
+/** 兜底查询替身（默认空态；用例覆写为在途快照） */
+let deployStatusImpl: () => Promise<DeployStatusResponse>
 
 function renderBanners() {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
-    <MemoryRouter>
-      <DegradationBanners />
-    </MemoryRouter>,
+    <QueryClientProvider client={qc}>
+      <MemoryRouter>
+        <DegradationBanners />
+      </MemoryRouter>
+    </QueryClientProvider>,
   )
 }
 
 describe('DegradationBanners', () => {
   beforeEach(() => {
+    deployStatusImpl = () => Promise.resolve({ deploying: false })
+    vi.spyOn(instancesApi, 'apiGetDeployStatus').mockImplementation(() => deployStatusImpl())
     useServerStore.setState({
       socketConnected: true,
       hasConnectedOnce: true,
       status: { isRunning: true, isRconConnected: true } as never,
     })
     useConnectionStore.setState({ status: 'ready' })
+    useDeployStore.setState({ progress: null, deploying: false, lastResult: null, recentActiveDeploy: null })
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
   })
 
   it('正常状态（WS 连接 + RCON 连接）：不渲染任何横幅', () => {
@@ -46,6 +64,32 @@ describe('DegradationBanners', () => {
       screen.getByText(new RegExp(`每 ${FALLBACK_POLL_INTERVAL_MS / 1000} 秒`)),
     ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /重连/ })).toBeInTheDocument()
+  })
+
+  it('WS 断开 + 服务端有部署在途：提示进度刷新方式且明确不得重新发起部署（J29）', async () => {
+    deployStatusImpl = () =>
+      Promise.resolve({
+        deploying: true,
+        instanceId: 'paper-a1b2c3d4',
+        instanceName: '生存服',
+        type: 'paper',
+        mcVersion: '1.21.4',
+        stage: 'download',
+        percent: 0.45,
+        transferred: 52_428_800,
+        total: 104_857_600,
+        updatedAt: Date.now(),
+      })
+    useServerStore.setState({ socketConnected: false, hasConnectedOnce: true })
+    renderBanners()
+
+    // 可兑现文案：说清进度的获取方式，并给出「不要重复发起」的明确动作
+    expect(
+      await screen.findByText(
+        new RegExp(`服务端仍有部署在进行，进度每 ${FALLBACK_POLL_INTERVAL_MS / 1000} 秒从服务端刷新`),
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/请勿重新发起部署（会重复创建实例）/)).toBeInTheDocument()
   })
 
   it('RCON 未连接（运行中）：warning 横幅写明服务器侧动作，不给做不到的出口', () => {

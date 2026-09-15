@@ -53,7 +53,7 @@ export type { FileEntry, FileListResponse, FileInfoResponse, FileContentResponse
 export type { ScheduledTaskType, ScheduledTask, TaskCreatePayload, TaskUpdatePayload, TaskRunHistory } from '@mc-commander/schemas'
 
 // ── 部署/升级 ──
-export type { VersionsResponse, DeployRequest, DeployResult, DeployProgress, UpgradeStage, UpgradeProgress, UpgradeRequest, UpgradeStartResponse } from '@mc-commander/schemas'
+export type { VersionsResponse, DeployRequest, DeployResult, DeployProgress, DeployStatusResponse, UpgradeStage, UpgradeProgress, UpgradeRequest, UpgradeStartResponse } from '@mc-commander/schemas'
 
 // ── 审计 ──
 export type { AuditLogItem, CommandHistoryItem } from '@mc-commander/schemas'

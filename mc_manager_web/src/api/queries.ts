@@ -23,6 +23,9 @@ export const queryKeys = {
   systemStats: () => [...queryKeys.all, 'system-stats'] as const,
   instances: () => [...queryKeys.all, 'instances'] as const,
   instance: (id: string) => [...queryKeys.all, 'instances', id] as const,
+  /** 部署进度兜底快照（单例查询：全局至多一条在途部署；置于 'deploy' 段下避免与
+   *  per-instance 的 ['mcs','instances',id] 前缀冲突——同名实例 id 会撞缓存条目） */
+  deployStatus: () => [...queryKeys.all, 'deploy', 'status'] as const,
   logs: (id: string) => [...queryKeys.all, 'logs', id] as const,
   players: (id: string, filters?: { q?: string; mode?: string }) =>
     [...queryKeys.all, 'players', id, filters ?? {}] as const,

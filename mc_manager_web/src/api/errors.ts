@@ -28,6 +28,8 @@ export const ErrorCode = {
   INSTANCE_NOT_FOUND: 40401,
   INSTANCE_NOT_RUNNING: 40002,
   INSTANCE_RUNNING: 40003,
+  /** 部署互斥：已有部署在途 */
+  DEPLOY_IN_PROGRESS: 40905,
 
   BACKUP_NOT_FOUND: 40402,
   BACKUP_IN_PROGRESS: 40901,
@@ -89,6 +91,7 @@ const LOCALIZED_MESSAGES: Partial<Record<ErrorCodeValue, string>> = {
   [ErrorCode.INSTANCE_NOT_FOUND]: '服务器实例不存在',
   [ErrorCode.INSTANCE_NOT_RUNNING]: '实例未在运行',
   [ErrorCode.INSTANCE_RUNNING]: '实例正在运行',
+  [ErrorCode.DEPLOY_IN_PROGRESS]: '服务端已有部署在进行中，请等待其完成后再发起新部署',
   [ErrorCode.BACKUP_NOT_FOUND]: '备份不存在',
   [ErrorCode.BACKUP_IN_PROGRESS]: '已有备份任务进行中',
   [ErrorCode.RESTORE_IN_PROGRESS]: '已有恢复任务进行中',

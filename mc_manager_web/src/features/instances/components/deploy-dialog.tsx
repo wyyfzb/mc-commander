@@ -8,10 +8,10 @@
  * - EULA 同意随部署请求下发（服务端据此写 eula.txt）；部署成功且已同意时发启动指令
  *   （POST /start），结果块展示启动状态（首启闭环，issue 312）
  * - 视图状态机：部署中 → 成功 → 失败 → 表单三步；恢复场景保留进行中进度（issue 352）；
- *   部署中禁用上一步与关闭（ESC/遮罩拦截）
+ *   服务端报告在途部署时禁止再次发起（J29，消除重复部署）；部署中禁用上一步与关闭（ESC/遮罩拦截）
  * - dirty 关闭拦截：表单与基线对比（自动回填的版本/加载器同步基线，不误判 dirty）
  * - 数据流：useDeployStore（progress/deploying/lastResult/startDeploy/finishDeploy/resetDeploy）
- *   + useDeployInstance().mutateAsync；关闭时 resetDeploy
+ *   + useDeployStatusFallback（挂载/断线兜底快照）+ useDeployInstance().mutateAsync；关闭时 resetDeploy
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { CloudDownload } from 'lucide-react'
@@ -33,6 +33,7 @@ import { FALLBACK_VERSIONS, type ServerType } from '@/lib/mc-deploy'
 import { useDeployStore } from '@/stores/deploy'
 import { useOverview } from '@/api/queries'
 import { useDeployInstance, useServerVersions } from '../queries'
+import { useDeployStatusFallback } from '../hooks/use-deploy-status-fallback'
 import type { DeployRequest, DeployResult } from '@/api/types'
 import { INITIAL_FORM, type AutoStartState, type DeployForm } from './deploy/types'
 import { recommendedMemoryGB } from './deploy/utils'
@@ -71,6 +72,8 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
   const resetDeploy = useDeployStore((s) => s.resetDeploy)
 
   const deployMutation = useDeployInstance()
+  // 服务端快照兜底：刷新/断线后恢复在途进度，并作为「禁止重复部署」的服务端真值
+  const { duplicateDeployBlocked } = useDeployStatusFallback()
   const versionsQuery = useServerVersions(form.type)
   // 版本列表失败 → 本地缓存兜底（仍可部署）；useMemo 稳定引用（回填 effect 依赖）
   const versions = useMemo(
@@ -161,6 +164,16 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
     form.name !== baselineRef.current.name ||
     form.memory !== baselineRef.current.memory
 
+  /**
+   * 服务端报告在途部署 → 禁止再次发起（重复部署会产出重复实例目录与 DB 记录）。
+   * 本地已有本轮终态结果（lastResult 非空）时放行：那是刚结束的部署，
+   * 服务端快照可能尚未清理，不能因此永久禁用按钮（「重试」路径读同一条件）
+   */
+  const duplicateDeploy =
+    duplicateDeployBlocked &&
+    lastResult === null &&
+    !(progress?.stage === 'complete' || progress?.stage === 'error')
+
   const changeType = (type: ServerType) => {
     if (type === form.type) return
     // 切换类型重置版本与加载器（新数据就绪后自动回填）
@@ -178,6 +191,11 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
 
   const handleDeploy = async () => {
     if (form.version === '' || form.name.trim() === '') return
+    // 服务端在途部署时不再发起（服务端同样以 409 拒绝，这里省掉一次注定失败的往返）
+    if (duplicateDeploy) {
+      toast.error('服务端已有部署在进行中，请等待其完成后再发起新部署')
+      return
+    }
     const payload: DeployRequest = {
       type: form.type,
       mcVersion: form.version,
@@ -344,10 +362,17 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
               ) : (
                 <Button
                   onClick={() => void handleDeploy()}
-                  aria-label={eulaAgreed ? '部署并启动' : '仅部署'}
+                  disabled={duplicateDeploy}
+                  aria-label={
+                    duplicateDeploy
+                      ? '已有部署在进行中'
+                      : eulaAgreed
+                        ? '部署并启动'
+                        : '仅部署'
+                  }
                 >
                   <CloudDownload className="size-4" aria-hidden />
-                  {eulaAgreed ? '部署并启动' : '仅部署'}
+                  {duplicateDeploy ? '已有部署在进行中' : eulaAgreed ? '部署并启动' : '仅部署'}
                 </Button>
               )}
             </DialogFooter>

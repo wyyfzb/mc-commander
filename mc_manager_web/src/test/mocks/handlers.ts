@@ -400,6 +400,13 @@ export const mockBans: BanRecord[] = [  {
 /** 部署失败开关（测试注入：结构占位，非真实错误） */
 export const deployMock: { shouldFail: boolean; lastBody: { eula?: boolean } | null } = { shouldFail: false, lastBody: null }
 
+/**
+ * 部署进度兜底快照开关（测试注入）：默认空态（无在途部署），
+ * 用例置 active 后 mock GET /instances/deploy/status 返回在途快照
+ * （结构占位虚构数据，严禁真实服务器信息）
+ */
+export const deployStatusMock: { active: boolean } = { active: false }
+
 /** 实例列表运行态开关（测试注入：false → 卡片显示启动按钮，供 EULA 首启用例） */
 export const instanceListMock = { running: true }
 
@@ -667,6 +674,26 @@ export const handlers = [
       ...('loaders' in mock ? { loaders: mock.loaders } : {}),
     })
   }),
+  // ── 部署域 ──
+  // 部署进度兜底快照（GET /instances/deploy/status；服务端契约 deployStatusResponseSchema）
+  http.get('*/api/v1/instances/deploy/status', () =>
+    ok(
+      deployStatusMock.active
+        ? {
+            deploying: true,
+            instanceId: 'paper-a1b2c3d4',
+            instanceName: '生存服',
+            type: 'paper',
+            mcVersion: '1.21.4',
+            stage: 'forge_install',
+            percent: 0.45,
+            transferred: 52_428_800,
+            total: 104_857_600,
+            updatedAt: Date.now(),
+          }
+        : { deploying: false },
+    ),
+  ),
   http.post('*/api/v1/instances/deploy', async ({ request }) => {
     if (deployMock.shouldFail) {
       return HttpResponse.json(
