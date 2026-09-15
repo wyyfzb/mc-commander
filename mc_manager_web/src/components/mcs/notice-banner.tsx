@@ -1,6 +1,7 @@
 /**
  * NoticeBanner —— 通用提示条（快照/截断/降级等非阻断提示）
  * 变体四色走 --mcs-* 状态 token（12% alpha 容器底 + 状态色文字），三重编码由调用方图标承担
+ * 级别选用（何时该常驻、何时用 toast）见 docs/design-review-guidelines.md §反馈级别三级口径
  */
 import type { LucideIcon } from 'lucide-react'
 import type { ReactNode } from 'react'

@@ -272,7 +272,7 @@ describe('buildAlertNotifications 告警状态机', () => {
 
   it('CPU/内存阈值 80% 告警与恢复', () => {
     const { notifications } = buildAlertNotifications({ cpu: 85 }, undefined, new Set())
-    expect(notifications[0]?.content).toBe('CPU 使用率过高: 85.0%')
+    expect(notifications[0]?.content).toBe('CPU 使用率过高: 85.0%（单核口径）')
 
     const recovered = buildAlertNotifications({ cpu: 50 }, undefined, new Set(['highCpu']))
     expect(recovered.notifications[0]?.content).toBe('CPU 使用率已恢复正常')

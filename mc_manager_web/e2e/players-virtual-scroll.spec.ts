@@ -166,3 +166,45 @@ test.describe('长列表虚拟滚动（「全部」档）', () => {
     }
   })
 })
+
+/**
+ * 分页栏的「共 N 条 · 第 x/y 页」与筛选条计数是同一形态——CJK 文案的断行点
+ * 落在任意字符间，375 下会被压成逐字竖排。此处的 60 人夹具是本仓**唯一**能让
+ * 分页栏出现多页文案（`共 60 条 · 第 1/3 页` + 页码组）的现场：mock 只有 5 人，
+ * 单页时 `showPager` 为假、文案退化成「共 5 条」，测不到该形态。
+ */
+test.describe('窄屏分页栏（375）', () => {
+  test('375px：条数/页码不折成竖排，分页栏与主区均无横向溢出', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 })
+    await setupConnection(page)
+    await injectLongList(page)
+    await page.goto('/players')
+    await expect(page.getByText(`${TOTAL} / ${TOTAL} 名玩家`)).toBeVisible()
+
+    const info = page.getByText(/共 \d+ 条 · 第 \d+\/\d+ 页/)
+    await expect(info).toBeVisible()
+    const metrics = await info.evaluate((el) => {
+      const cs = getComputedStyle(el)
+      return {
+        height: el.getBoundingClientRect().height,
+        lineHeight: parseFloat(cs.lineHeight),
+        whiteSpace: cs.whiteSpace,
+      }
+    })
+    // 先断症状（逐字竖排会把行高撑成多倍），再断机制（nowrap）
+    expect(metrics.height).toBeLessThanOrEqual(metrics.lineHeight * 1.5)
+    expect(metrics.whiteSpace).toBe('nowrap')
+
+    // 分页栏自身（每页选择器的祖父节点即分页栏根）不得横向溢出
+    const barOverflow = await page
+      .getByLabel('每页行数')
+      .locator('xpath=../..')
+      .evaluate((el) => el.scrollWidth - el.clientWidth)
+    expect(barOverflow).toBeLessThanOrEqual(0)
+
+    const mainOverflow = await page
+      .locator('#main-content')
+      .evaluate((el) => el.scrollWidth - el.clientWidth)
+    expect(mainOverflow).toBeLessThanOrEqual(0)
+  })
+})

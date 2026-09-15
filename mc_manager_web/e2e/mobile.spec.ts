@@ -121,6 +121,13 @@ test.describe('仪表盘右栏窄屏可达（R19）', () => {
       clientWidth: document.documentElement.clientWidth,
     }))
     expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.clientWidth)
+
+    // documentElement 拦不住 main 内部的横向溢出——`app-shell.tsx` 的 main 自带
+    // `overflow-y-auto`，其 overflow-x 计算值为 auto ⇒ 内部溢出只体现在 main 自己身上
+    const mainOverflow = await page
+      .locator('#main-content')
+      .evaluate((el) => el.scrollWidth - el.clientWidth)
+    expect(mainOverflow).toBeLessThanOrEqual(0)
   })
 })
 
@@ -232,5 +239,41 @@ test.describe('玩家表窄屏：行式卡片（C3）', () => {
       clientWidth: document.documentElement.clientWidth,
     }))
     expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.clientWidth)
+  })
+
+  /**
+   * 375 下筛选条计数「5 / 5 名玩家」曾被压成逐字竖排（CJK 断行点落在任意字符间）。
+   * 修法是 `whitespace-nowrap` **且**容器 `flex-wrap`——只锁 nowrap 会让筛选条的
+   * min-content 变成「计数 + 三个按钮」之和，把主区撑出横向溢出。
+   */
+  test('375px：筛选条计数不折成竖排，筛选条与主区均无横向溢出', async ({ page }) => {
+    await setupConnection(page)
+    await page.goto('/players')
+
+    const count = page.getByText(/\d+ \/ \d+ 名玩家/)
+    await expect(count).toBeVisible()
+    const metrics = await count.evaluate((el) => {
+      const cs = getComputedStyle(el)
+      return {
+        height: el.getBoundingClientRect().height,
+        lineHeight: parseFloat(cs.lineHeight),
+        whiteSpace: cs.whiteSpace,
+      }
+    })
+    // 竖排时实测为 6 行高；单行必须 ≤ 1.5 倍行高（先断症状，再断机制）
+    expect(metrics.height).toBeLessThanOrEqual(metrics.lineHeight * 1.5)
+    expect(metrics.whiteSpace).toBe('nowrap')
+
+    // 筛选条自身（重置按钮的父节点即筛选条根）不得横向溢出
+    const barOverflow = await page
+      .getByRole('button', { name: '重置筛选' })
+      .locator('xpath=..')
+      .evaluate((el) => el.scrollWidth - el.clientWidth)
+    expect(barOverflow).toBeLessThanOrEqual(0)
+
+    const mainOverflow = await page
+      .locator('#main-content')
+      .evaluate((el) => el.scrollWidth - el.clientWidth)
+    expect(mainOverflow).toBeLessThanOrEqual(0)
   })
 })

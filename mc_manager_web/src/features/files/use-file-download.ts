@@ -36,7 +36,8 @@ export function useFileDownload(instanceId: string | null) {
           }
         },
       })
-      toast.success(`已下载 ${fileName}`, { id: toastId })
+      // 时长与「一次性回执」家族统一（success 回执显式声明 duration: 1500）
+      toast.success(`已下载 ${fileName}`, { id: toastId, duration: 1500 })
     } catch (err) {
       toast.error(`下载失败：${getFriendlyErrorText(err)}`, { id: toastId })
     } finally {

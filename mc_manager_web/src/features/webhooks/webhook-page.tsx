@@ -136,7 +136,11 @@ export default function WebhookPage() {
   // 列表行启用开关直切（与编辑保存分离：文案与 in-flight 状态互不干扰）
   const toggleMut = useMutation({
     mutationFn: ({ id, enabled }: { id: number; enabled: boolean }) => apiUpdateWebhook(config, id, { isEnabled: enabled }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: queryKeys.webhooks() }) },
+    // 与同页其余写操作（创建/更新/删除/测试投递）同级别：成功也给回执，不静默
+    onSuccess: (_data, { enabled }) => {
+      qc.invalidateQueries({ queryKey: queryKeys.webhooks() })
+      toast.success(enabled ? 'Webhook 已启用' : 'Webhook 已停用')
+    },
     onError: (e) => toast.error(`切换启用状态失败：${getFriendlyErrorText(e)}`),
   })
   const deleteMut = useMutation({

@@ -249,7 +249,7 @@ describe('notifications store 告警状态机（dispatchPerformance）', () => {
   it('CPU 越阈值 → highCpu；回落 → 状态清除', () => {
     useNotificationStore.getState().dispatchPerformance({ cpu: 91.5 })
     let s = useNotificationStore.getState()
-    expect(s.items[0]).toMatchObject({ type: 'highCpu', content: 'CPU 使用率过高: 91.5%' })
+    expect(s.items[0]).toMatchObject({ type: 'highCpu', content: 'CPU 使用率过高: 91.5%（单核口径）' })
     expect(s.activeAlerts.has('highCpu')).toBe(true)
 
     useNotificationStore.getState().dispatchPerformance({ cpu: 50 })

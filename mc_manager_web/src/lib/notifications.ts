@@ -113,7 +113,15 @@ export interface AlertThresholds {
   tpsLow: number         // TPS 低于此值告警
 }
 
-/** 默认告警阈值（cpu/memory 80；TPS 走 tpsLow 绝对值） */
+/**
+ * 默认告警阈值（cpu/memory 80；TPS 走 tpsLow 绝对值）。
+ * `cpuWarning` 作用于 `performanceUpdate` 的**进程** CPU，口径＝占**单核**百分比
+ * （累计 CPU 秒差 ÷ 墙钟秒；多核进程可 >100%，服务端截断到 100）。服务端出处与
+ * 「不按核数归一」的理由见 `mc_commander_server/services/mc-server/stats-collector.js`
+ * 的 `_applyCpuSecondsSample`——归一会把「主线程打满」的真实告警抹成 100/核数。
+ * 与 Dashboard CPU 卡的**整机**口径（`systemStats.cpuUsage`，/proc/stat 差分，
+ * `features/dashboard/components/stat-cards.tsx`）不同源，两者不可互换或互为后备。
+ */
 export const DEFAULT_ALERT_THRESHOLDS: AlertThresholds = {
   cpuWarning: 80,
   memoryWarning: 80,
@@ -271,7 +279,7 @@ export function buildAlertNotifications(
     if (cpu > thresholds.cpuWarning) {
       if (!next.has('highCpu')) {
         next.add('highCpu')
-        notifications.push({ type: 'highCpu', category: 'server', content: `CPU 使用率过高: ${cpu.toFixed(1)}%` })
+        notifications.push({ type: 'highCpu', category: 'server', content: `CPU 使用率过高: ${cpu.toFixed(1)}%（单核口径）` })
       }
     } else if (next.has('highCpu')) {
       next.delete('highCpu')

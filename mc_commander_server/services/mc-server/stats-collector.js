@@ -186,6 +186,11 @@ export function _collectStats() {
 /**
  * 由两次采样的「累计 CPU 秒数」差分出瞬时 CPU%；单进程上限 100%
  * （多核并行也按单进程口径截断，与既有 Linux 行为一致）。
+ * 口径＝占**单核**百分比，**不按核数归一**：8 核机上主线程打满即 100%，
+ * 归一后只剩 12.5% 会把 MC 最关键的瓶颈信号抹掉。该值在前端唯一可见出口是
+ * CPU 告警（`mc_manager_web/src/lib/notifications.ts` 的 `cpuWarning`，文案标注
+ * 「单核口径」）；Dashboard 的 CPU 卡走**整机**口径（`systemStats.cpuUsage`，
+ * /proc/stat 差分），与本值不同源，勿互换。
  * @param {number} cpuSeconds 该进程的累计 CPU 秒数
  * @param {number} [sysSeconds] 整机累计 CPU 秒数（Linux 用；缺省时以「整机时钟有变化」计）
  */

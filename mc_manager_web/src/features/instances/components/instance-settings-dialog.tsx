@@ -253,7 +253,9 @@ export function InstanceSettingsDialog({
     setIsSaving(true)
     try {
       await updateMutation.mutateAsync({ instanceId: instance.id, payload })
-      toast.success('启动配置已保存')
+      // 「重启后才生效」是持续状态（级别 3）但保存后本弹窗即关闭、无可见常驻载体 ⇒ 属文档
+      // §反馈级别三级口径 的「未满足的级别 3 要求」（已登记为缺口），故口径临时写进 toast 文案
+      toast.success('启动配置已保存，重启实例后生效')
       onOpenChange(false)
     } catch (e) {
       toast.error(`保存失败：${getFriendlyErrorText(e)}`)

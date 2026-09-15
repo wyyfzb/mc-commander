@@ -65,7 +65,9 @@ export function InstanceControls() {
         resetTerminal()
         await sleep(3000)
         await queryClient.invalidateQueries({ queryKey: queryKeys.instance(instanceId ?? '') })
-        toast.success('服务器已重启')
+        // 口径＝发令回执（与命令面板/实例页同源 apiPost）：这里只等终端重挂，并未断言
+        // 重启结果，说「服务器已重启」是过度承诺——结果由 WS status 事件驱动
+        toast.success('重启指令已发送')
       } else {
         toast.success('已发送保存指令')
       }

@@ -247,7 +247,7 @@ describe('InstanceSettingsDialog', () => {
     await user.keyboard('{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}')
     await user.click(screen.getByRole('button', { name: '保存配置' }))
 
-    expect(await screen.findByText('启动配置已保存')).toBeInTheDocument()
+    expect(await screen.findByText('启动配置已保存，重启实例后生效')).toBeInTheDocument()
     expect(putBodies).toHaveLength(1)
     expect(putBodies[0]).toEqual({
       maxMemory: '4G',
@@ -270,7 +270,7 @@ describe('InstanceSettingsDialog', () => {
     await user.type(screen.getByLabelText('Java 路径（可选）'), '/usr/lib/jvm/java-21/bin/java')
     await user.click(screen.getByRole('button', { name: '保存配置' }))
 
-    expect(await screen.findByText('启动配置已保存')).toBeInTheDocument()
+    expect(await screen.findByText('启动配置已保存，重启实例后生效')).toBeInTheDocument()
     expect(putBodies[0]?.javaPath).toBe('/usr/lib/jvm/java-21/bin/java')
   })
 
@@ -291,7 +291,7 @@ describe('InstanceSettingsDialog', () => {
     renderDialog(detailWith({ startCommand: 'java -Xmx3G -jar server.jar nogui' }))
 
     await user.click(screen.getByRole('button', { name: '保存配置' }))
-    expect(await screen.findByText('启动配置已保存')).toBeInTheDocument()
+    expect(await screen.findByText('启动配置已保存，重启实例后生效')).toBeInTheDocument()
     // 清除旧命令：否则 jvmArgs 空数组时 start() 回退 startCommand 静默覆盖新配置
     expect(putBodies[0]).toMatchObject({ startCommand: null })
   })

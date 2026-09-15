@@ -77,9 +77,12 @@ export function Pagination({
   )
 
   return (
-    <div className="flex items-center justify-between border-t border-mcs-border-muted px-4 py-2">
+    <div className="flex flex-wrap items-center justify-between gap-y-2 border-t border-mcs-border-muted px-4 py-2">
+      {/* flex-wrap（外层与左组各一层）与下方文案的 whitespace-nowrap 是一对：条数/页码的
+          CJK 断行点落在任意字符间，不锁 nowrap 会在 375 下被逐字压成竖排；只锁 nowrap
+          则 min-content 变成整行文案宽，把分页栏撑出横向溢出 */}
       {/* 左侧：信息 + 可选的每页条数 */}
-      <div className="flex items-center gap-2 text-mcs-xs text-mcs-text-muted">
+      <div className="flex flex-wrap items-center gap-2 text-mcs-xs text-mcs-text-muted">
         {variant === 'numbers' && showPageSizeSelector && (
           <>
             每页
@@ -98,9 +101,9 @@ export function Pagination({
           </>
         )}
         {totalItems != null ? (
-          <span>{showPager ? `共 ${totalItems} 条 · 第 ${safePage}/${totalPages} 页` : `共 ${totalItems} 条`}</span>
+          <span className="whitespace-nowrap">{showPager ? `共 ${totalItems} 条 · 第 ${safePage}/${totalPages} 页` : `共 ${totalItems} 条`}</span>
         ) : showPager ? (
-          <span>第 {safePage} / {totalPages} 页</span>
+          <span className="whitespace-nowrap">第 {safePage} / {totalPages} 页</span>
         ) : null}
       </div>
 

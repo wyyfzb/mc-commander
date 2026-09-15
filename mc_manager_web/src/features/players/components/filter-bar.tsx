@@ -99,8 +99,10 @@ export function FilterBar({
         重置
       </Button>
 
-      <div className="ml-auto flex items-center gap-3">
-        <span className="text-mcs-xs text-mcs-text-muted">
+      {/* flex-wrap 与计数的 whitespace-nowrap 是一对：只加 nowrap 会让本行的
+          min-content 变成「计数 + 三个按钮」之和，375 下撑出横向溢出 */}
+      <div className="ml-auto flex flex-wrap items-center gap-3">
+        <span className="whitespace-nowrap text-mcs-xs text-mcs-text-muted">
           {players.length > 0 && totalCount > 0 && `${players.length} / ${totalCount} 名玩家`}
           {totalCount === 0 && '暂无玩家数据'}
         </span>
