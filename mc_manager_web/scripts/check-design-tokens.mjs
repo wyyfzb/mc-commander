@@ -38,7 +38,7 @@
  *  18. 危险语义色禁半透明底：bg-destructive/<alpha>
  *  19. 内容面 tint 必须不透明
  *  20. 布局属性动画（transition-all）与数字时长档（duration-<数字>），含 ui/ 基座
- * 六条门禁（第 21–27 条，J23/t27；扫描 src/ 全量，排除项在各条内声明）：
+ * 门禁（第 21–27 条，J23/t27；扫描 src/ 全量，排除项在各条内声明）：
  *  21. 卡片面类名（配方）只允许声明在 components/mcs/card.tsx——非卡片面但共用
  *      `shadow-mcs-card` 标记的现场按「登记额度」豁免（额度外的第 N 处即报，豁免的是现场
  *      而非整个文件）
@@ -558,8 +558,8 @@ for (const f of G9_FILES) {
 // （`text-mcs-${tone}-fg`）会登记成通配前缀——曾让 text-mcs-*/bg-mcs-*/border-mcs-* 整族
 // 恒判为「已消费」，第 14 条死 token 门禁对这族完全失效。测试要判定的产物是运行时代码的
 // 消费面，测试自身不构成消费点。
-// usedPrefixes 是「模板串动态拼接类名」的前缀面（`mcs-delay-${i}` 一类）：现网已无此写法，
-// 故当前恒为空集，仅作防御性保留——将来再出现这种拼法时，它的消费与未定义判定仍自动生效。
+// usedPrefixes 是「模板串动态拼接类名」的前缀面（`mcs-delay-${i}` 一类）：现网仅剩 `instance-cards.tsx`
+// 的 `mcs-delay-${i}` 一处真实动态拼法（测试里的 `text-mcs-${…}` 已由 `__tests__` 排除）。
 const CLASS_CONTEXT = /className|class=|\bcn\(|\bcva\(|\bclsx\(/
 const usedClasses = new Map() // class → { file, classContext }
 const usedPrefixes = new Set()
