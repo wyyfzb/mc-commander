@@ -188,6 +188,47 @@ describe('PlayerTable · 行元数据渲染', () => {
     expect(screen.getByText('离线')).toBeInTheDocument()
     expect(screen.getByText('已封禁')).toBeInTheDocument()
   })
+
+  /**
+   * 玩家列的行高契约：`player-table-row.tsx` 用 height: ROW_HEIGHT(40)，「全部」档虚拟滚动
+   * 的 estimateSize 也取同值 —— 整条链的前提是**每行恒为一行姓名 + 一行次要信息**。
+   * jsdom 没有布局引擎，量不出像素，故这里锁的是能推出该前提的结构：
+   * ①宽文本徽标不得与姓名按钮同行（否则其 shrink-0 会把姓名挤成几个字）；
+   * ②次要行不得折行（折行会把行撑过 ROW_HEIGHT，实测 在线+临时封禁+IP 会到 59px）。
+   * 像素级的行高由 e2e（players-virtual-scroll.spec.ts）实测锁定。
+   */
+  it('玩家列：宽文本徽标不与姓名同行，且次要行不折行（行高契约）', () => {
+    setup({
+      players: [
+        makePlayer({
+          name: 'DragonSlayer_777',
+          isOp: true,
+          isBanned: true,
+          banExpiresAt: Date.now() + 12 * 3600_000,
+          ip: '192.168.100.200',
+        }),
+      ],
+    })
+    const nameBtn = screen.getByRole('button', { name: '查看 DragonSlayer_777 详情' })
+    const bannedBadge = screen.getByText(/封禁·剩/)
+    // 超长名被截断时的可读出口
+    expect(nameBtn).toHaveAttribute('title', 'DragonSlayer_777')
+
+    // ① 姓名同行只允许纯图标徽标：文本徽标必须在姓名按钮所在行容器之外
+    const nameRow = nameBtn.parentElement as HTMLElement
+    expect(nameRow).not.toBeNull()
+    expect(nameRow).not.toContainElement(bannedBadge)
+
+    // ② 次要行不折行（折行即行高回归），且与文本徽标同处一行
+    const metaRow = bannedBadge.parentElement as HTMLElement
+    expect(metaRow).not.toBe(nameRow)
+    expect(metaRow.className).toContain('flex-nowrap')
+    expect(metaRow).toContainElement(screen.getByText('192.168.100.200'))
+
+    // ①的补强：OP 是纯图标（14px），留在姓名同行，不占次要行
+    expect(nameRow).toContainElement(screen.getByLabelText('OP'))
+    expect(metaRow).not.toContainElement(screen.getByLabelText('OP'))
+  })
 })
 
 /** 取玩家名按钮所在的数据行（行不再是 row 角色时本助手也依然可用，便于定位失败原因） */

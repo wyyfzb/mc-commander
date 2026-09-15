@@ -18,6 +18,7 @@ import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { PageHeader } from '@/components/mcs/page-header'
 import { ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { useConnectionStore } from '@/stores/connection'
 import { useServerStore } from '@/stores/server'
@@ -231,7 +232,7 @@ export function InstancesPage() {
         {instancesQuery.isLoading && instances.length === 0 ? (
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3" aria-label="加载实例中">
             {Array.from({ length: 3 }, (_, i) => (
-              <div key={i} className="h-28 rounded-mcs-md bg-mcs-bg-muted" aria-hidden />
+              <Skeleton key={i} className="h-28" aria-hidden />
             ))}
           </div>
         ) : instancesQuery.isError && !instancesQuery.isLoading ? (

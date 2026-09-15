@@ -111,14 +111,17 @@ export function buildPlayerColumns({
           <div className="flex min-w-0 items-center gap-2.5">
             <PlayerAvatar name={p.name} isOnline={p.isOnline} isFakePlayer={p.isFakePlayer} size={28} />
             <div className="min-w-0">
+              {/* 姓名行：身份 + 纯图标徽标（OP 仅 14px，从不是挤压姓名的元凶） */}
               <div className="flex items-center gap-1.5">
                 <button
                   type="button"
                   className={cn(
                     // 与其余单元格文字同款，仅补回 button 被 UA 设成居中所丢的对齐与指针
-                    'cursor-pointer truncate text-left text-mcs-sm font-medium',
+                    'block max-w-full cursor-pointer truncate text-left text-mcs-sm font-medium',
                     banned ? 'text-mcs-error-fg' : p.isOnline ? 'text-mcs-text-default' : 'text-mcs-text-muted',
                   )}
+                  // 超长名（假玩家可超 16 字）仍会被截断，title 是最后一个可读出口
+                  title={p.name}
                   aria-label={`查看 ${p.name} 详情`}
                   onClick={(e) => {
                     // 行级 onClick 只服务指针便利；此处已处理，阻止冒泡避免重复调用
@@ -128,11 +131,19 @@ export function buildPlayerColumns({
                 >
                   {p.name}
                 </button>
-                <PlayerBadges player={p} />
+                <PlayerBadges player={p} part="icons" />
               </div>
-              {p.isOnline && p.ip && (
-                <div className="truncate font-mono text-mcs-2xs text-mcs-text-muted">{p.ip}</div>
-              )}
+              {/* 次要行：文本徽标与 IP 分列。文本徽标此前与姓名同行，其 shrink-0 会把姓名挤到
+                  只剩几个字（1280 下 16 字名仅剩 3 字），故下移到此行。
+                  必须 nowrap：折行会把行撑过 ROW_HEIGHT，破坏「全部」档虚拟滚动的 estimateSize
+                  前提（实测 在线+临时封禁+IP 折行 → 行高 40→59px）；宽紧时由 IP 承担收缩裁切，
+                  徽标是状态信息，保持完整可见 */}
+              <div className="flex flex-nowrap items-center gap-1.5">
+                <PlayerBadges player={p} part="texts" />
+                {p.isOnline && p.ip && (
+                  <span className="min-w-0 truncate font-mono text-mcs-2xs text-mcs-text-muted">{p.ip}</span>
+                )}
+              </div>
             </div>
           </div>
         )
