@@ -55,6 +55,10 @@ export function useDeployStatusFallback() {
     // 即断线（反代未放行 Upgrade）时兜底从不轮询、挂载恢复的进度视图永久冻结
     refetchInterval:
       !socketConnected && (deploying || deployInFlight) ? FALLBACK_POLL_INTERVAL_MS : false,
+    // 每次挂载都必须问真值（刷新页面、离开再回到实例页）：吃全局 10s staleTime 时，
+    // 新鲜期内的重新挂载直接复用缓存，这期间服务端开始/结束的部署都观察不到——
+    // 挂载查询是兜底恢复的唯一入口，故对本查询单独取 0，不动全局默认
+    staleTime: 0,
   })
 
   // 快照（含空态）据实落 store：空态不得覆盖已有终态回执的判定在 store 内

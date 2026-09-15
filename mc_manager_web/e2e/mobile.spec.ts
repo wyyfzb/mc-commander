@@ -61,12 +61,16 @@ test.describe('桌面端回归（B1 响应式不改桌面）', () => {
  * R19：375 宽下仪表盘右栏完全不可达。
  * 根因＝主栅格行 `min-h-0 flex-1` 在外层定高 flex 列里被收缩到 23.3px，行内
  * `flex-1` 的终端与 `<aside>` 一并塌陷（右栏只有 3.6px 高、三张卡用户够不到）。
- * 断言锁住「右栏及其三张卡高度 > 0 且内容可交互」，回退修法必然变红。
+ * 断言锁「右栏及其三张卡各自成块」，回退修法必然变红。
+ *
+ * 可达性判据必须是**视口相交**而非盒子高度：塌陷时右栏是 `overflow-y-auto` 的裁剪
+ * 容器，卡仍在 DOM 里按内容排布、`getBoundingClientRect().height` 照样是 200+px，
+ * 只是被裁到容器那几像素里——高度/可见性断言在修复前同样通过，锁不住真实意图。
  */
 test.describe('仪表盘右栏窄屏可达（R19）', () => {
   test.use({ viewport: { width: 375, height: 812 } })
 
-  test('375px：右栏三卡各有高度且公告卡可交互', async ({ page }) => {
+  test('375px：右栏三卡可达且公告卡可交互', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/dashboard')
 
@@ -77,7 +81,7 @@ test.describe('仪表盘右栏窄屏可达（R19）', () => {
     expect(asideBox).not.toBeNull()
     expect(asideBox!.height).toBeGreaterThan(100)
 
-    // 三张右栏卡在 375 下各自成块（塌陷时被动行裁剪，卡虽在 DOM 但实际高度取整为 0/不可见）
+    // 三张右栏卡在 375 下各自成块
     const titles = ['MC 时钟 · 世界控制', '最近备份', '公告发送']
     const heights: number[] = []
     for (const title of titles) {
@@ -91,6 +95,18 @@ test.describe('仪表盘右栏窄屏可达（R19）', () => {
     }
     // 三卡都成块（不只是最后一张把行撑开）
     for (const h of heights) expect(h).toBeGreaterThan(100)
+
+    // 真正可达：逐卡滚到视野内并断言与视口有实际相交面积（裁剪掉时相交≈0）
+    for (const title of titles) {
+      const card = page.getByRole('heading', { name: title }).locator('xpath=ancestor::section[1]')
+      await card.scrollIntoViewIfNeeded()
+      await expect(card, `${title} 卡片未进入视口`).toBeInViewport({ ratio: 0.5 })
+      const visible = await card.evaluate((el) => {
+        const r = el.getBoundingClientRect()
+        return Math.min(r.bottom, window.innerHeight) - Math.max(r.top, 0)
+      })
+      expect(visible, `${title} 视口内可见高度`).toBeGreaterThan(0)
+    }
 
     // 滚动到公告卡：真正够得到并可用（塌陷时 #announcement-input 滚不出来）
     const input = page.getByLabel('公告内容')

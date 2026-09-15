@@ -1,7 +1,8 @@
 /**
  * 在途部署注册表读取判据测试（utils/deploy-inflight.js）：
  * 两个出口（WS 连接补发 / GET /instances/deploy/status）必须同口径——
- * 死快照一律不算在途，updatedAt 缺失同样按死快照处理（无法判龄即不可放行）
+ * 死快照一律不算在途，updatedAt 缺失或非数值（NaN）同样按死快照处理
+ * （无法判龄即不可放行）
  * 数据一律虚构（paper-xxxx / 生存服）
  */
 import { describe, it, expect } from 'vitest';
@@ -56,6 +57,24 @@ describe('在途部署读取判据', () => {
     delete noTimestamp.updatedAt;
 
     expect(inFlightDeploys(managerOf([noTimestamp]))).toEqual([]);
+  });
+
+  it('updatedAt 非数值（NaN）按死快照处理：判龄恒假不得当作在途', () => {
+    const nan = entry({ instanceId: 'paper-nan', updatedAt: NaN });
+
+    expect(inFlightDeploys(managerOf([nan]))).toEqual([]);
+    expect(latestInFlightDeploy(managerOf([nan]))).toBeNull();
+    expect(isDeployInFlight(managerOf([nan]))).toBe(false);
+  });
+
+  it('不可判龄的条目不得顶掉同表内可判龄的在途条目（选取同用归一化时刻）', () => {
+    const nan = entry({ instanceId: 'paper-nan', updatedAt: NaN });
+    const fresh = entry({ instanceId: 'paper-fresh', updatedAt: Date.now() });
+    const stale = entry({ instanceId: 'paper-stale', updatedAt: Date.now() - MAX_INFLIGHT_DEPLOY_AGE_MS - 1 });
+
+    expect(latestInFlightDeploy(managerOf([nan, fresh]))?.instanceId).toBe('paper-fresh');
+    expect(inFlightDeploys(managerOf([nan, stale, fresh]))).toEqual([fresh]);
+    expect(isDeployInFlight(managerOf([nan, stale, fresh]))).toBe(true);
   });
 
   it('latestInFlightDeploy 取 updatedAt 最新的一条（面板同一时刻只呈现一个进度视图）', () => {

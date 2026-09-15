@@ -18,6 +18,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router'
 import { handlers } from '@/test/mocks/handlers'
 import { DeployDialog } from '../components/deploy-dialog'
 import { InstancesPage } from '../instances-page'
+import { useDeployStatusFallback } from '../hooks/use-deploy-status-fallback'
 import { useConnectionStore } from '@/stores/connection'
 import { useDeployStore } from '@/stores/deploy'
 import { useServerStore } from '@/stores/server'
@@ -73,6 +74,27 @@ function renderInstancesPage() {
   )
   render(<RouterProvider router={router} />)
   return qc
+}
+
+/**
+ * 生产 QueryClient 的 queries.staleTime（src/main.tsx）——本用例组按同一取值建
+ * client：兜底查询的重新挂载重取必须由它自己的 staleTime 决定，不能靠测试里
+ * 恰好用了 staleTime 0 的替身 client 蒙对
+ */
+const GLOBAL_STALE_TIME_MS = 10_000
+
+/** 兜底 hook 的最小宿主（无页面噪声，只观察它的查询与门控） */
+function FallbackProbe() {
+  useDeployStatusFallback()
+  return null
+}
+
+function renderFallbackProbe(qc: QueryClient) {
+  return render(
+    <QueryClientProvider client={qc}>
+      <FallbackProbe />
+    </QueryClientProvider>,
+  )
 }
 
 /**
@@ -331,5 +353,67 @@ describe('重复部署门控（J29）', () => {
     })
     expect(useDeployStore.getState().deployInFlight).toBe(false)
     expect(useDeployStore.getState().lastResult?.ok).toBe(true)
+  })
+})
+
+/**
+ * 兜底查询自身的新鲜度策略：它每次挂载都要问一次服务端真值（刷新页面、从别的
+ * 路由切回实例页），吃全局 10s staleTime 会让「切走再切回」在新鲜期内复用缓存、
+ * 拿不到这期间变化的在途状态。此组用与生产同值的 client，锁住该查询 staleTime 0。
+ */
+describe('兜底查询新鲜度（J29）', () => {
+  /** 生产同值 QueryClient：全局 staleTime 非 0，避免替身 client 把结论架空 */
+  function newClient() {
+    return new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: GLOBAL_STALE_TIME_MS } } })
+  }
+
+  it('新鲜期内重新挂载（切走再切回）仍重取服务端真值', async () => {
+    const qc = newClient()
+    const spy = vi.spyOn(instancesApi, 'apiGetDeployStatus')
+    const { unmount } = renderFallbackProbe(qc)
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(1))
+
+    // 立刻卸载再挂载：全局 staleTime 内（数据新鲜）也不得复用缓存
+    unmount()
+    renderFallbackProbe(qc)
+
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(2))
+  })
+})
+
+/**
+ * 兜底快照守卫顺序（F2）：本页已有终态回执时，门控仍可能被非终态 WS 事件占回
+ * （并发的另一次部署）。此时到达的空态快照必须优先于「终态回执」守卫被处理——
+ * 否则这次释放被整体吞掉，入口停在「部署中」直到刷新。此处锁「空态释放门控」
+ * 与「终态回执原样保留」两件事同时成立。
+ */
+describe('兜底快照守卫顺序（F2）', () => {
+  it('终态回执后门控被 WS 占回：空态快照仍须释放门控，且不抹掉终态回执', () => {
+    act(() => {
+      useDeployStore.getState().finishDeploy({ ok: true, instanceId: 'paper-a1b2c3d4' })
+    })
+    const receipt = useDeployStore.getState().lastResult
+    // 非终态 WS 事件（此处代表并发的另一次部署）重新占据门控
+    act(() => {
+      useDeployStore.getState().applyDeployProgress({
+        stage: 'download',
+        percent: 0.1,
+        transferred: 1,
+        total: 10,
+        instanceName: '他端部署',
+      })
+    })
+    expect(useDeployStore.getState().deployInFlight).toBe(true)
+
+    // 守卫若整体前置到空态分支之前，这次空态被 return 吞掉，门控与进度视图都不收敛
+    act(() => {
+      useDeployStore.getState().applyDeployStatus({ deploying: false })
+    })
+
+    const s = useDeployStore.getState()
+    expect(s.deployInFlight).toBe(false)
+    expect(s.deploying).toBe(false)
+    expect(s.progress).toBeNull()
+    expect(s.lastResult).toBe(receipt)
   })
 })

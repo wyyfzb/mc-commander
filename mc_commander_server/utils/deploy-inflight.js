@@ -12,14 +12,19 @@
 export const MAX_INFLIGHT_DEPLOY_AGE_MS = 15 * 60 * 1000;
 
 /**
- * 未过期的在途部署条目。updatedAt 缺失按死快照处理：注册表只由 trackDeployProgress
- * 写入且恒带该字段，无该字段的条目无法判龄，放行等于绕过上面的兜底时限。
+ * 条目更新时刻，缺失/非数值（NaN、字符串）统一归一为 -Infinity——判龄要比大小，
+ * 不能留 NaN：`now - NaN > 时限` 恒假，会把无法判龄的条目当成永远新鲜的在途。
  */
+function updatedAtOf(dep) {
+  return Number.isFinite(dep.updatedAt) ? dep.updatedAt : -Infinity;
+}
+
+/** 未过期的在途部署条目（updatedAt 不可判龄者按死快照处理，见 updatedAtOf） */
 export function inFlightDeploys(serverManager) {
   const now = Date.now();
   const fresh = [];
   for (const dep of serverManager.activeDeploys?.values() ?? []) {
-    if (now - (dep.updatedAt ?? 0) > MAX_INFLIGHT_DEPLOY_AGE_MS) continue;
+    if (now - updatedAtOf(dep) > MAX_INFLIGHT_DEPLOY_AGE_MS) continue;
     fresh.push(dep);
   }
   return fresh;
@@ -32,7 +37,7 @@ export function inFlightDeploys(serverManager) {
 export function latestInFlightDeploy(serverManager) {
   let latest = null;
   for (const dep of inFlightDeploys(serverManager)) {
-    if (!latest || dep.updatedAt > latest.updatedAt) latest = dep;
+    if (!latest || updatedAtOf(dep) > updatedAtOf(latest)) latest = dep;
   }
   return latest;
 }

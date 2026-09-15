@@ -29,9 +29,10 @@ interface DeployState {
   /**
    * 服务端在途部署门控（true = 禁止再次发起部署）。与 deploying 分开：
    * deploying 还含本页 POST 的乐观置位（startDeploy），门控只认服务端真值。
-   * WS deployProgress 与兜底快照两个通道同生命周期（非终态置位、终态/空态释放，
-   * 见 applyDeployProgress / applyDeployStatus）——只由快照单通道写入会让 WS 报完
-   * 终态、横幅消失后入口仍禁用，反向则漏掉仅由 WS 观察到的在途部署
+   * 两个通道（WS deployProgress / 兜底快照）都必须写入本字段：只由快照单通道写会让
+   * WS 报完终态、横幅消失后入口仍禁用，反向则漏掉仅由 WS 观察到的在途部署。
+   * 故它是布尔而非实例归属对象：事件与快照在服务端都带 instanceId，但 socket 层不透传
+   * 事件字段（仅透传 instanceName），当前也无消费者读归属（三处只判布尔）
    */
   deployInFlight: boolean
   /** 应用 WS deployProgress 事件（use-server-socket 调用） */
@@ -70,8 +71,10 @@ export const useDeployStore = create<DeployState>()((set) => ({
   applyDeployStatus: (status) =>
     set((s) => {
       if (!status.deploying) {
-        // 空态即服务端真值：清掉残留的在途进度与门控（部署已终态/死快照超时），
-        // 否则进度视图与 30s 轮询都不会收敛
+        // 空态即服务端真值：清掉在途标记与门控（部署已终态/死快照超时），
+        // 否则进度视图与 30s 轮询都不会收敛；progress 仅在确实在途时清空，
+        // 已有终态展示位（deploying 已假）保留。本分支必须先于下面的终态回执守卫：
+        // 终态后门控又被 WS 占回时，被守卫吞掉的空态会让入口永久禁用
         return { deploying: false, deployInFlight: false, progress: s.deploying ? null : s.progress }
       }
       if (s.lastResult !== null) return s
