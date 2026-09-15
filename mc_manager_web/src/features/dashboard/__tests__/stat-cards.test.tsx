@@ -51,6 +51,22 @@ describe('BigStatCards 资源卡', () => {
     expect(screen.getAllByRole('progressbar')).toHaveLength(2)
   })
 
+  it('数据卡标签行走标签档，TPS 大数走数字档、单位留小档（Grafana 三段式）', () => {
+    render(<BigStatCards />)
+    // 标签行不得升为区块标题档（否则与真区块标题同级）
+    const title = screen.getByRole('heading', { name: '资源使用' })
+    expect(title.className).toContain('text-mcs-sm')
+    expect(title.className).not.toContain('text-mcs-lg')
+    // 大数：display 档 + .mcs-num；同一次 cn 调用里的阈值色不得吞掉字号档（J56 同组互吞）
+    const value = screen.getByText('20.0')
+    expect(value.className).toContain('mcs-num')
+    expect(value.className).toContain('text-mcs-display')
+    expect(value.className).toContain('text-mcs-success-fg')
+    expect(value.className).not.toContain('text-mcs-lg')
+    // 单位/后缀不随数字放大
+    expect(screen.getByText('TPS').className).toContain('text-mcs-lg')
+  })
+
   it('整机数据未到：CPU/内存显示「暂无数据」，不拿实例口径（进程 RSS / 整机总量）顶替', () => {
     // 实例状态在（status 有 memoryUsage=3.2 / cpuUsage），但 /system-stats 尚未送达
     useServerStore.setState({ systemStats: null })
@@ -177,6 +193,8 @@ describe('RuntimeInfoCard', () => {
     // 上次存档改绝对时间显示（「5分钟前」类模糊值降级为悬停提示）
     expect(screen.getByText(formatStartTime(mockInstanceStatus.lastSave))).toBeInTheDocument()
     expect(screen.queryByText('5分钟前')).not.toBeInTheDocument()
+    // 本卡关键数字与顶排另两卡同档（明细行留在 xs）
+    expect(screen.getByText('2h 0m').className).toContain('text-mcs-display')
   })
 
   it('未运行时显示「未运行」', () => {

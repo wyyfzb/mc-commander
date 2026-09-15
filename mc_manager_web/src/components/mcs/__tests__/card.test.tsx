@@ -4,7 +4,7 @@
  * - className 透传且不被吞（布局与内边距档位由调用点持有）
  * - className 可覆盖基座同名属性（底色/描边按内容语义走），被覆盖基座类不残留
  * - as 保留调用点元素语义（section/div/main/button）
- * - CardHeader/CardTitle/CardBody 子块：默认类、className 透传、CardTitle 层级可指定
+ * - CardHeader/CardTitle/CardBody 子块：默认类、className 透传、CardTitle 层级与角色轴可指定
  * mock 数据全部为测试占位，无真实服务器信息
  */
 import { describe, expect, it } from 'vitest'
@@ -89,7 +89,7 @@ describe('Card 子块', () => {
     }
   })
 
-  it('CardTitle 默认 h3，as 可指定层级，字号/色/字重为卡片标题档', () => {
+  it('CardTitle 默认 h3，as 可指定层级，默认角色＝区块/内容标题档', () => {
     const { container } = render(
       <>
         <CardTitle>默认层级</CardTitle>
@@ -98,17 +98,35 @@ describe('Card 子块', () => {
     )
     const h3 = container.querySelector('h3') as HTMLElement
     expect(h3.textContent).toBe('默认层级')
-    for (const c of ['text-mcs-sm', 'font-medium', 'text-mcs-text-muted']) {
+    for (const c of ['text-mcs-lg', 'font-medium', 'text-mcs-text-muted']) {
       expect(h3.classList.contains(c)).toBe(true)
     }
+    // 默认不再落标签档：真区块标题与数据卡标签行必须分档
+    expect(h3.classList.contains('text-mcs-sm')).toBe(false)
     expect(container.querySelector('h2')).not.toBeNull()
+  })
+
+  it('CardTitle variant="label"（数据卡标签行）维持标签档，不与区块标题同级', () => {
+    const { container } = render(
+      <>
+        <CardTitle>区块标题</CardTitle>
+        <CardTitle as="h2" variant="label">
+          数据卡标签
+        </CardTitle>
+      </>,
+    )
+    const heading = container.querySelector('h3') as HTMLElement
+    const label = container.querySelector('h2') as HTMLElement
+    expect(heading.classList.contains('text-mcs-lg')).toBe(true)
+    expect(label.classList.contains('text-mcs-sm')).toBe(true)
+    expect(label.classList.contains('text-mcs-lg')).toBe(false)
   })
 
   it('CardTitle className 覆盖字号档（同组后写者胜），颜色档不被吞', () => {
     const { container } = render(<CardTitle className="text-mcs-2xs">小标题</CardTitle>)
     const el = container.querySelector('h3') as HTMLElement
     expect(el.classList.contains('text-mcs-2xs')).toBe(true)
-    expect(el.classList.contains('text-mcs-sm')).toBe(false)
+    expect(el.classList.contains('text-mcs-lg')).toBe(false)
     expect(el.classList.contains('text-mcs-text-muted')).toBe(true)
   })
 

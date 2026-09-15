@@ -46,6 +46,7 @@
  *      已删除的 shadcn ui/badge 引用与重建；判定面是组件声明、模块引用与基座文件存在性
  *      （行内胶囊着色点不判）
  *  23. 页面页头：AppShell 主页面必须有且仅有一个 PageHeader，且该页标题字号档 ≤3
+ *      （标题组件的角色轴按调用点分类：CardTitle 默认角色 = 区块标题档，variant="label" = 标签档）
  *  24. 全屏覆盖层必须来自 ui/sheet 或 ui/dialog（禁裸 z-modal 全屏容器 / aside）
  *  25. 行内 onKeyDown 对空格/回车 preventDefault 前必须判落点（e.target）——否则容器会吞掉
  *      行内控件自己的激活键；宿主是 input/textarea 时其默认行为属控件自身，不判
@@ -851,6 +852,12 @@ for (const f of GATE_FILES) {
 //          元素的首个 text-mcs-*），不硬编码档名，基座换档时本条自动跟随。
 //     同文件里的正文、角标、数字档不进判定面：KPI 数字档（lg/display）不是标题档，
 //     收进来会把数字面板误判成「标题档位发散」。
+//     标题组件的角色轴（`CardTitle` 的 heading/label）按**调用点**分类：基座文件声明
+//     角色→档位的表（`const X = { role: 'text-mcs-xx' } as const`），元素行只写 `X[variant]`，
+//     调用点上的字面量 `variant="..."` 选档、缺省时走参数默认角色——同一组件在不同页面上
+//     可能落进不同档，故档位不能只按组件名记一个值。档位仍不硬编码：改基座的角色表即改口径。
+//     边界（宁漏不误报）：variant 非字面量（表达式/跨行写）与未登记角色不计档；
+//     基座元素行读不出档（如只有色类、无字号档的 SheetTitle/DialogTitle 一类）同样不计档。
 //     登录页/引导页是全屏品牌入口，不在 AppShell 内、标题由自身 h1 承担，显式豁免。
 //     引导页实测同屏有两个 h1（欢迎区 + 连接表单，不是互斥渲染）——那是该页自身的品牌+表单
 //     结构，本轮口径维持不改；把它拆成 h1+h2 是可见结构变更，与本条要防的
@@ -869,8 +876,25 @@ const TITLE_FUNCTION_DECL = /(?:export\s+)?function\s+\w+(?:Title|Header)\w*\s*\
 const JSX_TEXT_ELEMENT = /<([a-zA-Z][\w.]*)\b[^\n]*?className=[^\n]*?text-mcs-/
 /** `<*Title/*Header>` 用法（大写开头，故与 `function XxxTitle(` 声明不混） */
 const JSX_TITLE_TAG = /<([A-Z]\w*(?:Title|Header))\b/g
-/** 该文件里各标题组件自身的基座档：取组件体内第一个承载标题的元素行的 text-mcs-* */
+/** 标题组件的角色轴档位表声明：`const NAME = { role: 'text-mcs-档' } as const`
+ *  （角色轴基座的事实源——档位不在元素行上，元素行只写 `NAME[variant]`） */
+const ROLE_TIER_MAP_DECL = /const\s+([A-Z]\w*)\s*=\s*\{([\s\S]*?)\}\s*as\s+const/g
+/** 角色轴档位表的条目（角色名 → 字号档；档取 token 名，与标题标签行的档同口径） */
+const ROLE_TIER_ENTRY = /(\w+)\s*:\s*'text-mcs-(2xs|xs|sm|md|lg|xl|display)'/g
+/** 元素行上的角色查表写法 `NAME[param]` */
+const ROLE_LOOKUP = /([A-Z]\w*)\s*\[\s*(\w+)\s*\]/
+/** 调用点上的字面量角色 `variant="label"` */
+const VARIANT_LITERAL = /\svariant="(\w+)"/
+/** 该文件里各标题组件自身的基座档。单档基座取组件体内第一个承载标题的元素行的 text-mcs-*；
+ *  角色轴基座（元素行写 `NAME[variant]`）读同文件的角色档位表 + 参数默认角色，
+ *  调用点再按 `variant="..."` 分类取档。两种都读不出档即不计档（宁漏不误报）。 */
 function titleBaseTiers(code) {
+  const roleMaps = new Map()
+  for (const m of code.matchAll(ROLE_TIER_MAP_DECL)) {
+    const entries = new Map()
+    for (const entry of m[2].matchAll(ROLE_TIER_ENTRY)) entries.set(entry[1], entry[2])
+    if (entries.size > 0) roleMaps.set(m[1], entries)
+  }
   const facets = []
   for (const m of code.matchAll(TITLE_FUNCTION_DECL)) {
     const name = m[0].match(/function\s+(\w+)/)[1]
@@ -890,7 +914,18 @@ function titleBaseTiers(code) {
       if (code[end] === '{') braces++
       else if (code[end] === '}' && --braces === 0) break
     }
-    for (const line of code.slice(bodyStart, end).split('\n')) {
+    const body = code.slice(bodyStart, end)
+    const lookup = body.match(ROLE_LOOKUP)
+    const roleTiers = lookup ? roleMaps.get(lookup[1]) : null
+    if (roleTiers) {
+      // 默认角色＝该参数在签名里的默认值（`variant = 'heading'`）
+      const declared = code
+        .slice(parenAt + 1, after - 1)
+        .match(new RegExp(`\\b${lookup[2]}\\s*=\\s*'(\\w+)'`))
+      facets.push({ name, roleTiers, defaultRole: declared ? declared[1] : null })
+      continue
+    }
+    for (const line of body.split('\n')) {
       if (!JSX_TEXT_ELEMENT.test(line)) continue
       const tier = [...line.matchAll(MCS_SIZE_CLASS)][0]
       if (tier) facets.push({ name, tier: tier[1] })
@@ -898,6 +933,15 @@ function titleBaseTiers(code) {
     }
   }
   return facets
+}
+/** 调用点上该标题实际落的档：单档基座直取；角色轴基座按 `variant="..."` 分类，
+ *  无 variant 走默认角色，variant 非字面量或角色未登记则不计档 */
+function baseTierOf(base, tagText) {
+  if (!base.roleTiers) return base.tier
+  const gt = tagText.indexOf('>')
+  const literal = (gt < 0 ? tagText : tagText.slice(0, gt)).match(VARIANT_LITERAL)
+  const role = literal ? literal[1] : base.defaultRole
+  return role ? base.roleTiers.get(role) : undefined
 }
 /** 页内模块路径（`@/x` 走 src/，相对路径按引用文件所在目录解析）；外部包与测试返回 null */
 function resolveLocalModule(fromFile, spec) {
@@ -941,7 +985,7 @@ for (const f of GATE_FILES) {
   }
   const baseTierByName = new Map()
   for (const moduleCode of moduleCodes.values()) {
-    for (const { name, tier } of titleBaseTiers(moduleCode)) baseTierByName.set(name, tier)
+    for (const facet of titleBaseTiers(moduleCode)) baseTierByName.set(facet.name, facet)
   }
   const tiers = new Set()
   for (const moduleFile of scoped) {
@@ -952,7 +996,9 @@ for (const f of GATE_FILES) {
       }
       for (const tag of line.matchAll(JSX_TITLE_TAG)) {
         const base = baseTierByName.get(tag[1])
-        if (base) tiers.add(base)
+        if (!base) continue
+        const tier = baseTierOf(base, line.slice(tag.index))
+        if (tier) tiers.add(tier)
       }
     }
   }

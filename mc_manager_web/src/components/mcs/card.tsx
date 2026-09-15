@@ -57,20 +57,38 @@ export function CardHeader({ className, children }: { className?: string; childr
 }
 
 /**
+ * 卡片标题的角色轴档位表（角色由「这段文字承担什么」决定，与卡片视觉样式无关）：
+ * `heading` = 区块/内容标题，占标题档；`label` = 数据卡（KPI/指标卡）的标签行，只占标签档。
+ * 单档基座会把真区块标题压到与标签行同级，同屏只剩页头与正文两档可辨（AGENTS.md 标题口径
+ * 「区块与卡片标题 lg」）。命名取 variant 而非 role：role 在 JSX 里是 ARIA 属性名，同名会与
+ * 透传语义混淆。门禁第 23 条从本表读档并按调用点 variant 分类，改表即改口径。
+ */
+const CARD_TITLE_TIER = {
+  heading: 'text-mcs-lg',
+  label: 'text-mcs-sm',
+} as const
+
+/**
  * 卡片标题文字（默认 h3 = 页头 h2 之下的卡片标题档）。
- * 层级由调用点按所在页面给：钉死单一层级会让卡片标题与页头抢级或与子面板并列。
+ * 元素语义（as）与层级（className 覆盖基座档）仍由调用点持有：钉死单一层级会让卡片标题
+ * 与页头抢级或与子面板并列。
  */
 export function CardTitle({
   as: Tag = 'h3',
+  variant = 'heading',
   className,
   children,
 }: {
   as?: 'h2' | 'h3' | 'h4'
+  /** heading = 区块/内容标题（默认）；label = 数据卡标签行 */
+  variant?: keyof typeof CARD_TITLE_TIER
   className?: string
   children?: ReactNode
 }) {
   return (
-    <Tag className={cn('text-mcs-sm font-medium text-mcs-text-muted', className)}>{children}</Tag>
+    <Tag className={cn('font-medium text-mcs-text-muted', CARD_TITLE_TIER[variant], className)}>
+      {children}
+    </Tag>
   )
 }
 

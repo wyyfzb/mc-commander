@@ -42,7 +42,7 @@ function StatCard({
   return (
     <Card className={cn('mcs-edge-top relative flex min-w-0 flex-1 flex-col gap-3 p-4', className)}>
       <CardHeader className="justify-between gap-2">
-        <CardTitle as="h2">{title}</CardTitle>
+        <CardTitle as="h2" variant="label">{title}</CardTitle>
         {eyebrow && <span className={cn('text-mcs-xs', eyebrowClass)}>{eyebrow}</span>}
       </CardHeader>
       {children}
@@ -107,10 +107,12 @@ export function BigStatCards({
               <CheckCircle2 className="size-3.5" aria-hidden />
               {healthy ? '健康' : '卡顿'}
             </StatusPill>
-            <span className={cn('mcs-num text-mcs-lg leading-none', tpsColor(tps, isRunning))}>
+            {/* TPS 是卡级关键数字（Grafana 三段式：小标签 + 大数 + 后缀）：
+                数值占数字档 display，单位与状态词留在小档，不随数字放大 */}
+            <span className={cn('mcs-num text-mcs-display leading-none', tpsColor(tps, isRunning))}>
               {tps != null ? tps.toFixed(1) : '--'}
             </span>
-            <span className="text-mcs-2xs text-mcs-text-muted">TPS</span>
+            <span className="text-mcs-lg text-mcs-text-muted">TPS</span>
           </span>
         ) : undefined
       }
@@ -425,7 +427,8 @@ export function RuntimeInfoCard() {
       <div className="flex items-center justify-between gap-2">
         {/* 停止态下数值为 —（本次会话已结束），label 同步改「上次」避免语义误导 */}
         <p className="text-mcs-xs text-mcs-text-muted">{isRunning ? '本次运行时长' : '上次运行时长'}</p>
-        <p className={cn('mcs-num text-mcs-lg', !isRunning && 'text-mcs-text-muted')}>
+        {/* 本卡关键数字：与在线玩家 / 资源使用两卡同为顶排卡级大数（明细行留在 xs） */}
+        <p className={cn('mcs-num text-mcs-display leading-none', !isRunning && 'text-mcs-text-muted')}>
           {formatUptime(isRunning ? uptime : null)}
         </p>
       </div>

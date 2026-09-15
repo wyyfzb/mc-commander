@@ -1,5 +1,5 @@
 import path from 'node:path'
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect, type Locator, type Page } from '@playwright/test'
 
 /**
  * 仪表盘 E2E（数据源：scripts/mock-server.mjs）
@@ -46,6 +46,21 @@ test.describe('仪表盘', () => {
     await expect(page.getByText('2h 0m')).toBeVisible()
     await expect(page.getByText('2d 0h')).toBeVisible()
     await expect(page.getByText('第 42 天')).toBeVisible()
+  })
+
+  test('标题层级与关键数字档：数据卡标签 14px / 区块卡标题 18px / 卡级大数 30px', async ({ page }) => {
+    await setupConnection(page)
+    await page.goto('/dashboard')
+    const fontSizeOf = (locator: Locator) => locator.evaluate((el) => getComputedStyle(el).fontSize)
+    // 同屏两级标题可辨：数据卡（KPI）标签行留正文档，真区块标题占标题档
+    await expect(page.getByRole('heading', { name: '资源使用' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: '最近备份' })).toBeVisible()
+    expect(await fontSizeOf(page.getByRole('heading', { name: '资源使用' }))).toBe('14px')
+    expect(await fontSizeOf(page.getByRole('heading', { name: '最近备份' }))).toBe('18px')
+    // 关键数字走数字档 display（30px），单位/后缀留在小档
+    expect(await fontSizeOf(page.getByText('20.0'))).toBe('30px')
+    expect(await fontSizeOf(page.getByText('2h 0m'))).toBe('30px')
+    expect(await fontSizeOf(page.getByText('TPS', { exact: true }))).toBe('18px')
   })
 
   test('最近备份卡：渲染备份行 + 旧格式徽章，「全部」跳转设置页备份子路由', async ({ page }) => {
