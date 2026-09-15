@@ -1,52 +1,36 @@
 /**
  * PlayerTable 列定义 —— 10 列规格（自 player-table.tsx 拆出，纯搬移零行为变更）
  * 工厂参数化注入选择集与操作回调；依赖常量见 player-table-config.ts
+ * 行内菜单交互口径（J15）：OP/白名单切换可逆 → 直执 + 5s 撤销；踢出无逆操作 → 直执 + 普通回执
  */
 import type { ColumnDef } from '@tanstack/react-table'
-import {
-  Ban,
-  Eye,
-  Gift,
-  MoreHorizontal,
-  Send,
-  ShieldCheck,
-  ShieldX,
-  UserX,
-} from 'lucide-react'
+import { Ban } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { formatRelativeTime } from '@/lib/format'
-import { formatBanRemaining } from '@/lib/mc-ban'
 import type { Player } from '@/api/types'
 import type { PlayerDetailTab } from '../store'
 import { paginatePlayerRows } from '../player-pagination'
 import { PlayerAvatar } from './player-avatar'
+import { PlayerBadges } from './player-badges'
+import { PlayerRowMenu } from './player-row-menu'
 import { HeartsArmor } from './hearts-armor'
 import { DIMENSION_META, GAME_MODE_LABELS, features } from './player-table-config'
 
-/** OP/白名单切换确认状态（主表格持有，操作列触发） */
-export interface ConfirmToggleState {
-  type: 'op' | 'whitelist'
-  player: Player
-}
-
+/** OP/白名单切换与踢出的行内执行回调（表格持有：执行 + 回执 + 撤销口径） */
 interface PlayerColumnsDeps {
   selectedSet: Set<string>
   onOpenDetail: (name: string, tab?: PlayerDetailTab) => void
   onOpenBan: (player: Player) => void
   toggleSelect: (uuid: string) => void
   toggleSelectPage: (pageUuids: string[]) => void
-  setConfirmToggle: (v: ConfirmToggleState | null) => void
-  setKickTarget: (v: Player | null) => void
+  /** 可逆：直执 + 5s 撤销 */
+  toggleOp: (player: Player) => void
+  /** 可逆：直执 + 5s 撤销 */
+  toggleWhitelist: (player: Player) => void
+  /** 无逆操作：直执 + 普通回执 */
+  kick: (player: Player) => void
   /** 分页状态（-1 = 「全部」档）：表头全选只能作用于当前页，见 select 列 header */
   pageSize: number
   pageIndex: number
@@ -74,8 +58,9 @@ export function buildPlayerColumns({
   onOpenBan,
   toggleSelect,
   toggleSelectPage,
-  setConfirmToggle,
-  setKickTarget,
+  toggleOp,
+  toggleWhitelist,
+  kick,
   pageSize,
   pageIndex,
 }: PlayerColumnsDeps): ColumnDef<typeof features, Player>[] {
@@ -135,24 +120,7 @@ export function buildPlayerColumns({
                 >
                   {p.name}
                 </button>
-                {p.isOp && <ShieldCheck className="size-3.5 shrink-0 text-mcs-purple-fg" aria-label="OP" />}
-                {p.isAfk && (
-                  <span className="shrink-0 rounded-mcs-xs bg-mcs-bg-secondary px-1 text-mcs-2xs text-mcs-text-muted">
-                    AFK
-                  </span>
-                )}
-                {p.isWhitelisted && (
-                  <span className="shrink-0 rounded-mcs-xs bg-mcs-info-bg-subtle px-1 text-mcs-2xs text-mcs-info-fg">
-                    白名单
-                  </span>
-                )}
-                {banned && (
-                  <span className="shrink-0 rounded-mcs-xs bg-mcs-error-bg-subtle px-1 text-mcs-2xs text-mcs-error-fg">
-                    {p.isBanned && p.banExpiresAt
-                      ? `封禁·${formatBanRemaining(p.banExpiresAt, Date.now()) ?? '即将解封'}`
-                      : '封禁'}
-                  </span>
-                )}
+                <PlayerBadges player={p} />
               </div>
               {p.isOnline && p.ip && (
                 <div className="truncate font-mono text-mcs-2xs text-mcs-text-muted">{p.ip}</div>
@@ -286,50 +254,16 @@ export function buildPlayerColumns({
       id: 'actions',
       header: '',
       enableSorting: false,
-      cell: ({ row }) => {
-        const p = row.original
-        return (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon-sm" aria-label={`${p.name} 操作菜单`}>
-                <MoreHorizontal aria-hidden />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => onOpenDetail(p.name, 'overview')}>
-                <Eye aria-hidden />
-                详情
-              </DropdownMenuItem>
-              <DropdownMenuItem disabled={!p.isOnline} onSelect={() => onOpenDetail(p.name, 'teleport')}>
-                <Send aria-hidden />
-                传送
-              </DropdownMenuItem>
-              <DropdownMenuItem disabled={!p.isOnline} onSelect={() => onOpenDetail(p.name, 'give')}>
-                <Gift aria-hidden />
-                给予物品
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => setConfirmToggle({ type: 'op', player: p })}>
-                {p.isOp ? <ShieldX aria-hidden /> : <ShieldCheck aria-hidden />}
-                {p.isOp ? '取消 OP' : '设为 OP'}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setConfirmToggle({ type: 'whitelist', player: p })}>
-                {p.isWhitelisted ? <ShieldX aria-hidden /> : <ShieldCheck aria-hidden />}
-                {p.isWhitelisted ? '移除白名单' : '加入白名单'}
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem disabled={!p.isOnline} onSelect={() => setKickTarget(p)}>
-                <UserX aria-hidden />
-                踢出
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onOpenBan(p)}>
-                <Ban aria-hidden />
-                封禁…
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )
-      },
+      cell: ({ row }) => (
+        <PlayerRowMenu
+          player={row.original}
+          onOpenDetail={onOpenDetail}
+          onOpenBan={onOpenBan}
+          toggleOp={toggleOp}
+          toggleWhitelist={toggleWhitelist}
+          kick={kick}
+        />
+      ),
       size: 48,
     },
   ]

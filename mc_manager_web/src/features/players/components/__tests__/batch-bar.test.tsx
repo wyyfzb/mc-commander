@@ -1,7 +1,8 @@
 /**
- * BatchBar 行为级补测（issue 506）
- * - 9 动作入口三通道：导航类（传送/给予直接回调）、确认类（白名单±/OP±/清空背包/踢出经 ConfirmDialog）、
- *   游戏模式（DropdownMenu 选模式 → ConfirmDialog → gamemode 命令）
+ * BatchBar 行为级补测（issue 506 / J15 口径回归）
+ * - 9 动作入口三通道：导航类（传送/给予直接回调）、直执类（名单±/OP±/踢出/游戏模式）、
+ *   确认类（仅清空背包不可逆走 ConfirmDialog）
+ * - 可逆动作（名单±/OP±/游戏模式）直执 + 5s 撤销，且只回滚真正下发成功的目标
  * - 离线策略经真实 runBatchForTargets：名单类离线仍执行、在线类跳过离线、全离线不执行任何命令
  * - toast 汇总经真实 Toaster 渲染断言，sonner spy 观察调用类型
  * mock 数据为虚构玩家（Steve/Alex），严禁真实玩家/服务器信息
@@ -68,6 +69,8 @@ function makePlayer(overrides: Partial<Player> = {}): Player {
   }
 }
 
+const OFFLINE_ALEX = { name: 'Alex', uuid: '00000000-0000-4000-8000-000000000003', isOnline: false }
+
 describe('BatchBar', () => {
   const onOpenBatchDetail = vi.fn<(tab: 'teleport' | 'give') => void>()
   const onAction = vi.fn<(req: PlayerActionRequest) => Promise<void>>()
@@ -98,8 +101,13 @@ describe('BatchBar', () => {
     await user.click(await screen.findByRole('button', { name: '确认操作' }))
   }
 
+  /** 撤销入口在 toast 上：jsdom 无 setPointerCapture，直派 click 避开 sonner 的 onPointerDown */
+  function clickUndo() {
+    fireEvent.click(screen.getByRole('button', { name: '撤销' }))
+  }
+
   it('渲染已选择计数与全部动作入口（导航/名单/游戏模式/危险/清除）', () => {
-    setup([makePlayer(), makePlayer({ name: 'Alex', uuid: '00000000-0000-4000-8000-000000000003' })])
+    setup([makePlayer(), makePlayer(OFFLINE_ALEX)])
     expect(screen.getByText('已选择 2 名玩家')).toBeInTheDocument()
     for (const label of ['传送', '给予物品', '白名单', '移除白名单', 'OP', '取消OP', '游戏模式', '清空背包', '踢出']) {
       expect(screen.getByRole('button', { name: label })).toBeInTheDocument()
@@ -118,45 +126,45 @@ describe('BatchBar', () => {
   })
 
   it.each([
-    ['白名单', 'whitelistAdd', '批量添加白名单', '添加白名单'],
-    ['移除白名单', 'whitelistRemove', '批量移除白名单', '移除白名单'],
-    ['OP', 'op', '批量设置OP', '设置OP'],
-    ['取消OP', 'deop', '批量取消OP', '取消OP'],
-  ])('名单类 %s：确认后离线玩家仍执行（requireOnline=false）', async (label, kind, title, actionLabel) => {
-    setup([makePlayer({ name: 'Alex', uuid: '00000000-0000-4000-8000-000000000003', isOnline: false })])
-    await user.click(screen.getByRole('button', { name: label }))
-    expect(await screen.findByText(title)).toBeInTheDocument()
-    expect(screen.getByText(`即将对 1 名玩家执行：${actionLabel}`)).toBeInTheDocument()
-    expect(screen.getByText('离线玩家将跳过（名单类操作除外）')).toBeInTheDocument()
-    await confirmInDialog()
-    await screen.findByText(`批量${actionLabel}完成：成功 1，失败 0`)
-    expect(onAction).toHaveBeenCalledTimes(1)
-    expect(onAction).toHaveBeenCalledWith({ kind, playerName: 'Alex' })
-  })
+    ['白名单', 'whitelistAdd', '添加白名单', 'whitelistRemove'],
+    ['移除白名单', 'whitelistRemove', '移除白名单', 'whitelistAdd'],
+    ['OP', 'op', '设置OP', 'deop'],
+    ['取消OP', 'deop', '取消OP', 'op'],
+  ])(
+    '名单类 %s：直执（无确认弹窗）+ 回执挂撤销，撤销对偶动作；离线玩家仍执行',
+    async (label, kind, actionLabel, undoKind) => {
+      setup([makePlayer({ ...OFFLINE_ALEX })])
+      await user.click(screen.getByRole('button', { name: label }))
 
-  it('在线类踢出：离线玩家跳过（真实 runBatchForTargets 过滤）', async () => {
-    setup([
-      makePlayer(),
-      makePlayer({ name: 'Alex', uuid: '00000000-0000-4000-8000-000000000003', isOnline: false }),
-    ])
+      // 直执：无任何确认弹窗
+      expect(screen.queryByRole('button', { name: '确认操作' })).not.toBeInTheDocument()
+      await screen.findByText(`批量${actionLabel}完成：成功 1，失败 0`)
+      expect(onAction).toHaveBeenCalledTimes(1)
+      expect(onAction).toHaveBeenCalledWith({ kind, playerName: 'Alex' })
+
+      clickUndo()
+      expect(onAction).toHaveBeenLastCalledWith({ kind: undoKind, playerName: 'Alex' })
+    },
+  )
+
+  it('踢出：直执（无逆操作 → 回执不挂撤销），离线玩家跳过', async () => {
+    setup([makePlayer(), makePlayer(OFFLINE_ALEX)])
     await user.click(screen.getByRole('button', { name: '踢出' }))
-    expect(await screen.findByText('批量踢出')).toBeInTheDocument()
-    await confirmInDialog()
     await screen.findByText('批量踢出完成：成功 1，失败 0，跳过离线 1')
     expect(onAction).toHaveBeenCalledTimes(1)
     expect(onAction).toHaveBeenCalledWith({ kind: 'kick', playerName: 'Steve' })
+    expect(screen.queryByRole('button', { name: '撤销' })).not.toBeInTheDocument()
   })
 
-  it('全离线：不执行任何命令并提示所选玩家均已离线', async () => {
-    setup([makePlayer({ name: 'Alex', uuid: '00000000-0000-4000-8000-000000000003', isOnline: false })])
+  it('全离线：不执行任何命令并提示所选玩家均已离线，无撤销入口', async () => {
+    setup([makePlayer(OFFLINE_ALEX)])
     await user.click(screen.getByRole('button', { name: '踢出' }))
-    expect(await screen.findByText('批量踢出')).toBeInTheDocument()
-    await confirmInDialog()
     await screen.findByText('所选玩家均已离线，无法执行')
     expect(onAction).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: '撤销' })).not.toBeInTheDocument()
   })
 
-  it('清空背包：危险警告文案 + clear 命令；个体失败走 warning 且带失败详情', async () => {
+  it('清空背包：不可逆 → 确认 + 危险警告文案 + clear 命令；个体失败走 warning 且带失败详情，无撤销', async () => {
     setup([makePlayer()])
     await user.click(screen.getByRole('button', { name: '清空背包' }))
     expect(await screen.findByText('批量清空背包')).toBeInTheDocument()
@@ -166,46 +174,50 @@ describe('BatchBar', () => {
     await screen.findByText('批量清空背包完成：成功 0，失败 1')
     expect(screen.getByText('• Steve：boom')).toBeInTheDocument()
     expect(onAction).toHaveBeenCalledWith({ kind: 'command', command: 'clear Steve' })
+    expect(screen.queryByRole('button', { name: '撤销' })).not.toBeInTheDocument()
   })
 
-  it('游戏模式：下拉选择创造 → 确认 → gamemode creative 命令', async () => {
+  it('清空背包确认弹窗取消：不执行动作且弹窗关闭', async () => {
     setup([makePlayer()])
+    await user.click(screen.getByRole('button', { name: '清空背包' }))
+    expect(await screen.findByText('批量清空背包')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '取消' }))
+    await waitFor(() => expect(screen.queryByText('批量清空背包')).not.toBeInTheDocument())
+    expect(onAction).not.toHaveBeenCalled()
+  })
+
+  it('游戏模式：下拉选择创造 → 直执 gamemode，撤销切回各目标原模式', async () => {
+    setup([makePlayer({ gameMode: 'survival' })])
     await user.click(screen.getByRole('button', { name: '游戏模式' }))
     await user.click(await screen.findByRole('menuitem', { name: '创造' }))
-    expect(await screen.findByText('批量切换游戏模式')).toBeInTheDocument()
-    await confirmInDialog()
     await screen.findByText('批量切换游戏模式完成：成功 1，失败 0')
     expect(onAction).toHaveBeenCalledWith({ kind: 'command', command: 'gamemode creative Steve' })
+
+    clickUndo()
+    expect(onAction).toHaveBeenLastCalledWith({ kind: 'command', command: 'gamemode survival Steve' })
   })
 
   it('游戏模式多目标含离线：在线执行、离线跳过并汇总', async () => {
-    setup([
-      makePlayer(),
-      makePlayer({ name: 'Alex', uuid: '00000000-0000-4000-8000-000000000003', isOnline: false }),
-    ])
+    setup([makePlayer(), makePlayer(OFFLINE_ALEX)])
     await user.click(screen.getByRole('button', { name: '游戏模式' }))
     await user.click(await screen.findByRole('menuitem', { name: '生存' }))
-    await confirmInDialog()
     await screen.findByText('批量切换游戏模式完成：成功 1，失败 0，跳过离线 1')
     expect(onAction).toHaveBeenCalledTimes(1)
     expect(onAction).toHaveBeenCalledWith({ kind: 'command', command: 'gamemode survival Steve' })
   })
 
-  it('游戏模式弹窗取消：不执行、状态重置后可重新选择执行', async () => {
-    setup([makePlayer()])
-    await user.click(screen.getByRole('button', { name: '游戏模式' }))
-    await user.click(await screen.findByRole('menuitem', { name: '冒险' }))
-    expect(await screen.findByText('批量切换游戏模式')).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: '取消' }))
-    await waitFor(() => expect(screen.queryByText('批量切换游戏模式')).not.toBeInTheDocument())
-    expect(onAction).not.toHaveBeenCalled()
-    // 状态已重置：重新选择后弹窗可再次打开并正常执行
-    await user.click(screen.getByRole('button', { name: '游戏模式' }))
-    await user.click(await screen.findByRole('menuitem', { name: '旁观' }))
-    expect(await screen.findByText('批量切换游戏模式')).toBeInTheDocument()
-    await confirmInDialog()
-    await screen.findByText('批量切换游戏模式完成：成功 1，失败 0')
-    expect(onAction).toHaveBeenCalledWith({ kind: 'command', command: 'gamemode spectator Steve' })
+  it('撤销只回滚下发成功的目标（首名失败 → 不在回滚集内）', async () => {
+    setup([makePlayer(), makePlayer({ name: 'Bob', uuid: '00000000-0000-4000-8000-000000000004' })])
+    onAction.mockRejectedValueOnce(new Error('boom'))
+    await user.click(screen.getByRole('button', { name: '白名单' }))
+    await screen.findByText('批量添加白名单完成：成功 1，失败 1')
+    expect(onAction).toHaveBeenNthCalledWith(1, { kind: 'whitelistAdd', playerName: 'Steve' })
+    expect(onAction).toHaveBeenNthCalledWith(2, { kind: 'whitelistAdd', playerName: 'Bob' })
+
+    clickUndo()
+    await waitFor(() => expect(onAction).toHaveBeenCalledTimes(3))
+    // 仅 Bob 下发成功 → 只回滚 Bob；Steve 失败不回滚（回滚一条不存在的变更会掩盖失败）
+    expect(onAction).toHaveBeenLastCalledWith({ kind: 'whitelistRemove', playerName: 'Bob' })
   })
 
   it('执行期间全部动作按钮禁用（running 门控），完成后恢复；aria-busy 随执行翻转（J18）', async () => {
@@ -216,7 +228,6 @@ describe('BatchBar', () => {
     onAction.mockImplementation(() => gate)
     setup([makePlayer()])
     await user.click(screen.getByRole('button', { name: '踢出' }))
-    await confirmInDialog()
     await waitFor(() => expect(screen.getByRole('button', { name: '传送' })).toBeDisabled())
     expect(screen.getByRole('button', { name: '清空背包' })).toBeDisabled()
     // 读屏的「操作进行中」信号（J18）：执行中 busy，完成后复位
@@ -241,7 +252,6 @@ describe('BatchBar', () => {
     onAction.mockImplementation(() => gate)
     setup([makePlayer()])
     await user.click(screen.getByRole('button', { name: '踢出' }))
-    await confirmInDialog()
 
     const clear = screen.getByRole('button', { name: '清除选择' })
     // fireEvent 直派 click（绕过 userEvent 的 pointer-events 守卫）：禁用态下 handler 不得执行
@@ -252,14 +262,5 @@ describe('BatchBar', () => {
     release()
     await screen.findByText('批量踢出完成：成功 1，失败 0')
     await waitFor(() => expect(screen.getByRole('button', { name: '清除选择' })).toBeEnabled())
-  })
-
-  it('确认弹窗取消：不执行动作且弹窗关闭', async () => {
-    setup([makePlayer()])
-    await user.click(screen.getByRole('button', { name: '白名单' }))
-    expect(await screen.findByText('批量添加白名单')).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: '取消' }))
-    await waitFor(() => expect(screen.queryByText('批量添加白名单')).not.toBeInTheDocument())
-    expect(onAction).not.toHaveBeenCalled()
   })
 })

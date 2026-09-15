@@ -1,11 +1,12 @@
 /**
- * OverviewTab 可逆操作 undo toast 回归测试
- * - OP/白名单切换直接执行（无确认弹窗），不再弹出 ConfirmDialog
- * - 不可逆操作（踢人/清空背包）仍走确认弹窗
- * - toast 渲染依赖全局 Toaster（由 main.tsx 挂载），此处仅验证 onAction 调用与 DOM 行为
+ * OverviewTab 可逆操作口径回归测试（J15）
+ * 口径：可逆操作（OP/白名单/游戏模式）直接执行 + 5s 撤销；不可逆（清空背包）仍走确认弹窗；
+ * 无逆操作的踢出直执且不挂撤销入口。
+ * toast 断言经真实 Toaster 渲染（撤销入口是 toast 上的动作按钮，非本组件内的 DOM）
  */
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, act } from '@testing-library/react'
+import { Toaster, toast as sonnerToast } from 'sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { OverviewTab } from '../detail-overview-tab'
 import type { Player } from '@/api/types'
@@ -43,6 +44,7 @@ function renderOverview(player: Player) {
   mockAction.mockResolvedValue(undefined)
   return render(
     <TooltipProvider>
+      <Toaster />
       <OverviewTab
         instanceId="demo"
         player={player}
@@ -55,58 +57,114 @@ function renderOverview(player: Player) {
   )
 }
 
-describe('OverviewTab 可逆操作 undo toast', () => {
-  it('设为 OP 直接执行（无确认弹窗）', async () => {
+/** 点掉上一用例残留的 toast（sonner 为模块级单例） */
+beforeEach(() => {
+  sonnerToast.dismiss()
+})
+
+afterEach(() => {
+  vi.useRealTimers()
+})
+
+describe('OverviewTab 可逆操作：直执 + 撤销', () => {
+  it('设为 OP 直接执行（无确认弹窗），成功回执挂撤销入口，撤销恢复原状', async () => {
     renderOverview(makePlayer({ isOp: false }))
 
     await act(async () => { fireEvent.click(screen.getByText('设为OP')) })
 
     expect(mockAction).toHaveBeenCalledWith({ kind: 'op', playerName: 'Steve' })
-    expect(screen.queryByText('确认设为OP')).not.toBeInTheDocument()
+    expect(screen.queryByText('确认设为 OP')).not.toBeInTheDocument()
+    expect(await screen.findByText('已设置 Steve 为 OP')).toBeInTheDocument()
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '撤销' })) })
+    expect(mockAction).toHaveBeenLastCalledWith({ kind: 'deop', playerName: 'Steve' })
+    expect(await screen.findByText('已取消 Steve 的 OP')).toBeInTheDocument()
   })
 
-  it('取消 OP 直接执行（无确认弹窗）', async () => {
+  it('取消 OP 直接执行，撤销恢复为 OP', async () => {
     renderOverview(makePlayer({ isOp: true }))
 
     await act(async () => { fireEvent.click(screen.getByText('取消OP')) })
 
     expect(mockAction).toHaveBeenCalledWith({ kind: 'deop', playerName: 'Steve' })
-    expect(screen.queryByText('确认取消OP')).not.toBeInTheDocument()
+    expect(screen.queryByText('确认取消 OP')).not.toBeInTheDocument()
+
+    await act(async () => { fireEvent.click(await screen.findByRole('button', { name: '撤销' })) })
+    expect(mockAction).toHaveBeenLastCalledWith({ kind: 'op', playerName: 'Steve' })
   })
 
-  it('加入白名单直接执行（无确认弹窗）', async () => {
+  it('加入白名单直接执行，撤销移除白名单', async () => {
     renderOverview(makePlayer({ isWhitelisted: false }))
 
     await act(async () => { fireEvent.click(screen.getByText('加入白名单')) })
 
     expect(mockAction).toHaveBeenCalledWith({ kind: 'whitelistAdd', playerName: 'Steve' })
     expect(screen.queryByText('确认加入白名单')).not.toBeInTheDocument()
+
+    await act(async () => { fireEvent.click(await screen.findByRole('button', { name: '撤销' })) })
+    expect(mockAction).toHaveBeenLastCalledWith({ kind: 'whitelistRemove', playerName: 'Steve' })
   })
 
-  it('移除白名单直接执行（无确认弹窗）', async () => {
+  it('移除白名单直接执行，撤销恢复白名单', async () => {
     renderOverview(makePlayer({ isWhitelisted: true }))
 
     await act(async () => { fireEvent.click(screen.getByText('移除白名单')) })
 
     expect(mockAction).toHaveBeenCalledWith({ kind: 'whitelistRemove', playerName: 'Steve' })
     expect(screen.queryByText('确认移除白名单')).not.toBeInTheDocument()
+
+    await act(async () => { fireEvent.click(await screen.findByRole('button', { name: '撤销' })) })
+    expect(mockAction).toHaveBeenLastCalledWith({ kind: 'whitelistAdd', playerName: 'Steve' })
   })
 
-  it('踢人按钮仍走确认弹窗（不直接执行）；提示为可逆说明而非不可撤销', () => {
+  it('游戏模式：直执 + 撤销切回原模式', async () => {
+    const userEvent = (await import('@testing-library/user-event')).default
+    renderOverview(makePlayer({ gameMode: 'survival' }))
+
+    await userEvent.setup().click(screen.getByRole('button', { name: /游戏模式/ }))
+    await act(async () => { fireEvent.click(screen.getByRole('menuitem', { name: /创造/ })) })
+    expect(mockAction).toHaveBeenCalledWith({ kind: 'command', command: 'gamemode creative Steve' })
+
+    await act(async () => { fireEvent.click(await screen.findByRole('button', { name: '撤销' })) })
+    expect(mockAction).toHaveBeenLastCalledWith({ kind: 'command', command: 'gamemode survival Steve' })
+  })
+
+  it('撤销入口 5 秒后随 toast 消失（窗口过后操作即成事实）', async () => {
+    vi.useFakeTimers()
     renderOverview(makePlayer({ isOp: false }))
 
-    fireEvent.click(screen.getByText('踢出'))
-    expect(screen.getByText('确认踢出')).toBeInTheDocument()
-    expect(screen.getByText('玩家可随时重新加入服务器')).toBeInTheDocument()
-    expect(screen.queryByText('此操作不可撤销')).not.toBeInTheDocument()
-    expect(mockAction).not.toHaveBeenCalled()
+    await act(async () => { fireEvent.click(screen.getByText('设为OP')) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(1) })
+    expect(screen.getByRole('button', { name: '撤销' })).toBeInTheDocument()
+
+    // 5s 窗口边界仍可用（少于 1ms 都不足）
+    await act(async () => { await vi.advanceTimersByTimeAsync(5000) })
+    expect(screen.getByRole('button', { name: '撤销' })).toBeInTheDocument()
+
+    // 过期后退出：sonner 的退场动画期间节点仍在 DOM，故断言「再 1s 内必摘除」而非边界瞬间
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
+    expect(screen.queryByRole('button', { name: '撤销' })).not.toBeInTheDocument()
+  })
+})
+
+describe('OverviewTab 不可逆 / 无逆操作', () => {
+  it('踢出直执（无逆操作 → 不挂撤销入口），成功回执不带「撤销」', async () => {
+    renderOverview(makePlayer({ isOp: false }))
+
+    await act(async () => { fireEvent.click(screen.getByText('踢出')) })
+
+    expect(mockAction).toHaveBeenCalledWith({ kind: 'kick', playerName: 'Steve' })
+    expect(screen.queryByText('确认踢出')).not.toBeInTheDocument()
+    expect(await screen.findByText('已成功踢出 Steve')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '撤销' })).not.toBeInTheDocument()
   })
 
-  it('清空背包按钮仍走确认弹窗（不直接执行）', () => {
+  it('清空背包仍走确认弹窗（不可逆 + 后果清单），不直接执行', () => {
     renderOverview(makePlayer({ isOp: false }))
 
     fireEvent.click(screen.getByText('清空背包'))
     expect(screen.getByText('确认清空背包')).toBeInTheDocument()
+    expect(screen.getByText('此操作不可撤销，所有物品将被永久删除')).toBeInTheDocument()
     expect(mockAction).not.toHaveBeenCalled()
   })
 

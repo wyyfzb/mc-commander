@@ -1,21 +1,24 @@
 /**
  * PlayerTable 行为级测试（issue 466：组件拆分等价性回归锁）
- * 拆分（player-table-columns/row/dialogs/config）后锁定原有交互语义，覆盖：
+ * 拆分（player-table-columns/row/config）后锁定原有交互语义，覆盖：
  * - 表头 10 列渲染与加载骨架行
  * - 空态双文案（0=暂无玩家 / >0=无匹配 + 清空筛选 CTA）；错误态由页面持有，本组件不渲染
  * - 行元数据：OP/白名单/封禁徽标、离线态；行点击（指针便利）与名字按钮（键盘入口）打开详情
  * - 选择列：勾选写入 store、阻断行点击冒泡
- * - 行内菜单：详情/传送入口、OP 确认流（onAction kind=op）、踢出确认流（kind=kick + onKicked）、离线禁用
+ * - 行内菜单（J15 口径）：详情/传送入口、OP·白名单可逆（直执 + 撤销，无确认弹窗）、
+ *   踢出直执（无逆操作）、离线禁用
  * - 列头单列排序（Web 增强箭头）
  * mock 数据为结构占位（虚构玩家 Steve/Alex/Bob），严禁真实玩家/服务器信息
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { Toaster, toast as sonnerToast } from 'sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { PlayerTable } from '../components/player-table'
 import { usePlayersUiStore } from '../store'
 import type { Player } from '@/api/types'
+import type { PlayerActionRequest } from '../mutations'
 
 function makePlayer(overrides: Partial<Player> = {}): Player {
   return {
@@ -80,10 +83,11 @@ function setup({ players, isLoading = false, totalCount = 0 }: SetupOpts = {}) {
   const onClearFilter = vi.fn()
   const onOpenDetail = vi.fn()
   const onOpenBan = vi.fn()
-  const onAction = vi.fn()
+  const onAction = vi.fn<(req: PlayerActionRequest) => Promise<void>>().mockResolvedValue(undefined)
   const onKicked = vi.fn()
   const view = render(
     <TooltipProvider>
+      <Toaster />
       <PlayerTable
         players={players ?? [makePlayer()]}
         isLoading={isLoading}
@@ -102,6 +106,7 @@ function setup({ players, isLoading = false, totalCount = 0 }: SetupOpts = {}) {
 
 beforeEach(() => {
   usePlayersUiStore.setState({ selectedUuids: [] })
+  sonnerToast.dismiss() // sonner toast 为模块级单例，清掉上一用例残留弹窗（仓库既有范式）
 })
 
 // ── 表头与加载骨架 ──
@@ -316,29 +321,42 @@ describe('PlayerTable · 行内操作菜单', () => {
     expect(onOpenDetail).toHaveBeenCalledWith('Steve', 'teleport')
   })
 
-  it('非 OP 玩家「设为 OP」→ 确认弹窗 → 确认后 onAction(kind=op) 且弹窗关闭', async () => {
+  it('可逆：菜单「设为 OP」直执（无确认弹窗）+ 回执挂撤销，撤销发 deop', async () => {
     const user = userEvent.setup()
     const { onAction } = setup()
     await openMenu(user, 'Steve')
     await user.click(await screen.findByRole('menuitem', { name: '设为 OP' }))
-    expect(screen.getByText('确认设为 OP')).toBeInTheDocument()
-    expect(screen.getByText('即将设置 Steve 为 OP')).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: '确认操作' }))
+    expect(screen.queryByText('确认设为 OP')).not.toBeInTheDocument()
     expect(onAction).toHaveBeenCalledWith({ kind: 'op', playerName: 'Steve' })
-    expect(onAction).toHaveBeenCalledTimes(1)
+    expect(await screen.findByText('已设置 Steve 为 OP')).toBeInTheDocument()
+
+    // fireEvent 直派 click：jsdom 无 setPointerCapture，user.click 会在 sonner 的
+    // onPointerDown 上抛异常（与 toast 动作按钮无关的 jsdom 缺口）
+    fireEvent.click(screen.getByRole('button', { name: '撤销' }))
+    expect(onAction).toHaveBeenLastCalledWith({ kind: 'deop', playerName: 'Steve' })
   })
 
-  it('踢出确认流：菜单「踢出」→ 确认弹窗（含不可撤销警示）→ onAction(kind=kick) + onKicked', async () => {
+  it('可逆：菜单「加入白名单」直执 + 撤销发 whitelistRemove', async () => {
+    const user = userEvent.setup()
+    const { onAction } = setup()
+    await openMenu(user, 'Steve')
+    await user.click(await screen.findByRole('menuitem', { name: '加入白名单' }))
+    expect(screen.queryByText('确认加入白名单')).not.toBeInTheDocument()
+    expect(onAction).toHaveBeenCalledWith({ kind: 'whitelistAdd', playerName: 'Steve' })
+
+    fireEvent.click(await screen.findByRole('button', { name: '撤销' }))
+    expect(onAction).toHaveBeenLastCalledWith({ kind: 'whitelistRemove', playerName: 'Steve' })
+  })
+
+  it('踢出直执（无逆操作 → 回执不挂撤销入口）+ onKicked', async () => {
     const user = userEvent.setup()
     const { onAction, onKicked } = setup()
     await openMenu(user, 'Steve')
     await user.click(await screen.findByRole('menuitem', { name: '踢出' }))
-    expect(screen.getByText('确认踢出')).toBeInTheDocument()
-    expect(screen.getByText('即将踢出 Steve')).toBeInTheDocument()
-    expect(screen.getByText('此操作不可撤销')).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: '确认操作' }))
+    expect(screen.queryByText('确认踢出')).not.toBeInTheDocument()
     expect(onAction).toHaveBeenCalledWith({ kind: 'kick', playerName: 'Steve' })
-    expect(onKicked).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(onKicked).toHaveBeenCalledTimes(1))
+    expect(screen.queryByRole('button', { name: '撤销' })).not.toBeInTheDocument()
   })
 
   it('离线玩家菜单「踢出」禁用', async () => {

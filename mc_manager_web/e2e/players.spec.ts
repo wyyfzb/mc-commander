@@ -68,15 +68,26 @@ test.describe('玩家页', () => {
     await maybeShot(page, 'detail-overview-dark.png')
   })
 
-  test('行内菜单：踢出确认（Tasteful Friction）', async ({ page }) => {
+  test('行内菜单：踢出直执（无逆操作 → 不弹确认，直接下发 + 回执）', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/players')
     await page.getByRole('button', { name: 'Steve 操作菜单' }).click()
     await page.getByText('踢出').click()
-    await expect(page.getByRole('heading', { name: '确认踢出' })).toBeVisible()
-    await expect(page.getByText('此操作不可撤销')).toBeVisible()
-    await page.getByRole('button', { name: '确认操作' }).click()
+    // J15 口径：只有不可逆操作才走后果清单确认；踢出无逆操作 → 直执
+    await expect(page.getByRole('heading', { name: '确认踢出' })).toHaveCount(0)
     await expect(page.getByText('已成功踢出 1 名玩家')).toBeVisible({ timeout: 10_000 })
+  })
+
+  test('行内菜单：OP 切换直执 + 5s 撤销（可逆操作不留确认弹窗）', async ({ page }) => {
+    await setupConnection(page)
+    await page.goto('/players')
+    await page.getByRole('button', { name: 'Alex 操作菜单' }).click()
+    await page.getByRole('menuitem', { name: '设为 OP' }).click()
+    await expect(page.getByRole('heading', { name: '确认设为 OP' })).toHaveCount(0)
+    await expect(page.getByText('已设置 Alex 为 OP')).toBeVisible({ timeout: 10_000 })
+    // 撤销入口在回执上（5s 窗口），点击后下发逆操作并回执
+    await page.getByRole('button', { name: '撤销' }).click()
+    await expect(page.getByText('已取消 Alex 的 OP')).toBeVisible({ timeout: 10_000 })
   })
 
   test('给予物品对话框：选择物品 → 命令预览实时生成（NBT 1.21.4 直接映射）', async ({ page }) => {

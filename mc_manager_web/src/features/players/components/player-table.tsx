@@ -3,10 +3,11 @@
  * - 默认排序 = 收敛规则（在线>离线 → OP → lastSeen → 总时长，applyPlayersFilter 预排）
  * - 列头点击启用单列排序（Web 增强）；分页 10/20/50/全部（「全部」档 react-virtual 虚拟滚动）
  * - 行内溢出菜单：详情/传送/给予物品/OP 切换/白名单切换/踢出/封禁（设计文档 §3.2 重排）
+ * - 行内菜单交互口径（J15）：可逆（OP/白名单）直执 + 5s 撤销，踢出直执（无逆操作）
  * 单元拆分（纯搬移零行为变更）：列定义 player-table-columns / 行组件 player-table-row /
- * 确认弹窗 player-table-dialogs / 共享常量 player-table-config
+ * 行菜单 player-row-menu / 共享常量 player-table-config
  */
-import { useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import {
   flexRender,
@@ -21,11 +22,11 @@ import { Skeleton } from '@/components/ui/skeleton'
 import type { Player } from '@/api/types'
 import { usePlayersUiStore, type PlayerDetailTab } from '../store'
 import type { PlayerActionRequest } from '../mutations'
+import { toastWithUndo } from '../reversible-action'
 import { paginatePlayerRows } from '../player-pagination'
 import { PAGE_SIZE_OPTIONS, ROW_HEIGHT, features } from './player-table-config'
-import { buildPlayerColumns, type ConfirmToggleState } from './player-table-columns'
+import { buildPlayerColumns } from './player-table-columns'
 import { PlayerRow } from './player-table-row'
-import { PlayerConfirmDialogs } from './player-table-dialogs'
 
 interface PlayerTableProps {
   /** 已过滤+排序的玩家列表 */
@@ -61,14 +62,64 @@ export function PlayerTable({
   const [sorting, setSorting] = useState<SortingState>([])
   const [pageSize, setPageSize] = useState<(typeof PAGE_SIZE_OPTIONS)[number]>(20)
   const [pageIndex, setPageIndex] = useState(0)
-  const [kickTarget, setKickTarget] = useState<Player | null>(null)
-  /** OP/白名单切换确认 */
-  const [confirmToggle, setConfirmToggle] = useState<ConfirmToggleState | null>(null)
-  /** 行内确认提交中（防确认期间重复点击产生重复 kick/op 请求） */
-  const [confirmPending, setConfirmPending] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   const selectedSet = useMemo(() => new Set(selectedUuids), [selectedUuids])
+
+  /**
+   * 可逆操作（OP/白名单）：直执 + 5s 撤销。失败回执由页面层（handleAction）承担——
+   * 此处再 toast 会与页面层重复。
+   */
+  const runReversible = useCallback(
+    async (req: PlayerActionRequest, undoReq: PlayerActionRequest, successText: string, undoText: string) => {
+      try {
+        await onAction(req)
+        toastWithUndo({ text: successText, undoText, undo: () => onAction(undoReq) })
+      } catch {
+        // 页面层已回执错误
+      }
+    },
+    [onAction],
+  )
+
+  const toggleOp = useCallback(
+    (p: Player) => {
+      const revoke = p.isOp
+      void runReversible(
+        { kind: revoke ? 'deop' : 'op', playerName: p.name },
+        { kind: revoke ? 'op' : 'deop', playerName: p.name },
+        revoke ? `已取消 ${p.name} 的 OP` : `已设置 ${p.name} 为 OP`,
+        revoke ? `已恢复 ${p.name} 的 OP` : `已取消 ${p.name} 的 OP`,
+      )
+    },
+    [runReversible],
+  )
+
+  const toggleWhitelist = useCallback(
+    (p: Player) => {
+      const remove = p.isWhitelisted
+      void runReversible(
+        { kind: remove ? 'whitelistRemove' : 'whitelistAdd', playerName: p.name },
+        { kind: remove ? 'whitelistAdd' : 'whitelistRemove', playerName: p.name },
+        remove ? `已移除 ${p.name} 的白名单` : `已添加 ${p.name} 至白名单`,
+        remove ? `已恢复 ${p.name} 的白名单` : `已移除 ${p.name} 的白名单`,
+      )
+    },
+    [runReversible],
+  )
+
+  /** 踢出：无逆操作（重新加入由玩家侧发起）——直执 + 普通回执 */
+  const kick = useCallback(
+    async (p: Player) => {
+      try {
+        await onAction({ kind: 'kick', playerName: p.name })
+        onKicked()
+      } catch {
+        // 页面层已回执错误
+      }
+    },
+    [onAction, onKicked],
+  )
 
   const columns = useMemo<ColumnDef<typeof features, Player>[]>(
     () =>
@@ -78,13 +129,14 @@ export function PlayerTable({
         onOpenBan,
         toggleSelect,
         toggleSelectPage,
-        setConfirmToggle,
-        setKickTarget,
+        toggleOp,
+        toggleWhitelist,
+        kick,
         pageSize,
         pageIndex,
       }),
     // pageSize/pageIndex 参与表头全选范围计算，变更须重建列以刷新表头勾选态
-    [selectedSet, onOpenDetail, onOpenBan, toggleSelect, toggleSelectPage, pageSize, pageIndex],
+    [selectedSet, onOpenDetail, onOpenBan, toggleSelect, toggleSelectPage, toggleOp, toggleWhitelist, kick, pageSize, pageIndex],
   )
 
   const table = useTable(
@@ -243,42 +295,6 @@ export function PlayerTable({
         showPageSizeSelector
       />
 
-      <PlayerConfirmDialogs
-        confirmToggle={confirmToggle}
-        confirmPending={confirmPending}
-        kickTarget={kickTarget}
-        onCloseToggle={() => setConfirmToggle(null)}
-        onCloseKick={() => setKickTarget(null)}
-        onConfirmToggle={async () => {
-          if (!confirmToggle) return
-          const { type, player } = confirmToggle
-          setConfirmPending(true)
-          try {
-            if (type === 'op') {
-              await onAction({ kind: player.isOp ? 'deop' : 'op', playerName: player.name })
-            } else {
-              await onAction({
-                kind: player.isWhitelisted ? 'whitelistRemove' : 'whitelistAdd',
-                playerName: player.name,
-              })
-            }
-            setConfirmToggle(null)
-          } finally {
-            setConfirmPending(false)
-          }
-        }}
-        onConfirmKick={async () => {
-          if (!kickTarget) return
-          setConfirmPending(true)
-          try {
-            await onAction({ kind: 'kick', playerName: kickTarget.name })
-            setKickTarget(null)
-            onKicked()
-          } finally {
-            setConfirmPending(false)
-          }
-        }}
-      />
       <span className="sr-only">{isRconConnected ? 'rcon' : 'no-rcon'}</span>
     </div>
   )
