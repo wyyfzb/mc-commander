@@ -84,9 +84,29 @@ describe('NotificationDrawer 条目跳转（issue 334）', () => {
     expect(navigateMock).not.toHaveBeenCalled()
   })
 
-  it('带 instanceId 条目展示跳转提示（查看实例）', () => {
+  it('带 instanceId 条目展示跳转提示（查看实例），色相点在独立左列而非 info 文字行', () => {
     renderDrawer()
-    expect(screen.getByText('查看实例')).toBeInTheDocument()
+    const hint = screen.getByText('查看实例')
+    expect(hint).toBeInTheDocument()
+    const entry = hint.closest('button')
+    expect(entry).not.toBeNull()
+    const dot = entry?.querySelector('[data-instance-hue]')
+    expect(dot).not.toBeNull()
+    // 字面量断言（不调 instanceHueFillClass 自证）：inst-1 → slot 5；改哈希或改映射都会让本用例变红
+    expect(dot).toHaveClass('bg-mcs-identity-5')
+    // 左列整列是装饰（色点 + 它的定位壳），都不进无障碍树
+    expect(dot?.parentElement).toHaveAttribute('aria-hidden')
+    // 关键结构：色点不得落在「查看实例」那行内——该行整体是 info 语义色，
+    // 色点嵌在里面（同为圆点、2px 间距）会被读成 info 语义点（审查 F-M2）
+    const infoRow = hint.parentElement
+    expect(infoRow?.querySelector('[data-instance-hue]')).toBeNull()
+    expect(dot?.closest('button')).toBe(entry)
+  })
+
+  it('无 instanceId 条目不渲染实例色相点（不与 game 条目混色）', () => {
+    renderDrawer()
+    const entry = screen.getByText('Steve 加入了游戏').closest('button')
+    expect(entry?.querySelector('[data-instance-hue]')).toBeNull()
   })
 })
 

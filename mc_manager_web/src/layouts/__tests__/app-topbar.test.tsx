@@ -117,6 +117,20 @@ describe('AppTopBar 实例名三态', () => {
     renderTopbar()
     expect(await screen.findByText('未选择实例')).toBeInTheDocument()
     expect(screen.queryByText('暂无实例')).not.toBeInTheDocument()
+    // 未选中实例 → 不渲染实例固定色相点（否则会与占位文案一起假装有个实例）
+    const trigger = screen.getByRole('button', { name: /未选择实例/ })
+    expect(trigger.querySelector('[data-instance-hue]')).toBeNull()
+  })
+
+  it('已选中实例：实例名旁渲染该实例的固定色相点（类名钉死，映射漂移即红）', async () => {
+    useServerStore.setState({ instanceId: 'demo' })
+    renderTopbar()
+    const trigger = await screen.findByRole('button', { name: /演示实例/ })
+    const dot = trigger.querySelector('[data-instance-hue]')
+    expect(dot).not.toBeNull()
+    // 字面量断言（不调 instanceHueFillClass 自证）：demo → slot 3；改哈希或改槽位映射都会让本用例变红
+    expect(dot).toHaveClass('bg-mcs-identity-3')
+    expect(dot).toHaveAttribute('aria-hidden')
   })
 
   it('搜索按钮的快捷键提示按平台取词（macOS 是 ⌘，其余是 Ctrl）', () => {

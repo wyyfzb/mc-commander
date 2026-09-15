@@ -64,6 +64,14 @@
   --mcs-dimension-nether-bg-subtle: color-mix(in oklch, var(--ref-dimension-nether) 12%, var(--ref-dark-base));
   --mcs-dimension-end-bg-subtle: color-mix(in oklch, var(--ref-dimension-end) 12%, var(--ref-dark-base));
 
+  /* ── identity 六槽（暗色，非语义实例标识）：用法边界见 docs/design-review-guidelines.md ── */
+  --mcs-identity-1: var(--ref-identity-1);
+  --mcs-identity-2: var(--ref-identity-2);
+  --mcs-identity-3: var(--ref-identity-3);
+  --mcs-identity-4: var(--ref-identity-4);
+  --mcs-identity-5: var(--ref-identity-5);
+  --mcs-identity-6: var(--ref-identity-6);
+
   /* ── 状态层（M3 State Layer：hover 8% / focus 12% / pressed 12%）── */
   --mcs-state-hover: var(--ref-state-hover);
   --mcs-state-focus: var(--ref-state-focus);
@@ -193,6 +201,14 @@
   --mcs-dimension-overworld-bg-subtle: color-mix(in oklch, var(--ref-dimension-overworld-light) 10%, var(--ref-light-card));
   --mcs-dimension-nether-bg-subtle: color-mix(in oklch, var(--ref-dimension-nether-light) 10%, var(--ref-light-card));
   --mcs-dimension-end-bg-subtle: color-mix(in oklch, var(--ref-dimension-end-light) 10%, var(--ref-light-card));
+
+  /* identity 六槽（亮色）：色相与暗色不同档，依据见 docs/design-review-guidelines.md */
+  --mcs-identity-1: var(--ref-identity-1-light);
+  --mcs-identity-2: var(--ref-identity-2-light);
+  --mcs-identity-3: var(--ref-identity-3-light);
+  --mcs-identity-4: var(--ref-identity-4-light);
+  --mcs-identity-5: var(--ref-identity-5-light);
+  --mcs-identity-6: var(--ref-identity-6-light);
 
   --mcs-state-hover: var(--ref-state-hover-light);
   --mcs-state-focus: var(--ref-state-focus-light);

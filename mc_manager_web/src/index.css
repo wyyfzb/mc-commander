@@ -67,6 +67,13 @@
     --color-mcs-dimension-overworld-bg-subtle: var(--mcs-dimension-overworld-bg-subtle);
     --color-mcs-dimension-nether-bg-subtle: var(--mcs-dimension-nether-bg-subtle);
     --color-mcs-dimension-end-bg-subtle: var(--mcs-dimension-end-bg-subtle);
+    /* identity 六槽（非语义实例标识）：消费入口与用法边界见 docs/design-review-guidelines.md */
+    --color-mcs-identity-1: var(--mcs-identity-1);
+    --color-mcs-identity-2: var(--mcs-identity-2);
+    --color-mcs-identity-3: var(--mcs-identity-3);
+    --color-mcs-identity-4: var(--mcs-identity-4);
+    --color-mcs-identity-5: var(--mcs-identity-5);
+    --color-mcs-identity-6: var(--mcs-identity-6);
     --color-mcs-focus-ring: var(--mcs-focus-ring);
     --color-mcs-state-hover: var(--mcs-state-hover);
     --color-mcs-state-focus: var(--mcs-state-focus);

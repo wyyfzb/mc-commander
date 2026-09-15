@@ -74,6 +74,20 @@
   --ref-dimension-nether-light: oklch(0.4781 0.0844 32.31);
   --ref-dimension-end-light: oklch(0.4582 0.0663 328.62);
 
+  /* ── identity 六槽（非语义实例标识）：色值定档依据与用法边界见 docs/design-review-guidelines.md ── */
+  --ref-identity-1: oklch(0.82 0.09 10);
+  --ref-identity-2: oklch(0.82 0.09 70);
+  --ref-identity-3: oklch(0.82 0.09 130);
+  --ref-identity-4: oklch(0.82 0.09 190);
+  --ref-identity-5: oklch(0.82 0.09 250);
+  --ref-identity-6: oklch(0.82 0.09 310);
+  --ref-identity-1-light: oklch(0.5 0.1 15);
+  --ref-identity-2-light: oklch(0.5 0.1 75);
+  --ref-identity-3-light: oklch(0.5 0.1 135);
+  --ref-identity-4-light: oklch(0.5 0.1 195);
+  --ref-identity-5-light: oklch(0.5 0.1 255);
+  --ref-identity-6-light: oklch(0.5 0.1 315);
+
   /* ── 发丝边框（装饰豁免，白 5-8% 透明）── */
   --ref-border-hairline: rgba(255, 255, 255, 0.06);
   --ref-border-hairline-subtle: rgba(255, 255, 255, 0.04);

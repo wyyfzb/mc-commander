@@ -179,6 +179,54 @@ test.describe('仪表盘', () => {
     await expect(page.getByRole('button', { name: /全部已读/ })).toBeDisabled()
   })
 
+  test('通知抽屉：带实例的条目把实例色相点放在独立左列，不与 info 文字同排', async ({ page }) => {
+    await setupConnection(page)
+    // 预置一条带 instanceId 的通知（store 从 localStorage 恢复；数据全虚构）
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        'mcs-notifications',
+        JSON.stringify([
+          {
+            id: 'e2e-n-1',
+            type: 'serverCrash',
+            category: 'server',
+            content: 'E2E 虚构通知：服务器意外退出',
+            timestamp: Date.now(),
+            count: 1,
+            read: false,
+            instanceId: 'e2e-demo',
+          },
+        ]),
+      )
+    })
+    await page.goto('/dashboard')
+    await page.getByRole('button', { name: /通知/ }).click()
+    await expect(page.getByRole('heading', { name: '通知' })).toBeVisible()
+    // 等字体就位再量几何：字体回退会让字形盒宽窄变化，几何断言会抖（0.x px 级）
+    await page.evaluate(() => document.fonts.ready)
+    const entry = page.getByRole('button', { name: /E2E 虚构通知/ })
+    await expect(entry).toBeVisible()
+    const dot = entry.locator('[data-instance-hue]')
+    // 字面量槽位：e2e-demo → slot 2（与顶栏/实例卡同源）
+    await expect(dot).toHaveClass(/bg-mcs-identity-2/)
+    // 色点必须在独立左列，不在「查看实例」那一行内（那行整体是 info 语义色）
+    await expect(entry.getByText('查看实例').locator('[data-instance-hue]')).toHaveCount(0)
+    // 几何证据：① 色点在气泡内、贴左缘；② 色点整体位于 info 行**上方**（不同排）
+    const dotBox = (await dot.boundingBox())!
+    const entryBox = (await entry.boundingBox())!
+    const hintBox = (await entry.getByText('查看实例').boundingBox())!
+    expect(dotBox.x).toBeGreaterThanOrEqual(entryBox.x)
+    expect(dotBox.x - entryBox.x).toBeLessThan(20)
+    expect(dotBox.y + dotBox.height).toBeLessThanOrEqual(hintBox.y)
+    await maybeShot(page, 'notification-drawer-instance-dark.png')
+    // 亮色下同一槽位（审查点：slot5/slot2 在亮色里最贴近语义色）
+    await page.keyboard.press('Escape')
+    await page.getByRole('button', { name: /切换到亮色主题/ }).click()
+    await page.getByRole('button', { name: /通知/ }).click()
+    await expect(entry.locator('[data-instance-hue]')).toHaveClass(/bg-mcs-identity-2/)
+    await maybeShot(page, 'notification-drawer-instance-light.png')
+  })
+
   test('顶栏状态点：WS 连接后显示已连接', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/dashboard')

@@ -22,6 +22,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { formatWorldSize } from '@/lib/format'
+import { instanceHueFillClass } from '@/lib/instance-hue'
 import { StatusPill } from '@/components/mcs/status-pill'
 import { Card } from '@/components/mcs/card'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
@@ -175,6 +176,14 @@ function InstanceCard({
         detail?.circuitBreakerTripped && 'border-mcs-error-border',
       )}
     >
+      {/* 实例固定色相标识（非语义 identity）：贴左缘、上下各内缩 12px 的长色条（2px 宽、随卡高伸缩），
+          与首行状态点（success/muted，语义）各司其职——色条说「是哪个实例」，状态点说「现在怎么样」；
+          颜色与卡片描边/熔断描边无关，不随之换色 */}
+      <span
+        data-instance-hue
+        aria-hidden
+        className={cn('absolute inset-y-3 left-0 w-0.5 rounded-full', instanceHueFillClass(id))}
+      />
       {/* 首行：状态点 + 名称 + 「当前」徽章 + 升级中徽章 + 版本 mono 徽章（加载中骨架占位） */}
       <div className="flex items-center gap-2">
         <span

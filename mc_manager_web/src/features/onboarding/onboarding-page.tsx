@@ -3,7 +3,10 @@
  * - 部署方式按**发布物实际提供的能力**陈列三选一：已有服务端 / Linux 一键部署 / Windows 手动部署；
  *   Docker 官方不提供镜像，压成卡片区下方一行说明（不占卡片位、不泄漏内部术语）
  * - 连接表单复用 ConnectionForm variant onboarding；保存成功（setConfig → status ready）→ 跳转 /dashboard
- * - 路由保护：AppShell loader 在 status=unconfigured 时 redirect /onboarding
+ * - 连接成功后的三步清单（部署实例 / 确认 RCON / 加首位白名单）是**静态说明**，不是分步向导：
+ *   默认路径是「已有服务端」，一次连接即进面板，不该再插步骤页
+ * - 路由保护：本页 requireUnconfigured 在已有可用凭据时 redirect /dashboard；
+ *   反向守卫（无凭据）由 AppShell 的 requireConfigured 把受保护页打回 /login（见 routes.tsx）
  */
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router'
@@ -12,7 +15,7 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useRadioGroup, type RadioGroupItemProps } from '@/hooks/use-radio-group'
 import { TONE_SELECTED_SURFACE_CLASSES } from '@/components/mcs/tone'
-import { Card } from '@/components/mcs/card'
+import { Card, CardTitle } from '@/components/mcs/card'
 import { copyText } from '@/lib/clipboard'
 import { BrandLogo } from '@/components/mcs/brand-logo'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
@@ -45,6 +48,26 @@ const LINUX_POINTS = [
   '脚本会自动安装 Java 17/21/25 和 Node.js 22+，无需手动准备环境',
   '脚本结束时打印服务器地址、端口与「API Key」，请妥善保存',
   '服务端默认运行在 25566 端口，安装目录为 /opt/mc-commander',
+]
+
+/**
+ * 连接成功后的三步（面板内完成，不含任何配置文件外的动作）。
+ * 每条只留一行篇幅（引导页在 1440×900 下本已接近满屏，多一行就把底部入口挤出折叠线）：
+ * 语法细节不进这里——RCON 的完整处置口径由面板内的降级横幅承接（layouts/degradation-banners）。
+ */
+const POST_CONNECT_STEPS = [
+  {
+    title: '部署实例',
+    detail: '在「实例」页建第一个服务端，选版本、等下载，首启接受 EULA。',
+  },
+  {
+    title: '确认 RCON',
+    detail: 'enable-rcon 与 rcon.password 配好后重启实例，否则实时数据不可用。',
+  },
+  {
+    title: '加首位白名单',
+    detail: '在「玩家」页把首位玩家加进白名单（需 RCON），之后即可日常管理。',
+  },
 ]
 
 /** 部署方式卡片（已有服务端 / Linux 一键 / Windows 手动）——三选一的单选组，非独立开关 */
@@ -128,7 +151,11 @@ export function OnboardingPage() {
   })
 
   return (
-    <div className="flex min-h-dvh flex-col items-center justify-center bg-mcs-bg-default p-6">
+    // justify-center-safe：内容装得下时垂直居中；容器高度一旦被显式约束（改 h-dvh / max-h / 父级限高）
+    // 而内容超出时回落 start，避免 justify-center 把顶部 logo 与标题推出视口。
+    // 现状 min-h-dvh 是「最小高度 + 高度 auto」，容器始终长到内容高，故今天两种写法表现相同——
+    // 这里取 safe 是防御性的（保留意图），不是当下可见缺陷的修复。
+    <div className="flex min-h-dvh flex-col items-center justify-center-safe bg-mcs-bg-default p-6">
       <div className="w-full max-w-xl">
         {/* ── 欢迎区（品牌 Logo + 标题） ── */}
         <div className="mb-6 text-center">
@@ -229,6 +256,23 @@ export function OnboardingPage() {
             navigate('/dashboard')
           }}
         />
+
+        {/* ── 连接成功后的三步（静态说明，非分步向导）：放在表单之后，不把主 CTA 往下推 ── */}
+        <Card as="div" className="mt-4 flex flex-col gap-2 p-3">
+          <CardTitle as="h2">连接成功后的三步</CardTitle>
+          <ol
+            aria-label="连接成功后的三步"
+            className="flex list-decimal flex-col gap-1 pl-4 text-mcs-xs text-mcs-text-muted"
+          >
+            {POST_CONNECT_STEPS.map((step) => (
+              <li key={step.title}>
+                <span className="font-medium text-mcs-text-default">{step.title}</span>
+                {' — '}
+                {step.detail}
+              </li>
+            ))}
+          </ol>
+        </Card>
 
         {/* 底部：登录页经「前往连接引导」单向跳入此处，需提供返回入口 */}
         <div className="mt-6 flex flex-col items-center gap-1.5 border-t border-mcs-border-muted pt-4">

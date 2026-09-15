@@ -3,7 +3,7 @@ import { test, expect, type Page } from '@playwright/test'
 
 /**
  * onboarding E2E（无配置时 /dashboard 重定向 /onboarding）
- * 验收：重定向守卫 / 部署方式三选一（Docker 仅一行说明）/ 手动部署命令展示 / 连接表单保存 → 进入面板
+ * 验收：重定向守卫 / 部署方式三选一（Docker 仅一行说明）/ 手动部署命令展示 / 连接成功后三步清单 / 连接表单保存 → 进入面板
  */
 
 // 可选截图（调试用）：设 E2E_SHOT=1 时输出到 test-results/shots/，默认关闭
@@ -102,15 +102,56 @@ test.describe('onboarding', () => {
     await expect(already).toBeChecked()
   })
 
+  test('连接成功后的三步清单：恰好三条、无「邀请」、非分步向导', async ({ page }) => {
+    await clearConnection(page)
+    await page.goto('/onboarding')
+    const steps = page.getByRole('list', { name: '连接成功后的三步' })
+    await expect(steps.getByRole('listitem')).toHaveCount(3)
+    await expect(steps).toContainText('部署实例')
+    await expect(steps).toContainText('确认 RCON')
+    await expect(steps).toContainText('加首位白名单')
+    // 原四步口径的「邀请」全仓 0 处承载 → 已砍，页面不得出现
+    await expect(page.getByText(/邀请/)).toHaveCount(0)
+    // 不做分步向导：默认路径（已有服务端）下连接表单与清单同屏，无步骤导航
+    await expect(page.getByRole('button', { name: '连接并进入面板' })).toBeVisible()
+    await expect(page.getByRole('button', { name: /下一步|上一步|跳过/ })).toHaveCount(0)
+    await maybeShot(page, 'onboarding-post-connect-dark.png')
+  })
+
+  test('引导页内容超视口：顶部仍从滚动起点可见（不切顶），三步每条单行', async ({ page }) => {
+    await clearConnection(page)
+    await page.goto('/onboarding')
+    // 等 route chunk 与字体就位再量尺寸：早量会读到未完成布局（曾量出 720 的假值）
+    await page.waitForLoadState('networkidle')
+    await page.evaluate(() => document.fonts.ready)
+    // 720px 是 Playwright 默认视口高度；引导页内容实测 960px，确实超视口
+    const contentHeight = await page.evaluate(() => document.documentElement.scrollHeight)
+    expect(contentHeight).toBeGreaterThan(720)
+    // 不切顶：logo 与标题的 y ≥ 0。注意这条**今天不是靠 justify-center-safe 兜住的**——
+    // min-h-dvh 是「最小高度 + 高度 auto」，容器始终长到内容高，两种写法实测同为 y=24；
+    // safe 是防御：将来若把高度改成显式约束（h-dvh/max-h/父级限高），它会保证顶部仍可达。
+    const logoBox = await page.getByRole('img', { name: 'MC Commander Logo' }).boundingBox()
+    const titleBox = await page.getByRole('heading', { name: '欢迎使用 MC Commander' }).boundingBox()
+    expect(logoBox!.y).toBeGreaterThanOrEqual(0)
+    expect(titleBox!.y).toBeGreaterThanOrEqual(0)
+    // 三步每条 ≤1 行：12px 字 × 1.5 行高 = 18px，>20px 即折行（折行会把底部入口再推下去）
+    const stepHeights = await page
+      .getByRole('list', { name: '连接成功后的三步' })
+      .getByRole('listitem')
+      .evaluateAll((els) => els.map((el) => el.getBoundingClientRect().height))
+    for (const height of stepHeights) expect(height).toBeLessThanOrEqual(20)
+  })
+
   test('保存连接：onboarding 表单 → 进入面板', async ({ page }) => {
     await clearConnection(page)
     await page.goto('/onboarding')
     // 已有服务端（默认选中）→ 填表单
-    // 地址走 dev server（5199）proxy 转发到 mock（与 settings.spec 一致）：
-    // 保存前强制测试连接会带 X-API-Key 头直连目标，直连 5198
-    // 触发 CORS preflight 而 mock-server 无 Allow-Headers 头；真实部署服务端
-    // 同源托管（无跨域），开发/E2E 场景经 proxy 转发为既定模式
-    await page.getByRole('textbox', { name: '面板地址' }).fill('http://localhost:5199')
+    // 地址取当前页 origin（= dev server，端口随 MOCK_PORT/DEV_PORT 泳道变化），经其 proxy
+    // 转发到 mock：保存前强制测试连接会带 X-API-Key 头直连目标，直连 mock 端口会因
+    // mock-server 无 CORS Allow-Headers 头触发 preflight 失败；真实部署服务端同源托管
+    // （无跨域），开发/E2E 场景经 proxy 转发为既定模式
+    const devOrigin = new URL(page.url()).origin
+    await page.getByRole('textbox', { name: '面板地址' }).fill(devOrigin)
     await page.getByRole('textbox', { name: 'API Key' }).fill('e2e-mock-key-0000000000')
     await page.getByRole('button', { name: '连接并进入面板' }).click()
     await expect(page.getByText('连接配置已保存')).toBeVisible()

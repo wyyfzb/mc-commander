@@ -242,6 +242,13 @@ for (const [scopeName, vars] of [
     for (const [name, candidates] of surfaces) check(`dimension-${dim} on ${name}`, worstOn(fg.color, candidates), 3.0)
   }
 
+  // 8b. identity 六槽 × 面（实例固定色相标识：同为小图形填充，口径同 8）
+  //     非语义色族，只承担「是哪个实例」；禁作文字/容器底，故无 -fg/-bg-subtle 与文字口径
+  for (const slot of [1, 2, 3, 4, 5, 6]) {
+    const fg = parseColor(vars.get(`--mcs-identity-${slot}`), vars, refVars)
+    for (const [name, candidates] of surfaces) check(`identity-${slot} on ${name}`, worstOn(fg.color, candidates), 3.0)
+  }
+
   // 9. accent 强档边界 × 面（交互控件边界/状态描边 ≥3:1，须按合成后颜色算）
   //    弱档 --mcs-accent-border 仅作装饰（亮色 1.10:1 / 暗色 1.69:1），不得用于控件边界
   const strongBorder = parseColor(vars.get('--mcs-accent-border-strong'), vars, refVars)

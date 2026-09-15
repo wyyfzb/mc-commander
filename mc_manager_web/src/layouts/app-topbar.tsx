@@ -26,6 +26,8 @@ import { copyText } from '@/lib/clipboard'
 import { sessionAppliesToPanel } from '@/lib/mc-connection'
 import { clearLocalCredentials, logoutToastText } from '@/lib/logout'
 import { primaryModifierLabel } from '@/lib/platform'
+import { cn } from '@/lib/utils'
+import { instanceHueFillClass } from '@/lib/instance-hue'
 
 /**
  * AppTopBar —— 主顶栏（设计文档 §3.1）
@@ -142,6 +144,15 @@ export function AppTopBar() {
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" className="max-w-32 gap-1.5 text-mcs-sm font-medium">
             <Server className="size-4 shrink-0 text-mcs-text-muted" aria-hidden />
+            {/* 实例固定色相标识（非语义 identity：只回答「是哪个实例」，不表达运行/告警状态；
+                未选中实例时不渲染，避免与「暂无实例」等占位文案一起假装有个实例 */}
+            {instanceId && (
+              <span
+                data-instance-hue
+                className={cn('size-2 shrink-0 rounded-full', instanceHueFillClass(instanceId))}
+                aria-hidden
+              />
+            )}
             <span className="truncate">{currentInstanceName}</span>
           </Button>
         </DropdownMenuTrigger>

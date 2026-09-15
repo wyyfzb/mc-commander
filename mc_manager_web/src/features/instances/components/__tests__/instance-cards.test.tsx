@@ -140,6 +140,22 @@ describe('InstanceCards', () => {
     expect(stoppedDot.classList.contains('bg-mcs-text-muted')).toBe(true)
   })
 
+  it('实例固定色相标识：左缘色条逐卡按 id 取槽（类名钉死，映射漂移即红）', () => {
+    const { container } = render(<InstanceCards {...baseProps()} />)
+    const alphaCard = container.querySelector('[data-instance-id="alpha"]') as HTMLElement
+    const betaCard = container.querySelector('[data-instance-id="beta"]') as HTMLElement
+    // 色条与状态点是两个不同来源：色条只回答「哪个实例」，状态点回答「运行/停止」
+    const alphaBar = alphaCard.querySelector('[data-instance-hue]')
+    const betaBar = betaCard.querySelector('[data-instance-hue]')
+    // 字面量断言（不调 instanceHueFillClass 自证）：alpha → slot 4、beta → slot 6
+    expect(alphaBar).toHaveClass('bg-mcs-identity-4')
+    expect(betaBar).toHaveClass('bg-mcs-identity-6')
+    expect(alphaBar).toHaveAttribute('aria-hidden')
+    // 不得与语义色混淆：色条不携带 success/error 状态类（语义色声明源只有 tone.ts）
+    expect(alphaBar).not.toHaveClass('bg-mcs-success-fg')
+    expect(alphaBar).not.toHaveClass('bg-mcs-error-fg')
+  })
+
   it('详情加载中：仅该卡版本徽章位置显示骨架占位（他卡不受影响）', () => {
     const { container } = render(<InstanceCards {...baseProps({ loadingIds: new Set(['alpha']) })} />)
     expect(container.querySelectorAll('[data-slot="skeleton"]').length).toBe(1)

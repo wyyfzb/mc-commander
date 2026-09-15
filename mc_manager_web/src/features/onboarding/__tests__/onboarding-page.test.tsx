@@ -5,6 +5,8 @@
  * - 边界类：Docker 不占卡片位，只在卡片区下方一行说明（不提供镜像、不给跑不通的命令）
  * - 单选组类：三张卡是同一 radiogroup 下的 radio（aria-checked + roving tabindex + 方向键）
  * - 完成类：连接表单保存成功 → 欢迎 toast + navigate('/dashboard')
+ * - 部署后清单类：连接成功后三步（部署实例 / 确认 RCON / 加首位白名单）——恰好三条、
+ *   无「邀请」残留、且不是分步向导（不出现下一步/上一步导航）
  * - 附属：命令复制成功/失败反馈、ConnectionForm variant 透传
  * ConnectionForm 以轻量桩替代（其自身行为由 settings 域测试覆盖）；数据全虚构
  */
@@ -219,6 +221,45 @@ describe('OnboardingPage · 命令复制反馈', () => {
       timeout: 5000,
     })
     expect(toastSuccess).not.toHaveBeenCalled()
+  })
+})
+
+describe('OnboardingPage · 连接成功后的三步清单', () => {
+  it('恰好三步：部署实例 / 确认 RCON / 加首位白名单', () => {
+    render(<OnboardingPage />)
+    expect(screen.getByRole('heading', { name: '连接成功后的三步' })).toBeInTheDocument()
+    const steps = within(screen.getByRole('list', { name: '连接成功后的三步' })).getAllByRole('listitem')
+    expect(steps).toHaveLength(3)
+    expect(steps[0]).toHaveTextContent('部署实例')
+    expect(steps[1]).toHaveTextContent('确认 RCON')
+    expect(steps[2]).toHaveTextContent('加首位白名单')
+  })
+
+  it('RCON 一步写全处置口径：enable-rcon + rcon.password + 重启实例', () => {
+    render(<OnboardingPage />)
+    // 面板可连但实时数据/命令回显依赖 RCON；只说「确认 RCON」用户无从下手
+    expect(screen.getByText(/enable-rcon/)).toBeInTheDocument()
+    expect(screen.getByText(/rcon\.password/)).toBeInTheDocument()
+    expect(screen.getByText(/重启实例/)).toBeInTheDocument()
+  })
+
+  it('容器保留 safe 对齐语义（内容超视口时顶部不会被推出视口）', () => {
+    const { container } = render(<OnboardingPage />)
+    const shell = container.firstElementChild
+    expect(shell).toHaveClass('justify-center-safe')
+    // 不得用裸 justify-center：容器高度一旦被显式约束，居中会把顶部一起切掉
+    expect(shell).not.toHaveClass('justify-center')
+  })
+
+  it('「邀请」步骤已砍：全页无该词（原四步口径的残留）', () => {
+    render(<OnboardingPage />)
+    expect(screen.queryByText(/邀请/)).not.toBeInTheDocument()
+  })
+
+  it('默认路径不是分步向导：无下一步/上一步导航，连接表单始终在同屏', () => {
+    render(<OnboardingPage />)
+    expect(screen.queryByRole('button', { name: /下一步|上一步|跳过/ })).not.toBeInTheDocument()
+    expect(screen.getByTestId('connection-form')).toBeInTheDocument()
   })
 })
 

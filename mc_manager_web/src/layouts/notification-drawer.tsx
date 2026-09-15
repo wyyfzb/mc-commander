@@ -47,6 +47,7 @@ import { useRadioGroup } from '@/hooks/use-radio-group'
 import { useNotificationStore } from '@/stores/notifications'
 import { formatNotificationTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { instanceHueFillClass } from '@/lib/instance-hue'
 import {
   NOTIFICATION_TYPE_META,
   type NotificationSeverity,
@@ -245,7 +246,8 @@ export function NotificationDrawer({ open, onOpenChange }: NotificationDrawerPro
                   type="button"
                   onClick={jumpToInstance}
                   className={cn(
-                    'flex max-w-65 flex-col gap-1 rounded-mcs-sm border px-3 py-2 text-left',
+                    // 横向两列：左列只在有实例时出现（实例色相标识），右列是原有内容
+                    'flex max-w-65 gap-2 rounded-mcs-sm border px-3 py-2 text-left',
                     isGame
                       ? 'self-start rounded-bl-mcs-xs'
                       : 'self-end rounded-br-mcs-xs bg-mcs-bg-secondary',
@@ -261,30 +263,42 @@ export function NotificationDrawer({ open, onOpenChange }: NotificationDrawerPro
                       : `未读：${n.content}${n.instanceId ? '，点击查看关联实例' : ''}`
                   }
                 >
-                  <span className="flex items-center gap-1.5">
-                    <Icon className={cn('size-3', color.text)} aria-hidden />
-                    {!n.read && (
-                      <span className="size-1.5 rounded-full bg-mcs-accent" aria-hidden />
-                    )}
-                    <span className={cn('text-mcs-2xs text-mcs-text-muted tnum')}>
-                      {formatNotificationTime(n.timestamp)}
-                    </span>
-                  </span>
-                  <span
-                    className={cn(
-                      'line-clamp-3 text-mcs-xs',
-                      n.read ? 'font-normal text-mcs-text-muted' : 'font-medium text-mcs-text-default',
-                    )}
-                  >
-                    {n.content}
-                    {n.count > 1 && <span className="text-mcs-accent-fg"> ×{n.count}</span>}
-                  </span>
+                  {/* 实例固定色相标识（非语义 identity）：独立左列，**不进**「查看实例」那行——
+                       那行整体是 info 语义色，色点嵌在里面（同为圆点 + 2px 间距）会被读成 info 语义点 */}
                   {n.instanceId && (
-                    <span className="flex items-center gap-0.5 text-mcs-2xs text-mcs-info-fg">
-                      查看实例
-                      <ChevronRight className="size-3" aria-hidden />
+                    <span className="flex shrink-0 items-start pt-0.5" aria-hidden>
+                      <span
+                        data-instance-hue
+                        className={cn('size-2 rounded-full', instanceHueFillClass(n.instanceId))}
+                      />
                     </span>
                   )}
+                  <span className="flex min-w-0 flex-1 flex-col gap-1">
+                    <span className="flex items-center gap-1.5">
+                      <Icon className={cn('size-3', color.text)} aria-hidden />
+                      {!n.read && (
+                        <span className="size-1.5 rounded-full bg-mcs-accent" aria-hidden />
+                      )}
+                      <span className={cn('text-mcs-2xs text-mcs-text-muted tnum')}>
+                        {formatNotificationTime(n.timestamp)}
+                      </span>
+                    </span>
+                    <span
+                      className={cn(
+                        'line-clamp-3 text-mcs-xs',
+                        n.read ? 'font-normal text-mcs-text-muted' : 'font-medium text-mcs-text-default',
+                      )}
+                    >
+                      {n.content}
+                      {n.count > 1 && <span className="text-mcs-accent-fg"> ×{n.count}</span>}
+                    </span>
+                    {n.instanceId && (
+                      <span className="flex items-center gap-0.5 text-mcs-2xs text-mcs-info-fg">
+                        查看实例
+                        <ChevronRight className="size-3" aria-hidden />
+                      </span>
+                    )}
+                  </span>
                 </button>
               )
             })
