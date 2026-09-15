@@ -194,6 +194,9 @@ test.describe('玩家表中窄屏：裁到核心列（J28）', () => {
       expect(scrollWidth).toBeLessThanOrEqual(clientWidth)
 
       // 勾选框与玩家名在视口内（不需要横向滚动才够得着）
+      // 行数据是异步的：表头随骨架先挂载，行要等查询返回。先等目标行可见再取盒——
+      // 全量并行 8 worker 争抢时会落进「表头可见、行未挂载」的窗口，直接取盒会拿到 null
+      await expect(page.getByRole('checkbox', { name: '选择 Steve' })).toBeVisible()
       const checkbox = await page.getByRole('checkbox', { name: '选择 Steve' }).boundingBox()
       expect(checkbox).not.toBeNull()
       expect(checkbox!.x).toBeGreaterThanOrEqual(0)
