@@ -21,6 +21,9 @@ MC_Commander 是一个自托管的 Minecraft 服务器管理面板：不装插�
 
 ```bash
 # 一键检查（契约包 + 服务端 + 前端：lint / 类型检查 / 全量 test）
+# 依赖 bash：若 `bash` 不在 PATH（Windows 上 Git 自带的 bash 默认不进 PATH），
+# 把 Git 安装目录下的 `bin` 或 `usr/bin` 加入 PATH 后即可直接跑；
+# 无 bash 环境按下方「验证策略」的三包命令序列逐包降级执行
 bash scripts/local-check.sh
 
 # 契约包（mc-schemas/ 下）——改 src 后必须 build 并提交 dist
@@ -53,6 +56,9 @@ npm run dev                  # node --watch 热重载
 | 契约包 | `npm test` + `npm run build`（dist 与 src 同步） |
 | 跨端 | 以上都跑；一键路径 `bash scripts/local-check.sh` |
 
+- 一键路径：`bash scripts/local-check.sh`（三包 lint / 类型检查 / 全量 test + 契约 dist 同步守卫）；
+  `bash` 不在 PATH 时先按「常用命令」把它加进 PATH，未装 bash 的环境则按上表逐包执行（命令见「常用命令」）。
+  本机另有等价的私有入口 `.ai/tools/verify.ps1`（三包并行 + 三项门禁，出证据块与 `summary.json`；不入库）。
 - 涉及页面渲染 / 展示文案的改动，加跑相关 e2e spec（`npx playwright test <spec>`）。
 - 全量 e2e 由 CI 兜底，本地按需。
 - PR 自测清单必须附全量结果（通过数 / 总数），仅写「相关测试通过」视为自测未完成。
