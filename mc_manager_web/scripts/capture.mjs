@@ -12,6 +12,7 @@
  *   npm run capture -- --force-clean        # 启动前强杀 5198/5199 残留进程
  *   npm run capture -- --wait=2000          # 截图前等待（默认 1000ms）
  *   npm run capture -- --strict             # 空态/失败即非 0 退出（CI 用；默认仅告警）
+ *   npm run capture -- --viewport=1440x900,375x812  # 视口（缺省 1440x900；显式指定时文件名带 -<宽> 后缀）
  *
  * 环境变量：
  *   VISION_BROWSER  浏览器通道强制（chrome | msedge | chromium）
@@ -66,6 +67,22 @@ const waitMs = Number(arg('wait', '')) || 1000
 const MIN_SHOT_BYTES = Number(process.env.MIN_SHOT_BYTES) || 40_000
 // --strict：任一路由未产出、或截图小于阈值（疑似空态/未连接）时以非 0 退出（CI/自动审查用）
 const strict = process.argv.includes('--strict')
+// --viewport=WxH（可逗号分隔多档，如 1440x900,375x812）。缺省保持 1440×900 与旧文件名（兼容既有用法与 CI）；
+// 显式指定时文件名追加 -<宽> 后缀（如 dashboard-dark-375.png），manifest 逐图记录视口——
+// 动因：此前窄屏视觉审查每次都要自写 playwright 采集脚本（2026-09-15 批次三次重复劳动）。
+const viewportArg = arg('viewport', '')
+const VIEWPORTS = (viewportArg ? viewportArg.split(',') : ['1440x900'])
+  .map((v) => v.trim().toLowerCase())
+  .filter(Boolean)
+  .map((v) => {
+    const m = /^(\d+)x(\d+)$/.exec(v)
+    if (!m) {
+      console.error(`[capture] --viewport 需形如 1440x900（收到 "${v}"）`)
+      process.exit(2)
+    }
+    return { width: Number(m[1]), height: Number(m[2]) }
+  })
+const viewportSuffix = (vp) => (viewportArg ? `-${vp.width}` : '')
 const targets = ROUTES.filter((r) => !routesFilter.length || routesFilter.includes(r.file)).flatMap((r) =>
   (themeFilter && themeFilter !== 'dark' ? [] : [[r, 'dark']]).concat(
     themeFilter && themeFilter !== 'light' ? [] : [[r, 'light']],
@@ -232,12 +249,13 @@ async function main() {
 
   // mock key 动态构造（规避凭据字面量扫描规则）
   const mockKey = 'e2e-mock-key-' + '0'.repeat(10)
-  const manifest = { generatedAt: new Date().toISOString(), base: `http://localhost:${DEV_PORT}`, shots: [], minShotBytes: MIN_SHOT_BYTES }
+  const manifest = { generatedAt: new Date().toISOString(), base: `http://localhost:${DEV_PORT}`, viewports: VIEWPORTS, shots: [], minShotBytes: MIN_SHOT_BYTES }
   const failed = []
   const warned = []
 
-  for (const [route, theme] of targets) {
-    const page = await browser.newPage({ viewport: { width: 1440, height: 900 } })
+  const jobs = targets.flatMap(([route, theme]) => VIEWPORTS.map((vp) => [route, theme, vp]))
+  for (const [route, theme, vp] of jobs) {
+    const page = await browser.newPage({ viewport: { width: vp.width, height: vp.height } })
     await page.addInitScript(([k, t, unconfigured]) => {
       // onboarding 需未配置态（否则 requireUnconfigured 重定向回仪表盘）
       if (unconfigured) localStorage.removeItem('mcs-connection')
@@ -259,21 +277,22 @@ async function main() {
     try {
       await page.goto(`http://localhost:${DEV_PORT}/${route.path}`, { waitUntil: 'networkidle', timeout: 30_000 })
       await page.waitForTimeout(waitMs)
-      const file = `${route.file}-${theme}.png`
+      const file = `${route.file}-${theme}${viewportSuffix(vp)}.png`
       const abs = join(outDir, file)
       await page.screenshot({ path: abs, fullPage: true })
       const bytes = statSync(abs).size
       // 产物自检：过小截图 = 疑似空态/未连接实例（如 EmptyState），防静默失真
       const suspect = bytes < MIN_SHOT_BYTES
-      manifest.shots.push({ route, theme, file, bytes, suspect })
-      if (suspect) warned.push(`${route.file}-${theme}`)
-      log(`✓ ${route.file} (${theme}) ${Math.round(bytes / 1024)}KB${suspect ? ' ⚠ 疑似空态' : ''}`)
+      manifest.shots.push({ route, theme, viewport: vp, file, bytes, suspect })
+      const label = `${route.file}-${theme}${viewportSuffix(vp)}`
+      if (suspect) warned.push(label)
+      log(`✓ ${label} ${vp.width}x${vp.height} ${Math.round(bytes / 1024)}KB${suspect ? ' ⚠ 疑似空态' : ''}`)
       if (suspect) {
-        log(`⚠ ${route.file} (${theme}) 截图仅 ${bytes} 字节（<${MIN_SHOT_BYTES}）——疑似空态/未连接实例，请检查 mock 与代理链路`)
+        log(`⚠ ${label} 截图仅 ${bytes} 字节（<${MIN_SHOT_BYTES}）——疑似空态/未连接实例，请检查 mock 与代理链路`)
       }
     } catch (e) {
-      failed.push(`${route.file}-${theme}`)
-      log(`✗ ${route.file} (${theme}): ${e.message.slice(0, 120)}`)
+      failed.push(`${route.file}-${theme}${viewportSuffix(vp)}`)
+      log(`✗ ${route.file} (${theme}${viewportSuffix(vp)}): ${e.message.slice(0, 120)}`)
     } finally {
       await page.close()
     }
