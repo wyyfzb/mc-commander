@@ -41,6 +41,31 @@ export const deployProgressSchema = z.object({
   mcVersion: z.string().optional(),
 })
 
+/**
+ * GET /instances/deploy/status 响应契约（部署进度兜底查询）。
+ * - deploying 为判别字段：true 表示服务端确有部署在途（进度对象展开），
+ *   false 表示**空态**——从未部署过、部署已终态、或快照超出时限视为死快照，
+ *   三种情况都返回同一空态而非 404（与 upgradeStatusResponseSchema 同口径）。
+ * - 快照是内存态、按实例仅保留最近一次；服务重启会丢失快照，此时返回空态。
+ * - updatedAt 为快照最后写入时刻，供前端识别陈旧在途快照。
+ */
+export const deployStatusResponseSchema = z.discriminatedUnion('deploying', [
+  z.object({ deploying: z.literal(false) }),
+  z.object({
+    deploying: z.literal(true),
+    instanceId: z.string(),
+    instanceName: z.string(),
+    type: z.string(),
+    mcVersion: z.string(),
+    stage: z.string(),
+    percent: z.number(),
+    transferred: z.number(),
+    total: z.number(),
+    updatedAt: z.number(),
+    error: z.string().optional(),
+  }),
+])
+
 export const upgradeStageSchema = z.enum([
   'backup', 'download', 'replace', 'verify', 'completed', 'failed', 'rolled_back',
 ])
@@ -99,6 +124,7 @@ export type VersionsResponse = z.infer<typeof versionsResponseSchema>
 export type DeployRequest = z.infer<typeof deployRequestSchema>
 export type DeployResult = z.infer<typeof deployResultSchema>
 export type DeployProgress = z.infer<typeof deployProgressSchema>
+export type DeployStatusResponse = z.infer<typeof deployStatusResponseSchema>
 export type UpgradeStage = z.infer<typeof upgradeStageSchema>
 export type UpgradeProgress = z.infer<typeof upgradeProgressSchema>
 export type UpgradeRequest = z.infer<typeof upgradeRequestSchema>
