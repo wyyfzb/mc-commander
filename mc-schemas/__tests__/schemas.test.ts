@@ -47,6 +47,7 @@ import {
   instanceCommandRequestBodySchema,
   instancePropertiesRequestBodySchema,
   instanceEulaRequestBodySchema,
+  instanceDeleteRequestBodySchema,
 } from '../src/index'
 
 describe('schemas 基础校验', () => {
@@ -174,6 +175,30 @@ describe('schemas 基础校验', () => {
   it('deployRequest schema 解析部署请求', () => {
     const d = deployRequestSchema.parse({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'test' })
     expect(d.type).toBe('vanilla')
+  })
+
+  // 实例名是卸载/备份恢复等破坏性操作的确认值：写入侧不归一化首尾空白，用户按
+  // 界面所见名字确认就会永远对不上，实例再也删不掉
+  it('实例名写入路径归一化首尾空白，trim 后为空一律拒绝', () => {
+    expect(instanceSettingsRequestBodySchema.parse({ name: ' 生存服 ' }).name).toBe('生存服')
+    expect(instanceSettingsRequestBodySchema.safeParse({ name: '   ' }).success).toBe(false)
+
+    expect(deployRequestSchema.parse({ type: 'vanilla', mcVersion: '1.21.4', instanceName: ' 生存服 ' }).instanceName)
+      .toBe('生存服')
+    expect(deployRequestSchema.safeParse({ type: 'vanilla', mcVersion: '1.21.4', instanceName: '  ' }).success)
+      .toBe(false)
+  })
+
+  it('卸载确认 confirmName 只锁字符串类型：空串与纯空白是合法入参（语义在路由层比对）', () => {
+    // 存量空名实例只能靠空串确认，故 schema 不设最小长度、也不在此 trim
+    expect(instanceDeleteRequestBodySchema.parse({ confirmName: '' }).confirmName).toBe('')
+    expect(instanceDeleteRequestBodySchema.parse({ confirmName: '  ' }).confirmName).toBe('  ')
+    expect(instanceDeleteRequestBodySchema.parse({ confirmName: ' 生存服 ' }).confirmName).toBe(' 生存服 ')
+    // 类型收口：非字符串（null/number/数组/对象）与缺失一律拒绝
+    for (const bad of [null, 42, [], {}]) {
+      expect(instanceDeleteRequestBodySchema.safeParse({ confirmName: bad }).success, JSON.stringify(bad)).toBe(false)
+    }
+    expect(instanceDeleteRequestBodySchema.safeParse({}).success).toBe(false)
   })
 
   it('pluginInfo schema 解析插件信息', () => {

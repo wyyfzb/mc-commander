@@ -184,6 +184,28 @@ describe('BackupPanel 恢复', () => {
     expect(screen.getByRole('button', { name: '手动备份 恢复' })).toBeEnabled()
   })
 
+  // 升级前库里可能存着带首尾空白的实例名：两侧都归一化才可能确认得上。
+  // 服务端不校验实例名，这道确认是唯一闸门——按原样比对会让按钮永久禁用（有备份却恢复不了）
+  it('实例名带尾空格（升级前旧值）：输入界面所见名字即可确认恢复', async () => {
+    server.use(
+      http.get('*/api/v1/instances', () =>
+        okEnvelope([{ id: 'demo', name: '演示实例 ', isRunning: true, playerCount: 0 }]),
+      ),
+    )
+    const user = userEvent.setup()
+    renderPanel()
+    await screen.findByText('手动备份')
+    await user.click(screen.getByRole('button', { name: '手动备份 恢复' }))
+
+    const confirmBtn = screen.getByRole('button', { name: '确认恢复' })
+    expect(confirmBtn).toBeDisabled()
+    await user.type(screen.getByLabelText(/输入实例名/), '演示实例')
+
+    expect(confirmBtn).toBeEnabled()
+    await user.click(confirmBtn)
+    expect(await screen.findByText('恢复已开始，完成后请启动服务器生效')).toBeInTheDocument()
+  })
+
   it('任一行 restoring → 全列表恢复按钮禁用（含其余 completed 行）', async () => {
     const restoringList: BackupItem[] = [
       { ...mockBackups[0]!, id: 20, status: 'restoring', name: '恢复中的备份' },

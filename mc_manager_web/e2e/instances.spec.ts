@@ -108,6 +108,24 @@ test.describe('实例页', () => {
     await expect(page.getByRole('heading', { name: '卸载实例' })).toBeHidden()
   })
 
+  test('卸载：输入实例名经服务端校验后成功，提示保留的备份份数', async ({ page }) => {
+    await setupConnection(page)
+    await page.goto('/instances')
+    await page.getByRole('button', { name: 'E2E 演示实例 操作菜单' }).click()
+    await page.getByRole('menuitem', { name: '卸载实例' }).click()
+
+    // 服务端强制实例名确认：名字未输入前确认按钮不可用（UI 前置态）
+    const confirmButton = page.getByRole('button', { name: '确认卸载' })
+    await expect(confirmButton).toBeDisabled()
+    await page.getByLabel(/输入实例名/).fill('E2E 演示实例')
+    await expect(confirmButton).toBeEnabled()
+    await confirmButton.click()
+
+    // mock 确认通过：卸载不再销毁备份，成功提示必须报出保留份数（e2e-demo 有 2 份快照）
+    await expect(page.getByText('实例 "E2E 演示实例" 已卸载，已保留 2 份备份')).toBeVisible()
+    await expect(page.getByRole('heading', { name: '卸载实例' })).toBeHidden()
+  })
+
   test('深链接：?tab=deploy 自动打开部署向导', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/instances?tab=deploy')

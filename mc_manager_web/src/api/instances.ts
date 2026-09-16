@@ -3,7 +3,7 @@
  * config 由调用方从 useConnectionStore 传入（与 src/api/players.ts 同模式）。
  */
 import { apiDelete, apiGet, apiPost, apiPut, type ConnectionConfig } from './client'
-import type { DeployRequest, DeployResult, DeployStatusResponse, InstanceStatus, InstanceUpdatePayload, UpgradeRequest, UpgradeStartResponse, VersionsResponse } from './types'
+import type { DeployRequest, DeployResult, DeployStatusResponse, InstanceDeleteRequestBody, InstanceDeleteResponse, InstanceStatus, InstanceUpdatePayload, UpgradeRequest, UpgradeStartResponse, VersionsResponse } from './types'
 
 /** 服务端版本列表（GET /versions?type=；fabric 额外返回 loaders） */
 export function apiGetServerVersions(config: ConnectionConfig, type: string) {
@@ -23,9 +23,15 @@ export function apiGetDeployStatus(config: ConnectionConfig, signal?: AbortSigna
   return apiGet<DeployStatusResponse>(`/api/v1/instances/deploy/status${extraQuery}`, config, signal)
 }
 
-/** 卸载实例（DELETE /instances/:id；危险操作由 UI 层确认） */
-export function apiUninstallInstance(config: ConnectionConfig, instanceId: string) {
-  return apiDelete<null>(`/api/v1/instances/${instanceId}`, config)
+/** 卸载实例（DELETE /instances/:id；危险操作的实例名确认由服务端强制，
+ *  confirmName 必须是该实例名；实例没有任何备份时服务端回 409，
+ *  需带 acknowledgeIrreversible 重发） */
+export function apiUninstallInstance(
+  config: ConnectionConfig,
+  instanceId: string,
+  payload: InstanceDeleteRequestBody,
+) {
+  return apiDelete<InstanceDeleteResponse>(`/api/v1/instances/${instanceId}`, config, { body: payload })
 }
 
 /** 更新实例配置（PUT /instances/:id；白名单字段：name/description/javaPath/maxMemory/minMemory/jarFile/autoRestart/jvmArgs/startCommand） */

@@ -175,12 +175,12 @@ describe('config 数值环境变量收口（intFromEnv）', () => {
     expect(text).toContain('2 个环境变量');
   });
 
-  it('23 处调用点全部收口：配置赋值不再直接 parseInt(process.env)', async () => {
+  it('24 处调用点全部收口：配置赋值不再直接 parseInt(process.env)', async () => {
     const src = readFileSync(new URL('../config.js', import.meta.url), 'utf8');
     const codeLines = src.split('\n').filter((l) => !l.trim().startsWith('//'));
     // 对象属性形态的 parseInt 调用为 0（全部经 intFromEnv 收口）
     expect(codeLines.filter((l) => /:\s*parseInt\(/.test(l))).toEqual([]);
-    // 1 处定义 + 23 处调用
-    expect(src.split('intFromEnv(').length - 1).toBe(24);
+    // 1 处定义 + 24 处调用
+    expect(src.split('intFromEnv(').length - 1).toBe(25);
   });
 });

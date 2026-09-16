@@ -42,6 +42,10 @@ export const ErrorCode = {
   INSTANCE_NOT_FOUND: 40401,
   INSTANCE_NOT_RUNNING: 40002,
   INSTANCE_RUNNING: 40003,
+  /** 卸载实例缺少/不匹配实例名确认（服务端强制，见 DELETE /instances/:id） */
+  INSTANCE_DELETE_CONFIRM_REQUIRED: 40016,
+  /** 卸载的实例没有任何备份：须显式确认不可恢复后才放行 */
+  INSTANCE_DELETE_NO_BACKUP: 40914,
   /** 部署互斥：已有部署在途 */
   DEPLOY_IN_PROGRESS: 40905,
 

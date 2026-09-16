@@ -416,6 +416,18 @@ export const startMock = { eulaRequired: false, shouldFail: false, calls: 0 }
 /** EULA 写入开关（测试注入：shouldFail=写入失败；calls 供断言自动同意） */
 export const eulaMock = { shouldFail: false, calls: 0 }
 
+/**
+ * 卸载开关（测试注入）：retainedBackupCount=0 走服务端 409 前置清单校验分支；
+ * bodies 记录每次请求体，供断言二次确认带上了 acknowledgeIrreversible；
+ * expectedName 覆盖「实例名不匹配 → 400」场景
+ */
+export const uninstallMock = {
+  calls: 0,
+  retainedBackupCount: 0,
+  bodies: [] as Record<string, unknown>[],
+  expectedName: null as string | null,
+}
+
 /** 升级失败开关（测试注入：结构占位，非真实错误） */
 export const upgradeMock = { shouldFail: false, conflict: false }
 
@@ -583,6 +595,36 @@ export const handlers = [
     ok([instanceStatusSchema.parse({ ...mockInstanceStatus, isRunning: instanceListMock.running })]),
   ),
   http.get('*/api/v1/instances/:id', () => ok(instanceStatusSchema.parse(mockInstanceStatus))),
+  // DELETE /instances/:id 卸载：实例名确认由服务端强制（前端输入框只是 UX）；
+  // 备份清单为空时还必须带 acknowledgeIrreversible（与 routes/status.js 同语义）
+  http.delete('*/api/v1/instances/:id', async ({ request }) => {
+    uninstallMock.calls += 1
+    const body = (await request.json().catch(() => ({}))) as Record<string, unknown>
+    uninstallMock.bodies.push(body)
+    const expectedName = uninstallMock.expectedName ?? mockInstanceStatus.name
+    // 与服务端同口径：两侧 trim 后比对（兼容库里带首尾空白的旧实例名）
+    if (typeof body.confirmName !== 'string' || body.confirmName.trim() !== expectedName.trim()) {
+      return HttpResponse.json(
+        { status: 'error', code: 40016, message: '需在请求体提供 confirmName 且与实例名完全一致才能卸载实例', details: null, timestamp: new Date().toISOString() },
+        { status: 400 },
+      )
+    }
+    if (uninstallMock.retainedBackupCount === 0 && body.acknowledgeIrreversible !== true) {
+      return HttpResponse.json(
+        { status: 'error', code: 40914, message: '该实例没有任何备份，删除后世界数据与配置不可恢复；确认后请携带 acknowledgeIrreversible=true 重试', details: null, timestamp: new Date().toISOString() },
+        { status: 409 },
+      )
+    }
+    // 与真实契约同形：数量全量、名字只列最近 10 条（按修改时间倒序）
+    const count = uninstallMock.retainedBackupCount
+    return ok({
+      retainedBackupCount: count,
+      retainedBackupNames: Array.from(
+        { length: Math.min(count, 10) },
+        (_, i) => `快照-${String(i + 1).padStart(2, '0')}`,
+      ),
+    })
+  }),
   // PUT /instances/:id 实例配置更新（启动配置弹窗；回显提交字段，结构占位）
   http.put('*/api/v1/instances/:id', async ({ request, params }) => {
     const body = (await request.json()) as Record<string, unknown>

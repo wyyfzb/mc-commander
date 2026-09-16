@@ -9,7 +9,9 @@ export const versionsResponseSchema = z.object({
 export const deployRequestSchema = z.object({
   type: z.enum(['vanilla', 'paper', 'fabric', 'forge', 'purpur']),
   mcVersion: z.string(),
-  instanceName: z.string(),
+  // 实例名的另一条写入路径（部署）：与 PUT /instances/:id 同口径归一化首尾空白，
+  // 避免把带空格的名字落库后让卸载/恢复的实例名确认永久对不上
+  instanceName: z.string().trim().min(1, 'instanceName 不能为空或纯空白'),
   maxMemory: z.string().optional(),
   loaderVersion: z.string().optional(),
   // EULA 同意（用户动作，非部署配置）：true → 写 eula=true 并执行首启；

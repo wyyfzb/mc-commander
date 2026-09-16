@@ -44,6 +44,8 @@ const webhooks = [
 ]
 const ok = (data, message = 'Success') =>
   JSON.stringify({ status: 'ok', code: 0, message, data, timestamp: now() })
+const err = (code, message) =>
+  JSON.stringify({ status: 'error', code, message, details: null, timestamp: now() })
 
 /** 本 mock 签发的唯一会话令牌（登录/设密固定返回；鉴权建模见请求入口） */
 const MOCK_SESSION_TOKEN = 'e2e-mock-session-token-0000000001'
@@ -600,6 +602,31 @@ const server = createServer((req, res) => {
           Object.assign(instance, JSON.parse(body || '{}'))
         } catch {}
         return res.end(ok(instance, 'Instance updated successfully'))
+      }
+      // DELETE：卸载（数据安全契约，与 routes/status.js 同语义）——实例名确认由
+      // 服务端强制（前端输入框只是 UX）；实例无备份快照时还需 acknowledgeIrreversible。
+      // 快照目录名用备份记录的 name 占位（mock 不建真实目录）
+      if (req.method === 'DELETE') {
+        let uninstallBody = {}
+        try { uninstallBody = JSON.parse(body || '{}') } catch {}
+        const confirmName = typeof uninstallBody.confirmName === 'string' ? uninstallBody.confirmName.trim() : null
+        // 与服务端同口径：两侧 trim 后比对（兼容库里带首尾空白的旧实例名）
+        if (confirmName !== instance.name.trim()) {
+          res.statusCode = 400
+          return res.end(err(40016, '需在请求体提供 confirmName 且与实例名完全一致才能卸载实例'))
+        }
+        const snapshots = mockBackups
+          .filter((b) => b.instanceId === instance.id && b.format === 'snapshot')
+          .map((b) => b.name)
+        if (snapshots.length === 0 && uninstallBody.acknowledgeIrreversible !== true) {
+          res.statusCode = 409
+          return res.end(err(40914, '该实例没有任何备份，删除后世界数据与配置不可恢复；确认后请携带 acknowledgeIrreversible=true 重试'))
+        }
+        return res.end(ok({
+          retainedBackupCount: snapshots.length,
+          // 与真实契约同形：数量全量、名字只列最近 10 条
+          retainedBackupNames: snapshots.slice(0, 10),
+        }, 'Instance deleted'))
       }
       return res.end(ok(instance))
     }

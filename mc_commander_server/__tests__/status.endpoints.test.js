@@ -27,6 +27,13 @@ vi.mock('../utils/audit.js', async (importOriginal) => {
   return { ...actual, recordAudit: vi.fn() };
 });
 
+// 备份快照清点替身：路由级用例只关心「清单空/非空」两态与回报内容；真实磁盘
+// 行为（实例目录真删、备份目录与内容真留）由 instance-delete.safety.test.js
+// 在系统临时目录里取证，避免用例读到工作区的真实 backups/servers
+vi.mock('../services/backup-snapshot.service.js', () => ({
+  listInstanceSnapshotDirs: vi.fn(() => []),
+}));
+
 // os：接管 5 个采样函数（spread actual 保留其余导出）
 vi.mock('os', async (importOriginal) => {
   const actual = await importOriginal();
@@ -65,6 +72,7 @@ vi.mock('fs', async (importOriginal) => {
 import { createStatusRoutes } from '../routes/status.js';
 import { InstanceModel, BackupModel } from '../db/index.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
+import { listInstanceSnapshotDirs } from '../services/backup-snapshot.service.js';
 import { errorHandler } from '../middleware/error_handler.js';
 import config from '../config.js';
 
@@ -145,6 +153,8 @@ describe('Status Routes · 端点缺口收口', () => {
     // BackupModel.findAll 默认空集（无进行中备份）——DELETE 互斥检查放行；
     // 备份互斥用例按需覆盖为分状态计数
     BackupModel.findAll.mockReturnValue({ backups: [], total: 0 });
+    // 备份清单默认空（resetAllMocks 会清实现，逐用例重设）
+    listInstanceSnapshotDirs.mockReturnValue([]);
 
     app = express();
     app.use(express.json());
@@ -621,8 +631,23 @@ describe('Status Routes · 端点缺口收口', () => {
   // ── DELETE /instances/:id：卸载实例（整段缺口）──
   describe('DELETE /api/instances/:id', () => {
     const backupDir = path.join(config.backupsDir, 's1');
+    const NAME = '演示实例';
 
-    it('404：实例不存在', async () => {
+    /** 卸载请求：破坏性端点要求实例名确认，除 404 用例外的调用都要带上 */
+    const uninstall = (body = { confirmName: NAME }) =>
+      request(app).delete('/api/instances/s1').send(body);
+
+    const makeInstance = (overrides = {}) => ({
+      id: 's1',
+      name: NAME,
+      serverPath: INSTANCE_PATH,
+      isRunning: false,
+      cancelRestart: vi.fn(),
+      process: null,
+      ...overrides,
+    });
+
+    it('404：实例不存在（先于确认校验，无 body 也不进 400 分支）', async () => {
       mockManager.getInstance.mockReturnValue(undefined);
       const res = await request(app).delete('/api/instances/s1');
       expect(res.status).toBe(404);
@@ -630,31 +655,130 @@ describe('Status Routes · 端点缺口收口', () => {
       expect(InstanceModel.delete).not.toHaveBeenCalled();
     });
 
-    it('未运行实例卸载成功：定时器取消 + 目录/备份清理 + 备份 DB 清理 + 内存移除 + 实例 DB 删除 + 审计', async () => {
-      const instance = {
-        id: 's1',
-        serverPath: INSTANCE_PATH,
-        isRunning: false,
-        cancelRestart: vi.fn(),
-        process: null,
-      };
+    it('未运行实例卸载成功：定时器取消 + 实例目录删除 + 备份目录保留 + 备份 DB 清理 + 内存移除 + 实例 DB 删除 + 双阶段审计', async () => {
+      const instance = makeInstance();
       mockManager.getInstance.mockReturnValue(instance);
       mockManager.instances.set('s1', instance);
       fs.existsSync.mockImplementation((p) => p === INSTANCE_PATH || p === backupDir);
 
-      const res = await request(app).delete('/api/instances/s1');
+      const res = await uninstall({ confirmName: NAME, acknowledgeIrreversible: true });
 
       expect(res.status).toBe(200);
       expect(res.body.message).toBe('Instance deleted');
       expect(instance.cancelRestart).toHaveBeenCalledTimes(1);
+      expect(fs.rmSync).toHaveBeenCalledTimes(1);
       expect(fs.rmSync).toHaveBeenCalledWith(INSTANCE_PATH, { recursive: true, force: true });
-      expect(fs.rmSync).toHaveBeenCalledWith(backupDir, { recursive: true, force: true });
+      // 备份目录按设计保留：它是实例数据的事实副本，磁盘回收交给保留期孤儿清扫
+      expect(fs.rmSync).not.toHaveBeenCalledWith(backupDir, expect.anything());
       expect(BackupModel.deleteByInstance).toHaveBeenCalledWith('s1');
       expect(mockManager.instances.size).toBe(0);
       expect(InstanceModel.delete).toHaveBeenCalledWith('s1');
       expect(recordAudit).toHaveBeenCalledWith(
         expect.objectContaining({ instanceId: 's1', action: AuditActions.INSTANCE_DELETE }),
       );
+      expect(res.body.data).toEqual({ retainedBackupCount: 0, retainedBackupNames: [] });
+    });
+
+    it('确认校验：confirmName 缺失/类型不对/与实例名不匹配 → 400 且零副作用', async () => {
+      for (const body of [{}, { confirmName: 42 }, { confirmName: '别的名字' }, { confirmName: '  演示实例  x' }]) {
+        vi.clearAllMocks();
+        const instance = makeInstance();
+        mockManager.getInstance.mockReturnValue(instance);
+
+        const res = await uninstall(body);
+
+        expect(res.status, JSON.stringify(body)).toBe(400);
+        expect(res.body.code).toBe(40016);
+        expect(instance.cancelRestart).not.toHaveBeenCalled();
+        expect(fs.rmSync).not.toHaveBeenCalled();
+        expect(BackupModel.deleteByInstance).not.toHaveBeenCalled();
+        expect(InstanceModel.delete).not.toHaveBeenCalled();
+        expect(recordAudit).not.toHaveBeenCalled();
+      }
+    });
+
+    it('确认校验：首尾空白被归一化（" 演示实例 " 放行）', async () => {
+      const instance = makeInstance();
+      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.instances.set('s1', instance);
+      fs.existsSync.mockImplementation(() => false);
+
+      const res = await uninstall({ confirmName: '  演示实例  ', acknowledgeIrreversible: true });
+
+      expect(res.status).toBe(200);
+      expect(InstanceModel.delete).toHaveBeenCalledWith('s1');
+    });
+
+    it('零备份清单：仅确认不够 → 409，且不停机/不删文件/不改 DB/不写审计', async () => {
+      const instance = makeInstance();
+      mockManager.getInstance.mockReturnValue(instance);
+
+      const res = await uninstall();
+
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe(40914);
+      expect(instance.cancelRestart).not.toHaveBeenCalled();
+      expect(fs.rmSync).not.toHaveBeenCalled();
+      expect(BackupModel.deleteByInstance).not.toHaveBeenCalled();
+      expect(InstanceModel.delete).not.toHaveBeenCalled();
+      expect(recordAudit).not.toHaveBeenCalled();
+    });
+
+    it('零备份清单 + acknowledgeIrreversible:true → 放行，响应回报 0 份保留', async () => {
+      const instance = makeInstance();
+      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.instances.set('s1', instance);
+      fs.existsSync.mockImplementation(() => false);
+
+      const res = await uninstall({ confirmName: NAME, acknowledgeIrreversible: true });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data).toEqual({ retainedBackupCount: 0, retainedBackupNames: [] });
+      expect(InstanceModel.delete).toHaveBeenCalledWith('s1');
+    });
+
+    it('清单非空：确认即可放行，响应回报保留的快照目录名', async () => {
+      listInstanceSnapshotDirs.mockReturnValue(['每日备份-2026-09-01T04-00-00-000Z']);
+      const instance = makeInstance();
+      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.instances.set('s1', instance);
+      fs.existsSync.mockImplementation((p) => p === INSTANCE_PATH);
+
+      const res = await uninstall();
+
+      expect(res.status).toBe(200);
+      expect(res.body.data).toEqual({
+        retainedBackupCount: 1,
+        retainedBackupNames: ['每日备份-2026-09-01T04-00-00-000Z'],
+      });
+      // 清单非空时无需要求 acknowledgeIrreversible
+      expect(InstanceModel.delete).toHaveBeenCalledWith('s1');
+    });
+
+    it('审计先于文件操作：意图记录落盘时实例目录仍在，删除后补结果记录', async () => {
+      const instance = makeInstance();
+      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.instances.set('s1', instance);
+      // 意图审计写入时刻的真实盘面：实例目录尚未删除
+      fs.existsSync.mockImplementation((p) => p === INSTANCE_PATH);
+      let dirPresentDuringIntentAudit = null;
+      recordAudit.mockImplementation((entry) => {
+        if (entry.detail?.phase === 'intent') {
+          dirPresentDuringIntentAudit = fs.existsSync(INSTANCE_PATH);
+        }
+      });
+
+      const res = await uninstall({ confirmName: NAME, acknowledgeIrreversible: true });
+
+      expect(res.status).toBe(200);
+      expect(dirPresentDuringIntentAudit).toBe(true);
+      const phases = recordAudit.mock.calls.map(([entry]) => entry.detail?.phase);
+      expect(phases).toEqual(['intent', 'completed']);
+      // 审计 detail 不含任何凭据字段
+      for (const [entry] of recordAudit.mock.calls) {
+        expect(Object.keys(entry.detail).sort()).not.toContain('apiKey');
+        expect(JSON.stringify(entry.detail)).not.toMatch(/key|secret|token|password/i);
+      }
     });
 
     it('运行中实例：stopGracefully 后进程未退出 → 等待 exit 事件（立即触发）再清理', async () => {
@@ -663,19 +787,12 @@ describe('Status Routes · 端点缺口收口', () => {
         signalCode: null,
         once: vi.fn((ev, cb) => cb()),
       };
-      const instance = {
-        id: 's1',
-        serverPath: INSTANCE_PATH,
-        isRunning: true,
-        cancelRestart: vi.fn(),
-        stopGracefully: vi.fn().mockResolvedValue(),
-        process: proc,
-      };
+      const instance = makeInstance({ isRunning: true, stopGracefully: vi.fn().mockResolvedValue(), process: proc });
       mockManager.getInstance.mockReturnValue(instance);
       mockManager.instances.set('s1', instance);
       fs.existsSync.mockImplementation(() => false);
 
-      const res = await request(app).delete('/api/instances/s1');
+      const res = await uninstall({ confirmName: NAME, acknowledgeIrreversible: true });
 
       expect(res.status).toBe(200);
       expect(instance.stopGracefully).toHaveBeenCalledTimes(1);
@@ -687,19 +804,12 @@ describe('Status Routes · 端点缺口收口', () => {
     });
 
     it('stopGracefully 超时抛错被吞 + 目录不存在跳过 rmSync → 卸载流程继续', async () => {
-      const instance = {
-        id: 's1',
-        serverPath: INSTANCE_PATH,
-        isRunning: true,
-        cancelRestart: vi.fn(),
-        stopGracefully: vi.fn().mockRejectedValue(new Error('stop timeout')),
-        process: null,
-      };
+      const instance = makeInstance({ isRunning: true, stopGracefully: vi.fn().mockRejectedValue(new Error('stop timeout')) });
       mockManager.getInstance.mockReturnValue(instance);
       mockManager.instances.set('s1', instance);
       fs.existsSync.mockImplementation(() => false);
 
-      const res = await request(app).delete('/api/instances/s1');
+      const res = await uninstall({ confirmName: NAME, acknowledgeIrreversible: true });
 
       expect(res.status).toBe(200);
       expect(BackupModel.deleteByInstance).toHaveBeenCalledWith('s1');
@@ -707,21 +817,15 @@ describe('Status Routes · 端点缺口收口', () => {
     });
 
     it('DB 删除失败降级：实例目录已清理后 DB 删除抛错仅警告，仍返回成功', async () => {
-      const instance = {
-        id: 's1',
-        serverPath: INSTANCE_PATH,
-        isRunning: false,
-        cancelRestart: vi.fn(),
-        process: null,
-      };
+      const instance = makeInstance();
       mockManager.getInstance.mockReturnValue(instance);
       mockManager.instances.set('s1', instance);
-      fs.existsSync.mockImplementation((p) => p === INSTANCE_PATH || p === backupDir);
+      fs.existsSync.mockImplementation((p) => p === INSTANCE_PATH);
       InstanceModel.delete.mockImplementation(() => {
         throw new Error('db down');
       });
 
-      const res = await request(app).delete('/api/instances/s1');
+      const res = await uninstall({ confirmName: NAME, acknowledgeIrreversible: true });
 
       expect(res.status).toBe(200);
       expect(mockManager.instances.size).toBe(0);
@@ -730,13 +834,7 @@ describe('Status Routes · 端点缺口收口', () => {
 
     // ── 备份互斥（#530）：creating/restoring 进行中拒绝卸载，防恢复竞争数据事故 ──
     it('restoring 记录存在 → 409 拒绝：不触碰实例目录/快照目录/任何 DB 记录', async () => {
-      const instance = {
-        id: 's1',
-        serverPath: INSTANCE_PATH,
-        isRunning: false,
-        cancelRestart: vi.fn(),
-        process: null,
-      };
+      const instance = makeInstance();
       mockManager.getInstance.mockReturnValue(instance);
       mockManager.instances.set('s1', instance);
       fs.existsSync.mockImplementation((p) => p === INSTANCE_PATH || p === backupDir);
@@ -744,7 +842,7 @@ describe('Status Routes · 端点缺口收口', () => {
         backups: [], total: status === 'restoring' ? 1 : 0,
       }));
 
-      const res = await request(app).delete('/api/instances/s1');
+      const res = await uninstall({ confirmName: NAME, acknowledgeIrreversible: true });
 
       expect(res.status).toBe(409);
       expect(res.body.code).toBe(40901);
@@ -758,20 +856,14 @@ describe('Status Routes · 端点缺口收口', () => {
     });
 
     it('creating 记录存在 → 409 拒绝（在线备份中卸载同被拦下）', async () => {
-      const instance = {
-        id: 's1',
-        serverPath: INSTANCE_PATH,
-        isRunning: false,
-        cancelRestart: vi.fn(),
-        process: null,
-      };
+      const instance = makeInstance();
       mockManager.getInstance.mockReturnValue(instance);
       mockManager.instances.set('s1', instance);
       BackupModel.findAll.mockImplementation(({ status }) => ({
         backups: [], total: status === 'creating' ? 1 : 0,
       }));
 
-      const res = await request(app).delete('/api/instances/s1');
+      const res = await uninstall({ confirmName: NAME, acknowledgeIrreversible: true });
 
       expect(res.status).toBe(409);
       expect(res.body.code).toBe(40901);
@@ -781,47 +873,33 @@ describe('Status Routes · 端点缺口收口', () => {
     });
 
     it('卡死记录先经 resetStaleInProgress 按语义重置，重置后无进行中记录 → 正常卸载（三清回归）', async () => {
-      const instance = {
-        id: 's1',
-        serverPath: INSTANCE_PATH,
-        isRunning: false,
-        cancelRestart: vi.fn(),
-        process: null,
-      };
+      const instance = makeInstance();
       mockManager.getInstance.mockReturnValue(instance);
       mockManager.instances.set('s1', instance);
       fs.existsSync.mockImplementation((p) => p === INSTANCE_PATH || p === backupDir);
       BackupModel.resetStaleInProgress.mockReturnValue(1);
       // findAll 默认 total=0：stale 重置后互斥放行
 
-      const res = await request(app).delete('/api/instances/s1');
+      const res = await uninstall({ confirmName: NAME, acknowledgeIrreversible: true });
 
       expect(res.status).toBe(200);
       expect(BackupModel.resetStaleInProgress).toHaveBeenCalledWith({
         maxAgeMs: config.backupInProgressTimeoutMs, instanceId: 's1',
       });
       expect(fs.rmSync).toHaveBeenCalledWith(INSTANCE_PATH, { recursive: true, force: true });
-      expect(fs.rmSync).toHaveBeenCalledWith(backupDir, { recursive: true, force: true });
       expect(BackupModel.deleteByInstance).toHaveBeenCalledWith('s1');
       expect(InstanceModel.delete).toHaveBeenCalledWith('s1');
     });
 
     it('检查置于停机等待之后：运行中实例先 stopGracefully 再命中互斥 → 409', async () => {
-      const instance = {
-        id: 's1',
-        serverPath: INSTANCE_PATH,
-        isRunning: true,
-        cancelRestart: vi.fn(),
-        stopGracefully: vi.fn().mockResolvedValue(),
-        process: null,
-      };
+      const instance = makeInstance({ isRunning: true, stopGracefully: vi.fn().mockResolvedValue() });
       mockManager.getInstance.mockReturnValue(instance);
       mockManager.instances.set('s1', instance);
       BackupModel.findAll.mockImplementation(({ status }) => ({
         backups: [], total: status === 'restoring' ? 1 : 0,
       }));
 
-      const res = await request(app).delete('/api/instances/s1');
+      const res = await uninstall({ confirmName: NAME, acknowledgeIrreversible: true });
 
       expect(res.status).toBe(409);
       // 停机等待先行（删前必停的既有语义保留），互斥检查紧贴删除动作消除 TOCTOU 窗口

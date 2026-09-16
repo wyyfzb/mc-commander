@@ -17,6 +17,20 @@ export const ErrorCodes = {
 
   // 部署互斥：已有部署在途（部署实例尚未入库，重复发起会产出重复实例目录与 DB 记录）
   DEPLOY_IN_PROGRESS: { code: 40905, message: 'A deployment is already in progress', status: 409 },
+  // 卸载实例的实例名确认（服务端强制）：前端弹窗的输入只存在于客户端，
+  // 不带确认的直连 API 调用此前可无确认删除，故确认必须由服务端裁决
+  INSTANCE_DELETE_CONFIRM_REQUIRED: {
+    code: 40016,
+    message: '需在请求体提供 confirmName 且与实例名完全一致才能卸载实例',
+    status: 400,
+  },
+  // 卸载实例且备份清单为空：没有任何灾备副本可回退，仅凭实例名确认不足，
+  // 需调用方额外声明已接受不可恢复
+  INSTANCE_DELETE_NO_BACKUP: {
+    code: 40914,
+    message: '该实例没有任何备份，删除后世界数据与配置不可恢复；确认后请携带 acknowledgeIrreversible=true 重试',
+    status: 409,
+  },
   
   // 备份错误
   BACKUP_NOT_FOUND: { code: 40402, message: 'Backup not found', status: 404 },

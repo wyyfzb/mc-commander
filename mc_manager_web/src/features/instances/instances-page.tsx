@@ -10,9 +10,9 @@ import { useSearchParams } from 'react-router'
 import { useQueries, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, Info, Loader2, Rocket } from 'lucide-react'
 import { toast } from 'sonner'
-import { apiGet } from '@/api/client'
+import { apiGet, ApiError } from '@/api/client'
 import { queryKeys, useInstances } from '@/api/queries'
-import { getFriendlyErrorText } from '@/api/errors'
+import { ErrorCode, getFriendlyErrorText } from '@/api/errors'
 import { EmptyState } from '@/components/mcs/empty-state'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { PageHeader } from '@/components/mcs/page-header'
@@ -113,9 +113,12 @@ export function InstancesPage() {
   const [settingsTarget, setSettingsTarget] = useState<InstanceSummary | null>(null)
   const [upgradeTarget, setUpgradeTarget] = useState<InstanceSummary | null>(null)
   const [uninstallTarget, setUninstallTarget] = useState<InstanceSummary | null>(null)
-  /** 卸载强确认：输入实例名匹配后才可确认（防误删世界数据） */
+  /** 卸载强确认：输入实例名匹配后才可确认（防误删世界数据）；服务端同名校验为强制口径 */
   const [uninstallInput, setUninstallInput] = useState('')
-  const uninstallInputMatches = uninstallInput.trim() === (uninstallTarget?.name ?? '')
+  /** 服务端回「无备份」后的第二阶段：不可恢复确认（仅此阶段才声明 acknowledgeIrreversible） */
+  const [uninstallAckRequired, setUninstallAckRequired] = useState(false)
+  // 两侧都 trim：服务端按 trim 后比对，升级前库里带首尾空白的旧实例名也要能确认
+  const uninstallInputMatches = uninstallInput.trim() === (uninstallTarget?.name ?? '').trim()
   /** 待停止确认的实例（启动走共享 hook：EULA 首启特例内置） */
   const [stopTarget, setStopTarget] = useState<InstanceSummary | null>(null)
 
@@ -205,18 +208,42 @@ export function InstancesPage() {
     setSettingsTarget(inst)
   }
 
-  /** 卸载确认执行 */
+  /** 关闭卸载弹窗：确认输入与不可恢复阶段一并复位 */
+  const closeUninstall = () => {
+    setUninstallTarget(null)
+    setUninstallInput('')
+    setUninstallAckRequired(false)
+  }
+
+  /**
+   * 卸载确认执行。实例名确认与「有没有备份」都由服务端裁决：服务端在前置清单
+   * 为空时回 409，此时不重开弹窗，就地转入不可恢复二次确认（用户已输入的名字保留），
+   * 二次确认才带 acknowledgeIrreversible 重发——客户端不预判备份清单，避免与服务端
+   * 盘面判断分叉。
+   */
   const handleUninstallConfirm = async () => {
     if (!uninstallTarget) return
     const target = uninstallTarget
-    setUninstallTarget(null)
-    setUninstallInput('')
     try {
-      await uninstallMutation.mutateAsync(target.id)
-      toast.success(`实例 "${target.name}" 已卸载`)
+      const result = await uninstallMutation.mutateAsync({
+        instanceId: target.id,
+        // 用户输入原值：两侧 trim 归一化由服务端裁决（前端只在放行判定上做同构处理）
+        confirmName: uninstallInput,
+        acknowledgeIrreversible: uninstallAckRequired || undefined,
+      })
+      closeUninstall()
+      toast.success(
+        result.retainedBackupCount > 0
+          ? `实例 "${target.name}" 已卸载，已保留 ${result.retainedBackupCount} 份备份`
+          : `实例 "${target.name}" 已卸载，该实例没有备份`,
+      )
       // 卸载的是当前实例 → 清空选择（面板回无实例空态）
       if (instanceId === target.id) setInstanceId(null)
     } catch (e) {
+      if (e instanceof ApiError && e.code === ErrorCode.INSTANCE_DELETE_NO_BACKUP) {
+        setUninstallAckRequired(true)
+        return
+      }
       toast.error(`卸载失败：${getFriendlyErrorText(e)}`)
     }
   }
@@ -288,7 +315,7 @@ export function InstancesPage() {
             loadingIds={loadingIds}
             uninstallingId={
               // 同 runMutation：variables 成功后常驻，必须 isPending 才取（防按钮永久禁用）
-              uninstallMutation.isPending ? (uninstallMutation.variables ?? null) : null
+              uninstallMutation.isPending ? (uninstallMutation.variables?.instanceId ?? null) : null
             }
             onSwitch={handleSwitch}
             onOpenSettings={handleOpenSettings}
@@ -356,36 +383,44 @@ export function InstancesPage() {
       {/* ── EULA 首启特例（共享 hook：同意写入 eula.txt 后自动续启） ── */}
       {eulaDialog}
 
-      {/* ── 卸载确认（破坏力最大操作：输入实例名强确认，与备份恢复同级门槛） ── */}
+      {/* ── 卸载确认（破坏力最大操作：输入实例名强确认，与备份恢复同级门槛；
+             实例名确认与备份清单校验都由服务端强制，无备份时转入第二阶段） ── */}
       <ConfirmDialog
         open={uninstallTarget !== null}
         onOpenChange={(open) => {
-          if (!open) {
-            setUninstallTarget(null)
-            setUninstallInput('')
-          }
+          if (!open) closeUninstall()
         }}
         title="卸载实例"
         description={`确定要卸载实例 "${uninstallTarget?.name ?? ''}" 吗？`}
-        confirmText="确认卸载"
+        confirmText={uninstallAckRequired ? '确认不可恢复删除' : '确认卸载'}
         danger
         loading={uninstallMutation.isPending}
-        warning="此操作不可撤销！将会：停止运行中的服务器、删除所有世界数据和配置、从数据库中移除记录"
-        confirmDisabled={!uninstallInputMatches}
+        warning={
+          uninstallAckRequired
+            ? undefined
+            : '此操作不可撤销！将会：停止运行中的服务器、删除所有世界数据和配置、从数据库中移除记录'
+        }
+        confirmDisabled={!uninstallAckRequired && !uninstallInputMatches}
         onConfirm={() => void handleUninstallConfirm()}
       >
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="uninstall-confirm-input" className="text-mcs-xs font-semibold text-mcs-text-muted">
-            输入实例名「{uninstallTarget?.name ?? ''}」以确认
-          </label>
-          <input
-            id="uninstall-confirm-input"
-            value={uninstallInput}
-            onChange={(e) => setUninstallInput(e.target.value)}
-            placeholder={uninstallTarget?.name ?? ''}
-            className="h-9 rounded-mcs-md border border-mcs-border-default bg-mcs-bg-default px-3 font-mono text-mcs-sm text-mcs-text-default outline-none placeholder:text-mcs-text-muted focus:border-mcs-error-fg focus:ring-1 focus:ring-mcs-focus-ring"
-          />
-        </div>
+        {uninstallAckRequired ? (
+          <NoticeBanner variant="error" icon={AlertTriangle} role="alert">
+            该实例没有任何备份：删除后世界数据与配置不可恢复，也没有任何快照可供还原
+          </NoticeBanner>
+        ) : (
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="uninstall-confirm-input" className="text-mcs-xs font-semibold text-mcs-text-muted">
+              输入实例名「{uninstallTarget?.name ?? ''}」以确认
+            </label>
+            <input
+              id="uninstall-confirm-input"
+              value={uninstallInput}
+              onChange={(e) => setUninstallInput(e.target.value)}
+              placeholder={uninstallTarget?.name ?? ''}
+              className="h-9 rounded-mcs-md border border-mcs-border-default bg-mcs-bg-default px-3 font-mono text-mcs-sm text-mcs-text-default outline-none placeholder:text-mcs-text-muted focus:border-mcs-error-fg focus:ring-1 focus:ring-mcs-focus-ring"
+            />
+          </div>
+        )}
       </ConfirmDialog>
     </div>
   )

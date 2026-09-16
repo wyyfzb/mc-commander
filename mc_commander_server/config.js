@@ -144,6 +144,10 @@ const config = {
     auditLogDays: intFromEnv('AUDIT_LOG_RETENTION_DAYS', '90'),
     webhookDeliveryDays: intFromEnv('WEBHOOK_DELIVERY_RETENTION_DAYS', '30'),
     commandHistoryDays: intFromEnv('COMMAND_HISTORY_RETENTION_DAYS', '90'),
+    // 孤儿快照目录（backupsDir 下已无对应实例的实例级目录）的保守期：
+    // 卸载后实例目录立即删除，其备份目录按设计保留，需一段观察期避免与
+    // 「刚卸载又重建同 id」的实例抢数据；默认 30 天
+    orphanBackupDays: intFromEnv('ORPHAN_BACKUP_RETENTION_DAYS', '30'),
   },
   // 进行中备份/恢复记录的卡死判定阈值：服务启动与互斥检查时，
   // 状态变更超过此阈值的 creating（→failed）/restoring（→completed）记录自动重置

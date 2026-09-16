@@ -227,11 +227,11 @@ export function apiPut<T>(
   return apiRequest<T>(path, config, { method: 'PUT', body, ...options })
 }
 
-/** DELETE 便捷方法 */
+/** DELETE 便捷方法（options.body 供带确认信息的破坏性操作使用） */
 export function apiDelete<T>(
   path: string,
   config: ConnectionConfig,
-  options?: { signal?: AbortSignal },
+  options?: { signal?: AbortSignal; body?: unknown },
 ): Promise<T> {
   return apiRequest<T>(path, config, { method: 'DELETE', ...options })
 }

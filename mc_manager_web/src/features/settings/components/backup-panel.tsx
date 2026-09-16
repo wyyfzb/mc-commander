@@ -88,7 +88,9 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
   // 实例名（恢复危险确认输入匹配；无实例时按钮路径已拦截）
   const instancesQuery = useInstances()
   const instanceName = instancesQuery.data?.find((i) => i.id === instanceId)?.name ?? ''
-  const restoreInputMatches = restoreInput.trim() === instanceName
+  // 两侧都 trim：服务端不校验实例名，这道确认是唯一闸门——升级前库里的名字可能带
+  // 首尾空白，按原样比对会让按钮永久禁用（有备份却恢复不了）
+  const restoreInputMatches = restoreInput.trim() === instanceName.trim()
 
   // 无实例门：加载中/加载失败/真空态/待选中四态各自诚实（见 InstanceRequiredState）
   if (!instanceId) {

@@ -6,6 +6,7 @@ import { BackupModel } from '../db/backup.model.js';
 import { AuditLogModel, CommandHistoryModel } from '../db/audit.model.js';
 import { WebhookModel } from '../db/webhook.model.js';
 import { BackupService } from './backup.service.js';
+import { pruneOrphanBackupDirs } from './backup-snapshot.service.js';
 import { runPanelBackupCycle, getLatestSnapshotTime } from './panel-backup.service.js';
 import config from '../config.js';
 import { logger } from '../utils/logger.js';
@@ -89,13 +90,14 @@ export class TaskScheduler {
   }
 
   /**
-   * 执行一轮保留清理：审计日志、webhook 投递记录与命令历史三张 append-only 表
-   * 分别 try/catch——单表失败不拖累其余表，返回删除计数供日志与测试断言。
+   * 执行一轮保留清理：审计日志、webhook 投递记录、命令历史三张 append-only 表与
+   * backupsDir 的孤儿快照目录分别 try/catch——单项失败不拖累其余项，返回删除计数
+   * 供日志与测试断言。
    * @param {'startup'|'cron'} trigger 触发来源（日志归因用）
-   * @returns {{auditDeleted: number, webhookDeleted: number, commandHistoryDeleted: number, failed: string[]}}
+   * @returns {{auditDeleted: number, webhookDeleted: number, commandHistoryDeleted: number, orphanBackupsDeleted: number, failed: string[]}}
    */
   runRetentionPrune(trigger = 'manual') {
-    const result = { auditDeleted: 0, webhookDeleted: 0, commandHistoryDeleted: 0, failed: [] };
+    const result = { auditDeleted: 0, webhookDeleted: 0, commandHistoryDeleted: 0, orphanBackupsDeleted: 0, failed: [] };
     try {
       result.auditDeleted = AuditLogModel.prune(config.retentionPrune.auditLogDays);
     } catch (err) {
@@ -114,9 +116,17 @@ export class TaskScheduler {
       result.failed.push('command_history');
       logger.error(`[RetentionPrune] command_history prune failed (${trigger}):`, err.message);
     }
+    // 孤儿快照目录：卸载实例时实例目录照删、备份目录按设计保留，磁盘回收只能
+    // 靠这条全局扫描兜底（保守期见 config.retentionPrune.orphanBackupDays）
+    try {
+      result.orphanBackupsDeleted = pruneOrphanBackupDirs(config.retentionPrune.orphanBackupDays).deleted;
+    } catch (err) {
+      result.failed.push('orphan_backups');
+      logger.error(`[RetentionPrune] orphan backup dirs prune failed (${trigger}):`, err.message);
+    }
     if (result.failed.length === 0) {
       logger.info(
-        `[RetentionPrune] ok (${trigger}): audit_logs -${result.auditDeleted}, webhook_deliveries -${result.webhookDeleted}, command_history -${result.commandHistoryDeleted}`
+        `[RetentionPrune] ok (${trigger}): audit_logs -${result.auditDeleted}, webhook_deliveries -${result.webhookDeleted}, command_history -${result.commandHistoryDeleted}, orphan_backups -${result.orphanBackupsDeleted}`
       );
     }
     return result;

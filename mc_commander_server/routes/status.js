@@ -13,6 +13,8 @@ import {
   instanceStatusListSchema,
   instanceStatusSchema,
   instanceCommandRequestBodySchema,
+  instanceDeleteRequestBodySchema,
+  instanceDeleteResponseSchema,
   instanceEulaRequestBodySchema,
   instancePropertiesRequestBodySchema,
   instanceSettingsRequestBodySchema,
@@ -30,6 +32,10 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { logger } from '../utils/logger.js';
 import { getServerVersion } from '../utils/version.js';
 import { getPropertiesView, applyPropertyUpdates } from '../services/instance-properties.service.js';
+import { listInstanceSnapshotDirs } from '../services/backup-snapshot.service.js';
+
+// 卸载响应回报的快照目录名条数上限：清单可能很长，数量永远是全量，名字只列最近的
+const RETAINED_BACKUP_REPORT_LIMIT = 10;
 
 /**
  * 只读角色视图：从同一契约源派生（只删字段、不新增），避免与全量 schema 漂移。
@@ -533,7 +539,30 @@ export function createStatusRoutes(serverManager) {
       return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND));
     }
 
-      // 0. 无条件取消崩溃重启/延迟重启定时器：已崩溃实例（isRunning=false）
+      // 0. 破坏性前置校验：确认与备份清单校验全部在停机与首个 rmSync 之前完成，
+      //    拒绝路径零副作用（不停机、不删文件、不改 DB）。确认值取自请求体并由
+      //    服务端比对实例名——前端输入框只存在于客户端，直连 API 的调用方此前
+      //    可无确认删除。两侧 trim 后全等：写入侧已归一化新数据，但升级前库里
+      //    可能存着带首尾空白的旧值乃至空名旧值，按原样或按「非空」比对都会让
+      //    这类实例永远卸载不掉。缺失/类型不对/不匹配归同一错误码，文案不回显实例名。
+      const parsedBody = instanceDeleteRequestBodySchema.safeParse(req.body ?? {});
+      const confirmNameMatches =
+        parsedBody.success && parsedBody.data.confirmName.trim() === (instance.name ?? '').trim();
+      if (!confirmNameMatches) {
+        return res.status(400).json(error(ErrorCodes.INSTANCE_DELETE_CONFIRM_REQUIRED));
+      }
+
+      // 0.1 前置备份清单校验：实例备份目录按设计保留（见第 5 步），清单为空即这份
+      //     数据没有任何灾备副本，仅凭实例名确认不足以放行，需调用方显式声明接受
+      //     不可恢复。清单在此读一次供放行判定与意图审计；实际保留内容由删除后再
+      //     读一次回报（两次差异只可能来自停机期间新增的快照）。
+      const snapshotsBeforeDelete = listInstanceSnapshotDirs(req.params.id);
+      const acknowledgeIrreversible = parsedBody.data.acknowledgeIrreversible === true;
+      if (snapshotsBeforeDelete.length === 0 && !acknowledgeIrreversible) {
+        return res.status(409).json(error(ErrorCodes.INSTANCE_DELETE_NO_BACKUP));
+      }
+
+      // 1. 无条件取消崩溃重启/延迟重启定时器：已崩溃实例（isRunning=false）
       //    不满足下方 stopGracefully 分支（其内部才调用 cancelRestart），卸载时
       //    定时器不取消会保持存活；若 rmSync 因 Windows 文件占用句柄抛 EPERM
       //    导致目录与 server.jar 残留，5s 定时器回调的 jar 存在性检查通过，
@@ -542,7 +571,7 @@ export function createStatusRoutes(serverManager) {
       //    （cancelRestart 幂等），stopGracefully 内重复取消同样安全。
       instance.cancelRestart();
 
-      // 1. 停止运行中的实例：用 stopGracefully 等待 MC 正常退出后再删除目录
+      // 2. 停止运行中的实例：用 stopGracefully 等待 MC 正常退出后再删除目录
       //    （await stop 命令 → 等 exit 事件 → 超时强杀兜底），避免与仍存活的
       //    MC 进程竞争（Windows EPERM 半删除 / Linux 向已删 inode 写数据）
       if (instance.isRunning) {
@@ -558,7 +587,7 @@ export function createStatusRoutes(serverManager) {
         }
       }
 
-      // 1.5 备份互斥前置检查：实例存在 creating/restoring 备份记录时拒绝卸载。
+      // 2.5 备份互斥前置检查：实例存在 creating/restoring 备份记录时拒绝卸载。
       //    恢复是 fire-and-forget 后台任务（耗时随世界规模可达分钟级），删除与其
       //    并发的两条竞争终态均为数据事故：删除落在恢复 rename 之后 → 失败回滚
       //    把已删实例目录整体还原（已删实例"复活"）；落在 rsync 复制中 → 源消失
@@ -577,39 +606,58 @@ export function createStatusRoutes(serverManager) {
 
       const instancePath = instance.serverPath;
 
-      // 2. 先删除实例文件夹（含 instance.json）。文件删除必须前置：若先删内存/DB
+      // 3. 审计先于文件操作：rmSync 不可逆，先落一条「意图」记录，删除完成后再落
+      //    「结果」记录——崩溃落在两者之间时审计里留有未闭环的意图，可与磁盘现状
+      //    对照。detail 只含清理范围与保留计数，不含任何凭据。
+      recordAudit({
+        instanceId: req.params.id,
+        action: AuditActions.INSTANCE_DELETE,
+        targetType: 'instance',
+        targetId: req.params.id,
+        detail: { phase: 'intent', retainedBackupCount: snapshotsBeforeDelete.length, acknowledgeIrreversible },
+      });
+
+      // 4. 删除实例文件夹（含 instance.json）。文件删除必须前置：若先删内存/DB
       //    再 rmSync，Windows 句柄占用（杀软扫描 server.jar、资源管理器打开目录、
       //    日志文件被编辑器占用等）导致 rmSync 抛 EPERM（force:true 只吞 ENOENT
       //    不吞 EPERM）时删除已不可逆完成一半——实例已 404 客户端无法重试补偿，
-      //    目录与备份残留，重启 loadInstances（mc_server.js）还会从残留的
+      //    实例目录残留，重启 loadInstances（mc_server.js）还会从残留的
       //    instance.json 迁移"复活"已卸载实例。文件删除失败直接抛错经 asyncHandler
       //    进入全局 errorHandler，此时内存与 DB 记录均未动 → 实例保留可重试。
       if (instancePath && fs.existsSync(instancePath)) {
         fs.rmSync(instancePath, { recursive: true, force: true });
       }
 
-      // 3. 清理备份：快照目录按约定存放于 backupsDir/<instanceId>/（backup.service.js
-      //    getInstanceBackupDir），与实例目录 serversDir/<id> 分离，需显式清理，否则
-      //    磁盘残留孤儿快照；同时删除 backups 表该实例的全部 DB 记录
-      //    （InstanceModel.delete 只删 instances 表，记录同样成孤儿）。不吞错：
-      //    备份清理失败同样抛错保留实例，重试可补偿（重试时实例目录已删 existsSync
-      //    跳过，只重试备份清理）。
-      const backupDirPath = path.join(config.backupsDir, req.params.id);
-      if (fs.existsSync(backupDirPath)) {
-        fs.rmSync(backupDirPath, { recursive: true, force: true });
-      }
+      // 5. 清理该实例的 backups 表记录（InstanceModel.delete 只删 instances 表，
+      //    记录否则成孤儿）。快照目录 backupsDir/<instanceId> 本身**不删**：它是
+      //    实例数据的事实副本，卸载后仍需随磁盘留存供人工取回，磁盘回收由保留期
+      //    孤儿清扫承接（services/backup-snapshot.service.js）；备份目录与实例
+      //    目录分离，删不删它都不影响实例是否被 loadInstances 复活。
       BackupModel.deleteByInstance(req.params.id);
 
-      // 4. 文件与备份全部清理成功后才从内存中移除
+      // 6. 文件与备份记录全部清理成功后才从内存中移除
       serverManager.instances.delete(req.params.id);
 
-      // 5. 最后从数据库删除记录。DB 删除失败仅警告不阻塞（实例目录已删、
+      // 7. 最后从数据库删除记录。DB 删除失败仅警告不阻塞（实例目录已删、
       //    实例已 404，重试不可行；DB 记录残留重启会尝试加载该实例——
       //    属 SQLite 本地写失败的极端情况，且实例目录已删 createInstance 会
       //    重建空目录，风险远小于本路由历史 bug 的不可补偿半删除）
       try { InstanceModel.delete(req.params.id); } catch (e) { logger.warn('Failed to delete instance from DB:', e.message); }
-      recordAudit({ instanceId: req.params.id, action: AuditActions.INSTANCE_DELETE, targetType: 'instance', targetId: req.params.id });
-      res.json(validatedSuccess(nullDataSchema, null, 'Instance deleted'));
+
+      // 8. 结果审计 + 回报实际保留内容：删除后再读一次快照清单取磁盘现状
+      //    （第 0.1 步那次只用于放行判定）
+      const retainedBackups = listInstanceSnapshotDirs(req.params.id);
+      recordAudit({
+        instanceId: req.params.id,
+        action: AuditActions.INSTANCE_DELETE,
+        targetType: 'instance',
+        targetId: req.params.id,
+        detail: { phase: 'completed', retainedBackupCount: retainedBackups.length },
+      });
+      res.json(validatedSuccess(instanceDeleteResponseSchema, {
+        retainedBackupCount: retainedBackups.length,
+        retainedBackupNames: retainedBackups.slice(0, RETAINED_BACKUP_REPORT_LIMIT),
+      }, 'Instance deleted'));
   }));
 
   // POST /api/instances/:id/eula - 写入 EULA 协议确认

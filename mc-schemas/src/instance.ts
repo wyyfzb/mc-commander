@@ -8,7 +8,9 @@ export const instanceSummarySchema = z.object({
 })
 
 export const instanceUpdatePayloadSchema = z.object({
-  name: z.string().optional(),
+  // trim 后 min(1)：实例名首尾空白在写入侧一律归一化——库里的名字是卸载/恢复等
+  // 破坏性操作比对的确认值，存成带空格的形态会让用户按界面所见的名字永远确认不上
+  name: z.string().trim().min(1).optional(),
   description: z.string().optional(),
   javaPath: z.string().optional(),
   maxMemory: z.string().optional(),
@@ -139,7 +141,8 @@ export type LogEntry = z.infer<typeof logEntrySchema>
  *  isValidJavaExecutable 白名单分支）；maxMemory/minMemory/name 锁定 string——null 原行为
  *  会写入 DB 并导致响应侧 instanceStatusSchema 漂移，属本次收口治理目标） */
 export const instanceSettingsRequestBodySchema = z.object({
-  name: z.string().optional(),
+  // 与 instanceUpdatePayloadSchema.name 同口径（写入侧归一化）；trim 后为空视为无效
+  name: z.string().trim().min(1, 'name 不能为空或纯空白').optional(),
   description: z.string().nullable().optional(),
   javaPath: z.string().nullable().optional(),
   maxMemory: z.string().optional(),
@@ -187,3 +190,32 @@ export type InstanceStartRequestBody = z.infer<typeof instanceStartRequestBodySc
 export type InstanceCommandRequestBody = z.infer<typeof instanceCommandRequestBodySchema>
 export type InstancePropertiesRequestBody = z.infer<typeof instancePropertiesRequestBodySchema>
 export type InstanceEulaRequestBody = z.infer<typeof instanceEulaRequestBodySchema>
+
+// ---------------------------------------------------------------------------
+// 卸载实例（issue 486 收口的同一范式，见上）
+// 破坏性端点：实例名确认由服务端强制（前端弹窗的输入只存在于客户端，直连 API
+// 的调用方此前可无确认删除），备份目录按设计保留，故成功响应回报保留内容。
+// ---------------------------------------------------------------------------
+
+/** DELETE /instances/:id 请求体：confirmName 为实例名。本 schema 只锁类型（必须是字符串），
+ *  **不设最小长度**：升级前库里既可能存着带首尾空白的旧值、也可能存着空名旧值，两者都只能靠
+ *  空/空白入参确认，故归一化与相等判定全部由路由层承担（两侧 trim 后全等）。
+ *  acknowledgeIrreversible 仅在实例没有任何备份时才被要求为 true */
+export const instanceDeleteRequestBodySchema = z.object({
+  confirmName: z.string({
+    required_error: 'confirmName is required',
+    invalid_type_error: 'confirmName must be a string',
+  }),
+  acknowledgeIrreversible: z.boolean().optional(),
+})
+
+/** DELETE /instances/:id 成功响应：删除后仍保留在磁盘上的备份快照信息 */
+export const instanceDeleteResponseSchema = z.object({
+  /** 保留的备份（快照目录）总份数 */
+  retainedBackupCount: z.number(),
+  /** 最近若干条快照目录名（按修改时间倒序，超出上限的只计数量不列名） */
+  retainedBackupNames: z.array(z.string()),
+})
+
+export type InstanceDeleteRequestBody = z.infer<typeof instanceDeleteRequestBodySchema>
+export type InstanceDeleteResponse = z.infer<typeof instanceDeleteResponseSchema>

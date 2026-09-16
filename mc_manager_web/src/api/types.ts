@@ -21,6 +21,7 @@ export type { DiskInfo, DiskUsage, SystemStats, UpdateCheckResult } from '@mc-co
 
 // ── 实例 ──
 export type { InstanceSummary, InstanceStatus, InstanceUpdatePayload, OverviewData, LogEntry } from '@mc-commander/schemas'
+export type { InstanceDeleteRequestBody, InstanceDeleteResponse } from '@mc-commander/schemas'
 
 // ── 天气（从 player 模块导出） ──
 export type { WeatherType } from '@mc-commander/schemas'

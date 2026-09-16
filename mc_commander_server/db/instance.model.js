@@ -80,11 +80,26 @@ export class InstanceModel {
     const modLoader = instanceData.type ? capitalizeFirst(instanceData.type) : 'Vanilla';
     const port = instanceData.port !== undefined ? instanceData.port : 25565;
 
+    // 窄列 upsert：整行覆盖（INSERT OR REPLACE）在 id 冲突时先删后插，未列出的列
+    // （description/status/start_command/auto_start/auto_restart/total_uptime/
+    // jvm_args）会被静默清空或重置、created_at 被重置；这些列只由 update() 维护，
+    // create() 一律不得回退它们。范式与 db/admin.model.js 的窄列 UPDATE 一致。
     db.prepare(`
-      INSERT OR REPLACE INTO instances (
+      INSERT INTO instances (
         id, name, mod_loader, jar_file, java_path, max_memory, min_memory,
         server_path, mc_version, port
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        name = excluded.name,
+        mod_loader = excluded.mod_loader,
+        jar_file = excluded.jar_file,
+        java_path = excluded.java_path,
+        max_memory = excluded.max_memory,
+        min_memory = excluded.min_memory,
+        server_path = excluded.server_path,
+        mc_version = excluded.mc_version,
+        port = excluded.port,
+        updated_at = CURRENT_TIMESTAMP
     `).run(
       instanceData.id,
       instanceData.name,

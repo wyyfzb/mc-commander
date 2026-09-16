@@ -183,6 +183,25 @@ describe('status 输入侧契约 - PUT /instances/:id（issue 486）', () => {
     expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({ action: AuditActions.INSTANCE_UPDATE }));
   });
 
+  it('name 首尾空白在写入侧归一化：落库与内存同步的均为 trim 后的值', async () => {
+    const res = await request(app).put('/api/v1/instances/s1').send({ name: '  Steve 的服  ' });
+
+    expect(res.status).toBe(200);
+    // 库里的名字是卸载/备份恢复的确认值：存成带空格的形态会让用户按界面所见的
+    // 名字永远确认不上，实例再也删不掉
+    expect(InstanceModel.update).toHaveBeenCalledWith('s1', { name: 'Steve 的服' });
+    expect(instance.name).toBe('Steve 的服');
+  });
+
+  it('name trim 后为空 → 400（不落库空串/纯空白）', async () => {
+    const res = await request(app).put('/api/v1/instances/s1').send({ name: '   ' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe(40000);
+    expect(res.body.details.map((d) => d.path)).toContain('name');
+    expect(InstanceModel.update).not.toHaveBeenCalled();
+  });
+
   it('startCommand 传 null → 清除语义保持（遗留旧命令迁移途径不变）', async () => {
     instance.startCommand = 'java -jar legacy.jar';
     const res = await request(app).put('/api/v1/instances/s1').send({ startCommand: null });
