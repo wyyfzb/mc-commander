@@ -860,4 +860,6 @@ export const handlers = [
   http.get('*/api/v1/auth/totp/status', () =>
     ok({ enabled: false, confirmedAt: null, recoveryCodesRemaining: 0 }),
   ),
+  // 部署能力（默认 API Key 通道开放；关闭态由用例覆写为 apiKeyEnabled: false）
+  http.get('*/api/v1/auth/capabilities', () => ok({ apiKeyEnabled: true })),
 ]

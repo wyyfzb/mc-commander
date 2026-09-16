@@ -178,6 +178,15 @@ Authorization: Bearer <session-token>
   设 `API_KEY_ENABLED=false` 可整体关闭该通道（HTTP 与 WebSocket 一律 403 并提示改用会话
   登录，`rotate-key` 同样 403 且**不写 `.env`**；`.env` 中的哈希保留不动，设回 `true` 即恢复。
   取值 `true`/`false`/`1`/`0`，大小写与首尾空格不敏感，其它取值启动即报错）。
+  该 Key 是**单例全局凭据：无 scope、无过期、权限等同于管理员，且无条件绕过两步验证**
+  （`middleware/auth.js` 的 API Key 分支直接放行，不要求 `totpCode`——刻意保住无人值守的
+  自动化）。定位与操作纪律见 [SECURITY.md](../SECURITY.md) 的「API Key 的定位与信任模型」。
+- **部署能力探测**：`GET /api/v1/auth/capabilities` 返回 `{ apiKeyEnabled }`（认证域内，
+  未认证 401）。面板据此隐藏 `rotate-key` 入口；该开关是部署配置，未认证可达的
+  `/auth/status` 不回传任何配置面。设置页以**面板地址**为键探测：地址停止输入后落定
+  （约 300ms 防抖）才发请求，且表单未指明地址时（空串 = 同源默认值）**不发**——空地址探测会把
+  同源 origin 误当成会话签发面板。响应不可判读、请求失败或 40103 一律按「未知」处理：入口保持
+  可见（只有服务端明确返回 `apiKeyEnabled: false` 才隐藏），且探测**不改变本机登录态**。
 - **管理员会话**：`POST /api/v1/auth/setup` 首次设置管理员密码，`POST /api/v1/auth/login`
   换取令牌，`PUT /api/v1/auth/password` 改密；令牌仅以 SHA-256 落库，滑动有效期默认 7 天
   （`ADMIN_SESSION_TTL_HOURS`），自创建起 30 天强制重登（`ADMIN_SESSION_ABSOLUTE_TTL_DAYS`）。

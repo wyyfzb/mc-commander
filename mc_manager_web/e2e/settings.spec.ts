@@ -26,6 +26,18 @@ async function setupConnection(page: Page) {
   })
 }
 
+/**
+ * 把能力探测切到「API Key 通道关闭」态。
+ *
+ * 构造方式：mock 按请求头 `x-mock-api-key-enabled: 0` 判定（见 scripts/mock-server.mjs）。
+ * 之所以不在服务端启动时定死：Playwright 的 webServer 前后端共用一轮，环境变量改不了，
+ * 而同一 spec 文件里真假两态必须都能跑（false 态结构性不可达的夹具等于没有防线）。
+ * 只补一个请求头，不伪造响应体——走的仍是 mock 的真实应答路径。
+ */
+async function mockApiKeyChannel(page: Page, enabled: boolean) {
+  await page.setExtraHTTPHeaders({ 'x-mock-api-key-enabled': enabled ? '1' : '0' })
+}
+
 test.describe('设置页', () => {
   test('子导航：六子页 + 默认重定向连接设置', async ({ page }) => {
     await setupConnection(page)
@@ -97,6 +109,46 @@ test.describe('设置页', () => {
     expect(await page.evaluate(() => localStorage.getItem('mcs-session'))).toContain(
       'e2e-foreign-session-token',
     )
+  })
+
+  test('连接设置：API Key 通道开启 → 轮换入口可见可点', async ({ page }) => {
+    await setupConnection(page)
+    await mockApiKeyChannel(page, true)
+    await page.goto('/settings/connection')
+
+    // 能力探测只认「已落定的面板地址」（空地址是同源默认值，刻意不探测，见 useApiKeyCapabilities），
+    // 故先指明面板地址；地址取当前页 origin（端口随 MOCK_PORT/DEV_PORT 泳道变化）
+    await page.getByRole('textbox', { name: '面板地址' }).fill(new URL(page.url()).origin)
+
+    // 打开态：入口在，且带凭据定位说明（机器凭据 / 无过期 / 等同管理员）
+    await expect(page.getByRole('button', { name: '重新生成' })).toBeVisible()
+    await expect(page.getByText(/权限等同于管理员/)).toBeVisible()
+    await maybeShot(page, 'settings-connection-api-key-enabled-dark.png')
+
+    // 亮色复读：同一判定在另一主题下不得漂移（截图供视觉审查，判定本身与主题无关）
+    await page.getByRole('button', { name: '切换到亮色主题' }).click()
+    await expect(page.getByRole('button', { name: '重新生成' })).toBeVisible()
+    await maybeShot(page, 'settings-connection-api-key-enabled-light.png')
+  })
+
+  test('连接设置：API Key 通道关闭（API_KEY_ENABLED=false）→ 轮换入口不可见并说明原因', async ({ page }) => {
+    await setupConnection(page)
+    await mockApiKeyChannel(page, false)
+    await page.goto('/settings/connection')
+    await page.getByRole('textbox', { name: '面板地址' }).fill(new URL(page.url()).origin)
+
+    // 关闭态：入口消失 + 关闭原因可见；凭据输入框保留（已有 Key 仍可粘贴保存）。
+    // 用 toHaveCount(0) 而非 toBeHidden：后者对「元素根本不存在」同样通过，会放过回归
+    await expect(page.getByText(/部署配置已关闭 API Key 通道/)).toBeVisible()
+    await expect(page.getByRole('button', { name: '重新生成' })).toHaveCount(0)
+    await expect(page.getByRole('textbox', { name: 'API Key' })).toBeVisible()
+    await maybeShot(page, 'settings-connection-api-key-disabled-dark.png')
+
+    // 亮色复读：关闭态在另一主题下同样不显示入口
+    await page.getByRole('button', { name: '切换到亮色主题' }).click()
+    await expect(page.getByText(/部署配置已关闭 API Key 通道/)).toBeVisible()
+    await expect(page.getByRole('button', { name: '重新生成' })).toHaveCount(0)
+    await maybeShot(page, 'settings-connection-api-key-disabled-light.png')
   })
 
   test('通用设置：自动重启开关 + 主题切换', async ({ page }) => {

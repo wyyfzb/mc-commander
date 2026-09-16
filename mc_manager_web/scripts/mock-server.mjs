@@ -467,6 +467,23 @@ const server = createServer((req, res) => {
       const fresh = new URL(url, 'http://x').searchParams.get('fresh') === '1'
       return res.end(ok({ hasPassword: !fresh }))
     }
+    if (path === '/api/v1/auth/capabilities') {
+      // 部署能力探测（服务端 API_KEY_ENABLED）。默认开放——多数 spec 走 API Key 通道。
+      //
+      // false 态有三条构造路径，均为「按请求」判定（不是启动时一次性读），
+      // 故同一轮 e2e 里真假两态可并存：
+      //   ① request header `x-mock-api-key-enabled: 0`（e2e 用：page.setExtraHTTPHeaders 注入）
+      //   ② query `?apiKeyEnabled=0`
+      //   ③ env `MOCK_API_KEY_ENABLED=false`
+      // 之所以不把开关定死在启动参数：Playwright 的 webServer 前后端共用一轮，环境变量改不了，
+      // 而「通道关闭 ⇒ 入口不可见」必须真的被 e2e 跑到（夹具里结构性不可达的 false 态等于没有防线）。
+      const headerFlag = (req.headers['x-mock-api-key-enabled'] ?? '').toString().trim()
+      const queryFlag = new URL(url, 'http://x').searchParams.get('apiKeyEnabled') ?? ''
+      const envFlag = (process.env.MOCK_API_KEY_ENABLED ?? 'true').trim()
+      const raw = headerFlag || queryFlag || envFlag
+      const apiKeyEnabled = !['0', 'false', 'no', 'off'].includes(raw.toLowerCase())
+      return res.end(ok({ apiKeyEnabled }))
+    }
     if (path === '/api/v1/auth/login' && req.method === 'POST') {
       const mockSession = { token: MOCK_SESSION_TOKEN, sessionId: 'sess-mock-1', expiresAt: new Date(Date.now() + 7 * 86400000).toISOString() }
       try {

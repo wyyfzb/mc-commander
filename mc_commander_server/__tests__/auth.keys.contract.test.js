@@ -30,6 +30,7 @@ import { createKeyRoutes } from '../routes/keys.js';
 import { errorHandler } from '../middleware/error_handler.js';
 import {
   authStatusResponseSchema,
+  authCapabilitiesResponseSchema,
   authSetupResponseSchema,
   authSessionResponseSchema,
   authPasswordChangeResponseSchema,
@@ -100,6 +101,26 @@ describe('auth/keys 响应契约（validatedSuccess 观测）', { timeout: 15_00
     const res = await request(app).post('/api/v1/auth/login').send({ password: SETUP_PASSWORD });
     expect(res.status).toBe(200);
     expect(authSessionResponseSchema.safeParse(res.body.data).success).toBe(true);
+  });
+
+  it('GET /auth/capabilities：能力探测响应可 parse（apiKeyEnabled 单字段）', async () => {
+    const token = await setupAndLogin();
+    const originalEnabled = config.apiKeyEnabled;
+    try {
+      for (const enabled of [true, false]) {
+        config.apiKeyEnabled = enabled;
+        const res = await request(app)
+          .get('/api/v1/auth/capabilities')
+          .set('Authorization', `Bearer ${token}`);
+        expect(res.status).toBe(200);
+        const parsed = authCapabilitiesResponseSchema.safeParse(res.body.data);
+        expect(parsed.success).toBe(true);
+        expect(parsed.data.apiKeyEnabled).toBe(enabled);
+        expect(Object.keys(res.body.data)).toEqual(['apiKeyEnabled']);
+      }
+    } finally {
+      config.apiKeyEnabled = originalEnabled;
+    }
   });
 
   it('PUT /auth/password：改密响应（ok 恒 true + kickedSessions 数值）', async () => {

@@ -4,6 +4,7 @@ import config from '../config.js';
 import { error, ErrorCodes } from '../utils/response.js';
 import {
   authStatusResponseSchema,
+  authCapabilitiesResponseSchema,
   authSetupResponseSchema,
   authSessionResponseSchema,
   authPasswordChangeResponseSchema,
@@ -41,6 +42,9 @@ import { generateRecoveryCodes, hashRecoveryCode } from '../utils/recovery-codes
  * 管理员认证路由（安全主线：单管理员密码登录）
  *
  * - GET    /auth/status      公开  探测是否已设密（登录页首屏）
+ * - GET    /auth/capabilities 认证 部署能力探测（当前仅 apiKeyEnabled；据此隐藏
+ *                                  API Key 轮换入口——该开关是部署配置，公开的 status
+ *                                  刻意不回传配置面）
  * - POST   /auth/setup       公开  首访设密（仅未设密时可用；成功即自动登录）
  *                                  所有权证明约定（#309）：.env 配置了 SETUP_TOKEN 时（公网
  *                                  部署，部署脚本首次部署自动生成），请求必须携带
@@ -184,6 +188,18 @@ export function createAuthRoutes() {
   // GET /api/v1/auth/status —— 公开：登录页首屏探测
   router.get('/auth/status', (req, res) => {
     res.json(validatedSuccess(authStatusResponseSchema, { hasPassword: AdminAccountModel.isConfigured() }));
+  });
+
+  // GET /api/v1/auth/capabilities —— 认证：部署能力探测
+  //
+  // 为什么单开一个受保护端点、而不是往公开的 /auth/status 加字段：那是未认证可达的
+  // 信息面，部署配置不该出现在那里（status 只答「是否已设密」）。本端点落在
+  // authMiddleware 的公开白名单之外，未认证一律 401。
+  //
+  // 只暴露 apiKeyEnabled 一个布尔量：客户端据此决定「API Key 轮换」入口是否可见。
+  // 部署配置的其余部分（路径、端口、后端开关等）不属本契约，勿顺手加入。
+  router.get('/auth/capabilities', (req, res) => {
+    res.json(validatedSuccess(authCapabilitiesResponseSchema, { apiKeyEnabled: config.apiKeyEnabled }));
   });
 
   // POST /api/v1/auth/setup —— 公开：首访设密（幂等防护：已设密 409；所有权证明：SETUP_TOKEN）

@@ -7,6 +7,8 @@
  *   用户确认后仍可继续；局域网/本机地址不打扰）
  * - 测试连接：用表单值临时构造 config 调 GET /api/v1/overview，不写 store；
  *   保存才 setConfig（normalizeBaseUrl 默认 https + 去尾斜杠）
+ * - API Key 轮换入口的可见性由服务端能力探测（GET /auth/capabilities 的 apiKeyEnabled）决定：
+ *   开关关闭时隐藏入口，未知态（加载中/探测失败）保持可见
  * - 设计纪律：实底卡片（bg-mcs-bg-muted）+ --mcs-* token；禁硬编码色值/间距/圆角
  */
 import { useState } from 'react'
@@ -23,8 +25,10 @@ import { cn } from '@/lib/utils'
 import { ApiError, apiPost, apiRequest } from '@/api/client'
 import type { OverviewData } from '@/api/types'
 import { ErrorCode, getFriendlyErrorText } from '@/api/errors'
+import { useApiKeyCapabilities } from '@/api/queries'
 import { normalizeBaseUrl, needsHttpPlaintextWarning, sessionAppliesToPanel } from '@/lib/mc-connection'
 import { useUnsavedGuard } from '@/hooks/use-unsaved-guard'
+import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { useAuthStore } from '@/stores/auth'
 import { useConnectionStore } from '@/stores/connection'
 import type { ConnectionFormProps } from './contracts'
@@ -32,6 +36,9 @@ import { toneClasses } from '@/components/mcs/tone'
 
 /** 明文警告确认后待执行的挂起动作（null = 无弹窗） */
 type PendingAction = 'save' | 'test' | null
+
+/** 地址停止输入后多久视为落定（能力探测的取值点；见 formFields 上方注释） */
+const ADDRESS_SETTLE_DELAY_MS = 300
 
 export function ConnectionForm({ variant = 'settings', headingAs = 'h1', onSaved }: ConnectionFormProps) {
   /** 标题标签由调用点决定：同屏是否已有别的 h1 只有页面知道，组件内不能写死 */
@@ -43,6 +50,12 @@ export function ConnectionForm({ variant = 'settings', headingAs = 'h1', onSaved
   const session = useAuthStore((s) => s.session)
 
   const [url, setUrl] = useState(storedBaseUrl)
+  /**
+   * 能力探测专用的稳定地址：逐击键的中间态（`h`、`192.168.1.100:` …）各自都是一个新
+   * query key。实测逐字输入一个地址（击键间隔 30ms）：不落定 = 19 发注定失败的请求，
+   * 连地址门槛也不加 = 27 发。停止输入 ADDRESS_SETTLE_DELAY_MS 后落定。
+   */
+  const settledUrl = useDebouncedValue(url, ADDRESS_SETTLE_DELAY_MS)
   const [apiKey, setApiKey] = useState(storedApiKey)
   const [showApiKey, setShowApiKey] = useState(false)
   const [testing, setTesting] = useState(false)
@@ -65,6 +78,21 @@ export function ConnectionForm({ variant = 'settings', headingAs = 'h1', onSaved
    */
   const sessionApplies = sessionAppliesToPanel(session, url)
   const foreignSession = Boolean(session?.token) && !sessionApplies
+
+  /**
+   * API Key 通道是否开放（服务端部署开关 API_KEY_ENABLED）。按**表单草稿**取面板身份与
+   * 凭据：用已存值会让「填完 Key 才拿到真实答案」的路径失效。
+   *
+   * 地址取**停止输入后落定**的值（防抖；见 ADDRESS_SETTLE_DELAY_MS）：逐击键取值实测会让
+   * 一次地址输入打出 19 发请求，落定点的语义也正是「用户已经指明了面板」。
+   *
+   * 已知态才隐藏轮换入口：`data?.apiKeyEnabled === false` 是唯一的隐藏条件。加载中、
+   * 请求失败、响应不可判读（未知态）一律保持可见——隐藏是不可自证的，误隐藏会让用户以为
+   * 没有该能力且无从恢复；误显示的最坏结果只是点到一次 fail-closed 的 403（已有通道关闭文案）。
+   * 通道关闭时凭据本身仍可能有效（Key 照常可粘贴，只是无 API Key 鉴权通道），故输入框不隐藏。
+   */
+  const capabilities = useApiKeyCapabilities(settledUrl, apiKey)
+  const apiKeyChannelDisabled = capabilities.data?.apiKeyEnabled === false
 
   // 状态行即时反馈：保存过（ready）或测试连接成功 → 已连接
   const isConnected = status === 'ready' || testedOk
@@ -244,15 +272,17 @@ export function ConnectionForm({ variant = 'settings', headingAs = 'h1', onSaved
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
           <Label htmlFor="connection-api-key">API Key</Label>
-          <button
-            type="button"
-            onClick={() => void handleRotate()}
-            disabled={rotating || testing || saving}
-            className="inline-flex items-center gap-1 rounded-mcs-sm text-mcs-2xs font-medium text-mcs-text-muted transition-colors hover:text-mcs-text-default disabled:opacity-50"
-          >
-            <RefreshCw className={cn('size-3', rotating && 'animate-spin')} aria-hidden />
-            {rotating ? '生成中...' : '重新生成'}
-          </button>
+          {!apiKeyChannelDisabled && (
+            <button
+              type="button"
+              onClick={() => void handleRotate()}
+              disabled={rotating || testing || saving}
+              className="inline-flex items-center gap-1 rounded-mcs-sm text-mcs-2xs font-medium text-mcs-text-muted transition-colors hover:text-mcs-text-default disabled:opacity-50"
+            >
+              <RefreshCw className={cn('size-3', rotating && 'animate-spin')} aria-hidden />
+              {rotating ? '生成中...' : '重新生成'}
+            </button>
+          )}
         </div>
         <div className="relative">
           <Input
@@ -281,11 +311,25 @@ export function ConnectionForm({ variant = 'settings', headingAs = 'h1', onSaved
         {keyError !== '' && (
           <p className="text-mcs-xs text-mcs-error-fg">{keyError}</p>
         )}
-        <p className="text-mcs-xs text-mcs-text-muted">
-          {sessionApplies
-            ? '已登录：浏览器用登录会话鉴权，此处可留空；API Key 是无登录会话的客户端（自动化脚本等）用的凭据'
-            : '当前地址没有可用的登录会话：必须填写 API Key 才能连接'}
-        </p>
+        {apiKeyChannelDisabled ? (
+          <p className="text-mcs-xs text-mcs-text-muted">
+            当前面板的部署配置已关闭 API Key 通道：Key 在 HTTP 与 WebSocket 上一律被拒绝，
+            轮换入口已隐藏（值仍保留在服务端 .env，改回开启即恢复）。
+          </p>
+        ) : (
+          <>
+            <p className="text-mcs-xs text-mcs-text-muted">
+              {sessionApplies
+                ? '已登录：浏览器用登录会话鉴权，此处可留空。'
+                : '当前地址没有可用的登录会话：必须填写 API Key 才能连接。'}
+            </p>
+            <p className="text-mcs-xs text-mcs-text-muted">
+              API Key 是没有登录会话的客户端（自动化脚本、外部集成）用的机器凭据：单例全局、
+              无过期、权限等同于管理员（可访问全部接口），轮换后旧 Key 立即失效；
+              在服务端 .env 设 API_KEY_ENABLED=false 可整体关闭该通道。
+            </p>
+          </>
+        )}
       </div>
 
       <div className="flex gap-3">

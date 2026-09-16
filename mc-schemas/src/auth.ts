@@ -25,6 +25,21 @@ export const authStatusResponseSchema = z.object({
   hasPassword: z.boolean(),
 })
 
+// ---------------------------------------------------------------------------
+// 部署能力探测（认证域内）
+//
+// 为什么需要它：API_KEY_ENABLED 是服务端部署配置，公开的 auth/status 刻意不回传
+// 任何配置面；而「用 API Key 打通」不是它的替代信号——通道关闭时 fail-closed 只拒绝
+// **携带 Key** 的请求，不携带 Key 的公开端点照常 200，据此判断会得到一个随机消失的入口。
+// 故把该开关放进受保护的独立端点：路由挂在全局认证中间件之后，未认证不可达。
+// 契约只暴露这一个布尔量，部署配置（路径/端口/后端开关）一律不进响应面。
+// ---------------------------------------------------------------------------
+
+/** 部署能力：API Key 通道是否开放（关闭时 rotate-key 及 Key 鉴权一律 403） */
+export const authCapabilitiesResponseSchema = z.object({
+  apiKeyEnabled: z.boolean(),
+})
+
 /** 改密成功响应（会话通道与 API Key 通道同构：kickedSessions 为被踢会话数） */
 export const authPasswordChangeResponseSchema = z.object({
   ok: z.literal(true),
@@ -119,6 +134,7 @@ export type AuthTotpDisableResponse = z.infer<typeof authTotpDisableResponseSche
 export type AuthSessionResponse = z.infer<typeof authSessionResponseSchema>
 export type AuthSetupResponse = z.infer<typeof authSetupResponseSchema>
 export type AuthStatusResponse = z.infer<typeof authStatusResponseSchema>
+export type AuthCapabilitiesResponse = z.infer<typeof authCapabilitiesResponseSchema>
 export type AuthPasswordChangeResponse = z.infer<typeof authPasswordChangeResponseSchema>
 export type AuthLogoutResponse = z.infer<typeof authLogoutResponseSchema>
 export type AuthSessionItem = z.infer<typeof authSessionItemSchema>

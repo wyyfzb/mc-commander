@@ -5,8 +5,9 @@
  *  - password/logout/sessions 需认证（Bearer 会话或 X-API-Key 双通道均可）
  * 类型与信封字段 camelCase 对齐服务端响应（token/sessionId/expiresAt/userAgent…）
  */
-import { apiGet, apiPost, apiPut, apiDelete } from './client'
+import { apiGet, apiPost, apiPut, apiDelete, apiRequest } from './client'
 import type { ConnectionConfig } from './client'
+import type { AuthCapabilitiesResponse } from '@mc-commander/schemas'
 import type { StoredSession } from '@/stores/auth'
 
 export interface AuthStatusData {
@@ -121,6 +122,37 @@ export interface TotpConfirmData {
 /** GET /auth/totp/status（认证）：两步验证状态 */
 export function fetchTotpStatus(config: ConnectionConfig, signal?: AbortSignal): Promise<TotpStatusData> {
   return apiGet<TotpStatusData>('/api/v1/auth/totp/status', config, signal)
+}
+
+/**
+ * 部署能力（服务端按部署配置决定，客户端无法自行推断）
+ *
+ * `apiKeyEnabled=false` 时 API Key 通道在 HTTP 与 WS 上一律拒绝：`rotate-key` 403 且不写
+ * `.env`，携带 Key 的请求也 403——此时轮换入口应当隐藏（点它必然失败）。
+ *
+ * 类型直接取自契约包（与 api/types.ts 各域同口径），不在此另写字段副本。
+ */
+export type AuthCapabilitiesData = AuthCapabilitiesResponse
+
+/**
+ * GET /auth/capabilities（认证）：部署能力探测。
+ * 不在公开白名单内 ⇒ 未认证 401；调用方须先有可用凭据（会话或 API Key）。
+ *
+ * `ignoreSessionExpiry`：本调用的地址很可能是用户**刚输入、还没验证过**的面板。沿用的双通道
+ * 凭据注入会把请求变成一次「凭据归属判定」——未记签发面板的旧会话会带上 Bearer，目标若是别的
+ * 面板/同址换了后端就回 40103；而 40103 的默认处置是**全局登出**，会把人从连接表单里直接弹走。
+ * 探测只是表单内的辅助判定，与连接测试同取舍：即使 40103 是真的，也只该在表单内呈现为
+ * 「未知态」（入口保持可见），不改变本机登录态。
+ */
+export function fetchAuthCapabilities(
+  config: ConnectionConfig,
+  signal?: AbortSignal,
+): Promise<AuthCapabilitiesData> {
+  return apiRequest<AuthCapabilitiesData>('/api/v1/auth/capabilities', config, {
+    method: 'GET',
+    signal,
+    ignoreSessionExpiry: true,
+  })
 }
 
 /** POST /auth/totp/enroll（认证）：生成候选密钥 + 二维码 */

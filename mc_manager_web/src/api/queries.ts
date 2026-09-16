@@ -6,7 +6,9 @@
  */
 import { useQuery } from '@tanstack/react-query'
 import { apiGet } from './client'
+import { fetchAuthCapabilities } from './auth'
 import { useConnectionStore } from '@/stores/connection'
+import { useAuthStore } from '@/stores/auth'
 import type { InstanceStatus, InstanceSummary, LogEntry, OverviewData, SystemStats, UpdateCheckResult } from './types'
 import { apiGetAuditLogsPage, apiGetCommandHistoryPage, type AuditQueryParams } from './audit'
 
@@ -49,6 +51,12 @@ export const queryKeys = {
   authSessions: () => [...queryKeys.all, 'auth-sessions'] as const,
   /** 两步验证状态（账号与安全面板；挂靠/关闭成功后失效重取） */
   totpStatus: () => [...queryKeys.all, 'totp-status'] as const,
+  /**
+   * 部署能力探测（当前仅 apiKeyEnabled）。按**面板身份**细分：能力属于面板而非本机，
+   * 换地址必须重取。凭据刻意不进 key——key 会进 devtools 与持久化缓存。
+   */
+  authCapabilities: (baseUrl: string, credential: string) =>
+    [...queryKeys.all, 'auth-capabilities', baseUrl, credential] as const,
 }
 
 /** 面板概览（含云服务器系统级资源；未配置连接时禁用） */
@@ -141,4 +149,50 @@ export function useCheckUpdate() {
     enabled: config.status === 'ready',
     staleTime: 3_600_000,
   })
+}
+
+/**
+ * 部署能力探测：服务端 API Key 通道是否开放（`GET /auth/capabilities`）。
+ *
+ * 为什么不吃 store 而由调用方传面板地址与 API Key：连接表单在**保存前**就要判定能力，
+ * 而这一刻 store 里还是旧地址/旧凭据——用表单草稿值才能让用户填完 Key 后立刻看到真结果。
+ * 地址应由调用方给**停止输入后落定**的值（连接表单用 useDebouncedValue）。实测逐字输入
+ * `https://192.168.1.100:25566`（击键间隔 30ms）：不落定 = 19 发，连地址门槛也不加 = 27 发
+ * ——每个中间态都是新的 query key，落定是让请求数从「按键数」回到 1 的必要条件；
+ * 门槛另担一项独占职责：空地址不发请求（见 isFetchableBaseUrl）。
+ *
+ * `credential` 只参与 query key（用于换凭据后重取），不进请求配置——请求凭据由 apiRequest
+ * 按双通道规则注入（会话优先）。
+ *
+ * `retry: false`：探测失败最多两类——地址不对（网络错误）或凭据还不对（401），
+ * 两者都不会因重试变好，每次落定最多打一发，不在用户输入过程中放大失败流量。
+ */
+export function useApiKeyCapabilities(
+  baseUrl: string,
+  credential: string,
+  signal?: AbortSignal,
+) {
+  const session = useAuthStore((s) => s.session)
+  return useQuery({
+    queryKey: queryKeys.authCapabilities(baseUrl, credential || session?.token || ''),
+    queryFn: () => fetchAuthCapabilities({ baseUrl, apiKey: credential }, signal),
+    enabled: (Boolean(credential) || Boolean(session?.token)) && isFetchableBaseUrl(baseUrl),
+    staleTime: 5 * 60_000,
+    retry: false,
+  })
+}
+
+/** 面板地址是否已落定到可请求形态（空串与输入中间态都不发探测请求） */
+function isFetchableBaseUrl(baseUrl: string): boolean {
+  // 空串 = 同源（onboarding 与 dev 的默认形态）。刻意不探测：那是「还没指明面板」的状态，
+  // 请求会打到本机 origin 并让 client 把「令牌被该地址接受」回填成会话的签发面板
+  // （backfillSessionPanel），把一个尚未选定的默认值钉成面板身份。
+  if (baseUrl === '') return false
+  if (!/^https?:\/\//.test(baseUrl)) return false
+  try {
+    // 无主机或主机里还夹着非法字符（`192.168.1.100:` 这类中间态）即判为草稿
+    return new URL(baseUrl).hostname !== ''
+  } catch {
+    return false
+  }
 }

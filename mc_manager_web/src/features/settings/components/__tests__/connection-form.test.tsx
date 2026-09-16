@@ -10,14 +10,16 @@
  * - 标题层级（headingAs）：设置子页默认 h1，引导页传 h2 让位给页面级 h1
  * mock 数据为结构占位（虚构地址/密钥），严禁真实服务器信息
  */
-import { describe, it, expect, beforeEach, afterAll, beforeAll, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, afterAll, beforeAll, vi } from 'vitest'
 import { act, cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster, toast as sonnerToast } from 'sonner'
 import { HttpResponse, http } from 'msw'
 import { setupServer } from 'msw/node'
 import { handlers, mockOverview } from '@/test/mocks/handlers'
+import { authCapabilitiesResponseSchema } from '@mc-commander/schemas'
 import { useAuthStore, SESSION_EXPIRED_EVENT } from '@/stores/auth'
 import { useConnectionStore } from '@/stores/connection'
 import { ConnectionForm } from '../connection-form'
@@ -25,6 +27,8 @@ import { ConnectionForm } from '../connection-form'
 const server = setupServer(...handlers)
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
 afterAll(() => server.close())
+// 用例级 server.use 覆写必须在每例后回收：否则前一例的「挂起/401/403」应答会漏到后一例
+afterEach(() => server.resetHandlers())
 
 function okEnvelope(data: unknown) {
   return HttpResponse.json({
@@ -36,13 +40,22 @@ function okEnvelope(data: unknown) {
   })
 }
 
+/** 错误信封（code 用服务端错误码，如 40103 会话过期） */
+function okEnvelopeError(code: number, message: string) {
+  return HttpResponse.json(
+    { status: 'error', code, message, details: null, timestamp: new Date().toISOString() },
+    { status: 400 },
+  )
+}
+
+/** 渲染表单；返回 QueryClient 供「探测真正落定」类断言使用（不靠固定睡眠等结果） */
 function renderForm(props: {
   variant?: 'settings' | 'onboarding'
   headingAs?: 'h1' | 'h2'
   onSaved?: () => void
 } = {}) {
   const onSaved = props.onSaved ?? vi.fn()
-  // useUnsavedGuard 依赖 data router 上下文（useBlocker）
+  // useUnsavedGuard 依赖 data router 上下文（useBlocker）；能力探测查询需 QueryClient
   const router = createMemoryRouter(
     [
       {
@@ -54,13 +67,62 @@ function renderForm(props: {
     ],
     { initialEntries: ['/'] },
   )
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
-    <>
+    <QueryClientProvider client={queryClient}>
       <RouterProvider router={router} />
       <Toaster />
-    </>,
+    </QueryClientProvider>,
   )
-  return { onSaved }
+  return { onSaved, queryClient }
+}
+
+/** 只提供能力探测的关闭态（其余端点点默认 handler） */
+function useDisabledApiKeyChannel() {
+  server.use(http.get('*/api/v1/auth/capabilities', () => okEnvelope({ apiKeyEnabled: false })))
+}
+
+/**
+ * 等能力探测**真正落定**（请求已发出且客户端已消费响应）。
+ *
+ * 为什么不用固定睡眠：睡眠只是「大概等到了」，响应未返回时也会通过，是假绿。
+ * 判据取 QueryClient 里**该地址那条** query 的状态（缓存里可能同时存在空地址那条
+ * 「未指明面板」的禁用条目），并顺带把消费到的 data 交回调用方，使断言能证明
+ * 「落定的正是那条响应」。
+ */
+async function waitCapabilitiesSettled(queryClient: QueryClient, baseUrl: string): Promise<unknown> {
+  await waitCapabilitiesStatus(queryClient, baseUrl, 'success')
+  return capabilitiesQuery(queryClient, baseUrl)?.state.data
+}
+
+/** 等能力探测**已失败落定**（40103 等）：同样以 query 状态为判据 */
+async function waitCapabilitiesRejected(queryClient: QueryClient, baseUrl: string): Promise<void> {
+  await waitCapabilitiesStatus(queryClient, baseUrl, 'error')
+}
+
+function capabilitiesQuery(queryClient: QueryClient, baseUrl: string) {
+  return queryClient
+    .getQueryCache()
+    .findAll()
+    .find((q) => q.queryKey[1] === 'auth-capabilities' && q.queryKey[2] === baseUrl)
+}
+
+async function waitCapabilitiesStatus(
+  queryClient: QueryClient,
+  baseUrl: string,
+  status: 'success' | 'error',
+) {
+  await vi.waitFor(
+    () => {
+      const current = capabilitiesQuery(queryClient, baseUrl)?.state.status
+      if (current !== status) {
+        throw new Error(`能力探测未落定（${baseUrl}，期望 ${status}，当前 ${current ?? 'no-query'}）`)
+      }
+    },
+    { timeout: 3000 },
+  )
+  // 等 React 把新状态渲染进 DOM（query 通知 → setState → 提交）
+  await act(async () => {})
 }
 
 beforeEach(() => {
@@ -385,17 +447,21 @@ describe('ConnectionForm 保存', () => {
 describe('ConnectionForm 登录会话凭据（有会话时 API Key 可空）', () => {
   it('无会话：Key 提示「必须填写」', () => {
     renderForm()
-    expect(screen.getByText('当前地址没有可用的登录会话：必须填写 API Key 才能连接')).toBeInTheDocument()
+    expect(screen.getByText('当前地址没有可用的登录会话：必须填写 API Key 才能连接。')).toBeInTheDocument()
   })
 
-  it('有会话：Key 提示「可留空」（会话优先于 Key）', () => {
+  it('有会话：Key 提示「可留空」（会话优先于 Key）+ 机器凭据定位说明', () => {
     setSession()
     renderForm()
     expect(
-      screen.getByText(
-        '已登录：浏览器用登录会话鉴权，此处可留空；API Key 是无登录会话的客户端（自动化脚本等）用的凭据',
-      ),
+      screen.getByText('已登录：浏览器用登录会话鉴权，此处可留空。'),
     ).toBeInTheDocument()
+    // 定位说明与代码实际行为逐条对应：单例全局 / 无过期 / 权限等同管理员 / 可整体关闭
+    const model = screen.getByText(/API Key 是没有登录会话的客户端/)
+    expect(model).toHaveTextContent('单例全局')
+    expect(model).toHaveTextContent('无过期')
+    expect(model).toHaveTextContent('权限等同于管理员（可访问全部接口）')
+    expect(model).toHaveTextContent('API_KEY_ENABLED=false 可整体关闭该通道')
   })
 
   it('有会话 + Key 留空：保存放行，请求走 Bearer 且不带 X-API-Key，写入地址且不误存空 Key', async () => {
@@ -481,7 +547,7 @@ describe('ConnectionForm 登录会话凭据（有会话时 API Key 可空）', (
     expect(screen.getByText(/当前登录会话属于/)).toBeInTheDocument()
     expect(screen.getByText('https://panel-a.example.com')).toBeInTheDocument()
     // 本地址没有可用会话 → Key 必填
-    expect(screen.getByText('当前地址没有可用的登录会话：必须填写 API Key 才能连接')).toBeInTheDocument()
+    expect(screen.getByText('当前地址没有可用的登录会话：必须填写 API Key 才能连接。')).toBeInTheDocument()
   })
 
   it('会话属于本地址（含旧会话）：不显示异面板提示', () => {
@@ -558,25 +624,27 @@ describe('ConnectionForm 重新生成 API Key', () => {
   })
 
   /**
-   * 轮换入口**不**按通道开关隐藏，且失败时给出专用文案。
-   *
-   * 为什么不做「通道关闭就隐藏入口」：该开关（`API_KEY_ENABLED`）只存在于服务端 config.js，
-   * 任何响应体都不下发（`/auth/status` 只回 hasPassword）。唯一看似可用的替代信号是
-   * 「用 API Key 握手成功」——但通道关闭时 fail-closed 只拒绝**携带 Key** 的请求，
-   * 不携带 Key 的公开端点照常 200，握手只能证明「地址可达」，据此隐藏会得到一个
-   * 在真实部署里随机消失的入口。故入口恒在，把「为什么不能用」讲清楚。
+   * 40303 的兜底：能力查询已经把入口藏掉了，但「未知态保持可见」策略下入口仍可能
+   * 被点到（查询失败/超时）——那时必须点名原因，且不写 store。
+   * 用「能力探测不可达」构造未知态（不是关闭态），才是这条路径的真实形态。
    */
-  it('轮换失败（40303 通道关闭）：入口仍可用，错误文案点名通道已关闭，且不写 store', async () => {
-    server.use(http.post('*/api/v1/rotate-key', () => HttpResponse.json({
-      status: 'error', code: 40303, message: 'API Key 通道已关闭，无法轮换；如需自动化凭据请先启用该通道', details: null,
-      timestamp: new Date().toISOString(),
-    }, { status: 403 })))
+  it('能力未知（探测失败）+ 轮换 40303：错误文案点名通道已关闭，且不写 store', async () => {
+    server.use(
+      http.get('*/api/v1/auth/capabilities', () =>
+        HttpResponse.json({ status: 'error', code: 50000, message: '服务器内部错误', details: null, timestamp: new Date().toISOString() }, { status: 500 }),
+      ),
+      http.post('*/api/v1/rotate-key', () => HttpResponse.json({
+        status: 'error', code: 40303, message: 'API Key 通道已关闭，无法轮换；如需自动化凭据请先启用该通道', details: null,
+        timestamp: new Date().toISOString(),
+      }, { status: 403 })),
+    )
     const user = userEvent.setup()
     renderForm({ variant: 'settings' })
 
     await user.type(screen.getByLabelText('面板地址'), 'https://192.168.1.100:25566')
     await user.type(screen.getByLabelText('API Key'), 'old-key-abc')
-    const rotate = screen.getByRole('button', { name: '重新生成' })
+    // 未知态（探测失败）不隐藏入口：隐藏是不可自证的，误隐藏无从恢复
+    const rotate = await screen.findByRole('button', { name: '重新生成' })
     expect(rotate).toBeEnabled()
 
     await user.click(rotate)
@@ -584,5 +652,191 @@ describe('ConnectionForm 重新生成 API Key', () => {
     expect(await screen.findByText(/API Key 通道已关闭/)).toBeInTheDocument()
     expect(screen.getByLabelText('API Key')).toHaveValue('old-key-abc')
     expect(useConnectionStore.getState().apiKey).toBe('')
+  })
+})
+
+/**
+ * 轮换入口的可见性由服务端能力探测（GET /auth/capabilities）驱动。
+ *
+ * 为什么不能省掉这次探测：API_KEY_ENABLED 只存在于服务端部署配置，客户端无法推断。
+ * 曾被考虑的替代信号是「用 API Key 握手成功」，但通道关闭时 fail-closed 只拒绝
+ * **携带 Key** 的请求（不携带 Key 的公开端点照常 200），它证明的只是「地址可达」，
+ * 据此隐藏会得到一个在真实部署里随机消失的入口——那是把不确定当确定。
+ */
+describe('ConnectionForm API Key 轮换入口的可见性', () => {
+  it('能力开启（默认）：入口可见可点', async () => {
+    useConnectionStore.setState({
+      baseUrl: 'https://192.168.1.100:25566',
+      apiKey: 'demo-key-123',
+      status: 'ready',
+    })
+    renderForm({ variant: 'settings' })
+
+    expect(await screen.findByRole('button', { name: '重新生成' })).toBeEnabled()
+    // 开启态保留凭据定位说明（机器凭据 / 无过期 / 等同管理员）
+    expect(screen.getByText(/权限等同于管理员/)).toBeInTheDocument()
+  })
+
+  it('能力关闭（apiKeyEnabled=false）：入口不可见，且给出关闭原因；凭据输入框仍在', async () => {
+    useDisabledApiKeyChannel()
+    useConnectionStore.setState({
+      baseUrl: 'https://192.168.1.100:25566',
+      apiKey: 'demo-key-123',
+      status: 'ready',
+    })
+    renderForm({ variant: 'settings' })
+
+    expect(await screen.findByText(/部署配置已关闭 API Key 通道/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '重新生成' })).not.toBeInTheDocument()
+    // 通道关闭不影响已有 Key 的粘贴与保存（Key 仍可按原样留存），只藏「生成新 Key」
+    expect(screen.getByLabelText('API Key')).toBeInTheDocument()
+  })
+
+  it('能力未知（探测挂起）：入口保持可见（不隐藏是不可自证的保守选择）', async () => {
+    server.use(http.get('*/api/v1/auth/capabilities', () => new Promise<never>(() => {})))
+    useConnectionStore.setState({
+      baseUrl: 'https://192.168.1.100:25566',
+      apiKey: 'demo-key-123',
+      status: 'ready',
+    })
+    renderForm({ variant: 'settings' })
+
+    expect(screen.getByRole('button', { name: '重新生成' })).toBeEnabled()
+    expect(screen.queryByText(/部署配置已关闭 API Key 通道/)).not.toBeInTheDocument()
+  })
+
+  it('切换面板地址：按新面板能力重新判定（能力属于面板，不属于本机）', async () => {
+    server.use(
+      http.get('*/api/v1/auth/capabilities', ({ request }) => {
+        const host = new URL(request.url).host
+        return okEnvelope({ apiKeyEnabled: host !== 'panel-b.example.com' })
+      }),
+    )
+    useConnectionStore.setState({
+      baseUrl: 'https://panel-a.example.com',
+      apiKey: 'demo-key-123',
+      status: 'ready',
+    })
+    const user = userEvent.setup()
+    renderForm({ variant: 'settings' })
+
+    // A 面板：入口可见
+    expect(await screen.findByRole('button', { name: '重新生成' })).toBeEnabled()
+
+    // 改到关闭了通道的 B 面板 → 入口随之隐藏
+    const urlInput = screen.getByLabelText('面板地址')
+    await user.clear(urlInput)
+    await user.type(urlInput, 'https://panel-b.example.com')
+    expect(await screen.findByText(/部署配置已关闭 API Key 通道/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '重新生成' })).not.toBeInTheDocument()
+  })
+
+  /**
+   * 「成功但不可判读」这一档：200 且 status=ok，但 data 读不出布尔值。
+   * 判定必须是 `=== false`，不能是「探测成功即视为关闭」，也不能把 `!== false` 当真值校验。
+   * 三档形状一起锁，防「信任成功状态」与「拿非布尔当真值」两类实现。
+   */
+  it.each([
+    ['data 为 null', null],
+    ['data 缺字段', {}],
+    ['apiKeyEnabled 非布尔', { apiKeyEnabled: 'yes' }],
+  ])('能力响应畸形成功（%s）：不判为关闭，入口保持可见可操作', async (_label, data) => {
+    // 「何为畸形」的判据来自契约本身而非本用例的臆断：这三档都过不了
+    // authCapabilitiesResponseSchema，故客户端只能按「不可判读」保守处理
+    expect(authCapabilitiesResponseSchema.safeParse(data).success).toBe(false)
+    server.use(http.get('*/api/v1/auth/capabilities', () => okEnvelope(data)))
+    useConnectionStore.setState({
+      baseUrl: 'https://192.168.1.100:25566',
+      apiKey: 'demo-key-123',
+      status: 'ready',
+    })
+    const user = userEvent.setup()
+    const { queryClient } = renderForm({ variant: 'settings' })
+
+    // 等探测真正落定，并确认落定的就是那条畸形响应（睡眠等待会对「未返回」假绿）
+    expect(await waitCapabilitiesSettled(queryClient, 'https://192.168.1.100:25566')).toEqual(data)
+
+    expect(screen.queryByText(/部署配置已关闭 API Key 通道/)).not.toBeInTheDocument()
+    const rotate = screen.getByRole('button', { name: '重新生成' })
+    expect(rotate).toBeEnabled()
+    // 「可操作」：入口不只是画出来，点下去仍走真实轮换链路
+    await user.click(rotate)
+    expect(await screen.findByText('新 API Key 已生成并启用，旧 Key 已失效')).toBeInTheDocument()
+  })
+})
+
+/**
+ * 能力探测与登录态的关系（探测地址是用户**刚输入、尚未验证**的面板）。
+ *
+ * 探测沿用双通道凭据注入，因此它同时是一次「凭据归属判定」：命中 40103 时若不显式豁免，
+ * `client.ts` 的默认处置是**全局登出**——用户只是改了个地址填 Key，就被从连接表单弹到登录页。
+ * 连接测试早已为同一形态传 `ignoreSessionExpiry`；探测必须同取舍。
+ */
+describe('ConnectionForm 能力探测不得改变本机登录态', () => {
+  /** 记录探测请求实际携带的凭据头，并按给定应答返回（同一 handler，避免相互覆盖） */
+  function mockCapabilities(response: () => Response) {
+    const captured: { auth: string | null; key: string | null } = { auth: null, key: null }
+    server.use(
+      http.get('*/api/v1/auth/capabilities', ({ request }) => {
+        captured.auth = request.headers.get('Authorization')
+        captured.key = request.headers.get('X-API-Key')
+        return response()
+      }),
+    )
+    return captured
+  }
+
+  const okCapabilities = () => okEnvelope({ apiKeyEnabled: true })
+  const sessionExpired = () =>
+    okEnvelopeError(40103, '会话不存在或已登出，请重新登录')
+
+  it('旧会话（无签发面板）+ 改到别的地址 + 目标回 40103：本机会话必须保留、不得出现登出事件', async () => {
+    // 旧会话口径：令牌未记签发面板 ⇒ 对任何地址都按适用处理，Bearer 会发到刚输入的地址
+    setSession()
+    const captured = mockCapabilities(sessionExpired)
+    const expiredListener = vi.fn()
+    window.addEventListener(SESSION_EXPIRED_EVENT, expiredListener)
+    try {
+      const user = userEvent.setup()
+      const { queryClient } = renderForm({ variant: 'settings' })
+      await user.type(screen.getByLabelText('面板地址'), 'https://panel-b.example.com')
+      await waitCapabilitiesRejected(queryClient, 'https://panel-b.example.com')
+
+      expect(captured.auth).toBe('Bearer sess-token-abc')
+      expect(expiredListener).not.toHaveBeenCalled()
+      expect(useAuthStore.getState().session?.token).toBe('sess-token-abc')
+      // 探测失败属未知态：入口保持可见（不得因失败把能力判成关闭）
+      expect(screen.getByRole('button', { name: '重新生成' })).toBeEnabled()
+    } finally {
+      window.removeEventListener(SESSION_EXPIRED_EVENT, expiredListener)
+    }
+  })
+
+  it('会话绑定到 A 面板 + 探测 B 面板：不发 Bearer（J38 规则在探测路径上同样成立）', async () => {
+    setBoundSession('https://panel-a.example.com')
+    const captured = mockCapabilities(okCapabilities)
+    const user = userEvent.setup()
+    const { queryClient } = renderForm({ variant: 'settings' })
+
+    await user.type(screen.getByLabelText('面板地址'), 'https://panel-b.example.com')
+    await waitCapabilitiesSettled(queryClient, 'https://panel-b.example.com')
+
+    // 令牌只发签发它的面板：异地址回落 API Key 通道（此处无 Key ⇒ 不带认证头）
+    expect(captured.auth).toBeNull()
+    expect(captured.key).toBeNull()
+    expect(useAuthStore.getState().session?.token).toBe('sess-token-abc')
+  })
+
+  it('会话绑定到本地址 + 探测本地址：发 Bearer（合法路径）', async () => {
+    setBoundSession('https://panel-a.example.com')
+    const captured = mockCapabilities(okCapabilities)
+    const user = userEvent.setup()
+    const { queryClient } = renderForm({ variant: 'settings' })
+
+    await user.type(screen.getByLabelText('面板地址'), 'https://panel-a.example.com')
+    await waitCapabilitiesSettled(queryClient, 'https://panel-a.example.com')
+
+    expect(captured.auth).toBe('Bearer sess-token-abc')
+    expect(useAuthStore.getState().session?.token).toBe('sess-token-abc')
   })
 })
