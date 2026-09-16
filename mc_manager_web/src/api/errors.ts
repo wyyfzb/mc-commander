@@ -34,6 +34,10 @@ export const ErrorCode = {
   AUTH_TOTP_ALREADY_ENABLED: 40913,
   /** API Key 通道被部署配置关闭（API_KEY_ENABLED=false）：须改用会话登录 */
   API_KEY_DISABLED: 40303,
+  /** 只读机器凭据通道被部署配置关闭（READONLY_API_KEY_ENABLED=false） */
+  READONLY_API_KEY_DISABLED: 40304,
+  /** 只读机器凭据访问白名单之外的端点（凭据有效但权限不足） */
+  AUTH_INSUFFICIENT_ROLE: 40305,
 
   INSTANCE_NOT_FOUND: 40401,
   INSTANCE_NOT_RUNNING: 40002,

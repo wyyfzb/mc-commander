@@ -36,9 +36,9 @@ beforeEach(() => {
   app = express();
   app.use(express.json());
 
-  // 简易认证中间件（绕过 X-API-Key 检查）
+  // 简易认证中间件（绕过 X-API-Key 检查）；v1 角色门要求显式角色，故直接落 admin
   app.use('/api/v1', (req, res, next) => {
-    req.apiKeyValid = true;
+    req.auth = { source: 'test', role: 'admin' };
     next();
   });
 

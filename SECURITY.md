@@ -52,6 +52,38 @@ MC Commander 是**单管理员自托管面板**，架构上不区分多租户/�
 - **两步验证不能替代 Key 的保管**：启用 2FA 后，用 Key 通道仍可完全绕过它——这正是「Key 是
   break-glass 凭据」的含义，不是缺陷。若这个性质不可接受，请在部署层关闭 Key 通道。
 
+### 只读机器凭据（`READONLY_API_KEY_HASH`）
+
+需要「常驻的自动化读数」而不想交出全权凭据时使用。它与上面的全局 API Key **是两把独立凭据、
+两条独立通道**：开关（`READONLY_API_KEY_ENABLED`）与 `API_KEY_ENABLED` 互不影响，关掉全权 Key
+的部署仍可单独保留只读监控凭据。
+
+| 维度 | 实际行为 |
+|---|---|
+| 形态 | **单例全局凭据**：一个部署只有一把只读 Key（`READONLY_API_KEY_HASH` 只存 SHA-256 摘要，明文仅在轮换那一次响应里出现），明文前缀 `mcro-`（仅便于运维辨认，鉴权只看摘要） |
+| 权限范围 | **仅只读白名单 5 个端点**：`GET /overview`、`GET /system-stats`、`GET /instances`、`GET /instances/:id`、`GET /instances/:id/players`。其余 82 个端点中 **79 个一律 403**（`AUTH_INSUFFICIENT_ROLE`/40305），包括全部写操作与全部敏感读；另 3 个是认证前公开端点（`/auth/status`、`/auth/login`、`/auth/setup`），本就不经认证、与凭据角色无关 |
+| 字段裁剪 | `GET /instances` 与 `GET /instances/:id` 对只读**按角色裁剪响应**：剔除 `jvmArgs`、`startCommand`（自由文本，运维常把 JMX/DB 口令写进 JVM 参数）、`javaPath`（主机目录布局）、`seed`（世界种子）；监控所需字段（`id`/`name`/`address`/`isRunning`/`playerCount`/`tps`/`mspt`/CPU/内存/`uptime`/版本等）全部保留。**管理员响应不裁剪、逐字节不变**。裁剪只发生在 `routes/status.js` 的出参构造处，角色门不改写响应体 |
+| 明确不能做 | 读文件内容/目录（`files*`）、读日志原文（`logs`）、读配置内容（`properties`）、读世界数据（`world`）、读玩家存档明细与封禁记录（`players/:player/details`、`players/bans`）、下载或列出备份（`backups*`）、读命令史（`command-history`）、读审计明细（`audit-logs`）、读会话清单（`auth/sessions`）、读任务定义（`tasks*`）、读 Webhook 配置（`webhooks*`）、插件与升级/部署运维面、以及**任何**写操作 |
+| 默认拒绝的方向 | 判定是「**不在白名单 ⇒ 要求 admin**」而非「逐个列举要拦谁」：新增路由无需登记即自动对只读关闭，漏登记只会更严、不会更松。回归测试从 Express 实际注册的路由表枚举全部端点并断言非白名单端点对只读 403，新端点自动纳入覆盖 |
+| WebSocket | **一律拒绝握手**：Phase 1 不做事件级过滤，能开 WS 等于能订阅全量事件并借事件回执间接执行命令 |
+| 有效期 | **无过期**：不随会话 TTL/绝对存活期失效 |
+| 与两步验证的关系 | 与全局 API Key 相同，不走交互式登录 |
+| 轮换 | `POST /api/v1/rotate-readonly-key`（**仅管理员可达**，只读凭据调用会 403/40305，无法自我提权或替换同类凭据）；明文只在响应里出现一次，旧只读 Key 立即失效；写入 `.env` 的 `READONLY_API_KEY_HASH` 行，其余键不动 |
+| 通道关闭 | `READONLY_API_KEY_ENABLED=false`：**哈希已配置**时请求侧对该凭据一律 403（`READONLY_API_KEY_DISABLED`/40304），轮换端点同样 403 且**不写 `.env`**；哈希保留，设回 `true` 即恢复。该 40304 只在哈希已配置时可达——未配置时凭据恒不匹配，走下方 401 分支 |
+| 未配置 | `READONLY_API_KEY_HASH` 为空 ⇒ **该通道不存在**（fail-closed）：携带任意值（含空串）都只按无效凭据处理（401/40101，**与 `READONLY_API_KEY_ENABLED` 取值无关**），不会因为「空哈希与空输入相等」而被放行 |
+| 彻底关闭 | 删除 `.env` 的 `READONLY_API_KEY_HASH` 行并重启（通道消失、凭据不再被识别），或设 `READONLY_API_KEY_ENABLED=false`（保留哈希以便恢复）。**想先作废再观察**时，请用轮换端点生成新值（旧值立即失效）而不是手动删行 |
+
+由此推出的操作纪律：
+
+- **只读凭据也不是匿名的**：它仍是长期有效的常驻凭据，`GET /instances` 等白名单响应仍包含实例
+  地址、玩家名单等运行信息——按「内部监控账号」而非「公开只读」对待。（`jvmArgs`/`startCommand`/
+  `javaPath`/`seed` 已按角色裁剪，但**实例配置里不要放凭据**仍是基本原则：白名单是收窄面，不是
+  凭据托管处的许可。）
+- **只读凭据泄露的处置**：调用 `POST /api/v1/rotate-readonly-key` 立即轮换，或按上文彻底关闭。
+- **需要敏感读请用管理员凭据**：白名单是刻意收窄的；把某个敏感端点加进白名单等同于把该数据的
+  读取权交给一台常驻机器，必须作为一次安全评审来做（`middleware/auth.js` 的 `READONLY_ALLOWED`
+  是唯一事实源，回归测试会钉住它的每一条）。
+
 ## 已知依赖豁免（跟踪中）
 
 以下依赖告警目前仅有破坏性修复方案，升级方案在跟踪评估：

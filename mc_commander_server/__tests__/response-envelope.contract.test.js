@@ -79,8 +79,9 @@ beforeEach(() => {
 
   app = express();
   app.use(express.json());
+  // 认证层替身：v1 角色门要求显式角色（无 req.auth 一律 403），故此处直接落 admin 角色
   app.use('/api/v1', (req, res, next) => {
-    req.apiKeyValid = true;
+    req.auth = { source: 'test', role: 'admin' };
     next();
   });
   setupRoutes(app, serverManager, null);

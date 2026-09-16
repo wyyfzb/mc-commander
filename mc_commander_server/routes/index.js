@@ -16,22 +16,25 @@ import { success } from '../utils/response.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import config from '../config.js';
 import { notFoundHandler } from '../middleware/error_handler.js';
+import { requireAdminRole } from '../middleware/auth.js';
 
 /** 版本号单一来源：package.json（/health、check-update、启动横幅共用，杜绝三处硬编码漂移） */
 const SERVER_VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf-8')).version;
 
-export function setupRoutes(app, serverManager, taskScheduler) {
-  // 轻量健康检查：仅返回存活与版本（P2-9 信息暴露收口：未认证的 /health
-  // 不再暴露 instanceCount/nodeVersion/uptime 运行细节；check-update 依赖的
-  // version 保留），不调用 getAllInstances()
-  app.get('/health', (req, res) => {
-    res.json(success({
-      status: 'ok',
-      version: SERVER_VERSION,
-    }));
-  });
+/** API v1 挂载点（唯一事实源：setupRoutes 挂载与路由表枚举测试共用，防前缀漂移） */
+export const API_V1_MOUNT = '/api/v1';
 
+/**
+ * 组装 /api/v1 路由表。导出供路由表枚举测试复用**同一个**组装入口——测试自建一份
+ * 路由表就失去了「新增端点自动纳入覆盖」的意义。
+ *
+ * 角色门挂在 v1Router 上且早于全部子 router：默认要求 admin，只放行白名单内的
+ * 只读请求。逐 router / 逐端点加守卫必漏（12 个子 router 各自新增端点时无人补守卫），
+ * 而挂在聚合层 + 路由表枚举测试可让新端点自动落入「默认拒绝」。
+ */
+export function createApiV1Router(serverManager, taskScheduler) {
   const v1Router = Router();
+  v1Router.use(requireAdminRole);
 
   v1Router.use('/', createStatusRoutes(serverManager));
   v1Router.use('/', createPlayerRoutes(serverManager));
@@ -106,7 +109,22 @@ export function setupRoutes(app, serverManager, taskScheduler) {
     }));
   });
 
-  app.use('/api/v1', v1Router);
+  return v1Router;
+}
+
+export function setupRoutes(app, serverManager, taskScheduler) {
+  // 轻量健康检查：仅返回存活与版本（P2-9 信息暴露收口：未认证的 /health
+  // 不再暴露 instanceCount/nodeVersion/uptime 运行细节；check-update 依赖的
+  // version 保留），不调用 getAllInstances()。/health 挂在 app 上而非常规
+  // /api 前缀下，故不经认证、也不受角色门管辖（既有公开语义保持不变）
+  app.get('/health', (req, res) => {
+    res.json(success({
+      status: 'ok',
+      version: SERVER_VERSION,
+    }));
+  });
+
+  app.use(API_V1_MOUNT, createApiV1Router(serverManager, taskScheduler));
 
   app.use(notFoundHandler);
 }

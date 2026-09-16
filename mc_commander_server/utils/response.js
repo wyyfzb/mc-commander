@@ -114,6 +114,21 @@ export const ErrorCodes = {
     message: 'API Key 通道已关闭，请改用管理员会话登录',
     status: 403,
   },
+  // 只读 Key 通道被配置关闭（READONLY_API_KEY_ENABLED=false）：与未配置
+  // READONLY_API_KEY_HASH 的区别只在轮换端点——那里需要明确告知操作者
+  // 「哈希保留、重开即恢复」，请求侧两条路径同归无效凭据
+  READONLY_API_KEY_DISABLED: {
+    code: 40304,
+    message: '只读 API Key 通道已关闭，请改用管理员凭据',
+    status: 403,
+  },
+  // 只读凭据访问白名单之外的端点：403（凭据有效但权限不足，故不是 401），
+  // 响应体不回显白名单内容与凭据，避免给出权限边界的探测面
+  AUTH_INSUFFICIENT_ROLE: {
+    code: 40305,
+    message: '只读凭据无权访问该端点，请改用管理员凭据',
+    status: 403,
+  },
 };
 
 // 自定义错误类

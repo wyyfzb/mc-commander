@@ -104,7 +104,12 @@ sudo BRANCH=<旧版本标签> PACKAGE_SHA256=<该代码包 sha256> bash /tmp/dep
 
 ## 环境变量
 
-参见根目录 README。
+参见根目录 README。新增只读机器凭据相关的两个变量（`.env.example` 有同款注释）：
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `READONLY_API_KEY_HASH` | 空 | 只读凭据的 SHA-256 摘要。**留空 = 该通道不存在**（fail-closed）。请用 `POST /api/v1/rotate-readonly-key` 生成，不要手写 |
+| `READONLY_API_KEY_ENABLED` | `true` | 只读通道开关（`true`/`false`/`1`/`0`）。关闭后该凭据一律 403、轮换端点同样 403 且不写 `.env`；哈希保留，设回 `true` 即恢复。与 `API_KEY_ENABLED` 相互独立 |
 
 ## 日志
 
@@ -190,6 +195,32 @@ Authorization: Bearer <session-token>
 - **管理员会话**：`POST /api/v1/auth/setup` 首次设置管理员密码，`POST /api/v1/auth/login`
   换取令牌，`PUT /api/v1/auth/password` 改密；令牌仅以 SHA-256 落库，滑动有效期默认 7 天
   （`ADMIN_SESSION_TTL_HOURS`），自创建起 30 天强制重登（`ADMIN_SESSION_ABSOLUTE_TTL_DAYS`）。
+- **只读机器凭据**（`READONLY_API_KEY_HASH`，监控/仪表盘用）：同样走 `X-API-Key` 头，但角色为
+  `readonly`，**只**能访问 5 个只读监控端点——`GET /api/v1/overview`、`/system-stats`、
+  `/instances`、`/instances/:id`、`/instances/:id/players`；其余端点（含全部写操作与文件 /
+  日志 / 配置 / 世界 / 玩家存档 / 备份 / 命令史 / 审计 / 会话 / 任务 / Webhook）一律
+  403 `AUTH_INSUFFICIENT_ROLE`(40305)，WebSocket 握手一律拒绝。`GET /instances` 与
+  `GET /instances/:id` 对只读**按角色裁剪**：响应不含 `jvmArgs`/`startCommand`
+  （运维常把 JMX/DB 口令写进 JVM 参数）、`javaPath`、`seed`，监控所需字段照常返回；
+  管理员响应不裁剪。
+
+  ```bash
+  # 生成 / 轮换（用管理员会话或全局 API Key 调用；明文只在响应里出现一次）
+  curl -X POST http://127.0.0.1:25566/api/v1/rotate-readonly-key \
+       -H "X-API-Key: <管理员 Key>"
+  # → {"status":"ok", ..., "data":{"apiKey":"mcro-xxxxxxxx-xxxxxxxx-xxxxxxxx"}}
+
+  # 只读调用
+  curl http://127.0.0.1:25566/api/v1/overview -H "X-API-Key: mcro-..."
+  ```
+
+  轮换后旧只读 Key 立即失效；只读凭据调用轮换端点会 403（不能自我提权）。服务端把新摘要写进
+  `.env` 的 `READONLY_API_KEY_HASH` 行（明文不落盘），其余键不动。**未配置 `READONLY_API_KEY_HASH`
+  时该通道不存在**（携带任意值都按无效凭据 401）；`READONLY_API_KEY_ENABLED=false` 时请求侧
+  403 `READONLY_API_KEY_DISABLED`(40304)、轮换端点同样 403 且不写 `.env`（哈希保留，设回 `true`
+  即恢复）。该开关与 `API_KEY_ENABLED` 相互独立——只关全权 Key 的部署仍可单独保留只读监控凭据。
+  **彻底关闭**：删除 `.env` 的 `READONLY_API_KEY_HASH` 行并重启。权限边界与操作纪律见
+  [SECURITY.md](../SECURITY.md) 的「只读机器凭据」；需要敏感读时请改用管理员凭据。
 - 两条通道都不可用时返回 401，错误信息同时提示两种凭据形态。
 
 ### 两步验证（TOTP）

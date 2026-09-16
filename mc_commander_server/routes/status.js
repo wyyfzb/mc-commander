@@ -2,6 +2,7 @@ import express from 'express';
 import os from 'os';
 import fs from 'fs';
 import path from 'path';
+import { z } from 'zod';
 import { error, ErrorCodes } from '../utils/response.js';
 import { InstanceModel, BackupModel } from '../db/index.js';
 import config from '../config.js';
@@ -29,6 +30,39 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { logger } from '../utils/logger.js';
 import { getServerVersion } from '../utils/version.js';
 import { getPropertiesView, applyPropertyUpdates } from '../services/instance-properties.service.js';
+
+/**
+ * 只读角色视图：从同一契约源派生（只删字段、不新增），避免与全量 schema 漂移。
+ * 剔除的都是「主机配置 / 凭据可能驻留处」：jvmArgs、startCommand（自由文本，运维常把
+ * 口令写进 JVM 参数）、javaPath（主机目录布局）、seed（世界种子）。监控所需字段全部保留。
+ */
+const READONLY_REDACTED_FIELDS = ['jvmArgs', 'startCommand', 'javaPath', 'seed'];
+const readonlyInstanceStatusSchema = instanceStatusSchema.omit({
+  jvmArgs: true,
+  startCommand: true,
+  javaPath: true,
+  seed: true,
+});
+const readonlyInstanceStatusListSchema = z.array(readonlyInstanceStatusSchema);
+
+/**
+ * 实例状态按调用者角色出参：readonly 走裁剪视图，其余（admin/公开）原样。
+ * 入参是 toStatus() 的产物——getAllInstances() 返回的已是状态对象而非实例。
+ * 只在这里做一次裁剪并由两条 /instances 端点共用，不在角色门里改写响应体
+ * （守卫只做裁决，改响应体会让「拒了哪些」与「给了什么」混在一处，难以复核）。
+ */
+function statusForRole(req, status) {
+  if (req.auth?.role !== 'readonly') return status;
+  const redacted = { ...status };
+  for (const field of READONLY_REDACTED_FIELDS) delete redacted[field];
+  return redacted;
+}
+
+function statusSchemaForRole(req, list) {
+  const readonly = req.auth?.role === 'readonly';
+  if (list) return readonly ? readonlyInstanceStatusListSchema : instanceStatusListSchema;
+  return readonly ? readonlyInstanceStatusSchema : instanceStatusSchema;
+}
 
 // ── 磁盘使用率（feat-5 运维韧性）：fs.statfsSync 零新增依赖，10s 缓存 ──
 let _diskCache = { ts: 0, result: null };
@@ -218,19 +252,22 @@ export function createStatusRoutes(serverManager) {
     }));
   });
 
-  // GET /api/instances - 实例列表
+  // GET /api/instances - 实例列表（只读凭据按角色裁剪，见 statusForRole）
   router.get('/instances', (req, res) => {
     const instances = serverManager.getAllInstances();
-    res.json(validatedSuccess(instanceStatusListSchema, instances));
+    res.json(validatedSuccess(
+      statusSchemaForRole(req, true),
+      instances.map((status) => statusForRole(req, status)),
+    ));
   });
 
-  // GET /api/instances/:id - 单个实例详情
+  // GET /api/instances/:id - 单个实例详情（与列表同一套裁剪）
   router.get('/instances/:id', (req, res) => {
     const instance = serverManager.getInstance(req.params.id);
     if (!instance) {
       return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND));
     }
-    res.json(validatedSuccess(instanceStatusSchema, instance.toStatus()));
+    res.json(validatedSuccess(statusSchemaForRole(req, false), statusForRole(req, instance.toStatus())));
   });
 
   // PUT /api/instances/:id - 更新实例配置（启动命令/JVM 参数等）

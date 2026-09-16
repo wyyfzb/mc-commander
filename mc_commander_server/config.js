@@ -55,6 +55,10 @@ const config = {
   envFilePath: path.join(__dirname, '.env'),
   apiKey: process.env.API_KEY || '',
   apiKeyHash: process.env.API_KEY_HASH || '',
+  // 只读机器凭据（与 API_KEY_HASH 同款「只存 SHA-256 摘要」）：未配置 = 该通道
+  // 不存在（fail-closed，不是「不校验」）。仅可访问白名单内的只读监控端点，
+  // 写操作与敏感读（文件/日志/配置/命令史/审计/备份/会话）一律拒绝，WS 亦不可用。
+  readonlyApiKeyHash: process.env.READONLY_API_KEY_HASH || '',
   // 首访设密所有权证明（一次性 SETUP_TOKEN，audit S-P0-1 / issue #309）：
   // 部署脚本首次部署生成写入 .env；POST /auth/setup 强制校验，通过即作废
   //（内存清空 + .env 移除，重启后同样失效）。未配置 = 未开启（本机首发兼容）
@@ -97,6 +101,13 @@ const config = {
   // 部署形态。仅关闭鉴权入口——.env 里的 API_KEY_HASH 不删除，重新开启即恢复。
   // 取值 true/false/1/0（大小写与首尾空格不敏感），其余取值启动即报错
   apiKeyEnabled: boolFromEnv('API_KEY_ENABLED', true),
+  // 只读 Key 通道开关（默认 true = 配置即生效）。哈希已配置时关闭本开关：请求侧对该
+  // 凭据一律 403/READONLY_API_KEY_DISABLED，轮换端点同步 403 且不写 .env；哈希保留，
+  // 重新开启即恢复。**该 403 只在哈希已配置时可达**——哈希未配置时凭据恒不匹配
+  //（verifyReadonlyApiKey 先判 storedHash 存在性），请求直接落到管理员 Key 判定分支
+  // 返回 401，与开关取值无关。与 API_KEY_ENABLED 相互独立：关掉管理员自动化凭据的
+  // 部署形态，仍可单独保留只读监控凭据。
+  readonlyApiKeyEnabled: boolFromEnv('READONLY_API_KEY_ENABLED', true),
   rateLimit: {
     windowMs: intFromEnv('RATE_LIMIT_WINDOW', '60000'),
     // 240/min：前端常态轮询 6-8 个端点 × 5s ≈ 72-96 req/min，100 会在多标签页

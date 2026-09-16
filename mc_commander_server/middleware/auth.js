@@ -31,12 +31,24 @@ function verifyApiKey(incomingKey) {
 }
 
 /**
+ * 恒时比对只读 Key：与 verifyApiKey 同款（摘要比对 + 恒时）。
+ * 未配置 READONLY_API_KEY_HASH 时恒返回 false —— 通道不存在，而不是「不校验」；
+ * 因此不会出现「空哈希与空输入相等」而意外放行的路径
+ */
+function verifyReadonlyApiKey(incomingKey) {
+  const storedHash = config.readonlyApiKeyHash;
+  if (!storedHash) return false;
+  const incomingHash = hashToken(incomingKey);
+  return safeEqual(incomingHash, storedHash);
+}
+
+/**
  * 登录前必须可达的公开端点（req.path 相对挂载点 /api/，尾部斜杠归一化）：
  * - /v1/auth/status：登录页探测是否已设密（未认证时的唯一信息面）
  * - /v1/auth/setup：首访设密（未设密才允许，路由层二次校验）
  * - /v1/auth/login：登录换取会话令牌
  */
-const PUBLIC_ENDPOINTS = new Set(['/v1/auth/status', '/v1/auth/login', '/v1/auth/setup']);
+export const PUBLIC_ENDPOINTS = new Set(['/v1/auth/status', '/v1/auth/login', '/v1/auth/setup']);
 
 /** 滑动续期写库节流：距上次触达超过该值才刷新 expires_at（降低写放大） */
 const SESSION_TOUCH_INTERVAL_MS = 60_000;
@@ -88,6 +100,9 @@ export function authMiddleware(req, res, next) {
   // 不处理 Upgrade: websocket 请求：真实 WS 升级由 Node http server 的 upgrade 事件处理（不经过本中间件），WS 认证由 handleProtocols + authenticateWebSocket 独立完成，与此中间件无关。
   const relPath = (req.path || '').replace(/\/+$/, '') || '/';
   if (PUBLIC_ENDPOINTS.has(relPath)) {
+    // 显式标记公开角色：角色门只放行「有角色」的请求，装配不变量由此变成代码事实——
+    // 少了这一步，任何未经本中间件的请求都会带着 undefined 抵达角色门
+    req.auth = { source: 'public', role: 'public' };
     return next();
   }
 
@@ -96,6 +111,20 @@ export function authMiddleware(req, res, next) {
   // 指引会话登录（关掉自动化凭据的部署形态下，浏览器通道是唯一正常入口）
   const apiKey = req.headers['x-api-key'];
   if (apiKey != null) {
+    // 只读凭据先判定：两条机器通道的开关相互独立，先吃 API_KEY_ENABLED 会把
+    // 「关闭管理员 Key」绑架成「只读监控也不可用」；未配置只读哈希时此处恒 false，
+    // 既有部署（含 API_KEY_ENABLED=false）的判定顺序与结果逐字不变
+    if (verifyReadonlyApiKey(apiKey)) {
+      if (!config.readonlyApiKeyEnabled) {
+        logAuthRejection(req, 'readonly API key channel disabled', 'warn', 403);
+        return res.status(403).json(error(
+          ErrorCodes.READONLY_API_KEY_DISABLED,
+          '只读 API Key 通道已关闭，请改用管理员凭据'
+        ));
+      }
+      req.auth = { source: 'apiKey', role: 'readonly', key: apiKey };
+      return next();
+    }
     if (!config.apiKeyEnabled) {
       logAuthRejection(req, 'API key channel disabled', 'warn', 403);
       return res.status(403).json(error(
@@ -110,7 +139,7 @@ export function authMiddleware(req, res, next) {
         'Invalid API Key'
       ));
     }
-    req.auth = { source: 'apiKey', key: apiKey };
+    req.auth = { source: 'apiKey', role: 'admin', key: apiKey };
     return next();
   }
 
@@ -143,7 +172,7 @@ export function authMiddleware(req, res, next) {
     if (Date.now() - parseDbTime(session.last_seen_at) > SESSION_TOUCH_INTERVAL_MS) {
       AdminSessionModel.touch(session.id, slidingExpiry(session));
     }
-    req.auth = { source: 'session', sessionId: session.id, userAgent: session.user_agent, ip: session.ip };
+    req.auth = { source: 'session', role: 'admin', sessionId: session.id, userAgent: session.user_agent, ip: session.ip };
     return next();
   }
 
@@ -152,6 +181,76 @@ export function authMiddleware(req, res, next) {
     ErrorCodes.INVALID_API_KEY,
     'API Key is required. Use X-API-Key header or Bearer session token.'
   ));
+}
+
+/**
+ * 只读角色可达的端点白名单（唯一事实源，逐条理由见 SECURITY.md「只读凭据」）。
+ *
+ * 判定方向是「不在表里 ⇒ 要求 admin」：新增端点无需在此登记即自动对只读关闭，
+ * 逐条列举的是**放行**而非拒绝，所以漏登记只会更严、不会更松。键为
+ * `METHOD 路径`，路径相对 v1Router 挂载点（/api/v1）；:param 为任意单段占位。
+ * 收录标准：只读监控/仪表盘真正需要的实时状态观测端点，且不返回凭据、文件内容、
+ * 日志、配置内容、命令史、备份、会话或审计明细。返回历史/管理记录的一律不收。
+ * 白名单只决定「能不能进」，不保证「进来后看到什么」：命中白名单的端点若其响应
+ * 含凭据可能驻留的字段，必须在**出参构造处**按角色裁剪（见 routes/status.js 的
+ * statusForRole —— /instances 两条即此例）；只加白名单不裁剪等于把该数据交出去。
+ */
+export const READONLY_ALLOWED = Object.freeze([
+  'GET /overview',
+  'GET /system-stats',
+  'GET /instances',
+  'GET /instances/:id',
+  'GET /instances/:id/players',
+]);
+
+/**
+ * 段级匹配：白名单项与请求路径段数必须一致，:param 段接受任意非空段。
+ * 路径尾部斜杠在调用前已归一化（与 Express 路由 `strict:false` 一致）：`/instances/`
+ * 与 `/instances` 命中同一个已授权处理器，故不算放宽权限面。
+ * 空段（`//`）一律不匹配：Express 的 `:param` 不匹配空段，若在此按「过滤空段后比对」
+ * 放行，角色门的判断就会比路由表更宽。
+ */
+function matchesPattern(method, pattern, reqPath) {
+  const [patternMethod, patternPath] = pattern.split(' ');
+  if (patternMethod !== method) return false;
+  const expected = segments(patternPath);
+  const actual = segments(reqPath);
+  if (expected.includes('') || actual.includes('')) return false;
+  if (expected.length !== actual.length) return false;
+  return expected.every((seg, i) => seg.startsWith(':') || seg === actual[i]);
+}
+
+/** 路径 → 非空段数组（首尾斜杠不产生段） */
+function segments(p) {
+  const trimmed = p.replace(/^\/+/, '').replace(/\/+$/, '');
+  return trimmed === '' ? [] : trimmed.split('/');
+}
+
+/**
+ * 只读凭据是否可访问该方法+路径（路径相对 v1Router）。
+ * 导出供路由表枚举测试直接断言，避免测试另写一份匹配逻辑而与运行时漂移
+ */
+export function isReadonlyAllowed(method, reqPath) {
+  return READONLY_ALLOWED.some((entry) => matchesPattern(method, entry, reqPath));
+}
+
+/**
+ * fail-closed 角色门（挂载在 routes/index.js 的 v1Router 上，早于全部子 router）：
+ * 默认要求 admin，仅命中白名单的请求放行 readonly，公开端点由认证层标记为
+ * `role: 'public'` 后放行。
+ *
+ * **只放行有角色的请求**：`req.auth` 缺失（未经认证层赋值）一律 403。这样「角色门必须
+ * 挂在认证层之后」就是代码事实而非装配约定——把 v1Router 复用到别的挂载点时会立刻
+ * 全量 403（可见的故障），而不是静默放行所有无凭据请求（不可见的 fail-open）。
+ * 角色未知（未来新增角色未在此登记）同样拒绝，不给「角色字段缺失」留口子。
+ */
+export function requireAdminRole(req, res, next) {
+  const role = req.auth?.role;
+  if (role === 'admin' || role === 'public') return next();
+  const relPath = (req.path || '/').replace(/\/+$/, '') || '/';
+  if (role === 'readonly' && isReadonlyAllowed(req.method, relPath)) return next();
+  logAuthRejection(req, `role=${role ?? 'none'} denied`, 'warn', 403);
+  return res.status(403).json(error(ErrorCodes.AUTH_INSUFFICIENT_ROLE));
 }
 
 /**
@@ -170,6 +269,9 @@ export function authMiddleware(req, res, next) {
  */
 export function authenticateWebSocket(apiKey, sessionToken = null) {
   if (apiKey) {
+    // 只读凭据一律拒握手：WS 事件未做角色过滤，能开 WS 就等于能订阅全量事件
+    // 并经事件回执间接执行命令，故 Phase 1 关闭该凭据的 WS 入口（只走 HTTP 只读白名单）
+    if (verifyReadonlyApiKey(apiKey)) return false;
     if (!config.apiKeyEnabled) return false;
     return verifyApiKey(apiKey);
   }
