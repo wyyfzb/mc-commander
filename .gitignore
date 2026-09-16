@@ -21,6 +21,7 @@ trae/
 # Agent 私有配置/技能/MCP（本机工作环境，不入库；AGENTS.md/CLAUDE.md 为社区版入库）
 .claude/
 .ai/
+# AgentTeams 工作流已于 2026-09-16 退役（owner）；规则保留，防止宿主再次生成该目录时被误入库
 .agent-teams/
 .zcode/
 .mimosa/
