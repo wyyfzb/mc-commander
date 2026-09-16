@@ -694,15 +694,27 @@ describe('ConnectionForm API Key 轮换入口的可见性', () => {
 
   it('能力未知（探测挂起）：入口保持可见（不隐藏是不可自证的保守选择）', async () => {
     server.use(http.get('*/api/v1/auth/capabilities', () => new Promise<never>(() => {})))
-    useConnectionStore.setState({
-      baseUrl: 'https://192.168.1.100:25566',
-      apiKey: 'demo-key-123',
-      status: 'ready',
-    })
-    renderForm({ variant: 'settings' })
+    // 用会话（而非 Key）让探测起飞：beforeEach 会清空 Key，会话是本文件的第二条款凭据
+    useConnectionStore.setState({ baseUrl: 'https://192.168.1.100:25566', status: 'ready' })
+    setSession()
+
+    const { queryClient } = renderForm({ variant: 'settings' })
 
     expect(screen.getByRole('button', { name: '重新生成' })).toBeEnabled()
     expect(screen.queryByText(/部署配置已关闭 API Key 通道/)).not.toBeInTheDocument()
+    // 把「未知态来自挂起的探测」变成可证事实：只看按钮可见会连「探测根本没起飞」也放过
+    expect(capabilitiesQuery(queryClient, 'https://192.168.1.100:25566')?.state.fetchStatus).toBe(
+      'fetching',
+    )
+  })
+
+  it('onboarding 语境：入口不出现（与粘贴一次性 Key 的流程相邻，误触即作废）', async () => {
+    // 不种凭据：无凭据时探测不可能起飞，而未知态一律保持可见（同一规则，见上一例的结论）——
+    // 故本例里入口缺席只可能来自语境门，而非能力态
+    renderForm({ variant: 'onboarding' })
+
+    expect(await screen.findByLabelText('API Key')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '重新生成' })).not.toBeInTheDocument()
   })
 
   it('切换面板地址：按新面板能力重新判定（能力属于面板，不属于本机）', async () => {

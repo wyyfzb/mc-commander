@@ -57,6 +57,15 @@ test.describe('onboarding', () => {
     await expect(page.getByRole('heading', { level: 2, name: '连接你的服务器' })).toBeVisible()
   })
 
+  test('引导页不提供 API Key 轮换入口（与设置页可见形成对仗）', async ({ page }) => {
+    await clearConnection(page)
+    await page.goto('/onboarding')
+    // 该入口紧贴「粘贴部署输出的一次性 Key」的输入框，误触即让刚粘贴的 Key 当场作废；
+    // 轮换属凭据管理，归设置页（settings.spec 断言那里可见）
+    await expect(page.getByRole('textbox', { name: 'API Key' })).toBeVisible()
+    await expect(page.getByRole('button', { name: '重新生成' })).toHaveCount(0)
+  })
+
   test('部署方式切换（三选一）：Windows 步骤 / Linux 命令 + 要点', async ({ page }) => {
     await clearConnection(page)
     await page.goto('/onboarding')

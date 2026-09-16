@@ -86,9 +86,12 @@ export function ConnectionForm({ variant = 'settings', headingAs = 'h1', onSaved
    * 地址取**停止输入后落定**的值（防抖；见 ADDRESS_SETTLE_DELAY_MS）：逐击键取值会打出「按键数」
    * 发请求（门槛再挡掉 scheme 前的中间态），落定点的语义也正是「用户已经指明了面板」。
    *
-   * 已知态才隐藏轮换入口：`data?.apiKeyEnabled === false` 是唯一的隐藏条件。加载中、
-   * 请求失败、响应不可判读（未知态）一律保持可见——隐藏是不可自证的，误隐藏会让用户以为
-   * 没有该能力且无从恢复；误显示的最坏结果只是点到一次 fail-closed 的 403（已有通道关闭文案）。
+   * 轮换入口的隐藏条件有两个：① 已知态下 `data?.apiKeyEnabled === false`（通道关闭）；
+   * ② onboarding 语境（那是「粘贴部署输出的一次性 Key 后进面板」的流程，轮换紧贴输入框，
+   * 误触即让刚粘贴的 Key 立刻作废）——轮换属凭据管理，归设置页；此处不提供不等于无处可做，
+   * 连上后面板设置页即在同一位置提供该入口。
+   * 加载中、请求失败、响应不可判读（未知态）一律保持可见——隐藏是不可自证的，误隐藏会让用户
+   * 以为没有该能力且无从恢复；误显示的最坏结果只是点到一次 fail-closed 的 403（已有通道关闭文案）。
    * 通道关闭时凭据本身仍可能有效（Key 照常可粘贴，只是无 API Key 鉴权通道），故输入框不隐藏。
    */
   const capabilities = useApiKeyCapabilities(settledUrl, apiKey)
@@ -272,7 +275,7 @@ export function ConnectionForm({ variant = 'settings', headingAs = 'h1', onSaved
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
           <Label htmlFor="connection-api-key">API Key</Label>
-          {!apiKeyChannelDisabled && (
+          {!apiKeyChannelDisabled && variant !== 'onboarding' && (
             <button
               type="button"
               onClick={() => void handleRotate()}
@@ -314,7 +317,9 @@ export function ConnectionForm({ variant = 'settings', headingAs = 'h1', onSaved
         {apiKeyChannelDisabled ? (
           <p className="text-mcs-xs text-mcs-text-muted">
             当前面板的部署配置已关闭 API Key 通道：Key 在 HTTP 与 WebSocket 上一律被拒绝，
-            轮换入口已隐藏（值仍保留在服务端 .env，改回开启即恢复）。
+            {variant === 'onboarding'
+              ? '本页不提供轮换入口（轮换属凭据管理，连接后在设置页可见）。'
+              : '轮换入口已隐藏（值仍保留在服务端 .env，改回开启即恢复）。'}
           </p>
         ) : (
           <>
