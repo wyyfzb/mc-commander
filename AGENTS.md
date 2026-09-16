@@ -77,7 +77,9 @@ npm run dev                  # node --watch 热重载
   sm 1.6 / xs 1.5 / 2xs 1.5），两个 14px 档语义不同——`sm` 是正文基准、`md` 是强调正文
   （同尺寸靠字重与收紧行高区分），标题层次口径：页面 `xl` / 区块与卡片标题 `lg` / 正文 `sm`，
   `md` 不用于标题；`display`（30px）是**非文字数字档**，只随 `.mcs-num`
-  用于 KPI 等数字面板，不占文字档位。
+  用于 KPI 等数字面板，不占文字档位。两个输入控件基座（`ui/input.tsx`、`ui/textarea.tsx`）各保留
+  1 处原生 `text-base`（16px）——输入控件字号小于该值时 iOS 聚焦会自动放大整页；该额度受门禁
+  第 27 条约束（`check-design-tokens.mjs` 的 `TEXT_BASE_ALLOWLIST`，超出额度即报错），不得扩散。
 - **tint 两类**：承载文字/图标的内容面（`--mcs-{status,accent,dimension}-bg-subtle`）**必须不透明**
   （`color-mix(色 N%, 基面)`）——半透明 tint 的有效色随宿主面漂移，最亮浮层上文字会跌破 4.5:1；
   不承载文字的交互覆盖层（`--mcs-state-hover/focus/pressed`、`--mcs-scrim*`）保持半透明。

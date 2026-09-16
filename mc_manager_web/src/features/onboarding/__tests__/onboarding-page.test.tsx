@@ -40,10 +40,14 @@ vi.mock('@/lib/clipboard', () => ({
   copyText: () => copyTextMock(),
 }))
 
-// ConnectionForm 重表单组件桩：暴露 variant 与保存成功入口
+// ConnectionForm 重表单组件桩：暴露 variant / headingAs 与保存成功入口
 vi.mock('@/features/settings/components/connection-form', () => ({
-  ConnectionForm: (props: { variant: string; onSaved: () => void }) => (
-    <div data-testid="connection-form" data-variant={props.variant}>
+  ConnectionForm: (props: { variant: string; headingAs?: 'h1' | 'h2'; onSaved: () => void }) => (
+    <div
+      data-testid="connection-form"
+      data-variant={props.variant}
+      data-heading-as={props.headingAs}
+    >
       <button type="button" onClick={props.onSaved}>
         保存并连接
       </button>
@@ -267,6 +271,12 @@ describe('OnboardingPage · 完成路径（连接保存）', () => {
   it('ConnectionForm 以 onboarding variant 挂载', () => {
     render(<OnboardingPage />)
     expect(screen.getByTestId('connection-form')).toHaveAttribute('data-variant', 'onboarding')
+  })
+
+  it('表单标题降为 h2：本页 h1 由欢迎区承担（ConnectionForm 默认 h1）', () => {
+    render(<OnboardingPage />)
+    expect(screen.getByRole('heading', { level: 1, name: '欢迎使用 MC Commander' })).toBeInTheDocument()
+    expect(screen.getByTestId('connection-form')).toHaveAttribute('data-heading-as', 'h2')
   })
 
   it('保存成功 → 欢迎 toast + 跳转 /dashboard（完成路径）', () => {

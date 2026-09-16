@@ -56,6 +56,16 @@
 
 审查新 PR 时，`components/ui/` 下新增的 `rounded-[...]` 需确认属于上述派生模式或补充豁免理由；`features/` 下任何 `rounded-[...]` 均应驳回。
 
+### 扫描面边界（上表为何不含 `ui/` 的 5 处同形写法）
+
+`ui/` 下同形写法实为 5 处：`ui/button.tsx` 4 处（`xs` / `sm` / `icon-xs` / `icon-sm`，形如
+`rounded-[min(var(--radius-md),10px)]` 与 `…,12px)]`）＋ `ui/select.tsx` 1 处
+（`data-[size=sm]:rounded-[min(var(--radius-md),10px)]`）。它们**不在**门禁第 5 条（脚本头部规则清单
+第 5 条「`rounded-[` 任意值」）的判定面内——第 1–11 条逐行检查整体排除 `src/components/ui/`
+（`check-design-tokens.mjs` 的 `EXCLUDE_DIR`），其余条目则都不判该形状（如第 12 条只收
+`*-mcs-*` / `*-glass-*` 形状的类名），故既不会报错、也无需列入上表。此处仅登记扫描面边界，
+不追认其理由；若将来把 `ui/` 纳入扫描面，需先为这 5 处补豁免条目并说明派生模式。
+
 ## 非语义 identity 色族（实例固定色相标识）
 
 `--mcs-identity-1..6` 是**非语义**色族，只回答「是哪个实例」：**非语义 identity 色族，禁用于状态、告警、语义表达**。
@@ -80,6 +90,12 @@
 实例名的区分始终由文字承担，identity 色只是辅助标识，故它不承担文字对比度口径，只按
 WCAG 1.4.11 非文字图形 ≥3:1 校验（`npm run check:contrast` 已覆盖 identity 六槽 × 七个面 × 明暗两主题，
 实测暗色最差 6.88:1（identity-1 on bg-emphasis）/ 亮色最差 4.85:1（identity-4 on glass-overlay））。
+
+门禁第 11c 条（手写 accent 选中强调形态）不覆盖本族，**与扫描面无关**（声明源
+`src/lib/instance-hue.ts` 本就在 `src/` 扫描面内）：该条按**整词**匹配
+`border-mcs-accent-border-strong` 与 `bg-mcs-accent-bg-subtle` 的同处共现，而本族只产出单一
+`bg-mcs-identity-N` 填充类，结构上不进该判定面；同一原因也使它不参与第 9–10 条的角色矩阵
+（`bg-mcs-identity-*` 落 `unknown` 而不被判定）。
 
 ### 色相定档：两态各有各的最优偏移
 
