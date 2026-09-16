@@ -50,6 +50,9 @@ function ThemedToaster() {
       toastOptions={{
         classNames: {
           toast: 'bg-mcs-bg-emphasis! border-mcs-border-default! shadow-mcs-overlay!',
+          // description 由调用方用 `\n` 拼多行明细（批量回执「• 目标：原因」、插件批量失败等），
+          // 不给 pre-line 时 HTML 把换行折成空格，多条明细会挤成一行
+          description: 'whitespace-pre-line',
         },
       }}
     />

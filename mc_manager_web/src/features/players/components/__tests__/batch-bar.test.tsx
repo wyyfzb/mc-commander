@@ -206,6 +206,32 @@ describe('BatchBar', () => {
     expect(onAction).toHaveBeenCalledWith({ kind: 'command', command: 'gamemode survival Steve' })
   })
 
+  it('游戏模式：原模式全部未知 → 不给撤销入口，但回执说明原因（不静默排除）', async () => {
+    setup([makePlayer({ gameMode: null })])
+    await user.click(screen.getByRole('button', { name: '游戏模式' }))
+    await user.click(await screen.findByRole('menuitem', { name: '创造' }))
+
+    await screen.findByText('批量切换游戏模式完成：成功 1，失败 0')
+    // 没有可回滚目标 ⇒ 不挂撤销入口，但必须讲明为什么（不猜默认档）
+    expect(screen.queryByRole('button', { name: '撤销' })).not.toBeInTheDocument()
+    expect(screen.getByText(/1 名玩家的原游戏模式未知，本次不提供撤销/)).toBeInTheDocument()
+  })
+
+  it('游戏模式：仅部分原模式已知 → 撤销入口在，但回执说明覆盖面', async () => {
+    setup([
+      makePlayer({ gameMode: 'survival' }),
+      makePlayer({ name: 'Bob', uuid: '00000000-0000-4000-8000-000000000004', gameMode: null }),
+    ])
+    await user.click(screen.getByRole('button', { name: '游戏模式' }))
+    await user.click(await screen.findByRole('menuitem', { name: '创造' }))
+
+    await screen.findByText('批量切换游戏模式完成：成功 2，失败 0')
+    // 撤销只覆盖原模式已知的那一名，回执要说清，否则用户以为能整体回滚
+    expect(screen.getByText(/撤销只覆盖原模式已知的 1 名，另有 1 名原模式未知/)).toBeInTheDocument()
+    clickUndo()
+    expect(onAction).toHaveBeenLastCalledWith({ kind: 'command', command: 'gamemode survival Steve' })
+  })
+
   it('撤销只回滚下发成功的目标（首名失败 → 不在回滚集内）', async () => {
     setup([makePlayer(), makePlayer({ name: 'Bob', uuid: '00000000-0000-4000-8000-000000000004' })])
     onAction.mockRejectedValueOnce(new Error('boom'))

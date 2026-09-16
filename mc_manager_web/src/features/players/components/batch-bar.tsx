@@ -39,8 +39,16 @@ interface BatchBarProps {
   onAction: (req: PlayerActionRequest) => Promise<void>
 }
 
-/** 撤销规格：由成功目标推出回执文案与逆操作；无可回滚目标时返回 null（不挂撤销入口） */
-type BatchUndo = (succeeded: Player[]) => { text: string; run: () => Promise<void> } | null
+/**
+ * 撤销规格：由成功目标推出回执文案与逆操作。
+ * - `{ text, run }`：挂 5s 撤销入口；`note` 用于「撤销只覆盖一部分目标」时在回执里讲明
+ * - `{ unavailable }`：有成功目标但完全无法撤销 —— 回执必须说明原因，静默少给入口
+ *   会让用户以为撤销漏了
+ * - `null`：本动作没有撤销语义（如踢出），回执照常
+ */
+type BatchUndo = (
+  succeeded: Player[],
+) => { text: string; run: () => Promise<void>; note?: string } | { unavailable: string } | null
 
 export function BatchBar({ selectedPlayers, onOpenBatchDetail, onAction }: BatchBarProps) {
   const clearSelection = usePlayersUiStore((s) => s.clearSelection)
@@ -83,16 +91,26 @@ export function BatchBar({ selectedPlayers, onOpenBatchDetail, onAction }: Batch
         return
       }
       const undoSpec = undo?.(succeeded) ?? null
-      if (undoSpec) {
+      // 「可撤销但只覆盖一部分」与「有成功目标却完全不可撤销」都要在回执里讲明
+      const undoNote =
+        undoSpec && 'unavailable' in undoSpec
+          ? undoSpec.unavailable
+          : undoSpec && 'note' in undoSpec
+            ? undoSpec.note
+            : null
+      const description = [details, undoNote].filter(Boolean).join('\n') || undefined
+      if (undoSpec && 'text' in undoSpec) {
         toastWithUndo({
           text: summary,
-          description: details,
+          description,
           variant: result.failCount > 0 ? 'warning' : 'success',
           undoText: undoSpec.text,
           undo: undoSpec.run,
         })
       } else if (result.failCount > 0) {
-        toast.warning(summary, { description: details })
+        toast.warning(summary, { description })
+      } else if (description) {
+        toast.success(summary, { description })
       } else {
         toast.success(summary)
       }
@@ -131,7 +149,8 @@ export function BatchBar({ selectedPlayers, onOpenBatchDetail, onAction }: Batch
       }),
     )
 
-  /** 游戏模式：逆操作＝切回各目标原模式；原模式未知的目标排除在回滚集外（不猜默认档） */
+  /** 游戏模式：逆操作＝切回各目标原模式。原模式未知的目标（服务端未采集到）无法回滚——
+   *  既不猜默认档，也不静默排除：完全无法撤销时说清原因，只覆盖一部分时说明覆盖面 */
   const runGamemode = (mode: string) =>
     void runBatch(
       '切换游戏模式',
@@ -139,11 +158,20 @@ export function BatchBar({ selectedPlayers, onOpenBatchDetail, onAction }: Batch
       (p) => onAction({ kind: 'command', command: `gamemode ${mode} ${p.name}` }),
       (succeeded) => {
         const known = succeeded.filter((p) => p.gameMode)
-        if (known.length === 0) return null
+        const unknownCount = succeeded.length - known.length
+        if (known.length === 0) {
+          return unknownCount > 0
+            ? { unavailable: `${unknownCount} 名玩家的原游戏模式未知，本次不提供撤销（不猜默认档）` }
+            : null
+        }
         return {
           text: '已切回原游戏模式',
           run: () =>
             undoEach(known, (p) => ({ kind: 'command', command: `gamemode ${p.gameMode} ${p.name}` })),
+          note:
+            unknownCount > 0
+              ? `撤销只覆盖原模式已知的 ${known.length} 名，另有 ${unknownCount} 名原模式未知`
+              : undefined,
         }
       },
     )

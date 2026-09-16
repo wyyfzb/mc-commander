@@ -8,7 +8,7 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 import { getFriendlyErrorText } from '@/api/errors'
 import { buildSetWorldSpawnCommand, type TeleportPoint } from '@/lib/mc-teleport'
-import { formatBatchSummary, runBatchForTargets } from '@/lib/mc-batch'
+import { formatBatchSummary, formatFailureDetails, runBatchForTargets } from '@/lib/mc-batch'
 import { copyText } from '@/lib/clipboard'
 import type { Player } from '@/api/types'
 import type { PlayerActionRequest } from './mutations'
@@ -45,7 +45,10 @@ export function useTeleportExecute({ player, batchTargets, isBatchMode, onAction
           },
         })
         const summary = formatBatchSummary(label, result)
+        // 逐名失败原因不能只报计数（与批量条同口径）：无失败时返回 undefined，成功态不多出节点
+        const description = formatFailureDetails(result)
         if (result.allOffline) toast.warning(summary)
+        else if (description) toast.success(summary, { description })
         else toast.success(summary)
       }
     } catch (e) {

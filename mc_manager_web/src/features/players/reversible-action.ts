@@ -34,7 +34,10 @@ export function toastWithUndo({ text, undoText, undo, description, variant = 'su
         .catch((e) => toast.error(`撤销失败：${getFriendlyErrorText(e)}`))
     },
   }
-  const options = { duration: UNDO_WINDOW_MS, action }
-  if (variant === 'warning') toast.warning(text, { ...options, description })
+  // description 两个分支都要带：它不只承载失败明细，也承载「撤销覆盖面」这类成功态说明
+  // （此前只在 warning 分支传，成功态的非空说明会被静默吞掉）。空串按缺省处理——sonner
+  // 仅在 description 为真值时才渲染该节点。
+  const options = { duration: UNDO_WINDOW_MS, action, description: description || undefined }
+  if (variant === 'warning') toast.warning(text, options)
   else toast.success(text, options)
 }
