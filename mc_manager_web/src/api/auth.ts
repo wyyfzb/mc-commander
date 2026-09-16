@@ -72,9 +72,74 @@ export function setupPassword(
   )
 }
 
-/** POST /auth/login（公开）：密码换会话令牌（服务端按 IP 锁定防爆破） */
-export function login(baseUrl: string, password: string): Promise<AuthSessionData> {
-  return apiPost<AuthSessionData>('/api/v1/auth/login', publicConfig(baseUrl), { password })
+/**
+ * POST /auth/login（公开）：密码换会话令牌（服务端按 IP 锁定防爆破）
+ *
+ * `totpCode` 是账号启用两步验证后的第二因子（6 位动态口令或一枚一次性恢复码）。
+ * 已启用而未带（或带空串）时服务端回 40105 且**不签发会话**，调用方据此就地展开
+ * 第二因子输入后带码重试——省略该字段即「只提交密码」的首次尝试。
+ */
+export function login(
+  baseUrl: string,
+  password: string,
+  totpCode?: string,
+): Promise<AuthSessionData> {
+  const code = totpCode?.trim()
+  return apiPost<AuthSessionData>('/api/v1/auth/login', publicConfig(baseUrl), {
+    password,
+    ...(code ? { totpCode: code } : {}),
+  })
+}
+
+/** GET /auth/totp/status：两步验证状态（服务端永不回传 secret 与恢复码明文） */
+export interface TotpStatusData {
+  enabled: boolean
+  /** 启用时间（ISO）；未启用为 null */
+  confirmedAt: string | null
+  /** 剩余未使用的恢复码数量 */
+  recoveryCodesRemaining: number
+}
+
+/** POST /auth/totp/enroll：生成候选密钥与二维码（此时尚未启用，需 confirm 自证） */
+export interface TotpEnrollData {
+  /** Base32 密钥明文（供无法扫码时手动输入；仅本次响应出现） */
+  secret: string
+  /** otpauth:// URI（认证器可直接消费） */
+  otpauthUrl: string
+  /** 二维码 data URL（PNG），直接作为 <img src> */
+  qrDataUrl: string
+}
+
+/** POST /auth/totp/confirm：动态口令确认挂靠；恢复码明文的唯一出口 */
+export interface TotpConfirmData {
+  enabled: true
+  confirmedAt: string | null
+  /** 10 枚一次性恢复码（明文，仅此一次响应） */
+  recoveryCodes: string[]
+}
+
+/** GET /auth/totp/status（认证）：两步验证状态 */
+export function fetchTotpStatus(config: ConnectionConfig, signal?: AbortSignal): Promise<TotpStatusData> {
+  return apiGet<TotpStatusData>('/api/v1/auth/totp/status', config, signal)
+}
+
+/** POST /auth/totp/enroll（认证）：生成候选密钥 + 二维码 */
+export function enrollTotp(config: ConnectionConfig): Promise<TotpEnrollData> {
+  return apiPost<TotpEnrollData>('/api/v1/auth/totp/enroll', config)
+}
+
+/** POST /auth/totp/confirm（认证）：以一枚动态口令确认挂靠，返回恢复码明文 */
+export function confirmTotp(config: ConnectionConfig, code: string): Promise<TotpConfirmData> {
+  return apiPost<TotpConfirmData>('/api/v1/auth/totp/confirm', config, { code })
+}
+
+/** POST /auth/totp/disable（认证）：密码 + 第二因子双证关闭两步验证 */
+export function disableTotp(
+  config: ConnectionConfig,
+  password: string,
+  code: string,
+): Promise<{ ok: boolean }> {
+  return apiPost<{ ok: boolean }>('/api/v1/auth/totp/disable', config, { password, code })
 }
 
 /** POST /auth/logout：登出当前会话（仅会话通道有意义；API Key 通道返回 40301 忽略即可） */

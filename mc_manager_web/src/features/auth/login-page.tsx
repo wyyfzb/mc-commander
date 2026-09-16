@@ -16,6 +16,7 @@ import {
   Moon,
   RefreshCw,
   ServerOff,
+  ShieldCheck,
   Sun,
   TriangleAlert,
 } from 'lucide-react'
@@ -32,7 +33,14 @@ import { cn } from '@/lib/utils'
 import { panelAddress } from '@/lib/mc-connection'
 import { fetchAuthStatus, login, setupPassword } from '@/api/auth'
 import { ApiError, NetworkError } from '@/api/client'
-import { getFriendlyErrorText } from '@/api/errors'
+import { ErrorCode, getFriendlyErrorText } from '@/api/errors'
+import {
+  SECOND_FACTOR_HINT,
+  SECOND_FACTOR_PLACEHOLDER,
+  SECOND_FACTOR_SHAPE_HINT,
+  isSecondFactorSubmittable,
+  sanitizeSecondFactorInput,
+} from '@/lib/second-factor'
 import { useAuthStore } from '@/stores/auth'
 import { useConnectionStore } from '@/stores/connection'
 import { useUiStore } from '@/stores/ui'
@@ -46,6 +54,15 @@ type Phase = 'probing' | 'setup' | 'login' | 'unreachable'
 
 /** 服务端 AUTH_SETUP_TOKEN_INVALID：公网部署开启了首访设密所有权证明（issue 309） */
 const AUTH_SETUP_TOKEN_INVALID_CODE = 40104
+
+/**
+ * 封禁文案（42901）。锁定时长由服务端 AUTH_LOGIN_LOCK_MS 决定、不回传，故这里只说量级
+ * 与下一步动作，不编造一个精确倒计时去误导用户。
+ */
+function lockoutMessage(hadSecondFactor: boolean): string {
+  const scope = hadSecondFactor ? '密码或验证码' : '密码'
+  return `${scope}错误次数过多，登录已被暂时锁定（通常约 5 分钟），请稍后再试；锁定期间请勿反复提交。`
+}
 
 /** 强度条（4 段，score 决定填充段数与色阶） */
 function StrengthBar({ score, label }: { score: number; label: string }) {
@@ -88,6 +105,12 @@ export function LoginPage() {
   // 首访设密所有权证明（issue 309）：服务端返回 40104 时展示 SETUP_TOKEN 输入框
   const [needsSetupToken, setNeedsSetupToken] = useState(false)
   const [setupToken, setSetupToken] = useState('')
+  /**
+   * 第二因子（40105：密码已通过、服务端未签发会话）。
+   * 就地展开验证码输入框——密码仍在 state 里原样保留，不跳页、不要求重输。
+   */
+  const [totpRequired, setTotpRequired] = useState(false)
+  const [totpCode, setTotpCode] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [errorText, setErrorText] = useState('')
   const probeSeq = useRef(0)
@@ -103,6 +126,8 @@ export function LoginPage() {
     setErrorText('')
     setNeedsSetupToken(false)
     setSetupToken('')
+    setTotpRequired(false)
+    setTotpCode('')
     try {
       const status = await fetchAuthStatus(base)
       if (seq !== probeSeq.current) return
@@ -166,6 +191,18 @@ export function LoginPage() {
       setErrorText('请输入管理员密码')
       return
     }
+    // 第二因子已展开后，空值/形状不符都不发请求：错误尝试在服务端计入登录失败封禁，
+    // 拿必然失败的往返去换一句「格式不对」是净损失
+    if (totpRequired) {
+      if (!totpCode) {
+        setErrorText('请输入认证器中的 6 位验证码，或一枚恢复码')
+        return
+      }
+      if (!isSecondFactorSubmittable(totpCode)) {
+        setErrorText(SECOND_FACTOR_SHAPE_HINT)
+        return
+      }
+    }
 
     setSubmitting(true)
     setErrorText('')
@@ -173,13 +210,14 @@ export function LoginPage() {
       const session =
         phase === 'setup'
           ? await setupPassword(baseUrl, password, needsSetupToken ? setupToken.trim() : undefined)
-          : await login(baseUrl, password)
+          : await login(baseUrl, password, totpRequired ? totpCode : undefined)
       handleAuthSuccess(session.token, session.sessionId, session.expiresAt)
     } catch (err) {
       if (err instanceof ApiError) {
         // 40911：探测到未设密后他人抢先设密 → 回登录模式重试
         if (err.code === 40911) {
           setPhase('login')
+          setTotpRequired(false)
           setErrorText('管理员密码已被设置，请直接登录')
         } else if (err.code === AUTH_SETUP_TOKEN_INVALID_CODE) {
           // 40104：公网部署开启了首访设密所有权证明 → 展示 SETUP_TOKEN 输入框
@@ -187,6 +225,18 @@ export function LoginPage() {
           setErrorText(
             err.message || 'SETUP_TOKEN 缺失或错误：请粘贴部署完成时输出的一次性令牌',
           )
+        } else if (err.code === ErrorCode.AUTH_TOTP_REQUIRED) {
+          // 40105：密码已通过、仅缺第二因子。服务端此时未签发会话也未计失败，
+          // 故这不是「错误」而是流程下一步——展开输入框，不用错误色播报
+          setTotpRequired(true)
+        } else if (err.code === ErrorCode.AUTH_TOTP_INVALID) {
+          // 40106：第二因子错误（与密码错误 40102 分开提示）；清空已提交的码，避免原样重提
+          setTotpRequired(true)
+          setTotpCode('')
+          setErrorText(getFriendlyErrorText(err))
+        } else if (err.code === ErrorCode.AUTH_LOGIN_LOCKED || err.code === ErrorCode.RATE_LIMITED) {
+          // 429：密码错与第二因子错共用同一封禁计数，文案随是否已进入第二因子区分
+          setErrorText(lockoutMessage(totpRequired))
         } else {
           setErrorText(getFriendlyErrorText(err))
         }
@@ -201,7 +251,13 @@ export function LoginPage() {
   }
 
   const heading =
-    phase === 'setup' ? '设置管理员密码' : phase === 'login' ? '管理员登录' : '连接面板'
+    phase === 'setup'
+      ? '设置管理员密码'
+      : phase === 'login'
+        ? totpRequired
+          ? '两步验证'
+          : '管理员登录'
+        : '连接面板'
 
   return (
     <div className="mcs-shell-bg mcs-grain relative flex min-h-svh flex-col items-center justify-center overflow-hidden px-4 py-10">
@@ -235,11 +291,13 @@ export function LoginPage() {
           <p className="mt-1 text-mcs-xs text-mcs-text-muted">
             {phase === 'setup'
               ? '首次使用：设置管理员密码后即可登录管理面板（8–128 位）'
-              : phase === 'login'
-                ? '输入管理员密码访问管理面板（会话有效期 7 天，支持滑动续期）'
-                : phase === 'probing'
-                  ? '正在连接面板服务器…'
-                  : '无法连接面板服务器，请检查部署状态'}
+              : phase === 'probing'
+                ? '正在连接面板服务器…'
+                : phase === 'unreachable'
+                  ? '无法连接面板服务器，请检查部署状态'
+                  : totpRequired
+                    ? '该账号已启用两步验证：密码已通过，请输入认证器中的 6 位验证码'
+                    : '输入管理员密码访问管理面板（会话有效期 7 天，支持滑动续期）'}
           </p>
         </div>
 
@@ -344,13 +402,37 @@ export function LoginPage() {
                 onChange={(v) => {
                   setPassword(v)
                   setErrorText('')
+                  // 输入框不锁定、也不清空：改密码后第二因子需要重走一次（服务端按当前密码判是否已启用），
+                  // 但已输入的验证码留着——它可能仍然有效，重新提交即可
                 }}
                 placeholder={phase === 'setup' ? '设置 8–128 位密码' : '输入密码'}
                 autoComplete={phase === 'setup' ? 'new-password' : 'current-password'}
-                autoFocus
+                autoFocus={!totpRequired}
                 className="h-10"
               />
             </div>
+            {phase === 'login' && totpRequired && (
+              <div className="space-y-2">
+                <Label htmlFor="totp-code">两步验证码</Label>
+                <Input
+                  id="totp-code"
+                  value={totpCode}
+                  onChange={(e) => {
+                    setTotpCode(sanitizeSecondFactorInput(e.target.value))
+                    setErrorText('')
+                  }}
+                  placeholder={SECOND_FACTOR_PLACEHOLDER}
+                  // 一次性验证码的浏览器输入习惯：数字键盘 + 系统/密码管理器自动填充建议；
+                  // 不自动提交（onChange 里凑满 6 位就发请求会让「码还没看清」也算一次错误尝试）
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  autoFocus
+                  spellCheck={false}
+                  className="h-10 font-mono"
+                />
+                <p className="text-mcs-2xs text-mcs-text-muted">{SECOND_FACTOR_HINT}</p>
+              </div>
+            )}
             {phase === 'setup' && (
               <div className="space-y-2">
                 <Label htmlFor="confirm-password">确认密码</Label>
@@ -392,19 +474,30 @@ export function LoginPage() {
               <StrengthBar score={strength.score} label={strength.label} />
             )}
 
-            {errorText && (
+            {errorText ? (
               <NoticeBanner variant="error" role="alert" icon={TriangleAlert}>
                 {errorText}
               </NoticeBanner>
+            ) : (
+              // 40105 是流程的下一步而不是错误（服务端未计失败、也未签发会话）：
+              // 用 info 级常驻提示引导，不用错误色播报一次并未发生的失败
+              phase === 'login' &&
+              totpRequired && (
+                <NoticeBanner variant="info" icon={ShieldCheck}>
+                  请输入认证器中的 6 位验证码；手机不在身边时可改用一枚恢复码（恢复码用后即作废）。
+                </NoticeBanner>
+              )
             )}
 
             <Button type="submit" className="h-10 w-full font-semibold" disabled={submitting}>
               {submitting ? (
                 <Loader2 className="size-4 animate-spin" aria-hidden />
+              ) : totpRequired ? (
+                <ShieldCheck className="size-4" aria-hidden />
               ) : (
                 <KeyRound className="size-4" aria-hidden />
               )}
-              {phase === 'setup' ? '设置密码并登录' : '登录'}
+              {phase === 'setup' ? '设置密码并登录' : totpRequired ? '验证并登录' : '登录'}
               {!submitting && <ArrowRight className="size-4" aria-hidden />}
             </Button>
           </form>

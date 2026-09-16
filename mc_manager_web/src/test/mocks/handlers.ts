@@ -856,4 +856,8 @@ export const handlers = [
   http.post('*/api/v1/auth/logout', () => ok({ ok: true })),
   http.put('*/api/v1/auth/password', () => ok({ ok: true, kickedSessions: 2 })),
   http.delete('*/api/v1/auth/sessions/:id', () => ok({ ok: true, current: false })),
+  // 两步验证状态（默认未启用；各用例按需覆写 enabled/剩余数量）
+  http.get('*/api/v1/auth/totp/status', () =>
+    ok({ enabled: false, confirmedAt: null, recoveryCodesRemaining: 0 }),
+  ),
 ]

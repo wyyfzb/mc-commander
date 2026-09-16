@@ -139,6 +139,10 @@
   --mcs-terminal-warning: var(--ref-warning);
   --mcs-terminal-accent: var(--ref-accent);
 
+  /* ── 二维码承托面（主题无关亮面：扫码器要求深模块压在亮静默区上，
+       暗色主题把它换深底等于让二维码失效；与 --mcs-terminal-* 同理不参与主题映射）── */
+  --mcs-qr-surface: var(--ref-light-card);            /* 亮色卡片档即纯白，见 reference 层 --ref-light-card */
+
   /* ── 动效（交互反馈 ≤300ms 只动 transform/opacity；slow 450ms 仅限一次性入场编排；
         spring 轻微过冲仅限弹层/卡片入场，禁止用于循环动画）── */
   --mcs-motion-fast: 150ms;      /* hover */

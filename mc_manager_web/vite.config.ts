@@ -50,6 +50,7 @@ const NODE_ENV_TESTS = [
   'src/lib/__tests__/notifications.test.ts',
   'src/lib/__tests__/password-strength.test.ts',
   'src/lib/__tests__/radio-group.test.ts',
+  'src/lib/__tests__/second-factor.test.ts',
   'src/lib/__tests__/tailwind-merge.test.ts',
   'src/lib/__tests__/terminal-log.test.ts',
   'src/test/mocks/__tests__/fixtures.test.ts',

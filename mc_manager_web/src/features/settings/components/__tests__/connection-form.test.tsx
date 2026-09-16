@@ -556,4 +556,33 @@ describe('ConnectionForm 重新生成 API Key', () => {
     expect(screen.getByLabelText('API Key')).toHaveValue('bad-key')
     expect(useConnectionStore.getState().apiKey).toBe('')
   })
+
+  /**
+   * 轮换入口**不**按通道开关隐藏，且失败时给出专用文案。
+   *
+   * 为什么不做「通道关闭就隐藏入口」：该开关（`API_KEY_ENABLED`）只存在于服务端 config.js，
+   * 任何响应体都不下发（`/auth/status` 只回 hasPassword）。唯一看似可用的替代信号是
+   * 「用 API Key 握手成功」——但通道关闭时 fail-closed 只拒绝**携带 Key** 的请求，
+   * 不携带 Key 的公开端点照常 200，握手只能证明「地址可达」，据此隐藏会得到一个
+   * 在真实部署里随机消失的入口。故入口恒在，把「为什么不能用」讲清楚。
+   */
+  it('轮换失败（40303 通道关闭）：入口仍可用，错误文案点名通道已关闭，且不写 store', async () => {
+    server.use(http.post('*/api/v1/rotate-key', () => HttpResponse.json({
+      status: 'error', code: 40303, message: 'API Key 通道已关闭，无法轮换；如需自动化凭据请先启用该通道', details: null,
+      timestamp: new Date().toISOString(),
+    }, { status: 403 })))
+    const user = userEvent.setup()
+    renderForm({ variant: 'settings' })
+
+    await user.type(screen.getByLabelText('面板地址'), 'https://192.168.1.100:25566')
+    await user.type(screen.getByLabelText('API Key'), 'old-key-abc')
+    const rotate = screen.getByRole('button', { name: '重新生成' })
+    expect(rotate).toBeEnabled()
+
+    await user.click(rotate)
+
+    expect(await screen.findByText(/API Key 通道已关闭/)).toBeInTheDocument()
+    expect(screen.getByLabelText('API Key')).toHaveValue('old-key-abc')
+    expect(useConnectionStore.getState().apiKey).toBe('')
+  })
 })

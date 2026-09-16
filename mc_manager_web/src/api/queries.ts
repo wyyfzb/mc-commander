@@ -47,6 +47,8 @@ export const queryKeys = {
   checkUpdate: () => [...queryKeys.all, 'check-update'] as const,
   /** 管理员活跃会话列表（账号与安全面板，30s 轮询） */
   authSessions: () => [...queryKeys.all, 'auth-sessions'] as const,
+  /** 两步验证状态（账号与安全面板；挂靠/关闭成功后失效重取） */
+  totpStatus: () => [...queryKeys.all, 'totp-status'] as const,
 }
 
 /** 面板概览（含云服务器系统级资源；未配置连接时禁用） */

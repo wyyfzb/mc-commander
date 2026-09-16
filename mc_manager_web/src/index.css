@@ -61,6 +61,8 @@
     --color-mcs-terminal-accent: var(--mcs-terminal-accent);
     --color-mcs-terminal-error: var(--mcs-terminal-error);
     --color-mcs-terminal-warning: var(--mcs-terminal-warning);
+    /* 二维码承托亮面（主题无关；见 semantic.css 同名 token 的说明） */
+    --color-mcs-qr-surface: var(--mcs-qr-surface);
     --color-mcs-dimension-overworld: var(--mcs-dimension-overworld);
     --color-mcs-dimension-nether: var(--mcs-dimension-nether);
     --color-mcs-dimension-end: var(--mcs-dimension-end);

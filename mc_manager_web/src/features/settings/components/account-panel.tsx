@@ -30,7 +30,8 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { PasswordInput } from '@/components/ui/password-input'
 import { StatusPill } from '@/components/mcs/status-pill'
-import { Card } from '@/components/mcs/card'
+import { SettingsSectionCard as SectionCard } from './settings-section-card'
+import { TotpPanel } from './totp-panel'
 import {
   Table,
   TableBody,
@@ -72,34 +73,6 @@ function describeUserAgent(ua: string | null): string {
           : '未知浏览器'
   const mobile = /Mobile|Android|iPhone/.test(ua) ? '（移动端）' : ''
   return `${browser}${mobile}`
-}
-
-/** 通用区块卡片（面板内三段复用） */
-function SectionCard({
-  icon: Icon,
-  title,
-  description,
-  children,
-}: {
-  icon: typeof ShieldCheck
-  title: string
-  description: string
-  children: React.ReactNode
-}) {
-  return (
-    <Card className="p-5 bg-mcs-bg-default">
-      <div className="mb-4 flex items-start gap-3">
-        <div className="flex size-8 shrink-0 items-center justify-center rounded-mcs-sm bg-mcs-accent-bg-subtle">
-          <Icon className="size-4 text-mcs-accent-fg" aria-hidden />
-        </div>
-        <div>
-          <h3 className="text-mcs-sm font-semibold text-mcs-text-default">{title}</h3>
-          <p className="mt-0.5 text-mcs-2xs text-mcs-text-muted">{description}</p>
-        </div>
-      </div>
-      {children}
-    </Card>
-  )
 }
 
 export function AccountPanel() {
@@ -334,6 +307,9 @@ export function AccountPanel() {
           </div>
         </form>
       </SectionCard>
+
+      {/* ── 两步验证（TOTP）挂靠向导 ── */}
+      <TotpPanel baseUrl={baseUrl} apiKey={apiKey} authed={authed} />
 
       {/* ── 活跃会话 ── */}
       <SectionCard
