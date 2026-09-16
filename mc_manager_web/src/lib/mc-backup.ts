@@ -4,7 +4,6 @@
  * - formatBackupDate：ISO → YYYY-MM-DD HH:mm 本地时区（解析失败原样返回）
  * - backupStatusLabel：completed 已就绪/failed 失败/creating 备份中/restoring 恢复中/未知原样
  * - backupStatusTone：completed success/failed error/restoring warning/其余 info
- * - isLegacyFormat：zip 旧格式（仅可删除，不可恢复）
  */
 import { formatFullDateMinute } from './format'
 
@@ -60,9 +59,4 @@ export function backupStatusTone(
     default:
       return 'info'
   }
-}
-
-/** 备份是否为旧格式（zip 压缩包）：仅可删除，不可恢复 */
-export function isLegacyFormat(format: string | null | undefined): boolean {
-  return format === 'zip'
 }

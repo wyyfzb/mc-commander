@@ -2,8 +2,7 @@
  * P2 安全小批打包测试（audit P2-5/6/7/8/9/10/11 / issue 324）
  *
  * 七项逐条覆盖：
- * - P2-5  scrypt N 2^14→2^17：新哈希参数断言 + 旧参数哈希仍可校验（参数
- *   自描述）+ needsRehash 判定 + 登录成功后透明重哈希升级
+ * - P2-5  scrypt N=2^17：新哈希参数断言 + 参数不匹配/畸形存储串一律校验失败
  * - P2-6  safeEqual 先 SHA-256 归一化再恒时比较：长度不等路径功能正确
  * - P2-7  认证前 JSON body 1MB：超限 413（entity.too.large 映射）
  * - P2-9  /health 精简断言（health.test.js 专文件覆盖，此处不重复）
@@ -35,7 +34,6 @@ import { AdminAccountModel, AdminSessionModel } from '../db/admin.model.js';
 import {
   hashPassword,
   verifyPassword,
-  needsRehash,
   safeEqual,
   hashToken,
   generateSessionToken,
@@ -70,51 +68,50 @@ beforeEach(() => {
   app.use(errorHandler);
 });
 
-// ── P2-5：scrypt 参数升级 + 透明重哈希 ──
+// ── P2-5：scrypt 成本参数 ──
 
 // 超时余量：本 describe 含 scrypt(N=131072) 哈希/校验（单次实测 ~270ms，成本由 N 决定）。
 // 5s 默认值按空载耗时设定，并行争抢下没有余量（本批同类用例实测 5.16s 越线）；
 // 显式放宽到本仓 15s 口径——scrypt 强度不因测试下调。
-describe('P2-5 scrypt 参数升级（2^14 → 2^17）', { timeout: 15_000 }, () => {
+describe('P2-5 scrypt 成本参数（N=2^17）', { timeout: 15_000 }, () => {
   it('新哈希使用 N=131072 自描述参数', () => {
     const stored = hashPassword('some-password-1');
     expect(stored).toMatch(/^scrypt\$131072\$8\$/);
     expect(verifyPassword('some-password-1', stored)).toBe(true);
   });
 
-  it('旧参数（2^14）哈希按存储参数校验仍通过（共存兼容）', () => {
-    // 用旧参数 N=16384 构造一个存储哈希（模拟存量部署数据），动态计算
+  it('参数与当前参数不一致的存储串一律校验失败（单一参数集，不重算旧参数）', () => {
+    // 用 N=16384 构造存储串：参数不匹配 → 直接 false，不进入重算路径
     const salt = crypto.randomBytes(16);
-    const oldHash = crypto.scryptSync('legacy-pass', salt, 64, { N: 16384, r: 8, p: 1 });
-    const legacyStored = `scrypt$16384$8$1$${salt.toString('base64')}$${oldHash.toString('base64')}`;
-    expect(verifyPassword('legacy-pass', legacyStored)).toBe(true);
-    expect(verifyPassword('wrong-pass', legacyStored)).toBe(false);
+    const legacyHash = crypto.scryptSync('legacy-pass', salt, 64, { N: 16384, r: 8, p: 1 });
+    const legacyStored = `scrypt$16384$8$1$${salt.toString('base64')}$${legacyHash.toString('base64')}`;
+    expect(verifyPassword('legacy-pass', legacyStored)).toBe(false);
+
+    const current = hashPassword('current-pass');
+    expect(verifyPassword('current-pass', current)).toBe(true);
+    expect(verifyPassword('wrong-pass', current)).toBe(false);
   });
 
-  it('needsRehash：旧参数 true、当前参数 false、畸形格式 false', () => {
-    expect(needsRehash('scrypt$16384$8$1$xx$yy')).toBe(true);
-    expect(needsRehash(hashPassword('whatever-pass'))).toBe(false);
-    expect(needsRehash('not-a-valid-hash')).toBe(false);
-    expect(needsRehash('md5$1$2$3$xx$yy')).toBe(false);
+  it('畸形存储串一律校验失败（不抛出）', () => {
+    expect(verifyPassword('any', 'not-a-valid-hash')).toBe(false);
+    expect(verifyPassword('any', 'md5$1$2$3$xx$yy')).toBe(false);
+    expect(verifyPassword('any', 'scrypt$131072$8$1$xx')).toBe(false);
+    expect(verifyPassword('any', 'scrypt$131072$8$1$xx$yy$zz')).toBe(false);
+    // 空段：0 字节摘要会让 scryptSync(pw, salt, 0) 成功、safeEqual(空,空) 恒真
+    expect(verifyPassword('any', 'scrypt$131072$8$1$$')).toBe(false);
+    expect(verifyPassword('', 'scrypt$131072$8$1$$')).toBe(false);
+    expect(verifyPassword('any', 'scrypt$131072$8$1$AAAAAA==$')).toBe(false);
+    expect(verifyPassword('any', 'scrypt$131072$8$1$$AAAAAA==')).toBe(false);
   });
 
-  it('登录成功后透明重哈希：旧参数存储被升级为当前参数（无需改密）', { timeout: 30000 }, async () => {
-    // 种一个旧参数账号（动态构造）
-    const salt = crypto.randomBytes(16);
-    const oldHash = crypto.scryptSync('upgrade-me-pass', salt, 64, { N: 16384, r: 8, p: 1 });
-    const legacyStored = `scrypt$16384$8$1$${salt.toString('base64')}$${oldHash.toString('base64')}`;
-    AdminAccountModel.setPassword(legacyStored);
-
-    const res = await request(app)
-      .post('/api/v1/auth/login')
-      .send({ password: 'upgrade-me-pass' });
-    expect(res.status).toBe(200);
-    expect(res.body.data.token).toBeTruthy();
-
-    // 存储哈希已按当前参数重写，且新哈希仍验证同一密码
-    const updated = AdminAccountModel.get().password_hash;
-    expect(updated).toMatch(/^scrypt\$131072\$8\$/);
-    expect(verifyPassword('upgrade-me-pass', updated)).toBe(true);
+  it('空摘要段的记录不能被任意密码通过（登录语义：一律 40102）', async () => {
+    // 直接种一行「0 字节摘要」的损坏记录：修复前该形状能让任意密码登录成功
+    for (const broken of ['scrypt$131072$8$1$$', 'scrypt$131072$8$1$AAAAAA==$']) {
+      AdminAccountModel.setPassword(broken);
+      const res = await request(app).post('/api/v1/auth/login').send({ password: 'whatever-pass' });
+      expect(res.status, `损坏记录 ${broken} 不得签发放行`).toBe(401);
+      expect(res.body.code).toBe(40102);
+    }
   });
 });
 

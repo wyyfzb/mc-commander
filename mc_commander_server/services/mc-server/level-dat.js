@@ -289,7 +289,7 @@ export function _getLastSaveTime() {
 
 /// 从存档文件读取天气状态（NBT 格式），兼容新旧 MC 版本。
 /// MC 26.x   : 天气已从 level.dat 移出，存于 <world>/data/minecraft/weather.dat 的 data 子节点
-/// 旧版      : level.dat 的 Data.raining / Data.thundering（含 isRaining/isThundering 兼容）
+/// 旧版      : level.dat 的 Data.raining / Data.thundering
 /// 返回 'clear' / 'rain' / 'thunder'，读取失败返回 null
 export function _readWeatherFromLevelDat() {
   const levelName = this._getSafeLevelName();
@@ -324,11 +324,8 @@ export function _readWeatherFromLevelDat() {
 
     // NBT 结构: { Data: { raining, thundering, clearWeatherTime, rainTime, thunderTime, ... } }
     const data = parsed?.value?.Data?.value || parsed?.value || {};
-    // MC 真实字段名为 raining/thundering；保留 isRaining/isThundering 兼容旧实现
-    const isRaining = data.raining?.value === 1 || data.raining?.value === true
-      || data.isRaining?.value === 1 || data.isRaining?.value === true;
-    const isThundering = data.thundering?.value === 1 || data.thundering?.value === true
-      || data.isThundering?.value === 1 || data.isThundering?.value === true;
+    const isRaining = data.raining?.value === 1 || data.raining?.value === true;
+    const isThundering = data.thundering?.value === 1 || data.thundering?.value === true;
 
     if (isThundering) return 'thunder';
     if (isRaining) return 'rain';

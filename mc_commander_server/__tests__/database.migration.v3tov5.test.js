@@ -3,27 +3,27 @@ import fs from 'fs';
 import path from 'path';
 import Database from 'better-sqlite3';
 
-// 独立临时 dataDir：本文件模拟「存量 v4 库升级到 v5」，需避开其它迁移测试的目录
+// 独立临时 dataDir：本文件模拟「存量 v3 库升级到 v5」，需避开其它迁移测试的目录
 vi.mock('../config.js', async () => {
   const fs = await import('fs');
   const os = await import('os');
   const path = await import('path');
-  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-db-v4tov5-'));
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-db-v3tov5-'));
   return { default: { dataDir: tmpRoot } };
 });
 
 import config from '../config.js';
 import { initDatabase } from '../db/database.js';
 
-describe('数据库 v4→v5 升级迁移（存量库 + 存量行）', () => {
+describe('数据库 v3→v5 升级迁移（存量库 + 存量行）', () => {
   const dbPath = path.join(config.dataDir, 'mc_commander.db');
   let db;
 
   beforeAll(() => {
-    // 手工构造 v4 库：scheduled_tasks 无 last_run_status 列 + 存量行 + user_version=4
+    // 手工构造 v3 库：scheduled_tasks 无 last_run_status 列 + 存量行 + user_version=3
     fs.mkdirSync(config.dataDir, { recursive: true });
     const raw = new Database(dbPath);
-    raw.pragma('user_version = 4');
+    raw.pragma('user_version = 3');
     raw.exec(`
       CREATE TABLE scheduled_tasks (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -53,12 +53,19 @@ describe('数据库 v4→v5 升级迁移（存量库 + 存量行）', () => {
     fs.rmSync(config.dataDir, { recursive: true, force: true });
   });
 
-  it('user_version 升到 12（v4→v5→…→v11→v12 连续）', () => {
+  it('user_version 升到 12（v3 起经 v5→…→v11→v12 连续）', () => {
     expect(db.pragma('user_version', { simple: true })).toBe(12);
   });
 
   it('存量行 last_run_status 回填 never（ALTER 默认值）', () => {
     const row = db.prepare("SELECT last_run_status FROM scheduled_tasks WHERE name = '存量任务'").get();
     expect(row.last_run_status).toBe('never');
+  });
+
+  it('新建 backups 表不含 format 列', () => {
+    const columns = db.prepare('PRAGMA table_info(backups)').all().map((c) => c.name);
+    expect(columns).not.toContain('format');
+    expect(columns).toContain('file_path');
+    expect(columns).toContain('world_name');
   });
 });

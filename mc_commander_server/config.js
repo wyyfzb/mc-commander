@@ -53,7 +53,6 @@ const config = {
   // .env 文件路径（dotenv 加载源）：面板备份把它作快照伴生文件收进灾备
   // （API_KEY_HASH/SETUP_TOKEN 只存于 .env，丢 .env = 管理员无法重新接入）
   envFilePath: path.join(__dirname, '.env'),
-  apiKey: process.env.API_KEY || '',
   apiKeyHash: process.env.API_KEY_HASH || '',
   // 只读机器凭据（与 API_KEY_HASH 同款「只存 SHA-256 摘要」）：未配置 = 该通道
   // 不存在（fail-closed，不是「不校验」）。仅可访问白名单内的只读监控端点，

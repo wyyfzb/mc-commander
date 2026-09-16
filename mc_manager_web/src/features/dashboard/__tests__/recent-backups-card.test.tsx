@@ -1,6 +1,6 @@
 /**
  * RecentBackupsCard 测试：
- * - 骨架加载态 / 空态引导 / 失败态重试 / 正常渲染（名称 + 时间·大小 + 状态徽章 + 旧格式徽章）
+ * - 骨架加载态 / 空态引导 / 失败态重试 / 正常渲染（名称 + 时间·大小 + 状态徽章）
  * - 立即备份按钮（成功 toast / 有在途备份时禁用）
  * - 「全部」与空态入口**真实跳转**到设置页备份子路由（/settings/backup）——防入口路由漂移回归
  * mock 数据为虚构内容（mockBackups），严禁真实服务器信息
@@ -119,16 +119,14 @@ describe('RecentBackupsCard', () => {
     await waitFor(() => expect(screen.getByText('暂无备份记录')).toBeInTheDocument())
   })
 
-  it('渲染备份行：名称 + 时间·大小 + 状态徽章 + 旧格式徽章', async () => {
+  it('渲染备份行：名称 + 时间·大小 + 状态徽章', async () => {
     await renderReady()
 
-    // mockBackups 三条：已完成快照 / 已完成 zip / 失败
-    expect(screen.getByText('旧格式压缩包')).toBeInTheDocument()
+    // mockBackups 两条：已完成 / 失败
     expect(screen.getByText('失败的备份')).toBeInTheDocument()
-    expect(screen.getByText('旧格式')).toBeInTheDocument()
     expect(screen.getByText('失败')).toBeInTheDocument()
-    // 两条 completed → 「已就绪」
-    expect(screen.getAllByText('已就绪')).toHaveLength(2)
+    // 一条 completed → 「已就绪」
+    expect(screen.getAllByText('已就绪')).toHaveLength(1)
     // 大小格式化（524288000 → 500.0 MB）
     expect(screen.getByText(/500\.0 MB/)).toBeInTheDocument()
   })
@@ -158,7 +156,6 @@ describe('RecentBackupsCard', () => {
               size: 0,
               status: 'creating',
               worldName: 'world',
-              format: 'snapshot',
               createdAt: '2026-08-15T00:00:00.000Z',
               updatedAt: '2026-08-15T00:00:00.000Z',
             },

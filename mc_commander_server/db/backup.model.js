@@ -7,7 +7,7 @@ import { parseDbTime, toIsoUtc } from '../utils/db-time.js';
 // 目录结构（且可被用于探测/构造路径）；file_path 仅服务层内部通过
 // findByIdWithPath 获取（restoreBackup/deleteBackup 需要）。
 const PUBLIC_COLUMNS =
-  'id, instance_id, name, description, type, size, status, world_name, format, created_at, updated_at';
+  'id, instance_id, name, description, type, size, status, world_name, created_at, updated_at';
 
 export class BackupModel {
   static findAll(options = {}) {
@@ -81,7 +81,6 @@ export class BackupModel {
       size: row.size,
       status: row.status,
       worldName: row.world_name,
-      format: row.format,
       createdAt: toIsoUtc(row.created_at),
       updatedAt: toIsoUtc(row.updated_at),
     };
@@ -93,8 +92,8 @@ export class BackupModel {
     const result = db.prepare(`
       INSERT INTO backups (
         instance_id, name, description, type, size, status,
-        file_path, world_name, format
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        file_path, world_name
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       data.instanceId,
       data.name,
@@ -103,8 +102,7 @@ export class BackupModel {
       data.size || 0,
       data.status || 'creating',
       data.filePath || null,
-      data.worldName || null,
-      data.format || 'snapshot'
+      data.worldName || null
     );
 
     return this.findById(result.lastInsertRowid);
@@ -121,8 +119,7 @@ export class BackupModel {
       status: 'status',
       size: 'size',
       filePath: 'file_path',
-      worldName: 'world_name',
-      format: 'format'
+      worldName: 'world_name'
     };
 
     for (const [key, column] of Object.entries(fieldMap)) {
@@ -150,7 +147,7 @@ export class BackupModel {
    * 卡死恢复：进程崩溃时执行中的备份/恢复记录永久停留 creating/restoring
    * （fire-and-forget 的 finally 不会执行），导致该实例备份功能永久死锁
    * （互斥检查全部命中 409）。超过 maxAgeMs 的进行中记录按语义重置：
-   * - creating（备份执行中崩溃，zip 可能不完整）→ failed
+   * - creating（备份执行中崩溃，快照可能不完整）→ failed
    * - restoring（恢复执行中崩溃，备份文件本身未动）→ completed
    * 返回被重置的记录数。JS 侧比较避免 SQLite 时间函数时区差异。
    */

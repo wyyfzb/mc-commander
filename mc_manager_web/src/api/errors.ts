@@ -1,7 +1,7 @@
 /**
  * 错误码映射（设计文档 §5.1 errors.ts）
  * 对照服务端 utils/response.js ErrorCodes 全表；
- * 策略：服务端 message 已本地化的（40902/40904 等）直接透传，
+ * 策略：服务端 message 已本地化的（40902 等）直接透传，
  *       英文默认文案的用本地友好文案覆盖
  */
 import { ApiError } from './client'
@@ -53,7 +53,6 @@ export const ErrorCode = {
   BACKUP_IN_PROGRESS: 40901,
   BACKUP_RCON_UNAVAILABLE: 40902,
   RESTORE_IN_PROGRESS: 40903,
-  BACKUP_FORMAT_UNSUPPORTED: 40904,
   BACKUP_FAILED: 50002,
 
   TASK_NOT_FOUND: 40405,
@@ -147,7 +146,6 @@ const LOCALIZED_MESSAGES: Partial<Record<ErrorCodeValue, string>> = {
 /** 服务端已本地化的错误码（message 直接透传，不覆盖） */
 const SERVER_LOCALIZED_CODES: ReadonlySet<ErrorCodeValue> = new Set([
   ErrorCode.BACKUP_RCON_UNAVAILABLE, // 40902 中文文案
-  ErrorCode.BACKUP_FORMAT_UNSUPPORTED, // 40904 中文文案
 ])
 
 /**

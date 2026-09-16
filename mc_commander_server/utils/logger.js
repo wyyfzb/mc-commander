@@ -20,10 +20,13 @@ const LEVELS = Object.freeze({ debug: 10, info: 20, warn: 30, error: 40 });
 const LEVEL_TAGS = Object.freeze({ debug: 'DEBUG', info: 'INFO', warn: 'WARN', error: 'ERROR' });
 const ERROR_FILE_NAME = 'error.log';
 
-// dataDir 容错：测试 vi.mock(config) 可能缺 dataDir 字段，模块加载期不得抛错
-//（缺省时回退仓库默认 './data/logs'；真实运行始终有值——config.js 默认 './data'）
+// dataDir 容错：测试 vi.mock(config) 可能缺 dataDir 字段，模块加载期不得抛错。
+// 缺省时先跟随 DATA_DIR 环境变量（测试注入临时目录），最后才落仓库相对路径；
+// 真实运行 config.dataDir 恒有值（config.js 默认 './data'），此分支不可达
 function defaultLogDir() {
-  return config.dataDir ? path.join(config.dataDir, 'logs') : path.resolve('./data/logs');
+  if (config.dataDir) return path.join(config.dataDir, 'logs');
+  if (process.env.DATA_DIR) return path.join(process.env.DATA_DIR, 'logs');
+  return path.resolve('./data/logs');
 }
 
 const DEFAULTS = Object.freeze({

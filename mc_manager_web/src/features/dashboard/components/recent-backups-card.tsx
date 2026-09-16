@@ -22,7 +22,6 @@ import {
   backupStatusLabel,
   formatBackupDate,
   formatBackupSize,
-  isLegacyFormat,
 } from '@/lib/mc-backup'
 import { useBackups, useCreateBackup, useBackupEventRefresh } from '@/features/settings/queries'
 
@@ -137,7 +136,7 @@ export function RecentBackupsCard() {
   )
 }
 
-/** 紧凑单行：状态图标 + 名称（+ 旧格式徽章）+ 时间·大小 + 状态徽章 */
+/** 紧凑单行：状态图标 + 名称 + 时间·大小 + 状态徽章 */
 function BackupMiniRow({ backup }: { backup: BackupItem }) {
   const status = backup.status
   const tone = backupStatusTone(status)
@@ -169,11 +168,6 @@ function BackupMiniRow({ backup }: { backup: BackupItem }) {
           >
             {backup.name}
           </span>
-          {isLegacyFormat(backup.format) && (
-            <StatusPill tone="warning" className="text-mcs-2xs">
-              旧格式
-            </StatusPill>
-          )}
         </div>
         <p className="truncate text-mcs-2xs text-mcs-text-muted" title={metaLine}>
           {metaLine || '—'}

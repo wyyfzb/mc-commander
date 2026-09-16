@@ -21,8 +21,8 @@ const server = setupServer(
   }),
   http.get('http://localhost:25566/api/v1/backups/2/download', () => {
     return HttpResponse.json(
-      { status: 'error', code: 40904, message: '旧格式备份不支持恢复', details: null },
-      { status: 409 },
+      { status: 'error', code: 40000, message: 'Validation failed', details: null },
+      { status: 400 },
     )
   }),
   http.get('http://localhost:25566/api/v1/backups/999/download', () => {
@@ -49,8 +49,8 @@ describe('apiDownloadBackup', () => {
     expect(blob.size).toBeGreaterThan(0)
   })
 
-  it('throws error message from server for 409', async () => {
-    await expect(apiDownloadBackup(config, 2)).rejects.toThrow('旧格式备份不支持恢复')
+  it('throws error message from server for 400', async () => {
+    await expect(apiDownloadBackup(config, 2)).rejects.toThrow('Validation failed')
   })
 
   it('throws error for 404', async () => {

@@ -35,7 +35,6 @@ vi.mock('../config.js', async () => {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-manager-test-'));
   return {
     default: {
-      apiKey: '',
       port: 0,
       serversDir: path.join(tmpRoot, 'servers'),
       dataDir: path.join(tmpRoot, 'data'),
@@ -770,24 +769,6 @@ describe('MCServerManager', () => {
       });
       const instance = manager.createInstance({
         id: 'weather-26', name: 'Weather 26', jarFile: 'server.jar', serverPath: tmpDir,
-      });
-      instance.properties = { 'level-name': 'world' };
-      expect(instance._readWeatherFromLevelDat()).toBe('rain');
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-    });
-
-    it('兼容旧代码的 isRaining/isThundering 字段', () => {
-      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-weather-'));
-      writeNbtFile(path.join(tmpDir, 'world', 'level.dat'), {
-        type: 'compound', name: '', value: {
-          Data: { type: 'compound', value: {
-            isRaining: { type: 'byte', value: 1 },
-            isThundering: { type: 'byte', value: 0 },
-          }},
-        },
-      });
-      const instance = manager.createInstance({
-        id: 'weather-compat', name: 'Weather Compat', jarFile: 'server.jar', serverPath: tmpDir,
       });
       instance.properties = { 'level-name': 'world' };
       expect(instance._readWeatherFromLevelDat()).toBe('rain');

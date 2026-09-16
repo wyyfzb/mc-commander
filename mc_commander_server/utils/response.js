@@ -45,13 +45,6 @@ export const ErrorCodes = {
   },
   // 恢复互斥：另一恢复正在进行（同一实例 status='restoring'）
   RESTORE_IN_PROGRESS: { code: 40903, message: 'Restore already in progress', status: 409 },
-  // 旧格式备份（zip 压缩包）不支持恢复：快照方案改造后恢复为目录复制，
-  // 旧 zip 备份仅保留可删（无解压链路，不保留 unzip 攻击面）
-  BACKUP_FORMAT_UNSUPPORTED: {
-    code: 40904,
-    message: '旧格式备份（zip 压缩包）不支持恢复，仅可删除',
-    status: 409,
-  },
   
   // 定时任务错误
   TASK_NOT_FOUND: { code: 40405, message: 'Scheduled task not found', status: 404 },

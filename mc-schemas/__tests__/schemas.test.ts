@@ -126,9 +126,9 @@ describe('schemas 基础校验', () => {
     const backup = backupItemSchema.parse({
       id: 1, instanceId: 'inst-1', name: 'backup-1', description: null,
       type: 'manual', size: 1024000, status: 'completed',
-      worldName: 'world', format: 'snapshot', createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z',
+      worldName: 'world', createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z',
     })
-    expect(backup.format).toBe('snapshot')
+    expect(backup.worldName).toBe('world')
   })
 
   it('scheduledTask schema 解析定时任务', () => {

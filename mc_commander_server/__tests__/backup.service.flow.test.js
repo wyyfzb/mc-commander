@@ -136,9 +136,9 @@ describe.skipIf(!snapshotTool)(
     const record = await service.createBackup('s1', { name: '测试备份' });
 
     expect(record.id).toBe(1);
-    // 记录创建为 creating + snapshot 格式（互斥状态机入口 + 快照格式契约）
+    // 记录创建为 creating（互斥状态机入口）
     expect(MockBackupModel.create).toHaveBeenCalledWith(
-      expect.objectContaining({ status: 'creating', worldName: 'world', format: 'snapshot' })
+      expect.objectContaining({ status: 'creating', worldName: 'world' })
     );
 
     const done = await completeEvent;
@@ -261,7 +261,6 @@ describe.skipIf(!snapshotTool)(
       status: 'completed',
       world_name: 'world',
       name: '恢复源',
-      format: 'snapshot',
       file_path: snapshotDir,
     });
     const restoreComplete = waitForEvent(manager, 'instance:restoreComplete');
@@ -307,7 +306,6 @@ describe.skipIf(!snapshotTool)(
       status: 'completed',
       world_name: 'world',
       name: '坏快照',
-      format: 'snapshot',
       file_path: badSnapshot,
     });
     const service = new BackupService(manager);
@@ -331,7 +329,6 @@ describe.skipIf(!snapshotTool)(
       status: 'completed',
       world_name: 'world',
       name: '幽灵快照',
-      format: 'snapshot',
       file_path: path.join(backupsDir, 's1', 'ghost-snapshot'),
     });
     const service = new BackupService(manager);

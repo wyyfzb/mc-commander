@@ -51,7 +51,7 @@ MC_Commander 是一个自托管的 Minecraft 服务器管理工具。**核心定
 - **进程级异常兜底** — 未捕获异常/拒绝（uncaughtException/unhandledRejection）记录结构化错误日志（含堆栈）后自动优雅停机（停实例落盘、关库），避免无日志静默崩溃导致所有实例托管断连
 - **一键部署** — Vanilla/Paper/Fabric/Forge/Purpur 五种服务端类型，自动下载 JAR（实时进度）、Java 版本检测、首次启动配置、失败可重试
 - **Aikar's Flags JVM 优化** — 一键生成 G1GC 优化参数集，内存滑块带推荐值
-- **备份管理** — **目录快照 + 增量传输**（Linux rsync `--link-dest` 硬链接快照：未变化文件零拷贝；Windows rsync 优先、自动降级 robocopy 全量镜像）、**实例级备份**（世界+配置+插件全量，自动排除日志/加载器依赖/jar，兼容 26.x 新布局与旧版 Bukkit 维度目录）、在线备份原子序列（save-off→save-all flush→save-on）、恢复异步化（后台执行 + 进度事件 + 自动回滚 + 快照预检 + level.dat 完整性校验）、**自动清理**（数量/天数双上限）、磁盘预检与快照完整性校验（SQLite 持久化；旧 zip 备份保留可删、恢复拒绝）、**面板自身数据快照**（SQLite 在线备份 API 每日快照至 `backups/panel/`，保留策略与实例备份一致，恢复步骤见服务端 README 备份章节；`.env` 不入自动备份，手动备份在服务端 README 有指引）
+- **备份管理** — **目录快照 + 增量传输**（Linux rsync `--link-dest` 硬链接快照：未变化文件零拷贝；Windows rsync 优先、自动降级 robocopy 全量镜像）、**实例级备份**（世界+配置+插件全量，自动排除日志/加载器依赖/jar，兼容 26.x 新布局与旧版 Bukkit 维度目录）、在线备份原子序列（save-off→save-all flush→save-on）、恢复异步化（后台执行 + 进度事件 + 自动回滚 + 快照预检 + level.dat 完整性校验）、**自动清理**（数量/天数双上限）、磁盘预检与快照完整性校验（SQLite 持久化）、**面板自身数据快照**（SQLite 在线备份 API 每日快照至 `backups/panel/`，保留策略与实例备份一致，恢复步骤见服务端 README 备份章节；`.env` 不入自动备份，手动备份在服务端 README 有指引）
 - **性能监控** — CPU/内存/TPS 采集，WebSocket 实时推送
 
 ### 实时与可靠性
@@ -100,11 +100,10 @@ cp -r ../mc_manager_web/dist/. public/
 npm start
 ```
 
-**API Key 部署口径（二选一）**：
-- **明文自动迁移（推荐）**：`.env` 中设置 `API_KEY=<你的密钥>`，首次启动自动计算 SHA-256 并改写为 `API_KEY_HASH=<sha256hex>` 哈希存储，明文行随即移除（迁移失败时日志提示手动替换）；生产环境（`NODE_ENV=production`）下弱密钥（长度 <16 或纯重复字符）阻断启动，`ALLOW_WEAK_KEY=1` 可临时豁免（仅限开发联调，严禁生产开启）。
-- **纯 HASH 零明文落盘**：直接写入 `API_KEY_HASH=<sha256hex>`（如 `printf '%s' '你的密钥' | sha256sum` 生成），不配置明文 `API_KEY`。
+**API Key 部署口径**：`.env` 中写入 `API_KEY_HASH=<sha256hex>`（如 `printf '%s' '你的密钥' | sha256sum` 生成）。
+服务端只存 SHA-256 摘要，明文不落盘；轮换走 `POST /api/v1/rotate-key`（服务端写回该行）。
 
-启动校验以 `API_KEY_HASH` 为准：两种方式最终都未设置（或迁移失败）时，服务端打印错误横幅并以 `exit(1)` 拒绝启动。
+未设置 `API_KEY_HASH` 时，服务端打印错误横幅并以 `exit(1)` 拒绝启动。
 
 服务端默认运行在 `http://localhost:25566`
 
@@ -279,8 +278,7 @@ ws.onmessage = (event) => {
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
-| `API_KEY` | （与 `API_KEY_HASH` 二选一） | API 认证密钥（明文）：首次启动自动迁移为 `API_KEY_HASH` 哈希存储并移除明文行；生产环境弱密钥（长度 <16 或纯重复字符）阻断启动（`ALLOW_WEAK_KEY` 可临时豁免，严禁生产开启） |
-| `API_KEY_HASH` | （与 `API_KEY` 二选一，启动校验以本值为准） | API 认证密钥的 SHA-256 哈希（零明文落盘口径，如 `printf '%s' '<密钥>' \| sha256sum` 生成）；最终都未设置时启动报错 `exit(1)` |
+| `API_KEY_HASH` | （必填，启动校验以本值为准） | API 认证密钥的 SHA-256 摘要（零明文落盘，如 `printf '%s' '<密钥>' \| sha256sum` 生成）；未设置时启动报错 `exit(1)` |
 | `SETUP_TOKEN` | （未配置） | 首访设密所有权证明（一次性）：配置后 `POST /auth/setup` 必须携带 `Authorization: SetupToken <token>`，校验通过立即作废（内存 + 本行移除）；部署脚本首次部署自动生成，未配置 = 不校验（仅建议本机/可信网络使用） |
 | `HOST` | `127.0.0.1` | 服务监听地址：公网部署需显式设 `0.0.0.0`（默认仅本机） |
 | `TRUST_PROXY` | `1` | 信任反向代理层数（Express trust proxy）：默认 1 兼容 nginx/CDN 反代，设 0 不信任代理头（`req.ip` = 直连 IP）；仅影响 `req.ip` 解析，登录锁定键始终取直连 IP |

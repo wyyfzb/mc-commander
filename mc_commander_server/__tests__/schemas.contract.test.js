@@ -110,7 +110,6 @@ beforeAll(() => {
     status TEXT DEFAULT 'creating',
     file_path TEXT,
     world_name TEXT,
-    format TEXT DEFAULT 'snapshot',
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (instance_id) REFERENCES instances(id) ON DELETE CASCADE
@@ -293,7 +292,7 @@ describe('响应契约：状态路由 × overviewDataSchema（#393 接入）', (
 describe('响应契约：备份路由 × backupItemSchema（#393 接入）', () => {
   it('GET /instances/:instanceId/backups → 信封 + pagination 可 parse，data 逐条通过 backupItemSchema', async () => {
     db.prepare(
-      "INSERT INTO backups (instance_id, name, description, type, size, status, world_name, format) VALUES (?, ?, ?, 'manual', ?, 'completed', ?, 'snapshot')"
+      "INSERT INTO backups (instance_id, name, description, type, size, status, world_name) VALUES (?, ?, ?, 'manual', ?, 'completed', ?)"
     ).run('demo', '契约快照', null, 1024, 'world');
 
     const app = express();

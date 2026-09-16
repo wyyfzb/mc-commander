@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeAll, afterAll, beforeEach, afterEach } 
 import express from 'express';
 import request from 'supertest';
 import fs from 'fs';
-import crypto from 'crypto';
 
 // dataDir 指向临时目录（真实 SQLite）：本文件验证的是挂靠/确认/关闭/登录全链路
 // 与落库状态的真实变化，mock 库无法呈现 used_at / totp_last_step 的持久化语义
@@ -24,7 +23,6 @@ import { createAuthRoutes, resetLoginLockState } from '../routes/auth.js';
 import { errorHandler } from '../middleware/error_handler.js';
 import { isLocked } from '../utils/credential-lockout.js';
 import {
-  generateTotpSecret,
   totpCodeAtStep,
   currentTimeStep,
   TOTP_PERIOD_SECONDS,
@@ -675,36 +673,5 @@ describe('登录失败封禁：第二因子错误计入同一计数', () => {
 
     const blocked = await request(app).post('/api/v1/auth/login').send({ password: PASSWORD });
     expect(blocked.status).toBe(429);
-  });
-});
-
-describe('改密透明重哈希与两步验证共处一行', () => {
-  /** 旧参数 scrypt 哈希（N=2^14）：登录成功会触发透明重哈希写入 */
-  function legacyHash(password) {
-    const salt = crypto.randomBytes(16);
-    const hash = crypto.scryptSync(password, salt, 64, { N: 16384, r: 8, p: 1 });
-    return `scrypt$16384$8$1$${salt.toString('base64')}$${hash.toString('base64')}`;
-  }
-
-  it('重哈希不触碰 totp_secret，且重哈希后登录仍要求第二因子', async () => {
-    const secret = generateTotpSecret();
-    db.prepare('INSERT INTO admin_account (id, password_hash, totp_secret) VALUES (1, ?, ?)').run(
-      legacyHash(PASSWORD),
-      secret,
-    );
-    AdminAccountModel.confirmTotp();
-
-    const login = await request(app)
-      .post('/api/v1/auth/login')
-      .send({ password: PASSWORD, totpCode: codeNow(secret) });
-    expect(login.status).toBe(200);
-
-    const account = rawAccount();
-    expect(account.password_hash).toMatch(/^scrypt\$131072\$8\$1\$/); // 已透明升级
-    expect(account.totp_secret).toBe(secret); // 未被整行覆盖清空
-    expect(account.totp_enabled).toBe(1);
-
-    const again = await request(app).post('/api/v1/auth/login').send({ password: PASSWORD });
-    expect(again.body.code).toBe(40105); // 第二因子仍然生效
   });
 });

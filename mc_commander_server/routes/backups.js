@@ -139,7 +139,7 @@ export function createBackupRoutes(serverManager) {
 
   // feat-1: 备份下载（流式 tar.gz）
   // 安全链：findByIdWithPath（不泄露 file_path）→ resolveContained（目录包含 + symlink 复检）→
-  // spawn 数组参数（无 shell 注入）→ 仅 completed + snapshot 可下载
+  // spawn 数组参数（无 shell 注入）→ 仅 completed 可下载
   router.get('/backups/:id/download', asyncHandler(async (req, res) => {
     const backup = BackupModel.findByIdWithPath(req.params.id);
     if (!backup) {
@@ -148,13 +148,25 @@ export function createBackupRoutes(serverManager) {
     if (backup.status !== 'completed') {
       throw new AppError(ErrorCodes.VALIDATION_ERROR);
     }
-    if (backup.format === 'zip') {
-      throw new AppError(ErrorCodes.BACKUP_FORMAT_UNSUPPORTED);
-    }
-    // 路径安全：resolveContained 会 realpath 复检 symlink 逃逸
-    const resolvedDir = resolveContained(config.backupsDir, backup.file_path);
-    if (!fs.existsSync(resolvedDir)) {
+    // 路径安全：resolveContained 会 realpath 复检 symlink 逃逸。
+    // 记录必须带非空字符串路径——file_path 为 null 时 path.resolve 会抛
+    // ERR_INVALID_ARG_TYPE（500），空串则被解析成 cwd 绕过包含校验
+    const rawPath = backup.file_path;
+    if (typeof rawPath !== 'string' || rawPath.trim() === '') {
       throw new AppError(ErrorCodes.BACKUP_NOT_FOUND);
+    }
+    const resolvedDir = resolveContained(config.backupsDir, rawPath);
+    // 下载链路的 tar 以「目录」为目标（tar -C <dir>）：必须先确认是目录。
+    // 目标为文件时 tar 退出码非 0 且 stdout 为空，但响应头已发 ⇒ 客户端拿到
+    // 200 + 0 字节空档，无法与有效备份区分
+    let snapshotStat;
+    try {
+      snapshotStat = fs.statSync(resolvedDir);
+    } catch {
+      throw new AppError(ErrorCodes.BACKUP_NOT_FOUND);
+    }
+    if (!snapshotStat.isDirectory()) {
+      throw new AppError(ErrorCodes.VALIDATION_ERROR);
     }
     const dirName = path.basename(resolvedDir);
     res.setHeader('Content-Type', 'application/gzip');

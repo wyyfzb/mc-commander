@@ -80,8 +80,6 @@ function createTables() {
   }
 
   // 备份表
-  // format 列（v4）：'snapshot'（目录快照，当前格式）/'zip'（旧格式压缩包，
-  // 仅保留可删）。恢复路径按 format 分流——zip 无解压链路直接拒绝
   db.exec(`
     CREATE TABLE IF NOT EXISTS backups (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -93,7 +91,6 @@ function createTables() {
       status TEXT DEFAULT 'creating',
       file_path TEXT,
       world_name TEXT,
-      format TEXT DEFAULT 'snapshot',
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (instance_id) REFERENCES instances(id) ON DELETE CASCADE
@@ -112,22 +109,6 @@ function createTables() {
     }
     db.pragma('user_version = 3');
     logger.info('Migration: added updated_at column to backups table');
-  }
-
-  // 迁移：backups 表增加 format 列（v4）——快照方案（目录快照 + rsync/robocopy
-  // 增量）取代 zip 压缩后，历史 zip 备份与新建快照需区分：
-  // 旧记录 file_path 以 .zip 结尾 → 标记 zip（仅可删，恢复拒绝）；
-  // 其余（含新库建表默认值）为 snapshot。存量迁移不依赖默认值，
-  // 显式按 file_path 后缀改写，保证老库与旧版本写入的行均正确归类
-  if (userVersion < 4) {
-    try {
-      db.prepare('SELECT format FROM backups LIMIT 1').get();
-    } catch {
-      db.exec("ALTER TABLE backups ADD COLUMN format TEXT DEFAULT 'snapshot'");
-    }
-    db.exec("UPDATE backups SET format = 'zip' WHERE file_path LIKE '%.zip'");
-    db.pragma('user_version = 4');
-    logger.info('Migration: added format column to backups table');
   }
 
   // 定时任务表

@@ -243,8 +243,8 @@ describe('401 认证失败补日志', () => {
   });
 
   it('无效 API Key → warn（含 ip/path，不含凭据本体）', () => {
-    // 无效键从 env 测试键派生（不写凭据字面量）；日志断言同时锁「凭据本体永不入日志」
-    const invalidKey = `${process.env.API_KEY}-wrong`;
+    // 无效键由测试键派生（不写第二份凭据字面量）；日志断言同时锁「凭据本体永不入日志」
+    const invalidKey = `${TEST_API_KEY}-wrong`;
     const res = makeRes();
     authMiddleware(makeReq({ 'x-api-key': invalidKey }), res, next);
     expect(res.status).toHaveBeenCalledWith(401);

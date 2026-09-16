@@ -65,7 +65,7 @@ export function resolveContained(baseDir, target) {
 // 快照方案：备份 = 完整目录快照 + 增量传输（Linux rsync --link-dest 硬链接
 // / Windows robocopy 全量镜像，rsync 不可用时自动降级）。恢复 = 目录复制
 // （禁止 mv——mv 会把共享 inode 移交实例目录，服务器运行后的 in-place
-// 写入会污染所有仍硬链接同一 inode 的旧快照）。压缩与解压链路整体移除。
+// 写入会污染所有仍硬链接同一 inode 的旧快照）。
 
 // 构造 Linux rsync 快照命令参数（实例级目录快照）：
 // cwd=serversDir 下源为相对路径 <instanceId>/（尾带 / 复制目录内容，
@@ -172,7 +172,7 @@ export async function estimateDirSize(dir, { jarFile = null } = {}) {
 
 // 磁盘剩余空间预检：备份目标盘可用空间不足预估大小 1.5 倍时拒绝。
 // 磁盘满时 save 写入截断是世界损坏第一大诱因（业界共识），预检提前
-// 失败比压缩中失败（zip 截断 + save-on 前中断）安全得多。
+// 失败比快照中途失败（save-on 前中断）安全得多。
 function checkDiskSpace(backupsDir, estimateBytes) {
   try {
     const statfs = fs.statfsSync(backupsDir);
@@ -272,7 +272,7 @@ export class BackupService {
     }
 
     // 磁盘空间预检：预估实例目录大小（排除清单外）→ 校验备份盘剩余空间。
-    // 大世界压缩耗时长，磁盘满时中途失败（zip 截断）远比提前拒绝难处理
+    // 大世界快照耗时长，磁盘满时中途失败远比提前拒绝难处理
     const estimateBytes = await estimateDirSize(instanceDir, { jarFile: instance?.jarFile || null });
     checkDiskSpace(this.backupsDir, estimateBytes);
 
@@ -280,7 +280,7 @@ export class BackupService {
     // 只替换 Windows 非法文件名字符，保留中文/Unicode：旧实现用
     // [^\w.-] 清洗（\w 为 ASCII）会把中文名（如定时任务"每日备份"）
     // 全部替换为下划线，目录名失去可读性。路径安全由下方
-    // resolvedBackupPath 前缀校验兜底。快照 = 完整目录树（无 .zip 扩展名），
+    // resolvedBackupPath 前缀校验兜底。快照 = 完整目录树，
     // 命名 <safeName>-<时间戳> 保证唯一（定时任务名可能重复触发）
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const safeName = name
@@ -309,7 +309,6 @@ export class BackupService {
       filePath: snapshotDir,
       worldName,
       createdBy,
-      format: 'snapshot'
     });
 
     // 异步执行备份（fire-and-forget：互斥由 status='creating' 记录承担，
@@ -382,7 +381,7 @@ export class BackupService {
 
       // 快照子进程超时按预估规模动态计算（每 MB 约 4s，下限 5min，
       // 上限配置值）：固定 300s 会误杀 GB 级世界的定时备份。
-      // 快照（rsync 增量/robocopy 复制）远快于 zip 压缩，此估算偏保守
+      // 快照（rsync 增量/robocopy 复制）耗时估算偏保守
       // 但不会误杀（timeout 是上限而非目标）
       const timeout = Math.min(
         config.backupSpawnTimeoutMs,
@@ -396,8 +395,8 @@ export class BackupService {
 
       // 快照完整性校验：快照 = 实例目录镜像，必须有世界数据（level.dat 位于
       // level-name 目录直接层）且非空。rsync 退出 0/24 已保证文件完整，
-      // 此处拦截"空快照/无世界"的无效备份（与旧 zip 的 CRC 校验等价：
-      // 半成品快照目录在失败路径统一清理）
+      // 此处拦截"空快照/无世界"的无效备份（半成品快照目录
+      // 在失败路径统一清理）
       await this._verifySnapshot(snapshotDir);
 
       // 获取快照大小：递归统计目录总字节（= 单快照逻辑大小，恢复该快照
@@ -476,7 +475,7 @@ export class BackupService {
       throw err;
     } finally {
       // 恢复自动保存：save-off 与 save-on 必须成对。
-      // 无论压缩/统计成功与否都补发 save-on，否则 zip 失败等异常路径会
+      // 无论快照/统计成功与否都补发 save-on，否则异常路径会
       // 让 MC 服务器永久停留在自动保存关闭状态，崩溃/断电时世界数据回退。
       await this._restoreSaveOn(instanceId);
     }
@@ -557,8 +556,8 @@ export class BackupService {
   }
 
   // 快照完整性校验：快照 = 实例目录镜像（level-name 目录直接层有 level.dat
-  // 且目录非空）。空快照/无世界快照的恢复会毁掉原世界（与旧 zip CRC 校验
-  // 等价的作用），创建时即拦截，失败路径由调用方清理半成品。
+  // 且目录非空）。空快照/无世界快照的恢复会毁掉原世界，创建时即拦截，
+  // 失败路径由调用方清理半成品。
   //
   // 设计约定：快照目录由服务进程独占生成、无外部输入入口，恢复不做 symlink
   // 条目拒绝（若未来开放"导入备份"或接入共享存储，须在此补充恢复前 symlink 扫描）。
@@ -612,12 +611,6 @@ export class BackupService {
       throw new Error('Only completed backups can be restored');
     }
 
-    // 旧格式（zip 压缩包）备份禁止恢复：恢复链路为目录复制
-    // （rsync -a/robocopy /MIR），zip 无解压路径，仅保留可删
-    if (backup.format === 'zip') {
-      throw new AppError(ErrorCodes.BACKUP_FORMAT_UNSUPPORTED);
-    }
-
     const instanceId = backup.instance_id;
 
     // 互斥（restoring 状态机）：同实例任何进行中操作
@@ -644,18 +637,21 @@ export class BackupService {
     }
 
     const snapshotDir = backup.file_path;
+    // 记录必须带非空字符串路径：null/非字符串解析不出路径，空串则被
+    // fs/path 当作 cwd，绕过下方包含校验
+    if (typeof snapshotDir !== 'string' || snapshotDir.trim() === '') {
+      throw new AppError(ErrorCodes.BACKUP_NOT_FOUND);
+    }
     // find-004 兜底：快照目录路径必须位于备份目录内（防 DB 被篡改后
     // 删除/复制任意路径目录）
-    if (snapshotDir) {
-      resolveContained(this.backupsDir, snapshotDir);
-    }
+    resolveContained(this.backupsDir, snapshotDir);
 
     if (!fs.existsSync(snapshotDir)) {
-      throw new Error('Snapshot directory not found');
+      throw new AppError(ErrorCodes.BACKUP_NOT_FOUND, 'Snapshot directory not found');
     }
-    // 快照必须是目录（file_path 指向文件的记录为异常数据/旧格式错标）
+    // 快照必须是目录（file_path 指向文件的记录为异常数据，非服务端故障）
     if (!fs.statSync(snapshotDir).isDirectory()) {
-      throw new Error('Snapshot path is not a directory');
+      throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Snapshot path is not a directory');
     }
 
     // 置 restoring 状态（互斥锁）：此后的创建/恢复/删除入口全部命中
@@ -703,9 +699,8 @@ export class BackupService {
       }
 
       // ① 快照完整性预检（rename 之前执行：快照损坏时直接失败，
-      // 原实例目录未被触碰，无需回滚——比 zip 时代"解压后才发现坏包"
-      // 更安全）。restoreBackup 同步段已校验存在性/目录类型，此处校验
-      // 内容（level.dat + 非空），双保险防快照被外部改动
+      // 原实例目录未被触碰，无需回滚）。restoreBackup 同步段已校验存在性/
+      // 目录类型，此处校验内容（level.dat + 非空），双保险防快照被外部改动
       await this._verifySnapshot(snapshotDir);
 
       // ①.5 后台执行期间再次确认实例未运行：restoreBackup 同步段的
@@ -902,7 +897,7 @@ export class BackupService {
     if (backup.file_path) {
       resolveContained(this.backupsDir, backup.file_path);
     }
-    // 删除快照目录（zip 旧格式为文件，rm force 兼容两者）
+    // 删除快照目录
     if (backup.file_path && fs.existsSync(backup.file_path)) {
       await fs.promises.rm(backup.file_path, { recursive: true, force: true });
     }

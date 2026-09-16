@@ -1,11 +1,11 @@
 /**
  * BackupPanel 测试：
- * - 无实例空态 / 上次备份行（含无 completed 兜底）/ 列表行渲染（zip 旧格式徽章、failed 徽章、tone 类抽查）
- * - 恢复确认与 toast / zip·failed 行恢复禁用 / 任一行 restoring → 全列表恢复禁用
+ * - 无实例空态 / 上次备份行（含无 completed 兜底）/ 列表行渲染（failed 徽章、tone 类抽查）
+ * - 恢复确认与 toast / failed 行恢复禁用 / 任一行 restoring → 全列表恢复禁用
  * - 删除确认与 toast / 进行中（creating）行删除禁用
  * - 立即备份在途禁用 + 成功/失败 toast / 空态引导与「配置定时备份」跳转 /tasks
- * - 下载：completed 快照可下载（文件名含时间戳）→ a[download] 触发 + toast；
- *   zip/failed 禁用 + title 提示；下载中行级转圈禁用；失败错误 toast
+ * - 下载：completed 可下载（文件名含时间戳）→ a[download] 触发 + toast；
+ *   failed 禁用 + title 提示；下载中行级转圈禁用；失败错误 toast
  * mock 数据为结构占位（mockBackups 虚构内容），严禁真实服务器信息
  */
 import { describe, it, expect, beforeEach, afterAll, afterEach, beforeAll, vi } from 'vitest'
@@ -117,38 +117,31 @@ describe('BackupPanel 上次备份与列表渲染', () => {
     expect(await screen.findByText('尚未创建备份')).toBeInTheDocument()
   })
 
-  it('列表行渲染：名称 / 状态徽章 / 时间·大小 / 旧格式徽章（zip）', async () => {
+  it('列表行渲染：名称 / 状态徽章 / 时间·大小', async () => {
     renderPanel()
     await screen.findByText('手动备份')
-    expect(screen.getByText('旧格式压缩包')).toBeInTheDocument()
     expect(screen.getByText('失败的备份')).toBeInTheDocument()
 
-    // 状态徽章：completed ×2（已就绪）+ failed ×1（失败）
-    expect(screen.getAllByText('已就绪')).toHaveLength(2)
+    // 状态徽章：completed ×1（已就绪）+ failed ×1（失败）
+    expect(screen.getAllByText('已就绪')).toHaveLength(1)
     expect(screen.getByText('失败')).toBeInTheDocument()
 
-    // 旧格式徽章仅 zip 行
-    expect(screen.getByText('旧格式')).toBeInTheDocument()
-
-    // 时间 · 大小行（zip：日期 · 大小；failed size=0 → 仅日期）
-    const zip = mockBackups[1]!
+    // 时间 · 大小行（completed：日期 · 大小；failed size=0 → 仅日期）
+    const completed = mockBackups[0]!
     expect(
-      screen.getByText(`${formatBackupDate(zip.createdAt)} · ${formatBackupSize(zip.size)}`),
+      screen.getByText(`${formatBackupDate(completed.createdAt)} · ${formatBackupSize(completed.size)}`),
     ).toBeInTheDocument()
-    const failed = mockBackups[2]!
+    const failed = mockBackups[1]!
     expect(screen.getByText(formatBackupDate(failed.createdAt))).toBeInTheDocument()
 
     // 状态徽章 tone token 类抽查（token 纪律：禁硬编码色值）
-    const successBadge = screen.getAllByText('已就绪')[0]!
+    const successBadge = screen.getByText('已就绪')
     expect(successBadge.className).toContain('bg-mcs-success-bg-subtle')
     expect(successBadge.className).toContain('text-mcs-success-fg')
     expect(successBadge.className).toContain('border-mcs-success-border')
     const errorBadge = screen.getByText('失败')
     expect(errorBadge.className).toContain('bg-mcs-error-bg-subtle')
     expect(errorBadge.className).toContain('text-mcs-error-fg')
-    const legacyBadge = screen.getByText('旧格式')
-    expect(legacyBadge.className).toContain('bg-mcs-warning-bg-subtle')
-    expect(legacyBadge.className).toContain('text-mcs-warning-fg')
   })
 })
 
@@ -176,10 +169,9 @@ describe('BackupPanel 恢复', () => {
     expect(await screen.findByText('恢复已开始，完成后请启动服务器生效')).toBeInTheDocument()
   })
 
-  it('zip 旧格式与 failed 备份：恢复按钮禁用，completed 快照可恢复', async () => {
+  it('failed 备份：恢复按钮禁用，completed 可恢复', async () => {
     renderPanel()
     await screen.findByText('手动备份')
-    expect(screen.getByRole('button', { name: '旧格式压缩包 恢复' })).toBeDisabled()
     expect(screen.getByRole('button', { name: '失败的备份 恢复' })).toBeDisabled()
     expect(screen.getByRole('button', { name: '手动备份 恢复' })).toBeEnabled()
   })
@@ -384,7 +376,7 @@ describe('BackupPanel 下载', () => {
     vi.restoreAllMocks()
   })
 
-  it('completed 快照行可下载：点击 → a[download] 触发（文件名含时间戳）+ ObjectURL 用后即 revoke + 成功 toast', async () => {
+  it('completed 行可下载：点击 → a[download] 触发（文件名含时间戳）+ ObjectURL 用后即 revoke + 成功 toast', async () => {
     const user = userEvent.setup()
     renderPanel()
     await screen.findByText('手动备份')
@@ -398,13 +390,12 @@ describe('BackupPanel 下载', () => {
     expect(URL.revokeObjectURL).toHaveBeenCalledTimes(1)
   })
 
-  it('zip 旧格式/failed 行下载禁用 + title 提示；completed 快照可用', async () => {
+  it('failed 行下载禁用 + title 提示；completed 可用', async () => {
     renderPanel()
     await screen.findByText('手动备份')
-    const zipBtn = screen.getByRole('button', { name: '旧格式压缩包 下载' })
-    expect(zipBtn).toBeDisabled()
-    expect(zipBtn).toHaveAttribute('title', '旧格式备份不支持下载')
-    expect(screen.getByRole('button', { name: '失败的备份 下载' })).toBeDisabled()
+    const failedBtn = screen.getByRole('button', { name: '失败的备份 下载' })
+    expect(failedBtn).toBeDisabled()
+    expect(failedBtn).toHaveAttribute('title', '仅已就绪的备份可下载')
     expect(screen.getByRole('button', { name: '手动备份 下载' })).toBeEnabled()
   })
 
@@ -440,26 +431,26 @@ describe('BackupPanel 下载', () => {
     })
   })
 
-  it('下载失败 → 错误 toast（40904 服务端中文文案透传）', async () => {
+  it('下载失败 → 错误 toast（40000 前端本地化文案）', async () => {
     const user = userEvent.setup()
     server.use(
       http.get('*/api/v1/backups/:id/download', () =>
         HttpResponse.json(
           {
             status: 'error',
-            code: 40904,
-            message: '旧格式备份不支持下载',
+            code: 40000,
+            message: 'Validation failed',
             details: null,
             timestamp: new Date().toISOString(),
           },
-          { status: 409 },
+          { status: 400 },
         ),
       ),
     )
     renderPanel()
     await screen.findByText('手动备份')
     await user.click(screen.getByRole('button', { name: '手动备份 下载' }))
-    expect(await screen.findByText('下载失败：旧格式备份不支持下载')).toBeInTheDocument()
+    expect(await screen.findByText('下载失败：请求参数校验失败')).toBeInTheDocument()
     // 失败不触发浏览器下载
     expect(downloads).toHaveLength(0)
   })

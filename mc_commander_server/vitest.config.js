@@ -1,9 +1,16 @@
 import { defineConfig } from 'vitest/config';
 import crypto from 'crypto';
+import os from 'os';
+import path from 'path';
 
-// API Key 哈希：单元测试用的固定 Key 对应的 SHA-256
+// API Key 哈希：单元测试用的固定明文 Key 与其 SHA-256（服务端只读 API_KEY_HASH）
 const TEST_API_KEY = 'test-api-key-for-unit-tests';
 const TEST_API_KEY_HASH = crypto.createHash('sha256').update(TEST_API_KEY).digest('hex');
+
+// 运行时目录一律挂到系统临时目录：未显式 mock config 的用例会读真实 config
+// （DATA_DIR 缺省 './data' 相对 cwd），否则 `npm test` 会把测试日志写进仓库
+// 真实 data/logs。稳定子目录（非 mkdtemp）便于跨轮复用与排查
+const TEST_RUNTIME_ROOT = path.join(os.tmpdir(), 'mc-commander-server-vitest');
 
 export default defineConfig({
   test: {
@@ -13,8 +20,10 @@ export default defineConfig({
     // 1 个声明过），故在此统一给足；15s 仍能在用例真正挂死时失败，不是把超时当通过。
     testTimeout: 15_000,
     env: {
-      API_KEY: TEST_API_KEY,
       API_KEY_HASH: TEST_API_KEY_HASH,
+      DATA_DIR: path.join(TEST_RUNTIME_ROOT, 'data'),
+      SERVERS_DIR: path.join(TEST_RUNTIME_ROOT, 'servers'),
+      BACKUPS_DIR: path.join(TEST_RUNTIME_ROOT, 'backups'),
     },
     coverage: {
       provider: 'v8',

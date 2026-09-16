@@ -2,8 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { EventEmitter } from 'events';
 import { setupWebSocket, WSEvents } from '../websocket.js';
 
-// vitest.config.js 注入 API_KEY=test-api-key-for-unit-tests，
-// authenticateWebSocket 通过 config.apiKey 读取该值，无需 mock 认证逻辑
+// vitest.config.js 注入 API_KEY_HASH（对应明文 test-api-key-for-unit-tests），
+// authenticateWebSocket 通过 config.apiKeyHash 校验该值，无需 mock 认证逻辑
 const TEST_API_KEY = 'test-api-key-for-unit-tests';
 
 /** 构造一个假的 WebSocket 客户端（EventEmitter + send 间谍） */

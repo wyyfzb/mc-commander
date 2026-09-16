@@ -2,11 +2,11 @@
  * BackupPanel —— 备份管理子页
  * - 卡片结构：标题「备份管理」→ 上次备份信息行（最近一条 completed）+「立即备份」
  *   → 快照机制说明（subtle 小字）→ 备份列表（最近 10 条）
- * - 行：状态图标（tone 浅底；进行中转圈）→ 名称 + 旧格式(zip)徽章 → 时间·大小 → 状态徽章
+ * - 行：状态图标（tone 浅底；进行中转圈）→ 名称 → 时间·大小 → 状态徽章
  *   （backupStatusTone+backupStatusLabel）→ 下载/恢复/删除
- * - 下载仅 completed 且非 zip（服务端 GET /backups/:id/download 同约束），blob → a[download]
+ * - 下载仅 completed（服务端 GET /backups/:id/download 同约束），blob → a[download]
  *   触发浏览器保存；下载中按钮转圈禁用，失败 toast
- * - 恢复仅 completed 且非 zip（旧 zip 仅可删除，服务端 40904 拒绝）；任一行 restoring 或
+ * - 恢复仅 completed；任一行 restoring 或
  *   恢复请求在途 → 全列表恢复按钮禁用；creating/restoring 行
  *   不可删除（服务端互斥状态机拒绝）
  * - 30s 轮询（useBackups 自带）+ useBackupEventRefresh 事件驱动刷新；确认框 ConfirmDialog（danger）
@@ -47,7 +47,6 @@ import {
   backupStatusTone,
   formatBackupDate,
   formatBackupSize,
-  isLegacyFormat,
 } from '@/lib/mc-backup'
 import { useBackupEventRefresh, useBackups, useCreateBackup, useDeleteBackup, useRestoreBackup } from '../queries'
 import { useInstances } from '@/api/queries'
@@ -327,7 +326,7 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
   )
 }
 
-/** 单行备份：状态图标 → 名称/时间·大小 → 旧格式/状态徽章 → 恢复/删除 */
+/** 单行备份：状态图标 → 名称/时间·大小 → 状态徽章 → 恢复/删除 */
 function BackupRow({
   backup,
   restoringLocked,
@@ -345,10 +344,9 @@ function BackupRow({
   const iconToneClasses = toneClasses(tone)
   const name = backup.name
   const isInProgress = status === 'creating' || status === 'restoring'
-  const isLegacy = isLegacyFormat(backup.format)
-  /** 可恢复 = 已完成 + 快照格式（旧 zip 仅可删；进行中不可操作） */
-  const canRestore = status === 'completed' && !isLegacy
-  /** 可下载 = 已完成 + 快照格式（服务端仅此二者放行；zip 40904 / 非完成 40000） */
+  /** 可恢复 = 已完成（进行中不可操作） */
+  const canRestore = status === 'completed'
+  /** 可下载 = 已完成（服务端仅放行 completed，非完成 40000） */
   const canDownload = canRestore
   const metaLine = [formatBackupDate(backup.createdAt), formatBackupSize(backup.size)]
     .filter(Boolean)
@@ -400,12 +398,6 @@ function BackupRow({
           <span className="truncate text-mcs-sm font-semibold text-mcs-text-default" title={name}>
             {name}
           </span>
-          {/* 旧格式徽章（zip 压缩包：仅可删除，不支持恢复） */}
-          {isLegacy && (
-            <StatusPill tone="warning" className="text-mcs-xs">
-              旧格式
-            </StatusPill>
-          )}
         </div>
         {/* 时间 · 大小（size 空则不显示，避免尾部分隔符） */}
         <p className="mt-0.5 truncate text-mcs-xs text-mcs-text-muted" title={metaLine}>
@@ -418,18 +410,16 @@ function BackupRow({
         {backupStatusLabel(status)}
       </StatusPill>
 
-      {/* 下载（仅 completed 快照可下载；下载中转圈禁用，行级 loading） */}
+      {/* 下载（仅 completed 可下载；下载中转圈禁用，行级 loading） */}
       <IconButton
         aria-label={`${name} 下载`}
         disabled={!canDownload || downloading}
         title={
           downloading
             ? '正在下载...'
-            : isLegacy
-              ? '旧格式备份不支持下载'
-              : !canDownload
-                ? '仅已就绪的备份可下载'
-                : undefined
+            : !canDownload
+              ? '仅已就绪的备份可下载'
+              : undefined
         }
         className="text-mcs-accent-fg"
         onClick={() => void handleDownload()}
@@ -440,7 +430,7 @@ function BackupRow({
           <Download className="size-3.5" aria-hidden />
         )}
       </IconButton>
-      {/* 恢复（仅 completed 且非 zip；restoring 中全列表禁用） */}
+      {/* 恢复（仅 completed；restoring 中全列表禁用） */}
       <IconButton
         aria-label={`${name} 恢复`}
         disabled={!canRestore || restoringLocked}
@@ -448,11 +438,9 @@ function BackupRow({
         title={
           restoringLocked
             ? '其他备份正在恢复中，请稍候'
-            : isLegacy
-              ? '旧格式备份不支持恢复'
-              : !canRestore
-                ? '仅已就绪的备份可恢复'
-                : undefined
+            : !canRestore
+              ? '仅已就绪的备份可恢复'
+              : undefined
         }
         className="text-mcs-accent-fg"
         onClick={() => onRestore(backup)}

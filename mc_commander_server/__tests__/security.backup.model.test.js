@@ -31,13 +31,13 @@ describe('backup.model 显式列查询，不泄露 file_path', () => {
     expect(sql).toContain('created_at');
   });
 
-  it('findById 显式列查询，不含 file_path（含 format 列契约）', () => {
+  it('findById 显式列查询，不含 file_path', () => {
     BackupModel.findById(1);
     const sql = sqlLog.find((s) => s.includes('WHERE id = ?'));
     expect(sql).not.toContain('file_path');
     expect(sql).not.toContain('SELECT *');
-    // 快照/zip 格式契约列对外可见（前端据此区分旧格式备份）
-    expect(sql).toContain('format');
+    expect(sql).toContain('world_name');
+    expect(sql).toContain('created_at');
   });
 
   it('getLatestBackup 显式列查询，不含 file_path', () => {

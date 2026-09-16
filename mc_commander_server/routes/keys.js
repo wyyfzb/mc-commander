@@ -16,8 +16,8 @@ function generateApiKey(prefix = 'mcck-') {
 }
 
 /**
- * 写回 .env 哈希（保留其余键；dropPatterns 用于顺带清理明文行——明文 Key 不落盘，
- * 与 index.js 启动迁移同约束），原子写防半截文件，权限 0o600。
+ * 写回 .env 哈希（保留其余键；dropPatterns 用于顺带清理明文行——明文 Key 不落盘），
+ * 原子写防半截文件，权限 0o600。
  * 路径取 config.envFilePath（dotenv 的同一加载源）——测试可指向临时目录，
  * 不必触碰真实 .env
  */

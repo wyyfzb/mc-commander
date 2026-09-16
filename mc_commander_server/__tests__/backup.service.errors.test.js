@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
+import crypto from 'crypto';
 import { EventEmitter } from 'events';
 
 // ---------- BackupService 编排层错误路径防护网（issue 500） ----------
@@ -37,7 +38,7 @@ import config from '../config.js';
 import { BackupService, getBackupService, sanitizeFileName, estimateDirSize } from '../services/backup.service.js';
 import { BackupModel as MockBackupModel } from '../db/backup.model.js';
 import { spawn as mockSpawn } from 'child_process';
-import { ErrorCodes } from '../utils/response.js';
+import { ErrorCodes, AppError } from '../utils/response.js';
 
 // 等待事件（fire-and-forget 流程以事件作为完成信号）
 function waitForEvent(emitter, eventName, timeoutMs = 10000) {
@@ -81,6 +82,20 @@ function createTestInstance(serversDir, instanceId = 's1') {
   fs.writeFileSync(path.join(dir, 'server.properties'), 'level-name=world\n');
   fs.writeFileSync(path.join(dir, 'server.jar'), 'jar-data');
   return dir;
+}
+
+/** 目录树逐字节快照：相对路径 + sha256，用于断言「原目录未动」 */
+function snapshotTree(dir) {
+  const out = [];
+  const walk = (cur) => {
+    for (const entry of fs.readdirSync(cur, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      const full = path.join(cur, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else out.push([path.relative(dir, full), crypto.createHash('sha256').update(fs.readFileSync(full)).digest('hex')]);
+    }
+  };
+  walk(dir);
+  return out;
 }
 
 function makeManager(instanceStub = null) {
@@ -531,20 +546,64 @@ describe('createBackup / restoreBackup / deleteBackup 入口校验缺口收口',
     const snapshotDir = path.join(backupsDir, 'gone', 'snap');
     fs.mkdirSync(snapshotDir, { recursive: true });
     MockBackupModel.findByIdWithPath.mockReturnValue({
-      id: 2, instance_id: 'gone', status: 'completed', format: 'snapshot', file_path: snapshotDir,
+      id: 2, instance_id: 'gone', status: 'completed', file_path: snapshotDir,
     });
     await expect(service.restoreBackup(2)).rejects.toThrow('Instance directory not found');
   });
 
-  it('restoreBackup：file_path 指向文件而非目录 → 拒绝（异常数据/旧格式错标）', async () => {
-    createTestInstance(serversDir);
+  it('restoreBackup：file_path 指向文件而非目录 → 4xx（VALIDATION_ERROR，与下载侧同码）且原实例目录未动', async () => {
+    const instanceDir = createTestInstance(serversDir);
+    // 哨兵：恢复若在任何阶段触碰实例目录，下面的逐字节快照必然变化
+    fs.writeFileSync(path.join(instanceDir, 'SENTINEL.txt'), 'DO-NOT-TOUCH');
+    const before = snapshotTree(instanceDir);
+
     const filePath = path.join(backupsDir, 's1', 'not-a-dir');
     fs.mkdirSync(path.join(backupsDir, 's1'), { recursive: true });
-    fs.writeFileSync(filePath, 'legacy zip bytes');
+    fs.writeFileSync(filePath, 'stray file bytes');
     MockBackupModel.findByIdWithPath.mockReturnValue({
-      id: 3, instance_id: 's1', status: 'completed', format: 'snapshot', file_path: filePath,
+      id: 3, instance_id: 's1', status: 'completed', file_path: filePath,
     });
-    await expect(service.restoreBackup(3)).rejects.toThrow('Snapshot path is not a directory');
+
+    const err = await service.restoreBackup(3).then(() => null, (e) => e);
+    // 钉住错误形状：4xx 语义的 AppError，不是普通 Error（500）
+    expect(err).toBeInstanceOf(AppError);
+    expect(err.code).toBe(ErrorCodes.VALIDATION_ERROR.code);
+    expect(err.status).toBe(ErrorCodes.VALIDATION_ERROR.status);
+    expect(err.message).toBe('Snapshot path is not a directory');
+    // 同步段拦截：未置 restoring、未开后台恢复
+    expect(MockBackupModel.update).not.toHaveBeenCalled();
+    // 原实例目录逐字节未动（含 sentinel），且无 pre_restore 暂存残留
+    expect(snapshotTree(instanceDir)).toEqual(before);
+    expect(fs.readdirSync(serversDir).filter((n) => n.includes('_pre_restore_'))).toEqual([]);
+  });
+
+  it.each([
+    ['null', null],
+    ['empty string', ''],
+    ['whitespace-only', '   '],
+    ['non-string', 12345],
+  ])('restoreBackup：file_path 为 %s → BACKUP_NOT_FOUND（不被当作 cwd，也不抛普通 Error）', async (_label, filePath) => {
+    createTestInstance(serversDir);
+    MockBackupModel.findByIdWithPath.mockReturnValue({
+      id: 4, instance_id: 's1', status: 'completed', file_path: filePath,
+    });
+    await expect(service.restoreBackup(4))
+      .rejects.toMatchObject({ code: ErrorCodes.BACKUP_NOT_FOUND.code });
+  });
+
+  it('restoreBackup：快照目录在磁盘上不存在 → BACKUP_NOT_FOUND（与下载侧同码，不再落 500）', async () => {
+    const instanceDir = createTestInstance(serversDir);
+    const before = snapshotTree(instanceDir);
+    MockBackupModel.findByIdWithPath.mockReturnValue({
+      id: 5, instance_id: 's1', status: 'completed',
+      file_path: path.join(service.backupsDir, 's1', 'ghost-snapshot'),
+    });
+    const err = await service.restoreBackup(5).then(() => null, (e) => e);
+    expect(err).toBeInstanceOf(AppError);
+    expect(err.code).toBe(ErrorCodes.BACKUP_NOT_FOUND.code);
+    expect(err.status).toBe(ErrorCodes.BACKUP_NOT_FOUND.status);
+    expect(MockBackupModel.update).not.toHaveBeenCalled();
+    expect(snapshotTree(instanceDir)).toEqual(before);
   });
 
   it('deleteBackup：备份不存在 → BACKUP_NOT_FOUND', async () => {

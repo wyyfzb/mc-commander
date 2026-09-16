@@ -151,7 +151,6 @@ describe('restoreBackup 路径与状态校验（实例级恢复）', () => {
       instance_id: 's1',
       status: 'completed',
       world_name: 'world',
-      format: 'snapshot',
       file_path: 'D:/evil/outside',
     });
     const service = new BackupService(null);
@@ -164,24 +163,10 @@ describe('restoreBackup 路径与状态校验（实例级恢复）', () => {
       instance_id: 's1',
       status: 'completed',
       world_name: 'world',
-      format: 'snapshot',
       file_path: path.join(config.backupsDir, 's1', 'nonexistent-snapshot'),
     });
     const service = new BackupService(null);
     await expect(service.restoreBackup(1)).rejects.toThrow('Snapshot directory not found');
-  });
-
-  it('旧格式（zip 压缩包）备份禁止恢复（40904，仅可删除）', async () => {
-    MockBackupModel.findByIdWithPath.mockReturnValue({
-      id: 1,
-      instance_id: 's1',
-      status: 'completed',
-      world_name: 'world',
-      format: 'zip',
-      file_path: path.join(config.backupsDir, 's1', 'legacy.zip'),
-    });
-    const service = new BackupService(null);
-    await expect(service.restoreBackup(1)).rejects.toThrow('旧格式备份');
   });
 
   it('未完成备份仍拒绝恢复（状态检查不受影响）', async () => {
@@ -190,7 +175,6 @@ describe('restoreBackup 路径与状态校验（实例级恢复）', () => {
       instance_id: 's1',
       status: 'creating',
       world_name: 'world',
-      format: 'snapshot',
       file_path: null,
     });
     const service = new BackupService(null);
@@ -203,7 +187,6 @@ describe('restoreBackup 路径与状态校验（实例级恢复）', () => {
       instance_id: 's1',
       status: 'completed',
       world_name: 'world',
-      format: 'snapshot',
       file_path: path.join(config.backupsDir, 's1', 'ok-snapshot'),
     });
     // 服务层互斥兜底：findAll 命中另一条 restoring 记录
@@ -219,7 +202,6 @@ describe('restoreBackup 路径与状态校验（实例级恢复）', () => {
       instance_id: 's1',
       status: 'completed',
       world_name: 'world',
-      format: 'snapshot',
       file_path: path.join(config.backupsDir, 's1', 'ok-snapshot'),
     });
     const manager = new EventEmitter();

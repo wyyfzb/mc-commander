@@ -4,7 +4,7 @@
  * tar 进程错误分支无覆盖。
  *
  * 既有 backups.test.js 已锁定 restore 主链（202/404/409 运行中/restoring 互斥）、
- * backups.download.test.js 已锁定 download 安全链（流式/404/400/zip 409/路径
+ * backups.download.test.js 已锁定 download 安全链（流式/404/400/路径
  * 穿越/RFC 5987）——本文件只补缺口，不重复上述断言。
  *
  * 范式沿用 tasks.route.test.js（#413）：vi.mock 数据模型层与服务层隔离
@@ -62,7 +62,6 @@ function makeBackup(overrides = {}) {
     size: 1024,
     status: 'completed',
     worldName: 'world',
-    format: 'snapshot',
     createdAt: '2026-09-04 00:00:00',
     updatedAt: '2026-09-04 00:00:00',
     ...overrides,

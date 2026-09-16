@@ -43,9 +43,6 @@ vi.mock('../config.js', () => ({
     get apiKeyHash() {
       return h.apiKeyHash;
     },
-    get apiKey() {
-      return '';
-    },
     port: 1,
     serversDir: 'mock:/servers',
     dataDir: 'mock:/data',

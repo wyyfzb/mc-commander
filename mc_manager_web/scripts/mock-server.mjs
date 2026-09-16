@@ -274,22 +274,8 @@ const mockBackups = [
     size: 524_288_000,
     status: 'completed',
     worldName: 'world',
-    format: 'snapshot',
     createdAt: new Date(Date.now() - 86400_000).toISOString(),
     updatedAt: new Date(Date.now() - 86_340_000).toISOString(),
-  },
-  {
-    id: 20,
-    instanceId: 'e2e-demo',
-    name: '旧格式压缩包',
-    description: null,
-    type: 'manual',
-    size: 102_400_000,
-    status: 'completed',
-    worldName: 'world',
-    format: 'zip',
-    createdAt: new Date(Date.now() - 7 * 86400_000).toISOString(),
-    updatedAt: new Date(Date.now() - 7 * 86400_000).toISOString(),
   },
   {
     id: 19,
@@ -300,7 +286,6 @@ const mockBackups = [
     size: 0,
     status: 'failed',
     worldName: 'world',
-    format: 'snapshot',
     createdAt: new Date(Date.now() - 6 * 86400_000).toISOString(),
     updatedAt: new Date(Date.now() - 6 * 86400_000).toISOString(),
   },
@@ -616,7 +601,7 @@ const server = createServer((req, res) => {
           return res.end(err(40016, '需在请求体提供 confirmName 且与实例名完全一致才能卸载实例'))
         }
         const snapshots = mockBackups
-          .filter((b) => b.instanceId === instance.id && b.format === 'snapshot')
+          .filter((b) => b.instanceId === instance.id)
           .map((b) => b.name)
         if (snapshots.length === 0 && uninstallBody.acknowledgeIrreversible !== true) {
           res.statusCode = 409
@@ -719,7 +704,6 @@ const server = createServer((req, res) => {
           size: 0,
           status: 'creating',
           worldName: 'world',
-          format: 'snapshot',
           createdAt: now(),
           updatedAt: now(),
         }, 'Backup created successfully'))

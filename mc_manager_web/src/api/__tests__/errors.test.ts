@@ -8,11 +8,9 @@ describe('错误码映射（对照服务端 ErrorCodes 契约）', () => {
     expect(getFriendlyErrorMessage(ErrorCode.RATE_LIMITED)).toBe('请求过于频繁，请稍后再试')
   })
 
-  it('服务端已本地化的错误码透传 message（40902/40904）', () => {
+  it('服务端已本地化的错误码透传 message（40902）', () => {
     const serverMessage = '无法执行在线备份：服务器未启用 RCON。请先停止服务器，或在 server.properties 启用 RCON'
     expect(getFriendlyErrorMessage(ErrorCode.BACKUP_RCON_UNAVAILABLE, serverMessage)).toBe(serverMessage)
-    expect(getFriendlyErrorMessage(ErrorCode.BACKUP_FORMAT_UNSUPPORTED, '旧格式备份（zip 压缩包）不支持恢复，仅可删除'))
-      .toBe('旧格式备份（zip 压缩包）不支持恢复，仅可删除')
   })
 
   it('未知错误码回退服务端 message 或通用文案', () => {

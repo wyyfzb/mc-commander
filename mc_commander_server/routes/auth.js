@@ -25,7 +25,7 @@ import { validateBody, validatedSuccess } from '../middleware/validate.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
 import { AdminAccountModel, AdminRecoveryCodeModel, AdminSessionModel } from '../db/index.js';
-import { needsRehash, hashPassword, verifyPassword, hashToken, generateSessionToken } from '../utils/password.js';
+import { hashPassword, verifyPassword, hashToken, generateSessionToken } from '../utils/password.js';
 import { slidingExpiry } from '../middleware/auth.js';
 import { isSetupTokenRequired, verifySetupToken, consumeSetupToken } from '../utils/setup-token.js';
 import { toIsoUtc } from '../utils/db-time.js';
@@ -294,13 +294,6 @@ export function createAuthRoutes() {
       }
 
       clearLoginFailures(ip);
-      // scrypt 参数透明升级（P2-5）：旧参数（如 2^14）哈希验证成功后立即按
-      // 当前参数重哈希，逐步收敛到 OWASP 推荐成本，无需用户改密
-      let rehashed = false;
-      if (needsRehash(account.password_hash)) {
-        AdminAccountModel.setPassword(hashPassword(String(password)));
-        rehashed = true;
-      }
       const session = createSession(req);
       recordAudit({
         action: AuditActions.AUTH_LOGIN,
@@ -309,7 +302,6 @@ export function createAuthRoutes() {
         detail: {
           ip: clientIp(req),
           userAgent: req.headers['user-agent']?.slice(0, 100) || null,
-          rehashed,
           // 走恢复码登录的事实必须留痕：一枚恢复码被消耗是不可逆的资源变化
           secondFactor: secondFactorVia,
         },

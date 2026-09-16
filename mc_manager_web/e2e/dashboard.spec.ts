@@ -74,13 +74,14 @@ test.describe('仪表盘', () => {
     expect(await fontSizeOf(page.getByText('TPS', { exact: true }))).toBe('18px')
   })
 
-  test('最近备份卡：渲染备份行 + 旧格式徽章，「全部」跳转设置页备份子路由', async ({ page }) => {
+  test('最近备份卡：渲染备份行与状态徽章，「全部」跳转设置页备份子路由', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/dashboard')
     // 精确匹配（非子串）：夹具名一旦重新内嵌日期，这里必须变红
     await expect(page.getByText('手动备份', { exact: true })).toBeVisible()
-    await expect(page.getByText('旧格式压缩包', { exact: true })).toBeVisible()
-    await expect(page.getByText('旧格式', { exact: true })).toBeVisible()
+    await expect(page.getByText('失败的备份', { exact: true })).toBeVisible()
+    await expect(page.getByText('已就绪', { exact: true })).toBeVisible()
+    await expect(page.getByText('失败', { exact: true })).toBeVisible()
     // 入口必须落在真实子路由 /settings/backup（历史上曾指向不存在的 /settings/backups）
     await page.getByRole('button', { name: '查看全部备份' }).click()
     await expect(page).toHaveURL(/\/settings\/backup$/)

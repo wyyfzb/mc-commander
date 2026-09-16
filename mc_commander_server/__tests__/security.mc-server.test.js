@@ -38,7 +38,6 @@ vi.mock('../config.js', async () => {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-sec-test-'));
   return {
     default: {
-      apiKey: '',
       port: 0,
       serversDir: path.join(tmpRoot, 'servers'),
       dataDir: path.join(tmpRoot, 'data'),

@@ -39,7 +39,6 @@ beforeAll(() => {
       status TEXT DEFAULT 'creating',
       file_path TEXT,
       world_name TEXT,
-      format TEXT DEFAULT 'snapshot',
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (instance_id) REFERENCES instances(id) ON DELETE CASCADE
@@ -65,13 +64,12 @@ describe('BackupModel.create / findById 默认值链', () => {
     db.prepare("INSERT INTO instances (id, name) VALUES ('s2', 'Two')").run();
   });
 
-  it('create 缺省字段兜底（manual/creating/0/snapshot）', () => {
+  it('create 缺省字段兜底（manual/creating/0）', () => {
     const b = BackupModel.create({ instanceId: 's1', name: 'b-default' });
     expect(b.id).toBeGreaterThan(0);
     expect(b.type).toBe('manual');
     expect(b.status).toBe('creating');
     expect(b.size).toBe(0);
-    expect(b.format).toBe('snapshot');
     expect(b.description).toBeNull();
     expect(b.worldName).toBeNull();
   });
@@ -80,7 +78,7 @@ describe('BackupModel.create / findById 默认值链', () => {
     const b = BackupModel.create({
       instanceId: 's1', name: 'b-full', description: 'nightly',
       type: 'scheduled', size: 12345, status: 'completed',
-      filePath: '/data/backups/b-full', worldName: 'world', format: 'snapshot',
+      filePath: '/data/backups/b-full', worldName: 'world',
     });
     expect(b.type).toBe('scheduled');
     expect(b.size).toBe(12345);
@@ -106,7 +104,7 @@ describe('BackupModel._toCamel 时间归一', () => {
   it('CURRENT_TIMESTAMP 格式补 Z 转 ISO；空值转 null；非标准格式原样返回', () => {
     const row = {
       id: 1, instance_id: 's1', name: 'n', description: null, type: 'manual',
-      size: 0, status: 'creating', world_name: null, format: 'snapshot',
+      size: 0, status: 'creating', world_name: null,
       created_at: '2026-01-02 03:04:05', updated_at: '2026-01-02T03:04:05',
     };
     const camel = BackupModel._toCamel(row);
@@ -117,7 +115,7 @@ describe('BackupModel._toCamel 时间归一', () => {
   it('空时间戳转 null，异常格式原样透传', () => {
     const row = {
       id: 2, instance_id: 's1', name: 'n', description: null, type: 'manual',
-      size: 0, status: 'creating', world_name: null, format: 'snapshot',
+      size: 0, status: 'creating', world_name: null,
       created_at: null, updated_at: 'not-a-date',
     };
     const camel = BackupModel._toCamel(row);
@@ -183,13 +181,11 @@ describe('BackupModel.update', () => {
       size: 999,
       filePath: '/data/backups/u1',
       worldName: 'world_nether',
-      format: 'zip',
     });
     expect(updated.name).toBe('u1-renamed');
     expect(updated.status).toBe('completed');
     expect(updated.size).toBe(999);
     expect(updated.worldName).toBe('world_nether');
-    expect(updated.format).toBe('zip');
   });
 
   it('空 data 不执行 UPDATE，返回当前行', () => {

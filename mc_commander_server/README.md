@@ -16,7 +16,7 @@
 - **日志系统** — 日志缓存、实时流推送、按级别过滤
 - **server.properties 管理** — 读取/修改全部属性；**多端同步**（游戏内斜杠命令改属性 → 客户端同步；支持热改的属性保存后自动下发命令）
 - **世界信息** — 世界配置、维度概览
-- **备份系统** — **目录快照 + 增量传输**（Linux rsync `--link-dest` 硬链接快照：未变化文件零拷贝、变化文件整文件复制新 inode，region 文件天然适配；Windows rsync 优先、未安装时自动降级系统自带 robocopy `/MIR` 全量镜像）、**实例级备份**（世界+配置+插件全量，自动排除日志/加载器依赖/jar/pid，兼容 26.x 新布局与旧版 Bukkit 维度目录）、在线备份原子序列（save-off→save-all flush→save-on，RCON 不可用时运行中显式拒绝）、**恢复异步化**（202 立即返回 + restore 三事件 + 自动回滚 + level.dat 完整性校验 + jar 自动还原 + 恢复前快照预检，恢复为目录复制而非移动——mv 会污染硬链接快照链）、**自动清理**（数量/天数双上限，rm -rf 任意快照安全——硬链接引用计数自动回收）、磁盘预检、快照完整性校验、卡死记录自动恢复、SQLite 持久化（format 列区分快照/旧 zip）；**失败全程可见**（backupFailed/restoreFailed 携带中文原因，定时备份跳过发 backupSkipped 事件）；旧 zip 格式备份保留可删、恢复拒绝（无解压链路）
+- **备份系统** — **目录快照 + 增量传输**（Linux rsync `--link-dest` 硬链接快照：未变化文件零拷贝、变化文件整文件复制新 inode，region 文件天然适配；Windows rsync 优先、未安装时自动降级系统自带 robocopy `/MIR` 全量镜像）、**实例级备份**（世界+配置+插件全量，自动排除日志/加载器依赖/jar/pid，兼容 26.x 新布局与旧版 Bukkit 维度目录）、在线备份原子序列（save-off→save-all flush→save-on，RCON 不可用时运行中显式拒绝）、**恢复异步化**（202 立即返回 + restore 三事件 + 自动回滚 + level.dat 完整性校验 + jar 自动还原 + 恢复前快照预检，恢复为目录复制而非移动——mv 会污染硬链接快照链）、**自动清理**（数量/天数双上限，rm -rf 任意快照安全——硬链接引用计数自动回收）、磁盘预检、快照完整性校验、卡死记录自动恢复、SQLite 持久化；**失败全程可见**（backupFailed/restoreFailed 携带中文原因，定时备份跳过发 backupSkipped 事件）
 - **定时任务** — Cron 表达式（croner），支持重启/备份/命令/停止/启动
 - **文件管理** — 文件浏览、在线编辑、路径遍历防护；**二进制检测拒绝**、UTF-8/GBK 编码识别与按原编码写回、BOM 保留、GBK 不可表示字符拒绝
 - **列表文件同步** — 保存 banned-players/banned-ips/whitelist/ops.json 后自动对比差异并同步 MC 内存（pardon/ban/whitelist/deop/op 命令）
@@ -46,7 +46,7 @@ npm install
 
 # 配置环境变量
 cp .env.example .env
-# 编辑 .env，设置 API_KEY（必填）
+# 编辑 .env，设置 API_KEY_HASH（必填：明文 Key 的 SHA-256 摘要）
 
 # 构建 Web 前端并放进 public/（面板界面必需：public/index.html 不存在时
 # 静态层整体不挂载，浏览器访问只有 404 JSON；目录可用 PUBLIC_DIR 覆盖）
@@ -75,7 +75,7 @@ sudo bash /tmp/deploy-mc-commander.sh
 
 | 保留项 | 说明 |
 |--------|------|
-| `.env` | 配置与 API_KEY 沿用不重新生成（缺失时以 `.env.example` 为模板生成） |
+| `.env` | 配置与 API_KEY_HASH 沿用不重新生成（缺失时以 `.env.example` 为模板生成） |
 | `data/` | SQLite 数据库与运行时数据 |
 | `servers/` | MC 实例目录 |
 | `backups/` | 备份快照 |
@@ -330,12 +330,12 @@ stage 取值：`download` / `download_complete` / `forge_install` / `first_launc
 
 | 方法 | 端点 | 说明 |
 |------|------|------|
-| `GET` | `/api/v1/instances/:id/backups` | 备份列表（camelCase 契约：instanceId/worldName/createdAt/format） |
+| `GET` | `/api/v1/instances/:id/backups` | 备份列表（camelCase 契约：instanceId/worldName/createdAt） |
 | `POST` | `/api/v1/instances/:id/backups` | 创建备份（异步执行，目录快照 + rsync/robocopy 增量；完成/失败经 WS 事件推送） |
-| `POST` | `/api/v1/backups/:id/restore` | 恢复备份（**202 立即返回**，后台执行；互斥状态机：恢复中拒绝创建/删除/再次恢复；旧 zip 格式 40904 拒绝） |
+| `POST` | `/api/v1/backups/:id/restore` | 恢复备份（**202 立即返回**，后台执行；互斥状态机：恢复中拒绝创建/删除/再次恢复） |
 | `DELETE` | `/api/v1/backups/:id` | 删除备份（异步，恢复中/备份中拒绝） |
 
-> 备份 = `backups/<instanceId>/<名称>-<时间戳>/` 目录快照：Linux 用 `rsync -a --link-dest=<上一快照>` 硬链接增量（需安装 rsync，`apt-get install -y rsync`；实例目录与备份目录须同文件系统），Windows 优先 MSYS2 rsync、未安装时自动降级 robocopy `/MIR` 全量镜像。`size` 为快照逻辑大小（恢复所需容量）。改造前的 zip 备份 `format='zip'` 仅可删除。
+> 备份 = `backups/<instanceId>/<名称>-<时间戳>/` 目录快照：Linux 用 `rsync -a --link-dest=<上一快照>` 硬链接增量（需安装 rsync，`apt-get install -y rsync`；实例目录与备份目录须同文件系统），Windows 优先 MSYS2 rsync、未安装时自动降级 robocopy `/MIR` 全量镜像。`size` 为快照逻辑大小（恢复所需容量）。
 
 **面板自身数据**（`data/mc_commander.db`）每日自动快照至 `backups/panel/`，保留策略与实例备份一致。
 `.env` 不纳入自动备份（含认证凭据，且备份产物可经 API 下载），部署或改建后请手动复制一份留存。
@@ -468,7 +468,6 @@ mc_commander_server/
     ├── player-utils.js   # 玩家工具（离线 UUID 的唯一实现）
     ├── password.js       # 管理员密码哈希 / 定时安全比较
     ├── setup-token.js    # 首启一次性授权令牌（SETUP_TOKEN）
-    ├── weak-key.js       # 弱 API Key 检测
     ├── url-guard.js      # URL SSRF 防护
     ├── fs-utils.js       # 原子写文件（tmp + rename）
     ├── jar-download-guard.js # JAR 下载完整性校验

@@ -9,7 +9,6 @@ export const backupItemSchema = z.object({
   size: z.number(),
   status: z.enum(['completed', 'failed', 'creating', 'restoring']),
   worldName: z.string(),
-  format: z.enum(['snapshot', 'zip']),
   createdAt: z.string(),
   updatedAt: z.string(),
 })

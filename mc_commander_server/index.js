@@ -6,8 +6,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import helmet from 'helmet';
 import config from './config.js';
-import { hashToken } from './utils/password.js';
-import { isWeakApiKey } from './utils/weak-key.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // 版本号单一来源：package.json（与 routes/index.js 的 /health、check-update 共用）
@@ -28,31 +26,8 @@ import { BackupService } from './services/backup.service.js';
 import { initDatabase, getDb, InstanceModel } from './db/index.js';
 import { logger } from './utils/logger.js';
 
-// ── 启动时 API Key 哈希迁移 + .env 权限检查 ────────────
+// ── 启动时 .env 权限检查 ────────────
 const envPath = path.join(__dirname, '.env');
-
-// 迁移：旧格式 API_KEY=<明文> → API_KEY_HASH=<sha256hex>
-if (!config.apiKeyHash && config.apiKey) {
-  const hash = hashToken(config.apiKey);
-  config.apiKeyHash = hash;
-  try {
-    let content = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf-8') : '';
-    content = content.replace(/^API_KEY=.*$/m, '');
-    const hashLine = `API_KEY_HASH=${hash}`;
-    if (/^API_KEY_HASH=.*$/m.test(content)) {
-      content = content.replace(/^API_KEY_HASH=.*$/m, hashLine);
-    } else {
-      content += (content === '' || content.endsWith('\n') ? '' : '\n') + hashLine + '\n';
-    }
-    const tmp = envPath + '.tmp';
-    fs.writeFileSync(tmp, content, 'utf-8');
-    try { fs.chmodSync(tmp, 0o600); } catch { /* Windows 无权限位 */ }
-    fs.renameSync(tmp, envPath);
-    logger.info('[Security] API Key 已自动迁移为哈希存储格式（API_KEY_HASH）');
-  } catch (err) {
-    logger.error(`[Security] API Key 哈希迁移失败：${err.message}，请手动将 .env 中 API_KEY 替换为 API_KEY_HASH=<sha256hex>`);
-  }
-}
 
 // .env 权限检查：POSIX 下 group/other 可读位告警
 try {
@@ -61,25 +36,6 @@ try {
     logger.warn(`[Security] .env 文件权限过宽（${(stat.mode & 0o777).toString(8)}），建议设置为 0600（仅所有者可读写）`);
   }
 } catch { /* 文件不存在等情况由后续校验处理 */ }
-
-// 生产环境弱 API Key 检测（S-P0-5）：仅在明文 API_KEY 迁移路径中可检测
-//（哈希值无法逆推）。弱 = 长度 < 16 或纯重复字符（如 'aaaa...'）。
-// ALLOW_WEAK_KEY=1 显式豁免（开发/测试环境默认不检查）。
-if (process.env.NODE_ENV === 'production' && !process.env.ALLOW_WEAK_KEY) {
-  const rawKey = process.env.API_KEY;
-  if (rawKey) {
-    if (isWeakApiKey(rawKey)) {
-      // exit 前引导输出走 banner 白名单（stderr 直写，不受 LOG_LEVEL 过滤）
-      logger.banner('╔══════════════════════════════════════════════════╗');
-      logger.banner('║  错误: 生产环境不允许使用弱 API Key！         ║');
-      logger.banner('║  Key 长度须 >= 16 且不得为纯重复字符。         ║');
-      logger.banner('║  如确需使用弱 Key，请设置 ALLOW_WEAK_KEY=1。    ║');
-      logger.banner('╚══════════════════════════════════════════════════╝');
-      process.exit(1);
-    }
-  }
-  // apiKeyHash 已存在但无明文 → 无法检测原始密钥强度，放行
-}
 
 // 启动前校验关键配置（在 listen 之前）
 if (!config.apiKeyHash) {

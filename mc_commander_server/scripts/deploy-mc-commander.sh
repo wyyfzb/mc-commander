@@ -431,10 +431,12 @@ export npm_config_node_mirror="https://npmmirror.com/mirrors/node/"
 npm install --omit=dev
 
 # 9. 生成/读取 .env 配置（API Key 首次部署自动生成，更新时保留原有Key）
+# .env 只落 API_KEY_HASH（SHA-256 摘要），明文仅在完成横幅一次性展示
 # SETUP_TOKEN：首访设密所有权证明（audit S-P0-1 / #309）——仅首次部署生成；
 # 更新部署不读取不再生成（一次性凭据，避免重复展示扩大暴露面；存量部署
 # 需开启保护请手动向 .env 添加 SETUP_TOKEN 行后重启服务）
 SETUP_TOKEN=""
+API_KEY=""
 if [ ! -f .env ]; then
   log "首次部署，生成 API Key 和 .env 配置文件..."
   API_KEY=$(openssl rand -hex 16)
@@ -442,7 +444,7 @@ if [ ! -f .env ]; then
   # 设密成功立即作废（内存清空 + .env 移除，重启后同样失效）
   SETUP_TOKEN=$(openssl rand -hex 32)
   cat > .env <<EOF
-API_KEY=$API_KEY
+API_KEY_HASH=$(printf '%s' "$API_KEY" | sha256sum | awk '{print $1}')
 SETUP_TOKEN=$SETUP_TOKEN
 PORT=25566
 SERVERS_DIR=./servers
@@ -453,23 +455,11 @@ RATE_LIMIT_WINDOW=60000
 RATE_LIMIT_MAX=100
 EOF
   # Key 掩码进日志（P2-10）：完整值仅在下方完成横幅一次性展示（交付通道），
-  # 不进 log 长期留存；.env 为唯一持久存储
+  # 不进 log 长期留存；.env 只存摘要
   log "已生成 API Key: ${API_KEY:0:4}****（完整值见部署完成横幅）"
   log "已生成一次性 SETUP_TOKEN（首访设密时需粘贴，用后作废）"
 else
-  log ".env 已存在，读取现有配置..."
-  # 从已有 .env 中读取 API_KEY（支持 API_KEY=xxx 或 API Key: xxx 格式）
-  API_KEY=$(grep -E '^API_KEY=' .env 2>/dev/null | cut -d= -f2 | tr -d ' "[:space:]')
-  if [ -z "$API_KEY" ]; then
-    API_KEY=$(grep -E '^API Key:' .env 2>/dev/null | cut -d: -f2 | tr -d ' "[:space:]')
-  fi
-  if [ -z "$API_KEY" ]; then
-    warn "未能从 .env 中读取到 API_KEY，将重新生成"
-    API_KEY=$(openssl rand -hex 16)
-    sed -i "s/^API_KEY=.*/API_KEY=$API_KEY/" .env 2>/dev/null || echo "API_KEY=$API_KEY" >> .env
-  else
-    log "已读取现有 API Key: ${API_KEY:0:4}****"
-  fi
+  log ".env 已存在，保留现有 API_KEY_HASH（不重新生成）..."
 fi
 
 # 9.5 开放防火墙端口（25566）
@@ -508,7 +498,7 @@ After=network.target
 [Service]
 Type=simple
 User=mc-commander
-# 生产模式：启用 NODE_ENV 门控行为（严格错误掩码、弱密钥校验等），避免环境不一致
+# 生产模式：启用 NODE_ENV 门控行为（严格错误掩码等），避免环境不一致
 Environment=NODE_ENV=production
 # 只向面板主进程发停止信号，不波及同 cgroup 的 MC 实例——面板停机不停实例
 # （owner 2026-09-09 拍板），实例由下次启动的 pid 文件接管。默认 control-group
@@ -600,7 +590,10 @@ echo "╠═══════════════════════�
 echo "║                                                  ║"
 printf "║   ► 服务器地址:  %-34s ║\n" "$SERVER_IP"
 printf "║   ► 端口:        %-34s ║\n" "25566"
+if [ -n "$API_KEY" ]; then
 printf "║   ► API Key:     %-34s ║\n" "$API_KEY"
+echo "║   ⓘ 仅此一次显示；请立即保存（服务端只存摘要）    ║"
+fi
 if [ -n "$SETUP_TOKEN" ]; then
 printf "║   ► SETUP_TOKEN: %-34s ║\n" "$SETUP_TOKEN"
 echo "║   ⓘ 仅首次设密使用：浏览器设密页粘贴，用后作废  ║"

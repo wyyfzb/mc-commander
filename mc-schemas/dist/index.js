@@ -3921,7 +3921,6 @@ const backupItemSchema = objectType({
 		"restoring"
 	]),
 	worldName: stringType(),
-	format: enumType(["snapshot", "zip"]),
 	createdAt: stringType(),
 	updatedAt: stringType()
 });

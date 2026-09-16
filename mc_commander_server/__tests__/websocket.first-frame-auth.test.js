@@ -23,8 +23,8 @@ vi.mock('../db/index.js', async (importOriginal) => ({
 }));
 import { getDb, AdminSessionModel } from '../db/index.js';
 
-/** 测试键从 vitest env 读取（vitest.config.js 注入的固定测试键，禁止真实凭据入库） */
-const TEST_API_KEY = process.env.API_KEY;
+/** 与 vitest.config.js 注入的 API_KEY_HASH 对应的明文测试键（虚构，禁止真实凭据入库） */
+const TEST_API_KEY = 'test-api-key-for-unit-tests';
 const BAD_KEY = 'wrong-key-for-first-frame-test';
 const IP = '203.0.113.10';
 

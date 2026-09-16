@@ -185,12 +185,10 @@ test.describe('设置页', () => {
     await expect(page.getByRole('heading', { name: '备份管理', level: 3 })).toBeVisible()
     // 快照机制说明
     await expect(page.getByText('快照备份：未修改文件零拷贝增量传输，超出保留策略自动清理')).toBeVisible()
-    // 列表行（mock 3 条：completed snapshot / zip / failed）。三条名称都用精确匹配：
+    // 列表行（mock 2 条：completed / failed）。名称都用精确匹配：
     // 子串匹配下夹具名重新内嵌日期也照样命中，等于没有防线
     await expect(page.getByText('手动备份', { exact: true })).toBeVisible()
-    await expect(page.getByText('旧格式压缩包', { exact: true })).toBeVisible()
     await expect(page.getByText('失败的备份', { exact: true })).toBeVisible()
-    await expect(page.getByText('旧格式', { exact: true })).toBeVisible()
     // 立即备份 → creating 行 + toast
     await page.getByRole('button', { name: '立即备份' }).click()
     await expect(page.getByText('备份任务已启动')).toBeVisible()
