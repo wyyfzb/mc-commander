@@ -24,6 +24,16 @@ export const ErrorCode = {
   AUTH_LOGIN_LOCKED: 42901,
   /** 首访设密 SETUP_TOKEN 校验失败（缺失/错误/已作废；公网部署所有权证明，issue 309） */
   AUTH_SETUP_TOKEN_INVALID: 40104,
+  /** 密码已通过、尚缺第二因子：据此显示动态口令输入框（服务端此时未签发会话） */
+  AUTH_TOTP_REQUIRED: 40105,
+  /** 第二因子错误（动态口令或恢复码），与密码错误分开提示 */
+  AUTH_TOTP_INVALID: 40106,
+  /** 两步验证尚未挂靠（无候选密钥或未确认） */
+  AUTH_TOTP_NOT_ENROLLED: 40015,
+  /** 两步验证已启用：需先关闭才能重新挂靠 */
+  AUTH_TOTP_ALREADY_ENABLED: 40913,
+  /** API Key 通道被部署配置关闭（API_KEY_ENABLED=false）：须改用会话登录 */
+  API_KEY_DISABLED: 40303,
 
   INSTANCE_NOT_FOUND: 40401,
   INSTANCE_NOT_RUNNING: 40002,
@@ -88,6 +98,11 @@ const LOCALIZED_MESSAGES: Partial<Record<ErrorCodeValue, string>> = {
   [ErrorCode.AUTH_ALREADY_CONFIGURED]: '管理员密码已设置，请直接登录',
   [ErrorCode.AUTH_LOGIN_LOCKED]: '登录失败次数过多，请稍后再试',
   [ErrorCode.AUTH_SETUP_TOKEN_INVALID]: 'SETUP_TOKEN 缺失或错误：请粘贴部署完成时输出的一次性令牌',
+  [ErrorCode.AUTH_TOTP_REQUIRED]: '请输入两步验证码或恢复码',
+  [ErrorCode.AUTH_TOTP_INVALID]: '两步验证码或恢复码错误',
+  [ErrorCode.AUTH_TOTP_NOT_ENROLLED]: '两步验证尚未挂靠，请先完成挂靠',
+  [ErrorCode.AUTH_TOTP_ALREADY_ENABLED]: '两步验证已启用，请先关闭后再重新挂靠',
+  [ErrorCode.API_KEY_DISABLED]: 'API Key 通道已关闭，请改用管理员会话登录',
   [ErrorCode.INSTANCE_NOT_FOUND]: '服务器实例不存在',
   [ErrorCode.INSTANCE_NOT_RUNNING]: '实例未在运行',
   [ErrorCode.INSTANCE_RUNNING]: '实例正在运行',

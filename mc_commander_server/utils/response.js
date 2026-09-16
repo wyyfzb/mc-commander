@@ -98,6 +98,22 @@ export const ErrorCodes = {
     message: 'SETUP_TOKEN 缺失或错误：请携带部署完成时输出的一次性令牌',
     status: 403,
   },
+  // 密码已通过、尚缺第二因子：客户端据此显示动态口令输入框，服务端此时不签发会话
+  AUTH_TOTP_REQUIRED: { code: 40105, message: '需要两步验证码', status: 401 },
+  // 第二因子错误（动态口令或恢复码）：与密码错误分开，客户端可区分提示；
+  // 同样计入登录失败封禁（与密码失败共用计数）
+  AUTH_TOTP_INVALID: { code: 40106, message: '两步验证码或恢复码错误', status: 401 },
+  // 两步验证未挂靠（无候选 secret / 未确认）却调用 confirm/disable
+  AUTH_TOTP_NOT_ENROLLED: { code: 40015, message: '两步验证尚未挂靠，请先完成挂靠', status: 400 },
+  // 已挂靠状态下重复 enroll：必须先 disable 再重新挂靠（避免静默替换正在使用的 secret）
+  AUTH_TOTP_ALREADY_ENABLED: { code: 40913, message: '两步验证已启用，请先关闭后再重新挂靠', status: 409 },
+  // API Key 通道被配置关闭（API_KEY_ENABLED=false）：拒绝而非降级放行，
+  // 提示改用会话登录（浏览器的唯一正常通道）
+  API_KEY_DISABLED: {
+    code: 40303,
+    message: 'API Key 通道已关闭，请改用管理员会话登录',
+    status: 403,
+  },
 };
 
 // 自定义错误类

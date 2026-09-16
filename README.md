@@ -303,6 +303,7 @@ ws.onmessage = (event) => {
 | `ADMIN_SESSION_MAX_SESSIONS` | `5` | 每用户会话并发上限：新登录挤掉最旧会话 |
 | `AUTH_LOGIN_MAX_FAILS` | `10` | 登录失败锁定阈值（按账号/来源 IP 内存级计数，重启即清零） |
 | `AUTH_LOGIN_LOCK_MS` | `300000` | 登录失败锁定时长（毫秒） |
+| `API_KEY_ENABLED` | `true` | 是否开放 API Key 通道：设 `false` 时 API Key 在 HTTP 与 WebSocket 上一律拒绝（403，提示改用管理员会话登录），`rotate-key` 同样 403 且不写 `.env`；`.env` 中的 `API_KEY_HASH` 保留不动——重新设回 `true` 即恢复。取值 `true`/`false`/`1`/`0`（大小写与首尾空格不敏感），其它取值启动报错 |
 | `RATE_LIMIT_WINDOW` | `60000` | 速率限制窗口（毫秒） |
 | `RATE_LIMIT_MAX` | `240` | 窗口内最大请求数（认证前按 IP 计数；默认兼顾前端多标签页轮询 ≈72-96 req/min 不误伤） |
 | `CRASH_LOOP_WINDOW_MS` | `300000` | 崩溃循环熔断滑动窗口（毫秒） |

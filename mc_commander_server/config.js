@@ -14,6 +14,7 @@ dotenv.config({ path: path.join(__dirname, '.env') });
 // 回退（回退默认会让用户设置失效且难以察觉），且与 port NaN listen 抛错的既有
 // fail-fast 行为一致化
 const invalidNumberEnv = [];
+const invalidBooleanEnv = [];
 
 function intFromEnv(envNames, fallback) {
   const names = Array.isArray(envNames) ? envNames : [envNames];
@@ -28,6 +29,24 @@ function intFromEnv(envNames, fallback) {
     return parseInt(raw.trim(), 10);
   }
   return parseInt(fallback, 10);
+}
+
+/**
+ * 布尔开关统一收口：只认 true/false/1/0（trim + 大小写不敏感）。
+ *
+ * 安全档位开关不能用「不是 false 就算 true」的写法：操作者写 FALSE / False /
+ * 带首尾空格时以为已关闭、实际仍开着，且不报错（fail-open 方向）。未设置或
+ * 留空走默认；**识别不了的取值一律 fail-fast**——静默取默认在两个方向上都是
+ * 坑（以为关了其实开着 / 以为开了其实关了）。
+ */
+function boolFromEnv(name, fallback) {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === '') return fallback;
+  const value = raw.trim().toLowerCase();
+  if (value === 'true' || value === '1') return true;
+  if (value === 'false' || value === '0') return false;
+  invalidBooleanEnv.push({ name, raw });
+  return fallback; // 占位值：收集完成后统一 fail-fast
 }
 
 const config = {
@@ -72,6 +91,12 @@ const config = {
     loginLockMaxFails: intFromEnv('AUTH_LOGIN_MAX_FAILS', '10'),
     loginLockMs: intFromEnv('AUTH_LOGIN_LOCK_MS', '300000'),
   },
+  // API Key 通道开关（默认 true = 保持既有行为）。关闭后 API Key 在 HTTP 与 WS
+  // 两条通道上一律被拒（fail-closed，不做任何降级放行），且轮换端点同步 403
+  // （不写 .env）；面板只接受管理员会话。面向「不给自动化留常驻全权凭据」的
+  // 部署形态。仅关闭鉴权入口——.env 里的 API_KEY_HASH 不删除，重新开启即恢复。
+  // 取值 true/false/1/0（大小写与首尾空格不敏感），其余取值启动即报错
+  apiKeyEnabled: boolFromEnv('API_KEY_ENABLED', true),
   rateLimit: {
     windowMs: intFromEnv('RATE_LIMIT_WINDOW', '60000'),
     // 240/min：前端常态轮询 6-8 个端点 × 5s ≈ 72-96 req/min，100 会在多标签页
@@ -129,11 +154,16 @@ const config = {
 };
 
 // fail-fast：全部配置项求值后统一裁决，错误信息逐项给出变量名与实际读到的值，
-// 一次修完所有笔误；未设置或留空不受影响（走默认值）
-if (invalidNumberEnv.length > 0) {
-  const lines = invalidNumberEnv.map((v) => `  - ${v.name}="${v.raw}"`).join('\n');
+// 一次修完所有笔误；未设置或留空不受影响（走默认值）。数值与布尔两类分开列出，
+// 便于直接看出该填什么（整数 vs true/false/1/0）
+if (invalidNumberEnv.length > 0 || invalidBooleanEnv.length > 0) {
+  const lines = [
+    ...invalidNumberEnv.map((v) => `  - ${v.name}="${v.raw}"（应为整数）`),
+    ...invalidBooleanEnv.map((v) => `  - ${v.name}="${v.raw}"（应为 true/false/1/0）`),
+  ].join('\n');
+  const total = invalidNumberEnv.length + invalidBooleanEnv.length;
   throw new Error(
-    `启动中止：${invalidNumberEnv.length} 个数值环境变量的值不是合法整数：\n${lines}\n` +
+    `启动中止：${total} 个环境变量的值非法：\n${lines}\n` +
       '请修正环境变量或 .env 后重启；未设置或留空将使用默认值。'
   );
 }

@@ -24,6 +24,7 @@ const TOUCHED = [
   'BACKUP_RETENTION_MAX',
   'BACKUP_RETENTION_DAYS',
   'DISK_WARNING_PERCENT',
+  'API_KEY_ENABLED',
 ];
 let snapshot;
 
@@ -130,6 +131,48 @@ describe('config 数值环境变量收口（intFromEnv）', () => {
     const text = String(err?.message ?? err);
     expect(text).toContain('PANEL_BACKUP_RETENTION_MAX');
     expect(text).not.toContain('BACKUP_RETENTION_MAX="10"');
+  });
+
+  it('API_KEY_ENABLED 解析：默认开启，大小写与首尾空格不敏感的 false/0 关闭', async () => {
+    // 默认（.env 已 mock 掉，等价于未设置）
+    expect((await loadConfig()).default.apiKeyEnabled).toBe(true);
+    // 空串/纯空白等同未设置（与数值项同一口径）
+    process.env.API_KEY_ENABLED = '   ';
+    expect((await loadConfig()).default.apiKeyEnabled).toBe(true);
+    // 关闭：false 的任意大小写/空白变体，以及 0（FALSE 曾被静默忽略 ⇒ fail-open）
+    for (const value of ['false', 'FALSE', 'False', ' false ', '0']) {
+      process.env.API_KEY_ENABLED = value;
+      expect((await loadConfig()).default.apiKeyEnabled, `API_KEY_ENABLED=${value}`).toBe(false);
+    }
+    // 开启：true 的变体与 1
+    for (const value of ['true', 'TRUE', 'True', ' true ', '1']) {
+      process.env.API_KEY_ENABLED = value;
+      expect((await loadConfig()).default.apiKeyEnabled, `API_KEY_ENABLED=${value}`).toBe(true);
+    }
+  });
+
+  it('API_KEY_ENABLED 未识别取值启动 fail-fast（不静默取默认）', async () => {
+    // 'no'/'yes'/'2'/拼写错误都属未识别：静默取默认在两个方向上都是坑
+    for (const value of ['no', 'yes', '2', 'flase', 'enabled']) {
+      process.env.API_KEY_ENABLED = value;
+      const err = await loadConfig().catch((e) => e);
+      const text = String(err?.message ?? err);
+      expect(text, `API_KEY_ENABLED=${value}`).toContain('API_KEY_ENABLED');
+      expect(text, `API_KEY_ENABLED=${value}`).toContain(value);
+      expect(text).toContain('true/false/1/0');
+    }
+  });
+
+  it('数值与布尔两类非法项同一次启动全部列出', async () => {
+    process.env.PORT = '8O';
+    process.env.API_KEY_ENABLED = 'maybe';
+    const err = await loadConfig().catch((e) => e);
+    const text = String(err?.message ?? err);
+    expect(text).toContain('PORT');
+    expect(text).toContain('8O');
+    expect(text).toContain('API_KEY_ENABLED');
+    expect(text).toContain('maybe');
+    expect(text).toContain('2 个环境变量');
   });
 
   it('23 处调用点全部收口：配置赋值不再直接 parseInt(process.env)', async () => {

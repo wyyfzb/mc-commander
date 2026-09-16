@@ -16,8 +16,8 @@ function clientIp(req) {
  * 会话正常生命周期（到期 / 绝对过期）= 客户端会自动重登 → debug。
  * 日志只含 IP 与路径，永不记录凭据/令牌本体。
  */
-function logAuthRejection(req, reason, level = 'warn') {
-  logger[level](`[auth] 401 ${reason} ip=${clientIp(req)} path=${req.path}`);
+function logAuthRejection(req, reason, level = 'warn', status = 401) {
+  logger[level](`[auth] ${status} ${reason} ip=${clientIp(req)} path=${req.path}`);
 }
 
 /** 恒时比对 API Key：对入站明文做 SHA-256 后与存储的哈希比较。
@@ -92,8 +92,17 @@ export function authMiddleware(req, res, next) {
   }
 
   // 通道一：API Key（自动化 / API 调用通道，与既有行为完全兼容）
+  // API_KEY_ENABLED=false 时整条通道 fail-closed：不校验、不降级，直接拒绝并
+  // 指引会话登录（关掉自动化凭据的部署形态下，浏览器通道是唯一正常入口）
   const apiKey = req.headers['x-api-key'];
   if (apiKey != null) {
+    if (!config.apiKeyEnabled) {
+      logAuthRejection(req, 'API key channel disabled', 'warn', 403);
+      return res.status(403).json(error(
+        ErrorCodes.API_KEY_DISABLED,
+        'API Key 通道已关闭，请改用管理员会话登录'
+      ));
+    }
     if (!verifyApiKey(apiKey)) {
       logAuthRejection(req, 'invalid API key');
       return res.status(401).json(error(
@@ -147,7 +156,9 @@ export function authMiddleware(req, res, next) {
 
 /**
  * WebSocket 升级认证（双通道，与 authMiddleware 的 HTTP 语义对齐）：
- * - 通道一：API Key（handleProtocols 提取的 mc-commander-apikey.* subprotocol）
+ * - 通道一：API Key（handleProtocols 提取的 mc-commander-apikey.* subprotocol）；
+ *   API_KEY_ENABLED=false 时与 HTTP 同款 fail-closed——即使同时带了会话令牌也不
+ *   回退到它（关闭通道的语义是「该通道不可用」，而非「尽力而为」）
  * - 通道二：管理员会话令牌（mc-commander-session.* subprotocol）——
  *   浏览器会话化后 WS 握手不再依赖明文 API Key，与 HTTP Bearer 同源凭据。
  *   会话需存在且未过期；不在此处 touch 续期（重连频率不可控，避免绕过
@@ -159,6 +170,7 @@ export function authMiddleware(req, res, next) {
  */
 export function authenticateWebSocket(apiKey, sessionToken = null) {
   if (apiKey) {
+    if (!config.apiKeyEnabled) return false;
     return verifyApiKey(apiKey);
   }
   if (sessionToken) {

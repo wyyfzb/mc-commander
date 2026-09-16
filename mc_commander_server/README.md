@@ -175,10 +175,38 @@ Authorization: Bearer <session-token>
 ```
 
 - **API Key**：按 `API_KEY_HASH` 校验（见上文部署口径），`POST /api/v1/rotate-key` 可轮换。
+  设 `API_KEY_ENABLED=false` 可整体关闭该通道（HTTP 与 WebSocket 一律 403 并提示改用会话
+  登录，`rotate-key` 同样 403 且**不写 `.env`**；`.env` 中的哈希保留不动，设回 `true` 即恢复。
+  取值 `true`/`false`/`1`/`0`，大小写与首尾空格不敏感，其它取值启动即报错）。
 - **管理员会话**：`POST /api/v1/auth/setup` 首次设置管理员密码，`POST /api/v1/auth/login`
   换取令牌，`PUT /api/v1/auth/password` 改密；令牌仅以 SHA-256 落库，滑动有效期默认 7 天
   （`ADMIN_SESSION_TTL_HOURS`），自创建起 30 天强制重登（`ADMIN_SESSION_ABSOLUTE_TTL_DAYS`）。
 - 两条通道都不可用时返回 401，错误信息同时提示两种凭据形态。
+
+### 两步验证（TOTP）
+
+可在设置中为管理员账号挂靠基于时间的一次性口令（RFC 6238：SHA-1 / 6 位 / 30 秒，
+兼容 Google Authenticator、Authy、1Password 等）。挂靠与登录链路：
+
+| 方法 | 端点 | 说明 |
+|------|------|------|
+| `GET` | `/api/v1/auth/totp/status` | 状态：`{ enabled, confirmedAt, recoveryCodesRemaining }`（永不返回密钥与恢复码） |
+| `POST` | `/api/v1/auth/totp/enroll` | 生成候选密钥与二维码（`secret` / `otpauthUrl` / `qrDataUrl`）；此时**尚未启用** |
+| `POST` | `/api/v1/auth/totp/confirm` | 提交一次动态口令完成挂靠，返回 10 个一次性恢复码（**仅此一次**） |
+| `POST` | `/api/v1/auth/totp/disable` | 关闭两步验证：须同时提交当前密码与第二因子（动态口令或一枚未用恢复码） |
+
+- 启用后 `POST /api/v1/auth/login` 必须在 `password` 之外携带 `totpCode`（6 位动态口令或
+  一枚恢复码）：未带时返回 `40105`（客户端据此显示输入框），校验失败返回 `40106` 并计入
+  登录失败封禁（与密码失败共用计数）；任一步失败都不签发会话。
+- 动态口令接受 ±1 个步长（±30s）的时钟漂移，且**同一个码不会被接受两次**（已接受的
+  步长会被记录，任何不大于它的码一律拒绝）。
+- 恢复码只以 SHA-256 摘要落库、用后即废，登录与关闭两步验证时均可使用；用尽或需要重新
+  签发时，先关闭再重新挂靠即可。
+- **挂靠成功（confirm）与关闭（disable）都会立即吊销其它会话**，只保留发起本次操作的会话：
+  两步验证只拦新的登录，不吊销变更前创建的会话会让被窃会话绕过新因子。失败路径
+  （动态口令错 / 密码错）不吊销任何会话。
+- 密钥（`totp_secret`）与密码哈希同库明文存储：能读到库文件的攻击者本就能改管理员密码，
+  本仓不为它单独引入加密密钥管理（取舍说明见 `routes/auth.js` 头部注释）。
 
 WebSocket 经 Subprotocol 鉴权，与 HTTP 同源：`mc-commander-apikey.<key>`（API Key）
 或 `mc-commander-session.<token>`（会话令牌）。

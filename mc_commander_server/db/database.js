@@ -377,6 +377,46 @@ function createTables() {
     )
   `);
 
+  // 迁移 v12：TOTP 两步验证（挂在管理员账号上）。
+  //
+  // 列语义拆分：totp_secret 是「候选密钥」（enroll 即写入但**不生效**），
+  // totp_enabled 才是启用位——挂靠必须经一次动态口令校验（confirm）才置位，
+  // 否则误扫二维码/看错 secret 会把管理员永久锁在门外。
+  // totp_last_step 记录「最后一次被接受的步长」，供重放防护拒绝任何 ≤ 它的码
+  // （仅靠 30s 漂移窗，同一个码在 ±30s 内可重复使用）。
+  //
+  // 幂等：逐列 ALTER，duplicate column 视为已迁移（与 v9/v11 同款写法），
+  // 对 user_version=11 的存量库执行不报错；restore codes 表用 IF NOT EXISTS。
+  // 本块置于 admin_account 建表之后——存量库的 admin_account 早于本迁移存在，
+  // 新库则由上方 CREATE TABLE IF NOT EXISTS 先建好再补齐列。
+  if (userVersion < 12) {
+    for (const ddl of [
+      `ALTER TABLE admin_account ADD COLUMN totp_enabled INTEGER NOT NULL DEFAULT 0`,
+      `ALTER TABLE admin_account ADD COLUMN totp_confirmed_at TEXT`,
+      `ALTER TABLE admin_account ADD COLUMN totp_last_step INTEGER`,
+    ]) {
+      try {
+        db.exec(ddl);
+      } catch (e) {
+        if (!e.message.includes('duplicate column')) throw e;
+      }
+    }
+    // 一次性恢复码：只存 SHA-256 摘要，used_at 置位即作废（明文仅在生成响应里出现一次）
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS admin_recovery_codes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        code_hash TEXT NOT NULL UNIQUE,
+        used_at TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_admin_recovery_codes_unused ON admin_recovery_codes(used_at);
+    `);
+    db.pragma('user_version = 12');
+    logger.info('Migration: added TOTP two-factor columns and admin_recovery_codes table');
+  }
+
   // 创建索引
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_admin_sessions_expires ON admin_sessions(expires_at);

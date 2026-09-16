@@ -63,6 +63,59 @@ export const apiKeyRotateResponseSchema = z.object({
   apiKey: z.string(),
 })
 
+// ---------------------------------------------------------------------------
+// TOTP 两步验证（RFC 6238）
+//
+// 契约边界：secret 与恢复码明文**只在生成它的那一次响应里**出现——status 恒不含
+// 二者，enroll 只给候选 secret（未启用），confirm 是恢复码明文唯一出口。
+// 时间字段与全仓口径一致，为带时区的 ISO8601（服务端把 SQLite 的无时区
+// CURRENT_TIMESTAMP 经 toIsoUtc 归一化后下发）。
+// ---------------------------------------------------------------------------
+
+/** 两步验证状态（管理端设置页数据源；任何情况下不返回 secret 与恢复码） */
+export const authTotpStatusResponseSchema = z.object({
+  enabled: z.boolean(),
+  confirmedAt: z.string().nullable(),
+  recoveryCodesRemaining: z.number(),
+})
+
+/** enroll 响应：候选 secret + otpauth URI + 二维码 data URL（此时尚未启用） */
+export const authTotpEnrollResponseSchema = z.object({
+  secret: z.string(),
+  otpauthUrl: z.string(),
+  qrDataUrl: z.string(),
+})
+
+/** confirm 请求体：用当前动态口令证明已成功录入 secret */
+export const authTotpConfirmRequestBodySchema = z.object({
+  code: z.string(),
+})
+
+/** confirm 响应：启用态 + 10 个恢复码明文（唯一一次下发） */
+export const authTotpConfirmResponseSchema = z.object({
+  enabled: z.literal(true),
+  confirmedAt: z.string(),
+  recoveryCodes: z.array(z.string()),
+})
+
+/** disable 请求体：密码 + 第二因子（动态口令或恢复码）双重确认 */
+export const authTotpDisableRequestBodySchema = z.object({
+  password: z.string(),
+  code: z.string(),
+})
+
+/** disable 成功响应 */
+export const authTotpDisableResponseSchema = z.object({
+  ok: z.literal(true),
+})
+
+export type AuthTotpStatusResponse = z.infer<typeof authTotpStatusResponseSchema>
+export type AuthTotpEnrollResponse = z.infer<typeof authTotpEnrollResponseSchema>
+export type AuthTotpConfirmRequestBody = z.infer<typeof authTotpConfirmRequestBodySchema>
+export type AuthTotpConfirmResponse = z.infer<typeof authTotpConfirmResponseSchema>
+export type AuthTotpDisableRequestBody = z.infer<typeof authTotpDisableRequestBodySchema>
+export type AuthTotpDisableResponse = z.infer<typeof authTotpDisableResponseSchema>
+
 export type AuthSessionResponse = z.infer<typeof authSessionResponseSchema>
 export type AuthSetupResponse = z.infer<typeof authSetupResponseSchema>
 export type AuthStatusResponse = z.infer<typeof authStatusResponseSchema>
@@ -90,9 +143,10 @@ export const authSetupRequestBodySchema = z.object({
   password: z.string(),
 })
 
-/** login 请求体：密码换会话令牌 */
+/** login 请求体：密码换会话令牌；已挂靠两步验证时须带 totpCode（动态口令或恢复码） */
 export const authLoginRequestBodySchema = z.object({
   password: z.string(),
+  totpCode: z.string().optional(),
 })
 
 /** 改密请求体：验旧密 + 设新密 */
