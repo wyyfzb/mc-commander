@@ -129,12 +129,15 @@ function PlayerCard({
       )}
     >
       <div className="flex items-start gap-3 px-3 py-3">
-        <Checkbox
-          className="mt-1"
-          checked={selected}
-          onCheckedChange={() => toggleSelect(p.uuid)}
-          aria-label={`选择 ${p.name}`}
-        />
+        {/* 勾选框容器与 36px 头像同顶同高（h-9），16px 的框在其中垂直居中 →
+            与头像共享中线；表格态由单元格 align-middle 天然对齐，卡片态须显式成带 */}
+        <div className="flex h-9 shrink-0 items-center">
+          <Checkbox
+            checked={selected}
+            onCheckedChange={() => toggleSelect(p.uuid)}
+            aria-label={`选择 ${p.name}`}
+          />
+        </div>
         <PlayerAvatar name={p.name} isOnline={p.isOnline} isFakePlayer={p.isFakePlayer} size={36} />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">

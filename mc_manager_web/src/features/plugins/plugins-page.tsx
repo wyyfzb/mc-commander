@@ -36,6 +36,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { EmptyState } from '@/components/mcs/empty-state'
 import { Card } from '@/components/mcs/card'
+import { InfoHint } from '@/components/mcs/info-hint'
 import { InstanceRequiredState } from '@/features/instances/components/instance-required-state'
 import { PageHeader } from '@/components/mcs/page-header'
 import { useServerStore } from '@/stores/server'
@@ -48,6 +49,9 @@ import { usePluginUpload } from './use-plugin-upload'
 import { PluginRow } from './components/plugin-row'
 import { PluginDetailSheet } from './components/plugin-detail-sheet'
 import { UploadProgressBar } from './components/upload-progress-bar'
+
+/** 插件管理说明全文（唯一声明源：展示点与测试都取这里） */
+const PLUGIN_EFFECT_HINT = '管理 Bukkit 系插件（Paper/Spigot）：启停与增删在重启实例后生效'
 
 export function PluginsPage() {
   const instanceId = useServerStore((s) => s.instanceId)
@@ -295,19 +299,20 @@ export function PluginsPage() {
       />
 
       <PageHeader
+        /* 窄屏（<sm）改为上下堆叠：操作区四个按钮不可收缩（349px），与标题同排时
+           会把标题列挤到只剩一个字宽（实测 433px 下 40px，「插件管理」逐字竖排） */
+        className="flex-col items-stretch gap-3 sm:flex-row sm:items-center"
         title="插件管理"
         description={
-          <>
-            管理 Bukkit 系插件（Paper/Spigot）：启停与增删在重启实例后生效
+          <span className="inline-flex items-center gap-1">
             {plugins.length > 0 && (
-              <span className="ml-2 text-mcs-text-muted">
-                共 {plugins.length} 个（启用 {enabledCount} / 禁用 {plugins.length - enabledCount}）
-              </span>
+              <>共 {plugins.length} 个（启用 {enabledCount} / 禁用 {plugins.length - enabledCount}）</>
             )}
-          </>
+            <InfoHint label="插件管理说明">{PLUGIN_EFFECT_HINT}</InfoHint>
+          </span>
         }
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="outline"
               size="sm"

@@ -227,6 +227,17 @@ test.describe('玩家表窄屏：行式卡片（C3）', () => {
     const card = page.getByRole('listitem').filter({ hasText: 'Steve' }).first()
     await expect(card).toBeVisible()
     await expect(card.getByRole('checkbox', { name: '选择 Steve' })).toBeVisible()
+    // 勾选框与 36px 头像共享中线（修复前实测差 6px）；表格态靠单元格 align-middle
+    // 天然对齐，卡片态没有这层，故中线只能在浏览器里量（jsdom 无布局引擎）
+    const avatarLine = await card.evaluate((li) => {
+      const cb = li.querySelector('[role="checkbox"]')!.getBoundingClientRect()
+      const avatar = li.querySelector('img')!.getBoundingClientRect()
+      return {
+        checkbox: cb.top + cb.height / 2,
+        avatar: avatar.top + avatar.height / 2,
+      }
+    })
+    expect(Math.abs(avatarLine.checkbox - avatarLine.avatar)).toBeLessThanOrEqual(1)
     // 表头消失后全选入口仍在（与表格表头同标签）
     await expect(page.getByRole('checkbox', { name: '全选当前页' })).toBeVisible()
     // 小字标签：封禁剩余时间等长文本在卡片里完整可读
@@ -273,6 +284,81 @@ test.describe('玩家表窄屏：行式卡片（C3）', () => {
       .locator('xpath=..')
       .evaluate((el) => el.scrollWidth - el.clientWidth)
     expect(barOverflow).toBeLessThanOrEqual(0)
+
+    const mainOverflow = await page
+      .locator('#main-content')
+      .evaluate((el) => el.scrollWidth - el.clientWidth)
+    expect(mainOverflow).toBeLessThanOrEqual(0)
+  })
+})
+
+/**
+ * 插件页窄屏（owner 实测报「页头布局混乱 + 批量选择框在行内没有居中」）。
+ *
+ * 页头：操作区四个按钮合计 349px 且不可收缩，与标题同排时把标题列挤到 40px——
+ * 「插件管理」逐字竖排四行。判据同玩家页筛选条那条：单行高度 ≤ 1.5 倍行高（先断症状），
+ * 再加标题宽度下界（被挤扁时实测 40px，正常约 88px）。
+ * 说明句虽已移入浮层，仍断言它不常驻可见行、且入口能读到全文（信息不丢）。
+ *
+ * 选择框：与行首 36px 图标块共享中线（修复前实测相差 8px），中线用真实 rect 计算——
+ * jsdom 无布局引擎，这条只能在浏览器里量。
+ */
+test.describe('插件页窄屏：页头不挤压 + 选择框中线', () => {
+  test.use({ viewport: { width: 375, height: 812 } })
+
+  test('375px：标题单行、说明入浮层、选择框与图标同中线、无横向溢出', async ({ page }) => {
+    await setupConnection(page)
+    await page.goto('/plugins')
+
+    const title = page.getByRole('heading', { name: '插件管理' })
+    await expect(title).toBeVisible()
+    const titleMetrics = await title.evaluate((el) => {
+      const rect = el.getBoundingClientRect()
+      return {
+        width: rect.width,
+        height: rect.height,
+        lineHeight: parseFloat(getComputedStyle(el).lineHeight),
+      }
+    })
+    expect(titleMetrics.lineHeight).toBeGreaterThan(0)
+    expect(titleMetrics.height).toBeLessThanOrEqual(titleMetrics.lineHeight * 1.5)
+    expect(titleMetrics.width).toBeGreaterThan(80)
+
+    // 计数留在描述行，且不折成竖排
+    const count = page.getByText(/共 \d+ 个（启用 \d+ \/ 禁用 \d+）/)
+    await expect(count).toBeVisible()
+    const countMetrics = await count.evaluate((el) => ({
+      height: el.getBoundingClientRect().height,
+      lineHeight: parseFloat(getComputedStyle(el).lineHeight),
+    }))
+    expect(countMetrics.height).toBeLessThanOrEqual(countMetrics.lineHeight * 1.5)
+
+    // 说明句不常驻；点信息入口才读到全文
+    await expect(page.getByText('启停与增删在重启实例后生效')).toHaveCount(0)
+    await page.getByRole('button', { name: '插件管理说明' }).click()
+    await expect(page.getByRole('dialog', { name: '插件管理说明' })).toContainText(
+      '启停与增删在重启实例后生效',
+    )
+    await page.keyboard.press('Escape')
+
+    // 选择框与行首图标块共享中线
+    await expect(page.getByRole('checkbox', { name: '选择 EssentialsX' })).toBeVisible()
+    const centers = await page
+      .getByRole('checkbox', { name: '选择 EssentialsX' })
+      .evaluate((checkbox) => {
+        const icon = checkbox.closest('li')!.querySelector('div.size-9')!
+        const c = checkbox.getBoundingClientRect()
+        const i = icon.getBoundingClientRect()
+        return { checkbox: c.top + c.height / 2, icon: i.top + i.height / 2 }
+      })
+    expect(Math.abs(centers.checkbox - centers.icon)).toBeLessThanOrEqual(1)
+
+    // 四个按钮在 375 下换行而不是把页面撑宽
+    const overflow = await page.evaluate(() => ({
+      scrollWidth: document.documentElement.scrollWidth,
+      clientWidth: document.documentElement.clientWidth,
+    }))
+    expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.clientWidth)
 
     const mainOverflow = await page
       .locator('#main-content')

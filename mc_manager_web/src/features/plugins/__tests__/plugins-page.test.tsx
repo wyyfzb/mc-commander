@@ -251,6 +251,30 @@ describe('PluginsPage 列表渲染', () => {
   })
 })
 
+describe('PluginsPage 页头说明载体', () => {
+  it('说明不常驻：描述行只留计数，全文挂在信息入口里', async () => {
+    renderPage()
+    await screen.findByText('EssentialsX')
+
+    // 常驻说明句会把标题列挤成一个字宽（实测 433px 下 40px），故只保留入口
+    expect(screen.queryByText(/管理 Bukkit 系插件（Paper\/Spigot）/)).not.toBeInTheDocument()
+    expect(screen.getByText(/共 6 个（启用 2 \/ 禁用 4）/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '插件管理说明' })).toBeInTheDocument()
+  })
+
+  it('信息不丢：点按入口可读到完整说明（含生效时机）', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    const trigger = await screen.findByRole('button', { name: '插件管理说明' })
+
+    await user.click(trigger)
+
+    const hint = await screen.findByRole('dialog', { name: '插件管理说明' })
+    expect(hint).toHaveTextContent('管理 Bukkit 系插件（Paper/Spigot）')
+    expect(hint).toHaveTextContent('启停与增删在重启实例后生效')
+  })
+})
+
 describe('PluginsPage 搜索过滤', () => {
   it('多于 5 个插件出现搜索框；关键词命中后其余行消失', async () => {
     const user = userEvent.setup()

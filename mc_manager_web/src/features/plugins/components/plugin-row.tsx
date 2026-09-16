@@ -47,9 +47,10 @@ export function PluginRow({ plugin, checked, onCheckedChange, toggling, deleting
       tabIndex={0}
       aria-label={`查看插件 ${displayName} 详情`}
     >
-      {/* 复选框（阻止行点击） */}
+      {/* 复选框（阻止行点击）：容器与图标块同顶同高（mt-0.5 + h-9），
+          16px 的框在其中垂直居中 → 与 36px 图标块中线一致 */}
       <div
-        className="mt-1 flex items-center"
+        className="mt-0.5 flex h-9 shrink-0 items-center"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => e.stopPropagation()}
         role="presentation"
