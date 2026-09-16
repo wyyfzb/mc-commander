@@ -8,7 +8,7 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { useQueries, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Info, Loader2, Rocket } from 'lucide-react'
+import { AlertTriangle, Loader2, Rocket } from 'lucide-react'
 import { toast } from 'sonner'
 import { apiGet, ApiError } from '@/api/client'
 import { queryKeys, useInstances } from '@/api/queries'
@@ -16,7 +16,7 @@ import { ErrorCode, getFriendlyErrorText } from '@/api/errors'
 import { EmptyState } from '@/components/mcs/empty-state'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { PageHeader } from '@/components/mcs/page-header'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { InfoHint } from '@/components/mcs/info-hint'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
@@ -57,43 +57,13 @@ function DeployingBanner() {
   )
 }
 
-/** 实例隔离说明全文（唯一声明源：展示点与测试都取这里） */
+/**
+ * 实例隔离说明全文（唯一声明源：展示点与测试都取这里）
+ * 常驻信息条等于把同一句话在首屏说两遍（右栏部署引导块是同一条信息），还固定占掉一行高度，
+ * 故挂在页头描述行末尾的信息图标上（载体见 components/mcs/info-hint.tsx）。
+ */
 const ISOLATION_HINT =
   '实例隔离：每个实例独立目录 / 端口 / Java 版本，切换实例只需在顶栏选择，实例之间互不影响。'
-
-/**
- * 实例隔离说明的载体：说明本身与部署引导块（单实例时的右栏）是同一条信息，
- * 做成常驻信息条等于把同一句话在首屏说两遍，还固定占掉一行高度。
- * 挂到页头描述行末尾的信息图标上，用 Popover 而不是 Tooltip：
- * Tooltip 对触屏指针不响应（点按只聚焦、随后的 click 又被当作关闭），说明会只剩鼠标与键盘可达；
- * Popover 点按与 Enter/Space 均能打开、Escape 或点外部关闭，打开时全文进入可访问性树。
- * 图标内联在描述行的文字里，尺寸须小于该行行高（12px × 1.5 = 18px），否则会把页头撑高、
- * 抵消掉撤掉信息条省下的高度。
- */
-function InstanceIsolationHint() {
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          aria-label="实例隔离说明"
-          className="inline-flex size-4 shrink-0 items-center justify-center rounded-mcs-xs align-middle text-mcs-text-muted transition-colors hover:text-mcs-text-default focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mcs-focus-ring"
-        >
-          <Info className="size-3.5" aria-hidden />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent
-        aria-label="实例隔离说明"
-        side="bottom"
-        className="w-72 max-w-[calc(100vw-2rem)] p-3 text-mcs-xs text-mcs-text-default"
-        // 纯文本提示：不把焦点搬进浮层，键盘用户的落点留在入口上（Escape 仍可关闭）
-        onOpenAutoFocus={(event) => event.preventDefault()}
-      >
-        {ISOLATION_HINT}
-      </PopoverContent>
-    </Popover>
-  )
-}
 
 export function InstancesPage() {
   const config = useConnectionStore()
@@ -263,7 +233,7 @@ export function InstancesPage() {
         description={
           <span className="inline-flex items-center gap-1">
             {instancesQuery.isLoading ? '管理服务器实例的部署、切换与卸载' : `已安装 ${instances.length} 个实例`}
-            <InstanceIsolationHint />
+            <InfoHint label="实例隔离说明">{ISOLATION_HINT}</InfoHint>
           </span>
         }
         actions={
