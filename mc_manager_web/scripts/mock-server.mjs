@@ -455,6 +455,21 @@ const server = createServer((req, res) => {
       return res.end(ok({ hasPassword: !fresh }))
     }
     if (path === '/api/v1/auth/capabilities') {
+      // 鉴权与真实服务端对齐：该端点不在 authMiddleware 的公开白名单内，**未认证一律 401**
+      // （真实中间件无凭据分支回 40101 + "API Key is required. Use X-API-Key header or
+      // Bearer session token."）。mock 无 Key 台账，故只要求「带了凭据」而不校验 Key 值；
+      // Bearer 的值已由上方全局会话校验把关。
+      const apiKeyHeader = (req.headers['x-api-key'] ?? '').toString().trim()
+      if (!apiKeyHeader && !bearer) {
+        res.statusCode = 401
+        return res.end(JSON.stringify({
+          status: 'error',
+          code: 40101,
+          message: 'API Key is required. Use X-API-Key header or Bearer session token.',
+          details: null,
+          timestamp: now(),
+        }))
+      }
       // 部署能力探测（服务端 API_KEY_ENABLED）。默认开放——多数 spec 走 API Key 通道。
       //
       // false 态有三条构造路径，均为「按请求」判定（不是启动时一次性读），

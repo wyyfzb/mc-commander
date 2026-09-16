@@ -151,6 +151,17 @@ test.describe('设置页', () => {
     await maybeShot(page, 'settings-connection-api-key-disabled-light.png')
   })
 
+  test('能力探测端点未认证 → 401：mock 与真实服务端同门（不得放行匿名探测）', async ({ page }) => {
+    // 不带任何凭据直连该端点（page.request 不继承页面凭据）：真实服务端把它放在
+    // authMiddleware 公开白名单之外，未认证一律 401 + 40101；mock 必须同判，
+    // 否则「客户端忘了带凭据」在 e2e 里永远成功，这层防线等于没有。
+    const res = await page.request.get('/api/v1/auth/capabilities')
+    expect(res.status()).toBe(401)
+    const body = (await res.json()) as { code: number; message: string }
+    expect(body.code).toBe(40101)
+    expect(body.message).toBe('API Key is required. Use X-API-Key header or Bearer session token.')
+  })
+
   test('通用设置：自动重启开关 + 主题切换', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/settings/general')

@@ -26,6 +26,9 @@ test.describe('文件页', () => {
   test('双栏布局：文件列表 + 编辑器空态', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/files')
+    // 就绪门：页面 chunk 是懒加载的，壳未挂载时下面的断言会把预算耗在「页还没到」上
+    // （并行 worker 冷启动下偶发），先等外壳再断内容
+    await expect(page.locator('#main-content')).toBeVisible({ timeout: 30_000 })
     // 目录树已移除（导航收敛到面包屑 + 上级按钮）
     await expect(page.getByRole('button', { name: '展开 实例根目录' })).toHaveCount(0)
     // 左栏文件列表（根目录 5 项）

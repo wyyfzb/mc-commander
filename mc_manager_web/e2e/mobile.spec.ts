@@ -68,11 +68,20 @@ test.describe('桌面端回归（B1 响应式不改桌面）', () => {
  * `aside` 为 343×0，高度断言与 `toBeVisible` 都会红；两条断言互补而非互相替代。
  */
 test.describe('仪表盘右栏窄屏可达（R19）', () => {
-  test.use({ viewport: { width: 375, height: 812 } })
+  test.use({ viewport: { width: 375, height: 812 }, reducedMotion: 'reduce' })
 
   test('375px：右栏三卡可达且公告卡可交互', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/dashboard')
+    // 就绪门：本用例量的是盒子高度与视口相交（**不可重试**断言），须等外壳挂载、字体就位
+    // 与异步内容落定——挂载未完成时主栅格高度还在变、字体回退会改字形盒与行高、右栏卡从
+    // Skeleton 换数据时高度也会变，量早会读到未完成布局（同 dashboard.spec 的字体范式）。
+    // 本 describe 关掉动效：`mcs-fade-up` 的 opacity/translate 会让盒子在动画期间偏移 10px，
+    // 而 Playwright 的 visible 判定不排除 opacity:0；reduced-motion 是应用自身的降级路径
+    // （index.css 全局归零 duration），不是伪造状态。
+    await expect(page.getByTestId('server-terminal')).toBeVisible({ timeout: 30_000 })
+    await page.evaluate(() => document.fonts.ready)
+    await expect(page.locator('[data-slot="skeleton"]')).toHaveCount(0)
 
     const aside = page.getByTestId('dashboard-aside')
     await expect(aside).toBeVisible()
@@ -141,6 +150,8 @@ test.describe('仪表盘首屏高度预算（1440×900）', () => {
     await setupConnection(page)
     await page.goto('/dashboard')
     await expect(page.getByTestId('server-terminal')).toBeVisible()
+    // 量几何前等字体就位：字体回退会让字形盒与行高变化，终端高度会读到未完成布局的假值
+    await page.evaluate(() => document.fonts.ready)
 
     const header = await page.locator('main header').first().evaluate((el) => {
       const h2 = el.querySelector('h2')

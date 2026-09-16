@@ -69,10 +69,17 @@ test.describe('冒烟', () => {
     await page.setViewportSize({ width: 1440, height: 900 })
     await page.goto('/')
     await page.waitForLoadState('networkidle')
+    // 就绪门：networkidle 只代表网络静默，不保证 React 已挂载——Ctrl+K 若早于
+    // CommandPalette 注册 window keydown 监听就会丢键（空按），并行 worker 冷启动下偶发
+    await expect(page.locator('#main-content')).toBeVisible({ timeout: 30_000 })
     await maybeShot(page, 'dashboard-dark.png')
 
-    await page.keyboard.press('Control+k')
-    await expect(page.getByPlaceholder('输入页面名称或命令…')).toBeVisible()
+    // 可重试的按键：Ctrl+K 是**切换**语义，丢键（早于监听注册）时重按即开——用 toPass
+    // 与「监听何时注册」解耦，不再依赖某个前置可见信号恰好覆盖它
+    await expect(async () => {
+      await page.keyboard.press('Control+k')
+      await expect(page.getByPlaceholder('输入页面名称或命令…')).toBeVisible({ timeout: 3_000 })
+    }).toPass()
     await maybeShot(page, 'command-palette-dark.png')
     await page.keyboard.press('Escape')
 
