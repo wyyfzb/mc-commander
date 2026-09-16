@@ -24,7 +24,7 @@ import { useConnectionStore } from '@/stores/connection'
 import { useServerStore } from '@/stores/server'
 import { useDeployStore, DEPLOY_STAGE_LABELS } from '@/stores/deploy'
 import type { DeployResult, InstanceStatus, InstanceSummary } from '@/api/types'
-import { InstanceCards } from './components/instance-cards'
+import { InstanceCards, instanceGridClass } from './components/instance-cards'
 import { DeployDialog } from './components/deploy-dialog'
 import { InstanceSettingsDialog } from './components/instance-settings-dialog'
 import { UpgradeDialog } from './components/upgrade-dialog'
@@ -202,10 +202,13 @@ export function InstancesPage() {
         acknowledgeIrreversible: uninstallAckRequired || undefined,
       })
       closeUninstall()
+      // 空名实例（写入侧 trim+min(1) 已拦，仅防库中异常行）：直接印 name 会得到 `实例 ""`，
+      // 回退 id 才认得出卸掉的是哪一个；纯空白名按服务端口径视同空名
+      const label = target.name.trim() ? target.name : target.id
       toast.success(
         result.retainedBackupCount > 0
-          ? `实例 "${target.name}" 已卸载，已保留 ${result.retainedBackupCount} 份备份`
-          : `实例 "${target.name}" 已卸载，该实例没有备份`,
+          ? `实例 "${label}" 已卸载，已保留 ${result.retainedBackupCount} 份备份`
+          : `实例 "${label}" 已卸载，该实例没有备份`,
       )
       // 卸载的是当前实例 → 清空选择（面板回无实例空态）
       if (instanceId === target.id) setInstanceId(null)
@@ -265,8 +268,10 @@ export function InstancesPage() {
       {/* ── 实例卡片网格 ── */}
       <div className="min-h-0 flex-1 overflow-y-auto">
         {instancesQuery.isLoading && instances.length === 0 ? (
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3" aria-label="加载实例中">
-            {Array.from({ length: 3 }, (_, i) => (
+          // 骨架按单实例形态占位（两格，列数规则同 instanceGridClass）：实例数在数据到达前
+          // 不可知，故占位取常见形态，而不是假称只对多实例成立的 xl 三列
+          <div className={instanceGridClass(1)} aria-label="加载实例中">
+            {Array.from({ length: 2 }, (_, i) => (
               <Skeleton key={i} className="h-28" aria-hidden />
             ))}
           </div>

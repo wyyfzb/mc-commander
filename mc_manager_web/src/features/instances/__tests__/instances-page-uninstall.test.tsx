@@ -186,7 +186,8 @@ describe('InstancesPage · 卸载确认', () => {
       expect(confirmButton).toBeEnabled()
       await user.click(confirmButton)
 
-      expect(await screen.findByText('实例 "" 已卸载，已保留 2 份备份')).toBeInTheDocument()
+      // 提示回退到 id：印 `实例 "" 已卸载` 时用户无法确认卸掉的是哪一个
+      expect(await screen.findByText('实例 "demo" 已卸载，已保留 2 份备份')).toBeInTheDocument()
       expect(uninstallMock.bodies[0]).toEqual({ confirmName: '' })
     })
 

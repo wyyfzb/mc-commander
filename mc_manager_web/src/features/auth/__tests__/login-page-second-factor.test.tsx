@@ -5,6 +5,8 @@
  * - 恢复码路径：同一输入框粘贴恢复码即可（服务端按形状分流）；**含字母**与**全数字**
  *   两种形状各一条——只有全数字那条能抓住「长度被截断」类缺陷
  * - 错误分类：40106 与 40102/429 文案互不相同；40105 本身不产生错误播报（无「错误计数」暗示）
+ * - 429 文案随阶段区分：密码步只点名密码、第二因子步同时点名验证码（两阶段各一条——
+ *   服务端密码与验证码共用同一封禁计数，只能按「是否已进入第二因子」区分）
  * - 空值与形状不符的前置拦截不发请求
  * mock 数据为结构占位（虚构口令与恢复码），严禁真实凭据
  */
@@ -249,6 +251,21 @@ describe('LoginPage 第二因子', () => {
     expect(alert).toHaveTextContent('密码或验证码错误次数过多')
     expect(alert).toHaveTextContent('暂时锁定')
     expect(alert).toHaveTextContent(/5 分钟/)
+  })
+
+  it('429 封禁在密码步：文案只点名密码，不把验证码扯进来', async () => {
+    server.use(http.post('*/api/v1/auth/login', () => errorEnvelope(42901, '登录失败次数过多，请稍后再试', 429)))
+    const user = userEvent.setup()
+    renderLoginPage()
+    await waitForLoginMode()
+
+    await user.type(screen.getByLabelText('管理员密码'), 'demo-pass-12345')
+    await user.click(screen.getByRole('button', { name: /登录/ }))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('密码错误次数过多')
+    // 未进入第二因子：提「验证码」会让用户去查一个与本次失败无关的东西
+    expect(alert).not.toHaveTextContent('验证码')
   })
 
   it('前置拦截：空值与形状不符都不发请求', async () => {

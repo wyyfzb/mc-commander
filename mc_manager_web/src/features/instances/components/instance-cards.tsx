@@ -1,6 +1,6 @@
 /**
  * InstanceCards —— 实例卡片网格
- * - 网格 gap-3 sm:grid-cols-2（多实例 xl:grid-cols-3；单实例放宽为两栏 + 部署引导块，见下）
+ * - 网格列数规则见 instanceGridClass（与加载骨架共用同一声明）
  * - 卡片：状态点（运行 success / 停止 muted）+ 名称 + 「当前」accent 徽章（currentId 命中）
  *   + 副行「运行中 · N 人在线」（success 色）/「已停止」（muted）+ 版本 mono 徽章
  *   （detailStatuses[id]?.mcVersion，组件内不查询；详情在途时仅该卡骨架占位）
@@ -31,6 +31,15 @@ import { DeployGuideTile } from './deploy-guide-tile'
 import { useUpgradeStore } from '@/stores/upgrade'
 import type { InstancePhase } from '@/stores/server'
 import type { InstanceStatus, InstanceSummary } from '@/api/types'
+
+/**
+ * 实例网格列数规则（唯一声明源：真实网格与加载骨架共用，防止骨架列数与真实布局分叉）
+ * 单实例：xl 也保持两栏（同排右栏放部署引导块）——三列时卡片只占 1/3、右侧约 65% 空白；
+ * 多实例：xl 三列，卡片宽度不随实例数变化。
+ */
+export function instanceGridClass(instanceCount: number) {
+  return cn('grid gap-3 sm:grid-cols-2', instanceCount > 1 && 'xl:grid-cols-3')
+}
 
 export interface InstanceCardsProps {
   /** 实例摘要列表（GET /instances 结果） */
@@ -94,9 +103,7 @@ export function InstanceCards({
   }
 
   return (
-    // 单实例：三列网格只剩最左一格（xl 下右侧约 65% 空白）→ 两栏，右栏放部署引导块；
-    // 多实例维持三列，卡片宽度不随实例数变化
-    <div className={cn('grid gap-3 sm:grid-cols-2', instances.length > 1 && 'xl:grid-cols-3')}>
+    <div className={instanceGridClass(instances.length)}>
       {instances.map((instance, index) => (
         <InstanceCard
           key={instance.id}

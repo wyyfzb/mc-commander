@@ -60,9 +60,15 @@ export function StatusIndicator({ status, className }: StatusIndicatorProps) {
       data-status={status}
     >
       <span className="relative flex size-2 items-center justify-center" aria-hidden>
+        {/* 涟漪直径与起始不透明度即可感知门槛：与圆点同尺寸的 8px / 40% 在顶栏上几乎
+            看不出；12px 起点展开到 24px、60% 起衰减。颜色仍走状态色 token，
+            reduced-motion 由 index.css 全局归零兜底 */}
         {config.pulse && (
           <span
-            className={cn('absolute inline-flex size-full animate-ping rounded-full opacity-40', config.dot)}
+            className={cn(
+              'absolute inline-flex size-3 animate-ping rounded-full opacity-60',
+              config.dot,
+            )}
           />
         )}
         <span className={cn('relative inline-flex size-2 rounded-full', config.dot)} />
