@@ -52,8 +52,8 @@ export function ConnectionForm({ variant = 'settings', headingAs = 'h1', onSaved
   const [url, setUrl] = useState(storedBaseUrl)
   /**
    * 能力探测专用的稳定地址：逐击键的中间态（`h`、`192.168.1.100:` …）各自都是一个新
-   * query key。实测逐字输入一个地址（击键间隔 30ms）：不落定 = 19 发注定失败的请求，
-   * 连地址门槛也不加 = 27 发。停止输入 ADDRESS_SETTLE_DELAY_MS 后落定。
+   * query key，逐击键取值最坏发「按键数」发（27 字符地址：门槛挡掉 scheme 前 8 个中间态后实发 19 发）。
+   * 停止输入 ADDRESS_SETTLE_DELAY_MS 后落定。
    */
   const settledUrl = useDebouncedValue(url, ADDRESS_SETTLE_DELAY_MS)
   const [apiKey, setApiKey] = useState(storedApiKey)
@@ -83,8 +83,8 @@ export function ConnectionForm({ variant = 'settings', headingAs = 'h1', onSaved
    * API Key 通道是否开放（服务端部署开关 API_KEY_ENABLED）。按**表单草稿**取面板身份与
    * 凭据：用已存值会让「填完 Key 才拿到真实答案」的路径失效。
    *
-   * 地址取**停止输入后落定**的值（防抖；见 ADDRESS_SETTLE_DELAY_MS）：逐击键取值实测会让
-   * 一次地址输入打出 19 发请求，落定点的语义也正是「用户已经指明了面板」。
+   * 地址取**停止输入后落定**的值（防抖；见 ADDRESS_SETTLE_DELAY_MS）：逐击键取值会打出「按键数」
+   * 发请求（门槛再挡掉 scheme 前的中间态），落定点的语义也正是「用户已经指明了面板」。
    *
    * 已知态才隐藏轮换入口：`data?.apiKeyEnabled === false` 是唯一的隐藏条件。加载中、
    * 请求失败、响应不可判读（未知态）一律保持可见——隐藏是不可自证的，误隐藏会让用户以为

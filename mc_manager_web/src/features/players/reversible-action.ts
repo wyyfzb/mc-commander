@@ -1,5 +1,5 @@
 /**
- * 可逆操作统一口径（J15）——玩家域三处入口（详情面板 / 行内菜单 / 批量条）共用
+ * 可逆操作统一口径——玩家域三处入口（详情面板 / 行内菜单 / 批量条）共用
  * - 可逆操作（OP·白名单切换、游戏模式）：逆操作语义可表达 → 直接执行 + 5s 撤销 Toast，不设确认弹窗
  * - 不可逆操作（清空背包一类）：走后果清单确认（ConfirmDialog），不经本模块
  * - 无逆操作的轻伤害操作（踢出）：只直执 + 普通回执——挂一个做不到的「撤销」比没有入口更坏
@@ -8,7 +8,7 @@
 import { toast } from 'sonner'
 import { getFriendlyErrorText } from '@/api/errors'
 
-/** 撤销窗口（与 P1 口径的 5 秒一致；Toast 存活期即入口有效期） */
+/** 撤销窗口 = Toast 存活期（窗口过后入口消失，操作即成事实） */
 export const UNDO_WINDOW_MS = 5000
 
 export interface UndoToastOptions {

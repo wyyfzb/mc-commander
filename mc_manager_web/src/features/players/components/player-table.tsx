@@ -3,8 +3,8 @@
  * - 默认排序 = 收敛规则（在线>离线 → OP → lastSeen → 总时长，applyPlayersFilter 预排）
  * - 列头点击启用单列排序（Web 增强）；分页 10/20/50/全部（「全部」档 react-virtual 虚拟滚动）
  * - 行内溢出菜单：详情/传送/给予物品/OP 切换/白名单切换/踢出/封禁（设计文档 §3.2 重排）
- * - 行内菜单交互口径（J15）：可逆（OP/白名单）直执 + 5s 撤销，踢出直执（无逆操作）
- * - 响应式（J28/C3）：<1280px 裁到核心列（免横向滚动）；<640px 整表转行式卡片
+ * - 行内菜单交互口径：可逆（OP/白名单）直执 + 5s 撤销，踢出直执（无逆操作）
+ * - 响应式：<1280px 裁到核心列（免横向滚动）；<640px 整表转行式卡片
  * 单元拆分（纯搬移零行为变更）：列定义 player-table-columns / 行组件 player-table-row /
  * 行菜单 player-row-menu / 卡片态 player-card-list / 共享常量 player-table-config
  */
@@ -224,91 +224,91 @@ export function PlayerTable({
             bottomPadding={pageSize === -1 ? bottomPadding : 0}
           />
         ) : (
-        <table className="w-full border-collapse text-left" style={{ tableLayout: 'fixed' }}>
-          <thead className="sticky top-0 z-(--mcs-z-local) bg-mcs-bg-default">
-            {table.getHeaderGroups().map((headerGroup) => (
-              <tr key={headerGroup.id} className="border-b border-mcs-border-muted">
-                {headerGroup.headers.map((header) => {
-                  // 数值列（延迟/在线时长/总时长）表头与 cell 同向右对齐
-                  const rightAlign = ['ping', 'onlineDuration', 'totalPlayTime'].includes(header.column.id)
-                  const sorted = header.column.getIsSorted()
-                  const canSort = header.column.getCanSort()
-                  return (
-                    <th
-                      key={header.id}
-                      scope="col"
-                      style={{ width: header.getSize() }}
-                      // 排序态由 aria-sort 承担：箭头是 aria-hidden 的纯视觉提示，
-                      // 不能作为唯一信息源（读屏用户拿不到「当前按哪列排、什么方向」）
-                      aria-sort={
-                        !header.isPlaceholder && canSort
-                          ? sorted === 'asc'
-                            ? 'ascending'
-                            : sorted === 'desc'
-                              ? 'descending'
-                              : 'none'
-                          : undefined
-                      }
-                      className={cn(
-                        'h-9 px-2 text-mcs-xs font-medium text-mcs-text-muted',
-                        rightAlign && 'text-right',
-                      )}
-                    >
-                      {header.isPlaceholder
-                        ? null
-                        : canSort
-                          ? (
-                            <button
-                              type="button"
-                              className={cn(
-                                'flex cursor-pointer items-center gap-1 hover:text-mcs-text-muted',
-                                rightAlign && 'w-full justify-end',
-                              )}
-                              onClick={header.column.getToggleSortingHandler()}
-                            >
-                              {flexRender(header.column.columnDef.header, header.getContext())}
-                              {sorted === 'asc' && <span aria-hidden>↑</span>}
-                              {sorted === 'desc' && <span aria-hidden>↓</span>}
-                            </button>
-                          )
-                          : (
-                            <span className={cn('flex items-center gap-1', rightAlign && 'justify-end')}>
-                              {flexRender(header.column.columnDef.header, header.getContext())}
-                            </span>
-                          )}
-                    </th>
-                  )
-                })}
-              </tr>
-            ))}
-          </thead>
-          <tbody>
-            {isLoading &&
-              // 加载骨架行（设计规范 4.7/8：骨架屏而非空白，结构对齐真实列）
-              Array.from({ length: 5 }, (_, i) => (
-                <tr key={`skeleton-${i}`} className="border-b border-mcs-border-subtle" style={{ height: ROW_HEIGHT }} aria-hidden>
-                  {table.getHeaderGroups()[0]!.headers.map((h) => (
-                    <td key={h.id} className="px-2">
-                      <Skeleton className="h-3.5 w-3/4" />
-                    </td>
-                  ))}
+          <table className="w-full border-collapse text-left" style={{ tableLayout: 'fixed' }}>
+            <thead className="sticky top-0 z-(--mcs-z-local) bg-mcs-bg-default">
+              {table.getHeaderGroups().map((headerGroup) => (
+                <tr key={headerGroup.id} className="border-b border-mcs-border-muted">
+                  {headerGroup.headers.map((header) => {
+                    // 数值列（延迟/在线时长/总时长）表头与 cell 同向右对齐
+                    const rightAlign = ['ping', 'onlineDuration', 'totalPlayTime'].includes(header.column.id)
+                    const sorted = header.column.getIsSorted()
+                    const canSort = header.column.getCanSort()
+                    return (
+                      <th
+                        key={header.id}
+                        scope="col"
+                        style={{ width: header.getSize() }}
+                        // 排序态由 aria-sort 承担：箭头是 aria-hidden 的纯视觉提示，
+                        // 不能作为唯一信息源（读屏用户拿不到「当前按哪列排、什么方向」）
+                        aria-sort={
+                          !header.isPlaceholder && canSort
+                            ? sorted === 'asc'
+                              ? 'ascending'
+                              : sorted === 'desc'
+                                ? 'descending'
+                                : 'none'
+                            : undefined
+                        }
+                        className={cn(
+                          'h-9 px-2 text-mcs-xs font-medium text-mcs-text-muted',
+                          rightAlign && 'text-right',
+                        )}
+                      >
+                        {header.isPlaceholder
+                          ? null
+                          : canSort
+                            ? (
+                              <button
+                                type="button"
+                                className={cn(
+                                  'flex cursor-pointer items-center gap-1 hover:text-mcs-text-muted',
+                                  rightAlign && 'w-full justify-end',
+                                )}
+                                onClick={header.column.getToggleSortingHandler()}
+                              >
+                                {flexRender(header.column.columnDef.header, header.getContext())}
+                                {sorted === 'asc' && <span aria-hidden>↑</span>}
+                                {sorted === 'desc' && <span aria-hidden>↓</span>}
+                              </button>
+                            )
+                            : (
+                              <span className={cn('flex items-center gap-1', rightAlign && 'justify-end')}>
+                                {flexRender(header.column.columnDef.header, header.getContext())}
+                              </span>
+                            )}
+                      </th>
+                    )
+                  })}
                 </tr>
               ))}
-            {!isLoading && pageSize === -1 && topPadding > 0 && <tr style={{ height: topPadding }} aria-hidden />}
-            {!isLoading &&
-              rowsToRender.map((row) =>
-                row ? (
-                  <PlayerRow
-                    key={row.id}
-                    row={row}
-                    selected={selectedSet.has(row.original.uuid)}
-                    onOpenDetail={onOpenDetail}
-                  />
-                ) : null,
-              )}
-            {!isLoading && pageSize === -1 && bottomPadding > 0 && <tr style={{ height: bottomPadding }} aria-hidden />}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {isLoading &&
+                // 加载骨架行（设计规范 4.7/8：骨架屏而非空白，结构对齐真实列）
+                Array.from({ length: 5 }, (_, i) => (
+                  <tr key={`skeleton-${i}`} className="border-b border-mcs-border-subtle" style={{ height: ROW_HEIGHT }} aria-hidden>
+                    {table.getHeaderGroups()[0]!.headers.map((h) => (
+                      <td key={h.id} className="px-2">
+                        <Skeleton className="h-3.5 w-3/4" />
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              {!isLoading && pageSize === -1 && topPadding > 0 && <tr style={{ height: topPadding }} aria-hidden />}
+              {!isLoading &&
+                rowsToRender.map((row) =>
+                  row ? (
+                    <PlayerRow
+                      key={row.id}
+                      row={row}
+                      selected={selectedSet.has(row.original.uuid)}
+                      onOpenDetail={onOpenDetail}
+                    />
+                  ) : null,
+                )}
+              {!isLoading && pageSize === -1 && bottomPadding > 0 && <tr style={{ height: bottomPadding }} aria-hidden />}
+            </tbody>
+          </table>
         )}
         {/* 错误态由页面持有（players-page 在 isError 时用 EmptyState 替换整张表，
             避免错误被呈现为「暂无在线玩家」的误导空态），表格不再自带第二套错误 UI */}
