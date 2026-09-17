@@ -332,7 +332,7 @@ stage 取值：`download` / `download_complete` / `forge_install` / `first_launc
 |------|------|------|
 | `GET` | `/api/v1/instances/:id/backups` | 备份列表（camelCase 契约：instanceId/worldName/createdAt） |
 | `POST` | `/api/v1/instances/:id/backups` | 创建备份（异步执行，目录快照 + rsync/robocopy 增量；完成/失败经 WS 事件推送） |
-| `POST` | `/api/v1/backups/:id/restore` | 恢复备份（**202 立即返回**，后台执行；互斥状态机：恢复中拒绝创建/删除/再次恢复） |
+| `POST` | `/api/v1/backups/:id/restore` | 恢复备份（**202 立即返回**，后台执行；互斥状态机：恢复中拒绝创建/删除/再次恢复）。**body: `{ confirmName }`** ——确认目标＝该备份所属实例名（实例无名称时退为备份名/id），不符回 400/40017 |
 | `DELETE` | `/api/v1/backups/:id` | 删除备份（异步，恢复中/备份中拒绝） |
 
 > 备份 = `backups/<instanceId>/<名称>-<时间戳>/` 目录快照：Linux 用 `rsync -a --link-dest=<上一快照>` 硬链接增量（需安装 rsync，`apt-get install -y rsync`；实例目录与备份目录须同文件系统），Windows 优先 MSYS2 rsync、未安装时自动降级 robocopy `/MIR` 全量镜像。`size` 为快照逻辑大小（恢复所需容量）。

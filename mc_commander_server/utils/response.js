@@ -29,6 +29,13 @@ export const ErrorCodes = {
     message: '需在请求体提供 confirmName 且与实例名完全一致才能卸载实例',
     status: 400,
   },
+  // 卸载空名实例：实例名确认为空串时「输入实例名」这道闸门不承载任何信息
+  // （空串天然匹配），需调用方额外声明已接受不可恢复
+  INSTANCE_DELETE_UNNAMED: {
+    code: 40916,
+    message: '该实例无名称，名称确认不构成有效确认；确认后请携带 acknowledgeIrreversible=true 重试',
+    status: 409,
+  },
   // 卸载实例且备份清单为空：没有任何灾备副本可回退，仅凭实例名确认不足，
   // 需调用方额外声明已接受不可恢复
   INSTANCE_DELETE_NO_BACKUP: {
@@ -50,6 +57,13 @@ export const ErrorCodes = {
   },
   // 恢复互斥：另一恢复正在进行（同一实例 status='restoring'）
   RESTORE_IN_PROGRESS: { code: 40903, message: 'Restore already in progress', status: 409 },
+  // 恢复缺少/不匹配实例名确认（服务端强制）：恢复会用快照覆盖实例目录，
+  // 前端弹窗的实例名输入此前是唯一闸门，直连 API 可无确认覆盖
+  BACKUP_RESTORE_CONFIRM_REQUIRED: {
+    code: 40017,
+    message: '需在请求体提供 confirmName 且与该备份所属实例名完全一致才能恢复',
+    status: 400,
+  },
   
   // 定时任务错误
   TASK_NOT_FOUND: { code: 40405, message: 'Scheduled task not found', status: 404 },

@@ -4,7 +4,7 @@
  * 最终提示报出保留的备份份数（卸载不再销毁备份）。
  * MSW 拦截：DELETE 响应由 uninstallMock 控制；数据为结构占位虚构内容。
  */
-import { describe, it, expect, beforeEach, afterAll, beforeAll } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, afterAll, beforeAll } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -21,6 +21,8 @@ import { useServerStore } from '@/stores/server'
 const server = setupServer(...handlers)
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
 afterAll(() => server.close())
+// server.use 的覆盖是追加式且跨用例存活的：用例自己挂的场景必须在用例后复位
+afterEach(() => server.resetHandlers())
 
 function renderPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -98,6 +100,36 @@ describe('InstancesPage · 卸载确认', () => {
     // 首次不声明（让服务端的前置清单校验生效），二次确认才声明不可恢复
     expect(uninstallMock.bodies[0]).toEqual({ confirmName: '演示实例' })
     expect(uninstallMock.bodies[1]).toEqual({ confirmName: '演示实例', acknowledgeIrreversible: true })
+  })
+
+  it('空名实例 40916：转入不可恢复二次确认，提示据实说「无名称」而非「无备份」', async () => {
+    // 空名实例：列表名称为空 → 卡片展示名回退 id（instanceLabel），菜单与确认框都用原值比对
+    server.use(
+      http.get('*/api/v1/instances', () =>
+        HttpResponse.json({
+          status: 'ok',
+          code: 0,
+          message: 'Success',
+          data: [{ id: 'demo', name: '', isRunning: true, playerCount: 0 }],
+          timestamp: new Date().toISOString(),
+        }),
+      ),
+    )
+    uninstallMock.expectedName = ''
+    uninstallMock.retainedBackupCount = 3
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByRole('button', { name: 'demo 操作菜单' }))
+    await user.click(await screen.findByRole('menuitem', { name: '卸载实例' }))
+    // 空名实例：输入框留空即匹配（空串天然匹配），故不输入直接确认
+    await user.click(screen.getByRole('button', { name: '确认卸载' }))
+
+    expect(await screen.findByText(/该实例没有名称，实例名确认不构成有效确认/)).toBeInTheDocument()
+    // 反向断言：不得套用「没有任何备份」的文案（本实例有 3 份备份）
+    expect(screen.queryByText(/该实例没有任何备份/)).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '确认不可恢复删除' }))
+    expect(uninstallMock.bodies[1]).toEqual({ confirmName: '', acknowledgeIrreversible: true })
   })
 
   it('实例名与输入不符：确认按钮禁用（服务端同名校验的 UI 前置态）', async () => {
@@ -178,7 +210,7 @@ describe('InstancesPage · 卸载确认', () => {
       )
     })
 
-    it('空输入即匹配：确认按钮可用，请求体带空串并成功卸载', async () => {
+    it('空输入即匹配但要声明不可恢复：首次 40916 → 二次确认带 acknowledgeIrreversible 才卸载', async () => {
       const user = userEvent.setup()
       renderPage()
       // 操作按钮的可访问名同样回退到 id：空名旧行此前给出的是「无名按钮」（名字只剩「操作菜单」）
@@ -191,9 +223,15 @@ describe('InstancesPage · 卸载确认', () => {
       expect(confirmButton).toBeEnabled()
       await user.click(confirmButton)
 
+      // 空名让「输入实例名」这道闸门空转（空串天然匹配），服务端额外要求显式声明不可恢复
+      expect(await screen.findByText(/该实例没有名称，实例名确认不构成有效确认/)).toBeInTheDocument()
+      expect(uninstallMock.bodies[0]).toEqual({ confirmName: '' })
+
+      await user.click(screen.getByRole('button', { name: '确认不可恢复删除' }))
+
       // 提示回退到 id：印 `实例 "" 已卸载` 时用户无法确认卸掉的是哪一个
       expect(await screen.findByText('实例 "demo" 已卸载，已保留 2 份备份')).toBeInTheDocument()
-      expect(uninstallMock.bodies[0]).toEqual({ confirmName: '' })
+      expect(uninstallMock.bodies[1]).toEqual({ confirmName: '', acknowledgeIrreversible: true })
     })
 
     it('输入任意非空名字 → 确认按钮禁用（UI 侧拦截，服务端同判为 400）', async () => {

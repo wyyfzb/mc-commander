@@ -28,9 +28,10 @@ export function apiCreateBackup(
   return apiPost<BackupItem>(`/api/v1/instances/${instanceId}/backups`, config, payload ?? {})
 }
 
-/** 恢复备份（POST /backups/:id/restore；202 异步后台执行 + WS 事件；仅 completed 可恢复） */
-export function apiRestoreBackup(config: ConnectionConfig, backupId: number) {
-  return apiPost<null>(`/api/v1/backups/${backupId}/restore`, config)
+/** 恢复备份（POST /backups/:id/restore；202 异步后台执行 + WS 事件；仅 completed 可恢复）。
+ *  confirmName 为该备份所属实例的名称：服务端强制比对（弹窗输入只是 UX） */
+export function apiRestoreBackup(config: ConnectionConfig, backupId: number, confirmName: string) {
+  return apiPost<null>(`/api/v1/backups/${backupId}/restore`, config, { confirmName })
 }
 
 /** 删除备份（DELETE /backups/:id；creating/restoring 中拒绝 40901） */

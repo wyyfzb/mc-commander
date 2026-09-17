@@ -17,7 +17,7 @@ import { setupServer } from 'msw/node'
 import { createMemoryRouter, RouterProvider } from 'react-router'
 import { Toaster } from 'sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import { handlers, mockBackups } from '@/test/mocks/handlers'
+import { handlers, restoreMock, mockBackups } from '@/test/mocks/handlers'
 import { queryKeys } from '@/api/queries'
 import { useConnectionStore } from '@/stores/connection'
 import { formatBackupDate, formatBackupSize } from '@/lib/mc-backup'
@@ -67,6 +67,9 @@ function renderPanel(instanceId: string | null = 'demo') {
 beforeEach(() => {
   localStorage.clear()
   useConnectionStore.setState({ baseUrl: '', apiKey: 'test-key', status: 'ready' })
+  restoreMock.instanceName = null
+  restoreMock.calls = 0
+  restoreMock.bodies = []
 })
 
 describe('BackupPanel 空态', () => {
@@ -167,6 +170,40 @@ describe('BackupPanel 恢复', () => {
     expect(confirmBtn).toBeEnabled()
     await user.click(confirmBtn)
     expect(await screen.findByText('恢复已开始，完成后请启动服务器生效')).toBeInTheDocument()
+    // 显式断言请求体带确认串（服务端强制校验；只靠 mock 守卫则前端漏带时断言不承重）
+    expect(restoreMock.bodies[0]).toEqual({ confirmName: '演示实例' })
+  })
+
+  it('无名称实例：确认目标退到备份名（实例名确认会空转），标签与请求体同步', async () => {
+    // 面板的实例名来自实例列表：空名实例（升级前旧值）要连列表一起换
+    server.use(
+      http.get('*/api/v1/instances', () =>
+        HttpResponse.json({
+          status: 'ok',
+          code: 0,
+          message: 'Success',
+          data: [{ id: 'demo', name: '', isRunning: true, playerCount: 0 }],
+          timestamp: new Date().toISOString(),
+        }),
+      ),
+    )
+    restoreMock.instanceName = ''
+    const user = userEvent.setup()
+    renderPanel()
+    await screen.findByText('手动备份')
+    await user.click(screen.getByRole('button', { name: '手动备份 恢复' }))
+
+    // 实例没有名称 → 确认目标换成备份名，空输入不再构成确认
+    expect(screen.getByText('输入备份名「手动备份」以确认')).toBeInTheDocument()
+    const confirmBtn = screen.getByRole('button', { name: '确认恢复' })
+    expect(confirmBtn).toBeDisabled()
+
+    await user.type(screen.getByLabelText(/输入备份名/), '手动备份')
+    expect(confirmBtn).toBeEnabled()
+    await user.click(confirmBtn)
+
+    expect(await screen.findByText('恢复已开始，完成后请启动服务器生效')).toBeInTheDocument()
+    expect(restoreMock.bodies[0]).toEqual({ confirmName: '手动备份' })
   })
 
   it('failed 备份：恢复按钮禁用，completed 可恢复', async () => {
@@ -177,7 +214,8 @@ describe('BackupPanel 恢复', () => {
   })
 
   // 升级前库里可能存着带首尾空白的实例名：两侧都归一化才可能确认得上。
-  // 服务端不校验实例名，这道确认是唯一闸门——按原样比对会让按钮永久禁用（有备份却恢复不了）
+  // 服务端按 trim 后全等比对（见 POST /backups/:id/restore），前端按原样比对会让
+  // 按钮永久禁用（有备份却恢复不了）
   it('实例名带尾空格（升级前旧值）：输入界面所见名字即可确认恢复', async () => {
     server.use(
       http.get('*/api/v1/instances', () =>

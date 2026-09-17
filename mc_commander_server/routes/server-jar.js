@@ -22,6 +22,7 @@ import {
 import { logger } from '../utils/logger.js';
 import { getServerVersion } from '../utils/version.js';
 import { isDeployInFlight, latestInFlightDeploy } from '../utils/deploy-inflight.js';
+import { generateInstanceId } from '../utils/instance-id.js';
 import { killProcessTree } from '../utils/process-tree.js';
 import { beginCancellableTask, cancelTask, TASK_KINDS, TaskCancelledError } from '../utils/cancellable-task.js';
 
@@ -468,7 +469,7 @@ export function createServerJarRoutes(serverManager) {
     // EULA 只由用户显式同意决定：面板不得代替用户表达同意（未同意同样可完成部署，仅不写 true、不自动首启）
     const eulaAgreed = eula === true;
 
-    const instanceId = `${type}-${crypto.randomBytes(4).toString('hex')}`;
+    const instanceId = generateInstanceId(type);
     const instancePath = path.join(config.serversDir, instanceId);
 
     // 部署归属元数据：进度事件 payload 与进行中注册表共用（展示名与

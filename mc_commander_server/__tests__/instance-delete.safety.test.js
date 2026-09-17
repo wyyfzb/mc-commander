@@ -258,7 +258,9 @@ describe('DELETE /api/instances/:id · 真实盘面取证', () => {
   });
 
   // 升级前库里还可能存着空名旧行（写入侧当时放行 ''）：这类实例只能靠空/空白入参确认，
-  // 若把确认值当「必填非空」收紧，它们同样永远删不掉
+  // 若把确认值当「必填非空」收紧，它们同样永远删不掉。
+  // 但空名让「输入实例名」这道闸门空转（空串天然匹配、不承载任何信息），故这类实例
+  // 额外要求 acknowledgeIrreversible=true（与「没有任何备份」同一档显式确认）
   describe('旧数据：实例名为空串', () => {
     beforeEach(() => {
       app = makeApp('');
@@ -267,10 +269,26 @@ describe('DELETE /api/instances/:id · 真实盘面取证', () => {
     it.each([
       ['空串', ''],
       ['纯空白', '   '],
-    ])('confirmName 为%s → 成功卸载且实例目录真的删除', async (_label, confirmName) => {
+    ])('confirmName 为%s 但未声明不可恢复 → 409 且盘面逐字节不变', async (_label, confirmName) => {
       seedInstanceWithSnapshot();
+      const before = snapshotTree(TMP_ROOT);
 
       const res = await request(app).delete(`/api/instances/${ID}`).send({ confirmName });
+
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe(40916);
+      expect(snapshotTree(TMP_ROOT)).toEqual(before);
+    });
+
+    it.each([
+      ['空串', ''],
+      ['纯空白', '   '],
+    ])('confirmName 为%s 且声明不可恢复 → 成功卸载且实例目录真的删除', async (_label, confirmName) => {
+      seedInstanceWithSnapshot();
+
+      const res = await request(app)
+        .delete(`/api/instances/${ID}`)
+        .send({ confirmName, acknowledgeIrreversible: true });
 
       expect(res.status).toBe(200);
       expect(fs.existsSync(INSTANCE_PATH)).toBe(false);

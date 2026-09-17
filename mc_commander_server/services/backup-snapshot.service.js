@@ -3,6 +3,7 @@ import path from 'path';
 import config from '../config.js';
 import { InstanceModel } from '../db/index.js';
 import { logger } from '../utils/logger.js';
+import { INSTANCE_ID_PATTERN } from '../utils/instance-id.js';
 
 /**
  * 备份快照目录的磁盘清点（backupsDir 侧的唯一读取口径）。
@@ -13,10 +14,10 @@ import { logger } from '../utils/logger.js';
  * 因此实例级目录是唯一可清扫单位，且把 backupsDir 本身排除在射程之外。
  */
 
-// 实例 id 形态（唯一生产者 routes/server-jar.js：`${loader}-${8 位十六进制}`）。
-// 按形态白名单清点：panel/ 命名空间与人工放置目录都不匹配，永不进入清扫射程；
-// id 形态若变化清扫只会静默停止（少删方向），不会误删
-const INSTANCE_ID_PATTERN = /^[a-z][a-z0-9]*-[0-9a-f]{8}$/;
+// 实例 id 形态：与生成侧（utils/instance-id.js）共用同一常量——两处各写一份形态时，
+// 改生成方式会让清扫静默停止（少删方向、不报错）。按形态白名单清点：panel/ 命名空间
+// 与人工放置目录都不匹配，永不进入清扫射程
+// （见 utils/instance-id.js 的形态说明）
 
 /**
  * 列出实例备份目录下的快照目录名，按 mtime 倒序（最近在前）。

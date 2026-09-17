@@ -203,13 +203,29 @@ test.describe('设置页', () => {
     // 立即备份 → creating 行 + toast
     await page.getByRole('button', { name: '立即备份' }).click()
     await expect(page.getByText('备份任务已启动')).toBeVisible()
-    // 恢复确认（B3 危险弹窗：红色警示 + 输入实例名确认）→ 取消
+    // 恢复确认（B3 危险弹窗：红色警示 + 输入实例名确认）
     await page.getByRole('button', { name: '手动备份 恢复' }).click()
     await expect(page.getByRole('heading', { name: '恢复备份（危险操作）' })).toBeVisible()
     await expect(
       page.getByText(/覆盖当前世界数据，且不可撤销/),
     ).toBeVisible()
+
+    // 取消路径：不输入名字时确认按钮禁用（实例名确认是服务端强制的同一道闸门）
+    await expect(page.getByRole('button', { name: '确认恢复' })).toBeDisabled()
     await page.getByRole('button', { name: '取消' }).click()
+    await expect(page.getByRole('heading', { name: '恢复备份（危险操作）' })).toHaveCount(0)
+
+    // 确认路径：输入实例名 → 请求体必须带 confirmName（服务端按实例名强制校验；
+    // mock 与真实服务端同语义，缺名会回 400 40017）
+    await page.getByRole('button', { name: '手动备份 恢复' }).click()
+    const restoreReq = page.waitForRequest(
+      (r) => /\/api\/v1\/backups\/\d+\/restore$/.test(r.url()) && r.method() === 'POST',
+    )
+    await page.getByLabel(/输入实例名/).fill('E2E 演示实例')
+    await page.getByRole('button', { name: '确认恢复' }).click()
+    const req = await restoreReq
+    expect(req.postDataJSON()).toEqual({ confirmName: 'E2E 演示实例' })
+    await expect(page.getByText('恢复已开始，完成后请启动服务器生效')).toBeVisible()
     await expect(page.getByRole('heading', { name: '恢复备份（危险操作）' })).toBeHidden()
     await maybeShot(page, 'settings-backup-dark.png')
   })

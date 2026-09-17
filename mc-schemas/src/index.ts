@@ -96,8 +96,11 @@ export {
 export {
   backupItemSchema,
   backupCreateRequestSchema,
+  backupRestoreRequestSchema,
+  restoreConfirmTarget,
   type BackupItem,
   type BackupCreateRequest,
+  type BackupRestoreRequest,
 } from './backup'
 
 // 定时任务

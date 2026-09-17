@@ -739,6 +739,17 @@ const server = createServer((req, res) => {
       return res.end(ok(mockBackups))
     }
     if (path.match(/^\/api\/v1\/backups\/\d+\/restore$/)) {
+      // 与真实服务端同语义：恢复必须带实例名确认（mock 的实例名为「E2E 演示实例」）
+      let confirmName = ''
+      try {
+        confirmName = String(JSON.parse(body || '{}').confirmName ?? '')
+      } catch {
+        confirmName = ''
+      }
+      if (confirmName.trim() !== instance.name.trim()) {
+        res.statusCode = 400
+        return res.end(err(40017, '需在请求体提供 confirmName 且与该备份所属实例名完全一致才能恢复'))
+      }
       return res.end(ok(null, 'Restore started'))
     }
     if (path.match(/^\/api\/v1\/backups\/\d+$/)) {

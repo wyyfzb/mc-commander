@@ -546,10 +546,17 @@ export function createStatusRoutes(serverManager) {
       //    可能存着带首尾空白的旧值乃至空名旧值，按原样或按「非空」比对都会让
       //    这类实例永远卸载不掉。缺失/类型不对/不匹配归同一错误码，文案不回显实例名。
       const parsedBody = instanceDeleteRequestBodySchema.safeParse(req.body ?? {});
+      const trimmedInstanceName = (instance.name ?? '').trim();
       const confirmNameMatches =
-        parsedBody.success && parsedBody.data.confirmName.trim() === (instance.name ?? '').trim();
+        parsedBody.success && parsedBody.data.confirmName.trim() === trimmedInstanceName;
       if (!confirmNameMatches) {
         return res.status(400).json(error(ErrorCodes.INSTANCE_DELETE_CONFIRM_REQUIRED));
+      }
+      const acknowledgeIrreversible = parsedBody.data.acknowledgeIrreversible === true;
+      // 空名实例的「输入实例名」闸门是空转的（空串天然匹配），不构成任何确认：
+      // 这类实例必须显式声明已接受不可恢复
+      if (trimmedInstanceName === '' && !acknowledgeIrreversible) {
+        return res.status(ErrorCodes.INSTANCE_DELETE_UNNAMED.status).json(error(ErrorCodes.INSTANCE_DELETE_UNNAMED));
       }
 
       // 0.1 前置备份清单校验：实例备份目录按设计保留（见第 5 步），清单为空即这份
@@ -557,7 +564,6 @@ export function createStatusRoutes(serverManager) {
       //     不可恢复。清单在此读一次供放行判定与意图审计；实际保留内容由删除后再
       //     读一次回报（两次差异只可能来自停机期间新增的快照）。
       const snapshotsBeforeDelete = listInstanceSnapshotDirs(req.params.id);
-      const acknowledgeIrreversible = parsedBody.data.acknowledgeIrreversible === true;
       if (snapshotsBeforeDelete.length === 0 && !acknowledgeIrreversible) {
         return res.status(409).json(error(ErrorCodes.INSTANCE_DELETE_NO_BACKUP));
       }

@@ -157,6 +157,19 @@ describe('restoreBackup 路径与状态校验（实例级恢复）', () => {
     await expect(service.restoreBackup(1)).rejects.toThrow('Path traversal detected');
   });
 
+  it('file_path 指向另一个实例的合法快照 → 拒绝（归属校验，防跨实例灌数据）', async () => {
+    MockBackupModel.findByIdWithPath.mockReturnValue({
+      id: 1,
+      instance_id: 's1',
+      status: 'completed',
+      world_name: 'world',
+      file_path: path.join(config.backupsDir, 's2', 'other-instance-snapshot'),
+    });
+    const service = new BackupService(null);
+    // 只校验「在 backupsDir 内」会放行这条记录：恢复会把 s2 的世界数据灌进 s1
+    await expect(service.restoreBackup(1)).rejects.toThrow('Path traversal detected');
+  });
+
   it('file_path 在备份目录内但快照目录不存在时报原错误', async () => {
     MockBackupModel.findByIdWithPath.mockReturnValue({
       id: 1,

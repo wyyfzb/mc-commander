@@ -48,6 +48,7 @@ import {
   formatBackupDate,
   formatBackupSize,
 } from '@/lib/mc-backup'
+import { restoreConfirmTarget } from '@mc-commander/schemas'
 import { useBackupEventRefresh, useBackups, useCreateBackup, useDeleteBackup, useRestoreBackup } from '../queries'
 import { useInstances } from '@/api/queries'
 import type { BackupPanelProps } from './contracts'
@@ -79,17 +80,32 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
   /** 是否展开全部备份（默认只显示最近 10 条，超出时提供展开入口） */
   const [showAll, setShowAll] = useState(false)
 
-  const backupsQuery = useBackups(instanceId)
-  const createMutation = useCreateBackup(instanceId)
-  const restoreMutation = useRestoreBackup(instanceId)
-  const deleteMutation = useDeleteBackup(instanceId)
-  useBackupEventRefresh(instanceId)
   // 实例名（恢复危险确认输入匹配；无实例时按钮路径已拦截）
   const instancesQuery = useInstances()
   const instanceName = instancesQuery.data?.find((i) => i.id === instanceId)?.name ?? ''
-  // 两侧都 trim：服务端不校验实例名，这道确认是唯一闸门——升级前库里的名字可能带
-  // 首尾空白，按原样比对会让按钮永久禁用（有备份却恢复不了）
-  const restoreInputMatches = restoreInput.trim() === instanceName.trim()
+
+  const backupsQuery = useBackups(instanceId)
+  const createMutation = useCreateBackup(instanceId)
+  // 确认串随恢复请求下发（服务端强制比对）：输入框是同一确认的界面，不再是唯一闸门
+  const restoreMutation = useRestoreBackup(instanceId)
+  const deleteMutation = useDeleteBackup(instanceId)
+  useBackupEventRefresh(instanceId)
+  // 确认目标由契约层单一派生（实例名 → 无名称时退到备份名 → 再退到备份 id）：
+  // 空名实例下实例名确认会空转（空串天然匹配），服务端同用这一条派生链
+  const restoreConfirm = restoreTarget
+    ? restoreConfirmTarget({
+        instanceName,
+        backupName: restoreTarget.name,
+        backupId: restoreTarget.id,
+      })
+    : ''
+  // 两侧都 trim（与服务端比对口径一致）：升级前库里的名字可能带首尾空白，
+  // 按原样比对会让按钮永久禁用（有备份却恢复不了）
+  const restoreInputMatches = restoreInput.trim() === restoreConfirm
+  // 实例列表未回时 instanceName 是占位空串，此刻放行只会发出一个注定 400 的提交
+  // （服务端按实例名全等比对，空串命中的是「实例名恰好为空」那类语义）——等名字到了再放行。
+  // 注意不能用 instanceName.trim() === '' 当判据：真的无名称实例本就以空串确认（服务端接受）
+  const instanceNameLoaded = instancesQuery.data !== undefined
 
   // 无实例门：加载中/加载失败/真空态/待选中四态各自诚实（见 InstanceRequiredState）
   if (!instanceId) {
@@ -126,7 +142,10 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
     setRestoreTarget(null)
     setRestoreInput('')
     try {
-      await restoreMutation.mutateAsync(target.id)
+      await restoreMutation.mutateAsync({
+        backupId: target.id,
+        confirmName: restoreConfirmTarget({ instanceName, backupName: target.name, backupId: target.id }),
+      })
       toast.success('恢复已开始，完成后请启动服务器生效')
     } catch (e) {
       toast.error(`恢复失败：${getFriendlyErrorText(e)}`)
@@ -272,7 +291,7 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
         danger
         warning="流程：停止 → 校验 level.dat → 原子替换 → 重启"
         loading={restoreMutation.isPending}
-        confirmDisabled={!restoreInputMatches}
+        confirmDisabled={!restoreInputMatches || !instanceNameLoaded}
         onConfirm={() => void handleRestoreConfirm()}
       >
         {/* 目标快照信息块：名称/时间/覆盖范围（恢复为目录快照复制，非命令下发，故无命令预览） */}
@@ -298,15 +317,22 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
         </div>
         <div className="flex flex-col gap-1.5">
           <label htmlFor="restore-confirm-input" className="text-mcs-xs font-semibold text-mcs-text-muted">
-            输入实例名「{instanceName}」以确认
+            输入{instanceName.trim() === '' ? '备份名' : '实例名'}「{restoreConfirm}」以确认
           </label>
           <input
             id="restore-confirm-input"
             value={restoreInput}
             onChange={(e) => setRestoreInput(e.target.value)}
-            placeholder={instanceName}
+            placeholder={restoreConfirm}
             className="h-9 rounded-mcs-md border border-mcs-border-default bg-mcs-bg-default px-3 font-mono text-mcs-sm text-mcs-text-default outline-none placeholder:text-mcs-text-muted focus:border-mcs-error-fg focus:ring-1 focus:ring-mcs-focus-ring"
           />
+          {/* 确认目标取自实例列表：读不到名字时确认按钮会一直禁用，必须给出原因
+              （否则用户只看到一个永远点不动的按钮，不知道是加载失败还是自己没输对） */}
+          {!instanceNameLoaded && (
+            <p className="text-mcs-2xs text-mcs-text-muted">
+              {instancesQuery.isError ? '实例信息加载失败，无法确认恢复，请刷新页面重试' : '正在加载实例信息…'}
+            </p>
+          )}
         </div>
       </ConfirmDialog>
 

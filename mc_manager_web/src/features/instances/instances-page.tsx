@@ -87,7 +87,13 @@ export function InstancesPage() {
   /** 卸载强确认：输入实例名匹配后才可确认（防误删世界数据）；服务端同名校验为强制口径 */
   const [uninstallInput, setUninstallInput] = useState('')
   /** 服务端回「无备份」后的第二阶段：不可恢复确认（仅此阶段才声明 acknowledgeIrreversible） */
-  const [uninstallAckRequired, setUninstallAckRequired] = useState(false)
+  /**
+   * 「确认不可恢复」二次确认的触发原因（null = 未触发）：
+   * - no-backup：实例没有任何快照可回退（40914）
+   * - unnamed：实例名为空，实例名确认这道闸门空转（40916）
+   * 两者都要求显式声明 acknowledgeIrreversible，但原因不同 → 提示文案必须据实分叉
+   */
+  const [uninstallAckReason, setUninstallAckReason] = useState<'no-backup' | 'unnamed' | null>(null)
   // 两侧都 trim：服务端按 trim 后比对，升级前库里带首尾空白的旧实例名也要能确认
   const uninstallInputMatches = uninstallInput.trim() === (uninstallTarget?.name ?? '').trim()
   /** 待停止确认的实例（启动走共享 hook：EULA 首启特例内置） */
@@ -183,7 +189,7 @@ export function InstancesPage() {
   const closeUninstall = () => {
     setUninstallTarget(null)
     setUninstallInput('')
-    setUninstallAckRequired(false)
+    setUninstallAckReason(null)
   }
 
   /**
@@ -200,7 +206,7 @@ export function InstancesPage() {
         instanceId: target.id,
         // 用户输入原值：两侧 trim 归一化由服务端裁决（前端只在放行判定上做同构处理）
         confirmName: uninstallInput,
-        acknowledgeIrreversible: uninstallAckRequired || undefined,
+        acknowledgeIrreversible: uninstallAckReason !== null || undefined,
       })
       closeUninstall()
       // 展示名统一走 instanceLabel（空名/纯空白名回退 id，否则 toast 会印出 `实例 ""`）
@@ -213,8 +219,15 @@ export function InstancesPage() {
       // 卸载的是当前实例 → 清空选择（面板回无实例空态）
       if (instanceId === target.id) setInstanceId(null)
     } catch (e) {
+      // 无备份（40914）与空名实例（40916）都要求「确认不可恢复」这道二次确认：
+      // 两者的实例名闸门都不承载信息（无副本可回退 / 名称为空天然匹配）。
+      // 原因分档记录，二次确认的提示文案按原因据实显示
       if (e instanceof ApiError && e.code === ErrorCode.INSTANCE_DELETE_NO_BACKUP) {
-        setUninstallAckRequired(true)
+        setUninstallAckReason('no-backup')
+        return
+      }
+      if (e instanceof ApiError && e.code === ErrorCode.INSTANCE_DELETE_UNNAMED) {
+        setUninstallAckReason('unnamed')
         return
       }
       toast.error(`卸载失败：${getFriendlyErrorText(e)}`)
@@ -369,20 +382,22 @@ export function InstancesPage() {
         }}
         title="卸载实例"
         description={`确定要卸载实例 "${uninstallTarget ? instanceLabel(uninstallTarget) : ''}" 吗？`}
-        confirmText={uninstallAckRequired ? '确认不可恢复删除' : '确认卸载'}
+        confirmText={uninstallAckReason !== null ? '确认不可恢复删除' : '确认卸载'}
         danger
         loading={uninstallMutation.isPending}
         warning={
-          uninstallAckRequired
+          uninstallAckReason !== null
             ? undefined
             : '此操作不可撤销！将会：停止运行中的服务器、删除所有世界数据和配置、从数据库中移除记录'
         }
-        confirmDisabled={!uninstallAckRequired && !uninstallInputMatches}
+        confirmDisabled={uninstallAckReason === null && !uninstallInputMatches}
         onConfirm={() => void handleUninstallConfirm()}
       >
-        {uninstallAckRequired ? (
+        {uninstallAckReason !== null ? (
           <NoticeBanner variant="error" icon={AlertTriangle} role="alert">
-            该实例没有任何备份：删除后世界数据与配置不可恢复，也没有任何快照可供还原
+            {uninstallAckReason === 'no-backup'
+              ? '该实例没有任何备份：删除后世界数据与配置不可恢复，也没有任何快照可供还原'
+              : '该实例没有名称，实例名确认不构成有效确认：删除后世界数据与配置不可恢复'}
           </NoticeBanner>
         ) : (
           <div className="flex flex-col gap-1.5">

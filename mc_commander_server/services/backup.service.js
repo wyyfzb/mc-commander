@@ -642,9 +642,10 @@ export class BackupService {
     if (typeof snapshotDir !== 'string' || snapshotDir.trim() === '') {
       throw new AppError(ErrorCodes.BACKUP_NOT_FOUND);
     }
-    // find-004 兜底：快照目录路径必须位于备份目录内（防 DB 被篡改后
-    // 删除/复制任意路径目录）
-    resolveContained(this.backupsDir, snapshotDir);
+    // find-004 兜底 + 归属校验：快照必须位于「本备份所属实例」的备份子目录内
+    // （backupsDir/<instanceId>/…）。只校验「在 backupsDir 内」不够——记录被改成
+    // 指向另一个实例的合法快照时，恢复会把别的实例的世界数据灌进本实例
+    resolveContained(path.join(this.backupsDir, instanceId), snapshotDir);
 
     if (!fs.existsSync(snapshotDir)) {
       throw new AppError(ErrorCodes.BACKUP_NOT_FOUND, 'Snapshot directory not found');

@@ -1,4 +1,5 @@
 import { http, HttpResponse } from 'msw'
+import { restoreConfirmTarget } from '@mc-commander/schemas'
 import { LEGACY_GAMERULES } from '@/lib/mc-gamerules'
 import { todayIso } from '@/lib/mc-calendar'
 import type {
@@ -455,6 +456,13 @@ export const upgradeCancelMock: { notInProgress: boolean; calls: number } = {
   calls: 0,
 }
 
+/** 恢复端点 mock 控制：instanceName 覆盖实例名场景（空串 = 无名称实例）；bodies 供请求体断言 */
+export const restoreMock: {
+  instanceName: string | null
+  calls: number
+  bodies: { confirmName?: string }[]
+} = { instanceName: null, calls: 0, bodies: [] }
+
 /** 升级状态轮询 mock（测试注入：模拟断线后轮询返回的进度） */
 export const upgradeStatusMock = {
   upgrading: true,
@@ -530,7 +538,32 @@ const backupHandlers = [
       updatedAt: new Date().toISOString(),
     }),
   ),
-  http.post('*/api/v1/backups/:id/restore', () => ok(null)),
+  // 恢复：服务端强制确认串（缺/不匹配 → 400 40017）。按真实语义校验（同用契约层的
+  // restoreConfirmTarget 派生链），前端漏带/带错 confirmName 的回归会直接红
+  http.post('*/api/v1/backups/:id/restore', async ({ request, params }) => {
+    const body = (await request.json().catch(() => ({}))) as { confirmName?: string }
+    restoreMock.calls += 1
+    restoreMock.bodies.push(body)
+    const backup = mockBackups.find((b) => String(b.id) === String(params.id))
+    const expected = restoreConfirmTarget({
+      instanceName: restoreMock.instanceName ?? mockInstanceStatus.name,
+      backupName: backup?.name,
+      backupId: String(params.id ?? ''),
+    })
+    if ((body.confirmName ?? '').trim() !== expected) {
+      return HttpResponse.json(
+        {
+          status: 'error',
+          code: 40017,
+          message: '需在请求体提供 confirmName 且与该备份所属实例名完全一致才能恢复',
+          details: null,
+          timestamp: new Date().toISOString(),
+        },
+        { status: 400 },
+      )
+    }
+    return ok(null)
+  }),
   http.delete('*/api/v1/backups/:id', () => ok(null)),
   // 下载（GET /backups/:id/download；gzip magic bytes 占位流，服务端为 tar.gz 流）
   http.get('*/api/v1/backups/:id/download', () =>
@@ -615,6 +648,13 @@ export const handlers = [
       return HttpResponse.json(
         { status: 'error', code: 40016, message: '需在请求体提供 confirmName 且与实例名完全一致才能卸载实例', details: null, timestamp: new Date().toISOString() },
         { status: 400 },
+      )
+    }
+    // 与服务端同口径：空名实例的实例名确认空转 → 额外要求 acknowledgeIrreversible（40916）
+    if (expectedName.trim() === '' && body.acknowledgeIrreversible !== true) {
+      return HttpResponse.json(
+        { status: 'error', code: 40916, message: '该实例无名称，名称确认不构成有效确认；确认后请携带 acknowledgeIrreversible=true 重试', details: null, timestamp: new Date().toISOString() },
+        { status: 409 },
       )
     }
     if (uninstallMock.retainedBackupCount === 0 && body.acknowledgeIrreversible !== true) {

@@ -50,8 +50,9 @@ export function useRestoreBackup(instanceId: string | null) {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (backupId: number) => {
-      return apiRestoreBackup(config, backupId)
+    // confirmName 由调用点按契约层的 restoreConfirmTarget 派生（实例名 → 备份名 → 备份 id）
+    mutationFn: async (args: { backupId: number; confirmName: string }) => {
+      return apiRestoreBackup(config, args.backupId, args.confirmName)
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.backups(instanceId ?? '') })

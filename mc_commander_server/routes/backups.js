@@ -9,7 +9,7 @@ import { BackupModel } from '../db/backup.model.js';
 import { BackupService, resolveContained } from '../services/backup.service.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
 import config from '../config.js';
-import { backupCreateRequestSchema, backupItemSchema, nullDataSchema } from '@mc-commander/schemas';
+import { backupCreateRequestSchema, backupItemSchema, backupRestoreRequestSchema, restoreConfirmTarget, nullDataSchema } from '@mc-commander/schemas';
 import { validateBody, validatedSuccess, validatedSuccessPaginated } from '../middleware/validate.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { logger } from '../utils/logger.js';
@@ -86,11 +86,25 @@ export function createBackupRoutes(serverManager) {
     res.status(201).json(validatedSuccess(backupItemSchema, backup, 'Backup created successfully'));
   }));
 
-  router.post('/backups/:id/restore', asyncHandler(async (req, res) => {
+  router.post('/backups/:id/restore', validateBody(backupRestoreRequestSchema), asyncHandler(async (req, res) => {
     const backup = BackupModel.findById(req.params.id);
 
     if (!backup) {
       throw new AppError(ErrorCodes.BACKUP_NOT_FOUND);
+    }
+
+    // 确认串校验（服务端强制）：UI 的输入框只存在于客户端，直连 API 的调用方此前可
+    // 跳过确认直接覆盖实例目录。确认目标是「实例名」，实例无名称时退到备份名/id
+    // （restoreConfirmTarget 单一派生）——空名实例下实例名确认会空转（空串天然匹配），
+    // 与卸载侧空名实例的加固同源。两侧 trim 后全等比对，文案不回显确认目标
+    const instance = serverManager.getInstance(backup.instanceId);
+    const expectedConfirm = restoreConfirmTarget({
+      instanceName: instance?.name,
+      backupName: backup.name,
+      backupId: backup.id,
+    });
+    if (req.body.confirmName.trim() !== expectedConfirm) {
+      throw new AppError(ErrorCodes.BACKUP_RESTORE_CONFIRM_REQUIRED);
     }
 
     if (backup.status !== 'completed') {
@@ -105,7 +119,6 @@ export function createBackupRoutes(serverManager) {
 
     // 运行中恢复会把正在被 MC 写入的世界目录 rename/覆盖（Windows 上
     // 还会因文件占用 EPERM 失败），导致世界数据损坏——入口拦截提示先停止
-    const instance = serverManager.getInstance(backup.instanceId);
     if (instance?.isRunning) {
       throw new AppError(ErrorCodes.INSTANCE_RUNNING, '实例正在运行，请先停止服务器再恢复备份');
     }

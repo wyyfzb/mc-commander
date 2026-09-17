@@ -68,7 +68,7 @@ function makeBackup(overrides = {}) {
   };
 }
 
-function buildApp({ getInstance = vi.fn(() => ({})) } = {}) {
+function buildApp({ getInstance = vi.fn(() => ({ name: '演示实例' })) } = {}) {
   const app = express();
   app.use(express.json());
   app.use('/api/v1', createBackupRoutes({ getInstance }));
@@ -258,10 +258,53 @@ describe('POST /backups/:id/restore（互补分支：既有测试未覆盖）', 
     BackupModel.findById.mockReturnValue(makeBackup({ status: 'failed' }));
     const app = buildApp();
 
-    const res = await request(app).post('/api/v1/backups/1/restore');
+    const res = await request(app).post('/api/v1/backups/1/restore').send({ confirmName: '演示实例' });
 
     expect(res.status).toBe(400);
     expect(res.body.code).toBe(40000);
+  });
+
+  it('缺 confirmName → 400 40017（服务端强制实例名确认，UI 输入框不再是唯一闸门）', async () => {
+    BackupModel.findById.mockReturnValue(makeBackup({ status: 'completed' }));
+    const app = buildApp();
+
+    // 缺字段由契约层拦（40000 + 字段级 details），不匹配由处理器拦（40017 语义化文案）
+    const missing = await request(app).post('/api/v1/backups/1/restore');
+    expect(missing.status).toBe(400);
+    expect(missing.body.code).toBe(40000);
+    expect(missing.body.details.some((d) => d.path === 'confirmName')).toBe(true);
+
+    const mismatched = await request(app)
+      .post('/api/v1/backups/1/restore')
+      .send({ confirmName: '另一个实例' });
+    expect(mismatched.status).toBe(400);
+    expect(mismatched.body.code).toBe(40017);
+    // 拒绝路径零副作用：不做互斥判定也不动服务层
+    expect(BackupModel.findAll).not.toHaveBeenCalled();
+  });
+
+  it('空名实例：确认目标退到备份名（实例名确认会空转，不得放行空串）', async () => {
+    BackupModel.findById.mockReturnValue(makeBackup({ status: 'completed', name: '手动备份-1' }));
+    const app = buildApp({ getInstance: vi.fn(() => ({ name: '' })) });
+
+    // 空串天然匹配实例名 → 若确认目标仍是实例名，这道闸门等于没有
+    const vacuous = await request(app).post('/api/v1/backups/1/restore').send({ confirmName: '' });
+    expect(vacuous.status).toBe(400);
+    expect(vacuous.body.code).toBe(40017);
+
+    const withBackupName = await request(app)
+      .post('/api/v1/backups/1/restore')
+      .send({ confirmName: '手动备份-1' });
+    expect(withBackupName.status).toBe(202);
+  });
+
+  it('confirmName 两侧 trim 后全等即放行（升级前旧值可能带首尾空白）', async () => {
+    BackupModel.findById.mockReturnValue(makeBackup({ status: 'completed' }));
+    const app = buildApp({ getInstance: vi.fn(() => ({ name: '演示实例 ' })) });
+
+    const res = await request(app).post('/api/v1/backups/1/restore').send({ confirmName: '演示实例' });
+
+    expect(res.status).toBe(202);
   });
 
   it('creating 互斥 → 409 RESTORE_IN_PROGRESS(40903)（creating 分支，既有只测 restoring）', async () => {
@@ -271,7 +314,7 @@ describe('POST /backups/:id/restore（互补分支：既有测试未覆盖）', 
     );
     const app = buildApp();
 
-    const res = await request(app).post('/api/v1/backups/1/restore');
+    const res = await request(app).post('/api/v1/backups/1/restore').send({ confirmName: '演示实例' });
 
     expect(res.status).toBe(409);
     expect(res.body.code).toBe(40903);

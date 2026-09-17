@@ -46,6 +46,8 @@ export const ErrorCode = {
   INSTANCE_DELETE_CONFIRM_REQUIRED: 40016,
   /** 卸载的实例没有任何备份：须显式确认不可恢复后才放行 */
   INSTANCE_DELETE_NO_BACKUP: 40914,
+  /** 卸载的实例无名称：名称确认空转，须显式确认不可恢复后才放行 */
+  INSTANCE_DELETE_UNNAMED: 40916,
   /** 部署互斥：已有部署在途 */
   DEPLOY_IN_PROGRESS: 40905,
   /** 取消部署但无可取消对象（部署已终态/已被取消/服务端重启后注册表为空） */
@@ -58,6 +60,8 @@ export const ErrorCode = {
   BACKUP_RCON_UNAVAILABLE: 40902,
   RESTORE_IN_PROGRESS: 40903,
   BACKUP_FAILED: 50002,
+  /** 恢复缺少/不匹配实例名确认（服务端强制，见 POST /backups/:id/restore） */
+  BACKUP_RESTORE_CONFIRM_REQUIRED: 40017,
 
   TASK_NOT_FOUND: 40405,
   INVALID_CRON_EXPRESSION: 40004,
@@ -126,6 +130,8 @@ const LOCALIZED_MESSAGES: Partial<Record<ErrorCodeValue, string>> = {
   [ErrorCode.BACKUP_IN_PROGRESS]: '已有备份任务进行中',
   [ErrorCode.RESTORE_IN_PROGRESS]: '已有恢复任务进行中',
   [ErrorCode.BACKUP_FAILED]: '备份失败',
+  [ErrorCode.INSTANCE_DELETE_UNNAMED]: '该实例无名称，名称确认不构成有效确认，请确认不可恢复后再试',
+  [ErrorCode.BACKUP_RESTORE_CONFIRM_REQUIRED]: '需输入该备份所属实例的名称以确认恢复',
   [ErrorCode.TASK_NOT_FOUND]: '定时任务不存在',
   [ErrorCode.INVALID_CRON_EXPRESSION]: 'cron 表达式无效',
   [ErrorCode.FILE_NOT_FOUND]: '文件不存在',

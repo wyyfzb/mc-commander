@@ -42,6 +42,15 @@ describe('错误码映射（对照服务端 ErrorCodes 契约）', () => {
     expect(getFriendlyErrorMessage(ErrorCode.TASK_CANCELLED)).toBe('操作已取消')
   })
 
+  it('备份恢复确认与空名卸载错误码枚举与本地化（与服务端 response.js 同值）', () => {
+    expect(ErrorCode.BACKUP_RESTORE_CONFIRM_REQUIRED).toBe(40017)
+    expect(ErrorCode.INSTANCE_DELETE_UNNAMED).toBe(40916)
+    expect(getFriendlyErrorMessage(ErrorCode.BACKUP_RESTORE_CONFIRM_REQUIRED)).toBe(
+      '需输入该备份所属实例的名称以确认恢复',
+    )
+    expect(getFriendlyErrorMessage(ErrorCode.INSTANCE_DELETE_UNNAMED)).toContain('该实例无名称')
+  })
+
   it('INSTANCE_RUNNING 有本地化文案', () => {
     expect(getFriendlyErrorMessage(ErrorCode.INSTANCE_RUNNING)).toBe('实例正在运行')
   })
