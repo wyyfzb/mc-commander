@@ -32,6 +32,7 @@ export const WS_EVENT_TYPES = [
   'upgradeProgress',
   'upgradeComplete',
   'upgradeFailed',
+  'upgradeCancelled',
   'systemStatsUpdate',
   'error',
 ] as const

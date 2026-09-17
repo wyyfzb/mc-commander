@@ -7,7 +7,7 @@ import { useConnectionStore } from '@/stores/connection'
 import { useAuthStore } from '@/stores/auth'
 import { useServerStore } from '@/stores/server'
 import { useDeployStore } from '@/stores/deploy'
-import { applyUpgradeProgress } from '@/stores/upgrade'
+import { applyUpgradeProgress, isUpgradeTerminal } from '@/stores/upgrade'
 import { useNotificationStore } from '@/stores/notifications'
 import { useTerminalStore } from '@/stores/terminal'
 import { useUiStore } from '@/stores/ui'
@@ -154,7 +154,11 @@ export function useServerSocket(instanceId: string | null) {
 
       // 升级终态通知（带实例归属）：入通知中心（列表刷新由 upgradeProgress
       // 终态分支处理，不重复）
-      if (msg.type === 'upgradeComplete' || msg.type === 'upgradeFailed') {
+      if (
+        msg.type === 'upgradeComplete' ||
+        msg.type === 'upgradeFailed' ||
+        msg.type === 'upgradeCancelled'
+      ) {
         dispatchEvent({
           type: msg.type,
           data: msg.data as Record<string, unknown>,
@@ -175,8 +179,8 @@ export function useServerSocket(instanceId: string | null) {
           detail: String(data.detail ?? ''),
           timestamp: Number(data.timestamp ?? Date.now()),
         })
-        if (stage === 'completed' || stage === 'failed' || stage === 'rolled_back') {
-          // 终态：刷新实例列表（版本号/JAR 已变更）
+        if (isUpgradeTerminal(stage)) {
+          // 终态：刷新实例列表（版本号/JAR 已变更；取消也可能经回滚改写 DB）
           void queryClient.invalidateQueries({ queryKey: queryKeys.instances() })
         }
         return

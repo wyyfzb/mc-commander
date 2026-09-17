@@ -44,7 +44,7 @@ describe('NotificationsPanel', () => {
     const gameTypes = typesOf('game')
     const serverTypes = typesOf('server')
     expect(gameTypes.length).toBe(7)
-    expect(serverTypes.length).toBe(23)
+    expect(serverTypes.length).toBe(24)
 
     const gameGroup = screen.getByTestId('notification-group-game')
     const serverGroup = screen.getByTestId('notification-group-server')

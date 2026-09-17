@@ -17,7 +17,7 @@ export type NotificationType =
   | 'taskFailed'
   | 'webhookFailed'
   | 'deployComplete' | 'deployFailed' | 'deployCancelled'
-  | 'upgradeComplete' | 'upgradeFailed'
+  | 'upgradeComplete' | 'upgradeFailed' | 'upgradeCancelled'
 
 export interface AppNotification {
   id: string
@@ -77,6 +77,8 @@ export const NOTIFICATION_TYPE_META: Record<
   deployCancelled: { label: '部署已取消', category: 'server', severity: 'info' },
   upgradeComplete: { label: '升级完成', category: 'server', severity: 'info' },
   upgradeFailed: { label: '升级失败', category: 'server', severity: 'severe' },
+  // 用户主动取消不是故障：severity 保持 info，不进严重告警档
+  upgradeCancelled: { label: '升级已取消', category: 'server', severity: 'info' },
 }
 
 /** 设置页显示顺序：game 组在前、server 组在后 */
@@ -250,6 +252,12 @@ export function buildNotifications(
       return [{
         type: 'upgradeFailed', category: 'server',
         content: `实例「${String(d.instanceName ?? '未命名')}」${String(d.detail || '升级失败')}`,
+      }]
+    case 'upgradeCancelled':
+      // detail 由服务端给（含「是否已回滚到旧版本」），故这里直接透传
+      return [{
+        type: 'upgradeCancelled', category: 'server',
+        content: `实例「${String(d.instanceName ?? '未命名')}」${String(d.detail || '升级已取消')}`,
       }]
     default: {
       if (type in BACKUP_CONTENT) {

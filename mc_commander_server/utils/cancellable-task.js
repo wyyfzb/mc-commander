@@ -34,6 +34,7 @@ export class TaskCancelledError extends Error {
 /** 任务种类（注册点与取消端点共用，避免字符串两处各写一遍） */
 export const TASK_KINDS = {
   DEPLOY: 'deploy',
+  UPGRADE: 'upgrade',
 };
 
 /** `${kind}:${scope}` → 条目；scope 为实例 id（部署实例在入库前就已有 id） */

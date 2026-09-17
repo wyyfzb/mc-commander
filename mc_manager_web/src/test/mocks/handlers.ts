@@ -449,6 +449,12 @@ export const uninstallMock = {
 /** 升级失败开关（测试注入：结构占位，非真实错误） */
 export const upgradeMock = { shouldFail: false, conflict: false }
 
+/** 取消升级（POST /instances/:id/upgrade/cancel）mock 控制：notInProgress 模拟服务端 40908 */
+export const upgradeCancelMock: { notInProgress: boolean; calls: number } = {
+  notInProgress: false,
+  calls: 0,
+}
+
 /** 升级状态轮询 mock（测试注入：模拟断线后轮询返回的进度） */
 export const upgradeStatusMock = {
   upgrading: true,
@@ -841,6 +847,22 @@ export const handlers = [
       },
       { status: 202 },
     )
+  }),
+  http.post('*/api/v1/instances/:id/upgrade/cancel', ({ params }) => {
+    upgradeCancelMock.calls += 1
+    if (upgradeCancelMock.notInProgress) {
+      return HttpResponse.json(
+        {
+          status: 'error',
+          code: 40908,
+          message: 'No upgrade in progress for this instance',
+          details: null,
+          timestamp: new Date().toISOString(),
+        },
+        { status: 409 },
+      )
+    }
+    return ok({ instanceId: String(params.id ?? 'inst-001'), cancelled: true })
   }),
   http.get('*/api/v1/instances/:id/upgrade/status', () =>
     ok(upgradeStatusMock),

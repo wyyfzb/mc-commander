@@ -156,6 +156,12 @@ test.describe('仪表盘', () => {
     await setupConnection(page)
     await page.goto('/dashboard')
     const input = page.getByLabel('服务器命令输入')
+    // 就绪门（清单 #83 冷启动竞态）：命令发送要求「实例已选中 + 运行中」，两者未就绪时
+    // use-send-command 的守卫会静默丢弃（无 toast 无请求），表现为「等不到 /command」超时。
+    // 顶栏出现实例名即 instanceId 已落定（单实例降级分支要求 list[0].id === instanceId），
+    // 输入框可用即 isRunning 为真
+    await expect(input).toBeEnabled({ timeout: 10_000 })
+    await expect(page.getByRole('banner').getByText('E2E 演示实例').first()).toBeVisible()
     const cmdReq = page.waitForRequest(
       (r) => r.url().includes('/command') && String(r.postDataJSON()?.command).includes('say hello'),
     )
@@ -168,6 +174,9 @@ test.describe('仪表盘', () => {
     await setupConnection(page)
     await page.goto('/dashboard')
     const input = page.getByLabel('服务器命令输入')
+    // 就绪门（清单 #83）：输入框在实例运行态就绪前是 disabled，冷启动下直接 fill 会
+    // 一直等到用例超时（实测 30s 仍 disabled），先等可用再操作
+    await expect(input).toBeEnabled({ timeout: 15_000 })
     await input.fill('/ga')
     await expect(page.getByRole('option', { name: /gamemode/ })).toBeVisible()
   })

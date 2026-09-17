@@ -29,7 +29,7 @@ import { Card } from '@/components/mcs/card'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { EmptyState } from '@/components/mcs/empty-state'
 import { DeployGuideTile } from './deploy-guide-tile'
-import { useUpgradeStore } from '@/stores/upgrade'
+import { useUpgradeStore, isUpgradeTerminal } from '@/stores/upgrade'
 import type { InstancePhase } from '@/stores/server'
 import type { InstanceStatus, InstanceSummary } from '@/api/types'
 
@@ -173,11 +173,7 @@ function InstanceCard({
   // 升级中标识（issue 352）：WS 订阅补发/实时事件驱动；终态残留不误显示
   // （终态 store 清理由升级弹窗打开时做，卡片只认非终态）
   const upgradeStage = useUpgradeStore((s) => s.progress[id]?.stage)
-  const upgrading =
-    upgradeStage != null &&
-    upgradeStage !== 'completed' &&
-    upgradeStage !== 'failed' &&
-    upgradeStage !== 'rolled_back'
+  const upgrading = upgradeStage != null && !isUpgradeTerminal(upgradeStage)
 
   return (
     <Card

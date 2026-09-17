@@ -46,6 +46,8 @@ export const WSEvents = {
   UPGRADE_PROGRESS: 'upgradeProgress',
   UPGRADE_COMPLETE: 'upgradeComplete',
   UPGRADE_FAILED: 'upgradeFailed',
+  // 用户取消升级：与 failed 分开（取消不是故障，通知中心按严重度分档）
+  UPGRADE_CANCELLED: 'upgradeCancelled',
   SYSTEM_STATS_UPDATE: 'systemStatsUpdate',
   ERROR: 'error',
 };
@@ -110,6 +112,7 @@ const NOTIFICATION_EVENT_TYPES = new Set([
   WSEvents.DEPLOY_CANCELLED,
   WSEvents.UPGRADE_COMPLETE,
   WSEvents.UPGRADE_FAILED,
+  WSEvents.UPGRADE_CANCELLED,
 ]);
 
 // notification_events 保留期：超过保留期的记录定期清理（表只增不删，
@@ -673,6 +676,8 @@ export function setupWebSocket(wss, serverManager) {
         broadcast(data.instanceId, WSEvents.UPGRADE_COMPLETE, notifyPayload);
       } else if (data.stage === 'failed' || data.stage === 'rolled_back') {
         broadcast(data.instanceId, WSEvents.UPGRADE_FAILED, notifyPayload);
+      } else if (data.stage === 'cancelled') {
+        broadcast(data.instanceId, WSEvents.UPGRADE_CANCELLED, notifyPayload);
       }
     } else {
       broadcastAll(WSEvents.UPGRADE_PROGRESS, data);

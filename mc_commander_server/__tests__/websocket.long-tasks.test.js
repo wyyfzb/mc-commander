@@ -206,6 +206,30 @@ describe('WebSocket 长任务（部署/升级）通知与补发', () => {
       expect(fakeDb.inserted).toHaveLength(2);
     });
 
+    it('upgradeProgress cancelled → 广播 upgradeCancelled 并落库（带实例归属，与 failed 分档）', () => {
+      const ws = connect(wss);
+      subscribe(ws, 'paper-abc1');
+      ws.send.mockClear();
+      fakeDb.inserted.length = 0;
+
+      serverManager.emit('instance:upgradeProgress', {
+        instanceId: 'paper-abc1',
+        stage: 'cancelled',
+        percent: 0,
+        detail: '已取消，已回滚到 1.20.4',
+        timestamp: Date.now(),
+      });
+
+      const notice = sentMessage(ws, 1);
+      expect(notice.type).toBe(WSEvents.UPGRADE_CANCELLED);
+      expect(notice.instanceId).toBe('paper-abc1');
+      // 通知文案读 detail（含是否回滚），服务端补实例名
+      expect(notice.data.detail).toBe('已取消，已回滚到 1.20.4');
+      expect(notice.data.instanceName).toBeTruthy();
+      expect(fakeDb.inserted).toHaveLength(1);
+      expect(fakeDb.inserted[0][1]).toBe(WSEvents.UPGRADE_CANCELLED);
+    });
+
     it('upgradeProgress 进行中阶段不产生通知事件', () => {
       const ws = connect(wss);
       subscribe(ws, 'paper-abc1');

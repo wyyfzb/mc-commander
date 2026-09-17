@@ -53,6 +53,8 @@ const MOCK_SESSION_TOKEN = 'e2e-mock-session-token-0000000001'
 /** 首访设密是否已完成（记忆态，进程级）：Referer 推断出的 fresh 在 SPA 客户端路由期间一直成立，
  *  若不落这个状态，设密后再查一次 /auth/status 会又回 hasPassword:false、把用户弹回设密向导 */
 let passwordSet = false
+/** 升级在途快照（#94）：非 null 表示 mock 正在「升级中」，取消后清空 */
+let upgradeInFlight = null
 /** 无需凭据即可访问的端点（登录前必须可达，与真实服务端一致） */
 const PUBLIC_PATHS = new Set(['/api/v1/auth/status', '/api/v1/auth/login', '/api/v1/auth/setup'])
 
@@ -787,6 +789,25 @@ const server = createServer((req, res) => {
       }
       return res.end(ok({ deploying: false }))
     }
+    // mock 专用控制端点：把「场景态」一次性复位到默认（运行中 + 无在途升级）。
+    // mock 状态是进程级共享的，任何翻转运行态/制造在途升级的用例都必须在 finally 里调它
+    // ——否则后续 spec（如 dashboard 的命令输入框依赖 isRunning）会读到被改脏的状态
+    if (path === '/api/v1/mock/reset' && req.method === 'POST') {
+      instance.isRunning = true
+      upgradeInFlight = null
+      return res.end(ok({ isRunning: instance.isRunning, upgradeInFlight }))
+    }
+    // mock 专用控制端点：翻转实例运行态（e2e 复现「实例已停止 → 可升级」前置条件）
+    if (path === '/api/v1/mock/instance-running' && req.method === 'POST') {
+      let running = true
+      try {
+        running = JSON.parse(body || '{}').running !== false
+      } catch {
+        running = true
+      }
+      instance.isRunning = running
+      return res.end(ok({ isRunning: instance.isRunning }))
+    }
     // 强制断开全部 WS 连接（mock 专用控制端点：e2e 复现「实时通道断开」边沿，HTTP 不动）
     if (path === '/api/v1/instances/deploy/drop-ws' && req.method === 'POST') {
       for (const s of wsSockets) s.destroy()
@@ -815,6 +836,38 @@ const server = createServer((req, res) => {
       broadcastWs('deployCancelled', { stage: 'cancelled', instanceId, instanceName: '新部署实例' })
       return res.end(ok({ instanceId, cancelled: true }, 'Deployment cancellation requested'))
     }
+    // ── 升级域（#94）──
+    // 受理后按真实链路补发进度事件：前端据 WS 事件进入「升级中」视图（只回 HTTP 不发事件
+    // 会让用例停在初始表单，真实服务端不会）
+    if (path === '/api/v1/instances/e2e-demo/upgrade' && req.method === 'POST') {
+      let target = '26.2'
+      try {
+        target = String(JSON.parse(body || '{}').mcVersion ?? target)
+      } catch {
+        target = '26.2'
+      }
+      upgradeInFlight = { stage: 'download', detail: '正在下载新版本服务端…' }
+      broadcastWs('upgradeProgress', { instanceId: 'e2e-demo', stage: 'backup', percent: 0, detail: '正在创建备份…', timestamp: Date.now() }, 'e2e-demo')
+      broadcastWs('upgradeProgress', { instanceId: 'e2e-demo', stage: 'download', percent: 40, detail: '正在下载新版本服务端…', timestamp: Date.now() }, 'e2e-demo')
+      res.statusCode = 202
+      return res.end(ok({ message: 'Upgrade started', instanceId: 'e2e-demo', mcVersion: target, type: 'vanilla' }))
+    }
+    if (path === '/api/v1/instances/e2e-demo/upgrade/status') {
+      if (!upgradeInFlight) return res.end(ok({ upgrading: false }))
+      return res.end(ok({ upgrading: true, instanceId: 'e2e-demo', percent: 40, timestamp: Date.now(), ...upgradeInFlight }))
+    }
+    if (path === '/api/v1/instances/e2e-demo/upgrade/cancel' && req.method === 'POST') {
+      if (!upgradeInFlight) {
+        res.statusCode = 409
+        return res.end(err(40908, 'No upgrade in progress for this instance'))
+      }
+      const detail = '已取消，实例保持 1.21.4'
+      upgradeInFlight = null
+      broadcastWs('upgradeProgress', { instanceId: 'e2e-demo', stage: 'cancelled', percent: 0, detail, timestamp: Date.now() }, 'e2e-demo')
+      broadcastWs('upgradeCancelled', { instanceId: 'e2e-demo', instanceName: 'E2E 演示实例', stage: 'cancelled', detail, timestamp: Date.now() }, 'e2e-demo')
+      return res.end(ok({ instanceId: 'e2e-demo', cancelled: true }, 'Upgrade cancellation requested'))
+    }
+
     // ── 世界/属性域 ──
     if (path === '/api/v1/instances/e2e-demo/world') return res.end(ok(worldInfo))
     if (path === '/api/v1/instances/e2e-demo/properties') {

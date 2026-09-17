@@ -223,6 +223,7 @@ export {
   upgradeProgressSchema,
   upgradeRequestSchema,
   upgradeStartResponseSchema,
+  upgradeCancelResponseSchema,
   upgradeStatusResponseSchema,
   type VersionsResponse,
   type DeployRequest,
@@ -235,6 +236,7 @@ export {
   type UpgradeProgress,
   type UpgradeRequest,
   type UpgradeStartResponse,
+  type UpgradeCancelResponse,
   type UpgradeStatusResponse,
 } from './deploy'
 

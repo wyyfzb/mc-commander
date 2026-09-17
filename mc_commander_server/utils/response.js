@@ -72,6 +72,8 @@ export const ErrorCodes = {
 
   // 升级错误
   UPGRADE_IN_PROGRESS: { code: 40907, message: 'Upgrade already in progress', status: 409 },
+  // 取消升级时无可取消对象（升级已终态、已被取消、或进程重启后注册表为空）
+  UPGRADE_NOT_IN_PROGRESS: { code: 40908, message: 'No upgrade in progress for this instance', status: 409 },
   UPGRADE_VERSION_SAME: { code: 40012, message: 'Target version is the same as current version', status: 400 },
 
   // 插件错误（feat-8 P0-5）

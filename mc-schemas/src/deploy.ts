@@ -86,6 +86,9 @@ export const deployStatusResponseSchema = z.discriminatedUnion('deploying', [
 
 export const upgradeStageSchema = z.enum([
   'backup', 'download', 'replace', 'verify', 'completed', 'failed', 'rolled_back',
+  // 用户取消（服务端在途升级被中断）：与 failed/rolled_back 分档——取消不是故障，
+  // detail 里写明是否发生了回滚（替换 JAR 之后取消才需要回滚）
+  'cancelled',
 ])
 
 export const upgradeProgressSchema = z.object({
@@ -121,6 +124,12 @@ export const upgradeStartResponseSchema = z.object({
   type: z.string(),
 })
 
+/** POST /instances/:id/upgrade/cancel 响应契约（已受理中断，终态由 upgradeProgress 事件推送） */
+export const upgradeCancelResponseSchema = z.object({
+  instanceId: z.string(),
+  cancelled: z.literal(true),
+})
+
 /**
  * GET /instances/:id/upgrade/status 响应契约（issue 402 响应侧接入）。
  * upgrading 为判别字段：升级中 = 进度对象展开（与 upgradeProgressSchema 同构），
@@ -149,4 +158,5 @@ export type UpgradeStage = z.infer<typeof upgradeStageSchema>
 export type UpgradeProgress = z.infer<typeof upgradeProgressSchema>
 export type UpgradeRequest = z.infer<typeof upgradeRequestSchema>
 export type UpgradeStartResponse = z.infer<typeof upgradeStartResponseSchema>
+export type UpgradeCancelResponse = z.infer<typeof upgradeCancelResponseSchema>
 export type UpgradeStatusResponse = z.infer<typeof upgradeStatusResponseSchema>

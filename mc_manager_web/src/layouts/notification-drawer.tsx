@@ -70,7 +70,7 @@ const TYPE_ICON: Record<NotificationType, LucideIcon> = {
   backupSkipped: SkipForward, restoreStart: History, restoreComplete: CheckCheck,
   restoreFailed: XCircle, taskFailed: CalendarX, webhookFailed: Webhook,
   deployComplete: Rocket, deployFailed: XCircle, deployCancelled: Ban,
-  upgradeComplete: CheckCircle2, upgradeFailed: XCircle,
+  upgradeComplete: CheckCircle2, upgradeFailed: XCircle, upgradeCancelled: Ban,
 }
 
 /** 中性档（进出/停服等无成败含义的事件）：次级底，不占语义六色 */
@@ -115,6 +115,7 @@ export const NOTIFICATION_TONE: Record<NotificationType, SemanticTone | 'neutral
   deployCancelled: 'neutral',
   upgradeComplete: 'success',
   upgradeFailed: 'error',
+  upgradeCancelled: 'neutral',
 }
 
 /** 气泡图标/边框/底色（三处同档） */

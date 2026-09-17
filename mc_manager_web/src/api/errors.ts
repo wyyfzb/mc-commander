@@ -77,6 +77,8 @@ export const ErrorCode = {
 
   // 升级
   UPGRADE_IN_PROGRESS: 40907,
+  /** 取消升级但无可取消对象（升级已终态/已被取消/服务端重启后注册表为空） */
+  UPGRADE_NOT_IN_PROGRESS: 40908,
   UPGRADE_VERSION_SAME: 40012,
 
   // 插件管理（feat-8，routes/plugins.js）
@@ -146,6 +148,7 @@ const LOCALIZED_MESSAGES: Partial<Record<ErrorCodeValue, string>> = {
   [ErrorCode.MARKET_CHECKSUM_MISMATCH]: '插件市场：文件完整性校验失败，安装已拒绝（下载可能损坏，请重试）',
   [ErrorCode.RCON_UNAVAILABLE]: 'RCON 未启用或连接已断开，请在 server.properties 启用 RCON',
   [ErrorCode.UPGRADE_IN_PROGRESS]: '已有升级任务进行中',
+  [ErrorCode.UPGRADE_NOT_IN_PROGRESS]: '该升级已结束或不在进行中，无需取消',
   [ErrorCode.UPGRADE_VERSION_SAME]: '目标版本与当前版本相同',
 }
 

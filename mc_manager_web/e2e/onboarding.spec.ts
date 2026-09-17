@@ -159,7 +159,12 @@ test.describe('onboarding', () => {
     // 等 route chunk 与字体就位再量尺寸：早量会读到未完成布局（曾量出 720 的假值）
     await page.waitForLoadState('networkidle')
     await page.evaluate(() => document.fonts.ready)
-    // 720px 是 Playwright 默认视口高度；引导页内容实测 960px，确实超视口
+    // 720px 是 Playwright 默认视口高度；引导页内容实测 960px，确实超视口。
+    // 取高度用轮询而非一次性取值：networkidle + fonts.ready 之后，冷启动（并行负载下）
+    // 仍可能只量到视口高的假值——轮询到「确实超视口」再继续；量不到就是真回归（断言不放宽）
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.scrollHeight), { timeout: 10_000 })
+      .toBeGreaterThan(720)
     const contentHeight = await page.evaluate(() => document.documentElement.scrollHeight)
     expect(contentHeight).toBeGreaterThan(720)
     // 不切顶：logo 与标题的 y ≥ 0。注意这条**今天不是靠 justify-center-safe 兜住的**——

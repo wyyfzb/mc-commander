@@ -119,6 +119,17 @@ describe('InstanceCards', () => {
     expect(screen.queryByText('升级中')).not.toBeInTheDocument()
   })
 
+  it('取消终态同样算终态：不残留升级中徽标（判据与弹窗/WS 同源）', () => {
+    act(() => {
+      useUpgradeStore.setState({
+        progress: { alpha: { instanceId: 'alpha', stage: 'cancelled', percent: 0, detail: '已取消，实例保持 1.21.1', timestamp: 1 } },
+      })
+    })
+    render(<InstanceCards {...baseProps()} />)
+
+    expect(screen.queryByText('升级中')).not.toBeInTheDocument()
+  })
+
   it('版本徽章：detailStatuses 有 mcVersion 显示 mono 徽章，缺失不显示', () => {
     const { container } = render(<InstanceCards {...baseProps()} />)
 

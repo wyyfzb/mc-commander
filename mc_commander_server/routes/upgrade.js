@@ -2,10 +2,11 @@ import { Router } from 'express';
 import { error, ErrorCodes } from '../utils/response.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
 import { UpgradeService, MC_VERSION_REGEX } from '../services/upgrade.service.js';
-import { upgradeRequestSchema, upgradeStartResponseSchema, upgradeStatusResponseSchema } from '@mc-commander/schemas';
+import { upgradeRequestSchema, upgradeStartResponseSchema, upgradeCancelResponseSchema, upgradeStatusResponseSchema } from '@mc-commander/schemas';
 import { validateBody, validatedSuccess } from '../middleware/validate.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { logger } from '../utils/logger.js';
+import { cancelTask, TASK_KINDS } from '../utils/cancellable-task.js';
 
 /**
  * 升级路由（P0-4）
@@ -84,6 +85,24 @@ export function createUpgradeRoutes(serverManager) {
       return res.json(validatedSuccess(upgradeStatusResponseSchema, { upgrading: false }));
     }
     return res.json(validatedSuccess(upgradeStatusResponseSchema, { upgrading: true, ...progress }));
+  });
+
+  /**
+   * 取消在途升级（用户中断）：中断备份等待 / 下载 / 首启校验。
+   * 归属由路径参数给出（与升级本身同一把 id），服务端按 id 精确匹配注册表，
+   * 不做「取消当前那个」的推断。
+   * 响应只表示「已受理中断」：替换阶段之后的取消会在服务端回滚到旧版本，实际结果由
+   * cancelled/rolled_back/failed 终态事件给出，客户端据终态事件判定。
+   */
+  router.post('/instances/:id/upgrade/cancel', (req, res) => {
+    const { id } = req.params;
+    if (!cancelTask(TASK_KINDS.UPGRADE, id)) {
+      return res.status(ErrorCodes.UPGRADE_NOT_IN_PROGRESS.status).json(
+        error(ErrorCodes.UPGRADE_NOT_IN_PROGRESS, `No upgrade in progress for instance ${id}`)
+      );
+    }
+    logger.info(`[UpgradeRoute] Upgrade cancellation requested for ${id}`);
+    return res.json(validatedSuccess(upgradeCancelResponseSchema, { instanceId: id, cancelled: true }));
   });
 
   return router;

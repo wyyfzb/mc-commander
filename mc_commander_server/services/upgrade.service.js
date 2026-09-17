@@ -17,6 +17,7 @@ import {
 } from '../utils/jar-download-guard.js';
 import { logger } from '../utils/logger.js';
 import { getServerVersion } from '../utils/version.js';
+import { beginCancellableTask, TASK_KINDS, TaskCancelledError } from '../utils/cancellable-task.js';
 
 const VALID_TYPES = new Set(['vanilla', 'paper', 'purpur']);
 
@@ -84,6 +85,8 @@ const UPGRADE_STAGES = {
   COMPLETED: 'completed',
   FAILED: 'failed',
   ROLLED_BACK: 'rolled_back',
+  // 用户取消：与 failed/rolled_back 分档，detail 写明是否发生回滚
+  CANCELLED: 'cancelled',
 };
 
 // 版本号单一来源：package.json（见 utils/version.js）
@@ -181,10 +184,14 @@ export class UpgradeService {
    * @param {string} destPath
    * @param {string} instanceId
    * @param {{ algorithm: string, digest: string } | null} expectedHash - 上游摘要，null 跳过校验
+   * @param {AbortSignal|null} [signal] 取消信号（用户中断升级时断流 + 清理半成品）
    */
-  _downloadJar(url, destPath, instanceId, expectedHash = null) {
+  _downloadJar(url, destPath, instanceId, expectedHash = null, signal = null) {
     // 域白名单断言在下载流创建前（唯一下载入口，覆盖三个 resolveDownload 分支）
     assertAllowedDownloadHost(url);
+    // AbortSignal 不重放：信号在挂监听前就已中止时，监听永远不会触发 —— 必须在这里
+    // 立刻失败，否则调用方会照常走完（取消被吞）
+    if (signal?.aborted) return Promise.reject(new TaskCancelledError());
     return new Promise((resolve, reject) => {
       const file = fs.createWriteStream(destPath);
       const stream = got.stream(url, {
@@ -193,14 +200,23 @@ export class UpgradeService {
         headers: { 'User-Agent': PAPER_USER_AGENT },
       });
 
+      const detach = () => signal?.removeEventListener('abort', onCancel);
+      let aborted = false;
+      const onCancel = () => abort(new TaskCancelledError());
+
       /** 中止：终结写流，待其完全关闭（open 已终结，不会被后续反向创建）后清理半成品，再 reject */
       const abort = (err) => {
+        if (aborted) return;
+        aborted = true;
+        detach();
         stream.destroy();
         file.destroy();
         file.once('close', () => {
           fs.unlink(destPath, () => reject(err));
         });
       };
+
+      signal?.addEventListener('abort', onCancel, { once: true });
 
       let lastPct = -1;
       stream.on('downloadProgress', ({ percent, transferred, total }) => {
@@ -222,9 +238,17 @@ export class UpgradeService {
       file.on('finish', () => {
         // close 回调确保 fd 落盘后才校验摘要（issue 316：fail-closed）
         file.close(() => {
+          if (aborted) return;
           assertDownloadIntegrity(destPath, expectedHash)
-            .then(() => resolve())
+            .then(() => {
+              // 摘要校验期间被取消：abort 已清理半成品并 reject
+              if (aborted) return;
+              detach();
+              resolve();
+            })
             .catch((err) => {
+              if (aborted) return;
+              detach();
               // 校验失败：弃已下载部分并返回含期望/实际摘要的可读错误。
               // 清理完成后才 reject：调用方收到失败错误时磁盘已无残留（fail-closed 完整语义）
               fs.unlink(destPath, () => reject(err));
@@ -235,11 +259,15 @@ export class UpgradeService {
       // 写盘失败（目录不存在/磁盘满等）：写流 error 事件若无人监听会变成
       // uncaught exception 直接击穿进程，必须显式接管并清理半成品。
       file.on('error', (err) => {
+        if (aborted) return;
+        detach();
         stream.destroy();
         reject(err);
       });
 
       stream.on('error', (err) => {
+        if (aborted) return;
+        detach();
         // 同上：写流完全关闭后再清理，reject 时保证调用方磁盘无半成品残留
         stream.destroy();
         file.destroy();
@@ -252,8 +280,14 @@ export class UpgradeService {
 
   /**
    * 等待备份完成（封装 BackupService 事件）
+   * @param {string} instanceId
+   * @param {AbortSignal|null} [signal] 取消信号：中断等待并让升级中止。
+   *   备份本身不随之中断（BackupService 尚未接取消，见清单 #95），它会照常跑完并
+   *   留下一个正常备份——升级取消不需要删除它（那是用户的既有灾备副本）
    */
-  _createBackupAndWait(instanceId) {
+  _createBackupAndWait(instanceId, signal = null) {
+    // AbortSignal 不重放（同 _downloadJar）：已中止时直接失败，别把取消吞掉
+    if (signal?.aborted) return Promise.reject(new TaskCancelledError());
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => reject(new Error('Backup timeout')), 300_000);
 
@@ -272,9 +306,16 @@ export class UpgradeService {
 
       const cleanup = () => {
         clearTimeout(timeout);
+        signal?.removeEventListener('abort', onCancel);
         this.serverManager.removeListener('instance:backupComplete', onBackupComplete);
         this.serverManager.removeListener('instance:backupFailed', onBackupFailed);
       };
+
+      const onCancel = () => {
+        cleanup();
+        reject(new TaskCancelledError());
+      };
+      signal?.addEventListener('abort', onCancel, { once: true });
 
       this.serverManager.on('instance:backupComplete', onBackupComplete);
       this.serverManager.on('instance:backupFailed', onBackupFailed);
@@ -291,8 +332,13 @@ export class UpgradeService {
    * 首启校验：120s 窗口监听 instance:status 的 ready/crash 事件
    * （MCServerManager 事件模型：instance 'status' 转发为 instance:status，
    *   payload = { instanceId, event: 'ready'|'crash'|'stopped'|... }）
+   * @param {string} instanceId
+   * @param {{ signal?: AbortSignal|null }} [opts] signal：取消时停掉这台为校验而启动的
+   *   实例（用户取消升级不该在后台留下一个他没启动过的服务器）
    */
-  _startAndVerify(instanceId) {
+  _startAndVerify(instanceId, { signal = null } = {}) {
+    // AbortSignal 不重放（同 _downloadJar）：已中止时直接失败，别把取消吞掉
+    if (signal?.aborted) return Promise.reject(new TaskCancelledError());
     return new Promise((resolve, reject) => {
       const VERIFY_WINDOW_MS = 120_000;
       const timer = setTimeout(() => {
@@ -313,8 +359,25 @@ export class UpgradeService {
 
       const cleanup = () => {
         clearTimeout(timer);
+        signal?.removeEventListener('abort', onCancel);
         this.serverManager.removeListener('instance:status', onStatus);
       };
+
+      const onCancel = () => {
+        cleanup();
+        // 等停稳再 reject：替换后的取消要覆盖 JAR，而运行中的 JVM 在 Windows 上持有
+        // 文件句柄（EBUSY 会让回滚失败、取消变成「回滚未完成」）。stopGracefully 等到
+        // 进程退出（超时则强杀），因此 reject 必须放在它之后——提前 reject 会让回滚
+        // 与进程退出赛跑，正是要避免的情形
+        const instance = this.serverManager.getInstance(instanceId);
+        Promise.resolve()
+          .then(() => instance?.stopGracefully?.())
+          .catch(() => {
+            // 未在运行 / 已退出 / 发送失败：都不阻塞回滚
+          })
+          .finally(() => reject(new TaskCancelledError()));
+      };
+      signal?.addEventListener('abort', onCancel, { once: true });
 
       this.serverManager.on('instance:status', onStatus);
 
@@ -454,35 +517,52 @@ export class UpgradeService {
     // 保存原始版本用于回滚
     instance._originalMcVersion = oldMcVersion;
 
+    // 可取消登记：取消端点据注册表定位本次升级（与部署共用同一注册表实现）。
+    // 取消语义 = 以 TaskCancelledError 打断被 await 的步骤，收尾交给下面的 catch
+    const task = beginCancellableTask(TASK_KINDS.UPGRADE, instanceId);
+
     try {
       // 阶段 1：自动备份
       this._emitProgress(instanceId, UPGRADE_STAGES.BACKUP, 0, '正在创建备份...');
-      backupId = await this._createBackupAndWait(instanceId);
+      backupId = await this._createBackupAndWait(instanceId, task.signal);
       this._emitProgress(instanceId, UPGRADE_STAGES.BACKUP, 100, '备份完成');
+      task.throwIfCancelled();
 
       // 阶段 2：下载新 JAR
       this._emitProgress(instanceId, UPGRADE_STAGES.DOWNLOAD, 0, '正在解析下载地址...');
       const { url: downloadUrl, expectedHash } = await this.resolveDownload(mcVersion, type);
+      // 上游解析可能耗时数秒：此窗口内取消只能靠 await 边界拦住
+      task.throwIfCancelled();
       this._emitProgress(instanceId, UPGRADE_STAGES.DOWNLOAD, 0, '正在下载...');
-      await this._downloadJar(downloadUrl, newJarPath, instanceId, expectedHash);
+      await this._downloadJar(downloadUrl, newJarPath, instanceId, expectedHash, task.signal);
       this._emitProgress(instanceId, UPGRADE_STAGES.DOWNLOAD, 100, '下载完成');
+      task.throwIfCancelled();
 
       // 阶段 3：替换 JAR
       this._emitProgress(instanceId, UPGRADE_STAGES.REPLACE, 0, '正在替换 JAR...');
-      // 备份旧 JAR（异步复制对齐同链路 IO 风格，#520）
+      // 备份旧 JAR（异步复制对齐同链路 IO 风格，#520）。
+      // 先写 .part 再改名：复制中途失败/被取消时 rollback 源要么不存在、要么完整，
+      // 不会把半截文件当成「旧 JAR 副本」覆盖到实例目录（复制不可中断，取消落在
+      // 复制中只能等它结束，故副本完整性必须靠原子改名保证）
       if (fs.existsSync(oldJarPath)) {
-        await fs.promises.copyFile(oldJarPath, backupJarPath);
+        const backupTmpPath = `${backupJarPath}.part`;
+        await fs.promises.copyFile(oldJarPath, backupTmpPath);
+        await fs.promises.rename(backupTmpPath, backupJarPath);
       }
+      task.throwIfCancelled();
       // 更新 DB：jarFile + mcVersion
       const { InstanceModel } = await import('../db/index.js');
       InstanceModel.update(instanceId, { jarFile: newJarName, mcVersion });
       instance.jarFile = newJarName;
       instance.mcVersion = mcVersion;
       this._emitProgress(instanceId, UPGRADE_STAGES.REPLACE, 100, '替换完成');
+      // 替换已落定但校验未开始的窗口：此处的取消必须走「替换后」的收尾（回滚），
+      // 漏掉这一步会让取消被吞掉、最终以「升级失败」收场并触发一次世界恢复
+      task.throwIfCancelled();
 
       // 阶段 4：首启校验
       this._emitProgress(instanceId, UPGRADE_STAGES.VERIFY, 0, '正在启动验证...');
-      await this._startAndVerify(instanceId);
+      await this._startAndVerify(instanceId, { signal: task.signal });
       this._emitProgress(instanceId, UPGRADE_STAGES.COMPLETED, 100, '升级完成');
 
       // 清理：回滚源副本 + 被替换的旧版本 jar（#520：升级成功后实例目录
@@ -495,25 +575,73 @@ export class UpgradeService {
       }
       this._activeUpgrades.delete(instanceId);
     } catch (err) {
-      // 回滚
-      this._emitProgress(instanceId, UPGRADE_STAGES.ROLLED_BACK, 0, `升级失败: ${err.message}，正在回滚...`);
+      const cancelled = err?.cancelled === true;
+      // 替换是否已落定（判定必须在回滚之前：_doRollback 会把 jarFile 写回旧名）。
+      // 它是取消口径的分水岭：未替换 ⇒ 实例仍处于升级前状态，无需回滚
+      const replaced = instance.jarFile !== oldJarFile;
+      /** 取消终态文案：据实说明是否发生回滚 */
+      let cancelDetail = `已取消，实例保持 ${oldMcVersion}`;
+
       try {
-        await this._doRollback(instanceId, backupJarPath, backupId, oldJarFile);
-        // 回滚后尝试恢复备份
-        if (backupId) {
-          try {
-            await this.backupService.restoreBackup(backupId);
-          } catch {
-            // 恢复备份失败不阻塞主流程
+        if (cancelled && replaced) {
+          // 取消不另发中间进度档：rolled_back 在 WS 层是「升级失败」并落库（通知中心
+          // 严重档），复用它会把自己主动取消显示成故障。回滚只花一次文件复制 + 一次
+          // DB 写，用户在弹窗里已有「正在取消…」的在途反馈，无需再造一档进度
+          await this._doRollback(instanceId, backupJarPath, backupId, oldJarFile);
+          cancelDetail = `已取消，已回滚到 ${oldMcVersion}`;
+          // 刻意不自动恢复升级前备份（失败路径会恢复）：取消是用户主动中止，
+          // 顺带触发一次分钟级世界恢复会把「取消」变成看不见的长任务；
+          // 备份仍留在备份列表里，需要时由用户手动恢复
+          if (backupId) logger.info(`[UpgradeService] Upgrade ${instanceId} cancelled; backup ${backupId} kept`);
+        } else if (!cancelled) {
+          this._emitProgress(instanceId, UPGRADE_STAGES.ROLLED_BACK, 0, `升级失败: ${err.message}，正在回滚...`);
+          await this._doRollback(instanceId, backupJarPath, backupId, oldJarFile);
+          // 回滚后尝试恢复备份
+          if (backupId) {
+            try {
+              await this.backupService.restoreBackup(backupId);
+            } catch {
+              // 恢复备份失败不阻塞主流程
+            }
+          }
+        } else {
+          // 替换前的取消：jarFile/DB/磁盘旧 jar 都没动过，回滚无事可做——只清理本次
+          // 升级的磁盘产物：旧 jar 副本（含复制中途留下的 .part）与已下载的新 jar。
+          // 新 jar 必须删：取消后实例目录里留着新版本 jar 既是垃圾，也与「实例保持旧版本」
+          // 的终态文案不符（同路径守卫：旧 jar 本体即新 jar 时不可删）
+          await fs.promises.unlink(backupJarPath).catch(() => {});
+          await fs.promises.unlink(`${backupJarPath}.part`).catch(() => {});
+          if (newJarPath !== oldJarPath) {
+            await fs.promises.unlink(newJarPath).catch(() => {});
           }
         }
       } catch (rollbackErr) {
         logger.error(`[UpgradeService] Rollback failed for ${instanceId}:`, rollbackErr);
+        // 回滚失败不能报「已回滚」（固定文案会谎报，与部署取消文案同源要求）：
+        // 终态据实说明；上抛的仍是触发本次回滚的错误（既有契约，见
+        // upgrade.failurepaths.test.js「原错误仍上抛」），取消场景下则为回滚
+        // 自身的错误——那里它才是真正的故障
+        this._emitProgress(instanceId, UPGRADE_STAGES.FAILED, 0, `升级失败，回滚未完成: ${rollbackErr.message}`);
+        this._activeUpgrades.delete(instanceId);
+        throw cancelled ? rollbackErr : err;
       }
 
-      this._emitProgress(instanceId, UPGRADE_STAGES.FAILED, 0, `升级失败并已回滚: ${err.message}`);
+      // 终态（注销必须在最后一次 emit 之后：_emitProgress 会把进度重新写回注册表，
+      // 先删后发会让终态后仍显示「升级中」）
+      this._emitProgress(
+        instanceId,
+        cancelled ? UPGRADE_STAGES.CANCELLED : UPGRADE_STAGES.FAILED,
+        0,
+        cancelled ? cancelDetail : `升级失败并已回滚: ${err.message}`
+      );
       this._activeUpgrades.delete(instanceId);
+      // 取消不是故障：终态已按 cancelled 发出，正常返回而不是抛错——抛出会让
+      // 路由层的 catch 把它记成「Upgrade failed」错误日志（用户动作被写成故障）
+      if (cancelled) return;
       throw err;
+    } finally {
+      // 成功/失败/取消都要注销：残留条目会让取消端点对着已结束的任务回「已取消」
+      task.finish();
     }
   }
 }

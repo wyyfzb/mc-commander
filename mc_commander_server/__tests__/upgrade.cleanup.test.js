@@ -284,13 +284,14 @@ describe('失败/回滚路径：旧 jar 保留与回滚完成语义（#520）', 
 // ── ③ 复制异步化：API 选择与调用语义（#520 实锤②） ──
 
 describe('复制异步化：零 copyFileSync、promises.copyFile 参数正确', () => {
-  it('升级全程（含回滚）零 fs.copyFileSync；备份与回滚各一次异步复制且参数精确', async () => {
+  it('升级全程（含回滚）零 fs.copyFileSync；备份走 .part 原子改名、回滚一次异步复制', async () => {
     const manager = createMockServerManager({ start: startEmitsCrash() });
     const service = new UpgradeService(manager);
     fs.writeFileSync(OLD_JAR(), 'OLD_JAR_CONTENT');
 
     const syncCopySpy = vi.spyOn(fs, 'copyFileSync');
     const asyncCopySpy = vi.spyOn(fs.promises, 'copyFile');
+    const renameSpy = vi.spyOn(fs.promises, 'rename');
 
     await expect(service.upgrade('inst-1', '1.21.4', 'purpur')).rejects.toThrow(
       'Server crashed during startup verification'
@@ -299,9 +300,12 @@ describe('复制异步化：零 copyFileSync、promises.copyFile 参数正确', 
     // 同步 API 已彻底退出升级链路
     expect(syncCopySpy).not.toHaveBeenCalled();
 
-    // 异步复制恰好两次：replace 阶段备份 + 回滚恢复（目标=旧 jar 本体路径，#539）
+    // 异步复制恰好两次：replace 阶段备份 + 回滚恢复（目标=旧 jar 本体路径，#539）。
+    // 备份先写 .part 再改名：复制不可中断（取消/失败都可能落在复制中），
+    // 只有原子改名才能保证 rollback 源要么不存在、要么是完整副本
     expect(asyncCopySpy).toHaveBeenCalledTimes(2);
-    expect(asyncCopySpy).toHaveBeenNthCalledWith(1, OLD_JAR(), BACKUP_JAR());
+    expect(asyncCopySpy).toHaveBeenNthCalledWith(1, OLD_JAR(), `${BACKUP_JAR()}.part`);
+    expect(renameSpy).toHaveBeenCalledWith(`${BACKUP_JAR()}.part`, BACKUP_JAR());
     expect(asyncCopySpy).toHaveBeenNthCalledWith(2, BACKUP_JAR(), OLD_JAR());
 
     // 复制语义（内容恢复）由真实 fs 保证：旧 jar 本体内容 = 备份的旧内容

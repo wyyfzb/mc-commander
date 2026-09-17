@@ -159,6 +159,17 @@ describe('buildNotifications 文案模板', () => {
     expect(n?.content).toBe('实例「演示实例」部署已取消：实例目录未能删除（EBUSY: resource busy）')
   })
 
+  it('upgradeCancelled 透传服务端 detail（含是否已回滚），severity 为 info 不进告警档', () => {
+    const [n] = buildNotifications({
+      type: 'upgradeCancelled',
+      data: { instanceName: '演示实例', instanceId: 'paper-abc1', detail: '已取消，已回滚到 1.20.4' },
+    })
+    expect(n).toMatchObject({ type: 'upgradeCancelled', category: 'server' })
+    expect(n?.content).toBe('实例「演示实例」已取消，已回滚到 1.20.4')
+    expect(NOTIFICATION_TYPE_META.upgradeCancelled.severity).toBe('info')
+    expect(NOTIFICATION_TYPE_META.upgradeFailed.severity).toBe('severe')
+  })
+
   it('upgradeComplete 生成 server 类 info 通知（含实例名）', () => {
     const [n] = buildNotifications({
       type: 'upgradeComplete',
