@@ -55,15 +55,16 @@ function formatLine(level, args) {
 }
 
 // 写前轮转：error.log ≥ maxSizeBytes 时整体后移（.4→.5、.3→.4 … error.log→.1），
-// 最旧的 error.log.maxFiles 删除。同步实现（error 量级低频，与 better-sqlite3 同步风格一致）
+// 最旧的 error.log.maxFiles 删除。同步实现（error 量级低频，与 better-sqlite3 同步风格一致）。
+// 每一步都不做存在性预检：轮转是 best-effort（调用方整体 catch），预检与动作之间的
+// 窗口会把「文件不存在」抛成异常并让整轮轮转中断，直接吞掉 ENOENT 更稳
 function rotateIfNeeded(targetFile) {
   const st = fs.statSync(targetFile);
   if (st.size < current.maxSizeBytes) return;
   const oldest = `${targetFile}.${current.maxFiles}`;
-  if (fs.existsSync(oldest)) fs.unlinkSync(oldest);
+  try { fs.unlinkSync(oldest); } catch { /* 最旧档不存在 */ }
   for (let i = current.maxFiles - 1; i >= 1; i--) {
-    const from = `${targetFile}.${i}`;
-    if (fs.existsSync(from)) fs.renameSync(from, `${targetFile}.${i + 1}`);
+    try { fs.renameSync(`${targetFile}.${i}`, `${targetFile}.${i + 1}`); } catch { /* 该档不存在 */ }
   }
   fs.renameSync(targetFile, `${targetFile}.1`);
 }

@@ -33,15 +33,31 @@ function truncateLogText(text) {
   }).join('\n');
 }
 
+/**
+ * EULA 是否已同意（全仓唯一实现，routes/status.js 的启动前置检查与本域共用）。
+ * 读取即判定：文件缺失（ENOENT）与内容不含 `eula=true` 都算未同意——不做
+ * existsSync 预检，预检与读之间的窗口会让「文件消失」以裸 ENOENT 冒泡成 500，
+ * 而语义上它就该是「未同意 EULA」。
+ * 行首锚定（^…$，多行）：`#eula=true` 这类注释行不算同意（旧实现的行内匹配会把
+ * 注释也认下，与路由侧口径分叉，两侧统一到严格口径）。已知与 MC 自身解析的差异：
+ * java.util.Properties 忽略行首空白（` eula=true` 对 MC 有效），本判定不认——面板
+ * 写入侧（routes/status.js、routes/server-jar.js）产生的都是无缩进的干净行，该差异
+ * 只在人工手改文件时可见，且路由侧一直是这个口径。
+ */
+export function isEulaAccepted(serverPath) {
+  let eulaContent;
+  try {
+    eulaContent = fs.readFileSync(path.join(serverPath, 'eula.txt'), 'utf-8');
+  } catch (err) {
+    if (err.code === 'ENOENT') return false;
+    throw err;
+  }
+  return /^eula\s*=\s*true\s*$/im.test(eulaContent);
+}
+
 export function _ensureEulaAccepted() {
   // EULA 检查：首次启动前必须同意 EULA
-  const eulaPath = path.join(this.serverPath, 'eula.txt');
-  let eulaAccepted = false;
-  if (fs.existsSync(eulaPath)) {
-    const eulaContent = fs.readFileSync(eulaPath, 'utf-8');
-    eulaAccepted = /eula\s*=\s*true/i.test(eulaContent);
-  }
-  if (!eulaAccepted) {
+  if (!isEulaAccepted(this.serverPath)) {
     throw new Error('EULA_NOT_ACCEPTED');
   }
 }

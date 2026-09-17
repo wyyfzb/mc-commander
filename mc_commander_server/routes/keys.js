@@ -7,6 +7,7 @@ import { apiKeyRotateResponseSchema } from '@mc-commander/schemas';
 import { validatedSuccess } from '../middleware/validate.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
 import { hashToken } from '../utils/password.js';
+import { atomicWriteFile } from '../utils/fs-utils.js';
 
 /** 生成新 Key：前缀 + 3 组 8 位随机（服务端自托管格式，无第三方约定）。
  * 前缀区分凭据种类（mcck = 管理员，mcro = 只读），仅便于运维辨认，鉴权只看摘要 */
@@ -22,7 +23,15 @@ function generateApiKey(prefix = 'mcck-') {
  * 不必触碰真实 .env
  */
 function persistEnvHash(envPath, envKey, hash, dropPatterns = []) {
-  let content = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf-8') : '';
+  // 读取即判定：ENOENT ＝ 尚无 .env（从空串起写），不再用 existsSync 预检——
+  // 预检判定「不存在」而窗口内 .env 被创建时，会以空串为基线 rename 覆盖掉
+  // 整份 .env（其余键全丢）
+  let content = '';
+  try {
+    content = fs.readFileSync(envPath, 'utf-8');
+  } catch (err) {
+    if (err.code !== 'ENOENT') throw err;
+  }
   for (const pattern of dropPatterns) content = content.replace(pattern, '');
   const newLine = `${envKey}=${hash}`;
   const linePattern = new RegExp(`^${envKey}=.*$`, 'm');
@@ -31,10 +40,9 @@ function persistEnvHash(envPath, envKey, hash, dropPatterns = []) {
   } else {
     content += (content === '' || content.endsWith('\n') ? '' : '\n') + newLine + '\n';
   }
-  const tmp = envPath + '.tmp';
-  fs.writeFileSync(tmp, content, 'utf-8');
-  try { fs.chmodSync(tmp, 0o600); } catch { /* Windows 无权限位 */ }
-  fs.renameSync(tmp, envPath);
+  // 原子写（唯一临时名）：固定 `<env>.tmp` 名字会让并发轮换互相踩踏（一方 rename
+  // 走了另一方的临时文件），且直接覆盖写崩溃时会把 .env 截断成半截
+  atomicWriteFile(envPath, content, { mode: 0o600 });
 }
 
 function persistApiKeyHash(envPath, hash) {

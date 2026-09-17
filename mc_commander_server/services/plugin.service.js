@@ -1,9 +1,10 @@
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 import AdmZip from 'adm-zip';
 import { load as yamlLoad, FAILSAFE_SCHEMA } from 'js-yaml';
 import { AppError, ErrorCodes } from '../utils/response.js';
-import { resolveSafePath, PathTraversalError } from '../utils/fs-utils.js';
+import { ensureDir, renameNoClobber, resolveSafePath, PathTraversalError } from '../utils/fs-utils.js';
 
 /**
  * 插件管理服务（feat-8 P0-5 插件管理最小闭环）。
@@ -145,7 +146,7 @@ export function uploadPlugin(serverPath, tmpFilePath, originalName, { overwrite 
 
   const pluginsDir = path.join(serverPath, 'plugins');
   try {
-    fs.mkdirSync(pluginsDir, { recursive: true });
+    ensureDir(pluginsDir);
   } catch (err) {
     throw new AppError(ErrorCodes.SERVER_ERROR, `Failed to create plugins dir: ${err.message}`);
   }
@@ -156,25 +157,33 @@ export function uploadPlugin(serverPath, tmpFilePath, originalName, { overwrite 
     throw new AppError(ErrorCodes.VALIDATION_ERROR, `Invalid plugin path: ${originalName}`);
   }
 
-  let overwritten = false;
-  if (fs.existsSync(targetFull)) {
-    if (!overwrite) {
-      throw new AppError(ErrorCodes.PLUGIN_FILE_EXISTS,
-        `Plugin file already exists: ${originalName}`);
-    }
+  // 同名冲突判定由写入动作本身承担，不用「existsSync 预检 + unlink + copy」三步：
+  // 预检与 unlink 之间被并发创建的同名插件会被静默删除，且 unlink 与 copy 之间
+  // 崩溃会留下「插件已消失」的中间态。overwrite=false 走 COPYFILE_EXCL（存在即
+  // EEXIST，独占创建语义）；overwrite=true 先写同目录临时文件再 rename 覆盖
+  // （rename 是原子替换）。
+  const existedBefore = fs.existsSync(targetFull); // 仅决定回执状态码 200/201，不承担并发闸门
+  if (overwrite) {
+    const staging = `${targetFull}.${crypto.randomUUID()}.tmp`;
     try {
-      fs.unlinkSync(targetFull);
+      fs.copyFileSync(tmpFilePath, staging);
+      fs.renameSync(staging, targetFull);
     } catch (err) {
-      throw new AppError(ErrorCodes.SERVER_ERROR, `Failed to replace plugin: ${err.message}`);
+      try { fs.unlinkSync(staging); } catch { /* 未创建或已被 rename 消费 */ }
+      throw new AppError(ErrorCodes.SERVER_ERROR, `Failed to save plugin: ${err.message}`);
     }
-    overwritten = true;
+  } else {
+    try {
+      fs.copyFileSync(tmpFilePath, targetFull, fs.constants.COPYFILE_EXCL);
+    } catch (err) {
+      if (err.code === 'EEXIST') {
+        throw new AppError(ErrorCodes.PLUGIN_FILE_EXISTS,
+          `Plugin file already exists: ${originalName}`);
+      }
+      throw new AppError(ErrorCodes.SERVER_ERROR, `Failed to save plugin: ${err.message}`);
+    }
   }
-
-  try {
-    fs.copyFileSync(tmpFilePath, targetFull);
-  } catch (err) {
-    throw new AppError(ErrorCodes.SERVER_ERROR, `Failed to save plugin: ${err.message}`);
-  }
+  const overwritten = overwrite && existedBefore;
 
   let stat;
   try {
@@ -255,18 +264,20 @@ export function setPluginEnabled(serverPath, fileName, enabled) {
     throw new AppError(ErrorCodes.PLUGIN_STATE_CONFLICT,
       enabled ? 'Plugin is already enabled' : 'Plugin is already disabled');
   }
-  if (!fs.existsSync(full)) {
-    throw new AppError(ErrorCodes.PLUGIN_NOT_FOUND, `Plugin file not found: ${fileName}`);
-  }
   const baseName = isDisabled ? fileName.slice(0, -'.disabled'.length) : fileName;
   const targetName = enabled ? baseName : `${fileName}.disabled`;
   const targetFull = path.join(path.dirname(full), targetName);
-  if (fs.existsSync(targetFull)) {
-    throw new AppError(ErrorCodes.PLUGIN_STATE_CONFLICT, `Target file already exists: ${targetName}`);
-  }
+  // 源不存在 / 目标被占用都由 renameNoClobber 的独占声明判定并抛原生错误码：
+  // 「existsSync 预检 + renameSync」之间目标被并发创建时，rename 会静默覆盖
   try {
-    fs.renameSync(full, targetFull);
+    renameNoClobber(full, targetFull);
   } catch (err) {
+    if (err.code === 'ENOENT') {
+      throw new AppError(ErrorCodes.PLUGIN_NOT_FOUND, `Plugin file not found: ${fileName}`);
+    }
+    if (err.code === 'EEXIST') {
+      throw new AppError(ErrorCodes.PLUGIN_STATE_CONFLICT, `Target file already exists: ${targetName}`);
+    }
     throw new AppError(ErrorCodes.SERVER_ERROR, `Failed to rename plugin: ${err.message}`);
   }
   return { file: targetName, enabled };
@@ -277,12 +288,13 @@ export function setPluginEnabled(serverPath, fileName, enabled) {
  */
 export function deletePlugin(serverPath, fileName) {
   const full = resolvePluginFile(serverPath, fileName);
-  if (!fs.existsSync(full)) {
-    throw new AppError(ErrorCodes.PLUGIN_NOT_FOUND, `Plugin file not found: ${fileName}`);
-  }
+  // 不做存在性预检：unlink 的 ENOENT 即「不存在」，映射为 404 语义
   try {
     fs.unlinkSync(full);
   } catch (err) {
+    if (err.code === 'ENOENT') {
+      throw new AppError(ErrorCodes.PLUGIN_NOT_FOUND, `Plugin file not found: ${fileName}`);
+    }
     throw new AppError(ErrorCodes.SERVER_ERROR, `Failed to delete plugin: ${err.message}`);
   }
   return { deleted: fileName };

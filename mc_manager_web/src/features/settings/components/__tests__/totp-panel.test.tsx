@@ -206,14 +206,30 @@ describe('TotpPanel 已启用 → 关闭', () => {
     expect(screen.getByText(/启用时间：/)).toBeInTheDocument()
     expect(screen.getByText('7')).toBeInTheDocument()
     expect(screen.getByText(/剩余恢复码/)).toBeInTheDocument()
-    // 剩余不足 3 枚时的提醒（本用例为 7 枚，不出现）
-    expect(screen.queryByText(/可用恢复码不足 3 枚/)).not.toBeInTheDocument()
+    // 剩余充足时的提醒（本用例为 7 枚 > 阈值 3，不出现）
+    expect(screen.queryByText(/可用恢复码仅剩/)).not.toBeInTheDocument()
   })
 
-  it('剩余恢复码不足：给出警告提示', async () => {
-    mockStatus(true, 2)
+  // 阈值口径：剩余 ≤3 即告警（清单 #31）。边界用「恰好 3 枚」钉住——阈值回退到
+  // ≤2 时该用例必红，而不是只覆盖「显然很低」的 2 枚
+  it.each([
+    [3, true],
+    [2, true],
+    [1, true],
+    [0, true],
+    [4, false],
+    [10, false],
+  ])('剩余 %i 枚 → 告警提示出现=%s', async (remaining, shouldWarn) => {
+    mockStatus(true, remaining)
     renderPanel()
-    expect(await screen.findByText(/可用恢复码不足 3 枚/)).toBeInTheDocument()
+    await screen.findByText('已启用')
+
+    const banner = screen.queryByText(/可用恢复码仅剩/)
+    if (shouldWarn) {
+      expect(banner).toHaveTextContent(`可用恢复码仅剩 ${remaining} 枚`)
+    } else {
+      expect(banner).not.toBeInTheDocument()
+    }
   })
 
   it('关闭：确认按钮需密码 + 第二因子双证齐备；成功后提示「其它设备已登出」', async () => {

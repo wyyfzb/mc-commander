@@ -32,6 +32,8 @@ vi.mock('../config.js', async (importOriginal) => {
 });
 
 import config from '../config.js';
+import { instanceStatusSchema } from '@mc-commander/schemas';
+import { READONLY_REDACTED_FIELDS, readonlyInstanceStatusSchema } from '../routes/status.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { createApiV1Router, API_V1_MOUNT } from '../routes/index.js';
 import { errorHandler } from '../middleware/error_handler.js';
@@ -226,5 +228,49 @@ describe('裁剪只删该删的（不过度裁剪）', () => {
     expect(res.body.status).toBe('ok');
     // overview 是聚合面、不含实例状态的敏感字段，故无裁剪逻辑介入
     expect(JSON.stringify(res.body)).not.toContain(SENTINEL);
+  });
+});
+
+/**
+ * 敏感字段 × 裁剪清单哨兵（清单 #24）。
+ *
+ * 承重点：只读视图是「全量 schema 减黑名单」派生的——契约里新增字段会**自动**出现在
+ * 只读响应里。响应侧的既有用例都基于固定基线对象，加字段时它们照样绿（基线里没有
+ * 新字段，断言不到），也就是新增敏感字段会静默泄给只读凭据。
+ * 本组用例把「只读视图键集合」钉成显式清单：契约加字段 → READONLY_STATUS_FIELDS
+ * 必须同步，而同步动作本身就是一次「该字段敏感吗」的分类决策。
+ *
+ * 范围边界：只钉顶层键名（与裁剪机制同范围——omit 也只能删顶层字段），嵌套对象或
+ * 数组元素内部新增的字段不在此守卫内；将来若出现嵌套敏感字段，裁剪机制本身要一并改。
+ */
+describe('敏感字段 × 裁剪清单哨兵（新增契约字段必须显式分类）', () => {
+  it('黑名单成员都是契约里真实存在的字段（防笔误与字段删除后的悬空条目）', () => {
+    const baseFields = Object.keys(instanceStatusSchema.shape);
+    for (const field of READONLY_REDACTED_FIELDS) {
+      expect(baseFields, `裁剪清单里的 ${field} 不在契约中`).toContain(field);
+    }
+  });
+
+  it('只读视图 = 契约减黑名单（派生关系未被手工改写）', () => {
+    const baseFields = Object.keys(instanceStatusSchema.shape);
+    const expected = baseFields.filter((f) => !READONLY_REDACTED_FIELDS.includes(f));
+    expect(Object.keys(readonlyInstanceStatusSchema.shape).sort()).toEqual(expected.sort());
+  });
+
+  it('只读视图键集合与显式清单逐一相等：契约新增字段不改清单即红', () => {
+    // 新增字段时的处置：确认不敏感 → 加进本清单；确认敏感（凭据/主机布局/种子一类）
+    // → 加进 READONLY_REDACTED_FIELDS。两条路都要在本文件留下痕迹，不允许「顺手加字段」
+    const READONLY_STATUS_FIELDS = [
+      'id', 'name', 'isRunning', 'isRconConnected', 'autoRestart', 'autoStart',
+      'circuitBreakerTripped', 'consecutiveCrashes', 'uptime', 'address', 'players',
+      'playerCount', 'maxPlayers', 'mcVersion', 'modLoader', 'tps', 'mspt',
+      'cpuUsage', 'memoryUsage', 'totalMemory', 'worldSize', 'lastSave', 'lastOutput',
+      'gameMode', 'difficulty', 'whitelisted', 'onlineMode', 'viewDistance',
+      'spawnProtection', 'worldDay', 'worldTime', 'weather', 'opCount', 'opNames',
+      'todayNewPlayers', 'sleepingPlayers', 'sleepingPlayerNames', 'awakePlayerNames',
+      'totalUptime', 'startTime', 'maxMemory', 'minMemory', 'jarFile',
+    ];
+    expect(Object.keys(readonlyInstanceStatusSchema.shape).sort())
+      .toEqual([...READONLY_STATUS_FIELDS].sort());
   });
 });

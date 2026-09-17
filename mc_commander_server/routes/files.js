@@ -6,7 +6,7 @@ import { TextDecoder } from 'util';
 import iconv from 'iconv-lite';
 import multer from 'multer';
 import { ErrorCodes, AppError } from '../utils/response.js';
-import { atomicWriteFile, resolveSafePath, PathTraversalError } from '../utils/fs-utils.js';
+import { atomicWriteFile, ensureDir, renameNoClobber, resolveSafePath, PathTraversalError } from '../utils/fs-utils.js';
 import config from '../config.js';
 import { BanModel } from '../db/index.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
@@ -240,10 +240,6 @@ export function createFileRoutes(serverManager) {
       // 列表根目录 '/' 是唯一合法的"归一化后等于实例根"场景，故传 allowRoot。
       const fullPath = resolveInstancePath(basePath, dirPath, { allowRoot: true });
 
-      if (!fs.existsSync(fullPath)) {
-        throw new AppError(ErrorCodes.FILE_NOT_FOUND);
-      }
-      
       const stats = fs.statSync(fullPath);
       
       if (stats.isDirectory()) {
@@ -284,9 +280,9 @@ export function createFileRoutes(serverManager) {
         }));
       }
     } catch (err) {
-      // 目录/文件在 existsSync 预检通过后、statSync/readdirSync/子项 statSync
-      // 执行期间被并发删除（另一管理请求、MC 重启清理、备份删除等）时抛裸
-      // ENOENT：映射为 404 FILE_NOT_FOUND，否则 errorHandler 兜底返回 500。
+      // 目标在 statSync/readdirSync/子项 statSync 执行期间被并发删除（另一管理
+      // 请求、MC 重启清理、备份删除等）时抛裸 ENOENT：映射为 404 FILE_NOT_FOUND，
+      // 否则 errorHandler 兜底返回 500。
       if (err.code === 'ENOENT') {
         next(new AppError(ErrorCodes.FILE_NOT_FOUND));
         return;
@@ -422,24 +418,29 @@ export function createFileRoutes(serverManager) {
       // 统一路径校验（find-007）：符号链接越界写可覆盖实例外任意文件
       const fullPath = resolveInstancePath(basePath, filePath);
 
-      // 确保目录存在
-      const dir = path.dirname(fullPath);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
+      // 确保目录存在（mkdir recursive 幂等，不做 existsSync 预检）
+      ensureDir(path.dirname(fullPath));
 
       // 目标已存在且为二进制文件时拒绝覆盖（防二进制被 utf-8 解码乱码后保存损坏）
       // 已存在文件按原编码写回（utf-8 或 gbk，含 BOM 保留），新文件默认 utf-8
+      // 读头部即判定：ENOENT ＝ 新建文件，不再用 existsSync 预检——预检与 openSync
+      // 之间的窗口里文件被创建时，会把 GBK/二进制内容按「新文件」写成 UTF-8
       let encoding = 'utf-8';
       let hasBom = false;
-      if (fs.existsSync(fullPath)) {
-        const existing = readFileHead(fullPath);
-        const decoded = decodeContent(existing);
-        if (!decoded) {
+      let targetExisted = true;
+      let existingDecoded = null;
+      try {
+        existingDecoded = decodeContent(readFileHead(fullPath));
+      } catch (err) {
+        if (err.code !== 'ENOENT') throw err;
+        targetExisted = false;
+      }
+      if (targetExisted) {
+        if (!existingDecoded) {
           throw new AppError(ErrorCodes.BINARY_FILE_NOT_SUPPORTED);
         }
-        encoding = decoded.encoding;
-        hasBom = decoded.hasBom;
+        encoding = existingDecoded.encoding;
+        hasBom = existingDecoded.hasBom;
       }
 
       // 列表文件（banned-players/banned-ips/whitelist/ops.json）编辑后需同步 MC 内存：
@@ -451,15 +452,14 @@ export function createFileRoutes(serverManager) {
       const fileName = path.basename(fullPath).toLowerCase();
       const listSync = LIST_FILE_SYNC[fileName];
       if (listSync) {
-        // 写入前读取旧条目（写完后旧内容已不存在，无法对比）
+        // 写入前读取旧条目（写完后旧内容已不存在，无法对比）；文件不存在或损坏
+        // 一律视为空，仅同步新增——读操作本身容忍 ENOENT，故不做存在性预检
         let oldEntries = [];
-        if (fs.existsSync(fullPath)) {
-          try {
-            const oldDecoded = decodeContent(fs.readFileSync(fullPath));
-            oldEntries = oldDecoded ? parseListEntries(oldDecoded.content, fileName) : [];
-          } catch {
-            oldEntries = []; // 旧文件损坏无法解析 → 视为空，仅同步新增
-          }
+        try {
+          const oldDecoded = decodeContent(fs.readFileSync(fullPath));
+          oldEntries = oldDecoded ? parseListEntries(oldDecoded.content, fileName) : [];
+        } catch {
+          oldEntries = []; // 旧文件不存在/损坏无法解析 → 视为空，仅同步新增
         }
 
         // 校验新内容必须为合法 JSON 数组，非法直接拒绝保存
@@ -502,8 +502,8 @@ export function createFileRoutes(serverManager) {
         modifiedAt: stats.mtime.toISOString()
       }, 'File saved successfully'));
     } catch (err) {
-      // 文件在 existsSync 预检通过后、readFileHead 的 openSync 打开前被并发删除
-      // 时抛裸 ENOENT：映射为 404 FILE_NOT_FOUND，否则 errorHandler 兜底返回 500。
+      // 读取/写入期间文件被并发删除（另一管理请求、MC 重启清理、备份删除等）时
+      // 抛裸 ENOENT：映射为 404 FILE_NOT_FOUND，否则 errorHandler 兜底返回 500。
       if (err.code === 'ENOENT') {
         next(new AppError(ErrorCodes.FILE_NOT_FOUND));
         return;
@@ -528,26 +528,25 @@ export function createFileRoutes(serverManager) {
       // sep 边界杜绝父子实例越界，删除前 lstat 确认目标非符号链接。
       const fullPath = resolveInstancePath(basePath, filePath);
 
-      if (!fs.existsSync(fullPath)) {
-        throw new AppError(ErrorCodes.FILE_NOT_FOUND);
-      }
-
       // 列表文件（banned-players/banned-ips/whitelist/ops.json）删除 = 清空全部条目：
       // 删除前读取旧条目，删除后同步 MC 内存（下发移除命令）+ 清理 temp_bans，
       // 否则 MC 运行中内存封禁仍生效、玩家无法进服（与 PUT 的 LIST_FILE_SYNC 行为对齐）
+      // 存在性与类型只取一次 stat：预检 + statSync 两步之间的删除窗口会抛裸 ENOENT，
+      // 而 rmSync 的 force 本就容忍 ENOENT，预检没有承担任何判定职责
+      const delStat = fs.statSync(fullPath);
       const delFileName = path.basename(fullPath).toLowerCase();
       const delSpec = LIST_FILE_SYNC[delFileName];
       let delOldEntries = [];
-      if (delSpec && fs.existsSync(fullPath) && fs.statSync(fullPath).isFile()) {
+      if (delSpec && delStat.isFile()) {
         try {
           const oldDecoded = decodeContent(fs.readFileSync(fullPath));
           delOldEntries = oldDecoded ? parseListEntries(oldDecoded.content, delFileName) : [];
         } catch {
-          delOldEntries = []; // 旧文件损坏无法解析 → 视为空
+          delOldEntries = []; // 旧文件不存在/损坏无法解析 → 视为空
         }
       }
 
-      const delIsDirectory = fs.statSync(fullPath).isDirectory();
+      const delIsDirectory = delStat.isDirectory();
 
       // 递归删除
       fs.rmSync(fullPath, { recursive: true, force: true });
@@ -567,10 +566,10 @@ export function createFileRoutes(serverManager) {
 
       res.json(validatedSuccess(nullDataSchema, null, 'File/directory deleted successfully'));
     } catch (err) {
-      // 文件在 existsSync 预检通过后、statSync 执行前被并发删除（另一管理请求、
-      // MC 重启清理、备份删除等）时抛裸 ENOENT：映射为 404 FILE_NOT_FOUND，
-      // 否则 errorHandler 兜底返回 500 SERVER_ERROR。AppError.code 为数字错误码，
-      // 与 fs 错误码字符串 'ENOENT' 互不冲突，不会误判。
+      // statSync/读取期间目标被并发删除（另一管理请求、MC 重启清理、备份删除等）
+      // 时抛裸 ENOENT：映射为 404 FILE_NOT_FOUND，否则 errorHandler 兜底返回 500
+      // SERVER_ERROR。AppError.code 为数字错误码，与 fs 错误码字符串 'ENOENT'
+      // 互不冲突，不会误判。
       if (err.code === 'ENOENT') {
         next(new AppError(ErrorCodes.FILE_NOT_FOUND));
         return;
@@ -593,11 +592,26 @@ export function createFileRoutes(serverManager) {
       const basePath = instance.serverPath || path.join(config.serversDir, instanceId);
       const fullPath = resolveInstancePath(basePath, dirPath);
 
-      if (fs.existsSync(fullPath)) {
-        throw new AppError(ErrorCodes.FILE_ALREADY_EXISTS, 'Directory already exists');
+      // 非递归 mkdir 独占创建：EEXIST 即「已存在」的原子判定（recursive 会把已存在
+      // 吞成成功，预检 + recursive 之间的窗口会返回 200 而非 409）。父目录缺失时
+      // 先补齐父级再重试，保持「支持多级路径」的既有语义（前端新建目录走该能力）
+      try {
+        fs.mkdirSync(fullPath);
+      } catch (err) {
+        if (err.code === 'EEXIST') {
+          throw new AppError(ErrorCodes.FILE_ALREADY_EXISTS, 'Directory already exists');
+        }
+        if (err.code !== 'ENOENT') throw err;
+        ensureDir(path.dirname(fullPath));
+        try {
+          fs.mkdirSync(fullPath);
+        } catch (retryErr) {
+          if (retryErr.code === 'EEXIST') {
+            throw new AppError(ErrorCodes.FILE_ALREADY_EXISTS, 'Directory already exists');
+          }
+          throw retryErr;
+        }
       }
-
-      fs.mkdirSync(fullPath, { recursive: true });
 
       recordAudit({
         instanceId,
@@ -631,15 +645,20 @@ export function createFileRoutes(serverManager) {
       const fullOldPath = resolveInstancePath(basePath, oldPath);
       const fullNewPath = resolveInstancePath(basePath, newPath);
 
-      if (!fs.existsSync(fullOldPath)) {
-        throw new AppError(ErrorCodes.FILE_NOT_FOUND, 'Source file not found');
+      // 无覆盖重命名：目标是否存在由 renameNoClobber 的独占声明判定。不用
+      // 「existsSync 预检 + renameSync」——两步之间目标被并发创建时，rename 会
+      // 静默覆盖（POSIX 与 Windows 实测皆覆盖），被覆盖方数据直接丢失
+      try {
+        renameNoClobber(fullOldPath, fullNewPath);
+      } catch (err) {
+        if (err.code === 'ENOENT') {
+          throw new AppError(ErrorCodes.FILE_NOT_FOUND, 'Source file not found');
+        }
+        if (err.code === 'EEXIST') {
+          throw new AppError(ErrorCodes.FILE_ALREADY_EXISTS, 'Target already exists');
+        }
+        throw err;
       }
-
-      if (fs.existsSync(fullNewPath)) {
-        throw new AppError(ErrorCodes.FILE_ALREADY_EXISTS, 'Target already exists');
-      }
-
-      fs.renameSync(fullOldPath, fullNewPath);
 
       recordAudit({
         instanceId,

@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { error, ErrorCodes } from '../utils/response.js';
 import { InstanceModel, BackupModel } from '../db/index.js';
 import config from '../config.js';
-import { atomicWriteFile } from '../services/mc_server.js';
+import { atomicWriteFile, isEulaAccepted } from '../services/mc_server.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
 import {
   commandResponseSchema,
@@ -41,9 +41,13 @@ const RETAINED_BACKUP_REPORT_LIMIT = 10;
  * 只读角色视图：从同一契约源派生（只删字段、不新增），避免与全量 schema 漂移。
  * 剔除的都是「主机配置 / 凭据可能驻留处」：jvmArgs、startCommand（自由文本，运维常把
  * 口令写进 JVM 参数）、javaPath（主机目录布局）、seed（世界种子）。监控所需字段全部保留。
+ *
+ * 导出这两个成员是给「敏感字段 × 裁剪清单」哨兵用例（readonly-instance-redaction.test.js）
+ * 用的：契约新增字段会自动流进只读视图（黑名单裁剪），哨兵断言只读视图键集合与
+ * 显式清单逐一相等，新增字段不改清单就必红——必须做一次「是否敏感」的分类。
  */
-const READONLY_REDACTED_FIELDS = ['jvmArgs', 'startCommand', 'javaPath', 'seed'];
-const readonlyInstanceStatusSchema = instanceStatusSchema.omit({
+export const READONLY_REDACTED_FIELDS = ['jvmArgs', 'startCommand', 'javaPath', 'seed'];
+export const readonlyInstanceStatusSchema = instanceStatusSchema.omit({
   jvmArgs: true,
   startCommand: true,
   javaPath: true,
@@ -396,14 +400,9 @@ export function createStatusRoutes(serverManager) {
       return res.status(400).json(error(ErrorCodes.VALIDATION_ERROR, 'startCommand 已不再支持通过 API 传入'));
     }
 
-    // EULA 检查：首次启动需要用户同意 EULA 协议
-    const eulaPath = path.join(instance.serverPath, 'eula.txt');
-    let eulaAccepted = false;
-    if (fs.existsSync(eulaPath)) {
-      const eulaContent = fs.readFileSync(eulaPath, 'utf-8');
-      eulaAccepted = /^eula\s*=\s*true\s*$/im.test(eulaContent);
-    }
-    if (!eulaAccepted) {
+    // EULA 检查：首次启动需要用户同意 EULA 协议（判定实现与服务层启动前置共用
+    // isEulaAccepted：两侧口径分叉过——路由用严格行首匹配、服务层用行内匹配）
+    if (!isEulaAccepted(instance.serverPath)) {
       return res.status(403).json(error(ErrorCodes.VALIDATION_ERROR, 'EULA_NOT_ACCEPTED'));
     }
 
@@ -630,7 +629,9 @@ export function createStatusRoutes(serverManager) {
       //    实例目录残留，重启 loadInstances（mc_server.js）还会从残留的
       //    instance.json 迁移"复活"已卸载实例。文件删除失败直接抛错经 asyncHandler
       //    进入全局 errorHandler，此时内存与 DB 记录均未动 → 实例保留可重试。
-      if (instancePath && fs.existsSync(instancePath)) {
+      // 不做事前存在性判定：rmSync 的 force 已容忍 ENOENT，而「预检 + 删除」之间的
+      // 窗口里目录被重建时会把新目录删掉。删除失败（EPERM 等）照旧上抛
+      if (instancePath) {
         fs.rmSync(instancePath, { recursive: true, force: true });
       }
 
@@ -682,7 +683,8 @@ export function createStatusRoutes(serverManager) {
     const content = agreed
       ? '#By changing the setting below to TRUE you are indicating your agreement to our EULA (https://aka.ms/MinecraftEULA).\neula=true\n'
       : '#By changing the setting below to TRUE you are indicating your agreement to our EULA (https://aka.ms/MinecraftEULA).\neula=false\n';
-    fs.writeFileSync(eulaPath, content, 'utf-8');
+    // 原子写：MC 启动前会读该文件，半截内容会被解析成「未同意」并让服务器退出
+    atomicWriteFile(eulaPath, content);
 
     res.json(validatedSuccess(nullDataSchema, null, agreed ? 'EULA accepted' : 'EULA declined'));
   }));

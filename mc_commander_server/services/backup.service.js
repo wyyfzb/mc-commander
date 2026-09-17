@@ -5,6 +5,7 @@ import config from '../config.js';
 import { BackupModel } from '../db/backup.model.js';
 import { ScheduledTaskModel } from '../db/scheduled_task.model.js';
 import { AppError, ErrorCodes } from '../utils/response.js';
+import { ensureDir } from '../utils/fs-utils.js';
 import { logger } from '../utils/logger.js';
 import { localTimestamp } from '../utils/local-date.js';
 
@@ -198,16 +199,12 @@ export class BackupService {
   }
 
   ensureBackupsDir() {
-    if (!fs.existsSync(this.backupsDir)) {
-      fs.mkdirSync(this.backupsDir, { recursive: true });
-    }
+    ensureDir(this.backupsDir);
   }
 
   getInstanceBackupDir(instanceId) {
     const dir = path.join(this.backupsDir, instanceId);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
+    ensureDir(dir);
     return dir;
   }
 
@@ -265,6 +262,9 @@ export class BackupService {
     // 检查世界目录是否存在。
     // 同步抛错路径（此时无 backupId，未创建记录）也要发 backupFailed 事件：
     // 旧实现此处仅被定时调度器 .catch 记日志，用户对唯一灾备手段失效完全无感知
+    // （保留了存在性判定：它是「在任何花费与副作用之前给出明确领域错误」的
+    // 前置校验门，判定为假时直接中止且不改动任何文件；竞态下目录被删则会由
+    // 后续 rsync/robocopy 失败路径接手，两处都有明确失败出口）
     if (!fs.existsSync(worldDir)) {
       const err = new Error(`World directory not found: ${worldDir}`);
       this._failSetup(instanceId, err);
@@ -467,10 +467,9 @@ export class BackupService {
         ScheduledTaskModel.updateLastRunStatus(taskId, 'failed', err?.message ?? String(err), Date.now() - startTs);
       }
 
-      // 清理失败的半成品快照目录（rsync/robocopy 失败可能残留部分文件）
-      if (fs.existsSync(snapshotDir)) {
-        fs.rmSync(snapshotDir, { recursive: true, force: true });
-      }
+      // 清理失败的半成品快照目录（rsync/robocopy 失败可能残留部分文件）。
+      // force 容忍 ENOENT，不做存在性预检
+      fs.rmSync(snapshotDir, { recursive: true, force: true });
 
       throw err;
     } finally {
@@ -562,10 +561,14 @@ export class BackupService {
   // 设计约定：快照目录由服务进程独占生成、无外部输入入口，恢复不做 symlink
   // 条目拒绝（若未来开放"导入备份"或接入共享存储，须在此补充恢复前 symlink 扫描）。
   async _verifySnapshot(snapshotDir) {
-    if (!fs.existsSync(snapshotDir)) {
-      throw new Error('Snapshot directory not found');
+    // 读取即判定：readdirSync 的 ENOENT 就是「快照目录不存在」，不再先 existsSync
+    let entries;
+    try {
+      entries = fs.readdirSync(snapshotDir);
+    } catch (err) {
+      if (err.code === 'ENOENT') throw new Error('Snapshot directory not found');
+      throw err;
     }
-    const entries = fs.readdirSync(snapshotDir);
     if (entries.length === 0) {
       throw new Error('Snapshot is empty');
     }
@@ -632,6 +635,9 @@ export class BackupService {
     }
 
     const instanceDir = resolveContained(config.serversDir, path.join(config.serversDir, instanceId));
+    // 保留存在性判定：这是同步段的前置校验门——失败要立刻回给调用方（404 语义），
+    // 不能降级为后台恢复任务里的异步失败；判定为假时零副作用，竞态下目录被删则由
+    // executeRestore 的 renameSync 失败路径接手
     if (!fs.existsSync(instanceDir)) {
       throw new Error(`Instance directory not found: ${instanceDir}`);
     }
@@ -647,11 +653,19 @@ export class BackupService {
     // 指向另一个实例的合法快照时，恢复会把别的实例的世界数据灌进本实例
     resolveContained(path.join(this.backupsDir, instanceId), snapshotDir);
 
-    if (!fs.existsSync(snapshotDir)) {
-      throw new AppError(ErrorCodes.BACKUP_NOT_FOUND, 'Snapshot directory not found');
+    // 快照路径的判定只取一次 stat：ENOENT ＝ 记录指向的快照不存在（404 语义），
+    // 省掉 existsSync 预检——预检与 stat 之间的窗口里快照被删会抛裸 ENOENT
+    let snapshotStat;
+    try {
+      snapshotStat = fs.statSync(snapshotDir);
+    } catch (err) {
+      if (err.code === 'ENOENT') {
+        throw new AppError(ErrorCodes.BACKUP_NOT_FOUND, 'Snapshot directory not found');
+      }
+      throw err;
     }
     // 快照必须是目录（file_path 指向文件的记录为异常数据，非服务端故障）
-    if (!fs.statSync(snapshotDir).isDirectory()) {
+    if (!snapshotStat.isDirectory()) {
       throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Snapshot path is not a directory');
     }
 
@@ -689,6 +703,11 @@ export class BackupService {
     // 时可能把上次崩溃遗留的旧版本 rename 回实例目录，本次真实原数据
     // 被遗弃为孤儿目录）
     let preRestoreDir = null;
+    // 回滚判据是「本次恢复是否已把实例目录换成 pre_restore」这个状态位，不是
+    // 事后对 preRestoreDir 的存在性判定：后者在 catch 里再探文件系统，既可能
+    // 因并发删除误判（把唯一副本丢在一边），又会在判定与 rename 之间抛错时
+    // 掩盖原始失败并让实例目录永久消失
+    let swappedToPreRestore = false;
     try {
       // 触发恢复开始事件
       if (this.serverManager) {
@@ -718,6 +737,7 @@ export class BackupService {
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
       preRestoreDir = path.join(config.serversDir, `${instanceId}_pre_restore_${timestamp}`);
       fs.renameSync(instanceDir, preRestoreDir);
+      swappedToPreRestore = true; // rename 成功即置位：此后失败必须回滚
 
       // ③ 复制快照 → 实例目录（复制而非移动；--delete 仅恢复场景使用，
       // 清理实例目录中快照已不存在的文件）。子进程超时按快照规模动态
@@ -741,9 +761,13 @@ export class BackupService {
 
       // ⑥ 成功：删除 pre_restore，状态置回 completed（快照可继续用于
       // 未来恢复），发送恢复完成事件（提示启动服务器使新世界生效）
-      if (fs.existsSync(preRestoreDir)) {
-        fs.rmSync(preRestoreDir, { recursive: true, force: true });
-      }
+      // force 容忍 ENOENT，不做存在性预检
+      fs.rmSync(preRestoreDir, { recursive: true, force: true });
+      // pre_restore 一删，「回滚能力」随之消失：此后（DB 回写、日志、事件派发）
+      // 任一步失败都必须保留**已恢复成功**的实例目录，不能落进下面的回滚分支
+      // 去删它——清掉状态位是这条边界的唯一判据（旧实现靠 existsSync(preRestoreDir)
+      // 事后探盘，恰好也在这条路径上返回 false，换成状态位后必须显式复位）
+      swappedToPreRestore = false;
       BackupModel.update(backupId, { status: 'completed' });
 
       logger.info(`Backup restored: ${snapshotDir}`);
@@ -760,13 +784,27 @@ export class BackupService {
       logger.error('Restore failed:', err);
 
       // 失败回滚：删除半解压的新实例目录，rename 本次 pre_restore 回来。
-      // 精确匹配本次目录名（preRestoreDir 局部变量）而非前缀扫描——
-      // 失败点可能在校验/复制之前（preRestoreDir 未创建时无需回滚）
-      if (preRestoreDir && fs.existsSync(preRestoreDir)) {
-        if (fs.existsSync(instanceDir)) {
+      // 精确匹配本次目录名（preRestoreDir 局部变量）+ 本次是否真的换过目录
+      // （swappedToPreRestore 状态位），不做事后存在性判定。
+      // 回滚动作逐条自保：catch 块内再抛错会替换掉原始失败（用户看到的是回滚的
+      // 错误而非恢复失败原因），并在 rename 失败时留下「实例目录已删、原数据还
+      // 在 pre_restore」的最坏状态却无人知晓——故每步独立 try/catch 并记日志
+      if (swappedToPreRestore) {
+        try {
           fs.rmSync(instanceDir, { recursive: true, force: true });
+        } catch (cleanupErr) {
+          logger.error(`[Restore] 回滚时删除半成品实例目录失败 ${instanceDir}:`, cleanupErr.message);
         }
-        fs.renameSync(preRestoreDir, instanceDir);
+        try {
+          fs.renameSync(preRestoreDir, instanceDir);
+        } catch (rollbackErr) {
+          // 措辞据实：ENOENT 说明 pre_restore 已不在（能走到这里只能是它被删/被移走），
+          // 此时没有「原数据仍在」可指，唯一出路是按快照重试恢复
+          const hint = rollbackErr.code === 'ENOENT'
+            ? `回滚失败：${preRestoreDir} 已不存在，实例目录需用快照重新恢复`
+            : `回滚失败：原数据仍在 ${preRestoreDir}，需人工恢复`;
+          logger.error(`[Restore] ${hint}:`, rollbackErr.message);
+        }
       }
       // 状态置回 completed（备份文件完好，可重试恢复），发送失败事件
       try {
@@ -846,13 +884,13 @@ export class BackupService {
       // pre_restore 不可读（不应发生）：按配置的 jarFile 尝试
     }
     for (const name of jarNames) {
-      const src = path.join(preRestoreDir, name);
-      if (fs.existsSync(src)) {
-        try {
-          fs.copyFileSync(src, path.join(newInstanceDir, name));
-        } catch (e) {
-          logger.warn(`[Backup] Failed to copy back jar ${name}:`, e.message);
-        }
+      // 不做存在性预检：copyFileSync 的 ENOENT 就是「该 jar 不在 pre_restore 里」，
+      // 与预检失败同属可跳过情形（唯一副本可能被并发清理），且预检与复制之间的
+      // 窗口同样会抛 ENOENT
+      try {
+        fs.copyFileSync(path.join(preRestoreDir, name), path.join(newInstanceDir, name));
+      } catch (e) {
+        logger.warn(`[Backup] Failed to copy back jar ${name}:`, e.message);
       }
     }
   }
@@ -898,8 +936,8 @@ export class BackupService {
     if (backup.file_path) {
       resolveContained(this.backupsDir, backup.file_path);
     }
-    // 删除快照目录
-    if (backup.file_path && fs.existsSync(backup.file_path)) {
+    // 删除快照目录（force 容忍 ENOENT，不做存在性预检）
+    if (backup.file_path) {
       await fs.promises.rm(backup.file_path, { recursive: true, force: true });
     }
 

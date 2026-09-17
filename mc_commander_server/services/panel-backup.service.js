@@ -24,6 +24,7 @@ import fs from 'fs';
 import path from 'path';
 import config from '../config.js';
 import { getDb } from '../db/index.js';
+import { ensureDir } from '../utils/fs-utils.js';
 import { logger } from '../utils/logger.js';
 
 // 快照文件名：panel-<ISO 时间戳（:/. → -）>.db；仅识别该命名，
@@ -34,9 +35,7 @@ const SIDECAR_NAME_REGEX = /^panel-\d{4}-\d{2}-\d{2}T[\d-]+Z\.env$/;
 
 export function getPanelBackupDir() {
   const dir = path.join(config.backupsDir, 'panel');
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
+  ensureDir(dir);
   return dir;
 }
 
@@ -77,22 +76,29 @@ export async function createPanelSnapshot() {
   // 连同快照一并回滚，避免留下「有 db 无 env」的残缺恢复点；.env 不存在
   // （纯环境变量部署）为合法形态，跳过即可。envFilePath 缺省（测试 mock
   // 的最小 config 形态）视同不存在
+  // 复制动作即判定：ENOENT ＝ 没有 .env（合法形态），不做 existsSync 预检——
+  // 预检与复制之间的窗口会让「.env 刚被删除」把整份快照连带回滚掉
   let envFilePath = null;
-  if (config.envFilePath && fs.existsSync(config.envFilePath)) {
-    envFilePath = envSidecarPath(dest);
+  if (config.envFilePath) {
+    const candidate = envSidecarPath(dest);
     try {
-      fs.copyFileSync(config.envFilePath, envFilePath);
+      fs.copyFileSync(config.envFilePath, candidate);
       // 权限镜像源 .env（部署脚本/写回流程均维持 0600）：copyFileSync 落盘默认
       // 权限（Linux 0644）会让副本对组/其他可读，低于源文件的凭据纪律
-      fs.chmodSync(envFilePath, fs.statSync(config.envFilePath).mode & 0o777);
+      fs.chmodSync(candidate, fs.statSync(config.envFilePath).mode & 0o777);
+      envFilePath = candidate;
     } catch (e) {
-      // 快照清理失败会让残缺「有 db 无 env」快照以有效身份存活至保留期，
-      // 静默不可接受，记 error 与 cleanup 删除失败同口径
-      try { fs.unlinkSync(dest); } catch (cleanupErr) {
-        logger.error(`[PanelBackup] Failed to roll back snapshot after env copy failure: ${dest}`, cleanupErr.message);
+      if (e.code !== 'ENOENT') {
+        // 快照清理失败会让残缺「有 db 无 env」快照以有效身份存活至保留期，
+        // 静默不可接受，记 error 与 cleanup 删除失败同口径
+        try { fs.unlinkSync(dest); } catch (cleanupErr) {
+          logger.error(`[PanelBackup] Failed to roll back snapshot after env copy failure: ${dest}`, cleanupErr.message);
+        }
+        try { fs.unlinkSync(candidate); } catch { /* 半写副本清理失败不掩盖原错误；残件由孤儿清扫兜住 */ }
+        throw e;
       }
-      try { fs.unlinkSync(envFilePath); } catch { /* 半写副本清理失败不掩盖原错误；残件由孤儿清扫兜住 */ }
-      throw e;
+      // .env 不存在：跳过副本（纯环境变量部署），且清理可能已半写的副本
+      try { fs.unlinkSync(candidate); } catch { /* 未创建 */ }
     }
   }
   return { filePath: dest, sizeBytes: fs.statSync(dest).size, envFilePath };
@@ -124,27 +130,33 @@ export function cleanupPanelSnapshots(options = {}) {
   );
 
   const removedSnapshots = new Set([...excess, ...expired]);
+  // 存活集合：本轮不该删的快照 + 删除失败的快照（删除失败的快照与副本必须继续
+  // 成对存在，否则会留下「有 db 无 env」的残缺恢复点）——两者决定副本的去留
+  const survivingSnapshots = new Set(files.filter((f) => !removedSnapshots.has(f)));
   let deletedCount = 0;
   for (const f of removedSnapshots) {
     try {
       fs.unlinkSync(path.join(dir, f));
       deletedCount++;
     } catch (e) {
+      survivingSnapshots.add(f);
       logger.error(`[PanelBackup] Failed to delete snapshot ${f}:`, e.message);
     }
     // 副本与快照必须同去留：快照已删则副本不留（成为无人认领的孤儿）
     try { fs.unlinkSync(envSidecarPath(path.join(dir, f))); } catch { /* 无副本 */ }
   }
 
-  // 孤儿副本清扫：快照已被手工删除（不误会伤人工放置的非命名空间文件）
+  // 孤儿副本清扫：快照已被手工删除（不误会伤人工放置的非命名空间文件）。
+  // 判据取本次 readdir 得到的文件名集合（与快照侧同一份目录视图），不再逐条
+  // existsSync 探盘——探盘会把「快照刚被清理、副本还在」以外的情况也算进来，
+  // 且判定与 unlink 之间的窗口里同名快照被重建时（同一毫秒时间戳可重名）会
+  // 删掉有效副本。快照仍在（含删除失败）的副本一律保留，其余副本清掉——
+  // 这也让上面删除失败的副本在下一轮得到重试
   for (const f of fs.readdirSync(dir)) {
-    if (SIDECAR_NAME_REGEX.test(f)) {
-      const snapshot = path.join(dir, f.replace(/\.env$/, '.db'));
-      if (!fs.existsSync(snapshot)) {
-        try { fs.unlinkSync(path.join(dir, f)); } catch (e) {
-          logger.error(`[PanelBackup] Failed to delete orphan env sidecar ${f}:`, e.message);
-        }
-      }
+    if (!SIDECAR_NAME_REGEX.test(f)) continue;
+    if (survivingSnapshots.has(f.replace(/\.env$/, '.db'))) continue;
+    try { fs.unlinkSync(path.join(dir, f)); } catch (e) {
+      logger.error(`[PanelBackup] Failed to delete orphan env sidecar ${f}:`, e.message);
     }
   }
   return deletedCount;

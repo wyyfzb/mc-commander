@@ -3,7 +3,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-import { resolveSafePath, PathTraversalError } from '../utils/fs-utils.js';
+import { resolveSafePath, PathTraversalError, ensureDir, renameNoClobber, atomicWriteFile } from '../utils/fs-utils.js';
 
 // resolveSafePath 单元测试：四步防线
 // （归一化、相等排除 + sep 边界、逐段 realpath、最终目标 symlink 拒绝）
@@ -128,5 +128,142 @@ describe('fs-utils resolveSafePath', () => {
       const full = resolveSafePath(base, 'sub/inner-link/f.txt');
       expect(full).toBe(path.resolve(base, 'sub', 'inner-link', 'f.txt'));
     });
+  });
+});
+
+// ── 存在性判定纪律的执行件（清单 #20：existsSync TOCTOU 收敛）─────────────
+describe('fs-utils ensureDir', () => {
+  let root;
+
+  beforeEach(() => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'mcs-ensure-dir-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it('多级目录一次创建', () => {
+    const target = path.join(root, 'a', 'b', 'c');
+    ensureDir(target);
+    expect(fs.statSync(target).isDirectory()).toBe(true);
+  });
+
+  it('已存在时幂等（不抛 EEXIST，目录内容保留）', () => {
+    const target = path.join(root, 'a');
+    fs.mkdirSync(target);
+    fs.writeFileSync(path.join(target, 'keep.txt'), 'x');
+
+    expect(() => ensureDir(target)).not.toThrow();
+    expect(fs.readFileSync(path.join(target, 'keep.txt'), 'utf-8')).toBe('x');
+  });
+});
+
+describe('fs-utils renameNoClobber', () => {
+  let root;
+  const at = (name) => path.join(root, name);
+
+  beforeEach(() => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'mcs-rename-noclobber-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it('文件：正常重命名（内容随文件走，源消失）', () => {
+    fs.writeFileSync(at('src.txt'), 'payload');
+    renameNoClobber(at('src.txt'), at('dst.txt'));
+
+    expect(fs.readFileSync(at('dst.txt'), 'utf-8')).toBe('payload');
+    expect(fs.existsSync(at('src.txt'))).toBe(false);
+  });
+
+  it('文件：目标已存在 → 抛 EEXIST，且目标原内容未被覆盖（这是本助手存在的理由）', () => {
+    fs.writeFileSync(at('src.txt'), 'NEW');
+    fs.writeFileSync(at('dst.txt'), 'OLD');
+
+    expect(() => renameNoClobber(at('src.txt'), at('dst.txt')))
+      .toThrow(expect.objectContaining({ code: 'EEXIST' }));
+    expect(fs.readFileSync(at('dst.txt'), 'utf-8')).toBe('OLD');
+    // 失败路径不留残件：源仍在、目标未被清空
+    expect(fs.readFileSync(at('src.txt'), 'utf-8')).toBe('NEW');
+  });
+
+  it('文件：源不存在 → 抛 ENOENT 且不留下占位文件', () => {
+    expect(() => renameNoClobber(at('missing.txt'), at('dst.txt')))
+      .toThrow(expect.objectContaining({ code: 'ENOENT' }));
+    expect(fs.existsSync(at('dst.txt'))).toBe(false);
+  });
+
+  it('目录：正常重命名（含内部文件）', () => {
+    fs.mkdirSync(at('srcDir'));
+    fs.writeFileSync(path.join(at('srcDir'), 'inner.txt'), 'x');
+    renameNoClobber(at('srcDir'), at('dstDir'));
+
+    expect(fs.statSync(at('dstDir')).isDirectory()).toBe(true);
+    expect(fs.readFileSync(path.join(at('dstDir'), 'inner.txt'), 'utf-8')).toBe('x');
+    expect(fs.existsSync(at('srcDir'))).toBe(false);
+  });
+
+  it('目录：目标已存在 → 抛 EEXIST，且目标目录保留（源码目录未被搬走）', () => {
+    fs.mkdirSync(at('srcDir'));
+    fs.mkdirSync(at('dstDir'));
+
+    expect(() => renameNoClobber(at('srcDir'), at('dstDir')))
+      .toThrow(expect.objectContaining({ code: 'EEXIST' }));
+    expect(fs.existsSync(at('dstDir'))).toBe(true);
+    expect(fs.existsSync(at('srcDir'))).toBe(true);
+  });
+});
+
+describe('fs-utils atomicWriteFile', () => {
+  let root;
+
+  beforeEach(() => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'mcs-atomic-write-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it('覆盖已有目标且不留临时文件', () => {
+    const target = path.join(root, 'f.txt');
+    fs.writeFileSync(target, 'old');
+    atomicWriteFile(target, 'new');
+
+    expect(fs.readFileSync(target, 'utf-8')).toBe('new');
+    expect(fs.readdirSync(root)).toEqual(['f.txt']);
+  });
+
+  it('目标不存在时直接创建', () => {
+    const target = path.join(root, 'fresh.txt');
+    atomicWriteFile(target, 'v1');
+    expect(fs.readFileSync(target, 'utf-8')).toBe('v1');
+  });
+
+  it('rename 失败（目标是目录）时不破坏目标，且清掉残留临时文件', () => {
+    const dirTarget = path.join(root, 'dir-target');
+    fs.mkdirSync(dirTarget);
+
+    expect(() => atomicWriteFile(dirTarget, 'x')).toThrow();
+    expect(fs.statSync(dirTarget).isDirectory()).toBe(true);
+    // 目录里没有内容，且同层只剩目标目录本身（临时文件已被 finally 清掉）
+    expect(fs.readdirSync(root)).toEqual(['dir-target']);
+  });
+
+  it('父目录不存在时抛错且不留下半个目标文件', () => {
+    const target = path.join(root, 'nope', 'f.txt');
+    expect(() => atomicWriteFile(target, 'x')).toThrow();
+    expect(fs.existsSync(target)).toBe(false);
+    expect(fs.readdirSync(root)).toEqual([]);
+  });
+
+  // Windows 无 POSIX 权限位（statSync().mode 恒 0o666 形态），权限断言只在 Linux/macOS 有效
+  it.skipIf(process.platform === 'win32')('options.mode 落到最终文件上（.env 0600 场景）', () => {
+    const target = path.join(root, '.env');
+    atomicWriteFile(target, 'API_KEY_HASH=abc\n', { mode: 0o600 });
+    expect(fs.statSync(target).mode & 0o777).toBe(0o600);
   });
 });

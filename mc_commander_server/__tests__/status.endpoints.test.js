@@ -63,6 +63,9 @@ vi.mock('fs', async (importOriginal) => {
       existsSync: vi.fn(),
       rmSync: vi.fn(),
       writeFileSync: vi.fn(),
+      // 原子写（utils/fs-utils.js atomicWriteFile）由 writeFileSync(临时文件) +
+      // renameSync(目标) 两步组成，两半都接管才能完整观测写入动作
+      renameSync: vi.fn(),
       statSync: vi.fn(),
       readFileSync: vi.fn(),
     },
@@ -797,13 +800,14 @@ describe('Status Routes · 端点缺口收口', () => {
       expect(res.status).toBe(200);
       expect(instance.stopGracefully).toHaveBeenCalledTimes(1);
       expect(proc.once).toHaveBeenCalledWith('exit', expect.any(Function));
-      // 目录不存在跳过 rmSync，但备份 DB 清理与实例移除照常
-      expect(fs.rmSync).not.toHaveBeenCalled();
+      // 目录存在性不再前置于删除：rmSync 照常调用（force 容忍 ENOENT），
+      // 备份 DB 清理与实例移除照常
+      expect(fs.rmSync).toHaveBeenCalledWith(INSTANCE_PATH, { recursive: true, force: true });
       expect(BackupModel.deleteByInstance).toHaveBeenCalledWith('s1');
       expect(mockManager.instances.size).toBe(0);
     });
 
-    it('stopGracefully 超时抛错被吞 + 目录不存在跳过 rmSync → 卸载流程继续', async () => {
+    it('stopGracefully 超时抛错被吞 + 实例目录不存在也照常清理 → 卸载流程继续', async () => {
       const instance = makeInstance({ isRunning: true, stopGracefully: vi.fn().mockRejectedValue(new Error('stop timeout')) });
       mockManager.getInstance.mockReturnValue(instance);
       mockManager.instances.set('s1', instance);
@@ -940,11 +944,12 @@ describe('Status Routes · 端点缺口收口', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.message).toBe('EULA accepted');
-      expect(fs.writeFileSync).toHaveBeenCalledWith(
-        EULA_PATH,
-        expect.stringContaining('eula=true'),
-        'utf-8',
-      );
+      // 原子写契约：先写同目录唯一临时文件，再 rename 覆盖 eula.txt（半截内容不落盘）
+      const [tmpPath, written] = fs.writeFileSync.mock.calls[0];
+      expect(tmpPath.startsWith(`${EULA_PATH}.`)).toBe(true);
+      expect(tmpPath.endsWith('.tmp')).toBe(true);
+      expect(written).toContain('eula=true');
+      expect(fs.renameSync).toHaveBeenCalledWith(tmpPath, EULA_PATH);
     });
 
     it('agreed=false：写入 eula=false 内容，返回 EULA declined', async () => {
@@ -955,11 +960,12 @@ describe('Status Routes · 端点缺口收口', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.message).toBe('EULA declined');
-      expect(fs.writeFileSync).toHaveBeenCalledWith(
-        EULA_PATH,
-        expect.stringContaining('eula=false'),
-        'utf-8',
-      );
+      // 原子写契约：先写同目录唯一临时文件，再 rename 覆盖 eula.txt（半截内容不落盘）
+      const [tmpPath, written] = fs.writeFileSync.mock.calls[0];
+      expect(tmpPath.startsWith(`${EULA_PATH}.`)).toBe(true);
+      expect(tmpPath.endsWith('.tmp')).toBe(true);
+      expect(written).toContain('eula=false');
+      expect(fs.renameSync).toHaveBeenCalledWith(tmpPath, EULA_PATH);
     });
   });
 

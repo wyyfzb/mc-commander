@@ -445,6 +445,34 @@ describe('executeRestore 安全网：后台竞态放弃与中段失败回滚', (
     expect(fs.readFileSync(path.join(serversDir, 's1', 'world', 'level.dat'), 'utf8')).toBe('world-data');
   });
 
+  // 状态位复位回归守卫（审查 M1）：pre_restore 在步骤⑥被删掉之后，「回滚能力」已消失，
+  // 此后（DB 回写/日志/事件派发）失败必须保留**已恢复成功**的实例目录。判据若是「本次
+  // 是否换过目录」这个状态位而不复位，就会把一次成功的恢复反向销毁（删掉新目录 +
+  // rename 已不存在的 pre_restore → 实例目录彻底消失）
+  it('恢复已成功后置步骤（状态回写）失败：保留已恢复目录，不得反向销毁', async () => {
+    createTestInstance(serversDir);
+    const snapshotDir = goodSnapshot();
+    manager.getInstance = vi.fn(() => ({ isRunning: false, isRconConnected: false }));
+    // 复制成功且带世界数据：⑤ 校验通过，流程走到 ⑥（删 pre_restore → 回写状态）
+    vi.spyOn(service, '_restoreFromSnapshot').mockImplementation(async (_snap, target) => {
+      fs.mkdirSync(path.join(target, 'world'), { recursive: true });
+      fs.writeFileSync(path.join(target, 'world', 'level.dat'), 'RESTORED');
+    });
+    MockBackupModel.update.mockImplementation(() => { throw new Error('db locked'); });
+    const failed = waitForEvent(manager, 'instance:restoreFailed');
+
+    await expect(
+      service.executeRestore(1, backup, path.join(serversDir, 's1'), snapshotDir, {})
+    ).rejects.toThrow('db locked');
+    await failed;
+
+    // 已恢复的实例目录必须原样保留（内容是新世界，不是被回滚掉的旧数据）
+    expect(fs.readFileSync(path.join(serversDir, 's1', 'world', 'level.dat'), 'utf8')).toBe('RESTORED');
+    // 且没有把 pre_restore 又搬回来（旧目录在 ⑥ 已按设计删除）
+    expect(fs.readdirSync(serversDir).filter((n) => n.includes('_pre_restore_'))).toEqual([]);
+    expect(fs.existsSync(snapshotDir)).toBe(true);
+  });
+
   it('_copyBackJarFiles：配置 jar 与扫描 *.jar 均复制回；单文件复制失败不中断', async () => {
     const preRestore = path.join(serversDir, 'pre');
     const newInstance = path.join(serversDir, 'new');

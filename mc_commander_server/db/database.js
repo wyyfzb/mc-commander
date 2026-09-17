@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
-import fs from 'fs';
 import config from '../config.js';
+import { ensureDir } from '../utils/fs-utils.js';
 import { logger } from '../utils/logger.js';
 
 let db = null;
@@ -9,10 +9,8 @@ let db = null;
 export function initDatabase() {
   const dbPath = path.join(config.dataDir || './data', 'mc_commander.db');
 
-  const dbDir = path.dirname(dbPath);
-  if (!fs.existsSync(dbDir)) {
-    fs.mkdirSync(dbDir, { recursive: true });
-  }
+  // mkdir recursive 幂等，不做 existsSync 预检
+  ensureDir(path.dirname(dbPath));
 
   db = new Database(dbPath);
 

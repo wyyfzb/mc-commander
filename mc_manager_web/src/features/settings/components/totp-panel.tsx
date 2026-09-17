@@ -57,6 +57,15 @@ interface TotpPanelProps {
   authed: boolean
 }
 
+/**
+ * 恢复码告警阈值：剩余 ≤ 3 即提示（服务端一次发 10 枚）。
+ * 口径依据（单管理员自托管、无客服兜底）：恢复码与认证器是仅有的两条第二因子路径，
+ * 码用光后若认证器同时不可用即永久锁死面板，而补发只能「关闭两步验证再重新挂靠」——
+ * 代价高且必须先能登录。同类实现均取保守方向：Keycloak 12 枚码在剩 4 枚时提示、
+ * Duende 在剩余 <3 时提示，本面板码更少（10 枚），故阈值取 3（少于半数即告警）。
+ */
+const RECOVERY_CODE_WARN_THRESHOLD = 3
+
 /** 恢复码文件正文：码是本体的全部，头部只留「何时、何用、用完怎么办」 */
 function recoveryCodesFileText(codes: string[]): string {
   return [
@@ -385,6 +394,7 @@ export function TotpPanel({ baseUrl, apiKey, authed }: TotpPanelProps) {
 
     // ── 已启用 ──
     if (enabled) {
+      const remainingRecoveryCodes = statusQuery.data?.recoveryCodesRemaining ?? 0
       return (
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2 text-mcs-xs text-mcs-text-muted">
@@ -395,15 +405,12 @@ export function TotpPanel({ baseUrl, apiKey, authed }: TotpPanelProps) {
             <span>启用时间：{formatStartTime(statusQuery.data?.confirmedAt ?? null)}</span>
             <span>
               剩余恢复码：
-              <span className="font-mono text-mcs-text-default">
-                {statusQuery.data?.recoveryCodesRemaining ?? 0}
-              </span>{' '}
-              个
+              <span className="font-mono text-mcs-text-default">{remainingRecoveryCodes}</span> 个
             </span>
           </div>
-          {(statusQuery.data?.recoveryCodesRemaining ?? 0) <= 2 && (
+          {remainingRecoveryCodes <= RECOVERY_CODE_WARN_THRESHOLD && (
             <NoticeBanner variant="warning" icon={TriangleAlert}>
-              可用恢复码不足 3 枚：用完将无法在没有认证器的情况下登录。
+              可用恢复码仅剩 {remainingRecoveryCodes} 枚：用完将无法在没有认证器的情况下登录。
               需要新的一批，只能关闭两步验证后重新挂靠。
             </NoticeBanner>
           )}

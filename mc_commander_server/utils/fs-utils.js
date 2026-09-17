@@ -9,18 +9,78 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 
-export const atomicWriteFile = (filePath, content) => {
+export const atomicWriteFile = (filePath, content, options = {}) => {
   const tmpPath = `${filePath}.${crypto.randomUUID()}.tmp`;
   try {
-    fs.writeFileSync(tmpPath, content);
+    // options.mode 用于目标文件本身带权限纪律的场景（.env 0600 一类）：权限设在
+    // 临时文件上，rename 后目标继承——先写后 chmod 会在中间态留下过宽权限
+    fs.writeFileSync(tmpPath, content, options.mode ? { mode: options.mode } : undefined);
     fs.renameSync(tmpPath, filePath);
   } finally {
-    // 失败时清理残留临时文件
+    // 失败时清理残留临时文件：直接 unlink 并吞掉 ENOENT（未创建/已被 rename 消费），
+    // 不做 existsSync 预检——临时名带 UUID 本就是独占的，且 finally 里抛错会盖掉原错误
     try {
-      if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+      fs.unlinkSync(tmpPath);
     } catch {}
   }
 };
+
+// ── 存在性判定纪律（清单 #20：existsSync 的 TOCTOU 收敛）────────────────
+// existsSync 只允许用于「判定后不据此变更文件系统」的场景（启动门控、特性开关、
+// 回执展示、日志）。「先判定、再变更」的两步写法天然有窗口：判定为「不存在」后
+// 窗口内被并发创建/删除，变更就落在错误前提上（POSIX rename 会静默覆盖、
+// unlink 会删掉别人刚写的文件、mkdir recursive 会把「已存在」吞成成功）。
+// 收敛口径＝让**操作本身**承担判定，按原生错误码分流：
+//   · 要「已存在即失败」→ renameNoClobber（独占声明）或 copyFileSync 的 COPYFILE_EXCL
+//   · 要「不存在也能成功」→ 直接调用并容忍 ENOENT（rmSync force、读操作 try/catch）
+//   · 要「幂等创建」→ ensureDir（mkdir recursive 本就幂等，预检是纯冗余）
+// 纯读预检（「不存在则返回默认值 + 读到内容才算数」）不算违规：读操作本身容忍
+// ENOENT，预检只影响提前返回，竞态下结果与直接读再 catch 等价。
+
+/** 幂等建目录：mkdirSync recursive 对已存在目录不报错，无需存在性预检 */
+export function ensureDir(dir) {
+  fs.mkdirSync(dir, { recursive: true });
+}
+
+/**
+ * 无覆盖重命名：目标已存在时抛原生 EEXIST（调用方映射为各自的 409 语义）。
+ * 不用「existsSync 预检 + renameSync」——两者之间目标被并发创建时，POSIX 与
+ * Windows 的 rename 都会静默覆盖（实测 win32 覆盖），数据直接丢失。
+ * 做法是先用独占创建把「目标是否存在」判定与「占位」合并成一个原子动作：
+ *   · 文件：`open('wx')` 建空占位 → rename 覆盖的是我们自己的占位文件；
+ *   · 目录：`mkdir` 建空占位 → POSIX 允许 rename 替换空目录（仍原子）；
+ *     Windows 的 MoveFileEx 不能替换已存在目录（实测 EPERM），故退化为
+ *     「释放占位后 rename」——残留窗口为微秒级，且竞争方最多抢到一个空目录，
+ *     没有任何数据可丢。
+ * 源不存在时抛原生 ENOENT（占位文件会被回收，不留残件）。
+ * 与旧写法的已知差异（POSIX）：目标是指向不存在文件的悬空符号链接时，`open('wx')`
+ * 按 POSIX 语义一律 EEXIST（→409），而旧的 `existsSync`（跟随链接）判 false 会直接
+ * rename 替换该链接。差异只落在「悬空链接作目标」这一病态场景，且 win32 行为与旧版
+ * 一致（占位创建成功、链接被替换）。
+ */
+export function renameNoClobber(src, dst) {
+  if (!fs.lstatSync(src).isDirectory()) {
+    fs.closeSync(fs.openSync(dst, 'wx'));
+    try {
+      fs.renameSync(src, dst);
+    } catch (err) {
+      try { fs.unlinkSync(dst); } catch {}
+      throw err;
+    }
+    return;
+  }
+  fs.mkdirSync(dst);
+  try {
+    fs.renameSync(src, dst);
+  } catch (err) {
+    if (err.code !== 'EPERM' && err.code !== 'EACCES') {
+      fs.rmdirSync(dst);
+      throw err;
+    }
+    fs.rmdirSync(dst);
+    fs.renameSync(src, dst);
+  }
+}
 
 // ── 实例文件路径安全（find-006/007/004/extra-1 统一校验模式）────────────
 // 路径穿越检测专用错误：code 固定 'EPATHTRAVERSAL'，与 fs 原生错误码

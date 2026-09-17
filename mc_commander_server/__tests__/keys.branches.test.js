@@ -10,8 +10,9 @@ import { ErrorCodes } from '../utils/response.js';
 import config from '../config.js';
 import { hashToken } from '../utils/password.js';
 
-// keys.js 分支收口：persistApiKeyHash 的 existsSync 两态 / API_KEY_HASH 行替换与追加 /
-// 追加换行三态拼接 / chmod catch（Windows 无权限位语义）/ 路由级持久化失败 500。
+// keys.js 分支收口：persistApiKeyHash 的 .env 两态（存在/不存在，读取即判定）/
+// API_KEY_HASH 行替换与追加 / 追加换行三态拼接 / 原子写与 0600 权限传递 /
+// 路由级持久化失败 500。
 // 全程 spy 阻断真实写入（不触碰开发 .env），与 keys.test.js / keys-hash.test.js 同范式。
 
 // 与 routes/keys.js 同构推导 envPath（__tests__ 与 routes 同为服务端根一级子目录）
@@ -27,23 +28,30 @@ function buildApp() {
   return app;
 }
 
-/** 隔离 .env 文件视图：existsSync/readFileSync 仅对 envPath 返回桩定态，其余走真实 fs */
+/**
+ * 隔离 .env 文件视图：readFileSync 仅对 envPath 返回桩定态，其余走真实 fs。
+ * exists=false 时抛真实形态的 ENOENT（而不是返回空串）——persistEnvHash 的
+ * 「读取即判定」分支（ENOENT ⇒ 从空串起写，其余错误上抛）只有这样才被走到；
+ * existsSync 一并隔离，防止别处（如旧实现残留）用存在性预检蒙对。
+ */
 function stageEnvFile({ exists, content }) {
   const realExistsSync = fs.existsSync.bind(fs);
   const realReadFileSync = fs.readFileSync.bind(fs);
   vi.spyOn(fs, 'existsSync').mockImplementation(
     (p) => (p === ENV_PATH ? exists : realExistsSync(p)),
   );
-  vi.spyOn(fs, 'readFileSync').mockImplementation(
-    (p, ...rest) => (p === ENV_PATH ? content : realReadFileSync(p, ...rest)),
-  );
+  vi.spyOn(fs, 'readFileSync').mockImplementation((p, ...rest) => {
+    if (p !== ENV_PATH) return realReadFileSync(p, ...rest);
+    if (!exists) throw Object.assign(new Error(`ENOENT: no such file or directory, open '${p}'`), { code: 'ENOENT' });
+    return content;
+  });
 }
 
 function captureWrite() {
   const writes = [];
   const renames = [];
-  vi.spyOn(fs, 'writeFileSync').mockImplementation((p, data) => {
-    writes.push({ path: p, data });
+  vi.spyOn(fs, 'writeFileSync').mockImplementation((p, data, options) => {
+    writes.push({ path: p, data, options });
   });
   vi.spyOn(fs, 'renameSync').mockImplementation((from, to) => {
     renames.push({ from, to });
@@ -52,8 +60,8 @@ function captureWrite() {
 }
 
 function writtenEnvContent(writes) {
-  const call = writes.find((w) => String(w.path).endsWith('.env.tmp'));
-  expect(call, 'persistApiKeyHash 应先写 .env.tmp').toBeDefined();
+  const call = writes.find((w) => String(w.path).startsWith(`${ENV_PATH}.`) && String(w.path).endsWith('.tmp'));
+  expect(call, 'persistApiKeyHash 应先写 .env 的唯一临时文件').toBeDefined();
   return call.data;
 }
 
@@ -70,7 +78,7 @@ describe('POST /api/rotate-key 分支收口', () => {
     vi.restoreAllMocks();
   });
 
-  it('.env 不存在：从零建档只写 API_KEY_HASH 一行（existsSync=false + 空内容追加）', async () => {
+  it('.env 不存在（读抛 ENOENT）：从零建档只写 API_KEY_HASH 一行', async () => {
     stageEnvFile({ exists: false, content: '' });
     const { writes, renames } = captureWrite();
 
@@ -81,10 +89,11 @@ describe('POST /api/rotate-key 分支收口', () => {
     expect(newKey).toMatch(/^mcck-[0-9a-f]{8}-[0-9a-f]{8}-[0-9a-f]{8}$/);
     // 空内容追加：无前置换行，单行建档
     expect(writtenEnvContent(writes)).toBe(`API_KEY_HASH=${hashToken(newKey)}\n`);
-    // 原子写语义：先 .env.tmp 再 rename 落地
+    // 原子写语义：先写唯一临时文件（<目标>.<uuid>.tmp，并发轮换不互踩）再 rename 落地
     expect(renames).toHaveLength(1);
-    expect(renames[0].from).toBe(ENV_PATH + '.tmp');
     expect(renames[0].to).toBe(ENV_PATH);
+    expect(renames[0].from.startsWith(`${ENV_PATH}.`)).toBe(true);
+    expect(renames[0].from.endsWith('.tmp')).toBe(true);
     expect(config.apiKeyHash).toBe(hashToken(newKey));
   });
 
@@ -136,18 +145,17 @@ describe('POST /api/rotate-key 分支收口', () => {
     expect(writtenEnvContent(writes)).toBe(`API_KEY_HASH=${hashToken(newKey)}\n`);
   });
 
-  it('chmod 失败（Windows 无权限位语义）：写回仍成功', async () => {
+  it('临时文件按 0600 权限写入（.env 凭据纪律），权限随 rename 落到目标', async () => {
     stageEnvFile({ exists: false, content: '' });
-    vi.spyOn(fs, 'chmodSync').mockImplementation(() => {
-      throw new Error('chmod unsupported');
-    });
     const { writes, renames } = captureWrite();
 
     const res = await request(buildApp()).post('/api/rotate-key').set('x-api-key', TEST_PLAINTEXT_KEY);
 
-    // catch 吞掉 chmod 异常：轮换照常完成
     expect(res.status).toBe(200);
     expect(res.body.data.apiKey).toMatch(/^mcck-/);
+    // 权限设在临时文件上（先写后 chmod 会留下过宽权限的中间态），rename 后目标继承
+    const call = writes.find((w) => String(w.path).endsWith('.tmp'));
+    expect(call?.options).toEqual({ mode: 0o600 });
     expect(renames).toHaveLength(1);
     expect(writtenEnvContent(writes)).toContain('API_KEY_HASH=');
   });

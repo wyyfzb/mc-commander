@@ -84,6 +84,11 @@ export function pruneOrphanBackupDirs(retentionDays) {
     try {
       if (instanceStillExists(name)) continue;
       if (fs.statSync(path.join(config.backupsDir, name)).mtimeMs >= cutoffMs) continue;
+      // 删除前重查一次归属：判定与删除之间的窗口里同名实例被重建时，重建方可能
+      // 已开始往该目录写新备份。重查把窗口从「整轮扫描时长」收窄到「一次查询」，
+      // 不宣称原子——残留窗口由两条保守门覆盖：目录 mtime 未刷新（<保留期）与
+      // DB 无记录，且被删对象是上一个同名实例的旧备份
+      if (instanceStillExists(name)) continue;
       fs.rmSync(path.join(config.backupsDir, name), { recursive: true, force: true });
       result.deleted++;
       logger.info(`[OrphanBackup] 已清理无对应实例的备份目录: ${name}`);

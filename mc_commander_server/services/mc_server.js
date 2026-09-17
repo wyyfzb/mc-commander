@@ -7,7 +7,7 @@ import { Rcon } from 'rcon-client';
 import { parseUncompressed as parseNbtSync } from 'prismarine-nbt';
 import config from '../config.js';
 import { InstanceModel, CommandHistoryModel } from '../db/index.js';
-import { atomicWriteFile } from '../utils/fs-utils.js';
+import { atomicWriteFile, ensureDir } from '../utils/fs-utils.js';
 import { killProcessTree } from '../utils/process-tree.js';
 import { maskSensitiveCommand } from '../utils/command-mask.js';
 import { localDateKey } from '../utils/local-date.js';
@@ -25,6 +25,8 @@ import { logger } from '../utils/logger.js';
 // 保留 re-export：routes/status.js（_syncInstanceJson 同步 instance.json）与
 // routes/server-jar.js（创建实例首次写入 instance.json）仍从本文件导入，
 // 避免这两个调用点各自定义本地副本。
+// isEulaAccepted 同理：EULA 判定的唯一实现在 start-lifecycle 域（启动前置检查），
+// 路由侧（POST /instances/:id/start）经此处消费，两侧不再各写一份正则。
 
 // MC 命令执行失败的 RCON 响应短语。
 // MC 服务器命令执行失败（离线玩家/未知物品/语法错误）不会抛异常，只输出错误文本，
@@ -48,6 +50,7 @@ function matchCommandFailure(response) {
 }
 
 export { atomicWriteFile };
+export { isEulaAccepted } from './mc-server/start-lifecycle.js';
 
 export class MCServerManager extends EventEmitter {
   constructor() {
@@ -63,9 +66,7 @@ export class MCServerManager extends EventEmitter {
   }
 
   loadInstances() {
-    if (!fs.existsSync(config.serversDir)) {
-      fs.mkdirSync(config.serversDir, { recursive: true });
-    }
+    ensureDir(config.serversDir);
 
     // 1. 从 SQLite 加载实例
     let dbInstances = [];
@@ -100,81 +101,86 @@ export class MCServerManager extends EventEmitter {
     }
 
     // 3. 迁移文件系统中的旧实例（instance.json 存在但 DB 无记录）
-    if (fs.existsSync(config.serversDir)) {
-      const dirs = fs.readdirSync(config.serversDir, { withFileTypes: true })
+    // readdirSync 即判定：serversDir 已在方法起手 ensureDir 建好，故不做 existsSync
+    // 预检（预检也护不住紧随其后的 readdir——它不在预检的保护范围内）；极端并发
+    // 删除下 readdir 抛 ENOENT，语义等价于「没有旧实例可迁移」
+    let dirs;
+    try {
+      dirs = fs.readdirSync(config.serversDir, { withFileTypes: true })
         .filter(d => d.isDirectory());
+    } catch (err) {
+      if (err.code !== 'ENOENT') throw err;
+      dirs = [];
+    }
 
-      for (const dir of dirs) {
-        const configPath = path.join(config.serversDir, dir.name, 'instance.json');
-        if (!fs.existsSync(configPath)) continue;
+    for (const dir of dirs) {
+      const configPath = path.join(config.serversDir, dir.name, 'instance.json');
+      if (!fs.existsSync(configPath)) continue;
 
-        try {
-          const instanceConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      try {
+        const instanceConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
 
-          // 已迁移标记，跳过
-          if (instanceConfig.migrated === true) {
-            // 如果 DB 中没有但已标记迁移，说明 DB 记录被删除了，重新迁移
-            const dbRecord = InstanceModel.getById(instanceConfig.id);
-            if (dbRecord) {
-              // 已在 DB 中，确保内存中也加载
-              if (!this.instances.has(instanceConfig.id)) {
-                this.createInstance({
-                  ...instanceConfig,
-                  serverPath: path.join(config.serversDir, dir.name)
-                });
-                logger.info(`Loaded migrated instance: ${instanceConfig.id}`);
-              }
-              continue;
-            }
-            // DB 无记录但已标记迁移，移除标记重新迁移
-            delete instanceConfig.migrated;
-          }
-
-          // 检查 DB 是否已有此实例
-          const existing = InstanceModel.getById(instanceConfig.id);
-          if (existing) {
-            // DB 已有记录，确保内存加载（避免重复）
+        // 已迁移标记，跳过
+        if (instanceConfig.migrated === true) {
+          // 如果 DB 中没有但已标记迁移，说明 DB 记录被删除了，重新迁移
+          const dbRecord = InstanceModel.getById(instanceConfig.id);
+          if (dbRecord) {
+            // 已在 DB 中，确保内存中也加载
             if (!this.instances.has(instanceConfig.id)) {
               this.createInstance({
                 ...instanceConfig,
                 serverPath: path.join(config.serversDir, dir.name)
               });
+              logger.info(`Loaded migrated instance: ${instanceConfig.id}`);
             }
-            // 标记为已迁移
-            instanceConfig.migrated = true;
-            atomicWriteFile(configPath, JSON.stringify(instanceConfig, null, 2));
             continue;
           }
-
-          // DB 无记录，执行迁移
-          logger.info(`Migrating instance ${instanceConfig.id} from JSON to DB...`);
-          const serverPath = path.join(config.serversDir, dir.name);
-          const migrated = InstanceModel.migrateFromJson(instanceConfig, serverPath);
-          if (migrated) {
-            // 确保内存加载
-            if (!this.instances.has(instanceConfig.id)) {
-              this.createInstance({
-                ...instanceConfig,
-                serverPath
-              });
-            }
-            // 标记为已迁移
-            instanceConfig.migrated = true;
-            atomicWriteFile(configPath, JSON.stringify(instanceConfig, null, 2));
-            logger.info(`Migrated instance ${instanceConfig.id} to DB`);
-          }
-        } catch (e) {
-          logger.error(`Failed to load/migrate instance ${dir.name}:`, e);
+          // DB 无记录但已标记迁移，移除标记重新迁移
+          delete instanceConfig.migrated;
         }
+
+        // 检查 DB 是否已有此实例
+        const existing = InstanceModel.getById(instanceConfig.id);
+        if (existing) {
+          // DB 已有记录，确保内存加载（避免重复）
+          if (!this.instances.has(instanceConfig.id)) {
+            this.createInstance({
+              ...instanceConfig,
+              serverPath: path.join(config.serversDir, dir.name)
+            });
+          }
+          // 标记为已迁移
+          instanceConfig.migrated = true;
+          atomicWriteFile(configPath, JSON.stringify(instanceConfig, null, 2));
+          continue;
+        }
+
+        // DB 无记录，执行迁移
+        logger.info(`Migrating instance ${instanceConfig.id} from JSON to DB...`);
+        const serverPath = path.join(config.serversDir, dir.name);
+        const migrated = InstanceModel.migrateFromJson(instanceConfig, serverPath);
+        if (migrated) {
+          // 确保内存加载
+          if (!this.instances.has(instanceConfig.id)) {
+            this.createInstance({
+              ...instanceConfig,
+              serverPath
+            });
+          }
+          // 标记为已迁移
+          instanceConfig.migrated = true;
+          atomicWriteFile(configPath, JSON.stringify(instanceConfig, null, 2));
+          logger.info(`Migrated instance ${instanceConfig.id} to DB`);
+        }
+      } catch (e) {
+        logger.error(`Failed to load/migrate instance ${dir.name}:`, e);
       }
     }
   }
 
   createInstance({ id, name, javaPath = 'java', jarFile, maxMemory = '2G', minMemory = '1G', serverPath, ...rest }) {
     const instancePath = serverPath || path.join(config.serversDir, id);
-    if (!fs.existsSync(instancePath)) {
-      fs.mkdirSync(instancePath, { recursive: true });
-    }
+    ensureDir(instancePath);
 
     const instance = new MCServerInstance({
       id, name, javaPath, jarFile, maxMemory, minMemory, serverPath: instancePath, ...rest
@@ -477,19 +483,19 @@ export class MCServerInstance extends EventEmitter {
   /// API 路径的键白名单由 status-route 路由层负责）。
   saveProperties(props) {
     const propsPath = path.join(this.serverPath, 'server.properties');
-    // 读取原文件，保留注释行
+    // 读取原文件，保留注释行。读取即判定：文件不存在（ENOENT）＝ 首次写入，
+    // 直接从空基址起写；不做 existsSync 预检——预检判定「不存在」而窗口内文件
+    // 被外部创建（files 路由/游戏内命令）时，会以空基址覆盖掉刚写入的整份配置
     let comments = [];
     let onDisk = {};
-    if (fs.existsSync(propsPath)) {
-      try {
-        const content = fs.readFileSync(propsPath, 'utf-8');
-        comments = content.split('\n').filter(l => l.trim().startsWith('#'));
-        // 合并基址取磁盘最新内容而非内存缓存：缓存仅构造时加载一次，
-        // 文件被外部编辑（files 路由/游戏内命令）后不刷新，以陈旧缓存
-        // 为基址会把文件编辑值回滚（如 max-players=100 被覆盖回 20）
-        onDisk = this._loadProperties();
-      } catch {}
-    }
+    try {
+      const content = fs.readFileSync(propsPath, 'utf-8');
+      comments = content.split('\n').filter(l => l.trim().startsWith('#'));
+      // 合并基址取磁盘最新内容而非内存缓存：缓存仅构造时加载一次，
+      // 文件被外部编辑（files 路由/游戏内命令）后不刷新，以陈旧缓存
+      // 为基址会把文件编辑值回滚（如 max-players=100 被覆盖回 20）
+      onDisk = this._loadProperties();
+    } catch { /* 不存在或读失败：按空基址合并 */ }
     // 合并：磁盘原属性 → 新属性覆盖
     const merged = { ...onDisk, ...props };
     const lines = [
@@ -1421,7 +1427,7 @@ export class MCServerInstance extends EventEmitter {
   _savePlayerData(playerName, data) {
     try {
       const dir = path.join(this.serverPath, 'playerdata');
-      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      ensureDir(dir);
       const filePath = path.join(dir, `${playerName}.json`);
       const existing = this._loadPlayerData(playerName) || {};
       // 浅拷贝后再删除：调用方（60s 定时保存、玩家离开落盘）传入的是 this.players

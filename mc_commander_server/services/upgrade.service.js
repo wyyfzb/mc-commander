@@ -428,9 +428,13 @@ export class UpgradeService {
       // 产生「新名旧内容」jar，破坏 server-{mcVersion}.jar 命名约定。
       // 异步复制（#520）：50MB 级 JAR 同步 copyFileSync 会阻塞事件循环
       // 数百毫秒（期间 RCON/WS/全部请求延迟），与同链路其余异步 IO 风格对齐
-      if (oldJarPath && oldJarFile && fs.existsSync(oldJarPath)) {
+      // 复制即判定：ENOENT ＝ 旧 jar 已被清理（无副本可恢复），跳过即可；
+      // 不做存在性预检——预检与复制之间的窗口里旧 jar 被删会让整段回滚中断
+      if (oldJarPath && oldJarFile) {
         const restoreTarget = assertSafeInstancePath(instance.serverPath, oldJarFile);
-        await fs.promises.copyFile(oldJarPath, restoreTarget);
+        await fs.promises.copyFile(oldJarPath, restoreTarget).catch((e) => {
+          if (e.code !== 'ENOENT') throw e;
+        });
       }
 
       // 错位副本清理（#539）：阶段 3 后磁盘上新版本文件名 jar（新版本内容，
@@ -544,11 +548,17 @@ export class UpgradeService {
       // 先写 .part 再改名：复制中途失败/被取消时 rollback 源要么不存在、要么完整，
       // 不会把半截文件当成「旧 JAR 副本」覆盖到实例目录（复制不可中断，取消落在
       // 复制中只能等它结束，故副本完整性必须靠原子改名保证）
-      if (fs.existsSync(oldJarPath)) {
-        const backupTmpPath = `${backupJarPath}.part`;
+      // 旧 JAR 已被清理（ENOENT）＝ 没有可备份的副本，跳过；不做存在性预检——
+      // 预检与复制之间的窗口里旧 jar 被删会以裸 ENOENT 中断整个升级
+      const backupTmpPath = `${backupJarPath}.part`;
+      let jarCopied = false;
+      try {
         await fs.promises.copyFile(oldJarPath, backupTmpPath);
-        await fs.promises.rename(backupTmpPath, backupJarPath);
+        jarCopied = true;
+      } catch (e) {
+        if (e.code !== 'ENOENT') throw e;
       }
+      if (jarCopied) await fs.promises.rename(backupTmpPath, backupJarPath);
       task.throwIfCancelled();
       // 更新 DB：jarFile + mcVersion
       const { InstanceModel } = await import('../db/index.js');
