@@ -104,7 +104,7 @@ describe('WebSocket 通知持久化与断线补齐', () => {
     // 已落库 1 条 → id = 1
     expect(fakeDb.inserted.length).toBe(1);
     const msg = sentMessage(ws);
-    expect(msg.id).toBe(1);
+    expect(msg.eventId).toBe(1);
     expect(msg.type).toBe('playerJoin');
   });
 
@@ -115,7 +115,17 @@ describe('WebSocket 通知持久化与断线补齐', () => {
 
     expect(fakeDb.inserted.length).toBe(0);
     const msg = sentMessage(ws);
-    expect(msg.id).toBeUndefined();
+    expect(msg.eventId).toBeUndefined();
+  });
+
+  it('游标字段名只能是契约里的 eventId（写成 id 会让前端游标永不推进、断线补齐静默失效）', () => {
+    const ws = connectAndSubscribe('s1');
+
+    serverManager.emit('instance:playerJoin', { instanceId: 's1', name: 'Alice' });
+
+    const msg = sentMessage(ws);
+    expect(msg).toMatchObject({ eventId: 1 });
+    expect('id' in msg).toBe(false);
   });
 
   it('status 事件仅状态跃迁子事件（started/stopped/crash/ready/save）落库', () => {
@@ -148,7 +158,7 @@ describe('WebSocket 通知持久化与断线补齐', () => {
 
     expect(fakeDb.inserted.length).toBe(1);
     const msg = sentMessage(ws);
-    expect(msg.id).toBe(1);
+    expect(msg.eventId).toBe(1);
     expect(msg.type).toBe('taskFailed');
     expect(msg.data).toMatchObject({ taskId: 7, taskName: '每日重启', error: '端口被占用' });
   });
@@ -161,7 +171,7 @@ describe('WebSocket 通知持久化与断线补齐', () => {
     expect(fakeDb.inserted.length).toBe(0);
     const msg = sentMessage(ws);
     expect(msg.type).toBe('taskExecute');
-    expect(msg.id).toBeUndefined();
+    expect(msg.eventId).toBeUndefined();
   });
 
   it('subscribe 携带 lastEventId 时重放其后的事件（断线补齐）', () => {
@@ -177,14 +187,46 @@ describe('WebSocket 通知持久化与断线补齐', () => {
     // 重放 2 条（id 101/102）
     const replayed = ws.send.mock.calls.filter((c) => {
       const m = JSON.parse(c[0]);
-      return m.id === 101 || m.id === 102;
+      return m.eventId === 101 || m.eventId === 102;
     });
     expect(replayed.length).toBe(2);
     const replay1 = JSON.parse(replayed[0][0]);
-    expect(replay1.id).toBe(101);
+    expect(replay1.eventId).toBe(101);
     expect(replay1.type).toBe('playerJoin');
     expect(replay1.data).toMatchObject({ name: 'Alice' });
     expect(replay1.instanceId).toBe('s1');
+  });
+
+  it('断线补齐：全局行（instance_id 为空）的归属从载荷回退取得', () => {
+    // 关键事件（crash/熔断）落库为全局行以取得全局面补齐，实例归属只存在于载荷——
+    // 不回退则前端拿到空 instanceId，通知点击后无法跳转到出事的实例
+    fakeDb.prepare = vi.fn((sql) => {
+      if (sql.includes('SELECT id, instance_id, type, data')) {
+        return {
+          all: (lastEventId) => [
+            {
+              id: lastEventId + 1,
+              instance_id: null,
+              type: WSEvents.STATUS,
+              data: JSON.stringify({ instanceId: 's9', event: 'crash', exitCode: 1 }),
+              created_at: '2026-08-11T00:00:00.000Z',
+            },
+          ],
+        };
+      }
+      return { run: vi.fn(), all: vi.fn(() => []) };
+    });
+
+    const ws = createFakeWs();
+    wss.emit('connection', ws, { _wsApiKey: TEST_API_KEY });
+    ws.emit('message', JSON.stringify({ type: 'subscribe', instanceId: 's1', lastEventId: 100 }));
+
+    const replayed = ws.send.mock.calls
+      .map((c) => JSON.parse(c[0]))
+      .filter((m) => m.eventId === 101);
+    expect(replayed).toHaveLength(1);
+    expect(replayed[0].instanceId).toBe('s9');
+    expect(replayed[0].data).toMatchObject({ event: 'crash' });
   });
 
   it('subscribe 不携带 lastEventId 时不重放', () => {

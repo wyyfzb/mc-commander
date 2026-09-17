@@ -101,6 +101,15 @@ export function useServerSocket(instanceId: string | null) {
     const handleMessage = (msg: WsMessage) => {
       const data = (msg.data ?? {}) as Record<string, unknown>
 
+      // 通知分发：信封 eventId（服务端 notification_events 自增 id）统一带上，
+      // 作为通知条目的跨标签身份（多个标签页各持一份副本，合并时据此认成同一条）。
+      // 收敛在一处而非逐调用点手写——新增分发点漏带会静默退化成「跨标签重复条目」
+      const dispatchEvent = (event: {
+        type: string
+        data?: Record<string, unknown>
+        instanceId?: string
+      }) => dispatchWsEvent({ ...event, ...(msg.eventId != null ? { eventId: msg.eventId } : {}) })
+
       // 全局系统资源统计推送（broadcastAll，无 instanceId）
       if (msg.type === 'systemStatsUpdate') {
         void queryClient.invalidateQueries({ queryKey: queryKeys.systemStats() })
@@ -112,7 +121,7 @@ export function useServerSocket(instanceId: string | null) {
       if (msg.type === 'status' && msg.instanceId !== instanceRef.current) {
         const ev = String(data.event ?? '')
         if (ev === 'crash' || ev === 'circuit_breaker') {
-          dispatchWsEvent({ type: 'status', data: msg.data as Record<string, unknown>, instanceId: msg.instanceId })
+          dispatchEvent({ type: 'status', data: msg.data as Record<string, unknown>, instanceId: msg.instanceId })
         }
         return
       }
@@ -134,7 +143,7 @@ export function useServerSocket(instanceId: string | null) {
       // 部署终态通知（服务端落库事件，信封无 instanceId——部署实例未入库）：
       // 入通知中心；完成时新实例已入库，刷新列表
       if (msg.type === 'deployComplete' || msg.type === 'deployFailed') {
-        dispatchWsEvent({ type: msg.type, data: msg.data as Record<string, unknown> })
+        dispatchEvent({ type: msg.type, data: msg.data as Record<string, unknown> })
         if (msg.type === 'deployComplete') {
           void queryClient.invalidateQueries({ queryKey: queryKeys.instances() })
         }
@@ -144,7 +153,7 @@ export function useServerSocket(instanceId: string | null) {
       // 升级终态通知（带实例归属）：入通知中心（列表刷新由 upgradeProgress
       // 终态分支处理，不重复）
       if (msg.type === 'upgradeComplete' || msg.type === 'upgradeFailed') {
-        dispatchWsEvent({
+        dispatchEvent({
           type: msg.type,
           data: msg.data as Record<string, unknown>,
           instanceId: msg.instanceId,
@@ -189,7 +198,7 @@ export function useServerSocket(instanceId: string | null) {
             void queryClient.invalidateQueries({ queryKey: queryKeys.instance(msg.instanceId) })
             // critical 事件（当前实例）：入通知中心 + 持久 toast（手动关闭防错过）
             if (ev === 'crash' || ev === 'circuit_breaker') {
-              dispatchWsEvent({ type: 'status', data: msg.data as Record<string, unknown>, instanceId: msg.instanceId })
+              dispatchEvent({ type: 'status', data: msg.data as Record<string, unknown>, instanceId: msg.instanceId })
               const name = getInstanceName(queryClient, msg.instanceId)
               const crashedInstanceId = msg.instanceId
               toast.error(
@@ -205,7 +214,7 @@ export function useServerSocket(instanceId: string | null) {
             } else {
               // started/stopped/ready/save 常规跃迁：入通知中心（文案映射见
               // lib/notifications buildNotifications），不弹 toast 防打断
-              dispatchWsEvent({ type: 'status', data: msg.data as Record<string, unknown>, instanceId: msg.instanceId })
+              dispatchEvent({ type: 'status', data: msg.data as Record<string, unknown>, instanceId: msg.instanceId })
             }
           } else {
             applyWsSnapshot(msg.instanceId, {
@@ -274,7 +283,7 @@ export function useServerSocket(instanceId: string | null) {
         case 'achievement':
           // 玩家列表全量刷新（join/leave 后重新拉取），随后落入通知中心
           void queryClient.invalidateQueries({ queryKey: queryKeys.players(msg.instanceId) })
-          dispatchWsEvent({ type: msg.type, data: msg.data as Record<string, unknown>, instanceId: msg.instanceId })
+          dispatchEvent({ type: msg.type, data: msg.data as Record<string, unknown>, instanceId: msg.instanceId })
           break
         case 'weatherUpdate':
         case 'backupStart':
@@ -286,7 +295,7 @@ export function useServerSocket(instanceId: string | null) {
         case 'restoreFailed':
         case 'taskFailed':
         case 'webhookDeliveryFailed':
-          dispatchWsEvent({ type: msg.type, data: msg.data as Record<string, unknown>, instanceId: msg.instanceId })
+          dispatchEvent({ type: msg.type, data: msg.data as Record<string, unknown>, instanceId: msg.instanceId })
           break
         default:
           break

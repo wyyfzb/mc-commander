@@ -3,6 +3,7 @@ import {
   aggregateNotifications,
   buildAlertNotifications,
   buildNotifications,
+  mergeNotifications,
   type AppNotification,
 } from '../notifications'
 
@@ -276,5 +277,56 @@ describe('buildAlertNotifications 告警状态机', () => {
 
     const recovered = buildAlertNotifications({ cpu: 50 }, undefined, new Set(['highCpu']))
     expect(recovered.notifications[0]?.content).toBe('CPU 使用率已恢复正常')
+  })
+})
+
+describe('mergeNotifications 跨标签合并', () => {
+  it('并集：两侧独有条目都保留（另一标签刚产生的通知不被覆盖）', () => {
+    const local = [base({ id: 'a', timestamp: 100 })]
+    const remote = [base({ id: 'b', timestamp: 200 })]
+
+    // 远端独有条目排最前（对本标签是「新出现的」），本地顺序保持不动
+    expect(mergeNotifications(local, remote).map((n) => n.id)).toEqual(['b', 'a'])
+  })
+
+  it('身份取 eventKey 优先：同一事件在两个标签各生成的副本合并成一条', () => {
+    // 两个标签各持一份副本：id 是各自 randomUUID（不同），eventKey 相同
+    const tabA = [base({ id: 'tab-a-1', eventKey: 'evt-42-0', count: 3, read: false })]
+    const tabB = [base({ id: 'tab-b-1', eventKey: 'evt-42-0', count: 3, read: true })]
+
+    const merged = mergeNotifications(tabA, tabB)
+    expect(merged).toHaveLength(1)
+    // 保留先到者的 id，字段取并集（已读不回退）
+    expect(merged[0]).toMatchObject({ id: 'tab-a-1', read: true, count: 3 })
+  })
+
+  it('无 eventKey 时退回 id 身份（前端本地告警等无服务端事件的条目）', () => {
+    const local = [base({ id: 'alert-1' })]
+    const remote = [base({ id: 'alert-2' })]
+
+    expect(mergeNotifications(local, remote)).toHaveLength(2)
+    expect(mergeNotifications(local, local)).toHaveLength(1)
+  })
+
+  it('同 id：read 取并集、count/timestamp 取较大值（单调量不回退）', () => {
+    const local = [base({ id: 'a', read: true, count: 3, timestamp: 500 })]
+    const remote = [base({ id: 'a', read: false, count: 1, timestamp: 100 })]
+
+    const [merged] = mergeNotifications(local, remote)
+    expect(merged).toMatchObject({ id: 'a', read: true, count: 3, timestamp: 500 })
+  })
+
+  it('清空时刻：更早的条目两侧都不保留，同毫秒新条目保留（清空后立刻产生的通知不被吞掉）', () => {
+    const local = [base({ id: 'old', timestamp: 100 }), base({ id: 'same-ms', timestamp: 200 })]
+    const remote = [base({ id: 'older', timestamp: 50 }), base({ id: 'new', timestamp: 300 })]
+
+    expect(mergeNotifications(local, remote, 200).map((n) => n.id)).toEqual(['new', 'same-ms'])
+  })
+
+  it('顺序与裁剪：本地顺序不动，远端独有条目排最前，超上限裁掉列表尾部', () => {
+    const local = Array.from({ length: 5 }, (_, i) => base({ id: `n-${i}`, timestamp: 100 - i }))
+
+    const merged = mergeNotifications(local, [], 0, 3)
+    expect(merged.map((n) => n.id)).toEqual(['n-0', 'n-1', 'n-2'])
   })
 })

@@ -200,7 +200,7 @@ describe('WebSocket 系统广播域（broadcastAll / 全局通知 / 系统统计
 
       const notice = sentMessage(wsA, 1);
       expect(notice.type).toBe(WSEvents.DEPLOY_COMPLETE);
-      expect(notice.id).toBe(1);
+      expect(notice.eventId).toBe(1);
       expect('instanceId' in notice).toBe(false);
       expect(notice.data).toMatchObject({ instanceId: 'paper-x1', instanceName: '生存服' });
       // 落库：instance_id NULL（无归属全局通知）
@@ -231,7 +231,70 @@ describe('WebSocket 系统广播域（broadcastAll / 全局通知 / 系统统计
       expect(ws.send).toHaveBeenCalledTimes(2);
       const notice = sentMessage(ws, 1);
       expect(notice.type).toBe(WSEvents.DEPLOY_COMPLETE);
-      expect('id' in notice).toBe(false);
+      expect('eventId' in notice).toBe(false);
+    });
+  });
+
+  describe('关键状态跃迁（crash/熔断）全局面投递', () => {
+    it('未订阅该实例的客户端也收到 crash，归属仍由信封 instanceId 携带', () => {
+      const wsOther = connect(wss);
+      wsOther.subscribedInstances.add('s2');
+      const wsBare = connect(wss);
+
+      serverManager.emit('instance:status', { instanceId: 's1', event: 'crash', exitCode: 1 });
+
+      expect(wsOther.send).toHaveBeenCalledTimes(1);
+      expect(wsBare.send).toHaveBeenCalledTimes(1);
+      const msg = sentMessage(wsBare);
+      expect(msg.type).toBe(WSEvents.STATUS);
+      expect(msg.instanceId).toBe('s1');
+      expect(msg.data).toMatchObject({ event: 'crash', exitCode: 1 });
+    });
+
+    it('订阅者只收到一次（放开通投递不引入重复下发）', () => {
+      const ws = connect(wss);
+      ws.subscribedInstances.add('s1');
+
+      serverManager.emit('instance:status', { instanceId: 's1', event: 'crash' });
+
+      expect(ws.send).toHaveBeenCalledTimes(1);
+    });
+
+    it('关键事件落库 instance_id 置空（断线补齐取全局面）且消息携带自增 id', () => {
+      const ws = connect(wss);
+      ws.subscribedInstances.add('s1');
+
+      serverManager.emit('instance:status', {
+        instanceId: 's1',
+        event: 'circuit_breaker',
+        reason: '连续崩溃',
+      });
+
+      expect(fakeDb.inserted).toHaveLength(1);
+      expect(fakeDb.inserted[0][0]).toBeNull();
+      expect(sentMessage(ws).eventId).toBe(1);
+    });
+
+    it('常规跃迁（stopped）仍按订阅过滤并保留实例归属', () => {
+      const wsOther = connect(wss);
+      wsOther.subscribedInstances.add('s2');
+      const wsSub = connect(wss);
+      wsSub.subscribedInstances.add('s1');
+
+      serverManager.emit('instance:status', { instanceId: 's1', event: 'stopped', code: 0 });
+
+      expect(wsSub.send).toHaveBeenCalledTimes(1);
+      expect(wsOther.send).not.toHaveBeenCalled();
+      expect(fakeDb.inserted[0][0]).toBe('s1');
+    });
+
+    it('readyState 非 1 的客户端对关键事件同样免疫', () => {
+      const wsOff = connect(wss);
+      wsOff.readyState = 0;
+
+      serverManager.emit('instance:status', { instanceId: 's1', event: 'crash' });
+
+      expect(wsOff.send).not.toHaveBeenCalled();
     });
   });
 
@@ -408,7 +471,7 @@ describe('WebSocket 系统广播域（broadcastAll / 全局通知 / 系统统计
       expect(fakeDb.inserted).toHaveLength(1);
       const msg = sentMessage(ws);
       expect(msg.type).toBe(WSEvents.WEBHOOK_DELIVERY_FAILED);
-      expect(msg.id).toBe(1);
+      expect(msg.eventId).toBe(1);
       expect(msg.data).toMatchObject({ webhookId: 3, error: 'request timeout' });
     });
 

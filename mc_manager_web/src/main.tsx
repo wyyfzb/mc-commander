@@ -7,13 +7,15 @@ import { Toaster, toast } from 'sonner'
 import { PageLoader } from '@/components/mcs/page-loader'
 import { ErrorBoundary } from '@/components/mcs/error-boundary'
 import { ThemeClassSync } from '@/layouts/theme-class-sync'
-import { startNotificationCleanupTimer } from '@/stores/notifications'
+import { startNotificationCleanupTimer, startNotificationStorageSync } from '@/stores/notifications'
 import { useUiStore } from '@/stores/ui'
 import './index.css'
 import { router } from './routes'
 
-// 通知内存 5 分钟周期裁剪（长会话内存收敛，M2 差异 #3）
+// 通知内存 5 分钟周期裁剪（长会话内存收敛）
 startNotificationCleanupTimer()
+// 多标签页并行时的通知同步（各标签页独立持内存副本，靠 storage 事件按 id 合并）
+startNotificationStorageSync()
 
 // -- 全局运行时异常兜底（issue 333，audit F-P0-1 残留） --
 // ErrorBoundary 仅捕获 React 组件树内的渲染异常；

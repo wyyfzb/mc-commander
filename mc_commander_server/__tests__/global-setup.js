@@ -71,6 +71,10 @@ function sweepStaleRoots() {
   return swept;
 }
 
+/* vitest globalSetup 在测试进程内执行、不属于服务端运行时——运行时的日志收口
+   （utils/logger.js 的分级过滤与轮转）在这里不适用，输出直接走测试进程控制台 */
+/* eslint-disable no-console */
+
 export function setup() {
   const root = ownRoot();
   rmDir(root);

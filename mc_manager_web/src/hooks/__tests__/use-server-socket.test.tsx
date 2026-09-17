@@ -286,6 +286,9 @@ describe('useServerSocket（WS 单例治理，issue #311）', () => {
       ws1.receive({ type: 'playerJoin', eventId: 42, instanceId: 'i-1', data: {} })
     })
 
+    // 同一信封的 eventId 也随条目录下（跨标签合并的身份）：分发点手写会漏，接线收敛在一处
+    expect(useNotificationStore.getState().items[0]?.eventKey).toBe('evt-42-0')
+
     // 凭据变更重建
     act(() => {
       useAuthStore.setState({ session: makeSession('token-new') })

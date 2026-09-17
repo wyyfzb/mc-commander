@@ -29,6 +29,13 @@ export interface AppNotification {
   read: boolean
   /** 关联实例（server 类事件携带；通知条目据此跳转实例页） */
   instanceId?: string
+  /**
+   * 服务端事件身份（`evt-<notification_events.id>-<事件内序号>`）。
+   * 同一条事件在多个标签页各生成一份条目（id 是各自 randomUUID），
+   * 跨标签合并靠本字段把它们认成同一条，否则会各留一份重复条目。
+   * 由前端按事件直接生成的告警（TPS/CPU/内存阈值）没有服务端事件，故缺省。
+   */
+  eventKey?: string
 }
 
 /** 通知严重度（严重/警告/提示；行内即时反馈分级） */
@@ -362,4 +369,71 @@ export const CLEANUP_TARGET = 100
 
 export function trimNotifications(list: AppNotification[], limit = MAX_PERSISTED_NOTIFICATIONS): AppNotification[] {
   return list.length > limit ? list.slice(0, limit) : list
+}
+
+/**
+ * 跨标签合并（多标签页各自持有内存副本、每次变更整体写回，会互相覆盖）：
+ * - 身份：优先 `eventKey`（服务端事件身份，同一事件在各标签页携带同一个值），
+ *   没有它的条目退回 `id`。条目 `id` 是各标签页各自 randomUUID 出来的，
+ *   只按 id 合并会把「同一条事件的两份副本」当成两条独立条目留下
+ * - 同身份：保留先到者（本地）的 id/内容，read 取并集、count/timestamp 取较大值
+ *   （三者都只单调增长，取并集即不回退）
+ * - 严格早于 `clearedAt` 的条目剔除：清空是唯一「删」语义，没有这个墓碑，
+ *   另一标签内存里的旧副本会在它下次写回时把已清空的列表复活。
+ *   比较取严格小于而非小于等于——清空与新通知可能落在同一毫秒，用 `<=` 会把
+ *   清空后立刻产生的通知一并吞掉（代价是该毫秒内既有的条目理论上可被旧副本带回，
+ *   窗口 1ms 且要求用户在同一毫秒内既收到通知又清空，按可忽略处理；
+ *   客户端时钟回拨同样会让新条目落入清空点之前而被剔除，不另设防护）
+ * - 顺序：本标签顺序为基准（运行期顺序即「新在前」，聚合只抬计数不挪位，
+ *   重排会让正在看抽屉的用户看到列表自己跳动），本标签没有的远端条目排在最前
+ */
+export function mergeNotifications(
+  local: AppNotification[],
+  remote: AppNotification[],
+  clearedAt = 0,
+  limit = MAX_PERSISTED_NOTIFICATIONS,
+): AppNotification[] {
+  const identity = (n: AppNotification) => (n.eventKey ? `k:${n.eventKey}` : `i:${n.id}`)
+  const absorb = (a: AppNotification, b: AppNotification): AppNotification => ({
+    ...a,
+    read: a.read || b.read,
+    count: Math.max(a.count, b.count),
+    timestamp: Math.max(a.timestamp, b.timestamp),
+  })
+
+  const merged: AppNotification[] = []
+  const at = new Map<string, number>()
+  const addLocal = (n: AppNotification) => {
+    if (n.timestamp < clearedAt) return
+    const key = identity(n)
+    const hit = at.get(key)
+    if (hit === undefined) {
+      at.set(key, merged.length)
+      merged.push(n)
+      return
+    }
+    merged[hit] = absorb(merged[hit]!, n)
+  }
+  for (const n of local) addLocal(n)
+
+  const ahead: AppNotification[] = []
+  const aheadAt = new Map<string, number>()
+  for (const n of remote) {
+    if (n.timestamp < clearedAt) continue
+    const key = identity(n)
+    const hit = at.get(key)
+    if (hit !== undefined) {
+      merged[hit] = absorb(merged[hit]!, n)
+      continue
+    }
+    const aheadHit = aheadAt.get(key)
+    if (aheadHit === undefined) {
+      aheadAt.set(key, ahead.length)
+      ahead.push(n)
+      continue
+    }
+    ahead[aheadHit] = absorb(ahead[aheadHit]!, n)
+  }
+
+  return [...ahead, ...merged].slice(0, limit)
 }

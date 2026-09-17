@@ -128,7 +128,16 @@ export function cleanupNotificationEvents() {
 // status 事件中需要持久化的状态跃迁子事件（前端据此生成通知）
 const STATUS_EVENT_TYPES = new Set(['started', 'stopped', 'crash', 'ready', 'save', 'circuit_breaker']);
 
-/// 通知事件落库（广播前）：返回自增 id 供消息携带与断线补齐
+// 跃迁子事件中属「意外失败」的关键事件：用户不一定正盯着出事的实例，投递面取全局，
+// 否则多实例部署下非当前实例的崩溃只有恰好打开该实例控制台才看得见。
+// started/stopped/ready/save 是常规生命周期（多数由用户在面板上发起），
+// 保持订阅内投递——跨实例广播只会给其它实例的视图制造噪音
+const CRITICAL_STATUS_EVENTS = new Set(['crash', 'circuit_breaker']);
+
+/// 通知事件落库（广播前）：返回自增 id 供消息携带与断线补齐。
+/// 上线字段名必须是 eventId——契约（mc-schemas/src/ws.ts）与前端游标
+/// （api/ws.ts 的 saveLastEventId）都只认这个名字，发成 id 会让前端游标永不推进、
+/// 断线补齐静默失效（补齐逻辑与落库照常工作，只是永远不会被触发）
 function persistNotificationEvent(instanceId, type, data) {
   try {
     const db = getDb();
@@ -431,11 +440,14 @@ export function setupWebSocket(wss, serverManager) {
         )
         .all(lastEventId, instanceId);
       for (const ev of events) {
+        const data = JSON.parse(ev.data || '{}');
         ws.send(JSON.stringify({
-          id: ev.id,
+          eventId: ev.id,
           type: ev.type,
-          instanceId: ev.instance_id,
-          data: JSON.parse(ev.data || '{}'),
+          // 归属回退到载荷：关键事件（crash/熔断）落库时 instance_id 置空以取得
+          // 全局补齐面，实例归属只存在于 data.instanceId（前端据信封字段决定跳转目标）
+          instanceId: ev.instance_id ?? data.instanceId ?? null,
+          data,
           // parseDbTime 归一化：created_at 是无时区标记的 UTC 串，
           // 直接 Date.parse 在非 UTC 时区下会把补发事件的时间整体偏移。
           timestamp: parseDbTime(ev.created_at) || Date.now(),
@@ -449,24 +461,13 @@ export function setupWebSocket(wss, serverManager) {
     }
   }
 
-  /// 广播（带背压保护）：通知类事件先落库并携带事件 id
-  function broadcast(instanceId, type, data) {
-    let eventId = null;
-    if (NOTIFICATION_EVENT_TYPES.has(type)) {
-      eventId = persistNotificationEvent(instanceId, type, data);
-    }
-    const message = JSON.stringify({
-      ...(eventId != null ? { id: eventId } : {}),
-      type,
-      instanceId,
-      data,
-      timestamp: Date.now()
-    });
-
+  /// 单条消息投递（带背压保护）：订阅过滤 + readyState + 慢客户端处置的唯一实现，
+  /// 四条投递路径（实例广播 / 关键事件 / 全局通知 / broadcastAll）共用，避免背压判据分叉。
+  /// includeUnsubscribed=true 的关键事件与全局事件投递给全部在线客户端
+  function fanOut(message, { type, instanceId = null, includeUnsubscribed = false }) {
     for (const client of clients) {
-      if (client.readyState !== 1 || !client.subscribedInstances.has(instanceId)) {
-        continue;
-      }
+      if (client.readyState !== 1) continue;
+      if (!includeUnsubscribed && !client.subscribedInstances.has(instanceId)) continue;
       // 背压保护：慢客户端缓冲超阈值时跳过高频 LOG，超上限则断开。
       if (client.bufferedAmount > 1024 * 1024) {
         if (type === WSEvents.LOG) continue;
@@ -478,6 +479,23 @@ export function setupWebSocket(wss, serverManager) {
       }
       client.send(message);
     }
+  }
+
+  /// 广播（带背压保护）：通知类事件先落库并携带事件 id
+  function broadcast(instanceId, type, data) {
+    let eventId = null;
+    if (NOTIFICATION_EVENT_TYPES.has(type)) {
+      eventId = persistNotificationEvent(instanceId, type, data);
+    }
+    const message = JSON.stringify({
+      ...(eventId != null ? { eventId } : {}),
+      type,
+      instanceId,
+      data,
+      timestamp: Date.now()
+    });
+
+    fanOut(message, { type, instanceId });
   }
 
   function sendError(ws, message) {
@@ -496,16 +514,12 @@ export function setupWebSocket(wss, serverManager) {
   function broadcastGlobalNotification(type, data) {
     const eventId = persistNotificationEvent(null, type, data);
     const message = JSON.stringify({
-      ...(eventId != null ? { id: eventId } : {}),
+      ...(eventId != null ? { eventId } : {}),
       type,
       data,
       timestamp: Date.now()
     });
-    for (const client of clients) {
-      if (client.readyState === 1) {
-        client.send(message);
-      }
-    }
+    fanOut(message, { type, includeUnsubscribed: true });
   }
 
   serverManager.on('instance:log', (data) => {
@@ -515,19 +529,22 @@ export function setupWebSocket(wss, serverManager) {
   serverManager.on('instance:status', (data) => {
     // status 快照高频（每 5s performance 附带）；仅状态跃迁子事件落库
     if (STATUS_EVENT_TYPES.has(data?.event)) {
-      const eventId = persistNotificationEvent(data.instanceId, WSEvents.STATUS, data);
+      const critical = CRITICAL_STATUS_EVENTS.has(data.event);
+      // 关键事件落库为全局行（instance_id 置空）：断线补齐对任何订阅者都可见，
+      // 实例归属仍由载荷 data.instanceId 携带（前端据信封字段跳转实例页）
+      const eventId = persistNotificationEvent(critical ? null : data.instanceId, WSEvents.STATUS, data);
       const message = JSON.stringify({
-        ...(eventId != null ? { id: eventId } : {}),
+        ...(eventId != null ? { eventId } : {}),
         type: WSEvents.STATUS,
         instanceId: data.instanceId,
         data,
         timestamp: Date.now()
       });
-      for (const client of clients) {
-        if (client.readyState === 1 && client.subscribedInstances.has(data.instanceId)) {
-          client.send(message);
-        }
-      }
+      fanOut(message, {
+        type: WSEvents.STATUS,
+        instanceId: data.instanceId,
+        includeUnsubscribed: critical
+      });
       return;
     }
     broadcast(data.instanceId, WSEvents.STATUS, data);
@@ -621,11 +638,7 @@ export function setupWebSocket(wss, serverManager) {
       timestamp: Date.now()
     });
 
-    for (const client of clients) {
-      if (client.readyState === 1) {
-        client.send(message);
-      }
-    }
+    fanOut(message, { type, includeUnsubscribed: true });
   }
 
   serverManager.on(WSEvents.DEPLOY_PROGRESS, (data) => {
