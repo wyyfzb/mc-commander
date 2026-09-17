@@ -15,6 +15,8 @@ export const ErrorCode = {
   RATE_LIMITED: 42900,
 
   INVALID_API_KEY: 40101,
+  /** 未提供任何凭据（无 API Key、无登录会话）：与「凭据无效」分开提示 */
+  AUTH_CREDENTIALS_REQUIRED: 40107,
 
   // 安全主线：管理员认证（routes/auth.js）
   AUTH_INVALID_CREDENTIALS: 40102,
@@ -109,6 +111,7 @@ const LOCALIZED_MESSAGES: Partial<Record<ErrorCodeValue, string>> = {
   [ErrorCode.NOT_FOUND]: '请求的资源不存在',
   [ErrorCode.RATE_LIMITED]: '请求过于频繁，请稍后再试',
   [ErrorCode.INVALID_API_KEY]: 'API Key 无效或已过期',
+  [ErrorCode.AUTH_CREDENTIALS_REQUIRED]: '尚未提供访问凭据：请在设置页配置 API Key，或登录本面板',
   [ErrorCode.AUTH_INVALID_CREDENTIALS]: '密码错误',
   [ErrorCode.AUTH_SESSION_EXPIRED]: '登录会话已过期，请重新登录',
   [ErrorCode.AUTH_NOT_CONFIGURED]: '管理员密码尚未设置，请先完成初始化',

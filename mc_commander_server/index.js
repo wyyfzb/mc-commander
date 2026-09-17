@@ -23,11 +23,13 @@ import { setupWebSocket } from './websocket.js';
 import { BackupModel } from './db/backup.model.js';
 import { setupWebhookDispatch } from './services/webhook.service.js';
 import { BackupService } from './services/backup.service.js';
-import { initDatabase, getDb, InstanceModel } from './db/index.js';
+import { initDatabase, getDb, InstanceModel, AdminAccountModel } from './db/index.js';
+import { bootstrapApiKey, isPublicBind } from './utils/credentials.js';
 import { logger } from './utils/logger.js';
 
 // ── 启动时 .env 权限检查 ────────────
-const envPath = path.join(__dirname, '.env');
+// 路径取 config.envFilePath（与 dotenv 加载、凭据写回同一个来源），避免两处各自推导
+const envPath = config.envFilePath;
 
 // .env 权限检查：POSIX 下 group/other 可读位告警
 try {
@@ -37,16 +39,60 @@ try {
   }
 } catch { /* 文件不存在等情况由后续校验处理 */ }
 
-// 启动前校验关键配置（在 listen 之前）
+// ── 首次启动播种管理员 API Key ────────────
+// 不再要求部署方自行 `printf … | sha256sum`：人挑的明文无法约束强度（弱 Key 入口），
+// 而服务端签发一律走 CSPRNG（32 字节）。生成后写回 .env 的摘要行（原子写 + 0600），
+// 明文只在本次启动横幅里出现一次——与轮换端点同一口径（明文不落盘）。
+// 写盘失败即拒绝启动（而不是只在内存里留一把）：否则每次重启都会换一把 Key，
+// 已接入的脚本会在重启后收到无法解释的 401。
 if (!config.apiKeyHash) {
-  logger.banner('╔══════════════════════════════════════════════════╗');
-  logger.banner('║  错误: 未设置 API_KEY_HASH！                     ║');
-  logger.banner('║  请在 .env 文件中设置 API_KEY_HASH 后再启动。  ║');
-  logger.banner('╚══════════════════════════════════════════════════╝');
-  process.exit(1);
+  let bootstrapped = null;
+  try {
+    bootstrapped = bootstrapApiKey(config.envFilePath);
+  } catch (err) {
+    logger.banner('==========================================================');
+    logger.banner('  错误: 未设置 API_KEY_HASH，且自动生成后写回 .env 失败');
+    logger.banner('  请检查服务端目录写权限，或手动设置 API_KEY_HASH 后启动');
+    logger.banner('==========================================================');
+    logger.error('[Bootstrap] 写回 .env 失败:', err.message);
+    process.exit(1); // 生产路径到此终止；启动流程用例把 exit 桩成 no-op，故下方以 bootstrapped 收口
+  }
+  if (bootstrapped) {
+    config.apiKeyHash = bootstrapped.hash;
+    logger.banner('==========================================================');
+    logger.banner('  首次启动：已为你生成管理员 API Key（只显示这一次）');
+    logger.banner(`  API Key: ${bootstrapped.apiKey}`);
+    logger.banner('  摘要已写入 .env 的 API_KEY_HASH 行；明文请立即保存。');
+    logger.banner('  忘记可在设置页轮换，或删除该行后重启让服务端重新签发。');
+    logger.banner('==========================================================');
+  }
+}
+
+// ── 公网监听的所有权证明提示 ────────────
+// 威胁面：HOST 对外可达时，「部署完成 → 管理员设密」窗口内任何发现端口者可抢先
+// 设密并永久接管面板。部署脚本会生成一次性 SETUP_TOKEN（见 SECURITY.md「首访设密
+// 保护」），手工/容器部署容易漏掉，故这里在启动时点名提示（生成与否仍由部署方决定：
+// 手工加一行 `SETUP_TOKEN=<openssl rand -hex 32>` 即可，不改服务端行为）。
+function warnIfPublicBindWithoutSetupToken() {
+  if (config.setupToken || !isPublicBind(config.host)) return;
+  try {
+    if (AdminAccountModel.isConfigured()) return; // 已设密：setup 端点已不可达，无窗口
+  } catch (err) {
+    // 不猜状态：DB 不可读时默认「已设密」（最坏是漏一次提示，而不是对着健康部署误报）。
+    // 记一条 debug 便于排查接线错误（静默 return 会把「mock 少给一个模型」这类问题藏起来）
+    logger.debug('[Security] 首访设密提示的账号状态探测失败，按已设密处理:', err.message);
+    return;
+  }
+  logger.warn('──────────────────────────────────────────────────────────');
+  logger.warn(`[Security] 监听地址 ${config.host} 对外可达，且面板尚未设密、未配置 SETUP_TOKEN。`);
+  logger.warn('           此窗口内任何能访问该端口的人都可抢先设密并接管面板。');
+  logger.warn('           建议：运行 openssl rand -hex 32，把输出粘到 .env 的 SETUP_TOKEN= 后重启');
+  logger.warn('           （或改用部署脚本，它会自动生成并随部署输出展示）。');
+  logger.warn('──────────────────────────────────────────────────────────');
 }
 
 initDatabase();
+warnIfPublicBindWithoutSetupToken();
 
 const app = express();
 const server = http.createServer(app);

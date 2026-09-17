@@ -100,10 +100,15 @@ cp -r ../mc_manager_web/dist/. public/
 npm start
 ```
 
-**API Key 部署口径**：`.env` 中写入 `API_KEY_HASH=<sha256hex>`（如 `printf '%s' '你的密钥' | sha256sum` 生成）。
-服务端只存 SHA-256 摘要，明文不落盘；轮换走 `POST /api/v1/rotate-key`（服务端写回该行）。
+**API Key 部署口径**：`API_KEY_HASH` **留空即可**——服务端首次启动会自己签发一把
+`mcck-` 前缀的 32 字节随机 Key（256 位 CSPRNG），把 SHA-256 摘要写回 `.env`，并把明文
+在启动横幅里显示一次。服务端只存摘要、明文不落盘；轮换走 `POST /api/v1/rotate-key`
+（服务端写回该行）。忘记明文可删掉该行重启重新签发（旧 Key 随即失效）。
 
-未设置 `API_KEY_HASH` 时，服务端打印错误横幅并以 `exit(1)` 拒绝启动。
+想指定自己的 Key（如从密钥管理系统注入）时，请用 **≥32 字节 CSPRNG**，不要用人挑的
+短语：`printf '%s' "$(openssl rand -hex 32)" | sha256sum`，把输出填进 `API_KEY_HASH`。
+留空且写回 `.env` 失败（目录只读等）时，服务端打印错误横幅并以 `exit(1)` 拒绝启动——
+不降级为「每次重启换一把」的临时凭据。
 
 服务端默认运行在 `http://localhost:25566`
 
@@ -278,7 +283,7 @@ ws.onmessage = (event) => {
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
-| `API_KEY_HASH` | （必填，启动校验以本值为准） | API 认证密钥的 SHA-256 摘要（零明文落盘，如 `printf '%s' '<密钥>' \| sha256sum` 生成）；未设置时启动报错 `exit(1)` |
+| `API_KEY_HASH` | （留空则由服务端签发） | API 认证密钥的 SHA-256 摘要（零明文落盘）。**留空时服务端首次启动自己签发 32 字节 CSPRNG Key 并写回本行**（明文只在启动横幅显示一次）；手动指定时须 ≥32 字节 CSPRNG（`printf '%s' "$(openssl rand -hex 32)" \| sha256sum`）。留空且写回失败时启动报错 `exit(1)` |
 | `SETUP_TOKEN` | （未配置） | 首访设密所有权证明（一次性）：配置后 `POST /auth/setup` 必须携带 `Authorization: SetupToken <token>`，校验通过立即作废（内存 + 本行移除）；部署脚本首次部署自动生成，未配置 = 不校验（仅建议本机/可信网络使用） |
 | `HOST` | `127.0.0.1` | 服务监听地址：公网部署需显式设 `0.0.0.0`（默认仅本机） |
 | `TRUST_PROXY` | `1` | 信任反向代理层数（Express trust proxy）：默认 1 兼容 nginx/CDN 反代，设 0 不信任代理头（`req.ip` = 直连 IP）；仅影响 `req.ip` 解析，登录锁定键始终取直连 IP |

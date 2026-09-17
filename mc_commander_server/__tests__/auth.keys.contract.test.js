@@ -185,7 +185,7 @@ describe('auth/keys 响应契约（validatedSuccess 观测）', { timeout: 15_00
         .set('x-api-key', TEST_PLAINTEXT_KEY);
       expect(res.status).toBe(200);
       expect(apiKeyRotateResponseSchema.safeParse(res.body.data).success).toBe(true);
-      expect(res.body.data.apiKey).toMatch(/^mcck-[0-9a-f]{8}-[0-9a-f]{8}-[0-9a-f]{8}$/);
+      expect(res.body.data.apiKey).toMatch(/^mcck-[0-9a-f]{8}(-[0-9a-f]{8}){7}$/);
       expect(res.body.message).toContain('API Key 已轮换');
     } finally {
       config.apiKeyHash = originalHash;

@@ -43,9 +43,17 @@ vi.mock('../config.js', () => ({
     get apiKeyHash() {
       return h.apiKeyHash;
     },
+    // 启动播种会回填内存哈希（config 在生产里是普通对象，桩必须可写）
+    set apiKeyHash(value) {
+      h.apiKeyHash = value;
+    },
+    host: '127.0.0.1',
+    setupToken: '',
     port: 1,
     serversDir: 'mock:/servers',
     dataDir: 'mock:/data',
+    // .env 写回目标（启动播种用）：桩成非真实路径，防止用例意外写仓库 .env
+    envFilePath: 'mock:/.env',
     backupsDir: 'mock:/backups',
     publicDir: 'mock:/public',
     logLevel: 'info',
@@ -80,11 +88,25 @@ vi.mock('../services/task_scheduler.js', () => ({
 }));
 vi.mock('../websocket.js', () => ({ setupWebSocket: vi.fn() }));
 vi.mock('../services/webhook.service.js', () => ({ setupWebhookDispatch: vi.fn() }));
-vi.mock('../db/index.js', () => ({ initDatabase: vi.fn() }));
+vi.mock('../db/index.js', () => ({ initDatabase: vi.fn(), AdminAccountModel: { isConfigured: vi.fn(() => true) } }));
+// 启动播种的凭据写盘：本文件绝不触碰真实 .env（生成/写回都让桩可观测）
+vi.mock('../utils/credentials.js', () => ({
+  // 播种是「生成 + 写回」的单一入口（真实实现见 utils/credentials.js）：
+  // 本文件只验证启动流程的处置（用返回值回填内存、失败即退出），
+  // 生成/写回本身由 credentials.test.js 在真实文件系统上覆盖
+  bootstrapApiKey: vi.fn(() => ({
+    apiKey: 'mcck-mock-00000000-00000000-00000000',
+    hash: 'a'.repeat(64),
+  })),
+  isPublicBind: vi.fn(() => false),
+}));
 
 // 满足哈希格式的 mock Hash（64 位 hex）
 // SHA-256('mock-strong-key-0123456789abcdef') 预计算
 const VALID_HASH = '98f5a7bec05d6145e649c6edd8f8d27f380d0da515a86ab4f77c5f0f50b56bf6';
+
+import { bootstrapApiKey, isPublicBind } from '../utils/credentials.js';
+import { AdminAccountModel } from '../db/index.js';
 
 // 重新 import index.js 前复位：模块注册表 / use 记录
 function resetAndImport() {
@@ -157,6 +179,59 @@ describe('安全响应头中间件（helmet）', () => {
 });
 
 describe('API Key Hash 启动校验', () => {
+  describe('公网监听的 SETUP_TOKEN 提示（清单 #32 附带）', () => {
+    // 直接拦 stderr 落点（logger.warn 的出口）：vitest 的 resetModules 会让 logger 模块
+    // 重新实例化，spy 旧实例收不到新实例的调用
+    let warnSpy;
+    const warnText = () => warnSpy.mock.calls.map((c) => String(c[0])).join(String.fromCharCode(92) + 'n');
+
+    beforeAll(() => {
+      warnSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    });
+    afterAll(() => {
+      warnSpy.mockRestore();
+    });
+    beforeEach(() => {
+      warnSpy.mockClear();
+      h.apiKeyHash = VALID_HASH;
+      isPublicBind.mockReturnValue(true);
+      AdminAccountModel.isConfigured.mockReturnValue(false);
+      vi.stubEnv('NODE_ENV', 'development');
+    });
+
+    it('对外可达 + 尚未设密 + 未配置 token → 打告警（含修法）', async () => {
+      await resetAndImport();
+      const text = warnText();
+      expect(text).toContain('对外可达');
+      expect(text).toContain('SETUP_TOKEN');
+      // 告警必须给出可执行修法（不是只报风险）
+      expect(text).toContain('openssl rand -hex 32');
+    });
+
+    it('已设密 → 不打告警（setup 端点已不可达，没有抢注窗口）', async () => {
+      AdminAccountModel.isConfigured.mockReturnValue(true);
+      await resetAndImport();
+      expect(warnText()).not.toContain('对外可达');
+    });
+
+    it('已配置 SETUP_TOKEN → 不打告警', async () => {
+      const cfg = (await import('../config.js')).default;
+      cfg.setupToken = 'configured-token';
+      try {
+        await resetAndImport();
+        expect(warnText()).not.toContain('对外可达');
+      } finally {
+        cfg.setupToken = '';
+      }
+    });
+
+    it('仅本机监听 → 不打告警（本机/可信网络部署的既有便利不被打扰）', async () => {
+      isPublicBind.mockReturnValue(false);
+      await resetAndImport();
+      expect(warnText()).not.toContain('对外可达');
+    });
+  });
+
   describe('启动时哈希存在性校验', () => {
     let exitSpy;
 
@@ -174,8 +249,20 @@ describe('API Key Hash 启动校验', () => {
       vi.unstubAllEnvs();
     });
 
-    it('无 API Key Hash 应 process.exit(1)', async () => {
+    it('无 API Key Hash：服务端签发并写回 .env，不退出', async () => {
       h.apiKeyHash = '';
+      bootstrapApiKey.mockClear();
+      await resetAndImport();
+
+      // 播种入口收到 .env 路径（写回目标由 config 决定，不写死仓库路径）
+      expect(bootstrapApiKey).toHaveBeenCalledTimes(1);
+      expect(String(bootstrapApiKey.mock.calls[0][0]).endsWith('.env')).toBe(true);
+      expect(exitSpy).not.toHaveBeenCalled();
+    });
+
+    it('无 API Key Hash 且写回失败：横幅报错 + exit(1)（不留「每次重启换一把」的临时凭据）', async () => {
+      h.apiKeyHash = '';
+      bootstrapApiKey.mockImplementationOnce(() => { throw new Error('EACCES'); });
       await resetAndImport();
       expect(exitSpy).toHaveBeenCalledWith(1);
     });

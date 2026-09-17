@@ -121,7 +121,7 @@ describe('API_KEY_ENABLED=true（默认）：轮换行为与现状一致', () =>
 
     expect(res.status).toBe(200);
     const newKey = res.body.data.apiKey;
-    expect(newKey).toMatch(/^mcck-[0-9a-f]{8}-[0-9a-f]{8}-[0-9a-f]{8}$/);
+    expect(newKey).toMatch(/^mcck-[0-9a-f]{8}(-[0-9a-f]{8}){7}$/);
     expect(config.apiKeyHash).toBe(hashToken(newKey));
     // 只更新临时 .env；仓库真实 .env 从未参与
     expect(sha256Of(envPath)).not.toBe(before);

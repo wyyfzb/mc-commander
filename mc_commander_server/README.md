@@ -46,7 +46,8 @@ npm install
 
 # 配置环境变量
 cp .env.example .env
-# 编辑 .env，设置 API_KEY_HASH（必填：明文 Key 的 SHA-256 摘要）
+# API_KEY_HASH 留空即可：首次启动由服务端签发 32 字节 CSPRNG Key，
+# 摘要自动写回 .env，明文在启动横幅里显示一次（想自己指定请见 .env.example 的生成命令）
 
 # 构建 Web 前端并放进 public/（面板界面必需：public/index.html 不存在时
 # 静态层整体不挂载，浏览器访问只有 404 JSON；目录可用 PUBLIC_DIR 覆盖）
@@ -75,7 +76,7 @@ sudo bash /tmp/deploy-mc-commander.sh
 
 | 保留项 | 说明 |
 |--------|------|
-| `.env` | 配置与 API_KEY_HASH 沿用不重新生成（缺失时以 `.env.example` 为模板生成） |
+| `.env` | 已存在则沿用（配置与 API_KEY_HASH 不重新生成）；仅首次部署时由脚本按内置模板生成（含 `HOST=0.0.0.0` 与 `SETUP_TOKEN`） |
 | `data/` | SQLite 数据库与运行时数据 |
 | `servers/` | MC 实例目录 |
 | `backups/` | 备份快照 |
@@ -208,7 +209,7 @@ Authorization: Bearer <session-token>
   # 生成 / 轮换（用管理员会话或全局 API Key 调用；明文只在响应里出现一次）
   curl -X POST http://127.0.0.1:25566/api/v1/rotate-readonly-key \
        -H "X-API-Key: <管理员 Key>"
-  # → {"status":"ok", ..., "data":{"apiKey":"mcro-xxxxxxxx-xxxxxxxx-xxxxxxxx"}}
+  # → {"status":"ok", ..., "data":{"apiKey":"mcro-<32 字节随机 hex，8 位一组共 8 组>"}}
 
   # 只读调用
   curl http://127.0.0.1:25566/api/v1/overview -H "X-API-Key: mcro-..."

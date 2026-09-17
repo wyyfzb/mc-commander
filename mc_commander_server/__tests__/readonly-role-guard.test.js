@@ -492,11 +492,21 @@ describe('未配置只读 Key：该通道不存在（负向对照）', () => {
     config.readonlyApiKeyHash = '';
   });
 
-  it('任意值（含曾用只读值、空串）都拿不到 readonly 权限，也不是管理员', async () => {
-    for (const value of [READONLY_KEY, '', 'mcro-00000000-00000000-00000000', ADMIN_KEY + 'x']) {
+  it('任意值（含曾用只读值）都拿不到 readonly 权限，也不是管理员', async () => {
+    for (const value of [READONLY_KEY, 'mcro-00000000-00000000-00000000', ADMIN_KEY + 'x']) {
       const res = await request(app).get(`${API_V1_MOUNT}/overview`).set('X-API-Key', value);
       expect(res.status, `只读哈希未配置时 ${JSON.stringify(value)} 不应被接受`).toBe(401);
       expect(res.body.code).toBe(ErrorCodes.INVALID_API_KEY.code);
+    }
+  });
+
+  it('空串 header 走「未提供凭据」（40107），不是「凭据无效」（40101）', async () => {
+    // 空串在中间件里视同未提供凭据（trim 后为空），语义上不该报「Key 无效」；
+    // 安全性不受影响：一律 401，都不放行
+    for (const value of ['', '   ']) {
+      const res = await request(app).get(`${API_V1_MOUNT}/overview`).set('X-API-Key', value);
+      expect(res.status, `header=${JSON.stringify(value)} 不应被接受`).toBe(401);
+      expect(res.body.code).toBe(ErrorCodes.AUTH_CREDENTIALS_REQUIRED.code);
     }
   });
 
@@ -510,10 +520,17 @@ describe('未配置只读 Key：该通道不存在（负向对照）', () => {
     expect(bad.body.code).toBe(ErrorCodes.INVALID_API_KEY.code);
   });
 
-  it('空哈希不会与空输入恒等而放行（verify 侧先判 storedHash 存在性）', async () => {
+  it('哈希为空时恒不放行：空输入在比较前即被判「未提供凭据」，非空输入一律 40101', async () => {
+    // 「空 == 空 恒等」这条理论捷径现在结构性不可达：空/空白输入在进入摘要比较之前
+    // 就被中间件按「未提供凭据」拦下（40107），非空输入则走摘要比较后判无效（40101）
     config.apiKeyHash = '';
-    const res = await request(app).get(`${API_V1_MOUNT}/overview`).set('X-API-Key', '');
-    expect(res.status).toBe(401);
+    const empty = await request(app).get(`${API_V1_MOUNT}/overview`).set('X-API-Key', '');
+    expect(empty.status).toBe(401);
+    expect(empty.body.code).toBe(ErrorCodes.AUTH_CREDENTIALS_REQUIRED.code);
+
+    const wrong = await request(app).get(`${API_V1_MOUNT}/overview`).set('X-API-Key', 'anything');
+    expect(wrong.status).toBe(401);
+    expect(wrong.body.code).toBe(ErrorCodes.INVALID_API_KEY.code);
     config.apiKeyHash = hashToken(ADMIN_KEY);
   });
 });

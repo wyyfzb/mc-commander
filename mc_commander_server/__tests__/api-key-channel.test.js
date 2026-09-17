@@ -113,10 +113,23 @@ describe('API_KEY_ENABLED=false：API Key 通道 fail-closed', () => {
     expect(res.body.auth.source).toBe('session');
   });
 
-  it('无凭据仍是 401 INVALID_API_KEY（与「通道被关闭」区分开）', async () => {
+  it('无凭据：401 AUTH_CREDENTIALS_REQUIRED(40107)，与「凭据无效」的 40101 分开', async () => {
     const res = await request(app).get('/api/v1/protected');
     expect(res.status).toBe(401);
-    expect(res.body.code).toBe(40101);
+    // 定向文案（清单 #19）：不带凭据不该提示「Key 无效或已过期」（那会引导用户去
+    // 轮换一把其实没问题的 Key），故用独立码 40107
+    expect(res.body.code).toBe(40107);
+    expect(res.body.message).toContain('未提供访问凭据');
+  });
+
+  it('空白 X-API-Key（`""` / `"   "`）同按「未提供凭据」处理：40107 而非 40101', async () => {
+    // 脚本从环境变量取值、变量未设置时会发出空 header——报 40101 会把「没配好凭据」
+    // 误导成「Key 无效」，与定向文案（#19）的意图相反
+    for (const raw of ['', '   ']) {
+      const res = await request(app).get('/api/v1/protected').set('X-API-Key', raw);
+      expect(res.status, `header=${JSON.stringify(raw)}`).toBe(401);
+      expect(res.body.code, `header=${JSON.stringify(raw)}`).toBe(40107);
+    }
   });
 
   it('WS 握手：Key 一律 false，会话令牌照常通过', () => {

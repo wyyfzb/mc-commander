@@ -105,7 +105,7 @@ describe('管理员轮换只读 Key', () => {
 
     expect(res.status).toBe(200);
     const newKey = res.body.data.apiKey;
-    expect(newKey).toMatch(/^mcro-[0-9a-f]{8}-[0-9a-f]{8}-[0-9a-f]{8}$/);
+    expect(newKey).toMatch(/^mcro-[0-9a-f]{8}(-[0-9a-f]{8}){7}$/);
     // 契约：data 只暴露明文 Key 一个字段
     expect(Object.keys(res.body.data)).toEqual(['apiKey']);
     expect(config.readonlyApiKeyHash).toBe(hashToken(newKey));

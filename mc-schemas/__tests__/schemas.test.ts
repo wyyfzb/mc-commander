@@ -422,11 +422,11 @@ describe('响应侧契约（issue 402 files/plugins/upgrade 接入）', () => {
   })
 
   it('apiKeyRotateResponseSchema：明文新 Key 白名单单字段', () => {
-    // 夹具与服务端 generateApiKey 同构（mcck-8-8-8 hex），按段拼接构造——
+    // 夹具与服务端 generateApiKey 同构（mcck- 前缀 + 8 位 hex 分组，共 32 字节熵），按段拼接构造——
     // 避免源码出现 apiKey=高熵字面量触发 gitleaks generic-api-key 误报
-    const data = { apiKey: ['mcck', '11223344-55667788-99aabbcc'].join('-') }
+    const data = { apiKey: ['mcck', '11223344-55667788-99aabbcc-11223344-55667788-99aabbcc-11223344-55667788'].join('-') }
     expect(apiKeyRotateResponseSchema.parse(data)).toEqual(data)
-    expect(apiKeyRotateResponseSchema.parse(data).apiKey).toMatch(/^mcck-[0-9a-f]{8}-[0-9a-f]{8}-[0-9a-f]{8}$/)
+    expect(apiKeyRotateResponseSchema.parse(data).apiKey).toMatch(/^mcck-[0-9a-f]{8}(-[0-9a-f]{8}){7}$/)
     expect(() => apiKeyRotateResponseSchema.parse({ apiKey: 123 })).toThrow()
   })
 })

@@ -439,13 +439,18 @@ SETUP_TOKEN=""
 API_KEY=""
 if [ ! -f .env ]; then
   log "首次部署，生成 API Key 和 .env 配置文件..."
-  API_KEY=$(openssl rand -hex 16)
+  # 32 字节（256 位）CSPRNG：与文档对「自填 Key」的要求同一把尺子，
+  # 也避免出现「要求部署方 32 字节、脚本自己发 16 字节」的不一致
+  API_KEY=$(openssl rand -hex 32)
   # 一次性令牌：浏览器首访设密时需粘贴（服务端校验 Authorization: SetupToken <token>），
   # 设密成功立即作废（内存清空 + .env 移除，重启后同样失效）
   SETUP_TOKEN=$(openssl rand -hex 32)
   cat > .env <<EOF
 API_KEY_HASH=$(printf '%s' "$API_KEY" | sha256sum | awk '{print $1}')
 SETUP_TOKEN=$SETUP_TOKEN
+# 脚本会开放 25566 并在完成横幅里给出公网访问地址，故显式对外监听：
+# 服务端默认 127.0.0.1（仅本机），不写这一行会让「部署完成」的地址打不开
+HOST=0.0.0.0
 PORT=25566
 SERVERS_DIR=./servers
 DATA_DIR=./data
@@ -591,14 +596,18 @@ echo "║                                                  ║"
 printf "║   ► 服务器地址:  %-34s ║\n" "$SERVER_IP"
 printf "║   ► 端口:        %-34s ║\n" "25566"
 if [ -n "$API_KEY" ]; then
-printf "║   ► API Key:     %-34s ║\n" "$API_KEY"
-echo "║   ⓘ 仅此一次显示；请立即保存（服务端只存摘要）    ║"
+# Key 长 76 字符（32 字节 hex + 分组连字符），不再塞进右侧带边框的一行——会顶飞边框
+echo "║   ► API Key（仅此一次显示，请立即保存；服务端只存摘要）："
+echo "║     $API_KEY"
 fi
 if [ -n "$SETUP_TOKEN" ]; then
-printf "║   ► SETUP_TOKEN: %-34s ║\n" "$SETUP_TOKEN"
-echo "║   ⓘ 仅首次设密使用：浏览器设密页粘贴，用后作废  ║"
+echo "║   ► SETUP_TOKEN（仅首次设密用：浏览器设密页粘贴，用后作废）："
+echo "║     $SETUP_TOKEN"
 echo "║                                                  ║"
 fi
+echo "║                                                  ║"
+echo "║   ⚠ 端口已对外开放：建议在云安全组/防火墙限制来源  ║"
+echo "║     IP，或经反向代理终止 TLS 后再对外暴露          ║"
 echo "║                                                  ║"
 if [ "$IP_WARN" -eq 1 ]; then
 echo "║  ⚠ 以上地址为内网IP/未获取到，请在云服务器控制台 ║"

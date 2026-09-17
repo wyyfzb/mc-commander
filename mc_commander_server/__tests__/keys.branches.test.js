@@ -86,7 +86,7 @@ describe('POST /api/rotate-key 分支收口', () => {
 
     expect(res.status).toBe(200);
     const newKey = res.body.data.apiKey;
-    expect(newKey).toMatch(/^mcck-[0-9a-f]{8}-[0-9a-f]{8}-[0-9a-f]{8}$/);
+    expect(newKey).toMatch(/^mcck-[0-9a-f]{8}(-[0-9a-f]{8}){7}$/);
     // 空内容追加：无前置换行，单行建档
     expect(writtenEnvContent(writes)).toBe(`API_KEY_HASH=${hashToken(newKey)}\n`);
     // 原子写语义：先写唯一临时文件（<目标>.<uuid>.tmp，并发轮换不互踩）再 rename 落地

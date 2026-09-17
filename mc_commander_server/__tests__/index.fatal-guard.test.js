@@ -54,9 +54,15 @@ vi.mock('../config.js', () => ({
     get apiKeyHash() {
       return h.apiKeyHash;
     },
+    // 启动播种会回填内存哈希（config 在生产里是普通对象，桩必须可写）
+    set apiKeyHash(value) {
+      h.apiKeyHash = value;
+    },
     port: 1,
     serversDir: 'mock:/servers',
     dataDir: 'mock:/data',
+    // .env 写回目标（启动播种用）：桩成非真实路径，防止用例意外写仓库 .env
+    envFilePath: 'mock:/.env',
     backupsDir: 'mock:/backups',
     publicDir: 'mock:/public',
     logLevel: 'info',

@@ -21,7 +21,7 @@ describe('API 客户端（统一信封契约）', () => {
   it('错误信封抛 ApiError（携带错误码与 HTTP 状态）', async () => {
     const promise = apiGet('/api/v1/unauthorized-probe', config)
     await expect(promise).rejects.toBeInstanceOf(ApiError)
-    await expect(promise).rejects.toMatchObject({ code: 40101, httpStatus: 401 })
+    await expect(promise).rejects.toMatchObject({ code: 40107, httpStatus: 401 })
   })
 
   it('40902 中文 message 保留在 ApiError 中（供 getFriendlyErrorMessage 透传）', async () => {

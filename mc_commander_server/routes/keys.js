@@ -1,53 +1,16 @@
 import { Router } from 'express';
-import crypto from 'crypto';
-import fs from 'fs';
 import config from '../config.js';
 import { error, ErrorCodes } from '../utils/response.js';
 import { apiKeyRotateResponseSchema } from '@mc-commander/schemas';
 import { validatedSuccess } from '../middleware/validate.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
 import { hashToken } from '../utils/password.js';
-import { atomicWriteFile } from '../utils/fs-utils.js';
-
-/** 生成新 Key：前缀 + 3 组 8 位随机（服务端自托管格式，无第三方约定）。
- * 前缀区分凭据种类（mcck = 管理员，mcro = 只读），仅便于运维辨认，鉴权只看摘要 */
-function generateApiKey(prefix = 'mcck-') {
-  const rand = crypto.randomBytes(12).toString('hex').slice(0, 24);
-  return prefix + rand.replace(/(.{8})(?=.)/g, '$1-');
-}
-
-/**
- * 写回 .env 哈希（保留其余键；dropPatterns 用于顺带清理明文行——明文 Key 不落盘），
- * 原子写防半截文件，权限 0o600。
- * 路径取 config.envFilePath（dotenv 的同一加载源）——测试可指向临时目录，
- * 不必触碰真实 .env
- */
-function persistEnvHash(envPath, envKey, hash, dropPatterns = []) {
-  // 读取即判定：ENOENT ＝ 尚无 .env（从空串起写），不再用 existsSync 预检——
-  // 预检判定「不存在」而窗口内 .env 被创建时，会以空串为基线 rename 覆盖掉
-  // 整份 .env（其余键全丢）
-  let content = '';
-  try {
-    content = fs.readFileSync(envPath, 'utf-8');
-  } catch (err) {
-    if (err.code !== 'ENOENT') throw err;
-  }
-  for (const pattern of dropPatterns) content = content.replace(pattern, '');
-  const newLine = `${envKey}=${hash}`;
-  const linePattern = new RegExp(`^${envKey}=.*$`, 'm');
-  if (linePattern.test(content)) {
-    content = content.replace(linePattern, newLine);
-  } else {
-    content += (content === '' || content.endsWith('\n') ? '' : '\n') + newLine + '\n';
-  }
-  // 原子写（唯一临时名）：固定 `<env>.tmp` 名字会让并发轮换互相踩踏（一方 rename
-  // 走了另一方的临时文件），且直接覆盖写崩溃时会把 .env 截断成半截
-  atomicWriteFile(envPath, content, { mode: 0o600 });
-}
-
-function persistApiKeyHash(envPath, hash) {
-  persistEnvHash(envPath, 'API_KEY_HASH', hash, [/^API_KEY=.*$/m]);
-}
+import {
+  generateApiKey,
+  persistApiKeyHash,
+  persistEnvLine,
+  READONLY_KEY_PREFIX,
+} from '../utils/credentials.js';
 
 export function createKeyRoutes() {
   const router = Router();
@@ -91,10 +54,10 @@ export function createKeyRoutes() {
         '只读 API Key 通道已关闭，无法轮换；如需只读凭据请先启用该通道',
       ));
     }
-    const newKey = generateApiKey('mcro-');
+    const newKey = generateApiKey(READONLY_KEY_PREFIX);
     const newHash = hashToken(newKey);
     try {
-      persistEnvHash(config.envFilePath, 'READONLY_API_KEY_HASH', newHash);
+      persistEnvLine(config.envFilePath, 'READONLY_API_KEY_HASH', newHash);
     } catch {
       return res.status(500).json(error(
         ErrorCodes.SERVER_ERROR,

@@ -135,7 +135,9 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
     });
 
     it('部署完成输出展示 SETUP_TOKEN（与 API Key 同位置）并说明一次性语义', () => {
-      expect(script).toContain('► SETUP_TOKEN:');
+      // 横幅里 token/Key 独占一行原样输出（值长 64/76 字符，塞不进带右边框的一行）
+      expect(script).toContain('► SETUP_TOKEN');
+      expect(script).toContain('echo "║     $SETUP_TOKEN"');
       expect(script).toContain('用后作废');
     });
 
@@ -154,8 +156,9 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
     });
 
     it('完整 Key 仅在部署完成横幅一次性展示（交付通道保留）', () => {
-      // 横幅 printf 是唯一完整展示点（用户取 Key 的交付通道，有意保留）
-      expect(script).toContain('► API Key:');
+      // 横幅的独占行 echo 是唯一完整展示点（用户取 Key 的交付通道，有意保留）
+      expect(script).toContain('► API Key');
+      expect(script).toContain('echo "║     $API_KEY"');
     });
   });
 });

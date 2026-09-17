@@ -8,7 +8,16 @@ export const ErrorCodes = {
   RATE_LIMITED: { code: 42900, message: 'Too Many Requests', status: 429 },
   
   // 认证错误
+  // 凭据「无效」（带了 Key/令牌但对不上）：与「压根没带凭据」分开，
+  // 前者该去核对/轮换 Key，后者该去配置 Key 或重新登录（见 AUTH_CREDENTIALS_REQUIRED）
   INVALID_API_KEY: { code: 40101, message: 'Invalid or expired API Key', status: 401 },
+  // 未提供任何凭据（无 X-API-Key、无 Bearer）：客户端据此提示「请配置凭据/登录」，
+  // 而不是误导用户去轮换一把其实没问题的 Key
+  AUTH_CREDENTIALS_REQUIRED: {
+    code: 40107,
+    message: '未提供访问凭据：请携带 X-API-Key 头或登录会话令牌',
+    status: 401,
+  },
   
   // 实例错误
   INSTANCE_NOT_FOUND: { code: 40401, message: 'Instance not found', status: 404 },

@@ -109,8 +109,10 @@ export function authMiddleware(req, res, next) {
   // 通道一：API Key（自动化 / API 调用通道，与既有行为完全兼容）
   // API_KEY_ENABLED=false 时整条通道 fail-closed：不校验、不降级，直接拒绝并
   // 指引会话登录（关掉自动化凭据的部署形态下，浏览器通道是唯一正常入口）
-  const apiKey = req.headers['x-api-key'];
-  if (apiKey != null) {
+  // 空白 header（`X-API-Key: `、`"   "`）视同「未提供凭据」：按 40101 报「Key 无效」
+  // 会把从环境变量取值的脚本引向轮换一把其实没问题的 Key（与 40107 的定向文案同理）
+  const apiKey = typeof req.headers['x-api-key'] === 'string' ? req.headers['x-api-key'].trim() : null;
+  if (apiKey) {
     // 只读凭据先判定：两条机器通道的开关相互独立，先吃 API_KEY_ENABLED 会把
     // 「关闭管理员 Key」绑架成「只读监控也不可用」；未配置只读哈希时此处恒 false，
     // 既有部署（含 API_KEY_ENABLED=false）的判定顺序与结果逐字不变
@@ -177,10 +179,9 @@ export function authMiddleware(req, res, next) {
   }
 
   logAuthRejection(req, 'missing credentials');
-  return res.status(401).json(error(
-    ErrorCodes.INVALID_API_KEY,
-    'API Key is required. Use X-API-Key header or Bearer session token.'
-  ));
+  // 定向文案（清单 #19）：此处是「没带凭据」，与「带了但不对」（40101）分开报码——
+  // 复用 40101 会让客户端提示「Key 无效或已过期」，把用户引向轮换一把本来没问题的 Key
+  return res.status(401).json(error(ErrorCodes.AUTH_CREDENTIALS_REQUIRED));
 }
 
 /**

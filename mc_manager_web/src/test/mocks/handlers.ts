@@ -907,13 +907,14 @@ export const handlers = [
   http.get('*/api/v1/instances/:id/upgrade/status', () =>
     ok(upgradeStatusMock),
   ),
-  // 未配置 API Key 场景：401
+  // 未提供凭据场景：401（与服务端 authMiddleware 的无凭据分支同码同文案：
+  // 40107 AUTH_CREDENTIALS_REQUIRED，与「凭据无效」的 40101 分开）
   http.get('*/api/v1/unauthorized-probe', () =>
     HttpResponse.json(
       {
         status: 'error',
-        code: 40101,
-        message: 'Invalid or expired API Key',
+        code: 40107,
+        message: '未提供访问凭据：请携带 X-API-Key 头或登录会话令牌',
         details: null,
         timestamp: new Date().toISOString(),
       },
