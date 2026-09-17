@@ -8,9 +8,11 @@ import {
   WEEKDAY_LABELS,
   addDays,
   addMonths,
+  clampIsoDate,
   dayLabel,
   dayOfMonth,
   endOfWeek,
+  isIsoInRange,
   isSameMonth,
   monthGrid,
   monthLabel,
@@ -114,5 +116,24 @@ describe('标签与判定', () => {
 
   it('周标签为周一 → 周日', () => {
     expect(WEEKDAY_LABELS).toEqual(['一', '二', '三', '四', '五', '六', '日'])
+  })
+})
+
+describe('可选区间（min/max，含端点）', () => {
+  it('isIsoInRange：两侧缺省即不设界，端点算界内', () => {
+    expect(isIsoInRange('2026-09-07', '2026-09-01', '2026-09-30')).toBe(true)
+    expect(isIsoInRange('2026-09-01', '2026-09-01', '2026-09-30')).toBe(true)
+    expect(isIsoInRange('2026-09-30', '2026-09-01', '2026-09-30')).toBe(true)
+    expect(isIsoInRange('2026-08-31', '2026-09-01', undefined)).toBe(false)
+    expect(isIsoInRange('2026-10-01', undefined, '2026-09-30')).toBe(false)
+    // 空串与缺省同义：对侧日期未选时不该产生隐形边界
+    expect(isIsoInRange('2026-10-01', '', '')).toBe(true)
+  })
+
+  it('clampIsoDate：越界夹到端点，界内原样返回', () => {
+    expect(clampIsoDate('2026-08-31', '2026-09-01', '2026-09-30')).toBe('2026-09-01')
+    expect(clampIsoDate('2026-10-01', '2026-09-01', '2026-09-30')).toBe('2026-09-30')
+    expect(clampIsoDate('2026-09-15', '2026-09-01', '2026-09-30')).toBe('2026-09-15')
+    expect(clampIsoDate('2026-01-01', undefined, undefined)).toBe('2026-01-01')
   })
 })

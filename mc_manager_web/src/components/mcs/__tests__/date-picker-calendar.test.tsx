@@ -115,3 +115,83 @@ describe('DatePickerCalendar', () => {
     expect(dayButton('2026年9月7日 星期一')).toHaveFocus()
   })
 })
+
+/** 带可选区间（min/max，含端点）的挂载：共享 setup 不接受区间，故单列一个（避免改动既有 8 条） */
+function setupRange(value: string, min?: string, max?: string) {
+  const onSelect = vi.fn()
+  const user = userEvent.setup()
+  render(
+    <DatePickerCalendar value={value} min={min} max={max} onSelect={onSelect} onClear={vi.fn()} />,
+  )
+  return { user, onSelect }
+}
+
+describe('DatePickerCalendar 可选区间（min/max）', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date(2026, 8, 7, 10, 0, 0) })
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.clearAllMocks()
+  })
+
+  it('界外日禁选，端点可选', () => {
+    setupRange('', '2026-09-05', '2026-09-09')
+    expect(dayButton('2026年9月5日 星期六')).toBeEnabled()
+    expect(dayButton('2026年9月9日 星期三')).toBeEnabled()
+    expect(dayButton('2026年9月4日 星期五')).toBeDisabled()
+    expect(dayButton('2026年9月10日 星期四')).toBeDisabled()
+  })
+
+  it('键盘落点被夹在界内：端点处按方向键不再前进（否则焦点会指向禁选格）', async () => {
+    const { user } = setupRange('2026-09-09', '2026-09-05', '2026-09-09')
+    expect(dayButton('2026年9月9日 星期三')).toHaveFocus()
+
+    await user.keyboard('{ArrowRight}')
+    expect(dayButton('2026年9月9日 星期三')).toHaveFocus()
+    // 反向仍在界内，正常移动
+    await user.keyboard('{ArrowLeft}')
+    expect(dayButton('2026年9月8日 星期二')).toHaveFocus()
+  })
+
+  it('当前值落在界外时，打开即夹到端点（roving tabindex 不指向禁选格）', () => {
+    setupRange('2026-09-20', undefined, '2026-09-09')
+    expect(dayButton('2026年9月9日 星期三')).toHaveFocus()
+  })
+
+  it('目标月整月无选中日时禁掉翻月', () => {
+    // 区间收成一天：8 月与 10 月的 42 格网格都不含该日
+    setupRange('2026-09-07', '2026-09-07', '2026-09-07')
+    expect(screen.getByRole('button', { name: '上个月' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '下个月' })).toBeDisabled()
+  })
+
+  it('翻月按「目标月自己的界内日」判定：单月区间两侧都不可翻', () => {
+    // 相邻月补位日仍可在当前视图里点（既有设计），但翻月不该把用户带进一个整月无可选日的月份
+    setupRange('2026-09-07', '2026-09-01', '2026-09-30')
+    expect(screen.getByRole('button', { name: '上个月' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '下个月' })).toBeDisabled()
+  })
+
+  it('跨月区间：有界内日的一侧可翻，无界内日的一侧不可翻', () => {
+    setupRange('2026-09-15', '2026-09-01', '2026-10-05')
+    expect(screen.getByRole('button', { name: '上个月' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '下个月' })).toBeEnabled()
+  })
+
+  it('翻月后焦点落在界内日：不退到禁选格（否则网格失去 tab 停靠点与方向键处理）', async () => {
+    // 区间跨月且 10 月只有 1–5 可选：翻到 10 月的落点必须夹到 10-05，而不是平移出的 10-30
+    const { user } = setupRange('2026-09-30', '2026-09-01', '2026-10-05')
+    await user.click(screen.getByRole('button', { name: '下个月' }))
+
+    const landed = dayButton('2026年10月5日 星期一')
+    expect(landed).toBeEnabled()
+    expect(landed).toHaveFocus()
+    expect(landed).toHaveAttribute('tabindex', '0')
+  })
+
+  it('今天在界外时「今天」按钮禁用', () => {
+    setupRange('2026-09-10', '2026-09-08', '2026-09-30')
+    expect(screen.getByRole('button', { name: '今天' })).toBeDisabled()
+  })
+})

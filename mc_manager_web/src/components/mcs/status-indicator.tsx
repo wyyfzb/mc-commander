@@ -35,7 +35,7 @@ const STATUS_CONFIG: Record<
     label: '异常',
     pulse: true,
   },
-  /** 实时通道断开，轮询保底中（HTTP 数据仍可用） */
+  /** 实时通道断开：降级为定时轮询（轮询是否真能取到数据由页面错误态如实呈现，此处不承诺） */
   degraded: {
     dot: 'bg-mcs-warning-fg',
     icon: Cloud,

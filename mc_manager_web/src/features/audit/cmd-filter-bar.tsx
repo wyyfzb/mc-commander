@@ -70,6 +70,8 @@ export function CmdFilterBar({
         <DateTextInput
           value={cmdStart}
           onChange={(v) => changeCmdDate('start', v)}
+          // 起止互禁：开始日期不得晚于已选的结束日期（对侧为空则该项不设界）
+          max={cmdEnd}
           placeholder="开始日期 如 2026-09-01"
           ariaLabel="开始日期"
         />
@@ -77,6 +79,7 @@ export function CmdFilterBar({
         <DateTextInput
           value={cmdEnd}
           onChange={(v) => changeCmdDate('end', v)}
+          min={cmdStart}
           placeholder="结束日期"
           ariaLabel="结束日期"
         />

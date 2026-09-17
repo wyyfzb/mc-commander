@@ -203,3 +203,34 @@ describe('DateTextInput 交互', () => {
     expect(screen.getByRole('button', { name: '打开日历' })).toHaveAttribute('aria-haspopup', 'dialog')
   })
 })
+
+describe('DateTextInput 可选区间（min/max）', () => {
+  it('区间透传给日历弹层（不拦键入：无效组合由页面级告警解释）', async () => {
+    // 日历以「今天」开月，故固定时间基准，避免断言随运行时刻漂移
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date(2026, 8, 7, 10, 0, 0) })
+    try {
+      const user = userEvent.setup()
+      render(
+        <DateTextInput
+          value=""
+          onChange={vi.fn()}
+          min="2026-09-05"
+          max="2026-09-09"
+          ariaLabel="结束日期"
+        />,
+      )
+      await user.click(screen.getByRole('button', { name: '打开日历' }))
+      expect(screen.getByRole('button', { name: dayLabel('2026-09-05') })).toBeEnabled()
+      expect(screen.getByRole('button', { name: dayLabel('2026-09-04') })).toBeDisabled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('键入越界值照常上抛：区间不是键入层的闸门（倒置防护在页面级）', () => {
+    const onChange = vi.fn()
+    render(<DateTextInput value="" onChange={onChange} max="2026-09-12" ariaLabel="开始日期" />)
+    fireEvent.change(screen.getByLabelText('开始日期'), { target: { value: '2026-09-20' } })
+    expect(onChange).toHaveBeenCalledWith('2026-09-20')
+  })
+})

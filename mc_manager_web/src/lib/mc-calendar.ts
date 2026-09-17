@@ -97,3 +97,24 @@ export function isSameMonth(iso: string, ref: string): boolean {
   const b = baseDate(ref)
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth()
 }
+
+/**
+ * 是否落在可选区间内（含端点；两侧均可缺省，'' 亦视为不设界）。
+ * ISO 定长零填充串的字典序即时间序，故直接比串。
+ */
+export function isIsoInRange(iso: string, min?: string, max?: string): boolean {
+  if (min && iso < min) return false
+  if (max && iso > max) return false
+  return true
+}
+
+/**
+ * 把日期夹进可选区间（含端点）。
+ * 带上下界的日历在键盘导航时必须先夹再落焦：直接移到禁选日会让 roving tabindex 指向一个
+ * disabled 按钮（.focus() 无效），焦点环停在旧格而状态已前进，网格随后不可达。
+ */
+export function clampIsoDate(iso: string, min?: string, max?: string): string {
+  if (min && iso < min) return min
+  if (max && iso > max) return max
+  return iso
+}

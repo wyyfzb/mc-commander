@@ -6,6 +6,10 @@
  * 行为：数字输入自动分段（202697 → 2026-09-07 补零）；完整合法值即上抛
  * （末位日期只键入一位时延到键入完或失焦），输入中/不完整仅本地草稿显示不通知父级，
  * 失焦回退到已提交值。
+ *
+ * 可选区间 min/max（含端点）**只作用于日历**：界外日禁选、键盘落点夹在界内。
+ * 键入路径不受区间限制——「允许输入但必须显式告警」是页面级倒置防护的既有口径
+ * （见审计页的「起止时间倒置」提示），在此静默拒绝会把可解释的输入变成无声失败。
  */
 import { useState } from 'react'
 import { CalendarDays } from 'lucide-react'
@@ -48,12 +52,24 @@ interface DateTextInputProps {
   value: string
   /** 仅在空串或完整合法日期时被调用 */
   onChange: (v: string) => void
+  /** 可选下界（含）；'' 或省略表示不设界。只作用于日历弹层（界外日禁选、键盘夹取） */
+  min?: string
+  /** 可选上界（含）；'' 或省略表示不设界。同上，不拦键入 */
+  max?: string
   placeholder?: string
   ariaLabel: string
   className?: string
 }
 
-export function DateTextInput({ value, onChange, placeholder = '点击输入日期', ariaLabel, className }: DateTextInputProps) {
+export function DateTextInput({
+  value,
+  onChange,
+  min,
+  max,
+  placeholder = '点击输入日期',
+  ariaLabel,
+  className,
+}: DateTextInputProps) {
   // 草稿真源是「用户键入的原始数字」而非显示值：显示值会补零，若以显示值为下一次键入的基串，
   // 补出的 0 会被当成用户输入，两位月份/两位日期就永远输不进来（20261007 会落到 2026-01-00）
   const [draftDigits, setDraftDigits] = useState<string | null>(null)
@@ -149,7 +165,7 @@ export function DateTextInput({ value, onChange, placeholder = '点击输入日�
           // 焦点交给面板内部的日期格（roving tabindex），避免 Radix 默认落焦到弹层容器
           onOpenAutoFocus={(event) => event.preventDefault()}
         >
-          <DatePickerCalendar value={value} onSelect={commit} onClear={() => commit('')} />
+          <DatePickerCalendar value={value} min={min} max={max} onSelect={commit} onClear={() => commit('')} />
         </PopoverContent>
       </Popover>
     </div>

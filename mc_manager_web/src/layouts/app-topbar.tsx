@@ -81,7 +81,8 @@ export function AppTopBar() {
 
   const instancesQuery = useInstances()
 
-  // 状态点语义（三重编码；区分"初次连接"与"实时通道断开"——WS 断开时 HTTP 轮询保底，数据仍可用）
+  // 状态点语义（三重编码；区分"初次连接"与"实时通道断开"——WS 断开后降级为定时轮询，
+  // 轮询能否取到数据由页面错误态如实呈现，这里只表达"实时通道断了"这一已知事实）
   let indicator: IndicatorStatus = 'disconnected'
   if (connectionStatus === 'unconfigured') {
     indicator = 'disconnected'

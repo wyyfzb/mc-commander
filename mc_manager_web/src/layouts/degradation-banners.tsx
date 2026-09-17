@@ -1,6 +1,7 @@
 /**
  * DegradationBanners —— 降级横幅组（连接降级与数据缺失的诚实提示）
- * - WS 断开：已降级 HTTP 轮询（数据仍可用）+ 手动重连按钮；间隔取自 queries 的常量
+ * - WS 断开：已降级 HTTP 轮询 + 手动重连按钮；间隔取自 queries 的常量。文案只陈述
+ *   「WS 断了」这一已知事实，不替 HTTP 侧打包票（面板是否同样不可达这里无从判定）
  * - 从未连上（冷启动即断线 / 反代未放行 Upgrade）且连接超宽限期：顶栏只会停在
  *   「连接中」，这里补齐同一降级事实；判定带宽限期，正常握手期内不闪
  * - WS 断开且服务端有部署在途：写明进度由服务端继续、脚本刷新补位，并明确
@@ -41,7 +42,11 @@ export function DegradationBanners() {
               不再以同色 inline ghost 融入提示文字 */}
           <span className="flex items-center justify-between gap-3">
             <span className="min-w-0">
-              <b>{hasConnectedOnce ? 'WebSocket 已断开' : '实时通道未连接'}</b> · 已降级为定时刷新（每 {FALLBACK_POLL_INTERVAL_MS / 1000} 秒），数据仍可用
+              <b>{hasConnectedOnce ? 'WebSocket 已断开' : '实时通道未连接'}</b> · 已降级为定时刷新（每{' '}
+              {FALLBACK_POLL_INTERVAL_MS / 1000} 秒）
+              {/* 不写「数据仍可用」：本条只知道 WS 断了，面板地址是否同样不可达在此无从判定。
+                  真后端实测（2026-09-17）：服务端整体不可达时本横幅与内容区「加载失败」同屏，
+                  那句承诺会被现场当场推翻——按「不承诺做不到的事」的口径只陈述已知事实。 */}
               {duplicateDeployBlocked &&
                 `；服务端仍有部署在进行，进度经服务端刷新，请勿重新发起部署（会重复创建实例）`}
             </span>
