@@ -138,19 +138,21 @@ test.describe('实例页', () => {
     await expect(page).toHaveURL(/\/instances$/)
   })
 
-  test('单实例：两栏网格 + 部署引导块（J21，不把唯一卡片拉成整幅宽度）', async ({ page }) => {
+  test('单实例：恒定三列网格 + 引导块跨两列（列数不随实例数变化）', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 })
     await setupConnection(page)
     await page.goto('/instances')
 
-    // mock 只有 1 个实例：网格为两栏，卡片与引导块等宽并列
+    // mock 只有 1 个实例：网格仍是三列（列数恒定 ⇒ 骨架与真实网格不跳变），
+    // 卡片占 1 列、引导块跨 2 列补满整行
     const grid = page.locator('[data-instance-id]').first().locator('..')
-    expect(await grid.evaluate((el) => getComputedStyle(el).gridTemplateColumns.split(' ').length)).toBe(2)
+    expect(await grid.evaluate((el) => getComputedStyle(el).gridTemplateColumns.split(' ').length)).toBe(3)
     const card = await page.locator('[data-instance-id]').first().boundingBox()
     const tile = await page.getByTestId('deploy-guide-tile').boundingBox()
     expect(card).not.toBeNull()
     expect(tile).not.toBeNull()
-    expect(Math.abs(card!.width - tile!.width)).toBeLessThanOrEqual(1)
+    // 跨两列 = 两倍卡宽 + 一个列间距（gap-3 = 12px）
+    expect(Math.abs(tile!.width - (card!.width * 2 + 12))).toBeLessThanOrEqual(1)
     expect(tile!.x).toBeGreaterThan(card!.x)
 
     // 引导块入口与页头 CTA 同源（打开同一部署向导）

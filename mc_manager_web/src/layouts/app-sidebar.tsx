@@ -20,6 +20,7 @@ import { BrandLogo } from '@/components/mcs/brand-logo'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useUiStore } from '@/stores/ui'
 import { useInstances } from '@/api/queries'
+import { instanceLabel } from '@/lib/instance-label'
 import { useServerStore } from '@/stores/server'
 
 /**
@@ -160,7 +161,7 @@ export function AppSidebar({ collapsed, mobileNavOpen, onMobileNavClose }: AppSi
             />
             <div className="min-w-0">
               <div className="truncate text-mcs-xs font-semibold text-mcs-text-default">
-                {current.name}
+                {instanceLabel(current)}
               </div>
               <div className="truncate font-mono text-mcs-2xs text-mcs-text-muted">
                 {current.isRunning ? '运行中' : '已停止'} · {current.playerCount} 人在线

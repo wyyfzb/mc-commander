@@ -24,6 +24,7 @@ import { Switch } from '@/components/ui/switch'
 import { Slider } from '@/components/ui/slider'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { cn } from '@/lib/utils'
+import { instanceLabel } from '@/lib/instance-label'
 import { getFriendlyErrorText } from '@/api/errors'
 import { useUpdateInstance } from '../queries'
 import type { InstanceStatus, InstanceSummary, InstanceUpdatePayload } from '@/api/types'
@@ -276,7 +277,7 @@ export function InstanceSettingsDialog({
           <div className="min-w-0">
             <DialogTitle className="text-mcs-xl font-semibold text-mcs-text-default">启动配置</DialogTitle>
             <DialogDescription className="truncate text-mcs-xs text-mcs-text-muted">
-              {instance.name}
+              {instanceLabel(instance)}
             </DialogDescription>
           </div>
         </DialogHeader>

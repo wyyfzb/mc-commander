@@ -140,7 +140,9 @@ describe('InstancesPage · 卸载确认', () => {
       expect(confirmButton).toBeEnabled()
       await user.click(confirmButton)
 
-      expect(await screen.findByText('实例 "演示实例 " 已卸载，已保留 2 份备份')).toBeInTheDocument()
+      // 展示名走 instanceLabel：toast 印 trim 后的名字（尾空格不该跑到引号里），
+      // 而确认比对与上报仍是原值——显示口径与确认口径各司其职
+      expect(await screen.findByText('实例 "演示实例" 已卸载，已保留 2 份备份')).toBeInTheDocument()
       expect(uninstallMock.bodies[0]).toEqual({ confirmName: '演示实例' })
     })
 
@@ -153,7 +155,7 @@ describe('InstancesPage · 卸载确认', () => {
 
       await user.click(screen.getByRole('button', { name: '确认卸载' }))
 
-      expect(await screen.findByText('实例 "演示实例 " 已卸载，已保留 2 份备份')).toBeInTheDocument()
+      expect(await screen.findByText('实例 "演示实例" 已卸载，已保留 2 份备份')).toBeInTheDocument()
       expect(uninstallMock.bodies[0]).toEqual({ confirmName: SPACED_NAME })
     })
   })
@@ -179,8 +181,11 @@ describe('InstancesPage · 卸载确认', () => {
     it('空输入即匹配：确认按钮可用，请求体带空串并成功卸载', async () => {
       const user = userEvent.setup()
       renderPage()
-      await user.click(await screen.findByRole('button', { name: '操作菜单' }))
+      // 操作按钮的可访问名同样回退到 id：空名旧行此前给出的是「无名按钮」（名字只剩「操作菜单」）
+      await user.click(await screen.findByRole('button', { name: 'demo 操作菜单' }))
       await user.click(await screen.findByRole('menuitem', { name: '卸载实例' }))
+      // 确认块刻意用原值（服务端比的是 trim 后的 name），故这里标签仍是空名
+      expect(screen.getByLabelText(/输入实例名/)).toHaveAttribute('placeholder', '')
 
       const confirmButton = screen.getByRole('button', { name: '确认卸载' })
       expect(confirmButton).toBeEnabled()
@@ -194,7 +199,7 @@ describe('InstancesPage · 卸载确认', () => {
     it('输入任意非空名字 → 确认按钮禁用（UI 侧拦截，服务端同判为 400）', async () => {
       const user = userEvent.setup()
       renderPage()
-      await user.click(await screen.findByRole('button', { name: '操作菜单' }))
+      await user.click(await screen.findByRole('button', { name: 'demo 操作菜单' }))
       await user.click(await screen.findByRole('menuitem', { name: '卸载实例' }))
 
       await user.type(screen.getByLabelText(/输入实例名/), '随便什么')

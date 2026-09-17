@@ -27,6 +27,7 @@ import { sessionAppliesToPanel } from '@/lib/mc-connection'
 import { clearLocalCredentials, logoutToastText } from '@/lib/logout'
 import { primaryModifierLabel } from '@/lib/platform'
 import { cn } from '@/lib/utils'
+import { instanceLabel } from '@/lib/instance-label'
 import { instanceHueFillClass } from '@/lib/instance-hue'
 
 /**
@@ -99,7 +100,9 @@ export function AppTopBar() {
   // 无匹配实例时不得假造「默认实例」这类并不存在的名字；也不得把「列表还没到」
   // （加载中/请求失败）谎报成「一个实例都没有」——三种缺位各有诚实占位
   const instanceList = instancesQuery.data ?? []
-  const selectedInstanceName = instanceList.find((i) => i.id === instanceId)?.name
+  const selectedInstance = instanceList.find((i) => i.id === instanceId)
+  // 展示名统一走 instanceLabel（空名/纯空白名回退 id，避免顶栏出现「未选择实例」式的空壳）
+  const selectedInstanceName = selectedInstance ? instanceLabel(selectedInstance) : undefined
   const instanceNameFallback =
     instanceList.length > 0
       ? '未选择实例'
@@ -189,7 +192,7 @@ export function AppTopBar() {
                 onClick={() => switchInstance(inst.id)}
                 className="flex items-center justify-between gap-2"
               >
-                <span className="truncate">{inst.name}</span>
+                <span className="truncate">{instanceLabel(inst)}</span>
                 {inst.id === instanceId ? (
                   <span className="size-1.5 rounded-full bg-mcs-accent" aria-label="当前实例" />
                 ) : null}

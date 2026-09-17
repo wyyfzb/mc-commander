@@ -28,6 +28,7 @@ import {
 } from '@/components/ui/select'
 import { Loader2, ArrowUpCircle, CheckCircle2, RotateCcw, XCircle, AlertTriangle } from 'lucide-react'
 import { toneClasses } from '@/components/mcs/tone'
+import { instanceLabel } from '@/lib/instance-label'
 
 const SERVER_TYPES = [
   { value: 'vanilla', label: 'Vanilla' },
@@ -185,10 +186,10 @@ export function UpgradeDialog({ instance, open, onOpenChange }: UpgradeDialogPro
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ArrowUpCircle className="h-5 w-5" aria-hidden />
-            {`升级 ${instance.name}`}
+            {`升级 ${instanceLabel(instance)}`}
           </DialogTitle>
           <DialogDescription>
-            {`${instance.name} · 当前版本 ${instance.mcVersion}`}
+            {`${instanceLabel(instance)} · 当前版本 ${instance.mcVersion}`}
           </DialogDescription>
         </DialogHeader>
 

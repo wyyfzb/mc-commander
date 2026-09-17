@@ -42,6 +42,7 @@ import { useCreateBackup } from '@/features/settings/queries'
 import { useStopInstance } from '@/hooks/use-instance-stop'
 import { apiPost } from '@/api/client'
 import { getFriendlyErrorText } from '@/api/errors'
+import { instanceLabel } from '@/lib/instance-label'
 import { queryKeys } from '@/api/queries'
 import { iconForCommand } from '@/lib/mc-commands'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
@@ -95,7 +96,9 @@ export function CommandPalette() {
   const baseRunner = useCommandBus((s) => s.baseRunner)
   const commandRunner = overlayRunner ?? baseRunner
   const instanceId = useServerStore((s) => s.instanceId)
-  const instanceName = useServerStore((s) => s.status?.name ?? null)
+  // 展示名走 instanceLabel：状态载荷自带 id，空名/纯空白名回退 id，命令项不会渲染成空白
+  const instanceStatus = useServerStore((s) => s.status)
+  const instanceName = instanceStatus ? instanceLabel(instanceStatus) : null
   const isInstanceRunning = useServerStore((s) => s.status?.isRunning ?? false)
   const openPlayerDetail = usePlayersUiStore((s) => s.openPlayerDetail)
 

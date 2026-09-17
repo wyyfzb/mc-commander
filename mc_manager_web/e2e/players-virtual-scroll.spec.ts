@@ -107,6 +107,18 @@ async function openAllPage(page: Page) {
   await expect(page.getByText(`${TOTAL} / ${TOTAL} 名玩家`)).toBeVisible()
   await page.selectOption('select[aria-label="每页行数"]', '-1')
   await expect.poll(async () => (await snapshot(page)).renderedRows).toBeGreaterThan(0)
+  // 量几何前等字体与虚拟窗口落定：字体回退期行高与容器高都会变，冷启动并行跑时
+  // 曾量到未落定的值（单次假红，单独重跑即过）。轮询到几何自洽为止——真的坏掉会超时红
+  await page.evaluate(() => document.fonts.ready)
+  await expect
+    .poll(
+      async () => {
+        const s = await snapshot(page)
+        return s.scrollH > s.clientH && s.rowHeights.length > 0 && s.rowHeights.every((h) => h === 40)
+      },
+      { message: '等待列表几何落定（可滚动 + 行高恒为 40）' },
+    )
+    .toBe(true)
 }
 
 test.describe('长列表虚拟滚动（「全部」档）', () => {

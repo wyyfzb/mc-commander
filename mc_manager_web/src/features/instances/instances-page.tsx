@@ -13,6 +13,7 @@ import { toast } from 'sonner'
 import { apiGet, ApiError } from '@/api/client'
 import { queryKeys, useInstances } from '@/api/queries'
 import { ErrorCode, getFriendlyErrorText } from '@/api/errors'
+import { instanceLabel } from '@/lib/instance-label'
 import { EmptyState } from '@/components/mcs/empty-state'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { PageHeader } from '@/components/mcs/page-header'
@@ -24,7 +25,7 @@ import { useConnectionStore } from '@/stores/connection'
 import { useServerStore } from '@/stores/server'
 import { useDeployStore, DEPLOY_STAGE_LABELS } from '@/stores/deploy'
 import type { DeployResult, InstanceStatus, InstanceSummary } from '@/api/types'
-import { InstanceCards, instanceGridClass } from './components/instance-cards'
+import { InstanceCards, INSTANCE_GRID_CLASS } from './components/instance-cards'
 import { DeployDialog } from './components/deploy-dialog'
 import { InstanceSettingsDialog } from './components/instance-settings-dialog'
 import { UpgradeDialog } from './components/upgrade-dialog'
@@ -170,7 +171,7 @@ export function InstancesPage() {
   /** 切换当前实例 */
   const handleSwitch = (inst: InstanceSummary) => {
     setInstanceId(inst.id)
-    toast.success(`已切换到 "${inst.name}"`, { duration: 1500 })
+    toast.success(`已切换到 "${instanceLabel(inst)}"`, { duration: 1500 })
   }
 
   /** 启动配置 → 实例设置弹窗 */
@@ -202,9 +203,8 @@ export function InstancesPage() {
         acknowledgeIrreversible: uninstallAckRequired || undefined,
       })
       closeUninstall()
-      // 空名实例（写入侧 trim+min(1) 已拦，仅防库中异常行）：直接印 name 会得到 `实例 ""`，
-      // 回退 id 才认得出卸掉的是哪一个；纯空白名按服务端口径视同空名
-      const label = target.name.trim() ? target.name : target.id
+      // 展示名统一走 instanceLabel（空名/纯空白名回退 id，否则 toast 会印出 `实例 ""`）
+      const label = instanceLabel(target)
       toast.success(
         result.retainedBackupCount > 0
           ? `实例 "${label}" 已卸载，已保留 ${result.retainedBackupCount} 份备份`
@@ -226,7 +226,7 @@ export function InstancesPage() {
     setInstanceId(result.id)
     void instancesQuery.refetch()
     setDeployOpenDeep(false)
-    toast.success(`实例 "${result.name}" 部署完成`)
+    toast.success(`实例 "${instanceLabel(result)}" 部署完成`)
   }
 
   return (
@@ -268,12 +268,14 @@ export function InstancesPage() {
       {/* ── 实例卡片网格 ── */}
       <div className="min-h-0 flex-1 overflow-y-auto">
         {instancesQuery.isLoading && instances.length === 0 ? (
-          // 骨架按单实例形态占位（两格，列数规则同 instanceGridClass）：实例数在数据到达前
-          // 不可知，故占位取常见形态，而不是假称只对多实例成立的 xl 三列
-          <div className={instanceGridClass(1)} aria-label="加载实例中">
-            {Array.from({ length: 2 }, (_, i) => (
-              <Skeleton key={i} className="h-28" aria-hidden />
-            ))}
+          // 骨架与真实网格同源（INSTANCE_GRID_CLASS）：列数恒定，实例数在数据到达前不可知
+          // 也不再影响布局；两格＝一张实例卡 + 单实例形态下的部署引导块（xl 跨两列）
+          <div role="status" aria-label="加载实例中" className={INSTANCE_GRID_CLASS}>
+            {/* sr-only 文本才是 live region 的公告载体（role=status 播报的是内容，
+                aria-label 只作内容前缀）；骨架格是装饰，不进可访问树 */}
+            <span className="sr-only">加载实例中</span>
+            <Skeleton className="h-28" aria-hidden />
+            <Skeleton className="h-28 xl:col-span-2" aria-hidden />
           </div>
         ) : instancesQuery.isError && !instancesQuery.isLoading ? (
           <EmptyState
@@ -345,7 +347,7 @@ export function InstancesPage() {
         open={stopTarget !== null}
         onOpenChange={(open) => !open && setStopTarget(null)}
         title="停止服务器"
-        description={`确定要停止实例 "${stopTarget?.name ?? ''}" 吗？停止前将自动执行存档，在线玩家会断开连接。`}
+        description={`确定要停止实例 "${stopTarget ? instanceLabel(stopTarget) : ''}" 吗？停止前将自动执行存档，在线玩家会断开连接。`}
         confirmText="存档并停止"
         danger
         onConfirm={() => {
@@ -366,7 +368,7 @@ export function InstancesPage() {
           if (!open) closeUninstall()
         }}
         title="卸载实例"
-        description={`确定要卸载实例 "${uninstallTarget?.name ?? ''}" 吗？`}
+        description={`确定要卸载实例 "${uninstallTarget ? instanceLabel(uninstallTarget) : ''}" 吗？`}
         confirmText={uninstallAckRequired ? '确认不可恢复删除' : '确认卸载'}
         danger
         loading={uninstallMutation.isPending}
@@ -384,6 +386,9 @@ export function InstancesPage() {
           </NoticeBanner>
         ) : (
           <div className="flex flex-col gap-1.5">
+            {/* 确认块刻意**不用** instanceLabel：只有名称为空/纯空白时展示名会变成 id，
+                而服务端（routes/status.js：confirmName.trim() === name.trim()）只认原值，
+                那时用户照显示名输入会被判不匹配，故这里保持显示与比对同源的原值 */}
             <label htmlFor="uninstall-confirm-input" className="text-mcs-xs font-semibold text-mcs-text-muted">
               输入实例名「{uninstallTarget?.name ?? ''}」以确认
             </label>

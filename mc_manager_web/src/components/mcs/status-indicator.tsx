@@ -61,12 +61,15 @@ export function StatusIndicator({ status, className }: StatusIndicatorProps) {
     >
       <span className="relative flex size-2 items-center justify-center" aria-hidden>
         {/* 涟漪直径与起始不透明度即可感知门槛：与圆点同尺寸的 8px / 40% 在顶栏上几乎
-            看不出；12px 起点展开到 24px、60% 起衰减。颜色仍走状态色 token，
+            看不出；12px 起点展开到 24px。
+            不透明度走 token（--mcs-ripple-opacity，亮色档更高）：顶栏玻璃面在亮色下亮得多，
+            同一档位合成后只有 2.63:1，达不到图形 3:1 → 亮色升到 0.75（info 3.48 / warning 3.92）。
+            check-contrast 的「pulse 涟漪」断言守住这两个数。颜色仍走状态色 token，
             reduced-motion 由 index.css 全局归零兜底 */}
         {config.pulse && (
           <span
             className={cn(
-              'absolute inline-flex size-3 animate-ping rounded-full opacity-60',
+              'absolute inline-flex size-3 animate-ping rounded-full opacity-(--mcs-ripple-opacity)',
               config.dot,
             )}
           />

@@ -1,6 +1,6 @@
 /**
  * InstanceCards —— 实例卡片网格
- * - 网格列数规则见 instanceGridClass（与加载骨架共用同一声明）
+ * - 网格列数见 INSTANCE_GRID_CLASS（与加载骨架共用同一声明）
  * - 卡片：状态点（运行 success / 停止 muted）+ 名称 + 「当前」accent 徽章（currentId 命中）
  *   + 副行「运行中 · N 人在线」（success 色）/「已停止」（muted）+ 版本 mono 徽章
  *   （detailStatuses[id]?.mcVersion，组件内不查询；详情在途时仅该卡骨架占位）
@@ -23,6 +23,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { formatWorldSize } from '@/lib/format'
 import { instanceHueFillClass } from '@/lib/instance-hue'
+import { instanceLabel } from '@/lib/instance-label'
 import { StatusPill } from '@/components/mcs/status-pill'
 import { Card } from '@/components/mcs/card'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
@@ -33,13 +34,12 @@ import type { InstancePhase } from '@/stores/server'
 import type { InstanceStatus, InstanceSummary } from '@/api/types'
 
 /**
- * 实例网格列数规则（唯一声明源：真实网格与加载骨架共用，防止骨架列数与真实布局分叉）
- * 单实例：xl 也保持两栏（同排右栏放部署引导块）——三列时卡片只占 1/3、右侧约 65% 空白；
- * 多实例：xl 三列，卡片宽度不随实例数变化。
+ * 实例网格列数（唯一声明源：真实网格与加载骨架共用，防止骨架列数与真实布局分叉）
+ * 恒定三列（xl）：列数不随实例数变化，骨架与真实网格因此永不跳变——单实例下由
+ * 引导块跨两列补满整行（见下方 DeployGuideTile 的 xl:col-span-2）。
+ * 取舍：单实例几何由「卡片 1/2 + 引导块 1/2」变为「1/3 + 2/3」，换冷加载零跳变
  */
-export function instanceGridClass(instanceCount: number) {
-  return cn('grid gap-3 sm:grid-cols-2', instanceCount > 1 && 'xl:grid-cols-3')
-}
+export const INSTANCE_GRID_CLASS = 'grid gap-3 sm:grid-cols-2 xl:grid-cols-3'
 
 export interface InstanceCardsProps {
   /** 实例摘要列表（GET /instances 结果） */
@@ -103,7 +103,7 @@ export function InstanceCards({
   }
 
   return (
-    <div className={instanceGridClass(instances.length)}>
+    <div className={INSTANCE_GRID_CLASS}>
       {instances.map((instance, index) => (
         <InstanceCard
           key={instance.id}
@@ -123,7 +123,12 @@ export function InstanceCards({
           className={`animate-mcs-fade-up mcs-delay-${Math.min(index + 1, 6)}`}
         />
       ))}
-      {instances.length === 1 && <DeployGuideTile onDeploy={onDeploy} className="animate-mcs-fade-up mcs-delay-2" />}
+      {instances.length === 1 && (
+        <DeployGuideTile
+          onDeploy={onDeploy}
+          className="animate-mcs-fade-up mcs-delay-2 xl:col-span-2"
+        />
+      )}
     </div>
   )
 }
@@ -161,7 +166,9 @@ function InstanceCard({
   /** 入场 stagger（页面组合处注入，组件内不内嵌动效类） */
   className?: string
 }) {
-  const { id, name, isRunning, playerCount } = instance
+  const { id, isRunning, playerCount } = instance
+  // 展示名与操作按钮的可访问名统一走 instanceLabel（空名回退 id，避免出现无名按钮）
+  const name = instanceLabel(instance)
   const mcVersion = detail?.mcVersion
   // 升级中标识（issue 352）：WS 订阅补发/实时事件驱动；终态残留不误显示
   // （终态 store 清理由升级弹窗打开时做，卡片只认非终态）

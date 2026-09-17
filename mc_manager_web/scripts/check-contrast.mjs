@@ -249,6 +249,32 @@ for (const [scopeName, vars] of [
     for (const [name, candidates] of surfaces) check(`identity-${slot} on ${name}`, worstOn(fg.color, candidates), 3.0)
   }
 
+  // 8c. 状态指示器 ping 涟漪（顶栏）：状态色按 --mcs-ripple-opacity 叠在顶栏玻璃面上。
+  //     涟漪承担可感知性（无它只剩 8px 圆点），按非文字图形 ≥3:1 口径；
+  //     不透明度与状态色都从 token 读——改了任一项却没重算对比度，这里会红。
+  //     pulse 的两个状态取自 status-indicator 的 STATUS_CONFIG（connecting=info / warning=warning）
+  {
+    const alpha = Number(vars.get('--mcs-ripple-opacity'))
+    const chromeSpec = readGlassSpecs(scopeName === '亮色').find((s) => s.name === 'glass-chrome')
+    if (!Number.isFinite(alpha) || !chromeSpec) {
+      console.log(`✗ 涟漪检查缺少输入：--mcs-ripple-opacity=${vars.get('--mcs-ripple-opacity')} glass-chrome=${!!chromeSpec}`)
+      failures++
+      checks++
+    } else {
+      const glass = parseColor(vars.get(chromeSpec.token), vars, refVars)
+      const page = parseColor(vars.get('--mcs-bg-default'), vars, refVars)
+      const chrome = composite(glass.color, page.color, chromeSpec.alpha)
+      for (const status of ['info', 'warning']) {
+        const fg = parseColor(vars.get(`--mcs-${status}-fg`), vars, refVars)
+        check(
+          `pulse 涟漪 ${status}-fg @${alpha} on glass-chrome`,
+          wcagContrast(composite(fg.color, chrome, alpha), chrome),
+          3.0,
+        )
+      }
+    }
+  }
+
   // 9. accent 强档边界 × 面（交互控件边界/状态描边 ≥3:1，须按合成后颜色算）
   //    弱档 --mcs-accent-border 仅作装饰（亮色 1.10:1 / 暗色 1.69:1），不得用于控件边界
   const strongBorder = parseColor(vars.get('--mcs-accent-border-strong'), vars, refVars)

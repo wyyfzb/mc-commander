@@ -90,6 +90,11 @@
   --mcs-z-tooltip: 70;   /* 提示气泡（须盖过弹窗与下拉） */
   --mcs-z-toast: 80;     /* 通知/跳转链接（永远最上） */
 
+  /* ── 状态指示器涟漪起始不透明度（消费写法 opacity-(--mcs-ripple-opacity)）
+        亮色档单独提高的理由：顶层玻璃面在亮色下亮得多，同一档位合成后只有 2.63:1，
+        达不到非文字图形 3:1；两档的达标值由 check-contrast 的「pulse 涟漪」断言守住 ── */
+  --mcs-ripple-opacity: 0.6;
+
   /* ── 光影（v2 深空工作台：投影墨 + 顶部内高光构成「受光面」；
         card=平面卡 / raised=悬浮下拉 / overlay=弹窗浮层；辉光仅限 CTA/激活/危险场景）── */
   --mcs-shadow-card: inset 0 1px 0 var(--ref-highlight-top), 0 1px 3px var(--ref-shadow-ink-soft), 0 10px 32px -8px var(--ref-shadow-ink);
@@ -156,6 +161,8 @@
 .light {
   /* 亮色主题独立映射（换档不换色，明暗独立验证） */
   --mcs-bg-default: var(--ref-light-bg);
+  /* 涟漪在亮色面上升档：同一 0.6 在亮色玻璃面上合成后只有 2.63:1（图形口径要 ≥3:1） */
+  --mcs-ripple-opacity: 0.75;
   --mcs-bg-muted: var(--ref-light-card);
   /* 深嵌区：亮色下与页面底同值（浅灰）。终端等真正深嵌场景由 M2 引入
      主题无关的 --mcs-terminal-* 专用 token（设计文档：ServerTerminal 独立深底） */
