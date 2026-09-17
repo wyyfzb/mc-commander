@@ -111,6 +111,20 @@ export function AppTopBar() {
   const currentInstanceName = selectedInstanceName ?? instanceNameFallback
   const noInstances = instancesQuery.isSuccess && instanceList.length === 0
 
+  /** 单实例且正是当前选中实例时才降级为纯展示：只有一个选项的下拉除了展开什么也做不了。
+      单实例但选中的是列表外的陈旧 id 时仍保留下拉——那时用户正需要靠它把那唯一实例选回来 */
+  const singleSelectedInstance = instanceList.length === 1 && instanceList[0]?.id === instanceId
+
+  /** 实例固定色相标识（非语义 identity：只回答「是哪个实例」，不表达运行/告警状态；
+      未选中实例时不渲染，避免与「暂无实例」等占位文案一起假装有个实例） */
+  const instanceHueDot = instanceId ? (
+    <span
+      data-instance-hue
+      className={cn('size-2 shrink-0 rounded-full', instanceHueFillClass(instanceId))}
+      aria-hidden
+    />
+  ) : null
+
   return (
     <header className="glass-chrome flex h-12 shrink-0 items-center gap-2 border-b border-mcs-border-muted px-3">
       {/* 移动端导航抽屉开关（桌面侧栏开合在侧栏 Logo 上，见 app-sidebar） */}
@@ -118,7 +132,7 @@ export function AppTopBar() {
         <Menu aria-hidden />
       </IconButton>
 
-      {/* 服务器地址（B15：原型顶栏地址 chip；带复制按钮，方便发给玩家直连） */}
+      {/* 服务器地址 chip（带复制按钮，方便发给玩家直连） */}
       {status?.address && (
         <span className="hidden items-center gap-1 rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-muted py-1 pr-1 pl-2 font-mono text-mcs-2xs text-mcs-text-muted lg:inline-flex">
           <Server className="size-3" aria-hidden />
@@ -140,49 +154,50 @@ export function AppTopBar() {
         </span>
       )}
 
-      {/* 实例选择器（真实实例列表） */}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" className="max-w-32 gap-1.5 text-mcs-sm font-medium">
-            <Server className="size-4 shrink-0 text-mcs-text-muted" aria-hidden />
-            {/* 实例固定色相标识（非语义 identity：只回答「是哪个实例」，不表达运行/告警状态；
-                未选中实例时不渲染，避免与「暂无实例」等占位文案一起假装有个实例 */}
-            {instanceId && (
-              <span
-                data-instance-hue
-                className={cn('size-2 shrink-0 rounded-full', instanceHueFillClass(instanceId))}
-                aria-hidden
-              />
+      {/* 实例选择器：单实例降级为纯展示（见 singleSelectedInstance）；0 实例 / 加载中 / 失败
+          仍保留下拉：那里要承载「前往部署」与诚实的缺位说明 */}
+      {singleSelectedInstance ? (
+        <span className="flex max-w-32 items-center gap-1.5 px-1 text-mcs-sm font-medium text-mcs-text-default">
+          <Server className="size-4 shrink-0 text-mcs-text-muted" aria-hidden />
+          {instanceHueDot}
+          <span className="truncate">{currentInstanceName}</span>
+        </span>
+      ) : (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" className="max-w-32 gap-1.5 text-mcs-sm font-medium">
+              <Server className="size-4 shrink-0 text-mcs-text-muted" aria-hidden />
+              {instanceHueDot}
+              <span className="truncate">{currentInstanceName}</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-56">
+            <DropdownMenuLabel>服务器实例</DropdownMenuLabel>
+            {/* 仅「确实一个实例都没有」才推去部署向导；列表未到/失败时不假装没有实例 */}
+            {noInstances && (
+              <DropdownMenuItem onClick={() => navigate('/instances?tab=deploy')}>
+                暂无实例，前往部署
+              </DropdownMenuItem>
             )}
-            <span className="truncate">{currentInstanceName}</span>
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-56">
-          <DropdownMenuLabel>服务器实例</DropdownMenuLabel>
-          {/* 仅「确实一个实例都没有」才推去部署向导；列表未到/失败时不假装没有实例 */}
-          {noInstances && (
-            <DropdownMenuItem onClick={() => navigate('/instances?tab=deploy')}>
-              暂无实例，前往部署
-            </DropdownMenuItem>
-          )}
-          {instancesQuery.isError && <DropdownMenuItem disabled>实例列表加载失败</DropdownMenuItem>}
-          {instancesQuery.isPending && (
-            <DropdownMenuItem disabled>正在加载实例列表…</DropdownMenuItem>
-          )}
-          {instanceList.map((inst) => (
-            <DropdownMenuItem
-              key={inst.id}
-              onClick={() => switchInstance(inst.id)}
-              className="flex items-center justify-between gap-2"
-            >
-              <span className="truncate">{inst.name}</span>
-              {inst.id === instanceId ? (
-                <span className="size-1.5 rounded-full bg-mcs-accent" aria-label="当前实例" />
-              ) : null}
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
+            {instancesQuery.isError && <DropdownMenuItem disabled>实例列表加载失败</DropdownMenuItem>}
+            {instancesQuery.isPending && (
+              <DropdownMenuItem disabled>正在加载实例列表…</DropdownMenuItem>
+            )}
+            {instanceList.map((inst) => (
+              <DropdownMenuItem
+                key={inst.id}
+                onClick={() => switchInstance(inst.id)}
+                className="flex items-center justify-between gap-2"
+              >
+                <span className="truncate">{inst.name}</span>
+                {inst.id === instanceId ? (
+                  <span className="size-1.5 rounded-full bg-mcs-accent" aria-label="当前实例" />
+                ) : null}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
 
       {/* 全局搜索（Cmd/Ctrl+K） */}
       <Button

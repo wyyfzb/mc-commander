@@ -361,11 +361,21 @@ function PropertyRow({
   return (
     <div
       data-prop={def.name}
-      className="flex items-center gap-3 border-b border-mcs-border-subtle px-2 py-1.5 last:border-b-0"
+      // xs 以下键名与值上下堆叠：行内固定值列 + 长键名（enable-command-network-threshold
+      // 这类）会把键名裁到 2-3 字可见——按 scrollWidth-clientWidth 口径实测 320px 26/28 行、
+      // 375px 8/28 行被裁。
+      // xs 及以上保持行内：该档（480-639px）实测 0 行被裁，而按原计划收窄值列到 112px 反而有害——
+      // 160px 的输入/下拉会被压进 112px 列（level-type 下拉 min-content 140px 直接左溢出压进键名区），
+      // 收益为 0，故只做堆叠不动列宽
+      className="flex flex-col items-stretch gap-1 border-b border-mcs-border-subtle px-2 py-1.5 last:border-b-0 xs:flex-row xs:items-center xs:gap-3"
     >
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
-          <span className="truncate font-mono text-mcs-xs text-mcs-text-default" title={def.name}>
+          <span
+            data-prop-name
+            className="truncate font-mono text-mcs-xs text-mcs-text-default"
+            title={def.name}
+          >
             {def.name}
           </span>
           {isSensitive && (
@@ -389,7 +399,7 @@ function PropertyRow({
         </div>
       </div>
 
-      <div className="flex w-44 shrink-0 justify-end">
+      <div className="flex w-full shrink-0 justify-start xs:w-44 xs:justify-end">
         {isSensitive ? (
           // 敏感键：只读占位符（编辑态也锁定）
           <span className="inline-flex items-center gap-1 rounded-mcs-xs bg-mcs-bg-muted px-2 py-1 font-mono text-mcs-xs text-mcs-text-muted">

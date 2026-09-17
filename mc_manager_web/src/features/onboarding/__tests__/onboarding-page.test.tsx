@@ -1,5 +1,6 @@
 /**
  * OnboardingPage 行为级补测（issue 433）
+ * - 折叠类：部署方式区默认收起（入口 aria-expanded + 面板按需渲染），展开后内容与从前一致
  * - 跳过类：「已有服务端」默认态——部署指南不渲染，直连表单就位
  * - 推进类：部署方式切换——指南块内容随选择渲染（Windows 手动步骤 / Linux 一键脚本+要点）
  * - 边界类：Docker 不占卡片位，只在卡片区下方一行说明（不提供镜像、不给跑不通的命令）
@@ -60,9 +61,45 @@ beforeEach(() => {
   copyTextMock.mockResolvedValue(true)
 })
 
+/** 展开默认收起的部署方式区——引导页默认只把连接表单交给用户，三张部署卡要展开才在文档里 */
+function expandDeploy() {
+  fireEvent.click(screen.getByRole('button', { name: '还没有服务端？查看部署方式' }))
+}
+
+/** 渲染引导页并展开部署方式区（除「默认收起」的两条用例外，其余用例都走这条路径） */
+function renderWithDeploy() {
+  const view = render(<OnboardingPage />)
+  expandDeploy()
+  return view
+}
+
 describe('OnboardingPage · 默认态（跳过部署指南）', () => {
-  it('渲染标题 + 三部署方式卡 + Docker 说明 + 连接表单 + 部署文档链接', () => {
+  it('部署方式区默认收起：入口 aria-expanded=false、面板与三张卡都不在文档里', () => {
     render(<OnboardingPage />)
+    const toggle = screen.getByRole('button', { name: '还没有服务端？查看部署方式' })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    // 收起时面板整体不渲染（内容不删只收）
+    expect(screen.queryByRole('radiogroup', { name: '部署方式' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/Docker 不在支持范围内/)).not.toBeInTheDocument()
+    // 首屏主内容仍是连接表单
+    expect(screen.getByTestId('connection-form')).toBeInTheDocument()
+  })
+
+  it('展开/收起：aria-expanded 与面板同步，收起后三张卡再次离场', () => {
+    render(<OnboardingPage />)
+    const toggle = screen.getByRole('button', { name: '还没有服务端？查看部署方式' })
+
+    fireEvent.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('radiogroup', { name: '部署方式' })).toBeInTheDocument()
+
+    fireEvent.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByRole('radiogroup', { name: '部署方式' })).not.toBeInTheDocument()
+  })
+
+  it('渲染标题 + 三部署方式卡 + Docker 说明 + 连接表单 + 部署文档链接', () => {
+    renderWithDeploy()
     expect(screen.getByText('欢迎使用 MC Commander')).toBeInTheDocument()
     expect(screen.getByRole('radio', { name: /已有服务端/ })).toBeInTheDocument()
     expect(screen.getByRole('radio', { name: /Linux 一键部署/ })).toBeInTheDocument()
@@ -76,7 +113,7 @@ describe('OnboardingPage · 默认态（跳过部署指南）', () => {
   })
 
   it('默认选中「已有服务端」且部署指南不渲染（跳过路径）', () => {
-    render(<OnboardingPage />)
+    renderWithDeploy()
     const already = screen.getByRole('radio', { name: /已有服务端/ })
     expect(already).toHaveAttribute('aria-checked', 'true')
     // 两种指南均未出现
@@ -87,7 +124,7 @@ describe('OnboardingPage · 默认态（跳过部署指南）', () => {
 
 describe('OnboardingPage · 部署方式推进', () => {
   it('切换到 Windows 手动部署：卡片选中态迁移 + 步骤指南渲染', () => {
-    render(<OnboardingPage />)
+    renderWithDeploy()
     fireEvent.click(screen.getByRole('radio', { name: /Windows 手动部署/ }))
     expect(screen.getByRole('radio', { name: /Windows 手动部署/ })).toHaveAttribute('aria-checked', 'true')
     expect(screen.getByRole('radio', { name: /已有服务端/ })).toHaveAttribute('aria-checked', 'false')
@@ -104,7 +141,7 @@ describe('OnboardingPage · 部署方式推进', () => {
   })
 
   it('切换到 Linux 一键部署：一键脚本 + 三条要点清单', () => {
-    render(<OnboardingPage />)
+    renderWithDeploy()
     fireEvent.click(screen.getByRole('radio', { name: /Linux 一键部署/ }))
     expect(screen.getByText('Linux 一键部署命令')).toBeInTheDocument()
     expect(screen.getByText(/deploy-mc-commander\.sh/)).toBeInTheDocument()
@@ -114,7 +151,7 @@ describe('OnboardingPage · 部署方式推进', () => {
   })
 
   it('指南块随选择互斥：切回「已有服务端」指南消失', () => {
-    render(<OnboardingPage />)
+    renderWithDeploy()
     fireEvent.click(screen.getByRole('radio', { name: /Linux 一键部署/ }))
     expect(screen.getByText('Linux 一键部署命令')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('radio', { name: /已有服务端/ }))
@@ -124,7 +161,7 @@ describe('OnboardingPage · 部署方式推进', () => {
 
 describe('OnboardingPage · 部署方式单选组语义', () => {
   it('三张卡同属一个 radiogroup，选中态用 aria-checked 表达（不是各按各的开关）', () => {
-    render(<OnboardingPage />)
+    renderWithDeploy()
     const group = screen.getByRole('radiogroup', { name: '部署方式' })
     expect(within(group).getAllByRole('radio')).toHaveLength(3)
     expect(within(group).getByRole('radio', { name: /已有服务端/ })).toHaveAttribute('aria-checked', 'true')
@@ -134,14 +171,14 @@ describe('OnboardingPage · 部署方式单选组语义', () => {
   })
 
   it('roving tabindex：组内只有选中项可 Tab 进入', () => {
-    render(<OnboardingPage />)
+    renderWithDeploy()
     expect(screen.getByRole('radio', { name: /已有服务端/ })).toHaveAttribute('tabindex', '0')
     expect(screen.getByRole('radio', { name: /Linux 一键部署/ })).toHaveAttribute('tabindex', '-1')
     expect(screen.getByRole('radio', { name: /Windows 手动部署/ })).toHaveAttribute('tabindex', '-1')
   })
 
   it('方向键在组内移动并即时选中（右移 / 左移回绕 / Home），焦点跟随', () => {
-    render(<OnboardingPage />)
+    renderWithDeploy()
     const already = screen.getByRole('radio', { name: /已有服务端/ })
     already.focus()
 
@@ -166,7 +203,7 @@ describe('OnboardingPage · 部署方式单选组语义', () => {
   })
 
   it('上下键与 End 同样按单选组模型工作', () => {
-    render(<OnboardingPage />)
+    renderWithDeploy()
     const already = screen.getByRole('radio', { name: /已有服务端/ })
     already.focus()
 
@@ -180,7 +217,7 @@ describe('OnboardingPage · 部署方式单选组语义', () => {
   })
 
   it('点击非选中项后 roving tabindex 随之迁移（组内恒好一个 Tab 停靠点）', () => {
-    render(<OnboardingPage />)
+    renderWithDeploy()
     const group = screen.getByRole('radiogroup', { name: '部署方式' })
     fireEvent.click(screen.getByRole('radio', { name: /Windows 手动部署/ }))
 
@@ -192,7 +229,7 @@ describe('OnboardingPage · 部署方式单选组语义', () => {
   })
 
   it('方向键之外的按键不抢：选中态不动，且不吞掉默认行为', () => {
-    render(<OnboardingPage />)
+    renderWithDeploy()
     const already = screen.getByRole('radio', { name: /已有服务端/ })
     already.focus()
     fireEvent.keyDown(already, { key: 'a' })
@@ -205,11 +242,11 @@ describe('OnboardingPage · 部署方式单选组语义', () => {
 describe('OnboardingPage · 命令复制反馈', () => {
   it('复制成功 → toast.success', async () => {
     copyTextMock.mockResolvedValue(true)
-    render(<OnboardingPage />)
+    renderWithDeploy()
     fireEvent.click(screen.getByRole('radio', { name: /Linux 一键部署/ }))
     fireEvent.click(screen.getByRole('button', { name: '复制部署命令' }))
     await vi.waitFor(() => expect(toastSuccess).toHaveBeenCalledWith('命令已复制', { duration: 1500 }), {
-      // vi.waitFor 有独立的硬编码 1s 上限，不读 RTL 的 asyncUtilTimeout（J58）
+      // vi.waitFor 自带上限、不读 RTL 的 asyncUtilTimeout，故这里显式给 timeout
       timeout: 5000,
     })
     expect(toastError).not.toHaveBeenCalled()
@@ -217,7 +254,7 @@ describe('OnboardingPage · 命令复制反馈', () => {
 
   it('复制失败 → toast.error 引导手动复制', async () => {
     copyTextMock.mockResolvedValue(false)
-    render(<OnboardingPage />)
+    renderWithDeploy()
     fireEvent.click(screen.getByRole('radio', { name: /Linux 一键部署/ }))
     fireEvent.click(screen.getByRole('button', { name: '复制部署命令' }))
     await vi.waitFor(() => expect(toastError).toHaveBeenCalledWith('复制失败，请手动复制'), {
@@ -230,7 +267,7 @@ describe('OnboardingPage · 命令复制反馈', () => {
 
 describe('OnboardingPage · 连接成功后的三步清单', () => {
   it('恰好三步：部署实例 / 确认 RCON / 加首位白名单', () => {
-    render(<OnboardingPage />)
+    renderWithDeploy()
     expect(screen.getByRole('heading', { name: '连接成功后的三步' })).toBeInTheDocument()
     const steps = within(screen.getByRole('list', { name: '连接成功后的三步' })).getAllByRole('listitem')
     expect(steps).toHaveLength(3)
@@ -240,7 +277,7 @@ describe('OnboardingPage · 连接成功后的三步清单', () => {
   })
 
   it('RCON 一步写全处置口径：enable-rcon + rcon.password + 重启实例', () => {
-    render(<OnboardingPage />)
+    renderWithDeploy()
     // 面板可连但实时数据/命令回显依赖 RCON；只说「确认 RCON」用户无从下手
     expect(screen.getByText(/enable-rcon/)).toBeInTheDocument()
     expect(screen.getByText(/rcon\.password/)).toBeInTheDocument()
@@ -248,7 +285,7 @@ describe('OnboardingPage · 连接成功后的三步清单', () => {
   })
 
   it('容器保留 safe 对齐语义（内容超视口时顶部不会被推出视口）', () => {
-    const { container } = render(<OnboardingPage />)
+    const { container } = renderWithDeploy()
     const shell = container.firstElementChild
     expect(shell).toHaveClass('justify-center-safe')
     // 不得用裸 justify-center：容器高度一旦被显式约束，居中会把顶部一起切掉
@@ -256,12 +293,12 @@ describe('OnboardingPage · 连接成功后的三步清单', () => {
   })
 
   it('「邀请」步骤已砍：全页无该词（原四步口径的残留）', () => {
-    render(<OnboardingPage />)
+    renderWithDeploy()
     expect(screen.queryByText(/邀请/)).not.toBeInTheDocument()
   })
 
   it('默认路径不是分步向导：无下一步/上一步导航，连接表单始终在同屏', () => {
-    render(<OnboardingPage />)
+    renderWithDeploy()
     expect(screen.queryByRole('button', { name: /下一步|上一步|跳过/ })).not.toBeInTheDocument()
     expect(screen.getByTestId('connection-form')).toBeInTheDocument()
   })
@@ -269,18 +306,18 @@ describe('OnboardingPage · 连接成功后的三步清单', () => {
 
 describe('OnboardingPage · 完成路径（连接保存）', () => {
   it('ConnectionForm 以 onboarding variant 挂载', () => {
-    render(<OnboardingPage />)
+    renderWithDeploy()
     expect(screen.getByTestId('connection-form')).toHaveAttribute('data-variant', 'onboarding')
   })
 
   it('表单标题降为 h2：本页 h1 由欢迎区承担（ConnectionForm 默认 h1）', () => {
-    render(<OnboardingPage />)
+    renderWithDeploy()
     expect(screen.getByRole('heading', { level: 1, name: '欢迎使用 MC Commander' })).toBeInTheDocument()
     expect(screen.getByTestId('connection-form')).toHaveAttribute('data-heading-as', 'h2')
   })
 
   it('保存成功 → 欢迎 toast + 跳转 /dashboard（完成路径）', () => {
-    render(<OnboardingPage />)
+    renderWithDeploy()
     fireEvent.click(screen.getByRole('button', { name: '保存并连接' }))
     expect(toastSuccess).toHaveBeenCalledWith('欢迎使用，已进入管理面板')
     expect(navigateSpy).toHaveBeenCalledWith('/dashboard')

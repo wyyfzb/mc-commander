@@ -10,7 +10,16 @@
  */
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router'
-import { AlertTriangle, Check, Copy, Lightbulb, Package, Server, Terminal } from 'lucide-react'
+import {
+  AlertTriangle,
+  Check,
+  ChevronDown,
+  Copy,
+  Lightbulb,
+  Package,
+  Server,
+  Terminal,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useRadioGroup, type RadioGroupItemProps } from '@/hooks/use-radio-group'
@@ -140,9 +149,11 @@ function CommandBlock({ command, ariaLabel }: { command: string; ariaLabel: stri
 export function OnboardingPage() {
   const navigate = useNavigate()
   const [mode, setMode] = useState<DeployMode>('already')
+  // 部署方式区默认收起：面板可达即后端已部署，先把连接表单交到用户手里
+  const [deployOpen, setDeployOpen] = useState(false)
 
   // 单选组接线（roving tabindex + 方向键移动即选中、焦点跟随）统一走 useRadioGroup，
-  // 与 webhook 渠道预设、J55 批次各组共用同一键盘模型
+  // 与 webhook 渠道预设等其它单选组共用同一键盘模型
   const { groupProps, itemProps } = useRadioGroup<DeployMode>({
     label: '部署方式',
     value: mode,
@@ -166,87 +177,116 @@ export function OnboardingPage() {
           </p>
         </div>
 
-        {/* ── 部署方式选择（三选一单选组）+ Docker 边界说明 ── */}
-        <div {...groupProps} className="mb-2 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <ModeCard
-            mode="already"
-            active={itemProps(0)['aria-checked']}
-            title="已有服务端"
-            description="我已部署，直接连接"
-            icon={Server}
-            onSelect={setMode}
-            radioProps={itemProps(0)}
-          />
-          <ModeCard
-            mode="linux"
-            active={itemProps(1)['aria-checked']}
-            title="Linux 一键部署"
-            description="一条命令装好运行环境"
-            icon={Terminal}
-            onSelect={setMode}
-            radioProps={itemProps(1)}
-          />
-          <ModeCard
-            mode="windows"
-            active={itemProps(2)['aria-checked']}
-            title="Windows 手动部署"
-            description="自备 Node 22+ · 分步指引"
-            icon={Package}
-            onSelect={setMode}
-            radioProps={itemProps(2)}
-          />
-        </div>
-        <p className="mb-4 text-mcs-xs text-mcs-text-muted">
-          Docker 不在支持范围内：官方不提供镜像，请用上方任一方式部署。
-        </p>
+        {/* ── 部署方式（默认收起）：页面可达即后端已部署，标准部署下这一区只是首屏噪音；
+               内容不删只收——真要自建的部署方展开即可 ── */}
+        <section className="mb-4">
+          <button
+            type="button"
+            onClick={() => setDeployOpen((open) => !open)}
+            aria-expanded={deployOpen}
+            className="flex w-full items-center justify-between gap-2 rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-muted px-3 py-2 text-left transition-colors hover:bg-mcs-state-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mcs-focus-ring"
+          >
+            <span className="text-mcs-sm font-medium text-mcs-text-default">
+              还没有服务端？查看部署方式
+            </span>
+            <ChevronDown
+              className={cn(
+                'size-4 shrink-0 text-mcs-text-muted transition-transform',
+                deployOpen && 'rotate-180',
+              )}
+              aria-hidden
+            />
+          </button>
 
-        {/* ── 部署指南（随选择切换） ── */}
-        {mode !== 'already' && (
-          <Card as="div" className="mb-4 flex flex-col gap-3 p-4">
-            {mode === 'windows' && (
-              <>
-                <div className="flex items-center gap-2">
-                  <Package className="size-3.5 text-mcs-text-muted" aria-hidden />
-                  <span className="text-mcs-xs font-medium text-mcs-text-muted">
-                    Windows 手动部署（Node 22+）
-                  </span>
-                </div>
-                <ol className="flex list-decimal flex-col gap-1.5 pl-4 text-mcs-xs text-mcs-text-muted">
-                  {WINDOWS_STEPS.map((step) => (
-                    <li key={step}>{step}</li>
-                  ))}
-                </ol>
-                <NoticeBanner variant="warning" icon={AlertTriangle}>
-                  未提供 Windows 安装包：官方部署脚本面向 Linux，Windows 请按上述步骤手动部署（第 3-4
-                  步构建前端产物不可省，否则 :25566 只有接口没有界面）；遇到环境问题建议改用 WSL2
-                  走 Linux 一键脚本。
-                </NoticeBanner>
-              </>
-            )}
-            {mode === 'linux' && (
-              <>
-                <div className="flex items-center gap-2">
-                  <Terminal className="size-3.5 text-mcs-text-muted" aria-hidden />
-                  <span className="text-mcs-xs font-medium text-mcs-text-muted">
-                    Linux 一键部署命令
-                  </span>
-                </div>
-                <CommandBlock command={DEPLOY_COMMAND} ariaLabel="复制部署命令" />
-                <ul className="flex flex-col gap-1.5">
-                  {LINUX_POINTS.map((point) => (
-                    <li key={point} className="flex items-start gap-2 text-mcs-xs text-mcs-text-muted">
-                      <Check className="mt-0.5 size-3 shrink-0 text-mcs-success-fg" aria-hidden />
-                      {point}
-                    </li>
-                  ))}
-                </ul>
-                <NoticeBanner variant="success" icon={Lightbulb}>
-                  部署完成后，记下终端输出的「API Key」，下一步连接时需要填写。
-                </NoticeBanner>
-              </>
-            )}
-          </Card>
-        )}
+          {deployOpen && (
+            <div className="mt-3 flex flex-col gap-3">
+              {/* 部署方式选择（三选一单选组） */}
+              <div {...groupProps} className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <ModeCard
+                  mode="already"
+                  active={itemProps(0)['aria-checked']}
+                  title="已有服务端"
+                  description="我已部署，直接连接"
+                  icon={Server}
+                  onSelect={setMode}
+                  radioProps={itemProps(0)}
+                />
+                <ModeCard
+                  mode="linux"
+                  active={itemProps(1)['aria-checked']}
+                  title="Linux 一键部署"
+                  description="一条命令装好运行环境"
+                  icon={Terminal}
+                  onSelect={setMode}
+                  radioProps={itemProps(1)}
+                />
+                <ModeCard
+                  mode="windows"
+                  active={itemProps(2)['aria-checked']}
+                  title="Windows 手动部署"
+                  description="自备 Node 22+ · 分步指引"
+                  icon={Package}
+                  onSelect={setMode}
+                  radioProps={itemProps(2)}
+                />
+              </div>
+              <p className="text-mcs-xs text-mcs-text-muted">
+                Docker 不在支持范围内：官方不提供镜像，请用上方任一方式部署。
+              </p>
+
+              {/* 部署指南（随选择切换） */}
+              {mode !== 'already' && (
+                <Card as="div" className="flex flex-col gap-3 p-4">
+                  {mode === 'windows' && (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <Package className="size-3.5 text-mcs-text-muted" aria-hidden />
+                        <span className="text-mcs-xs font-medium text-mcs-text-muted">
+                          Windows 手动部署（Node 22+）
+                        </span>
+                      </div>
+                      <ol className="flex list-decimal flex-col gap-1.5 pl-4 text-mcs-xs text-mcs-text-muted">
+                        {WINDOWS_STEPS.map((step) => (
+                          <li key={step}>{step}</li>
+                        ))}
+                      </ol>
+                      <NoticeBanner variant="warning" icon={AlertTriangle}>
+                        未提供 Windows 安装包：官方部署脚本面向 Linux，Windows 请按上述步骤手动部署（第
+                        3-4 步构建前端产物不可省，否则 :25566 只有接口没有界面）；遇到环境问题建议改用
+                        WSL2 走 Linux 一键脚本。
+                      </NoticeBanner>
+                    </>
+                  )}
+                  {mode === 'linux' && (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <Terminal className="size-3.5 text-mcs-text-muted" aria-hidden />
+                        <span className="text-mcs-xs font-medium text-mcs-text-muted">
+                          Linux 一键部署命令
+                        </span>
+                      </div>
+                      <CommandBlock command={DEPLOY_COMMAND} ariaLabel="复制部署命令" />
+                      <ul className="flex flex-col gap-1.5">
+                        {LINUX_POINTS.map((point) => (
+                          <li
+                            key={point}
+                            className="flex items-start gap-2 text-mcs-xs text-mcs-text-muted"
+                          >
+                            <Check className="mt-0.5 size-3 shrink-0 text-mcs-success-fg" aria-hidden />
+                            {point}
+                          </li>
+                        ))}
+                      </ul>
+                      <NoticeBanner variant="success" icon={Lightbulb}>
+                        部署完成后，记下终端输出的「API Key」，下一步连接时需要填写。
+                      </NoticeBanner>
+                    </>
+                  )}
+                </Card>
+              )}
+            </div>
+          )}
+        </section>
 
         {/* ── 连接表单（复用；保存成功 → 跳转仪表盘）
                标题降为 h2：本页 h1 由上方欢迎区承担，页面级唯一标题不能有两个 ── */}

@@ -30,6 +30,13 @@ async function setupConnection(page: Page) {
   })
 }
 
+/** 展开默认收起的部署方式区（引导页默认只给连接表单，三张部署卡要展开才在文档里） */
+async function expandDeploy(page: Page) {
+  const toggle = page.getByRole('button', { name: '还没有服务端？查看部署方式' })
+  await toggle.click()
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+}
+
 test.describe('onboarding', () => {
   test('无配置：/dashboard 重定向 /login（安全主线：登录页为首访入口）', async ({ page }) => {
     await clearConnection(page)
@@ -69,6 +76,13 @@ test.describe('onboarding', () => {
   test('部署方式切换（三选一）：Windows 步骤 / Linux 命令 + 要点', async ({ page }) => {
     await clearConnection(page)
     await page.goto('/onboarding')
+    // 部署方式区默认收起：入口在，三张卡与 Docker 说明都不在文档里
+    await expect(page.getByRole('radiogroup', { name: '部署方式' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: '还没有服务端？查看部署方式' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
+    await expandDeploy(page)
     // 三张卡片：已有服务端 / Linux 一键部署 / Windows 手动部署；Docker 只占一行说明
     await expect(page.getByRole('button', { name: 'Docker' })).toHaveCount(0)
     await expect(page.getByText(/Docker 不在支持范围内/)).toBeVisible()
@@ -98,6 +112,7 @@ test.describe('onboarding', () => {
   test('部署方式是可键盘操作的单选组：方向键移动并即时选中', async ({ page }) => {
     await clearConnection(page)
     await page.goto('/onboarding')
+    await expandDeploy(page)
     // jsdom 模拟不出真实的 Tab 顺序与焦点，roving tabindex 必须在真实浏览器里验
     const group = page.getByRole('radiogroup', { name: '部署方式' })
     await expect(group.getByRole('radio')).toHaveCount(3)

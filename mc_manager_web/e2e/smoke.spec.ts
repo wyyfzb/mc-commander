@@ -32,8 +32,11 @@ test.describe('冒烟', () => {
       await expect(page.getByRole('link', { name: new RegExp(label) })).toBeVisible()
     }
     await expect(page.getByRole('button', { name: /搜索或执行命令/ })).toBeVisible()
-    // 顶栏实例选择器（mock 无 WS，状态点文案动态不稳，用实例名断言）
-    await expect(page.getByRole('button', { name: 'E2E 演示实例' })).toBeVisible()
+    // 顶栏实例标识（mock 无 WS，状态点文案动态不稳，用实例名断言）。
+    // mock 的实例列表恰好一个 ⇒ 选择器降级为纯展示：实例名不该挂在可点的按钮上
+    // （mock 若增到多实例，这里会红——那正是「该恢复下拉」的信号，不是脆断言）
+    await expect(page.getByText('E2E 演示实例').first()).toBeVisible()
+    await expect(page.getByRole('button', { name: 'E2E 演示实例' })).toHaveCount(0)
   })
 
   test('导航跳转：点击侧栏玩家进入占位页', async ({ page }) => {

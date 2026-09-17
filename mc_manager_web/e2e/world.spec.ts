@@ -88,4 +88,36 @@ test.describe('世界页', () => {
     await expect(page.getByText('已更新规则 allowEnteringNetherUsingPortals = false')).toBeVisible()
     await maybeShot(page, 'world-gamerules-dark.png')
   })
+
+  test('属性面板窄屏（375px）：键名与值上下堆叠，全部键名不再被裁', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 })
+    await setupConnection(page)
+    await page.goto('/world')
+    await expect(page.getByRole('heading', { name: '世界信息' })).toBeVisible()
+
+    const rows = page.locator('[data-prop]')
+    // 属性清单来自 GET /properties，等首行落定再量（空集合会让下面两条断言空转）
+    await expect(rows.first()).toBeVisible()
+    const rowCount = await rows.count()
+    expect(rowCount).toBeGreaterThan(0)
+
+    // xs（30rem=480px）以下改为纵向堆叠：行内 176px 固定值列会把长键名裁到 2-3 字可见
+    const directions = await rows.evaluateAll((els) =>
+      els.map((el) => getComputedStyle(el).flexDirection),
+    )
+    expect(new Set(directions)).toEqual(new Set(['column']))
+
+    // 堆叠后键名拿到整行宽度：逐行量「截断溢出量」，任何一行 > 0 都算回归
+    const overflow = await rows.evaluateAll((els) =>
+      els.map((row) => {
+        const name = row.querySelector('[data-prop-name]')
+        return name ? name.scrollWidth - name.clientWidth : -1
+      }),
+    )
+    expect(overflow.filter((n) => n !== 0)).toEqual([])
+    // 页面级不横向溢出（堆叠不能把内容撑破视口）
+    const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth)
+    expect(scrollWidth).toBeLessThanOrEqual(375)
+    await maybeShot(page, 'world-properties-375.png')
+  })
 })
