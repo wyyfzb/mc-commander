@@ -268,6 +268,27 @@ describe('LoginPage 第二因子', () => {
     expect(alert).not.toHaveTextContent('验证码')
   })
 
+  it('42900 通用洪泛限流：不给封禁文案（那会把它谎报成密码错误次数过多）', async () => {
+    server.use(
+      http.post('*/api/v1/auth/login', () =>
+        errorEnvelope(42900, 'Too many requests, please try again after 42 seconds', 429),
+      ),
+    )
+    const user = userEvent.setup()
+    renderLoginPage()
+    await waitForLoginMode()
+
+    await user.type(screen.getByLabelText('管理员密码'), 'demo-pass-12345')
+    await user.click(screen.getByRole('button', { name: /登录/ }))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('提交过于频繁')
+    expect(alert).toHaveTextContent('与密码是否正确无关')
+    // 限流与凭据无关：不得出现封禁语义的文案
+    expect(alert).not.toHaveTextContent('错误次数过多')
+    expect(alert).not.toHaveTextContent('锁定')
+  })
+
   it('前置拦截：空值与形状不符都不发请求', async () => {
     let calls = 0
     server.use(

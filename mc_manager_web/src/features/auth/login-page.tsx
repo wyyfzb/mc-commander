@@ -234,9 +234,13 @@ export function LoginPage() {
           setTotpRequired(true)
           setTotpCode('')
           setErrorText(getFriendlyErrorText(err))
-        } else if (err.code === ErrorCode.AUTH_LOGIN_LOCKED || err.code === ErrorCode.RATE_LIMITED) {
-          // 429：密码错与第二因子错共用同一封禁计数，文案随是否已进入第二因子区分
+        } else if (err.code === ErrorCode.AUTH_LOGIN_LOCKED) {
+          // 42901：密码错与第二因子错共用同一封禁计数，文案随是否已进入第二因子区分
           setErrorText(lockoutMessage(totpRequired))
+        } else if (err.code === ErrorCode.RATE_LIMITED) {
+          // 42900：/api/ 通用洪泛限流（与登录失败计数无关）——复用封禁文案会把它
+          // 谎报成「密码错误次数过多」，把限流说成凭据问题
+          setErrorText('提交过于频繁，已被临时限流，请稍后再试（与密码是否正确无关）。')
         } else {
           setErrorText(getFriendlyErrorText(err))
         }
