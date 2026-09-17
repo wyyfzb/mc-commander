@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { authMiddleware, authenticateWebSocket } from '../middleware/auth.js';
 
-// 测试用明文 Key（与 vitest.config.js 中 API_KEY 一致）
+// 测试用明文 Key（对应 vitest.config.js 注入的 API_KEY_HASH，虚拟值）
 const TEST_PLAINTEXT_KEY = 'test-api-key-for-unit-tests';
 
 describe('authMiddleware', () => {

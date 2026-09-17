@@ -28,7 +28,7 @@ import { parseDbTime } from '../utils/db-time.js';
 // 文件级放宽到本仓既有 15s 口径；scrypt 强度不因测试下调。
 vi.setConfig({ testTimeout: 15_000 });
 
-// 测试用明文 Key（与 vitest.config.js 中 API_KEY 一致）
+// 测试用明文 Key（对应 vitest.config.js 注入的 API_KEY_HASH，虚拟值）
 const TEST_PLAINTEXT_KEY = 'test-api-key-for-unit-tests';
 
 let app;

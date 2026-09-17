@@ -7,6 +7,8 @@
  *
  * 覆盖：未认证 → 401；认证后 → 200 且 apiKeyEnabled 与 config 一致（true/false 两态）。
  * 临时库指向 os.tmpdir()，不触碰仓库内 .env 与真实数据目录。
+ * 注：`config.apiKeyHash` 由 vitest.config.js 的 `test.env.API_KEY_HASH` 注入（固定测试明文 Key 的
+ * SHA-256），与本机 .env 无关——该文件既不该读到、也不该依赖部署机的真实哈希。
  */
 import { describe, it, expect, vi, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import express from 'express';

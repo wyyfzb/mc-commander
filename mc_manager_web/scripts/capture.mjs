@@ -14,6 +14,16 @@
  *   npm run capture -- --wait=2000          # 截图前等待（默认 1000ms）
  *   npm run capture -- --strict             # 空态/失败即非 0 退出（CI 用；默认仅告警）
  *   npm run capture -- --viewport=1440x900,375x812  # 视口（缺省 1440x900；显式指定时文件名带 -<宽> 后缀）
+ *   npm run capture -- --inject=<路径.mjs>   # 批次夹具注入点（见下）
+ *
+ * 批次夹具注入点（--inject）：整批一次的变更若只影响登录态/引导态等「非已连接」形态，
+ * 默认夹具会整批报「无视觉变化」。传入一个 .mjs（**相对当前工作目录解析**，`npm run` 时即
+ * mc_manager_web/），其 default export 收 `{ page, route, theme, viewport, mockKey }`，
+ * 在导航前按需注入：
+ *   - 改初始状态：用 `page.addInitScript`（后注册者后执行，可覆盖脚本内建的默认注入）
+ *   - 造接口形态：用 `page.route`
+ * 注意：整批共用一个模块实例（ESM 缓存），别在模块作用域攒跨题状态。
+ * 夹具脚本留 `.ai/`（不入库），本脚本不内置任何批次形态。
  *
  * 环境变量：
  *   VISION_BROWSER  浏览器通道强制（chrome | msedge | chromium）
@@ -46,6 +56,12 @@ const OUT_DIR = resolve(process.env.VISION_OUT || join(PROJECT_ROOT, '.ai', 'vis
  */
 const ROUTES = [
   { path: 'onboarding', file: 'onboarding', unconfigured: true },
+  // 登录页同为「未配置」形态（已配置时 requireUnconfigured 会把它弹回仪表盘）：
+  // 缺它时整批只改了登录页的改动会被报成「无视觉变化」
+  { path: 'login', file: 'login', unconfigured: true },
+  // 首访设密向导：登录页的第三相（mock 的 auth/status 认接口 ?fresh=1，也认页面 Referer），
+  // 缺它时「只改了设密向导」的整批同样会静默报「无视觉变化」
+  { path: 'login?fresh=1', file: 'login-fresh', unconfigured: true },
   { path: 'dashboard', file: 'dashboard' },
   { path: 'players', file: 'players' },
   { path: 'world', file: 'world' },
@@ -84,6 +100,18 @@ const VIEWPORTS = (viewportArg ? viewportArg.split(',') : ['1440x900'])
     return { width: Number(m[1]), height: Number(m[2]) }
   })
 const viewportSuffix = (vp) => (viewportArg ? `-${vp.width}` : '')
+/** 批次夹具脚本（--inject）：动态载入，在每题导航前调用其 default export */
+const injectArg = arg('inject', '')
+const injectPath = injectArg ? resolve(injectArg) : ''
+if (injectPath && !existsSync(injectPath)) {
+  console.error(`[capture] --inject 指向的模块不存在：${injectPath}（相对当前工作目录解析）`)
+  process.exit(2)
+}
+const injectMod = injectPath ? await import(pathToFileURL(injectPath).href) : null
+if (injectPath && typeof injectMod?.default !== 'function') {
+  console.error(`[capture] --inject 指向的模块须 default export 一个函数（收到 ${injectArg}）`)
+  process.exit(2)
+}
 const targets = ROUTES.filter((r) => !routesFilter.length || routesFilter.includes(r.file)).flatMap((r) =>
   (themeFilter && themeFilter !== 'dark' ? [] : [[r, 'dark']]).concat(
     themeFilter && themeFilter !== 'light' ? [] : [[r, 'light']],
@@ -258,6 +286,8 @@ async function main() {
     base: `http://localhost:${DEV_PORT}`,
     servers: { mock: mockSource, dev: devSource },
     viewports: VIEWPORTS,
+    // 批次夹具路径（无则 null）：记 resolve 后的绝对路径，便于「这批为什么长这样」的复现
+    inject: injectPath || null,
     shots: [],
     minShotBytes: MIN_SHOT_BYTES,
   }
@@ -286,6 +316,13 @@ async function main() {
       }
     }, [mockKey, theme, route.unconfigured === true])
     try {
+      // 批次夹具先于导航注入：它可用 addInitScript 覆盖上面的默认状态、或用 route 造接口形态。
+      // 夹具自身的报错单独包一层并打 [inject] 前缀——否则它与「页面没起来」在日志里无法分辨
+      try {
+        await injectMod?.default?.({ page, route, theme, viewport: vp, mockKey })
+      } catch (e) {
+        throw new Error(`[inject] ${e?.message ?? String(e)}`)
+      }
       await page.goto(`http://localhost:${DEV_PORT}/${route.path}`, { waitUntil: 'networkidle', timeout: 30_000 })
       await page.waitForTimeout(waitMs)
       const file = `${route.file}-${theme}${viewportSuffix(vp)}.png`
@@ -303,7 +340,9 @@ async function main() {
       }
     } catch (e) {
       failed.push(`${route.file}-${theme}${viewportSuffix(vp)}`)
-      log(`✗ ${route.file} (${theme}${viewportSuffix(vp)}): ${e.message.slice(0, 120)}`)
+      // 夹具可能抛非 Error（throw 'x' / reject()），故不能直接取 e.message——那会在 catch 里
+      // 再抛一次 TypeError，把整批（含 manifest）一起带走
+      log(`✗ ${route.file} (${theme}${viewportSuffix(vp)}): ${String(e?.message ?? e).slice(0, 120)}`)
     } finally {
       await page.close()
     }
