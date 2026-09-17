@@ -524,7 +524,7 @@ describe('forge 安装段分支', () => {
     );
   });
 
-  it('安装器 120s 超时 → kill 兜底 + 502 timed out', async () => {
+  it('安装器 120s 超时 → 进程树终止 + 502 timed out', async () => {
     defineForgeChain();
     testState.spawnBehavior = 'hang';
     const { app } = buildApp();
@@ -542,13 +542,21 @@ describe('forge 安装段分支', () => {
     expect(timerCall, 'forge 安装器应注册 120s 定时器').not.toBeNull();
     const callIdx = setTimeoutSpy.mock.calls.findIndex(([, ms]) => ms === 120000);
     clearTimeout(setTimeoutSpy.mock.results[callIdx].value);
-    timerCall[0](); // 手动触发超时回调：extractProc.kill() + reject
+    timerCall[0](); // 手动触发超时回调：终止进程树 + reject
 
     const res = await inflight;
     expect(res.status).toBe(502);
     expect(res.body.message).toContain('timed out (120s)');
-    const { spawn } = await import('child_process');
+    const { spawn, spawnSync } = await import('child_process');
+    // 单进程 SIGKILL 兜底
     expect(spawn.mock.results[0].value.kill).toHaveBeenCalled();
+    // 进程树终止（与实例 stop 同策略，见 utils/process-tree.js）：
+    // Windows 走 taskkill /T 递归；POSIX 上安装器未 detached（无进程组语义）→ 不做 kill(-pid)
+    if (process.platform === 'win32') {
+      expect(spawnSync).toHaveBeenCalledWith('taskkill', ['/F', '/T', '/PID', '42424'], { stdio: 'ignore' });
+    } else {
+      expect(spawnSync).not.toHaveBeenCalledWith('taskkill', expect.anything(), expect.anything());
+    }
   });
 });
 

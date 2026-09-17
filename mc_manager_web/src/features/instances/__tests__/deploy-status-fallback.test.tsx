@@ -280,7 +280,10 @@ describe('重复部署门控（J29）', () => {
     renderDialog()
 
     expect(await screen.findByText('正在安装 Forge…')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /部署/ })).not.toBeInTheDocument()
+    // 无「发起部署」入口（向导被进度视图替代），此刻唯一出口是取消在途部署
+    expect(screen.queryByRole('button', { name: '下一步' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /仅部署|部署并启动/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '取消部署' })).toBeInTheDocument()
   })
 
   it('仅由 WS 观察到的在途部署也禁用入口（门控不依赖 HTTP 快照）', async () => {

@@ -60,4 +60,27 @@ test.describe('部署进度兜底（J29）', () => {
     await expect(page.getByText(/进度经服务端刷新/)).toBeVisible()
     await expect(page.getByText(/每 30 秒/)).toHaveCount(1)
   })
+
+  test('恢复态可取消在途部署：请求按实例 id 精确匹配，终态切「已取消」而非「失败」', async ({
+    page,
+  }) => {
+    await setupInFlightDeploy(page)
+    await page.goto('/instances?tab=deploy')
+    await expect(page.getByRole('progressbar')).toBeVisible()
+
+    // 请求体断言：取消必须点名实例 id（服务端按 id 匹配注册表，不做「取消当前那个」的推断）
+    const cancelBodies: unknown[] = []
+    page.on('request', (req) => {
+      if (req.url().endsWith('/api/v1/instances/deploy/cancel')) cancelBodies.push(req.postDataJSON())
+    })
+
+    await page.getByRole('button', { name: '取消部署' }).click()
+    await expect(page.getByText('取消部署？')).toBeVisible()
+    await page.getByRole('button', { name: '中断并清理' }).click()
+
+    // mock 按真实链路补发 cancelled 终态事件 → 视图收敛到已取消（不是失败视图）
+    await expect(page.getByText('部署已取消，未完成的实例目录已清理。')).toBeVisible()
+    await expect(page.getByText(/部署失败/)).toHaveCount(0)
+    expect(cancelBodies).toEqual([{ instanceId: 'paper-a1b2c3d4' }])
+  })
 })

@@ -1,4 +1,3 @@
-import { spawnSync } from 'child_process';
 import { EventEmitter } from 'events';
 import path from 'path';
 import fs from 'fs';
@@ -9,6 +8,7 @@ import { parseUncompressed as parseNbtSync } from 'prismarine-nbt';
 import config from '../config.js';
 import { InstanceModel, CommandHistoryModel } from '../db/index.js';
 import { atomicWriteFile } from '../utils/fs-utils.js';
+import { killProcessTree } from '../utils/process-tree.js';
 import { maskSensitiveCommand } from '../utils/command-mask.js';
 import { localDateKey } from '../utils/local-date.js';
 // offline uuid / stats 时长读取全仓公共实现（与 routes/players.js 共用 player-utils.js）
@@ -906,28 +906,10 @@ export class MCServerInstance extends EventEmitter {
     // 清 pid 文件），此处不重复清理。
     const pid = this.process?.pid ?? (this.adopted ? this.adoptedPid : null);
     if (pid) {
-      // 只杀主进程不够：MC 1.18+/26.x 官方 server.jar 为 Bundler 结构，
-      // java 主进程（BundlerMain 引导器）经 ProcessBuilder 派生真正运行的
-      // 服务器 JVM，主进程被杀后 JVM 成为孤儿继续运行（Linux 被 init 收养
-      // 继续占用/写世界数据；Windows 上 libuv job object 的
-      // JOB_OBJECT_KILL_ON_JOB_CLOSE 因宿主 mc-commander 进程仍存活而不触发）。
-      // 旧版（1.17-）server.jar 直接运行服务器主类、无派生进程，进程树终止
-      // 对其同样有效，保持新旧版本兼容。
-      if (pid) {
-        if (process.platform === 'win32') {
-          // taskkill /T 从根进程向下递归遍历，根必须先存活才能定位整棵树
-          // （先杀根会让 taskkill 报"找不到进程"而无法递归）。
-          try { spawnSync('taskkill', ['/F', '/T', '/PID', String(pid)], { stdio: 'ignore' }); } catch {}
-        } else {
-          // Linux/macOS：start() 以 detached:true spawn 使主进程成为进程组组长
-          // （pid 即 PGID），kill(-pid) 一次性终止整组（含组长自身）
-          try { process.kill(-pid, 'SIGKILL'); } catch {}
-        }
-      }
-      // 单进程 SIGKILL 兜底（进程树杀失败/pid 缺失时仍杀主进程本身）
-      if (this.process) {
-        try { this.process.kill('SIGKILL'); } catch {}
-      }
+      // 终止整棵进程树（Bundler 结构的 server.jar 会派生真正运行的 JVM），
+      // 平台策略见 utils/process-tree.js；start() 在非 win32 上以 detached 启动，
+      // 故按进程组终止有效
+      killProcessTree(this.process, { pid, detached: true });
     }
     this._rconCleanup();
   }

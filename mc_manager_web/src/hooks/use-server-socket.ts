@@ -127,7 +127,8 @@ export function useServerSocket(instanceId: string | null) {
       }
 
       // 全局进度事件（部署：创建新实例前即有进度，无实例归属）。
-      // 归属字段（instanceName 等）透传：连接补发恢复显示与部署横幅所需
+      // 归属字段（instanceId/instanceName 等）透传：连接补发恢复显示、部署横幅
+      // 与「取消部署」定位服务端在途任务都需要它（取消端点按实例 id 精确匹配）
       if (msg.type === 'deployProgress') {
         applyDeployProgress({
           stage: String(data.stage ?? ''),
@@ -135,14 +136,15 @@ export function useServerSocket(instanceId: string | null) {
           transferred: Number(data.transferred ?? 0),
           total: Number(data.total ?? 0),
           ...(data.error ? { error: String(data.error) } : {}),
+          ...(data.instanceId ? { instanceId: String(data.instanceId) } : {}),
           ...(data.instanceName ? { instanceName: String(data.instanceName) } : {}),
         })
         return
       }
 
       // 部署终态通知（服务端落库事件，信封无 instanceId——部署实例未入库）：
-      // 入通知中心；完成时新实例已入库，刷新列表
-      if (msg.type === 'deployComplete' || msg.type === 'deployFailed') {
+      // 入通知中心；完成时新实例已入库，刷新列表（取消不产生实例，无需刷新）
+      if (msg.type === 'deployComplete' || msg.type === 'deployFailed' || msg.type === 'deployCancelled') {
         dispatchEvent({ type: msg.type, data: msg.data as Record<string, unknown> })
         if (msg.type === 'deployComplete') {
           void queryClient.invalidateQueries({ queryKey: queryKeys.instances() })

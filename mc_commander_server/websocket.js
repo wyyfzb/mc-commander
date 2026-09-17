@@ -39,6 +39,9 @@ export const WSEvents = {
   DEPLOY_PROGRESS: 'deployProgress',
   DEPLOY_COMPLETE: 'deployComplete',
   DEPLOY_FAILED: 'deployFailed',
+  // 用户取消部署：与 failed 分开是因为它不是故障（通知中心与筛选按严重度分档，
+  // 复用 deployFailed 会让可控的主动取消显示成「部署失败」告警）
+  DEPLOY_CANCELLED: 'deployCancelled',
   CIRCUIT_BREAKER: 'circuit_breaker',
   UPGRADE_PROGRESS: 'upgradeProgress',
   UPGRADE_COMPLETE: 'upgradeComplete',
@@ -99,9 +102,12 @@ const NOTIFICATION_EVENT_TYPES = new Set([
   // Webhook 投递失败：低频高价值，首次失败通知（连续失败去重后恢复）
   WSEvents.WEBHOOK_DELIVERY_FAILED,
   // 长任务终态（部署/升级完成与失败）：低频高价值，用户离开向导后
-  // 唯一得知结果的通道；落库后断线/离线重连也能补齐看到
+  // 唯一得知结果的通道；落库后断线/离线重连也能补齐看到。
+  // 注意本集合只对经 broadcast() 的事件生效——部署终态三项走的是
+  // broadcastGlobalNotification()（该入口无条件落库），在此列出只为同类事件同居一处
   WSEvents.DEPLOY_COMPLETE,
   WSEvents.DEPLOY_FAILED,
+  WSEvents.DEPLOY_CANCELLED,
   WSEvents.UPGRADE_COMPLETE,
   WSEvents.UPGRADE_FAILED,
 ]);
@@ -643,12 +649,14 @@ export function setupWebSocket(wss, serverManager) {
 
   serverManager.on(WSEvents.DEPLOY_PROGRESS, (data) => {
     broadcastAll(WSEvents.DEPLOY_PROGRESS, data);
-    // 部署终态转通知事件：deployProgress 本身高频不落库，完成/失败仅此一次，
+    // 部署终态转通知事件：deployProgress 本身高频不落库，完成/失败/取消仅此一次，
     // 落库后通知中心可见且断线补齐覆盖（用户离开向导后唯一得知结果的方式）
     if (data?.stage === 'complete') {
       broadcastGlobalNotification(WSEvents.DEPLOY_COMPLETE, data);
     } else if (data?.stage === 'error') {
       broadcastGlobalNotification(WSEvents.DEPLOY_FAILED, data);
+    } else if (data?.stage === 'cancelled') {
+      broadcastGlobalNotification(WSEvents.DEPLOY_CANCELLED, data);
     }
   });
 

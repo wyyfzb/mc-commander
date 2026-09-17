@@ -121,6 +121,26 @@ describe('WebSocket 长任务（部署/升级）通知与补发', () => {
       expect(fakeDb.inserted[0][1]).toBe(WSEvents.DEPLOY_FAILED);
     });
 
+    it('deployProgress cancelled → 广播 deployCancelled 并落库（与 failed 分档，不显示成故障）', () => {
+      const ws = connect(wss);
+      serverManager.emit('deployProgress', {
+        stage: 'cancelled',
+        percent: 0,
+        instanceId: 'paper-abc3',
+        instanceName: '演示实例',
+        type: 'paper',
+        mcVersion: '1.21.4',
+      });
+
+      const notice = sentMessage(ws, 1);
+      expect(notice.type).toBe(WSEvents.DEPLOY_CANCELLED);
+      expect(notice.data.instanceName).toBe('演示实例');
+      // 全局通知（无实例归属）：取消后的实例未入库，订阅过滤不适用
+      expect(fakeDb.inserted).toHaveLength(1);
+      expect(fakeDb.inserted[0][0]).toBeNull();
+      expect(fakeDb.inserted[0][1]).toBe(WSEvents.DEPLOY_CANCELLED);
+    });
+
     it('进行中阶段（download）不产生通知事件（仅原事件广播）', () => {
       const ws = connect(wss);
       serverManager.emit('deployProgress', { stage: 'download', percent: 0.42, transferred: 100, total: 240 });

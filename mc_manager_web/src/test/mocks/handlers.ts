@@ -398,7 +398,25 @@ export const mockBans: BanRecord[] = [  {
 ]
 
 /** 部署失败开关（测试注入：结构占位，非真实错误） */
-export const deployMock: { shouldFail: boolean; lastBody: { eula?: boolean } | null } = { shouldFail: false, lastBody: null }
+/** 部署 mock 控制：cancelEcho 模拟「部署被取消后在途请求以 409 40915 结束」 */
+export const deployMock: {
+  shouldFail: boolean
+  cancelEcho: boolean
+  /** 取消回声携带的收尾明细（服务端 details.cleanup；null = 收尾正常） */
+  cancelEchoDetails: unknown
+  lastBody: { eula?: boolean } | null
+} = {
+  shouldFail: false,
+  cancelEcho: false,
+  cancelEchoDetails: null,
+  lastBody: null,
+}
+
+/** 取消部署（POST /instances/deploy/cancel）mock 控制：notInFlight 模拟服务端 40906（任务已结束） */
+export const deployCancelMock: { notInFlight: boolean; lastBody: { instanceId?: string } | null } = {
+  notInFlight: false,
+  lastBody: null,
+}
 
 /**
  * 部署进度兜底快照开关（测试注入）：默认空态（无在途部署），
@@ -720,7 +738,36 @@ export const handlers = [
         : { deploying: false },
     ),
   ),
+  http.post('*/api/v1/instances/deploy/cancel', async ({ request }) => {
+    const body = (await request.json()) as { instanceId?: string }
+    deployCancelMock.lastBody = body
+    if (deployCancelMock.notInFlight) {
+      return HttpResponse.json(
+        {
+          status: 'error',
+          code: 40906,
+          message: 'No deployment in progress for this instance',
+          details: null,
+          timestamp: new Date().toISOString(),
+        },
+        { status: 409 },
+      )
+    }
+    return ok({ instanceId: body.instanceId ?? 'paper-a1b2c3d4', cancelled: true })
+  }),
   http.post('*/api/v1/instances/deploy', async ({ request }) => {
+    if (deployMock.cancelEcho) {
+      return HttpResponse.json(
+        {
+          status: 'error',
+          code: 40915,
+          message: 'Task cancelled by user',
+          details: deployMock.cancelEchoDetails,
+          timestamp: new Date().toISOString(),
+        },
+        { status: 409 },
+      )
+    }
     if (deployMock.shouldFail) {
       return HttpResponse.json(
         {

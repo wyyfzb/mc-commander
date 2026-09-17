@@ -17,6 +17,11 @@ export const ErrorCodes = {
 
   // 部署互斥：已有部署在途（部署实例尚未入库，重复发起会产出重复实例目录与 DB 记录）
   DEPLOY_IN_PROGRESS: { code: 40905, message: 'A deployment is already in progress', status: 409 },
+  // 取消部署时无可取消对象（部署已终态、被取消过、或进程重启后注册表为空）：
+  // 明确拒绝而非静默成功——静默成功会让客户端一直等一个不会到来的终态事件
+  DEPLOY_NOT_IN_FLIGHT: { code: 40906, message: 'No deployment in progress for this instance', status: 409 },
+  // 用户取消导致长任务未完成（部署 POST 的响应；终态事件会另行推送 cancelled 阶段）
+  TASK_CANCELLED: { code: 40915, message: 'Task cancelled by user', status: 409 },
   // 卸载实例的实例名确认（服务端强制）：前端弹窗的输入只存在于客户端，
   // 不带确认的直连 API 调用此前可无确认删除，故确认必须由服务端裁决
   INSTANCE_DELETE_CONFIRM_REQUIRED: {

@@ -27,6 +27,7 @@ export const WS_EVENT_TYPES = [
   'deployProgress',
   'deployComplete',
   'deployFailed',
+  'deployCancelled',
   'circuit_breaker',
   'upgradeProgress',
   'upgradeComplete',

@@ -3,6 +3,7 @@ import {
   AlertCircle,
   AlertTriangle,
   Archive,
+  Ban,
   CalendarX,
   CheckCheck,
   CheckCircle2,
@@ -68,7 +69,7 @@ const TYPE_ICON: Record<NotificationType, LucideIcon> = {
   backupStart: Archive, backupComplete: CheckCircle2, backupFailed: AlertCircle,
   backupSkipped: SkipForward, restoreStart: History, restoreComplete: CheckCheck,
   restoreFailed: XCircle, taskFailed: CalendarX, webhookFailed: Webhook,
-  deployComplete: Rocket, deployFailed: XCircle,
+  deployComplete: Rocket, deployFailed: XCircle, deployCancelled: Ban,
   upgradeComplete: CheckCircle2, upgradeFailed: XCircle,
 }
 
@@ -111,6 +112,7 @@ export const NOTIFICATION_TONE: Record<NotificationType, SemanticTone | 'neutral
   webhookFailed: 'error',
   deployComplete: 'success',
   deployFailed: 'error',
+  deployCancelled: 'neutral',
   upgradeComplete: 'success',
   upgradeFailed: 'error',
 }

@@ -35,6 +35,13 @@ describe('错误码映射（对照服务端 ErrorCodes 契约）', () => {
     expect(getFriendlyErrorMessage(ErrorCode.UPGRADE_VERSION_SAME)).toBe('目标版本与当前版本相同')
   })
 
+  it('部署取消相关错误码枚举与本地化（与服务端 response.js 同值）', () => {
+    expect(ErrorCode.DEPLOY_NOT_IN_FLIGHT).toBe(40906)
+    expect(ErrorCode.TASK_CANCELLED).toBe(40915)
+    expect(getFriendlyErrorMessage(ErrorCode.DEPLOY_NOT_IN_FLIGHT)).toBe('该部署已结束或不在进行中，无需取消')
+    expect(getFriendlyErrorMessage(ErrorCode.TASK_CANCELLED)).toBe('操作已取消')
+  })
+
   it('INSTANCE_RUNNING 有本地化文案', () => {
     expect(getFriendlyErrorMessage(ErrorCode.INSTANCE_RUNNING)).toBe('实例正在运行')
   })

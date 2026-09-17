@@ -3,7 +3,7 @@
  * config 由调用方从 useConnectionStore 传入（与 src/api/players.ts 同模式）。
  */
 import { apiDelete, apiGet, apiPost, apiPut, type ConnectionConfig } from './client'
-import type { DeployRequest, DeployResult, DeployStatusResponse, InstanceDeleteRequestBody, InstanceDeleteResponse, InstanceStatus, InstanceUpdatePayload, UpgradeRequest, UpgradeStartResponse, VersionsResponse } from './types'
+import type { DeployCancelResponse, DeployRequest, DeployResult, DeployStatusResponse, InstanceDeleteRequestBody, InstanceDeleteResponse, InstanceStatus, InstanceUpdatePayload, UpgradeRequest, UpgradeStartResponse, VersionsResponse } from './types'
 
 /** 服务端版本列表（GET /versions?type=；fabric 额外返回 loaders） */
 export function apiGetServerVersions(config: ConnectionConfig, type: string) {
@@ -21,6 +21,12 @@ export function apiDeployInstance(config: ConnectionConfig, payload: DeployReque
  *  extraQuery 供 e2e mock 切换场景（真实服务端忽略未知查询参数） */
 export function apiGetDeployStatus(config: ConnectionConfig, signal?: AbortSignal, extraQuery = '') {
   return apiGet<DeployStatusResponse>(`/api/v1/instances/deploy/status${extraQuery}`, config, signal)
+}
+
+/** 取消在途部署（POST /instances/deploy/cancel）：服务端中断下载/安装/首启并清理实例目录；
+ *  instanceId 必须是服务端当前在途部署的实例（按 id 精确匹配，不做「取消当前那个」的推断） */
+export function apiCancelDeploy(config: ConnectionConfig, instanceId: string) {
+  return apiPost<DeployCancelResponse>('/api/v1/instances/deploy/cancel', config, { instanceId })
 }
 
 /** 卸载实例（DELETE /instances/:id；危险操作的实例名确认由服务端强制，

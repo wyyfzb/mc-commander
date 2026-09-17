@@ -1,10 +1,12 @@
 /**
- * DeployDialog 三态结果视图：部署中 / 成功 / 失败（从 deploy-dialog.tsx 行为不变迁移）
+ * DeployDialog 结果视图：部署中 / 成功 / 失败 / 已取消（从 deploy-dialog.tsx 行为不变迁移）
  * - 部署中：进度条（percent×100）+ stage 中文标签（DEPLOY_STAGE_LABELS）+ transferred/total MB
+ *   +「取消部署」（服务端中断下载/安装/首启并清理实例目录）
  * - 成功：绿色结果块（实例 id/名称/版本）+ 自动启动状态（首启闭环，issue 312）+「完成」
  * - 失败：error 块 + 取消/重试
+ * - 已取消：中性结果块 + 关闭/重新部署（用户动作而非故障，故不占 error 档）
  */
-import { CheckCircle2, Loader2, XCircle } from 'lucide-react'
+import { Ban, CheckCircle2, Loader2, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { DialogFooter } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
@@ -15,8 +17,15 @@ import type { AutoStartState } from './types'
 import { formatMB } from './utils'
 import { toneClasses } from '@/components/mcs/tone'
 
-/** 部署中视图：进度条 + 阶段文案 + 传输量（进度为 null 时显示不确定占位） */
-export function DeployProgressView({ progress }: { progress: DeployProgress | null }) {
+interface DeployProgressViewProps {
+  progress: DeployProgress | null
+  /** 取消请求在途（按钮转「正在取消…」并禁用，避免重复请求） */
+  cancelling: boolean
+  onCancel: () => void
+}
+
+/** 部署中视图：进度条 + 阶段文案 + 传输量（进度为 null 时显示不确定占位）+ 取消入口 */
+export function DeployProgressView({ progress, cancelling, onCancel }: DeployProgressViewProps) {
   const pct = progress != null ? Math.round(progress.percent * 100) : 0
   const stageLabel = progress
     ? (DEPLOY_STAGE_LABELS[progress.stage] ?? progress.stage)
@@ -54,6 +63,16 @@ export function DeployProgressView({ progress }: { progress: DeployProgress | nu
       {stageError != null && (
         <p className="text-mcs-xs text-mcs-error-fg">部署失败：{stageError}</p>
       )}
+      <DialogFooter>
+        <Button
+          variant="outline"
+          onClick={onCancel}
+          disabled={cancelling}
+          aria-label={cancelling ? '正在取消部署' : '取消部署'}
+        >
+          {cancelling ? '正在取消…' : '取消部署'}
+        </Button>
+      </DialogFooter>
     </div>
   )
 }
@@ -135,6 +154,41 @@ export function DeployErrorView({ errorText, onCancel, onRetry }: DeployErrorVie
           取消
         </Button>
         <Button onClick={onRetry}>重试</Button>
+      </DialogFooter>
+    </div>
+  )
+}
+
+interface DeployCancelledViewProps {
+  /** 服务端收尾结果（清理失败时的明细）；缺省表示实例目录已清理完毕 */
+  cleanupError?: string
+  onClose: () => void
+  onRetry: () => void
+}
+
+/** 已取消视图：中性结果块（用户主动取消不是故障）+ 关闭 / 重新部署（回到步骤①保留表单值） */
+export function DeployCancelledView({ cleanupError, onClose, onRetry }: DeployCancelledViewProps) {
+  return (
+    <div className="flex flex-col gap-3">
+      <div
+        role="status"
+        className={cn('flex items-start gap-2 rounded-mcs-sm border px-3 py-2.5', toneClasses('info'))}
+      >
+        <Ban className="mt-px size-4 shrink-0" aria-hidden />
+        <div className="flex flex-col gap-0.5 text-mcs-sm">
+          {/* 收尾是 best-effort：目录可能仍被正在退出的进程占用，删除失败时如实说明，
+              不宣称「已清理」（否则用户按提示以为磁盘已干净） */}
+          <p>部署已取消{cleanupError == null ? '，未完成的实例目录已清理。' : '。'}</p>
+          {cleanupError != null && (
+            <p className="text-mcs-text-muted">收尾未完成：{cleanupError}</p>
+          )}
+        </div>
+      </div>
+      <DialogFooter>
+        <Button variant="outline" onClick={onClose}>
+          关闭
+        </Button>
+        <Button onClick={onRetry}>重新部署</Button>
       </DialogFooter>
     </div>
   )

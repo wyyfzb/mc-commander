@@ -4,6 +4,7 @@ import {
   buildAlertNotifications,
   buildNotifications,
   mergeNotifications,
+  NOTIFICATION_TYPE_META,
   type AppNotification,
 } from '../notifications'
 
@@ -135,6 +136,27 @@ describe('buildNotifications 文案模板', () => {
   it('deployComplete 缺实例名时使用默认文案', () => {
     const [n] = buildNotifications({ type: 'deployComplete', data: {} })
     expect(n?.content).toBe('实例「未命名」部署完成')
+  })
+
+  it('deployCancelled 生成 server 类 info 通知（用户取消不是告警）', () => {
+    const [n] = buildNotifications({
+      type: 'deployCancelled',
+      data: { instanceName: '演示实例', instanceId: 'paper-abc1', stage: 'cancelled' },
+    })
+    expect(n).toMatchObject({ type: 'deployCancelled', category: 'server' })
+    // 不宣称「已清理」：清理成不成只有服务端知道，成功时也不多话
+    expect(n?.content).toBe('实例「演示实例」部署已取消')
+    // 与 deployFailed（severe，进严重告警档）分档：主动取消不该混进告警筛选
+    expect(NOTIFICATION_TYPE_META.deployCancelled.severity).toBe('info')
+    expect(NOTIFICATION_TYPE_META.deployFailed.severity).toBe('severe')
+  })
+
+  it('deployCancelled 带收尾明细时一并显示（清理失败不得被吞成「已清理」）', () => {
+    const [n] = buildNotifications({
+      type: 'deployCancelled',
+      data: { instanceName: '演示实例', error: '实例目录未能删除（EBUSY: resource busy）' },
+    })
+    expect(n?.content).toBe('实例「演示实例」部署已取消：实例目录未能删除（EBUSY: resource busy）')
   })
 
   it('upgradeComplete 生成 server 类 info 通知（含实例名）', () => {

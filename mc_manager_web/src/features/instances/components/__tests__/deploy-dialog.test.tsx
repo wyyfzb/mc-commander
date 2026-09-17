@@ -4,6 +4,7 @@
  * - fabric 加载器下拉（自动回填首个 loader）
  * - 部署中：进度条（useDeployStore.setState 注入 progress）+ stage 中文标签 + 传输字节 MB + 禁用关闭
  * - 部署失败：error 块 + 重试回到步骤①
+ * - 取消部署：确认后按实例 id 调服务端取消端点；cancelled 终态走「已取消」视图（非失败）
  * - dirty 关闭拦截（继续编辑 / 放弃配置）；未修改直接关闭
  * mock 数据为结构占位（虚构版本/实例），严禁真实服务器信息
  */
@@ -12,7 +13,8 @@ import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { setupServer } from 'msw/node'
-import { handlers, deployMock, startMock, eulaMock } from '@/test/mocks/handlers'
+import { Toaster, toast } from 'sonner'
+import { handlers, deployMock, deployCancelMock, deployStatusMock, startMock, eulaMock } from '@/test/mocks/handlers'
 import { DeployDialog } from '../deploy-dialog'
 import { useDeployStore } from '@/stores/deploy'
 import { useConnectionStore } from '@/stores/connection'
@@ -41,6 +43,17 @@ function renderDialog() {
   return { onDeployed, onOpenChange }
 }
 
+/** 带 Toaster 的渲染（仅断言 toast 文案的用例需要；其余用例不挂以避免 toast 文本混入查询面） */
+function renderDialogWithToaster() {
+  const qc = new QueryClient()
+  render(
+    <QueryClientProvider client={qc}>
+      <Toaster />
+      <DeployDialog open onOpenChange={vi.fn()} onDeployed={vi.fn()} />
+    </QueryClientProvider>,
+  )
+}
+
 /** 等待版本列表就绪并自动回填（fabric 默认 mock 首个版本 1.21.4） */
 async function waitVersion() {
   await screen.findByText('1.21.4')
@@ -58,9 +71,16 @@ async function gotoStep3AndAgreeEula(user: ReturnType<typeof userEvent.setup>) {
 beforeEach(() => {
   localStorage.clear()
   useConnectionStore.setState({ baseUrl: '', apiKey: 'test-key', status: 'ready' })
-  useDeployStore.setState({ progress: null, deploying: false, lastResult: null })
+  // sonner toast store 是模块级：清残留防跨用例泄漏（反向断言「无失败提示」会被上一条污染）
+  toast.dismiss()
+  useDeployStore.setState({ progress: null, deploying: false, lastResult: null, cancelling: false })
   deployMock.shouldFail = false
+  deployMock.cancelEcho = false
+  deployMock.cancelEchoDetails = null
   deployMock.lastBody = null
+  deployCancelMock.notInFlight = false
+  deployCancelMock.lastBody = null
+  deployStatusMock.active = false
   startMock.eulaRequired = false
   startMock.shouldFail = false
   startMock.calls = 0
@@ -326,5 +346,136 @@ describe('DeployDialog', () => {
     expect(deployMock.lastBody?.eula).toBe(false)
     expect(startMock.calls).toBe(0)
     expect(eulaMock.calls).toBe(0)
+  })
+})
+
+describe('DeployDialog 取消部署', () => {
+  /**
+   * 在途快照与注入的进度必须同源：兜底查询（挂载即问服务端真值）会覆盖 store，
+   * 若两边 instanceId 不同，取消请求带的是快照那个 id，断言就不再承重。
+   * 故这里直接吃 mock 快照的 id（真实场景下刷新恢复的 id 也来自该快照）。
+   */
+  const IN_FLIGHT = {
+    stage: 'forge_install',
+    percent: 0,
+    transferred: 0,
+    total: 0,
+    instanceId: 'paper-a1b2c3d4',
+    instanceName: '演示实例',
+  }
+
+  it('部署中：进度视图提供「取消部署」入口（点开前不显示确认框）', () => {
+    renderDialog()
+    act(() => {
+      useDeployStore.setState({ deploying: true, progress: { ...IN_FLIGHT } })
+    })
+    expect(screen.getByRole('button', { name: '取消部署' })).toBeEnabled()
+    expect(screen.queryByText('取消部署？')).not.toBeInTheDocument()
+  })
+
+  it('确认取消：按实例 id 调服务端取消端点，按钮转「正在取消…」并禁用', async () => {
+    deployStatusMock.active = true
+    const user = userEvent.setup()
+    renderDialog()
+    act(() => {
+      useDeployStore.setState({ deploying: true, progress: { ...IN_FLIGHT } })
+    })
+
+    await user.click(screen.getByRole('button', { name: '取消部署' }))
+    // 二次确认：中断会清理已下载内容，误触代价高
+    expect(await screen.findByText('取消部署？')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '中断并清理' }))
+
+    await waitFor(() => expect(deployCancelMock.lastBody).toEqual({ instanceId: 'paper-a1b2c3d4' }))
+    expect(useDeployStore.getState().cancelling).toBe(true)
+    expect(screen.getByRole('button', { name: '正在取消部署' })).toBeDisabled()
+  })
+
+  it('服务端回「无可取消对象」（40906）：失败可见且解除取消中状态，可重试', async () => {
+    deployStatusMock.active = true
+    deployCancelMock.notInFlight = true
+    renderDialogWithToaster()
+    const user = userEvent.setup()
+    act(() => {
+      useDeployStore.setState({ deploying: true, progress: { ...IN_FLIGHT } })
+    })
+
+    await user.click(screen.getByRole('button', { name: '取消部署' }))
+    await user.click(await screen.findByRole('button', { name: '中断并清理' }))
+
+    expect(await screen.findByText(/取消部署失败：该部署已结束或不在进行中/)).toBeInTheDocument()
+    await waitFor(() => expect(useDeployStore.getState().cancelling).toBe(false))
+    expect(screen.getByRole('button', { name: '取消部署' })).toBeEnabled()
+  })
+
+  it('取消终态：显示已取消视图（不是失败视图），「重新部署」回到步骤①', async () => {
+    const user = userEvent.setup()
+    renderDialog()
+    act(() => {
+      useDeployStore.setState({ deploying: true, progress: { ...IN_FLIGHT } })
+      // 服务端终态事件（WS deployProgress stage=cancelled）
+      useDeployStore.getState().applyDeployProgress({
+        stage: 'cancelled',
+        percent: 0,
+        transferred: 0,
+        total: 0,
+        instanceId: 'paper-cancel01',
+      })
+    })
+
+    expect(screen.getByText('部署已取消，未完成的实例目录已清理。')).toBeInTheDocument()
+    expect(screen.queryByText(/部署失败/)).not.toBeInTheDocument()
+    // 取消后实例未创建：主操作是重新部署，而不是「完成」
+    expect(screen.queryByRole('button', { name: '完成' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '重新部署' }))
+    expect(screen.getByRole('button', { name: '下一步' })).toBeInTheDocument()
+  })
+
+  it('部署请求以 409 TASK_CANCELLED 结束：走已取消视图而不是「部署失败」', async () => {
+    deployMock.cancelEcho = true
+    renderDialog()
+    const user = userEvent.setup()
+
+    await gotoStep3AndAgreeEula(user)
+    await user.click(screen.getByRole('button', { name: '部署并启动' }))
+
+    expect(await screen.findByText('部署已取消，未完成的实例目录已清理。')).toBeInTheDocument()
+    expect(screen.queryByText(/部署失败/)).not.toBeInTheDocument()
+    // 自动启动只跟成功路径走：取消后不得再发启动指令
+    expect(startMock.calls).toBe(0)
+  })
+
+  it('仅靠 POST 回声（WS 未送达）时据实显示收尾明细：不回落到「已清理」', async () => {
+    deployMock.cancelEcho = true
+    deployMock.cancelEchoDetails = { cleanup: '实例目录未能删除（EBUSY: resource busy）' }
+    renderDialog()
+    const user = userEvent.setup()
+
+    await gotoStep3AndAgreeEula(user)
+    await user.click(screen.getByRole('button', { name: '部署并启动' }))
+
+    expect(await screen.findByText(/收尾未完成：实例目录未能删除（EBUSY/)).toBeInTheDocument()
+    expect(screen.queryByText(/实例目录已清理/)).not.toBeInTheDocument()
+  })
+
+  it('收尾未完成（服务端带清理明细）：取消视图如实说明，不谎报已清理', () => {
+    renderDialog()
+    act(() => {
+      useDeployStore.setState({ deploying: true, progress: { ...IN_FLIGHT } })
+      useDeployStore.getState().applyDeployProgress({
+        stage: 'cancelled',
+        percent: 0,
+        transferred: 0,
+        total: 0,
+        instanceId: 'paper-a1b2c3d4',
+        error: '实例目录未能删除（EBUSY: resource busy）',
+      })
+    })
+
+    expect(screen.getByText('部署已取消。')).toBeInTheDocument()
+    expect(screen.getByText(/收尾未完成：实例目录未能删除（EBUSY/)).toBeInTheDocument()
+    // 反向断言：不得同时出现「已清理」的说法（两种口径同屏即自相矛盾）
+    expect(screen.queryByText(/实例目录已清理/)).not.toBeInTheDocument()
   })
 })

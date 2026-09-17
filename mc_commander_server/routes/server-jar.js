@@ -1,7 +1,7 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
-import { spawn, spawnSync } from 'child_process';
+import { spawn } from 'child_process';
 import crypto from 'crypto';
 import got from 'got';
 import { MinecraftServerManager, NodeAdapter } from 'minecraft-core';
@@ -11,7 +11,7 @@ import { getRecommendedJavaVersion, findJavaPath } from '../utils/java-detector.
 import { InstanceModel } from '../db/index.js';
 import { atomicWriteFile } from '../services/mc_server.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
-import { deployRequestSchema, deployStatusResponseSchema } from '@mc-commander/schemas';
+import { deployRequestSchema, deployCancelRequestSchema, deployCancelResponseSchema, deployStatusResponseSchema } from '@mc-commander/schemas';
 import { validateBody, validatedSuccess } from '../middleware/validate.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import {
@@ -22,6 +22,8 @@ import {
 import { logger } from '../utils/logger.js';
 import { getServerVersion } from '../utils/version.js';
 import { isDeployInFlight, latestInFlightDeploy } from '../utils/deploy-inflight.js';
+import { killProcessTree } from '../utils/process-tree.js';
+import { beginCancellableTask, cancelTask, TASK_KINDS, TaskCancelledError } from '../utils/cancellable-task.js';
 
 const mcCoreManager = new MinecraftServerManager(new NodeAdapter());
 
@@ -102,7 +104,7 @@ async function getPaperDownload(mcVersion) {
  *   读取判据统一走 utils/deploy-inflight.js（含死快照时限）
  * @param {{ instanceId: string, instanceName: string, type: string, mcVersion: string }|null} meta
  */
-const TERMINAL_DEPLOY_STAGES = new Set(['complete', 'error']);
+const TERMINAL_DEPLOY_STAGES = new Set(['complete', 'error', 'cancelled']);
 
 function trackDeployProgress(serverManager, meta, payload) {
   if (meta) {
@@ -122,7 +124,16 @@ function trackDeployProgress(serverManager, meta, payload) {
   }
 }
 
-async function downloadWithProgress(url, destPath, serverManager, stage = 'download', { expectedHash = null, maxBytes = JAR_DOWNLOAD_MAX_BYTES, deployMeta = null } = {}) {
+/**
+ * 删除下载半成品：失败不抛。清理动作不该顶掉失败回执——取消路径是在
+ * `controller.abort()` 内同步执行的，抛出会穿透到取消端点变成 500；
+ * 事件回调里抛出更是未捕获异常。残留半成品由部署失败路径的整目录清理兜底。
+ */
+function removePartialFile(target) {
+  try { fs.unlinkSync(target); } catch { /* 不存在或仍被占用，交由整目录清理兜底 */ }
+}
+
+async function downloadWithProgress(url, destPath, serverManager, stage = 'download', { expectedHash = null, maxBytes = JAR_DOWNLOAD_MAX_BYTES, deployMeta = null, signal = null } = {}) {
   return new Promise((resolve, reject) => {
     const file = fs.createWriteStream(destPath);
     const stream = got.stream(url, {
@@ -131,13 +142,23 @@ async function downloadWithProgress(url, destPath, serverManager, stage = 'downl
       headers: { 'User-Agent': PAPER_USER_AGENT }
     });
 
+    // 取消（用户中断部署）与自身失败共用同一收尾：清理半成品 + 断流 + reject
+    const detach = () => signal?.removeEventListener('abort', onCancel);
+    const onCancel = () => abort(new TaskCancelledError());
+    let aborted = false;
+
     /** 中止：清理半成品 + 断流 + reject（promise 已 settle 时 reject 为 no-op） */
     const abort = (err) => {
-      fs.existsSync(destPath) && fs.unlinkSync(destPath);
+      if (aborted) return;
+      aborted = true;
+      detach();
+      removePartialFile(destPath);
       stream.destroy();
       file.destroy();
       reject(err);
     };
+
+    signal?.addEventListener('abort', onCancel, { once: true });
 
     // 下载进度节流：got 的 downloadProgress 每个 chunk 触发（大 jar 每秒可达多次），
     // 全部广播会对所有在线客户端高频轰炸。节流：百分比变化 ≥1% 才发射
@@ -166,8 +187,12 @@ async function downloadWithProgress(url, destPath, serverManager, stage = 'downl
     file.on('finish', () => {
       // close 回调确保 fd 落盘后才校验摘要（issue 316：fail-closed）
       file.close(() => {
+        if (aborted) return;
         assertDownloadIntegrity(destPath, expectedHash)
           .then(() => {
+            // 摘要校验期间被取消：abort 已清理半成品并 reject，此处不得再报「下载完成」
+            if (aborted) return;
+            detach();
             trackDeployProgress(serverManager, deployMeta, {
               stage: 'download_complete',
               percent: 1.0,
@@ -177,22 +202,28 @@ async function downloadWithProgress(url, destPath, serverManager, stage = 'downl
             resolve(destPath);
           })
           .catch((err) => {
+            if (aborted) return;
+            detach();
             // 校验失败：弃已下载部分（清理残留）并抛含期望/实际摘要的可读错误
-            try { fs.unlinkSync(destPath); } catch { /* 已清理 */ }
+            removePartialFile(destPath);
             reject(err);
           });
       });
     });
 
     stream.on('error', (err) => {
+      if (aborted) return;
+      detach();
       file.close();
-      if (fs.existsSync(destPath)) fs.unlinkSync(destPath);
+      removePartialFile(destPath);
       reject(err);
     });
 
     file.on('error', (err) => {
+      if (aborted) return;
+      detach();
       stream.destroy();
-      if (fs.existsSync(destPath)) fs.unlinkSync(destPath);
+      removePartialFile(destPath);
       reject(err);
     });
   });
@@ -262,8 +293,14 @@ max-world-size=29999984
 `;
 }
 
-async function runFirstLaunch(instancePath, javaPath, jarFile, maxMemory) {
-  return new Promise((resolve, _reject) => {
+/**
+ * 首启生成世界与配置（60s 上限）。
+ * 取消（用户中断部署）与超时不共用回声：超时按「配置可能已生成」放行（首启只求
+ * 生成配置，失败不阻塞部署），取消则必须以错误结束整个部署。
+ * @param {{ signal?: AbortSignal|null }} [opts]
+ */
+async function runFirstLaunch(instancePath, javaPath, jarFile, maxMemory, { signal = null } = {}) {
+  return new Promise((resolve, reject) => {
     const logsDir = path.join(instancePath, 'logs');
     if (fs.existsSync(logsDir)) {
       return resolve();
@@ -280,9 +317,9 @@ async function runFirstLaunch(instancePath, javaPath, jarFile, maxMemory) {
       cwd: instancePath,
       // 不用 spawn 的 timeout 选项：Node 内部超时仅杀主进程（Windows 上
       // TerminateProcess），且其内部定时器先于自定义定时器触发——根进程先死
-      // 会让下方 taskkill /T 无法递归定位整棵树。超时终止统一由下方自定义
-      // 定时器按进程树处理（策略同 services/mc_server.js kill()）。
-      // Linux/macOS：以独立进程组启动（pid 即 PGID），超时后按进程组终止；
+      // 反而让后来者无法递归定位整棵树。超时与取消统一由下方自定义定时器
+      // 走 killProcessTree（见 utils/process-tree.js）。
+      // Linux/macOS：以独立进程组启动（pid 即 PGID），终止时按进程组处理；
       // Windows 不设 detached（无进程组信号概念），进程树由 taskkill /T 终止。
       ...(process.platform !== 'win32' ? { detached: true } : {}),
     });
@@ -291,43 +328,46 @@ async function runFirstLaunch(instancePath, javaPath, jarFile, maxMemory) {
     proc.stdout.on('data', (data) => output += data.toString());
     proc.stderr.on('data', (data) => output += data.toString());
 
+    // 超时与取消可能同时到达（取消恰好落在 60s 边界）：单次落定，先到者胜
+    let settled = false;
+    function settle(err) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      signal?.removeEventListener('abort', onCancel);
+      if (err) reject(err);
+      else resolve();
+    }
+
     const timeout = setTimeout(() => {
-      // 只杀主进程不够：MC 1.18+/26.x 官方 server.jar 为 Bundler 结构，
-      // java 主进程（BundlerMain 引导器）经 ProcessBuilder 派生真正运行的
-      // 服务器 JVM，仅杀主进程会遗留孤儿 JVM 继续运行（占端口/写世界数据）。
-      // 与 services/mc_server.js kill() 相同的进程树终止策略：
-      // Windows 用 taskkill /T 递归终止整棵树；Linux/macOS 因 spawn 带
-      // detached:true（pid 即 PGID）用 kill(-pid) 终止整个进程组。
-      // 旧版（1.17-）server.jar 直接运行服务器主类、无派生进程，进程树终止
-      // 对其同样有效，保持新旧版本兼容。
-      const pid = proc.pid;
-      if (pid) {
-        if (process.platform === 'win32') {
-          try { spawnSync('taskkill', ['/F', '/T', '/PID', String(pid)], { stdio: 'ignore' }); } catch {}
-        } else {
-          try { process.kill(-pid, 'SIGKILL'); } catch {}
-        }
-      }
-      // 单进程 SIGKILL 兜底（进程树终止失败/pid 缺失时仍杀主进程本身）
-      try { proc.kill('SIGKILL'); } catch {}
+      // 进程树终止：MC 1.18+/26.x 的 server.jar 会派生真正运行的 JVM，
+      // 只杀主进程会留下孤儿继续占端口/写世界数据（见 utils/process-tree.js）
+      killProcessTree(proc, { detached: true });
       logger.warn('First launch timed out (60s), but config may have been generated');
-      resolve();
+      settle();
     }, 60000);
 
+    // 取消（用户中断部署）：与超时同样是进程树终止，但以取消错误结束——超时按
+    // 「配置可能已生成」放行，取消必须打断整个部署（不能留下半成品实例）
+    const onCancel = () => {
+      killProcessTree(proc, { detached: true });
+      settle(new TaskCancelledError());
+    };
+    signal?.addEventListener('abort', onCancel, { once: true });
+
     proc.on('exit', (code) => {
-      clearTimeout(timeout);
+      if (settled) return;
       if (fs.existsSync(logsDir) || code === 0) {
-        resolve();
+        settle();
       } else {
         logger.warn(`First launch exited with code ${code}. Output: ${output.substring(0, 500)}`);
-        resolve();
+        settle();
       }
     });
 
     proc.on('error', (err) => {
-      clearTimeout(timeout);
       logger.warn('First launch error:', err.message);
-      resolve();
+      settle();
     });
   });
 }
@@ -444,6 +484,13 @@ export function createServerJarRoutes(serverManager) {
     const downloadJarName = isForge ? 'forge-installer.jar' : 'server.jar';
     const jarPath = path.join(instancePath, downloadJarName);
 
+    // 可取消登记：取消端点据注册表定位本次部署。登记必须先于第一个 await——
+    // 上游版本查询可能耗时数秒，此窗口内的取消请求同样要被受理
+    const task = beginCancellableTask(TASK_KINDS.DEPLOY, instanceId);
+    // 首启前才写 DB，但写入后仍可能被取消（首启最长 60s）：清理必须一并回滚这一行，
+    // 否则留下指向已删除目录的幽灵实例
+    let instanceCreatedInDb = false;
+
     try {
       // 必须在 try 内：mkdirSync 抛错（ENOTDIR/EACCES/EPERM）时由 catch 统一返回 502 并清理，
       // 否则裸 async handler 的 rejection 不被 Express 4 捕获 → 请求挂起 + unhandledRejection
@@ -454,9 +501,10 @@ export function createServerJarRoutes(serverManager) {
 
       // 审计「受理」语义（与 INSTANCE_DELETE 对偶，回查实例何时被谁创建）：
       // schema 校验通过 + 实例目录已建 + 部署流程正式启动即记录，不等终态。
-      // 失败路径刻意不记审计：部署中断时实例目录已被清理、DB 未入库，不存在
-      // 可回查的实例实体，失败可见性由部署进度 error 事件（进度面板 + 通知）承担，
-      // 避免审计页出现指向已清理目录的幽灵记录
+      // 终态（成功/失败/被取消）不另记一条、也不回滚本条：它记的是「谁在何时发起过
+      // 这次部署」——失败与取消的可见性由进度事件（进度面板 + 通知）承担；
+      // 代价是失败/取消会留下一条指向已清理目录的受理记录，属既定契约
+      // （见 __tests__/server-jar.deploy.audit.test.js）
       recordAudit({
         instanceId,
         action: AuditActions.INSTANCE_CREATE,
@@ -512,9 +560,13 @@ export function createServerJarRoutes(serverManager) {
         }
       }
 
+      // 版本查询是第一个 await 边界：取消落在下载开始前时这里就要拦住，
+      // 否则会先下一段 jar 再发现已被取消
+      task.throwIfCancelled();
+
       if (downloadUrl) {
         logger.info(`Download URL: ${downloadUrl}`);
-        await downloadWithProgress(downloadUrl, jarPath, serverManager, 'download', { expectedHash, deployMeta });
+        await downloadWithProgress(downloadUrl, jarPath, serverManager, 'download', { expectedHash, deployMeta, signal: task.signal });
       } else {
         const downloadedFile = fs.readdirSync(instancePath).find(f => f.endsWith('.jar'));
         if (downloadedFile && downloadedFile !== downloadJarName) {
@@ -534,18 +586,33 @@ export function createServerJarRoutes(serverManager) {
         const extractArgs = ['-Xmx512M', '-jar', downloadJarName, '--installServer'];
         const extractProc = spawn(javaPath, extractArgs, { cwd: instancePath });
         await new Promise((resolve, reject) => {
-          const timer = setTimeout(() => {
-            extractProc.kill();
-            reject(new Error('Forge installer timed out (120s)'));
-          }, 120000);
-          extractProc.on('exit', (code) => {
+          // 超时与取消单次落定：取消（abort）先到则 exit 事件的 resolve 已是空操作
+          let settled = false;
+          function settle(err) {
+            if (settled) return;
+            settled = true;
             clearTimeout(timer);
+            task.signal.removeEventListener('abort', onCancel);
+            if (err) reject(err);
+            else resolve();
+          }
+          const timer = setTimeout(() => {
+            killProcessTree(extractProc);
+            settle(new Error('Forge installer timed out (120s)'));
+          }, 120000);
+          // Forge 安装器是单进程 java 程序（未 detached），故不做进程组终止
+          const onCancel = () => {
+            killProcessTree(extractProc);
+            settle(new TaskCancelledError());
+          };
+          task.signal.addEventListener('abort', onCancel, { once: true });
+          extractProc.on('exit', (code) => {
+            if (settled) return;
             if (code !== 0) logger.warn(`Forge installer exited with code ${code}`);
-            resolve();
+            settle();
           });
           extractProc.on('error', (err) => {
-            clearTimeout(timer);
-            reject(err);
+            settle(err);
           });
         });
 
@@ -559,6 +626,9 @@ export function createServerJarRoutes(serverManager) {
         }
         fs.unlinkSync(jarPath);
       }
+
+      // 写盘与入库之前再判一次：Forge 安装阶段被取消时不该留下 instance.json/DB 行
+      task.throwIfCancelled();
 
       const instanceConfig = {
         id: instanceId,
@@ -591,6 +661,7 @@ export function createServerJarRoutes(serverManager) {
           port: 25565 + parseInt(instanceId.slice(-4), 16) % 100,
         });
         logger.info(`Instance ${instanceId} written to DB`);
+        instanceCreatedInDb = true;
       } catch (dbErr) {
         logger.warn(`Failed to write instance to DB:`, dbErr.message);
       }
@@ -601,9 +672,12 @@ export function createServerJarRoutes(serverManager) {
         trackDeployProgress(serverManager, deployMeta, { stage: 'first_launch', percent: 0, transferred: 0, total: 0 });
         try {
           logger.info('Running first launch to generate config...');
-          await runFirstLaunch(instancePath, javaPath, jarFile, ramSize);
+          await runFirstLaunch(instancePath, javaPath, jarFile, ramSize, { signal: task.signal });
           logger.info('First launch completed');
         } catch (e) {
+          // 首启失败可以放行（配置多半已生成），但取消必须打断整个部署：
+          // 否则「取消」会走到下面的 complete 分支，用户看到的是部署成功
+          if (e.cancelled) throw e;
           logger.warn('First launch failed (may require manual setup):', e.message);
         }
       }
@@ -625,21 +699,73 @@ export function createServerJarRoutes(serverManager) {
         maxMemory: ramSize,
       }, 'Instance deployed successfully'));
     } catch (e) {
-      // 清理失败（Windows 上目录被进程占用——如孤儿 JVM 仍在写文件——或权限
-      // 不足时 rmSync 抛 EPERM/EBUSY）必须兜住：异常从 catch 逃逸会变成 async
-      // rejection，Express 4 不捕获 → 请求挂起 + unhandledRejection 崩溃
-      // （与上方 L312-314 mkdirSync 同源问题）。清理失败仅记录日志，仍返回 502。
+      // 取消与执行失败共用同一清理（磁盘目录 + 注册表 + DB 行），只在终态事件与
+      // HTTP 回声上分叉——用户取消不是故障，报 error 会让通知中心与审计页失真
+      const cancelled = e?.cancelled === true;
+      // 收尾失败（Windows 上目录被进程占用——如孤儿 JVM 仍在写文件——或权限不足时
+      // rmSync 抛 EPERM/EBUSY；DB 行删除同理）必须兜住：异常从 catch 逃逸会变成
+      // async rejection，Express 4 不捕获 → 请求挂起 + unhandledRejection 崩溃。
+      // 但也不能吞掉：取消的终态会向用户声称「已清理」，收尾没做成时必须据实回报
+      const cleanupProblems = [];
       try {
         fs.rmSync(instancePath, { recursive: true, force: true });
       } catch (cleanupErr) {
+        cleanupProblems.push(`实例目录未能删除（${cleanupErr.message}）`);
         logger.warn('Failed to clean up instance dir after failed deploy:', cleanupErr.message);
       }
+      // 首启前已入库的行必须回滚（取消可落在首启窗口内）：否则留下指向已删目录的
+      // 幽灵实例，列表里可见、点进去全是 404
+      if (instanceCreatedInDb) {
+        try {
+          InstanceModel.delete(instanceId);
+        } catch (delErr) {
+          cleanupProblems.push(`实例记录未能移除（${delErr.message}）`);
+          logger.warn(`Failed to remove DB row after ${cancelled ? 'cancelled' : 'failed'} deploy:`, delErr.message);
+        }
+      }
       serverManager.activeDeploys?.delete(instanceId);
+      if (cancelled) {
+        trackDeployProgress(serverManager, deployMeta, {
+          stage: 'cancelled',
+          percent: 0,
+          transferred: 0,
+          total: 0,
+          ...(cleanupProblems.length ? { error: cleanupProblems.join('；') } : {}),
+        });
+        logger.info(`Instance ${instanceId} deployment cancelled by user`);
+        // 收尾明细同时放进响应 details：WS 断线时前端只能靠这次回声，缺了它会
+        // 把「收尾未完成」显示成「已清理」（文案谎报既成事实）
+        return res.status(ErrorCodes.TASK_CANCELLED.status).json(
+          error(ErrorCodes.TASK_CANCELLED, undefined, cleanupProblems.length ? { cleanup: cleanupProblems.join('；') } : null)
+        );
+      }
       trackDeployProgress(serverManager, deployMeta, { stage: 'error', percent: 0, transferred: 0, total: 0, error: e.message });
       logger.error(`Failed to deploy ${type} ${mcVersion}:`, e.message);
       return res.status(502).json(error(ErrorCodes.SERVER_ERROR, `Deployment failed: ${e.message}`));
+    } finally {
+      // 成功/失败/取消都要注销：残留条目会让取消端点对着已结束的任务回「已取消」
+      task.finish();
     }
   }));
+
+  /**
+   * 取消在途部署（用户中断）：中断下载/Forge 安装/首启，并清理未完成的实例目录。
+   * 归属校验用 body 的 instanceId：部署实例在完成前未入库，注册表是唯一可信来源，
+   * 且必须**按 id 精确匹配**——若改成「取消当前在途的那一个」，一个滞后一个部署
+   * 周期的取消请求会误杀随后发起的新部署。
+   * 响应只表示「已受理中断」：实际收尾（清理磁盘、发 cancelled 终态事件）由部署
+   * 自身的失败路径继续完成，客户端据终态事件判定结果。
+   */
+  router.post('/instances/deploy/cancel', validateBody(deployCancelRequestSchema), (req, res) => {
+    const { instanceId } = req.body;
+    if (!cancelTask(TASK_KINDS.DEPLOY, instanceId)) {
+      return res.status(ErrorCodes.DEPLOY_NOT_IN_FLIGHT.status).json(
+        error(ErrorCodes.DEPLOY_NOT_IN_FLIGHT, `No deployment in progress for instance ${instanceId}`)
+      );
+    }
+    logger.info(`Deployment ${instanceId} cancellation requested`);
+    return res.json(validatedSuccess(deployCancelResponseSchema, { instanceId, cancelled: true }));
+  });
 
   return router;
 }

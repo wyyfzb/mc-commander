@@ -29,6 +29,22 @@ export const deployResultSchema = z.object({
   maxMemory: z.string(),
 })
 
+/**
+ * POST /instances/deploy/cancel 请求契约（取消在途部署）。
+ * instanceId 必须是服务端当前在途部署的实例 id：部署实例在完成前未入库，
+ * 服务端按 id 精确匹配注册表条目，不做「取消当前在途的那一个」的兜底推断
+ * （滞后一个部署周期的取消请求会误杀随后发起的新部署）。
+ */
+export const deployCancelRequestSchema = z.object({
+  instanceId: z.string().min(1, 'instanceId 不能为空'),
+})
+
+/** POST /instances/deploy/cancel 响应契约（已受理中断，终态由 deployProgress 事件推送） */
+export const deployCancelResponseSchema = z.object({
+  instanceId: z.string(),
+  cancelled: z.literal(true),
+})
+
 export const deployProgressSchema = z.object({
   stage: z.string(),
   percent: z.number(),
@@ -125,6 +141,8 @@ export const upgradeStatusResponseSchema = z.discriminatedUnion('upgrading', [
 export type VersionsResponse = z.infer<typeof versionsResponseSchema>
 export type DeployRequest = z.infer<typeof deployRequestSchema>
 export type DeployResult = z.infer<typeof deployResultSchema>
+export type DeployCancelRequest = z.infer<typeof deployCancelRequestSchema>
+export type DeployCancelResponse = z.infer<typeof deployCancelResponseSchema>
 export type DeployProgress = z.infer<typeof deployProgressSchema>
 export type DeployStatusResponse = z.infer<typeof deployStatusResponseSchema>
 export type UpgradeStage = z.infer<typeof upgradeStageSchema>

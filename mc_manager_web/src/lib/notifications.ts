@@ -16,7 +16,7 @@ export type NotificationType =
   | 'restoreStart' | 'restoreComplete' | 'restoreFailed'
   | 'taskFailed'
   | 'webhookFailed'
-  | 'deployComplete' | 'deployFailed'
+  | 'deployComplete' | 'deployFailed' | 'deployCancelled'
   | 'upgradeComplete' | 'upgradeFailed'
 
 export interface AppNotification {
@@ -73,6 +73,8 @@ export const NOTIFICATION_TYPE_META: Record<
   webhookFailed: { label: 'Webhook 投递失败', category: 'server', severity: 'severe' },
   deployComplete: { label: '部署完成', category: 'server', severity: 'info' },
   deployFailed: { label: '部署失败', category: 'server', severity: 'severe' },
+  // 用户主动取消不是故障：severity 保持 info，避免进「严重告警」筛选与聚合告警面
+  deployCancelled: { label: '部署已取消', category: 'server', severity: 'info' },
   upgradeComplete: { label: '升级完成', category: 'server', severity: 'info' },
   upgradeFailed: { label: '升级失败', category: 'server', severity: 'severe' },
 }
@@ -232,6 +234,12 @@ export function buildNotifications(
       return [{
         type: 'deployFailed', category: 'server',
         content: `实例「${String(d.instanceName ?? '未命名')}」部署失败：${String(d.error || '未知错误')}`,
+      }]
+    case 'deployCancelled':
+      // 不宣称「已清理」：服务端收尾是 best-effort，清理未完成时把明细一并带出
+      return [{
+        type: 'deployCancelled', category: 'server',
+        content: `实例「${String(d.instanceName ?? '未命名')}」部署已取消${d.error ? `：${String(d.error)}` : ''}`,
       }]
     case 'upgradeComplete':
       return [{

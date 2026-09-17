@@ -48,6 +48,10 @@ export const ErrorCode = {
   INSTANCE_DELETE_NO_BACKUP: 40914,
   /** 部署互斥：已有部署在途 */
   DEPLOY_IN_PROGRESS: 40905,
+  /** 取消部署但无可取消对象（部署已终态/已被取消/服务端重启后注册表为空） */
+  DEPLOY_NOT_IN_FLIGHT: 40906,
+  /** 用户取消导致长任务未完成（部署 POST 的响应；终态另由 deployProgress 推送 cancelled） */
+  TASK_CANCELLED: 40915,
 
   BACKUP_NOT_FOUND: 40402,
   BACKUP_IN_PROGRESS: 40901,
@@ -114,6 +118,8 @@ const LOCALIZED_MESSAGES: Partial<Record<ErrorCodeValue, string>> = {
   [ErrorCode.INSTANCE_NOT_RUNNING]: '实例未在运行',
   [ErrorCode.INSTANCE_RUNNING]: '实例正在运行',
   [ErrorCode.DEPLOY_IN_PROGRESS]: '服务端已有部署在进行中，请等待其完成后再发起新部署',
+  [ErrorCode.DEPLOY_NOT_IN_FLIGHT]: '该部署已结束或不在进行中，无需取消',
+  [ErrorCode.TASK_CANCELLED]: '操作已取消',
   [ErrorCode.BACKUP_NOT_FOUND]: '备份不存在',
   [ErrorCode.BACKUP_IN_PROGRESS]: '已有备份任务进行中',
   [ErrorCode.RESTORE_IN_PROGRESS]: '已有恢复任务进行中',

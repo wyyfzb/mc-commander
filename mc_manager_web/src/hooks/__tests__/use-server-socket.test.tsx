@@ -6,6 +6,7 @@ import { useServerSocket, getSocketSingleton } from '../use-server-socket'
 import { useConnectionStore } from '@/stores/connection'
 import { useAuthStore, type StoredSession } from '@/stores/auth'
 import { useNotificationStore } from '@/stores/notifications'
+import { useDeployStore } from '@/stores/deploy'
 import { queryKeys } from '@/api/queries'
 import type { WebSocketLike, WebSocketCtor } from '@/api/ws'
 
@@ -396,5 +397,51 @@ describe('useServerSocket（状态跃迁通知接线）', () => {
     // 详情与列表都进入失效态：详情 refetch 后 isRunning 翻转，停止状态条即时出现
     expect(qc.getQueryState(queryKeys.instance('i-1'))?.isInvalidated).toBe(true)
     expect(qc.getQueryState(queryKeys.instances())?.isInvalidated).toBe(true)
+  })
+
+  it('deployProgress 透传 instanceId（取消部署要按实例 id 精确匹配服务端注册表）', async () => {
+    const ws = await connectReady('i-1')
+
+    act(() => {
+      ws.receive({
+        type: 'deployProgress',
+        data: {
+          stage: 'download',
+          percent: 0.2,
+          transferred: 2,
+          total: 10,
+          instanceId: 'paper-abc1',
+          instanceName: '演示实例',
+        },
+      })
+    })
+
+    expect(useDeployStore.getState().progress?.instanceId).toBe('paper-abc1')
+  })
+
+  it('deployCancelled 终态事件入通知中心，并收敛部署中视图', async () => {
+    const ws = await connectReady('i-1')
+    act(() => {
+      useDeployStore.getState().applyDeployProgress({
+        stage: 'download',
+        percent: 0.2,
+        transferred: 2,
+        total: 10,
+        instanceId: 'paper-abc1',
+        instanceName: '演示实例',
+      })
+    })
+
+    act(() => {
+      ws.receive({
+        type: 'deployCancelled',
+        data: { stage: 'cancelled', instanceId: 'paper-abc1', instanceName: '演示实例' },
+      })
+    })
+
+    // 通知中心可见（用户离开向导后的唯一得知通道）
+    const items = useNotificationStore.getState().items
+    expect(items[0]?.type).toBe('deployCancelled')
+    expect(items[0]?.content).toBe('实例「演示实例」部署已取消')
   })
 })

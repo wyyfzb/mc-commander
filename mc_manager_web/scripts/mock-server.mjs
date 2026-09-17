@@ -793,6 +793,28 @@ const server = createServer((req, res) => {
       wsSockets.clear()
       return res.end(ok({ dropped: true }))
     }
+    // 取消在途部署（对齐服务端 POST /instances/deploy/cancel）：受理后按真实链路
+    // 补一条 cancelled 终态进度事件——前端据此从「部署中」切到「已取消」视图，
+    // 只回 HTTP 而不发事件会让用例停在「正在取消…」（真实服务端不会）
+    if (path === '/api/v1/instances/deploy/cancel' && req.method === 'POST') {
+      let requestedId = ''
+      try {
+        requestedId = String(JSON.parse(body || '{}').instanceId ?? '')
+      } catch {
+        requestedId = ''
+      }
+      const instanceId = requestedId || 'paper-a1b2c3d4'
+      broadcastWs('deployProgress', {
+        stage: 'cancelled',
+        percent: 0,
+        transferred: 0,
+        total: 0,
+        instanceId,
+        instanceName: '新部署实例',
+      })
+      broadcastWs('deployCancelled', { stage: 'cancelled', instanceId, instanceName: '新部署实例' })
+      return res.end(ok({ instanceId, cancelled: true }, 'Deployment cancellation requested'))
+    }
     // ── 世界/属性域 ──
     if (path === '/api/v1/instances/e2e-demo/world') return res.end(ok(worldInfo))
     if (path === '/api/v1/instances/e2e-demo/properties') {
@@ -950,6 +972,20 @@ function encodeTextFrame(text) {
     header.writeBigUInt64BE(BigInt(payload.length), 2)
   }
   return Buffer.concat([header, payload])
+}
+
+/** 向全部在线连接推送一条事件（mock 侧模拟服务端广播；构造端点在请求处理期调用） */
+function broadcastWs(type, data, instanceId) {
+  const frame = encodeTextFrame(
+    JSON.stringify({ type, ...(instanceId ? { instanceId } : {}), data, timestamp: Date.now() }),
+  )
+  for (const s of wsSockets) {
+    try {
+      s.write(frame)
+    } catch {
+      wsSockets.delete(s)
+    }
+  }
 }
 
 const wsSockets = new Set()
