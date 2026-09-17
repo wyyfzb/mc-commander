@@ -177,7 +177,9 @@ function InstanceCard({
       as="div"
       data-instance-id={id}
       className={cn(
-        'mcs-edge-top relative flex flex-col gap-3 p-4',
+        // min-w-0：卡片是网格项，网格项的 min-width 默认 auto ⇒ 长实例名会把整列按 min-content 撑宽
+        // （卡内名字虽有 truncate，但外层不松绑就轮不到它截断），窄屏下表现为卡片与引导块被挤出视口
+        'mcs-edge-top relative flex min-w-0 flex-col gap-3 p-4',
         className,
         isCurrent ? 'border-mcs-accent-border' : 'border-mcs-border-muted',
         detail?.circuitBreakerTripped && 'border-mcs-error-border',

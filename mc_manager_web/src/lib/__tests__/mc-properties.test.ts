@@ -69,6 +69,22 @@ describe('敏感键（9 键）与热改键（4 键）', () => {
   it('占位符常量与服务端 SENSITIVE_PLACEHOLDER 一致', () => {
     expect(SENSITIVE_PROPERTY_PLACEHOLDER).toBe('********')
   })
+
+  it('三个集合的不变量（面板的生效方式标识依赖它们）', () => {
+    // ① 敏感键与热改键不相交：面板按「热改 ⇒ 即时生效 / 否则可写 ⇒ 重启生效」出标，
+    //    交集非空时同一行会同时具备两种语义（当前靠短路兜底，但语义本身就是错的）
+    expect([...HOT_RELOAD_KEYS].filter((k) => SENSITIVE_PROPERTY_KEYS.has(k))).toEqual([])
+    // ② 热改键必须可写：不可写却标「即时生效」＝宣称一件做不到的事
+    for (const key of HOT_RELOAD_KEYS) {
+      expect(SERVER_PROPERTY_DEF_MAP.get(key)?.isWritable, key).toBe(true)
+    }
+    // ③ 存在「已知、可写、非热改」的键：面板的「重启生效」标才有落点
+    //    （若将来全表变热改，这条会红，提示重新审视该标识是否还有意义）
+    const restartOnly = [...SERVER_PROPERTY_DEF_MAP.values()].filter(
+      (d) => d.isWritable && !d.isHotReload && !d.isSensitive,
+    )
+    expect(restartOnly.length).toBeGreaterThan(0)
+  })
 })
 
 describe('每条属性定义合法性', () => {

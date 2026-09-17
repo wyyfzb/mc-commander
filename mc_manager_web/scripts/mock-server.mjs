@@ -49,6 +49,10 @@ const err = (code, message) =>
 
 /** 本 mock 签发的唯一会话令牌（登录/设密固定返回；鉴权建模见请求入口） */
 const MOCK_SESSION_TOKEN = 'e2e-mock-session-token-0000000001'
+
+/** 首访设密是否已完成（记忆态，进程级）：Referer 推断出的 fresh 在 SPA 客户端路由期间一直成立，
+ *  若不落这个状态，设密后再查一次 /auth/status 会又回 hasPassword:false、把用户弹回设密向导 */
+let passwordSet = false
 /** 无需凭据即可访问的端点（登录前必须可达，与真实服务端一致） */
 const PUBLIC_PATHS = new Set(['/api/v1/auth/status', '/api/v1/auth/login', '/api/v1/auth/setup'])
 
@@ -450,8 +454,14 @@ const server = createServer((req, res) => {
     if (path === '/api/v1/system-stats') return res.end(ok(systemStats))
     // ── 安全主线：auth 端点（登录 e2e 用；mock 固定凭据，严禁真实密码） ──
     if (path === '/api/v1/auth/status') {
-      // 默认已设密（登录模式）；?fresh=1 模拟首访（设密向导模式）
-      const fresh = new URL(url, 'http://x').searchParams.get('fresh') === '1'
+      // 默认已设密（登录模式）；首访（设密向导模式）有两条构造路径：
+      //   ① 接口 query `?fresh=1`（直接打 API 的用例）
+      //   ② 页面 URL 带 `?fresh=1` —— 前端不读、也不透传该参数（生产代码里没有它的位置），
+      //      故由 mock 从 Referer 推断；不这么做时文档里的「URL 加 ?fresh=1」其实点了没反应
+      const freshByQuery = new URL(url, 'http://x').searchParams.get('fresh') === '1'
+      const referer = (req.headers.referer ?? '').toString()
+      const freshByReferer = /[?&]fresh=1(?:&|$)/.test(referer)
+      const fresh = (freshByQuery || freshByReferer) && !passwordSet
       return res.end(ok({ hasPassword: !fresh }))
     }
     if (path === '/api/v1/auth/capabilities') {
@@ -498,6 +508,7 @@ const server = createServer((req, res) => {
       return res.end(ok(mockSession))
     }
     if (path === '/api/v1/auth/setup' && req.method === 'POST') {
+      passwordSet = true
       return res.end(ok({ hasPassword: true, token: MOCK_SESSION_TOKEN, sessionId: 'sess-mock-1', expiresAt: new Date(Date.now() + 7 * 86400000).toISOString() }))
     }
     if (path === '/api/v1/auth/sessions') {

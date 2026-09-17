@@ -96,7 +96,8 @@ export function AuditFilterBar({
 
       <span className="h-5 w-px shrink-0 bg-mcs-border-muted" aria-hidden />
 
-      <div className="flex items-center gap-1.5">
+      {/* 极窄视口（320px）：两个 144px 日期输入 + 间隔共 312px 会超出行宽 8px，故允许折行 */}
+      <div className="flex flex-wrap items-center gap-1.5">
         <DateTextInput
           value={auditStart}
           onChange={(v) => changeDate('start', v)}
