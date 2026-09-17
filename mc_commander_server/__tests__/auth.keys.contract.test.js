@@ -103,7 +103,7 @@ describe('auth/keys 响应契约（validatedSuccess 观测）', { timeout: 15_00
     expect(authSessionResponseSchema.safeParse(res.body.data).success).toBe(true);
   });
 
-  it('GET /auth/capabilities：能力探测响应可 parse（apiKeyEnabled 单字段）', async () => {
+  it('GET /auth/capabilities：能力探测响应可 parse（通道开关 + 只读凭据状态）', async () => {
     const token = await setupAndLogin();
     const originalEnabled = config.apiKeyEnabled;
     try {
@@ -116,7 +116,12 @@ describe('auth/keys 响应契约（validatedSuccess 观测）', { timeout: 15_00
         const parsed = authCapabilitiesResponseSchema.safeParse(res.body.data);
         expect(parsed.success).toBe(true);
         expect(parsed.data.apiKeyEnabled).toBe(enabled);
-        expect(Object.keys(res.body.data)).toEqual(['apiKeyEnabled']);
+        // 契约面固定三项：通道开关 + 只读凭据的「开关/是否已配置」（其余部署配置不外泄）
+        expect(Object.keys(res.body.data).sort()).toEqual([
+          'apiKeyEnabled', 'readonlyApiKeyConfigured', 'readonlyApiKeyEnabled',
+        ]);
+        expect(typeof res.body.data.readonlyApiKeyConfigured).toBe('boolean');
+        expect(typeof res.body.data.readonlyApiKeyEnabled).toBe('boolean');
       }
     } finally {
       config.apiKeyEnabled = originalEnabled;

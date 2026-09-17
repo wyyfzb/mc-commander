@@ -72,9 +72,9 @@ MC Commander 是**单管理员自托管面板**，架构上不区分多租户/�
 | WebSocket | **一律拒绝握手**：Phase 1 不做事件级过滤，能开 WS 等于能订阅全量事件并借事件回执间接执行命令 |
 | 有效期 | **无过期**：不随会话 TTL/绝对存活期失效 |
 | 与两步验证的关系 | 与全局 API Key 相同，不走交互式登录 |
-| 轮换 | `POST /api/v1/rotate-readonly-key`（**仅管理员可达**，只读凭据调用会 403/40305，无法自我提权或替换同类凭据）；明文只在响应里出现一次，旧只读 Key 立即失效；写入 `.env` 的 `READONLY_API_KEY_HASH` 行，其余键不动 |
+| 轮换 | 设置页「账号与安全 → 只读监控凭据」一键生成/轮换（浏览器内操作，明文一次性展示），或 `POST /api/v1/rotate-readonly-key`（**仅管理员可达**，只读凭据调用会 403/40305，无法自我提权或替换同类凭据）；明文只在响应里出现一次，旧只读 Key 立即失效；写入 `.env` 的 `READONLY_API_KEY_HASH` 行，其余键不动 |
 | 通道关闭 | `READONLY_API_KEY_ENABLED=false`：**哈希已配置**时请求侧对该凭据一律 403（`READONLY_API_KEY_DISABLED`/40304），轮换端点同样 403 且**不写 `.env`**；哈希保留，设回 `true` 即恢复。该 40304 只在哈希已配置时可达——未配置时凭据恒不匹配，走下方 401 分支 |
-| 未配置 | `READONLY_API_KEY_HASH` 为空 ⇒ **该通道不存在**（fail-closed）：携带任意值（含空串）都只按无效凭据处理（401/40101，**与 `READONLY_API_KEY_ENABLED` 取值无关**），不会因为「空哈希与空输入相等」而被放行 |
+| 未配置 | `READONLY_API_KEY_HASH` 为空 ⇒ **该通道不存在**（fail-closed）：携带任意值（含空串）都只按无效凭据处理（401/40101，**与 `READONLY_API_KEY_ENABLED` 取值无关**），不会因为「空哈希与空输入相等」而被放行。设置页据 `GET /auth/capabilities` 的 `readonlyApiKeyConfigured` 区分「尚未创建 / 已配置」两态 |
 | 彻底关闭 | 删除 `.env` 的 `READONLY_API_KEY_HASH` 行并重启（通道消失、凭据不再被识别），或设 `READONLY_API_KEY_ENABLED=false`（保留哈希以便恢复）。**想先作废再观察**时，请用轮换端点生成新值（旧值立即失效）而不是手动删行 |
 
 由此推出的操作纪律：
@@ -83,7 +83,7 @@ MC Commander 是**单管理员自托管面板**，架构上不区分多租户/�
   地址、玩家名单等运行信息——按「内部监控账号」而非「公开只读」对待。（`jvmArgs`/`startCommand`/
   `javaPath`/`seed` 已按角色裁剪，但**实例配置里不要放凭据**仍是基本原则：白名单是收窄面，不是
   凭据托管处的许可。）
-- **只读凭据泄露的处置**：调用 `POST /api/v1/rotate-readonly-key` 立即轮换，或按上文彻底关闭。
+- **只读凭据泄露的处置**：在设置页「账号与安全 → 只读监控凭据」一键重新生成（或调 `POST /api/v1/rotate-readonly-key`）立即轮换，或按上文彻底关闭。
 - **需要敏感读请用管理员凭据**：白名单是刻意收窄的；把某个敏感端点加进白名单等同于把该数据的
   读取权交给一台常驻机器，必须作为一次安全评审来做（`middleware/auth.js` 的 `READONLY_ALLOWED`
   是唯一事实源，回归测试会钉住它的每一条）。

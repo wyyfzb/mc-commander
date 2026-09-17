@@ -163,6 +163,67 @@ test.describe('设置页', () => {
     expect(body.message).toBe('未提供访问凭据：请携带 X-API-Key 头或登录会话令牌')
   })
 
+  test('账号与安全：只读监控凭据——生成后明文只展示一次，收起即不可回看', async ({ page }) => {
+    await setupConnection(page)
+    // 初始态用请求头钉死（同轮 webServer 共享一个 mock 进程，其它用例可能已生成过凭据；
+    // 不依赖 /mock/reset——那是全局复位，其它 spec 也在调，会互相打断）
+    await page.setExtraHTTPHeaders({ 'x-mock-readonly-configured': '0' })
+    await page.goto('/settings/account')
+
+    // 初始态：服务端未配置只读凭据（mock 台账初值 false）
+    const panel = page.getByRole('heading', { name: '只读监控凭据' }).locator('xpath=ancestor::section[1]')
+    await expect(panel.getByText('尚未创建')).toBeVisible()
+    await expect(panel.getByText(/仅能访问 5 个读数端点/)).toBeVisible()
+
+    // 生成：首次生成无需二次确认；明文一次性出现
+    await panel.getByRole('button', { name: /生成只读凭据/ }).click()
+    const issued = 'mcro-mock-1234-5678-90ab-cdef-1234-5678-90ab-cdef'
+    await expect(panel.getByText(issued)).toBeVisible()
+    await expect(panel.getByText(/只显示这一次/)).toBeVisible()
+
+    // 收起后明文消失，且刷新页面也拿不回来（服务端只存摘要）
+    await panel.getByRole('button', { name: /我已保存，收起/ }).click()
+    await expect(panel.getByText(issued)).toHaveCount(0)
+    // 撤掉请求头覆盖：让状态回到 mock 真实台账（生成已把它置真）
+    await page.setExtraHTTPHeaders({})
+    await page.reload()
+    await expect(page.getByText(issued)).toHaveCount(0)
+    // 状态下翻为「已配置」：入口文案变为重新生成
+    await expect(
+      page.getByRole('button', { name: /重新生成只读凭据/ }),
+    ).toBeVisible()
+  })
+
+  test('账号与安全：重新生成只读凭据需二次确认（说明旧凭据立即失效）', async ({ page }) => {
+    await setupConnection(page)
+    // 显式钉死「已配置」初始态（不依赖同轮其它用例先跑出状态）
+    await page.setExtraHTTPHeaders({ 'x-mock-readonly-configured': '1' })
+    await page.goto('/settings/account')
+    const panel = page.getByRole('heading', { name: '只读监控凭据' }).locator('xpath=ancestor::section[1]')
+
+    await panel.getByRole('button', { name: '重新生成只读凭据' }).click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog.getByText(/旧凭据立即失效/)).toBeVisible()
+    // 取消：不发起写请求（凭据状态保持已配置，且无新明文出现）
+    await dialog.getByRole('button', { name: '取消' }).click()
+    await expect(dialog).toHaveCount(0)
+    await expect(page.getByText('mcro-mock-1234-5678-90ab-cdef-1234-5678-90ab-cdef')).toHaveCount(0)
+  })
+
+  test('账号与安全：只读凭据通道关闭 → 入口禁用并说明恢复方法', async ({ page }) => {
+    await setupConnection(page)
+    await page.setExtraHTTPHeaders({
+      'x-mock-readonly-enabled': '0',
+      'x-mock-readonly-configured': '1',
+    })
+    await page.goto('/settings/account')
+
+    const panel = page.getByRole('heading', { name: '只读监控凭据' }).locator('xpath=ancestor::section[1]')
+    await expect(panel.getByText('通道已关闭')).toBeVisible()
+    await expect(panel.getByText(/READONLY_API_KEY_ENABLED=false/)).toBeVisible()
+    await expect(panel.getByRole('button', { name: /只读凭据/ })).toBeDisabled()
+  })
+
   test('通用设置：自动重启开关 + 主题切换', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/settings/general')

@@ -25,10 +25,15 @@ vi.mock('../config.js', async (importOriginal) => {
     default: {
       ...actual.default,
       dataDir: tmpRoot,
-      // 开关初值必须钉死：本文件断言 true 态，而真实 config 从部署机 .env 解析
-      // （API_KEY_ENABLED=false 的机器上跑全量会假红）。envFilePath 一并指向临时目录，
+      // 三个开关/凭据态的初值必须全部钉死：本文件逐条断言「初值 → 值」，
+      // 而真实 config 从部署机 .env 解析——只读两字段尤其不能留真实值：
+      // 设置页的只读凭据入口一旦被用过，本机 .env 就会带上 READONLY_API_KEY_HASH，
+      // 那时「未配置=false」这类断言会在全量里假红（本文件的用例正是要覆盖两态，
+      // 不能反过来依赖机器状态）。envFilePath 一并指向临时目录，
       // 顺带消除任何写仓库真实 .env 的可能。
       apiKeyEnabled: true,
+      readonlyApiKeyEnabled: true,
+      readonlyApiKeyHash: '',
       envFilePath: path.join(tmpRoot, '.env'),
     },
   };
@@ -58,10 +63,15 @@ afterAll(() => {
 });
 
 const originalApiKeyEnabled = config.apiKeyEnabled;
+const originalReadonlyEnabled = config.readonlyApiKeyEnabled;
+const originalReadonlyHash = config.readonlyApiKeyHash;
 
 beforeEach(() => {
   db.prepare('DELETE FROM admin_sessions').run();
   config.apiKeyEnabled = originalApiKeyEnabled;
+  // 只读凭据两字段的初值同样钉死：部署机 .env 配了只读哈希时不该让本文件假红
+  config.readonlyApiKeyEnabled = originalReadonlyEnabled;
+  config.readonlyApiKeyHash = originalReadonlyHash;
   app = express();
   app.use(express.json());
   app.use('/api/', authMiddleware);
@@ -71,6 +81,8 @@ beforeEach(() => {
 
 afterEach(() => {
   config.apiKeyEnabled = originalApiKeyEnabled;
+  config.readonlyApiKeyEnabled = originalReadonlyEnabled;
+  config.readonlyApiKeyHash = originalReadonlyHash;
 });
 
 /** 会话记录（真实 model + 临时 SQLite），返回明文令牌 */
@@ -108,8 +120,35 @@ describe('GET /auth/capabilities 返回值', () => {
     const parsed = authCapabilitiesResponseSchema.safeParse(res.body.data);
     expect(parsed.success).toBe(true);
     expect(parsed.data.apiKeyEnabled).toBe(true);
-    // 契约只暴露这一个字段：部署配置（路径/端口/后端开关）不得进入响应面
-    expect(Object.keys(res.body.data)).toEqual(['apiKeyEnabled']);
+    // 契约只暴露「通道开关 + 只读凭据是否已配置」这三项：部署配置的其余部分
+    // （路径/端口/后端开关/哈希本身）不得进入响应面
+    expect(Object.keys(res.body.data).sort()).toEqual([
+      'apiKeyEnabled', 'readonlyApiKeyConfigured', 'readonlyApiKeyEnabled',
+    ]);
+  });
+
+  it('只读凭据状态如实回报：未配置=false，配置后=true（只答有无，不回摘要）', async () => {
+    const before = await request(app)
+      .get('/api/v1/auth/capabilities')
+      .set('Authorization', `Bearer ${seedSession()}`);
+    expect(before.body.data.readonlyApiKeyConfigured).toBe(false);
+
+    config.readonlyApiKeyHash = 'deadbeef'.repeat(8);
+    const after = await request(app)
+      .get('/api/v1/auth/capabilities')
+      .set('Authorization', `Bearer ${seedSession()}`);
+    expect(after.body.data.readonlyApiKeyConfigured).toBe(true);
+    // 摘要本身绝不外泄
+    expect(JSON.stringify(after.body)).not.toContain('deadbeef');
+    expect(after.body.data.readonlyApiKeyEnabled).toBe(true);
+  });
+
+  it('READONLY_API_KEY_ENABLED=false 如实回报（UI 据此禁用生成入口）', async () => {
+    config.readonlyApiKeyEnabled = false;
+    const res = await request(app)
+      .get('/api/v1/auth/capabilities')
+      .set('Authorization', `Bearer ${seedSession()}`);
+    expect(res.body.data.readonlyApiKeyEnabled).toBe(false);
   });
 
   it('API_KEY_ENABLED=false：会话认证后 200，apiKeyEnabled=false', async () => {

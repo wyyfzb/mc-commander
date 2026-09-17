@@ -53,6 +53,13 @@ const MOCK_SESSION_TOKEN = 'e2e-mock-session-token-0000000001'
 /** 首访设密是否已完成（记忆态，进程级）：Referer 推断出的 fresh 在 SPA 客户端路由期间一直成立，
  *  若不落这个状态，设密后再查一次 /auth/status 会又回 hasPassword:false、把用户弹回设密向导 */
 let passwordSet = false
+
+// 只读凭据的 mock 台账（进程内，供设置面板 e2e 用）：生成后 configured 翻真。
+// 开关与 capabilities 上报同源，可用 MOCK_READONLY_ENABLED=false 构造关闭态
+let mockReadonlyConfigured = false
+const mockReadonlyEnabled = !['0', 'false', 'no', 'off'].includes(
+  (process.env.MOCK_READONLY_ENABLED ?? 'true').trim().toLowerCase(),
+)
 /** 升级在途快照（#94）：非 null 表示 mock 正在「升级中」，取消后清空 */
 let upgradeInFlight = null
 /** 无需凭据即可访问的端点（登录前必须可达，与真实服务端一致） */
@@ -496,7 +503,53 @@ const server = createServer((req, res) => {
       const envFlag = (process.env.MOCK_API_KEY_ENABLED ?? 'true').trim()
       const raw = headerFlag || queryFlag || envFlag
       const apiKeyEnabled = !['0', 'false', 'no', 'off'].includes(raw.toLowerCase())
-      return res.end(ok({ apiKeyEnabled }))
+      // 只读凭据两字段：与真实服务端同形。configured 有两条构造路径——
+      //   ① 进程内台账（rotate-readonly-key 置位，跑完「生成」用例后自然为真）
+      //   ② 请求头 `x-mock-readonly-configured: 0|1`（用例显式钉死初始态，避免依赖
+      //      同轮其它用例的执行顺序：webServer 一轮共享一个 mock 进程）
+      const readonlyFlagHeader = (req.headers['x-mock-readonly-configured'] ?? '').toString().trim()
+      const readonlyConfigured = readonlyFlagHeader === ''
+        ? mockReadonlyConfigured
+        : ['1', 'true', 'yes', 'on'].includes(readonlyFlagHeader.toLowerCase())
+      // 通道关闭态同样支持按请求构造（与 apiKeyEnabled 同款理由：webServer 一轮共享进程，
+      // 环境变量改不了，而「通道关闭 ⇒ 入口禁用 + 说明恢复方法」必须真被 e2e 跑到）
+      const readonlyEnabledHeader = (req.headers['x-mock-readonly-enabled'] ?? '').toString().trim()
+      const readonlyEnabled = readonlyEnabledHeader === ''
+        ? mockReadonlyEnabled
+        : !['0', 'false', 'no', 'off'].includes(readonlyEnabledHeader.toLowerCase())
+      return res.end(ok({
+        apiKeyEnabled,
+        readonlyApiKeyEnabled: readonlyEnabled,
+        readonlyApiKeyConfigured: readonlyConfigured,
+      }))
+    }
+    if (path === '/api/v1/rotate-readonly-key' && req.method === 'POST') {
+      // 与真实端点同门：真实服务端该端点要求管理员凭据（只读凭据调用 403/40305）。
+      // mock 无 Key 台账，故只要求「带了凭据」——否则「面板忘带凭据」在 e2e 里永远成功
+      const rotateKey = (req.headers['x-api-key'] ?? '').toString().trim()
+      if (!rotateKey && !bearer) {
+        res.statusCode = 401
+        return res.end(JSON.stringify({
+          status: 'error',
+          code: 40107,
+          message: '未提供访问凭据：请携带 X-API-Key 头或登录会话令牌',
+          details: null,
+          timestamp: now(),
+        }))
+      }
+      // 明文只在响应里出现一次；此后能力探测回报「已配置」
+      if (!mockReadonlyEnabled) {
+        res.statusCode = 403
+        return res.end(JSON.stringify({
+          status: 'error',
+          code: 40304,
+          message: '只读 API Key 通道已关闭，无法轮换；如需只读凭据请先启用该通道',
+          details: null,
+          timestamp: now(),
+        }))
+      }
+      mockReadonlyConfigured = true
+      return res.end(ok({ apiKey: 'mcro-mock-1234-5678-90ab-cdef-1234-5678-90ab-cdef' }))
     }
     if (path === '/api/v1/auth/login' && req.method === 'POST') {
       const mockSession = { token: MOCK_SESSION_TOKEN, sessionId: 'sess-mock-1', expiresAt: new Date(Date.now() + 7 * 86400000).toISOString() }
@@ -806,6 +859,7 @@ const server = createServer((req, res) => {
     if (path === '/api/v1/mock/reset' && req.method === 'POST') {
       instance.isRunning = true
       upgradeInFlight = null
+      mockReadonlyConfigured = false
       return res.end(ok({ isRunning: instance.isRunning, upgradeInFlight }))
     }
     // mock 专用控制端点：翻转实例运行态（e2e 复现「实例已停止 → 可升级」前置条件）

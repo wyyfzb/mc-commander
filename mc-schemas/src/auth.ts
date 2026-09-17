@@ -32,12 +32,19 @@ export const authStatusResponseSchema = z.object({
 // 任何配置面；而「用 API Key 打通」不是它的替代信号——通道关闭时 fail-closed 只拒绝
 // **携带 Key** 的请求，不携带 Key 的公开端点照常 200，据此判断会得到一个随机消失的入口。
 // 故把该开关放进受保护的独立端点：路由挂在全局认证中间件之后，未认证不可达。
-// 契约只暴露这一个布尔量，部署配置（路径/端口/后端开关）一律不进响应面。
+// 只读机器凭据同理（readonlyApiKeyEnabled / readonlyApiKeyConfigured）：设置页要据它
+// 决定「生成/轮换只读凭据」入口是否可用、以及显示「尚未创建 / 已配置」哪一态。
+// 契约只暴露「通道开关 + 凭据是否已配置」这几个布尔量，部署配置的其余部分
+// （路径/端口/后端开关）一律不进响应面。
 // ---------------------------------------------------------------------------
 
 /** 部署能力：API Key 通道是否开放（关闭时 rotate-key 及 Key 鉴权一律 403） */
 export const authCapabilitiesResponseSchema = z.object({
   apiKeyEnabled: z.boolean(),
+  /** 只读机器凭据通道开关（READONLY_API_KEY_ENABLED；关闭时该凭据一律 403、轮换端点 403） */
+  readonlyApiKeyEnabled: z.boolean(),
+  /** 服务端是否已配置只读凭据哈希（未配置 = 该通道不存在，轮换即「首次生成」） */
+  readonlyApiKeyConfigured: z.boolean(),
 })
 
 /** 改密成功响应（会话通道与 API Key 通道同构：kickedSessions 为被踢会话数） */

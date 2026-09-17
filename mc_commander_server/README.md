@@ -109,7 +109,7 @@ sudo BRANCH=<旧版本标签> PACKAGE_SHA256=<该代码包 sha256> bash /tmp/dep
 
 | 变量 | 默认 | 说明 |
 |---|---|---|
-| `READONLY_API_KEY_HASH` | 空 | 只读凭据的 SHA-256 摘要。**留空 = 该通道不存在**（fail-closed）。请用 `POST /api/v1/rotate-readonly-key` 生成，不要手写 |
+| `READONLY_API_KEY_HASH` | 空 | 只读凭据的 SHA-256 摘要。**留空 = 该通道不存在**（fail-closed）。生成入口：设置页「账号与安全 → 只读监控凭据」，或管理员调 `POST /api/v1/rotate-readonly-key`；**不要手写本行** |
 | `READONLY_API_KEY_ENABLED` | `true` | 只读通道开关（`true`/`false`/`1`/`0`）。关闭后该凭据一律 403、轮换端点同样 403 且不写 `.env`；哈希保留，设回 `true` 即恢复。与 `API_KEY_ENABLED` 相互独立 |
 
 ## 日志
@@ -204,6 +204,9 @@ Authorization: Bearer <session-token>
   `GET /instances/:id` 对只读**按角色裁剪**：响应不含 `jvmArgs`/`startCommand`
   （运维常把 JMX/DB 口令写进 JVM 参数）、`javaPath`、`seed`，监控所需字段照常返回；
   管理员响应不裁剪。
+
+  面板内置生成入口：**设置 → 账号与安全 → 只读监控凭据**（显示「尚未创建 / 已配置 /
+  通道已关闭」三态，一键生成或轮换，明文一次性展示且服务端只存摘要）。命令行等价操作：
 
   ```bash
   # 生成 / 轮换（用管理员会话或全局 API Key 调用；明文只在响应里出现一次）

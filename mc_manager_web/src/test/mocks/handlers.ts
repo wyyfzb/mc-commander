@@ -997,5 +997,11 @@ export const handlers = [
     ok({ enabled: false, confirmedAt: null, recoveryCodesRemaining: 0 }),
   ),
   // 部署能力（默认 API Key 通道开放；关闭态由用例覆写为 apiKeyEnabled: false）
-  http.get('*/api/v1/auth/capabilities', () => ok({ apiKeyEnabled: true })),
+  http.get('*/api/v1/auth/capabilities', () =>
+    ok({ apiKeyEnabled: true, readonlyApiKeyEnabled: true, readonlyApiKeyConfigured: false }),
+  ),
+  // 只读凭据生成/轮换（设置页面板用；默认返回标记串，具体用例自行 use() 覆盖）
+  http.post('*/api/v1/rotate-readonly-key', () =>
+    ok({ apiKey: 'mcro-mock-0000-0000-0000-0000-0000-0000-0000' }),
+  ),
 ]

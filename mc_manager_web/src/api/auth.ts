@@ -7,7 +7,7 @@
  */
 import { apiGet, apiPost, apiPut, apiDelete, apiRequest } from './client'
 import type { ConnectionConfig } from './client'
-import type { AuthCapabilitiesResponse } from '@mc-commander/schemas'
+import type { ApiKeyRotateResponse, AuthCapabilitiesResponse } from '@mc-commander/schemas'
 import type { StoredSession } from '@/stores/auth'
 
 export interface AuthStatusData {
@@ -153,6 +153,15 @@ export function fetchAuthCapabilities(
     signal,
     ignoreSessionExpiry: true,
   })
+}
+
+/**
+ * POST /rotate-readonly-key（认证）：生成/轮换只读机器凭据。
+ * 旧凭据立即失效，明文只在本次响应里出现一次（服务端只存摘要）。
+ * 仅管理员可达：只读凭据本身调用会 403（不能自我提权或替换同类凭据）。
+ */
+export function rotateReadonlyKey(config: ConnectionConfig): Promise<ApiKeyRotateResponse> {
+  return apiPost<ApiKeyRotateResponse>('/api/v1/rotate-readonly-key', config, {})
 }
 
 /** POST /auth/totp/enroll（认证）：生成候选密钥 + 二维码 */

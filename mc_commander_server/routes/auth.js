@@ -196,10 +196,16 @@ export function createAuthRoutes() {
   // 信息面，部署配置不该出现在那里（status 只答「是否已设密」）。本端点落在
   // authMiddleware 的公开白名单之外，未认证一律 401。
   //
-  // 只暴露 apiKeyEnabled 一个布尔量：客户端据此决定「API Key 轮换」入口是否可见。
+  // 只暴露「通道开关 + 凭据是否已配置」：客户端据此决定「API Key 轮换」与
+  // 「只读凭据生成/轮换」入口的可见性与文案（未配置 = 首次生成，已配置 = 轮换）。
   // 部署配置的其余部分（路径、端口、后端开关等）不属本契约，勿顺手加入。
   router.get('/auth/capabilities', (req, res) => {
-    res.json(validatedSuccess(authCapabilitiesResponseSchema, { apiKeyEnabled: config.apiKeyEnabled }));
+    res.json(validatedSuccess(authCapabilitiesResponseSchema, {
+      apiKeyEnabled: config.apiKeyEnabled,
+      readonlyApiKeyEnabled: config.readonlyApiKeyEnabled,
+      // 只答「有没有配置」这一事实，不返回摘要本身（哈希也不外泄）
+      readonlyApiKeyConfigured: Boolean(config.readonlyApiKeyHash),
+    }));
   });
 
   // POST /api/v1/auth/setup —— 公开：首访设密（幂等防护：已设密 409；所有权证明：SETUP_TOKEN）

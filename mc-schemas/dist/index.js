@@ -4649,7 +4649,13 @@ const authSetupResponseSchema = authSessionResponseSchema.extend({ hasPassword: 
 /** status 探测响应：是否已设密（登录页首屏） */
 const authStatusResponseSchema = objectType({ hasPassword: booleanType() });
 /** 部署能力：API Key 通道是否开放（关闭时 rotate-key 及 Key 鉴权一律 403） */
-const authCapabilitiesResponseSchema = objectType({ apiKeyEnabled: booleanType() });
+const authCapabilitiesResponseSchema = objectType({
+	apiKeyEnabled: booleanType(),
+	/** 只读机器凭据通道开关（READONLY_API_KEY_ENABLED；关闭时该凭据一律 403、轮换端点 403） */
+	readonlyApiKeyEnabled: booleanType(),
+	/** 服务端是否已配置只读凭据哈希（未配置 = 该通道不存在，轮换即「首次生成」） */
+	readonlyApiKeyConfigured: booleanType()
+});
 /** 改密成功响应（会话通道与 API Key 通道同构：kickedSessions 为被踢会话数） */
 const authPasswordChangeResponseSchema = objectType({
 	ok: literalType(true),
