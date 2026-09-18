@@ -204,6 +204,12 @@ export function GamerulePanel({ instanceId, mcVersion, isRconConnected, onSendCo
         ))}
       </div>
 
+      {/* ── 生效方式说明（与属性面板同一口径：一行说清「改了要不要重启」）──
+             gamerule 经 RCON 命令作用于运行中的服务器，全部即时生效，无逐项例外 */}
+      <p className="text-mcs-2xs text-mcs-text-muted">
+        规则修改保存后即时生效，无需重启实例
+      </p>
+
       {/* ── 规则列表 ── */}
       <div className="min-h-0 flex-1 overflow-y-auto">
         {loading ? (

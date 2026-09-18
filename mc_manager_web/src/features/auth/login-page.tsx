@@ -412,7 +412,6 @@ export function LoginPage() {
                 placeholder={phase === 'setup' ? '设置 8–128 位密码' : '输入密码'}
                 autoComplete={phase === 'setup' ? 'new-password' : 'current-password'}
                 autoFocus={!totpRequired}
-                className="h-10"
               />
             </div>
             {phase === 'login' && totpRequired && (
@@ -432,7 +431,7 @@ export function LoginPage() {
                   autoComplete="one-time-code"
                   autoFocus
                   spellCheck={false}
-                  className="h-10 font-mono"
+                  className="font-mono"
                 />
                 <p className="text-mcs-2xs text-mcs-text-muted">{SECOND_FACTOR_HINT}</p>
               </div>
@@ -451,7 +450,6 @@ export function LoginPage() {
                   }}
                   placeholder="再次输入密码"
                   autoComplete="new-password"
-                  className="h-10"
                 />
               </div>
             )}
@@ -467,7 +465,6 @@ export function LoginPage() {
                   }}
                   placeholder="粘贴部署输出中的 SETUP_TOKEN"
                   autoComplete="off"
-                  className="h-10 font-mono"
                 />
                 <p className="text-mcs-2xs text-mcs-text-muted">
                   该面板已开启部署保护：公网部署场景下需证明您是部署者（令牌见部署脚本完成输出，用后即作废）。

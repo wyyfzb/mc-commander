@@ -69,6 +69,8 @@ describe('GamerulePanel 挂载查询与列表', () => {
     expect(screen.getByText('旧版规则')).toBeInTheDocument()
     // 解析成功 → 无 warning 提示
     expect(screen.queryByText(/无法解析 gamerule 列表/)).not.toBeInTheDocument()
+    // 生效方式标识（与属性面板同一口径）：gamerule 全部即时生效
+    expect(screen.getByText('规则修改保存后即时生效，无需重启实例')).toBeInTheDocument()
     // 旧集分类全部为空串 → chips 仅「全部 + 其他」
     expect(screen.getByRole('button', { name: '其他' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '玩家' })).not.toBeInTheDocument()

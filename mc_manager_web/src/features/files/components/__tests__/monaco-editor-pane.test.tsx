@@ -216,6 +216,17 @@ describe('头部条', () => {
     expect(name.className).toContain('font-mono')
   })
 
+  it('server.properties 生效方式标识：需重启 + 指回属性面板（与属性面板同一口径）', () => {
+    render(<MonacoEditorPane {...makeProps({ path: PATH_PROPERTIES })} />)
+    expect(screen.getByText(/保存后需重启实例生效/)).toBeInTheDocument()
+    expect(screen.getByText(/即时生效/)).toBeInTheDocument()
+  })
+
+  it('非 server.properties 文件不渲染生效方式标识', () => {
+    render(<MonacoEditorPane {...makeProps({ path: '/示例世界/logs/latest.log' })} />)
+    expect(screen.queryByText(/需重启实例生效/)).not.toBeInTheDocument()
+  })
+
   it('encoding 徽章：utf-8 → 「UTF-8」，gbk → 「GBK」', () => {
     const { rerender } = render(
       <MonacoEditorPane {...makeProps({ path: PATH_PROPERTIES, encoding: 'utf-8' })} />,

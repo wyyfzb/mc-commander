@@ -255,6 +255,13 @@ export function MonacoEditorPane({
         </Button>
       </header>
 
+      {/* ── 生效方式标识（与属性面板同一口径）：文件级修改一律需重启；热改项指回属性面板 ── */}
+      {fileNameOf(path).toLowerCase() === 'server.properties' && (
+        <p className="shrink-0 border-b border-mcs-border-muted px-3 py-1 text-mcs-2xs text-mcs-text-muted">
+          该文件保存后需重启实例生效；热改属性可在世界页「服务器属性」面板即时生效
+        </p>
+      )}
+
       {/* ── 内容区：加载 → 错误 → 编辑器 ── */}
       {isLoading ? (
         <div
