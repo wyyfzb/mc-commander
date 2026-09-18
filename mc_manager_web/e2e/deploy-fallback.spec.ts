@@ -21,6 +21,10 @@ async function setupInFlightDeploy(page: Page) {
     )
     localStorage.setItem('mcs-deploy-mock', 'in-flight')
   })
+  // WS 连接分组：断线用例会调 mock 的 drop-ws，按分组只断本用例的连接。
+  // 旧实现断的是共享 mock 进程里的全部连接（连接普查实测：会连带掐掉并行 spec 的
+  // 实时通道），按分组后只断自己那几条
+  await page.setExtraHTTPHeaders({ 'x-mock-ws-group': 'deploy-fallback' })
 }
 
 test.describe('部署进度兜底（J29）', () => {
@@ -49,10 +53,17 @@ test.describe('部署进度兜底（J29）', () => {
     await page.goto('/instances')
     await expect(page.getByRole('banner').getByText('已连接')).toBeVisible()
 
-    // 断开实时通道：mock 专用控制端点强制断开 WS（HTTP 兜底仍可用）
+    // 断开实时通道：mock 专用控制端点断开**本组** WS（HTTP 兜底仍可用）。
     // 地址取当前页 origin（= dev/preview server，端口随 MOCK_PORT/DEV_PORT 泳道变化），
-    // 经其 proxy 转发到 mock：硬编码 mock 端口会让非默认泳道下的 spec 变成 ECONNREFUSED 假红
-    await page.request.post(new URL('/api/v1/instances/deploy/drop-ws', page.url()).toString())
+    // 经其 proxy 转发到 mock：硬编码 mock 端口会让非默认泳道下的 spec 变成 ECONNREFUSED 假红。
+    // 分组头显式带上：setExtraHTTPHeaders 作用于页面请求（WS 握手因此拿到分组），
+    // 但 page.request 的 APIRequestContext 不继承它——不显式传就会断到「无分组」那一组
+    const dropRes = await page.request.post(
+      new URL('/api/v1/instances/deploy/drop-ws', page.url()).toString(),
+      { headers: { 'x-mock-ws-group': 'deploy-fallback' } },
+    )
+    // 先把「一条都没断」的失败钉在调用点（否则只能等下面三条 UI 断言，失败信息指向模糊）
+    expect(((await dropRes.json()) as { data: { dropped: number } }).data.dropped).toBeGreaterThan(0)
 
     await expect(page.getByText('WebSocket 已断开').first()).toBeVisible()
     await expect(page.getByText(/请勿重新发起部署（会重复创建实例）/)).toBeVisible()

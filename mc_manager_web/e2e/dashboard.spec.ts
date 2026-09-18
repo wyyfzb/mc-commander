@@ -221,12 +221,17 @@ test.describe('仪表盘', () => {
     await expect(dot).toHaveClass(/bg-mcs-identity-2/)
     // 色点必须在独立左列，不在「查看实例」那一行内（那行整体是 info 语义色）
     await expect(entry.getByText('查看实例').locator('[data-instance-hue]')).toHaveCount(0)
-    // 几何证据：① 色点在气泡内、贴左缘；② 色点整体位于 info 行**上方**（不同排）
+    // 几何证据：① 色点在气泡内、贴左缘；② 色点整体位于 info 行**上方**（不同排）。
+    // 左缘上界只是**粗检**：实测色点偏移在本机 13px、并行负载下 20px（字体度量漂移），
+    // 而真实回归形态量到的是 13–29px——别指望这个上界兜回归，承载语义的是下面
+    // 「info 行内不得有色点」（count 断言）与「色点底线在 info 行顶线之上」（y 带）两条。
+    // 上界贴着实测值（曾写 <20）只会把亚像素抖动判成失败（清单 #83 族）
+    const LEFT_COLUMN_MAX_OFFSET_PX = 32
     const dotBox = (await dot.boundingBox())!
     const entryBox = (await entry.boundingBox())!
     const hintBox = (await entry.getByText('查看实例').boundingBox())!
     expect(dotBox.x).toBeGreaterThanOrEqual(entryBox.x)
-    expect(dotBox.x - entryBox.x).toBeLessThan(20)
+    expect(dotBox.x - entryBox.x).toBeLessThan(LEFT_COLUMN_MAX_OFFSET_PX)
     expect(dotBox.y + dotBox.height).toBeLessThanOrEqual(hintBox.y)
     await maybeShot(page, 'notification-drawer-instance-dark.png')
     // 亮色下同一槽位（审查点：slot5/slot2 在亮色里最贴近语义色）

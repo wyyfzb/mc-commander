@@ -485,7 +485,16 @@ const server = createServer((req, res) => {
       const freshByQuery = new URL(url, 'http://x').searchParams.get('fresh') === '1'
       const referer = (req.headers.referer ?? '').toString()
       const freshByReferer = /[?&]fresh=1(?:&|$)/.test(referer)
-      const fresh = (freshByQuery || freshByReferer) && !passwordSet
+      // 设密态与其它场景态同款：允许按请求头覆写，避免「另一个 spec 走过设密向导后
+      // 本 spec 的 ?fresh=1 静默失效」（该副作用是进程级的，当前无 e2e 触达，
+      // 这里先把覆写通道准备好——与 x-mock-instance-running 同一范式）
+      const passwordSetOverride = (() => {
+        const raw = req.headers['x-mock-password-set']
+        if (raw === 'true') return true
+        if (raw === 'false') return false
+        return null
+      })()
+      const fresh = (freshByQuery || freshByReferer) && !(passwordSetOverride ?? passwordSet)
       return res.end(ok({ hasPassword: !fresh }))
     }
     if (path === '/api/v1/auth/capabilities') {
@@ -920,9 +929,16 @@ const server = createServer((req, res) => {
     }
     // 强制断开全部 WS 连接（mock 专用控制端点：e2e 复现「实时通道断开」边沿，HTTP 不动）
     if (path === '/api/v1/instances/deploy/drop-ws' && req.method === 'POST') {
-      for (const s of wsSockets) s.destroy()
-      wsSockets.clear()
-      return res.end(ok({ dropped: true }))
+      // 按请求头分组断开（两侧都不带分组头时即『断开全部无分组连接』＝旧行为）
+      const group = String(req.headers['x-mock-ws-group'] ?? '')
+      let dropped = 0
+      for (const s of wsSockets) {
+        if ((s.mockWsGroup ?? '') !== group) continue
+        s.destroy()
+        wsSockets.delete(s)
+        dropped += 1
+      }
+      return res.end(ok({ dropped }))
     }
     // 取消在途部署（对齐服务端 POST /instances/deploy/cancel）：受理后按真实链路
     // 补一条 cancelled 终态进度事件——前端据此从「部署中」切到「已取消」视图，
@@ -1169,6 +1185,10 @@ server.on('upgrade', (req, socket) => {
       `\r\n`,
   )
   socket.setNoDelay(true)
+  // WS 连接分组：drop-ws 这类「断开实时通道」的场景只该断自己那一组，不能把同轮
+  // 其它 spec 正常断言的连接一起掐掉（实测它确实打到过别的 spec）。分组随握手请求头
+  // 携带（Playwright 的 extraHTTPHeaders 会带到 WS 握手，已实测）
+  socket.mockWsGroup = String(req.headers['x-mock-ws-group'] ?? '')
   // 逐连接场景态：握手请求头携带的覆写在 status 快照里沿用（与 REST 同源）
   socket.mockRunning = req.headers['x-mock-instance-running'] === 'true'
     ? true
