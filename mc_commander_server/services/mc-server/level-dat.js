@@ -4,7 +4,7 @@
  *       世界目录定位（level-name 服务层兜底校验）、存档大小与保存时间读取。
  * 挂载方式：mc_server.js 顶部 import 后经 Object.assign(MCServerInstance.prototype, levelDat)
  * 注入原型——函数体内 this 语义与类内定义完全一致（实例方法调用时 this 绑定实例），
- * 全部调用点零改动，对外接口零变化；isPathContained 采用 utils/player-utils.js 全仓公共实现
+ * 全部调用点零改动，对外接口零变化；isPathContained 采用 utils/fs-utils.js 全仓公共实现
  * （mc_server.js 原有逐字副本已由 issue 499 收敛至本单源）。
  */
 import path from 'path';
@@ -12,7 +12,7 @@ import fs from 'fs';
 import zlib from 'zlib';
 import { parseUncompressed as parseNbtSync } from 'prismarine-nbt';
 import { logger } from '../../utils/logger.js';
-import { isPathContained } from '../../utils/player-utils.js';
+import { isPathContained } from '../../utils/fs-utils.js';
 
 /// level-name 服务层兜底校验（extra-1，与 status-route 路由层白名单双保险）：
 /// ①正则 ^[A-Za-z0-9_-]+$（不含路径分隔符/..，杜绝路径穿越）；

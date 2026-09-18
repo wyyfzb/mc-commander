@@ -5,7 +5,7 @@ import config from '../config.js';
 import { BackupModel } from '../db/backup.model.js';
 import { ScheduledTaskModel } from '../db/scheduled_task.model.js';
 import { AppError, ErrorCodes } from '../utils/response.js';
-import { ensureDir } from '../utils/fs-utils.js';
+import { ensureDir, resolveContainedPath, PathTraversalError } from '../utils/fs-utils.js';
 import { logger } from '../utils/logger.js';
 import { localTimestamp } from '../utils/local-date.js';
 import { INSTANCE_ID_PATTERN } from '../utils/instance-id.js';
@@ -30,37 +30,20 @@ const EXCLUDED_DIRS = new Set([
   'backups',
 ]);
 
-// 路径包含校验（find-004）：将 target 解析后必须严格位于 baseDir 内。
-// ①path.resolve 归一化 ②严格前缀校验（相等排除 + 目录分隔符边界，
-// 避免 /base-evil 之类前缀陷阱）③已存在路径做 realpath 复检，
-// 防止 worldDir 是 symlink（指向实例目录外）时压缩跟随链接泄露外部数据、
-// 恢复时 rename/rmSync 伤及外部。模式与 utils/fs-utils.js 的 resolveSafePath
-// 一致，本文件内自实现以避免跨文件顺序依赖（并行开发约束）。
+// 路径包含校验（find-004）已收敛到 utils/fs-utils.js 的解析面 resolveContainedPath
+// （四步防线：归一化 → 相等排除 + sep 边界 → 逐段 realpath → 最终目标 symlink 拒绝）。
+// 本文件保留导出名与一层错误形态翻译：路由层契约是 AppError(PATH_TRAVERSAL_DETECTED)，
+// 消息文本随 fs-utils 单源；baseMustExist=false——实例/世界目录的存在性由后续
+// 业务步骤判定（「World directory not found」比 ENOENT 更可操作）。
 export function resolveContained(baseDir, target) {
-  const base = path.resolve(baseDir);
-  const resolved = path.resolve(target);
-  const rel = path.relative(base, resolved);
-  if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) {
-    throw new AppError(ErrorCodes.PATH_TRAVERSAL_DETECTED, `Path traversal detected: ${target}`);
-  }
-  // 已存在路径：realpath 复检确认最终落点仍在 baseDir 内（防 symlink 逃逸）
-  let baseReal = base;
   try {
-    baseReal = fs.realpathSync(base);
-  } catch {
-    // baseDir 不存在时无法形成 symlink 链，前缀校验已足够
+    return resolveContainedPath(baseDir, target, { baseMustExist: false });
+  } catch (err) {
+    if (err instanceof PathTraversalError) {
+      throw new AppError(ErrorCodes.PATH_TRAVERSAL_DETECTED, err.message);
+    }
+    throw err;
   }
-  let real = null;
-  try {
-    real = fs.realpathSync(resolved);
-  } catch {
-    // 目标不存在：非 symlink，前缀校验已足够
-    return resolved;
-  }
-  if (real !== baseReal && !real.startsWith(baseReal + path.sep)) {
-    throw new AppError(ErrorCodes.PATH_TRAVERSAL_DETECTED, `Symlink escape detected: ${target}`);
-  }
-  return resolved;
 }
 
 // ── 快照工具命令构造 ──────────────────────────────────────────────

@@ -124,19 +124,9 @@ export class PathTraversalError extends Error {
 //    跟随链接，即使链接目标解析后仍在实例内也拒绝（防链接替换攻击）。
 // 注意：options.allowRoot = true 仅用于"列出实例根目录"（list 接口的 '/'），
 // 是归一化后等于 basePath 的唯一合法场景。
-export function resolveSafePath(basePath, userPath, options = {}) {
-  // ① path.resolve 归一化。注意用 path.join 拼接而非 path.resolve(base, userPath)：
-  // path.resolve 会把以 '/' 开头的用户路径当绝对路径处理（Windows 上 '/' 直接落到
-  // 盘符根目录，导致列表根目录 '/' 失效），而 join 语义与旧实现一致——按相对实例
-  // 目录拼接后统一归一化，跨平台行为不变
-  const base = path.resolve(basePath);
-  const full = path.resolve(path.join(base, userPath));
-
-  // NUL 字节不可能出现在合法路径：提前拒绝，避免 fs API 抛 TypeError 落 500
-  if (full.includes('\0')) {
-    throw new PathTraversalError('Path contains NUL byte');
-  }
-
+// ②③④ 由本仓两个解析面入口共用（resolveSafePath / resolveContainedPath），
+// ①的拼接方式各入口自持（见各函数注释）。
+function assertPathContained(base, full, options = {}) {
   // ② 相等排除：'.'/ './' / './/' / 'a/../' 归一化后与 base 相等
   if (full === base && !options.allowRoot) {
     throw new PathTraversalError('Path resolves to instance root');
@@ -155,8 +145,16 @@ export function resolveSafePath(basePath, userPath, options = {}) {
     missing.unshift(path.basename(existing));
     existing = path.dirname(existing);
   }
-  // base 不存在时抛原生 ENOENT（路由层 catch 映射 FILE_NOT_FOUND）
-  const baseReal = fs.realpathSync(base);
+  // base 不存在时抛原生 ENOENT（路由层 catch 映射 FILE_NOT_FOUND）；
+  // baseMustExist=false 是服务层显式选择（备份流程先做包含校验、存在性由
+  // 后续步骤判定并给出更精确的业务错误），此时退化为纯前缀校验
+  let baseReal;
+  try {
+    baseReal = fs.realpathSync(base);
+  } catch (err) {
+    if (err.code === 'ENOENT' && options.baseMustExist === false) return;
+    throw err;
+  }
   const candidate = path.join(fs.realpathSync(existing), ...missing);
   if (candidate !== baseReal && !candidate.startsWith(baseReal + path.sep)) {
     throw new PathTraversalError('Path escapes instance root via symlink');
@@ -174,6 +172,63 @@ export function resolveSafePath(basePath, userPath, options = {}) {
       if (err.code !== 'ENOENT') throw err;
     }
   }
+}
+
+export function resolveSafePath(basePath, userPath, options = {}) {
+  // ① path.resolve 归一化。注意用 path.join 拼接而非 path.resolve(base, userPath)：
+  // path.resolve 会把以 '/' 开头的用户路径当绝对路径处理（Windows 上 '/' 直接落到
+  // 盘符根目录，导致列表根目录 '/' 失效），而 join 语义与旧实现一致——按相对实例
+  // 目录拼接后统一归一化，跨平台行为不变
+  const base = path.resolve(basePath);
+  const full = path.resolve(path.join(base, userPath));
+
+  // NUL 字节不可能出现在合法路径：提前拒绝，避免 fs API 抛 TypeError 落 500
+  if (full.includes('\0')) {
+    throw new PathTraversalError('Path contains NUL byte');
+  }
+
+  assertPathContained(base, full, options);
 
   return full;
+}
+
+/**
+ * 路径包含校验的解析面——绝对/混合 target 变体（backup 等服务层收敛入口）。
+ * 与 resolveSafePath 同一套四步防线（归一化 → 相等排除 + sep 边界 → 逐段
+ * realpath → 最终目标 symlink 拒绝），差异只有三点：
+ * ① target 用 path.resolve(base, target) 拼接——绝对 target 独立生效（服务层
+ *    传入的已是绝对路径），相对 target 按 base 拼接（不依赖进程 CWD）；
+ * ② options.allowRoot 允许 target 归一化后等于 base（备份「整个实例」类场景）；
+ * ③ options.baseMustExist=false 时基座不存在退化为纯前缀校验（服务层先做
+ *    包含校验、存在性由后续业务步骤判定）；缺省 true，基座缺失抛原生 ENOENT。
+ * @returns {string} 归一化绝对路径
+ * @throws {PathTraversalError} 越界/穿越/symlink 逃逸
+ * @throws {Error} 原生 ENOENT（base 目录不存在且未显式选择容忍口径）
+ */
+export function resolveContainedPath(baseDir, target, options = {}) {
+  const base = path.resolve(baseDir);
+  const full = path.resolve(base, target);
+  if (full.includes('\0')) {
+    throw new PathTraversalError('Path contains NUL byte');
+  }
+  assertPathContained(base, full, options);
+  return full;
+}
+
+/**
+ * 路径包含校验的文本面——内部候选路径过滤（mc_server 启动参数、stats 候选、
+ * level-dat 路径等服务器自身产生的路径）。
+ * 与解析面的三分歧维度（语义事实源，调用方按维度选面）：
+ * ① 相等允许：target 归一化后等于 base 返回 true（「实例根本身」是合法候选）；
+ * ② 不做任何 fs 判定：不跟随、也不检测符号链接——管理员的 world 目录 symlink
+ *    到数据盘是合法部署形态，文本面必须放行（用户可控路径的攻击面才走解析面）；
+ * ③ 前缀比较按字面大小写：候选路径由 path.join(base, …) 构造、与 base 同源，
+ *    已存在组件的实际大小写由解析面（realpath）归一，文本面不折叠（Windows 上
+ *    大小写不符只会「拒绝合法路径」，不会「放行越界路径」，宁拒绝不误放）。
+ * @returns {boolean}
+ */
+export function isPathContained(basePath, targetPath) {
+  const base = path.resolve(basePath);
+  const target = path.resolve(base, targetPath);
+  return target === base || target.startsWith(base + path.sep);
 }

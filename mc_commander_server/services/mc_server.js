@@ -12,7 +12,8 @@ import { killProcessTree } from '../utils/process-tree.js';
 import { maskSensitiveCommand } from '../utils/command-mask.js';
 import { localDateKey } from '../utils/local-date.js';
 // offline uuid / stats 时长读取全仓公共实现（与 routes/players.js 共用 player-utils.js）
-import { isPathContained, offlineUuid as computeOfflineUuid, getTotalPlayTime } from '../utils/player-utils.js';
+import { offlineUuid as computeOfflineUuid, getTotalPlayTime } from '../utils/player-utils.js';
+import { isPathContained } from '../utils/fs-utils.js';
 import * as levelDat from './mc-server/level-dat.js';
 import * as outputParser from './mc-server/output-parser.js';
 import * as statsCollector from './mc-server/stats-collector.js';

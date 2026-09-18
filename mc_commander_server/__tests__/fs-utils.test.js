@@ -1,9 +1,9 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-import { resolveSafePath, PathTraversalError, ensureDir, renameNoClobber, atomicWriteFile } from '../utils/fs-utils.js';
+import { resolveSafePath, resolveContainedPath, isPathContained, PathTraversalError, ensureDir, renameNoClobber, atomicWriteFile } from '../utils/fs-utils.js';
 
 // resolveSafePath 单元测试：四步防线
 // （归一化、相等排除 + sep 边界、逐段 realpath、最终目标 symlink 拒绝）
@@ -311,5 +311,118 @@ describe('fs-utils atomicWriteFile', () => {
     } finally {
       spy.mockRestore();
     }
+  });
+});
+
+// ── 路径包含校验收敛（三实现单源化）：解析面 resolveContainedPath 与文本面
+// isPathContained 的差异维度矩阵（相等排除 / symlink / base 存在性 / 大小写）──
+describe('fs-utils resolveContainedPath（解析面，绝对/混合 target）', () => {
+  let root;
+  let base;
+
+  beforeEach(() => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'mcs-resolve-contained-'));
+    base = path.join(root, 'base');
+    fs.mkdirSync(base);
+    fs.writeFileSync(path.join(base, 'file.txt'), 'data');
+  });
+
+  afterEach(() => {
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it('绝对 target 在 base 内 → 返回归一化绝对路径', () => {
+    expect(resolveContainedPath(base, path.join(base, 'sub', 'x'))).toBe(path.join(base, 'sub', 'x'));
+  });
+
+  it('相对 target 按 base 拼接（不依赖进程 CWD）', () => {
+    expect(resolveContainedPath(base, 'sub/x')).toBe(path.join(base, 'sub', 'x'));
+  });
+
+  it('target 等于 base：默认拒绝，allowRoot 放行', () => {
+    expect(() => resolveContainedPath(base, base)).toThrow(PathTraversalError);
+    expect(resolveContainedPath(base, base, { allowRoot: true })).toBe(base);
+  });
+
+  it('兄弟目录前缀陷阱（base-evil）拒绝', () => {
+    const evil = path.join(root, 'base-evil');
+    fs.mkdirSync(evil);
+    expect(() => resolveContainedPath(base, evil)).toThrow(PathTraversalError);
+  });
+
+  it('.. 逃逸与 NUL 字节拒绝', () => {
+    expect(() => resolveContainedPath(base, path.join(base, '..', 'evil'))).toThrow(PathTraversalError);
+    expect(() => resolveContainedPath(base, 'a\0b')).toThrow(PathTraversalError);
+  });
+
+  it('缺失叶子（无 symlink）通过：前缀 + 逐段 realpath 兜底', () => {
+    expect(resolveContainedPath(base, path.join(base, 'new', 'deep'))).toBe(path.join(base, 'new', 'deep'));
+  });
+
+  // Windows 创建符号链接需要管理员权限或开发者模式：探测一次，不可用则跳过
+  const probe = fs.mkdtempSync(path.join(os.tmpdir(), 'mcs-symlink-probe2-'));
+  let symlinkSupported = false;
+  try {
+    fs.symlinkSync('probe-target', path.join(probe, 'probe-link'), 'file');
+    symlinkSupported = true;
+  } catch {}
+  finally {
+    fs.rmSync(probe, { recursive: true, force: true });
+  }
+
+  it.skipIf(!symlinkSupported)('中间目录 symlink 指向 base 外 + 叶子缺失 → 拒绝（旧 backup 实现的漏检面）', () => {
+    const outside = path.join(root, 'outside');
+    fs.mkdirSync(outside);
+    fs.symlinkSync(outside, path.join(base, 'world'), 'junction');
+    // 叶子不存在，旧实现（只对完整目标 realpath）会因 realpath ENOENT 而放行
+    expect(() => resolveContainedPath(base, path.join(base, 'world', 'newfile')))
+      .toThrow(PathTraversalError);
+  });
+
+  it.skipIf(!symlinkSupported)('最终目标 symlink（即使指向 base 内）拒绝：第 ④ 步', () => {
+    fs.mkdirSync(path.join(base, 'real'));
+    fs.symlinkSync(path.join(base, 'real'), path.join(base, 'link'), 'junction');
+    expect(() => resolveContainedPath(base, path.join(base, 'link'))).toThrow(PathTraversalError);
+  });
+
+  it('base 不存在：缺省抛 ENOENT，baseMustExist=false 容忍（备份先校验后判存在的口径）', () => {
+    const missing = path.join(root, 'no-such-base');
+    expect(() => resolveContainedPath(missing, path.join(missing, 'world')))
+      .toThrow(expect.objectContaining({ code: 'ENOENT' }));
+    expect(resolveContainedPath(missing, path.join(missing, 'world'), { baseMustExist: false }))
+      .toBe(path.join(missing, 'world'));
+  });
+});
+
+describe('fs-utils isPathContained（文本面，内部候选过滤）', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mcs-text-contained-'));
+  const base = path.join(root, 'base');
+  fs.mkdirSync(base);
+
+  afterAll(() => {
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it('相等允许（与解析面的唯一语义分歧之一）：「实例根本身」是合法候选', () => {
+    expect(isPathContained(base, base)).toBe(true);
+  });
+
+  it('子路径与相对 target 拼接', () => {
+    expect(isPathContained(base, path.join(base, 'world', 'x'))).toBe(true);
+    expect(isPathContained(base, 'world/x')).toBe(true);
+  });
+
+  it('兄弟前缀陷阱与 .. 逃逸拒绝', () => {
+    expect(isPathContained(base, path.join(root, 'base-evil', 'x'))).toBe(false);
+    expect(isPathContained(base, path.join(base, '..', 'evil'))).toBe(false);
+  });
+
+  it('symlink 维度：文本面不跟随也不检测（合法 symlink 世界目录放行）', () => {
+    // 与解析面的关键分歧：文本面零 fs 判定，路径字面在 base 内即 true
+    expect(isPathContained(base, path.join(base, 'world-symlinked', 'players'))).toBe(true);
+  });
+
+  it('大小写维度：前缀按字面比较、不折叠（Windows 上只误拒不误放）', () => {
+    expect(isPathContained(base, path.join(root, 'BASE', 'sub'))).toBe(false);
   });
 });

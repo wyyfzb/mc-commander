@@ -43,7 +43,7 @@ import {
 } from '../services/backup.service.js';
 import { BackupModel as MockBackupModel } from '../db/backup.model.js';
 
-describe('resolveContained 路径包含校验', () => {
+describe('resolveContained 路径包含校验（收敛到 fs-utils 解析面后的错误形态翻译层）', () => {
   const tmpBase = fs.mkdtempSync(path.join(os.tmpdir(), 'backup-resolve-'));
   const base = path.join(tmpBase, 'base');
   fs.mkdirSync(base);
@@ -55,23 +55,23 @@ describe('resolveContained 路径包含校验', () => {
 
   it('../ 越界目标抛 PATH_TRAVERSAL_DETECTED', () => {
     expect(() => resolveContained(base, path.join(base, '..', 'evil')))
-      .toThrowError(/Path traversal detected/);
+      .toThrowError(/escapes instance root/);
   });
 
   it('绝对路径逃逸抛 PATH_TRAVERSAL_DETECTED', () => {
     expect(() => resolveContained(base, path.join(tmpBase, 'outside')))
-      .toThrowError(/Path traversal detected/);
+      .toThrowError(/escapes instance root/);
   });
 
   it('目标等于 base 本身被拒绝（相等排除）', () => {
-    expect(() => resolveContained(base, base)).toThrowError(/Path traversal detected/);
+    expect(() => resolveContained(base, base)).toThrowError(/resolves to instance root/);
   });
 
   it('前缀陷阱（/base-evil 非 /base 子路径）被拒绝', () => {
     const evil = path.join(tmpBase, 'base-evil');
     fs.mkdirSync(evil);
     try {
-      expect(() => resolveContained(base, evil)).toThrowError(/Path traversal detected/);
+      expect(() => resolveContained(base, evil)).toThrowError(/escapes instance root/);
     } finally {
       fs.rmSync(evil, { recursive: true, force: true });
     }
@@ -88,9 +88,15 @@ describe('resolveContained 路径包含校验', () => {
     }
     if (linkCreated) {
       expect(() => resolveContained(base, path.join(base, 'world')))
-        .toThrowError(/Symlink escape detected/);
+        .toThrowError(/via symlink/);
     }
     fs.rmSync(outside, { recursive: true, force: true });
+  });
+
+  it('基座目录不存在时容忍（存在性由后续业务步骤判定，不在此报 ENOENT）', () => {
+    const missing = path.join(tmpBase, 'no-such-base');
+    expect(resolveContained(missing, path.join(missing, 'world')))
+      .toBe(path.join(missing, 'world'));
   });
 
   afterAll(() => {
@@ -154,7 +160,7 @@ describe('restoreBackup 路径与状态校验（实例级恢复）', () => {
       file_path: 'D:/evil/outside',
     });
     const service = new BackupService(null);
-    await expect(service.restoreBackup(1)).rejects.toThrow('Path traversal detected');
+    await expect(service.restoreBackup(1)).rejects.toThrow('escapes instance root');
   });
 
   it('file_path 指向另一个实例的合法快照 → 拒绝（归属校验，防跨实例灌数据）', async () => {
@@ -167,7 +173,7 @@ describe('restoreBackup 路径与状态校验（实例级恢复）', () => {
     });
     const service = new BackupService(null);
     // 只校验「在 backupsDir 内」会放行这条记录：恢复会把 s2 的世界数据灌进 s1
-    await expect(service.restoreBackup(1)).rejects.toThrow('Path traversal detected');
+    await expect(service.restoreBackup(1)).rejects.toThrow('escapes instance root');
   });
 
   it('file_path 在备份目录内但快照目录不存在时报原错误', async () => {
@@ -251,7 +257,7 @@ describe('deleteBackup 对 file_path 校验（异步化）', () => {
     const service = new BackupService(null);
     // deleteBackup 为异步（rm 大目录不阻塞事件循环），同步 throw 改为
     // Promise rejection
-    await expect(service.deleteBackup(1)).rejects.toThrowError(/Path traversal detected/);
+    await expect(service.deleteBackup(1)).rejects.toThrowError(/escapes instance root/);
   });
 
   it('实例 id 缺失的异常记录：拒绝删除并给明确错误（不是裸 TypeError）', async () => {
@@ -275,7 +281,7 @@ describe('deleteBackup 对 file_path 校验（异步化）', () => {
       source_archive_id: null,
     });
     const service = new BackupService(null);
-    await expect(service.deleteBackup(1)).rejects.toThrowError(/Path traversal detected/);
+    await expect(service.deleteBackup(1)).rejects.toThrowError(/escapes instance root/);
     // 别人的快照原样保留
     expect(fs.existsSync(path.join(victimDir, 'world', 'level.dat'))).toBe(true);
     expect(MockBackupModel.delete).not.toHaveBeenCalled();
