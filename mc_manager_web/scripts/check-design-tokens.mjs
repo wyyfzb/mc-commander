@@ -309,7 +309,7 @@ function checkLine(filePath, lineNum, line) {
 }
 
 /**
- * 一次 `cn`/`clsx` 调用的实参表（J70）：从 `(` 起按括号配平取到配对右括号，跨行；
+ * 一次 `cn`/`clsx` 调用的实参表：从 `(` 起按括号配平取到配对右括号，跨行；
  * 嵌套调用只取最外层（内层实参本就是外层实参的片段，重复计入会让同一处报两次）；
  * 未配平（写法异常）跳过。语义色形态的三条判定（三件套 / 选中强调 / 词表 tint 叠加）
  * 都在这张表上做，口径因此统一：**同一次调用的不同实参拆写与单串共现同判**；
@@ -377,7 +377,7 @@ function findToneTintOverlaps(content) {
 /**
  * 六档语义色的「静态三件套」声明源只有 mcs/tone.ts。
  * 判定面＝一次 cn/clsx 调用的实参表 ∪ 单个字面量：三件套拆到同一次调用的不同实参里同样算
- * 手写（J70 扩面），拆到不同调用、不同元素上则看不见（宁漏不误报）。
+ * 手写（扩面），拆到不同调用、不同元素上则看不见（宁漏不误报）。
  * 按空白切词做**整词**比对（不用子串包含）：`border-mcs-accent-border-strong` 是另一档
  * 描边（选中强调，由下面 findHandwrittenSelectedShapes 单独判定）、`hover:bg-mcs-*-bg-subtle`
  * 是交互覆盖层而非内容面 tint，两者都不算手写三件套，不能被误报。
@@ -411,7 +411,7 @@ function findHandwrittenToneTriads(content) {
 }
 
 /**
- * 选中强调形态（J57）：`border-mcs-accent-border-strong` 与 `bg-mcs-accent-bg-subtle`
+ * 选中强调形态：`border-mcs-accent-border-strong` 与 `bg-mcs-accent-bg-subtle`
  * 同处共现（同一次 cn/clsx 调用的实参表，或单个字面量）即为手写选中态。词表的两个形状都由
  * 这两个 token 构成——三件套 `TONE_SELECTED_CLASSES` 与两件套容器
  * `TONE_SELECTED_SURFACE_CLASSES`（后者把前景留给子元素），故一条判定同时覆盖两种现场；
@@ -766,7 +766,7 @@ for (const f of G9_FILES) {
   })
 }
 
-// ── G21–G27（J23 门禁 + t27 第 27 条）：src/ 全量静态防线 ────────────────────────
+// ── G21–G27：src/ 全量静态防线 ────────────────────────
 // 前 20 条按各自的扫描集（逐行 1–11 排除 ui/；12–20 含 ui/ 与 e2e/），这些条统一扫 src/ 全量。
 const GATE_FILES = G9_FILES.filter((f) => f.startsWith(srcDir))
 const GATE_REL = (f) => relative(root, f).split(sep).join('/')

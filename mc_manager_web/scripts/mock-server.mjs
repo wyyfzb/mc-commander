@@ -56,7 +56,7 @@ let passwordSet = false
 
 // 只读凭据的 mock 台账（进程内，供设置面板 e2e 用）：生成后 configured 翻真。
 // 开关与 capabilities 上报同源，可用 MOCK_READONLY_ENABLED=false 构造关闭态
-// 归档快照台账（清单 #27）：挂载后清空，与真实服务端的「挂载即建索引 → 清点里不再出现」同形
+// 归档快照台账：挂载后清空，与真实服务端的「挂载即建索引 → 清点里不再出现」同形
 let mockArchivedAttached = false
 
 let mockReadonlyConfigured = false
@@ -815,7 +815,7 @@ const server = createServer((req, res) => {
       }
       return res.end(ok(mockBackups))
     }
-    // 归档快照（清单 #27）：磁盘上有、备份表里没有索引的快照目录
+    // 归档快照：磁盘上有、备份表里没有索引的快照目录
     if (path === '/api/v1/backups/archived' && req.method === 'GET') {
       if (mockArchivedAttached) return res.end(ok([]))
       return res.end(ok([{
@@ -1095,7 +1095,7 @@ const server = createServer((req, res) => {
 })
 
 // ── 最小 WS 端点（对齐真实服务端契约）──────────────────────────────
-// H2-4b：与真实端一致支持两条鉴权通道——①subprotocol 携带凭据（向后兼容）；
+// 与真实端一致支持两条鉴权通道——①subprotocol 携带凭据（向后兼容）；
 // ②首帧消息 auth（客户端主线）：无凭据握手放行，第一条消息必须是
 // {type:'auth', ...}，回执 {type:'auth', ok:true} 后才接受订阅
 // （e2e 专用令牌恒放行——mock 不做凭据校验）

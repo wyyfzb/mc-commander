@@ -85,7 +85,7 @@ export function useServerSocket(instanceId: string | null) {
         apiKey,
         baseUrl,
         sessionToken,
-        // 连接生命周期边沿（UXT-4）：断线即时置 false（激活「实时推送已断」降级态
+        // 连接生命周期边沿：断线即时置 false（激活「实时推送已断」降级态
         // 与降级横幅——此前 socketConnected 只在 effect 挂载/卸载时置位，断线
         // 永远感知不到，degraded 态是死码）；重连成功 onopen 置回 true
         onStateChange: ({ open }) => {

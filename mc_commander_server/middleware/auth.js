@@ -11,7 +11,7 @@ function clientIp(req) {
 }
 
 /**
- * 401 分支补日志（H2-4：此前认证失败全静默，爆破不可见）。
+ * 401 分支补日志（此前认证失败全静默，爆破不可见）。
  * 级别分档：无效凭据（key 错 / 令牌未知 / 头缺失）= 潜在攻击信号 → warn；
  * 会话正常生命周期（到期 / 绝对过期）= 客户端会自动重登 → debug。
  * 日志只含 IP 与路径，永不记录凭据/令牌本体。
@@ -179,7 +179,7 @@ export function authMiddleware(req, res, next) {
   }
 
   logAuthRejection(req, 'missing credentials');
-  // 定向文案（清单 #19）：此处是「没带凭据」，与「带了但不对」（40101）分开报码——
+  // 定向文案：此处是「没带凭据」，与「带了但不对」（40101）分开报码——
   // 复用 40101 会让客户端提示「Key 无效或已过期」，把用户引向轮换一把本来没问题的 Key
   return res.status(401).json(error(ErrorCodes.AUTH_CREDENTIALS_REQUIRED));
 }

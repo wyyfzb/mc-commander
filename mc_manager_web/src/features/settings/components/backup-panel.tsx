@@ -88,7 +88,7 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
   const instanceName = instancesQuery.data?.find((i) => i.id === instanceId)?.name ?? ''
 
   const backupsQuery = useBackups(instanceId)
-  // 归档快照（清单 #27）：卸载实例后按设计保留、但已无索引的快照目录。
+  // 归档快照：卸载实例后按设计保留、但已无索引的快照目录。
   // 挂载入口只在存在可挂载项时出现（空态不出一个「永远没有内容」的区块）
   const archivedQuery = useArchivedSnapshots(Boolean(instanceId))
   const attachMutation = useAttachArchive(instanceId)
@@ -362,7 +362,7 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
         </div>
       </ConfirmDialog>
 
-      {/* ── 归档快照（清单 #27）：卸载实例保留下来、但已无索引的快照目录 ── */}
+      {/* ── 归档快照：卸载实例保留下来、但已无索引的快照目录 ── */}
       {archivedQuery.isError && (
         <p className="mt-2 border-t border-mcs-border-subtle px-4 py-3 text-mcs-2xs text-mcs-text-muted">
           归档快照清点失败（服务端暂时不可用），刷新页面可重试。

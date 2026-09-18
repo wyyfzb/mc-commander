@@ -2,7 +2,7 @@ import { getDb } from './database.js';
 import { logger } from '../utils/logger.js';
 import { parseDbTime, toIsoUtc } from '../utils/db-time.js';
 
-// 对外查询列白名单（find-021）：显式列出字段，绝不返回 file_path。
+// 对外查询列白名单：显式列出字段，绝不返回 file_path。
 // file_path 是服务器本地磁盘路径，原样下发给 API 客户端会泄露服务器
 // 目录结构（且可被用于探测/构造路径）；file_path 仅服务层内部通过
 // findByIdWithPath 获取（restoreBackup/deleteBackup 需要）。

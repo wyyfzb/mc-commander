@@ -81,7 +81,7 @@ export function toneOutlineClasses(tone: SemanticTone): string {
 }
 
 /**
- * 选中/激活态（J57）：强档描边 token（`--mcs-accent-border-strong`，≥3:1）承担
+ * 选中/激活态：强档描边 token（`--mcs-accent-border-strong`，≥3:1）承担
  * 「已选中」的可辨识信息（弱档仅装饰），与同档内容面 + 同档前景构成第三种词表形状。
  * token 现状只有 accent 与 error 带强档描边；error 的同形三件套目前只被 ui/button
  * 的危险变体消费（在门禁扫描范围外），其余四色没有强档 token，故此处只出 accent 常量——

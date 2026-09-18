@@ -22,7 +22,7 @@ import { logger } from '../../utils/logger.js';
 
 
 // 日志单行最大长度：超长行截断并加标记，防超长输出（崩溃堆栈/异常打印）撑爆
-// logBuffer 与 WebSocket 广播（find-023-server 单行截断）。
+// logBuffer 与 WebSocket 广播（单行截断）。
 const LOG_LINE_MAX_LENGTH = 4096;
 
 /// 单行日志截断：按行截断超过 LOG_LINE_MAX_LENGTH 的行，超长部分加 "…[truncated]" 标记。
@@ -77,7 +77,7 @@ export function _cleanWorldLock() {
   // 注意：不使用 pkill，避免误杀同名进程和命令注入风险
   this.process = null;
   // 使用 level-name 而非硬编码 'world'，兼容自定义世界目录名；
-  // 服务层兜底校验（extra-1）：非法/越界 level-name 回退 'world'，
+  // 服务层兜底校验：非法/越界 level-name 回退 'world'，
   // 保证 unlink 只作用于实例目录内的锁文件（越界拒绝并告警）
   const lockLevelName = this._getSafeLevelName();
   const lockPath = path.join(this.serverPath, lockLevelName, 'session.lock');
@@ -87,12 +87,12 @@ export function _cleanWorldLock() {
 export function _resolveStartCommand(startCommand) {
   let command, args;
 
-  // ── 启动命令/参数构建（find-002-service 结构化改造，移除自由字符串执行能力）──
+  // ── 启动命令/参数构建（结构化改造，移除自由字符串执行能力）──
   // 四种来源（优先级从高到低）：
   // 1. 调用方结构化参数 start({ jvmArgs: [...] })：command 固定 javaPath，
   //    jvmArgs 过白名单校验（仅 -X/-D 前缀与 -jar，-jar 路径必须位于 serverPath 内）；
   // 2. 实例配置持久化的 jvmArgs（DB jvm_args 列，实例设置弹窗写入）：
-  //    与传参同规则校验，实现"结构化启动参数可持久化"闭环（find-002）；
+  //    与传参同规则校验，实现"结构化启动参数可持久化"闭环；
   // 3. 旧接口兼容：调用方传字符串命令 / 实例配置的旧 startCommand 字段，
   //    解析为 命令+参数 并逐项校验（java 可执行特征 + 参数白名单），
   //    不合法时拒绝启动并报清晰错误（不静默执行）。restart/自动重启/
@@ -224,7 +224,7 @@ export function _filterLogNoise(text) {
 }
 
 /** 日志文本统一摄取入口：stdout 管道、stderr 与接管实例的文件续读共用——
- *  过滤（stdout 语义）→ 单行截断（find-023-server）→ logBuffer 滚动 + WS 推送
+ *  过滤（stdout 语义）→ 单行截断→ logBuffer 滚动 + WS 推送
  *  + 输出解析。三条来源共用可保证接管实例的日志行为与常规实例完全一致。 */
 export function _ingestLogText(text, type = 'stdout') {
   this.lastOutput = text;

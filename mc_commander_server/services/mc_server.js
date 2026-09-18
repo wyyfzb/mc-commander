@@ -238,7 +238,7 @@ export class MCServerInstance extends EventEmitter {
     this.minMemory = minMemory;
     this.serverPath = serverPath;
     this.startCommand = startCommand || null;
-    // 结构化 JVM 参数（find-002 闭环：实例级持久化，start() 无传参时使用）
+    // 结构化 JVM 参数（闭环：实例级持久化，start() 无传参时使用）
     this.jvmArgs = Array.isArray(jvmArgs) ? jvmArgs : null;
     // 意外停止自动重启开关（DB 持久化，默认开）
     this.autoRestart = autoRestart !== undefined ? Boolean(autoRestart) : true;
@@ -248,7 +248,7 @@ export class MCServerInstance extends EventEmitter {
     this._manualStop = false;
     this.process = null;
     this.isRunning = false;
-    // 孤儿接管态（UXT-15）：adopted=本实例进程非本面板 spawn、由 pid 文件接管而来。
+    // 孤儿接管态：adopted=本实例进程非本面板 spawn、由 pid 文件接管而来。
     // 接管实例无 stdout/stdin 管道（this.process 保持 null），命令仅 RCON 通道，
     // 退出感知走看门狗轮询（adopt.js），this.process 众多守卫据此放行。
     this.adopted = false;
@@ -310,13 +310,13 @@ export class MCServerInstance extends EventEmitter {
     this._detectPublicIp();
     // 启动时读取世界出生点（纯文件 I/O，不阻塞）
     this._readWorldSpawnFromLevelDat();
-    // 面板（重）启动时从 latest.log 回填当次运行日志（UXT-24），见方法注释
+    // 面板（重）启动时从 latest.log 回填当次运行日志，见方法注释
     this._loadLogBufferFromLatestLog();
   }
 
-  /// 面板（重）启动时从 vanilla 的 latest.log 回填日志缓冲（UXT-24）：
+  /// 面板（重）启动时从 vanilla 的 latest.log 回填日志缓冲：
   /// logBuffer 是纯内存态，面板重启即清空——运行中实例的当次运行日志
-  /// （含启动段）随面板重启从终端消失，孤儿接管（UXT-15）场景同样断档。
+  /// （含启动段）随面板重启从终端消失，孤儿接管场景同样断档。
   /// latest.log 由 MC 自身每次启动重写、持续落盘，天然就是「当次运行」
   /// 的权威日志；取尾部至多 1000 行（与 logBuffer 滚动上限一致）注入。
   /// start() 的 _initializeRuntimeState 仍会清空缓冲：新一次运行从空开始，
@@ -461,7 +461,7 @@ export class MCServerInstance extends EventEmitter {
   }
 
   /// 属性值转义：将值内真实换行（\n/\r）替换为字面 "\\n"/"\\r"，
-  /// 防止单属性值内嵌换行走私多键注入（find-018-service）。
+  /// 防止单属性值内嵌换行走私多键注入。
   /// server.properties 为逐行 key=value 格式，真实换行会被当作行分隔符解析。
   _escapePropertyValue(value) {
     return String(value)
@@ -535,7 +535,7 @@ export class MCServerInstance extends EventEmitter {
   }
 
 
-  /// 校验可执行文件是否为合法 java 启动器（find-002-service javaPath 校验）：
+  /// 校验可执行文件是否为合法 java 启动器（javaPath 校验）：
   /// - 路径形式（含路径分隔符/绝对路径）：必须 existsSync，且文件名符合 java 特征
   ///   （java/javaw/java.exe/javaw.exe）；
   /// - 纯命令名：仅允许 java 系列（走 PATH，existsSync 对 PATH 命令恒 false 无法预校验），
@@ -553,11 +553,11 @@ export class MCServerInstance extends EventEmitter {
     return /^java(?:w)?(?:\.exe)?$/i.test(name);
   }
 
-  /// 启动参数白名单校验（find-002-service 结构化参数）：
+  /// 启动参数白名单校验（结构化参数）：
   /// 仅允许 -X/-D 前缀参数、'nogui' 与 '-jar'；'-jar' 的路径参数 resolve 后
   /// 必须位于 serverPath 内（越界拒绝）。非法参数抛错拒绝启动，
   /// 杜绝经 jvmArgs/旧 startCommand 注入任意可执行行为。
-  /// 结构化 jvmArgs 补全基础参数（find-002 回归修复）：
+  /// 结构化 jvmArgs 补全基础参数（回归修复）：
   /// 客户端语义为「附加 JVM flags」（-jar 之前的 token，见 instance_settings_dialog），
   /// -Xmx/-Xms 由 maxMemory/minMemory 字段管理、-jar/nogui 由 jarFile 字段管理；
   /// 此处按该语义补全缺失项（已显式提供则尊重原值，如显式 -jar 视为完整参数），
@@ -607,7 +607,7 @@ export class MCServerInstance extends EventEmitter {
     return result;
   }
 
-  /// 旧 startCommand 兼容解析（find-002-service 兼容读取）：
+  /// 旧 startCommand 兼容解析（兼容读取）：
   /// 旧实例配置的 startCommand / 调用方传入的字符串命令解析为 命令+参数，
   /// 逐项校验（可执行文件 java 特征 + 参数白名单），不合法时拒绝启动并报清晰错误，
   /// 而不是静默按自由字符串执行。
@@ -645,7 +645,7 @@ export class MCServerInstance extends EventEmitter {
 
     const { command, args } = this._resolveStartCommand(startCommand);
     this._spawnServerProcess(command, args);
-    // pid 文件是面板重启后接管孤儿进程的唯一线索（UXT-15），spawn 成功即落盘
+    // pid 文件是面板重启后接管孤儿进程的唯一线索，spawn 成功即落盘
     this._writePidFile();
     this._attachSpawnErrorListener();
     this._attachStdinErrorListener();
@@ -1568,7 +1568,7 @@ export class MCServerInstance extends EventEmitter {
 
   // 从 playerdata/<uuid>.dat 读取物品栏（gzip NBT），返回快照数据
   _loadInventoryFromDat(uuid, playerName) {
-    // level-name 服务层兜底校验（find-008-read）：非法/越界回退 'world'
+    // level-name 服务层兜底校验：非法/越界回退 'world'
     const levelName = this._getSafeLevelName();
     const candidates = [
       // MC 26.1+ 新世界格式：players/data
@@ -1590,7 +1590,7 @@ export class MCServerInstance extends EventEmitter {
 
     let datPath = null;
     for (const c of candidates) {
-      // 兜底防御（find-008-read）：候选路径 resolve 后必须位于 serverPath 内，越界丢弃
+      // 兜底防御：候选路径 resolve 后必须位于 serverPath 内，越界丢弃
       if (!isPathContained(this.serverPath, c)) continue;
       if (fs.existsSync(c)) { datPath = c; break; }
     }
@@ -2057,9 +2057,9 @@ Object.assign(MCServerInstance.prototype, outputParser);
 // 全部调用点零改动，对外接口零变化。
 Object.assign(MCServerInstance.prototype, statsCollector);
 
-// 接管实例日志续读域挂载（UXT-15 后续）：log-tail 模块经原型注入复用，
+// 接管实例日志续读域挂载（后续）：log-tail 模块经原型注入复用，
 // 接管实例改读 latest.log 尾部以恢复日志与事件解析（详见模块头注释）。
 Object.assign(MCServerInstance.prototype, logTail);
 
-// 孤儿进程接管域挂载（UXT-15 根修）：pid 文件与面板重启后接管，机制见 adopt.js 头注释。
+// 孤儿进程接管域挂载（根修）：pid 文件与面板重启后接管，机制见 adopt.js 头注释。
 Object.assign(MCServerInstance.prototype, adopt);

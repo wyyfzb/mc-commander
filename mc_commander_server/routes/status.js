@@ -386,7 +386,7 @@ export function createStatusRoutes(serverManager) {
   }));
 
   // POST /api/instances/:id/start
-  // 输入侧契约（issue 486）：startCommand 禁用键 schema 前置 400（find-002）；
+  // 输入侧契约（issue 486）：startCommand 禁用键 schema 前置 400；
   // 下方路由层原判断保留作纵深防御（中间件被移除时仍封堵 RCE）
   router.post('/instances/:id/start', validateBody(instanceStartRequestBodySchema), asyncHandler(async (req, res) => {
     const instance = serverManager.getInstance(req.params.id);

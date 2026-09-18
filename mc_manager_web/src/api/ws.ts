@@ -1,7 +1,7 @@
 /**
  * WebSocket 封装（设计文档 §5.1 ws.ts）
  * 契约（服务端 websocket.js）：
- *  - 鉴权（H2-4b 首帧通道，主线）：连接建立后客户端第一条消息必须是
+ *  - 鉴权（首帧通道，主线）：连接建立后客户端第一条消息必须是
  *    {type:'auth', apiKey? | sessionToken?}，服务端校验通过回执
  *    {type:'auth', ok:true}，失败/超时/首条非 auth 一律 close(1008)。
  *    1008 + auth 类 reason 为终态：不自动重连（无效凭据重试会把自己
@@ -38,7 +38,7 @@ const WS_OPEN = 1
 const MAX_RECONNECT_DELAY_MS = 30_000
 const RECONNECT_BASE_DELAY_MS = 1_000
 const LAST_EVENT_KEY_PREFIX = 'mcs-ws-last-event'
-/** 连接挂起超时：CONNECTING 态超过该时长视为死连接（UXT-4——首连挂起时
+/** 连接挂起超时：CONNECTING 态超过该时长视为死连接（首连挂起时
  *  原生 WebSocket 可能既不 open 也不 error，UI 会永远停留在「连接中」） */
 export const WS_CONNECT_TIMEOUT_MS = 15_000
 /** 鉴权回执等待超时：open 后服务端须在此时限内回 auth 回执（与服务端
@@ -106,7 +106,7 @@ export class McSocket {
     return this.apiKey === options.apiKey && this.sessionToken === (options.sessionToken ?? null)
   }
 
-  /** 建立连接并完成首帧鉴权（H2-4b：open 后发 auth 消息，auth-ok 到达才算连上）。
+  /** 建立连接并完成首帧鉴权（open 后发 auth 消息，auth-ok 到达才算连上）。
    *  幂等：连接进行中（CONNECTING）或已建立（OPEN）时复用既有 promise，
    *  不再新建 WebSocket —— effect 重跑/重复点重连按钮不会产生双连接、事件不会重复派发 */
   connect(): Promise<void> {
@@ -125,7 +125,7 @@ export class McSocket {
     const promise = new Promise<void>((resolve, reject) => {
       const ws = new this.WebSocketImpl(this.url)
       this.ws = ws
-      // 连接挂起看门狗（UXT-4）：CONNECTING 超时视为死连接，主动 close
+      // 连接挂起看门狗：CONNECTING 超时视为死连接，主动 close
       // （close 回调清锚点并进入指数退避重连）——否则 UI 永远停在「连接中」
       this.connectTimeoutTimer = setTimeout(() => {
         if (this.ws === ws && ws.readyState === WS_CONNECTING) {

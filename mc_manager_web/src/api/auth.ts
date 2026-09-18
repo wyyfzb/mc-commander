@@ -1,6 +1,6 @@
 /**
  * Auth API（安全主线：管理员密码登录 / 会话管理）
- * 对照服务端 routes/auth.js（R10 #54）：
+ * 对照服务端 routes/auth.js：
  *  - status/setup/login 为公开端点（未认证可达，登录页首屏探测与凭据交换）
  *  - password/logout/sessions 需认证（Bearer 会话或 X-API-Key 双通道均可）
  * 类型与信封字段 camelCase 对齐服务端响应（token/sessionId/expiresAt/userAgent…）

@@ -2,7 +2,7 @@
  * OverviewTab 操作按钮组（三组语义分区——状态切换 | 游戏干预 | 危险）
  * 自 detail-overview-tab.tsx 纯搬移（issue 489 治理线延续）：操作域 JSX 与专属图标/菜单收口，
  * 确认弹窗与消息弹窗状态仍由宿主 OverviewTab 持有，经回调上抛
- * 交互口径（J15，与行内菜单、批量条共用 reversible-action）：可逆操作直执 + 5s 撤销；
+ * 交互口径（与行内菜单、批量条共用 reversible-action）：可逆操作直执 + 5s 撤销；
  * 无逆操作的踢出不挂撤销；清空背包超出本组职责，上抛宿主走后果清单确认
  */
 import {

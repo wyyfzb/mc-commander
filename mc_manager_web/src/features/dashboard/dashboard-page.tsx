@@ -63,7 +63,7 @@ export function DashboardPage() {
   const statusLoading = statusQuery.isLoading && status === null && !statusFailed
 
   // 两条查询各自失败都要有出口：只报状态失败会把「资源卡永久停在暂无数据、又无重试」
-  // 留成静默（J49）。两条都失败时合并为一条横幅、一次重试，避免横幅堆叠。
+  // 留成静默。两条都失败时合并为一条横幅、一次重试，避免横幅堆叠。
   const statsFailed = queryFailed(systemStatsQuery)
   const failedSources = [
     statusFailed ? '服务器状态' : null,
@@ -114,7 +114,7 @@ export function DashboardPage() {
 
       {/* 终端主体 + 右栏卡。
           单列窄屏（<xl）主栅格必须按内容高度排布：外层是定高 flex 列，`min-h-0 flex-1`
-          会让这一行被压到几像素，行内 flex-1 的终端与右栏 <aside> 一并塌陷（R19：
+          会让这一行被压到几像素，行内 flex-1 的终端与右栏 <aside> 一并塌陷（
           375 下右栏只剩 3.6px 高、三张卡用户完全够不到）。xl 起恢复 min-h-0 flex-1，
           让终端吃满剩余高度、右栏自身滚动（桌面口径不变）。 */}
       <div className="grid flex-1 grid-cols-1 gap-4 xl:min-h-0 xl:grid-cols-[minmax(0,1fr)_336px]">

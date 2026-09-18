@@ -60,7 +60,7 @@ export function createBackupRoutes(serverManager) {
     res.json(validatedSuccessPaginated(backupItemSchema, result.backups, result.total, page, pageSize));
   }));
 
-  // GET /backups/archived —— 归档快照清点（清单 #27）
+  // GET /backups/archived —— 归档快照清点
   //
   // 卸载实例会删掉备份表记录、但快照目录按设计留在 backupsDir/<原实例 id>/：
   // 此后它们既不出现在任何实例的备份列表里，又会随保留期孤儿清扫被删。本端点把

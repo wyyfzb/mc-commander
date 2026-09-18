@@ -282,7 +282,7 @@ export class UpgradeService {
    * 等待备份完成（封装 BackupService 事件）
    * @param {string} instanceId
    * @param {AbortSignal|null} [signal] 取消信号：中断等待并让升级中止。
-   *   备份本身不随之中断（BackupService 尚未接取消，见清单 #95），它会照常跑完并
+   *   备份本身不随之中断（BackupService 尚未接取消），它会照常跑完并
    *   留下一个正常备份——升级取消不需要删除它（那是用户的既有灾备副本）
    */
   _createBackupAndWait(instanceId, signal = null) {

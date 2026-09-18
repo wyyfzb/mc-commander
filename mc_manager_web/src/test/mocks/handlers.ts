@@ -517,7 +517,7 @@ const backupHandlers = [
   http.get('*/api/v1/instances/:id/backups', () => ok(backupItemSchema.array().parse(mockBackups))),
   // 归档清点/挂载必须排在 `/backups/:id` 之前：MSW 首个匹配胜出，而 `:id` 是通配段，
   // 排在前面会把 `/backups/archived` 当详情查询吃掉（返回 404 → 面板渲染清点失败）
-  // 归档快照（清单 #27）：默认空清单（多数用例不关心）；需要的用例自行 use() 覆盖
+  // 归档快照：默认空清单（多数用例不关心）；需要的用例自行 use() 覆盖
   http.get('*/api/v1/backups/archived', () => ok([])),
   // 挂载：默认「没有可挂载项」；用例自行 use() 覆盖出参与失败分支
   http.post('*/api/v1/instances/:id/backups/attach', () => ok({ attached: 0, skipped: 0 })),

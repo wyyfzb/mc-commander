@@ -205,7 +205,7 @@ function syncListFileChanges(instance, fileName, oldEntries, newEntries) {
   })();
 }
 
-// 统一实例内路径校验入口（find-006/007 共用）：resolveSafePath 抛出的
+// 统一实例内路径校验入口（共用）：resolveSafePath 抛出的
 // PathTraversalError 映射为 PATH_TRAVERSAL_DETECTED（403）；其余错误原样上抛，
 // 由各路由现有 catch 按 ENOENT→FILE_NOT_FOUND（404）的风格处理
 function resolveInstancePath(basePath, userPath, options) {
@@ -235,7 +235,7 @@ export function createFileRoutes(serverManager) {
       }
 
       const basePath = instance.serverPath || path.join(config.serversDir, instanceId);
-      // 统一路径校验（find-006/007）：resolveSafePath 四步防线——path.resolve 归一化、
+      // 统一路径校验：resolveSafePath 四步防线——path.resolve 归一化、
       // 相等排除 + sep 边界、已存在组件逐段 realpath、最终目标 symlink 拒绝。
       // 列表根目录 '/' 是唯一合法的"归一化后等于实例根"场景，故传 allowRoot。
       const fullPath = resolveInstancePath(basePath, dirPath, { allowRoot: true });
@@ -306,7 +306,7 @@ export function createFileRoutes(serverManager) {
       }
 
       const basePath = instance.serverPath || path.join(config.serversDir, instanceId);
-      // 统一路径校验（find-006/007）：实例内符号链接可越界读任意文件，
+      // 统一路径校验：实例内符号链接可越界读任意文件，
       // 与 GET /content 同级别的 realpath + symlink 拒绝防线
       const fullPath = resolveInstancePath(basePath, filePath);
 
@@ -358,7 +358,7 @@ export function createFileRoutes(serverManager) {
       }
 
       const basePath = instance.serverPath || path.join(config.serversDir, instanceId);
-      // 统一路径校验（find-007）：实例目录内符号链接可越界读文件（root 运行时
+      // 统一路径校验：实例目录内符号链接可越界读文件（root 运行时
       // 可读 /etc/shadow 等敏感文件），resolveSafePath 逐段 realpath + 最终目标
       // symlink 拒绝
       const fullPath = resolveInstancePath(basePath, filePath);
@@ -415,7 +415,7 @@ export function createFileRoutes(serverManager) {
       }
 
       const basePath = instance.serverPath || path.join(config.serversDir, instanceId);
-      // 统一路径校验（find-007）：符号链接越界写可覆盖实例外任意文件
+      // 统一路径校验：符号链接越界写可覆盖实例外任意文件
       const fullPath = resolveInstancePath(basePath, filePath);
 
       // 确保目录存在（mkdir recursive 幂等，不做 existsSync 预检）
@@ -524,7 +524,7 @@ export function createFileRoutes(serverManager) {
       }
 
       const basePath = instance.serverPath || path.join(config.serversDir, instanceId);
-      // 统一路径校验（find-006/007）：resolveSafePath 相等性排除兜住根目录删除，
+      // 统一路径校验：resolveSafePath 相等性排除兜住根目录删除，
       // sep 边界杜绝父子实例越界，删除前 lstat 确认目标非符号链接。
       const fullPath = resolveInstancePath(basePath, filePath);
 

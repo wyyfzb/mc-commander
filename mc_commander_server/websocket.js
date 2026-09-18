@@ -60,7 +60,7 @@ export const ClientMessages = {
   AUTH: 'auth',
 };
 
-// ── 只读角色的实时事件白名单（清单 #21 Phase 2，唯一事实源）──────────────
+// ── 只读角色的实时事件白名单（Phase 2，唯一事实源）──────────────
 // 口径与 HTTP 只读白名单同一条：**只读＝监控读数**。故只放行「实例运行状态 /
 // 性能 / 天气 / 玩家在线情况」这类读数事件，其信息面不超过只读可达的 HTTP 端点
 // （/overview、/system-stats、/instances、/instances/:id、/instances/:id/players）。
@@ -111,7 +111,7 @@ export const REPLAY_THROTTLE_MS = 5000;
 // 单连接消息速率限制窗口与上限：窗口内超过上限直接断开（1008），防消息风暴
 export const MESSAGE_RATE_WINDOW_MS = 60000;
 export const MAX_MESSAGES_PER_WINDOW = 60;
-// 首帧鉴权（H2-4b）：pending 连接的 auth 等待超时。pending 连接不在 clients
+// 首帧鉴权：pending 连接的 auth 等待超时。pending 连接不在 clients
 // 集合、不受消息速率限制管，但首条消息即定去留（超时/断开/首条处理），无需
 // 消息数护栏
 export const WS_AUTH_TIMEOUT_MS = 10_000;
@@ -399,7 +399,7 @@ export function setupWebSocket(wss, serverManager) {
 
   wss.on('connection', (ws, req) => {
     // 凭据两条通道：① subprotocol 携带（handleProtocols 提取，向后兼容）；
-    // ② 首帧消息 auth（H2-4b 主线：兼容代理剥离 Sec-WebSocket-Protocol 的部署环境）
+    // ② 首帧消息 auth（主线：兼容代理剥离 Sec-WebSocket-Protocol 的部署环境）
     const apiKey = req._wsApiKey || null;
     const sessionToken = req._wsSessionToken || null;
     // 封禁键取直连 IP（与 HTTP 登录锁定同源，见 utils/credential-lockout.js）
@@ -426,7 +426,7 @@ export function setupWebSocket(wss, serverManager) {
       return;
     }
 
-    // 通道二（H2-4b 主线）：首帧鉴权——第一条消息必须是 auth；首条非 auth/
+    // 通道二（主线）：首帧鉴权——第一条消息必须是 auth；首条非 auth/
     // 凭据错误/坏 JSON 一律 1008 并计入封禁计数；超时与断开不计数（网络慢≠爆破）
     if (pendingAuth.size >= MAX_CONNECTIONS) {
       logger.warn('Rejecting websocket connection: too many pending auth connections');

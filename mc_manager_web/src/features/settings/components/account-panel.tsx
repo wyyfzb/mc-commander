@@ -312,7 +312,7 @@ export function AccountPanel() {
       {/* ── 两步验证（TOTP）挂靠向导 ── */}
       <TotpPanel baseUrl={baseUrl} apiKey={apiKey} authed={authed} />
 
-      {/* ── 只读监控凭据（机器凭据生命周期：清单 #23） ── */}
+      {/* ── 只读监控凭据（机器凭据生命周期） ── */}
       <ReadonlyCredentialPanel baseUrl={baseUrl} apiKey={apiKey} authed={authed} />
 
       {/* ── 活跃会话 ── */}

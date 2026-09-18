@@ -14,7 +14,7 @@ import { parseUncompressed as parseNbtSync } from 'prismarine-nbt';
 import { logger } from '../../utils/logger.js';
 import { isPathContained } from '../../utils/fs-utils.js';
 
-/// level-name 服务层兜底校验（extra-1，与 status-route 路由层白名单双保险）：
+/// level-name 服务层兜底校验（与 status-route 路由层白名单双保险）：
 /// ①正则 ^[A-Za-z0-9_-]+$（不含路径分隔符/..，杜绝路径穿越）；
 /// ②resolve 后必须位于 serverPath 内（路径边界前缀校验）。
 /// 非法/越界时告警并回退 'world'（合法世界名恒在 serverPath 内），

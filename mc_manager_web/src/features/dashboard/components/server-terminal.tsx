@@ -191,7 +191,7 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
     const onResize = () => fit.fit()
     window.addEventListener('resize', onResize)
     // 容器尺寸变化同样要 refit：停止状态条显隐会挤压终端区高度而 window 不变，
-    // 画布保持旧高度会溢出容器，绝对定位层盖住状态条（UXT-24 实测）
+    // 画布保持旧高度会溢出容器，绝对定位层盖住状态条（实测）
     const ro = new ResizeObserver(() => fit.fit())
     ro.observe(containerRef.current)
 
@@ -230,7 +230,7 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
     const term = xtermRef.current
     if (!term) return
     // 缓冲归零联动清屏：启动/重启路径经 store.resetForRestart 清缓冲，
-    // xterm 画布必须同步清——否则当次运行的新日志追加在上一轮渲染行后残留（UXT-24）
+    // xterm 画布必须同步清——否则当次运行的新日志追加在上一轮渲染行后残留
     if (buffer.length === 0 && renderedCountRef.current > 0) {
       term.clear()
       renderedCountRef.current = 0
@@ -502,7 +502,7 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
       </div>
       {/* 停止状态条：随 isRunning 显隐的 DOM 元素而非 xterm 画布内容——
           画布只追加不可擦除，旧实现把标记行写进画布，刷新时 isRunning
-          短暂为 false 的竞态会让「运行中」实例永久残留停止标记（UXT-24 实测） */}
+          短暂为 false 的竞态会让「运行中」实例永久残留停止标记（实测） */}
       {!isRunning && buffer.length > 0 && (
         <div
           className="shrink-0 border-t border-mcs-border-muted bg-mcs-bg-muted px-3 py-1.5 text-center text-mcs-2xs italic text-mcs-text-muted"

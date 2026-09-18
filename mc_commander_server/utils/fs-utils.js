@@ -43,7 +43,7 @@ export const atomicWriteFile = (filePath, content, options = {}) => {
   }
 };
 
-// ── 存在性判定纪律（清单 #20：existsSync 的 TOCTOU 收敛）────────────────
+// ── 存在性判定纪律（existsSync 的 TOCTOU 收敛）────────────────
 // existsSync 只允许用于「判定后不据此变更文件系统」的场景（启动门控、特性开关、
 // 回执展示、日志）。「先判定、再变更」的两步写法天然有窗口：判定为「不存在」后
 // 窗口内被并发创建/删除，变更就落在错误前提上（POSIX rename 会静默覆盖、
@@ -100,7 +100,7 @@ export function renameNoClobber(src, dst) {
   }
 }
 
-// ── 实例文件路径安全（find-006/007/004/extra-1 统一校验模式）────────────
+// ── 实例文件路径安全（统一校验模式）────────────
 // 路径穿越检测专用错误：code 固定 'EPATHTRAVERSAL'，与 fs 原生错误码
 // （'ENOENT'、'EISDIR' 等）互不冲突，路由层据此映射 PATH_TRAVERSAL_DETECTED
 export class PathTraversalError extends Error {

@@ -10,7 +10,7 @@ import { logger } from '../utils/logger.js';
 import { localTimestamp } from '../utils/local-date.js';
 import { INSTANCE_ID_PATTERN } from '../utils/instance-id.js';
 
-// 世界目录名白名单（find-004）：与路由层 server.properties level-name 校验
+// 世界目录名白名单：与路由层 server.properties level-name 校验
 // 一致（^[A-Za-z0-9_-]+$），单段字符集禁止 / \ . 等路径分隔/穿越字符。
 // MC 26.x 新旧版本的 level-name 均符合此字符集。
 const WORLD_NAME_REGEX = /^[A-Za-z0-9_-]+$/;
@@ -30,7 +30,7 @@ const EXCLUDED_DIRS = new Set([
   'backups',
 ]);
 
-// 路径包含校验（find-004）已收敛到 utils/fs-utils.js 的解析面 resolveContainedPath
+// 路径包含校验已收敛到 utils/fs-utils.js 的解析面 resolveContainedPath
 // （四步防线：归一化 → 相等排除 + sep 边界 → 逐段 realpath → 最终目标 symlink 拒绝）。
 // 本文件保留导出名与一层错误形态翻译：路由层契约是 AppError(PATH_TRAVERSAL_DETECTED)，
 // 消息文本随 fs-utils 单源；baseMustExist=false——实例/世界目录的存在性由后续
@@ -583,7 +583,7 @@ export class BackupService {
     }
   }
 
-  // 快照归属校验（find-004 兜底）：防 DB 记录被改成指向别处后，恢复/删除把
+  // 快照归属校验（兜底）：防 DB 记录被改成指向别处后，恢复/删除把
   // 不属于本实例的数据灌进来或删掉。两类行口径不同：
   // - 常规快照：必须位于「本行所属实例」的备份子目录内（backupsDir/<instanceId>/…）。
   //   只校验「在 backupsDir 内」不够——记录被改成指向另一个实例的合法快照时，

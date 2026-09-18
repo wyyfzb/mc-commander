@@ -55,7 +55,7 @@ export async function apiDownloadBackup(config: ConnectionConfig, backupId: numb
 }
 
 /**
- * 归档快照清点（GET /backups/archived；清单 #27）。
+ * 归档快照清点（GET /backups/archived）。
  * 卸载实例会删掉备份表记录、但快照目录按设计保留在磁盘上——此后它们不出现在任何实例的
  * 备份列表里，且会随保留期被自动清理。本端点把「磁盘上有、索引里没有」的那部分清点出来。
  */

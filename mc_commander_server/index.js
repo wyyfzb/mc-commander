@@ -105,7 +105,7 @@ const wss = new WebSocketServer({
   handleProtocols: (protocols, req) => {
     // 双通道 WS 鉴权 subprotocol：API Key（既有）与管理员会话令牌（安全主线）。
     // 仅提取凭据挂到 req，真实校验在 websocket.js connection 时完成。
-    // H2-4b：无凭据 subprotocol 的握手不再拒绝——放行进入「首帧鉴权」通道
+    // 无凭据 subprotocol 的握手不再拒绝——放行进入「首帧鉴权」通道
     // （第一条消息必须是 auth，见 websocket.js），兼容代理剥离
     // Sec-WebSocket-Protocol 头的部署环境；subprotocol 通道保留向后兼容
     for (const p of protocols) {
@@ -127,7 +127,7 @@ app.set('trust proxy', config.trustProxy);
 
 const serverManager = new MCServerManager();
 
-// 孤儿实例接管（UXT-15）：面板重启后扫描各实例 pid 文件，验活接管仍在运行的
+// 孤儿实例接管：面板重启后扫描各实例 pid 文件，验活接管仍在运行的
 // MC 进程（恢复运行态/RCON/停止能力）。必须先于 autoStart 错峰启动执行——
 // 接管置 isRunning=true 后，autoStart 的已运行跳过检查天然防止双开。
 // 失败不阻塞面板启动（接管缺失退化为旧行为：实例失联显示已停止）

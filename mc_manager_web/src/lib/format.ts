@@ -146,7 +146,7 @@ export function worldSizeParts(sizeGB: number | null | undefined): { value: stri
   return { value: sizeGB.toFixed(1), unit: 'GB' }
 }
 
-/** 存档大小统一展示（实例卡/世界页共用）：兼容 number 与数字字符串（UXT-17 两端类型不一） */
+/** 存档大小统一展示（实例卡/世界页共用）：兼容 number 与数字字符串（两端类型不一） */
 export function formatWorldSize(raw: string | number | null | undefined): string {
   if (raw == null || raw === '') return '—'
   const gb = typeof raw === 'number' ? raw : parseFloat(raw)

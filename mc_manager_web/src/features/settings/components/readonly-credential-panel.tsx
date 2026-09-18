@@ -1,5 +1,5 @@
 /**
- * ReadonlyCredentialPanel —— 设置页「只读监控凭据」管理（清单 #23）
+ * ReadonlyCredentialPanel —— 设置页「只读监控凭据」管理
  *
  * 背景：只读机器凭据（`READONLY_API_KEY_HASH`）此前只能改服务端 `.env` 或手调
  * `POST /rotate-readonly-key`——而「未配置 = 该通道不存在」（fail-closed），手工改 .env
