@@ -1,5 +1,5 @@
 /**
- * 部署进度兜底与重复部署门控 E2E（J29）
+ * 部署进度兜底与重复部署门控 E2E
  * 数据源：scripts/mock-server.mjs（结构占位虚构数据）
  * - 刷新页面：兜底快照（GET /instances/deploy/status）恢复在途进度，不回落步骤①
  * - 服务端在途：实例页「部署新实例」入口禁用（消除刷新后的重复发起部署）
@@ -27,7 +27,7 @@ async function setupInFlightDeploy(page: Page) {
   await page.setExtraHTTPHeaders({ 'x-mock-ws-group': 'deploy-fallback' })
 }
 
-test.describe('部署进度兜底（J29）', () => {
+test.describe('部署进度兜底', () => {
   test('刷新页面恢复在途进度，且实例页禁止重复部署', async ({ page }) => {
     await setupInFlightDeploy(page)
     await page.goto('/instances?tab=deploy')

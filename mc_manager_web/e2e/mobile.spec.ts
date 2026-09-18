@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test'
 
 /**
  * 移动端 E2E（viewport 375×812）
- * 验收：侧栏抽屉（汉堡开关/导航关闭）/ 顶栏搜索按钮窄屏可访问名 / 玩家表卡片态（C3）/ 桌面端响应式回归
+ * 验收：侧栏抽屉（汉堡开关/导航关闭）/ 顶栏搜索按钮窄屏可访问名 / 玩家表卡片态 / 桌面端响应式回归
  */
 
 /** 注入连接配置（mock 假 key，mock server 不校验）——严禁真实服务器信息 */
@@ -67,7 +67,7 @@ test.describe('桌面端回归（B1 响应式不改桌面）', () => {
  * 可交互断言。下方的盒子高度断言（`aside` 成块）**同样承重、勿删**——回退修法时实测
  * `aside` 为 343×0，高度断言与 `toBeVisible` 都会红；两条断言互补而非互相替代。
  */
-test.describe('仪表盘右栏窄屏可达（R19）', () => {
+test.describe('仪表盘右栏窄屏可达', () => {
   test.use({ viewport: { width: 375, height: 812 }, reducedMotion: 'reduce' })
 
   test('375px：右栏三卡可达且公告卡可交互', async ({ page }) => {
@@ -178,7 +178,7 @@ test.describe('仪表盘首屏高度预算（1440×900）', () => {
 })
 
 /**
- * 玩家表响应式（J28 形态由实测决定：<1256px 视口下 10 列合计约 1016px 会横向溢出，
+ * 玩家表响应式（形态由实测决定：<1256px 视口下 10 列合计约 1016px 会横向溢出，
  * 表格横向滚动把勾选框与玩家名推出视野 → 中窄屏裁列、<640px 转卡片）
  */
 async function playerTableOverflow(page: Page) {
@@ -188,7 +188,7 @@ async function playerTableOverflow(page: Page) {
   })
 }
 
-test.describe('玩家表中窄屏：裁到核心列（J28）', () => {
+test.describe('玩家表中窄屏：裁到核心列', () => {
   for (const width of [1024, 768]) {
     test(`${width}px：核心列齐全、次级列不渲染、无横向滚动`, async ({ page }) => {
       await page.setViewportSize({ width, height: 900 })
@@ -226,7 +226,7 @@ test.describe('玩家表中窄屏：裁到核心列（J28）', () => {
   })
 })
 
-test.describe('玩家表窄屏：行式卡片（C3）', () => {
+test.describe('玩家表窄屏：行式卡片', () => {
   test.use({ viewport: { width: 375, height: 812 } })
 
   test('375px：表格转卡片，勾选/全选/操作菜单可用且页面无横向溢出', async ({ page }) => {

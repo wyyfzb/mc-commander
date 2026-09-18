@@ -50,7 +50,7 @@ test.describe('任务页', () => {
     await page.getByLabel('任务名称').fill('E2E 占位任务')
     await page.getByRole('button', { name: '每天 4:00' }).click()
     await expect(page.getByLabel('Cron 表达式')).toHaveValue('0 4 * * *')
-    // 收窄到 dialog：任务列表行内也渲染 cronDescription（UX 走查新增），全局 getByText 会 strict violation
+    // 收窄到 dialog：任务列表行内也渲染 cronDescription（走查新增），全局 getByText 会 strict violation
     await expect(page.getByRole('dialog').getByText('04:00每天执行')).toBeVisible()
     // 创建 → 成功 toast
     await page.getByRole('button', { name: '创建' }).click()

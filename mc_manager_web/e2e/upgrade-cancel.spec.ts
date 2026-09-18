@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test'
 
 /**
- * 升级取消 E2E（清单 #94，数据源：scripts/mock-server.mjs 结构占位虚构数据）
+ * 升级取消 E2E（数据源：scripts/mock-server.mjs 结构占位虚构数据）
  * 路径：实例为停止态才给升级入口（运行中菜单里没有该项）→ 操作菜单「升级版本」
  *      → 选目标版本 → 开始升级 → WS 进度事件进入「升级中」视图 → 取消升级（二次确认）
  *      → 服务端补发 cancelled 终态 → 展示取消块（不是失败块）
@@ -41,7 +41,7 @@ async function resetMockScenario(page: Page) {
   }
 }
 
-test.describe('升级取消（清单 #94）', () => {
+test.describe('升级取消', () => {
   test('升级中可取消：确认后展示 cancelled 终态块，而非失败块', async ({ page }) => {
     await setupConnection(page)
     // 先落地再覆写运行态（extraHTTPHeaders 在 reload 后对后续请求生效）

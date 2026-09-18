@@ -156,7 +156,7 @@ test.describe('仪表盘', () => {
     await setupConnection(page)
     await page.goto('/dashboard')
     const input = page.getByLabel('服务器命令输入')
-    // 就绪门（清单 #83 冷启动竞态）：命令发送要求「实例已选中 + 运行中」，两者未就绪时
+    // 就绪门（冷启动竞态）：命令发送要求「实例已选中 + 运行中」，两者未就绪时
     // use-send-command 的守卫会静默丢弃（无 toast 无请求），表现为「等不到 /command」超时。
     // 顶栏出现实例名即 instanceId 已落定（单实例降级分支要求 list[0].id === instanceId），
     // 输入框可用即 isRunning 为真
@@ -174,7 +174,7 @@ test.describe('仪表盘', () => {
     await setupConnection(page)
     await page.goto('/dashboard')
     const input = page.getByLabel('服务器命令输入')
-    // 就绪门（清单 #83）：输入框在实例运行态就绪前是 disabled，冷启动下直接 fill 会
+    // 就绪门：输入框在实例运行态就绪前是 disabled，冷启动下直接 fill 会
     // 一直等到用例超时（实测 30s 仍 disabled），先等可用再操作
     await expect(input).toBeEnabled({ timeout: 15_000 })
     await input.fill('/ga')
@@ -225,7 +225,7 @@ test.describe('仪表盘', () => {
     // 左缘上界只是**粗检**：实测色点偏移在本机 13px、并行负载下 20px（字体度量漂移），
     // 而真实回归形态量到的是 13–29px——别指望这个上界兜回归，承载语义的是下面
     // 「info 行内不得有色点」（count 断言）与「色点底线在 info 行顶线之上」（y 带）两条。
-    // 上界贴着实测值（曾写 <20）只会把亚像素抖动判成失败（清单 #83 族）
+    // 上界贴着实测值（曾写 <20）只会把亚像素抖动判成失败
     const LEFT_COLUMN_MAX_OFFSET_PX = 32
     const dotBox = (await dot.boundingBox())!
     const entryBox = (await entry.boundingBox())!
