@@ -100,7 +100,9 @@ function CommandInput({
         <CommandPrimitive.Input
           data-slot="command-input"
           className={cn(
-            "w-full text-sm outline-hidden disabled:cursor-not-allowed disabled:opacity-50",
+            // 焦点配方与 ui/input 同款：InputGroup 的 has() 替换只认 input-group-control
+            // slot，本输入（command-input）匹配不到，必须自带 ring 指示
+            "w-full text-sm outline-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
             className
           )}
           {...props}

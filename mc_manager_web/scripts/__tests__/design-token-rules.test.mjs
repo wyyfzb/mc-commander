@@ -257,3 +257,25 @@ describe('第 29 条：交互元素裸取消 outline 采集', () => {
     expect(collectFocusCancellationHits(code)).toEqual([])
   })
 })
+
+describe('第 29 条边界（替换口径与判定面分工）', () => {
+  it('outline-none + 仅 outline 颜色类（假替换）不归本条：成对抵消由第 8 条判', () => {
+    const code = '<button type="button" className="outline-none focus-visible:outline-mcs-focus-ring" onClick={fn}>x</button>'
+    expect(collectFocusCancellationHits(code)).toEqual([])
+  })
+
+  it('focus-visible:outline-1 不算替换（须达全局兜底同级 2px 基线）→ 命中', () => {
+    const code = '<button type="button" className="outline-none focus-visible:outline-1" onClick={fn}>x</button>'
+    expect(collectFocusCancellationHits(code)).toEqual([{ line: 1 }])
+  })
+
+  it('表单控件也在判定面（命令面板输入框反例的形态）：裸取消命中', () => {
+    const code = '<input data-slot="command-input" className="w-full text-sm outline-none" />'
+    expect(collectFocusCancellationHits(code)).toEqual([{ line: 1 }])
+  })
+
+  it('表单控件带 ring 替换 → 放行', () => {
+    const code = '<input className="outline-none focus-visible:ring-1 focus-visible:ring-ring" />'
+    expect(collectFocusCancellationHits(code)).toEqual([])
+  })
+})

@@ -91,18 +91,22 @@ export function collectDangerousButtonBorderHits(code) {
  * token 焦点环；`outline-none/outline-hidden` 在 utilities 层会把它的 outline-style
  * 钉死为 none——同处没有 ring/outline 替换指示器时，键盘焦点完全不可见
  * （第 8 条只拦「outline-none 与 focus-visible:outline-* 互相抵消」的成对形态，
- * 单独裸取消正是它的漏检面）。替换指示器按 focus ring 与 focus outline 的粗细档近似；
- * 非交互容器（弹层面板等）刻意不判——interactivity 由同行按钮语义标记近似，
- * 跨行 className 刻意不判（与第 28 条同口径，宁漏不误报）。
+ * 单独裸取消正是它的漏检面；「outline-none + 仅 outline 颜色类」的组合刻意留给
+ * 第 8 条判，本条不重复计数）。替换指示器按 focus ring 与 focus outline 的粗细档
+ * 近似，outline-1 不算——替换须达到全局兜底同级的 2px 基线。
+ * 交互形态按同行标记近似：按钮四标记之外含 input/textarea/select（表单控件的
+ * 焦点环同等重要，ui/command.tsx:103 的命令面板输入框曾是现实反例）；弹层容器、
+ * role=tab 等其余形态刻意不判——跨行 className 也不判（与第 28 条同口径，宁漏不误报）。
  * 入参须是 stripComments 后的正文。
  * @returns {{ line: number }[]} 1 基行号，按出现顺序
  */
 const OUTLINE_CANCEL = /\boutline-(none|hidden)\b/
+const INTERACTIVE_MARKERS = /\bonClick=|<Button\b|<button\b|role="button"|<input\b|<textarea\b|<select\b/
 const FOCUS_INDICATOR = /focus(-visible)?:(ring-(?:[1-9]|\d{2,}|\[)|outline-(?:[2-9]|\d{2,}|mcs-|\[))/
 export function collectFocusCancellationHits(code) {
   const hits = []
   for (const [i, line] of code.split('\n').entries()) {
-    if (OUTLINE_CANCEL.test(line) && BUTTON_SEMANTICS.test(line) && !FOCUS_INDICATOR.test(line)) {
+    if (OUTLINE_CANCEL.test(line) && INTERACTIVE_MARKERS.test(line) && !FOCUS_INDICATOR.test(line)) {
       hits.push({ line: i + 1 })
     }
   }
