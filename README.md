@@ -264,6 +264,11 @@ ws.onmessage = (event) => {
 
 > `tpsUpdate` 已并入 `performanceUpdate`（payload 含 tps 字段，避免双广播冗余）；`playerDeath` 批量场景为聚合格式 `{players: [...], count: N}`（5s 窗口）；`deployProgress` 进度节流 ≥1% 才发射。
 
+> **只读凭据的 WS 边界**：用 `mcro-…` 只读凭据连接会成功，但**只收读数类事件**（`status`——崩溃与熔断也随它下发、
+> `performanceUpdate`、`weatherUpdate`、`playerStatsUpdate`、玩家进出/死亡/复活/入睡、`achievement`）
+> ——日志与命令原文、玩家聊天、备份/恢复、任务、Webhook 投递失败、部署/升级一律不下发
+> （与 HTTP 只读白名单同一口径：只读＝监控读数）。客户端→服务端方向没有写操作消息，只读连接不存在「借 WS 下命令」的通道。
+
 > **连接上限**：服务端最多同时接受 **32 个 WebSocket 连接**（`MAX_CONNECTIONS`），超过上限的新连接将被拒绝；单个连接最多订阅 64 个实例、每分钟 60 条消息（防滥用保护）。
 
 ## Web 页面一览

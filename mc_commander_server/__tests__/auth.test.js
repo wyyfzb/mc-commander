@@ -81,14 +81,14 @@ describe('authMiddleware', () => {
 
 describe('authenticateWebSocket', () => {
   it('should return true for valid apikey', () => {
-    expect(authenticateWebSocket(TEST_PLAINTEXT_KEY)).toBe(true);
+    expect(authenticateWebSocket(TEST_PLAINTEXT_KEY)).toEqual({ role: 'admin' });
   });
 
   it('should return false for invalid apikey', () => {
-    expect(authenticateWebSocket('wrong')).toBe(false);
+    expect(authenticateWebSocket('wrong')).toBe(null);
   });
 
   it('should return false for empty apikey', () => {
-    expect(authenticateWebSocket('')).toBe(false);
+    expect(authenticateWebSocket('')).toBe(null);
   });
 });

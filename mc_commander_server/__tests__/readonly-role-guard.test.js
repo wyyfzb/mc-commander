@@ -1,5 +1,6 @@
 /**
- * 只读角色 fail-closed 守卫（HTTP 角色门 + WS 握手拒绝 + 凭据通道语义）。
+ * 只读角色 fail-closed 守卫（HTTP 角色门 + WS 握手角色落定 + 凭据通道语义）。
+ * WS 投递侧的事件白名单矩阵在 websocket.readonly-filter.test.js。
  *
  * 承重点：不枚举「哪些端点该拦」，而是从 Express **实际注册的路由表**取出全部端点，
  * 断言除显式白名单外一律 403——将来任何新增端点无需改测试即自动纳入覆盖，这正是
@@ -538,24 +539,29 @@ describe('未配置只读 Key：该通道不存在（负向对照）', () => {
 });
 
 describe('WebSocket 握手', () => {
-  it('只读凭据一律拒绝握手（能开 WS 即等于能执行命令）', () => {
-    expect(authenticateWebSocket(READONLY_KEY, null)).toBe(false);
-    // 同时给出会话令牌也不回退（与关闭通道同款 fail-closed）
-    expect(authenticateWebSocket(READONLY_KEY, seedSession())).toBe(false);
-    // 通道关闭时同样拒绝
+  // Phase 2（清单 #21）：只读凭据不再拒握手，改为「放行 + 按事件白名单过滤投递」。
+  // 握手处的判据只剩「凭据本身是否有效、通道是否开启」；投递面的过滤在
+  // websocket.js（fanOut / 直发 / 重放三处），事件矩阵见 websocket.readonly-filter.test.js
+  it('只读凭据可握手且角色落定为 readonly（Phase 2 起不再一律拒绝）', () => {
+    expect(authenticateWebSocket(READONLY_KEY, null)).toEqual({ role: 'readonly' });
+    // 同时给出会话令牌时仍按 API Key 通道判定（只读优先，与 HTTP 中间件同序）
+    expect(authenticateWebSocket(READONLY_KEY, seedSession())).toEqual({ role: 'readonly' });
+  });
+
+  it('只读通道关闭时照常拒绝握手（fail-closed，不降级为 admin）', () => {
     config.readonlyApiKeyEnabled = false;
-    expect(authenticateWebSocket(READONLY_KEY, null)).toBe(false);
+    expect(authenticateWebSocket(READONLY_KEY, null)).toBe(null);
   });
 
   it('管理员 API Key 与会话令牌照常可握手（既有行为不变）', () => {
-    expect(authenticateWebSocket(ADMIN_KEY, null)).toBe(true);
-    expect(authenticateWebSocket(null, seedSession())).toBe(true);
-    expect(authenticateWebSocket('wrong-key', null)).toBe(false);
+    expect(authenticateWebSocket(ADMIN_KEY, null)).toEqual({ role: 'admin' });
+    expect(authenticateWebSocket(null, seedSession())).toEqual({ role: 'admin' });
+    expect(authenticateWebSocket('wrong-key', null)).toBe(null);
   });
 
   it('未配置只读哈希时凭据不会被误当管理员 Key', () => {
     config.readonlyApiKeyHash = '';
-    expect(authenticateWebSocket(READONLY_KEY, null)).toBe(false);
-    expect(authenticateWebSocket(ADMIN_KEY, null)).toBe(true);
+    expect(authenticateWebSocket(READONLY_KEY, null)).toBe(null);
+    expect(authenticateWebSocket(ADMIN_KEY, null)).toEqual({ role: 'admin' });
   });
 });

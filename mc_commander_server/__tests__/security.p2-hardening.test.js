@@ -208,7 +208,7 @@ describe('P2-11 会话 30 天绝对过期', () => {
 
   it('WS 通道同步校验绝对过期：超 30 天 → false 且行清理', () => {
     const token = seedSession({ createdAtOffsetMs: -31 * 86400_000 });
-    expect(authenticateWebSocket(null, token)).toBe(false);
+    expect(authenticateWebSocket(null, token)).toBe(null);
     expect(AdminSessionModel.findByTokenHash(hashToken(token))).toBeNull();
   });
 

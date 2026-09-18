@@ -75,8 +75,8 @@ describe('API_KEY_ENABLED=true（默认）：既有行为不变', () => {
   });
 
   it('WS 握手：Key 通道可用', () => {
-    expect(authenticateWebSocket(TEST_PLAINTEXT_KEY, null)).toBe(true);
-    expect(authenticateWebSocket('wrong-key', null)).toBe(false);
+    expect(authenticateWebSocket(TEST_PLAINTEXT_KEY, null)).toEqual({ role: 'admin' });
+    expect(authenticateWebSocket('wrong-key', null)).toBe(null);
   });
 });
 
@@ -134,9 +134,9 @@ describe('API_KEY_ENABLED=false：API Key 通道 fail-closed', () => {
 
   it('WS 握手：Key 一律 false，会话令牌照常通过', () => {
     const token = seedSession();
-    expect(authenticateWebSocket(TEST_PLAINTEXT_KEY, null)).toBe(false);
+    expect(authenticateWebSocket(TEST_PLAINTEXT_KEY, null)).toBe(null);
     // 与会话令牌同时提供也不回退（与 HTTP 同款 fail-closed）
-    expect(authenticateWebSocket(TEST_PLAINTEXT_KEY, token)).toBe(false);
-    expect(authenticateWebSocket(null, token)).toBe(true);
+    expect(authenticateWebSocket(TEST_PLAINTEXT_KEY, token)).toBe(null);
+    expect(authenticateWebSocket(null, token)).toEqual({ role: 'admin' });
   });
 });

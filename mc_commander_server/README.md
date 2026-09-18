@@ -200,7 +200,11 @@ Authorization: Bearer <session-token>
   `readonly`，**只**能访问 5 个只读监控端点——`GET /api/v1/overview`、`/system-stats`、
   `/instances`、`/instances/:id`、`/instances/:id/players`；其余端点（含全部写操作与文件 /
   日志 / 配置 / 世界 / 玩家存档 / 备份 / 命令史 / 审计 / 会话 / 任务 / Webhook）一律
-  403 `AUTH_INSUFFICIENT_ROLE`(40305)，WebSocket 握手一律拒绝。`GET /instances` 与
+  403 `AUTH_INSUFFICIENT_ROLE`(40305)。WebSocket **可握手**，但事件按白名单投递：只收读数类
+  （`status`/`performanceUpdate`/`weatherUpdate`/`playerStatsUpdate`/玩家进出死亡复活与睡眠/
+  `achievement`；崩溃与熔断随 `status` 放行；`tpsUpdate` 与 `systemStatsUpdate` 在许可面内但当前
+  未被服务端发射），日志与命令原文、玩家聊天、备份/恢复、任务、Webhook、部署/升级一律不下发
+  （过滤覆盖实例广播、全局与跨订阅投递、连接/订阅直发补发、断线补齐重放四条路径）。`GET /instances` 与
   `GET /instances/:id` 对只读**按角色裁剪**：响应不含 `jvmArgs`/`startCommand`
   （运维常把 JMX/DB 口令写进 JVM 参数）、`javaPath`、`seed`，监控所需字段照常返回；
   管理员响应不裁剪。
@@ -253,7 +257,9 @@ Authorization: Bearer <session-token>
   本仓不为它单独引入加密密钥管理（取舍说明见 `routes/auth.js` 头部注释）。
 
 WebSocket 经 Subprotocol 鉴权，与 HTTP 同源：`mc-commander-apikey.<key>`（API Key）
-或 `mc-commander-session.<token>`（会话令牌）。
+或 `mc-commander-session.<token>`（会话令牌）；代理会剥离 `Sec-WebSocket-Protocol` 的
+环境走首帧 `{"type":"auth","apiKey"|"sessionToken"}` 通道（两者语义一致）。
+只读凭据可握手，但只收读数类事件（白名单见上「只读机器凭据」段）。
 
 ### 基础路径
 
@@ -382,6 +388,7 @@ stage 取值：`download` / `download_complete` / `forge_install` / `first_launc
 ### WebSocket
 
 **连接**: `ws://host:25566/ws`，通过 Subprotocol 鉴权：`mc-commander-apikey.YOUR_API_KEY`
+（只读凭据 `mcro-…` 同样可连，但按事件白名单投递：只收状态/性能/天气/玩家在线类事件）
 
 **订阅**（可携带 `lastEventId` 断线补齐，服务端重放其后遗漏的通知事件）:
 ```json

@@ -263,36 +263,44 @@ export function requireAdminRole(req, res, next) {
  *   浏览器会话化后 WS 握手不再依赖明文 API Key，与 HTTP Bearer 同源凭据。
  *   会话需存在且未过期；不在此处 touch 续期（重连频率不可控，避免绕过
  *   HTTP 通道的 60s 写库节流），会话活性由 HTTP Bearer 请求持续滑动续期。
- *   校验失败一律返回 false，由调用方以 1008 关闭。
+ *   校验失败一律返回 null，由调用方以 1008 关闭。
+ *
+ * **返回值携带角色**（Phase 2）：只读凭据不再一律拒握手，而是以
+ * `{ role: 'readonly' }` 放行，由 websocket.js 按事件白名单过滤投递面。
+ * 返回对象而非 boolean 的必要性：角色必须在连接建立时落定（`ws._role`），
+ * 否则每条投递路径都要重验凭据。对象本身是 truthy，既有 `if (!ok)` 调用
+ * （心跳会话复验）语义不变。
  * @param {string|null} apiKey
  * @param {string|null} sessionToken 明文会话令牌（内部立即做 SHA-256，不留存）
- * @returns {boolean}
+ * @returns {{role: 'admin'|'readonly'}|null}
  */
 export function authenticateWebSocket(apiKey, sessionToken = null) {
   if (apiKey) {
-    // 只读凭据一律拒握手：WS 事件未做角色过滤，能开 WS 就等于能订阅全量事件
-    // 并经事件回执间接执行命令，故 Phase 1 关闭该凭据的 WS 入口（只走 HTTP 只读白名单）
-    if (verifyReadonlyApiKey(apiKey)) return false;
-    if (!config.apiKeyEnabled) return false;
-    return verifyApiKey(apiKey);
+    // 只读凭据先判定（与 HTTP 中间件同序）：两条机器通道开关相互独立，
+    // 先吃 API_KEY_ENABLED 会把「关闭管理员 Key」绑架成「只读监控也不可用」
+    if (verifyReadonlyApiKey(apiKey)) {
+      return config.readonlyApiKeyEnabled ? { role: 'readonly' } : null;
+    }
+    if (!config.apiKeyEnabled) return null;
+    return verifyApiKey(apiKey) ? { role: 'admin' } : null;
   }
   if (sessionToken) {
     const session = AdminSessionModel.findByTokenHash(hashToken(sessionToken));
-    if (!session) return false;
+    if (!session) return null;
     if (new Date(session.expires_at).getTime() <= Date.now()) {
       // 过期会话顺手清理（与 HTTP 中间件的惰性清理语义一致）
       AdminSessionModel.deleteById(session.id);
-      return false;
+      return null;
     }
     // 绝对过期同步校验（P2-11）：WS 通道与 HTTP 语义对齐，不给窃取令牌
     // 绕过 HTTP 重登边界的口子
     if (isAbsolutelyExpired(session)) {
       AdminSessionModel.deleteById(session.id);
-      return false;
+      return null;
     }
-    return true;
+    return { role: 'admin' };
   }
-  return false;
+  return null;
 }
 
 export default { authMiddleware, authenticateWebSocket };

@@ -92,16 +92,16 @@ describe('authenticateWebSocket 会话通道（WS 握手双通道）', () => {
 
   it('有效会话令牌 → true（与 API Key 通道语义对齐）', () => {
     const token = seedSession();
-    expect(authenticateWebSocket(null, token)).toBe(true);
+    expect(authenticateWebSocket(null, token)).toEqual({ role: 'admin' });
   });
 
   it('未知令牌 → false', () => {
-    expect(authenticateWebSocket(null, 'no-such-token')).toBe(false);
+    expect(authenticateWebSocket(null, 'no-such-token')).toBe(null);
   });
 
   it('过期会话 → false 且记录被顺手清理', () => {
     const token = seedSession({ expiresInMs: -1_000 });
-    expect(authenticateWebSocket(null, token)).toBe(false);
+    expect(authenticateWebSocket(null, token)).toBe(null);
     // 惰性清理：库中不应残留过期行
     const rows = AdminSessionModel.listActive();
     expect(rows).toHaveLength(0);
@@ -109,13 +109,13 @@ describe('authenticateWebSocket 会话通道（WS 握手双通道）', () => {
 
   it('apiKey 与 sessionToken 同时传入 → apiKey 优先', () => {
     seedSession();
-    expect(authenticateWebSocket(TEST_PLAINTEXT_KEY, 'ignored-invalid-token')).toBe(true);
-    expect(authenticateWebSocket('wrong-key', 'ignored-invalid-token')).toBe(false);
+    expect(authenticateWebSocket(TEST_PLAINTEXT_KEY, 'ignored-invalid-token')).toEqual({ role: 'admin' });
+    expect(authenticateWebSocket('wrong-key', 'ignored-invalid-token')).toBe(null);
   });
 
   it('两者皆空 → false', () => {
-    expect(authenticateWebSocket(null, null)).toBe(false);
-    expect(authenticateWebSocket('', '')).toBe(false);
+    expect(authenticateWebSocket(null, null)).toBe(null);
+    expect(authenticateWebSocket('', '')).toBe(null);
   });
 });
 

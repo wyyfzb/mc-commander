@@ -60,6 +60,45 @@ export const ClientMessages = {
   AUTH: 'auth',
 };
 
+// ── 只读角色的实时事件白名单（清单 #21 Phase 2，唯一事实源）──────────────
+// 口径与 HTTP 只读白名单同一条：**只读＝监控读数**。故只放行「实例运行状态 /
+// 性能 / 天气 / 玩家在线情况」这类读数事件，其信息面不超过只读可达的 HTTP 端点
+// （/overview、/system-stats、/instances、/instances/:id、/instances/:id/players）。
+//
+// 明确拦下的都是 HTTP 只读信息面之外的东西：日志流与命令原文（log——连续的日志
+// 原文与 `> 命令` 回显，远宽于只读面里那一行 `lastOutput`）、玩家聊天（playerChat）、
+// 备份/恢复（backup*/restore*，快照名与失败原因可能含磁盘路径）、任务（task*）、
+// Webhook 投递失败（url 可能内嵌令牌）、部署/升级（deploy*/upgrade*，管理员生命周期
+// 信息）。错误回执（error）、pong、auth 回执是客户端自身消息的应答，不经本表判定。
+// 崩溃与熔断随 `status` 放行（运行时健康是监控的核心读数，且实例状态端点本就可见）。
+//
+// 与 WSEvents 同文件维护：新增事件时**必须**在此二分归类（归类哨兵见
+// __tests__/websocket.readonly-filter.test.js——未归类的新事件会让用例变红）。
+export const READONLY_WS_EVENTS = new Set([
+  WSEvents.STATUS,             // 运行态跃迁与状态快照（含崩溃熔断提示，不含日志文本）
+  WSEvents.TPS_UPDATE,         // 保留项：**当前无发射方**（已并入 performanceUpdate），性能读数语义
+  WSEvents.PERFORMANCE_UPDATE, // 性能读数（含睡眠/清醒玩家名）
+  WSEvents.WEATHER_UPDATE,
+  WSEvents.PLAYER_STATS_UPDATE, // 在线玩家血量/护甲/坐标
+  WSEvents.PLAYER_JOIN,
+  WSEvents.PLAYER_LEAVE,
+  WSEvents.PLAYER_DEATH,
+  WSEvents.PLAYER_RESPAWN,
+  WSEvents.PLAYER_SLEEP,
+  WSEvents.ACHIEVEMENT,        // 游戏内本就全服广播的成就播报
+  WSEvents.SYSTEM_STATS_UPDATE, // 主机资源读数（/system-stats 对只读开放）——注意当前
+                                // 亦无发射方（startSystemStatsBroadcast 无调用点，见清单 #98）
+]);
+
+/**
+ * 该连接是否允许收到该类型事件：只有角色为 admin 才放行全部，其余（含角色未落定的
+ * 异常连接）一律按只读白名单——判定方向朝收紧，漏设角色只会少收、不会多收。
+ */
+function mayReceiveEvent(client, type) {
+  if (client._role === 'admin') return true;
+  return READONLY_WS_EVENTS.has(type);
+}
+
 // ── find-012 安全加固：资源上限与频率限制 ─────────────────────────────
 // 单服务端最大同时连接数：clients 集合已满时拒绝新连接（1013），
 // 防止恶意客户端无限建立连接导致 clients Set 内存膨胀
@@ -220,7 +259,7 @@ export function setupWebSocket(wss, serverManager) {
   }
 
   /** 鉴权通过后的客户端登记与消息管线（subprotocol 与首帧两条鉴权通道共用） */
-  function setupAuthenticatedClient(ws, { sessionToken }) {
+  function setupAuthenticatedClient(ws, { sessionToken, role = 'readonly' }) {
     // 连接数上限：clients 已满（≥ MAX_CONNECTIONS）时拒绝新连接，
     // 防止恶意客户端无限建连耗尽服务端资源
     if (clients.size >= MAX_CONNECTIONS) {
@@ -229,6 +268,10 @@ export function setupWebSocket(wss, serverManager) {
       return;
     }
 
+    // 角色必须在入册**之前**落定：clients 是投递侧的枚举源，先入册后赋角色会留下
+    // 一个「已在线但角色未定」的窗口（当前两句之间无 await，但顺序是免费的保险）。
+    // 默认值朝收紧方向（readonly）：漏传角色只会收不到事件，不会越权多收
+    ws._role = role;
     clients.add(ws);
     ws.isAlive = true;
     // 保存 session token 供心跳复验使用（API Key 认证无 token）
@@ -236,16 +279,19 @@ export function setupWebSocket(wss, serverManager) {
     ws.on('pong', () => {
       ws.isAlive = true;
     });
-    logger.info(`WebSocket client connected. Total: ${clients.size}`);
+    logger.info(`WebSocket client connected (role=${ws._role}). Total: ${clients.size}`);
 
     // 长任务状态补发：连接建立即推送进行中的部署快照。部署进度是全局事件
     // （部署实例未入库，无订阅语义），刷新页面/重连后前端据此恢复「部署中」
     // 显示——长阶段（Forge 安装/首启）事件稀疏，仅靠阶段边界广播会零可见。
     // 读取判据与 GET /instances/deploy/status 同源（utils/deploy-inflight.js）：
-    // 死快照不补发，否则前端会恢复一个早已结束的「部署中」视图
+    // 死快照不补发，否则前端会恢复一个早已结束的「部署中」视图。
+    // 部署属管理员生命周期信息（HTTP 只读不可达），只读连接不补发
     try {
-      for (const dep of inFlightDeploys(serverManager)) {
-        ws.send(JSON.stringify({ type: WSEvents.DEPLOY_PROGRESS, data: dep, timestamp: Date.now() }));
+      if (mayReceiveEvent(ws, WSEvents.DEPLOY_PROGRESS)) {
+        for (const dep of inFlightDeploys(serverManager)) {
+          ws.send(JSON.stringify({ type: WSEvents.DEPLOY_PROGRESS, data: dep, timestamp: Date.now() }));
+        }
       }
     } catch (err) {
       logger.error('Failed to send active deploy snapshot:', err);
@@ -296,10 +342,11 @@ export function setupWebSocket(wss, serverManager) {
             }
           }
           // 进行中升级补发：订阅即恢复该实例的升级进度（重连/刷新后
-          // 升级弹窗与实例卡「升级中」标识可恢复）
+          // 升级弹窗与实例卡「升级中」标识可恢复）。
+          // 升级属管理员生命周期信息（HTTP 只读不可达），只读连接不补发
           try {
             const upgradeProgress = serverManager.activeUpgrades?.get(msg.instanceId);
-            if (upgradeProgress) {
+            if (upgradeProgress && mayReceiveEvent(ws, WSEvents.UPGRADE_PROGRESS)) {
               ws.send(JSON.stringify({
                 type: WSEvents.UPGRADE_PROGRESS,
                 instanceId: msg.instanceId,
@@ -311,6 +358,8 @@ export function setupWebSocket(wss, serverManager) {
             logger.error('Failed to send active upgrade snapshot:', err);
           }
           const instance = serverManager.getInstance(msg.instanceId);
+          // 不带角色判据：status 本就在只读白名单内，包一层恒真的判据只会让后来者
+          // 误以为这条快照是「可拦的」（真判据在 fanOut 与重放处）
           if (instance) {
             ws.send(JSON.stringify({
               type: WSEvents.STATUS,
@@ -362,13 +411,14 @@ export function setupWebSocket(wss, serverManager) {
 
     // 通道一（向后兼容）：凭据已在握手层携带，connection 时即完成校验
     if (apiKey || sessionToken) {
-      if (!authenticateWebSocket(apiKey, sessionToken)) {
+      const auth = authenticateWebSocket(apiKey, sessionToken);
+      if (!auth) {
         logAuthFailure(ip);
         ws.close(1008, 'Unauthorized');
         return;
       }
       clearCredentialFailures(ip);
-      setupAuthenticatedClient(ws, { sessionToken });
+      setupAuthenticatedClient(ws, { sessionToken, role: auth.role });
       return;
     }
 
@@ -410,7 +460,8 @@ export function setupWebSocket(wss, serverManager) {
         rejectPending('Unauthorized');
         return;
       }
-      if (!authenticateWebSocket(msg.apiKey || null, msg.sessionToken || null)) {
+      const auth = authenticateWebSocket(msg.apiKey || null, msg.sessionToken || null);
+      if (!auth) {
         rejectPending('Unauthorized');
         return;
       }
@@ -419,7 +470,7 @@ export function setupWebSocket(wss, serverManager) {
       // 先回执 auth ok 再登记（登记时会补发 activeDeploys 快照——回执必须
       // 先于快照到达，否则客户端鉴权门控会丢弃部署进度补发）
       ws.send(JSON.stringify({ type: ClientMessages.AUTH, ok: true, timestamp: Date.now() }));
-      setupAuthenticatedClient(ws, { sessionToken: msg.sessionToken || null });
+      setupAuthenticatedClient(ws, { sessionToken: msg.sessionToken || null, role: auth.role });
     }
     ws.on('message', handleFirstMessage);
     ws.on('close', () => leavePending());
@@ -440,15 +491,27 @@ export function setupWebSocket(wss, serverManager) {
   function replayEvents(ws, instanceId, lastEventId) {
     try {
       const db = getDb();
+      // 角色过滤**下推到 SQL**：LIMIT 窗口必须只装该连接可见的候选行。只在循环里
+      // 过滤会让不可见事件占满 500 条配额——只读一条也收不到，而客户端只在收到带
+      // eventId 的消息时推进游标（web/src/api/ws.ts），于是下次重连仍带同一个
+      // lastEventId、仍撞上同一个被占满的窗口，永久补不到（忙碌服的 playerChat
+      // 是最易达的触发情形）。管理员不带 type 条件，窗口与改动前逐字一致
+      const allowlist = ws._role === 'readonly' ? [...READONLY_WS_EVENTS] : null;
+      const typeClause = allowlist
+        ? ` AND type IN (${allowlist.map(() => '?').join(', ')})`
+        : '';
       const events = db
         .prepare(
           `SELECT id, instance_id, type, data, created_at
            FROM notification_events
-           WHERE id > ? AND (instance_id = ? OR instance_id IS NULL)
+           WHERE id > ? AND (instance_id = ? OR instance_id IS NULL)${typeClause}
            ORDER BY id ASC LIMIT 500`
         )
-        .all(lastEventId, instanceId);
+        .all(lastEventId, instanceId, ...(allowlist ?? []));
       for (const ev of events) {
+        // 纵深防御：白名单只有一个事实源，这里再加一道闸防「SQL 过滤被改坏」——
+        // 重放是直发不经 fanOut，漏掉就是越权读取面
+        if (!mayReceiveEvent(ws, ev.type)) continue;
         const data = JSON.parse(ev.data || '{}');
         ws.send(JSON.stringify({
           eventId: ev.id,
@@ -470,12 +533,14 @@ export function setupWebSocket(wss, serverManager) {
     }
   }
 
-  /// 单条消息投递（带背压保护）：订阅过滤 + readyState + 慢客户端处置的唯一实现，
-  /// 四条投递路径（实例广播 / 关键事件 / 全局通知 / broadcastAll）共用，避免背压判据分叉。
-  /// includeUnsubscribed=true 的关键事件与全局事件投递给全部在线客户端
+  /// 单条消息投递（带背压保护）：订阅过滤 + 角色过滤 + readyState + 慢客户端处置的
+  /// 唯一实现，四条投递路径（实例广播 / 关键事件 / 全局通知 / broadcastAll）共用，
+  /// 避免背压判据分叉。includeUnsubscribed=true 的关键事件与全局事件投递给全部在线
+  /// 客户端——**角色过滤必须在这里**：只在 subscribe 处拦会漏掉这四条全局路径
   function fanOut(message, { type, instanceId = null, includeUnsubscribed = false }) {
     for (const client of clients) {
       if (client.readyState !== 1) continue;
+      if (!mayReceiveEvent(client, type)) continue;
       if (!includeUnsubscribed && !client.subscribedInstances.has(instanceId)) continue;
       // 背压保护：慢客户端缓冲超阈值时跳过高频 LOG，超上限则断开。
       if (client.bufferedAmount > 1024 * 1024) {
