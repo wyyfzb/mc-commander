@@ -5,15 +5,18 @@ import path from 'path';
 
 // 孤儿快照清扫 + 备份清单清点（真实文件系统 + 系统临时目录）
 //
-// 只替身 DB 读取（InstanceModel.getById）：清扫的删除动作、保守期与命名形态
-// 判定全部走真实 fs，工作区的 backups/ 与 servers/ 全程零参与。
+// 只替身 DB 读取（InstanceModel.getById 与 BackupModel.listFilePaths）：清扫的
+// 删除动作、保守期与命名形态判定全部走真实 fs，工作区的 backups/ 与 servers/ 全程零参与。
+
+const h = vi.hoisted(() => ({ indexed: [] }));
 
 vi.mock('../db/index.js', () => ({
   InstanceModel: { getById: vi.fn(() => null) },
+  BackupModel: { listFilePaths: vi.fn(() => h.indexed) },
 }));
 
 import { listInstanceSnapshotDirs, pruneOrphanBackupDirs } from '../services/backup-snapshot.service.js';
-import { InstanceModel } from '../db/index.js';
+import { InstanceModel, BackupModel } from '../db/index.js';
 import config from '../config.js';
 
 const TMP_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'mcs-orphan-backup-'));
@@ -63,6 +66,7 @@ describe('listInstanceSnapshotDirs · 备份清单清点', () => {
 describe('pruneOrphanBackupDirs · 全局孤儿快照清扫', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    h.indexed = [];
     InstanceModel.getById.mockReturnValue(null);
     fs.rmSync(BACKUPS_DIR, { recursive: true, force: true });
     fs.rmSync(SERVERS_DIR, { recursive: true, force: true });
@@ -153,12 +157,38 @@ describe('pruneOrphanBackupDirs · 全局孤儿快照清扫', () => {
     age(good, 40);
     const realRmSync = fs.rmSync;
     vi.spyOn(fs, 'rmSync').mockImplementation((p, opts) => {
-      if (p === bad) throw new Error('EPERM');
+      if (String(p).startsWith(bad)) throw new Error('EPERM');
       return realRmSync(p, opts);
     });
 
     expect(pruneOrphanBackupDirs(30)).toEqual({ deleted: 1, failed: 1 });
     expect(fs.existsSync(good)).toBe(false);
     expect(fs.existsSync(bad)).toBe(true);
+  });
+
+  it('已被索引的快照（含被别的实例挂载走的归档）→ 跳过不删，同目录其余孤儿快照照常清理', () => {
+    const dir = path.join(BACKUPS_DIR, 'paper-1a2b3c4d');
+    mk(path.join(dir, '已挂载')); // 快照名不受形态约束，挂载行记的就是它
+    mk(path.join(dir, '无人持有'));
+    age(dir, 40);
+    h.indexed = [path.join(dir, '已挂载')];
+
+    expect(pruneOrphanBackupDirs(30)).toEqual({ deleted: 1, failed: 0 });
+    expect(fs.existsSync(path.join(dir, '已挂载'))).toBe(true);
+    expect(fs.existsSync(path.join(dir, '无人持有'))).toBe(false);
+    // 目录内还有被挂载的快照 → 目录本身保留（删掉它等于删掉那条挂载行指向的数据）
+    expect(fs.existsSync(dir)).toBe(true);
+  });
+
+  it('索引不可读（DB 故障）→ 整轮放弃（分不清谁还有人持有，宁可不删）', () => {
+    const dir = path.join(BACKUPS_DIR, 'paper-1a2b3c4d');
+    mk(path.join(dir, 'snap-1'));
+    age(dir, 400);
+    BackupModel.listFilePaths.mockImplementation(() => {
+      throw new Error('db down');
+    });
+
+    expect(pruneOrphanBackupDirs(30)).toEqual({ deleted: 0, failed: 0 });
+    expect(fs.existsSync(path.join(dir, 'snap-1'))).toBe(true);
   });
 });

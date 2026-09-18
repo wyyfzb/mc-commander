@@ -396,6 +396,26 @@ function createTables() {
     logger.info('Migration: added TOTP two-factor columns and admin_recovery_codes table');
   }
 
+  if (userVersion < 13) {
+    // 归档挂载标记：非空 = 本行是「挂载归档快照」登记的索引（快照位于原归档实例的
+    // 目录下，不属于本行的 instance_id）。restoreBackup 的归属校验凭它区分两类行：
+    // 常规行仍必须位于 backupsDir/<instance_id>/，挂载行的基准放宽到它声明的归档目录。
+    try {
+      db.exec(`ALTER TABLE backups ADD COLUMN source_archive_id TEXT`);
+    } catch (e) {
+      if (!e.message.includes('duplicate column')) throw e;
+    }
+    // file_path 唯一：一份磁盘快照只允许有一条索引行。两条行指向同一目录时，删除
+    // 其中一条的 rm -rf 会连带毁掉另一条的数据（并发挂载正是这样造出重复行的）。
+    // 部分索引（WHERE 非空）让「尚无路径」的 creating/失败记录不受约束
+    db.exec(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_backups_file_path
+        ON backups(file_path) WHERE file_path IS NOT NULL
+    `);
+    db.pragma('user_version = 13');
+    logger.info('Migration: added backups.source_archive_id and unique index on file_path');
+  }
+
   // 创建索引
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_admin_sessions_expires ON admin_sessions(expires_at);

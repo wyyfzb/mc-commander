@@ -56,6 +56,9 @@ let passwordSet = false
 
 // 只读凭据的 mock 台账（进程内，供设置面板 e2e 用）：生成后 configured 翻真。
 // 开关与 capabilities 上报同源，可用 MOCK_READONLY_ENABLED=false 构造关闭态
+// 归档快照台账（清单 #27）：挂载后清空，与真实服务端的「挂载即建索引 → 清点里不再出现」同形
+let mockArchivedAttached = false
+
 let mockReadonlyConfigured = false
 const mockReadonlyEnabled = !['0', 'false', 'no', 'off'].includes(
   (process.env.MOCK_READONLY_ENABLED ?? 'true').trim().toLowerCase(),
@@ -122,6 +125,18 @@ const instance = {
   maxMemory: 4096,
   minMemory: 1024,
   jarFile: 'server.jar',
+}
+
+/**
+ * 实例运行态的**逐请求**视图（`x-mock-instance-running: true|false`）。
+ * mock 是多 spec 并行共享的进程：把「已停止」这类场景态写进全局，会把别的 spec
+ * 正在断言的运行态改脏（dashboard 的命令输入框可用性就依赖它，实测与升级类
+ * spec 并行时被拖到超时）。故场景态按请求头覆写，全局状态恒为默认。
+ */
+function instanceView(req) {
+  const raw = req?.headers?.['x-mock-instance-running']
+  if (raw !== 'true' && raw !== 'false') return instance
+  return { ...instance, isRunning: raw === 'true' }
 }
 
 const overview = {
@@ -660,7 +675,7 @@ const server = createServer((req, res) => {
     if (/^\/api\/v1\/instances\/e2e-demo\/plugins\/market\/search$/.test(path) && req.method === 'GET') {
       return res.end(ok({ hits: [], total: 0 }))
     }
-    if (path === '/api/v1/instances') return res.end(ok([instance]))
+    if (path === '/api/v1/instances') return res.end(ok([instanceView(req)]))
     if (path === '/api/v1/instances/e2e-demo') {
       // PUT：实例配置更新（general-panel autoRestart 用；合并白名单字段）
       if (req.method === 'PUT') {
@@ -694,7 +709,7 @@ const server = createServer((req, res) => {
           retainedBackupNames: snapshots.slice(0, 10),
         }, 'Instance deleted'))
       }
-      return res.end(ok(instance))
+      return res.end(ok(instanceView(req)))
     }
     if (path === '/api/v1/instances/e2e-demo/logs') return res.end(ok(logs))
     if (path === '/api/v1/instances/e2e-demo/command') {
@@ -791,6 +806,37 @@ const server = createServer((req, res) => {
       }
       return res.end(ok(mockBackups))
     }
+    // 归档快照（清单 #27）：磁盘上有、备份表里没有索引的快照目录
+    if (path === '/api/v1/backups/archived' && req.method === 'GET') {
+      if (mockArchivedAttached) return res.end(ok([]))
+      return res.end(ok([{
+        archiveId: 'paper-1a2b3c4d',
+        instanceExists: false,
+        snapshotCount: 3,
+        usableCount: 2,
+        latestMtime: '2026-09-01T00:00:00.000Z',
+      }]))
+    }
+    if (/^\/api\/v1\/instances\/[^/]+\/backups\/attach$/.test(path) && req.method === 'POST') {
+      // 与真实端点同门：要求管理员凭据（mock 无 Key 台账，只要求「带了凭据」）
+      const attachKey = (req.headers['x-api-key'] ?? '').toString().trim()
+      if (!attachKey && !bearer) {
+        res.statusCode = 401
+        return res.end(err(40107, '未提供访问凭据：请携带 X-API-Key 头或登录会话令牌'))
+      }
+      let archiveId = ''
+      try {
+        archiveId = String(JSON.parse(body || '{}').archiveId ?? '')
+      } catch {
+        archiveId = ''
+      }
+      if (!archiveId) {
+        res.statusCode = 400
+        return res.end(err(40000, 'archiveId 必填'))
+      }
+      mockArchivedAttached = true
+      return res.end(ok({ attached: 2, skipped: 1 }, '已挂载 2 份归档快照（跳过 1 份：已挂载过或无法识别）'))
+    }
     if (path.match(/^\/api\/v1\/backups\/\d+\/restore$/)) {
       // 与真实服务端同语义：恢复必须带实例名确认（mock 的实例名为「E2E 演示实例」）
       let confirmName = ''
@@ -853,25 +899,24 @@ const server = createServer((req, res) => {
       }
       return res.end(ok({ deploying: false }))
     }
-    // mock 专用控制端点：把「场景态」一次性复位到默认（运行中 + 无在途升级）。
-    // mock 状态是进程级共享的，任何翻转运行态/制造在途升级的用例都必须在 finally 里调它
-    // ——否则后续 spec（如 dashboard 的命令输入框依赖 isRunning）会读到被改脏的状态
+    // mock 专用控制端点：把「场景态」复位到默认。mock 状态是进程级共享的，制造场景态的
+    // 用例必须在 finally 里调它——但**按域复位**（body `{ only: 'upgrade' | 'archive' |
+    // 'readonly' }`）：全量复位会把并行 spec 正在用的场景态一起清掉（归档用例刚断言
+    // 「挂载后清点收敛」，升级用例的 finally 一复位就又让归档冒出来）。不传 only 时全量复位
     if (path === '/api/v1/mock/reset' && req.method === 'POST') {
-      instance.isRunning = true
-      upgradeInFlight = null
-      mockReadonlyConfigured = false
-      return res.end(ok({ isRunning: instance.isRunning, upgradeInFlight }))
-    }
-    // mock 专用控制端点：翻转实例运行态（e2e 复现「实例已停止 → 可升级」前置条件）
-    if (path === '/api/v1/mock/instance-running' && req.method === 'POST') {
-      let running = true
+      let only = null
       try {
-        running = JSON.parse(body || '{}').running !== false
-      } catch {
-        running = true
-      }
-      instance.isRunning = running
-      return res.end(ok({ isRunning: instance.isRunning }))
+        const parsed = JSON.parse(body || '{}')
+        // 显式传了 only 但取值不认识（含非字符串）：什么都不复位——写错域名的用例
+        // 会看到「复位没生效」，而不是悄悄把并行 spec 的场景态全清掉
+        if (Object.prototype.hasOwnProperty.call(parsed, 'only')) only = String(parsed.only)
+      } catch {}
+      const knownOnly = only === null || ['upgrade', 'readonly', 'archive'].includes(only)
+      if (!knownOnly) return res.end(ok({ only, reset: 'none' }))
+      if (only === null || only === 'upgrade') upgradeInFlight = null
+      if (only === null || only === 'readonly') mockReadonlyConfigured = false
+      if (only === null || only === 'archive') mockArchivedAttached = false
+      return res.end(ok({ only, reset: only ?? 'all' }))
     }
     // 强制断开全部 WS 连接（mock 专用控制端点：e2e 复现「实时通道断开」边沿，HTTP 不动）
     if (path === '/api/v1/instances/deploy/drop-ws' && req.method === 'POST') {
@@ -1124,6 +1169,10 @@ server.on('upgrade', (req, socket) => {
       `\r\n`,
   )
   socket.setNoDelay(true)
+  // 逐连接场景态：握手请求头携带的覆写在 status 快照里沿用（与 REST 同源）
+  socket.mockRunning = req.headers['x-mock-instance-running'] === 'true'
+    ? true
+    : req.headers['x-mock-instance-running'] === 'false' ? false : null
   // 首帧鉴权状态（对齐真实端：鉴权前收到非 auth 消息即断连）
   let authed = !firstFrameAuth
   wsSockets.add(socket)
@@ -1163,8 +1212,8 @@ server.on('upgrade', (req, socket) => {
             type: 'status',
             instanceId: msg.instanceId,
             data: {
-              status: instance.isRunning ? 'running' : 'stopped',
-              isRunning: instance.isRunning,
+              status: (socket.mockRunning ?? instance.isRunning) ? 'running' : 'stopped',
+              isRunning: socket.mockRunning ?? instance.isRunning,
               players: instance.players,
               tps: instance.tps,
             },

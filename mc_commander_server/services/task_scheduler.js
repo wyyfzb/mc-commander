@@ -116,8 +116,10 @@ export class TaskScheduler {
       result.failed.push('command_history');
       logger.error(`[RetentionPrune] command_history prune failed (${trigger}):`, err.message);
     }
-    // 孤儿快照目录：卸载实例时实例目录照删、备份目录按设计保留，磁盘回收只能
-    // 靠这条全局扫描兜底（保守期见 config.retentionPrune.orphanBackupDays）
+    // 孤儿快照：卸载实例时实例目录照删、备份目录按设计保留，磁盘回收只能靠这条
+    // 全局扫描兜底（保守期见 config.retentionPrune.orphanBackupDays）。清扫单位是
+    // 快照子目录且跳过已索引的——被别的实例挂载走的归档快照仍住在这个目录里，
+    // 按实例级目录整体清扫会把别人正在用的唯一副本删掉
     try {
       result.orphanBackupsDeleted = pruneOrphanBackupDirs(config.retentionPrune.orphanBackupDays).deleted;
     } catch (err) {

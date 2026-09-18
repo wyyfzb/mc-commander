@@ -20,22 +20,22 @@ async function setupConnection(page: Page) {
   )
 }
 
-/** mock 控制端点地址：取配置的 baseURL 而非 page.url()——后者在首个 goto 失败时是
- *  about:blank，会让 finally 里的复位一起抛错，把 mock 状态留脏给后续 spec */
-function mockApiUrl(): string {
-  const base = test.info().project.use.baseURL
-  return new URL('/api/v1/mock/instance-running', base).toString()
+/** 场景态（实例已停止）：按请求头逐请求覆写，不动 mock 的全局状态。
+ * 全局状态是进程级共享的，翻转它会把并行 spec 正在断言的运行态改脏
+ * （dashboard 的命令输入框可用性依赖 isRunning，实测因此被拖到超时）。
+ * WS 握手同样带上该头，status 快照与 REST 同一口径。 */
+async function useStoppedInstance(page: Page) {
+  await page.setExtraHTTPHeaders({ 'x-mock-instance-running': 'false' })
+  await page.reload()
 }
 
-/** 翻转 mock 实例运行态（升级入口仅停止态可见） */
-async function setInstanceRunning(page: Page, running: boolean) {
-  await page.request.post(mockApiUrl(), { data: { running } })
-}
-
-/** 场景态复位（运行中 + 无在途升级）：失败路径也必须执行，故自成 try/catch */
+/** 场景态复位（只域复位在途升级；归档台账归归档用例管，全量复位会打断它的断言）：
+ *  失败路径也必须执行，故自成 try/catch */
 async function resetMockScenario(page: Page) {
   try {
-    await page.request.post(new URL('/api/v1/mock/reset', test.info().project.use.baseURL).toString())
+    await page.request.post(new URL('/api/v1/mock/reset', test.info().project.use.baseURL).toString(), {
+      data: { only: 'upgrade' },
+    })
   } catch {
     // 复位失败不掩盖用例本身的失败原因（下一轮 e2e 是新 mock 进程，不跨运行泄漏）
   }
@@ -44,9 +44,9 @@ async function resetMockScenario(page: Page) {
 test.describe('升级取消（清单 #94）', () => {
   test('升级中可取消：确认后展示 cancelled 终态块，而非失败块', async ({ page }) => {
     await setupConnection(page)
-    // 先落地再翻转运行态（控制端点地址取当前页 origin；about:blank 上取不到）
+    // 先落地再覆写运行态（extraHTTPHeaders 在 reload 后对后续请求生效）
     await page.goto('/instances')
-    await setInstanceRunning(page, false)
+    await useStoppedInstance(page)
     try {
       await page.reload()
       await page.getByRole('button', { name: 'E2E 演示实例 操作菜单' }).click()

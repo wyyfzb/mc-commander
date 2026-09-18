@@ -9,7 +9,17 @@ import { BackupModel } from '../db/backup.model.js';
 import { BackupService, resolveContained } from '../services/backup.service.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
 import config from '../config.js';
-import { backupCreateRequestSchema, backupItemSchema, backupRestoreRequestSchema, restoreConfirmTarget, nullDataSchema } from '@mc-commander/schemas';
+import {
+  archivedSnapshotListSchema,
+  backupAttachRequestSchema,
+  backupAttachResponseSchema,
+  backupCreateRequestSchema,
+  backupItemSchema,
+  backupRestoreRequestSchema,
+  restoreConfirmTarget,
+  nullDataSchema,
+} from '@mc-commander/schemas';
+import { attachArchivedSnapshots, listArchivedSnapshots } from '../services/backup-snapshot.service.js';
 import { validateBody, validatedSuccess, validatedSuccessPaginated } from '../middleware/validate.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { logger } from '../utils/logger.js';
@@ -48,6 +58,62 @@ export function createBackupRoutes(serverManager) {
     });
 
     res.json(validatedSuccessPaginated(backupItemSchema, result.backups, result.total, page, pageSize));
+  }));
+
+  // GET /backups/archived —— 归档快照清点（清单 #27）
+  //
+  // 卸载实例会删掉备份表记录、但快照目录按设计留在 backupsDir/<原实例 id>/：
+  // 此后它们既不出现在任何实例的备份列表里，又会随保留期孤儿清扫被删。本端点把
+  // 「磁盘上有、索引里没有」的那部分清点出来，供设置页展示与挂载。
+  // 只读快照目录名与计数，不下发磁盘路径（file_path 同 find-021 的口径）。
+  router.get('/backups/archived', asyncHandler(async (req, res) => {
+    res.json(validatedSuccess(archivedSnapshotListSchema, listArchivedSnapshots()));
+  }));
+
+  // POST /instances/:instanceId/backups/attach —— 把归档快照挂载到目标实例
+  //
+  // 只登记索引、不复制不移动磁盘内容：挂载后这些快照走常规路径（列表/恢复/下载/删除）。
+  // 幂等：已在索引中的快照计 skipped，重复点击不会插重复行。
+  router.post('/instances/:instanceId/backups/attach', validateBody(backupAttachRequestSchema), asyncHandler(async (req, res) => {
+    const { instanceId } = req.params;
+    const { archiveId } = req.body;
+
+    const instance = serverManager.getInstance(instanceId);
+    if (!instance) {
+      throw new AppError(ErrorCodes.INSTANCE_NOT_FOUND);
+    }
+
+    let result;
+    try {
+      result = await attachArchivedSnapshots(instanceId, archiveId);
+    } catch (err) {
+      if (err.message === 'Archive directory not found') {
+        throw new AppError(ErrorCodes.BACKUP_NOT_FOUND, '归档目录不存在（可能已被清理）');
+      }
+      if (err.message === 'Invalid archive id' || err.message === 'Archive directory escapes backups dir') {
+        throw new AppError(ErrorCodes.VALIDATION_ERROR, '归档标识不合法');
+      }
+      // 索引不可读＝服务端依赖故障，不是客户端请求问题：503 而非 500 泛化
+      if (err.message === 'Backup index unavailable') {
+        throw new AppError(ErrorCodes.BACKUP_INDEX_UNAVAILABLE);
+      }
+      throw err;
+    }
+
+    if (result.attached > 0) {
+      recordAudit({
+        instanceId,
+        action: AuditActions.BACKUP_CREATE,
+        targetType: 'backup_archive',
+        targetId: archiveId,
+        detail: { attached: result.attached, skipped: result.skipped },
+      });
+    }
+
+    const message = result.attached > 0
+      ? `已挂载 ${result.attached} 份归档快照${result.skipped > 0 ? `（跳过 ${result.skipped} 份：已挂载过或无法识别）` : ''}`
+      : '没有可挂载的快照：它们已挂载过，或目录里没有可识别的世界数据';
+    res.json(validatedSuccess(backupAttachResponseSchema, result, message));
   }));
 
   // find-021：详情响应不含 file_path（模型层显式列查询）

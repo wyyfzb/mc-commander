@@ -65,7 +65,7 @@ MC Commander 是**单管理员自托管面板**，架构上不区分多租户/�
 | 维度 | 实际行为 |
 |---|---|
 | 形态 | **单例全局凭据**：一个部署只有一把只读 Key（`READONLY_API_KEY_HASH` 只存 SHA-256 摘要，明文仅在轮换那一次响应里出现），明文前缀 `mcro-`（仅便于运维辨认，鉴权只看摘要） |
-| 权限范围 | **仅只读白名单 5 个端点**：`GET /overview`、`GET /system-stats`、`GET /instances`、`GET /instances/:id`、`GET /instances/:id/players`。其余 82 个端点中 **79 个一律 403**（`AUTH_INSUFFICIENT_ROLE`/40305），包括全部写操作与全部敏感读；另 3 个是认证前公开端点（`/auth/status`、`/auth/login`、`/auth/setup`），本就不经认证、与凭据角色无关 |
+| 权限范围 | **仅只读白名单 5 个端点**：`GET /overview`、`GET /system-stats`、`GET /instances`、`GET /instances/:id`、`GET /instances/:id/players`。其余 86 个端点中 **83 个一律 403**（`AUTH_INSUFFICIENT_ROLE`/40305），包括全部写操作与全部敏感读；另 3 个是认证前公开端点（`/auth/status`、`/auth/login`、`/auth/setup`），本就不经认证、与凭据角色无关 |
 | 字段裁剪 | `GET /instances` 与 `GET /instances/:id` 对只读**按角色裁剪响应**：剔除 `jvmArgs`、`startCommand`（自由文本，运维常把 JMX/DB 口令写进 JVM 参数）、`javaPath`（主机目录布局）、`seed`（世界种子）；监控所需字段（`id`/`name`/`address`/`isRunning`/`playerCount`/`tps`/`mspt`/CPU/内存/`uptime`/版本等）全部保留。**管理员响应不裁剪、逐字节不变**。裁剪只发生在 `routes/status.js` 的出参构造处，角色门不改写响应体 |
 | 明确不能做 | 读文件内容/目录（`files*`）、读日志原文（`logs`）、读配置内容（`properties`）、读世界数据（`world`）、读玩家存档明细与封禁记录（`players/:player/details`、`players/bans`）、下载或列出备份（`backups*`）、读命令史（`command-history`）、读审计明细（`audit-logs`）、读会话清单（`auth/sessions`）、读任务定义（`tasks*`）、读 Webhook 配置（`webhooks*`）、插件与升级/部署运维面、以及**任何**写操作 |
 | 默认拒绝的方向 | 判定是「**不在白名单 ⇒ 要求 admin**」而非「逐个列举要拦谁」：新增路由无需登记即自动对只读关闭，漏登记只会更严、不会更松。回归测试从 Express 实际注册的路由表枚举全部端点并断言非白名单端点对只读 403，新端点自动纳入覆盖 |

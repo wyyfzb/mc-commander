@@ -10,7 +10,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/api/queries'
 import {
   apiCreateBackup,
+  apiAttachArchive,
   apiDeleteBackup,
+  apiGetArchivedSnapshots,
   apiGetBackups,
   apiRestoreBackup,
 } from '@/api/backups'
@@ -71,6 +73,38 @@ export function useDeleteBackup(instanceId: string | null) {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.backups(instanceId ?? '') })
+    },
+  })
+}
+
+/**
+ * 归档快照清点（清单 #27）：磁盘上有、备份表里没有索引的实例级快照目录。
+ * 全局面（与所选实例无关），故 query key 不带实例 id；60s 轮询足够——
+ * 归档只在「卸载实例 / 手工挪回目录」时出现，且挂载动作后本 hook 会被失效。
+ */
+export function useArchivedSnapshots(enabled: boolean) {
+  const config = useConnectionStore()
+  return useQuery({
+    queryKey: queryKeys.archivedSnapshots(),
+    queryFn: () => apiGetArchivedSnapshots(config),
+    enabled: config.status === 'ready' && enabled,
+    refetchInterval: 60_000,
+  })
+}
+
+/** 挂载归档快照到当前实例；成功后失效该实例的备份列表与归档清点（挂过的不再出现） */
+export function useAttachArchive(instanceId: string | null) {
+  const config = useConnectionStore()
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (archiveId: string) => {
+      if (!instanceId) throw new Error('未选择实例')
+      return apiAttachArchive(config, instanceId, archiveId)
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.backups(instanceId ?? '') })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.archivedSnapshots() })
     },
   })
 }

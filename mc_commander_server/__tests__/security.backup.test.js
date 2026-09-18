@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterAll, beforeAll } from 'vitest';
+import { describe, it, expect, vi, afterAll, beforeAll, beforeEach, afterEach } from 'vitest';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
@@ -225,15 +225,77 @@ describe('restoreBackup 路径与状态校验（实例级恢复）', () => {
 });
 
 describe('deleteBackup 对 file_path 校验（异步化）', () => {
+  let tmpRoot;
+  let backupsDir;
+  let serversDir;
+
+  beforeEach(() => {
+    tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'mcs-del-guard-'));
+    backupsDir = path.join(tmpRoot, 'backups');
+    serversDir = path.join(tmpRoot, 'servers');
+    fs.mkdirSync(backupsDir, { recursive: true });
+    fs.mkdirSync(serversDir, { recursive: true });
+    config.backupsDir = backupsDir;
+    config.serversDir = serversDir;
+  });
+  afterEach(() => {
+    if (tmpRoot) fs.rmSync(tmpRoot, { recursive: true, force: true });
+  });
+
   it('file_path 越界（DB 被篡改）拒绝删除', async () => {
     MockBackupModel.findByIdWithPath.mockReturnValue({
       id: 1,
+      instance_id: 's1',
       file_path: 'D:/evil/outside',
     });
     const service = new BackupService(null);
     // deleteBackup 为异步（rm 大目录不阻塞事件循环），同步 throw 改为
     // Promise rejection
     await expect(service.deleteBackup(1)).rejects.toThrowError(/Path traversal detected/);
+  });
+
+  it('实例 id 缺失的异常记录：拒绝删除并给明确错误（不是裸 TypeError）', async () => {
+    MockBackupModel.findByIdWithPath.mockReturnValue({
+      id: 1,
+      file_path: path.join(backupsDir, 's1', 'snap'),
+    });
+    const service = new BackupService(null);
+    await expect(service.deleteBackup(1)).rejects.toThrowError(/Path traversal detected/);
+  });
+
+  it('常规行指向另一个实例的快照 → 拒绝删除（记录被篡改不得 rm -rf 别人的副本）', async () => {
+    const victimDir = path.join(backupsDir, 'paper-1a2b3c4d', 'snap');
+    fs.mkdirSync(path.join(victimDir, 'world'), { recursive: true });
+    fs.writeFileSync(path.join(victimDir, 'world', 'level.dat'), 'other-instance-world');
+    MockBackupModel.findByIdWithPath.mockReturnValue({
+      id: 1,
+      instance_id: 's1',
+      status: 'completed',
+      file_path: victimDir,
+      source_archive_id: null,
+    });
+    const service = new BackupService(null);
+    await expect(service.deleteBackup(1)).rejects.toThrowError(/Path traversal detected/);
+    // 别人的快照原样保留
+    expect(fs.existsSync(path.join(victimDir, 'world', 'level.dat'))).toBe(true);
+    expect(MockBackupModel.delete).not.toHaveBeenCalled();
+  });
+
+  it('挂载行删除照常放行（基准放宽到它声明的归档目录）', async () => {
+    const archivedSnap = path.join(backupsDir, 'paper-1a2b3c4d', 'snap');
+    fs.mkdirSync(path.join(archivedSnap, 'world'), { recursive: true });
+    fs.writeFileSync(path.join(archivedSnap, 'world', 'level.dat'), 'archived');
+    MockBackupModel.findByIdWithPath.mockReturnValue({
+      id: 1,
+      instance_id: 'fabric-99999999',
+      status: 'completed',
+      file_path: archivedSnap,
+      source_archive_id: 'paper-1a2b3c4d',
+    });
+    const service = new BackupService(null);
+    await expect(service.deleteBackup(1)).resolves.toBe(true);
+    expect(fs.existsSync(archivedSnap)).toBe(false);
+    expect(MockBackupModel.delete).toHaveBeenCalledWith(1);
   });
 
   it('恢复中（restoring）的备份拒绝删除（互斥状态机）', async () => {

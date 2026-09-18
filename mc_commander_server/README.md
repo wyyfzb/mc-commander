@@ -338,8 +338,12 @@ stage 取值：`download` / `download_complete` / `forge_install` / `first_launc
 | `POST` | `/api/v1/instances/:id/backups` | 创建备份（异步执行，目录快照 + rsync/robocopy 增量；完成/失败经 WS 事件推送） |
 | `POST` | `/api/v1/backups/:id/restore` | 恢复备份（**202 立即返回**，后台执行；互斥状态机：恢复中拒绝创建/删除/再次恢复）。**body: `{ confirmName }`** ——确认目标＝该备份所属实例名（实例无名称时退为备份名/id），不符回 400/40017 |
 | `DELETE` | `/api/v1/backups/:id` | 删除备份（异步，恢复中/备份中拒绝） |
+| `GET` | `/api/v1/backups/archived` | 归档快照清点：磁盘上有、备份表里没有索引的实例级快照目录（卸载实例后按设计保留的那部分；只回目录名与计数，不下发磁盘路径） |
+| `POST` | `/api/v1/instances/:id/backups/attach` | 把归档快照挂载到实例。**body: `{ archiveId }`**：只登记索引，不复制、不移动磁盘内容；幂等（已索引/无法识别的份数计 skipped；`file_path` 唯一索引兜底并发重复登记，索引不可读回 503/50303） |
 
 > 备份 = `backups/<instanceId>/<名称>-<时间戳>/` 目录快照：Linux 用 `rsync -a --link-dest=<上一快照>` 硬链接增量（需安装 rsync，`apt-get install -y rsync`；实例目录与备份目录须同文件系统），Windows 优先 MSYS2 rsync、未安装时自动降级 robocopy `/MIR` 全量镜像。`size` 为快照逻辑大小（恢复所需容量）。
+
+> 归档快照（`backups/<原实例 id>/…`）：卸载实例会删掉备份表记录、保留快照目录。挂载把这些快照登记到目标实例的备份表（**跨实例**：快照仍住在原归档目录里，`source_archive_id` 标记该行；恢复/下载走常规路径，恢复与删除的归属校验对这类行放宽为「在 `backupsDir` 内且一级目录 = 声明的归档 id」）。挂载后该快照不再被孤儿清扫删除，但作为目标实例的普通备份条目**计入其备份配额**，超出保留策略（默认 10 份/30 天，按 `created_at` 最旧优先）时会被自动清理；删除条目会连带删除磁盘上的原归档快照。软链/联结点目录的清点与挂载两侧一致地按「不存在」处理。
 
 **面板自身数据**（`data/mc_commander.db`）每日自动快照至 `backups/panel/`，保留策略与实例备份一致。
 `.env` 不纳入自动备份（含认证凭据，且备份产物可经 API 下载），部署或改建后请手动复制一份留存。

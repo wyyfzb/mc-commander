@@ -73,6 +73,13 @@ export const ErrorCodes = {
     message: '需在请求体提供 confirmName 且与该备份所属实例名完全一致才能恢复',
     status: 400,
   },
+  // 归档挂载依赖备份表索引（判断哪些快照已被登记）：索引不可读时无法安全挂载
+  // （会插重复行），也谈不上「没有可挂载的快照」——503 明示服务端依赖故障
+  BACKUP_INDEX_UNAVAILABLE: {
+    code: 50303,
+    message: '备份索引不可读，请稍后重试',
+    status: 503,
+  },
   
   // 定时任务错误
   TASK_NOT_FOUND: { code: 40405, message: 'Scheduled task not found', status: 404 },

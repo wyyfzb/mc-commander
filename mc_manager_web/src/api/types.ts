@@ -42,7 +42,7 @@ export {
 export type { WsEventType, WsMessage, WsStatusSnapshot, WsPerformancePayload, WsLogPayload, WsStatusEventPayload, WsPlayerEventPayload, WsWeatherPayload, WsBackupPayload } from '@mc-commander/schemas'
 
 // ── 备份 ──
-export type { BackupItem } from '@mc-commander/schemas'
+export type { BackupItem, ArchivedSnapshotGroup, BackupAttachResponse } from '@mc-commander/schemas'
 
 // ── 世界 ──
 export type { WorldDimension, WorldInfo, ServerProperties, UpdatePropertiesResponse } from '@mc-commander/schemas'

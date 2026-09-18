@@ -4,7 +4,7 @@
  * 分页信封仅解包 data（pagination 丢失）——前端拉 pageSize=100 后 slice 最近 10 条。
  */
 import { apiDelete, apiDownloadFile, apiGet, apiPost, type ConnectionConfig } from './client'
-import type { BackupItem } from './types'
+import type { ArchivedSnapshotGroup, BackupAttachResponse, BackupItem } from './types'
 
 /** 备份列表（GET /instances/:id/backups?page=&pageSize=；分页信封） */
 export function apiGetBackups(config: ConnectionConfig, instanceId: string) {
@@ -52,4 +52,26 @@ export async function apiDownloadBackup(config: ConnectionConfig, backupId: numb
     timeoutMs: 120_000,
   })
   return blob
+}
+
+/**
+ * 归档快照清点（GET /backups/archived；清单 #27）。
+ * 卸载实例会删掉备份表记录、但快照目录按设计保留在磁盘上——此后它们不出现在任何实例的
+ * 备份列表里，且会随保留期被自动清理。本端点把「磁盘上有、索引里没有」的那部分清点出来。
+ */
+export function apiGetArchivedSnapshots(config: ConnectionConfig) {
+  return apiGet<ArchivedSnapshotGroup[]>('/api/v1/backups/archived', config)
+}
+
+/**
+ * 挂载归档快照到实例（POST /instances/:id/backups/attach）。
+ * **只建索引，不复制、不移动磁盘内容**：挂载后这些快照出现在该实例的备份列表里，
+ * 可正常恢复/下载/删除。幂等：已挂载过的份数计 skipped。
+ */
+export function apiAttachArchive(config: ConnectionConfig, instanceId: string, archiveId: string) {
+  return apiPost<BackupAttachResponse>(
+    `/api/v1/instances/${instanceId}/backups/attach`,
+    config,
+    { archiveId },
+  )
 }

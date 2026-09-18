@@ -57,6 +57,8 @@ export const queryKeys = {
    */
   authCapabilities: (baseUrl: string, credential: string) =>
     [...queryKeys.all, 'auth-capabilities', baseUrl, credential] as const,
+  /** 归档快照清点（全局面：不属于某个实例，卸载实例后遗留的快照都在这里） */
+  archivedSnapshots: () => [...queryKeys.all, 'archived-snapshots'] as const,
 }
 
 /** 面板概览（含云服务器系统级资源；未配置连接时禁用） */

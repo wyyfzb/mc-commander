@@ -166,7 +166,7 @@ test.describe('设置页', () => {
   test('账号与安全：只读监控凭据——生成后明文只展示一次，收起即不可回看', async ({ page }) => {
     await setupConnection(page)
     // 初始态用请求头钉死（同轮 webServer 共享一个 mock 进程，其它用例可能已生成过凭据；
-    // 不依赖 /mock/reset——那是全局复位，其它 spec 也在调，会互相打断）
+    // 不依赖 /mock/reset——复位是进程级共享状态，按域复位也可能漏掉本用例关心的那一项）
     await page.setExtraHTTPHeaders({ 'x-mock-readonly-configured': '0' })
     await page.goto('/settings/account')
 
@@ -290,6 +290,34 @@ test.describe('设置页', () => {
     await expect(page.getByText('恢复已开始，完成后请启动服务器生效')).toBeVisible()
     await expect(page.getByRole('heading', { name: '恢复备份（危险操作）' })).toBeHidden()
     await maybeShot(page, 'settings-backup-dark.png')
+  })
+
+  test('备份管理：归档快照（来自已卸载实例）可见且可挂载到本实例', async ({ page }) => {
+    await setupConnection(page)
+    // 按域复位 mock 的归档台账（同轮 webServer 共享一个 mock 进程；不传 only 的全量复位
+    // 会清掉并行升级用例的在途升级态）
+    await page.request.post('/api/v1/mock/reset', { data: { only: 'archive' } })
+    await page.goto('/settings/backup')
+
+    const archive = 'paper-1a2b3c4d'
+    await expect(page.getByText('归档快照（未建立索引）')).toBeVisible()
+    await expect(page.getByText(archive)).toBeVisible()
+    await expect(page.getByText(/来自已卸载实例/)).toBeVisible()
+    await expect(page.getByText(/可挂载 2\/3 份/)).toBeVisible()
+
+    // 挂载：二次确认讲清后果（不动磁盘 + 无第二份副本 + 计入配额受保留策略约束），
+    // 确认后 toast 报挂载与跳过份数
+    await page.getByRole('button', { name: /挂载到本实例/ }).click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toContainText(archive)
+    await expect(dialog).toContainText('原归档目录不会被复制或移动')
+    await expect(dialog).toContainText('删除这些条目会删除磁盘上的原归档快照')
+    await expect(dialog).toContainText('计入本实例的备份配额')
+    await dialog.getByRole('button', { name: '挂载' }).click()
+
+    await expect(page.getByText(/已挂载 2 份归档快照/)).toBeVisible()
+    // 挂载后清点收敛：区块消失（已无未索引项）
+    await expect(page.getByText('归档快照（未建立索引）')).toHaveCount(0)
   })
 
   test('关于：版本与链接', async ({ page }) => {

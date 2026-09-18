@@ -97,10 +97,17 @@ export {
   backupItemSchema,
   backupCreateRequestSchema,
   backupRestoreRequestSchema,
+  archivedSnapshotGroupSchema,
+  archivedSnapshotListSchema,
+  backupAttachRequestSchema,
+  backupAttachResponseSchema,
   restoreConfirmTarget,
   type BackupItem,
   type BackupCreateRequest,
   type BackupRestoreRequest,
+  type ArchivedSnapshotGroup,
+  type BackupAttachRequest,
+  type BackupAttachResponse,
 } from './backup'
 
 // 定时任务

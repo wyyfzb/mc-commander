@@ -650,6 +650,150 @@ describe('createBackup / restoreBackup / deleteBackup 入口校验缺口收口',
   });
 });
 
+// 快照归属校验（find-004）：常规快照必须住在「本行实例」的备份子目录内；挂载来的
+// 归档快照（source_archive_id 非空）住在**原归档实例**目录下，基准放宽到 backupsDir，
+// 但仍被「一级目录 = 声明的归档 id」卡住。放宽是本轮修的关键：归档快照的实例 id
+// 不复用，标注行却按常规基准校验时，跨实例挂载出来的条目一恢复就是 403
+describe('restoreBackup 快照归属校验：常规行严格 / 挂载行放宽但不越界', () => {
+  let tmpRoot;
+  let serversDir;
+  let backupsDir;
+  let service;
+  let executeSpy;
+
+  const ARCHIVE_ID = 'paper-1a2b3c4d';
+
+  /** 造一份可用快照（level.dat 位于 <world>/ 直接层）并返回路径 */
+  function makeSnapshot(parentDir, name = 'snap-a', worldName = 'world') {
+    const dir = path.join(parentDir, name);
+    fs.mkdirSync(path.join(dir, worldName), { recursive: true });
+    fs.writeFileSync(path.join(dir, worldName, 'level.dat'), 'archived-world');
+    return dir;
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    MockBackupModel.findAll.mockReturnValue({ total: 0, backups: [] });
+    MockBackupModel.update.mockReset().mockImplementation((id, data) => ({ id, ...data }));
+    MockBackupModel.resetStaleInProgress.mockReset();
+    tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'bu-own-'));
+    serversDir = path.join(tmpRoot, 'servers');
+    backupsDir = path.join(tmpRoot, 'backups');
+    fs.mkdirSync(serversDir, { recursive: true });
+    fs.mkdirSync(backupsDir, { recursive: true });
+    config.serversDir = serversDir;
+    config.backupsDir = backupsDir;
+    service = new BackupService(makeManager());
+    // 同步段通过后 restoreBackup 会 fire-and-forget 后台恢复：本组只验归属门，
+    // 替身后台执行，断言「放行 = 置 restoring 并进入后台」
+    executeSpy = vi.spyOn(BackupService.prototype, 'executeRestore').mockResolvedValue(true);
+  });
+  afterEach(() => {
+    if (tmpRoot) fs.rmSync(tmpRoot, { recursive: true, force: true });
+  });
+
+  it('挂载行：快照位于原归档实例目录下 → 放行（跨实例挂载后一键恢复可达）', async () => {
+    createTestInstance(serversDir, 'fabric-99999999');
+    const snapshotDir = makeSnapshot(path.join(backupsDir, ARCHIVE_ID));
+    MockBackupModel.findByIdWithPath.mockReturnValue({
+      id: 7,
+      instance_id: 'fabric-99999999',
+      status: 'completed',
+      file_path: snapshotDir,
+      source_archive_id: ARCHIVE_ID,
+    });
+
+    await expect(service.restoreBackup(7)).resolves.toBe(true);
+    expect(MockBackupModel.update).toHaveBeenCalledWith(7, { status: 'restoring' });
+    expect(executeSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('挂载行：声明归档 id 与所在目录不一致（记录被改）→ 403 且不置 restoring', async () => {
+    createTestInstance(serversDir, 'fabric-99999999');
+    const snapshotDir = makeSnapshot(path.join(backupsDir, 'paper-9f9f9f9f'));
+    MockBackupModel.findByIdWithPath.mockReturnValue({
+      id: 8,
+      instance_id: 'fabric-99999999',
+      status: 'completed',
+      file_path: snapshotDir,
+      source_archive_id: ARCHIVE_ID,
+    });
+
+    const err = await service.restoreBackup(8).then(() => null, (e) => e);
+    expect(err).toBeInstanceOf(AppError);
+    expect(err.code).toBe(ErrorCodes.PATH_TRAVERSAL_DETECTED.code);
+    expect(err.status).toBe(ErrorCodes.PATH_TRAVERSAL_DETECTED.status);
+    expect(MockBackupModel.update).not.toHaveBeenCalled();
+    expect(executeSpy).not.toHaveBeenCalled();
+  });
+
+  it('挂载行：file_path 指到 backupsDir 之外 → 403（放宽不等于放弃包含校验）', async () => {
+    createTestInstance(serversDir, 'fabric-99999999');
+    const outsideDir = path.join(tmpRoot, 'elsewhere', ARCHIVE_ID, 'snap-a');
+    fs.mkdirSync(path.join(outsideDir, 'world'), { recursive: true });
+    fs.writeFileSync(path.join(outsideDir, 'world', 'level.dat'), 'x');
+    MockBackupModel.findByIdWithPath.mockReturnValue({
+      id: 9,
+      instance_id: 'fabric-99999999',
+      status: 'completed',
+      file_path: outsideDir,
+      source_archive_id: ARCHIVE_ID,
+    });
+
+    await expect(service.restoreBackup(9))
+      .rejects.toMatchObject({ code: ErrorCodes.PATH_TRAVERSAL_DETECTED.code });
+    expect(MockBackupModel.update).not.toHaveBeenCalled();
+  });
+
+  it('挂载行：file_path 指向归档目录本身（不是快照子目录）→ 403', async () => {
+    createTestInstance(serversDir, 'fabric-99999999');
+    const archiveDir = path.join(backupsDir, ARCHIVE_ID);
+    makeSnapshot(archiveDir);
+    MockBackupModel.findByIdWithPath.mockReturnValue({
+      id: 10,
+      instance_id: 'fabric-99999999',
+      status: 'completed',
+      file_path: archiveDir,
+      source_archive_id: ARCHIVE_ID,
+    });
+
+    await expect(service.restoreBackup(10))
+      .rejects.toMatchObject({ code: ErrorCodes.PATH_TRAVERSAL_DETECTED.code });
+    expect(MockBackupModel.update).not.toHaveBeenCalled();
+  });
+
+  it('常规行（无挂载标记）：指向另一个实例的快照目录 → 403（原判据不因本次放宽而松动）', async () => {
+    createTestInstance(serversDir, 's1');
+    const snapshotDir = makeSnapshot(path.join(backupsDir, 'paper-1a2b3c4d'));
+    MockBackupModel.findByIdWithPath.mockReturnValue({
+      id: 11,
+      instance_id: 's1',
+      status: 'completed',
+      file_path: snapshotDir,
+      source_archive_id: null,
+    });
+
+    await expect(service.restoreBackup(11))
+      .rejects.toMatchObject({ code: ErrorCodes.PATH_TRAVERSAL_DETECTED.code });
+    expect(MockBackupModel.update).not.toHaveBeenCalled();
+  });
+
+  it('常规行：指向本实例备份子目录 → 照常放行（放宽分支不影响既有路径）', async () => {
+    createTestInstance(serversDir, 's1');
+    const snapshotDir = makeSnapshot(path.join(backupsDir, 's1'));
+    MockBackupModel.findByIdWithPath.mockReturnValue({
+      id: 12,
+      instance_id: 's1',
+      status: 'completed',
+      file_path: snapshotDir,
+      source_archive_id: null,
+    });
+
+    await expect(service.restoreBackup(12)).resolves.toBe(true);
+    expect(executeSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('cleanupOldBackups：时间上限与失败容忍', () => {
   let manager;
   let service;

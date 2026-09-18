@@ -7,7 +7,7 @@ import { parseDbTime, toIsoUtc } from '../utils/db-time.js';
 // 目录结构（且可被用于探测/构造路径）；file_path 仅服务层内部通过
 // findByIdWithPath 获取（restoreBackup/deleteBackup 需要）。
 const PUBLIC_COLUMNS =
-  'id, instance_id, name, description, type, size, status, world_name, created_at, updated_at';
+  'id, instance_id, name, description, type, size, status, world_name, source_archive_id, created_at, updated_at';
 
 export class BackupModel {
   static findAll(options = {}) {
@@ -81,6 +81,9 @@ export class BackupModel {
       size: row.size,
       status: row.status,
       worldName: row.world_name,
+      // 非空 = 挂载自归档（快照不在本实例的备份子目录内）。下发给前端是为了让
+      // 「删除」确认弹窗能如实告知：删掉这行会连带删除磁盘上的原归档快照
+      sourceArchiveId: row.source_archive_id ?? null,
       createdAt: toIsoUtc(row.created_at),
       updatedAt: toIsoUtc(row.updated_at),
     };
@@ -92,8 +95,8 @@ export class BackupModel {
     const result = db.prepare(`
       INSERT INTO backups (
         instance_id, name, description, type, size, status,
-        file_path, world_name
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        file_path, world_name, source_archive_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       data.instanceId,
       data.name,
@@ -102,7 +105,8 @@ export class BackupModel {
       data.size || 0,
       data.status || 'creating',
       data.filePath || null,
-      data.worldName || null
+      data.worldName || null,
+      data.sourceArchiveId || null
     );
 
     return this.findById(result.lastInsertRowid);
@@ -194,6 +198,18 @@ export class BackupModel {
     const db = getDb();
     const result = db.prepare('DELETE FROM backups WHERE instance_id = ?').run(instanceId);
     return result.changes > 0;
+  }
+
+  /**
+   * 全部快照的磁盘路径清单（**仅服务层内部用**：归档挂载的「已索引」比对、
+   * 清扫兜底）。与 PUBLIC_COLUMNS 的取舍一致——file_path 不下发 API，
+   * 故这里单独开口子而不放宽对外查询列。
+   */
+  static listFilePaths() {
+    const db = getDb();
+    return db.prepare('SELECT file_path FROM backups WHERE file_path IS NOT NULL')
+      .all()
+      .map((row) => row.file_path);
   }
 
   static getLatestBackup(instanceId) {

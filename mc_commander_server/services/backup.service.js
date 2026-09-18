@@ -8,6 +8,7 @@ import { AppError, ErrorCodes } from '../utils/response.js';
 import { ensureDir } from '../utils/fs-utils.js';
 import { logger } from '../utils/logger.js';
 import { localTimestamp } from '../utils/local-date.js';
+import { INSTANCE_ID_PATTERN } from '../utils/instance-id.js';
 
 // 世界目录名白名单（find-004）：与路由层 server.properties level-name 校验
 // 一致（^[A-Za-z0-9_-]+$），单段字符集禁止 / \ . 等路径分隔/穿越字符。
@@ -599,6 +600,38 @@ export class BackupService {
     }
   }
 
+  // 快照归属校验（find-004 兜底）：防 DB 记录被改成指向别处后，恢复/删除把
+  // 不属于本实例的数据灌进来或删掉。两类行口径不同：
+  // - 常规快照：必须位于「本行所属实例」的备份子目录内（backupsDir/<instanceId>/…）。
+  //   只校验「在 backupsDir 内」不够——记录被改成指向另一个实例的合法快照时，
+  //   恢复会把别的实例的世界数据灌进本实例
+  // - 挂载来的归档快照（source_archive_id 非空）：它按设计住在**原归档实例**目录下
+  //   （实例 id 不复用，卸载后只能被别的实例挂载），故基准放宽为 backupsDir 本身。
+  //   放宽后仍被两条判据卡住：必须在 backupsDir 内（resolveContained，含 symlink 复检），
+  //   且一级目录名必须等于本行声明的归档 id —— 指向 backupsDir 之外、或指向另一个
+  //   未声明的实例目录依旧拒绝
+  _assertSnapshotOwnership(backup, snapshotDir) {
+    const archiveId = backup.source_archive_id;
+    if (!archiveId) {
+      // 归属基准是「本行所属实例」：实例 id 缺失的记录（异常数据）无法定基准，
+      // 一律拒绝——否则 path.join 会抛裸 TypeError，看不出是记录损坏
+      if (typeof backup.instance_id !== 'string' || backup.instance_id.trim() === '') {
+        throw new AppError(ErrorCodes.PATH_TRAVERSAL_DETECTED, `Path traversal detected: ${snapshotDir}`);
+      }
+      resolveContained(path.join(this.backupsDir, backup.instance_id), snapshotDir);
+      return;
+    }
+    const resolved = resolveContained(this.backupsDir, snapshotDir);
+    const rel = path.relative(path.resolve(this.backupsDir), resolved);
+    const segments = rel.split(path.sep);
+    // 必须是「实例级目录 → 快照」两级：一级直接命中归档目录＝指向目录而非快照
+    // （挂载不会造出这种行），与 INSTANCE_ID_PATTERN 一起把放宽后的自由度钉死在
+    // 「backupsDir/<声明的归档 id>/<快照>」这一形态上
+    if (segments.length < 2 || segments[0] !== archiveId || !INSTANCE_ID_PATTERN.test(segments[0])) {
+      throw new AppError(ErrorCodes.PATH_TRAVERSAL_DETECTED, `Path traversal detected: ${snapshotDir}`);
+    }
+  }
+
   // 恢复备份（异步：同步段完成校验与互斥锁置位后立即返回，恢复实际执行放
   // 后台）。三入口（创建/恢复/删除）统一 status='restoring' 状态机互斥，
   // 路由快速 202 返回，进度经 restoreStart/restoreComplete/restoreFailed 事件推送。
@@ -648,10 +681,8 @@ export class BackupService {
     if (typeof snapshotDir !== 'string' || snapshotDir.trim() === '') {
       throw new AppError(ErrorCodes.BACKUP_NOT_FOUND);
     }
-    // find-004 兜底 + 归属校验：快照必须位于「本备份所属实例」的备份子目录内
-    // （backupsDir/<instanceId>/…）。只校验「在 backupsDir 内」不够——记录被改成
-    // 指向另一个实例的合法快照时，恢复会把别的实例的世界数据灌进本实例
-    resolveContained(path.join(this.backupsDir, instanceId), snapshotDir);
+    // find-004 兜底 + 归属校验（见 _assertSnapshotOwnership）
+    this._assertSnapshotOwnership(backup, snapshotDir);
 
     // 快照路径的判定只取一次 stat：ENOENT ＝ 记录指向的快照不存在（404 语义），
     // 省掉 existsSync 预检——预检与 stat 之间的窗口里快照被删会抛裸 ENOENT
@@ -931,10 +962,12 @@ export class BackupService {
       throw new AppError(ErrorCodes.BACKUP_IN_PROGRESS);
     }
 
-    // find-004 兜底：快照目录路径必须位于备份目录内（防 DB 被篡改后
-    // rmSync 递归删除任意目录）
+    // find-004 兜底 + 归属校验：与恢复同一口径（见 _assertSnapshotOwnership）——
+    // 常规行必须落在本实例的备份子目录内，挂载行落在它声明的归档目录内。
+    // 只校验「在 backupsDir 内」不够：记录被改成指向别的实例的合法快照时，
+    // 删除会 rm -rf 掉别人的（可能是唯一）副本
     if (backup.file_path) {
-      resolveContained(this.backupsDir, backup.file_path);
+      this._assertSnapshotOwnership(backup, backup.file_path);
     }
     // 删除快照目录（force 容忍 ENOENT，不做存在性预检）
     if (backup.file_path) {

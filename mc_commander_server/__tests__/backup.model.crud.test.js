@@ -22,6 +22,8 @@ beforeAll(() => {
   db.pragma('foreign_keys = ON');
 
   // 与 database.js createTables 的 instances/backups 表结构一致
+  // （镜像 DDL：database.js 每加一列这里要同步——漏了会以「no such column」的
+  //   500 暴露，不会静默走偏）
   db.exec(`
     CREATE TABLE IF NOT EXISTS instances (
       id TEXT PRIMARY KEY,
@@ -39,6 +41,7 @@ beforeAll(() => {
       status TEXT DEFAULT 'creating',
       file_path TEXT,
       world_name TEXT,
+      source_archive_id TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (instance_id) REFERENCES instances(id) ON DELETE CASCADE

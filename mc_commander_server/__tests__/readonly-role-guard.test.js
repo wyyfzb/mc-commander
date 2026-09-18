@@ -193,9 +193,11 @@ function seedSession() {
 
 describe('路由表枚举本身（结构性前提）', () => {
   it('枚举到全部已注册端点且数量不低于现状（枚举空转会让下面的断言假绿）', () => {
-    // 现网 /api/v1 下 89 个端点（另有 app 级未认证 /health，不在 v1Router 管辖范围）
-    expect(endpoints.length).toBe(89);
-    expect(new Set(endpoints.map((e) => `${e.method} ${e.pattern}`)).size).toBe(89);
+    // 现网 /api/v1 下 91 个端点（另有 app 级未认证 /health，不在 v1Router 管辖范围）。
+    // 这个数字是「不许静默减少」的基线：新增端点时必须**显式**改它（新增端点默认对只读
+    // 关闭，走的是下方枚举断言；改数字这一步是让「新增了什么」出现在 diff 里）
+    expect(endpoints.length).toBe(91);
+    expect(new Set(endpoints.map((e) => `${e.method} ${e.pattern}`)).size).toBe(91);
     // 三个公开端点在册（下方豁免逻辑依赖它们存在）
     expect(PUBLIC_V1).toEqual(new Set(['/auth/status', '/auth/login', '/auth/setup']));
   });

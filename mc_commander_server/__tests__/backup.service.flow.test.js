@@ -288,6 +288,46 @@ describe.skipIf(!snapshotTool)(
     expect(done.content).toContain('启动服务器');
   });
 
+  it('挂载归档快照后跨实例恢复：真实替换目标实例目录（归档的世界灌进本实例）', async () => {
+    // 归档方：造一个已卸载实例的遗留快照（快照住 backupsDir/<原实例 id>/…）
+    const archivedInstance = createTestInstance(serversDir, 'paper-1a2b3c4d');
+    fs.writeFileSync(path.join(archivedInstance, 'world', 'level.dat'), 'ARCHIVED-WORLD');
+    const service = new BackupService(manager);
+    const archivedDone = waitForEvent(manager, 'instance:backupComplete');
+    await service.createBackup('paper-1a2b3c4d', { name: '卸载前的快照' });
+    await archivedDone;
+    const archiveSnapshot = getOnlySnapshot(backupsDir, 'paper-1a2b3c4d');
+    // 卸载：实例目录（与备份表记录）都被删除，只剩归档快照目录
+    fs.rmSync(archivedInstance, { recursive: true, force: true });
+
+    // 接收方：另一个实例，当前世界与归档内容不同
+    const targetDir = createTestInstance(serversDir, 'fabric-99999999');
+    fs.writeFileSync(path.join(targetDir, 'world', 'level.dat'), 'TARGET-CURRENT');
+
+    // 挂载行（attachArchivedSnapshots 写入的形状：source_archive_id = 原归档实例 id）
+    MockBackupModel.findByIdWithPath.mockReturnValue({
+      id: 9,
+      instance_id: 'fabric-99999999',
+      status: 'completed',
+      world_name: 'world',
+      name: path.basename(archiveSnapshot),
+      file_path: archiveSnapshot,
+      source_archive_id: 'paper-1a2b3c4d',
+    });
+    const restoreComplete = waitForEvent(manager, 'instance:restoreComplete');
+
+    await expect(service.restoreBackup(9)).resolves.toBe(true);
+    await restoreComplete;
+
+    // 归属校验放宽后的真实结果：目标实例的世界被归档内容整体替换
+    expect(fs.readFileSync(path.join(targetDir, 'world', 'level.dat'), 'utf8')).toBe('ARCHIVED-WORLD');
+    // 归档快照本身是复制源：内容与位置原样保留（挂载不移动磁盘内容）
+    expect(fs.readFileSync(path.join(archiveSnapshot, 'world', 'level.dat'), 'utf8')).toBe('ARCHIVED-WORLD');
+    expect(fs.readdirSync(path.join(backupsDir, 'paper-1a2b3c4d'))).toEqual([path.basename(archiveSnapshot)]);
+    // 目标实例的 pre_restore 暂存清理干净
+    expect(fs.readdirSync(serversDir).filter((n) => n.includes('_pre_restore_'))).toEqual([]);
+  });
+
   it('恢复坏快照（无 level.dat）：预检拦截（不触碰原实例目录），原世界不丢', async () => {
     // 构造"内容为空/无世界数据"的坏快照目录（模拟世界被清空时创建的
     // 快照——旧实现解压 exit 0 即删 pre_restore，原世界不可逆丢失；

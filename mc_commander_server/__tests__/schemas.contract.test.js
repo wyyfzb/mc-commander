@@ -100,6 +100,7 @@ beforeAll(() => {
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (instance_id) REFERENCES instances(id) ON DELETE CASCADE
   )`);
+  // 镜像 database.js 的 backups DDL（加列时两处要同步；漏了会以 no such column 暴露）
   db.exec(`CREATE TABLE IF NOT EXISTS backups (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     instance_id TEXT NOT NULL,
@@ -110,6 +111,7 @@ beforeAll(() => {
     status TEXT DEFAULT 'creating',
     file_path TEXT,
     world_name TEXT,
+    source_archive_id TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (instance_id) REFERENCES instances(id) ON DELETE CASCADE

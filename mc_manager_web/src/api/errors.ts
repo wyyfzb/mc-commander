@@ -100,6 +100,9 @@ export const ErrorCode = {
 
   // RCON 不可用（命令路由需要 RCON 响应但连接未启用或已断开）
   RCON_UNAVAILABLE: 50302,
+
+  // 备份索引不可读（归档快照挂载需要备份表判断哪些快照已登记）
+  BACKUP_INDEX_UNAVAILABLE: 50303,
 } as const
 
 export type ErrorCodeValue = (typeof ErrorCode)[keyof typeof ErrorCode]
