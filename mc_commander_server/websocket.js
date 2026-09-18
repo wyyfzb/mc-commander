@@ -99,7 +99,7 @@ function mayReceiveEvent(client, type) {
   return READONLY_WS_EVENTS.has(type);
 }
 
-// ── find-012 安全加固：资源上限与频率限制 ─────────────────────────────
+// ── WS 安全加固：资源上限与频率限制 ─────────────────────────────
 // 单服务端最大同时连接数：clients 集合已满时拒绝新连接（1013），
 // 防止恶意客户端无限建立连接导致 clients Set 内存膨胀
 export const MAX_CONNECTIONS = 32;

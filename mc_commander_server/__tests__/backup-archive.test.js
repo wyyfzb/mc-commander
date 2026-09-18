@@ -337,7 +337,7 @@ describe('归档快照路由', () => {
       snapshotCount: 1,
       usableCount: 1,
     }));
-    // 契约面固定五项：不夹带磁盘路径（与备份详情 find-021 同口径）
+    // 契约面固定五项：不夹带磁盘路径（与备份详情同口径）
     expect(Object.keys(res.body.data[0]).sort()).toEqual([
       'archiveId', 'instanceExists', 'latestMtime', 'snapshotCount', 'usableCount',
     ]);

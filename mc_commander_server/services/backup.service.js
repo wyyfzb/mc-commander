@@ -230,7 +230,7 @@ export class BackupService {
       worldName = instance?.properties?.['level-name'] || 'world';
     }
 
-    // find-004：worldName 白名单校验——level-name 未经校验时 ../ 可指向
+    // worldName 白名单校验——level-name 未经校验时 ../ 可指向
     // 任意目录被压缩（任意文件泄露）。显式传入的 worldName 同样校验。
     if (typeof worldName !== 'string' || !WORLD_NAME_REGEX.test(worldName)) {
       const err = new AppError(ErrorCodes.VALIDATION_ERROR, `Invalid world name: ${worldName}`);
@@ -239,7 +239,7 @@ export class BackupService {
     }
 
     const instanceDir = path.join(config.serversDir, instanceId);
-    // find-004：resolveContained 兜底保证世界目录必须位于实例目录内
+    // resolveContained 兜底保证世界目录必须位于实例目录内
     // （严格前缀 + 分隔符边界，相等排除；已存在路径 realpath 复检防 symlink）
     const worldDir = resolveContained(instanceDir, path.join(instanceDir, worldName));
 
@@ -619,7 +619,7 @@ export class BackupService {
   // 后台）。三入口（创建/恢复/删除）统一 status='restoring' 状态机互斥，
   // 路由快速 202 返回，进度经 restoreStart/restoreComplete/restoreFailed 事件推送。
   async restoreBackup(backupId) {
-    // find-021：file_path 仅服务层内部使用，走专用查询获取完整行
+    // file_path 仅服务层内部使用，走专用查询获取完整行
     const backup = BackupModel.findByIdWithPath(backupId);
 
     if (!backup) {
@@ -664,7 +664,7 @@ export class BackupService {
     if (typeof snapshotDir !== 'string' || snapshotDir.trim() === '') {
       throw new AppError(ErrorCodes.BACKUP_NOT_FOUND);
     }
-    // find-004 兜底 + 归属校验（见 _assertSnapshotOwnership）
+    // 路径兜底 + 归属校验（见 _assertSnapshotOwnership）
     this._assertSnapshotOwnership(backup, snapshotDir);
 
     // 快照路径的判定只取一次 stat：ENOENT ＝ 记录指向的快照不存在（404 语义），
@@ -932,7 +932,7 @@ export class BackupService {
   // 快照（含中间快照）不影响其他快照——只有某文件在所有快照中最后一次
   // 出现（引用计数归零）才真正释放磁盘
   async deleteBackup(backupId) {
-    // find-021：file_path 仅服务层内部使用，走专用查询获取完整行
+    // file_path 仅服务层内部使用，走专用查询获取完整行
     const backup = BackupModel.findByIdWithPath(backupId);
 
     if (!backup) {
@@ -945,7 +945,7 @@ export class BackupService {
       throw new AppError(ErrorCodes.BACKUP_IN_PROGRESS);
     }
 
-    // find-004 兜底 + 归属校验：与恢复同一口径（见 _assertSnapshotOwnership）——
+    // 路径兜底 + 归属校验：与恢复同一口径（见 _assertSnapshotOwnership）——
     // 常规行必须落在本实例的备份子目录内，挂载行落在它声明的归档目录内。
     // 只校验「在 backupsDir 内」不够：记录被改成指向别的实例的合法快照时，
     // 删除会 rm -rf 掉别人的（可能是唯一）副本

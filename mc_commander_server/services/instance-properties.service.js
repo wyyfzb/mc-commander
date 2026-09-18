@@ -24,7 +24,7 @@ export const RUNTIME_COMMAND_MAP = {
   'gamemode': (v) => `defaultgamemode ${v}`,
 };
 
-// ── find-018 / find-015：PUT /properties 键白名单与值校验 ──
+// ── PUT /properties 键白名单与值校验 ──
 // 普通可写属性键白名单（前端世界属性页暴露 + MC 26.x 常用键，保持新旧版本
 // 兼容的宽松策略：对已知属性尽量放行，未知键才拒绝）。
 export const WRITABLE_PROPERTIES = new Set([
@@ -88,7 +88,7 @@ export const ALLOWED_PROPERTY_KEYS = new Set([
   ...Object.keys(RUNTIME_COMMAND_MAP),
 ]);
 
-// find-018：单键值校验。返回 { ok: true, value } 或 { ok: false, reason }
+// 单键值校验。返回 { ok: true, value } 或 { ok: false, reason }
 export function validatePropertyValue(key, rawValue) {
   if (rawValue === null || rawValue === undefined || typeof rawValue === 'object') {
     return { ok: false, reason: '值必须是标量' };
@@ -127,7 +127,7 @@ export function validatePropertyValue(key, rawValue) {
   return { ok: true, value };
 }
 
-// find-015：敏感属性（rcon.password 等）以占位符掩码返回，防止密码与
+// 敏感属性（rcon.password 等）以占位符掩码返回，防止密码与
 // 网络配置泄露给 API 调用方；客户端原样回传占位符时 PUT 视为未修改。
 export function maskSensitiveProperties(props) {
   const masked = { ...props };

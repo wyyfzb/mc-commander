@@ -37,7 +37,7 @@ export function offlineUuid(playerName) {
  * @param {string} [opts.levelName] level-name 配置（非法/缺失回退 'world'）
  */
 export function getTotalPlayTime({ serverPath, uuid, playerName, levelName }) {
-  // find-008-read 服务层兜底：非法 worldName（含路径分隔符/..）回退 'world'
+  // 服务层兜底：非法 worldName（含路径分隔符/..）回退 'world'
   let worldName = (typeof levelName === 'string' && levelName) || 'world';
   if (!LEVEL_NAME_REGEX.test(worldName)) {
     worldName = 'world';
@@ -68,7 +68,7 @@ export function getTotalPlayTime({ serverPath, uuid, playerName, levelName }) {
     }
   }
   for (const statsPath of candidates) {
-    // find-008-read：候选路径 resolve 后必须位于 serverPath 内，越界丢弃（回退 'world' 已保证安全）
+    // 候选路径 resolve 后必须位于 serverPath 内，越界丢弃（回退 'world' 已保证安全）
     if (!isPathContained(serverPath, statsPath)) continue;
     if (!fs.existsSync(statsPath)) continue;
     try {

@@ -87,7 +87,7 @@ vi.mock('../services/task_scheduler.js', () => ({
   },
 }));
 vi.mock('../websocket.js', () => ({
-  // index.js 会消费返回值里的 startSystemStatsBroadcast 的接线点：
+  // index.js 会消费返回值里的 startSystemStatsBroadcast（系统统计推送的接线点）：
   // 桩必须给出该函数及其 stop 句柄，否则启动代码在测试里直接抛错
   setupWebSocket: vi.fn(() => ({ startSystemStatsBroadcast: vi.fn(() => vi.fn()) })),
 }));

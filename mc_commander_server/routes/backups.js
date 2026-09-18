@@ -42,7 +42,7 @@ export function createBackupRoutes(serverManager) {
   const router = Router({ mergeParams: true });
   const backupService = new BackupService(serverManager);
 
-  // find-021：列表响应数据来自模型层显式列查询（不含 file_path 本地路径）
+  // 列表响应数据来自模型层显式列查询（不含 file_path 本地路径）
   router.get('/instances/:instanceId/backups', asyncHandler(async (req, res) => {
     const { instanceId } = req.params;
     const { page, pageSize } = parsePagination(req.query, { maxPageSize: 100 });
@@ -65,7 +65,7 @@ export function createBackupRoutes(serverManager) {
   // 卸载实例会删掉备份表记录、但快照目录按设计留在 backupsDir/<原实例 id>/：
   // 此后它们既不出现在任何实例的备份列表里，又会随保留期孤儿清扫被删。本端点把
   // 「磁盘上有、索引里没有」的那部分清点出来，供设置页展示与挂载。
-  // 只读快照目录名与计数，不下发磁盘路径（file_path 同 find-021 的口径）。
+  // 只读快照目录名与计数，不下发磁盘路径（与列表/详情口径一致，不暴露 file_path）。
   router.get('/backups/archived', asyncHandler(async (req, res) => {
     res.json(validatedSuccess(archivedSnapshotListSchema, listArchivedSnapshots()));
   }));
@@ -116,7 +116,7 @@ export function createBackupRoutes(serverManager) {
     res.json(validatedSuccess(backupAttachResponseSchema, result, message));
   }));
 
-  // find-021：详情响应不含 file_path（模型层显式列查询）
+  // 详情响应不含 file_path（模型层显式列查询）
   router.get('/backups/:id', asyncHandler(async (req, res) => {
     const backup = BackupModel.findById(req.params.id);
 

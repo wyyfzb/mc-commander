@@ -99,7 +99,7 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({
   server,
   path: '/ws',
-  // find-012：限制单条 WS 消息大小（客户端仅 subscribe/unsubscribe/ping，
+  // 限制单条 WS 消息大小（客户端仅 subscribe/unsubscribe/ping，
   // 1MB 足够），防止恶意客户端发送超大消息导致服务端内存膨胀
   maxPayload: 1024 * 1024,
   handleProtocols: (protocols, req) => {

@@ -178,7 +178,7 @@ function getSystemCpuUsage() {
 export function createStatusRoutes(serverManager) {
   const router = express.Router();
 
-  // find-002：校验 javaPath 是否为已存在的 java/javaw 可执行文件。
+  // 校验 javaPath 是否为已存在的 java/javaw 可执行文件。
   // 启动器路径会被 start() spawn 执行，若允许指向 bash/python/sh 等任意
   // 可执行文件即远程代码执行入口。null/'' 视为清除配置（回退服务端默认 java）。
   function isValidJavaExecutable(javaPath) {
@@ -313,7 +313,7 @@ export function createStatusRoutes(serverManager) {
     if (body.javaPath !== undefined && !isValidJavaExecutable(body.javaPath)) {
       return res.status(400).json(error(ErrorCodes.VALIDATION_ERROR, 'javaPath 必须是已存在的 java/javaw 可执行文件路径'));
     }
-    // find-002：jvmArgs 结构化启动参数——仅允许字符串数组，每项为
+    // jvmArgs 结构化启动参数——仅允许字符串数组，每项为
     // -X/-D 前缀参数、-jar 或 nogui；-jar 后路径必须位于实例目录内。
     // 与服务层 _validateJvmArgs 同规则（路由层先做类型/形态校验，
     // 服务层 start() 兜底终检），任一非法整体 400 拒绝（原子性不落盘）
@@ -394,7 +394,7 @@ export function createStatusRoutes(serverManager) {
       return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND));
     }
 
-    // find-002：拒绝通过请求体传入任意启动命令字符串（远程代码执行入口）。
+    // 拒绝通过请求体传入任意启动命令字符串（远程代码执行入口）。
     // 启动方式仅由实例配置的 javaPath/jarFile/jvmArgs（服务层）控制。
     if (req.body && typeof req.body === 'object' && 'startCommand' in req.body) {
       return res.status(400).json(error(ErrorCodes.VALIDATION_ERROR, 'startCommand 已不再支持通过 API 传入'));
