@@ -80,6 +80,21 @@ describe('AuditBody（issue 481 拆分后行为级测试）', () => {
     expect(screen.getByText('配置修改')).toBeInTheDocument()
     expect(screen.getByText('extra: {"a":1}')).toBeInTheDocument()
   })
+
+  it('详情单元格 title 保留原始 JSON（人性化文案截断时的悬停兜底）', () => {
+    const logs: AuditLogItem[] = [
+      makeLog({ action: 'CONFIG_CHANGE', detail: { key: 'view-distance', from: '10', to: '12' } }),
+    ]
+    render(
+      <table>
+        <AuditBody logs={logs} />
+      </table>,
+    )
+    expect(screen.getByText('view-distance: 10 → 12')).toHaveAttribute(
+      'title',
+      '{"key":"view-distance","from":"10","to":"12"}',
+    )
+  })
 })
 
 describe('CmdBody（命令历史表体）', () => {
