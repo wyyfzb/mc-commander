@@ -10,6 +10,7 @@ import {
   baseTierOf,
   collectCardSurfaceOffsets,
   collectDangerousButtonBorderHits,
+  collectFocusCancellationHits,
   collectHeadingTiers,
   collectRoleTierMaps,
   collectTextBaseHits,
@@ -230,5 +231,29 @@ describe('第 28 条：弱档危险描边 + 按钮语义同行采集', () => {
       '<Button className="border-mcs-error-border" onClick={fn}>x</Button>',
     ].join('\n')
     expect(collectDangerousButtonBorderHits(stripComments(code))).toEqual([{ line: 2 }])
+  })
+})
+
+describe('第 29 条：交互元素裸取消 outline 采集', () => {
+  it('outline-none + 按钮语义同行且无替换 → 命中', () => {
+    const code = '<button type="button" className="rounded-mcs-xs px-2 outline-none" onClick={fn}>x</button>'
+    expect(collectFocusCancellationHits(code)).toEqual([{ line: 1 }])
+  })
+
+  it('outline-hidden 同判（v4 的两种取消形）', () => {
+    const code = '<div role="button" tabIndex={0} className="outline-hidden" onKeyDown={fn} />'
+    expect(collectFocusCancellationHits(code)).toEqual([{ line: 1 }])
+  })
+
+  it('有 focus ring/outline 替换 → 放行（输入框与 skip-link 的既有形态）', () => {
+    const withRing = '<input className="outline-none focus:ring-1 focus:ring-mcs-focus-ring" />'
+    const withOutline = '<Button className="focus-visible:outline-none focus-visible:ring-2" onClick={fn}>'
+    expect(collectFocusCancellationHits(withRing)).toEqual([])
+    expect(collectFocusCancellationHits(withOutline)).toEqual([])
+  })
+
+  it('outline-none 但非交互元素（弹层面板）不判', () => {
+    const code = '<div className="rounded-mcs-md bg-popover outline-none p-4" />'
+    expect(collectFocusCancellationHits(code)).toEqual([])
   })
 })

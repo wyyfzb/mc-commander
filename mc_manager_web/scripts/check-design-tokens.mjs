@@ -59,6 +59,9 @@
  *      手写危险按钮配方（历史现场：variant="outline" + className 手写弱档描边）；危险按钮
  *      配方唯一声明源是 ui/button 的 destructive 变体（跨行 className 刻意不判，宁漏不误报）。
  *      扫描面＝src/ 内（排除 ui/、tone.ts 与 __tests__），不覆盖 e2e/ 与 scripts/
+ *  29. 焦点环取消须有替换：交互元素行上 outline-none/outline-hidden 且无 focus ring/outline
+ *      替换指示器 → 全局 :focus-visible 兜底被 utilities 层钉死为 none，键盘焦点不可见
+ *      （第 8 条只拦成对抵消形态，本条拦单独裸取消；扫描面与豁免同第 28 条）
  * 类名提取覆盖 className="..."、className={cn(...)}、模板字面量、对象映射值（如 tone: 'bg-...'），
  * 不留「只在 className 字面属性里才检查」的盲区。
  * 发现违规 → 输出 文件:行号 → 非零退出码（阻止合并）
@@ -71,6 +74,7 @@ import {
   STRING_LITERAL,
   collectCardSurfaceOffsets,
   collectDangerousButtonBorderHits,
+  collectFocusCancellationHits,
   collectHeadingTiers,
   collectTextBaseHits,
   lineAt,
@@ -486,6 +490,11 @@ function walkDir(dir) {
       // 28. 危险按钮手写配方：弱档 error 描边 + 按钮语义同行（测试同样按定义豁免）
       for (const hit of collectDangerousButtonBorderHits(stripComments(content))) {
         console.log(`${relPath}:${hit.line}: 弱档 error 描边 + 按钮语义同行 → 危险按钮一律用 Button 的 destructive 变体，不得手写 border-mcs-error-border`)
+        violations++
+      }
+      // 29. 交互元素裸取消 outline（全局 :focus-visible 兜底被钉死为 none，焦点不可见）
+      for (const hit of collectFocusCancellationHits(stripComments(content))) {
+        console.log(`${relPath}:${hit.line}: 交互元素 outline 取消且无 ring/outline 替换 → 键盘焦点不可见；补 focus-visible:ring-* 或删 outline-none 交给全局兜底`)
         violations++
       }
     }
@@ -1031,4 +1040,4 @@ if (violations > 0) {
   console.error(`\n✗ 发现 ${violations} 处设计 token 违规（设计规范 §4.5）`)
   process.exit(1)
 }
-console.log('✓ 设计 token 完整性检查通过（色板类/dark:/transition-all/duration-数字/rounded-任意值/字号上限/焦点可见性/未注册 token 类/token 角色矩阵/alpha 白名单/未定义类/死类/死 token/内容面 tint 叠加/语义色三件套与选中强调形态声明源/Z 轴阶梯/text-base 额度/玻璃预算/危险半透明底/内容面 tint 不透明/布局属性动画/卡片面声明源/标签组件唯一性/页面页头与标题档/全屏覆盖层来源/行内抢键落点/内联尺寸单位/危险描边只从变体取）')
+console.log('✓ 设计 token 完整性检查通过（色板类/dark:/transition-all/duration-数字/rounded-任意值/字号上限/焦点可见性/未注册 token 类/token 角色矩阵/alpha 白名单/未定义类/死类/死 token/内容面 tint 叠加/语义色三件套与选中强调形态声明源/Z 轴阶梯/text-base 额度/玻璃预算/危险半透明底/内容面 tint 不透明/布局属性动画/卡片面声明源/标签组件唯一性/页面页头与标题档/全屏覆盖层来源/行内抢键落点/内联尺寸单位/危险描边只从变体取/焦点环取消须有替换）')
