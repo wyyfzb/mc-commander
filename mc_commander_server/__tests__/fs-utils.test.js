@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -265,5 +265,51 @@ describe('fs-utils atomicWriteFile', () => {
     const target = path.join(root, '.env');
     atomicWriteFile(target, 'API_KEY_HASH=abc\n', { mode: 0o600 });
     expect(fs.statSync(target).mode & 0o777).toBe(0o600);
+  });
+
+  // Windows 杀软/索引服务短暂持有目标文件时 rename 瞬时抛 EPERM/EACCES/EBUSY
+  // （keys-hash 轮换用例「全量首跑偶红、复跑与隔离跑全绿」的历史 flake 的候选机理之一，
+  // 未用失败现场栈闭环——下次偶红先抓完整失败栈区分断言失败 vs teardown 清理错误），
+  // 生产代码以有界重试根除——以下用例锁住重试契约，防静默退化
+  it('rename 遇瞬时共享冲突（EPERM）重试后成功', () => {
+    const target = path.join(root, 'f.txt');
+    fs.writeFileSync(target, 'old');
+    const realRename = fs.renameSync.bind(fs);
+    const spy = vi.spyOn(fs, 'renameSync')
+      .mockImplementationOnce(() => { throw Object.assign(new Error('sharing violation'), { code: 'EPERM' }); })
+      .mockImplementation(realRename);
+    try {
+      atomicWriteFile(target, 'new');
+      expect(fs.readFileSync(target, 'utf-8')).toBe('new');
+      expect(spy).toHaveBeenCalledTimes(2);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it.each(['EPERM', 'EACCES', 'EBUSY'])('瞬时冲突（%s）持续存在时重试到上限后抛出（不无限重试）', (code) => {
+    const target = path.join(root, 'f.txt');
+    const spy = vi.spyOn(fs, 'renameSync').mockImplementation(() => {
+      throw Object.assign(new Error('locked'), { code });
+    });
+    try {
+      expect(() => atomicWriteFile(target, 'x')).toThrow(expect.objectContaining({ code }));
+      expect(spy).toHaveBeenCalledTimes(5);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('非瞬时错误（ENOENT）不重试立即抛出', () => {
+    const target = path.join(root, 'f.txt');
+    const spy = vi.spyOn(fs, 'renameSync').mockImplementation(() => {
+      throw Object.assign(new Error('missing'), { code: 'ENOENT' });
+    });
+    try {
+      expect(() => atomicWriteFile(target, 'x')).toThrow(expect.objectContaining({ code: 'ENOENT' }));
+      expect(spy).toHaveBeenCalledTimes(1);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

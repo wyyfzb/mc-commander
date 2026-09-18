@@ -9,19 +9,37 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 
+// Windows 瞬时共享冲突重试：rename 覆盖已存在文件时，杀毒/索引/搜索服务可能短暂
+// 持有目标文件，rename 会瞬时抛 EPERM/EACCES/EBUSY（新文件首次被扫描的窗口最常见，
+// 毫秒级即消散）——凭据轮换/启动播种这类一次性写盘动作没有第二次机会，必须有界重试。
+// 三类瞬时码之外（ENOENT、目录目标等真错误）原样抛出，不把缺陷吞成成功；
+// 临时名每次重试重新生成，finally 逐次清理，原子性语义不变。
+const TRANSIENT_RENAME_CODES = new Set(['EPERM', 'EACCES', 'EBUSY']);
+// 5 = 首次尝试 + 4 次重试的总 rename 次数（不是「重试 5 次」）
+const RENAME_RETRY_ATTEMPTS = 5;
+// 同步 IO 路径上的同步等待：Atomics.wait 阻塞当前线程（与所在调用本就同步阻塞一致）
+const sleepSync = (ms) => { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); };
+
 export const atomicWriteFile = (filePath, content, options = {}) => {
-  const tmpPath = `${filePath}.${crypto.randomUUID()}.tmp`;
-  try {
-    // options.mode 用于目标文件本身带权限纪律的场景（.env 0600 一类）：权限设在
-    // 临时文件上，rename 后目标继承——先写后 chmod 会在中间态留下过宽权限
-    fs.writeFileSync(tmpPath, content, options.mode ? { mode: options.mode } : undefined);
-    fs.renameSync(tmpPath, filePath);
-  } finally {
-    // 失败时清理残留临时文件：直接 unlink 并吞掉 ENOENT（未创建/已被 rename 消费），
-    // 不做 existsSync 预检——临时名带 UUID 本就是独占的，且 finally 里抛错会盖掉原错误
+  const writeOpts = options.mode ? { mode: options.mode } : undefined;
+  for (let attempt = 1; ; attempt++) {
+    const tmpPath = `${filePath}.${crypto.randomUUID()}.tmp`;
     try {
-      fs.unlinkSync(tmpPath);
-    } catch {}
+      // options.mode 用于目标文件本身带权限纪律的场景（.env 0600 一类）：权限设在
+      // 临时文件上，rename 后目标继承——先写后 chmod 会在中间态留下过宽权限
+      fs.writeFileSync(tmpPath, content, writeOpts);
+      fs.renameSync(tmpPath, filePath);
+      return;
+    } catch (err) {
+      if (attempt >= RENAME_RETRY_ATTEMPTS || !TRANSIENT_RENAME_CODES.has(err?.code)) throw err;
+      sleepSync(10 * attempt + Math.random() * 10);
+    } finally {
+      // 失败时清理残留临时文件：直接 unlink 并吞掉 ENOENT（未创建/已被 rename 消费），
+      // 不做 existsSync 预检——临时名带 UUID 本就是独占的，且 finally 里抛错会盖掉原错误
+      try {
+        fs.unlinkSync(tmpPath);
+      } catch {}
+    }
   }
 };
 
