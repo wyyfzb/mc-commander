@@ -5,8 +5,10 @@
  * 按语句覆盖率（statements.covered / statements.total）与阈值比较，低于则 exit 1 阻止合并。
  * 口径说明：v8 provider 产物无 lines 汇总字段（statementMap + s 推导行覆盖不准确——
  * 一行多语句去重后按行计，会系统性低估）；statements 口径为 CI 门禁行业惯例，
- * 与 vitest 文本报告的 % Stmts 一致。owner 2026-09-03 拍板：statements + 65%。
- * 用法：node scripts/check-coverage-gate.mjs <web-json> <server-json> [threshold=65]
+ * 与 vitest 文本报告的 % Stmts 一致。owner 2026-09-03 拍板：statements；阈值 65%。
+ * owner 2026-09-18 拍板提到 **70%**（前提是「先实测两包真实覆盖率」，实测结果：
+ * 前端 statements 82.95% / 服务端 92.74%，均远超 70，无补测试的缺口门槛问题）。
+ * 用法：node scripts/check-coverage-gate.mjs <web-json> <server-json> [threshold=70]
  */
 import { readFileSync } from 'node:fs'
 
