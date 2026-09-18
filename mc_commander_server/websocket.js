@@ -86,8 +86,8 @@ export const READONLY_WS_EVENTS = new Set([
   WSEvents.PLAYER_RESPAWN,
   WSEvents.PLAYER_SLEEP,
   WSEvents.ACHIEVEMENT,        // 游戏内本就全服广播的成就播报
-  WSEvents.SYSTEM_STATS_UPDATE, // 主机资源读数（/system-stats 对只读开放）——注意当前
-                                // 亦无发射方（startSystemStatsBroadcast 无调用点，见清单 #98）
+  WSEvents.SYSTEM_STATS_UPDATE, // 主机资源读数（/system-stats 对只读开放），由
+                                // startSystemStatsBroadcast 每 15s 经 broadcastAll 推送
 ]);
 
 /**
@@ -359,16 +359,20 @@ export function setupWebSocket(wss, serverManager) {
           }
           const instance = serverManager.getInstance(msg.instanceId);
           // 不带角色判据：status 本就在只读白名单内，包一层恒真的判据只会让后来者
-          // 误以为这条快照是「可拦的」（真判据在 fanOut 与重放处）
+          // 误以为这条快照是「可拦的」（真判据在 fanOut 与重放处）。
+          // 四个字段逐项对齐 wsStatusSnapshotSchema（前端 applyWsSnapshot 与 e2e mock
+          // 同款口径）：ManagedInstance 上没有 status 字段（旧实现发 undefined，
+          // 违反契约的 z.string()）、players 是 Map（旧实现直接发出去会被
+          // JSON.stringify 成 {}，违反 z.array）。四项都不在只读裁剪清单内，故不分角色
           if (instance) {
             ws.send(JSON.stringify({
               type: WSEvents.STATUS,
               instanceId: msg.instanceId,
               data: {
-                status: instance.status,
-                isRunning: instance.isRunning,
-                players: instance.players || [],
-                tps: instance.tps || null
+                status: instance.isRunning ? 'running' : 'stopped',
+                isRunning: Boolean(instance.isRunning),
+                players: Array.from(instance.players?.values?.() ?? []),
+                tps: typeof instance.tps === 'number' ? instance.tps : null
               },
               timestamp: Date.now()
             }));

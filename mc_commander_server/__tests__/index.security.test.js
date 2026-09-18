@@ -86,7 +86,11 @@ vi.mock('../services/task_scheduler.js', () => ({
     stop = vi.fn();
   },
 }));
-vi.mock('../websocket.js', () => ({ setupWebSocket: vi.fn() }));
+vi.mock('../websocket.js', () => ({
+  // index.js 会消费返回值里的 startSystemStatsBroadcast（清单 #98 的接线点）：
+  // 桩必须给出该函数及其 stop 句柄，否则启动代码在测试里直接抛错
+  setupWebSocket: vi.fn(() => ({ startSystemStatsBroadcast: vi.fn(() => vi.fn()) })),
+}));
 vi.mock('../services/webhook.service.js', () => ({ setupWebhookDispatch: vi.fn() }));
 vi.mock('../db/index.js', () => ({ initDatabase: vi.fn(), AdminAccountModel: { isConfigured: vi.fn(() => true) } }));
 // 启动播种的凭据写盘：本文件绝不触碰真实 .env（生成/写回都让桩可观测）

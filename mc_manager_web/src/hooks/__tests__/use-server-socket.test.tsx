@@ -399,6 +399,29 @@ describe('useServerSocket（状态跃迁通知接线）', () => {
     expect(qc.getQueryState(queryKeys.instances())?.isInvalidated).toBe(true)
   })
 
+  it('systemStatsUpdate 失效系统指标 query（清单 #98 接线后该分支才第一次有消费方）', async () => {
+    useConnectionStore.setState({ baseUrl: '', apiKey: 'k1', status: 'ready' })
+    const wrapper = createWrapper()
+    const { qc } = wrapper
+    // 预置指标缓存，模拟仪表盘已加载态
+    qc.setQueryData(queryKeys.systemStats(), { cpuUsage: 1 })
+    renderHook(() => useServerSocket('i-1'), { wrapper })
+    await waitFor(() => expect(FakeWebSocket.instances.length).toBe(1))
+    const ws = FakeWebSocket.instances[0]!
+    act(() => {
+      openAndAuth(ws)
+    })
+    await flushMicrotasks()
+
+    // 服务端每 15s 推一次（无 instanceId 的全局事件）：前端不直接写 store，
+    // 而是失效指标 query 触发 HTTP 重取——数值只有 /system-stats 一个来源
+    act(() => {
+      ws.receive({ type: 'systemStatsUpdate', data: { cpuUsage: 12.5 } })
+    })
+
+    expect(qc.getQueryState(queryKeys.systemStats())?.isInvalidated).toBe(true)
+  })
+
   it('deployProgress 透传 instanceId（取消部署要按实例 id 精确匹配服务端注册表）', async () => {
     const ws = await connectReady('i-1')
 

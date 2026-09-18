@@ -207,8 +207,12 @@ setupRoutes(app, serverManager, taskScheduler);
 app.use(errorHandler);
 
 setupWebhookDispatch(serverManager);
-// eslint-disable-next-line no-unused-vars
 const wsSetup = setupWebSocket(wss, serverManager);
+// 系统资源统计的 WS 推送（每 15s）：前端把它当**缓存失效信号**——收到即重取
+// GET /system-stats（另有 30s 保底轮询兜底，两者叠加不构成双写）。两处读数口径
+// 并不完全同源：内存/磁盘同逻辑（本模块内为拷贝实现），CPU 一方是 loadavg 近似、
+// 另一方是 /proc/stat 差分，故数值只以 HTTP 为准。返回的 stop 句柄接入停机路径
+const stopSystemStatsBroadcast = wsSetup.startSystemStatsBroadcast();
 
 server.on('error', (err) => {
   if (err.code === 'EADDRINUSE') {
@@ -282,6 +286,7 @@ server.listen(config.port, config.host, () => {
 async function shutdown(signal) {
   logger.info(`${signal} received, shutting down (MC instances keep running)...`);
   taskScheduler.stop();
+  stopSystemStatsBroadcast();
   wss.close(() => {
     logger.info('WebSocket server closed');
     try {

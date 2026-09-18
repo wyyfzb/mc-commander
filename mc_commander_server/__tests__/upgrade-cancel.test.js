@@ -91,7 +91,6 @@ function createMockServerManager(instanceOverrides = {}) {
   const instance = {
     id: 'inst-1',
     name: '演示实例',
-    status: 'stopped',
     mcVersion: '1.20.4',
     jarFile: OLD_JAR_NAME,
     serverPath: testState.tmpDir,

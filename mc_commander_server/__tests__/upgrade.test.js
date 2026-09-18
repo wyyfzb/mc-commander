@@ -85,7 +85,8 @@ function createMockInstance(overrides = {}) {
   return {
     id: 'inst-1',
     name: 'Test Server',
-    status: 'stopped',
+    // 不虚构 status 字段：真实 ManagedInstance 上只有 isRunning，桩多给一个
+    // 字段会让「守卫读错字段」保持绿灯（本套件曾因此掩盖 409 守卫恒假）
     mcVersion: '1.20.4',
     jarFile: 'server-1.20.4.jar',
     serverPath: tmpDir,
@@ -178,7 +179,6 @@ describe('Upgrade Routes', () => {
   });
 
   it('POST /instances/:id/upgrade - 实例运行中返回 409（INSTANCE_RUNNING CONFLICT）', async () => {
-    serverManager._instance.status = 'running';
     serverManager._instance.isRunning = true;
     const res = await request
       .post('/api/v1/instances/inst-1/upgrade')

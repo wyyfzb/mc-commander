@@ -217,7 +217,12 @@ describe('只读角色的 WS 事件过滤', () => {
   describe('③ 订阅补发升级进度快照', () => {
     it('只读订阅时不补发升级进度，但仍补发 status 快照', () => {
       serverManager.activeUpgrades = new Map([['s1', { stage: 'download', percent: 40 }]]);
-      serverManager.getInstance = vi.fn(() => ({ status: 'running', isRunning: true, players: [], tps: 20 }));
+      // players 与真实 ManagedInstance 同为 Map（旧实现直接下发 Map → JSON 成 {}）
+      serverManager.getInstance = vi.fn(() => ({
+        isRunning: true,
+        players: new Map([['Steve', { name: 'Steve' }]]),
+        tps: 20,
+      }));
 
       const ro = connect(READONLY_KEY);
       ro.emit('message', JSON.stringify({ type: 'subscribe', instanceId: 's1' }));
