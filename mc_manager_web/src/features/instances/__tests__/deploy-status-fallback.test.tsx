@@ -1,5 +1,5 @@
 /**
- * 部署进度兜底与重复部署门控测试（J29）：
+ * 部署进度兜底与重复部署门控测试：
  * - 刷新/挂载兜底：服务端报告在途 → 恢复部署进度视图，不回落步骤①
  * - 空态收敛：服务端转为空态（部署完成/15 分钟死快照超时）→ 进度视图与轮询一起停下
  * - 重复部署门控：服务端在途 → 实例页「部署新实例」入口禁用；门控信号由
@@ -126,7 +126,7 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-describe('部署进度兜底（J29）', () => {
+describe('部署进度兜底', () => {
   it('刷新页面：兜底快照恢复在途进度，不回落步骤①', async () => {
     deployStatusImpl = () => Promise.resolve(IN_FLIGHT)
     renderDialog()
@@ -264,7 +264,7 @@ describe('部署进度兜底（J29）', () => {
   })
 })
 
-describe('重复部署门控（J29）', () => {
+describe('重复部署门控', () => {
   it('实例页：服务端报告在途 → 「部署新实例」入口禁用，向导不再可打开', async () => {
     deployStatusImpl = () => Promise.resolve(IN_FLIGHT)
     renderInstancesPage()
@@ -367,7 +367,7 @@ describe('重复部署门控（J29）', () => {
  * 路由切回实例页），吃全局 10s staleTime 会让「切走再切回」在新鲜期内复用缓存、
  * 拿不到这期间变化的在途状态。此组用与生产同值的 client，锁住该查询 staleTime 0。
  */
-describe('兜底查询新鲜度（J29）', () => {
+describe('兜底查询新鲜度', () => {
   /** 生产同值 QueryClient：全局 staleTime 非 0，避免替身 client 把结论架空 */
   function newClient() {
     return new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: GLOBAL_STALE_TIME_MS } } })

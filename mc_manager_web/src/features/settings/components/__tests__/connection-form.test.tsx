@@ -824,7 +824,7 @@ describe('ConnectionForm 能力探测不得改变本机登录态', () => {
     }
   })
 
-  it('会话绑定到 A 面板 + 探测 B 面板：不发 Bearer（J38 规则在探测路径上同样成立）', async () => {
+  it('会话绑定到 A 面板 + 探测 B 面板：不发 Bearer（规则在探测路径上同样成立）', async () => {
     setBoundSession('https://panel-a.example.com')
     const captured = mockCapabilities(okCapabilities)
     const user = userEvent.setup()

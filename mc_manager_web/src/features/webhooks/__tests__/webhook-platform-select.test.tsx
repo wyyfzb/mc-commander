@@ -1,5 +1,5 @@
 /**
- * Webhook 渠道预设的单选组语义（J54）
+ * Webhook 渠道预设的单选组语义
  * 该处此前已是 role=radiogroup + role=radio + aria-checked，却没有 roving tabindex 与
  * 方向键——读屏宣告了「单选组」，键盘操作却不符合模型（三个按钮各占一个 Tab 停靠点、
  * 方向键无响应）。本用例锁定补齐后的完整 APG 模型。
@@ -163,7 +163,7 @@ describe('Webhook 渠道预设单选组', () => {
   })
 })
 
-describe('Webhook 事件过滤「已选 N」计数（H1-9）', () => {
+describe('Webhook 事件过滤「已选 N」计数', () => {
   const EVENT_TYPES = ['player.join', 'player.leave', 'player.death', 'backup.create']
 
   beforeEach(() => {

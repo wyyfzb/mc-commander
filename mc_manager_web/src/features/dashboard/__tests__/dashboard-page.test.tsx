@@ -13,7 +13,7 @@ import { useConnectionStore } from '@/stores/connection'
 import { useServerStore } from '@/stores/server'
 
 /**
- * 仪表盘页横幅（J49）：两条查询各自失败都要有出口——
+ * 仪表盘页横幅：两条查询各自失败都要有出口——
  * 状态失败会让卡片停在过期值，系统资源失败会让 CPU/内存行永久停在「暂无数据」；
  * 只报其一等于把另一半故障留成静默。两条都失败时合并为一条横幅、一次重试。
  * 终端子树依赖 xterm（jsdom 无 canvas），与本用例关注点无关，整体 mock 掉。

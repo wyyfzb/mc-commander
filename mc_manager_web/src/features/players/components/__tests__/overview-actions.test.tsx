@@ -1,7 +1,7 @@
 /**
  * OverviewActions 操作按钮组行为级测试（issue 489 拆分交付）
  * - 清空背包上抛宿主（不可逆 → 后果清单确认）；踢出直执（无逆操作 → 不挂撤销）
- * - 游戏模式菜单项直执 + 逆操作（切回原模式，J15 可逆口径）
+ * - 游戏模式菜单项直执 + 逆操作（切回原模式，可逆口径）
  * - 发送消息按钮上抛回调；OP 态切换文案与逆操作对
  * 数据全部为虚构占位
  */
@@ -126,7 +126,7 @@ describe('OverviewActions 游戏模式菜单', () => {
     expect(screen.getByRole('menuitem', { name: /生存/ }).getAttribute('data-disabled')).not.toBeNull()
   })
 
-  it('当前模式菜单项禁用：点击不触发 runAction（J71：门控由 onSelect 收口，不靠 CSS 兜底）', async () => {
+  it('当前模式菜单项禁用：点击不触发 runAction（门控由 onSelect 收口，不靠 CSS 兜底）', async () => {
     const userEvent = (await import('@testing-library/user-event')).default
     const props = renderActions(makePlayer({ isOnline: true, gameMode: 'survival' }))
     await userEvent.setup().click(screen.getByRole('button', { name: /游戏模式/ }))
@@ -139,7 +139,7 @@ describe('OverviewActions 游戏模式菜单', () => {
 })
 
 describe('OverviewActions OP/白名单切换', () => {
-  it('非 OP 玩家点击「设为OP」直执 op 并带 deop 逆操作（J15 可逆口径）', () => {
+  it('非 OP 玩家点击「设为OP」直执 op 并带 deop 逆操作（可逆口径）', () => {
     const props = renderActions(makePlayer({ isOp: false }))
     fireEvent.click(screen.getByRole('button', { name: /设为OP/ }))
     expect(props.runAction).toHaveBeenCalledTimes(1)

@@ -1,5 +1,5 @@
 /**
- * ReadonlyCredentialPanel（设置页只读监控凭据）测试（清单 #23）：
+ * ReadonlyCredentialPanel（设置页只读监控凭据）测试：
  * - 未创建态：入口文案是「生成只读凭据」（不是「重新生成」）
  * - 已配置态：入口是「重新生成」，点它先弹二次确认（旧凭据立即失效）
  * - 通道关闭态（READONLY_API_KEY_ENABLED=false）：入口禁用 + 说明恢复方法，不发写请求

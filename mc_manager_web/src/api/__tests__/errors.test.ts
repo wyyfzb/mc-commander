@@ -55,7 +55,7 @@ describe('错误码映射（对照服务端 ErrorCodes 契约）', () => {
     expect(getFriendlyErrorMessage(ErrorCode.INSTANCE_RUNNING)).toBe('实例正在运行')
   })
 
-  it('401 定向文案：未提供凭据（40107）与凭据无效（40101）分开（清单 #19）', () => {
+  it('401 定向文案：未提供凭据（40107）与凭据无效（40101）分开', () => {
     expect(ErrorCode.AUTH_CREDENTIALS_REQUIRED).toBe(40107)
     expect(ErrorCode.INVALID_API_KEY).toBe(40101)
     const required = getFriendlyErrorMessage(ErrorCode.AUTH_CREDENTIALS_REQUIRED)

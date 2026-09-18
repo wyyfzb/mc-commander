@@ -1,5 +1,5 @@
 /**
- * WS 首帧鉴权通道测试（H2-4b）：
+ * WS 首帧鉴权通道测试（）：
  * - 无 subprotocol 凭据的连接：第一条消息必须是 auth，成功后回执
  *   {type:'auth', ok:true} 并可正常订阅
  * - 首条非 auth / 凭据错误 / pending 期消息风暴 → close(1008) 并计入封禁计数
@@ -38,7 +38,7 @@ function createFakeWs() {
   return ws;
 }
 
-describe('WS 首帧鉴权通道（H2-4b）', () => {
+describe('WS 首帧鉴权通道（）', () => {
   let wss;
   let serverManager;
 

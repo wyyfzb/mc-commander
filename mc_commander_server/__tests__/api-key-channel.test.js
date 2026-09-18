@@ -116,7 +116,7 @@ describe('API_KEY_ENABLED=false：API Key 通道 fail-closed', () => {
   it('无凭据：401 AUTH_CREDENTIALS_REQUIRED(40107)，与「凭据无效」的 40101 分开', async () => {
     const res = await request(app).get('/api/v1/protected');
     expect(res.status).toBe(401);
-    // 定向文案（清单 #19）：不带凭据不该提示「Key 无效或已过期」（那会引导用户去
+    // 定向文案：不带凭据不该提示「Key 无效或已过期」（那会引导用户去
     // 轮换一把其实没问题的 Key），故用独立码 40107
     expect(res.body.code).toBe(40107);
     expect(res.body.message).toContain('未提供访问凭据');

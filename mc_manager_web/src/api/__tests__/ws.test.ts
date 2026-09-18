@@ -9,7 +9,7 @@ import {
 
 /**
  * FakeWebSocket：记录消息并支持脚本化触发事件（契约测试用）。
- * H2-4b 首帧鉴权：open 后客户端发送 {type:'auth', ...}，服务端回
+ * 首帧鉴权：open 后客户端发送 {type:'auth', ...}，服务端回
  * {type:'auth', ok:true} 后 connect promise 才 resolve。
  * 凭据值为结构占位（k/t 家族短串，非真实密钥），严禁真实服务器信息
  */
@@ -58,7 +58,7 @@ class FakeWebSocket implements WebSocketLike {
 
 const FakeCtor = FakeWebSocket as unknown as WebSocketCtor
 
-describe('McSocket（对照服务端 websocket.js 契约，H2-4b 首帧鉴权）', () => {
+describe('McSocket（对照服务端 websocket.js 契约，首帧鉴权）', () => {
   beforeEach(() => {
     FakeWebSocket.instances = []
     localStorage.clear()
@@ -89,7 +89,7 @@ describe('McSocket（对照服务端 websocket.js 契约，H2-4b 首帧鉴权）
     const p = socket.connect()
     const ws = FakeWebSocket.instances[0]!
     expect(ws.url).toMatch(/\/ws$/)
-    // H2-4b：客户端不再经 subprotocol 传凭据（凭据走首帧消息，代理剥离协议头也能连）
+    // 客户端不再经 subprotocol 传凭据（凭据走首帧消息，代理剥离协议头也能连）
     expect(ws.protocols).toBeUndefined()
 
     ws.open()
@@ -231,7 +231,7 @@ describe('McSocket（对照服务端 websocket.js 契约，H2-4b 首帧鉴权）
       const p2 = socket.connect()
       expect(FakeWebSocket.instances.length).toBe(2)
       const ws2 = FakeWebSocket.instances[1]!
-      // H2-4b：重建连接同样不带 subprotocol，走首帧鉴权
+      // 重建连接同样不带 subprotocol，走首帧鉴权
       expect(ws2.protocols).toBeUndefined()
       await openAndAuth(socket, p2, { apiKey: 'k' })
       expect(socket.isOpen).toBe(true)
@@ -303,7 +303,7 @@ describe('McSocket（对照服务端 websocket.js 契约，H2-4b 首帧鉴权）
     })
   })
 
-  describe('连接挂起看门狗与状态回调（UXT-4 / H2-4b）', () => {
+  describe('连接挂起看门狗与状态回调', () => {
     it('CONNECTING 挂起超时：close 被调用、promise 拒绝、进入重连序列', async () => {
       vi.useFakeTimers()
       try {

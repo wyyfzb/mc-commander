@@ -57,7 +57,7 @@ describe('BigStatCards 资源卡', () => {
     const title = screen.getByRole('heading', { name: '资源使用' })
     expect(title.className).toContain('text-mcs-sm')
     expect(title.className).not.toContain('text-mcs-lg')
-    // 大数：display 档 + .mcs-num；同一次 cn 调用里的阈值色不得吞掉字号档（J56 同组互吞）
+    // 大数：display 档 + .mcs-num；同一次 cn 调用里的阈值色不得吞掉字号档（同组互吞）
     const value = screen.getByText('20.0')
     expect(value.className).toContain('mcs-num')
     expect(value.className).toContain('text-mcs-display')

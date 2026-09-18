@@ -145,7 +145,7 @@ describe('status 输入侧契约 - PUT /instances/:id（issue 486）', () => {
     expect(res.body.details.map((d) => d.path)).toContain('name');
   });
 
-  it('jvmArgs 非数组（字符串）→ 400 统一校验信封（find-002 结构化参数形状前置）', async () => {
+  it('jvmArgs 非数组（字符串）→ 400 统一校验信封（结构化参数形状前置）', async () => {
     const res = await request(app).put('/api/v1/instances/s1').send({ jvmArgs: '-Xmx4G' });
     expect(res.status).toBe(400);
     expect(res.body.code).toBe(40000);
@@ -226,7 +226,7 @@ describe('status 输入侧契约 - POST /instances/:id/start（issue 486）', ()
     app.use(errorHandler);
   });
 
-  it('startCommand 字符串 → 400 统一校验信封（find-002 RCE 封堵 schema 前置）', async () => {
+  it('startCommand 字符串 → 400 统一校验信封（RCE 封堵 schema 前置）', async () => {
     const res = await request(app).post('/api/v1/instances/s1/start').send({ startCommand: 'java -jar evil.jar' });
     expect(res.status).toBe(400);
     expect(res.body.code).toBe(40000);

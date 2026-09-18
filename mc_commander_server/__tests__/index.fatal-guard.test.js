@@ -106,7 +106,7 @@ vi.mock('../services/task_scheduler.js', () => ({
   },
 }));
 vi.mock('../websocket.js', () => ({
-  // index.js 会消费返回值里的 startSystemStatsBroadcast（清单 #98 的接线点）：
+  // index.js 会消费返回值里的 startSystemStatsBroadcast 的接线点：
   // 桩给出该函数并把 stop 句柄记在 hoisted holder 上，供「停机链调用了它」的断言
   // 只在被调用时返回 stop 句柄（不得顺手调用它，否则「停机调用了 stop」的断言变成空转）
   setupWebSocket: vi.fn(() => ({ startSystemStatsBroadcast: h.startSystemStatsBroadcast })),
@@ -173,7 +173,7 @@ describe('进程级兜底（uncaughtException/unhandledRejection）', () => {
     expect(events).toContain('unhandledRejection');
     // 既有优雅停机信号不回退
     expect(events).toContain('SIGTERM');
-    // 清单 #98：系统资源统计的 WS 推送必须在启动时接线（此前该函数无任何调用点，
+    // 系统资源统计的 WS 推送必须在启动时接线（此前该函数无任何调用点，
     // 事件从不发射，前端只能吃 30s 保底轮询）
     expect(h.startSystemStatsBroadcast).toHaveBeenCalledTimes(1);
     expect(events).toContain('SIGINT');
@@ -192,7 +192,7 @@ describe('进程级兜底（uncaughtException/unhandledRejection）', () => {
     // shutdown 同步执行调度器停止，随后回调链落地
     await new Promise((resolve) => setImmediate(resolve));
     expect(h.scheduler.stop).toHaveBeenCalledTimes(1); // 定时任务先停
-    expect(h.stopSystemStatsBroadcast).toHaveBeenCalled(); // 系统统计定时器同停（清单 #98）
+    expect(h.stopSystemStatsBroadcast).toHaveBeenCalled(); // 系统统计定时器同停
     // 面板停机不停实例（owner 2026-09-09 拍板）：实例继续服务玩家，重启后接管
     expect(h.manager.stopAll).not.toHaveBeenCalled();
     expect(h.db.close).toHaveBeenCalledTimes(1); // 数据库关闭（WAL 刷盘）

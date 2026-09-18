@@ -1,5 +1,5 @@
 /**
- * 孤儿进程接管域测试（UXT-15 根修）
+ * 孤儿进程接管域测试（根修）
  * - pid 文件写/读/删（spawn 后落盘、exit 清理的线索文件）
  * - adoptFromPidFile：活 pid 接管（运行态恢复 + started 广播）/ 死 pid 清残留
  * - 看门狗：接管进程死亡后的状态收敛（_manualStop 区分 stopped/crash）

@@ -1,5 +1,5 @@
 /**
- * 部署进度兜底端点与重复部署门控测试（J29）
+ * 部署进度兜底端点与重复部署门控测试
  *
  * 覆盖 routes/server-jar.js：
  * - GET /instances/deploy/status：空态（无部署/快照超时）不返回 404，

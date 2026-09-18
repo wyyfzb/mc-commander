@@ -1,5 +1,5 @@
 /**
- * Webhook 签名密钥的显隐切换（J72）
+ * Webhook 签名密钥的显隐切换
  * 遮蔽的三种渠道（通用/飞书/钉钉）此前只有 type="password"，粘贴的密钥无法自查；
  * 本用例钉住：遮蔽态必有显隐按钮且能切到明文、切换只作用于密钥框；
  * 明文渠道（企业微信/Server酱/PushPlus）保持无按钮的明文输入（type 分支语义不变）。
@@ -67,7 +67,7 @@ beforeEach(() => {
   )
 })
 
-describe('Webhook 密钥显隐切换（J72）', () => {
+describe('Webhook 密钥显隐切换', () => {
   it('遮蔽渠道（通用）：密钥框默认遮蔽且有显隐按钮，切换后变明文且只动自己', async () => {
     const user = userEvent.setup()
     await openCreateDialog(user)

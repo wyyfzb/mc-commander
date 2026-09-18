@@ -343,7 +343,7 @@ describe('ServerTerminal JVM 眼睛切换（P2-27 复现修复）', () => {
     expect(rewrittenBack.some((t) => t.includes('restricted method'))).toBe(false)
   })
 
-  it('停止态且缓冲非空 → 显示「实例已停止」状态条；运行中不显示（UXT-24：DOM 状态条随运行态显隐，不再写画布残留）', async () => {
+  it('停止态且缓冲非空 → 显示「实例已停止」状态条；运行中不显示（DOM 状态条随运行态显隐，不再写画布残留）', async () => {
     useServerStore.setState({ status: { isRunning: false } as never })
     useTerminalStore.setState({
       buffer: [{ text: '[19:37:44] Stopping server', level: 'info', jvmWarning: false }],

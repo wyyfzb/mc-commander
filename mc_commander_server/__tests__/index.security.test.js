@@ -87,7 +87,7 @@ vi.mock('../services/task_scheduler.js', () => ({
   },
 }));
 vi.mock('../websocket.js', () => ({
-  // index.js 会消费返回值里的 startSystemStatsBroadcast（清单 #98 的接线点）：
+  // index.js 会消费返回值里的 startSystemStatsBroadcast 的接线点：
   // 桩必须给出该函数及其 stop 句柄，否则启动代码在测试里直接抛错
   setupWebSocket: vi.fn(() => ({ startSystemStatsBroadcast: vi.fn(() => vi.fn()) })),
 }));
@@ -183,7 +183,7 @@ describe('安全响应头中间件（helmet）', () => {
 });
 
 describe('API Key Hash 启动校验', () => {
-  describe('公网监听的 SETUP_TOKEN 提示（清单 #32 附带）', () => {
+  describe('公网监听的 SETUP_TOKEN 提示（附带）', () => {
     // 直接拦 stderr 落点（logger.warn 的出口）：vitest 的 resetModules 会让 logger 模块
     // 重新实例化，spy 旧实例收不到新实例的调用
     let warnSpy;

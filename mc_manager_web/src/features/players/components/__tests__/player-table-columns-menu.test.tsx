@@ -1,5 +1,5 @@
 /**
- * 行内操作菜单的禁用门控（J71）
+ * 行内操作菜单的禁用门控
  * @radix-ui/react-menu 的 disabled 只拦内部 handleSelect（即 onSelect）；用 onClick 时
  * 「离线禁用」只剩基类 data-disabled:pointer-events-none 的 CSS 兜底，jsdom 与事件直派路径都验不到。
  * 本用例直派 click 事件，验证三个需在线的菜单项（传送/给予物品/踢出）不触发任何回调。
@@ -85,7 +85,7 @@ beforeEach(() => {
   usePlayersUiStore.setState({ selectedUuids: [] })
 })
 
-describe('行内操作菜单 · 需在线项的禁用门控（J71）', () => {
+describe('行内操作菜单 · 需在线项的禁用门控', () => {
   it('离线玩家：传送/给予物品/踢出禁用，点击不触发回调、不打开确认弹窗', async () => {
     const user = userEvent.setup()
     const props = setup(makeOfflinePlayer())

@@ -1,5 +1,5 @@
 /**
- * WS 认证失败 IP 临时封禁测试（H2-4a）：
+ * WS 认证失败 IP 临时封禁测试：
  * - 连续失败达到阈值（AUTH_LOGIN_MAX_FAILS 默认 10）→ IP 锁定：锁定窗口内
  *   即使凭据正确也拒绝（close 1008 'Too many auth failures'）
  * - 认证成功清零失败计数；锁定到期后放行；不同 IP 互不影响

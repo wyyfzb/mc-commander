@@ -1,5 +1,5 @@
 /**
- * PlayerTable 响应式形态（J28 / C3）
+ * PlayerTable 响应式形态
  * 两段各自锁住：
  * - <640px：整表转行式卡片（横向溢出下 10 列无论如何都读不全），保留勾选、全选、操作菜单
  * - <1280px：表格裁到核心列（选择/玩家/状态/操作），次级列不再横向溢出把勾选框与玩家名推出视野
@@ -113,7 +113,7 @@ function setup(players: Player[]) {
   return { onOpenDetail, onOpenBan, onAction, onKicked }
 }
 
-describe('PlayerTable · 响应式形态（J28/C3）', () => {
+describe('PlayerTable · 响应式形态', () => {
   it('<640px：渲染行式卡片而非表格，勾选/全选/操作菜单均在位', () => {
     restoreMedia = mockBreakpoints([BREAKPOINT_BELOW_SM, BREAKPOINT_BELOW_XL])
     usePlayersUiStore.setState({ selectedUuids: [] })

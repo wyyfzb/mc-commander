@@ -123,7 +123,7 @@ describe('KitEditorDialog dirty 关闭拦截', { timeout: 15000 }, () => {
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
-  describe('KitEditorDialog 图标单选组键盘模型（J55）', { timeout: 15000 }, () => {
+  describe('KitEditorDialog 图标单选组键盘模型', { timeout: 15000 }, () => {
     it('图标预设是单选组：方向键移动即选中且焦点跟随', () => {
       renderEditor()
       const group = screen.getByRole('radiogroup', { name: '礼包图标' })

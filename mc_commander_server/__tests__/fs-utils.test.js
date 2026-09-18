@@ -131,7 +131,7 @@ describe('fs-utils resolveSafePath', () => {
   });
 });
 
-// ── 存在性判定纪律的执行件（清单 #20：existsSync TOCTOU 收敛）─────────────
+// ── 存在性判定纪律的执行件（existsSync TOCTOU 收敛）─────────────
 describe('fs-utils ensureDir', () => {
   let root;
 

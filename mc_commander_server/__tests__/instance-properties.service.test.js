@@ -2,7 +2,7 @@
  * instance-properties.service 行为级测试（issue 514 分层治理）
  *
  * 覆盖 service 层核心分支：单键值校验（布尔/数值/level-name 路径穿越/
- * 换行注入/运行期命令字符集/非标量拒绝）、敏感键掩码（find-015）、PUT
+ * 换行注入/运行期命令字符集/非标量拒绝）、敏感键掩码、PUT
  * 校验阶段（敏感键占位符短路/白名单拒绝/整体拒绝原子性）、写盘与重启
  * 联动编排（磁盘快照 diff 基线/restartRequired 判定/运行中命令逐条下发
  * 与单条失败降级）、GET 展示视图（运行状态覆盖/掩码/异常兜底）、缓存
@@ -92,7 +92,7 @@ describe('instance-properties.service · 敏感键掩码 maskSensitiveProperties
     expect(src['rcon.password']).toBe('secret');
   });
 
-  it('敏感键集合覆盖 9 个网络/权限键（find-015 收口面不缩水）', () => {
+  it('敏感键集合覆盖 9 个网络/权限键（收口面不缩水）', () => {
     expect(SENSITIVE_PROPERTIES.size).toBe(9);
     for (const key of ['enable-rcon', 'rcon.password', 'rcon.port', 'enable-query', 'enable-status',
       'enable-command-block', 'online-mode', 'server-port', 'server-ip']) {

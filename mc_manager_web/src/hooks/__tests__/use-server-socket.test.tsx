@@ -17,7 +17,7 @@ import type { WebSocketLike, WebSocketCtor } from '@/api/ws'
  * - 实例切换/effect 重跑 → connect 幂等不产生双 WebSocket
  * - 断线补齐游标（lastEventId）存 localStorage，重建后订阅仍携带
  *
- * H2-4b 首帧鉴权：open 后客户端发 {type:'auth', ...}，服务端回
+ * 首帧鉴权：open 后客户端发 {type:'auth', ...}，服务端回
  * {type:'auth', ok:true} 后连接才可用（订阅在鉴权后发出）
  * hook 内 McSocket 默认用全局 WebSocket → vi.stubGlobal 注入 FakeWebSocket
  */
@@ -69,7 +69,7 @@ class FakeWebSocket implements WebSocketLike {
 
 const FakeCtor = FakeWebSocket as unknown as WebSocketCtor
 
-/** 模拟握手 + 首帧鉴权完成（服务端回 auth-ok；H2-4b 流程） */
+/** 模拟握手 + 首帧鉴权完成（服务端回 auth-ok；首帧鉴权流程） */
 function openAndAuth(ws: FakeWebSocket) {
   ws.open()
   ws.receive({ type: 'auth', ok: true })
@@ -399,7 +399,7 @@ describe('useServerSocket（状态跃迁通知接线）', () => {
     expect(qc.getQueryState(queryKeys.instances())?.isInvalidated).toBe(true)
   })
 
-  it('systemStatsUpdate 失效系统指标 query（清单 #98 接线后该分支才第一次有消费方）', async () => {
+  it('systemStatsUpdate 失效系统指标 query（接线后该分支才第一次有消费方）', async () => {
     useConnectionStore.setState({ baseUrl: '', apiKey: 'k1', status: 'ready' })
     const wrapper = createWrapper()
     const { qc } = wrapper

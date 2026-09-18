@@ -153,7 +153,7 @@ describe('CommandPalette 实例操作分组', () => {
   })
 })
 
-describe('CommandPalette 操作辅助（C2）', () => {
+describe('CommandPalette 操作辅助', () => {
   beforeEach(() => {
     localStorage.clear()
     useUiStore.setState({ commandPaletteOpen: false, lastOutputInstanceId: null })

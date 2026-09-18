@@ -150,7 +150,7 @@ describe('BanDialog 自定义理由关闭拦截', { timeout: 15000 }, () => {
     expect(screen.queryByText('放弃未保存的修改？')).not.toBeInTheDocument()
   })
 
-  describe('BanDialog 单选组键盘模型（J55）', { timeout: 15000 }, () => {
+  describe('BanDialog 单选组键盘模型', { timeout: 15000 }, () => {
     it('时长/理由是单选组：方向键移动即选中且焦点跟随（含回绕）', () => {
       renderDialog()
 

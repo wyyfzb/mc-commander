@@ -1,7 +1,7 @@
 /**
  * DegradationBanners 测试（降级横幅）：
  * - WS 断开（hasConnectedOnce + 未连接）→ error 横幅 + 重连按钮 + 轮询间隔（取 queries 常量）
- * - WS 断开且服务端有部署在途 → 补写「进度由服务端刷新、勿重新发起部署」（J29 断线提示）
+ * - WS 断开且服务端有部署在途 → 补写「进度由服务端刷新、勿重新发起部署」（断线提示）
  * - 从未连上（冷启动即断线）且兜底轮询已接管 → 同一降级事实的据实提示；
  *   仅挂载探针时不得出现（正常握手期内不闪）
  * - RCON 未连接（运行中实例）→ warning 横幅 + 写明服务器侧动作；不得给界面做不到的出口
@@ -95,7 +95,7 @@ describe('DegradationBanners', () => {
     expect(screen.getByRole('button', { name: /重连/ })).toBeInTheDocument()
   })
 
-  it('WS 断开 + 服务端有部署在途：提示进度刷新方式且明确不得重新发起部署（J29）', async () => {
+  it('WS 断开 + 服务端有部署在途：提示进度刷新方式且明确不得重新发起部署', async () => {
     deployStatusImpl = () => Promise.resolve(IN_FLIGHT)
     useServerStore.setState({ socketConnected: false, hasConnectedOnce: true })
     renderBanners()

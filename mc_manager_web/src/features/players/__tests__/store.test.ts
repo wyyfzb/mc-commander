@@ -1,5 +1,5 @@
 /**
- * 玩家筛选/排序纯函数单测 + UI store 持久化（H1-1）
+ * 玩家筛选/排序纯函数单测 + UI store 持久化
  */
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest'
 import type { Player } from '@/api/types'
@@ -158,7 +158,7 @@ describe('applyPlayersFilter（完整流水线）', () => {
   })
 })
 
-describe('usePlayersUiStore persist（H1-1 筛选状态记忆）', () => {
+describe('usePlayersUiStore persist（筛选状态记忆）', () => {
   const STORAGE_KEY = 'mcs-players-ui'
 
   beforeEach(() => {

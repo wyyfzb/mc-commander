@@ -87,7 +87,7 @@ describe('WebSocket 事件格式契约', () => {
       expect(msg.data).toMatchObject({ event: 'stopped', code: 0 });
     });
 
-    it('subscribe 应立即回发 status 快照，且逐字段满足 wsStatusSnapshotSchema（清单 #99）', () => {
+    it('subscribe 应立即回发 status 快照，且逐字段满足 wsStatusSnapshotSchema', () => {
       // 桩用真实 ManagedInstance 的形状：没有 status 字段、players 是 Map。
       // 旧实现手抄了 {status, isRunning, players, tps}：status 取到 undefined、
       // players 被 JSON.stringify 成 {} —— 两项都违反契约 schema，且与 e2e mock

@@ -1,5 +1,5 @@
 /**
- * 投递记录弹窗交互测试（UXT 第 5 项重组后）：
+ * 投递记录弹窗交互测试（第 5 项重组后）：
  * - 列表行仅剩启用开关 + 「设置」入口（行主体按钮）
  * - 设置弹窗内：投递日志每条展开显示「发送内容」（事件 payload）与「响应内容」（截断摘要）
  * - truncateResponseBody 边界（null/空白/200 上限/省略号）
@@ -93,7 +93,7 @@ describe('truncateResponseBody', () => {
   })
 })
 
-describe('列表行形态（UXT-5 重组）', () => {
+describe('列表行形态（重组）', () => {
   it('行内仅剩启用开关：无 测试/日志/编辑/删除 图标按钮', async () => {
     userEvent.setup()
     renderPage()

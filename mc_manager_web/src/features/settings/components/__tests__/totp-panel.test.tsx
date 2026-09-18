@@ -210,7 +210,7 @@ describe('TotpPanel 已启用 → 关闭', () => {
     expect(screen.queryByText(/可用恢复码仅剩/)).not.toBeInTheDocument()
   })
 
-  // 阈值口径：剩余 ≤3 即告警（清单 #31）。边界用「恰好 3 枚」钉住——阈值回退到
+  // 阈值口径：剩余 ≤3 即告警。边界用「恰好 3 枚」钉住——阈值回退到
   // ≤2 时该用例必红，而不是只覆盖「显然很低」的 2 枚
   it.each([
     [3, true],

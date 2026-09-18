@@ -279,7 +279,7 @@ describe('NOTIFICATION_TONE 类型 → 语义档', () => {
     expect(Object.keys(NOTIFICATION_TONE)).toHaveLength(31)
   })
 
-  describe('NotificationDrawer 严重度单选组键盘模型（J55）', () => {
+  describe('NotificationDrawer 严重度单选组键盘模型', () => {
     it('方向键在严重度筛选内移动即选中且焦点跟随', () => {
       useNotificationStore.setState({
         items: [makeItem({ type: 'serverCrash', category: 'server' })],

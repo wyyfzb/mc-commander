@@ -18,7 +18,7 @@ const INDEX_CSS = readFileSync(join(import.meta.dirname, '..', '..', 'index.css'
 
 /**
  * 字号 token 声明：整段 token 名后紧跟冒号，故 `--text-mcs-xs--line-height`
- * 这类配对行高子键不会被误当成独立档位（J13 登记配对行高后这条约束才真正生效）。
+ * 这类配对行高子键不会被误当成独立档位（登记配对行高后这条约束才真正生效）。
  */
 const FONT_SIZE_DECLARATION = /--text-(mcs-(?:[a-z0-9]+-)*[a-z0-9]+)[^\S\n]*:/g
 

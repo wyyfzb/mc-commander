@@ -102,7 +102,7 @@ describe('LastOutputDialog', () => {
     expect(screen.queryByText('实例末尾日志')).not.toBeInTheDocument()
   })
 
-  it('长行折行显示（C4）：whitespace-pre-wrap + break-all，不横向溢出', async () => {
+  it('长行折行显示：whitespace-pre-wrap + break-all，不横向溢出', async () => {
     server.use(
       http.get('*/api/v1/instances/:id', () =>
         HttpResponse.json({

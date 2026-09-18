@@ -168,7 +168,7 @@ describe('ActionForms', () => {
     expect(screen.getByText('RCON 未连接，无法执行操作')).toBeTruthy()
   })
 
-  // ── 单选组键盘模型（J55）：组语义 + roving tabindex + 方向键移动即选中 ──
+  // ── 单选组键盘模型：组语义 + roving tabindex + 方向键移动即选中 ──
   it('经验表单三组是单选组：方向键移动即选中且焦点跟随', async () => {
     const user = userEvent.setup()
     render(<ActionForms {...defaultProps} />, { wrapper })

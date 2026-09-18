@@ -1,5 +1,5 @@
 /**
- * accent 描边角色契约（UXT-22）
+ * accent 描边角色契约
  * 交互控件「激活/选中态」边界一律用强档 --mcs-accent-border-strong（≥3:1，check:contrast 第 9 组覆盖）；
  * 弱档 --mcs-accent-border 仅作装饰描边，不得承担可辨识的控件状态。
  * 显式豁免（状态由文字/图标/底色承载，不在此断言）：StatusPill 只读状态、

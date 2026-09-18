@@ -1,5 +1,5 @@
 /**
- * BatchBar 行为级补测（issue 506 / J15 口径回归）
+ * BatchBar 行为级补测（issue 506 口径回归）
  * - 9 动作入口三通道：导航类（传送/给予直接回调）、直执类（名单±/OP±/踢出/游戏模式）、
  *   确认类（仅清空背包不可逆走 ConfirmDialog）
  * - 可逆动作（名单±/OP±/游戏模式）直执 + 5s 撤销，且只回滚真正下发成功的目标
@@ -246,7 +246,7 @@ describe('BatchBar', () => {
     expect(onAction).toHaveBeenLastCalledWith({ kind: 'whitelistRemove', playerName: 'Bob' })
   })
 
-  it('执行期间全部动作按钮禁用（running 门控），完成后恢复；aria-busy 随执行翻转（J18）', async () => {
+  it('执行期间全部动作按钮禁用（running 门控），完成后恢复；aria-busy 随执行翻转', async () => {
     let release!: () => void
     const gate = new Promise<void>((resolve) => {
       release = resolve
@@ -256,7 +256,7 @@ describe('BatchBar', () => {
     await user.click(screen.getByRole('button', { name: '踢出' }))
     await waitFor(() => expect(screen.getByRole('button', { name: '传送' })).toBeDisabled())
     expect(screen.getByRole('button', { name: '清空背包' })).toBeDisabled()
-    // 读屏的「操作进行中」信号（J18）：执行中 busy，完成后复位
+    // 读屏的「操作进行中」信号：执行中 busy，完成后复位
     expect(screen.getByText(/已选择 1 名玩家/).parentElement).toHaveAttribute('aria-busy', 'true')
     release()
     await screen.findByText('批量踢出完成：成功 1，失败 0')
@@ -270,7 +270,7 @@ describe('BatchBar', () => {
     expect(usePlayersUiStore.getState().selectedUuids).toEqual([])
   })
 
-  it('执行期间「清除选择」禁用，点击不清空选中（J67：与同条其余控件同口径）', async () => {
+  it('执行期间「清除选择」禁用，点击不清空选中（与同条其余控件同口径）', async () => {
     let release!: () => void
     const gate = new Promise<void>((resolve) => {
       release = resolve

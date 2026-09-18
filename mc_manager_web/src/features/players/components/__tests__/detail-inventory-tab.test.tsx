@@ -194,7 +194,7 @@ describe('InventoryTab hover tooltip', () => {
     expect(screen.queryByText(/已附魔/)).not.toBeInTheDocument()
   })
 
-  it('自定义名 break-all：玩家可控长串折行防溢出 tooltip 框（J66）', async () => {
+  it('自定义名 break-all：玩家可控长串折行防溢出 tooltip 框', async () => {
     const player = samplePlayer()
     // 混入拉丁无空白段：CJK 串本可逐字折行（min-content=单字宽），拉丁串才真正触发溢出
     player.inventory!.quickbar[0] = makeItem({

@@ -1,5 +1,5 @@
 /**
- * 密码输入高度基座归一的回归锁（J14 高度半 + 全站收口 h-8）
+ * 密码输入高度基座归一的回归锁（高度基座归一 + 全站收口 h-8）
  * 口径：`ui/input.tsx` 基座 h-8，`PasswordInput` 基座不自带高度，全站输入控件统一 32px 档。
  * 本用例钉住两端：基座无 h-10（回落 h-8）与登录页全部输入不再自带 h-10。
  * 单独成文件同 J59/J14 先例（login-page.test.tsx 的修改会被工具链误拦）。
@@ -43,7 +43,7 @@ function renderLoginPage() {
   return render(<RouterProvider router={router} />)
 }
 
-describe('PasswordInput 高度基座归一（J14）', () => {
+describe('PasswordInput 高度基座归一', () => {
   it('基座不自带高度：未传高度类时回落 ui/input 的 h-8', () => {
     const { container } = render(<PasswordInput id="probe-secret" value="" onChange={() => {}} />)
     const input = container.querySelector('input')!

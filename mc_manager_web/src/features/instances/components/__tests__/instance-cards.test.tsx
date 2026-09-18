@@ -193,7 +193,7 @@ describe('InstanceCards', () => {
     expect(onSwitch).toHaveBeenCalledWith(beta)
   })
 
-  // ── 操作行收敛（J8）────────────────────────────────────────────
+  // ── 操作行收敛────────────────────────────────────────────
 
   it('行内最多两个主操作：启停 + 切换（非当前实例）+ 一个操作菜单触发器', () => {
     const { container } = render(<InstanceCards {...baseProps()} />)
