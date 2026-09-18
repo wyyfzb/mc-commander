@@ -9,6 +9,7 @@ import { describe, it, expect } from 'vitest'
 import {
   baseTierOf,
   collectCardSurfaceOffsets,
+  collectDangerousButtonBorderHits,
   collectHeadingTiers,
   collectRoleTierMaps,
   collectTextBaseHits,
@@ -167,5 +168,67 @@ describe('第 23 条标题档位采集（一层页内模块的静态近似）', 
     expect([...collectHeadingTiers([page], [page, sectionBase])]).toEqual([])
     // 同一模块一旦进入判定面（页内模块），其标题标签才计入
     expect([...collectHeadingTiers([page, sectionBase], [page, sectionBase])]).toEqual(['lg'])
+  })
+})
+
+describe('第 28 条：弱档危险描边 + 按钮语义同行采集', () => {
+  it('手写危险按钮配方命中并给出所在行号', () => {
+    const code = [
+      'export function Bar() {',
+      '  return <Button variant="outline" className="border-mcs-error-border" onClick={fn}>删除</Button>',
+      '}',
+    ].join('\n')
+    expect(collectDangerousButtonBorderHits(stripComments(code))).toEqual([{ line: 2 }])
+  })
+
+  it('四类按钮语义标记均可触发（onClick / Button / 原生 button / role）', () => {
+    for (const marker of ['onClick={fn}', '<Button', '<button', 'role="button"']) {
+      const code = `<div className="border-mcs-error-border" ${marker} />`
+      expect(collectDangerousButtonBorderHits(code)).toHaveLength(1)
+    }
+  })
+
+  it('强档描边（-strong）不命中：那是变体与 tone 词表的声明域', () => {
+    const code = '<Button variant="outline" className="border-mcs-error-border-strong" onClick={fn}>'
+    expect(collectDangerousButtonBorderHits(code)).toEqual([])
+  })
+
+  it('无按钮语义的弱档描边（普通告警卡描边）不命中', () => {
+    const code = '<div className="border border-mcs-error-border bg-mcs-error-bg-subtle px-3 py-2" />'
+    expect(collectDangerousButtonBorderHits(code)).toEqual([])
+  })
+
+  it('注释里引用的配方示例不算现场（stripComments 后正文判定）', () => {
+    const code = [
+      '// 历史现场：variant="outline" + className="border-mcs-error-border" onClick={fn}',
+      '/* 块注释里的配方示例：border-mcs-error-border 与 onClick={fn} 同行 */',
+      'export const ok = 1',
+    ].join('\n')
+    expect(collectDangerousButtonBorderHits(stripComments(code))).toEqual([])
+  })
+
+  it('同行判定不跨行共现：描边与 onClick 分处两行不命中（防退化为全文共现判定）', () => {
+    const code = [
+      '<div className="border-mcs-error-border" />',
+      '<Button onClick={fn}>删除</Button>',
+    ].join('\n')
+    expect(collectDangerousButtonBorderHits(stripComments(code))).toEqual([])
+  })
+
+  it('同一文件多现场各计一次，行号递增', () => {
+    const code = [
+      '<button className="border-mcs-error-border" onClick={fn}>a</button>',
+      'const ok = 1',
+      '<span role="button" className="border-mcs-error-border">b</span>',
+    ].join('\n')
+    expect(collectDangerousButtonBorderHits(stripComments(code))).toEqual([{ line: 1 }, { line: 3 }])
+  })
+
+  it('剥离注释后行号仍与原文对齐（stripComments 等长替换，报错行号不得漂移）', () => {
+    const code = [
+      '// 前置注释占用第一行：variant="outline" + border-mcs-error-border onClick={fn}',
+      '<Button className="border-mcs-error-border" onClick={fn}>x</Button>',
+    ].join('\n')
+    expect(collectDangerousButtonBorderHits(stripComments(code))).toEqual([{ line: 2 }])
   })
 })

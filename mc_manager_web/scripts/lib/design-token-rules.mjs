@@ -16,7 +16,8 @@ export const STRING_LITERAL = /'[^'\n]*'|"[^"\n]*"|`(?:[^`\\]|\\.)*`/g
 const QUOTED_LITERAL = /(["'`])([^"'`\n]*)\1/g
 
 /** 剥掉注释后的正文（一律等长空白替换，保证偏移量↔行号仍与原文对齐）。
- *  只供词表侧跨行判定使用：逐行检查按原始行判定，注释里的示例仍会命中（既有取舍，未改） */
+ *  供文件级采集判定使用（第 21/27/28 条：注释里的配方示例不算现场）；
+ *  逐行规则（第 1–11 条）按原始行判定、不经本函数——两者的取舍各自成立 */
 export function stripComments(content) {
   return content
     .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
@@ -60,6 +61,26 @@ export function collectTextBaseHits(content) {
         if (word === 'text-base') hits.push({ line: i + 1 })
       }
     }
+  }
+  return hits
+}
+
+/**
+ * 第 28 条：弱档危险描边 + 按钮语义同行的现场（手写危险按钮配方）。
+ * 危险按钮的配方唯一声明源是 ui/button 的 destructive 变体——调用点手写
+ * `border-mcs-error-border`（弱档，不含 -strong：强档描边是「已选中」语义且
+ * 只在变体/tone 词表里声明）加按钮语义，会让危险形态再次发散。
+ * 按钮语义按同行标记近似（onClick / Button / 原生 button / role="button"）；
+ * 跨行的 className 刻意不判（与逐行规则口径一致，宁漏不误报）。
+ * 入参须是 stripComments 后的正文：注释里引用的配方示例不算现场。
+ * @returns {{ line: number }[]} 1 基行号，按出现顺序
+ */
+const DANGEROUS_BUTTON_BORDER = /border-mcs-error-border(?!-strong)/
+const BUTTON_SEMANTICS = /\bonClick=|<Button\b|<button\b|role="button"/
+export function collectDangerousButtonBorderHits(code) {
+  const hits = []
+  for (const [i, line] of code.split('\n').entries()) {
+    if (DANGEROUS_BUTTON_BORDER.test(line) && BUTTON_SEMANTICS.test(line)) hits.push({ line: i + 1 })
   }
   return hits
 }

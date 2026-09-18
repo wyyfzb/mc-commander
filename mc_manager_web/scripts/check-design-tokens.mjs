@@ -55,6 +55,10 @@
  *  27. 原生 text-base（16px，体系外第 7 个字号）：唯一豁免现场是 ui/input.tsx 与
  *      ui/textarea.tsx 各 1 处（移动端聚焦时 <16px 会触发 iOS 自动缩放），按「登记额度」
  *      校验——额度外的第 N 处即报（写法同第 21 条卡片面额度）
+ *  28. 危险描边只从变体取：弱档 error 描边（border-mcs-error-border）与按钮语义同行 →
+ *      手写危险按钮配方（历史现场：variant="outline" + className 手写弱档描边）；危险按钮
+ *      配方唯一声明源是 ui/button 的 destructive 变体（跨行 className 刻意不判，宁漏不误报）。
+ *      扫描面＝src/ 内（排除 ui/、tone.ts 与 __tests__），不覆盖 e2e/ 与 scripts/
  * 类名提取覆盖 className="..."、className={cn(...)}、模板字面量、对象映射值（如 tone: 'bg-...'），
  * 不留「只在 className 字面属性里才检查」的盲区。
  * 发现违规 → 输出 文件:行号 → 非零退出码（阻止合并）
@@ -66,6 +70,7 @@ import { join, extname, relative, sep } from 'node:path'
 import {
   STRING_LITERAL,
   collectCardSurfaceOffsets,
+  collectDangerousButtonBorderHits,
   collectHeadingTiers,
   collectTextBaseHits,
   lineAt,
@@ -476,6 +481,11 @@ function walkDir(dir) {
         if (reported.has(hit.offset)) continue
         const lineNum = content.slice(0, hit.offset).split('\n').length
         console.log(`${relPath}:${lineNum}: 手写 accent 选中强调形态（border-strong+bg-subtle）→ 声明源只有 components/mcs/tone.ts 的 TONE_SELECTED_* 常量`)
+        violations++
+      }
+      // 28. 危险按钮手写配方：弱档 error 描边 + 按钮语义同行（测试同样按定义豁免）
+      for (const hit of collectDangerousButtonBorderHits(stripComments(content))) {
+        console.log(`${relPath}:${hit.line}: 弱档 error 描边 + 按钮语义同行 → 危险按钮一律用 Button 的 destructive 变体，不得手写 border-mcs-error-border`)
         violations++
       }
     }
@@ -1021,4 +1031,4 @@ if (violations > 0) {
   console.error(`\n✗ 发现 ${violations} 处设计 token 违规（设计规范 §4.5）`)
   process.exit(1)
 }
-console.log('✓ 设计 token 完整性检查通过（色板类/dark:/transition-all/duration-数字/rounded-任意值/字号上限/焦点可见性/未注册 token 类/token 角色矩阵/alpha 白名单/未定义类/死类/死 token/内容面 tint 叠加/语义色三件套与选中强调形态声明源/Z 轴阶梯/text-base 额度/玻璃预算/危险半透明底/内容面 tint 不透明/布局属性动画/卡片面声明源/标签组件唯一性/页面页头与标题档/全屏覆盖层来源/行内抢键落点/内联尺寸单位）')
+console.log('✓ 设计 token 完整性检查通过（色板类/dark:/transition-all/duration-数字/rounded-任意值/字号上限/焦点可见性/未注册 token 类/token 角色矩阵/alpha 白名单/未定义类/死类/死 token/内容面 tint 叠加/语义色三件套与选中强调形态声明源/Z 轴阶梯/text-base 额度/玻璃预算/危险半透明底/内容面 tint 不透明/布局属性动画/卡片面声明源/标签组件唯一性/页面页头与标题档/全屏覆盖层来源/行内抢键落点/内联尺寸单位/危险描边只从变体取）')
