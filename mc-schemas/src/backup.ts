@@ -31,6 +31,16 @@ export const backupRestoreRequestSchema = z.object({
 })
 
 /**
+ * POST /instances/:instanceId/backups/cancel 响应：取消命中的进行中操作。
+ * kind=create 时备份记录与半成品快照一并清除（主动取消不留 failed 记录）；
+ * kind=restore 时走既有回滚（pre_restore rename 回来），备份记录回 completed 可再次恢复。
+ */
+export const backupCancelResponseSchema = z.object({
+  kind: z.enum(['create', 'restore']),
+  backupId: z.number(),
+})
+
+/**
  * 恢复确认的目标串（服务端校验与前端输入提示的唯一派生口径）。
  * 优先实例名；实例没有名称时退到备份名，备份名也为空再退到备份 id——确认串必须
  * 始终非空：空串天然匹配会让这道闸门空转（与卸载侧空名实例的加固同源问题），
@@ -94,6 +104,7 @@ export const backupAttachResponseSchema = z.object({
 export type BackupItem = z.infer<typeof backupItemSchema>
 export type BackupCreateRequest = z.infer<typeof backupCreateRequestSchema>
 export type BackupRestoreRequest = z.infer<typeof backupRestoreRequestSchema>
+export type BackupCancelResponse = z.infer<typeof backupCancelResponseSchema>
 export type ArchivedSnapshotGroup = z.infer<typeof archivedSnapshotGroupSchema>
 export type BackupAttachRequest = z.infer<typeof backupAttachRequestSchema>
 export type BackupAttachResponse = z.infer<typeof backupAttachResponseSchema>

@@ -27,6 +27,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
+import { ProgressBar } from '@/components/mcs/progress-bar'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
@@ -47,22 +48,6 @@ function StageIcon({ stage }: { stage: UpgradeStage }) {
   if (stage === 'failed') return <XCircle className="h-5 w-5 text-mcs-error-fg" />
   if (stage === 'cancelled') return <Ban className="h-5 w-5 text-mcs-text-muted" />
   return <Loader2 className="h-5 w-5 animate-spin text-mcs-accent-fg" />
-}
-
-/** 进度条（token 填充，与 deploy-dialog 同模式） */
-function ProgressBar({ percent }: { percent: number }) {
-  const p = Math.max(0, Math.min(100, percent))
-  return (
-    <div
-      role="progressbar"
-      aria-valuenow={Math.round(p)}
-      aria-valuemin={0}
-      aria-valuemax={100}
-      className="h-1.5 w-full overflow-hidden rounded-full bg-mcs-bg-emphasis"
-    >
-      <div className="h-full rounded-full" style={{ width: `${p}%`, background: 'var(--mcs-accent)' }} />
-    </div>
-  )
 }
 
 interface UpgradeDialogProps {

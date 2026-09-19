@@ -61,6 +61,8 @@ export const ErrorCode = {
   BACKUP_IN_PROGRESS: 40901,
   BACKUP_RCON_UNAVAILABLE: 40902,
   RESTORE_IN_PROGRESS: 40903,
+  /** 取消请求无命中：该实例当前没有进行中的备份/恢复操作 */
+  BACKUP_NOT_ACTIVE: 40904,
   BACKUP_FAILED: 50002,
   /** 恢复缺少/不匹配实例名确认（服务端强制，见 POST /backups/:id/restore） */
   BACKUP_RESTORE_CONFIRM_REQUIRED: 40017,
@@ -134,6 +136,7 @@ const LOCALIZED_MESSAGES: Partial<Record<ErrorCodeValue, string>> = {
   [ErrorCode.TASK_CANCELLED]: '操作已取消',
   [ErrorCode.BACKUP_NOT_FOUND]: '备份不存在',
   [ErrorCode.BACKUP_IN_PROGRESS]: '已有备份任务进行中',
+  [ErrorCode.BACKUP_NOT_ACTIVE]: '没有进行中的备份或恢复操作',
   [ErrorCode.RESTORE_IN_PROGRESS]: '已有恢复任务进行中',
   [ErrorCode.BACKUP_FAILED]: '备份失败',
   [ErrorCode.INSTANCE_DELETE_UNNAMED]: '该实例无名称，名称确认不构成有效确认，请确认不可恢复后再试',

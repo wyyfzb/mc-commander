@@ -209,10 +209,26 @@ describe('_restoreFromSnapshot 平台分支：恢复降级路径', () => {
     expect(robocopyCall[1]).toContain('/MIR');
   });
 
-  it('Linux：rsync -a --delete（--delete 仅恢复场景使用）', async () => {
+  it('Linux：rsync -a --delete（--delete 仅恢复场景使用；无进度监听不加 --info）', async () => {
     spawnEmits((proc) => proc.emit('close', 0));
     await service._restoreFromSnapshot('/snap', '/inst', {});
     expect(mockSpawn.mock.calls[0][0]).toBe('rsync');
+    expect(mockSpawn.mock.calls[0][1]).toEqual(['-a', '--delete', '/snap/', '/inst/']);
+  });
+
+  it('Linux：传 onStdout 时才加 --info=progress2（GNU rsync <3.1 不识别该参数，无监听不加）', async () => {
+    spawnEmits((proc) => proc.emit('close', 0));
+    await service._restoreFromSnapshot('/snap', '/inst', { onStdout: () => {} });
+    expect(mockSpawn.mock.calls[0][1]).toEqual([
+      '-a', '--delete', '--info=progress2', '/snap/', '/inst/',
+    ]);
+  });
+
+  it('darwin：即使传 onStdout 也不加 --info=progress2（openrsync/rsync 2.6.9 不识别，传了恢复整体失败）', async () => {
+    setPlatform('darwin');
+    spawnEmits((proc) => proc.emit('close', 0));
+    // 生产路径恒传进度解析器：参数门控必须按平台分支，不能只看 onStdout
+    await service._restoreFromSnapshot('/snap', '/inst', { onStdout: () => {} });
     expect(mockSpawn.mock.calls[0][1]).toEqual(['-a', '--delete', '/snap/', '/inst/']);
   });
 

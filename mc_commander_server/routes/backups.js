@@ -6,13 +6,14 @@ import { ErrorCodes, AppError } from '../utils/response.js';
 import { parsePagination } from '../utils/pagination.js';
 import { localDateKey } from '../utils/local-date.js';
 import { BackupModel } from '../db/backup.model.js';
-import { BackupService, resolveContained } from '../services/backup.service.js';
+import { BackupService, requestCancelBackup, resolveContained } from '../services/backup.service.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
 import config from '../config.js';
 import {
   archivedSnapshotListSchema,
   backupAttachRequestSchema,
   backupAttachResponseSchema,
+  backupCancelResponseSchema,
   backupCreateRequestSchema,
   backupItemSchema,
   backupRestoreRequestSchema,
@@ -196,6 +197,30 @@ export function createBackupRoutes(serverManager) {
     await backupService.restoreBackup(req.params.id);
 
     res.status(202).json(validatedSuccess(nullDataSchema, null, 'Restore started'));
+  }));
+
+  // POST /instances/:instanceId/backups/cancel —— 取消该实例进行中的备份/恢复。
+  // 取消是尽力而为：命中后 abort 子进程，实际终态经 backup/restoreCancelled 或
+  // backupFailed/restoreFailed 事件推送；无进行中操作时 409（刚完成的竞态下
+  // 前端失效列表自然看到终态）
+  router.post('/instances/:instanceId/backups/cancel', asyncHandler(async (req, res) => {
+    const { instanceId } = req.params;
+    if (!serverManager.getInstance(instanceId)) {
+      throw new AppError(ErrorCodes.INSTANCE_NOT_FOUND);
+    }
+    const hit = requestCancelBackup(instanceId);
+    if (!hit) {
+      throw new AppError(ErrorCodes.BACKUP_NOT_ACTIVE, '没有进行中的备份或恢复操作');
+    }
+    recordAudit({
+      instanceId,
+      action: AuditActions.BACKUP_CANCEL,
+      targetType: 'backup',
+      targetId: String(hit.backupId),
+      // 同一条 action 承载取消备份与取消恢复两种语义：kind 落库供审计页区分
+      detail: { kind: hit.kind },
+    });
+    res.json(validatedSuccess(backupCancelResponseSchema, hit, '取消请求已发送'));
   }));
 
   router.delete('/backups/:id', asyncHandler(async (req, res) => {

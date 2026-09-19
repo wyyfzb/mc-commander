@@ -26,12 +26,16 @@ export const WSEvents = {
   PLAYER_SLEEP: 'playerSleep',
   ACHIEVEMENT: 'achievement',
   BACKUP_START: 'backupStart',
+  BACKUP_PROGRESS: 'backupProgress',
   BACKUP_COMPLETE: 'backupComplete',
   BACKUP_FAILED: 'backupFailed',
   BACKUP_SKIPPED: 'backupSkipped',
+  BACKUP_CANCELLED: 'backupCancelled',
   RESTORE_START: 'restoreStart',
+  RESTORE_PROGRESS: 'restoreProgress',
   RESTORE_COMPLETE: 'restoreComplete',
   RESTORE_FAILED: 'restoreFailed',
+  RESTORE_CANCELLED: 'restoreCancelled',
   TASK_EXECUTE: 'taskExecute',
   TASK_FAILED: 'taskFailed',
   WEBHOOK_DELIVERY_FAILED: 'webhookDeliveryFailed',
@@ -133,9 +137,11 @@ const NOTIFICATION_EVENT_TYPES = new Set([
   WSEvents.BACKUP_COMPLETE,
   WSEvents.BACKUP_FAILED,
   WSEvents.BACKUP_SKIPPED,
+  WSEvents.BACKUP_CANCELLED,
   WSEvents.RESTORE_START,
   WSEvents.RESTORE_COMPLETE,
   WSEvents.RESTORE_FAILED,
+  WSEvents.RESTORE_CANCELLED,
   // 任务失败与 backupFailed 同语义：低频高价值，落库断线补齐。
   // taskExecute 每次触发都发故不入集合（见上方注释），失败事件仅在异常时发射
   WSEvents.TASK_FAILED,
@@ -740,6 +746,26 @@ export function setupWebSocket(wss, serverManager) {
   // 定时备份因上一备份仍在进行而被跳过（task_scheduler 发出）
   serverManager.on('instance:backupSkipped', (data) => {
     broadcast(data.instanceId, WSEvents.BACKUP_SKIPPED, data);
+  });
+
+  // 备份/恢复进度（rsync --info=progress2 解析，服务端已 1s 节流）：
+  // 高频瞬态，不落库；仅在订阅了该实例的连接上转发
+  serverManager.on('instance:backupProgress', (data) => {
+    broadcast(data.instanceId, WSEvents.BACKUP_PROGRESS, data);
+  });
+
+  serverManager.on('instance:restoreProgress', (data) => {
+    broadcast(data.instanceId, WSEvents.RESTORE_PROGRESS, data);
+  });
+
+  // 用户取消备份/恢复（backup.service.js 取消分支发出）：落库通知中心，
+  // 其他标签页/断线重连后可见取消结局
+  serverManager.on('instance:backupCancelled', (data) => {
+    broadcast(data.instanceId, WSEvents.BACKUP_CANCELLED, data);
+  });
+
+  serverManager.on('instance:restoreCancelled', (data) => {
+    broadcast(data.instanceId, WSEvents.RESTORE_CANCELLED, data);
   });
 
   // 恢复异步化三事件（backup.service.js executeRestore 发出）

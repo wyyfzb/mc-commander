@@ -101,6 +101,7 @@ export {
   archivedSnapshotListSchema,
   backupAttachRequestSchema,
   backupAttachResponseSchema,
+  backupCancelResponseSchema,
   restoreConfirmTarget,
   type BackupItem,
   type BackupCreateRequest,
@@ -108,6 +109,7 @@ export {
   type ArchivedSnapshotGroup,
   type BackupAttachRequest,
   type BackupAttachResponse,
+  type BackupCancelResponse,
 } from './backup'
 
 // 定时任务
@@ -147,6 +149,7 @@ export {
   wsPlayerEventPayloadSchema,
   wsWeatherPayloadSchema,
   wsBackupPayloadSchema,
+  wsBackupProgressPayloadSchema,
   NOTIFICATION_EVENT_TYPES,
   type WsEventType,
   type WsMessage,
@@ -157,6 +160,7 @@ export {
   type WsPlayerEventPayload,
   type WsWeatherPayload,
   type WsBackupPayload,
+  type WsBackupProgressPayload,
 } from './ws'
 
 // 世界

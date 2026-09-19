@@ -846,6 +846,10 @@ const server = createServer((req, res) => {
       mockArchivedAttached = true
       return res.end(ok({ attached: 2, skipped: 1 }, '已挂载 2 份归档快照（跳过 1 份：已挂载过或无法识别）'))
     }
+    // 取消进行中的备份/恢复（服务端 routes/backups.js POST /instances/:id/backups/cancel）
+    if (/^\/api\/v1\/instances\/[^/]+\/backups\/cancel$/.test(path) && req.method === 'POST') {
+      return res.end(ok({ kind: 'create', backupId: 23 }, '取消请求已发送'))
+    }
     if (path.match(/^\/api\/v1\/backups\/\d+\/restore$/)) {
       // 与真实服务端同语义：恢复必须带实例名确认（mock 的实例名为「E2E 演示实例」）
       let confirmName = ''

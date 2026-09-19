@@ -13,7 +13,8 @@ export type NotificationType =
   | 'serverStart' | 'serverStop' | 'serverCrash' | 'save' | 'circuitBreaker'
   | 'lowTps' | 'highCpu' | 'highMemory' | 'weatherChange'
   | 'backupStart' | 'backupComplete' | 'backupFailed' | 'backupSkipped'
-  | 'restoreStart' | 'restoreComplete' | 'restoreFailed'
+  | 'backupCancelled'
+  | 'restoreStart' | 'restoreComplete' | 'restoreFailed' | 'restoreCancelled'
   | 'taskFailed'
   | 'webhookFailed'
   | 'deployComplete' | 'deployFailed' | 'deployCancelled'
@@ -66,9 +67,13 @@ export const NOTIFICATION_TYPE_META: Record<
   backupComplete: { label: '备份完成', category: 'server', severity: 'info' },
   backupFailed: { label: '备份失败', category: 'server', severity: 'severe' },
   backupSkipped: { label: '备份已跳过', category: 'server', severity: 'warning' },
+  // 用户主动取消不是故障：severity 保持 info，不进严重告警档（与 deploy/upgrade 取消同口径）
+  backupCancelled: { label: '备份已取消', category: 'server', severity: 'info' },
   restoreStart: { label: '恢复开始', category: 'server', severity: 'severe' },
   restoreComplete: { label: '恢复完成', category: 'server', severity: 'info' },
   restoreFailed: { label: '恢复失败', category: 'server', severity: 'severe' },
+  // 同上：用户主动取消，info 档
+  restoreCancelled: { label: '恢复已取消', category: 'server', severity: 'info' },
   taskFailed: { label: '任务失败', category: 'server', severity: 'severe' },
   webhookFailed: { label: 'Webhook 投递失败', category: 'server', severity: 'severe' },
   deployComplete: { label: '部署完成', category: 'server', severity: 'info' },
@@ -258,6 +263,19 @@ export function buildNotifications(
       return [{
         type: 'upgradeCancelled', category: 'server',
         content: `实例「${String(d.instanceName ?? '未命名')}」${String(d.detail || '升级已取消')}`,
+      }]
+    // 备份/恢复取消走显式分支（不落 BACKUP_CONTENT 静态表）：恢复取消的
+    // 服务端 content 会区分「原数据已回滚」与「回滚失败请人工检查」，
+    // 静态文案会把后者这类危险明细吞掉
+    case 'backupCancelled':
+      return [{
+        type: 'backupCancelled', category: 'server',
+        content: String(d.content || '备份已取消'),
+      }]
+    case 'restoreCancelled':
+      return [{
+        type: 'restoreCancelled', category: 'server',
+        content: String(d.content || '恢复已取消'),
       }]
     default: {
       if (type in BACKUP_CONTENT) {

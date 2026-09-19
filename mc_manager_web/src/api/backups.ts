@@ -4,7 +4,12 @@
  * 分页信封仅解包 data（pagination 丢失）——前端拉 pageSize=100 后 slice 最近 10 条。
  */
 import { apiDelete, apiDownloadFile, apiGet, apiPost, type ConnectionConfig } from './client'
-import type { ArchivedSnapshotGroup, BackupAttachResponse, BackupItem } from './types'
+import type {
+  ArchivedSnapshotGroup,
+  BackupAttachResponse,
+  BackupCancelResponse,
+  BackupItem,
+} from './types'
 
 /** 备份列表（GET /instances/:id/backups?page=&pageSize=；分页信封） */
 export function apiGetBackups(config: ConnectionConfig, instanceId: string) {
@@ -37,6 +42,15 @@ export function apiRestoreBackup(config: ConnectionConfig, backupId: number, con
 /** 删除备份（DELETE /backups/:id；creating/restoring 中拒绝 40901） */
 export function apiDeleteBackup(config: ConnectionConfig, backupId: number) {
   return apiDelete<null>(`/api/v1/backups/${backupId}`, config)
+}
+
+/**
+ * 取消该实例进行中的备份/恢复（POST /instances/:id/backups/cancel）。
+ * 取消是尽力而为：命中后服务端 abort 子进程，实际终态经 backup/restoreCancelled
+ * 事件推送；无进行中操作时 40904（刚完成的竞态，失效列表即可看到终态）。
+ */
+export function apiCancelBackupOperation(config: ConnectionConfig, instanceId: string) {
+  return apiPost<BackupCancelResponse>(`/api/v1/instances/${instanceId}/backups/cancel`, config, {})
 }
 
 /**

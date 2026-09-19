@@ -68,6 +68,24 @@ describe('buildNotifications 文案模板', () => {
     expect(buildNotifications({ type: 'backupSkipped' })[0]?.content).toBe('定时备份已跳过（上一备份仍在进行）')
   })
 
+  it('备份/恢复取消透传服务端 content（回滚失败这类危险明细不得被静态文案吞掉）', () => {
+    // 服务端 content 优先：恢复取消时区分「已回滚」与「回滚失败请人工检查」
+    const [cancelled] = buildNotifications({
+      type: 'restoreCancelled',
+      data: { content: '恢复已取消，但原数据回滚失败，请检查实例目录或残留的 pre_restore 目录' },
+    })
+    expect(cancelled).toMatchObject({ type: 'restoreCancelled', category: 'server' })
+    expect(cancelled?.content).toBe('恢复已取消，但原数据回滚失败，请检查实例目录或残留的 pre_restore 目录')
+
+    expect(
+      buildNotifications({ type: 'backupCancelled', data: { content: '备份已取消，未产生备份' } })[0]?.content,
+    ).toBe('备份已取消，未产生备份')
+
+    // content 缺失时回退静态文案（老服务端/异常 payload 不致空白条目）
+    expect(buildNotifications({ type: 'restoreCancelled' })[0]?.content).toBe('恢复已取消')
+    expect(buildNotifications({ type: 'backupCancelled' })[0]?.content).toBe('备份已取消')
+  })
+
   it('taskFailed 文案含任务名与错误摘要', () => {
     const [n] = buildNotifications({
       type: 'taskFailed',

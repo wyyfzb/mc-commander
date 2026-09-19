@@ -8,6 +8,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useServerStore } from '@/stores/server'
 import { useDeployStore } from '@/stores/deploy'
 import { applyUpgradeProgress, isUpgradeTerminal } from '@/stores/upgrade'
+import { applyBackupProgress, clearBackupProgress } from '@/stores/backup-progress'
 import { useNotificationStore } from '@/stores/notifications'
 import { useTerminalStore } from '@/stores/terminal'
 import { useUiStore } from '@/stores/ui'
@@ -301,14 +302,38 @@ export function useServerSocket(instanceId: string | null) {
           void queryClient.invalidateQueries({ queryKey: queryKeys.players(msg.instanceId) })
           dispatchEvent({ type: msg.type, data: msg.data as Record<string, unknown>, instanceId: msg.instanceId })
           break
-        case 'weatherUpdate':
-        case 'backupStart':
+        case 'backupProgress':
+        case 'restoreProgress': {
+          // 进度推送（1s 节流）：瞬态 UI 状态进 backup-progress store，
+          // 不进通知中心（高频事件落库会挤占断线补齐配额）
+          applyBackupProgress(
+            msg.instanceId,
+            msg.type === 'backupProgress' ? 'create' : 'restore',
+            Number(data.backupId ?? 0),
+            Number(data.percent ?? 0),
+          )
+          break
+        }
         case 'backupComplete':
         case 'backupFailed':
-        case 'backupSkipped':
-        case 'restoreStart':
+        case 'backupCancelled':
         case 'restoreComplete':
         case 'restoreFailed':
+        case 'restoreCancelled':
+          // 终态清除进度条（列表轮询/事件刷新负责后续数据收敛）
+          clearBackupProgress(msg.instanceId)
+          dispatchEvent({ type: msg.type, data: msg.data as Record<string, unknown>, instanceId: msg.instanceId })
+          break
+        case 'backupStart':
+        case 'restoreStart':
+          // 新操作开始：清上一次的进度条目——终态事件对非当前实例会被上方
+          // 实例门拦下，回切后陈旧百分比会污染本次进度条（降级路径无新推送时
+          // 会整段显示旧值）
+          clearBackupProgress(msg.instanceId)
+          dispatchEvent({ type: msg.type, data: msg.data as Record<string, unknown>, instanceId: msg.instanceId })
+          break
+        case 'weatherUpdate':
+        case 'backupSkipped':
         case 'taskFailed':
         case 'webhookDeliveryFailed':
           dispatchEvent({ type: msg.type, data: msg.data as Record<string, unknown>, instanceId: msg.instanceId })

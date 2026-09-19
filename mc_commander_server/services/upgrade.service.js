@@ -282,8 +282,9 @@ export class UpgradeService {
    * 等待备份完成（封装 BackupService 事件）
    * @param {string} instanceId
    * @param {AbortSignal|null} [signal] 取消信号：中断等待并让升级中止。
-   *   备份本身不随之中断（BackupService 尚未接取消），它会照常跑完并
-   *   留下一个正常备份——升级取消不需要删除它（那是用户的既有灾备副本）
+   *   升级侧取消不主动中断备份（用户可在备份面板单独取消，那会走
+   *   backupCancelled）；本函数的 abort 只停止等待，备份照常跑完并留下
+   *   一个正常备份——升级取消不需要删除它（那是用户的既有灾备副本）
    */
   _createBackupAndWait(instanceId, signal = null) {
     // AbortSignal 不重放（同 _downloadJar）：已中止时直接失败，别把取消吞掉
@@ -303,12 +304,21 @@ export class UpgradeService {
           reject(new Error(data.error || 'Backup failed'));
         }
       };
+      // 用户在备份面板取消预备份：backupCancelled 是唯一终态信号（取消不发
+      // backupFailed），漏听会让升级挂到 300s 超时才失败
+      const onBackupCancelled = (data) => {
+        if (data.instanceId === instanceId) {
+          cleanup();
+          reject(new Error('Backup cancelled'));
+        }
+      };
 
       const cleanup = () => {
         clearTimeout(timeout);
         signal?.removeEventListener('abort', onCancel);
         this.serverManager.removeListener('instance:backupComplete', onBackupComplete);
         this.serverManager.removeListener('instance:backupFailed', onBackupFailed);
+        this.serverManager.removeListener('instance:backupCancelled', onBackupCancelled);
       };
 
       const onCancel = () => {
@@ -319,6 +329,7 @@ export class UpgradeService {
 
       this.serverManager.on('instance:backupComplete', onBackupComplete);
       this.serverManager.on('instance:backupFailed', onBackupFailed);
+      this.serverManager.on('instance:backupCancelled', onBackupCancelled);
 
       // 触发备份
       this.backupService.createBackup(instanceId).catch((err) => {

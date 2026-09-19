@@ -7,7 +7,7 @@
 export const ACTION_GROUPS = [
   { group: '实例', actions: ['INSTANCE_CREATE', 'INSTANCE_UPDATE', 'INSTANCE_START', 'INSTANCE_STOP', 'INSTANCE_RESTART', 'INSTANCE_DELETE'] },
   { group: '配置', actions: ['CONFIG_CHANGE'] },
-  { group: '备份', actions: ['BACKUP_CREATE', 'BACKUP_RESTORE', 'BACKUP_DELETE'] },
+  { group: '备份', actions: ['BACKUP_CREATE', 'BACKUP_RESTORE', 'BACKUP_DELETE', 'BACKUP_CANCEL'] },
   { group: '玩家', actions: ['PLAYER_OP', 'PLAYER_DEOP', 'PLAYER_KICK', 'PLAYER_BAN', 'PLAYER_PARDON', 'PLAYER_WHITELIST'] },
   { group: '任务', actions: ['TASK_CREATE', 'TASK_UPDATE', 'TASK_DELETE', 'TASK_EXECUTE'] },
   { group: '密钥', actions: ['KEY_ROTATE'] },
@@ -24,6 +24,7 @@ export const ACTION_LABELS: Record<string, string> = {
   BACKUP_CREATE: '创建备份',
   BACKUP_RESTORE: '恢复备份',
   BACKUP_DELETE: '删除备份',
+  BACKUP_CANCEL: '取消备份/恢复',
   PLAYER_OP: '授权管理员',
   PLAYER_DEOP: '撤销管理员',
   PLAYER_KICK: '踢出玩家',

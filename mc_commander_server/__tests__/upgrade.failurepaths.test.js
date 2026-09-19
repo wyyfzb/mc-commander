@@ -374,6 +374,21 @@ describe('_createBackupAndWait 失败与超时', () => {
     });
   });
 
+  it('backupCancelled 事件（用户在备份面板取消预备份）→ 立即失败，不挂到 300s 超时', async () => {
+    const manager = createMockServerManager();
+    const service = new UpgradeService(manager);
+    service.backupService.createBackup = vi.fn(async (instanceId) => {
+      // 取消是唯一终态信号（取消分支不发 backupFailed）——漏听会挂满 300s
+      manager.emit('instance:backupCancelled', { instanceId, backupId: 'bk-1' });
+      throw new Error('unreachable');
+    });
+
+    const started = Date.now();
+    await expect(service.upgrade('inst-1', '1.21.4', 'purpur')).rejects.toThrow('Backup cancelled');
+    expect(Date.now() - started).toBeLessThan(5000);
+    expect(progressStages(manager)).toContain(UPGRADE_STAGES.ROLLED_BACK);
+  });
+
   it('backupFailed 事件缺 error 字段 → 兜底消息 Backup failed', async () => {
     const manager = createMockServerManager();
     const service = new UpgradeService(manager);

@@ -15,12 +15,16 @@ export const WS_EVENT_TYPES = [
   'playerSleep',
   'achievement',
   'backupStart',
+  'backupProgress',
   'backupComplete',
   'backupFailed',
   'backupSkipped',
+  'backupCancelled',
   'restoreStart',
+  'restoreProgress',
   'restoreComplete',
   'restoreFailed',
+  'restoreCancelled',
   'taskExecute',
   'taskFailed',
   'webhookDeliveryFailed',
@@ -99,6 +103,12 @@ export const wsBackupPayloadSchema = z.object({
   name: z.string().optional(),
 }).passthrough()
 
+/** 备份/恢复进度（rsync --info=progress2 解析，服务端 1s 节流；robocopy/ditto 降级路径无进度） */
+export const wsBackupProgressPayloadSchema = z.object({
+  backupId: z.number(),
+  percent: z.number().min(0).max(100),
+})
+
 /** 通知类事件集合（服务端落库，断线补齐用） */
 export const NOTIFICATION_EVENT_TYPES: ReadonlySet<WsEventType> = new Set([
   'playerJoin',
@@ -112,9 +122,11 @@ export const NOTIFICATION_EVENT_TYPES: ReadonlySet<WsEventType> = new Set([
   'backupComplete',
   'backupFailed',
   'backupSkipped',
+  'backupCancelled',
   'restoreStart',
   'restoreComplete',
   'restoreFailed',
+  'restoreCancelled',
   'taskFailed',
   'webhookDeliveryFailed',
 ])
@@ -128,3 +140,4 @@ export type WsStatusEventPayload = z.infer<typeof wsStatusEventPayloadSchema>
 export type WsPlayerEventPayload = z.infer<typeof wsPlayerEventPayloadSchema>
 export type WsWeatherPayload = z.infer<typeof wsWeatherPayloadSchema>
 export type WsBackupPayload = z.infer<typeof wsBackupPayloadSchema>
+export type WsBackupProgressPayload = z.infer<typeof wsBackupProgressPayloadSchema>

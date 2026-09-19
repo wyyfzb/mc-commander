@@ -56,6 +56,7 @@ export const ErrorCodes = {
   // 备份错误
   BACKUP_NOT_FOUND: { code: 40402, message: 'Backup not found', status: 404 },
   BACKUP_IN_PROGRESS: { code: 40901, message: 'Backup already in progress', status: 409 },
+  BACKUP_NOT_ACTIVE: { code: 40904, message: 'No active backup operation', status: 409 },
   BACKUP_FAILED: { code: 50002, message: 'Backup failed', status: 500 },
   // 运行中实例无法在线备份（RCON 不可用）：在线备份依赖 save-off/save-all/save-on
   // 原子序列保证一致性，RCON 缺失时静默直压运行中世界会产出不一致包（find 审计）

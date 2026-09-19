@@ -20,6 +20,7 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { handlers, restoreMock, mockBackups } from '@/test/mocks/handlers'
 import { queryKeys } from '@/api/queries'
 import { useConnectionStore } from '@/stores/connection'
+import { applyBackupProgress, clearBackupProgress } from '@/stores/backup-progress'
 import { formatBackupDate, formatBackupSize } from '@/lib/mc-backup'
 import type { BackupItem } from '@/api/types'
 import { BackupPanel, buildBackupDownloadName } from '../backup-panel'
@@ -249,9 +250,82 @@ describe('BackupPanel 恢复', () => {
     // 恢复中行本身 + 其余 completed 行恢复全部禁用
     expect(screen.getByRole('button', { name: '恢复中的备份 恢复' })).toBeDisabled()
     expect(screen.getByRole('button', { name: '可恢复的备份 恢复' })).toBeDisabled()
-    // 恢复中行删除禁用；completed 行删除可用
-    expect(screen.getByRole('button', { name: '恢复中的备份 删除' })).toBeDisabled()
+    // 进行中行显示取消入口（替代禁用的删除）；completed 行删除可用
+    expect(screen.getByRole('button', { name: '恢复中的备份 取消' })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: '恢复中的备份 删除' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '可恢复的备份 删除' })).toBeEnabled()
+  })
+})
+
+describe('BackupPanel 取消与进度', () => {
+  it('列表有进行中行：显示进度区（无 WS 推送时转圈不确定态）+ 取消按钮', async () => {
+    const creatingList: BackupItem[] = [
+      { ...mockBackups[0]!, id: 30, status: 'creating', name: '创建中的备份' },
+    ]
+    server.use(http.get('*/api/v1/instances/:id/backups', () => okEnvelope(creatingList)))
+    renderPanel()
+    await screen.findByText('创建中的备份')
+    const zone = screen.getByTestId('backup-progress')
+    expect(zone).toBeInTheDocument()
+    expect(screen.getByText('取消操作')).toBeEnabled()
+    // 无 WS 推送：不确定态（文案「备份中…」），无 role=progressbar
+    expect(screen.getByText('备份中…')).toBeInTheDocument()
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
+  })
+
+  it('WS 进度推送后进度条呈现百分比（store → 面板联动）', async () => {
+    const creatingList: BackupItem[] = [
+      { ...mockBackups[0]!, id: 30, status: 'creating', name: '创建中的备份' },
+    ]
+    server.use(http.get('*/api/v1/instances/:id/backups', () => okEnvelope(creatingList)))
+    applyBackupProgress('demo', 'create', 30, 62.4)
+    renderPanel()
+    await screen.findByText('创建中的备份')
+    const bar = screen.getByRole('progressbar')
+    expect(bar).toHaveAttribute('aria-valuenow', '62')
+    expect(screen.getByText('62%')).toBeInTheDocument()
+    // store 是全局的：用例结束清理防串场
+    clearBackupProgress('demo')
+  })
+
+  it('取消命中 40904（操作刚结束的良性竞态）→ 提示「已结束」而非报取消失败', async () => {
+    const user = userEvent.setup()
+    server.use(
+      http.post('*/api/v1/instances/:id/backups/cancel', () =>
+        HttpResponse.json(
+          { status: 'error', code: 40904, message: 'No active backup operation', data: null },
+          { status: 409 },
+        ),
+      ),
+    )
+    const creatingList: BackupItem[] = [
+      { ...mockBackups[0]!, id: 30, status: 'creating', name: '创建中的备份' },
+    ]
+    server.use(http.get('*/api/v1/instances/:id/backups', () => okEnvelope(creatingList)))
+    renderPanel()
+    await screen.findByText('创建中的备份')
+    await user.click(screen.getByText('取消操作'))
+    expect(await screen.findByText('该操作已结束')).toBeInTheDocument()
+    expect(screen.queryByText(/取消失败/)).not.toBeInTheDocument()
+  })
+
+  it('点击取消 → 调用 cancel 端点并失效列表', async () => {
+    const user = userEvent.setup()
+    let cancelCalls = 0
+    server.use(
+      http.post('*/api/v1/instances/:id/backups/cancel', () => {
+        cancelCalls += 1
+        return okEnvelope({ kind: 'create', backupId: 30 })
+      }),
+    )
+    const creatingList: BackupItem[] = [
+      { ...mockBackups[0]!, id: 30, status: 'creating', name: '创建中的备份' },
+    ]
+    server.use(http.get('*/api/v1/instances/:id/backups', () => okEnvelope(creatingList)))
+    renderPanel()
+    await screen.findByText('创建中的备份')
+    await user.click(screen.getByText('取消操作'))
+    await waitFor(() => expect(cancelCalls).toBe(1))
   })
 })
 
@@ -277,7 +351,9 @@ describe('BackupPanel 删除', () => {
     renderPanel()
     await screen.findByText('创建中的备份')
     expect(screen.getByText('备份中')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '创建中的备份 删除' })).toBeDisabled()
+    // 进行中行：删除入口被取消替代；恢复仍禁用
+    expect(screen.getByRole('button', { name: '创建中的备份 取消' })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: '创建中的备份 删除' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '创建中的备份 恢复' })).toBeDisabled()
   })
 

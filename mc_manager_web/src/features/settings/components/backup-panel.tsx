@@ -28,10 +28,12 @@ import {
   RotateCcw,
   ServerOff,
   Trash2,
+  X,
 } from 'lucide-react'
 import { LoadingButton } from '@/components/mcs/loading-button'
 import { toast } from 'sonner'
-import { getFriendlyErrorText } from '@/api/errors'
+import { ErrorCode, getFriendlyErrorText } from '@/api/errors'
+import { ApiError } from '@/api/client'
 import { apiDownloadBackup } from '@/api/backups'
 import type { BackupItem } from '@/api/types'
 import { useConnectionStore } from '@/stores/connection'
@@ -41,7 +43,9 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { cn } from '@/lib/utils'
 import { StatusPill } from '@/components/mcs/status-pill'
+import { ProgressBar } from '@/components/mcs/progress-bar'
 import { Card } from '@/components/mcs/card'
+import { useBackupProgressStore } from '@/stores/backup-progress'
 import { toneClasses } from '@/components/mcs/tone'
 import {
   backupStatusLabel,
@@ -50,7 +54,16 @@ import {
   formatBackupSize,
 } from '@/lib/mc-backup'
 import { restoreConfirmTarget } from '@mc-commander/schemas'
-import { useArchivedSnapshots, useAttachArchive, useBackupEventRefresh, useBackups, useCreateBackup, useDeleteBackup, useRestoreBackup } from '../queries'
+import {
+  useArchivedSnapshots,
+  useAttachArchive,
+  useBackupEventRefresh,
+  useBackups,
+  useCancelBackupOperation,
+  useCreateBackup,
+  useDeleteBackup,
+  useRestoreBackup,
+} from '../queries'
 import { useInstances } from '@/api/queries'
 import type { BackupPanelProps } from './contracts'
 import { EmptyState } from '@/components/mcs/empty-state'
@@ -96,7 +109,11 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
   // 确认串随恢复请求下发（服务端强制比对）：输入框是同一确认的界面，不再是唯一闸门
   const restoreMutation = useRestoreBackup(instanceId)
   const deleteMutation = useDeleteBackup(instanceId)
+  const cancelMutation = useCancelBackupOperation(instanceId)
   useBackupEventRefresh(instanceId)
+  // WS 进度推送（1s 节流）：rsync 路径有百分比；robocopy/ditto 降级路径无推送，
+  // 进度条退化为转圈不确定态
+  const progress = useBackupProgressStore((s) => s.progress[instanceId ?? ''])
   // 确认目标由契约层单一派生（实例名 → 无名称时退到备份名 → 再退到备份 id）：
   // 空名实例下实例名确认会空转（空串天然匹配），服务端同用这一条派生链
   const restoreConfirm = restoreTarget
@@ -128,6 +145,29 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
   const lastCompleted = backups.find((b) => b.status === 'completed')
   /** 恢复中：任一行 restoring 或恢复请求在途 → 全列表恢复按钮禁用（检查全量，防止截断后遗漏） */
   const restoringLocked = restoreMutation.isPending || backups.some((b) => b.status === 'restoring')
+
+  /** 本实例有进行中的备份/恢复（请求在途覆盖轮询间隙）→ 显示进度区与取消入口 */
+  const activeInProgress =
+    createMutation.isPending ||
+    restoreMutation.isPending ||
+    backups.some((b) => b.status === 'creating' || b.status === 'restoring')
+  const inProgressLabel =
+    restoreMutation.isPending || backups.some((b) => b.status === 'restoring') ? '恢复中' : '备份中'
+
+  const handleCancel = async () => {
+    try {
+      await cancelMutation.mutateAsync()
+      // 终态由 backup/restoreCancelled 事件推送（通知中心可见），此处不重复播报
+    } catch (e) {
+      // 40904＝点下时操作刚结束（良性竞态）：列表失效后自然看到终态，
+      // 报「取消失败」会与用户刚看到的完成通知矛盾
+      if (e instanceof ApiError && e.code === ErrorCode.BACKUP_NOT_ACTIVE) {
+        toast.info('该操作已结束')
+        return
+      }
+      toast.error(`取消失败：${getFriendlyErrorText(e)}`)
+    }
+  }
 
   const lastBackupText = lastCompleted
     ? `上次备份：${[formatBackupDate(lastCompleted.createdAt), formatBackupSize(lastCompleted.size)]
@@ -220,6 +260,40 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
         </LoadingButton>
       </div>
 
+      {/* 进行中进度区：WS 推送有百分比走进度条，否则转圈不确定态；取消请求
+          异步生效（服务端 abort 子进程），终态经事件推送，按钮只做发起 */}
+      {activeInProgress && (
+        <div
+          data-testid="backup-progress"
+          className="flex items-center gap-3 border-t border-mcs-border-subtle px-4 py-2.5"
+        >
+          {progress ? (
+            <div className="min-w-0 flex-1">
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <span className="text-mcs-xs text-mcs-text-muted">{inProgressLabel}</span>
+                <span className="text-mcs-xs text-mcs-text-muted">{Math.round(progress.percent)}%</span>
+              </div>
+              <ProgressBar percent={progress.percent} />
+            </div>
+          ) : (
+            <>
+              <Loader2 className="size-3.5 shrink-0 animate-spin text-mcs-text-muted" aria-hidden />
+              <span className="min-w-0 flex-1 text-mcs-xs text-mcs-text-muted">{inProgressLabel}…</span>
+            </>
+          )}
+          <LoadingButton
+            variant="outline"
+            size="sm"
+            loading={cancelMutation.isPending}
+            loadingText="取消中..."
+            onClick={() => void handleCancel()}
+          >
+            {/* 文案区别于确认弹窗的「取消」：同名会让同屏两个取消按钮无法按名区分 */}
+            取消操作
+          </LoadingButton>
+        </div>
+      )}
+
       {/* 快照机制说明（subtle 小字；保留策略服务端可配且 API 未暴露，不硬编码数值——避免与服务端实际配置漂移） */}
       <p className="px-4 text-mcs-xs text-mcs-text-muted">
         快照备份：未修改文件零拷贝增量传输，超出保留策略自动清理（默认保留策略见服务端配置）
@@ -267,6 +341,7 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
                   restoringLocked={restoringLocked}
                   onRestore={setRestoreTarget}
                   onDelete={setDeleteTarget}
+                  onCancel={() => void handleCancel()}
                 />
               ))}
             </div>
@@ -453,12 +528,15 @@ function BackupRow({
   restoringLocked,
   onRestore,
   onDelete,
+  onCancel,
 }: {
   backup: BackupItem
   /** 页面级恢复中锁：任一行 restoring 或恢复请求在途时全列表恢复禁用 */
   restoringLocked: boolean
   onRestore: (backup: BackupItem) => void
   onDelete: (backup: BackupItem) => void
+  /** 进行中行显示取消入口（取消按实例发起，两模式共用同一 mutation） */
+  onCancel: () => void
 }) {
   const status = backup.status
   const tone = backupStatusTone(status)
@@ -568,15 +646,25 @@ function BackupRow({
       >
         <RotateCcw className="size-3.5" aria-hidden />
       </IconButton>
-      {/* 删除（creating/restoring 中不可删——服务端互斥状态机拒绝） */}
-      <IconButton
-        aria-label={`${name} 删除`}
-        disabled={isInProgress}
-        className="text-mcs-error-fg hover:bg-mcs-error-bg-subtle hover:text-mcs-error-fg"
-        onClick={() => onDelete(backup)}
-      >
-        <Trash2 className="size-3.5" aria-hidden />
-      </IconButton>
+      {/* 进行中行显示取消（取消请求异步生效，点击后按钮交由页面级 pending）；否则删除 */}
+      {isInProgress ? (
+        <IconButton
+          aria-label={`${name} 取消`}
+          title="取消当前备份/恢复"
+          className="text-mcs-error-fg hover:bg-mcs-error-bg-subtle hover:text-mcs-error-fg"
+          onClick={onCancel}
+        >
+          <X className="size-3.5" aria-hidden />
+        </IconButton>
+      ) : (
+        <IconButton
+          aria-label={`${name} 删除`}
+          className="text-mcs-error-fg hover:bg-mcs-error-bg-subtle hover:text-mcs-error-fg"
+          onClick={() => onDelete(backup)}
+        >
+          <Trash2 className="size-3.5" aria-hidden />
+        </IconButton>
+      )}
     </div>
   )
 }

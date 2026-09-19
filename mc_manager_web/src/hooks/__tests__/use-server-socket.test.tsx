@@ -7,6 +7,7 @@ import { useConnectionStore } from '@/stores/connection'
 import { useAuthStore, type StoredSession } from '@/stores/auth'
 import { useNotificationStore } from '@/stores/notifications'
 import { useDeployStore } from '@/stores/deploy'
+import { useBackupProgressStore, clearBackupProgress } from '@/stores/backup-progress'
 import { queryKeys } from '@/api/queries'
 import type { WebSocketLike, WebSocketCtor } from '@/api/ws'
 
@@ -304,6 +305,73 @@ describe('useServerSocket（WS 单例治理，issue #311）', () => {
     // 新连接的 subscribe 携带 lastEventId=42（断线补齐锚点不丢失）
     const subs = sentSubscribe(ws2)
     expect(subs).toEqual([{ type: 'subscribe', instanceId: 'i-1', lastEventId: 42 }])
+  })
+})
+
+describe('useServerSocket（备份进度与取消接线，清单 #16）', () => {
+  beforeEach(() => {
+    FakeWebSocket.instances = []
+    localStorage.clear()
+    vi.stubGlobal('WebSocket', FakeCtor)
+    useConnectionStore.setState({ baseUrl: '', apiKey: '', status: 'unconfigured' })
+    useAuthStore.setState({ session: null })
+    useNotificationStore.setState({ items: [], unreadCount: 0, activeAlerts: new Set() })
+    clearBackupProgress('i-1')
+    const { unmount } = renderHook(() => useServerSocket(null), { wrapper: createWrapper() })
+    unmount()
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+  })
+
+  /** 建立已连接的 socket（与上方 describe 同实现；各自作用域内维护） */
+  async function connectReady(instanceId: string) {
+    useConnectionStore.setState({ baseUrl: '', apiKey: 'k1', status: 'ready' })
+    renderHook(() => useServerSocket(instanceId), { wrapper: createWrapper() })
+    await waitFor(() => expect(FakeWebSocket.instances.length).toBe(1))
+    const ws = FakeWebSocket.instances[0]!
+    act(() => {
+      openAndAuth(ws)
+    })
+    await flushMicrotasks()
+    return ws
+  }
+
+  it('backupProgress → 进度 store（不进通知中心，1s 级推送不落库）', async () => {
+    const ws = await connectReady('i-1')
+    act(() => {
+      ws.receive({ type: 'backupProgress', instanceId: 'i-1', data: { backupId: 7, percent: 41.2 } })
+    })
+    expect(useBackupProgressStore.getState().progress['i-1']).toEqual({
+      kind: 'create',
+      backupId: 7,
+      percent: 41.2,
+    })
+    expect(useNotificationStore.getState().items.length).toBe(0)
+  })
+
+  it('backupStart 清除上一次的进度条目（终态在别处错过时，新操作不得显示陈旧百分比）', async () => {
+    useBackupProgressStore.setState({ progress: { 'i-1': { kind: 'create', backupId: 7, percent: 88 } } })
+    const ws = await connectReady('i-1')
+    act(() => {
+      ws.receive({ type: 'backupStart', instanceId: 'i-1', data: { backupId: 8 } })
+    })
+    expect(useBackupProgressStore.getState().progress['i-1']).toBeUndefined()
+  })
+
+  it('终态 backupCancelled 清除进度并入通知中心（跨标签/断线补齐可见取消结局）', async () => {
+    useBackupProgressStore.setState({ progress: { 'i-1': { kind: 'create', backupId: 7, percent: 50 } } })
+    const ws = await connectReady('i-1')
+    act(() => {
+      ws.receive({ type: 'backupCancelled', instanceId: 'i-1', data: { backupId: 7, content: '备份已取消' } })
+    })
+    expect(useBackupProgressStore.getState().progress['i-1']).toBeUndefined()
+    const items = useNotificationStore.getState().items
+    expect(items[0]?.type).toBe('backupCancelled')
+    expect(items[0]?.content).toBe('备份已取消')
   })
 })
 
