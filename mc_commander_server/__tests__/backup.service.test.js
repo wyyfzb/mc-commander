@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -19,7 +19,7 @@ vi.mock('../db/scheduled_task.model.js', () => ({
 }));
 
 import { EventEmitter } from 'events';
-import { BackupService } from '../services/backup.service.js';
+import { BackupService, verifyHardlinkDedup } from '../services/backup.service.js';
 import { ScheduledTaskModel } from '../db/scheduled_task.model.js';
 
 describe('BackupService.createBackup - 世界目录缺失', () => {
@@ -98,5 +98,54 @@ describe('BackupService.executeBackup - 定时任务结果回写', () => {
     ).rejects.toThrow('boom');
 
     expect(ScheduledTaskModel.updateLastRunStatus).not.toHaveBeenCalled();
+  });
+});
+
+// macOS 快照降级链的探测件：verifyHardlinkDedup 用 inode 比对判断
+// --link-dest 去重是否真生效（openrsync 兼容性未知，探测结果驱动警告）。
+// 本机（win32 NTFS / linux ext4）硬链接可用，可真实构造去重/拷贝两形态
+describe('verifyHardlinkDedup 硬链接去重探测', () => {
+  let root;
+
+  beforeEach(() => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'mcs-dedup-probe-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it('快照文件与基线共享 inode（fs.link）→ true（去重生效）', () => {
+    const base = path.join(root, 'base');
+    const snap = path.join(root, 'snap');
+    fs.mkdirSync(path.join(base, 'world'), { recursive: true });
+    fs.mkdirSync(path.join(snap, 'world'), { recursive: true });
+    fs.writeFileSync(path.join(base, 'world', 'level.dat'), 'worlddata');
+    fs.linkSync(path.join(base, 'world', 'level.dat'), path.join(snap, 'world', 'level.dat'));
+
+    expect(verifyHardlinkDedup(base, snap)).toBe(true);
+  });
+
+  it('快照为独立拷贝（copyFileSync）→ false（去重未生效）', () => {
+    const base = path.join(root, 'base');
+    const snap = path.join(root, 'snap');
+    fs.mkdirSync(base, { recursive: true });
+    fs.mkdirSync(snap, { recursive: true });
+    fs.writeFileSync(path.join(base, 'level.dat'), 'worlddata');
+    fs.copyFileSync(path.join(base, 'level.dat'), path.join(snap, 'level.dat'));
+
+    expect(verifyHardlinkDedup(base, snap)).toBe(false);
+  });
+
+  it('两侧无同相对路径文件 → null（无法判定，不误报）', () => {
+    const base = path.join(root, 'base');
+    const snap = path.join(root, 'snap');
+    fs.mkdirSync(base, { recursive: true });
+    fs.mkdirSync(snap, { recursive: true });
+    expect(verifyHardlinkDedup(base, snap)).toBeNull();
+  });
+
+  it('基线为空目录/不存在 → null（不抛错，首份快照场景）', () => {
+    expect(verifyHardlinkDedup(path.join(root, 'nope'), path.join(root, 'snap'))).toBeNull();
   });
 });

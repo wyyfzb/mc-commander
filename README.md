@@ -388,7 +388,7 @@ mc-commander/
 |------|---------|
 | Linux | ✅ 全支持（推荐部署环境，一键部署脚本面向 Ubuntu/Debian） |
 | Windows | ⚠️ 实验性——官方部署脚本与发布包面向 Linux（脚本注册的 systemd 单元不覆盖 Windows），需手动部署并自行构建前端产物（better-sqlite3 13.x 已随包提供 win32 预编译产物，无需本机构建工具链）；未装 rsync 时备份降级为 robocopy 全量镜像；建议使用 WSL2 以获得与 Linux 一致体验 |
-| macOS | ✅ 支持（与 Windows 同为手动部署：官方发布包面向 Linux、无服务托管，需自行构建前端产物；better-sqlite3 13.x 已随包提供 macOS 预编译产物） |
+| macOS | ⚠️ 实验性——与 Windows 同为手动部署：官方发布包面向 Linux、无服务托管，需自行构建前端产物（better-sqlite3 13.x 已随包提供 macOS 预编译产物）。系统自带 rsync 为 openrsync，`--link-dest` 硬链接去重未验证（面板会在每次快照后自动探测，未生效时记录警告——快照本身仍完整，只是退化为全量拷贝；大世界曾有 EMFILE 报告）。建议 `brew install rsync` 后以环境变量 `RSYNC_BIN` 指向 GNU rsync（如 `/opt/homebrew/bin/rsync`），即可获得与 Linux 一致的增量快照与恢复 |
 
 > 部署脚本（`方式一：Linux 一键部署`）仅面向 Linux；Windows / macOS 请走手动部署路径。
 

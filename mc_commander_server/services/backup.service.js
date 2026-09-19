@@ -109,6 +109,53 @@ export function buildRobocopyArgs(instanceId, snapshotDir, { jarFile = null } = 
   return args;
 }
 
+// rsync 可执行文件名：RSYNC_BIN 环境变量指向 GNU rsync（macOS 上系统自带
+// openrsync 的 --link-dest 去重未经验证，brew install rsync 后指过来即与
+// Linux 行为一致）；缺省 'rsync'（PATH 解析）
+function rsyncBin() {
+  return process.env.RSYNC_BIN || 'rsync';
+}
+
+// 硬链接去重探测（macOS openrsync 兼容性验证；其余平台为诊断工具）：
+// 在基线快照中逐个取普通文件，与本次快照同相对路径的文件比对 inode——
+// dev+ino 相同即硬链接共享存储（去重生效）。取不到可比对文件返回 null
+// （首份快照/两侧无交集，无法判定）。极端情况（快照侧全部缺失）会遍历
+// 整棵基线树，仅运行在后台备份流程内
+export function verifyHardlinkDedup(baselineDir, snapshotDir) {
+  const stack = [baselineDir];
+  const basePrefix = baselineDir.endsWith(path.sep) ? baselineDir : baselineDir + path.sep;
+  while (stack.length > 0) {
+    const dir = stack.pop();
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const e of entries) {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) {
+        stack.push(full);
+        continue;
+      }
+      if (!e.isFile()) continue;
+      const rel = full.slice(basePrefix.length);
+      const mirrored = path.join(snapshotDir, rel);
+      try {
+        const baseStat = fs.statSync(full);
+        const snapStat = fs.statSync(mirrored);
+        // 内容未变（同大小）且同一 inode = 硬链接；不同 inode = 全量拷贝
+        if (baseStat.size === snapStat.size && baseStat.mtimeMs === snapStat.mtimeMs) {
+          return snapStat.ino === baseStat.ino && snapStat.dev === baseStat.dev;
+        }
+      } catch {
+        // 基线侧文件在快照中缺失/被替换：取下一个样本继续
+      }
+    }
+  }
+  return null;
+}
+
 // 备份文件名清洗：替换 Windows 非法文件名字符（含控制字符），
 // 保留中文/Unicode。控制字符按码点过滤（正则字符类含控制字符会触发
 // no-control-regex lint）。路径安全由调用方 resolveContained 兜底
@@ -465,7 +512,8 @@ export class BackupService {
   }
 
   // 创建快照：Windows 优先 rsync（MSYS2），ENOENT 自动降级 robocopy；
-  // Linux 固定 rsync。返回实际使用的工具名（'rsync' / 'robocopy'）
+  // Linux 固定 rsync；macOS 走 darwin 分支（openrsync 兼容探测 + 降级）。
+  // 返回实际使用的工具名（'rsync' / 'robocopy' / 'ditto'）
   async _createSnapshot(instanceId, snapshotDir, { jarFile = null, timeout = 300000 } = {}) {
     if (process.platform === 'win32') {
       try {
@@ -480,19 +528,24 @@ export class BackupService {
         return 'robocopy';
       }
     }
+    if (process.platform === 'darwin') {
+      return this._darwinSnapshot(instanceId, snapshotDir, { jarFile, timeout });
+    }
     await this._rsyncSnapshot(instanceId, snapshotDir, { jarFile, timeout });
     return 'rsync';
   }
 
-  // rsync 快照（Linux 主路径 / Windows MSYS2 主路径）：
-  // --link-dest 指向该实例最近一次快照。基线选择按目录 mtime 取最新
-  // （目录名前缀是用户可变的备份名，中英文混排时整串字典序≠时间序，
-  // 曾导致 linkDest 指向数周前旧快照、增量失效退化为大范围全量复制）；
-  // 快照创建后不被改写，mtime 即创建时间，排序可靠。未变化文件硬链接
-  // 共享 inode 零拷贝。首次无历史快照不传 --link-dest（全量复制；
-  // 指向不存在目录只会发误导性警告）。
-  // 退出码：0=成功；24=源文件在传输中消失（容忍，记警告）；其余失败
-  async _rsyncSnapshot(instanceId, snapshotDir, { jarFile = null, timeout = 300000 } = {}) {
+  // macOS 快照：系统自带 rsync 自 11.5 起为 openrsync，--link-dest 硬链接去重
+  // 未经验证。三级策略：
+  // ① RSYNC_BIN 指向 GNU rsync（brew install rsync）时行为与 Linux 一致，
+  //    由 verifyHardlinkDedup 探测确认去重生效；
+  // ② openrsync 对 --link-dest 直接报错的版本：退回无 --link-dest 的全量
+  //    rsync 再试一次（快照完整、仅无增量）；
+  // ③ rsync 整体缺失：ditto 全量复制（darwin 自带，无 --delete 顾虑——
+  //    快照目标目录由本服务独占创建，每次为空目录）。
+  // 三条路径产出都是完整可恢复快照，差别只在空间/耗时；去重未生效时
+  // 记警告提示 RSYNC_BIN，不为此引入第二套复制器。
+  async _darwinSnapshot(instanceId, snapshotDir, { jarFile = null, timeout = 300000 } = {}) {
     const instanceBackupDir = this.getInstanceBackupDir(instanceId);
     let linkDest = null;
     try {
@@ -509,14 +562,74 @@ export class BackupService {
             return 0;
           }
         });
-      if (snapshots.length > 0) {
-        linkDest = path.join(instanceBackupDir, snapshots[snapshots.length - 1]);
-      }
+      if (snapshots.length > 0) linkDest = path.join(instanceBackupDir, snapshots[snapshots.length - 1]);
     } catch {
       // 备份目录不可读：按无历史快照处理（全量复制），不阻断备份
     }
+    try {
+      await this._rsyncSnapshot(instanceId, snapshotDir, { jarFile, timeout, linkDest });
+    } catch (err) {
+      if (err.code === 'ENOENT') {
+        // ditto 无排除清单能力（logs/libraries 等会进快照），磁盘预检按排除口径
+        // 估算会偏小——仅作 rsync 完全缺失时的兜底，警告提示空间代价
+        logger.warn('[Backup] macOS rsync 不可用，降级为 ditto 全量快照（无排除清单，快照体积将偏大）');
+        await spawnProcess('ditto', [path.join(config.serversDir, instanceId), snapshotDir], { timeout });
+        return 'ditto';
+      }
+      if (linkDest) {
+        // openrsync 对 --link-dest 报错的兜底：退全量 rsync（无 --link-dest）
+        logger.warn(`[Backup] macOS rsync --link-dest 失败（${err.message}），退全量 rsync 重试`);
+        await this._rsyncSnapshot(instanceId, snapshotDir, { jarFile, timeout, linkDest: null });
+        return 'rsync';
+      }
+      throw err;
+    }
+    if (linkDest && verifyHardlinkDedup(linkDest, snapshotDir) === false) {
+      logger.warn(
+        '[Backup] macOS rsync 硬链接去重未生效（openrsync --link-dest 兼容性？），' +
+        '本次为全量拷贝；可设 RSYNC_BIN 指向 GNU rsync（brew install rsync）启用增量',
+      );
+    }
+    return 'rsync';
+  }
+
+  // rsync 快照（Linux 主路径 / Windows MSYS2 主路径）：
+  // --link-dest 指向该实例最近一次快照。基线选择按目录 mtime 取最新
+  // （目录名前缀是用户可变的备份名，中英文混排时整串字典序≠时间序，
+  // 曾导致 linkDest 指向数周前旧快照、增量失效退化为大范围全量复制）；
+  // 快照创建后不被改写，mtime 即创建时间，排序可靠。未变化文件硬链接
+  // 共享 inode 零拷贝。首次无历史快照不传 --link-dest（全量复制；
+  // 指向不存在目录只会发误导性警告）。
+  // 退出码：0=成功；24=源文件在传输中消失（容忍，记警告）；其余失败
+  async _rsyncSnapshot(instanceId, snapshotDir, { jarFile = null, timeout = 300000, linkDest: linkDestOverride = undefined } = {}) {
+    const instanceBackupDir = this.getInstanceBackupDir(instanceId);
+    let linkDest = null;
+    if (linkDestOverride !== undefined) {
+      linkDest = linkDestOverride; // 调用方显式指定（darwin 重试退全量时传 null）
+    } else {
+      try {
+        const snapshots = fs.readdirSync(instanceBackupDir, { withFileTypes: true })
+          .filter((e) => e.isDirectory())
+          .map((e) => e.name)
+          .sort((a, b) => {
+            try {
+              return (
+                fs.statSync(path.join(instanceBackupDir, a)).mtimeMs -
+                fs.statSync(path.join(instanceBackupDir, b)).mtimeMs
+              );
+            } catch {
+              return 0;
+            }
+          });
+        if (snapshots.length > 0) {
+          linkDest = path.join(instanceBackupDir, snapshots[snapshots.length - 1]);
+        }
+      } catch {
+        // 备份目录不可读：按无历史快照处理（全量复制），不阻断备份
+      }
+    }
     const args = buildRsyncArgs(instanceId, snapshotDir, { linkDest, jarFile });
-    const code = await spawnProcess('rsync', args, {
+    const code = await spawnProcess(rsyncBin(), args, {
       cwd: config.serversDir,
       timeout,
       okCodes: [0, 24],
@@ -850,7 +963,7 @@ export class BackupService {
   async _restoreFromSnapshot(snapshotDir, instanceDir, { timeout = 300000 } = {}) {
     if (process.platform === 'win32') {
       try {
-        await spawnProcess('rsync', ['-a', '--delete', `${snapshotDir}/`, `${instanceDir}/`], {
+        await spawnProcess(rsyncBin(), ['-a', '--delete', `${snapshotDir}/`, `${instanceDir}/`], {
           timeout,
           okCodes: [0, 24],
         });
@@ -860,8 +973,23 @@ export class BackupService {
         if (err.code !== 'ENOENT') throw err;
         logger.warn(`[Backup] rsync 不可用，恢复降级为 robocopy: ${err.message}`);
       }
+    } else if (process.platform === 'darwin') {
+      // macOS：恢复目标目录经 pre_restore 换出后为空目录，无需镜像删除语义，
+      // ditto 全量拷贝即等价（rsync 缺失时；有 rsync 仍走 -a --delete）
+      try {
+        await spawnProcess(rsyncBin(), ['-a', '--delete', `${snapshotDir}/`, `${instanceDir}/`], {
+          timeout,
+          okCodes: [0, 24],
+        });
+        return;
+      } catch (err) {
+        if (err.code !== 'ENOENT') throw err;
+        logger.warn('[Backup] macOS rsync 不可用，恢复降级为 ditto 全量拷贝');
+        await spawnProcess('ditto', [snapshotDir, instanceDir], { timeout });
+        return;
+      }
     } else {
-      await spawnProcess('rsync', ['-a', '--delete', `${snapshotDir}/`, `${instanceDir}/`], {
+      await spawnProcess(rsyncBin(), ['-a', '--delete', `${snapshotDir}/`, `${instanceDir}/`], {
         timeout,
         okCodes: [0, 24],
       });

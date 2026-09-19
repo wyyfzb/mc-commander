@@ -31,7 +31,7 @@ MC_Commander 是一个自托管的 Minecraft 服务器管理面板：**无需安
 
 **预期结果**：面板服务监听 25566 端口，浏览器访问 `http://<服务器地址>:25566` 出现登录页（见第 2 步）。
 
-> 平台支持：Linux 全支持；Windows 为实验性（官方部署脚本与发布包面向 Linux，需按 README「手动部署」自行构建前端产物，建议 WSL2）；macOS 支持。
+> 平台支持：Linux 全支持；Windows 与 macOS 为实验性（官方部署脚本与发布包面向 Linux，需按 README「手动部署」自行构建前端产物，Windows 建议 WSL2；macOS 系统自带 rsync 的硬链接去重未验证，备份会自动探测降级，建议以 `RSYNC_BIN` 指向 GNU rsync）。
 
 ---
 
