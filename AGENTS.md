@@ -1,20 +1,20 @@
-# AGENTS.md — MC_Commander Agent 上手指南
+# AGENTS.md — MC\_Commander Agent 上手指南
 
-MC_Commander 是一个自托管的 Minecraft 服务器管理面板：不装插件、不进游戏，
+MC\_Commander 是一个自托管的 Minecraft 服务器管理面板：不装插件、不进游戏，
 在浏览器里图形化完成玩家管理与服务器运维（Web 前端 + Node.js 服务端）。
 
 ## 项目构成
 
-| 目录 | 说明 |
-|---|---|
-| `mc_manager_web/` | Web 前端（React 19 / TypeScript strict / Tailwind v4 / shadcn-ui / TanStack Query / zustand） |
-| `mc_commander_server/` | 服务端（Express / WebSocket / better-sqlite3 / RCON 双通道 / cron 调度） |
-| `mc-schemas/` | 共享契约包（zod，包名 `@mc-commander/schemas`）：web 经 vite alias 直读 `src`，服务端经 `file:` 链接消费 `dist` |
-| `scripts/` | 通用脚本（`local-check.sh` 一键本地检查） |
-| `docs/` | 使用者文档（`architecture.md` 架构说明、`user-guide.md` 用户指南）；开发意图类（ADR/审查报告/任务清单）不入库，走本机 `.ai/` |
+| 目录                     | 说明                                                                                        |
+| ---------------------- | ----------------------------------------------------------------------------------------- |
+| `mc_manager_web/`      | Web 前端（React 19 / TypeScript strict / Tailwind v4 / shadcn-ui / TanStack Query / zustand） |
+| `mc_commander_server/` | 服务端（Express / WebSocket / better-sqlite3 / RCON 双通道 / cron 调度）                            |
+| `mc-schemas/`          | 共享契约包（zod，包名 `@mc-commander/schemas`）：web 经 vite alias 直读 `src`，服务端经 `file:` 链接消费 `dist`  |
+| `scripts/`             | 通用脚本（`local-check.sh` 一键本地检查）                                                             |
+| `docs/`                | 使用者文档（`architecture.md` 架构说明、`user-guide.md` 用户指南）；开发意图类（ADR/审查报告/任务清单）不入库，走本机 `.ai/`     |
 
-三个包各自独立安装依赖（无 workspace 根），分别 `npm ci`。**改动 `mc-schemas/src` 后必须
-`npm run build` 重建 `dist/` 并一并提交**——服务端运行时消费的是 `dist`，前端读的是 `src`，
+三个包各自独立安装依赖（无 workspace 根），分别 `npm ci`。**改动** **`mc-schemas/src`** **后必须
+`npm run build`** **重建** **`dist/`** **并一并提交**——服务端运行时消费的是 `dist`，前端读的是 `src`，
 不重建会让服务端静默使用旧契约（`local-check.sh` 与 CI 均有 dist 同步守卫拦截）。
 
 ## 常用命令
@@ -54,13 +54,13 @@ npm run dev                  # node --watch 热重载
 
 改动不分大小，本地自测一律全量，禁止只跑相关测试就提交：
 
-| 改动范围 | 验证内容 |
-|---|---|
-| 前端 | `npx tsc -b --noEmit` + `npm run lint` + `npm run test`（全量） |
-| 服务端 | `npm run lint` + `npm test`（全量） |
-| 契约包 | `npm run lint` + `npm test` + `npm run build`（dist 与 src 同步） |
-| 任何代码改动（含单文件） | 根目录 `npm run format`（写入后）——格式检查在 CI 与一键路径内 |
-| 跨端 | 以上都跑；一键路径 `bash scripts/local-check.sh` |
+| 改动范围         | 验证内容                                                         |
+| ------------ | ------------------------------------------------------------ |
+| 前端           | `npx tsc -b --noEmit` + `npm run lint` + `npm run test`（全量）  |
+| 服务端          | `npm run lint` + `npm test`（全量）                              |
+| 契约包          | `npm run lint` + `npm test` + `npm run build`（dist 与 src 同步） |
+| 任何代码改动（含单文件） | 根目录 `npm run format`（写入后）——格式检查在 CI 与一键路径内                   |
+| 跨端           | 以上都跑；一键路径 `bash scripts/local-check.sh`                      |
 
 - 一键路径：`bash scripts/local-check.sh`（代码格式 + 三包 lint（oxlint）/ 类型检查 / 全量 test + 契约 dist 同步守卫）；
   `bash` 不在 PATH 时先按「常用命令」把它加进 PATH，未装 bash 的环境则按上表逐包执行（格式检查用
@@ -122,8 +122,8 @@ npm run dev                  # node --watch 热重载
   标题与描述只在页头声明；同屏标题字号档 ≤3（页头 `xl` + 区块/卡片标题 `lg` + 数据卡标签 `sm` + 显式档）。
   卡片标题配方（唯一事实源是 `components/mcs/card.tsx` 基座，调用点不再另写一份）：
   区块/卡片标题 = `lg` + `font-semibold` + `text-mcs-text-default`；数据卡标签 = `sm` + `font-medium`
-  + `text-mcs-text-muted`（标签必须弱于同卡数值）。
-  登录页/引导页是全屏品牌入口，不在 AppShell 内，由自身 `h1` 承担标题（门禁第 23 条静态拦截）。
+  - `text-mcs-text-muted`（标签必须弱于同卡数值）。
+    登录页/引导页是全屏品牌入口，不在 AppShell 内，由自身 `h1` 承担标题（门禁第 23 条静态拦截）。
 - **Z 轴**：禁裸 `z-<数字>`，一律 `z-(--mcs-z-*)`（阶梯见 `semantic.css`：
   local 10 / overlay 40 / modal 50 / dropdown 60 / tooltip 70 / toast 80；
   下拉必须高于弹窗——Radix 弹层挂在 body 末尾，弹窗内的 Select 要盖过遮罩才可点）。
@@ -163,7 +163,7 @@ npm run dev                  # node --watch 热重载
   修复缺陷时先验证问题存在性，局部缺陷打最小补丁，设计问题重构根因。
 - **文件存放纪律**：先判文件性质再定落点——源码/公开文档进包与 `docs/`（要过门禁、CI、
   独立审查，且**新文件入库须 owner 批准**）；开发意图类（清单/审查报告/决策记录）进本机私有的
-  `.ai/`（规范见 `.ai/README.md`）；探针、一次性脚本、临时夹具与临时截图**唯一落点是 `.ai/temp/`**
+  `.ai/`（规范见 `.ai/README.md`）；探针、一次性脚本、临时夹具与临时截图**唯一落点是** **`.ai/temp/`**
   （或系统临时目录），不得写进 `mc_manager_web/e2e/`、`scripts/`、`__tests__/` 等任何库内目录——
   探针混进去会被误提交、污染 grep 与 diff，**事后删除不能抵消**（它在被删前一直躺在版本控制眼皮下）。
   工具硬要求「路径必须落在仓库内」时（Playwright 的 `testDir` 即此类），先在回复里说明这是临时文件，
@@ -193,7 +193,7 @@ mock 是**进程级共享**的（并行 spec 连同一个「服务端」）：�
 Conventional Commits（`feat`/`fix`/`refactor`/`docs`/`chore`/`test` + scope），
 描述用中文，例：`feat(web): 玩家详情新增成就标签页`。详见 CONTRIBUTING.md。
 
-- **AI 协作署名（Co-authored-by）**：Agent 发起或协助生成的提交，在 commit footer 附带共同作者声明：
+- **AI 协作署名（Co-authored-by）**：Agent 发起或协助生成的提交，在 commit footer 附带共同作者声明，例如：
   ```text
   Co-authored-by: ZCode Agent <noreply@zcode.ai>
   ```
