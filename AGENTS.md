@@ -172,6 +172,12 @@ mock 后端（端口 5198）+ 前端服务器（端口 5199，默认 dev；CI �
 自动降级（Chrome → Edge → 内置 chromium）。断言优先用可访问性角色/名称，
 不用脆弱的 CSS 选择器。
 
+mock 是**进程级共享**的（并行 spec 连同一个「服务端」）：一个 spec 触发的构造端点
+广播（deploy/upgrade 的进度与终态）只投递给**同分组**连接，分组头 `x-mock-ws-group`。
+触发广播的 spec 必须声明自己的分组（`page.setExtraHTTPHeaders`；`page.request.*`
+不继承该头，需在调用处显式传）；断言「通知空态 / 进度」这类全局状态的 spec 也应声明
+分组，否则并行 spec 的广播会打进来。
+
 ## 提交规范
 
 Conventional Commits（`feat`/`fix`/`refactor`/`docs`/`chore`/`test` + scope），

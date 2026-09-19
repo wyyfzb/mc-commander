@@ -5,6 +5,15 @@
  * WS：最小握手 + subscribe 快照 + ping/pong（对齐 index.js handleProtocols
  * 与 websocket.js 消息契约；手写 RFC 6455 握手避免引入 ws 依赖——web 包
  * devDeps 无 ws，mock 端点不需要完整实现）。
+ *
+ * WS 连接分组（x-mock-ws-group，握手与 REST 请求头都带）：
+ * mock 是**进程级共享**的单个「服务端」，而 Playwright 并行跑多个 spec 文件——
+ * 一个 spec 触发的构造端点（deploy/upgrade 的进度与终态）若向全部连接广播，
+ * 会打进并行 spec 的页面：实测 dashboard 的「通知抽屉空态」会被 upgrade-cancel /
+ * deploy-fallback 广播的终态事件塞进一条未读通知而偶发变红。故**广播按分组投递**：
+ * 只发给与触发请求同分组的连接（无分组 → 无分组，保持旧行为）。
+ * 触发构造端点的 spec 必须声明自己的分组：不声明则既收不到自己触发的事件
+ * （分组不同），又会污染未声明分组的 spec。
  */
 import { createServer } from 'node:http'
 import { createHash } from 'node:crypto'
@@ -1239,7 +1248,7 @@ const server = createServer((req, res) => {
     // 强制断开全部 WS 连接（mock 专用控制端点：e2e 复现「实时通道断开」边沿，HTTP 不动）
     if (path === '/api/v1/instances/deploy/drop-ws' && req.method === 'POST') {
       // 按请求头分组断开（两侧都不带分组头时即『断开全部无分组连接』＝旧行为）
-      const group = String(req.headers['x-mock-ws-group'] ?? '')
+      const group = wsGroupOf(req)
       let dropped = 0
       for (const s of wsSockets) {
         if ((s.mockWsGroup ?? '') !== group) continue
@@ -1260,15 +1269,26 @@ const server = createServer((req, res) => {
         requestedId = ''
       }
       const instanceId = requestedId || 'paper-a1b2c3d4'
-      broadcastWs('deployProgress', {
-        stage: 'cancelled',
-        percent: 0,
-        transferred: 0,
-        total: 0,
-        instanceId,
-        instanceName: '新部署实例',
-      })
-      broadcastWs('deployCancelled', { stage: 'cancelled', instanceId, instanceName: '新部署实例' })
+      const group = wsGroupOf(req)
+      broadcastWs(
+        'deployProgress',
+        {
+          stage: 'cancelled',
+          percent: 0,
+          transferred: 0,
+          total: 0,
+          instanceId,
+          instanceName: '新部署实例',
+        },
+        undefined,
+        group,
+      )
+      broadcastWs(
+        'deployCancelled',
+        { stage: 'cancelled', instanceId, instanceName: '新部署实例' },
+        undefined,
+        group,
+      )
       return res.end(ok({ instanceId, cancelled: true }, 'Deployment cancellation requested'))
     }
     // ── 升级域（#94）──
@@ -1282,6 +1302,7 @@ const server = createServer((req, res) => {
         target = '26.2'
       }
       upgradeInFlight = { stage: 'download', detail: '正在下载新版本服务端…' }
+      const group = wsGroupOf(req)
       broadcastWs(
         'upgradeProgress',
         {
@@ -1292,6 +1313,7 @@ const server = createServer((req, res) => {
           timestamp: Date.now(),
         },
         'e2e-demo',
+        group,
       )
       broadcastWs(
         'upgradeProgress',
@@ -1303,6 +1325,7 @@ const server = createServer((req, res) => {
           timestamp: Date.now(),
         },
         'e2e-demo',
+        group,
       )
       res.statusCode = 202
       return res.end(
@@ -1333,10 +1356,12 @@ const server = createServer((req, res) => {
       }
       const detail = '已取消，实例保持 1.21.4'
       upgradeInFlight = null
+      const group = wsGroupOf(req)
       broadcastWs(
         'upgradeProgress',
         { instanceId: 'e2e-demo', stage: 'cancelled', percent: 0, detail, timestamp: Date.now() },
         'e2e-demo',
+        group,
       )
       broadcastWs(
         'upgradeCancelled',
@@ -1348,6 +1373,7 @@ const server = createServer((req, res) => {
           timestamp: Date.now(),
         },
         'e2e-demo',
+        group,
       )
       return res.end(
         ok({ instanceId: 'e2e-demo', cancelled: true }, 'Upgrade cancellation requested'),
@@ -1625,12 +1651,20 @@ function encodeTextFrame(text) {
   return Buffer.concat([header, payload])
 }
 
-/** 向全部在线连接推送一条事件（mock 侧模拟服务端广播；构造端点在请求处理期调用） */
-function broadcastWs(type, data, instanceId) {
+/** 触发请求所属的 WS 连接分组（REST 与握手同源取头；无头即无分组） */
+function wsGroupOf(req) {
+  return String(req.headers['x-mock-ws-group'] ?? '')
+}
+
+/** 向**同分组**的在线连接推送一条事件（mock 侧模拟服务端广播；构造端点在请求处理期调用）。
+ * 分组取触发请求的 x-mock-ws-group——并行 spec 各连各的，广播不跨 spec 串场
+ * （详见文件头「WS 连接分组」） */
+function broadcastWs(type, data, instanceId, group = '') {
   const frame = encodeTextFrame(
     JSON.stringify({ type, ...(instanceId ? { instanceId } : {}), data, timestamp: Date.now() }),
   )
   for (const s of wsSockets) {
+    if ((s.mockWsGroup ?? '') !== group) continue
     try {
       s.write(frame)
     } catch {

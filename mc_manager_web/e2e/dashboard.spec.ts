@@ -20,6 +20,11 @@ async function setupConnection(page: Page) {
       JSON.stringify({ baseUrl: '', apiKey: 'e2e-mock-key-0000000000' }),
     )
   })
+  // WS 连接分组：mock 的广播按分组投递，本 spec 声明自己的分组后，并行 spec 触发的
+  // 构造端点广播打不进来——通知抽屉空态依赖「一条通知都没有」，而并行 spec 的
+  // deploy/upgrade 终态广播会塞进一条未读通知（实测 dashboard 因此偶发变红）。
+  // 注意：分组头只随页面请求走（含 WS 握手），page.request.* 不继承它
+  await page.setExtraHTTPHeaders({ 'x-mock-ws-group': 'dashboard' })
 }
 
 test.describe('仪表盘', () => {

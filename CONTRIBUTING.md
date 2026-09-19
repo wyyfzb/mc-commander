@@ -102,6 +102,11 @@ npm run format:check    # 只检查不改写（CI 与 scripts/local-check.sh 跑
 - **测试数据一律虚构**：禁止出现真实服务器 IP、API Key、真实玩家数据
   （用 `1.2.3.4`、TEST-NET 网段、Steve/Alex 示例名）
 - e2e 配置会自动启动 mock 后端（5198）与 dev server（5199），无需手工准备
+- **mock 是进程级共享的**（并行 spec 连同一个「服务端」）：spec 触发的构造端点广播
+  （deploy/upgrade 的进度与终态）只投递给**同分组**的连接，分组头是 `x-mock-ws-group`。
+  触发广播的 spec 必须声明自己的分组（`page.setExtraHTTPHeaders`；`page.request.*`
+  不继承它，需在调用处显式传），断言「通知空态 / 进度」这类全局状态的 spec 也应声明分组——
+  否则并行 spec 的广播会打进来（实测让 dashboard 的通知抽屉空态偶发变红）
 
 ### 前端设计约束
 

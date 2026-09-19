@@ -9,6 +9,11 @@ import { test, expect, type Page } from '@playwright/test'
  */
 const CONNECTION_STORAGE = 'mcs-connection'
 
+/** WS 连接分组：本 spec 会触发 mock 的 upgrade 广播，而 mock 的广播按分组投递——
+ *  不声明分组就收不到自己触发的事件；声明后也不会打进并行 spec（dashboard 的
+ *  通知抽屉空态曾被本 spec 广播的 upgradeCancelled 塞进一条未读通知而偶发变红） */
+const WS_GROUP = 'upgrade-cancel'
+
 async function setupConnection(page: Page) {
   // 假 Key 运行时拼接（仓库纪律：mock 凭据不写可用字面量）；mock 不校验 X-API-Key，取值任意
   const fakeKey = ['e2e', 'mock', 'key', '0000000000'].join('-')
@@ -18,14 +23,20 @@ async function setupConnection(page: Page) {
     },
     [CONNECTION_STORAGE, fakeKey] as const,
   )
+  await page.setExtraHTTPHeaders({ 'x-mock-ws-group': WS_GROUP })
 }
 
 /** 场景态（实例已停止）：按请求头逐请求覆写，不动 mock 的全局状态。
  * 全局状态是进程级共享的，翻转它会把并行 spec 正在断言的运行态改脏
  * （dashboard 的命令输入框可用性依赖 isRunning，实测因此被拖到超时）。
- * WS 握手同样带上该头，status 快照与 REST 同一口径。 */
+ * WS 握手同样带上该头，status 快照与 REST 同一口径。
+ * setExtraHTTPHeaders 是整体替换语义：分组头必须一并带上，否则 reload 后
+ * 连接退回无分组，本 spec 自己触发的广播就收不到了 */
 async function useStoppedInstance(page: Page) {
-  await page.setExtraHTTPHeaders({ 'x-mock-instance-running': 'false' })
+  await page.setExtraHTTPHeaders({
+    'x-mock-ws-group': WS_GROUP,
+    'x-mock-instance-running': 'false',
+  })
   await page.reload()
 }
 
