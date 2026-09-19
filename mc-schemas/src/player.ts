@@ -20,12 +20,14 @@ export const playerPositionSchema = z.object({
 export const playerEventSchema = z.object({
   type: z.string(),
   message: z.string(),
-  timestamp: z.string(),
+  // epoch 毫秒（output-parser 的产出与 playerdata 持久化形态；消费端 new Date(n) 归一）
+  timestamp: z.number(),
 })
 
 export const playerSessionSchema = z.object({
-  joinTime: z.string(),
-  leaveTime: z.string().nullable(),
+  // epoch 毫秒（本仓时刻表示的统一口径：与顶层 joinTime / events.timestamp 一致）
+  start: z.number(),
+  end: z.number().nullable(),
   duration: z.number(),
 })
 
@@ -85,7 +87,8 @@ export const playerSchema = z.object({
   isOnline: z.boolean(),
   ip: z.string(),
   joinTime: z.number().nullable(),
-  onlineTime: z.number(),
+  // 离线玩家无进行中会话 → null（服务端两分支装配均产出该字段）
+  onlineTime: z.number().nullable(),
   totalPlayTime: z.number(),
   isOp: z.boolean(),
   isWhitelisted: z.boolean(),
@@ -154,7 +157,8 @@ export const banRecordSchema = z.object({
   isActive: z.boolean(),
   isPermanent: z.boolean(),
   expiresAt: z.number().nullable(),
-  createdAt: z.string(),
+  // 原版封禁文件的 created 字段可缺省（旧版/手工编辑的封禁文件）
+  createdAt: z.string().nullable(),
 })
 
 /** 封禁记录列表（生效中在前 + 历史，非分页信封） */

@@ -5,7 +5,7 @@ import { parsePagination } from '../utils/pagination.js';
 import { ScheduledTaskModel } from '../db/scheduled_task.model.js';
 import { TaskRunHistoryModel } from '../db/task_run_history.model.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
-import { taskCreatePayloadSchema, taskUpdatePayloadSchema, scheduledTaskSchema, taskRunHistorySchema } from '@mc-commander/schemas';
+import { taskCreatePayloadSchema, taskUpdatePayloadSchema, scheduledTaskSchema, taskRunHistoryListSchema } from '@mc-commander/schemas';
 import { validateBody, validatedSuccess, validatedSuccessPaginated } from '../middleware/validate.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 
@@ -95,7 +95,9 @@ export function createTaskRoutes(serverManager, taskScheduler) {
       limit = Math.max(1, Math.min(limit, 100));
 
       const runs = TaskRunHistoryModel.findByTask(task.id, limit);
-      res.json(validatedSuccessPaginated(taskRunHistorySchema, runs, runs.length, 1, limit));
+      // 执行历史是服务端限量的最近记录（未真正分页），用普通信封——分页信封
+      // 的 pagination 块在未切片数据上是误导（totalPages>1 但永远只有第 1 页）
+      res.json(validatedSuccess(taskRunHistoryListSchema, runs));
     } catch (err) {
       next(err);
     }

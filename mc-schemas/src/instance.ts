@@ -43,7 +43,8 @@ export const instanceStatusSchema = z.object({
   cpuUsage: z.number(),
   memoryUsage: z.number(),
   totalMemory: z.number(),
-  worldSize: z.string().nullable(),
+  // GB 数值（服务端 _getWorldSize 产出；世界目录缺失回退 0，遍历失败回退旧值）
+  worldSize: z.number().nullable(),
   seed: z.string().nullable(),
   lastSave: z.string().nullable(),
   lastOutput: z.string().nullable(),

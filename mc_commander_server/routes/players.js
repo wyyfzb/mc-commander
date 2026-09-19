@@ -147,6 +147,23 @@ export function createPlayerRoutes(serverManager) {
         maxHealth: null,
         hunger: null,
         xpLevel: null,
+        // RCON 动态字段以契约缺省态占位（schema required 面必须完整）：
+        // RCON 可用时下方 Object.assign 覆盖为实时值，不可用时 null/false
+        // 即真实语义（离线态/未采集 = 未知或非活动）
+        gameMode: null,
+        dimension: null,
+        position: null,
+        armor: null,
+        xpProgress: null,
+        ping: null,
+        isSleeping: false,
+        isAfk: false,
+        isFlying: false,
+        isSneaking: false,
+        isSprinting: false,
+        isBurning: false,
+        isFrozen: false,
+        inventory: null,
         // 世界出生点是世界级数据（从 level.dat 读取），对所有玩家统一返回
         spawnPoint: worldSpawn,
         respawnPoint: null,
@@ -244,6 +261,17 @@ export function createPlayerRoutes(serverManager) {
         maxHealth: savedData.maxHealth ?? null,
         hunger: savedData.hunger ?? null,
         xpLevel: savedData.xpLevel ?? null,
+        // RCON 动态字段契约缺省态（离线玩家的真实语义：未采集=未知，状态=非活动）
+        armor: null,
+        xpProgress: null,
+        ping: null,
+        isSleeping: false,
+        isAfk: false,
+        isFlying: false,
+        isSneaking: false,
+        isSprinting: false,
+        isBurning: false,
+        isFrozen: false,
         ip: savedData.ip || '',
         // 世界出生点是世界级数据，统一用当前 level.dat 的出生点（离线玩家不查详情）
         spawnPoint: worldSpawn || (savedData.spawnPoint || null),

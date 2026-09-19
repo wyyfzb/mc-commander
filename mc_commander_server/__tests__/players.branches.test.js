@@ -580,7 +580,16 @@ describe('Player Routes 分支补测', () => {
           ['Bob', { name: 'Bob', joinTime: Date.now() }],
         ]),
         _loadInventoryFromDat: vi.fn((_uuid, name) => {
-          if (name === 'Steve') return { hotbar: ['diamond_sword'] };
+          if (name === 'Steve') {
+            return {
+              quickbar: [{ id: 'minecraft:diamond_sword', count: 1, slot: 0, durability: null, enchanted: false, customName: null }],
+              main: [],
+              equipment: { helmet: null, chestplate: null, leggings: null, boots: null, offhand: null },
+              enderChest: [],
+              source: 'snapshot',
+              partial: false,
+            };
+          }
           throw new Error('dat corrupt');
         }),
       });
@@ -590,9 +599,10 @@ describe('Player Routes 分支补测', () => {
 
       expect(res.status).toBe(200);
       const byName = Object.fromEntries(res.body.data.map((p) => [p.name, p]));
-      expect(byName.Steve.inventory).toEqual({ hotbar: ['diamond_sword'] });
-      // Bob 快照读取失败 → 静默跳过，无 inventory 键
-      expect(byName.Bob.inventory).toBeUndefined();
+      expect(byName.Steve.inventory.quickbar[0]).toMatchObject({ id: 'minecraft:diamond_sword' });
+      expect(byName.Steve.inventory.source).toBe('snapshot');
+      // Bob 快照读取失败 → 契约缺省态（显式 null，schema required 面完整）
+      expect(byName.Bob.inventory).toBeNull();
       // sessions 缺失 → 空数组兜底（前端展开不崩）
       expect(byName.Steve.sessions).toEqual([]);
     });
@@ -601,7 +611,7 @@ describe('Player Routes 分支补测', () => {
       writePlayerData('OfflineP', JSON.stringify({
         totalPlayTime: 7200,
         gameMode: 'survival',
-        dimension: 'minecraft:overworld',
+        dimension: 'overworld',
         position: { x: 1, y: 64, z: 2 },
         ip: '5.6.7.8',
         lastSeen: '2024-06-02T12:30:00Z',
@@ -610,7 +620,7 @@ describe('Player Routes 分支补测', () => {
         hunger: 17,
         xpLevel: 12,
         sessions: [{ start: 1, end: 2, duration: 1 }],
-        events: [{ type: 'quit', at: 3 }],
+        events: [{ type: 'quit', message: '离开服务器', timestamp: 1717331400000 }],
       }));
       fs.writeFileSync(
         path.join(tmpServerPath, 'banned-ips.json'),
@@ -621,7 +631,14 @@ describe('Player Routes 分支补测', () => {
         getAllKnownPlayers: () => new Map([
           ['OfflineP', { uuid: 'uuid-off', isOp: true, isWhitelisted: true, lastSeen: '2024-06-01T10:00:00Z' }],
         ]),
-        _loadInventoryFromDat: vi.fn(() => ({ hotbar: ['bread'] })),
+        _loadInventoryFromDat: vi.fn(() => ({
+          quickbar: [{ id: 'minecraft:bread', count: 1, slot: 0, durability: null, enchanted: false, customName: null }],
+          main: [],
+          equipment: { helmet: null, chestplate: null, leggings: null, boots: null, offhand: null },
+          enderChest: [],
+          source: 'snapshot',
+          partial: false,
+        })),
       });
       mockManager.getInstance.mockReturnValue(instance);
       BanModel.findActiveByInstance.mockReturnValue([
@@ -640,7 +657,7 @@ describe('Player Routes 分支补测', () => {
       expect(offline.ipBanExpiresAt).toBe(9_999_999_999_999); // 临时 IP 封禁到期时间
       expect(offline.lastSeen).toBe('2024-06-02T12:30:00.000Z'); // ISO 规范化（毫秒位补齐）
       expect(offline.health).toBe(18.5);
-      expect(offline.inventory).toEqual({ hotbar: ['bread'] });
+      expect(offline.inventory.quickbar[0]).toMatchObject({ id: 'minecraft:bread' });
       expect(offline.spawnPoint).toEqual({ x: 8, y: 70, z: -3 });
     });
 

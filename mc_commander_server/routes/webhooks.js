@@ -7,11 +7,16 @@
  */
 import { Router } from 'express';
 import { WebhookModel } from '../db/index.js';
-import { success, successPaginated, error, ErrorCodes } from '../utils/response.js';
+import { success, error, ErrorCodes } from '../utils/response.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
 import { WebhookService, WEBHOOK_EVENT_TYPES } from '../services/webhook.service.js';
 import { checkPublicUrl } from '../utils/url-guard.js';
-import { webhookCreatePayloadSchema, webhookSchema, WEBHOOK_PLATFORMS } from '@mc-commander/schemas';
+import {
+  webhookCreatePayloadSchema,
+  webhookSchema,
+  webhookDeliverySchema,
+  WEBHOOK_PLATFORMS,
+} from '@mc-commander/schemas';
 import { validateBody, validatedSuccess, validatedSuccessPaginated } from '../middleware/validate.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { parsePagination } from '../utils/pagination.js';
@@ -159,7 +164,7 @@ export function createWebhookRoutes() {
 
     const { page, pageSize } = parsePagination(req.query, { maxPageSize: 200 });
     const result = WebhookModel.findDeliveries({ webhookId: id, page, pageSize });
-    res.json(successPaginated(result.deliveries, result.total, result.page, result.pageSize));
+    res.json(validatedSuccessPaginated(webhookDeliverySchema, result.deliveries, result.total, result.page, result.pageSize));
   });
 
   return router;

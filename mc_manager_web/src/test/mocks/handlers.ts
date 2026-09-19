@@ -87,7 +87,7 @@ export const mockInstanceStatus: InstanceStatus = {
   cpuUsage: 15,
   memoryUsage: 3.2,
   totalMemory: 16,
-  worldSize: '1.2GB',
+  worldSize: 1.2,
   seed: null,
   lastSave: new Date(Date.now() - 5 * 60_000).toISOString(),
   lastOutput: null,

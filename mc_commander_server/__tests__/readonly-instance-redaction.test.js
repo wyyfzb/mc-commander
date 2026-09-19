@@ -73,7 +73,7 @@ const BASELINE_STATUS = {
   cpuUsage: 25.5,
   memoryUsage: 2.5,
   totalMemory: 8,
-  worldSize: '128.5 MB',
+  worldSize: 0.1256,
   seed: '1234567890',
   lastSave: '2026-09-16T00:00:00.000Z',
   lastOutput: 'Done (1.234s)! For help, type "help"',

@@ -47,3 +47,7 @@ export type TaskCreatePayload = z.infer<typeof taskCreatePayloadSchema>
 export type TaskUpdatePayload = z.infer<typeof taskUpdatePayloadSchema>
 export type TaskRunStatus = z.infer<typeof taskRunStatusSchema>
 export type TaskRunHistory = z.infer<typeof taskRunHistorySchema>
+
+/** 执行历史列表（GET /tasks/:id/history：服务端限量的最近记录，非分页信封） */
+export const taskRunHistoryListSchema = z.array(taskRunHistorySchema)
+export type TaskRunHistoryList = z.infer<typeof taskRunHistoryListSchema>

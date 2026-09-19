@@ -130,7 +130,7 @@ export function OverviewTab({ player, isRconConnected, bans, onAction, onOpenBan
           <InfoCell label="IP 地址" value={player.ip || '--'} mono />
           <InfoCell label="总游戏时长" value={formatPlayTime(player.totalPlayTime)} />
           <InfoCell label="最后在线" value={player.lastSeen ? formatRelativeTime(player.lastSeen) : '--'} />
-          <InfoCell label="连续在线" value={player.isOnline ? formatPlayTime(player.onlineTime) : '--'} />
+          <InfoCell label="连续在线" value={player.isOnline && player.onlineTime != null ? formatPlayTime(player.onlineTime) : '--'} />
           <InfoCell
             label="复活点"
             value={

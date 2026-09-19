@@ -56,13 +56,14 @@ export function formatDateTime(
   return `${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`
 }
 
-/** 完整时刻：YYYY-MM-DD HH:mm:ss 本地时区；缺失/非法返回 emptyText */
+/** 完整时刻：YYYY-MM-DD HH:mm:ss 本地时区；缺失/非法返回 emptyText。
+ *  入参兼容 ISO 串与 epoch 毫秒（事件 timestamp 契约＝毫秒数，其余字段为 ISO 串） */
 export function formatFullDateTime(
-  iso: string | null | undefined,
+  value: string | number | null | undefined,
   emptyText = '--',
 ): string {
-  if (!iso) return emptyText
-  const d = new Date(iso)
+  if (value == null || value === '') return emptyText
+  const d = new Date(value)
   if (Number.isNaN(d.getTime())) return emptyText
   return (
     `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ` +
@@ -84,13 +85,13 @@ export function formatFullDateMinute(
   )
 }
 
-/** 时刻 HH:mm 本地时区；缺失/非法返回 emptyText */
+/** 时刻 HH:mm 本地时区；缺失/非法返回 emptyText。入参兼容 ISO 串与 epoch 毫秒 */
 export function formatClock(
-  iso: string | null | undefined,
+  value: string | number | null | undefined,
   emptyText = '--',
 ): string {
-  if (!iso) return emptyText
-  const d = new Date(iso)
+  if (value == null || value === '') return emptyText
+  const d = new Date(value)
   if (Number.isNaN(d.getTime())) return emptyText
   return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`
 }
@@ -146,12 +147,10 @@ export function worldSizeParts(sizeGB: number | null | undefined): { value: stri
   return { value: sizeGB.toFixed(1), unit: 'GB' }
 }
 
-/** 存档大小统一展示（实例卡/世界页共用）：兼容 number 与数字字符串（两端类型不一） */
-export function formatWorldSize(raw: string | number | null | undefined): string {
-  if (raw == null || raw === '') return '—'
-  const gb = typeof raw === 'number' ? raw : parseFloat(raw)
-  if (Number.isNaN(gb)) return '—'
-  const { value, unit } = worldSizeParts(gb)
+/** 存档大小统一展示（实例卡/世界页共用）：入参 = 契约的 GB 数值（worldSize 对齐后） */
+export function formatWorldSize(raw: number | null | undefined): string {
+  if (raw == null || !Number.isFinite(raw)) return '—'
+  const { value, unit } = worldSizeParts(raw)
   return `${value} ${unit}`
 }
 

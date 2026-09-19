@@ -65,7 +65,7 @@ describe('InstanceCards', () => {
     expect(screen.getByText('已停止')).toBeInTheDocument()
   })
 
-  it('世界指标走 formatWorldSize 统一格式化（mock worldSize=1.2GB 字符串 → 1.2 GB）', () => {
+  it('世界指标走 formatWorldSize 统一格式化（mock worldSize=1.2 → 1.2 GB）', () => {
     render(<InstanceCards {...baseProps()} />)
     // 有详情的卡显示格式化值；无详情卡显示 —（数量随 fixture detailStatuses 覆盖度变化，≥1 即证明格式化生效）
     expect(screen.getAllByText('1.2 GB').length).toBeGreaterThanOrEqual(1)

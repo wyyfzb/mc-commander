@@ -147,14 +147,11 @@ describe('formatStartTime / formatLogFileName / worldTimePhase', () => {
     expect(worldSizeParts(Number.NaN)).toEqual({ value: '0', unit: 'GB' })
   })
 
-  it('formatWorldSize：兼容 number 与数字字符串（两端契约类型不一），空/非法回退 —', () => {
+  it('formatWorldSize：GB 数值档位换算，null/非有限数回退 —（契约对齐后入参恒为 number）', () => {
     expect(formatWorldSize(0.6279296875)).toBe('643 MB')
     expect(formatWorldSize(3.2)).toBe('3.2 GB')
-    expect(formatWorldSize('1.2GB')).toBe('1.2 GB')
-    expect(formatWorldSize('0.03')).toBe('31 MB')
     expect(formatWorldSize(null)).toBe('—')
-    expect(formatWorldSize('')).toBe('—')
-    expect(formatWorldSize('N/A')).toBe('—')
+    expect(formatWorldSize(undefined)).toBe('—')
   })
 })
 

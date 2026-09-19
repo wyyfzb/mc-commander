@@ -5,7 +5,7 @@
  * 1. 顶部 6 项统计卡：总在线/累计登录/已离线/死亡/进度/入睡（player.stats：totalOnline/loginCount/offlineSince/deathCount/achievementCount/sleepCount）
  *    + 「全部折叠」按钮
  * 2. 会话树时间线：
- *    - 会话节点（sessions）：登录/退出时间 + 时长，默认折叠（「登录日志N」）；展开显示会话内事件
+ *    - 会话节点（sessions）：start/end（epoch 毫秒）+ 时长，默认折叠（「登录日志N」）；展开显示会话内事件
  *    - 事件行 7 类型（player.events：join/leave/death/respawn/achievement/sleep/wake），各配语义色+图标+中文标签
  *      （语义色映射：join=success/leave=muted/death=error/respawn=info/achievement=accent/sleep=purple/wake=warning，用 --mcs-* token）
  *    - 会话间离线间隔节点「离线 · X时X分」（相邻 sessions 的 gap 计算）
@@ -55,10 +55,10 @@ interface SessionNode {
 interface OfflineNode {
   kind: 'offline'
   durationSec: number
-  /** 间隔起点（ISO） */
-  start: string
-  /** 间隔终点（ISO） */
-  end: string
+  /** 间隔起点（epoch 毫秒，与会话契约一致） */
+  start: number
+  /** 间隔终点（epoch 毫秒） */
+  end: number
 }
 
 /** 事件中性档（离开：无成败含义，压低存在感）——三件套拆给图标与徽章两处用 */
@@ -97,21 +97,21 @@ const EMPTY_STATS = {
 function buildLogNodes(player: Player): LogNode[] {
   // 会话按时间正序（详情 fallback 分支可能缺 sessions 字段，? 兜底防崩溃）
   const sessions = [...(player.sessions ?? [])].sort(
-    (a, b) => new Date(a.joinTime).getTime() - new Date(b.joinTime).getTime(),
+    (a, b) => a.start - b.start,
   )
 
   const nodes: LogNode[] = []
   let prevEnd: number | null = null
   sessions.forEach((s, i) => {
-    const startMs = new Date(s.joinTime).getTime()
-    const endMs = s.leaveTime ? new Date(s.leaveTime).getTime() : Date.now()
+    const startMs = s.start
+    const endMs = s.end ?? Date.now()
     // 离线间隔：上一会话结束 到 本会话开始
     if (prevEnd !== null && startMs > prevEnd) {
       nodes.push({
         kind: 'offline',
         durationSec: Math.floor((startMs - prevEnd) / 1000),
-        start: new Date(prevEnd).toISOString(),
-        end: s.joinTime,
+        start: prevEnd,
+        end: s.start,
       })
     }
     // 会话内事件：时间在 [start, end] 范围内，按时间倒序。
@@ -225,9 +225,9 @@ function SessionRow({
   onToggle: (index: number) => void
 }) {
   const { session, labelNo, events } = node
-  const endLabel = session.leaveTime ? formatClock(session.leaveTime) : '现在'
+  const endLabel = session.end ? formatClock(session.end) : '现在'
   const title =
-    `登录日志${labelNo} ${formatClock(session.joinTime)} → ${endLabel} · ` + formatDurationSec(session.duration)
+    `登录日志${labelNo} ${formatClock(session.start)} → ${endLabel} · ` + formatDurationSec(session.duration)
 
   return (
     <div className="flex flex-col">

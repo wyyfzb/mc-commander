@@ -252,7 +252,7 @@ export function buildPlayerColumns({
         const p = row.original
         return (
           <span className="block text-right text-mcs-xs text-mcs-text-muted">
-            {p.isOnline ? formatOnlineTimeShort(p.onlineTime) : formatRelativeTime(p.lastSeen ?? null, Date.now(), '从未')}
+            {p.isOnline && p.onlineTime != null ? formatOnlineTimeShort(p.onlineTime) : formatRelativeTime(p.lastSeen ?? null, Date.now(), '从未')}
           </span>
         )
       },
