@@ -59,6 +59,16 @@ mc_commander_server/.env
 mc_commander_server/backups/
 # servers/ 整体忽略（含 jar/world/logs 等运行时文件）由 mc_commander_server/.gitignore 的 servers/ 规则覆盖，
 # 此处的按文件列举规则已删除（原为死规则，从未实际生效）
+#
+# 根锚定兜底：服务端的 dataDir/serversDir/backupsDir 默认值是 **cwd 相对**的
+# （config.js 的 path.resolve(process.env.X || './x')），从仓库根直接跑服务端或
+# 服务端测试时（如根目录 npx vitest），落点是仓库根的 data/ servers/ backups/，
+# 而上面几条与包内 .gitignore 的同类规则都只在 cwd = 包目录时生效。
+# 实测漏过：根级 data/logs/error.log 仅被通用 *.log 碰巧盖住，同目录的轮转文件
+# error.log.1~.5 与 data/mc_commander.db 当时都是「未忽略」裸状态。
+/data/
+/servers/
+/backups/
 
 # Flutter build artifacts（桌面端已废弃归档，路径前缀为 archived/）
 archived/
