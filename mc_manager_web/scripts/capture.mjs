@@ -68,6 +68,9 @@ const ROUTES = [
   { path: 'files', file: 'files' },
   { path: 'tasks', file: 'tasks' },
   { path: 'instances', file: 'instances' },
+  { path: 'plugins', file: 'plugins' },
+  { path: 'webhooks', file: 'webhooks' },
+  { path: 'audit', file: 'audit' },
   { path: 'settings/notifications', file: 'settings-notifications' },
   { path: 'settings/backup', file: 'settings-backup' },
 ]
