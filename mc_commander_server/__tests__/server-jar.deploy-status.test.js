@@ -10,19 +10,28 @@
  * mock 边界（对齐 server-jar.deploy.chain.test.js 范式）：仅替身外部依赖，
  * 数据一律虚构（1.2.3.4 / paper-xxxx / Steve）
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest';
 import express from 'express';
 import request from 'supertest';
 import { deployStatusResponseSchema } from '@mc-commander/schemas';
+
+const testState = vi.hoisted(() => ({ serversDir: null }));
 
 vi.mock('../db/index.js', () => ({
   InstanceModel: { create: vi.fn() },
   AuditLogModel: { create: vi.fn() },
 }));
 
-vi.mock('../config.js', () => ({
-  default: { serversDir: '/tmp/mcs-deploy-status-test' },
-}));
+// 实例目录挂系统临时目录：写死 POSIX 形态（'/tmp/...'）在 Windows 上会被解析成
+// 「当前盘根 + /tmp」（path.resolve 的盘符相对语义），落点既不跨平台也不受
+// vitest 的临时根管辖，且用完不清理——与 server-jar.deploy.chain.test.js 同款
+vi.mock('../config.js', async () => {
+  const fsp = await import('node:fs/promises');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  testState.serversDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'mcs-deploy-status-'));
+  return { default: { serversDir: testState.serversDir } };
+});
 
 vi.mock('minecraft-core', () => ({
   MinecraftServerManager: class {
@@ -87,6 +96,13 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+});
+
+afterAll(async () => {
+  const fsp = await import('node:fs/promises');
+  if (testState.serversDir) {
+    await fsp.rm(testState.serversDir, { recursive: true, force: true });
+  }
 });
 
 describe('GET /instances/deploy/status', () => {
