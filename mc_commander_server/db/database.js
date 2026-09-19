@@ -416,6 +416,26 @@ function createTables() {
     logger.info('Migration: added backups.source_archive_id and unique index on file_path');
   }
 
+  // 迁移 v14：分钟级主机指标历史（metrics 采样器每 60s 写一行，24h 保留期）。
+  // 面板尚未上线、暂无前端消费方——端点先行（GET /api/v1/metrics），为
+  // dashboard「昨日摘要」等后续能力提供数据面
+  if (userVersion < 14) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS metrics_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        captured_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        cpu_usage REAL,
+        memory_used_gb REAL,
+        memory_total_gb REAL,
+        memory_percent REAL,
+        players_online INTEGER NOT NULL DEFAULT 0
+      )
+    `);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_metrics_history_captured ON metrics_history(captured_at)`);
+    db.pragma('user_version = 14');
+    logger.info('Migration: added metrics_history table');
+  }
+
   // 创建索引
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_admin_sessions_expires ON admin_sessions(expires_at);

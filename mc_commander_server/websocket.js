@@ -5,12 +5,11 @@ import {
   clearFailures as clearCredentialFailures,
 } from './utils/credential-lockout.js';
 import { getDb } from './db/index.js';
-import os from 'os';
-import fs from 'fs';
-import config from './config.js';
+
 import { logger } from './utils/logger.js';
 import { parseDbTime } from './utils/db-time.js';
 import { inFlightDeploys } from './utils/deploy-inflight.js';
+import { collectSystemStats } from './utils/system-stats.js';
 
 export const WSEvents = {
   LOG: 'log',
@@ -187,18 +186,90 @@ const CRITICAL_STATUS_EVENTS = new Set(['crash', 'circuit_breaker']);
 /// 上线字段名必须是 eventId——契约（mc-schemas/src/ws.ts）与前端游标
 /// （api/ws.ts 的 saveLastEventId）都只认这个名字，发成 id 会让前端游标永不推进、
 /// 断线补齐静默失效（补齐逻辑与落库照常工作，只是永远不会被触发）
-function persistNotificationEvent(instanceId, type, data) {
+// ── 通知事件落库队列：广播热路径不再逐条同步 INSERT ─────────────────
+// 事件 id 必须在入队时同步分配（消息体携带 eventId，客户端断线补齐游标只认
+// 这个名字），故计数器按「表内当前最大 id + 1」懒初始化、只增不减；刷写用
+// 显式 id 单事务批量 INSERT。触发条件＝攒满 50 条或 500ms 定时（unref 不阻
+// 停机）。读侧（replayEvents）与停机前先强制 flush，保证读到已提交行。
+const NOTIFICATION_FLUSH_INTERVAL_MS = 500;
+const NOTIFICATION_FLUSH_BATCH_SIZE = 50;
+const notificationQueue = { buffer: [], nextId: null, stmt: null, timer: null };
+
+export function flushNotificationEvents() {
+  if (notificationQueue.timer) {
+    clearTimeout(notificationQueue.timer);
+    notificationQueue.timer = null;
+  }
+  if (notificationQueue.buffer.length === 0) return;
+  const batch = notificationQueue.buffer.splice(0);
   try {
     const db = getDb();
-    const result = db
-      .prepare(
-        'INSERT INTO notification_events (instance_id, type, data) VALUES (?, ?, ?)'
-      )
-      .run(instanceId, type, JSON.stringify(data ?? {}));
-    return result.lastInsertRowid;
+    if (!notificationQueue.stmt) {
+      notificationQueue.stmt = db.prepare(
+        'INSERT INTO notification_events (id, instance_id, type, data) VALUES (?, ?, ?, ?)'
+      );
+    }
+    const insertAll = db.transaction((rows) => {
+      for (const row of rows) {
+        notificationQueue.stmt.run(row.id, row.instanceId, row.type, row.data);
+      }
+    });
+    insertAll(batch);
   } catch (err) {
     // 落库失败不阻断广播（通知投递优先），但记录日志便于审计
-    logger.error(`Failed to persist notification event (${type}):`, err);
+    logger.error(`Failed to persist ${batch.length} notification events:`, err);
+  }
+}
+
+/** 重置队列（幂等）：nextId 回到「表内 MAX+1」懒初始化——停机清理与测试隔离用 */
+export function resetNotificationEventQueue() {
+  if (notificationQueue.timer) {
+    clearTimeout(notificationQueue.timer);
+    notificationQueue.timer = null;
+  }
+  notificationQueue.buffer.length = 0;
+  notificationQueue.nextId = null;
+  notificationQueue.stmt = null;
+}
+
+function persistNotificationEvent(instanceId, type, data) {
+  try {
+    if (notificationQueue.nextId === null) {
+      // 计数器初始化：多面板共库非受支持部署，单进程内不会复用 id
+      try {
+        const db = getDb();
+        // AUTOINCREMENT 的 rowid 永不复用保护只覆盖 sqlite_sequence：表被保留期
+        // 清理清空 + 重启的组合下 MAX(id)=0，必须与 seq 取大，否则高游标客户端
+        // 的新事件 id 全部低于游标、断线补齐失效
+        const maxId = db.prepare('SELECT COALESCE(MAX(id), 0) AS maxId FROM notification_events').get()?.maxId ?? 0;
+        let seq = 0;
+        try {
+          seq = db.prepare("SELECT seq FROM sqlite_sequence WHERE name = 'notification_events'").get()?.seq ?? 0;
+        } catch { /* sqlite_sequence 行不存在（从未插入过）即 0 */ }
+        notificationQueue.nextId = Math.max(maxId, seq) + 1;
+      } catch {
+        notificationQueue.nextId = 1;
+      }
+    }
+    const id = notificationQueue.nextId++;
+    notificationQueue.buffer.push({
+      id,
+      instanceId,
+      type,
+      data: JSON.stringify(data ?? {}),
+    });
+    if (notificationQueue.buffer.length >= NOTIFICATION_FLUSH_BATCH_SIZE) {
+      flushNotificationEvents();
+    } else if (!notificationQueue.timer) {
+      notificationQueue.timer = setTimeout(
+        flushNotificationEvents,
+        NOTIFICATION_FLUSH_INTERVAL_MS,
+      );
+      notificationQueue.timer.unref?.();
+    }
+    return id;
+  } catch (err) {
+    logger.error(`Failed to enqueue notification event (${type}):`, err);
     return null;
   }
 }
@@ -495,6 +566,7 @@ export function setupWebSocket(wss, serverManager) {
   /// 断线补齐：重放 lastEventId 之后的通知事件（上限 500 条防积压）
   function replayEvents(ws, instanceId, lastEventId) {
     try {
+      flushNotificationEvents();
       const db = getDb();
       // 角色过滤**下推到 SQL**：LIMIT 窗口必须只装该连接可见的候选行。只在循环里
       // 过滤会让不可见事件占满 500 条配额——只读一条也收不到，而客户端只在收到带
@@ -770,68 +842,17 @@ export function setupWebSocket(wss, serverManager) {
     }
   });
 
-  return { broadcast, broadcastAll, WSEvents, ClientMessages, startSystemStatsBroadcast };
+  return { broadcast, broadcastAll, WSEvents, ClientMessages, startSystemStatsBroadcast, flushNotificationEvents };
 
   /// 每 15s 通过 broadcastAll 推送系统资源统计（CPU/内存/磁盘）
-  /// 调用方在 index.js 启动后调用，返回 stop 函数供优雅停机
+  /// 调用方在 index.js 启动后调用，返回 stop 函数供优雅停机。
+  /// 无任何已连接客户端时跳过采集（采集读数与广播都只对连接有意义的
+  /// 消费者发生；客户端连上后的下一拍自然恢复），metrics 分钟级落库
+  /// 独立采样不依赖本函数
   function startSystemStatsBroadcast() {
-    // 磁盘使用率 10s 缓存（复用 status.js 同逻辑）
-    let _diskCache = { ts: 0, result: null };
-    function getDiskUsage() {
-      const now = Date.now();
-      if (_diskCache.result && now - _diskCache.ts < 10_000) return _diskCache.result;
-      const dirs = [config.serversDir, config.dataDir, config.backupsDir];
-      const seen = new Map();
-      for (const dir of dirs) {
-        try {
-          const stat = fs.statfsSync(dir);
-          const total = stat.bsize * stat.blocks;
-          const free = stat.bsize * stat.bfree;
-          const used = total - free;
-          const percent = total > 0 ? Math.round((used / total) * 1000) / 10 : 0;
-          const entry = {
-            mountpoint: stat.mounted || dir,
-            totalGB: Math.round(total / (1024 * 1024 * 1024) * 10) / 10,
-            usedGB: Math.round(used / (1024 * 1024 * 1024) * 10) / 10,
-            percent,
-          };
-          if (!seen.has(entry.mountpoint) || entry.percent > seen.get(entry.mountpoint).percent) {
-            seen.set(entry.mountpoint, entry);
-          }
-        } catch { /* skip */ }
-      }
-      const all = Array.from(seen.values());
-      const primary = all.sort((a, b) => b.percent - a.percent)[0] || null;
-      const result = { primary, all };
-      _diskCache = { ts: now, result };
-      return result;
-    }
-
-    // CPU 使用率：简单 loadavg 近似（避免复制 /proc/stat 状态机）
-    function getCpuUsage() {
-      const cores = os.cpus().length || 1;
-      const load = os.loadavg()[0] || 0;
-      return Math.min(100, Math.round((load / cores) * 100 * 10) / 10);
-    }
-
     function collectAndBroadcast() {
-      const totalMemBytes = os.totalmem();
-      const freeMemBytes = os.freemem();
-      const usedMemBytes = totalMemBytes - freeMemBytes;
-      const totalMemGB = Math.round(totalMemBytes / (1024 * 1024 * 1024) * 10) / 10;
-      const usedMemGB = Math.round(usedMemBytes / (1024 * 1024 * 1024) * 10) / 10;
-      const memUsagePercent = totalMemBytes > 0
-        ? Math.round((usedMemBytes / totalMemBytes) * 1000) / 10 : 0;
-      broadcastAll(WSEvents.SYSTEM_STATS_UPDATE, {
-        cpuUsage: getCpuUsage(),
-        memoryUsage: usedMemGB,
-        totalMemory: totalMemGB,
-        memoryPercent: memUsagePercent,
-        cpuCores: os.cpus().length,
-        loadAvg: os.loadavg(),
-        uptime: os.uptime(),
-        diskUsage: getDiskUsage(),
-      });
+      if (clients.size === 0) return;
+      broadcastAll(WSEvents.SYSTEM_STATS_UPDATE, collectSystemStats());
     }
 
     // 立即推送一次，然后每 15s 定时

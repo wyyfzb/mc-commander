@@ -110,6 +110,8 @@ vi.mock('../websocket.js', () => ({
   // 桩给出该函数并把 stop 句柄记在 hoisted holder 上，供「停机链调用了它」的断言
   // 只在被调用时返回 stop 句柄（不得顺手调用它，否则「停机调用了 stop」的断言变成空转）
   setupWebSocket: vi.fn(() => ({ startSystemStatsBroadcast: h.startSystemStatsBroadcast })),
+  // 停机链会调用通知事件队列的强制刷写（批量落库收尾）
+  flushNotificationEvents: vi.fn(),
 }));
 vi.mock('../services/webhook.service.js', () => ({ setupWebhookDispatch: vi.fn() }));
 vi.mock('../db/index.js', () => ({

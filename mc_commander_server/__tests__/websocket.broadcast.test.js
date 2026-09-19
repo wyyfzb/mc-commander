@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'events';
-import { setupWebSocket, WSEvents } from '../websocket.js';
+import { setupWebSocket, WSEvents, flushNotificationEvents, resetNotificationEventQueue } from '../websocket.js';
+import { resetSystemStatsCache } from '../utils/system-stats.js';
 
 // Mock 数据库：捕获通知事件落库（全局通知 id 透传 / 落库失败降级分支）
 vi.mock('../db/index.js', () => ({
@@ -80,6 +81,10 @@ describe('WebSocket 系统广播域（broadcastAll / 全局通知 / 系统统计
   let api;
 
   beforeEach(() => {
+    // 队列状态跨用例隔离：nextId 回到「表内 MAX+1」懒初始化，id 从 1 起可断言
+    resetNotificationEventQueue();
+    // 磁盘读数缓存同理（fake timers 下 10s 窗口不会自然过期）
+    resetSystemStatsCache();
     // fake timers 需在 setupWebSocket 之前启用：心跳 interval、广播节流窗口
     // 与系统统计 15s 周期都依赖可控时钟
     vi.useFakeTimers();
@@ -91,6 +96,8 @@ describe('WebSocket 系统广播域（broadcastAll / 全局通知 / 系统统计
     fakeDb = {
       inserted: [],
       failInsert: false,
+      // 队列刷写走事务包装（透传执行，记录行为与断言口径一致）
+      transaction: vi.fn((fn) => (rows) => fn(rows)),
       prepare: vi.fn((sql) => {
         if (sql.includes('INSERT INTO notification_events')) {
           return {
@@ -203,10 +210,12 @@ describe('WebSocket 系统广播域（broadcastAll / 全局通知 / 系统统计
       expect(notice.eventId).toBe(1);
       expect('instanceId' in notice).toBe(false);
       expect(notice.data).toMatchObject({ instanceId: 'paper-x1', instanceName: '生存服' });
-      // 落库：instance_id NULL（无归属全局通知）
+      // 落库：instance_id NULL（无归属全局通知）；批量队列需显式刷写
+      flushNotificationEvents();
       expect(fakeDb.inserted).toHaveLength(1);
-      expect(fakeDb.inserted[0][0]).toBeNull();
-      expect(fakeDb.inserted[0][1]).toBe(WSEvents.DEPLOY_COMPLETE);
+      expect(fakeDb.inserted[0][0]).toBe(1);
+      expect(fakeDb.inserted[0][1]).toBeNull();
+      expect(fakeDb.inserted[0][2]).toBe(WSEvents.DEPLOY_COMPLETE);
     });
 
     it('readyState 非 1 的客户端对全局通知同样免疫', () => {
@@ -221,17 +230,18 @@ describe('WebSocket 系统广播域（broadcastAll / 全局通知 / 系统统计
       expect(sentMessage(wsOk, 1).type).toBe(WSEvents.DEPLOY_FAILED);
     });
 
-    it('落库失败降级：通知无 id 字段但广播不中断（投递优先）', () => {
+    it('落库失败降级：id 入队即分配（消息仍带 eventId），flush 失败丢行不中断广播', () => {
       fakeDb.failInsert = true;
       const ws = connect(wss);
 
       serverManager.emit('deployProgress', { stage: 'complete', percent: 1.0, instanceId: 'paper-x3', instanceName: '生存服' });
 
-      // progress（无落库语义）+ notice 均送达，notice 无 id
+      // progress（无落库语义）+ notice 均送达；id 已随消息下发，flush 失败只丢行
       expect(ws.send).toHaveBeenCalledTimes(2);
       const notice = sentMessage(ws, 1);
       expect(notice.type).toBe(WSEvents.DEPLOY_COMPLETE);
-      expect('eventId' in notice).toBe(false);
+      expect(notice.eventId).toBe(1);
+      expect(() => flushNotificationEvents()).not.toThrow();
     });
   });
 
@@ -270,8 +280,11 @@ describe('WebSocket 系统广播域（broadcastAll / 全局通知 / 系统统计
         reason: '连续崩溃',
       });
 
+      flushNotificationEvents();
       expect(fakeDb.inserted).toHaveLength(1);
-      expect(fakeDb.inserted[0][0]).toBeNull();
+      expect(fakeDb.inserted[0][0]).toBe(1);
+      expect(fakeDb.inserted[0][1]).toBeNull();
+      expect(fakeDb.inserted[0][2]).toBe(WSEvents.STATUS);
       expect(sentMessage(ws).eventId).toBe(1);
     });
 
@@ -285,7 +298,9 @@ describe('WebSocket 系统广播域（broadcastAll / 全局通知 / 系统统计
 
       expect(wsSub.send).toHaveBeenCalledTimes(1);
       expect(wsOther.send).not.toHaveBeenCalled();
-      expect(fakeDb.inserted[0][0]).toBe('s1');
+      flushNotificationEvents();
+      expect(fakeDb.inserted[0][0]).toBe(1);
+      expect(fakeDb.inserted[0][1]).toBe('s1');
     });
 
     it('readyState 非 1 的客户端对关键事件同样免疫', () => {
@@ -410,6 +425,7 @@ describe('WebSocket 系统广播域（broadcastAll / 全局通知 / 系统统计
       const msg = sentMessage(wsA);
       expect(msg.type).toBe(WSEvents.UPGRADE_PROGRESS);
       expect('instanceId' in msg).toBe(false);
+      flushNotificationEvents();
       expect(fakeDb.inserted).toHaveLength(0);
     });
 
@@ -472,9 +488,11 @@ describe('WebSocket 系统广播域（broadcastAll / 全局通知 / 系统统计
       });
 
       // 落库为全局行（instance_id 置空）：断线补齐对任何订阅者都可见
+      flushNotificationEvents();
       expect(fakeDb.inserted).toHaveLength(1);
-      expect(fakeDb.inserted[0][0]).toBeNull();
-      expect(fakeDb.inserted[0][1]).toBe(WSEvents.WEBHOOK_DELIVERY_FAILED);
+      expect(fakeDb.inserted[0][0]).toBe(1);
+      expect(fakeDb.inserted[0][1]).toBeNull();
+      expect(fakeDb.inserted[0][2]).toBe(WSEvents.WEBHOOK_DELIVERY_FAILED);
       const msg = sentMessage(ws);
       expect(msg.type).toBe(WSEvents.WEBHOOK_DELIVERY_FAILED);
       expect(msg.eventId).toBe(1);
@@ -496,10 +514,11 @@ describe('WebSocket 系统广播域（broadcastAll / 全局通知 / 系统统计
 
       const types = outsider.send.mock.calls.map(([m]) => JSON.parse(m).type);
       expect(types).toEqual([WSEvents.BACKUP_FAILED, WSEvents.TASK_FAILED]);
-      // 两行均为全局行
+      // 两行均为全局行（批量队列先显式刷写）
+      flushNotificationEvents();
       const recent = fakeDb.inserted.slice(-2);
-      expect(recent.map((r) => r[0])).toEqual([null, null]);
-      expect(recent.map((r) => r[1])).toEqual([WSEvents.BACKUP_FAILED, WSEvents.TASK_FAILED]);
+      expect(recent.map((r) => r[1])).toEqual([null, null]);
+      expect(recent.map((r) => r[2])).toEqual([WSEvents.BACKUP_FAILED, WSEvents.TASK_FAILED]);
     });
 
     it('客户端断开事件移出广播集合，error 事件仅记录无副作用', () => {

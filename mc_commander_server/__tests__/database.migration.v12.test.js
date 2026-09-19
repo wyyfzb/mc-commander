@@ -55,8 +55,8 @@ describe('数据库 v11→v12 迁移（存量库 + 存量行）', () => {
     fs.rmSync(config.dataDir, { recursive: true, force: true });
   });
 
-  it('user_version 升到 13（v11→v12→v13 连续；后续迁移块照常衔接）', () => {
-    expect(db.pragma('user_version', { simple: true })).toBe(13);
+  it('user_version 升到 14（v11→v12→v13 连续；后续迁移块照常衔接）', () => {
+    expect(db.pragma('user_version', { simple: true })).toBe(14);
   });
 
   it('admin_account 补齐三列，类型与默认值符合契约', () => {
@@ -91,13 +91,13 @@ describe('数据库 v11→v12 迁移（存量库 + 存量行）', () => {
     expect(unique).toBe(true);
   });
 
-  it('重复执行迁移幂等：列已存在时不报错、user_version 保持 13、数据不变', () => {
+  it('重复执行迁移幂等：列已存在时不报错、user_version 保持 14、数据不变', () => {
     // 把版本号退回 11，强制 v12 块再跑一次（模拟「列已存在但版本落后」的导入/半迁移）
     db.pragma('user_version = 11');
     db.close();
     db = initDatabase();
 
-    expect(db.pragma('user_version', { simple: true })).toBe(13);
+    expect(db.pragma('user_version', { simple: true })).toBe(14);
     expect(db.prepare('SELECT totp_secret FROM admin_account WHERE id = 1').get().totp_secret).toBe('KEEP-ME-PLEASE');
     expect(db.prepare('SELECT COUNT(*) AS n FROM admin_account').get().n).toBe(1);
   });

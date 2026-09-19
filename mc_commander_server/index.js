@@ -20,6 +20,9 @@ import { MCServerManager } from './services/mc_server.js';
 import { adoptOrphanInstances } from './services/mc-server/adopt.js';
 import { TaskScheduler } from './services/task_scheduler.js';
 import { setupWebSocket } from './websocket.js';
+import { collectSystemStats } from './utils/system-stats.js';
+import { flushNotificationEvents } from './websocket.js';
+import { MetricsModel } from './db/metrics.model.js';
 import { BackupModel } from './db/backup.model.js';
 import { setupWebhookDispatch } from './services/webhook.service.js';
 import { BackupService } from './services/backup.service.js';
@@ -214,6 +217,47 @@ const wsSetup = setupWebSocket(wss, serverManager);
 // 另一方是 /proc/stat 差分，故数值只以 HTTP 为准。返回的 stop 句柄接入停机路径
 const stopSystemStatsBroadcast = wsSetup.startSystemStatsBroadcast();
 
+// 分钟级主机指标落库（60s 一行，24h 保留期）：观测数据面，供 GET /api/v1/metrics
+// 与后续 dashboard「昨日摘要」消费。在线玩家数从全部已加载实例汇总。
+// 每日顺带清一次保留期外样本
+const METRICS_SAMPLE_INTERVAL_MS = 60_000;
+const METRICS_RETENTION_HOURS = 24;
+let lastRetentionSweep = 0;
+
+function countOnlinePlayers() {
+  let total = 0;
+  for (const instance of serverManager.instances.values()) {
+    total += instance.players?.size ?? 0;
+  }
+  return total;
+}
+
+function recordMetricsSample() {
+  try {
+    const stats = collectSystemStats();
+    MetricsModel.record({
+      cpuUsage: stats.cpuUsage,
+      memoryUsedGb: stats.memoryUsage,
+      memoryTotalGb: stats.totalMemory,
+      memoryPercent: stats.memoryPercent,
+      playersOnline: countOnlinePlayers(),
+    });
+    if (Date.now() - lastRetentionSweep > 24 * 3600_000) {
+      lastRetentionSweep = Date.now();
+      const removed = MetricsModel.deleteOlderThan(METRICS_RETENTION_HOURS);
+      if (removed > 0) logger.info(`[Metrics] Pruned ${removed} stale samples`);
+    }
+  } catch (err) {
+    logger.warn('[Metrics] Failed to record sample:', err.message);
+  }
+}
+
+const stopMetricsSampler = (() => {
+  recordMetricsSample();
+  const timer = setInterval(recordMetricsSample, METRICS_SAMPLE_INTERVAL_MS);
+  return () => clearInterval(timer);
+})();
+
 server.on('error', (err) => {
   if (err.code === 'EADDRINUSE') {
     logger.error(`错误: 端口 ${config.port} 已被占用，请修改 .env 的 PORT 配置或停止占用该端口的进程。`);
@@ -287,8 +331,12 @@ async function shutdown(signal) {
   logger.info(`${signal} received, shutting down (MC instances keep running)...`);
   taskScheduler.stop();
   stopSystemStatsBroadcast();
+  stopMetricsSampler();
+  flushNotificationEvents();
   wss.close(() => {
     logger.info('WebSocket server closed');
+    // 停机窗口内 serverManager 仍可能发出通知事件（入队未刷），关库前收尾
+    flushNotificationEvents();
     try {
       getDb().close();
       logger.info('Database closed');

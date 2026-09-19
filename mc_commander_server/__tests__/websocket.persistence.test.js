@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'events';
-import { setupWebSocket, WSEvents } from '../websocket.js';
+import { setupWebSocket, WSEvents, flushNotificationEvents, resetNotificationEventQueue } from '../websocket.js';
 
 // Mock 数据库：验证通知事件落库（携带 id）与断线补齐（lastEventId 重放）
 vi.mock('../db/index.js', () => ({
@@ -40,8 +40,10 @@ describe('WebSocket 通知持久化与断线补齐', () => {
     serverManager.getInstance = vi.fn(() => null);
 
     // 假 DB：落库返回自增 id，重放查询返回预设事件
+    resetNotificationEventQueue();
     fakeDb = {
       inserted: [],
+      transaction: vi.fn((fn) => (rows) => fn(rows)),
       prepare: vi.fn((sql) => {
         if (sql.includes('INSERT INTO notification_events')) {
           return {
@@ -50,6 +52,9 @@ describe('WebSocket 通知持久化与断线补齐', () => {
               return { lastInsertRowid: fakeDb.inserted.length };
             },
           };
+        }
+        if (sql.includes('MAX(id)')) {
+          return { get: () => ({ maxId: fakeDb.inserted.length }) };
         }
         if (sql.includes('SELECT id, instance_id, type, data')) {
           return {
@@ -102,6 +107,7 @@ describe('WebSocket 通知持久化与断线补齐', () => {
     serverManager.emit('instance:playerJoin', { instanceId: 's1', name: 'Alice' });
 
     // 已落库 1 条 → id = 1
+    flushNotificationEvents();
     expect(fakeDb.inserted.length).toBe(1);
     const msg = sentMessage(ws);
     expect(msg.eventId).toBe(1);
@@ -113,6 +119,7 @@ describe('WebSocket 通知持久化与断线补齐', () => {
 
     serverManager.emit('instance:log', { instanceId: 's1', text: 'hi', type: 'stdout' });
 
+    flushNotificationEvents();
     expect(fakeDb.inserted.length).toBe(0);
     const msg = sentMessage(ws);
     expect(msg.eventId).toBeUndefined();
@@ -133,14 +140,17 @@ describe('WebSocket 通知持久化与断线补齐', () => {
 
     // 状态跃迁：落库
     serverManager.emit('instance:status', { instanceId: 's1', event: 'stopped', code: 0 });
+    flushNotificationEvents();
     expect(fakeDb.inserted.length).toBe(1);
 
     // 高频快照（无 event 字段）：不落库
     serverManager.emit('instance:status', { instanceId: 's1', isRunning: true, tps: 20 });
+    flushNotificationEvents();
     expect(fakeDb.inserted.length).toBe(1);
 
     // 高频快照（event 不在跃迁集合）：不落库
     serverManager.emit('instance:status', { instanceId: 's1', event: 'performance', cpu: 50 });
+    flushNotificationEvents();
     expect(fakeDb.inserted.length).toBe(1);
   });
 
@@ -156,6 +166,7 @@ describe('WebSocket 通知持久化与断线补齐', () => {
       content: '定时任务「每日重启」执行失败: 端口被占用',
     });
 
+    flushNotificationEvents();
     expect(fakeDb.inserted.length).toBe(1);
     const msg = sentMessage(ws);
     expect(msg.eventId).toBe(1);
@@ -168,6 +179,7 @@ describe('WebSocket 通知持久化与断线补齐', () => {
 
     serverManager.emit('instance:taskExecute', { instanceId: 's1', taskId: 7, taskName: '每日重启' });
 
+    flushNotificationEvents();
     expect(fakeDb.inserted.length).toBe(0);
     const msg = sentMessage(ws);
     expect(msg.type).toBe('taskExecute');
@@ -260,5 +272,26 @@ describe('WebSocket 通知持久化与断线补齐', () => {
     expect(dead.ping).toHaveBeenCalledTimes(1);
     vi.advanceTimersByTime(30000);
     expect(dead.terminate).toHaveBeenCalledTimes(1);
+  });
+
+  it('replay 前强制 flush：未刷写的入队事件在补齐查询中可见（防断线重连丢行）', () => {
+    const ws = createFakeWs();
+    wss.emit('connection', ws, { _wsApiKey: TEST_API_KEY });
+    ws.emit('message', JSON.stringify({ type: 'subscribe', instanceId: 's1' }));
+    ws.send.mockClear();
+
+    // 事件入队但仍在批量缓冲内（未达 50 条、500ms 定时未到）
+    serverManager.emit('instance:playerJoin', { instanceId: 's1', name: 'Alice' });
+    expect(fakeDb.inserted.length).toBe(0); // 未 flush → 未落库
+
+    // 断线重连带游标（新连接＝重放节流是按连接记忆的）：replayEvents 起手强制
+    // flush → 缓冲行必须先于 SELECT 提交
+    const reconnected = createFakeWs();
+    wss.emit('connection', reconnected, { _wsApiKey: TEST_API_KEY });
+    reconnected.emit('message', JSON.stringify({ type: 'subscribe', instanceId: 's1', lastEventId: 5 }));
+
+    // flush 已把缓冲行落库（插入与重放 SELECT 的交互由 fakeDb 的 all 预设承接，
+    // 此处断言的是「flush 确实在 replay 的 SELECT 之前执行」这一时序）
+    expect(fakeDb.inserted.length).toBe(1);
   });
 });

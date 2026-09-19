@@ -128,6 +128,13 @@ export {
   type TaskUpdatePayload,
 } from './task'
 
+export {
+  systemMetricSampleSchema,
+  systemMetricsSeriesSchema,
+  type SystemMetricSample,
+  type SystemMetricsSeries,
+} from './metrics'
+
 // WebSocket
 export {
   WS_EVENT_TYPES,

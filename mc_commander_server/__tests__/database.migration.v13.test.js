@@ -65,8 +65,8 @@ describe('数据库 v12→v13 迁移（存量库 + 存量行）', () => {
     fs.rmSync(config.dataDir, { recursive: true, force: true });
   });
 
-  it('user_version 升到 13（v12→v13 连续）', () => {
-    expect(db.pragma('user_version', { simple: true })).toBe(13);
+  it('user_version 升到 14（v12→v13 连续）', () => {
+    expect(db.pragma('user_version', { simple: true })).toBe(14);
   });
 
   it('backups 表新增 source_archive_id 列（可空，存量行保持 NULL）', () => {
