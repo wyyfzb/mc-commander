@@ -5,7 +5,7 @@
  * header: <thead>（始终渲染）
  * children: <tbody>（仅数据就绪时渲染）
  */
-import type { ReactNode } from 'react'
+import type { ReactNode, Ref } from 'react'
 import { cn } from '@/lib/utils'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Card } from '@/components/mcs/card'
@@ -35,6 +35,10 @@ export interface DataTableShellProps {
   skeletonWidths?: string[]
   /** 分页配置（不传则不显示分页） */
   pagination?: PaginationProps
+  /** 滚动容器（壳内卡片面）引用；虚滚动等需要拿到滚动元素的调用点使用 */
+  scrollRef?: Ref<HTMLElement>
+  /** 表格元素附加类（如 table-fixed），合并到壳的 w-full text-mcs-sm 基础配方上 */
+  tableClassName?: string
   /** 自定义容器类名 */
   className?: string
 }
@@ -84,6 +88,8 @@ export function DataTableShell({
   skeletonRows = 5,
   skeletonWidths,
   pagination,
+  scrollRef,
+  tableClassName,
   className,
 }: DataTableShellProps) {
   const widths = skeletonWidths ?? Array(columns).fill('w-24')
@@ -91,8 +97,8 @@ export function DataTableShell({
   return (
     <div className={className ?? 'flex min-h-0 flex-1 flex-col'}>
       {/* 表格外壳即卡片面：走 Card 基座，滚动与伸缩留给调用点 */}
-      <Card as="div" className="min-h-0 flex-1 overflow-auto">
-        <table className="w-full text-mcs-sm">
+      <Card as="div" ref={scrollRef} className="min-h-0 flex-1 overflow-auto">
+        <table className={cn('w-full text-mcs-sm', tableClassName)}>
           {header}
           {isLoading
             ? (<tbody>{Array.from({ length: skeletonRows }, (_, i) => (

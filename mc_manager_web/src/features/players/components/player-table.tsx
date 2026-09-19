@@ -17,9 +17,10 @@ import {
   type SortingState,
 } from '@tanstack/react-table'
 import { cn } from '@/lib/utils'
+import { DataTableShell } from '@/components/mcs/data-table-shell'
+import { EmptyStateVisual } from '@/components/mcs/data-states'
 import { Pagination } from '@/components/mcs/pagination'
 import { Button } from '@/components/ui/button'
-import { Skeleton } from '@/components/ui/skeleton'
 import { BREAKPOINT_BELOW_SM, BREAKPOINT_BELOW_XL, useMediaQuery } from '@/hooks/use-media-query'
 import type { Player } from '@/api/types'
 import { usePlayersUiStore, type PlayerDetailTab } from '../store'
@@ -201,31 +202,55 @@ export function PlayerTable({
 
   const rowsToRender = pageSize === -1 ? virtualItems.map((v) => allRows[v.index]) : visibleRows
 
+  /** 空态文案与 CTA：卡片态与表格态（DataTableShell）共用同一份 */
+  const emptyText = totalCount === 0 ? '暂无在线玩家' : '没有匹配的玩家'
+  const emptyActions =
+    totalCount > 0 && onClearFilter ? (
+      <Button variant="outline" size="sm" onClick={onClearFilter} data-testid="players-clear-filter">
+        清空筛选
+      </Button>
+    ) : undefined
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto">
-        {/* 窄屏（<640px）表格必然横向溢出：勾选框/玩家名/操作入口都够不着 → 改行式卡片 */}
-        {isCardLayout ? (
-          <PlayerCardList
-            rows={rowsToRender.filter(Boolean) as typeof visibleRows}
-            isLoading={isLoading}
-            selectedSet={selectedSet}
-            selectAllLabel={pageSize === -1 ? '全选全部筛选结果' : '全选当前页'}
-            allSelected={allSelected}
-            someSelected={someSelected}
-            onToggleSelectAll={() => toggleSelectPage(pageRowIds)}
-            toggleSelect={toggleSelect}
-            onOpenDetail={onOpenDetail}
-            onOpenBan={onOpenBan}
-            toggleOp={toggleOp}
-            toggleWhitelist={toggleWhitelist}
-            kick={kick}
-            topPadding={pageSize === -1 ? topPadding : 0}
-            bottomPadding={pageSize === -1 ? bottomPadding : 0}
-          />
-        ) : (
-          <table className="w-full border-collapse text-left" style={{ tableLayout: 'fixed' }}>
-            <thead className="sticky top-0 z-(--mcs-z-local) bg-mcs-bg-default">
+      {/* 窄屏（<640px）表格必然横向溢出：勾选框/玩家名/操作入口都够不着 → 改行式卡片 */}
+      {isCardLayout ? (
+        <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto">
+          {!isLoading && allRows.length === 0 ? (
+            <div className="flex h-40 items-center justify-center">
+              <EmptyStateVisual text={emptyText} actions={emptyActions} />
+            </div>
+          ) : (
+            <PlayerCardList
+              rows={rowsToRender.filter(Boolean) as typeof visibleRows}
+              isLoading={isLoading}
+              selectedSet={selectedSet}
+              selectAllLabel={pageSize === -1 ? '全选全部筛选结果' : '全选当前页'}
+              allSelected={allSelected}
+              someSelected={someSelected}
+              onToggleSelectAll={() => toggleSelectPage(pageRowIds)}
+              toggleSelect={toggleSelect}
+              onOpenDetail={onOpenDetail}
+              onOpenBan={onOpenBan}
+              toggleOp={toggleOp}
+              toggleWhitelist={toggleWhitelist}
+              kick={kick}
+              topPadding={pageSize === -1 ? topPadding : 0}
+              bottomPadding={pageSize === -1 ? bottomPadding : 0}
+            />
+          )}
+        </div>
+      ) : (
+        <DataTableShell
+          scrollRef={scrollRef}
+          columns={table.getHeaderGroups()[0]?.headers.length ?? 0}
+          isLoading={isLoading}
+          isEmpty={!isLoading && allRows.length === 0}
+          emptyText={emptyText}
+          emptyActions={emptyActions}
+          tableClassName="table-fixed text-left"
+          header={
+            <thead className="sticky top-0 z-(--mcs-z-local) bg-mcs-bg-muted">
               {table.getHeaderGroups().map((headerGroup) => (
                 <tr key={headerGroup.id} className="border-b border-mcs-border-muted">
                   {headerGroup.headers.map((header) => {
@@ -282,50 +307,29 @@ export function PlayerTable({
                 </tr>
               ))}
             </thead>
-            <tbody>
-              {isLoading &&
-                // 加载骨架行（设计规范 4.7/8：骨架屏而非空白，结构对齐真实列）
-                Array.from({ length: 5 }, (_, i) => (
-                  <tr key={`skeleton-${i}`} className="border-b border-mcs-border-subtle" style={{ height: ROW_HEIGHT }} aria-hidden>
-                    {table.getHeaderGroups()[0]!.headers.map((h) => (
-                      <td key={h.id} className="px-2">
-                        <Skeleton className="h-3.5 w-3/4" />
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              {!isLoading && pageSize === -1 && topPadding > 0 && <tr style={{ height: topPadding }} aria-hidden />}
-              {!isLoading &&
-                rowsToRender.map((row) =>
-                  row ? (
-                    <PlayerRow
-                      key={row.id}
-                      row={row}
-                      selected={selectedSet.has(row.original.uuid)}
-                      onOpenDetail={onOpenDetail}
-                    />
-                  ) : null,
-                )}
-              {!isLoading && pageSize === -1 && bottomPadding > 0 && <tr style={{ height: bottomPadding }} aria-hidden />}
-            </tbody>
-          </table>
-        )}
-        {/* 错误态由页面持有（players-page 在 isError 时用 EmptyState 替换整张表，
-            避免错误被呈现为「暂无在线玩家」的误导空态），表格不再自带第二套错误 UI */}
-        {!isLoading && allRows.length === 0 ? (
-          <div className="flex h-40 flex-col items-center justify-center gap-2 text-mcs-sm text-mcs-text-muted">
-            {totalCount === 0 ? '暂无在线玩家' : '没有匹配的玩家'}
-            {totalCount > 0 && onClearFilter && (
-              <Button variant="outline" size="sm" onClick={onClearFilter} data-testid="players-clear-filter">
-                清空筛选
-              </Button>
+          }
+        >
+          <tbody>
+            {/* 虚拟滚动上下留白行（仅「全部」档）；children 仅在数据就绪时被壳渲染，
+                骨架/空态期不会出现悬空 padding */}
+            {pageSize === -1 && topPadding > 0 && <tr style={{ height: topPadding }} aria-hidden />}
+            {rowsToRender.map((row) =>
+              row ? (
+                <PlayerRow
+                  key={row.id}
+                  row={row}
+                  selected={selectedSet.has(row.original.uuid)}
+                  onOpenDetail={onOpenDetail}
+                />
+              ) : null,
             )}
-          </div>
-        ) : null}
-      </div>
+            {pageSize === -1 && bottomPadding > 0 && <tr style={{ height: bottomPadding }} aria-hidden />}
+          </tbody>
+        </DataTableShell>
+      )}
 
-      {/* 分页器常驻：切到「全部」档只换数据源（虚拟滚动）；分页栏若一并消失，
-          用户就没有选回其他每页条数的入口（只能刷新页面） */}
+      {/* 分页器常驻（两模式共用，置于分支外）：切到「全部」档只换数据源（虚拟滚动）；
+          分页栏若一并消失，用户就没有选回其他每页条数的入口（只能刷新页面） */}
       <Pagination
         page={safePageIndex + 1}
         totalPages={totalPages}

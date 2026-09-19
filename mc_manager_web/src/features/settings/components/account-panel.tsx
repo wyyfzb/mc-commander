@@ -33,14 +33,7 @@ import { StatusPill } from '@/components/mcs/status-pill'
 import { SettingsSectionCard as SectionCard } from './settings-section-card'
 import { TotpPanel } from './totp-panel'
 import { ReadonlyCredentialPanel } from './readonly-credential-panel'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { EmptyState } from '@/components/mcs/empty-state'
 import { queryKeys } from '@/api/queries'
@@ -343,22 +336,22 @@ export function AccountPanel() {
           />
         ) : (
           <div className="max-h-96 overflow-y-auto rounded-mcs-md border border-mcs-border-muted">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-mcs-bg-muted/60">
-                  <TableHead className="text-mcs-2xs">设备</TableHead>
-                  <TableHead className="text-mcs-2xs">IP 地址</TableHead>
-                  <TableHead className="text-mcs-2xs">最后活跃</TableHead>
-                  <TableHead className="text-mcs-2xs">到期时间</TableHead>
-                  <TableHead className="w-10 text-right text-mcs-2xs">
+            <table className="w-full border-collapse text-left">
+              <thead>
+                <tr className="border-b border-mcs-border-muted bg-mcs-bg-muted/60">
+                  <th scope="col" className="h-9 px-2 text-mcs-2xs font-medium text-mcs-text-muted">设备</th>
+                  <th scope="col" className="h-9 px-2 text-mcs-2xs font-medium text-mcs-text-muted">IP 地址</th>
+                  <th scope="col" className="h-9 px-2 text-mcs-2xs font-medium text-mcs-text-muted">最后活跃</th>
+                  <th scope="col" className="h-9 px-2 text-mcs-2xs font-medium text-mcs-text-muted">到期时间</th>
+                  <th scope="col" className="h-9 w-10 px-2 text-right text-mcs-2xs font-medium text-mcs-text-muted">
                     <span className="sr-only">操作</span>
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
                 {sessions.map((s) => (
-                  <TableRow key={s.id}>
-                    <TableCell className="py-2.5">
+                  <tr key={s.id} className="border-b border-mcs-border-subtle last:border-b-0">
+                    <td className="px-2 py-2.5">
                       <div className="flex items-center gap-2">
                         <span className="text-mcs-xs font-medium text-mcs-text-default">
                           {describeUserAgent(s.userAgent)}
@@ -372,17 +365,17 @@ export function AccountPanel() {
                       <p className="mt-0.5 max-w-52 truncate text-mcs-2xs text-mcs-text-muted" title={s.userAgent ?? undefined}>
                         登录于 {formatDateTime(s.createdAt)}
                       </p>
-                    </TableCell>
-                    <TableCell className="py-2.5 font-mono text-mcs-xs text-mcs-text-muted">
+                    </td>
+                    <td className="px-2 py-2.5 font-mono text-mcs-xs text-mcs-text-muted">
                       {s.ip ?? '—'}
-                    </TableCell>
-                    <TableCell className="py-2.5 text-mcs-xs text-mcs-text-muted">
+                    </td>
+                    <td className="px-2 py-2.5 text-mcs-xs text-mcs-text-muted">
                       {formatRelativeTime(s.lastSeenAt)}
-                    </TableCell>
-                    <TableCell className="py-2.5 text-mcs-xs text-mcs-text-muted">
+                    </td>
+                    <td className="px-2 py-2.5 text-mcs-xs text-mcs-text-muted">
                       {formatDateTime(s.expiresAt)}
-                    </TableCell>
-                    <TableCell className="py-2.5 text-right">
+                    </td>
+                    <td className="px-2 py-2.5 text-right">
                       <Button
                         variant="ghost"
                         size="icon-sm"
@@ -392,11 +385,11 @@ export function AccountPanel() {
                       >
                         <Trash2 className="size-3.5" aria-hidden />
                       </Button>
-                    </TableCell>
-                  </TableRow>
+                    </td>
+                  </tr>
                 ))}
-              </TableBody>
-            </Table>
+              </tbody>
+            </table>
           </div>
         )}
       </SectionCard>

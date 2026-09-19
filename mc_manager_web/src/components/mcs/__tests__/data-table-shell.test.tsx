@@ -6,6 +6,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import { render } from '@testing-library/react'
+import { createRef } from 'react'
 import { DataTableShell } from '../data-table-shell'
 
 const header = (
@@ -52,5 +53,32 @@ describe('DataTableShell 骨架', () => {
     for (const bar of bars) {
       expect(bar).toHaveClass('w-24')
     }
+  })
+})
+
+describe('DataTableShell 滚动容器与表格类', () => {
+  it('scrollRef 指向壳内滚动容器（卡片面），tableClassName 合并到 table 基础配方', () => {
+    const scrollRef = createRef<HTMLElement>()
+    const { container } = render(
+      <DataTableShell header={header} columns={2} scrollRef={scrollRef} tableClassName="table-fixed text-left">
+        <tbody>
+          <tr>
+            <td>A</td>
+            <td>B</td>
+          </tr>
+        </tbody>
+      </DataTableShell>,
+    )
+
+    // 滚动容器 = 卡片面（overflow-auto），虚滚动的 getScrollElement 依赖它；
+    // contains(table) 防将来 overflow-auto 移到内层而 ref 仍挂外层的错位回归
+    expect(scrollRef.current).not.toBeNull()
+    expect(scrollRef.current).toHaveClass('overflow-auto')
+    const table = container.querySelector('table')
+    expect(scrollRef.current?.contains(table)).toBe(true)
+    expect(table).toHaveClass('w-full')
+    expect(table).toHaveClass('text-mcs-sm')
+    expect(table).toHaveClass('table-fixed')
+    expect(table).toHaveClass('text-left')
   })
 })
