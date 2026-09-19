@@ -69,11 +69,15 @@ const config = {
   // 锁定键始终取 socket.remoteAddress）
   trustProxy: intFromEnv('TRUST_PROXY', '1'),
   port: intFromEnv('PORT', '25566'),
-  serversDir: path.resolve(process.env.SERVERS_DIR || './servers'),
-  dataDir: path.resolve(process.env.DATA_DIR || './data'),
-  backupsDir: path.resolve(process.env.BACKUPS_DIR || './backups'),
+  serversDir: path.resolve(__dirname, process.env.SERVERS_DIR || './servers'),
+  dataDir: path.resolve(__dirname, process.env.DATA_DIR || './data'),
+  backupsDir: path.resolve(__dirname, process.env.BACKUPS_DIR || './backups'),
   // 前端静态产物随包分发（release 打包复制到服务端 public/），锚定服务端目录
-  // 而非 cwd——服务器从任意工作目录启动都不影响托管（运行时数据目录仍保持 cwd 相对）
+  // 而非 cwd——服务器从任意工作目录启动都不影响托管。三个运行期数据目录（其上
+  // 行）与 publicDir 同款锚定 __dirname：从任意 cwd 启动，运行期产物落点都固定
+  // 在安装目录下，不再随 cwd 漂移（避免误把 data/ servers/ backups/ 写进启动目录，
+  // 如从仓库根跑服务端/测试时写到仓库根）。env 传绝对路径时 path.resolve 以它为准，
+  // 用户仍可用绝对路径指到任意位置（与 publicDir 同语义）
   publicDir: path.resolve(__dirname, process.env.PUBLIC_DIR || './public'),
   logLevel: process.env.LOG_LEVEL || 'info',
   // 认证前 JSON body 上限（P2-7）：全局 10mb 过宽（认证前攻击面），收紧至

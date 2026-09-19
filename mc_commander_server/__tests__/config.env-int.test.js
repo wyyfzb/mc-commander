@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 // config.js 模块加载时会读服务端目录 .env（外部 IO 边界）——mock 掉使 env 三态
 // 完全由测试掌控，不受本地 .env 内容影响
@@ -182,5 +185,61 @@ describe('config 数值环境变量收口（intFromEnv）', () => {
     expect(codeLines.filter((l) => /:\s*parseInt\(/.test(l))).toEqual([]);
     // 1 处定义 + 24 处调用
     expect(src.split('intFromEnv(').length - 1).toBe(25);
+  });
+});
+
+// 运行期目录锚定：三个数据目录与 publicDir 同款锚定 __dirname（服务端包目录），
+// 从任意 cwd 启动落点都不漂移。锚定失效是静默的——产物会悄悄写进启动目录
+// （如从仓库根跑服务端时写进仓库根），故用「改 cwd 后仍指向包目录」锁死口径
+describe('config 运行期目录锚定（__dirname，不随 cwd 漂移）', () => {
+  // 期望基准取包目录拼接值而非绝对字面量：任意机器 / 任意 checkout 路径都成立
+  const PKG_DIR = path.dirname(fileURLToPath(new URL('../config.js', import.meta.url)));
+  const DIR_KEYS = ['SERVERS_DIR', 'DATA_DIR', 'BACKUPS_DIR'];
+
+  // vitest.config.js 把三个目录注入为临时绝对路径（隔离真实数据目录），此处需
+  // 摘掉它们才能观察到缺省口径；用完按原值还原，不污染同 worker 其他用例
+  let dirSnapshot;
+  beforeEach(() => {
+    dirSnapshot = Object.fromEntries(DIR_KEYS.map((k) => [k, process.env[k]]));
+    for (const k of DIR_KEYS) delete process.env[k];
+  });
+
+  afterEach(() => {
+    for (const k of DIR_KEYS) {
+      if (dirSnapshot[k] === undefined) delete process.env[k];
+      else process.env[k] = dirSnapshot[k];
+    }
+  });
+
+  it('缺省值锚定服务端包目录，且与启动 cwd 无关', async () => {
+    const cwd = process.cwd();
+    try {
+      process.chdir(os.tmpdir());
+      const config = (await loadConfig()).default;
+      expect(config.serversDir).toBe(path.join(PKG_DIR, 'servers'));
+      expect(config.dataDir).toBe(path.join(PKG_DIR, 'data'));
+      expect(config.backupsDir).toBe(path.join(PKG_DIR, 'backups'));
+    } finally {
+      process.chdir(cwd);
+    }
+  });
+
+  it('env 传绝对路径时以其为准（与 publicDir 同语义，可指到安装目录之外）', async () => {
+    const absData = path.join(os.tmpdir(), 'mc-anchor-abs-data');
+    process.env.DATA_DIR = absData;
+    const config = (await loadConfig()).default;
+    expect(config.dataDir).toBe(absData);
+  });
+
+  it('env 传相对路径时按包目录解析，而非 cwd', async () => {
+    process.env.BACKUPS_DIR = './custom-backups';
+    const cwd = process.cwd();
+    try {
+      process.chdir(os.tmpdir());
+      const config = (await loadConfig()).default;
+      expect(config.backupsDir).toBe(path.join(PKG_DIR, 'custom-backups'));
+    } finally {
+      process.chdir(cwd);
+    }
   });
 });

@@ -171,7 +171,7 @@ npm run dev                  # node --watch 热重载
   探针要驱动浏览器/起服务时，写成 `.ai/temp/` 下的 node 脚本直接消费既有库，不要借 `e2e/` 落文件。
   **新增文件或目录前**先确认忽略规则覆盖：`git check-ignore -v --no-index <path>`——未被忽略的新目录
   在 `git status` 里是可见的裸状态，离误提交只差一次 `git add -A`（服务端 `data/`/`servers/`/`backups/`
-  按 cwd 解析，从仓库根跑服务端或服务端测试就会漏到根级，已在 `.gitignore` 加根锚定规则兜底）。
+  已锚定安装目录，从任意 cwd 启动都不再漏到根级；根级忽略规则作为防回归兜底保留）。
   提交前用 `git status --short --untracked-files=all` 自证只出现本次预期的改动。
 
 ## e2e 说明

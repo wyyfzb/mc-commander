@@ -305,10 +305,10 @@ ws.onmessage = (event) => {
 | `HOST` | `127.0.0.1` | 服务监听地址：公网部署需显式设 `0.0.0.0`（默认仅本机） |
 | `TRUST_PROXY` | `1` | 信任反向代理层数（Express trust proxy）：默认 1 兼容 nginx/CDN 反代，设 0 不信任代理头（`req.ip` = 直连 IP）；仅影响 `req.ip` 解析，登录锁定键始终取直连 IP |
 | `PORT` | `25566` | 服务端口 |
-| `SERVERS_DIR` | `./servers` | MC 实例数据目录 |
-| `DATA_DIR` | `./data` | SQLite 数据库目录 |
-| `BACKUPS_DIR` | `./backups` | 备份存储目录 |
-| `PUBLIC_DIR` | `./public` | 前端静态产物目录（锚定服务端安装目录而非工作目录，一般无需修改） |
+| `SERVERS_DIR` | `./servers` | MC 实例数据目录（相对路径锚定服务端安装目录，不随启动 cwd 漂移；传绝对路径则以其为准） |
+| `DATA_DIR` | `./data` | SQLite 数据库目录（同上锚定安装目录） |
+| `BACKUPS_DIR` | `./backups` | 备份存储目录（同上锚定安装目录） |
+| `PUBLIC_DIR` | `./public` | 前端静态产物目录（同上锚定安装目录，一般无需修改） |
 | `BODY_LIMIT_JSON` | `1mb` | 认证前 JSON body 大小上限（body-parser limit 语法）；文件上传走 multipart 独立通道不受此值影响 |
 | `BACKUP_RETENTION_MAX` | `10` | 每实例保留备份数量上限（超出自动清理） |
 | `BACKUP_RETENTION_DAYS` | `30` | 备份最大保留天数（超出自动清理） |

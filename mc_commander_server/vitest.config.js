@@ -8,8 +8,9 @@ const TEST_API_KEY = 'test-api-key-for-unit-tests';
 const TEST_API_KEY_HASH = crypto.createHash('sha256').update(TEST_API_KEY).digest('hex');
 
 // 运行时目录一律挂到系统临时目录：未显式 mock config 的用例会读真实 config
-// （DATA_DIR 缺省 './data' 相对 cwd），否则 `npm test` 会把测试日志写进仓库
-// 真实 data/logs。目录名带 pid（同包并发两轮各用各的，互不相干）；
+// （三个目录缺省锚定服务端安装目录 = 包内真实 data/ servers/ backups/），否则
+// `npm test` 会把测试日志与夹具写进仓库内真实数据目录。目录名带 pid（同包并发
+// 两轮各用各的，互不相干）；
 // __tests__/global-setup.js 起手清空自己的、回收陈旧根，收尾删除——否则每轮留下的
 // SQLite 夹具库会一直堆积。需要保留现场时 KEEP_TEST_TMP=1 npm test
 const TEST_RUNTIME_ROOT = path.join(os.tmpdir(), `mc-commander-server-vitest-${process.pid}`);
