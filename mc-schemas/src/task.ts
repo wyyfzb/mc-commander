@@ -19,7 +19,9 @@ export const scheduledTaskSchema = z.object({
 })
 
 export const taskCreatePayloadSchema = z.object({
-  name: z.string(),
+  // 名称归一化首尾空白并拒空：与实例名（instance.ts）/部署请求（deploy.ts）同口径。
+  // 不拒空则直连 API 可建出无名任务，任务列表出现无标签行（UI 表单已拦，契约层补上）
+  name: z.string().trim().min(1, 'name 不能为空或纯空白'),
   type: scheduledTaskTypeSchema,
   cronExpression: z.string(),
   command: z.string().nullable().optional(),

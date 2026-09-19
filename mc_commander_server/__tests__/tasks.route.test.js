@@ -288,6 +288,22 @@ describe('POST /instances/:instanceId/tasks（创建）', () => {
     expect(recordAudit).not.toHaveBeenCalled();
   });
 
+  it('name 空/纯空白 → 400 zod 契约拒绝(40000)，不建无名任务', async () => {
+    const app = buildApp();
+
+    for (const name of ['', '   ']) {
+      const res = await request(app)
+        .post('/api/v1/instances/inst-1/tasks')
+        .send({ ...validPayload, name });
+
+      expect(res.status).toBe(400);
+      expect(res.body.code).toBe(40000);
+      expect(res.body.details[0]).toMatchObject({ path: 'name' });
+    }
+    expect(ScheduledTaskModel.create).not.toHaveBeenCalled();
+    expect(recordAudit).not.toHaveBeenCalled();
+  });
+
   it('实例不存在 → 404 INSTANCE_NOT_FOUND(40401)', async () => {
     const getInstance = vi.fn().mockReturnValue(null);
     const app = buildApp({ getInstance });

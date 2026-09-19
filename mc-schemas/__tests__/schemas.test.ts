@@ -45,6 +45,8 @@ import {
   instancePropertiesRequestBodySchema,
   instanceEulaRequestBodySchema,
   instanceDeleteRequestBodySchema,
+  taskCreatePayloadSchema,
+  taskUpdatePayloadSchema,
 } from '../src/index'
 
 describe('schemas 基础校验', () => {
@@ -519,6 +521,108 @@ describe('请求侧契约（issue 391 路由层 zod 统一）', () => {
     expect(() => upgradeRequestSchema.parse({ mcVersion: '1.21.4', type: 'bukkit' })).toThrow(
       /Invalid type/,
     )
+  })
+
+  it('taskCreatePayloadSchema：name/type/cronExpression 必填，type 限五值枚举', () => {
+    const base = { name: '每日重启', type: 'restart', cronExpression: '0 4 * * *' }
+    expect(taskCreatePayloadSchema.parse(base)).toEqual(base)
+    for (const type of ['restart', 'backup', 'command', 'stop', 'start']) {
+      expect(taskCreatePayloadSchema.parse({ ...base, type }).type).toBe(type)
+    }
+    expect(() =>
+      taskCreatePayloadSchema.parse({ type: 'restart', cronExpression: '0 4 * * *' }),
+    ).toThrow()
+    expect(() =>
+      taskCreatePayloadSchema.parse({ name: 'x', cronExpression: '0 4 * * *' }),
+    ).toThrow()
+    expect(() => taskCreatePayloadSchema.parse({ name: 'x', type: 'restart' })).toThrow()
+    expect(() => taskCreatePayloadSchema.parse({ ...base, type: 'upgrade' })).toThrow()
+  })
+
+  it('taskCreatePayloadSchema：name 归一化首尾空白并拒空（与实例名同口径）', () => {
+    expect(
+      taskCreatePayloadSchema.parse({
+        name: '  每日重启  ',
+        type: 'restart',
+        cronExpression: '0 4 * * *',
+      }).name,
+    ).toBe('每日重启')
+    expect(() =>
+      taskCreatePayloadSchema.parse({ name: '', type: 'restart', cronExpression: '0 4 * * *' }),
+    ).toThrow(/name 不能为空或纯空白/)
+    expect(() =>
+      taskCreatePayloadSchema.parse({ name: '   ', type: 'restart', cronExpression: '0 4 * * *' }),
+    ).toThrow(/name 不能为空或纯空白/)
+  })
+
+  it('taskCreatePayloadSchema：command/isEnabled 缺省可选——command 允许 null（非 command 型任务的清空形态）', () => {
+    const parsed = taskCreatePayloadSchema.parse({
+      name: '每晚广播',
+      type: 'command',
+      cronExpression: '0 22 * * *',
+      command: 'say hi',
+      isEnabled: false,
+    })
+    expect(parsed).toEqual({
+      name: '每晚广播',
+      type: 'command',
+      cronExpression: '0 22 * * *',
+      command: 'say hi',
+      isEnabled: false,
+    })
+    // 缺省：两键缺席即不出现（路由据此走 isEnabled !== false 的默认启用）
+    expect(
+      taskCreatePayloadSchema.parse({ name: 'x', type: 'restart', cronExpression: '0 4 * * *' }),
+    ).toEqual({ name: 'x', type: 'restart', cronExpression: '0 4 * * *' })
+    expect(
+      taskCreatePayloadSchema.parse({
+        name: 'x',
+        type: 'restart',
+        cronExpression: '0 4 * * *',
+        command: null,
+      }).command,
+    ).toBeNull()
+    // 类型守护：command 非字符串、isEnabled 非布尔一律拒收
+    expect(() =>
+      taskCreatePayloadSchema.parse({
+        name: 'x',
+        type: 'command',
+        cronExpression: '0 4 * * *',
+        command: 1,
+      }),
+    ).toThrow()
+    expect(() =>
+      taskCreatePayloadSchema.parse({
+        name: 'x',
+        type: 'restart',
+        cronExpression: '0 4 * * *',
+        isEnabled: 'yes',
+      }),
+    ).toThrow()
+  })
+
+  it('taskCreatePayloadSchema：剥离未知字段（含模型 fieldMap 认得的 lastRunAt/nextRunAt）', () => {
+    // lastRunAt/nextRunAt 在 ScheduledTaskModel.update 的 fieldMap 里，靠契约剥离才无法被
+    // 客户端直写（否则可伪造执行时间）；lastRunStatus 则由模型刻意不映射
+    const parsed = taskCreatePayloadSchema.parse({
+      name: 'x',
+      type: 'restart',
+      cronExpression: '0 4 * * *',
+      id: 7,
+      instanceId: 'other',
+      lastRunAt: '2026-01-01T00:00:00.000Z',
+      nextRunAt: '2026-01-02T00:00:00.000Z',
+      lastRunStatus: 'success',
+    })
+    expect(parsed).toEqual({ name: 'x', type: 'restart', cronExpression: '0 4 * * *' })
+  })
+
+  it('taskUpdatePayloadSchema：partial——全字段可选（空体合法），name 仍拒空', () => {
+    expect(taskUpdatePayloadSchema.parse({})).toEqual({})
+    expect(taskUpdatePayloadSchema.parse({ isEnabled: false })).toEqual({ isEnabled: false })
+    expect(taskUpdatePayloadSchema.parse({ name: ' 改名 ' }).name).toBe('改名')
+    expect(() => taskUpdatePayloadSchema.parse({ name: '  ' })).toThrow(/name 不能为空或纯空白/)
+    expect(() => taskUpdatePayloadSchema.parse({ type: 'upgrade' })).toThrow()
   })
 })
 

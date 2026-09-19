@@ -4026,7 +4026,7 @@ const scheduledTaskSchema = objectType({
 	updatedAt: stringType()
 });
 const taskCreatePayloadSchema = objectType({
-	name: stringType(),
+	name: stringType().trim().min(1, "name 不能为空或纯空白"),
 	type: scheduledTaskTypeSchema,
 	cronExpression: stringType(),
 	command: stringType().nullable().optional(),
