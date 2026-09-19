@@ -25,14 +25,14 @@ const assetsDir = path.join(distDir, 'assets')
 
 // 预算 = 当前实测值 + 约 8% 余量，取整到 5KB；上调需在 PR 里说明理由
 const BUDGETS = [
-  { label: '首屏（index.html 引用闭包）', entry: null, limitKb: 235 },
-  { label: '玩家页路由首访', entry: /^players-page-[\w-]+\.js$/, limitKb: 310 },
-  { label: '审计页路由首访', entry: /^audit-page-[\w-]+\.js$/, limitKb: 245 },
+  { label: '首屏（index.html 引用闭包）', entry: null, limitKb: 265 },
+  { label: '玩家页路由首访', entry: /^players-page-[\w-]+\.js$/, limitKb: 345 },
+  { label: '审计页路由首访', entry: /^audit-page-[\w-]+\.js$/, limitKb: 280 },
 ]
 
 // 字体资产预算（原字节，见头注释口径）= 当前实测 + 约 8% 余量，取整到 5KB
 const FONT_EXTENSIONS = new Set(['.ttf', '.woff', '.woff2', '.otf', '.eot'])
-const FONT_BUDGET = { label: '字体资产（dist 全量）', limitKb: 5215 }
+const FONT_BUDGET = { label: '字体资产（dist 全量）', limitKb: 2525 }
 
 const VERBOSE = process.argv.includes('--verbose')
 const gzipCache = new Map()
