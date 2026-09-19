@@ -92,7 +92,9 @@ npm run dev                  # node --watch 热重载
   （`color-mix(色 N%, 基面)`）——半透明 tint 的有效色随宿主面漂移，最亮浮层上文字会跌破 4.5:1；
   不承载文字的交互覆盖层（`--mcs-state-hover/focus/pressed`、`--mcs-scrim*`）保持半透明。
   同一元素只允许一个内容面 tint（内容面 tint 不得互相叠加，也不得与玻璃面同元素）；
-  危险语义色底（`--mcs-error-bg-subtle`）同样不透明，禁 `bg-destructive/<alpha>`。
+  危险语义色底（`--mcs-error-bg-subtle`）同样不透明，禁 `bg-destructive/<alpha>`——
+  危险按钮配方的唯一声明源是 `ui/button` 的 destructive 变体，不得手写
+  （门禁第 28 条静态拦截「弱档 error 描边与按钮语义同行」，扫描面＝`src/`，排除 `ui/`、`tone.ts` 与 `__tests__`）。
 - **标签与状态展示**：只读状态用 `components/mcs/status-pill.tsx`（`StatusPill`），
   可交互/通用标签用 `components/mcs/chip.tsx`（`Chip`），计数用 `components/mcs/count-badge.tsx`
   （`CountBadge`，定位＝数量/条数；不是状态，也不是版本号、百分比与带单位规格值）——只允许这三件，
@@ -136,6 +138,9 @@ npm run dev                  # node --watch 热重载
   （仅靠 `focus:bg-accent` 在弹窗面上只有 1.1:1）。注意：Radix 指针移动也会移动 DOM 焦点，
   实测 Chromium 下 `focus-visible:` 对指针 hover 同样匹配 → 该环在指针悬停时也会出现，
   这是为可访问性接受的取舍，不要为此改回 `outline-hidden`。
+  未显式声明焦点类的交互元素由 `index.css` 的全局 `:focus-visible` 兜底承担焦点环，
+  但**裸取消 outline 且无替换指示器**会把该兜底钉死（门禁第 29 条静态拦截；
+  第 8 条只拦成对抵消形态）。
   行内 `onKeyDown` 对空格/回车 `preventDefault` 前必须判落点（`e.target` / `e.currentTarget`），
   否则容器会吞掉行内控件自己的激活键（门禁第 25 条静态拦截）。
 - **测试等待**：异步查询统一吃 `src/test/setup.ts` 的全局 `asyncUtilTimeout`（5s），
@@ -156,13 +161,18 @@ npm run dev                  # node --watch 热重载
   行宽 100——不要手工对抗格式化结果，也不要为「更好看」手写折行。
 - **最小改动**：遵循既有代码模式与风格，不夹带与目标无关的重构；
   修复缺陷时先验证问题存在性，局部缺陷打最小补丁，设计问题重构根因。
-- **临时物不进源码目录**：探针、一次性脚本、临时夹具与临时截图**唯一落点是 `.ai/temp/`**
+- **文件存放纪律**：先判文件性质再定落点——源码/公开文档进包与 `docs/`（要过门禁、CI、
+  独立审查，且**新文件入库须 owner 批准**）；开发意图类（清单/审查报告/决策记录）进本机私有的
+  `.ai/`（规范见 `.ai/README.md`）；探针、一次性脚本、临时夹具与临时截图**唯一落点是 `.ai/temp/`**
   （或系统临时目录），不得写进 `mc_manager_web/e2e/`、`scripts/`、`__tests__/` 等任何库内目录——
-  源码目录里的每个文件都要过门禁、CI、独立审查与「新文件入库需批准」，
   探针混进去会被误提交、污染 grep 与 diff，**事后删除不能抵消**（它在被删前一直躺在版本控制眼皮下）。
   工具硬要求「路径必须落在仓库内」时（Playwright 的 `testDir` 即此类），先在回复里说明这是临时文件，
   用完立即删除并以 `git status --short` 自证；探针在库内产生的产物（`test-results/` 下截图等）同样清掉。
   探针要驱动浏览器/起服务时，写成 `.ai/temp/` 下的 node 脚本直接消费既有库，不要借 `e2e/` 落文件。
+  **新增文件或目录前**先确认忽略规则覆盖：`git check-ignore -v --no-index <path>`——未被忽略的新目录
+  在 `git status` 里是可见的裸状态，离误提交只差一次 `git add -A`（服务端 `data/`/`servers/`/`backups/`
+  按 cwd 解析，从仓库根跑服务端或服务端测试就会漏到根级，已在 `.gitignore` 加根锚定规则兜底）。
+  提交前用 `git status --short --untracked-files=all` 自证只出现本次预期的改动。
 
 ## e2e 说明
 
