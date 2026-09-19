@@ -80,7 +80,12 @@ export default defineConfig({
         // 所在目录为基准，两种部署形态均正确
         icons: [
           { src: './pwa-icon.svg', sizes: '512x512', type: 'image/svg+xml' },
-          { src: './pwa-maskable.svg', sizes: '512x512', type: 'image/svg+xml', purpose: 'maskable' },
+          {
+            src: './pwa-maskable.svg',
+            sizes: '512x512',
+            type: 'image/svg+xml',
+            purpose: 'maskable',
+          },
         ],
       },
       workbox: {
@@ -103,7 +108,7 @@ export default defineConfig({
       '@mc-commander/schemas': path.resolve(import.meta.dirname, '../mc-schemas/src/index.ts'),
       // mc-schemas 位于本包 node_modules 之外，其内部 import 'zod' 无法按目录链解析到
       // 本包依赖，统一钉到显式声明的 zod 副本（与 tsconfig.app.json paths 映射对齐）
-      'zod': path.resolve(import.meta.dirname, './node_modules/zod'),
+      zod: path.resolve(import.meta.dirname, './node_modules/zod'),
     },
   },
   server: {

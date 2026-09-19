@@ -99,7 +99,10 @@ describe('TaskScheduler - 临时封禁到期自动解封', () => {
     BanModel.findExpiredActive.mockReturnValue([
       { id: 5, instanceId: 's1', targetType: 'player', target: 'Steve' },
     ]);
-    const instance = { isRunning: true, sendCommand: vi.fn(() => Promise.reject(new Error('RCON down'))) };
+    const instance = {
+      isRunning: true,
+      sendCommand: vi.fn(() => Promise.reject(new Error('RCON down'))),
+    };
     mockManager.getInstance.mockReturnValue(instance);
 
     // checkExpiredBans 为同步函数，sendCommand 的 rejection 由内部 .catch 消化

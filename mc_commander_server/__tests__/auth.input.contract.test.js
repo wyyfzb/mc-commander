@@ -19,11 +19,7 @@ import { initDatabase } from '../db/index.js';
 import { AdminAccountModel } from '../db/admin.model.js';
 import { hashPassword } from '../utils/password.js';
 import { authMiddleware } from '../middleware/auth.js';
-import {
-  createAuthRoutes,
-  resetLoginLockState,
-  _getLoginFailuresSize,
-} from '../routes/auth.js';
+import { createAuthRoutes, resetLoginLockState, _getLoginFailuresSize } from '../routes/auth.js';
 import { errorHandler } from '../middleware/error_handler.js';
 
 // 测试用明文 Key（对应 vitest.config.js 注入的 API_KEY_HASH，虚拟值）
@@ -107,7 +103,9 @@ describe('auth 输入侧契约 - POST /auth/login（#428）', { timeout: 15_000 
   });
 
   it('password 非字符串（对象）→ 400 且不计入失败锁定', async () => {
-    const res = await request(app).post('/api/v1/auth/login').send({ password: { $gt: '' } });
+    const res = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ password: { $gt: '' } });
     expectValidationError(res, 'password');
     expect(_getLoginFailuresSize()).toBe(0);
   });
@@ -187,7 +185,9 @@ describe('auth 输入侧契约 - PUT /auth/password（#428）', { timeout: 15_00
     expect(res.status).toBe(200);
     expect(res.body.data.ok).toBe(true);
 
-    const relogin = await request(app).post('/api/v1/auth/login').send({ password: 'new-pass-5678' });
+    const relogin = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ password: 'new-pass-5678' });
     expect(relogin.status).toBe(200);
   });
 

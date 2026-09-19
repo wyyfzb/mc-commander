@@ -73,7 +73,11 @@ vi.mock('child_process', async (importOriginal) => {
 });
 
 import { logger } from '../utils/logger.js';
-import { getRecommendedJavaVersion, getAllJavaVersions, findJavaPath } from '../utils/java-detector.js';
+import {
+  getRecommendedJavaVersion,
+  getAllJavaVersions,
+  findJavaPath,
+} from '../utils/java-detector.js';
 
 // ── 内存文件树工具（键一律经 norm，宿主无关）────────────────
 function addDir(p) {
@@ -91,11 +95,14 @@ function addBroken(p) {
 // kind: 'dir' | 'file' | 'none'（isDirectory/isFile 均为 false 的异常项）
 function addEntries(dir, list) {
   fsState.dirs.add(norm(dir));
-  fsState.entries.set(norm(dir), list.map(([name, kind]) => ({
-    name,
-    isDirectory: () => kind === 'dir',
-    isFile: () => kind === 'file',
-  })));
+  fsState.entries.set(
+    norm(dir),
+    list.map(([name, kind]) => ({
+      name,
+      isDirectory: () => kind === 'dir',
+      isFile: () => kind === 'file',
+    })),
+  );
 }
 
 // java -version 输出按路径注入：{ out } 走 stdout 正常路径，{ err } 走异常 stderr 路径，
@@ -112,11 +119,12 @@ beforeEach(() => {
   fsState.broken.clear();
   versionByPath.clear();
 
-  fsState.existsSync.mockImplementation(
-    (p) => [fsState.files, fsState.dirs, fsState.broken].some((set) => set.has(norm(p)))
+  fsState.existsSync.mockImplementation((p) =>
+    [fsState.files, fsState.dirs, fsState.broken].some((set) => set.has(norm(p))),
   );
   fsState.statSync.mockImplementation((p) => {
-    if (fsState.broken.has(norm(p))) throw Object.assign(new Error(`EACCES: ${p}`), { code: 'EACCES' });
+    if (fsState.broken.has(norm(p)))
+      throw Object.assign(new Error(`EACCES: ${p}`), { code: 'EACCES' });
     if (fsState.files.has(norm(p))) return { isFile: () => true, isDirectory: () => false };
     if (fsState.dirs.has(norm(p))) return { isFile: () => false, isDirectory: () => true };
     throw Object.assign(new Error(`ENOENT: ${p}`), { code: 'ENOENT' });
@@ -229,9 +237,7 @@ describe('getAllJavaVersions · JAVA_HOME 探测与 java -version 输出解析',
 
   it('openjdk 新格式输出解析主版本（成功路径 stdout）', () => {
     setupJavaHome(JDK17, `${JDK17}/bin/java`, { out: 'openjdk version "17.0.1" 2021-10-19' });
-    expect(getAllJavaVersions()).toEqual([
-      { version: '17', path: norm(`${JDK17}/bin/java`) },
-    ]);
+    expect(getAllJavaVersions()).toEqual([{ version: '17', path: norm(`${JDK17}/bin/java`) }]);
   });
 
   it('短版本号与最新版本号解析（21 / 25）', () => {
@@ -251,9 +257,7 @@ describe('getAllJavaVersions · JAVA_HOME 探测与 java -version 输出解析',
 
   it('execFileSync 异常但 stderr 携带版本串时仍可解析（java -version 走 stderr 的真实行为）', () => {
     setupJavaHome(JDK17, `${JDK17}/bin/java`, { err: 'openjdk version "11.0.2" 2019-01-15' });
-    expect(getAllJavaVersions()).toEqual([
-      { version: '11', path: norm(`${JDK17}/bin/java`) },
-    ]);
+    expect(getAllJavaVersions()).toEqual([{ version: '11', path: norm(`${JDK17}/bin/java`) }]);
   });
 
   it('输出无 version 串或执行异常且无 stderr → 版本为 null → 不收录', () => {
@@ -305,12 +309,16 @@ function buildLinuxTree() {
   addDir('usr/lib/jvm/java-17-openjdk-amd64');
   addDir('usr/lib/jvm/java-17-openjdk-amd64/bin');
   addFile('usr/lib/jvm/java-17-openjdk-amd64/bin/java');
-  setVersionOutput('usr/lib/jvm/java-17-openjdk-amd64/bin/java', { out: 'openjdk version "17.0.1"' });
+  setVersionOutput('usr/lib/jvm/java-17-openjdk-amd64/bin/java', {
+    out: 'openjdk version "17.0.1"',
+  });
 
   addDir('usr/lib/jvm/java-8-amazon-corretto');
   addDir('usr/lib/jvm/java-8-amazon-corretto/bin');
   addFile('usr/lib/jvm/java-8-amazon-corretto/bin/java');
-  setVersionOutput('usr/lib/jvm/java-8-amazon-corretto/bin/java', { out: 'java version "1.8.0_292"' });
+  setVersionOutput('usr/lib/jvm/java-8-amazon-corretto/bin/java', {
+    out: 'java version "1.8.0_292"',
+  });
 
   addDir('usr/lib/jvm/temurin-25-jre');
   addDir('usr/lib/jvm/temurin-25-jre/bin');
@@ -363,9 +371,8 @@ describe('getAllJavaVersions · Linux glob 探测（expandGlob 注入）', () =>
     buildLinuxTree();
     addFile('/usr/local/bin/java');
     setVersionOutput('/usr/local/bin/java', { out: 'openjdk version "21"' });
-    cpState.execSync.mockImplementation(
-      () =>
-        [hostPath('usr/lib/jvm/jdk-11/bin/java'), hostPath('/usr/local/bin/java')].join('\n')
+    cpState.execSync.mockImplementation(() =>
+      [hostPath('usr/lib/jvm/jdk-11/bin/java'), hostPath('/usr/local/bin/java')].join('\n'),
     );
     const paths = getAllJavaVersions().map((x) => x.path);
     expect(paths.filter((p) => p === norm('usr/lib/jvm/jdk-11/bin/java'))).toHaveLength(1);
@@ -418,13 +425,14 @@ describe('getAllJavaVersions · Windows 平台分支', () => {
     addDir('C:/Program Files/Java/jdk-17');
     addDir('C:/Program Files/Java/jdk-17/bin');
     addFile('C:/Program Files/Java/jdk-17/bin/java.exe');
-    setVersionOutput('C:/Program Files/Java/jdk-17/bin/java.exe', { out: 'java version "1.17.0_1"' });
+    setVersionOutput('C:/Program Files/Java/jdk-17/bin/java.exe', {
+      out: 'java version "1.17.0_1"',
+    });
 
     addFile('C:/Windows/system32/java.exe');
     setVersionOutput('C:/Windows/system32/java.exe', { out: 'openjdk version "17"' });
-    cpState.execSync.mockImplementation(
-      () =>
-        [hostPath('C:/Windows/system32/java.exe'), hostPath('C:/nowhere/java.exe')].join('\n')
+    cpState.execSync.mockImplementation(() =>
+      [hostPath('C:/Windows/system32/java.exe'), hostPath('C:/nowhere/java.exe')].join('\n'),
     );
 
     const paths = getAllJavaVersions().map((x) => x.path);
@@ -453,7 +461,10 @@ describe('getAllJavaVersions · macOS 平台分支', () => {
     });
 
     expect(getAllJavaVersions()).toEqual([
-      { version: '21', path: norm('Library/Java/JavaVirtualMachines/zulu-21/Contents/Home/bin/java') },
+      {
+        version: '21',
+        path: norm('Library/Java/JavaVirtualMachines/zulu-21/Contents/Home/bin/java'),
+      },
     ]);
   });
 });

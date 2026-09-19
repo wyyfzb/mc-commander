@@ -31,7 +31,7 @@ import config from '../config.js';
 
 // 版本号单一来源与 routes/index.js 同源：package.json
 const SERVER_VERSION = JSON.parse(
-  readFileSync(new URL('../package.json', import.meta.url), 'utf-8')
+  readFileSync(new URL('../package.json', import.meta.url), 'utf-8'),
 ).version;
 
 // 测试用明文 Key（与 vitest.config.js 注入的 API_KEY_HASH 一致）
@@ -83,7 +83,7 @@ describe('routes/index.js 聚合层', () => {
       // npm registry 查询使用 config.npmPkgName 拼接
       expect(fetchMock).toHaveBeenCalledWith(
         `https://registry.npmjs.org/${config.npmPkgName}/latest`,
-        expect.objectContaining({ signal: expect.anything() })
+        expect.objectContaining({ signal: expect.anything() }),
       );
     });
 
@@ -100,7 +100,7 @@ describe('routes/index.js 聚合层', () => {
       expect(res.body.data.hasUpdate).toBe(false);
       // url 判断条件是 latest truthy 而非 hasUpdate（锁定当前行为）
       expect(res.body.data.url).toBe(
-        `https://www.npmjs.com/package/${config.npmPkgName}/v/${SERVER_VERSION}`
+        `https://www.npmjs.com/package/${config.npmPkgName}/v/${SERVER_VERSION}`,
       );
     });
 
@@ -183,7 +183,7 @@ describe('routes/index.js 聚合层', () => {
       expect(res.body.data.version).toBe('v1');
       // 验收指定核心端点
       expect(res.body.data.endpoints).toEqual(
-        expect.arrayContaining(['/instances', '/webhooks', '/check-update'])
+        expect.arrayContaining(['/instances', '/webhooks', '/check-update']),
       );
       // 清单数量锁定（23 项，防漂移）
       expect(res.body.data.endpoints).toHaveLength(23);

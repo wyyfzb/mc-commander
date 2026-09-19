@@ -45,11 +45,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
           <p className="text-center text-mcs-sm text-mcs-text-muted">
             页面渲染出现异常，请尝试重新加载
           </p>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={this.handleReset}
-          >
+          <Button variant="outline" size="sm" onClick={this.handleReset}>
             重新加载
           </Button>
         </div>

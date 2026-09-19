@@ -37,9 +37,16 @@ function parseStored(raw: string | null): StoredNotifications {
       const parsed = JSON.parse(raw) as unknown
       // 旧形状（纯数组载荷，无 clearedAt）：读入即归一，写入始终是新形状
       if (Array.isArray(parsed)) return { items: parsed as AppNotification[], clearedAt: 0 }
-      if (parsed && typeof parsed === 'object' && Array.isArray((parsed as StoredNotifications).items)) {
+      if (
+        parsed &&
+        typeof parsed === 'object' &&
+        Array.isArray((parsed as StoredNotifications).items)
+      ) {
         const stored = parsed as Partial<StoredNotifications>
-        return { items: stored.items as AppNotification[], clearedAt: Number(stored.clearedAt) || 0 }
+        return {
+          items: stored.items as AppNotification[],
+          clearedAt: Number(stored.clearedAt) || 0,
+        }
       }
     }
   } catch {

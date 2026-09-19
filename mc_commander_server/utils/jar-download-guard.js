@@ -47,7 +47,7 @@ export async function assertDownloadIntegrity(filePath, expectedHash) {
   if (actual.toLowerCase() !== String(expectedHash.digest).toLowerCase()) {
     throw new AppError(
       ErrorCodes.SERVER_ERROR,
-      `Download integrity check failed: expected ${expectedHash.algorithm}=${expectedHash.digest}, got ${actual} (upstream file corrupted or tampered)`
+      `Download integrity check failed: expected ${expectedHash.algorithm}=${expectedHash.digest}, got ${actual} (upstream file corrupted or tampered)`,
     );
   }
 }
@@ -61,7 +61,7 @@ export function assertSizeWithinLimit(transferred, maxBytes = JAR_DOWNLOAD_MAX_B
   if (transferred > maxBytes) {
     throw new AppError(
       ErrorCodes.SERVER_ERROR,
-      `JAR download aborted: ${transferred} bytes received, exceeds size limit of ${maxBytes} bytes`
+      `JAR download aborted: ${transferred} bytes received, exceeds size limit of ${maxBytes} bytes`,
     );
   }
 }

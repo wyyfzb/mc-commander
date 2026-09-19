@@ -56,7 +56,11 @@ async function renderReady() {
 
 beforeEach(() => {
   server.resetHandlers()
-  useConnectionStore.setState({ status: 'ready', baseUrl: 'http://localhost:8080', apiKey: 'test-key' })
+  useConnectionStore.setState({
+    status: 'ready',
+    baseUrl: 'http://localhost:8080',
+    apiKey: 'test-key',
+  })
   useServerStore.setState({
     instanceId: 'demo',
     status: null,
@@ -68,9 +72,7 @@ beforeEach(() => {
 describe('RecentBackupsCard', () => {
   it('加载中显示骨架（role=status）', () => {
     // 永不 resolve 的挂起响应：等待语义本身（骨架常驻）而非定时器，避免用例结束后残留幽灵定时器
-    server.use(
-      http.get(BACKUPS_URL, () => new Promise<Response>(() => {})),
-    )
+    server.use(http.get(BACKUPS_URL, () => new Promise<Response>(() => {})))
     renderCard()
     expect(screen.getByRole('status')).toBeInTheDocument()
   })

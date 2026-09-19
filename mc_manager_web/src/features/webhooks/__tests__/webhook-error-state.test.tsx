@@ -16,13 +16,25 @@ import { useConnectionStore } from '@/stores/connection'
 const server = setupServer(
   http.get('*/api/v1/webhooks', () =>
     HttpResponse.json(
-      { status: 'error', code: 50000, message: 'mock 内部错误', details: null, timestamp: new Date().toISOString() },
+      {
+        status: 'error',
+        code: 50000,
+        message: 'mock 内部错误',
+        details: null,
+        timestamp: new Date().toISOString(),
+      },
       { status: 500 },
     ),
   ),
   // 页面加载即拉事件类型（表单依赖）：本文件只拦错列表，event-types 返回空集保拦截面完整
   http.get('*/api/v1/webhooks/event-types', () =>
-    HttpResponse.json({ status: 'ok', code: 0, message: 'Success', data: [], timestamp: new Date().toISOString() }),
+    HttpResponse.json({
+      status: 'ok',
+      code: 0,
+      message: 'Success',
+      data: [],
+      timestamp: new Date().toISOString(),
+    }),
   ),
 )
 
@@ -32,7 +44,11 @@ afterAll(() => server.close())
 beforeEach(() => {
   localStorage.clear()
   // 占位凭据动态生成（MSW 不校验值，仅满足连接就绪门槛），避免测试源码出现凭据字面量
-  useConnectionStore.setState({ baseUrl: '', apiKey: `msw-test-${crypto.randomUUID()}`, status: 'ready' })
+  useConnectionStore.setState({
+    baseUrl: '',
+    apiKey: `msw-test-${crypto.randomUUID()}`,
+    status: 'ready',
+  })
 })
 
 function renderPage() {

@@ -97,7 +97,11 @@ describe('TOTP 端点契约', () => {
           status: 'ok',
           code: 0,
           message: 'Success',
-          data: { enabled: true, confirmedAt: '2026-01-02T03:04:05.000Z', recoveryCodesRemaining: 7 },
+          data: {
+            enabled: true,
+            confirmedAt: '2026-01-02T03:04:05.000Z',
+            recoveryCodesRemaining: 7,
+          },
           timestamp: '',
         }),
       ),
@@ -118,7 +122,13 @@ describe('TOTP 端点契约', () => {
         const body = (await request.json()) as { code: string }
         if (body.code !== '123456') {
           return HttpResponse.json(
-            { status: 'error', code: 40106, message: '两步验证码错误', details: null, timestamp: '' },
+            {
+              status: 'error',
+              code: 40106,
+              message: '两步验证码错误',
+              details: null,
+              timestamp: '',
+            },
             { status: 401 },
           )
         }
@@ -143,7 +153,13 @@ describe('TOTP 端点契约', () => {
             { status: 401 },
           )
         }
-        return HttpResponse.json({ status: 'ok', code: 0, message: 'Success', data: { ok: true }, timestamp: '' })
+        return HttpResponse.json({
+          status: 'ok',
+          code: 0,
+          message: 'Success',
+          data: { ok: true },
+          timestamp: '',
+        })
       }),
     )
   })
@@ -177,7 +193,13 @@ describe('TOTP 端点契约', () => {
     server.use(
       http.post('*/api/v1/auth/totp/disable', async ({ request }) => {
         body = (await request.json()) as Record<string, unknown>
-        return HttpResponse.json({ status: 'ok', code: 0, message: 'Success', data: { ok: true }, timestamp: '' })
+        return HttpResponse.json({
+          status: 'ok',
+          code: 0,
+          message: 'Success',
+          data: { ok: true },
+          timestamp: '',
+        })
       }),
     )
 

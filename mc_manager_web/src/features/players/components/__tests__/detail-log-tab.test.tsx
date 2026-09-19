@@ -97,13 +97,23 @@ function makePlayer(overrides: Partial<Player>): Player {
     inventory: null,
     events: [],
     sessions: [],
-    stats: { totalOnline: 0, loginCount: 0, offlineSince: 0, deathCount: 0, achievementCount: 0, sleepCount: 0 },
+    stats: {
+      totalOnline: 0,
+      loginCount: 0,
+      offlineSince: 0,
+      deathCount: 0,
+      achievementCount: 0,
+      sleepCount: 0,
+    },
     ...overrides,
   }
 }
 
 /** 双会话玩家：会话1(10:00-10:30) + 会话2(13:00 进行中)，间隔 2.5h */
-const twoSessionPlayer = makePlayer({ events: [...EVENTS_1, ...EVENTS_2], sessions: [SESSION_1, SESSION_2] })
+const twoSessionPlayer = makePlayer({
+  events: [...EVENTS_1, ...EVENTS_2],
+  sessions: [SESSION_1, SESSION_2],
+})
 
 describe('LogTab 空态', () => {
   it('无会话/事件 → 「暂无日志数据」，无统计卡与折叠按钮', () => {
@@ -121,7 +131,14 @@ describe('LogTab 统计卡 6 项', () => {
       <LogTab
         player={makePlayer({
           sessions: [SESSION_1],
-          stats: { totalOnline: 7200, loginCount: 12, offlineSince: 9000, deathCount: 3, achievementCount: 5, sleepCount: 2 },
+          stats: {
+            totalOnline: 7200,
+            loginCount: 12,
+            offlineSince: 9000,
+            deathCount: 3,
+            achievementCount: 5,
+            sleepCount: 2,
+          },
         })}
       />,
     )
@@ -144,7 +161,14 @@ describe('LogTab 统计卡 6 项', () => {
       <LogTab
         player={makePlayer({
           sessions: [SESSION_1],
-          stats: { totalOnline: 7200, loginCount: 1, offlineSince: 0, deathCount: 3, achievementCount: 5, sleepCount: 2 },
+          stats: {
+            totalOnline: 7200,
+            loginCount: 1,
+            offlineSince: 0,
+            deathCount: 3,
+            achievementCount: 5,
+            sleepCount: 2,
+          },
         })}
       />,
     )
@@ -253,10 +277,14 @@ describe('LogTab 7 类型事件行（语义色 + 图标 + 中文标签）', () =
   it('事件行显示完整时间戳（YYYY-MM-DD HH:mm:ss，本地时区计算）', () => {
     const d = new Date(T10_10)
     const p = (n: number) => String(n).padStart(2, '0')
-    const expected =
-      `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+    const expected = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
     render(
-      <LogTab player={makePlayer({ sessions: [SESSION_1], events: [{ type: 'death', message: 'Steve 掉入虚空', timestamp: ms(T10_10) }] })} />,
+      <LogTab
+        player={makePlayer({
+          sessions: [SESSION_1],
+          events: [{ type: 'death', message: 'Steve 掉入虚空', timestamp: ms(T10_10) }],
+        })}
+      />,
     )
     fireEvent.click(screen.getByText(/登录日志1/))
     expect(screen.getByText(expected)).toBeInTheDocument()
@@ -294,7 +322,9 @@ describe('LogTab 折叠状态重置（索引防错位语义）', () => {
     fireEvent.click(screen.getByText(/登录日志2/))
     expect(screen.getByText('起床')).toBeInTheDocument()
 
-    rerender(<LogTab player={makePlayer({ name: 'Alex', events: EVENTS_1, sessions: [SESSION_1] })} />)
+    rerender(
+      <LogTab player={makePlayer({ name: 'Alex', events: EVENTS_1, sessions: [SESSION_1] })} />,
+    )
     expect(screen.queryByText('起床')).not.toBeInTheDocument()
     expect(screen.queryByText('进入')).not.toBeInTheDocument()
   })
@@ -318,7 +348,13 @@ describe('LogTab 折叠状态重置（索引防错位语义）', () => {
     // 同 name 同 sessions.length，仅事件新增
     rerender(
       <LogTab
-        player={makePlayer({ events: [...EVENTS_2, { type: 'death', message: 'Steve 被骷髅射杀', timestamp: ms(T13_40) }], sessions: [SESSION_1, SESSION_2] })}
+        player={makePlayer({
+          events: [
+            ...EVENTS_2,
+            { type: 'death', message: 'Steve 被骷髅射杀', timestamp: ms(T13_40) },
+          ],
+          sessions: [SESSION_1, SESSION_2],
+        })}
       />,
     )
     expect(screen.getByText('起床')).toBeInTheDocument()

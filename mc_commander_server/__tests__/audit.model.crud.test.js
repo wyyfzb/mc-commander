@@ -64,33 +64,53 @@ const { toDbUtcString } = await import('../utils/db-time.js');
 // ——与生产写入同域；若写 ISO，prune 的 cutoff 口径错配恰好不可见（两者同为 ISO 才可比）。
 function insertAuditRaw(overrides = {}) {
   const o = {
-    instance_id: 's1', action: 'INSTANCE_START', target_type: null, target_id: null,
-    detail: null, source: 'api', created_at: '2026-06-15 00:00:00', ...overrides,
+    instance_id: 's1',
+    action: 'INSTANCE_START',
+    target_type: null,
+    target_id: null,
+    detail: null,
+    source: 'api',
+    created_at: '2026-06-15 00:00:00',
+    ...overrides,
   };
-  const r = db.prepare(`
+  const r = db
+    .prepare(`
     INSERT INTO audit_logs (instance_id, action, target_type, target_id, detail, source, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(o.instance_id, o.action, o.target_type, o.target_id, o.detail, o.source, o.created_at);
+  `)
+    .run(o.instance_id, o.action, o.target_type, o.target_id, o.detail, o.source, o.created_at);
   return r.lastInsertRowid;
 }
 
 function insertCommandRaw(overrides = {}) {
   const o = {
-    instance_id: 's1', command: 'say hi', source: 'api', success: 1,
-    response: null, duration_ms: null, created_at: '2026-06-15 00:00:00', ...overrides,
+    instance_id: 's1',
+    command: 'say hi',
+    source: 'api',
+    success: 1,
+    response: null,
+    duration_ms: null,
+    created_at: '2026-06-15 00:00:00',
+    ...overrides,
   };
-  const r = db.prepare(`
+  const r = db
+    .prepare(`
     INSERT INTO command_history (instance_id, command, source, success, response, duration_ms, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(o.instance_id, o.command, o.source, o.success, o.response, o.duration_ms, o.created_at);
+  `)
+    .run(o.instance_id, o.command, o.source, o.success, o.response, o.duration_ms, o.created_at);
   return r.lastInsertRowid;
 }
 
 describe('AuditLogModel.create / findById 真实往返', () => {
   it('create 全字段落库，findById 读回 camelCase 与 detail JSON 反序列化', () => {
     const log = AuditLogModel.create({
-      instanceId: 's1', action: 'PLAYER_KICK', targetType: 'player',
-      targetId: 'Steve', detail: { reason: 'griefing', by: 'Alex' }, source: 'webui',
+      instanceId: 's1',
+      action: 'PLAYER_KICK',
+      targetType: 'player',
+      targetId: 'Steve',
+      detail: { reason: 'griefing', by: 'Alex' },
+      source: 'webui',
     });
     expect(log.id).toBeGreaterThan(0);
     expect(log.instanceId).toBe('s1');
@@ -114,7 +134,11 @@ describe('AuditLogModel.create / findById 真实往返', () => {
   });
 
   it('create detail 为原始字符串时存取保真（非 JSON 也原样读回）', () => {
-    const log = AuditLogModel.create({ instanceId: 's1', action: 'X', detail: 'plain-text-detail' });
+    const log = AuditLogModel.create({
+      instanceId: 's1',
+      action: 'X',
+      detail: 'plain-text-detail',
+    });
     expect(log.detail).toBe('plain-text-detail');
   });
 
@@ -134,9 +158,21 @@ describe('AuditLogModel.create / findById 真实往返', () => {
 describe('AuditLogModel.findAll 过滤组合（真实 AND 语义）', () => {
   beforeAll(() => {
     insertAuditRaw({ action: 'A1', created_at: '2026-01-01 00:00:00' });
-    insertAuditRaw({ instance_id: 's2', action: 'A2', target_type: 'player', target_id: 'Steve', source: 'webui', created_at: '2026-02-01 00:00:00' });
+    insertAuditRaw({
+      instance_id: 's2',
+      action: 'A2',
+      target_type: 'player',
+      target_id: 'Steve',
+      source: 'webui',
+      created_at: '2026-02-01 00:00:00',
+    });
     insertAuditRaw({ action: 'A2', created_at: '2026-03-01 00:00:00' });
-    insertAuditRaw({ instance_id: 's2', action: 'A3', source: 'scheduler', created_at: '2026-04-01 00:00:00' });
+    insertAuditRaw({
+      instance_id: 's2',
+      action: 'A3',
+      source: 'scheduler',
+      created_at: '2026-04-01 00:00:00',
+    });
   });
 
   it('instanceId 过滤只命中对应实例', () => {
@@ -166,7 +202,8 @@ describe('AuditLogModel.findAll 过滤组合（真实 AND 语义）', () => {
     });
     expect(r.total).toBe(2);
     expect(r.logs.map((l) => l.createdAt)).toEqual([
-      '2026-03-01T00:00:00.000Z', '2026-02-01T00:00:00.000Z',
+      '2026-03-01T00:00:00.000Z',
+      '2026-02-01T00:00:00.000Z',
     ]);
   });
 
@@ -260,8 +297,12 @@ describe('AuditLogModel.prune 真实删除计数', () => {
 describe('CommandHistoryModel 真实往返与过滤', () => {
   it('create 全字段落库，success 布尔落库为 1 并读回 true', () => {
     const c = CommandHistoryModel.create({
-      instanceId: 's1', command: 'time query gametime', source: 'rcon',
-      success: true, response: 'The time is 13000', durationMs: 42,
+      instanceId: 's1',
+      command: 'time query gametime',
+      source: 'rcon',
+      success: true,
+      response: 'The time is 13000',
+      durationMs: 42,
     });
     expect(c.id).toBeGreaterThan(0);
     expect(c.instanceId).toBe('s1');
@@ -288,7 +329,12 @@ describe('CommandHistoryModel 真实往返与过滤', () => {
 
   it('findAll 过滤 + 恒定降序（无 order 参数，行为锁定）', () => {
     insertCommandRaw({ instance_id: 's9', command: 'list', created_at: '2026-07-01 00:00:00' });
-    insertCommandRaw({ instance_id: 's9', command: 'tps', source: 'scheduler', created_at: '2026-07-02 00:00:00' });
+    insertCommandRaw({
+      instance_id: 's9',
+      command: 'tps',
+      source: 'scheduler',
+      created_at: '2026-07-02 00:00:00',
+    });
     insertCommandRaw({ instance_id: 's9', command: 'save-all', created_at: '2026-07-03 00:00:00' });
 
     const r = CommandHistoryModel.findAll({ instanceId: 's9' });

@@ -17,10 +17,18 @@ export function AuditHeader() {
   return (
     <thead className="sticky top-0 bg-mcs-bg-muted">
       <tr className="border-b border-mcs-border-muted text-left">
-        <th scope="col" className="px-3 py-2 font-medium text-mcs-text-muted">时间</th>
-        <th scope="col" className="px-3 py-2 font-medium text-mcs-text-muted">操作</th>
-        <th scope="col" className="px-3 py-2 font-medium text-mcs-text-muted">目标</th>
-        <th scope="col" className="px-3 py-2 font-medium text-mcs-text-muted">详情</th>
+        <th scope="col" className="px-3 py-2 font-medium text-mcs-text-muted">
+          时间
+        </th>
+        <th scope="col" className="px-3 py-2 font-medium text-mcs-text-muted">
+          操作
+        </th>
+        <th scope="col" className="px-3 py-2 font-medium text-mcs-text-muted">
+          目标
+        </th>
+        <th scope="col" className="px-3 py-2 font-medium text-mcs-text-muted">
+          详情
+        </th>
       </tr>
     </thead>
   )
@@ -32,10 +40,17 @@ export function AuditBody({ logs }: { logs: AuditLogItem[] }) {
     <tbody>
       {logs.map((log) => (
         <tr key={log.id} className="border-b border-mcs-border-muted last:border-b-0">
-          <td className="whitespace-nowrap px-3 py-2 text-mcs-text-default font-mono text-mcs-xs">{formatTime(log.createdAt)}</td>
+          <td className="whitespace-nowrap px-3 py-2 text-mcs-text-default font-mono text-mcs-xs">
+            {formatTime(log.createdAt)}
+          </td>
           <td className="px-3 py-2 text-mcs-text-default">{getActionLabel(log.action)}</td>
-          <td className="px-3 py-2 text-mcs-text-default">{log.targetType ? `${log.targetType}${log.targetId ? `: ${log.targetId}` : ''}` : '-'}</td>
-          <td className="max-w-xs truncate px-3 py-2 text-mcs-text-muted" title={typeof log.detail === 'object' ? JSON.stringify(log.detail) : undefined}>
+          <td className="px-3 py-2 text-mcs-text-default">
+            {log.targetType ? `${log.targetType}${log.targetId ? `: ${log.targetId}` : ''}` : '-'}
+          </td>
+          <td
+            className="max-w-xs truncate px-3 py-2 text-mcs-text-muted"
+            title={typeof log.detail === 'object' ? JSON.stringify(log.detail) : undefined}
+          >
             {formatAuditDetail(log.detail)}
           </td>
         </tr>
@@ -49,11 +64,21 @@ export function CmdHeader() {
   return (
     <thead className="sticky top-0 bg-mcs-bg-muted">
       <tr className="border-b border-mcs-border-muted text-left">
-        <th scope="col" className="px-3 py-2 font-medium text-mcs-text-muted">时间</th>
-        <th scope="col" className="px-3 py-2 font-medium text-mcs-text-muted">命令</th>
-        <th scope="col" className="px-3 py-2 font-medium text-mcs-text-muted">结果</th>
-        <th scope="col" className="px-3 py-2 font-medium text-mcs-text-muted">来源</th>
-        <th scope="col" className="px-3 py-2 font-medium text-mcs-text-muted">耗时</th>
+        <th scope="col" className="px-3 py-2 font-medium text-mcs-text-muted">
+          时间
+        </th>
+        <th scope="col" className="px-3 py-2 font-medium text-mcs-text-muted">
+          命令
+        </th>
+        <th scope="col" className="px-3 py-2 font-medium text-mcs-text-muted">
+          结果
+        </th>
+        <th scope="col" className="px-3 py-2 font-medium text-mcs-text-muted">
+          来源
+        </th>
+        <th scope="col" className="px-3 py-2 font-medium text-mcs-text-muted">
+          耗时
+        </th>
       </tr>
     </thead>
   )
@@ -65,7 +90,9 @@ export function CmdBody({ cmds }: { cmds: CommandHistoryItem[] }) {
     <tbody>
       {cmds.map((cmd) => (
         <tr key={cmd.id} className="border-b border-mcs-border-muted last:border-b-0">
-          <td className="whitespace-nowrap px-3 py-2 text-mcs-text-default font-mono text-mcs-xs">{formatTime(cmd.createdAt)}</td>
+          <td className="whitespace-nowrap px-3 py-2 text-mcs-text-default font-mono text-mcs-xs">
+            {formatTime(cmd.createdAt)}
+          </td>
           <td className="px-3 py-2 font-mono text-mcs-text-default">{cmd.command}</td>
           <td className="px-3 py-2">
             {cmd.success || !cmd.response ? (
@@ -89,7 +116,9 @@ export function CmdBody({ cmds }: { cmds: CommandHistoryItem[] }) {
             )}
           </td>
           <td className="px-3 py-2 text-mcs-text-muted">{cmd.source}</td>
-          <td className="px-3 py-2 text-mcs-text-muted font-mono text-mcs-xs">{formatDurationMs(cmd.durationMs)}</td>
+          <td className="px-3 py-2 text-mcs-text-muted font-mono text-mcs-xs">
+            {formatDurationMs(cmd.durationMs)}
+          </td>
         </tr>
       ))}
     </tbody>

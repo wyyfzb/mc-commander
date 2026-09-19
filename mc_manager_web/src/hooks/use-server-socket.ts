@@ -32,7 +32,10 @@ export function getSocketSingleton(): McSocket | null {
 }
 
 /** 从实例列表缓存取实例名（critical toast 文案用；查不到回退实例 id） */
-function getInstanceName(queryClient: ReturnType<typeof useQueryClient>, instanceId: string): string {
+function getInstanceName(
+  queryClient: ReturnType<typeof useQueryClient>,
+  instanceId: string,
+): string {
   const list = queryClient.getQueryData<InstanceSummary[]>(queryKeys.instances())
   return list?.find((i) => i.id === instanceId)?.name ?? instanceId
 }
@@ -124,15 +127,26 @@ export function useServerSocket(instanceId: string | null) {
       // 无归属 webhook 的投递失败），此处同样旁路实例门控——出事实例未必
       // 是当前视图，跨实例丢弃会让失败只有控制台读者可见
       const isFailureEvent =
-        msg.type === 'backupFailed' || msg.type === 'taskFailed' || msg.type === 'webhookDeliveryFailed'
+        msg.type === 'backupFailed' ||
+        msg.type === 'taskFailed' ||
+        msg.type === 'webhookDeliveryFailed'
       if (isFailureEvent) {
-        dispatchEvent({ type: msg.type, data: msg.data as Record<string, unknown>, instanceId: msg.instanceId })
+        dispatchEvent({
+          type: msg.type,
+          data: msg.data as Record<string, unknown>,
+          instanceId: msg.instanceId,
+        })
         return
       }
       if (msg.instanceId && msg.instanceId !== instanceRef.current) {
-        const isCriticalStatus = msg.type === 'status' && (data.event === 'crash' || data.event === 'circuit_breaker')
+        const isCriticalStatus =
+          msg.type === 'status' && (data.event === 'crash' || data.event === 'circuit_breaker')
         if (isCriticalStatus) {
-          dispatchEvent({ type: msg.type, data: msg.data as Record<string, unknown>, instanceId: msg.instanceId })
+          dispatchEvent({
+            type: msg.type,
+            data: msg.data as Record<string, unknown>,
+            instanceId: msg.instanceId,
+          })
         }
         return
       }
@@ -155,7 +169,11 @@ export function useServerSocket(instanceId: string | null) {
 
       // 部署终态通知（服务端落库事件，信封无 instanceId——部署实例未入库）：
       // 入通知中心；完成时新实例已入库，刷新列表（取消不产生实例，无需刷新）
-      if (msg.type === 'deployComplete' || msg.type === 'deployFailed' || msg.type === 'deployCancelled') {
+      if (
+        msg.type === 'deployComplete' ||
+        msg.type === 'deployFailed' ||
+        msg.type === 'deployCancelled'
+      ) {
         dispatchEvent({ type: msg.type, data: msg.data as Record<string, unknown> })
         if (msg.type === 'deployComplete') {
           void queryClient.invalidateQueries({ queryKey: queryKeys.instances() })
@@ -202,10 +220,21 @@ export function useServerSocket(instanceId: string | null) {
       switch (msg.type) {
         case 'status': {
           if (data.event && typeof data.event === 'string') {
-            const ev = data.event as 'started' | 'stopped' | 'ready' | 'crash' | 'save' | 'circuit_breaker'
+            const ev = data.event as
+              | 'started'
+              | 'stopped'
+              | 'ready'
+              | 'crash'
+              | 'save'
+              | 'circuit_breaker'
             applyWsStatusEvent(ev)
             // 启停中间态确认清除（issue 334）：started/stopped 为终态确认，crash/熔断为异常终态
-            if (ev === 'started' || ev === 'stopped' || ev === 'crash' || ev === 'circuit_breaker') {
+            if (
+              ev === 'started' ||
+              ev === 'stopped' ||
+              ev === 'crash' ||
+              ev === 'circuit_breaker'
+            ) {
               clearPhase(msg.instanceId, null)
             }
             // 实例列表状态变化时刷新列表（runningCount 等）
@@ -215,7 +244,11 @@ export function useServerSocket(instanceId: string | null) {
             void queryClient.invalidateQueries({ queryKey: queryKeys.instance(msg.instanceId) })
             // critical 事件（当前实例）：入通知中心 + 持久 toast（手动关闭防错过）
             if (ev === 'crash' || ev === 'circuit_breaker') {
-              dispatchEvent({ type: 'status', data: msg.data as Record<string, unknown>, instanceId: msg.instanceId })
+              dispatchEvent({
+                type: 'status',
+                data: msg.data as Record<string, unknown>,
+                instanceId: msg.instanceId,
+              })
               const name = getInstanceName(queryClient, msg.instanceId)
               const crashedInstanceId = msg.instanceId
               toast.error(
@@ -225,13 +258,20 @@ export function useServerSocket(instanceId: string | null) {
                 {
                   duration: Infinity,
                   // 深入链接：一键查看进程末尾日志（issue 343，消费 lastOutput）
-                  action: { label: '查看末尾日志', onClick: () => setLastOutputInstanceId(crashedInstanceId) },
+                  action: {
+                    label: '查看末尾日志',
+                    onClick: () => setLastOutputInstanceId(crashedInstanceId),
+                  },
                 },
               )
             } else {
               // started/stopped/ready/save 常规跃迁：入通知中心（文案映射见
               // lib/notifications buildNotifications），不弹 toast 防打断
-              dispatchEvent({ type: 'status', data: msg.data as Record<string, unknown>, instanceId: msg.instanceId })
+              dispatchEvent({
+                type: 'status',
+                data: msg.data as Record<string, unknown>,
+                instanceId: msg.instanceId,
+              })
             }
           } else {
             applyWsSnapshot(msg.instanceId, {
@@ -261,7 +301,11 @@ export function useServerSocket(instanceId: string | null) {
           break
         }
         case 'log': {
-          pushLog(msg.instanceId, String(data.text ?? ''), (data.type as 'stdout' | 'stderr' | 'command') ?? 'stdout')
+          pushLog(
+            msg.instanceId,
+            String(data.text ?? ''),
+            (data.type as 'stdout' | 'stderr' | 'command') ?? 'stdout',
+          )
           break
         }
         case 'playerStatsUpdate': {
@@ -282,7 +326,9 @@ export function useServerSocket(instanceId: string | null) {
                 armor: typeof update.armor === 'number' ? update.armor : p.armor,
                 position:
                   update.position && typeof update.position === 'object'
-                    ? ({ ...(update.position as Record<string, unknown>) } as unknown as Player['position'])
+                    ? ({
+                        ...(update.position as Record<string, unknown>),
+                      } as unknown as Player['position'])
                     : p.position,
                 isSleeping:
                   typeof update.isSleeping === 'boolean' ? update.isSleeping : p.isSleeping,
@@ -300,7 +346,11 @@ export function useServerSocket(instanceId: string | null) {
         case 'achievement':
           // 玩家列表全量刷新（join/leave 后重新拉取），随后落入通知中心
           void queryClient.invalidateQueries({ queryKey: queryKeys.players(msg.instanceId) })
-          dispatchEvent({ type: msg.type, data: msg.data as Record<string, unknown>, instanceId: msg.instanceId })
+          dispatchEvent({
+            type: msg.type,
+            data: msg.data as Record<string, unknown>,
+            instanceId: msg.instanceId,
+          })
           break
         case 'backupProgress':
         case 'restoreProgress': {
@@ -322,7 +372,11 @@ export function useServerSocket(instanceId: string | null) {
         case 'restoreCancelled':
           // 终态清除进度条（列表轮询/事件刷新负责后续数据收敛）
           clearBackupProgress(msg.instanceId)
-          dispatchEvent({ type: msg.type, data: msg.data as Record<string, unknown>, instanceId: msg.instanceId })
+          dispatchEvent({
+            type: msg.type,
+            data: msg.data as Record<string, unknown>,
+            instanceId: msg.instanceId,
+          })
           break
         case 'backupStart':
         case 'restoreStart':
@@ -330,13 +384,21 @@ export function useServerSocket(instanceId: string | null) {
           // 实例门拦下，回切后陈旧百分比会污染本次进度条（降级路径无新推送时
           // 会整段显示旧值）
           clearBackupProgress(msg.instanceId)
-          dispatchEvent({ type: msg.type, data: msg.data as Record<string, unknown>, instanceId: msg.instanceId })
+          dispatchEvent({
+            type: msg.type,
+            data: msg.data as Record<string, unknown>,
+            instanceId: msg.instanceId,
+          })
           break
         case 'weatherUpdate':
         case 'backupSkipped':
         case 'taskFailed':
         case 'webhookDeliveryFailed':
-          dispatchEvent({ type: msg.type, data: msg.data as Record<string, unknown>, instanceId: msg.instanceId })
+          dispatchEvent({
+            type: msg.type,
+            data: msg.data as Record<string, unknown>,
+            instanceId: msg.instanceId,
+          })
           break
         default:
           break
@@ -345,16 +407,19 @@ export function useServerSocket(instanceId: string | null) {
 
     const off = socket.on(handleMessage)
 
-    void socket.connect().then(() => {
-      if (disposed) return
-      setSocketConnected(true)
-      setHasConnectedOnce(true)
-      if (instanceRef.current) {
-        socket?.subscribe(instanceRef.current)
-      }
-    }).catch(() => {
-      // 连接失败由 McSocket 重连逻辑接管
-    })
+    void socket
+      .connect()
+      .then(() => {
+        if (disposed) return
+        setSocketConnected(true)
+        setHasConnectedOnce(true)
+        if (instanceRef.current) {
+          socket?.subscribe(instanceRef.current)
+        }
+      })
+      .catch(() => {
+        // 连接失败由 McSocket 重连逻辑接管
+      })
 
     return () => {
       disposed = true
@@ -362,7 +427,24 @@ export function useServerSocket(instanceId: string | null) {
       setSocketConnected(false)
       // 单例保留（跨页面复用）；实例切换由下方 effect 处理订阅
     }
-  }, [connectionReady, apiKey, sessionToken, baseUrl, applyWsSnapshot, applyWsPerformance, applyWsStatusEvent, setSocketConnected, setHasConnectedOnce, dispatchWsEvent, dispatchPerformance, applyDeployProgress, pushLog, clearPhase, setLastOutputInstanceId, queryClient])
+  }, [
+    connectionReady,
+    apiKey,
+    sessionToken,
+    baseUrl,
+    applyWsSnapshot,
+    applyWsPerformance,
+    applyWsStatusEvent,
+    setSocketConnected,
+    setHasConnectedOnce,
+    dispatchWsEvent,
+    dispatchPerformance,
+    applyDeployProgress,
+    pushLog,
+    clearPhase,
+    setLastOutputInstanceId,
+    queryClient,
+  ])
 
   // 实例切换：更新订阅
   useEffect(() => {

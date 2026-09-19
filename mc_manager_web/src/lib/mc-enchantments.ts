@@ -371,7 +371,10 @@ export function areEnchantmentsConflicting(idA: string, idB: string): boolean {
 }
 
 /** 给定已选附魔列表，判断某附魔是否因互斥而应被禁用 */
-export function isEnchantmentDisabledBy(candidateId: string, selectedIds: Iterable<string>): boolean {
+export function isEnchantmentDisabledBy(
+  candidateId: string,
+  selectedIds: Iterable<string>,
+): boolean {
   for (const selected of selectedIds) {
     if (areEnchantmentsConflicting(candidateId, selected)) return true
   }
@@ -381,7 +384,11 @@ export function isEnchantmentDisabledBy(candidateId: string, selectedIds: Iterab
 // ── MC 版本判定（NBT 三格式自适应）──────────────────────────
 
 /** 解析版本号为主/次/修订三元组；无法解析的段返回 null */
-function parseVersion(mcVersion: string): { major: number | null; minor: number | null; patch: number | null } {
+function parseVersion(mcVersion: string): {
+  major: number | null
+  minor: number | null
+  patch: number | null
+} {
   const parts = mcVersion.split('.')
   return {
     major: parts.length > 0 ? Number.parseInt(parts[0]!, 10) : null,

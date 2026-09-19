@@ -11,7 +11,12 @@ import { useConnectionStore } from '@/stores/connection'
 import { useServerStore } from '@/stores/server'
 import { useTerminalStore } from '@/stores/terminal'
 import { useCommandBus } from '@/stores/command-bus'
-import { colorForCommand, completeCommands, iconForCommand, type CompletionItem } from '@/lib/mc-commands'
+import {
+  colorForCommand,
+  completeCommands,
+  iconForCommand,
+  type CompletionItem,
+} from '@/lib/mc-commands'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { Card } from '@/components/mcs/card'
@@ -138,9 +143,10 @@ export function CommandInput() {
     },
     onSuccess: (response, command) => {
       // RCON 响应非空 → 手动插入终端（INFO 级；服务端日志不含 RCON 输出）
-      const text = typeof response === 'string' && response.trim()
-        ? response.trim()
-        : (response as { response?: string } | null)?.response?.trim()
+      const text =
+        typeof response === 'string' && response.trim()
+          ? response.trim()
+          : (response as { response?: string } | null)?.response?.trim()
       if (text && instanceId) {
         pushEntry(instanceId, text, 'stdout')
       }
@@ -251,8 +257,17 @@ export function CommandInput() {
       )}
       {/* 历史导航状态指示器 */}
       {navStatus && navRef.current != null && (
-        <div className={"flex items-center gap-1 text-mcs-2xs " + (navStatus.status === 'sent' ? 'text-mcs-success-fg' : 'text-mcs-error-fg')}>
-          {navStatus.status === 'sent' ? <Check className="size-3" aria-hidden /> : <X className="size-3" aria-hidden />}
+        <div
+          className={
+            'flex items-center gap-1 text-mcs-2xs ' +
+            (navStatus.status === 'sent' ? 'text-mcs-success-fg' : 'text-mcs-error-fg')
+          }
+        >
+          {navStatus.status === 'sent' ? (
+            <Check className="size-3" aria-hidden />
+          ) : (
+            <X className="size-3" aria-hidden />
+          )}
           {navStatus.status === 'sent' ? '已送达' : `失败: ${navStatus.error ?? '未知'}`}
         </div>
       )}
@@ -306,7 +321,12 @@ export function CommandInput() {
         >
           <Star className="size-3.5" aria-hidden />
         </IconButton>
-        <IconButton variant="default" onClick={() => send(value)} disabled={sending || !isRunning} aria-label="发送命令">
+        <IconButton
+          variant="default"
+          onClick={() => send(value)}
+          disabled={sending || !isRunning}
+          aria-label="发送命令"
+        >
           <Send className="size-3.5" aria-hidden />
         </IconButton>
 
@@ -332,7 +352,9 @@ export function CommandInput() {
                 >
                   <Icon className="size-3 text-mcs-accent-fg" aria-hidden />
                   <span className="font-mono">{item.text}</span>
-                  {item.usage && <span className="ml-auto truncate text-mcs-text-muted">{item.usage}</span>}
+                  {item.usage && (
+                    <span className="ml-auto truncate text-mcs-text-muted">{item.usage}</span>
+                  )}
                 </button>
               )
             })}

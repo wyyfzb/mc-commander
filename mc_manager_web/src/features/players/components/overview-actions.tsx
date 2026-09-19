@@ -52,7 +52,8 @@ export function OverviewActions({
   onClearInventory,
   onOpenBanDialog,
 }: OverviewActionsProps) {
-  const gamemodeCommand = (mode: string) => ({ kind: 'command', command: `gamemode ${mode} ${player.name}` }) as PlayerActionRequest
+  const gamemodeCommand = (mode: string) =>
+    ({ kind: 'command', command: `gamemode ${mode} ${player.name}` }) as PlayerActionRequest
   /** 当前模式＝游戏模式切换的逆操作依据；服务端未采集到模式时无逆操作可用 */
   const previousMode = player.gameMode
   const previousModeLabel = previousMode ? GAME_MODE_LABELS[previousMode] : undefined
@@ -65,14 +66,28 @@ export function OverviewActions({
         disabled={running !== null}
         onClick={() =>
           void (player.isOp
-            ? runAction('deop', { kind: 'deop', playerName: player.name }, {
-                successText: `已取消 ${player.name} 的 OP`,
-                undo: { req: { kind: 'op', playerName: player.name }, text: `已恢复 ${player.name} 的 OP` },
-              })
-            : runAction('op', { kind: 'op', playerName: player.name }, {
-                successText: `已设置 ${player.name} 为 OP`,
-                undo: { req: { kind: 'deop', playerName: player.name }, text: `已取消 ${player.name} 的 OP` },
-              }))
+            ? runAction(
+                'deop',
+                { kind: 'deop', playerName: player.name },
+                {
+                  successText: `已取消 ${player.name} 的 OP`,
+                  undo: {
+                    req: { kind: 'op', playerName: player.name },
+                    text: `已恢复 ${player.name} 的 OP`,
+                  },
+                },
+              )
+            : runAction(
+                'op',
+                { kind: 'op', playerName: player.name },
+                {
+                  successText: `已设置 ${player.name} 为 OP`,
+                  undo: {
+                    req: { kind: 'deop', playerName: player.name },
+                    text: `已取消 ${player.name} 的 OP`,
+                  },
+                },
+              ))
         }
       >
         {player.isOp ? <ShieldX aria-hidden /> : <ShieldCheck aria-hidden />}
@@ -85,14 +100,28 @@ export function OverviewActions({
         disabled={running !== null}
         onClick={() =>
           void (player.isWhitelisted
-            ? runAction('whitelistRemove', { kind: 'whitelistRemove', playerName: player.name }, {
-                successText: `已移除 ${player.name} 的白名单`,
-                undo: { req: { kind: 'whitelistAdd', playerName: player.name }, text: `已恢复 ${player.name} 的白名单` },
-              })
-            : runAction('whitelistAdd', { kind: 'whitelistAdd', playerName: player.name }, {
-                successText: `已添加 ${player.name} 至白名单`,
-                undo: { req: { kind: 'whitelistRemove', playerName: player.name }, text: `已移除 ${player.name} 的白名单` },
-              }))
+            ? runAction(
+                'whitelistRemove',
+                { kind: 'whitelistRemove', playerName: player.name },
+                {
+                  successText: `已移除 ${player.name} 的白名单`,
+                  undo: {
+                    req: { kind: 'whitelistAdd', playerName: player.name },
+                    text: `已恢复 ${player.name} 的白名单`,
+                  },
+                },
+              )
+            : runAction(
+                'whitelistAdd',
+                { kind: 'whitelistAdd', playerName: player.name },
+                {
+                  successText: `已添加 ${player.name} 至白名单`,
+                  undo: {
+                    req: { kind: 'whitelistRemove', playerName: player.name },
+                    text: `已移除 ${player.name} 的白名单`,
+                  },
+                },
+              ))
         }
       >
         {player.isWhitelisted ? <ShieldX aria-hidden /> : <ShieldCheck aria-hidden />}
@@ -118,7 +147,10 @@ export function OverviewActions({
                   successText: `已切换 ${player.name} 至${label}模式`,
                   undo:
                     previousMode && previousModeLabel
-                      ? { req: gamemodeCommand(previousMode), text: `已切回${previousModeLabel}模式` }
+                      ? {
+                          req: gamemodeCommand(previousMode),
+                          text: `已切回${previousModeLabel}模式`,
+                        }
                       : undefined,
                 })
               }
@@ -170,12 +202,7 @@ export function OverviewActions({
         <TooltipContent>恢复饥饿值（saturation 30s 255 级）</TooltipContent>
       </Tooltip>
 
-      <Button
-        variant="outline"
-        size="sm"
-        disabled={!player.isOnline}
-        onClick={onSendMessage}
-      >
+      <Button variant="outline" size="sm" disabled={!player.isOnline} onClick={onSendMessage}>
         <MessageSquare aria-hidden />
         发送消息
       </Button>
@@ -198,20 +225,20 @@ export function OverviewActions({
         size="sm"
         disabled={!player.isOnline}
         onClick={() =>
-          void runAction('kick', { kind: 'kick', playerName: player.name }, {
-            successText: `已成功踢出 ${player.name}`,
-          })
+          void runAction(
+            'kick',
+            { kind: 'kick', playerName: player.name },
+            {
+              successText: `已成功踢出 ${player.name}`,
+            },
+          )
         }
       >
         <UserX aria-hidden />
         踢出
       </Button>
 
-      <Button
-        variant="destructive-outline"
-        size="sm"
-        onClick={() => onOpenBanDialog(player)}
-      >
+      <Button variant="destructive-outline" size="sm" onClick={() => onOpenBanDialog(player)}>
         <Ban aria-hidden />
         封禁…
       </Button>

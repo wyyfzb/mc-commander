@@ -26,7 +26,13 @@ import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { useRadioGroup } from '@/hooks/use-radio-group'
 import { cn } from '@/lib/utils'
 import { TONE_SELECTED_SURFACE_CLASSES } from '@/components/mcs/tone'
-import { BAN_DURATION_OPTIONS, BAN_REASONS, BAN_REASON_FALLBACK, validateBanForm, type BanFormModel } from '@/lib/mc-ban'
+import {
+  BAN_DURATION_OPTIONS,
+  BAN_REASONS,
+  BAN_REASON_FALLBACK,
+  validateBanForm,
+  type BanFormModel,
+} from '@/lib/mc-ban'
 import type { Player } from '@/api/types'
 
 interface BanDialogProps {
@@ -86,7 +92,8 @@ function BanFormContent({
   })
   const selectedDuration = BAN_DURATION_OPTIONS[durationIndex]
   const selectedReason = BAN_REASONS[reasonIndex] ?? BAN_REASONS[0]
-  const finalReason = selectedReason === '其他' ? (customReason.trim() || BAN_REASON_FALLBACK) : selectedReason
+  const finalReason =
+    selectedReason === '其他' ? customReason.trim() || BAN_REASON_FALLBACK : selectedReason
 
   // 仅自定义理由是可丢失的自由输入；理由未选「其他」或输入为空白时提交不依赖它
   const closeDirty = selectedReason === '其他' && customReason.trim().length > 0

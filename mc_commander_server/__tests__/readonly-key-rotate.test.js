@@ -110,10 +110,12 @@ describe('管理员轮换只读 Key', () => {
     expect(Object.keys(res.body.data)).toEqual(['apiKey']);
     expect(config.readonlyApiKeyHash).toBe(hashToken(newKey));
     expect(sha256Of(envPath)).not.toBe(before);
-    expect(fs.readFileSync(envPath, 'utf-8')).toContain(`READONLY_API_KEY_HASH=${hashToken(newKey)}`);
+    expect(fs.readFileSync(envPath, 'utf-8')).toContain(
+      `READONLY_API_KEY_HASH=${hashToken(newKey)}`,
+    );
     // 明文不落盘，且不误伤既有管理员哈希行
     expect(fs.readFileSync(envPath, 'utf-8')).toMatch(
-      new RegExp(`^API_KEY_HASH=${hashToken(ADMIN_KEY)}$`, 'm')
+      new RegExp(`^API_KEY_HASH=${hashToken(ADMIN_KEY)}$`, 'm'),
     );
     expect(fs.readFileSync(envPath, 'utf-8')).not.toMatch(/^API_KEY=/m);
     expect(fs.readFileSync(envPath, 'utf-8')).not.toContain(newKey);
@@ -121,7 +123,9 @@ describe('管理员轮换只读 Key', () => {
     // 新凭据在只读白名单上可用，旧凭据失效
     const okRes = await request(app).get(`${API_V1_MOUNT}/overview`).set('X-API-Key', newKey);
     expect(okRes.status).toBe(200);
-    const oldRes = await request(app).get(`${API_V1_MOUNT}/overview`).set('X-API-Key', OLD_READONLY_KEY);
+    const oldRes = await request(app)
+      .get(`${API_V1_MOUNT}/overview`)
+      .set('X-API-Key', OLD_READONLY_KEY);
     expect(oldRes.status).toBe(401);
   });
 

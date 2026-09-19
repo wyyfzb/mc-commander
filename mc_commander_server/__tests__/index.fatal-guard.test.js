@@ -23,7 +23,16 @@ const h = vi.hoisted(() => {
   const startSystemStatsBroadcast = vi.fn(() => stopSystemStatsBroadcast);
   return {
     startSystemStatsBroadcast,
-    apiKeyHash: ['98f5a7be', 'c05d6145', 'e649c6ed', 'd8f8d27f', '380d0da5', '15a86ab4', 'f77c5f0f', '50b56bf6'].join(''),
+    apiKeyHash: [
+      '98f5a7be',
+      'c05d6145',
+      'e649c6ed',
+      'd8f8d27f',
+      '380d0da5',
+      '15a86ab4',
+      'f77c5f0f',
+      '50b56bf6',
+    ].join(''),
     app,
     server,
     serverOn,
@@ -217,9 +226,13 @@ describe('进程级兜底（uncaughtException/unhandledRejection）', () => {
     await resetAndImport();
     fatalHandler('uncaughtException')(new Error('ordering-check'));
 
-    const logIdx = stderrSpy.mock.calls.findIndex(([chunk]) => String(chunk).includes('[Fatal] Uncaught exception:'));
+    const logIdx = stderrSpy.mock.calls.findIndex(([chunk]) =>
+      String(chunk).includes('[Fatal] Uncaught exception:'),
+    );
     expect(logIdx).toBeGreaterThanOrEqual(0);
-    expect(stderrSpy.mock.invocationCallOrder[logIdx]).toBeLessThan(h.scheduler.stop.mock.invocationCallOrder[0]);
+    expect(stderrSpy.mock.invocationCallOrder[logIdx]).toBeLessThan(
+      h.scheduler.stop.mock.invocationCallOrder[0],
+    );
 
     await new Promise((resolve) => setImmediate(resolve));
     expect(exitSpy).toHaveBeenCalled(); // 停机流程已启动，不存在吞异常后继续运行的路径

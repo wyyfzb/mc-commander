@@ -17,21 +17,42 @@ import { getFriendlyErrorText } from '@/api/errors'
 import { getSocketSingleton } from '@/hooks/use-server-socket'
 import { useRadioGroup } from '@/hooks/use-radio-group'
 import {
-  useUpgradeStore, UPGRADE_STAGE_LABELS, clearUpgradeProgress, applyUpgradeProgress,
-  isUpgradeTerminal, getUpgradeProgress,
+  useUpgradeStore,
+  UPGRADE_STAGE_LABELS,
+  clearUpgradeProgress,
+  applyUpgradeProgress,
+  isUpgradeTerminal,
+  getUpgradeProgress,
 } from '@/stores/upgrade'
 import { useServerVersions } from '../queries'
 import type { InstanceStatus, UpgradeStage } from '@/api/types'
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { ProgressBar } from '@/components/mcs/progress-bar'
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from '@/components/ui/select'
-import { Loader2, ArrowUpCircle, CheckCircle2, RotateCcw, XCircle, AlertTriangle, Ban } from 'lucide-react'
+import {
+  Loader2,
+  ArrowUpCircle,
+  CheckCircle2,
+  RotateCcw,
+  XCircle,
+  AlertTriangle,
+  Ban,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { toneClasses } from '@/components/mcs/tone'
 import { instanceLabel } from '@/lib/instance-label'
@@ -233,17 +254,13 @@ export function UpgradeDialog({ instance, open, onOpenChange }: UpgradeDialogPro
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <StageIcon stage={progress.stage} />
-                <span className="text-sm font-medium">
-                  {UPGRADE_STAGE_LABELS[progress.stage]}
-                </span>
+                <span className="text-sm font-medium">{UPGRADE_STAGE_LABELS[progress.stage]}</span>
                 {progress.percent > 0 && (
                   <span className="text-xs text-mcs-text-muted">{progress.percent}%</span>
                 )}
               </div>
               {progress.percent > 0 && <ProgressBar percent={progress.percent} />}
-              {progress.detail && (
-                <p className="text-xs text-mcs-text-muted">{progress.detail}</p>
-              )}
+              {progress.detail && <p className="text-xs text-mcs-text-muted">{progress.detail}</p>}
               <Button
                 variant="outline"
                 size="sm"
@@ -271,10 +288,13 @@ export function UpgradeDialog({ instance, open, onOpenChange }: UpgradeDialogPro
                 <StageIcon stage={progress.stage} />
                 <span
                   className={`font-medium ${
-                    isSuccess ? 'text-mcs-success-fg'
-                    : isRolledBack ? 'text-mcs-warning-fg'
-                    : isCancelled ? 'text-mcs-text-muted'
-                    : 'text-mcs-error-fg'
+                    isSuccess
+                      ? 'text-mcs-success-fg'
+                      : isRolledBack
+                        ? 'text-mcs-warning-fg'
+                        : isCancelled
+                          ? 'text-mcs-text-muted'
+                          : 'text-mcs-error-fg'
                   }`}
                 >
                   {progress.detail || UPGRADE_STAGE_LABELS[progress.stage]}
@@ -314,12 +334,9 @@ export function UpgradeDialog({ instance, open, onOpenChange }: UpgradeDialogPro
                   </SelectTrigger>
                   <SelectContent>
                     {versions.map((v) => (
-                      <SelectItem
-                        key={v}
-                        value={v}
-                        disabled={v === instance.mcVersion}
-                      >
-                        {v}{v === instance.mcVersion ? '（当前）' : ''}
+                      <SelectItem key={v} value={v} disabled={v === instance.mcVersion}>
+                        {v}
+                        {v === instance.mcVersion ? '（当前）' : ''}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -330,7 +347,9 @@ export function UpgradeDialog({ instance, open, onOpenChange }: UpgradeDialogPro
 
           {/* 错误 */}
           {error && (
-            <p className="text-sm text-mcs-error-fg" role="alert">{error}</p>
+            <p className="text-sm text-mcs-error-fg" role="alert">
+              {error}
+            </p>
           )}
         </div>
 
@@ -339,7 +358,11 @@ export function UpgradeDialog({ instance, open, onOpenChange }: UpgradeDialogPro
             <Button onClick={() => handleClose(false)}>关闭</Button>
           ) : (
             <div className="flex gap-2">
-              <Button variant="ghost" onClick={() => handleClose(false)} disabled={upgrading || starting}>
+              <Button
+                variant="ghost"
+                onClick={() => handleClose(false)}
+                disabled={upgrading || starting}
+              >
                 取消
               </Button>
               <Button
@@ -368,4 +391,3 @@ export function UpgradeDialog({ instance, open, onOpenChange }: UpgradeDialogPro
     </Dialog>
   )
 }
-

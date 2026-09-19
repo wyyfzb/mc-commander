@@ -116,7 +116,7 @@ function enumerateEndpoints(router) {
       } else if (layer.handle?.stack) {
         expect(
           layer.matchers?.[0]?.('/') ?? false,
-          '子 router 必须挂载在 "/"，否则枚举前缀失准'
+          '子 router 必须挂载在 "/"，否则枚举前缀失准',
         ).toBeTruthy();
         walk(layer.handle.stack, prefix);
       }
@@ -134,7 +134,10 @@ beforeAll(() => {
   db = initDatabase();
   // 全局阻断出网：路由表逐端点遍历会真实进入管理员的处理链路，
   // /check-update 与 /versions 会外呼（离线降级虽可用，但测试不应依赖网络）
-  vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ version: '0.0.0-test' }) })));
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => ({ ok: true, json: async () => ({ version: '0.0.0-test' }) })),
+  );
   const stubManager = {
     instances: new Map(),
     getAllInstances: () => [],
@@ -209,7 +212,7 @@ describe('路由表枚举本身（结构性前提）', () => {
       const [method, pattern] = entry.split(' ');
       expect(
         endpoints.some((e) => e.method === method && e.pattern === pattern),
-        `白名单项 ${entry} 未匹配任何已注册端点`
+        `白名单项 ${entry} 未匹配任何已注册端点`,
       ).toBe(true);
     }
   });
@@ -262,14 +265,12 @@ describe('结构性默认拒绝：非白名单端点对只读凭据一律 403', 
 
   it('写操作对只读凭据一律 403（含只读凭据自我轮换）', async () => {
     // 公开端点含两条写（login/setup）：它们在认证层即放行、不带角色，不属角色门裁决面
-    const writes = endpoints.filter(
-      (e) => e.method !== 'GET' && !PUBLIC_V1.has(e.pattern)
-    );
+    const writes = endpoints.filter((e) => e.method !== 'GET' && !PUBLIC_V1.has(e.pattern));
     expect(writes.length).toBeGreaterThan(40);
     for (const { method, pattern } of writes) {
       const res = await asReadonly(method, API_V1_MOUNT + concreteUrl(pattern));
       expect(`${method} ${pattern} -> ${res.status}/${res.body.code}`).toBe(
-        `${method} ${pattern} -> 403/${ErrorCodes.AUTH_INSUFFICIENT_ROLE.code}`
+        `${method} ${pattern} -> 403/${ErrorCodes.AUTH_INSUFFICIENT_ROLE.code}`,
       );
     }
   });
@@ -347,7 +348,7 @@ describe('拒绝语义与信息暴露', () => {
     ]) {
       const res = await asReadonly('GET', API_V1_MOUNT + path);
       expect(`${path} -> ${res.status}/${res.body.code}`).toBe(
-        `${path} -> 403/${ErrorCodes.AUTH_INSUFFICIENT_ROLE.code}`
+        `${path} -> 403/${ErrorCodes.AUTH_INSUFFICIENT_ROLE.code}`,
       );
     }
   });
@@ -370,7 +371,7 @@ describe('凭据通道与角色赋值', () => {
       }
       expect(`${method} ${pattern} -> ${res.status}`).not.toBe(`${method} ${pattern} -> 401`);
       expect(res.body.code, `${method} ${pattern} 被角色门拒绝`).not.toBe(
-        ErrorCodes.AUTH_INSUFFICIENT_ROLE.code
+        ErrorCodes.AUTH_INSUFFICIENT_ROLE.code,
       );
     }
   });
@@ -402,7 +403,9 @@ describe('凭据通道与角色赋值', () => {
       .set('Authorization', `Bearer ${seedSession()}`);
     expect(viaSession.body.auth).toMatchObject({ source: 'session', role: 'admin' });
 
-    const viaReadonly = await request(app2).get('/api/v1/role-probe').set('X-API-Key', READONLY_KEY);
+    const viaReadonly = await request(app2)
+      .get('/api/v1/role-probe')
+      .set('X-API-Key', READONLY_KEY);
     expect(viaReadonly.body.auth).toMatchObject({ source: 'apiKey', role: 'readonly' });
 
     // 公开端点由认证层显式标记 role=public：不再靠「req.auth 缺失」表达放行
@@ -424,8 +427,14 @@ describe('凭据通道与角色赋值', () => {
     // ② 单元级：req.auth 为 undefined / null / 空对象 都必须拒绝
     const calls = [];
     const res = {
-      status(code) { calls.push(code); return this; },
-      json(body) { calls.push(body.code); return this; },
+      status(code) {
+        calls.push(code);
+        return this;
+      },
+      json(body) {
+        calls.push(body.code);
+        return this;
+      },
     };
     for (const auth of [undefined, null, {}, { source: 'apiKey' }, { role: 'unknown' }]) {
       calls.length = 0;
@@ -443,14 +452,22 @@ describe('凭据通道与角色赋值', () => {
       expect(next, `role=${auth.role} 应放行`).toHaveBeenCalled();
     }
     const nextReadonly = vi.fn();
-    requireAdminRole({ auth: { role: 'readonly' }, method: 'GET', path: '/instances' }, res, nextReadonly);
+    requireAdminRole(
+      { auth: { role: 'readonly' }, method: 'GET', path: '/instances' },
+      res,
+      nextReadonly,
+    );
     expect(nextReadonly).toHaveBeenCalled();
   });
 
   it('GET /health（app 级、不在 /api/ 下）不经角色门：仍返回 200', async () => {
     const healthApp = express();
     healthApp.use('/api/', authMiddleware);
-    setupRoutes(healthApp, { instances: new Map(), getAllInstances: () => [], getInstance: () => null }, {});
+    setupRoutes(
+      healthApp,
+      { instances: new Map(), getAllInstances: () => [], getInstance: () => null },
+      {},
+    );
     const res = await request(healthApp).get('/health');
     expect(res.status).toBe(200);
     expect(res.body.data.status).toBe('ok');
@@ -485,7 +502,9 @@ describe('只读通道关闭（READONLY_API_KEY_ENABLED=false）', () => {
     expect(adminRes.status).toBe(200);
 
     config.readonlyApiKeyHash = '';
-    const adminRes2 = await request(app).get(`${API_V1_MOUNT}/overview`).set('X-API-Key', ADMIN_KEY);
+    const adminRes2 = await request(app)
+      .get(`${API_V1_MOUNT}/overview`)
+      .set('X-API-Key', ADMIN_KEY);
     expect(adminRes2.status).toBe(200);
   });
 });

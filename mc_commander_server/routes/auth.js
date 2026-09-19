@@ -25,7 +25,12 @@ import { validateBody, validatedSuccess } from '../middleware/validate.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
 import { AdminAccountModel, AdminRecoveryCodeModel, AdminSessionModel } from '../db/index.js';
-import { hashPassword, verifyPassword, hashToken, generateSessionToken } from '../utils/password.js';
+import {
+  hashPassword,
+  verifyPassword,
+  hashToken,
+  generateSessionToken,
+} from '../utils/password.js';
 import { slidingExpiry } from '../middleware/auth.js';
 import { isSetupTokenRequired, verifySetupToken, consumeSetupToken } from '../utils/setup-token.js';
 import { toIsoUtc } from '../utils/db-time.js';
@@ -187,7 +192,9 @@ export function createAuthRoutes() {
 
   // GET /api/v1/auth/status —— 公开：登录页首屏探测
   router.get('/auth/status', (req, res) => {
-    res.json(validatedSuccess(authStatusResponseSchema, { hasPassword: AdminAccountModel.isConfigured() }));
+    res.json(
+      validatedSuccess(authStatusResponseSchema, { hasPassword: AdminAccountModel.isConfigured() }),
+    );
   });
 
   // GET /api/v1/auth/capabilities —— 认证：部署能力探测
@@ -200,12 +207,14 @@ export function createAuthRoutes() {
   // 「只读凭据生成/轮换」入口的可见性与文案（未配置 = 首次生成，已配置 = 轮换）。
   // 部署配置的其余部分（路径、端口、后端开关等）不属本契约，勿顺手加入。
   router.get('/auth/capabilities', (req, res) => {
-    res.json(validatedSuccess(authCapabilitiesResponseSchema, {
-      apiKeyEnabled: config.apiKeyEnabled,
-      readonlyApiKeyEnabled: config.readonlyApiKeyEnabled,
-      // 只答「有没有配置」这一事实，不返回摘要本身（哈希也不外泄）
-      readonlyApiKeyConfigured: Boolean(config.readonlyApiKeyHash),
-    }));
+    res.json(
+      validatedSuccess(authCapabilitiesResponseSchema, {
+        apiKeyEnabled: config.apiKeyEnabled,
+        readonlyApiKeyEnabled: config.readonlyApiKeyEnabled,
+        // 只答「有没有配置」这一事实，不返回摘要本身（哈希也不外泄）
+        readonlyApiKeyConfigured: Boolean(config.readonlyApiKeyHash),
+      }),
+    );
   });
 
   // POST /api/v1/auth/setup —— 公开：首访设密（幂等防护：已设密 409；所有权证明：SETUP_TOKEN）
@@ -214,7 +223,9 @@ export function createAuthRoutes() {
   router.post('/auth/setup', validateBody(authSetupRequestBodySchema), (req, res, next) => {
     try {
       if (AdminAccountModel.isConfigured()) {
-        return res.status(409).json(error(ErrorCodes.AUTH_ALREADY_CONFIGURED, '管理员密码已设置，请直接登录'));
+        return res
+          .status(409)
+          .json(error(ErrorCodes.AUTH_ALREADY_CONFIGURED, '管理员密码已设置，请直接登录'));
       }
       // 所有权证明（audit S-P0-1 / #309）：公网部署时「部署完成 → 管理员设密」窗口内
       // 任何发现端口者可抢先设密永久接管面板；配置了 SETUP_TOKEN 则强制校验。
@@ -228,10 +239,14 @@ export function createAuthRoutes() {
       }
       const { password } = req.body || {};
       if (!validatePasswordStrength(password)) {
-        return res.status(400).json(error(
-          ErrorCodes.VALIDATION_ERROR,
-          `密码长度需在 ${PASSWORD_MIN}-${PASSWORD_MAX} 位之间`,
-        ));
+        return res
+          .status(400)
+          .json(
+            error(
+              ErrorCodes.VALIDATION_ERROR,
+              `密码长度需在 ${PASSWORD_MIN}-${PASSWORD_MAX} 位之间`,
+            ),
+          );
       }
       // TOCTOU 说明：better-sqlite3 为同步 API——上方 isConfigured() 检查与此处
       // setPassword() 写入之间无 await，事件循环内原子，无并发竞态窗口；
@@ -242,12 +257,19 @@ export function createAuthRoutes() {
         const { envRemoved } = consumeSetupToken();
         if (!envRemoved) {
           // best-effort 失败仅告警：内存已作废，本进程内已不可再用
-          logger.warn('[auth] SETUP_TOKEN 已作废，但 .env 移除失败（重启前请手动移除 SETUP_TOKEN 行）');
+          logger.warn(
+            '[auth] SETUP_TOKEN 已作废，但 .env 移除失败（重启前请手动移除 SETUP_TOKEN 行）',
+          );
         }
       }
       // 设密即登录：首访向导完成直达面板
       const session = createSession(req);
-      recordAudit({ action: AuditActions.AUTH_SETUP, targetType: 'admin', targetId: '1', detail: null });
+      recordAudit({
+        action: AuditActions.AUTH_SETUP,
+        targetType: 'admin',
+        targetId: '1',
+        detail: null,
+      });
       res.json(validatedSuccess(authSetupResponseSchema, { hasPassword: true, ...session }));
     } catch (err) {
       next(err);
@@ -260,14 +282,21 @@ export function createAuthRoutes() {
     try {
       const ip = clientIp(req);
       if (isLoginLocked(ip)) {
-        return res.status(429).json(error(ErrorCodes.AUTH_LOGIN_LOCKED, '登录失败次数过多，请稍后再试'));
+        return res
+          .status(429)
+          .json(error(ErrorCodes.AUTH_LOGIN_LOCKED, '登录失败次数过多，请稍后再试'));
       }
       if (!AdminAccountModel.isConfigured()) {
-        return res.status(400).json(error(ErrorCodes.AUTH_NOT_CONFIGURED, '管理员密码尚未设置，请先完成初始化'));
+        return res
+          .status(400)
+          .json(error(ErrorCodes.AUTH_NOT_CONFIGURED, '管理员密码尚未设置，请先完成初始化'));
       }
       const { password } = req.body || {};
       const account = AdminAccountModel.get();
-      if (!validatePasswordStrength(password) || !verifyPassword(String(password ?? ''), account.password_hash)) {
+      if (
+        !validatePasswordStrength(password) ||
+        !verifyPassword(String(password ?? ''), account.password_hash)
+      ) {
         recordLoginFailure(ip);
         return res.status(401).json(error(ErrorCodes.AUTH_INVALID_CREDENTIALS, '密码错误'));
       }
@@ -282,19 +311,17 @@ export function createAuthRoutes() {
           // 密码正确但未带第二因子：可区分的「需要验证码」响应，不签发会话、
           // 不计失败（用户只是还没输入，不是一次错误尝试），也不清失败计数
           // （清计数只在完整认证成功后发生）
-          return res.status(401).json(error(
-            ErrorCodes.AUTH_TOTP_REQUIRED,
-            '请输入两步验证码或恢复码',
-          ));
+          return res
+            .status(401)
+            .json(error(ErrorCodes.AUTH_TOTP_REQUIRED, '请输入两步验证码或恢复码'));
         }
         const verified = verifySecondFactor(totpState, rawCode);
         if (!verified.ok) {
           // 第二因子失败与密码失败共用同一封禁计数（口径：6 位码错误同样计入）
           recordLoginFailure(ip);
-          return res.status(401).json(error(
-            ErrorCodes.AUTH_TOTP_INVALID,
-            '两步验证码或恢复码错误',
-          ));
+          return res
+            .status(401)
+            .json(error(ErrorCodes.AUTH_TOTP_INVALID, '两步验证码或恢复码错误'));
         }
         secondFactorVia = verified.via;
       }
@@ -320,57 +347,82 @@ export function createAuthRoutes() {
 
   // PUT /api/v1/auth/password —— 认证：改密（验旧密；改后踢单设备保留当前）
   // schema 只锁形状（#428）：旧密 401 校验先于新密强度 400，错误呈现顺序保持
-  router.put('/auth/password', validateBody(authPasswordChangeRequestBodySchema), (req, res, next) => {
-    try {
-      const { oldPassword, newPassword } = req.body || {};
-      const account = AdminAccountModel.get();
-      if (!account) {
-        return res.status(400).json(error(ErrorCodes.AUTH_NOT_CONFIGURED, '管理员密码尚未设置'));
+  router.put(
+    '/auth/password',
+    validateBody(authPasswordChangeRequestBodySchema),
+    (req, res, next) => {
+      try {
+        const { oldPassword, newPassword } = req.body || {};
+        const account = AdminAccountModel.get();
+        if (!account) {
+          return res.status(400).json(error(ErrorCodes.AUTH_NOT_CONFIGURED, '管理员密码尚未设置'));
+        }
+        if (!verifyPassword(String(oldPassword ?? ''), account.password_hash)) {
+          return res.status(401).json(error(ErrorCodes.AUTH_INVALID_CREDENTIALS, '原密码错误'));
+        }
+        if (!validatePasswordStrength(newPassword)) {
+          return res
+            .status(400)
+            .json(
+              error(
+                ErrorCodes.VALIDATION_ERROR,
+                `新密码长度需在 ${PASSWORD_MIN}-${PASSWORD_MAX} 位之间`,
+              ),
+            );
+        }
+        AdminAccountModel.setPassword(hashPassword(newPassword));
+        // 改密后踢掉其余会话（当前会话保留，避免把自己登出）
+        if (req.auth?.source === 'session') {
+          const kicked = AdminSessionModel.deleteAllExcept(req.auth.sessionId);
+          recordAudit({
+            action: AuditActions.AUTH_PASSWORD_CHANGE,
+            targetType: 'admin',
+            targetId: '1',
+            detail: { kickedSessions: kicked },
+          });
+          res.json(
+            validatedSuccess(authPasswordChangeResponseSchema, {
+              ok: true,
+              kickedSessions: kicked,
+            }),
+          );
+        } else {
+          // API Key 通道改密：无当前会话可保留，全部会话失效
+          const kicked = AdminSessionModel.deleteAllExcept('__none__');
+          recordAudit({
+            action: AuditActions.AUTH_PASSWORD_CHANGE,
+            targetType: 'admin',
+            targetId: '1',
+            detail: { kickedSessions: kicked, via: 'apiKey' },
+          });
+          res.json(
+            validatedSuccess(authPasswordChangeResponseSchema, {
+              ok: true,
+              kickedSessions: kicked,
+            }),
+          );
+        }
+      } catch (err) {
+        next(err);
       }
-      if (!verifyPassword(String(oldPassword ?? ''), account.password_hash)) {
-        return res.status(401).json(error(ErrorCodes.AUTH_INVALID_CREDENTIALS, '原密码错误'));
-      }
-      if (!validatePasswordStrength(newPassword)) {
-        return res.status(400).json(error(
-          ErrorCodes.VALIDATION_ERROR,
-          `新密码长度需在 ${PASSWORD_MIN}-${PASSWORD_MAX} 位之间`,
-        ));
-      }
-      AdminAccountModel.setPassword(hashPassword(newPassword));
-      // 改密后踢掉其余会话（当前会话保留，避免把自己登出）
-      if (req.auth?.source === 'session') {
-        const kicked = AdminSessionModel.deleteAllExcept(req.auth.sessionId);
-        recordAudit({
-          action: AuditActions.AUTH_PASSWORD_CHANGE,
-          targetType: 'admin',
-          targetId: '1',
-          detail: { kickedSessions: kicked },
-        });
-        res.json(validatedSuccess(authPasswordChangeResponseSchema, { ok: true, kickedSessions: kicked }));
-      } else {
-        // API Key 通道改密：无当前会话可保留，全部会话失效
-        const kicked = AdminSessionModel.deleteAllExcept('__none__');
-        recordAudit({
-          action: AuditActions.AUTH_PASSWORD_CHANGE,
-          targetType: 'admin',
-          targetId: '1',
-          detail: { kickedSessions: kicked, via: 'apiKey' },
-        });
-        res.json(validatedSuccess(authPasswordChangeResponseSchema, { ok: true, kickedSessions: kicked }));
-      }
-    } catch (err) {
-      next(err);
-    }
-  });
+    },
+  );
 
   // POST /api/v1/auth/logout —— 认证：登出（删除当前会话）
   router.post('/auth/logout', (req, res, next) => {
     try {
       if (req.auth?.source !== 'session') {
-        return res.status(400).json(error(ErrorCodes.VALIDATION_ERROR, '当前为 API Key 认证，无会话可登出'));
+        return res
+          .status(400)
+          .json(error(ErrorCodes.VALIDATION_ERROR, '当前为 API Key 认证，无会话可登出'));
       }
       AdminSessionModel.deleteById(req.auth.sessionId);
-      recordAudit({ action: AuditActions.AUTH_LOGOUT, targetType: 'admin', targetId: '1', detail: null });
+      recordAudit({
+        action: AuditActions.AUTH_LOGOUT,
+        targetType: 'admin',
+        targetId: '1',
+        detail: null,
+      });
       res.json(validatedSuccess(authLogoutResponseSchema, { ok: true }));
     } catch (err) {
       next(err);
@@ -411,7 +463,12 @@ export function createAuthRoutes() {
         targetId: id,
         detail: { current: req.auth?.sessionId === id },
       });
-      res.json(validatedSuccess(authSessionKickResponseSchema, { ok: true, current: req.auth?.sessionId === id }));
+      res.json(
+        validatedSuccess(authSessionKickResponseSchema, {
+          ok: true,
+          current: req.auth?.sessionId === id,
+        }),
+      );
     } catch (err) {
       next(err);
     }
@@ -424,12 +481,14 @@ export function createAuthRoutes() {
   router.get('/auth/totp/status', (req, res, next) => {
     try {
       const state = AdminAccountModel.getTotpState();
-      res.json(validatedSuccess(authTotpStatusResponseSchema, {
-        enabled: state.enabled,
-        // 库里是 CURRENT_TIMESTAMP 的无时区 UTC 串，下发前补时区标记
-        confirmedAt: toIsoUtc(state.confirmedAt),
-        recoveryCodesRemaining: AdminRecoveryCodeModel.countRemaining(),
-      }));
+      res.json(
+        validatedSuccess(authTotpStatusResponseSchema, {
+          enabled: state.enabled,
+          // 库里是 CURRENT_TIMESTAMP 的无时区 UTC 串，下发前补时区标记
+          confirmedAt: toIsoUtc(state.confirmedAt),
+          recoveryCodesRemaining: AdminRecoveryCodeModel.countRemaining(),
+        }),
+      );
     } catch (err) {
       next(err);
     }
@@ -438,82 +497,95 @@ export function createAuthRoutes() {
   // POST /api/v1/auth/totp/enroll —— 认证：生成候选 secret + otpauth URI + 二维码
   // 只写候选 secret，启用位保持 0：扫码/抄写正确性必须靠 confirm 的一次动态口令
   // 自证，否则一个抄错的 secret 会把管理员永久挡在门外
-  router.post('/auth/totp/enroll', asyncHandler(async (req, res) => {
-    // 未设密时 admin_account 无行：beginTotpEnrollment 会更新 0 行，若不拦截就会
-    // 返回一个从未落库的 secret（随后 confirm 必然 400），故先按未初始化处理
-    if (!AdminAccountModel.isConfigured()) {
-      return res.status(400).json(error(ErrorCodes.AUTH_NOT_CONFIGURED, '管理员密码尚未设置，请先完成初始化'));
-    }
-    const state = AdminAccountModel.getTotpState();
-    if (state.enabled) {
-      // 已启用时拒绝重新挂靠：静默替换 secret 会让正在使用的认证器失效，
-      // 而管理员可能并未意识到自己被降级/锁死。关闭要走 disable
-      return res.status(409).json(error(ErrorCodes.AUTH_TOTP_ALREADY_ENABLED));
-    }
-    const secret = generateTotpSecret();
-    AdminAccountModel.beginTotpEnrollment(secret);
-    const otpauthUrl = buildOtpauthUrl({ secret, issuer: TOTP_ISSUER, account: TOTP_ACCOUNT });
-    const qrDataUrl = await QRCode.toDataURL(otpauthUrl, {
-      // 纠错档 M（~15%）：手机拍屏场景的常见选择，再高一档会显著增密影响小尺寸识别
-      errorCorrectionLevel: 'M',
-      // 留白 1 模块：认证器对极窄静默区的识别率不稳定，1 是经验下限
-      margin: 1,
-      width: 240,
-    });
-    recordAudit({
-      action: AuditActions.AUTH_TOTP_ENROLL,
-      targetType: 'admin',
-      targetId: '1',
-      detail: { ip: clientIp(req) },
-    });
-    // secret 明文仅在本次响应出现（审计日志不含 secret）
-    res.json(validatedSuccess(authTotpEnrollResponseSchema, { secret, otpauthUrl, qrDataUrl }));
-  }));
-
-  // POST /api/v1/auth/totp/confirm —— 认证：动态口令确认挂靠；恢复码明文的唯一出口
-  router.post('/auth/totp/confirm', validateBody(authTotpConfirmRequestBodySchema), (req, res, next) => {
-    try {
-      const ip = clientIp(req);
-      if (isLoginLocked(ip)) {
-        return res.status(429).json(error(ErrorCodes.AUTH_LOGIN_LOCKED, '登录失败次数过多，请稍后再试'));
+  router.post(
+    '/auth/totp/enroll',
+    asyncHandler(async (req, res) => {
+      // 未设密时 admin_account 无行：beginTotpEnrollment 会更新 0 行，若不拦截就会
+      // 返回一个从未落库的 secret（随后 confirm 必然 400），故先按未初始化处理
+      if (!AdminAccountModel.isConfigured()) {
+        return res
+          .status(400)
+          .json(error(ErrorCodes.AUTH_NOT_CONFIGURED, '管理员密码尚未设置，请先完成初始化'));
       }
       const state = AdminAccountModel.getTotpState();
       if (state.enabled) {
+        // 已启用时拒绝重新挂靠：静默替换 secret 会让正在使用的认证器失效，
+        // 而管理员可能并未意识到自己被降级/锁死。关闭要走 disable
         return res.status(409).json(error(ErrorCodes.AUTH_TOTP_ALREADY_ENABLED));
       }
-      if (!state.secret) {
-        return res.status(400).json(error(ErrorCodes.AUTH_TOTP_NOT_ENROLLED));
-      }
-      const { code } = req.body || {};
-      const check = verifyTotpCode(state.secret, code, state.lastStep);
-      if (!check.ok) {
-        // 挂靠确认处的错误码尝试与登录处同源：错误尝试同样计入封禁计数
-        recordLoginFailure(ip);
-        return res.status(401).json(error(ErrorCodes.AUTH_TOTP_INVALID, '两步验证码错误'));
-      }
-      AdminAccountModel.setTotpLastStep(check.step);
-      AdminAccountModel.confirmTotp();
-      const recoveryCodes = generateRecoveryCodes();
-      AdminRecoveryCodeModel.replaceAll(recoveryCodes.map((c) => hashRecoveryCode(c)));
-      // 启用新因子后吊销其它会话：否则变更前创建的（可能已被窃取的）会话绕过 2FA
-      const kicked = revokeOtherSessions(req);
-      clearLoginFailures(ip);
+      const secret = generateTotpSecret();
+      AdminAccountModel.beginTotpEnrollment(secret);
+      const otpauthUrl = buildOtpauthUrl({ secret, issuer: TOTP_ISSUER, account: TOTP_ACCOUNT });
+      const qrDataUrl = await QRCode.toDataURL(otpauthUrl, {
+        // 纠错档 M（~15%）：手机拍屏场景的常见选择，再高一档会显著增密影响小尺寸识别
+        errorCorrectionLevel: 'M',
+        // 留白 1 模块：认证器对极窄静默区的识别率不稳定，1 是经验下限
+        margin: 1,
+        width: 240,
+      });
       recordAudit({
-        action: AuditActions.AUTH_TOTP_CONFIRM,
+        action: AuditActions.AUTH_TOTP_ENROLL,
         targetType: 'admin',
         targetId: '1',
-        detail: { ip, recoveryCodesIssued: recoveryCodes.length, kickedSessions: kicked },
+        detail: { ip: clientIp(req) },
       });
-      const confirmed = AdminAccountModel.getTotpState().confirmedAt;
-      res.json(validatedSuccess(authTotpConfirmResponseSchema, {
-        enabled: true,
-        confirmedAt: toIsoUtc(confirmed),
-        recoveryCodes,
-      }));
-    } catch (err) {
-      next(err);
-    }
-  });
+      // secret 明文仅在本次响应出现（审计日志不含 secret）
+      res.json(validatedSuccess(authTotpEnrollResponseSchema, { secret, otpauthUrl, qrDataUrl }));
+    }),
+  );
+
+  // POST /api/v1/auth/totp/confirm —— 认证：动态口令确认挂靠；恢复码明文的唯一出口
+  router.post(
+    '/auth/totp/confirm',
+    validateBody(authTotpConfirmRequestBodySchema),
+    (req, res, next) => {
+      try {
+        const ip = clientIp(req);
+        if (isLoginLocked(ip)) {
+          return res
+            .status(429)
+            .json(error(ErrorCodes.AUTH_LOGIN_LOCKED, '登录失败次数过多，请稍后再试'));
+        }
+        const state = AdminAccountModel.getTotpState();
+        if (state.enabled) {
+          return res.status(409).json(error(ErrorCodes.AUTH_TOTP_ALREADY_ENABLED));
+        }
+        if (!state.secret) {
+          return res.status(400).json(error(ErrorCodes.AUTH_TOTP_NOT_ENROLLED));
+        }
+        const { code } = req.body || {};
+        const check = verifyTotpCode(state.secret, code, state.lastStep);
+        if (!check.ok) {
+          // 挂靠确认处的错误码尝试与登录处同源：错误尝试同样计入封禁计数
+          recordLoginFailure(ip);
+          return res.status(401).json(error(ErrorCodes.AUTH_TOTP_INVALID, '两步验证码错误'));
+        }
+        AdminAccountModel.setTotpLastStep(check.step);
+        AdminAccountModel.confirmTotp();
+        const recoveryCodes = generateRecoveryCodes();
+        AdminRecoveryCodeModel.replaceAll(recoveryCodes.map((c) => hashRecoveryCode(c)));
+        // 启用新因子后吊销其它会话：否则变更前创建的（可能已被窃取的）会话绕过 2FA
+        const kicked = revokeOtherSessions(req);
+        clearLoginFailures(ip);
+        recordAudit({
+          action: AuditActions.AUTH_TOTP_CONFIRM,
+          targetType: 'admin',
+          targetId: '1',
+          detail: { ip, recoveryCodesIssued: recoveryCodes.length, kickedSessions: kicked },
+        });
+        const confirmed = AdminAccountModel.getTotpState().confirmedAt;
+        res.json(
+          validatedSuccess(authTotpConfirmResponseSchema, {
+            enabled: true,
+            confirmedAt: toIsoUtc(confirmed),
+            recoveryCodes,
+          }),
+        );
+      } catch (err) {
+        next(err);
+      }
+    },
+  );
 
   // POST /api/v1/auth/totp/disable —— 认证：关闭两步验证（降级安全档，必须双证）
   //
@@ -524,48 +596,56 @@ export function createAuthRoutes() {
   // 第二因子接受「当前动态口令 或 一枚未用恢复码」：否则丢了手机的用户即使
   // 靠恢复码登录成功，也永远无法关闭/重挂两步验证（enroll 在启用态被拒），
   // 形成死锁。恢复码被用于关闭时同样置 used_at（一次性语义不变）。
-  router.post('/auth/totp/disable', validateBody(authTotpDisableRequestBodySchema), (req, res, next) => {
-    try {
-      const ip = clientIp(req);
-      if (isLoginLocked(ip)) {
-        return res.status(429).json(error(ErrorCodes.AUTH_LOGIN_LOCKED, '登录失败次数过多，请稍后再试'));
+  router.post(
+    '/auth/totp/disable',
+    validateBody(authTotpDisableRequestBodySchema),
+    (req, res, next) => {
+      try {
+        const ip = clientIp(req);
+        if (isLoginLocked(ip)) {
+          return res
+            .status(429)
+            .json(error(ErrorCodes.AUTH_LOGIN_LOCKED, '登录失败次数过多，请稍后再试'));
+        }
+        const account = AdminAccountModel.get();
+        if (!account) {
+          return res.status(400).json(error(ErrorCodes.AUTH_NOT_CONFIGURED, '管理员密码尚未设置'));
+        }
+        const state = AdminAccountModel.getTotpState();
+        if (!state.enabled) {
+          return res.status(400).json(error(ErrorCodes.AUTH_TOTP_NOT_ENROLLED));
+        }
+        const { password, code } = req.body || {};
+        if (!verifyPassword(String(password ?? ''), account.password_hash)) {
+          recordLoginFailure(ip);
+          return res.status(401).json(error(ErrorCodes.AUTH_INVALID_CREDENTIALS, '密码错误'));
+        }
+        const verified = verifySecondFactor(state, code);
+        if (!verified.ok) {
+          recordLoginFailure(ip);
+          return res
+            .status(401)
+            .json(error(ErrorCodes.AUTH_TOTP_INVALID, '两步验证码或恢复码错误'));
+        }
+        AdminAccountModel.disableTotp();
+        // 恢复码随挂靠一并作废：留在库里等于给「已关闭两步验证」的账号留一批
+        // 仍可通过 login 第二因子分支的凭据
+        const revoked = AdminRecoveryCodeModel.deleteAll();
+        // 关闭同样是安全档位变更：吊销其它会话，避免降级期间遗留的高权限会话
+        const kicked = revokeOtherSessions(req);
+        clearLoginFailures(ip);
+        recordAudit({
+          action: AuditActions.AUTH_TOTP_DISABLE,
+          targetType: 'admin',
+          targetId: '1',
+          detail: { ip, via: verified.via, recoveryCodesRevoked: revoked, kickedSessions: kicked },
+        });
+        res.json(validatedSuccess(authTotpDisableResponseSchema, { ok: true }));
+      } catch (err) {
+        next(err);
       }
-      const account = AdminAccountModel.get();
-      if (!account) {
-        return res.status(400).json(error(ErrorCodes.AUTH_NOT_CONFIGURED, '管理员密码尚未设置'));
-      }
-      const state = AdminAccountModel.getTotpState();
-      if (!state.enabled) {
-        return res.status(400).json(error(ErrorCodes.AUTH_TOTP_NOT_ENROLLED));
-      }
-      const { password, code } = req.body || {};
-      if (!verifyPassword(String(password ?? ''), account.password_hash)) {
-        recordLoginFailure(ip);
-        return res.status(401).json(error(ErrorCodes.AUTH_INVALID_CREDENTIALS, '密码错误'));
-      }
-      const verified = verifySecondFactor(state, code);
-      if (!verified.ok) {
-        recordLoginFailure(ip);
-        return res.status(401).json(error(ErrorCodes.AUTH_TOTP_INVALID, '两步验证码或恢复码错误'));
-      }
-      AdminAccountModel.disableTotp();
-      // 恢复码随挂靠一并作废：留在库里等于给「已关闭两步验证」的账号留一批
-      // 仍可通过 login 第二因子分支的凭据
-      const revoked = AdminRecoveryCodeModel.deleteAll();
-      // 关闭同样是安全档位变更：吊销其它会话，避免降级期间遗留的高权限会话
-      const kicked = revokeOtherSessions(req);
-      clearLoginFailures(ip);
-      recordAudit({
-        action: AuditActions.AUTH_TOTP_DISABLE,
-        targetType: 'admin',
-        targetId: '1',
-        detail: { ip, via: verified.via, recoveryCodesRevoked: revoked, kickedSessions: kicked },
-      });
-      res.json(validatedSuccess(authTotpDisableResponseSchema, { ok: true }));
-    } catch (err) {
-      next(err);
-    }
-  });
+    },
+  );
 
   return router;
 }

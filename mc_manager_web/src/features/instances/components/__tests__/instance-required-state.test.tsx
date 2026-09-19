@@ -77,7 +77,9 @@ describe('InstanceRequiredState', () => {
     server.use(
       http.get('*/api/v1/instances', () => {
         calls += 1
-        return calls === 1 ? HttpResponse.json({ status: 'error', code: 50000, message: 'boom' }, { status: 500 }) : okEnvelope([])
+        return calls === 1
+          ? HttpResponse.json({ status: 'error', code: 50000, message: 'boom' }, { status: 500 })
+          : okEnvelope([])
       }),
     )
     const user = userEvent.setup()

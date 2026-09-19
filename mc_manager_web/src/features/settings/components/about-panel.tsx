@@ -7,7 +7,15 @@
  * - 更新检查（UpdateCheckSection，独立组件，由 settings-page 按条件渲染）
  * 设计纪律：实底卡（玻璃禁区）+ --mcs-* 语义 token + shadcn 基座
  */
-import { ChevronRight, Code, GitBranch, Heart, Link as LinkIcon, MessageSquareWarning, Tag } from 'lucide-react'
+import {
+  ChevronRight,
+  Code,
+  GitBranch,
+  Heart,
+  Link as LinkIcon,
+  MessageSquareWarning,
+  Tag,
+} from 'lucide-react'
 import type { AboutPanelProps } from './contracts'
 import { toneClasses } from '@/components/mcs/tone'
 import { Card, CardBody, CardHeader } from '@/components/mcs/card'
@@ -56,7 +64,9 @@ export function AboutPanel(_props: AboutPanelProps) {
       <Card className="flex flex-col items-center gap-1.5 px-4 py-6">
         <h3 className="text-mcs-xl font-semibold text-mcs-text-default">MC Commander</h3>
         <p className="text-mcs-sm text-mcs-text-muted">自托管 Minecraft 服务器管理客户端</p>
-        <span className={`mt-1 inline-flex h-5 items-center rounded-full border px-2 font-mono text-mcs-xs font-semibold ${toneClasses('accent')}`}>
+        <span
+          className={`mt-1 inline-flex h-5 items-center rounded-full border px-2 font-mono text-mcs-xs font-semibold ${toneClasses('accent')}`}
+        >
           v{__APP_VERSION__}
         </span>
       </Card>
@@ -95,7 +105,9 @@ export function AboutPanel(_props: AboutPanelProps) {
                 <Icon className="size-4 text-mcs-text-muted" aria-hidden />
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block text-mcs-sm font-semibold text-mcs-text-default">{title}</span>
+                <span className="block text-mcs-sm font-semibold text-mcs-text-default">
+                  {title}
+                </span>
                 <span className="block text-mcs-xs text-mcs-text-muted">{subtitle}</span>
               </span>
               <ChevronRight className="size-4 shrink-0 text-mcs-text-muted" aria-hidden />

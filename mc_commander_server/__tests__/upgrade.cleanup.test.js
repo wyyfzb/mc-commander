@@ -26,7 +26,7 @@ const { jsonImpl, streamImpl } = vi.hoisted(() => ({
 vi.mock('got', () => ({
   default: Object.assign(
     vi.fn(() => ({ json: () => jsonImpl.current() })),
-    { stream: vi.fn(() => streamImpl.current()) }
+    { stream: vi.fn(() => streamImpl.current()) },
   ),
 }));
 
@@ -135,20 +135,24 @@ function streamSucceeds() {
 /** 首启即 ready 的实例桩 */
 function startEmitsReady() {
   return vi.fn(() => {
-    queueMicrotask(() => serverManagerRef.current.emit('instance:status', {
-      instanceId: 'inst-1',
-      event: 'ready',
-    }));
+    queueMicrotask(() =>
+      serverManagerRef.current.emit('instance:status', {
+        instanceId: 'inst-1',
+        event: 'ready',
+      }),
+    );
   });
 }
 
 /** 首启即 crash 的实例桩 */
 function startEmitsCrash() {
   return vi.fn(() => {
-    queueMicrotask(() => serverManagerRef.current.emit('instance:status', {
-      instanceId: 'inst-1',
-      event: 'crash',
-    }));
+    queueMicrotask(() =>
+      serverManagerRef.current.emit('instance:status', {
+        instanceId: 'inst-1',
+        event: 'crash',
+      }),
+    );
   });
 }
 
@@ -214,13 +218,15 @@ describe('成功路径：被替换旧版本 jar 清理（#520 实锤①）', () 
     downloadData = 'V_1.21.6_CONTENT';
     await service.upgrade('inst-1', '1.21.6', 'purpur');
     await vi.waitFor(() =>
-      expect(fs.existsSync(path.join(tmpDir, 'server-1.21.4.jar'))).toBe(false)
+      expect(fs.existsSync(path.join(tmpDir, 'server-1.21.4.jar'))).toBe(false),
     );
 
     // 目录终态：仅剩当前版本 jar，无任何 ._upgrade_backup_ 残留
     const jars = fs.readdirSync(tmpDir).filter((f) => f.endsWith('.jar'));
     expect(jars).toEqual(['server-1.21.6.jar']);
-    expect(fs.readFileSync(path.join(tmpDir, 'server-1.21.6.jar'), 'utf8')).toBe('V_1.21.6_CONTENT');
+    expect(fs.readFileSync(path.join(tmpDir, 'server-1.21.6.jar'), 'utf8')).toBe(
+      'V_1.21.6_CONTENT',
+    );
     expect(fs.readdirSync(tmpDir).some((f) => f.startsWith('._upgrade_backup_'))).toBe(false);
   });
 
@@ -251,7 +257,7 @@ describe('失败/回滚路径：旧 jar 保留与回滚完成语义（#520）', 
     fs.writeFileSync(OLD_JAR(), 'OLD_JAR_CONTENT');
 
     await expect(service.upgrade('inst-1', '1.21.4', 'purpur')).rejects.toThrow(
-      'Server crashed during startup verification'
+      'Server crashed during startup verification',
     );
 
     // 旧 jar 本体：失败/回滚路径不删
@@ -267,7 +273,7 @@ describe('失败/回滚路径：旧 jar 保留与回滚完成语义（#520）', 
     fs.writeFileSync(OLD_JAR(), 'OLD_JAR_CONTENT');
 
     await expect(service.upgrade('inst-1', '1.21.4', 'purpur')).rejects.toThrow(
-      'Server crashed during startup verification'
+      'Server crashed during startup verification',
     );
 
     // _doRollback finally await unlink：调用方收到 reject 时清理已同步完成，
@@ -293,7 +299,7 @@ describe('复制异步化：零 copyFileSync、promises.copyFile 参数正确', 
     const renameSpy = vi.spyOn(fs.promises, 'rename');
 
     await expect(service.upgrade('inst-1', '1.21.4', 'purpur')).rejects.toThrow(
-      'Server crashed during startup verification'
+      'Server crashed during startup verification',
     );
 
     // 同步 API 已彻底退出升级链路

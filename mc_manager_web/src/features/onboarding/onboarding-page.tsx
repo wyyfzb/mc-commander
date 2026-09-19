@@ -170,7 +170,10 @@ export function OnboardingPage() {
       <div className="w-full max-w-xl">
         {/* ── 欢迎区（品牌 Logo + 标题） ── */}
         <div className="mb-6 text-center">
-          <BrandLogo className="mx-auto mb-3 size-12 text-mcs-text-default" label="MC Commander Logo" />
+          <BrandLogo
+            className="mx-auto mb-3 size-12 text-mcs-text-default"
+            label="MC Commander Logo"
+          />
           <h1 className="text-mcs-xl font-semibold text-mcs-text-default">欢迎使用 MC Commander</h1>
           <p className="mt-2 text-mcs-sm text-mcs-text-muted">
             自托管 Minecraft 服务器管理面板。首次使用前，请先确认服务端部署状态。
@@ -251,9 +254,9 @@ export function OnboardingPage() {
                         ))}
                       </ol>
                       <NoticeBanner variant="warning" icon={AlertTriangle}>
-                        未提供 Windows 安装包：官方部署脚本面向 Linux，Windows 请按上述步骤手动部署（第
-                        3-4 步构建前端产物不可省，否则 :25566 只有接口没有界面）；遇到环境问题建议改用
-                        WSL2 走 Linux 一键脚本。
+                        未提供 Windows 安装包：官方部署脚本面向 Linux，Windows
+                        请按上述步骤手动部署（第 3-4 步构建前端产物不可省，否则 :25566
+                        只有接口没有界面）；遇到环境问题建议改用 WSL2 走 Linux 一键脚本。
                       </NoticeBanner>
                     </>
                   )}
@@ -272,7 +275,10 @@ export function OnboardingPage() {
                             key={point}
                             className="flex items-start gap-2 text-mcs-xs text-mcs-text-muted"
                           >
-                            <Check className="mt-0.5 size-3 shrink-0 text-mcs-success-fg" aria-hidden />
+                            <Check
+                              className="mt-0.5 size-3 shrink-0 text-mcs-success-fg"
+                              aria-hidden
+                            />
                             {point}
                           </li>
                         ))}

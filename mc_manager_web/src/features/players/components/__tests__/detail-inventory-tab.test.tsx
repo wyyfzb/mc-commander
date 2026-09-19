@@ -77,7 +77,15 @@ function makePlayer(overrides: Partial<Player> = {}): Player {
 }
 
 function makeItem(overrides: Partial<InventoryItem> = {}): InventoryItem {
-  return { id: 'diamond', count: 1, slot: 0, durability: null, enchanted: false, customName: null, ...overrides }
+  return {
+    id: 'diamond',
+    count: 1,
+    slot: 0,
+    durability: null,
+    enchanted: false,
+    customName: null,
+    ...overrides,
+  }
 }
 
 function renderTab(player: Player) {
@@ -92,13 +100,28 @@ function renderTab(player: Player) {
 function samplePlayer(overrides: Partial<Player> = {}): Player {
   return makePlayer({
     inventory: makeInventory({
-      quickbar: [makeItem({ id: 'diamond_sword', count: 1, slot: 0, durability: 0.8, enchanted: true, customName: '神剑' })],
+      quickbar: [
+        makeItem({
+          id: 'diamond_sword',
+          count: 1,
+          slot: 0,
+          durability: 0.8,
+          enchanted: true,
+          customName: '神剑',
+        }),
+      ],
       main: [
         makeItem({ id: 'diamond', count: 64, slot: 0 }),
         makeItem({ id: 'bread', count: 16, slot: 9 }),
       ],
       equipment: {
-        helmet: makeItem({ id: 'diamond_helmet', count: 1, slot: 103, durability: 0.2, enchanted: true }),
+        helmet: makeItem({
+          id: 'diamond_helmet',
+          count: 1,
+          slot: 103,
+          durability: 0.2,
+          enchanted: true,
+        }),
         chestplate: null,
         leggings: null,
         boots: null,

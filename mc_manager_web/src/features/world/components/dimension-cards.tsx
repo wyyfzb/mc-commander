@@ -57,13 +57,13 @@ export function DimensionCards({ dimensions, className }: DimensionCardsProps) {
         const kind = dimensionKind(dim.name)
         const english = dimEnglishName(dim.name)
         return (
-          <Card
-            key={dim.name}
-            data-dimension-kind={kind}
-            className="flex overflow-hidden"
-          >
+          <Card key={dim.name} data-dimension-kind={kind} className="flex overflow-hidden">
             {/* 左 4px 垂直维度色条（维度语义色 token） */}
-            <span aria-hidden data-dimension-bar className={cn('w-1 shrink-0', DIMENSION_BAR[kind])} />
+            <span
+              aria-hidden
+              data-dimension-bar
+              className={cn('w-1 shrink-0', DIMENSION_BAR[kind])}
+            />
             <div className="flex min-w-0 flex-1 items-center gap-3 p-3">
               {/* 36px emoji 圆图标（同色浅底） */}
               <span
@@ -79,7 +79,9 @@ export function DimensionCards({ dimensions, className }: DimensionCardsProps) {
                 <p className="truncate text-mcs-sm font-medium" title={dim.name}>
                   {dim.name}
                   {english !== dim.name && (
-                    <span className="ml-1.5 text-mcs-xs font-normal text-mcs-text-muted">{english}</span>
+                    <span className="ml-1.5 text-mcs-xs font-normal text-mcs-text-muted">
+                      {english}
+                    </span>
                   )}
                 </p>
                 <p className="text-mcs-xs text-mcs-text-muted">在线玩家 {dim.playerCount}</p>

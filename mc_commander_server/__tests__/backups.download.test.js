@@ -42,7 +42,9 @@ vi.mock('../services/backup.service.js', async (importOriginal) => {
   const actual = await importOriginal();
   return {
     ...actual,
-    BackupService: class { constructor() {} },
+    BackupService: class {
+      constructor() {}
+    },
   };
 });
 
@@ -85,14 +87,15 @@ describe('GET /api/v1/backups/:id/download', () => {
     fs.writeFileSync(path.join(snapDir, 'world', 'level.dat'), 'fake-nbt');
     fs.writeFileSync(path.join(snapDir, 'server.properties'), 'level-name=world');
 
-    mockRows.set("1", {
-      id: 1, instance_id: 'inst-1', name: 'Test', status: 'completed',
+    mockRows.set('1', {
+      id: 1,
+      instance_id: 'inst-1',
+      name: 'Test',
+      status: 'completed',
       file_path: snapDir,
     });
 
-    const res = await request(app)
-      .get('/api/v1/backups/1/download')
-      .buffer();
+    const res = await request(app).get('/api/v1/backups/1/download').buffer();
 
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toContain('application/gzip');
@@ -108,39 +111,41 @@ describe('GET /api/v1/backups/:id/download', () => {
   });
 
   it('returns 404 for non-existent backup', async () => {
-    const res = await request(app)
-      .get('/api/v1/backups/99999/download');
+    const res = await request(app).get('/api/v1/backups/99999/download');
     expect(res.status).toBe(404);
     expect(res.body.code).toBe(40402);
   });
 
   it('returns 400 for non-completed backup', async () => {
-    mockRows.set("2", {
-      id: 2, status: 'creating', file_path: '/tmp/x',
+    mockRows.set('2', {
+      id: 2,
+      status: 'creating',
+      file_path: '/tmp/x',
     });
-    const res = await request(app)
-      .get('/api/v1/backups/2/download');
+    const res = await request(app).get('/api/v1/backups/2/download');
     expect(res.status).toBe(400);
     expect(res.body.code).toBe(40000);
   });
 
   it('returns 404 when backup directory missing on disk', async () => {
     const missingDir = path.join(backupDir, 'nonexistent');
-    mockRows.set("3", {
-      id: 3, status: 'completed', file_path: missingDir,
+    mockRows.set('3', {
+      id: 3,
+      status: 'completed',
+      file_path: missingDir,
     });
-    const res = await request(app)
-      .get('/api/v1/backups/3/download');
+    const res = await request(app).get('/api/v1/backups/3/download');
     expect(res.status).toBe(404);
     expect(res.body.code).toBe(40402);
   });
 
   it('returns 403 for path traversal', async () => {
-    mockRows.set("5", {
-      id: 5, status: 'completed', file_path: '/etc/evil',
+    mockRows.set('5', {
+      id: 5,
+      status: 'completed',
+      file_path: '/etc/evil',
     });
-    const res = await request(app)
-      .get('/api/v1/backups/5/download');
+    const res = await request(app).get('/api/v1/backups/5/download');
     expect(res.status).toBe(403);
     expect(res.body.code).toBe(40302);
   });
@@ -151,12 +156,13 @@ describe('GET /api/v1/backups/:id/download', () => {
     const strayFile = path.join(backupDir, 'inst1', 'legacy.zip');
     fs.mkdirSync(path.dirname(strayFile), { recursive: true });
     fs.writeFileSync(strayFile, 'stray bytes');
-    mockRows.set("7", {
-      id: 7, status: 'completed', file_path: strayFile,
+    mockRows.set('7', {
+      id: 7,
+      status: 'completed',
+      file_path: strayFile,
     });
 
-    const res = await request(app)
-      .get('/api/v1/backups/7/download');
+    const res = await request(app).get('/api/v1/backups/7/download');
 
     expect(res.status).toBe(400);
     expect(res.body.code).toBe(40000);
@@ -172,12 +178,13 @@ describe('GET /api/v1/backups/:id/download', () => {
     ['whitespace-only', '   '],
     ['non-string', 12345],
   ])('returns 4xx (never 500) when file_path is %s', async (_label, filePath) => {
-    mockRows.set("8", {
-      id: 8, status: 'completed', file_path: filePath,
+    mockRows.set('8', {
+      id: 8,
+      status: 'completed',
+      file_path: filePath,
     });
 
-    const res = await request(app)
-      .get('/api/v1/backups/8/download');
+    const res = await request(app).get('/api/v1/backups/8/download');
 
     expect(res.status).toBe(404);
     expect(res.body.code).toBe(40402);
@@ -188,13 +195,13 @@ describe('GET /api/v1/backups/:id/download', () => {
     fs.mkdirSync(path.join(snapDir, 'world'), { recursive: true });
     fs.writeFileSync(path.join(snapDir, 'world', 'level.dat'), 'data');
 
-    mockRows.set("6", {
-      id: 6, status: 'completed', file_path: snapDir,
+    mockRows.set('6', {
+      id: 6,
+      status: 'completed',
+      file_path: snapDir,
     });
 
-    const res = await request(app)
-      .get('/api/v1/backups/6/download')
-      .buffer();
+    const res = await request(app).get('/api/v1/backups/6/download').buffer();
     expect(res.status).toBe(200);
     const cd = res.headers['content-disposition'];
     expect(cd).toContain("filename*=UTF-8''");

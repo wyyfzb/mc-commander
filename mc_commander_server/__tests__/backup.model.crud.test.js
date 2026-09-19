@@ -79,9 +79,14 @@ describe('BackupModel.create / findById 默认值链', () => {
 
   it('create 显式全字段落库且 createdAt 归一为 ISO 带 Z', () => {
     const b = BackupModel.create({
-      instanceId: 's1', name: 'b-full', description: 'nightly',
-      type: 'scheduled', size: 12345, status: 'completed',
-      filePath: '/data/backups/b-full', worldName: 'world',
+      instanceId: 's1',
+      name: 'b-full',
+      description: 'nightly',
+      type: 'scheduled',
+      size: 12345,
+      status: 'completed',
+      filePath: '/data/backups/b-full',
+      worldName: 'world',
     });
     expect(b.type).toBe('scheduled');
     expect(b.size).toBe(12345);
@@ -95,7 +100,11 @@ describe('BackupModel.create / findById 默认值链', () => {
   });
 
   it('findByIdWithPath 返回含 file_path 的 snake_case 原始行（服务层专用）', () => {
-    const created = BackupModel.create({ instanceId: 's1', name: 'b-path', filePath: '/data/backups/b-path' });
+    const created = BackupModel.create({
+      instanceId: 's1',
+      name: 'b-path',
+      filePath: '/data/backups/b-path',
+    });
     const raw = BackupModel.findByIdWithPath(created.id);
     expect(raw.file_path).toBe('/data/backups/b-path');
     expect(raw.instance_id).toBe('s1');
@@ -106,9 +115,16 @@ describe('BackupModel.create / findById 默认值链', () => {
 describe('BackupModel._toCamel 时间归一', () => {
   it('CURRENT_TIMESTAMP 格式补 Z 转 ISO；空值转 null；非标准格式原样返回', () => {
     const row = {
-      id: 1, instance_id: 's1', name: 'n', description: null, type: 'manual',
-      size: 0, status: 'creating', world_name: null,
-      created_at: '2026-01-02 03:04:05', updated_at: '2026-01-02T03:04:05',
+      id: 1,
+      instance_id: 's1',
+      name: 'n',
+      description: null,
+      type: 'manual',
+      size: 0,
+      status: 'creating',
+      world_name: null,
+      created_at: '2026-01-02 03:04:05',
+      updated_at: '2026-01-02T03:04:05',
     };
     const camel = BackupModel._toCamel(row);
     expect(camel.createdAt).toBe('2026-01-02T03:04:05.000Z');
@@ -117,9 +133,16 @@ describe('BackupModel._toCamel 时间归一', () => {
 
   it('空时间戳转 null，异常格式原样透传', () => {
     const row = {
-      id: 2, instance_id: 's1', name: 'n', description: null, type: 'manual',
-      size: 0, status: 'creating', world_name: null,
-      created_at: null, updated_at: 'not-a-date',
+      id: 2,
+      instance_id: 's1',
+      name: 'n',
+      description: null,
+      type: 'manual',
+      size: 0,
+      status: 'creating',
+      world_name: null,
+      created_at: null,
+      updated_at: 'not-a-date',
     };
     const camel = BackupModel._toCamel(row);
     expect(camel.createdAt).toBeNull();
@@ -210,12 +233,20 @@ describe('BackupModel.resetStaleInProgress 卡死恢复', () => {
     const c = BackupModel.create({ instanceId: 's9', name: 'stale-creating', status: 'creating' });
     db.prepare("UPDATE backups SET updated_at = '2020-01-01T00:00:00' WHERE id = ?").run(c.id);
     // restoring 陈旧（2020）→ completed
-    const r = BackupModel.create({ instanceId: 's9', name: 'stale-restoring', status: 'restoring' });
+    const r = BackupModel.create({
+      instanceId: 's9',
+      name: 'stale-restoring',
+      status: 'restoring',
+    });
     db.prepare("UPDATE backups SET updated_at = '2020-01-01T00:00:00' WHERE id = ?").run(r.id);
     // creating 新鲜 → 不动
     BackupModel.create({ instanceId: 's9', name: 'fresh-creating', status: 'creating' });
     // completed 陈旧 → 不动（非进行中状态）
-    const d = BackupModel.create({ instanceId: 's9', name: 'stale-completed', status: 'completed' });
+    const d = BackupModel.create({
+      instanceId: 's9',
+      name: 'stale-completed',
+      status: 'completed',
+    });
     db.prepare("UPDATE backups SET updated_at = '2020-01-01T00:00:00' WHERE id = ?").run(d.id);
   });
 
@@ -223,7 +254,10 @@ describe('BackupModel.resetStaleInProgress 卡死恢复', () => {
     const reset = BackupModel.resetStaleInProgress({ maxAgeMs: 60 * 60 * 1000 });
     expect(reset).toBeGreaterThanOrEqual(2);
     const byName = Object.fromEntries(
-      db.prepare("SELECT name, status FROM backups WHERE instance_id = 's9'").all().map((r) => [r.name, r.status]),
+      db
+        .prepare("SELECT name, status FROM backups WHERE instance_id = 's9'")
+        .all()
+        .map((r) => [r.name, r.status]),
     );
     expect(byName['stale-creating']).toBe('failed');
     expect(byName['stale-restoring']).toBe('completed');
@@ -240,14 +274,18 @@ describe('BackupModel.resetStaleInProgress 卡死恢复', () => {
     expect(reset).toBe(1);
     expect(BackupModel.findById(only.id).status).toBe('failed');
     // s9 的新鲜 creating 依然不动
-    const s9 = db.prepare("SELECT status FROM backups WHERE instance_id = 's9' AND name = 'fresh-creating'").get();
+    const s9 = db
+      .prepare("SELECT status FROM backups WHERE instance_id = 's9' AND name = 'fresh-creating'")
+      .get();
     expect(s9.status).toBe('creating');
   });
 
   it('updated_at 为 NULL 时回退 created_at 判断年龄', () => {
     db.prepare("INSERT INTO instances (id, name) VALUES ('s11', 'Eleven')").run();
     const b = BackupModel.create({ instanceId: 's11', name: 'null-updated', status: 'restoring' });
-    db.prepare("UPDATE backups SET updated_at = NULL, created_at = '2020-01-01T00:00:00' WHERE id = ?").run(b.id);
+    db.prepare(
+      "UPDATE backups SET updated_at = NULL, created_at = '2020-01-01T00:00:00' WHERE id = ?",
+    ).run(b.id);
     const reset = BackupModel.resetStaleInProgress({ maxAgeMs: 60 * 60 * 1000, instanceId: 's11' });
     expect(reset).toBe(1);
     // restoring 卡死恢复为 completed（备份文件本身未动）
@@ -277,7 +315,12 @@ describe('BackupModel.delete / 聚合统计', () => {
   it('getLatestBackup 返回最新 completed 快照，无则 null', () => {
     expect(BackupModel.getLatestBackup('s20')).toBeNull();
     BackupModel.create({ instanceId: 's20', name: 'old', status: 'completed', size: 5 });
-    const latest = BackupModel.create({ instanceId: 's20', name: 'newest', status: 'completed', size: 7 });
+    const latest = BackupModel.create({
+      instanceId: 's20',
+      name: 'newest',
+      status: 'completed',
+      size: 7,
+    });
     expect(BackupModel.getLatestBackup('s20').name).toBe('newest');
     expect(latest.createdAt).toMatch(/Z$/);
   });

@@ -24,7 +24,11 @@ export interface QuickTeleportsSectionProps {
   isBatchMode: boolean
   quickSchema: QuickTeleportSchema
   running: boolean
-  onTeleport: (label: string, buildCommand: (name: string) => string, successText?: string) => Promise<void>
+  onTeleport: (
+    label: string,
+    buildCommand: (name: string) => string,
+    successText?: string,
+  ) => Promise<void>
   onRespawn: () => void
   onEditWorldSpawn: (draft: WorldSpawnDraft) => void
   onHideOrigin: () => void
@@ -71,7 +75,11 @@ export function QuickTeleportsSection({
         <QuickChip
           name="个人复活点"
           // 批量时每个玩家分别传送到各自复活点，坐标以 x, y, z 占位避免误导
-          coords={isBatchMode ? 'x, y, z' : formatCoords(resolveRespawnTarget(player?.respawnPoint, player?.spawnPoint))}
+          coords={
+            isBatchMode
+              ? 'x, y, z'
+              : formatCoords(resolveRespawnTarget(player?.respawnPoint, player?.spawnPoint))
+          }
           icon={<Bed aria-hidden />}
           onClick={onRespawn}
           disabled={running}

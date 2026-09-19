@@ -42,7 +42,11 @@ const BACKUPS_DIR = path.join(TMP_ROOT, 'backups');
 const INSTANCE_PATH = path.join(SERVERS_DIR, ID);
 const BACKUP_PATH = path.join(BACKUPS_DIR, ID);
 
-const ORIGINAL_DIRS = { serversDir: config.serversDir, backupsDir: config.backupsDir, dataDir: config.dataDir };
+const ORIGINAL_DIRS = {
+  serversDir: config.serversDir,
+  backupsDir: config.backupsDir,
+  dataDir: config.dataDir,
+};
 config.serversDir = SERVERS_DIR;
 config.backupsDir = BACKUPS_DIR;
 config.dataDir = path.join(TMP_ROOT, 'data');
@@ -57,13 +61,17 @@ function snapshotTree(root) {
   const entries = [];
   const walk = (dir) => {
     if (!fs.existsSync(dir)) return;
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+    for (const entry of fs
+      .readdirSync(dir, { withFileTypes: true })
+      .sort((a, b) => a.name.localeCompare(b.name))) {
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) {
         entries.push(`d ${path.relative(root, full)}`);
         walk(full);
       } else {
-        entries.push(`f ${path.relative(root, full)} ${crypto.createHash('sha256').update(fs.readFileSync(full)).digest('hex')}`);
+        entries.push(
+          `f ${path.relative(root, full)} ${crypto.createHash('sha256').update(fs.readFileSync(full)).digest('hex')}`,
+        );
       }
     }
   };
@@ -74,7 +82,10 @@ function snapshotTree(root) {
 /** 造一个「实例目录 + 单份备份快照」的真实盘面 */
 function seedInstanceWithSnapshot(snapshotName = '每日备份-2026-09-01T04-00-00-000Z') {
   fs.mkdirSync(path.join(INSTANCE_PATH, 'world'), { recursive: true });
-  fs.writeFileSync(path.join(INSTANCE_PATH, 'instance.json'), JSON.stringify({ id: ID, name: NAME }));
+  fs.writeFileSync(
+    path.join(INSTANCE_PATH, 'instance.json'),
+    JSON.stringify({ id: ID, name: NAME }),
+  );
   fs.writeFileSync(path.join(INSTANCE_PATH, 'world', 'level.dat'), 'world-bytes');
   fs.mkdirSync(path.join(BACKUP_PATH, snapshotName, 'world'), { recursive: true });
   fs.writeFileSync(path.join(BACKUP_PATH, snapshotName, 'world', 'level.dat'), 'snapshot-bytes');
@@ -85,17 +96,20 @@ function seedInstanceWithSnapshot(snapshotName = '每日备份-2026-09-01T04-00-
 function makeApp(nameOverride = NAME) {
   const app = express();
   app.use(express.json());
-  app.use('/api', createStatusRoutes({
-    instances: new Map(),
-    getInstance: () => ({
-      id: ID,
-      name: nameOverride,
-      serverPath: INSTANCE_PATH,
-      isRunning: false,
-      cancelRestart: vi.fn(),
-      process: null,
+  app.use(
+    '/api',
+    createStatusRoutes({
+      instances: new Map(),
+      getInstance: () => ({
+        id: ID,
+        name: nameOverride,
+        serverPath: INSTANCE_PATH,
+        isRunning: false,
+        cancelRestart: vi.fn(),
+        process: null,
+      }),
     }),
-  }));
+  );
   app.use(errorHandler);
   return app;
 }
@@ -123,7 +137,9 @@ describe('DELETE /api/instances/:id · 真实盘面取证', () => {
     expect(fs.existsSync(INSTANCE_PATH)).toBe(false);
     // 备份目录真的还在，且内容逐字节保留
     expect(fs.existsSync(BACKUP_PATH)).toBe(true);
-    expect(fs.readFileSync(path.join(BACKUP_PATH, snapshotName, 'world', 'level.dat'), 'utf-8')).toBe('snapshot-bytes');
+    expect(
+      fs.readFileSync(path.join(BACKUP_PATH, snapshotName, 'world', 'level.dat'), 'utf-8'),
+    ).toBe('snapshot-bytes');
     expect(res.body.data).toEqual({ retainedBackupCount: 1, retainedBackupNames: [snapshotName] });
     // backupsDir 本身绝不在删除射程内
     expect(fs.existsSync(BACKUPS_DIR)).toBe(true);
@@ -135,7 +151,9 @@ describe('DELETE /api/instances/:id · 真实盘面取证', () => {
     fs.mkdirSync(INSTANCE_PATH, { recursive: true });
     fs.writeFileSync(path.join(INSTANCE_PATH, 'instance.json'), '{}');
 
-    const res = await request(app).delete(`/api/instances/${ID}`).send({ confirmName: NAME, acknowledgeIrreversible: true });
+    const res = await request(app)
+      .delete(`/api/instances/${ID}`)
+      .send({ confirmName: NAME, acknowledgeIrreversible: true });
 
     expect(res.status).toBe(200);
     expect(fs.existsSync(INSTANCE_PATH)).toBe(false);
@@ -151,7 +169,9 @@ describe('DELETE /api/instances/:id · 真实盘面取证', () => {
     expect(denied.body.code).toBe(40914);
     expect(fs.existsSync(INSTANCE_PATH)).toBe(true);
 
-    const allowed = await request(app).delete(`/api/instances/${ID}`).send({ confirmName: NAME, acknowledgeIrreversible: true });
+    const allowed = await request(app)
+      .delete(`/api/instances/${ID}`)
+      .send({ confirmName: NAME, acknowledgeIrreversible: true });
     expect(allowed.status).toBe(200);
     expect(fs.existsSync(INSTANCE_PATH)).toBe(false);
   });
@@ -160,7 +180,9 @@ describe('DELETE /api/instances/:id · 真实盘面取证', () => {
     seedInstanceWithSnapshot();
     const before = snapshotTree(TMP_ROOT);
 
-    const res = await request(app).delete(`/api/instances/${ID}`).send({ confirmName: '另一个名字' });
+    const res = await request(app)
+      .delete(`/api/instances/${ID}`)
+      .send({ confirmName: '另一个名字' });
 
     expect(res.status).toBe(400);
     expect(res.body.code).toBe(40016);
@@ -189,7 +211,11 @@ describe('DELETE /api/instances/:id · 真实盘面取证', () => {
     seedInstanceWithSnapshot();
     const seen = [];
     recordAudit.mockImplementation((entry) => {
-      seen.push({ phase: entry.detail?.phase, dirPresent: fs.existsSync(INSTANCE_PATH), backupPresent: fs.existsSync(BACKUP_PATH) });
+      seen.push({
+        phase: entry.detail?.phase,
+        dirPresent: fs.existsSync(INSTANCE_PATH),
+        backupPresent: fs.existsSync(BACKUP_PATH),
+      });
     });
 
     const res = await request(app).delete(`/api/instances/${ID}`).send({ confirmName: NAME });
@@ -239,7 +265,9 @@ describe('DELETE /api/instances/:id · 真实盘面取证', () => {
       seedInstanceWithSnapshot();
       const before = snapshotTree(TMP_ROOT);
 
-      const res = await request(app).delete(`/api/instances/${ID}`).send({ confirmName: '测试实例x' });
+      const res = await request(app)
+        .delete(`/api/instances/${ID}`)
+        .send({ confirmName: '测试实例x' });
 
       expect(res.status).toBe(400);
       expect(res.body.code).toBe(40016);
@@ -283,23 +311,28 @@ describe('DELETE /api/instances/:id · 真实盘面取证', () => {
     it.each([
       ['空串', ''],
       ['纯空白', '   '],
-    ])('confirmName 为%s 且声明不可恢复 → 成功卸载且实例目录真的删除', async (_label, confirmName) => {
-      seedInstanceWithSnapshot();
+    ])(
+      'confirmName 为%s 且声明不可恢复 → 成功卸载且实例目录真的删除',
+      async (_label, confirmName) => {
+        seedInstanceWithSnapshot();
 
-      const res = await request(app)
-        .delete(`/api/instances/${ID}`)
-        .send({ confirmName, acknowledgeIrreversible: true });
+        const res = await request(app)
+          .delete(`/api/instances/${ID}`)
+          .send({ confirmName, acknowledgeIrreversible: true });
 
-      expect(res.status).toBe(200);
-      expect(fs.existsSync(INSTANCE_PATH)).toBe(false);
-      expect(res.body.data.retainedBackupCount).toBe(1);
-    });
+        expect(res.status).toBe(200);
+        expect(fs.existsSync(INSTANCE_PATH)).toBe(false);
+        expect(res.body.data.retainedBackupCount).toBe(1);
+      },
+    );
 
     it('传任意非空名字 → 400 且盘面逐字节不变', async () => {
       seedInstanceWithSnapshot();
       const before = snapshotTree(TMP_ROOT);
 
-      const res = await request(app).delete(`/api/instances/${ID}`).send({ confirmName: '随便什么' });
+      const res = await request(app)
+        .delete(`/api/instances/${ID}`)
+        .send({ confirmName: '随便什么' });
 
       expect(res.status).toBe(400);
       expect(res.body.code).toBe(40016);

@@ -118,7 +118,9 @@ describe('auth/keys 响应契约（validatedSuccess 观测）', { timeout: 15_00
         expect(parsed.data.apiKeyEnabled).toBe(enabled);
         // 契约面固定三项：通道开关 + 只读凭据的「开关/是否已配置」（其余部署配置不外泄）
         expect(Object.keys(res.body.data).sort()).toEqual([
-          'apiKeyEnabled', 'readonlyApiKeyConfigured', 'readonlyApiKeyEnabled',
+          'apiKeyEnabled',
+          'readonlyApiKeyConfigured',
+          'readonlyApiKeyEnabled',
         ]);
         expect(typeof res.body.data.readonlyApiKeyConfigured).toBe('boolean');
         expect(typeof res.body.data.readonlyApiKeyEnabled).toBe('boolean');
@@ -185,9 +187,7 @@ describe('auth/keys 响应契约（validatedSuccess 观测）', { timeout: 15_00
     vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {});
     vi.spyOn(fs, 'renameSync').mockImplementation(() => {});
     try {
-      const res = await request(app)
-        .post('/api/rotate-key')
-        .set('x-api-key', TEST_PLAINTEXT_KEY);
+      const res = await request(app).post('/api/rotate-key').set('x-api-key', TEST_PLAINTEXT_KEY);
       expect(res.status).toBe(200);
       expect(apiKeyRotateResponseSchema.safeParse(res.body.data).success).toBe(true);
       expect(res.body.data.apiKey).toMatch(/^mcck-[0-9a-f]{8}(-[0-9a-f]{8}){7}$/);

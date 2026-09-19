@@ -46,17 +46,19 @@ interface MarketSheetProps {
   initialQuery?: string | null
 }
 
-export function MarketSheet({ open, onOpenChange, instanceId, initialQuery = null }: MarketSheetProps) {
+export function MarketSheet({
+  open,
+  onOpenChange,
+  instanceId,
+  initialQuery = null,
+}: MarketSheetProps) {
   const instanceMcVersion = useServerStore((s) => s.status?.mcVersion)
 
   const [query, setQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
 
   // 防抖回调（由 SearchInput 内部管理 debounce 定时器；清除时立即同步）
-  const handleDebouncedChange = useCallback(
-    (v: string) => setDebouncedQuery(v),
-    [],
-  )
+  const handleDebouncedChange = useCallback((v: string) => setDebouncedQuery(v), [])
   const [loader, setLoader] = useState<string>('')
   const [gameVersion, setGameVersion] = useState('')
 
@@ -123,7 +125,8 @@ export function MarketSheet({ open, onOpenChange, instanceId, initialQuery = nul
         setCached(data.cached)
         firstLoadDoneRef.current = true
       } catch (e) {
-        if (controller.signal.aborted || (e instanceof DOMException && e.name === 'AbortError')) return
+        if (controller.signal.aborted || (e instanceof DOMException && e.name === 'AbortError'))
+          return
         setError(getFriendlyErrorText(e))
       } finally {
         if (!controller.signal.aborted) {
@@ -180,14 +183,20 @@ export function MarketSheet({ open, onOpenChange, instanceId, initialQuery = nul
   )
 
   // 关闭面板时清理进行中的请求
-  useEffect(() => () => {
-    searchAbortRef.current?.abort()
-    versionsAbortRef.current?.abort()
-  }, [])
+  useEffect(
+    () => () => {
+      searchAbortRef.current?.abort()
+      versionsAbortRef.current?.abort()
+    },
+    [],
+  )
 
   // ── 安装（单项目串行；40912 → 覆盖确认）──────────────────────
   const [installingKey, setInstallingKey] = useState<string | null>(null)
-  const [overwriteTarget, setOverwriteTarget] = useState<{ hit: MarketSearchHit; version: MarketVersion } | null>(null)
+  const [overwriteTarget, setOverwriteTarget] = useState<{
+    hit: MarketSearchHit
+    version: MarketVersion
+  } | null>(null)
 
   const installOne = useCallback(
     async (hit: MarketSearchHit, version: MarketVersion, overwrite: boolean) => {
@@ -261,7 +270,10 @@ export function MarketSheet({ open, onOpenChange, instanceId, initialQuery = nul
           {loading ? (
             <div className="space-y-3" aria-busy="true" aria-label="搜索中">
               {Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className="flex gap-3 rounded-mcs-md border border-mcs-border-muted p-3">
+                <div
+                  key={i}
+                  className="flex gap-3 rounded-mcs-md border border-mcs-border-muted p-3"
+                >
                   <Skeleton className="size-10 rounded-mcs-md" />
                   <div className="flex-1 space-y-2">
                     <Skeleton className="h-4 w-1/3" />
@@ -333,14 +345,17 @@ export function MarketSheet({ open, onOpenChange, instanceId, initialQuery = nul
 
         {/* ── 底注：安全说明 ── */}
         <div className="border-t border-mcs-border-muted px-5 py-2.5 text-mcs-xs text-mcs-text-muted">
-          数据源 modrinth.com（服务端代理转发，面板不出网）；文件经 zip 校验与文件名净化后落入 plugins/
+          数据源 modrinth.com（服务端代理转发，面板不出网）；文件经 zip 校验与文件名净化后落入
+          plugins/
         </div>
       </SheetContent>
 
       {/* 同名覆盖确认（与上传冲突确认同语义：升级是高影响操作） */}
       <ConfirmDialog
         open={overwriteTarget !== null}
-        onOpenChange={(o) => { if (!o) setOverwriteTarget(null) }}
+        onOpenChange={(o) => {
+          if (!o) setOverwriteTarget(null)
+        }}
         title="同名插件文件已存在"
         description={`plugins/ 目录已存在 ${overwriteTarget?.version.file.filename ?? ''}（净化后同名）。覆盖安装将替换旧文件，插件升级/降级可能影响存档兼容性。`}
         confirmText="覆盖安装"

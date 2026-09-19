@@ -74,7 +74,11 @@ describe('Chip', () => {
   it('onPointerEnter/onPointerLeave 透传到 DOM', () => {
     const onEnter = vi.fn()
     const onLeave = vi.fn()
-    render(<Chip onPointerEnter={onEnter} onPointerLeave={onLeave}>hover</Chip>)
+    render(
+      <Chip onPointerEnter={onEnter} onPointerLeave={onLeave}>
+        hover
+      </Chip>,
+    )
     fireEvent.pointerEnter(screen.getByText('hover'))
     expect(onEnter).toHaveBeenCalledTimes(1)
     fireEvent.pointerLeave(screen.getByText('hover'))

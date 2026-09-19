@@ -355,7 +355,10 @@ describe('PlayerTable · 行内操作菜单', () => {
     })
     await openMenu(user, 'Bob')
     // radix DropdownMenuItem 的 disabled 语义：aria-disabled 属性（div 非原生 button）
-    expect(await screen.findByRole('menuitem', { name: '传送' })).toHaveAttribute('aria-disabled', 'true')
+    expect(await screen.findByRole('menuitem', { name: '传送' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
     await user.keyboard('{Escape}')
     await openMenu(user, 'Steve')
     await user.click(await screen.findByRole('menuitem', { name: '传送' }))
@@ -403,10 +406,15 @@ describe('PlayerTable · 行内操作菜单', () => {
   it('离线玩家菜单「踢出」禁用', async () => {
     const user = userEvent.setup()
     const { onAction } = setup({
-      players: [makePlayer({ name: 'Bob', uuid: '00000000-0000-4000-8000-000000000004', isOnline: false })],
+      players: [
+        makePlayer({ name: 'Bob', uuid: '00000000-0000-4000-8000-000000000004', isOnline: false }),
+      ],
     })
     await openMenu(user, 'Bob')
-    expect(await screen.findByRole('menuitem', { name: '踢出' })).toHaveAttribute('aria-disabled', 'true')
+    expect(await screen.findByRole('menuitem', { name: '踢出' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
     expect(onAction).not.toHaveBeenCalled()
   })
 
@@ -426,7 +434,10 @@ describe('PlayerTable · 列头排序', () => {
   it('点击「玩家」列头切换排序箭头 ↑→↓（既有行为：箭头由 sorting state 驱动）', async () => {
     const user = userEvent.setup()
     setup({
-      players: [makePlayer(), makePlayer({ name: 'Alex', uuid: '00000000-0000-4000-8000-000000000003' })],
+      players: [
+        makePlayer(),
+        makePlayer({ name: 'Alex', uuid: '00000000-0000-4000-8000-000000000003' }),
+      ],
     })
     await user.click(screen.getByRole('button', { name: '玩家' }))
     // 箭头 span 带 aria-hidden，不进 accessible name，用 textContent 断言
@@ -438,7 +449,10 @@ describe('PlayerTable · 列头排序', () => {
   it('排序态经 aria-sort 暴露：none → ascending → descending，不可排序列不设该属性', async () => {
     const user = userEvent.setup()
     setup({
-      players: [makePlayer(), makePlayer({ name: 'Alex', uuid: '00000000-0000-4000-8000-000000000003' })],
+      players: [
+        makePlayer(),
+        makePlayer({ name: 'Alex', uuid: '00000000-0000-4000-8000-000000000003' }),
+      ],
     })
     const nameHeader = () => screen.getByRole('columnheader', { name: '玩家' })
 
@@ -451,7 +465,9 @@ describe('PlayerTable · 列头排序', () => {
     // 其他可排序列仍是 none（排序态不会串到别的列）
     expect(screen.getByRole('columnheader', { name: '延迟' })).toHaveAttribute('aria-sort', 'none')
     // 不可排序列（选择列）不设该属性：aria-sort 只对可排序表头有意义
-    expect(screen.getByRole('checkbox', { name: '全选当前页' }).closest('th')).not.toHaveAttribute('aria-sort')
+    expect(screen.getByRole('checkbox', { name: '全选当前页' }).closest('th')).not.toHaveAttribute(
+      'aria-sort',
+    )
   })
 
   // 回归锁（issue #472 / PR #473 沉淀缺口）：v9 未注册 sortedRowModel 时
@@ -465,7 +481,10 @@ describe('PlayerTable · 列头排序', () => {
   it('升序点击后行序真实重排：Alex（字母序在前）排到 Steve 之前', async () => {
     const user = userEvent.setup()
     setup({
-      players: [makePlayer(), makePlayer({ name: 'Alex', uuid: '00000000-0000-4000-8000-000000000003' })],
+      players: [
+        makePlayer(),
+        makePlayer({ name: 'Alex', uuid: '00000000-0000-4000-8000-000000000003' }),
+      ],
     })
     // 修复前：getRowModel() 恒为 core 模型，行序保持传入序 [Steve, Alex]
     expect(playerNameOrder()).toEqual(['Steve', 'Alex'])
@@ -478,7 +497,10 @@ describe('PlayerTable · 列头排序', () => {
   it('再次点击切换降序后行序反转回传入序', async () => {
     const user = userEvent.setup()
     setup({
-      players: [makePlayer(), makePlayer({ name: 'Alex', uuid: '00000000-0000-4000-8000-000000000003' })],
+      players: [
+        makePlayer(),
+        makePlayer({ name: 'Alex', uuid: '00000000-0000-4000-8000-000000000003' }),
+      ],
     })
     await user.click(screen.getByRole('button', { name: '玩家' }))
     expect(playerNameOrder()).toEqual(['Alex', 'Steve'])
@@ -494,7 +516,10 @@ describe('PlayerTable · 分页栏', () => {
   it('切到「全部」档分页栏仍在，可切回其他每页条数', async () => {
     const user = userEvent.setup()
     setup({
-      players: [makePlayer(), makePlayer({ name: 'Alex', uuid: '00000000-0000-4000-8000-000000000003' })],
+      players: [
+        makePlayer(),
+        makePlayer({ name: 'Alex', uuid: '00000000-0000-4000-8000-000000000003' }),
+      ],
     })
 
     await user.selectOptions(screen.getByLabelText('每页行数'), '-1')

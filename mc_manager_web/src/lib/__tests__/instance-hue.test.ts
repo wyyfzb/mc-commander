@@ -40,7 +40,9 @@ describe('instanceHueSlot · 稳定性与值域', () => {
   it('槽位值钉死（换哈希实现即红）', () => {
     // 值本身无语义，唯一作用是防止哈希被无意改动导致全站标识色漂移
     expect(
-      ['default', 'survival', 'creative', 's1', 's2', 'server-1', 'test-server'].map(instanceHueSlot),
+      ['default', 'survival', 'creative', 's1', 's2', 'server-1', 'test-server'].map(
+        instanceHueSlot,
+      ),
     ).toEqual([6, 2, 6, 3, 3, 4, 4])
   })
 
@@ -66,9 +68,7 @@ describe('instanceHueFillClass · 唯一映射源', () => {
   })
 
   it('6 槽全部可达（不存在永不出现的档位）', () => {
-    const seen = new Set(
-      Array.from({ length: 300 }, (_, i) => instanceHueSlot(`inst-${i}`)),
-    )
+    const seen = new Set(Array.from({ length: 300 }, (_, i) => instanceHueSlot(`inst-${i}`)))
     expect(seen.size).toBe(6)
   })
 })

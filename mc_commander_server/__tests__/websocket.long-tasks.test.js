@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'events';
-import { setupWebSocket, WSEvents, flushNotificationEvents, resetNotificationEventQueue } from '../websocket.js';
+import {
+  setupWebSocket,
+  WSEvents,
+  flushNotificationEvents,
+  resetNotificationEventQueue,
+} from '../websocket.js';
 
 // Mock 数据库：验证长任务终态通知落库（deployComplete/deployFailed/upgradeComplete/upgradeFailed）
 vi.mock('../db/index.js', () => ({
@@ -29,7 +34,10 @@ function connect(wss, req) {
 }
 
 function subscribe(ws, instanceId, lastEventId) {
-  ws.emit('message', JSON.stringify({ type: 'subscribe', instanceId, ...(lastEventId ? { lastEventId } : {}) }));
+  ws.emit(
+    'message',
+    JSON.stringify({ type: 'subscribe', instanceId, ...(lastEventId ? { lastEventId } : {}) }),
+  );
 }
 
 /** 解析客户端收到的第 n 条消息 */
@@ -154,7 +162,12 @@ describe('WebSocket 长任务（部署/升级）通知与补发', () => {
 
     it('进行中阶段（download）不产生通知事件（仅原事件广播）', () => {
       const ws = connect(wss);
-      serverManager.emit('deployProgress', { stage: 'download', percent: 0.42, transferred: 100, total: 240 });
+      serverManager.emit('deployProgress', {
+        stage: 'download',
+        percent: 0.42,
+        transferred: 100,
+        total: 240,
+      });
 
       // broadcastAll 对同类型有 15s 节流（既有设计），单事件仅验证通知不落库
       expect(ws.send).toHaveBeenCalledTimes(1);

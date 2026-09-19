@@ -24,7 +24,11 @@ export function apiCreateTask(
 }
 
 /** 更新任务（PUT /tasks/:id；局部更新） */
-export function apiUpdateTask(config: ConnectionConfig, taskId: number, payload: TaskUpdatePayload) {
+export function apiUpdateTask(
+  config: ConnectionConfig,
+  taskId: number,
+  payload: TaskUpdatePayload,
+) {
   return apiPut<ScheduledTask>(`/api/v1/tasks/${taskId}`, config, payload)
 }
 

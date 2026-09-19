@@ -20,7 +20,12 @@ import {
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import { TONE_SELECTED_SURFACE_CLASSES } from '@/components/mcs/tone'
-import { SERVER_TYPES, SERVER_TYPE_LABELS, recommendedJavaVersion, type ServerType } from '@/lib/mc-deploy'
+import {
+  SERVER_TYPES,
+  SERVER_TYPE_LABELS,
+  recommendedJavaVersion,
+  type ServerType,
+} from '@/lib/mc-deploy'
 import { SERVER_TYPE_DESCRIPTIONS, SERVER_TYPE_ICONS, MEMORY_OPTIONS } from './constants'
 import type { DeployForm } from './types'
 import { memoryToGB } from './utils'
@@ -118,13 +123,12 @@ export function DeployStepServer({
           </SelectContent>
         </Select>
         {versionsError && (
-          <p className="text-mcs-xs text-mcs-warning-fg">
-            无法获取远程版本列表，使用本地缓存
-          </p>
+          <p className="text-mcs-xs text-mcs-warning-fg">无法获取远程版本列表，使用本地缓存</p>
         )}
         {form.version !== '' && (
           <NoticeBanner variant="info" icon={Info}>
-            推荐 Java 版本：{recommendedJavaVersion(form.version)}（服务端会自动检测并使用合适的 Java 版本）
+            推荐 Java 版本：{recommendedJavaVersion(form.version)}（服务端会自动检测并使用合适的
+            Java 版本）
           </NoticeBanner>
         )}
       </div>
@@ -179,9 +183,7 @@ export function DeployStepConfig({
           placeholder="例如: 我的生存服"
           maxLength={50}
         />
-        {nameError !== '' && (
-          <p className="text-mcs-xs text-mcs-error-fg">{nameError}</p>
-        )}
+        {nameError !== '' && <p className="text-mcs-xs text-mcs-error-fg">{nameError}</p>}
       </div>
 
       {/* 内存档位 */}
@@ -191,9 +193,7 @@ export function DeployStepConfig({
           <span className="font-mono text-mcs-xl font-semibold text-mcs-accent-fg">
             {memoryToGB(form.memory).toFixed(1)} GB
           </span>
-          <span className="text-mcs-sm text-mcs-text-muted">
-            / {totalMemory.toFixed(1)} GB
-          </span>
+          <span className="text-mcs-sm text-mcs-text-muted">/ {totalMemory.toFixed(1)} GB</span>
         </div>
         <Select value={form.memory} onValueChange={onMemoryChange}>
           <SelectTrigger className="w-full" aria-label="选择内存分配">
@@ -207,9 +207,7 @@ export function DeployStepConfig({
             ))}
           </SelectContent>
         </Select>
-        <p className="text-mcs-xs text-mcs-text-muted">
-          选择 Minecraft 服务器可用的最大内存
-        </p>
+        <p className="text-mcs-xs text-mcs-text-muted">选择 Minecraft 服务器可用的最大内存</p>
         {/* 推荐提示（<=8G 推荐 50%，>8G 推荐 70%） */}
         <p className="flex items-center gap-1.5 text-mcs-xs text-mcs-warning-fg">
           <Info className="size-3.5 shrink-0" aria-hidden />
@@ -243,7 +241,9 @@ export function DeployStepConfirm({
           [
             ['服务端类型', SERVER_TYPE_LABELS[form.type]],
             ['版本', form.version],
-            ...(loaders.length > 0 && (form.type === 'fabric' || form.type === 'forge') && form.loader !== ''
+            ...(loaders.length > 0 &&
+            (form.type === 'fabric' || form.type === 'forge') &&
+            form.loader !== ''
               ? [['加载器', form.loader] as const]
               : []),
             ['实例名称', form.name.trim()],
@@ -256,15 +256,16 @@ export function DeployStepConfirm({
             className="flex items-center justify-between gap-3 px-3 py-1.5 text-mcs-sm"
           >
             <span className="shrink-0 text-mcs-text-muted">{label}</span>
-            <span className="min-w-0 truncate font-mono text-mcs-text-default">
-              {value}
-            </span>
+            <span className="min-w-0 truncate font-mono text-mcs-text-default">{value}</span>
           </div>
         ))}
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <label htmlFor="deploy-eula-agree" className="flex cursor-pointer items-start gap-2 text-mcs-sm text-mcs-text-default">
+        <label
+          htmlFor="deploy-eula-agree"
+          className="flex cursor-pointer items-start gap-2 text-mcs-sm text-mcs-text-default"
+        >
           <Checkbox
             id="deploy-eula-agree"
             checked={eulaAgreed}

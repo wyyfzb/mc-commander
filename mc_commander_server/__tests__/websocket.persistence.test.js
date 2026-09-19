@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'events';
-import { setupWebSocket, WSEvents, flushNotificationEvents, resetNotificationEventQueue } from '../websocket.js';
+import {
+  setupWebSocket,
+  WSEvents,
+  flushNotificationEvents,
+  resetNotificationEventQueue,
+} from '../websocket.js';
 
 // Mock 数据库：验证通知事件落库（携带 id）与断线补齐（lastEventId 重放）
 vi.mock('../db/index.js', () => ({
@@ -177,7 +182,11 @@ describe('WebSocket 通知持久化与断线补齐', () => {
   it('taskExecute 触发事件不落库（既有决策：仅失败事件落库）', () => {
     const ws = connectAndSubscribe('s1');
 
-    serverManager.emit('instance:taskExecute', { instanceId: 's1', taskId: 7, taskName: '每日重启' });
+    serverManager.emit('instance:taskExecute', {
+      instanceId: 's1',
+      taskId: 7,
+      taskName: '每日重启',
+    });
 
     flushNotificationEvents();
     expect(fakeDb.inserted.length).toBe(0);
@@ -190,11 +199,14 @@ describe('WebSocket 通知持久化与断线补齐', () => {
     const ws = createFakeWs();
     wss.emit('connection', ws, { _wsApiKey: TEST_API_KEY });
 
-    ws.emit('message', JSON.stringify({
-      type: 'subscribe',
-      instanceId: 's1',
-      lastEventId: 100,
-    }));
+    ws.emit(
+      'message',
+      JSON.stringify({
+        type: 'subscribe',
+        instanceId: 's1',
+        lastEventId: 100,
+      }),
+    );
 
     // 重放 2 条（id 101/102）
     const replayed = ws.send.mock.calls.filter((c) => {
@@ -288,7 +300,10 @@ describe('WebSocket 通知持久化与断线补齐', () => {
     // flush → 缓冲行必须先于 SELECT 提交
     const reconnected = createFakeWs();
     wss.emit('connection', reconnected, { _wsApiKey: TEST_API_KEY });
-    reconnected.emit('message', JSON.stringify({ type: 'subscribe', instanceId: 's1', lastEventId: 5 }));
+    reconnected.emit(
+      'message',
+      JSON.stringify({ type: 'subscribe', instanceId: 's1', lastEventId: 5 }),
+    );
 
     // flush 已把缓冲行落库（插入与重放 SELECT 的交互由 fakeDb 的 all 预设承接，
     // 此处断言的是「flush 确实在 replay 的 SELECT 之前执行」这一时序）

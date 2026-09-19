@@ -145,12 +145,18 @@ describe('FilesPage 上传进度反馈', () => {
 
     const xhr = sentXHR[0]!
     xhr.emitProgress(5, 100)
-    await waitFor(() => expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '5'))
+    await waitFor(() =>
+      expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '5'),
+    )
     // 进度条直更（无 toast 文字节流）：5% → 7% 直接反映
     xhr.emitProgress(7, 100)
-    await waitFor(() => expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '7'))
+    await waitFor(() =>
+      expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '7'),
+    )
     xhr.emitProgress(100, 100)
-    await waitFor(() => expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '100'))
+    await waitFor(() =>
+      expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '100'),
+    )
     // 完成收尾：进度条消失 + success toast
     xhr.emitLoad(okUploadEnvelope())
     expect(await screen.findByText('已上传 /示例整合包.zip（1.0 KB）')).toBeInTheDocument()
@@ -211,7 +217,9 @@ describe('FilesPage 上传进度反馈', () => {
 
     const xhr = sentXHR[0]!
     xhr.emitProgress(30, 100)
-    await waitFor(() => expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '30'))
+    await waitFor(() =>
+      expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '30'),
+    )
 
     fireEvent.click(screen.getByTestId('upload-cancel'))
     expect(abortSpy).toHaveBeenCalled()

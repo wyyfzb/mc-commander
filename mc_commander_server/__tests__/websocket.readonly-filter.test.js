@@ -37,9 +37,7 @@ function createFakeWs() {
 
 /** 已收消息的事件类型清单（去掉 pong/auth 回执这类非广播消息） */
 function receivedTypes(ws) {
-  return ws.send.mock.calls
-    .map(([raw]) => JSON.parse(raw))
-    .map((m) => m.type);
+  return ws.send.mock.calls.map(([raw]) => JSON.parse(raw)).map((m) => m.type);
 }
 
 describe('只读角色的 WS 事件过滤', () => {
@@ -117,7 +115,12 @@ describe('只读角色的 WS 事件过滤', () => {
       ['instance:webhookDeliveryFailed', WSEvents.WEBHOOK_DELIVERY_FAILED],
     ])('只读收不到 %s（%s）', (emitterEvent, wsType) => {
       const ro = connectAndSubscribe(READONLY_KEY);
-      serverManager.emit(emitterEvent, { instanceId: 's1', text: 'secret', name: 'x', url: 'https://hook/?token=abc' });
+      serverManager.emit(emitterEvent, {
+        instanceId: 's1',
+        text: 'secret',
+        name: 'x',
+        url: 'https://hook/?token=abc',
+      });
       expect(receivedTypes(ro)).not.toContain(wsType);
     });
 
@@ -143,14 +146,17 @@ describe('只读角色的 WS 事件过滤', () => {
       serverManager.emit('instance:log', { instanceId: 's1', text: 'hi', type: 'stdout' });
       serverManager.emit('instance:backupFailed', { instanceId: 's1', error: 'boom' });
       serverManager.emit('instance:taskFailed', { instanceId: 's1', error: 'boom' });
-      serverManager.emit('instance:webhookDeliveryFailed', { instanceId: 's1', url: 'https://hook' });
+      serverManager.emit('instance:webhookDeliveryFailed', {
+        instanceId: 's1',
+        url: 'https://hook',
+      });
       expect(receivedTypes(admin)).toEqual(
         expect.arrayContaining([
           WSEvents.LOG,
           WSEvents.BACKUP_FAILED,
           WSEvents.TASK_FAILED,
           WSEvents.WEBHOOK_DELIVERY_FAILED,
-        ])
+        ]),
       );
     });
 
@@ -183,7 +189,11 @@ describe('只读角色的 WS 事件过滤', () => {
 
     it('deployProgress / deploy 终态（全局通知）对只读一律拦下', () => {
       const ro = connectAndSubscribe(READONLY_KEY, 'other-instance');
-      serverManager.emit(WSEvents.DEPLOY_PROGRESS, { instanceId: 's1', stage: 'download', percent: 40 });
+      serverManager.emit(WSEvents.DEPLOY_PROGRESS, {
+        instanceId: 's1',
+        stage: 'download',
+        percent: 40,
+      });
       serverManager.emit(WSEvents.DEPLOY_COMPLETE, { instanceId: 's1', instanceName: 'x' });
       const types = receivedTypes(ro);
       expect(types).not.toContain(WSEvents.DEPLOY_PROGRESS);
@@ -193,7 +203,11 @@ describe('只读角色的 WS 事件过滤', () => {
     it('upgradeProgress 对只读拦下、管理员照收', () => {
       const ro = connectAndSubscribe(READONLY_KEY);
       const admin = connectAndSubscribe(ADMIN_KEY);
-      serverManager.emit('instance:upgradeProgress', { instanceId: 's1', stage: 'download', percent: 40 });
+      serverManager.emit('instance:upgradeProgress', {
+        instanceId: 's1',
+        stage: 'download',
+        percent: 40,
+      });
       expect(receivedTypes(ro)).not.toContain(WSEvents.UPGRADE_PROGRESS);
       expect(receivedTypes(admin)).toContain(WSEvents.UPGRADE_PROGRESS);
     });
@@ -262,11 +276,13 @@ describe('只读角色的 WS 事件过滤', () => {
     }
 
     it('重放按角色过滤：落库的 taskFailed / webhookDeliveryFailed 不补发给只读，playerJoin 照补', () => {
-      getDb.mockReturnValue(fakeDb([
-        row(42, WSEvents.TASK_FAILED, { error: 'boom' }),
-        row(43, WSEvents.PLAYER_JOIN, { player: 'Steve' }),
-        row(44, WSEvents.WEBHOOK_DELIVERY_FAILED, { url: 'https://hook' }),
-      ]));
+      getDb.mockReturnValue(
+        fakeDb([
+          row(42, WSEvents.TASK_FAILED, { error: 'boom' }),
+          row(43, WSEvents.PLAYER_JOIN, { player: 'Steve' }),
+          row(44, WSEvents.WEBHOOK_DELIVERY_FAILED, { url: 'https://hook' }),
+        ]),
+      );
 
       const ro = createFakeWs();
       wss.emit('connection', ro, { _wsApiKey: READONLY_KEY });
@@ -279,18 +295,27 @@ describe('只读角色的 WS 事件过滤', () => {
     });
 
     it('管理员重放不受过滤（三条全补）', () => {
-      getDb.mockReturnValue(fakeDb([
-        row(42, WSEvents.TASK_FAILED, { error: 'boom' }),
-        row(43, WSEvents.PLAYER_JOIN, { player: 'Steve' }),
-        row(44, WSEvents.WEBHOOK_DELIVERY_FAILED, { url: 'https://hook' }),
-      ]));
+      getDb.mockReturnValue(
+        fakeDb([
+          row(42, WSEvents.TASK_FAILED, { error: 'boom' }),
+          row(43, WSEvents.PLAYER_JOIN, { player: 'Steve' }),
+          row(44, WSEvents.WEBHOOK_DELIVERY_FAILED, { url: 'https://hook' }),
+        ]),
+      );
 
       const admin = createFakeWs();
       wss.emit('connection', admin, { _wsApiKey: ADMIN_KEY });
-      admin.emit('message', JSON.stringify({ type: 'subscribe', instanceId: 's1', lastEventId: 41 }));
+      admin.emit(
+        'message',
+        JSON.stringify({ type: 'subscribe', instanceId: 's1', lastEventId: 41 }),
+      );
 
       expect(receivedTypes(admin)).toEqual(
-        expect.arrayContaining([WSEvents.TASK_FAILED, WSEvents.PLAYER_JOIN, WSEvents.WEBHOOK_DELIVERY_FAILED])
+        expect.arrayContaining([
+          WSEvents.TASK_FAILED,
+          WSEvents.PLAYER_JOIN,
+          WSEvents.WEBHOOK_DELIVERY_FAILED,
+        ]),
       );
     });
 
@@ -299,7 +324,8 @@ describe('只读角色的 WS 事件过滤', () => {
       // 游标不前进（客户端只在收到带 eventId 的消息时推进）→ 重连永远撞同一堵墙。
       // 忙碌服的 playerChat 是最易达的触发情形
       const rows = [row(1, WSEvents.PLAYER_JOIN)];
-      for (let id = 2; id <= 601; id += 1) rows.push(row(id, WSEvents.PLAYER_CHAT, { message: 'noise' }));
+      for (let id = 2; id <= 601; id += 1)
+        rows.push(row(id, WSEvents.PLAYER_CHAT, { message: 'noise' }));
       rows.push(row(602, WSEvents.PLAYER_JOIN, { player: 'Alex' }));
       getDb.mockReturnValue(fakeDb(rows));
 
@@ -355,7 +381,9 @@ describe('只读角色的 WS 事件过滤', () => {
 
     it('白名单里不含任何日志/命令/备份/任务/Webhook/部署/升级事件（口径自检）', () => {
       for (const type of READONLY_WS_EVENTS) {
-        expect(type).not.toMatch(/log|backup|restore|task|webhook|deploy|upgrade|chat|error|circuit/i);
+        expect(type).not.toMatch(
+          /log|backup|restore|task|webhook|deploy|upgrade|chat|error|circuit/i,
+        );
       }
     });
   });

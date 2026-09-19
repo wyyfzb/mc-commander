@@ -27,7 +27,12 @@ export function BrandLogo({ className, label }: { className?: string; label?: st
         strokeWidth="1.5"
       />
       {/* 命令符 ">" + 光标条：品牌 accent 色 */}
-      <g className="text-mcs-accent-fg" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
+      <g
+        className="text-mcs-accent-fg"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
         <path d="M7.5 8.75 11 12l-3.5 3.25" strokeWidth="2" />
         <path d="M13.5 15.25h3.25" strokeWidth="2" />
       </g>

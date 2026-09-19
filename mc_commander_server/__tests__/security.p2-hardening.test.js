@@ -168,7 +168,10 @@ describe('P2-11 会话 30 天绝对过期', () => {
     const token = generateSessionToken();
     // production 同口径：CURRENT_TIMESTAMP 的无时区 UTC 串（写 ISO 会让裸解析
     // 在任何时区下恰好正确，中间件的时区缺陷无法被测出）
-    const created = new Date(Date.now() + createdAtOffsetMs).toISOString().replace('T', ' ').slice(0, 19);
+    const created = new Date(Date.now() + createdAtOffsetMs)
+      .toISOString()
+      .replace('T', ' ')
+      .slice(0, 19);
     AdminSessionModel.create({
       tokenHash: hashToken(token),
       userAgent: 'vitest-p2',
@@ -177,8 +180,9 @@ describe('P2-11 会话 30 天绝对过期', () => {
     });
     // 回写 created_at / last_seen_at 模拟历史会话（create 均为 CURRENT_TIMESTAMP
     // 默认值；last_seen_at 同步回写以越过 60s touch 节流窗口）
-    db.prepare('UPDATE admin_sessions SET created_at = ?, last_seen_at = ? WHERE token_hash = ?')
-      .run(created, created, hashToken(token));
+    db.prepare(
+      'UPDATE admin_sessions SET created_at = ?, last_seen_at = ? WHERE token_hash = ?',
+    ).run(created, created, hashToken(token));
     return token;
   }
 
@@ -241,10 +245,15 @@ describe('P2-11 会话并发上限（每用户 5 条挤最旧）', () => {
       db.prepare(
         `INSERT INTO admin_sessions (id, token_hash, user_agent, ip, created_at, last_seen_at, expires_at)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      ).run(id, `hash-${i}`, 'ua', '127.0.0.1',
+      ).run(
+        id,
+        `hash-${i}`,
+        'ua',
+        '127.0.0.1',
         new Date(Date.now() - (10 - i) * 1000).toISOString(),
         new Date(Date.now() - (10 - i) * 1000).toISOString(),
-        new Date(Date.now() + 3600_000).toISOString());
+        new Date(Date.now() + 3600_000).toISOString(),
+      );
       ids.push(id);
     }
     const evicted = AdminSessionModel.enforceLimit(5);
@@ -268,7 +277,9 @@ describe('P2-11 会话并发上限（每用户 5 条挤最旧）', () => {
     expect(AdminSessionModel.getById('expired-1')).toBeNull();
   });
 
-  it('登录路径集成：第 6 次登录挤掉最旧会话（登录即惰性清理触发点）', { timeout: 30000 }, async () => {
+  it('登录路径集成：第 6 次登录挤掉最旧会话（登录即惰性清理触发点）', {
+    timeout: 30000,
+  }, async () => {
     AdminAccountModel.setPassword(hashPassword('session-limit-pass'));
 
     const tokens = [];
@@ -283,8 +294,10 @@ describe('P2-11 会话并发上限（每用户 5 条挤最旧）', () => {
       // 时 SQLite 格式恒小于 ISO 格式（空格 0x20 < 'T' 0x54）导致排序失真。
       // 生产路径 touch() 始终写 CURRENT_TIMESTAMP，无此混合问题。
       const sqliteTs = (d) => d.toISOString().replace('T', ' ').slice(0, 19);
-      db.prepare('UPDATE admin_sessions SET last_seen_at = ? WHERE token_hash = ?')
-        .run(sqliteTs(new Date(Date.now() - (6 - i) * 60_000)), hashToken(tokens[i]));
+      db.prepare('UPDATE admin_sessions SET last_seen_at = ? WHERE token_hash = ?').run(
+        sqliteTs(new Date(Date.now() - (6 - i) * 60_000)),
+        hashToken(tokens[i]),
+      );
     }
 
     // 第 1 个（最旧）被挤出，第 2-6 个保留

@@ -52,7 +52,12 @@ interface RowEdit {
   draft: string
 }
 
-export function GamerulePanel({ instanceId, mcVersion, isRconConnected, onSendCommand }: GamerulePanelProps) {
+export function GamerulePanel({
+  instanceId,
+  mcVersion,
+  isRconConnected,
+  onSendCommand,
+}: GamerulePanelProps) {
   const defs = useMemo(() => pickGameruleSet(mcVersion), [mcVersion])
   /** 版本徽章：1.21.11+ 新命名体系 / 旧命名体系（pickGameruleSet 恒返回常量引用） */
   const isNewSet = defs === MINECRAFT_GAMERULES
@@ -206,14 +211,16 @@ export function GamerulePanel({ instanceId, mcVersion, isRconConnected, onSendCo
 
       {/* ── 生效方式说明（与属性面板同一口径：一行说清「改了要不要重启」）──
              gamerule 经 RCON 命令作用于运行中的服务器，全部即时生效，无逐项例外 */}
-      <p className="text-mcs-2xs text-mcs-text-muted">
-        规则修改保存后即时生效，无需重启实例
-      </p>
+      <p className="text-mcs-2xs text-mcs-text-muted">规则修改保存后即时生效，无需重启实例</p>
 
       {/* ── 规则列表 ── */}
       <div className="min-h-0 flex-1 overflow-y-auto">
         {loading ? (
-          <div data-testid="gamerule-skeletons" className="flex flex-col gap-1.5" aria-label="加载规则中">
+          <div
+            data-testid="gamerule-skeletons"
+            className="flex flex-col gap-1.5"
+            aria-label="加载规则中"
+          >
             {Array.from({ length: 6 }, (_, i) => (
               <Skeleton key={i} className="h-9 w-full" />
             ))}
@@ -274,14 +281,19 @@ function RuleRow({
 
   return (
     <div className="flex items-center gap-3 border-b border-mcs-border-subtle px-2 py-1.5 last:border-b-0">
-      <span className="w-56 shrink-0 truncate font-mono text-mcs-xs text-mcs-text-default" title={def.name}>
+      <span
+        className="w-56 shrink-0 truncate font-mono text-mcs-xs text-mcs-text-default"
+        title={def.name}
+      >
         {def.name}
       </span>
       <span className="min-w-0 flex-1 truncate text-mcs-2xs text-mcs-text-muted" title={def.desc}>
         {def.desc}
       </span>
 
-      {isDefault && !isEditing && <span className="shrink-0 text-mcs-2xs text-mcs-text-muted">默认</span>}
+      {isDefault && !isEditing && (
+        <span className="shrink-0 text-mcs-2xs text-mcs-text-muted">默认</span>
+      )}
 
       <div className="flex w-44 shrink-0 items-center justify-end">
         {isBool ? (
@@ -307,11 +319,22 @@ function RuleRow({
       {/* 行尾保存/取消（编辑态出现；Tasteful Friction） */}
       {isEditing && (
         <div className="flex shrink-0 items-center gap-1">
-          <Button variant="ghost" size="sm" className="h-7 px-2 text-mcs-xs" onClick={onCancel} disabled={saving}>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-mcs-xs"
+            onClick={onCancel}
+            disabled={saving}
+          >
             <X aria-hidden />
             取消
           </Button>
-          <Button size="sm" className="h-7 px-2 text-mcs-xs" onClick={onSave} disabled={saving || (!isBool && !intValid)}>
+          <Button
+            size="sm"
+            className="h-7 px-2 text-mcs-xs"
+            onClick={onSave}
+            disabled={saving || (!isBool && !intValid)}
+          >
             <Check aria-hidden />
             保存
           </Button>

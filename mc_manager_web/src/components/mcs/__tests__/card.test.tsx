@@ -11,7 +11,13 @@ import { describe, expect, it } from 'vitest'
 import { render } from '@testing-library/react'
 import { Card, CardBody, CardHeader, CardTitle } from '../card'
 
-const SURFACE = ['rounded-mcs-md', 'border', 'border-mcs-border-muted', 'bg-mcs-bg-muted', 'shadow-mcs-card']
+const SURFACE = [
+  'rounded-mcs-md',
+  'border',
+  'border-mcs-border-muted',
+  'bg-mcs-bg-muted',
+  'shadow-mcs-card',
+]
 
 describe('Card', () => {
   it('默认渲染 section 并输出卡片面四件套类', () => {

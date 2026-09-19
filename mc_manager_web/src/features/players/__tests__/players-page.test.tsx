@@ -47,7 +47,11 @@ function renderPage(initialPath = '/players') {
 
 beforeEach(() => {
   localStorage.clear()
-  usePlayersUiStore.setState({ selectedUuids: [], filter: { q: '', mode: 'all', gameMode: '', dimension: '' }, detail: null })
+  usePlayersUiStore.setState({
+    selectedUuids: [],
+    filter: { q: '', mode: 'all', gameMode: '', dimension: '' },
+    detail: null,
+  })
   useConnectionStore.setState({ baseUrl: '', apiKey: 'test-key', status: 'ready' })
   useServerStore.setState({
     status: null,
@@ -69,7 +73,13 @@ describe('PlayersPage', () => {
               { status: 'error', code: 50000, message: '内部错误', details: null, timestamp: '' },
               { status: 500 },
             )
-          : HttpResponse.json({ status: 'ok', code: 0, message: 'Success', data: mockPlayers, timestamp: '' })
+          : HttpResponse.json({
+              status: 'ok',
+              code: 0,
+              message: 'Success',
+              data: mockPlayers,
+              timestamp: '',
+            })
       }),
     )
     const user = userEvent.setup()
@@ -127,14 +137,18 @@ describe('PlayersPage', () => {
   it('无匹配时显示「没有匹配的玩家」', async () => {
     renderPage()
     await screen.findByText('Steve')
-    fireEvent.change(screen.getByPlaceholderText('搜索玩家名或 UUID…'), { target: { value: 'zzz-not-exist' } })
+    fireEvent.change(screen.getByPlaceholderText('搜索玩家名或 UUID…'), {
+      target: { value: 'zzz-not-exist' },
+    })
     expect(await screen.findByText('没有匹配的玩家')).toBeInTheDocument()
   })
 
   it('无匹配空态提供「清空筛选」CTA：点击恢复全量列表（issue 343）', async () => {
     renderPage()
     await screen.findByText('Steve')
-    fireEvent.change(screen.getByPlaceholderText('搜索玩家名或 UUID…'), { target: { value: 'zzz-not-exist' } })
+    fireEvent.change(screen.getByPlaceholderText('搜索玩家名或 UUID…'), {
+      target: { value: 'zzz-not-exist' },
+    })
     expect(await screen.findByText('没有匹配的玩家')).toBeInTheDocument()
     // 深链 CTA 出现并可一键复位
     fireEvent.click(screen.getByTestId('players-clear-filter'))
@@ -195,7 +209,16 @@ describe('PlayersPage', () => {
     fireEvent.click(within(alexRow).getByRole('checkbox'))
     // 批量操作条：已选择 2 名玩家 + 9 动作
     expect(await screen.findByText('已选择 2 名玩家')).toBeInTheDocument()
-    for (const label of ['传送', '给予物品', '白名单', '移除白名单', 'OP', '取消OP', '清空背包', '踢出']) {
+    for (const label of [
+      '传送',
+      '给予物品',
+      '白名单',
+      '移除白名单',
+      'OP',
+      '取消OP',
+      '清空背包',
+      '踢出',
+    ]) {
       expect(screen.getByRole('button', { name: label })).toBeInTheDocument()
     }
   })
@@ -246,7 +269,9 @@ describe('PlayersPage', () => {
     expect(within(dialog).getAllByRole('button', { name: '解封' })).toHaveLength(1)
     // 解封确认 → 执行 → 成功 toast
     await user.click(within(dialog).getByRole('button', { name: '解封' }))
-    expect(await screen.findByText('确定要解封 Charlie 吗？解封后对方可重新连接。')).toBeInTheDocument()
+    expect(
+      await screen.findByText('确定要解封 Charlie 吗？解封后对方可重新连接。'),
+    ).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '确认解封' }))
     expect(await screen.findByText('已解封 Charlie')).toBeInTheDocument()
     // 关闭弹窗（footer 按钮，X 按钮 sr-only 同名需排除）

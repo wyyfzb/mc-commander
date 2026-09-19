@@ -1,5 +1,12 @@
 import type { ReactNode } from 'react'
-import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger } from '@/components/ui/select'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+} from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import { TONE_SELECTED_CLASSES } from '@/components/mcs/tone'
 

@@ -33,7 +33,9 @@ function detailValue(v: unknown): string {
 export function formatAuditDetail(detail: unknown): string {
   if (detail === null || detail === undefined || detail === '') return '-'
   if (typeof detail !== 'object') return String(detail)
-  const entries = Object.entries(detail as Record<string, unknown>).filter(([, v]) => v !== null && v !== undefined && v !== '')
+  const entries = Object.entries(detail as Record<string, unknown>).filter(
+    ([, v]) => v !== null && v !== undefined && v !== '',
+  )
   if (entries.length === 0) return '-'
   const get = (k: string) => detailValue((detail as Record<string, unknown>)[k])
   const parts: string[] = []

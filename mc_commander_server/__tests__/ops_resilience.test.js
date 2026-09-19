@@ -108,10 +108,10 @@ describe('磁盘使用率 getDiskUsage', () => {
   it('statfsSync 返回值正确计算 percent', () => {
     // 模拟 statfsSync 返回 1TB 磁盘，已用 850GB
     const bsize = 4096;
-    const blocks = 256 * 1024 * 1024;  // 1TB in 4K blocks
-    const bfree = 38.25 * 1024 * 1024;  // ~150GB free
+    const blocks = 256 * 1024 * 1024; // 1TB in 4K blocks
+    const bfree = 38.25 * 1024 * 1024; // ~150GB free
     const total = bsize * blocks;
-    const used = total - (bsize * bfree);
+    const used = total - bsize * bfree;
     const percent = Math.round((used / total) * 1000) / 10;
     // 850/1000 = 85%
     expect(percent).toBeCloseTo(85, 0);
@@ -139,7 +139,9 @@ describe('GET /api/v1/check-update', () => {
 
 // ── 4. toStatus 包含韧性字段 ──────────────────────────────────
 describe('toStatus 韧性字段', () => {
-  it('MCServerInstance.toStatus() 包含 autoStart/circuitBreakerTripped/consecutiveCrashes', { timeout: 60_000 }, async () => {
+  it('MCServerInstance.toStatus() 包含 autoStart/circuitBreakerTripped/consecutiveCrashes', {
+    timeout: 60_000,
+  }, async () => {
     const { MCServerInstance } = await import('../services/mc_server.js');
     // 构造一个轻量实例（serverPath 不需要真实 JAR）
     const inst = new MCServerInstance({

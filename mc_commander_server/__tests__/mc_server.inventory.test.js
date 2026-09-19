@@ -107,7 +107,14 @@ describe('MCServerInstance - 物品栏解析域（NBT/SNBT/装配）', () => {
           Slot: { value: 5 },
         },
       });
-      expect(item).toEqual({ id: 'diamond', count: 3, slot: 5, durability: null, enchanted: false, customName: null });
+      expect(item).toEqual({
+        id: 'diamond',
+        count: 3,
+        slot: 5,
+        durability: null,
+        enchanted: false,
+        customName: null,
+      });
     });
 
     it('无包装结构（list 元素直传）同样解析', () => {
@@ -205,7 +212,10 @@ describe('MCServerInstance - 物品栏解析域（NBT/SNBT/装配）', () => {
 
     it('装备槽 103/102/101/100 映射盔甲位', () => {
       const r = instance._buildInventoryResult(
-        [mk(103), mk(102), mk(101), mk(100)], [], 'snapshot');
+        [mk(103), mk(102), mk(101), mk(100)],
+        [],
+        'snapshot',
+      );
       expect(r.equipment.helmet).toEqual({ id: 'diamond', count: 1 });
       expect(r.equipment.chestplate).toEqual({ id: 'diamond', count: 1 });
       expect(r.equipment.leggings).toEqual({ id: 'diamond', count: 1 });
@@ -255,7 +265,9 @@ describe('MCServerInstance - 物品栏解析域（NBT/SNBT/装配）', () => {
     });
 
     it('从第一个 { 起截取 NBT', () => {
-      const r = instance._extractNbtFromResponse('Steve has the following entity data: {id: 1, tag: {x: 2}}');
+      const r = instance._extractNbtFromResponse(
+        'Steve has the following entity data: {id: 1, tag: {x: 2}}',
+      );
       expect(r).toBe('{id: 1, tag: {x: 2}}');
     });
   });
@@ -288,12 +300,19 @@ describe('MCServerInstance - 物品栏解析域（NBT/SNBT/装配）', () => {
     });
 
     it('附魔检测：旧版 Enchantments 列表', () => {
-      expect(instance._parseSnbtItem(`{id:"minecraft:sword",Enchantments:[{id:"sharpness"}]}`).enchanted).toBe(true);
+      expect(
+        instance._parseSnbtItem(`{id:"minecraft:sword",Enchantments:[{id:"sharpness"}]}`).enchanted,
+      ).toBe(true);
     });
 
     it('附魔检测：新版组件名（enchantments / stored_enchantments）', () => {
-      expect(instance._parseSnbtItem(`{id:"minecraft:bow","minecraft:enchantments":{}}`).enchanted).toBe(true);
-      expect(instance._parseSnbtItem(`{id:"minecraft:book","minecraft:stored_enchantments":{}}`).enchanted).toBe(true);
+      expect(
+        instance._parseSnbtItem(`{id:"minecraft:bow","minecraft:enchantments":{}}`).enchanted,
+      ).toBe(true);
+      expect(
+        instance._parseSnbtItem(`{id:"minecraft:book","minecraft:stored_enchantments":{}}`)
+          .enchanted,
+      ).toBe(true);
     });
 
     it('未附魔物品 enchanted 为 false', () => {
@@ -301,11 +320,16 @@ describe('MCServerInstance - 物品栏解析域（NBT/SNBT/装配）', () => {
     });
 
     it('旧版 Name 提取自定义名称', () => {
-      expect(instance._parseSnbtItem(`{id:"minecraft:sword",Name:'{"text":"神剑"}'}`).customName).toBe('神剑');
+      expect(
+        instance._parseSnbtItem(`{id:"minecraft:sword",Name:'{"text":"神剑"}'}`).customName,
+      ).toBe('神剑');
     });
 
     it('新版 custom_name 提取自定义名称', () => {
-      expect(instance._parseSnbtItem(`{id:"minecraft:stick","minecraft:custom_name":'{"text":"教鞭"}'}`).customName).toBe('教鞭');
+      expect(
+        instance._parseSnbtItem(`{id:"minecraft:stick","minecraft:custom_name":'{"text":"教鞭"}'}`)
+          .customName,
+      ).toBe('教鞭');
     });
   });
 
@@ -322,12 +346,20 @@ describe('MCServerInstance - 物品栏解析域（NBT/SNBT/装配）', () => {
     it('单物品解析', () => {
       const r = instance._parseSnbtItemList(`[{id:"minecraft:diamond",Count:3b,Slot:1b}]`);
       expect(r).toHaveLength(1);
-      expect(r[0]).toEqual({ id: 'diamond', count: 3, slot: 1, durability: null, enchanted: false, customName: null });
+      expect(r[0]).toEqual({
+        id: 'diamond',
+        count: 3,
+        slot: 1,
+        durability: null,
+        enchanted: false,
+        customName: null,
+      });
     });
 
     it('多物品（含嵌套大括号）逐项提取', () => {
       const r = instance._parseSnbtItemList(
-        `[{id:"minecraft:a",Count:1b,Slot:0b,tag:{display:{Name:'{"text":"x"}'}}},{id:"minecraft:b",Count:2b,Slot:1b}]`);
+        `[{id:"minecraft:a",Count:1b,Slot:0b,tag:{display:{Name:'{"text":"x"}'}}},{id:"minecraft:b",Count:2b,Slot:1b}]`,
+      );
       expect(r).toHaveLength(2);
       expect(r[0].id).toBe('a');
       expect(r[1].id).toBe('b');
@@ -335,7 +367,8 @@ describe('MCServerInstance - 物品栏解析域（NBT/SNBT/装配）', () => {
 
     it('字符串内大括号/引号不干扰括号匹配', () => {
       const r = instance._parseSnbtItemList(
-        `[{id:"minecraft:a",Name:'{"text":"a{b}c"}',Count:1b,Slot:0b}]`);
+        `[{id:"minecraft:a",Name:'{"text":"a{b}c"}',Count:1b,Slot:0b}]`,
+      );
       expect(r).toHaveLength(1);
       expect(r[0].customName).toBe('a{b}c');
     });
@@ -394,7 +427,9 @@ describe('MCServerInstance - 物品栏解析域（NBT/SNBT/装配）', () => {
 
     it('Inventory 响应无 NBT 结构返回 null', async () => {
       rconConnected(instance, true);
-      vi.spyOn(instance, 'sendCommandWithResponse').mockImplementation(async () => 'Steve is not found');
+      vi.spyOn(instance, 'sendCommandWithResponse').mockImplementation(
+        async () => 'Steve is not found',
+      );
       expect(await instance._loadInventoryFromRcon('Steve')).toBeNull();
     });
 
@@ -418,15 +453,26 @@ describe('MCServerInstance - 物品栏解析域（NBT/SNBT/装配）', () => {
         type: 'compound',
         name: '',
         value: {
-          Inventory: { type: 'list', value: { type: 'compound', value: items.map(([i, c, s]) => item(i, c, s)) } },
-          EnderItems: { type: 'list', value: { type: 'compound', value: enderItems.map(([i, c, s]) => item(i, c, s)) } },
+          Inventory: {
+            type: 'list',
+            value: { type: 'compound', value: items.map(([i, c, s]) => item(i, c, s)) },
+          },
+          EnderItems: {
+            type: 'list',
+            value: { type: 'compound', value: enderItems.map(([i, c, s]) => item(i, c, s)) },
+          },
         },
       };
     }
 
     it('读取 world/playerdata 快照并解析物品', () => {
-      writeNbtFile(path.join(tmpDir, 'world', 'playerdata', `${UUID}.dat`),
-        nbtCompound([['diamond', 3, 1], ['stone', 1, 10]]));
+      writeNbtFile(
+        path.join(tmpDir, 'world', 'playerdata', `${UUID}.dat`),
+        nbtCompound([
+          ['diamond', 3, 1],
+          ['stone', 1, 10],
+        ]),
+      );
       const r = instance._loadInventoryFromDat(UUID, 'Steve');
       expect(r).not.toBeNull();
       expect(r.source).toBe('snapshot');
@@ -466,8 +512,10 @@ describe('MCServerInstance - 物品栏解析域（NBT/SNBT/装配）', () => {
     });
 
     it('末影箱物品从 EnderItems 解析', () => {
-      writeNbtFile(path.join(tmpDir, 'world', 'playerdata', `${UUID}.dat`),
-        nbtCompound([['apple', 1, 0]], [['obsidian', 64, 3]]));
+      writeNbtFile(
+        path.join(tmpDir, 'world', 'playerdata', `${UUID}.dat`),
+        nbtCompound([['apple', 1, 0]], [['obsidian', 64, 3]]),
+      );
       const r = instance._loadInventoryFromDat(UUID, 'Steve');
       expect(r.enderChest[3]).toMatchObject({ id: 'obsidian', count: 64 });
     });
@@ -479,7 +527,10 @@ describe('MCServerInstance - 物品栏解析域（NBT/SNBT/装配）', () => {
     });
 
     it('默认返回全部缓冲日志', () => {
-      instance.logBuffer = [{ time: 1, text: 'a', type: 'stdout' }, { time: 2, text: 'b', type: 'stderr' }];
+      instance.logBuffer = [
+        { time: 1, text: 'a', type: 'stdout' },
+        { time: 2, text: 'b', type: 'stderr' },
+      ];
       expect(instance.getLogs()).toHaveLength(2);
     });
 

@@ -9,7 +9,9 @@ import config from './config.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // 版本号单一来源：package.json（与 routes/index.js 的 /health、check-update 共用）
-const SERVER_VERSION = JSON.parse(fs.readFileSync(new URL('./package.json', import.meta.url), 'utf-8')).version;
+const SERVER_VERSION = JSON.parse(
+  fs.readFileSync(new URL('./package.json', import.meta.url), 'utf-8'),
+).version;
 import { authMiddleware } from './middleware/auth.js';
 import { errorHandler } from './middleware/error_handler.js';
 import { apiKeyRateLimit, rateLimit } from './middleware/rate_limit.js';
@@ -38,9 +40,13 @@ const envPath = config.envFilePath;
 try {
   const stat = fs.statSync(envPath);
   if ((stat.mode & 0o077) !== 0) {
-    logger.warn(`[Security] .env 文件权限过宽（${(stat.mode & 0o777).toString(8)}），建议设置为 0600（仅所有者可读写）`);
+    logger.warn(
+      `[Security] .env 文件权限过宽（${(stat.mode & 0o777).toString(8)}），建议设置为 0600（仅所有者可读写）`,
+    );
   }
-} catch { /* 文件不存在等情况由后续校验处理 */ }
+} catch {
+  /* 文件不存在等情况由后续校验处理 */
+}
 
 // ── 首次启动播种管理员 API Key ────────────
 // 不再要求部署方自行 `printf … | sha256sum`：人挑的明文无法约束强度（弱 Key 入口），
@@ -147,7 +153,9 @@ const taskScheduler = new TaskScheduler(serverManager);
 // 备份/恢复被互斥检查永久拒绝（只能人工改库）——超时记录按语义重置
 // （creating→failed、restoring→completed，备份文件本身未动）
 try {
-  const resetCount = BackupModel.resetStaleInProgress({ maxAgeMs: config.backupInProgressTimeoutMs });
+  const resetCount = BackupModel.resetStaleInProgress({
+    maxAgeMs: config.backupInProgressTimeoutMs,
+  });
   if (resetCount > 0) {
     logger.info(`[Backup] Reset ${resetCount} stale in-progress backup record(s) on startup`);
   }
@@ -170,25 +178,27 @@ app.use(cors());
 // - 禁用 upgrade-insecure-requests：局域网 http 自托管部署下相对路径请求
 //   会被强制升级 https 而中断
 // - 关闭 COEP（require-corp 会阻断跨源图片等嵌入资源，非本任务必需）
-app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
-      fontSrc: ["'self'", 'data:'],
-      connectSrc: ["'self'", 'ws:', 'wss:', 'http:', 'https:'],
-      objectSrc: ["'none'"],
-      baseUri: ["'self'"],
-      formAction: ["'self'"],
-      frameAncestors: ["'none'"],
-      upgradeInsecureRequests: null,
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
+        fontSrc: ["'self'", 'data:'],
+        connectSrc: ["'self'", 'ws:', 'wss:', 'http:', 'https:'],
+        objectSrc: ["'none'"],
+        baseUri: ["'self'"],
+        formAction: ["'self'"],
+        frameAncestors: ["'none'"],
+        upgradeInsecureRequests: null,
+      },
     },
-  },
-  frameguard: { action: 'deny' },
-  crossOriginEmbedderPolicy: false,
-}));
+    frameguard: { action: 'deny' },
+    crossOriginEmbedderPolicy: false,
+  }),
+);
 
 app.use(express.json({ limit: config.bodyLimitJson }));
 app.use(express.urlencoded({ extended: true, limit: config.bodyLimitJson }));
@@ -260,7 +270,9 @@ const stopMetricsSampler = (() => {
 
 server.on('error', (err) => {
   if (err.code === 'EADDRINUSE') {
-    logger.error(`错误: 端口 ${config.port} 已被占用，请修改 .env 的 PORT 配置或停止占用该端口的进程。`);
+    logger.error(
+      `错误: 端口 ${config.port} 已被占用，请修改 .env 的 PORT 配置或停止占用该端口的进程。`,
+    );
     process.exit(1);
     return;
   }
@@ -276,9 +288,8 @@ server.listen(config.port, config.host, () => {
   logger.banner(`========================================`);
   logger.banner(`  Host: ${config.host}`);
   logger.banner(`  Port: ${config.port}`);
-  const maskedHash = config.apiKeyHash.length > 8
-    ? config.apiKeyHash.substring(0, 8) + '...'
-    : '****';
+  const maskedHash =
+    config.apiKeyHash.length > 8 ? config.apiKeyHash.substring(0, 8) + '...' : '****';
   logger.banner(`  API Key Hash: ${maskedHash}`);
   logger.banner(`  Servers Dir: ${config.serversDir}`);
   logger.banner(`  Data Dir: ${config.dataDir}`);
@@ -293,7 +304,11 @@ server.listen(config.port, config.host, () => {
   // InstanceModel 已在模块顶层通过 initDatabase() 初始化，直接同步调用即可
   setTimeout(() => {
     let autoStartInstances;
-    try { autoStartInstances = InstanceModel.getAll().filter(i => i.autoStart === true); } catch { return; }
+    try {
+      autoStartInstances = InstanceModel.getAll().filter((i) => i.autoStart === true);
+    } catch {
+      return;
+    }
     if (autoStartInstances.length === 0) return;
     logger.info(`[AutoStart] Found ${autoStartInstances.length} instance(s) marked for auto-start`);
     let idx = 0;
@@ -301,13 +316,25 @@ server.listen(config.port, config.host, () => {
       if (idx >= autoStartInstances.length) return;
       const inst = autoStartInstances[idx++];
       const instance = serverManager.getInstance(inst.id);
-      if (!instance) { startNext(); return; }
+      if (!instance) {
+        startNext();
+        return;
+      }
       // 跳过已运行/熔断/目录缺失
-      if (instance.isRunning) { logger.info(`[AutoStart] ${inst.id} already running, skipping`); startNext(); return; }
-      if (instance._circuitBreakerTripped) { logger.info(`[AutoStart] ${inst.id} circuit breaker tripped, skipping`); startNext(); return; }
+      if (instance.isRunning) {
+        logger.info(`[AutoStart] ${inst.id} already running, skipping`);
+        startNext();
+        return;
+      }
+      if (instance._circuitBreakerTripped) {
+        logger.info(`[AutoStart] ${inst.id} circuit breaker tripped, skipping`);
+        startNext();
+        return;
+      }
       if (!fs.existsSync(path.join(instance.serverPath, instance.jarFile))) {
         logger.info(`[AutoStart] ${inst.id} jar missing, skipping`);
-        startNext(); return;
+        startNext();
+        return;
       }
       try {
         instance.start();
@@ -361,10 +388,16 @@ process.on('SIGINT', () => shutdown('SIGINT'));
 // 可由 systemd 自愈）。记录结构化错误日志（含堆栈）后复用 shutdown() 退出——
 // 崩溃路径同样不停 MC 实例（进程继续服务玩家，重启后接管），禁止静默吞异常继续运行
 process.on('uncaughtException', (err) => {
-  logger.error('[Fatal] Uncaught exception:', err instanceof Error ? (err.stack || err.message) : String(err));
+  logger.error(
+    '[Fatal] Uncaught exception:',
+    err instanceof Error ? err.stack || err.message : String(err),
+  );
   shutdown('uncaughtException');
 });
 process.on('unhandledRejection', (reason) => {
-  logger.error('[Fatal] Unhandled rejection:', reason instanceof Error ? (reason.stack || reason.message) : String(reason));
+  logger.error(
+    '[Fatal] Unhandled rejection:',
+    reason instanceof Error ? reason.stack || reason.message : String(reason),
+  );
   shutdown('unhandledRejection');
 });

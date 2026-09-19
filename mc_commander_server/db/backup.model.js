@@ -35,25 +35,31 @@ export class BackupModel {
     const whereClause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
     const offset = (page - 1) * pageSize;
 
-    const backups = db.prepare(`
+    const backups = db
+      .prepare(`
       SELECT ${PUBLIC_COLUMNS} FROM backups
       ${whereClause}
       ORDER BY id DESC
       LIMIT ? OFFSET ?
-    `).all(...params, pageSize, offset);
+    `)
+      .all(...params, pageSize, offset);
 
-    const total = db.prepare(`
+    const total = db
+      .prepare(`
       SELECT COUNT(*) as count FROM backups ${whereClause}
-    `).get(...params).count;
+    `)
+      .get(...params).count;
 
-    return { backups: backups.map(r => this._toCamel(r)), total, page, pageSize };
+    return { backups: backups.map((r) => this._toCamel(r)), total, page, pageSize };
   }
 
   static findById(id) {
     const db = getDb();
-    const row = db.prepare(`
+    const row = db
+      .prepare(`
       SELECT ${PUBLIC_COLUMNS} FROM backups WHERE id = ?
-    `).get(id);
+    `)
+      .get(id);
     return row ? this._toCamel(row) : null;
   }
 
@@ -92,22 +98,24 @@ export class BackupModel {
   static create(data) {
     const db = getDb();
 
-    const result = db.prepare(`
+    const result = db
+      .prepare(`
       INSERT INTO backups (
         instance_id, name, description, type, size, status,
         file_path, world_name, source_archive_id
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      data.instanceId,
-      data.name,
-      data.description || null,
-      data.type || 'manual',
-      data.size || 0,
-      data.status || 'creating',
-      data.filePath || null,
-      data.worldName || null,
-      data.sourceArchiveId || null
-    );
+    `)
+      .run(
+        data.instanceId,
+        data.name,
+        data.description || null,
+        data.type || 'manual',
+        data.size || 0,
+        data.status || 'creating',
+        data.filePath || null,
+        data.worldName || null,
+        data.sourceArchiveId || null,
+      );
 
     return this.findById(result.lastInsertRowid);
   }
@@ -123,7 +131,7 @@ export class BackupModel {
       status: 'status',
       size: 'size',
       filePath: 'file_path',
-      worldName: 'world_name'
+      worldName: 'world_name',
     };
 
     for (const [key, column] of Object.entries(fieldMap)) {
@@ -164,7 +172,9 @@ export class BackupModel {
       params.push(instanceId);
     }
 
-    const stale = db.prepare(`SELECT id, status, updated_at FROM backups WHERE ${where}`).all(...params);
+    const stale = db
+      .prepare(`SELECT id, status, updated_at FROM backups WHERE ${where}`)
+      .all(...params);
     const cutoff = Date.now() - maxAgeMs;
     let resetCount = 0;
 
@@ -175,10 +185,11 @@ export class BackupModel {
       const ts = parseDbTime(row.updated_at || row.created_at);
       if (ts < cutoff) {
         const target = row.status === 'restoring' ? 'completed' : 'failed';
-        db.prepare(`UPDATE backups SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
-          .run(target, row.id);
+        db.prepare(
+          `UPDATE backups SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+        ).run(target, row.id);
         logger.warn(
-          `[Backup] Reset stale ${row.status} backup record #${row.id} -> ${target} (crashed process)`
+          `[Backup] Reset stale ${row.status} backup record #${row.id} -> ${target} (crashed process)`,
         );
         resetCount++;
       }
@@ -207,34 +218,41 @@ export class BackupModel {
    */
   static listFilePaths() {
     const db = getDb();
-    return db.prepare('SELECT file_path FROM backups WHERE file_path IS NOT NULL')
+    return db
+      .prepare('SELECT file_path FROM backups WHERE file_path IS NOT NULL')
       .all()
       .map((row) => row.file_path);
   }
 
   static getLatestBackup(instanceId) {
     const db = getDb();
-    const row = db.prepare(`
+    const row = db
+      .prepare(`
       SELECT ${PUBLIC_COLUMNS} FROM backups
       WHERE instance_id = ? AND status = 'completed'
       ORDER BY id DESC
       LIMIT 1
-    `).get(instanceId);
+    `)
+      .get(instanceId);
     return row ? this._toCamel(row) : null;
   }
 
   static getBackupCount(instanceId) {
     const db = getDb();
-    return db.prepare(`
+    return db
+      .prepare(`
       SELECT COUNT(*) as count FROM backups WHERE instance_id = ?
-    `).get(instanceId).count;
+    `)
+      .get(instanceId).count;
   }
 
   static getTotalSize(instanceId) {
     const db = getDb();
-    const result = db.prepare(`
+    const result = db
+      .prepare(`
       SELECT COALESCE(SUM(size), 0) as total_size FROM backups WHERE instance_id = ?
-    `).get(instanceId);
+    `)
+      .get(instanceId);
     return result.total_size;
   }
 }

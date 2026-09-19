@@ -1,5 +1,5 @@
-import { clsx, type ClassValue } from "clsx"
-import { extendTailwindMerge } from "tailwind-merge"
+import { clsx, type ClassValue } from 'clsx'
+import { extendTailwindMerge } from 'tailwind-merge'
 
 /**
  * 本仓字号 token 的类名后缀（对应 index.css 的 --text-mcs-*）。
@@ -7,13 +7,13 @@ import { extendTailwindMerge } from "tailwind-merge"
  * 故 lib/__tests__/tailwind-merge.test.ts 会遍历 index.css 逐个断言，漏了即红。
  */
 const MCS_FONT_SIZE_SUFFIXES = [
-  "mcs-2xs",
-  "mcs-xs",
-  "mcs-sm",
-  "mcs-md",
-  "mcs-lg",
-  "mcs-xl",
-  "mcs-display",
+  'mcs-2xs',
+  'mcs-xs',
+  'mcs-sm',
+  'mcs-md',
+  'mcs-lg',
+  'mcs-xl',
+  'mcs-display',
 ]
 
 /**
@@ -33,13 +33,13 @@ const MCS_FONT_SIZE_SUFFIXES = [
 const twMerge = extendTailwindMerge({
   extend: {
     classGroups: {
-      "font-size": [{ text: MCS_FONT_SIZE_SUFFIXES }],
+      'font-size': [{ text: MCS_FONT_SIZE_SUFFIXES }],
     },
   },
   // override 按键覆盖：只清空 font-size 的冲突表（其余 48 项原样保留，
   // 用例以原生 twMerge 为基准逐条对拍守住这一点）
   override: {
-    conflictingClassGroups: { "font-size": [] },
+    conflictingClassGroups: { 'font-size': [] },
   },
 })
 

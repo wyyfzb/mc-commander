@@ -11,7 +11,7 @@ describe('authMiddleware', () => {
     req = { query: {}, headers: {} };
     res = {
       status: vi.fn().mockReturnThis(),
-      json: vi.fn().mockReturnThis()
+      json: vi.fn().mockReturnThis(),
     };
     next = vi.fn();
   });
@@ -30,9 +30,7 @@ describe('authMiddleware', () => {
 
     expect(next).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(401);
-    expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ status: 'error' })
-    );
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ status: 'error' }));
   });
 
   it('should reject request with invalid apikey in header', () => {
@@ -63,9 +61,7 @@ describe('authMiddleware', () => {
 
     expect(next).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(401);
-    expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ status: 'error' })
-    );
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ status: 'error' }));
   });
 
   it('should reject request with Upgrade: websocket header and invalid api key', () => {

@@ -6,7 +6,7 @@ export const ErrorCodes = {
   VALIDATION_ERROR: { code: 40000, message: 'Validation Error', status: 400 },
   NOT_FOUND: { code: 40400, message: 'Resource Not Found', status: 404 },
   RATE_LIMITED: { code: 42900, message: 'Too Many Requests', status: 429 },
-  
+
   // 认证错误
   // 凭据「无效」（带了 Key/令牌但对不上）：与「压根没带凭据」分开，
   // 前者该去核对/轮换 Key，后者该去配置 Key 或重新登录（见 AUTH_CREDENTIALS_REQUIRED）
@@ -18,7 +18,7 @@ export const ErrorCodes = {
     message: '未提供访问凭据：请携带 X-API-Key 头或登录会话令牌',
     status: 401,
   },
-  
+
   // 实例错误
   INSTANCE_NOT_FOUND: { code: 40401, message: 'Instance not found', status: 404 },
   INSTANCE_NOT_RUNNING: { code: 40002, message: 'Instance is not running', status: 400 },
@@ -28,7 +28,11 @@ export const ErrorCodes = {
   DEPLOY_IN_PROGRESS: { code: 40905, message: 'A deployment is already in progress', status: 409 },
   // 取消部署时无可取消对象（部署已终态、被取消过、或进程重启后注册表为空）：
   // 明确拒绝而非静默成功——静默成功会让客户端一直等一个不会到来的终态事件
-  DEPLOY_NOT_IN_FLIGHT: { code: 40906, message: 'No deployment in progress for this instance', status: 409 },
+  DEPLOY_NOT_IN_FLIGHT: {
+    code: 40906,
+    message: 'No deployment in progress for this instance',
+    status: 409,
+  },
   // 用户取消导致长任务未完成（部署 POST 的响应；终态事件会另行推送 cancelled 阶段）
   TASK_CANCELLED: { code: 40915, message: 'Task cancelled by user', status: 409 },
   // 卸载实例的实例名确认（服务端强制）：前端弹窗的输入只存在于客户端，
@@ -49,10 +53,11 @@ export const ErrorCodes = {
   // 需调用方额外声明已接受不可恢复
   INSTANCE_DELETE_NO_BACKUP: {
     code: 40914,
-    message: '该实例没有任何备份，删除后世界数据与配置不可恢复；确认后请携带 acknowledgeIrreversible=true 重试',
+    message:
+      '该实例没有任何备份，删除后世界数据与配置不可恢复；确认后请携带 acknowledgeIrreversible=true 重试',
     status: 409,
   },
-  
+
   // 备份错误
   BACKUP_NOT_FOUND: { code: 40402, message: 'Backup not found', status: 404 },
   BACKUP_IN_PROGRESS: { code: 40901, message: 'Backup already in progress', status: 409 },
@@ -62,7 +67,8 @@ export const ErrorCodes = {
   // 原子序列保证一致性，RCON 缺失时静默直压运行中世界会产出不一致包（find 审计）
   BACKUP_RCON_UNAVAILABLE: {
     code: 40902,
-    message: '无法执行在线备份：服务器未启用 RCON。请先停止服务器，或在 server.properties 启用 RCON',
+    message:
+      '无法执行在线备份：服务器未启用 RCON。请先停止服务器，或在 server.properties 启用 RCON',
     status: 409,
   },
   // 恢复互斥：另一恢复正在进行（同一实例 status='restoring'）
@@ -81,11 +87,11 @@ export const ErrorCodes = {
     message: '备份索引不可读，请稍后重试',
     status: 503,
   },
-  
+
   // 定时任务错误
   TASK_NOT_FOUND: { code: 40405, message: 'Scheduled task not found', status: 404 },
   INVALID_CRON_EXPRESSION: { code: 40004, message: 'Invalid cron expression', status: 400 },
-  
+
   // 文件错误
   FILE_NOT_FOUND: { code: 40406, message: 'File not found', status: 404 },
   PATH_TRAVERSAL_DETECTED: { code: 40302, message: 'Path traversal detected', status: 403 },
@@ -97,15 +103,27 @@ export const ErrorCodes = {
 
   // Webhook 错误
   WEBHOOK_NOT_FOUND: { code: 40410, message: 'Webhook not found', status: 404 },
-  WEBHOOK_INVALID_URL: { code: 40010, message: 'Invalid webhook URL (only http/https allowed)', status: 400 },
+  WEBHOOK_INVALID_URL: {
+    code: 40010,
+    message: 'Invalid webhook URL (only http/https allowed)',
+    status: 400,
+  },
   WEBHOOK_INVALID_EVENTS: { code: 40011, message: 'Invalid webhook event types', status: 400 },
   WEBHOOK_TEST_FAILED: { code: 50010, message: 'Webhook test delivery failed', status: 500 },
 
   // 升级错误
   UPGRADE_IN_PROGRESS: { code: 40907, message: 'Upgrade already in progress', status: 409 },
   // 取消升级时无可取消对象（升级已终态、已被取消、或进程重启后注册表为空）
-  UPGRADE_NOT_IN_PROGRESS: { code: 40908, message: 'No upgrade in progress for this instance', status: 409 },
-  UPGRADE_VERSION_SAME: { code: 40012, message: 'Target version is the same as current version', status: 400 },
+  UPGRADE_NOT_IN_PROGRESS: {
+    code: 40908,
+    message: 'No upgrade in progress for this instance',
+    status: 409,
+  },
+  UPGRADE_VERSION_SAME: {
+    code: 40012,
+    message: 'Target version is the same as current version',
+    status: 400,
+  },
 
   // 插件错误（feat-8 P0-5）
   PLUGIN_NOT_FOUND: { code: 40411, message: 'Plugin not found', status: 404 },
@@ -122,7 +140,11 @@ export const ErrorCodes = {
   // Modrinth 上游错误（搜索/版本/下载任一环节，保留 502 语义）
   MARKET_UPSTREAM_ERROR: { code: 50301, message: 'Modrinth upstream error', status: 502 },
   // 市场下载文件 sha512 校验不匹配：与 Modrinth 官方哈希比对失败，拒绝安装（供应链完整性闸门）
-  MARKET_CHECKSUM_MISMATCH: { code: 40014, message: 'Market file integrity check failed', status: 400 },
+  MARKET_CHECKSUM_MISMATCH: {
+    code: 40014,
+    message: 'Market file integrity check failed',
+    status: 400,
+  },
 
   // RCON 不可用（命令路由需要 RCON 响应但连接未启用或已断开）
   RCON_UNAVAILABLE: { code: 50302, message: 'RCON not available', status: 503 },
@@ -151,7 +173,11 @@ export const ErrorCodes = {
   // 两步验证未挂靠（无候选 secret / 未确认）却调用 confirm/disable
   AUTH_TOTP_NOT_ENROLLED: { code: 40015, message: '两步验证尚未挂靠，请先完成挂靠', status: 400 },
   // 已挂靠状态下重复 enroll：必须先 disable 再重新挂靠（避免静默替换正在使用的 secret）
-  AUTH_TOTP_ALREADY_ENABLED: { code: 40913, message: '两步验证已启用，请先关闭后再重新挂靠', status: 409 },
+  AUTH_TOTP_ALREADY_ENABLED: {
+    code: 40913,
+    message: '两步验证已启用，请先关闭后再重新挂靠',
+    status: 409,
+  },
   // API Key 通道被配置关闭（API_KEY_ENABLED=false）：拒绝而非降级放行，
   // 提示改用会话登录（浏览器的唯一正常通道）
   API_KEY_DISABLED: {
@@ -194,7 +220,7 @@ export function success(data, message = 'Success') {
     code: 0,
     message,
     data: data || null,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   };
 }
 
@@ -209,9 +235,9 @@ export function successPaginated(data, total, page, pageSize, message = 'Success
       total,
       page,
       pageSize,
-      totalPages: Math.ceil(total / pageSize)
+      totalPages: Math.ceil(total / pageSize),
     },
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   };
 }
 
@@ -222,7 +248,7 @@ export function error(errorCode, message, details) {
     code: errorCode.code,
     message: message || errorCode.message,
     details: details || null,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   };
 }
 
@@ -231,5 +257,5 @@ export default {
   AppError,
   success,
   successPaginated,
-  error
+  error,
 };

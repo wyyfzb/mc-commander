@@ -6,7 +6,13 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { useDeployStore } from '../deploy'
 
-const inFlight = { stage: 'download', percent: 0.3, transferred: 30, total: 100, instanceId: 'paper-abc1' }
+const inFlight = {
+  stage: 'download',
+  percent: 0.3,
+  transferred: 30,
+  total: 100,
+  instanceId: 'paper-abc1',
+}
 
 beforeEach(() => {
   useDeployStore.getState().resetDeploy()
@@ -23,7 +29,9 @@ describe('useDeployStore 终态收敛', () => {
 
   it('cancelled 终态：收敛 deploying 与门控，并落「已取消」结果位', () => {
     useDeployStore.getState().applyDeployProgress(inFlight)
-    useDeployStore.getState().applyDeployProgress({ stage: 'cancelled', percent: 0, transferred: 0, total: 0 })
+    useDeployStore
+      .getState()
+      .applyDeployProgress({ stage: 'cancelled', percent: 0, transferred: 0, total: 0 })
 
     const s = useDeployStore.getState()
     expect(s.deploying).toBe(false)
@@ -67,7 +75,9 @@ describe('useDeployStore 终态收敛', () => {
     // POST 回声晚于 WS 终态到达：两者对同一终态的描述必须一致
     useDeployStore.getState().finishDeploy({ ok: false, cancelled: true })
 
-    expect(useDeployStore.getState().progress?.error).toBe('实例目录未能删除（EBUSY: resource busy）')
+    expect(useDeployStore.getState().progress?.error).toBe(
+      '实例目录未能删除（EBUSY: resource busy）',
+    )
   })
 
   it('WS 断线时靠回声 details 补收尾明细（否则会把「收尾未完成」显示成「已清理」）', () => {
@@ -78,7 +88,9 @@ describe('useDeployStore 终态收敛', () => {
       cancelled: true,
       error: '实例目录未能删除（EBUSY: resource busy）',
     })
-    expect(useDeployStore.getState().progress?.error).toBe('实例目录未能删除（EBUSY: resource busy）')
+    expect(useDeployStore.getState().progress?.error).toBe(
+      '实例目录未能删除（EBUSY: resource busy）',
+    )
   })
 
   it('兜底快照空态：在途标记清空（服务端已无在途部署）', () => {

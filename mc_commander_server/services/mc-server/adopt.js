@@ -40,14 +40,20 @@ export function _writePidFile() {
 }
 
 export function _removePidFile() {
-  try { fs.unlinkSync(this._pidFilePath()); } catch { /* 不存在/已删 */ }
+  try {
+    fs.unlinkSync(this._pidFilePath());
+  } catch {
+    /* 不存在/已删 */
+  }
 }
 
 export function _readPidFile() {
   try {
     const raw = JSON.parse(fs.readFileSync(this._pidFilePath(), 'utf8'));
     if (Number.isInteger(raw?.pid) && raw.pid > 1) return raw;
-  } catch { /* 不存在/损坏 */ }
+  } catch {
+    /* 不存在/损坏 */
+  }
   return null;
 }
 
@@ -58,7 +64,11 @@ export function _readPidFile() {
  * 非 Linux（无 /proc）退化为纯验活，接受复用窗口。
  */
 export function _isPidAlive(pid) {
-  try { process.kill(pid, 0); } catch { return false; }
+  try {
+    process.kill(pid, 0);
+  } catch {
+    return false;
+  }
   if (process.platform === 'win32') return true;
   try {
     const cmdline = fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8');
@@ -128,7 +138,11 @@ export function _startAdoptWatchdog(intervalMs = ADOPT_WATCHDOG_INTERVAL_MS) {
     for (const name of [...this.players.keys()]) this._handlePlayerLeave(name);
     this.players.clear();
     if (uptimeSeconds != null) {
-      try { InstanceModel.addUptime(this.id, uptimeSeconds); } catch (e) { logger.warn('Failed to persist uptime:', e.message); }
+      try {
+        InstanceModel.addUptime(this.id, uptimeSeconds);
+      } catch (e) {
+        logger.warn('Failed to persist uptime:', e.message);
+      }
     }
     logger.info(`[${this.id}] Adopted process (pid ${pid}) exited`);
     if (this._manualStop) {

@@ -12,7 +12,15 @@ export interface QuickChipProps {
 }
 
 /** 快捷传送点 chip：名称行 + 坐标行，可带编辑/删除操作 */
-export function QuickChip({ name, coords, icon, onClick, disabled, onDelete, onEdit }: QuickChipProps) {
+export function QuickChip({
+  name,
+  coords,
+  icon,
+  onClick,
+  disabled,
+  onDelete,
+  onEdit,
+}: QuickChipProps) {
   return (
     <div className="inline-flex items-start gap-1 rounded-mcs-md border border-mcs-border-default bg-mcs-bg-default px-2.5 py-1.5">
       <button

@@ -58,7 +58,14 @@ function makePlayer(overrides: Partial<Player> = {}): Player {
     inventory: null,
     events: [],
     sessions: [],
-    stats: { totalOnline: 0, loginCount: 0, offlineSince: 0, deathCount: 0, achievementCount: 0, sleepCount: 0 },
+    stats: {
+      totalOnline: 0,
+      loginCount: 0,
+      offlineSince: 0,
+      deathCount: 0,
+      achievementCount: 0,
+      sleepCount: 0,
+    },
     ...overrides,
   }
 }
@@ -152,7 +159,9 @@ describe('PlayerTable · 响应式形态', () => {
     setup([makePlayer()])
 
     await user.click(screen.getByRole('checkbox', { name: '选择 Steve' }))
-    expect(usePlayersUiStore.getState().selectedUuids).toEqual(['00000000-0000-4000-8000-000000000002'])
+    expect(usePlayersUiStore.getState().selectedUuids).toEqual([
+      '00000000-0000-4000-8000-000000000002',
+    ])
   })
 
   it('<1280px（≥640px）：表格裁到核心列，次级列不参与布局（免横向溢出）', () => {

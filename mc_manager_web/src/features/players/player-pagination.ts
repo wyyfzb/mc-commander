@@ -27,8 +27,6 @@ export function paginatePlayerRows<T>(
     safePageIndex,
     pageCount,
     rows:
-      pageSize === -1
-        ? rows
-        : rows.slice(safePageIndex * pageSize, (safePageIndex + 1) * pageSize),
+      pageSize === -1 ? rows : rows.slice(safePageIndex * pageSize, (safePageIndex + 1) * pageSize),
   }
 }

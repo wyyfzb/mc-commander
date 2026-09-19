@@ -1,4 +1,16 @@
-import { Bell, Copy, KeyRound, LogOut, Menu, Moon, Search, Server, Settings, Sun, UserRound } from 'lucide-react'
+import {
+  Bell,
+  Copy,
+  KeyRound,
+  LogOut,
+  Menu,
+  Moon,
+  Search,
+  Server,
+  Settings,
+  Sun,
+  UserRound,
+} from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
@@ -183,7 +195,9 @@ export function AppTopBar() {
                 暂无实例，前往部署
               </DropdownMenuItem>
             )}
-            {instancesQuery.isError && <DropdownMenuItem disabled>实例列表加载失败</DropdownMenuItem>}
+            {instancesQuery.isError && (
+              <DropdownMenuItem disabled>实例列表加载失败</DropdownMenuItem>
+            )}
             {instancesQuery.isPending && (
               <DropdownMenuItem disabled>正在加载实例列表…</DropdownMenuItem>
             )}

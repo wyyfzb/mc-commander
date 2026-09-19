@@ -146,7 +146,9 @@ export class McSocket {
           ws.send(
             JSON.stringify({
               type: 'auth',
-              ...(this.sessionToken ? { sessionToken: this.sessionToken } : { apiKey: this.apiKey }),
+              ...(this.sessionToken
+                ? { sessionToken: this.sessionToken }
+                : { apiKey: this.apiKey }),
             }),
           )
         } catch {
@@ -376,9 +378,12 @@ export class McSocket {
 /** 同源推导：/ws（dev 走 Vite proxy；生产同源托管） */
 export function deriveWsUrl(baseUrl = ''): string {
   const base = baseUrl.replace(/\/+$/, '')
-  const protocol = base.startsWith('https:') || base.startsWith('wss:')
-    ? 'wss:'
-    : typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  const protocol =
+    base.startsWith('https:') || base.startsWith('wss:')
+      ? 'wss:'
+      : typeof window !== 'undefined' && window.location.protocol === 'https:'
+        ? 'wss:'
+        : 'ws:'
   if (base.startsWith('ws')) return base.replace(/\/+$/, '') + '/ws'
   if (base) return base.replace(/^https?:/, protocol) + '/ws'
   const host = typeof window !== 'undefined' ? window.location.host : 'localhost:25566'

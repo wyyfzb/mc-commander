@@ -153,7 +153,9 @@ describe('status 输入侧契约 - PUT /instances/:id（issue 486）', () => {
   });
 
   it('startCommand 字符串 → 400 且原文案保持（schema 承接既有拒绝语义）', async () => {
-    const res = await request(app).put('/api/v1/instances/s1').send({ startCommand: 'java -jar evil.jar' });
+    const res = await request(app)
+      .put('/api/v1/instances/s1')
+      .send({ startCommand: 'java -jar evil.jar' });
     expect(res.status).toBe(400);
     expect(res.body.code).toBe(40000);
     expect(res.body.message).toContain('startCommand 已不再支持通过 API 更新');
@@ -174,13 +176,17 @@ describe('status 输入侧契约 - PUT /instances/:id（issue 486）', () => {
   });
 
   it('合法 name+autoRestart → 200 + DB 持久化 + 内存同步 + 审计（成功路径行为不变）', async () => {
-    const res = await request(app).put('/api/v1/instances/s1').send({ name: 'renamed', autoRestart: true });
+    const res = await request(app)
+      .put('/api/v1/instances/s1')
+      .send({ name: 'renamed', autoRestart: true });
     expect(res.status).toBe(200);
     expect(res.body.data.name).toBe('s1');
     expect(InstanceModel.update).toHaveBeenCalledWith('s1', { name: 'renamed', autoRestart: true });
     expect(instance.name).toBe('renamed');
     expect(instance.autoRestart).toBe(true);
-    expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({ action: AuditActions.INSTANCE_UPDATE }));
+    expect(recordAudit).toHaveBeenCalledWith(
+      expect.objectContaining({ action: AuditActions.INSTANCE_UPDATE }),
+    );
   });
 
   it('name 首尾空白在写入侧归一化：落库与内存同步的均为 trim 后的值', async () => {
@@ -207,7 +213,10 @@ describe('status 输入侧契约 - PUT /instances/:id（issue 486）', () => {
     const res = await request(app).put('/api/v1/instances/s1').send({ startCommand: null });
     expect(res.status).toBe(200);
     expect(instance.startCommand).toBeNull();
-    expect(InstanceModel.update).toHaveBeenCalledWith('s1', expect.objectContaining({ startCommand: null }));
+    expect(InstanceModel.update).toHaveBeenCalledWith(
+      's1',
+      expect.objectContaining({ startCommand: null }),
+    );
   });
 });
 
@@ -227,7 +236,9 @@ describe('status 输入侧契约 - POST /instances/:id/start（issue 486）', ()
   });
 
   it('startCommand 字符串 → 400 统一校验信封（RCE 封堵 schema 前置）', async () => {
-    const res = await request(app).post('/api/v1/instances/s1/start').send({ startCommand: 'java -jar evil.jar' });
+    const res = await request(app)
+      .post('/api/v1/instances/s1/start')
+      .send({ startCommand: 'java -jar evil.jar' });
     expect(res.status).toBe(400);
     expect(res.body.code).toBe(40000);
     expect(res.body.message).toContain('startCommand 已不再支持通过 API 传入');
@@ -247,7 +258,9 @@ describe('status 输入侧契约 - POST /instances/:id/start（issue 486）', ()
     expect(res.status).toBe(200);
     expect(instance.start).toHaveBeenCalledTimes(1);
     expect(InstanceModel.update).toHaveBeenCalledWith('s1', { status: 'running' });
-    expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({ action: AuditActions.INSTANCE_START }));
+    expect(recordAudit).toHaveBeenCalledWith(
+      expect.objectContaining({ action: AuditActions.INSTANCE_START }),
+    );
   });
 
   it('EULA 未接受 → 403（schema 放行后 handler 原语义保持）', async () => {
@@ -297,7 +310,9 @@ describe('status 输入侧契约 - POST /instances/:id/command（issue 486）', 
   });
 
   it('超长命令（>2000）→ 400（长度上限拒收）', async () => {
-    const res = await request(app).post('/api/v1/instances/s1/command').send({ command: 'x'.repeat(2001) });
+    const res = await request(app)
+      .post('/api/v1/instances/s1/command')
+      .send({ command: 'x'.repeat(2001) });
     expect(res.status).toBe(400);
     expect(res.body.code).toBe(40000);
     expect(instance.sendCommand).not.toHaveBeenCalled();
@@ -334,10 +349,14 @@ describe('status 输入侧契约 - PUT /instances/:id/properties（issue 486）'
   });
 
   it('合法属性对象 → 200 + saveProperties 全量键写入 + 运行中命令下发（行为不变）', async () => {
-    const res = await request(app).put('/api/v1/instances/s1/properties')
+    const res = await request(app)
+      .put('/api/v1/instances/s1/properties')
       .send({ difficulty: 'hard', 'view-distance': '12' });
     expect(res.status).toBe(200);
-    expect(instance.saveProperties).toHaveBeenCalledWith({ difficulty: 'hard', 'view-distance': '12' });
+    expect(instance.saveProperties).toHaveBeenCalledWith({
+      difficulty: 'hard',
+      'view-distance': '12',
+    });
     // difficulty 为运行期命令键：运行中下发 difficulty hard（view-distance 需重启）
     expect(instance.sendCommand).toHaveBeenCalledWith('difficulty hard');
     expect(res.body.data.restartRequired).toEqual(['view-distance']);

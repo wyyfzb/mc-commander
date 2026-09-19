@@ -20,7 +20,7 @@ const COLUMN_TO_FIELD = {
   total_uptime: 'totalUptime',
   jvm_args: 'jvmArgs',
   created_at: 'createdAt',
-  updated_at: 'updatedAt'
+  updated_at: 'updatedAt',
 };
 
 const FIELD_TO_COLUMN = {
@@ -39,7 +39,7 @@ const FIELD_TO_COLUMN = {
   autoStart: 'auto_start',
   autoRestart: 'auto_restart',
   totalUptime: 'total_uptime',
-  jvmArgs: 'jvm_args'
+  jvmArgs: 'jvm_args',
 };
 
 function capitalizeFirst(s) {
@@ -110,7 +110,7 @@ export class InstanceModel {
       instanceData.minMemory || '1G',
       instanceData.serverPath || null,
       instanceData.mcVersion || null,
-      port
+      port,
     );
 
     return instanceData.id;
@@ -166,7 +166,9 @@ export class InstanceModel {
   /// 累加实例的累计运行时长（秒），在服务器停止时调用
   static addUptime(id, seconds) {
     const db = getDb();
-    db.prepare('UPDATE instances SET total_uptime = total_uptime + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(Math.floor(seconds), id);
+    db.prepare(
+      'UPDATE instances SET total_uptime = total_uptime + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+    ).run(Math.floor(seconds), id);
     return this.getById(id);
   }
 

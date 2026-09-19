@@ -4,7 +4,14 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 vi.mock('../config.js', () => ({
   default: {
     panelBackup: { enabled: false, cron: '0 4 * * *' },
-    retentionPrune: { enabled: false, cron: '30 4 * * *', auditLogDays: 90, webhookDeliveryDays: 30, commandHistoryDays: 90, orphanBackupDays: 30 },
+    retentionPrune: {
+      enabled: false,
+      cron: '30 4 * * *',
+      auditLogDays: 90,
+      webhookDeliveryDays: 30,
+      commandHistoryDays: 90,
+      orphanBackupDays: 30,
+    },
     backupInProgressTimeoutMs: 30 * 60 * 1000,
     logLevel: 'debug',
     dataDir: './data',
@@ -167,7 +174,13 @@ describe('TaskScheduler - append-only 表保留清理（issue #472：审计日�
 
     const result = scheduler.runRetentionPrune('cron');
 
-    expect(result).toEqual({ auditDeleted: 12, webhookDeleted: 5, commandHistoryDeleted: 9, orphanBackupsDeleted: 2, failed: [] });
+    expect(result).toEqual({
+      auditDeleted: 12,
+      webhookDeleted: 5,
+      commandHistoryDeleted: 9,
+      orphanBackupsDeleted: 2,
+      failed: [],
+    });
   });
 
   it('runRetentionPrune：孤儿快照清扫抛错不拖累其余项，failed 归因 orphan_backups', () => {
@@ -186,7 +199,7 @@ describe('TaskScheduler - append-only 表保留清理（issue #472：审计日�
     expect(result.orphanBackupsDeleted).toBe(0);
     expect(logger.error).toHaveBeenCalledWith(
       '[RetentionPrune] orphan backup dirs prune failed (cron):',
-      'readdir failed'
+      'readdir failed',
     );
   });
 
@@ -208,7 +221,7 @@ describe('TaskScheduler - append-only 表保留清理（issue #472：审计日�
     expect(result.commandHistoryDeleted).toBe(2);
     expect(logger.error).toHaveBeenCalledWith(
       '[RetentionPrune] audit_logs prune failed (startup):',
-      'db locked'
+      'db locked',
     );
   });
 
@@ -228,7 +241,7 @@ describe('TaskScheduler - append-only 表保留清理（issue #472：审计日�
     expect(result.commandHistoryDeleted).toBe(2);
     expect(logger.error).toHaveBeenCalledWith(
       '[RetentionPrune] webhook_deliveries prune failed (cron):',
-      'disk io error'
+      'disk io error',
     );
   });
 
@@ -248,7 +261,7 @@ describe('TaskScheduler - append-only 表保留清理（issue #472：审计日�
     expect(result.commandHistoryDeleted).toBe(0);
     expect(logger.error).toHaveBeenCalledWith(
       '[RetentionPrune] command_history prune failed (startup):',
-      'table corrupted'
+      'table corrupted',
     );
   });
 

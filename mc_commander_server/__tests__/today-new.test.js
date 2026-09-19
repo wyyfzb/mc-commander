@@ -52,7 +52,9 @@ describe('getTodayNewPlayers', () => {
 
   it('should count online player with first session today', () => {
     const instance = makeInstance(tmpDir);
-    instance.players.set('Steve', { sessions: [{ start: todayMs() + 1000, end: null, duration: 0 }] });
+    instance.players.set('Steve', {
+      sessions: [{ start: todayMs() + 1000, end: null, duration: 0 }],
+    });
     instance.players.set('Alex', { sessions: [{ start: yesterdayMs(), end: null, duration: 0 }] });
     expect(instance.getTodayNewPlayers()).toBe(1);
   });
@@ -61,16 +63,25 @@ describe('getTodayNewPlayers', () => {
     const instance = makeInstance(tmpDir);
     // usercache 提供离线玩家名单
     fs.mkdirSync(path.join(tmpDir, 'playerdata'), { recursive: true });
-    fs.writeFileSync(path.join(tmpDir, 'usercache.json'), JSON.stringify([
-      { name: 'Bob', uuid: '0000-0001' },
-      { name: 'Creeper', uuid: '0000-0002' },
-    ]));
-    fs.writeFileSync(path.join(tmpDir, 'playerdata', 'Bob.json'), JSON.stringify({
-      sessions: [{ start: todayMs() + 2000, end: null, duration: 0 }],
-    }));
-    fs.writeFileSync(path.join(tmpDir, 'playerdata', 'Creeper.json'), JSON.stringify({
-      sessions: [{ start: yesterdayMs(), end: null, duration: 0 }],
-    }));
+    fs.writeFileSync(
+      path.join(tmpDir, 'usercache.json'),
+      JSON.stringify([
+        { name: 'Bob', uuid: '0000-0001' },
+        { name: 'Creeper', uuid: '0000-0002' },
+      ]),
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, 'playerdata', 'Bob.json'),
+      JSON.stringify({
+        sessions: [{ start: todayMs() + 2000, end: null, duration: 0 }],
+      }),
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, 'playerdata', 'Creeper.json'),
+      JSON.stringify({
+        sessions: [{ start: yesterdayMs(), end: null, duration: 0 }],
+      }),
+    );
     expect(instance.getTodayNewPlayers()).toBe(1);
   });
 
@@ -91,7 +102,8 @@ describe('getTodayNewPlayers', () => {
     instance.players.set('Notch', { sessions: [{ start: Date.now(), end: null, duration: 0 }] });
     // 直接触发与 join 处理相同逻辑的计数（savedData 为空对象）
     const savedData = {};
-    const isFirstJoin = !savedData.totalPlayTime && !savedData.sessions?.length && !savedData.events?.length;
+    const isFirstJoin =
+      !savedData.totalPlayTime && !savedData.sessions?.length && !savedData.events?.length;
     if (isFirstJoin) instance._todayNewCache.count++;
     expect(instance.getTodayNewPlayers()).toBe(1);
   });

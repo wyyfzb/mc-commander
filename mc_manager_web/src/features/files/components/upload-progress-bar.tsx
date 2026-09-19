@@ -26,7 +26,9 @@ export function UploadProgressBar({ uploading, onCancel }: UploadProgressBarProp
           <p className="truncate text-mcs-sm text-mcs-text-default" title={uploading.name}>
             正在上传 {uploading.name}
           </p>
-          <span className="mcs-num text-mcs-xs leading-none text-mcs-text-muted">{uploading.pct}%</span>
+          <span className="mcs-num text-mcs-xs leading-none text-mcs-text-muted">
+            {uploading.pct}%
+          </span>
         </div>
         <div
           role="progressbar"

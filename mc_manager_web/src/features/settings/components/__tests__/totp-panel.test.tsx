@@ -30,8 +30,16 @@ afterAll(() => server.close())
  * 该形状正是「清洗不得截断」这条纪律的承重点（见 lib/__tests__/second-factor.test.ts）。
  */
 const RECOVERY_CODES = [
-  '2345678923', 'ABCDEFGHJK', 'LMNPQRSTUV', 'WXYZ234567', '89ABCDEFGH',
-  'JKLMNPQRST', 'UVWXYZ2345', '6789ABCDEF', 'GHJKLMNPQR', 'STUVWXYZ23',
+  '2345678923',
+  'ABCDEFGHJK',
+  'LMNPQRSTUV',
+  'WXYZ234567',
+  '89ABCDEFGH',
+  'JKLMNPQRST',
+  'UVWXYZ2345',
+  '6789ABCDEF',
+  'GHJKLMNPQR',
+  'STUVWXYZ23',
 ]
 
 function ok(data: unknown) {
@@ -45,18 +53,29 @@ function err(code: number, message: string, status: number) {
   )
 }
 
-function mockStatus(enabled: boolean, remaining = 10, confirmedAt: string | null = '2026-01-02T03:04:05.000Z') {
+function mockStatus(
+  enabled: boolean,
+  remaining = 10,
+  confirmedAt: string | null = '2026-01-02T03:04:05.000Z',
+) {
   server.use(
-    http.get('*/api/v1/auth/totp/status', () => ok({ enabled, confirmedAt, recoveryCodesRemaining: remaining })),
+    http.get('*/api/v1/auth/totp/status', () =>
+      ok({ enabled, confirmedAt, recoveryCodesRemaining: remaining }),
+    ),
   )
 }
 
 /** 面板渲染；传入 queryClient 即复用同一实例（模拟应用级 QueryClient 跨子页存活） */
 function renderPanel(props?: { authed?: boolean; queryClient?: QueryClient }) {
-  const qc = props?.queryClient ?? new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const qc =
+    props?.queryClient ?? new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={qc}>
-      <TotpPanel baseUrl="https://192.168.1.100:25566" apiKey="demo-key-123" authed={props?.authed ?? true} />
+      <TotpPanel
+        baseUrl="https://192.168.1.100:25566"
+        apiKey="demo-key-123"
+        authed={props?.authed ?? true}
+      />
       <Toaster />
     </QueryClientProvider>,
   )
@@ -73,7 +92,11 @@ describe('TotpPanel 未启用 → 挂靠', () => {
     server.use(
       http.post('*/api/v1/auth/totp/enroll', () => {
         enrollCalls += 1
-        return ok({ secret: 'JBSWY3DPEHPK3PXP', otpauthUrl: 'otpauth://totp/x', qrDataUrl: 'data:image/png;base64,AAAA' })
+        return ok({
+          secret: 'JBSWY3DPEHPK3PXP',
+          otpauthUrl: 'otpauth://totp/x',
+          qrDataUrl: 'data:image/png;base64,AAAA',
+        })
       }),
     )
     renderPanel()
@@ -87,13 +110,20 @@ describe('TotpPanel 未启用 → 挂靠', () => {
     mockStatus(false, 0)
     server.use(
       http.post('*/api/v1/auth/totp/enroll', () =>
-        ok({ secret: 'JBSWY3DPEHPK3PXP', otpauthUrl: 'otpauth://totp/x', qrDataUrl: 'data:image/png;base64,AAAA' }),
+        ok({
+          secret: 'JBSWY3DPEHPK3PXP',
+          otpauthUrl: 'otpauth://totp/x',
+          qrDataUrl: 'data:image/png;base64,AAAA',
+        }),
       ),
     )
     // setup() 会自行接管 navigator.clipboard，故探针必须在它之后注入（否则断言打在自己的桩上）
     const user = userEvent.setup()
     const writeText = vi.fn().mockResolvedValue(undefined)
-    Object.defineProperty(window.navigator, 'clipboard', { value: { writeText }, configurable: true })
+    Object.defineProperty(window.navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    })
     renderPanel()
 
     await user.click(await screen.findByRole('button', { name: /启用两步验证/ }))
@@ -112,12 +142,20 @@ describe('TotpPanel 未启用 → 挂靠', () => {
     mockStatus(false, 0)
     server.use(
       http.post('*/api/v1/auth/totp/enroll', () =>
-        ok({ secret: 'JBSWY3DPEHPK3PXP', otpauthUrl: 'otpauth://totp/x', qrDataUrl: 'data:image/png;base64,AAAA' }),
+        ok({
+          secret: 'JBSWY3DPEHPK3PXP',
+          otpauthUrl: 'otpauth://totp/x',
+          qrDataUrl: 'data:image/png;base64,AAAA',
+        }),
       ),
       http.post('*/api/v1/auth/totp/confirm', async ({ request }) => {
         const body = (await request.json()) as { code: string }
         if (body.code !== '123456') return err(40106, '两步验证码错误', 401)
-        return ok({ enabled: true, confirmedAt: '2026-01-02T03:04:05.000Z', recoveryCodes: RECOVERY_CODES })
+        return ok({
+          enabled: true,
+          confirmedAt: '2026-01-02T03:04:05.000Z',
+          recoveryCodes: RECOVERY_CODES,
+        })
       }),
     )
     const user = userEvent.setup()
@@ -128,7 +166,9 @@ describe('TotpPanel 未启用 → 挂靠', () => {
     await user.type(codeInput, '000000')
     await user.click(screen.getByRole('button', { name: /完成挂靠/ }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(/两步验证码错误|两步验证码或恢复码错误/)
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /两步验证码错误|两步验证码或恢复码错误/,
+    )
     expect(screen.queryByRole('list', { name: '两步验证恢复码' })).not.toBeInTheDocument()
 
     await user.clear(screen.getByLabelText('认证器中的 6 位验证码'))
@@ -159,10 +199,18 @@ describe('TotpPanel 未启用 → 挂靠', () => {
     mockStatus(false, 0)
     server.use(
       http.post('*/api/v1/auth/totp/enroll', () =>
-        ok({ secret: 'JBSWY3DPEHPK3PXP', otpauthUrl: 'otpauth://totp/x', qrDataUrl: 'data:image/png;base64,AAAA' }),
+        ok({
+          secret: 'JBSWY3DPEHPK3PXP',
+          otpauthUrl: 'otpauth://totp/x',
+          qrDataUrl: 'data:image/png;base64,AAAA',
+        }),
       ),
       http.post('*/api/v1/auth/totp/confirm', () =>
-        ok({ enabled: true, confirmedAt: '2026-01-02T03:04:05.000Z', recoveryCodes: RECOVERY_CODES }),
+        ok({
+          enabled: true,
+          confirmedAt: '2026-01-02T03:04:05.000Z',
+          recoveryCodes: RECOVERY_CODES,
+        }),
       ),
     )
     const user = userEvent.setup()

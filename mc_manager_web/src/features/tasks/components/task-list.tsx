@@ -147,7 +147,10 @@ function TaskRow({
     <div className="flex items-center gap-3 px-4 py-3">
       {/* 36px 类型图标（tone 浅底 + tone 前景） */}
       <span
-        className={cn('flex size-9 shrink-0 items-center justify-center rounded-mcs-sm', iconToneClasses)}
+        className={cn(
+          'flex size-9 shrink-0 items-center justify-center rounded-mcs-sm',
+          iconToneClasses,
+        )}
         aria-hidden
       >
         <Clock className="size-4.5" aria-hidden />
@@ -156,7 +159,10 @@ function TaskRow({
       <div className="min-w-0 flex-1">
         {/* 名称 + 类型徽章（同 tone） */}
         <div className="flex min-w-0 items-center gap-2">
-          <span className="truncate text-mcs-sm font-semibold text-mcs-text-default" title={task.name}>
+          <span
+            className="truncate text-mcs-sm font-semibold text-mcs-text-default"
+            title={task.name}
+          >
             {task.name}
           </span>
           <StatusPill tone={tone} className="text-mcs-xs">
@@ -193,7 +199,9 @@ function TaskRow({
                   className={cn(
                     'ml-1.5 inline-flex items-center gap-1 font-medium',
                     lastRunMeta.text,
-                    task.lastRunStatus === 'failed' && task.lastRunError && 'cursor-help underline decoration-dashed underline-offset-2',
+                    task.lastRunStatus === 'failed' &&
+                      task.lastRunError &&
+                      'cursor-help underline decoration-dashed underline-offset-2',
                   )}
                 >
                   <span className={cn('size-1.5 rounded-full', lastRunMeta.dot)} aria-hidden />
@@ -207,7 +215,9 @@ function TaskRow({
                 <TooltipContent side="bottom" className="max-w-xs">
                   <p className="text-mcs-xs font-medium text-mcs-error-fg">失败原因</p>
                   {/* 失败原因可能为无空格长串（压缩 JSON/路径），break-all 防溢出 tooltip 框 */}
-                  <p className="mt-1 text-xs break-all text-mcs-text-default">{task.lastRunError}</p>
+                  <p className="mt-1 text-xs break-all text-mcs-text-default">
+                    {task.lastRunError}
+                  </p>
                 </TooltipContent>
               )}
             </Tooltip>
@@ -229,7 +239,11 @@ function TaskRow({
           className="text-mcs-accent-fg"
           onClick={() => onRunNow(task)}
         >
-          {running ? <Hourglass className="size-3.5" aria-hidden /> : <Play className="size-3.5" aria-hidden />}
+          {running ? (
+            <Hourglass className="size-3.5" aria-hidden />
+          ) : (
+            <Play className="size-3.5" aria-hidden />
+          )}
         </IconButton>
         <IconButton
           aria-label={`${task.name} 编辑`}

@@ -126,7 +126,9 @@ test.describe('登录页', () => {
     // 凭据全清 → requireUnconfigured 放行，真正落在登录页而不是被弹回仪表盘
     await expect(page).toHaveURL(/\/login/)
     await expect(page.getByRole('heading', { name: '管理员登录' })).toBeVisible()
-    expect(await page.evaluate(() => localStorage.getItem('mcs-connection'))).not.toContain('e2e-mock-key')
+    expect(await page.evaluate(() => localStorage.getItem('mcs-connection'))).not.toContain(
+      'e2e-mock-key',
+    )
   })
 
   test('账号与安全面板：会话列表 + 本机徽章 + 改密表单', async ({ page }) => {

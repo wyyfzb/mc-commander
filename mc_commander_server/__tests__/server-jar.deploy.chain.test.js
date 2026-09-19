@@ -121,7 +121,11 @@ function defaultStreamImpl(jarBytes) {
   return (url, streamMod) => {
     const pt = new streamMod.PassThrough();
     queueMicrotask(() => {
-      pt.emit('downloadProgress', { percent: 0.5, transferred: jarBytes.length, total: jarBytes.length });
+      pt.emit('downloadProgress', {
+        percent: 0.5,
+        transferred: jarBytes.length,
+        total: jarBytes.length,
+      });
       pt.write(jarBytes);
       pt.end();
     });
@@ -327,7 +331,17 @@ describe('POST /instances/deploy · Paper 主链', () => {
     setPaperChain({
       builds: [
         { id: 43, channel: 'SNAPSHOT', downloads: {} },
-        { id: 42, channel: 'STABLE', downloads: { 'server:default': { name: 'paper-1.21.4-42.jar', url: `${PAPER_URL}/d/42`, sha256: JAR_SHA256 } } },
+        {
+          id: 42,
+          channel: 'STABLE',
+          downloads: {
+            'server:default': {
+              name: 'paper-1.21.4-42.jar',
+              url: `${PAPER_URL}/d/42`,
+              sha256: JAR_SHA256,
+            },
+          },
+        },
         { id: 41, channel: 'STABLE', downloads: {} },
       ],
     });
@@ -341,14 +355,24 @@ describe('POST /instances/deploy · Paper 主链', () => {
     expect(res.body.status).toBe('ok');
     const instanceId = res.body.data.id;
     expect(instanceId).toMatch(/^paper-[0-9a-f]{8}$/);
-    expect(res.body.data).toMatchObject({ type: 'paper', mcVersion: '1.21.4', maxMemory: '2G', javaVersion: '21' });
+    expect(res.body.data).toMatchObject({
+      type: 'paper',
+      mcVersion: '1.21.4',
+      maxMemory: '2G',
+      javaVersion: '21',
+    });
 
     const instancePath = `${testState.serversDir}/${instanceId}`;
     expect(fs.readFileSync(`${instancePath}/server.jar`)).toEqual(JAR_BYTES);
     expect(fs.readFileSync(`${instancePath}/eula.txt`, 'utf8')).toBe('eula=true\n');
     expect(fs.existsSync(`${instancePath}/instance.json`)).toBe(true);
     expect(InstanceModel.create).toHaveBeenCalledWith(
-      expect.objectContaining({ id: instanceId, name: 'Paper Chain Server', type: 'paper', mcVersion: '1.21.4' }),
+      expect.objectContaining({
+        id: instanceId,
+        name: 'Paper Chain Server',
+        type: 'paper',
+        mcVersion: '1.21.4',
+      }),
     );
 
     const stages = manager.emit.mock.calls.map(([, evt]) => evt.stage);
@@ -437,17 +461,19 @@ describe('部署注册表终态语义（issue 420）', () => {
   function setPaperChain({ badSha = false } = {}) {
     gotState.jsonTable = {
       'projects/paper/versions': {
-        builds: [{
-          id: 42,
-          channel: 'STABLE',
-          downloads: {
-            'server:default': {
-              name: 'paper-1.21.4-42.jar',
-              url: `${PAPER_URL}/d/42`,
-              sha256: badSha ? 'deadbeef'.repeat(8) : JAR_SHA256,
+        builds: [
+          {
+            id: 42,
+            channel: 'STABLE',
+            downloads: {
+              'server:default': {
+                name: 'paper-1.21.4-42.jar',
+                url: `${PAPER_URL}/d/42`,
+                sha256: badSha ? 'deadbeef'.repeat(8) : JAR_SHA256,
+              },
             },
           },
-        }],
+        ],
       },
     };
   }
@@ -466,9 +492,12 @@ describe('部署注册表终态语义（issue 420）', () => {
       return origSet(k, v);
     };
 
-    const res = await request(app)
-      .post('/api/instances/deploy')
-      .send({ type: 'paper', mcVersion: '1.21.4', instanceName: 'Registry Life Server', eula: true });
+    const res = await request(app).post('/api/instances/deploy').send({
+      type: 'paper',
+      mcVersion: '1.21.4',
+      instanceName: 'Registry Life Server',
+      eula: true,
+    });
     expect(res.status).toBe(200);
     const instanceId = res.body.data.id;
 
@@ -500,7 +529,8 @@ describe('部署注册表终态语义（issue 420）', () => {
     // websocket.js 连接建立时遍历 activeDeploys.values() 补发——终态后注册表为空，
     // 等价于新连接不对已完成部署补发历史终态；进行中快照结构含完整 meta 归属
     expect(manager.activeDeploys.size).toBe(0);
-    const inFlightEvt = manager.emit.mock.calls.map(([, evt]) => evt)
+    const inFlightEvt = manager.emit.mock.calls
+      .map(([, evt]) => evt)
       .find((e) => e.stage === 'first_launch');
     expect(inFlightEvt).toMatchObject({
       instanceId,
@@ -522,7 +552,9 @@ describe('部署注册表终态语义（issue 420）', () => {
 
     // download 首事件已写入 entry（受理即入注册表），sha 校验失败进入 catch：
     // :580 delete 先清 entry，:581 error 终态只推送不写回——发射时点注册表必为空
-    const downloadEvt = manager.emit.mock.calls.map(([, evt]) => evt).find((e) => e.stage === 'download');
+    const downloadEvt = manager.emit.mock.calls
+      .map(([, evt]) => evt)
+      .find((e) => e.stage === 'download');
     expect(downloadEvt).toMatchObject({ instanceId });
     expect(manager.emit.mock.calls.find(([, evt]) => evt.stage === 'error')).toBeTruthy();
     expect(manager.activeDeploys.get(instanceId)).toBeUndefined();
@@ -532,7 +564,9 @@ describe('部署注册表终态语义（issue 420）', () => {
 
 describe('POST /instances/deploy · 下载异常与核心回退', () => {
   it('got.stream 中途 error → 502 + 残留清理', async () => {
-    testState.latestBuild = { downloads: { application: { url: 'https://example.invalid/jar/server.jar' } } };
+    testState.latestBuild = {
+      downloads: { application: { url: 'https://example.invalid/jar/server.jar' } },
+    };
     gotState.streamImpl = (url, streamMod) => {
       const pt = new streamMod.PassThrough();
       queueMicrotask(() => pt.emit('error', new Error('socket hang up')));
@@ -552,7 +586,9 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
 
   it('vanilla：core build.application 携带 sha256 → 防御式取值 + 摘要校验通过', async () => {
     testState.latestBuild = {
-      downloads: { application: { url: 'https://example.invalid/jar/server.jar', sha256: JAR_SHA256 } },
+      downloads: {
+        application: { url: 'https://example.invalid/jar/server.jar', sha256: JAR_SHA256 },
+      },
     };
     const { app } = buildApp();
 
@@ -575,7 +611,9 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
       .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Vanilla Sha1 Server' });
 
     expect(res.status).toBe(200);
-    expect(fs.readFileSync(`${testState.serversDir}/${res.body.data.id}/server.jar`)).toEqual(JAR_BYTES);
+    expect(fs.readFileSync(`${testState.serversDir}/${res.body.data.id}/server.jar`)).toEqual(
+      JAR_BYTES,
+    );
   });
 
   it('fabric：core 失败 → 回退 meta.fabricmc 直链（loaderVersion 缺省 0.16.10）下载成功', async () => {
@@ -597,9 +635,12 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
     testState.mcCoreThrow = true;
     const { app } = buildApp();
 
-    await request(app)
-      .post('/api/instances/deploy')
-      .send({ type: 'fabric', mcVersion: '1.21.4', instanceName: 'Fabric Loader Server', loaderVersion: '0.16.14' });
+    await request(app).post('/api/instances/deploy').send({
+      type: 'fabric',
+      mcVersion: '1.21.4',
+      instanceName: 'Fabric Loader Server',
+      loaderVersion: '0.16.14',
+    });
 
     const { default: got } = await import('got');
     expect(got.stream.mock.calls[0][0]).toContain('/0.16.14/');
@@ -615,13 +656,17 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
 
     expect(res.status).toBe(200);
     const { default: got } = await import('got');
-    expect(got.stream.mock.calls[0][0]).toBe('https://api.purpurmc.org/v2/purpur/1.21.4/latest/download');
+    expect(got.stream.mock.calls[0][0]).toBe(
+      'https://api.purpurmc.org/v2/purpur/1.21.4/latest/download',
+    );
   });
 
   it('forge：安装器退出后未产出 server jar → 502 Forge server jar not found', async () => {
     // forge-installer.jar 下载后 spawn --installServer 假进程 exit0，
     // 目录中除 installer 外无 forge-*.jar → 查找失败抛错
-    testState.latestBuild = { downloads: { application: { url: 'https://example.invalid/jar/forge-installer.jar' } } };
+    testState.latestBuild = {
+      downloads: { application: { url: 'https://example.invalid/jar/forge-installer.jar' } },
+    };
     const { app } = buildApp();
 
     const res = await request(app)
@@ -653,7 +698,9 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
 
   it('InstanceModel.create 抛错 → 部署不阻断仍 200（DB 故障仅降级记录）', async () => {
     testState.dbCreateError = new Error('SQLITE_BUSY: database is locked');
-    testState.latestBuild = { downloads: { application: { url: 'https://example.invalid/jar/server.jar' } } };
+    testState.latestBuild = {
+      downloads: { application: { url: 'https://example.invalid/jar/server.jar' } },
+    };
     const { app } = buildApp();
 
     const res = await request(app)
@@ -668,7 +715,9 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
 
 describe('generateServerProperties 落盘契约', () => {
   it('rcon.port/server-port 按 instanceId 后 4 位 hex 偏移 + enable-rcon + 16 位随机密码', async () => {
-    testState.latestBuild = { downloads: { application: { url: 'https://example.invalid/jar/server.jar' } } };
+    testState.latestBuild = {
+      downloads: { application: { url: 'https://example.invalid/jar/server.jar' } },
+    };
     const { app } = buildApp();
 
     const res = await request(app)
@@ -678,7 +727,10 @@ describe('generateServerProperties 落盘契约', () => {
     expect(res.status).toBe(200);
     const instanceId = res.body.data.id;
     const offset = parseInt(instanceId.slice(-4), 16) % 100;
-    const props = fs.readFileSync(`${testState.serversDir}/${instanceId}/server.properties`, 'utf8');
+    const props = fs.readFileSync(
+      `${testState.serversDir}/${instanceId}/server.properties`,
+      'utf8',
+    );
 
     expect(props).toContain(`rcon.port=${25575 + offset}`);
     expect(props).toContain(`server-port=${25565 + offset}`);
@@ -690,16 +742,25 @@ describe('generateServerProperties 落盘契约', () => {
   });
 
   it('instance.json 与 eula.txt 契约（已同意 EULA 时部署产物可直接启动）', async () => {
-    testState.latestBuild = { downloads: { application: { url: 'https://example.invalid/jar/server.jar' } } };
+    testState.latestBuild = {
+      downloads: { application: { url: 'https://example.invalid/jar/server.jar' } },
+    };
     const { app } = buildApp();
 
-    const res = await request(app)
-      .post('/api/instances/deploy')
-      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Eula Contract Server', eula: true });
+    const res = await request(app).post('/api/instances/deploy').send({
+      type: 'vanilla',
+      mcVersion: '1.21.4',
+      instanceName: 'Eula Contract Server',
+      eula: true,
+    });
 
     const instanceId = res.body.data.id;
-    expect(fs.readFileSync(`${testState.serversDir}/${instanceId}/eula.txt`, 'utf8')).toBe('eula=true\n');
-    const cfg = JSON.parse(fs.readFileSync(`${testState.serversDir}/${instanceId}/instance.json`, 'utf8'));
+    expect(fs.readFileSync(`${testState.serversDir}/${instanceId}/eula.txt`, 'utf8')).toBe(
+      'eula=true\n',
+    );
+    const cfg = JSON.parse(
+      fs.readFileSync(`${testState.serversDir}/${instanceId}/instance.json`, 'utf8'),
+    );
     expect(cfg).toMatchObject({
       id: instanceId,
       name: 'Eula Contract Server',
@@ -712,7 +773,9 @@ describe('generateServerProperties 落盘契约', () => {
   });
 
   it('未同意 EULA（字段缺省）：写 eula=false、跳过首启，部署仍成功', async () => {
-    testState.latestBuild = { downloads: { application: { url: 'https://example.invalid/jar/server.jar' } } };
+    testState.latestBuild = {
+      downloads: { application: { url: 'https://example.invalid/jar/server.jar' } },
+    };
     const { app, manager } = buildApp();
 
     const res = await request(app)
@@ -722,30 +785,41 @@ describe('generateServerProperties 落盘契约', () => {
     expect(res.status).toBe(200);
     const instanceId = res.body.data.id;
     // 面板不得代替用户表达同意：未同意即 eula=false，且 MC 首启强制要求 true 故必须跳过
-    expect(fs.readFileSync(`${testState.serversDir}/${instanceId}/eula.txt`, 'utf8')).toBe('eula=false\n');
+    expect(fs.readFileSync(`${testState.serversDir}/${instanceId}/eula.txt`, 'utf8')).toBe(
+      'eula=false\n',
+    );
     const stages = manager.emit.mock.calls.map(([, evt]) => evt.stage);
     expect(stages).not.toContain('first_launch');
     expect(stages[stages.length - 1]).toBe('complete');
   });
 
   it('未同意 EULA（显式 false）：同样写 eula=false 且不首启', async () => {
-    testState.latestBuild = { downloads: { application: { url: 'https://example.invalid/jar/server.jar' } } };
+    testState.latestBuild = {
+      downloads: { application: { url: 'https://example.invalid/jar/server.jar' } },
+    };
     const { app, manager } = buildApp();
 
-    const res = await request(app)
-      .post('/api/instances/deploy')
-      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Explicit Decline Server', eula: false });
+    const res = await request(app).post('/api/instances/deploy').send({
+      type: 'vanilla',
+      mcVersion: '1.21.4',
+      instanceName: 'Explicit Decline Server',
+      eula: false,
+    });
 
     expect(res.status).toBe(200);
     const instanceId = res.body.data.id;
-    expect(fs.readFileSync(`${testState.serversDir}/${instanceId}/eula.txt`, 'utf8')).toBe('eula=false\n');
+    expect(fs.readFileSync(`${testState.serversDir}/${instanceId}/eula.txt`, 'utf8')).toBe(
+      'eula=false\n',
+    );
     expect(manager.emit.mock.calls.map(([, evt]) => evt.stage)).not.toContain('first_launch');
   });
 });
 
 describe('runFirstLaunch 首启行为', () => {
   beforeEach(() => {
-    testState.latestBuild = { downloads: { application: { url: 'https://example.invalid/jar/server.jar' } } };
+    testState.latestBuild = {
+      downloads: { application: { url: 'https://example.invalid/jar/server.jar' } },
+    };
   });
 
   it('首启退出码非 0 且无 logs 目录 → 记录告警但不阻断部署（resolve）', async () => {
@@ -764,9 +838,12 @@ describe('runFirstLaunch 首启行为', () => {
     testState.spawnBehavior = 'error';
     const { app } = buildApp();
 
-    const res = await request(app)
-      .post('/api/instances/deploy')
-      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Spawn Error Server', eula: true });
+    const res = await request(app).post('/api/instances/deploy').send({
+      type: 'vanilla',
+      mcVersion: '1.21.4',
+      instanceName: 'Spawn Error Server',
+      eula: true,
+    });
 
     expect(res.status).toBe(200);
   });
@@ -814,4 +891,3 @@ describe('runFirstLaunch 首启行为', () => {
     }
   });
 });
-

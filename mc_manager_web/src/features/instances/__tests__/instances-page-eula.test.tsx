@@ -77,7 +77,9 @@ describe('InstancesPage EULA 首启闭环（issue 312）', () => {
     // 命中 EULA 特例：弹中文同意对话框（而不是无关报错 toast）
     expect(await screen.findByText('Minecraft EULA 协议')).toBeInTheDocument()
     // 文案说的是**文件内容**（eula=true），不是请求体字段（agreed）——勿把两者混为一谈
-    expect(screen.getByText(/同意后将在 eula\.txt 中写入 eula=true 并自动启动服务器/)).toBeInTheDocument()
+    expect(
+      screen.getByText(/同意后将在 eula\.txt 中写入 eula=true 并自动启动服务器/),
+    ).toBeInTheDocument()
     expect(startMock.calls).toBe(1)
     expect(eulaMock.calls).toBe(0)
 

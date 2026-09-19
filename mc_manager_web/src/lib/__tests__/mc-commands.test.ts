@@ -5,7 +5,21 @@ describe('命令静态表', () => {
   it('包含核心命令且无重复', () => {
     const names = MC_COMMANDS.map((c) => c.name)
     expect(new Set(names).size).toBe(names.length)
-    for (const required of ['help', 'give', 'tp', 'ban', 'kick', 'whitelist', 'save-all', 'stop', 'say', 'fill', 'effect', 'enchant', 'xp']) {
+    for (const required of [
+      'help',
+      'give',
+      'tp',
+      'ban',
+      'kick',
+      'whitelist',
+      'save-all',
+      'stop',
+      'say',
+      'fill',
+      'effect',
+      'enchant',
+      'xp',
+    ]) {
       expect(names).toContain(required)
     }
   })

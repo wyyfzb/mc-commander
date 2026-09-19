@@ -22,7 +22,12 @@ import {
 } from '../queries'
 import { useConnectionStore } from '@/stores/connection'
 import { ApiError } from '@/api/client'
-import type { FileEntry, FileListResponse, FileContentResponse, FileSaveResponse } from '@/api/types'
+import type {
+  FileEntry,
+  FileListResponse,
+  FileContentResponse,
+  FileSaveResponse,
+} from '@/api/types'
 
 const entry: FileEntry = {
   name: 'server.properties',
@@ -64,7 +69,10 @@ let renameHits = 0
 
 function ok<T>(data: T) {
   return HttpResponse.json({
-    status: 'ok', code: 0, message: 'Success', data,
+    status: 'ok',
+    code: 0,
+    message: 'Success',
+    data,
     timestamp: new Date().toISOString(),
   })
 }
@@ -455,8 +463,16 @@ describe('useUploadFile', () => {
   })
 
   const uploadOk = {
-    status: 'ok', code: 0, message: 'Success',
-    data: { path: '/plugins/config.txt', name: 'config.txt', size: 2048, modifiedAt: '2026-01-01T00:00:00Z', isDirectory: false },
+    status: 'ok',
+    code: 0,
+    message: 'Success',
+    data: {
+      path: '/plugins/config.txt',
+      name: 'config.txt',
+      size: 2048,
+      modifiedAt: '2026-01-01T00:00:00Z',
+      isDirectory: false,
+    },
     timestamp: '',
   }
 

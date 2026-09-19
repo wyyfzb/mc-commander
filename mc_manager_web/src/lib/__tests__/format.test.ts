@@ -58,10 +58,14 @@ describe('formatNotificationTime', () => {
     expect(formatNotificationTime(new Date('2026-08-14T09:05:00').getTime(), now)).toBe('09:05')
   })
   it('昨天 HH:mm', () => {
-    expect(formatNotificationTime(new Date('2026-08-13T23:30:00').getTime(), now)).toBe('昨天 23:30')
+    expect(formatNotificationTime(new Date('2026-08-13T23:30:00').getTime(), now)).toBe(
+      '昨天 23:30',
+    )
   })
   it('更早 MM-dd HH:mm', () => {
-    expect(formatNotificationTime(new Date('2026-08-01T08:00:00').getTime(), now)).toBe('08-01 08:00')
+    expect(formatNotificationTime(new Date('2026-08-01T08:00:00').getTime(), now)).toBe(
+      '08-01 08:00',
+    )
   })
 })
 
@@ -125,7 +129,9 @@ describe('formatStartTime / formatLogFileName / worldTimePhase', () => {
   })
 
   it('日志文件名格式', () => {
-    expect(formatLogFileName(new Date(2026, 7, 14, 9, 30, 5))).toBe('mc_server_log_20260814_093005.txt')
+    expect(formatLogFileName(new Date(2026, 7, 14, 9, 30, 5))).toBe(
+      'mc_server_log_20260814_093005.txt',
+    )
   })
 
   it('世界时段映射', () => {

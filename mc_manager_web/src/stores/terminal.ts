@@ -21,7 +21,10 @@ interface TerminalState {
   /** 实例切换：清空旧实例日志 + 重置标记 */
   setInstance: (instanceId: string | null) => void
   /** 历史日志填充（仅空缓冲时） */
-  fillHistory: (instanceId: string, logs: Array<{ text: string; type: 'stdout' | 'stderr' }>) => void
+  fillHistory: (
+    instanceId: string,
+    logs: Array<{ text: string; type: 'stdout' | 'stderr' }>,
+  ) => void
   /** WS log 事件推入 */
   pushEntry: (instanceId: string, text: string, type: 'stdout' | 'stderr' | 'command') => void
   /** 手动清空（置 suppressBackfill：组件重建不再回填历史） */

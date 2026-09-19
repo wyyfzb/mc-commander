@@ -67,9 +67,7 @@ export const fileListRequestSchema = z.object({
 
 /** GET download / GET content / DELETE files 查询：path 必填非空 */
 export const filePathRequestSchema = z.object({
-  path: z
-    .string({ required_error: 'File path is required' })
-    .min(1, 'File path is required'),
+  path: z.string({ required_error: 'File path is required' }).min(1, 'File path is required'),
 })
 
 /** PUT /instances/:id/files/content 保存内容请求体 */

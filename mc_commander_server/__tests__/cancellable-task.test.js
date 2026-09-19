@@ -18,7 +18,9 @@ describe('cancellable-task 注册表', () => {
   it('登记后取消返回 true，且 abort 监听被同步触发（子进程/下载流的实际中断点）', () => {
     const task = beginCancellableTask(TASK_KINDS.DEPLOY, 'vanilla-cancel1');
     let aborted = 0;
-    task.signal.addEventListener('abort', () => { aborted += 1; });
+    task.signal.addEventListener('abort', () => {
+      aborted += 1;
+    });
 
     expect(cancelTask(TASK_KINDS.DEPLOY, 'vanilla-cancel1')).toBe(true);
     expect(aborted).toBe(1);

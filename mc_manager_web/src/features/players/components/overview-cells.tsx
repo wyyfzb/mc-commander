@@ -13,11 +13,23 @@ export function Section({ title, children }: { title: string; children: ReactNod
   )
 }
 
-export function InfoCell({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
+export function InfoCell({
+  label,
+  value,
+  mono = false,
+}: {
+  label: string
+  value: string
+  mono?: boolean
+}) {
   return (
     <div className="flex flex-col gap-0.5">
       <span className="text-mcs-2xs text-mcs-text-muted">{label}</span>
-      <span className={mono ? 'font-mono text-mcs-xs text-mcs-text-default' : 'text-mcs-xs text-mcs-text-default'}>
+      <span
+        className={
+          mono ? 'font-mono text-mcs-xs text-mcs-text-default' : 'text-mcs-xs text-mcs-text-default'
+        }
+      >
         {value}
       </span>
     </div>
@@ -28,7 +40,9 @@ export function StatCell({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col gap-0.5 rounded-mcs-xs bg-mcs-bg-muted px-2 py-1.5">
       <span className="text-mcs-2xs text-mcs-text-muted">{label}</span>
-      <span className="mcs-num text-mcs-sm leading-none font-medium text-mcs-text-default">{value}</span>
+      <span className="mcs-num text-mcs-sm leading-none font-medium text-mcs-text-default">
+        {value}
+      </span>
     </div>
   )
 }

@@ -66,7 +66,11 @@ describe('WebSocket 事件格式契约', () => {
     it('instance:log 应广播 type=log 且 data 含 text/type 字段', () => {
       const ws = connectAndSubscribe('s1');
 
-      serverManager.emit('instance:log', { instanceId: 's1', text: '[Server] Done', type: 'stdout' });
+      serverManager.emit('instance:log', {
+        instanceId: 's1',
+        text: '[Server] Done',
+        type: 'stdout',
+      });
 
       const msg = sentMessage(ws);
       expect(msg.type).toBe('log');

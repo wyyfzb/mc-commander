@@ -160,7 +160,8 @@ const LOCALIZED_MESSAGES: Partial<Record<ErrorCodeValue, string>> = {
   [ErrorCode.MARKET_PROJECT_NOT_FOUND]: '插件市场：Modrinth 上未找到该项目（可能已下架）',
   [ErrorCode.MARKET_VERSION_NOT_FOUND]: '插件市场：Modrinth 上未找到该版本',
   [ErrorCode.MARKET_UPSTREAM_ERROR]: '插件市场：Modrinth 服务暂时不可用，请稍后再试',
-  [ErrorCode.MARKET_CHECKSUM_MISMATCH]: '插件市场：文件完整性校验失败，安装已拒绝（下载可能损坏，请重试）',
+  [ErrorCode.MARKET_CHECKSUM_MISMATCH]:
+    '插件市场：文件完整性校验失败，安装已拒绝（下载可能损坏，请重试）',
   [ErrorCode.RCON_UNAVAILABLE]: 'RCON 未启用或连接已断开，请在 server.properties 启用 RCON',
   [ErrorCode.UPGRADE_IN_PROGRESS]: '已有升级任务进行中',
   [ErrorCode.UPGRADE_NOT_IN_PROGRESS]: '该升级已结束或不在进行中，无需取消',
@@ -194,7 +195,11 @@ function formatValidationDetails(details: unknown): string | null {
  * 服务端已本地化的 message 透传；英文默认文案按错误码映射。
  * 校验失败（40000）且携带结构化 details 时，拼接字段级错误帮助定位。
  */
-export function getFriendlyErrorMessage(code: number, serverMessage?: string, details?: unknown): string {
+export function getFriendlyErrorMessage(
+  code: number,
+  serverMessage?: string,
+  details?: unknown,
+): string {
   const base = SERVER_LOCALIZED_CODES.has(code as ErrorCodeValue)
     ? serverMessage || LOCALIZED_MESSAGES[code as ErrorCodeValue] || '操作失败'
     : LOCALIZED_MESSAGES[code as ErrorCodeValue] || serverMessage || `操作失败（错误码 ${code}）`

@@ -30,15 +30,20 @@ function buildLegacyV11Db() {
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
   `);
-  raw.prepare(
-    `INSERT INTO admin_account (id, password_hash, totp_secret, created_at)
+  raw
+    .prepare(
+      `INSERT INTO admin_account (id, password_hash, totp_secret, created_at)
      VALUES (1, 'scrypt$131072$8$1$c2FsdA==$aGFzaA==', 'KEEP-ME-PLEASE', '2026-01-01 00:00:00')`,
-  ).run();
+    )
+    .run();
   raw.close();
 }
 
 function columnsOf(db, table) {
-  return db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+  return db
+    .prepare(`PRAGMA table_info(${table})`)
+    .all()
+    .map((c) => c.name);
 }
 
 describe('数据库 v11→v12 迁移（存量库 + 存量行）', () => {
@@ -61,9 +66,19 @@ describe('数据库 v11→v12 迁移（存量库 + 存量行）', () => {
 
   it('admin_account 补齐三列，类型与默认值符合契约', () => {
     expect(columnsOf(db, 'admin_account')).toEqual(
-      expect.arrayContaining(['totp_secret', 'totp_enabled', 'totp_confirmed_at', 'totp_last_step']),
+      expect.arrayContaining([
+        'totp_secret',
+        'totp_enabled',
+        'totp_confirmed_at',
+        'totp_last_step',
+      ]),
     );
-    const info = Object.fromEntries(db.prepare('PRAGMA table_info(admin_account)').all().map((c) => [c.name, c]));
+    const info = Object.fromEntries(
+      db
+        .prepare('PRAGMA table_info(admin_account)')
+        .all()
+        .map((c) => [c.name, c]),
+    );
     // 存量行必须回填 0（NOT NULL DEFAULT），否则 getTotpState 的 === 1 判定会漏
     expect(info.totp_enabled.type).toBe('INTEGER');
     expect(info.totp_enabled.notnull).toBe(1);
@@ -84,10 +99,16 @@ describe('数据库 v11→v12 迁移（存量库 + 存量行）', () => {
     expect(columnsOf(db, 'admin_recovery_codes')).toEqual(
       expect.arrayContaining(['id', 'code_hash', 'used_at', 'created_at']),
     );
-    const indexes = db.prepare('PRAGMA index_list(admin_recovery_codes)').all().map((i) => i.name);
+    const indexes = db
+      .prepare('PRAGMA index_list(admin_recovery_codes)')
+      .all()
+      .map((i) => i.name);
     expect(indexes).toContain('idx_admin_recovery_codes_unused');
     // code_hash 唯一（同一摘要不得落两行）
-    const unique = db.prepare('PRAGMA index_list(admin_recovery_codes)').all().some((i) => i.unique === 1);
+    const unique = db
+      .prepare('PRAGMA index_list(admin_recovery_codes)')
+      .all()
+      .some((i) => i.unique === 1);
     expect(unique).toBe(true);
   });
 
@@ -98,7 +119,9 @@ describe('数据库 v11→v12 迁移（存量库 + 存量行）', () => {
     db = initDatabase();
 
     expect(db.pragma('user_version', { simple: true })).toBe(14);
-    expect(db.prepare('SELECT totp_secret FROM admin_account WHERE id = 1').get().totp_secret).toBe('KEEP-ME-PLEASE');
+    expect(db.prepare('SELECT totp_secret FROM admin_account WHERE id = 1').get().totp_secret).toBe(
+      'KEEP-ME-PLEASE',
+    );
     expect(db.prepare('SELECT COUNT(*) AS n FROM admin_account').get().n).toBe(1);
   });
 });

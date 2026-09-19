@@ -33,9 +33,12 @@ async function useStoppedInstance(page: Page) {
  *  失败路径也必须执行，故自成 try/catch */
 async function resetMockScenario(page: Page) {
   try {
-    await page.request.post(new URL('/api/v1/mock/reset', test.info().project.use.baseURL).toString(), {
-      data: { only: 'upgrade' },
-    })
+    await page.request.post(
+      new URL('/api/v1/mock/reset', test.info().project.use.baseURL).toString(),
+      {
+        data: { only: 'upgrade' },
+      },
+    )
   } catch {
     // 复位失败不掩盖用例本身的失败原因（下一轮 e2e 是新 mock 进程，不跨运行泄漏）
   }

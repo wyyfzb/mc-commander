@@ -98,8 +98,10 @@ function translateUpstreamError(err, notFoundCode) {
   if (err?.response?.statusCode === 404) {
     return new AppError(notFoundCode, 'Not found on Modrinth');
   }
-  return new AppError(ErrorCodes.MARKET_UPSTREAM_ERROR,
-    `Modrinth upstream error: ${err?.message || 'unknown'}`);
+  return new AppError(
+    ErrorCodes.MARKET_UPSTREAM_ERROR,
+    `Modrinth upstream error: ${err?.message || 'unknown'}`,
+  );
 }
 
 /**
@@ -149,7 +151,13 @@ function buildFacets({ gameVersion, loader }) {
  * 搜索插件市场（Modrinth /search 代理 + TTL 缓存）。
  * @returns {{ totalHits: number, hits: Array, cached: boolean }}
  */
-export async function searchMarketPlugins({ query, offset = 0, limit = 20, gameVersion = null, loader = null }) {
+export async function searchMarketPlugins({
+  query,
+  offset = 0,
+  limit = 20,
+  gameVersion = null,
+  loader = null,
+}) {
   const q = sanitizeQuery(query);
   const gv = sanitizeGameVersion(gameVersion);
   const ld = sanitizeLoader(loader);
@@ -189,9 +197,8 @@ export async function searchMarketPlugins({ query, offset = 0, limit = 20, gameV
         author: h.author ?? null,
         downloads: typeof h.downloads === 'number' ? h.downloads : 0,
         follows: typeof h.follows === 'number' ? h.follows : 0,
-        iconUrl: typeof h.icon_url === 'string' && h.icon_url.startsWith('https://')
-          ? h.icon_url
-          : null,
+        iconUrl:
+          typeof h.icon_url === 'string' && h.icon_url.startsWith('https://') ? h.icon_url : null,
         dateModified: h.date_modified ?? null,
         categories: Array.isArray(h.display_categories)
           ? h.display_categories.filter((c) => typeof c === 'string').slice(0, 8)
@@ -238,11 +245,14 @@ export async function getMarketProjectVersions(slug, { gameVersion = null, loade
 
     const versions = (Array.isArray(data) ? data : [])
       .map((v) => {
-        const primary = (Array.isArray(v.files) ? v.files : []).find((f) => f.primary)
-          ?? (Array.isArray(v.files) ? v.files[0] : null);
+        const primary =
+          (Array.isArray(v.files) ? v.files : []).find((f) => f.primary) ??
+          (Array.isArray(v.files) ? v.files[0] : null);
         return {
           versionNumber: typeof v.version_number === 'string' ? v.version_number : null,
-          versionType: ['release', 'beta', 'alpha'].includes(v.version_type) ? v.version_type : null,
+          versionType: ['release', 'beta', 'alpha'].includes(v.version_type)
+            ? v.version_type
+            : null,
           name: typeof v.name === 'string' ? v.name : null,
           changelog: typeof v.changelog === 'string' ? v.changelog.slice(0, 2000) : null,
           datePublished: v.date_published ?? null,
@@ -290,7 +300,9 @@ export function sanitizeMarketFileName(filename, { slug, versionNumber }) {
     return /^[A-Za-z0-9][A-Za-z0-9._-]*\.jar$/.test(raw) ? raw : 'modrinth-plugin.jar';
   })();
 
-  const base = String(filename || '').split(/[/\\]/).pop();
+  const base = String(filename || '')
+    .split(/[/\\]/)
+    .pop();
   const stripped = base
     .replace(/\s+/g, '-')
     .replace(/[^A-Za-z0-9._-]/g, '')
@@ -316,8 +328,10 @@ export function sanitizeMarketFileName(filename, { slug, versionNumber }) {
  */
 export async function downloadMarketFile(url) {
   if (typeof url !== 'string' || !url.startsWith(MODRINTH_CDN_PREFIX)) {
-    throw new AppError(ErrorCodes.MARKET_UPSTREAM_ERROR,
-      'Download URL is not on the Modrinth CDN allowlist');
+    throw new AppError(
+      ErrorCodes.MARKET_UPSTREAM_ERROR,
+      'Download URL is not on the Modrinth CDN allowlist',
+    );
   }
 
   const tmpDir = path.join(os.tmpdir(), 'mc-commander-uploads');
@@ -326,7 +340,10 @@ export async function downloadMarketFile(url) {
   } catch (err) {
     throw new AppError(ErrorCodes.SERVER_ERROR, `Failed to create tmp dir: ${err.message}`);
   }
-  const tmpPath = path.join(tmpDir, `.market-download.tmp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+  const tmpPath = path.join(
+    tmpDir,
+    `.market-download.tmp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+  );
 
   const source = got.stream(url, {
     headers: { 'User-Agent': USER_AGENT },
@@ -348,8 +365,12 @@ export async function downloadMarketFile(url) {
     transferred += chunk.length;
     if (transferred > MARKET_DOWNLOAD_MAX_SIZE) {
       sizeExceeded = true;
-      source.destroy(new AppError(ErrorCodes.MARKET_UPSTREAM_ERROR,
-        `Plugin exceeds download size limit (${Math.round(MARKET_DOWNLOAD_MAX_SIZE / 1024 / 1024)}MB)`));
+      source.destroy(
+        new AppError(
+          ErrorCodes.MARKET_UPSTREAM_ERROR,
+          `Plugin exceeds download size limit (${Math.round(MARKET_DOWNLOAD_MAX_SIZE / 1024 / 1024)}MB)`,
+        ),
+      );
       counter.destroy();
     }
   });
@@ -358,10 +379,16 @@ export async function downloadMarketFile(url) {
     await pipeline(source, counter, fs.createWriteStream(tmpPath));
     return { tmpPath, sha512: hash.digest('hex') };
   } catch (err) {
-    try { fs.unlinkSync(tmpPath); } catch { /* 半成品清理失败可忽略 */ }
+    try {
+      fs.unlinkSync(tmpPath);
+    } catch {
+      /* 半成品清理失败可忽略 */
+    }
     if (err instanceof AppError) throw err;
-    throw new AppError(ErrorCodes.MARKET_UPSTREAM_ERROR,
-      `Failed to download plugin: ${err?.message || 'unknown'}`);
+    throw new AppError(
+      ErrorCodes.MARKET_UPSTREAM_ERROR,
+      `Failed to download plugin: ${err?.message || 'unknown'}`,
+    );
   }
 }
 
@@ -374,11 +401,19 @@ export async function downloadMarketFile(url) {
  * 注意：不从客户端接收下载 URL（服务端重新解析，防 SSRF/任意下载）。
  * @returns {object} uploadPlugin 结果 + { slug, versionNumber, source }
  */
-export async function installPluginFromMarket(serverPath, { slug, versionNumber }, { overwrite = false } = {}) {
+export async function installPluginFromMarket(
+  serverPath,
+  { slug, versionNumber },
+  { overwrite = false } = {},
+) {
   if (typeof slug !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(slug)) {
     throw new AppError(ErrorCodes.VALIDATION_ERROR, `Invalid project slug: ${slug}`);
   }
-  if (typeof versionNumber !== 'string' || versionNumber.length === 0 || versionNumber.length > 100) {
+  if (
+    typeof versionNumber !== 'string' ||
+    versionNumber.length === 0 ||
+    versionNumber.length > 100
+  ) {
     throw new AppError(ErrorCodes.VALIDATION_ERROR, `Invalid version number: ${versionNumber}`);
   }
 
@@ -386,12 +421,13 @@ export async function installPluginFromMarket(serverPath, { slug, versionNumber 
   const { versions } = await getMarketProjectVersions(slug, {});
   const target = versions.find((v) => v.versionNumber === versionNumber);
   if (!target) {
-    throw new AppError(ErrorCodes.MARKET_VERSION_NOT_FOUND,
-      `Version not found on Modrinth: ${versionNumber}`);
+    throw new AppError(
+      ErrorCodes.MARKET_VERSION_NOT_FOUND,
+      `Version not found on Modrinth: ${versionNumber}`,
+    );
   }
   if (!target.file?.url) {
-    throw new AppError(ErrorCodes.MARKET_VERSION_NOT_FOUND,
-      'Version has no downloadable file');
+    throw new AppError(ErrorCodes.MARKET_VERSION_NOT_FOUND, 'Version has no downloadable file');
   }
 
   const { tmpPath, sha512: actualSha512 } = await downloadMarketFile(target.file.url);
@@ -403,11 +439,15 @@ export async function installPluginFromMarket(serverPath, { slug, versionNumber 
     const expectedSha512 = target.file.sha512;
     if (expectedSha512) {
       if (actualSha512 !== expectedSha512.toLowerCase()) {
-        throw new AppError(ErrorCodes.MARKET_CHECKSUM_MISMATCH,
-          `File integrity check failed: ${target.file.filename}`);
+        throw new AppError(
+          ErrorCodes.MARKET_CHECKSUM_MISMATCH,
+          `File integrity check failed: ${target.file.filename}`,
+        );
       }
     } else {
-      logger.info(`Market install skipped sha512 check (upstream provided no hash): ${target.file.filename}`);
+      logger.info(
+        `Market install skipped sha512 check (upstream provided no hash): ${target.file.filename}`,
+      );
     }
     const fileName = sanitizeMarketFileName(target.file.filename, { slug, versionNumber });
     const result = uploadPlugin(serverPath, tmpPath, fileName, { overwrite });
@@ -419,7 +459,11 @@ export async function installPluginFromMarket(serverPath, { slug, versionNumber 
       originalFileName: target.file.filename,
     };
   } finally {
-    try { fs.unlinkSync(tmpPath); } catch { /* 已清理 */ }
+    try {
+      fs.unlinkSync(tmpPath);
+    } catch {
+      /* 已清理 */
+    }
   }
 }
 
@@ -437,7 +481,9 @@ const UPDATE_CHECK_CONCURRENCY = 5;
 
 /** 插件名 → slug 候选（Modrinth slug 全小写连字符风格：VaultUnlocked → vaultunlocked） */
 function slugifyPluginName(name) {
-  return String(name).toLowerCase().replace(/[^a-z0-9]+/g, '');
+  return String(name)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '');
 }
 
 /**
@@ -449,7 +495,11 @@ function slugifyPluginName(name) {
  * @returns {number} 1: a>b；0: 相等；-1: a<b
  */
 export function comparePluginVersions(a, b) {
-  const norm = (v) => String(v ?? '').trim().replace(/^[vV]/, '').split('+')[0];
+  const norm = (v) =>
+    String(v ?? '')
+      .trim()
+      .replace(/^[vV]/, '')
+      .split('+')[0];
   const va = norm(a);
   const vb = norm(b);
   if (va === vb) return 0;

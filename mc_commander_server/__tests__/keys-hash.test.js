@@ -26,7 +26,8 @@ const TEST_PLAINTEXT_KEY = 'test-api-key-for-unit-tests';
 /** 仓库真实 .env（本文件必须一次都不碰；见下方回归守卫用例） */
 const REAL_ENV_PATH = fileURLToPath(new URL('../.env', import.meta.url));
 
-const sha256File = (file) => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+const sha256File = (file) =>
+  crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 
 describe('POST /api/rotate-key 哈希存储', () => {
   let tmpDir;
@@ -64,7 +65,7 @@ describe('POST /api/rotate-key 哈希存储', () => {
       const newKey = res.body.data.apiKey;
 
       // 检查写入内容不含 API_KEY= 明文
-      const writeCall = writeSpy.mock.calls.find(c => {
+      const writeCall = writeSpy.mock.calls.find((c) => {
         const content = typeof c[1] === 'string' ? c[1] : '';
         return content.includes('API_KEY_HASH');
       });
@@ -147,7 +148,11 @@ describe('persistApiKeyHash 文件权限', () => {
     }
     const tmp = envPath + '.tmp';
     fs.writeFileSync(tmp, content, 'utf-8');
-    try { fs.chmodSync(tmp, 0o600); } catch { /* Windows */ }
+    try {
+      fs.chmodSync(tmp, 0o600);
+    } catch {
+      /* Windows */
+    }
     fs.renameSync(tmp, envPath);
 
     try {

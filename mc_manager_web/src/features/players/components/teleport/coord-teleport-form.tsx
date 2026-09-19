@@ -13,7 +13,12 @@ export interface CoordTeleportFormProps {
   running: boolean
 }
 
-export function CoordTeleportForm({ coords, onCoordChange, onTeleport, running }: CoordTeleportFormProps) {
+export function CoordTeleportForm({
+  coords,
+  onCoordChange,
+  onTeleport,
+  running,
+}: CoordTeleportFormProps) {
   return (
     <Section title="坐标传送">
       <div className="flex items-end gap-2 rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-default p-3">

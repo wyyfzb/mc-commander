@@ -36,7 +36,7 @@ describe('Player Routes', () => {
     app.use(express.json());
     mockManager = {
       instances: new Map(),
-      getInstance: vi.fn()
+      getInstance: vi.fn(),
     };
     app.use('/api', createPlayerRoutes(mockManager));
     app.use(errorHandler); // 注册全局错误处理，与生产环境一致
@@ -55,18 +55,25 @@ describe('Player Routes', () => {
         isRunning: true,
         serverPath: tmpServerPath,
         players: new Map([
-          ['Steve', {
-            name: 'Steve',
-            joinTime: now,
-            sessions: [{ start: now, end: null, duration: 0 }],
-          }],
+          [
+            'Steve',
+            {
+              name: 'Steve',
+              joinTime: now,
+              sessions: [{ start: now, end: null, duration: 0 }],
+            },
+          ],
         ]),
         getAllKnownPlayers: () => new Map(),
         playerEvents: new Map(),
         _worldSpawn: null,
         _computePlayerStats: () => ({
-          totalOnline: 0, loginCount: 1, offlineSince: 0,
-          deathCount: 0, achievementCount: 0, sleepCount: 0,
+          totalOnline: 0,
+          loginCount: 1,
+          offlineSince: 0,
+          deathCount: 0,
+          achievementCount: 0,
+          sleepCount: 0,
         }),
         _mergePlayerEvents: (a, b) => [...(a || []), ...(b || [])],
       };
@@ -95,15 +102,17 @@ describe('Player Routes', () => {
       const mockInstance = {
         isRunning: true,
         serverPath: tmpServerPath,
-        players: new Map([
-          ['Steve', { name: 'Steve', joinTime: now, sessions: [] }],
-        ]),
+        players: new Map([['Steve', { name: 'Steve', joinTime: now, sessions: [] }]]),
         getAllKnownPlayers: () => new Map(),
         playerEvents: new Map(),
         _worldSpawn: null,
         _computePlayerStats: () => ({
-          totalOnline: 0, loginCount: 1, offlineSince: 0,
-          deathCount: 0, achievementCount: 0, sleepCount: 0,
+          totalOnline: 0,
+          loginCount: 1,
+          offlineSince: 0,
+          deathCount: 0,
+          achievementCount: 0,
+          sleepCount: 0,
         }),
         _mergePlayerEvents: (a, b) => [...(a || []), ...(b || [])],
       };
@@ -125,24 +134,27 @@ describe('Player Routes', () => {
       // 持久化 playerdata：内存 playerEvents 为空（模拟服务端重启）
       const playerdataDir = path.join(tmpServerPath, 'playerdata');
       fs.mkdirSync(playerdataDir, { recursive: true });
-      fs.writeFileSync(path.join(playerdataDir, 'Steve.json'), JSON.stringify({
-        events: [
-          { type: 'achievement', message: 'Stone Age', timestamp: now - 1000 },
-        ],
-        totalPlayTime: 120,
-      }));
+      fs.writeFileSync(
+        path.join(playerdataDir, 'Steve.json'),
+        JSON.stringify({
+          events: [{ type: 'achievement', message: 'Stone Age', timestamp: now - 1000 }],
+          totalPlayTime: 120,
+        }),
+      );
       const mockInstance = {
         isRunning: true,
         serverPath: tmpServerPath,
-        players: new Map([
-          ['Steve', { name: 'Steve', joinTime: now, sessions: [] }],
-        ]),
+        players: new Map([['Steve', { name: 'Steve', joinTime: now, sessions: [] }]]),
         getAllKnownPlayers: () => new Map(),
         playerEvents: new Map(), // 刚重启：内存事件为空
         _worldSpawn: null,
         _computePlayerStats: (sessions, events) => ({
-          totalOnline: 0, loginCount: 1, offlineSince: 0,
-          deathCount: 0, achievementCount: events.length, sleepCount: 0,
+          totalOnline: 0,
+          loginCount: 1,
+          offlineSince: 0,
+          deathCount: 0,
+          achievementCount: events.length,
+          sleepCount: 0,
         }),
         _mergePlayerEvents: (a, b) => [...(a || []), ...(b || [])],
       };
@@ -207,16 +219,26 @@ describe('Player Routes', () => {
         isRunning: true,
         serverPath: tmpServerPath,
         players: new Map([
-          ['Steve', {
-            name: 'Steve', ip: '1.2.3.4', joinTime: now, sessions: [],
-          }],
+          [
+            'Steve',
+            {
+              name: 'Steve',
+              ip: '1.2.3.4',
+              joinTime: now,
+              sessions: [],
+            },
+          ],
         ]),
         getAllKnownPlayers: () => new Map(),
         playerEvents: new Map(),
         _worldSpawn: null,
         _computePlayerStats: () => ({
-          totalOnline: 0, loginCount: 1, offlineSince: 0,
-          deathCount: 0, achievementCount: 0, sleepCount: 0,
+          totalOnline: 0,
+          loginCount: 1,
+          offlineSince: 0,
+          deathCount: 0,
+          achievementCount: 0,
+          sleepCount: 0,
         }),
         _mergePlayerEvents: (a, b) => [...(a || []), ...(b || [])],
       };
@@ -236,16 +258,26 @@ describe('Player Routes', () => {
         isRunning: true,
         serverPath: tmpServerPath,
         players: new Map([
-          ['Steve', {
-            name: 'Steve', ip: '5.6.7.8', joinTime: now, sessions: [],
-          }],
+          [
+            'Steve',
+            {
+              name: 'Steve',
+              ip: '5.6.7.8',
+              joinTime: now,
+              sessions: [],
+            },
+          ],
         ]),
         getAllKnownPlayers: () => new Map(),
         playerEvents: new Map(),
         _worldSpawn: null,
         _computePlayerStats: () => ({
-          totalOnline: 0, loginCount: 1, offlineSince: 0,
-          deathCount: 0, achievementCount: 0, sleepCount: 0,
+          totalOnline: 0,
+          loginCount: 1,
+          offlineSince: 0,
+          deathCount: 0,
+          achievementCount: 0,
+          sleepCount: 0,
         }),
         _mergePlayerEvents: (a, b) => [...(a || []), ...(b || [])],
       };
@@ -281,16 +313,32 @@ describe('Player Routes', () => {
       );
       fs.writeFileSync(
         path.join(tmpServerPath, 'banned-ips.json'),
-        JSON.stringify([
-          { ip: '9.9.9.9', reason: 'Cheating', created: '2026-02-01 00:00:00' },
-        ]),
+        JSON.stringify([{ ip: '9.9.9.9', reason: 'Cheating', created: '2026-02-01 00:00:00' }]),
       );
       BanModel.findAllByInstance.mockReturnValue([
-        { id: 1, targetType: 'player', target: 'Steve', reason: 'Cheating', isActive: true, expiresAt: 1750000000000, createdAt: '2026-08-01 10:00:00' },
-        { id: 2, targetType: 'ip', target: '5.5.5.5', reason: 'Cheating', isActive: false, expiresAt: 1700000000000, createdAt: '2026-07-01 10:00:00' },
+        {
+          id: 1,
+          targetType: 'player',
+          target: 'Steve',
+          reason: 'Cheating',
+          isActive: true,
+          expiresAt: 1750000000000,
+          createdAt: '2026-08-01 10:00:00',
+        },
+        {
+          id: 2,
+          targetType: 'ip',
+          target: '5.5.5.5',
+          reason: 'Cheating',
+          isActive: false,
+          expiresAt: 1700000000000,
+          createdAt: '2026-07-01 10:00:00',
+        },
       ]);
       const mockInstance = {
-        isRunning: true, serverPath: tmpServerPath };
+        isRunning: true,
+        serverPath: tmpServerPath,
+      };
       mockManager.getInstance.mockReturnValue(mockInstance);
 
       const res = await request(app).get('/api/instances/s1/players/bans');
@@ -323,20 +371,36 @@ describe('Player Routes', () => {
       // 1.2.3.4 有生效中的临时 IP 封禁 → banned-ips.json 中对应的原版条目应被跳过
       fs.writeFileSync(
         path.join(tmpServerPath, 'banned-ips.json'),
-        JSON.stringify([
-          { ip: '1.2.3.4', reason: 'Cheating', created: '2026-08-01 09:00:00' },
-        ]),
+        JSON.stringify([{ ip: '1.2.3.4', reason: 'Cheating', created: '2026-08-01 09:00:00' }]),
       );
       BanModel.findActiveByInstance.mockReturnValue([
         { id: 1, targetType: 'player', target: 'Steve', expiresAt: 1750000000000 },
         { id: 2, targetType: 'ip', target: '1.2.3.4', expiresAt: 1750000000000 },
       ]);
       BanModel.findAllByInstance.mockReturnValue([
-        { id: 1, targetType: 'player', target: 'Steve', reason: 'Cheating', isActive: true, expiresAt: 1750000000000, createdAt: '2026-08-01 10:00:00' },
-        { id: 2, targetType: 'ip', target: '1.2.3.4', reason: 'Cheating', isActive: true, expiresAt: 1750000000000, createdAt: '2026-08-01 10:00:00' },
+        {
+          id: 1,
+          targetType: 'player',
+          target: 'Steve',
+          reason: 'Cheating',
+          isActive: true,
+          expiresAt: 1750000000000,
+          createdAt: '2026-08-01 10:00:00',
+        },
+        {
+          id: 2,
+          targetType: 'ip',
+          target: '1.2.3.4',
+          reason: 'Cheating',
+          isActive: true,
+          expiresAt: 1750000000000,
+          createdAt: '2026-08-01 10:00:00',
+        },
       ]);
       const mockInstance = {
-        isRunning: true, serverPath: tmpServerPath };
+        isRunning: true,
+        serverPath: tmpServerPath,
+      };
       mockManager.getInstance.mockReturnValue(mockInstance);
 
       const res = await request(app).get('/api/instances/s1/players/bans');
@@ -358,7 +422,9 @@ describe('Player Routes', () => {
   describe('POST /api/instances/:id/players/:player/op', () => {
     it('should op player', async () => {
       const mockInstance = {
-        isRunning: true, sendCommand: vi.fn() };
+        isRunning: true,
+        sendCommand: vi.fn(),
+      };
       mockManager.getInstance.mockReturnValue(mockInstance);
 
       const res = await request(app).post('/api/instances/s1/players/Steve/op');
@@ -371,7 +437,9 @@ describe('Player Routes', () => {
   describe('DELETE /api/instances/:id/players/:player/op', () => {
     it('should deop player', async () => {
       const mockInstance = {
-        isRunning: true, sendCommand: vi.fn() };
+        isRunning: true,
+        sendCommand: vi.fn(),
+      };
       mockManager.getInstance.mockReturnValue(mockInstance);
 
       const res = await request(app).delete('/api/instances/s1/players/Steve/op');
@@ -384,7 +452,9 @@ describe('Player Routes', () => {
   describe('POST /api/instances/:id/players/:player/kick', () => {
     it('should kick player', async () => {
       const mockInstance = {
-        isRunning: true, sendCommand: vi.fn() };
+        isRunning: true,
+        sendCommand: vi.fn(),
+      };
       mockManager.getInstance.mockReturnValue(mockInstance);
 
       const res = await request(app)
@@ -398,7 +468,9 @@ describe('Player Routes', () => {
 
     it('should use default kick reason', async () => {
       const mockInstance = {
-        isRunning: true, sendCommand: vi.fn() };
+        isRunning: true,
+        sendCommand: vi.fn(),
+      };
       mockManager.getInstance.mockReturnValue(mockInstance);
 
       const res = await request(app).post('/api/instances/s1/players/Steve/kick');
@@ -412,7 +484,9 @@ describe('Player Routes', () => {
     it('should permanently ban player (no duration)', async () => {
       vi.clearAllMocks();
       const mockInstance = {
-        isRunning: true, sendCommand: vi.fn() };
+        isRunning: true,
+        sendCommand: vi.fn(),
+      };
       mockManager.getInstance.mockReturnValue(mockInstance);
 
       const res = await request(app)
@@ -429,7 +503,9 @@ describe('Player Routes', () => {
     it('should temp ban player with duration (write record + expiresAt)', async () => {
       vi.clearAllMocks();
       const mockInstance = {
-        isRunning: true, sendCommand: vi.fn() };
+        isRunning: true,
+        sendCommand: vi.fn(),
+      };
       mockManager.getInstance.mockReturnValue(mockInstance);
 
       const before = Date.now();
@@ -451,7 +527,9 @@ describe('Player Routes', () => {
     it('should ban IP when ip provided', async () => {
       vi.clearAllMocks();
       const mockInstance = {
-        isRunning: true, sendCommand: vi.fn() };
+        isRunning: true,
+        sendCommand: vi.fn(),
+      };
       mockManager.getInstance.mockReturnValue(mockInstance);
 
       const res = await request(app)
@@ -469,7 +547,9 @@ describe('Player Routes', () => {
     it('should reject invalid IP', async () => {
       vi.clearAllMocks();
       const mockInstance = {
-        isRunning: true, sendCommand: vi.fn() };
+        isRunning: true,
+        sendCommand: vi.fn(),
+      };
       mockManager.getInstance.mockReturnValue(mockInstance);
 
       const res = await request(app)
@@ -484,7 +564,9 @@ describe('Player Routes', () => {
     it('should treat unparsable duration as permanent ban', async () => {
       vi.clearAllMocks();
       const mockInstance = {
-        isRunning: true, sendCommand: vi.fn() };
+        isRunning: true,
+        sendCommand: vi.fn(),
+      };
       mockManager.getInstance.mockReturnValue(mockInstance);
 
       const res = await request(app)
@@ -502,7 +584,9 @@ describe('Player Routes', () => {
     it('should pardon player', async () => {
       vi.clearAllMocks();
       const mockInstance = {
-        isRunning: true, sendCommand: vi.fn() };
+        isRunning: true,
+        sendCommand: vi.fn(),
+      };
       mockManager.getInstance.mockReturnValue(mockInstance);
 
       const res = await request(app).post('/api/instances/s1/players/Steve/pardon');
@@ -518,7 +602,9 @@ describe('Player Routes', () => {
     it('should pardon IP and clean temp_bans ip record', async () => {
       vi.clearAllMocks();
       const mockInstance = {
-        isRunning: true, sendCommand: vi.fn() };
+        isRunning: true,
+        sendCommand: vi.fn(),
+      };
       mockManager.getInstance.mockReturnValue(mockInstance);
 
       const res = await request(app)
@@ -534,7 +620,9 @@ describe('Player Routes', () => {
     it('should pardon player via generic route', async () => {
       vi.clearAllMocks();
       const mockInstance = {
-        isRunning: true, sendCommand: vi.fn() };
+        isRunning: true,
+        sendCommand: vi.fn(),
+      };
       mockManager.getInstance.mockReturnValue(mockInstance);
 
       const res = await request(app)
@@ -549,7 +637,9 @@ describe('Player Routes', () => {
     it('should record PLAYER_PARDON audit for record-level pardon (player)', async () => {
       vi.clearAllMocks();
       const mockInstance = {
-        isRunning: true, sendCommand: vi.fn() };
+        isRunning: true,
+        sendCommand: vi.fn(),
+      };
       mockManager.getInstance.mockReturnValue(mockInstance);
 
       const res = await request(app)
@@ -558,19 +648,23 @@ describe('Player Routes', () => {
 
       expect(res.status).toBe(200);
       expect(recordAudit).toHaveBeenCalledTimes(1);
-      expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({
-        instanceId: 's1',
-        action: AuditActions.PLAYER_PARDON,
-        targetType: 'player',
-        targetId: 'Steve',
-        detail: { entry: 'ban-record' },
-      }));
+      expect(recordAudit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          instanceId: 's1',
+          action: AuditActions.PLAYER_PARDON,
+          targetType: 'player',
+          targetId: 'Steve',
+          detail: { entry: 'ban-record' },
+        }),
+      );
     });
 
     it('should record PLAYER_PARDON audit for record-level pardon (ip)', async () => {
       vi.clearAllMocks();
       const mockInstance = {
-        isRunning: true, sendCommand: vi.fn() };
+        isRunning: true,
+        sendCommand: vi.fn(),
+      };
       mockManager.getInstance.mockReturnValue(mockInstance);
 
       const res = await request(app)
@@ -579,13 +673,15 @@ describe('Player Routes', () => {
 
       expect(res.status).toBe(200);
       expect(recordAudit).toHaveBeenCalledTimes(1);
-      expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({
-        instanceId: 's1',
-        action: AuditActions.PLAYER_PARDON,
-        targetType: 'ip',
-        targetId: '1.2.3.4',
-        detail: { entry: 'ban-record' },
-      }));
+      expect(recordAudit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          instanceId: 's1',
+          action: AuditActions.PLAYER_PARDON,
+          targetType: 'ip',
+          targetId: '1.2.3.4',
+          detail: { entry: 'ban-record' },
+        }),
+      );
     });
 
     it('should not record audit when pardon command fails', async () => {
@@ -608,7 +704,9 @@ describe('Player Routes', () => {
     it('should reject invalid IP', async () => {
       vi.clearAllMocks();
       const mockInstance = {
-        isRunning: true, sendCommand: vi.fn() };
+        isRunning: true,
+        sendCommand: vi.fn(),
+      };
       mockManager.getInstance.mockReturnValue(mockInstance);
 
       const res = await request(app)
@@ -622,7 +720,9 @@ describe('Player Routes', () => {
     it('should reject invalid targetType', async () => {
       vi.clearAllMocks();
       const mockInstance = {
-        isRunning: true, sendCommand: vi.fn() };
+        isRunning: true,
+        sendCommand: vi.fn(),
+      };
       mockManager.getInstance.mockReturnValue(mockInstance);
 
       const res = await request(app)
@@ -638,20 +738,24 @@ describe('Player Routes', () => {
     it('should add player to whitelist', async () => {
       vi.clearAllMocks();
       const mockInstance = {
-        isRunning: true, sendCommand: vi.fn() };
+        isRunning: true,
+        sendCommand: vi.fn(),
+      };
       mockManager.getInstance.mockReturnValue(mockInstance);
 
       const res = await request(app).post('/api/instances/s1/players/Steve/whitelist/add');
 
       expect(res.status).toBe(200);
       expect(mockInstance.sendCommand).toHaveBeenCalledWith('whitelist add Steve');
-      expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({
-        instanceId: 's1',
-        action: AuditActions.PLAYER_WHITELIST,
-        targetType: 'player',
-        targetId: 'Steve',
-        detail: { op: 'add' },
-      }));
+      expect(recordAudit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          instanceId: 's1',
+          action: AuditActions.PLAYER_WHITELIST,
+          targetType: 'player',
+          targetId: 'Steve',
+          detail: { op: 'add' },
+        }),
+      );
     });
   });
 
@@ -659,7 +763,9 @@ describe('Player Routes', () => {
     it('should remove player from whitelist', async () => {
       vi.clearAllMocks();
       const mockInstance = {
-        isRunning: true, sendCommand: vi.fn() };
+        isRunning: true,
+        sendCommand: vi.fn(),
+      };
       mockManager.getInstance.mockReturnValue(mockInstance);
 
       const res = await request(app).delete('/api/instances/s1/players/Steve/whitelist');
@@ -668,13 +774,15 @@ describe('Player Routes', () => {
       expect(mockInstance.sendCommand).toHaveBeenCalledWith('whitelist remove Steve');
       // 白名单移除接入审计（与 add 同枚举，detail.op 区分方向）
       expect(recordAudit).toHaveBeenCalledTimes(1);
-      expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({
-        instanceId: 's1',
-        action: AuditActions.PLAYER_WHITELIST,
-        targetType: 'player',
-        targetId: 'Steve',
-        detail: { op: 'remove' },
-      }));
+      expect(recordAudit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          instanceId: 's1',
+          action: AuditActions.PLAYER_WHITELIST,
+          targetType: 'player',
+          targetId: 'Steve',
+          detail: { op: 'remove' },
+        }),
+      );
     });
 
     it('should not record audit when whitelist remove command fails', async () => {

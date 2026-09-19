@@ -49,11 +49,13 @@ function okEnvelopeError(code: number, message: string) {
 }
 
 /** 渲染表单；返回 QueryClient 供「探测真正落定」类断言使用（不靠固定睡眠等结果） */
-function renderForm(props: {
-  variant?: 'settings' | 'onboarding'
-  headingAs?: 'h1' | 'h2'
-  onSaved?: () => void
-} = {}) {
+function renderForm(
+  props: {
+    variant?: 'settings' | 'onboarding'
+    headingAs?: 'h1' | 'h2'
+    onSaved?: () => void
+  } = {},
+) {
   const onSaved = props.onSaved ?? vi.fn()
   // useUnsavedGuard 依赖 data router 上下文（useBlocker）；能力探测查询需 QueryClient
   const router = createMemoryRouter(
@@ -90,7 +92,10 @@ function useDisabledApiKeyChannel() {
  * 「未指明面板」的禁用条目），并顺带把消费到的 data 交回调用方，使断言能证明
  * 「落定的正是那条响应」。
  */
-async function waitCapabilitiesSettled(queryClient: QueryClient, baseUrl: string): Promise<unknown> {
+async function waitCapabilitiesSettled(
+  queryClient: QueryClient,
+  baseUrl: string,
+): Promise<unknown> {
   await waitCapabilitiesStatus(queryClient, baseUrl, 'success')
   return capabilitiesQuery(queryClient, baseUrl)?.state.data
 }
@@ -116,7 +121,9 @@ async function waitCapabilitiesStatus(
     () => {
       const current = capabilitiesQuery(queryClient, baseUrl)?.state.status
       if (current !== status) {
-        throw new Error(`能力探测未落定（${baseUrl}，期望 ${status}，当前 ${current ?? 'no-query'}）`)
+        throw new Error(
+          `能力探测未落定（${baseUrl}，期望 ${status}，当前 ${current ?? 'no-query'}）`,
+        )
       }
     },
     { timeout: 3000 },
@@ -136,7 +143,11 @@ beforeEach(() => {
 /** 造一个未过期的登录会话（结构占位，非真实凭据）；不写签发面板 = 旧会话口径（按适用处理） */
 function setSession(token = 'sess-token-abc') {
   useAuthStore.setState({
-    session: { token, sessionId: 'sess-mock-1', expiresAt: new Date(Date.now() + 60_000).toISOString() },
+    session: {
+      token,
+      sessionId: 'sess-mock-1',
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    },
   })
 }
 
@@ -166,11 +177,17 @@ describe('ConnectionForm 渲染', () => {
 
   it('地址输入下方显示协议说明辅助文案', () => {
     renderForm()
-    expect(screen.getByText('支持 http/https 协议；局域网自建服务器推荐内网地址')).toBeInTheDocument()
+    expect(
+      screen.getByText('支持 http/https 协议；局域网自建服务器推荐内网地址'),
+    ).toBeInTheDocument()
   })
 
   it('settings variant：状态行跟随 store（ready=已连接 / 否则未连接）', () => {
-    useConnectionStore.setState({ baseUrl: 'https://192.168.1.100:25566', apiKey: 'k', status: 'ready' })
+    useConnectionStore.setState({
+      baseUrl: 'https://192.168.1.100:25566',
+      apiKey: 'k',
+      status: 'ready',
+    })
     renderForm({ variant: 'settings' })
     expect(screen.getByText('已连接')).toBeInTheDocument()
 
@@ -181,7 +198,11 @@ describe('ConnectionForm 渲染', () => {
   })
 
   it('onboarding variant：大标题 + 副标题，无状态行，保存按钮文案对齐进入面板行为', () => {
-    useConnectionStore.setState({ baseUrl: 'https://192.168.1.100:25566', apiKey: 'k', status: 'ready' })
+    useConnectionStore.setState({
+      baseUrl: 'https://192.168.1.100:25566',
+      apiKey: 'k',
+      status: 'ready',
+    })
     renderForm({ variant: 'onboarding' })
     expect(screen.getByRole('heading', { name: '连接你的服务器' })).toBeInTheDocument()
     expect(screen.queryByText('已连接')).not.toBeInTheDocument()
@@ -295,9 +316,7 @@ describe('ConnectionForm 测试连接', () => {
   })
 
   it('失败（网络错误）：toast「连接失败，请检查配置」', async () => {
-    server.use(
-      http.get('*/api/v1/overview', () => HttpResponse.error()),
-    )
+    server.use(http.get('*/api/v1/overview', () => HttpResponse.error()))
     const user = userEvent.setup()
     renderForm()
     await user.type(screen.getByLabelText('面板地址'), 'https://192.168.1.100:25566')
@@ -348,9 +367,7 @@ describe('ConnectionForm 明文传输警告', () => {
 
     await user.click(screen.getByRole('button', { name: '测试连接' }))
     expect(await screen.findByText('明文传输警告')).toBeInTheDocument()
-    expect(
-      screen.getByText(/您正在通过 HTTP（非加密）连接公网服务器/),
-    ).toBeInTheDocument()
+    expect(screen.getByText(/您正在通过 HTTP（非加密）连接公网服务器/)).toBeInTheDocument()
 
     // 取消 → 中止：弹窗关闭、无请求、无 toast
     await user.click(screen.getByRole('button', { name: '取消' }))
@@ -447,15 +464,15 @@ describe('ConnectionForm 保存', () => {
 describe('ConnectionForm 登录会话凭据（有会话时 API Key 可空）', () => {
   it('无会话：Key 提示「必须填写」', () => {
     renderForm()
-    expect(screen.getByText('当前地址没有可用的登录会话：必须填写 API Key 才能连接。')).toBeInTheDocument()
+    expect(
+      screen.getByText('当前地址没有可用的登录会话：必须填写 API Key 才能连接。'),
+    ).toBeInTheDocument()
   })
 
   it('有会话：Key 提示「可留空」（会话优先于 Key）+ 机器凭据定位说明', () => {
     setSession()
     renderForm()
-    expect(
-      screen.getByText('已登录：浏览器用登录会话鉴权，此处可留空。'),
-    ).toBeInTheDocument()
+    expect(screen.getByText('已登录：浏览器用登录会话鉴权，此处可留空。')).toBeInTheDocument()
     // 定位说明与代码实际行为逐条对应：单例全局 / 无过期 / 权限等同管理员 / 可整体关闭
     const model = screen.getByText(/API Key 是没有登录会话的客户端/)
     expect(model).toHaveTextContent('单例全局')
@@ -516,7 +533,13 @@ describe('ConnectionForm 登录会话凭据（有会话时 API Key 可空）', (
     server.use(
       http.get('*/api/v1/overview', () =>
         HttpResponse.json(
-          { status: 'error', code: 40103, message: '会话不存在或已登出，请重新登录', details: null, timestamp: new Date().toISOString() },
+          {
+            status: 'error',
+            code: 40103,
+            message: '会话不存在或已登出，请重新登录',
+            details: null,
+            timestamp: new Date().toISOString(),
+          },
           { status: 401 },
         ),
       ),
@@ -547,7 +570,9 @@ describe('ConnectionForm 登录会话凭据（有会话时 API Key 可空）', (
     expect(screen.getByText(/当前登录会话属于/)).toBeInTheDocument()
     expect(screen.getByText('https://panel-a.example.com')).toBeInTheDocument()
     // 本地址没有可用会话 → Key 必填
-    expect(screen.getByText('当前地址没有可用的登录会话：必须填写 API Key 才能连接。')).toBeInTheDocument()
+    expect(
+      screen.getByText('当前地址没有可用的登录会话：必须填写 API Key 才能连接。'),
+    ).toBeInTheDocument()
   })
 
   it('会话属于本地址（含旧会话）：不显示异面板提示', () => {
@@ -607,10 +632,20 @@ describe('ConnectionForm 重新生成 API Key', () => {
   })
 
   it('轮换失败（401）：错误 toast + 表单与 store 不变', async () => {
-    server.use(http.post('*/api/v1/rotate-key', () => HttpResponse.json({
-      status: 'error', code: 40101, message: 'Invalid API Key', details: null,
-      timestamp: new Date().toISOString(),
-    }, { status: 401 })))
+    server.use(
+      http.post('*/api/v1/rotate-key', () =>
+        HttpResponse.json(
+          {
+            status: 'error',
+            code: 40101,
+            message: 'Invalid API Key',
+            details: null,
+            timestamp: new Date().toISOString(),
+          },
+          { status: 401 },
+        ),
+      ),
+    )
     const user = userEvent.setup()
     renderForm({ variant: 'settings' })
 
@@ -631,12 +666,29 @@ describe('ConnectionForm 重新生成 API Key', () => {
   it('能力未知（探测失败）+ 轮换 40303：错误文案点名通道已关闭，且不写 store', async () => {
     server.use(
       http.get('*/api/v1/auth/capabilities', () =>
-        HttpResponse.json({ status: 'error', code: 50000, message: '服务器内部错误', details: null, timestamp: new Date().toISOString() }, { status: 500 }),
+        HttpResponse.json(
+          {
+            status: 'error',
+            code: 50000,
+            message: '服务器内部错误',
+            details: null,
+            timestamp: new Date().toISOString(),
+          },
+          { status: 500 },
+        ),
       ),
-      http.post('*/api/v1/rotate-key', () => HttpResponse.json({
-        status: 'error', code: 40303, message: 'API Key 通道已关闭，无法轮换；如需自动化凭据请先启用该通道', details: null,
-        timestamp: new Date().toISOString(),
-      }, { status: 403 })),
+      http.post('*/api/v1/rotate-key', () =>
+        HttpResponse.json(
+          {
+            status: 'error',
+            code: 40303,
+            message: 'API Key 通道已关闭，无法轮换；如需自动化凭据请先启用该通道',
+            details: null,
+            timestamp: new Date().toISOString(),
+          },
+          { status: 403 },
+        ),
+      ),
     )
     const user = userEvent.setup()
     renderForm({ variant: 'settings' })
@@ -799,8 +851,7 @@ describe('ConnectionForm 能力探测不得改变本机登录态', () => {
   }
 
   const okCapabilities = () => okEnvelope({ apiKeyEnabled: true })
-  const sessionExpired = () =>
-    okEnvelopeError(40103, '会话不存在或已登出，请重新登录')
+  const sessionExpired = () => okEnvelopeError(40103, '会话不存在或已登出，请重新登录')
 
   it('旧会话（无签发面板）+ 改到别的地址 + 目标回 40103：本机会话必须保留、不得出现登出事件', async () => {
     // 旧会话口径：令牌未记签发面板 ⇒ 对任何地址都按适用处理，Bearer 会发到刚输入的地址

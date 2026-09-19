@@ -63,7 +63,9 @@ describe('PropertiesPanel 渲染', () => {
     expect(within(row('difficulty')).getByText('即时生效')).toBeInTheDocument()
     // 常态：可写但非热改的项不逐项挂标（320px 下会把键名挤到 2 字可见），由说明行统一讲清
     expect(within(row('max-players')).queryByText('重启生效')).not.toBeInTheDocument()
-    expect(screen.getByText(/除标记「即时生效」的属性外，其余可写属性改动后需重启实例生效/)).toBeInTheDocument()
+    expect(
+      screen.getByText(/除标记「即时生效」的属性外，其余可写属性改动后需重启实例生效/),
+    ).toBeInTheDocument()
     // 不可写/未知键改不动，谈不上生效方式，也不该挂例外标
     expect(within(row('custom-unknown-key')).queryByText('即时生效')).not.toBeInTheDocument()
   })

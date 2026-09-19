@@ -9,11 +9,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'events';
-import {
-  setupWebSocket,
-  WS_AUTH_TIMEOUT_MS,
-  ClientMessages,
-} from '../websocket.js';
+import { setupWebSocket, WS_AUTH_TIMEOUT_MS, ClientMessages } from '../websocket.js';
 import { resetForTests, isLockedForTests } from '../utils/credential-lockout.js';
 import { logger } from '../utils/logger.js';
 
@@ -93,7 +89,10 @@ describe('WS 首帧鉴权通道（）', () => {
       expires_at: new Date(Date.now() + 60_000).toISOString(),
     });
     const ws = connectFirstFrame();
-    ws.emit('message', JSON.stringify({ type: ClientMessages.AUTH, sessionToken: 'valid-session-token' }));
+    ws.emit(
+      'message',
+      JSON.stringify({ type: ClientMessages.AUTH, sessionToken: 'valid-session-token' }),
+    );
 
     expect(sentJson(ws).find((m) => m.type === ClientMessages.AUTH)).toMatchObject({ ok: true });
     expect(ws._sessionToken).toBe('valid-session-token');

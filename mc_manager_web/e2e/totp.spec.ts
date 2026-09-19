@@ -24,8 +24,16 @@ const MOCK_SESSION_TOKEN = 'e2e-mock-session-token-0000000001'
  * 正是「清洗不得截断」这条纪律的承重点。
  */
 const RECOVERY_CODES = [
-  '2345678923', 'ABCDEFGHJK', 'LMNPQRSTUV', 'WXYZ234567', '89ABCDEFGH',
-  'JKLMNPQRST', 'UVWXYZ2345', '6789ABCDEF', 'GHJKLMNPQR', 'STUVWXYZ23',
+  '2345678923',
+  'ABCDEFGHJK',
+  'LMNPQRSTUV',
+  'WXYZ234567',
+  '89ABCDEFGH',
+  'JKLMNPQRST',
+  'UVWXYZ2345',
+  '6789ABCDEF',
+  'GHJKLMNPQR',
+  'STUVWXYZ23',
 ]
 
 /** 全数字恢复码（展示形态带分组；清洗后应为 RECOVERY_CODES[0]） */
@@ -40,7 +48,13 @@ function ok(data: unknown) {
   return {
     status: 200,
     contentType: 'application/json',
-    body: JSON.stringify({ status: 'ok', code: 0, message: 'Success', data, timestamp: new Date().toISOString() }),
+    body: JSON.stringify({
+      status: 'ok',
+      code: 0,
+      message: 'Success',
+      data,
+      timestamp: new Date().toISOString(),
+    }),
   }
 }
 
@@ -48,7 +62,13 @@ function fail(code: number, message: string, httpStatus: number) {
   return {
     status: httpStatus,
     contentType: 'application/json',
-    body: JSON.stringify({ status: 'error', code, message, details: null, timestamp: new Date().toISOString() }),
+    body: JSON.stringify({
+      status: 'error',
+      code,
+      message,
+      details: null,
+      timestamp: new Date().toISOString(),
+    }),
   }
 }
 
@@ -76,7 +96,8 @@ async function routeLoginWithTotp(
     const body = (route.request().postDataJSON() ?? {}) as { password?: string; totpCode?: string }
     seen.push(body)
     if (!body.totpCode) return route.fulfill(fail(40105, '需要两步验证码', 401))
-    if (body.totpCode !== acceptCode) return route.fulfill(fail(40106, '两步验证码或恢复码错误', 401))
+    if (body.totpCode !== acceptCode)
+      return route.fulfill(fail(40106, '两步验证码或恢复码错误', 401))
     return route.fulfill(
       ok({
         token: MOCK_SESSION_TOKEN,
@@ -170,7 +191,9 @@ test.describe('登录页第二因子（40105）', () => {
 })
 
 test.describe('设置页两步验证挂靠向导', () => {
-  test('未启用 → enroll 展示二维码与密钥 → confirm 后一次性展示恢复码 → 我已保存后收起（子导航往返与刷新双路径不复现）', async ({ page }) => {
+  test('未启用 → enroll 展示二维码与密钥 → confirm 后一次性展示恢复码 → 我已保存后收起（子导航往返与刷新双路径不复现）', async ({
+    page,
+  }) => {
     await seedSession(page)
     await page.addInitScript(() => {
       localStorage.setItem('mcs-connection', JSON.stringify({ baseUrl: '', apiKey: '' }))
@@ -201,7 +224,11 @@ test.describe('设置页两步验证挂靠向导', () => {
       if (body.code !== '123456') return route.fulfill(fail(40106, '两步验证码错误', 401))
       enabled = true
       return route.fulfill(
-        ok({ enabled: true, confirmedAt: '2026-01-02T03:04:05.000Z', recoveryCodes: RECOVERY_CODES }),
+        ok({
+          enabled: true,
+          confirmedAt: '2026-01-02T03:04:05.000Z',
+          recoveryCodes: RECOVERY_CODES,
+        }),
       )
     })
 
@@ -271,7 +298,8 @@ test.describe('设置页两步验证挂靠向导', () => {
     )
     await page.route('**/api/v1/auth/totp/disable', async (route) => {
       const body = (route.request().postDataJSON() ?? {}) as { password?: string; code?: string }
-      if (!body.password || !body.code) return route.fulfill(fail(40015, '两步验证尚未挂靠，请先完成挂靠', 400))
+      if (!body.password || !body.code)
+        return route.fulfill(fail(40015, '两步验证尚未挂靠，请先完成挂靠', 400))
       enabled = false
       return route.fulfill(ok({ ok: true }))
     })

@@ -22,11 +22,7 @@ import { authMiddleware } from '../middleware/auth.js';
 import { createAuthRoutes, resetLoginLockState } from '../routes/auth.js';
 import { errorHandler } from '../middleware/error_handler.js';
 import { isLocked } from '../utils/credential-lockout.js';
-import {
-  totpCodeAtStep,
-  currentTimeStep,
-  TOTP_PERIOD_SECONDS,
-} from '../utils/totp.js';
+import { totpCodeAtStep, currentTimeStep, TOTP_PERIOD_SECONDS } from '../utils/totp.js';
 import { hashRecoveryCode } from '../utils/recovery-codes.js';
 
 const CODE_RE = /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{5}-[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{5}$/;
@@ -161,7 +157,8 @@ describe('安全档位变更后的会话吊销（confirm / disable）', () => {
 
   /** 用令牌探活：200 = 会话仍有效，401 = 已被吊销 */
   const alive = async (token) =>
-    (await request(app).get('/api/v1/auth/totp/status').set('Authorization', `Bearer ${token}`)).status;
+    (await request(app).get('/api/v1/auth/totp/status').set('Authorization', `Bearer ${token}`))
+      .status;
 
   it('confirm 成功：其它会话立即失效，当前会话保留', async () => {
     seedAccount();
@@ -170,7 +167,8 @@ describe('安全档位变更后的会话吊销（confirm / disable）', () => {
     const other2 = await loginToken();
     const auth = { Authorization: `Bearer ${current}` };
 
-    const { secret } = (await request(app).post('/api/v1/auth/totp/enroll').set(auth).send()).body.data;
+    const { secret } = (await request(app).post('/api/v1/auth/totp/enroll').set(auth).send()).body
+      .data;
     const res = await request(app)
       .post('/api/v1/auth/totp/confirm')
       .set(auth)
@@ -189,7 +187,8 @@ describe('安全档位变更后的会话吊销（confirm / disable）', () => {
     const other = await loginToken();
     const auth = { Authorization: `Bearer ${current}` };
 
-    const { secret } = (await request(app).post('/api/v1/auth/totp/enroll').set(auth).send()).body.data;
+    const { secret } = (await request(app).post('/api/v1/auth/totp/enroll').set(auth).send()).body
+      .data;
     const res = await request(app)
       .post('/api/v1/auth/totp/confirm')
       .set(auth)
@@ -205,7 +204,8 @@ describe('安全档位变更后的会话吊销（confirm / disable）', () => {
     const other = await loginToken();
     const apiKey = { 'X-API-Key': TEST_PLAINTEXT_KEY };
 
-    const { secret } = (await request(app).post('/api/v1/auth/totp/enroll').set(apiKey).send()).body.data;
+    const { secret } = (await request(app).post('/api/v1/auth/totp/enroll').set(apiKey).send()).body
+      .data;
     const res = await request(app)
       .post('/api/v1/auth/totp/confirm')
       .set(apiKey)
@@ -260,7 +260,11 @@ describe('挂靠流程：enroll → confirm', () => {
       .set('Authorization', `Bearer ${login.body.data.token}`);
     expect(res.status).toBe(200);
     expect(res.body.data).toEqual({ enabled: false, confirmedAt: null, recoveryCodesRemaining: 0 });
-    expect(Object.keys(res.body.data).sort()).toEqual(['confirmedAt', 'enabled', 'recoveryCodesRemaining']);
+    expect(Object.keys(res.body.data).sort()).toEqual([
+      'confirmedAt',
+      'enabled',
+      'recoveryCodesRemaining',
+    ]);
   });
 
   it('enroll 返回 secret + otpauth URI + PNG 二维码；此时尚未启用，登录不需要第二因子', async () => {
@@ -280,7 +284,9 @@ describe('挂靠流程：enroll → confirm', () => {
     // 二维码是服务端出的真 PNG（不是空串/占位）
     expect(qrDataUrl.startsWith('data:image/png;base64,')).toBe(true);
     const png = Buffer.from(qrDataUrl.split(',')[1], 'base64');
-    expect(png.subarray(0, 8)).toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+    expect(png.subarray(0, 8)).toEqual(
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    );
 
     // 未 confirm：启用位仍为 0，会话登录不要求第二因子
     expect(rawAccount().totp_enabled).toBe(0);
@@ -308,7 +314,10 @@ describe('挂靠流程：enroll → confirm', () => {
     const login = await request(app).post('/api/v1/auth/login').send({ password: PASSWORD });
     const auth = { Authorization: `Bearer ${login.body.data.token}` };
 
-    const confirm = await request(app).post('/api/v1/auth/totp/confirm').set(auth).send({ code: '123456' });
+    const confirm = await request(app)
+      .post('/api/v1/auth/totp/confirm')
+      .set(auth)
+      .send({ code: '123456' });
     expect(confirm.status).toBe(400);
     expect(confirm.body.code).toBe(40015);
 
@@ -343,7 +352,8 @@ describe('挂靠流程：enroll → confirm', () => {
     seedAccount();
     const login = await request(app).post('/api/v1/auth/login').send({ password: PASSWORD });
     const auth = { Authorization: `Bearer ${login.body.data.token}` };
-    const { secret } = (await request(app).post('/api/v1/auth/totp/enroll').set(auth).send()).body.data;
+    const { secret } = (await request(app).post('/api/v1/auth/totp/enroll').set(auth).send()).body
+      .data;
 
     const step = currentTimeStep();
     const res = await request(app)
@@ -403,8 +413,10 @@ describe('挂靠流程：enroll → confirm', () => {
     const login = await request(app).post('/api/v1/auth/login').send({ password: PASSWORD });
     const auth = { Authorization: `Bearer ${login.body.data.token}` };
 
-    const first = (await request(app).post('/api/v1/auth/totp/enroll').set(auth).send()).body.data.secret;
-    const second = (await request(app).post('/api/v1/auth/totp/enroll').set(auth).send()).body.data.secret;
+    const first = (await request(app).post('/api/v1/auth/totp/enroll').set(auth).send()).body.data
+      .secret;
+    const second = (await request(app).post('/api/v1/auth/totp/enroll').set(auth).send()).body.data
+      .secret;
     expect(second).not.toBe(first);
     expect(rawAccount().totp_secret).toBe(second);
 
@@ -531,7 +543,9 @@ describe('登录第二因子', () => {
     const step = currentTimeStep() + 1;
     const code = totpCodeAtStep(secret, step);
 
-    const first = await request(app).post('/api/v1/auth/login').send({ password: PASSWORD, totpCode: code });
+    const first = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ password: PASSWORD, totpCode: code });
     expect(first.status).toBe(200);
     expect(first.body.data.token).toBeTruthy();
     expect(rawAccount().totp_last_step).toBe(step);
@@ -542,7 +556,9 @@ describe('登录第二因子', () => {
       .set('Authorization', `Bearer ${token}`);
     expect(protectedRes.status).toBe(200);
 
-    const replay = await request(app).post('/api/v1/auth/login').send({ password: PASSWORD, totpCode: code });
+    const replay = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ password: PASSWORD, totpCode: code });
     expect(replay.status).toBe(401);
     expect(replay.body.code).toBe(40106);
   });
@@ -649,7 +665,9 @@ describe('登录失败封禁：第二因子错误计入同一计数', () => {
     expect(anyLocked()).toBe(false);
 
     // 失败一次（计数 1），再用正确码登录 → 计数被清零
-    await request(app).post('/api/v1/auth/login').send({ password: PASSWORD, totpCode: wrongCode(secret) });
+    await request(app)
+      .post('/api/v1/auth/login')
+      .send({ password: PASSWORD, totpCode: wrongCode(secret) });
     const ok = await request(app)
       .post('/api/v1/auth/login')
       .send({ password: PASSWORD, totpCode: codeNow(secret, 1) });
@@ -668,7 +686,9 @@ describe('登录失败封禁：第二因子错误计入同一计数', () => {
     await enrollAndConfirm();
 
     await request(app).post('/api/v1/auth/login').send({ password: 'wrong-password-1' });
-    await request(app).post('/api/v1/auth/login').send({ password: PASSWORD, totpCode: 'ZZZZZ-ZZZZZ' });
+    await request(app)
+      .post('/api/v1/auth/login')
+      .send({ password: PASSWORD, totpCode: 'ZZZZZ-ZZZZZ' });
     expect(anyLocked()).toBe(true);
 
     const blocked = await request(app).post('/api/v1/auth/login').send({ password: PASSWORD });

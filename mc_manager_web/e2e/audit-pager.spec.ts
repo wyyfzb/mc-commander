@@ -14,7 +14,13 @@ import { test, expect } from '@playwright/test'
 
 const TOTAL_AUDIT = 60
 const TOTAL_CMD = 45
-const AUDIT_ACTIONS = ['INSTANCE_START', 'PLAYER_OP', 'CONFIG_CHANGE', 'BACKUP_CREATE', 'PLAYER_KICK']
+const AUDIT_ACTIONS = [
+  'INSTANCE_START',
+  'PLAYER_OP',
+  'CONFIG_CHANGE',
+  'BACKUP_CREATE',
+  'PLAYER_KICK',
+]
 
 /** 注入连接配置（mock 假 key，mock server 不校验）——严禁真实服务器信息 */
 async function setupConnection(page: import('@playwright/test').Page) {
@@ -34,7 +40,10 @@ function hoursAgo(h: number): string {
 /** 分页信封（对齐 audit-logs / command-history 的响应契约） */
 function envelope(data: unknown[], total: number, page: number, pageSize: number) {
   return {
-    status: 'ok', code: 0, message: 'Success', data,
+    status: 'ok',
+    code: 0,
+    message: 'Success',
+    data,
     pagination: { total, page, pageSize, totalPages: Math.ceil(total / pageSize) },
     timestamp: new Date().toISOString(),
   }
@@ -57,7 +66,9 @@ async function inflateAuditLogs(page: import('@playwright/test').Page) {
       createdAt: hoursAgo(i + 1),
     }))
     const start = (p - 1) * pageSize
-    await route.fulfill({ json: envelope(rows.slice(start, start + pageSize), TOTAL_AUDIT, p, pageSize) })
+    await route.fulfill({
+      json: envelope(rows.slice(start, start + pageSize), TOTAL_AUDIT, p, pageSize),
+    })
   })
 }
 
@@ -78,7 +89,9 @@ async function inflateCommandHistory(page: import('@playwright/test').Page) {
       createdAt: hoursAgo(i + 1),
     }))
     const start = (p - 1) * pageSize
-    await route.fulfill({ json: envelope(rows.slice(start, start + pageSize), TOTAL_CMD, p, pageSize) })
+    await route.fulfill({
+      json: envelope(rows.slice(start, start + pageSize), TOTAL_CMD, p, pageSize),
+    })
   })
 }
 
@@ -117,7 +130,9 @@ test.describe('审计页多页形态（375px）', () => {
       clientWidth: document.documentElement.clientWidth,
     }))
     expect(doc.scrollWidth).toBeLessThanOrEqual(doc.clientWidth)
-    const mainOverflow = await page.locator('#main-content').evaluate((el) => el.scrollWidth - el.clientWidth)
+    const mainOverflow = await page
+      .locator('#main-content')
+      .evaluate((el) => el.scrollWidth - el.clientWidth)
     expect(mainOverflow).toBeLessThanOrEqual(0)
   })
 

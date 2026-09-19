@@ -34,7 +34,13 @@ describe('buildNotifications 文案模板', () => {
   it('playerDeath 团灭聚合事件逐条生成', () => {
     const ns = buildNotifications({
       type: 'playerDeath',
-      data: { players: [{ name: 'A', cause: '被僵尸杀死' }, { name: 'B', cause: '坠落' }], count: 2 },
+      data: {
+        players: [
+          { name: 'A', cause: '被僵尸杀死' },
+          { name: 'B', cause: '坠落' },
+        ],
+        count: 2,
+      },
     })
     expect(ns).toHaveLength(2)
     expect(ns[0]?.content).toBe('A 被僵尸杀死')
@@ -50,11 +56,18 @@ describe('buildNotifications 文案模板', () => {
   })
 
   it('status 事件映射（started/ready/stopped/crash/save）', () => {
-    expect(buildNotifications({ type: 'status', data: { event: 'started' } })[0]?.content).toBe('服务器已启动')
-    expect(buildNotifications({ type: 'status', data: { event: 'ready' } })[0]?.content).toBe('服务器已就绪')
-    expect(buildNotifications({ type: 'status', data: { event: 'stopped' } })[0]?.content).toBe('服务器已停止')
+    expect(buildNotifications({ type: 'status', data: { event: 'started' } })[0]?.content).toBe(
+      '服务器已启动',
+    )
+    expect(buildNotifications({ type: 'status', data: { event: 'ready' } })[0]?.content).toBe(
+      '服务器已就绪',
+    )
+    expect(buildNotifications({ type: 'status', data: { event: 'stopped' } })[0]?.content).toBe(
+      '服务器已停止',
+    )
     expect(
-      buildNotifications({ type: 'status', data: { event: 'crash', autoRestart: true } })[0]?.content,
+      buildNotifications({ type: 'status', data: { event: 'crash', autoRestart: true } })[0]
+        ?.content,
     ).toBe('服务器意外退出，正在自动重启')
   })
 
@@ -65,7 +78,9 @@ describe('buildNotifications 文案模板', () => {
 
   it('备份/恢复类缺省文案', () => {
     expect(buildNotifications({ type: 'backupComplete' })[0]?.content).toBe('备份完成')
-    expect(buildNotifications({ type: 'backupSkipped' })[0]?.content).toBe('定时备份已跳过（上一备份仍在进行）')
+    expect(buildNotifications({ type: 'backupSkipped' })[0]?.content).toBe(
+      '定时备份已跳过（上一备份仍在进行）',
+    )
   })
 
   it('备份/恢复取消透传服务端 content（回滚失败这类危险明细不得被静态文案吞掉）', () => {
@@ -75,10 +90,15 @@ describe('buildNotifications 文案模板', () => {
       data: { content: '恢复已取消，但原数据回滚失败，请检查实例目录或残留的 pre_restore 目录' },
     })
     expect(cancelled).toMatchObject({ type: 'restoreCancelled', category: 'server' })
-    expect(cancelled?.content).toBe('恢复已取消，但原数据回滚失败，请检查实例目录或残留的 pre_restore 目录')
+    expect(cancelled?.content).toBe(
+      '恢复已取消，但原数据回滚失败，请检查实例目录或残留的 pre_restore 目录',
+    )
 
     expect(
-      buildNotifications({ type: 'backupCancelled', data: { content: '备份已取消，未产生备份' } })[0]?.content,
+      buildNotifications({
+        type: 'backupCancelled',
+        data: { content: '备份已取消，未产生备份' },
+      })[0]?.content,
     ).toBe('备份已取消，未产生备份')
 
     // content 缺失时回退静态文案（老服务端/异常 payload 不致空白条目）
@@ -180,7 +200,11 @@ describe('buildNotifications 文案模板', () => {
   it('upgradeCancelled 透传服务端 detail（含是否已回滚），severity 为 info 不进告警档', () => {
     const [n] = buildNotifications({
       type: 'upgradeCancelled',
-      data: { instanceName: '演示实例', instanceId: 'paper-abc1', detail: '已取消，已回滚到 1.20.4' },
+      data: {
+        instanceName: '演示实例',
+        instanceId: 'paper-abc1',
+        detail: '已取消，已回滚到 1.20.4',
+      },
     })
     expect(n).toMatchObject({ type: 'upgradeCancelled', category: 'server' })
     expect(n?.content).toBe('实例「演示实例」已取消，已回滚到 1.20.4')
@@ -215,8 +239,13 @@ describe('buildNotifications 文案模板', () => {
     const result = aggregateNotifications(
       [
         {
-          id: 'a', type: 'deployFailed', category: 'server',
-          content: '实例「Forge 服」部署失败：x', timestamp: 60_000, count: 1, read: false,
+          id: 'a',
+          type: 'deployFailed',
+          category: 'server',
+          content: '实例「Forge 服」部署失败：x',
+          timestamp: 60_000,
+          count: 1,
+          read: false,
         },
       ],
       { type: 'deployFailed', category: 'server', content: '实例「Forge 服」部署失败：x' },
@@ -272,7 +301,9 @@ describe('aggregateNotifications 聚合规则', () => {
   })
 
   it('taskFailed 属 critical 类：同任务连发不聚合（每次失败独立可见）', () => {
-    const existing = [base({ type: 'taskFailed', content: '定时任务「每日重启」执行失败', timestamp: 95_000 })]
+    const existing = [
+      base({ type: 'taskFailed', content: '定时任务「每日重启」执行失败', timestamp: 95_000 }),
+    ]
     const result = aggregateNotifications(
       existing,
       { type: 'taskFailed', category: 'server', content: '定时任务「每日重启」执行失败' },
@@ -282,10 +313,20 @@ describe('aggregateNotifications 聚合规则', () => {
   })
 
   it('circuitBreaker 属 critical 类：连续熔断不聚合（每次独立可见）', () => {
-    const existing = [base({ type: 'circuitBreaker', content: '连续崩溃 3 次，已触发熔断保护（自动重启暂停，请检查日志）', timestamp: 95_000 })]
+    const existing = [
+      base({
+        type: 'circuitBreaker',
+        content: '连续崩溃 3 次，已触发熔断保护（自动重启暂停，请检查日志）',
+        timestamp: 95_000,
+      }),
+    ]
     const result = aggregateNotifications(
       existing,
-      { type: 'circuitBreaker', category: 'server', content: '连续崩溃 3 次，已触发熔断保护（自动重启暂停，请检查日志）' },
+      {
+        type: 'circuitBreaker',
+        category: 'server',
+        content: '连续崩溃 3 次，已触发熔断保护（自动重启暂停，请检查日志）',
+      },
       100_000,
     )
     expect(result).toHaveLength(2)
@@ -304,7 +345,11 @@ describe('aggregateNotifications 聚合规则', () => {
 
 describe('buildAlertNotifications 告警状态机', () => {
   it('TPS 低于阈值首次触发告警', () => {
-    const { notifications, activeAlerts } = buildAlertNotifications({ tps: 10 }, undefined, new Set())
+    const { notifications, activeAlerts } = buildAlertNotifications(
+      { tps: 10 },
+      undefined,
+      new Set(),
+    )
     expect(notifications).toHaveLength(1)
     expect(notifications[0]?.content).toBe('TPS 过低: 10.0')
     expect(activeAlerts.has('lowTps')).toBe(true)
@@ -316,7 +361,11 @@ describe('buildAlertNotifications 告警状态机', () => {
   })
 
   it('恢复后产生恢复通知并清除激活态', () => {
-    const { notifications, activeAlerts } = buildAlertNotifications({ tps: 20 }, undefined, new Set(['lowTps']))
+    const { notifications, activeAlerts } = buildAlertNotifications(
+      { tps: 20 },
+      undefined,
+      new Set(['lowTps']),
+    )
     expect(notifications).toHaveLength(1)
     expect(notifications[0]?.content).toBe('TPS 已恢复正常')
     expect(activeAlerts.has('lowTps')).toBe(false)

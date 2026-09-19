@@ -69,7 +69,9 @@ export function SearchInput({
   }, [onValueChange, debounceMs, onDebouncedChange])
 
   useEffect(() => {
-    return () => { if (timerRef.current) clearTimeout(timerRef.current) }
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current)
+    }
   }, [])
 
   const prClass = value && clearable ? 'pr-8' : ''

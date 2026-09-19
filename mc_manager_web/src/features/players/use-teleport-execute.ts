@@ -22,7 +22,12 @@ interface UseTeleportExecuteParams {
   onAction: (req: PlayerActionRequest) => Promise<void>
 }
 
-export function useTeleportExecute({ player, batchTargets, isBatchMode, onAction }: UseTeleportExecuteParams) {
+export function useTeleportExecute({
+  player,
+  batchTargets,
+  isBatchMode,
+  onAction,
+}: UseTeleportExecuteParams) {
   const [running, setRunning] = useState(false)
 
   /**
@@ -30,7 +35,11 @@ export function useTeleportExecute({ player, batchTargets, isBatchMode, onAction
    * - 单个模式：直接 onAction，成功 toast（错误走 getFriendlyErrorText）
    * - 批量模式：runBatchForTargets 跳过离线目标 + formatBatchSummary 汇总 toast
    */
-  const execute = async (label: string, buildCommand: (name: string) => string, successText?: string) => {
+  const execute = async (
+    label: string,
+    buildCommand: (name: string) => string,
+    successText?: string,
+  ) => {
     setRunning(true)
     try {
       if (!isBatchMode && player !== null) {

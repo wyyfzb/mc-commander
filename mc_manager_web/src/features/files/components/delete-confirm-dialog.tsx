@@ -17,13 +17,22 @@ interface DeleteConfirmDialogProps {
   onClose: () => void
 }
 
-export function DeleteConfirmDialog({ target, loading, onConfirm, onClose }: DeleteConfirmDialogProps) {
+export function DeleteConfirmDialog({
+  target,
+  loading,
+  onConfirm,
+  onClose,
+}: DeleteConfirmDialogProps) {
   return (
     <ConfirmDialog
       open={target !== null}
       onOpenChange={(open) => !open && onClose()}
       title={`删除 ${target?.name ?? ''}？`}
-      description={target?.isDirectory === true ? `将递归删除目录「${target?.name}」及其全部内容。` : `将删除文件「${target?.name}」。`}
+      description={
+        target?.isDirectory === true
+          ? `将递归删除目录「${target?.name}」及其全部内容。`
+          : `将删除文件「${target?.name}」。`
+      }
       confirmText="删除"
       danger
       warning="此操作不可撤销"

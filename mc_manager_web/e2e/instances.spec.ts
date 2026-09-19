@@ -63,7 +63,9 @@ test.describe('实例页', () => {
     await page.getByRole('button', { name: '部署并启动' }).click()
     // mock 直接成功：结果块 + 自动启动状态（已勾选 EULA → 部署完成自动启动）+ 完成
     await expect(page.getByText('部署成功')).toBeVisible()
-    await expect(page.getByText('已发送启动指令，服务器正在启动（状态可在仪表盘查看）')).toBeVisible()
+    await expect(
+      page.getByText('已发送启动指令，服务器正在启动（状态可在仪表盘查看）'),
+    ).toBeVisible()
     await expect(page.getByText('新部署实例').first()).toBeVisible()
     await maybeShot(page, 'deploy-done-dark.png')
     await page.getByRole('button', { name: '完成' }).click()
@@ -102,7 +104,9 @@ test.describe('实例页', () => {
     await expect(page.getByText(/确定要卸载实例 "E2E 演示实例"/)).toBeVisible()
     // 三条款警告文案
     await expect(
-      page.getByText('此操作不可撤销！将会：停止运行中的服务器、删除所有世界数据和配置、从数据库中移除记录'),
+      page.getByText(
+        '此操作不可撤销！将会：停止运行中的服务器、删除所有世界数据和配置、从数据库中移除记录',
+      ),
     ).toBeVisible()
     await page.getByRole('button', { name: '取消' }).click()
     await expect(page.getByRole('heading', { name: '卸载实例' })).toBeHidden()
@@ -146,7 +150,9 @@ test.describe('实例页', () => {
     // mock 只有 1 个实例：网格仍是三列（列数恒定 ⇒ 骨架与真实网格不跳变），
     // 卡片占 1 列、引导块跨 2 列补满整行
     const grid = page.locator('[data-instance-id]').first().locator('..')
-    expect(await grid.evaluate((el) => getComputedStyle(el).gridTemplateColumns.split(' ').length)).toBe(3)
+    expect(
+      await grid.evaluate((el) => getComputedStyle(el).gridTemplateColumns.split(' ').length),
+    ).toBe(3)
     const card = await page.locator('[data-instance-id]').first().boundingBox()
     const tile = await page.getByTestId('deploy-guide-tile').boundingBox()
     expect(card).not.toBeNull()

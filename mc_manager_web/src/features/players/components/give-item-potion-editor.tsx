@@ -110,10 +110,7 @@ export function PotionPanel({
         </div>
         <div className="flex items-center gap-2">
           <span className="w-8 shrink-0 text-mcs-xs text-mcs-text-muted">等级</span>
-          <Select
-            value={String(potion.level)}
-            onValueChange={(v) => onSetLevel(Number(v))}
-          >
+          <Select value={String(potion.level)} onValueChange={(v) => onSetLevel(Number(v))}>
             <SelectTrigger size="sm" aria-label="效果等级" className="min-w-28">
               <SelectValue />
             </SelectTrigger>
@@ -131,10 +128,7 @@ export function PotionPanel({
         {durations.length > 0 ? (
           <div className="flex items-center gap-2">
             <span className="w-8 shrink-0 text-mcs-xs text-mcs-text-muted">时长</span>
-            <Select
-              value={String(potion.duration)}
-              onValueChange={(v) => onSetDuration(Number(v))}
-            >
+            <Select value={String(potion.duration)} onValueChange={(v) => onSetDuration(Number(v))}>
               <SelectTrigger size="sm" aria-label="时长" className="min-w-28">
                 <SelectValue />
               </SelectTrigger>

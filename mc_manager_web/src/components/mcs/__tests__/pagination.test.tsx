@@ -69,7 +69,13 @@ describe('Pagination 当前页语义', () => {
 
   it('numbers：totalPages=0（空结果）只报「共 0 条」，不出现「第 1/0 页」', () => {
     const { container } = render(
-      <Pagination page={1} totalPages={0} totalItems={0} onPageChange={() => {}} variant="numbers" />,
+      <Pagination
+        page={1}
+        totalPages={0}
+        totalItems={0}
+        onPageChange={() => {}}
+        variant="numbers"
+      />,
     )
 
     expect(screen.queryAllByRole('button')).toHaveLength(0)

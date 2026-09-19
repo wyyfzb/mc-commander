@@ -101,12 +101,15 @@ describe('cn 的合并语义未被削弱', () => {
     expect(cn('text-mcs-info-fg', 'text-mcs-error-fg')).toBe('text-mcs-error-fg')
   })
 
-  it.each(['p-4 px-2', 'flex block', 'inset-0 top-2', 'font-medium font-bold', 'rounded-lg rounded-t-sm'])(
-    '与字号/行高无关的合并仍走 twMerge 默认规则：%s',
-    (classes) => {
-      expect(cn(classes)).toBe(twMerge(classes))
-    },
-  )
+  it.each([
+    'p-4 px-2',
+    'flex block',
+    'inset-0 top-2',
+    'font-medium font-bold',
+    'rounded-lg rounded-t-sm',
+  ])('与字号/行高无关的合并仍走 twMerge 默认规则：%s', (classes) => {
+    expect(cn(classes)).toBe(twMerge(classes))
+  })
 
   it('类名去重与条件值照常工作', () => {
     const hidden: boolean = false

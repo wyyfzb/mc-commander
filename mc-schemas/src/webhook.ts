@@ -1,7 +1,14 @@
 import { z } from 'zod'
 
 /** 渠道预设：generic=项目通用格式；其余为国内平台特化格式（签名协议/消息体互不兼容） */
-export const WEBHOOK_PLATFORMS = ['generic', 'feishu', 'dingtalk', 'wecom', 'serverchan', 'pushplus'] as const
+export const WEBHOOK_PLATFORMS = [
+  'generic',
+  'feishu',
+  'dingtalk',
+  'wecom',
+  'serverchan',
+  'pushplus',
+] as const
 export const webhookPlatformSchema = z.enum(WEBHOOK_PLATFORMS)
 export type WebhookPlatform = z.infer<typeof webhookPlatformSchema>
 

@@ -111,7 +111,9 @@ describe('PluginRow · 渲染与 meta 回退', () => {
 
   it('meta=null 时展示名回退为文件名（meta?.name ?? plugin.name）', () => {
     setup({ plugin: mkPlugin({ meta: null }) })
-    expect(screen.getByRole('button', { name: '查看插件 EssentialsX-2.21.0.jar 详情' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: '查看插件 EssentialsX-2.21.0.jar 详情' }),
+    ).toBeInTheDocument()
     // 元数据派生内容缺席：版本/API 徽章、作者、依赖
     expect(screen.queryByText('v2.21.0')).not.toBeInTheDocument()
     expect(screen.queryByText('API 1.21')).not.toBeInTheDocument()
@@ -130,7 +132,9 @@ describe('PluginRow · 渲染与 meta 回退', () => {
 
   it('meta.name 为 null 时回退文件名，但版本等仍可渲染', () => {
     setup({ plugin: mkPlugin({ meta: { ...META, name: null } }) })
-    expect(screen.getByRole('button', { name: '查看插件 EssentialsX-2.21.0.jar 详情' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: '查看插件 EssentialsX-2.21.0.jar 详情' }),
+    ).toBeInTheDocument()
     expect(screen.getByText('v2.21.0')).toBeInTheDocument()
   })
 

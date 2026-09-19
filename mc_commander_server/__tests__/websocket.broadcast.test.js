@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'events';
-import { setupWebSocket, WSEvents, flushNotificationEvents, resetNotificationEventQueue } from '../websocket.js';
+import {
+  setupWebSocket,
+  WSEvents,
+  flushNotificationEvents,
+  resetNotificationEventQueue,
+} from '../websocket.js';
 import { resetSystemStatsCache } from '../utils/system-stats.js';
 
 // Mock 数据库：捕获通知事件落库（全局通知 id 透传 / 落库失败降级分支）
@@ -17,7 +22,12 @@ vi.mock('os', async (importOriginal) => {
     ...actual,
     default: {
       ...actual.default,
-      cpus: vi.fn(() => [{ model: 'cpu0' }, { model: 'cpu1' }, { model: 'cpu2' }, { model: 'cpu3' }]),
+      cpus: vi.fn(() => [
+        { model: 'cpu0' },
+        { model: 'cpu1' },
+        { model: 'cpu2' },
+        { model: 'cpu3' },
+      ]),
       loadavg: vi.fn(() => [2.0, 1.0, 0.5]),
       totalmem: vi.fn(() => 8 * 1024 * 1024 * 1024),
       freemem: vi.fn(() => 2 * 1024 * 1024 * 1024),
@@ -115,7 +125,12 @@ describe('WebSocket 系统广播域（broadcastAll / 全局通知 / 系统统计
 
     // 系统指标默认实现（用例内可重设；clearAllMocks 不清实现，这里显式复位防泄漏）
     vi.mocked(os.loadavg).mockReturnValue([2.0, 1.0, 0.5]);
-    vi.mocked(os.cpus).mockReturnValue([{ model: 'cpu0' }, { model: 'cpu1' }, { model: 'cpu2' }, { model: 'cpu3' }]);
+    vi.mocked(os.cpus).mockReturnValue([
+      { model: 'cpu0' },
+      { model: 'cpu1' },
+      { model: 'cpu2' },
+      { model: 'cpu3' },
+    ]);
     vi.mocked(os.totalmem).mockReturnValue(8 * 1024 * 1024 * 1024);
     vi.mocked(os.freemem).mockReturnValue(2 * 1024 * 1024 * 1024);
     vi.mocked(os.uptime).mockReturnValue(12345);
@@ -223,7 +238,13 @@ describe('WebSocket 系统广播域（broadcastAll / 全局通知 / 系统统计
       const wsOff = connect(wss);
       wsOff.readyState = 0;
 
-      serverManager.emit('deployProgress', { stage: 'error', percent: 0, error: 'download failed', instanceId: 'forge-x2', instanceName: 'Forge 服' });
+      serverManager.emit('deployProgress', {
+        stage: 'error',
+        percent: 0,
+        error: 'download failed',
+        instanceId: 'forge-x2',
+        instanceName: 'Forge 服',
+      });
 
       expect(wsOk.send).toHaveBeenCalledTimes(2);
       expect(wsOff.send).not.toHaveBeenCalled();
@@ -234,7 +255,12 @@ describe('WebSocket 系统广播域（broadcastAll / 全局通知 / 系统统计
       fakeDb.failInsert = true;
       const ws = connect(wss);
 
-      serverManager.emit('deployProgress', { stage: 'complete', percent: 1.0, instanceId: 'paper-x3', instanceName: '生存服' });
+      serverManager.emit('deployProgress', {
+        stage: 'complete',
+        percent: 1.0,
+        instanceId: 'paper-x3',
+        instanceName: '生存服',
+      });
 
       // progress（无落库语义）+ notice 均送达；id 已随消息下发，flush 失败只丢行
       expect(ws.send).toHaveBeenCalledTimes(2);
@@ -417,7 +443,11 @@ describe('WebSocket 系统广播域（broadcastAll / 全局通知 / 系统统计
       const wsA = connect(wss);
       const wsB = connect(wss);
 
-      serverManager.emit('instance:upgradeProgress', { stage: 'download', percent: 40, detail: '正在下载...' });
+      serverManager.emit('instance:upgradeProgress', {
+        stage: 'download',
+        percent: 40,
+        detail: '正在下载...',
+      });
 
       // 兜底走全量广播：无实例归属，不校验订阅，不落库
       expect(wsA.send).toHaveBeenCalledTimes(1);
@@ -452,14 +482,30 @@ describe('WebSocket 系统广播域（broadcastAll / 全局通知 / 系统统计
       ws.send.mockClear();
 
       const CASES = [
-        ['instance:playerDeath', WSEvents.PLAYER_DEATH, { instanceId: 's1', name: 'Steve', cause: 'lava' }],
+        [
+          'instance:playerDeath',
+          WSEvents.PLAYER_DEATH,
+          { instanceId: 's1', name: 'Steve', cause: 'lava' },
+        ],
         ['instance:playerRespawn', WSEvents.PLAYER_RESPAWN, { instanceId: 's1', name: 'Steve' }],
-        ['instance:playerChat', WSEvents.PLAYER_CHAT, { instanceId: 's1', name: 'Steve', message: 'hello' }],
-        ['instance:achievement', WSEvents.ACHIEVEMENT, { instanceId: 's1', name: 'Steve', achievement: 'Taking Inventory' }],
+        [
+          'instance:playerChat',
+          WSEvents.PLAYER_CHAT,
+          { instanceId: 's1', name: 'Steve', message: 'hello' },
+        ],
+        [
+          'instance:achievement',
+          WSEvents.ACHIEVEMENT,
+          { instanceId: 's1', name: 'Steve', achievement: 'Taking Inventory' },
+        ],
         ['instance:tpsUpdate', WSEvents.TPS_UPDATE, { instanceId: 's1', tps: 19.5 }],
         ['instance:performanceUpdate', WSEvents.PERFORMANCE_UPDATE, { instanceId: 's1', cpu: 30 }],
         ['instance:weatherUpdate', WSEvents.WEATHER_UPDATE, { instanceId: 's1', raining: true }],
-        ['instance:playerStatsUpdate', WSEvents.PLAYER_STATS_UPDATE, { instanceId: 's1', players: [{ name: 'Alex' }] }],
+        [
+          'instance:playerStatsUpdate',
+          WSEvents.PLAYER_STATS_UPDATE,
+          { instanceId: 's1', players: [{ name: 'Alex' }] },
+        ],
         ['instance:playerSleep', WSEvents.PLAYER_SLEEP, { instanceId: 's1', name: 'Steve' }],
       ];
       for (const [event, expectedType, data] of CASES) {
@@ -510,7 +556,11 @@ describe('WebSocket 系统广播域（broadcastAll / 全局通知 / 系统统计
       outsider.send.mockClear();
 
       serverManager.emit('instance:backupFailed', { instanceId: 's1', error: 'rsync boom' });
-      serverManager.emit('instance:taskFailed', { instanceId: 's1', taskName: '每日备份', error: 'boom' });
+      serverManager.emit('instance:taskFailed', {
+        instanceId: 's1',
+        taskName: '每日备份',
+        error: 'boom',
+      });
 
       const types = outsider.send.mock.calls.map(([m]) => JSON.parse(m).type);
       expect(types).toEqual([WSEvents.BACKUP_FAILED, WSEvents.TASK_FAILED]);

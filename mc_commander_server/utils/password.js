@@ -42,11 +42,7 @@ export function verifyPassword(password, stored) {
     const parts = String(stored).split('$');
     if (parts.length !== 6 || parts[0] !== 'scrypt') return false;
     const [, n, r, p, saltB64, hashB64] = parts;
-    if (
-      Number(n) !== SCRYPT_N ||
-      Number(r) !== SCRYPT_R ||
-      Number(p) !== SCRYPT_P
-    ) {
+    if (Number(n) !== SCRYPT_N || Number(r) !== SCRYPT_R || Number(p) !== SCRYPT_P) {
       return false;
     }
     const salt = Buffer.from(saltB64, 'base64');

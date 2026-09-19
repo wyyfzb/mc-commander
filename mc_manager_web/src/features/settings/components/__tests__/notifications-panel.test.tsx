@@ -58,7 +58,9 @@ describe('NotificationsPanel', () => {
       .getAllByRole('switch')
       .slice(1)
       .map((s) => s.getAttribute('aria-label'))
-    expect(serverRowNames).toEqual(serverTypes.map((t) => `${NOTIFICATION_TYPE_META[t].label} 开关`))
+    expect(serverRowNames).toEqual(
+      serverTypes.map((t) => `${NOTIFICATION_TYPE_META[t].label} 开关`),
+    )
     // 组内行数 = 类型数 + 1 个组级开关
     expect(within(gameGroup).getAllByRole('switch')).toHaveLength(gameTypes.length + 1)
     expect(within(serverGroup).getAllByRole('switch')).toHaveLength(serverTypes.length + 1)
@@ -82,16 +84,25 @@ describe('NotificationsPanel', () => {
     expect(useNotificationPreferenceStore.getState().isEnabled('chat')).toBe(false)
     expect(useNotificationPreferenceStore.getState().isEnabled('join')).toBe(true)
     // UI 回显
-    expect(screen.getByRole('switch', { name: '聊天 开关' })).toHaveAttribute('data-state', 'unchecked')
+    expect(screen.getByRole('switch', { name: '聊天 开关' })).toHaveAttribute(
+      'data-state',
+      'unchecked',
+    )
     // 持久化：仅写非默认（false）项
-    const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}') as Record<string, { toast: boolean }>
+    const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}') as Record<
+      string,
+      { toast: boolean }
+    >
     expect(raw.chat?.toast).toBe(false)
     expect(raw.join).toBeUndefined()
     // 组级 checked 语义：至少一项开启 → checked，并带半开提示
     const gameGroupSwitch = screen.getByRole('switch', { name: '游戏通知 开关' })
     expect(gameGroupSwitch).toHaveAttribute('data-state', 'checked')
     expect(gameGroupSwitch).toHaveAttribute('title', '组内部分类型已关闭，点击将全部开启')
-    expect(screen.getByRole('switch', { name: '服务器通知 开关' })).toHaveAttribute('data-state', 'checked')
+    expect(screen.getByRole('switch', { name: '服务器通知 开关' })).toHaveAttribute(
+      'data-state',
+      'checked',
+    )
   })
 
   it('组级批量开关：关闭「游戏通知」→ 组内全部关闭，server 组不受影响', async () => {
@@ -107,7 +118,10 @@ describe('NotificationsPanel', () => {
     for (const s of within(gameGroup).getAllByRole('switch').slice(1)) {
       expect(s).toHaveAttribute('data-state', 'unchecked')
     }
-    expect(screen.getByRole('switch', { name: '服务器通知 开关' })).toHaveAttribute('data-state', 'checked')
+    expect(screen.getByRole('switch', { name: '服务器通知 开关' })).toHaveAttribute(
+      'data-state',
+      'checked',
+    )
   })
 
   it('组级批量开关：半开态点击 → 全部关闭；再点击 → 全部开启', async () => {
@@ -115,19 +129,28 @@ describe('NotificationsPanel', () => {
     render(<NotificationsPanel />)
     // 先关一行 → 组级保持 checked（半开态）
     await user.click(screen.getByRole('switch', { name: '死亡 开关' }))
-    expect(screen.getByRole('switch', { name: '游戏通知 开关' })).toHaveAttribute('data-state', 'checked')
+    expect(screen.getByRole('switch', { name: '游戏通知 开关' })).toHaveAttribute(
+      'data-state',
+      'checked',
+    )
     // 组级点击 → 全部关闭（标准 header checkbox 语义）
     await user.click(screen.getByRole('switch', { name: '游戏通知 开关' }))
     for (const t of typesOf('game')) {
       expect(useNotificationPreferenceStore.getState().isEnabled(t)).toBe(false)
     }
-    expect(screen.getByRole('switch', { name: '游戏通知 开关' })).toHaveAttribute('data-state', 'unchecked')
+    expect(screen.getByRole('switch', { name: '游戏通知 开关' })).toHaveAttribute(
+      'data-state',
+      'unchecked',
+    )
     // 再点击 → 全部开启
     await user.click(screen.getByRole('switch', { name: '游戏通知 开关' }))
     for (const t of typesOf('game')) {
       expect(useNotificationPreferenceStore.getState().isEnabled(t)).toBe(true)
     }
-    expect(screen.getByRole('switch', { name: '游戏通知 开关' })).toHaveAttribute('data-state', 'checked')
+    expect(screen.getByRole('switch', { name: '游戏通知 开关' })).toHaveAttribute(
+      'data-state',
+      'checked',
+    )
   })
 
   it('持久化后重载回显：localStorage 注入 → 关闭项回显关闭，其余默认开', () => {
@@ -137,11 +160,26 @@ describe('NotificationsPanel', () => {
     useNotificationPreferenceStore.setState({ prefs: stored })
 
     render(<NotificationsPanel />)
-    expect(screen.getByRole('switch', { name: '聊天 开关' })).toHaveAttribute('data-state', 'unchecked')
-    expect(screen.getByRole('switch', { name: '进入 开关' })).toHaveAttribute('data-state', 'checked')
-    expect(screen.getByRole('switch', { name: '启动 开关' })).toHaveAttribute('data-state', 'checked')
+    expect(screen.getByRole('switch', { name: '聊天 开关' })).toHaveAttribute(
+      'data-state',
+      'unchecked',
+    )
+    expect(screen.getByRole('switch', { name: '进入 开关' })).toHaveAttribute(
+      'data-state',
+      'checked',
+    )
+    expect(screen.getByRole('switch', { name: '启动 开关' })).toHaveAttribute(
+      'data-state',
+      'checked',
+    )
     // 部分关闭 → 组级保持 checked（半开态显示开），server 组全开 → checked
-    expect(screen.getByRole('switch', { name: '游戏通知 开关' })).toHaveAttribute('data-state', 'checked')
-    expect(screen.getByRole('switch', { name: '服务器通知 开关' })).toHaveAttribute('data-state', 'checked')
+    expect(screen.getByRole('switch', { name: '游戏通知 开关' })).toHaveAttribute(
+      'data-state',
+      'checked',
+    )
+    expect(screen.getByRole('switch', { name: '服务器通知 开关' })).toHaveAttribute(
+      'data-state',
+      'checked',
+    )
   })
 })

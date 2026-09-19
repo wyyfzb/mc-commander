@@ -31,16 +31,16 @@ function renderList(overrides: Partial<TaskListProps> = {}) {
   }
   render(
     <TooltipProvider>
-    <TaskList
-      tasks={overrides.tasks ?? mockTasks}
-      isLoading={overrides.isLoading ?? false}
-      runningTaskId={overrides.runningTaskId ?? null}
-      onToggle={handlers.onToggle}
-      onRunNow={handlers.onRunNow}
-      onEdit={handlers.onEdit}
-      onDelete={handlers.onDelete}
-      onNewTask={handlers.onNewTask}
-    />
+      <TaskList
+        tasks={overrides.tasks ?? mockTasks}
+        isLoading={overrides.isLoading ?? false}
+        runningTaskId={overrides.runningTaskId ?? null}
+        onToggle={handlers.onToggle}
+        onRunNow={handlers.onRunNow}
+        onEdit={handlers.onEdit}
+        onDelete={handlers.onDelete}
+        onNewTask={handlers.onNewTask}
+      />
     </TooltipProvider>,
   )
   return handlers
@@ -68,10 +68,16 @@ describe('TaskList 渲染', () => {
     expect(screen.getByText('say 服务器每半小时自动公告')).toBeInTheDocument()
 
     // 时间行「上次运行/下次运行」（formatTaskDate 格式化；null → 从未）
-    const timeRows = screen.getAllByText((_, el) => el?.textContent?.startsWith('上次运行:') ?? false)
+    const timeRows = screen.getAllByText(
+      (_, el) => el?.textContent?.startsWith('上次运行:') ?? false,
+    )
     expect(timeRows).toHaveLength(3)
-    expect(timeRows[0]?.textContent).toContain(`上次运行: ${formatTaskDate(mockTasks[0]!.lastRunAt)}`)
-    expect(timeRows[0]?.textContent).toContain(`下次运行: ${formatTaskDate(mockTasks[0]!.nextRunAt)}（`)
+    expect(timeRows[0]?.textContent).toContain(
+      `上次运行: ${formatTaskDate(mockTasks[0]!.lastRunAt)}`,
+    )
+    expect(timeRows[0]?.textContent).toContain(
+      `下次运行: ${formatTaskDate(mockTasks[0]!.nextRunAt)}（`,
+    )
     // 下次运行追加倒计时（2h 前生成：2h 0m 后；容差断言，精确格式由 formatNextRunCountdown 单测锁定）
     expect(timeRows[0]?.textContent).toContain(
       `（${formatNextRunCountdown(mockTasks[0]!.nextRunAt, Date.now())}）`,

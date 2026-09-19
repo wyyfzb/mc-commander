@@ -29,18 +29,22 @@ export class ScheduledTaskModel {
     const whereClause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
     const offset = (page - 1) * pageSize;
 
-    const tasks = db.prepare(`
+    const tasks = db
+      .prepare(`
       SELECT * FROM scheduled_tasks
       ${whereClause}
       ORDER BY id DESC
       LIMIT ? OFFSET ?
-    `).all(...params, pageSize, offset);
+    `)
+      .all(...params, pageSize, offset);
 
-    const total = db.prepare(`
+    const total = db
+      .prepare(`
       SELECT COUNT(*) as count FROM scheduled_tasks ${whereClause}
-    `).get(...params).count;
+    `)
+      .get(...params).count;
 
-    return { tasks: tasks.map(r => this._toCamel(r)), total, page, pageSize };
+    return { tasks: tasks.map((r) => this._toCamel(r)), total, page, pageSize };
   }
 
   static findById(id) {
@@ -74,19 +78,21 @@ export class ScheduledTaskModel {
   static create(data) {
     const db = getDb();
 
-    const result = db.prepare(`
+    const result = db
+      .prepare(`
       INSERT INTO scheduled_tasks (
         instance_id, name, type, cron_expression, command,
         is_enabled
       ) VALUES (?, ?, ?, ?, ?, ?)
-    `).run(
-      data.instanceId || null,
-      data.name,
-      data.type,
-      data.cronExpression,
-      data.command || null,
-      data.isEnabled !== false ? 1 : 0
-    );
+    `)
+      .run(
+        data.instanceId || null,
+        data.name,
+        data.type,
+        data.cronExpression,
+        data.command || null,
+        data.isEnabled !== false ? 1 : 0,
+      );
 
     return this.findById(result.lastInsertRowid);
   }
@@ -105,7 +111,7 @@ export class ScheduledTaskModel {
       command: 'command',
       isEnabled: 'is_enabled',
       lastRunAt: 'last_run_at',
-      nextRunAt: 'next_run_at'
+      nextRunAt: 'next_run_at',
     };
 
     for (const [key, column] of Object.entries(fieldMap)) {
@@ -135,10 +141,12 @@ export class ScheduledTaskModel {
 
   static getEnabledTasks() {
     const db = getDb();
-    const rows = db.prepare(`
+    const rows = db
+      .prepare(`
       SELECT * FROM scheduled_tasks WHERE is_enabled = 1
-    `).all();
-    return rows.map(r => this._toCamel(r));
+    `)
+      .all();
+    return rows.map((r) => this._toCamel(r));
   }
 
   static updateLastRun(id, nextRunAt, status, error = null, durationMs = null) {
@@ -187,9 +195,7 @@ export class ScheduledTaskModel {
     clauses.push('updated_at = CURRENT_TIMESTAMP');
     params.push(id);
 
-    db.prepare(
-      `UPDATE scheduled_tasks SET ${clauses.join(', ')} WHERE id = ?`
-    ).run(...params);
+    db.prepare(`UPDATE scheduled_tasks SET ${clauses.join(', ')} WHERE id = ?`).run(...params);
 
     // 异步结果同样是真实执行结果：追加历史，run_at 取触发时已落的 last_run_at
     this._recordHistory(id, status, error, durationMs);
@@ -199,9 +205,7 @@ export class ScheduledTaskModel {
   static _recordHistory(taskId, status, error, durationMs) {
     try {
       const db = getDb();
-      const row = db.prepare(
-        'SELECT last_run_at FROM scheduled_tasks WHERE id = ?'
-      ).get(taskId);
+      const row = db.prepare('SELECT last_run_at FROM scheduled_tasks WHERE id = ?').get(taskId);
       TaskRunHistoryModel.record({
         taskId,
         status,

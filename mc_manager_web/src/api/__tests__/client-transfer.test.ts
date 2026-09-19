@@ -15,14 +15,25 @@ import { useAuthStore, SESSION_EXPIRED_EVENT } from '@/stores/auth'
 
 function ok<T>(data: T) {
   return HttpResponse.json({
-    status: 'ok', code: 0, message: 'Success', data,
+    status: 'ok',
+    code: 0,
+    message: 'Success',
+    data,
     timestamp: new Date().toISOString(),
   })
 }
 
 const server = setupServer(
   http.get('*/api/v1/dl', () => HttpResponse.text('file-bytes')),
-  http.post('*/api/v1/upload', () => ok({ path: '/x.jar', name: 'x.jar', size: 10, modifiedAt: '2026-01-01T00:00:00Z', isDirectory: false })),
+  http.post('*/api/v1/upload', () =>
+    ok({
+      path: '/x.jar',
+      name: 'x.jar',
+      size: 10,
+      modifiedAt: '2026-01-01T00:00:00Z',
+      isDirectory: false,
+    }),
+  ),
 )
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
@@ -47,7 +58,7 @@ describe('apiDownloadFile · Content-Disposition 解析', () => {
       ),
     )
 
-  it("RFC 5987 filename*（UTF-8 扩展）优先并解码中文文件名", async () => {
+  it('RFC 5987 filename*（UTF-8 扩展）优先并解码中文文件名', async () => {
     dl(`attachment; filename="fallback.zip"; filename*=UTF-8''%E5%AD%98%E6%A1%A3.zip`)
     const { fileName } = await apiDownloadFile('/api/v1/dl', config)
     expect(fileName).toBe('存档.zip')
@@ -102,9 +113,7 @@ describe('apiDownloadFile · 流式进度与 blob 快路径', () => {
 
   it('无 onProgress（或无 Content-Length）走 blob 快路径并回调 100', async () => {
     // 覆盖流式用例残留的 Content-Length handler：无 CL 时不得进入流式分支
-    server.use(
-      http.get('*/api/v1/dl', () => HttpResponse.text('file-bytes')),
-    )
+    server.use(http.get('*/api/v1/dl', () => HttpResponse.text('file-bytes')))
     const onProgress = vi.fn()
     const { blob } = await apiDownloadFile('/api/v1/dl', config, { onProgress })
     expect(blob.size).toBe('file-bytes'.length)
@@ -144,7 +153,10 @@ describe('apiDownloadFile · 错误传播', () => {
     // 无法触达 AbortError 分支；stub fetch 用 jsdom 原生 DOMException 注入
     const controller = new AbortController()
     controller.abort()
-    vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new DOMException('The operation was aborted', 'AbortError'))))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.reject(new DOMException('The operation was aborted', 'AbortError'))),
+    )
     await expect(
       apiDownloadFile('/api/v1/dl', config, { signal: controller.signal }),
     ).rejects.toMatchObject({ name: 'NetworkError', message: '下载已取消' })
@@ -207,12 +219,20 @@ describe('apiUploadFile（XHR 共享实现）', () => {
   const file = () => new File(['file-bytes'], 'x.jar', { type: 'application/java-archive' })
 
   it('上传成功：query 拼接 + data 解包', async () => {
-    const res = await apiUploadFile<{ name: string }>('/api/v1/upload?targetDir=%2Fplugins', config, file())
+    const res = await apiUploadFile<{ name: string }>(
+      '/api/v1/upload?targetDir=%2Fplugins',
+      config,
+      file(),
+    )
     expect(res.name).toBe('x.jar')
   })
 
   it('非 JSON 响应：NetworkError「响应解析失败」（xhr.responseText JSON.parse 失败路径）', async () => {
-    server.use(http.post('*/api/v1/upload', () => HttpResponse.text('<html>bad gateway</html>', { status: 502 })))
+    server.use(
+      http.post('*/api/v1/upload', () =>
+        HttpResponse.text('<html>bad gateway</html>', { status: 502 }),
+      ),
+    )
     await expect(apiUploadFile('/api/v1/upload', config, file())).rejects.toMatchObject({
       name: 'NetworkError',
       message: expect.stringContaining('响应解析失败（HTTP 502）'),
@@ -223,7 +243,13 @@ describe('apiUploadFile（XHR 共享实现）', () => {
     server.use(
       http.post('*/api/v1/upload', () =>
         HttpResponse.json(
-          { status: 'error', code: 40902, message: 'file type blocked', details: null, timestamp: '' },
+          {
+            status: 'error',
+            code: 40902,
+            message: 'file type blocked',
+            details: null,
+            timestamp: '',
+          },
           { status: 400 },
         ),
       ),
@@ -237,21 +263,31 @@ describe('apiUploadFile（XHR 共享实现）', () => {
 
   it('上传遇 40103 会话过期：清会话 + 派发全局事件（与 apiRequest 同一处置）', async () => {
     // 会话过期必须先有会话：40103 只在「令牌属于本目标面板」时才算过期（异面板不动本机登录态）
-    useAuthStore
-      .getState()
-      .setSession({ token: 'tok-upload', sessionId: 'sess-up', expiresAt: new Date(Date.now() + 60_000).toISOString() })
+    useAuthStore.getState().setSession({
+      token: 'tok-upload',
+      sessionId: 'sess-up',
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    })
     const listener = vi.fn()
     window.addEventListener(SESSION_EXPIRED_EVENT, listener)
     server.use(
       http.post('*/api/v1/upload', () =>
         HttpResponse.json(
-          { status: 'error', code: 40103, message: 'session expired', details: null, timestamp: '' },
+          {
+            status: 'error',
+            code: 40103,
+            message: 'session expired',
+            details: null,
+            timestamp: '',
+          },
           { status: 401 },
         ),
       ),
     )
     try {
-      await expect(apiUploadFile('/api/v1/upload', config, file())).rejects.toMatchObject({ code: 40103 })
+      await expect(apiUploadFile('/api/v1/upload', config, file())).rejects.toMatchObject({
+        code: 40103,
+      })
       expect(useAuthStore.getState().session).toBeNull()
       expect(listener).toHaveBeenCalledTimes(1)
     } finally {
@@ -272,14 +308,24 @@ describe('apiUploadFile（XHR 共享实现）', () => {
     server.use(
       http.post('*/api/v1/upload', () =>
         HttpResponse.json(
-          { status: 'error', code: 40103, message: 'session expired', details: null, timestamp: '' },
+          {
+            status: 'error',
+            code: 40103,
+            message: 'session expired',
+            details: null,
+            timestamp: '',
+          },
           { status: 401 },
         ),
       ),
     )
     try {
       await expect(
-        apiUploadFile('/api/v1/upload', { baseUrl: 'https://panel-b.example.com', apiKey: 'key-b' }, file()),
+        apiUploadFile(
+          '/api/v1/upload',
+          { baseUrl: 'https://panel-b.example.com', apiKey: 'key-b' },
+          file(),
+        ),
       ).rejects.toMatchObject({ code: 40103 })
       expect(useAuthStore.getState().session).toEqual(session)
       expect(listener).not.toHaveBeenCalled()
@@ -336,7 +382,10 @@ describe('apiUploadFile（XHR 共享实现）', () => {
 
 describe('requestEnvelope · 外部 signal 与超时分支', () => {
   it('外部 signal 中止：AbortError → NetworkError（超时文案为既有行为，如实锁定）', async () => {
-    vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new DOMException('The operation was aborted', 'AbortError'))))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.reject(new DOMException('The operation was aborted', 'AbortError'))),
+    )
     await expect(apiGet('/api/v1/dl', config, new AbortController().signal)).rejects.toMatchObject({
       name: 'NetworkError',
       message: '请求超时，请检查服务器连接',
@@ -344,7 +393,10 @@ describe('requestEnvelope · 外部 signal 与超时分支', () => {
   })
 
   it('非 APIError/AbortError/TypeError 的未知异常原样抛出（finally 清理定时器）', async () => {
-    vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new Error('boom-inside-fetch'))))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.reject(new Error('boom-inside-fetch'))),
+    )
     await expect(apiGet('/api/v1/dl', config)).rejects.toThrow('boom-inside-fetch')
   })
 })
@@ -363,7 +415,10 @@ describe('requestEnvelope（apiRequest 链）· 变体补充', () => {
   it('非 2xx 且信封 status≠error（畸形信封）：退回 NetworkError「请求失败」', async () => {
     server.use(
       http.get('*/api/v1/dl', () =>
-        HttpResponse.json({ status: 'ok', code: 0, message: 'x', data: null, timestamp: '' }, { status: 500 }),
+        HttpResponse.json(
+          { status: 'ok', code: 0, message: 'x', data: null, timestamp: '' },
+          { status: 500 },
+        ),
       ),
     )
     const { apiGet } = await import('../client')

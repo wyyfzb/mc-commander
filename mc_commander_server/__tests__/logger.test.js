@@ -4,12 +4,7 @@ import os from 'os';
 import path from 'path';
 
 import config from '../config.js';
-import {
-  logger,
-  __configureLogger,
-  __resetLogger,
-  __loggerState,
-} from '../utils/logger.js';
+import { logger, __configureLogger, __resetLogger, __loggerState } from '../utils/logger.js';
 
 // logger 单元测试（issue #325）：四级过滤 / error 分流 / 轮转 / banner 白名单
 // 输出捕获：替换 process.stdout/stderr.write（logger 唯一输出口）
@@ -26,8 +21,14 @@ describe('logger 轻量结构化日志', () => {
     stderrWrites = [];
     origStdoutWrite = process.stdout.write.bind(process.stdout);
     origStderrWrite = process.stderr.write.bind(process.stderr);
-    process.stdout.write = (chunk) => { stdoutWrites.push(String(chunk)); return true; };
-    process.stderr.write = (chunk) => { stderrWrites.push(String(chunk)); return true; };
+    process.stdout.write = (chunk) => {
+      stdoutWrites.push(String(chunk));
+      return true;
+    };
+    process.stderr.write = (chunk) => {
+      stderrWrites.push(String(chunk));
+      return true;
+    };
     __configureLogger({ dir: tmpDir });
   });
 

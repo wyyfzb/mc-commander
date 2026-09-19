@@ -306,7 +306,9 @@ describe('命令历史 tab 时间筛选（issue 385）', () => {
 
     // URL 持久化：tab + cmd 起止同步写回（刷新/分享链接后筛选保持）
     await waitFor(() =>
-      expect(router.state.location.search).toBe('?tab=commands&cmdStart=2026-02-25&cmdEnd=2026-03-01'),
+      expect(router.state.location.search).toBe(
+        '?tab=commands&cmdStart=2026-02-25&cmdEnd=2026-03-01',
+      ),
     )
   })
 
@@ -333,5 +335,4 @@ describe('命令历史 tab 时间筛选（issue 385）', () => {
     expect(week).toHaveAttribute('aria-checked', 'false')
     expect(today).toHaveAttribute('aria-checked', 'false')
   })
-
 })

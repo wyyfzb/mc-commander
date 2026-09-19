@@ -74,12 +74,17 @@ const ItemCell = memo(function ItemCell({
           </span>
         )}
         {isSelected && entry !== undefined && Object.keys(entry.enchants).length > 0 && (
-          <span className={`absolute left-0 top-0 rounded-mcs-xs border px-1 text-mcs-2xs font-semibold leading-tight ${toneClasses('purple')}`}>
+          <span
+            className={`absolute left-0 top-0 rounded-mcs-xs border px-1 text-mcs-2xs font-semibold leading-tight ${toneClasses('purple')}`}
+          >
             附{Object.keys(entry.enchants).length}
           </span>
         )}
       </span>
-      <span className="w-full truncate text-center text-mcs-xs text-mcs-text-default" title={item.name}>
+      <span
+        className="w-full truncate text-center text-mcs-xs text-mcs-text-default"
+        title={item.name}
+      >
         {item.name}
       </span>
       <span
@@ -205,7 +210,10 @@ export function ItemSelector({
           <p className="text-mcs-sm text-mcs-text-muted">没有找到匹配的物品</p>
         </div>
       ) : (
-        <div className="grid flex-1 grid-cols-4 content-start gap-1.5 overflow-y-auto pb-1 sm:grid-cols-5 lg:grid-cols-6" data-testid="give-item-grid">
+        <div
+          className="grid flex-1 grid-cols-4 content-start gap-1.5 overflow-y-auto pb-1 sm:grid-cols-5 lg:grid-cols-6"
+          data-testid="give-item-grid"
+        >
           {filteredItems.map((item) => (
             <ItemCell
               key={item.id}

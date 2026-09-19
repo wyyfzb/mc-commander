@@ -37,66 +37,42 @@ describe('Audit Routes', () => {
   });
 
   it('GET /audit-logs passes instanceId filter', async () => {
-    await request(app)
-      .get('/api/v1/audit-logs?instanceId=inst-1')
-      .set('X-API-Key', 'test-key');
+    await request(app).get('/api/v1/audit-logs?instanceId=inst-1').set('X-API-Key', 'test-key');
     expect(AuditLogModel.findAll).toHaveBeenCalledWith(
       expect.objectContaining({ instanceId: 'inst-1' }),
     );
   });
 
   it('GET /audit-logs passes action filter', async () => {
-    await request(app)
-      .get('/api/v1/audit-logs?action=INSTANCE_START')
-      .set('X-API-Key', 'test-key');
+    await request(app).get('/api/v1/audit-logs?action=INSTANCE_START').set('X-API-Key', 'test-key');
     expect(AuditLogModel.findAll).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'INSTANCE_START' }),
     );
   });
 
   it('GET /audit-logs clamps pageSize to max 200', async () => {
-    await request(app)
-      .get('/api/v1/audit-logs?pageSize=999')
-      .set('X-API-Key', 'test-key');
-    expect(AuditLogModel.findAll).toHaveBeenCalledWith(
-      expect.objectContaining({ pageSize: 200 }),
-    );
+    await request(app).get('/api/v1/audit-logs?pageSize=999').set('X-API-Key', 'test-key');
+    expect(AuditLogModel.findAll).toHaveBeenCalledWith(expect.objectContaining({ pageSize: 200 }));
   });
 
   it('GET /audit-logs passes order=asc to model', async () => {
-    await request(app)
-      .get('/api/v1/audit-logs?order=asc')
-      .set('X-API-Key', 'test-key');
-    expect(AuditLogModel.findAll).toHaveBeenCalledWith(
-      expect.objectContaining({ order: 'asc' }),
-    );
+    await request(app).get('/api/v1/audit-logs?order=asc').set('X-API-Key', 'test-key');
+    expect(AuditLogModel.findAll).toHaveBeenCalledWith(expect.objectContaining({ order: 'asc' }));
   });
 
   it('GET /audit-logs passes order=desc to model', async () => {
-    await request(app)
-      .get('/api/v1/audit-logs?order=desc')
-      .set('X-API-Key', 'test-key');
-    expect(AuditLogModel.findAll).toHaveBeenCalledWith(
-      expect.objectContaining({ order: 'desc' }),
-    );
+    await request(app).get('/api/v1/audit-logs?order=desc').set('X-API-Key', 'test-key');
+    expect(AuditLogModel.findAll).toHaveBeenCalledWith(expect.objectContaining({ order: 'desc' }));
   });
 
   it('GET /audit-logs without order defaults to desc (backward compatible)', async () => {
-    await request(app)
-      .get('/api/v1/audit-logs')
-      .set('X-API-Key', 'test-key');
-    expect(AuditLogModel.findAll).toHaveBeenCalledWith(
-      expect.objectContaining({ order: 'desc' }),
-    );
+    await request(app).get('/api/v1/audit-logs').set('X-API-Key', 'test-key');
+    expect(AuditLogModel.findAll).toHaveBeenCalledWith(expect.objectContaining({ order: 'desc' }));
   });
 
   it('GET /audit-logs invalid order falls back to desc', async () => {
-    await request(app)
-      .get('/api/v1/audit-logs?order=invalid')
-      .set('X-API-Key', 'test-key');
-    expect(AuditLogModel.findAll).toHaveBeenCalledWith(
-      expect.objectContaining({ order: 'desc' }),
-    );
+    await request(app).get('/api/v1/audit-logs?order=invalid').set('X-API-Key', 'test-key');
+    expect(AuditLogModel.findAll).toHaveBeenCalledWith(expect.objectContaining({ order: 'desc' }));
   });
 
   it('GET /command-history returns paginated results', async () => {
@@ -118,9 +94,7 @@ describe('Audit Routes', () => {
   });
 
   it('GET /command-history clamps pageSize to max 200', async () => {
-    await request(app)
-      .get('/api/v1/command-history?pageSize=500')
-      .set('X-API-Key', 'test-key');
+    await request(app).get('/api/v1/command-history?pageSize=500').set('X-API-Key', 'test-key');
     expect(CommandHistoryModel.findAll).toHaveBeenCalledWith(
       expect.objectContaining({ pageSize: 200 }),
     );
@@ -129,35 +103,25 @@ describe('Audit Routes', () => {
   it('GET /audit-logs without auth returns 401 (middleware outside scope, 200 if no middleware)', async () => {
     // audit routes are mounted after auth middleware in production,
     // but this test doesn't include auth middleware
-    const res = await request(app)
-      .get('/api/v1/audit-logs')
-      .set('X-API-Key', 'test-key');
+    const res = await request(app).get('/api/v1/audit-logs').set('X-API-Key', 'test-key');
     expect(res.status).toBe(200);
   });
 
   // ── 分页参数回归（parsePagination 统一收口，issue 388）──
   it('GET /audit-logs 分页参数透传到模型', async () => {
-    await request(app)
-      .get('/api/v1/audit-logs?page=3&pageSize=7')
-      .set('X-API-Key', 'test-key');
+    await request(app).get('/api/v1/audit-logs?page=3&pageSize=7').set('X-API-Key', 'test-key');
     expect(AuditLogModel.findAll).toHaveBeenCalledWith(
       expect.objectContaining({ page: 3, pageSize: 7 }),
     );
   });
 
   it('GET /audit-logs page 越界钳制到 1000', async () => {
-    await request(app)
-      .get('/api/v1/audit-logs?page=5000')
-      .set('X-API-Key', 'test-key');
-    expect(AuditLogModel.findAll).toHaveBeenCalledWith(
-      expect.objectContaining({ page: 1000 }),
-    );
+    await request(app).get('/api/v1/audit-logs?page=5000').set('X-API-Key', 'test-key');
+    expect(AuditLogModel.findAll).toHaveBeenCalledWith(expect.objectContaining({ page: 1000 }));
   });
 
   it('GET /audit-logs 非法分页参数回落默认', async () => {
-    await request(app)
-      .get('/api/v1/audit-logs?page=abc&pageSize=xyz')
-      .set('X-API-Key', 'test-key');
+    await request(app).get('/api/v1/audit-logs?page=abc&pageSize=xyz').set('X-API-Key', 'test-key');
     expect(AuditLogModel.findAll).toHaveBeenCalledWith(
       expect.objectContaining({ page: 1, pageSize: 20 }),
     );
@@ -199,8 +163,6 @@ describe('Audit Routes zod 请求契约（issue 391）', () => {
 
   it('GET /audit-logs 非法 order 回落 desc 是 schema 契约的一部分（issue 383 向后兼容语义，不升级 400）', async () => {
     await request(app).get('/api/v1/audit-logs?order=<script>');
-    expect(AuditLogModel.findAll).toHaveBeenCalledWith(
-      expect.objectContaining({ order: 'desc' }),
-    );
+    expect(AuditLogModel.findAll).toHaveBeenCalledWith(expect.objectContaining({ order: 'desc' }));
   });
 });

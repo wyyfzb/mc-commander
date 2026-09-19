@@ -65,7 +65,10 @@ describe('危险按钮变体（唯一声明源）', () => {
   })
 
   it('实例卡「停止」走实底档（中断服务的后果重于导航）', () => {
-    const code = readFileSync(join(WEB_DIR, 'src/features/instances/components/instance-cards.tsx'), 'utf-8')
+    const code = readFileSync(
+      join(WEB_DIR, 'src/features/instances/components/instance-cards.tsx'),
+      'utf-8',
+    )
     expect(code).toContain('variant="destructive"')
   })
 

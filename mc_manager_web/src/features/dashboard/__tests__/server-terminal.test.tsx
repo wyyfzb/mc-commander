@@ -23,7 +23,12 @@ const xtermStub = vi.hoisted(() => {
   type ResultCb = (r: { resultIndex: number; resultCount: number }) => void
   type TermEvent = { op: 'write'; text: string } | { op: 'clear' }
   return {
-    customKeyHandlers: [] as ((e: { key: string; ctrlKey?: boolean; metaKey?: boolean; preventDefault: () => void }) => boolean)[],
+    customKeyHandlers: [] as ((e: {
+      key: string
+      ctrlKey?: boolean
+      metaKey?: boolean
+      preventDefault: () => void
+    }) => boolean)[],
     searchAddonInstances: [] as {
       findNext: ReturnType<typeof vi.fn>
       findPrevious: ReturnType<typeof vi.fn>
@@ -58,7 +63,14 @@ vi.mock('@xterm/xterm', () => ({
     onScroll() {
       return { dispose() {} }
     }
-    attachCustomKeyEventHandler(h: (e: { key: string; ctrlKey?: boolean; metaKey?: boolean; preventDefault: () => void }) => boolean) {
+    attachCustomKeyEventHandler(
+      h: (e: {
+        key: string
+        ctrlKey?: boolean
+        metaKey?: boolean
+        preventDefault: () => void
+      }) => boolean,
+    ) {
       xtermStub.customKeyHandlers.push(h)
     }
     constructor() {
@@ -150,7 +162,9 @@ describe('ServerTerminal', () => {
     })
     // store 缓冲随 setInstance 归零，xterm 必须出现新的 clear 事件（旧日志不得残留）
     await waitFor(() => expect(useTerminalStore.getState().instanceId).toBe('other'))
-    expect(xtermStub.events.filter((e) => e.op === 'clear').length).toBeGreaterThan(clearCountBefore)
+    expect(xtermStub.events.filter((e) => e.op === 'clear').length).toBeGreaterThan(
+      clearCountBefore,
+    )
   })
 
   it('不带修饰键的 L 不清屏', async () => {
@@ -162,9 +176,7 @@ describe('ServerTerminal', () => {
 
   it('aria-live 屏读镜像区域存在且含终端文本', async () => {
     renderTerminal()
-    const srMirror = await waitFor(() =>
-      document.querySelector('[data-testid="sr-live-mirror"]'),
-    )
+    const srMirror = await waitFor(() => document.querySelector('[data-testid="sr-live-mirror"]'))
     expect(srMirror).toBeTruthy()
     expect(srMirror?.getAttribute('aria-live')).toBe('polite')
     expect(srMirror?.getAttribute('aria-label')).toBe('终端输出')
@@ -228,7 +240,10 @@ describe('ServerTerminal 终端内搜索', () => {
     await user.type(input, 'ERROR')
     await user.keyboard('{Enter}')
     const addon = lastAddon()!
-    expect(addon.findNext).toHaveBeenCalledWith('ERROR', expect.objectContaining({ decorations: expect.any(Object) }))
+    expect(addon.findNext).toHaveBeenCalledWith(
+      'ERROR',
+      expect.objectContaining({ decorations: expect.any(Object) }),
+    )
     // addon 上报结果 → n/m 计数（resultIndex 0 起 → 显示 3/17）
     addon.fireResults({ resultIndex: 2, resultCount: 17 })
     expect(await screen.findByText('3/17')).toBeInTheDocument()
@@ -327,7 +342,9 @@ describe('ServerTerminal JVM 眼睛切换（P2-27 复现修复）', () => {
     // 初始态（默认隐藏 JVM 警告）：2 行可见，无 clear，不含 JVM 行
     expect(xtermStub.events.filter((e) => e.op === 'write')).toHaveLength(2)
     expect(xtermStub.events.some((e) => e.op === 'clear')).toBe(false)
-    expect(xtermStub.events.some((e) => e.op === 'write' && e.text.includes('restricted method'))).toBe(false)
+    expect(
+      xtermStub.events.some((e) => e.op === 'write' && e.text.includes('restricted method')),
+    ).toBe(false)
 
     // 切换显示：clear + 3 行全量重写（含 JVM 警告行）→ 历史行回填
     await user.click(screen.getByRole('button', { name: '显示 JVM 警告' }))

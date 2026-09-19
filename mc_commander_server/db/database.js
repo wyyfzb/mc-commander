@@ -252,7 +252,9 @@ function createTables() {
   // SQLite 无法直接改列约束：重建表 + 复制 + 原名替换；新库由上方 v6 建表
   // 语句直接可空，此处仅在检测到 notnull 标记时执行重建。
   if (userVersion < 8) {
-    const auditInstanceId = db.prepare('PRAGMA table_info(audit_logs)').all()
+    const auditInstanceId = db
+      .prepare('PRAGMA table_info(audit_logs)')
+      .all()
       .find((c) => c.name === 'instance_id');
     if (auditInstanceId?.notnull) {
       db.exec(`
@@ -431,7 +433,9 @@ function createTables() {
         players_online INTEGER NOT NULL DEFAULT 0
       )
     `);
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_metrics_history_captured ON metrics_history(captured_at)`);
+    db.exec(
+      `CREATE INDEX IF NOT EXISTS idx_metrics_history_captured ON metrics_history(captured_at)`,
+    );
     db.pragma('user_version = 14');
     logger.info('Migration: added metrics_history table');
   }

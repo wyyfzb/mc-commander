@@ -59,7 +59,10 @@ export function PlayerDetailPanel({
 
   // 列表查不到时回退详情端点
   const detailName = isBatchMode ? null : (detail?.playerName ?? null)
-  const fallbackDetails = usePlayerDetails(instanceId, player === null && detailName !== null ? detailName : null)
+  const fallbackDetails = usePlayerDetails(
+    instanceId,
+    player === null && detailName !== null ? detailName : null,
+  )
   const effectivePlayer: Player | null = player ?? fallbackDetails.data ?? null
 
   // 封禁记录 30s 轮询（面板打开期间）
@@ -102,7 +105,9 @@ export function PlayerDetailPanel({
               )}
             </div>
             <div className="min-w-0">
-              <div className="text-mcs-sm font-medium text-mcs-text-default">已选择 {batchTargets.length} 名玩家</div>
+              <div className="text-mcs-sm font-medium text-mcs-text-default">
+                已选择 {batchTargets.length} 名玩家
+              </div>
               <div className="max-h-10 truncate text-mcs-xs text-mcs-text-muted">
                 {batchTargets.map((p) => p.name).join('、')}
               </div>
@@ -137,7 +142,9 @@ export function PlayerDetailPanel({
                   </span>
                 )}
               </div>
-              <div className="truncate font-mono text-mcs-2xs text-mcs-text-muted">{effectivePlayer.uuid}</div>
+              <div className="truncate font-mono text-mcs-2xs text-mcs-text-muted">
+                {effectivePlayer.uuid}
+              </div>
             </div>
           </div>
         ) : (
@@ -185,7 +192,9 @@ export function PlayerDetailPanel({
             onOpenBanDialog={onOpenBanDialog}
           />
         )}
-        {effectiveTab === 'inventory' && effectivePlayer && <InventoryTab player={effectivePlayer} />}
+        {effectiveTab === 'inventory' && effectivePlayer && (
+          <InventoryTab player={effectivePlayer} />
+        )}
         {effectiveTab === 'teleport' && (
           <TeleportTab
             player={isBatchMode ? null : effectivePlayer}

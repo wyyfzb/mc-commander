@@ -88,9 +88,30 @@ const EXCLUDE_DIR = 'src/components/ui'
 
 // Tailwind 调色板色名（仅拦截视觉色值类，不拦截 transparent/current 等功能值）
 const PALETTE_COLORS = new Set([
-  'slate','gray','zinc','neutral','stone','red','orange','amber','yellow',
-  'lime','green','emerald','teal','cyan','sky','blue','indigo','violet',
-  'purple','fuchsia','pink','rose','black','white',
+  'slate',
+  'gray',
+  'zinc',
+  'neutral',
+  'stone',
+  'red',
+  'orange',
+  'amber',
+  'yellow',
+  'lime',
+  'green',
+  'emerald',
+  'teal',
+  'cyan',
+  'sky',
+  'blue',
+  'indigo',
+  'violet',
+  'purple',
+  'fuchsia',
+  'pink',
+  'rose',
+  'black',
+  'white',
 ])
 
 /** @theme 注册集（index.css）与 effects.css 定义的动画类——未注册即静默失效 */
@@ -114,7 +135,19 @@ function readRegistered() {
 }
 const REGISTERED = readRegistered()
 const COLOR_PREFIXES = new Set([
-  'bg','text','border','ring','outline','fill','stroke','divide','decoration','caret','from','via','to',
+  'bg',
+  'text',
+  'border',
+  'ring',
+  'outline',
+  'fill',
+  'stroke',
+  'divide',
+  'decoration',
+  'caret',
+  'from',
+  'via',
+  'to',
 ])
 
 let violations = 0
@@ -151,13 +184,21 @@ function isColorToken(prefix, name) {
 function roleOf(name) {
   if (name === 'focus-ring') return 'ring'
   // 顺序敏感：tint 判定必须先于 dimension-（维度色也有 -bg-subtle 内容面档）
-  if (name.endsWith('-bg-subtle') || name.startsWith('state-') || name.startsWith('scrim')) return 'tint'
+  if (name.endsWith('-bg-subtle') || name.startsWith('state-') || name.startsWith('scrim'))
+    return 'tint'
   if (name.startsWith('dimension-')) return 'graphic'
   if (name === 'terminal-bg') return 'surface'
   if (name.startsWith('bg-')) return 'surface'
   if (name === 'accent') return 'brand'
-  if (name.endsWith('-fg') || name === 'on-accent' || name.startsWith('text-') || name.startsWith('terminal-')) return 'text'
-  if (name.startsWith('border-') || name.endsWith('-border') || name.endsWith('-border-strong')) return 'border'
+  if (
+    name.endsWith('-fg') ||
+    name === 'on-accent' ||
+    name.startsWith('text-') ||
+    name.startsWith('terminal-')
+  )
+    return 'text'
+  if (name.startsWith('border-') || name.endsWith('-border') || name.endsWith('-border-strong'))
+    return 'border'
   return 'unknown'
 }
 
@@ -204,7 +245,9 @@ function checkTokenClasses(classes, filePath, lineNum) {
     else if (prefix === 'text') ok = REGISTERED.text.has(name) || REGISTERED.color.has(name)
     else ok = COLOR_PREFIXES.has(prefix) && REGISTERED.color.has(name)
     if (!ok) {
-      console.log(`${filePath}:${lineNum + 1}: ${raw} 未在 @theme/effects 注册 → Tailwind 不生成任何规则（语义静默丢失）`)
+      console.log(
+        `${filePath}:${lineNum + 1}: ${raw} 未在 @theme/effects 注册 → Tailwind 不生成任何规则（语义静默丢失）`,
+      )
       violations++
       continue
     }
@@ -213,11 +256,15 @@ function checkTokenClasses(classes, filePath, lineNum) {
     const role = roleOf(name)
     const allowed = ROLE_MATRIX[prefix]
     if (allowed && role !== 'unknown' && !allowed.has(role)) {
-      console.log(`${filePath}:${lineNum + 1}: ${raw} 角色越界 → --mcs-${name} 是 ${role} 档，不可作 ${prefix}-（改用同族 -fg/-border 档或 border-default；角色表见本文件 ROLE_MATRIX）`)
+      console.log(
+        `${filePath}:${lineNum + 1}: ${raw} 角色越界 → --mcs-${name} 是 ${role} 档，不可作 ${prefix}-（改用同族 -fg/-border 档或 border-default；角色表见本文件 ROLE_MATRIX）`,
+      )
       violations++
     }
     if (alpha !== null && !(ALPHA_ALLOW_PREFIX.has(prefix) && ALPHA_ALLOW_ROLE.has(role))) {
-      console.log(`${filePath}:${lineNum + 1}: ${raw} 不可叠加 alpha → 仅不透明填充档（bg- 前缀 + surface/brand 角色）可加 /NN`)
+      console.log(
+        `${filePath}:${lineNum + 1}: ${raw} 不可叠加 alpha → 仅不透明填充档（bg- 前缀 + surface/brand 角色）可加 /NN`,
+      )
       violations++
     }
   }
@@ -229,7 +276,7 @@ function checkTokenClasses(classes, filePath, lineNum) {
  * 其余任何位置（含豁免文件里的第 2 处）都属体系外第 7 个字号。
  */
 const TEXT_BASE_ALLOWLIST = new Map([
-  ['src/components/ui/input.tsx', 1],    // 输入框：<16px 时 iOS 聚焦自动放大页面
+  ['src/components/ui/input.tsx', 1], // 输入框：<16px 时 iOS 聚焦自动放大页面
   ['src/components/ui/textarea.tsx', 1], // 多行输入：同上
 ])
 
@@ -237,17 +284,23 @@ const TEXT_BASE_ALLOWLIST = new Map([
 function checkClasses(filePath, lineNum, classes) {
   // 1. dark: 前缀
   if (/\bdark:\w/.test(classes)) {
-    console.log(`${filePath}:${lineNum + 1}: dark: 前缀类 → ${extractViolatingClass(classes, 'dark:')}`)
+    console.log(
+      `${filePath}:${lineNum + 1}: dark: 前缀类 → ${extractViolatingClass(classes, 'dark:')}`,
+    )
     violations++
   }
   // 2. transition-all
   if (/\btransition-all\b/.test(classes)) {
-    console.log(`${filePath}:${lineNum + 1}: transition-all → 请改用具体属性如 transition-[property]`)
+    console.log(
+      `${filePath}:${lineNum + 1}: transition-all → 请改用具体属性如 transition-[property]`,
+    )
     violations++
   }
   // 3. duration-{纯数字}
   if (/\bduration-(\d+)\b/.test(classes)) {
-    console.log(`${filePath}:${lineNum + 1}: duration-${classes.match(/\bduration-(\d+)\b/)[1]} → 请使用 duration-mcs-fast/base/slow token`)
+    console.log(
+      `${filePath}:${lineNum + 1}: duration-${classes.match(/\bduration-(\d+)\b/)[1]} → 请使用 duration-mcs-fast/base/slow token`,
+    )
     violations++
   }
   // 4. rounded-[ 任意值
@@ -256,14 +309,16 @@ function checkClasses(filePath, lineNum, classes) {
     violations++
   }
   // 5. 原始色板类 (text-{color}, bg-{color}, border-{color}, ring-{color})
-  for (const prefix of ['text-','bg-','border-','ring-']) {
+  for (const prefix of ['text-', 'bg-', 'border-', 'ring-']) {
     for (const cm of classes.matchAll(new RegExp(`\\b${prefix}([a-zA-Z][\\w-]*)`, 'g'))) {
       // 去 alpha 后缀与色阶数字（bg-red-500 → red），否则带色阶的色板类会漏检
       const colorName = cm[1].split('/')[0].replace(/-\d+$/, '')
       if (PALETTE_COLORS.has(colorName)) {
         const fullClass = prefix + cm[1]
         if (!fullClass.includes('mcs-')) {
-          console.log(`${filePath}:${lineNum + 1}: ${prefix}${colorName} 原始色板类 → 请使用 --mcs-* token`)
+          console.log(
+            `${filePath}:${lineNum + 1}: ${prefix}${colorName} 原始色板类 → 请使用 --mcs-* token`,
+          )
           violations++
         }
       }
@@ -277,7 +332,9 @@ function checkClasses(filePath, lineNum, classes) {
   // 7. Tailwind 原生超大字号（3xl+）
   const oversize = classes.match(/\btext-(3xl|4xl|5xl|6xl|7xl|8xl|9xl)\b/)
   if (oversize) {
-    console.log(`${filePath}:${lineNum + 1}: text-${oversize[1]} 超出字号 token 体系 → 请使用 text-mcs-* token（文字档上限 text-mcs-xl）或 text-mcs-display（配 .mcs-num）`)
+    console.log(
+      `${filePath}:${lineNum + 1}: text-${oversize[1]} 超出字号 token 体系 → 请使用 text-mcs-* token（文字档上限 text-mcs-xl）或 text-mcs-display（配 .mcs-num）`,
+    )
     violations++
   }
   // 8. 原生的 16px text-base 由第 27 条统一判定（含 ui/ 扫描面与豁免额度），此处不报
@@ -287,15 +344,22 @@ function checkClasses(filePath, lineNum, classes) {
     /\bfocus(-visible)?:outline-(?:[2-9]|\d{2,}|mcs-|\[)/.test(classes) &&
     !/\bring-/.test(classes)
   ) {
-    console.log(`${filePath}:${lineNum + 1}: outline-none 与 focus-visible:outline-* 互相抵消（焦点环不绘制）→ 删 outline-none 或补 focus-visible:ring-*`)
+    console.log(
+      `${filePath}:${lineNum + 1}: outline-none 与 focus-visible:outline-* 互相抵消（焦点环不绘制）→ 删 outline-none 或补 focus-visible:ring-*`,
+    )
     violations++
   }
   // 10. 未注册 token 类 / 角色越界 / alpha 越界（语义静默丢失与对比度跌破）
   checkTokenClasses(classes, filePath, lineNum)
   // 11. 内容面 tint 不得叠加：不透明 tint 叠加无意义（后者覆盖前者），叠玻璃面同理（背景由后写者决定）
   const contentTints = classes.match(/\bbg-mcs-[\w-]+-bg-subtle\b/g)
-  if (contentTints && (contentTints.length > 1 || /\bglass-(chrome|overlay|toast)\b/.test(classes))) {
-    console.log(`${filePath}:${lineNum + 1}: ${contentTints.join(' + ')}${contentTints.length > 1 ? ' 内容面 tint 叠加' : ' 与玻璃面同元素'} → 同一元素只允许一个背景来源（不透明 tint 会互相覆盖）`)
+  if (
+    contentTints &&
+    (contentTints.length > 1 || /\bglass-(chrome|overlay|toast)\b/.test(classes))
+  ) {
+    console.log(
+      `${filePath}:${lineNum + 1}: ${contentTints.join(' + ')}${contentTints.length > 1 ? ' 内容面 tint 叠加' : ' 与玻璃面同元素'} → 同一元素只允许一个背景来源（不透明 tint 会互相覆盖）`,
+    )
     violations++
   }
 }
@@ -360,7 +424,8 @@ function findToneTintOverlaps(content) {
   const hits = []
 
   for (const call of cnCallArgTables(code)) {
-    if (TINT_SOURCE.test(call.args) && TINT_LITERAL.test(call.args)) hits.push({ offset: call.offset, end: call.end })
+    if (TINT_SOURCE.test(call.args) && TINT_LITERAL.test(call.args))
+      hits.push({ offset: call.offset, end: call.end })
   }
 
   // 模板串：同一个串里两种来源并存（cn 之外的常见写法）；已被 cn 命中区间包住的不重复计数
@@ -440,7 +505,7 @@ function findHandwrittenSelectedShapes(content) {
 
 function extractViolatingClass(classes, prefix) {
   const parts = classes.split(' ')
-  const found = parts.find(c => c.startsWith(prefix))
+  const found = parts.find((c) => c.startsWith(prefix))
   return found || prefix + '...'
 }
 
@@ -454,7 +519,7 @@ function walkDir(dir) {
       walkDir(fullPath)
       continue
     }
-    if (!['.tsx','.ts','.jsx','.js'].includes(extname(entry.name))) continue
+    if (!['.tsx', '.ts', '.jsx', '.js'].includes(extname(entry.name))) continue
     // 排除 shadcn UI 组件（路径分隔符归一为正斜杠，兼容 Windows join 产生的反斜杠）
     if (fullPath.replace(/\\/g, '/').includes(EXCLUDE_DIR)) continue
 
@@ -468,7 +533,9 @@ function walkDir(dir) {
     const rel = relPath.split(sep).join('/')
     for (const hit of findToneTintOverlaps(content)) {
       const lineNum = content.slice(0, hit.offset).split('\n').length
-      console.log(`${relPath}:${lineNum}: 词表 tint（toneClasses/SEMANTIC_TONE_CLASSES）× 字面量 tint 同元素 → 同一元素只允许一个背景来源`)
+      console.log(
+        `${relPath}:${lineNum}: 词表 tint（toneClasses/SEMANTIC_TONE_CLASSES）× 字面量 tint 同元素 → 同一元素只允许一个背景来源`,
+      )
       violations++
     }
     // 词表自身（它就是声明源）与测试（用例按定义就该断言类名三元组）除外
@@ -476,7 +543,9 @@ function walkDir(dir) {
       const triadHits = findHandwrittenToneTriads(content)
       for (const hit of triadHits) {
         const lineNum = content.slice(0, hit.offset).split('\n').length
-        console.log(`${relPath}:${lineNum}: 手写 ${hit.tone} 档三件套（border+bg-subtle+fg）→ 语义色声明源只有 components/mcs/tone.ts`)
+        console.log(
+          `${relPath}:${lineNum}: 手写 ${hit.tone} 档三件套（border+bg-subtle+fg）→ 语义色声明源只有 components/mcs/tone.ts`,
+        )
         violations++
       }
       // 同一字面量里弱档、强档都写了时两条规则会各命中一次，只报三件套那条（同处不重复计数）
@@ -484,17 +553,23 @@ function walkDir(dir) {
       for (const hit of findHandwrittenSelectedShapes(content)) {
         if (reported.has(hit.offset)) continue
         const lineNum = content.slice(0, hit.offset).split('\n').length
-        console.log(`${relPath}:${lineNum}: 手写 accent 选中强调形态（border-strong+bg-subtle）→ 声明源只有 components/mcs/tone.ts 的 TONE_SELECTED_* 常量`)
+        console.log(
+          `${relPath}:${lineNum}: 手写 accent 选中强调形态（border-strong+bg-subtle）→ 声明源只有 components/mcs/tone.ts 的 TONE_SELECTED_* 常量`,
+        )
         violations++
       }
       // 28. 危险按钮手写配方：弱档 error 描边 + 按钮语义同行（测试同样按定义豁免）
       for (const hit of collectDangerousButtonBorderHits(stripComments(content))) {
-        console.log(`${relPath}:${hit.line}: 弱档 error 描边 + 按钮语义同行 → 危险按钮一律用 Button 的 destructive 变体，不得手写 border-mcs-error-border`)
+        console.log(
+          `${relPath}:${hit.line}: 弱档 error 描边 + 按钮语义同行 → 危险按钮一律用 Button 的 destructive 变体，不得手写 border-mcs-error-border`,
+        )
         violations++
       }
       // 29. 交互元素裸取消 outline（全局 :focus-visible 兜底被钉死为 none，焦点不可见）
       for (const hit of collectFocusCancellationHits(stripComments(content))) {
-        console.log(`${relPath}:${hit.line}: 交互元素 outline 取消且无 ring/outline 替换 → 键盘焦点不可见；补 focus-visible:ring-* 或删 outline-none 交给全局兜底`)
+        console.log(
+          `${relPath}:${hit.line}: 交互元素 outline 取消且无 ring/outline 替换 → 键盘焦点不可见；补 focus-visible:ring-* 或删 outline-none 交给全局兜底`,
+        )
         violations++
       }
     }
@@ -509,12 +584,58 @@ walkDir(srcDir)
 // 与逐行检查的区别：本段**不排除** src/components/ui/——基座里的失效类同样是缺陷
 // （`--ease-mcs-spring` 曾在 ui/dialog.tsx 静默失效即因此逃检）。
 /** 注册名 → 生成的工具类（如 color-mcs-bg-default → bg-mcs-bg-default/text-mcs-bg-default/…） */
-const UTILITY_COLOR_PREFIXES = ['bg', 'text', 'border', 'ring', 'outline', 'fill', 'stroke', 'divide', 'decoration', 'caret', 'from', 'via', 'to']
-const UTILITY_RADIUS_PREFIXES = ['rounded', 'rounded-t', 'rounded-b', 'rounded-l', 'rounded-r', 'rounded-tl', 'rounded-tr', 'rounded-bl', 'rounded-br', 'rounded-s', 'rounded-e', 'rounded-ss', 'rounded-se', 'rounded-es', 'rounded-ee']
+const UTILITY_COLOR_PREFIXES = [
+  'bg',
+  'text',
+  'border',
+  'ring',
+  'outline',
+  'fill',
+  'stroke',
+  'divide',
+  'decoration',
+  'caret',
+  'from',
+  'via',
+  'to',
+]
+const UTILITY_RADIUS_PREFIXES = [
+  'rounded',
+  'rounded-t',
+  'rounded-b',
+  'rounded-l',
+  'rounded-r',
+  'rounded-tl',
+  'rounded-tr',
+  'rounded-bl',
+  'rounded-br',
+  'rounded-s',
+  'rounded-e',
+  'rounded-ss',
+  'rounded-se',
+  'rounded-es',
+  'rounded-ee',
+]
 function utilitiesOfRegistration(reg) {
-  if (reg.startsWith('color-')) { const n = reg.slice(6); return UTILITY_COLOR_PREFIXES.map((p) => `${p}-${n}`) }
-  if (reg.startsWith('radius-')) { const n = reg.slice(7); return UTILITY_RADIUS_PREFIXES.map((p) => `${p}-${n}`) }
-  for (const [kind, prefix] of [['text-', 'text-'], ['duration-', 'duration-'], ['ease-', 'ease-'], ['shadow-', 'shadow-'], ['font-', 'font-'], ['animate-', 'animate-'], ['leading-', 'leading-'], ['tracking-', 'tracking-'], ['blur-', 'blur-']]) {
+  if (reg.startsWith('color-')) {
+    const n = reg.slice(6)
+    return UTILITY_COLOR_PREFIXES.map((p) => `${p}-${n}`)
+  }
+  if (reg.startsWith('radius-')) {
+    const n = reg.slice(7)
+    return UTILITY_RADIUS_PREFIXES.map((p) => `${p}-${n}`)
+  }
+  for (const [kind, prefix] of [
+    ['text-', 'text-'],
+    ['duration-', 'duration-'],
+    ['ease-', 'ease-'],
+    ['shadow-', 'shadow-'],
+    ['font-', 'font-'],
+    ['animate-', 'animate-'],
+    ['leading-', 'leading-'],
+    ['tracking-', 'tracking-'],
+    ['blur-', 'blur-'],
+  ]) {
     if (reg.startsWith(kind)) return [`${prefix}${reg.slice(kind.length)}`]
   }
   return []
@@ -527,7 +648,10 @@ function collectG9Files() {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       if (entry.name === 'node_modules' || entry.name === 'dist') continue
       const full = join(dir, entry.name)
-      if (entry.isDirectory()) { walkAll(full); continue }
+      if (entry.isDirectory()) {
+        walkAll(full)
+        continue
+      }
       if (!['.tsx', '.ts', '.jsx', '.js', '.css'].includes(extname(entry.name))) continue
       out.push(full)
     }
@@ -549,7 +673,9 @@ const registeredUtilities = new Set()
 const IMPLICIT_CONSUMED_REGS = new Set(['font-sans'])
 const implicitConsumedTokens = new Set()
 for (const cssFile of [indexPath]) {
-  for (const m of readFileSync(cssFile, 'utf-8').matchAll(/--([\w-]+)\s*:\s*var\((--mcs-[\w-]+)\)/g)) {
+  for (const m of readFileSync(cssFile, 'utf-8').matchAll(
+    /--([\w-]+)\s*:\s*var\((--mcs-[\w-]+)\)/g,
+  )) {
     const [, reg, token] = m
     const us = utilitiesOfRegistration(reg)
     for (const u of us) registeredUtilities.add(u)
@@ -566,7 +692,12 @@ for (const f of G9_FILES) {
   const lines = readFileSync(f, 'utf-8').split('\n')
   lines.forEach((line, i) => {
     for (const m of line.matchAll(/\.((?:mcs|glass|animate-mcs)-[\w-]+)/g)) {
-      if (!definedClasses.has(m[1])) definedClasses.set(m[1], { file: relative(root, f), line: i, reserved: line.includes('@reserved') || (lines[i - 1] ?? '').includes('@reserved') })
+      if (!definedClasses.has(m[1]))
+        definedClasses.set(m[1], {
+          file: relative(root, f),
+          line: i,
+          reserved: line.includes('@reserved') || (lines[i - 1] ?? '').includes('@reserved'),
+        })
     }
   })
 }
@@ -590,10 +721,16 @@ for (const f of G9_FILES) {
     const classContext = CLASS_CONTEXT.test(line)
     for (const lit of line.matchAll(/(["'`])([^"'`\n]*)\1/g)) {
       for (const raw of lit[2].split(/\s+/)) {
-        const body = raw.replace(/^.*:/, '').replace(/!$/, '').replace(/\/[\d[\].]+$/, '')
+        const body = raw
+          .replace(/^.*:/, '')
+          .replace(/!$/, '')
+          .replace(/\/[\d[\].]+$/, '')
         if (!body) continue
         const dyn = body.match(/^((?:mcs|glass|animate-mcs|[a-z-]*-mcs)-[a-z0-9-]*)\$\{/)
-        if (dyn) { usedPrefixes.add(dyn[1]); continue }
+        if (dyn) {
+          usedPrefixes.add(dyn[1])
+          continue
+        }
         if (!/^(?:[a-z-]*-)?(?:mcs|glass)-[a-z0-9-]+$/.test(body)) continue
         const info = usedClasses.get(body)
         if (!info) usedClasses.set(body, { file: relFile, classContext })
@@ -614,7 +751,9 @@ for (const [cls, info] of usedClasses) {
     // 裸 mcs-*/glass-* 标识符（localStorage 键、事件名、测试夹具）不是类名，不进判定
     continue
   }
-  console.log(`${info.file}: ${cls} 未定义/未注册 → 项目 CSS 无此选择器且 @theme 无此注册，类名静默无效果`)
+  console.log(
+    `${info.file}: ${cls} 未定义/未注册 → 项目 CSS 无此选择器且 @theme 无此注册，类名静默无效果`,
+  )
   violations++
 }
 for (const p of usedPrefixes) {
@@ -624,15 +763,21 @@ for (const p of usedPrefixes) {
 }
 
 // 13. 死类：项目 CSS 定义但 0 使用（@reserved 豁免）
-const deadClasses = [...definedClasses.entries()].filter(([cls, info]) => !info.reserved && !isUsed(cls))
+const deadClasses = [...definedClasses.entries()].filter(
+  ([cls, info]) => !info.reserved && !isUsed(cls),
+)
 for (const [cls, info] of deadClasses) {
-  console.log(`${info.file}:${info.line + 1}: ${cls} 定义但全仓 0 使用 → 删除或加 @reserved 注释说明预留原因`)
+  console.log(
+    `${info.file}:${info.line + 1}: ${cls} 定义但全仓 0 使用 → 删除或加 @reserved 注释说明预留原因`,
+  )
   violations++
 }
 
 // 14. 死 token：semantic.css 定义但 0 消费 → 报错（@reserved 是唯一豁免口径）
 const semanticLines = readFileSync(semanticPath, 'utf-8').split('\n')
-const tokenNames = [...new Set([...semanticLines.join('\n').matchAll(/(--mcs-[\w-]+)\s*:/g)].map((m) => m[1]))]
+const tokenNames = [
+  ...new Set([...semanticLines.join('\n').matchAll(/(--mcs-[\w-]+)\s*:/g)].map((m) => m[1])),
+]
 // 定义层/注册层之外的全文（用于 ① 字面量引用判定）
 // index.css 只剔除 @theme 注册行，保留 base 层的真实消费（如 line-height: var(--mcs-line-height-body)）
 const REGISTRATION_LINE = /^\s*--[\w-]+\s*:\s*var\(--mcs-[\w-]+\);\s*$/gm
@@ -645,14 +790,19 @@ for (const f of G9_FILES) {
 const deadTokens = []
 for (const token of tokenNames) {
   const defLine = semanticLines.findIndex((l) => l.includes(`${token}:`))
-  const reserved = defLine >= 0 && (semanticLines[defLine].includes('@reserved') || (semanticLines[defLine - 1] ?? '').includes('@reserved'))
+  const reserved =
+    defLine >= 0 &&
+    (semanticLines[defLine].includes('@reserved') ||
+      (semanticLines[defLine - 1] ?? '').includes('@reserved'))
   if (reserved || implicitConsumedTokens.has(token)) continue
   const literalRef = outsideText.includes(token)
   const classRef = [...(tokenUtilities.get(token) ?? [])].some(isUsed)
   if (!literalRef && !classRef) deadTokens.push(token)
 }
 if (deadTokens.length > 0) {
-  console.log(`\n✗ 死 token ${deadTokens.length} 个（semantic.css 定义但全仓 0 消费）→ 删除，或加 @reserved 注释说明预留原因：`)
+  console.log(
+    `\n✗ 死 token ${deadTokens.length} 个（semantic.css 定义但全仓 0 消费）→ 删除，或加 @reserved 注释说明预留原因：`,
+  )
   for (const t of deadTokens) console.log(`   ${t}`)
   violations += deadTokens.length
 }
@@ -714,7 +864,9 @@ for (const f of G9_FILES) {
 for (const [kind, count] of glassCount) {
   const budget = GLASS_BUDGET[kind] ?? 0
   if (count > budget) {
-    console.log(`玻璃预算超标：glass-${kind} ${count} 处（预算 ${budget}）→ 预算说明见 src/styles/glass.css`)
+    console.log(
+      `玻璃预算超标：glass-${kind} ${count} 处（预算 ${budget}）→ 预算说明见 src/styles/glass.css`,
+    )
     violations += count - budget
   }
 }
@@ -725,7 +877,9 @@ for (const f of G9_FILES) {
   const lines = readFileSync(f, 'utf-8').split('\n')
   lines.forEach((line, i) => {
     if (/\bbg-destructive\/(?:[\d.]+|\[[\d.]+\])/.test(codeOnly(line))) {
-      console.log(`${relative(root, f)}:${i + 1}: bg-destructive/<alpha> 半透明危险底 → 改用不透明 bg-mcs-error-bg-subtle + border-mcs-error-border-strong`)
+      console.log(
+        `${relative(root, f)}:${i + 1}: bg-destructive/<alpha> 半透明危险底 → 改用不透明 bg-mcs-error-bg-subtle + border-mcs-error-border-strong`,
+      )
       violations++
     }
   })
@@ -738,7 +892,9 @@ const hasAlphaSyntax = (value) =>
 for (const [i, line] of semanticLines.entries()) {
   const m = line.match(/(--mcs-[\w-]+-bg-subtle)\s*:\s*([^;]+);/)
   if (m && hasAlphaSyntax(m[2])) {
-    console.log(`${relative(root, semanticPath)}:${i + 1}: ${m[1]} 含半透明值 → 内容面 tint 必须不透明（color-mix(色 N%, 基面)）`)
+    console.log(
+      `${relative(root, semanticPath)}:${i + 1}: ${m[1]} 含半透明值 → 内容面 tint 必须不透明（color-mix(色 N%, 基面)）`,
+    )
     violations++
   }
 }
@@ -755,10 +911,14 @@ for (const f of G9_FILES) {
       for (const raw of lit[2].split(/\s+/)) {
         const body = raw.replace(/^.*:/, '').replace(/!$/, '')
         if (body === 'transition-all') {
-          console.log(`${relative(root, f)}:${i + 1}: transition-all → 改用 transition / transition-colors（避免布局属性参与过渡）`)
+          console.log(
+            `${relative(root, f)}:${i + 1}: transition-all → 改用 transition / transition-colors（避免布局属性参与过渡）`,
+          )
           violations++
         } else if (/^duration-\d+$/.test(body)) {
-          console.log(`${relative(root, f)}:${i + 1}: ${body} 数字时长档 → 改用 duration-mcs-fast/base/slow`)
+          console.log(
+            `${relative(root, f)}:${i + 1}: ${body} 数字时长档 → 改用 duration-mcs-fast/base/slow`,
+          )
           violations++
         }
       }
@@ -782,7 +942,9 @@ for (const f of G9_FILES) {
   const rel = GATE_REL(f)
   const budget = TEXT_BASE_ALLOWLIST.get(rel) ?? 0
   for (const hit of overQuota(collectTextBaseHits(readFileSync(f, 'utf-8')), budget)) {
-    console.log(`${rel}:${hit.line}: text-base 是体系外第 7 个字号（16px）→ 改用 text-mcs-*；仅移动端输入控件可豁免（ui/input、ui/textarea 各 1 处，额度见本文件 TEXT_BASE_ALLOWLIST）`)
+    console.log(
+      `${rel}:${hit.line}: text-base 是体系外第 7 个字号（16px）→ 改用 text-mcs-*；仅移动端输入控件可豁免（ui/input、ui/textarea 各 1 处，额度见本文件 TEXT_BASE_ALLOWLIST）`,
+    )
     violations++
   }
 }
@@ -794,21 +956,26 @@ for (const f of G9_FILES) {
 //     逐条理由见下表；新写一处卡面会被额度拒收，不因同文件已豁免而放过。
 const CARD_DECLARATION_SOURCE = 'src/components/mcs/card.tsx'
 const CARD_SURFACE_ALLOWLIST = new Map([
-  ['src/components/mcs/empty-state.tsx', 1],                    // 空态插画底座：ring-1 ring-mcs-border-muted 代 border，非卡片面配方
-  ['src/layouts/app-sidebar.tsx', 1],                           // 侧栏实例摘要条：导航区部件，不是页面内容卡片
+  ['src/components/mcs/empty-state.tsx', 1], // 空态插画底座：ring-1 ring-mcs-border-muted 代 border，非卡片面配方
+  ['src/layouts/app-sidebar.tsx', 1], // 侧栏实例摘要条：导航区部件，不是页面内容卡片
   ['src/features/dashboard/components/server-terminal.tsx', 1], // 终端深底面：底色走 --mcs-terminal-*（主题无关），无卡底色
-  ['src/features/instances/components/instance-cards.tsx', 1],  // 卡内数值栅格：rounded-mcs-sm + bg-mcs-bg-default，档位不同
-  ['src/features/settings/settings-page.tsx', 1],               // 设置页子导航轨道：侧向导航，不是内容卡片
-  ['src/features/tasks/components/cron-editor.tsx', 1],         // 表单内嵌块 p-2（非内容分组）
-  ['src/features/tasks/components/task-dialog.tsx', 1],         // 表单内嵌块 p-2（同上）
+  ['src/features/instances/components/instance-cards.tsx', 1], // 卡内数值栅格：rounded-mcs-sm + bg-mcs-bg-default，档位不同
+  ['src/features/settings/settings-page.tsx', 1], // 设置页子导航轨道：侧向导航，不是内容卡片
+  ['src/features/tasks/components/cron-editor.tsx', 1], // 表单内嵌块 p-2（非内容分组）
+  ['src/features/tasks/components/task-dialog.tsx', 1], // 表单内嵌块 p-2（同上）
 ])
 for (const f of GATE_FILES) {
   if (f.endsWith('.css') || isTestFile(f)) continue
   const rel = GATE_REL(f)
   if (rel === CARD_DECLARATION_SOURCE) continue
   const code = stripComments(readFileSync(f, 'utf-8'))
-  for (const offset of overQuota(collectCardSurfaceOffsets(code), CARD_SURFACE_ALLOWLIST.get(rel))) {
-    console.log(`${rel}:${lineAt(code, offset)}: 卡片面类名配方（shadow-mcs-card）→ 卡片面只在 components/mcs/card.tsx 声明（AGENTS.md「卡片容器」）；非卡片面的同配方现场须登记豁免额度`)
+  for (const offset of overQuota(
+    collectCardSurfaceOffsets(code),
+    CARD_SURFACE_ALLOWLIST.get(rel),
+  )) {
+    console.log(
+      `${rel}:${lineAt(code, offset)}: 卡片面类名配方（shadow-mcs-card）→ 卡片面只在 components/mcs/card.tsx 声明（AGENTS.md「卡片容器」）；非卡片面的同配方现场须登记豁免额度`,
+    )
     violations++
   }
 }
@@ -829,7 +996,9 @@ const LABEL_COMPONENT_DECL = /export\s+(?:function|const)\s+([A-Z]\w*(?:Badge|Pi
 const BADGE_MODULE_REF = /(?:components\/ui\/badge|@\/components\/badge)\b|<Badge\b/g
 const RETIRED_BADGE_FILE = join(srcDir, 'components', 'ui', 'badge.tsx')
 if (existsSync(RETIRED_BADGE_FILE)) {
-  console.log(`${GATE_REL(RETIRED_BADGE_FILE)}: 已删除的 shadcn badge 基座被重建 → 状态标签走 StatusPill / Chip / CountBadge`)
+  console.log(
+    `${GATE_REL(RETIRED_BADGE_FILE)}: 已删除的 shadcn badge 基座被重建 → 状态标签走 StatusPill / Chip / CountBadge`,
+  )
   violations++
 }
 for (const f of GATE_FILES) {
@@ -838,12 +1007,16 @@ for (const f of GATE_FILES) {
   const code = stripComments(readFileSync(f, 'utf-8'))
   if (!LABEL_COMPONENT_SOURCES.has(rel)) {
     for (const m of code.matchAll(LABEL_COMPONENT_DECL)) {
-      console.log(`${rel}:${lineAt(code, m.index)}: 新导出标签组件 ${m[1]} → 标签只有 Chip / StatusPill / CountBadge 三件（AGENTS.md「标签与状态展示」）`)
+      console.log(
+        `${rel}:${lineAt(code, m.index)}: 新导出标签组件 ${m[1]} → 标签只有 Chip / StatusPill / CountBadge 三件（AGENTS.md「标签与状态展示」）`,
+      )
       violations++
     }
   }
   for (const m of code.matchAll(BADGE_MODULE_REF)) {
-    console.log(`${rel}:${lineAt(code, m.index)}: 引用已删除的 badge 基座 → 状态标签走 StatusPill / Chip / CountBadge`)
+    console.log(
+      `${rel}:${lineAt(code, m.index)}: 引用已删除的 badge 基座 → 状态标签走 StatusPill / Chip / CountBadge`,
+    )
     violations++
   }
 }
@@ -909,13 +1082,17 @@ for (const f of GATE_FILES) {
   const code = stripComments(readFileSync(f, 'utf-8'))
   const headerCount = [...code.matchAll(/<PageHeader\b/g)].length
   if (headerCount !== 1) {
-    console.log(`${rel}: 页面必须有且仅一个 PageHeader（当前 ${headerCount} 个）→ 标题与描述只在页头声明`)
+    console.log(
+      `${rel}: 页面必须有且仅一个 PageHeader（当前 ${headerCount} 个）→ 标题与描述只在页头声明`,
+    )
     violations++
   }
   // 判定面：页文件 + 其直接引用的页内模块
   const scoped = [f]
   for (const imported of localImportsOf(code, f)) scoped.push(imported)
-  const moduleCodes = new Map(scoped.map((p) => [p, p === f ? code : stripComments(readFileSync(p, 'utf-8'))]))
+  const moduleCodes = new Map(
+    scoped.map((p) => [p, p === f ? code : stripComments(readFileSync(p, 'utf-8'))]),
+  )
   // 基座名表：判定面内的标题组件声明 + 这些模块再引用的基座（`<CardTitle>` 的档在 mcs/card）
   for (const p of [...scoped, ...scoped.flatMap((m) => localImportsOf(moduleCodes.get(m), m))]) {
     if (!moduleCodes.has(p)) moduleCodes.set(p, stripComments(readFileSync(p, 'utf-8')))
@@ -925,7 +1102,9 @@ for (const f of GATE_FILES) {
     moduleCodes.values(),
   )
   if (tiers.size > 3) {
-    console.log(`${rel}: 页内标题字号档 ${tiers.size} 档（${[...tiers].sort().join('/')}）→ 同屏标题最多 3 档`)
+    console.log(
+      `${rel}: 页内标题字号档 ${tiers.size} 档（${[...tiers].sort().join('/')}）→ 同屏标题最多 3 档`,
+    )
     violations++
   }
 }
@@ -938,17 +1117,19 @@ for (const f of GATE_FILES) {
   if (f.endsWith('.css')) continue
   const rel = GATE_REL(f)
   if (OVERLAY_SOURCES.has(rel)) continue
-  readFileSync(f, 'utf-8').split('\n').forEach((line, i) => {
-    const code = codeOnly(line)
-    if (!code) return
-    if (
-      /z-\(--mcs-z-modal\)/.test(code) &&
-      (/fixed/.test(code) || /inset-0/.test(code) || /<aside\b/.test(code))
-    ) {
-      console.log(`${rel}:${i + 1}: 裸 z-modal 全屏覆盖层 → 全屏面板走 ui/sheet / ui/dialog`)
-      violations++
-    }
-  })
+  readFileSync(f, 'utf-8')
+    .split('\n')
+    .forEach((line, i) => {
+      const code = codeOnly(line)
+      if (!code) return
+      if (
+        /z-\(--mcs-z-modal\)/.test(code) &&
+        (/fixed/.test(code) || /inset-0/.test(code) || /<aside\b/.test(code))
+      ) {
+        console.log(`${rel}:${i + 1}: 裸 z-modal 全屏覆盖层 → 全屏面板走 ui/sheet / ui/dialog`)
+        violations++
+      }
+    })
 }
 
 // 25. 行内 onKeyDown 抢键：对空格/回车调 preventDefault 的处理器必须先判落点
@@ -994,7 +1175,9 @@ for (const f of GATE_FILES) {
     if (!interceptsSpaceOrEnter(body)) continue
     if (/\.target\b/.test(body)) continue
     if (KEYBOARD_HOST_EXEMPT.test(hostTagBefore(content, m.index))) continue
-    console.log(`${rel}:${lineAt(content, m.index)}: 行内 onKeyDown 对空格/回车 preventDefault 却未判落点 → 先判 e.target（容器会吞掉行内控件自己的激活键）`)
+    console.log(
+      `${rel}:${lineAt(content, m.index)}: 行内 onKeyDown 对空格/回车 preventDefault 却未判落点 → 先判 e.target（容器会吞掉行内控件自己的激活键）`,
+    )
     violations++
   }
 }
@@ -1005,7 +1188,8 @@ for (const f of GATE_FILES) {
 const SIZE_STYLE_KEY = /\b(?:min|max)?(?:width|height)\s*:\s*/gi
 /** 单位必须紧跟数值（`100%` / `2rem`）；裸关键词与无单位零值都是合法 CSS */
 const CSS_LENGTH_OK = /[\d.](?:px|rem|em|%|vh|vw|vmin|vmax|ch|ex|pt|pc|cm|mm|in|q)(?![\w])/i
-const CSS_SIZE_KEYWORD_OK = /^(?:0|auto|fit-content|max-content|min-content|stretch|inherit|initial|unset|revert|none)$/i
+const CSS_SIZE_KEYWORD_OK =
+  /^(?:0|auto|fit-content|max-content|min-content|stretch|inherit|initial|unset|revert|none)$/i
 for (const f of GATE_FILES) {
   if (f.endsWith('.css')) continue
   const rel = GATE_REL(f)
@@ -1022,7 +1206,10 @@ for (const f of GATE_FILES) {
     if (depth > 0) continue
     const object = content.slice(start + 1, i - 1)
     for (const k of object.matchAll(SIZE_STYLE_KEY)) {
-      const value = object.slice(k.index + k[0].length).split(/[,}]/)[0].trim()
+      const value = object
+        .slice(k.index + k[0].length)
+        .split(/[,}]/)[0]
+        .trim()
       const literal = /^(['"`])([\s\S]*)\1$/.exec(value)
       if (!literal) continue
       const inner = literal[2]
@@ -1030,7 +1217,9 @@ for (const f of GATE_FILES) {
       if (CSS_SIZE_KEYWORD_OK.test(inner)) continue
       if (CSS_LENGTH_OK.test(inner)) continue
       if (/\b(?:calc|var|clamp|min|max)\(/.test(inner)) continue
-      console.log(`${rel}:${lineAt(content, m.index)}: 内联 style 的 ${k[0].trim()} 值「${inner}」不含单位 → 必须是数值或含单位字符串（传类名会被浏览器忽略）`)
+      console.log(
+        `${rel}:${lineAt(content, m.index)}: 内联 style 的 ${k[0].trim()} 值「${inner}」不含单位 → 必须是数值或含单位字符串（传类名会被浏览器忽略）`,
+      )
       violations++
     }
   }
@@ -1040,4 +1229,6 @@ if (violations > 0) {
   console.error(`\n✗ 发现 ${violations} 处设计 token 违规（设计规范 §4.5）`)
   process.exit(1)
 }
-console.log('✓ 设计 token 完整性检查通过（色板类/dark:/transition-all/duration-数字/rounded-任意值/字号上限/焦点可见性/未注册 token 类/token 角色矩阵/alpha 白名单/未定义类/死类/死 token/内容面 tint 叠加/语义色三件套与选中强调形态声明源/Z 轴阶梯/text-base 额度/玻璃预算/危险半透明底/内容面 tint 不透明/布局属性动画/卡片面声明源/标签组件唯一性/页面页头与标题档/全屏覆盖层来源/行内抢键落点/内联尺寸单位/危险描边只从变体取/焦点环取消须有替换）')
+console.log(
+  '✓ 设计 token 完整性检查通过（色板类/dark:/transition-all/duration-数字/rounded-任意值/字号上限/焦点可见性/未注册 token 类/token 角色矩阵/alpha 白名单/未定义类/死类/死 token/内容面 tint 叠加/语义色三件套与选中强调形态声明源/Z 轴阶梯/text-base 额度/玻璃预算/危险半透明底/内容面 tint 不透明/布局属性动画/卡片面声明源/标签组件唯一性/页面页头与标题档/全屏覆盖层来源/行内抢键落点/内联尺寸单位/危险描边只从变体取/焦点环取消须有替换）',
+)

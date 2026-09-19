@@ -18,6 +18,9 @@
 git clone <仓库地址>
 cd mc-commander
 
+# 仓库根工具包（只装代码格式化器 Biome；不是 workspace 根）
+npm ci
+
 # 共享契约包（服务端运行时消费其构建产物 dist，须先装）
 cd mc-schemas
 npm ci
@@ -36,7 +39,8 @@ npm run build              # 或 npm run dev 起开发服务器
 npm run test
 ```
 
-三个包相互独立，各自安装依赖（无 workspace 根）。
+三个包相互独立，各自安装依赖（无 workspace 根）；仓库根另有一个工具包 `package.json`，
+只装全仓共用的代码格式化器 Biome（`npm ci` 后 `npm run format`），不参与构建与运行。
 
 `mc-schemas` 是 web 与服务端共用的 zod 契约包：改动其 `src/` 后必须 `npm run build`
 重建 `dist/` 并连同源码一并提交——服务端运行时经 `file:` 链接消费 `dist`，前端则经
@@ -71,7 +75,25 @@ bash scripts/local-check.sh --skip-frontend     # 仅契约包 + 服务端
 bash scripts/local-check.sh --skip-schemas      # 跳过契约包
 ```
 
-CI 会在 PR 上运行三套完整检查 + e2e + 密钥扫描，本地建议至少跑过 L1。
+CI 会在 PR 上运行三套完整检查 + 代码格式检查 + e2e + 密钥扫描，本地建议至少跑过 L1。
+
+### 代码格式
+
+格式化由仓库根目录的 **Biome** 统一负责（配置见 `biome.jsonc`，**只启用 formatter**，
+lint 仍归前端的 oxlint 与服务端的 eslint）：
+
+```bash
+npm run format          # 在仓库根执行：按配置格式化全仓
+npm run format:check    # 只检查不改写（CI 与 scripts/local-check.sh 跑这条）
+```
+
+- 范围：全仓 `.ts/.tsx/.js/.mjs` 与配置文件；**不含 CSS 与 Markdown**（设计 token 样式表由门禁脚本
+  解析、文档为手写排版），也不含 `dist/`、`public/`、`coverage/`、e2e 产物、锁文件与 `.ai/`、`.mimosa/`。
+- 风格参数向各包主导风格收敛（2 空格缩进、单引号、JSX 属性双引号、尾逗号 all、行宽 100；
+  分号按包分流：服务端有、前端/契约/e2e 无）。接入时少数偏离既有风格的现场被一并归一
+  （shadcn 生成的 `components/ui/*.tsx` 由双引号改单引号、个别服务端文件补分号），属一次性收敛。
+  此后**不要手工调整格式**——提交前跑一次 `npm run format` 即可；也不要引入其它格式化器
+  （Prettier 等），避免两把格式化器互相打架。
 
 ### 测试约定
 

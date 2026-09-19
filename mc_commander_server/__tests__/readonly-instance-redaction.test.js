@@ -47,8 +47,18 @@ const SENTINEL = '-Drcon.password=SENTINEL_JVM_XYZ_1.2.3.4';
 const REDACTED_FIELDS = ['jvmArgs', 'startCommand', 'javaPath', 'seed'];
 /** 裁剪必须保留的监控字段（抽样子集，防「一刀切删字段」式过度裁剪） */
 const KEPT_FIELDS = [
-  'id', 'name', 'address', 'isRunning', 'playerCount', 'tps', 'mspt',
-  'cpuUsage', 'memoryUsage', 'uptime', 'mcVersion', 'playerCount',
+  'id',
+  'name',
+  'address',
+  'isRunning',
+  'playerCount',
+  'tps',
+  'mspt',
+  'cpuUsage',
+  'memoryUsage',
+  'uptime',
+  'mcVersion',
+  'playerCount',
 ];
 
 /** 完整的实例状态基线：即 toStatus() 的产物，也是 admin 响应的逐字段对照基准 */
@@ -109,9 +119,7 @@ beforeAll(() => {
     instances: new Map(),
     // 与生产同形：getAllInstances() 返回的已是状态对象（不是实例）
     getAllInstances: () => [BASELINE_STATUS],
-    getInstance: (id) => (id === BASELINE_STATUS.id
-      ? { toStatus: () => BASELINE_STATUS }
-      : null),
+    getInstance: (id) => (id === BASELINE_STATUS.id ? { toStatus: () => BASELINE_STATUS } : null),
   };
   app = express();
   app.use(express.json());
@@ -261,16 +269,52 @@ describe('敏感字段 × 裁剪清单哨兵（新增契约字段必须显式分
     // 新增字段时的处置：确认不敏感 → 加进本清单；确认敏感（凭据/主机布局/种子一类）
     // → 加进 READONLY_REDACTED_FIELDS。两条路都要在本文件留下痕迹，不允许「顺手加字段」
     const READONLY_STATUS_FIELDS = [
-      'id', 'name', 'isRunning', 'isRconConnected', 'autoRestart', 'autoStart',
-      'circuitBreakerTripped', 'consecutiveCrashes', 'uptime', 'address', 'players',
-      'playerCount', 'maxPlayers', 'mcVersion', 'modLoader', 'tps', 'mspt',
-      'cpuUsage', 'memoryUsage', 'totalMemory', 'worldSize', 'lastSave', 'lastOutput',
-      'gameMode', 'difficulty', 'whitelisted', 'onlineMode', 'viewDistance',
-      'spawnProtection', 'worldDay', 'worldTime', 'weather', 'opCount', 'opNames',
-      'todayNewPlayers', 'sleepingPlayers', 'sleepingPlayerNames', 'awakePlayerNames',
-      'totalUptime', 'startTime', 'maxMemory', 'minMemory', 'jarFile',
+      'id',
+      'name',
+      'isRunning',
+      'isRconConnected',
+      'autoRestart',
+      'autoStart',
+      'circuitBreakerTripped',
+      'consecutiveCrashes',
+      'uptime',
+      'address',
+      'players',
+      'playerCount',
+      'maxPlayers',
+      'mcVersion',
+      'modLoader',
+      'tps',
+      'mspt',
+      'cpuUsage',
+      'memoryUsage',
+      'totalMemory',
+      'worldSize',
+      'lastSave',
+      'lastOutput',
+      'gameMode',
+      'difficulty',
+      'whitelisted',
+      'onlineMode',
+      'viewDistance',
+      'spawnProtection',
+      'worldDay',
+      'worldTime',
+      'weather',
+      'opCount',
+      'opNames',
+      'todayNewPlayers',
+      'sleepingPlayers',
+      'sleepingPlayerNames',
+      'awakePlayerNames',
+      'totalUptime',
+      'startTime',
+      'maxMemory',
+      'minMemory',
+      'jarFile',
     ];
-    expect(Object.keys(readonlyInstanceStatusSchema.shape).sort())
-      .toEqual([...READONLY_STATUS_FIELDS].sort());
+    expect(Object.keys(readonlyInstanceStatusSchema.shape).sort()).toEqual(
+      [...READONLY_STATUS_FIELDS].sort(),
+    );
   });
 });

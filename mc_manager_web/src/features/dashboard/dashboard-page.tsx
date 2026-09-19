@@ -71,7 +71,8 @@ export function DashboardPage() {
   ].filter((v): v is string => v != null)
   // 只按「已失败且正在重取」的那几条算重试在途：健康查询的 30s 保底轮询/WS 失效
   // 重取与用户点重试无关，把它算进来会让按钮在无关窗口里无故变灰
-  const retryInFlight = (statusFailed && statusQuery.isFetching) || (statsFailed && systemStatsQuery.isFetching)
+  const retryInFlight =
+    (statusFailed && statusQuery.isFetching) || (statsFailed && systemStatsQuery.isFetching)
   const retryFailedQueries = () => {
     if (statusFailed) void statusQuery.refetch()
     if (statsFailed) void systemStatsQuery.refetch()

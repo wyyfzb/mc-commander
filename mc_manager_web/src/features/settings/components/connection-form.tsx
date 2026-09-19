@@ -26,7 +26,11 @@ import { ApiError, apiPost, apiRequest } from '@/api/client'
 import type { OverviewData } from '@/api/types'
 import { ErrorCode, getFriendlyErrorText } from '@/api/errors'
 import { useApiKeyCapabilities } from '@/api/queries'
-import { normalizeBaseUrl, needsHttpPlaintextWarning, sessionAppliesToPanel } from '@/lib/mc-connection'
+import {
+  normalizeBaseUrl,
+  needsHttpPlaintextWarning,
+  sessionAppliesToPanel,
+} from '@/lib/mc-connection'
 import { useUnsavedGuard } from '@/hooks/use-unsaved-guard'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { useAuthStore } from '@/stores/auth'
@@ -40,7 +44,11 @@ type PendingAction = 'save' | 'test' | null
 /** 地址停止输入后多久视为落定（能力探测的取值点；见 formFields 上方注释） */
 const ADDRESS_SETTLE_DELAY_MS = 300
 
-export function ConnectionForm({ variant = 'settings', headingAs = 'h1', onSaved }: ConnectionFormProps) {
+export function ConnectionForm({
+  variant = 'settings',
+  headingAs = 'h1',
+  onSaved,
+}: ConnectionFormProps) {
   /** 标题标签由调用点决定：同屏是否已有别的 h1 只有页面知道，组件内不能写死 */
   const HeadingTag = headingAs
   const storedBaseUrl = useConnectionStore((s) => s.baseUrl)
@@ -107,8 +115,18 @@ export function ConnectionForm({ variant = 'settings', headingAs = 'h1', onSaved
    */
   function ensureFilled(): boolean {
     let valid = true
-    if (url.trim() === '') { setUrlError('请填写服务器地址'); valid = false } else { setUrlError('') }
-    if (!sessionApplies && apiKey.trim() === '') { setKeyError('请填写 API Key'); valid = false } else { setKeyError('') }
+    if (url.trim() === '') {
+      setUrlError('请填写服务器地址')
+      valid = false
+    } else {
+      setUrlError('')
+    }
+    if (!sessionApplies && apiKey.trim() === '') {
+      setKeyError('请填写 API Key')
+      valid = false
+    } else {
+      setKeyError('')
+    }
     return valid
   }
 
@@ -116,7 +134,10 @@ export function ConnectionForm({ variant = 'settings', headingAs = 'h1', onSaved
    * 测试连接：表单值临时构造 config，成功后不写 store（保存才持久化）。
    * 返回结果对象；silentFailure=true 时不弹失败细节 toast（保存路径由调用方统一提示）
    */
-  async function runTest(base: string, opts?: { silentFailure?: boolean }): Promise<{ ok: boolean; error?: string }> {
+  async function runTest(
+    base: string,
+    opts?: { silentFailure?: boolean },
+  ): Promise<{ ok: boolean; error?: string }> {
     setTesting(true)
     try {
       const t0 = performance.now()
@@ -204,7 +225,11 @@ export function ConnectionForm({ variant = 'settings', headingAs = 'h1', onSaved
     setRotating(true)
     try {
       const base = normalizeBaseUrl(url)
-      const res = await apiPost<{ apiKey: string }>('/api/v1/rotate-key', { baseUrl: base, apiKey }, {})
+      const res = await apiPost<{ apiKey: string }>(
+        '/api/v1/rotate-key',
+        { baseUrl: base, apiKey },
+        {},
+      )
       const newKey = res.apiKey
       setApiKey(newKey)
       setTestedOk(true)
@@ -257,9 +282,7 @@ export function ConnectionForm({ variant = 'settings', headingAs = 'h1', onSaved
           autoComplete="off"
           spellCheck={false}
         />
-        {urlError !== '' && (
-          <p className="text-mcs-xs text-mcs-error-fg">{urlError}</p>
-        )}
+        {urlError !== '' && <p className="text-mcs-xs text-mcs-error-fg">{urlError}</p>}
         <p className="text-mcs-xs text-mcs-text-muted">
           支持 http/https 协议；局域网自建服务器推荐内网地址
         </p>
@@ -308,12 +331,14 @@ export function ConnectionForm({ variant = 'settings', headingAs = 'h1', onSaved
             aria-label={showApiKey ? '隐藏 API Key' : '显示 API Key'}
             className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-mcs-text-muted transition-colors hover:text-mcs-text-default"
           >
-            {showApiKey ? <EyeOff className="size-4" aria-hidden /> : <Eye className="size-4" aria-hidden />}
+            {showApiKey ? (
+              <EyeOff className="size-4" aria-hidden />
+            ) : (
+              <Eye className="size-4" aria-hidden />
+            )}
           </button>
         </div>
-        {keyError !== '' && (
-          <p className="text-mcs-xs text-mcs-error-fg">{keyError}</p>
-        )}
+        {keyError !== '' && <p className="text-mcs-xs text-mcs-error-fg">{keyError}</p>}
         {apiKeyChannelDisabled ? (
           <p className="text-mcs-xs text-mcs-text-muted">
             当前面板的部署配置已关闭 API Key 通道：Key 在 HTTP 与 WebSocket 上一律被拒绝，
@@ -330,20 +355,39 @@ export function ConnectionForm({ variant = 'settings', headingAs = 'h1', onSaved
             </p>
             <p className="text-mcs-xs text-mcs-text-muted">
               API Key 是没有登录会话的客户端（自动化脚本、外部集成）用的机器凭据：单例全局、
-              无过期、权限等同于管理员（可访问全部接口），轮换后旧 Key 立即失效；
-              在服务端 .env 设 API_KEY_ENABLED=false 可整体关闭该通道。
+              无过期、权限等同于管理员（可访问全部接口），轮换后旧 Key 立即失效； 在服务端 .env 设
+              API_KEY_ENABLED=false 可整体关闭该通道。
             </p>
           </>
         )}
       </div>
 
       <div className="flex gap-3">
-        <Button type="button" variant="outline" className="flex-1" onClick={handleTest} disabled={testing || saving}>
-          {testing && !saving ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Wifi className="size-4" aria-hidden />}
+        <Button
+          type="button"
+          variant="outline"
+          className="flex-1"
+          onClick={handleTest}
+          disabled={testing || saving}
+        >
+          {testing && !saving ? (
+            <Loader2 className="size-4 animate-spin" aria-hidden />
+          ) : (
+            <Wifi className="size-4" aria-hidden />
+          )}
           {testing && !saving ? '测试中...' : '测试连接'}
         </Button>
-        <Button type="button" className="flex-1" onClick={() => void handleSave()} disabled={testing || saving}>
-          {saving ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Save className="size-4" aria-hidden />}
+        <Button
+          type="button"
+          className="flex-1"
+          onClick={() => void handleSave()}
+          disabled={testing || saving}
+        >
+          {saving ? (
+            <Loader2 className="size-4 animate-spin" aria-hidden />
+          ) : (
+            <Save className="size-4" aria-hidden />
+          )}
           {saving ? saveLabels.busy : saveLabels.idle}
         </Button>
       </div>
@@ -354,7 +398,9 @@ export function ConnectionForm({ variant = 'settings', headingAs = 'h1', onSaved
     <div className={variant === 'onboarding' ? 'mx-auto w-full max-w-md' : 'w-full'}>
       {variant === 'onboarding' ? (
         <header className="mb-8 text-center">
-          <HeadingTag className="text-mcs-xl font-semibold text-mcs-text-default">连接你的服务器</HeadingTag>
+          <HeadingTag className="text-mcs-xl font-semibold text-mcs-text-default">
+            连接你的服务器
+          </HeadingTag>
           <p className="mt-2 text-mcs-sm text-mcs-text-muted">
             输入 MC Commander 面板地址与 API Key，测试并保存连接配置后即可开始使用。
           </p>
@@ -369,7 +415,10 @@ export function ConnectionForm({ variant = 'settings', headingAs = 'h1', onSaved
           )}
         >
           <span
-            className={cn('size-2 rounded-full', isConnected ? 'bg-mcs-success-fg' : 'bg-mcs-text-muted')}
+            className={cn(
+              'size-2 rounded-full',
+              isConnected ? 'bg-mcs-success-fg' : 'bg-mcs-text-muted',
+            )}
             aria-hidden
           />
           <span className="text-mcs-sm font-medium">{isConnected ? '已连接' : '未连接'}</span>
@@ -379,10 +428,7 @@ export function ConnectionForm({ variant = 'settings', headingAs = 'h1', onSaved
         </div>
       )}
 
-      <Card
-        as="div"
-        className={cn('flex flex-col gap-5 p-6', variant === 'settings' && 'mt-4')}
-      >
+      <Card as="div" className={cn('flex flex-col gap-5 p-6', variant === 'settings' && 'mt-4')}>
         {formFields}
       </Card>
 

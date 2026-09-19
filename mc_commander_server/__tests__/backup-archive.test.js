@@ -157,8 +157,10 @@ describe('listArchivedSnapshots · 未索引快照清点', () => {
     fs.utimesSync(path.join(BACKUPS_DIR, 'paper-11111111', 'snap-old'), t(3600), t(3600));
     fs.utimesSync(path.join(BACKUPS_DIR, 'paper-22222222', 'snap-new'), t(10), t(10));
 
-    expect(listArchivedSnapshots().map((g) => g.archiveId))
-      .toEqual(['paper-22222222', 'paper-11111111']);
+    expect(listArchivedSnapshots().map((g) => g.archiveId)).toEqual([
+      'paper-22222222',
+      'paper-11111111',
+    ]);
   });
 
   it('备份表不可读 → 空清单（宁可这次不给入口，也不给出会插重复行的入口）', () => {
@@ -225,21 +227,26 @@ describe('attachArchivedSnapshots · 挂载（只建索引）', () => {
 
   it('归档标识不合法（路径穿越/形态不符）→ 拒绝，不碰磁盘', async () => {
     for (const bad of ['../etc', 'paper-1a2b3c4d/../..', 'panel', 'PAPER-1A2B3C4D', '']) {
-      await expect(attachArchivedSnapshots('fabric-99999999', bad)).rejects.toThrow('Invalid archive id');
+      await expect(attachArchivedSnapshots('fabric-99999999', bad)).rejects.toThrow(
+        'Invalid archive id',
+      );
     }
     expect(h.created).toHaveLength(0);
   });
 
   it('归档目录不存在 → 明确报错（路由层映射 404）', async () => {
-    await expect(attachArchivedSnapshots('fabric-99999999', 'paper-1a2b3c4d'))
-      .rejects.toThrow('Archive directory not found');
+    await expect(attachArchivedSnapshots('fabric-99999999', 'paper-1a2b3c4d')).rejects.toThrow(
+      'Archive directory not found',
+    );
   });
 
   it('目录里没有子目录（空归档）→ 0 挂载 0 跳过', async () => {
     mk(path.join(BACKUPS_DIR, 'paper-1a2b3c4d'));
     fs.writeFileSync(path.join(BACKUPS_DIR, 'paper-1a2b3c4d', 'README.txt'), 'x');
-    expect(await attachArchivedSnapshots('fabric-99999999', 'paper-1a2b3c4d'))
-      .toEqual({ attached: 0, skipped: 0 });
+    expect(await attachArchivedSnapshots('fabric-99999999', 'paper-1a2b3c4d')).toEqual({
+      attached: 0,
+      skipped: 0,
+    });
   });
 
   it('备份表不可读 → 抛错（不插第二批重复行）', async () => {
@@ -247,8 +254,9 @@ describe('attachArchivedSnapshots · 挂载（只建索引）', () => {
     BackupModel.listFilePaths.mockImplementation(() => {
       throw new Error('db locked');
     });
-    await expect(attachArchivedSnapshots('fabric-99999999', 'paper-1a2b3c4d'))
-      .rejects.toThrow('Backup index unavailable');
+    await expect(attachArchivedSnapshots('fabric-99999999', 'paper-1a2b3c4d')).rejects.toThrow(
+      'Backup index unavailable',
+    );
     expect(h.created).toHaveLength(0);
   });
 
@@ -266,15 +274,17 @@ describe('attachArchivedSnapshots · 挂载（只建索引）', () => {
     }
 
     expect(listArchivedSnapshots().map((g) => g.archiveId)).not.toContain('paper-1a2b3c4d');
-    await expect(attachArchivedSnapshots('fabric-99999999', 'paper-1a2b3c4d'))
-      .rejects.toThrow('Archive directory not found');
+    await expect(attachArchivedSnapshots('fabric-99999999', 'paper-1a2b3c4d')).rejects.toThrow(
+      'Archive directory not found',
+    );
     expect(h.created).toHaveLength(0);
   });
 
   it('归档标识指向文件而非目录 → 按不存在拒绝（不落 500）', async () => {
     fs.writeFileSync(path.join(BACKUPS_DIR, 'paper-1a2b3c4d'), 'not a dir');
-    await expect(attachArchivedSnapshots('fabric-99999999', 'paper-1a2b3c4d'))
-      .rejects.toThrow('Archive directory not found');
+    await expect(attachArchivedSnapshots('fabric-99999999', 'paper-1a2b3c4d')).rejects.toThrow(
+      'Archive directory not found',
+    );
   });
 
   it('并发挂载同一归档：UNIQUE(file_path) 拦下重复登记，第二次计 skipped（不抛错、不双份行）', async () => {
@@ -308,8 +318,9 @@ describe('attachArchivedSnapshots · 挂载（只建索引）', () => {
     });
 
     // 吞掉会让路由回 200「没有可挂载的快照」，而真实原因（DB 故障）被掩盖
-    await expect(attachArchivedSnapshots('fabric-99999999', 'paper-1a2b3c4d'))
-      .rejects.toThrow('database is locked');
+    await expect(attachArchivedSnapshots('fabric-99999999', 'paper-1a2b3c4d')).rejects.toThrow(
+      'database is locked',
+    );
   });
 });
 
@@ -331,15 +342,21 @@ describe('归档快照路由', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.data).toHaveLength(1);
-    expect(res.body.data[0]).toEqual(expect.objectContaining({
-      archiveId: 'paper-1a2b3c4d',
-      instanceExists: false,
-      snapshotCount: 1,
-      usableCount: 1,
-    }));
+    expect(res.body.data[0]).toEqual(
+      expect.objectContaining({
+        archiveId: 'paper-1a2b3c4d',
+        instanceExists: false,
+        snapshotCount: 1,
+        usableCount: 1,
+      }),
+    );
     // 契约面固定五项：不夹带磁盘路径（与备份详情同口径）
     expect(Object.keys(res.body.data[0]).sort()).toEqual([
-      'archiveId', 'instanceExists', 'latestMtime', 'snapshotCount', 'usableCount',
+      'archiveId',
+      'instanceExists',
+      'latestMtime',
+      'snapshotCount',
+      'usableCount',
     ]);
   });
 
@@ -362,12 +379,14 @@ describe('归档快照路由', () => {
     expect(res.status).toBe(200);
     expect(res.body.data).toEqual({ attached: 1, skipped: 1 });
     expect(res.body.message).toContain('已挂载 1 份');
-    expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({
-      instanceId: 'fabric-99999999',
-      action: AuditActions.BACKUP_CREATE,
-      targetType: 'backup_archive',
-      targetId: 'paper-1a2b3c4d',
-    }));
+    expect(recordAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        instanceId: 'fabric-99999999',
+        action: AuditActions.BACKUP_CREATE,
+        targetType: 'backup_archive',
+        targetId: 'paper-1a2b3c4d',
+      }),
+    );
   });
 
   it('重复挂载（无可挂载项）：200 且文案据实，不写审计', async () => {

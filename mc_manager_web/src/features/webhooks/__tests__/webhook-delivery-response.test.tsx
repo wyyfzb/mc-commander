@@ -18,28 +18,80 @@ import { useConnectionStore } from '@/stores/connection'
 const LONG_BODY = 'x'.repeat(250)
 
 const mockWebhook = {
-  id: 1, name: 'Notify', url: 'https://example.com/hook', secret: null,
-  events: ['player.join'], instanceId: null, isEnabled: true,
-  createdAt: '2026-09-01T00:00:00Z', updatedAt: '2026-09-01T00:00:00Z',
+  id: 1,
+  name: 'Notify',
+  url: 'https://example.com/hook',
+  secret: null,
+  events: ['player.join'],
+  instanceId: null,
+  isEnabled: true,
+  createdAt: '2026-09-01T00:00:00Z',
+  updatedAt: '2026-09-01T00:00:00Z',
 }
 
 const mockDeliveries = [
-  { id: 11, webhookId: 1, eventType: 'player.join', instanceId: null, payload: { event: 'player.join', player: 'Steve' }, status: 'failed', responseStatus: 500, responseBody: LONG_BODY, durationMs: 120, attempts: 3, createdAt: '2026-09-01T08:00:00Z' },
-  { id: 12, webhookId: 1, eventType: 'player.leave', instanceId: null, payload: { event: 'player.leave', player: 'Alex' }, status: 'success', responseStatus: 200, responseBody: '{"ok":true}', durationMs: 80, attempts: 1, createdAt: '2026-09-01T07:00:00Z' },
-  { id: 13, webhookId: 1, eventType: 'ping', instanceId: null, payload: null, status: 'failed', responseStatus: null, responseBody: null, durationMs: null, attempts: 1, createdAt: '2026-09-01T06:00:00Z' },
+  {
+    id: 11,
+    webhookId: 1,
+    eventType: 'player.join',
+    instanceId: null,
+    payload: { event: 'player.join', player: 'Steve' },
+    status: 'failed',
+    responseStatus: 500,
+    responseBody: LONG_BODY,
+    durationMs: 120,
+    attempts: 3,
+    createdAt: '2026-09-01T08:00:00Z',
+  },
+  {
+    id: 12,
+    webhookId: 1,
+    eventType: 'player.leave',
+    instanceId: null,
+    payload: { event: 'player.leave', player: 'Alex' },
+    status: 'success',
+    responseStatus: 200,
+    responseBody: '{"ok":true}',
+    durationMs: 80,
+    attempts: 1,
+    createdAt: '2026-09-01T07:00:00Z',
+  },
+  {
+    id: 13,
+    webhookId: 1,
+    eventType: 'ping',
+    instanceId: null,
+    payload: null,
+    status: 'failed',
+    responseStatus: null,
+    responseBody: null,
+    durationMs: null,
+    attempts: 1,
+    createdAt: '2026-09-01T06:00:00Z',
+  },
 ]
 
 function envelope<T>(data: T) {
   return HttpResponse.json({
-    status: 'ok', code: 0, message: 'Success', data,
-    pagination: { total: Array.isArray(data) ? data.length : 1, page: 1, pageSize: 20, totalPages: 1 },
+    status: 'ok',
+    code: 0,
+    message: 'Success',
+    data,
+    pagination: {
+      total: Array.isArray(data) ? data.length : 1,
+      page: 1,
+      pageSize: 20,
+      totalPages: 1,
+    },
     timestamp: new Date().toISOString(),
   })
 }
 
 const server = setupServer(
   http.get('*/api/v1/webhooks', () => envelope([mockWebhook])),
-  http.get('*/api/v1/webhooks/event-types', () => envelope(['player.join', 'player.leave', 'ping'])),
+  http.get('*/api/v1/webhooks/event-types', () =>
+    envelope(['player.join', 'player.leave', 'ping']),
+  ),
   http.get('*/api/v1/webhooks/1/deliveries', () => envelope(mockDeliveries)),
 )
 
@@ -49,7 +101,11 @@ afterAll(() => server.close())
 beforeEach(() => {
   localStorage.clear()
   // 占位凭据动态生成（MSW 不校验值，仅满足连接就绪门槛），避免测试源码出现凭据字面量
-  useConnectionStore.setState({ baseUrl: '', apiKey: `msw-test-${crypto.randomUUID()}`, status: 'ready' })
+  useConnectionStore.setState({
+    baseUrl: '',
+    apiKey: `msw-test-${crypto.randomUUID()}`,
+    status: 'ready',
+  })
 })
 
 function renderPage() {
@@ -110,7 +166,7 @@ describe('列表行形态（重组）', () => {
     let putBody: Record<string, unknown> | null = null
     server.use(
       http.put('*/api/v1/webhooks/1', async ({ request }) => {
-        putBody = await request.json() as Record<string, unknown>
+        putBody = (await request.json()) as Record<string, unknown>
         return envelope({ ...mockWebhook, isEnabled: false })
       }),
     )
@@ -171,7 +227,19 @@ describe('设置弹窗：投递日志（发送内容 + 响应内容）', () => {
         const rows =
           deliveryGetCount >= 2
             ? [
-                { id: 14, webhookId: 1, eventType: 'ping', instanceId: null, payload: null, status: 'success', responseStatus: 200, responseBody: 'ok', durationMs: 42, attempts: 1, createdAt: '2026-09-01T09:00:00Z' },
+                {
+                  id: 14,
+                  webhookId: 1,
+                  eventType: 'ping',
+                  instanceId: null,
+                  payload: null,
+                  status: 'success',
+                  responseStatus: 200,
+                  responseBody: 'ok',
+                  durationMs: 42,
+                  attempts: 1,
+                  createdAt: '2026-09-01T09:00:00Z',
+                },
                 ...mockDeliveries,
               ]
             : mockDeliveries
@@ -188,7 +256,8 @@ describe('设置弹窗：投递日志（发送内容 + 响应内容）', () => {
     const countAfterOpen = deliveryGetCount
     expect(countAfterOpen).toBeGreaterThanOrEqual(1)
     // 日志行中的 Ping 记录计数（expanded 过滤排除表单事件过滤按钮）
-    const pingRows = () => within(dialog).queryAllByRole('button', { name: /Ping 测试/, expanded: false }).length
+    const pingRows = () =>
+      within(dialog).queryAllByRole('button', { name: /Ping 测试/, expanded: false }).length
     expect(pingRows()).toBe(1)
 
     await user.click(within(dialog).getByRole('button', { name: '测试投递' }))
@@ -211,7 +280,12 @@ describe('WebhookPage 投递日志错误态', () => {
   it('投递日志查询失败 → 错误态而非「暂无投递记录」，含失败原因与重试', async () => {
     const user = userEvent.setup()
     server.use(
-      http.get('*/api/v1/webhooks/1/deliveries', () => HttpResponse.json({ status: 'error', code: 500, message: 'internal error' }, { status: 500 })),
+      http.get('*/api/v1/webhooks/1/deliveries', () =>
+        HttpResponse.json(
+          { status: 'error', code: 500, message: 'internal error' },
+          { status: 500 },
+        ),
+      ),
     )
     renderPage()
     await openSettings(user)

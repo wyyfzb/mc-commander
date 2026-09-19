@@ -58,7 +58,14 @@ function makePlayer(overrides: Partial<Player>): Player {
     inventory: null,
     events: [],
     sessions: [],
-    stats: { totalOnline: 86_400, loginCount: 12, offlineSince: 0, deathCount: 3, achievementCount: 25, sleepCount: 2 },
+    stats: {
+      totalOnline: 86_400,
+      loginCount: 12,
+      offlineSince: 0,
+      deathCount: 3,
+      achievementCount: 25,
+      sleepCount: 2,
+    },
     ...overrides,
   }
 }

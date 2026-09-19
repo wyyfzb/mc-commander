@@ -16,7 +16,12 @@ interface UnsavedConfirmDialogProps {
   onConfirm: () => void
 }
 
-export function UnsavedConfirmDialog({ open, isBlocked, onCancel, onConfirm }: UnsavedConfirmDialogProps) {
+export function UnsavedConfirmDialog({
+  open,
+  isBlocked,
+  onCancel,
+  onConfirm,
+}: UnsavedConfirmDialogProps) {
   return (
     <ConfirmDialog
       open={open}

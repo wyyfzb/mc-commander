@@ -66,7 +66,7 @@ export function rateLimit(options = {}) {
     record.lastSeen = now;
 
     // 清理窗口外的过期请求记录
-    record.hits = record.hits.filter(time => time > windowStart);
+    record.hits = record.hits.filter((time) => time > windowStart);
 
     // 检查是否超过限制
     if (record.hits.length >= max) {
@@ -77,10 +77,14 @@ export function rateLimit(options = {}) {
       res.setHeader('X-RateLimit-Reset', Math.ceil((record.hits[0] + windowMs) / 1000));
       res.setHeader('Retry-After', retryAfter);
 
-      return res.status(429).json(error(
-        ErrorCodes.RATE_LIMITED,
-        `Too many requests, please try again after ${retryAfter} seconds`
-      ));
+      return res
+        .status(429)
+        .json(
+          error(
+            ErrorCodes.RATE_LIMITED,
+            `Too many requests, please try again after ${retryAfter} seconds`,
+          ),
+        );
     }
 
     // 添加当前请求时间
@@ -112,7 +116,7 @@ export function apiKeyRateLimit(options = {}) {
       // 超长随机值（如几十 KB）会无限撑爆 Map，截断后同一键只能落在有限桶内
       const truncated = apiKey ? String(apiKey).slice(0, 128) : '';
       return `apikey:${truncated || getRealIp(req)}`;
-    }
+    },
   });
 }
 

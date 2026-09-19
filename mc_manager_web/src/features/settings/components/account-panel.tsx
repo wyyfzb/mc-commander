@@ -122,7 +122,9 @@ export function AccountPanel() {
     setChangeError('')
     try {
       const res = await changePassword({ baseUrl, apiKey }, currentPassword, newPassword)
-      toast.success(`密码已更新${res.kickedSessions > 0 ? `，已下线其他 ${res.kickedSessions} 个会话` : ''}`)
+      toast.success(
+        `密码已更新${res.kickedSessions > 0 ? `，已下线其他 ${res.kickedSessions} 个会话` : ''}`,
+      )
       setCurrentPassword('')
       setNewPassword('')
       setConfirmPassword('')
@@ -218,9 +220,12 @@ export function AccountPanel() {
           )}
         </div>
         {!sessionApplies && (
-          <p className={`mt-3 flex items-start gap-1.5 rounded-mcs-sm border px-2.5 py-2 text-mcs-2xs ${toneClasses('warning')}`}>
+          <p
+            className={`mt-3 flex items-start gap-1.5 rounded-mcs-sm border px-2.5 py-2 text-mcs-2xs ${toneClasses('warning')}`}
+          >
             <TriangleAlert className="mt-0.5 size-3 shrink-0" aria-hidden />
-            当前使用明文 API Key 直连。建议退出后使用管理员密码登录（令牌仅存服务端摘要，传输/存储更安全）。
+            当前使用明文 API Key
+            直连。建议退出后使用管理员密码登录（令牌仅存服务端摘要，传输/存储更安全）。
           </p>
         )}
       </SectionCard>
@@ -276,12 +281,16 @@ export function AccountPanel() {
                   <div
                     key={i}
                     className={`h-1 flex-1 rounded-full transition-colors duration-mcs-base ${
-                      i < strength.score ? STRENGTH_BAR_STYLES[strength.score] : 'bg-mcs-border-muted'
+                      i < strength.score
+                        ? STRENGTH_BAR_STYLES[strength.score]
+                        : 'bg-mcs-border-muted'
                     }`}
                   />
                 ))}
               </div>
-              <p className={`mt-1 text-mcs-2xs font-medium ${STRENGTH_TEXT_STYLES[strength.score]}`}>
+              <p
+                className={`mt-1 text-mcs-2xs font-medium ${STRENGTH_TEXT_STYLES[strength.score]}`}
+              >
                 新密码强度：{strength.label}
                 {strength.score > 0 && strength.score < 3 && '（建议混合大小写字母、数字与符号）'}
               </p>
@@ -315,14 +324,19 @@ export function AccountPanel() {
         description="所有已登录设备；发现异常登录可立即下线（最长 7 天未活动自动过期）"
       >
         {sessionsQuery.isLoading ? (
-          <div className="flex items-center justify-center gap-2 py-8 text-mcs-xs text-mcs-text-muted" role="status">
+          <div
+            className="flex items-center justify-center gap-2 py-8 text-mcs-xs text-mcs-text-muted"
+            role="status"
+          >
             <Loader2 className="size-4 animate-spin" aria-hidden />
             正在加载会话列表…
           </div>
         ) : sessionsQuery.isError ? (
           <div className="flex flex-col items-center gap-1.5 py-8 text-center">
             <TriangleAlert className="size-6 text-mcs-error-fg" aria-hidden />
-            <p className="text-mcs-xs text-mcs-error-fg">会话列表加载失败：{getFriendlyErrorText(sessionsQuery.error)}</p>
+            <p className="text-mcs-xs text-mcs-error-fg">
+              会话列表加载失败：{getFriendlyErrorText(sessionsQuery.error)}
+            </p>
             <Button variant="outline" size="sm" onClick={() => void sessionsQuery.refetch()}>
               重试
             </Button>
@@ -339,11 +353,22 @@ export function AccountPanel() {
             <table className="w-full border-collapse text-left">
               <thead>
                 <tr className="border-b border-mcs-border-muted bg-mcs-bg-muted/60">
-                  <th scope="col" className="h-9 px-2 text-mcs-2xs font-medium text-mcs-text-muted">设备</th>
-                  <th scope="col" className="h-9 px-2 text-mcs-2xs font-medium text-mcs-text-muted">IP 地址</th>
-                  <th scope="col" className="h-9 px-2 text-mcs-2xs font-medium text-mcs-text-muted">最后活跃</th>
-                  <th scope="col" className="h-9 px-2 text-mcs-2xs font-medium text-mcs-text-muted">到期时间</th>
-                  <th scope="col" className="h-9 w-10 px-2 text-right text-mcs-2xs font-medium text-mcs-text-muted">
+                  <th scope="col" className="h-9 px-2 text-mcs-2xs font-medium text-mcs-text-muted">
+                    设备
+                  </th>
+                  <th scope="col" className="h-9 px-2 text-mcs-2xs font-medium text-mcs-text-muted">
+                    IP 地址
+                  </th>
+                  <th scope="col" className="h-9 px-2 text-mcs-2xs font-medium text-mcs-text-muted">
+                    最后活跃
+                  </th>
+                  <th scope="col" className="h-9 px-2 text-mcs-2xs font-medium text-mcs-text-muted">
+                    到期时间
+                  </th>
+                  <th
+                    scope="col"
+                    className="h-9 w-10 px-2 text-right text-mcs-2xs font-medium text-mcs-text-muted"
+                  >
                     <span className="sr-only">操作</span>
                   </th>
                 </tr>
@@ -362,7 +387,10 @@ export function AccountPanel() {
                           </StatusPill>
                         )}
                       </div>
-                      <p className="mt-0.5 max-w-52 truncate text-mcs-2xs text-mcs-text-muted" title={s.userAgent ?? undefined}>
+                      <p
+                        className="mt-0.5 max-w-52 truncate text-mcs-2xs text-mcs-text-muted"
+                        title={s.userAgent ?? undefined}
+                      >
                         登录于 {formatDateTime(s.createdAt)}
                       </p>
                     </td>

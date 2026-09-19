@@ -77,7 +77,9 @@ describe('LoginPage 设密模式密码显隐', () => {
   it('登录模式（非设密）不渲染确认密码，不存在第二个显隐切换', async () => {
     server.use(http.get('*/api/v1/auth/status', () => okEnvelope({ hasPassword: true })))
     renderLoginPage()
-    await waitFor(() => expect(screen.getByRole('heading', { name: '管理员登录' })).toBeInTheDocument())
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: '管理员登录' })).toBeInTheDocument(),
+    )
 
     expect(screen.queryByLabelText('确认密码')).not.toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: '显示密码' })).toHaveLength(1)

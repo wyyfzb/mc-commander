@@ -7,7 +7,9 @@ describe('maskSensitiveCommand（命令史敏感值遮蔽）', () => {
     expect(maskSensitiveCommand('deop Alex')).toBe('deop Alex');
     expect(maskSensitiveCommand('ban-ip 1.2.3.4 恶意破坏')).toBe('ban-ip 1.2.3.4 恶意破坏');
     expect(maskSensitiveCommand('kick Bob 挂机')).toBe('kick Bob 挂机');
-    expect(maskSensitiveCommand('give Steve minecraft:diamond_sword 1')).toBe('give Steve minecraft:diamond_sword 1');
+    expect(maskSensitiveCommand('give Steve minecraft:diamond_sword 1')).toBe(
+      'give Steve minecraft:diamond_sword 1',
+    );
     expect(maskSensitiveCommand('whitelist add Steve')).toBe('whitelist add Steve');
     expect(maskSensitiveCommand('weather rain')).toBe('weather rain');
     expect(maskSensitiveCommand('time set night')).toBe('time set night');
@@ -29,8 +31,12 @@ describe('maskSensitiveCommand（命令史敏感值遮蔽）', () => {
   });
 
   it('key 名不含敏感词的普通等值不遮蔽', () => {
-    expect(maskSensitiveCommand('gamerule doDaylightCycle false')).toBe('gamerule doDaylightCycle false');
-    expect(maskSensitiveCommand('effect give Steve minecraft:speed 60 1')).toBe('effect give Steve minecraft:speed 60 1');
+    expect(maskSensitiveCommand('gamerule doDaylightCycle false')).toBe(
+      'gamerule doDaylightCycle false',
+    );
+    expect(maskSensitiveCommand('effect give Steve minecraft:speed 60 1')).toBe(
+      'effect give Steve minecraft:speed 60 1',
+    );
   });
 
   it('空串与非字符串原样返回', () => {

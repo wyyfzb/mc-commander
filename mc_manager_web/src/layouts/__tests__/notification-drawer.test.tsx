@@ -110,11 +110,12 @@ describe('NotificationDrawer 条目跳转（issue 334）', () => {
   })
 })
 
-
 // ─── 以下为组件打磨批（issue 344）补充：severity 筛选 + 清除全部确认 ───
 
 let seq = 0
-function makeItem(partial: Pick<AppNotification, 'type' | 'category'> & Partial<AppNotification>): AppNotification {
+function makeItem(
+  partial: Pick<AppNotification, 'type' | 'category'> & Partial<AppNotification>,
+): AppNotification {
   seq += 1
   return {
     id: `n${seq}`,
@@ -145,9 +146,15 @@ describe('NotificationDrawer severity 筛选（issue 344）', () => {
     })
     renderDrawer()
     const group = screen.getByRole('radiogroup', { name: '按严重度筛选' })
-    expect(within(group).getByRole('radio', { name: '全部通知' })).toHaveAttribute('aria-checked', 'true')
+    expect(within(group).getByRole('radio', { name: '全部通知' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    )
     for (const label of ['严重通知', '警告通知', '提示通知']) {
-      expect(within(group).getByRole('radio', { name: label })).toHaveAttribute('aria-checked', 'false')
+      expect(within(group).getByRole('radio', { name: label })).toHaveAttribute(
+        'aria-checked',
+        'false',
+      )
     }
     expect(screen.getByText('通知内容 1')).toBeInTheDocument()
     expect(screen.getByText('通知内容 2')).toBeInTheDocument()
@@ -261,12 +268,37 @@ describe('NotificationDrawer 语义色来源', () => {
 describe('NOTIFICATION_TONE 类型 → 语义档', () => {
   it('33 个通知类型全部归入预期档位，中性档不占语义六色', () => {
     const expected: Record<string, string[]> = {
-      success: ['join', 'revive', 'serverStart', 'backupComplete', 'restoreComplete', 'deployComplete', 'upgradeComplete'],
-      error: ['death', 'serverCrash', 'circuitBreaker', 'backupFailed', 'restoreFailed', 'taskFailed', 'webhookFailed', 'deployFailed', 'upgradeFailed'],
+      success: [
+        'join',
+        'revive',
+        'serverStart',
+        'backupComplete',
+        'restoreComplete',
+        'deployComplete',
+        'upgradeComplete',
+      ],
+      error: [
+        'death',
+        'serverCrash',
+        'circuitBreaker',
+        'backupFailed',
+        'restoreFailed',
+        'taskFailed',
+        'webhookFailed',
+        'deployFailed',
+        'upgradeFailed',
+      ],
       warning: ['lowTps', 'highCpu', 'highMemory', 'backupSkipped'],
       info: ['chat', 'sleep', 'save', 'weatherChange', 'backupStart', 'restoreStart'],
       purple: ['achievement'],
-      neutral: ['leave', 'serverStop', 'backupCancelled', 'restoreCancelled', 'deployCancelled', 'upgradeCancelled'],
+      neutral: [
+        'leave',
+        'serverStop',
+        'backupCancelled',
+        'restoreCancelled',
+        'deployCancelled',
+        'upgradeCancelled',
+      ],
     }
     for (const [tone, types] of Object.entries(expected)) {
       const actual = Object.entries(NOTIFICATION_TONE)

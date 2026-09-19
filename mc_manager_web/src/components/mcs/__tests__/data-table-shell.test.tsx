@@ -60,7 +60,12 @@ describe('DataTableShell 滚动容器与表格类', () => {
   it('scrollRef 指向壳内滚动容器（卡片面），tableClassName 合并到 table 基础配方', () => {
     const scrollRef = createRef<HTMLElement>()
     const { container } = render(
-      <DataTableShell header={header} columns={2} scrollRef={scrollRef} tableClassName="table-fixed text-left">
+      <DataTableShell
+        header={header}
+        columns={2}
+        scrollRef={scrollRef}
+        tableClassName="table-fixed text-left"
+      >
         <tbody>
           <tr>
             <td>A</td>

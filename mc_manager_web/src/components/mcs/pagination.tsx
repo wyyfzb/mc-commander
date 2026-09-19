@@ -13,13 +13,7 @@ const DEFAULT_PAGE_SIZES = [10, 20, 50] as const
 
 /** 生成带省略号的页码数组 */
 function buildPageNumbers(current: number, total: number): Array<number | '…'> {
-  const set = new Set([
-    1,
-    total,
-    current - 1,
-    current,
-    current + 1,
-  ])
+  const set = new Set([1, total, current - 1, current, current + 1])
   const sorted = [...set].filter((n) => n >= 1 && n <= total).sort((a, b) => a - b)
   const withGaps: Array<number | '…'> = []
   for (let i = 0; i < sorted.length; i++) {
@@ -44,7 +38,7 @@ export interface PaginationProps {
   disabled?: boolean
   /** 每页条数选择（仅 numbers 模式） */
   pageSize?: number
-   pageSizeOptions?: number[]
+  pageSizeOptions?: number[]
   onPageSizeChange?: (size: number) => void
   /** 显示「全部」选项（仅 numbers 模式） */
   showAllOption?: boolean
@@ -94,16 +88,24 @@ export function Pagination({
               aria-label="每页行数"
             >
               {pageSizeOptions.map((s) => (
-                <option key={s} value={s}>{s}</option>
+                <option key={s} value={s}>
+                  {s}
+                </option>
               ))}
               {showAllOption && <option value={-1}>全部</option>}
             </select>
           </>
         )}
         {totalItems != null ? (
-          <span className="whitespace-nowrap">{showPager ? `共 ${totalItems} 条 · 第 ${safePage}/${totalPages} 页` : `共 ${totalItems} 条`}</span>
+          <span className="whitespace-nowrap">
+            {showPager
+              ? `共 ${totalItems} 条 · 第 ${safePage}/${totalPages} 页`
+              : `共 ${totalItems} 条`}
+          </span>
         ) : showPager ? (
-          <span className="whitespace-nowrap">第 {safePage} / {totalPages} 页</span>
+          <span className="whitespace-nowrap">
+            第 {safePage} / {totalPages} 页
+          </span>
         ) : null}
       </div>
 
@@ -120,7 +122,9 @@ export function Pagination({
             </IconButton>
             {pageNumbers.map((n, i) =>
               n === '…' ? (
-                <span key={`gap${i}`} className="px-1 text-mcs-xs text-mcs-text-muted">…</span>
+                <span key={`gap${i}`} className="px-1 text-mcs-xs text-mcs-text-muted">
+                  …
+                </span>
               ) : (
                 <Button
                   key={n}

@@ -90,7 +90,9 @@ describe('InstancesPage · 卸载确认', () => {
     await user.click(screen.getByRole('button', { name: '确认卸载' }))
 
     // 服务端前置清单校验拒绝：弹窗不关闭，就地给出不可恢复警告与更强的确认动作
-    expect(await screen.findByText(/该实例没有任何备份：删除后世界数据与配置不可恢复/)).toBeInTheDocument()
+    expect(
+      await screen.findByText(/该实例没有任何备份：删除后世界数据与配置不可恢复/),
+    ).toBeInTheDocument()
     expect(screen.queryByLabelText(/输入实例名/)).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '确认不可恢复删除' }))
@@ -99,7 +101,10 @@ describe('InstancesPage · 卸载确认', () => {
     expect(uninstallMock.calls).toBe(2)
     // 首次不声明（让服务端的前置清单校验生效），二次确认才声明不可恢复
     expect(uninstallMock.bodies[0]).toEqual({ confirmName: '演示实例' })
-    expect(uninstallMock.bodies[1]).toEqual({ confirmName: '演示实例', acknowledgeIrreversible: true })
+    expect(uninstallMock.bodies[1]).toEqual({
+      confirmName: '演示实例',
+      acknowledgeIrreversible: true,
+    })
   })
 
   it('空名实例 40916：转入不可恢复二次确认，提示据实说「无名称」而非「无备份」', async () => {
@@ -224,7 +229,9 @@ describe('InstancesPage · 卸载确认', () => {
       await user.click(confirmButton)
 
       // 空名让「输入实例名」这道闸门空转（空串天然匹配），服务端额外要求显式声明不可恢复
-      expect(await screen.findByText(/该实例没有名称，实例名确认不构成有效确认/)).toBeInTheDocument()
+      expect(
+        await screen.findByText(/该实例没有名称，实例名确认不构成有效确认/),
+      ).toBeInTheDocument()
       expect(uninstallMock.bodies[0]).toEqual({ confirmName: '' })
 
       await user.click(screen.getByRole('button', { name: '确认不可恢复删除' }))

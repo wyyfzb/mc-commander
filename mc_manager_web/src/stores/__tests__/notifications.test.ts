@@ -199,7 +199,9 @@ describe('notifications store 生命周期（已读/全读/清空）', () => {
   /** 两条不同类型事件 → 两条未读条目（chat/join 类型不同不互聚） */
   function seedTwoUnread() {
     useNotificationStore.getState().dispatchWsEvent({ type: 'playerJoin', data: { name: 'Alex' } })
-    useNotificationStore.getState().dispatchWsEvent({ type: 'playerChat', data: { name: 'Alex', message: 'hi' } })
+    useNotificationStore
+      .getState()
+      .dispatchWsEvent({ type: 'playerChat', data: { name: 'Alex', message: 'hi' } })
   }
 
   it('markAsRead：单条已读 + 未读计数重算 + 持久化', () => {
@@ -262,7 +264,12 @@ describe('notifications store 告警状态机（dispatchPerformance）', () => {
 
     const s = useNotificationStore.getState()
     expect(s.items).toHaveLength(1)
-    expect(s.items[0]).toMatchObject({ type: 'lowTps', content: 'TPS 过低: 12.5', count: 1, read: false })
+    expect(s.items[0]).toMatchObject({
+      type: 'lowTps',
+      content: 'TPS 过低: 12.5',
+      count: 1,
+      read: false,
+    })
     expect(s.activeAlerts.has('lowTps')).toBe(true)
     expect(s.unreadCount).toBe(1)
     expect(persistedItems()).toHaveLength(1)
@@ -288,7 +295,10 @@ describe('notifications store 告警状态机（dispatchPerformance）', () => {
   it('CPU 越阈值 → highCpu；回落 → 状态清除', () => {
     useNotificationStore.getState().dispatchPerformance({ cpu: 91.5 })
     let s = useNotificationStore.getState()
-    expect(s.items[0]).toMatchObject({ type: 'highCpu', content: 'CPU 使用率过高: 91.5%（单核口径）' })
+    expect(s.items[0]).toMatchObject({
+      type: 'highCpu',
+      content: 'CPU 使用率过高: 91.5%（单核口径）',
+    })
     expect(s.activeAlerts.has('highCpu')).toBe(true)
 
     useNotificationStore.getState().dispatchPerformance({ cpu: 50 })
@@ -388,7 +398,9 @@ describe('notifications store 初始化恢复与持久化容错（模块重载�
     })
 
     expect(() =>
-      useNotificationStore.getState().dispatchWsEvent({ type: 'playerJoin', data: { name: 'Alex' } }),
+      useNotificationStore
+        .getState()
+        .dispatchWsEvent({ type: 'playerJoin', data: { name: 'Alex' } }),
     ).not.toThrow()
     expect(useNotificationStore.getState().items).toHaveLength(1)
     spy.mockRestore()
@@ -399,7 +411,10 @@ describe('notifications store 跨标签同步（多标签写竞争）', () => {
   it('写回前先合并另一标签已写入的条目（并集，不整量覆盖）', () => {
     localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ items: [foreignItem({ id: 'remote-1', timestamp: 1_700_000_001_000 })], clearedAt: 0 }),
+      JSON.stringify({
+        items: [foreignItem({ id: 'remote-1', timestamp: 1_700_000_001_000 })],
+        clearedAt: 0,
+      }),
     )
 
     useNotificationStore.getState().dispatchWsEvent({ type: 'playerJoin', data: { name: 'Steve' } })
@@ -422,7 +437,9 @@ describe('notifications store 跨标签同步（多标签写竞争）', () => {
       JSON.stringify({ items: [{ ...target, read: false }], clearedAt: 0 }),
     )
 
-    useNotificationStore.getState().dispatchWsEvent({ type: 'playerChat', data: { name: 'Alex', message: 'hi' } })
+    useNotificationStore
+      .getState()
+      .dispatchWsEvent({ type: 'playerChat', data: { name: 'Alex', message: 'hi' } })
 
     expect(useNotificationStore.getState().items.find((n) => n.id === target.id)?.read).toBe(true)
     expect(persistedItems().find((n) => n.id === target.id)?.read).toBe(true)
@@ -440,7 +457,9 @@ describe('notifications store 跨标签同步（多标签写竞争）', () => {
 
     // 另一标签写回它手里的旧副本（沿用自己读到的清空时刻）
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ items: [stale], clearedAt }))
-    useNotificationStore.getState().dispatchWsEvent({ type: 'playerChat', data: { name: 'Alex', message: 'hi' } })
+    useNotificationStore
+      .getState()
+      .dispatchWsEvent({ type: 'playerChat', data: { name: 'Alex', message: 'hi' } })
 
     const items = useNotificationStore.getState().items
     expect(items.some((n) => n.id === 'stale-1')).toBe(false)
@@ -449,19 +468,23 @@ describe('notifications store 跨标签同步（多标签写竞争）', () => {
 
   it('同一服务端事件在两个标签各生成一份：合并后只留一条（靠信封 eventId 认身份）', () => {
     // 标签 A：收到 eventId=42 的事件并落盘，随后把该条标记为已读
-    useNotificationStore.getState().dispatchWsEvent(
-      { type: 'playerJoin', data: { name: 'Alex' }, instanceId: 's1', eventId: 42 },
-      1_700_000_000_000,
-    )
+    useNotificationStore
+      .getState()
+      .dispatchWsEvent(
+        { type: 'playerJoin', data: { name: 'Alex' }, instanceId: 's1', eventId: 42 },
+        1_700_000_000_000,
+      )
     const aItem = useNotificationStore.getState().items[0]!
     useNotificationStore.getState().markAsRead(aItem.id)
 
     // 标签 B：同一事件（各标签的条目 id 是各自 randomUUID），合并时认成同一条
     useNotificationStore.setState({ items: [] })
-    useNotificationStore.getState().dispatchWsEvent(
-      { type: 'playerJoin', data: { name: 'Alex' }, instanceId: 's1', eventId: 42 },
-      1_700_000_000_000,
-    )
+    useNotificationStore
+      .getState()
+      .dispatchWsEvent(
+        { type: 'playerJoin', data: { name: 'Alex' }, instanceId: 's1', eventId: 42 },
+        1_700_000_000_000,
+      )
 
     const items = useNotificationStore.getState().items
     expect(items).toHaveLength(1)
@@ -480,7 +503,9 @@ describe('notifications store 跨标签同步（多标签写竞争）', () => {
     // 伪造另一标签在「清空同一毫秒」写回的一条新条目
     const sameMs = foreignItem({ id: 'same-ms', timestamp: clearedAt })
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ items: [sameMs], clearedAt }))
-    useNotificationStore.getState().dispatchWsEvent({ type: 'playerChat', data: { name: 'Alex', message: 'hi' } })
+    useNotificationStore
+      .getState()
+      .dispatchWsEvent({ type: 'playerChat', data: { name: 'Alex', message: 'hi' } })
 
     expect(useNotificationStore.getState().items.map((n) => n.id)).toContain('same-ms')
   })
@@ -488,7 +513,9 @@ describe('notifications store 跨标签同步（多标签写竞争）', () => {
   it('storage 事件：合并另一标签的新条目与该条目的新已读态', () => {
     const stop = startNotificationStorageSync()
     try {
-      useNotificationStore.getState().dispatchWsEvent({ type: 'playerJoin', data: { name: 'Alex' } })
+      useNotificationStore
+        .getState()
+        .dispatchWsEvent({ type: 'playerJoin', data: { name: 'Alex' } })
       const mine = useNotificationStore.getState().items[0]!
 
       window.dispatchEvent(
@@ -513,7 +540,9 @@ describe('notifications store 跨标签同步（多标签写竞争）', () => {
   it('storage 事件：另一标签清空后本标签内存同步清空（不靠整量替换也能收敛）', () => {
     const stop = startNotificationStorageSync()
     try {
-      useNotificationStore.getState().dispatchWsEvent({ type: 'playerJoin', data: { name: 'Alex' } })
+      useNotificationStore
+        .getState()
+        .dispatchWsEvent({ type: 'playerJoin', data: { name: 'Alex' } })
 
       window.dispatchEvent(
         new StorageEvent('storage', {
@@ -532,11 +561,11 @@ describe('notifications store 跨标签同步（多标签写竞争）', () => {
   it('storage 事件：非本键的写入被忽略（不误伤其它本地状态）', () => {
     const stop = startNotificationStorageSync()
     try {
-      useNotificationStore.getState().dispatchWsEvent({ type: 'playerJoin', data: { name: 'Alex' } })
+      useNotificationStore
+        .getState()
+        .dispatchWsEvent({ type: 'playerJoin', data: { name: 'Alex' } })
 
-      window.dispatchEvent(
-        new StorageEvent('storage', { key: 'mcs-theme', newValue: '"light"' }),
-      )
+      window.dispatchEvent(new StorageEvent('storage', { key: 'mcs-theme', newValue: '"light"' }))
 
       expect(useNotificationStore.getState().items).toHaveLength(1)
     } finally {

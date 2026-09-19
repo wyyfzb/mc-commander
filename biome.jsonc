@@ -1,0 +1,77 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.14/schema.json",
+  // 全仓唯一的代码格式化配置（Biome formatter only）。
+  // 只做 formatter：linter 与 assist 一律关闭——lint 仍由 oxlint（前端）/ eslint（服务端）承担；
+  // assist 的导入排序与类名排序会重排 cn(twMerge(...)) 的类串（同串后写者胜），从而改变生效样式，必须关。
+  // 风格参数向各包「主导风格」收敛（不引入新风格）：行宽 100、单引号、JSX 属性双引号、尾逗号 all、2 空格缩进；
+  // 分号按包分流（前端/契约/e2e 无分号，服务端有分号）——两包统一风格属另一决策，不在本次接入内。
+  // 少数偏离既有主导风格的现场在本次接入中被归一（shadcn 生成的 components/ui/*.tsx 原用双引号、
+  // 个别服务端文件漏分号），属一次性的机械收敛，此后以本配置为准。
+  // 排除：依赖与构建产物、部署投放目录（public/）、覆盖率与 e2e 报告、私有工作区（.ai/）、锁文件；
+  // CSS 与 Markdown 不纳入：设计 token 样式表由门禁脚本解析且手工分节维护，文档为手写排版
+  // （见 .editorconfig 对 *.md 的豁免）。
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "includes": [
+      "**/*.ts",
+      "**/*.tsx",
+      "**/*.js",
+      "**/*.mjs",
+      "**/package.json",
+      "**/tsconfig*.json",
+      "**/.oxlintrc.json",
+      "**/components.json",
+      "!**/node_modules/**",
+      "!**/dist/**",
+      "!**/public/**",
+      "!**/coverage/**",
+      "!**/playwright-report/**",
+      "!**/test-results/**",
+      "!.ai/**",
+      "!**/.mimosa/**",
+      "!**/package-lock.json"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single",
+      "jsxQuoteStyle": "double",
+      "semicolons": "asNeeded",
+      "trailingCommas": "all",
+      "arrowParentheses": "always",
+      "bracketSameLine": false
+    }
+  },
+  "json": {
+    "formatter": {
+      "indentWidth": 2
+    }
+  },
+  "linter": {
+    "enabled": false
+  },
+  "assist": {
+    "enabled": false
+  },
+  "overrides": [
+    {
+      // 服务端既有风格以分号结尾；前端/契约/e2e 相反。分流而非统一，避免本次接入夹带风格变更
+      "includes": ["mc_commander_server/**"],
+      "javascript": {
+        "formatter": {
+          "semicolons": "always"
+        }
+      }
+    }
+  ]
+}

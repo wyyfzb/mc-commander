@@ -8,7 +8,10 @@ import { describe, it, expect, afterEach, vi } from 'vitest'
 import { toast } from 'sonner'
 import { useConnectionStore } from '@/stores/connection'
 import { useAuthStore, SESSION_EXPIRED_EVENT } from '@/stores/auth'
-import { shouldRedirectToLoginAfterSessionExpiry, installSessionExpiryHandler } from '../session-expiry'
+import {
+  shouldRedirectToLoginAfterSessionExpiry,
+  installSessionExpiryHandler,
+} from '../session-expiry'
 
 describe('shouldRedirectToLoginAfterSessionExpiry', () => {
   it('本机仍持有 API Key（status=ready）：不跳转——Key 通道顶上继续用', () => {
@@ -35,9 +38,7 @@ describe('installSessionExpiryHandler 接线', () => {
   /** 安装监听并返回 navigate 桩（pathname 决定「当前在哪」） */
   function install(pathname: string) {
     const navigate = vi.fn()
-    disposers.push(
-      installSessionExpiryHandler({ state: { location: { pathname } }, navigate }),
-    )
+    disposers.push(installSessionExpiryHandler({ state: { location: { pathname } }, navigate }))
     return navigate
   }
 

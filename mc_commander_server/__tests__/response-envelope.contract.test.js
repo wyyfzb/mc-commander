@@ -15,14 +15,16 @@ import {
 
 vi.mock('../services/plugin.service.js', () => ({
   listPlugins: vi.fn(() => ({
-    plugins: [{
-      file: 'vault.jar',
-      name: 'vault',
-      enabled: true,
-      sizeBytes: 1024,
-      mtimeMs: 1760000000000,
-      meta: null,
-    }],
+    plugins: [
+      {
+        file: 'vault.jar',
+        name: 'vault',
+        enabled: true,
+        sizeBytes: 1024,
+        mtimeMs: 1760000000000,
+        meta: null,
+      },
+    ],
   })),
   deletePlugin: vi.fn(() => ({ deleted: 'vault.jar' })),
   uploadPlugin: vi.fn(),
@@ -43,7 +45,9 @@ vi.mock('../services/upgrade.service.js', async (importOriginal) => {
   return {
     ...actual,
     // 普通 function 实现：路由层以 new UpgradeService(serverManager) 构造
-    UpgradeService: vi.fn(function () { return upgradeMocks; }),
+    UpgradeService: vi.fn(function () {
+      return upgradeMocks;
+    }),
   };
 });
 

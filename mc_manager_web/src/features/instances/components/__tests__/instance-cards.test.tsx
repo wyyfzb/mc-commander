@@ -99,7 +99,9 @@ describe('InstanceCards', () => {
   it('升级中徽标：store 有非终态进度时显示（issue 352）', () => {
     act(() => {
       useUpgradeStore.setState({
-        progress: { alpha: { instanceId: 'alpha', stage: 'download', percent: 40, detail: '', timestamp: 1 } },
+        progress: {
+          alpha: { instanceId: 'alpha', stage: 'download', percent: 40, detail: '', timestamp: 1 },
+        },
       })
     })
     render(<InstanceCards {...baseProps()} />)
@@ -111,7 +113,15 @@ describe('InstanceCards', () => {
   it('升级终态残留不误显示升级中徽标', () => {
     act(() => {
       useUpgradeStore.setState({
-        progress: { alpha: { instanceId: 'alpha', stage: 'completed', percent: 100, detail: '', timestamp: 1 } },
+        progress: {
+          alpha: {
+            instanceId: 'alpha',
+            stage: 'completed',
+            percent: 100,
+            detail: '',
+            timestamp: 1,
+          },
+        },
       })
     })
     render(<InstanceCards {...baseProps()} />)
@@ -122,7 +132,15 @@ describe('InstanceCards', () => {
   it('取消终态同样算终态：不残留升级中徽标（判据与弹窗/WS 同源）', () => {
     act(() => {
       useUpgradeStore.setState({
-        progress: { alpha: { instanceId: 'alpha', stage: 'cancelled', percent: 0, detail: '已取消，实例保持 1.21.1', timestamp: 1 } },
+        progress: {
+          alpha: {
+            instanceId: 'alpha',
+            stage: 'cancelled',
+            percent: 0,
+            detail: '已取消，实例保持 1.21.1',
+            timestamp: 1,
+          },
+        },
       })
     })
     render(<InstanceCards {...baseProps()} />)
@@ -168,7 +186,9 @@ describe('InstanceCards', () => {
   })
 
   it('详情加载中：仅该卡版本徽章位置显示骨架占位（他卡不受影响）', () => {
-    const { container } = render(<InstanceCards {...baseProps({ loadingIds: new Set(['alpha']) })} />)
+    const { container } = render(
+      <InstanceCards {...baseProps({ loadingIds: new Set(['alpha']) })} />,
+    )
     expect(container.querySelectorAll('[data-slot="skeleton"]').length).toBe(1)
     expect(screen.queryByText('1.21.4')).not.toBeInTheDocument()
     // beta 卡无骨架（详情未在途）
@@ -197,7 +217,8 @@ describe('InstanceCards', () => {
 
   it('行内最多两个主操作：启停 + 切换（非当前实例）+ 一个操作菜单触发器', () => {
     const { container } = render(<InstanceCards {...baseProps()} />)
-    const card = (id: string) => container.querySelector(`[data-instance-id="${id}"]`) as HTMLElement
+    const card = (id: string) =>
+      container.querySelector(`[data-instance-id="${id}"]`) as HTMLElement
 
     // 卡片内除操作行外无其他按钮，故按钮集合即操作行
     const labels = (id: string) =>
@@ -212,10 +233,11 @@ describe('InstanceCards', () => {
     const { container } = render(<InstanceCards {...baseProps({ currentId: 'alpha' })} />)
     const card = container.querySelector('[data-instance-id="alpha"]') as HTMLElement
 
-    expect(within(card).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual([
-      '停止 虚构甲服',
-      '虚构甲服 操作菜单',
-    ])
+    expect(
+      within(card)
+        .getAllByRole('button')
+        .map((b) => b.getAttribute('aria-label')),
+    ).toEqual(['停止 虚构甲服', '虚构甲服 操作菜单'])
   })
 
   it('操作菜单：启动配置 / 升级版本 / 卸载实例三项，卸载为破坏性样式且与安全项分隔', async () => {
@@ -225,7 +247,10 @@ describe('InstanceCards', () => {
 
     expect(await screen.findByRole('menuitem', { name: '启动配置' })).toBeInTheDocument()
     expect(screen.getByRole('menuitem', { name: '升级版本' })).toBeInTheDocument()
-    expect(screen.getByRole('menuitem', { name: '卸载实例' })).toHaveAttribute('data-variant', 'destructive')
+    expect(screen.getByRole('menuitem', { name: '卸载实例' })).toHaveAttribute(
+      'data-variant',
+      'destructive',
+    )
     // 破坏性项与安全项之间的视觉分组（收编前二者分属不同按钮，无此分组）；菜单挂在 body 上的 portal 里
     expect(document.querySelectorAll('[data-slot="dropdown-menu-separator"]')).toHaveLength(1)
   })
@@ -278,8 +303,14 @@ describe('InstanceCards', () => {
     render(<InstanceCards {...baseProps({ uninstallingId: 'alpha', onUninstall })} />)
 
     // 卡片面承接在途信号（卸载反馈原挂在行内按钮上，收进菜单后靠触发器 spinner）
-    expect(screen.getByRole('button', { name: '虚构甲服 操作菜单' })).toHaveAttribute('aria-busy', 'true')
-    expect(screen.getByRole('button', { name: '虚构乙服 操作菜单' })).not.toHaveAttribute('aria-busy', 'true')
+    expect(screen.getByRole('button', { name: '虚构甲服 操作菜单' })).toHaveAttribute(
+      'aria-busy',
+      'true',
+    )
+    expect(screen.getByRole('button', { name: '虚构乙服 操作菜单' })).not.toHaveAttribute(
+      'aria-busy',
+      'true',
+    )
 
     await openMenu(user, '虚构甲服')
     // 卸载中：文案切换为「卸载中」（可访问名随内容变化）

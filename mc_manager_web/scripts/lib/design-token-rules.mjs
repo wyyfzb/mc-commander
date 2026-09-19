@@ -19,10 +19,12 @@ const QUOTED_LITERAL = /(["'`])([^"'`\n]*)\1/g
  *  供文件级采集判定使用（第 21/27/28 条：注释里的配方示例不算现场）；
  *  逐行规则（第 1–11 条）按原始行判定、不经本函数——两者的取舍各自成立 */
 export function stripComments(content) {
-  return content
-    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
-    // 行注释同样抹成等长空白：会把 https:// 这类串连同其后内容一并吃掉，属「宁漏不误报」的取舍
-    .replace(/\/\/[^\n]*/g, (m) => ' '.repeat(m.length))
+  return (
+    content
+      .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
+      // 行注释同样抹成等长空白：会把 https:// 这类串连同其后内容一并吃掉，属「宁漏不误报」的取舍
+      .replace(/\/\/[^\n]*/g, (m) => ' '.repeat(m.length))
+  )
 }
 
 /** 正文偏移量 → 1 基行号（报错行号与编辑器一致） */
@@ -80,7 +82,8 @@ const BUTTON_SEMANTICS = /\bonClick=|<Button\b|<button\b|role="button"/
 export function collectDangerousButtonBorderHits(code) {
   const hits = []
   for (const [i, line] of code.split('\n').entries()) {
-    if (DANGEROUS_BUTTON_BORDER.test(line) && BUTTON_SEMANTICS.test(line)) hits.push({ line: i + 1 })
+    if (DANGEROUS_BUTTON_BORDER.test(line) && BUTTON_SEMANTICS.test(line))
+      hits.push({ line: i + 1 })
   }
   return hits
 }
@@ -101,12 +104,18 @@ export function collectDangerousButtonBorderHits(code) {
  * @returns {{ line: number }[]} 1 基行号，按出现顺序
  */
 const OUTLINE_CANCEL = /\boutline-(none|hidden)\b/
-const INTERACTIVE_MARKERS = /\bonClick=|<Button\b|<button\b|role="button"|<input\b|<textarea\b|<select\b/
-const FOCUS_INDICATOR = /focus(-visible)?:(ring-(?:[1-9]|\d{2,}|\[)|outline-(?:[2-9]|\d{2,}|mcs-|\[))/
+const INTERACTIVE_MARKERS =
+  /\bonClick=|<Button\b|<button\b|role="button"|<input\b|<textarea\b|<select\b/
+const FOCUS_INDICATOR =
+  /focus(-visible)?:(ring-(?:[1-9]|\d{2,}|\[)|outline-(?:[2-9]|\d{2,}|mcs-|\[))/
 export function collectFocusCancellationHits(code) {
   const hits = []
   for (const [i, line] of code.split('\n').entries()) {
-    if (OUTLINE_CANCEL.test(line) && INTERACTIVE_MARKERS.test(line) && !FOCUS_INDICATOR.test(line)) {
+    if (
+      OUTLINE_CANCEL.test(line) &&
+      INTERACTIVE_MARKERS.test(line) &&
+      !FOCUS_INDICATOR.test(line)
+    ) {
       hits.push({ line: i + 1 })
     }
   }

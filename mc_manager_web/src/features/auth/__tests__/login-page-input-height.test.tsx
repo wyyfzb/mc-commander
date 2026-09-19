@@ -67,7 +67,13 @@ describe('PasswordInput 高度基座归一', () => {
     server.use(
       http.post('*/api/v1/auth/login', () =>
         HttpResponse.json(
-          { status: 'error', code: 40105, message: '请输入两步验证码或恢复码', details: null, timestamp: '' },
+          {
+            status: 'error',
+            code: 40105,
+            message: '请输入两步验证码或恢复码',
+            details: null,
+            timestamp: '',
+          },
           { status: 401 },
         ),
       ),
@@ -88,7 +94,13 @@ describe('PasswordInput 高度基座归一', () => {
     server.use(
       http.post('*/api/v1/auth/setup', () =>
         HttpResponse.json(
-          { status: 'error', code: 40104, message: 'SETUP_TOKEN 缺失或错误', details: null, timestamp: '' },
+          {
+            status: 'error',
+            code: 40104,
+            message: 'SETUP_TOKEN 缺失或错误',
+            details: null,
+            timestamp: '',
+          },
           { status: 401 },
         ),
       ),

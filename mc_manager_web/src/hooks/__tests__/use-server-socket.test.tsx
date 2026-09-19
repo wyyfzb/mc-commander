@@ -93,7 +93,9 @@ function createWrapper() {
 }
 
 /** 读取某个 FakeWebSocket 已发送的 subscribe 消息 */
-function sentSubscribe(ws: FakeWebSocket): Array<{ type: string; instanceId?: string; lastEventId?: number }> {
+function sentSubscribe(
+  ws: FakeWebSocket,
+): Array<{ type: string; instanceId?: string; lastEventId?: number }> {
   return ws.sent
     .map((m) => JSON.parse(m) as { type: string; instanceId?: string; lastEventId?: number })
     .filter((m) => m.type === 'subscribe')
@@ -343,7 +345,11 @@ describe('useServerSocket（备份进度与取消接线，清单 #16）', () => 
   it('backupProgress → 进度 store（不进通知中心，1s 级推送不落库）', async () => {
     const ws = await connectReady('i-1')
     act(() => {
-      ws.receive({ type: 'backupProgress', instanceId: 'i-1', data: { backupId: 7, percent: 41.2 } })
+      ws.receive({
+        type: 'backupProgress',
+        instanceId: 'i-1',
+        data: { backupId: 7, percent: 41.2 },
+      })
     })
     expect(useBackupProgressStore.getState().progress['i-1']).toEqual({
       kind: 'create',
@@ -354,7 +360,9 @@ describe('useServerSocket（备份进度与取消接线，清单 #16）', () => 
   })
 
   it('backupStart 清除上一次的进度条目（终态在别处错过时，新操作不得显示陈旧百分比）', async () => {
-    useBackupProgressStore.setState({ progress: { 'i-1': { kind: 'create', backupId: 7, percent: 88 } } })
+    useBackupProgressStore.setState({
+      progress: { 'i-1': { kind: 'create', backupId: 7, percent: 88 } },
+    })
     const ws = await connectReady('i-1')
     act(() => {
       ws.receive({ type: 'backupStart', instanceId: 'i-1', data: { backupId: 8 } })
@@ -363,10 +371,16 @@ describe('useServerSocket（备份进度与取消接线，清单 #16）', () => 
   })
 
   it('终态 backupCancelled 清除进度并入通知中心（跨标签/断线补齐可见取消结局）', async () => {
-    useBackupProgressStore.setState({ progress: { 'i-1': { kind: 'create', backupId: 7, percent: 50 } } })
+    useBackupProgressStore.setState({
+      progress: { 'i-1': { kind: 'create', backupId: 7, percent: 50 } },
+    })
     const ws = await connectReady('i-1')
     act(() => {
-      ws.receive({ type: 'backupCancelled', instanceId: 'i-1', data: { backupId: 7, content: '备份已取消' } })
+      ws.receive({
+        type: 'backupCancelled',
+        instanceId: 'i-1',
+        data: { backupId: 7, content: '备份已取消' },
+      })
     })
     expect(useBackupProgressStore.getState().progress['i-1']).toBeUndefined()
     const items = useNotificationStore.getState().items

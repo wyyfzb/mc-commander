@@ -16,7 +16,10 @@ import {
   type NotificationSeverity,
   type NotificationType,
 } from '@/lib/notifications'
-import { isToastEnabledRaw, useNotificationPreferenceStore } from '@/stores/notification-preferences'
+import {
+  isToastEnabledRaw,
+  useNotificationPreferenceStore,
+} from '@/stores/notification-preferences'
 
 /** 设置页分组顺序（类型体系无 management 组，仅渲染 game/server） */
 const CATEGORY_SECTIONS: ReadonlyArray<{ category: NotificationCategory; title: string }> = [
@@ -24,7 +27,10 @@ const CATEGORY_SECTIONS: ReadonlyArray<{ category: NotificationCategory; title: 
   { category: 'server', title: '服务器通知' },
 ]
 
-const SEVERITY_META: Record<NotificationSeverity, { label: string; tone: 'error' | 'warning' | 'info' }> = {
+const SEVERITY_META: Record<
+  NotificationSeverity,
+  { label: string; tone: 'error' | 'warning' | 'info' }
+> = {
   severe: { label: '严重', tone: 'error' },
   warning: { label: '警告', tone: 'warning' },
   info: { label: '提示', tone: 'info' },
@@ -41,7 +47,9 @@ export function NotificationsPanel() {
     <div className="flex flex-col gap-4">
       {/* 顶部描述 + 右上实时保存提示 */}
       <div className="flex items-center justify-between gap-4">
-        <p className="min-w-0 text-mcs-sm text-mcs-text-muted">设置各类通知的站内推送（严重度仅作展示分级）。</p>
+        <p className="min-w-0 text-mcs-sm text-mcs-text-muted">
+          设置各类通知的站内推送（严重度仅作展示分级）。
+        </p>
         <div className="flex shrink-0 items-center gap-1.5">
           <CheckCircle2 className="size-3.5 text-mcs-success-fg" aria-hidden />
           <span className="text-mcs-sm text-mcs-text-muted">修改即时保存</span>
@@ -66,7 +74,9 @@ export function NotificationsPanel() {
             {/* 组头行：folder 图标 + 组名 + 组级批量开关 */}
             <div className="flex items-center gap-2 border-b border-mcs-border-muted px-4 py-3">
               <Folder className="size-4 shrink-0 text-mcs-accent-fg" aria-hidden />
-              <h3 className="min-w-0 flex-1 text-mcs-lg font-semibold text-mcs-text-default">{title}</h3>
+              <h3 className="min-w-0 flex-1 text-mcs-lg font-semibold text-mcs-text-default">
+                {title}
+              </h3>
               <Switch
                 checked={anyOn}
                 onCheckedChange={(checked) => setCategoryEnabled(category, checked)}
@@ -89,7 +99,9 @@ export function NotificationsPanel() {
                     key={type}
                     className="grid grid-cols-[1fr_auto_auto] items-center gap-x-4 border-b border-mcs-border-muted px-4 py-2 last:border-b-0"
                   >
-                    <span className="min-w-0 truncate text-mcs-sm text-mcs-text-default">{meta.label}</span>
+                    <span className="min-w-0 truncate text-mcs-sm text-mcs-text-default">
+                      {meta.label}
+                    </span>
                     <StatusPill tone={sev.tone} className="w-12 justify-center px-0 text-mcs-2xs">
                       {sev.label}
                     </StatusPill>

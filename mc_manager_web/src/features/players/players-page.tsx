@@ -27,7 +27,12 @@ import { Input } from '@/components/ui/input'
 import { useServerStore } from '@/stores/server'
 import { useInstanceStatus } from '@/api/queries'
 import type { Player } from '@/api/types'
-import { applyPlayersFilter, usePlayersUiStore, FILTER_MODE_OPTIONS, type PlayerDetailTab } from './store'
+import {
+  applyPlayersFilter,
+  usePlayersUiStore,
+  FILTER_MODE_OPTIONS,
+  type PlayerDetailTab,
+} from './store'
 import type { BanFormModel } from '@/lib/mc-ban'
 import { usePlayers } from './queries'
 import { usePlayerAction, type PlayerActionRequest } from './mutations'
@@ -71,7 +76,10 @@ export function PlayersPage() {
   const action = usePlayerAction(instanceId)
 
   const allPlayers = playersQuery.data ?? NO_PLAYERS
-  const filteredPlayers = useMemo(() => applyPlayersFilter(allPlayers, filter), [allPlayers, filter])
+  const filteredPlayers = useMemo(
+    () => applyPlayersFilter(allPlayers, filter),
+    [allPlayers, filter],
+  )
   const selectedPlayers = useMemo(
     () => allPlayers.filter((p) => selectedUuids.includes(p.uuid)),
     [allPlayers, selectedUuids],
@@ -140,7 +148,11 @@ export function PlayersPage() {
     // 同时踢出（kick 失败不阻断封禁）
     if (model.kickFirst && banTarget.isOnline) {
       try {
-        await handleAction({ kind: 'kick', playerName: banTarget.name, reason: `封禁：${model.reason}` })
+        await handleAction({
+          kind: 'kick',
+          playerName: banTarget.name,
+          reason: `封禁：${model.reason}`,
+        })
       } catch {
         // 不阻断
       }
@@ -186,10 +198,7 @@ export function PlayersPage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4 p-4">
-      <PageHeader
-        title="玩家"
-        description="查看 · 管理 · 洞察服务器玩家"
-      />
+      <PageHeader title="玩家" description="查看 · 管理 · 洞察服务器玩家" />
 
       {/* 左栏：筛选 + 表格 */}
       <div className="relative flex min-h-0 flex-1">
@@ -224,7 +233,9 @@ export function PlayersPage() {
               totalCount={allPlayers.length}
               onClearFilter={() => setFilter({ q: '', mode: 'all' })}
               isRconConnected={isRconConnected}
-              onOpenDetail={(name, tab) => openPlayerDetail(name, tab as PlayerDetailTab | undefined)}
+              onOpenDetail={(name, tab) =>
+                openPlayerDetail(name, tab as PlayerDetailTab | undefined)
+              }
               onOpenBan={setBanTarget}
               onAction={handleAction}
               onKicked={handleKicked}
@@ -249,10 +260,21 @@ export function PlayersPage() {
 
       {/* lg 以下（含平板）：详情面板以 Sheet（Radix Dialog）承载，获得 role=dialog / aria-modal / 焦点陷阱 / Esc 关闭 / 背景 inert */}
       {detail !== null && isSheetLayout && (
-        <Sheet open onOpenChange={(open) => { if (!open) closeDetail() }}>
-          <SheetContent side="right" showCloseButton={false} className="w-full! gap-0 p-0 sm:max-w-none!">
+        <Sheet
+          open
+          onOpenChange={(open) => {
+            if (!open) closeDetail()
+          }}
+        >
+          <SheetContent
+            side="right"
+            showCloseButton={false}
+            className="w-full! gap-0 p-0 sm:max-w-none!"
+          >
             <SheetTitle className="sr-only">
-              {detail.batchMode ? `批量操作 ${selectedPlayers.length} 名玩家` : `${detailPlayer?.name ?? '玩家'} 详情`}
+              {detail.batchMode
+                ? `批量操作 ${selectedPlayers.length} 名玩家`
+                : `${detailPlayer?.name ?? '玩家'} 详情`}
             </SheetTitle>
             <PlayerDetailPanel
               variant="overlay"

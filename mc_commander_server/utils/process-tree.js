@@ -24,13 +24,25 @@ export function killProcessTree(proc, { pid = null, detached = false } = {}) {
     if (process.platform === 'win32') {
       // taskkill /T 从根进程向下递归遍历，根必须先存活才能定位整棵树
       // （先杀根会让 taskkill 报「找不到进程」而无法递归），故此处不先单杀根
-      try { spawnSync('taskkill', ['/F', '/T', '/PID', String(target)], { stdio: 'ignore' }); } catch { /* 进程已退出 */ }
+      try {
+        spawnSync('taskkill', ['/F', '/T', '/PID', String(target)], { stdio: 'ignore' });
+      } catch {
+        /* 进程已退出 */
+      }
     } else if (detached) {
-      try { process.kill(-target, 'SIGKILL'); } catch { /* 进程组已不存在 */ }
+      try {
+        process.kill(-target, 'SIGKILL');
+      } catch {
+        /* 进程组已不存在 */
+      }
     }
   }
   // 单进程 SIGKILL 兜底：进程树终止失败 / pid 缺失 / 未 detached 时仍杀主进程本身
   if (proc) {
-    try { proc.kill('SIGKILL'); } catch { /* 进程已退出 */ }
+    try {
+      proc.kill('SIGKILL');
+    } catch {
+      /* 进程已退出 */
+    }
   }
 }

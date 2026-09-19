@@ -35,7 +35,14 @@ describe('CountBadge', () => {
     const el = container.querySelector('[data-count-badge]') as HTMLElement
     expect(el.classList.contains('text-mcs-2xs')).toBe(true)
     expect(el.classList.contains('text-xs')).toBe(false)
-    for (const c of ['inline-flex', 'h-5', 'rounded-full', 'border-mcs-border-muted', 'bg-mcs-bg-subtle', 'text-mcs-text-muted']) {
+    for (const c of [
+      'inline-flex',
+      'h-5',
+      'rounded-full',
+      'border-mcs-border-muted',
+      'bg-mcs-bg-subtle',
+      'text-mcs-text-muted',
+    ]) {
       expect(el.classList.contains(c)).toBe(true)
     }
   })

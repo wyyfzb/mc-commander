@@ -40,7 +40,12 @@ import type { DeployRequest, DeployResult } from '@/api/types'
 import { INITIAL_FORM, type AutoStartState, type DeployForm } from './deploy/types'
 import { recommendedMemoryGB } from './deploy/utils'
 import { Stepper } from './deploy/stepper'
-import { DeployCancelledView, DeployErrorView, DeployProgressView, DeploySuccessView } from './deploy/views'
+import {
+  DeployCancelledView,
+  DeployErrorView,
+  DeployProgressView,
+  DeploySuccessView,
+} from './deploy/views'
 import { DeployStepConfig, DeployStepConfirm, DeployStepServer } from './deploy/steps'
 
 const EMPTY_STRINGS: string[] = []
@@ -133,7 +138,7 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
       baselineRef.current = { ...baselineRef.current, memory: next }
       return { ...f, memory: next }
     })
-  // oxlint-disable-next-line react-hooks/exhaustive-deps -- recommendedMemoryGB 模块级纯函数，setter/ref 稳定引用
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- recommendedMemoryGB 模块级纯函数，setter/ref 稳定引用
   }, [totalMemory, open])
 
   // 版本列表就绪 → 自动回填首个版本，并同步基线。
@@ -177,7 +182,11 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
   const duplicateDeploy =
     duplicateDeployBlocked &&
     lastResult === null &&
-    !(progress?.stage === 'complete' || progress?.stage === 'error' || progress?.stage === 'cancelled')
+    !(
+      progress?.stage === 'complete' ||
+      progress?.stage === 'error' ||
+      progress?.stage === 'cancelled'
+    )
 
   const changeType = (type: ServerType) => {
     if (type === form.type) return
@@ -409,7 +418,11 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
                 </Button>
               )}
               {step < 2 ? (
-                <Button onClick={handleNext} disabled={step === 0 && form.version === ''} aria-label="下一步">
+                <Button
+                  onClick={handleNext}
+                  disabled={step === 0 && form.version === ''}
+                  aria-label="下一步"
+                >
                   下一步
                 </Button>
               ) : (
@@ -417,11 +430,7 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
                   onClick={() => void handleDeploy()}
                   disabled={duplicateDeploy}
                   aria-label={
-                    duplicateDeploy
-                      ? '已有部署在进行中'
-                      : eulaAgreed
-                        ? '部署并启动'
-                        : '仅部署'
+                    duplicateDeploy ? '已有部署在进行中' : eulaAgreed ? '部署并启动' : '仅部署'
                   }
                 >
                   <CloudDownload className="size-4" aria-hidden />

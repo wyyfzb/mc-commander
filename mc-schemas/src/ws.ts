@@ -98,10 +98,12 @@ export const wsWeatherPayloadSchema = z.object({
   weather: z.enum(['clear', 'rain', 'thunder']),
 })
 
-export const wsBackupPayloadSchema = z.object({
-  id: z.number().optional(),
-  name: z.string().optional(),
-}).passthrough()
+export const wsBackupPayloadSchema = z
+  .object({
+    id: z.number().optional(),
+    name: z.string().optional(),
+  })
+  .passthrough()
 
 /** 备份/恢复进度（rsync --info=progress2 解析，服务端 1s 节流；robocopy/ditto 降级路径无进度） */
 export const wsBackupProgressPayloadSchema = z.object({

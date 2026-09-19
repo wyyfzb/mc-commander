@@ -9,16 +9,39 @@
 export type NotificationCategory = 'game' | 'server' | 'management'
 
 export type NotificationType =
-  | 'join' | 'leave' | 'death' | 'revive' | 'achievement' | 'chat' | 'sleep'
-  | 'serverStart' | 'serverStop' | 'serverCrash' | 'save' | 'circuitBreaker'
-  | 'lowTps' | 'highCpu' | 'highMemory' | 'weatherChange'
-  | 'backupStart' | 'backupComplete' | 'backupFailed' | 'backupSkipped'
+  | 'join'
+  | 'leave'
+  | 'death'
+  | 'revive'
+  | 'achievement'
+  | 'chat'
+  | 'sleep'
+  | 'serverStart'
+  | 'serverStop'
+  | 'serverCrash'
+  | 'save'
+  | 'circuitBreaker'
+  | 'lowTps'
+  | 'highCpu'
+  | 'highMemory'
+  | 'weatherChange'
+  | 'backupStart'
+  | 'backupComplete'
+  | 'backupFailed'
+  | 'backupSkipped'
   | 'backupCancelled'
-  | 'restoreStart' | 'restoreComplete' | 'restoreFailed' | 'restoreCancelled'
+  | 'restoreStart'
+  | 'restoreComplete'
+  | 'restoreFailed'
+  | 'restoreCancelled'
   | 'taskFailed'
   | 'webhookFailed'
-  | 'deployComplete' | 'deployFailed' | 'deployCancelled'
-  | 'upgradeComplete' | 'upgradeFailed' | 'upgradeCancelled'
+  | 'deployComplete'
+  | 'deployFailed'
+  | 'deployCancelled'
+  | 'upgradeComplete'
+  | 'upgradeFailed'
+  | 'upgradeCancelled'
 
 export interface AppNotification {
   id: string
@@ -93,8 +116,14 @@ export const NOTIFICATION_TYPE_ORDER: NotificationType[] = Object.keys(
 
 /** critical 类：不参与聚合，每次都独立通知 */
 const CRITICAL_TYPES: ReadonlySet<NotificationType> = new Set([
-  'serverCrash', 'circuitBreaker', 'backupFailed', 'restoreFailed', 'taskFailed', 'webhookFailed',
-  'deployFailed', 'upgradeFailed',
+  'serverCrash',
+  'circuitBreaker',
+  'backupFailed',
+  'restoreFailed',
+  'taskFailed',
+  'webhookFailed',
+  'deployFailed',
+  'upgradeFailed',
 ])
 
 /** 告警类型集合（阈值跃迁语义，需 _activeAlerts 状态机） */
@@ -123,10 +152,10 @@ export interface WsEventInput {
 }
 
 export interface AlertThresholds {
-  tpsWarning?: number    // 预留：百分比语义（当前实现走 tpsLow）
+  tpsWarning?: number // 预留：百分比语义（当前实现走 tpsLow）
   cpuWarning: number
   memoryWarning: number
-  tpsLow: number         // TPS 低于此值告警
+  tpsLow: number // TPS 低于此值告警
 }
 
 /**
@@ -164,7 +193,9 @@ export function buildNotifications(
       const players = d.players as Array<{ name: string; cause?: string }> | undefined
       if (Array.isArray(players)) {
         return players.map((p) => ({
-          type: 'death', category: 'game', content: `${p.name} ${p.cause ?? ''}`.trim(),
+          type: 'death',
+          category: 'game',
+          content: `${p.name} ${p.cause ?? ''}`.trim(),
         }))
       }
       return [{ type: 'death', category: 'game', content: `${d.name} ${d.cause ?? ''}`.trim() }]
@@ -172,17 +203,23 @@ export function buildNotifications(
     case 'playerRespawn':
       return [{ type: 'revive', category: 'game', content: `${d.name} 已重生` }]
     case 'achievement':
-      return [{
-        type: 'achievement', category: 'game',
-        content: `${d.name} ${d.isChallenge ? '完成了挑战' : '获得了成就'} [${d.advancement}]`,
-      }]
+      return [
+        {
+          type: 'achievement',
+          category: 'game',
+          content: `${d.name} ${d.isChallenge ? '完成了挑战' : '获得了成就'} [${d.advancement}]`,
+        },
+      ]
     case 'playerChat':
       return [{ type: 'chat', category: 'game', content: `${d.name}: ${d.message}` }]
     case 'playerSleep':
-      return [{
-        type: 'sleep', category: 'game',
-        content: d.sleeping ? `${d.name} 入睡了` : `${d.name} 醒来了`,
-      }]
+      return [
+        {
+          type: 'sleep',
+          category: 'game',
+          content: d.sleeping ? `${d.name} 入睡了` : `${d.name} 醒来了`,
+        },
+      ]
     case 'status': {
       const ev = d.event as string | undefined
       if (ev === 'started') {
@@ -195,17 +232,23 @@ export function buildNotifications(
         return [{ type: 'serverStop', category: 'server', content: '服务器已停止' }]
       }
       if (ev === 'crash') {
-        return [{
-          type: 'serverCrash', category: 'server',
-          content: d.autoRestart ? '服务器意外退出，正在自动重启' : '服务器意外退出',
-        }]
+        return [
+          {
+            type: 'serverCrash',
+            category: 'server',
+            content: d.autoRestart ? '服务器意外退出，正在自动重启' : '服务器意外退出',
+          },
+        ]
       }
       if (ev === 'circuit_breaker') {
         const crashes = Number(d.consecutiveCrashes ?? 0)
-        return [{
-          type: 'circuitBreaker', category: 'server',
-          content: `连续崩溃 ${crashes} 次，已触发熔断保护（自动重启暂停，请检查日志）`,
-        }]
+        return [
+          {
+            type: 'circuitBreaker',
+            category: 'server',
+            content: `连续崩溃 ${crashes} 次，已触发熔断保护（自动重启暂停，请检查日志）`,
+          },
+        ]
       }
       if (ev === 'save') {
         return [{ type: 'save', category: 'server', content: '世界已保存' }]
@@ -218,70 +261,104 @@ export function buildNotifications(
     }
     case 'taskFailed': {
       const errText = d.error ? `: ${d.error}` : ''
-      return [{
-        type: 'taskFailed', category: 'server',
-        content: `定时任务「${String(d.taskName ?? '未命名')}」执行失败${errText}`,
-      }]
+      return [
+        {
+          type: 'taskFailed',
+          category: 'server',
+          content: `定时任务「${String(d.taskName ?? '未命名')}」执行失败${errText}`,
+        },
+      ]
     }
     case 'webhookDeliveryFailed': {
       const name = String(d.webhookName ?? '未命名 Webhook')
-      return [{
-        type: 'webhookFailed', category: 'server',
-        content: `Webhook「${name}」投递失败（重试耗尽）`,
-      }]
+      return [
+        {
+          type: 'webhookFailed',
+          category: 'server',
+          content: `Webhook「${name}」投递失败（重试耗尽）`,
+        },
+      ]
     }
     // 长任务终态（issue 352）：部署完成前实例未入库，实例名由 payload 携带；
     // 升级终态的服务端 payload 同样补了 instanceName
     case 'deployComplete':
-      return [{
-        type: 'deployComplete', category: 'server',
-        content: `实例「${String(d.instanceName ?? '未命名')}」部署完成`,
-      }]
+      return [
+        {
+          type: 'deployComplete',
+          category: 'server',
+          content: `实例「${String(d.instanceName ?? '未命名')}」部署完成`,
+        },
+      ]
     case 'deployFailed':
-      return [{
-        type: 'deployFailed', category: 'server',
-        content: `实例「${String(d.instanceName ?? '未命名')}」部署失败：${String(d.error || '未知错误')}`,
-      }]
+      return [
+        {
+          type: 'deployFailed',
+          category: 'server',
+          content: `实例「${String(d.instanceName ?? '未命名')}」部署失败：${String(d.error || '未知错误')}`,
+        },
+      ]
     case 'deployCancelled':
       // 不宣称「已清理」：服务端收尾是 best-effort，清理未完成时把明细一并带出
-      return [{
-        type: 'deployCancelled', category: 'server',
-        content: `实例「${String(d.instanceName ?? '未命名')}」部署已取消${d.error ? `：${String(d.error)}` : ''}`,
-      }]
+      return [
+        {
+          type: 'deployCancelled',
+          category: 'server',
+          content: `实例「${String(d.instanceName ?? '未命名')}」部署已取消${d.error ? `：${String(d.error)}` : ''}`,
+        },
+      ]
     case 'upgradeComplete':
-      return [{
-        type: 'upgradeComplete', category: 'server',
-        content: `实例「${String(d.instanceName ?? '未命名')}」升级完成`,
-      }]
+      return [
+        {
+          type: 'upgradeComplete',
+          category: 'server',
+          content: `实例「${String(d.instanceName ?? '未命名')}」升级完成`,
+        },
+      ]
     case 'upgradeFailed':
-      return [{
-        type: 'upgradeFailed', category: 'server',
-        content: `实例「${String(d.instanceName ?? '未命名')}」${String(d.detail || '升级失败')}`,
-      }]
+      return [
+        {
+          type: 'upgradeFailed',
+          category: 'server',
+          content: `实例「${String(d.instanceName ?? '未命名')}」${String(d.detail || '升级失败')}`,
+        },
+      ]
     case 'upgradeCancelled':
       // detail 由服务端给（含「是否已回滚到旧版本」），故这里直接透传
-      return [{
-        type: 'upgradeCancelled', category: 'server',
-        content: `实例「${String(d.instanceName ?? '未命名')}」${String(d.detail || '升级已取消')}`,
-      }]
+      return [
+        {
+          type: 'upgradeCancelled',
+          category: 'server',
+          content: `实例「${String(d.instanceName ?? '未命名')}」${String(d.detail || '升级已取消')}`,
+        },
+      ]
     // 备份/恢复取消走显式分支（不落 BACKUP_CONTENT 静态表）：恢复取消的
     // 服务端 content 会区分「原数据已回滚」与「回滚失败请人工检查」，
     // 静态文案会把后者这类危险明细吞掉
     case 'backupCancelled':
-      return [{
-        type: 'backupCancelled', category: 'server',
-        content: String(d.content || '备份已取消'),
-      }]
+      return [
+        {
+          type: 'backupCancelled',
+          category: 'server',
+          content: String(d.content || '备份已取消'),
+        },
+      ]
     case 'restoreCancelled':
-      return [{
-        type: 'restoreCancelled', category: 'server',
-        content: String(d.content || '恢复已取消'),
-      }]
+      return [
+        {
+          type: 'restoreCancelled',
+          category: 'server',
+          content: String(d.content || '恢复已取消'),
+        },
+      ]
     default: {
       if (type in BACKUP_CONTENT) {
-        return [{
-          type: type as NotificationType, category: 'server', content: BACKUP_CONTENT[type]!,
-        }]
+        return [
+          {
+            type: type as NotificationType,
+            category: 'server',
+            content: BACKUP_CONTENT[type]!,
+          },
+        ]
       }
       return []
     }
@@ -296,7 +373,10 @@ export function buildAlertNotifications(
   perf: { tps?: number | null; cpu?: number | null; memoryPercent?: number | null },
   thresholds: AlertThresholds = DEFAULT_ALERT_THRESHOLDS,
   activeAlerts: ReadonlySet<AlertType> = new Set(),
-): { notifications: Omit<AppNotification, 'id' | 'timestamp' | 'count' | 'read'>[]; activeAlerts: Set<AlertType> } {
+): {
+  notifications: Omit<AppNotification, 'id' | 'timestamp' | 'count' | 'read'>[]
+  activeAlerts: Set<AlertType>
+} {
   const next = new Set(activeAlerts)
   const notifications: Omit<AppNotification, 'id' | 'timestamp' | 'count' | 'read'>[] = []
   const tps = perf.tps
@@ -308,7 +388,11 @@ export function buildAlertNotifications(
     if (tps < (thresholds.tpsLow ?? 15)) {
       if (!next.has('lowTps')) {
         next.add('lowTps')
-        notifications.push({ type: 'lowTps', category: 'server', content: `TPS 过低: ${tps.toFixed(1)}` })
+        notifications.push({
+          type: 'lowTps',
+          category: 'server',
+          content: `TPS 过低: ${tps.toFixed(1)}`,
+        })
       }
     } else if (next.has('lowTps')) {
       next.delete('lowTps')
@@ -320,7 +404,11 @@ export function buildAlertNotifications(
     if (cpu > thresholds.cpuWarning) {
       if (!next.has('highCpu')) {
         next.add('highCpu')
-        notifications.push({ type: 'highCpu', category: 'server', content: `CPU 使用率过高: ${cpu.toFixed(1)}%（单核口径）` })
+        notifications.push({
+          type: 'highCpu',
+          category: 'server',
+          content: `CPU 使用率过高: ${cpu.toFixed(1)}%（单核口径）`,
+        })
       }
     } else if (next.has('highCpu')) {
       next.delete('highCpu')
@@ -332,11 +420,19 @@ export function buildAlertNotifications(
     if (mem > thresholds.memoryWarning) {
       if (!next.has('highMemory')) {
         next.add('highMemory')
-        notifications.push({ type: 'highMemory', category: 'server', content: `内存使用率过高: ${mem.toFixed(1)}%` })
+        notifications.push({
+          type: 'highMemory',
+          category: 'server',
+          content: `内存使用率过高: ${mem.toFixed(1)}%`,
+        })
       }
     } else if (next.has('highMemory')) {
       next.delete('highMemory')
-      notifications.push({ type: 'highMemory', category: 'server', content: '内存使用率已恢复正常' })
+      notifications.push({
+        type: 'highMemory',
+        category: 'server',
+        content: '内存使用率已恢复正常',
+      })
     }
   }
 
@@ -378,13 +474,11 @@ export function aggregateNotifications(
   const entityKey = playerName
     ? `${incoming.type}|${playerName}`
     : `${incoming.type}|${incoming.content.split(':')[0] ?? incoming.content}`
-  const entityHit = existing.find(
-    (n) => {
-      const nName = n.content.split(' ')[0]
-      const nKey = nName ? `${n.type}|${nName}` : `${n.type}|${n.content.split(':')[0] ?? n.content}`
-      return nKey === entityKey && now - n.timestamp < 30_000
-    },
-  )
+  const entityHit = existing.find((n) => {
+    const nName = n.content.split(' ')[0]
+    const nKey = nName ? `${n.type}|${nName}` : `${n.type}|${n.content.split(':')[0] ?? n.content}`
+    return nKey === entityKey && now - n.timestamp < 30_000
+  })
   if (entityHit) {
     return existing.map((n) =>
       n.id === entityHit.id ? { ...n, count: n.count + 1, timestamp: now } : n,
@@ -401,7 +495,10 @@ export function aggregateNotifications(
 export const MAX_PERSISTED_NOTIFICATIONS = 200
 export const CLEANUP_TARGET = 100
 
-export function trimNotifications(list: AppNotification[], limit = MAX_PERSISTED_NOTIFICATIONS): AppNotification[] {
+export function trimNotifications(
+  list: AppNotification[],
+  limit = MAX_PERSISTED_NOTIFICATIONS,
+): AppNotification[] {
   return list.length > limit ? list.slice(0, limit) : list
 }
 

@@ -22,8 +22,20 @@ beforeEach(() => {
 describe('upgrade store', () => {
   it('applyUpgradeProgress 按实例累积，多实例互不覆盖', () => {
     applyUpgradeProgress({ instanceId: 'a', stage: 'backup', percent: 0, detail: '', timestamp: 1 })
-    applyUpgradeProgress({ instanceId: 'b', stage: 'download', percent: 30, detail: '', timestamp: 2 })
-    applyUpgradeProgress({ instanceId: 'a', stage: 'download', percent: 50, detail: '', timestamp: 3 })
+    applyUpgradeProgress({
+      instanceId: 'b',
+      stage: 'download',
+      percent: 30,
+      detail: '',
+      timestamp: 2,
+    })
+    applyUpgradeProgress({
+      instanceId: 'a',
+      stage: 'download',
+      percent: 50,
+      detail: '',
+      timestamp: 3,
+    })
 
     expect(Object.keys(useUpgradeStore.getState().progress).sort()).toEqual(['a', 'b'])
     expect(getUpgradeProgress('a')).toMatchObject({ stage: 'download', percent: 50 })
@@ -31,7 +43,13 @@ describe('upgrade store', () => {
   })
 
   it('clearUpgradeProgress 只清指定实例', () => {
-    applyUpgradeProgress({ instanceId: 'a', stage: 'completed', percent: 100, detail: '', timestamp: 1 })
+    applyUpgradeProgress({
+      instanceId: 'a',
+      stage: 'completed',
+      percent: 100,
+      detail: '',
+      timestamp: 1,
+    })
     applyUpgradeProgress({ instanceId: 'b', stage: 'failed', percent: 0, detail: '', timestamp: 2 })
 
     clearUpgradeProgress('a')
@@ -45,7 +63,14 @@ describe('upgrade store', () => {
 
   it('UPGRADE_STAGE_LABELS 覆盖全部 8 个阶段', () => {
     const stages: UpgradeStage[] = [
-      'backup', 'download', 'replace', 'verify', 'completed', 'failed', 'rolled_back', 'cancelled',
+      'backup',
+      'download',
+      'replace',
+      'verify',
+      'completed',
+      'failed',
+      'rolled_back',
+      'cancelled',
     ]
     expect(Object.keys(UPGRADE_STAGE_LABELS).sort()).toEqual([...stages].sort())
     expect(UPGRADE_STAGE_LABELS.backup).toBe('备份中')

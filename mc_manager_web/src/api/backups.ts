@@ -13,10 +13,7 @@ import type {
 
 /** 备份列表（GET /instances/:id/backups?page=&pageSize=；分页信封） */
 export function apiGetBackups(config: ConnectionConfig, instanceId: string) {
-  return apiGet<BackupItem[]>(
-    `/api/v1/instances/${instanceId}/backups?page=1&pageSize=100`,
-    config,
-  )
+  return apiGet<BackupItem[]>(`/api/v1/instances/${instanceId}/backups?page=1&pageSize=100`, config)
 }
 
 /** 单备份（GET /backups/:id） */
@@ -83,9 +80,7 @@ export function apiGetArchivedSnapshots(config: ConnectionConfig) {
  * 可正常恢复/下载/删除。幂等：已挂载过的份数计 skipped。
  */
 export function apiAttachArchive(config: ConnectionConfig, instanceId: string, archiveId: string) {
-  return apiPost<BackupAttachResponse>(
-    `/api/v1/instances/${instanceId}/backups/attach`,
-    config,
-    { archiveId },
-  )
+  return apiPost<BackupAttachResponse>(`/api/v1/instances/${instanceId}/backups/attach`, config, {
+    archiveId,
+  })
 }

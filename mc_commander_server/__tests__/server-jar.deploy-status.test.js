@@ -44,9 +44,12 @@ vi.mock('../utils/java-detector.js', () => ({
 vi.mock('../services/mc_server.js', () => ({ atomicWriteFile: vi.fn() }));
 
 vi.mock('got', () => ({
-  default: Object.assign(vi.fn(() => ({ json: () => Promise.reject(new Error('no network in test')) })), {
-    stream: vi.fn(),
-  }),
+  default: Object.assign(
+    vi.fn(() => ({ json: () => Promise.reject(new Error('no network in test')) })),
+    {
+      stream: vi.fn(),
+    },
+  ),
 }));
 
 const { createServerJarRoutes } = await import('../routes/server-jar.js');

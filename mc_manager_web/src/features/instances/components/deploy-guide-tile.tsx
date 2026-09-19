@@ -26,11 +26,16 @@ export function DeployGuideTile({ onDeploy, className }: DeployGuideTileProps) {
         className,
       )}
     >
-      <span className="flex size-10 items-center justify-center rounded-mcs-md bg-mcs-bg-default" aria-hidden>
+      <span
+        className="flex size-10 items-center justify-center rounded-mcs-md bg-mcs-bg-default"
+        aria-hidden
+      >
         <Plus className="size-5 text-mcs-text-muted" />
       </span>
       <p className="text-mcs-sm font-medium text-mcs-text-default">再部署一个实例</p>
-      <p className="text-mcs-xs text-mcs-text-muted">独立目录 / 端口 / Java 版本，切换实例互不影响</p>
+      <p className="text-mcs-xs text-mcs-text-muted">
+        独立目录 / 端口 / Java 版本，切换实例互不影响
+      </p>
       <Button variant="outline" size="sm" className="mt-1" onClick={onDeploy}>
         打开部署向导
       </Button>

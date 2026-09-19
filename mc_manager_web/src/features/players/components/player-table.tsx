@@ -10,12 +10,7 @@
  */
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import {
-  flexRender,
-  useTable,
-  type ColumnDef,
-  type SortingState,
-} from '@tanstack/react-table'
+import { flexRender, useTable, type ColumnDef, type SortingState } from '@tanstack/react-table'
 import { cn } from '@/lib/utils'
 import { DataTableShell } from '@/components/mcs/data-table-shell'
 import { EmptyStateVisual } from '@/components/mcs/data-states'
@@ -79,7 +74,12 @@ export function PlayerTable({
    * 此处再 toast 会与页面层重复。
    */
   const runReversible = useCallback(
-    async (req: PlayerActionRequest, undoReq: PlayerActionRequest, successText: string, undoText: string) => {
+    async (
+      req: PlayerActionRequest,
+      undoReq: PlayerActionRequest,
+      successText: string,
+      undoText: string,
+    ) => {
       try {
         await onAction(req)
         toastWithUndo({ text: successText, undoText, undo: () => onAction(undoReq) })
@@ -160,23 +160,21 @@ export function PlayerTable({
     ],
   )
 
-  const table = useTable(
-    {
-      features,
-      data: players,
-      columns,
-      state: { sorting },
-      onSortingChange: setSorting,
-    },
-  )
+  const table = useTable({
+    features,
+    data: players,
+    columns,
+    state: { sorting },
+    onSortingChange: setSorting,
+  })
 
   const allRows = table.getRowModel().rows
   // 切片口径与表头「全选当前页」共用同一实现（player-pagination），勿就地重写
-  const { rows: visibleRows, pageCount: totalPages, safePageIndex } = paginatePlayerRows(
-    allRows,
-    pageSize,
-    pageIndex,
-  )
+  const {
+    rows: visibleRows,
+    pageCount: totalPages,
+    safePageIndex,
+  } = paginatePlayerRows(allRows, pageSize, pageIndex)
 
   // 表头全选范围（卡片态的全选入口复用同一口径：-1 档作用于全部筛选结果）
   const pageRowIds =
@@ -206,7 +204,12 @@ export function PlayerTable({
   const emptyText = totalCount === 0 ? '暂无在线玩家' : '没有匹配的玩家'
   const emptyActions =
     totalCount > 0 && onClearFilter ? (
-      <Button variant="outline" size="sm" onClick={onClearFilter} data-testid="players-clear-filter">
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={onClearFilter}
+        data-testid="players-clear-filter"
+      >
         清空筛选
       </Button>
     ) : undefined
@@ -255,7 +258,9 @@ export function PlayerTable({
                 <tr key={headerGroup.id} className="border-b border-mcs-border-muted">
                   {headerGroup.headers.map((header) => {
                     // 数值列（延迟/在线时长/总时长）表头与 cell 同向右对齐
-                    const rightAlign = ['ping', 'onlineDuration', 'totalPlayTime'].includes(header.column.id)
+                    const rightAlign = ['ping', 'onlineDuration', 'totalPlayTime'].includes(
+                      header.column.id,
+                    )
                     const sorted = header.column.getIsSorted()
                     const canSort = header.column.getCanSort()
                     return (
@@ -279,28 +284,26 @@ export function PlayerTable({
                           rightAlign && 'text-right',
                         )}
                       >
-                        {header.isPlaceholder
-                          ? null
-                          : canSort
-                            ? (
-                              <button
-                                type="button"
-                                className={cn(
-                                  'flex cursor-pointer items-center gap-1 hover:text-mcs-text-muted',
-                                  rightAlign && 'w-full justify-end',
-                                )}
-                                onClick={header.column.getToggleSortingHandler()}
-                              >
-                                {flexRender(header.column.columnDef.header, header.getContext())}
-                                {sorted === 'asc' && <span aria-hidden>↑</span>}
-                                {sorted === 'desc' && <span aria-hidden>↓</span>}
-                              </button>
-                            )
-                            : (
-                              <span className={cn('flex items-center gap-1', rightAlign && 'justify-end')}>
-                                {flexRender(header.column.columnDef.header, header.getContext())}
-                              </span>
+                        {header.isPlaceholder ? null : canSort ? (
+                          <button
+                            type="button"
+                            className={cn(
+                              'flex cursor-pointer items-center gap-1 hover:text-mcs-text-muted',
+                              rightAlign && 'w-full justify-end',
                             )}
+                            onClick={header.column.getToggleSortingHandler()}
+                          >
+                            {flexRender(header.column.columnDef.header, header.getContext())}
+                            {sorted === 'asc' && <span aria-hidden>↑</span>}
+                            {sorted === 'desc' && <span aria-hidden>↓</span>}
+                          </button>
+                        ) : (
+                          <span
+                            className={cn('flex items-center gap-1', rightAlign && 'justify-end')}
+                          >
+                            {flexRender(header.column.columnDef.header, header.getContext())}
+                          </span>
+                        )}
                       </th>
                     )
                   })}
@@ -323,7 +326,9 @@ export function PlayerTable({
                 />
               ) : null,
             )}
-            {pageSize === -1 && bottomPadding > 0 && <tr style={{ height: bottomPadding }} aria-hidden />}
+            {pageSize === -1 && bottomPadding > 0 && (
+              <tr style={{ height: bottomPadding }} aria-hidden />
+            )}
           </tbody>
         </DataTableShell>
       )}

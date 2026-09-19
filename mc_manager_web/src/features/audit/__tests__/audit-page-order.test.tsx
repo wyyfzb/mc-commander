@@ -101,7 +101,10 @@ describe('AuditPage 时间排序切换（issue 383）', () => {
     renderPage('/audit?order=asc')
 
     await waitFor(() =>
-      expect(screen.getByRole('radio', { name: '最早优先' })).toHaveAttribute('aria-checked', 'true'),
+      expect(screen.getByRole('radio', { name: '最早优先' })).toHaveAttribute(
+        'aria-checked',
+        'true',
+      ),
     )
     expect(auditParams.order).toBe('asc')
   })
@@ -123,7 +126,9 @@ describe('AuditPage 时间排序切换（issue 383）', () => {
 
     // 切到正序：page 参数消失（重置第 1 页），action 筛选保留
     await user.click(screen.getByRole('radio', { name: '最早优先' }))
-    await waitFor(() => expect(router.state.location.search).toBe('?action=INSTANCE_START&order=asc'))
+    await waitFor(() =>
+      expect(router.state.location.search).toBe('?action=INSTANCE_START&order=asc'),
+    )
     expect(auditParams.page).toBe(1)
     expect(auditParams.action).toBe('INSTANCE_START')
     expect(auditParams.order).toBe('asc')
@@ -134,7 +139,10 @@ describe('AuditPage 时间排序切换（issue 383）', () => {
     const router = renderPage('/audit?order=asc')
 
     await waitFor(() =>
-      expect(screen.getByRole('radio', { name: '最早优先' })).toHaveAttribute('aria-checked', 'true'),
+      expect(screen.getByRole('radio', { name: '最早优先' })).toHaveAttribute(
+        'aria-checked',
+        'true',
+      ),
     )
 
     await user.click(screen.getByRole('radio', { name: '最新优先' }))
@@ -154,5 +162,4 @@ describe('AuditPage 时间排序切换（issue 383）', () => {
     expect(asc).toHaveAttribute('tabindex', '0')
     expect(document.activeElement).toBe(asc)
   })
-
 })

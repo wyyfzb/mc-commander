@@ -3,8 +3,24 @@
  */
 import { describe, expect, it } from 'vitest'
 import { ITEM_CATEGORIES, MINECRAFT_ITEMS, fullItemId, itemImageUrl } from '../mc-items'
-import { CUSTOM_LEVEL_DURATIONS, MINECRAFT_POTIONS, POTION_BOTTLE_TYPES, POTION_LEVEL_ROMAN, POTION_MAX_LEVEL, durationsForLevel, isCustomPotionLevel, potionDisplayName, potionLevelLabel } from '../mc-potions'
-import { DEFAULT_KITS, kitFromJson, kitToJson, loadKitsFromStorage, saveKitsToStorage } from '../mc-kits'
+import {
+  CUSTOM_LEVEL_DURATIONS,
+  MINECRAFT_POTIONS,
+  POTION_BOTTLE_TYPES,
+  POTION_LEVEL_ROMAN,
+  POTION_MAX_LEVEL,
+  durationsForLevel,
+  isCustomPotionLevel,
+  potionDisplayName,
+  potionLevelLabel,
+} from '../mc-potions'
+import {
+  DEFAULT_KITS,
+  kitFromJson,
+  kitToJson,
+  loadKitsFromStorage,
+  saveKitsToStorage,
+} from '../mc-kits'
 
 describe('物品目录完整性（212 种）', () => {
   it('共 212 种物品', () => {
@@ -46,7 +62,14 @@ describe('物品目录完整性（212 种）', () => {
 
   it('覆盖 26.x 新物品（金蒲公英/硫磺系列/朱砂系列/新唱片/间歇泉）', () => {
     const ids = MINECRAFT_ITEMS.map((i) => i.id)
-    for (const id of ['golden_dandelion', 'sulfur', 'cinnabar', 'music_disc_bounce', 'geyser', 'mace']) {
+    for (const id of [
+      'golden_dandelion',
+      'sulfur',
+      'cinnabar',
+      'music_disc_bounce',
+      'geyser',
+      'mace',
+    ]) {
       expect(ids).toContain(id)
     }
   })
@@ -147,7 +170,13 @@ describe('默认礼包（6 个）与持久化 schema', () => {
     expect(kitFromJson(null)).toBeNull()
     expect(kitFromJson('abc')).toBeNull()
     expect(kitFromJson({ name: '', items: [{ id: '', count: 2 }] })).toBeNull()
-    const partial = kitFromJson({ name: 'x', items: [{ id: '', count: 2 }, { id: 'diamond', count: '8' as unknown as number }] })
+    const partial = kitFromJson({
+      name: 'x',
+      items: [
+        { id: '', count: 2 },
+        { id: 'diamond', count: '8' as unknown as number },
+      ],
+    })
     // 空 id 条目丢弃；非 number count 回退 1
     expect(partial?.items).toEqual([{ id: 'diamond', count: 1 }])
   })

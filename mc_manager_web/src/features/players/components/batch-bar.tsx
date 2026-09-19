@@ -161,13 +161,18 @@ export function BatchBar({ selectedPlayers, onOpenBatchDetail, onAction }: Batch
         const unknownCount = succeeded.length - known.length
         if (known.length === 0) {
           return unknownCount > 0
-            ? { unavailable: `${unknownCount} 名玩家的原游戏模式未知，本次不提供撤销（不猜默认档）` }
+            ? {
+                unavailable: `${unknownCount} 名玩家的原游戏模式未知，本次不提供撤销（不猜默认档）`,
+              }
             : null
         }
         return {
           text: '已切回原游戏模式',
           run: () =>
-            undoEach(known, (p) => ({ kind: 'command', command: `gamemode ${p.gameMode} ${p.name}` })),
+            undoEach(known, (p) => ({
+              kind: 'command',
+              command: `gamemode ${p.gameMode} ${p.name}`,
+            })),
           note:
             unknownCount > 0
               ? `撤销只覆盖原模式已知的 ${known.length} 名，另有 ${unknownCount} 名原模式未知`
@@ -187,102 +192,127 @@ export function BatchBar({ selectedPlayers, onOpenBatchDetail, onAction }: Batch
         已选择 {count} 名玩家
       </span>
 
-        {/* 导航类 */}
-        <Button variant="outline" size="sm" onClick={() => onOpenBatchDetail('teleport')} disabled={running}>
-          <Send aria-hidden />
-          传送
-        </Button>
-        <Button variant="outline" size="sm" onClick={() => onOpenBatchDetail('give')} disabled={running}>
-          <Gift aria-hidden />
-          给予物品
-        </Button>
+      {/* 导航类 */}
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => onOpenBatchDetail('teleport')}
+        disabled={running}
+      >
+        <Send aria-hidden />
+        传送
+      </Button>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => onOpenBatchDetail('give')}
+        disabled={running}
+      >
+        <Gift aria-hidden />
+        给予物品
+      </Button>
 
-        <span className="h-5 w-px shrink-0 bg-mcs-border-muted" aria-hidden />
+      <span className="h-5 w-px shrink-0 bg-mcs-border-muted" aria-hidden />
 
-        {/* 名单类（添加=ShieldCheck 正向，移除=ShieldX 禁止）——可逆，直执 + 5s 撤销 */}
-        <Button variant="outline" size="sm" onClick={() => runListToggle(true)} disabled={running}>
-          <ShieldCheck aria-hidden />
-          白名单
-        </Button>
-        <Button variant="outline" size="sm" onClick={() => runListToggle(false)} disabled={running}>
-          <ShieldX aria-hidden />
-          移除白名单
-        </Button>
-        <Button variant="outline" size="sm" onClick={() => runOpToggle(true)} disabled={running}>
-          <ShieldCheck aria-hidden />
-          OP
-        </Button>
-        <Button variant="outline" size="sm" onClick={() => runOpToggle(false)} disabled={running}>
-          <ShieldX aria-hidden />
-          取消OP
-        </Button>
+      {/* 名单类（添加=ShieldCheck 正向，移除=ShieldX 禁止）——可逆，直执 + 5s 撤销 */}
+      <Button variant="outline" size="sm" onClick={() => runListToggle(true)} disabled={running}>
+        <ShieldCheck aria-hidden />
+        白名单
+      </Button>
+      <Button variant="outline" size="sm" onClick={() => runListToggle(false)} disabled={running}>
+        <ShieldX aria-hidden />
+        移除白名单
+      </Button>
+      <Button variant="outline" size="sm" onClick={() => runOpToggle(true)} disabled={running}>
+        <ShieldCheck aria-hidden />
+        OP
+      </Button>
+      <Button variant="outline" size="sm" onClick={() => runOpToggle(false)} disabled={running}>
+        <ShieldX aria-hidden />
+        取消OP
+      </Button>
 
-        <span className="h-5 w-px shrink-0 bg-mcs-border-muted" aria-hidden />
+      <span className="h-5 w-px shrink-0 bg-mcs-border-muted" aria-hidden />
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" className="border-mcs-purple-border text-mcs-purple-fg hover:bg-mcs-purple-bg-subtle" disabled={running}>
-              <Gamepad2 aria-hidden />
-              游戏模式
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            {GAME_MODE_OPTIONS.map((label) => (
-              <DropdownMenuItem
-                key={label}
-                onClick={() => {
-                  const mode = GAME_MODE_VALUE[label]
-                  if (mode) runGamemode(mode)
-                }}
-              >
-                {label}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="outline"
+            size="sm"
+            className="border-mcs-purple-border text-mcs-purple-fg hover:bg-mcs-purple-bg-subtle"
+            disabled={running}
+          >
+            <Gamepad2 aria-hidden />
+            游戏模式
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          {GAME_MODE_OPTIONS.map((label) => (
+            <DropdownMenuItem
+              key={label}
+              onClick={() => {
+                const mode = GAME_MODE_VALUE[label]
+                if (mode) runGamemode(mode)
+              }}
+            >
+              {label}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
 
-        <span className="h-5 w-px shrink-0 bg-mcs-border-muted" aria-hidden />
+      <span className="h-5 w-px shrink-0 bg-mcs-border-muted" aria-hidden />
 
-        {/* 危险类：清空背包不可逆 → 确认；踢出无逆操作但可自愈（玩家可重连）→ 直执 */}
-        <Button
-          variant="destructive-outline"
-          size="sm"
-          onClick={() => setClearinvOpen(true)}
-          disabled={running}
-        >
-          <PackageX aria-hidden />
-          清空背包
-        </Button>
-        <Button
-          variant="destructive-outline"
-          size="sm"
-          onClick={() => void runBatch('踢出', true, (p) => onAction({ kind: 'kick', playerName: p.name }))}
-          disabled={running}
-        >
-          <UserX aria-hidden />
-          踢出
-        </Button>
+      {/* 危险类：清空背包不可逆 → 确认；踢出无逆操作但可自愈（玩家可重连）→ 直执 */}
+      <Button
+        variant="destructive-outline"
+        size="sm"
+        onClick={() => setClearinvOpen(true)}
+        disabled={running}
+      >
+        <PackageX aria-hidden />
+        清空背包
+      </Button>
+      <Button
+        variant="destructive-outline"
+        size="sm"
+        onClick={() =>
+          void runBatch('踢出', true, (p) => onAction({ kind: 'kick', playerName: p.name }))
+        }
+        disabled={running}
+      >
+        <UserX aria-hidden />
+        踢出
+      </Button>
 
-        {/* 执行中禁用：清空选择不能中止已下发的命令，只会让在途执行失去可见面 */}
-        <Button variant="ghost" size="icon-sm" onClick={clearSelection} aria-label="清除选择" disabled={running}>
-          <X aria-hidden />
-        </Button>
+      {/* 执行中禁用：清空选择不能中止已下发的命令，只会让在途执行失去可见面 */}
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        onClick={clearSelection}
+        aria-label="清除选择"
+        disabled={running}
+      >
+        <X aria-hidden />
+      </Button>
 
-        {/* 确认对话框（仅清空背包：不可逆，需后果清单） */}
-        <ConfirmDialog
-          open={clearinvOpen}
-          onOpenChange={setClearinvOpen}
-          title="批量清空背包"
-          description={`即将对 ${count} 名玩家执行：清空背包`}
-          warning="此操作不可撤销，所有物品将被永久删除；离线玩家将跳过"
-          confirmText="确认操作"
-          danger
-          loading={running}
-          onConfirm={() => {
-            setClearinvOpen(false)
-            void runBatch('清空背包', true, (p) => onAction({ kind: 'command', command: `clear ${p.name}` }))
-          }}
-        />
+      {/* 确认对话框（仅清空背包：不可逆，需后果清单） */}
+      <ConfirmDialog
+        open={clearinvOpen}
+        onOpenChange={setClearinvOpen}
+        title="批量清空背包"
+        description={`即将对 ${count} 名玩家执行：清空背包`}
+        warning="此操作不可撤销，所有物品将被永久删除；离线玩家将跳过"
+        confirmText="确认操作"
+        danger
+        loading={running}
+        onConfirm={() => {
+          setClearinvOpen(false)
+          void runBatch('清空背包', true, (p) =>
+            onAction({ kind: 'command', command: `clear ${p.name}` }),
+          )
+        }}
+      />
     </div>
   )
 }

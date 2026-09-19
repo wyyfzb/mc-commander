@@ -88,7 +88,11 @@ const server = setupServer(
       status: 'ok',
       code: 0,
       message: 'ok',
-      data: { ...SEARCH_FIXTURE, requestedQ: url.searchParams.get('q'), gameVersion: url.searchParams.get('game_version') },
+      data: {
+        ...SEARCH_FIXTURE,
+        requestedQ: url.searchParams.get('q'),
+        gameVersion: url.searchParams.get('game_version'),
+      },
     })
   }),
   http.get('/api/v1/instances/demo/plugins/market/projects/:slug/versions', () =>
@@ -187,7 +191,9 @@ describe('MarketSheet', () => {
     fireEvent.click(await screen.findByRole('button', { name: /展开 EssentialsX 的版本列表/ }))
     const btn = await screen.findByRole('button', { name: '安装 EssentialsX 2.21.0' })
     await user.click(btn)
-    await waitFor(() => expect(screen.getByText(/已安装 EssentialsX-2.21.0.jar/)).toBeInTheDocument())
+    await waitFor(() =>
+      expect(screen.getByText(/已安装 EssentialsX-2.21.0.jar/)).toBeInTheDocument(),
+    )
     expect(installBody).toMatchObject({ slug: 'essentialsx', versionNumber: '2.21.0' })
   })
 
@@ -200,7 +206,9 @@ describe('MarketSheet', () => {
     await user.click(btn)
     expect(await screen.findByText('同名插件文件已存在')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '覆盖安装' }))
-    await waitFor(() => expect(screen.getByText(/已安装 EssentialsX-2.21.0.jar/)).toBeInTheDocument())
+    await waitFor(() =>
+      expect(screen.getByText(/已安装 EssentialsX-2.21.0.jar/)).toBeInTheDocument(),
+    )
   })
 
   it('搜索失败展示错误态与重试按钮', async () => {
@@ -214,7 +222,9 @@ describe('MarketSheet', () => {
     )
     renderSheet()
     expect(await screen.findByText('搜索失败')).toBeInTheDocument()
-    expect(screen.getAllByText(/Modrinth 服务暂时不可用|Modrinth upstream/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Modrinth 服务暂时不可用|Modrinth upstream/).length).toBeGreaterThan(
+      0,
+    )
     expect(screen.getByRole('button', { name: '重试' })).toBeInTheDocument()
   })
 

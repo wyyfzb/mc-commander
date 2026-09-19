@@ -1,0 +1,12 @@
+{
+  "name": "mc-commander-tooling",
+  "private": true,
+  "description": "仓库级开发工具（当前仅 Biome 格式化器）。三个包仍各自独立安装依赖——此处不是 workspace 根，只为「跨包共用一把格式化器」提供唯一的版本与配置来源。",
+  "scripts": {
+    "format": "biome format --write .",
+    "format:check": "biome format ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.14"
+  }
+}

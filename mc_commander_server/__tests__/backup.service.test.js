@@ -31,9 +31,9 @@ describe('BackupService.createBackup - 世界目录缺失', () => {
 
     const service = new BackupService(manager);
 
-    await expect(
-      service.createBackup('nonexistent-instance', { name: 'x' })
-    ).rejects.toThrow('World directory not found');
+    await expect(service.createBackup('nonexistent-instance', { name: 'x' })).rejects.toThrow(
+      'World directory not found',
+    );
 
     // 关键：世界目录缺失（setup 阶段同步抛错）也必须发 backupFailed 事件，
     // 定时备份路径若仅记日志，用户会对灾备失效无感知
@@ -72,7 +72,12 @@ describe('BackupService.executeBackup - 定时任务结果回写', () => {
 
       await service.executeBackup('s1', 999, snapshotDir, { taskId: 42 });
 
-      expect(ScheduledTaskModel.updateLastRunStatus).toHaveBeenCalledWith(42, 'success', null, expect.any(Number));
+      expect(ScheduledTaskModel.updateLastRunStatus).toHaveBeenCalledWith(
+        42,
+        'success',
+        null,
+        expect.any(Number),
+      );
     } finally {
       fs.rmSync(snapshotDir, { recursive: true, force: true });
     }
@@ -83,19 +88,22 @@ describe('BackupService.executeBackup - 定时任务结果回写', () => {
     vi.spyOn(service, '_createSnapshot').mockRejectedValue(new Error('rsync failed'));
 
     await expect(
-      service.executeBackup('s1', 999, '/nonexistent-dir', { taskId: 42 })
+      service.executeBackup('s1', 999, '/nonexistent-dir', { taskId: 42 }),
     ).rejects.toThrow('rsync failed');
 
-    expect(ScheduledTaskModel.updateLastRunStatus).toHaveBeenCalledWith(42, 'failed', 'rsync failed', expect.any(Number));
+    expect(ScheduledTaskModel.updateLastRunStatus).toHaveBeenCalledWith(
+      42,
+      'failed',
+      'rsync failed',
+      expect.any(Number),
+    );
   });
 
   it('taskId 为空（手动备份）不回写任务状态', async () => {
     const service = makeService();
     vi.spyOn(service, '_createSnapshot').mockRejectedValue(new Error('boom'));
 
-    await expect(
-      service.executeBackup('s1', 999, '/nonexistent-dir')
-    ).rejects.toThrow('boom');
+    await expect(service.executeBackup('s1', 999, '/nonexistent-dir')).rejects.toThrow('boom');
 
     expect(ScheduledTaskModel.updateLastRunStatus).not.toHaveBeenCalled();
   });

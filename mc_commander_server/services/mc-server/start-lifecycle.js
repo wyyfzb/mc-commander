@@ -20,17 +20,19 @@ import { InstanceModel } from '../../db/index.js';
 import { reconcileTempBans } from '../../utils/ban-reconcile.js';
 import { logger } from '../../utils/logger.js';
 
-
 // 日志单行最大长度：超长行截断并加标记，防超长输出（崩溃堆栈/异常打印）撑爆
 // logBuffer 与 WebSocket 广播（单行截断）。
 const LOG_LINE_MAX_LENGTH = 4096;
 
 /// 单行日志截断：按行截断超过 LOG_LINE_MAX_LENGTH 的行，超长部分加 "…[truncated]" 标记。
 function truncateLogText(text) {
-  return String(text).split('\n').map((line) => {
-    if (line.length <= LOG_LINE_MAX_LENGTH) return line;
-    return line.substring(0, LOG_LINE_MAX_LENGTH) + '…[truncated]';
-  }).join('\n');
+  return String(text)
+    .split('\n')
+    .map((line) => {
+      if (line.length <= LOG_LINE_MAX_LENGTH) return line;
+      return line.substring(0, LOG_LINE_MAX_LENGTH) + '…[truncated]';
+    })
+    .join('\n');
 }
 
 /**
@@ -67,7 +69,9 @@ export function _reconcileTempBansSafe() {
   // banned-players.json 添加/删除封禁，导致面板 DB 与文件不一致。
   // 方向 1：文件有但 DB 无活跃记录 → 文件直接添加的封禁，补入 DB（永久）
   // 方向 2：DB 已过期但文件仍存在 → 停机期间到期未 pardon，清理文件 + 停用记录
-  try { reconcileTempBans(this.id, this.serverPath); } catch (e) {
+  try {
+    reconcileTempBans(this.id, this.serverPath);
+  } catch (e) {
     logger.warn(`[${this.id}] tempban 对账失败（不阻塞启动）:`, e.message);
   }
 }
@@ -81,7 +85,9 @@ export function _cleanWorldLock() {
   // 保证 unlink 只作用于实例目录内的锁文件（越界拒绝并告警）
   const lockLevelName = this._getSafeLevelName();
   const lockPath = path.join(this.serverPath, lockLevelName, 'session.lock');
-  try { fs.unlinkSync(lockPath); } catch {}
+  try {
+    fs.unlinkSync(lockPath);
+  } catch {}
 }
 
 export function _resolveStartCommand(startCommand) {
@@ -100,24 +106,31 @@ export function _resolveStartCommand(startCommand) {
   // 4. 默认：javaPath + -Xmx/-Xms + -jar jarPath + nogui。
   if (startCommand && typeof startCommand === 'object' && Array.isArray(startCommand.jvmArgs)) {
     if (!this._isValidJavaExecutable(this.javaPath)) {
-      throw new Error(`非法 javaPath: ${this.javaPath}（仅允许 java 可执行文件，拒绝 bash/python/sh 等）`);
+      throw new Error(
+        `非法 javaPath: ${this.javaPath}（仅允许 java 可执行文件，拒绝 bash/python/sh 等）`,
+      );
     }
     command = this.javaPath;
     args = this._buildFullJvmArgs(startCommand.jvmArgs, this.serverPath);
   } else if (Array.isArray(this.jvmArgs) && this.jvmArgs.length > 0) {
     // 实例配置持久化的结构化参数（优先级高于遗留 startCommand）
     if (!this._isValidJavaExecutable(this.javaPath)) {
-      throw new Error(`非法 javaPath: ${this.javaPath}（仅允许 java 可执行文件，拒绝 bash/python/sh 等）`);
+      throw new Error(
+        `非法 javaPath: ${this.javaPath}（仅允许 java 可执行文件，拒绝 bash/python/sh 等）`,
+      );
     }
     command = this.javaPath;
     args = this._buildFullJvmArgs(this.jvmArgs, this.serverPath);
   } else {
-    const legacyCmd = (typeof startCommand === 'string' && startCommand.trim()) || this.startCommand;
+    const legacyCmd =
+      (typeof startCommand === 'string' && startCommand.trim()) || this.startCommand;
     if (legacyCmd) {
       ({ command, args } = this._parseLegacyStartCommand(legacyCmd));
     } else {
       if (!this._isValidJavaExecutable(this.javaPath)) {
-        throw new Error(`非法 javaPath: ${this.javaPath}（仅允许 java 可执行文件，拒绝 bash/python/sh 等）`);
+        throw new Error(
+          `非法 javaPath: ${this.javaPath}（仅允许 java 可执行文件，拒绝 bash/python/sh 等）`,
+        );
       }
       const jarPath = path.join(this.serverPath, this.jarFile);
       if (!fs.existsSync(jarPath)) {
@@ -126,11 +139,10 @@ export function _resolveStartCommand(startCommand) {
 
       command = this.javaPath;
       // 默认参数同样过白名单校验：jarFile 若被配置为 ../ 越界路径会被拒绝
-      args = this._validateJvmArgs([
-        `-Xmx${this.maxMemory}`,
-        `-Xms${this.minMemory}`,
-        '-jar', jarPath, 'nogui'
-      ], this.serverPath);
+      args = this._validateJvmArgs(
+        [`-Xmx${this.maxMemory}`, `-Xms${this.minMemory}`, '-jar', jarPath, 'nogui'],
+        this.serverPath,
+      );
     }
   }
   return { command, args };
@@ -183,7 +195,10 @@ export function _attachStdinErrorListener() {
   // 场景无 .on，防御跳过。
   if (typeof this.process.stdin.on === 'function') {
     this.process.stdin.on('error', (err) => {
-      logger.warn(`[${this.id}] Server stdin pipe error (server exited mid-command?):`, err.message);
+      logger.warn(
+        `[${this.id}] Server stdin pipe error (server exited mid-command?):`,
+        err.message,
+      );
     });
   }
 }
@@ -209,18 +224,25 @@ export function _initializeRuntimeState() {
 /** 日志噪音行过滤（stdout 管道与接管实例的文件续读共用）：保留 [Rcon: ...]
  *  命令执行反馈（小写 rcon），过滤线程/监听器/连接等纯系统噪音。 */
 export function _filterLogNoise(text) {
-  return text.split('\n').filter(l => {
-    const trimmed = l.trim();
-    if (!trimmed) return false;
-    if (trimmed.startsWith('[RCON')) return false;              // [RCON Listener/Client #N/INFO]
-    if (trimmed.includes('Thread RCON')) return false;          // Thread RCON Client ... shutting down
-    if (trimmed.includes('RCON Client')) return false;          // RCON Client /127... 连接噪音
-    if (trimmed.includes('RCON Listener')) return false;        // RCON Listener 监听噪音
-    if (trimmed.includes('RCON running on')) return false;      // RCON running on 0.0.0.0:25575
-    if (trimmed.startsWith('WARNING:') && trimmed.includes('java.lang.System')) return false;
-    if (trimmed.startsWith('Starting net.minecraft') && trimmed.includes('BundlerClassPathCapture')) return false;
-    return true;
-  }).join('\n');
+  return text
+    .split('\n')
+    .filter((l) => {
+      const trimmed = l.trim();
+      if (!trimmed) return false;
+      if (trimmed.startsWith('[RCON')) return false; // [RCON Listener/Client #N/INFO]
+      if (trimmed.includes('Thread RCON')) return false; // Thread RCON Client ... shutting down
+      if (trimmed.includes('RCON Client')) return false; // RCON Client /127... 连接噪音
+      if (trimmed.includes('RCON Listener')) return false; // RCON Listener 监听噪音
+      if (trimmed.includes('RCON running on')) return false; // RCON running on 0.0.0.0:25575
+      if (trimmed.startsWith('WARNING:') && trimmed.includes('java.lang.System')) return false;
+      if (
+        trimmed.startsWith('Starting net.minecraft') &&
+        trimmed.includes('BundlerClassPathCapture')
+      )
+        return false;
+      return true;
+    })
+    .join('\n');
 }
 
 /** 日志文本统一摄取入口：stdout 管道、stderr 与接管实例的文件续读共用——
@@ -254,11 +276,11 @@ export function _attachExitListener() {
     // 关闭前的最终存档已落盘（graceful stop 保存世界）：标记大小缓存失效
     this._worldSizeDirty = true;
     this._stopStatsCollection();
-  this._rconCleanup();
-  // pid 文件随进程退出删除：残留文件会在下次面板启动时被 adopt 验活自然清理，
-  // 此处主动删是让「进程活着但面板误判」的窗口内不留过时线索
-  this._removePidFile();
-  // 服务器关闭时所有在线玩家视为离开（记录"离开服务器"事件 + 保存数据）
+    this._rconCleanup();
+    // pid 文件随进程退出删除：残留文件会在下次面板启动时被 adopt 验活自然清理，
+    // 此处主动删是让「进程活着但面板误判」的窗口内不留过时线索
+    this._removePidFile();
+    // 服务器关闭时所有在线玩家视为离开（记录"离开服务器"事件 + 保存数据）
     for (const name of [...this.players.keys()]) {
       this._handlePlayerLeave(name);
     }
@@ -266,7 +288,11 @@ export function _attachExitListener() {
     // 持久化累计运行时长到数据库
     if (this.startTime) {
       const uptimeSeconds = Math.floor((Date.now() - this.startTime) / 1000);
-      try { InstanceModel.addUptime(this.id, uptimeSeconds); } catch (e) { logger.warn('Failed to persist uptime:', e.message); }
+      try {
+        InstanceModel.addUptime(this.id, uptimeSeconds);
+      } catch (e) {
+        logger.warn('Failed to persist uptime:', e.message);
+      }
     }
 
     // 区分「意外停止/崩溃」与「用户主动停止」：
@@ -287,12 +313,20 @@ export function _attachExitListener() {
       if (this._consecutiveCrashes >= maxCrashes && !this._circuitBreakerTripped) {
         this._circuitBreakerTripped = true;
         this.autoRestart = false;
-        try { InstanceModel.update(this.id, { autoRestart: false }); } catch { /* best-effort */ }
+        try {
+          InstanceModel.update(this.id, { autoRestart: false });
+        } catch {
+          /* best-effort */
+        }
         this.emit('log', {
           text: `[服务器] 崩溃循环熔断已触发（${windowMs / 1000}s 内崩溃 ${this._consecutiveCrashes} 次），自动重启已禁用。请在实例设置中手动重新启用。`,
           type: 'stdout',
         });
-        this.emit('status', { event: 'circuit_breaker', consecutiveCrashes: this._consecutiveCrashes, windowMs });
+        this.emit('status', {
+          event: 'circuit_breaker',
+          consecutiveCrashes: this._consecutiveCrashes,
+          windowMs,
+        });
       }
 
       // 意外停止：记录到日志流（终端可见），并按开关决定是否自动重启

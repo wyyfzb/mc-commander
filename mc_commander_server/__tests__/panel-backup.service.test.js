@@ -55,8 +55,10 @@ function cleanPanelBackupDir() {
   const dir = getPanelBackupDir();
   for (const f of fs.readdirSync(dir)) {
     // .db-wal/.db-shm：只读打开 WAL 模式快照时 SQLite 产生的副文件，一并清理
-    if (f.startsWith('panel-') && (f.endsWith('.db') || f.endsWith('.env')
-      || f.endsWith('.db-wal') || f.endsWith('.db-shm'))) {
+    if (
+      f.startsWith('panel-') &&
+      (f.endsWith('.db') || f.endsWith('.env') || f.endsWith('.db-wal') || f.endsWith('.db-shm'))
+    ) {
       fs.rmSync(inDir(dir, f), { force: true });
     }
   }
@@ -82,7 +84,7 @@ describe('PanelBackupService', () => {
   describe('createPanelSnapshot', () => {
     it('快照文件落 backups/panel/ 且内容可查询（数据一致）', async () => {
       db.prepare(
-        "INSERT INTO instances (id, name) VALUES ('panel-bu-test', '面板备份测试实例')"
+        "INSERT INTO instances (id, name) VALUES ('panel-bu-test', '面板备份测试实例')",
       ).run();
 
       const result = await createPanelSnapshot();
@@ -101,9 +103,7 @@ describe('PanelBackupService', () => {
     it('在线语义：快照后源库继续可写，新快照包含增量数据', async () => {
       const first = await createPanelSnapshot();
 
-      db.prepare(
-        "INSERT INTO instances (id, name) VALUES ('panel-bu-test-2', '增量实例')"
-      ).run();
+      db.prepare("INSERT INTO instances (id, name) VALUES ('panel-bu-test-2', '增量实例')").run();
 
       // 文件名时间戳为毫秒精度：等过 1ms 保证两次快照文件名不同
       // （生产触发源为每日 cron，无同毫秒并发场景）
@@ -114,8 +114,12 @@ describe('PanelBackupService', () => {
 
       const snap1 = new Database(first.filePath, { readonly: true });
       const snap2 = new Database(second.filePath, { readonly: true });
-      expect(snap1.prepare("SELECT COUNT(*) AS c FROM instances WHERE id = 'panel-bu-test-2'").get().c).toBe(0);
-      expect(snap2.prepare("SELECT COUNT(*) AS c FROM instances WHERE id = 'panel-bu-test-2'").get().c).toBe(1);
+      expect(
+        snap1.prepare("SELECT COUNT(*) AS c FROM instances WHERE id = 'panel-bu-test-2'").get().c,
+      ).toBe(0);
+      expect(
+        snap2.prepare("SELECT COUNT(*) AS c FROM instances WHERE id = 'panel-bu-test-2'").get().c,
+      ).toBe(1);
       snap1.close();
       snap2.close();
     });
@@ -130,13 +134,17 @@ describe('PanelBackupService', () => {
     it('数量上限：超出部分最旧先删', () => {
       const dir = getPanelBackupDir();
       // 文件名内嵌毫秒时间戳：先固定再创建/断言共用，避免 isoDaysAgo 重复调用毫秒抖动
-      const [name5, name4, name3, name2, name1] = [5, 4, 3, 2, 1].map((d) => fakeSnapshotName(isoDaysAgo(d)));
+      const [name5, name4, name3, name2, name1] = [5, 4, 3, 2, 1].map((d) =>
+        fakeSnapshotName(isoDaysAgo(d)),
+      );
       for (const n of [name5, name4, name3, name2, name1]) fs.writeFileSync(inDir(dir, n), 'x');
 
       const deleted = cleanupPanelSnapshots({ maxBackups: 3, maxAgeDays: 365 });
 
       expect(deleted).toBe(2);
-      const remaining = fs.readdirSync(dir).filter((f) => f.startsWith('panel-') && f.endsWith('.db'));
+      const remaining = fs
+        .readdirSync(dir)
+        .filter((f) => f.startsWith('panel-') && f.endsWith('.db'));
       expect(remaining.length).toBe(3);
       expect(remaining).toContain(name1);
       expect(remaining).not.toContain(name5);
@@ -145,7 +153,9 @@ describe('PanelBackupService', () => {
 
     it('数量上限：被删快照的 .env 伴生副本同去留', () => {
       const dir = getPanelBackupDir();
-      const [name5, name4, name3, name2, name1] = [5, 4, 3, 2, 1].map((d) => fakeSnapshotName(isoDaysAgo(d)));
+      const [name5, name4, name3, name2, name1] = [5, 4, 3, 2, 1].map((d) =>
+        fakeSnapshotName(isoDaysAgo(d)),
+      );
       for (const n of [name5, name4, name3, name2, name1]) {
         fs.writeFileSync(inDir(dir, n), 'x');
         fs.writeFileSync(inDir(dir, fakeSidecarName(n)), 'env');
@@ -280,7 +290,9 @@ describe('PanelBackupService', () => {
 
       expect(fs.existsSync(result.filePath)).toBe(true);
       expect(result.deletedCount).toBe(1);
-      const remaining = fs.readdirSync(dir).filter((f) => f.startsWith('panel-') && f.endsWith('.db'));
+      const remaining = fs
+        .readdirSync(dir)
+        .filter((f) => f.startsWith('panel-') && f.endsWith('.db'));
       expect(remaining.length).toBe(3);
     });
   });

@@ -66,8 +66,12 @@ describe('terminal store 日志推入', () => {
   it('pushEntry：stdout 按 MC 日志标记推断 INFO/WARN/ERROR', () => {
     useTerminalStore.getState().setInstance('inst-1')
     useTerminalStore.getState().pushEntry('inst-1', 'Done (2.1s)! For help, type "help"', 'stdout')
-    useTerminalStore.getState().pushEntry('inst-1', '[12:00:00] [Server thread/WARN]: memory low', 'stdout')
-    useTerminalStore.getState().pushEntry('inst-1', '[12:00:01] [Server thread/ERROR]: bad thing', 'stdout')
+    useTerminalStore
+      .getState()
+      .pushEntry('inst-1', '[12:00:00] [Server thread/WARN]: memory low', 'stdout')
+    useTerminalStore
+      .getState()
+      .pushEntry('inst-1', '[12:00:01] [Server thread/ERROR]: bad thing', 'stdout')
 
     const levels = useTerminalStore.getState().buffer.map((e) => e.level)
     expect(levels).toEqual(['INFO', 'WARN', 'ERROR'])
@@ -75,11 +79,9 @@ describe('terminal store 日志推入', () => {
 
   it('pushEntry：JVM 启动警告标记 jvmWarning（默认隐藏态）', () => {
     useTerminalStore.getState().setInstance('inst-1')
-    useTerminalStore.getState().pushEntry(
-      'inst-1',
-      'WARNING: An illegal reflective access operation has occurred',
-      'stdout',
-    )
+    useTerminalStore
+      .getState()
+      .pushEntry('inst-1', 'WARNING: An illegal reflective access operation has occurred', 'stdout')
 
     const entry = useTerminalStore.getState().buffer[0]
     expect(entry?.jvmWarning).toBe(true)
@@ -166,9 +168,9 @@ describe('terminal store 清空与重启联动', () => {
     useTerminalStore.getState().resetForRestart()
     expect(useTerminalStore.getState().suppressBackfill).toBe(false)
 
-    useTerminalStore.getState().fillHistory('inst-1', [
-      { text: 'restarted', type: 'stdout' as const },
-    ])
+    useTerminalStore
+      .getState()
+      .fillHistory('inst-1', [{ text: 'restarted', type: 'stdout' as const }])
     const buffer = useTerminalStore.getState().buffer
     expect(buffer).toHaveLength(1)
     expect(buffer[0]?.text).toBe('restarted')

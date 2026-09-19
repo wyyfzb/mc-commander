@@ -92,10 +92,18 @@ export function TaskDialog({ task, onClose, onSave, saving }: TaskDialogProps) {
 
   const handleSave = async () => {
     let valid = true
-    if (name.trim().length === 0) { setNameError('请填写任务名称'); valid = false }
-    else { setNameError('') }
-    if (cron.trim().length === 0) { setCronError('请填写 Cron 表达式'); valid = false }
-    else { setCronError('') }
+    if (name.trim().length === 0) {
+      setNameError('请填写任务名称')
+      valid = false
+    } else {
+      setNameError('')
+    }
+    if (cron.trim().length === 0) {
+      setCronError('请填写 Cron 表达式')
+      valid = false
+    } else {
+      setCronError('')
+    }
     if (!valid) return
     try {
       await onSave({
@@ -130,12 +138,13 @@ export function TaskDialog({ task, onClose, onSave, saving }: TaskDialogProps) {
               <Input
                 id="task-name"
                 value={name}
-                onChange={(e) => { setName(e.target.value); setNameError('') }}
+                onChange={(e) => {
+                  setName(e.target.value)
+                  setNameError('')
+                }}
                 placeholder="如：每日自动重启"
               />
-              {nameError !== '' && (
-                <p className="text-mcs-xs text-mcs-error-fg">{nameError}</p>
-              )}
+              {nameError !== '' && <p className="text-mcs-xs text-mcs-error-fg">{nameError}</p>}
             </div>
 
             {/* 任务类型 */}
@@ -162,7 +171,10 @@ export function TaskDialog({ task, onClose, onSave, saving }: TaskDialogProps) {
                 <Input
                   id="task-cron"
                   value={cron}
-                  onChange={(e) => { setCron(e.target.value); setCronError('') }}
+                  onChange={(e) => {
+                    setCron(e.target.value)
+                    setCronError('')
+                  }}
                   placeholder="如：0 4 * * * （每天 4:00）"
                   className="font-mono"
                 />
@@ -177,9 +189,7 @@ export function TaskDialog({ task, onClose, onSave, saving }: TaskDialogProps) {
                   {showEditor ? <ChevronUp aria-hidden /> : <SlidersHorizontal aria-hidden />}
                 </Button>
               </div>
-              {cronError !== '' && (
-                <p className="text-mcs-xs text-mcs-error-fg">{cronError}</p>
-              )}
+              {cronError !== '' && <p className="text-mcs-xs text-mcs-error-fg">{cronError}</p>}
               <p className="text-mcs-xs text-mcs-text-muted">格式：分 时 日 月 周（* 表示任意）</p>
               {cronDesc.length > 0 && (
                 <p className="flex items-start gap-1 text-mcs-xs text-mcs-text-muted">
@@ -204,7 +214,8 @@ export function TaskDialog({ task, onClose, onSave, saving }: TaskDialogProps) {
                         setCron(preset.value)
                         setCronError('')
                         if (name.trim() === '') {
-                          const typeLabel = TASK_TYPE_OPTIONS.find((o) => o.value === type)?.label ?? type
+                          const typeLabel =
+                            TASK_TYPE_OPTIONS.find((o) => o.value === type)?.label ?? type
                           setName(`${preset.label} ${typeLabel}`)
                         }
                       }}
@@ -281,7 +292,10 @@ export function TaskDialog({ task, onClose, onSave, saving }: TaskDialogProps) {
  * 执行结果语义色映射（与 task-list LAST_RUN_STATUS 同源）。
  * 历史表只落真实执行结果，无 never。
  */
-const RUN_STATUS_META: Record<TaskRunHistory['status'], { dot: string; text: string; label: string }> = {
+const RUN_STATUS_META: Record<
+  TaskRunHistory['status'],
+  { dot: string; text: string; label: string }
+> = {
   success: { dot: 'bg-mcs-success-fg', text: 'text-mcs-success-fg', label: '成功' },
   failed: { dot: 'bg-mcs-error-fg', text: 'text-mcs-error-fg', label: '失败' },
   skipped: { dot: 'bg-mcs-warning-fg', text: 'text-mcs-warning-fg', label: '跳过' },
@@ -308,7 +322,12 @@ function TaskRunHistory({ taskId }: { taskId: number }) {
             <CircleAlert className="size-3.5 shrink-0" aria-hidden />
             执行历史加载失败：{getFriendlyErrorText(error)}
           </p>
-          <Button variant="outline" size="sm" className="h-6 text-mcs-2xs" onClick={() => void refetch()}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-6 text-mcs-2xs"
+            onClick={() => void refetch()}
+          >
             重试
           </Button>
         </div>
@@ -328,14 +347,13 @@ function TaskRunHistory({ taskId }: { taskId: number }) {
                   <span className={meta.text}>{meta.label}</span>
                   <span className="text-mcs-text-muted">{formatTaskDate(run.runAt)}</span>
                   {run.durationMs !== null && (
-                    <span className="text-mcs-text-muted">· {formatDurationMs(run.durationMs)}</span>
+                    <span className="text-mcs-text-muted">
+                      · {formatDurationMs(run.durationMs)}
+                    </span>
                   )}
                 </div>
                 {run.error && (
-                  <p
-                    className="truncate pl-3 text-mcs-xs text-mcs-error-fg"
-                    title={run.error}
-                  >
+                  <p className="truncate pl-3 text-mcs-xs text-mcs-error-fg" title={run.error}>
                     {run.error}
                   </p>
                 )}

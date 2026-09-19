@@ -165,11 +165,12 @@ export function _collectStats() {
         const workingSet = Number(info?.WorkingSet64);
         if (Number.isFinite(workingSet) && workingSet > 0) {
           // 与 Linux 分支同口径保留两位小数
-          this._memoryUsage = Math.round(workingSet / (1024 * 1024 * 1024) * 100) / 100;
+          this._memoryUsage = Math.round((workingSet / (1024 * 1024 * 1024)) * 100) / 100;
         }
         // CPU 可能为 null（受保护进程）：不能当成 0 建立基线——那会把下一个采样的差值放大成假高占用
         const cpuSeconds = info?.CPU == null ? null : Number(info.CPU);
-        if (cpuSeconds !== null && Number.isFinite(cpuSeconds)) this._applyCpuSecondsSample(cpuSeconds);
+        if (cpuSeconds !== null && Number.isFinite(cpuSeconds))
+          this._applyCpuSecondsSample(cpuSeconds);
         this._emitPerformance();
       } catch (e) {
         // 解析失败（真实 PowerShell 输出契约漂移）与监听器抛错都不得逃逸；只留 debug
@@ -230,7 +231,7 @@ export function _collectLinuxStats(pid) {
       const rssPages = parseInt(statmParts[1]) || 0;
       const pageSize = 4096;
       const rssBytes = rssPages * pageSize;
-      this._memoryUsage = Math.round(rssBytes / (1024 * 1024 * 1024) * 100) / 100;
+      this._memoryUsage = Math.round((rssBytes / (1024 * 1024 * 1024)) * 100) / 100;
     } catch {
       // statm 读取失败，保留旧值
     }
@@ -238,7 +239,12 @@ export function _collectLinuxStats(pid) {
     // 从 /proc/stat 读取系统总 CPU 时间用于计算
     const sysStat = fs.readFileSync('/proc/stat', 'utf-8');
     const cpuLine = sysStat.match(/^cpu\s+([\d\s]+)$/m);
-    const sysTotal = cpuLine ? cpuLine[1].trim().split(/\s+/).reduce((a, b) => a + parseInt(b), 0) : 0;
+    const sysTotal = cpuLine
+      ? cpuLine[1]
+          .trim()
+          .split(/\s+/)
+          .reduce((a, b) => a + parseInt(b), 0)
+      : 0;
 
     // 使用 _lastCpuTime 做差分计算瞬时 CPU（Linux 的 utime+stime 以 clock tick 计）
     const clkTck = 100;
@@ -276,9 +282,7 @@ export async function _collectMspt() {
     // tick 命令不可用（旧版 vanilla）：回退 tps 命令（Paper 系列），
     // 由 TPS 反推每 tick 毫秒数（20 TPS = 50ms）
     const tpsResponse = await this._rconSend('tps');
-    const tpsMatch = String(tpsResponse || '').match(
-      /TPS from last 5s, 1m, 5m:\s*([\d.]+)/i
-    );
+    const tpsMatch = String(tpsResponse || '').match(/TPS from last 5s, 1m, 5m:\s*([\d.]+)/i);
     if (tpsMatch) {
       const tps = parseFloat(tpsMatch[1]);
       if (tps > 0) this._mspt = 1000 / tps;
@@ -431,15 +435,15 @@ export async function _collectPlayerStats() {
   for (const [name] of this.players) {
     try {
       // 串行查询，避免 RCON 并发导致响应错乱
-      const healthResult = await this._rconSend(`data get entity ${name} Health`).catch(e => {
+      const healthResult = await this._rconSend(`data get entity ${name} Health`).catch((e) => {
         logger.warn(`[${this.id}] RCON Health query failed for ${name}: ${e.message}`);
         return null;
       });
-      const posResult = await this._rconSend(`data get entity ${name} Pos`).catch(e => {
+      const posResult = await this._rconSend(`data get entity ${name} Pos`).catch((e) => {
         logger.warn(`[${this.id}] RCON Pos query failed for ${name}: ${e.message}`);
         return null;
       });
-      const sleepResult = await this._rconSend(`data get entity ${name} SleepTimer`).catch(e => {
+      const sleepResult = await this._rconSend(`data get entity ${name} SleepTimer`).catch((e) => {
         logger.warn(`[${this.id}] RCON SleepTimer query failed for ${name}: ${e.message}`);
         return null;
       });
@@ -449,7 +453,7 @@ export async function _collectPlayerStats() {
         (cmd) => this._rconSend(cmd),
         name,
         'minecraft:generic.armor',
-        'minecraft:armor'
+        'minecraft:armor',
       );
 
       let health = null;

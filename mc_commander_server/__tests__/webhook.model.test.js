@@ -130,8 +130,18 @@ describe('WebhookModel', () => {
   });
 
   it('delete 级联删除投递日志', () => {
-    WebhookModel.createDelivery({ webhookId: 1, eventType: 'ping', payload: { test: true }, status: 'success' });
-    WebhookModel.createDelivery({ webhookId: 2, eventType: 'ping', payload: { test: true }, status: 'pending' });
+    WebhookModel.createDelivery({
+      webhookId: 1,
+      eventType: 'ping',
+      payload: { test: true },
+      status: 'success',
+    });
+    WebhookModel.createDelivery({
+      webhookId: 2,
+      eventType: 'ping',
+      payload: { test: true },
+      status: 'pending',
+    });
     expect(WebhookModel.delete(2)).toBe(true);
     // webhook 2 的投递日志也应被级联删除
     const dels = WebhookModel.findDeliveries({ webhookId: 2 });
@@ -147,7 +157,12 @@ describe('WebhookModel', () => {
 
   it('findAllEnabled 只返回启用的 webhook（原始 secret）', () => {
     // id=1 仍启用, 再创建一个禁用的
-    WebhookModel.create({ name: 'disabled', url: 'https://c.com/hook', isEnabled: false, secret: 'dis-secret' });
+    WebhookModel.create({
+      name: 'disabled',
+      url: 'https://c.com/hook',
+      isEnabled: false,
+      secret: 'dis-secret',
+    });
     const enabled = WebhookModel.findAllEnabled();
     // id=1 (enabled), id=3 (disabled) — 但 id=2 已被删除
     expect(enabled).toHaveLength(1);
@@ -157,8 +172,11 @@ describe('WebhookModel', () => {
 
   it('delivery CRUD + 分页', () => {
     const dId = WebhookModel.createDelivery({
-      webhookId: 1, eventType: 'player.join', instanceId: 'inst-1',
-      payload: { player: 'Steve' }, status: 'pending',
+      webhookId: 1,
+      eventType: 'player.join',
+      instanceId: 'inst-1',
+      payload: { player: 'Steve' },
+      status: 'pending',
     });
     expect(dId).toBeGreaterThan(0);
 
@@ -174,7 +192,12 @@ describe('WebhookModel', () => {
   });
 
   it('findDeliveries 按 eventType 过滤', () => {
-    WebhookModel.createDelivery({ webhookId: 1, eventType: 'instance.start', payload: {}, status: 'pending' });
+    WebhookModel.createDelivery({
+      webhookId: 1,
+      eventType: 'instance.start',
+      payload: {},
+      status: 'pending',
+    });
     const result = WebhookModel.findDeliveries({ webhookId: 1, eventType: 'instance.start' });
     expect(result.total).toBe(1);
     expect(result.deliveries[0].eventType).toBe('instance.start');

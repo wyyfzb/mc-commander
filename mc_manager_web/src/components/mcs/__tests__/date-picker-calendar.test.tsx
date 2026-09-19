@@ -10,9 +10,7 @@ import { DatePickerCalendar } from '../date-picker-calendar'
 
 function setup(value = '', onSelect = vi.fn(), onClear = vi.fn()) {
   const user = userEvent.setup()
-  const utils = render(
-    <DatePickerCalendar value={value} onSelect={onSelect} onClear={onClear} />,
-  )
+  const utils = render(<DatePickerCalendar value={value} onSelect={onSelect} onClear={onClear} />)
   return { user, onSelect, onClear, ...utils }
 }
 

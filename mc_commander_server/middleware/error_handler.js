@@ -5,11 +5,15 @@ export function errorHandler(err, req, res, _next) {
   logger.error('Error:', err);
 
   if (err instanceof AppError) {
-    return res.status(err.status).json(error(
-      { code: err.code, message: err.message, status: err.status },
-      err.message,
-      err.details
-    ));
+    return res
+      .status(err.status)
+      .json(
+        error(
+          { code: err.code, message: err.message, status: err.status },
+          err.message,
+          err.details,
+        ),
+      );
   }
 
   if (err instanceof SyntaxError || err.type === 'entity.parse.failed') {
@@ -25,7 +29,9 @@ export function errorHandler(err, req, res, _next) {
   // 携带服务器绝对路径等敏感信息。详细错误已由上方 console.error 记录日志；
   // 仅 development 环境用 X-Debug-Error 响应头携带详情辅助排查
   // （清洗换行防 HTTP 头注入、截断防超长），生产环境不设该头。
-  const debugMessage = String(err.message || '').replace(/[\r\n]+/g, ' ').slice(0, 1000);
+  const debugMessage = String(err.message || '')
+    .replace(/[\r\n]+/g, ' ')
+    .slice(0, 1000);
   res.status(500);
   if (process.env.NODE_ENV === 'development') {
     res.set('X-Debug-Error', debugMessage);
@@ -34,10 +40,7 @@ export function errorHandler(err, req, res, _next) {
 }
 
 export function notFoundHandler(req, res) {
-  res.status(404).json(error(
-    ErrorCodes.NOT_FOUND,
-    `Route ${req.method} ${req.path} not found`
-  ));
+  res.status(404).json(error(ErrorCodes.NOT_FOUND, `Route ${req.method} ${req.path} not found`));
 }
 
 export default { errorHandler, notFoundHandler };

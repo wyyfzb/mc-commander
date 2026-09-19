@@ -69,9 +69,7 @@ describe('AuditBody（issue 481 拆分后行为级测试）', () => {
   })
 
   it('嵌套对象详情降级 JSON 字符串展示（审计详情兜底路径）', () => {
-    const logs: AuditLogItem[] = [
-      makeLog({ action: 'CONFIG_CHANGE', detail: { extra: { a: 1 } } }),
-    ]
+    const logs: AuditLogItem[] = [makeLog({ action: 'CONFIG_CHANGE', detail: { extra: { a: 1 } } })]
     render(
       <table>
         <AuditBody logs={logs} />

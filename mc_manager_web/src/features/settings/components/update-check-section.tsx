@@ -57,7 +57,9 @@ export function UpdateCheckSection() {
         <RefreshCw className="size-4 text-mcs-warning-fg" aria-hidden />
       </span>
       <div className="min-w-0 flex-1">
-        <div className="text-mcs-sm font-semibold text-mcs-text-default">发现新版本 v{data.latest}</div>
+        <div className="text-mcs-sm font-semibold text-mcs-text-default">
+          发现新版本 v{data.latest}
+        </div>
         <div className="text-mcs-xs text-mcs-text-muted">当前 v{data.current}</div>
       </div>
       {data.url && (

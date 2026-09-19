@@ -9,7 +9,14 @@ import { apiGet } from './client'
 import { fetchAuthCapabilities } from './auth'
 import { useConnectionStore } from '@/stores/connection'
 import { useAuthStore } from '@/stores/auth'
-import type { InstanceStatus, InstanceSummary, LogEntry, OverviewData, SystemStats, UpdateCheckResult } from './types'
+import type {
+  InstanceStatus,
+  InstanceSummary,
+  LogEntry,
+  OverviewData,
+  SystemStats,
+  UpdateCheckResult,
+} from './types'
 import { apiGetAuditLogsPage, apiGetCommandHistoryPage, type AuditQueryParams } from './audit'
 
 /**
@@ -43,7 +50,8 @@ export const queryKeys = {
   world: (id: string) => [...queryKeys.all, 'world', id] as const,
   properties: (id: string) => [...queryKeys.all, 'properties', id] as const,
   auditLogs: (params?: AuditQueryParams) => [...queryKeys.all, 'audit-logs', params ?? {}] as const,
-  commandHistory: (params?: AuditQueryParams) => [...queryKeys.all, 'command-history', params ?? {}] as const,
+  commandHistory: (params?: AuditQueryParams) =>
+    [...queryKeys.all, 'command-history', params ?? {}] as const,
   webhooks: () => [...queryKeys.all, 'webhooks'] as const,
   webhookDeliveries: (id: number) => [...queryKeys.all, 'webhooks', id, 'deliveries'] as const,
   checkUpdate: () => [...queryKeys.all, 'check-update'] as const,
@@ -101,8 +109,7 @@ export function useInstances() {
   const config = useConnectionStore()
   return useQuery({
     queryKey: queryKeys.instances(),
-    queryFn: ({ signal }) =>
-      apiGet<InstanceSummary[]>(`/api/v1/instances`, config, signal),
+    queryFn: ({ signal }) => apiGet<InstanceSummary[]>(`/api/v1/instances`, config, signal),
     enabled: config.status === 'ready',
     refetchInterval: FALLBACK_POLL_INTERVAL_MS,
   })
@@ -169,11 +176,7 @@ export function useCheckUpdate() {
  * `retry: false`：探测失败最多两类——地址不对（网络错误）或凭据还不对（401），
  * 两者都不会因重试变好，每次落定最多打一发，不在用户输入过程中放大失败流量。
  */
-export function useApiKeyCapabilities(
-  baseUrl: string,
-  credential: string,
-  signal?: AbortSignal,
-) {
+export function useApiKeyCapabilities(baseUrl: string, credential: string, signal?: AbortSignal) {
   const session = useAuthStore((s) => s.session)
   return useQuery({
     queryKey: queryKeys.authCapabilities(baseUrl, credential || session?.token || ''),

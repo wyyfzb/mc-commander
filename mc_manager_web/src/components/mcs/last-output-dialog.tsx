@@ -54,9 +54,7 @@ export function LastOutputDialog() {
   }, [instanceId, fetchLastOutput])
 
   const truncated =
-    output != null && output.length > MAX_DISPLAY_CHARS
-      ? output.slice(-MAX_DISPLAY_CHARS)
-      : output
+    output != null && output.length > MAX_DISPLAY_CHARS ? output.slice(-MAX_DISPLAY_CHARS) : output
 
   return (
     <Dialog
@@ -77,9 +75,7 @@ export function LastOutputDialog() {
             <ScrollText className="size-4 text-mcs-accent-fg" aria-hidden />
             实例末尾日志
           </DialogTitle>
-          <DialogDescription>
-            服务器进程最近输出（崩溃/异常退出时最接近现场）
-          </DialogDescription>
+          <DialogDescription>服务器进程最近输出（崩溃/异常退出时最接近现场）</DialogDescription>
         </DialogHeader>
 
         <div className="relative min-h-40">
@@ -129,11 +125,14 @@ export function LastOutputDialog() {
             <RefreshCw className={`size-3.5${loading ? ' animate-spin' : ''}`} aria-hidden />
             刷新
           </Button>
-          <Button size="sm" onClick={() => {
-            setInstanceId(null)
-            setOutput(null)
-            setError(null)
-          }}>
+          <Button
+            size="sm"
+            onClick={() => {
+              setInstanceId(null)
+              setOutput(null)
+              setError(null)
+            }}
+          >
             关闭
           </Button>
         </div>

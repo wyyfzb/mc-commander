@@ -303,11 +303,46 @@ export const mockFileListRoot: FileListResponse = {
   path: '/',
   isDirectory: true,
   files: [
-    { name: 'server.properties', path: '/server.properties', type: 'file', size: 1024, modifiedAt: new Date(Date.now() - 3_600_000).toISOString(), isDirectory: false },
-    { name: 'whitelist.json', path: '/whitelist.json', type: 'file', size: 128, modifiedAt: new Date(Date.now() - 7_200_000).toISOString(), isDirectory: false },
-    { name: 'ops.json', path: '/ops.json', type: 'file', size: 64, modifiedAt: new Date(Date.now() - 86_400_000).toISOString(), isDirectory: false },
-    { name: 'world', path: '/world', type: 'directory', size: 0, modifiedAt: new Date(Date.now() - 86_400_000).toISOString(), isDirectory: true },
-    { name: 'logs', path: '/logs', type: 'directory', size: 0, modifiedAt: new Date(Date.now() - 86_400_000).toISOString(), isDirectory: true },
+    {
+      name: 'server.properties',
+      path: '/server.properties',
+      type: 'file',
+      size: 1024,
+      modifiedAt: new Date(Date.now() - 3_600_000).toISOString(),
+      isDirectory: false,
+    },
+    {
+      name: 'whitelist.json',
+      path: '/whitelist.json',
+      type: 'file',
+      size: 128,
+      modifiedAt: new Date(Date.now() - 7_200_000).toISOString(),
+      isDirectory: false,
+    },
+    {
+      name: 'ops.json',
+      path: '/ops.json',
+      type: 'file',
+      size: 64,
+      modifiedAt: new Date(Date.now() - 86_400_000).toISOString(),
+      isDirectory: false,
+    },
+    {
+      name: 'world',
+      path: '/world',
+      type: 'directory',
+      size: 0,
+      modifiedAt: new Date(Date.now() - 86_400_000).toISOString(),
+      isDirectory: true,
+    },
+    {
+      name: 'logs',
+      path: '/logs',
+      type: 'directory',
+      size: 0,
+      modifiedAt: new Date(Date.now() - 86_400_000).toISOString(),
+      isDirectory: true,
+    },
   ],
 }
 
@@ -315,8 +350,22 @@ export const mockFileListWorld: FileListResponse = {
   path: '/world',
   isDirectory: true,
   files: [
-    { name: 'level.dat', path: '/world/level.dat', type: 'file', size: 2048, modifiedAt: new Date(Date.now() - 3_600_000).toISOString(), isDirectory: false },
-    { name: 'region', path: '/world/region', type: 'directory', size: 0, modifiedAt: new Date(Date.now() - 86_400_000).toISOString(), isDirectory: true },
+    {
+      name: 'level.dat',
+      path: '/world/level.dat',
+      type: 'file',
+      size: 2048,
+      modifiedAt: new Date(Date.now() - 3_600_000).toISOString(),
+      isDirectory: false,
+    },
+    {
+      name: 'region',
+      path: '/world/region',
+      type: 'directory',
+      size: 0,
+      modifiedAt: new Date(Date.now() - 86_400_000).toISOString(),
+      isDirectory: true,
+    },
   ],
 }
 
@@ -378,7 +427,8 @@ export const mockTasks: ScheduledTask[] = [
   },
 ]
 
-export const mockBans: BanRecord[] = [  {
+export const mockBans: BanRecord[] = [
+  {
     targetType: 'player',
     target: 'Charlie',
     reason: '作弊',
@@ -414,10 +464,11 @@ export const deployMock: {
 }
 
 /** 取消部署（POST /instances/deploy/cancel）mock 控制：notInFlight 模拟服务端 40906（任务已结束） */
-export const deployCancelMock: { notInFlight: boolean; lastBody: { instanceId?: string } | null } = {
-  notInFlight: false,
-  lastBody: null,
-}
+export const deployCancelMock: { notInFlight: boolean; lastBody: { instanceId?: string } | null } =
+  {
+    notInFlight: false,
+    lastBody: null,
+  }
 
 /**
  * 部署进度兜底快照开关（测试注入）：默认空态（无在途部署），
@@ -523,10 +574,18 @@ const backupHandlers = [
   http.post('*/api/v1/instances/:id/backups/attach', () => ok({ attached: 0, skipped: 0 })),
   http.get('*/api/v1/backups/:id', ({ params }) => {
     const found = mockBackups.find((b) => String(b.id) === String(params.id))
-    return found ? ok(found) : HttpResponse.json(
-      { status: 'error', code: 40403, message: '备份不存在', details: null, timestamp: new Date().toISOString() },
-      { status: 404 },
-    )
+    return found
+      ? ok(found)
+      : HttpResponse.json(
+          {
+            status: 'error',
+            code: 40403,
+            message: '备份不存在',
+            details: null,
+            timestamp: new Date().toISOString(),
+          },
+          { status: 404 },
+        )
   }),
   http.post('*/api/v1/instances/:id/backups', () =>
     ok({
@@ -572,29 +631,43 @@ const backupHandlers = [
   }),
   http.delete('*/api/v1/backups/:id', () => ok(null)),
   // 下载（GET /backups/:id/download；gzip magic bytes 占位流，服务端为 tar.gz 流）
-  http.get('*/api/v1/backups/:id/download', () =>
-    new HttpResponse(new Uint8Array([0x1f, 0x8b, 8, 0, 0, 0, 0, 0, 0, 3]), {
-      status: 200,
-      headers: { 'Content-Type': 'application/gzip' },
-    }),
+  http.get(
+    '*/api/v1/backups/:id/download',
+    () =>
+      new HttpResponse(new Uint8Array([0x1f, 0x8b, 8, 0, 0, 0, 0, 0, 0, 3]), {
+        status: 200,
+        headers: { 'Content-Type': 'application/gzip' },
+      }),
   ),
 ]
 
 /** 玩家域 mock 端点 */
 const playerHandlers = [
-  http.get('*/api/v1/instances/:id/players/bans', () => ok(banRecordSchema.array().parse(mockBans))),
+  http.get('*/api/v1/instances/:id/players/bans', () =>
+    ok(banRecordSchema.array().parse(mockBans)),
+  ),
   http.get('*/api/v1/instances/:id/players/:player/details', ({ params }) => {
     const found = mockPlayers.find((p) => p.name === params.player)
-    return found ? ok(found) : HttpResponse.json(
-      { status: 'error', code: 40403, message: '玩家不存在', details: null, timestamp: new Date().toISOString() },
-      { status: 404 },
-    )
+    return found
+      ? ok(found)
+      : HttpResponse.json(
+          {
+            status: 'error',
+            code: 40403,
+            message: '玩家不存在',
+            details: null,
+            timestamp: new Date().toISOString(),
+          },
+          { status: 404 },
+        )
   }),
   http.get('*/api/v1/instances/:id/players', () => ok(playerSchema.array().parse(mockPlayers))),
   http.post('*/api/v1/instances/:id/players/:player/op', () => ok(null)),
   http.delete('*/api/v1/instances/:id/players/:player/op', () => ok(null)),
   http.post('*/api/v1/instances/:id/players/:player/kick', () => ok(null)),
-  http.post('*/api/v1/instances/:id/players/:player/ban', () => ok({ expiresAt: Date.now() + 3_600_000 })),
+  http.post('*/api/v1/instances/:id/players/:player/ban', () =>
+    ok({ expiresAt: Date.now() + 3_600_000 }),
+  ),
   http.post('*/api/v1/instances/:id/players/:player/pardon', () => ok(null)),
   http.post('*/api/v1/instances/:id/players/bans/:target/pardon', () => ok(null)),
   http.post('*/api/v1/instances/:id/players/:player/whitelist/add', () => ok(null)),
@@ -637,9 +710,13 @@ export const handlers = [
   ),
   http.get('*/api/v1/overview', () => ok(overviewDataSchema.parse(mockOverview))),
   http.get('*/api/v1/system-stats', () => ok(systemStatsSchema.parse(mockSystemStats))),
-  http.get('*/api/v1/check-update', () => ok({ current: '0.1.0', latest: null, hasUpdate: false, offline: true })),
+  http.get('*/api/v1/check-update', () =>
+    ok({ current: '0.1.0', latest: null, hasUpdate: false, offline: true }),
+  ),
   http.get('*/api/v1/instances', () =>
-    ok([instanceStatusSchema.parse({ ...mockInstanceStatus, isRunning: instanceListMock.running })]),
+    ok([
+      instanceStatusSchema.parse({ ...mockInstanceStatus, isRunning: instanceListMock.running }),
+    ]),
   ),
   http.get('*/api/v1/instances/:id', () => ok(instanceStatusSchema.parse(mockInstanceStatus))),
   // DELETE /instances/:id 卸载：实例名确认由服务端强制（前端输入框只是 UX）；
@@ -652,20 +729,40 @@ export const handlers = [
     // 与服务端同口径：两侧 trim 后比对（兼容库里带首尾空白的旧实例名）
     if (typeof body.confirmName !== 'string' || body.confirmName.trim() !== expectedName.trim()) {
       return HttpResponse.json(
-        { status: 'error', code: 40016, message: '需在请求体提供 confirmName 且与实例名完全一致才能卸载实例', details: null, timestamp: new Date().toISOString() },
+        {
+          status: 'error',
+          code: 40016,
+          message: '需在请求体提供 confirmName 且与实例名完全一致才能卸载实例',
+          details: null,
+          timestamp: new Date().toISOString(),
+        },
         { status: 400 },
       )
     }
     // 与服务端同口径：空名实例的实例名确认空转 → 额外要求 acknowledgeIrreversible（40916）
     if (expectedName.trim() === '' && body.acknowledgeIrreversible !== true) {
       return HttpResponse.json(
-        { status: 'error', code: 40916, message: '该实例无名称，名称确认不构成有效确认；确认后请携带 acknowledgeIrreversible=true 重试', details: null, timestamp: new Date().toISOString() },
+        {
+          status: 'error',
+          code: 40916,
+          message:
+            '该实例无名称，名称确认不构成有效确认；确认后请携带 acknowledgeIrreversible=true 重试',
+          details: null,
+          timestamp: new Date().toISOString(),
+        },
         { status: 409 },
       )
     }
     if (uninstallMock.retainedBackupCount === 0 && body.acknowledgeIrreversible !== true) {
       return HttpResponse.json(
-        { status: 'error', code: 40914, message: '该实例没有任何备份，删除后世界数据与配置不可恢复；确认后请携带 acknowledgeIrreversible=true 重试', details: null, timestamp: new Date().toISOString() },
+        {
+          status: 'error',
+          code: 40914,
+          message:
+            '该实例没有任何备份，删除后世界数据与配置不可恢复；确认后请携带 acknowledgeIrreversible=true 重试',
+          details: null,
+          timestamp: new Date().toISOString(),
+        },
         { status: 409 },
       )
     }
@@ -697,13 +794,25 @@ export const handlers = [
     if (startMock.eulaRequired) {
       // 服务端 start 前置检查：eula.txt 缺失或 eula=false → 403 EULA_NOT_ACCEPTED
       return HttpResponse.json(
-        { status: 'error', code: 40000, message: 'EULA_NOT_ACCEPTED', details: null, timestamp: new Date().toISOString() },
+        {
+          status: 'error',
+          code: 40000,
+          message: 'EULA_NOT_ACCEPTED',
+          details: null,
+          timestamp: new Date().toISOString(),
+        },
         { status: 403 },
       )
     }
     if (startMock.shouldFail) {
       return HttpResponse.json(
-        { status: 'error', code: 50000, message: 'start failed', details: null, timestamp: new Date().toISOString() },
+        {
+          status: 'error',
+          code: 50000,
+          message: 'start failed',
+          details: null,
+          timestamp: new Date().toISOString(),
+        },
         { status: 500 },
       )
     }
@@ -714,7 +823,13 @@ export const handlers = [
     eulaMock.calls += 1
     if (eulaMock.shouldFail) {
       return HttpResponse.json(
-        { status: 'error', code: 50000, message: 'eula write failed', details: null, timestamp: new Date().toISOString() },
+        {
+          status: 'error',
+          code: 50000,
+          message: 'eula write failed',
+          details: null,
+          timestamp: new Date().toISOString(),
+        },
         { status: 500 },
       )
     }
@@ -753,7 +868,11 @@ export const handlers = [
   }),
   http.put('*/api/v1/instances/:id/files/content', async ({ request }) => {
     const body = (await request.json()) as { path?: string }
-    return ok({ path: body.path ?? '/server.properties', size: 1024, modifiedAt: new Date().toISOString() })
+    return ok({
+      path: body.path ?? '/server.properties',
+      size: 1024,
+      modifiedAt: new Date().toISOString(),
+    })
   }),
   http.delete('*/api/v1/instances/:id/files', () => ok(null)),
   http.get('*/api/v1/instances/:id/files', ({ request }) => {
@@ -910,9 +1029,7 @@ export const handlers = [
     }
     return ok({ instanceId: String(params.id ?? 'inst-001'), cancelled: true })
   }),
-  http.get('*/api/v1/instances/:id/upgrade/status', () =>
-    ok(upgradeStatusMock),
-  ),
+  http.get('*/api/v1/instances/:id/upgrade/status', () => ok(upgradeStatusMock)),
   // 未提供凭据场景：401（与服务端 authMiddleware 的无凭据分支同码同文案：
   // 40107 AUTH_CREDENTIALS_REQUIRED，与「凭据无效」的 40101 分开）
   http.get('*/api/v1/unauthorized-probe', () =>
@@ -933,7 +1050,8 @@ export const handlers = [
       {
         status: 'error',
         code: 40902,
-        message: '无法执行在线备份：服务器未启用 RCON。请先停止服务器，或在 server.properties 启用 RCON',
+        message:
+          '无法执行在线备份：服务器未启用 RCON。请先停止服务器，或在 server.properties 启用 RCON',
         details: null,
         timestamp: new Date().toISOString(),
       },
@@ -972,11 +1090,20 @@ export const handlers = [
   http.get('*/api/v1/auth/status', () => ok({ hasPassword: true })),
   // 密码登录（固定测试凭据）
   http.post('*/api/v1/auth/login', async () =>
-    ok({ token: 'mock-session-token-0123456789abcdef', sessionId: 'sess-mock-1', expiresAt: new Date(Date.now() + 7 * 86_400_000).toISOString() }),
+    ok({
+      token: 'mock-session-token-0123456789abcdef',
+      sessionId: 'sess-mock-1',
+      expiresAt: new Date(Date.now() + 7 * 86_400_000).toISOString(),
+    }),
   ),
   // 首访设密（同登录响应）
   http.post('*/api/v1/auth/setup', async () =>
-    ok({ hasPassword: true, token: 'mock-session-token-0123456789abcdef', sessionId: 'sess-mock-1', expiresAt: new Date(Date.now() + 7 * 86_400_000).toISOString() }),
+    ok({
+      hasPassword: true,
+      token: 'mock-session-token-0123456789abcdef',
+      sessionId: 'sess-mock-1',
+      expiresAt: new Date(Date.now() + 7 * 86_400_000).toISOString(),
+    }),
   ),
   // 活跃会话列表
   http.get('*/api/v1/auth/sessions', () =>

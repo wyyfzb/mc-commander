@@ -248,7 +248,9 @@ export function InstancesPage() {
         title="实例管理"
         description={
           <span className="inline-flex items-center gap-1">
-            {instancesQuery.isLoading ? '管理服务器实例的部署、切换与卸载' : `已安装 ${instances.length} 个实例`}
+            {instancesQuery.isLoading
+              ? '管理服务器实例的部署、切换与卸载'
+              : `已安装 ${instances.length} 个实例`}
             <InfoHint label="实例隔离说明">{ISOLATION_HINT}</InfoHint>
           </span>
         }
@@ -328,7 +330,11 @@ export function InstancesPage() {
       </div>
 
       {/* ── 部署向导 ── */}
-      <DeployDialog open={deployOpen} onOpenChange={setDeployOpenDeep} onDeployed={handleDeployed} />
+      <DeployDialog
+        open={deployOpen}
+        onOpenChange={setDeployOpenDeep}
+        onDeployed={handleDeployed}
+      />
 
       {/* ── 启动配置弹窗（条件挂载：每次打开重置表单状态；详情预填取逐卡查询缓存） ──
           detail 就绪才挂载：预填在 mount 时计算，未就绪挂载会以默认值固化，
@@ -404,7 +410,10 @@ export function InstancesPage() {
             {/* 确认块刻意**不用** instanceLabel：只有名称为空/纯空白时展示名会变成 id，
                 而服务端（routes/status.js：confirmName.trim() === name.trim()）只认原值，
                 那时用户照显示名输入会被判不匹配，故这里保持显示与比对同源的原值 */}
-            <label htmlFor="uninstall-confirm-input" className="text-mcs-xs font-semibold text-mcs-text-muted">
+            <label
+              htmlFor="uninstall-confirm-input"
+              className="text-mcs-xs font-semibold text-mcs-text-muted"
+            >
               输入实例名「{uninstallTarget?.name ?? ''}」以确认
             </label>
             <input

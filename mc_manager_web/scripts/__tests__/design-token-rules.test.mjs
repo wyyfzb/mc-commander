@@ -56,7 +56,9 @@ describe('第 21 条卡片面现场采集（判定标记 shadow-mcs-card）', ()
 
 describe('第 27 条 text-base 现场采集（整词比对，额度按现场数而非行数）', () => {
   it('逐处命中并给出所在行号', () => {
-    const content = ['<input className="text-base" />', '<textarea className="text-base" />'].join('\n')
+    const content = ['<input className="text-base" />', '<textarea className="text-base" />'].join(
+      '\n',
+    )
     expect(collectTextBaseHits(content)).toEqual([{ line: 1 }, { line: 2 }])
   })
 
@@ -93,7 +95,9 @@ describe('G23 角色档位表采集（档位不硬编码：改基座角色表即
   })
 
   it('非字号档取值不进表：读不出档就不计档', () => {
-    const maps = collectRoleTierMaps(`const TIERS = { heading: 'font-semibold', label: 'text-mcs-sm' } as const`)
+    const maps = collectRoleTierMaps(
+      `const TIERS = { heading: 'font-semibold', label: 'text-mcs-sm' } as const`,
+    )
     expect(maps.get('TIERS')).toEqual(new Map([['label', 'sm']]))
   })
 })
@@ -190,12 +194,14 @@ describe('第 28 条：弱档危险描边 + 按钮语义同行采集', () => {
   })
 
   it('强档描边（-strong）不命中：那是变体与 tone 词表的声明域', () => {
-    const code = '<Button variant="outline" className="border-mcs-error-border-strong" onClick={fn}>'
+    const code =
+      '<Button variant="outline" className="border-mcs-error-border-strong" onClick={fn}>'
     expect(collectDangerousButtonBorderHits(code)).toEqual([])
   })
 
   it('无按钮语义的弱档描边（普通告警卡描边）不命中', () => {
-    const code = '<div className="border border-mcs-error-border bg-mcs-error-bg-subtle px-3 py-2" />'
+    const code =
+      '<div className="border border-mcs-error-border bg-mcs-error-bg-subtle px-3 py-2" />'
     expect(collectDangerousButtonBorderHits(code)).toEqual([])
   })
 
@@ -222,7 +228,10 @@ describe('第 28 条：弱档危险描边 + 按钮语义同行采集', () => {
       'const ok = 1',
       '<span role="button" className="border-mcs-error-border">b</span>',
     ].join('\n')
-    expect(collectDangerousButtonBorderHits(stripComments(code))).toEqual([{ line: 1 }, { line: 3 }])
+    expect(collectDangerousButtonBorderHits(stripComments(code))).toEqual([
+      { line: 1 },
+      { line: 3 },
+    ])
   })
 
   it('剥离注释后行号仍与原文对齐（stripComments 等长替换，报错行号不得漂移）', () => {
@@ -236,7 +245,8 @@ describe('第 28 条：弱档危险描边 + 按钮语义同行采集', () => {
 
 describe('第 29 条：交互元素裸取消 outline 采集', () => {
   it('outline-none + 按钮语义同行且无替换 → 命中', () => {
-    const code = '<button type="button" className="rounded-mcs-xs px-2 outline-none" onClick={fn}>x</button>'
+    const code =
+      '<button type="button" className="rounded-mcs-xs px-2 outline-none" onClick={fn}>x</button>'
     expect(collectFocusCancellationHits(code)).toEqual([{ line: 1 }])
   })
 
@@ -247,7 +257,8 @@ describe('第 29 条：交互元素裸取消 outline 采集', () => {
 
   it('有 focus ring/outline 替换 → 放行（输入框与 skip-link 的既有形态）', () => {
     const withRing = '<input className="outline-none focus:ring-1 focus:ring-mcs-focus-ring" />'
-    const withOutline = '<Button className="focus-visible:outline-none focus-visible:ring-2" onClick={fn}>'
+    const withOutline =
+      '<Button className="focus-visible:outline-none focus-visible:ring-2" onClick={fn}>'
     expect(collectFocusCancellationHits(withRing)).toEqual([])
     expect(collectFocusCancellationHits(withOutline)).toEqual([])
   })
@@ -260,12 +271,14 @@ describe('第 29 条：交互元素裸取消 outline 采集', () => {
 
 describe('第 29 条边界（替换口径与判定面分工）', () => {
   it('outline-none + 仅 outline 颜色类（假替换）不归本条：成对抵消由第 8 条判', () => {
-    const code = '<button type="button" className="outline-none focus-visible:outline-mcs-focus-ring" onClick={fn}>x</button>'
+    const code =
+      '<button type="button" className="outline-none focus-visible:outline-mcs-focus-ring" onClick={fn}>x</button>'
     expect(collectFocusCancellationHits(code)).toEqual([])
   })
 
   it('focus-visible:outline-1 不算替换（须达全局兜底同级 2px 基线）→ 命中', () => {
-    const code = '<button type="button" className="outline-none focus-visible:outline-1" onClick={fn}>x</button>'
+    const code =
+      '<button type="button" className="outline-none focus-visible:outline-1" onClick={fn}>x</button>'
     expect(collectFocusCancellationHits(code)).toEqual([{ line: 1 }])
   })
 

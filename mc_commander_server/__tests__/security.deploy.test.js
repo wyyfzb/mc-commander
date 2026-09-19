@@ -59,7 +59,11 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
     });
 
     it('校验失败即中止并删除临时文件（fail-closed）', () => {
-      const failBlock = script.split('代码包 sha256 校验失败')[1]?.split('\n').slice(0, 10).join('\n');
+      const failBlock = script
+        .split('代码包 sha256 校验失败')[1]
+        ?.split('\n')
+        .slice(0, 10)
+        .join('\n');
       expect(failBlock).toBeDefined();
       expect(failBlock).toContain('exit 1');
       expect(failBlock).toContain('rm -rf "$TMP_TGZ" "$TMP_EXTRACT"');
@@ -70,7 +74,9 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
       expect(script).toMatch(/BRANCH="\$\{BRANCH:-v\d+\.\d+\.\d+\}"/);
       expect(script).not.toContain('BRANCH="${BRANCH:-master}"');
       // 默认 PACKAGE_URL 使用 BRANCH 变量（因此默认解析为固定 tag 的 GitHub Release 资产）
-      expect(script).toContain('PACKAGE_URL="${PACKAGE_URL:-https://github.com/wyyfzb/mc-commander/releases/download/${BRANCH}/mc-commander-server-${BRANCH}.tar.gz}"');
+      expect(script).toContain(
+        'PACKAGE_URL="${PACKAGE_URL:-https://github.com/wyyfzb/mc-commander/releases/download/${BRANCH}/mc-commander-server-${BRANCH}.tar.gz}"',
+      );
     });
 
     it('保留 BRANCH / PACKAGE_SHA256 环境变量覆盖能力', () => {

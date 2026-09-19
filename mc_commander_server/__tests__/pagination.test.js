@@ -43,7 +43,10 @@ describe('parsePagination', () => {
   });
 
   it('pageSize 上限可按端点口径覆盖（tasks/backups=100）', () => {
-    expect(parsePagination({ pageSize: '999' }, { maxPageSize: 100 })).toEqual({ page: 1, pageSize: 100 });
+    expect(parsePagination({ pageSize: '999' }, { maxPageSize: 100 })).toEqual({
+      page: 1,
+      pageSize: 100,
+    });
   });
 
   it('maxPage 可覆盖（收窄场景）', () => {
@@ -52,7 +55,10 @@ describe('parsePagination', () => {
 
   // ── 边界值 ──
   it('上边界值原样保留', () => {
-    expect(parsePagination({ page: '1000', pageSize: '200' })).toEqual({ page: 1000, pageSize: 200 });
+    expect(parsePagination({ page: '1000', pageSize: '200' })).toEqual({
+      page: 1000,
+      pageSize: 200,
+    });
   });
 
   it('下边界值原样保留', () => {
@@ -68,7 +74,10 @@ describe('parsePagination', () => {
   });
 
   it('超大数值钳制到上限（不溢出为异常值）', () => {
-    expect(parsePagination({ page: '999999999999999999999' })).toEqual({ page: 1000, pageSize: 20 });
+    expect(parsePagination({ page: '999999999999999999999' })).toEqual({
+      page: 1000,
+      pageSize: 20,
+    });
   });
 
   // ── radix 统一语义 ──
@@ -85,6 +94,9 @@ describe('parsePagination', () => {
   });
 
   it('tasks/backups 口径：maxPageSize=100', () => {
-    expect(parsePagination({ page: '2', pageSize: '50' }, { maxPageSize: 100 })).toEqual({ page: 2, pageSize: 50 });
+    expect(parsePagination({ page: '2', pageSize: '50' }, { maxPageSize: 100 })).toEqual({
+      page: 2,
+      pageSize: 50,
+    });
   });
 });

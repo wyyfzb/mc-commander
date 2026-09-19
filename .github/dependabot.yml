@@ -22,6 +22,19 @@ updates:
       minor-and-patch:
         update-types: [minor, patch]
 
+  # 仓库根工具包（只装代码格式化器 Biome）：漏掉本目录会让格式化器长期停在旧版本，
+  # 与 CI 的 format job 及各贡献者的本地输出产生版本漂移
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    rebase-strategy: auto
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+
   # 契约包同样独立安装依赖，其 dist 是服务端运行时消费物：漏掉本目录会让
   # zod 长期停在旧版本，而两边 schema 行为差异只在运行期暴露
   - package-ecosystem: npm

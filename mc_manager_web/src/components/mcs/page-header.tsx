@@ -22,19 +22,23 @@ interface PageHeaderProps {
   inlineDescription?: boolean
 }
 
-export function PageHeader({ title, description, actions, className, inlineDescription }: PageHeaderProps) {
+export function PageHeader({
+  title,
+  description,
+  actions,
+  className,
+  inlineDescription,
+}: PageHeaderProps) {
   return (
-    <header
-      className={cn(
-        'flex shrink-0 items-center justify-between gap-3',
-        className,
-      )}
-    >
-      <div className={cn('min-w-0 flex flex-col', inlineDescription && 'sm:flex-row sm:items-baseline sm:gap-3')}>
-        <h2 className="text-mcs-xl font-semibold text-mcs-text-default">{title}</h2>
-        {description != null && (
-          <p className="text-mcs-xs text-mcs-text-muted">{description}</p>
+    <header className={cn('flex shrink-0 items-center justify-between gap-3', className)}>
+      <div
+        className={cn(
+          'min-w-0 flex flex-col',
+          inlineDescription && 'sm:flex-row sm:items-baseline sm:gap-3',
         )}
+      >
+        <h2 className="text-mcs-xl font-semibold text-mcs-text-default">{title}</h2>
+        {description != null && <p className="text-mcs-xs text-mcs-text-muted">{description}</p>}
       </div>
       {actions != null && <div className="shrink-0">{actions}</div>}
     </header>

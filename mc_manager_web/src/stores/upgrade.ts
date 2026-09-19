@@ -19,7 +19,10 @@ export const UPGRADE_STAGE_LABELS: Record<UpgradeStage, string> = {
  * 三处共用——此前各写一份名单，新增阶段（如 cancelled）必然漏改其中一两处
  */
 export const UPGRADE_TERMINAL_STAGES: ReadonlySet<UpgradeStage> = new Set([
-  'completed', 'failed', 'rolled_back', 'cancelled',
+  'completed',
+  'failed',
+  'rolled_back',
+  'cancelled',
 ])
 
 /** 是否已到终态（未到 = 升级进行中） */

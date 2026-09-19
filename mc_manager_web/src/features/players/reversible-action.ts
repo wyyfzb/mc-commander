@@ -25,7 +25,13 @@ export interface UndoToastOptions {
 }
 
 /** 可逆操作回执：成功 Toast 挂撤销动作；撤销自身失败单独回执（不静默） */
-export function toastWithUndo({ text, undoText, undo, description, variant = 'success' }: UndoToastOptions): void {
+export function toastWithUndo({
+  text,
+  undoText,
+  undo,
+  description,
+  variant = 'success',
+}: UndoToastOptions): void {
   const action = {
     label: '撤销',
     onClick: () => {

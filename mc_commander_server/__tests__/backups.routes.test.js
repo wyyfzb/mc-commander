@@ -95,16 +95,26 @@ describe('GET /instances/:instanceId/backups（列表）', () => {
     expect(res.body.data[0].name).toBe('Backup_2026-09-04');
     expect(res.body.pagination).toEqual({ total: 1, page: 1, pageSize: 20, totalPages: 1 });
     expect(BackupModel.findAll).toHaveBeenCalledWith({
-      instanceId: 's1', page: 1, pageSize: 20, type: undefined, status: undefined,
+      instanceId: 's1',
+      page: 1,
+      pageSize: 20,
+      type: undefined,
+      status: undefined,
     });
   });
 
   it('type/status 查询参数透传 + 自定义分页', async () => {
     const app = buildApp();
-    await request(app).get('/api/v1/instances/s1/backups?page=2&pageSize=50&type=manual&status=completed');
+    await request(app).get(
+      '/api/v1/instances/s1/backups?page=2&pageSize=50&type=manual&status=completed',
+    );
 
     expect(BackupModel.findAll).toHaveBeenCalledWith({
-      instanceId: 's1', page: 2, pageSize: 50, type: 'manual', status: 'completed',
+      instanceId: 's1',
+      page: 2,
+      pageSize: 50,
+      type: 'manual',
+      status: 'completed',
     });
   });
 
@@ -112,13 +122,13 @@ describe('GET /instances/:instanceId/backups（列表）', () => {
     const app = buildApp();
     await request(app).get('/api/v1/instances/s1/backups?pageSize=500');
 
-    expect(BackupModel.findAll).toHaveBeenCalledWith(
-      expect.objectContaining({ pageSize: 100 })
-    );
+    expect(BackupModel.findAll).toHaveBeenCalledWith(expect.objectContaining({ pageSize: 100 }));
   });
 
   it('findAll 抛错 → 全局 errorHandler 500(50000)', async () => {
-    BackupModel.findAll.mockImplementation(() => { throw new Error('db down'); });
+    BackupModel.findAll.mockImplementation(() => {
+      throw new Error('db down');
+    });
     const app = buildApp();
 
     const res = await request(app).get('/api/v1/instances/s1/backups');
@@ -174,7 +184,7 @@ describe('POST /instances/:instanceId/backups（创建）', () => {
 
   it('creating 互斥 → 409 BACKUP_IN_PROGRESS(40901)（findAll 按 status 分流）', async () => {
     BackupModel.findAll.mockImplementation(({ status }) =>
-      status === 'creating' ? { total: 1 } : { total: 0 }
+      status === 'creating' ? { total: 1 } : { total: 0 },
     );
     const app = buildApp();
 
@@ -186,7 +196,7 @@ describe('POST /instances/:instanceId/backups（创建）', () => {
 
   it('restoring 互斥 → 409 BACKUP_IN_PROGRESS(40901)（第二分支）', async () => {
     BackupModel.findAll.mockImplementation(({ status }) =>
-      status === 'restoring' ? { total: 1 } : { total: 0 }
+      status === 'restoring' ? { total: 1 } : { total: 0 },
     );
     const app = buildApp();
 
@@ -239,7 +249,8 @@ describe('POST /instances/:instanceId/backups（创建）', () => {
     BackupService.prototype.createBackup = svcCreate;
 
     try {
-      await request(app).post('/api/v1/instances/s1/backups')
+      await request(app)
+        .post('/api/v1/instances/s1/backups')
         .send({ name: '我的备份', description: '恢复点' });
 
       expect(svcCreate).toHaveBeenCalledWith('s1', {
@@ -258,7 +269,9 @@ describe('POST /backups/:id/restore（互补分支：既有测试未覆盖）', 
     BackupModel.findById.mockReturnValue(makeBackup({ status: 'failed' }));
     const app = buildApp();
 
-    const res = await request(app).post('/api/v1/backups/1/restore').send({ confirmName: '演示实例' });
+    const res = await request(app)
+      .post('/api/v1/backups/1/restore')
+      .send({ confirmName: '演示实例' });
 
     expect(res.status).toBe(400);
     expect(res.body.code).toBe(40000);
@@ -302,7 +315,9 @@ describe('POST /backups/:id/restore（互补分支：既有测试未覆盖）', 
     BackupModel.findById.mockReturnValue(makeBackup({ status: 'completed' }));
     const app = buildApp({ getInstance: vi.fn(() => ({ name: '演示实例 ' })) });
 
-    const res = await request(app).post('/api/v1/backups/1/restore').send({ confirmName: '演示实例' });
+    const res = await request(app)
+      .post('/api/v1/backups/1/restore')
+      .send({ confirmName: '演示实例' });
 
     expect(res.status).toBe(202);
   });
@@ -310,11 +325,13 @@ describe('POST /backups/:id/restore（互补分支：既有测试未覆盖）', 
   it('creating 互斥 → 409 RESTORE_IN_PROGRESS(40903)（creating 分支，既有只测 restoring）', async () => {
     BackupModel.findById.mockReturnValue(makeBackup({ status: 'completed' }));
     BackupModel.findAll.mockImplementation(({ status }) =>
-      status === 'creating' ? { total: 1 } : { total: 0 }
+      status === 'creating' ? { total: 1 } : { total: 0 },
     );
     const app = buildApp();
 
-    const res = await request(app).post('/api/v1/backups/1/restore').send({ confirmName: '演示实例' });
+    const res = await request(app)
+      .post('/api/v1/backups/1/restore')
+      .send({ confirmName: '演示实例' });
 
     expect(res.status).toBe(409);
     expect(res.body.code).toBe(40903);

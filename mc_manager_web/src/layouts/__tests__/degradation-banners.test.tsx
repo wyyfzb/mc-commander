@@ -101,9 +101,7 @@ describe('DegradationBanners', () => {
     renderBanners()
 
     // 可兑现文案：说清进度的获取方式，并给出「不要重复发起」的明确动作
-    expect(
-      await screen.findByText(/服务端仍有部署在进行，进度经服务端刷新/),
-    ).toBeInTheDocument()
+    expect(await screen.findByText(/服务端仍有部署在进行，进度经服务端刷新/)).toBeInTheDocument()
     expect(screen.getByText(/请勿重新发起部署（会重复创建实例）/)).toBeInTheDocument()
   })
 

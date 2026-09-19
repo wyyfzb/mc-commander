@@ -17,8 +17,11 @@ function parseMcVersion(mcVersion) {
   if (!mcVersion || typeof mcVersion !== 'string') {
     return null;
   }
-  const parts = mcVersion.trim().split('.').map(p => parseInt(p, 10));
-  if (parts.length < 2 || parts.some(n => Number.isNaN(n))) {
+  const parts = mcVersion
+    .trim()
+    .split('.')
+    .map((p) => parseInt(p, 10));
+  if (parts.length < 2 || parts.some((n) => Number.isNaN(n))) {
     return null;
   }
   return [parts[0], parts[1], parts[2] || 0];
@@ -88,7 +91,7 @@ function getJavaVersionFromPath(javaPath) {
     const output = execFileSync(javaPath, ['-version'], {
       stdio: 'pipe',
       encoding: 'utf-8',
-      timeout: 10000
+      timeout: 10000,
     });
     // java -version 输出到 stderr，但 execFileSync 在 stdio: 'pipe' 时通过异常的 stderr 字段返回
     return parseJavaVersionOutput(output);
@@ -249,7 +252,7 @@ export function getAllJavaVersions() {
       // Eclipse Temurin (Adoptium): /usr/lib/jvm/temurin-17-jre/bin/java
       '/usr/lib/jvm/temurin-*-jre/bin/java',
       // 通用 jdk 目录: /usr/lib/jvm/jdk-17/bin/java
-      '/usr/lib/jvm/jdk-*/bin/java'
+      '/usr/lib/jvm/jdk-*/bin/java',
     ];
     for (const pattern of linuxPatterns) {
       const paths = expandGlob(pattern);
@@ -272,7 +275,7 @@ export function getAllJavaVersions() {
       // Amazon Corretto on Windows: C:\Program Files\Amazon\Corretto\jdk25\bin\java.exe
       'C:/Program Files/Amazon/Corretto/jdk*/bin/java.exe',
       // Eclipse Temurin legacy path
-      'C:/Program Files/Temurin/jdk-*/bin/java.exe'
+      'C:/Program Files/Temurin/jdk-*/bin/java.exe',
     ];
     for (const pattern of winPatterns) {
       const paths = expandGlob(pattern);
@@ -309,7 +312,7 @@ export function getAllJavaVersions() {
     const result = execSync(cmd, {
       stdio: 'pipe',
       encoding: 'utf-8',
-      timeout: 5000
+      timeout: 5000,
     }).trim();
     if (result) {
       // where 可能返回多行
@@ -357,7 +360,7 @@ export function findJavaPath(requiredVersion) {
 
   // 2. 回退到较新版本中的最小版本
   const newer = all
-    .filter(item => parseInt(item.version, 10) >= required)
+    .filter((item) => parseInt(item.version, 10) >= required)
     .sort((a, b) => parseInt(a.version, 10) - parseInt(b.version, 10));
   if (newer.length > 0) {
     return newer[0].path;
@@ -371,5 +374,5 @@ export function findJavaPath(requiredVersion) {
 export default {
   getRecommendedJavaVersion,
   getAllJavaVersions,
-  findJavaPath
+  findJavaPath,
 };

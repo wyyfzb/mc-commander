@@ -56,8 +56,8 @@ export function FilesPage() {
 
   // ── 导航状态（URL 深链接初始化；?dir= 目录 / ?file= 选中文件） ──
   const [dir, setDirState] = useState(() => searchParams.get('dir') ?? '/')
-  const [selectedPath, setSelectedPathState] = useState<string | null>(
-    () => searchParams.get('file'),
+  const [selectedPath, setSelectedPathState] = useState<string | null>(() =>
+    searchParams.get('file'),
   )
 
   /** 目录切换：state + URL（根目录时移除参数） */
@@ -70,13 +70,16 @@ export function FilesPage() {
   }
 
   /** 选中文件切换：state + URL（null 时移除参数）；useCallback 稳定引用（effect 依赖） */
-  const setSelectedPath = useCallback((path: string | null) => {
-    setSelectedPathState(path)
-    const next = new URLSearchParams(searchParams)
-    if (path === null) next.delete('file')
-    else next.set('file', path)
-    setSearchParams(next, { replace: true })
-  }, [searchParams, setSearchParams])
+  const setSelectedPath = useCallback(
+    (path: string | null) => {
+      setSelectedPathState(path)
+      const next = new URLSearchParams(searchParams)
+      if (path === null) next.delete('file')
+      else next.set('file', path)
+      setSearchParams(next, { replace: true })
+    },
+    [searchParams, setSearchParams],
+  )
 
   // 实例切换：目录/选中文件重置（跳过首次挂载；draft/基线重置见下方 useFileEditor 解构）
   const prevInstanceRef = useRef<string | null>(null)
@@ -163,7 +166,10 @@ export function FilesPage() {
       if (dir === target.path || dir.startsWith(`${target.path}/`)) {
         setDir(parentDirOf(target.path))
       }
-      if (selectedPath && (selectedPath === target.path || selectedPath.startsWith(`${target.path}/`))) {
+      if (
+        selectedPath &&
+        (selectedPath === target.path || selectedPath.startsWith(`${target.path}/`))
+      ) {
         setSelectedPath(null)
         originalRef.current = null
         setDraft('')

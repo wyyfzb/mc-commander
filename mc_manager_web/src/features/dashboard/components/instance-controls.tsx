@@ -35,7 +35,9 @@ export function InstanceControls() {
   const config = useConnectionStore()
   const status = useServerStore((s) => s.status)
   const instanceId = useServerStore((s) => s.instanceId)
-  const currentPhase = useServerStore((s) => (s.instanceId ? (s.phase[s.instanceId] ?? null) : null))
+  const currentPhase = useServerStore((s) =>
+    s.instanceId ? (s.phase[s.instanceId] ?? null) : null,
+  )
   const resetTerminal = useTerminalStore((s) => s.resetForRestart)
   const setLastOutputInstanceId = useUiStore((s) => s.setLastOutputInstanceId)
   const [busyAction, setBusyAction] = useState<BusyAction>(null)
@@ -79,7 +81,9 @@ export function InstanceControls() {
   })
 
   /** 启动轮询：每 2s 查 isRunning，60s 超时 */
-  async function waitForStart(id: string): Promise<{ ok: boolean; message: string; instanceId?: string }> {
+  async function waitForStart(
+    id: string,
+  ): Promise<{ ok: boolean; message: string; instanceId?: string }> {
     let wasRunning = false
     for (let i = 0; i < 30; i++) {
       await sleep(2000)
@@ -122,7 +126,12 @@ export function InstanceControls() {
             toast.error(result.message, {
               // 深入链接：失败时进程可能已留下末尾输出（issue 343）
               ...(result.instanceId
-                ? { action: { label: '查看末尾日志', onClick: () => setLastOutputInstanceId(result.instanceId!) } }
+                ? {
+                    action: {
+                      label: '查看末尾日志',
+                      onClick: () => setLastOutputInstanceId(result.instanceId!),
+                    },
+                  }
                 : {}),
             })
           }
@@ -146,13 +155,16 @@ export function InstanceControls() {
   }
 
   // 在线玩家名（停止确认时动态展示）
-  const playerNames = (status?.players as Array<{ name?: string }> | undefined)
-    ?.map((p) => p.name)
-    .filter(Boolean) ?? []
+  const playerNames =
+    (status?.players as Array<{ name?: string }> | undefined)?.map((p) => p.name).filter(Boolean) ??
+    []
 
   // 启动按钮 busy：共享 hook 的启动中（含 EULA 同意后续启）或本页确认弹窗链路；
   // phase 中间态（issue 334）：starting/stopping 期间全部启停按钮禁用（WS 确认后解锁）
-  const startBusy = (startPending && pendingStartId === instanceId) || busyAction === '启动' || currentPhase === 'starting'
+  const startBusy =
+    (startPending && pendingStartId === instanceId) ||
+    busyAction === '启动' ||
+    currentPhase === 'starting'
   const stopBusy = stopMutation.isPending || currentPhase === 'stopping'
 
   const buttons = [
@@ -166,7 +178,8 @@ export function InstanceControls() {
     {
       action: '停止' as const,
       icon: Square,
-      disabled: !isRunning || (busyAction !== null && busyAction !== '停止') || currentPhase !== null,
+      disabled:
+        !isRunning || (busyAction !== null && busyAction !== '停止') || currentPhase !== null,
       color: SEMANTIC_TONE_CLASSES.error.text,
       confirm: {
         title: '关闭服务器',
@@ -180,7 +193,8 @@ export function InstanceControls() {
     {
       action: '重启' as const,
       icon: RefreshCw,
-      disabled: !isRunning || (busyAction !== null && busyAction !== '重启') || currentPhase !== null,
+      disabled:
+        !isRunning || (busyAction !== null && busyAction !== '重启') || currentPhase !== null,
       color: SEMANTIC_TONE_CLASSES.info.text,
       confirm: { title: '重启服务器', description: '确定要重启服务器吗？重启期间玩家将断开连接。' },
     },
@@ -212,7 +226,9 @@ export function InstanceControls() {
                   }
                 }}
               >
-                {busyAction === b.action || (b.action === '启动' && startBusy) || (b.action === '停止' && stopBusy) ? (
+                {busyAction === b.action ||
+                (b.action === '启动' && startBusy) ||
+                (b.action === '停止' && stopBusy) ? (
                   <Loader2 className="size-4 animate-spin" aria-hidden />
                 ) : (
                   <b.icon className={`size-4 ${b.color}`} aria-hidden />
@@ -230,9 +246,15 @@ export function InstanceControls() {
       <ConfirmDialog
         open={confirmAction !== null}
         onOpenChange={(open) => !open && setConfirmAction(null)}
-        title={confirmAction ? (buttons.find((b) => b.action === confirmAction)?.confirm?.title ?? '') : ''}
+        title={
+          confirmAction
+            ? (buttons.find((b) => b.action === confirmAction)?.confirm?.title ?? '')
+            : ''
+        }
         description={
-          confirmAction ? (buttons.find((b) => b.action === confirmAction)?.confirm?.description ?? '') : ''
+          confirmAction
+            ? (buttons.find((b) => b.action === confirmAction)?.confirm?.description ?? '')
+            : ''
         }
         confirmText={confirmAction ?? '确定'}
         danger={confirmAction === '停止'}

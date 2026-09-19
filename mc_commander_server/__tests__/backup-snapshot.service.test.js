@@ -15,7 +15,10 @@ vi.mock('../db/index.js', () => ({
   BackupModel: { listFilePaths: vi.fn(() => h.indexed) },
 }));
 
-import { listInstanceSnapshotDirs, pruneOrphanBackupDirs } from '../services/backup-snapshot.service.js';
+import {
+  listInstanceSnapshotDirs,
+  pruneOrphanBackupDirs,
+} from '../services/backup-snapshot.service.js';
 import { InstanceModel, BackupModel } from '../db/index.js';
 import config from '../config.js';
 

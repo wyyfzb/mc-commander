@@ -112,12 +112,12 @@ const config = {
     windowMs: intFromEnv('RATE_LIMIT_WINDOW', '60000'),
     // 240/min：前端常态轮询 6-8 个端点 × 5s ≈ 72-96 req/min，100 会在多标签页
     // 场景触发 429 误伤正常使用；仍保留对命令执行类之外的滥用拦截空间
-    max: intFromEnv('RATE_LIMIT_MAX', '240')
+    max: intFromEnv('RATE_LIMIT_MAX', '240'),
   },
   // 备份保留策略（自动清理）：备份完成时清理超出上限的旧备份
   backupRetention: {
     maxBackups: intFromEnv('BACKUP_RETENTION_MAX', '10'),
-    maxAgeDays: intFromEnv('BACKUP_RETENTION_DAYS', '30')
+    maxAgeDays: intFromEnv('BACKUP_RETENTION_DAYS', '30'),
   },
   // 面板自身数据备份（SQLite 在线快照，每日定时）：面板库与管理员账号、
   // 审计日志等同库存储，实例备份不覆盖它。保留策略默认继承实例备份配置
@@ -179,7 +179,7 @@ if (invalidNumberEnv.length > 0 || invalidBooleanEnv.length > 0) {
   const total = invalidNumberEnv.length + invalidBooleanEnv.length;
   throw new Error(
     `启动中止：${total} 个环境变量的值非法：\n${lines}\n` +
-      '请修正环境变量或 .env 后重启；未设置或留空将使用默认值。'
+      '请修正环境变量或 .env 后重启；未设置或留空将使用默认值。',
   );
 }
 

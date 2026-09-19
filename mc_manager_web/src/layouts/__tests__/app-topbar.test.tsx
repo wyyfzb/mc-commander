@@ -201,7 +201,11 @@ describe('AppTopBar 实例名三态', () => {
 
   it('退出登录：会话与残留 API Key 一并清除并落到 /login（只清会话会被守卫弹回）', async () => {
     useAuthStore.setState({
-      session: { token: 'sess-token-abc', sessionId: 'sess-mock-1', expiresAt: new Date(Date.now() + 60_000).toISOString() },
+      session: {
+        token: 'sess-token-abc',
+        sessionId: 'sess-mock-1',
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      },
     })
     useConnectionStore.setState({ baseUrl: '', apiKey: 'stored-key-abc', status: 'ready' })
     const user = userEvent.setup()

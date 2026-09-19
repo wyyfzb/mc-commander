@@ -176,9 +176,8 @@ export function MonacoEditorPane({
     editor: monaco.editor.IStandaloneCodeEditor,
     monacoInstance: typeof monaco,
   ) => {
-    editor.addCommand(
-      monacoInstance.KeyMod.CtrlCmd | monacoInstance.KeyCode.KeyS,
-      () => onSaveRef.current(),
+    editor.addCommand(monacoInstance.KeyMod.CtrlCmd | monacoInstance.KeyCode.KeyS, () =>
+      onSaveRef.current(),
     )
   }
 
@@ -218,7 +217,9 @@ export function MonacoEditorPane({
           </span>
         )}
         {dirty && (
-          <span className={`rounded-mcs-xs border px-1.5 py-px text-mcs-2xs font-semibold ${toneClasses('warning')}`}>
+          <span
+            className={`rounded-mcs-xs border px-1.5 py-px text-mcs-2xs font-semibold ${toneClasses('warning')}`}
+          >
             未保存
           </span>
         )}

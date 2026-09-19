@@ -107,7 +107,9 @@ export function bootstrapApiKey(envPath) {
  * 判定保守：无法解析时按「对外可达」处理（宁可多提示一次，也不静默漏提示）。
  */
 export function isPublicBind(host) {
-  const value = String(host ?? '').trim().toLowerCase();
+  const value = String(host ?? '')
+    .trim()
+    .toLowerCase();
   if (value === '') return false; // 未显式配置：config 默认已落到 127.0.0.1
   // 显式环回：IPv4 127.0.0.0/8、IPv6 ::1、localhost
   if (value === 'localhost' || value === '::1' || value === '[::1]') return false;

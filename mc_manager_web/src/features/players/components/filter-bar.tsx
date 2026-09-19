@@ -50,7 +50,7 @@ export function FilterBar({
   const [exporting, setExporting] = useState(false)
 
   const gameModeValue = filter.gameMode
-    ? GAME_MODE_OPTIONS.find((label) => GAME_MODE_VALUE[label] === filter.gameMode) ?? ''
+    ? (GAME_MODE_OPTIONS.find((label) => GAME_MODE_VALUE[label] === filter.gameMode) ?? '')
     : ''
 
   const handleExport = async () => {
@@ -76,7 +76,10 @@ export function FilterBar({
         label="玩家状态"
         value={filter.mode}
         allValue="all"
-        options={FILTER_MODE_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+        options={FILTER_MODE_OPTIONS.map((option) => ({
+          value: option.value,
+          label: option.label,
+        }))}
         onChange={(v) => setFilter({ mode: v as typeof filter.mode })}
       />
 
@@ -84,7 +87,7 @@ export function FilterBar({
         label="游戏模式"
         value={gameModeValue}
         options={GAME_MODE_OPTIONS.map((label) => ({ value: label, label }))}
-        onChange={(v) => setFilter({ gameMode: v === '' ? '' : GAME_MODE_VALUE[v] ?? '' })}
+        onChange={(v) => setFilter({ gameMode: v === '' ? '' : (GAME_MODE_VALUE[v] ?? '') })}
       />
 
       <FilterSelect
@@ -123,14 +126,24 @@ export function FilterBar({
           </TooltipTrigger>
           {!isRconConnected && <TooltipContent>需要 RCON 连接</TooltipContent>}
         </Tooltip>
-        <Button variant="outline" size="sm" onClick={handleExport} disabled={exporting || players.length === 0}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleExport}
+          disabled={exporting || players.length === 0}
+        >
           <Download aria-hidden />
           {exporting ? '导出中…' : '导出 Excel'}
         </Button>
         <Tooltip>
           <TooltipTrigger asChild>
             <span className="inline-flex">
-              <Button variant="default" size="sm" onClick={onAddWhitelist} disabled={!isRconConnected}>
+              <Button
+                variant="default"
+                size="sm"
+                onClick={onAddWhitelist}
+                disabled={!isRconConnected}
+              >
                 <UserPlus aria-hidden />
                 添加白名单
               </Button>

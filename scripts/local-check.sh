@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 本地 CI：统一执行契约包 / 后端 / 前端的检查与测试 + 设计 token 守门。
+# 本地 CI：统一执行代码格式 / 契约包 / 后端 / 前端的检查与测试 + 设计 token 守门。
 # 覆盖范围与 .github/workflows/ci.yml 对齐（覆盖率与体积门禁仍只在 CI 跑）。
 # 用法：bash scripts/local-check.sh [--skip-frontend] [--skip-schemas]
 set -euo pipefail
@@ -27,10 +27,15 @@ ensure_deps() {
   (cd "$1" && npm ci --no-audit --no-fund)
 }
 
+echo "=== [1/4] 代码格式检查（Biome formatter；范围与排除项见 biome.jsonc）==="
+# 仓库级工具包（根 package.json 只装 Biome，不是 workspace 根）
+ensure_deps "$PROJECT_DIR"
+(cd "$PROJECT_DIR" && npm run format:check)
+
 # 契约包最先跑：服务端运行时经 file: link 消费其 dist，前端经 vite alias 直读 src，
 # dist 落后于 src 时服务端会静默使用旧契约，故须先确保 dist 与 src 同步。
 if [ "$SKIP_SCHEMAS" -eq 0 ]; then
-  echo "=== [1/3] 共享契约包 mc-schemas（测试 + dist 同步守卫）==="
+  echo "=== [2/4] 共享契约包 mc-schemas（测试 + dist 同步守卫）==="
   if [ ! -d "$SCHEMAS_DIR" ]; then
     echo "错误：未找到 mc-schemas 目录"
     exit 1
@@ -61,7 +66,7 @@ if [ "$SKIP_SCHEMAS" -eq 0 ]; then
   rm -f "$DIST_COMMITTED"
 fi
 
-echo "=== [2/3] 后端 Lint + 单元测试 ==="
+echo "=== [3/4] 后端 Lint + 单元测试 ==="
 if [ ! -d "$SERVER_DIR" ]; then
   echo "错误：未找到 mc_commander_server 目录"
   exit 1
@@ -76,7 +81,7 @@ if [ "$SKIP_FRONTEND" -eq 1 ]; then
   exit 0
 fi
 
-echo "=== [3/3] 前端 Lint + 类型检查 + 设计 token 守门 + 单元测试 ==="
+echo "=== [4/4] 前端 Lint + 类型检查 + 设计 token 守门 + 单元测试 ==="
 if [ ! -d "$WEB_DIR" ]; then
   echo "错误：未找到 mc_manager_web 目录"
   exit 1

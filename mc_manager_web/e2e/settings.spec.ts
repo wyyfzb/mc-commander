@@ -14,7 +14,9 @@ function maybeShot(page: Page, name: string) {
 }
 
 // 包版本（about-panel 由 vite define 编译期注入同源值），不逐版本改断言
-const APP_VERSION = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf-8')).version
+const APP_VERSION = JSON.parse(
+  fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf-8'),
+).version
 
 /** 注入连接配置（mock 假 key，mock server 不校验）——严禁真实服务器信息 */
 async function setupConnection(page: Page) {
@@ -48,7 +50,10 @@ test.describe('设置页', () => {
     for (const label of ['连接设置', '账号与安全', '通用设置', '通知设置', '备份管理', '关于']) {
       await expect(page.getByRole('link', { name: label })).toBeVisible()
     }
-    await expect(page.getByRole('link', { name: '连接设置' })).toHaveAttribute('aria-current', 'page')
+    await expect(page.getByRole('link', { name: '连接设置' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
   })
 
   test('连接设置：表单 + 测试连接 + 保存', async ({ page }) => {
@@ -131,7 +136,9 @@ test.describe('设置页', () => {
     await maybeShot(page, 'settings-connection-api-key-enabled-light.png')
   })
 
-  test('连接设置：API Key 通道关闭（API_KEY_ENABLED=false）→ 轮换入口不可见并说明原因', async ({ page }) => {
+  test('连接设置：API Key 通道关闭（API_KEY_ENABLED=false）→ 轮换入口不可见并说明原因', async ({
+    page,
+  }) => {
     await setupConnection(page)
     await mockApiKeyChannel(page, false)
     await page.goto('/settings/connection')
@@ -171,7 +178,9 @@ test.describe('设置页', () => {
     await page.goto('/settings/account')
 
     // 初始态：服务端未配置只读凭据（mock 台账初值 false）
-    const panel = page.getByRole('heading', { name: '只读监控凭据' }).locator('xpath=ancestor::section[1]')
+    const panel = page
+      .getByRole('heading', { name: '只读监控凭据' })
+      .locator('xpath=ancestor::section[1]')
     await expect(panel.getByText('尚未创建')).toBeVisible()
     await expect(panel.getByText(/仅能访问 5 个读数端点/)).toBeVisible()
 
@@ -189,9 +198,7 @@ test.describe('设置页', () => {
     await page.reload()
     await expect(page.getByText(issued)).toHaveCount(0)
     // 状态下翻为「已配置」：入口文案变为重新生成
-    await expect(
-      page.getByRole('button', { name: /重新生成只读凭据/ }),
-    ).toBeVisible()
+    await expect(page.getByRole('button', { name: /重新生成只读凭据/ })).toBeVisible()
   })
 
   test('账号与安全：重新生成只读凭据需二次确认（说明旧凭据立即失效）', async ({ page }) => {
@@ -199,7 +206,9 @@ test.describe('设置页', () => {
     // 显式钉死「已配置」初始态（不依赖同轮其它用例先跑出状态）
     await page.setExtraHTTPHeaders({ 'x-mock-readonly-configured': '1' })
     await page.goto('/settings/account')
-    const panel = page.getByRole('heading', { name: '只读监控凭据' }).locator('xpath=ancestor::section[1]')
+    const panel = page
+      .getByRole('heading', { name: '只读监控凭据' })
+      .locator('xpath=ancestor::section[1]')
 
     await panel.getByRole('button', { name: '重新生成只读凭据' }).click()
     const dialog = page.getByRole('dialog')
@@ -218,7 +227,9 @@ test.describe('设置页', () => {
     })
     await page.goto('/settings/account')
 
-    const panel = page.getByRole('heading', { name: '只读监控凭据' }).locator('xpath=ancestor::section[1]')
+    const panel = page
+      .getByRole('heading', { name: '只读监控凭据' })
+      .locator('xpath=ancestor::section[1]')
     await expect(panel.getByText('通道已关闭')).toBeVisible()
     await expect(panel.getByText(/READONLY_API_KEY_ENABLED=false/)).toBeVisible()
     await expect(panel.getByRole('button', { name: /只读凭据/ })).toBeDisabled()
@@ -257,7 +268,9 @@ test.describe('设置页', () => {
     // 面板标题（h3 面板内标题；页面级 h2 与其同名，按层级区分）
     await expect(page.getByRole('heading', { name: '备份管理', level: 3 })).toBeVisible()
     // 快照机制说明
-    await expect(page.getByText('快照备份：未修改文件零拷贝增量传输，超出保留策略自动清理')).toBeVisible()
+    await expect(
+      page.getByText('快照备份：未修改文件零拷贝增量传输，超出保留策略自动清理'),
+    ).toBeVisible()
     // 列表行（mock 2 条：completed / failed）。名称都用精确匹配：
     // 子串匹配下夹具名重新内嵌日期也照样命中，等于没有防线
     await expect(page.getByText('手动备份', { exact: true })).toBeVisible()
@@ -268,9 +281,7 @@ test.describe('设置页', () => {
     // 恢复确认（B3 危险弹窗：红色警示 + 输入实例名确认）
     await page.getByRole('button', { name: '手动备份 恢复' }).click()
     await expect(page.getByRole('heading', { name: '恢复备份（危险操作）' })).toBeVisible()
-    await expect(
-      page.getByText(/覆盖当前世界数据，且不可撤销/),
-    ).toBeVisible()
+    await expect(page.getByText(/覆盖当前世界数据，且不可撤销/)).toBeVisible()
 
     // 取消路径：不输入名字时确认按钮禁用（实例名确认是服务端强制的同一道闸门）
     await expect(page.getByRole('button', { name: '确认恢复' })).toBeDisabled()

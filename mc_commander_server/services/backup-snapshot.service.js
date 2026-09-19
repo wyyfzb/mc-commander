@@ -112,7 +112,9 @@ export function pruneOrphanBackupDirs(retentionDays) {
 
       let snapshots = [];
       try {
-        snapshots = fs.readdirSync(instanceDir, { withFileTypes: true }).filter((e) => e.isDirectory());
+        snapshots = fs
+          .readdirSync(instanceDir, { withFileTypes: true })
+          .filter((e) => e.isDirectory());
       } catch {
         continue; // 并发删除：本轮无事可做
       }
@@ -218,7 +220,9 @@ export function listArchivedSnapshots() {
 
     let snapshots;
     try {
-      snapshots = fs.readdirSync(archiveDir, { withFileTypes: true }).filter((e) => e.isDirectory());
+      snapshots = fs
+        .readdirSync(archiveDir, { withFileTypes: true })
+        .filter((e) => e.isDirectory());
     } catch {
       continue; // 并发删除/无权限：跳过该组（下一次清点会重新出现）
     }
@@ -298,7 +302,8 @@ export async function attachArchivedSnapshots(instanceId, archiveId) {
   try {
     snapshots = fs.readdirSync(archiveDir, { withFileTypes: true }).filter((e) => e.isDirectory());
   } catch (err) {
-    if (err.code === 'ENOENT' || err.code === 'ENOTDIR') throw new Error('Archive directory not found');
+    if (err.code === 'ENOENT' || err.code === 'ENOTDIR')
+      throw new Error('Archive directory not found');
     throw err;
   }
 

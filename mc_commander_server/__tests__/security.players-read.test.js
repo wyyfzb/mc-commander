@@ -48,8 +48,12 @@ describe('安全修复：players.js _getTotalPlayTime 路径校验', () => {
       playerEvents: new Map(),
       _worldSpawn: null,
       _computePlayerStats: () => ({
-        totalOnline: 0, loginCount: 1, offlineSince: 0,
-        deathCount: 0, achievementCount: 0, sleepCount: 0,
+        totalOnline: 0,
+        loginCount: 1,
+        offlineSince: 0,
+        deathCount: 0,
+        achievementCount: 0,
+        sleepCount: 0,
       }),
       _mergePlayerEvents: (a, b) => [...(a || []), ...(b || [])],
       _loadInventoryFromDat: () => null,
@@ -61,15 +65,16 @@ describe('安全修复：players.js _getTotalPlayTime 路径校验', () => {
     // 在 tmpServerPath/world/players/stats/ 放置官方统计文件（MC 26.1+ 新世界格式）
     const statsDir = path.join(tmpServerPath, 'world', 'players', 'stats');
     fs.mkdirSync(statsDir, { recursive: true });
-    fs.writeFileSync(path.join(statsDir, 'u1.json'), JSON.stringify({
-      stats: { 'minecraft:custom': { 'minecraft:play_time': 400 } },
-    }));
+    fs.writeFileSync(
+      path.join(statsDir, 'u1.json'),
+      JSON.stringify({
+        stats: { 'minecraft:custom': { 'minecraft:play_time': 400 } },
+      }),
+    );
     // 离线玩家 Steve 已知 uuid=u1；level-name 被配置为恶意穿越值
     const mockInstance = baseMockInstance({
       properties: { 'level-name': '../../evil' },
-      getAllKnownPlayers: () => new Map([
-        ['Steve', { name: 'Steve', uuid: 'u1', lastSeen: null }],
-      ]),
+      getAllKnownPlayers: () => new Map([['Steve', { name: 'Steve', uuid: 'u1', lastSeen: null }]]),
     });
     mockManager.getInstance.mockReturnValue(mockInstance);
 
@@ -83,15 +88,20 @@ describe('安全修复：players.js _getTotalPlayTime 路径校验', () => {
 
   it('worldName 含路径分隔符时候选路径不越界（resolve 过滤丢弃越界候选）', async () => {
     // 在 tmpServerPath 上级放置"越界"统计文件，模拟恶意读取目标
-    const evilStatsPath = path.join(tmpServerPath, '..', `${path.basename(tmpServerPath)}.evil.json`);
-    fs.writeFileSync(evilStatsPath, JSON.stringify({
-      stats: { 'minecraft:custom': { 'minecraft:play_time': 999999 } },
-    }));
+    const evilStatsPath = path.join(
+      tmpServerPath,
+      '..',
+      `${path.basename(tmpServerPath)}.evil.json`,
+    );
+    fs.writeFileSync(
+      evilStatsPath,
+      JSON.stringify({
+        stats: { 'minecraft:custom': { 'minecraft:play_time': 999999 } },
+      }),
+    );
     const mockInstance = baseMockInstance({
       properties: { 'level-name': '..' }, // 候选 resolve 后指向 tmpServerPath 上级
-      getAllKnownPlayers: () => new Map([
-        ['Steve', { name: 'Steve', uuid: 'u1', lastSeen: null }],
-      ]),
+      getAllKnownPlayers: () => new Map([['Steve', { name: 'Steve', uuid: 'u1', lastSeen: null }]]),
     });
     mockManager.getInstance.mockReturnValue(mockInstance);
 
@@ -107,14 +117,15 @@ describe('安全修复：players.js _getTotalPlayTime 路径校验', () => {
   it('合法 level-name 正常读取（校验不误伤自定义世界目录）', async () => {
     const statsDir = path.join(tmpServerPath, 'my_world', 'players', 'stats');
     fs.mkdirSync(statsDir, { recursive: true });
-    fs.writeFileSync(path.join(statsDir, 'u1.json'), JSON.stringify({
-      stats: { 'minecraft:custom': { 'minecraft:play_time': 800 } },
-    }));
+    fs.writeFileSync(
+      path.join(statsDir, 'u1.json'),
+      JSON.stringify({
+        stats: { 'minecraft:custom': { 'minecraft:play_time': 800 } },
+      }),
+    );
     const mockInstance = baseMockInstance({
       properties: { 'level-name': 'my_world' },
-      getAllKnownPlayers: () => new Map([
-        ['Steve', { name: 'Steve', uuid: 'u1', lastSeen: null }],
-      ]),
+      getAllKnownPlayers: () => new Map([['Steve', { name: 'Steve', uuid: 'u1', lastSeen: null }]]),
     });
     mockManager.getInstance.mockReturnValue(mockInstance);
 

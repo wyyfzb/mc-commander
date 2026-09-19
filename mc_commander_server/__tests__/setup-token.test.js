@@ -204,7 +204,9 @@ describe('POST /auth/setup × SETUP_TOKEN（四路径）', () => {
 
   it('已配置 + 缺失/畸形凭据头：403（缺失、Bearer 伪装、无值三种变体）', async () => {
     _setSetupToken(TOKEN_A);
-    const missing = await request(app).post('/api/v1/auth/setup').send({ password: 'setup-pass-9' });
+    const missing = await request(app)
+      .post('/api/v1/auth/setup')
+      .send({ password: 'setup-pass-9' });
     expect(missing.status).toBe(403);
     expect(missing.body.code).toBe(40104);
 

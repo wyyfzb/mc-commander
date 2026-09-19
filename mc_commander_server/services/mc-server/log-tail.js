@@ -30,7 +30,12 @@ export function _logTailPath() {
  *  构造期的 _loadLogBufferFromLatestLog 已回填尾部内容，从末尾起读避免重复。 */
 export function _startAdoptedLogTail() {
   this._stopAdoptedLogTail();
-  this._logTailState = { offset: null, ino: null, remainder: '', decoder: new StringDecoder('utf8') };
+  this._logTailState = {
+    offset: null,
+    ino: null,
+    remainder: '',
+    decoder: new StringDecoder('utf8'),
+  };
   this._logTailTimer = setInterval(() => this._pollAdoptedLogTail(), LOG_TAIL_INTERVAL_MS);
   // 不阻塞面板进程退出
   this._logTailTimer.unref?.();

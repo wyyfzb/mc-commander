@@ -28,7 +28,9 @@ export function UploadProgressBar({ uploading, queueRemaining, onCancel }: Uploa
           <p className="truncate text-mcs-sm text-mcs-text-default" title={uploading.name}>
             正在上传 {uploading.name}
             {queueRemaining > 1 && (
-              <span className="ml-1.5 text-mcs-xs text-mcs-text-muted">（队列剩余 {queueRemaining - 1} 个）</span>
+              <span className="ml-1.5 text-mcs-xs text-mcs-text-muted">
+                （队列剩余 {queueRemaining - 1} 个）
+              </span>
             )}
           </p>
           <span className="text-mcs-xs tabular-nums text-mcs-text-muted">{uploading.pct}%</span>

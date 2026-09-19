@@ -92,7 +92,11 @@ describe('BatchBar', () => {
     render(
       <>
         <Toaster />
-        <BatchBar selectedPlayers={players} onOpenBatchDetail={onOpenBatchDetail} onAction={onAction} />
+        <BatchBar
+          selectedPlayers={players}
+          onOpenBatchDetail={onOpenBatchDetail}
+          onAction={onAction}
+        />
       </>,
     )
   }
@@ -109,7 +113,17 @@ describe('BatchBar', () => {
   it('渲染已选择计数与全部动作入口（导航/名单/游戏模式/危险/清除）', () => {
     setup([makePlayer(), makePlayer(OFFLINE_ALEX)])
     expect(screen.getByText('已选择 2 名玩家')).toBeInTheDocument()
-    for (const label of ['传送', '给予物品', '白名单', '移除白名单', 'OP', '取消OP', '游戏模式', '清空背包', '踢出']) {
+    for (const label of [
+      '传送',
+      '给予物品',
+      '白名单',
+      '移除白名单',
+      'OP',
+      '取消OP',
+      '游戏模式',
+      '清空背包',
+      '踢出',
+    ]) {
       expect(screen.getByRole('button', { name: label })).toBeInTheDocument()
     }
     expect(screen.getByRole('button', { name: '清除选择' })).toBeInTheDocument()
@@ -168,7 +182,9 @@ describe('BatchBar', () => {
     setup([makePlayer()])
     await user.click(screen.getByRole('button', { name: '清空背包' }))
     expect(await screen.findByText('批量清空背包')).toBeInTheDocument()
-    expect(screen.getByText('此操作不可撤销，所有物品将被永久删除；离线玩家将跳过')).toBeInTheDocument()
+    expect(
+      screen.getByText('此操作不可撤销，所有物品将被永久删除；离线玩家将跳过'),
+    ).toBeInTheDocument()
     onAction.mockRejectedValueOnce(new Error('boom'))
     await confirmInDialog()
     await screen.findByText('批量清空背包完成：成功 0，失败 1')
@@ -194,7 +210,10 @@ describe('BatchBar', () => {
     expect(onAction).toHaveBeenCalledWith({ kind: 'command', command: 'gamemode creative Steve' })
 
     clickUndo()
-    expect(onAction).toHaveBeenLastCalledWith({ kind: 'command', command: 'gamemode survival Steve' })
+    expect(onAction).toHaveBeenLastCalledWith({
+      kind: 'command',
+      command: 'gamemode survival Steve',
+    })
   })
 
   it('游戏模式多目标含离线：在线执行、离线跳过并汇总', async () => {
@@ -229,7 +248,10 @@ describe('BatchBar', () => {
     // 撤销只覆盖原模式已知的那一名，回执要说清，否则用户以为能整体回滚
     expect(screen.getByText(/撤销只覆盖原模式已知的 1 名，另有 1 名原模式未知/)).toBeInTheDocument()
     clickUndo()
-    expect(onAction).toHaveBeenLastCalledWith({ kind: 'command', command: 'gamemode survival Steve' })
+    expect(onAction).toHaveBeenLastCalledWith({
+      kind: 'command',
+      command: 'gamemode survival Steve',
+    })
   })
 
   it('撤销只回滚下发成功的目标（首名失败 → 不在回滚集内）', async () => {
@@ -282,7 +304,9 @@ describe('BatchBar', () => {
     const clear = screen.getByRole('button', { name: '清除选择' })
     // fireEvent 直派 click（绕过 userEvent 的 pointer-events 守卫）：禁用态下 handler 不得执行
     fireEvent.click(clear)
-    expect(usePlayersUiStore.getState().selectedUuids).toEqual(['00000000-0000-4000-8000-000000000002'])
+    expect(usePlayersUiStore.getState().selectedUuids).toEqual([
+      '00000000-0000-4000-8000-000000000002',
+    ])
     await waitFor(() => expect(clear).toBeDisabled())
 
     release()

@@ -33,13 +33,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { useNavigate } from 'react-router'
-import {
-  Sheet,
-  SheetClose,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet'
+import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/mcs/chip'
 import { SEMANTIC_TONE_CLASSES, type SemanticTone, type ToneClasses } from '@/components/mcs/tone'
@@ -61,17 +55,39 @@ import {
  */
 
 const TYPE_ICON: Record<NotificationType, LucideIcon> = {
-  join: LogIn, leave: LogOut, death: Skull, revive: HeartPulse,
-  achievement: Trophy, chat: MessageSquare, sleep: MoonStar,
-  serverStart: Play, serverStop: Square, serverCrash: AlertTriangle, save: Save,
+  join: LogIn,
+  leave: LogOut,
+  death: Skull,
+  revive: HeartPulse,
+  achievement: Trophy,
+  chat: MessageSquare,
+  sleep: MoonStar,
+  serverStart: Play,
+  serverStop: Square,
+  serverCrash: AlertTriangle,
+  save: Save,
   circuitBreaker: CircuitBoard,
-  lowTps: Gauge, highCpu: Cpu, highMemory: MemoryStick, weatherChange: CloudSun,
-  backupStart: Archive, backupComplete: CheckCircle2, backupFailed: AlertCircle,
-  backupSkipped: SkipForward, backupCancelled: Ban, restoreStart: History,
-  restoreComplete: CheckCheck, restoreFailed: XCircle, restoreCancelled: Ban,
-  taskFailed: CalendarX, webhookFailed: Webhook,
-  deployComplete: Rocket, deployFailed: XCircle, deployCancelled: Ban,
-  upgradeComplete: CheckCircle2, upgradeFailed: XCircle, upgradeCancelled: Ban,
+  lowTps: Gauge,
+  highCpu: Cpu,
+  highMemory: MemoryStick,
+  weatherChange: CloudSun,
+  backupStart: Archive,
+  backupComplete: CheckCircle2,
+  backupFailed: AlertCircle,
+  backupSkipped: SkipForward,
+  backupCancelled: Ban,
+  restoreStart: History,
+  restoreComplete: CheckCheck,
+  restoreFailed: XCircle,
+  restoreCancelled: Ban,
+  taskFailed: CalendarX,
+  webhookFailed: Webhook,
+  deployComplete: Rocket,
+  deployFailed: XCircle,
+  deployCancelled: Ban,
+  upgradeComplete: CheckCircle2,
+  upgradeFailed: XCircle,
+  upgradeCancelled: Ban,
 }
 
 /** 中性档（进出/停服等无成败含义的事件）：次级底，不占语义六色 */
@@ -212,7 +228,10 @@ export function NotificationDrawer({ open, onOpenChange }: NotificationDrawerPro
 
         {/* severity 筛选 chips（有通知时才出现，避免空态噪音；单选组：语义与方向键走 hook） */}
         {items.length > 0 && (
-          <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-mcs-border-muted px-4 py-2" {...severityGroup.groupProps}>
+          <div
+            className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-mcs-border-muted px-4 py-2"
+            {...severityGroup.groupProps}
+          >
             {SEVERITY_FILTERS.map((f, index) => (
               <Chip
                 key={f.value}
@@ -258,14 +277,15 @@ export function NotificationDrawer({ open, onOpenChange }: NotificationDrawerPro
                       ? 'self-start rounded-bl-mcs-xs'
                       : 'self-end rounded-br-mcs-xs bg-mcs-bg-secondary',
                     isGame && color.bg,
-                    n.read
-                      ? 'border-mcs-border-muted'
-                      : cn('border', color.border),
-                    n.instanceId && 'cursor-pointer transition-colors hover:border-mcs-accent-border',
+                    n.read ? 'border-mcs-border-muted' : cn('border', color.border),
+                    n.instanceId &&
+                      'cursor-pointer transition-colors hover:border-mcs-accent-border',
                   )}
                   aria-label={
                     n.read
-                      ? (n.instanceId ? `${n.content}，点击查看关联实例` : n.content)
+                      ? n.instanceId
+                        ? `${n.content}，点击查看关联实例`
+                        : n.content
                       : `未读：${n.content}${n.instanceId ? '，点击查看关联实例' : ''}`
                   }
                 >
@@ -292,7 +312,9 @@ export function NotificationDrawer({ open, onOpenChange }: NotificationDrawerPro
                     <span
                       className={cn(
                         'line-clamp-3 text-mcs-xs',
-                        n.read ? 'font-normal text-mcs-text-muted' : 'font-medium text-mcs-text-default',
+                        n.read
+                          ? 'font-normal text-mcs-text-muted'
+                          : 'font-medium text-mcs-text-default',
                       )}
                     >
                       {n.content}

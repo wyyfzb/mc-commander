@@ -131,9 +131,7 @@ describe('字母表常量', () => {
       expect(RECOVERY_CODE_ALPHABET, forbidden).not.toContain(forbidden)
     }
     // 含 2-9 共 8 个数字字符——这正是「纯数字恢复码合法」的来源
-    expect([...RECOVERY_CODE_ALPHABET].filter((c) => /\d/.test(c))).toEqual(
-      '23456789'.split(''),
-    )
+    expect([...RECOVERY_CODE_ALPHABET].filter((c) => /\d/.test(c))).toEqual('23456789'.split(''))
     expect(new Set(RECOVERY_CODE_ALPHABET).size).toBe(32)
   })
 })

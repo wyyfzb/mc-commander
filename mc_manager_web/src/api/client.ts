@@ -8,7 +8,11 @@
  */
 import type { ApiEnvelope, ApiErrorEnvelope } from './types'
 import { sessionAppliesToPanel } from '@/lib/mc-connection'
-import { getStoredSession, clearSessionAndDispatchExpired, backfillSessionPanel } from '@/stores/auth'
+import {
+  getStoredSession,
+  clearSessionAndDispatchExpired,
+  backfillSessionPanel,
+} from '@/stores/auth'
 
 export class ApiError extends Error {
   readonly code: number
@@ -89,7 +93,10 @@ function authTokenFor(config: ConnectionConfig): string | null {
  * 认证头注入（双通道互斥，不叠加）：会话令牌优先（浏览器登录主线），
  * 否则 apiKey（自动化 / 高级用户通道，行为兼容）；两者皆无（公开端点）不带认证头。
  */
-function authHeadersFor(config: ConnectionConfig, sessionToken: string | null): Record<string, string> {
+function authHeadersFor(
+  config: ConnectionConfig,
+  sessionToken: string | null,
+): Record<string, string> {
   if (config.noCredentials) return {}
   if (sessionToken) return { Authorization: `Bearer ${sessionToken}` }
   return config.apiKey ? { 'X-API-Key': config.apiKey } : {}
@@ -198,12 +205,20 @@ export async function apiRequest<T>(
 }
 
 /** GET 便捷方法（解包信封，仅返回 data） */
-export function apiGet<T>(path: string, config: ConnectionConfig, signal?: AbortSignal): Promise<T> {
+export function apiGet<T>(
+  path: string,
+  config: ConnectionConfig,
+  signal?: AbortSignal,
+): Promise<T> {
   return apiRequest<T>(path, config, { method: 'GET', signal })
 }
 
 /** GET 信封级变体：返回完整信封（含 pagination），供分页控件消费（与 apiRequest 单源请求链） */
-export function apiGetEnvelope<T>(path: string, config: ConnectionConfig, signal?: AbortSignal): Promise<ApiEnvelope<T>> {
+export function apiGetEnvelope<T>(
+  path: string,
+  config: ConnectionConfig,
+  signal?: AbortSignal,
+): Promise<ApiEnvelope<T>> {
   return requestEnvelope<T>(path, config, { method: 'GET', signal })
 }
 
@@ -262,8 +277,7 @@ function fileNameFromDisposition(header: string | null): string | null {
       // 编码异常回退到 filename=
     }
   }
-  const plain =
-    /filename="([^"]+)"/.exec(header)?.[1] ?? /filename=([^;]+)/.exec(header)?.[1]
+  const plain = /filename="([^"]+)"/.exec(header)?.[1] ?? /filename=([^;]+)/.exec(header)?.[1]
   return plain ? plain.trim() : null
 }
 
@@ -430,7 +444,11 @@ export function apiUploadFile<T>(
         return
       }
       const err = payload as ApiErrorEnvelope
-      if (err.code === AUTH_SESSION_EXPIRED_CODE && sessionToken !== null && sessionTokenStillCurrent(sessionToken)) {
+      if (
+        err.code === AUTH_SESSION_EXPIRED_CODE &&
+        sessionToken !== null &&
+        sessionTokenStillCurrent(sessionToken)
+      ) {
         handleSessionExpired()
       }
       reject(new ApiError(err.code, xhr.status, err.message, err.details))

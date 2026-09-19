@@ -85,7 +85,13 @@ export const deployStatusResponseSchema = z.discriminatedUnion('deploying', [
 ])
 
 export const upgradeStageSchema = z.enum([
-  'backup', 'download', 'replace', 'verify', 'completed', 'failed', 'rolled_back',
+  'backup',
+  'download',
+  'replace',
+  'verify',
+  'completed',
+  'failed',
+  'rolled_back',
   // 用户取消（服务端在途升级被中断）：与 failed/rolled_back 分档——取消不是故障，
   // detail 里写明是否发生了回滚（替换 JAR 之后取消才需要回滚）
   'cancelled',

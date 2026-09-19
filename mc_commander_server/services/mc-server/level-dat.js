@@ -22,7 +22,9 @@ import { isPathContained } from '../../utils/fs-utils.js';
 export function _getSafeLevelName() {
   const raw = this.properties?.['level-name'] || 'world';
   if (typeof raw !== 'string' || !/^[A-Za-z0-9_-]+$/.test(raw)) {
-    logger.warn(`[Instance ${this.id}] 非法 level-name '${raw}'（仅允许字母/数字/_/-），回退 'world'`);
+    logger.warn(
+      `[Instance ${this.id}] 非法 level-name '${raw}'（仅允许字母/数字/_/-），回退 'world'`,
+    );
     return 'world';
   }
   if (!isPathContained(this.serverPath, raw)) {
@@ -83,7 +85,7 @@ export function _getWorldSize() {
       }
     }
     this._worldSizeCache = {
-      value: Math.round(size / (1024 * 1024 * 1024) * 100) / 100,
+      value: Math.round((size / (1024 * 1024 * 1024)) * 100) / 100,
       mtimeMs: st.mtimeMs,
       size: st.size,
     };
@@ -262,9 +264,7 @@ export function _readLevelDatData() {
   const levelDatPath = path.join(this.serverPath, levelName, 'level.dat');
   if (!fs.existsSync(levelDatPath)) return null;
   try {
-    const parsed = parseNbtSync(
-      zlib.gunzipSync(fs.readFileSync(levelDatPath)),
-    );
+    const parsed = parseNbtSync(zlib.gunzipSync(fs.readFileSync(levelDatPath)));
     return parsed?.value?.Data?.value || parsed?.value || null;
   } catch (err) {
     logger.warn(`[Instance ${this.id}] 读取 level.dat 失败:`, err.message);
@@ -380,7 +380,9 @@ export function _readWorldSpawnFromLevelDat(rawOverride) {
       // 记录本次成功解析的原始字节，供 get _worldSpawn 做运行期变更检测；
       // 仅在成功解析后更新，解析失败时下次访问会重试
       this._worldSpawnRaw = raw;
-      logger.info(`[${this.id}] World spawn initialized from level.dat: ${spawnX}, ${spawnY}, ${spawnZ}`);
+      logger.info(
+        `[${this.id}] World spawn initialized from level.dat: ${spawnX}, ${spawnY}, ${spawnZ}`,
+      );
     }
   } catch (e) {
     logger.warn(`[${this.id}] Failed to read world spawn from level.dat:`, e.message);

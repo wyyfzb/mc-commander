@@ -16,10 +16,7 @@ export function formatUptime(seconds: number | null | undefined): string {
 }
 
 /** 启动时间：MM-dd HH:mm 本地时区；缺失/非法返回 emptyText（默认 '--'） */
-export function formatStartTime(
-  iso: string | null | undefined,
-  emptyText = '--',
-): string {
+export function formatStartTime(iso: string | null | undefined, emptyText = '--'): string {
   if (!iso) return emptyText
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return emptyText
@@ -46,10 +43,7 @@ export function formatRelativeTime(
 }
 
 /** 含秒时刻：MM-dd HH:mm:ss 本地时区；缺失/非法返回 emptyText */
-export function formatDateTime(
-  iso: string | null | undefined,
-  emptyText = '--',
-): string {
+export function formatDateTime(iso: string | null | undefined, emptyText = '--'): string {
   if (!iso) return emptyText
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return emptyText
@@ -72,10 +66,7 @@ export function formatFullDateTime(
 }
 
 /** 完整日期到分：YYYY-MM-DD HH:mm 本地时区；缺失/非法返回 emptyText */
-export function formatFullDateMinute(
-  iso: string | null | undefined,
-  emptyText = '--',
-): string {
+export function formatFullDateMinute(iso: string | null | undefined, emptyText = '--'): string {
   if (!iso) return emptyText
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return emptyText
@@ -86,10 +77,7 @@ export function formatFullDateMinute(
 }
 
 /** 时刻 HH:mm 本地时区；缺失/非法返回 emptyText。入参兼容 ISO 串与 epoch 毫秒 */
-export function formatClock(
-  value: string | number | null | undefined,
-  emptyText = '--',
-): string {
+export function formatClock(value: string | number | null | undefined, emptyText = '--'): string {
   if (value == null || value === '') return emptyText
   const d = new Date(value)
   if (Number.isNaN(d.getTime())) return emptyText
@@ -165,10 +153,7 @@ function decomposeSeconds(sec: number): { h: number; m: number; s: number } {
 }
 
 /** 短时长（毫秒基）：<1s 「Nms」/ 否则秒保留一位「X.Xs」；null/undefined → emptyText（默认 '-'） */
-export function formatDurationMs(
-  ms: number | null | undefined,
-  emptyText = '-',
-): string {
+export function formatDurationMs(ms: number | null | undefined, emptyText = '-'): string {
   if (ms == null) return emptyText
   if (ms < 1000) return `${ms}ms`
   return `${(ms / 1000).toFixed(1)}s`

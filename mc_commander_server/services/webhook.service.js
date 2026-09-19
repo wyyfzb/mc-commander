@@ -80,7 +80,9 @@ export class WebhookService {
       // 背压检查
       const current = _concurrentCount.get(webhook.id) || 0;
       if (current >= MAX_CONCURRENT_PER_WEBHOOK) {
-        logger.warn(`[Webhook] Backpressure: skipping webhook #${webhook.id} (${current} concurrent)`);
+        logger.warn(
+          `[Webhook] Backpressure: skipping webhook #${webhook.id} (${current} concurrent)`,
+        );
         // 背压丢弃落投递记录（与 SSRF 拦截路径观测粒度对齐）：attempts=0 标记投递从未尝试，
         // responseBody 携带丢弃原因与当时并发数，排障时区分「事件未产生」与「背压丢弃」。
         // 落记录失败不中断分发循环——可观测性增强不得引入新的投递失败面
@@ -99,13 +101,15 @@ export class WebhookService {
             attempts: 0,
           });
         } catch (err) {
-          logger.warn(`[Webhook] Failed to record skipped delivery for #${webhook.id}: ${err.message}`);
+          logger.warn(
+            `[Webhook] Failed to record skipped delivery for #${webhook.id}: ${err.message}`,
+          );
         }
         continue;
       }
 
       // fire-and-forget：不 await，错误内部捕获
-      this._deliver(webhook, eventType, payload).catch(err => {
+      this._deliver(webhook, eventType, payload).catch((err) => {
         logger.warn(`[Webhook] Unhandled delivery error for #${webhook.id}: ${err.message}`);
       });
     }
@@ -201,7 +205,11 @@ export class WebhookService {
           }
 
           // 4xx（非 429）不重试
-          if (response.statusCode >= 400 && response.statusCode < 500 && response.statusCode !== 429) {
+          if (
+            response.statusCode >= 400 &&
+            response.statusCode < 500 &&
+            response.statusCode !== 429
+          ) {
             lastError = new Error(`HTTP ${response.statusCode}`);
             break;
           }
@@ -338,7 +346,7 @@ export class WebhookService {
   }
 
   static _sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   /** 平台判定：webhooks.platform 显式字段（迁移 v11 已按 URL 推断过存量行，generic=纯用户显式选择） */
@@ -362,7 +370,7 @@ export class WebhookService {
       'instance.crash': () => `服务器意外退出${d.autoRestart ? '，正在自动重启' : ''}`,
       'instance.ready': () => '服务器已就绪',
       'instance.save': () => '世界已保存',
-      'ping': () => '测试投递（收到此条说明渠道配置生效）',
+      ping: () => '测试投递（收到此条说明渠道配置生效）',
     };
     const title = EVENT_TEXT[eventType]?.() ?? `事件 ${eventType}`;
     const instance = d.instanceId
@@ -432,7 +440,12 @@ export class WebhookService {
       // PushPlus：token 由用户填在密钥字段（secret），随 body 传递；txt 模板适配纯文本通知
       return {
         url: webhook.url,
-        body: { token: webhook.secret || '', title: `【MC_Commander】${title}`, content: text, template: 'txt' },
+        body: {
+          token: webhook.secret || '',
+          title: `【MC_Commander】${title}`,
+          content: text,
+          template: 'txt',
+        },
       };
     }
 
@@ -453,11 +466,11 @@ const EVENT_MAP = {
 };
 
 const STATUS_EVENT_MAP = {
-  'started': 'instance.start',
-  'stopped': 'instance.stop',
-  'crash': 'instance.crash',
-  'ready': 'instance.ready',
-  'save': 'instance.save',
+  started: 'instance.start',
+  stopped: 'instance.stop',
+  crash: 'instance.crash',
+  ready: 'instance.ready',
+  save: 'instance.save',
 };
 
 /**

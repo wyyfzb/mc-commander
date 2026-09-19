@@ -7,7 +7,12 @@
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/api/queries'
-import { apiDeployInstance, apiGetServerVersions, apiUninstallInstance, apiUpdateInstance } from '@/api/instances'
+import {
+  apiDeployInstance,
+  apiGetServerVersions,
+  apiUninstallInstance,
+  apiUpdateInstance,
+} from '@/api/instances'
 import { useConnectionStore } from '@/stores/connection'
 import type { DeployRequest, InstanceUpdatePayload } from '@/api/types'
 

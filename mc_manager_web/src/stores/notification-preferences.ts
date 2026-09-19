@@ -57,31 +57,29 @@ function persist(prefs: StoredPrefs) {
   }
 }
 
-export const useNotificationPreferenceStore = create<NotificationPreferenceState>()(
-  (set, get) => ({
-    prefs: readStored(),
+export const useNotificationPreferenceStore = create<NotificationPreferenceState>()((set, get) => ({
+  prefs: readStored(),
 
-    isEnabled: (type) => isToastEnabledRaw(get().prefs, type),
+  isEnabled: (type) => isToastEnabledRaw(get().prefs, type),
 
-    setEnabled: (type, enabled) => {
-      set((s) => {
-        const prefs = { ...s.prefs, [type]: { toast: enabled } }
-        persist(prefs)
-        return { prefs }
-      })
-    },
+  setEnabled: (type, enabled) => {
+    set((s) => {
+      const prefs = { ...s.prefs, [type]: { toast: enabled } }
+      persist(prefs)
+      return { prefs }
+    })
+  },
 
-    setCategoryEnabled: (category, enabled) => {
-      set((s) => {
-        const prefs = { ...s.prefs }
-        for (const type of NOTIFICATION_TYPE_ORDER) {
-          if (NOTIFICATION_TYPE_META[type].category === category) {
-            prefs[type] = { toast: enabled }
-          }
+  setCategoryEnabled: (category, enabled) => {
+    set((s) => {
+      const prefs = { ...s.prefs }
+      for (const type of NOTIFICATION_TYPE_ORDER) {
+        if (NOTIFICATION_TYPE_META[type].category === category) {
+          prefs[type] = { toast: enabled }
         }
-        persist(prefs)
-        return { prefs }
-      })
-    },
-  }),
-)
+      }
+      persist(prefs)
+      return { prefs }
+    })
+  },
+}))

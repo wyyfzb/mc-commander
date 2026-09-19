@@ -123,7 +123,9 @@ describe('GET /auth/capabilities 返回值', () => {
     // 契约只暴露「通道开关 + 只读凭据是否已配置」这三项：部署配置的其余部分
     // （路径/端口/后端开关/哈希本身）不得进入响应面
     expect(Object.keys(res.body.data).sort()).toEqual([
-      'apiKeyEnabled', 'readonlyApiKeyConfigured', 'readonlyApiKeyEnabled',
+      'apiKeyEnabled',
+      'readonlyApiKeyConfigured',
+      'readonlyApiKeyEnabled',
     ]);
   });
 

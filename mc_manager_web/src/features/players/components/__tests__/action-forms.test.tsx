@@ -47,7 +47,14 @@ const ONLINE_PLAYER: Player = {
   inventory: null,
   events: [],
   sessions: [],
-  stats: { totalOnline: 3600, loginCount: 1, offlineSince: 0, deathCount: 0, achievementCount: 0, sleepCount: 0 },
+  stats: {
+    totalOnline: 3600,
+    loginCount: 1,
+    offlineSince: 0,
+    deathCount: 0,
+    achievementCount: 0,
+    sleepCount: 0,
+  },
 }
 
 const defaultOnAction = async () => {}

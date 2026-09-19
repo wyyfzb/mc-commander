@@ -26,7 +26,13 @@ interface NoticeBannerProps {
   role?: 'status' | 'alert'
 }
 
-export function NoticeBanner({ variant, icon: Icon, children, className, role = 'status' }: NoticeBannerProps) {
+export function NoticeBanner({
+  variant,
+  icon: Icon,
+  children,
+  className,
+  role = 'status',
+}: NoticeBannerProps) {
   return (
     <div
       role={role}

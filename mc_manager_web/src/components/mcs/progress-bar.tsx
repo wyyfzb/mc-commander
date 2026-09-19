@@ -13,7 +13,10 @@ export function ProgressBar({ percent }: { percent: number }) {
       aria-valuemax={100}
       className="h-1.5 w-full overflow-hidden rounded-full bg-mcs-bg-emphasis"
     >
-      <div className="h-full rounded-full" style={{ width: `${p}%`, background: 'var(--mcs-accent)' }} />
+      <div
+        className="h-full rounded-full"
+        style={{ width: `${p}%`, background: 'var(--mcs-accent)' }}
+      />
     </div>
   )
 }

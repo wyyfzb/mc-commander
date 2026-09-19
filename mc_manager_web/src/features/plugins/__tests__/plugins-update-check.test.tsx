@@ -48,7 +48,10 @@ const UPDATE_FIXTURE = {
 let updateStatus = 200
 const server = setupServer(
   http.post('/api/v1/instances/demo/plugins/check-updates', () =>
-    HttpResponse.json({ status: 'ok', code: 0, message: 'ok', data: UPDATE_FIXTURE }, { status: updateStatus }),
+    HttpResponse.json(
+      { status: 'ok', code: 0, message: 'ok', data: UPDATE_FIXTURE },
+      { status: updateStatus },
+    ),
   ),
   http.get('/api/v1/instances/demo/plugins', () =>
     HttpResponse.json({ status: 'ok', code: 0, message: 'ok', data: { plugins: [] } }),
@@ -111,7 +114,9 @@ describe('apiCheckPluginUpdates', () => {
         ),
       ),
     )
-    await expect(apiCheckPluginUpdates(useConnectionStore.getState(), 'demo')).rejects.toMatchObject({
+    await expect(
+      apiCheckPluginUpdates(useConnectionStore.getState(), 'demo'),
+    ).rejects.toMatchObject({
       code: 50301,
     })
   })

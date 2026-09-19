@@ -144,9 +144,18 @@ describe('采集域模块 require 复用语义', () => {
   it('12 个域方法经 Object.assign 注入 MCServerInstance 原型，实例调用 this 绑定正确', () => {
     const inst = makeBareInstance();
     for (const m of [
-      '_startStatsCollection', '_schedulePlayerStats', '_scheduleMspt', '_scheduleWorldState',
-      '_stopStatsCollection', '_collectStats', '_collectLinuxStats', '_collectMspt',
-      '_collectWorldState', '_queryWorldTime', '_queryWorldDay', '_collectPlayerStats',
+      '_startStatsCollection',
+      '_schedulePlayerStats',
+      '_scheduleMspt',
+      '_scheduleWorldState',
+      '_stopStatsCollection',
+      '_collectStats',
+      '_collectLinuxStats',
+      '_collectMspt',
+      '_collectWorldState',
+      '_queryWorldTime',
+      '_queryWorldDay',
+      '_collectPlayerStats',
     ]) {
       expect(typeof inst[m]).toBe('function');
     }
@@ -276,8 +285,11 @@ describe('调度链（串行化递归 setTimeout + 代际 epoch）', () => {
   ])('%s：采集 reject 不中断链；代际推进后停链', async (scheduleFn, collectFn, interval) => {
     const inst = makeBareInstance();
     const epochKey =
-      scheduleFn === '_schedulePlayerStats' ? '_playerStatsEpoch'
-        : scheduleFn === '_scheduleMspt' ? '_msptEpoch' : '_worldStateEpoch';
+      scheduleFn === '_schedulePlayerStats'
+        ? '_playerStatsEpoch'
+        : scheduleFn === '_scheduleMspt'
+          ? '_msptEpoch'
+          : '_worldStateEpoch';
     let call = 0;
     const collect = vi.fn(async () => {
       call += 1;
@@ -293,8 +305,11 @@ describe('调度链（串行化递归 setTimeout + 代际 epoch）', () => {
     await vi.advanceTimersByTimeAsync(interval); // 代际已变 → 停链
     expect(collect).toHaveBeenCalledTimes(2);
     const timerKey =
-      scheduleFn === '_schedulePlayerStats' ? '_playerStatsTimer'
-        : scheduleFn === '_scheduleMspt' ? '_msptTimer' : '_worldStateTimer';
+      scheduleFn === '_schedulePlayerStats'
+        ? '_playerStatsTimer'
+        : scheduleFn === '_scheduleMspt'
+          ? '_msptTimer'
+          : '_worldStateTimer';
     expect(inst[timerKey]).toBeNull();
   });
 });
@@ -338,7 +353,9 @@ describe('_collectStats 门控与平台分支', () => {
       // 字段缺失/非数字：内存保留旧值，CPU 基线不动
       const inst2 = makeBareInstance();
       inst2._memoryUsage = 0.5;
-      exec.mockImplementation((cmd, ...rest) => rest[rest.length - 1](null, '{"WorkingSet64":null,"CPU":null}'));
+      exec.mockImplementation((cmd, ...rest) =>
+        rest[rest.length - 1](null, '{"WorkingSet64":null,"CPU":null}'),
+      );
       inst2._collectStats();
       expect(inst2._memoryUsage).toBe(0.5);
       expect(inst2._cpuUsage).toBe(0);
@@ -356,7 +373,9 @@ describe('_collectStats 门控与平台分支', () => {
       // cpuDiff = 11.5s / elapsed 1s = 1150%（多核并行的进程也按单进程口径截断）；
       // 输入须明显越过上限：恰好 100% 时删掉截断照样通过，用例等于没锁住
       inst._lastCpuTime = { cpu: 1.0, sys: 0, time: Date.now() - 1000 };
-      exec.mockImplementation((cmd, ...rest) => rest[rest.length - 1](null, '{"WorkingSet64":1073741824,"CPU":12.5}'));
+      exec.mockImplementation((cmd, ...rest) =>
+        rest[rest.length - 1](null, '{"WorkingSet64":1073741824,"CPU":12.5}'),
+      );
       inst._collectStats();
       expect(inst._cpuUsage).toBe(100);
       expect(inst._lastCpuTime.cpu).toBe(12.5);
@@ -371,7 +390,9 @@ describe('_collectStats 门控与平台分支', () => {
     try {
       const inst2 = makeBareInstance();
       const perf2 = collectPerf(inst2);
-      exec.mockImplementation((cmd, ...rest) => rest[rest.length - 1](new Error('powershell failed'), ''));
+      exec.mockImplementation((cmd, ...rest) =>
+        rest[rest.length - 1](new Error('powershell failed'), ''),
+      );
       inst2._collectStats();
       expect(perf2).toHaveLength(0);
 
@@ -401,7 +422,9 @@ describe('_collectStats 门控与平台分支', () => {
       inst.on('performanceUpdate', () => {
         throw new Error('broadcast failed');
       });
-      exec.mockImplementation((cmd, ...rest) => rest[rest.length - 1](null, '{"WorkingSet64":1073741824,"CPU":1}'));
+      exec.mockImplementation((cmd, ...rest) =>
+        rest[rest.length - 1](null, '{"WorkingSet64":1073741824,"CPU":1}'),
+      );
       // exec 回调里抛错无人接管，只能在这里就地吞掉：采集照常、只丢这次广播
       expect(() => inst._collectStats()).not.toThrow();
       expect(inst._memoryUsage).toBe(1);
@@ -483,7 +506,8 @@ describe('_collectLinuxStats：/proc fixture 驱动差分 CPU 计算', () => {
     });
     statFixture = makeStatContent(77, 33);
     statmFixture = '123 456000 78 9 10 11 12\n';
-    procStatFixture = 'cpu  100 200 300 4000 500 0 100 0 0 0\ncpu0 50 100 150 2000 250 0 50 0 0 0\n';
+    procStatFixture =
+      'cpu  100 200 300 4000 500 0 100 0 0 0\ncpu0 50 100 150 2000 250 0 50 0 0 0\n';
     exec.mockReset();
   });
 
@@ -634,14 +658,20 @@ describe('_collectMspt：tick query 主路径与 TPS 回退（真实 isRconConne
 
   it('tick query 无 mean：回退 tps 命令反推 MSPT（20 TPS = 50ms）', async () => {
     const inst = rconEnabledInstance();
-    stubRconSend(inst, (cmd) => (cmd === 'tick query' ? 'Unknown or incomplete command' : 'TPS from last 5s, 1m, 5m: 20.0, 19.9, 19.8'));
+    stubRconSend(inst, (cmd) =>
+      cmd === 'tick query'
+        ? 'Unknown or incomplete command'
+        : 'TPS from last 5s, 1m, 5m: 20.0, 19.9, 19.8',
+    );
     await inst._collectMspt();
     expect(inst._mspt).toBe(50);
   });
 
   it('tps 为 0 不更新 MSPT；查询异常静默跳过待下轮重试', async () => {
     const inst = rconEnabledInstance();
-    stubRconSend(inst, (cmd) => (cmd === 'tick query' ? 'no mean here' : 'TPS from last 5s, 1m, 5m: 0.0, 0.0, 0.0'));
+    stubRconSend(inst, (cmd) =>
+      cmd === 'tick query' ? 'no mean here' : 'TPS from last 5s, 1m, 5m: 0.0, 0.0, 0.0',
+    );
     await inst._collectMspt();
     expect(inst._mspt).toBe(0);
     const inst2 = rconEnabledInstance();
@@ -814,12 +844,17 @@ describe('_collectPlayerStats：玩家状态采集与错误隔离', () => {
 
   function stubPlayerQueries(inst, overrides = {}) {
     stubRconSend(inst, (cmd) => {
-      if (cmd.includes(' Health')) return overrides.health ?? 'Steve has the following entity data: 20.5f';
-      if (cmd.includes(' Pos')) return overrides.pos ?? 'Steve has the following entity data: [1.5d, 64.0d, 2.5d]';
-      if (cmd.includes(' SleepTimer')) return overrides.sleep ?? 'Steve has the following entity data: 100';
+      if (cmd.includes(' Health'))
+        return overrides.health ?? 'Steve has the following entity data: 20.5f';
+      if (cmd.includes(' Pos'))
+        return overrides.pos ?? 'Steve has the following entity data: [1.5d, 64.0d, 2.5d]';
+      if (cmd.includes(' SleepTimer'))
+        return overrides.sleep ?? 'Steve has the following entity data: 100';
       return 'unexpected query';
     });
-    inst._queryAttribute = vi.fn(async () => (overrides.armor === undefined ? 12.5 : overrides.armor));
+    inst._queryAttribute = vi.fn(async () =>
+      overrides.armor === undefined ? 12.5 : overrides.armor,
+    );
   }
 
   it('无在线玩家且入睡计数非零：清零并广播；已为零不重复广播', async () => {
@@ -881,7 +916,10 @@ describe('_collectPlayerStats：玩家状态采集与错误隔离', () => {
     // 第二轮 SleepTimer 归零：起床事件 + 计数回落
     stubPlayerQueries(inst, { sleep: 'Steve has the following entity data: 0' });
     await inst._collectPlayerStats();
-    expect(sleeps).toEqual([{ name: 'Steve', sleeping: true }, { name: 'Steve', sleeping: false }]);
+    expect(sleeps).toEqual([
+      { name: 'Steve', sleeping: true },
+      { name: 'Steve', sleeping: false },
+    ]);
     // _addPlayerEvent 逆序 unshift（最新事件在前）：起床在前、入睡在后
     const events = inst.playerEvents.get('Steve');
     expect(events.map((e) => e.type)).toEqual(['wake', 'sleep']);
@@ -922,7 +960,11 @@ describe('_collectPlayerStats：玩家状态采集与错误隔离', () => {
       armor: null,
       sleep: 'Steve has the following entity data: 0',
     });
-    inst.players.get('Steve')._cachedDetails = { health: 18, armor: 5, position: { x: 1, y: 2, z: 3 } };
+    inst.players.get('Steve')._cachedDetails = {
+      health: 18,
+      armor: 5,
+      position: { x: 1, y: 2, z: 3 },
+    };
     const stats = [];
     inst.on('playerStatsUpdate', (e) => stats.push(e));
     await inst._collectPlayerStats();
@@ -952,10 +994,12 @@ describe('_collectPlayerStats：玩家状态采集与错误隔离', () => {
   });
 
   it('多玩家采集：单玩家循环异常隔离跳过，其余玩家照常入列', async () => {
-    const inst = fullRconInstance(new Map([
-      ['Alex', makePlayer('Alex')],
-      ['Steve', makePlayer('Steve')],
-    ]));
+    const inst = fullRconInstance(
+      new Map([
+        ['Alex', makePlayer('Alex')],
+        ['Steve', makePlayer('Steve')],
+      ]),
+    );
     stubPlayerQueries(inst);
     // Alex 的护甲查询抛错 → 整个玩家跳过（stats 不含 Alex）
     inst._queryAttribute = vi.fn(async (cmd, name) => {

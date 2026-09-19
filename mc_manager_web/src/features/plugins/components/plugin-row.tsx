@@ -24,7 +24,18 @@ interface PluginRowProps {
   onUpdate: (plugin: PluginInfo) => void
 }
 
-export function PluginRow({ plugin, checked, onCheckedChange, toggling, deleting, onToggle, onDelete, onOpenDetail, updateInfo, onUpdate }: PluginRowProps) {
+export function PluginRow({
+  plugin,
+  checked,
+  onCheckedChange,
+  toggling,
+  deleting,
+  onToggle,
+  onDelete,
+  onOpenDetail,
+  updateInfo,
+  onUpdate,
+}: PluginRowProps) {
   const displayName = plugin.meta?.name ?? plugin.name
   const version = plugin.meta?.version
   const apiVersion = plugin.meta?.apiVersion
@@ -69,7 +80,10 @@ export function PluginRow({ plugin, checked, onCheckedChange, toggling, deleting
       {/* 主列：名称 + 元数据 */}
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="truncate text-mcs-sm font-medium text-mcs-text-default" title={displayName}>
+          <span
+            className="truncate text-mcs-sm font-medium text-mcs-text-default"
+            title={displayName}
+          >
             {displayName}
           </span>
           {version && <StatusPill tone="muted">v{version}</StatusPill>}
@@ -93,7 +107,9 @@ export function PluginRow({ plugin, checked, onCheckedChange, toggling, deleting
           )}
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-mcs-xs text-mcs-text-muted">
-          <span className="truncate font-mono" title={plugin.file}>{plugin.file}</span>
+          <span className="truncate font-mono" title={plugin.file}>
+            {plugin.file}
+          </span>
           <span>{formatFileSize(plugin.sizeBytes)}</span>
           <span>{formatModifiedAt(new Date(plugin.mtimeMs).toISOString())} 修改</span>
           {authors.length > 0 && <span className="truncate">作者 {authors.join(', ')}</span>}

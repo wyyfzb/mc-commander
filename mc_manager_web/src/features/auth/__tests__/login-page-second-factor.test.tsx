@@ -254,7 +254,11 @@ describe('LoginPage 第二因子', () => {
   })
 
   it('429 封禁在密码步：文案只点名密码，不把验证码扯进来', async () => {
-    server.use(http.post('*/api/v1/auth/login', () => errorEnvelope(42901, '登录失败次数过多，请稍后再试', 429)))
+    server.use(
+      http.post('*/api/v1/auth/login', () =>
+        errorEnvelope(42901, '登录失败次数过多，请稍后再试', 429),
+      ),
+    )
     const user = userEvent.setup()
     renderLoginPage()
     await waitForLoginMode()

@@ -67,7 +67,12 @@ function parseColor(raw, vars, refVars) {
     const h2 = b.h ?? 0
     const dh = ((h2 - h1 + 540) % 360) - 180 // 短弧插值
     return {
-      color: { mode: 'oklch', l: p * a.l + (1 - p) * b.l, c: p * a.c + (1 - p) * b.c, h: (h1 + dh * (1 - p) + 360) % 360 },
+      color: {
+        mode: 'oklch',
+        l: p * a.l + (1 - p) * b.l,
+        c: p * a.c + (1 - p) * b.c,
+        h: (h1 + dh * (1 - p) + 360) % 360,
+      },
       alpha: 1,
     }
   }
@@ -75,7 +80,13 @@ function parseColor(raw, vars, refVars) {
   if (!c) throw new Error(`无法解析颜色: ${raw} -> ${value}`)
   // rgba()/带 alpha 的色值：把自带 alpha 提到包装层（前景须按合成后颜色参与对比度计算）
   const alpha = c.alpha ?? 1
-  return { color: alpha === 1 ? c : { mode: c.mode, ...Object.fromEntries(Object.entries(c).filter(([k]) => k !== 'alpha')) }, alpha }
+  return {
+    color:
+      alpha === 1
+        ? c
+        : { mode: c.mode, ...Object.fromEntries(Object.entries(c).filter(([k]) => k !== 'alpha')) },
+    alpha,
+  }
 }
 
 /** alpha 容器底与背景的合成色（先转 sRGB 再线性合成，WCAG 亮度计算域） */
@@ -158,7 +169,9 @@ for (const [scopeName, vars] of [
     const glass = parseColor(vars.get(spec.token), vars, refVars)
     const candidates = ['bg-muted', 'bg-emphasis'].map((bk) => {
       const backdrop = parseColor(vars.get(`--mcs-${bk}`), vars, refVars)
-      const behind = MODAL_GLASS.has(spec.name) ? composite(scrim.color, backdrop.color, scrim.alpha) : backdrop.color
+      const behind = MODAL_GLASS.has(spec.name)
+        ? composite(scrim.color, backdrop.color, scrim.alpha)
+        : backdrop.color
       return composite(glass.color, behind, spec.alpha)
     })
     return [spec.name, candidates]
@@ -168,18 +181,21 @@ for (const [scopeName, vars] of [
     ...glassSurfaces,
   ]
   // 面 × 前景：取该面上所有候选底的最差对比度
-  const worstOn = (fgColor, candidates) => Math.min(...candidates.map((bg) => wcagContrast(fgColor, bg)))
+  const worstOn = (fgColor, candidates) =>
+    Math.min(...candidates.map((bg) => wcagContrast(fgColor, bg)))
 
   // 1. 文字两级 × 面（正文 ≥4.5:1）
   for (const textKey of ['text-default', 'text-muted']) {
     const fg = parseColor(vars.get(`--mcs-${textKey}`), vars, refVars)
-    for (const [name, candidates] of surfaces) check(`${textKey} on ${name}`, worstOn(fg.color, candidates), 4.5)
+    for (const [name, candidates] of surfaces)
+      check(`${textKey} on ${name}`, worstOn(fg.color, candidates), 4.5)
   }
 
   // 2. 状态六色 fg × 面（文字/图标 ≥4.5）
   for (const status of STATUS_KEYS) {
     const fg = parseColor(vars.get(`--mcs-${status}-fg`), vars, refVars)
-    for (const [name, candidates] of surfaces) check(`${status}-fg on ${name}`, worstOn(fg.color, candidates), 4.5)
+    for (const [name, candidates] of surfaces)
+      check(`${status}-fg on ${name}`, worstOn(fg.color, candidates), 4.5)
   }
 
   // 3. 状态色 fg × 自身容器底（容器底承载文字 → 文字口径 4.5）
@@ -187,13 +203,17 @@ for (const [scopeName, vars] of [
   for (const status of STATUS_KEYS) {
     const bgSubRaw = vars.get(`--mcs-${status}-bg-subtle`)
     if (bgSubRaw === undefined) {
-      console.log(`· ${status}-fg on ${status}-bg-subtle`.padEnd(53) + `  跳过（该色族无 -bg-subtle 档）`)
+      console.log(
+        `· ${status}-fg on ${status}-bg-subtle`.padEnd(53) + `  跳过（该色族无 -bg-subtle 档）`,
+      )
       continue
     }
     const fg = parseColor(vars.get(`--mcs-${status}-fg`), vars, refVars)
     const bgSub = parseColor(bgSubRaw, vars, refVars)
     if (bgSub.alpha !== 1) {
-      console.log(`✗ ${status}-bg-subtle 为半透明（alpha ${bgSub.alpha}）→ 内容面 tint 必须不透明，否则对比度随宿主面漂移`)
+      console.log(
+        `✗ ${status}-bg-subtle 为半透明（alpha ${bgSub.alpha}）→ 内容面 tint 必须不透明，否则对比度随宿主面漂移`,
+      )
       failures++
       checks++
       continue
@@ -210,7 +230,8 @@ for (const [scopeName, vars] of [
   // 5. accent-fg × 面（accent 做文字/图标 ≥4.5）
   {
     const fg = parseColor(vars.get('--mcs-accent-fg'), vars, refVars)
-    for (const [name, candidates] of surfaces) check(`accent-fg on ${name}`, worstOn(fg.color, candidates), 4.5)
+    for (const [name, candidates] of surfaces)
+      check(`accent-fg on ${name}`, worstOn(fg.color, candidates), 4.5)
     const accTint = parseColor(vars.get('--mcs-accent-bg-subtle'), vars, refVars)
     if (accTint.alpha !== 1) {
       console.log(`✗ accent-bg-subtle 为半透明（alpha ${accTint.alpha}）→ 内容面 tint 必须不透明`)
@@ -225,7 +246,9 @@ for (const [scopeName, vars] of [
   {
     const fg = parseColor(vars.get('--mcs-border-default'), vars, refVars)
     for (const [name, candidates] of surfaces) {
-      const worst = Math.min(...candidates.map((bg) => wcagContrast(composite(fg.color, bg, fg.alpha), bg)))
+      const worst = Math.min(
+        ...candidates.map((bg) => wcagContrast(composite(fg.color, bg, fg.alpha), bg)),
+      )
       check(`border-default on ${name}`, worst, 3.0)
     }
   }
@@ -233,20 +256,23 @@ for (const [scopeName, vars] of [
   // 7. 焦点环 × 面（≥3:1，不透明；组件用 ring-ring 不透明焦点环，见 ui/* 组件）
   {
     const fg = parseColor(vars.get('--mcs-focus-ring'), vars, refVars)
-    for (const [name, candidates] of surfaces) check(`focus-ring on ${name}`, worstOn(fg.color, candidates), 3.0)
+    for (const [name, candidates] of surfaces)
+      check(`focus-ring on ${name}`, worstOn(fg.color, candidates), 3.0)
   }
 
   // 8. 维度三色 × 面（8px 色点小图形 ≥3:1，WCAG 1.4.11 非文字图形标准）
   for (const dim of ['overworld', 'nether', 'end']) {
     const fg = parseColor(vars.get(`--mcs-dimension-${dim}`), vars, refVars)
-    for (const [name, candidates] of surfaces) check(`dimension-${dim} on ${name}`, worstOn(fg.color, candidates), 3.0)
+    for (const [name, candidates] of surfaces)
+      check(`dimension-${dim} on ${name}`, worstOn(fg.color, candidates), 3.0)
   }
 
   // 8b. identity 六槽 × 面（实例固定色相标识：同为小图形填充，口径同 8）
   //     非语义色族，只承担「是哪个实例」；禁作文字/容器底，故无 -fg/-bg-subtle 与文字口径
   for (const slot of [1, 2, 3, 4, 5, 6]) {
     const fg = parseColor(vars.get(`--mcs-identity-${slot}`), vars, refVars)
-    for (const [name, candidates] of surfaces) check(`identity-${slot} on ${name}`, worstOn(fg.color, candidates), 3.0)
+    for (const [name, candidates] of surfaces)
+      check(`identity-${slot} on ${name}`, worstOn(fg.color, candidates), 3.0)
   }
 
   // 8c. 状态指示器 ping 涟漪（顶栏）：状态色按 --mcs-ripple-opacity 叠在顶栏玻璃面上。
@@ -257,7 +283,9 @@ for (const [scopeName, vars] of [
     const alpha = Number(vars.get('--mcs-ripple-opacity'))
     const chromeSpec = readGlassSpecs(scopeName === '亮色').find((s) => s.name === 'glass-chrome')
     if (!Number.isFinite(alpha) || !chromeSpec) {
-      console.log(`✗ 涟漪检查缺少输入：--mcs-ripple-opacity=${vars.get('--mcs-ripple-opacity')} glass-chrome=${!!chromeSpec}`)
+      console.log(
+        `✗ 涟漪检查缺少输入：--mcs-ripple-opacity=${vars.get('--mcs-ripple-opacity')} glass-chrome=${!!chromeSpec}`,
+      )
       failures++
       checks++
     } else {
@@ -279,7 +307,11 @@ for (const [scopeName, vars] of [
   //    弱档 --mcs-accent-border 仅作装饰（亮色 1.10:1 / 暗色 1.69:1），不得用于控件边界
   const strongBorder = parseColor(vars.get('--mcs-accent-border-strong'), vars, refVars)
   for (const [name, candidates] of surfaces) {
-    const worst = Math.min(...candidates.map((bg) => wcagContrast(composite(strongBorder.color, bg, strongBorder.alpha), bg)))
+    const worst = Math.min(
+      ...candidates.map((bg) =>
+        wcagContrast(composite(strongBorder.color, bg, strongBorder.alpha), bg),
+      ),
+    )
     check(`accent-border-strong on ${name}`, worst, 3.0)
   }
   // 9b. 选中态内面（accent tint 叠页面底）：强档描边的实际落点（选中 chip/物品格/导航项）
@@ -317,8 +349,18 @@ for (const [scopeName, vars] of [
       ['error-fg on bg-default (text-destructive)', '--mcs-error-fg', '--mcs-bg-default', 4.5],
       ['error-fg on bg-muted (text-destructive)', '--mcs-error-fg', '--mcs-bg-muted', 4.5],
       ['error-fg on bg-emphasis (text-destructive)', '--mcs-error-fg', '--mcs-bg-emphasis', 4.5],
-      ['text-muted on bg-emphasis (muted-foreground)', '--mcs-text-muted', '--mcs-bg-emphasis', 4.5],
-      ['text-default on bg-secondary (secondary-foreground)', '--mcs-text-default', '--mcs-bg-secondary', 4.5],
+      [
+        'text-muted on bg-emphasis (muted-foreground)',
+        '--mcs-text-muted',
+        '--mcs-bg-emphasis',
+        4.5,
+      ],
+      [
+        'text-default on bg-secondary (secondary-foreground)',
+        '--mcs-text-default',
+        '--mcs-bg-secondary',
+        4.5,
+      ],
       ['focus-ring on bg-emphasis (ring)', '--mcs-focus-ring', '--mcs-bg-emphasis', 3.0],
       ['border-default on bg-emphasis (input)', '--mcs-border-default', '--mcs-bg-emphasis', 3.0],
     ]

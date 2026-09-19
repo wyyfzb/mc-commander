@@ -98,4 +98,5 @@ export function toneOutlineClasses(tone: SemanticTone): string {
 export const TONE_SELECTED_CLASSES =
   'border-mcs-accent-border-strong bg-mcs-accent-bg-subtle text-mcs-accent-fg'
 
-export const TONE_SELECTED_SURFACE_CLASSES = 'border-mcs-accent-border-strong bg-mcs-accent-bg-subtle'
+export const TONE_SELECTED_SURFACE_CLASSES =
+  'border-mcs-accent-border-strong bg-mcs-accent-bg-subtle'

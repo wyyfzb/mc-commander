@@ -237,6 +237,8 @@ describe('PluginDetailSheet · 行内启停', () => {
 
   it('面板底部渲染启停生效时机提示', () => {
     setup()
-    expect(screen.getByText('启停与增删在重启实例后生效（Bukkit 插件仅启动时加载）')).toBeInTheDocument()
+    expect(
+      screen.getByText('启停与增删在重启实例后生效（Bukkit 插件仅启动时加载）'),
+    ).toBeInTheDocument()
   })
 })

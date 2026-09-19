@@ -63,7 +63,7 @@ describe('TaskScheduler - backup 任务分支（互斥跳过 + 失败可见性�
     });
     expect(scheduler.backupService.createBackup).toHaveBeenCalledWith(
       's1',
-      expect.objectContaining({ type: 'scheduled', createdBy: 'scheduler', taskId: 10 })
+      expect.objectContaining({ type: 'scheduled', createdBy: 'scheduler', taskId: 10 }),
     );
     // 名字里的时刻取本地时区（与列表按本地时区渲染 createdAt 同口径，不带 Z）
     const d = new Date();
@@ -83,7 +83,11 @@ describe('TaskScheduler - backup 任务分支（互斥跳过 + 失败可见性�
     scheduler.executeTask(baseTask);
 
     expect(scheduler.backupService.createBackup).not.toHaveBeenCalled();
-    expect(ScheduledTaskModel.updateLastRun).toHaveBeenCalledWith(10, expect.any(String), 'skipped');
+    expect(ScheduledTaskModel.updateLastRun).toHaveBeenCalledWith(
+      10,
+      expect.any(String),
+      'skipped',
+    );
   });
 
   it('备份进行中（creating）时跳过：发 backupSkipped 事件 + 结果落 skipped（防短周期 cron 刷屏，下周期重试）', () => {
@@ -97,9 +101,17 @@ describe('TaskScheduler - backup 任务分支（互斥跳过 + 失败可见性�
     expect(scheduler.backupService.createBackup).not.toHaveBeenCalled();
     expect(mockManager.emit).toHaveBeenCalledWith(
       'instance:backupSkipped',
-      expect.objectContaining({ instanceId: 's1', taskId: 10, content: expect.stringContaining('跳过') })
+      expect.objectContaining({
+        instanceId: 's1',
+        taskId: 10,
+        content: expect.stringContaining('跳过'),
+      }),
     );
-    expect(ScheduledTaskModel.updateLastRun).toHaveBeenCalledWith(10, expect.any(String), 'skipped');
+    expect(ScheduledTaskModel.updateLastRun).toHaveBeenCalledWith(
+      10,
+      expect.any(String),
+      'skipped',
+    );
   });
 
   it('恢复进行中（restoring）时同样跳过（restoring 状态机统一互斥）', () => {
@@ -125,8 +137,13 @@ describe('TaskScheduler - backup 任务分支（互斥跳过 + 失败可见性�
         phase: 'scheduled',
         error: 'World directory not found',
         content: expect.stringContaining('备份失败'),
-      })
+      }),
     );
-    expect(ScheduledTaskModel.updateLastRunStatus).toHaveBeenCalledWith(10, 'failed', 'World directory not found', expect.any(Number));
+    expect(ScheduledTaskModel.updateLastRunStatus).toHaveBeenCalledWith(
+      10,
+      'failed',
+      'World directory not found',
+      expect.any(Number),
+    );
   });
 });

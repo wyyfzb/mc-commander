@@ -14,7 +14,15 @@
  * 7. 设计纪律：全部 --mcs-* 语义 token；格子实底（玻璃禁区）；不硬编码色值/间距/圆角
  */
 import { useState, type ReactNode } from 'react'
-import { AlertTriangle, CloudOff, EyeOff, History, Hourglass, Lock, type LucideIcon } from 'lucide-react'
+import {
+  AlertTriangle,
+  CloudOff,
+  EyeOff,
+  History,
+  Hourglass,
+  Lock,
+  type LucideIcon,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { fullItemId, itemImageUrl } from '@/lib/mc-items'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -103,7 +111,11 @@ export function InventoryTab({ player }: InventoryTabProps) {
         </NoticeBanner>
       )}
 
-      {subTab === 'player' ? <PlayerInventoryPanel inventory={inventory} /> : <EnderChestPanel inventory={inventory} />}
+      {subTab === 'player' ? (
+        <PlayerInventoryPanel inventory={inventory} />
+      ) : (
+        <EnderChestPanel inventory={inventory} />
+      )}
     </div>
   )
 }
@@ -113,7 +125,13 @@ function PlayerInventoryPanel({ inventory }: { inventory: PlayerInventory }) {
   const quickbar = fillSlots(inventory.quickbar, 9)
   const main = fillSlots(inventory.main, 27)
   const equipment = inventory.equipment
-  const equipmentItems = [equipment.helmet, equipment.chestplate, equipment.leggings, equipment.boots, equipment.offhand]
+  const equipmentItems = [
+    equipment.helmet,
+    equipment.chestplate,
+    equipment.leggings,
+    equipment.boots,
+    equipment.offhand,
+  ]
   const equipmentLabels = ['头盔', '胸甲', '护腿', '靴子', '副手']
 
   return (
@@ -170,13 +188,21 @@ function EnderChestPanel({ inventory }: { inventory: PlayerInventory }) {
         <SlotStat label="空位" value={`${27 - used}`} accent />
       </div>
 
-      <p className="text-mcs-2xs text-mcs-text-muted">末影箱数据来自玩家存档（playerdata EnderItems）</p>
+      <p className="text-mcs-2xs text-mcs-text-muted">
+        末影箱数据来自玩家存档（playerdata EnderItems）
+      </p>
     </div>
   )
 }
 
 /** 单格：贴图 / 数量角标 / 耐久条 / 附魔紫光 / hover tooltip */
-function InventorySlot({ item, variant = 'default' }: { item: InventoryItem | null; variant?: 'default' | 'ender' }) {
+function InventorySlot({
+  item,
+  variant = 'default',
+}: {
+  item: InventoryItem | null
+  variant?: 'default' | 'ender'
+}) {
   const slotStyle = { width: SLOT_SIZE, height: SLOT_SIZE }
 
   // 空槽（实底弱边框，无交互）
@@ -188,7 +214,9 @@ function InventorySlot({ item, variant = 'default' }: { item: InventoryItem | nu
         style={slotStyle}
         className={cn(
           'block rounded-mcs-xs border',
-          variant === 'ender' ? 'border-mcs-purple-border bg-mcs-purple-bg-subtle' : 'border-mcs-border-subtle bg-mcs-bg-muted',
+          variant === 'ender'
+            ? 'border-mcs-purple-border bg-mcs-purple-bg-subtle'
+            : 'border-mcs-border-subtle bg-mcs-bg-muted',
         )}
       />
     )
@@ -206,7 +234,9 @@ function InventorySlot({ item, variant = 'default' }: { item: InventoryItem | nu
           }}
           className={cn(
             'relative block cursor-help rounded-mcs-xs border transition-colors hover:border-mcs-accent-border-strong',
-            variant === 'ender' ? 'border-mcs-purple-border bg-mcs-purple-bg-subtle' : 'border-mcs-border-default bg-mcs-bg-muted',
+            variant === 'ender'
+              ? 'border-mcs-purple-border bg-mcs-purple-bg-subtle'
+              : 'border-mcs-border-default bg-mcs-bg-muted',
             item.enchanted && 'border-mcs-purple-border',
           )}
         >
@@ -273,7 +303,15 @@ function SlotIcon({ item }: { item: InventoryItem }) {
 }
 
 /** 空态卡片 */
-function EmptyState({ icon: Icon, message, subtext }: { icon: LucideIcon; message: string; subtext?: string }) {
+function EmptyState({
+  icon: Icon,
+  message,
+  subtext,
+}: {
+  icon: LucideIcon
+  message: string
+  subtext?: string
+}) {
   return (
     <div className="flex w-full flex-col items-center gap-2 rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-default px-6 py-10">
       <Icon className="size-8 text-mcs-text-muted" aria-hidden />
@@ -297,9 +335,7 @@ function NoticeBanner({
     <div
       className={cn(
         'flex items-center gap-1.5 rounded-mcs-xs border px-2.5 py-1.5 text-mcs-xs',
-        variant === 'info'
-          ? toneClasses('info')
-          : toneClasses('warning'),
+        variant === 'info' ? toneClasses('info') : toneClasses('warning'),
       )}
     >
       <Icon className="size-3.5 shrink-0" aria-hidden />
@@ -309,7 +345,15 @@ function NoticeBanner({
 }
 
 /** 统计小卡片 */
-function SlotStat({ label, value, accent = false }: { label: string; value: string; accent?: boolean }) {
+function SlotStat({
+  label,
+  value,
+  accent = false,
+}: {
+  label: string
+  value: string
+  accent?: boolean
+}) {
   return (
     <span className="flex flex-col items-center gap-0.5 rounded-mcs-xs bg-mcs-bg-muted px-2.5 py-1">
       <span className="text-mcs-2xs text-mcs-text-muted">{label}</span>

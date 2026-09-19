@@ -35,6 +35,6 @@ export default defineConfig({
       reporter: ['json', 'text'],
       include: ['routes/**', 'services/**', 'utils/**', 'db/**', 'websocket.js'],
       exclude: ['routes/*.test.js', '**/__tests__/**'],
-    }
-  }
+    },
+  },
 });

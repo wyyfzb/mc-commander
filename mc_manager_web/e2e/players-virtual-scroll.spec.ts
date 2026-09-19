@@ -114,7 +114,9 @@ async function openAllPage(page: Page) {
     .poll(
       async () => {
         const s = await snapshot(page)
-        return s.scrollH > s.clientH && s.rowHeights.length > 0 && s.rowHeights.every((h) => h === 40)
+        return (
+          s.scrollH > s.clientH && s.rowHeights.length > 0 && s.rowHeights.every((h) => h === 40)
+        )
       },
       { message: '等待列表几何落定（可滚动 + 行高恒为 40）' },
     )
@@ -144,7 +146,11 @@ test.describe('长列表虚拟滚动（「全部」档）', () => {
       .poll(
         async () => {
           const s = await snapshot(page)
-          return Math.abs(s.maxScroll - s.scrollTop) <= 1 && s.tailGap !== null && Math.abs(s.tailGap) <= 4
+          return (
+            Math.abs(s.maxScroll - s.scrollTop) <= 1 &&
+            s.tailGap !== null &&
+            Math.abs(s.tailGap) <= 4
+          )
         },
         { message: '等待滚动容器落到底部且尾部无留白' },
       )
@@ -174,7 +180,12 @@ test.describe('长列表虚拟滚动（「全部」档）', () => {
         .poll(async () => (await snapshot(page)).rowHeights, { message: `${width}px 下行高` })
         .toEqual([40])
       // 夹具里的封禁行（宽徽标 + IP）确实在渲染窗口内，否则上面的断言是空转
-      expect(await page.locator('main table tbody').getByText(/封禁·剩/).count()).toBeGreaterThan(0)
+      expect(
+        await page
+          .locator('main table tbody')
+          .getByText(/封禁·剩/)
+          .count(),
+      ).toBeGreaterThan(0)
     }
   })
 })

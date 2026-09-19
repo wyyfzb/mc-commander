@@ -19,10 +19,24 @@ import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/mcs/page-header'
 import { DataTableShell } from '@/components/mcs/data-table-shell'
 import { useAuditLogs, useCommandHistory } from '@/api/queries'
-import { QUICK_RANGES, isRangeInverted, quickRangeDates, toServerEnd, toServerStart, type QuickRange } from './time-range'
+import {
+  QUICK_RANGES,
+  isRangeInverted,
+  quickRangeDates,
+  toServerEnd,
+  toServerStart,
+  type QuickRange,
+} from './time-range'
 import { ACTION_LABELS } from './action-labels'
 import { exportAuditLogsToExcel, exportCommandHistoryToExcel } from './audit-export'
-import { AuditHeader, AuditBody, CmdHeader, CmdBody, AUDIT_COLUMNS, CMD_COLUMNS } from './audit-tables'
+import {
+  AuditHeader,
+  AuditBody,
+  CmdHeader,
+  CmdBody,
+  AUDIT_COLUMNS,
+  CMD_COLUMNS,
+} from './audit-tables'
 import { AuditFilterBar } from './audit-filter-bar'
 import { CmdFilterBar } from './cmd-filter-bar'
 
@@ -250,13 +264,10 @@ export function AuditPage() {
   const handleCmdExport = async () => {
     setCmdExporting(true)
     try {
-      await exportCommandHistoryToExcel(
-        config,
-        {
-          startTime: cmdStart && !cmdRangeInvalid ? toServerStart(cmdStart) : undefined,
-          endTime: cmdEnd && !cmdRangeInvalid ? toServerEnd(cmdEnd) : undefined,
-        },
-      )
+      await exportCommandHistoryToExcel(config, {
+        startTime: cmdStart && !cmdRangeInvalid ? toServerStart(cmdStart) : undefined,
+        endTime: cmdEnd && !cmdRangeInvalid ? toServerEnd(cmdEnd) : undefined,
+      })
     } catch {
       toast.error('导出失败，请重试')
     } finally {
@@ -319,11 +330,18 @@ export function AuditPage() {
             columns={AUDIT_COLUMNS}
             isLoading={auditQuery.isLoading}
             error={auditQuery.isError ? auditQuery.error : undefined}
-            isEmpty={!auditQuery.isLoading && !auditQuery.isError && auditQuery.data?.data.length === 0}
+            isEmpty={
+              !auditQuery.isLoading && !auditQuery.isError && auditQuery.data?.data.length === 0
+            }
             emptyText={auditFiltered ? '当前筛选条件下暂无记录' : '暂无记录'}
             emptyActions={
               auditFiltered ? (
-                <Button variant="outline" size="sm" onClick={clearAuditFilters} data-testid="audit-clear-filters">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={clearAuditFilters}
+                  data-testid="audit-clear-filters"
+                >
                   <X aria-hidden />
                   清空筛选
                 </Button>
@@ -331,14 +349,18 @@ export function AuditPage() {
             }
             skeletonWidths={['w-20', 'w-14', 'w-24', 'w-36']}
             header={<AuditHeader />}
-            pagination={auditQuery.data?.pagination ? {
-              page: auditPage,
-              totalPages: auditQuery.data.pagination.totalPages,
-              totalItems: auditQuery.data.pagination.total,
-              onPageChange: setAuditPage,
-              variant: 'prev-next',
-              disabled: auditQuery.isFetching,
-            } : undefined}
+            pagination={
+              auditQuery.data?.pagination
+                ? {
+                    page: auditPage,
+                    totalPages: auditQuery.data.pagination.totalPages,
+                    totalItems: auditQuery.data.pagination.total,
+                    onPageChange: setAuditPage,
+                    variant: 'prev-next',
+                    disabled: auditQuery.isFetching,
+                  }
+                : undefined
+            }
           >
             <AuditBody logs={auditQuery.data?.data ?? []} />
           </DataTableShell>
@@ -371,14 +393,18 @@ export function AuditPage() {
             emptyText="暂无记录"
             skeletonWidths={['w-20', 'w-40', 'w-10', 'w-14', 'w-12']}
             header={<CmdHeader />}
-            pagination={cmdQuery.data?.pagination ? {
-              page: cmdPage,
-              totalPages: cmdQuery.data.pagination.totalPages,
-              totalItems: cmdQuery.data.pagination.total,
-              onPageChange: setCmdPage,
-              variant: 'prev-next',
-              disabled: cmdQuery.isFetching,
-            } : undefined}
+            pagination={
+              cmdQuery.data?.pagination
+                ? {
+                    page: cmdPage,
+                    totalPages: cmdQuery.data.pagination.totalPages,
+                    totalItems: cmdQuery.data.pagination.total,
+                    onPageChange: setCmdPage,
+                    variant: 'prev-next',
+                    disabled: cmdQuery.isFetching,
+                  }
+                : undefined
+            }
           >
             <CmdBody cmds={cmdQuery.data?.data ?? []} />
           </DataTableShell>

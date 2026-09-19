@@ -71,7 +71,11 @@ export function PlayerCardList({
       <ul className="flex flex-col">
         {isLoading &&
           Array.from({ length: 5 }, (_, i) => (
-            <li key={`skeleton-${i}`} className="flex items-center gap-3 border-b border-mcs-border-subtle px-3 py-3" aria-hidden>
+            <li
+              key={`skeleton-${i}`}
+              className="flex items-center gap-3 border-b border-mcs-border-subtle px-3 py-3"
+              aria-hidden
+            >
               <Skeleton className="size-9 rounded-mcs-sm" />
               <Skeleton className="h-3.5 w-2/5" />
             </li>
@@ -116,7 +120,9 @@ function PlayerCard({
 >) {
   const p = row.original
   const banned = p.isBanned || p.isIpBanned
-  const dimension = p.dimension ? DIMENSION_META[p.dimension as keyof typeof DIMENSION_META]?.label : undefined
+  const dimension = p.dimension
+    ? DIMENSION_META[p.dimension as keyof typeof DIMENSION_META]?.label
+    : undefined
   // 渲染期取当前时间为可接受权衡：最后在线时间随列表数据刷新更新，非实时相对时钟
   // eslint-disable-next-line react/purity
   const nowMs = Date.now()
@@ -125,7 +131,11 @@ function PlayerCard({
     <li
       className={cn(
         'border-b border-mcs-border-subtle',
-        selected ? 'bg-mcs-accent-bg-subtle' : banned ? 'bg-mcs-error-bg-subtle' : 'bg-mcs-bg-default',
+        selected
+          ? 'bg-mcs-accent-bg-subtle'
+          : banned
+            ? 'bg-mcs-error-bg-subtle'
+            : 'bg-mcs-bg-default',
       )}
     >
       <div className="flex items-start gap-3 px-3 py-3">
@@ -145,7 +155,11 @@ function PlayerCard({
               type="button"
               className={cn(
                 'cursor-pointer truncate text-left text-mcs-md font-semibold',
-                banned ? 'text-mcs-error-fg' : p.isOnline ? 'text-mcs-text-default' : 'text-mcs-text-muted',
+                banned
+                  ? 'text-mcs-error-fg'
+                  : p.isOnline
+                    ? 'text-mcs-text-default'
+                    : 'text-mcs-text-muted',
               )}
               aria-label={`查看 ${p.name} 详情`}
               onClick={() => onOpenDetail(p.name)}
@@ -156,8 +170,14 @@ function PlayerCard({
           </div>
           {/* 摘要行：原先横向排开的列在此折为一行小字（状态在前，身份信息在后） */}
           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-mcs-2xs text-mcs-text-muted">
-            <span>{p.isOnline ? '在线' : `最后在线 ${formatRelativeTime(p.lastSeen ?? null, nowMs, '未知')}`}</span>
-            {p.isOnline && <HeartsArmor health={p.health} maxHealth={p.maxHealth} armor={p.armor} />}
+            <span>
+              {p.isOnline
+                ? '在线'
+                : `最后在线 ${formatRelativeTime(p.lastSeen ?? null, nowMs, '未知')}`}
+            </span>
+            {p.isOnline && (
+              <HeartsArmor health={p.health} maxHealth={p.maxHealth} armor={p.armor} />
+            )}
             {p.gameMode && <span>{GAME_MODE_LABELS[p.gameMode] ?? p.gameMode}</span>}
             {dimension && <span>{dimension}</span>}
             {p.isOnline && p.ip && <span className="font-mono">{p.ip}</span>}

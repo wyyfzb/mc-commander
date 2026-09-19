@@ -171,7 +171,13 @@ describe('部署进度兜底', () => {
       useServerStore.setState({ socketConnected: false, hasConnectedOnce: true })
       useDeployStore.setState({
         deploying: true,
-        progress: { stage: 'download', percent: 0.5, transferred: 1, total: 2, instanceId: 'paper-a1b2c3d4' },
+        progress: {
+          stage: 'download',
+          percent: 0.5,
+          transferred: 1,
+          total: 2,
+          instanceId: 'paper-a1b2c3d4',
+        },
       })
     })
     renderDialog()
@@ -370,7 +376,9 @@ describe('重复部署门控', () => {
 describe('兜底查询新鲜度', () => {
   /** 生产同值 QueryClient：全局 staleTime 非 0，避免替身 client 把结论架空 */
   function newClient() {
-    return new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: GLOBAL_STALE_TIME_MS } } })
+    return new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: GLOBAL_STALE_TIME_MS } },
+    })
   }
 
   it('新鲜期内重新挂载（切走再切回）仍重取服务端真值', async () => {

@@ -35,7 +35,13 @@ describe('命令面板 Escape 关闭', () => {
     localStorage.clear()
     useUiStore.setState({ theme: 'dark', sidebarCollapsed: false, commandPaletteOpen: false })
     useConnectionStore.setState({ baseUrl: '', apiKey: '', status: 'unconfigured' })
-    useServerStore.setState({ status: null, systemStats: null, instanceId: null, socketConnected: false, lastStatusEvent: null })
+    useServerStore.setState({
+      status: null,
+      systemStats: null,
+      instanceId: null,
+      socketConnected: false,
+      lastStatusEvent: null,
+    })
   })
 
   it('Escape 关闭已打开的命令面板', async () => {

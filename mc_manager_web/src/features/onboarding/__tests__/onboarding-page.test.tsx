@@ -24,7 +24,10 @@ const { toastSuccess, toastError, copyTextMock, navigateSpy } = vi.hoisted(() =>
 }))
 
 vi.mock('sonner', () => ({
-  toast: { success: (...a: unknown[]) => toastSuccess(...a), error: (...a: unknown[]) => toastError(...a) },
+  toast: {
+    success: (...a: unknown[]) => toastSuccess(...a),
+    error: (...a: unknown[]) => toastError(...a),
+  },
 }))
 
 // OnboardingPage 消费 useNavigate 与 Link（返回登录页）；Link 桩为纯锚点渲染，导出其余保留
@@ -109,7 +112,10 @@ describe('OnboardingPage · 默认态（跳过部署指南）', () => {
     expect(screen.getByText(/Docker 不在支持范围内/)).toBeInTheDocument()
     expect(screen.getByTestId('connection-form')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '← 返回登录页' })).toHaveAttribute('href', '/login')
-    expect(screen.getByRole('link', { name: '查看部署文档 →' })).toHaveAttribute('href', 'https://gitee.com/wyyfzb/mc-commander')
+    expect(screen.getByRole('link', { name: '查看部署文档 →' })).toHaveAttribute(
+      'href',
+      'https://gitee.com/wyyfzb/mc-commander',
+    )
   })
 
   it('默认选中「已有服务端」且部署指南不渲染（跳过路径）', () => {
@@ -126,15 +132,23 @@ describe('OnboardingPage · 部署方式推进', () => {
   it('切换到 Windows 手动部署：卡片选中态迁移 + 步骤指南渲染', () => {
     renderWithDeploy()
     fireEvent.click(screen.getByRole('radio', { name: /Windows 手动部署/ }))
-    expect(screen.getByRole('radio', { name: /Windows 手动部署/ })).toHaveAttribute('aria-checked', 'true')
-    expect(screen.getByRole('radio', { name: /已有服务端/ })).toHaveAttribute('aria-checked', 'false')
+    expect(screen.getByRole('radio', { name: /Windows 手动部署/ })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    )
+    expect(screen.getByRole('radio', { name: /已有服务端/ })).toHaveAttribute(
+      'aria-checked',
+      'false',
+    )
     expect(screen.getByText('Windows 手动部署（Node 22+）')).toBeInTheDocument()
     expect(screen.getByText(/nodejs\.org/)).toBeInTheDocument()
     expect(screen.getByText(/Copy-Item \.env\.example \.env/)).toBeInTheDocument()
     expect(screen.getByText(/localhost:25566/)).toBeInTheDocument()
     // 前端产物缺失时服务端不挂载静态层（:25566 只有 API）——构建步骤必须在列
     expect(screen.getByText(/npm run build/)).toBeInTheDocument()
-    expect(screen.getByText(/Copy-Item \.\.\/mc_manager_web\/dist\/\* public\//)).toBeInTheDocument()
+    expect(
+      screen.getByText(/Copy-Item \.\.\/mc_manager_web\/dist\/\* public\//),
+    ).toBeInTheDocument()
     // 发布物没有 Windows 包，页面必须把这一点说清而不是指引下载
     expect(screen.getByText(/未提供 Windows 安装包/)).toBeInTheDocument()
     expect(screen.getByText(/建议改用 WSL2/)).toBeInTheDocument()
@@ -164,8 +178,14 @@ describe('OnboardingPage · 部署方式单选组语义', () => {
     renderWithDeploy()
     const group = screen.getByRole('radiogroup', { name: '部署方式' })
     expect(within(group).getAllByRole('radio')).toHaveLength(3)
-    expect(within(group).getByRole('radio', { name: /已有服务端/ })).toHaveAttribute('aria-checked', 'true')
-    expect(within(group).getByRole('radio', { name: /Linux 一键部署/ })).toHaveAttribute('aria-checked', 'false')
+    expect(within(group).getByRole('radio', { name: /已有服务端/ })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    )
+    expect(within(group).getByRole('radio', { name: /Linux 一键部署/ })).toHaveAttribute(
+      'aria-checked',
+      'false',
+    )
     // 组外没有游离的 radio
     expect(within(group).getAllByRole('radio')).toHaveLength(screen.getAllByRole('radio').length)
   })
@@ -174,7 +194,10 @@ describe('OnboardingPage · 部署方式单选组语义', () => {
     renderWithDeploy()
     expect(screen.getByRole('radio', { name: /已有服务端/ })).toHaveAttribute('tabindex', '0')
     expect(screen.getByRole('radio', { name: /Linux 一键部署/ })).toHaveAttribute('tabindex', '-1')
-    expect(screen.getByRole('radio', { name: /Windows 手动部署/ })).toHaveAttribute('tabindex', '-1')
+    expect(screen.getByRole('radio', { name: /Windows 手动部署/ })).toHaveAttribute(
+      'tabindex',
+      '-1',
+    )
   })
 
   it('方向键在组内移动并即时选中（右移 / 左移回绕 / Home），焦点跟随', () => {
@@ -208,12 +231,18 @@ describe('OnboardingPage · 部署方式单选组语义', () => {
     already.focus()
 
     fireEvent.keyDown(already, { key: 'ArrowDown' })
-    expect(screen.getByRole('radio', { name: /Linux 一键部署/ })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByRole('radio', { name: /Linux 一键部署/ })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    )
     fireEvent.keyDown(screen.getByRole('radio', { name: /Linux 一键部署/ }), { key: 'ArrowUp' })
     expect(already).toHaveAttribute('aria-checked', 'true')
     // End 跳末项
     fireEvent.keyDown(already, { key: 'End' })
-    expect(screen.getByRole('radio', { name: /Windows 手动部署/ })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByRole('radio', { name: /Windows 手动部署/ })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    )
   })
 
   it('点击非选中项后 roving tabindex 随之迁移（组内恒好一个 Tab 停靠点）', () => {
@@ -245,10 +274,13 @@ describe('OnboardingPage · 命令复制反馈', () => {
     renderWithDeploy()
     fireEvent.click(screen.getByRole('radio', { name: /Linux 一键部署/ }))
     fireEvent.click(screen.getByRole('button', { name: '复制部署命令' }))
-    await vi.waitFor(() => expect(toastSuccess).toHaveBeenCalledWith('命令已复制', { duration: 1500 }), {
-      // vi.waitFor 自带上限、不读 RTL 的 asyncUtilTimeout，故这里显式给 timeout
-      timeout: 5000,
-    })
+    await vi.waitFor(
+      () => expect(toastSuccess).toHaveBeenCalledWith('命令已复制', { duration: 1500 }),
+      {
+        // vi.waitFor 自带上限、不读 RTL 的 asyncUtilTimeout，故这里显式给 timeout
+        timeout: 5000,
+      },
+    )
     expect(toastError).not.toHaveBeenCalled()
   })
 
@@ -269,7 +301,9 @@ describe('OnboardingPage · 连接成功后的三步清单', () => {
   it('恰好三步：部署实例 / 确认 RCON / 加首位白名单', () => {
     renderWithDeploy()
     expect(screen.getByRole('heading', { name: '连接成功后的三步' })).toBeInTheDocument()
-    const steps = within(screen.getByRole('list', { name: '连接成功后的三步' })).getAllByRole('listitem')
+    const steps = within(screen.getByRole('list', { name: '连接成功后的三步' })).getAllByRole(
+      'listitem',
+    )
     expect(steps).toHaveLength(3)
     expect(steps[0]).toHaveTextContent('部署实例')
     expect(steps[1]).toHaveTextContent('确认 RCON')
@@ -312,7 +346,9 @@ describe('OnboardingPage · 完成路径（连接保存）', () => {
 
   it('表单标题降为 h2：本页 h1 由欢迎区承担（ConnectionForm 默认 h1）', () => {
     renderWithDeploy()
-    expect(screen.getByRole('heading', { level: 1, name: '欢迎使用 MC Commander' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { level: 1, name: '欢迎使用 MC Commander' }),
+    ).toBeInTheDocument()
     expect(screen.getByTestId('connection-form')).toHaveAttribute('data-heading-as', 'h2')
   })
 

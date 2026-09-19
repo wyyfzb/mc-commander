@@ -17,25 +17,28 @@ import path from 'path';
 
 // got：函数调用（.json 链）直接离线拒绝；stream 返回立即 error 的伪流
 vi.mock('got', () => ({
-  default: Object.assign(vi.fn(() => Promise.reject(new Error('offline (mocked)'))), {
-    stream: vi.fn(() => {
-      const listeners = {};
-      const stream = {
-        on(ev, cb) {
-          (listeners[ev] = listeners[ev] || []).push(cb);
-          return stream;
-        },
-        pipe() {
-          return stream;
-        },
-        destroy() {},
-      };
-      queueMicrotask(() => {
-        (listeners.error || []).forEach((cb) => cb(new Error('download failed (mocked)')));
-      });
-      return stream;
-    }),
-  }),
+  default: Object.assign(
+    vi.fn(() => Promise.reject(new Error('offline (mocked)'))),
+    {
+      stream: vi.fn(() => {
+        const listeners = {};
+        const stream = {
+          on(ev, cb) {
+            (listeners[ev] = listeners[ev] || []).push(cb);
+            return stream;
+          },
+          pipe() {
+            return stream;
+          },
+          destroy() {},
+        };
+        queueMicrotask(() => {
+          (listeners.error || []).forEach((cb) => cb(new Error('download failed (mocked)')));
+        });
+        return stream;
+      }),
+    },
+  ),
 }));
 
 // BackupService：备份即完成（触发 backupComplete 事件），restore 恒成功
@@ -144,9 +147,7 @@ describe('Upgrade Routes', () => {
   });
 
   it('POST /instances/:id/upgrade - mcVersion 必填返回 400', async () => {
-    const res = await request
-      .post('/api/v1/instances/inst-1/upgrade')
-      .send({ type: 'vanilla' });
+    const res = await request.post('/api/v1/instances/inst-1/upgrade').send({ type: 'vanilla' });
     expect(res.status).toBe(400);
     expect(res.body.code).toBe(40000);
   });
@@ -230,9 +231,7 @@ describe('UpgradeService 进度序列（离线 mock）', () => {
     const service = new UpgradeService(serverManager);
 
     // purpur：resolveDownloadUrl 无网络调用，直接进下载阶段 → mock 流报错
-    await expect(service.upgrade('inst-1', '1.21.4', 'purpur')).rejects.toThrow(
-      /download failed/
-    );
+    await expect(service.upgrade('inst-1', '1.21.4', 'purpur')).rejects.toThrow(/download failed/);
 
     const stages = serverManager._emitted
       .filter((e) => e.event === 'instance:upgradeProgress')
@@ -252,7 +251,7 @@ describe('UpgradeService 进度序列（离线 mock）', () => {
     const serverManager = createMockServerManager();
     const service = new UpgradeService(serverManager);
     await expect(service.upgrade('ghost', '1.21.4', 'purpur')).rejects.toThrow(
-      'Instance not found'
+      'Instance not found',
     );
   });
 

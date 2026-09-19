@@ -37,12 +37,15 @@ function buildApp() {
 function stageEnvFile({ exists, content }) {
   const realExistsSync = fs.existsSync.bind(fs);
   const realReadFileSync = fs.readFileSync.bind(fs);
-  vi.spyOn(fs, 'existsSync').mockImplementation(
-    (p) => (p === ENV_PATH ? exists : realExistsSync(p)),
+  vi.spyOn(fs, 'existsSync').mockImplementation((p) =>
+    p === ENV_PATH ? exists : realExistsSync(p),
   );
   vi.spyOn(fs, 'readFileSync').mockImplementation((p, ...rest) => {
     if (p !== ENV_PATH) return realReadFileSync(p, ...rest);
-    if (!exists) throw Object.assign(new Error(`ENOENT: no such file or directory, open '${p}'`), { code: 'ENOENT' });
+    if (!exists)
+      throw Object.assign(new Error(`ENOENT: no such file or directory, open '${p}'`), {
+        code: 'ENOENT',
+      });
     return content;
   });
 }
@@ -60,7 +63,9 @@ function captureWrite() {
 }
 
 function writtenEnvContent(writes) {
-  const call = writes.find((w) => String(w.path).startsWith(`${ENV_PATH}.`) && String(w.path).endsWith('.tmp'));
+  const call = writes.find(
+    (w) => String(w.path).startsWith(`${ENV_PATH}.`) && String(w.path).endsWith('.tmp'),
+  );
   expect(call, 'persistApiKeyHash 应先写 .env 的唯一临时文件').toBeDefined();
   return call.data;
 }
@@ -82,7 +87,9 @@ describe('POST /api/rotate-key 分支收口', () => {
     stageEnvFile({ exists: false, content: '' });
     const { writes, renames } = captureWrite();
 
-    const res = await request(buildApp()).post('/api/rotate-key').set('x-api-key', TEST_PLAINTEXT_KEY);
+    const res = await request(buildApp())
+      .post('/api/rotate-key')
+      .set('x-api-key', TEST_PLAINTEXT_KEY);
 
     expect(res.status).toBe(200);
     const newKey = res.body.data.apiKey;
@@ -98,10 +105,15 @@ describe('POST /api/rotate-key 分支收口', () => {
   });
 
   it('.env 含明文与旧哈希：API_KEY 行剔除、API_KEY_HASH 行原位替换、其余键保留', async () => {
-    stageEnvFile({ exists: true, content: 'API_KEY=old-plain-text\nAPI_KEY_HASH=oldhash\nPORT=25566\n' });
+    stageEnvFile({
+      exists: true,
+      content: 'API_KEY=old-plain-text\nAPI_KEY_HASH=oldhash\nPORT=25566\n',
+    });
     const { writes } = captureWrite();
 
-    const res = await request(buildApp()).post('/api/rotate-key').set('x-api-key', TEST_PLAINTEXT_KEY);
+    const res = await request(buildApp())
+      .post('/api/rotate-key')
+      .set('x-api-key', TEST_PLAINTEXT_KEY);
 
     expect(res.status).toBe(200);
     const newKey = res.body.data.apiKey;
@@ -116,7 +128,9 @@ describe('POST /api/rotate-key 分支收口', () => {
     stageEnvFile({ exists: true, content: 'FOO=bar' });
     const { writes } = captureWrite();
 
-    const res = await request(buildApp()).post('/api/rotate-key').set('x-api-key', TEST_PLAINTEXT_KEY);
+    const res = await request(buildApp())
+      .post('/api/rotate-key')
+      .set('x-api-key', TEST_PLAINTEXT_KEY);
 
     expect(res.status).toBe(200);
     const newKey = res.body.data.apiKey;
@@ -127,7 +141,9 @@ describe('POST /api/rotate-key 分支收口', () => {
     stageEnvFile({ exists: true, content: 'FOO=bar\n' });
     const { writes } = captureWrite();
 
-    const res = await request(buildApp()).post('/api/rotate-key').set('x-api-key', TEST_PLAINTEXT_KEY);
+    const res = await request(buildApp())
+      .post('/api/rotate-key')
+      .set('x-api-key', TEST_PLAINTEXT_KEY);
 
     expect(res.status).toBe(200);
     const newKey = res.body.data.apiKey;
@@ -138,7 +154,9 @@ describe('POST /api/rotate-key 分支收口', () => {
     stageEnvFile({ exists: true, content: '' });
     const { writes } = captureWrite();
 
-    const res = await request(buildApp()).post('/api/rotate-key').set('x-api-key', TEST_PLAINTEXT_KEY);
+    const res = await request(buildApp())
+      .post('/api/rotate-key')
+      .set('x-api-key', TEST_PLAINTEXT_KEY);
 
     expect(res.status).toBe(200);
     const newKey = res.body.data.apiKey;
@@ -149,7 +167,9 @@ describe('POST /api/rotate-key 分支收口', () => {
     stageEnvFile({ exists: false, content: '' });
     const { writes, renames } = captureWrite();
 
-    const res = await request(buildApp()).post('/api/rotate-key').set('x-api-key', TEST_PLAINTEXT_KEY);
+    const res = await request(buildApp())
+      .post('/api/rotate-key')
+      .set('x-api-key', TEST_PLAINTEXT_KEY);
 
     expect(res.status).toBe(200);
     expect(res.body.data.apiKey).toMatch(/^mcck-/);
@@ -170,7 +190,9 @@ describe('POST /api/rotate-key 分支收口', () => {
       throw new Error('disk full');
     });
 
-    const res = await request(buildApp()).post('/api/rotate-key').set('x-api-key', TEST_PLAINTEXT_KEY);
+    const res = await request(buildApp())
+      .post('/api/rotate-key')
+      .set('x-api-key', TEST_PLAINTEXT_KEY);
 
     expect(res.status).toBe(500);
     expect(res.body.status).toBe('error');

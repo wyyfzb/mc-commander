@@ -20,7 +20,13 @@ interface PlayerAvatarProps {
   className?: string
 }
 
-export function PlayerAvatar({ name, isOnline, isFakePlayer = false, size = 32, className }: PlayerAvatarProps) {
+export function PlayerAvatar({
+  name,
+  isOnline,
+  isFakePlayer = false,
+  size = 32,
+  className,
+}: PlayerAvatarProps) {
   const [failed, setFailed] = useState(false)
 
   if (isFakePlayer) {

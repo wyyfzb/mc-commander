@@ -30,12 +30,12 @@ export function useFileUpload(
   /** 当前目录文件列表（上传前探测同名冲突；仅目录列表有 .files） */
   const fileListQuery = useFileList(instanceId, dir)
   const existingFileNames = useMemo(
-    () => new Set(
-      (fileListQuery.data && 'files' in fileListQuery.data
-        ? fileListQuery.data.files
-        : []
-      ).map((f: { name: string }) => f.name),
-    ),
+    () =>
+      new Set(
+        (fileListQuery.data && 'files' in fileListQuery.data ? fileListQuery.data.files : []).map(
+          (f: { name: string }) => f.name,
+        ),
+      ),
     [fileListQuery.data],
   )
 
@@ -80,7 +80,9 @@ export function useFileUpload(
     if (!file) return
     // 体积上限前置拦截：选择阶段即拒绝，不再等到上传失败才报错（对齐服务端 multer 50MB）
     if (file.size > UPLOAD_MAX_FILE_BYTES) {
-      toast.error(`「${file.name}」超过单文件上限 ${formatUploadLimit(UPLOAD_MAX_FILE_BYTES)}，请压缩后上传`)
+      toast.error(
+        `「${file.name}」超过单文件上限 ${formatUploadLimit(UPLOAD_MAX_FILE_BYTES)}，请压缩后上传`,
+      )
       return
     }
     if (uploadMutation.isPending) return // 在途保护：上传中忽略重复触发

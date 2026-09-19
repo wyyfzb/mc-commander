@@ -14,7 +14,11 @@
 export function nextRadioIndex(key: string, currentIndex: number, length: number): number | null {
   if (length <= 0) return null
   const step =
-    key === 'ArrowRight' || key === 'ArrowDown' ? 1 : key === 'ArrowLeft' || key === 'ArrowUp' ? -1 : 0
+    key === 'ArrowRight' || key === 'ArrowDown'
+      ? 1
+      : key === 'ArrowLeft' || key === 'ArrowUp'
+        ? -1
+        : 0
   if (step !== 0) return (currentIndex + step + length) % length
   if (key === 'Home') return 0
   if (key === 'End') return length - 1

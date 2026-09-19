@@ -94,7 +94,9 @@ describe('InstancesPage 部署进行中横幅（issue 352）', () => {
     })
     renderPage()
 
-    expect(screen.getByText('有实例正在部署：「生存服」正在下载服务端核心…（45%）')).toBeInTheDocument()
+    expect(
+      screen.getByText('有实例正在部署：「生存服」正在下载服务端核心…（45%）'),
+    ).toBeInTheDocument()
   })
 
   it('无进行中部署：横幅不渲染', () => {

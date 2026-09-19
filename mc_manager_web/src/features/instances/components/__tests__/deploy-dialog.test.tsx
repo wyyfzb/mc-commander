@@ -14,7 +14,14 @@ import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { setupServer } from 'msw/node'
 import { Toaster, toast } from 'sonner'
-import { handlers, deployMock, deployCancelMock, deployStatusMock, startMock, eulaMock } from '@/test/mocks/handlers'
+import {
+  handlers,
+  deployMock,
+  deployCancelMock,
+  deployStatusMock,
+  startMock,
+  eulaMock,
+} from '@/test/mocks/handlers'
 import { DeployDialog } from '../deploy-dialog'
 import { useDeployStore } from '@/stores/deploy'
 import { useConnectionStore } from '@/stores/connection'
@@ -98,14 +105,18 @@ describe('DeployDialog', () => {
     expect(screen.getAllByRole('radio')).toHaveLength(5)
     expect(screen.getByRole('radio', { name: /^Paper/ })).toBeChecked()
     await waitVersion()
-    expect(screen.getByRole('combobox', { name: '选择 Minecraft 版本' })).toHaveTextContent('1.21.4')
+    expect(screen.getByRole('combobox', { name: '选择 Minecraft 版本' })).toHaveTextContent(
+      '1.21.4',
+    )
     // Java 推荐提示
     expect(screen.getByText(/推荐 Java 版本：21/)).toBeInTheDocument()
 
     // 切换类型 → 版本随类型重新拉取（仍自动回填）
     await user.click(screen.getByRole('radio', { name: /fabric/i }))
     await waitFor(() =>
-      expect(screen.getByRole('combobox', { name: '选择 Minecraft 版本' })).toHaveTextContent('1.21.4'),
+      expect(screen.getByRole('combobox', { name: '选择 Minecraft 版本' })).toHaveTextContent(
+        '1.21.4',
+      ),
     )
 
     // 下一步 → 步骤②
@@ -134,7 +145,9 @@ describe('DeployDialog', () => {
     // EULA 不再阻断部署：未勾选时主操作为「仅部署」（可点），勾选后变「部署并启动」
     expect(screen.getByRole('button', { name: '仅部署' })).toBeEnabled()
     expect(
-      screen.getByText('未勾选也可部署：eula.txt 记为 eula=false，部署后不自动启动；需在实例详情同意 EULA 后才能启动服务器。'),
+      screen.getByText(
+        '未勾选也可部署：eula.txt 记为 eula=false，部署后不自动启动；需在实例详情同意 EULA 后才能启动服务器。',
+      ),
     ).toBeInTheDocument()
     await user.click(screen.getByRole('checkbox', { name: /Minecraft EULA/ }))
     expect(screen.getByRole('button', { name: '部署并启动' })).toBeEnabled()
@@ -147,7 +160,9 @@ describe('DeployDialog', () => {
     expect(screen.getByText('服务端：Fabric 1.21.4')).toBeInTheDocument()
     expect(screen.getByText('推荐 Java 版本：21')).toBeInTheDocument()
     // 首启闭环：EULA 同意随部署请求下发（服务端据此写 eula.txt），随后只发启动指令
-    expect(await screen.findByText('已发送启动指令，服务器正在启动（状态可在仪表盘查看）')).toBeInTheDocument()
+    expect(
+      await screen.findByText('已发送启动指令，服务器正在启动（状态可在仪表盘查看）'),
+    ).toBeInTheDocument()
     expect(deployMock.lastBody?.eula).toBe(true)
     expect(eulaMock.calls).toBe(0)
     expect(startMock.calls).toBe(1)

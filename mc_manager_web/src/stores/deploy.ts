@@ -100,7 +100,12 @@ export const useDeployStore = create<DeployState>()((set) => ({
         // 否则进度视图与 30s 轮询都不会收敛；progress 仅在确实在途时清空，
         // 已有终态展示位（deploying 已假）保留。本分支必须先于下面的终态回执守卫：
         // 终态后门控又被 WS 占回时，被守卫吞掉的空态会让入口永久禁用
-        return { deploying: false, deployInFlight: false, cancelling: false, progress: s.deploying ? null : s.progress }
+        return {
+          deploying: false,
+          deployInFlight: false,
+          cancelling: false,
+          progress: s.deploying ? null : s.progress,
+        }
       }
       if (s.lastResult !== null) return s
       return {
@@ -158,5 +163,11 @@ export const useDeployStore = create<DeployState>()((set) => ({
     }),
   setCancelling: (value) => set({ cancelling: value }),
   resetDeploy: () =>
-    set({ progress: null, deploying: false, lastResult: null, deployInFlight: false, cancelling: false }),
+    set({
+      progress: null,
+      deploying: false,
+      lastResult: null,
+      deployInFlight: false,
+      cancelling: false,
+    }),
 }))

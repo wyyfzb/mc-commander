@@ -63,8 +63,12 @@ describe('Player Routes 分支补测', () => {
       playerEvents: new Map(),
       _worldSpawn: null,
       _computePlayerStats: () => ({
-        totalOnline: 0, loginCount: 0, offlineSince: 0,
-        deathCount: 0, achievementCount: 0, sleepCount: 0,
+        totalOnline: 0,
+        loginCount: 0,
+        offlineSince: 0,
+        deathCount: 0,
+        achievementCount: 0,
+        sleepCount: 0,
       }),
       _mergePlayerEvents: (a, b) => [...(a || []), ...(b || [])],
       _loadInventoryFromDat: vi.fn(() => null),
@@ -129,30 +133,36 @@ describe('Player Routes 分支补测', () => {
     // 仅命令端点要求实例运行中（GET 列表/详情只读端点不检查 isRunning）
     const commandEndpoints = guardedEndpoints.filter(([method]) => method !== 'GET');
 
-    it.each(guardedEndpoints)('%s %s 实例不存在返回 404 INSTANCE_NOT_FOUND', async (method, url, body) => {
-      mockManager.getInstance.mockReturnValue(undefined);
+    it.each(guardedEndpoints)(
+      '%s %s 实例不存在返回 404 INSTANCE_NOT_FOUND',
+      async (method, url, body) => {
+        mockManager.getInstance.mockReturnValue(undefined);
 
-      const req = request(app)[method.toLowerCase()](url);
-      const res = body ? await req.send(body) : await req;
+        const req = request(app)[method.toLowerCase()](url);
+        const res = body ? await req.send(body) : await req;
 
-      expect(res.status).toBe(404);
-      expect(res.body.status).toBe('error');
-      expect(res.body.code).toBe(40401);
-    });
+        expect(res.status).toBe(404);
+        expect(res.body.status).toBe('error');
+        expect(res.body.code).toBe(40401);
+      },
+    );
 
-    it.each(commandEndpoints)('%s %s 实例未运行返回 400 INSTANCE_NOT_RUNNING 且不发命令', async (method, url, body) => {
-      const instance = makeInstance({ isRunning: false });
-      mockManager.getInstance.mockReturnValue(instance);
+    it.each(commandEndpoints)(
+      '%s %s 实例未运行返回 400 INSTANCE_NOT_RUNNING 且不发命令',
+      async (method, url, body) => {
+        const instance = makeInstance({ isRunning: false });
+        mockManager.getInstance.mockReturnValue(instance);
 
-      const req = request(app)[method.toLowerCase()](url);
-      const res = body ? await req.send(body) : await req;
+        const req = request(app)[method.toLowerCase()](url);
+        const res = body ? await req.send(body) : await req;
 
-      expect(res.status).toBe(400);
-      expect(res.body.code).toBe(40002);
-      expect(res.body.message).toBe('Instance is not running');
-      expect(instance.sendCommand).not.toHaveBeenCalled();
-      expect(recordAudit).not.toHaveBeenCalled();
-    });
+        expect(res.status).toBe(400);
+        expect(res.body.code).toBe(40002);
+        expect(res.body.message).toBe('Instance is not running');
+        expect(instance.sendCommand).not.toHaveBeenCalled();
+        expect(recordAudit).not.toHaveBeenCalled();
+      },
+    );
   });
 
   describe('validatePlayerName 参数校验', () => {
@@ -173,7 +183,11 @@ describe('Player Routes 分支补测', () => {
         isRconConnected: true,
         players: new Map([['Steve', { name: 'Steve', joinTime: Date.now() }]]),
         getPlayerDetails: vi.fn().mockResolvedValue({
-          health: 20, maxHealth: 20, hunger: 19, xpLevel: 3, gameMode: 'survival',
+          health: 20,
+          maxHealth: 20,
+          hunger: 19,
+          xpLevel: 3,
+          gameMode: 'survival',
         }),
       });
       mockManager.getInstance.mockReturnValue(instance);
@@ -191,17 +205,24 @@ describe('Player Routes 分支补测', () => {
     });
 
     it('RCON 失败：回退持久化 playerdata + 合并内存事件（服务端重启后历史不丢）', async () => {
-      writePlayerData('Fallback', JSON.stringify({
-        sessions: [{ start: 1, end: 2, duration: 1 }],
-        events: [{ type: 'achievement', at: 10 }],
-        lastSeen: '2024-06-01T10:00:00Z',
-      }));
+      writePlayerData(
+        'Fallback',
+        JSON.stringify({
+          sessions: [{ start: 1, end: 2, duration: 1 }],
+          events: [{ type: 'achievement', at: 10 }],
+          lastSeen: '2024-06-01T10:00:00Z',
+        }),
+      );
       const instance = makeInstance({
         getPlayerDetails: vi.fn().mockRejectedValue(new Error('rcon timeout')),
         playerEvents: new Map([['Fallback', [{ type: 'join', at: 99 }]]]),
         _computePlayerStats: () => ({
-          totalOnline: 0, loginCount: 42, offlineSince: 0,
-          deathCount: 0, achievementCount: 0, sleepCount: 0,
+          totalOnline: 0,
+          loginCount: 42,
+          offlineSince: 0,
+          deathCount: 0,
+          achievementCount: 0,
+          sleepCount: 0,
         }),
       });
       mockManager.getInstance.mockReturnValue(instance);
@@ -259,12 +280,14 @@ describe('Player Routes 分支补测', () => {
 
       expect(res.status).toBe(200);
       expect(instance.sendCommand).toHaveBeenCalledWith('kick Steve Kicked by operator');
-      expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({
-        instanceId: 's1',
-        action: AuditActions.PLAYER_KICK,
-        targetId: 'Steve',
-        detail: { reason: 'Kicked by operator' },
-      }));
+      expect(recordAudit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          instanceId: 's1',
+          action: AuditActions.PLAYER_KICK,
+          targetId: 'Steve',
+          detail: { reason: 'Kicked by operator' },
+        }),
+      );
     });
 
     it('空 reason 与显式默认值一致', async () => {
@@ -391,15 +414,20 @@ describe('Player Routes 分支补测', () => {
 
     it('pardon 命令失败：先清记录再执行命令，失败后按备份恢复记录', async () => {
       BanModel.findActiveByInstance.mockReturnValue([
-        { instanceId: 's1', targetType: 'player', target: 'Steve', reason: 'griefing', expiresAt: 123_456 },
+        {
+          instanceId: 's1',
+          targetType: 'player',
+          target: 'Steve',
+          reason: 'griefing',
+          expiresAt: 123_456,
+        },
       ]);
       const instance = makeInstance({
         sendCommand: vi.fn().mockRejectedValue(new Error('rcon timeout')),
       });
       mockManager.getInstance.mockReturnValue(instance);
 
-      const res = await request(app)
-        .post('/api/instances/s1/players/Steve/pardon');
+      const res = await request(app).post('/api/instances/s1/players/Steve/pardon');
 
       expect(res.status).toBe(500);
       // 顺序不变量：先清理记录（失败则命令不执行，无中间态）
@@ -419,7 +447,13 @@ describe('Player Routes 分支补测', () => {
 
     it('pardon 恢复失败：记录日志并继续抛出原始错误', async () => {
       BanModel.findActiveByInstance.mockReturnValue([
-        { instanceId: 's1', targetType: 'player', target: 'Steve', reason: 'griefing', expiresAt: 1 },
+        {
+          instanceId: 's1',
+          targetType: 'player',
+          target: 'Steve',
+          reason: 'griefing',
+          expiresAt: 1,
+        },
       ]);
       BanModel.create.mockImplementation(() => {
         throw new Error('disk full');
@@ -430,8 +464,7 @@ describe('Player Routes 分支补测', () => {
       });
       mockManager.getInstance.mockReturnValue(instance);
 
-      const res = await request(app)
-        .post('/api/instances/s1/players/Steve/pardon');
+      const res = await request(app).post('/api/instances/s1/players/Steve/pardon');
 
       expect(res.status).toBe(500);
       expect(loggerError).toHaveBeenCalled();
@@ -466,8 +499,7 @@ describe('Player Routes 分支补测', () => {
       mockManager.getInstance.mockReturnValue(instance);
 
       // 不调用 .send()：req.body undefined → targetType 走 undefined 分支
-      const res = await request(app)
-        .post('/api/instances/s1/players/bans/Steve/pardon');
+      const res = await request(app).post('/api/instances/s1/players/bans/Steve/pardon');
 
       expect(res.status).toBe(400);
       expect(res.body.code).toBe(40000);
@@ -537,9 +569,11 @@ describe('Player Routes 分支补测', () => {
           ['Alex', { name: 'Alex', joinTime: Date.now(), sessions: [] }],
           ['Bob', { name: 'Bob', joinTime: Date.now(), sessions: [] }],
         ]),
-        getPlayerDetails: vi.fn((name) => name === 'Alex'
-          ? Promise.resolve({ health: 20, maxHealth: 20, hunger: 18 })
-          : Promise.reject(new Error('rcon err'))),
+        getPlayerDetails: vi.fn((name) =>
+          name === 'Alex'
+            ? Promise.resolve({ health: 20, maxHealth: 20, hunger: 18 })
+            : Promise.reject(new Error('rcon err')),
+        ),
       });
       mockManager.getInstance.mockReturnValue(instance);
 
@@ -582,9 +616,24 @@ describe('Player Routes 分支补测', () => {
         _loadInventoryFromDat: vi.fn((_uuid, name) => {
           if (name === 'Steve') {
             return {
-              quickbar: [{ id: 'minecraft:diamond_sword', count: 1, slot: 0, durability: null, enchanted: false, customName: null }],
+              quickbar: [
+                {
+                  id: 'minecraft:diamond_sword',
+                  count: 1,
+                  slot: 0,
+                  durability: null,
+                  enchanted: false,
+                  customName: null,
+                },
+              ],
               main: [],
-              equipment: { helmet: null, chestplate: null, leggings: null, boots: null, offhand: null },
+              equipment: {
+                helmet: null,
+                chestplate: null,
+                leggings: null,
+                boots: null,
+                offhand: null,
+              },
               enderChest: [],
               source: 'snapshot',
               partial: false,
@@ -608,31 +657,52 @@ describe('Player Routes 分支补测', () => {
     });
 
     it('离线玩家：持久化数据完整呈现（时长覆盖/IP 封禁/物品栏/世界出生点）', async () => {
-      writePlayerData('OfflineP', JSON.stringify({
-        totalPlayTime: 7200,
-        gameMode: 'survival',
-        dimension: 'overworld',
-        position: { x: 1, y: 64, z: 2 },
-        ip: '5.6.7.8',
-        lastSeen: '2024-06-02T12:30:00Z',
-        health: 18.5,
-        maxHealth: 20,
-        hunger: 17,
-        xpLevel: 12,
-        sessions: [{ start: 1, end: 2, duration: 1 }],
-        events: [{ type: 'quit', message: '离开服务器', timestamp: 1717331400000 }],
-      }));
+      writePlayerData(
+        'OfflineP',
+        JSON.stringify({
+          totalPlayTime: 7200,
+          gameMode: 'survival',
+          dimension: 'overworld',
+          position: { x: 1, y: 64, z: 2 },
+          ip: '5.6.7.8',
+          lastSeen: '2024-06-02T12:30:00Z',
+          health: 18.5,
+          maxHealth: 20,
+          hunger: 17,
+          xpLevel: 12,
+          sessions: [{ start: 1, end: 2, duration: 1 }],
+          events: [{ type: 'quit', message: '离开服务器', timestamp: 1717331400000 }],
+        }),
+      );
       fs.writeFileSync(
         path.join(tmpServerPath, 'banned-ips.json'),
         JSON.stringify([{ ip: '5.6.7.8', created: '2024-06-02T00:00:00Z' }]),
       );
       const instance = makeInstance({
         _worldSpawn: { x: 8, y: 70, z: -3 }, // truthy → 统一出生点拷贝
-        getAllKnownPlayers: () => new Map([
-          ['OfflineP', { uuid: 'uuid-off', isOp: true, isWhitelisted: true, lastSeen: '2024-06-01T10:00:00Z' }],
-        ]),
+        getAllKnownPlayers: () =>
+          new Map([
+            [
+              'OfflineP',
+              {
+                uuid: 'uuid-off',
+                isOp: true,
+                isWhitelisted: true,
+                lastSeen: '2024-06-01T10:00:00Z',
+              },
+            ],
+          ]),
         _loadInventoryFromDat: vi.fn(() => ({
-          quickbar: [{ id: 'minecraft:bread', count: 1, slot: 0, durability: null, enchanted: false, customName: null }],
+          quickbar: [
+            {
+              id: 'minecraft:bread',
+              count: 1,
+              slot: 0,
+              durability: null,
+              enchanted: false,
+              customName: null,
+            },
+          ],
           main: [],
           equipment: { helmet: null, chestplate: null, leggings: null, boots: null, offhand: null },
           enderChest: [],
@@ -664,9 +734,10 @@ describe('Player Routes 分支补测', () => {
     it('损坏 playerdata JSON：离线玩家安全回退默认值不崩溃', async () => {
       writePlayerData('Corrupt', '{not valid json');
       const instance = makeInstance({
-        getAllKnownPlayers: () => new Map([
-          ['Corrupt', { isOp: false }], // 无 uuid → offline uuid 兜底分支
-        ]),
+        getAllKnownPlayers: () =>
+          new Map([
+            ['Corrupt', { isOp: false }], // 无 uuid → offline uuid 兜底分支
+          ]),
       });
       mockManager.getInstance.mockReturnValue(instance);
 
@@ -699,11 +770,46 @@ describe('Player Routes 分支补测', () => {
   describe('GET /players/bans 排序与容错分支', () => {
     it('生效临时封禁按到期升序在前 → 原版永久 → 历史按创建时间倒序', async () => {
       BanModel.findAllByInstance.mockReturnValue([
-        { targetType: 'player', target: 'HistoryOld', reason: 'r1', isActive: false, expiresAt: 100, createdAt: '2024-01-01T00:00:00Z' },
-        { targetType: 'player', target: 'HistoryNew', reason: 'r2', isActive: false, expiresAt: 200, createdAt: '2024-06-01T00:00:00Z' },
-        { targetType: 'player', target: 'TempLate', reason: 'r3', isActive: true, expiresAt: 5000, createdAt: '2024-02-01T00:00:00Z' },
-        { targetType: 'player', target: 'TempEarly', reason: 'r4', isActive: true, expiresAt: 1000, createdAt: '2024-03-01T00:00:00Z' },
-        { targetType: 'player', target: 'TempNull', reason: 'r5', isActive: true, expiresAt: null, createdAt: '2024-04-01T00:00:00Z' },
+        {
+          targetType: 'player',
+          target: 'HistoryOld',
+          reason: 'r1',
+          isActive: false,
+          expiresAt: 100,
+          createdAt: '2024-01-01T00:00:00Z',
+        },
+        {
+          targetType: 'player',
+          target: 'HistoryNew',
+          reason: 'r2',
+          isActive: false,
+          expiresAt: 200,
+          createdAt: '2024-06-01T00:00:00Z',
+        },
+        {
+          targetType: 'player',
+          target: 'TempLate',
+          reason: 'r3',
+          isActive: true,
+          expiresAt: 5000,
+          createdAt: '2024-02-01T00:00:00Z',
+        },
+        {
+          targetType: 'player',
+          target: 'TempEarly',
+          reason: 'r4',
+          isActive: true,
+          expiresAt: 1000,
+          createdAt: '2024-03-01T00:00:00Z',
+        },
+        {
+          targetType: 'player',
+          target: 'TempNull',
+          reason: 'r5',
+          isActive: true,
+          expiresAt: null,
+          createdAt: '2024-04-01T00:00:00Z',
+        },
       ]);
       // 生效中集合（跳过原版文件重复项的 key 来源）
       BanModel.findActiveByInstance.mockReturnValue([
@@ -717,10 +823,7 @@ describe('Player Routes 分支补测', () => {
         JSON.stringify([{ name: 'PermNoMeta' }]),
       );
       // 空条目：entry.ip 缺失 → target 兜底空串分支
-      fs.writeFileSync(
-        path.join(tmpServerPath, 'banned-ips.json'),
-        JSON.stringify([{}]),
-      );
+      fs.writeFileSync(path.join(tmpServerPath, 'banned-ips.json'), JSON.stringify([{}]));
       const instance = makeInstance();
       mockManager.getInstance.mockReturnValue(instance);
 
@@ -729,9 +832,13 @@ describe('Player Routes 分支补测', () => {
       expect(res.status).toBe(200);
       // 排序不变量：生效临时（到期升序，null 排最前）→ 生效永久 → 历史（创建倒序）
       expect(res.body.data.map((b) => b.target)).toEqual([
-        'TempNull', 'TempEarly', 'TempLate',
-        'PermNoMeta', '',
-        'HistoryNew', 'HistoryOld',
+        'TempNull',
+        'TempEarly',
+        'TempLate',
+        'PermNoMeta',
+        '',
+        'HistoryNew',
+        'HistoryOld',
       ]);
       const perm = res.body.data.find((b) => b.target === 'PermNoMeta');
       expect(perm.isPermanent).toBe(true);
@@ -743,7 +850,14 @@ describe('Player Routes 分支补测', () => {
       fs.writeFileSync(path.join(tmpServerPath, 'banned-players.json'), 'not json');
       fs.writeFileSync(path.join(tmpServerPath, 'banned-ips.json'), 'also broken');
       BanModel.findAllByInstance.mockReturnValue([
-        { targetType: 'player', target: 'TempOnly', reason: 'r', isActive: true, expiresAt: 1, createdAt: '2024-01-01T00:00:00Z' },
+        {
+          targetType: 'player',
+          target: 'TempOnly',
+          reason: 'r',
+          isActive: true,
+          expiresAt: 1,
+          createdAt: '2024-01-01T00:00:00Z',
+        },
       ]);
       const instance = makeInstance();
       mockManager.getInstance.mockReturnValue(instance);

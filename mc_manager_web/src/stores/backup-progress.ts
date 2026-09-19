@@ -24,7 +24,12 @@ export const useBackupProgressStore = create<BackupProgressState>(() => ({
   progress: {},
 }))
 
-export function applyBackupProgress(instanceId: string, kind: BackupProgress['kind'], backupId: number, percent: number) {
+export function applyBackupProgress(
+  instanceId: string,
+  kind: BackupProgress['kind'],
+  backupId: number,
+  percent: number,
+) {
   useBackupProgressStore.setState((state) => ({
     progress: { ...state.progress, [instanceId]: { kind, backupId, percent } },
   }))

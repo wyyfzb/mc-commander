@@ -10,7 +10,7 @@ describe('errorHandler 500 分支', () => {
     res = {
       status: vi.fn().mockReturnThis(),
       set: vi.fn().mockReturnThis(),
-      json: vi.fn().mockReturnThis()
+      json: vi.fn().mockReturnThis(),
     };
     next = vi.fn();
     vi.spyOn(process.stderr, 'write').mockImplementation(() => true); // 静默 logger.error 的 stderr 输出
@@ -29,8 +29,8 @@ describe('errorHandler 500 分支', () => {
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({
         status: 'error',
-        message: 'Internal Server Error'
-      })
+        message: 'Internal Server Error',
+      }),
     );
     // 敏感路径不得出现在响应体
     const body = res.json.mock.calls[0][0];
@@ -105,7 +105,7 @@ describe('errorHandler 500 分支', () => {
 
     expect(res.status).toHaveBeenCalledWith(500);
     expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ message: 'Internal Server Error' })
+      expect.objectContaining({ message: 'Internal Server Error' }),
     );
   });
 
@@ -119,8 +119,8 @@ describe('errorHandler 500 分支', () => {
       expect.objectContaining({
         status: 'error',
         code: ErrorCodes.INSTANCE_NOT_FOUND.code,
-        message: 'Instance s1 not found'
-      })
+        message: 'Instance s1 not found',
+      }),
     );
   });
 
@@ -131,9 +131,7 @@ describe('errorHandler 500 分支', () => {
     errorHandler(parseErr, req, res, next);
 
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ message: 'Invalid JSON' })
-    );
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ message: 'Invalid JSON' }));
   });
 });
 
@@ -142,7 +140,7 @@ describe('notFoundHandler', () => {
     const req = { method: 'GET', path: '/nope' };
     const res = {
       status: vi.fn().mockReturnThis(),
-      json: vi.fn().mockReturnThis()
+      json: vi.fn().mockReturnThis(),
     };
 
     notFoundHandler(req, res);
@@ -151,8 +149,8 @@ describe('notFoundHandler', () => {
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({
         status: 'error',
-        message: 'Route GET /nope not found'
-      })
+        message: 'Route GET /nope not found',
+      }),
     );
   });
 });

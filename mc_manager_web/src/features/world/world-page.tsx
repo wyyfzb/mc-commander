@@ -104,12 +104,13 @@ export function WorldPage() {
       {(worldQuery.isError || propertiesQuery.isError) && (
         <NoticeBanner variant="error" icon={AlertTriangle}>
           <span className="flex items-center gap-2">
-            <b>世界数据获取失败</b> ·
-            {/* 双查询同错时两部分都列出（审查观察①） */}
+            <b>世界数据获取失败</b> ·{/* 双查询同错时两部分都列出（审查观察①） */}
             {[
               worldQuery.isError ? '世界信息不可用' : null,
               propertiesQuery.isError ? '服务器属性不可用' : null,
-            ].filter(Boolean).join('、')}
+            ]
+              .filter(Boolean)
+              .join('、')}
             <Button
               variant="ghost"
               size="sm"
@@ -128,57 +129,64 @@ export function WorldPage() {
 
       {/* ── 主体：左栏信息卡 + 右栏 Tabs ── */}
       <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row">
-      {/* 左栏：世界信息 + 维度卡（窄屏整宽堆叠并限高内滚，lg 起固定 320px） */}
-      <div className="flex min-h-0 w-full shrink-0 flex-col gap-4 overflow-y-auto max-lg:max-h-[45%] lg:w-80">
-        <WorldInfoCard
-          world={worldQuery.data ?? null}
-          isLoading={worldQuery.isLoading}
-          onRefresh={() => void worldQuery.refetch()}
-          className="animate-mcs-fade-up mcs-delay-1"
-        />
-        <DimensionCards
-          dimensions={worldQuery.data?.dimensions}
-          className="animate-mcs-fade-up mcs-delay-2"
-        />
-      </div>
+        {/* 左栏：世界信息 + 维度卡（窄屏整宽堆叠并限高内滚，lg 起固定 320px） */}
+        <div className="flex min-h-0 w-full shrink-0 flex-col gap-4 overflow-y-auto max-lg:max-h-[45%] lg:w-80">
+          <WorldInfoCard
+            world={worldQuery.data ?? null}
+            isLoading={worldQuery.isLoading}
+            onRefresh={() => void worldQuery.refetch()}
+            className="animate-mcs-fade-up mcs-delay-1"
+          />
+          <DimensionCards
+            dimensions={worldQuery.data?.dimensions}
+            className="animate-mcs-fade-up mcs-delay-2"
+          />
+        </div>
 
-      {/* ── 右栏：属性 / 游戏规则 Tabs ── */}
-      <Card as="div" className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as WorldTab)} className="flex h-full min-h-0 flex-col">
-          <TabsList variant="line" className="h-10 shrink-0 justify-start gap-0 border-b border-mcs-border-muted px-2 py-0">
-            <TabsTrigger
+        {/* ── 右栏：属性 / 游戏规则 Tabs ── */}
+        <Card as="div" className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <Tabs
+            value={activeTab}
+            onValueChange={(v) => setActiveTab(v as WorldTab)}
+            className="flex h-full min-h-0 flex-col"
+          >
+            <TabsList
+              variant="line"
+              className="h-10 shrink-0 justify-start gap-0 border-b border-mcs-border-muted px-2 py-0"
+            >
+              <TabsTrigger value="properties" className="h-10 px-3 text-mcs-sm after:bg-mcs-accent">
+                服务器属性
+              </TabsTrigger>
+              <TabsTrigger value="gamerule" className="h-10 px-3 text-mcs-sm after:bg-mcs-accent">
+                游戏规则
+              </TabsTrigger>
+            </TabsList>
+            <TabsContent
               value="properties"
-              className="h-10 px-3 text-mcs-sm after:bg-mcs-accent"
+              className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4"
             >
-              服务器属性
-            </TabsTrigger>
-            <TabsTrigger
+              <PropertiesPanel
+                properties={propertiesQuery.data}
+                isLoading={propertiesQuery.isLoading}
+                onSave={handleSaveProperties}
+                onEditingChange={setPropertiesEditing}
+                isRunning={isRunning}
+                onRestart={() => handleRestart()}
+              />
+            </TabsContent>
+            <TabsContent
               value="gamerule"
-              className="h-10 px-3 text-mcs-sm after:bg-mcs-accent"
+              className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4"
             >
-              游戏规则
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent value="properties" className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4">
-            <PropertiesPanel
-              properties={propertiesQuery.data}
-              isLoading={propertiesQuery.isLoading}
-              onSave={handleSaveProperties}
-              onEditingChange={setPropertiesEditing}
-              isRunning={isRunning}
-              onRestart={() => handleRestart()}
-            />
-          </TabsContent>
-          <TabsContent value="gamerule" className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4">
-            <GamerulePanel
-              instanceId={instanceId}
-              mcVersion={mcVersion}
-              isRconConnected={isRconConnected}
-              onSendCommand={handleSendCommand}
-            />
-          </TabsContent>
-        </Tabs>
-      </Card>
+              <GamerulePanel
+                instanceId={instanceId}
+                mcVersion={mcVersion}
+                isRconConnected={isRconConnected}
+                onSendCommand={handleSendCommand}
+              />
+            </TabsContent>
+          </Tabs>
+        </Card>
       </div>
 
       {/* ── 属性编辑未保存守卫确认 ── */}

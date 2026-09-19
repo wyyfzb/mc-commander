@@ -10,7 +10,18 @@
  * - 空态：「暂无已安装的实例」+「部署新实例」按钮（onDeploy 与页面头部入口共用）
  * - 设计纪律：实底卡（玻璃禁区）+ --mcs-* 语义 token，禁硬编码色值/间距/圆角
  */
-import { ArrowRightLeft, ArrowUpCircle, Loader2, MoreHorizontal, Play, Server, Settings, ShieldAlert, Square, Trash2 } from 'lucide-react'
+import {
+  ArrowRightLeft,
+  ArrowUpCircle,
+  Loader2,
+  MoreHorizontal,
+  Play,
+  Server,
+  Settings,
+  ShieldAlert,
+  Square,
+  Trash2,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -206,7 +217,10 @@ function InstanceCard({
             isRunning ? 'bg-mcs-success-fg' : 'bg-mcs-text-muted',
           )}
         />
-        <span className="min-w-0 flex-1 truncate text-mcs-sm font-semibold text-mcs-text-default" title={name}>
+        <span
+          className="min-w-0 flex-1 truncate text-mcs-sm font-semibold text-mcs-text-default"
+          title={name}
+        >
           {name}
         </span>
         {isCurrent && (
@@ -215,7 +229,11 @@ function InstanceCard({
           </StatusPill>
         )}
         {upgrading && (
-          <StatusPill tone="accent" className="gap-1 text-mcs-2xs font-semibold" title={`正在升级 ${name}`}>
+          <StatusPill
+            tone="accent"
+            className="gap-1 text-mcs-2xs font-semibold"
+            title={`正在升级 ${name}`}
+          >
             <Loader2 className="size-3 animate-spin" aria-hidden />
             升级中
           </StatusPill>
@@ -241,7 +259,10 @@ function InstanceCard({
           统计未就绪初值为 0，此时显示 —（运行中却报 0 会被读成「内存耗光」） */}
       <div className="grid grid-cols-4 gap-2 rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-default px-3 py-2 shadow-mcs-card">
         <Metric label="在线" value={isRunning ? `${playerCount}` : '—'} />
-        <Metric label="TPS" value={isRunning && detail?.tps != null ? detail.tps.toFixed(1) : '—'} />
+        <Metric
+          label="TPS"
+          value={isRunning && detail?.tps != null ? detail.tps.toFixed(1) : '—'}
+        />
         <Metric
           label="内存"
           value={isRunning && detail && detail.memoryUsage > 0 ? `${detail.memoryUsage} GB` : '—'}
@@ -277,7 +298,11 @@ function InstanceCard({
             disabled={isBusy || phase !== null}
             onClick={() => onStop(instance)}
           >
-            {isBusy || phase === 'stopping' ? <Loader2 className="animate-spin" aria-hidden /> : <Square aria-hidden />}
+            {isBusy || phase === 'stopping' ? (
+              <Loader2 className="animate-spin" aria-hidden />
+            ) : (
+              <Square aria-hidden />
+            )}
             停止
           </Button>
         ) : (
@@ -288,7 +313,11 @@ function InstanceCard({
             disabled={isBusy || phase !== null}
             onClick={() => onStart(instance)}
           >
-            {isBusy || phase === 'starting' ? <Loader2 className="animate-spin" aria-hidden /> : <Play aria-hidden />}
+            {isBusy || phase === 'starting' ? (
+              <Loader2 className="animate-spin" aria-hidden />
+            ) : (
+              <Play aria-hidden />
+            )}
             启动
           </Button>
         )}
@@ -341,7 +370,11 @@ function InstanceCard({
               disabled={isUninstalling}
               onSelect={() => onUninstall(instance)}
             >
-              {isUninstalling ? <Loader2 className="animate-spin" aria-hidden /> : <Trash2 aria-hidden />}
+              {isUninstalling ? (
+                <Loader2 className="animate-spin" aria-hidden />
+              ) : (
+                <Trash2 aria-hidden />
+              )}
               {isUninstalling ? '卸载中' : '卸载实例'}
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -356,7 +389,10 @@ function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0">
       <div className="text-mcs-2xs text-mcs-text-muted">{label}</div>
-      <div className="mcs-num truncate text-mcs-sm leading-none font-semibold text-mcs-text-default" title={value}>
+      <div
+        className="mcs-num truncate text-mcs-sm leading-none font-semibold text-mcs-text-default"
+        title={value}
+      >
         {value}
       </div>
     </div>

@@ -117,7 +117,9 @@ describe('UploadConflictDialog（上传同名冲突确认）', () => {
     const file = new File(['data'], 'server.properties')
     render(<UploadConflictDialog target={file} onConfirm={onConfirm} onClose={onClose} />)
     expect(screen.getByText('同名文件已存在')).toBeInTheDocument()
-    expect(screen.getByText('当前目录已存在「server.properties」，上传将覆盖原文件内容。')).toBeInTheDocument()
+    expect(
+      screen.getByText('当前目录已存在「server.properties」，上传将覆盖原文件内容。'),
+    ).toBeInTheDocument()
     fireEvent.click(screen.getByText('覆盖'))
     expect(onConfirm).toHaveBeenCalledWith(file)
     expect(onClose).toHaveBeenCalled()
@@ -126,7 +128,13 @@ describe('UploadConflictDialog（上传同名冲突确认）', () => {
   it('点击跳过：仅关闭，不触发覆盖上传', () => {
     const onConfirm = vi.fn()
     const onClose = vi.fn()
-    render(<UploadConflictDialog target={new File(['data'], 'world.zip')} onConfirm={onConfirm} onClose={onClose} />)
+    render(
+      <UploadConflictDialog
+        target={new File(['data'], 'world.zip')}
+        onConfirm={onConfirm}
+        onClose={onClose}
+      />,
+    )
     fireEvent.click(screen.getByText('跳过'))
     expect(onClose).toHaveBeenCalled()
     expect(onConfirm).not.toHaveBeenCalled()
@@ -136,9 +144,7 @@ describe('UploadConflictDialog（上传同名冲突确认）', () => {
 describe('UnsavedConfirmDialog（未保存修改放弃确认）', () => {
   it('关闭分支文案（isBlocked=false）：描述为「关闭」', () => {
     const onConfirm = vi.fn()
-    render(
-      <UnsavedConfirmDialog open isBlocked={false} onCancel={vi.fn()} onConfirm={onConfirm} />,
-    )
+    render(<UnsavedConfirmDialog open isBlocked={false} onCancel={vi.fn()} onConfirm={onConfirm} />)
     expect(screen.getByText('放弃未保存的修改？')).toBeInTheDocument()
     expect(screen.getByText('当前文件有未保存的更改，关闭后将丢失这些修改。')).toBeInTheDocument()
     fireEvent.click(screen.getByText('放弃修改并离开'))
@@ -148,10 +154,10 @@ describe('UnsavedConfirmDialog（未保存修改放弃确认）', () => {
   it('路由拦截分支文案（isBlocked=true）：描述为「离开页面」；取消走 onCancel', () => {
     const onCancel = vi.fn()
     const onConfirm = vi.fn()
-    render(
-      <UnsavedConfirmDialog open isBlocked onCancel={onCancel} onConfirm={onConfirm} />,
-    )
-    expect(screen.getByText('当前文件有未保存的更改，离开页面后将丢失这些修改。')).toBeInTheDocument()
+    render(<UnsavedConfirmDialog open isBlocked onCancel={onCancel} onConfirm={onConfirm} />)
+    expect(
+      screen.getByText('当前文件有未保存的更改，离开页面后将丢失这些修改。'),
+    ).toBeInTheDocument()
     fireEvent.click(screen.getByText('留下'))
     expect(onCancel).toHaveBeenCalledTimes(1)
     expect(onConfirm).not.toHaveBeenCalled()

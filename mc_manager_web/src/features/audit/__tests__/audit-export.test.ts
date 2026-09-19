@@ -34,7 +34,9 @@ vi.mock('@/api/audit', () => ({
   apiGetCommandHistoryPage: (...args: unknown[]) => cmdPageImpl.current(...args),
 }))
 
-const config = { baseUrl: 'http://test.local', apiKey: 'k-test' } as Parameters<typeof fetchAuditExportRows>[0]
+const config = { baseUrl: 'http://test.local', apiKey: 'k-test' } as Parameters<
+  typeof fetchAuditExportRows
+>[0]
 
 /** 构造单条记录（seq 递减模拟 desc 时间序：seq 越大越旧） */
 function mkRow(seq: number): AuditLogItem {
@@ -170,7 +172,10 @@ describe('命令历史导出工具（issue 403）', () => {
       const p = params as { page: number; pageSize?: number; order?: string }
       expect(p.pageSize).toBe(200)
       expect('order' in p).toBe(false) // 命令历史无 order 语义：不传该键
-      return { data: Array.from({ length: 200 }, (_, i) => mkCmdRow((p.page - 1) * 200 + i)), pagination: { page: p.page, totalPages: 6, total: 1200 } }
+      return {
+        data: Array.from({ length: 200 }, (_, i) => mkCmdRow((p.page - 1) * 200 + i)),
+        pagination: { page: p.page, totalPages: 6, total: 1200 },
+      }
     }
     const rows = await fetchCommandExportRows(config, { startTime: '2026-01-01T00:00:00Z' })
     expect(rows).toHaveLength(AUDIT_EXPORT_MAX_ROWS)
@@ -183,7 +188,10 @@ describe('命令历史导出工具（issue 403）', () => {
     cmdPageImpl.current = (_configArg, params) => {
       calls += 1
       const p = params as { page: number }
-      return { data: Array.from({ length: p.page === 3 ? 50 : 200 }, (_, i) => mkCmdRow(i)), pagination: { page: p.page, totalPages: 3, total: 450 } }
+      return {
+        data: Array.from({ length: p.page === 3 ? 50 : 200 }, (_, i) => mkCmdRow(i)),
+        pagination: { page: p.page, totalPages: 3, total: 450 },
+      }
     }
     const rows = await fetchCommandExportRows(config, {})
     expect(calls).toBe(3)

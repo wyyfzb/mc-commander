@@ -84,20 +84,26 @@ export const overviewDataSchema = z.object({
   systemMemoryPercent: z.number(),
   totalMemory: z.number(),
   freeMemory: z.number(),
-  diskUsage: z.object({
-    primary: z.object({
-      mountpoint: z.string(),
-      totalGB: z.number(),
-      usedGB: z.number(),
-      percent: z.number(),
-    }).nullable(),
-    all: z.array(z.object({
-      mountpoint: z.string(),
-      totalGB: z.number(),
-      usedGB: z.number(),
-      percent: z.number(),
-    })),
-  }).optional(),
+  diskUsage: z
+    .object({
+      primary: z
+        .object({
+          mountpoint: z.string(),
+          totalGB: z.number(),
+          usedGB: z.number(),
+          percent: z.number(),
+        })
+        .nullable(),
+      all: z.array(
+        z.object({
+          mountpoint: z.string(),
+          totalGB: z.number(),
+          usedGB: z.number(),
+          percent: z.number(),
+        }),
+      ),
+    })
+    .optional(),
   instances: z.array(instanceSummarySchema),
 })
 
@@ -152,31 +158,37 @@ export const instanceSettingsRequestBodySchema = z.object({
   autoRestart: z.boolean().optional(),
   autoStart: z.boolean().optional(),
   jvmArgs: z.array(z.string()).optional(),
-  startCommand: z.null({
-    invalid_type_error: 'startCommand 已不再支持通过 API 更新（如需清除旧配置请传 null）',
-  }).optional(),
+  startCommand: z
+    .null({
+      invalid_type_error: 'startCommand 已不再支持通过 API 更新（如需清除旧配置请传 null）',
+    })
+    .optional(),
 })
 
 /** POST /instances/:id/start 请求体：禁用键契约——startCommand 出现即 400（find-002 RCE 封堵） */
 export const instanceStartRequestBodySchema = z.object({
-  startCommand: z.never({
-    invalid_type_error: 'startCommand 已不再支持通过 API 传入',
-  }).optional(),
+  startCommand: z
+    .never({
+      invalid_type_error: 'startCommand 已不再支持通过 API 传入',
+    })
+    .optional(),
 })
 
 /** POST /instances/:id/command 请求体：非空字符串 + 长度上限（上限宽松覆盖长 tellraw/NBT 命令，仅拒收超长滥用） */
 export const instanceCommandRequestBodySchema = z.object({
-  command: z.string({
-    required_error: 'Command is required',
-    invalid_type_error: 'Command must be a string',
-  }).min(1, 'Command is required').max(2000),
+  command: z
+    .string({
+      required_error: 'Command is required',
+      invalid_type_error: 'Command must be a string',
+    })
+    .min(1, 'Command is required')
+    .max(2000),
 })
 
 /** PUT /instances/:id/properties 请求体：属性键值对（passthrough 保留全部键；数组/标量/null 拒绝） */
-export const instancePropertiesRequestBodySchema = z.object(
-  {},
-  { invalid_type_error: '请求体必须是 JSON 对象' },
-).passthrough()
+export const instancePropertiesRequestBodySchema = z
+  .object({}, { invalid_type_error: '请求体必须是 JSON 对象' })
+  .passthrough()
 
 /** POST /instances/:id/eula 请求体：EULA 确认布尔（文案与原 400 一致） */
 export const instanceEulaRequestBodySchema = z.object({

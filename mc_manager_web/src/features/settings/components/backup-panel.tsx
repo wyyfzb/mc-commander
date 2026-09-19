@@ -192,7 +192,11 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
     try {
       await restoreMutation.mutateAsync({
         backupId: target.id,
-        confirmName: restoreConfirmTarget({ instanceName, backupName: target.name, backupId: target.id }),
+        confirmName: restoreConfirmTarget({
+          instanceName,
+          backupName: target.name,
+          backupId: target.id,
+        }),
       })
       toast.success('恢复已开始，完成后请启动服务器生效')
     } catch (e) {
@@ -245,7 +249,10 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
 
       {/* 上次备份信息行 + 立即备份（在途禁用 + 备份中...） */}
       <div className="flex items-center gap-3 border-t border-mcs-border-subtle px-4 py-3">
-        <p className="min-w-0 flex-1 truncate text-mcs-sm text-mcs-text-muted" title={lastBackupText}>
+        <p
+          className="min-w-0 flex-1 truncate text-mcs-sm text-mcs-text-muted"
+          title={lastBackupText}
+        >
           {lastBackupText}
         </p>
         <LoadingButton
@@ -271,14 +278,18 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
             <div className="min-w-0 flex-1">
               <div className="mb-1 flex items-center justify-between gap-2">
                 <span className="text-mcs-xs text-mcs-text-muted">{inProgressLabel}</span>
-                <span className="text-mcs-xs text-mcs-text-muted">{Math.round(progress.percent)}%</span>
+                <span className="text-mcs-xs text-mcs-text-muted">
+                  {Math.round(progress.percent)}%
+                </span>
               </div>
               <ProgressBar percent={progress.percent} />
             </div>
           ) : (
             <>
               <Loader2 className="size-3.5 shrink-0 animate-spin text-mcs-text-muted" aria-hidden />
-              <span className="min-w-0 flex-1 text-mcs-xs text-mcs-text-muted">{inProgressLabel}…</span>
+              <span className="min-w-0 flex-1 text-mcs-xs text-mcs-text-muted">
+                {inProgressLabel}…
+              </span>
             </>
           )}
           <LoadingButton
@@ -399,7 +410,10 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
         <div className="flex flex-col gap-1 rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-default px-2.5 py-2 text-mcs-xs text-mcs-text-muted">
           <div className="flex items-center gap-1.5">
             <HardDrive className="size-3 shrink-0 text-mcs-accent-fg" aria-hidden />
-            <span className="truncate font-mono text-mcs-text-default" title={restoreTarget?.name ?? ''}>
+            <span
+              className="truncate font-mono text-mcs-text-default"
+              title={restoreTarget?.name ?? ''}
+            >
               {restoreTarget?.name ?? ''}
             </span>
           </div>
@@ -407,7 +421,10 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
             <div className="flex items-center gap-1.5">
               <CalendarClock className="size-3 shrink-0 text-mcs-text-muted" aria-hidden />
               <span>
-                快照时间：{[formatBackupDate(restoreTarget.createdAt), formatBackupSize(restoreTarget.size)].filter(Boolean).join(' · ')}
+                快照时间：
+                {[formatBackupDate(restoreTarget.createdAt), formatBackupSize(restoreTarget.size)]
+                  .filter(Boolean)
+                  .join(' · ')}
               </span>
             </div>
           )}
@@ -417,7 +434,10 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
           </div>
         </div>
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="restore-confirm-input" className="text-mcs-xs font-semibold text-mcs-text-muted">
+          <label
+            htmlFor="restore-confirm-input"
+            className="text-mcs-xs font-semibold text-mcs-text-muted"
+          >
             输入{instanceName.trim() === '' ? '备份名' : '实例名'}「{restoreConfirm}」以确认
           </label>
           <input
@@ -431,7 +451,9 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
               （否则用户只看到一个永远点不动的按钮，不知道是加载失败还是自己没输对） */}
           {!instanceNameLoaded && (
             <p className="text-mcs-2xs text-mcs-text-muted">
-              {instancesQuery.isError ? '实例信息加载失败，无法确认恢复，请刷新页面重试' : '正在加载实例信息…'}
+              {instancesQuery.isError
+                ? '实例信息加载失败，无法确认恢复，请刷新页面重试'
+                : '正在加载实例信息…'}
             </p>
           )}
         </div>
@@ -445,7 +467,9 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
       )}
       {archived.length > 0 && (
         <div className="mt-2 border-t border-mcs-border-subtle px-4 py-3">
-          <h4 className="text-mcs-sm font-semibold text-mcs-text-default">归档快照（未建立索引）</h4>
+          <h4 className="text-mcs-sm font-semibold text-mcs-text-default">
+            归档快照（未建立索引）
+          </h4>
           <p className="mt-0.5 text-mcs-2xs text-mcs-text-muted">
             卸载实例时会保留其快照目录（磁盘上的事实副本），但备份表里已无索引——它们不出现在
             任何实例的备份列表中，未挂载的会随保留期被自动清理。挂载只登记索引，不复制、不移动
@@ -460,12 +484,15 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
                 className="flex flex-wrap items-center gap-2 rounded-mcs-md border border-mcs-border-muted px-3 py-2"
               >
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-mono text-mcs-xs text-mcs-text-default" title={group.archiveId}>
+                  <p
+                    className="truncate font-mono text-mcs-xs text-mcs-text-default"
+                    title={group.archiveId}
+                  >
                     {group.archiveId}
                   </p>
                   <p className="text-mcs-2xs text-mcs-text-muted">
-                    {group.instanceExists ? '现存实例的未索引快照' : '来自已卸载实例'} ·{' '}
-                    可挂载 {group.usableCount}/{group.snapshotCount} 份 · 最近{' '}
+                    {group.instanceExists ? '现存实例的未索引快照' : '来自已卸载实例'} · 可挂载{' '}
+                    {group.usableCount}/{group.snapshotCount} 份 · 最近{' '}
                     {formatBackupDate(group.latestMtime)}
                   </p>
                 </div>
@@ -492,9 +519,9 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
         }}
         title="挂载归档快照到本实例？"
         description={
-          `归档「${attachTarget ?? ''}」中可识别的快照会登记为实例「${instanceName || instanceId}」的备份，`
-          + '随后可在本列表里恢复、下载或删除。原归档目录不会被复制或移动，仍留在磁盘原处——'
-          + '也因为没有第二份副本，删除这些条目会删除磁盘上的原归档快照。'
+          `归档「${attachTarget ?? ''}」中可识别的快照会登记为实例「${instanceName || instanceId}」的备份，` +
+          '随后可在本列表里恢复、下载或删除。原归档目录不会被复制或移动，仍留在磁盘原处——' +
+          '也因为没有第二份副本，删除这些条目会删除磁盘上的原归档快照。'
         }
         warning="挂载后的条目计入本实例的备份配额，超出保留策略时按创建时间最旧优先被自动清理"
         confirmText="挂载"
@@ -580,7 +607,10 @@ function BackupRow({
     <div className="flex items-center gap-3 px-4 py-3">
       {/* 状态图标（tone 浅底；备份中/恢复中转圈，失败 error 图标，其余硬盘图标） */}
       <span
-        className={cn('flex size-9 shrink-0 items-center justify-center rounded-mcs-sm', iconToneClasses)}
+        className={cn(
+          'flex size-9 shrink-0 items-center justify-center rounded-mcs-sm',
+          iconToneClasses,
+        )}
         aria-hidden
       >
         {isInProgress ? (
@@ -613,13 +643,7 @@ function BackupRow({
       <IconButton
         aria-label={`${name} 下载`}
         disabled={!canDownload || downloading}
-        title={
-          downloading
-            ? '正在下载...'
-            : !canDownload
-              ? '仅已就绪的备份可下载'
-              : undefined
-        }
+        title={downloading ? '正在下载...' : !canDownload ? '仅已就绪的备份可下载' : undefined}
         className="text-mcs-accent-fg"
         onClick={() => void handleDownload()}
       >

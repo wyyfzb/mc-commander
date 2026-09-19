@@ -2,15 +2,7 @@
  * 预览条 —— CommandPreview（命令预览 + 复制）+ SelectedItemsBar（已选 chips 横滚）+ FooterSummary（汇总 + 给予按钮）
  * 从 give-item-dialog.tsx 提取，预览/汇总独立可测试。
  */
-import {
-  Check,
-  ChevronDown,
-  FlaskConical,
-  Minus,
-  Plus,
-  Wand2,
-  X,
-} from 'lucide-react'
+import { Check, ChevronDown, FlaskConical, Minus, Plus, Wand2, X } from 'lucide-react'
 export { CommandPreview } from '@/components/mcs/command-preview'
 import { Button } from '@/components/ui/button'
 import {
@@ -33,8 +25,6 @@ const QUICK_COUNTS = [1, 16, 64, 256, 640, 6400]
 export function effectColorHex(effect: PotionEffect): string {
   return `#${effect.color.toString(16).padStart(6, '0')}`
 }
-
-
 
 /** 物品贴图 / 药水效果色块（复用于已选 chip 缩略图） */
 function ItemThumb({
@@ -116,9 +106,7 @@ export function SelectedItemsBar({
           >
             <ItemThumb item={entry.item} effect={effect} size={22} />
             <div className="min-w-0 flex-1">
-              <div className="truncate text-mcs-xs text-mcs-text-default">
-                {entry.item.name}
-              </div>
+              <div className="truncate text-mcs-xs text-mcs-text-default">{entry.item.name}</div>
               <div className="flex items-center gap-0.5">
                 <button
                   type="button"
@@ -247,11 +235,7 @@ export function FooterSummary({
       ) : (
         <p className="text-mcs-sm text-mcs-text-muted">请点击上方物品添加</p>
       )}
-      <Button
-        size="sm"
-        disabled={entries.length === 0 || running}
-        onClick={onGive}
-      >
+      <Button size="sm" disabled={entries.length === 0 || running} onClick={onGive}>
         <Check aria-hidden />
         {running ? '执行中…' : entries.length > 0 ? `给予 (${entries.length})` : '给予'}
       </Button>

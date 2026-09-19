@@ -37,7 +37,9 @@ export function reconcileTempBans(instanceId, serverPath) {
   // 方向 2 先行：清理已过期但文件仍残留的条目
   const expiredBans = BanModel.findExpiredActive(now);
   const expiredTargets = new Set(
-    expiredBans.filter((b) => b.instanceId === instanceId && b.targetType === 'player').map((b) => b.target),
+    expiredBans
+      .filter((b) => b.instanceId === instanceId && b.targetType === 'player')
+      .map((b) => b.target),
   );
   let fileDirty = false;
   if (expiredTargets.size > 0) {

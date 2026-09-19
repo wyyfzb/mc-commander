@@ -37,7 +37,10 @@ describe('useSendCommand（连点不丢命令）', () => {
   it('第一条命令飞行中连点第二条：两条都被发送（isPending 不静默丢弃）', async () => {
     let resolveFirst: (v: unknown) => void = () => {}
     sendCommandMock.mockImplementationOnce(
-      () => new Promise((resolve) => { resolveFirst = resolve }),
+      () =>
+        new Promise((resolve) => {
+          resolveFirst = resolve
+        }),
     )
     sendCommandMock.mockResolvedValueOnce({ response: 'ok' })
 
@@ -48,12 +51,19 @@ describe('useSendCommand（连点不丢命令）', () => {
     // 第二条：立即连点（此时 mutation.isPending === true）
     expect(result.current.send('time set night')).toBe(true)
 
-    await act(async () => { resolveFirst({ response: 'ok' }) })
+    await act(async () => {
+      resolveFirst({ response: 'ok' })
+    })
     await waitFor(() => {
       expect(sendCommandMock).toHaveBeenCalledTimes(2)
     })
     expect(sendCommandMock).toHaveBeenNthCalledWith(1, expect.anything(), 'inst-1', 'weather rain')
-    expect(sendCommandMock).toHaveBeenNthCalledWith(2, expect.anything(), 'inst-1', 'time set night')
+    expect(sendCommandMock).toHaveBeenNthCalledWith(
+      2,
+      expect.anything(),
+      'inst-1',
+      'time set night',
+    )
   })
 
   it('未运行时 send 返回 false 且不发起请求', () => {

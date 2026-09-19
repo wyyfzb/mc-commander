@@ -43,9 +43,12 @@ describe('player-utils getTotalPlayTime', () => {
   function writeStats(relDir, fileName, playTimeTick) {
     const dir = path.join(base, relDir);
     fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, fileName), JSON.stringify({
-      stats: { 'minecraft:custom': { 'minecraft:play_time': playTimeTick } },
-    }));
+    fs.writeFileSync(
+      path.join(dir, fileName),
+      JSON.stringify({
+        stats: { 'minecraft:custom': { 'minecraft:play_time': playTimeTick } },
+      }),
+    );
   }
 
   it('uuid 命中：MC 26.1+ 新格式 world/players/stats/<uuid>.json，tick/20 换算', () => {
@@ -60,9 +63,14 @@ describe('player-utils getTotalPlayTime', () => {
 
   it('自定义世界目录（合法 level-name）正常读取', () => {
     writeStats(path.join('my_world', 'players', 'stats'), 'u1.json', 200);
-    expect(getTotalPlayTime({
-      serverPath: base, uuid: 'u1', playerName: 'Steve', levelName: 'my_world',
-    })).toBe(10);
+    expect(
+      getTotalPlayTime({
+        serverPath: base,
+        uuid: 'u1',
+        playerName: 'Steve',
+        levelName: 'my_world',
+      }),
+    ).toBe(10);
   });
 
   it('uuid 空串 + playerName → offline uuid 候选命中（无 usercache 兜底）', () => {
@@ -84,21 +92,34 @@ describe('player-utils getTotalPlayTime', () => {
 
   it('非法 level-name（../../evil）回退 world 读取（路径穿越防御）', () => {
     writeStats(path.join('world', 'players', 'stats'), 'u1.json', 400);
-    expect(getTotalPlayTime({
-      serverPath: base, uuid: 'u1', playerName: 'Steve', levelName: '../../evil',
-    })).toBe(20);
+    expect(
+      getTotalPlayTime({
+        serverPath: base,
+        uuid: 'u1',
+        playerName: 'Steve',
+        levelName: '../../evil',
+      }),
+    ).toBe(20);
   });
 
   it('level-name=.. 不读取上级目录文件（越界候选被过滤）', () => {
     // 在 base 上级放置「越界」统计文件，模拟恶意读取目标
     const evilPath = path.join(path.dirname(base), `${path.basename(base)}.evil.json`);
-    fs.writeFileSync(evilPath, JSON.stringify({
-      stats: { 'minecraft:custom': { 'minecraft:play_time': 999999 } },
-    }));
+    fs.writeFileSync(
+      evilPath,
+      JSON.stringify({
+        stats: { 'minecraft:custom': { 'minecraft:play_time': 999999 } },
+      }),
+    );
     try {
-      expect(getTotalPlayTime({
-        serverPath: base, uuid: 'u1', playerName: 'Steve', levelName: '..',
-      })).toBe(0);
+      expect(
+        getTotalPlayTime({
+          serverPath: base,
+          uuid: 'u1',
+          playerName: 'Steve',
+          levelName: '..',
+        }),
+      ).toBe(0);
     } finally {
       fs.rmSync(evilPath, { force: true });
     }

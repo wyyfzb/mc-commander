@@ -25,9 +25,9 @@ export function validateBody(schema) {
     const result = schema.safeParse(req.body ?? {});
     if (!result.success) {
       const messages = result.error.issues.map((i) => i.message);
-      return res.status(400).json(
-        error(ErrorCodes.VALIDATION_ERROR, messages.join('; '), formatIssues(result.error))
-      );
+      return res
+        .status(400)
+        .json(error(ErrorCodes.VALIDATION_ERROR, messages.join('; '), formatIssues(result.error)));
     }
     req.body = result.data;
     next();
@@ -59,9 +59,9 @@ export function validateQuery(schema, options = {}) {
         }
       }
       const messages = result.error.issues.map((i) => i.message);
-      return res.status(400).json(
-        error(ErrorCodes.VALIDATION_ERROR, messages.join('; '), formatIssues(result.error))
-      );
+      return res
+        .status(400)
+        .json(error(ErrorCodes.VALIDATION_ERROR, messages.join('; '), formatIssues(result.error)));
     }
     Object.defineProperty(req, 'query', {
       value: result.data,
@@ -117,7 +117,14 @@ export function validatedSuccess(schema, data, message = 'Success') {
 }
 
 /** 分页版响应 + 契约观测（逐条 parse 数组元素，精确定位漂移行） */
-export function validatedSuccessPaginated(schema, data, total, page, pageSize, message = 'Success') {
+export function validatedSuccessPaginated(
+  schema,
+  data,
+  total,
+  page,
+  pageSize,
+  message = 'Success',
+) {
   const items = Array.isArray(data) ? data : [];
   const mismatch = items
     .map((item, index) => ({ item, index, result: schema.safeParse(item) }))

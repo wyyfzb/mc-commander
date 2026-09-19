@@ -30,8 +30,22 @@ const mockDirList: FileListResponse = {
   path: '/config',
   isDirectory: true,
   files: [
-    { name: 'server.properties', path: '/config/server.properties', type: 'file', size: 1024, modifiedAt: '2026-01-01T00:00:00Z', isDirectory: false },
-    { name: 'plugins', path: '/config/plugins', type: 'directory', size: 0, modifiedAt: '2026-01-01T00:00:00Z', isDirectory: true },
+    {
+      name: 'server.properties',
+      path: '/config/server.properties',
+      type: 'file',
+      size: 1024,
+      modifiedAt: '2026-01-01T00:00:00Z',
+      isDirectory: false,
+    },
+    {
+      name: 'plugins',
+      path: '/config/plugins',
+      type: 'directory',
+      size: 0,
+      modifiedAt: '2026-01-01T00:00:00Z',
+      isDirectory: true,
+    },
   ],
 }
 
@@ -55,7 +69,10 @@ const mockContent: FileContentResponse = {
 
 function ok<T>(data: T) {
   return HttpResponse.json({
-    status: 'ok', code: 0, message: 'Success', data,
+    status: 'ok',
+    code: 0,
+    message: 'Success',
+    data,
     timestamp: new Date().toISOString(),
   })
 }
@@ -75,7 +92,11 @@ const server = setupServer(
   }),
   http.put('*/api/v1/instances/inst1/files/content', async ({ request }) => {
     lastBody = await request.json()
-    return ok({ path: (lastBody as { path: string }).path, size: 1024, modifiedAt: '2026-01-02T00:00:00Z' } satisfies FileSaveResponse)
+    return ok({
+      path: (lastBody as { path: string }).path,
+      size: 1024,
+      modifiedAt: '2026-01-02T00:00:00Z',
+    } satisfies FileSaveResponse)
   }),
   http.delete('*/api/v1/instances/inst1/files', ({ request }) => {
     lastBody = new URL(request.url).searchParams.get('path')
@@ -91,7 +112,9 @@ const server = setupServer(
   }),
   http.get('*/api/v1/instances/inst1/files/download', () =>
     HttpResponse.text('file-bytes-here', {
-      headers: { 'Content-Disposition': `attachment; filename*=UTF-8''%E6%9C%8D%E5%8A%A1%E5%99%A8.zip` },
+      headers: {
+        'Content-Disposition': `attachment; filename*=UTF-8''%E6%9C%8D%E5%8A%A1%E5%99%A8.zip`,
+      },
     }),
   ),
   // 错误传播专用实例（正常用例不可见，仅错误用例命中）
@@ -150,7 +173,12 @@ describe('files API · 目录与文件读取', () => {
 
 describe('files API · 写入与结构操作', () => {
   it('apiSaveFileContent：PUT body {path, content} 透传，保存结果解包', async () => {
-    const res = await apiSaveFileContent(config, 'inst1', '/config/server.properties', 'max-players=30')
+    const res = await apiSaveFileContent(
+      config,
+      'inst1',
+      '/config/server.properties',
+      'max-players=30',
+    )
     expect(res).toMatchObject({ path: '/config/server.properties', size: 1024 })
     expect(lastBody).toEqual({ path: '/config/server.properties', content: 'max-players=30' })
   })
@@ -182,7 +210,10 @@ describe('files API · 下载浏览器侧保存流程', () => {
     URL.revokeObjectURL = revokeObjectURL as unknown as typeof URL.revokeObjectURL
     const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
 
-    const { fileName } = await apiDownloadFile(config, 'inst1', { path: '/world/world.zip', name: 'world.zip' })
+    const { fileName } = await apiDownloadFile(config, 'inst1', {
+      path: '/world/world.zip',
+      name: 'world.zip',
+    })
 
     // 服务端 RFC 5987 文件名（UTF-8''%E6%9C%8D... = 服务器.zip）优先于 entry.name
     expect(fileName).toBe('服务器.zip')
@@ -200,7 +231,10 @@ describe('files API · 下载浏览器侧保存流程', () => {
     URL.revokeObjectURL = vi.fn() as unknown as typeof URL.revokeObjectURL
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
 
-    const { fileName } = await apiDownloadFile(config, 'inst1', { path: '/world/world.zip', name: 'fallback.zip' })
+    const { fileName } = await apiDownloadFile(config, 'inst1', {
+      path: '/world/world.zip',
+      name: 'fallback.zip',
+    })
     expect(fileName).toBe('fallback.zip')
   })
 })
@@ -222,6 +256,8 @@ describe('files API · 常量与错误传播', () => {
 
   it('读取不存在文件：404 → ApiError 40401', async () => {
     await expect(apiGetFileContent(config, 'inst1', '/ghost.txt')).rejects.toBeInstanceOf(ApiError)
-    await expect(apiGetFileContent(config, 'inst1', '/ghost.txt')).rejects.toMatchObject({ code: 40401 })
+    await expect(apiGetFileContent(config, 'inst1', '/ghost.txt')).rejects.toMatchObject({
+      code: 40401,
+    })
   })
 })

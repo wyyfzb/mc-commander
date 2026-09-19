@@ -29,7 +29,13 @@ const LOAD_LABEL: Record<string, string> = {
 }
 
 /** 插件详情面板：完整元数据 + 文件信息 + 行内启停 */
-export function PluginDetailSheet({ plugin, open, onOpenChange, onToggle, toggling }: PluginDetailSheetProps) {
+export function PluginDetailSheet({
+  plugin,
+  open,
+  onOpenChange,
+  onToggle,
+  toggling,
+}: PluginDetailSheetProps) {
   if (!plugin) return null
   const meta = plugin.meta
   const displayName = meta?.name ?? plugin.name
@@ -85,7 +91,9 @@ export function PluginDetailSheet({ plugin, open, onOpenChange, onToggle, toggli
               {meta?.main && (
                 <>
                   <dt className="shrink-0 text-mcs-text-muted">主类</dt>
-                  <dd className="break-all font-mono text-mcs-xs text-mcs-text-muted">{meta.main}</dd>
+                  <dd className="break-all font-mono text-mcs-xs text-mcs-text-muted">
+                    {meta.main}
+                  </dd>
                 </>
               )}
               {(meta?.authors?.length ?? 0) > 0 && (
@@ -123,7 +131,9 @@ export function PluginDetailSheet({ plugin, open, onOpenChange, onToggle, toggli
                   <p className="text-mcs-xs text-mcs-text-muted">硬依赖（缺失时插件无法加载）</p>
                   <div className="flex flex-wrap gap-1.5">
                     {meta!.depend.map((d) => (
-                      <StatusPill key={d} tone="warning">{d}</StatusPill>
+                      <StatusPill key={d} tone="warning">
+                        {d}
+                      </StatusPill>
                     ))}
                   </div>
                 </div>
@@ -133,7 +143,9 @@ export function PluginDetailSheet({ plugin, open, onOpenChange, onToggle, toggli
                   <p className="text-mcs-xs text-mcs-text-muted">软依赖（缺失不影响加载）</p>
                   <div className="flex flex-wrap gap-1.5">
                     {meta!.softdepend.map((d) => (
-                      <StatusPill key={d} tone="muted">{d}</StatusPill>
+                      <StatusPill key={d} tone="muted">
+                        {d}
+                      </StatusPill>
                     ))}
                   </div>
                 </div>
@@ -152,7 +164,9 @@ export function PluginDetailSheet({ plugin, open, onOpenChange, onToggle, toggli
                 {formatModifiedAt(new Date(plugin.mtimeMs).toISOString())}
               </dd>
               <dt className="shrink-0 text-mcs-text-muted">路径</dt>
-              <dd className="break-all font-mono text-mcs-xs text-mcs-text-muted">plugins/{plugin.file}</dd>
+              <dd className="break-all font-mono text-mcs-xs text-mcs-text-muted">
+                plugins/{plugin.file}
+              </dd>
             </dl>
           </section>
 

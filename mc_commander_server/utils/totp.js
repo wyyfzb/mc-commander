@@ -195,8 +195,7 @@ export function verifyTotpCode(secret, code, lastAcceptedStep = null) {
   }
   if (matchedStep === null) return { ok: false, step: null, reason: 'mismatch' };
 
-  const staleBaseline =
-    lastAcceptedStep !== null && lastAcceptedStep > current + TOTP_DRIFT_STEPS;
+  const staleBaseline = lastAcceptedStep !== null && lastAcceptedStep > current + TOTP_DRIFT_STEPS;
   if (!staleBaseline && lastAcceptedStep !== null && matchedStep <= lastAcceptedStep) {
     return { ok: false, step: null, reason: 'replay' };
   }

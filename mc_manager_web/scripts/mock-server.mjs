@@ -170,9 +170,15 @@ const systemStats = {
 const logs = [
   { text: '[00:00:01] [Server thread/INFO]: Starting minecraft server', type: 'stdout' },
   { text: '[00:00:05] [Server thread/INFO]: Done (1.2s)! For help, type "help"', type: 'stdout' },
-  { text: '[00:00:06] [Server thread/WARN]: Can\'t keep up! Is the server overloaded?', type: 'stdout' },
+  {
+    text: "[00:00:06] [Server thread/WARN]: Can't keep up! Is the server overloaded?",
+    type: 'stdout',
+  },
   // 超长行占位（真实场景：MC 会回显玩家执行的完整命令，长 NBT 命令回显超宽）
-  { text: '[00:00:07] [Server thread/INFO]: Steve issued server command: /give Steve minecraft:diamond_sword{Enchantments:[{id:"minecraft:sharpness",lvl:5},{id:"minecraft:unbreaking",lvl:3},{id:"minecraft:mending",lvl:1},{id:"minecraft:looting",lvl:3},{id:"minecraft:fire_aspect",lvl:2}]} 1', type: 'stdout' },
+  {
+    text: '[00:00:07] [Server thread/INFO]: Steve issued server command: /give Steve minecraft:diamond_sword{Enchantments:[{id:"minecraft:sharpness",lvl:5},{id:"minecraft:unbreaking",lvl:3},{id:"minecraft:mending",lvl:1},{id:"minecraft:looting",lvl:3},{id:"minecraft:fire_aspect",lvl:2}]} 1',
+    type: 'stdout',
+  },
 ]
 
 // ── 世界/属性/文件 mock 数据（结构占位，虚构内容）──────────────────
@@ -323,11 +329,46 @@ const rootFileList = {
   path: '/',
   isDirectory: true,
   files: [
-    { name: 'server.properties', path: '/server.properties', type: 'file', size: 1024, modifiedAt: new Date(Date.now() - 3600_000).toISOString(), isDirectory: false },
-    { name: 'whitelist.json', path: '/whitelist.json', type: 'file', size: 128, modifiedAt: new Date(Date.now() - 7200_000).toISOString(), isDirectory: false },
-    { name: 'ops.json', path: '/ops.json', type: 'file', size: 64, modifiedAt: new Date(Date.now() - 86400_000).toISOString(), isDirectory: false },
-    { name: 'world', path: '/world', type: 'directory', size: 0, modifiedAt: new Date(Date.now() - 86_400_000).toISOString(), isDirectory: true },
-    { name: 'logs', path: '/logs', type: 'directory', size: 0, modifiedAt: new Date(Date.now() - 86_400_000).toISOString(), isDirectory: true },
+    {
+      name: 'server.properties',
+      path: '/server.properties',
+      type: 'file',
+      size: 1024,
+      modifiedAt: new Date(Date.now() - 3600_000).toISOString(),
+      isDirectory: false,
+    },
+    {
+      name: 'whitelist.json',
+      path: '/whitelist.json',
+      type: 'file',
+      size: 128,
+      modifiedAt: new Date(Date.now() - 7200_000).toISOString(),
+      isDirectory: false,
+    },
+    {
+      name: 'ops.json',
+      path: '/ops.json',
+      type: 'file',
+      size: 64,
+      modifiedAt: new Date(Date.now() - 86400_000).toISOString(),
+      isDirectory: false,
+    },
+    {
+      name: 'world',
+      path: '/world',
+      type: 'directory',
+      size: 0,
+      modifiedAt: new Date(Date.now() - 86_400_000).toISOString(),
+      isDirectory: true,
+    },
+    {
+      name: 'logs',
+      path: '/logs',
+      type: 'directory',
+      size: 0,
+      modifiedAt: new Date(Date.now() - 86_400_000).toISOString(),
+      isDirectory: true,
+    },
   ],
 }
 
@@ -335,15 +376,33 @@ const worldDirList = {
   path: '/world',
   isDirectory: true,
   files: [
-    { name: 'level.dat', path: '/world/level.dat', type: 'file', size: 2048, modifiedAt: new Date(Date.now() - 3600_000).toISOString(), isDirectory: false },
-    { name: 'region', path: '/world/region', type: 'directory', size: 0, modifiedAt: new Date(Date.now() - 86_400_000).toISOString(), isDirectory: true },
+    {
+      name: 'level.dat',
+      path: '/world/level.dat',
+      type: 'file',
+      size: 2048,
+      modifiedAt: new Date(Date.now() - 3600_000).toISOString(),
+      isDirectory: false,
+    },
+    {
+      name: 'region',
+      path: '/world/region',
+      type: 'directory',
+      size: 0,
+      modifiedAt: new Date(Date.now() - 86_400_000).toISOString(),
+      isDirectory: true,
+    },
   ],
 }
 
 // ── 玩家 mock 数据（结构占位，虚构玩家名；E2E 断言用）────────────
 const statsPlaceholder = {
-  totalOnline: 86400, loginCount: 12, offlineSince: 0,
-  deathCount: 3, achievementCount: 25, sleepCount: 2,
+  totalOnline: 86400,
+  loginCount: 12,
+  offlineSince: 0,
+  deathCount: 3,
+  achievementCount: 25,
+  sleepCount: 2,
 }
 
 function mockPlayer(overrides) {
@@ -363,7 +422,10 @@ function mockPlayer(overrides) {
     ipBanExpiresAt: null,
     isFakePlayer: false,
     lastSeen: new Date().toISOString(),
-    health: 20, maxHealth: 20, hunger: 18, xpLevel: 12,
+    health: 20,
+    maxHealth: 20,
+    hunger: 18,
+    xpLevel: 12,
     spawnPoint: { x: 0, y: 64, z: 0 },
     respawnPoint: null,
     position: { x: 123.5, y: 64, z: -456.2 },
@@ -373,8 +435,12 @@ function mockPlayer(overrides) {
     xpProgress: 0.4,
     ping: 35,
     isSleeping: false,
-    isAfk: false, isFlying: false, isSneaking: false, isSprinting: false,
-    isBurning: false, isFrozen: false,
+    isAfk: false,
+    isFlying: false,
+    isSneaking: false,
+    isSprinting: false,
+    isBurning: false,
+    isFrozen: false,
     potionEffects: [],
     ipHistory: [],
     inventory: null,
@@ -388,40 +454,72 @@ function mockPlayer(overrides) {
 const players = [
   mockPlayer({ name: 'Steve', isOp: true }),
   mockPlayer({
-    name: 'Alex', uuid: '00000000-0000-4000-8000-000000000002',
-    isSleeping: true, gameMode: 'creative',
-    potionEffects: [{ id: 'speed', name: '迅捷', level: 2, durationSeconds: 240, isBeneficial: true }],
+    name: 'Alex',
+    uuid: '00000000-0000-4000-8000-000000000002',
+    isSleeping: true,
+    gameMode: 'creative',
+    potionEffects: [
+      { id: 'speed', name: '迅捷', level: 2, durationSeconds: 240, isBeneficial: true },
+    ],
   }),
   mockPlayer({
-    name: 'Bob', uuid: '00000000-0000-4000-8000-000000000003',
-    isOnline: false, isWhitelisted: true, totalPlayTime: 180000,
-    health: null, maxHealth: null, hunger: null, xpLevel: null,
-    armor: null, ping: null, position: null, joinTime: null, onlineTime: 0,
+    name: 'Bob',
+    uuid: '00000000-0000-4000-8000-000000000003',
+    isOnline: false,
+    isWhitelisted: true,
+    totalPlayTime: 180000,
+    health: null,
+    maxHealth: null,
+    hunger: null,
+    xpLevel: null,
+    armor: null,
+    ping: null,
+    position: null,
+    joinTime: null,
+    onlineTime: 0,
     lastSeen: new Date(Date.now() - 86400000).toISOString(),
   }),
   mockPlayer({
-    name: 'Charlie', uuid: '00000000-0000-4000-8000-000000000004',
-    isOnline: false, isBanned: true, banExpiresAt: Date.now() + 43200000,
-    health: null, maxHealth: null, hunger: null, xpLevel: null,
-    armor: null, ping: null, position: null, joinTime: null, onlineTime: 0,
+    name: 'Charlie',
+    uuid: '00000000-0000-4000-8000-000000000004',
+    isOnline: false,
+    isBanned: true,
+    banExpiresAt: Date.now() + 43200000,
+    health: null,
+    maxHealth: null,
+    hunger: null,
+    xpLevel: null,
+    armor: null,
+    ping: null,
+    position: null,
+    joinTime: null,
+    onlineTime: 0,
     lastSeen: new Date(Date.now() - 172800000).toISOString(),
   }),
   mockPlayer({
-    name: 'Bot_farm1', uuid: '00000000-0000-4000-8000-000000000005',
-    isFakePlayer: true, dimension: 'nether',
+    name: 'Bot_farm1',
+    uuid: '00000000-0000-4000-8000-000000000005',
+    isFakePlayer: true,
+    dimension: 'nether',
   }),
 ]
 
 const bans = [
   {
-    targetType: 'player', target: 'Charlie', reason: '作弊',
-    isActive: true, isPermanent: false,
+    targetType: 'player',
+    target: 'Charlie',
+    reason: '作弊',
+    isActive: true,
+    isPermanent: false,
     expiresAt: Date.now() + 43200000,
     createdAt: new Date(Date.now() - 43200000).toISOString(),
   },
   {
-    targetType: 'player', target: 'Ghost', reason: '恶意破坏',
-    isActive: false, isPermanent: false,
+    targetType: 'player',
+    target: 'Ghost',
+    reason: '恶意破坏',
+    isActive: false,
+    isPermanent: false,
     expiresAt: Date.now() - 3600000,
     createdAt: new Date(Date.now() - 86400000).toISOString(),
   },
@@ -435,7 +533,16 @@ const plugins = [
     enabled: true,
     sizeBytes: 2_201_600,
     mtimeMs: Date.now() - 86_400_000,
-    meta: { name: 'EssentialsX', version: '2.20.1', main: 'com.earth2me.essentials.Essentials', apiVersion: '1.13', description: '提供基础指令与权限管理', authors: ['EssentialsX Team'], depend: [], softdepend: ['Vault'] },
+    meta: {
+      name: 'EssentialsX',
+      version: '2.20.1',
+      main: 'com.earth2me.essentials.Essentials',
+      apiVersion: '1.13',
+      description: '提供基础指令与权限管理',
+      authors: ['EssentialsX Team'],
+      depend: [],
+      softdepend: ['Vault'],
+    },
   },
   {
     file: 'Vault.jar',
@@ -443,7 +550,16 @@ const plugins = [
     enabled: true,
     sizeBytes: 331_264,
     mtimeMs: Date.now() - 2 * 86_400_000,
-    meta: { name: 'Vault', version: '1.7.3', main: 'net.milkbowl.vault.Vault', apiVersion: null, description: '经济与权限抽象层', authors: ['Sleaker'], depend: [], softdepend: [] },
+    meta: {
+      name: 'Vault',
+      version: '1.7.3',
+      main: 'net.milkbowl.vault.Vault',
+      apiVersion: null,
+      description: '经济与权限抽象层',
+      authors: ['Sleaker'],
+      depend: [],
+      softdepend: [],
+    },
   },
   {
     file: 'WorldEdit.jar',
@@ -451,7 +567,16 @@ const plugins = [
     enabled: false,
     sizeBytes: 8_912_896,
     mtimeMs: Date.now() - 7 * 86_400_000,
-    meta: { name: 'WorldEdit', version: '7.3.0', main: 'com.sk89q.worldedit.bukkit.WorldEditPlugin', apiVersion: '1.17', description: '世界编辑工具', authors: ['EngineHub'], depend: [], softdepend: ['CommandBook'] },
+    meta: {
+      name: 'WorldEdit',
+      version: '7.3.0',
+      main: 'com.sk89q.worldedit.bukkit.WorldEditPlugin',
+      apiVersion: '1.17',
+      description: '世界编辑工具',
+      authors: ['EngineHub'],
+      depend: [],
+      softdepend: ['CommandBook'],
+    },
   },
 ]
 
@@ -460,7 +585,9 @@ const server = createServer((req, res) => {
   const path = url.split('?')[0]
 
   let body = ''
-  req.on('data', (chunk) => { body += chunk })
+  req.on('data', (chunk) => {
+    body += chunk
+  })
   req.on('end', () => {
     res.setHeader('Content-Type', 'application/json')
     res.setHeader('Access-Control-Allow-Origin', '*')
@@ -471,7 +598,15 @@ const server = createServer((req, res) => {
     const bearer = /^Bearer\s+(.+)$/i.exec(req.headers.authorization ?? '')?.[1]
     if (bearer && bearer !== MOCK_SESSION_TOKEN && !PUBLIC_PATHS.has(path)) {
       res.statusCode = 401
-      return res.end(JSON.stringify({ status: 'error', code: 40103, message: '会话已过期，请重新登录', details: null, timestamp: now() }))
+      return res.end(
+        JSON.stringify({
+          status: 'error',
+          code: 40103,
+          message: '会话已过期，请重新登录',
+          details: null,
+          timestamp: now(),
+        }),
+      )
     }
 
     if (path === '/api/v1/overview') return res.end(ok(overview))
@@ -505,13 +640,15 @@ const server = createServer((req, res) => {
       const apiKeyHeader = (req.headers['x-api-key'] ?? '').toString().trim()
       if (!apiKeyHeader && !bearer) {
         res.statusCode = 401
-        return res.end(JSON.stringify({
-          status: 'error',
-          code: 40107,
-          message: '未提供访问凭据：请携带 X-API-Key 头或登录会话令牌',
-          details: null,
-          timestamp: now(),
-        }))
+        return res.end(
+          JSON.stringify({
+            status: 'error',
+            code: 40107,
+            message: '未提供访问凭据：请携带 X-API-Key 头或登录会话令牌',
+            details: null,
+            timestamp: now(),
+          }),
+        )
       }
       // 部署能力探测（服务端 API_KEY_ENABLED）。默认开放——多数 spec 走 API Key 通道。
       //
@@ -532,20 +669,24 @@ const server = createServer((req, res) => {
       //   ② 请求头 `x-mock-readonly-configured: 0|1`（用例显式钉死初始态，避免依赖
       //      同轮其它用例的执行顺序：webServer 一轮共享一个 mock 进程）
       const readonlyFlagHeader = (req.headers['x-mock-readonly-configured'] ?? '').toString().trim()
-      const readonlyConfigured = readonlyFlagHeader === ''
-        ? mockReadonlyConfigured
-        : ['1', 'true', 'yes', 'on'].includes(readonlyFlagHeader.toLowerCase())
+      const readonlyConfigured =
+        readonlyFlagHeader === ''
+          ? mockReadonlyConfigured
+          : ['1', 'true', 'yes', 'on'].includes(readonlyFlagHeader.toLowerCase())
       // 通道关闭态同样支持按请求构造（与 apiKeyEnabled 同款理由：webServer 一轮共享进程，
       // 环境变量改不了，而「通道关闭 ⇒ 入口禁用 + 说明恢复方法」必须真被 e2e 跑到）
       const readonlyEnabledHeader = (req.headers['x-mock-readonly-enabled'] ?? '').toString().trim()
-      const readonlyEnabled = readonlyEnabledHeader === ''
-        ? mockReadonlyEnabled
-        : !['0', 'false', 'no', 'off'].includes(readonlyEnabledHeader.toLowerCase())
-      return res.end(ok({
-        apiKeyEnabled,
-        readonlyApiKeyEnabled: readonlyEnabled,
-        readonlyApiKeyConfigured: readonlyConfigured,
-      }))
+      const readonlyEnabled =
+        readonlyEnabledHeader === ''
+          ? mockReadonlyEnabled
+          : !['0', 'false', 'no', 'off'].includes(readonlyEnabledHeader.toLowerCase())
+      return res.end(
+        ok({
+          apiKeyEnabled,
+          readonlyApiKeyEnabled: readonlyEnabled,
+          readonlyApiKeyConfigured: readonlyConfigured,
+        }),
+      )
     }
     if (path === '/api/v1/rotate-readonly-key' && req.method === 'POST') {
       // 与真实端点同门：真实服务端该端点要求管理员凭据（只读凭据调用 403/40305）。
@@ -553,51 +694,94 @@ const server = createServer((req, res) => {
       const rotateKey = (req.headers['x-api-key'] ?? '').toString().trim()
       if (!rotateKey && !bearer) {
         res.statusCode = 401
-        return res.end(JSON.stringify({
-          status: 'error',
-          code: 40107,
-          message: '未提供访问凭据：请携带 X-API-Key 头或登录会话令牌',
-          details: null,
-          timestamp: now(),
-        }))
+        return res.end(
+          JSON.stringify({
+            status: 'error',
+            code: 40107,
+            message: '未提供访问凭据：请携带 X-API-Key 头或登录会话令牌',
+            details: null,
+            timestamp: now(),
+          }),
+        )
       }
       // 明文只在响应里出现一次；此后能力探测回报「已配置」
       if (!mockReadonlyEnabled) {
         res.statusCode = 403
-        return res.end(JSON.stringify({
-          status: 'error',
-          code: 40304,
-          message: '只读 API Key 通道已关闭，无法轮换；如需只读凭据请先启用该通道',
-          details: null,
-          timestamp: now(),
-        }))
+        return res.end(
+          JSON.stringify({
+            status: 'error',
+            code: 40304,
+            message: '只读 API Key 通道已关闭，无法轮换；如需只读凭据请先启用该通道',
+            details: null,
+            timestamp: now(),
+          }),
+        )
       }
       mockReadonlyConfigured = true
       return res.end(ok({ apiKey: 'mcro-mock-1234-5678-90ab-cdef-1234-5678-90ab-cdef' }))
     }
     if (path === '/api/v1/auth/login' && req.method === 'POST') {
-      const mockSession = { token: MOCK_SESSION_TOKEN, sessionId: 'sess-mock-1', expiresAt: new Date(Date.now() + 7 * 86400000).toISOString() }
+      const mockSession = {
+        token: MOCK_SESSION_TOKEN,
+        sessionId: 'sess-mock-1',
+        expiresAt: new Date(Date.now() + 7 * 86400000).toISOString(),
+      }
       try {
         const { password } = JSON.parse(body || '{}')
         if (password !== 'e2e-correct-pass') {
           res.statusCode = 401
-          return res.end(JSON.stringify({ status: 'error', code: 40102, message: '密码错误', details: null, timestamp: '' }))
+          return res.end(
+            JSON.stringify({
+              status: 'error',
+              code: 40102,
+              message: '密码错误',
+              details: null,
+              timestamp: '',
+            }),
+          )
         }
       } catch {}
       return res.end(ok(mockSession))
     }
     if (path === '/api/v1/auth/setup' && req.method === 'POST') {
       passwordSet = true
-      return res.end(ok({ hasPassword: true, token: MOCK_SESSION_TOKEN, sessionId: 'sess-mock-1', expiresAt: new Date(Date.now() + 7 * 86400000).toISOString() }))
+      return res.end(
+        ok({
+          hasPassword: true,
+          token: MOCK_SESSION_TOKEN,
+          sessionId: 'sess-mock-1',
+          expiresAt: new Date(Date.now() + 7 * 86400000).toISOString(),
+        }),
+      )
     }
     if (path === '/api/v1/auth/sessions') {
-      return res.end(ok({ sessions: [{ id: 1, userAgent: 'Playwright E2E', ip: '127.0.0.1', createdAt: new Date().toISOString(), lastSeenAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 6 * 86400000).toISOString(), current: true }] }))
+      return res.end(
+        ok({
+          sessions: [
+            {
+              id: 1,
+              userAgent: 'Playwright E2E',
+              ip: '127.0.0.1',
+              createdAt: new Date().toISOString(),
+              lastSeenAt: new Date().toISOString(),
+              expiresAt: new Date(Date.now() + 6 * 86400000).toISOString(),
+              current: true,
+            },
+          ],
+        }),
+      )
     }
     if (path === '/api/v1/auth/logout' && req.method === 'POST') return res.end(ok({ ok: true }))
-    if (path === '/api/v1/auth/password' && req.method === 'PUT') return res.end(ok({ ok: true, kickedSessions: 1 }))
+    if (path === '/api/v1/auth/password' && req.method === 'PUT')
+      return res.end(ok({ ok: true, kickedSessions: 1 }))
     if (path === '/api/v1/rotate-key' && req.method === 'POST') {
       // API Key 轮换（mock：固定返回演示 key；生产为随机生成）
-      return res.end(ok({ apiKey: 'mcck-mock-0000-0000-0000-0001' }, 'API Key 已轮换：旧 Key 立即失效，请立即保存新 Key'))
+      return res.end(
+        ok(
+          { apiKey: 'mcck-mock-0000-0000-0000-0001' },
+          'API Key 已轮换：旧 Key 立即失效，请立即保存新 Key',
+        ),
+      )
     }
     // ── Webhook 端点（对齐 @mc-commander/schemas webhook 契约） ──
     if (path === '/api/v1/webhooks' && req.method === 'GET') {
@@ -606,15 +790,32 @@ const server = createServer((req, res) => {
       const pageSize = Math.min(200, Math.max(1, parseInt(q.pageSize) || 20))
       // 剔除 secret（列表契约不回传密钥）
       const list = webhooks.map(({ secret: _secret, ...rest }) => rest)
-      return res.end(JSON.stringify({
-        status: 'ok', code: 0, message: 'Success',
-        data: list.slice((page - 1) * pageSize, page * pageSize),
-        pagination: { total: list.length, page, pageSize, totalPages: Math.ceil(list.length / pageSize) || 1 },
-        timestamp: now(),
-      }))
+      return res.end(
+        JSON.stringify({
+          status: 'ok',
+          code: 0,
+          message: 'Success',
+          data: list.slice((page - 1) * pageSize, page * pageSize),
+          pagination: {
+            total: list.length,
+            page,
+            pageSize,
+            totalPages: Math.ceil(list.length / pageSize) || 1,
+          },
+          timestamp: now(),
+        }),
+      )
     }
     if (path === '/api/v1/webhooks/event-types') {
-      return res.end(ok(['instance.started', 'instance.stopped', 'backup.completed', 'player.joined', 'player.left']))
+      return res.end(
+        ok([
+          'instance.started',
+          'instance.stopped',
+          'backup.completed',
+          'player.joined',
+          'player.left',
+        ]),
+      )
     }
     if (path === '/api/v1/webhooks' && req.method === 'POST') {
       let created
@@ -646,22 +847,62 @@ const server = createServer((req, res) => {
       const pageSize = Math.min(200, Math.max(1, parseInt(q.pageSize) || 20))
       // 字段对齐 webhookDeliverySchema（eventType/responseStatus/status）；payload=事件发送内容示例（虚构数据）
       const deliveries = [
-        { id: 1, webhookId: 1, eventType: 'instance.started', instanceId: 'e2e-demo', payload: { event: 'instance.started', instance: 'E2E 演示实例', timestamp: Date.now() - 3600_000 }, status: 'success', responseStatus: 200, durationMs: 110, attempts: 1, createdAt: new Date(Date.now() - 3600_000).toISOString(), responseBody: '{"ok":true}' },
-        { id: 2, webhookId: 1, eventType: 'backup.completed', instanceId: 'e2e-demo', payload: { event: 'backup.completed', file: 'world-backup-test.zip', size: 1024 }, status: 'failed', responseStatus: 502, durationMs: 3000, attempts: 3, createdAt: new Date(Date.now() - 86_400_000).toISOString(), responseBody: 'Bad Gateway' },
+        {
+          id: 1,
+          webhookId: 1,
+          eventType: 'instance.started',
+          instanceId: 'e2e-demo',
+          payload: {
+            event: 'instance.started',
+            instance: 'E2E 演示实例',
+            timestamp: Date.now() - 3600_000,
+          },
+          status: 'success',
+          responseStatus: 200,
+          durationMs: 110,
+          attempts: 1,
+          createdAt: new Date(Date.now() - 3600_000).toISOString(),
+          responseBody: '{"ok":true}',
+        },
+        {
+          id: 2,
+          webhookId: 1,
+          eventType: 'backup.completed',
+          instanceId: 'e2e-demo',
+          payload: { event: 'backup.completed', file: 'world-backup-test.zip', size: 1024 },
+          status: 'failed',
+          responseStatus: 502,
+          durationMs: 3000,
+          attempts: 3,
+          createdAt: new Date(Date.now() - 86_400_000).toISOString(),
+          responseBody: 'Bad Gateway',
+        },
       ]
-      return res.end(JSON.stringify({
-        status: 'ok', code: 0, message: 'Success',
-        data: deliveries.slice((page - 1) * pageSize, page * pageSize),
-        pagination: { total: deliveries.length, page, pageSize, totalPages: Math.ceil(deliveries.length / pageSize) || 1 },
-        timestamp: now(),
-      }))
+      return res.end(
+        JSON.stringify({
+          status: 'ok',
+          code: 0,
+          message: 'Success',
+          data: deliveries.slice((page - 1) * pageSize, page * pageSize),
+          pagination: {
+            total: deliveries.length,
+            page,
+            pageSize,
+            totalPages: Math.ceil(deliveries.length / pageSize) || 1,
+          },
+          timestamp: now(),
+        }),
+      )
     }
     if (/^\/api\/v1\/webhooks\/\d+$/.test(path) && req.method === 'DELETE') return res.end(ok(null))
     // ── 插件域（对齐 @mc-commander/schemas plugin 契约；数据见模块级 plugins） ──
     if (path === '/api/v1/instances/e2e-demo/plugins' && req.method === 'GET') {
       return res.end(ok({ plugins }))
     }
-    if (/^\/api\/v1\/instances\/e2e-demo\/plugins\/[^/]+\/enabled$/.test(path) && req.method === 'PUT') {
+    if (
+      /^\/api\/v1\/instances\/e2e-demo\/plugins\/[^/]+\/enabled$/.test(path) &&
+      req.method === 'PUT'
+    ) {
       let target = null
       try {
         const file = decodeURIComponent(path.split('/')[6])
@@ -675,13 +916,28 @@ const server = createServer((req, res) => {
       return res.end(ok({ ok: true }))
     }
     if (path === '/api/v1/instances/e2e-demo/plugins/check-updates' && req.method === 'POST') {
-      return res.end(ok({ results: plugins.map((p) => ({
-        file: p.file, name: p.name, installedVersion: p.meta?.version ?? null, enabled: p.enabled,
-        matched: true, slug: p.name.toLowerCase(), title: p.name, iconUrl: null,
-        latestVersion: p.meta?.version ?? '1.0.0', updateAvailable: false, hasNewer: false,
-      })) }))
+      return res.end(
+        ok({
+          results: plugins.map((p) => ({
+            file: p.file,
+            name: p.name,
+            installedVersion: p.meta?.version ?? null,
+            enabled: p.enabled,
+            matched: true,
+            slug: p.name.toLowerCase(),
+            title: p.name,
+            iconUrl: null,
+            latestVersion: p.meta?.version ?? '1.0.0',
+            updateAvailable: false,
+            hasNewer: false,
+          })),
+        }),
+      )
     }
-    if (/^\/api\/v1\/instances\/e2e-demo\/plugins\/market\/search$/.test(path) && req.method === 'GET') {
+    if (
+      /^\/api\/v1\/instances\/e2e-demo\/plugins\/market\/search$/.test(path) &&
+      req.method === 'GET'
+    ) {
       return res.end(ok({ hits: [], total: 0 }))
     }
     if (path === '/api/v1/instances') return res.end(ok([instanceView(req)]))
@@ -698,56 +954,73 @@ const server = createServer((req, res) => {
       // 快照目录名用备份记录的 name 占位（mock 不建真实目录）
       if (req.method === 'DELETE') {
         let uninstallBody = {}
-        try { uninstallBody = JSON.parse(body || '{}') } catch {}
-        const confirmName = typeof uninstallBody.confirmName === 'string' ? uninstallBody.confirmName.trim() : null
+        try {
+          uninstallBody = JSON.parse(body || '{}')
+        } catch {}
+        const confirmName =
+          typeof uninstallBody.confirmName === 'string' ? uninstallBody.confirmName.trim() : null
         // 与服务端同口径：两侧 trim 后比对（兼容库里带首尾空白的旧实例名）
         if (confirmName !== instance.name.trim()) {
           res.statusCode = 400
           return res.end(err(40016, '需在请求体提供 confirmName 且与实例名完全一致才能卸载实例'))
         }
-        const snapshots = mockBackups
-          .filter((b) => b.instanceId === instance.id)
-          .map((b) => b.name)
+        const snapshots = mockBackups.filter((b) => b.instanceId === instance.id).map((b) => b.name)
         if (snapshots.length === 0 && uninstallBody.acknowledgeIrreversible !== true) {
           res.statusCode = 409
-          return res.end(err(40914, '该实例没有任何备份，删除后世界数据与配置不可恢复；确认后请携带 acknowledgeIrreversible=true 重试'))
+          return res.end(
+            err(
+              40914,
+              '该实例没有任何备份，删除后世界数据与配置不可恢复；确认后请携带 acknowledgeIrreversible=true 重试',
+            ),
+          )
         }
-        return res.end(ok({
-          retainedBackupCount: snapshots.length,
-          // 与真实契约同形：数量全量、名字只列最近 10 条
-          retainedBackupNames: snapshots.slice(0, 10),
-        }, 'Instance deleted'))
+        return res.end(
+          ok(
+            {
+              retainedBackupCount: snapshots.length,
+              // 与真实契约同形：数量全量、名字只列最近 10 条
+              retainedBackupNames: snapshots.slice(0, 10),
+            },
+            'Instance deleted',
+          ),
+        )
       }
       return res.end(ok(instanceView(req)))
     }
     if (path === '/api/v1/instances/e2e-demo/logs') return res.end(ok(logs))
     if (path === '/api/v1/instances/e2e-demo/command') {
       let cmd = ''
-      try { cmd = JSON.parse(body || '{}').command ?? '' } catch {}
+      try {
+        cmd = JSON.parse(body || '{}').command ?? ''
+      } catch {}
       // gamerule 无参查询 → 全量规则文本（≥ 规则集 1/3 才能过 parseGameruleOutput 阈值，返回 20 条）
       if (/^gamerule\s*$/i.test(cmd)) {
-        return res.end(ok([
-          'allowEnteringNetherUsingPortals = true',
-          'announceAdvancements = true',
-          'blockExplosionDropDecay = true',
-          'commandBlockOutput = true',
-          'commandBlocksEnabled = true',
-          'commandModificationBlockLimit = 32768',
-          'disableElytraMovementCheck = false',
-          'disablePlayerMovementCheck = false',
-          'disableRaids = false',
-          'doDaylightCycle = true',
-          'doEntityDrops = true',
-          'doImmediateRespawn = false',
-          'doInsomnia = true',
-          'doLimitedCrafting = false',
-          'doMobLoot = true',
-          'doMobSpawning = true',
-          'doPatrolSpawning = true',
-          'doTileDrops = true',
-          'doTraderSpawning = true',
-          'doVinesSpread = true',
-        ].join('\n')))
+        return res.end(
+          ok(
+            [
+              'allowEnteringNetherUsingPortals = true',
+              'announceAdvancements = true',
+              'blockExplosionDropDecay = true',
+              'commandBlockOutput = true',
+              'commandBlocksEnabled = true',
+              'commandModificationBlockLimit = 32768',
+              'disableElytraMovementCheck = false',
+              'disablePlayerMovementCheck = false',
+              'disableRaids = false',
+              'doDaylightCycle = true',
+              'doEntityDrops = true',
+              'doImmediateRespawn = false',
+              'doInsomnia = true',
+              'doLimitedCrafting = false',
+              'doMobLoot = true',
+              'doMobSpawning = true',
+              'doPatrolSpawning = true',
+              'doTileDrops = true',
+              'doTraderSpawning = true',
+              'doVinesSpread = true',
+            ].join('\n'),
+          ),
+        )
       }
       // gamerule 修改（带值）→ RCON 成功文本
       if (/^gamerule\s+\S+\s+\S+\s*$/i.test(cmd)) {
@@ -766,19 +1039,24 @@ const server = createServer((req, res) => {
     if (path === '/api/v1/instances/e2e-demo/tasks') {
       if (req.method === 'POST') {
         const bodyObj = JSON.parse(body || '{}')
-        return res.end(ok({
-          id: 99,
-          instanceId: 'e2e-demo',
-          name: bodyObj.name ?? '新任务',
-          type: bodyObj.type ?? 'restart',
-          cronExpression: bodyObj.cronExpression ?? '0 0 * * *',
-          command: bodyObj.command ?? null,
-          isEnabled: bodyObj.isEnabled ?? true,
-          lastRunAt: null,
-          nextRunAt: null,
-          createdAt: now(),
-          updatedAt: now(),
-        }, 'Scheduled task created successfully'))
+        return res.end(
+          ok(
+            {
+              id: 99,
+              instanceId: 'e2e-demo',
+              name: bodyObj.name ?? '新任务',
+              type: bodyObj.type ?? 'restart',
+              cronExpression: bodyObj.cronExpression ?? '0 0 * * *',
+              command: bodyObj.command ?? null,
+              isEnabled: bodyObj.isEnabled ?? true,
+              lastRunAt: null,
+              nextRunAt: null,
+              createdAt: now(),
+              updatedAt: now(),
+            },
+            'Scheduled task created successfully',
+          ),
+        )
       }
       return res.end(ok(mockTasks))
     }
@@ -786,7 +1064,12 @@ const server = createServer((req, res) => {
     if (taskMatch) {
       const task = mockTasks.find((t) => t.id === Number(taskMatch[1]))
       if (req.method === 'PUT') {
-        return res.end(ok({ ...(task ?? {}), ...JSON.parse(body || '{}') }, 'Scheduled task updated successfully'))
+        return res.end(
+          ok(
+            { ...(task ?? {}), ...JSON.parse(body || '{}') },
+            'Scheduled task updated successfully',
+          ),
+        )
       }
       if (req.method === 'DELETE') {
         return res.end(ok(null, 'Scheduled task deleted successfully'))
@@ -798,33 +1081,42 @@ const server = createServer((req, res) => {
     // ── 备份域（M6；虚构占位数据）──
     if (path === '/api/v1/instances/e2e-demo/backups') {
       if (req.method === 'POST') {
-        return res.end(ok({
-          id: 23,
-          instanceId: 'e2e-demo',
-          // 与服务端默认命名同源（routes/backups.js：未传 name 时用 Backup_<本地日期>），
-          // 与 createdAt 同刻生成，不再写死日期
-          name: `Backup_${localDateKey()}`,
-          description: null,
-          type: 'manual',
-          size: 0,
-          status: 'creating',
-          worldName: 'world',
-          createdAt: now(),
-          updatedAt: now(),
-        }, 'Backup created successfully'))
+        return res.end(
+          ok(
+            {
+              id: 23,
+              instanceId: 'e2e-demo',
+              // 与服务端默认命名同源（routes/backups.js：未传 name 时用 Backup_<本地日期>），
+              // 与 createdAt 同刻生成，不再写死日期
+              name: `Backup_${localDateKey()}`,
+              description: null,
+              type: 'manual',
+              size: 0,
+              status: 'creating',
+              worldName: 'world',
+              createdAt: now(),
+              updatedAt: now(),
+            },
+            'Backup created successfully',
+          ),
+        )
       }
       return res.end(ok(mockBackups))
     }
     // 归档快照：磁盘上有、备份表里没有索引的快照目录
     if (path === '/api/v1/backups/archived' && req.method === 'GET') {
       if (mockArchivedAttached) return res.end(ok([]))
-      return res.end(ok([{
-        archiveId: 'paper-1a2b3c4d',
-        instanceExists: false,
-        snapshotCount: 3,
-        usableCount: 2,
-        latestMtime: '2026-09-01T00:00:00.000Z',
-      }]))
+      return res.end(
+        ok([
+          {
+            archiveId: 'paper-1a2b3c4d',
+            instanceExists: false,
+            snapshotCount: 3,
+            usableCount: 2,
+            latestMtime: '2026-09-01T00:00:00.000Z',
+          },
+        ]),
+      )
     }
     if (/^\/api\/v1\/instances\/[^/]+\/backups\/attach$/.test(path) && req.method === 'POST') {
       // 与真实端点同门：要求管理员凭据（mock 无 Key 台账，只要求「带了凭据」）
@@ -844,7 +1136,9 @@ const server = createServer((req, res) => {
         return res.end(err(40000, 'archiveId 必填'))
       }
       mockArchivedAttached = true
-      return res.end(ok({ attached: 2, skipped: 1 }, '已挂载 2 份归档快照（跳过 1 份：已挂载过或无法识别）'))
+      return res.end(
+        ok({ attached: 2, skipped: 1 }, '已挂载 2 份归档快照（跳过 1 份：已挂载过或无法识别）'),
+      )
     }
     // 取消进行中的备份/恢复（服务端 routes/backups.js POST /instances/:id/backups/cancel）
     if (/^\/api\/v1\/instances\/[^/]+\/backups\/cancel$/.test(path) && req.method === 'POST') {
@@ -860,7 +1154,9 @@ const server = createServer((req, res) => {
       }
       if (confirmName.trim() !== instance.name.trim()) {
         res.statusCode = 400
-        return res.end(err(40017, '需在请求体提供 confirmName 且与该备份所属实例名完全一致才能恢复'))
+        return res.end(
+          err(40017, '需在请求体提供 confirmName 且与该备份所属实例名完全一致才能恢复'),
+        )
       }
       return res.end(ok(null, 'Restore started'))
     }
@@ -873,22 +1169,29 @@ const server = createServer((req, res) => {
     if (path === '/api/v1/versions') {
       const { type } = parseQuery(url)
       const verType = type || 'vanilla'
-      return res.end(ok({
-        type: verType,
-        versions: ['26.2', '1.21.4', '1.21.1', '1.20.6', '1.20.4', '1.19.4'],
-        ...(verType === 'fabric' ? { loaders: ['0.16.10', '0.16.9', '0.15.11'] } : {}),
-      }))
+      return res.end(
+        ok({
+          type: verType,
+          versions: ['26.2', '1.21.4', '1.21.1', '1.20.6', '1.20.4', '1.19.4'],
+          ...(verType === 'fabric' ? { loaders: ['0.16.10', '0.16.9', '0.15.11'] } : {}),
+        }),
+      )
     }
     if (path === '/api/v1/instances/deploy' && req.method === 'POST') {
-      return res.end(ok({
-        id: 'paper-a1b2c3d4',
-        name: '新部署实例',
-        type: 'paper',
-        mcVersion: '1.21.4',
-        javaVersion: '21',
-        path: '/mock/instances/paper-a1b2c3d4',
-        maxMemory: '2G',
-      }, 'Instance deployed successfully'))
+      return res.end(
+        ok(
+          {
+            id: 'paper-a1b2c3d4',
+            name: '新部署实例',
+            type: 'paper',
+            mcVersion: '1.21.4',
+            javaVersion: '21',
+            path: '/mock/instances/paper-a1b2c3d4',
+            maxMemory: '2G',
+          },
+          'Instance deployed successfully',
+        ),
+      )
     }
     // 部署进度兜底快照（对齐 @mc-commander/schemas deployStatusResponseSchema）：
     // 默认空态；?active=1 或 ?mockInFlight=1 返回在途快照（后者由面板按
@@ -897,18 +1200,20 @@ const server = createServer((req, res) => {
     if (path === '/api/v1/instances/deploy/status') {
       const q = parseQuery(url)
       if (q.active === '1' || q.mockInFlight === '1') {
-        return res.end(ok({
-          deploying: true,
-          instanceId: 'paper-a1b2c3d4',
-          instanceName: '新部署实例',
-          type: 'paper',
-          mcVersion: '1.21.4',
-          stage: 'download',
-          percent: 0.45,
-          transferred: 52_428_800,
-          total: 104_857_600,
-          updatedAt: Date.now(),
-        }))
+        return res.end(
+          ok({
+            deploying: true,
+            instanceId: 'paper-a1b2c3d4',
+            instanceName: '新部署实例',
+            type: 'paper',
+            mcVersion: '1.21.4',
+            stage: 'download',
+            percent: 0.45,
+            transferred: 52_428_800,
+            total: 104_857_600,
+            updatedAt: Date.now(),
+          }),
+        )
       }
       return res.end(ok({ deploying: false }))
     }
@@ -977,14 +1282,49 @@ const server = createServer((req, res) => {
         target = '26.2'
       }
       upgradeInFlight = { stage: 'download', detail: '正在下载新版本服务端…' }
-      broadcastWs('upgradeProgress', { instanceId: 'e2e-demo', stage: 'backup', percent: 0, detail: '正在创建备份…', timestamp: Date.now() }, 'e2e-demo')
-      broadcastWs('upgradeProgress', { instanceId: 'e2e-demo', stage: 'download', percent: 40, detail: '正在下载新版本服务端…', timestamp: Date.now() }, 'e2e-demo')
+      broadcastWs(
+        'upgradeProgress',
+        {
+          instanceId: 'e2e-demo',
+          stage: 'backup',
+          percent: 0,
+          detail: '正在创建备份…',
+          timestamp: Date.now(),
+        },
+        'e2e-demo',
+      )
+      broadcastWs(
+        'upgradeProgress',
+        {
+          instanceId: 'e2e-demo',
+          stage: 'download',
+          percent: 40,
+          detail: '正在下载新版本服务端…',
+          timestamp: Date.now(),
+        },
+        'e2e-demo',
+      )
       res.statusCode = 202
-      return res.end(ok({ message: 'Upgrade started', instanceId: 'e2e-demo', mcVersion: target, type: 'vanilla' }))
+      return res.end(
+        ok({
+          message: 'Upgrade started',
+          instanceId: 'e2e-demo',
+          mcVersion: target,
+          type: 'vanilla',
+        }),
+      )
     }
     if (path === '/api/v1/instances/e2e-demo/upgrade/status') {
       if (!upgradeInFlight) return res.end(ok({ upgrading: false }))
-      return res.end(ok({ upgrading: true, instanceId: 'e2e-demo', percent: 40, timestamp: Date.now(), ...upgradeInFlight }))
+      return res.end(
+        ok({
+          upgrading: true,
+          instanceId: 'e2e-demo',
+          percent: 40,
+          timestamp: Date.now(),
+          ...upgradeInFlight,
+        }),
+      )
     }
     if (path === '/api/v1/instances/e2e-demo/upgrade/cancel' && req.method === 'POST') {
       if (!upgradeInFlight) {
@@ -993,9 +1333,25 @@ const server = createServer((req, res) => {
       }
       const detail = '已取消，实例保持 1.21.4'
       upgradeInFlight = null
-      broadcastWs('upgradeProgress', { instanceId: 'e2e-demo', stage: 'cancelled', percent: 0, detail, timestamp: Date.now() }, 'e2e-demo')
-      broadcastWs('upgradeCancelled', { instanceId: 'e2e-demo', instanceName: 'E2E 演示实例', stage: 'cancelled', detail, timestamp: Date.now() }, 'e2e-demo')
-      return res.end(ok({ instanceId: 'e2e-demo', cancelled: true }, 'Upgrade cancellation requested'))
+      broadcastWs(
+        'upgradeProgress',
+        { instanceId: 'e2e-demo', stage: 'cancelled', percent: 0, detail, timestamp: Date.now() },
+        'e2e-demo',
+      )
+      broadcastWs(
+        'upgradeCancelled',
+        {
+          instanceId: 'e2e-demo',
+          instanceName: 'E2E 演示实例',
+          stage: 'cancelled',
+          detail,
+          timestamp: Date.now(),
+        },
+        'e2e-demo',
+      )
+      return res.end(
+        ok({ instanceId: 'e2e-demo', cancelled: true }, 'Upgrade cancellation requested'),
+      )
     }
 
     // ── 世界/属性域 ──
@@ -1011,17 +1367,21 @@ const server = createServer((req, res) => {
     if (path === '/api/v1/instances/e2e-demo/files/content') {
       const { path: filePath } = parseQuery(url)
       if (req.method === 'PUT') {
-        return res.end(ok({ path: filePath, size: 1024, modifiedAt: now() }, 'File saved successfully'))
+        return res.end(
+          ok({ path: filePath, size: 1024, modifiedAt: now() }, 'File saved successfully'),
+        )
       }
       const name = filePath.split('/').filter(Boolean).pop() || 'server.properties'
-      return res.end(ok({
-        path: filePath,
-        name,
-        size: 1024,
-        content: serverPropertiesText,
-        encoding: 'utf-8',
-        modifiedAt: now(),
-      }))
+      return res.end(
+        ok({
+          path: filePath,
+          name,
+          size: 1024,
+          content: serverPropertiesText,
+          encoding: 'utf-8',
+          modifiedAt: now(),
+        }),
+      )
     }
     if (path === '/api/v1/instances/e2e-demo/files') {
       if (req.method === 'DELETE') {
@@ -1036,19 +1396,101 @@ const server = createServer((req, res) => {
       const q = parseQuery(url)
       // 对齐真服务端口径：SQLite CURRENT_TIMESTAMP = UTC「YYYY-MM-DD HH:MM:SS」（空格分隔，
       // 无时区标记）；ISO「T」分隔会与前端按该口径构造的 startTime/endTime 字符串比较失配
-      const hoursAgo = (h) => new Date(Date.now() - h * 3600000).toISOString().replace('T', ' ').slice(0, 19)
+      const hoursAgo = (h) =>
+        new Date(Date.now() - h * 3600000).toISOString().replace('T', ' ').slice(0, 19)
       const auditLogs = [
-        { id: 1, instanceId: 'e2e-demo', action: 'INSTANCE_START', targetType: 'instance', targetId: 'e2e-demo', detail: { reason: '手动启动' }, source: 'web', createdAt: hoursAgo(30) },
-        { id: 2, instanceId: 'e2e-demo', action: 'PLAYER_OP', targetType: 'player', targetId: 'Steve', detail: { by: 'admin' }, source: 'rcon', createdAt: hoursAgo(20) },
-        { id: 3, instanceId: 'e2e-demo', action: 'CONFIG_CHANGE', targetType: 'properties', targetId: 'server.properties', detail: { key: 'view-distance', from: '10', to: '12' }, source: 'web', createdAt: hoursAgo(8) },
-        { id: 4, instanceId: 'e2e-demo', action: 'PLAYER_KICK', targetType: 'player', targetId: 'Alex', detail: { reason: '违规行为' }, source: 'web', createdAt: hoursAgo(2) },
-        { id: 5, instanceId: 'e2e-demo', action: 'BACKUP_CREATE', targetType: 'backup', targetId: 'backup-demo', detail: { sizeBytes: 1048576 }, source: 'cron', createdAt: hoursAgo(1) },
+        {
+          id: 1,
+          instanceId: 'e2e-demo',
+          action: 'INSTANCE_START',
+          targetType: 'instance',
+          targetId: 'e2e-demo',
+          detail: { reason: '手动启动' },
+          source: 'web',
+          createdAt: hoursAgo(30),
+        },
+        {
+          id: 2,
+          instanceId: 'e2e-demo',
+          action: 'PLAYER_OP',
+          targetType: 'player',
+          targetId: 'Steve',
+          detail: { by: 'admin' },
+          source: 'rcon',
+          createdAt: hoursAgo(20),
+        },
+        {
+          id: 3,
+          instanceId: 'e2e-demo',
+          action: 'CONFIG_CHANGE',
+          targetType: 'properties',
+          targetId: 'server.properties',
+          detail: { key: 'view-distance', from: '10', to: '12' },
+          source: 'web',
+          createdAt: hoursAgo(8),
+        },
+        {
+          id: 4,
+          instanceId: 'e2e-demo',
+          action: 'PLAYER_KICK',
+          targetType: 'player',
+          targetId: 'Alex',
+          detail: { reason: '违规行为' },
+          source: 'web',
+          createdAt: hoursAgo(2),
+        },
+        {
+          id: 5,
+          instanceId: 'e2e-demo',
+          action: 'BACKUP_CREATE',
+          targetType: 'backup',
+          targetId: 'backup-demo',
+          detail: { sizeBytes: 1048576 },
+          source: 'cron',
+          createdAt: hoursAgo(1),
+        },
       ]
       const commandHistory = [
-        { id: 1, instanceId: 'e2e-demo', command: 'list', source: 'web', success: true, response: 'There are 3 of a max of 20 players online', durationMs: 42, createdAt: hoursAgo(3) },
-        { id: 2, instanceId: 'e2e-demo', command: 'time set day', source: 'web', success: true, response: 'Set the time to 1000', durationMs: 18, createdAt: hoursAgo(2.5) },
-        { id: 3, instanceId: 'e2e-demo', command: 'gamemode creative Steve', source: 'web', success: false, response: 'No player was found', durationMs: 21, createdAt: hoursAgo(2) },
-        { id: 4, instanceId: 'e2e-demo', command: 'say hello', source: 'rcon', success: true, response: null, durationMs: 9, createdAt: hoursAgo(1) },
+        {
+          id: 1,
+          instanceId: 'e2e-demo',
+          command: 'list',
+          source: 'web',
+          success: true,
+          response: 'There are 3 of a max of 20 players online',
+          durationMs: 42,
+          createdAt: hoursAgo(3),
+        },
+        {
+          id: 2,
+          instanceId: 'e2e-demo',
+          command: 'time set day',
+          source: 'web',
+          success: true,
+          response: 'Set the time to 1000',
+          durationMs: 18,
+          createdAt: hoursAgo(2.5),
+        },
+        {
+          id: 3,
+          instanceId: 'e2e-demo',
+          command: 'gamemode creative Steve',
+          source: 'web',
+          success: false,
+          response: 'No player was found',
+          durationMs: 21,
+          createdAt: hoursAgo(2),
+        },
+        {
+          id: 4,
+          instanceId: 'e2e-demo',
+          command: 'say hello',
+          source: 'rcon',
+          success: true,
+          response: null,
+          durationMs: 9,
+          createdAt: hoursAgo(1),
+        },
       ]
       const isAudit = path === '/api/v1/audit-logs'
       let list = isAudit ? auditLogs : commandHistory
@@ -1061,12 +1503,16 @@ const server = createServer((req, res) => {
       const page = Math.max(1, parseInt(q.page) || 1)
       const pageSize = Math.min(200, Math.max(1, parseInt(q.pageSize) || 20))
       const total = list.length
-      return res.end(JSON.stringify({
-        status: 'ok', code: 0, message: 'Success',
-        data: list.slice((page - 1) * pageSize, page * pageSize),
-        pagination: { total, page, pageSize, totalPages: Math.ceil(total / pageSize) || 1 },
-        timestamp: now(),
-      }))
+      return res.end(
+        JSON.stringify({
+          status: 'ok',
+          code: 0,
+          message: 'Success',
+          data: list.slice((page - 1) * pageSize, page * pageSize),
+          pagination: { total, page, pageSize, totalPages: Math.ceil(total / pageSize) || 1 },
+          timestamp: now(),
+        }),
+      )
     }
 
     // ── 玩家域 ──
@@ -1078,7 +1524,15 @@ const server = createServer((req, res) => {
       const found = players.find((p) => p.name === detailsMatch[1])
       if (found) return res.end(ok(found))
       res.statusCode = 404
-      return res.end(JSON.stringify({ status: 'error', code: 40403, message: '玩家不存在', details: null, timestamp: now() }))
+      return res.end(
+        JSON.stringify({
+          status: 'error',
+          code: 40403,
+          message: '玩家不存在',
+          details: null,
+          timestamp: now(),
+        }),
+      )
     }
     const opMatch = path.match(/^\/api\/v1\/instances\/e2e-demo\/players\/([^/]+)\/op$/)
     if (opMatch) return res.end(ok(null))
@@ -1088,13 +1542,25 @@ const server = createServer((req, res) => {
     if (banMatch) return res.end(ok({ expiresAt: Date.now() + 3600000 }))
     const pardonMatch = path.match(/^\/api\/v1\/instances\/e2e-demo\/players\/([^/]+)\/pardon$/)
     if (pardonMatch) return res.end(ok(null))
-    const whitelistAddMatch = path.match(/^\/api\/v1\/instances\/e2e-demo\/players\/([^/]+)\/whitelist\/add$/)
+    const whitelistAddMatch = path.match(
+      /^\/api\/v1\/instances\/e2e-demo\/players\/([^/]+)\/whitelist\/add$/,
+    )
     if (whitelistAddMatch) return res.end(ok(null))
-    const whitelistRemoveMatch = path.match(/^\/api\/v1\/instances\/e2e-demo\/players\/([^/]+)\/whitelist$/)
+    const whitelistRemoveMatch = path.match(
+      /^\/api\/v1\/instances\/e2e-demo\/players\/([^/]+)\/whitelist$/,
+    )
     if (whitelistRemoveMatch) return res.end(ok(null))
 
     res.statusCode = 404
-    res.end(JSON.stringify({ status: 'error', code: 40400, message: 'Not found', details: null, timestamp: now() }))
+    res.end(
+      JSON.stringify({
+        status: 'error',
+        code: 40400,
+        message: 'Not found',
+        details: null,
+        timestamp: now(),
+      }),
+    )
   })
 })
 
@@ -1105,7 +1571,9 @@ const server = createServer((req, res) => {
 // （e2e 专用令牌恒放行——mock 不做凭据校验）
 const WS_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11'
 const authProtocol = (protocols) =>
-  protocols.find((p) => p.startsWith('mc-commander-apikey.') || p.startsWith('mc-commander-session.')) ?? null
+  protocols.find(
+    (p) => p.startsWith('mc-commander-apikey.') || p.startsWith('mc-commander-session.'),
+  ) ?? null
 
 /** 帧解码：客户端→服务端仅小载荷文本帧（subscribe/ping），掩码必处理 */
 function decodeFrame(buf) {
@@ -1176,11 +1644,16 @@ const wsSockets = new Set()
 server.on('upgrade', (req, socket) => {
   const url = req.url ?? ''
   if (!url.startsWith('/ws')) return socket.destroy()
-  const protocols = String(req.headers['sec-websocket-protocol'] ?? '').split(',').map((s) => s.trim()).filter(Boolean)
+  const protocols = String(req.headers['sec-websocket-protocol'] ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
   const chosen = authProtocol(protocols)
   const firstFrameAuth = !chosen // 无凭据握手 → 走首帧鉴权通道（客户端主线）
   const key = req.headers['sec-websocket-key']
-  const accept = createHash('sha1').update(key + WS_GUID).digest('base64')
+  const accept = createHash('sha1')
+    .update(key + WS_GUID)
+    .digest('base64')
   socket.write(
     `HTTP/1.1 101 Switching Protocols\r\n` +
       `Upgrade: websocket\r\nConnection: Upgrade\r\n` +
@@ -1194,9 +1667,12 @@ server.on('upgrade', (req, socket) => {
   // 携带（Playwright 的 extraHTTPHeaders 会带到 WS 握手，已实测）
   socket.mockWsGroup = String(req.headers['x-mock-ws-group'] ?? '')
   // 逐连接场景态：握手请求头携带的覆写在 status 快照里沿用（与 REST 同源）
-  socket.mockRunning = req.headers['x-mock-instance-running'] === 'true'
-    ? true
-    : req.headers['x-mock-instance-running'] === 'false' ? false : null
+  socket.mockRunning =
+    req.headers['x-mock-instance-running'] === 'true'
+      ? true
+      : req.headers['x-mock-instance-running'] === 'false'
+        ? false
+        : null
   // 首帧鉴权状态（对齐真实端：鉴权前收到非 auth 消息即断连）
   let authed = !firstFrameAuth
   wsSockets.add(socket)
@@ -1219,7 +1695,9 @@ server.on('upgrade', (req, socket) => {
       // 首帧鉴权回执（mock 恒放行）：与真实端一致——收到 auth 才回执 ok
       if (authed) return
       authed = true
-      socket.write(encodeTextFrame(JSON.stringify({ type: 'auth', ok: true, timestamp: Date.now() })))
+      socket.write(
+        encodeTextFrame(JSON.stringify({ type: 'auth', ok: true, timestamp: Date.now() })),
+      )
       return
     }
     // 鉴权前收到非 auth 消息：与真实端一致断连（暴露鉴权前发消息的客户端回归）

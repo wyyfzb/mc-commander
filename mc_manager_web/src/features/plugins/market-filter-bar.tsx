@@ -61,7 +61,9 @@ export function MarketFilterBar({
           </SelectTrigger>
           <SelectContent>
             {LOADER_OPTIONS.map((o) => (
-              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+              <SelectItem key={o.value} value={o.value}>
+                {o.label}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>

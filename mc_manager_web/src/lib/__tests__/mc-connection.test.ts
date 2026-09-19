@@ -120,8 +120,12 @@ describe('panelAddress（面板身份）', () => {
   })
 
   it('协议与端口参与身份（http/https、不同端口都不算同一面板）', () => {
-    expect(panelAddress('http://panel.example.com')).not.toBe(panelAddress('https://panel.example.com'))
-    expect(panelAddress('https://panel.example.com:25566')).not.toBe(panelAddress('https://panel.example.com'))
+    expect(panelAddress('http://panel.example.com')).not.toBe(
+      panelAddress('https://panel.example.com'),
+    )
+    expect(panelAddress('https://panel.example.com:25566')).not.toBe(
+      panelAddress('https://panel.example.com'),
+    )
   })
 })
 
@@ -146,6 +150,8 @@ describe('sessionAppliesToPanel（会话是否属于目标面板）', () => {
   })
 
   it('有 token 但签发面板为空串 → 按旧会话口径兜底', () => {
-    expect(sessionAppliesToPanel({ token: 'tok-1', issuedFor: '' }, 'https://panel-b.example.com')).toBe(true)
+    expect(
+      sessionAppliesToPanel({ token: 'tok-1', issuedFor: '' }, 'https://panel-b.example.com'),
+    ).toBe(true)
   })
 })

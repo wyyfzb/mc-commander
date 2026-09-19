@@ -18,7 +18,13 @@ describe('runBatchForTargets', () => {
       },
     })
     expect(order).toEqual(['A', 'B'])
-    expect(result).toEqual({ successCount: 2, failCount: 0, skippedCount: 0, allOffline: false, failures: [] })
+    expect(result).toEqual({
+      successCount: 2,
+      failCount: 0,
+      skippedCount: 0,
+      allOffline: false,
+      failures: [],
+    })
   })
 
   it('requireOnline 时离线目标跳过计 skipped', async () => {
@@ -35,7 +41,13 @@ describe('runBatchForTargets', () => {
       },
     })
     expect(executed).toEqual(['A', 'C'])
-    expect(result).toEqual({ successCount: 2, failCount: 0, skippedCount: 1, allOffline: false, failures: [] })
+    expect(result).toEqual({
+      successCount: 2,
+      failCount: 0,
+      skippedCount: 1,
+      allOffline: false,
+      failures: [],
+    })
   })
 
   it('单条失败计 fail，不阻断后续目标', async () => {
@@ -68,7 +80,13 @@ describe('runBatchForTargets', () => {
       },
     })
     expect(executed).toEqual([])
-    expect(result).toEqual({ successCount: 0, failCount: 0, skippedCount: 2, allOffline: true, failures: [] })
+    expect(result).toEqual({
+      successCount: 0,
+      failCount: 0,
+      skippedCount: 2,
+      allOffline: true,
+      failures: [],
+    })
   })
 
   it('名单类动作（白名单/OP）requireOnline=false 对离线仍执行', async () => {
@@ -77,7 +95,13 @@ describe('runBatchForTargets', () => {
       requireOnline: false,
       execute: async () => {},
     })
-    expect(result).toEqual({ successCount: 1, failCount: 0, skippedCount: 0, allOffline: false, failures: [] })
+    expect(result).toEqual({
+      successCount: 1,
+      failCount: 0,
+      skippedCount: 0,
+      allOffline: false,
+      failures: [],
+    })
   })
 
   it('多条失败记录每个目标的独立错误', async () => {
@@ -106,7 +130,9 @@ describe('runBatchForTargets', () => {
     const result = await runBatchForTargets({
       targets: [{ name: 'A', isOnline: true }],
       requireOnline: false,
-      execute: async () => { throw 'string error' },
+      execute: async () => {
+        throw 'string error'
+      },
     })
     expect(result.failures).toEqual([{ target: 'A', error: 'string error' }])
   })
@@ -115,35 +141,73 @@ describe('runBatchForTargets', () => {
 describe('formatBatchSummary（汇总 Toast 文案）', () => {
   it('常规汇总', () => {
     expect(
-      formatBatchSummary('踢出', { successCount: 3, failCount: 1, skippedCount: 2, allOffline: false, failures: [] }),
+      formatBatchSummary('踢出', {
+        successCount: 3,
+        failCount: 1,
+        skippedCount: 2,
+        allOffline: false,
+        failures: [],
+      }),
     ).toBe('批量踢出完成：成功 3，失败 1，跳过离线 2')
   })
   it('无跳过时不显示跳过段', () => {
     expect(
-      formatBatchSummary('设置OP', { successCount: 5, failCount: 0, skippedCount: 0, allOffline: false, failures: [] }),
+      formatBatchSummary('设置OP', {
+        successCount: 5,
+        failCount: 0,
+        skippedCount: 0,
+        allOffline: false,
+        failures: [],
+      }),
     ).toBe('批量设置OP完成：成功 5，失败 0')
   })
   it('全部离线提示', () => {
     expect(
-      formatBatchSummary('传送', { successCount: 0, failCount: 0, skippedCount: 2, allOffline: true, failures: [] }),
+      formatBatchSummary('传送', {
+        successCount: 0,
+        failCount: 0,
+        skippedCount: 2,
+        allOffline: true,
+        failures: [],
+      }),
     ).toBe('所选玩家均已离线，无法执行')
   })
 })
 
 describe('formatFailureDetails（失败详情文案）', () => {
   it('无失败返回 undefined', () => {
-    expect(formatFailureDetails({ successCount: 2, failCount: 0, skippedCount: 0, allOffline: false, failures: [] })).toBeUndefined()
+    expect(
+      formatFailureDetails({
+        successCount: 2,
+        failCount: 0,
+        skippedCount: 0,
+        allOffline: false,
+        failures: [],
+      }),
+    ).toBeUndefined()
   })
 
   it('单条失败返回带 bullet 列表', () => {
-    const result = { successCount: 1, failCount: 1, skippedCount: 0, allOffline: false, failures: [{ target: 'Alex', error: 'RCON 超时' }] }
+    const result = {
+      successCount: 1,
+      failCount: 1,
+      skippedCount: 0,
+      allOffline: false,
+      failures: [{ target: 'Alex', error: 'RCON 超时' }],
+    }
     expect(formatFailureDetails(result)).toBe('• Alex：RCON 超时')
   })
 
   it('多条失败用换行分隔', () => {
     const result = {
-      successCount: 0, failCount: 2, skippedCount: 0, allOffline: false,
-      failures: [{ target: 'Alex', error: 'RCON 超时' }, { target: 'Steve', error: '玩家不存在' }],
+      successCount: 0,
+      failCount: 2,
+      skippedCount: 0,
+      allOffline: false,
+      failures: [
+        { target: 'Alex', error: 'RCON 超时' },
+        { target: 'Steve', error: '玩家不存在' },
+      ],
     }
     const details = formatFailureDetails(result)
     expect(details).toContain('• Alex：RCON 超时')

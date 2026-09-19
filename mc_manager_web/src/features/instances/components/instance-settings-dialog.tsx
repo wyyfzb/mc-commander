@@ -123,7 +123,10 @@ export function parseStartCommand(cmd: string | null | undefined): ParsedStartCo
   const useAikar = cmd.includes('aikars')
 
   // -jar 之前、排除 java/-Xms/-Xmx 及（开关开启时）Aikar 的 -XX/-D 标志
-  const tokens = cmd.split('-jar')[0]!.split(/\s+/).filter((t) => t.length > 0)
+  const tokens = cmd
+    .split('-jar')[0]!
+    .split(/\s+/)
+    .filter((t) => t.length > 0)
   const extraTokens: string[] = []
   for (const tok of tokens) {
     if (tok === 'java') continue
@@ -187,7 +190,9 @@ export function InstanceSettingsDialog({
       memory,
       useAikar,
       // 仅开关开启时同步生成，关闭时原样保留解析出的附加参数
-      jvmArgsText: useAikar ? syncAikar(jvmArgsInit, true, memory).join('\n') : jvmArgsInit.join('\n'),
+      jvmArgsText: useAikar
+        ? syncAikar(jvmArgsInit, true, memory).join('\n')
+        : jvmArgsInit.join('\n'),
       javaPath: detail?.javaPath ?? '',
     }
   })
@@ -268,14 +273,25 @@ export function InstanceSettingsDialog({
     'h-9 w-full rounded-mcs-sm border border-mcs-border-default bg-mcs-bg-default px-2.5 text-mcs-sm text-mcs-text-default placeholder:text-mcs-text-muted focus:border-mcs-accent-border focus:outline-none focus:ring-1 focus:ring-mcs-focus-ring'
 
   return (
-    <Dialog open onOpenChange={(open) => { if (!open && dirty) { setCloseConfirmOpen(true) } else if (!open) { onOpenChange(false) } }}>
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open && dirty) {
+          setCloseConfirmOpen(true)
+        } else if (!open) {
+          onOpenChange(false)
+        }
+      }}
+    >
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader className="flex-row items-center gap-3 space-y-0">
           <span className="flex size-9 shrink-0 items-center justify-center rounded-mcs-sm bg-mcs-accent-bg-subtle text-mcs-accent-fg">
             <Settings className="size-4.5" aria-hidden />
           </span>
           <div className="min-w-0">
-            <DialogTitle className="text-mcs-xl font-semibold text-mcs-text-default">启动配置</DialogTitle>
+            <DialogTitle className="text-mcs-xl font-semibold text-mcs-text-default">
+              启动配置
+            </DialogTitle>
             <DialogDescription className="truncate text-mcs-xs text-mcs-text-muted">
               {instanceLabel(instance)}
             </DialogDescription>
@@ -290,7 +306,9 @@ export function InstanceSettingsDialog({
               <span className="font-mono text-mcs-xl font-semibold text-mcs-accent-fg">
                 {allocatedMemory.toFixed(1)} GB
               </span>
-              <span className="ml-1 text-mcs-sm text-mcs-text-muted">/ {totalMax.toFixed(1)} GB</span>
+              <span className="ml-1 text-mcs-sm text-mcs-text-muted">
+                / {totalMax.toFixed(1)} GB
+              </span>
             </p>
             <Slider
               aria-label="内存分配"
@@ -306,12 +324,19 @@ export function InstanceSettingsDialog({
           {/* ── Aikar Flags 开关（开启时生成 G1GC 优化参数同步进 jvmArgs）── */}
           <div className="flex items-center gap-3 rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-default px-3 py-2">
             <Gauge
-              className={cn('size-4 shrink-0', useAikarFlags ? 'text-mcs-accent-fg' : 'text-mcs-text-muted')}
+              className={cn(
+                'size-4 shrink-0',
+                useAikarFlags ? 'text-mcs-accent-fg' : 'text-mcs-text-muted',
+              )}
               aria-hidden
             />
             <div className="min-w-0 flex-1">
-              <p className="text-mcs-sm font-semibold text-mcs-text-default">JVM 优化 (Aikar&apos;s Flags)</p>
-              <p className="text-mcs-xs text-mcs-text-muted">使用 MCS 社区优化的 G1GC 参数，改善 GC 停顿</p>
+              <p className="text-mcs-sm font-semibold text-mcs-text-default">
+                JVM 优化 (Aikar&apos;s Flags)
+              </p>
+              <p className="text-mcs-xs text-mcs-text-muted">
+                使用 MCS 社区优化的 G1GC 参数，改善 GC 停顿
+              </p>
             </div>
             <Switch
               checked={useAikarFlags}
@@ -335,7 +360,11 @@ export function InstanceSettingsDialog({
             aria-expanded={showAdvanced}
             className="flex cursor-pointer items-center gap-1 rounded-mcs-sm text-mcs-sm font-medium text-mcs-text-muted transition-colors hover:bg-mcs-state-hover hover:text-mcs-text-default"
           >
-            {showAdvanced ? <ChevronUp className="size-4" aria-hidden /> : <ChevronDown className="size-4" aria-hidden />}
+            {showAdvanced ? (
+              <ChevronUp className="size-4" aria-hidden />
+            ) : (
+              <ChevronDown className="size-4" aria-hidden />
+            )}
             高级参数
           </button>
 
@@ -343,7 +372,9 @@ export function InstanceSettingsDialog({
             <div className="flex flex-col gap-4">
               {/* Java 路径（可选）：默认 java；服务端 PUT 校验必须为已存在 java 可执行文件 */}
               <div className="flex flex-col gap-1.5">
-                <span className="text-mcs-xs font-medium text-mcs-text-muted">Java 路径（可选）</span>
+                <span className="text-mcs-xs font-medium text-mcs-text-muted">
+                  Java 路径（可选）
+                </span>
                 <input
                   value={javaPath}
                   onChange={(e) => setJavaPath(e.target.value)}
@@ -358,7 +389,9 @@ export function InstanceSettingsDialog({
 
               {/* JVM 参数多行输入（服务端 start() 白名单：仅 -X/-D 前缀、-jar 与 nogui） */}
               <div className="flex flex-col gap-1.5">
-                <span className="text-mcs-xs font-medium text-mcs-text-muted">JVM 参数（每行一个）</span>
+                <span className="text-mcs-xs font-medium text-mcs-text-muted">
+                  JVM 参数（每行一个）
+                </span>
                 <textarea
                   value={jvmArgsText}
                   onChange={(e) => setJvmArgsText(e.target.value)}
@@ -389,7 +422,10 @@ export function InstanceSettingsDialog({
                     ] as [string, string][]
                   ).map(([arg, desc]) => (
                     <div key={arg} className="flex items-baseline gap-2">
-                      <dt className="w-30 shrink-0 truncate font-mono text-mcs-xs text-mcs-accent-fg" title={arg}>
+                      <dt
+                        className="w-30 shrink-0 truncate font-mono text-mcs-xs text-mcs-accent-fg"
+                        title={arg}
+                      >
                         {arg}
                       </dt>
                       <dd className="min-w-0 flex-1 text-mcs-xs text-mcs-text-muted">{desc}</dd>
@@ -407,7 +443,13 @@ export function InstanceSettingsDialog({
             variant="outline"
             className="flex-1"
             disabled={isSaving}
-            onClick={() => { if (dirty) { setCloseConfirmOpen(true) } else { onOpenChange(false) } }}
+            onClick={() => {
+              if (dirty) {
+                setCloseConfirmOpen(true)
+              } else {
+                onOpenChange(false)
+              }
+            }}
           >
             取消
           </Button>
@@ -432,7 +474,10 @@ export function InstanceSettingsDialog({
         description="当前有未保存的配置更改，关闭后这些修改将丢失。"
         confirmText="不保存"
         cancelText="继续编辑"
-        onConfirm={() => { setCloseConfirmOpen(false); onOpenChange(false) }}
+        onConfirm={() => {
+          setCloseConfirmOpen(false)
+          onOpenChange(false)
+        }}
       />
     </Dialog>
   )

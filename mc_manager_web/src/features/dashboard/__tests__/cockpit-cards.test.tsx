@@ -40,7 +40,11 @@ function renderWithProviders(ui: ReactNode) {
 beforeEach(() => {
   localStorage.clear()
   // 占位凭据动态生成（mimosa 硬编码凭据规则对 apiKey 字面量告警，测试值虽虚构仍按源消除）
-  useConnectionStore.setState({ baseUrl: '', apiKey: `test-key-${crypto.randomUUID()}`, status: 'ready' })
+  useConnectionStore.setState({
+    baseUrl: '',
+    apiKey: `test-key-${crypto.randomUUID()}`,
+    status: 'ready',
+  })
   useServerStore.setState({
     status: mockInstanceStatus,
     systemStats: null,
@@ -94,7 +98,9 @@ describe('McClockCard 世界控制', () => {
   })
 
   it('实例停止时控件禁用', () => {
-    useServerStore.setState({ status: { ...mockInstanceStatus, isRunning: false, weather: null, worldTime: null } })
+    useServerStore.setState({
+      status: { ...mockInstanceStatus, isRunning: false, weather: null, worldTime: null },
+    })
     renderWithProviders(<McClockCard />)
     expect(screen.getByRole('radio', { name: '晴天' })).toBeDisabled()
     expect(screen.getByRole('radio', { name: '白天' })).toBeDisabled()
@@ -109,13 +115,19 @@ describe('AnnouncementCard 公告发送', () => {
     expect(input).toHaveValue('服务器将在 5 分钟后重启，请及时停靠')
     fireEvent.keyDown(input, { key: 'Enter', ctrlKey: true })
     // 二次确认：确认前不发送
-    expect(useTerminalStore.getState().buffer.some((e) => e.text.includes('say 服务器将在'))).toBe(false)
+    expect(useTerminalStore.getState().buffer.some((e) => e.text.includes('say 服务器将在'))).toBe(
+      false,
+    )
     fireEvent.click(screen.getByRole('button', { name: /^发送$/ }))
     await waitFor(() =>
-      expect(useTerminalStore.getState().buffer.some((e) => e.text.includes('say 服务器将在'))).toBe(true),
+      expect(
+        useTerminalStore.getState().buffer.some((e) => e.text.includes('say 服务器将在')),
+      ).toBe(true),
     )
     expect(input).toHaveValue('')
-    expect(useTerminalStore.getState().buffer.some((e) => e.text.includes('say 服务器将在'))).toBe(true)
+    expect(useTerminalStore.getState().buffer.some((e) => e.text.includes('say 服务器将在'))).toBe(
+      true,
+    )
   })
 
   it('预设管理：添加 → 胶囊与持久化；删除 → 胶囊消失', () => {
@@ -126,7 +138,9 @@ describe('AnnouncementCard 公告发送', () => {
     fireEvent.change(screen.getByLabelText('公告文案'), { target: { value: '周末活动即将开始' } })
     fireEvent.click(screen.getByRole('button', { name: '保存' }))
     expect(screen.getByRole('button', { name: '活动预告' })).toBeInTheDocument()
-    const stored = JSON.parse(localStorage.getItem('mcs-announcement-presets') ?? '[]') as { name: string }[]
+    const stored = JSON.parse(localStorage.getItem('mcs-announcement-presets') ?? '[]') as {
+      name: string
+    }[]
     expect(stored.some((p) => p.name === '活动预告')).toBe(true)
     // 删除预设：经二次确认
     fireEvent.click(screen.getByRole('button', { name: '删除预设 活动预告' }))
@@ -187,5 +201,4 @@ describe('AnnouncementCard 公告发送', () => {
     fireEvent.keyDown(timeGroup, { key: 'ArrowLeft' })
     expect(times[(from - 1 + times.length) % times.length]).toHaveAttribute('aria-checked', 'true')
   })
-
 })

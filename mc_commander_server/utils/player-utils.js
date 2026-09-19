@@ -73,10 +73,11 @@ export function getTotalPlayTime({ serverPath, uuid, playerName, levelName }) {
     if (!fs.existsSync(statsPath)) continue;
     try {
       const raw = JSON.parse(fs.readFileSync(statsPath, 'utf-8'));
-      const playTime = raw?.stats?.['minecraft:custom']?.['minecraft:play_time']
-        || raw?.['minecraft:custom']?.['minecraft:play_time']
-        || raw?.['minecraft:custom']?.['minecraft:total_world_time']
-        || 0;
+      const playTime =
+        raw?.stats?.['minecraft:custom']?.['minecraft:play_time'] ||
+        raw?.['minecraft:custom']?.['minecraft:play_time'] ||
+        raw?.['minecraft:custom']?.['minecraft:total_world_time'] ||
+        0;
       return Math.floor(playTime / 20);
     } catch {}
   }

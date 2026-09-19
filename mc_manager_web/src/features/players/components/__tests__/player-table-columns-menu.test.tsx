@@ -54,7 +54,14 @@ function makeOfflinePlayer(): Player {
     inventory: null,
     events: [],
     sessions: [],
-    stats: { totalOnline: 0, loginCount: 0, offlineSince: 0, deathCount: 0, achievementCount: 0, sleepCount: 0 },
+    stats: {
+      totalOnline: 0,
+      loginCount: 0,
+      offlineSince: 0,
+      deathCount: 0,
+      achievementCount: 0,
+      sleepCount: 0,
+    },
   }
 }
 

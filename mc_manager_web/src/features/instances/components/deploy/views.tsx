@@ -98,7 +98,8 @@ export function DeploySuccessView({ result, autoStart, onComplete }: DeploySucce
           <p className="text-mcs-text-muted">实例 ID：{result.id}</p>
           <p className="text-mcs-text-muted">名称：{result.name}</p>
           <p className="text-mcs-text-muted">
-            服务端：{SERVER_TYPE_LABELS[result.type as ServerType] ?? result.type} {result.mcVersion}
+            服务端：{SERVER_TYPE_LABELS[result.type as ServerType] ?? result.type}{' '}
+            {result.mcVersion}
           </p>
           <p className="text-mcs-text-muted">
             推荐 Java 版本：{recommendedJavaVersion(result.mcVersion)}
@@ -111,11 +112,14 @@ export function DeploySuccessView({ result, autoStart, onComplete }: DeploySucce
           className={cn(
             'flex items-center gap-2 rounded-mcs-sm border px-3 py-2 text-mcs-sm',
             autoStart === 'ok' && toneClasses('success'),
-            autoStart === 'pending' && 'border-mcs-border-muted bg-mcs-bg-muted text-mcs-text-muted',
+            autoStart === 'pending' &&
+              'border-mcs-border-muted bg-mcs-bg-muted text-mcs-text-muted',
             autoStart === 'failed' && toneClasses('warning'),
           )}
         >
-          {autoStart === 'pending' && <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />}
+          {autoStart === 'pending' && (
+            <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
+          )}
           {autoStart === 'ok' && <CheckCircle2 className="size-4 shrink-0" aria-hidden />}
           {autoStart === 'failed' && <XCircle className="size-4 shrink-0" aria-hidden />}
           <p aria-live="polite">
@@ -172,7 +176,10 @@ export function DeployCancelledView({ cleanupError, onClose, onRetry }: DeployCa
     <div className="flex flex-col gap-3">
       <div
         role="status"
-        className={cn('flex items-start gap-2 rounded-mcs-sm border px-3 py-2.5', toneClasses('info'))}
+        className={cn(
+          'flex items-start gap-2 rounded-mcs-sm border px-3 py-2.5',
+          toneClasses('info'),
+        )}
       >
         <Ban className="mt-px size-4 shrink-0" aria-hidden />
         <div className="flex flex-col gap-0.5 text-mcs-sm">

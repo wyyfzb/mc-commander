@@ -13,7 +13,15 @@ import { formatStartTime } from '@/lib/format'
 function setState(status = mockInstanceStatus) {
   useServerStore.setState({
     status,
-    systemStats: { cpuUsage: 12.5, memoryUsage: 4.2, totalMemory: 16, memoryPercent: 26.3, cpuCores: 4, loadAvg: [0.1], uptime: 86400 },
+    systemStats: {
+      cpuUsage: 12.5,
+      memoryUsage: 4.2,
+      totalMemory: 16,
+      memoryPercent: 26.3,
+      cpuCores: 4,
+      loadAvg: [0.1],
+      uptime: 86400,
+    },
     instanceId: 'demo',
     socketConnected: true,
     lastStatusEvent: null,
@@ -107,7 +115,15 @@ describe('BigStatCards 资源卡', () => {
   it('totalMemory 为 0 时内存进度条兜底为 0', () => {
     useServerStore.setState({
       status: mockInstanceStatus,
-      systemStats: { cpuUsage: 10, memoryUsage: 0, totalMemory: 0, memoryPercent: 0, cpuCores: 4, loadAvg: [0.1], uptime: 86400 },
+      systemStats: {
+        cpuUsage: 10,
+        memoryUsage: 0,
+        totalMemory: 0,
+        memoryPercent: 0,
+        cpuCores: 4,
+        loadAvg: [0.1],
+        uptime: 86400,
+      },
       instanceId: 'demo',
       socketConnected: true,
       lastStatusEvent: null,
@@ -173,19 +189,34 @@ describe('PlayersCard（右栏可点行）', () => {
   })
 
   it('RCON 未连接 → 提示启用 RCON', () => {
-    setState({ ...mockInstanceStatus, isRconConnected: false, sleepingPlayerNames: [], awakePlayerNames: [] })
+    setState({
+      ...mockInstanceStatus,
+      isRconConnected: false,
+      sleepingPlayerNames: [],
+      awakePlayerNames: [],
+    })
     renderCard()
     expect(screen.getByText('需启用 RCON 才能读取在线玩家')).toBeInTheDocument()
   })
 
   it('RCON 未连接 → 空态提供「前往服务器属性」深链（issue 343）', () => {
-    setState({ ...mockInstanceStatus, isRconConnected: false, sleepingPlayerNames: [], awakePlayerNames: [] })
+    setState({
+      ...mockInstanceStatus,
+      isRconConnected: false,
+      sleepingPlayerNames: [],
+      awakePlayerNames: [],
+    })
     renderCard()
     expect(screen.getByRole('button', { name: '前往服务器属性' })).toBeInTheDocument()
   })
 
   it('RCON 已连接 → 不渲染「前往服务器属性」深链', () => {
-    setState({ ...mockInstanceStatus, isRconConnected: true, sleepingPlayerNames: [], awakePlayerNames: [] })
+    setState({
+      ...mockInstanceStatus,
+      isRconConnected: true,
+      sleepingPlayerNames: [],
+      awakePlayerNames: [],
+    })
     renderCard()
     expect(screen.queryByRole('button', { name: '前往服务器属性' })).not.toBeInTheDocument()
   })

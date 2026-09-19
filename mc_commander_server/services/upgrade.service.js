@@ -37,11 +37,11 @@ const SERVER_JAR_NAME_REGEX = /^server-\d{1,3}(\.\d{1,3}){0,3}\.jar$/;
 /// downloads.server.url、paper v3 downloads）理论可携带任意 host，下载前
 /// 统一断言，防污染响应把下载流导向任意主机。
 const ALLOWED_DOWNLOAD_HOSTS = new Set([
-  'piston-meta.mojang.com',   // vanilla manifest / version detail
-  'piston-data.mojang.com',   // vanilla server jar 实际文件域
-  'api.papermc.io',           // paper v2/v3 API + v2 回退拼接
-  'fill-data.papermc.io',     // paper v3 downloads 实际文件域
-  'api.purpurmc.org',         // purpur latest/download
+  'piston-meta.mojang.com', // vanilla manifest / version detail
+  'piston-data.mojang.com', // vanilla server jar 实际文件域
+  'api.papermc.io', // paper v2/v3 API + v2 回退拼接
+  'fill-data.papermc.io', // paper v3 downloads 实际文件域
+  'api.purpurmc.org', // purpur latest/download
 ]);
 
 /**
@@ -123,11 +123,16 @@ export class UpgradeService {
   async resolveDownload(mcVersion, type) {
     if (type === 'vanilla') {
       // Mojang Piston API
-      const manifest = await got('https://piston-meta.mojang.com/mc/game/version_manifest_v2.json', {
-        timeout: { request: 15000 },
-        retry: { limit: 2 },
-      }).json();
-      const versionEntry = manifest.versions?.find(v => v.id === mcVersion && v.type === 'release');
+      const manifest = await got(
+        'https://piston-meta.mojang.com/mc/game/version_manifest_v2.json',
+        {
+          timeout: { request: 15000 },
+          retry: { limit: 2 },
+        },
+      ).json();
+      const versionEntry = manifest.versions?.find(
+        (v) => v.id === mcVersion && v.type === 'release',
+      );
       if (!versionEntry?.url) throw new Error(`Vanilla version ${mcVersion} not found`);
       const versionDetail = await got(versionEntry.url, {
         timeout: { request: 15000 },
@@ -135,21 +140,22 @@ export class UpgradeService {
       }).json();
       const serverJar = versionDetail.downloads?.server;
       if (!serverJar?.url) throw new Error(`No server JAR download for ${mcVersion}`);
-      const expectedHash = serverJar.sha1
-        ? { algorithm: 'sha1', digest: serverJar.sha1 }
-        : null;
+      const expectedHash = serverJar.sha1 ? { algorithm: 'sha1', digest: serverJar.sha1 } : null;
       return { url: serverJar.url, expectedHash };
     }
 
     if (type === 'paper') {
       // PaperMC v3 API
-      const buildsData = await got(`https://api.papermc.io/v3/projects/paper/versions/${mcVersion}/builds`, {
-        headers: { 'User-Agent': PAPER_USER_AGENT },
-        timeout: { request: 15000 },
-        retry: { limit: 2 },
-      }).json();
-      const builds = Array.isArray(buildsData) ? buildsData : (buildsData.builds || []);
-      const stable = builds.filter(b => b.channel === 'STABLE' || b.channel === 'RECOMMENDED');
+      const buildsData = await got(
+        `https://api.papermc.io/v3/projects/paper/versions/${mcVersion}/builds`,
+        {
+          headers: { 'User-Agent': PAPER_USER_AGENT },
+          timeout: { request: 15000 },
+          retry: { limit: 2 },
+        },
+      ).json();
+      const builds = Array.isArray(buildsData) ? buildsData : buildsData.builds || [];
+      const stable = builds.filter((b) => b.channel === 'STABLE' || b.channel === 'RECOMMENDED');
       const candidates = stable.length > 0 ? stable : builds;
       if (candidates.length === 0) throw new Error(`No Paper build found for ${mcVersion}`);
       const latest = candidates.sort((a, b) => (b.id || 0) - (a.id || 0))[0];
@@ -172,7 +178,10 @@ export class UpgradeService {
 
     if (type === 'purpur') {
       // Purpur API（上游不提供摘要 → 跳过完整性校验，仍执行体积上限）
-      return { url: `https://api.purpurmc.org/v2/purpur/${mcVersion}/latest/download`, expectedHash: null };
+      return {
+        url: `https://api.purpurmc.org/v2/purpur/${mcVersion}/latest/download`,
+        expectedHash: null,
+      };
     }
 
     throw new Error(`Unsupported server type: ${type}`);
@@ -227,7 +236,7 @@ export class UpgradeService {
           abort(err);
           return;
         }
-        const pct = percent > 0 ? percent : (total > 0 ? transferred / total : 0);
+        const pct = percent > 0 ? percent : total > 0 ? transferred / total : 0;
         if (pct - lastPct < 0.01) return;
         lastPct = pct;
         this._emitProgress(instanceId, UPGRADE_STAGES.DOWNLOAD, Math.round(pct * 100));
@@ -524,7 +533,7 @@ export class UpgradeService {
     const newJarPath = assertSafeInstancePath(instance.serverPath, newJarName);
     const backupJarPath = assertSafeInstancePath(
       instance.serverPath,
-      `._upgrade_backup_${oldJarFile}`
+      `._upgrade_backup_${oldJarFile}`,
     );
 
     let backupId = null;
@@ -613,9 +622,17 @@ export class UpgradeService {
           // 刻意不自动恢复升级前备份（失败路径会恢复）：取消是用户主动中止，
           // 顺带触发一次分钟级世界恢复会把「取消」变成看不见的长任务；
           // 备份仍留在备份列表里，需要时由用户手动恢复
-          if (backupId) logger.info(`[UpgradeService] Upgrade ${instanceId} cancelled; backup ${backupId} kept`);
+          if (backupId)
+            logger.info(
+              `[UpgradeService] Upgrade ${instanceId} cancelled; backup ${backupId} kept`,
+            );
         } else if (!cancelled) {
-          this._emitProgress(instanceId, UPGRADE_STAGES.ROLLED_BACK, 0, `升级失败: ${err.message}，正在回滚...`);
+          this._emitProgress(
+            instanceId,
+            UPGRADE_STAGES.ROLLED_BACK,
+            0,
+            `升级失败: ${err.message}，正在回滚...`,
+          );
           await this._doRollback(instanceId, backupJarPath, backupId, oldJarFile);
           // 回滚后尝试恢复备份
           if (backupId) {
@@ -642,7 +659,12 @@ export class UpgradeService {
         // 终态据实说明；上抛的仍是触发本次回滚的错误（既有契约，见
         // upgrade.failurepaths.test.js「原错误仍上抛」），取消场景下则为回滚
         // 自身的错误——那里它才是真正的故障
-        this._emitProgress(instanceId, UPGRADE_STAGES.FAILED, 0, `升级失败，回滚未完成: ${rollbackErr.message}`);
+        this._emitProgress(
+          instanceId,
+          UPGRADE_STAGES.FAILED,
+          0,
+          `升级失败，回滚未完成: ${rollbackErr.message}`,
+        );
         this._activeUpgrades.delete(instanceId);
         throw cancelled ? rollbackErr : err;
       }
@@ -653,7 +675,7 @@ export class UpgradeService {
         instanceId,
         cancelled ? UPGRADE_STAGES.CANCELLED : UPGRADE_STAGES.FAILED,
         0,
-        cancelled ? cancelDetail : `升级失败并已回滚: ${err.message}`
+        cancelled ? cancelDetail : `升级失败并已回滚: ${err.message}`,
       );
       this._activeUpgrades.delete(instanceId);
       // 取消不是故障：终态已按 cancelled 发出，正常返回而不是抛错——抛出会让

@@ -39,7 +39,8 @@ function capabilities(readonlyApiKeyEnabled: boolean, readonlyApiKeyConfigured: 
 }
 
 function renderPanel(props?: { authed?: boolean; queryClient?: QueryClient }) {
-  const qc = props?.queryClient ?? new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const qc =
+    props?.queryClient ?? new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={qc}>
       <ReadonlyCredentialPanel
@@ -133,7 +134,11 @@ describe('ReadonlyCredentialPanel 状态呈现', () => {
     server.use(
       http.get('*/api/v1/auth/capabilities', () => {
         capabilityCalls += 1
-        return ok({ apiKeyEnabled: true, readonlyApiKeyEnabled: true, readonlyApiKeyConfigured: false })
+        return ok({
+          apiKeyEnabled: true,
+          readonlyApiKeyEnabled: true,
+          readonlyApiKeyConfigured: false,
+        })
       }),
     )
     renderPanel({ authed: false })
@@ -162,7 +167,14 @@ describe('ReadonlyCredentialPanel 生成与明文一次性展示', () => {
     // 明文只存在于组件 state：localStorage / sessionStorage / query 缓存都不得出现
     expect(JSON.stringify(localStorage)).not.toContain('mcro-')
     expect(JSON.stringify(sessionStorage)).not.toContain('mcro-')
-    expect(JSON.stringify(qc.getQueryCache().getAll().map((q) => q.state.data))).not.toContain('mcro-')
+    expect(
+      JSON.stringify(
+        qc
+          .getQueryCache()
+          .getAll()
+          .map((q) => q.state.data),
+      ),
+    ).not.toContain('mcro-')
 
     await user.click(screen.getByRole('button', { name: /我已保存，收起/ }))
     expect(screen.queryByText(ISSUED_KEY)).not.toBeInTheDocument()

@@ -115,10 +115,11 @@ if (injectPath && typeof injectMod?.default !== 'function') {
   console.error(`[capture] --inject 指向的模块须 default export 一个函数（收到 ${injectArg}）`)
   process.exit(2)
 }
-const targets = ROUTES.filter((r) => !routesFilter.length || routesFilter.includes(r.file)).flatMap((r) =>
-  (themeFilter && themeFilter !== 'dark' ? [] : [[r, 'dark']]).concat(
-    themeFilter && themeFilter !== 'light' ? [] : [[r, 'light']],
-  ),
+const targets = ROUTES.filter((r) => !routesFilter.length || routesFilter.includes(r.file)).flatMap(
+  (r) =>
+    (themeFilter && themeFilter !== 'dark' ? [] : [[r, 'dark']]).concat(
+      themeFilter && themeFilter !== 'light' ? [] : [[r, 'light']],
+    ),
 )
 
 function log(m) {
@@ -140,10 +141,22 @@ function killPort(port) {
       for (const pid of pids) spawnSync('taskkill', ['/F', '/PID', pid])
     } else {
       const out =
-        spawnSync('sh', ['-c', `lsof -ti :${port} 2>/dev/null || ss -tlnp "sport = :${port}" 2>/dev/null | grep -oP 'pid=\\K[0-9]+'`], {
-          encoding: 'utf-8',
-        }).stdout || ''
-      for (const pid of new Set(out.split('\n').map((s) => s.trim()).filter(Boolean))) {
+        spawnSync(
+          'sh',
+          [
+            '-c',
+            `lsof -ti :${port} 2>/dev/null || ss -tlnp "sport = :${port}" 2>/dev/null | grep -oP 'pid=\\K[0-9]+'`,
+          ],
+          {
+            encoding: 'utf-8',
+          },
+        ).stdout || ''
+      for (const pid of new Set(
+        out
+          .split('\n')
+          .map((s) => s.trim())
+          .filter(Boolean),
+      )) {
         spawnSync('kill', [pid])
       }
     }
@@ -197,8 +210,23 @@ function browserChannel() {
   if (process.env.VISION_BROWSER) return process.env.VISION_BROWSER
   // 通道降级链：chrome → msedge → 内置 chromium（不传 channel）
   const candidates = [
-    ['chrome', ['C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe', '/usr/bin/google-chrome', '/usr/bin/chromium']],
-    ['msedge', ['C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', 'C:/Program Files/Microsoft/Edge/Application/msedge.exe', '/usr/bin/microsoft-edge']],
+    [
+      'chrome',
+      [
+        'C:/Program Files/Google/Chrome/Application/chrome.exe',
+        'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
+        '/usr/bin/google-chrome',
+        '/usr/bin/chromium',
+      ],
+    ],
+    [
+      'msedge',
+      [
+        'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
+        'C:/Program Files/Microsoft/Edge/Application/msedge.exe',
+        '/usr/bin/microsoft-edge',
+      ],
+    ],
   ]
   for (const [channel, paths] of candidates) {
     if (paths.some((p) => existsSync(p))) return channel
@@ -221,7 +249,8 @@ async function main() {
     for (const c of children) {
       try {
         // Windows shell 模式 spawn 的是 cmd 包装层，kill 只杀包装进程——taskkill /T 杀整棵进程树
-        if (process.platform === 'win32' && c.pid) spawnSync('taskkill', ['/F', '/T', '/PID', String(c.pid)])
+        if (process.platform === 'win32' && c.pid)
+          spawnSync('taskkill', ['/F', '/T', '/PID', String(c.pid)])
         else c.kill()
       } catch {}
     }
@@ -246,7 +275,9 @@ async function main() {
   // 还是外部残留实例（旧 dist 喂假数据正是此类）。
   const mockExisting = await portOpen(MOCK_PORT)
   if (!mockExisting) {
-    children.push(startServer('node', [join(WEB_DIR, 'scripts', 'mock-server.mjs')], { cwd: WEB_DIR }))
+    children.push(
+      startServer('node', [join(WEB_DIR, 'scripts', 'mock-server.mjs')], { cwd: WEB_DIR }),
+    )
     await waitPort(MOCK_PORT)
   }
   const mockSource = mockExisting ? 'reused' : 'started'
@@ -266,7 +297,9 @@ async function main() {
   log(`vite dev ${DEV_PORT} ${devSource === 'reused' ? '复用既有实例' : '本进程启动'}`)
 
   // ── 2. 加载 Playwright（web 依赖）──
-  const { chromium } = await import(pathToFileURL(join(WEB_DIR, 'node_modules', 'playwright', 'index.mjs')))
+  const { chromium } = await import(
+    pathToFileURL(join(WEB_DIR, 'node_modules', 'playwright', 'index.mjs'))
+  )
   const channel = browserChannel()
   log(`浏览器通道: ${channel || '内置 chromium'}`)
 
@@ -274,8 +307,12 @@ async function main() {
   try {
     browser = await chromium.launch(channel ? { channel } : {})
   } catch (e) {
-    console.error(`[capture] 浏览器启动失败（通道 ${channel || '内置 chromium'}）：${e.message.slice(0, 200)}`)
-    console.error('[capture] 处置：装浏览器（npx playwright install chromium）或用 VISION_BROWSER=chrome|msedge 指定通道')
+    console.error(
+      `[capture] 浏览器启动失败（通道 ${channel || '内置 chromium'}）：${e.message.slice(0, 200)}`,
+    )
+    console.error(
+      '[capture] 处置：装浏览器（npx playwright install chromium）或用 VISION_BROWSER=chrome|msedge 指定通道',
+    )
     process.exit(3)
   }
   const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
@@ -300,24 +337,27 @@ async function main() {
   const jobs = targets.flatMap(([route, theme]) => VIEWPORTS.map((vp) => [route, theme, vp]))
   for (const [route, theme, vp] of jobs) {
     const page = await browser.newPage({ viewport: { width: vp.width, height: vp.height } })
-    await page.addInitScript(([k, t, unconfigured]) => {
-      // onboarding 需未配置态（否则 requireUnconfigured 重定向回仪表盘）
-      if (unconfigured) localStorage.removeItem('mcs-connection')
-      else localStorage.setItem('mcs-connection', JSON.stringify({ baseUrl: '', apiKey: k }))
-      // 主题需同步写入 ui store 的 localStorage（mcs-theme）：仅注入 class 会被
-      // app-shell 初始化覆盖（store 默认 dark），light 截图会失效
-      localStorage.setItem('mcs-theme', t)
-      const applyThemeClass = () => {
-        document.documentElement.classList.add(t)
-        document.documentElement.classList.remove(t === 'dark' ? 'light' : 'dark')
-      }
-      // 无 AppShell 页面（onboarding）无主题 effect，class 须在文档就绪后设置
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', applyThemeClass, { once: true })
-      } else {
-        applyThemeClass()
-      }
-    }, [mockKey, theme, route.unconfigured === true])
+    await page.addInitScript(
+      ([k, t, unconfigured]) => {
+        // onboarding 需未配置态（否则 requireUnconfigured 重定向回仪表盘）
+        if (unconfigured) localStorage.removeItem('mcs-connection')
+        else localStorage.setItem('mcs-connection', JSON.stringify({ baseUrl: '', apiKey: k }))
+        // 主题需同步写入 ui store 的 localStorage（mcs-theme）：仅注入 class 会被
+        // app-shell 初始化覆盖（store 默认 dark），light 截图会失效
+        localStorage.setItem('mcs-theme', t)
+        const applyThemeClass = () => {
+          document.documentElement.classList.add(t)
+          document.documentElement.classList.remove(t === 'dark' ? 'light' : 'dark')
+        }
+        // 无 AppShell 页面（onboarding）无主题 effect，class 须在文档就绪后设置
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', applyThemeClass, { once: true })
+        } else {
+          applyThemeClass()
+        }
+      },
+      [mockKey, theme, route.unconfigured === true],
+    )
     try {
       // 批次夹具先于导航注入：它可用 addInitScript 覆盖上面的默认状态、或用 route 造接口形态。
       // 夹具自身的报错单独包一层并打 [inject] 前缀——否则它与「页面没起来」在日志里无法分辨
@@ -326,7 +366,10 @@ async function main() {
       } catch (e) {
         throw new Error(`[inject] ${e?.message ?? String(e)}`)
       }
-      await page.goto(`http://localhost:${DEV_PORT}/${route.path}`, { waitUntil: 'networkidle', timeout: 30_000 })
+      await page.goto(`http://localhost:${DEV_PORT}/${route.path}`, {
+        waitUntil: 'networkidle',
+        timeout: 30_000,
+      })
       await page.waitForTimeout(waitMs)
       const file = `${route.file}-${theme}${viewportSuffix(vp)}.png`
       const abs = join(outDir, file)
@@ -337,15 +380,21 @@ async function main() {
       manifest.shots.push({ route, theme, viewport: vp, file, bytes, suspect })
       const label = `${route.file}-${theme}${viewportSuffix(vp)}`
       if (suspect) warned.push(label)
-      log(`✓ ${label} ${vp.width}x${vp.height} ${Math.round(bytes / 1024)}KB${suspect ? ' ⚠ 疑似空态' : ''}`)
+      log(
+        `✓ ${label} ${vp.width}x${vp.height} ${Math.round(bytes / 1024)}KB${suspect ? ' ⚠ 疑似空态' : ''}`,
+      )
       if (suspect) {
-        log(`⚠ ${label} 截图仅 ${bytes} 字节（<${MIN_SHOT_BYTES}）——疑似空态/未连接实例，请检查 mock 与代理链路`)
+        log(
+          `⚠ ${label} 截图仅 ${bytes} 字节（<${MIN_SHOT_BYTES}）——疑似空态/未连接实例，请检查 mock 与代理链路`,
+        )
       }
     } catch (e) {
       failed.push(`${route.file}-${theme}${viewportSuffix(vp)}`)
       // 夹具可能抛非 Error（throw 'x' / reject()），故不能直接取 e.message——那会在 catch 里
       // 再抛一次 TypeError，把整批（含 manifest）一起带走
-      log(`✗ ${route.file} (${theme}${viewportSuffix(vp)}): ${String(e?.message ?? e).slice(0, 120)}`)
+      log(
+        `✗ ${route.file} (${theme}${viewportSuffix(vp)}): ${String(e?.message ?? e).slice(0, 120)}`,
+      )
     } finally {
       await page.close()
     }

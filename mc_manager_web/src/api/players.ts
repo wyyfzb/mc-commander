@@ -37,7 +37,11 @@ export function apiBanPlayer(
   playerName: string,
   body: BanRequestBody,
 ) {
-  return apiPost<{ expiresAt: number | null }>(`${base(instanceId)}/players/${playerName}/ban`, config, body)
+  return apiPost<{ expiresAt: number | null }>(
+    `${base(instanceId)}/players/${playerName}/ban`,
+    config,
+    body,
+  )
 }
 
 /** 解封（按玩家名，POST /players/:player/pardon → pardon <name>） */
@@ -61,7 +65,11 @@ export function apiAddWhitelist(config: ConnectionConfig, instanceId: string, pl
 }
 
 /** 移除白名单（DELETE /players/:player/whitelist → whitelist remove <name>） */
-export function apiRemoveWhitelist(config: ConnectionConfig, instanceId: string, playerName: string) {
+export function apiRemoveWhitelist(
+  config: ConnectionConfig,
+  instanceId: string,
+  playerName: string,
+) {
   return apiDelete<null>(`${base(instanceId)}/players/${playerName}/whitelist`, config)
 }
 

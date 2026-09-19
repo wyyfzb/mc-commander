@@ -150,9 +150,7 @@ export function loadKitsFromStorage(storage: Storage): KitPreset[] {
     if (raw === null || raw.length === 0) return [...DEFAULT_KITS]
     const parsed: unknown = JSON.parse(raw)
     if (!Array.isArray(parsed) || parsed.length === 0) return [...DEFAULT_KITS]
-    const kits = parsed
-      .map((e) => kitFromJson(e))
-      .filter((e): e is KitPreset => e !== null)
+    const kits = parsed.map((e) => kitFromJson(e)).filter((e): e is KitPreset => e !== null)
     return kits.length > 0 ? kits : [...DEFAULT_KITS]
   } catch {
     return [...DEFAULT_KITS]

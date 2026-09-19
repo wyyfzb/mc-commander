@@ -35,7 +35,9 @@ describe('useUiStore persist', () => {
     // persist 当前为同步存储（写入随 set 同步完成），waitFor 首查即过；保留是为对将来换异步存储自愈
     await vi.waitFor(
       () => {
-        const stored = JSON.parse(localStorage.getItem(STORAGE_KEY)!) as { state: { terminalAutoScroll: boolean } }
+        const stored = JSON.parse(localStorage.getItem(STORAGE_KEY)!) as {
+          state: { terminalAutoScroll: boolean }
+        }
         expect(stored.state.terminalAutoScroll).toBe(false)
       },
       { timeout: 5000 },
@@ -46,7 +48,9 @@ describe('useUiStore persist', () => {
     useUiStore.getState().toggleSidebar()
     useUiStore.getState().setCommandPaletteOpen(true)
     useUiStore.getState().setMobileNavOpen(true)
-    await vi.waitFor(() => expect(localStorage.getItem(STORAGE_KEY)).not.toBeNull(), { timeout: 5000 })
+    await vi.waitFor(() => expect(localStorage.getItem(STORAGE_KEY)).not.toBeNull(), {
+      timeout: 5000,
+    })
     const stored = JSON.parse(localStorage.getItem(STORAGE_KEY)!) as Record<string, unknown>
     expect(stored.state).not.toHaveProperty('sidebarCollapsed')
     expect(stored.state).not.toHaveProperty('commandPaletteOpen')

@@ -184,7 +184,8 @@ export function ReadonlyCredentialPanel({ baseUrl, apiKey, authed }: ReadonlyCre
 
         {channelDisabled && (
           <NoticeBanner variant="warning" icon={TriangleAlert}>
-            只读凭据通道已被部署配置关闭（<code className="font-mono">READONLY_API_KEY_ENABLED=false</code>）：
+            只读凭据通道已被部署配置关闭（
+            <code className="font-mono">READONLY_API_KEY_ENABLED=false</code>）：
             携带该凭据的请求一律 403，生成入口不可用。需要在服务端把该值改回
             <code className="font-mono">true</code> 并重启面板后，本入口才会恢复。
           </NoticeBanner>
@@ -206,7 +207,11 @@ export function ReadonlyCredentialPanel({ baseUrl, apiKey, authed }: ReadonlyCre
             </code>
             <div className="flex flex-wrap gap-2">
               <Button type="button" variant="outline" size="sm" onClick={() => void handleCopy()}>
-                {copied ? <Check className="size-3.5" aria-hidden /> : <Copy className="size-3.5" aria-hidden />}
+                {copied ? (
+                  <Check className="size-3.5" aria-hidden />
+                ) : (
+                  <Copy className="size-3.5" aria-hidden />
+                )}
                 复制
               </Button>
               <Button type="button" variant="ghost" size="sm" onClick={() => setIssuedKey(null)}>

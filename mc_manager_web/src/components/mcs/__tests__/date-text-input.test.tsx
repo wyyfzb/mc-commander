@@ -88,7 +88,9 @@ describe('DateTextInput 交互', () => {
     for (const [typed, expected] of cases) {
       const onChange = vi.fn()
       const user = userEvent.setup()
-      const { unmount } = render(<DateTextInput value="" onChange={onChange} ariaLabel="逐位日期" />)
+      const { unmount } = render(
+        <DateTextInput value="" onChange={onChange} ariaLabel="逐位日期" />,
+      )
       await user.type(screen.getByLabelText('逐位日期'), typed)
       expect(onChange).toHaveBeenLastCalledWith(expected)
       expect(onChange).toHaveBeenCalledTimes(1)
@@ -200,7 +202,10 @@ describe('DateTextInput 交互', () => {
     expect(classes).toContain('bg-mcs-accent-bg-subtle')
     expect(classes).toContain('border-mcs-accent-border-strong')
     expect(classes).not.toContain('border-mcs-accent-border')
-    expect(screen.getByRole('button', { name: '打开日历' })).toHaveAttribute('aria-haspopup', 'dialog')
+    expect(screen.getByRole('button', { name: '打开日历' })).toHaveAttribute(
+      'aria-haspopup',
+      'dialog',
+    )
   })
 })
 

@@ -34,7 +34,13 @@ export function heartsArmorContentWidth(iconSize: number, armorDigits: number): 
   return heartRow + SEPARATOR_PX + shieldGap + iconSize + numberWidth
 }
 
-export function HeartsArmor({ health, maxHealth, armor, iconSize = 11, className }: HeartsArmorProps) {
+export function HeartsArmor({
+  health,
+  maxHealth,
+  armor,
+  iconSize = 11,
+  className,
+}: HeartsArmorProps) {
   if (health === null || maxHealth === null) {
     // 离线：显示占位（P1 三重编码第三通道由文字兜底）
     return <span className={cn('text-mcs-xs text-mcs-text-muted', className)}>--</span>
@@ -81,7 +87,10 @@ export function HeartsArmor({ health, maxHealth, armor, iconSize = 11, className
             )}
             {/* 半心：左半实心覆盖 */}
             {half && (
-              <span className="absolute inset-y-0 left-0 overflow-hidden" style={{ width: iconSize / 2 }}>
+              <span
+                className="absolute inset-y-0 left-0 overflow-hidden"
+                style={{ width: iconSize / 2 }}
+              >
                 <Heart
                   className="text-mcs-error-fg"
                   fill="currentColor"

@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 
@@ -65,7 +73,13 @@ describe('色值扫描的引用编号剥离', () => {
   })
 
   it('真色值一字不动（剥离不得放宽色值判定）', () => {
-    for (const line of ["const c = '#fff'", 'color: #000000', '`#ff0000`', '#383a0f', 'issue #383abc']) {
+    for (const line of [
+      "const c = '#fff'",
+      'color: #000000',
+      '`#ff0000`',
+      '#383a0f',
+      'issue #383abc',
+    ]) {
       expect(stripIssueRefs(line), line).toMatch(HEX_LITERAL_RE)
     }
   })
@@ -79,8 +93,9 @@ describe('token 引用完整性', () => {
 
   it('semantic 层引用的 --ref-* 全部在 reference 层定义', () => {
     const refDefined = definedVars(reference)
-    const dangling = [...referencedVars(semantic)]
-      .filter((v) => v.startsWith('--ref-') && !refDefined.has(v))
+    const dangling = [...referencedVars(semantic)].filter(
+      (v) => v.startsWith('--ref-') && !refDefined.has(v),
+    )
     expect(dangling).toEqual([])
   })
 
@@ -109,7 +124,14 @@ describe('token 引用完整性', () => {
 })
 
 describe('组件源码禁硬编码色值', () => {
-  const SKIP_DIRS = new Set(['node_modules', 'dist', 'styles', 'test', '__tests__', 'components/ui'])
+  const SKIP_DIRS = new Set([
+    'node_modules',
+    'dist',
+    'styles',
+    'test',
+    '__tests__',
+    'components/ui',
+  ])
   // 根级配置文件豁免：vite.config.ts 的 PWA manifest 色为浏览器元数据
   // （Web App Manifest 规范要求 CSS 色格式，无法引用 CSS 变量），非组件样式硬编码
   const SKIP_FILES = new Set(['vite.config.ts'])
@@ -132,7 +154,9 @@ describe('组件源码禁硬编码色值', () => {
     const refsOf = (cls: string): string[] =>
       collectTsxTs(srcDir)
         .filter((f) => /\.tsx?$/.test(f))
-        .flatMap((f) => Array<string>(readFileSync(f, 'utf-8').match(new RegExp(cls, 'g'))?.length ?? 0).fill(f))
+        .flatMap((f) =>
+          Array<string>(readFileSync(f, 'utf-8').match(new RegExp(cls, 'g'))?.length ?? 0).fill(f),
+        )
     const chrome = refsOf('glass-chrome')
     const overlay = refsOf('glass-overlay')
     expect(chrome).toHaveLength(1)
@@ -201,11 +225,20 @@ describe('字号档位与配对行高', () => {
   const indexCss = readCss('index.css')
   const semanticCss = readCss('styles/tokens/semantic.css')
   const FONT_SIZE_DECL = /--mcs-font-size-([\w-]+)\s*:\s*([^;]+);/g
-  const tierPx = new Map([...semanticCss.matchAll(FONT_SIZE_DECL)].map((m) => [m[1]!, m[2]!.trim()]))
+  const tierPx = new Map(
+    [...semanticCss.matchAll(FONT_SIZE_DECL)].map((m) => [m[1]!, m[2]!.trim()]),
+  )
   /** 6 个文字档；display 是非文字数字档，不占文字档位 */
   const TEXT_TIERS = ['2xs', 'xs', 'sm', 'md', 'lg', 'xl']
   /** 逐档期望行高：sm 是唯一走正文基准 1.6 的档（同尺寸的 md 靠收紧到 1.5 作强调正文） */
-  const EXPECTED_LINE_HEIGHT: Record<string, number> = { '2xs': 1.5, xs: 1.5, sm: 1.6, md: 1.5, lg: 1.4, xl: 1.3 }
+  const EXPECTED_LINE_HEIGHT: Record<string, number> = {
+    '2xs': 1.5,
+    xs: 1.5,
+    sm: 1.6,
+    md: 1.5,
+    lg: 1.4,
+    xl: 1.3,
+  }
   /** semantic.css 的数值型 token（行高可能声明成 var(--mcs-line-height-body)） */
   const semanticNumber = (name: string): number | null => {
     const m = semanticCss.match(new RegExp(`${name}\\s*:\\s*([\\d.]+)\\s*;`))
@@ -276,8 +309,14 @@ describe('字号档位与配对行高', () => {
     const builtCss = builtCssOf(join(srcDir, '..', 'dist'))
     if (builtCss.length > 0) {
       const deletedClass = '.' + 'text-mcs-' + '2xl'
-      expect(builtCss.some((css) => css.includes(deletedClass)), '产物 CSS 残留 ' + deletedClass).toBe(false)
-      expect(builtCss.some((css) => css.includes('.text-mcs-xl')), '产物 CSS 未见字号档（检查失效）').toBe(true)
+      expect(
+        builtCss.some((css) => css.includes(deletedClass)),
+        '产物 CSS 残留 ' + deletedClass,
+      ).toBe(false)
+      expect(
+        builtCss.some((css) => css.includes('.text-mcs-xl')),
+        '产物 CSS 未见字号档（检查失效）',
+      ).toBe(true)
     }
   })
 

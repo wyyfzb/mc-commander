@@ -101,7 +101,11 @@ function completingStream(jarBytes) {
   return (url, streamMod) => {
     const pt = new streamMod.PassThrough();
     queueMicrotask(() => {
-      pt.emit('downloadProgress', { percent: 0.5, transferred: jarBytes.length, total: jarBytes.length });
+      pt.emit('downloadProgress', {
+        percent: 0.5,
+        transferred: jarBytes.length,
+        total: jarBytes.length,
+      });
       pt.write(jarBytes);
       pt.end();
     });
@@ -138,7 +142,10 @@ async function waitFor(predicate, { tries = 200 } = {}) {
  * 只创建 Test 对象就等（`await` 之前）在途部署根本不存在，取消端点会回「无可取消对象」
  */
 function startDeploy(app, body) {
-  return request(app).post('/api/instances/deploy').send(body).then((res) => res);
+  return request(app)
+    .post('/api/instances/deploy')
+    .send(body)
+    .then((res) => res);
 }
 
 /** 从进度事件里取服务端生成的部署实例 id */
@@ -184,7 +191,9 @@ afterAll(async () => {
 describe('POST /instances/deploy/cancel 受理语义', () => {
   it('无可取消任务：409 DEPLOY_NOT_IN_FLIGHT（不静默成功）', async () => {
     const { app } = buildApp();
-    const res = await request(app).post('/api/instances/deploy/cancel').send({ instanceId: 'vanilla-deadbeef' });
+    const res = await request(app)
+      .post('/api/instances/deploy/cancel')
+      .send({ instanceId: 'vanilla-deadbeef' });
     expect(res.status).toBe(409);
     expect(res.body.code).toBe(40906);
   });
@@ -195,7 +204,9 @@ describe('POST /instances/deploy/cancel 受理语义', () => {
     const deploying = startDeploy(app, DEPLOY_BODY);
     const id = await waitFor(() => deployId(manager));
 
-    const stale = await request(app).post('/api/instances/deploy/cancel').send({ instanceId: 'vanilla-00000000' });
+    const stale = await request(app)
+      .post('/api/instances/deploy/cancel')
+      .send({ instanceId: 'vanilla-00000000' });
     expect(stale.status).toBe(409);
     expect(stale.body.code).toBe(40906);
     // 在途任务仍在：注册表条目未被动过，进度也未出现取消终态
@@ -339,7 +350,9 @@ describe('取消在途部署', () => {
     const res = await request(app).post('/api/instances/deploy').send(DEPLOY_BODY);
     expect(res.status).toBe(200);
 
-    const cancel = await request(app).post('/api/instances/deploy/cancel').send({ instanceId: res.body.data.id });
+    const cancel = await request(app)
+      .post('/api/instances/deploy/cancel')
+      .send({ instanceId: res.body.data.id });
     expect(cancel.status).toBe(409);
     expect(cancel.body.code).toBe(40906);
     expect(manager.activeDeploys.size).toBe(0);

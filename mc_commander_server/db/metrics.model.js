@@ -11,7 +11,7 @@ export const MetricsModel = {
     const db = getDb();
     db.prepare(
       `INSERT INTO metrics_history (cpu_usage, memory_used_gb, memory_total_gb, memory_percent, players_online)
-       VALUES (?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?)`,
     ).run(cpuUsage, memoryUsedGb, memoryTotalGb, memoryPercent, playersOnline);
   },
 
@@ -23,7 +23,7 @@ export const MetricsModel = {
         `SELECT captured_at, cpu_usage, memory_used_gb, memory_total_gb, memory_percent, players_online
          FROM metrics_history
          WHERE captured_at >= datetime('now', ?)
-         ORDER BY captured_at ASC`
+         ORDER BY captured_at ASC`,
       )
       .all(`-${Math.max(1, Math.min(hours, 72))} hours`)
       .map((row) => ({

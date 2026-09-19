@@ -97,7 +97,13 @@ export class TaskScheduler {
    * @returns {{auditDeleted: number, webhookDeleted: number, commandHistoryDeleted: number, orphanBackupsDeleted: number, failed: string[]}}
    */
   runRetentionPrune(trigger = 'manual') {
-    const result = { auditDeleted: 0, webhookDeleted: 0, commandHistoryDeleted: 0, orphanBackupsDeleted: 0, failed: [] };
+    const result = {
+      auditDeleted: 0,
+      webhookDeleted: 0,
+      commandHistoryDeleted: 0,
+      orphanBackupsDeleted: 0,
+      failed: [],
+    };
     try {
       result.auditDeleted = AuditLogModel.prune(config.retentionPrune.auditLogDays);
     } catch (err) {
@@ -105,13 +111,17 @@ export class TaskScheduler {
       logger.error(`[RetentionPrune] audit_logs prune failed (${trigger}):`, err.message);
     }
     try {
-      result.webhookDeleted = WebhookModel.pruneDeliveries(config.retentionPrune.webhookDeliveryDays);
+      result.webhookDeleted = WebhookModel.pruneDeliveries(
+        config.retentionPrune.webhookDeliveryDays,
+      );
     } catch (err) {
       result.failed.push('webhook');
       logger.error(`[RetentionPrune] webhook_deliveries prune failed (${trigger}):`, err.message);
     }
     try {
-      result.commandHistoryDeleted = CommandHistoryModel.prune(config.retentionPrune.commandHistoryDays);
+      result.commandHistoryDeleted = CommandHistoryModel.prune(
+        config.retentionPrune.commandHistoryDays,
+      );
     } catch (err) {
       result.failed.push('command_history');
       logger.error(`[RetentionPrune] command_history prune failed (${trigger}):`, err.message);
@@ -121,14 +131,16 @@ export class TaskScheduler {
     // 快照子目录且跳过已索引的——被别的实例挂载走的归档快照仍住在这个目录里，
     // 按实例级目录整体清扫会把别人正在用的唯一副本删掉
     try {
-      result.orphanBackupsDeleted = pruneOrphanBackupDirs(config.retentionPrune.orphanBackupDays).deleted;
+      result.orphanBackupsDeleted = pruneOrphanBackupDirs(
+        config.retentionPrune.orphanBackupDays,
+      ).deleted;
     } catch (err) {
       result.failed.push('orphan_backups');
       logger.error(`[RetentionPrune] orphan backup dirs prune failed (${trigger}):`, err.message);
     }
     if (result.failed.length === 0) {
       logger.info(
-        `[RetentionPrune] ok (${trigger}): audit_logs -${result.auditDeleted}, webhook_deliveries -${result.webhookDeleted}, command_history -${result.commandHistoryDeleted}, orphan_backups -${result.orphanBackupsDeleted}`
+        `[RetentionPrune] ok (${trigger}): audit_logs -${result.auditDeleted}, webhook_deliveries -${result.webhookDeleted}, command_history -${result.commandHistoryDeleted}, orphan_backups -${result.orphanBackupsDeleted}`,
       );
     }
     return result;
@@ -152,7 +164,7 @@ export class TaskScheduler {
       const result = await runPanelBackupCycle();
       logger.info(
         `[PanelBackup] snapshot ok: ${path.basename(result.filePath)} ` +
-        `(${Math.max(1, Math.round(result.sizeBytes / 1024))} KB), cleaned ${result.deletedCount}`
+          `(${Math.max(1, Math.round(result.sizeBytes / 1024))} KB), cleaned ${result.deletedCount}`,
       );
     } catch (err) {
       logger.error('[PanelBackup] snapshot failed:', err.message);
@@ -177,7 +189,7 @@ export class TaskScheduler {
         const missed = findMissedTrigger(task.cronExpression, task.lastRunAt ?? task.createdAt);
         if (!missed) continue;
         logger.info(
-          `Catch-up: task ${task.name} (${task.type}) missed trigger at ${missed.toISOString()} while panel was down; running once`
+          `Catch-up: task ${task.name} (${task.type}) missed trigger at ${missed.toISOString()} while panel was down; running once`,
         );
         this.executeTask(task);
       } catch (err) {
@@ -200,14 +212,16 @@ export class TaskScheduler {
     try {
       const latest = getLatestSnapshotTime();
       if (latest == null) return;
-      missed = findMissedTrigger(config.panelBackup.cron, latest, new Date(), { includeCurrentMinute: true });
+      missed = findMissedTrigger(config.panelBackup.cron, latest, new Date(), {
+        includeCurrentMinute: true,
+      });
     } catch (err) {
       logger.error('Panel backup catch-up check failed:', err.message);
       return;
     }
     if (!missed) return;
     logger.info(
-      `Catch-up: panel snapshot missed trigger at ${missed.toISOString()} while panel was down; running once`
+      `Catch-up: panel snapshot missed trigger at ${missed.toISOString()} while panel was down; running once`,
     );
     void this.runPanelBackup();
   }
@@ -259,15 +273,12 @@ export class TaskScheduler {
     try {
       const expired = BanModel.findExpiredActive();
       for (const ban of expired) {
-        const instance = ban.instanceId
-          ? this.serverManager.getInstance(ban.instanceId)
-          : null;
+        const instance = ban.instanceId ? this.serverManager.getInstance(ban.instanceId) : null;
         if (!instance || !instance.isRunning) continue;
 
-        const cmd = ban.targetType === 'ip'
-          ? `pardon-ip ${ban.target}`
-          : `pardon ${ban.target}`;
-        instance.sendCommand(cmd)
+        const cmd = ban.targetType === 'ip' ? `pardon-ip ${ban.target}` : `pardon ${ban.target}`;
+        instance
+          .sendCommand(cmd)
           .then(() => {
             BanModel.deactivate(ban.id);
             logger.info(`Auto-pardoned ${ban.targetType} ${ban.target} (expired temp ban)`);
@@ -302,9 +313,7 @@ export class TaskScheduler {
     const nextRunAt = nextRun?.toISOString();
 
     try {
-      const instance = task.instanceId
-        ? this.serverManager.getInstance(task.instanceId)
-        : null;
+      const instance = task.instanceId ? this.serverManager.getInstance(task.instanceId) : null;
 
       switch (task.type) {
         case 'start':
@@ -329,11 +338,24 @@ export class TaskScheduler {
           if (instance && instance.isRunning && task.command) {
             // 触发先刷新时间戳，结果由异步回调回填 status
             ScheduledTaskModel.updateLastRun(task.id, nextRunAt);
-            instance.sendCommand(task.command)
-              .then(() => ScheduledTaskModel.updateLastRunStatus(task.id, 'success', null, Date.now() - startTs))
+            instance
+              .sendCommand(task.command)
+              .then(() =>
+                ScheduledTaskModel.updateLastRunStatus(
+                  task.id,
+                  'success',
+                  null,
+                  Date.now() - startTs,
+                ),
+              )
               .catch((err) => {
                 const errMsg = err?.message ?? String(err);
-                ScheduledTaskModel.updateLastRunStatus(task.id, 'failed', errMsg, Date.now() - startTs);
+                ScheduledTaskModel.updateLastRunStatus(
+                  task.id,
+                  'failed',
+                  errMsg,
+                  Date.now() - startTs,
+                );
                 this.emitTaskFailed(task, err);
               });
           } else {
@@ -367,7 +389,7 @@ export class TaskScheduler {
             }).total;
             if (creatingCount + restoringCount > 0) {
               logger.warn(
-                `Scheduled backup skipped for instance ${task.instanceId}: backup/restore already in progress`
+                `Scheduled backup skipped for instance ${task.instanceId}: backup/restore already in progress`,
               );
               // 跳过必须对用户可见：发送 backupSkipped 提示事件；结果状态
               // 一并落 skipped（skip 也消费本次触发，避免短周期 cron 每分钟
@@ -388,27 +410,34 @@ export class TaskScheduler {
             // executeBackup 内部回写 lastRunStatus——createBackup 是
             // fire-and-forget（resolve 早于快照完成），不能在 .then 写 success
             ScheduledTaskModel.updateLastRun(task.id, nextRunAt);
-            this.backupService.createBackup(task.instanceId, {
-              // 名字里的时刻用本地时区（与列表渲染 createdAt 同口径，见 utils/local-date.js）
-              name: task.name ? `${task.name} ${localTimestamp()}` : undefined,
-              type: 'scheduled',
-              createdBy: 'scheduler',
-              taskId: task.id,
-            }).catch(err => {
-              // 仅 setup 阶段失败（世界缺失/磁盘不足/RCON 不可用等，executeBackup
-              // 尚未启动）走这里；执行阶段失败由 executeBackup 内部回写。
-              // 定时备份失败必须对用户可见：补发 backupFailed 事件（旧实现仅记日志）
-              logger.error(`Scheduled backup failed for instance ${task.instanceId}:`, err);
-              if (this.serverManager) {
-                this.serverManager.emit('instance:backupFailed', {
-                  instanceId: task.instanceId,
-                  error: err.message,
-                  phase: 'scheduled',
-                  content: `备份失败: ${err.message}`,
-                });
-              }
-              ScheduledTaskModel.updateLastRunStatus(task.id, 'failed', err.message, Date.now() - startTs);
-            });
+            this.backupService
+              .createBackup(task.instanceId, {
+                // 名字里的时刻用本地时区（与列表渲染 createdAt 同口径，见 utils/local-date.js）
+                name: task.name ? `${task.name} ${localTimestamp()}` : undefined,
+                type: 'scheduled',
+                createdBy: 'scheduler',
+                taskId: task.id,
+              })
+              .catch((err) => {
+                // 仅 setup 阶段失败（世界缺失/磁盘不足/RCON 不可用等，executeBackup
+                // 尚未启动）走这里；执行阶段失败由 executeBackup 内部回写。
+                // 定时备份失败必须对用户可见：补发 backupFailed 事件（旧实现仅记日志）
+                logger.error(`Scheduled backup failed for instance ${task.instanceId}:`, err);
+                if (this.serverManager) {
+                  this.serverManager.emit('instance:backupFailed', {
+                    instanceId: task.instanceId,
+                    error: err.message,
+                    phase: 'scheduled',
+                    content: `备份失败: ${err.message}`,
+                  });
+                }
+                ScheduledTaskModel.updateLastRunStatus(
+                  task.id,
+                  'failed',
+                  err.message,
+                  Date.now() - startTs,
+                );
+              });
             logger.info(`Backup task triggered for instance ${task.instanceId}`);
           } else {
             // 实例缺失（instance_id 为空/实例未被加载）：与 command 分支一致记 skipped，
@@ -419,7 +448,13 @@ export class TaskScheduler {
 
         default:
           logger.warn(`Unknown task type: ${task.type}`);
-          ScheduledTaskModel.updateLastRun(task.id, nextRunAt, 'failed', `未知任务类型: ${task.type}`, Date.now() - startTs);
+          ScheduledTaskModel.updateLastRun(
+            task.id,
+            nextRunAt,
+            'failed',
+            `未知任务类型: ${task.type}`,
+            Date.now() - startTs,
+          );
           this.emitTaskFailed(task, new Error(`未知任务类型: ${task.type}`));
       }
 
@@ -430,11 +465,16 @@ export class TaskScheduler {
       if (task.type === 'start' || task.type === 'stop' || task.type === 'restart') {
         ScheduledTaskModel.updateLastRun(task.id, nextRunAt, 'success');
       }
-
     } catch (err) {
       logger.error(`Task execution failed (${task.name}):`, err);
       // 同步 throw（如 start 的 EULA/路径校验）：失败同样落库记录 last_run_at
-      ScheduledTaskModel.updateLastRun(task.id, nextRunAt, 'failed', err?.message ?? String(err), Date.now() - startTs);
+      ScheduledTaskModel.updateLastRun(
+        task.id,
+        nextRunAt,
+        'failed',
+        err?.message ?? String(err),
+        Date.now() - startTs,
+      );
       this.emitTaskFailed(task, err);
     }
   }
@@ -501,10 +541,10 @@ export function findMissedTrigger(cronExpr, lastRunAt, now = new Date(), options
   const upperBoundMs = options.includeCurrentMinute
     ? now.getTime()
     : (() => {
-      const minuteStart = new Date(now);
-      minuteStart.setSeconds(0, 0);
-      return minuteStart.getTime();
-    })();
+        const minuteStart = new Date(now);
+        minuteStart.setSeconds(0, 0);
+        return minuteStart.getTime();
+      })();
   try {
     const cron = new Cron(cronExpr, { paused: true });
     const missed = cron.nextRun(new Date(lastRunMs));

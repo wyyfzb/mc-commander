@@ -18,7 +18,9 @@ export function UploadConflictDialog({ target, onConfirm, onClose }: UploadConfl
   return (
     <ConfirmDialog
       open={target !== null}
-      onOpenChange={(o) => { if (!o) onClose() }}
+      onOpenChange={(o) => {
+        if (!o) onClose()
+      }}
       title="同名文件已存在"
       description={`当前目录已存在「${target?.name ?? ''}」，上传将覆盖原文件内容。`}
       confirmText="覆盖"

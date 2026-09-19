@@ -16,7 +16,13 @@ interface LoadingButtonProps extends ComponentProps<typeof Button> {
   loadingText?: string
 }
 
-export function LoadingButton({ loading = false, loadingText, children, disabled, ...rest }: LoadingButtonProps) {
+export function LoadingButton({
+  loading = false,
+  loadingText,
+  children,
+  disabled,
+  ...rest
+}: LoadingButtonProps) {
   return (
     <Button disabled={disabled || loading} {...rest}>
       {loading && <Loader2 className="mr-1.5 size-3.5 animate-spin" aria-hidden />}

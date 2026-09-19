@@ -46,9 +46,7 @@ test.describe('部署进度兜底', () => {
     await expect(page.getByRole('button', { name: '下一步' })).toHaveCount(0)
   })
 
-  test('断线提示：实时通道断开 + 服务端在途 → 写明进度刷新方式且不得重复发起', async ({
-    page,
-  }) => {
+  test('断线提示：实时通道断开 + 服务端在途 → 写明进度刷新方式且不得重复发起', async ({ page }) => {
     await setupInFlightDeploy(page)
     await page.goto('/instances')
     await expect(page.getByRole('banner').getByText('已连接')).toBeVisible()
@@ -63,7 +61,9 @@ test.describe('部署进度兜底', () => {
       { headers: { 'x-mock-ws-group': 'deploy-fallback' } },
     )
     // 先把「一条都没断」的失败钉在调用点（否则只能等下面三条 UI 断言，失败信息指向模糊）
-    expect(((await dropRes.json()) as { data: { dropped: number } }).data.dropped).toBeGreaterThan(0)
+    expect(((await dropRes.json()) as { data: { dropped: number } }).data.dropped).toBeGreaterThan(
+      0,
+    )
 
     await expect(page.getByText('WebSocket 已断开').first()).toBeVisible()
     await expect(page.getByText(/请勿重新发起部署（会重复创建实例）/)).toBeVisible()
@@ -82,7 +82,8 @@ test.describe('部署进度兜底', () => {
     // 请求体断言：取消必须点名实例 id（服务端按 id 匹配注册表，不做「取消当前那个」的推断）
     const cancelBodies: unknown[] = []
     page.on('request', (req) => {
-      if (req.url().endsWith('/api/v1/instances/deploy/cancel')) cancelBodies.push(req.postDataJSON())
+      if (req.url().endsWith('/api/v1/instances/deploy/cancel'))
+        cancelBodies.push(req.postDataJSON())
     })
 
     await page.getByRole('button', { name: '取消部署' }).click()

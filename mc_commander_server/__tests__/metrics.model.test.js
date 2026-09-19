@@ -19,8 +19,20 @@ describe('MetricsModel（分钟级主机指标历史）', () => {
   });
 
   it('record → list 按时间升序返回并携带全部字段', () => {
-    MetricsModel.record({ cpuUsage: 12.5, memoryUsedGb: 3.2, memoryTotalGb: 16, memoryPercent: 20, playersOnline: 2 });
-    MetricsModel.record({ cpuUsage: 45.5, memoryUsedGb: 7.9, memoryTotalGb: 16, memoryPercent: 49.4, playersOnline: 5 });
+    MetricsModel.record({
+      cpuUsage: 12.5,
+      memoryUsedGb: 3.2,
+      memoryTotalGb: 16,
+      memoryPercent: 20,
+      playersOnline: 2,
+    });
+    MetricsModel.record({
+      cpuUsage: 45.5,
+      memoryUsedGb: 7.9,
+      memoryTotalGb: 16,
+      memoryPercent: 49.4,
+      playersOnline: 5,
+    });
 
     const rows = MetricsModel.list(24);
     expect(rows).toHaveLength(2);
@@ -30,17 +42,31 @@ describe('MetricsModel（分钟级主机指标历史）', () => {
   });
 
   it('list 的 hours 参数夹紧到 [1, 72] 且按时间过滤', () => {
-    MetricsModel.record({ cpuUsage: 1, memoryUsedGb: 1, memoryTotalGb: 16, memoryPercent: 6.3, playersOnline: 0 });
+    MetricsModel.record({
+      cpuUsage: 1,
+      memoryUsedGb: 1,
+      memoryTotalGb: 16,
+      memoryPercent: 6.3,
+      playersOnline: 0,
+    });
     // 0 小时会被夹紧到 1 小时 → 样本仍在窗口内
     expect(MetricsModel.list(0)).toHaveLength(1);
     expect(MetricsModel.list(500)).toHaveLength(1);
   });
 
   it('deleteOlderThan 删除保留期外样本（插入旧时间戳行验证）', () => {
-    MetricsModel.record({ cpuUsage: 1, memoryUsedGb: 1, memoryTotalGb: 16, memoryPercent: 6.3, playersOnline: 0 });
+    MetricsModel.record({
+      cpuUsage: 1,
+      memoryUsedGb: 1,
+      memoryTotalGb: 16,
+      memoryPercent: 6.3,
+      playersOnline: 0,
+    });
     // 手工植入一条保留期外的旧行
     getDb()
-      .prepare(`INSERT INTO metrics_history (captured_at, cpu_usage, players_online) VALUES (datetime('now', '-3 days'), 0, 0)`)
+      .prepare(
+        `INSERT INTO metrics_history (captured_at, cpu_usage, players_online) VALUES (datetime('now', '-3 days'), 0, 0)`,
+      )
       .run();
 
     const removed = MetricsModel.deleteOlderThan(24);

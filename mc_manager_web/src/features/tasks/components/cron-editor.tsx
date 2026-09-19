@@ -110,7 +110,8 @@ export function CronEditor({ value, onChange }: { value: string; onChange: (v: s
         <div className="mt-1.5 flex flex-wrap gap-1">
           {WEEKDAY_COMBOS.map((combo) => {
             const comboSet = parseWeekdayField(combo.value)
-            const active = comboSet.size > 0 &&
+            const active =
+              comboSet.size > 0 &&
               comboSet.size === selectedWeekdays.size &&
               [...comboSet].every((v) => selectedWeekdays.has(v))
             return (

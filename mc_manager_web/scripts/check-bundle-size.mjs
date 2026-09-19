@@ -86,17 +86,18 @@ function firstScreenEntries() {
   const html = readFileSync(path.join(distDir, 'index.html'), 'utf8')
   const refs = new Set()
   for (const match of html.matchAll(/<script[^>]+src="([^"]+)"/g)) refs.add(match[1])
-  for (const match of html.matchAll(/<link[^>]+rel="modulepreload"[^>]+href="([^"]+)"/g)) refs.add(match[1])
-  return [...refs]
-    .filter((ref) => ref.endsWith('.js'))
-    .map((ref) => path.basename(ref))
+  for (const match of html.matchAll(/<link[^>]+rel="modulepreload"[^>]+href="([^"]+)"/g))
+    refs.add(match[1])
+  return [...refs].filter((ref) => ref.endsWith('.js')).map((ref) => path.basename(ref))
 }
 
 function resolveEntry(budget) {
   if (budget.entry === null) return firstScreenEntries()
   const matched = readdirSync(assetsDir).filter((name) => budget.entry.test(name))
   if (matched.length === 0) {
-    console.error(`✗ 未找到匹配 ${budget.entry} 的路由 chunk——构建产物命名已变更，请同步本脚本预算配置`)
+    console.error(
+      `✗ 未找到匹配 ${budget.entry} 的路由 chunk——构建产物命名已变更，请同步本脚本预算配置`,
+    )
     process.exit(1)
   }
   return matched

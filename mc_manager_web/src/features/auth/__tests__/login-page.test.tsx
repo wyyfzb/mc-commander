@@ -68,7 +68,9 @@ describe('LoginPage（登录/首访设密三态）', () => {
   it('未设密 → 设密模式：强度条可见；两次密码不一致报错不提交', async () => {
     server.use(http.get('*/api/v1/auth/status', () => okEnvelope({ hasPassword: false })))
     renderLoginPage()
-    await waitFor(() => expect(screen.getByRole('heading', { name: '设置管理员密码' })).toBeInTheDocument())
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: '设置管理员密码' })).toBeInTheDocument(),
+    )
 
     await userEvent.type(screen.getByLabelText('管理员密码'), 'Abcdef123456')
     expect(screen.getByText(/密码强度/)).toBeInTheDocument()

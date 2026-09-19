@@ -35,9 +35,9 @@ window.addEventListener('unhandledrejection', (event) => {
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      retry: 1,           // 网络抖动只重试一次，避免请求风暴
+      retry: 1, // 网络抖动只重试一次，避免请求风暴
       refetchOnWindowFocus: false, // 管理面板不因切窗口打扰
-      staleTime: 10_000,  // 10s 内视为新鲜（与 WS 事件互补失效）
+      staleTime: 10_000, // 10s 内视为新鲜（与 WS 事件互补失效）
     },
   },
 })

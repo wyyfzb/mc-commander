@@ -196,10 +196,14 @@ export function WorldInfoCard({ world, isLoading, onRefresh, className }: WorldI
               )}
             </InfoRow>
             <InfoRow label="难度">
-              <StatusPill tone={difficultyTone(world.difficulty)}>{formatDifficulty(world.difficulty)}</StatusPill>
+              <StatusPill tone={difficultyTone(world.difficulty)}>
+                {formatDifficulty(world.difficulty)}
+              </StatusPill>
             </InfoRow>
             <InfoRow label="游戏模式">
-              <StatusPill tone={gameModeTone(world.gameMode)}>{formatGameMode(world.gameMode)}</StatusPill>
+              <StatusPill tone={gameModeTone(world.gameMode)}>
+                {formatGameMode(world.gameMode)}
+              </StatusPill>
             </InfoRow>
             <InfoRow label="视野距离">
               <span className="mcs-num text-mcs-sm leading-none">{world.viewDistance}</span>

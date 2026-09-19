@@ -63,7 +63,10 @@ function spawnControlled() {
 
 function waitForEvent(emitter, eventName, timeoutMs = 10000) {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`Timeout waiting for ${eventName}`)), timeoutMs);
+    const timer = setTimeout(
+      () => reject(new Error(`Timeout waiting for ${eventName}`)),
+      timeoutMs,
+    );
     emitter.on(eventName, (data) => {
       clearTimeout(timer);
       resolve(data);
@@ -174,7 +177,12 @@ describe('备份取消（executeBackup 取消分支）', () => {
     await vi.waitFor(() => expect(mockSpawn).toHaveBeenCalled());
     requestCancelBackup('s1');
     await done;
-    expect(MockScheduledTaskModel.updateLastRunStatus).toHaveBeenCalledWith(5, 'failed', '已取消', expect.any(Number));
+    expect(MockScheduledTaskModel.updateLastRunStatus).toHaveBeenCalledWith(
+      5,
+      'failed',
+      '已取消',
+      expect.any(Number),
+    );
   });
 });
 
@@ -230,7 +238,9 @@ describe('恢复取消（executeRestore 取消分支）', () => {
 
     // 回滚：原实例目录回来了（含世界数据），pre_restore 不残留
     expect(fs.existsSync(path.join(instanceDir, 'world', 'level.dat'))).toBe(true);
-    const leftovers = fs.readdirSync(path.join(tmpRoot, 'servers')).filter((n) => n.includes('_pre_restore_'));
+    const leftovers = fs
+      .readdirSync(path.join(tmpRoot, 'servers'))
+      .filter((n) => n.includes('_pre_restore_'));
     expect(leftovers).toEqual([]);
 
     // 备份记录回 completed（快照完好可再恢复），不发 restoreFailed

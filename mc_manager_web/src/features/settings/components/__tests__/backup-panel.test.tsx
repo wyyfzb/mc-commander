@@ -105,7 +105,9 @@ describe('BackupPanel 上次备份与列表渲染', () => {
     renderPanel()
     expect(await screen.findByText('备份管理')).toBeInTheDocument()
     expect(
-      screen.getByText('快照备份：未修改文件零拷贝增量传输，超出保留策略自动清理（默认保留策略见服务端配置）'),
+      screen.getByText(
+        '快照备份：未修改文件零拷贝增量传输，超出保留策略自动清理（默认保留策略见服务端配置）',
+      ),
     ).toBeInTheDocument()
     // 等待列表数据加载完成（标题为静态文案，先于数据渲染）
     await screen.findByText('手动备份')
@@ -133,7 +135,9 @@ describe('BackupPanel 上次备份与列表渲染', () => {
     // 时间 · 大小行（completed：日期 · 大小；failed size=0 → 仅日期）
     const completed = mockBackups[0]!
     expect(
-      screen.getByText(`${formatBackupDate(completed.createdAt)} · ${formatBackupSize(completed.size)}`),
+      screen.getByText(
+        `${formatBackupDate(completed.createdAt)} · ${formatBackupSize(completed.size)}`,
+      ),
     ).toBeInTheDocument()
     const failed = mockBackups[1]!
     expect(screen.getByText(formatBackupDate(failed.createdAt))).toBeInTheDocument()
@@ -157,9 +161,7 @@ describe('BackupPanel 恢复', () => {
     await user.click(screen.getByRole('button', { name: '手动备份 恢复' }))
     // 红色警示标题 + 影响说明
     expect(screen.getByText('恢复备份（危险操作）')).toBeInTheDocument()
-    expect(
-      screen.getByText(/将用备份 “手动备份” 覆盖当前世界数据，且不可撤销/),
-    ).toBeInTheDocument()
+    expect(screen.getByText(/将用备份 “手动备份” 覆盖当前世界数据，且不可撤销/)).toBeInTheDocument()
     // 输入不匹配 → 确认禁用
     const confirmBtn = screen.getByRole('button', { name: '确认恢复' })
     expect(confirmBtn).toBeDisabled()
@@ -505,7 +507,9 @@ describe('BackupPanel 下载', () => {
     downloads = []
     vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:mock-download')
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
-    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
       downloads.push(this.download)
     })
   })
@@ -640,9 +644,7 @@ describe('BackupPanel 归档快照（未建立索引）', () => {
     )
     const qc = renderPanel()
     // 等查询真的失败（不是首帧的「还没请求」）：错误行只在 query 出错后渲染
-    await waitFor(() =>
-      expect(qc.getQueryState(queryKeys.archivedSnapshots())?.error).toBeTruthy(),
-    )
+    await waitFor(() => expect(qc.getQueryState(queryKeys.archivedSnapshots())?.error).toBeTruthy())
 
     expect(await screen.findByText(/归档快照清点失败/)).toBeInTheDocument()
     expect(screen.queryByText('归档快照（未建立索引）')).not.toBeInTheDocument()
@@ -718,7 +720,13 @@ describe('BackupPanel 归档快照（未建立索引）', () => {
       http.get('*/api/v1/backups/archived', () => okEnvelope([archivedGroup])),
       http.post('*/api/v1/instances/:id/backups/attach', () =>
         HttpResponse.json(
-          { status: 'error', code: 40402, message: '归档目录不存在（可能已被清理）', details: null, timestamp: '' },
+          {
+            status: 'error',
+            code: 40402,
+            message: '归档目录不存在（可能已被清理）',
+            details: null,
+            timestamp: '',
+          },
           { status: 404 },
         ),
       ),

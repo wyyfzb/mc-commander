@@ -20,11 +20,16 @@ MC_Commander 是一个自托管的 Minecraft 服务器管理面板：不装插�
 ## 常用命令
 
 ```bash
-# 一键检查（契约包 + 服务端 + 前端：lint / 类型检查 / 全量 test）
+# 一键检查（代码格式 + 契约包 + 服务端 + 前端：lint / 类型检查 / 全量 test）
 # 依赖 bash：若 `bash` 不在 PATH（Windows 上 Git 自带的 bash 默认不进 PATH），
 # 把 Git 安装目录下的 `bin` 或 `usr/bin` 加入 PATH 后即可直接跑；
 # 无 bash 环境按下方「验证策略」的三包命令序列逐包降级执行
 bash scripts/local-check.sh
+
+# 仓库根（工具包，只装 Biome；不是 workspace 根，三包依赖仍各自安装）
+npm ci                       # 安装格式化器（首次）
+npm run format               # 按 biome.jsonc 格式化全仓代码
+npm run format:check         # 只检查不改写（CI 与 local-check 用这条）
 
 # 契约包（mc-schemas/ 下）——改 src 后必须 build 并提交 dist
 npm ci && npm test
@@ -54,11 +59,14 @@ npm run dev                  # node --watch 热重载
 | 前端 | `npx tsc -b --noEmit` + `npm run lint` + `npm run test`（全量） |
 | 服务端 | `npm run lint` + `npm test`（全量） |
 | 契约包 | `npm test` + `npm run build`（dist 与 src 同步） |
+| 任何代码改动（含单文件） | 根目录 `npm run format`（写入后）——格式检查在 CI 与一键路径内 |
 | 跨端 | 以上都跑；一键路径 `bash scripts/local-check.sh` |
 
-- 一键路径：`bash scripts/local-check.sh`（三包 lint / 类型检查 / 全量 test + 契约 dist 同步守卫）；
-  `bash` 不在 PATH 时先按「常用命令」把它加进 PATH，未装 bash 的环境则按上表逐包执行（命令见「常用命令」）。
-  本机另有等价的私有入口 `.ai/tools/verify.ps1`（三包并行 + 三项门禁，出证据块与 `summary.json`；不入库）。
+- 一键路径：`bash scripts/local-check.sh`（代码格式 + 三包 lint / 类型检查 / 全量 test + 契约 dist 同步守卫）；
+  `bash` 不在 PATH 时先按「常用命令」把它加进 PATH，未装 bash 的环境则按上表逐包执行（格式检查用
+  根目录 `npm run format:check`，其余命令见「常用命令」）。
+  本机另有等价的私有入口 `.ai/tools/verify.ps1`（四条泳道并行＝格式 + 三包 + 三项门禁，出证据块与
+  `summary.json`；不入库）。
 - 涉及页面渲染 / 展示文案的改动，加跑相关 e2e spec（`npx playwright test <spec>`）。
 - 全量 e2e 由 CI 兜底，本地按需。
 - PR 自测清单必须附全量结果（通过数 / 总数），仅写「相关测试通过」视为自测未完成。
@@ -140,6 +148,12 @@ npm run dev                  # node --watch 热重载
   命令行为上的差异；改动不得破坏对新旧版本的兼容。
 - **注释边界**：注释只写「代码无法直观体现的设计意图、隐含约束、特殊边界、选型原因」；
   禁止写入迭代过程、方案对比、调试记录；单行优先，不复述代码行为。
+- **代码格式**：格式化的唯一事实源是根目录 `biome.jsonc`（Biome formatter，**只做 formatter**——
+  lint 仍归 oxlint/eslint）。改完代码跑 `npm run format`（根目录）即与门禁一致；
+  `npm run format:check` 在 CI 与 `local-check.sh` 里跑。范围＝全仓 .ts/.tsx/.js/.mjs + 配置文件，
+  **不含 CSS 与 Markdown**（设计 token 样式表由门禁脚本解析、文档手写排版），
+  也不含 dist/public/coverage/e2e 产物/.ai/锁文件。分号风格按包分流（服务端有、其余无），
+  行宽 100——不要手工对抗格式化结果，也不要为「更好看」手写折行。
 - **最小改动**：遵循既有代码模式与风格，不夹带与目标无关的重构；
   修复缺陷时先验证问题存在性，局部缺陷打最小补丁，设计问题重构根因。
 - **临时物不进源码目录**：探针、一次性脚本、临时夹具与临时截图**唯一落点是 `.ai/temp/`**

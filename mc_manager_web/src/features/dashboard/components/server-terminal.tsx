@@ -4,7 +4,20 @@ import { FitAddon } from '@xterm/addon-fit'
 import { SearchAddon, type ISearchDecorationOptions } from '@xterm/addon-search'
 // 官方 CSS 必须引入：缺失会导致测量元素可见（32 个问号乱码行）+ 光标/选区样式缺失
 import '@xterm/xterm/css/xterm.css'
-import { ChevronDown, ChevronUp, Download, Eraser, Eye, EyeOff, Loader2, Search, TerminalSquare, Copy, Check, X } from 'lucide-react'
+import {
+  ChevronDown,
+  ChevronUp,
+  Download,
+  Eraser,
+  Eye,
+  EyeOff,
+  Loader2,
+  Search,
+  TerminalSquare,
+  Copy,
+  Check,
+  X,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -170,7 +183,12 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
     term.loadAddon(fit)
     const searchAddon = new SearchAddon()
     term.loadAddon(searchAddon)
-    searchAddon.onDidChangeResults((r) => setSearch((s) => ({ ...s, result: { resultIndex: r.resultIndex, resultCount: r.resultCount } })))
+    searchAddon.onDidChangeResults((r) =>
+      setSearch((s) => ({
+        ...s,
+        result: { resultIndex: r.resultIndex, resultCount: r.resultCount },
+      })),
+    )
     // Ctrl/⌘+F：仅终端聚焦时生效（attachCustomKeyEventHandler 只在 xterm 持有焦点时触发，
     // dashboard 其他区域浏览器原生查找不受影响）。canvas 渲染下原生 Ctrl/⌘+F 对终端内容
     // 无法命中，preventDefault 抑制浏览器查找弹窗并转为打开终端内搜索。
@@ -256,10 +274,12 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
     }
     // 同步屏读镜像：取最近 N 行纯文本
     if (srLiveRef.current) {
-      const allVisible = buffer.filter((e) => {
-        const entry = e as TerminalLogEntry
-        return !(entry.jvmWarning && !showJvmWarnings)
-      }).map((e) => (e as TerminalLogEntry).text)
+      const allVisible = buffer
+        .filter((e) => {
+          const entry = e as TerminalLogEntry
+          return !(entry.jvmWarning && !showJvmWarnings)
+        })
+        .map((e) => (e as TerminalLogEntry).text)
       srLiveRef.current.textContent = allVisible.slice(-SR_LINE_COUNT).join('\n')
     }
   }, [buffer, showJvmWarnings])
@@ -348,7 +368,8 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
       }
       const header =
         `MC Commander - 服务器日志\n导出时间: ${new Date().toLocaleString()}\n实例: ${instanceId}\n` +
-        '='.repeat(60) + '\n'
+        '='.repeat(60) +
+        '\n'
       const body = logs.map((l) => `[${l.type}] ${l.text}`).join('\n')
       const blob = new Blob([header + body], { type: 'text/plain;charset=utf-8' })
       const url = URL.createObjectURL(blob)
@@ -415,7 +436,11 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
             disabled={downloading}
             aria-label="下载日志"
           >
-            {downloading ? <Loader2 className="animate-spin" aria-hidden /> : <Download aria-hidden />}
+            {downloading ? (
+              <Loader2 className="animate-spin" aria-hidden />
+            ) : (
+              <Download aria-hidden />
+            )}
           </IconButton>
         </div>
       </div>
@@ -450,7 +475,10 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
               className="h-7 w-44 text-mcs-xs"
               autoFocus
             />
-            <span className="min-w-12 text-center text-mcs-xs tabular-nums text-mcs-text-muted" aria-live="polite">
+            <span
+              className="min-w-12 text-center text-mcs-xs tabular-nums text-mcs-text-muted"
+              aria-live="polite"
+            >
               {search.result
                 ? search.result.resultCount === 0
                   ? '无结果'

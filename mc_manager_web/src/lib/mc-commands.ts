@@ -5,7 +5,16 @@
  */
 import type { LucideIcon } from 'lucide-react'
 import {
-  Cloud, Gem, Navigation, Palette, Skull, Sparkles, Star, Sun, Terminal, Zap,
+  Cloud,
+  Gem,
+  Navigation,
+  Palette,
+  Skull,
+  Sparkles,
+  Star,
+  Sun,
+  Terminal,
+  Zap,
 } from 'lucide-react'
 
 export type CommandColor = 'info' | 'purple' | 'warning' | 'success' | 'error' | 'orange' | 'accent'
@@ -19,7 +28,20 @@ export interface McCommandDef {
 }
 
 export const COMMAND_CATEGORIES = [
-  '基础', '时间', '天气', '游戏', '传送', '物品', '实体', '效果', '附魔', '经验', '服务器', '管理', '消息', '建筑',
+  '基础',
+  '时间',
+  '天气',
+  '游戏',
+  '传送',
+  '物品',
+  '实体',
+  '效果',
+  '附魔',
+  '经验',
+  '服务器',
+  '管理',
+  '消息',
+  '建筑',
 ] as const
 
 /** 52 条命令静态表 */
@@ -31,14 +53,26 @@ export const MC_COMMANDS: McCommandDef[] = [
   { name: 'w', usage: '<玩家> <消息>', category: '基础' },
   { name: 'me', usage: '<动作>', category: '基础' },
   // 时间
-  { name: 'time', usage: 'set day | set night | set noon | set midnight | add <数值>', category: '时间' },
+  {
+    name: 'time',
+    usage: 'set day | set night | set noon | set midnight | add <数值>',
+    category: '时间',
+  },
   // 天气
   { name: 'weather', usage: 'clear | rain | thunder', category: '天气' },
   // 游戏
-  { name: 'gamemode', usage: 'survival | creative | adventure | spectator [<玩家>]', category: '游戏' },
+  {
+    name: 'gamemode',
+    usage: 'survival | creative | adventure | spectator [<玩家>]',
+    category: '游戏',
+  },
   { name: 'difficulty', usage: 'peaceful | easy | normal | hard', category: '游戏' },
   { name: 'gamerule', usage: '<规则> <值>', category: '游戏' },
-  { name: 'scoreboard', usage: 'objectives add <名称> dummy | players add <玩家> <目标> <分数>', category: '游戏' },
+  {
+    name: 'scoreboard',
+    usage: 'objectives add <名称> dummy | players add <玩家> <目标> <分数>',
+    category: '游戏',
+  },
   // 传送
   { name: 'tp', usage: '<玩家> <x> <y> <z> | <x> <y> <z> | @a <x> <y> <z>', category: '传送' },
   { name: 'teleport', usage: '<玩家> <x> <y> <z> | <x> <y> <z>', category: '传送' },

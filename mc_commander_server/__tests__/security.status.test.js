@@ -74,7 +74,7 @@ describe('PUT /api/instances/:id/properties 键白名单与值校验', () => {
 
     const res = await request(app)
       .put('/api/instances/s1/properties')
-      .send({ 'pvp': 'false', 'totally-unknown-key': 'x' });
+      .send({ pvp: 'false', 'totally-unknown-key': 'x' });
 
     expect(res.status).toBe(400);
     expect(instance.saveProperties).not.toHaveBeenCalled();
@@ -85,7 +85,17 @@ describe('PUT /api/instances/:id/properties 键白名单与值校验', () => {
     const instance = makeMockInstance();
     mockManager.getInstance.mockReturnValue(instance);
 
-    for (const key of ['enable-rcon', 'online-mode', 'server-port', 'enable-command-block', 'rcon.password', 'server-ip', 'enable-query', 'enable-status', 'rcon.port']) {
+    for (const key of [
+      'enable-rcon',
+      'online-mode',
+      'server-port',
+      'enable-command-block',
+      'rcon.password',
+      'server-ip',
+      'enable-query',
+      'enable-status',
+      'rcon.port',
+    ]) {
       const res = await request(app)
         .put('/api/instances/s1/properties')
         .send({ [key]: 'x' });
@@ -99,9 +109,7 @@ describe('PUT /api/instances/:id/properties 键白名单与值校验', () => {
     const instance = makeMockInstance();
     mockManager.getInstance.mockReturnValue(instance);
 
-    const res = await request(app)
-      .put('/api/instances/s1/properties')
-      .send({ 'pvp': 'yes' });
+    const res = await request(app).put('/api/instances/s1/properties').send({ pvp: 'yes' });
 
     expect(res.status).toBe(400);
     expect(instance.saveProperties).not.toHaveBeenCalled();
@@ -133,7 +141,7 @@ describe('PUT /api/instances/:id/properties 键白名单与值校验', () => {
 
     const res = await request(app)
       .put('/api/instances/s1/properties')
-      .send({ 'motd': '第一行\n第二行' });
+      .send({ motd: '第一行\n第二行' });
 
     expect(res.status).toBe(400);
     expect(instance.saveProperties).not.toHaveBeenCalled();
@@ -166,13 +174,17 @@ describe('PUT /api/instances/:id/properties 键白名单与值校验', () => {
 
     const ok = await request(app)
       .put('/api/instances/s1/properties')
-      .send({ 'pvp': 'false', 'view-distance': '12', 'motd': 'hello world' });
+      .send({ pvp: 'false', 'view-distance': '12', motd: 'hello world' });
     expect(ok.status).toBe(200);
-    expect(instance.saveProperties).toHaveBeenCalledWith({ 'pvp': 'false', 'view-distance': '12', 'motd': 'hello world' });
+    expect(instance.saveProperties).toHaveBeenCalledWith({
+      pvp: 'false',
+      'view-distance': '12',
+      motd: 'hello world',
+    });
 
     const mixed = await request(app)
       .put('/api/instances/s1/properties')
-      .send({ 'pvp': 'false', 'evil-key': 'x' });
+      .send({ pvp: 'false', 'evil-key': 'x' });
     expect(mixed.status).toBe(400);
     expect(instance.saveProperties).toHaveBeenCalledTimes(1); // 混合提交未落盘
   });
@@ -183,12 +195,10 @@ describe('PUT /api/instances/:id/properties 键白名单与值校验', () => {
 
     const bad = await request(app)
       .put('/api/instances/s1/properties')
-      .send({ 'difficulty': 'easy; stop' });
+      .send({ difficulty: 'easy; stop' });
     expect(bad.status).toBe(400);
 
-    const ok = await request(app)
-      .put('/api/instances/s1/properties')
-      .send({ 'difficulty': 'easy' });
+    const ok = await request(app).put('/api/instances/s1/properties').send({ difficulty: 'easy' });
     expect(ok.status).toBe(200);
     expect(instance.sendCommand).toHaveBeenCalledWith('difficulty easy');
   });
@@ -197,9 +207,7 @@ describe('PUT /api/instances/:id/properties 键白名单与值校验', () => {
     const instance = makeMockInstance();
     mockManager.getInstance.mockReturnValue(instance);
 
-    const res = await request(app)
-      .put('/api/instances/s1/properties')
-      .send({});
+    const res = await request(app).put('/api/instances/s1/properties').send({});
 
     expect(res.status).toBe(200);
     expect(instance.saveProperties).not.toHaveBeenCalled();
@@ -256,9 +264,7 @@ describe('PUT /api/instances/:id 与 POST /start 封堵 startCommand 注入面',
       for (const name of ['bash', 'python', 'sh']) {
         const fakeExec = path.join(tmpDir, name);
         fs.writeFileSync(fakeExec, '#!/bin/sh\necho hi\n');
-        const res = await request(app)
-          .put('/api/instances/s1')
-          .send({ javaPath: fakeExec });
+        const res = await request(app).put('/api/instances/s1').send({ javaPath: fakeExec });
         expect(res.status).toBe(400);
         expect(InstanceModel.update).not.toHaveBeenCalled();
       }
@@ -276,9 +282,7 @@ describe('PUT /api/instances/:id 与 POST /start 封堵 startCommand 注入面',
       fs.writeFileSync(fakeJava, 'fake java binary');
       InstanceModel.update.mockReturnValue({ changes: 1 });
 
-      const res = await request(app)
-        .put('/api/instances/s1')
-        .send({ javaPath: fakeJava });
+      const res = await request(app).put('/api/instances/s1').send({ javaPath: fakeJava });
 
       expect(res.status).toBe(200);
       expect(InstanceModel.update).toHaveBeenCalledWith('s1', { javaPath: fakeJava });
@@ -292,9 +296,7 @@ describe('PUT /api/instances/:id 与 POST /start 封堵 startCommand 注入面',
     mockManager.getInstance.mockReturnValue(instance);
     InstanceModel.update.mockReturnValue({ changes: 1 });
 
-    const res = await request(app)
-      .put('/api/instances/s1')
-      .send({ name: 'S2' });
+    const res = await request(app).put('/api/instances/s1').send({ name: 'S2' });
 
     expect(res.status).toBe(200);
     expect(InstanceModel.update).toHaveBeenCalledWith('s1', { name: 'S2' });
@@ -360,7 +362,7 @@ describe('GET/PUT /properties 敏感键占位符掩码', () => {
         'enable-rcon': 'true',
         'online-mode': 'true',
         'white-list': 'true',
-        'pvp': 'false',
+        pvp: 'false',
       },
     });
     mockManager.getInstance.mockReturnValue(instance);
@@ -416,7 +418,9 @@ describe('PUT /api/instances/:id jvmArgs 持久化与 startCommand 清除', () =
       .send({ jvmArgs: ['-Xmx4G', '-Xms2G', '-XX:+UseG1GC', 'nogui'] });
 
     expect(res.status).toBe(200);
-    expect(InstanceModel.update).toHaveBeenCalledWith('s1', { jvmArgs: ['-Xmx4G', '-Xms2G', '-XX:+UseG1GC', 'nogui'] });
+    expect(InstanceModel.update).toHaveBeenCalledWith('s1', {
+      jvmArgs: ['-Xmx4G', '-Xms2G', '-XX:+UseG1GC', 'nogui'],
+    });
     expect(instance.jvmArgs).toEqual(['-Xmx4G', '-Xms2G', '-XX:+UseG1GC', 'nogui']);
   });
 
@@ -444,15 +448,21 @@ describe('PUT /api/instances/:id jvmArgs 持久化与 startCommand 清除', () =
     const nonArray = await request(app).put('/api/instances/s1').send({ jvmArgs: '-Xmx4G' });
     expect(nonArray.status).toBe(400);
 
-    const nonString = await request(app).put('/api/instances/s1').send({ jvmArgs: [123] });
+    const nonString = await request(app)
+      .put('/api/instances/s1')
+      .send({ jvmArgs: [123] });
     expect(nonString.status).toBe(400);
 
     // 任意可执行文件名（RCE 注入面）被拒
-    const arbitrary = await request(app).put('/api/instances/s1').send({ jvmArgs: ['bash', '-c', 'id'] });
+    const arbitrary = await request(app)
+      .put('/api/instances/s1')
+      .send({ jvmArgs: ['bash', '-c', 'id'] });
     expect(arbitrary.status).toBe(400);
 
     // -jar 后缺路径参数
-    const missingJar = await request(app).put('/api/instances/s1').send({ jvmArgs: ['-jar'] });
+    const missingJar = await request(app)
+      .put('/api/instances/s1')
+      .send({ jvmArgs: ['-jar'] });
     expect(missingJar.status).toBe(400);
   });
 

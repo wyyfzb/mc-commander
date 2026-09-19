@@ -54,13 +54,15 @@ describe('resolveContained 路径包含校验（收敛到 fs-utils 解析面后�
   });
 
   it('../ 越界目标抛 PATH_TRAVERSAL_DETECTED', () => {
-    expect(() => resolveContained(base, path.join(base, '..', 'evil')))
-      .toThrowError(/escapes instance root/);
+    expect(() => resolveContained(base, path.join(base, '..', 'evil'))).toThrowError(
+      /escapes instance root/,
+    );
   });
 
   it('绝对路径逃逸抛 PATH_TRAVERSAL_DETECTED', () => {
-    expect(() => resolveContained(base, path.join(tmpBase, 'outside')))
-      .toThrowError(/escapes instance root/);
+    expect(() => resolveContained(base, path.join(tmpBase, 'outside'))).toThrowError(
+      /escapes instance root/,
+    );
   });
 
   it('目标等于 base 本身被拒绝（相等排除）', () => {
@@ -87,16 +89,16 @@ describe('resolveContained 路径包含校验（收敛到 fs-utils 解析面后�
       linkCreated = false;
     }
     if (linkCreated) {
-      expect(() => resolveContained(base, path.join(base, 'world')))
-        .toThrowError(/via symlink/);
+      expect(() => resolveContained(base, path.join(base, 'world'))).toThrowError(/via symlink/);
     }
     fs.rmSync(outside, { recursive: true, force: true });
   });
 
   it('基座目录不存在时容忍（存在性由后续业务步骤判定，不在此报 ENOENT）', () => {
     const missing = path.join(tmpBase, 'no-such-base');
-    expect(resolveContained(missing, path.join(missing, 'world')))
-      .toBe(path.join(missing, 'world'));
+    expect(resolveContained(missing, path.join(missing, 'world'))).toBe(
+      path.join(missing, 'world'),
+    );
   });
 
   afterAll(() => {
@@ -107,16 +109,16 @@ describe('resolveContained 路径包含校验（收敛到 fs-utils 解析面后�
 describe('createBackup 对 worldName 强制校验', () => {
   it('显式传入 ../ 恶意 worldName 拒绝创建（白名单）', async () => {
     const service = new BackupService(null);
-    await expect(
-      service.createBackup('s1', { worldName: '../../etc' })
-    ).rejects.toThrow('Invalid world name');
+    await expect(service.createBackup('s1', { worldName: '../../etc' })).rejects.toThrow(
+      'Invalid world name',
+    );
   });
 
   it('显式传入反斜杠穿越 worldName 拒绝创建（白名单）', async () => {
     const service = new BackupService(null);
-    await expect(
-      service.createBackup('s1', { worldName: '..\\..\\evil' })
-    ).rejects.toThrow('Invalid world name');
+    await expect(service.createBackup('s1', { worldName: '..\\..\\evil' })).rejects.toThrow(
+      'Invalid world name',
+    );
   });
 
   it('实例 properties 中的恶意 level-name 同样被拒绝', async () => {
@@ -140,7 +142,7 @@ describe('createBackup 对 worldName 强制校验', () => {
   it('合法 worldName 不误拒（目录不存在时走原有 World directory not found 路径）', async () => {
     const service = new BackupService(null);
     await expect(
-      service.createBackup('nonexistent-instance', { name: 'x', worldName: 'world' })
+      service.createBackup('nonexistent-instance', { name: 'x', worldName: 'world' }),
     ).rejects.toThrow('World directory not found');
   });
 });
@@ -197,7 +199,9 @@ describe('restoreBackup 路径与状态校验（实例级恢复）', () => {
       file_path: null,
     });
     const service = new BackupService(null);
-    await expect(service.restoreBackup(1)).rejects.toThrow('Only completed backups can be restored');
+    await expect(service.restoreBackup(1)).rejects.toThrow(
+      'Only completed backups can be restored',
+    );
   });
 
   it('同实例已有恢复进行中（restoring）时拒绝新的恢复', async () => {
@@ -368,7 +372,7 @@ describe('命令参数构造（目录快照：rsync --link-dest / robocopy /MIR�
     // /XF 文件排除（jar + pid/lock + JVM 崩溃日志）
     const xfIdx = args.indexOf('/XF');
     expect(args.slice(xfIdx + 1)).toEqual(
-      expect.arrayContaining(['server.jar', '*.pid', '*.lock', 'hs_err_pid*.log'])
+      expect.arrayContaining(['server.jar', '*.pid', '*.lock', 'hs_err_pid*.log']),
     );
   });
 

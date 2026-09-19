@@ -18,18 +18,28 @@ import { WebhookService } from '../services/webhook.service.js';
 
 describe('WebhookService._resolvePlatform', () => {
   it('显式平台字段原样返回', () => {
-    expect(WebhookService._resolvePlatform({ platform: 'dingtalk', url: 'https://example.com/hook' })).toBe('dingtalk');
-    expect(WebhookService._resolvePlatform({ platform: 'feishu', url: 'https://example.com/hook' })).toBe('feishu');
+    expect(
+      WebhookService._resolvePlatform({ platform: 'dingtalk', url: 'https://example.com/hook' }),
+    ).toBe('dingtalk');
+    expect(
+      WebhookService._resolvePlatform({ platform: 'feishu', url: 'https://example.com/hook' }),
+    ).toBe('feishu');
   });
 
   it('generic 或缺失 → generic（显式选通用即通用格式，不做 URL 二次推断）', () => {
-    expect(WebhookService._resolvePlatform({ platform: 'generic', url: 'https://example.com/hook' })).toBe('generic');
+    expect(
+      WebhookService._resolvePlatform({ platform: 'generic', url: 'https://example.com/hook' }),
+    ).toBe('generic');
     expect(WebhookService._resolvePlatform({ url: 'https://example.com/hook' })).toBe('generic');
   });
 });
 
 describe('WebhookService._buildPlatformRequest 各平台格式', () => {
-  const feishuWebhook = { platform: 'feishu', name: '飞书', url: 'https://open.feishu.cn/open-apis/bot/v2/hook/xxx' };
+  const feishuWebhook = {
+    platform: 'feishu',
+    name: '飞书',
+    url: 'https://open.feishu.cn/open-apis/bot/v2/hook/xxx',
+  };
 
   it('generic 返回 null（维持通用 payload + X-MC-Signature 路径）', () => {
     expect(
@@ -47,7 +57,9 @@ describe('WebhookService._buildPlatformRequest 各平台格式', () => {
   });
 
   it('飞书无 secret：仅消息结构，不带 timestamp/sign', () => {
-    const req = WebhookService._buildPlatformRequest(feishuWebhook, 'instance.stop', { instanceId: 'i1' });
+    const req = WebhookService._buildPlatformRequest(feishuWebhook, 'instance.stop', {
+      instanceId: 'i1',
+    });
     expect(req.body.msg_type).toBe('text');
     expect(req.body.content.text).toContain('服务器已停止');
     expect(req.body.content.text).toContain('【MC_Commander】');
@@ -58,7 +70,9 @@ describe('WebhookService._buildPlatformRequest 各平台格式', () => {
   it('飞书有 secret：body 携带秒级 timestamp 与 base64 签名，且可按官方算法复算一致', () => {
     const webhook = { ...feishuWebhook, secret: 'test-secret-abcdef' };
     const before = Math.floor(Date.now() / 1000);
-    const req = WebhookService._buildPlatformRequest(webhook, 'instance.stop', { instanceId: 'i1' });
+    const req = WebhookService._buildPlatformRequest(webhook, 'instance.stop', {
+      instanceId: 'i1',
+    });
     const after = Math.floor(Date.now() / 1000);
 
     expect(req.body.timestamp).toMatch(/^\d{10}$/);
@@ -78,9 +92,13 @@ describe('WebhookService._buildPlatformRequest 各平台格式', () => {
       getInstance: (id) => (id === 'i1' ? { name: '我的测试' } : undefined),
     };
     try {
-      const req = WebhookService._buildPlatformRequest(feishuWebhook, 'instance.stop', { instanceId: 'i1' });
+      const req = WebhookService._buildPlatformRequest(feishuWebhook, 'instance.stop', {
+        instanceId: 'i1',
+      });
       expect(req.body.content.text).toContain('我的测试');
-      const fallback = WebhookService._buildPlatformRequest(feishuWebhook, 'instance.stop', { instanceId: 'i9' });
+      const fallback = WebhookService._buildPlatformRequest(feishuWebhook, 'instance.stop', {
+        instanceId: 'i9',
+      });
       expect(fallback.body.content.text).toContain('i9');
     } finally {
       WebhookService._serverManager = prev;
@@ -94,7 +112,9 @@ describe('WebhookService._buildPlatformRequest 各平台格式', () => {
       url: 'https://oapi.dingtalk.com/robot/send?access_token=dummy-token',
       secret: 'SECdummy-secret',
     };
-    const req = WebhookService._buildPlatformRequest(webhook, 'instance.start', { instanceId: 'i1' });
+    const req = WebhookService._buildPlatformRequest(webhook, 'instance.start', {
+      instanceId: 'i1',
+    });
 
     expect(req.body.msg_type).toBeUndefined();
     expect(req.body.msgtype).toBe('text');
@@ -104,14 +124,20 @@ describe('WebhookService._buildPlatformRequest 各平台格式', () => {
     const timestamp = parsed.searchParams.get('timestamp');
     expect(timestamp).toMatch(/^\d{13}$/); // 毫秒级
     const expected = encodeURIComponent(
-      crypto.createHmac('sha256', webhook.secret).update(`${timestamp}\n${webhook.secret}`).digest('base64'),
+      crypto
+        .createHmac('sha256', webhook.secret)
+        .update(`${timestamp}\n${webhook.secret}`)
+        .digest('base64'),
     );
     expect(parsed.searchParams.get('sign')).toBe(decodeURIComponent(expected));
   });
 
   it('钉钉无 secret：URL 原样（不加签）', () => {
     const req = WebhookService._buildPlatformRequest(
-      { platform: 'dingtalk', url: 'https://oapi.dingtalk.com/robot/send?access_token=dummy-token' },
+      {
+        platform: 'dingtalk',
+        url: 'https://oapi.dingtalk.com/robot/send?access_token=dummy-token',
+      },
       'instance.stop',
       { instanceId: 'i1' },
     );
@@ -126,7 +152,10 @@ describe('WebhookService._buildPlatformRequest 各平台格式', () => {
       { instanceId: 'i1' },
     );
     expect(req.url).toBe('https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=dummy-key');
-    expect(req.body).toEqual({ msgtype: 'text', text: { content: expect.stringContaining('服务器已停止') } });
+    expect(req.body).toEqual({
+      msgtype: 'text',
+      text: { content: expect.stringContaining('服务器已停止') },
+    });
     expect(req.body.timestamp).toBeUndefined();
   });
 
@@ -144,7 +173,11 @@ describe('WebhookService._buildPlatformRequest 各平台格式', () => {
 
   it('PushPlus：token 取自 secret 字段进 body，txt 模板', () => {
     const req = WebhookService._buildPlatformRequest(
-      { platform: 'pushplus', url: 'https://www.pushplus.plus/send', secret: 'dummy-pushplus-token' },
+      {
+        platform: 'pushplus',
+        url: 'https://www.pushplus.plus/send',
+        secret: 'dummy-pushplus-token',
+      },
       'instance.stop',
       { instanceId: 'i1' },
     );
@@ -164,8 +197,12 @@ describe('WebhookService._buildPlatformRequest 各平台格式', () => {
   });
 
   it('玩家事件文案带玩家名（平台无关）', () => {
-    expect(WebhookService._feishuText('player.join', { name: 'Steve' })).toContain('Steve 加入了游戏');
-    expect(WebhookService._feishuText('player.achievement', { name: 'Steve', advancement: '获取升级' })).toContain('Steve 获得成就 [获取升级]');
+    expect(WebhookService._feishuText('player.join', { name: 'Steve' })).toContain(
+      'Steve 加入了游戏',
+    );
+    expect(
+      WebhookService._feishuText('player.achievement', { name: 'Steve', advancement: '获取升级' }),
+    ).toContain('Steve 获得成就 [获取升级]');
   });
 
   it('未知事件兜底原始类型（ping 已是已知事件，用真正未注册的类型验证兜底）', () => {

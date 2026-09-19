@@ -15,7 +15,12 @@ export interface CustomPointDialogProps {
   running: boolean
 }
 
-export function CustomPointDialog({ draft, onDraftChange, onAdd, running }: CustomPointDialogProps) {
+export function CustomPointDialog({
+  draft,
+  onDraftChange,
+  onAdd,
+  running,
+}: CustomPointDialogProps) {
   const handleConfirm = () => {
     if (!draft) return
     if (onAdd(draft)) onDraftChange(null)

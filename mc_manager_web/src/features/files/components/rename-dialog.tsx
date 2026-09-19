@@ -4,7 +4,14 @@
  * - 受控新名称输入 + Enter 直提交；重命名中 LoadingButton 防重复提交
  * - 名称校验（空值/分隔符/未变更短路）由父组件 onSubmit 负责
  */
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { LoadingButton } from '@/components/mcs/loading-button'
 import { Input } from '@/components/ui/input'
@@ -22,7 +29,14 @@ interface RenameDialogProps {
   onClose: () => void
 }
 
-export function RenameDialog({ target, value, onValueChange, submitting, onSubmit, onClose }: RenameDialogProps) {
+export function RenameDialog({
+  target,
+  value,
+  onValueChange,
+  submitting,
+  onSubmit,
+  onClose,
+}: RenameDialogProps) {
   return (
     <Dialog open={target !== null} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-md">
@@ -47,7 +61,11 @@ export function RenameDialog({ target, value, onValueChange, submitting, onSubmi
           <Button variant="outline" onClick={onClose}>
             取消
           </Button>
-          <LoadingButton onClick={() => void onSubmit()} loading={submitting} loadingText="重命名中…">
+          <LoadingButton
+            onClick={() => void onSubmit()}
+            loading={submitting}
+            loadingText="重命名中…"
+          >
             重命名
           </LoadingButton>
         </DialogFooter>

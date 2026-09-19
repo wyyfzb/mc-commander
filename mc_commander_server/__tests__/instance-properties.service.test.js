@@ -47,32 +47,51 @@ describe('instance-properties.service · 单键值校验 validatePropertyValue',
   it('布尔属性接受 true/false（大小写不敏感），其余值拒绝', () => {
     expect(validatePropertyValue('pvp', 'true')).toEqual({ ok: true, value: 'true' });
     expect(validatePropertyValue('pvp', 'FALSE')).toEqual({ ok: true, value: 'FALSE' });
-    expect(validatePropertyValue('pvp', 'yes')).toEqual({ ok: false, reason: '布尔属性仅接受 true/false' });
+    expect(validatePropertyValue('pvp', 'yes')).toEqual({
+      ok: false,
+      reason: '布尔属性仅接受 true/false',
+    });
   });
 
   it('数值属性接受整数（含 -1 禁用语义），小数与非数字拒绝', () => {
     expect(validatePropertyValue('max-players', '20')).toEqual({ ok: true, value: '20' });
     expect(validatePropertyValue('max-tick-time', '-1')).toEqual({ ok: true, value: '-1' });
-    expect(validatePropertyValue('view-distance', '12.5')).toEqual({ ok: false, reason: '数值属性仅接受整数' });
-    expect(validatePropertyValue('view-distance', 'abc')).toEqual({ ok: false, reason: '数值属性仅接受整数' });
+    expect(validatePropertyValue('view-distance', '12.5')).toEqual({
+      ok: false,
+      reason: '数值属性仅接受整数',
+    });
+    expect(validatePropertyValue('view-distance', 'abc')).toEqual({
+      ok: false,
+      reason: '数值属性仅接受整数',
+    });
   });
 
   it('level-name 路径穿越根治：仅接受字母数字、下划线与连字符', () => {
-    expect(validatePropertyValue('level-name', 'My_World-1')).toEqual({ ok: true, value: 'My_World-1' });
-    expect(validatePropertyValue('level-name', '../../etc'))
-      .toEqual({ ok: false, reason: 'level-name 仅接受字母数字、下划线与连字符' });
+    expect(validatePropertyValue('level-name', 'My_World-1')).toEqual({
+      ok: true,
+      value: 'My_World-1',
+    });
+    expect(validatePropertyValue('level-name', '../../etc')).toEqual({
+      ok: false,
+      reason: 'level-name 仅接受字母数字、下划线与连字符',
+    });
   });
 
   it('字符串属性拒绝真实换行（防行注入）；motd 字面转义序列不受影响', () => {
-    expect(validatePropertyValue('motd', 'line1\nline2'))
-      .toEqual({ ok: false, reason: '字符串属性不允许包含换行符' });
+    expect(validatePropertyValue('motd', 'line1\nline2')).toEqual({
+      ok: false,
+      reason: '字符串属性不允许包含换行符',
+    });
     expect(validatePropertyValue('motd', 'a\rb').ok).toBe(false);
     expect(validatePropertyValue('motd', 'hello\\nworld').ok).toBe(true);
   });
 
   it('运行期命令键值字符集限制（difficulty/gamemode 拼入控制台命令，防注入）', () => {
     expect(validatePropertyValue('difficulty', 'hard')).toEqual({ ok: true, value: 'hard' });
-    expect(validatePropertyValue('gamemode', 'creative; shutdown')).toEqual({ ok: false, reason: '值包含非法字符' });
+    expect(validatePropertyValue('gamemode', 'creative; shutdown')).toEqual({
+      ok: false,
+      reason: '值包含非法字符',
+    });
   });
 
   it('非标量值拒绝（null/undefined/对象）', () => {
@@ -94,8 +113,17 @@ describe('instance-properties.service · 敏感键掩码 maskSensitiveProperties
 
   it('敏感键集合覆盖 9 个网络/权限键（收口面不缩水）', () => {
     expect(SENSITIVE_PROPERTIES.size).toBe(9);
-    for (const key of ['enable-rcon', 'rcon.password', 'rcon.port', 'enable-query', 'enable-status',
-      'enable-command-block', 'online-mode', 'server-port', 'server-ip']) {
+    for (const key of [
+      'enable-rcon',
+      'rcon.password',
+      'rcon.port',
+      'enable-query',
+      'enable-status',
+      'enable-command-block',
+      'online-mode',
+      'server-port',
+      'server-ip',
+    ]) {
       expect(SENSITIVE_PROPERTIES.has(key)).toBe(true);
     }
   });
@@ -176,7 +204,10 @@ describe('instance-properties.service · 写盘与重启联动编排 applyProper
   });
 
   it('运行中：非 runtime 键变更 → restartRequired 列出；runtime 键变更 → 下发命令', async () => {
-    const instance = makeInstance({ isRunning: true, properties: { pvp: 'true', difficulty: 'peaceful' } });
+    const instance = makeInstance({
+      isRunning: true,
+      properties: { pvp: 'true', difficulty: 'peaceful' },
+    });
     const r = await applyPropertyUpdates(instance, { pvp: 'false', difficulty: 'hard' });
     expect(r.restartRequired).toEqual(['pvp']);
     expect(instance.sendCommand).toHaveBeenCalledTimes(1);
@@ -227,8 +258,12 @@ describe('instance-properties.service · GET 展示视图 getPropertiesView', ()
   it('_loadProperties 抛错 → 沿用内存缓存；readDifficulty 抛错 → 不影响主体响应', async () => {
     const instance = makeInstance({
       properties: { motd: 'cached' },
-      _loadProperties: vi.fn(() => { throw new Error('disk gone'); }),
-      readDifficulty: vi.fn(async () => { throw new Error('rcon gone'); }),
+      _loadProperties: vi.fn(() => {
+        throw new Error('disk gone');
+      }),
+      readDifficulty: vi.fn(async () => {
+        throw new Error('rcon gone');
+      }),
     });
     const view = await getPropertiesView(instance);
     expect(view).toEqual({ motd: 'cached' });
@@ -238,13 +273,18 @@ describe('instance-properties.service · GET 展示视图 getPropertiesView', ()
 describe('instance-properties.service · 缓存刷新边界 reloadProperties', () => {
   it('fresh 为 null/空对象/undefined/抛错 → 均不覆盖内存缓存', () => {
     for (const ret of [null, {}, undefined]) {
-      const instance = makeInstance({ properties: { motd: 'keep' }, _loadProperties: vi.fn(() => ret) });
+      const instance = makeInstance({
+        properties: { motd: 'keep' },
+        _loadProperties: vi.fn(() => ret),
+      });
       reloadProperties(instance);
       expect(instance.properties).toEqual({ motd: 'keep' });
     }
     const throwing = makeInstance({
       properties: { motd: 'keep' },
-      _loadProperties: vi.fn(() => { throw new Error('io'); }),
+      _loadProperties: vi.fn(() => {
+        throw new Error('io');
+      }),
     });
     reloadProperties(throwing);
     expect(throwing.properties).toEqual({ motd: 'keep' });

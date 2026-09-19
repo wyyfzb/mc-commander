@@ -323,11 +323,15 @@ describe('PluginsPage 上传入口', () => {
     expect(bar).toHaveAttribute('aria-valuemax', '100')
     const xhr = sentXHR[0]!
     xhr.emitProgress(40, 100)
-    await waitFor(() => expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '40'))
+    await waitFor(() =>
+      expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '40'),
+    )
 
     // 完成收尾
     xhr.emitLoad(okUploadEnvelope('DemoX.jar'))
-    expect(await screen.findByText('已上传 DemoX.jar，落入 plugins/，重启实例后生效')).toBeInTheDocument()
+    expect(
+      await screen.findByText('已上传 DemoX.jar，落入 plugins/，重启实例后生效'),
+    ).toBeInTheDocument()
     await waitFor(() => expect(screen.queryByRole('progressbar')).not.toBeInTheDocument())
   })
 
@@ -387,7 +391,9 @@ describe('PluginsPage 启停与删除', () => {
     await screen.findByText('EssentialsX')
     await user.click(screen.getByRole('button', { name: '禁用 EssentialsX' }))
     // toast 文案用 plugin.name（此处等于文件名），非 meta.name
-    expect(await screen.findByText(/已禁用 EssentialsX-2\.21\.0\.jar，重启实例后生效/)).toBeInTheDocument()
+    expect(
+      await screen.findByText(/已禁用 EssentialsX-2\.21\.0\.jar，重启实例后生效/),
+    ).toBeInTheDocument()
   })
 
   it('行删除：确认弹窗 → DELETE 成功 → toast 提示', async () => {

@@ -153,13 +153,16 @@ test.describe('仪表盘首屏高度预算（1440×900）', () => {
     // 量几何前等字体就位：字体回退会让字形盒与行高变化，终端高度会读到未完成布局的假值
     await page.evaluate(() => document.fonts.ready)
 
-    const header = await page.locator('main header').first().evaluate((el) => {
-      const h2 = el.querySelector('h2')
-      return {
-        height: el.getBoundingClientRect().height,
-        titleLineHeight: h2 ? parseFloat(getComputedStyle(h2).lineHeight) : 0,
-      }
-    })
+    const header = await page
+      .locator('main header')
+      .first()
+      .evaluate((el) => {
+        const h2 = el.querySelector('h2')
+        return {
+          height: el.getBoundingClientRect().height,
+          titleLineHeight: h2 ? parseFloat(getComputedStyle(h2).lineHeight) : 0,
+        }
+      })
     expect(header.titleLineHeight).toBeGreaterThan(0)
     expect(header.height).toBeLessThanOrEqual(header.titleLineHeight * 1.2 + 2)
 

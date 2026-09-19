@@ -33,12 +33,47 @@ const DURATION_PRESETS = [
 const EFFECT_CATEGORIES = ['正向增益', '负面效果', '中性/特殊'] as const
 
 function categorizeEffect(e: PotionEffect): string {
-  if (['slowness', 'mining_fatigue', 'nausea', 'blindness', 'hunger', 'weakness', 'poison', 'wither', 'levitation', 'darkness', 'wind_charged'].includes(e.effectId)) return '负面效果'
-  if (['saturation', 'glowing', 'luck', 'bad_omen', 'hero_of_the_village', 'trial_omen', 'infested', 'oozing', 'weaving', 'cobweb'].includes(e.effectId)) return '中性/特殊'
+  if (
+    [
+      'slowness',
+      'mining_fatigue',
+      'nausea',
+      'blindness',
+      'hunger',
+      'weakness',
+      'poison',
+      'wither',
+      'levitation',
+      'darkness',
+      'wind_charged',
+    ].includes(e.effectId)
+  )
+    return '负面效果'
+  if (
+    [
+      'saturation',
+      'glowing',
+      'luck',
+      'bad_omen',
+      'hero_of_the_village',
+      'trial_omen',
+      'infested',
+      'oozing',
+      'weaving',
+      'cobweb',
+    ].includes(e.effectId)
+  )
+    return '中性/特殊'
   return '正向增益'
 }
 
-export function EffectForm({ player, batchTargets, isBatchMode, isRconConnected, onAction }: ActionFormProps) {
+export function EffectForm({
+  player,
+  batchTargets,
+  isBatchMode,
+  isRconConnected,
+  onAction,
+}: ActionFormProps) {
   const [effectId, setEffectId] = useState('')
   const [level, setLevel] = useState(1)
   const [durationSeconds, setDurationSeconds] = useState(180)
@@ -47,10 +82,16 @@ export function EffectForm({ player, batchTargets, isBatchMode, isRconConnected,
   const [search, setSearch] = useState('')
 
   const selectedEffect = MINECRAFT_POTIONS.find((e) => e.effectId === effectId)
-  const levelOptions = selectedEffect ? (selectedEffect.isInstant ? [1] : Array.from({ length: 5 }, (_, i) => i + 1)) : [1, 2, 3, 4, 5]
+  const levelOptions = selectedEffect
+    ? selectedEffect.isInstant
+      ? [1]
+      : Array.from({ length: 5 }, (_, i) => i + 1)
+    : [1, 2, 3, 4, 5]
 
   const filteredEffects = search
-    ? MINECRAFT_POTIONS.filter((e) => e.name.includes(search) || e.effectId.toLowerCase().includes(search.toLowerCase()))
+    ? MINECRAFT_POTIONS.filter(
+        (e) => e.name.includes(search) || e.effectId.toLowerCase().includes(search.toLowerCase()),
+      )
     : MINECRAFT_POTIONS
 
   const effectsByCategory = EFFECT_CATEGORIES.map((cat) => ({
@@ -90,7 +131,11 @@ export function EffectForm({ player, batchTargets, isBatchMode, isRconConnected,
   function buildCommand(targetName: string): string {
     if (effectMode === 'clear') return `/effect clear ${targetName}`
     if (!selectedEffect) return ''
-    const dur = selectedEffect.isInstant ? '1' : durationSeconds === -1 ? '999999' : String(durationSeconds * 20)
+    const dur = selectedEffect.isInstant
+      ? '1'
+      : durationSeconds === -1
+        ? '999999'
+        : String(durationSeconds * 20)
     return `/effect give ${targetName} ${selectedEffect.effectId} ${dur} ${level}`
   }
 
@@ -103,7 +148,9 @@ export function EffectForm({ player, batchTargets, isBatchMode, isRconConnected,
         const results = await runBatchForTargets({
           targets: batchTargets,
           requireOnline: true,
-          execute: async (p) => { await onAction({ kind: 'command', command: buildCommand(p.name) }) },
+          execute: async (p) => {
+            await onAction({ kind: 'command', command: buildCommand(p.name) })
+          },
         })
         toast.success(formatBatchSummary('赋予效果', results), {
           description: formatFailureDetails(results),
@@ -117,7 +164,9 @@ export function EffectForm({ player, batchTargets, isBatchMode, isRconConnected,
     }
   }
 
-  const canExecute = isRconConnected && (effectMode === 'clear' || !!selectedEffect) &&
+  const canExecute =
+    isRconConnected &&
+    (effectMode === 'clear' || !!selectedEffect) &&
     (!isBatchMode ? player?.isOnline : batchTargets.some((p) => p.isOnline))
 
   return (
@@ -165,7 +214,9 @@ export function EffectForm({ player, batchTargets, isBatchMode, isRconConnected,
           <div className="max-h-48 space-y-3 overflow-auto pr-1" {...effectGroup.groupProps}>
             {effectsByCategory.map((group) => (
               <div key={group.category}>
-                <div className="mb-1 text-mcs-2xs font-medium text-mcs-text-muted">{group.category}</div>
+                <div className="mb-1 text-mcs-2xs font-medium text-mcs-text-muted">
+                  {group.category}
+                </div>
                 <div className="flex flex-wrap gap-1">
                   {group.effects.map((e) => (
                     <button
@@ -251,9 +302,7 @@ export function EffectForm({ player, batchTargets, isBatchMode, isRconConnected,
       {effectMode === 'give' && selectedEffect && player && (
         <CommandPreview command={buildCommand(player.name)} />
       )}
-      {effectMode === 'clear' && player && (
-        <CommandPreview command={buildCommand(player.name)} />
-      )}
+      {effectMode === 'clear' && player && <CommandPreview command={buildCommand(player.name)} />}
 
       {/* 执行 */}
       <LoadingButton type="submit" loading={loading} disabled={!canExecute} className="w-full">

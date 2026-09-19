@@ -59,8 +59,6 @@ describe('LoginPage 设密模式确认密码', () => {
 
     // 修正确认密码：提示随之消失（不再挂到下次提交）
     await user.type(screen.getByLabelText('确认密码'), '{backspace}!')
-    await waitFor(() =>
-      expect(screen.queryByText('两次输入的密码不一致')).not.toBeInTheDocument(),
-    )
+    await waitFor(() => expect(screen.queryByText('两次输入的密码不一致')).not.toBeInTheDocument())
   })
 })

@@ -21,7 +21,14 @@ import { HeartsArmor } from './hearts-armor'
 import { DIMENSION_META, GAME_MODE_LABELS, features } from './player-table-config'
 
 /** 列优先级：容器装不下时按此集合裁剪（保留 选择/玩家/状态/操作 —— 身份、在线状态、行动入口） */
-const SECONDARY_COLUMN_IDS = new Set(['gameMode', 'dimension', 'position', 'ping', 'onlineDuration', 'totalPlayTime'])
+const SECONDARY_COLUMN_IDS = new Set([
+  'gameMode',
+  'dimension',
+  'position',
+  'ping',
+  'onlineDuration',
+  'totalPlayTime',
+])
 
 /** OP/白名单切换与踢出的行内执行回调（表格持有：执行 + 回执 + 撤销口径） */
 interface PlayerColumnsDeps {
@@ -79,8 +86,9 @@ export function buildPlayerColumns({
       header: ({ table }) => {
         // 分页由外层手动切片（table 未注册分页 feature，其 rows 是全量），
         // 故此处按同一规则复算当前页，避免「全选当前页」实际选中全部筛选结果
-        const pageIds = paginatePlayerRows(table.getRowModel().rows, pageSize, pageIndex).rows
-          .map((r) => r.original.uuid)
+        const pageIds = paginatePlayerRows(table.getRowModel().rows, pageSize, pageIndex).rows.map(
+          (r) => r.original.uuid,
+        )
         const allSelected = pageIds.length > 0 && pageIds.every((u) => selectedSet.has(u))
         const someSelected = pageIds.some((u) => selectedSet.has(u))
         return (
@@ -109,7 +117,12 @@ export function buildPlayerColumns({
         const banned = p.isBanned || p.isIpBanned
         return (
           <div className="flex min-w-0 items-center gap-2.5">
-            <PlayerAvatar name={p.name} isOnline={p.isOnline} isFakePlayer={p.isFakePlayer} size={28} />
+            <PlayerAvatar
+              name={p.name}
+              isOnline={p.isOnline}
+              isFakePlayer={p.isFakePlayer}
+              size={28}
+            />
             <div className="min-w-0">
               {/* 姓名行：身份 + 纯图标徽标（OP 仅 14px，从不是挤压姓名的元凶） */}
               <div className="flex items-center gap-1.5">
@@ -118,7 +131,11 @@ export function buildPlayerColumns({
                   className={cn(
                     // 与其余单元格文字同款，仅补回 button 被 UA 设成居中所丢的对齐与指针
                     'block max-w-full cursor-pointer truncate text-left text-mcs-sm font-medium',
-                    banned ? 'text-mcs-error-fg' : p.isOnline ? 'text-mcs-text-default' : 'text-mcs-text-muted',
+                    banned
+                      ? 'text-mcs-error-fg'
+                      : p.isOnline
+                        ? 'text-mcs-text-default'
+                        : 'text-mcs-text-muted',
                   )}
                   // 超长名（假玩家可超 16 字）仍会被截断，title 是最后一个可读出口
                   title={p.name}
@@ -141,7 +158,9 @@ export function buildPlayerColumns({
               <div className="flex flex-nowrap items-center gap-1.5">
                 <PlayerBadges player={p} part="texts" />
                 {p.isOnline && p.ip && (
-                  <span className="min-w-0 truncate font-mono text-mcs-2xs text-mcs-text-muted">{p.ip}</span>
+                  <span className="min-w-0 truncate font-mono text-mcs-2xs text-mcs-text-muted">
+                    {p.ip}
+                  </span>
                 )}
               </div>
             </div>
@@ -153,7 +172,7 @@ export function buildPlayerColumns({
     {
       id: 'gameMode',
       header: '模式',
-      accessorFn: (p) => (p.gameMode ? GAME_MODE_LABELS[p.gameMode] ?? p.gameMode : ''),
+      accessorFn: (p) => (p.gameMode ? (GAME_MODE_LABELS[p.gameMode] ?? p.gameMode) : ''),
       cell: ({ getValue }) => (
         <span className="text-mcs-xs text-mcs-text-muted">{String(getValue() || '--')}</span>
       ),
@@ -163,7 +182,9 @@ export function buildPlayerColumns({
       id: 'dimension',
       header: '维度',
       accessorFn: (p) =>
-        p.dimension ? DIMENSION_META[p.dimension as keyof typeof DIMENSION_META]?.label ?? p.dimension : '',
+        p.dimension
+          ? (DIMENSION_META[p.dimension as keyof typeof DIMENSION_META]?.label ?? p.dimension)
+          : '',
       cell: ({ row }) => {
         const dim = row.original.dimension as keyof typeof DIMENSION_META | null
         const meta = dim ? DIMENSION_META[dim] : null
@@ -235,10 +256,18 @@ export function buildPlayerColumns({
           )
         }
         const color =
-          ping < 50 ? 'var(--mcs-success-fg)' : ping < 150 ? 'var(--mcs-warning-fg)' : 'var(--mcs-error-fg)'
+          ping < 50
+            ? 'var(--mcs-success-fg)'
+            : ping < 150
+              ? 'var(--mcs-warning-fg)'
+              : 'var(--mcs-error-fg)'
         return (
           <span className="inline-flex items-center justify-end gap-1.5 font-mono text-mcs-xs tabular-nums text-mcs-text-muted">
-            <span className="inline-block size-1.5 shrink-0 rounded-full" style={{ backgroundColor: color }} aria-hidden />
+            <span
+              className="inline-block size-1.5 shrink-0 rounded-full"
+              style={{ backgroundColor: color }}
+              aria-hidden
+            />
             {ping}
           </span>
         )
@@ -252,7 +281,9 @@ export function buildPlayerColumns({
         const p = row.original
         return (
           <span className="block text-right text-mcs-xs text-mcs-text-muted">
-            {p.isOnline && p.onlineTime != null ? formatOnlineTimeShort(p.onlineTime) : formatRelativeTime(p.lastSeen ?? null, Date.now(), '从未')}
+            {p.isOnline && p.onlineTime != null
+              ? formatOnlineTimeShort(p.onlineTime)
+              : formatRelativeTime(p.lastSeen ?? null, Date.now(), '从未')}
           </span>
         )
       },

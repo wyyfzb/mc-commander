@@ -25,15 +25,14 @@ describe('rcon.port 按实例配置派生', () => {
     expect(src).toMatch(/rcon\.port.*25575/);
   });
 
-  const derive = (base, id) => base + parseInt(id.slice(-4), 16) % 100;
+  const derive = (base, id) => base + (parseInt(id.slice(-4), 16) % 100);
 
-  it.each([
-    ['inst-0001'],
-    ['inst-00ff'],
-    ['inst-abcd'],
-  ])('rcon.port 比对应 server-port 大 10（%s）', (id) => {
-    expect(derive(25575, id)).toBe(derive(25565, id) + 10);
-  });
+  it.each([['inst-0001'], ['inst-00ff'], ['inst-abcd']])(
+    'rcon.port 比对应 server-port 大 10（%s）',
+    (id) => {
+      expect(derive(25575, id)).toBe(derive(25565, id) + 10);
+    },
+  );
 });
 
 // ── ② HOST 可配 ──

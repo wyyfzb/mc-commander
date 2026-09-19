@@ -93,7 +93,10 @@ vi.mock('../websocket.js', () => ({
   setupWebSocket: vi.fn(() => ({ startSystemStatsBroadcast: vi.fn(() => vi.fn()) })),
 }));
 vi.mock('../services/webhook.service.js', () => ({ setupWebhookDispatch: vi.fn() }));
-vi.mock('../db/index.js', () => ({ initDatabase: vi.fn(), AdminAccountModel: { isConfigured: vi.fn(() => true) } }));
+vi.mock('../db/index.js', () => ({
+  initDatabase: vi.fn(),
+  AdminAccountModel: { isConfigured: vi.fn(() => true) },
+}));
 // 启动播种的凭据写盘：本文件绝不触碰真实 .env（生成/写回都让桩可观测）
 vi.mock('../utils/credentials.js', () => ({
   // 播种是「生成 + 写回」的单一入口（真实实现见 utils/credentials.js）：
@@ -173,7 +176,8 @@ describe('安全响应头中间件（helmet）', () => {
     await resetAndImport();
     // 归一化：app.use(fn) 单参调用视为无路径中间件
     const mounted = h.appUse.mock.calls.map(([p, mw]) =>
-      mw === undefined ? { path: undefined, mw: p } : { path: p, mw });
+      mw === undefined ? { path: undefined, mw: p } : { path: p, mw },
+    );
     const idxHelmet = mounted.findIndex((m) => m.mw === 'helmet-middleware');
     const idxJson = mounted.findIndex((m) => m.mw === 'express-json-middleware');
 
@@ -188,7 +192,8 @@ describe('API Key Hash 启动校验', () => {
     // 直接拦 stderr 落点（logger.warn 的出口）：vitest 的 resetModules 会让 logger 模块
     // 重新实例化，spy 旧实例收不到新实例的调用
     let warnSpy;
-    const warnText = () => warnSpy.mock.calls.map((c) => String(c[0])).join(String.fromCharCode(92) + 'n');
+    const warnText = () =>
+      warnSpy.mock.calls.map((c) => String(c[0])).join(String.fromCharCode(92) + 'n');
 
     beforeAll(() => {
       warnSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
@@ -267,7 +272,9 @@ describe('API Key Hash 启动校验', () => {
 
     it('无 API Key Hash 且写回失败：横幅报错 + exit(1)（不留「每次重启换一把」的临时凭据）', async () => {
       h.apiKeyHash = '';
-      bootstrapApiKey.mockImplementationOnce(() => { throw new Error('EACCES'); });
+      bootstrapApiKey.mockImplementationOnce(() => {
+        throw new Error('EACCES');
+      });
       await resetAndImport();
       expect(exitSpy).toHaveBeenCalledWith(1);
     });
@@ -311,29 +318,21 @@ describe('端口占用错误处理（EADDRINUSE）', () => {
 
   it('EADDRINUSE 错误应输出友好提示并以 exit code 1 退出', async () => {
     await resetAndImport();
-    const errorHandler = h.serverOn.mock.calls.find(
-      ([event]) => event === 'error',
-    )?.[1];
+    const errorHandler = h.serverOn.mock.calls.find(([event]) => event === 'error')?.[1];
     expect(errorHandler).toBeDefined();
 
     const err = new Error('port in use');
     err.code = 'EADDRINUSE';
     errorHandler(err);
 
-    expect(errorSpy).toHaveBeenCalledWith(
-      expect.stringContaining('端口'),
-    );
-    expect(errorSpy).toHaveBeenCalledWith(
-      expect.stringContaining('.env'),
-    );
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('端口'));
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('.env'));
     expect(exitSpy).toHaveBeenCalledWith(1);
   });
 
   it('非 EADDRINUSE 错误应抛出（不吞掉）', async () => {
     await resetAndImport();
-    const errorHandler = h.serverOn.mock.calls.find(
-      ([event]) => event === 'error',
-    )?.[1];
+    const errorHandler = h.serverOn.mock.calls.find(([event]) => event === 'error')?.[1];
     expect(errorHandler).toBeDefined();
 
     const err = new Error('something else');

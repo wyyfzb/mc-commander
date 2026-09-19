@@ -14,9 +14,7 @@ describe('useSnapshotSave', () => {
     const onSaved = vi.fn()
     const onSave = vi.fn().mockResolvedValue(undefined)
 
-    const { result } = renderHook(() =>
-      useSnapshotSave({ onSave, onSaved }),
-    )
+    const { result } = renderHook(() => useSnapshotSave({ onSave, onSaved }))
 
     const snapshot = { content: 'hello', path: '/test.txt' }
     await act(async () => {
@@ -32,9 +30,13 @@ describe('useSnapshotSave', () => {
 
   it('连续快速 save，只有最后一次触发 onSaved', async () => {
     let release1!: () => void
-    const gate1 = new Promise<void>((resolve) => { release1 = resolve })
+    const gate1 = new Promise<void>((resolve) => {
+      release1 = resolve
+    })
     let resolve2!: () => void
-    const gate2 = new Promise<void>((resolve2_) => { resolve2 = resolve2_ })
+    const gate2 = new Promise<void>((resolve2_) => {
+      resolve2 = resolve2_
+    })
 
     let callCount = 0
     const onSave = vi.fn().mockImplementation(() => {
@@ -44,9 +46,7 @@ describe('useSnapshotSave', () => {
     })
     const onSaved = vi.fn()
 
-    const { result } = renderHook(() =>
-      useSnapshotSave({ onSave, onSaved }),
-    )
+    const { result } = renderHook(() => useSnapshotSave({ onSave, onSaved }))
 
     // 第一次 save（慢）
     act(() => {
@@ -79,9 +79,7 @@ describe('useSnapshotSave', () => {
     const onError = vi.fn()
     const onSave = vi.fn().mockRejectedValue(new Error('保存失败'))
 
-    const { result } = renderHook(() =>
-      useSnapshotSave({ onSave, onError }),
-    )
+    const { result } = renderHook(() => useSnapshotSave({ onSave, onError }))
 
     await act(async () => {
       result.current.save({ content: 'test' })
@@ -97,18 +95,21 @@ describe('useSnapshotSave', () => {
   it('过时失败不触发 onError', async () => {
     const onError = vi.fn()
     let release1!: () => void
-    const gate1 = new Promise<void>((resolve) => { release1 = resolve })
+    const gate1 = new Promise<void>((resolve) => {
+      release1 = resolve
+    })
 
     let callCount = 0
     const onSave = vi.fn().mockImplementation(() => {
       callCount++
-      if (callCount === 1) return gate1.then(() => { throw new Error('old-error') })
+      if (callCount === 1)
+        return gate1.then(() => {
+          throw new Error('old-error')
+        })
       return Promise.resolve()
     })
 
-    const { result } = renderHook(() =>
-      useSnapshotSave({ onSave, onError }),
-    )
+    const { result } = renderHook(() => useSnapshotSave({ onSave, onError }))
 
     // 第一次 save（慢，会失败）
     act(() => {

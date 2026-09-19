@@ -154,7 +154,10 @@ describe('InstanceSettingsDialog', () => {
 
     // 高级参数默认折叠：Java 路径输入不可见
     expect(screen.queryByLabelText('Java 路径（可选）')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /高级参数/ })).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.getByRole('button', { name: /高级参数/ })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
   })
 
   it('高级参数展开：Java 路径 + JVM 参数多行 + 参数说明（含逐行参数与说明）', async () => {
@@ -174,9 +177,7 @@ describe('InstanceSettingsDialog', () => {
   })
 
   it('旧 startCommand 解析（无 aikars 标记）：内存 -Xmx3G + 附加参数保留、Aikar 开关关闭', () => {
-    renderDialog(
-      detailWith({ startCommand: 'java -Xmx3G -XX:+UseG1GC -jar server.jar nogui' }),
-    )
+    renderDialog(detailWith({ startCommand: 'java -Xmx3G -XX:+UseG1GC -jar server.jar nogui' }))
 
     expect(screen.getByText('3.0 GB')).toBeInTheDocument()
     expect(screen.getByRole('switch', { name: "JVM 优化 (Aikar's Flags)" })).not.toBeChecked()

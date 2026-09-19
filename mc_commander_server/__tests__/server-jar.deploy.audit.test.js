@@ -109,7 +109,9 @@ afterAll(async () => {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  testState.latestBuild = { downloads: { application: { url: 'https://example.invalid/jar/server.jar' } } };
+  testState.latestBuild = {
+    downloads: { application: { url: 'https://example.invalid/jar/server.jar' } },
+  };
 });
 
 describe('POST /instances/deploy 审计（INSTANCE_CREATE）', () => {

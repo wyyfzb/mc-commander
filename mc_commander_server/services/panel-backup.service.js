@@ -46,7 +46,8 @@ export function getPanelBackupDir() {
  */
 export function getLatestSnapshotTime() {
   const dir = getPanelBackupDir();
-  const mtimes = fs.readdirSync(dir)
+  const mtimes = fs
+    .readdirSync(dir)
     .filter((f) => SNAPSHOT_NAME_REGEX.test(f))
     .map((f) => fs.statSync(path.join(dir, f)).mtimeMs);
   return mtimes.length ? Math.max(...mtimes) : null;
@@ -68,7 +69,11 @@ export async function createPanelSnapshot() {
   } catch (e) {
     // backup 中途失败可能遗留半写目标文件，不留存（否则被保留清理
     // 误认为有效快照）；目标不存在时 unlink 报错可忽略
-    try { fs.unlinkSync(dest); } catch { /* 目标未创建 */ }
+    try {
+      fs.unlinkSync(dest);
+    } catch {
+      /* 目标未创建 */
+    }
     throw e;
   }
 
@@ -91,14 +96,27 @@ export async function createPanelSnapshot() {
       if (e.code !== 'ENOENT') {
         // 快照清理失败会让残缺「有 db 无 env」快照以有效身份存活至保留期，
         // 静默不可接受，记 error 与 cleanup 删除失败同口径
-        try { fs.unlinkSync(dest); } catch (cleanupErr) {
-          logger.error(`[PanelBackup] Failed to roll back snapshot after env copy failure: ${dest}`, cleanupErr.message);
+        try {
+          fs.unlinkSync(dest);
+        } catch (cleanupErr) {
+          logger.error(
+            `[PanelBackup] Failed to roll back snapshot after env copy failure: ${dest}`,
+            cleanupErr.message,
+          );
         }
-        try { fs.unlinkSync(candidate); } catch { /* 半写副本清理失败不掩盖原错误；残件由孤儿清扫兜住 */ }
+        try {
+          fs.unlinkSync(candidate);
+        } catch {
+          /* 半写副本清理失败不掩盖原错误；残件由孤儿清扫兜住 */
+        }
         throw e;
       }
       // .env 不存在：跳过副本（纯环境变量部署），且清理可能已半写的副本
-      try { fs.unlinkSync(candidate); } catch { /* 未创建 */ }
+      try {
+        fs.unlinkSync(candidate);
+      } catch {
+        /* 未创建 */
+      }
     }
   }
   return { filePath: dest, sizeBytes: fs.statSync(dest).size, envFilePath };
@@ -116,18 +134,15 @@ export function cleanupPanelSnapshots(options = {}) {
   const maxAgeDays = options.maxAgeDays ?? config.panelBackup.retention.maxAgeDays;
 
   const dir = getPanelBackupDir();
-  const files = fs.readdirSync(dir)
+  const files = fs
+    .readdirSync(dir)
     .filter((f) => SNAPSHOT_NAME_REGEX.test(f))
     .sort(); // 文件名内嵌定长 ISO 时间戳，字典序即时间序
 
   const cutoffMs = Date.now() - maxAgeDays * 86_400_000;
-  const excess = files.length > maxBackups
-    ? files.slice(0, files.length - maxBackups)
-    : [];
+  const excess = files.length > maxBackups ? files.slice(0, files.length - maxBackups) : [];
   const kept = files.slice(excess.length);
-  const expired = kept.filter(
-    (f) => fs.statSync(path.join(dir, f)).mtimeMs < cutoffMs,
-  );
+  const expired = kept.filter((f) => fs.statSync(path.join(dir, f)).mtimeMs < cutoffMs);
 
   const removedSnapshots = new Set([...excess, ...expired]);
   // 存活集合：本轮不该删的快照 + 删除失败的快照（删除失败的快照与副本必须继续
@@ -143,7 +158,11 @@ export function cleanupPanelSnapshots(options = {}) {
       logger.error(`[PanelBackup] Failed to delete snapshot ${f}:`, e.message);
     }
     // 副本与快照必须同去留：快照已删则副本不留（成为无人认领的孤儿）
-    try { fs.unlinkSync(envSidecarPath(path.join(dir, f))); } catch { /* 无副本 */ }
+    try {
+      fs.unlinkSync(envSidecarPath(path.join(dir, f)));
+    } catch {
+      /* 无副本 */
+    }
   }
 
   // 孤儿副本清扫：快照已被手工删除（不误会伤人工放置的非命名空间文件）。
@@ -155,7 +174,9 @@ export function cleanupPanelSnapshots(options = {}) {
   for (const f of fs.readdirSync(dir)) {
     if (!SIDECAR_NAME_REGEX.test(f)) continue;
     if (survivingSnapshots.has(f.replace(/\.env$/, '.db'))) continue;
-    try { fs.unlinkSync(path.join(dir, f)); } catch (e) {
+    try {
+      fs.unlinkSync(path.join(dir, f));
+    } catch (e) {
       logger.error(`[PanelBackup] Failed to delete orphan env sidecar ${f}:`, e.message);
     }
   }

@@ -9,8 +9,11 @@ describe('错误码映射（对照服务端 ErrorCodes 契约）', () => {
   })
 
   it('服务端已本地化的错误码透传 message（40902）', () => {
-    const serverMessage = '无法执行在线备份：服务器未启用 RCON。请先停止服务器，或在 server.properties 启用 RCON'
-    expect(getFriendlyErrorMessage(ErrorCode.BACKUP_RCON_UNAVAILABLE, serverMessage)).toBe(serverMessage)
+    const serverMessage =
+      '无法执行在线备份：服务器未启用 RCON。请先停止服务器，或在 server.properties 启用 RCON'
+    expect(getFriendlyErrorMessage(ErrorCode.BACKUP_RCON_UNAVAILABLE, serverMessage)).toBe(
+      serverMessage,
+    )
   })
 
   it('未知错误码回退服务端 message 或通用文案', () => {
@@ -24,7 +27,7 @@ describe('错误码映射（对照服务端 ErrorCodes 契约）', () => {
     expect(ErrorCode.INSTANCE_RUNNING).toBe(40003)
     // 确认不再有其他枚举值映射到 40003
     const values = Object.values(ErrorCode)
-    const count40003 = values.filter(v => v === 40003).length
+    const count40003 = values.filter((v) => v === 40003).length
     expect(count40003).toBe(1)
   })
 
@@ -38,7 +41,9 @@ describe('错误码映射（对照服务端 ErrorCodes 契约）', () => {
   it('部署取消相关错误码枚举与本地化（与服务端 response.js 同值）', () => {
     expect(ErrorCode.DEPLOY_NOT_IN_FLIGHT).toBe(40906)
     expect(ErrorCode.TASK_CANCELLED).toBe(40915)
-    expect(getFriendlyErrorMessage(ErrorCode.DEPLOY_NOT_IN_FLIGHT)).toBe('该部署已结束或不在进行中，无需取消')
+    expect(getFriendlyErrorMessage(ErrorCode.DEPLOY_NOT_IN_FLIGHT)).toBe(
+      '该部署已结束或不在进行中，无需取消',
+    )
     expect(getFriendlyErrorMessage(ErrorCode.TASK_CANCELLED)).toBe('操作已取消')
   })
 
@@ -71,27 +76,44 @@ describe('错误码映射（对照服务端 ErrorCodes 契约）', () => {
       { path: 'mcVersion', code: 'invalid_type', message: 'Required' },
       { path: 'name', code: 'too_small', message: 'Too short' },
     ]
-    expect(getFriendlyErrorMessage(ErrorCode.VALIDATION_ERROR, 'name Required; mcVersion Required', details)).toBe(
-      '请求参数校验失败：mcVersion Required；name Too short'
-    )
+    expect(
+      getFriendlyErrorMessage(
+        ErrorCode.VALIDATION_ERROR,
+        'name Required; mcVersion Required',
+        details,
+      ),
+    ).toBe('请求参数校验失败：mcVersion Required；name Too short')
   })
 
   it('40000 无 details / 空 details / 非法 details 时维持通用文案（链路不破坏）', () => {
-    expect(getFriendlyErrorMessage(ErrorCode.VALIDATION_ERROR, 'name Required')).toBe('请求参数校验失败')
-    expect(getFriendlyErrorMessage(ErrorCode.VALIDATION_ERROR, undefined, [])).toBe('请求参数校验失败')
-    expect(getFriendlyErrorMessage(ErrorCode.VALIDATION_ERROR, undefined, 'not-an-array')).toBe('请求参数校验失败')
-    expect(getFriendlyErrorMessage(ErrorCode.VALIDATION_ERROR, undefined, [null, 42])).toBe('请求参数校验失败')
+    expect(getFriendlyErrorMessage(ErrorCode.VALIDATION_ERROR, 'name Required')).toBe(
+      '请求参数校验失败',
+    )
+    expect(getFriendlyErrorMessage(ErrorCode.VALIDATION_ERROR, undefined, [])).toBe(
+      '请求参数校验失败',
+    )
+    expect(getFriendlyErrorMessage(ErrorCode.VALIDATION_ERROR, undefined, 'not-an-array')).toBe(
+      '请求参数校验失败',
+    )
+    expect(getFriendlyErrorMessage(ErrorCode.VALIDATION_ERROR, undefined, [null, 42])).toBe(
+      '请求参数校验失败',
+    )
   })
 
   it('40000 details 缺 path/message 字段时逐项降级拼接', () => {
-    expect(getFriendlyErrorMessage(ErrorCode.VALIDATION_ERROR, undefined, [{ path: 'mcVersion' }, { message: 'Required' }])).toBe(
-      '请求参数校验失败：mcVersion；Required'
-    )
+    expect(
+      getFriendlyErrorMessage(ErrorCode.VALIDATION_ERROR, undefined, [
+        { path: 'mcVersion' },
+        { message: 'Required' },
+      ]),
+    ).toBe('请求参数校验失败：mcVersion；Required')
   })
 
   it('非 40000 错误即使带 details 也不拼接（行为不变）', () => {
-    expect(getFriendlyErrorMessage(ErrorCode.INSTANCE_NOT_FOUND, undefined, [{ path: 'id', message: 'Required' }])).toBe(
-      '服务器实例不存在'
-    )
+    expect(
+      getFriendlyErrorMessage(ErrorCode.INSTANCE_NOT_FOUND, undefined, [
+        { path: 'id', message: 'Required' },
+      ]),
+    ).toBe('服务器实例不存在')
   })
 })

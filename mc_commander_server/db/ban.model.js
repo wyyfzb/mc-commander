@@ -31,16 +31,12 @@ export class BanModel {
       WHERE instance_id = ? AND target_type = ? AND target = ? AND is_active = 1
     `).run(data.instanceId, data.targetType, data.target);
 
-    const result = db.prepare(`
+    const result = db
+      .prepare(`
       INSERT INTO temp_bans (instance_id, target_type, target, reason, expires_at, is_active)
       VALUES (?, ?, ?, ?, ?, 1)
-    `).run(
-      data.instanceId,
-      data.targetType,
-      data.target,
-      data.reason || null,
-      data.expiresAt,
-    );
+    `)
+      .run(data.instanceId, data.targetType, data.target, data.reason || null, data.expiresAt);
     return this.findById(result.lastInsertRowid);
   }
 
@@ -53,33 +49,39 @@ export class BanModel {
   /** 查询某实例所有生效中的临时封禁记录（含已过期的，供玩家列表展示剩余时间） */
   static findActiveByInstance(instanceId) {
     const db = getDb();
-    const rows = db.prepare(`
+    const rows = db
+      .prepare(`
       SELECT * FROM temp_bans
       WHERE instance_id = ? AND is_active = 1
       ORDER BY id DESC
-    `).all(instanceId);
+    `)
+      .all(instanceId);
     return rows.map((r) => this._toCamel(r));
   }
 
   /** 查询某实例全部临时封禁记录（含已解封/到期的历史，供封禁记录界面展示） */
   static findAllByInstance(instanceId) {
     const db = getDb();
-    const rows = db.prepare(`
+    const rows = db
+      .prepare(`
       SELECT * FROM temp_bans
       WHERE instance_id = ?
       ORDER BY is_active DESC, expires_at ASC, id DESC
-    `).all(instanceId);
+    `)
+      .all(instanceId);
     return rows.map((r) => this._toCamel(r));
   }
 
   /** 查询已到期且生效中的记录（定时器到期解封用） */
   static findExpiredActive(now = Date.now()) {
     const db = getDb();
-    const rows = db.prepare(`
+    const rows = db
+      .prepare(`
       SELECT * FROM temp_bans
       WHERE is_active = 1 AND expires_at <= ?
       ORDER BY id ASC
-    `).all(now);
+    `)
+      .all(now);
     return rows.map((r) => this._toCamel(r));
   }
 

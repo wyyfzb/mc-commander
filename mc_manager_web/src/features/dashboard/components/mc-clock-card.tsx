@@ -1,13 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import {
-  Clock,
-  CloudLightning,
-  CloudRain,
-  Cloudy,
-  Moon,
-  Sun,
-  type LucideIcon,
-} from 'lucide-react'
+import { Clock, CloudLightning, CloudRain, Cloudy, Moon, Sun, type LucideIcon } from 'lucide-react'
 import { worldTimePhase } from '@/lib/format'
 import { Chip } from '@/components/mcs/chip'
 import { Card, CardHeader, CardTitle } from '@/components/mcs/card'
@@ -91,7 +83,8 @@ export function McClockCard() {
     if (!base || base.tick !== rawTick) anchorRef.current = { tick: rawTick, at: Date.now() }
   }
   const anchored = anchorRef.current && rawTick != null ? anchorRef.current.tick : null
-  const tick = anchored != null ? interpolateTick(anchored, anchorRef.current!.at, now, isRunning) : null
+  const tick =
+    anchored != null ? interpolateTick(anchored, anchorRef.current!.at, now, isRunning) : null
   /* eslint-enable react/refs, react/purity */
   const weather = status?.weather ?? null
   const worldDay = status?.worldDay ?? null
@@ -101,7 +94,11 @@ export function McClockCard() {
   // 乐观更新窗口（对齐 Flutter 版 _weatherOptimisticUntil/_timeOptimisticUntil）：
   // 点击天气/时间 chip 后本地立即生效（图示/按钮即时联动），窗口内忽略服务器覆盖防抖，
   // 窗口外回落到服务器真实状态（WS 推送）——图示区/按钮区/服务器三联同步
-  const [optimistic, setOptimistic] = useState<{ weather?: WeatherKey; timeTick?: number; until: number }>({ until: 0 })
+  const [optimistic, setOptimistic] = useState<{
+    weather?: WeatherKey
+    timeTick?: number
+    until: number
+  }>({ until: 0 })
   const optimisticActive = now < optimistic.until
   const displayWeather = optimisticActive && optimistic.weather ? optimistic.weather : weather
   const displayTick = optimisticActive && optimistic.timeTick != null ? optimistic.timeTick : tick
@@ -133,7 +130,9 @@ export function McClockCard() {
     onChange: applyWeather,
   })
   const activeTimeKey =
-    displayTick != null ? (TIME_PRESETS.find((p) => worldTimePhase(p.tick) === phase)?.key ?? null) : null
+    displayTick != null
+      ? (TIME_PRESETS.find((p) => worldTimePhase(p.tick) === phase)?.key ?? null)
+      : null
   const timeGroup = useRadioGroup<string>({
     label: '时间',
     value: activeTimeKey,
@@ -160,7 +159,13 @@ export function McClockCard() {
         role="img"
         aria-label={`世界时间：${phase}${displayTick != null ? `，${Math.round(displayTick)} tick` : ''}，天气：${displayWeather ? WEATHER_LABEL[displayWeather].label : '未知'}，第 ${worldDay ?? '--'} 天`}
       >
-        <path d={ARC_PATH} fill="none" stroke="var(--mcs-border-muted)" strokeWidth={5} strokeLinecap="round" />
+        <path
+          d={ARC_PATH}
+          fill="none"
+          stroke="var(--mcs-border-muted)"
+          strokeWidth={5}
+          strokeLinecap="round"
+        />
         {cycle && (
           <path
             d={ARC_PATH}
@@ -184,7 +189,14 @@ export function McClockCard() {
             <>
               {/* 光晕：弧线色半透明大圆，将 orb 从弧线/背景中托出 */}
               <circle cx={orbX} cy={orbY} r={18} fill={orbColor} opacity={0.16} />
-              <circle cx={orbX} cy={orbY} r={13} fill="var(--mcs-bg-default)" stroke={orbColor} strokeWidth={2} />
+              <circle
+                cx={orbX}
+                cy={orbY}
+                r={13}
+                fill="var(--mcs-bg-default)"
+                stroke={orbColor}
+                strokeWidth={2}
+              />
               <OrbIcon
                 x={orbX - 9}
                 y={orbY - 9}
@@ -216,15 +228,38 @@ export function McClockCard() {
             </>
           )
         })()}
-        <text x={140} y={88} textAnchor="middle" fontSize={16} fontWeight={600} fill="var(--mcs-text-default)">
+        <text
+          x={140}
+          y={88}
+          textAnchor="middle"
+          fontSize={16}
+          fontWeight={600}
+          fill="var(--mcs-text-default)"
+        >
           {displayWeather ? WEATHER_LABEL[displayWeather].label : '--'}
         </text>
         {/* 天气图标：未知天气用 Cloudy 占位（aria 由外层 svg label 承载） */}
         {(() => {
           const WeatherIcon = displayWeather ? WEATHER_LABEL[displayWeather].Icon : Cloudy
-          return <WeatherIcon x={124} y={92} width={32} height={32} stroke="var(--mcs-text-muted)" aria-hidden />
+          return (
+            <WeatherIcon
+              x={124}
+              y={92}
+              width={32}
+              height={32}
+              stroke="var(--mcs-text-muted)"
+              aria-hidden
+            />
+          )
         })()}
-        <text x={140} y={140} textAnchor="middle" fontSize={14} fontWeight={650} fill="var(--mcs-text-muted)">
+        <text
+          x={140}
+          y={140}
+          textAnchor="middle"
+          fontSize={14}
+          fontWeight={650}
+          fill="var(--mcs-text-muted)"
+        >
           第 {worldDay ?? '--'} 天
         </text>
       </svg>
@@ -232,7 +267,12 @@ export function McClockCard() {
       {/* tick 标尺 0 —— 当前 —— 24000（绝对定位：0/24000 居中于弧端点 x=30/250，当前值居中于弧线进度点） */}
       <div className="relative mt-1 h-4 font-mono text-mcs-2xs text-mcs-text-muted">
         <span className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 border-t border-dashed border-mcs-border-muted" />
-        <span className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2" style={{ left: `${(30 / 280) * 100}%` }}>0</span>
+        <span
+          className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2"
+          style={{ left: `${(30 / 280) * 100}%` }}
+        >
+          0
+        </span>
         {displayTick != null && (
           <span
             className="tnum absolute top-1/2 -translate-x-1/2 -translate-y-1/2 font-medium"
@@ -245,12 +285,19 @@ export function McClockCard() {
             {Math.round(displayTick)} tick
           </span>
         )}
-        <span className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2" style={{ left: `${(250 / 280) * 100}%` }}>24000</span>
+        <span
+          className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2"
+          style={{ left: `${(250 / 280) * 100}%` }}
+        >
+          24000
+        </span>
       </div>
 
       {/* 天气 */}
       <div className="mt-2 flex items-center gap-2">
-        <span className="flex w-8 shrink-0 items-center text-mcs-2xs text-mcs-text-muted">天气</span>
+        <span className="flex w-8 shrink-0 items-center text-mcs-2xs text-mcs-text-muted">
+          天气
+        </span>
         <div className="flex flex-1 gap-1.5" {...weatherGroup.groupProps}>
           {WEATHER_PRESETS.map((w, index) => (
             <Chip
@@ -270,7 +317,9 @@ export function McClockCard() {
 
       {/* 时间 */}
       <div className="mt-1.5 flex items-center gap-2">
-        <span className="flex w-8 shrink-0 items-center text-mcs-2xs text-mcs-text-muted">时间</span>
+        <span className="flex w-8 shrink-0 items-center text-mcs-2xs text-mcs-text-muted">
+          时间
+        </span>
         <div className="flex flex-1 gap-1.5" {...timeGroup.groupProps}>
           {TIME_PRESETS.map((p, index) => (
             <Chip
@@ -287,7 +336,6 @@ export function McClockCard() {
           ))}
         </div>
       </div>
-
     </Card>
   )
 }

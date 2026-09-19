@@ -120,7 +120,10 @@ export interface TotpConfirmData {
 }
 
 /** GET /auth/totp/status（认证）：两步验证状态 */
-export function fetchTotpStatus(config: ConnectionConfig, signal?: AbortSignal): Promise<TotpStatusData> {
+export function fetchTotpStatus(
+  config: ConnectionConfig,
+  signal?: AbortSignal,
+): Promise<TotpStatusData> {
   return apiGet<TotpStatusData>('/api/v1/auth/totp/status', config, signal)
 }
 
@@ -201,7 +204,10 @@ export function changePassword(
 }
 
 /** GET /auth/sessions：活跃会话列表（含 current 标记） */
-export function fetchSessions(config: ConnectionConfig, signal?: AbortSignal): Promise<SessionsData> {
+export function fetchSessions(
+  config: ConnectionConfig,
+  signal?: AbortSignal,
+): Promise<SessionsData> {
   return apiGet<SessionsData>('/api/v1/auth/sessions', config, signal)
 }
 

@@ -11,7 +11,9 @@ const PANEL_A = 'https://panel-a.example.com'
 const PANEL_B = 'https://panel-b.example.com'
 const future = () => new Date(Date.now() + 60_000).toISOString()
 const bindSession = (issuedFor?: string) =>
-  useAuthStore.getState().setSession({ token: 'tok-1', sessionId: 'sess-1', expiresAt: future(), issuedFor })
+  useAuthStore
+    .getState()
+    .setSession({ token: 'tok-1', sessionId: 'sess-1', expiresAt: future(), issuedFor })
 
 describe('连接就绪判定（凭据 × 面板）', () => {
   beforeEach(() => {

@@ -6,13 +6,7 @@
  * 展开，降低请求压力）。
  */
 import { useCallback, useState } from 'react'
-import {
-  ChevronDown,
-  Download,
-  ExternalLink,
-  Loader2,
-  Package,
-} from 'lucide-react'
+import { ChevronDown, Download, ExternalLink, Loader2, Package } from 'lucide-react'
 import type { MarketSearchHit, MarketVersion } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { StatusPill } from '@/components/mcs/status-pill'
@@ -65,7 +59,9 @@ export function MarketHitCard({
   return (
     <li
       className={`rounded-mcs-md border bg-mcs-bg-default transition-colors duration-mcs-base ${
-        expanded ? 'border-mcs-accent-border-strong' : 'border-mcs-border-muted hover:border-mcs-border-default'
+        expanded
+          ? 'border-mcs-accent-border-strong'
+          : 'border-mcs-border-muted hover:border-mcs-border-default'
       }`}
       data-testid="market-hit"
     >
@@ -102,13 +98,18 @@ export function MarketHitCard({
             <StatusPill tone="success">↓ {formatCompact(hit.downloads)}</StatusPill>
           </div>
           {hit.description && (
-            <p className="mt-1 line-clamp-2 text-mcs-xs text-mcs-text-muted" title={hit.description}>
+            <p
+              className="mt-1 line-clamp-2 text-mcs-xs text-mcs-text-muted"
+              title={hit.description}
+            >
               {hit.description}
             </p>
           )}
           <div className="mt-1.5 flex flex-wrap items-center gap-1">
             {hit.categories.slice(0, 3).map((c) => (
-              <StatusPill key={c} tone="muted">{c}</StatusPill>
+              <StatusPill key={c} tone="muted">
+                {c}
+              </StatusPill>
             ))}
             {hit.dateModified && (
               <span className="text-mcs-xs text-mcs-text-muted">
@@ -126,9 +127,15 @@ export function MarketHitCard({
 
       {/* 版本面板 */}
       {expanded && (
-        <div className="border-t border-mcs-border-muted bg-mcs-bg-muted/40 px-3 py-2.5" data-testid="market-versions">
+        <div
+          className="border-t border-mcs-border-muted bg-mcs-bg-muted/40 px-3 py-2.5"
+          data-testid="market-versions"
+        >
           {panel?.loading ? (
-            <div className="flex items-center gap-2 py-2 text-mcs-xs text-mcs-text-muted" aria-busy="true">
+            <div
+              className="flex items-center gap-2 py-2 text-mcs-xs text-mcs-text-muted"
+              aria-busy="true"
+            >
               <Loader2 className="size-3.5 animate-spin" aria-hidden />
               正在获取版本列表…
             </div>
@@ -148,7 +155,10 @@ export function MarketHitCard({
                     key={v.versionNumber}
                     className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-mcs-sm px-2 py-1.5 hover:bg-mcs-state-hover"
                   >
-                    <span className="font-mono text-mcs-xs text-mcs-text-default" title={v.name ?? v.versionNumber}>
+                    <span
+                      className="font-mono text-mcs-xs text-mcs-text-default"
+                      title={v.name ?? v.versionNumber}
+                    >
                       {v.versionNumber}
                     </span>
                     {v.versionType === 'release' ? (
@@ -169,8 +179,14 @@ export function MarketHitCard({
                       {formatFileSize(v.file.size)}
                       {v.datePublished && ` · ${formatRelativeTime(v.datePublished)}`}
                     </span>
-                    <span className="min-w-0 truncate text-mcs-xs text-mcs-text-muted" title={v.gameVersions.join(', ')}>
-                      兼容 {v.gameVersions.length > 3 ? `${v.gameVersions.slice(0, 3).join(', ')} 等` : v.gameVersions.join(', ') || '—'}
+                    <span
+                      className="min-w-0 truncate text-mcs-xs text-mcs-text-muted"
+                      title={v.gameVersions.join(', ')}
+                    >
+                      兼容{' '}
+                      {v.gameVersions.length > 3
+                        ? `${v.gameVersions.slice(0, 3).join(', ')} 等`
+                        : v.gameVersions.join(', ') || '—'}
                     </span>
                     <div className="ml-auto flex items-center gap-1.5">
                       {hit.slug && (

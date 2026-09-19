@@ -38,7 +38,9 @@ export function SummonForm({ isRconConnected, onAction }: ActionFormProps) {
   // 实体网格按分类渲染成多段，语义上是一个单选组：压平顺序从分组结构派生
   // （= 渲染顺序 by construction，与源数据「同类连续」排列解耦——数据按 id 重排
   // 也不会让键盘顺序与渲染顺序分叉，对齐 effect-form 同款做法）
-  const entityValues = Array.from(entitiesByCategory.values()).flat().map((e) => e.id)
+  const entityValues = Array.from(entitiesByCategory.values())
+    .flat()
+    .map((e) => e.id)
   const entityIndexById = new Map(entityValues.map((id, i) => [id, i]))
   const entityGroup = useRadioGroup<string>({
     label: '实体',
@@ -87,7 +89,9 @@ export function SummonForm({ isRconConnected, onAction }: ActionFormProps) {
       <div className="max-h-52 space-y-2.5 overflow-auto pr-1" {...entityGroup.groupProps}>
         {Array.from(entitiesByCategory.entries()).map(([category, entities]) => (
           <div key={category}>
-            <div className="mb-1 text-mcs-2xs font-medium text-mcs-text-muted">{category}（{entities.length}）</div>
+            <div className="mb-1 text-mcs-2xs font-medium text-mcs-text-muted">
+              {category}（{entities.length}）
+            </div>
             <div className="flex flex-wrap gap-1">
               {entities.map((e) => (
                 <button
@@ -114,8 +118,12 @@ export function SummonForm({ isRconConnected, onAction }: ActionFormProps) {
       {selectedEntity && (
         <div className="flex items-center gap-2 rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-muted px-3 py-2">
           <span className="text-mcs-2xs text-mcs-text-muted">已选：</span>
-          <span className="text-mcs-sm font-medium text-mcs-text-default">{selectedEntity.name}</span>
-          <span className="font-mono text-mcs-2xs text-mcs-text-muted">minecraft:{selectedEntity.id}</span>
+          <span className="text-mcs-sm font-medium text-mcs-text-default">
+            {selectedEntity.name}
+          </span>
+          <span className="font-mono text-mcs-2xs text-mcs-text-muted">
+            minecraft:{selectedEntity.id}
+          </span>
         </div>
       )}
 
@@ -141,10 +149,30 @@ export function SummonForm({ isRconConnected, onAction }: ActionFormProps) {
           ))}
         </div>
         <div className="flex gap-1">
-          <Button type="button" variant="outline" size="sm" className="h-6 px-2 text-mcs-2xs" onClick={() => { setX('~'); setY('~'); setZ('~') }}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-6 px-2 text-mcs-2xs"
+            onClick={() => {
+              setX('~')
+              setY('~')
+              setZ('~')
+            }}
+          >
             当前位置 (~ ~ ~)
           </Button>
-          <Button type="button" variant="outline" size="sm" className="h-6 px-2 text-mcs-2xs" onClick={() => { setX('~ ~1 ~'); setY('~2'); setZ('~') }}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-6 px-2 text-mcs-2xs"
+            onClick={() => {
+              setX('~ ~1 ~')
+              setY('~2')
+              setZ('~')
+            }}
+          >
             头顶上方
           </Button>
         </div>

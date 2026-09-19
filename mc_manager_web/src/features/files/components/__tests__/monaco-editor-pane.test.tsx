@@ -169,9 +169,7 @@ describe('空态（无选中文件）', () => {
 describe('加载态（isLoading）', () => {
   it('显示文件名 + Skeleton 占位，隐藏 encoding 徽章与编辑器', () => {
     const { container } = render(
-      <MonacoEditorPane
-        {...makeProps({ path: PATH_PROPERTIES, isLoading: true, dirty: true })}
-      />,
+      <MonacoEditorPane {...makeProps({ path: PATH_PROPERTIES, isLoading: true, dirty: true })} />,
     )
     expect(screen.getByText('server.properties')).toBeInTheDocument()
     expect(container.querySelector('[data-slot="skeleton"]')).not.toBeNull()
@@ -295,9 +293,7 @@ describe('头部条', () => {
 describe('编辑器（@monaco-editor/react mock）', () => {
   it('暗色主题 → mcs-dark；语言按扩展名映射；value/path 透传', () => {
     render(
-      <MonacoEditorPane
-        {...makeProps({ path: PATH_PROPERTIES, content: 'a=b', theme: 'dark' })}
-      />,
+      <MonacoEditorPane {...makeProps({ path: PATH_PROPERTIES, content: 'a=b', theme: 'dark' })} />,
     )
     expect(editorCall.props?.theme).toBe('mcs-dark')
     expect(editorCall.props?.language).toBe('properties')
@@ -321,11 +317,7 @@ describe('编辑器（@monaco-editor/react mock）', () => {
 
   it('编辑器输入 → onChange 透传新值', () => {
     const onChange = vi.fn()
-    render(
-      <MonacoEditorPane
-        {...makeProps({ path: PATH_PROPERTIES, content: 'a=b', onChange })}
-      />,
-    )
+    render(<MonacoEditorPane {...makeProps({ path: PATH_PROPERTIES, content: 'a=b', onChange })} />)
     const textarea = screen.getByTestId('monaco-editor')
     fireEvent.change(textarea, { target: { value: 'a=c' } })
     expect(onChange).toHaveBeenCalledWith('a=c')

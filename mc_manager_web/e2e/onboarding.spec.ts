@@ -171,7 +171,9 @@ test.describe('onboarding', () => {
     // min-h-dvh 是「最小高度 + 高度 auto」，容器始终长到内容高，两种写法实测同为 y=24；
     // safe 是防御：将来若把高度改成显式约束（h-dvh/max-h/父级限高），它会保证顶部仍可达。
     const logoBox = await page.getByRole('img', { name: 'MC Commander Logo' }).boundingBox()
-    const titleBox = await page.getByRole('heading', { name: '欢迎使用 MC Commander' }).boundingBox()
+    const titleBox = await page
+      .getByRole('heading', { name: '欢迎使用 MC Commander' })
+      .boundingBox()
     expect(logoBox!.y).toBeGreaterThanOrEqual(0)
     expect(titleBox!.y).toBeGreaterThanOrEqual(0)
     // 三步每条 ≤1 行：12px 字 × 1.5 行高 = 18px，>20px 即折行（折行会把底部入口再推下去）

@@ -31,11 +31,27 @@ export function buildAuditQuery(params: AuditQueryParams): string {
 }
 
 /** 信封级变体：额外返回分页信息（total / totalPages），供页面分页控件消费 */
-export function apiGetAuditLogsPage(config: ConnectionConfig, params: AuditQueryParams = {}, signal?: AbortSignal) {
-  return apiGetEnvelope<AuditLogItem[]>(`/api/v1/audit-logs${buildAuditQuery(params)}`, config, signal)
+export function apiGetAuditLogsPage(
+  config: ConnectionConfig,
+  params: AuditQueryParams = {},
+  signal?: AbortSignal,
+) {
+  return apiGetEnvelope<AuditLogItem[]>(
+    `/api/v1/audit-logs${buildAuditQuery(params)}`,
+    config,
+    signal,
+  )
 }
 
 /** 信封级变体：额外返回分页信息（total / totalPages），供页面分页控件消费 */
-export function apiGetCommandHistoryPage(config: ConnectionConfig, params: AuditQueryParams = {}, signal?: AbortSignal) {
-  return apiGetEnvelope<CommandHistoryItem[]>(`/api/v1/command-history${buildAuditQuery(params)}`, config, signal)
+export function apiGetCommandHistoryPage(
+  config: ConnectionConfig,
+  params: AuditQueryParams = {},
+  signal?: AbortSignal,
+) {
+  return apiGetEnvelope<CommandHistoryItem[]>(
+    `/api/v1/command-history${buildAuditQuery(params)}`,
+    config,
+    signal,
+  )
 }

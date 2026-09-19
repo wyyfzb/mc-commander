@@ -126,7 +126,7 @@ describe('MCServerInstance - 进程异常退出与崩溃循环熔断', () => {
     });
   });
 
-  describe("exit 非零意外退出（crash 路径）", () => {
+  describe('exit 非零意外退出（crash 路径）', () => {
     it('广播 crash 状态（code、autoRestart=true）', async () => {
       await instance.start();
       const statuses = [];

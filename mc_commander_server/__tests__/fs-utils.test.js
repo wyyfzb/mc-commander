@@ -3,7 +3,15 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-import { resolveSafePath, resolveContainedPath, isPathContained, PathTraversalError, ensureDir, renameNoClobber, atomicWriteFile } from '../utils/fs-utils.js';
+import {
+  resolveSafePath,
+  resolveContainedPath,
+  isPathContained,
+  PathTraversalError,
+  ensureDir,
+  renameNoClobber,
+  atomicWriteFile,
+} from '../utils/fs-utils.js';
 
 // resolveSafePath 单元测试：四步防线
 // （归一化、相等排除 + sep 边界、逐段 realpath、最终目标 symlink 拒绝）
@@ -47,8 +55,9 @@ describe('fs-utils resolveSafePath', () => {
     const sibling = `${base}-sibling`;
     fs.mkdirSync(sibling);
     try {
-      expect(() => resolveSafePath(base, `../${path.basename(base)}-sibling/x`))
-        .toThrow(PathTraversalError);
+      expect(() => resolveSafePath(base, `../${path.basename(base)}-sibling/x`)).toThrow(
+        PathTraversalError,
+      );
     } finally {
       fs.rmSync(sibling, { recursive: true, force: true });
     }
@@ -64,8 +73,9 @@ describe('fs-utils resolveSafePath', () => {
   });
 
   it('实例目录不存在时抛原生 ENOENT（路由层映射 404）', () => {
-    expect(() => resolveSafePath(path.join(base, 'missing'), 'x'))
-      .toThrow(expect.objectContaining({ code: 'ENOENT' }));
+    expect(() => resolveSafePath(path.join(base, 'missing'), 'x')).toThrow(
+      expect.objectContaining({ code: 'ENOENT' }),
+    );
   });
 
   it('PathTraversalError 携带独立错误码 EPATHTRAVERSAL', () => {
@@ -115,7 +125,11 @@ describe('fs-utils resolveSafePath', () => {
     });
 
     it.skipIf(!symlinkSupported)('最终目标符号链接（即使指向实例内）一律拒绝', () => {
-      fs.symlinkSync(path.join(base, 'sub', 'file.txt'), path.join(base, 'link-inside.txt'), 'file');
+      fs.symlinkSync(
+        path.join(base, 'sub', 'file.txt'),
+        path.join(base, 'link-inside.txt'),
+        'file',
+      );
       expect(() => resolveSafePath(base, 'link-inside.txt')).toThrow(PathTraversalError);
     });
 
@@ -183,16 +197,18 @@ describe('fs-utils renameNoClobber', () => {
     fs.writeFileSync(at('src.txt'), 'NEW');
     fs.writeFileSync(at('dst.txt'), 'OLD');
 
-    expect(() => renameNoClobber(at('src.txt'), at('dst.txt')))
-      .toThrow(expect.objectContaining({ code: 'EEXIST' }));
+    expect(() => renameNoClobber(at('src.txt'), at('dst.txt'))).toThrow(
+      expect.objectContaining({ code: 'EEXIST' }),
+    );
     expect(fs.readFileSync(at('dst.txt'), 'utf-8')).toBe('OLD');
     // 失败路径不留残件：源仍在、目标未被清空
     expect(fs.readFileSync(at('src.txt'), 'utf-8')).toBe('NEW');
   });
 
   it('文件：源不存在 → 抛 ENOENT 且不留下占位文件', () => {
-    expect(() => renameNoClobber(at('missing.txt'), at('dst.txt')))
-      .toThrow(expect.objectContaining({ code: 'ENOENT' }));
+    expect(() => renameNoClobber(at('missing.txt'), at('dst.txt'))).toThrow(
+      expect.objectContaining({ code: 'ENOENT' }),
+    );
     expect(fs.existsSync(at('dst.txt'))).toBe(false);
   });
 
@@ -210,8 +226,9 @@ describe('fs-utils renameNoClobber', () => {
     fs.mkdirSync(at('srcDir'));
     fs.mkdirSync(at('dstDir'));
 
-    expect(() => renameNoClobber(at('srcDir'), at('dstDir')))
-      .toThrow(expect.objectContaining({ code: 'EEXIST' }));
+    expect(() => renameNoClobber(at('srcDir'), at('dstDir'))).toThrow(
+      expect.objectContaining({ code: 'EEXIST' }),
+    );
     expect(fs.existsSync(at('dstDir'))).toBe(true);
     expect(fs.existsSync(at('srcDir'))).toBe(true);
   });
@@ -275,8 +292,11 @@ describe('fs-utils atomicWriteFile', () => {
     const target = path.join(root, 'f.txt');
     fs.writeFileSync(target, 'old');
     const realRename = fs.renameSync.bind(fs);
-    const spy = vi.spyOn(fs, 'renameSync')
-      .mockImplementationOnce(() => { throw Object.assign(new Error('sharing violation'), { code: 'EPERM' }); })
+    const spy = vi
+      .spyOn(fs, 'renameSync')
+      .mockImplementationOnce(() => {
+        throw Object.assign(new Error('sharing violation'), { code: 'EPERM' });
+      })
       .mockImplementation(realRename);
     try {
       atomicWriteFile(target, 'new');
@@ -287,18 +307,21 @@ describe('fs-utils atomicWriteFile', () => {
     }
   });
 
-  it.each(['EPERM', 'EACCES', 'EBUSY'])('瞬时冲突（%s）持续存在时重试到上限后抛出（不无限重试）', (code) => {
-    const target = path.join(root, 'f.txt');
-    const spy = vi.spyOn(fs, 'renameSync').mockImplementation(() => {
-      throw Object.assign(new Error('locked'), { code });
-    });
-    try {
-      expect(() => atomicWriteFile(target, 'x')).toThrow(expect.objectContaining({ code }));
-      expect(spy).toHaveBeenCalledTimes(5);
-    } finally {
-      spy.mockRestore();
-    }
-  });
+  it.each(['EPERM', 'EACCES', 'EBUSY'])(
+    '瞬时冲突（%s）持续存在时重试到上限后抛出（不无限重试）',
+    (code) => {
+      const target = path.join(root, 'f.txt');
+      const spy = vi.spyOn(fs, 'renameSync').mockImplementation(() => {
+        throw Object.assign(new Error('locked'), { code });
+      });
+      try {
+        expect(() => atomicWriteFile(target, 'x')).toThrow(expect.objectContaining({ code }));
+        expect(spy).toHaveBeenCalledTimes(5);
+      } finally {
+        spy.mockRestore();
+      }
+    },
+  );
 
   it('非瞬时错误（ENOENT）不重试立即抛出', () => {
     const target = path.join(root, 'f.txt');
@@ -306,7 +329,9 @@ describe('fs-utils atomicWriteFile', () => {
       throw Object.assign(new Error('missing'), { code: 'ENOENT' });
     });
     try {
-      expect(() => atomicWriteFile(target, 'x')).toThrow(expect.objectContaining({ code: 'ENOENT' }));
+      expect(() => atomicWriteFile(target, 'x')).toThrow(
+        expect.objectContaining({ code: 'ENOENT' }),
+      );
       expect(spy).toHaveBeenCalledTimes(1);
     } finally {
       spy.mockRestore();
@@ -332,7 +357,9 @@ describe('fs-utils resolveContainedPath（解析面，绝对/混合 target）', 
   });
 
   it('绝对 target 在 base 内 → 返回归一化绝对路径', () => {
-    expect(resolveContainedPath(base, path.join(base, 'sub', 'x'))).toBe(path.join(base, 'sub', 'x'));
+    expect(resolveContainedPath(base, path.join(base, 'sub', 'x'))).toBe(
+      path.join(base, 'sub', 'x'),
+    );
   });
 
   it('相对 target 按 base 拼接（不依赖进程 CWD）', () => {
@@ -351,12 +378,16 @@ describe('fs-utils resolveContainedPath（解析面，绝对/混合 target）', 
   });
 
   it('.. 逃逸与 NUL 字节拒绝', () => {
-    expect(() => resolveContainedPath(base, path.join(base, '..', 'evil'))).toThrow(PathTraversalError);
+    expect(() => resolveContainedPath(base, path.join(base, '..', 'evil'))).toThrow(
+      PathTraversalError,
+    );
     expect(() => resolveContainedPath(base, 'a\0b')).toThrow(PathTraversalError);
   });
 
   it('缺失叶子（无 symlink）通过：前缀 + 逐段 realpath 兜底', () => {
-    expect(resolveContainedPath(base, path.join(base, 'new', 'deep'))).toBe(path.join(base, 'new', 'deep'));
+    expect(resolveContainedPath(base, path.join(base, 'new', 'deep'))).toBe(
+      path.join(base, 'new', 'deep'),
+    );
   });
 
   // Windows 创建符号链接需要管理员权限或开发者模式：探测一次，不可用则跳过
@@ -365,19 +396,23 @@ describe('fs-utils resolveContainedPath（解析面，绝对/混合 target）', 
   try {
     fs.symlinkSync('probe-target', path.join(probe, 'probe-link'), 'file');
     symlinkSupported = true;
-  } catch {}
-  finally {
+  } catch {
+  } finally {
     fs.rmSync(probe, { recursive: true, force: true });
   }
 
-  it.skipIf(!symlinkSupported)('中间目录 symlink 指向 base 外 + 叶子缺失 → 拒绝（旧 backup 实现的漏检面）', () => {
-    const outside = path.join(root, 'outside');
-    fs.mkdirSync(outside);
-    fs.symlinkSync(outside, path.join(base, 'world'), 'junction');
-    // 叶子不存在，旧实现（只对完整目标 realpath）会因 realpath ENOENT 而放行
-    expect(() => resolveContainedPath(base, path.join(base, 'world', 'newfile')))
-      .toThrow(PathTraversalError);
-  });
+  it.skipIf(!symlinkSupported)(
+    '中间目录 symlink 指向 base 外 + 叶子缺失 → 拒绝（旧 backup 实现的漏检面）',
+    () => {
+      const outside = path.join(root, 'outside');
+      fs.mkdirSync(outside);
+      fs.symlinkSync(outside, path.join(base, 'world'), 'junction');
+      // 叶子不存在，旧实现（只对完整目标 realpath）会因 realpath ENOENT 而放行
+      expect(() => resolveContainedPath(base, path.join(base, 'world', 'newfile'))).toThrow(
+        PathTraversalError,
+      );
+    },
+  );
 
   it.skipIf(!symlinkSupported)('最终目标 symlink（即使指向 base 内）拒绝：第 ④ 步', () => {
     fs.mkdirSync(path.join(base, 'real'));
@@ -387,10 +422,12 @@ describe('fs-utils resolveContainedPath（解析面，绝对/混合 target）', 
 
   it('base 不存在：缺省抛 ENOENT，baseMustExist=false 容忍（备份先校验后判存在的口径）', () => {
     const missing = path.join(root, 'no-such-base');
-    expect(() => resolveContainedPath(missing, path.join(missing, 'world')))
-      .toThrow(expect.objectContaining({ code: 'ENOENT' }));
-    expect(resolveContainedPath(missing, path.join(missing, 'world'), { baseMustExist: false }))
-      .toBe(path.join(missing, 'world'));
+    expect(() => resolveContainedPath(missing, path.join(missing, 'world'))).toThrow(
+      expect.objectContaining({ code: 'ENOENT' }),
+    );
+    expect(
+      resolveContainedPath(missing, path.join(missing, 'world'), { baseMustExist: false }),
+    ).toBe(path.join(missing, 'world'));
   });
 });
 

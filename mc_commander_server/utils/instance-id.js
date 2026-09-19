@@ -14,7 +14,7 @@ export const INSTANCE_ID_RANDOM_BYTES = 4;
 
 /** 实例 id 形态：与 generateInstanceId 由同一常量派生 */
 export const INSTANCE_ID_PATTERN = new RegExp(
-  `^[a-z][a-z0-9]*-[0-9a-f]{${INSTANCE_ID_RANDOM_BYTES * 2}}$`
+  `^[a-z][a-z0-9]*-[0-9a-f]{${INSTANCE_ID_RANDOM_BYTES * 2}}$`,
 );
 
 /**

@@ -53,7 +53,15 @@ function ErrorRow({ colSpan, error }: { colSpan: number; error: unknown }) {
   )
 }
 
-function EmptyRow({ colSpan, text, actions }: { colSpan: number; text: string; actions?: ReactNode }) {
+function EmptyRow({
+  colSpan,
+  text,
+  actions,
+}: {
+  colSpan: number
+  text: string
+  actions?: ReactNode
+}) {
   return (
     <tr>
       <td colSpan={colSpan} className="px-3 py-8">
@@ -100,15 +108,23 @@ export function DataTableShell({
       <Card as="div" ref={scrollRef} className="min-h-0 flex-1 overflow-auto">
         <table className={cn('w-full text-mcs-sm', tableClassName)}>
           {header}
-          {isLoading
-            ? (<tbody>{Array.from({ length: skeletonRows }, (_, i) => (
+          {isLoading ? (
+            <tbody>
+              {Array.from({ length: skeletonRows }, (_, i) => (
                 <SkeletonRow key={i} colSpan={columns} widths={widths} />
-              ))}</tbody>)
-            : error
-              ? (<tbody><ErrorRow colSpan={columns} error={error} /></tbody>)
-              : isEmpty
-                ? (<tbody><EmptyRow colSpan={columns} text={emptyText} actions={emptyActions} /></tbody>)
-              : children}
+              ))}
+            </tbody>
+          ) : error ? (
+            <tbody>
+              <ErrorRow colSpan={columns} error={error} />
+            </tbody>
+          ) : isEmpty ? (
+            <tbody>
+              <EmptyRow colSpan={columns} text={emptyText} actions={emptyActions} />
+            </tbody>
+          ) : (
+            children
+          )}
         </table>
       </Card>
       {pagination && <Pagination {...pagination} />}

@@ -193,7 +193,9 @@ describe('InstanceModel.update 字段映射', () => {
   });
 
   it('autoStart/autoRestart 布尔落库为 0/1 整数', () => {
-    const row = db.prepare('SELECT auto_start, auto_restart FROM instances WHERE id = ?').get('inst-upd');
+    const row = db
+      .prepare('SELECT auto_start, auto_restart FROM instances WHERE id = ?')
+      .get('inst-upd');
     expect(row.auto_start).toBe(1);
     expect(row.auto_restart).toBe(0);
   });
@@ -244,21 +246,39 @@ describe('InstanceModel.create 同 id 重写（窄列 upsert）', () => {
   // 旧实现（INSERT OR REPLACE）在 id 冲突时先删后插，create() 未列出的 9 列被静默重置
   // （8 列回退默认值/null，updated_at 重置为当前时刻）；这些列由 update()/运行期维护
   const UNLISTED_PRESERVED_COLUMNS = [
-    'description', 'status', 'start_command', 'auto_start', 'auto_restart',
-    'total_uptime', 'jvm_args', 'created_at',
+    'description',
+    'status',
+    'start_command',
+    'auto_start',
+    'auto_restart',
+    'total_uptime',
+    'jvm_args',
+    'created_at',
   ];
   // create() 显式列出的列（与 instance.model.js 的 SQL 一致）
   const CREATE_COLUMNS = [
-    'id', 'name', 'mod_loader', 'jar_file', 'java_path', 'max_memory', 'min_memory',
-    'server_path', 'mc_version', 'port',
+    'id',
+    'name',
+    'mod_loader',
+    'jar_file',
+    'java_path',
+    'max_memory',
+    'min_memory',
+    'server_path',
+    'mc_version',
+    'port',
   ];
 
   it('未列出列口径 = 表定义 19 列 − create() 列出的 10 列 = 9 列（含 updated_at）', () => {
-    const tableColumns = db.prepare('PRAGMA table_info(instances)').all().map((c) => c.name);
+    const tableColumns = db
+      .prepare('PRAGMA table_info(instances)')
+      .all()
+      .map((c) => c.name);
 
     expect(tableColumns).toHaveLength(19);
-    expect(tableColumns.filter((c) => !CREATE_COLUMNS.includes(c)).sort())
-      .toEqual([...UNLISTED_PRESERVED_COLUMNS, 'updated_at'].sort());
+    expect(tableColumns.filter((c) => !CREATE_COLUMNS.includes(c)).sort()).toEqual(
+      [...UNLISTED_PRESERVED_COLUMNS, 'updated_at'].sort(),
+    );
   });
 
   it('同 id 二次 create 只更新列出的列，未列出的列逐列保留', () => {
@@ -290,8 +310,9 @@ describe('InstanceModel.create 同 id 重写（窄列 upsert）', () => {
   it('updated_at 是唯一被有意刷新的未列出列：旧值哨兵被覆盖，created_at 原样保留', () => {
     InstanceModel.create({ id: 'inst-ts', name: '首建' });
     // 远古时间戳作哨兵：任何「保留原值」的实现都会把它留在库里
-    db.prepare("UPDATE instances SET created_at = '2020-01-01 00:00:00', updated_at = '2020-01-01 00:00:00' WHERE id = ?")
-      .run('inst-ts');
+    db.prepare(
+      "UPDATE instances SET created_at = '2020-01-01 00:00:00', updated_at = '2020-01-01 00:00:00' WHERE id = ?",
+    ).run('inst-ts');
 
     InstanceModel.create({ id: 'inst-ts', name: '重写' });
 

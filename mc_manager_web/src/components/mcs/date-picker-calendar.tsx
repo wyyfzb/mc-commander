@@ -42,7 +42,13 @@ interface DatePickerCalendarProps {
   onClear: () => void
 }
 
-export function DatePickerCalendar({ value, min, max, onSelect, onClear }: DatePickerCalendarProps) {
+export function DatePickerCalendar({
+  value,
+  min,
+  max,
+  onSelect,
+  onClear,
+}: DatePickerCalendarProps) {
   const monthLabelId = useId()
   const gridRef = useRef<HTMLDivElement>(null)
   // 落点也必须夹在界内：当前值可能落在后来收窄的区间外（父级先选了值再改约束），
@@ -77,9 +83,7 @@ export function DatePickerCalendar({ value, min, max, onSelect, onClear }: DateP
 
   // roving tabindex 的落点：打开时落焦当前值/今天，键盘移动后跟随
   useEffect(() => {
-    gridRef.current
-      ?.querySelector<HTMLButtonElement>(`[data-date="${focusDate}"]`)
-      ?.focus()
+    gridRef.current?.querySelector<HTMLButtonElement>(`[data-date="${focusDate}"]`)?.focus()
   }, [focusDate])
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
@@ -175,7 +179,12 @@ export function DatePickerCalendar({ value, min, max, onSelect, onClear }: DateP
               const outside = !isSameMonth(iso, focusDate)
               const disabled = !inRange(iso)
               return (
-                <div key={iso} role="gridcell" aria-selected={selected} className="flex justify-center">
+                <div
+                  key={iso}
+                  role="gridcell"
+                  aria-selected={selected}
+                  className="flex justify-center"
+                >
                   <button
                     type="button"
                     data-date={iso}
@@ -187,8 +196,8 @@ export function DatePickerCalendar({ value, min, max, onSelect, onClear }: DateP
                     className={cn(
                       'flex size-7 items-center justify-center rounded-mcs-xs text-mcs-xs tabular-nums transition-colors focus-visible:outline-2 focus-visible:outline-mcs-focus-ring focus-visible:outline-offset-1 disabled:cursor-not-allowed disabled:opacity-40',
                       selected
-                        // 亮色下实心 accent 对弹层底仅 1.33:1，靠强档描边补足选中态的 ≥3:1 可辨识性
-                        ? 'bg-mcs-accent font-medium text-mcs-on-accent ring-1 ring-mcs-accent-border-strong'
+                        ? // 亮色下实心 accent 对弹层底仅 1.33:1，靠强档描边补足选中态的 ≥3:1 可辨识性
+                          'bg-mcs-accent font-medium text-mcs-on-accent ring-1 ring-mcs-accent-border-strong'
                         : cn(
                             'hover:bg-mcs-state-hover',
                             outside ? 'text-mcs-text-muted' : 'text-mcs-text-default',
@@ -207,7 +216,13 @@ export function DatePickerCalendar({ value, min, max, onSelect, onClear }: DateP
       </div>
 
       <div className="mt-1 flex items-center justify-between border-t border-mcs-border-muted pt-1">
-        <Button type="button" variant="ghost" size="xs" disabled={!inRange(today)} onClick={() => onSelect(today)}>
+        <Button
+          type="button"
+          variant="ghost"
+          size="xs"
+          disabled={!inRange(today)}
+          onClick={() => onSelect(today)}
+        >
           今天
         </Button>
         <Button type="button" variant="ghost" size="xs" onClick={onClear} disabled={value === ''}>

@@ -17,7 +17,11 @@ import { AuditPage } from '../audit-page'
 import { toServerStart, toServerEnd } from '../time-range'
 
 const { auditParams } = vi.hoisted(() => ({
-  auditParams: { action: undefined as string | undefined, startTime: undefined as string | undefined, endTime: undefined as string | undefined },
+  auditParams: {
+    action: undefined as string | undefined,
+    startTime: undefined as string | undefined,
+    endTime: undefined as string | undefined,
+  },
 }))
 
 vi.mock('@/api/queries', () => ({
@@ -87,7 +91,9 @@ describe('AuditPage 筛选状态 URL 持久化（issue 381）', () => {
 
     // 操作类型下拉初始选中「更新实例配置」
     await waitFor(() =>
-      expect(screen.getByRole('combobox', { name: '操作类型' })).toHaveTextContent('操作类型：更新实例配置'),
+      expect(screen.getByRole('combobox', { name: '操作类型' })).toHaveTextContent(
+        '操作类型：更新实例配置',
+      ),
     )
     // 时间起止初始值
     expect(screen.getByLabelText('开始日期')).toHaveValue('2026-01-01')
@@ -123,10 +129,14 @@ describe('AuditPage 筛选状态 URL 持久化（issue 381）', () => {
 
     // 设置时间起止 → URL 依次追加（翻页重置不产生 page 参数：默认第 1 页不留痕）
     fireEvent.change(screen.getByLabelText('开始日期'), { target: { value: '2026-02-10' } })
-    await waitFor(() => expect(router.state.location.search).toBe('?action=INSTANCE_START&start=2026-02-10'))
+    await waitFor(() =>
+      expect(router.state.location.search).toBe('?action=INSTANCE_START&start=2026-02-10'),
+    )
     fireEvent.change(screen.getByLabelText('结束日期'), { target: { value: '2026-02-20' } })
     await waitFor(() =>
-      expect(router.state.location.search).toBe('?action=INSTANCE_START&start=2026-02-10&end=2026-02-20'),
+      expect(router.state.location.search).toBe(
+        '?action=INSTANCE_START&start=2026-02-10&end=2026-02-20',
+      ),
     )
 
     // 清空筛选（空态 CTA）→ URL 回归无参数形态

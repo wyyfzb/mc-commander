@@ -31,7 +31,11 @@ vi.mock('../config.js', async () => {
   };
 });
 
-import { _makeSeedCache, _readLevelDatData, _getSafeLevelName } from '../services/mc-server/level-dat.js';
+import {
+  _makeSeedCache,
+  _readLevelDatData,
+  _getSafeLevelName,
+} from '../services/mc-server/level-dat.js';
 import { MCServerInstance } from '../services/mc_server.js';
 
 const tmpBase = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-level-dat-fixture-'));
@@ -58,9 +62,18 @@ describe('level-dat 模块 require 复用语义', () => {
   it('12 个域方法经 Object.assign 注入 MCServerInstance 原型，实例调用 this 绑定正确', () => {
     const inst = makeBareInstance(path.join(tmpBase, 'inst-a'));
     for (const m of [
-      '_getSafeLevelName', '_getWorldSize', '_readSeedFromLevelDat', '_readSeedFromWorldGenSettings',
-      '_makeSeedCache', 'readDifficulty', '_readGameTypeFromLevelDat', '_readDifficultyFromLevelDat',
-      '_readLevelDatData', '_getLastSaveTime', '_readWeatherFromLevelDat', '_readWorldSpawnFromLevelDat',
+      '_getSafeLevelName',
+      '_getWorldSize',
+      '_readSeedFromLevelDat',
+      '_readSeedFromWorldGenSettings',
+      '_makeSeedCache',
+      'readDifficulty',
+      '_readGameTypeFromLevelDat',
+      '_readDifficultyFromLevelDat',
+      '_readLevelDatData',
+      '_getLastSaveTime',
+      '_readWeatherFromLevelDat',
+      '_readWorldSpawnFromLevelDat',
     ]) {
       expect(typeof inst[m]).toBe('function');
     }
@@ -92,7 +105,9 @@ describe('level-dat 纯解析函数', () => {
     writeNbtFile(path.join(worldDir, 'level.dat'), {
       type: 'compound',
       name: '',
-      value: { Data: { type: 'compound', name: '', value: { GameType: { type: 'int', value: 1 } } } },
+      value: {
+        Data: { type: 'compound', name: '', value: { GameType: { type: 'int', value: 1 } } },
+      },
     });
     const inst = makeBareInstance(path.join(tmpBase, 'inst-c'));
     const data = inst._readLevelDatData();

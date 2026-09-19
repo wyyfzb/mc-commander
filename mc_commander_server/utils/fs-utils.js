@@ -18,7 +18,9 @@ const TRANSIENT_RENAME_CODES = new Set(['EPERM', 'EACCES', 'EBUSY']);
 // 5 = 首次尝试 + 4 次重试的总 rename 次数（不是「重试 5 次」）
 const RENAME_RETRY_ATTEMPTS = 5;
 // 同步 IO 路径上的同步等待：Atomics.wait 阻塞当前线程（与所在调用本就同步阻塞一致）
-const sleepSync = (ms) => { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); };
+const sleepSync = (ms) => {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+};
 
 export const atomicWriteFile = (filePath, content, options = {}) => {
   const writeOpts = options.mode ? { mode: options.mode } : undefined;
@@ -82,7 +84,9 @@ export function renameNoClobber(src, dst) {
     try {
       fs.renameSync(src, dst);
     } catch (err) {
-      try { fs.unlinkSync(dst); } catch {}
+      try {
+        fs.unlinkSync(dst);
+      } catch {}
       throw err;
     }
     return;

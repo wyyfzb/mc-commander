@@ -53,14 +53,25 @@ function makePlayer(overrides: Partial<Player>): Player {
     inventory: null,
     events: [],
     sessions: [],
-    stats: { totalOnline: 0, loginCount: 0, offlineSince: 0, deathCount: 0, achievementCount: 0, sleepCount: 0 },
+    stats: {
+      totalOnline: 0,
+      loginCount: 0,
+      offlineSince: 0,
+      deathCount: 0,
+      achievementCount: 0,
+      sleepCount: 0,
+    },
     ...overrides,
   }
 }
 
-function renderActions(player: Player, overrides: Partial<Parameters<typeof OverviewActions>[0]> = {}) {
+function renderActions(
+  player: Player,
+  overrides: Partial<Parameters<typeof OverviewActions>[0]> = {},
+) {
   const mocks = {
-    runAction: vi.fn<(key: string, req: PlayerActionRequest, outcome?: ActionOutcome) => Promise<void>>(),
+    runAction:
+      vi.fn<(key: string, req: PlayerActionRequest, outcome?: ActionOutcome) => Promise<void>>(),
     onSendMessage: vi.fn(),
     onClearInventory: vi.fn(),
     onOpenBanDialog: vi.fn(),
@@ -108,7 +119,10 @@ describe('OverviewActions 游戏模式菜单', () => {
     expect(key).toBe('gamemode-creative')
     expect(req).toMatchObject({ kind: 'command', command: 'gamemode creative Steve' })
     expect(outcome?.successText).toContain('创造模式')
-    expect(outcome?.undo?.req).toMatchObject({ kind: 'command', command: 'gamemode survival Steve' })
+    expect(outcome?.undo?.req).toMatchObject({
+      kind: 'command',
+      command: 'gamemode survival Steve',
+    })
   })
 
   it('原模式未知（服务端未采集）时不提供逆操作（不猜默认档）', async () => {
@@ -123,7 +137,9 @@ describe('OverviewActions 游戏模式菜单', () => {
     const userEvent = (await import('@testing-library/user-event')).default
     renderActions(makePlayer({ isOnline: true, gameMode: 'survival' }))
     await userEvent.setup().click(screen.getByRole('button', { name: /游戏模式/ }))
-    expect(screen.getByRole('menuitem', { name: /生存/ }).getAttribute('data-disabled')).not.toBeNull()
+    expect(
+      screen.getByRole('menuitem', { name: /生存/ }).getAttribute('data-disabled'),
+    ).not.toBeNull()
   })
 
   it('当前模式菜单项禁用：点击不触发 runAction（门控由 onSelect 收口，不靠 CSS 兜底）', async () => {

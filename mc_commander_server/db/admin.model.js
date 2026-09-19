@@ -40,7 +40,9 @@ export class AdminAccountModel {
 
   static setTotpSecret(secret) {
     getDb()
-      .prepare('UPDATE admin_account SET totp_secret = ?, updated_at = CURRENT_TIMESTAMP WHERE id = 1')
+      .prepare(
+        'UPDATE admin_account SET totp_secret = ?, updated_at = CURRENT_TIMESTAMP WHERE id = 1',
+      )
       .run(secret);
   }
 
@@ -61,9 +63,10 @@ export class AdminAccountModel {
       secret: row.totp_secret || null,
       enabled: row.totp_enabled === 1,
       confirmedAt: row.totp_confirmed_at || null,
-      lastStep: row.totp_last_step === null || row.totp_last_step === undefined
-        ? null
-        : Number(row.totp_last_step),
+      lastStep:
+        row.totp_last_step === null || row.totp_last_step === undefined
+          ? null
+          : Number(row.totp_last_step),
     };
   }
 
@@ -97,7 +100,9 @@ export class AdminAccountModel {
   /** 记录最后一次被接受的步长（重放防护基线） */
   static setTotpLastStep(step) {
     getDb()
-      .prepare('UPDATE admin_account SET totp_last_step = ?, updated_at = CURRENT_TIMESTAMP WHERE id = 1')
+      .prepare(
+        'UPDATE admin_account SET totp_last_step = ?, updated_at = CURRENT_TIMESTAMP WHERE id = 1',
+      )
       .run(step);
   }
 
@@ -176,7 +181,9 @@ export class AdminRecoveryCodeModel {
     }
     if (matchedId === null) return false;
     const res = getDb()
-      .prepare('UPDATE admin_recovery_codes SET used_at = CURRENT_TIMESTAMP WHERE id = ? AND used_at IS NULL')
+      .prepare(
+        'UPDATE admin_recovery_codes SET used_at = CURRENT_TIMESTAMP WHERE id = ? AND used_at IS NULL',
+      )
       .run(matchedId);
     return res.changes > 0;
   }
@@ -223,9 +230,7 @@ export class AdminSessionModel {
 
   /** 改密后踢单设备例外：踢掉除 keepId 外的全部会话 */
   static deleteAllExcept(keepId) {
-    const res = getDb()
-      .prepare('DELETE FROM admin_sessions WHERE id != ?')
-      .run(keepId);
+    const res = getDb().prepare('DELETE FROM admin_sessions WHERE id != ?').run(keepId);
     return res.changes;
   }
 

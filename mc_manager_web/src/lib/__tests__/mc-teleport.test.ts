@@ -14,7 +14,9 @@ import {
 
 describe('传送命令模板（6 入口）', () => {
   it('坐标传送（坐标取整，无前导 /）', () => {
-    expect(buildTeleportToCoordsCommand('Steve', { x: 12.6, y: 64.2, z: -8.8 })).toBe('tp Steve 13 64 -9')
+    expect(buildTeleportToCoordsCommand('Steve', { x: 12.6, y: 64.2, z: -8.8 })).toBe(
+      'tp Steve 13 64 -9',
+    )
   })
 
   it('世界出生点（固定 chip）', () => {
@@ -26,7 +28,9 @@ describe('传送命令模板（6 入口）', () => {
   })
 
   it('自定义快捷点', () => {
-    expect(buildTeleportToCoordsCommand('Steve', { x: 100, y: 70, z: -200 })).toBe('tp Steve 100 70 -200')
+    expect(buildTeleportToCoordsCommand('Steve', { x: 100, y: 70, z: -200 })).toBe(
+      'tp Steve 100 70 -200',
+    )
   })
 
   it('传送到其他在线玩家', () => {
@@ -40,7 +44,11 @@ describe('传送命令模板（6 入口）', () => {
 
 describe('个人复活点回退链', () => {
   it('respawnPoint 优先', () => {
-    expect(resolveRespawnTarget({ x: 1, y: 2, z: 3 }, { x: 4, y: 5, z: 6 })).toEqual({ x: 1, y: 2, z: 3 })
+    expect(resolveRespawnTarget({ x: 1, y: 2, z: 3 }, { x: 4, y: 5, z: 6 })).toEqual({
+      x: 1,
+      y: 2,
+      z: 3,
+    })
   })
   it('无 respawnPoint 回退 spawnPoint', () => {
     expect(resolveRespawnTarget(null, { x: 4, y: 5, z: 6 })).toEqual({ x: 4, y: 5, z: 6 })
@@ -78,7 +86,14 @@ describe('快捷传送点持久化 schema', () => {
     expect(loadQuickTeleports(storage)).toEqual({ hideOrigin: false, items: [] })
 
     const storage2 = {
-      getItem: () => JSON.stringify({ hideOrigin: true, items: [{ name: 'ok', x: 1, y: 2, z: 3 }, { name: 'bad', x: 'a' }] }),
+      getItem: () =>
+        JSON.stringify({
+          hideOrigin: true,
+          items: [
+            { name: 'ok', x: 1, y: 2, z: 3 },
+            { name: 'bad', x: 'a' },
+          ],
+        }),
     } as unknown as Storage
     const loaded = loadQuickTeleports(storage2)
     expect(loaded.hideOrigin).toBe(true)

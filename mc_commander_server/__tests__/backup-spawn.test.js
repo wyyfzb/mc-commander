@@ -44,7 +44,9 @@ describe('spawnProcess 取消语义', () => {
   });
 
   it('无 signal 时非白名单退出码照旧拒绝（okCodes 语义未被取消通道影响）', async () => {
-    const err = await spawnProcess('node', ['-e', 'process.exit(3)'], { timeout: 30000 }).catch((e) => e);
+    const err = await spawnProcess('node', ['-e', 'process.exit(3)'], { timeout: 30000 }).catch(
+      (e) => e,
+    );
     expect(err.message).toBe('Exit code 3');
   });
 });

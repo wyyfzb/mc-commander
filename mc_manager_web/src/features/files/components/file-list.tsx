@@ -38,11 +38,7 @@ import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/mcs/icon-button'
 import { cn } from '@/lib/utils'
 import { fileIconName, formatFileSize, formatModifiedAt, isEditableFile } from '@/lib/mc-files'
-import {
-  EmptyStateVisual,
-  ErrorStateVisual,
-  ListSkeleton,
-} from '@/components/mcs/data-states'
+import { EmptyStateVisual, ErrorStateVisual, ListSkeleton } from '@/components/mcs/data-states'
 import { useFileList } from '../queries'
 import type { FileEntry } from '@/api/types'
 
@@ -126,7 +122,13 @@ function FileListRow({
     <div
       role="button"
       tabIndex={0}
-      aria-label={isDir ? `打开目录 ${entry.name}` : editable ? `选择文件 ${entry.name}` : `文件 ${entry.name}（二进制，可下载）`}
+      aria-label={
+        isDir
+          ? `打开目录 ${entry.name}`
+          : editable
+            ? `选择文件 ${entry.name}`
+            : `文件 ${entry.name}（二进制，可下载）`
+      }
       // 当前预览文件：底色是视觉线索，语义位由 aria-current 承担（role=button 行不构成列表选中集）
       aria-current={isSelected ? 'true' : undefined}
       onClick={handleRowClick}
@@ -140,7 +142,9 @@ function FileListRow({
       }}
       className={cn(
         'flex cursor-pointer items-center gap-3 px-4 py-2 transition-colors duration-mcs-fast focus-visible:bg-mcs-state-focus',
-        isDir ? 'hover:bg-mcs-state-hover' : cn('hover:bg-mcs-state-hover', isSelected && 'bg-mcs-accent-bg-subtle'),
+        isDir
+          ? 'hover:bg-mcs-state-hover'
+          : cn('hover:bg-mcs-state-hover', isSelected && 'bg-mcs-accent-bg-subtle'),
       )}
     >
       <Icon
@@ -244,7 +248,9 @@ export function FileList({
   /** 目录在前（同组保持服务端顺序；现代引擎稳定排序） */
   const entries = useMemo<FileEntry[]>(() => {
     if (!data || !('files' in data)) return []
-    return [...data.files].sort((a, b) => (a.isDirectory === b.isDirectory ? 0 : a.isDirectory ? -1 : 1))
+    return [...data.files].sort((a, b) =>
+      a.isDirectory === b.isDirectory ? 0 : a.isDirectory ? -1 : 1,
+    )
   }, [data])
 
   const isEmpty = data !== undefined && data.isDirectory === true && data.files.length === 0

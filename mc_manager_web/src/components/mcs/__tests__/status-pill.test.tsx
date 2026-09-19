@@ -23,7 +23,11 @@ describe('StatusPill', () => {
   })
 
   it('outline 变体：仅 border + fg，无 bg-subtle', () => {
-    const { container } = render(<StatusPill variant="outline" tone="success">成功</StatusPill>)
+    const { container } = render(
+      <StatusPill variant="outline" tone="success">
+        成功
+      </StatusPill>,
+    )
     const el = container.querySelector('[data-status-pill]') as HTMLElement
     expect(el.dataset.statusVariant).toBe('outline')
     expect(el.classList.contains('text-mcs-success-fg')).toBe(true)
@@ -39,11 +43,22 @@ describe('StatusPill', () => {
   })
 
   it('8 tone 全覆盖：default/muted/accent/success/warning/error/info/purple', () => {
-    const tones = ['default', 'muted', 'accent', 'success', 'warning', 'error', 'info', 'purple'] as const
+    const tones = [
+      'default',
+      'muted',
+      'accent',
+      'success',
+      'warning',
+      'error',
+      'info',
+      'purple',
+    ] as const
     const { container } = render(
       <>
         {tones.map((t) => (
-          <StatusPill key={t} tone={t}>{t}</StatusPill>
+          <StatusPill key={t} tone={t}>
+            {t}
+          </StatusPill>
         ))}
       </>,
     )

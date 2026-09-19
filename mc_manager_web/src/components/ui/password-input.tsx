@@ -54,7 +54,11 @@ export function PasswordInput({
           aria-label={visible ? revealLabels.hide : revealLabels.show}
           className="absolute right-2 top-1/2 -translate-y-1/2 rounded-mcs-sm p-1.5 text-mcs-text-muted transition-colors hover:bg-mcs-state-hover hover:text-mcs-text-default"
         >
-          {visible ? <EyeOff className="size-4" aria-hidden /> : <Eye className="size-4" aria-hidden />}
+          {visible ? (
+            <EyeOff className="size-4" aria-hidden />
+          ) : (
+            <Eye className="size-4" aria-hidden />
+          )}
         </button>
       </div>
       {showCapsLock && capsLock && (

@@ -54,7 +54,11 @@ export function EditorSlot({
       content={draft}
       encoding={contentQuery.data?.encoding ?? 'utf-8'}
       theme={theme}
-      isLoading={variant === 'desktop' ? contentQuery.isLoading && selectedPath !== null : contentQuery.isLoading}
+      isLoading={
+        variant === 'desktop'
+          ? contentQuery.isLoading && selectedPath !== null
+          : contentQuery.isLoading
+      }
       loadError={loadError}
       isSaving={isSaving}
       dirty={dirty}
@@ -66,15 +70,9 @@ export function EditorSlot({
     />
   )
   if (variant === 'desktop') {
-    return (
-      <Card className="flex h-full min-h-0 w-[45%] shrink-0 flex-col">
-        {editor}
-      </Card>
-    )
+    return <Card className="flex h-full min-h-0 w-[45%] shrink-0 flex-col">{editor}</Card>
   }
   return (
-    <div className="fixed inset-0 z-(--mcs-z-overlay) flex flex-col bg-mcs-bg-muted">
-      {editor}
-    </div>
+    <div className="fixed inset-0 z-(--mcs-z-overlay) flex flex-col bg-mcs-bg-muted">{editor}</div>
   )
 }

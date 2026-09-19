@@ -114,7 +114,10 @@ export function DateTextInput({
             nextDigits = (base + inputDigits.slice(shownDigits.length)).slice(0, 8)
           } else if (shown.startsWith(rawInput) && inputDigits.length < shownDigits.length) {
             // 末端删除：从原始数字缓冲扣掉，避免把补零位当成用户输入
-            nextDigits = base.slice(0, Math.max(0, base.length - (shownDigits.length - inputDigits.length)))
+            nextDigits = base.slice(
+              0,
+              Math.max(0, base.length - (shownDigits.length - inputDigits.length)),
+            )
           } else {
             // 整串替换（全选重输/粘贴/输入法上屏）：以新数字串为准
             nextDigits = inputDigits.slice(0, 8)
@@ -123,7 +126,9 @@ export function DateTextInput({
           setDraftDigits(nextDigits)
           // 末位日期只键入一位时（7 位数字）补零显示可能还会被下一位改写，先不上抛，等键入完或失焦
           const pendingDayDigit =
-            rawInput.startsWith(shown) && inputDigits.length === shownDigits.length + 1 && nextDigits.length === 7
+            rawInput.startsWith(shown) &&
+            inputDigits.length === shownDigits.length + 1 &&
+            nextDigits.length === 7
           if (next === '' || (isCompleteIsoDate(next) && !pendingDayDigit)) onChange(next)
         }}
         onBlur={() => {
@@ -165,7 +170,13 @@ export function DateTextInput({
           // 焦点交给面板内部的日期格（roving tabindex），避免 Radix 默认落焦到弹层容器
           onOpenAutoFocus={(event) => event.preventDefault()}
         >
-          <DatePickerCalendar value={value} min={min} max={max} onSelect={commit} onClear={() => commit('')} />
+          <DatePickerCalendar
+            value={value}
+            min={min}
+            max={max}
+            onSelect={commit}
+            onClear={() => commit('')}
+          />
         </PopoverContent>
       </Popover>
     </div>

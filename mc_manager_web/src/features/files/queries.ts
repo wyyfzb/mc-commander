@@ -30,11 +30,7 @@ export function useFileList(instanceId: string | null, dir: string) {
 }
 
 /** 文件内容（按完整文件路径缓存；打开编辑器时才拉取） */
-export function useFileContent(
-  instanceId: string | null,
-  filePath: string | null,
-  enabled = true,
-) {
+export function useFileContent(instanceId: string | null, filePath: string | null, enabled = true) {
   const config = useConnectionStore()
   return useQuery({
     queryKey: queryKeys.fileContent(instanceId ?? '', filePath ?? ''),

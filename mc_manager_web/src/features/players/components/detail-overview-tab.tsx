@@ -15,7 +15,13 @@ import { formatBanRemaining } from '@/lib/mc-ban'
 import { formatRelativeTime } from '@/lib/format'
 import type { BanRecord, Player } from '@/api/types'
 import type { PlayerActionRequest } from '../mutations'
-import { DIMENSION_LABELS, GAME_MODE_LABELS, formatEffectDuration, formatPlayTime, toRomanLabel } from './detail-overview-format'
+import {
+  DIMENSION_LABELS,
+  GAME_MODE_LABELS,
+  formatEffectDuration,
+  formatPlayTime,
+  toRomanLabel,
+} from './detail-overview-format'
 import { InfoCell, Section, StatCell } from './overview-cells'
 import { OverviewActions, type ActionOutcome } from './overview-actions'
 import { toastWithUndo } from '../reversible-action'
@@ -29,7 +35,13 @@ interface OverviewTabProps {
   onOpenBanDialog: (player: Player) => void
 }
 
-export function OverviewTab({ player, isRconConnected, bans, onAction, onOpenBanDialog }: OverviewTabProps) {
+export function OverviewTab({
+  player,
+  isRconConnected,
+  bans,
+  onAction,
+  onOpenBanDialog,
+}: OverviewTabProps) {
   const [confirmAction, setConfirmAction] = useState<string | null>(null)
   const [messageText, setMessageText] = useState('')
   const [messageOpen, setMessageOpen] = useState(false)
@@ -57,10 +69,10 @@ export function OverviewTab({ player, isRconConnected, bans, onAction, onOpenBan
     }
   }
 
-  const playerBans = bans.filter(
-    (b) => b.targetType === 'player' && b.target === player.name,
-  )
-  const ipBans = player.ip ? bans.filter((b) => b.targetType === 'ip' && b.target === player.ip) : []
+  const playerBans = bans.filter((b) => b.targetType === 'player' && b.target === player.name)
+  const ipBans = player.ip
+    ? bans.filter((b) => b.targetType === 'ip' && b.target === player.ip)
+    : []
   const relatedBans = [...playerBans, ...ipBans]
   // 渲染期取当前时间为可接受权衡：封禁剩余时间随详情数据刷新更新，非实时倒计时
   // eslint-disable-next-line react/purity
@@ -91,7 +103,10 @@ export function OverviewTab({ player, isRconConnected, bans, onAction, onOpenBan
       {/* ── 状态条（仅在线）── */}
       {player.isOnline && (
         <div className="grid grid-cols-4 gap-2 rounded-mcs-sm border border-mcs-border-muted p-3">
-          <StatCell label="生命" value={player.health !== null ? `${player.health}/${player.maxHealth}` : '--'} />
+          <StatCell
+            label="生命"
+            value={player.health !== null ? `${player.health}/${player.maxHealth}` : '--'}
+          />
           <StatCell label="饥饿" value={player.hunger !== null ? String(player.hunger) : '--'} />
           <StatCell label="护甲" value={player.armor != null ? String(player.armor) : '--'} />
           <StatCell label="经验" value={player.xpLevel !== null ? `Lv.${player.xpLevel}` : '--'} />
@@ -107,14 +122,19 @@ export function OverviewTab({ player, isRconConnected, bans, onAction, onOpenBan
                 key={`${effect.id}-${i}`}
                 className="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-mcs-xs"
                 style={{
-                  borderColor: effect.isBeneficial ? 'var(--mcs-success-border)' : 'var(--mcs-warning-border)',
-                  backgroundColor: effect.isBeneficial ? 'var(--mcs-success-bg-subtle)' : 'var(--mcs-warning-bg-subtle)',
+                  borderColor: effect.isBeneficial
+                    ? 'var(--mcs-success-border)'
+                    : 'var(--mcs-warning-border)',
+                  backgroundColor: effect.isBeneficial
+                    ? 'var(--mcs-success-bg-subtle)'
+                    : 'var(--mcs-warning-bg-subtle)',
                   color: effect.isBeneficial ? 'var(--mcs-success-fg)' : 'var(--mcs-warning-fg)',
                 }}
               >
                 {effect.name}
                 {effect.level > 1 && toRomanLabel(effect.level)}
-                {effect.durationSeconds >= 0 && ` · ${formatEffectDuration(effect.durationSeconds)}`}
+                {effect.durationSeconds >= 0 &&
+                  ` · ${formatEffectDuration(effect.durationSeconds)}`}
               </span>
             ))}
           </div>
@@ -124,13 +144,39 @@ export function OverviewTab({ player, isRconConnected, bans, onAction, onOpenBan
       {/* ── 基本信息 2×3 网格 ── */}
       <Section title="基本信息">
         <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-          <InfoCell label="坐标" value={player.position ? `${Math.round(player.position.x)}, ${Math.round(player.position.y)}, ${Math.round(player.position.z)}` : '--'} mono />
-          <InfoCell label="游戏模式" value={player.gameMode ? GAME_MODE_LABELS[player.gameMode] ?? player.gameMode : '--'} />
-          <InfoCell label="维度" value={player.dimension ? DIMENSION_LABELS[player.dimension] ?? player.dimension : '--'} />
+          <InfoCell
+            label="坐标"
+            value={
+              player.position
+                ? `${Math.round(player.position.x)}, ${Math.round(player.position.y)}, ${Math.round(player.position.z)}`
+                : '--'
+            }
+            mono
+          />
+          <InfoCell
+            label="游戏模式"
+            value={player.gameMode ? (GAME_MODE_LABELS[player.gameMode] ?? player.gameMode) : '--'}
+          />
+          <InfoCell
+            label="维度"
+            value={
+              player.dimension ? (DIMENSION_LABELS[player.dimension] ?? player.dimension) : '--'
+            }
+          />
           <InfoCell label="IP 地址" value={player.ip || '--'} mono />
           <InfoCell label="总游戏时长" value={formatPlayTime(player.totalPlayTime)} />
-          <InfoCell label="最后在线" value={player.lastSeen ? formatRelativeTime(player.lastSeen) : '--'} />
-          <InfoCell label="连续在线" value={player.isOnline && player.onlineTime != null ? formatPlayTime(player.onlineTime) : '--'} />
+          <InfoCell
+            label="最后在线"
+            value={player.lastSeen ? formatRelativeTime(player.lastSeen) : '--'}
+          />
+          <InfoCell
+            label="连续在线"
+            value={
+              player.isOnline && player.onlineTime != null
+                ? formatPlayTime(player.onlineTime)
+                : '--'
+            }
+          />
           <InfoCell
             label="复活点"
             value={
@@ -161,13 +207,19 @@ export function OverviewTab({ player, isRconConnected, bans, onAction, onOpenBan
                     <span className={ban.isActive ? 'text-mcs-error-fg' : 'text-mcs-text-muted'}>
                       {ban.isActive ? '生效中' : '已解除'}
                     </span>
-                    <span className="text-mcs-text-muted"> · {ban.targetType === 'ip' ? 'IP 封禁' : '玩家封禁'} · {ban.reason || '无理由'}</span>
+                    <span className="text-mcs-text-muted">
+                      {' '}
+                      · {ban.targetType === 'ip' ? 'IP 封禁' : '玩家封禁'} ·{' '}
+                      {ban.reason || '无理由'}
+                    </span>
                   </div>
                   <div className="text-mcs-2xs text-mcs-text-muted">
                     {ban.isPermanent
                       ? '永久'
                       : ban.expiresAt
-                        ? (ban.isActive ? (formatBanRemaining(ban.expiresAt, nowMs) ?? '即将解封') : '已到期')
+                        ? ban.isActive
+                          ? (formatBanRemaining(ban.expiresAt, nowMs) ?? '即将解封')
+                          : '已到期'
                         : ''}
                     {' · '}
                     {ban.createdAt ? formatRelativeTime(ban.createdAt) : ''}
@@ -232,7 +284,10 @@ export function OverviewTab({ player, isRconConnected, bans, onAction, onOpenBan
         <Section title="IP 登录历史">
           <div className="flex flex-col gap-1.5">
             {player.ipHistory?.map((entry, i) => (
-              <div key={`${entry.ip}-${i}`} className="flex items-center justify-between text-mcs-xs">
+              <div
+                key={`${entry.ip}-${i}`}
+                className="flex items-center justify-between text-mcs-xs"
+              >
                 <span className="font-mono text-mcs-text-muted">{entry.ip}</span>
                 <span className="text-mcs-text-muted">
                   {entry.lastSeen} · {entry.count} 次
@@ -255,7 +310,9 @@ export function OverviewTab({ player, isRconConnected, bans, onAction, onOpenBan
             ? `即将清空 ${player.name} 的背包`
             : `即将解封 ${confirmAction?.split('-')[2] ?? ''}`
         }
-        warning={confirmAction === 'clearinv' ? '此操作不可撤销，所有物品将被永久删除' : '此操作不可撤销'}
+        warning={
+          confirmAction === 'clearinv' ? '此操作不可撤销，所有物品将被永久删除' : '此操作不可撤销'
+        }
         confirmText="确认操作"
         danger
         onConfirm={async () => {
@@ -306,7 +363,9 @@ export function OverviewTab({ player, isRconConnected, bans, onAction, onOpenBan
 
       {/* RCON 不可用时在线操作提示 */}
       {player.isOnline && !isRconConnected && (
-        <p className="text-mcs-xs text-mcs-text-muted">提示：RCON 未连接，在线操作可能失败（需启用 RCON）</p>
+        <p className="text-mcs-xs text-mcs-text-muted">
+          提示：RCON 未连接，在线操作可能失败（需启用 RCON）
+        </p>
       )}
     </div>
   )

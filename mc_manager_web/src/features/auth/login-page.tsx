@@ -222,9 +222,7 @@ export function LoginPage() {
         } else if (err.code === AUTH_SETUP_TOKEN_INVALID_CODE) {
           // 40104：公网部署开启了首访设密所有权证明 → 展示 SETUP_TOKEN 输入框
           setNeedsSetupToken(true)
-          setErrorText(
-            err.message || 'SETUP_TOKEN 缺失或错误：请粘贴部署完成时输出的一次性令牌',
-          )
+          setErrorText(err.message || 'SETUP_TOKEN 缺失或错误：请粘贴部署完成时输出的一次性令牌')
         } else if (err.code === ErrorCode.AUTH_TOTP_REQUIRED) {
           // 40105：密码已通过、仅缺第二因子。服务端此时未签发会话也未计失败，
           // 故这不是「错误」而是流程下一步——展开输入框，不用错误色播报
@@ -272,7 +270,11 @@ export function LoginPage() {
         aria-label={theme === 'dark' ? '切换到亮色主题' : '切换到深色主题'}
         className="absolute right-4 top-4 z-(--mcs-z-local) rounded-mcs-md p-2 text-mcs-text-muted transition-colors hover:bg-mcs-state-hover hover:text-mcs-text-default"
       >
-        {theme === 'dark' ? <Sun className="size-4" aria-hidden /> : <Moon className="size-4" aria-hidden />}
+        {theme === 'dark' ? (
+          <Sun className="size-4" aria-hidden />
+        ) : (
+          <Moon className="size-4" aria-hidden />
+        )}
       </button>
 
       {/* 装饰性方块网格（MC 世界语义，24px = 1 格；aria 隐藏） */}
@@ -289,7 +291,10 @@ export function LoginPage() {
       </div>
 
       {/* 登录卡片（浮起面：卡阴影 + 顶部受光线；stagger 入场跟随品牌区） */}
-      <Card as="main" className="animate-mcs-fade-up mcs-delay-1 mcs-edge-top relative z-(--mcs-z-local) w-full max-w-md p-6">
+      <Card
+        as="main"
+        className="animate-mcs-fade-up mcs-delay-1 mcs-edge-top relative z-(--mcs-z-local) w-full max-w-md p-6"
+      >
         <div className="mb-5">
           <h2 className="text-mcs-lg font-semibold text-mcs-text-default">{heading}</h2>
           <p className="mt-1 text-mcs-xs text-mcs-text-muted">
@@ -307,7 +312,11 @@ export function LoginPage() {
 
         {/* 探测中骨架 */}
         {phase === 'probing' && (
-          <div className="flex flex-col items-center gap-3 py-8" role="status" aria-label="正在探测面板状态">
+          <div
+            className="flex flex-col items-center gap-3 py-8"
+            role="status"
+            aria-label="正在探测面板状态"
+          >
             <Loader2 className="size-6 animate-spin text-mcs-text-muted" aria-hidden />
             <div className="w-full space-y-2">
               <Skeleton className="h-9 w-full" />

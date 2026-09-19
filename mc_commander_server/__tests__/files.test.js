@@ -33,7 +33,10 @@ describe('File Routes - Path Traversal Protection', () => {
     fs.mkdirSync(path.join(tmpDir, 'plugins'));
     fs.writeFileSync(path.join(tmpDir, 'plugins', 'plugin.yml'), 'name: test\n');
     // 二进制文件（PNG 文件头 + NUL 字节），用于验证二进制检测
-    fs.writeFileSync(path.join(tmpDir, 'binary.dat'), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x01, 0x02, 0x03]));
+    fs.writeFileSync(
+      path.join(tmpDir, 'binary.dat'),
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x01, 0x02, 0x03]),
+    );
 
     // 实例目录外的敏感文件，用于验证穿越攻击无法读取/删除
     secretFile = path.join(path.dirname(tmpDir), `mc-files-secret-${Date.now()}.txt`);
@@ -42,7 +45,7 @@ describe('File Routes - Path Traversal Protection', () => {
     app = express();
     app.use(express.json());
     mockManager = {
-      getInstance: vi.fn().mockReturnValue({ serverPath: tmpDir })
+      getInstance: vi.fn().mockReturnValue({ serverPath: tmpDir }),
     };
     app.use('/api', createFileRoutes(mockManager));
     app.use(errorHandler);
@@ -60,7 +63,7 @@ describe('File Routes - Path Traversal Protection', () => {
       expect(res.status).toBe(200);
       expect(res.body.status).toBe('ok');
       expect(res.body.data.isDirectory).toBe(true);
-      const names = res.body.data.files.map(f => f.name);
+      const names = res.body.data.files.map((f) => f.name);
       expect(names).toContain('server.properties');
       expect(names).toContain('plugins');
       // 目录在前
@@ -71,7 +74,7 @@ describe('File Routes - Path Traversal Protection', () => {
       const res = await request(app).get('/api/instances/s1/files').query({ path: 'plugins' });
 
       expect(res.status).toBe(200);
-      expect(res.body.data.files.map(f => f.name)).toContain('plugin.yml');
+      expect(res.body.data.files.map((f) => f.name)).toContain('plugin.yml');
     });
 
     it('should reject path traversal with ../', async () => {
@@ -150,7 +153,9 @@ describe('File Routes - Path Traversal Protection', () => {
         .send({ path: 'server.properties', content: 'motd=atomic\n' });
 
       expect(res.status).toBe(200);
-      expect(fs.readFileSync(path.join(tmpDir, 'server.properties'), 'utf-8')).toBe('motd=atomic\n');
+      expect(fs.readFileSync(path.join(tmpDir, 'server.properties'), 'utf-8')).toBe(
+        'motd=atomic\n',
+      );
       // 修复前：writeFileSync 直接覆盖目标文件（与设置页 saveProperties 双写入点竞争）
       expect(renameSpy).toHaveBeenCalled();
       // 不残留临时文件
@@ -160,9 +165,10 @@ describe('File Routes - Path Traversal Protection', () => {
     });
 
     it('大写文件名列表文件同样触发 MC 内存同步（大小写不敏感）', async () => {
-      fs.writeFileSync(path.join(tmpDir, 'BANNED-PLAYERS.JSON'), JSON.stringify([
-        { name: 'Steve', reason: 'test' },
-      ]));
+      fs.writeFileSync(
+        path.join(tmpDir, 'BANNED-PLAYERS.JSON'),
+        JSON.stringify([{ name: 'Steve', reason: 'test' }]),
+      );
       const mockInstance = {
         id: 's1',
         serverPath: tmpDir,
@@ -218,9 +224,7 @@ describe('File Routes - Path Traversal Protection', () => {
     });
 
     it('should reject deleting the instance root via /', async () => {
-      const res = await request(app)
-        .delete('/api/instances/s1/files')
-        .query({ path: '/' });
+      const res = await request(app).delete('/api/instances/s1/files').query({ path: '/' });
 
       expect(res.status).toBe(403);
       expect(res.body.code).toBe(ErrorCodes.PATH_TRAVERSAL_DETECTED.code);
@@ -231,9 +235,7 @@ describe('File Routes - Path Traversal Protection', () => {
     // 原防护（字符串 includes('..') + 无边界 startsWith 前缀检查）全部可绕过——
     // 归一化后 startsWith 恒真，随后 rmSync recursive 会删除整个实例目录
     it('should reject deleting the instance root via . (归一化后等于根目录)', async () => {
-      const res = await request(app)
-        .delete('/api/instances/s1/files')
-        .query({ path: '.' });
+      const res = await request(app).delete('/api/instances/s1/files').query({ path: '.' });
 
       expect(res.status).toBe(403);
       expect(res.body.code).toBe(ErrorCodes.PATH_TRAVERSAL_DETECTED.code);
@@ -244,9 +246,7 @@ describe('File Routes - Path Traversal Protection', () => {
 
     it('should reject deleting the instance root via ./ 与 .// 与 a/../ 变体', async () => {
       for (const p of ['./', './/', 'a/../']) {
-        const res = await request(app)
-          .delete('/api/instances/s1/files')
-          .query({ path: p });
+        const res = await request(app).delete('/api/instances/s1/files').query({ path: p });
 
         expect(res.status).toBe(403);
         expect(res.body.code).toBe(ErrorCodes.PATH_TRAVERSAL_DETECTED.code);
@@ -275,9 +275,10 @@ describe('File Routes - Path Traversal Protection', () => {
     });
 
     it('删除 banned-players.json 后同步 MC 内存并清理 temp_bans', async () => {
-      fs.writeFileSync(path.join(tmpDir, 'banned-players.json'), JSON.stringify([
-        { name: 'Alex', reason: 'spam' },
-      ]));
+      fs.writeFileSync(
+        path.join(tmpDir, 'banned-players.json'),
+        JSON.stringify([{ name: 'Alex', reason: 'spam' }]),
+      );
       const mockInstance = {
         id: 's1',
         serverPath: tmpDir,
@@ -322,9 +323,7 @@ describe('File Routes - Path Traversal Protection', () => {
       expect(res.body.code).toBe(ErrorCodes.BINARY_FILE_NOT_SUPPORTED.code);
       // 原二进制内容未被修改（整字节比较，替代首字节 includes 的宽松断言）
       const buf = fs.readFileSync(path.join(tmpDir, 'binary.dat'));
-      expect(
-        buf.equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x01, 0x02, 0x03])),
-      ).toBe(true);
+      expect(buf.equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x01, 0x02, 0x03]))).toBe(true);
     });
   });
 
@@ -366,7 +365,7 @@ describe('File Routes - Path Traversal Protection', () => {
       const buf = fs.readFileSync(path.join(tmpDir, 'gbk.txt'));
       expect(iconv.decode(buf, 'gbk')).toBe('新名');
       // 若被转成 UTF-8，GBK 解码会得到乱码
-      expect(buf.includes(0xE6)).toBe(false); // '新' 的 UTF-8 首字节
+      expect(buf.includes(0xe6)).toBe(false); // '新' 的 UTF-8 首字节
     });
 
     it('should create a new file as UTF-8 by default', async () => {
@@ -383,8 +382,11 @@ describe('File Routes - Path Traversal Protection', () => {
   describe('PUT /api/instances/:id/files/content - BOM preservation', () => {
     it('should read BOM file without BOM chars and write back with BOM preserved', async () => {
       // 带 BOM 的 UTF-8 文件
-      const BOM = Buffer.from([0xEF, 0xBB, 0xBF]);
-      fs.writeFileSync(path.join(tmpDir, 'bom.txt'), Buffer.concat([BOM, Buffer.from('motd=hi\n')]));
+      const BOM = Buffer.from([0xef, 0xbb, 0xbf]);
+      fs.writeFileSync(
+        path.join(tmpDir, 'bom.txt'),
+        Buffer.concat([BOM, Buffer.from('motd=hi\n')]),
+      );
 
       // 读取：content 不含 BOM 字符
       const readRes = await request(app)
@@ -457,10 +459,25 @@ describe('File Routes - Path Traversal Protection', () => {
 
     it('should pardon removed players and clean temp bans when banned-players.json saved', async () => {
       // 既有封禁：Saul233（临时封禁载体）+ Other（永久）
-      fs.writeFileSync(path.join(banTmpDir, 'banned-players.json'), JSON.stringify([
-        { name: 'Saul233', uuid: 'a1b2c3', reason: 'temp ban', created: new Date().toISOString(), source: 'command' },
-        { name: 'Other', uuid: 'd4e5f6', reason: 'perm', created: new Date().toISOString(), source: 'command' },
-      ]));
+      fs.writeFileSync(
+        path.join(banTmpDir, 'banned-players.json'),
+        JSON.stringify([
+          {
+            name: 'Saul233',
+            uuid: 'a1b2c3',
+            reason: 'temp ban',
+            created: new Date().toISOString(),
+            source: 'command',
+          },
+          {
+            name: 'Other',
+            uuid: 'd4e5f6',
+            reason: 'perm',
+            created: new Date().toISOString(),
+            source: 'command',
+          },
+        ]),
+      );
 
       // 编辑移除 Saul233，保留 Other
       const res = await request(banApp)
@@ -469,7 +486,13 @@ describe('File Routes - Path Traversal Protection', () => {
         .send({
           path: 'banned-players.json',
           content: JSON.stringify([
-            { name: 'Other', uuid: 'd4e5f6', reason: 'perm', created: new Date().toISOString(), source: 'command' },
+            {
+              name: 'Other',
+              uuid: 'd4e5f6',
+              reason: 'perm',
+              created: new Date().toISOString(),
+              source: 'command',
+            },
           ]),
         });
 
@@ -481,15 +504,26 @@ describe('File Routes - Path Traversal Protection', () => {
       // 同步清理 temp_bans 生效记录
       expect(BanModel.deactivateByPlayer).toHaveBeenCalledWith('s1', 'Saul233');
       // 文件已按新内容保存
-      const saved = JSON.parse(fs.readFileSync(path.join(banTmpDir, 'banned-players.json'), 'utf-8'));
+      const saved = JSON.parse(
+        fs.readFileSync(path.join(banTmpDir, 'banned-players.json'), 'utf-8'),
+      );
       expect(saved).toHaveLength(1);
       expect(saved[0].name).toBe('Other');
     });
 
     it('should ban newly added players when banned-players.json saved', async () => {
-      fs.writeFileSync(path.join(banTmpDir, 'banned-players.json'), JSON.stringify([
-        { name: 'Other', uuid: 'd4e5f6', reason: 'perm', created: new Date().toISOString(), source: 'command' },
-      ]));
+      fs.writeFileSync(
+        path.join(banTmpDir, 'banned-players.json'),
+        JSON.stringify([
+          {
+            name: 'Other',
+            uuid: 'd4e5f6',
+            reason: 'perm',
+            created: new Date().toISOString(),
+            source: 'command',
+          },
+        ]),
+      );
 
       // 编辑新增 Newbie（带 reason）
       const res = await request(banApp)
@@ -498,8 +532,20 @@ describe('File Routes - Path Traversal Protection', () => {
         .send({
           path: 'banned-players.json',
           content: JSON.stringify([
-            { name: 'Other', uuid: 'd4e5f6', reason: 'perm', created: new Date().toISOString(), source: 'command' },
-            { name: 'Newbie', uuid: 'g7h8i9', reason: 'spam', created: new Date().toISOString(), source: 'command' },
+            {
+              name: 'Other',
+              uuid: 'd4e5f6',
+              reason: 'perm',
+              created: new Date().toISOString(),
+              source: 'command',
+            },
+            {
+              name: 'Newbie',
+              uuid: 'g7h8i9',
+              reason: 'spam',
+              created: new Date().toISOString(),
+              source: 'command',
+            },
           ]),
         });
 
@@ -513,10 +559,13 @@ describe('File Routes - Path Traversal Protection', () => {
     });
 
     it('should pardon-ip removed IPs and clean ip temp bans when banned-ips.json saved', async () => {
-      fs.writeFileSync(path.join(banTmpDir, 'banned-ips.json'), JSON.stringify([
-        { ip: '1.2.3.4', reason: 'temp', created: new Date().toISOString(), source: 'command' },
-        { ip: '5.6.7.8', reason: 'perm', created: new Date().toISOString(), source: 'command' },
-      ]));
+      fs.writeFileSync(
+        path.join(banTmpDir, 'banned-ips.json'),
+        JSON.stringify([
+          { ip: '1.2.3.4', reason: 'temp', created: new Date().toISOString(), source: 'command' },
+          { ip: '5.6.7.8', reason: 'perm', created: new Date().toISOString(), source: 'command' },
+        ]),
+      );
 
       const res = await request(banApp)
         .put('/api/instances/s1/files/content')
@@ -540,9 +589,18 @@ describe('File Routes - Path Traversal Protection', () => {
         isRunning: false,
         sendCommand,
       });
-      fs.writeFileSync(path.join(banTmpDir, 'banned-players.json'), JSON.stringify([
-        { name: 'Saul233', uuid: 'a1b2c3', reason: 'temp', created: new Date().toISOString(), source: 'command' },
-      ]));
+      fs.writeFileSync(
+        path.join(banTmpDir, 'banned-players.json'),
+        JSON.stringify([
+          {
+            name: 'Saul233',
+            uuid: 'a1b2c3',
+            reason: 'temp',
+            created: new Date().toISOString(),
+            source: 'command',
+          },
+        ]),
+      );
 
       const res = await request(banApp)
         .put('/api/instances/s1/files/content')
@@ -557,9 +615,18 @@ describe('File Routes - Path Traversal Protection', () => {
     });
 
     it('should reject invalid JSON for ban files without saving', async () => {
-      fs.writeFileSync(path.join(banTmpDir, 'banned-players.json'), JSON.stringify([
-        { name: 'Saul233', uuid: 'a1b2c3', reason: 'temp', created: new Date().toISOString(), source: 'command' },
-      ]));
+      fs.writeFileSync(
+        path.join(banTmpDir, 'banned-players.json'),
+        JSON.stringify([
+          {
+            name: 'Saul233',
+            uuid: 'a1b2c3',
+            reason: 'temp',
+            created: new Date().toISOString(),
+            source: 'command',
+          },
+        ]),
+      );
 
       const res = await request(banApp)
         .put('/api/instances/s1/files/content')
@@ -569,7 +636,9 @@ describe('File Routes - Path Traversal Protection', () => {
       expect(res.status).toBe(400);
       expect(res.body.code).toBe(ErrorCodes.VALIDATION_ERROR.code);
       // 原文件未被修改
-      const saved = JSON.parse(fs.readFileSync(path.join(banTmpDir, 'banned-players.json'), 'utf-8'));
+      const saved = JSON.parse(
+        fs.readFileSync(path.join(banTmpDir, 'banned-players.json'), 'utf-8'),
+      );
       expect(saved).toHaveLength(1);
       expect(saved[0].name).toBe('Saul233');
       // 未触发任何命令或清理
@@ -592,9 +661,18 @@ describe('File Routes - Path Traversal Protection', () => {
       sendCommand.mockImplementation(() => {
         throw new Error('unexpected sync error');
       });
-      fs.writeFileSync(path.join(banTmpDir, 'banned-players.json'), JSON.stringify([
-        { name: 'Saul233', uuid: 'a1b2c3', reason: 'temp', created: new Date().toISOString(), source: 'command' },
-      ]));
+      fs.writeFileSync(
+        path.join(banTmpDir, 'banned-players.json'),
+        JSON.stringify([
+          {
+            name: 'Saul233',
+            uuid: 'a1b2c3',
+            reason: 'temp',
+            created: new Date().toISOString(),
+            source: 'command',
+          },
+        ]),
+      );
 
       const res = await request(banApp)
         .put('/api/instances/s1/files/content')
@@ -603,7 +681,9 @@ describe('File Routes - Path Traversal Protection', () => {
 
       // 文件保存不受同步命令失败影响
       expect(res.status).toBe(200);
-      const saved = JSON.parse(fs.readFileSync(path.join(banTmpDir, 'banned-players.json'), 'utf-8'));
+      const saved = JSON.parse(
+        fs.readFileSync(path.join(banTmpDir, 'banned-players.json'), 'utf-8'),
+      );
       expect(saved).toHaveLength(0);
       // temp_bans 清理仍执行（在命令之前，不依赖命令成功）
       expect(BanModel.deactivateByPlayer).toHaveBeenCalledWith('s1', 'Saul233');
@@ -653,10 +733,13 @@ describe('File Routes - Path Traversal Protection', () => {
     });
 
     it('should whitelist remove/whitelist add on whitelist.json changes without touching temp bans', async () => {
-      fs.writeFileSync(path.join(wlTmpDir, 'whitelist.json'), JSON.stringify([
-        { name: 'Alex', uuid: 'aaa' },
-        { name: 'Bob', uuid: 'bbb' },
-      ]));
+      fs.writeFileSync(
+        path.join(wlTmpDir, 'whitelist.json'),
+        JSON.stringify([
+          { name: 'Alex', uuid: 'aaa' },
+          { name: 'Bob', uuid: 'bbb' },
+        ]),
+      );
 
       // 移除 Alex，新增 Carol
       const res = await request(wlApp)
@@ -679,9 +762,10 @@ describe('File Routes - Path Traversal Protection', () => {
     });
 
     it('should deop/op on ops.json changes', async () => {
-      fs.writeFileSync(path.join(wlTmpDir, 'ops.json'), JSON.stringify([
-        { name: 'Alex', uuid: 'aaa', level: 4, bypassesPlayerLimit: false },
-      ]));
+      fs.writeFileSync(
+        path.join(wlTmpDir, 'ops.json'),
+        JSON.stringify([{ name: 'Alex', uuid: 'aaa', level: 4, bypassesPlayerLimit: false }]),
+      );
 
       // 移除 Alex，新增 Admin
       const res = await request(wlApp)
@@ -701,9 +785,10 @@ describe('File Routes - Path Traversal Protection', () => {
     });
 
     it('should reject invalid JSON for whitelist.json without saving', async () => {
-      fs.writeFileSync(path.join(wlTmpDir, 'whitelist.json'), JSON.stringify([
-        { name: 'Alex', uuid: 'aaa' },
-      ]));
+      fs.writeFileSync(
+        path.join(wlTmpDir, 'whitelist.json'),
+        JSON.stringify([{ name: 'Alex', uuid: 'aaa' }]),
+      );
 
       const res = await request(wlApp)
         .put('/api/instances/s1/files/content')
@@ -725,9 +810,10 @@ describe('File Routes - Path Traversal Protection', () => {
         isRunning: false,
         sendCommand,
       });
-      fs.writeFileSync(path.join(wlTmpDir, 'whitelist.json'), JSON.stringify([
-        { name: 'Alex', uuid: 'aaa' },
-      ]));
+      fs.writeFileSync(
+        path.join(wlTmpDir, 'whitelist.json'),
+        JSON.stringify([{ name: 'Alex', uuid: 'aaa' }]),
+      );
 
       const res = await request(wlApp)
         .put('/api/instances/s1/files/content')
@@ -770,7 +856,7 @@ describe('File Routes - Path Traversal Protection', () => {
       app = express();
       app.use(express.json());
       mockManager = {
-        getInstance: vi.fn().mockReturnValue({ serverPath: tmpDir })
+        getInstance: vi.fn().mockReturnValue({ serverPath: tmpDir }),
       };
       app.use('/api', createFileRoutes(mockManager));
       app.use(errorHandler);
@@ -794,52 +880,66 @@ describe('File Routes - Path Traversal Protection', () => {
       expect(res.body.data).toBeUndefined();
     });
 
-    it.skipIf(!symlinkSupported)('PUT content 通过符号链接覆盖外部文件 → 403 且外部文件未改', async () => {
-      fs.symlinkSync(secretFile, path.join(tmpDir, 'overwrite.txt'), 'file');
+    it.skipIf(!symlinkSupported)(
+      'PUT content 通过符号链接覆盖外部文件 → 403 且外部文件未改',
+      async () => {
+        fs.symlinkSync(secretFile, path.join(tmpDir, 'overwrite.txt'), 'file');
 
-      const res = await request(app)
-        .put('/api/instances/s1/files/content')
-        .set('Content-Type', 'application/json')
-        .send({ path: 'overwrite.txt', content: 'pwned' });
+        const res = await request(app)
+          .put('/api/instances/s1/files/content')
+          .set('Content-Type', 'application/json')
+          .send({ path: 'overwrite.txt', content: 'pwned' });
 
-      expect(res.status).toBe(403);
-      expect(res.body.code).toBe(ErrorCodes.PATH_TRAVERSAL_DETECTED.code);
-      expect(fs.readFileSync(secretFile, 'utf-8')).toBe('top-secret');
-    });
+        expect(res.status).toBe(403);
+        expect(res.body.code).toBe(ErrorCodes.PATH_TRAVERSAL_DETECTED.code);
+        expect(fs.readFileSync(secretFile, 'utf-8')).toBe('top-secret');
+      },
+    );
 
-    it.skipIf(!symlinkSupported)('DELETE 通过符号链接删除外部文件 → 403 且外部文件仍在', async () => {
-      fs.symlinkSync(secretFile, path.join(tmpDir, 'del-link.txt'), 'file');
+    it.skipIf(!symlinkSupported)(
+      'DELETE 通过符号链接删除外部文件 → 403 且外部文件仍在',
+      async () => {
+        fs.symlinkSync(secretFile, path.join(tmpDir, 'del-link.txt'), 'file');
 
-      const res = await request(app)
-        .delete('/api/instances/s1/files')
-        .query({ path: 'del-link.txt' });
+        const res = await request(app)
+          .delete('/api/instances/s1/files')
+          .query({ path: 'del-link.txt' });
 
-      expect(res.status).toBe(403);
-      expect(res.body.code).toBe(ErrorCodes.PATH_TRAVERSAL_DETECTED.code);
-      expect(fs.existsSync(secretFile)).toBe(true);
-    });
+        expect(res.status).toBe(403);
+        expect(res.body.code).toBe(ErrorCodes.PATH_TRAVERSAL_DETECTED.code);
+        expect(fs.existsSync(secretFile)).toBe(true);
+      },
+    );
 
-    it.skipIf(!symlinkSupported)('指向实例内文件的符号链接同样拒绝（最终目标 symlink 一律拒绝）', async () => {
-      fs.symlinkSync(path.join(tmpDir, 'server.properties'), path.join(tmpDir, 'link-inside.txt'), 'file');
+    it.skipIf(!symlinkSupported)(
+      '指向实例内文件的符号链接同样拒绝（最终目标 symlink 一律拒绝）',
+      async () => {
+        fs.symlinkSync(
+          path.join(tmpDir, 'server.properties'),
+          path.join(tmpDir, 'link-inside.txt'),
+          'file',
+        );
 
-      const res = await request(app)
-        .get('/api/instances/s1/files/content')
-        .query({ path: 'link-inside.txt' });
+        const res = await request(app)
+          .get('/api/instances/s1/files/content')
+          .query({ path: 'link-inside.txt' });
 
-      expect(res.status).toBe(403);
-      expect(res.body.code).toBe(ErrorCodes.PATH_TRAVERSAL_DETECTED.code);
-    });
+        expect(res.status).toBe(403);
+        expect(res.body.code).toBe(ErrorCodes.PATH_TRAVERSAL_DETECTED.code);
+      },
+    );
 
-    it.skipIf(!symlinkSupported)('list 通过符号链接目录越界 → 403（逐段 realpath 校验）', async () => {
-      fs.symlinkSync(outsideDir, path.join(tmpDir, 'linkdir'), 'junction');
+    it.skipIf(!symlinkSupported)(
+      'list 通过符号链接目录越界 → 403（逐段 realpath 校验）',
+      async () => {
+        fs.symlinkSync(outsideDir, path.join(tmpDir, 'linkdir'), 'junction');
 
-      const res = await request(app)
-        .get('/api/instances/s1/files')
-        .query({ path: 'linkdir' });
+        const res = await request(app).get('/api/instances/s1/files').query({ path: 'linkdir' });
 
-      expect(res.status).toBe(403);
-      expect(res.body.code).toBe(ErrorCodes.PATH_TRAVERSAL_DETECTED.code);
-    });
+        expect(res.status).toBe(403);
+        expect(res.body.code).toBe(ErrorCodes.PATH_TRAVERSAL_DETECTED.code);
+      },
+    );
 
     it.skipIf(!symlinkSupported)('GET content 通过符号链接目录嵌套访问外部文件 → 403', async () => {
       fs.symlinkSync(outsideDir, path.join(tmpDir, 'linkdir'), 'junction');

@@ -78,7 +78,7 @@ export function PluginsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   /** 正在启停的插件（行按钮 loading） */
-  const togglingFile = toggleMutation.isPending ? toggleMutation.variables?.file ?? null : null
+  const togglingFile = toggleMutation.isPending ? (toggleMutation.variables?.file ?? null) : null
 
   // 列表加载失败提示（TanStack Query 静默 → 页面补 error toast）
   const loadErrorShownRef = useRef(false)
@@ -306,7 +306,9 @@ export function PluginsPage() {
         description={
           <span className="inline-flex items-center gap-1">
             {plugins.length > 0 && (
-              <>共 {plugins.length} 个（启用 {enabledCount} / 禁用 {plugins.length - enabledCount}）</>
+              <>
+                共 {plugins.length} 个（启用 {enabledCount} / 禁用 {plugins.length - enabledCount}）
+              </>
             )}
             <InfoHint label="插件管理说明">{PLUGIN_EFFECT_HINT}</InfoHint>
           </span>
@@ -320,7 +322,10 @@ export function PluginsPage() {
               disabled={pluginsQuery.isFetching}
               aria-label="刷新插件列表"
             >
-              <RefreshCw className={`size-3.5 ${pluginsQuery.isFetching ? 'animate-spin' : ''}`} aria-hidden />
+              <RefreshCw
+                className={`size-3.5 ${pluginsQuery.isFetching ? 'animate-spin' : ''}`}
+                aria-hidden
+              />
               刷新
             </Button>
             <Button size="sm" onClick={() => fileInputRef.current?.click()} aria-label="上传插件">
@@ -335,7 +340,10 @@ export function PluginsPage() {
               aria-label="检查插件更新"
               data-testid="check-updates"
             >
-              <RefreshCw className={`size-3.5 ${updateChecking ? 'animate-spin' : ''}`} aria-hidden />
+              <RefreshCw
+                className={`size-3.5 ${updateChecking ? 'animate-spin' : ''}`}
+                aria-hidden
+              />
               检查更新
             </Button>
             <Button
@@ -354,7 +362,11 @@ export function PluginsPage() {
 
       {/* ── 上传进度条（顺序队列，可取消） ── */}
       {uploading && (
-        <UploadProgressBar uploading={uploading} queueRemaining={queueRemaining} onCancel={cancelUpload} />
+        <UploadProgressBar
+          uploading={uploading}
+          queueRemaining={queueRemaining}
+          onCancel={cancelUpload}
+        />
       )}
 
       {/* ── 批量操作条 ── */}
@@ -405,7 +417,10 @@ export function PluginsPage() {
       {pluginsQuery.isPending ? (
         <div className="space-y-2" data-testid="plugin-skeletons" aria-label="加载插件中">
           {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="flex items-center gap-3 rounded-mcs-md border border-mcs-border-muted p-4">
+            <div
+              key={i}
+              className="flex items-center gap-3 rounded-mcs-md border border-mcs-border-muted p-4"
+            >
               <Skeleton className="size-9 shrink-0" />
               <div className="min-w-0 flex-1 space-y-1.5">
                 <Skeleton className="h-4 w-1/3" />
@@ -431,13 +446,19 @@ export function PluginsPage() {
             hint={
               <>
                 将插件 jar 拖入本页或点击「上传插件」，放入实例{' '}
-                <code className="text-mcs-text-muted">plugins/</code> 目录，首次启动实例后会生成该目录
+                <code className="text-mcs-text-muted">plugins/</code>{' '}
+                目录，首次启动实例后会生成该目录
               </>
             }
             action={{ label: '上传插件', onClick: () => fileInputRef.current?.click() }}
           />
           <div className="mt-3 flex justify-center">
-            <Button variant="link" size="sm" onClick={() => setMarketOpen(true)} data-testid="open-market-empty">
+            <Button
+              variant="link"
+              size="sm"
+              onClick={() => setMarketOpen(true)}
+              data-testid="open-market-empty"
+            >
               <Store className="size-3.5" aria-hidden />
               或从插件市场一键安装
             </Button>

@@ -14,7 +14,13 @@ import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { setupServer } from 'msw/node'
 import { Toaster, toast } from 'sonner'
-import { handlers, mockInstanceStatus, upgradeMock, upgradeCancelMock, upgradeStatusMock } from '@/test/mocks/handlers'
+import {
+  handlers,
+  mockInstanceStatus,
+  upgradeMock,
+  upgradeCancelMock,
+  upgradeStatusMock,
+} from '@/test/mocks/handlers'
 import { UpgradeDialog } from '../upgrade-dialog'
 import { applyUpgradeProgress, useUpgradeStore } from '@/stores/upgrade'
 import { useConnectionStore } from '@/stores/connection'
@@ -134,9 +140,7 @@ describe('UpgradeDialog', () => {
     await selectVersion(user, '1.21.4')
     await user.click(screen.getByRole('button', { name: '开始升级' }))
     // 受理成功：按钮回可用（进度未到前可再次触发，由服务端 409 拦截）、无错误提示
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: '开始升级' })).toBeEnabled(),
-    )
+    await waitFor(() => expect(screen.getByRole('button', { name: '开始升级' })).toBeEnabled())
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
@@ -407,5 +411,4 @@ describe('UpgradeDialog', () => {
     expect(purpur).toHaveAttribute('aria-checked', 'true')
     expect(vanilla).toHaveAttribute('aria-checked', 'false')
   })
-
 })

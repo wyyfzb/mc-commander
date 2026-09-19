@@ -36,7 +36,7 @@ const mockWorld: WorldInfo = {
 }
 
 const mockProps: ServerProperties = {
-  'motd': 'A Demo Server',
+  motd: 'A Demo Server',
   'view-distance': '10',
   'rcon.password': '********',
   'white-list': 'false',
@@ -44,7 +44,10 @@ const mockProps: ServerProperties = {
 
 function ok<T>(data: T) {
   return HttpResponse.json({
-    status: 'ok', code: 0, message: 'Success', data,
+    status: 'ok',
+    code: 0,
+    message: 'Success',
+    data,
     timestamp: new Date().toISOString(),
   })
 }
@@ -87,7 +90,7 @@ describe('world API', () => {
 
   it('GET server.properties：Record 键值解包（敏感键 ******** 占位原样透传）', async () => {
     const res = await apiGetProperties(config, 'inst1')
-    expect(res).toMatchObject({ 'motd': 'A Demo Server', 'view-distance': '10' })
+    expect(res).toMatchObject({ motd: 'A Demo Server', 'view-distance': '10' })
     expect(res['rcon.password']).toBe('********')
   })
 

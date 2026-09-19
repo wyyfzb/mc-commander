@@ -33,7 +33,11 @@ function renderDialog() {
 
 describe('LastOutputDialog', () => {
   beforeEach(() => {
-    useConnectionStore.setState({ status: 'ready', baseUrl: 'http://localhost:8080', apiKey: 'test-key' })
+    useConnectionStore.setState({
+      status: 'ready',
+      baseUrl: 'http://localhost:8080',
+      apiKey: 'test-key',
+    })
     useUiStore.setState({ lastOutputInstanceId: null })
   })
 
@@ -47,7 +51,11 @@ describe('LastOutputDialog', () => {
       http.get('*/api/v1/instances/:id', () =>
         HttpResponse.json({
           status: 'ok',
-          data: { ...mockInstanceStatus, lastOutput: '[12:00:01] [Server thread/ERROR]: Failed to start server\n[12:00:02] Done (1.2s)!' },
+          data: {
+            ...mockInstanceStatus,
+            lastOutput:
+              '[12:00:01] [Server thread/ERROR]: Failed to start server\n[12:00:02] Done (1.2s)!',
+          },
         }),
       ),
     )
@@ -84,7 +92,9 @@ describe('LastOutputDialog', () => {
     expect(await screen.findByText(/获取失败/)).toBeInTheDocument()
     fail = false
     await user.click(screen.getByRole('button', { name: /重试/ }))
-    await waitFor(() => expect(screen.getByTestId('last-output-content').textContent).toContain('recovered'))
+    await waitFor(() =>
+      expect(screen.getByTestId('last-output-content').textContent).toContain('recovered'),
+    )
   })
 
   it('点击关闭按钮复位 ui store', async () => {
@@ -108,7 +118,11 @@ describe('LastOutputDialog', () => {
         HttpResponse.json({
           status: 'ok',
           // 虚构长 JSON 行（如 /give 附魔 NBT 回显）：不折行即横向滚动、行首滚出视野
-          data: { ...mockInstanceStatus, lastOutput: '{"id":"minecraft:diamond_sword","components":{"minecraft:enchantments":{"levels":{"minecraft:sharpness":255}}}}' },
+          data: {
+            ...mockInstanceStatus,
+            lastOutput:
+              '{"id":"minecraft:diamond_sword","components":{"minecraft:enchantments":{"levels":{"minecraft:sharpness":255}}}}',
+          },
         }),
       ),
     )

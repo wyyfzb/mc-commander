@@ -40,7 +40,9 @@ let current = { ...DEFAULTS };
 let fileFailureWarned = false;
 
 function normalizeLevel(value) {
-  const lv = String(value || '').trim().toLowerCase();
+  const lv = String(value || '')
+    .trim()
+    .toLowerCase();
   return Object.hasOwn(LEVELS, lv) ? lv : 'info';
 }
 
@@ -62,9 +64,17 @@ function rotateIfNeeded(targetFile) {
   const st = fs.statSync(targetFile);
   if (st.size < current.maxSizeBytes) return;
   const oldest = `${targetFile}.${current.maxFiles}`;
-  try { fs.unlinkSync(oldest); } catch { /* 最旧档不存在 */ }
+  try {
+    fs.unlinkSync(oldest);
+  } catch {
+    /* 最旧档不存在 */
+  }
   for (let i = current.maxFiles - 1; i >= 1; i--) {
-    try { fs.renameSync(`${targetFile}.${i}`, `${targetFile}.${i + 1}`); } catch { /* 该档不存在 */ }
+    try {
+      fs.renameSync(`${targetFile}.${i}`, `${targetFile}.${i + 1}`);
+    } catch {
+      /* 该档不存在 */
+    }
   }
   fs.renameSync(targetFile, `${targetFile}.1`);
 }
@@ -73,7 +83,11 @@ function appendErrorFile(line) {
   const targetFile = path.join(current.dir, ERROR_FILE_NAME);
   try {
     fs.mkdirSync(current.dir, { recursive: true });
-    try { rotateIfNeeded(targetFile); } catch { /* 首次写入文件不存在等情况 */ }
+    try {
+      rotateIfNeeded(targetFile);
+    } catch {
+      /* 首次写入文件不存在等情况 */
+    }
     fs.appendFileSync(targetFile, line + '\n', 'utf-8');
     if (fileFailureWarned) fileFailureWarned = false; // 恢复后重置告警标志
   } catch (err) {
@@ -92,12 +106,22 @@ function emit(stream, level, args) {
 }
 
 export const logger = {
-  debug: (...args) => { if (enabled('debug')) emit(process.stdout, 'debug', args); },
-  info: (...args) => { if (enabled('info')) emit(process.stdout, 'info', args); },
-  warn: (...args) => { if (enabled('warn')) emit(process.stderr, 'warn', args); },
-  error: (...args) => { if (enabled('error')) emit(process.stderr, 'error', args); },
+  debug: (...args) => {
+    if (enabled('debug')) emit(process.stdout, 'debug', args);
+  },
+  info: (...args) => {
+    if (enabled('info')) emit(process.stdout, 'info', args);
+  },
+  warn: (...args) => {
+    if (enabled('warn')) emit(process.stderr, 'warn', args);
+  },
+  error: (...args) => {
+    if (enabled('error')) emit(process.stderr, 'error', args);
+  },
   // stderr 白名单通道：启动横幅等安全/引导输出。不受级别过滤（始终可见）、不落盘
-  banner: (...args) => { process.stderr.write(formatLine('info', args) + '\n'); },
+  banner: (...args) => {
+    process.stderr.write(formatLine('info', args) + '\n');
+  },
 };
 
 // ── 测试注入通道（生产代码勿用）────────────────────────

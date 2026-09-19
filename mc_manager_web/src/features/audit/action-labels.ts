@@ -5,10 +5,30 @@
 
 /** 操作域分组（筛选下拉按域聚簇，组序=数组序） */
 export const ACTION_GROUPS = [
-  { group: '实例', actions: ['INSTANCE_CREATE', 'INSTANCE_UPDATE', 'INSTANCE_START', 'INSTANCE_STOP', 'INSTANCE_RESTART', 'INSTANCE_DELETE'] },
+  {
+    group: '实例',
+    actions: [
+      'INSTANCE_CREATE',
+      'INSTANCE_UPDATE',
+      'INSTANCE_START',
+      'INSTANCE_STOP',
+      'INSTANCE_RESTART',
+      'INSTANCE_DELETE',
+    ],
+  },
   { group: '配置', actions: ['CONFIG_CHANGE'] },
   { group: '备份', actions: ['BACKUP_CREATE', 'BACKUP_RESTORE', 'BACKUP_DELETE', 'BACKUP_CANCEL'] },
-  { group: '玩家', actions: ['PLAYER_OP', 'PLAYER_DEOP', 'PLAYER_KICK', 'PLAYER_BAN', 'PLAYER_PARDON', 'PLAYER_WHITELIST'] },
+  {
+    group: '玩家',
+    actions: [
+      'PLAYER_OP',
+      'PLAYER_DEOP',
+      'PLAYER_KICK',
+      'PLAYER_BAN',
+      'PLAYER_PARDON',
+      'PLAYER_WHITELIST',
+    ],
+  },
   { group: '任务', actions: ['TASK_CREATE', 'TASK_UPDATE', 'TASK_DELETE', 'TASK_EXECUTE'] },
   { group: '密钥', actions: ['KEY_ROTATE'] },
 ] as const

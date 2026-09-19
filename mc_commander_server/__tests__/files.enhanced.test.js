@@ -198,7 +198,9 @@ describe('POST /instances/:id/files/upload', () => {
     expect(res.body.data.name).toBe('test.txt');
     expect(res.body.data.size).toBe(11);
     expect(fs.existsSync(path.join(tmpDir, 'test-inst', 'test.txt'))).toBe(true);
-    expect(fs.readFileSync(path.join(tmpDir, 'test-inst', 'test.txt'), 'utf-8')).toBe('hello world');
+    expect(fs.readFileSync(path.join(tmpDir, 'test-inst', 'test.txt'), 'utf-8')).toBe(
+      'hello world',
+    );
   });
 
   it('rejects .jar extension', async () => {
@@ -250,7 +252,9 @@ describe('POST /instances/:id/files/upload', () => {
       .post('/api/v1/instances/test-inst/files/upload')
       .set(authHeaders())
       .set('Content-Type', 'multipart/form-data; boundary=----test')
-      .send('------test--\r\nContent-Disposition: form-data; name="something"\r\n\r\nvalue\r\n------test--');
+      .send(
+        '------test--\r\nContent-Disposition: form-data; name="something"\r\n\r\nvalue\r\n------test--',
+      );
 
     expect(res.status).toBe(400);
     expect(res.body.code).toBe(ErrorCodes.VALIDATION_ERROR.code);
@@ -279,8 +283,15 @@ describe('POST /instances/:id/files/upload', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.name).toBe('config.yml');
     expect(res.body.data.path).toBe('/plugins/Essentials/config.yml');
-    expect(fs.existsSync(path.join(tmpDir, 'test-inst', 'plugins', 'Essentials', 'config.yml'))).toBe(true);
-    expect(fs.readFileSync(path.join(tmpDir, 'test-inst', 'plugins', 'Essentials', 'config.yml'), 'utf-8')).toBe('config data');
+    expect(
+      fs.existsSync(path.join(tmpDir, 'test-inst', 'plugins', 'Essentials', 'config.yml')),
+    ).toBe(true);
+    expect(
+      fs.readFileSync(
+        path.join(tmpDir, 'test-inst', 'plugins', 'Essentials', 'config.yml'),
+        'utf-8',
+      ),
+    ).toBe('config data');
   });
 
   it('rejects path traversal in targetDir', async () => {
@@ -373,9 +384,7 @@ describe('files zod 请求契约（issue 391）', () => {
   it('POST /files/upload：?targetDir= 控制字符 → 400 且 multer 临时文件被清理（diskStorage 无残留）', async () => {
     // multer diskStorage 缓冲目录（routes/files.js uploadStorage.destination）
     const tmpUploadDir = path.join(os.tmpdir(), 'mc-commander-uploads');
-    const snapshotBefore = new Set(
-      fs.existsSync(tmpUploadDir) ? fs.readdirSync(tmpUploadDir) : []
-    );
+    const snapshotBefore = new Set(fs.existsSync(tmpUploadDir) ? fs.readdirSync(tmpUploadDir) : []);
 
     const res = await request(app)
       .post('/api/v1/instances/test-inst/files/upload?targetDir=%01bad')
@@ -388,9 +397,9 @@ describe('files zod 请求契约（issue 391）', () => {
     // validateQuery onError 钩子在 400 前清理落盘临时文件：
     // 本次请求新增的 .upload.tmp-* 不应残留在磁盘上
     const leftovers = fs.existsSync(tmpUploadDir)
-      ? fs.readdirSync(tmpUploadDir).filter(
-          (f) => f.startsWith('.upload.tmp-') && !snapshotBefore.has(f)
-        )
+      ? fs
+          .readdirSync(tmpUploadDir)
+          .filter((f) => f.startsWith('.upload.tmp-') && !snapshotBefore.has(f))
       : [];
     expect(leftovers).toEqual([]);
   });

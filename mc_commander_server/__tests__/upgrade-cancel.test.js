@@ -23,35 +23,38 @@ const testState = vi.hoisted(() => ({
 
 /** 下载流桩：hang 模式永不结束（把升级停在下载阶段），failure 模式立即 error */
 vi.mock('got', () => ({
-  default: Object.assign(vi.fn(() => Promise.reject(new Error('offline (mocked)'))), {
-    stream: vi.fn(() => {
-      const listeners = {};
-      const stream = {
-        on(ev, cb) {
-          (listeners[ev] = listeners[ev] || []).push(cb);
-          return stream;
-        },
-        pipe(file) {
-          stream._file = file;
-          return stream;
-        },
-        destroy() {
-          stream._destroyed = true;
-        },
-      };
-      stream._emit = (ev, ...args) => (listeners[ev] || []).forEach((cb) => cb(...args));
-      if (testState.streamBehavior === 'failure') {
-        queueMicrotask(() => stream._emit('error', new Error('download failed (mocked)')));
-      } else if (testState.streamBehavior === 'success') {
-        // 真正落盘并 end：只有 end 才触发 file.on('finish') → 摘要校验 → 推进到 verify
-        queueMicrotask(() => {
-          stream._emit('downloadProgress', { percent: 1, transferred: 1, total: 1 });
-          stream._file.end();
-        });
-      }
-      return stream;
-    }),
-  }),
+  default: Object.assign(
+    vi.fn(() => Promise.reject(new Error('offline (mocked)'))),
+    {
+      stream: vi.fn(() => {
+        const listeners = {};
+        const stream = {
+          on(ev, cb) {
+            (listeners[ev] = listeners[ev] || []).push(cb);
+            return stream;
+          },
+          pipe(file) {
+            stream._file = file;
+            return stream;
+          },
+          destroy() {
+            stream._destroyed = true;
+          },
+        };
+        stream._emit = (ev, ...args) => (listeners[ev] || []).forEach((cb) => cb(...args));
+        if (testState.streamBehavior === 'failure') {
+          queueMicrotask(() => stream._emit('error', new Error('download failed (mocked)')));
+        } else if (testState.streamBehavior === 'success') {
+          // 真正落盘并 end：只有 end 才触发 file.on('finish') → 摘要校验 → 推进到 verify
+          queueMicrotask(() => {
+            stream._emit('downloadProgress', { percent: 1, transferred: 1, total: 1 });
+            stream._file.end();
+          });
+        }
+        return stream;
+      }),
+    },
+  ),
 }));
 
 /** 备份服务桩：createBackup 触发完成事件（除非处于 backup-hang 模式）；restore 记录调用 */
@@ -63,7 +66,9 @@ vi.mock('../services/backup.service.js', () => ({
     }
     async createBackup(instanceId) {
       if (!testState.backupHang) {
-        queueMicrotask(() => this.serverManager.emit('instance:backupComplete', { instanceId, backupId: 'bk-mock' }));
+        queueMicrotask(() =>
+          this.serverManager.emit('instance:backupComplete', { instanceId, backupId: 'bk-mock' }),
+        );
       }
       return 'bk-mock';
     }
@@ -77,7 +82,10 @@ vi.mock('../services/backup.service.js', () => ({
 vi.mock('../db/index.js', () => ({ InstanceModel: { update: vi.fn() } }));
 vi.mock('../utils/audit.js', () => ({
   recordAudit: vi.fn(),
-  AuditActions: { INSTANCE_UPGRADE: 'INSTANCE_UPGRADE', INSTANCE_UPGRADE_ROLLBACK: 'INSTANCE_UPGRADE_ROLLBACK' },
+  AuditActions: {
+    INSTANCE_UPGRADE: 'INSTANCE_UPGRADE',
+    INSTANCE_UPGRADE_ROLLBACK: 'INSTANCE_UPGRADE_ROLLBACK',
+  },
 }));
 
 const { createUpgradeRoutes } = await import('../routes/upgrade.js');
@@ -285,7 +293,9 @@ describe('取消窗口与收尾口径', () => {
     });
     expect(manager._instance.jarFile).toBe(OLD_JAR_NAME);
     expect(manager._instance.mcVersion).toBe('1.20.4');
-    expect(fs.readFileSync(path.join(testState.tmpDir, OLD_JAR_NAME), 'utf8')).toBe('OLD_JAR_CONTENT');
+    expect(fs.readFileSync(path.join(testState.tmpDir, OLD_JAR_NAME), 'utf8')).toBe(
+      'OLD_JAR_CONTENT',
+    );
 
     const terminal = terminalEvent(manager);
     expect(terminal.stage).toBe(UPGRADE_STAGES.CANCELLED);
@@ -337,7 +347,9 @@ describe('取消窗口与收尾口径', () => {
 
     // 再次升级：注册表已释放，不会被 UPGRADE_IN_PROGRESS 拦
     testState.streamBehavior = 'failure';
-    const res = await request.post('/api/v1/instances/inst-1/upgrade').send({ mcVersion: '1.21.4', type: 'purpur' });
+    const res = await request
+      .post('/api/v1/instances/inst-1/upgrade')
+      .send({ mcVersion: '1.21.4', type: 'purpur' });
     expect(res.status).toBe(202);
     // 等这次升级走完（下载立即失败 → failed 终态）再断言，避免跨用例残留
     await vi.waitFor(() => expect(stages(manager)).toContain(UPGRADE_STAGES.FAILED));

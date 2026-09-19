@@ -61,7 +61,11 @@ export function AppShell() {
         <AppTopBar />
         {/* 降级横幅：WS 断开/RCON 未连接时的诚实提示 + 处置入口 */}
         <DegradationBanners />
-        <main id="main-content" tabIndex={-1} className="min-h-0 flex-1 overflow-y-auto focus-visible:outline-none">
+        <main
+          id="main-content"
+          tabIndex={-1}
+          className="min-h-0 flex-1 overflow-y-auto focus-visible:outline-none"
+        >
           <ErrorBoundary>
             <Outlet />
           </ErrorBoundary>

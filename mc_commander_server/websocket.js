@@ -78,8 +78,8 @@ export const ClientMessages = {
 // 与 WSEvents 同文件维护：新增事件时**必须**在此二分归类（归类哨兵见
 // __tests__/websocket.readonly-filter.test.js——未归类的新事件会让用例变红）。
 export const READONLY_WS_EVENTS = new Set([
-  WSEvents.STATUS,             // 运行态跃迁与状态快照（含崩溃熔断提示，不含日志文本）
-  WSEvents.TPS_UPDATE,         // 保留项：**当前无发射方**（已并入 performanceUpdate），性能读数语义
+  WSEvents.STATUS, // 运行态跃迁与状态快照（含崩溃熔断提示，不含日志文本）
+  WSEvents.TPS_UPDATE, // 保留项：**当前无发射方**（已并入 performanceUpdate），性能读数语义
   WSEvents.PERFORMANCE_UPDATE, // 性能读数（含睡眠/清醒玩家名）
   WSEvents.WEATHER_UPDATE,
   WSEvents.PLAYER_STATS_UPDATE, // 在线玩家血量/护甲/坐标
@@ -88,9 +88,9 @@ export const READONLY_WS_EVENTS = new Set([
   WSEvents.PLAYER_DEATH,
   WSEvents.PLAYER_RESPAWN,
   WSEvents.PLAYER_SLEEP,
-  WSEvents.ACHIEVEMENT,        // 游戏内本就全服广播的成就播报
+  WSEvents.ACHIEVEMENT, // 游戏内本就全服广播的成就播报
   WSEvents.SYSTEM_STATS_UPDATE, // 主机资源读数（/system-stats 对只读开放），由
-                                // startSystemStatsBroadcast 每 15s 经 broadcastAll 推送
+  // startSystemStatsBroadcast 每 15s 经 broadcastAll 推送
 ]);
 
 /**
@@ -179,7 +179,14 @@ export function cleanupNotificationEvents() {
 }
 
 // status 事件中需要持久化的状态跃迁子事件（前端据此生成通知）
-const STATUS_EVENT_TYPES = new Set(['started', 'stopped', 'crash', 'ready', 'save', 'circuit_breaker']);
+const STATUS_EVENT_TYPES = new Set([
+  'started',
+  'stopped',
+  'crash',
+  'ready',
+  'save',
+  'circuit_breaker',
+]);
 
 // 跃迁子事件中属「意外失败」的关键事件：用户不一定正盯着出事的实例，投递面取全局，
 // 否则多实例部署下非当前实例的崩溃只有恰好打开该实例控制台才看得见。
@@ -212,7 +219,7 @@ export function flushNotificationEvents() {
     const db = getDb();
     if (!notificationQueue.stmt) {
       notificationQueue.stmt = db.prepare(
-        'INSERT INTO notification_events (id, instance_id, type, data) VALUES (?, ?, ?, ?)'
+        'INSERT INTO notification_events (id, instance_id, type, data) VALUES (?, ?, ?, ?)',
       );
     }
     const insertAll = db.transaction((rows) => {
@@ -247,11 +254,17 @@ function persistNotificationEvent(instanceId, type, data) {
         // AUTOINCREMENT 的 rowid 永不复用保护只覆盖 sqlite_sequence：表被保留期
         // 清理清空 + 重启的组合下 MAX(id)=0，必须与 seq 取大，否则高游标客户端
         // 的新事件 id 全部低于游标、断线补齐失效
-        const maxId = db.prepare('SELECT COALESCE(MAX(id), 0) AS maxId FROM notification_events').get()?.maxId ?? 0;
+        const maxId =
+          db.prepare('SELECT COALESCE(MAX(id), 0) AS maxId FROM notification_events').get()
+            ?.maxId ?? 0;
         let seq = 0;
         try {
-          seq = db.prepare("SELECT seq FROM sqlite_sequence WHERE name = 'notification_events'").get()?.seq ?? 0;
-        } catch { /* sqlite_sequence 行不存在（从未插入过）即 0 */ }
+          seq =
+            db.prepare("SELECT seq FROM sqlite_sequence WHERE name = 'notification_events'").get()
+              ?.seq ?? 0;
+        } catch {
+          /* sqlite_sequence 行不存在（从未插入过）即 0 */
+        }
         notificationQueue.nextId = Math.max(maxId, seq) + 1;
       } catch {
         notificationQueue.nextId = 1;
@@ -267,10 +280,7 @@ function persistNotificationEvent(instanceId, type, data) {
     if (notificationQueue.buffer.length >= NOTIFICATION_FLUSH_BATCH_SIZE) {
       flushNotificationEvents();
     } else if (!notificationQueue.timer) {
-      notificationQueue.timer = setTimeout(
-        flushNotificationEvents,
-        NOTIFICATION_FLUSH_INTERVAL_MS,
-      );
+      notificationQueue.timer = setTimeout(flushNotificationEvents, NOTIFICATION_FLUSH_INTERVAL_MS);
       notificationQueue.timer.unref?.();
     }
     return id;
@@ -332,7 +342,7 @@ export function setupWebSocket(wss, serverManager) {
   function logAuthFailure(ip) {
     const justLocked = recordCredentialFailure(ip);
     logger.warn(
-      `WebSocket auth failed, closing 1008 (ip=${ip ?? 'unknown'}${justLocked ? ', IP now locked' : ''})`
+      `WebSocket auth failed, closing 1008 (ip=${ip ?? 'unknown'}${justLocked ? ', IP now locked' : ''})`,
     );
   }
 
@@ -368,7 +378,9 @@ export function setupWebSocket(wss, serverManager) {
     try {
       if (mayReceiveEvent(ws, WSEvents.DEPLOY_PROGRESS)) {
         for (const dep of inFlightDeploys(serverManager)) {
-          ws.send(JSON.stringify({ type: WSEvents.DEPLOY_PROGRESS, data: dep, timestamp: Date.now() }));
+          ws.send(
+            JSON.stringify({ type: WSEvents.DEPLOY_PROGRESS, data: dep, timestamp: Date.now() }),
+          );
         }
       }
     } catch (err) {
@@ -401,8 +413,8 @@ export function setupWebSocket(wss, serverManager) {
           // 订阅数上限：拒绝新增订阅（幂等重复订阅已有实例仍放行，
           // 不打断断线补齐重放）；超限返回 error 消息，不执行订阅
           if (
-            ws.subscribedInstances.size >= MAX_SUBSCRIPTIONS_PER_CLIENT
-            && !ws.subscribedInstances.has(msg.instanceId)
+            ws.subscribedInstances.size >= MAX_SUBSCRIPTIONS_PER_CLIENT &&
+            !ws.subscribedInstances.has(msg.instanceId)
           ) {
             sendError(ws, 'Too many subscriptions');
             return;
@@ -425,12 +437,14 @@ export function setupWebSocket(wss, serverManager) {
           try {
             const upgradeProgress = serverManager.activeUpgrades?.get(msg.instanceId);
             if (upgradeProgress && mayReceiveEvent(ws, WSEvents.UPGRADE_PROGRESS)) {
-              ws.send(JSON.stringify({
-                type: WSEvents.UPGRADE_PROGRESS,
-                instanceId: msg.instanceId,
-                data: upgradeProgress,
-                timestamp: Date.now(),
-              }));
+              ws.send(
+                JSON.stringify({
+                  type: WSEvents.UPGRADE_PROGRESS,
+                  instanceId: msg.instanceId,
+                  data: upgradeProgress,
+                  timestamp: Date.now(),
+                }),
+              );
             }
           } catch (err) {
             logger.error('Failed to send active upgrade snapshot:', err);
@@ -443,17 +457,19 @@ export function setupWebSocket(wss, serverManager) {
           // 违反契约的 z.string()）、players 是 Map（旧实现直接发出去会被
           // JSON.stringify 成 {}，违反 z.array）。四项都不在只读裁剪清单内，故不分角色
           if (instance) {
-            ws.send(JSON.stringify({
-              type: WSEvents.STATUS,
-              instanceId: msg.instanceId,
-              data: {
-                status: instance.isRunning ? 'running' : 'stopped',
-                isRunning: Boolean(instance.isRunning),
-                players: Array.from(instance.players?.values?.() ?? []),
-                tps: typeof instance.tps === 'number' ? instance.tps : null
-              },
-              timestamp: Date.now()
-            }));
+            ws.send(
+              JSON.stringify({
+                type: WSEvents.STATUS,
+                instanceId: msg.instanceId,
+                data: {
+                  status: instance.isRunning ? 'running' : 'stopped',
+                  isRunning: Boolean(instance.isRunning),
+                  players: Array.from(instance.players?.values?.() ?? []),
+                  tps: typeof instance.tps === 'number' ? instance.tps : null,
+                },
+                timestamp: Date.now(),
+              }),
+            );
           }
         } else if (msg.type === ClientMessages.UNSUBSCRIBE) {
           ws.subscribedInstances.delete(msg.instanceId);
@@ -486,7 +502,9 @@ export function setupWebSocket(wss, serverManager) {
     // 认证失败 IP 临时封禁：锁定窗口内所有尝试一律拒绝（凭据正确也不放行），
     // 堵住「无限次握手/首帧试凭据」的爆破口子
     if (isCredentialLocked(ip)) {
-      logger.warn(`Rejecting websocket connection: IP locked after auth failures (${ip ?? 'unknown'})`);
+      logger.warn(
+        `Rejecting websocket connection: IP locked after auth failures (${ip ?? 'unknown'})`,
+      );
       ws.close(1008, 'Too many auth failures');
       return;
     }
@@ -580,15 +598,13 @@ export function setupWebSocket(wss, serverManager) {
       // lastEventId、仍撞上同一个被占满的窗口，永久补不到（忙碌服的 playerChat
       // 是最易达的触发情形）。管理员不带 type 条件，窗口与改动前逐字一致
       const allowlist = ws._role === 'readonly' ? [...READONLY_WS_EVENTS] : null;
-      const typeClause = allowlist
-        ? ` AND type IN (${allowlist.map(() => '?').join(', ')})`
-        : '';
+      const typeClause = allowlist ? ` AND type IN (${allowlist.map(() => '?').join(', ')})` : '';
       const events = db
         .prepare(
           `SELECT id, instance_id, type, data, created_at
            FROM notification_events
            WHERE id > ? AND (instance_id = ? OR instance_id IS NULL)${typeClause}
-           ORDER BY id ASC LIMIT 500`
+           ORDER BY id ASC LIMIT 500`,
         )
         .all(lastEventId, instanceId, ...(allowlist ?? []));
       for (const ev of events) {
@@ -596,20 +612,24 @@ export function setupWebSocket(wss, serverManager) {
         // 重放是直发不经 fanOut，漏掉就是越权读取面
         if (!mayReceiveEvent(ws, ev.type)) continue;
         const data = JSON.parse(ev.data || '{}');
-        ws.send(JSON.stringify({
-          eventId: ev.id,
-          type: ev.type,
-          // 归属回退到载荷：关键事件（crash/熔断）落库时 instance_id 置空以取得
-          // 全局补齐面，实例归属只存在于 data.instanceId（前端据信封字段决定跳转目标）
-          instanceId: ev.instance_id ?? data.instanceId ?? null,
-          data,
-          // parseDbTime 归一化：created_at 是无时区标记的 UTC 串，
-          // 直接 Date.parse 在非 UTC 时区下会把补发事件的时间整体偏移。
-          timestamp: parseDbTime(ev.created_at) || Date.now(),
-        }));
+        ws.send(
+          JSON.stringify({
+            eventId: ev.id,
+            type: ev.type,
+            // 归属回退到载荷：关键事件（crash/熔断）落库时 instance_id 置空以取得
+            // 全局补齐面，实例归属只存在于 data.instanceId（前端据信封字段决定跳转目标）
+            instanceId: ev.instance_id ?? data.instanceId ?? null,
+            data,
+            // parseDbTime 归一化：created_at 是无时区标记的 UTC 串，
+            // 直接 Date.parse 在非 UTC 时区下会把补发事件的时间整体偏移。
+            timestamp: parseDbTime(ev.created_at) || Date.now(),
+          }),
+        );
       }
       if (events.length > 0) {
-        logger.info(`Replayed ${events.length} notification events to client (after id ${lastEventId})`);
+        logger.info(
+          `Replayed ${events.length} notification events to client (after id ${lastEventId})`,
+        );
       }
     } catch (err) {
       logger.error('Failed to replay notification events:', err);
@@ -649,7 +669,7 @@ export function setupWebSocket(wss, serverManager) {
       type,
       instanceId,
       data,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     });
 
     fanOut(message, { type, instanceId });
@@ -657,11 +677,13 @@ export function setupWebSocket(wss, serverManager) {
 
   function sendError(ws, message) {
     if (ws.readyState === 1) {
-      ws.send(JSON.stringify({
-        type: WSEvents.ERROR,
-        data: { message },
-        timestamp: Date.now()
-      }));
+      ws.send(
+        JSON.stringify({
+          type: WSEvents.ERROR,
+          data: { message },
+          timestamp: Date.now(),
+        }),
+      );
     }
   }
 
@@ -677,7 +699,7 @@ export function setupWebSocket(wss, serverManager) {
       type,
       instanceId: data?.instanceId ?? null,
       data,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     });
     fanOut(message, { type, instanceId: data?.instanceId ?? null, includeUnsubscribed: true });
   }
@@ -691,7 +713,7 @@ export function setupWebSocket(wss, serverManager) {
       ...(eventId != null ? { eventId } : {}),
       type,
       data,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     });
     fanOut(message, { type, includeUnsubscribed: true });
   }
@@ -709,13 +731,16 @@ export function setupWebSocket(wss, serverManager) {
       }
       // 常规跃迁也落库（实例行，仅订阅者断线补齐可见），但投递仍按订阅过滤
       const eventId = persistNotificationEvent(data.instanceId, WSEvents.STATUS, data);
-      fanOut(JSON.stringify({
-        ...(eventId != null ? { eventId } : {}),
-        type: WSEvents.STATUS,
-        instanceId: data.instanceId,
-        data,
-        timestamp: Date.now()
-      }), { type: WSEvents.STATUS, instanceId: data.instanceId });
+      fanOut(
+        JSON.stringify({
+          ...(eventId != null ? { eventId } : {}),
+          type: WSEvents.STATUS,
+          instanceId: data.instanceId,
+          data,
+          timestamp: Date.now(),
+        }),
+        { type: WSEvents.STATUS, instanceId: data.instanceId },
+      );
       return;
     }
     broadcast(data.instanceId, WSEvents.STATUS, data);
@@ -802,9 +827,15 @@ export function setupWebSocket(wss, serverManager) {
     ['instance:playerChat', (data) => broadcast(data.instanceId, WSEvents.PLAYER_CHAT, data)],
     ['instance:achievement', (data) => broadcast(data.instanceId, WSEvents.ACHIEVEMENT, data)],
     ['instance:tpsUpdate', (data) => broadcast(data.instanceId, WSEvents.TPS_UPDATE, data)],
-    ['instance:performanceUpdate', (data) => broadcast(data.instanceId, WSEvents.PERFORMANCE_UPDATE, data)],
+    [
+      'instance:performanceUpdate',
+      (data) => broadcast(data.instanceId, WSEvents.PERFORMANCE_UPDATE, data),
+    ],
     ['instance:weatherUpdate', (data) => broadcast(data.instanceId, WSEvents.WEATHER_UPDATE, data)],
-    ['instance:playerStatsUpdate', (data) => broadcast(data.instanceId, WSEvents.PLAYER_STATS_UPDATE, data)],
+    [
+      'instance:playerStatsUpdate',
+      (data) => broadcast(data.instanceId, WSEvents.PLAYER_STATS_UPDATE, data),
+    ],
     ['instance:playerSleep', (data) => broadcast(data.instanceId, WSEvents.PLAYER_SLEEP, data)],
   ];
   for (const [eventName, handler] of EVENT_HANDLERS) {
@@ -828,7 +859,7 @@ export function setupWebSocket(wss, serverManager) {
     const message = JSON.stringify({
       type,
       data,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     });
 
     fanOut(message, { type, includeUnsubscribed: true });
@@ -868,7 +899,14 @@ export function setupWebSocket(wss, serverManager) {
     }
   });
 
-  return { broadcast, broadcastAll, WSEvents, ClientMessages, startSystemStatsBroadcast, flushNotificationEvents };
+  return {
+    broadcast,
+    broadcastAll,
+    WSEvents,
+    ClientMessages,
+    startSystemStatsBroadcast,
+    flushNotificationEvents,
+  };
 
   /// 每 15s 通过 broadcastAll 推送系统资源统计（CPU/内存/磁盘）
   /// 调用方在 index.js 启动后调用，返回 stop 函数供优雅停机。

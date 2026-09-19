@@ -32,7 +32,12 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { SEMANTIC_TONE_CLASSES, type SemanticTone } from '@/components/mcs/tone'
-import { formatClock, formatDurationSec, formatDurationSecFull, formatFullDateTime } from '@/lib/format'
+import {
+  formatClock,
+  formatDurationSec,
+  formatDurationSecFull,
+  formatFullDateTime,
+} from '@/lib/format'
 import type { Player, PlayerEvent, PlayerSession } from '@/api/types'
 
 export interface LogTabProps {
@@ -74,7 +79,10 @@ function eventTone(tone: SemanticTone) {
 }
 
 /** 事件类型 → 语义色+图标+中文标签（契约映射，--mcs-* token） */
-const EVENT_META: Record<string, { label: string; icon: LucideIcon; color: string; badge: string }> = {
+const EVENT_META: Record<
+  string,
+  { label: string; icon: LucideIcon; color: string; badge: string }
+> = {
   join: { label: '进入', icon: LogIn, ...eventTone('success') },
   leave: { label: '离开', icon: LogOut, ...EVENT_NEUTRAL },
   death: { label: '死亡', icon: Skull, ...eventTone('error') },
@@ -96,9 +104,7 @@ const EMPTY_STATS = {
 /** 构建树节点列表（最新会话在上） */
 function buildLogNodes(player: Player): LogNode[] {
   // 会话按时间正序（详情 fallback 分支可能缺 sessions 字段，? 兜底防崩溃）
-  const sessions = [...(player.sessions ?? [])].sort(
-    (a, b) => a.start - b.start,
-  )
+  const sessions = [...(player.sessions ?? [])].sort((a, b) => a.start - b.start)
 
   const nodes: LogNode[] = []
   let prevEnd: number | null = null
@@ -180,9 +186,17 @@ export function LogTab({ player }: LogTabProps) {
           <div className="grid flex-1 grid-cols-3 gap-2">
             <StatCell label="总在线" value={formatDurationSec(stats.totalOnline)} />
             <StatCell label="累计登录" value={`${stats.loginCount} 次`} />
-            <StatCell label="已离线" value={formatDurationSec(stats.offlineSince)} color="text-mcs-text-muted" />
+            <StatCell
+              label="已离线"
+              value={formatDurationSec(stats.offlineSince)}
+              color="text-mcs-text-muted"
+            />
             <StatCell label="死亡" value={`${stats.deathCount} 次`} color="text-mcs-error-fg" />
-            <StatCell label="进度" value={`${stats.achievementCount} 个`} color="text-mcs-accent-fg" />
+            <StatCell
+              label="进度"
+              value={`${stats.achievementCount} 个`}
+              color="text-mcs-accent-fg"
+            />
             <StatCell label="入睡" value={`${stats.sleepCount} 次`} color="text-mcs-info-fg" />
           </div>
           <Button variant="outline" size="xs" onClick={toggleAll} className="shrink-0">
@@ -227,7 +241,8 @@ function SessionRow({
   const { session, labelNo, events } = node
   const endLabel = session.end ? formatClock(session.end) : '现在'
   const title =
-    `登录日志${labelNo} ${formatClock(session.start)} → ${endLabel} · ` + formatDurationSec(session.duration)
+    `登录日志${labelNo} ${formatClock(session.start)} → ${endLabel} · ` +
+    formatDurationSec(session.duration)
 
   return (
     <div className="flex flex-col">
@@ -243,7 +258,9 @@ function SessionRow({
           <ChevronDown className="size-3.5 shrink-0 text-mcs-text-muted" aria-hidden />
         )}
         <Folder className="size-3.5 shrink-0 text-mcs-warning-fg" aria-hidden />
-        <span className="min-w-0 flex-1 truncate text-mcs-sm font-medium text-mcs-text-default">{title}</span>
+        <span className="min-w-0 flex-1 truncate text-mcs-sm font-medium text-mcs-text-default">
+          {title}
+        </span>
       </button>
       {!collapsed && (
         <div className="ml-4 border-l border-mcs-border-muted pl-3 pb-1">
@@ -268,7 +285,8 @@ function EventRow({ event }: { event: PlayerEvent }) {
       ? event.message.replace('获得成就: ', '').replace('完成挑战: ', '')
       : event.message
   // 完成挑战 vs 获得进度
-  const label = event.type === 'achievement' && event.message.includes('完成挑战') ? '完成挑战' : meta.label
+  const label =
+    event.type === 'achievement' && event.message.includes('完成挑战') ? '完成挑战' : meta.label
 
   return (
     <div className="flex items-center gap-1.5 py-1">
@@ -279,7 +297,9 @@ function EventRow({ event }: { event: PlayerEvent }) {
         {label}
       </span>
       <span className="min-w-0 flex-1 truncate text-mcs-xs text-mcs-text-default">{message}</span>
-      <span className="shrink-0 font-mono text-mcs-2xs text-mcs-text-muted">{formatFullDateTime(event.timestamp)}</span>
+      <span className="shrink-0 font-mono text-mcs-2xs text-mcs-text-muted">
+        {formatFullDateTime(event.timestamp)}
+      </span>
     </div>
   )
 }
@@ -303,11 +323,21 @@ function OfflineRow({ node }: { node: OfflineNode }) {
 }
 
 /** 统计卡：标签 + 数值（语义色可覆盖） */
-function StatCell({ label, value, color = 'text-mcs-text-default' }: { label: string; value: string; color?: string }) {
+function StatCell({
+  label,
+  value,
+  color = 'text-mcs-text-default',
+}: {
+  label: string
+  value: string
+  color?: string
+}) {
   return (
     <div className="flex min-w-0 flex-col gap-0.5 rounded-mcs-xs bg-mcs-bg-muted px-2 py-1.5">
       <span className="text-mcs-2xs text-mcs-text-muted">{label}</span>
-      <span className={`truncate font-mono text-mcs-sm font-medium tabular-nums ${color}`}>{value}</span>
+      <span className={`truncate font-mono text-mcs-sm font-medium tabular-nums ${color}`}>
+        {value}
+      </span>
     </div>
   )
 }

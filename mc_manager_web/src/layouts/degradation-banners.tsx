@@ -42,8 +42,8 @@ export function DegradationBanners() {
               不再以同色 inline ghost 融入提示文字 */}
           <span className="flex items-center justify-between gap-3">
             <span className="min-w-0">
-              <b>{hasConnectedOnce ? 'WebSocket 已断开' : '实时通道未连接'}</b> · 已降级为定时刷新（每{' '}
-              {FALLBACK_POLL_INTERVAL_MS / 1000} 秒）
+              <b>{hasConnectedOnce ? 'WebSocket 已断开' : '实时通道未连接'}</b> ·
+              已降级为定时刷新（每 {FALLBACK_POLL_INTERVAL_MS / 1000} 秒）
               {/* 不写「数据仍可用」：本条只知道 WS 断了，面板地址是否同样不可达在此无从判定。
                   真后端实测（2026-09-17）：服务端整体不可达时本横幅与内容区「加载失败」同屏，
                   那句承诺会被现场当场推翻——按「不承诺做不到的事」的口径只陈述已知事实。 */}

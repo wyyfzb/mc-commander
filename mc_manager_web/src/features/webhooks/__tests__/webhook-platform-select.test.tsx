@@ -84,7 +84,10 @@ describe('Webhook 渠道预设单选组', () => {
     const generic = within(group).getByRole('radio', { name: '通用' })
     expect(generic).toHaveAttribute('aria-checked', 'true')
     expect(generic).toHaveAttribute('tabindex', '0')
-    expect(within(group).getByRole('radio', { name: '飞书' })).toHaveAttribute('aria-checked', 'false')
+    expect(within(group).getByRole('radio', { name: '飞书' })).toHaveAttribute(
+      'aria-checked',
+      'false',
+    )
     expect(within(group).getByRole('radio', { name: '飞书' })).toHaveAttribute('tabindex', '-1')
   })
 
@@ -145,9 +148,15 @@ describe('Webhook 渠道预设单选组', () => {
 
     // 停靠点可用：无选中态下首次方向键落在首项本身（不跳到第 2 项）
     fireEvent.keyDown(stops[0]!, { key: 'ArrowRight' })
-    expect(within(group).getByRole('radio', { name: '通用' })).toHaveAttribute('aria-checked', 'true')
+    expect(within(group).getByRole('radio', { name: '通用' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    )
     fireEvent.keyDown(stops[0]!, { key: 'ArrowRight' })
-    expect(within(group).getByRole('radio', { name: '飞书' })).toHaveAttribute('aria-checked', 'true')
+    expect(within(group).getByRole('radio', { name: '飞书' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    )
   })
 
   it('方向键之外的按键不抢，也不吞掉默认行为', async () => {

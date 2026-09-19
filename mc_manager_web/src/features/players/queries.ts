@@ -29,7 +29,11 @@ export function usePlayerDetails(instanceId: string | null, playerName: string |
   return useQuery({
     queryKey: [...queryKeys.players(instanceId ?? ''), 'details', playerName ?? ''],
     queryFn: ({ signal }) =>
-      apiGet<Player>(`/api/v1/instances/${instanceId}/players/${playerName}/details`, config, signal),
+      apiGet<Player>(
+        `/api/v1/instances/${instanceId}/players/${playerName}/details`,
+        config,
+        signal,
+      ),
     enabled: config.status === 'ready' && Boolean(instanceId) && Boolean(playerName),
   })
 }

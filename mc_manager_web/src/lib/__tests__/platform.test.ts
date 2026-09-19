@@ -31,7 +31,10 @@ describe('isMacPlatform / primaryModifierLabel', () => {
   })
 
   it('无 UA-CH 时退回 navigator.platform（MacIntel）', () => {
-    stubNavigator({ platform: 'MacIntel', userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)' })
+    stubNavigator({
+      platform: 'MacIntel',
+      userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
+    })
     expect(isMacPlatform()).toBe(true)
   })
 

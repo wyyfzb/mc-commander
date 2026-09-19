@@ -33,13 +33,15 @@ export class TaskRunHistoryModel {
   /** 某任务的最近执行记录，倒序（最新在前） */
   static findByTask(taskId, limit = 20) {
     const db = getDb();
-    const rows = db.prepare(`
+    const rows = db
+      .prepare(`
       SELECT * FROM task_run_history
       WHERE task_id = ?
       ORDER BY id DESC
       LIMIT ?
-    `).all(taskId, limit);
-    return rows.map(r => this._toCamel(r));
+    `)
+      .all(taskId, limit);
+    return rows.map((r) => this._toCamel(r));
   }
 
   static _toCamel(row) {

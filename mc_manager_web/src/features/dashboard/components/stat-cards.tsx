@@ -44,7 +44,9 @@ function StatCard({
   return (
     <Card className={cn('mcs-edge-top relative flex min-w-0 flex-1 flex-col gap-2 p-3', className)}>
       <CardHeader className="justify-between gap-2">
-        <CardTitle as="h2" variant="label">{title}</CardTitle>
+        <CardTitle as="h2" variant="label">
+          {title}
+        </CardTitle>
         {eyebrow && <span className={cn('text-mcs-xs', eyebrowClass)}>{eyebrow}</span>}
       </CardHeader>
       {children}
@@ -122,7 +124,13 @@ export function BigStatCards({
       <div className="flex flex-col gap-3">
         <ResourceRow
           label="CPU"
-          eyebrow={cores ? <StatusPill tone="muted" className="text-mcs-2xs">{cores} 核</StatusPill> : undefined}
+          eyebrow={
+            cores ? (
+              <StatusPill tone="muted" className="text-mcs-2xs">
+                {cores} 核
+              </StatusPill>
+            ) : undefined
+          }
           value={
             cpu != null ? (
               <>
@@ -130,7 +138,9 @@ export function BigStatCards({
                 <span className="text-mcs-sm font-medium text-mcs-text-muted">%</span>
               </>
             ) : (
-              <span className="font-sans text-mcs-sm font-medium text-mcs-text-muted">暂无数据</span>
+              <span className="font-sans text-mcs-sm font-medium text-mcs-text-muted">
+                暂无数据
+              </span>
             )
           }
           percent={cpu}
@@ -139,17 +149,24 @@ export function BigStatCards({
           label="内存"
           eyebrow={
             memPct != null ? (
-              <StatusPill tone="muted" className="text-mcs-2xs">{memPct.toFixed(0)}%</StatusPill>
+              <StatusPill tone="muted" className="text-mcs-2xs">
+                {memPct.toFixed(0)}%
+              </StatusPill>
             ) : undefined
           }
           value={
             hasMem ? (
               <>
                 {memUsed.toFixed(1)}
-                <span className="text-mcs-sm font-medium text-mcs-text-muted"> / {memTotal.toFixed(0)}G</span>
+                <span className="text-mcs-sm font-medium text-mcs-text-muted">
+                  {' '}
+                  / {memTotal.toFixed(0)}G
+                </span>
               </>
             ) : (
-              <span className="font-sans text-mcs-sm font-medium text-mcs-text-muted">暂无数据</span>
+              <span className="font-sans text-mcs-sm font-medium text-mcs-text-muted">
+                暂无数据
+              </span>
             )
           }
           percent={memPct}
@@ -158,17 +175,24 @@ export function BigStatCards({
           label="磁盘"
           eyebrow={
             primary ? (
-              <StatusPill tone="muted" className="text-mcs-2xs">{primary.percent.toFixed(1)}%</StatusPill>
+              <StatusPill tone="muted" className="text-mcs-2xs">
+                {primary.percent.toFixed(1)}%
+              </StatusPill>
             ) : undefined
           }
           value={
             primary ? (
               <>
                 {primary.usedGB}
-                <span className="text-mcs-sm font-medium text-mcs-text-muted"> / {primary.totalGB}G</span>
+                <span className="text-mcs-sm font-medium text-mcs-text-muted">
+                  {' '}
+                  / {primary.totalGB}G
+                </span>
               </>
             ) : (
-              <span className="font-sans text-mcs-sm font-medium text-mcs-text-muted">暂无磁盘数据</span>
+              <span className="font-sans text-mcs-sm font-medium text-mcs-text-muted">
+                暂无磁盘数据
+              </span>
             )
           }
           percent={primary?.percent ?? null}
@@ -206,12 +230,20 @@ function ResourceRow({
       <div
         {...(p == null
           ? { 'aria-hidden': true }
-          : { role: 'progressbar', 'aria-valuenow': Math.round(p), 'aria-valuemin': 0, 'aria-valuemax': 100 })}
+          : {
+              role: 'progressbar',
+              'aria-valuenow': Math.round(p),
+              'aria-valuemin': 0,
+              'aria-valuemax': 100,
+            })}
         className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-mcs-bg-secondary"
       >
         <div
           className="mcs-progress-sheen h-full w-full rounded-full transition-transform duration-mcs-base ease-mcs-snappy"
-          style={{ transform: `translateX(${(p ?? 0) - 100}%)`, background: barColor ?? 'var(--mcs-success-fg)' }}
+          style={{
+            transform: `translateX(${(p ?? 0) - 100}%)`,
+            background: barColor ?? 'var(--mcs-success-fg)',
+          }}
         />
       </div>
     </div>
@@ -422,21 +454,34 @@ export function RuntimeInfoCard() {
       className="animate-mcs-fade-up mcs-delay-3"
       eyebrow={
         versionText ? (
-          <StatusPill tone="muted" className="tnum text-mcs-2xs">{versionText}</StatusPill>
+          <StatusPill tone="muted" className="tnum text-mcs-2xs">
+            {versionText}
+          </StatusPill>
         ) : undefined
       }
     >
       <div className="flex items-center justify-between gap-2">
         {/* 停止态下数值为 —（本次会话已结束），label 同步改「上次」避免语义误导 */}
-        <p className="text-mcs-xs text-mcs-text-muted">{isRunning ? '本次运行时长' : '上次运行时长'}</p>
+        <p className="text-mcs-xs text-mcs-text-muted">
+          {isRunning ? '本次运行时长' : '上次运行时长'}
+        </p>
         {/* 本卡关键数字：与在线玩家 / 资源使用两卡同为顶排卡级大数（明细行留在 xs） */}
-        <p className={cn('mcs-num text-mcs-display leading-none', !isRunning && 'text-mcs-text-muted')}>
+        <p
+          className={cn(
+            'mcs-num text-mcs-display leading-none',
+            !isRunning && 'text-mcs-text-muted',
+          )}
+        >
           {formatUptime(isRunning ? uptime : null)}
         </p>
       </div>
       <div className="flex flex-col gap-1.5 border-t border-mcs-border-muted pt-2">
         {infoLines.map((line) => (
-          <div key={line.label} className="flex items-center justify-between text-mcs-xs" title={line.tooltip}>
+          <div
+            key={line.label}
+            className="flex items-center justify-between text-mcs-xs"
+            title={line.tooltip}
+          >
             <span className="flex items-center gap-1.5 text-mcs-text-muted">
               <line.icon className="size-3 text-mcs-text-muted" aria-hidden />
               {line.label}

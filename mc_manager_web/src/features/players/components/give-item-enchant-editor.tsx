@@ -2,10 +2,7 @@
  * 附魔编辑器 —— EnchantPanel（紫底面板）+ EnchantToggle（开关）
  * 从 give-item-dialog.tsx 提取，附魔配置独立可测试。
  */
-import {
-  ChevronUp,
-  Wand2,
-} from 'lucide-react'
+import { ChevronUp, Wand2 } from 'lucide-react'
 import {
   Select,
   SelectContent,
@@ -140,7 +137,9 @@ export function EnchantPanel({
                   I-{toRoman(ench.maxLevel)}
                 </span>
                 {ench.isNew121 && (
-                  <span className={`shrink-0 rounded-mcs-xs border px-1 text-mcs-2xs font-medium ${toneClasses('warning')}`}>
+                  <span
+                    className={`shrink-0 rounded-mcs-xs border px-1 text-mcs-2xs font-medium ${toneClasses('warning')}`}
+                  >
                     1.21+
                   </span>
                 )}

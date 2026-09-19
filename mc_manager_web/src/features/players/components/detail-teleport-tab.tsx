@@ -116,14 +116,21 @@ function TeleportTabContent({
       '传送到个人复活点',
       (name) => {
         const target = isBatchMode ? batchTargets.find((t) => t.name === name) : player
-        return buildTeleportToCoordsCommand(name, resolveRespawnTarget(target?.respawnPoint, target?.spawnPoint))
+        return buildTeleportToCoordsCommand(
+          name,
+          resolveRespawnTarget(target?.respawnPoint, target?.spawnPoint),
+        )
       },
       '已传送到个人复活点',
     )
   }
 
   const handleTeleportTo = (target: Player) => {
-    void execute('传送', (name) => buildTeleportToPlayerCommand(name, target.name), `已传送至 ${target.name}`)
+    void execute(
+      '传送',
+      (name) => buildTeleportToPlayerCommand(name, target.name),
+      `已传送至 ${target.name}`,
+    )
   }
 
   const handleCoordTeleport = () => {
@@ -141,7 +148,9 @@ function TeleportTabContent({
 
   /** 传送到玩家列表：在线玩家，排除目标自身（批量时排除全部选中目标） */
   const onlineOthers = useMemo(() => {
-    const exclude = new Set(isBatchMode ? batchTargets.map((t) => t.name) : player ? [player.name] : [])
+    const exclude = new Set(
+      isBatchMode ? batchTargets.map((t) => t.name) : player ? [player.name] : [],
+    )
     return (playersQuery.data ?? []).filter((p) => p.isOnline && !exclude.has(p.name))
   }, [playersQuery.data, isBatchMode, batchTargets, player])
 
@@ -189,7 +198,9 @@ function TeleportTabContent({
 
       {/* RCON 不可用时在线操作提示 */}
       {!isRconConnected && (
-        <p className="text-mcs-xs text-mcs-text-muted">提示：RCON 未连接，在线操作可能失败（需启用 RCON）</p>
+        <p className="text-mcs-xs text-mcs-text-muted">
+          提示：RCON 未连接，在线操作可能失败（需启用 RCON）
+        </p>
       )}
 
       <WorldSpawnDialogs

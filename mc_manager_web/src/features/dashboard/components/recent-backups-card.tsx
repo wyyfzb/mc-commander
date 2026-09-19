@@ -148,7 +148,10 @@ function BackupMiniRow({ backup }: { backup: BackupItem }) {
   return (
     <div className="flex items-center gap-2 py-1.5">
       <span
-        className={cn('flex size-6 shrink-0 items-center justify-center rounded-mcs-xs', toneClasses(tone))}
+        className={cn(
+          'flex size-6 shrink-0 items-center justify-center rounded-mcs-xs',
+          toneClasses(tone),
+        )}
         aria-hidden
       >
         {isInProgress ? (

@@ -45,7 +45,10 @@ describe('在途部署读取判据', () => {
   });
 
   it('时限内的条目算在途，超时限的死快照不算', () => {
-    const stale = entry({ instanceId: 'paper-stale', updatedAt: Date.now() - MAX_INFLIGHT_DEPLOY_AGE_MS - 1 });
+    const stale = entry({
+      instanceId: 'paper-stale',
+      updatedAt: Date.now() - MAX_INFLIGHT_DEPLOY_AGE_MS - 1,
+    });
     expect(isDeployInFlight(managerOf([stale]))).toBe(false);
 
     const fresh = entry({ updatedAt: Date.now() - MAX_INFLIGHT_DEPLOY_AGE_MS + 60_000 });
@@ -70,7 +73,10 @@ describe('在途部署读取判据', () => {
   it('不可判龄的条目不得顶掉同表内可判龄的在途条目（选取同用归一化时刻）', () => {
     const nan = entry({ instanceId: 'paper-nan', updatedAt: NaN });
     const fresh = entry({ instanceId: 'paper-fresh', updatedAt: Date.now() });
-    const stale = entry({ instanceId: 'paper-stale', updatedAt: Date.now() - MAX_INFLIGHT_DEPLOY_AGE_MS - 1 });
+    const stale = entry({
+      instanceId: 'paper-stale',
+      updatedAt: Date.now() - MAX_INFLIGHT_DEPLOY_AGE_MS - 1,
+    });
 
     expect(latestInFlightDeploy(managerOf([nan, fresh]))?.instanceId).toBe('paper-fresh');
     expect(inFlightDeploys(managerOf([nan, stale, fresh]))).toEqual([fresh]);

@@ -106,7 +106,9 @@ describe('parseDbTime', () => {
 // 整日被判为「更旧」而被多删（最多约一天）——本组用例锁住正确口径。
 describe('toDbUtcString', () => {
   it('Date → CURRENT_TIMESTAMP 口径（秒级、空格分隔、UTC）', () => {
-    expect(toDbUtcString(new Date(Date.UTC(2026, 8, 10, 16, 55, 36, 789)))).toBe('2026-09-10 16:55:36');
+    expect(toDbUtcString(new Date(Date.UTC(2026, 8, 10, 16, 55, 36, 789)))).toBe(
+      '2026-09-10 16:55:36',
+    );
   });
 
   it('epoch 毫秒入参等价', () => {
@@ -151,7 +153,10 @@ describe('时区不变性（子进程强制 TZ=Asia/Shanghai）', () => {
       env: { ...process.env, TZ: 'Asia/Shanghai' },
     });
     const { naive, normalized, expected } = JSON.parse(stdout.trim());
-    expect(naive, 'TZ=Asia/Shanghai 未生效，本用例失去鉴别力（应修复子进程环境，而非放宽本断言）').not.toBe(expected); // 前提：若无此偏移，TZ 未生效
+    expect(
+      naive,
+      'TZ=Asia/Shanghai 未生效，本用例失去鉴别力（应修复子进程环境，而非放宽本断言）',
+    ).not.toBe(expected); // 前提：若无此偏移，TZ 未生效
     expect(normalized).toBe(expected);
   });
 });

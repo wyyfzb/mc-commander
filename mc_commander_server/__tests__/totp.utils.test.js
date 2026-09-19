@@ -221,7 +221,10 @@ describe('基线合理性护栏（仅「越过漂移窗的未来基线」视为�
     // 只可能来自「库被手工改写」或「时钟前跳期间成功验证后残留」：这类基线若照旧参与
     // 比较，正确码会被永久判为重放（自锁死，只剩恢复码退路）
     for (const corrupt of [t + TOTP_DRIFT_STEPS + 1, t + 1000, 99999999999]) {
-      expect(verifyTotpCode(secret, totpCodeAtStep(secret, t), corrupt), `baseline=${corrupt}`).toMatchObject({
+      expect(
+        verifyTotpCode(secret, totpCodeAtStep(secret, t), corrupt),
+        `baseline=${corrupt}`,
+      ).toMatchObject({
         ok: true,
         step: t,
         reason: 'stale-baseline',
@@ -240,11 +243,14 @@ describe('基线合理性护栏（仅「越过漂移窗的未来基线」视为�
 
   it('边界：基线 = current + 漂移窗仍参与重放判定（恰好不算损坏值）', () => {
     const t = currentTimeStep();
-    expect(verifyTotpCode(secret, totpCodeAtStep(secret, t + TOTP_DRIFT_STEPS), t + TOTP_DRIFT_STEPS))
-      .toMatchObject({ ok: false, reason: 'replay' });
+    expect(
+      verifyTotpCode(secret, totpCodeAtStep(secret, t + TOTP_DRIFT_STEPS), t + TOTP_DRIFT_STEPS),
+    ).toMatchObject({ ok: false, reason: 'replay' });
     // 同一基线下，更新的（窗口外）码也不可能命中 ⇒ 仍被拒
-    expect(verifyTotpCode(secret, totpCodeAtStep(secret, t), t + TOTP_DRIFT_STEPS))
-      .toMatchObject({ ok: false, reason: 'replay' });
+    expect(verifyTotpCode(secret, totpCodeAtStep(secret, t), t + TOTP_DRIFT_STEPS)).toMatchObject({
+      ok: false,
+      reason: 'replay',
+    });
   });
 
   it('窗口内 / 刚过去的基线语义不变（current、current-1、current-2 照旧拒绝重放）', () => {
@@ -287,8 +293,19 @@ describe('输入归一化与非法输入', () => {
 
   it('形状不符（位数/非数字/空/非字符串/超长/控制字符/全角）→ malformed，不静默当 0 处理', () => {
     const cases = [
-      '12345', '1234567', 'abcdef', '12 34', '', '   ', null, undefined, 123456,
-      '1'.repeat(1000), '\u0000'.repeat(6), '１２３４５６', '12345\u0000',
+      '12345',
+      '1234567',
+      'abcdef',
+      '12 34',
+      '',
+      '   ',
+      null,
+      undefined,
+      123456,
+      '1'.repeat(1000),
+      '\u0000'.repeat(6),
+      '１２３４５６',
+      '12345\u0000',
     ];
     for (const bad of cases) {
       // 长度不等的输入绝不能触发 timingSafeEqual 的长度异常（异常路径本身即侧信道信号）
@@ -303,7 +320,10 @@ describe('输入归一化与非法输入', () => {
   it('secret 不可用（缺列/被改坏）→ no-secret，不抛出', () => {
     expect(verifyTotpCode(null, '123456', null)).toMatchObject({ ok: false, reason: 'no-secret' });
     expect(verifyTotpCode('', '123456', null)).toMatchObject({ ok: false, reason: 'no-secret' });
-    expect(verifyTotpCode('NOT!BASE32', '123456', null)).toMatchObject({ ok: false, reason: 'no-secret' });
+    expect(verifyTotpCode('NOT!BASE32', '123456', null)).toMatchObject({
+      ok: false,
+      reason: 'no-secret',
+    });
   });
 });
 
@@ -317,13 +337,17 @@ describe('secret 生成与 otpauth 挂靠 URI', () => {
   });
 
   it('otpauth URI 形态锁定：全部走百分号编码，空间不出现在 query 里', () => {
-    const url = buildOtpauthUrl({ secret: RFC_SECRET_BASE32, issuer: 'MC Commander', account: 'admin' });
+    const url = buildOtpauthUrl({
+      secret: RFC_SECRET_BASE32,
+      issuer: 'MC Commander',
+      account: 'admin',
+    });
     // 逐字符锁定最终形态：URLSearchParams 会把空格编成 '+'（otpauth 客户端按 URI
     // 语义逐字解析，'+' 不是空格 → 发行方名会变成 "MC+Commander"）
     expect(url).toBe(
-      'otpauth://totp/MC%20Commander:admin'
-      + `?secret=${RFC_SECRET_BASE32}`
-      + '&issuer=MC%20Commander&algorithm=SHA1&digits=6&period=30',
+      'otpauth://totp/MC%20Commander:admin' +
+        `?secret=${RFC_SECRET_BASE32}` +
+        '&issuer=MC%20Commander&algorithm=SHA1&digits=6&period=30',
     );
     expect(url).not.toContain('+');
 
@@ -338,11 +362,15 @@ describe('secret 生成与 otpauth 挂靠 URI', () => {
   });
 
   it('issuer/account 含需转义字符时逐段编码，分隔符仍是字面量 ":"', () => {
-    const url = buildOtpauthUrl({ secret: RFC_SECRET_BASE32, issuer: 'ACME & Co', account: 'a b@x' });
+    const url = buildOtpauthUrl({
+      secret: RFC_SECRET_BASE32,
+      issuer: 'ACME & Co',
+      account: 'a b@x',
+    });
     expect(url).toBe(
-      'otpauth://totp/ACME%20%26%20Co:a%20b%40x'
-      + `?secret=${RFC_SECRET_BASE32}`
-      + '&issuer=ACME%20%26%20Co&algorithm=SHA1&digits=6&period=30',
+      'otpauth://totp/ACME%20%26%20Co:a%20b%40x' +
+        `?secret=${RFC_SECRET_BASE32}` +
+        '&issuer=ACME%20%26%20Co&algorithm=SHA1&digits=6&period=30',
     );
     expect(decodeURIComponent(new URL(url).pathname.slice(1))).toBe('ACME & Co:a b@x');
   });

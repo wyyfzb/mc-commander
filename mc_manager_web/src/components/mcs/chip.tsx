@@ -13,7 +13,15 @@ import { TONE_SELECTED_CLASSES, toneClasses } from './tone'
  * 此时按 radio 渲染、不再发 aria-pressed（两套语义互斥，同时出现读屏会播报矛盾信息）。
  */
 
-export type ChipTone = 'default' | 'muted' | 'accent' | 'success' | 'warning' | 'error' | 'info' | 'purple'
+export type ChipTone =
+  | 'default'
+  | 'muted'
+  | 'accent'
+  | 'success'
+  | 'warning'
+  | 'error'
+  | 'info'
+  | 'purple'
 
 /** 中性两档：Chip 的静态面用 bg-default、次级用 bg-subtle（语义六色走共用词表 mcs/tone） */
 const NEUTRAL_TONE_CLASSES: Record<'default' | 'muted', string> = {
@@ -88,7 +96,15 @@ export function Chip({
         disabled={disabled}
         role={role}
         aria-checked={role === 'radio' ? ariaChecked : undefined}
-        aria-pressed={role === 'radio' ? undefined : selected != null ? (selected ? 'true' : 'false') : undefined}
+        aria-pressed={
+          role === 'radio'
+            ? undefined
+            : selected != null
+              ? selected
+                ? 'true'
+                : 'false'
+              : undefined
+        }
         tabIndex={tabIndex}
         aria-label={ariaLabel}
         title={title}

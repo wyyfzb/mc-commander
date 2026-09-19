@@ -31,6 +31,8 @@ describe('instance-id 形态单一事实源', () => {
     expect(INSTANCE_ID_PATTERN.test('old-manual-backup')).toBe(false);
     expect(INSTANCE_ID_PATTERN.test('paper-XYZ12345')).toBe(false);
     // 正向样本按常量拼（不写死 8 位字面量）：常量变更时这条仍成立，红的是真正依赖长度的断言
-    expect(INSTANCE_ID_PATTERN.test(`paper-${'a'.repeat(INSTANCE_ID_RANDOM_BYTES * 2)}`)).toBe(true);
+    expect(INSTANCE_ID_PATTERN.test(`paper-${'a'.repeat(INSTANCE_ID_RANDOM_BYTES * 2)}`)).toBe(
+      true,
+    );
   });
 });

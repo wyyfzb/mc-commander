@@ -4,7 +4,12 @@ import crypto from 'crypto';
 import AdmZip from 'adm-zip';
 import { load as yamlLoad, FAILSAFE_SCHEMA } from 'js-yaml';
 import { AppError, ErrorCodes } from '../utils/response.js';
-import { ensureDir, renameNoClobber, resolveSafePath, PathTraversalError } from '../utils/fs-utils.js';
+import {
+  ensureDir,
+  renameNoClobber,
+  resolveSafePath,
+  PathTraversalError,
+} from '../utils/fs-utils.js';
 
 /**
  * 插件管理服务（feat-8 P0-5 插件管理最小闭环）。
@@ -85,13 +90,18 @@ export function readPluginMeta(jarPath) {
         name: typeof doc.name === 'string' ? doc.name : null,
         version: typeof doc.version === 'string' ? doc.version : null,
         main: typeof doc.main === 'string' ? doc.main : null,
-        apiVersion: typeof doc['api-version'] === 'string'
-          ? doc['api-version']
-          : (typeof doc.apiVersion === 'string' ? doc.apiVersion : null),
+        apiVersion:
+          typeof doc['api-version'] === 'string'
+            ? doc['api-version']
+            : typeof doc.apiVersion === 'string'
+              ? doc.apiVersion
+              : null,
         description: typeof doc.description === 'string' ? doc.description : null,
         authors: Array.isArray(doc.authors)
           ? doc.authors.filter((a) => typeof a === 'string').slice(0, 10)
-          : (typeof doc.author === 'string' ? [doc.author] : []),
+          : typeof doc.author === 'string'
+            ? [doc.author]
+            : [],
         depend: Array.isArray(doc.depend)
           ? doc.depend.filter((d) => typeof d === 'string').slice(0, 20)
           : [],
@@ -140,8 +150,10 @@ export function uploadPlugin(serverPath, tmpFilePath, originalName, { overwrite 
     throw new AppError(ErrorCodes.SERVER_ERROR, `Failed to read uploaded file: ${err.message}`);
   }
   if (!head.subarray(0, 4).equals(ZIP_MAGIC)) {
-    throw new AppError(ErrorCodes.VALIDATION_ERROR,
-      'Uploaded file is not a valid jar (zip magic check failed)');
+    throw new AppError(
+      ErrorCodes.VALIDATION_ERROR,
+      'Uploaded file is not a valid jar (zip magic check failed)',
+    );
   }
 
   const pluginsDir = path.join(serverPath, 'plugins');
@@ -169,7 +181,11 @@ export function uploadPlugin(serverPath, tmpFilePath, originalName, { overwrite 
       fs.copyFileSync(tmpFilePath, staging);
       fs.renameSync(staging, targetFull);
     } catch (err) {
-      try { fs.unlinkSync(staging); } catch { /* 未创建或已被 rename 消费 */ }
+      try {
+        fs.unlinkSync(staging);
+      } catch {
+        /* 未创建或已被 rename 消费 */
+      }
       throw new AppError(ErrorCodes.SERVER_ERROR, `Failed to save plugin: ${err.message}`);
     }
   } else {
@@ -177,8 +193,10 @@ export function uploadPlugin(serverPath, tmpFilePath, originalName, { overwrite 
       fs.copyFileSync(tmpFilePath, targetFull, fs.constants.COPYFILE_EXCL);
     } catch (err) {
       if (err.code === 'EEXIST') {
-        throw new AppError(ErrorCodes.PLUGIN_FILE_EXISTS,
-          `Plugin file already exists: ${originalName}`);
+        throw new AppError(
+          ErrorCodes.PLUGIN_FILE_EXISTS,
+          `Plugin file already exists: ${originalName}`,
+        );
       }
       throw new AppError(ErrorCodes.SERVER_ERROR, `Failed to save plugin: ${err.message}`);
     }
@@ -261,8 +279,10 @@ export function setPluginEnabled(serverPath, fileName, enabled) {
   const full = resolvePluginFile(serverPath, fileName);
   const isDisabled = fileName.toLowerCase().endsWith('.jar.disabled');
   if (enabled === !isDisabled) {
-    throw new AppError(ErrorCodes.PLUGIN_STATE_CONFLICT,
-      enabled ? 'Plugin is already enabled' : 'Plugin is already disabled');
+    throw new AppError(
+      ErrorCodes.PLUGIN_STATE_CONFLICT,
+      enabled ? 'Plugin is already enabled' : 'Plugin is already disabled',
+    );
   }
   const baseName = isDisabled ? fileName.slice(0, -'.disabled'.length) : fileName;
   const targetName = enabled ? baseName : `${fileName}.disabled`;
@@ -276,7 +296,10 @@ export function setPluginEnabled(serverPath, fileName, enabled) {
       throw new AppError(ErrorCodes.PLUGIN_NOT_FOUND, `Plugin file not found: ${fileName}`);
     }
     if (err.code === 'EEXIST') {
-      throw new AppError(ErrorCodes.PLUGIN_STATE_CONFLICT, `Target file already exists: ${targetName}`);
+      throw new AppError(
+        ErrorCodes.PLUGIN_STATE_CONFLICT,
+        `Target file already exists: ${targetName}`,
+      );
     }
     throw new AppError(ErrorCodes.SERVER_ERROR, `Failed to rename plugin: ${err.message}`);
   }

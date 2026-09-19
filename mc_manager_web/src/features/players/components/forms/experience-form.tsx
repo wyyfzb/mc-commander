@@ -19,7 +19,13 @@ import { OfflineBanner } from './offline-banner'
 const XP_QUICK_AMOUNTS = [1, 10, 30, 50, 100, 500, 1000]
 const XP_QUICK_LEVELS = [1, 5, 10, 20, 30]
 
-export function ExperienceForm({ player, batchTargets, isBatchMode, isRconConnected, onAction }: ActionFormProps) {
+export function ExperienceForm({
+  player,
+  batchTargets,
+  isBatchMode,
+  isRconConnected,
+  onAction,
+}: ActionFormProps) {
   const [mode, setMode] = useState<'points' | 'levels'>('points')
   const [amount, setAmount] = useState('10')
   const [action, setAction] = useState<'add' | 'set' | 'remove'>('add')
@@ -76,7 +82,9 @@ export function ExperienceForm({ player, batchTargets, isBatchMode, isRconConnec
         const results = await runBatchForTargets({
           targets: batchTargets,
           requireOnline: true,
-          execute: async (p) => { await onAction({ kind: 'command', command: buildCommand(p.name) }) },
+          execute: async (p) => {
+            await onAction({ kind: 'command', command: buildCommand(p.name) })
+          },
         })
         toast.success(formatBatchSummary('给予经验', results), {
           description: formatFailureDetails(results),
@@ -90,7 +98,10 @@ export function ExperienceForm({ player, batchTargets, isBatchMode, isRconConnec
     }
   }
 
-  const canExecute = isRconConnected && numAmount > 0 && (!isBatchMode ? player?.isOnline : batchTargets.some((p) => p.isOnline))
+  const canExecute =
+    isRconConnected &&
+    numAmount > 0 &&
+    (!isBatchMode ? player?.isOnline : batchTargets.some((p) => p.isOnline))
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -127,7 +138,13 @@ export function ExperienceForm({ player, batchTargets, isBatchMode, isRconConnec
       <div className="space-y-1.5">
         <Label className="text-mcs-xs text-mcs-text-muted">操作</Label>
         <div className="flex gap-1.5" {...actionGroup.groupProps}>
-          {([['add', '给予'], ['set', '设置'], ['remove', '移除']] as const).map(([act, label], index) => (
+          {(
+            [
+              ['add', '给予'],
+              ['set', '设置'],
+              ['remove', '移除'],
+            ] as const
+          ).map(([act, label], index) => (
             <Button
               key={act}
               type="button"
@@ -167,7 +184,8 @@ export function ExperienceForm({ player, batchTargets, isBatchMode, isRconConnec
               {...quickAmountGroup.itemProps(index)}
               onClick={() => setAmount(String(v))}
             >
-              {v}{mode === 'levels' ? 'L' : ''}
+              {v}
+              {mode === 'levels' ? 'L' : ''}
             </Button>
           ))}
         </div>

@@ -42,7 +42,10 @@ beforeEach(() => {
 });
 
 function storedHashes() {
-  return db.prepare('SELECT code_hash FROM admin_recovery_codes').all().map((r) => r.code_hash);
+  return db
+    .prepare('SELECT code_hash FROM admin_recovery_codes')
+    .all()
+    .map((r) => r.code_hash);
 }
 
 describe('恢复码生成（形态与熵）', () => {
@@ -84,7 +87,17 @@ describe('恢复码归一化与哈希', () => {
   });
 
   it('形状不符返回 null（不静默截断成另一个码）', () => {
-    for (const bad of ['ABCDE-FGHJ', 'ABCDE-FGHJKL', 'ABCDE-FGHJ0', 'ABCDE-FGHJO', 'ABCDE-FGHJI', 'ABCDE-FGHJ1', '', null, 123456]) {
+    for (const bad of [
+      'ABCDE-FGHJ',
+      'ABCDE-FGHJKL',
+      'ABCDE-FGHJ0',
+      'ABCDE-FGHJO',
+      'ABCDE-FGHJI',
+      'ABCDE-FGHJ1',
+      '',
+      null,
+      123456,
+    ]) {
       expect(normalizeRecoveryCode(bad), `${String(bad)} 应判非法`).toBeNull();
       expect(hashRecoveryCode(bad)).toBeNull();
     }
@@ -133,7 +146,9 @@ describe('恢复码落库：只存哈希 + 一次性', () => {
 
     // 一次性：第二次必须失败（即使输入写法不同——归一化后是同一个码）
     expect(AdminRecoveryCodeModel.verifyAndConsume(codes[0])).toBe(false);
-    expect(AdminRecoveryCodeModel.verifyAndConsume(codes[0].replace('-', '').toLowerCase())).toBe(false);
+    expect(AdminRecoveryCodeModel.verifyAndConsume(codes[0].replace('-', '').toLowerCase())).toBe(
+      false,
+    );
   });
 
   it('错误码 / 未生成时的任意码一律失败且不写 used_at', () => {

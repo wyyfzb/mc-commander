@@ -75,7 +75,14 @@ interface PropertiesPanelProps {
   onRestart?: () => Promise<void>
 }
 
-export function PropertiesPanel({ properties, isLoading, onSave, onEditingChange, isRunning = false, onRestart }: PropertiesPanelProps) {
+export function PropertiesPanel({
+  properties,
+  isLoading,
+  onSave,
+  onEditingChange,
+  isRunning = false,
+  onRestart,
+}: PropertiesPanelProps) {
   const [isEditing, setIsEditingState] = useState(false)
 
   /** 编辑态统一入口（state + 通知页面守卫） */
@@ -117,7 +124,11 @@ export function PropertiesPanel({ properties, isLoading, onSave, onEditingChange
     return rows.filter((def) => {
       if (category !== 'all' && def.category !== category) return false
       if (q.length === 0) return true
-      return def.name.toLowerCase().includes(q) || def.label.toLowerCase().includes(q) || def.desc.toLowerCase().includes(q)
+      return (
+        def.name.toLowerCase().includes(q) ||
+        def.label.toLowerCase().includes(q) ||
+        def.desc.toLowerCase().includes(q)
+      )
     })
   }, [rows, category, search])
 
@@ -198,7 +209,8 @@ export function PropertiesPanel({ properties, isLoading, onSave, onEditingChange
   }
 
   /** 当前显示值：编辑态取 edited，否则取服务端值 */
-  const displayValue = (def: PropertyDef): string => (isEditing ? (edited[def.name] ?? snapshot[def.name] ?? '') : (properties?.[def.name] ?? ''))
+  const displayValue = (def: PropertyDef): string =>
+    isEditing ? (edited[def.name] ?? snapshot[def.name] ?? '') : (properties?.[def.name] ?? '')
 
   const setEditValue = (key: string, value: string) => {
     setEdited((prev) => ({ ...prev, [key]: value }))
@@ -211,7 +223,13 @@ export function PropertiesPanel({ properties, isLoading, onSave, onEditingChange
         <span className="text-mcs-sm font-semibold text-mcs-text-default">服务器属性</span>
         <span className="text-mcs-2xs text-mcs-text-muted">server.properties</span>
         {!isEditing ? (
-          <Button variant="outline" size="sm" className="ml-auto" onClick={startEditing} disabled={isLoading || !properties}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="ml-auto"
+            onClick={startEditing}
+            disabled={isLoading || !properties}
+          >
             <Pencil aria-hidden />
             编辑
           </Button>
@@ -276,7 +294,9 @@ export function PropertiesPanel({ properties, isLoading, onSave, onEditingChange
                 key={item.key}
                 className="flex items-baseline gap-2 border-b border-mcs-border-subtle px-1 py-1.5 last:border-b-0"
               >
-                <span className="shrink-0 text-mcs-xs font-medium text-mcs-text-default">{item.label}</span>
+                <span className="shrink-0 text-mcs-xs font-medium text-mcs-text-default">
+                  {item.label}
+                </span>
                 <span className="min-w-0 flex-1 truncate font-mono text-mcs-2xs text-mcs-text-muted">
                   {item.oldValue} <span className="text-mcs-text-default">→</span> {item.newValue}
                 </span>
@@ -285,17 +305,26 @@ export function PropertiesPanel({ properties, isLoading, onSave, onEditingChange
           </div>
           <DialogFooter className="flex-col gap-2 sm:flex-col">
             <div className="flex w-full items-center gap-2">
-              <Button variant="outline" size="sm" className="ml-auto" onClick={() => void handleCopy()}>
-                {copied ? <Check className="size-3.5" aria-hidden /> : <Copy className="size-3.5" aria-hidden />}
+              <Button
+                variant="outline"
+                size="sm"
+                className="ml-auto"
+                onClick={() => void handleCopy()}
+              >
+                {copied ? (
+                  <Check className="size-3.5" aria-hidden />
+                ) : (
+                  <Copy className="size-3.5" aria-hidden />
+                )}
                 {copied ? '已复制' : '复制清单'}
               </Button>
               {isRunning && onRestart && (
-                <Button
-                  size="sm"
-                  disabled={restarting}
-                  onClick={() => setConfirmRestartOpen(true)}
-                >
-                  {restarting ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <RefreshCw className="size-3.5" aria-hidden />}
+                <Button size="sm" disabled={restarting} onClick={() => setConfirmRestartOpen(true)}>
+                  {restarting ? (
+                    <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                  ) : (
+                    <RefreshCw className="size-3.5" aria-hidden />
+                  )}
                   {restarting ? '重启中…' : '立即重启'}
                 </Button>
               )}
@@ -383,7 +412,9 @@ function PropertyRow({
               <TooltipTrigger asChild>
                 <Lock className="size-3 shrink-0 text-mcs-text-muted" aria-label="敏感属性" />
               </TooltipTrigger>
-              <TooltipContent>安全敏感项不可通过面板修改，请在服务器上直接编辑 server.properties</TooltipContent>
+              <TooltipContent>
+                安全敏感项不可通过面板修改，请在服务器上直接编辑 server.properties
+              </TooltipContent>
             </Tooltip>
           )}
           {isHotReload && (

@@ -264,7 +264,9 @@ export function TotpPanel({ baseUrl, apiKey, authed }: TotpPanelProps) {
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => void handleCopy(recoveryCodesFileText(recoveryCodes), '恢复码已复制到剪贴板')}
+              onClick={() =>
+                void handleCopy(recoveryCodesFileText(recoveryCodes), '恢复码已复制到剪贴板')
+              }
             >
               <Copy className="size-3.5" aria-hidden />
               复制全部
@@ -439,8 +441,8 @@ export function TotpPanel({ baseUrl, apiKey, authed }: TotpPanelProps) {
     return (
       <div className="space-y-3">
         <p className="text-mcs-xs text-mcs-text-muted">
-          当前仅用密码登录。启用两步验证后，登录还需输入认证器生成的 6 位验证码
-          （服务端会同时给出 10 枚一次性恢复码，供手机丢失时使用）。
+          当前仅用密码登录。启用两步验证后，登录还需输入认证器生成的 6 位验证码 （服务端会同时给出
+          10 枚一次性恢复码，供手机丢失时使用）。
         </p>
         {errorText && (
           <NoticeBanner variant="error" role="alert" icon={TriangleAlert}>

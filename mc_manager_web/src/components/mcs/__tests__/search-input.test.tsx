@@ -3,8 +3,12 @@ import { render, screen, fireEvent, act } from '@testing-library/react'
 import { SearchInput } from '../search-input'
 
 describe('SearchInput', () => {
-  beforeEach(() => { vi.useFakeTimers() })
-  afterEach(() => { vi.useRealTimers() })
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
 
   it('渲染搜索图标和输入框', () => {
     render(<SearchInput value="" onValueChange={() => {}} placeholder="搜索…" aria-label="搜索" />)
@@ -41,29 +45,58 @@ describe('SearchInput', () => {
 
   it('debounce: 输入后按延迟调用 onDebouncedChange', () => {
     const onDebounced = vi.fn()
-    render(<SearchInput value="" onValueChange={() => {}} debounceMs={300} onDebouncedChange={onDebounced} />)
+    render(
+      <SearchInput
+        value=""
+        onValueChange={() => {}}
+        debounceMs={300}
+        onDebouncedChange={onDebounced}
+      />,
+    )
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'hello' } })
     expect(onDebounced).not.toHaveBeenCalled()
-    act(() => { vi.advanceTimersByTime(300) })
+    act(() => {
+      vi.advanceTimersByTime(300)
+    })
     expect(onDebounced).toHaveBeenCalledWith('hello')
   })
 
   it('debounce: 连续输入只触发最后一次', () => {
     const onDebounced = vi.fn()
-    render(<SearchInput value="" onValueChange={() => {}} debounceMs={300} onDebouncedChange={onDebounced} />)
+    render(
+      <SearchInput
+        value=""
+        onValueChange={() => {}}
+        debounceMs={300}
+        onDebouncedChange={onDebounced}
+      />,
+    )
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'a' } })
-    act(() => { vi.advanceTimersByTime(100) })
+    act(() => {
+      vi.advanceTimersByTime(100)
+    })
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'ab' } })
-    act(() => { vi.advanceTimersByTime(100) })
+    act(() => {
+      vi.advanceTimersByTime(100)
+    })
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'abc' } })
-    act(() => { vi.advanceTimersByTime(300) })
+    act(() => {
+      vi.advanceTimersByTime(300)
+    })
     expect(onDebounced).toHaveBeenCalledTimes(1)
     expect(onDebounced).toHaveBeenCalledWith('abc')
   })
 
   it('debounce: 清除时立即触发 onDebouncedChange(空串)', () => {
     const onDebounced = vi.fn()
-    render(<SearchInput value="x" onValueChange={() => {}} debounceMs={300} onDebouncedChange={onDebounced} />)
+    render(
+      <SearchInput
+        value="x"
+        onValueChange={() => {}}
+        debounceMs={300}
+        onDebouncedChange={onDebounced}
+      />,
+    )
     fireEvent.click(screen.getByRole('button', { name: '清空搜索' }))
     expect(onDebounced).toHaveBeenCalledWith('')
   })

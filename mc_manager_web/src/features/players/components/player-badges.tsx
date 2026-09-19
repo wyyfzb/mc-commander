@@ -27,7 +27,9 @@ export function PlayerBadges({
   const nowMs = Date.now()
   return (
     <>
-      {withIcons && p.isOp && <ShieldCheck className="size-3.5 shrink-0 text-mcs-purple-fg" aria-label="OP" />}
+      {withIcons && p.isOp && (
+        <ShieldCheck className="size-3.5 shrink-0 text-mcs-purple-fg" aria-label="OP" />
+      )}
       {withTexts && p.isAfk && (
         <span className="shrink-0 rounded-mcs-xs bg-mcs-bg-secondary px-1 text-mcs-2xs text-mcs-text-muted">
           AFK

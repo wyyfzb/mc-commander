@@ -111,7 +111,8 @@ export function authMiddleware(req, res, next) {
   // 指引会话登录（关掉自动化凭据的部署形态下，浏览器通道是唯一正常入口）
   // 空白 header（`X-API-Key: `、`"   "`）视同「未提供凭据」：按 40101 报「Key 无效」
   // 会把从环境变量取值的脚本引向轮换一把其实没问题的 Key（与 40107 的定向文案同理）
-  const apiKey = typeof req.headers['x-api-key'] === 'string' ? req.headers['x-api-key'].trim() : null;
+  const apiKey =
+    typeof req.headers['x-api-key'] === 'string' ? req.headers['x-api-key'].trim() : null;
   if (apiKey) {
     // 只读凭据先判定：两条机器通道的开关相互独立，先吃 API_KEY_ENABLED 会把
     // 「关闭管理员 Key」绑架成「只读监控也不可用」；未配置只读哈希时此处恒 false，
@@ -119,27 +120,27 @@ export function authMiddleware(req, res, next) {
     if (verifyReadonlyApiKey(apiKey)) {
       if (!config.readonlyApiKeyEnabled) {
         logAuthRejection(req, 'readonly API key channel disabled', 'warn', 403);
-        return res.status(403).json(error(
-          ErrorCodes.READONLY_API_KEY_DISABLED,
-          '只读 API Key 通道已关闭，请改用管理员凭据'
-        ));
+        return res
+          .status(403)
+          .json(
+            error(
+              ErrorCodes.READONLY_API_KEY_DISABLED,
+              '只读 API Key 通道已关闭，请改用管理员凭据',
+            ),
+          );
       }
       req.auth = { source: 'apiKey', role: 'readonly', key: apiKey };
       return next();
     }
     if (!config.apiKeyEnabled) {
       logAuthRejection(req, 'API key channel disabled', 'warn', 403);
-      return res.status(403).json(error(
-        ErrorCodes.API_KEY_DISABLED,
-        'API Key 通道已关闭，请改用管理员会话登录'
-      ));
+      return res
+        .status(403)
+        .json(error(ErrorCodes.API_KEY_DISABLED, 'API Key 通道已关闭，请改用管理员会话登录'));
     }
     if (!verifyApiKey(apiKey)) {
       logAuthRejection(req, 'invalid API key');
-      return res.status(401).json(error(
-        ErrorCodes.INVALID_API_KEY,
-        'Invalid API Key'
-      ));
+      return res.status(401).json(error(ErrorCodes.INVALID_API_KEY, 'Invalid API Key'));
     }
     req.auth = { source: 'apiKey', role: 'admin', key: apiKey };
     return next();
@@ -151,12 +152,16 @@ export function authMiddleware(req, res, next) {
     const token = authHeader.slice(7).trim();
     if (!token) {
       logAuthRejection(req, 'empty bearer token');
-      return res.status(401).json(error(ErrorCodes.AUTH_SESSION_EXPIRED, '会话凭据缺失，请重新登录'));
+      return res
+        .status(401)
+        .json(error(ErrorCodes.AUTH_SESSION_EXPIRED, '会话凭据缺失，请重新登录'));
     }
     const session = AdminSessionModel.findByTokenHash(hashToken(token));
     if (!session) {
       logAuthRejection(req, 'unknown session token');
-      return res.status(401).json(error(ErrorCodes.AUTH_SESSION_EXPIRED, '会话不存在或已登出，请重新登录'));
+      return res
+        .status(401)
+        .json(error(ErrorCodes.AUTH_SESSION_EXPIRED, '会话不存在或已登出，请重新登录'));
     }
     if (new Date(session.expires_at).getTime() <= Date.now()) {
       AdminSessionModel.deleteById(session.id);
@@ -167,14 +172,22 @@ export function authMiddleware(req, res, next) {
     if (isAbsolutelyExpired(session)) {
       AdminSessionModel.deleteById(session.id);
       logAuthRejection(req, 'session absolute expired', 'debug');
-      return res.status(401).json(error(ErrorCodes.AUTH_SESSION_EXPIRED, '会话已达到最长存活期，请重新登录'));
+      return res
+        .status(401)
+        .json(error(ErrorCodes.AUTH_SESSION_EXPIRED, '会话已达到最长存活期，请重新登录'));
     }
     // 滑动续期（节流写库；上限 cap 在绝对过期边界，P2-11）
     // last_seen_at 同为无时区 UTC 串，裸解析在 UTC+8 下恒判「已超 60s」→ 节流失效（每请求写库）
     if (Date.now() - parseDbTime(session.last_seen_at) > SESSION_TOUCH_INTERVAL_MS) {
       AdminSessionModel.touch(session.id, slidingExpiry(session));
     }
-    req.auth = { source: 'session', role: 'admin', sessionId: session.id, userAgent: session.user_agent, ip: session.ip };
+    req.auth = {
+      source: 'session',
+      role: 'admin',
+      sessionId: session.id,
+      userAgent: session.user_agent,
+      ip: session.ip,
+    };
     return next();
   }
 

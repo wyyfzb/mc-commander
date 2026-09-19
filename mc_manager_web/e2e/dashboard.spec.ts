@@ -48,7 +48,9 @@ test.describe('仪表盘', () => {
     await expect(page.getByText('第 42 天')).toBeVisible()
   })
 
-  test('标题层级与关键数字档：数据卡标签 14px/w500/muted、区块卡标题 18px/w600/default、卡级大数 30px', async ({ page }) => {
+  test('标题层级与关键数字档：数据卡标签 14px/w500/muted、区块卡标题 18px/w600/default、卡级大数 30px', async ({
+    page,
+  }) => {
     await setupConnection(page)
     await page.goto('/dashboard')
     const styleOf = (locator: Locator, prop: string) =>
@@ -95,13 +97,16 @@ test.describe('仪表盘', () => {
     await expect(page.getByRole('radio', { name: '晴天' })).toHaveAttribute('aria-checked', 'true')
     // 成功反馈已静默（终端回显为反馈源），以命令请求实际发出为断言信号
     const rainReq = page.waitForRequest(
-      (r) => r.url().includes('/command') && String(r.postDataJSON()?.command).includes('weather rain'),
+      (r) =>
+        r.url().includes('/command') && String(r.postDataJSON()?.command).includes('weather rain'),
     )
     await page.getByRole('radio', { name: '雨天' }).click()
     await rainReq
     await expect(page.getByRole('radio', { name: '雨天' })).toHaveAttribute('aria-checked', 'true')
     const nightReq = page.waitForRequest(
-      (r) => r.url().includes('/command') && String(r.postDataJSON()?.command).includes('time set night'),
+      (r) =>
+        r.url().includes('/command') &&
+        String(r.postDataJSON()?.command).includes('time set night'),
     )
     await page.getByRole('radio', { name: '夜晚' }).click()
     await nightReq
@@ -115,7 +120,9 @@ test.describe('仪表盘', () => {
     await page.getByRole('button', { name: '重启预告', exact: true }).click()
     await expect(page.getByLabel('公告内容')).toHaveValue('服务器将在 5 分钟后重启，请及时停靠')
     const sayReq = page.waitForRequest(
-      (r) => r.url().includes('/command') && String(r.postDataJSON()?.command).includes('say 服务器将在'),
+      (r) =>
+        r.url().includes('/command') &&
+        String(r.postDataJSON()?.command).includes('say 服务器将在'),
     )
     await page.getByRole('button', { name: '发送公告' }).click()
     // 二次确认弹窗
@@ -163,7 +170,8 @@ test.describe('仪表盘', () => {
     await expect(input).toBeEnabled({ timeout: 10_000 })
     await expect(page.getByRole('banner').getByText('E2E 演示实例').first()).toBeVisible()
     const cmdReq = page.waitForRequest(
-      (r) => r.url().includes('/command') && String(r.postDataJSON()?.command).includes('say hello'),
+      (r) =>
+        r.url().includes('/command') && String(r.postDataJSON()?.command).includes('say hello'),
     )
     await input.fill('say hello')
     await input.press('Enter')
@@ -250,7 +258,9 @@ test.describe('仪表盘', () => {
     await expect(page.getByText('E2E 演示实例').first()).toBeVisible()
   })
 
-  test('系统资源查询失败：横幅可见，重试后恢复（真实终端子树下的失败渲染路径）', async ({ page }) => {
+  test('系统资源查询失败：横幅可见，重试后恢复（真实终端子树下的失败渲染路径）', async ({
+    page,
+  }) => {
     await setupConnection(page)
     // 拦截优先于代理：让 /system-stats 先 500，再放行真实 mock 后端
     let failing = true

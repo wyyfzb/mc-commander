@@ -29,15 +29,17 @@ function getDiskUsage() {
       const percent = total > 0 ? Math.round((used / total) * 1000) / 10 : 0;
       const entry = {
         mountpoint: stat.mounted || dir,
-        totalGB: Math.round(total / (1024 * 1024 * 1024) * 10) / 10,
-        usedGB: Math.round(used / (1024 * 1024 * 1024) * 10) / 10,
+        totalGB: Math.round((total / (1024 * 1024 * 1024)) * 10) / 10,
+        usedGB: Math.round((used / (1024 * 1024 * 1024)) * 10) / 10,
         percent,
       };
       // 同一挂载点多目录取使用率最高者（最紧张口径）
       if (!seen.has(entry.mountpoint) || entry.percent > seen.get(entry.mountpoint).percent) {
         seen.set(entry.mountpoint, entry);
       }
-    } catch { /* 目录不可用时跳过 */ }
+    } catch {
+      /* 目录不可用时跳过 */
+    }
   }
   const all = Array.from(seen.values());
   const primary = all.sort((a, b) => b.percent - a.percent)[0] || null;
@@ -58,10 +60,10 @@ export function collectSystemStats() {
   const totalMemBytes = os.totalmem();
   const freeMemBytes = os.freemem();
   const usedMemBytes = totalMemBytes - freeMemBytes;
-  const totalMemGB = Math.round(totalMemBytes / (1024 * 1024 * 1024) * 10) / 10;
-  const usedMemGB = Math.round(usedMemBytes / (1024 * 1024 * 1024) * 10) / 10;
-  const memUsagePercent = totalMemBytes > 0
-    ? Math.round((usedMemBytes / totalMemBytes) * 1000) / 10 : 0;
+  const totalMemGB = Math.round((totalMemBytes / (1024 * 1024 * 1024)) * 10) / 10;
+  const usedMemGB = Math.round((usedMemBytes / (1024 * 1024 * 1024)) * 10) / 10;
+  const memUsagePercent =
+    totalMemBytes > 0 ? Math.round((usedMemBytes / totalMemBytes) * 1000) / 10 : 0;
   return {
     cpuUsage: getCpuUsage(),
     memoryUsage: usedMemGB,

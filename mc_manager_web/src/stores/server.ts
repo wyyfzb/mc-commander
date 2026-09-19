@@ -111,6 +111,5 @@ export const useServerStore = create<ServerState>()((set) => ({
       }
     }),
 
-  applyWsStatusEvent: (event) =>
-    set({ lastStatusEvent: { event, timestamp: Date.now() } }),
+  applyWsStatusEvent: (event) => set({ lastStatusEvent: { event, timestamp: Date.now() } }),
 }))

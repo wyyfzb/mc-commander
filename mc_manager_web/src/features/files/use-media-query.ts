@@ -12,7 +12,11 @@ export function useMediaQuery(query: string, initialValue = false): boolean {
     mql.addEventListener('change', onStoreChange)
     return () => mql.removeEventListener('change', onStoreChange)
   }
-  return useSyncExternalStore(subscribe, () => window.matchMedia(query).matches, () => initialValue)
+  return useSyncExternalStore(
+    subscribe,
+    () => window.matchMedia(query).matches,
+    () => initialValue,
+  )
 }
 
 /** 断点常量（与 Tailwind md/lg 断点对齐） */
