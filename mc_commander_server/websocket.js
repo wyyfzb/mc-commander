@@ -178,8 +178,9 @@ const STATUS_EVENT_TYPES = new Set(['started', 'stopped', 'crash', 'ready', 'sav
 
 // 跃迁子事件中属「意外失败」的关键事件：用户不一定正盯着出事的实例，投递面取全局，
 // 否则多实例部署下非当前实例的崩溃只有恰好打开该实例控制台才看得见。
-// started/stopped/ready/save 是常规生命周期（多数由用户在面板上发起），
-// 保持订阅内投递——跨实例广播只会给其它实例的视图制造噪音
+// 同口径的无订阅全局播报也适用于失败类事件（备份失败/任务失败/Webhook 投递失败，
+// 见 broadcastCriticalInstanceEvent）。started/stopped/ready/save 是常规生命周期
+// （多数由用户在面板上发起），保持订阅内投递——跨实例广播只会制造噪音
 const CRITICAL_STATUS_EVENTS = new Set(['crash', 'circuit_breaker']);
 
 /// 通知事件落库（广播前）：返回自增 id 供消息携带与断线补齐。
@@ -586,6 +587,23 @@ export function setupWebSocket(wss, serverManager) {
     }
   }
 
+  /// 关键实例事件派发（与 crash / 熔断同款）：落库为全局行（instance_id 置空，
+  /// 断线补齐对任何订阅者可见）+ 无订阅全局播发。适用「用户不一定正盯着出事
+  /// 实例」的意外失败——订阅过滤会把非当前实例的失败吞到只剩恰好打开该实例
+  /// 控制台的人。信封与载荷仍携带实例归属，前端据此跳转；角色过滤不受影响
+  /// （fanOut 内 mayReceiveEvent 照常生效，只读的失败静音是既有取舍）
+  function broadcastCriticalInstanceEvent(type, data) {
+    const eventId = persistNotificationEvent(null, type, data);
+    const message = JSON.stringify({
+      ...(eventId != null ? { eventId } : {}),
+      type,
+      instanceId: data?.instanceId ?? null,
+      data,
+      timestamp: Date.now()
+    });
+    fanOut(message, { type, instanceId: data?.instanceId ?? null, includeUnsubscribed: true });
+  }
+
   /// 全局通知广播：落库（instance_id NULL，重连补齐对所有订阅者可见）+
   /// 发给所有在线客户端。用于无实例归属的低频高价值事件——部署终态：
   /// 部署实例在完成前不入库，订阅过滤不适用，broadcast 的订阅匹配会全部落空
@@ -607,22 +625,19 @@ export function setupWebSocket(wss, serverManager) {
   serverManager.on('instance:status', (data) => {
     // status 快照高频（每 5s performance 附带）；仅状态跃迁子事件落库
     if (STATUS_EVENT_TYPES.has(data?.event)) {
-      const critical = CRITICAL_STATUS_EVENTS.has(data.event);
-      // 关键事件落库为全局行（instance_id 置空）：断线补齐对任何订阅者都可见，
-      // 实例归属仍由载荷 data.instanceId 携带（前端据信封字段跳转实例页）
-      const eventId = persistNotificationEvent(critical ? null : data.instanceId, WSEvents.STATUS, data);
-      const message = JSON.stringify({
+      if (CRITICAL_STATUS_EVENTS.has(data.event)) {
+        broadcastCriticalInstanceEvent(WSEvents.STATUS, data);
+        return;
+      }
+      // 常规跃迁也落库（实例行，仅订阅者断线补齐可见），但投递仍按订阅过滤
+      const eventId = persistNotificationEvent(data.instanceId, WSEvents.STATUS, data);
+      fanOut(JSON.stringify({
         ...(eventId != null ? { eventId } : {}),
         type: WSEvents.STATUS,
         instanceId: data.instanceId,
         data,
         timestamp: Date.now()
-      });
-      fanOut(message, {
-        type: WSEvents.STATUS,
-        instanceId: data.instanceId,
-        includeUnsubscribed: critical
-      });
+      }), { type: WSEvents.STATUS, instanceId: data.instanceId });
       return;
     }
     broadcast(data.instanceId, WSEvents.STATUS, data);
@@ -644,8 +659,10 @@ export function setupWebSocket(wss, serverManager) {
     broadcast(data.instanceId, WSEvents.BACKUP_START, data);
   });
 
+  // 备份失败：关键事件（无订阅全局播报 + 落库全局行）——出事实例未必是
+  // 当前视图实例，订阅过滤会让失败只有控制台读者看见
   serverManager.on('instance:backupFailed', (data) => {
-    broadcast(data.instanceId, WSEvents.BACKUP_FAILED, data);
+    broadcastCriticalInstanceEvent(WSEvents.BACKUP_FAILED, data);
   });
 
   // 定时备份因上一备份仍在进行而被跳过（task_scheduler 发出）
@@ -670,14 +687,14 @@ export function setupWebSocket(wss, serverManager) {
     broadcast(data.instanceId, WSEvents.TASK_EXECUTE, data);
   });
 
-  // 定时任务执行失败（task_scheduler 发出）：与 backupFailed 一致的通知链
+  // 定时任务执行失败（task_scheduler 发出）：与 backupFailed 同为关键事件
   serverManager.on('instance:taskFailed', (data) => {
-    broadcast(data.instanceId, WSEvents.TASK_FAILED, data);
+    broadcastCriticalInstanceEvent(WSEvents.TASK_FAILED, data);
   });
 
-  // Webhook 投递失败（webhook.service.js 重试耗尽后发出）：低频高价值，首次失败通知
+  // Webhook 投递失败（webhook.service.js 重试耗尽后发出）：同为关键事件，首次失败通知
   serverManager.on('instance:webhookDeliveryFailed', (data) => {
-    broadcast(data.instanceId, WSEvents.WEBHOOK_DELIVERY_FAILED, data);
+    broadcastCriticalInstanceEvent(WSEvents.WEBHOOK_DELIVERY_FAILED, data);
   });
 
   // 监听器注册：统一在 try 中注册并记录注册失败

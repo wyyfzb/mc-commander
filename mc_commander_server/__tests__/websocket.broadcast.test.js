@@ -455,9 +455,12 @@ describe('WebSocket 系统广播域（broadcastAll / 全局通知 / 系统统计
       expect(ws.send).toHaveBeenCalledTimes(CASES.length);
     });
 
-    it('webhook 投递失败事件广播并落库（低频高价值通知链）', () => {
+    it('webhook 投递失败：关键事件派发（落库全局行 + 未订阅客户端也收到）', () => {
       const ws = connect(wss);
       ws.subscribedInstances.add('s1');
+      // 未订阅任何实例的另一客户端：失败事件与 crash/熔断同款，投递面取全局
+      const outsider = connect(wss);
+      outsider.send.mockClear();
       ws.send.mockClear();
 
       serverManager.emit('instance:webhookDeliveryFailed', {
@@ -468,11 +471,35 @@ describe('WebSocket 系统广播域（broadcastAll / 全局通知 / 系统统计
         error: 'request timeout',
       });
 
+      // 落库为全局行（instance_id 置空）：断线补齐对任何订阅者都可见
       expect(fakeDb.inserted).toHaveLength(1);
+      expect(fakeDb.inserted[0][0]).toBeNull();
+      expect(fakeDb.inserted[0][1]).toBe(WSEvents.WEBHOOK_DELIVERY_FAILED);
       const msg = sentMessage(ws);
       expect(msg.type).toBe(WSEvents.WEBHOOK_DELIVERY_FAILED);
       expect(msg.eventId).toBe(1);
+      // 信封仍携带实例归属（前端据此跳转实例页）
+      expect(msg.instanceId).toBe('s1');
       expect(msg.data).toMatchObject({ webhookId: 3, error: 'request timeout' });
+      // 未订阅客户端同样收到（关键事件无订阅播报）
+      const outsiderMsg = sentMessage(outsider);
+      expect(outsiderMsg.type).toBe(WSEvents.WEBHOOK_DELIVERY_FAILED);
+      expect(outsiderMsg.instanceId).toBe('s1');
+    });
+
+    it('备份失败与定时任务失败同走关键事件派发（未订阅也收到、落库全局行）', () => {
+      const outsider = connect(wss);
+      outsider.send.mockClear();
+
+      serverManager.emit('instance:backupFailed', { instanceId: 's1', error: 'rsync boom' });
+      serverManager.emit('instance:taskFailed', { instanceId: 's1', taskName: '每日备份', error: 'boom' });
+
+      const types = outsider.send.mock.calls.map(([m]) => JSON.parse(m).type);
+      expect(types).toEqual([WSEvents.BACKUP_FAILED, WSEvents.TASK_FAILED]);
+      // 两行均为全局行
+      const recent = fakeDb.inserted.slice(-2);
+      expect(recent.map((r) => r[0])).toEqual([null, null]);
+      expect(recent.map((r) => r[1])).toEqual([WSEvents.BACKUP_FAILED, WSEvents.TASK_FAILED]);
     });
 
     it('客户端断开事件移出广播集合，error 事件仅记录无副作用', () => {

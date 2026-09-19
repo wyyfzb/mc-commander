@@ -117,11 +117,21 @@ export function useServerSocket(instanceId: string | null) {
       }
 
       // ── critical 事件全局广播（issue 334）：非当前实例的 crash/熔断不丢弃 ──
-      // 用户切到其他页面/实例时，崩溃与熔断仍入通知中心（可跳转回溯）
-      if (msg.type === 'status' && msg.instanceId !== instanceRef.current) {
-        const ev = String(data.event ?? '')
-        if (ev === 'crash' || ev === 'circuit_breaker') {
-          dispatchEvent({ type: 'status', data: msg.data as Record<string, unknown>, instanceId: msg.instanceId })
+      // 用户切到其他页面/实例时，崩溃与熔断仍入通知中心（可跳转回溯）。
+      // 失败类事件（备份失败/任务失败/Webhook 投递失败）与服务端同口径走
+      // 无订阅全局播发（broadcastCriticalInstanceEvent，instanceId 可空＝
+      // 无归属 webhook 的投递失败），此处同样旁路实例门控——出事实例未必
+      // 是当前视图，跨实例丢弃会让失败只有控制台读者可见
+      const isFailureEvent =
+        msg.type === 'backupFailed' || msg.type === 'taskFailed' || msg.type === 'webhookDeliveryFailed'
+      if (isFailureEvent) {
+        dispatchEvent({ type: msg.type, data: msg.data as Record<string, unknown>, instanceId: msg.instanceId })
+        return
+      }
+      if (msg.instanceId && msg.instanceId !== instanceRef.current) {
+        const isCriticalStatus = msg.type === 'status' && (data.event === 'crash' || data.event === 'circuit_breaker')
+        if (isCriticalStatus) {
+          dispatchEvent({ type: msg.type, data: msg.data as Record<string, unknown>, instanceId: msg.instanceId })
         }
         return
       }
