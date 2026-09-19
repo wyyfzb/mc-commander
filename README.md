@@ -27,7 +27,19 @@ MC_Commander 是一个自托管的 Minecraft 服务器管理工具。**核心定
 |---|---|
 | ![文件管理](screenshots/files.png) | ![玩家管理](screenshots/players.png) |
 
-> 其余页面（世界/任务/插件/Webhook/审计/设置）截图待补充；完整操作流程见 [docs/user-guide.md](docs/user-guide.md)。
+| 世界 | 任务 |
+|---|---|
+| ![世界](screenshots/world.png) | ![任务](screenshots/tasks.png) |
+
+| 插件 | Webhook |
+|---|---|
+| ![插件](screenshots/plugins.png) | ![Webhook](screenshots/webhooks.png) |
+
+| 审计日志 | 设置 |
+|---|---|
+| ![审计日志](screenshots/audit.png) | ![设置](screenshots/settings.png) |
+
+> 完整操作流程见 [docs/user-guide.md](docs/user-guide.md)。
 
 ---
 
