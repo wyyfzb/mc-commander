@@ -19,5 +19,6 @@ byte 级比对守卫拦截该漂移。
 ```bash
 npm ci         # 安装依赖（本包独立安装，仓库无 workspace 根）
 npm test       # vitest 全量
+npm run lint   # oxlint（三个包同一把 linter，规则面见 .oxlintrc.json）
 npm run build  # 构建 dist/index.js（rolldown，输出确定，同步时不会改写工作区）
 ```
