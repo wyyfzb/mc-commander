@@ -80,7 +80,7 @@ CI 会在 PR 上运行三套完整检查 + 代码格式检查 + e2e + 密钥扫�
 ### 代码格式
 
 格式化由仓库根目录的 **Biome** 统一负责（配置见 `biome.jsonc`，**只启用 formatter**，
-lint 仍归前端的 oxlint 与服务端的 eslint）：
+lint 归 oxlint，三个包同一把）：
 
 ```bash
 npm run format          # 在仓库根执行：按配置格式化全仓

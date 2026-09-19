@@ -35,13 +35,14 @@ ensure_deps "$PROJECT_DIR"
 # 契约包最先跑：服务端运行时经 file: link 消费其 dist，前端经 vite alias 直读 src，
 # dist 落后于 src 时服务端会静默使用旧契约，故须先确保 dist 与 src 同步。
 if [ "$SKIP_SCHEMAS" -eq 0 ]; then
-  echo "=== [2/4] 共享契约包 mc-schemas（测试 + dist 同步守卫）==="
+  echo "=== [2/4] 共享契约包 mc-schemas（lint + 测试 + dist 同步守卫）==="
   if [ ! -d "$SCHEMAS_DIR" ]; then
     echo "错误：未找到 mc-schemas 目录"
     exit 1
   fi
   ensure_deps "$SCHEMAS_DIR"
   cd "$SCHEMAS_DIR"
+  npm run lint
   npm test
   # dist 同步守卫（与 ci.yml schemas job 同款）：重建产物与提交版 byte 级比对，
   # 漂移即失败。rolldown 输出确定，同步时本步不会改写工作区。

@@ -499,7 +499,7 @@ mc_commander_server/
 
 ```bash
 npm test        # vitest 全量用例
-npm run lint    # eslint
+npm run lint    # oxlint
 ```
 
 ## 开发

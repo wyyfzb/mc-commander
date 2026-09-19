@@ -32,7 +32,7 @@ npm run format               # 按 biome.jsonc 格式化全仓代码
 npm run format:check         # 只检查不改写（CI 与 local-check 用这条）
 
 # 契约包（mc-schemas/ 下）——改 src 后必须 build 并提交 dist
-npm ci && npm test
+npm ci && npm run lint && npm test
 npm run build
 
 # 前端（mc_manager_web/ 下）
@@ -46,7 +46,7 @@ npm run test:e2e             # Playwright e2e（自动起 mock 后端 + dev serv
 
 # 服务端（mc_commander_server/ 下）
 npm ci && npm test           # vitest 全量
-npm run lint                 # ESLint
+npm run lint                 # oxlint
 npm run dev                  # node --watch 热重载
 ```
 
@@ -58,11 +58,11 @@ npm run dev                  # node --watch 热重载
 |---|---|
 | 前端 | `npx tsc -b --noEmit` + `npm run lint` + `npm run test`（全量） |
 | 服务端 | `npm run lint` + `npm test`（全量） |
-| 契约包 | `npm test` + `npm run build`（dist 与 src 同步） |
+| 契约包 | `npm run lint` + `npm test` + `npm run build`（dist 与 src 同步） |
 | 任何代码改动（含单文件） | 根目录 `npm run format`（写入后）——格式检查在 CI 与一键路径内 |
 | 跨端 | 以上都跑；一键路径 `bash scripts/local-check.sh` |
 
-- 一键路径：`bash scripts/local-check.sh`（代码格式 + 三包 lint / 类型检查 / 全量 test + 契约 dist 同步守卫）；
+- 一键路径：`bash scripts/local-check.sh`（代码格式 + 三包 lint（oxlint）/ 类型检查 / 全量 test + 契约 dist 同步守卫）；
   `bash` 不在 PATH 时先按「常用命令」把它加进 PATH，未装 bash 的环境则按上表逐包执行（格式检查用
   根目录 `npm run format:check`，其余命令见「常用命令」）。
   本机另有等价的私有入口 `.ai/tools/verify.ps1`（四条泳道并行＝格式 + 三包 + 三项门禁，出证据块与
@@ -149,7 +149,7 @@ npm run dev                  # node --watch 热重载
 - **注释边界**：注释只写「代码无法直观体现的设计意图、隐含约束、特殊边界、选型原因」；
   禁止写入迭代过程、方案对比、调试记录；单行优先，不复述代码行为。
 - **代码格式**：格式化的唯一事实源是根目录 `biome.jsonc`（Biome formatter，**只做 formatter**——
-  lint 仍归 oxlint/eslint）。改完代码跑 `npm run format`（根目录）即与门禁一致；
+  lint 归 oxlint，三个包同一把）。改完代码跑 `npm run format`（根目录）即与门禁一致；
   `npm run format:check` 在 CI 与 `local-check.sh` 里跑。范围＝全仓 .ts/.tsx/.js/.mjs + 配置文件，
   **不含 CSS 与 Markdown**（设计 token 样式表由门禁脚本解析、文档手写排版），
   也不含 dist/public/coverage/e2e 产物/.ai/锁文件。分号风格按包分流（服务端有、其余无），

@@ -27,13 +27,13 @@ jobs:
           cache-dependency-path: package-lock.json
       - run: npm ci
       # 仓库级工具包（根 package.json 只装 Biome，不是 workspace 根）。
-      # 只查 formatter，不含 lint——lint 由下方各包的 oxlint / eslint job 承担；
+      # 只查 formatter，不含 lint——lint 由下方各包的 oxlint job 承担；
       # 格式化范围与排除项（dist/public/coverage/e2e 产物/.ai/锁文件，以及 CSS 与 Markdown）
       # 见 biome.jsonc。失败时本地执行 `npm run format` 即修复。
       - run: npm run format:check
 
   schemas:
-    name: 契约包（schemas 测试 + dist 同步守卫）
+    name: 契约包（lint + schemas 测试 + dist 同步守卫）
     runs-on: ubuntu-latest
     if: >-
       github.event_name == 'push' ||
@@ -49,6 +49,7 @@ jobs:
           cache: npm
           cache-dependency-path: mc-schemas/package-lock.json
       - run: npm ci
+      - run: npm run lint
       - run: npm test
       # dist 同步守卫：dist/index.js 是服务端运行时消费物（server 经
       # file: link + main 字段解析到 dist，前端则经 vite alias 直读 src），

@@ -353,7 +353,7 @@ describe('_collectStats 门控与平台分支', () => {
       // 字段缺失/非数字：内存保留旧值，CPU 基线不动
       const inst2 = makeBareInstance();
       inst2._memoryUsage = 0.5;
-      exec.mockImplementation((cmd, ...rest) =>
+      exec.mockImplementation((_cmd, ...rest) =>
         rest[rest.length - 1](null, '{"WorkingSet64":null,"CPU":null}'),
       );
       inst2._collectStats();
@@ -373,7 +373,7 @@ describe('_collectStats 门控与平台分支', () => {
       // cpuDiff = 11.5s / elapsed 1s = 1150%（多核并行的进程也按单进程口径截断）；
       // 输入须明显越过上限：恰好 100% 时删掉截断照样通过，用例等于没锁住
       inst._lastCpuTime = { cpu: 1.0, sys: 0, time: Date.now() - 1000 };
-      exec.mockImplementation((cmd, ...rest) =>
+      exec.mockImplementation((_cmd, ...rest) =>
         rest[rest.length - 1](null, '{"WorkingSet64":1073741824,"CPU":12.5}'),
       );
       inst._collectStats();
@@ -390,7 +390,7 @@ describe('_collectStats 门控与平台分支', () => {
     try {
       const inst2 = makeBareInstance();
       const perf2 = collectPerf(inst2);
-      exec.mockImplementation((cmd, ...rest) =>
+      exec.mockImplementation((_cmd, ...rest) =>
         rest[rest.length - 1](new Error('powershell failed'), ''),
       );
       inst2._collectStats();
@@ -399,14 +399,14 @@ describe('_collectStats 门控与平台分支', () => {
       const inst3 = makeBareInstance();
       const perf3 = collectPerf(inst3);
       inst3._memoryUsage = 0.88;
-      exec.mockImplementation((cmd, ...rest) => rest[rest.length - 1](null, 'not json'));
+      exec.mockImplementation((_cmd, ...rest) => rest[rest.length - 1](null, 'not json'));
       inst3._collectStats();
       expect(perf3).toHaveLength(0);
       expect(inst3._memoryUsage).toBe(0.88);
 
       const inst4 = makeBareInstance();
       const perf4 = collectPerf(inst4);
-      exec.mockImplementation((cmd, ...rest) => rest[rest.length - 1](null, undefined));
+      exec.mockImplementation((_cmd, ...rest) => rest[rest.length - 1](null, undefined));
       inst4._collectStats();
       expect(perf4).toHaveLength(0);
     } finally {
@@ -422,7 +422,7 @@ describe('_collectStats 门控与平台分支', () => {
       inst.on('performanceUpdate', () => {
         throw new Error('broadcast failed');
       });
-      exec.mockImplementation((cmd, ...rest) =>
+      exec.mockImplementation((_cmd, ...rest) =>
         rest[rest.length - 1](null, '{"WorkingSet64":1073741824,"CPU":1}'),
       );
       // exec 回调里抛错无人接管，只能在这里就地吞掉：采集照常、只丢这次广播
@@ -439,7 +439,7 @@ describe('_collectStats 门控与平台分支', () => {
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
     try {
       const inst = makeBareInstance();
-      const fail = (cmd, ...rest) => rest[rest.length - 1](new Error('Access is denied'), '');
+      const fail = (_cmd, ...rest) => rest[rest.length - 1](new Error('Access is denied'), '');
       exec.mockImplementation(fail);
       inst._collectStats();
       expect(warn).toHaveBeenCalledTimes(1);
@@ -449,7 +449,7 @@ describe('_collectStats 门控与平台分支', () => {
       expect(warn).toHaveBeenCalledTimes(1); // 持续失败不重复告警
 
       // 恢复成功后再次失败：仍会告警（不是「一辈子只报一次」）
-      exec.mockImplementation((cmd, ...rest) =>
+      exec.mockImplementation((_cmd, ...rest) =>
         rest[rest.length - 1](null, '{"WorkingSet64":1073741824,"CPU":1}'),
       );
       inst._collectStats();

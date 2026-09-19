@@ -105,6 +105,8 @@ export const fileUploadQuerySchema = z.object({
   targetDir: z
     .string()
     .min(1, 'Invalid targetDir')
+    // 控制字符校验是安全面刻意为之（拒绝 \x00-\x1f），非误用正则
+    // oxlint-disable-next-line no-control-regex
     .refine((v) => !/[\x00-\x1f]/.test(v), 'Invalid targetDir')
     .transform((v) => (v.startsWith('/') ? v : `/${v}`))
     .optional()
