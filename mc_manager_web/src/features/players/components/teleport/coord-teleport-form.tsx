@@ -32,8 +32,8 @@ export function CoordTeleportForm({
             />
           ))}
         </div>
-        <Button variant="default" size="sm" onClick={onTeleport} disabled={running}>
-          <Navigation className="size-3.5" aria-hidden />
+        <Button variant="default" className="shrink-0" onClick={onTeleport} disabled={running}>
+          <Navigation aria-hidden />
           传送
         </Button>
       </div>

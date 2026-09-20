@@ -206,8 +206,6 @@ export function EffectForm({
             onValueChange={setSearch}
             placeholder="搜索效果（中文/ID）"
             aria-label="搜索效果"
-            inputClassName="h-8 text-mcs-sm"
-            size="sm"
           />
 
           {/* 效果选择网格（跨分类的一个单选组） */}

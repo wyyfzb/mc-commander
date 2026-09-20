@@ -81,8 +81,6 @@ export function SummonForm({ isRconConnected, onAction }: ActionFormProps) {
         onValueChange={setEntitySearch}
         placeholder="搜索实体（中文/ID）"
         aria-label="搜索实体"
-        inputClassName="h-8 text-mcs-sm"
-        size="sm"
       />
 
       {/* 实体选择网格（跨分类的一个单选组） */}
@@ -143,7 +141,7 @@ export function SummonForm({ isRconConnected, onAction }: ActionFormProps) {
                 onChange={(e) => set(e.target.value)}
                 placeholder={placeholder}
                 aria-label={label}
-                className="h-8 text-mcs-sm font-mono"
+                className="font-mono"
               />
             </div>
           ))}

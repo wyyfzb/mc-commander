@@ -28,7 +28,7 @@ interface SearchInputProps {
 }
 
 const SIZE_STYLES = {
-  default: { input: 'h-8 pl-8', icon: 'size-3.5', iconPos: 'left-2.5', clear: 'right-2' },
+  default: { input: 'h-10 pl-8', icon: 'size-3.5', iconPos: 'left-2.5', clear: 'right-2' },
   sm: { input: 'h-7 pl-7 text-mcs-xs', icon: 'size-3', iconPos: 'left-2', clear: 'right-2' },
 } as const
 

@@ -246,7 +246,6 @@ export function AccountPanel() {
               value={currentPassword}
               onChange={setCurrentPassword}
               autoComplete="current-password"
-              className="h-9"
             />
           </div>
           <div className="space-y-2">
@@ -258,7 +257,6 @@ export function AccountPanel() {
               value={newPassword}
               onChange={setNewPassword}
               autoComplete="new-password"
-              className="h-9"
             />
           </div>
           <div className="space-y-2">
@@ -270,7 +268,6 @@ export function AccountPanel() {
               value={confirmPassword}
               onChange={setConfirmPassword}
               autoComplete="new-password"
-              className="h-9"
             />
           </div>
 
@@ -304,7 +301,7 @@ export function AccountPanel() {
           )}
 
           <div className="sm:col-span-3">
-            <LoadingButton type="submit" size="sm" loading={changing} disabled={!authed}>
+            <LoadingButton type="submit" loading={changing} disabled={!authed}>
               更新密码
             </LoadingButton>
           </div>

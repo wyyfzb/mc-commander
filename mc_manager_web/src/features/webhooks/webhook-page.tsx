@@ -516,7 +516,6 @@ export default function WebhookPage() {
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                 placeholder="Discord 通知"
-                className="text-mcs-sm"
               />
             </div>
             <div className="space-y-1.5">
@@ -554,7 +553,6 @@ export default function WebhookPage() {
                 value={form.url}
                 onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
                 placeholder={platformPreset(form.platform).urlPlaceholder}
-                className="text-mcs-sm"
                 aria-invalid={urlInvalid}
               />
               {urlInvalid && (
@@ -577,7 +575,6 @@ export default function WebhookPage() {
                       ? '留空保持原密钥不变'
                       : platformPreset(form.platform).secretPlaceholder
                   }
-                  className="text-mcs-sm"
                   showCapsLock={false}
                   revealLabels={{ show: '显示密钥', hide: '隐藏密钥' }}
                 />
@@ -593,7 +590,6 @@ export default function WebhookPage() {
                       : platformPreset(form.platform).secretPlaceholder
                   }
                   disabled={form.platform === 'wecom' || form.platform === 'serverchan'}
-                  className="text-mcs-sm"
                 />
               )}
             </div>

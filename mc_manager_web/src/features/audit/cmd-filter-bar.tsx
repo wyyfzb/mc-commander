@@ -52,8 +52,6 @@ export function CmdFilterBar({
           return (
             <Button
               key={q.key}
-              size="sm"
-              className="h-8"
               variant={active ? 'selected' : 'outline'}
               {...quickGroup.itemProps(index)}
               onClick={() => applyQuickCmd(q)}
@@ -87,7 +85,7 @@ export function CmdFilterBar({
       </div>
 
       {cmdHasTimeRange && (
-        <Button size="sm" variant="ghost" onClick={clearCmdTimeRange}>
+        <Button variant="ghost" onClick={clearCmdTimeRange}>
           <X aria-hidden />
           清空时间
         </Button>
@@ -96,9 +94,7 @@ export function CmdFilterBar({
       <span className="h-5 w-px shrink-0 bg-mcs-border-muted" aria-hidden />
 
       <Button
-        size="sm"
         variant="outline"
-        className="h-8"
         onClick={() => void handleCmdExport()}
         disabled={cmdExporting}
         data-testid="cmd-export"

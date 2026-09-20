@@ -13,6 +13,8 @@ import { useState } from 'react'
 import { ChevronDown, ChevronUp, Gauge, Info, Loader2, Save, Settings } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import {
   Dialog,
   DialogContent,
@@ -269,8 +271,8 @@ export function InstanceSettingsDialog({
     }
   }
 
-  const inputClass =
-    'h-9 w-full rounded-mcs-sm border border-mcs-border-default bg-mcs-bg-default px-2.5 text-mcs-sm text-mcs-text-default placeholder:text-mcs-text-muted focus:border-mcs-accent-border focus:outline-none focus:ring-1 focus:ring-mcs-focus-ring'
+  // 几何随 ui/input 基座，只保留 accent 焦点语义（启动配置项的「可写」视觉线索）
+  const accentFocus = 'focus-visible:border-mcs-accent-border focus-visible:ring-mcs-accent-border'
 
   return (
     <Dialog
@@ -375,12 +377,12 @@ export function InstanceSettingsDialog({
                 <span className="text-mcs-xs font-medium text-mcs-text-muted">
                   Java 路径（可选）
                 </span>
-                <input
+                <Input
                   value={javaPath}
                   onChange={(e) => setJavaPath(e.target.value)}
                   aria-label="Java 路径（可选）"
                   placeholder="java"
-                  className={inputClass}
+                  className={accentFocus}
                 />
                 <p className="text-mcs-xs text-mcs-text-muted">
                   留空或填 java 使用系统默认；填路径时需为已存在的 java 可执行文件
@@ -392,13 +394,13 @@ export function InstanceSettingsDialog({
                 <span className="text-mcs-xs font-medium text-mcs-text-muted">
                   JVM 参数（每行一个）
                 </span>
-                <textarea
+                <Textarea
                   value={jvmArgsText}
                   onChange={(e) => setJvmArgsText(e.target.value)}
                   aria-label="JVM 参数（每行一个）"
                   rows={5}
                   placeholder={'每行一个 JVM 参数，例如：\n-Xmx4G\n-XX:+UseG1GC'}
-                  className={cn(inputClass, 'h-auto min-h-24 resize-y font-mono')}
+                  className={cn(accentFocus, 'min-h-24 resize-y font-mono')}
                 />
                 <p className="text-mcs-xs text-mcs-text-muted">
                   仅支持 -X/-D 前缀参数、-jar 与 nogui；-jar 路径需位于实例目录内

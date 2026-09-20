@@ -19,6 +19,7 @@ import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { PageHeader } from '@/components/mcs/page-header'
 import { InfoHint } from '@/components/mcs/info-hint'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { useConnectionStore } from '@/stores/connection'
@@ -416,12 +417,13 @@ export function InstancesPage() {
             >
               输入实例名「{uninstallTarget?.name ?? ''}」以确认
             </label>
-            <input
+            {/* 归 ui/input 基座，只保留危险语义焦点环（确认框的「红色 = 不可逆」提示） */}
+            <Input
               id="uninstall-confirm-input"
               value={uninstallInput}
               onChange={(e) => setUninstallInput(e.target.value)}
               placeholder={uninstallTarget?.name ?? ''}
-              className="h-9 rounded-mcs-md border border-mcs-border-default bg-mcs-bg-default px-3 font-mono text-mcs-sm text-mcs-text-default outline-none placeholder:text-mcs-text-muted focus:border-mcs-error-fg focus:ring-1 focus:ring-mcs-focus-ring"
+              className="font-mono focus-visible:border-mcs-error-fg focus-visible:ring-mcs-error-fg"
             />
           </div>
         )}

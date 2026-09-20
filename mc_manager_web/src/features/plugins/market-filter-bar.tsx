@@ -56,7 +56,7 @@ export function MarketFilterBar({
       />
       <div className="flex items-center gap-2">
         <Select value={loader} onValueChange={onLoaderChange}>
-          <SelectTrigger size="sm" className="w-32.5" aria-label="按加载器过滤">
+          <SelectTrigger className="w-32.5" aria-label="按加载器过滤">
             <SelectValue placeholder="全部加载器" />
           </SelectTrigger>
           <SelectContent>
@@ -71,19 +71,19 @@ export function MarketFilterBar({
           value={gameVersion}
           onChange={(e) => onGameVersionChange(e.target.value.trim())}
           placeholder="MC 版本（如 1.21.4）"
-          className="h-8 flex-1 text-mcs-xs"
+          className="flex-1"
           aria-label="按 MC 版本过滤"
           data-testid="market-game-version"
         />
         <Button
           variant="ghost"
-          size="icon-sm"
+          size="icon"
           onClick={onRefresh}
           disabled={loading}
           aria-label="重新搜索"
           title="重新搜索"
         >
-          <RefreshCw className={`size-3.5 ${loading ? 'animate-spin' : ''}`} aria-hidden />
+          <RefreshCw className={`size-4 ${loading ? 'animate-spin' : ''}`} aria-hidden />
         </Button>
       </div>
       {totalHits > 0 && (

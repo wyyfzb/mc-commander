@@ -143,7 +143,7 @@ export function DateTextInput({
           setDraftDigits(null)
         }}
         className={cn(
-          'pr-8 w-36 text-mcs-xs',
+          'pr-8 w-36',
           // 与 FilterSelect 同款「筛选生效可见」激活态；边界用强档 accent（弱档亮色仅 1.10:1，不达交互边界 ≥3:1）
           active && !draftInvalid && TONE_SELECTED_CLASSES,
           className,

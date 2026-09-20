@@ -8,6 +8,7 @@ import { useMemo, useState } from 'react'
 import { Minus, MoreVertical, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -259,23 +260,24 @@ export function KitEditorDialog({
             <div className="flex items-start gap-3">
               <div className="flex w-16 shrink-0 flex-col gap-1">
                 <span className="text-mcs-xs text-mcs-text-muted">图标</span>
-                <input
+                {/* 归 ui/input 基座；图标字号 18px 需带 md: 同档——基座声明 md:text-sm，会盖掉未加变体的字号覆盖 */}
+                <Input
                   value={icon}
                   onChange={(e) => setIcon(e.target.value)}
                   aria-label="礼包图标"
                   maxLength={4}
-                  className="h-9 rounded-mcs-sm border border-mcs-border-default bg-mcs-bg-default text-center text-mcs-lg text-mcs-text-default focus:border-mcs-accent-border focus:outline-none focus:ring-1 focus:ring-mcs-focus-ring"
+                  className="text-center text-mcs-lg md:text-mcs-lg focus-visible:border-mcs-accent-border focus-visible:ring-mcs-accent-border"
                 />
               </div>
               <div className="min-w-0 flex-1">
                 <span className="text-mcs-xs text-mcs-text-muted">名称</span>
-                <input
+                <Input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   aria-label="礼包名称"
                   placeholder="如：新手起步包"
                   maxLength={20}
-                  className="mt-1 h-9 w-full rounded-mcs-sm border border-mcs-border-default bg-mcs-bg-default px-2.5 text-mcs-sm text-mcs-text-default placeholder:text-mcs-text-muted focus:border-mcs-accent-border focus:outline-none focus:ring-1 focus:ring-mcs-focus-ring"
+                  className="mt-1 focus-visible:border-mcs-accent-border focus-visible:ring-mcs-accent-border"
                 />
               </div>
             </div>

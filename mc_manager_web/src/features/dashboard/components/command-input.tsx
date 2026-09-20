@@ -3,6 +3,7 @@ import { ArrowRight, Check, Play, Send, ShieldAlert, Star, X } from 'lucide-reac
 import { toast } from 'sonner'
 import { useMutation } from '@tanstack/react-query'
 import { IconButton } from '@/components/mcs/icon-button'
+import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { apiPost } from '@/api/client'
 import { ApiError } from '@/api/client'
@@ -274,7 +275,8 @@ export function CommandInput() {
 
       {/* 输入行 */}
       <div className="relative flex items-center gap-2">
-        <input
+        {/* 归 ui/input 基座；12px 需带 md: 同档——基座声明 md:text-sm，会盖掉未加变体的字号覆盖 */}
+        <Input
           ref={inputRef}
           value={value}
           onChange={(e) => {
@@ -303,7 +305,7 @@ export function CommandInput() {
           }}
           placeholder="输入服务器命令... (如 /say hello)"
           disabled={!isRunning}
-          className="h-8 min-w-0 flex-1 rounded-mcs-sm border border-input bg-mcs-bg-subtle py-0 pr-2.5 pl-7 font-mono text-mcs-xs text-mcs-text-default transition-colors outline-none placeholder:text-mcs-text-muted focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+          className="min-w-0 flex-1 bg-mcs-bg-subtle pl-7 font-mono text-mcs-xs text-mcs-text-default md:text-mcs-xs"
           aria-label="服务器命令输入"
         />
         {/* shell 语义前缀：内嵌输入框内 */}
@@ -315,19 +317,21 @@ export function CommandInput() {
         </span>
         <IconButton
           variant="outline"
+          size="icon"
           onClick={() => savePreset()}
           aria-label="存为预设"
           title="存为预设"
         >
-          <Star className="size-3.5" aria-hidden />
+          <Star className="size-4" aria-hidden />
         </IconButton>
         <IconButton
           variant="default"
+          size="icon"
           onClick={() => send(value)}
           disabled={sending || !isRunning}
           aria-label="发送命令"
         >
-          <Send className="size-3.5" aria-hidden />
+          <Send className="size-4" aria-hidden />
         </IconButton>
 
         {/* 补全下拉 */}

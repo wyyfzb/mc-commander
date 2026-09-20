@@ -171,7 +171,6 @@ export function ExperienceForm({
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
           placeholder={mode === 'levels' ? '输入等级' : '输入经验值'}
-          className="h-8 text-mcs-sm"
         />
         <div className="flex flex-wrap gap-1" {...quickAmountGroup.groupProps}>
           {(mode === 'levels' ? XP_QUICK_LEVELS : XP_QUICK_AMOUNTS).map((v, index) => (

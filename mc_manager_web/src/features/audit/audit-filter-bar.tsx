@@ -82,8 +82,6 @@ export function AuditFilterBar({
           return (
             <Button
               key={q.key}
-              size="sm"
-              className="h-8"
               variant={active ? 'selected' : 'outline'}
               {...quickGroup.itemProps(index)}
               onClick={() => applyQuick(q)}
@@ -117,7 +115,7 @@ export function AuditFilterBar({
       </div>
 
       {hasTimeRange && (
-        <Button size="sm" variant="ghost" onClick={clearTimeRange}>
+        <Button variant="ghost" onClick={clearTimeRange}>
           <X aria-hidden />
           清空时间
         </Button>
@@ -127,8 +125,6 @@ export function AuditFilterBar({
 
       <div className="flex items-center gap-1" {...orderGroup.groupProps}>
         <Button
-          size="sm"
-          className="h-8"
           variant={auditOrder === 'desc' ? 'selected' : 'outline'}
           {...orderGroup.itemProps(0)}
           onClick={() => setAuditOrder('desc')}
@@ -136,8 +132,6 @@ export function AuditFilterBar({
           最新优先
         </Button>
         <Button
-          size="sm"
-          className="h-8"
           variant={auditOrder === 'asc' ? 'selected' : 'outline'}
           {...orderGroup.itemProps(1)}
           onClick={() => setAuditOrder('asc')}
@@ -149,9 +143,7 @@ export function AuditFilterBar({
       <span className="h-5 w-px shrink-0 bg-mcs-border-muted" aria-hidden />
 
       <Button
-        size="sm"
         variant="outline"
-        className="h-8"
         onClick={() => void handleExport()}
         disabled={exporting}
         data-testid="audit-export"

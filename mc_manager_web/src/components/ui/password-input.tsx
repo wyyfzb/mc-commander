@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils'
  * PasswordInput —— 密码输入统一组件（显隐切换 + CapsLock 提醒）
  * 显隐交互由应用内按钮承载：Edge 注入的原生 reveal 按钮已在 index.css
  * 全局隐藏（须置于 @layer 外，见该处注释）
- * 高度不在基座（缺省随 ui/input 的 h-8，全站输入统一 32px 档），调用点无需自备高度类
+ * 高度不在基座（缺省随 ui/input 的 h-10，全站输入统一 40px 档），调用点无需自备高度类
  */
 export function PasswordInput({
   id,

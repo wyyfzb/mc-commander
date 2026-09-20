@@ -97,7 +97,7 @@ export function FilterBar({
         onChange={(v) => setFilter({ dimension: v })}
       />
 
-      <Button variant="ghost" size="sm" onClick={resetFilter} aria-label="重置筛选">
+      <Button variant="ghost" onClick={resetFilter} aria-label="重置筛选">
         <RotateCcw aria-hidden />
         重置
       </Button>
@@ -114,7 +114,6 @@ export function FilterBar({
             <span className="inline-flex">
               <Button
                 variant="ghost"
-                size="sm"
                 onClick={onOpenBanRecords}
                 disabled={!isRconConnected}
                 aria-label="封禁记录"
@@ -128,7 +127,6 @@ export function FilterBar({
         </Tooltip>
         <Button
           variant="outline"
-          size="sm"
           onClick={handleExport}
           disabled={exporting || players.length === 0}
         >
@@ -138,12 +136,7 @@ export function FilterBar({
         <Tooltip>
           <TooltipTrigger asChild>
             <span className="inline-flex">
-              <Button
-                variant="default"
-                size="sm"
-                onClick={onAddWhitelist}
-                disabled={!isRconConnected}
-              >
+              <Button variant="default" onClick={onAddWhitelist} disabled={!isRconConnected}>
                 <UserPlus aria-hidden />
                 添加白名单
               </Button>

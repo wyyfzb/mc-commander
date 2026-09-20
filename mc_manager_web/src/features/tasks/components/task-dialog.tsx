@@ -181,7 +181,7 @@ export function TaskDialog({ task, onClose, onSave, saving }: TaskDialogProps) {
                 <Button
                   type="button"
                   variant="ghost"
-                  size="icon-sm"
+                  size="icon"
                   aria-label="可视化编辑"
                   aria-pressed={showEditor}
                   onClick={() => setShowEditor((v) => !v)}
