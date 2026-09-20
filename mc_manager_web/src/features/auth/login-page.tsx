@@ -4,8 +4,8 @@
  *  - setup：后端未设密 → 首访设密向导（一次输入，成功即自动登录）
  *  - login：已设密 → 密码登录（服务端按 IP 锁定 10 次/5min）
  *  - unreachable：后端不可达 → 错误态 + 重试（此时才提供「连接其他面板地址」入口，渐进披露）
- * 细节：密码显隐切换 / CapsLock 提醒 / 强度条（引导性）/ returnTo 回跳 /
- *       装饰性网格纹理 / 公开端点探测不携带任何凭据头
+ * 细节：目标面板地址只读展示（凭据去向可见）/ 密码显隐切换 / CapsLock 提醒 /
+ *       强度条（引导性）/ returnTo 回跳 / 装饰性网格纹理 / 公开端点探测不携带任何凭据头
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams, Link } from 'react-router'
@@ -27,6 +27,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { BrandLogo } from '@/components/mcs/brand-logo'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { Card } from '@/components/mcs/card'
+import { InfoHint } from '@/components/mcs/info-hint'
 import { Label } from '@/components/ui/label'
 import { PasswordInput } from '@/components/ui/password-input'
 import { cn } from '@/lib/utils'
@@ -118,6 +119,12 @@ export function LoginPage() {
   const addressSettled = useRef(false)
 
   const strength = assessPasswordStrength(password)
+  // 目标面板地址（只读展示）：与会话绑定 issuedFor 取同一函数，空地址＝同源部署取站点根。
+  // 分域部署时登录请求的目标与当前页面 origin 并不相同，用户在输入密码前需要看到凭据
+  // 会发往哪块面板（也是会话将绑定的面板）。本处保证的是「展示值 ≡ 会话绑定 issuedFor」，
+  // 不是与请求 URL 逐字相同——展示值经过归一（折叠主机大小写、去掉显式默认端口），
+  // 请求侧仍用用户原样输入
+  const targetPanelAddress = panelAddress(baseUrl)
 
   // 探测后端状态（公开端点；seq 防并发乱序）
   const probe = useCallback(async (base: string) => {
@@ -342,7 +349,7 @@ export function LoginPage() {
               </div>
             </div>
             <div className="flex gap-2">
-              <Button type="button" className="h-10 flex-1" onClick={() => void probe(baseUrl)}>
+              <Button type="button" className="flex-1" onClick={() => void probe(baseUrl)}>
                 <RefreshCw className="size-4" aria-hidden />
                 重新探测
               </Button>
@@ -350,7 +357,7 @@ export function LoginPage() {
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-10 flex-1"
+                  className="flex-1"
                   onClick={() => {
                     addressSettled.current = true
                     setBaseUrl('')
@@ -386,13 +393,12 @@ export function LoginPage() {
                         setBaseUrl(e.target.value.trim())
                       }}
                       placeholder="http://your-server:25566"
-                      className="h-8 font-mono text-mcs-xs"
+                      className="font-mono"
                     />
                     <Button
                       type="button"
                       variant="outline"
-                      size="sm"
-                      className="h-8"
+                      className="shrink-0"
                       onClick={() => void probe(baseUrl)}
                     >
                       连接
@@ -407,6 +413,26 @@ export function LoginPage() {
         {/* 设密 / 登录表单 */}
         {(phase === 'setup' || phase === 'login') && (
           <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+            {/* 目标面板地址用纯文本呈现：它不是可编辑字段，做成输入框会被误当可输入项
+                （焦点环、iOS 聚焦放大、多余的 Tab 停靠点都随之而来）。紧随其后的 username
+                输入是视觉隐藏的，只服务表单语义——消除「密码表单缺 username 字段」提示，
+                并让密码管理器按面板区分条目；隐藏故不参与交互，也不会显示成假地址 */}
+            <div className="space-y-1">
+              <p className="text-mcs-sm font-medium text-mcs-text-default">面板地址</p>
+              <p className="break-all font-mono text-mcs-sm text-mcs-text-default">
+                {targetPanelAddress}
+              </p>
+              <p className="text-mcs-2xs text-mcs-text-muted">登录凭据将发送到该面板</p>
+              <input
+                type="text"
+                name="username"
+                autoComplete="username"
+                value={targetPanelAddress}
+                readOnly
+                hidden
+                tabIndex={-1}
+              />
+            </div>
             <div className="space-y-2">
               <Label htmlFor="admin-password">管理员密码</Label>
               <PasswordInput
@@ -464,7 +490,12 @@ export function LoginPage() {
             )}
             {phase === 'setup' && needsSetupToken && (
               <div className="space-y-2">
-                <Label htmlFor="setup-token">SETUP_TOKEN（一次性，部署完成时输出）</Label>
+                <div className="flex items-center gap-1">
+                  <Label htmlFor="setup-token">SETUP_TOKEN（一次性，部署完成时输出）</Label>
+                  <InfoHint label="部署保护说明">
+                    该面板已开启部署保护：公网部署场景下需证明您是部署者（令牌见部署脚本完成输出，用后即作废）。
+                  </InfoHint>
+                </div>
                 <PasswordInput
                   id="setup-token"
                   value={setupToken}
@@ -475,9 +506,6 @@ export function LoginPage() {
                   placeholder="粘贴部署输出中的 SETUP_TOKEN"
                   autoComplete="off"
                 />
-                <p className="text-mcs-2xs text-mcs-text-muted">
-                  该面板已开启部署保护：公网部署场景下需证明您是部署者（令牌见部署脚本完成输出，用后即作废）。
-                </p>
               </div>
             )}
             {phase === 'setup' && (password.length > 0 || confirmPassword.length > 0) && (
@@ -499,7 +527,7 @@ export function LoginPage() {
               )
             )}
 
-            <Button type="submit" className="h-10 w-full font-semibold" disabled={submitting}>
+            <Button type="submit" className="w-full font-semibold" disabled={submitting}>
               {submitting ? (
                 <Loader2 className="size-4 animate-spin" aria-hidden />
               ) : totpRequired ? (
