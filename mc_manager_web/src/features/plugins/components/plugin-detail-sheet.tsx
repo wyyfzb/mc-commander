@@ -13,6 +13,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { StatusPill } from '@/components/mcs/status-pill'
+import { InfoHint } from '@/components/mcs/info-hint'
 import { formatFileSize, formatModifiedAt } from '@/lib/mc-files'
 
 interface PluginDetailSheetProps {
@@ -194,10 +195,10 @@ export function PluginDetailSheet({
                 启用插件
               </Button>
             )}
+            <InfoHint label="启停生效时机说明">
+              启停与增删在重启实例后生效（Bukkit 插件仅启动时加载）
+            </InfoHint>
           </div>
-          <p className="-mt-3 text-center text-mcs-xs text-mcs-text-muted">
-            启停与增删在重启实例后生效（Bukkit 插件仅启动时加载）
-          </p>
         </div>
       </SheetContent>
     </Sheet>

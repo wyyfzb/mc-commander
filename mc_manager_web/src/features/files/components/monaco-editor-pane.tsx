@@ -26,6 +26,7 @@ import jsonWorker from 'monaco-editor/language/json/json.worker?worker'
 import { FileEdit, RotateCcw, Save, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { InfoHint } from '@/components/mcs/info-hint'
 import { toneClasses } from '@/components/mcs/tone'
 
 // ── Monaco worker 配置（Vite 必需，否则控制台报错 "Could not create web worker"）──
@@ -205,12 +206,20 @@ export function MonacoEditorPane({
     <div className="flex h-full min-h-0 flex-col">
       {/* ── 头部条：文件名 + encoding 徽章 + 脏标记 + 关闭 + 保存 ── */}
       <header className="flex h-10 shrink-0 items-center gap-2 border-b border-mcs-border-muted px-3">
-        <span
-          title={path}
-          className="min-w-0 flex-1 truncate font-mono text-mcs-sm text-mcs-text-default"
-        >
-          {fileNameOf(path)}
-        </span>
+        <div className="flex min-w-0 flex-1 items-center gap-1">
+          <span
+            title={path}
+            className="min-w-0 truncate font-mono text-mcs-sm text-mcs-text-default"
+          >
+            {fileNameOf(path)}
+          </span>
+          {/* 生效方式标识（与属性面板同一口径）：文件级修改一律需重启；热改项指回属性面板 */}
+          {fileNameOf(path).toLowerCase() === 'server.properties' && (
+            <InfoHint label="生效方式说明">
+              该文件保存后需重启实例生效；热改属性可在世界页「服务器属性」面板即时生效
+            </InfoHint>
+          )}
+        </div>
         {!isLoading && (
           <span className="rounded-mcs-xs border border-mcs-border-muted bg-mcs-bg-muted px-1.5 py-px font-mono text-mcs-2xs font-semibold text-mcs-text-muted">
             {encoding === 'utf-8' ? 'UTF-8' : 'GBK'}
@@ -255,13 +264,6 @@ export function MonacoEditorPane({
           </kbd>
         </Button>
       </header>
-
-      {/* ── 生效方式标识（与属性面板同一口径）：文件级修改一律需重启；热改项指回属性面板 ── */}
-      {fileNameOf(path).toLowerCase() === 'server.properties' && (
-        <p className="shrink-0 border-b border-mcs-border-muted px-3 py-1 text-mcs-2xs text-mcs-text-muted">
-          该文件保存后需重启实例生效；热改属性可在世界页「服务器属性」面板即时生效
-        </p>
-      )}
 
       {/* ── 内容区：加载 → 错误 → 编辑器 ── */}
       {isLoading ? (

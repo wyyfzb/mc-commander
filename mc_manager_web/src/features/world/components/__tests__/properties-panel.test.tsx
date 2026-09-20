@@ -50,7 +50,8 @@ describe('PropertiesPanel 渲染', () => {
     expect(screen.getByText('custom-unknown-key')).toBeInTheDocument()
   })
 
-  it('生效方式：常态由面板说明行承担，只给热改例外逐项挂标（默认只读态即如此）', () => {
+  it('生效方式：常态说明收进面板头部信息入口，只给热改例外逐项挂标（默认只读态即如此）', async () => {
+    const user = userEvent.setup()
     const { container } = render(
       <TooltipProvider>
         <PropertiesPanel properties={mockProps} isLoading={false} onSave={vi.fn()} />
@@ -61,11 +62,16 @@ describe('PropertiesPanel 渲染', () => {
 
     // 例外：热改 4 键（difficulty 是其一）逐项挂「即时生效」
     expect(within(row('difficulty')).getByText('即时生效')).toBeInTheDocument()
-    // 常态：可写但非热改的项不逐项挂标（320px 下会把键名挤到 2 字可见），由说明行统一讲清
+    // 常态：可写但非热改的项不逐项挂标（320px 下会把键名挤到 2 字可见），由信息入口统一讲清
     expect(within(row('max-players')).queryByText('重启生效')).not.toBeInTheDocument()
+    // 正文不常驻，点开入口才读到全文
     expect(
-      screen.getByText(/除标记「即时生效」的属性外，其余可写属性改动后需重启实例生效/),
-    ).toBeInTheDocument()
+      screen.queryByText(/除标记「即时生效」的属性外，其余可写属性改动后需重启实例生效/),
+    ).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '生效方式说明' }))
+    expect(await screen.findByRole('dialog', { name: '生效方式说明' })).toHaveTextContent(
+      '除标记「即时生效」的属性外，其余可写属性改动后需重启实例生效',
+    )
     // 不可写/未知键改不动，谈不上生效方式，也不该挂例外标
     expect(within(row('custom-unknown-key')).queryByText('即时生效')).not.toBeInTheDocument()
   })

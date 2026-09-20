@@ -3,8 +3,8 @@
  * - 只读态/编辑态：快照 → 编辑（NoticeBanner + 取消/保存）→ PUT → 需重启项 Dialog 清单 + 可选一键重启
  * - 三分类 FilterChip + 搜索；未知属性自动追加展示（只读，服务端白名单外不可写）
  * - 敏感 9 键锁定（锁图标 + 占位符，tooltip 说明）
- * - 生效方式：常态（可写但非热改 ⇒ 改后需重启）由面板一行说明承担，只给热改例外逐项挂
- *   「即时生效」标；说明行只读态与编辑态都可见，故不必等保存后的 Dialog 才知道要不要重启。
+ * - 生效方式：常态（可写但非热改 ⇒ 改后需重启）由面板头部信息入口承担，只给热改例外逐项挂
+ *   「即时生效」标；入口只读态与编辑态都在，故不必等保存后的 Dialog 才知道要不要重启。
  *   例外标在 xs 以下收起——窄屏逐项挂标会把键名压到 2 字可见，宽度还给键名更重要
  * - 编辑值在组件 state，与 30s 轮询 query data 隔离，无需暂停轮询
  */
@@ -33,6 +33,7 @@ import {
 } from '@/components/ui/dialog'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
+import { InfoHint } from '@/components/mcs/info-hint'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { toast } from 'sonner'
 import { getFriendlyErrorText } from '@/api/errors'
@@ -222,6 +223,9 @@ export function PropertiesPanel({
       <div className="flex items-center gap-2">
         <span className="text-mcs-sm font-semibold text-mcs-text-default">服务器属性</span>
         <span className="text-mcs-2xs text-mcs-text-muted">server.properties</span>
+        <InfoHint label="生效方式说明">
+          除标记「即时生效」的属性外，其余可写属性改动后需重启实例生效
+        </InfoHint>
         {!isEditing ? (
           <Button
             variant="outline"
@@ -270,12 +274,6 @@ export function PropertiesPanel({
           </Chip>
         ))}
       </div>
-
-      {/* ── 生效方式说明（常态一行说清，例外才逐项挂标）：只读态同样可见，
-             故不必等保存后的 Dialog 才知道「改了要不要重启」 */}
-      <p className="text-mcs-2xs text-mcs-text-muted">
-        除标记「即时生效」的属性外，其余可写属性改动后需重启实例生效
-      </p>
 
       {/* ── 需重启项清单 Dialog ── */}
       <Dialog open={restartDialogOpen} onOpenChange={setRestartDialogOpen}>

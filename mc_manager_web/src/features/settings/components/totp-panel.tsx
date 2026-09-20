@@ -35,6 +35,7 @@ import { PasswordInput } from '@/components/ui/password-input'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { LoadingButton } from '@/components/mcs/loading-button'
+import { InfoHint } from '@/components/mcs/info-hint'
 import { SettingsSectionCard } from './settings-section-card'
 import { confirmTotp, disableTotp, enrollTotp, fetchTotpStatus } from '@/api/auth'
 import type { TotpEnrollData } from '@/api/auth'
@@ -317,20 +318,24 @@ export function TotpPanel({ baseUrl, apiKey, authed }: TotpPanelProps) {
               className="h-45 w-45 shrink-0 self-start rounded-mcs-md border border-mcs-border-muted bg-mcs-qr-surface object-contain p-2"
             />
             <div className="min-w-0 flex-1 space-y-2">
-              <Label htmlFor="totp-secret">密钥（无法扫码时手动输入）</Label>
+              <div className="flex items-center gap-1">
+                <Label htmlFor="totp-secret">密钥（无法扫码时手动输入）</Label>
+                <InfoHint label="密钥安全说明">
+                  密钥等同第二因子凭据，请勿截图外发；挂靠完成前它不会生效。
+                </InfoHint>
+              </div>
               <div className="flex gap-2">
                 <Input
                   id="totp-secret"
                   value={enrollment.secret}
                   readOnly
                   spellCheck={false}
-                  className="h-9 font-mono text-mcs-xs"
+                  className="font-mono"
                 />
                 <Button
                   type="button"
                   variant="outline"
-                  size="sm"
-                  className="h-9 shrink-0"
+                  className="shrink-0"
                   onClick={() =>
                     void handleCopy(enrollment.secret, '密钥已复制到剪贴板').then((ok) =>
                       setCopiedSecret(ok),
@@ -345,9 +350,6 @@ export function TotpPanel({ baseUrl, apiKey, authed }: TotpPanelProps) {
                   {copiedSecret ? '已复制' : '复制'}
                 </Button>
               </div>
-              <p className="text-mcs-2xs text-mcs-text-muted">
-                密钥等同第二因子凭据，请勿截图外发；挂靠完成前它不会生效。
-              </p>
             </div>
           </div>
           <div className="space-y-2">
@@ -363,7 +365,7 @@ export function TotpPanel({ baseUrl, apiKey, authed }: TotpPanelProps) {
               inputMode="numeric"
               autoComplete="one-time-code"
               spellCheck={false}
-              className="h-9 max-w-40 font-mono tracking-[0.2em]"
+              className="max-w-40 font-mono tracking-[0.2em]"
             />
           </div>
           {errorText && (
@@ -372,14 +374,13 @@ export function TotpPanel({ baseUrl, apiKey, authed }: TotpPanelProps) {
             </NoticeBanner>
           )}
           <div className="flex flex-wrap gap-2">
-            <LoadingButton type="submit" size="sm" loading={confirming} loadingText="确认中…">
-              <ShieldCheck className="size-3.5" aria-hidden />
+            <LoadingButton type="submit" loading={confirming} loadingText="确认中…">
+              <ShieldCheck aria-hidden />
               完成挂靠
             </LoadingButton>
             <Button
               type="button"
               variant="outline"
-              size="sm"
               disabled={confirming}
               onClick={() => {
                 setEnrollment(null)
@@ -419,7 +420,6 @@ export function TotpPanel({ baseUrl, apiKey, authed }: TotpPanelProps) {
           <Button
             type="button"
             variant="destructive-outline"
-            size="sm"
             onClick={() => {
               setDisablePassword('')
               setDisableCode('')
@@ -427,7 +427,7 @@ export function TotpPanel({ baseUrl, apiKey, authed }: TotpPanelProps) {
               setDisableOpen(true)
             }}
           >
-            <Lock className="size-3.5" aria-hidden />
+            <Lock aria-hidden />
             关闭两步验证
           </Button>
           <p className="text-mcs-2xs text-mcs-text-muted">
@@ -440,25 +440,26 @@ export function TotpPanel({ baseUrl, apiKey, authed }: TotpPanelProps) {
     // ── 未启用 ──
     return (
       <div className="space-y-3">
-        <p className="text-mcs-xs text-mcs-text-muted">
-          当前仅用密码登录。启用两步验证后，登录还需输入认证器生成的 6 位验证码 （服务端会同时给出
-          10 枚一次性恢复码，供手机丢失时使用）。
-        </p>
         {errorText && (
           <NoticeBanner variant="error" role="alert" icon={TriangleAlert}>
             {errorText}
           </NoticeBanner>
         )}
-        <LoadingButton
-          type="button"
-          size="sm"
-          loading={enrolling}
-          loadingText="生成中…"
-          onClick={() => void handleEnroll()}
-        >
-          <Smartphone className="size-3.5" aria-hidden />
-          启用两步验证
-        </LoadingButton>
+        <div className="flex items-center gap-2">
+          <LoadingButton
+            type="button"
+            loading={enrolling}
+            loadingText="生成中…"
+            onClick={() => void handleEnroll()}
+          >
+            <Smartphone aria-hidden />
+            启用两步验证
+          </LoadingButton>
+          <InfoHint label="两步验证说明">
+            当前仅用密码登录。启用两步验证后，登录还需输入认证器生成的 6 位验证码（服务端会同时给出
+            10 枚一次性恢复码，供手机丢失时使用）。
+          </InfoHint>
+        </div>
       </div>
     )
   })()
@@ -502,7 +503,6 @@ export function TotpPanel({ baseUrl, apiKey, authed }: TotpPanelProps) {
                 setDisableError('')
               }}
               autoComplete="current-password"
-              className="h-9"
             />
           </div>
           <div className="space-y-2">
@@ -518,7 +518,7 @@ export function TotpPanel({ baseUrl, apiKey, authed }: TotpPanelProps) {
               inputMode="numeric"
               autoComplete="one-time-code"
               spellCheck={false}
-              className="h-9 font-mono"
+              className="font-mono"
             />
             <p className="text-mcs-2xs text-mcs-text-muted">{SECOND_FACTOR_HINT}</p>
           </div>

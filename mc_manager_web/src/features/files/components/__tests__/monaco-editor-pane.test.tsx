@@ -9,6 +9,7 @@
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import type { MonacoEditorPaneProps } from '../monaco-editor-pane'
 import { MonacoEditorPane, languageForFile } from '../monaco-editor-pane'
 
@@ -214,10 +215,15 @@ describe('头部条', () => {
     expect(name.className).toContain('font-mono')
   })
 
-  it('server.properties 生效方式标识：需重启 + 指回属性面板（与属性面板同一口径）', () => {
+  it('server.properties 生效方式标识：收进信息入口，点开读到「需重启 + 指回属性面板」', async () => {
+    const user = userEvent.setup()
     render(<MonacoEditorPane {...makeProps({ path: PATH_PROPERTIES })} />)
-    expect(screen.getByText(/保存后需重启实例生效/)).toBeInTheDocument()
-    expect(screen.getByText(/即时生效/)).toBeInTheDocument()
+    // 正文不常驻
+    expect(screen.queryByText(/保存后需重启实例生效/)).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '生效方式说明' }))
+    const hint = await screen.findByRole('dialog', { name: '生效方式说明' })
+    expect(hint).toHaveTextContent('保存后需重启实例生效')
+    expect(hint).toHaveTextContent('即时生效')
   })
 
   it('非 server.properties 文件不渲染生效方式标识', () => {

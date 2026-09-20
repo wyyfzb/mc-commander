@@ -38,6 +38,7 @@ import { apiDownloadBackup } from '@/api/backups'
 import type { BackupItem } from '@/api/types'
 import { useConnectionStore } from '@/stores/connection'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { IconButton } from '@/components/mcs/icon-button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
@@ -45,6 +46,7 @@ import { cn } from '@/lib/utils'
 import { StatusPill } from '@/components/mcs/status-pill'
 import { ProgressBar } from '@/components/mcs/progress-bar'
 import { Card } from '@/components/mcs/card'
+import { InfoHint } from '@/components/mcs/info-hint'
 import { useBackupProgressStore } from '@/stores/backup-progress'
 import { toneClasses } from '@/components/mcs/tone'
 import {
@@ -244,7 +246,13 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
         >
           <HardDrive className="size-3.5" />
         </span>
-        <h3 className="text-mcs-sm font-semibold text-mcs-text-default">备份管理</h3>
+        <h3 className="flex items-center gap-1 text-mcs-sm font-semibold text-mcs-text-default">
+          备份管理
+          {/* 保留策略服务端可配且 API 未暴露，不硬编码数值——避免与服务端实际配置漂移 */}
+          <InfoHint label="快照备份说明">
+            快照备份：未修改文件零拷贝增量传输，超出保留策略自动清理（默认保留策略见服务端配置）
+          </InfoHint>
+        </h3>
       </div>
 
       {/* 上次备份信息行 + 立即备份（在途禁用 + 备份中...） */}
@@ -304,11 +312,6 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
           </LoadingButton>
         </div>
       )}
-
-      {/* 快照机制说明（subtle 小字；保留策略服务端可配且 API 未暴露，不硬编码数值——避免与服务端实际配置漂移） */}
-      <p className="px-4 text-mcs-xs text-mcs-text-muted">
-        快照备份：未修改文件零拷贝增量传输，超出保留策略自动清理（默认保留策略见服务端配置）
-      </p>
 
       {/* 列表 / 空态 / 骨架 */}
       <div className="mt-2 border-t border-mcs-border-subtle">
@@ -440,12 +443,13 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
           >
             输入{instanceName.trim() === '' ? '备份名' : '实例名'}「{restoreConfirm}」以确认
           </label>
-          <input
+          {/* 归 ui/input 基座，只保留危险语义焦点环（确认框的「红色 = 不可逆」提示） */}
+          <Input
             id="restore-confirm-input"
             value={restoreInput}
             onChange={(e) => setRestoreInput(e.target.value)}
             placeholder={restoreConfirm}
-            className="h-9 rounded-mcs-md border border-mcs-border-default bg-mcs-bg-default px-3 font-mono text-mcs-sm text-mcs-text-default outline-none placeholder:text-mcs-text-muted focus:border-mcs-error-fg focus:ring-1 focus:ring-mcs-focus-ring"
+            className="font-mono focus-visible:border-mcs-error-fg focus-visible:ring-mcs-error-fg"
           />
           {/* 确认目标取自实例列表：读不到名字时确认按钮会一直禁用，必须给出原因
               （否则用户只看到一个永远点不动的按钮，不知道是加载失败还是自己没输对） */}
@@ -467,16 +471,12 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
       )}
       {archived.length > 0 && (
         <div className="mt-2 border-t border-mcs-border-subtle px-4 py-3">
-          <h4 className="text-mcs-sm font-semibold text-mcs-text-default">
+          <h4 className="flex items-center gap-1 text-mcs-sm font-semibold text-mcs-text-default">
             归档快照（未建立索引）
+            <InfoHint label="归档快照说明">
+              卸载实例时会保留其快照目录（磁盘上的事实副本），但备份表里已无索引——它们不出现在任何实例的备份列表中，未挂载的会随保留期被自动清理。挂载只登记索引，不复制、不移动磁盘内容；挂载后它们就是本实例的普通备份条目，计入本实例的备份配额，超出保留策略（数量/天数）时按创建时间最旧优先被自动清理（挂载行按挂载时刻计时）；删除条目会连带删除磁盘上的原归档快照。
+            </InfoHint>
           </h4>
-          <p className="mt-0.5 text-mcs-2xs text-mcs-text-muted">
-            卸载实例时会保留其快照目录（磁盘上的事实副本），但备份表里已无索引——它们不出现在
-            任何实例的备份列表中，未挂载的会随保留期被自动清理。挂载只登记索引，不复制、不移动
-            磁盘内容；挂载后它们就是本实例的普通备份条目，计入本实例的备份配额，超出保留策略
-            （数量/天数）时按创建时间最旧优先被自动清理（挂载行按挂载时刻计时）；删除条目会连带
-            删除磁盘上的原归档快照。
-          </p>
           <div className="mt-2 space-y-1.5">
             {archived.map((group) => (
               <div

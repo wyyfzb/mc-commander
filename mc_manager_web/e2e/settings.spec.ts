@@ -125,9 +125,13 @@ test.describe('设置页', () => {
     // 故先指明面板地址；地址取当前页 origin（端口随 MOCK_PORT/DEV_PORT 泳道变化）
     await page.getByRole('textbox', { name: '面板地址' }).fill(new URL(page.url()).origin)
 
-    // 打开态：入口在，且带凭据定位说明（机器凭据 / 无过期 / 等同管理员）
+    // 打开态：入口在；凭据定位说明已收进信息入口，点开即读到全文
     await expect(page.getByRole('button', { name: '重新生成' })).toBeVisible()
-    await expect(page.getByText(/权限等同于管理员/)).toBeVisible()
+    await page.getByRole('button', { name: 'API Key 说明' }).click()
+    await expect(page.getByRole('dialog', { name: 'API Key 说明' })).toContainText(
+      '权限等同于管理员',
+    )
+    await page.keyboard.press('Escape')
     await maybeShot(page, 'settings-connection-api-key-enabled-dark.png')
 
     // 亮色复读：同一判定在另一主题下不得漂移（截图供视觉审查，判定本身与主题无关）
@@ -182,7 +186,13 @@ test.describe('设置页', () => {
       .getByRole('heading', { name: '只读监控凭据' })
       .locator('xpath=ancestor::section[1]')
     await expect(panel.getByText('尚未创建')).toBeVisible()
-    await expect(panel.getByText(/仅能访问 5 个读数端点/)).toBeVisible()
+    // 权限范围收进信息入口：正文不常驻，点开才读到
+    await expect(panel.getByText(/仅能访问 5 个读数端点/)).toHaveCount(0)
+    await panel.getByRole('button', { name: '只读凭据权限范围' }).click()
+    await expect(page.getByRole('dialog', { name: '只读凭据权限范围' })).toContainText(
+      '仅能访问 5 个读数端点',
+    )
+    await page.keyboard.press('Escape')
 
     // 生成：首次生成无需二次确认；明文一次性出现
     await panel.getByRole('button', { name: /生成只读凭据/ }).click()
@@ -232,7 +242,7 @@ test.describe('设置页', () => {
       .locator('xpath=ancestor::section[1]')
     await expect(panel.getByText('通道已关闭')).toBeVisible()
     await expect(panel.getByText(/READONLY_API_KEY_ENABLED=false/)).toBeVisible()
-    await expect(panel.getByRole('button', { name: /只读凭据/ })).toBeDisabled()
+    await expect(panel.getByRole('button', { name: '重新生成只读凭据' })).toBeDisabled()
   })
 
   test('通用设置：自动重启开关 + 主题切换', async ({ page }) => {
@@ -267,10 +277,15 @@ test.describe('设置页', () => {
     await page.goto('/settings/backup')
     // 面板标题（h3 面板内标题；页面级 h2 与其同名，按层级区分）
     await expect(page.getByRole('heading', { name: '备份管理', level: 3 })).toBeVisible()
-    // 快照机制说明
+    // 快照机制说明收进信息入口：正文不常驻，点开才读到
     await expect(
       page.getByText('快照备份：未修改文件零拷贝增量传输，超出保留策略自动清理'),
-    ).toBeVisible()
+    ).toHaveCount(0)
+    await page.getByRole('button', { name: '快照备份说明' }).click()
+    await expect(page.getByRole('dialog', { name: '快照备份说明' })).toContainText(
+      '快照备份：未修改文件零拷贝增量传输，超出保留策略自动清理',
+    )
+    await page.keyboard.press('Escape')
     // 列表行（mock 2 条：completed / failed）。名称都用精确匹配：
     // 子串匹配下夹具名重新内嵌日期也照样命中，等于没有防线
     await expect(page.getByText('手动备份', { exact: true })).toBeVisible()

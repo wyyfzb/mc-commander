@@ -30,6 +30,7 @@ import {
 import { StatusPill } from '@/components/mcs/status-pill'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { EmptyState } from '@/components/mcs/empty-state'
+import { InfoHint } from '@/components/mcs/info-hint'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useConnectionStore } from '@/stores/connection'
 import { useServerStore } from '@/stores/server'
@@ -343,10 +344,10 @@ export function MarketSheet({
           )}
         </div>
 
-        {/* ── 底注：安全说明 ── */}
-        <div className="border-t border-mcs-border-muted px-5 py-2.5 text-mcs-xs text-mcs-text-muted">
-          数据源 modrinth.com（服务端代理转发，面板不出网）；文件经 zip 校验与文件名净化后落入
-          plugins/
+        {/* ── 底注：数据来源常驻（请求去向属须知情的信息）；安装处理细节收进浮层 ── */}
+        <div className="flex items-center gap-1 border-t border-mcs-border-muted px-5 py-2.5 text-mcs-xs text-mcs-text-muted">
+          <span>数据源 modrinth.com（服务端代理转发，面板不出网）</span>
+          <InfoHint label="插件文件处理说明">文件经 zip 校验与文件名净化后落入 plugins/</InfoHint>
         </div>
       </SheetContent>
 

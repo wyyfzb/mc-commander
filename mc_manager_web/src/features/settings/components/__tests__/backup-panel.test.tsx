@@ -101,14 +101,20 @@ describe('BackupPanel 空态', () => {
 })
 
 describe('BackupPanel 上次备份与列表渲染', () => {
-  it('标题 + 快照机制说明 + 上次备份行（最近一条 completed：日期 · 大小）', async () => {
+  it('标题 + 快照机制说明（收进信息入口）+ 上次备份行（最近一条 completed：日期 · 大小）', async () => {
+    const user = userEvent.setup()
     renderPanel()
     expect(await screen.findByText('备份管理')).toBeInTheDocument()
+    // 机制说明不常驻：正文只在点开信息入口后进入可访问性树
     expect(
-      screen.getByText(
+      screen.queryByText(
         '快照备份：未修改文件零拷贝增量传输，超出保留策略自动清理（默认保留策略见服务端配置）',
       ),
-    ).toBeInTheDocument()
+    ).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '快照备份说明' }))
+    expect(await screen.findByRole('dialog', { name: '快照备份说明' })).toHaveTextContent(
+      '快照备份：未修改文件零拷贝增量传输，超出保留策略自动清理（默认保留策略见服务端配置）',
+    )
     // 等待列表数据加载完成（标题为静态文案，先于数据渲染）
     await screen.findByText('手动备份')
     const completed = mockBackups.find((b) => b.status === 'completed')!
@@ -650,7 +656,8 @@ describe('BackupPanel 归档快照（未建立索引）', () => {
     expect(screen.queryByText('归档快照（未建立索引）')).not.toBeInTheDocument()
   })
 
-  it('有可挂载项：展示来源/可挂载份数/最近时间，且说明「挂载只建索引」与后续生命周期', async () => {
+  it('有可挂载项：展示来源/可挂载份数/最近时间；生命周期说明收进信息入口', async () => {
+    const user = userEvent.setup()
     server.use(http.get('*/api/v1/backups/archived', () => okEnvelope([archivedGroup])))
     const qc = renderPanel()
     await waitFor(() => expect(qc.getQueryData(queryKeys.archivedSnapshots())).toBeDefined())
@@ -660,12 +667,15 @@ describe('BackupPanel 归档快照（未建立索引）', () => {
     expect(screen.getByText(/来自已卸载实例/)).toBeInTheDocument()
     // 计数口径 = 未建立索引的份数中可挂载的那部分（已挂载的不计入）
     expect(screen.getByText(/可挂载 2\/3 份/)).toBeInTheDocument()
-    // 说明文字按渲染结果断言（JSX 源码换行会渲染为一个空格，故允许分隔符处有空白）
-    expect(screen.getByText(/不复制、不移动\s*磁盘内容/)).toBeInTheDocument()
-    // 挂载后的生命周期与磁盘后果一并写明（计入配额、按最旧优先清理、删除条目＝删除唯一副本）
-    expect(screen.getByText(/计入本实例的备份配额/)).toBeInTheDocument()
-    expect(screen.getByText(/按创建时间最旧优先/)).toBeInTheDocument()
-    expect(screen.getByText(/删除条目会连带\s*删除磁盘上的原归档快照/)).toBeInTheDocument()
+    // 机制说明不常驻
+    expect(screen.queryByText(/不复制、不移动\s*磁盘内容/)).not.toBeInTheDocument()
+    // 点开入口即读到全文：「挂载只建索引」+ 后续生命周期（计入配额、按最旧优先清理、删条目＝删唯一副本）
+    await user.click(screen.getByRole('button', { name: '归档快照说明' }))
+    const hint = await screen.findByRole('dialog', { name: '归档快照说明' })
+    expect(hint).toHaveTextContent('不复制、不移动磁盘内容')
+    expect(hint).toHaveTextContent('计入本实例的备份配额')
+    expect(hint).toHaveTextContent('按创建时间最旧优先')
+    expect(hint).toHaveTextContent('删除条目会连带删除磁盘上的原归档快照')
   })
 
   it('现存实例的未索引快照：文案据实（不误称「已卸载」）', async () => {

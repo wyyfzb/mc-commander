@@ -28,6 +28,7 @@ import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { LoadingButton } from '@/components/mcs/loading-button'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { StatusPill } from '@/components/mcs/status-pill'
+import { InfoHint } from '@/components/mcs/info-hint'
 import { SettingsSectionCard as SectionCard } from './settings-section-card'
 import { fetchAuthCapabilities, rotateReadonlyKey } from '@/api/auth'
 import { queryKeys } from '@/api/queries'
@@ -119,9 +120,9 @@ export function ReadonlyCredentialPanel({ baseUrl, apiKey, authed }: ReadonlyCre
           {!busy && <RefreshCw className="size-3.5" aria-hidden />}
           {configured ? '重新生成只读凭据' : '生成只读凭据'}
         </LoadingButton>
-        <span className="text-mcs-2xs text-mcs-text-muted">
+        <InfoHint label="只读凭据明文说明">
           明文只在生成后显示一次；服务端只存 SHA-256 摘要。
-        </span>
+        </InfoHint>
       </div>
     )
   }
@@ -179,7 +180,7 @@ export function ReadonlyCredentialPanel({ baseUrl, apiKey, authed }: ReadonlyCre
               尚未创建
             </StatusPill>
           )}
-          <span className="text-mcs-2xs text-mcs-text-muted">{READONLY_SCOPE_HINT}</span>
+          <InfoHint label="只读凭据权限范围">{READONLY_SCOPE_HINT}</InfoHint>
         </div>
 
         {channelDisabled && (

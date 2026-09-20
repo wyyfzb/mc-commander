@@ -68,14 +68,19 @@ describe('ReadonlyCredentialPanel 状态呈现', () => {
     expect(screen.queryByRole('button', { name: /重新生成只读凭据/ })).not.toBeInTheDocument()
   })
 
-  it('已配置：显示「已配置」与「重新生成」，且给出能力边界说明', async () => {
+  it('已配置：显示「已配置」与「重新生成」，能力边界说明收进信息入口', async () => {
+    const user = userEvent.setup()
     capabilities(true, true)
     renderPanel()
 
     expect(await screen.findByText('已配置')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /重新生成只读凭据/ })).toBeInTheDocument()
-    // 能力边界是使用该凭据的前提（只读白名单 + 字段裁剪），必须在界面可见
-    expect(screen.getByText(/仅能访问 5 个读数端点/)).toBeInTheDocument()
+    // 能力边界是使用该凭据的前提（只读白名单 + 字段裁剪）：正文不常驻，点开入口即读到全文
+    expect(screen.queryByText(/仅能访问 5 个读数端点/)).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '只读凭据权限范围' }))
+    expect(await screen.findByRole('dialog', { name: '只读凭据权限范围' })).toHaveTextContent(
+      '仅能访问 5 个读数端点',
+    )
   })
 
   it('通道关闭：入口禁用并说明恢复方法（不是凭空消失）', async () => {

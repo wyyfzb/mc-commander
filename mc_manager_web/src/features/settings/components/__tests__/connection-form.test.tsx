@@ -163,6 +163,13 @@ function setBoundSession(issuedFor: string, token = 'sess-token-abc') {
   })
 }
 
+/** 打开 API Key 信息入口：正文已收进浮层，入口是按钮，点开即全文进入可访问性树 */
+async function openApiKeyHint() {
+  const user = userEvent.setup()
+  await user.click(screen.getByRole('button', { name: 'API Key 说明' }))
+  return screen.findByRole('dialog', { name: 'API Key 说明' })
+}
+
 describe('ConnectionForm 渲染', () => {
   it('表单初始化：store 有值 → 地址与 API Key 回填', () => {
     useConnectionStore.setState({
@@ -462,23 +469,26 @@ describe('ConnectionForm 保存', () => {
 })
 
 describe('ConnectionForm 登录会话凭据（有会话时 API Key 可空）', () => {
-  it('无会话：Key 提示「必须填写」', () => {
+  it('无会话：Key 必填约束不常驻，点开信息入口读到全文', async () => {
     renderForm()
+    // 正文不常驻（否则「收进浮层」没发生）
     expect(
-      screen.getByText('当前地址没有可用的登录会话：必须填写 API Key 才能连接。'),
-    ).toBeInTheDocument()
+      screen.queryByText('当前地址没有可用的登录会话：必须填写 API Key 才能连接。'),
+    ).not.toBeInTheDocument()
+    const hint = await openApiKeyHint()
+    expect(hint).toHaveTextContent('当前地址没有可用的登录会话：必须填写 API Key 才能连接。')
   })
 
-  it('有会话：Key 提示「可留空」（会话优先于 Key）+ 机器凭据定位说明', () => {
+  it('有会话：入口读到「可留空」（会话优先于 Key）+ 机器凭据定位说明', async () => {
     setSession()
     renderForm()
-    expect(screen.getByText('已登录：浏览器用登录会话鉴权，此处可留空。')).toBeInTheDocument()
+    const hint = await openApiKeyHint()
     // 定位说明与代码实际行为逐条对应：单例全局 / 无过期 / 权限等同管理员 / 可整体关闭
-    const model = screen.getByText(/API Key 是没有登录会话的客户端/)
-    expect(model).toHaveTextContent('单例全局')
-    expect(model).toHaveTextContent('无过期')
-    expect(model).toHaveTextContent('权限等同于管理员（可访问全部接口）')
-    expect(model).toHaveTextContent('API_KEY_ENABLED=false 可整体关闭该通道')
+    expect(hint).toHaveTextContent('已登录：浏览器用登录会话鉴权，此处可留空。')
+    expect(hint).toHaveTextContent('单例全局')
+    expect(hint).toHaveTextContent('无过期')
+    expect(hint).toHaveTextContent('权限等同于管理员（可访问全部接口）')
+    expect(hint).toHaveTextContent('API_KEY_ENABLED=false 可整体关闭该通道')
   })
 
   it('有会话 + Key 留空：保存放行，请求走 Bearer 且不带 X-API-Key，写入地址且不误存空 Key', async () => {
@@ -564,22 +574,22 @@ describe('ConnectionForm 登录会话凭据（有会话时 API Key 可空）', (
     }
   })
 
-  it('会话属于别的面板：地址下方提示本地址将改用 API Key（并给出退出登录后重新登录的出路）', () => {
+  it('会话属于别的面板：地址下方提示本地址将改用 API Key（并给出退出登录后重新登录的出路）', async () => {
     setBoundSession('https://panel-a.example.com')
     renderForm()
     expect(screen.getByText(/当前登录会话属于/)).toBeInTheDocument()
     expect(screen.getByText('https://panel-a.example.com')).toBeInTheDocument()
-    // 本地址没有可用会话 → Key 必填
-    expect(
-      screen.getByText('当前地址没有可用的登录会话：必须填写 API Key 才能连接。'),
-    ).toBeInTheDocument()
+    // 本地址没有可用会话 → Key 必填（约束收进信息入口，正文不常驻）
+    const hint = await openApiKeyHint()
+    expect(hint).toHaveTextContent('当前地址没有可用的登录会话：必须填写 API Key 才能连接。')
   })
 
-  it('会话属于本地址（含旧会话）：不显示异面板提示', () => {
+  it('会话属于本地址（含旧会话）：不显示异面板提示', async () => {
     setBoundSession(window.location.origin)
     renderForm()
     expect(screen.queryByText(/当前登录会话属于/)).not.toBeInTheDocument()
-    expect(screen.getByText(/已登录：浏览器用登录会话鉴权/)).toBeInTheDocument()
+    const hint = await openApiKeyHint()
+    expect(hint).toHaveTextContent('已登录：浏览器用登录会话鉴权，此处可留空。')
   })
 
   it('会话属于别的面板：测试连接改用本地址的 X-API-Key，不拿 A 的令牌换 40103（也不被踢下线）', async () => {
@@ -725,8 +735,9 @@ describe('ConnectionForm API Key 轮换入口的可见性', () => {
     renderForm({ variant: 'settings' })
 
     expect(await screen.findByRole('button', { name: '重新生成' })).toBeEnabled()
-    // 开启态保留凭据定位说明（机器凭据 / 无过期 / 等同管理员）
-    expect(screen.getByText(/权限等同于管理员/)).toBeInTheDocument()
+    // 开启态保留凭据定位说明（机器凭据 / 无过期 / 等同管理员），已收进信息入口
+    const hint = await openApiKeyHint()
+    expect(hint).toHaveTextContent('权限等同于管理员')
   })
 
   it('能力关闭（apiKeyEnabled=false）：入口不可见，且给出关闭原因；凭据输入框仍在', async () => {

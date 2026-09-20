@@ -21,6 +21,7 @@ import { Label } from '@/components/ui/label'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { Card } from '@/components/mcs/card'
+import { InfoHint } from '@/components/mcs/info-hint'
 import { cn } from '@/lib/utils'
 import { ApiError, apiPost, apiRequest } from '@/api/client'
 import type { OverviewData } from '@/api/types'
@@ -43,6 +44,13 @@ type PendingAction = 'save' | 'test' | null
 
 /** 地址停止输入后多久视为落定（能力探测的取值点；见 formFields 上方注释） */
 const ADDRESS_SETTLE_DELAY_MS = 300
+
+/**
+ * API Key 的凭据定位（浮层正文，逐条对应代码行为：单例全局 / 无过期 / 权限等同管理员 /
+ * 可整体关闭）。常驻会与地址行、会话提示挤在同一栏，故降级为输入框旁的信息入口。
+ */
+const API_KEY_MODEL_HINT =
+  'API Key 是没有登录会话的客户端（自动化脚本、外部集成）用的机器凭据：单例全局、无过期、权限等同于管理员（可访问全部接口），轮换后旧 Key 立即失效；在服务端 .env 设 API_KEY_ENABLED=false 可整体关闭该通道。'
 
 export function ConnectionForm({
   variant = 'settings',
@@ -297,7 +305,17 @@ export function ConnectionForm({
 
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
-          <Label htmlFor="connection-api-key">API Key</Label>
+          <div className="flex items-center gap-1">
+            <Label htmlFor="connection-api-key">API Key</Label>
+            {!apiKeyChannelDisabled && (
+              <InfoHint label="API Key 说明">
+                {sessionApplies
+                  ? '已登录：浏览器用登录会话鉴权，此处可留空。'
+                  : '当前地址没有可用的登录会话：必须填写 API Key 才能连接。'}
+                {API_KEY_MODEL_HINT}
+              </InfoHint>
+            )}
+          </div>
           {!apiKeyChannelDisabled && variant !== 'onboarding' && (
             <button
               type="button"
@@ -339,26 +357,13 @@ export function ConnectionForm({
           </button>
         </div>
         {keyError !== '' && <p className="text-mcs-xs text-mcs-error-fg">{keyError}</p>}
-        {apiKeyChannelDisabled ? (
+        {apiKeyChannelDisabled && (
           <p className="text-mcs-xs text-mcs-text-muted">
             当前面板的部署配置已关闭 API Key 通道：Key 在 HTTP 与 WebSocket 上一律被拒绝，
             {variant === 'onboarding'
               ? '本页不提供轮换入口（轮换属凭据管理，连接后在设置页可见）。'
               : '轮换入口已隐藏（值仍保留在服务端 .env，改回开启即恢复）。'}
           </p>
-        ) : (
-          <>
-            <p className="text-mcs-xs text-mcs-text-muted">
-              {sessionApplies
-                ? '已登录：浏览器用登录会话鉴权，此处可留空。'
-                : '当前地址没有可用的登录会话：必须填写 API Key 才能连接。'}
-            </p>
-            <p className="text-mcs-xs text-mcs-text-muted">
-              API Key 是没有登录会话的客户端（自动化脚本、外部集成）用的机器凭据：单例全局、
-              无过期、权限等同于管理员（可访问全部接口），轮换后旧 Key 立即失效； 在服务端 .env 设
-              API_KEY_ENABLED=false 可整体关闭该通道。
-            </p>
-          </>
         )}
       </div>
 
