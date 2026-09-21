@@ -464,7 +464,7 @@ function PropertyRow({
             value={value}
             onChange={(e) => onChange(e.target.value)}
             disabled={!isEditing || !def.isWritable}
-            className="h-7 w-40 font-mono text-mcs-xs"
+            className="h-7 w-40 font-mono"
             aria-label={`${def.label} 输入`}
           />
         )}

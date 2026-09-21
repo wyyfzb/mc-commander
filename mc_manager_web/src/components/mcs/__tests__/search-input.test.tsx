@@ -101,11 +101,12 @@ describe('SearchInput', () => {
     expect(onDebounced).toHaveBeenCalledWith('')
   })
 
-  it('size=sm 应用紧凑样式', () => {
+  it('size=sm 只缩高度，字号随基座', () => {
     const { container } = render(<SearchInput value="" onValueChange={() => {}} size="sm" />)
     const input = container.querySelector('input')!
     expect(input.className).toContain('h-7')
-    expect(input.className).toContain('text-mcs-xs')
+    // 未加变体的字号覆盖会被基座的 md:text-sm 盖掉（代码与事实不符），故紧凑档不带字号类
+    expect(input.className).not.toContain('text-mcs-xs')
   })
 
   it('支持 testId', () => {

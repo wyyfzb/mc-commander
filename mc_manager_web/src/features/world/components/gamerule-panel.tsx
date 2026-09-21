@@ -310,7 +310,7 @@ function RuleRow({
             value={display}
             disabled={disabled || saving}
             onChange={(e) => onChange(e.target.value)}
-            className="h-7 w-24 font-mono text-mcs-xs"
+            className="h-7 w-24 font-mono"
             aria-label={`${def.name} 值`}
           />
         )}

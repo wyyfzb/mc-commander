@@ -29,7 +29,9 @@ interface SearchInputProps {
 
 const SIZE_STYLES = {
   default: { input: 'h-10 pl-8', icon: 'size-3.5', iconPos: 'left-2.5', clear: 'right-2' },
-  sm: { input: 'h-7 pl-7 text-mcs-xs', icon: 'size-3', iconPos: 'left-2', clear: 'right-2' },
+  // 紧凑档只缩高度，字号随 ui/input 基座（基座声明 md:text-sm，产物里带变体的规则排在后面，
+  // 会盖掉调用点未加变体的字号类——要显式改字号必须带 md: 同档）
+  sm: { input: 'h-7 pl-7', icon: 'size-3', iconPos: 'left-2', clear: 'right-2' },
 } as const
 
 export function SearchInput({

@@ -118,6 +118,19 @@ npm run dev                  # node --watch 热重载
   密集条 `px-3 py-2` / 内嵌块 `p-2`；语义告警条一律用 `components/mcs/notice-banner.tsx`
   （`px-2.5 py-1.5`），多行告警卡用 `p-3`。内联 `style` 的 `width`/`height` 必须是数值或含单位
   字符串——传 Tailwind 类名会被浏览器当非法 CSS 丢弃（门禁第 26 条静态拦截）。
+- **控件高度档位**：档位由**语境**决定，同一语境内部必须一致——不盲目全站统一，也不允许
+  调用点各自补偿基座高度（历史问题：`ui/input` 基座 32px 时，各页用 `h-8`/`h-9` 覆盖去凑
+  40px，形成满屏随手写的档位）。四档固定：
+  标准档 `h-10`（40px）＝表单控件与含输入的筛选栏（输入 / 下拉 / 日期框 / 同行按钮全部同档）；
+  紧凑档 `h-7`（28px）＝无输入的密集操作条（页头操作、批量条）、列表行内操作、分页、tabs；
+  行内小档 `h-6`（24px）＝行内小按钮（`h-6 px-2 text-mcs-2xs` 一族）；
+  大档 `h-11`（44px）＝主 CTA（`lg` / `icon-lg`）。
+  基座是 `ui/input` / `ui/input-group` / `ui/select`（默认档）/ `ui/button`（`default`/`lg`/`icon`/`icon-lg`），
+  调用点**不再自备高度类**（`size="sm"` 等紧凑档是另一档，属刻意保留，不是不一致）。
+  两条隐含约束：①紧凑档只缩高度、字号仍随基座；②`ui/input` 与 `ui/textarea` 基座声明
+  `text-base md:text-sm`（`text-base` 受门禁第 27 条额度约束），产物里带变体的规则排在后面，
+  会**盖掉调用点未加变体的字号类**——要在调用点显式改字号必须写 `md:` 同档，否则代码写 12px、
+  桌面端实际渲染 14px（类型与事实不符）。
 - **页面结构**：AppShell 主页面有且仅有一个 `components/mcs/page-header.tsx`（`PageHeader`），
   标题与描述只在页头声明；同屏标题字号档 ≤3（页头 `xl` + 区块/卡片标题 `lg` + 数据卡标签 `sm` + 显式档）。
   卡片标题配方（唯一事实源是 `components/mcs/card.tsx` 基座，调用点不再另写一份）：

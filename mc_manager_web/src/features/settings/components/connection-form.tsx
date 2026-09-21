@@ -358,11 +358,14 @@ export function ConnectionForm({
         </div>
         {keyError !== '' && <p className="text-mcs-xs text-mcs-error-fg">{keyError}</p>}
         {apiKeyChannelDisabled && (
-          <p className="text-mcs-xs text-mcs-text-muted">
-            当前面板的部署配置已关闭 API Key 通道：Key 在 HTTP 与 WebSocket 上一律被拒绝，
-            {variant === 'onboarding'
-              ? '本页不提供轮换入口（轮换属凭据管理，连接后在设置页可见）。'
-              : '轮换入口已隐藏（值仍保留在服务端 .env，改回开启即恢复）。'}
+          <p className="flex items-center gap-1 text-mcs-xs text-mcs-text-muted">
+            当前面板的部署配置已关闭 API Key 通道：Key 在 HTTP 与 WebSocket 上一律被拒绝。
+            {/* 关闭原因与恢复路径收进浮层，行内只留状态与后果——两者是「填了也没用」的直接解释 */}
+            <InfoHint label="API Key 通道关闭说明">
+              {variant === 'onboarding'
+                ? '本页不提供轮换入口（轮换属凭据管理，连接后在设置页可见）。'
+                : '轮换入口已隐藏；值仍保留在服务端 .env，改回开启即恢复。'}
+            </InfoHint>
           </p>
         )}
       </div>

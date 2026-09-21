@@ -14,7 +14,8 @@ import { Card } from '@/components/mcs/card'
 interface SettingsSectionCardProps {
   icon: LucideIcon
   title: string
-  description: string
+  /** 说明行：允许 ReactNode——长机制说明可挂 `InfoHint` 收进浮层，行内只留定位短句 */
+  description: React.ReactNode
   children: React.ReactNode
 }
 

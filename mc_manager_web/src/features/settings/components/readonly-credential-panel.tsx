@@ -234,7 +234,15 @@ export function ReadonlyCredentialPanel({ baseUrl, apiKey, authed }: ReadonlyCre
     <SectionCard
       icon={KeyRound}
       title="只读监控凭据"
-      description="给监控/仪表盘这类常驻自动化用的低权限凭据；与管理员 API Key 是两条独立通道"
+      description={
+        <span className="inline-flex flex-wrap items-center gap-1">
+          供监控 / 仪表盘等常驻自动化使用的低权限凭据
+          <InfoHint label="只读凭据定位说明">
+            与管理员 API Key
+            是两条独立通道：只读凭据仅覆盖读数端点，泄漏时可单独作废而不影响管理通道。
+          </InfoHint>
+        </span>
+      }
     >
       {body}
 

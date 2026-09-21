@@ -81,6 +81,13 @@ describe('ReadonlyCredentialPanel 状态呈现', () => {
     expect(await screen.findByRole('dialog', { name: '只读凭据权限范围' })).toHaveTextContent(
       '仅能访问 5 个读数端点',
     )
+    await user.keyboard('{Escape}')
+    // 定位说明（与管理员 Key 是两条独立通道）同样收进入口：卡片说明行只留一行定位短句
+    expect(screen.queryByText(/两条独立通道/)).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '只读凭据定位说明' }))
+    expect(await screen.findByRole('dialog', { name: '只读凭据定位说明' })).toHaveTextContent(
+      '两条独立通道',
+    )
   })
 
   it('通道关闭：入口禁用并说明恢复方法（不是凭空消失）', async () => {
@@ -149,7 +156,9 @@ describe('ReadonlyCredentialPanel 状态呈现', () => {
     renderPanel({ authed: false })
 
     expect(await screen.findByText(/需要登录会话或 API Key 才能管理/)).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /只读凭据/ })).not.toBeInTheDocument()
+    // 精确名：卡片说明行的「只读凭据定位说明」入口与登录态无关，会撞上 /只读凭据/ 模糊名
+    expect(screen.queryByRole('button', { name: '只读凭据权限范围' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /生成只读凭据/ })).not.toBeInTheDocument()
     expect(capabilityCalls).toBe(0)
   })
 })

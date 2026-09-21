@@ -741,6 +741,7 @@ describe('ConnectionForm API Key 轮换入口的可见性', () => {
   })
 
   it('能力关闭（apiKeyEnabled=false）：入口不可见，且给出关闭原因；凭据输入框仍在', async () => {
+    const user = userEvent.setup()
     useDisabledApiKeyChannel()
     useConnectionStore.setState({
       baseUrl: 'https://192.168.1.100:25566',
@@ -753,6 +754,12 @@ describe('ConnectionForm API Key 轮换入口的可见性', () => {
     expect(screen.queryByRole('button', { name: '重新生成' })).not.toBeInTheDocument()
     // 通道关闭不影响已有 Key 的粘贴与保存（Key 仍可按原样留存），只藏「生成新 Key」
     expect(screen.getByLabelText('API Key')).toBeInTheDocument()
+    // 关闭原因与恢复路径收进信息入口：正文只留状态与后果（「填了也没用」的直接解释）
+    expect(screen.queryByText(/值仍保留在服务端/)).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'API Key 通道关闭说明' }))
+    expect(await screen.findByRole('dialog', { name: 'API Key 通道关闭说明' })).toHaveTextContent(
+      '值仍保留在服务端',
+    )
   })
 
   it('能力未知（探测挂起）：入口保持可见（不隐藏是不可自证的保守选择）', async () => {
