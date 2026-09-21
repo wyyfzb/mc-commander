@@ -178,6 +178,35 @@ test.describe('仪表盘首屏高度预算（1440×900）', () => {
       .evaluate((el) => getComputedStyle(el).padding)
     expect(cardPadding).toBe('12px')
   })
+
+  /**
+   * 断点口径回归锁：仪表盘栅格按**容器内容宽**切档（`@container` + `@2xl`/`@5xl`），
+   * 不是视口断点。jsdom 不评估容器查询，这层只能在这里锁——1280/1366 是笔记本常见尺寸，
+   * 且侧栏默认展开（容器 = 视口 − 208 − 32 = 1040/1126，均 ≥ @5xl=1024）。
+   * 退回视口断点（`xl`=1280）会让 1280–1391 带内丢掉三列与分栏。
+   */
+  test('1280×800：顶卡三列同行 + 终端与右栏并排（容器查询档位不回退）', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 })
+    await setupConnection(page)
+    await page.goto('/dashboard')
+    await expect(page.getByTestId('server-terminal')).toBeVisible()
+    await page.evaluate(() => document.fonts.ready)
+
+    // 列数读计算后的 grid-template-columns（不受顶卡 animate-mcs-fade-up 的位移影响，
+    // 用 getBoundingClientRect().top 去重会在入场动画期间抖出假值）
+    const topCols = await page
+      .getByRole('heading', { name: '资源使用' })
+      .locator('xpath=ancestor::section[1]/parent::*')
+      .evaluate((el) => getComputedStyle(el).gridTemplateColumns.trim().split(/\s+/).length)
+    expect(topCols).toBe(3)
+
+    // 右栏在终端右侧而非其下方（x 轴不受入场动画影响）
+    const terminal = await page.getByTestId('server-terminal').boundingBox()
+    const aside = await page.getByTestId('dashboard-aside').boundingBox()
+    expect(terminal).not.toBeNull()
+    expect(aside).not.toBeNull()
+    expect(aside!.x).toBeGreaterThanOrEqual(terminal!.x + terminal!.width)
+  })
 })
 
 /**
