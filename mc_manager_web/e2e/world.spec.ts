@@ -51,6 +51,54 @@ test.describe('世界页', () => {
     await maybeShot(page, 'world-info-dark.png')
   })
 
+  /**
+   * 主从分栏阈值为容器档 @3xl=768px（左栏 320 + 列距 16 + 右栏最小 432）。
+   * jsdom 不评估容器查询，阈值只能在这里锁。两条各锁一头：
+   * - 1023 视口展开侧栏内容 784px：改前差 1px 未达 lg 仍上下堆叠，现在必须分栏
+   * - 900 视口展开侧栏内容 660px：分栏会把右栏压到 324px，必须继续堆叠
+   */
+  test('主从分栏按容器宽切档：1023 视口分栏、900 视口堆叠', async ({ page }) => {
+    await setupConnection(page)
+
+    // 分栏：左栏与右栏同一行（left 相差 >10px 且 top 对齐）
+    await page.setViewportSize({ width: 1023, height: 900 })
+    await page.goto('/world')
+    await expect(page.getByRole('heading', { name: '世界信息' })).toBeVisible()
+    const split = await page.evaluate(() => {
+      const left = document.querySelector('main .overflow-y-auto')!
+      const right = document.querySelector('main .flex.min-h-0.min-w-0')!
+      const l = left.getBoundingClientRect()
+      const r = right.getBoundingClientRect()
+      return {
+        sameRow: Math.abs(l.top - r.top) < 4,
+        rightOfLeft: r.left > l.left + 10,
+        leftW: l.width,
+      }
+    })
+    expect(split.sameRow).toBe(true)
+    expect(split.rightOfLeft).toBe(true)
+    expect(split.leftW).toBe(320)
+
+    // 堆叠：右栏落到左栏下方
+    await page.setViewportSize({ width: 900, height: 900 })
+    await expect(page.getByRole('heading', { name: '世界信息' })).toBeVisible()
+    const stacked = await page.evaluate(() => {
+      const left = document.querySelector('main .overflow-y-auto')!
+      const right = document.querySelector('main .flex.min-h-0.min-w-0')!
+      const l = left.getBoundingClientRect()
+      const r = right.getBoundingClientRect()
+      return { below: r.top >= l.bottom - 1, fullWidth: Math.abs(r.width - l.width) < 2 }
+    })
+    expect(stacked.below).toBe(true)
+    expect(stacked.fullWidth).toBe(true)
+
+    // 两态都不得横向溢出
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    )
+    expect(overflow).toBe(0)
+  })
+
   test('属性 Tab：默认渲染 + 编辑保存流程', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/world')

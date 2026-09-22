@@ -88,7 +88,10 @@ export function WorldPage() {
   const isRunning = statusQuery.data?.isRunning ?? false
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4 p-4">
+    /* @container：主从分栏按「可用内容宽」切档而非视口宽——侧栏可折叠（56px ↔ 208px），
+       同视口下内容宽差 152px：1023 视口展开侧栏内容已有 784px（恰容 320+16+448），
+       视口差 1px 未达 lg 仍上下堆叠；折叠侧栏 936px 也早该分栏 */
+    <div className="@container flex h-full min-h-0 flex-col gap-4 p-4">
       <PageHeader
         title="世界"
         description="服务器属性 · 游戏规则 · 存档"
@@ -127,10 +130,12 @@ export function WorldPage() {
         </NoticeBanner>
       )}
 
-      {/* ── 主体：左栏信息卡 + 右栏 Tabs ── */}
-      <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row">
-        {/* 左栏：世界信息 + 维度卡（窄屏整宽堆叠并限高内滚，lg 起固定 320px） */}
-        <div className="flex min-h-0 w-full shrink-0 flex-col gap-4 overflow-y-auto max-lg:max-h-[45%] lg:w-80">
+      {/* ── 主体：左栏信息卡 + 右栏 Tabs ──
+          分栏阈值为容器档 @3xl=768px：左栏固定 320px + 列距 16px + 右栏最小 432px。
+          低于此宽右栏 Tabs 会被压到读不了几行，改为上下堆叠（左栏限高内滚） */}
+      <div className="flex min-h-0 flex-1 flex-col gap-4 @3xl:flex-row">
+        {/* 左栏：世界信息 + 维度卡（窄内容宽整宽堆叠并限高内滚，@3xl 起固定 320px） */}
+        <div className="flex min-h-0 w-full shrink-0 flex-col gap-4 overflow-y-auto max-h-[45%] @3xl:max-h-none @3xl:w-80">
           <WorldInfoCard
             world={worldQuery.data ?? null}
             isLoading={worldQuery.isLoading}

@@ -265,7 +265,9 @@ export function PluginsPage() {
 
   return (
     <div
-      className="relative flex h-full min-h-0 flex-col gap-4 p-4"
+      /* @container：页头的「上下堆叠 ↔ 同行」按可用内容宽切档而非视口宽
+         （侧栏可折叠，同视口下内容宽差 152px），见 PageHeader 的 className */
+      className="@container relative flex h-full min-h-0 flex-col gap-4 p-4"
       onDragEnter={onDragEnter}
       onDragLeave={onDragLeave}
       onDragOver={onDragOver}
@@ -299,9 +301,11 @@ export function PluginsPage() {
       />
 
       <PageHeader
-        /* 窄屏（<sm）改为上下堆叠：操作区四个按钮不可收缩（349px），与标题同排时
-           会把标题列挤到只剩一个字宽（实测 433px 下 40px，「插件管理」逐字竖排） */
-        className="flex-col items-stretch gap-3 sm:flex-row sm:items-center"
+        /* 内容宽 <576px 时改为上下堆叠：操作区四个按钮不可收缩（349px），与标题同排时
+           标题列只剩 39px，「插件管理」逐字竖排。断点取容器档（@xl=576px）而非视口档——
+           侧栏折叠会使同视口下内容宽差 152px，且 768 以下侧栏退化成抽屉（不占布局宽），
+           视口断点在这两种状态下给不出正确判据 */
+        className="flex-col items-stretch gap-3 @xl:flex-row @xl:items-center"
         title="插件管理"
         description={
           <span className="inline-flex items-center gap-1">

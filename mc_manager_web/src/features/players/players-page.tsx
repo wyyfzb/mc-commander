@@ -43,10 +43,20 @@ import { BatchBar } from './components/batch-bar'
 import { BanDialog } from './components/ban-dialog'
 import { BanRecordsDialog } from './components/ban-records-dialog'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
-import { useMediaQuery, BREAKPOINT_BELOW_LG } from '@/hooks/use-media-query'
+import { useContainerWidth } from '@/hooks/use-container-width'
 
 /** data 未就绪时的稳定空数组（避免 ?? [] 每次渲染新建引用、污染下游 useMemo） */
 const NO_PLAYERS: Player[] = []
+
+/**
+ * 详情面板内联并列所需的内容宽：面板 w-105（420px，右列无 gap，见 PlayerDetailPanel 的 inline 变体）
+ * + 裁列后表格的最小可用宽（480px，见 player-table 的 FULL_COLUMNS_MIN_WIDTH 一档的下一级）。
+ * 低于此宽表格会被压到百 px 级，改由 Sheet 全屏承载（role=dialog / 焦点陷阱 / Esc / 背景 inert），
+ * 既免去旧 CSS 覆盖层无 dialog 语义的问题，也不挤压表格与筛选栏。
+ * 判据取**容器实宽**而非视口：侧栏折叠会使同视口下内容宽差 152px，视口断点会把
+ * 「明明并得下」的宽度误判成 Sheet（折叠侧栏 1024 视口内容已有 936px）
+ */
+const PANEL_INLINE_MIN_CONTENT = 420 + 480
 
 export function PlayersPage() {
   const instanceId = useServerStore((s) => s.instanceId)
@@ -67,9 +77,9 @@ export function PlayersPage() {
   const resetForInstance = usePlayersUiStore((s) => s.resetForInstance)
   const closeDetail = usePlayersUiStore((s) => s.closeDetail)
   const selectedUuids = usePlayersUiStore((s) => s.selectedUuids)
-  // lg 以下容器里没有并列空间（面板 w-105 会把表格压到百 px 级），详情改由 Sheet 承载：
-  // 既免去旧 CSS 覆盖层无 dialog 语义/无焦点约束的问题，也不挤压表格与筛选栏
-  const isSheetLayout = useMediaQuery(BREAKPOINT_BELOW_LG)
+  // 容器实宽（而非视口）：侧栏折叠 / 面板开合都直接反映在测量值里
+  const [areaRef, areaWidth] = useContainerWidth<HTMLDivElement>()
+  const isSheetLayout = areaWidth != null && areaWidth < PANEL_INLINE_MIN_CONTENT
 
   const playersQuery = usePlayers(instanceId)
   const statusQuery = useInstanceStatus(instanceId)
@@ -200,8 +210,8 @@ export function PlayersPage() {
     <div className="flex h-full min-h-0 flex-col gap-4 p-4">
       <PageHeader title="玩家" description="查看 · 管理 · 洞察服务器玩家" />
 
-      {/* 左栏：筛选 + 表格 */}
-      <div className="relative flex min-h-0 flex-1">
+      {/* 左栏：筛选 + 表格（容器实宽决定详情面板内联还是 Sheet，见 PANEL_INLINE_MIN_CONTENT） */}
+      <div ref={areaRef} className="relative flex min-h-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col">
           <FilterBar
             players={filteredPlayers}
@@ -243,7 +253,7 @@ export function PlayersPage() {
           )}
         </div>
 
-        {/* 右栏：详情面板（lg 及以上内联并列；lg 以下移入 Sheet，见下） */}
+        {/* 右栏：详情面板（容器并得下时内联并列；并不下移入 Sheet，见下） */}
         {detail !== null && !isSheetLayout && (
           <PlayerDetailPanel
             instanceId={instanceId ?? ''}
@@ -258,7 +268,7 @@ export function PlayersPage() {
         )}
       </div>
 
-      {/* lg 以下（含平板）：详情面板以 Sheet（Radix Dialog）承载，获得 role=dialog / aria-modal / 焦点陷阱 / Esc 关闭 / 背景 inert */}
+      {/* 容器并不下面板时（含平板/窄屏）：详情面板以 Sheet（Radix Dialog）承载，获得 role=dialog / aria-modal / 焦点陷阱 / Esc 关闭 / 背景 inert */}
       {detail !== null && isSheetLayout && (
         <Sheet
           open

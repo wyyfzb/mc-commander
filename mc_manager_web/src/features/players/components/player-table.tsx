@@ -4,7 +4,7 @@
  * - 列头点击启用单列排序（Web 增强）；分页 10/20/50/全部（「全部」档 react-virtual 虚拟滚动）
  * - 行内溢出菜单：详情/传送/给予物品/OP 切换/白名单切换/踢出/封禁（设计文档 §3.2 重排）
  * - 行内菜单交互口径：可逆（OP/白名单）直执 + 5s 撤销，踢出直执（无逆操作）
- * - 响应式：<1280px 裁到核心列（免横向滚动）；<640px 整表转行式卡片
+ * - 响应式：列数按**表格区实宽**切档（<1016px 裁到核心列免横向滚动）；<640px 整表转行式卡片
  * 单元拆分（纯搬移零行为变更）：列定义 player-table-columns / 行组件 player-table-row /
  * 行菜单 player-row-menu / 卡片态 player-card-list / 共享常量 player-table-config
  */
@@ -16,7 +16,8 @@ import { DataTableShell } from '@/components/mcs/data-table-shell'
 import { EmptyStateVisual } from '@/components/mcs/data-states'
 import { Pagination } from '@/components/mcs/pagination'
 import { Button } from '@/components/ui/button'
-import { BREAKPOINT_BELOW_SM, BREAKPOINT_BELOW_XL, useMediaQuery } from '@/hooks/use-media-query'
+import { BREAKPOINT_BELOW_SM, useMediaQuery } from '@/hooks/use-media-query'
+import { useContainerWidth } from '@/hooks/use-container-width'
 import type { Player } from '@/api/types'
 import { usePlayersUiStore, type PlayerDetailTab } from '../store'
 import type { PlayerActionRequest } from '../mutations'
@@ -44,6 +45,9 @@ interface PlayerTableProps {
   onKicked: () => void
 }
 
+/** 10 列全展开约需 1016px（列宽口径见 player-table-columns）；装不下就裁到核心列 */
+const FULL_COLUMNS_MIN_WIDTH = 1016
+
 export function PlayerTable({
   players,
   isLoading,
@@ -66,8 +70,14 @@ export function PlayerTable({
   const selectedSet = useMemo(() => new Set(selectedUuids), [selectedUuids])
   /** <640px：整表转卡片（列宽再怎么妥协也放不下 10 列） */
   const isCardLayout = useMediaQuery(BREAKPOINT_BELOW_SM)
-  /** <1280px：10 列合计约 1016px，容器装不下 → 裁到核心列免横向滚动 */
-  const isCompactColumns = useMediaQuery(BREAKPOINT_BELOW_XL)
+  /**
+   * 表格区实宽（而非视口）：同一视口下，侧栏折叠差 152px、详情面板内联再借走 420px，
+   * 视口断点会把「装得下 10 列」的宽度误判成裁列（折叠侧栏 1279 视口表格区已有 1191px）。
+   * null = 尚未测到（首帧前/jsdom）：按宽兜底给全列，与既有宽屏态用例一致
+   */
+  const [tableRef, tableWidth] = useContainerWidth<HTMLDivElement>()
+  /** 10 列合计约 1016px（列宽口径见 player-table-columns），装不下 → 裁到核心列免横向滚动 */
+  const isCompactColumns = tableWidth != null && tableWidth < FULL_COLUMNS_MIN_WIDTH
 
   /**
    * 可逆操作（OP/白名单）：直执 + 5s 撤销。失败回执由页面层（handleAction）承担——
@@ -215,7 +225,7 @@ export function PlayerTable({
     ) : undefined
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div ref={tableRef} className="flex min-h-0 flex-1 flex-col">
       {/* 窄屏（<640px）表格必然横向溢出：勾选框/玩家名/操作入口都够不着 → 改行式卡片 */}
       {isCardLayout ? (
         <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto">

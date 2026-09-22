@@ -175,4 +175,40 @@ test.describe('实例页', () => {
     }))
     expect(narrow.scrollWidth).toBeLessThanOrEqual(narrow.clientWidth)
   })
+
+  /**
+   * 栅格列数按容器内容宽切档（@2xl=672 两列 / @5xl=1024 三列）。
+   * jsdom 不评估容器查询，阈值只能在这里锁。768 视口展开侧栏内容 528px：
+   * 改前视口 `md` 给两列、每张 258px，卡内四格指标行被压到 44px/格（"3.2 GB" 截断），
+   * 现在必须单列。1279 视口折叠侧栏内容 1191px：改前差 1px 未达 `xl` 只给两列，
+   * 现在必须三列
+   */
+  test('栅格按容器宽切档：768 展开侧栏单列、1279 折叠侧栏三列', async ({ page }) => {
+    await setupConnection(page)
+
+    const cols = () =>
+      page
+        .locator('[data-instance-id]')
+        .first()
+        .locator('..')
+        .evaluate((el) => getComputedStyle(el).gridTemplateColumns.split(' ').length)
+
+    // 768 展开侧栏（内容 528 < 672）⇒ 单列；卡片吃满，指标格不被压扁
+    await page.setViewportSize({ width: 768, height: 900 })
+    await page.goto('/instances')
+    await expect(page.locator('[data-instance-id]').first()).toBeVisible()
+    expect(await cols()).toBe(1)
+
+    // 1279 折叠侧栏（内容 1191 ≥ 1024）⇒ 三列
+    await page.getByRole('button', { name: '收起侧栏' }).click()
+    await expect(page.getByRole('button', { name: '展开侧栏' })).toBeVisible()
+    await page.setViewportSize({ width: 1279, height: 900 })
+    expect(await cols()).toBe(3)
+
+    // 两态都不得横向溢出
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    )
+    expect(overflow).toBe(0)
+  })
 })

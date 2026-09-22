@@ -12,6 +12,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router'
 import { Toaster } from 'sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { handlers, mockPlayers } from '@/test/mocks/handlers'
+import { mockContainerWidth } from '@/test/mock-container-width'
 import { PlayersPage } from '../players-page'
 import { usePlayersUiStore } from '../store'
 import { useConnectionStore } from '@/stores/connection'
@@ -226,30 +227,20 @@ describe('PlayersPage', () => {
   it('深链接 ?player=Steve 打开详情', async () => {
     renderPage('/players?player=Steve')
     expect(await screen.findByText('基本信息')).toBeInTheDocument()
-    // 宽屏（默认 matchMedia 全 false）走内联右栏，不得退化成 Sheet
+    // 未测到容器宽（jsdom 无布局引擎）按宽兜底走内联右栏，不得退化成 Sheet
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
-  it('lg 以下（含平板）详情面板以 dialog 承载（role=dialog + 可访问名），不再是裸覆盖层', async () => {
-    const orig = window.matchMedia
-    // 平板/窄屏模拟：仅「lg 以下」断点命中（其余查询保持 false，与内联态用例互不干扰）
-    window.matchMedia = ((query: string) => ({
-      matches: query === '(max-width: 1023px)',
-      media: query,
-      onchange: null,
-      addListener: () => {},
-      removeListener: () => {},
-      addEventListener: () => {},
-      removeEventListener: () => {},
-      dispatchEvent: () => false,
-    })) as unknown as typeof window.matchMedia
+  it('容器并不下面板时（<900px 内容宽）详情以 dialog 承载，不再是内联窄列', async () => {
+    // 只喂「主从区实宽 < PANEL_INLINE_MIN_CONTENT」：折叠侧栏 768 视口、或宽视口开面板都命中此档
+    const restore = mockContainerWidth(784)
     try {
       renderPage('/players?player=Steve')
       // 轮询到列表就绪后的可访问名（标题取玩家名，SR 可播报上下文）
       const dialog = await screen.findByRole('dialog', { name: /Steve 详情/ })
       expect(within(dialog).getByText('基本信息')).toBeInTheDocument()
     } finally {
-      window.matchMedia = orig
+      restore()
     }
   })
 

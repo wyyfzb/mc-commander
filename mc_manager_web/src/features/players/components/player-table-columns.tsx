@@ -2,8 +2,9 @@
  * PlayerTable 列定义 —— 10 列规格（自 player-table.tsx 拆出，纯搬移零行为变更）
  * 工厂参数化注入选择集与操作回调；依赖常量见 player-table-config.ts
  * 行内菜单交互口径：OP/白名单切换可逆 → 直执 + 5s 撤销；踢出无逆操作 → 直执 + 普通回执
- * compact（<1280px 容器）：10 列合计约 1016px，装不下时表格会横向溢出把勾选框与玩家名推出视野，
+ * compact（表格区实宽 <1016px）：10 列合计约 1016px，装不下时表格会横向溢出把勾选框与玩家名推出视野，
  * 故按列价值裁到核心四列（选择/玩家/状态/操作）；被裁列的字段在详情面板仍可查
+ * （判据取表格区实宽而非视口：侧栏折叠差 152px、详情面板内联再借走 420px）
  */
 import type { ColumnDef } from '@tanstack/react-table'
 import { Ban } from 'lucide-react'

@@ -210,8 +210,10 @@ test.describe('仪表盘首屏高度预算（1440×900）', () => {
 })
 
 /**
- * 玩家表响应式（形态由实测决定：<1256px 视口下 10 列合计约 1016px 会横向溢出，
- * 表格横向滚动把勾选框与玩家名推出视野 → 中窄屏裁列、<640px 转卡片）
+ * 玩家表响应式（形态由表格区实宽决定：10 列合计约 1016px，装不下就裁到核心四列；
+ * <640px 视口转卡片）。判据取表格区实宽而非视口——侧栏折叠使同视口下内容宽差 152px，
+ * 详情面板内联还会再借走 420px，视口断点会把「装得下 10 列」的宽度误判成裁列。
+ * jsdom 不评估布局，故这些阈值只能在这里锁（几何断言）
  */
 async function playerTableOverflow(page: Page) {
   return page.getByRole('table').evaluate((el) => {
@@ -233,13 +235,16 @@ test.describe('玩家表中窄屏：裁到核心列', () => {
         await expect(page.getByRole('columnheader', { name: label })).toHaveCount(0)
       }
 
-      const { scrollWidth, clientWidth } = await playerTableOverflow(page)
-      expect(scrollWidth).toBeLessThanOrEqual(clientWidth)
-
       // 勾选框与玩家名在视口内（不需要横向滚动才够得着）
       // 行数据是异步的：表头随骨架先挂载，行要等查询返回。先等目标行可见再取盒——
       // 全量并行 8 worker 争抢时会落进「表头可见、行未挂载」的窗口，直接取盒会拿到 null
       await expect(page.getByRole('checkbox', { name: '选择 Steve' })).toBeVisible()
+
+      // 溢出量也必须在行挂载后量：骨架行的列宽与真实行不同，行未到位时量到的
+      // scrollWidth 会瞬态超出 clientWidth（并行争抢下实测 812 vs 782 的假红）
+      const { scrollWidth, clientWidth } = await playerTableOverflow(page)
+      expect(scrollWidth).toBeLessThanOrEqual(clientWidth)
+
       const checkbox = await page.getByRole('checkbox', { name: '选择 Steve' }).boundingBox()
       expect(checkbox).not.toBeNull()
       expect(checkbox!.x).toBeGreaterThanOrEqual(0)
@@ -255,6 +260,106 @@ test.describe('玩家表中窄屏：裁到核心列', () => {
     for (const label of ['玩家', '模式', '维度', '坐标', '状态', '延迟', '在线时长', '总时长']) {
       await expect(page.getByRole('columnheader', { name: label })).toBeVisible()
     }
+  })
+
+  /**
+   * 折叠侧栏后表格区从 1040 涨到 1192px（同视口下内容宽 +152px）：
+   * 改前 ≤1279 视口一律裁列，1192px 明明装得下 10 列却只给 4 列。
+   * 改后判据是表格区实宽 ≥1016px ⇒ 全列。这条锁的就是「折叠侧栏不该丢列」
+   */
+  test('1279px + 折叠侧栏：表格区 1192px 仍拿全 10 列（不因视口差 1px 裁列）', async ({ page }) => {
+    await page.setViewportSize({ width: 1279, height: 900 })
+    await setupConnection(page)
+    await page.goto('/players')
+    await expect(page.getByRole('columnheader', { name: '玩家' })).toBeVisible()
+
+    await page.getByRole('button', { name: '收起侧栏' }).click()
+    await expect(page.getByRole('button', { name: '展开侧栏' })).toBeVisible()
+
+    for (const label of ['玩家', '模式', '维度', '坐标', '状态', '延迟', '在线时长', '总时长']) {
+      await expect(page.getByRole('columnheader', { name: label })).toBeVisible()
+    }
+    const { scrollWidth, clientWidth } = await playerTableOverflow(page)
+    expect(scrollWidth).toBeLessThanOrEqual(clientWidth)
+  })
+
+  /**
+   * 详情面板内联会借走表格区 420px：1280 视口开面板后表格区只剩 620px，
+   * 必须裁列（否则 10 列横向滚动把勾选框推出视野）。锁「开面板自动裁列」
+   */
+  test('1280px + 详情面板内联：表格区 620px 裁到核心列（不横向溢出）', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 })
+    await setupConnection(page)
+    await page.goto('/players')
+    await page.getByRole('button', { name: '查看 Steve 详情' }).first().click()
+
+    // 内联右栏（容器 1040 ≥ 900），不是 Sheet
+    await expect(page.getByRole('complementary', { name: '玩家详情面板' })).toBeVisible()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+
+    for (const label of ['模式', '维度', '坐标', '延迟', '在线时长', '总时长']) {
+      await expect(page.getByRole('columnheader', { name: label })).toHaveCount(0)
+    }
+    const { scrollWidth, clientWidth } = await playerTableOverflow(page)
+    expect(scrollWidth).toBeLessThanOrEqual(clientWidth)
+  })
+
+  /**
+   * 容器 900–1023px 时面板仍内联（≥900），但表格区已被压到 480–603px：
+   * 这是内联的下限带，裁列后刚好不溢出。低于 900 改走 Sheet（下一条锁）
+   */
+  test('1156px：容器 916px 仍内联 + 表格区 496px 裁列不溢出', async ({ page }) => {
+    await page.setViewportSize({ width: 1156, height: 900 })
+    await setupConnection(page)
+    await page.goto('/players')
+    await page.getByRole('button', { name: '查看 Steve 详情' }).first().click()
+
+    await expect(page.getByRole('complementary', { name: '玩家详情面板' })).toBeVisible()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    await expect(page.getByRole('columnheader', { name: '玩家' })).toBeVisible()
+    await expect(page.getByRole('columnheader', { name: '状态' })).toBeVisible()
+    for (const label of ['模式', '维度', '坐标', '延迟', '在线时长', '总时长']) {
+      await expect(page.getByRole('columnheader', { name: label })).toHaveCount(0)
+    }
+    const { scrollWidth, clientWidth } = await playerTableOverflow(page)
+    expect(scrollWidth).toBeLessThanOrEqual(clientWidth)
+  })
+
+  /**
+   * 容器 <900px（视口 1100 展开侧栏 ⇒ 内容 860px）时面板改 Sheet 全屏承载：
+   * 内联会把表格压到 440px 以下。锁「窄容器转 Sheet + 表格恢复全宽」
+   */
+  test('1100px：容器 860px 详情走 Sheet，表格吃满内容宽', async ({ page }) => {
+    await page.setViewportSize({ width: 1100, height: 900 })
+    await setupConnection(page)
+    await page.goto('/players')
+    await page.getByRole('button', { name: '查看 Steve 详情' }).first().click()
+
+    await expect(page.getByRole('dialog', { name: /Steve 详情/ })).toBeVisible()
+    // Sheet 形态的判据是「面板挂在 dialog 子树里」——aside 元素两种形态都渲染
+    // （variant 只换外层容器），数它为 0 会误判
+    const inDialog = await page.evaluate(() => {
+      const aside = document.querySelector("aside[aria-label='玩家详情面板']")
+      const dialog = document.querySelector('[role="dialog"]')
+      return !!aside && !!dialog && dialog.contains(aside)
+    })
+    expect(inDialog).toBe(true)
+
+    // 表格在 Sheet 背后被 aria-modal 置为 inert，角色查询不可见 ⇒ 用 CSS 定位 +
+    // evaluate 量几何（不依赖可访问性可见性）
+    const table = page.locator('main table')
+    await table.waitFor({ state: 'attached' })
+    const geom = await table.evaluate((el) => {
+      const scroller = el.parentElement!
+      return {
+        scrollWidth: scroller.scrollWidth,
+        clientWidth: scroller.clientWidth,
+        tableW: scroller.clientWidth,
+      }
+    })
+    expect(geom.scrollWidth).toBeLessThanOrEqual(geom.clientWidth)
+    // 表格吃满内容宽（面板移入 Sheet 后不再借走 420px）
+    expect(geom.tableW).toBeGreaterThanOrEqual(848)
   })
 })
 

@@ -17,7 +17,9 @@ interface PageHeaderProps {
   /**
    * 描述与标题同行的紧凑版式（截稿页用，如仪表盘——首屏高度要还给终端）。
    * 仅改排布不改字号档：标题仍 `xl`、描述仍 `xs`，信息不减少。
-   * 窄屏（<640px）保持上下堆叠：标题+描述一行会挤压长描述的可读性。
+   * 窄内容宽保持上下堆叠：标题+描述一行会挤压长描述的可读性。
+   * 断点取**容器档**（@xs=320px）而非视口档：页面根须声明 `@container`，
+   * 否则侧栏折叠会使同视口下内容宽差 152px，视口断点判不准「并得下并不了」
    */
   inlineDescription?: boolean
 }
@@ -34,7 +36,7 @@ export function PageHeader({
       <div
         className={cn(
           'min-w-0 flex flex-col',
-          inlineDescription && 'sm:flex-row sm:items-baseline sm:gap-3',
+          inlineDescription && '@xs:flex-row @xs:items-baseline @xs:gap-3',
         )}
       >
         <h2 className="text-mcs-xl font-semibold text-mcs-text-default">{title}</h2>

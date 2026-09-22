@@ -40,6 +40,61 @@ test.describe('文件页', () => {
     await maybeShot(page, 'files-two-column-dark.png')
   })
 
+  /**
+   * 编辑器「内联双栏 ↔ 全屏覆盖」按双栏区实宽切档（阈值 672px = 编辑器 w-45% 要 ≥320px）。
+   * jsdom 不评估布局，阈值只能在这里锁。两条各锁一头：
+   * - 767 视口：侧栏退化成抽屉，双栏区内容 743px ⇒ 必须双栏（改前被 <768 误判成全屏）
+   * - 768 视口展开侧栏：双栏区内容仅 536px ⇒ 必须全屏（改前双栏只给 Monaco 241px）
+   */
+  test('编辑器按双栏区实宽切档：767 双栏、768 展开侧栏全屏', async ({ page }) => {
+    await setupConnection(page)
+
+    // 767：抽屉侧栏 ⇒ 内容 743px ≥ 672 ⇒ 双栏
+    await page.setViewportSize({ width: 767, height: 900 })
+    await page.goto('/files')
+    await page.getByRole('button', { name: '选择文件 server.properties' }).click()
+    await expect(page.locator('.monaco-editor').first()).toBeVisible({ timeout: 20_000 })
+    const dual = await page.evaluate(() => {
+      const cards = Array.from(document.querySelectorAll('main .shadow-mcs-card'))
+      return {
+        cardCount: cards.length,
+        monacoW: Math.round(
+          document.querySelector('.monaco-editor')!.getBoundingClientRect().width,
+        ),
+        // 全屏覆盖层的判据：Monaco 挂在 fixed 祖先下（侧栏抽屉遮罩同为 overlay 档 z 轴，
+        // 但 Monaco 不在它的子树里，用 closest 不会误判）
+        overlay: !!document.querySelector('.monaco-editor')?.closest('.fixed'),
+      }
+    })
+    expect(dual.cardCount).toBe(2)
+    expect(dual.overlay).toBe(false)
+    // w-45% 且 ≥320px 才谈得上可用
+    expect(dual.monacoW).toBeGreaterThanOrEqual(320)
+
+    // 768：侧栏常显占 208px ⇒ 内容 536px < 672 ⇒ 全屏覆盖。
+    // 等「main 里只剩文件列表一张卡」——内联编辑器那张 Card 卸载后 main 才减到 1 张，
+    // 不能用「关闭编辑器」按钮可见来等：内联态也有这个按钮，断言会立刻通过而读到旧形态
+    await page.setViewportSize({ width: 768, height: 900 })
+    await expect(page.locator('main .shadow-mcs-card')).toHaveCount(1)
+    // 全屏态的 Monaco 是重新挂载的（懒加载 chunk），要等它起来再量
+    await expect(page.locator('.monaco-editor').first()).toBeVisible({ timeout: 20_000 })
+    const full = await page.evaluate(() => {
+      const cards = Array.from(document.querySelectorAll('main .shadow-mcs-card'))
+      return {
+        cardCount: cards.length,
+        overlay: !!document.querySelector('.monaco-editor')?.closest('.fixed'),
+      }
+    })
+    expect(full.overlay).toBe(true)
+    expect(full.cardCount).toBe(1)
+
+    // 两态都不得横向溢出
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    )
+    expect(overflow).toBe(0)
+  })
+
   test('点击文件打开 Monaco 编辑器 + 编辑保存', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/files')

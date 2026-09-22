@@ -244,7 +244,9 @@ export function InstancesPage() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4 p-4">
+    /* @container：卡片栅格按「可用内容宽」切档而非视口宽（侧栏可折叠，同视口下内容宽差 152px），
+       口径见 instance-cards.tsx 的 INSTANCE_GRID_CLASS */
+    <div className="@container flex h-full min-h-0 flex-col gap-4 p-4">
       <PageHeader
         title="实例管理"
         description={
@@ -285,13 +287,13 @@ export function InstancesPage() {
       <div className="min-h-0 flex-1 overflow-y-auto">
         {instancesQuery.isLoading && instances.length === 0 ? (
           // 骨架与真实网格同源（INSTANCE_GRID_CLASS）：列数恒定，实例数在数据到达前不可知
-          // 也不再影响布局；两格＝一张实例卡 + 单实例形态下的部署引导块（xl 跨两列）
+          // 也不再影响布局；两格＝一张实例卡 + 单实例形态下的部署引导块（三列档下跨两列）
           <div role="status" aria-label="加载实例中" className={INSTANCE_GRID_CLASS}>
             {/* sr-only 文本才是 live region 的公告载体（role=status 播报的是内容，
                 aria-label 只作内容前缀）；骨架格是装饰，不进可访问树 */}
             <span className="sr-only">加载实例中</span>
             <Skeleton className="h-28" aria-hidden />
-            <Skeleton className="h-28 xl:col-span-2" aria-hidden />
+            <Skeleton className="h-28 @5xl:col-span-2" aria-hidden />
           </div>
         ) : instancesQuery.isError && !instancesQuery.isLoading ? (
           <EmptyState

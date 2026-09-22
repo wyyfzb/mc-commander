@@ -46,11 +46,19 @@ import type { InstanceStatus, InstanceSummary } from '@/api/types'
 
 /**
  * 实例网格列数（唯一声明源：真实网格与加载骨架共用，防止骨架列数与真实布局分叉）
- * 恒定三列（xl）：列数不随实例数变化，骨架与真实网格因此永不跳变——单实例下由
- * 引导块跨两列补满整行（见下方 DeployGuideTile 的 xl:col-span-2）。
- * 取舍：单实例几何由「卡片 1/2 + 引导块 1/2」变为「1/3 + 2/3」，换冷加载零跳变
+ * 按**容器内容宽**切档（`@container` 由页面根声明）：视口断点在这里判不准——侧栏可折叠
+ * （56px ↔ 208px），同一视口宽下内容宽差 152px：768 视口展开侧栏仅 528px，视口 `md` 判出的
+ * 两列每张 258px，卡内四格指标行被压到 44px/格（"3.2 GB" 实测截断）；而 1279 视口内容
+ * 已有 1039px，视口差 1px 未达 `xl` 仍给两列（每张 513px），白丢一列。
+ * 档位按卡片最小可用宽反推，与仪表盘三卡同档（@2xl 两列 / @5xl 三列）：
+ * 四格指标行每格 ≥62px 才放得下 "32.0 GB"（实测 63px 格不截断、54px 格的 3.2GB 也够），
+ * 故 672px（@2xl）起两列（每张 330px，格 62px）、1024px（@5xl）起三列（每张 333px，格 63px）。
+ * 低于 672px 只给一列：两列会把卡片压到 258px 级（44px/格，"3.2 GB" 实测截断），
+ * 而单列拉到 660px 只是指标格变疏（144px/格），不损失信息——与仪表盘顶卡同档取舍
+ * 列数不随实例数变化，骨架与真实网格永不跳变——单实例下由引导块跨两列补满整行
+ * （DeployGuideTile 的 `@5xl:col-span-2`，与三列档同源）
  */
-export const INSTANCE_GRID_CLASS = 'grid gap-3 sm:grid-cols-2 xl:grid-cols-3'
+export const INSTANCE_GRID_CLASS = 'grid gap-3 @2xl:grid-cols-2 @5xl:grid-cols-3'
 
 export interface InstanceCardsProps {
   /** 实例摘要列表（GET /instances 结果） */
@@ -137,7 +145,7 @@ export function InstanceCards({
       {instances.length === 1 && (
         <DeployGuideTile
           onDeploy={onDeploy}
-          className="animate-mcs-fade-up mcs-delay-2 xl:col-span-2"
+          className="animate-mcs-fade-up mcs-delay-2 @5xl:col-span-2"
         />
       )}
     </div>

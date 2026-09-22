@@ -3,7 +3,7 @@
  * 断言结构而非像素（jsdom 无布局引擎）：占位必须是 mcs 骨架基座（`data-slot="skeleton"`）
  * 且保持列表的 h-28 卡高。既有一处静态 `bg-mcs-bg-muted` 占位读起来像「坏了」而非「加载中」。
  * 列数恒定（`INSTANCE_GRID_CLASS`）：真实网格与骨架共用同一条声明，装几个实例都不跳变；
- * 两格＝一张实例卡 + 单实例形态下的部署引导块（xl 跨两列，骨架同样跨列，几何逐格对齐）。
+ * 两格＝一张实例卡 + 单实例形态下的部署引导块（三列档跨两列，骨架同样跨列，几何逐格对齐）。
  * 骨架容器是 `role="status"`（读屏能进可访问树并播报「加载实例中」），格本身 aria-hidden
  * MSW 拦截：列表请求挂起（永不 resolve）以停在加载态；结构占位虚构数据
  */
@@ -66,14 +66,20 @@ describe('InstancesPage · 加载态', () => {
 
     const grid = await screen.findByRole('status', { name: '加载实例中' })
     const bars = grid.querySelectorAll('[data-slot="skeleton"]')
-    // 两格：第一格＝实例卡，第二格＝单实例形态的部署引导块（跨两列）
+    // 两格：第一格＝实例卡，第二格＝单实例形态的部署引导块（三列档跨两列）
     expect(bars).toHaveLength(2)
     // 列数规则与真实网格同源（改真实网格这里同步变，不再有「按实例数分叉」的可能）
     expect(grid.className).toBe(INSTANCE_GRID_CLASS)
-    expect(INSTANCE_GRID_CLASS).toContain('xl:grid-cols-3')
-    expect(bars[0]?.className).not.toContain('xl:col-span-2')
-    // 第二格跨两列：与真实引导块同几何，xl 冷加载不再 2→3 列跳变
-    expect(bars[1]?.className).toContain('xl:col-span-2')
+    // 容器档而非视口档：侧栏折叠会使同视口下内容宽差 152px，视口断点判不准列数。
+    // 用词边界判定「前面没有 @」才算视口档（@5xl 里也含 xl 子串）
+    const viewportTier = (tier: string) => new RegExp(`(?:^|\\s)${tier}:`).test(INSTANCE_GRID_CLASS)
+    expect(INSTANCE_GRID_CLASS).toContain('@2xl:grid-cols-2')
+    expect(INSTANCE_GRID_CLASS).toContain('@5xl:grid-cols-3')
+    expect(viewportTier('sm')).toBe(false)
+    expect(viewportTier('xl')).toBe(false)
+    expect(bars[0]?.className).not.toContain('@5xl:col-span-2')
+    // 第二格跨两列：与真实引导块同几何，三列档冷加载不再 2→3 列跳变
+    expect(bars[1]?.className).toContain('@5xl:col-span-2')
     for (const bar of bars) {
       expect(bar).toHaveClass('h-28')
       // 骨架基座自带流光动效；静态灰块（无动效）会被读成「坏了」而不是「加载中」
