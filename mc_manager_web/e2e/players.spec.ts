@@ -109,6 +109,43 @@ test.describe('玩家页', () => {
     await maybeShot(page, 'give-dialog-dark.png')
   })
 
+  /**
+   * 给予物品栅格列数按**面板实宽**切档（@container 在详情面板的 aside 上）。
+   * jsdom 不评估容器查询，阈值只能在这里锁。内联面板固定 w-105=420px，
+   * 视口 lg 却给 6 列 ⇒ 每格仅 ~54px，36px 缩略图下的物品名与 id 双双被 truncate 截掉。
+   * 两条各锁一头：内联 420px 必须 4 列（格子 ≥88px）；<1024 视口走 Sheet 全宽后
+   * 必须拿到 6 列（原来只给 5 列，白白少排一列）
+   */
+  test('给予物品栅格按面板实宽切档：内联 4 列、Sheet 全宽 6 列', async ({ page }) => {
+    await setupConnection(page)
+
+    // 内联面板（视口 1280 ⇒ 容器 1040 ≥ 900，面板内联 420px）⇒ 4 列
+    await page.setViewportSize({ width: 1280, height: 900 })
+    await page.goto('/players')
+    await page.getByText('Steve').first().click()
+    await page.getByRole('tab', { name: '给予物品' }).click()
+    const grid = page.getByTestId('give-item-grid')
+    await expect(grid).toBeVisible()
+    const inline = await grid.evaluate((el) => ({
+      cols: getComputedStyle(el).gridTemplateColumns.split(' ').length,
+      cellW: Math.round(el.firstElementChild!.getBoundingClientRect().width),
+      panelW: Math.round(el.closest('aside')!.getBoundingClientRect().width),
+    }))
+    expect(inline.panelW).toBe(420)
+    expect(inline.cols).toBe(4)
+    expect(inline.cellW).toBeGreaterThanOrEqual(88)
+
+    // Sheet 全宽（视口 1024 ⇒ 容器 784 < 900，面板移入 Sheet 吃满内容宽）⇒ 6 列
+    await page.setViewportSize({ width: 1024, height: 900 })
+    await expect(page.getByRole('dialog', { name: /Steve 详情/ })).toBeVisible()
+    const sheet = await grid.evaluate((el) => ({
+      cols: getComputedStyle(el).gridTemplateColumns.split(' ').length,
+      panelW: Math.round(el.closest('aside')!.getBoundingClientRect().width),
+    }))
+    expect(sheet.panelW).toBeGreaterThan(700)
+    expect(sheet.cols).toBe(6)
+  })
+
   test('批量选择：底部浮动操作条 + 批量传送走详情批量模式', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/players')

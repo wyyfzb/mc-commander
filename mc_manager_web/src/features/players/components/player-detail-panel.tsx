@@ -74,9 +74,12 @@ export function PlayerDetailPanel({
   const effectiveTab = tabs.includes(currentTab) ? currentTab : tabs[0]
 
   return (
+    /* @container：本面板 embedded 承载给予物品栅格等子组件，容器宽在两种形态下差 580px
+       （内联 w-105=420px / Sheet 全宽约 1000px）。子组件的列数必须按**面板实宽**切档，
+       按视口断会给出完全反向的列数（见 give-item-selector 的栅格注释） */
     <aside
       className={cn(
-        'flex min-h-0 flex-col bg-mcs-bg-default',
+        '@container flex min-h-0 flex-col bg-mcs-bg-default',
         variant === 'inline'
           ? 'w-105 shrink-0 border-l border-mcs-border-default'
           : 'h-full w-full overflow-hidden',

@@ -56,6 +56,53 @@ test.describe('设置页', () => {
     )
   })
 
+  /**
+   * 子导航「图标态 ↔ 文字态」按容器内容宽切档（@3xl=768px）。
+   * jsdom 不评估容器查询，阈值只能在这里锁。768 视口展开侧栏内容仅 528px：
+   * 改前视口 md 把子导航展成 200px 文字态，右表单区被压到 312px；现在必须保持
+   * 图标态、把宽度让给表单。1024 视口内容 784px 才展成文字态
+   */
+  test('子导航按容器宽切档：768 视口保持图标态（表单不被压窄），1024 展文字态', async ({
+    page,
+  }) => {
+    await setupConnection(page)
+
+    const geom = () =>
+      page.evaluate(() => {
+        const nav = document.querySelector("nav[aria-label='设置子导航']")!
+        const form = nav.nextElementSibling!
+        const label = nav.querySelector('span.hidden')!
+        return {
+          navW: Math.round(nav.getBoundingClientRect().width),
+          formW: Math.round(form.getBoundingClientRect().width),
+          expanded: label.getBoundingClientRect().width > 0,
+        }
+      })
+
+    // 768 展开侧栏：内容 528 < 768 ⇒ 图标态，表单 464px（改前 312px）
+    await page.setViewportSize({ width: 768, height: 900 })
+    await page.goto('/settings/account')
+    await expect(page.getByRole('heading', { name: '账号与安全', level: 2 })).toBeVisible()
+    const narrow = await geom()
+    expect(narrow.expanded).toBe(false)
+    expect(narrow.navW).toBe(48)
+    expect(narrow.formW).toBeGreaterThanOrEqual(440)
+
+    // 1024 展开侧栏：内容 784 ≥ 768 ⇒ 文字态，表单仍有余量
+    await page.setViewportSize({ width: 1024, height: 900 })
+    await expect(page.getByRole('link', { name: '账号与安全' })).toBeVisible()
+    const wide = await geom()
+    expect(wide.expanded).toBe(true)
+    expect(wide.navW).toBe(200)
+    expect(wide.formW).toBeGreaterThanOrEqual(540)
+
+    // 两态都不得横向溢出
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    )
+    expect(overflow).toBe(0)
+  })
+
   test('连接设置：表单 + 测试连接 + 保存', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/settings/connection')

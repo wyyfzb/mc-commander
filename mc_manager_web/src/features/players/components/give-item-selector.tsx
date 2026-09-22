@@ -203,7 +203,13 @@ export function ItemSelector({
         </div>
       </div>
 
-      {/* 物品网格 */}
+      {/* 物品网格：列数按**面板实宽**切档（@container 在 PlayerDetailPanel 的 aside 上）。
+          本面板 embedded 内嵌在详情面板里，容器宽在两种形态下差 580px（内联 w-105=420px /
+          Sheet 全宽约 1000px）。原来按视口断（sm 5 列 / lg 6 列）完全反向：内联 420px
+          在 1280 视口下拿到 6 列，每格仅 ~54px，36px 缩略图下的物品名与 id 双双被
+          truncate 截掉；而 Sheet 全宽在 <1024 视口下只给 5 列，白白少排一列。
+          档位按格子最小可用宽反推：一格要放得下 36px 缩略图 + 不截断的物品名 ⇒ ≥88px，
+          故 <576px 4 列、≥576px 5 列、≥896px 6 列 */}
       {filteredItems.length === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-1.5 py-8">
           <Terminal className="size-6 text-mcs-text-muted" aria-hidden />
@@ -211,7 +217,7 @@ export function ItemSelector({
         </div>
       ) : (
         <div
-          className="grid flex-1 grid-cols-4 content-start gap-1.5 overflow-y-auto pb-1 sm:grid-cols-5 lg:grid-cols-6"
+          className="grid flex-1 grid-cols-4 content-start gap-1.5 overflow-y-auto pb-1 @xl:grid-cols-5 @4xl:grid-cols-6"
           data-testid="give-item-grid"
         >
           {filteredItems.map((item) => (
