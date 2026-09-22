@@ -48,6 +48,40 @@ test.describe('移动端侧栏抽屉', () => {
   })
 })
 
+/**
+ * 侧栏「收起」态跨断点回归：桌面 sidebarCollapsed 只属于桌面侧栏（w-14 图标态），
+ * 抽屉是 256px 浮层、不占布局宽 ⇒ 没有收起语义，恒按展开态渲染。
+ * 曾把 nav 片段的 collapsed 直接复用到抽屉：桌面收起后拖窄窗口再开抽屉，
+ * 只剩图标 + 实例迷你卡被条件卸载——窄屏下导航直接不可读。
+ */
+test.describe('侧栏收起态跨断点', () => {
+  test('桌面收起侧栏后拖窄到移动端：抽屉仍按展开态渲染', async ({ page }) => {
+    await setupConnection(page)
+    await page.goto('/dashboard')
+    // 桌面：收起侧栏（w-14 图标态）
+    await page.getByRole('button', { name: '收起侧栏' }).click()
+    await expect(page.getByRole('complementary', { name: '主导航' })).toHaveClass(/\bw-14\b/)
+
+    // 拖窄到移动端 → 桌面侧栏退出布局，抽屉接管
+    await page.setViewportSize({ width: 375, height: 812 })
+    await page.getByRole('button', { name: '打开导航菜单' }).click()
+    const drawer = page.getByRole('complementary', { name: '主导航（移动端）' })
+    await expect(drawer).toBeVisible()
+
+    // 展开态链接：带文字（非居中图标化）
+    const link = drawer.getByRole('link', { name: '玩家' })
+    await expect(link).not.toHaveCSS('justify-content', 'center')
+    await expect(link).toHaveCSS('padding-left', '10px')
+    const label = drawer.locator('a[href="/players"] > span')
+    await expect(label).toBeVisible()
+    await expect(label).toHaveCSS('opacity', '1')
+    await expect(label).toHaveCSS('max-width', '112px')
+
+    // 实例迷你卡随展开态一并渲染（收起态会被条件卸载）
+    await expect(drawer.getByText('E2E 演示实例')).toBeVisible()
+  })
+})
+
 test.describe('桌面端回归（B1 响应式不改桌面）', () => {
   test('桌面端侧栏常显 + 无汉堡按钮', async ({ page }) => {
     await setupConnection(page)

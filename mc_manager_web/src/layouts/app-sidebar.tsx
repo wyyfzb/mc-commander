@@ -127,7 +127,7 @@ export function AppSidebar({ collapsed, mobileNavOpen, onMobileNavClose }: AppSi
   const toggleSidebar = useUiStore((s) => s.toggleSidebar)
   const handleDrawerKeyDown = useFocusTrap(mobileNavOpen, mobileDrawerRef, onMobileNavClose)
 
-  const nav = (
+  const renderNav = (isCollapsed: boolean) => (
     <>
       <nav className="flex flex-1 flex-col gap-1 overflow-y-auto p-2">
         {PRIMARY_NAV.map(({ to, label, icon: Icon }) => (
@@ -136,7 +136,7 @@ export function AppSidebar({ collapsed, mobileNavOpen, onMobileNavClose }: AppSi
             to={to}
             label={label}
             icon={Icon}
-            collapsed={collapsed}
+            collapsed={isCollapsed}
             onClick={onMobileNavClose}
           />
         ))}
@@ -149,14 +149,14 @@ export function AppSidebar({ collapsed, mobileNavOpen, onMobileNavClose }: AppSi
             to={to}
             label={label}
             icon={Icon}
-            collapsed={collapsed}
+            collapsed={isCollapsed}
             onClick={onMobileNavClose}
           />
         ))}
       </nav>
 
       {/* 实例迷你卡（原型 side-foot：当前实例 + TPS + 人数；仅展开态展示） */}
-      {!collapsed && current && (
+      {!isCollapsed && current && (
         <div className="border-t border-mcs-border-muted p-2.5">
           <div className="flex items-center gap-2 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted px-2.5 py-2 shadow-mcs-card">
             <span
@@ -197,10 +197,12 @@ export function AppSidebar({ collapsed, mobileNavOpen, onMobileNavClose }: AppSi
         aria-label="主导航"
       >
         <BrandRow collapsed={collapsed} onToggle={() => toggleSidebar()} />
-        {nav}
+        {renderNav(collapsed)}
       </aside>
 
-      {/* 移动端抽屉（<768px）：fixed 覆盖层 + 遮罩；关闭态 inert 移出焦点顺序 */}
+      {/* 移动端抽屉（<768px）：fixed 覆盖层 + 遮罩；关闭态 inert 移出焦点顺序
+          抽屉是 256px 浮层、不占布局宽 ⇒ 没有「收起」语义，恒按展开态渲染：
+          桌面 sidebarCollapsed 只属于桌面侧栏，渗进来会让窄屏下开抽屉只剩图标 */}
       <div
         className={cn(
           'fixed inset-0 z-(--mcs-z-overlay) md:hidden',
@@ -228,7 +230,7 @@ export function AppSidebar({ collapsed, mobileNavOpen, onMobileNavClose }: AppSi
           inert={!mobileNavOpen}
         >
           <BrandRow collapsed={false} />
-          {nav}
+          {renderNav(false)}
         </aside>
       </div>
     </>

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, within } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -45,7 +45,13 @@ function renderShell(initialPath = '/dashboard') {
 describe('AppShell', () => {
   beforeEach(() => {
     localStorage.clear()
-    useUiStore.setState({ theme: 'dark', sidebarCollapsed: false, commandPaletteOpen: false })
+    useUiStore.setState({
+      theme: 'dark',
+      sidebarCollapsed: false,
+      // 抽屉态必须逐例重置：开着抽屉会多渲染一份同名导航链接，撞 strict 模式查询
+      mobileNavOpen: false,
+      commandPaletteOpen: false,
+    })
     // 未配置连接：useInstances/useServerSocket 均不激活
     useConnectionStore.setState({ baseUrl: '', apiKey: '', status: 'unconfigured' })
     useServerStore.setState({
@@ -118,5 +124,23 @@ describe('AppShell', () => {
     expect(aside).toHaveClass('w-14')
     fireEvent.click(screen.getByRole('button', { name: /展开侧栏/ }))
     expect(aside).not.toHaveClass('w-14')
+  })
+
+  it('移动抽屉恒按展开态渲染：桌面「收起」态不渗入抽屉（窄屏拖动回归）', () => {
+    // 桌面收起 + 抽屉打开（关闭态抽屉 aria-hidden，role 查询取不到）
+    useUiStore.setState({ sidebarCollapsed: true, mobileNavOpen: true })
+    renderShell()
+    // 桌面侧栏确实处于收起态（这条保证下面断言测的是渗漏、不是状态没切成功）
+    expect(screen.getByRole('complementary', { name: '主导航' })).toHaveClass('w-14')
+
+    // 抽屉是 256px 浮层、不占布局宽 ⇒ 没有「收起」语义：链接带文字而非图标化
+    const drawer = screen.getByRole('complementary', { name: '主导航（移动端）' })
+    const link = within(drawer).getByRole('link', { name: '仪表盘' })
+    expect(link).toHaveClass('px-2.5')
+    expect(link).not.toHaveClass('justify-center')
+    expect(link).not.toHaveClass('px-0')
+    const label = within(drawer).getByText('仪表盘')
+    expect(label).toHaveClass('max-w-28', 'opacity-100')
+    expect(label).not.toHaveClass('max-w-0', 'opacity-0')
   })
 })
