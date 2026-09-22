@@ -28,6 +28,7 @@ import { useServerStore } from '@/stores/server'
  * 导航：仪表盘/玩家/世界/文件/任务/实例 + 底部设置
  * 折叠由 zustand（useUiStore.sidebarCollapsed）驱动
  * 移动端（<768px）：fixed 抽屉 + 遮罩（useUiStore.mobileNavOpen 驱动）；底部实例迷你卡
+ * 两种形态的共用主体见 SidebarBody——形态差异由判别联合在编译期切开
  */
 
 interface NavItem {
@@ -120,67 +121,9 @@ interface AppSidebarProps {
 }
 
 export function AppSidebar({ collapsed, mobileNavOpen, onMobileNavClose }: AppSidebarProps) {
-  const instanceId = useServerStore((s) => s.instanceId)
-  const instancesQuery = useInstances()
-  const current = instancesQuery.data?.find((i) => i.id === instanceId)
   const mobileDrawerRef = useRef<HTMLElement | null>(null)
   const toggleSidebar = useUiStore((s) => s.toggleSidebar)
   const handleDrawerKeyDown = useFocusTrap(mobileNavOpen, mobileDrawerRef, onMobileNavClose)
-
-  const renderNav = (isCollapsed: boolean) => (
-    <>
-      <nav className="flex flex-1 flex-col gap-1 overflow-y-auto p-2">
-        {PRIMARY_NAV.map(({ to, label, icon: Icon }) => (
-          <SidebarLink
-            key={to}
-            to={to}
-            label={label}
-            icon={Icon}
-            collapsed={isCollapsed}
-            onClick={onMobileNavClose}
-          />
-        ))}
-      </nav>
-
-      <nav className="flex flex-col gap-1 border-t border-mcs-border-muted p-2">
-        {BOTTOM_NAV.map(({ to, label, icon: Icon }) => (
-          <SidebarLink
-            key={to}
-            to={to}
-            label={label}
-            icon={Icon}
-            collapsed={isCollapsed}
-            onClick={onMobileNavClose}
-          />
-        ))}
-      </nav>
-
-      {/* 实例迷你卡（原型 side-foot：当前实例 + TPS + 人数；仅展开态展示） */}
-      {!isCollapsed && current && (
-        <div className="border-t border-mcs-border-muted p-2.5">
-          <div className="flex items-center gap-2 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted px-2.5 py-2 shadow-mcs-card">
-            <span
-              className={cn(
-                'size-2 shrink-0 rounded-full',
-                current.isRunning
-                  ? 'bg-mcs-success-fg shadow-mcs-glow-accent'
-                  : 'bg-mcs-text-muted',
-              )}
-              aria-hidden
-            />
-            <div className="min-w-0">
-              <div className="truncate text-mcs-xs font-semibold text-mcs-text-default">
-                {instanceLabel(current)}
-              </div>
-              <div className="truncate font-mono text-mcs-2xs text-mcs-text-muted">
-                {current.isRunning ? '运行中' : '已停止'} · {current.playerCount} 人在线
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </>
-  )
 
   return (
     <>
@@ -196,13 +139,15 @@ export function AppSidebar({ collapsed, mobileNavOpen, onMobileNavClose }: AppSi
         )}
         aria-label="主导航"
       >
-        <BrandRow collapsed={collapsed} onToggle={() => toggleSidebar()} />
-        {renderNav(collapsed)}
+        <SidebarBody
+          variant="rail"
+          collapsed={collapsed}
+          onToggle={() => toggleSidebar()}
+          onNavigate={onMobileNavClose}
+        />
       </aside>
 
-      {/* 移动端抽屉（<768px）：fixed 覆盖层 + 遮罩；关闭态 inert 移出焦点顺序
-          抽屉是 256px 浮层、不占布局宽 ⇒ 没有「收起」语义，恒按展开态渲染：
-          桌面 sidebarCollapsed 只属于桌面侧栏，渗进来会让窄屏下开抽屉只剩图标 */}
+      {/* 移动端抽屉（<768px）：fixed 覆盖层 + 遮罩；关闭态 inert 移出焦点顺序 */}
       <div
         className={cn(
           'fixed inset-0 z-(--mcs-z-overlay) md:hidden',
@@ -229,10 +174,82 @@ export function AppSidebar({ collapsed, mobileNavOpen, onMobileNavClose }: AppSi
           aria-hidden={!mobileNavOpen}
           inert={!mobileNavOpen}
         >
-          <BrandRow collapsed={false} />
-          {renderNav(false)}
+          <SidebarBody variant="drawer" onNavigate={onMobileNavClose} />
         </aside>
       </div>
+    </>
+  )
+}
+
+/**
+ * SidebarBody —— 侧栏主体（品牌行 + 导航 + 实例迷你卡），两种形态共用一份标记
+ *
+ * 形态差异用判别联合表达，且 **drawer 形态拿不到 collapsed**：
+ * - rail：桌面常驻导轨，占布局宽，可收起（w-52 ↔ w-14）⇒ 带 collapsed 与开合交互
+ * - drawer：<768 的 256px 浮层，不占布局宽 ⇒ 没有「收起」概念，恒展开态
+ *
+ * drawer 恒展开态是硬约束：桌面 sidebarCollapsed 渗进来会让窄屏下开抽屉只剩图标、
+ * 实例迷你卡也被条件卸载。判别联合把这条约束变成编译期事实，不依赖调用约定自觉。
+ */
+type SidebarBodyProps = {
+  onNavigate: () => void
+} & ({ variant: 'rail'; collapsed: boolean; onToggle: () => void } | { variant: 'drawer' })
+
+function SidebarBody(props: SidebarBodyProps) {
+  const { onNavigate } = props
+  const instanceId = useServerStore((s) => s.instanceId)
+  const instancesQuery = useInstances()
+  const current = instancesQuery.data?.find((i) => i.id === instanceId)
+  const isCollapsed = props.variant === 'rail' && props.collapsed
+
+  const links = (items: NavItem[], extraClass?: string) => (
+    <nav className={cn('flex flex-col gap-1 p-2', extraClass)}>
+      {items.map(({ to, label, icon: Icon }) => (
+        <SidebarLink
+          key={to}
+          to={to}
+          label={label}
+          icon={Icon}
+          collapsed={isCollapsed}
+          onClick={onNavigate}
+        />
+      ))}
+    </nav>
+  )
+
+  return (
+    <>
+      <BrandRow
+        collapsed={isCollapsed}
+        onToggle={props.variant === 'rail' ? props.onToggle : undefined}
+      />
+      {links(PRIMARY_NAV, 'flex-1 overflow-y-auto')}
+      {links(BOTTOM_NAV, 'border-t border-mcs-border-muted')}
+
+      {/* 实例迷你卡（原型 side-foot：当前实例 + TPS + 人数；仅展开态展示） */}
+      {!isCollapsed && current && (
+        <div className="border-t border-mcs-border-muted p-2.5">
+          <div className="flex items-center gap-2 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted px-2.5 py-2 shadow-mcs-card">
+            <span
+              className={cn(
+                'size-2 shrink-0 rounded-full',
+                current.isRunning
+                  ? 'bg-mcs-success-fg shadow-mcs-glow-accent'
+                  : 'bg-mcs-text-muted',
+              )}
+              aria-hidden
+            />
+            <div className="min-w-0">
+              <div className="truncate text-mcs-xs font-semibold text-mcs-text-default">
+                {instanceLabel(current)}
+              </div>
+              <div className="truncate font-mono text-mcs-2xs text-mcs-text-muted">
+                {current.isRunning ? '运行中' : '已停止'} · {current.playerCount} 人在线
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }

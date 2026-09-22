@@ -297,11 +297,32 @@ test.describe('玩家表中窄屏：裁到核心列', () => {
   })
 
   /**
-   * 折叠侧栏后表格区从 1040 涨到 1192px（同视口下内容宽 +152px）：
-   * 改前 ≤1279 视口一律裁列，1192px 明明装得下 10 列却只给 4 列。
+   * 阈值 FULL_COLUMNS_MIN_WIDTH=1016 的下方括号：1240 视口展开侧栏 ⇒ 表格区
+   * 1240−208−32=1000px，差 16px 不到全列线，必须仍是核心列。
+   * 与上方括号（1280 ⇒ 1040px 全列）合起来把 1016 夹住——阈值往下漂到
+   * (860, 1016) 区间时，原先只有溢出断言兜底、且要等表格真溢出才红；
+   * 这条在阈值越界的当口就红，不必等布局烂掉。
+   */
+  test('1240px + 展开侧栏：表格区 1000px 仍裁到核心列（阈值下方括号）', async ({ page }) => {
+    await page.setViewportSize({ width: 1240, height: 900 })
+    await setupConnection(page)
+    await page.goto('/players')
+    await expect(page.getByRole('columnheader', { name: '玩家' })).toBeVisible()
+    await expect(page.getByRole('columnheader', { name: '状态' })).toBeVisible()
+    for (const label of ['模式', '维度', '坐标', '延迟', '在线时长', '总时长']) {
+      await expect(page.getByRole('columnheader', { name: label })).toHaveCount(0)
+    }
+    await expect(page.getByRole('checkbox', { name: '选择 Steve' })).toBeVisible()
+    const { scrollWidth, clientWidth } = await playerTableOverflow(page)
+    expect(scrollWidth).toBeLessThanOrEqual(clientWidth)
+  })
+
+  /**
+   * 折叠侧栏后表格区从 1039 涨到 1191px（同视口下内容宽 +152px）：
+   * 改前 ≤1279 视口一律裁列，1191px 明明装得下 10 列却只给 4 列。
    * 改后判据是表格区实宽 ≥1016px ⇒ 全列。这条锁的就是「折叠侧栏不该丢列」
    */
-  test('1279px + 折叠侧栏：表格区 1192px 仍拿全 10 列（不因视口差 1px 裁列）', async ({ page }) => {
+  test('1279px + 折叠侧栏：表格区 1191px 仍拿全 10 列（不因视口差 1px 裁列）', async ({ page }) => {
     await page.setViewportSize({ width: 1279, height: 900 })
     await setupConnection(page)
     await page.goto('/players')

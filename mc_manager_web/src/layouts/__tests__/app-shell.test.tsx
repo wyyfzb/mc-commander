@@ -142,5 +142,9 @@ describe('AppShell', () => {
     const label = within(drawer).getByText('仪表盘')
     expect(label).toHaveClass('max-w-28', 'opacity-100')
     expect(label).not.toHaveClass('max-w-0', 'opacity-0')
+
+    // drawer 形态不接入开合交互：整个抽屉里没有「收起/展开侧栏」按钮
+    // （rail 的那个在桌面 aside 里，两侧各一个，不会串）
+    expect(within(drawer).queryByRole('button', { name: /侧栏/ })).toBeNull()
   })
 })
