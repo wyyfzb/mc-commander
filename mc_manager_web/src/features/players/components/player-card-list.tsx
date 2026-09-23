@@ -1,8 +1,11 @@
 /**
  * PlayerCardList —— 窄屏（<640px）玩家行式卡片
  * 表格在 375px 上横向溢出约 670px：勾选框、玩家名、状态与操作入口都要靠横向滚动才够得着，
- * 长文本也被挤到不可读。卡片态把一行摊成：勾选 + 头像 + 大字姓名 + 小字标签/摘要 + 操作菜单，
+ * 长文本也被挤到不可读。卡片态把一行摊成：勾选 + 头像 + 姓名（与徽标同行）+ 摘要行 + 操作菜单，
  * 无横向滚动、无列宽妥协。与表格共用同一套行内操作（菜单/撤销口径完全相同）
+ *
+ * 字号口径：姓名用 md（14px + semibold），摘要行用 xs（12px，与表格同名字段同档）；
+ * 徽标与 IP 保持 2xs——前者是角标、后者是 mono 元数据，都在 2xs 的允许面内
  */
 import type { Row } from '@tanstack/react-table'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -17,8 +20,11 @@ import { PlayerRowMenu } from './player-row-menu'
 import { HeartsArmor } from './hearts-armor'
 import { DIMENSION_META, GAME_MODE_LABELS, features } from './player-table-config'
 
-/** 卡片估算行高（实测单行卡 74px；徽标换行的卡更高，估算偏差只影响滚动位置精度而非可达性） */
-export const CARD_HEIGHT = 74
+/** 卡片估算行高（实测：离线单行卡 68px；在线卡的血量护甲约 120px 宽，把摘要行顶到第二行 → 88px）
+    取值口径：摘要行的状态 span 恒渲染 ⇒ 真实高度恒 ≥ 本值，虚拟窗口在任意 scrollTop 下都覆盖视口；
+    取均值反而随数据构成漂移。e2e 锁单行卡实高为 68，本值须与之保持一致（改卡片内边距或字号时同步改，
+    无自动校验） */
+export const CARD_HEIGHT = 68
 
 interface PlayerCardListProps {
   rows: Row<typeof features, Player>[]
@@ -168,8 +174,9 @@ function PlayerCard({
             </button>
             <PlayerBadges player={p} />
           </div>
-          {/* 摘要行：原先横向排开的列在此折为一行小字（状态在前，身份信息在后） */}
-          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-mcs-2xs text-mcs-text-muted">
+          {/* 摘要行：原先横向排开的列在此折为一行（状态在前，身份信息在后）
+              中文走 xs：与表格同名字段（模式/维度/状态）同档；2xs 只留给角标与 mono 元数据 */}
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-mcs-xs text-mcs-text-muted">
             <span>
               {p.isOnline
                 ? '在线'
@@ -180,7 +187,7 @@ function PlayerCard({
             )}
             {p.gameMode && <span>{GAME_MODE_LABELS[p.gameMode] ?? p.gameMode}</span>}
             {dimension && <span>{dimension}</span>}
-            {p.isOnline && p.ip && <span className="font-mono">{p.ip}</span>}
+            {p.isOnline && p.ip && <span className="font-mono text-mcs-2xs">{p.ip}</span>}
           </div>
         </div>
         <PlayerRowMenu

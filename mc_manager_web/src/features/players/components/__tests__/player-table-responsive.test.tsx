@@ -144,7 +144,7 @@ describe('PlayerTable · 响应式形态', () => {
     expect(screen.queryByRole('table')).toBeNull()
     expect(screen.queryByRole('columnheader')).toBeNull()
     const card = screen.getByRole('listitem')
-    // 大字姓名 + 小字标签都在卡片内（不是被截断的表格单元格）
+    // 姓名与徽标都在卡片内（不是被截断的表格单元格）；字号档由 e2e 锁（jsdom 不算样式）
     expect(card).toHaveTextContent('Steve')
     expect(within(card).getByLabelText('OP')).toBeInTheDocument()
     expect(card).toHaveTextContent('白名单')

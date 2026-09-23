@@ -446,6 +446,28 @@ test.describe('玩家表窄屏：行式卡片', () => {
     // 小字标签：封禁剩余时间等长文本在卡片里完整可读
     await expect(page.getByText(/封禁·剩/)).toBeVisible()
 
+    /**
+     * 字号档与估算行高（Charlie 离线 ⇒ 摘要行单行；封禁徽标约 55px，窄于姓名行不把它挤折，
+     * 故卡高可判）：姓名 14px/semibold、摘要 12px（与表格同名字段同档，中文不得落到 2xs）、
+     * 徽标 10px（角标，2xs 的允许面）。68 须与 CARD_HEIGHT 一致——它是虚拟滚动估值，
+     * 卡片内边距或字号一变就要同步，此处是唯一的几何校验点。
+     */
+    const charlie = page.getByRole('listitem').filter({ hasText: 'Charlie' }).first()
+    await expect(charlie.getByRole('button', { name: '查看 Charlie 详情' })).toHaveCSS(
+      'font-size',
+      '14px',
+    )
+    await expect(charlie.getByRole('button', { name: '查看 Charlie 详情' })).toHaveCSS(
+      'font-weight',
+      '600',
+    )
+    await expect(charlie.getByText(/^最后在线/)).toHaveCSS('font-size', '12px')
+    await expect(charlie.getByText(/封禁·剩/)).toHaveCSS('font-size', '10px')
+    const singleLineCardH = await charlie.evaluate((li) =>
+      Math.round(li.getBoundingClientRect().height),
+    )
+    expect(singleLineCardH).toBe(68)
+
     // 卡片态与表格共用同一套操作菜单
     await page.getByRole('button', { name: 'Steve 操作菜单' }).click()
     await expect(page.getByRole('menuitem', { name: '详情' })).toBeVisible()
