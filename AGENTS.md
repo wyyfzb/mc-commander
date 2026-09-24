@@ -11,7 +11,7 @@ MC\_Commander 是一个自托管的 Minecraft 服务器管理面板：不装插�
 | `mc_commander_server/` | 服务端（Express / WebSocket / better-sqlite3 / RCON 双通道 / cron 调度）                            |
 | `mc-schemas/`          | 共享契约包（zod，包名 `@mc-commander/schemas`）：web 经 vite alias 直读 `src`，服务端经 `file:` 链接消费 `dist`  |
 | `scripts/`             | 通用脚本（`local-check.sh` 一键本地检查）                                                             |
-| `docs/`                | 使用者文档（`architecture.md` 架构说明、`user-guide.md` 用户指南）；开发意图类（ADR/审查报告/任务清单）不入库，走本机 `.ai/`     |
+| `docs/`                | 使用者文档（`architecture.md` 架构说明、`user-guide.md` 用户指南）与入库的审查指南（`mc_manager_web/docs/design-review-guidelines.md`：CTA 配额、圆角守门、字号档位适用面、反馈级别等**无门禁、靠审查口径统一**的规则）；开发意图类（ADR/审查报告/任务清单）不入库，走本机 `.ai/`     |
 
 三个包各自独立安装依赖（无 workspace 根），分别 `npm ci`。**改动** **`mc-schemas/src`** **后必须
 `npm run build`** **重建** **`dist/`** **并一并提交**——服务端运行时消费的是 `dist`，前端读的是 `src`，
@@ -50,7 +50,7 @@ npm run lint                 # oxlint
 npm run dev                  # node --watch 热重载
 ```
 
-## 验证策略（一律全量）
+## 验证策略（静态检查与单测一律全量）
 
 改动不分大小，本地自测一律全量，禁止只跑相关测试就提交：
 
@@ -69,7 +69,8 @@ npm run dev                  # node --watch 热重载
   `summary.json`；不入库）。
 - 涉及页面渲染 / 展示文案的改动，加跑相关 e2e spec（`npx playwright test <spec>`）。
 - 全量 e2e 由 CI 兜底，本地按需。
-- PR 自测清单必须附全量结果（通过数 / 总数），仅写「相关测试通过」视为自测未完成。
+- 自测证据必须附全量结果（通过数 / 总数），仅写「相关测试通过」视为自测未完成；
+  本地单线开发下证据落在提交信息或任务回复里（PR 流已退役，见「提交规范」）。
 
 ## 工程纪律
 
@@ -79,13 +80,24 @@ npm run dev                  # node --watch 热重载
   （经 `src/index.css` 的 `@theme` 注册为工具类），禁止组件内硬编码色值，禁止引入未 token 化的第三方 UI 库。
   文字只有两级（`--mcs-text-default` / `--mcs-text-muted`；终端专用 `--mcs-terminal-*` 是独立深底调色板，
   不占文字档位）、交互悬浮只有一档（`--mcs-state-hover`，
-  `--mcs-bg-secondary` 是静态次级面不是 hover 态）；圆角只有一套档位（6/8/12/16px，
-  shadcn 的 `--radius-*` 直接绑定 `--mcs-radius-*`）。
+  `--mcs-bg-secondary` 是静态次级面不是 hover 态）；圆角档位是 6/8/12/16px（另有 20px
+  `@reserved` 档，当前 0 消费），shadcn 的 `--radius-*` **逐档错位**绑定（`--radius-sm` ←
+  `--mcs-radius-xs` 6px、`--radius-md` ← 8px、`--radius-lg` ← 12px、`--radius-xl` ← 16px），
+  所以 `rounded-md` 不是卡片档（8px），卡片是 `rounded-mcs-md`／`rounded-lg`（12px）。
   字号只有 6 个**文字档**（22/18/14/14/12/10，逐档配对行高：xl 1.3 / lg 1.4 / md 1.5 /
   sm 1.6 / xs 1.5 / 2xs 1.5），两个 14px 档语义不同——`sm` 是正文基准、`md` 是强调正文
   （同尺寸靠字重与收紧行高区分），标题层次口径：页面 `xl` / 区块与卡片标题 `lg` / 正文 `sm`，
   `md` 不用于标题；`display`（30px）是**非文字数字档**，只随 `.mcs-num`
-  用于 KPI 等数字面板，不占文字档位。两个输入控件基座（`ui/input.tsx`、`ui/textarea.tsx`）各保留
+  用于 KPI 等数字面板，不占文字档位。
+  **2xs（10px）的适用面**：只用于可扫读的角标、单位、短标签与 mono 元数据（徽章计数、
+  列头词、`{n} 种可用` 这类数量单位、IP/耗时）；**完整句子最低 xs（12px）**——
+  提示语、错误说明、帮助文本一律不用 2xs（CJK 笔画在 10px 下屏显发糊，且 12px 才是
+  中文正文的常规下限）。判据是「短语 vs 句子」，不是「有没有中文」：列头「严重度」
+  这类词正确；「事件类型加载失败，无法勾选事件」这类句子越界。灰区的兜底口径：
+  **含 `，／；／。` 分句标点、或中文 ≥15 字者按句子处理**（`连接正常 · 延迟 12ms`
+  这类以单位收尾的省略式状态行仍算元数据）；只判可见文本，`title=`／`aria-label`
+  里的句子不计。此条无门禁（长度/标点只是代理量，精度不足以做拦截），由独立审查把关。
+  两个输入控件基座（`ui/input.tsx`、`ui/textarea.tsx`）各保留
   1 处原生 `text-base`（16px）——输入控件字号小于该值时 iOS 聚焦会自动放大整页；该额度受门禁
   第 27 条约束（`check-design-tokens.mjs` 的 `TEXT_BASE_ALLOWLIST`，超出额度即报错），不得扩散。
 - **tint 两类**：承载文字/图标的内容面（`--mcs-{status,accent,dimension}-bg-subtle`）**必须不透明**
@@ -99,7 +111,8 @@ npm run dev                  # node --watch 热重载
   可交互/通用标签用 `components/mcs/chip.tsx`（`Chip`），计数用 `components/mcs/count-badge.tsx`
   （`CountBadge`，定位＝数量/条数；不是状态，也不是版本号、百分比与带单位规格值）——只允许这三件，
   不存在第四套标签组件，也不要再造（门禁第 22 条拦新导出的 `*Badge/*Pill/*Tag` 组件、
-  已删除的 shadcn `ui/badge` 的引用与重建）。
+  已删除的 shadcn `ui/badge` 的引用与重建；正则判**单数结尾**，`PlayerBadges` 这类
+  复数领域部件在判定面外）。
   语义色唯一声明源是 `components/mcs/tone.ts`（六档 accent/success/warning/error/info/purple，
   各含 border + bg-subtle + fg；另有 accent 的选中/激活形态 `TONE_SELECTED_CLASSES`
   三件套与 `TONE_SELECTED_SURFACE_CLASSES` 两件套容器——强档描边 `-border-strong`
@@ -113,7 +126,9 @@ npm run dev                  # node --watch 热重载
   子导航轨道、表单内嵌块 ×2）已在门禁里登记豁免额度——那是在豁免具体现场（额度外的第 N 处
   照样报错），不是允许新写卡片面。
 - **间距**：不设 `--mcs-space-*`，统一走 Tailwind 默认 4px 刻度（`--spacing` 0.25rem）；
-  结构间距必须 4px 倍数，组件内微节奏（2px 档）须在 PR 说明理由。
+  结构间距走 4px 刻度，半档（`.5` 后缀，如 `gap-1.5`/`px-2.5`/`mt-0.5`）是全站常态、
+  基座自己就在用（`ui/button` 的 `px-2.5`、`ui/input` 的 `py-1.5`），允许直接写；
+  要避免的是**非刻度任意值**（`size-5.5`、`max-w-35` 这类），它绕过刻度体系、无人能推其来处。
   容器档位固定：大面板 `p-6` / 标准卡 `p-4` / 紧凑卡 `p-3` / 横向卡 `px-4 py-3` /
   密集条 `px-3 py-2` / 内嵌块 `p-2`；语义告警条一律用 `components/mcs/notice-banner.tsx`
   （`px-2.5 py-1.5`），多行告警卡用 `p-3`。内联 `style` 的 `width`/`height` 必须是数值或含单位
@@ -122,17 +137,39 @@ npm run dev                  # node --watch 热重载
   调用点各自补偿基座高度（历史问题：`ui/input` 基座 32px 时，各页用 `h-8`/`h-9` 覆盖去凑
   40px，形成满屏随手写的档位）。四档固定：
   标准档 `h-10`（40px）＝表单控件与含输入的筛选栏（输入 / 下拉 / 日期框 / 同行按钮全部同档）；
-  紧凑档 `h-7`（28px）＝无输入的密集操作条（页头操作、批量条）、列表行内操作、分页、tabs；
-  行内小档 `h-6`（24px）＝行内小按钮（`h-6 px-2 text-mcs-2xs` 一族）；
+  紧凑档 `h-7`（28px）＝无输入的密集操作条（页头操作、批量条）、列表行内操作、分页、tabs
+  （tabs 是**目标态**：现网 4 个调用点仍各写 h-7/h-8/h-10，基座 `group-data-horizontal/tabs:h-8`
+  是上游遗留的 32px，收口属设计问题，未做）；
+  行内小档 `h-6`（24px）＝行内小按钮（两族：`size="xs"` 基座 = `h-6 px-2` + `text-xs`；
+  `size="sm"` + 覆盖 `h-6` = 字号仍 2xs 一族——换族会把 10px 变 12px，别混）；
   大档 `h-11`（44px）＝主 CTA（`lg` / `icon-lg`）。
   基座是 `ui/input` / `ui/input-group` / `ui/select`（默认档）/ `ui/button`（`default`/`lg`/`icon`/`icon-lg`），
-  调用点**不再自备高度类**（`size="sm"` 等紧凑档是另一档，属刻意保留，不是不一致）。
+  `size` 变体（`sm`/`xs`/`icon-sm`）是基座的一部分、按语境选档（`sm` 是显式 size 里的主力档，
+  约 default 的两倍）——禁止的是**用 `h-*` 覆盖基座已给的档**，不是不许用紧凑档。
+  注意 `ui/input` / `ui/textarea` 尚无 size 变体，紧凑语境允许调用点写 `h-7`（世界页属性/规则
+  面板即此形态）；tabs 行另有上游遗留的基座 `h-8`（32px，四档之外），收口属设计问题。
   两条隐含约束：①紧凑档只缩高度、字号仍随基座；②`ui/input` 与 `ui/textarea` 基座声明
   `text-base md:text-sm`（`text-base` 受门禁第 27 条额度约束），产物里带变体的规则排在后面，
   会**盖掉调用点未加变体的字号类**——要在调用点显式改字号必须写 `md:` 同档，否则代码写 12px、
   桌面端实际渲染 14px（类型与事实不符）。
+- **响应式切档**：按**容器宽**判，不按视口断点——侧栏可折叠（56px ↔ 208px）、`md`(768) 以下
+  退化成抽屉（不占布局宽）、主从页还会被右层面板再借走 420px，同一个视口宽下「这一块到底
+  有多宽」能差出六百多 px，视口断点在这些场景原理上判不准。按「CSS 能否独立解决」二分：
+  纯展示差异（栅格列数 / 分栏 / 页头堆叠）→ 页面根加 `@container`，把 `sm:/md:/lg:/xl:` 换成
+  容器档（纯 CSS，不过 JS、不重渲染）；必须换组件行为的（内联↔Sheet / 全列↔裁列 /
+  双栏↔全屏）→ `src/hooks/use-container-width.ts`（ResizeObserver 测实宽）。
+  **两套档位同名不同值，选错前缀就是成倍误判**：视口 `md:` 48rem/768px ← 侧栏/抽屉分界，
+  容器 `@md:` 28rem/448px（容器档取 Tailwind v4 默认值 `@xs` 320 → `@5xl` 1024，本仓未覆盖；
+  视口档仅追加了 `xs`）。
+  阈值取**实测最小可用宽**反推，不拍脑袋凑档位；改任一侧都要连同理由一起改。
+  **jsdom 不评估容器查询 ⇒ 容器阈值必须由 e2e 在对应视口宽上锁住**（jsdom 量不到真实几何）。
+  `use-media-query.ts` 只留 `BREAKPOINT_BELOW_SM`（玩家表 <640 整表转卡片）——卡片态把一行
+  摊成「姓名（与徽标同行）+ 摘要行」两行，比紧凑 4 列表更适合窄屏阅读，故阈值**刻意取视口**而非
+  表格区实宽（抽屉侧栏下 512–639 视口的内容宽其实放得下紧凑表，仍选卡片态）：这是有理由的
+  例外，不是漏改。
 - **页面结构**：AppShell 主页面有且仅有一个 `components/mcs/page-header.tsx`（`PageHeader`），
-  标题与描述只在页头声明；同屏标题字号档 ≤3（页头 `xl` + 区块/卡片标题 `lg` + 数据卡标签 `sm` + 显式档）。
+  标题与描述只在页头声明；同屏标题最多 3 个不同字号档（页头 `xl`／区块与卡片标题 `lg`／
+  数据卡标签 `sm`；页面自加的标题档也计入总数）。
   卡片标题配方（唯一事实源是 `components/mcs/card.tsx` 基座，调用点不再另写一份）：
   区块/卡片标题 = `lg` + `font-semibold` + `text-mcs-text-default`；数据卡标签 = `sm` + `font-medium`
   - `text-mcs-text-muted`（标签必须弱于同卡数值）。
@@ -141,7 +178,8 @@ npm run dev                  # node --watch 热重载
   local 10 / overlay 40 / modal 50 / dropdown 60 / tooltip 70 / toast 80；
   下拉必须高于弹窗——Radix 弹层挂在 body 末尾，弹窗内的 Select 要盖过遮罩才可点）。
   全屏覆盖层（`modal` 档）只出自 `ui/sheet` / `ui/dialog`，禁在 feature/layout 里裸搭
-  全屏容器或 `aside`（门禁第 24 条静态拦截）。
+  全屏容器或 `aside`（门禁第 24 条静态拦截；判定面＝**同一行**同时出现 modal 档与
+  `fixed`/`inset-0`/`<aside` 的组合——跨行与不带 z-modal 的裸 `aside` 看不见，宁漏不误报）。
 - **玻璃预算**：同屏 ≤2 层——常驻 1 处（顶栏 `glass-chrome`）+ 覆盖层 1 处（确认弹窗 `glass-overlay`）；
   门禁按「全站各 1 处」的静态口径校验（同屏无法静态判定），见 `check-design-tokens.mjs` 第 17 条；
   侧栏/通知抽屉/toast 一律实底（玻璃内含滚动容器时 backdrop 每次重绘都要重算模糊）。
@@ -166,6 +204,8 @@ npm run dev                  # node --watch 热重载
   命令行为上的差异；改动不得破坏对新旧版本的兼容。
 - **注释边界**：注释只写「代码无法直观体现的设计意图、隐含约束、特殊边界、选型原因」；
   禁止写入迭代过程、方案对比、调试记录；单行优先，不复述代码行为。
+  **实测数据与反例是允许的**（本仓注释的主流：`实测 812 vs 782 的假红`、`内联 420px 下每格仅 ~54px`
+  ——它们是「为什么是这个值」的依据）；禁止的是过程叙事（改了几版、谁提出、走了哪些弯路）。
 - **代码格式**：格式化的唯一事实源是根目录 `biome.jsonc`（Biome formatter，**只做 formatter**——
   lint 归 oxlint，三个包同一把）。改完代码跑 `npm run format`（根目录）即与门禁一致；
   `npm run format:check` 在 CI 与 `local-check.sh` 里跑。范围＝全仓 .ts/.tsx/.js/.mjs + 配置文件，
@@ -174,6 +214,8 @@ npm run dev                  # node --watch 热重载
   行宽 100——不要手工对抗格式化结果，也不要为「更好看」手写折行。
 - **最小改动**：遵循既有代码模式与风格，不夹带与目标无关的重构；
   修复缺陷时先验证问题存在性，局部缺陷打最小补丁，设计问题重构根因。
+  二分判据：**同类现场 ≥3 处、或根因在基座/门禁/文档口径上 → 按设计问题走根因**；
+  单点且不复发 → 最小补丁。走根因路径时必须把同类现场一并收掉，或登记为待办。
 - **文件存放纪律**：先判文件性质再定落点——源码/公开文档进包与 `docs/`（要过门禁、CI、
   独立审查，且**新文件入库须 owner 批准**）；开发意图类（清单/审查报告/决策记录）进本机私有的
   `.ai/`（规范见 `.ai/README.md`）；探针、一次性脚本、临时夹具与临时截图**唯一落点是** **`.ai/temp/`**
