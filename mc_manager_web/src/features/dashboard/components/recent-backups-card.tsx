@@ -60,7 +60,10 @@ export function RecentBackupsCard() {
   }
 
   return (
-    <Card className="animate-mcs-fade-up mcs-delay-6 mcs-edge-top relative flex shrink-0 flex-col gap-3 p-4">
+    <Card
+      size="default"
+      className="animate-mcs-fade-up mcs-delay-6 mcs-edge-top relative flex shrink-0 flex-col gap-3"
+    >
       <CardHeader className="justify-between gap-2">
         <CardTitle>最近备份</CardTitle>
         <button

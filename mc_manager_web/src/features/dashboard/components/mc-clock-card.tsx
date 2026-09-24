@@ -141,7 +141,10 @@ export function McClockCard() {
   })
 
   return (
-    <Card className="animate-mcs-fade-up mcs-delay-5 mcs-edge-top relative flex shrink-0 flex-col p-4">
+    <Card
+      size="default"
+      className="animate-mcs-fade-up mcs-delay-5 mcs-edge-top relative flex shrink-0 flex-col"
+    >
       <CardHeader className="justify-between gap-2">
         <CardTitle>MC 时钟 · 世界控制</CardTitle>
         <span className="flex size-6 items-center justify-center rounded-full border border-mcs-border-muted text-mcs-text-muted">

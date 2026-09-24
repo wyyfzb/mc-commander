@@ -300,7 +300,8 @@ export function LoginPage() {
       {/* 登录卡片（浮起面：卡阴影 + 顶部受光线；stagger 入场跟随品牌区） */}
       <Card
         as="main"
-        className="animate-mcs-fade-up mcs-delay-1 mcs-edge-top relative z-(--mcs-z-local) w-full max-w-md p-6"
+        size="panel"
+        className="animate-mcs-fade-up mcs-delay-1 mcs-edge-top relative z-(--mcs-z-local) w-full max-w-md"
       >
         <div className="mb-5">
           <h2 className="text-mcs-lg font-semibold text-mcs-text-default">{heading}</h2>

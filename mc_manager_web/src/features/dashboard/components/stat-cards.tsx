@@ -43,7 +43,10 @@ function StatCard({
   children: React.ReactNode
 }) {
   return (
-    <Card className={cn('mcs-edge-top relative flex min-w-0 flex-1 flex-col gap-2 p-3', className)}>
+    <Card
+      size="compact"
+      className={cn('mcs-edge-top relative flex min-w-0 flex-1 flex-col gap-2', className)}
+    >
       <CardHeader className="justify-between gap-2">
         <CardTitle as="h2" variant="label">
           {title}
@@ -86,7 +89,8 @@ export function BigStatCards({
   if (isLoading) {
     return (
       <Card
-        className="animate-mcs-fade-up mcs-delay-2 mcs-edge-top relative flex min-w-0 flex-col gap-2 p-3"
+        size="compact"
+        className="animate-mcs-fade-up mcs-delay-2 mcs-edge-top relative flex min-w-0 flex-col gap-2"
         aria-label="统计加载中"
         role="status"
       >

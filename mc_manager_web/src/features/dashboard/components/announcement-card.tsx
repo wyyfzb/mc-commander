@@ -123,7 +123,10 @@ export function AnnouncementCard() {
   }
 
   return (
-    <Card className="animate-mcs-fade-up mcs-delay-6 mcs-edge-top relative flex shrink-0 flex-col p-4">
+    <Card
+      size="default"
+      className="animate-mcs-fade-up mcs-delay-6 mcs-edge-top relative flex shrink-0 flex-col"
+    >
       <CardHeader className="mb-2 gap-2">
         <CardTitle>公告发送</CardTitle>
         <Button

@@ -148,4 +148,28 @@ describe('Card 子块', () => {
     const el = container.querySelector('div') as HTMLElement
     expect([...el.classList].sort()).toEqual(['px-4', 'py-2'])
   })
+  it('size 缺省时不给内距（基座代劳会把全站既有卡推离现状）', () => {
+    const { container } = render(<Card>x</Card>)
+    const el = container.querySelector('section') as HTMLElement
+    expect([...el.classList].some((c) => /(^|:)p-\d/.test(c))).toBe(false)
+    expect(el.classList.contains('shadow-mcs-card')).toBe(true)
+  })
+
+  it('size 取档＝CARD_SIZE_CLASSES 的档；className 的 p-* 仍覆盖它', () => {
+    const { container } = render(
+      <div>
+        <Card size="compact" data-testid="a">
+          x
+        </Card>
+        <Card size="panel" className="p-2" data-testid="b">
+          x
+        </Card>
+      </div>,
+    )
+    const a = container.querySelector('[data-testid="a"]') as HTMLElement
+    expect(a.classList.contains('p-3')).toBe(true)
+    const b = container.querySelector('[data-testid="b"]') as HTMLElement
+    expect(b.classList.contains('p-2')).toBe(true)
+    expect(b.classList.contains('p-6')).toBe(false)
+  })
 })

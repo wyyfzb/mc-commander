@@ -249,7 +249,10 @@ export function CommandInput() {
   }
 
   return (
-    <Card className="animate-mcs-fade-up mcs-delay-5 mcs-edge-top relative flex shrink-0 flex-col gap-2 p-3">
+    <Card
+      size="compact"
+      className="animate-mcs-fade-up mcs-delay-5 mcs-edge-top relative flex shrink-0 flex-col gap-2"
+    >
       {/* RCON 降级横幅：命令已发送但响应不可见 */}
       {isRunning && !isRconConnected && (
         <NoticeBanner variant="warning" icon={ShieldAlert}>

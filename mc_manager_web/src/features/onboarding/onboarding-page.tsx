@@ -239,7 +239,7 @@ export function OnboardingPage() {
 
               {/* 部署指南（随选择切换） */}
               {mode !== 'already' && (
-                <Card as="div" className="flex flex-col gap-3 p-4">
+                <Card as="div" size="default" className="flex flex-col gap-3">
                   {mode === 'windows' && (
                     <>
                       <div className="flex items-center gap-2">
@@ -306,7 +306,7 @@ export function OnboardingPage() {
         />
 
         {/* ── 连接成功后的三步（静态说明，非分步向导）：放在表单之后，不把主 CTA 往下推 ── */}
-        <Card as="div" className="mt-4 flex flex-col gap-2 p-3">
+        <Card as="div" size="compact" className="mt-4 flex flex-col gap-2">
           <CardTitle as="h2">连接成功后的三步</CardTitle>
           <ol
             aria-label="连接成功后的三步"
