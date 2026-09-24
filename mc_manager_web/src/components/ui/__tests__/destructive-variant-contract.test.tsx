@@ -31,7 +31,6 @@ const SHALLOW_CALL_SITES = [
   'src/features/players/components/batch-bar.tsx',
   'src/features/players/components/overview-actions.tsx',
   'src/features/webhooks/webhook-page.tsx',
-  'src/layouts/degradation-banners.tsx',
 ]
 
 describe('危险按钮变体（唯一声明源）', () => {
@@ -79,5 +78,13 @@ describe('危险按钮变体（唯一声明源）', () => {
     const code = readFileSync(join(WEB_DIR, relPath), 'utf-8')
     expect(code).toContain('variant="destructive-outline"')
     expect(WEAK_ERROR_BORDER.test(code), `${relPath} 仍手写弱档危险描边`).toBe(false)
+  })
+
+  it('降级横幅走 NoticeBannerAction，未回退手写危险描边', () => {
+    // 它不再直接写变体名：横幅动作的配方已收进 notice-banner 基座，同屏的页级
+    // 失败横幅与它必须长出同一个按钮，故这里断言的是「用了那个唯一入口」
+    const code = readFileSync(join(WEB_DIR, 'src/layouts/degradation-banners.tsx'), 'utf-8')
+    expect(code).toContain('<NoticeBannerAction')
+    expect(WEAK_ERROR_BORDER.test(code), '降级横幅仍手写弱档危险描边').toBe(false)
   })
 })

@@ -87,4 +87,16 @@ describe('PageHeader', () => {
     expect(wrapper?.className).toContain('flex-col')
     expect(wrapper?.className).not.toContain('@xs:flex-row')
   })
+
+  it('banner 是 header 的兄弟节点而非子级', () => {
+    // 调用点用 className 自己控制页头横竖排（插件页 flex-col @xl:flex-row）；
+    // 往 header 里插一层会让这些 className 作用到错误的节点上，窄屏页头排布随即走样
+    const { container } = render(
+      <PageHeader title="仪表盘" banner={<div data-testid="banner">告警</div>} />,
+    )
+    const header = container.querySelector('header')
+    expect(header).not.toBeNull()
+    expect(header?.querySelector('[data-testid="banner"]')).toBeNull()
+    expect(screen.getByTestId('banner').nextElementSibling).toBe(header)
+  })
 })

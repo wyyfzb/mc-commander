@@ -10,10 +10,9 @@ import { AnnouncementCard } from './components/announcement-card'
 import { useInstanceStatus, useSystemStats, queryKeys } from '@/api/queries'
 import { useServerStore } from '@/stores/server'
 import { InstanceRequiredState } from '@/features/instances/components/instance-required-state'
-import { NoticeBanner } from '@/components/mcs/notice-banner'
+import { NoticeBanner, NoticeBannerAction } from '@/components/mcs/notice-banner'
 import { PageHeader } from '@/components/mcs/page-header'
 import { queryFailed } from '@/lib/query-phase'
-import { Button } from '@/components/ui/button'
 
 /**
  * 仪表盘驾驶舱
@@ -79,26 +78,27 @@ export function DashboardPage() {
        视口断点（lg/xl）在这里原理上判不准：1023px 视口内容宽已有 783px，
        却因差 1px 未达 lg 而把三张卡硬塞成一列、每张拉到 783px 宽 */
     <div className="@container flex h-full flex-col gap-4 overflow-y-auto p-4">
-      <PageHeader title="仪表盘" description="实例运行状态 · 终端 · 快捷操作" inlineDescription />
-
-      {/* 查询失败横幅（避免卡片静默显示 0 / 留在「暂无数据」被误读为真实状态） */}
-      {failedSources.length > 0 && !statusLoading && (
-        <NoticeBanner variant="error" icon={AlertTriangle}>
-          <span className="flex items-center gap-2">
-            <b>{failedSources.join('与')}获取失败</b> · 相关数据可能缺失或已过期
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 px-1.5 text-mcs-2xs text-mcs-error-fg"
-              onClick={retryFailedQueries}
-              disabled={retryInFlight}
-            >
-              <RefreshCw className="size-3" aria-hidden />
-              重试
-            </Button>
-          </span>
-        </NoticeBanner>
-      )}
+      <PageHeader
+        title="仪表盘"
+        description="实例运行状态 · 终端 · 快捷操作"
+        inlineDescription
+        banner={
+          failedSources.length > 0 && !statusLoading ? (
+            <NoticeBanner variant="error" icon={AlertTriangle}>
+              {/* 文案成块、动作靠右：文本折行时整句换行不产生孤字，按钮也不被挤进文本流 */}
+              <span className="flex items-center justify-between gap-3">
+                <span className="min-w-0">
+                  <b>{failedSources.join('与')}获取失败</b> · 相关数据可能缺失或已过期
+                </span>
+                <NoticeBannerAction onClick={retryFailedQueries} disabled={retryInFlight}>
+                  <RefreshCw className="size-3" aria-hidden />
+                  重试
+                </NoticeBannerAction>
+              </span>
+            </NoticeBanner>
+          ) : undefined
+        }
+      />
 
       {/* 顶部三卡：在线玩家 / 资源使用 / 实例运行信息
           阈值按容器**内容盒**计（不含页面 p-4 与滚动条）：
