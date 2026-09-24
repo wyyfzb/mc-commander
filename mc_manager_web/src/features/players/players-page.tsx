@@ -11,8 +11,10 @@ import { useSearchParams } from 'react-router'
 import { toast } from 'sonner'
 import { AlertTriangle } from 'lucide-react'
 import { getFriendlyErrorText } from '@/api/errors'
+import { queryPhase } from '@/lib/query-phase'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/mcs/empty-state'
+import { StaleQueryNotice } from '@/components/mcs/data-states'
 import { InstanceRequiredState } from '@/features/instances/components/instance-required-state'
 import { PageHeader } from '@/components/mcs/page-header'
 import {
@@ -205,6 +207,8 @@ export function PlayersPage() {
 
   const isRconConnected = statusQuery.data?.isRconConnected ?? false
   const mcVersion = statusQuery.data?.mcVersion ?? ''
+  /** 列表相位：有旧值可留时不把一次轮询抖动呈现成整屏故障 */
+  const playersPhase = queryPhase(playersQuery)
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4 p-4">
@@ -228,8 +232,17 @@ export function PlayersPage() {
               onAction={handleAction}
             />
           )}
-          {/* 列表错误态（避免错误被呈现为「暂无在线玩家」的误导空态） */}
-          {playersQuery.isError && !playersQuery.isLoading ? (
+          {/* 错误态只在「无旧值可留」时整块替换主体（避免错误被呈现为「暂无在线玩家」的
+              误导空态）；已落定过一轮则保留表格 + 非阻断告警，否则 30s 轮询的一次抖动
+              会把用户正在看的数据、滚动位与勾选态一起抹掉 */}
+          {playersPhase === 'stale' && (
+            <StaleQueryNotice
+              className="mb-2"
+              error={playersQuery.error}
+              onRetry={() => void playersQuery.refetch()}
+            />
+          )}
+          {playersPhase === 'failed' ? (
             <EmptyState
               icon={AlertTriangle}
               title="加载失败"

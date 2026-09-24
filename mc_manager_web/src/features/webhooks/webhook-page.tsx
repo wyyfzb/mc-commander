@@ -32,6 +32,7 @@ import {
 } from '@/api/webhooks'
 import { queryKeys } from '@/api/queries'
 import { getFriendlyErrorText } from '@/api/errors'
+import { queryPhase } from '@/lib/query-phase'
 import type { Webhook, WebhookCreatePayload, WebhookDelivery } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { LoadingButton } from '@/components/mcs/loading-button'
@@ -45,6 +46,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { PageHeader } from '@/components/mcs/page-header'
 import { EmptyState } from '@/components/mcs/empty-state'
+import { StaleQueryNotice } from '@/components/mcs/data-states'
 import {
   Dialog,
   DialogContent,
@@ -193,16 +195,14 @@ export default function WebhookPage() {
     form.isEnabled !== initialForm.isEnabled ||
     JSON.stringify(form.events) !== JSON.stringify(initialForm.events)
 
-  const {
-    data: webhooksData,
-    isLoading,
-    error,
-    refetch,
-  } = useQuery({
+  const webhooksQuery = useQuery({
     queryKey: queryKeys.webhooks(),
     queryFn: ({ signal }) => apiGetWebhooks(config, 1, 100, signal),
     enabled: config.status === 'ready',
   })
+  const { data: webhooksData, isLoading, error, refetch } = webhooksQuery
+  /** 列表相位：有旧值可留时不把一次轮询抖动呈现成整屏故障 */
+  const webhooksPhase = queryPhase(webhooksQuery)
   const {
     data: eventTypes,
     isError: eventTypesError,
@@ -407,6 +407,13 @@ export default function WebhookPage() {
 
       {/* ── 列表容器 ── */}
       <Card as="div" className="min-h-0 flex-1 overflow-hidden">
+        {webhooksPhase === 'stale' && (
+          <StaleQueryNotice
+            className="m-2"
+            error={webhooksQuery.error}
+            onRetry={() => void webhooksQuery.refetch()}
+          />
+        )}
         {isLoading ? (
           /* 骨架行 */
           <div
@@ -428,7 +435,7 @@ export default function WebhookPage() {
               </div>
             ))}
           </div>
-        ) : error != null ? (
+        ) : webhooksPhase === 'failed' ? (
           /* 加载失败态（优先于空态：避免错误信息与「暂无 Webhook」混排误导） */
           <EmptyState
             icon={AlertTriangle}

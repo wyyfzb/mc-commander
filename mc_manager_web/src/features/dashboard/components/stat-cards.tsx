@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { useNavigate } from 'react-router'
 import { ArrowRight, CheckCircle2, History, MoonStar, Play, Save } from 'lucide-react'
 import { StatusPill } from '@/components/mcs/status-pill'
+import { ListSkeleton } from '@/components/mcs/data-states'
 import { Card, CardHeader, CardTitle } from '@/components/mcs/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useServerStore } from '@/stores/server'
@@ -144,6 +145,7 @@ export function BigStatCards({
             )
           }
           percent={cpu}
+          barColor={cpu != null ? loadBarColor(cpu) : undefined}
         />
         <ResourceRow
           label="内存"
@@ -170,6 +172,7 @@ export function BigStatCards({
             )
           }
           percent={memPct}
+          barColor={memPct != null ? loadBarColor(memPct) : undefined}
         />
         <ResourceRow
           label="磁盘"
@@ -196,7 +199,7 @@ export function BigStatCards({
             )
           }
           percent={primary?.percent ?? null}
-          barColor={primary ? diskBarColor(primary.percent) : undefined}
+          barColor={primary ? loadBarColor(primary.percent) : undefined}
         />
       </div>
     </StatCard>
@@ -254,7 +257,7 @@ function ResourceRow({
 /** 每列最多显示玩家数（Flutter 版 maxDisplay=3 同源），超出以 +N 汇总 */
 const MAX_COLUMN_ROWS = 3
 
-export function PlayersCard() {
+export function PlayersCard({ isLoading = false }: { isLoading?: boolean }) {
   const status = useServerStore((s) => s.status)
   const navigate = useNavigate()
   const isRunning = status?.isRunning ?? false
@@ -328,7 +331,11 @@ export function PlayersCard() {
     [sleepingNames, awakeNames],
   )
 
-  const body = !isRunning ? (
+  const body = isLoading ? (
+    // 首帧未落定不得抢答：此前 status 未到即按 isRunning=false 渲染
+    // 「实例已停止，暂无玩家数据」，把「还不知道」说成了一条确定结论
+    <ListSkeleton rows={3} />
+  ) : !isRunning ? (
     <p className="py-1 text-mcs-xs text-mcs-text-muted">实例已停止，暂无玩家数据</p>
   ) : names.length === 0 ? (
     <div className="flex items-center gap-2 py-1">
@@ -411,7 +418,7 @@ export function PlayersCard() {
 }
 
 // ── 顶部卡：实例信息 ────────────────────────────────────────
-export function RuntimeInfoCard() {
+export function RuntimeInfoCard({ isLoading = false }: { isLoading?: boolean }) {
   const status = useServerStore((s) => s.status)
   const isRunning = status?.isRunning ?? false
 
@@ -460,43 +467,74 @@ export function RuntimeInfoCard() {
         ) : undefined
       }
     >
-      <div className="flex items-center justify-between gap-2">
-        {/* 停止态下数值为 —（本次会话已结束），label 同步改「上次」避免语义误导 */}
-        <p className="text-mcs-xs text-mcs-text-muted">
-          {isRunning ? '本次运行时长' : '上次运行时长'}
-        </p>
-        {/* 本卡关键数字：与在线玩家 / 资源使用两卡同为顶排卡级大数（明细行留在 xs） */}
-        <p
-          className={cn(
-            'mcs-num text-mcs-display leading-none',
-            !isRunning && 'text-mcs-text-muted',
-          )}
-        >
-          {formatUptime(isRunning ? uptime : null)}
-        </p>
-      </div>
-      <div className="flex flex-col gap-1.5 border-t border-mcs-border-muted pt-2">
-        {infoLines.map((line) => (
-          <div
-            key={line.label}
-            className="flex items-center justify-between text-mcs-xs"
-            title={line.tooltip}
-          >
-            <span className="flex items-center gap-1.5 text-mcs-text-muted">
-              <line.icon className="size-3 text-mcs-text-muted" aria-hidden />
-              {line.label}
-            </span>
-            <span className="tnum font-medium">{line.value}</span>
+      {isLoading ? (
+        // 首帧未落定时本卡会给出「累计运行 0m」这类**肯定值**（totalUptime 在
+        // isRunning=false 下取 0），把「还不知道」说成「跑了 0 分钟」——故整块走骨架
+        <div className="flex flex-col gap-3" aria-hidden>
+          <div className="flex items-center justify-between gap-2">
+            <Skeleton className="h-3.5 w-20" />
+            <Skeleton className="h-7 w-24" />
           </div>
-        ))}
-      </div>
+          <div className="flex flex-col gap-1.5 border-t border-mcs-border-muted pt-2">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="flex items-center justify-between">
+                <Skeleton className="h-3 w-16" />
+                <Skeleton className="h-3 w-20" />
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="flex items-center justify-between gap-2">
+            {/* 停止态下数值为 —（本次会话已结束），label 同步改「上次」避免语义误导 */}
+            <p className="text-mcs-xs text-mcs-text-muted">
+              {isRunning ? '本次运行时长' : '上次运行时长'}
+            </p>
+            {/* 本卡关键数字：与在线玩家 / 资源使用两卡同为顶排卡级大数（明细行留在 xs） */}
+            <p
+              className={cn(
+                'mcs-num text-mcs-display leading-none',
+                !isRunning && 'text-mcs-text-muted',
+              )}
+            >
+              {formatUptime(isRunning ? uptime : null)}
+            </p>
+          </div>
+          <div className="flex flex-col gap-1.5 border-t border-mcs-border-muted pt-2">
+            {infoLines.map((line) => (
+              <div
+                key={line.label}
+                className="flex items-center justify-between text-mcs-xs"
+                title={line.tooltip}
+              >
+                <span className="flex items-center gap-1.5 text-mcs-text-muted">
+                  <line.icon className="size-3 text-mcs-text-muted" aria-hidden />
+                  {line.label}
+                </span>
+                <span className="tnum font-medium">{line.value}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </StatCard>
   )
 }
 
 /** 磁盘使用率色阶（ResourceRow 磁盘行用）：正常 / 警告(≥85%) / 错误(≥95%) */
-function diskBarColor(percent: number): string {
-  if (percent >= 95) return 'var(--mcs-error-fg)'
-  if (percent >= 85) return 'var(--mcs-warning-fg)'
+/**
+ * 三行资源条（CPU / 内存 / 磁盘）共用的阈值阶梯：≥95 红 / ≥85 黄 / 其余绿。
+ * 同卡三行是同一套视觉语言，阶梯必须一致——此前只有磁盘行接它，CPU 与内存行恒绿，
+ * 于是「97% 的 CPU」和「12% 的 CPU」长得一模一样（违反 P1 的阈值对齐）。
+ * 刻意不复用告警系统的 80：那条是**进程** CPU 单核口径（见 lib/notifications.ts
+ * 的 DEFAULT_ALERT_THRESHOLDS 声明），与本卡的整机口径不同源、不可互为后备。
+ */
+const LOAD_WARN_PERCENT = 85
+const LOAD_DANGER_PERCENT = 95
+
+function loadBarColor(percent: number): string {
+  if (percent >= LOAD_DANGER_PERCENT) return 'var(--mcs-error-fg)'
+  if (percent >= LOAD_WARN_PERCENT) return 'var(--mcs-warning-fg)'
   return 'var(--mcs-success-fg)'
 }

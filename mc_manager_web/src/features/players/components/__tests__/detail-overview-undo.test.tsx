@@ -78,6 +78,9 @@ function renderOverview(player: Player) {
         player={player}
         isRconConnected={true}
         bans={[]}
+        bansPhase="ready"
+        bansError={null}
+        onRetryBans={() => {}}
         onAction={mockAction}
         onOpenBanDialog={() => {}}
       />

@@ -13,6 +13,8 @@ import { toast } from 'sonner'
 import { getFriendlyErrorText } from '@/api/errors'
 import { formatBanRemaining } from '@/lib/mc-ban'
 import { formatRelativeTime } from '@/lib/format'
+import type { QueryPhase } from '@/lib/query-phase'
+import { StaleQueryNotice } from '@/components/mcs/data-states'
 import type { BanRecord, Player } from '@/api/types'
 import type { PlayerActionRequest } from '../mutations'
 import {
@@ -31,6 +33,13 @@ interface OverviewTabProps {
   player: Player
   isRconConnected: boolean
   bans: BanRecord[]
+  /**
+   * 封禁列表的查询相位：取不到数据时**不得**渲染成「无封禁记录」——
+   * 那会把一次请求故障伪装成「这个玩家干净」的安全结论。
+   */
+  bansPhase: QueryPhase
+  bansError: unknown
+  onRetryBans: () => void
   onAction: (req: PlayerActionRequest) => Promise<void>
   onOpenBanDialog: (player: Player) => void
 }
@@ -39,6 +48,9 @@ export function OverviewTab({
   player,
   isRconConnected,
   bans,
+  bansPhase,
+  bansError,
+  onRetryBans,
   onAction,
   onOpenBanDialog,
 }: OverviewTabProps) {
@@ -193,7 +205,19 @@ export function OverviewTab({
 
       {/* ── 封禁记录区（该玩家名+IP 匹配；生效中可解封）── */}
       <Section title="封禁记录">
-        {relatedBans.length === 0 ? (
+        {bansPhase === 'stale' && (
+          <StaleQueryNotice className="mb-2" error={bansError} onRetry={onRetryBans} />
+        )}
+        {bansPhase === 'failed' ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-mcs-xs text-mcs-error-fg">
+              封禁记录加载失败，不能据此判定该玩家无封禁
+            </p>
+            <Button size="xs" variant="outline" onClick={onRetryBans}>
+              重试
+            </Button>
+          </div>
+        ) : relatedBans.length === 0 ? (
           <p className="text-mcs-xs text-mcs-text-muted">无封禁记录</p>
         ) : (
           <div className="flex flex-col gap-2">

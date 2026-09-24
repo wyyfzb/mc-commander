@@ -9,6 +9,7 @@ import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
+import { queryPhase } from '@/lib/query-phase'
 import type { Player } from '@/api/types'
 import { DETAIL_TAB_LABELS, usePlayersUiStore, type PlayerDetailTab } from '../store'
 import { usePlayerBans, usePlayerDetails } from '../queries'
@@ -191,6 +192,9 @@ export function PlayerDetailPanel({
             player={effectivePlayer}
             isRconConnected={isRconConnected}
             bans={bans}
+            bansPhase={queryPhase(bansQuery)}
+            bansError={bansQuery.error}
+            onRetryBans={() => void bansQuery.refetch()}
             onAction={onAction}
             onOpenBanDialog={onOpenBanDialog}
           />

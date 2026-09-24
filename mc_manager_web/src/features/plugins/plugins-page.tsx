@@ -28,6 +28,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { getFriendlyErrorText } from '@/api/errors'
+import { queryPhase } from '@/lib/query-phase'
 import type { PluginInfo } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { SearchInput } from '@/components/mcs/search-input'
@@ -35,6 +36,7 @@ import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { EmptyState } from '@/components/mcs/empty-state'
+import { StaleQueryNotice } from '@/components/mcs/data-states'
 import { Card } from '@/components/mcs/card'
 import { InfoHint } from '@/components/mcs/info-hint'
 import { InstanceRequiredState } from '@/features/instances/components/instance-required-state'
@@ -57,6 +59,8 @@ export function PluginsPage() {
   const instanceId = useServerStore((s) => s.instanceId)
 
   const pluginsQuery = usePlugins(instanceId)
+  /** 列表相位：有旧值可留时不把一次轮询抖动呈现成整屏故障 */
+  const pluginsPhase = queryPhase(pluginsQuery)
   const toggleMutation = useTogglePlugin(instanceId)
   const deleteMutation = useDeletePlugin(instanceId)
 
@@ -418,6 +422,13 @@ export function PluginsPage() {
       )}
 
       {/* ── 内容区 ── */}
+      {pluginsPhase === 'stale' && (
+        <StaleQueryNotice
+          className="mb-2"
+          error={pluginsQuery.error}
+          onRetry={() => void pluginsQuery.refetch()}
+        />
+      )}
       {pluginsQuery.isPending ? (
         <div className="space-y-2" data-testid="plugin-skeletons" aria-label="加载插件中">
           {Array.from({ length: 3 }).map((_, i) => (
@@ -433,7 +444,7 @@ export function PluginsPage() {
             </div>
           ))}
         </div>
-      ) : pluginsQuery.isError ? (
+      ) : pluginsPhase === 'failed' ? (
         <div className="min-h-0 flex-1">
           <EmptyState
             icon={AlertTriangle}

@@ -22,6 +22,7 @@ import { handlers, mockOverview } from '@/test/mocks/handlers'
 import { authCapabilitiesResponseSchema } from '@mc-commander/schemas'
 import { useAuthStore, SESSION_EXPIRED_EVENT } from '@/stores/auth'
 import { useConnectionStore } from '@/stores/connection'
+import { useServerStore } from '@/stores/server'
 import { ConnectionForm } from '../connection-form'
 
 const server = setupServer(...handlers)
@@ -138,6 +139,8 @@ beforeEach(() => {
   useConnectionStore.setState({ baseUrl: '', apiKey: '', status: 'unconfigured' })
   // 会话是第二条款凭据：逐个用例显式设置，避免上一例的会话泄漏（内存态不随 localStorage.clear 复位）
   useAuthStore.setState({ session: null })
+  // 实时通道是在线判据：不复位会把上一例的「已连接」漏进本例
+  useServerStore.setState({ socketConnected: false })
 })
 
 /** 造一个未过期的登录会话（结构占位，非真实凭据）；不写签发面板 = 旧会话口径（按适用处理） */
@@ -189,16 +192,26 @@ describe('ConnectionForm 渲染', () => {
     ).toBeInTheDocument()
   })
 
-  it('settings variant：状态行跟随 store（ready=已连接 / 否则未连接）', () => {
+  it('settings variant：状态行三档——凭据存在不等于已连接', () => {
     useConnectionStore.setState({
       baseUrl: 'https://192.168.1.100:25566',
       apiKey: 'k',
       status: 'ready',
     })
     renderForm({ variant: 'settings' })
+    // store 的 ready 只表示凭据在（服务端整体不可达时同样为 ready），
+    // 所以它只能换来「凭据已配置」，换不来「已连接」
+    expect(screen.getByText('凭据已配置')).toBeInTheDocument()
+    expect(screen.queryByText('已连接')).not.toBeInTheDocument()
+
+    // 实时通道在线才是已连接（与顶栏状态点同源）
+    act(() => {
+      useServerStore.setState({ socketConnected: true })
+    })
     expect(screen.getByText('已连接')).toBeInTheDocument()
 
     act(() => {
+      useServerStore.setState({ socketConnected: false })
       useConnectionStore.setState({ status: 'unconfigured' })
     })
     expect(screen.getByText('未连接')).toBeInTheDocument()

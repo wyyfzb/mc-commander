@@ -35,6 +35,7 @@ import {
 import { useUnsavedGuard } from '@/hooks/use-unsaved-guard'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { useAuthStore } from '@/stores/auth'
+import { useServerStore } from '@/stores/server'
 import { useConnectionStore } from '@/stores/connection'
 import type { ConnectionFormProps } from './contracts'
 import { toneClasses } from '@/components/mcs/tone'
@@ -113,8 +114,17 @@ export function ConnectionForm({
   const capabilities = useApiKeyCapabilities(settledUrl, apiKey)
   const apiKeyChannelDisabled = capabilities.data?.apiKeyEnabled === false
 
-  // 状态行即时反馈：保存过（ready）或测试连接成功 → 已连接
-  const isConnected = status === 'ready' || testedOk
+  /** 实时通道在线状态——与顶栏状态点同源（见 layouts/app-topbar.tsx 的 indicator） */
+  const socketConnected = useServerStore((s) => s.socketConnected)
+
+  /**
+   * 状态行三档。connection store 的 `ready` 只表示**凭据存在**（见
+   * stores/connection.ts 的 hasCredentials），服务端整体不可达时它同样为 ready，
+   * 撑不起「已连接」这个词——此前设置页与顶栏用同一个词说两件不同的事。
+   * 「已连接」只由真实连通证据给出：实时通道在线，或本次测试连接拿到结果。
+   */
+  const isConnected = socketConnected || testedOk || latencyMs != null
+  const statusLabel = isConnected ? '已连接' : status === 'ready' ? '凭据已配置' : '未连接'
 
   /**
    * 空值校验（测试/保存前置）——行内提示，对齐 deploy-dialog 范式。
@@ -429,7 +439,7 @@ export function ConnectionForm({
             )}
             aria-hidden
           />
-          <span className="text-mcs-sm font-medium">{isConnected ? '已连接' : '未连接'}</span>
+          <span className="text-mcs-sm font-medium">{statusLabel}</span>
           {isConnected && latencyMs != null && (
             <span className="text-mcs-2xs text-mcs-text-muted">连接正常 · 延迟 {latencyMs}ms</span>
           )}

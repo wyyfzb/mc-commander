@@ -31,8 +31,10 @@ import {
   X,
 } from 'lucide-react'
 import { LoadingButton } from '@/components/mcs/loading-button'
+import { StaleQueryNotice } from '@/components/mcs/data-states'
 import { toast } from 'sonner'
 import { ErrorCode, getFriendlyErrorText } from '@/api/errors'
+import { queryPhase } from '@/lib/query-phase'
 import { ApiError } from '@/api/client'
 import { apiDownloadBackup } from '@/api/backups'
 import type { BackupItem } from '@/api/types'
@@ -103,6 +105,8 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
   const instanceName = instancesQuery.data?.find((i) => i.id === instanceId)?.name ?? ''
 
   const backupsQuery = useBackups(instanceId)
+  /** 列表相位：有旧值可留时不把一次轮询抖动呈现成整屏故障 */
+  const backupsPhase = queryPhase(backupsQuery)
   // 归档快照：卸载实例后按设计保留、但已无索引的快照目录。
   // 挂载入口只在存在可挂载项时出现（空态不出一个「永远没有内容」的区块）
   const archivedQuery = useArchivedSnapshots(Boolean(instanceId))
@@ -315,6 +319,13 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
 
       {/* 列表 / 空态 / 骨架 */}
       <div className="mt-2 border-t border-mcs-border-subtle">
+        {backupsPhase === 'stale' && (
+          <StaleQueryNotice
+            className="m-2"
+            error={backupsQuery.error}
+            onRetry={() => void backupsQuery.refetch()}
+          />
+        )}
         {backupsQuery.isLoading ? (
           <div data-testid="backup-skeletons" aria-label="加载备份中" className="space-y-1 p-4">
             {Array.from({ length: 3 }, (_, i) => (
@@ -327,7 +338,7 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
               </div>
             ))}
           </div>
-        ) : backupsQuery.isError ? (
+        ) : backupsPhase === 'failed' ? (
           /* 错误态：明确报错 + 重试（避免错误被空态分支伪装成「点击立即备份」引导） */
           <EmptyState
             icon={CircleAlert}
@@ -675,7 +686,7 @@ function BackupRow({
         <IconButton
           aria-label={`${name} 取消`}
           title="取消当前备份/恢复"
-          className="text-mcs-error-fg hover:bg-mcs-error-bg-subtle hover:text-mcs-error-fg"
+          className="text-mcs-error-fg hover:bg-mcs-state-hover-error"
           onClick={onCancel}
         >
           <X className="size-3.5" aria-hidden />
@@ -683,7 +694,7 @@ function BackupRow({
       ) : (
         <IconButton
           aria-label={`${name} 删除`}
-          className="text-mcs-error-fg hover:bg-mcs-error-bg-subtle hover:text-mcs-error-fg"
+          className="text-mcs-error-fg hover:bg-mcs-state-hover-error"
           onClick={() => onDelete(backup)}
         >
           <Trash2 className="size-3.5" aria-hidden />

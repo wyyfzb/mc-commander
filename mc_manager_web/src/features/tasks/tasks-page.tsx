@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from 'react'
 import { AlertTriangle, Plus, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import { getFriendlyErrorText } from '@/api/errors'
+import { queryPhase } from '@/lib/query-phase'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { CommandPreview } from '@/components/mcs/command-preview'
@@ -17,6 +18,7 @@ import { useCreateTask, useDeleteTask, useRunTaskNow, useTasks, useUpdateTask } 
 import { TaskDialog } from './components/task-dialog'
 import { TaskList } from './components/task-list'
 import { EmptyState } from '@/components/mcs/empty-state'
+import { StaleQueryNotice } from '@/components/mcs/data-states'
 import { InstanceRequiredState } from '@/features/instances/components/instance-required-state'
 import { PageHeader } from '@/components/mcs/page-header'
 
@@ -30,6 +32,8 @@ export function TasksPage() {
   const [runTarget, setRunTarget] = useState<ScheduledTask | null>(null)
 
   const tasksQuery = useTasks(instanceId)
+  /** 列表相位：有旧值可留时不把一次轮询抖动呈现成整屏故障 */
+  const tasksPhase = queryPhase(tasksQuery)
   const createMutation = useCreateTask(instanceId)
   const updateMutation = useUpdateTask(instanceId)
   const deleteMutation = useDeleteTask(instanceId)
@@ -152,7 +156,14 @@ export function TasksPage() {
 
       {/* ── 任务列表 ── */}
       <div className="min-h-0 flex-1">
-        {tasksQuery.isError && !tasksQuery.isLoading ? (
+        {tasksPhase === 'stale' && (
+          <StaleQueryNotice
+            className="mb-2"
+            error={tasksQuery.error}
+            onRetry={() => void tasksQuery.refetch()}
+          />
+        )}
+        {tasksPhase === 'failed' ? (
           <EmptyState
             icon={AlertTriangle}
             title="加载失败"

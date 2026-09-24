@@ -12,18 +12,8 @@ import { useServerStore } from '@/stores/server'
 import { InstanceRequiredState } from '@/features/instances/components/instance-required-state'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { PageHeader } from '@/components/mcs/page-header'
+import { queryFailed } from '@/lib/query-phase'
 import { Button } from '@/components/ui/button'
-
-/**
- * 查询是否处于「已失败且尚未恢复」：失败过一轮后的重试会把 query 短暂置回 pending
- * （isError 瞬时为 false），只看 isError 会让横幅连同重试按钮在整个请求窗口内消失——
- * 端点持续故障时用户点完重试得不到任何反馈。
- * 用两次「落定时间」比较兜住：失败的时间戳晚于成功，说明最近一次落定是失败
- * （fetch 开始时 failureCount 会归零，不能拿它判）。
- */
-function queryFailed(q: { isError: boolean; errorUpdatedAt: number; dataUpdatedAt: number }) {
-  return q.isError || q.errorUpdatedAt > q.dataUpdatedAt
-}
 
 /**
  * 仪表盘驾驶舱
@@ -114,9 +104,9 @@ export function DashboardPage() {
           阈值按容器**内容盒**计（不含页面 p-4 与滚动条）：
           @2xl=672px 两列（每张约 328px）、@5xl=1024px 三列（每张约 330px，与改前 1280 视口下的 336px 同档） */}
       <div className="grid grid-cols-1 gap-4 @2xl:grid-cols-2 @5xl:grid-cols-3">
-        <PlayersCard />
+        <PlayersCard isLoading={statusLoading} />
         <BigStatCards isLoading={statusLoading} />
-        <RuntimeInfoCard />
+        <RuntimeInfoCard isLoading={statusLoading} />
       </div>
 
       {/* 终端主体 + 右栏卡。

@@ -9,6 +9,8 @@ import { useNavigate } from 'react-router'
 import { ArrowRight, CircleAlert, CloudUpload, HardDrive, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { getFriendlyErrorText } from '@/api/errors'
+import { queryPhase } from '@/lib/query-phase'
+import { StaleQueryNotice } from '@/components/mcs/data-states'
 import type { BackupItem } from '@/api/types'
 import { cn } from '@/lib/utils'
 import { useServerStore } from '@/stores/server'
@@ -38,6 +40,8 @@ export function RecentBackupsCard() {
   const instanceId = useServerStore((s) => s.instanceId)
   const navigate = useNavigate()
   const backupsQuery = useBackups(instanceId)
+  /** 卡片相位：有旧值可留时不把一次轮询抖动呈现成整块故障（卡内空间小，取紧凑下间距） */
+  const backupsPhase = queryPhase(backupsQuery)
   const createMutation = useCreateBackup(instanceId)
   useBackupEventRefresh(instanceId)
 
@@ -70,6 +74,13 @@ export function RecentBackupsCard() {
         </button>
       </CardHeader>
 
+      {backupsPhase === 'stale' && (
+        <StaleQueryNotice
+          className="mb-2"
+          error={backupsQuery.error}
+          onRetry={() => void backupsQuery.refetch()}
+        />
+      )}
       {backupsQuery.isLoading ? (
         <div className="space-y-2" aria-label="加载备份中" role="status">
           {Array.from({ length: 3 }, (_, i) => (
@@ -82,7 +93,7 @@ export function RecentBackupsCard() {
             </div>
           ))}
         </div>
-      ) : backupsQuery.isError ? (
+      ) : backupsPhase === 'failed' ? (
         <div className="flex flex-col items-center gap-1.5 py-4 text-center">
           <CircleAlert className="size-6 text-mcs-error-fg" aria-hidden />
           <p className="text-mcs-xs text-mcs-error-fg">

@@ -13,8 +13,10 @@ import { toast } from 'sonner'
 import { apiGet, ApiError } from '@/api/client'
 import { queryKeys, useInstances } from '@/api/queries'
 import { ErrorCode, getFriendlyErrorText } from '@/api/errors'
+import { queryPhase } from '@/lib/query-phase'
 import { instanceLabel } from '@/lib/instance-label'
 import { EmptyState } from '@/components/mcs/empty-state'
+import { StaleQueryNotice } from '@/components/mcs/data-states'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { PageHeader } from '@/components/mcs/page-header'
 import { InfoHint } from '@/components/mcs/info-hint'
@@ -75,6 +77,8 @@ export function InstancesPage() {
   const { duplicateDeployBlocked } = useDeployStatusFallback()
 
   const instancesQuery = useInstances()
+  /** 列表相位：有旧值可留时不把一次轮询抖动呈现成整屏故障 */
+  const instancesPhase = queryPhase(instancesQuery)
   const uninstallMutation = useUninstallInstance()
   const stopMutation = useStopInstance()
   const queryClient = useQueryClient()
@@ -285,6 +289,13 @@ export function InstancesPage() {
 
       {/* ── 实例卡片网格 ── */}
       <div className="min-h-0 flex-1 overflow-y-auto">
+        {instancesPhase === 'stale' && (
+          <StaleQueryNotice
+            className="mb-2"
+            error={instancesQuery.error}
+            onRetry={() => void instancesQuery.refetch()}
+          />
+        )}
         {instancesQuery.isLoading && instances.length === 0 ? (
           // 骨架与真实网格同源（INSTANCE_GRID_CLASS）：列数恒定，实例数在数据到达前不可知
           // 也不再影响布局；两格＝一张实例卡 + 单实例形态下的部署引导块（三列档下跨两列）
@@ -295,7 +306,7 @@ export function InstancesPage() {
             <Skeleton className="h-28" aria-hidden />
             <Skeleton className="h-28 @5xl:col-span-2" aria-hidden />
           </div>
-        ) : instancesQuery.isError && !instancesQuery.isLoading ? (
+        ) : instancesPhase === 'failed' ? (
           <EmptyState
             icon={AlertTriangle}
             title="加载失败"

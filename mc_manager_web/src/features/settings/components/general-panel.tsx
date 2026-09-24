@@ -22,6 +22,7 @@ import {
 import { queryKeys, useInstanceStatus } from '@/api/queries'
 import { apiUpdateInstance } from '@/api/instances'
 import { getFriendlyErrorText } from '@/api/errors'
+import { queryPhase } from '@/lib/query-phase'
 import { useConnectionStore } from '@/stores/connection'
 import { useServerStore } from '@/stores/server'
 import { useUiStore, type ThemeMode } from '@/stores/ui'
@@ -39,7 +40,10 @@ export function GeneralPanel(_props: GeneralPanelProps) {
   const confirmCommands = useUiStore((s) => s.confirmCommands)
   const setConfirmCommands = useUiStore((s) => s.setConfirmCommands)
 
-  const { data: instance } = useInstanceStatus(instanceId)
+  const instanceQuery = useInstanceStatus(instanceId)
+  const instance = instanceQuery.data
+  /** 实例配置相位：失败时不得用默认值冒充服务端事实 */
+  const instancePhase = queryPhase(instanceQuery)
 
   /** 乐观翻转本地值（null = 跟随服务端 useInstanceStatus 数据） */
   const [autoRestartOverride, setAutoRestartOverride] = useState<boolean | null>(null)
@@ -89,13 +93,23 @@ export function GeneralPanel(_props: GeneralPanelProps) {
               </div>
               <div className="mt-0.5 text-mcs-xs text-mcs-text-muted">
                 服务器意外崩溃/退出后自动重启（手动停止不触发）
+                {instancePhase === 'failed' && (
+                  <span className="text-mcs-error-fg"> · 实例配置读取失败，下方状态不可信</span>
+                )}
               </div>
             </div>
-            <Switch
-              checked={autoRestart}
-              onCheckedChange={(checked) => void handleAutoRestartChange(checked)}
-              aria-label="意外停止自动重启"
-            />
+            {/* 查询失败时服务端值缺失，`?? true` 会把「读不到」显示成「已开启」——
+                这是肯定式假信息（用户会以为崩溃后真会自动重启）。无本地乐观意图时
+                不渲染开关，如实标「状态未知」；已有 override 说明用户刚操作过，仍显示其意图。 */}
+            {instancePhase === 'failed' && autoRestartOverride === null ? (
+              <span className="shrink-0 text-mcs-xs text-mcs-text-muted">状态未知</span>
+            ) : (
+              <Switch
+                checked={autoRestart}
+                onCheckedChange={(checked) => void handleAutoRestartChange(checked)}
+                aria-label="意外停止自动重启"
+              />
+            )}
           </div>
         ) : (
           <div className="border-b border-mcs-border-subtle py-3 last:border-b-0">
