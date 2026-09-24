@@ -12,22 +12,9 @@ import { useCallback, useEffect, useRef, useState } from 'react'
  * 调用方按「宽」兜底——降级形态（Sheet 承载 / 裁列 / 转卡片）不该在测量完成前闪出来。
  * ResizeObserver 的投递在 layout 之后、paint 之前，正常浏览器里不会产生可见闪烁。
  *
- * ── 两套档位对照（同名不同值，选错前缀就是成倍的误判）────────────────────────
- *   视口档 `md:`（问窗口多宽）        容器档 `@md:`（问这一块多宽）
- *   xs  30rem  480px（本仓追加）      @xs  20rem  320px
- *   sm  40rem  640px                 @sm  24rem  384px
- *   md  48rem  768px ← 侧栏/抽屉分界   @md  28rem  448px
- *   lg  64rem 1024px                 @lg  32rem  512px
- *   xl  80rem 1280px                 @xl  36rem  576px
- *   2xl 96rem 1536px                 @2xl 42rem  672px
- *                                    @3xl 48rem  768px（与视口 md 同值，巧合）
- *                                    @4xl 56rem  896px
- *                                    @5xl 64rem 1024px（与视口 lg 同值，巧合）
- * 容器档取 Tailwind v4 默认值（本仓未覆盖）；视口档仅追加了 xs。
- * 选档规则：先问「这一块有多宽」能不能解决——能就走容器档（纯 CSS，不过 JS、不重渲染）；
- * 只有必须换组件行为（内联↔Sheet / 全列↔裁列 / 双栏↔全屏）才用本 hook。
- * 阈值是实测最小宽（不是档位凑整），改任一侧都要连同理由一起改，并由 e2e 在对应
- * 视口宽上锁住——jsdom 不评估容器查询，量不到真实几何。
+ * 档位对照与选档规则见 AGENTS.md「响应式切档」；此处只记本 hook 的边界：
+ * 阈值取**实测最小可用宽**（不是档位凑整），且 jsdom 不评估容器查询 ⇒ 阈值必须由
+ * e2e 在对应视口宽上锁住。
  */
 export function useContainerWidth<T extends HTMLElement>(): [
   ref: (node: T | null) => void,
