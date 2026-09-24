@@ -2,12 +2,12 @@
 /**
  * capture.mjs —— 全站截图脚本（设计审查用：可复现的视觉证据采集）
  *
- * 自动起 mock 数据服务 + vite dev，用 Playwright 对 10 个路由 × 明/暗双主题
+ * 自动起 mock 数据服务 + vite dev，用 Playwright 对 19 个路由 × 明/暗双主题
  * 截图，输出 <VISION_OUT>/capture_<时间戳>/<路由>-<主题>.png + manifest.json
  * （manifest 逐图记视口与字节数，并记 servers 的来源 started|reused）。
  *
  * 用法（在 mc_manager_web/ 下）：
- *   npm run capture                         # 全量截图（10 路由 × 2 主题）
+ *   npm run capture                         # 全量截图（19 路由 × 2 主题）
  *   npm run capture -- --routes=players     # 仅指定路由（逗号分隔，用 file 名）
  *   npm run capture -- --theme=dark         # 仅指定主题（dark|light）
  *   npm run capture -- --force-clean        # 启动前强杀 5198/5199 残留进程
@@ -73,6 +73,11 @@ const ROUTES = [
   { path: 'audit', file: 'audit' },
   { path: 'settings/notifications', file: 'settings-notifications' },
   { path: 'settings/backup', file: 'settings-backup' },
+  // 设置页其余四子页：connection 是 /settings 的默认落地页，此前长期无视觉基线
+  { path: 'settings/connection', file: 'settings-connection' },
+  { path: 'settings/account', file: 'settings-account' },
+  { path: 'settings/general', file: 'settings-general' },
+  { path: 'settings/about', file: 'settings-about' },
 ]
 
 function arg(name, fallback) {

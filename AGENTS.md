@@ -79,8 +79,10 @@ npm run dev                  # node --watch 热重载
 - **设计 token**：前端颜色/圆角/字号/动效/光影一律使用 `src/styles/` 的 `--mcs-*` CSS token
   （经 `src/index.css` 的 `@theme` 注册为工具类），禁止组件内硬编码色值，禁止引入未 token 化的第三方 UI 库。
   文字只有两级（`--mcs-text-default` / `--mcs-text-muted`；终端专用 `--mcs-terminal-*` 是独立深底调色板，
-  不占文字档位）、交互悬浮只有一档（`--mcs-state-hover`，
-  `--mcs-bg-secondary` 是静态次级面不是 hover 态）；圆角档位是 6/8/12/16px（另有 20px
+  不占文字档位）、交互悬浮只有覆盖层（中性 `--mcs-state-hover` 一档，外加危险族升温用的
+  `--mcs-state-hover-error`；`--mcs-bg-secondary` 是静态次级面不是 hover 态，内容面 tint
+  （`--mcs-*-bg-subtle`）不得出现在 `hover:` 上，口径见 `mc_manager_web/docs/design-review-guidelines.md`
+  「交互悬浮只走覆盖层」）；圆角档位是 6/8/12/16px（另有 20px
   `@reserved` 档，当前 0 消费），shadcn 的 `--radius-*` **逐档错位**绑定（`--radius-sm` ←
   `--mcs-radius-xs` 6px、`--radius-md` ← 8px、`--radius-lg` ← 12px、`--radius-xl` ← 16px），
   所以 `rounded-md` 不是卡片档（8px），卡片是 `rounded-mcs-md`／`rounded-lg`（12px）。
