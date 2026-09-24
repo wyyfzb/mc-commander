@@ -24,7 +24,7 @@ import type { PlayerActionRequest } from '../mutations'
 import { toastWithUndo } from '../reversible-action'
 import { paginatePlayerRows } from '../player-pagination'
 import { PAGE_SIZE_OPTIONS, ROW_HEIGHT, features } from './player-table-config'
-import { buildPlayerColumns } from './player-table-columns'
+import { buildPlayerColumns, SECONDARY_COLUMN_IDS } from './player-table-columns'
 import { PlayerRow } from './player-table-row'
 import { PlayerCardList, CARD_HEIGHT } from './player-card-list'
 
@@ -78,6 +78,8 @@ export function PlayerTable({
   const [tableRef, tableWidth] = useContainerWidth<HTMLDivElement>()
   /** 10 列合计约 1016px（列宽口径见 player-table-columns），装不下 → 裁到核心列免横向滚动 */
   const isCompactColumns = tableWidth != null && tableWidth < FULL_COLUMNS_MIN_WIDTH
+  /** 用户主动要回全部列（此时由横向滚动承担溢出，不再静默删列） */
+  const [showAllColumns, setShowAllColumns] = useState(false)
 
   /**
    * 可逆操作（OP/白名单）：直执 + 5s 撤销。失败回执由页面层（handleAction）承担——
@@ -152,7 +154,7 @@ export function PlayerTable({
         kick,
         pageSize,
         pageIndex,
-        compact: isCompactColumns,
+        compact: isCompactColumns && !showAllColumns,
       }),
     // pageSize/pageIndex 参与表头全选范围计算，变更须重建列以刷新表头勾选态
     [
@@ -167,6 +169,7 @@ export function PlayerTable({
       pageSize,
       pageIndex,
       isCompactColumns,
+      showAllColumns,
     ],
   )
 
@@ -341,6 +344,22 @@ export function PlayerTable({
             )}
           </tbody>
         </DataTableShell>
+      )}
+
+      {/* 窄容器下次要列被裁掉——静默删列会让用户以为「这表本来就只有这几列」，
+          而维度/坐标恰是监控时最想扫的信息。把折叠显式化并把选择权交还：
+          展开后由横向滚动承担溢出（这正是当初裁列想避免的，让它成为用户的主动取舍） */}
+      {isCompactColumns && !isCardLayout && (
+        <div className="flex justify-end">
+          <Button
+            type="button"
+            size="xs"
+            variant="ghost"
+            onClick={() => setShowAllColumns((v) => !v)}
+          >
+            {showAllColumns ? '收起次要列' : `显示全部列（已隐藏 ${SECONDARY_COLUMN_IDS.size} 列）`}
+          </Button>
+        </div>
       )}
 
       {/* 分页器常驻（两模式共用，置于分支外）：切到「全部」档只换数据源（虚拟滚动）；

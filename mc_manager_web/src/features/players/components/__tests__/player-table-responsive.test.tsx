@@ -196,6 +196,22 @@ describe('PlayerTable · 响应式形态', () => {
     expect(screen.getByRole('button', { name: 'Steve 操作菜单' })).toBeInTheDocument()
   })
 
+  it('裁列态下「显示全部列」能把次级列要回（静默删列必须可见且可逆）', async () => {
+    restoreObserver = mockTableWidth(784)
+    setup([makePlayer()])
+    expect(await screen.findByRole('table')).toBeInTheDocument()
+
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: /显示全部列（已隐藏 6 列/ }))
+
+    for (const label of ['模式', '维度', '坐标', '延迟', '在线时长', '总时长']) {
+      expect(screen.getByRole('columnheader', { name: label })).toBeInTheDocument()
+    }
+    // 展开后不再谎报「已隐藏」，按钮翻回收起入口
+    expect(screen.queryByRole('button', { name: /显示全部列/ })).toBeNull()
+    expect(screen.getByRole('button', { name: '收起次要列' })).toBeInTheDocument()
+  })
+
   it('≥1016px：完整 10 列（响应式不收窄宽屏；折叠侧栏 1279 视口表格区 1191px 也命中此档）', async () => {
     restoreObserver = mockTableWidth(1191)
     setup([makePlayer()])

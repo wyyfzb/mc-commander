@@ -22,7 +22,8 @@ import { HeartsArmor } from './hearts-armor'
 import { DIMENSION_META, GAME_MODE_LABELS, features } from './player-table-config'
 
 /** 列优先级：容器装不下时按此集合裁剪（保留 选择/玩家/状态/操作 —— 身份、在线状态、行动入口） */
-const SECONDARY_COLUMN_IDS = new Set([
+/** 窄容器下被裁掉的次要列；导出供调用点把「折叠了几列」如实告知用户 */
+export const SECONDARY_COLUMN_IDS = new Set([
   'gameMode',
   'dimension',
   'position',
