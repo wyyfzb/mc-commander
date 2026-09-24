@@ -289,7 +289,7 @@ export function TotpPanel({ baseUrl, apiKey, authed }: TotpPanelProps) {
               我已保存
             </Button>
           </div>
-          <p className="text-mcs-2xs text-mcs-text-muted">
+          <p className="text-mcs-xs text-mcs-text-muted">
             保存后关闭本提示，页面只显示剩余可用数量。
           </p>
         </div>
@@ -430,7 +430,7 @@ export function TotpPanel({ baseUrl, apiKey, authed }: TotpPanelProps) {
             <Lock aria-hidden />
             关闭两步验证
           </Button>
-          <p className="text-mcs-2xs text-mcs-text-muted">
+          <p className="text-mcs-xs text-mcs-text-muted">
             关闭后本账号回到「仅密码」单因素状态，安全性降低；关闭不会卸载认证器里的条目。
           </p>
         </div>
@@ -520,7 +520,7 @@ export function TotpPanel({ baseUrl, apiKey, authed }: TotpPanelProps) {
               spellCheck={false}
               className="font-mono"
             />
-            <p className="text-mcs-2xs text-mcs-text-muted">{SECOND_FACTOR_HINT}</p>
+            <p className="text-mcs-xs text-mcs-text-muted">{SECOND_FACTOR_HINT}</p>
           </div>
           {disableError && (
             <NoticeBanner variant="error" role="alert" icon={TriangleAlert}>

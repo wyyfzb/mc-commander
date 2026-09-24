@@ -538,7 +538,7 @@ export default function WebhookPage() {
                   </button>
                 ))}
               </div>
-              <p className="text-mcs-2xs text-mcs-text-muted">
+              <p className="text-mcs-xs text-mcs-text-muted">
                 {form.platform === 'generic'
                   ? '通用格式：适配 Discord 等自定义接收端，事件数据原样推送'
                   : `选中后按 ${platformPreset(form.platform).label} 官方格式签名与投递`}
@@ -556,7 +556,7 @@ export default function WebhookPage() {
                 aria-invalid={urlInvalid}
               />
               {urlInvalid && (
-                <p className="text-mcs-2xs text-mcs-error-fg">URL 需以 http:// 或 https:// 开头</p>
+                <p className="text-mcs-xs text-mcs-error-fg">URL 需以 http:// 或 https:// 开头</p>
               )}
             </div>
             <div className="space-y-1.5">
@@ -613,7 +613,7 @@ export default function WebhookPage() {
               </div>
               {eventTypesError && (
                 <div className="flex items-center justify-between rounded-mcs-xs border border-mcs-warning-border bg-mcs-warning-bg-subtle px-2 py-1.5">
-                  <p className="text-mcs-2xs text-mcs-warning-fg">事件类型加载失败，无法勾选事件</p>
+                  <p className="text-mcs-xs text-mcs-warning-fg">事件类型加载失败，无法勾选事件</p>
                   <Button
                     variant="ghost"
                     size="sm"

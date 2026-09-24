@@ -188,7 +188,7 @@ function EnderChestPanel({ inventory }: { inventory: PlayerInventory }) {
         <SlotStat label="空位" value={`${27 - used}`} accent />
       </div>
 
-      <p className="text-mcs-2xs text-mcs-text-muted">
+      <p className="text-mcs-xs text-mcs-text-muted">
         末影箱数据来自玩家存档（playerdata EnderItems）
       </p>
     </div>

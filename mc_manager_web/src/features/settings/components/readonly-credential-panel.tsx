@@ -219,7 +219,7 @@ export function ReadonlyCredentialPanel({ baseUrl, apiKey, authed }: ReadonlyCre
                 我已保存，收起
               </Button>
             </div>
-            <p className="text-mcs-2xs text-mcs-text-muted">
+            <p className="text-mcs-xs text-mcs-text-muted">
               服务端只保存摘要，收起或刷新后无法再次查看；如需换一把，重新生成即可（旧凭据随即失效）。
             </p>
           </div>

@@ -454,7 +454,7 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
           {/* 确认目标取自实例列表：读不到名字时确认按钮会一直禁用，必须给出原因
               （否则用户只看到一个永远点不动的按钮，不知道是加载失败还是自己没输对） */}
           {!instanceNameLoaded && (
-            <p className="text-mcs-2xs text-mcs-text-muted">
+            <p className="text-mcs-xs text-mcs-text-muted">
               {instancesQuery.isError
                 ? '实例信息加载失败，无法确认恢复，请刷新页面重试'
                 : '正在加载实例信息…'}
@@ -465,7 +465,7 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
 
       {/* ── 归档快照：卸载实例保留下来、但已无索引的快照目录 ── */}
       {archivedQuery.isError && (
-        <p className="mt-2 border-t border-mcs-border-subtle px-4 py-3 text-mcs-2xs text-mcs-text-muted">
+        <p className="mt-2 border-t border-mcs-border-subtle px-4 py-3 text-mcs-xs text-mcs-text-muted">
           归档快照清点失败（服务端暂时不可用），刷新页面可重试。
         </p>
       )}

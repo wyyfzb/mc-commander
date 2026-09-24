@@ -221,7 +221,7 @@ export function AccountPanel() {
         </div>
         {!sessionApplies && (
           <p
-            className={`mt-3 flex items-start gap-1.5 rounded-mcs-sm border px-2.5 py-2 text-mcs-2xs ${toneClasses('warning')}`}
+            className={`mt-3 flex items-start gap-1.5 rounded-mcs-sm border px-2.5 py-2 text-mcs-xs ${toneClasses('warning')}`}
           >
             <TriangleAlert className="mt-0.5 size-3 shrink-0" aria-hidden />
             当前使用明文 API Key

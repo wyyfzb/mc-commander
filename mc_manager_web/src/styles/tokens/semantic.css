@@ -126,7 +126,7 @@
         故「偶数字号 ≤7 档」仍成立（6 文字档 + 1 数字档）── */
   --mcs-font-sans: 'Noto Sans SC Subset', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
   --mcs-font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
-  --mcs-font-size-2xs: 10px;  /* 角标/单位/mono 元数据，禁用于中文正文 */
+  --mcs-font-size-2xs: 10px;  /* 角标/单位/短标签/mono 元数据；句子最低 xs——适用面见 AGENTS.md「设计 token」 */
   --mcs-font-size-xs: 12px;   /* 辅助 */
   --mcs-font-size-sm: 14px;   /* 正文基准（唯一行高 1.6 的档） */
   --mcs-font-size-md: 14px;   /* 强调正文：与正文同尺寸，靠字重 + 收紧行高（1.5）区分 */

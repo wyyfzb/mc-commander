@@ -381,7 +381,7 @@ export function LoginPage() {
               </button>
               {baseUrlOpen && (
                 <div className="mt-2.5 space-y-2">
-                  <Label htmlFor="base-url" className="text-mcs-2xs">
+                  <Label htmlFor="base-url" className="text-mcs-xs">
                     面板服务端地址（用于面板网页与服务端分开部署的场景）
                   </Label>
                   <div className="flex gap-2">
@@ -422,7 +422,7 @@ export function LoginPage() {
               <p className="break-all font-mono text-mcs-sm text-mcs-text-default">
                 {targetPanelAddress}
               </p>
-              <p className="text-mcs-2xs text-mcs-text-muted">登录凭据将发送到该面板</p>
+              <p className="text-mcs-xs text-mcs-text-muted">登录凭据将发送到该面板</p>
               <input
                 type="text"
                 name="username"
@@ -468,7 +468,7 @@ export function LoginPage() {
                   spellCheck={false}
                   className="font-mono"
                 />
-                <p className="text-mcs-2xs text-mcs-text-muted">{SECOND_FACTOR_HINT}</p>
+                <p className="text-mcs-xs text-mcs-text-muted">{SECOND_FACTOR_HINT}</p>
               </div>
             )}
             {phase === 'setup' && (
@@ -553,7 +553,7 @@ export function LoginPage() {
             前往连接引导
           </Link>
         </p>
-        <p className="text-mcs-2xs text-mcs-text-muted">
+        <p className="text-mcs-xs text-mcs-text-muted">
           会话可在「设置 → 账号与安全」中随时下线或踢出其他设备
         </p>
       </footer>
