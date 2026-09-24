@@ -256,3 +256,25 @@ export function collectHeadingTiers(scopedCodes, baseCodes) {
   }
   return tiers
 }
+
+/**
+ * 第 30 条：内容面 tint 被当交互悬浮用（hover/focus/active 背景）。
+ * `--mcs-*-bg-subtle` 是为「承载文字/图标的常驻面」设计的不透明 tint，其有效色已经同
+ * 基面算过一次；放到状态前缀上等于让常驻面互相替换，违反「交互悬浮只走覆盖层」
+ * （覆盖层＝ --mcs-state-*，危险族另有 --mcs-state-hover-error）。
+ * 判定面**含 ui/**：现实反例正是 ui/button 的 destructive-outline 变体——基座破例会被
+ * 调用点逐字照抄（曾扩散到 4 处），只扫 feature 等于放行源头。
+ * 状态前缀按「变体名里含 hover/focus/active」取，故 hover:/focus-visible:/group-hover:/
+ * dark:hover: 一并命中；跨行 className 不判（与第 28/29 条同口径，宁漏不误报）。
+ * 入参须是 stripComments 后的正文。
+ * @returns {{ line: number }[]} 1 基行号，按出现顺序
+ */
+const TINT_AS_INTERACTION = /(?:[\w-]*(?:hover|focus|active)[\w-]*:)+bg-mcs-[a-z-]*bg-subtle\b/
+
+export function collectTintAsInteractionHits(code) {
+  const hits = []
+  for (const [i, line] of code.split('\n').entries()) {
+    if (TINT_AS_INTERACTION.test(line)) hits.push({ line: i + 1 })
+  }
+  return hits
+}

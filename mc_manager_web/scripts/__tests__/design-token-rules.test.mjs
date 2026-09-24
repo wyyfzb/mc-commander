@@ -14,6 +14,7 @@ import {
   collectHeadingTiers,
   collectRoleTierMaps,
   collectTextBaseHits,
+  collectTintAsInteractionHits,
   lineAt,
   overQuota,
   stripComments,
@@ -290,5 +291,42 @@ describe('第 29 条边界（替换口径与判定面分工）', () => {
   it('表单控件带 ring 替换 → 放行', () => {
     const code = '<input className="outline-none focus-visible:ring-1 focus-visible:ring-ring" />'
     expect(collectFocusCancellationHits(code)).toEqual([])
+  })
+})
+
+describe('第 30 条：交互悬浮只走覆盖层（内容面 tint 不得上状态前缀）', () => {
+  it('hover 上内容面 tint → 命中（ui/button destructive-outline 曾是现实反例）', () => {
+    const code = "'border-mcs-error-border-strong bg-mcs-bg-secondary hover:bg-mcs-error-bg-subtle'"
+    expect(collectTintAsInteractionHits(code)).toEqual([{ line: 1 }])
+  })
+
+  it('常驻面用 tint 不命中（那正是它的用途）', () => {
+    expect(collectTintAsInteractionHits('<div className="bg-mcs-error-bg-subtle" />')).toEqual([])
+  })
+
+  it('覆盖层档放行：state-hover 与危险族专用档都不是 tint', () => {
+    expect(collectTintAsInteractionHits('a hover:bg-mcs-state-hover b')).toEqual([])
+    expect(collectTintAsInteractionHits('a hover:bg-mcs-state-hover-error b')).toEqual([])
+  })
+
+  it('各类状态前缀都命中（含组合前缀与 group/dark 变体）', () => {
+    const cases = [
+      'focus-visible:bg-mcs-accent-bg-subtle',
+      'group-hover:bg-mcs-purple-bg-subtle',
+      'dark:hover:bg-mcs-info-bg-subtle',
+      'active:bg-mcs-success-bg-subtle',
+    ]
+    for (const c of cases) expect(collectTintAsInteractionHits(c), c).toEqual([{ line: 1 }])
+  })
+
+  it('选中态用内容面 tint 是正当的，不拦（data-[state=active] 与 hover 语义不同）', () => {
+    // tone.ts 的 TONE_SELECTED_* 就是「bg-subtle 表已选中」——那是常驻面不是悬浮覆盖层。
+    // 此条此前只靠正则不匹配巧合放过，改正则的人无从得知是故意的，故显式钉住
+    expect(collectTintAsInteractionHits('data-[state=active]:bg-mcs-accent-bg-subtle')).toEqual([])
+  })
+
+  it('行号逐行报（只报命中那一行，其余行不牵连）', () => {
+    const code = ['<div className="p-2" />', '<button className="hover:bg-mcs-error-bg-subtle" />']
+    expect(collectTintAsInteractionHits(code.join('\n'))).toEqual([{ line: 2 }])
   })
 })

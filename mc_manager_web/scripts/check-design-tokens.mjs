@@ -62,6 +62,12 @@
  *  29. 焦点环取消须有替换：交互元素行上 outline-none/outline-hidden 且无 focus ring/outline
  *      替换指示器 → 全局 :focus-visible 兜底被 utilities 层钉死为 none，键盘焦点不可见
  *      （第 8 条只拦成对抵消形态，本条拦单独裸取消；扫描面与豁免同第 28 条）
+ *  30. 交互悬浮只走覆盖层：状态前缀（hover/focus/active 系）上出现内容面 tint
+ *      （bg-mcs-*-bg-subtle）→ 常驻面互相替换，违反「tint 两类」；覆盖层取 --mcs-state-*，
+ *      危险族另有 --mcs-state-hover-error。判定面**含 ui/**——现实反例正是 ui/button 的
+ *      destructive-outline 变体，基座破例会被调用点逐字照抄（曾扩散到 4 处）。
+ *      实现分两支：主遍历 walkDir 按 EXCLUDE_DIR 跳过 components/ui/，故另起 walkUiDir
+ *      只扫 ui/（见「30b」段）——只挂主遍历的判定看不见 ui/，别再以为一条就够。
  * 类名提取覆盖 className="..."、className={cn(...)}、模板字面量、对象映射值（如 tone: 'bg-...'），
  * 不留「只在 className 字面属性里才检查」的盲区。
  * 发现违规 → 输出 文件:行号 → 非零退出码（阻止合并）
@@ -77,6 +83,7 @@ import {
   collectFocusCancellationHits,
   collectHeadingTiers,
   collectTextBaseHits,
+  collectTintAsInteractionHits,
   lineAt,
   overQuota,
   stripComments,
@@ -509,6 +516,17 @@ function extractViolatingClass(classes, prefix) {
   return found || prefix + '...'
 }
 
+/** 递归收集 components/ui/ 下的源文件（主遍历按 EXCLUDE_DIR 跳过了这里，第 30 条需要它） */
+function walkUiDir(dir) {
+  const out = []
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, entry.name)
+    if (entry.isDirectory()) out.push(...walkUiDir(full))
+    else if (['.tsx', '.ts'].includes(extname(entry.name))) out.push(full)
+  }
+  return out
+}
+
 /** 递归遍历 src/ 目录（排除 ui/） */
 function walkDir(dir) {
   const entries = readdirSync(dir, { withFileTypes: true })
@@ -572,11 +590,34 @@ function walkDir(dir) {
         )
         violations++
       }
+      // 30. 内容面 tint 被当交互悬浮用（判定面含 ui/：基座破例会被调用点照抄）
+      for (const hit of collectTintAsInteractionHits(stripComments(content))) {
+        console.log(
+          `${relPath}:${hit.line}: 状态前缀上用了内容面 tint（*-bg-subtle）→ 交互悬浮只走覆盖层 --mcs-state-*（危险族用 --mcs-state-hover-error）`,
+        )
+        violations++
+      }
     }
   }
 }
 
 walkDir(srcDir)
+
+// 30b. 第 30 条的 ui/ 半边。主遍历 walkDir 按 EXCLUDE_DIR 跳过 components/ui/，
+// 而本条要拦的正是基座自己（现实反例＝ui/button 的 destructive-outline 变体——基座
+// 破例会被调用点逐字照抄）。只扫 feature 等于放行源头，故单开一支遍历补上，
+// 判定面才与规则声明一致。
+// 测试按定义就该断言类名字面量（反例字面量也会命中正则），与第 28/29 条同口径排除
+for (const f of walkUiDir(join(srcDir, 'components', 'ui'))) {
+  if (f.split(sep).join('/').includes('__tests__')) continue
+  const content = readFileSync(f, 'utf-8')
+  for (const hit of collectTintAsInteractionHits(stripComments(content))) {
+    console.log(
+      `${relative(root, f)}:${hit.line}: 状态前缀上用了内容面 tint（*-bg-subtle）→ 交互悬浮只走覆盖层 --mcs-state-*（危险族用 --mcs-state-hover-error）`,
+    )
+    violations++
+  }
+}
 
 // ── G9：未定义类 / 死类 / 死 token 双向检查 ─────────────────────
 // 消费口径：token 存活 = ① 定义层/注册层之外出现 `--mcs-x` 字面量（含 cssVar('--mcs-x')），
@@ -1230,5 +1271,5 @@ if (violations > 0) {
   process.exit(1)
 }
 console.log(
-  '✓ 设计 token 完整性检查通过（色板类/dark:/transition-all/duration-数字/rounded-任意值/字号上限/焦点可见性/未注册 token 类/token 角色矩阵/alpha 白名单/未定义类/死类/死 token/内容面 tint 叠加/语义色三件套与选中强调形态声明源/Z 轴阶梯/text-base 额度/玻璃预算/危险半透明底/内容面 tint 不透明/布局属性动画/卡片面声明源/标签组件唯一性/页面页头与标题档/全屏覆盖层来源/行内抢键落点/内联尺寸单位/危险描边只从变体取/焦点环取消须有替换）',
+  '✓ 设计 token 完整性检查通过（色板类/dark:/transition-all/duration-数字/rounded-任意值/字号上限/焦点可见性/未注册 token 类/token 角色矩阵/alpha 白名单/未定义类/死类/死 token/内容面 tint 叠加/语义色三件套与选中强调形态声明源/Z 轴阶梯/text-base 额度/玻璃预算/危险半透明底/内容面 tint 不透明/布局属性动画/卡片面声明源/标签组件唯一性/页面页头与标题档/全屏覆盖层来源/行内抢键落点/内联尺寸单位/危险描边只从变体取/焦点环取消须有替换/交互悬浮只走覆盖层）',
 )
