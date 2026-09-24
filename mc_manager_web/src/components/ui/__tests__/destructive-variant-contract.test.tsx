@@ -39,7 +39,10 @@ describe('危险按钮变体（唯一声明源）', () => {
     const cls = tokens(buttonVariants({ variant: 'destructive-outline' }))
     expect(cls).toContain('border-mcs-error-border-strong')
     expect(cls).toContain('text-mcs-error-fg')
-    expect(cls).toContain('hover:bg-mcs-error-bg-subtle')
+    expect(cls).toContain('hover:bg-mcs-state-hover-error')
+    // 悬停必须走覆盖层档，不得回落到内容面 tint（*-bg-subtle 承载文字，按
+    // 「交互悬浮只走覆盖层」不得当 hover 态用——基座破例会被调用点忠实复制）
+    expect(cls).not.toContain('hover:bg-mcs-error-bg-subtle')
     // 面与中性次操作同源（--mcs-bg-secondary 即 chip 面），不因换档而退掉按钮面
     expect(cls).toContain('bg-mcs-bg-secondary')
     // 面档必须走 token：dark: 前缀类在 ui/ 外被门禁拦，且它排在 hover:* 之后会吃掉悬停危险底

@@ -16,7 +16,11 @@ import {
 import { MINECRAFT_POTIONS, type PotionEffect } from '@/lib/mc-potions'
 import { effectColorHex } from './give-item-preview-bar'
 import type { SelectedEntry } from './give-item-enchant-editor'
-import { TONE_SELECTED_SURFACE_CLASSES, toneClasses } from '@/components/mcs/tone'
+import {
+  TONE_SELECTED_CLASSES,
+  TONE_SELECTED_SURFACE_CLASSES,
+  toneClasses,
+} from '@/components/mcs/tone'
 
 /** 药水效果虚拟物品（id 用效果 id，category 固定「药水」，UI 展示用） */
 export const POTION_VIRTUAL_ITEMS: MinecraftItem[] = MINECRAFT_POTIONS.map((e) => ({
@@ -191,9 +195,9 @@ export function ItemSelector({
               type="button"
               onClick={() => onCategoryChangeWithPanelReset(cat)}
               className={cn(
-                'shrink-0 rounded-full px-2 py-0.5 text-mcs-xs transition-colors',
+                'shrink-0 rounded-full border border-transparent px-2 py-0.5 text-mcs-xs transition-colors',
                 activeCategory === cat
-                  ? 'bg-mcs-accent-bg-subtle font-medium text-mcs-accent-fg'
+                  ? `${TONE_SELECTED_CLASSES} font-medium`
                   : 'text-mcs-text-muted hover:bg-mcs-state-hover hover:text-mcs-text-default',
               )}
             >

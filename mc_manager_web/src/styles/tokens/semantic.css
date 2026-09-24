@@ -76,6 +76,11 @@
   --mcs-state-hover: var(--ref-state-hover);
   --mcs-state-focus: var(--ref-state-focus);
   --mcs-state-pressed: var(--ref-state-pressed);
+  /* 危险族的 hover 升温档。中性 state-hover 叠在危险按钮上只「变亮」，读不出「更危险」；
+     而直接 hover 到内容面 tint（*-bg-subtle）违反「交互悬浮只走覆盖层」。故为危险族
+     单开一支覆盖层——它与 state-hover 同类，不是内容面。取 state-hover 的 2×（8%→16%）：
+     升温必须明显压过 resting 的 error-bg-subtle 12%，否则 hover 与常态分不出。 */
+  --mcs-state-hover-error: color-mix(in oklch, var(--ref-error) 16%, transparent);
 
   /* ── 遮罩（弹窗/抽屉背板；原始值见 reference 层 --ref-scrim）── */
   --mcs-scrim: var(--ref-scrim);
@@ -224,6 +229,8 @@
   --mcs-state-hover: var(--ref-state-hover-light);
   --mcs-state-focus: var(--ref-state-focus-light);
   --mcs-state-pressed: var(--ref-state-pressed-light);
+  /* 亮色同族升温：state-hover 6% 的 2×（理由见暗色档声明处） */
+  --mcs-state-hover-error: color-mix(in oklch, var(--ref-error-light) 12%, transparent);
 
   /* 亮色光影：暗底的「内高光」手法不适用，改低强度冷灰投影；辉光同源 accent-light */
   --mcs-shadow-card: 0 1px 2px var(--ref-shadow-ink-light-soft), 0 4px 12px -4px var(--ref-shadow-ink-light);

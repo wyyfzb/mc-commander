@@ -239,7 +239,7 @@ export function BatchBar({ selectedPlayers, onOpenBatchDetail, onAction }: Batch
           <Button
             variant="outline"
             size="sm"
-            className="border-mcs-purple-border text-mcs-purple-fg hover:bg-mcs-purple-bg-subtle"
+            className="border-mcs-purple-border text-mcs-purple-fg hover:bg-mcs-state-hover"
             disabled={running}
           >
             <Gamepad2 aria-hidden />

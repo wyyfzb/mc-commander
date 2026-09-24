@@ -206,7 +206,7 @@ function FileListRow({
       )}
       <IconButton
         aria-label={`删除 ${entry.name}`}
-        className="text-mcs-error-fg hover:bg-mcs-error-bg-subtle hover:text-mcs-error-fg"
+        className="text-mcs-error-fg hover:bg-mcs-state-hover-error"
         onClick={(e) => {
           e.stopPropagation()
           onDelete(entry)

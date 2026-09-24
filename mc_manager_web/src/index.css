@@ -78,6 +78,7 @@
     --color-mcs-identity-6: var(--mcs-identity-6);
     --color-mcs-focus-ring: var(--mcs-focus-ring);
     --color-mcs-state-hover: var(--mcs-state-hover);
+    --color-mcs-state-hover-error: var(--mcs-state-hover-error);
     --color-mcs-state-focus: var(--mcs-state-focus);
     --color-mcs-state-pressed: var(--mcs-state-pressed);
     --color-mcs-scrim: var(--mcs-scrim);

@@ -32,8 +32,10 @@ const buttonVariants = cva(
         // 边界取强档：弱档 --mcs-error-border 是 25% 装饰线，不满足控件边界 ≥3:1（同 accent 弱档口径）。
         // 面档用 token 而非 dark: 覆写：dark: 前缀类在 ui/ 外被门禁拦（token 自带明暗），
         // 且产物里 dark:* 排在 hover:* 之后，一旦引入 dark: 面档就会吃掉悬停的危险底。
+        // 悬停取 --mcs-state-hover-error（危险族专用覆盖层）而非 error-bg-subtle：后者是
+        // 承载文字的内容面 tint，按「交互悬浮只走覆盖层」不得当 hover 态用。
         'destructive-outline':
-          'border-mcs-error-border-strong bg-mcs-bg-secondary text-mcs-error-fg hover:bg-mcs-error-bg-subtle focus-visible:outline-mcs-error-fg',
+          'border-mcs-error-border-strong bg-mcs-bg-secondary text-mcs-error-fg hover:bg-mcs-state-hover-error focus-visible:outline-mcs-error-fg',
         link: 'text-primary underline-offset-4 hover:underline',
       },
       size: {

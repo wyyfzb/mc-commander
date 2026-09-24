@@ -256,7 +256,7 @@ function TaskRow({
         <span className="h-5 w-px shrink-0 bg-mcs-border-muted" aria-hidden />
         <IconButton
           aria-label={`${task.name} 删除`}
-          className="text-mcs-error-fg hover:bg-mcs-error-bg-subtle hover:text-mcs-error-fg"
+          className="text-mcs-error-fg hover:bg-mcs-state-hover-error"
           onClick={() => onDelete(task)}
         >
           <Trash2 className="size-3.5" aria-hidden />

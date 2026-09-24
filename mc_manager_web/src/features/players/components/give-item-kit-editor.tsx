@@ -26,7 +26,7 @@ import {
 import { SearchInput } from '@/components/mcs/search-input'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { useRadioGroup } from '@/hooks/use-radio-group'
-import { TONE_SELECTED_SURFACE_CLASSES } from '@/components/mcs/tone'
+import { TONE_SELECTED_CLASSES, TONE_SELECTED_SURFACE_CLASSES } from '@/components/mcs/tone'
 import { cn } from '@/lib/utils'
 import {
   ITEM_CATEGORIES,
@@ -411,9 +411,9 @@ export function KitEditorDialog({
                     type="button"
                     onClick={() => setCategory(cat)}
                     className={cn(
-                      'shrink-0 rounded-full px-2 py-0.5 text-mcs-xs transition-colors',
+                      'shrink-0 rounded-full border border-transparent px-2 py-0.5 text-mcs-xs transition-colors',
                       category === cat
-                        ? 'bg-mcs-accent-bg-subtle font-medium text-mcs-accent-fg'
+                        ? `${TONE_SELECTED_CLASSES} font-medium`
                         : 'text-mcs-text-muted hover:bg-mcs-state-hover hover:text-mcs-text-default',
                     )}
                   >
@@ -433,7 +433,7 @@ export function KitEditorDialog({
                         key={item.id}
                         type="button"
                         onClick={() => addItem(item)}
-                        className="flex flex-col items-center gap-0.5 rounded-mcs-sm border border-mcs-border-subtle bg-mcs-bg-muted px-0.5 py-1 transition-colors hover:border-mcs-accent-border hover:bg-mcs-accent-bg-subtle"
+                        className="flex flex-col items-center gap-0.5 rounded-mcs-sm border border-mcs-border-subtle bg-mcs-bg-muted px-0.5 py-1 transition-colors hover:border-mcs-accent-border hover:bg-mcs-state-hover"
                       >
                         <img
                           src={itemImageUrl(item.id)}
