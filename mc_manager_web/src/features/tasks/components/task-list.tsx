@@ -13,7 +13,7 @@ import { IconButton } from '@/components/mcs/icon-button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { InfoHint } from '@/components/mcs/info-hint'
 import { StatusPill } from '@/components/mcs/status-pill'
 import { toneClasses } from '@/components/mcs/tone'
 import { EmptyState } from '@/components/mcs/empty-state'
@@ -192,36 +192,21 @@ function TaskRow({
             下次运行追加倒计时（useNow 每分钟刷新；null → 保持「从未」） */}
         <p className="mt-0.5 truncate text-mcs-xs text-mcs-text-muted">
           {`上次运行: ${formatTaskDate(task.lastRunAt)}`}
-          {lastRunMeta && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span
-                  className={cn(
-                    'ml-1.5 inline-flex items-center gap-1 font-medium',
-                    lastRunMeta.text,
-                    task.lastRunStatus === 'failed' &&
-                      task.lastRunError &&
-                      'cursor-help underline decoration-dashed underline-offset-2',
-                  )}
-                >
-                  <span className={cn('size-1.5 rounded-full', lastRunMeta.dot)} aria-hidden />
-                  {lastRunMeta.label}
-                  {task.lastRunStatus === 'failed' && task.lastRunError && (
-                    <AlertCircle className="size-3" aria-hidden />
-                  )}
-                </span>
-              </TooltipTrigger>
-              {task.lastRunStatus === 'failed' && task.lastRunError && (
-                <TooltipContent side="bottom" className="max-w-xs">
-                  <p className="text-mcs-xs font-medium text-mcs-error-fg">失败原因</p>
-                  {/* 失败原因可能为无空格长串（压缩 JSON/路径），break-all 防溢出 tooltip 框 */}
-                  <p className="mt-1 text-xs break-all text-mcs-text-default">
-                    {task.lastRunError}
-                  </p>
-                </TooltipContent>
-              )}
-            </Tooltip>
-          )}
+          {lastRunMeta &&
+            (task.lastRunStatus === 'failed' && task.lastRunError ? (
+              /* 走 InfoHint inline 而非 Tooltip：失败原因必须键盘与触屏都拿得到 */
+              <InfoHint
+                variant="inline"
+                label="失败原因"
+                term={<LastRunMetaMark meta={lastRunMeta} withAlert />}
+              >
+                <p className="text-mcs-xs font-medium text-mcs-error-fg">失败原因</p>
+                {/* 失败原因可能为无空格长串（压缩 JSON/路径），break-all 防溢出浮层框 */}
+                <p className="mt-1 text-xs break-all text-mcs-text-default">{task.lastRunError}</p>
+              </InfoHint>
+            ) : (
+              <LastRunMetaMark meta={lastRunMeta} />
+            ))}
           {`  ·  下次运行: ${nextRunCountdown === null ? '从未' : `${formatTaskDate(task.nextRunAt)}（${nextRunCountdown}）`}`}
         </p>
       </div>
@@ -263,5 +248,26 @@ function TaskRow({
         </IconButton>
       </div>
     </div>
+  )
+}
+
+/**
+ * 上次运行结果标记：色点 + 文案（失败且带原因时追加警示图标）。
+ * 抽成组件是因为「有解释」与「无解释」两条分支必须共用同一段可见内容——
+ * 写两份就会各自漂移，而它是用户扫列表时判断「这条要不要点进去」的唯一依据。
+ */
+function LastRunMetaMark({
+  meta,
+  withAlert,
+}: {
+  meta: NonNullable<(typeof LAST_RUN_STATUS)[keyof typeof LAST_RUN_STATUS]>
+  withAlert?: boolean
+}) {
+  return (
+    <span className={cn('ml-1.5 inline-flex items-center gap-1 font-medium', meta.text)}>
+      <span className={cn('size-1.5 rounded-full', meta.dot)} aria-hidden />
+      {meta.label}
+      {withAlert && <AlertCircle className="size-3" aria-hidden />}
+    </span>
   )
 }

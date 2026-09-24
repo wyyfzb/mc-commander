@@ -9,7 +9,7 @@
 import type { ColumnDef } from '@tanstack/react-table'
 import { Ban } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { InfoHint } from '@/components/mcs/info-hint'
 import { cn } from '@/lib/utils'
 import { formatRelativeTime } from '@/lib/format'
 import type { Player } from '@/api/types'
@@ -249,12 +249,11 @@ export function buildPlayerColumns({
         // 服务端从不返回 ping（RCON 不暴露）——undefined 同样视为「需插件」
         if (ping == null) {
           return (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="cursor-help text-mcs-xs text-mcs-text-muted">需插件</span>
-              </TooltipTrigger>
-              <TooltipContent>原版 RCON 不暴露玩家 ping</TooltipContent>
-            </Tooltip>
+            <span className="text-mcs-xs text-mcs-text-muted">
+              <InfoHint variant="inline" label="需插件">
+                原版 RCON 不暴露玩家 ping
+              </InfoHint>
+            </span>
           )
         }
         const color =

@@ -96,7 +96,7 @@ describe('AuditBody（issue 481 拆分后行为级测试）', () => {
 })
 
 describe('CmdBody（命令历史表体）', () => {
-  it('失败行 hover tooltip：response 内容 break-all 防长串溢出', async () => {
+  it('失败行取解释：response 内容 break-all 防长串溢出', async () => {
     const user = userEvent.setup()
     render(
       <TooltipProvider>
@@ -105,7 +105,8 @@ describe('CmdBody（命令历史表体）', () => {
         </table>
       </TooltipProvider>,
     )
-    await user.hover(screen.getByText('失败'))
+    // 点按而非 hover：解释走 Popover，键盘/触屏与鼠标必须走同一条路
+    await user.click(screen.getByRole('button', { name: '失败原因' }))
     expect(await screen.findByText('ECONNREFUSED 1.2.3.4')).toHaveClass('break-all')
   })
 

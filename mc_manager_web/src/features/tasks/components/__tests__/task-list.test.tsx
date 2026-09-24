@@ -128,9 +128,10 @@ describe('TaskList 上次运行结果标记', () => {
     renderOneTask('failed', new Date().toISOString())
     expect(screen.getByText('失败')).toBeInTheDocument()
 
-    // 失败原因 tooltip 内容 break-all：无空格长串（压缩 JSON/路径）不溢出 tooltip 框
+    // 失败原因浮层内容 break-all：无空格长串（压缩 JSON/路径）不溢出浮层框。
+    // 点按而非 hover——解释走 Popover，键盘/触屏与鼠标必须走同一条路
     const user = userEvent.setup()
-    await user.hover(screen.getByText('失败'))
+    await user.click(screen.getByRole('button', { name: '失败原因' }))
     expect(await screen.findByText('RCON 不可用')).toHaveClass('break-all')
   })
 
