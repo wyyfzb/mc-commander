@@ -591,3 +591,34 @@ test.describe('插件页窄屏：页头不挤压 + 选择框中线', () => {
     expect(mainOverflow).toBeLessThanOrEqual(0)
   })
 })
+
+test.describe('手机横屏（短视口）', () => {
+  /**
+   * 短视口下页面下部控件必须仍可点。
+   *
+   * 缺口由来：表格外壳的收缩下限先写成固定 `min-h-40`（160px），可用高不足时不肯退让，
+   * 卡片溢出父级并盖住其后的兄弟节点——「显示全部列」开关实测在 667x375 与 812x375
+   * 由可点变**点击超时**（Playwright 非 force 点击会因元素被遮挡而失败）。
+   * 下限改 `min()` 后恢复；本用例锁的就是这个可点性。
+   * 横屏短高度此前无用例（既有移动用例都是 375x812 竖屏，可用高远大于 160px）。
+   */
+  test('667x375 与 812x375：表格下方的「显示全部列」开关可点', async ({ page }) => {
+    await setupConnection(page)
+    for (const vp of [
+      { width: 667, height: 375 },
+      { width: 812, height: 375 },
+    ]) {
+      await page.setViewportSize(vp)
+      await page.goto('/players')
+      await page.waitForLoadState('networkidle')
+      await page.waitForTimeout(600)
+
+      const toggle = page.getByRole('button', { name: /显示全部列|收起次要列/ })
+      await expect(toggle, `${vp.width}x${vp.height} 未见列开关`).toBeVisible()
+      // 非 force 点击：被遮挡时 Playwright 会等待到超时并抛错——正是要拦的回归
+      await toggle.click({ timeout: 5000 })
+      // 点完确实生效（开关本身有状态变化，不是空过）
+      await expect(page.getByRole('button', { name: /收起次要列/ })).toBeVisible()
+    }
+  })
+})

@@ -13,7 +13,7 @@ import { toast } from 'sonner'
 import { apiGet, ApiError } from '@/api/client'
 import { queryKeys, useInstances } from '@/api/queries'
 import { ErrorCode, getFriendlyErrorText } from '@/api/errors'
-import { queryPhase } from '@/lib/query-phase'
+import { queryFailed, queryPhase } from '@/lib/query-phase'
 import { instanceLabel } from '@/lib/instance-label'
 import { EmptyState } from '@/components/mcs/empty-state'
 import { StaleQueryNotice } from '@/components/mcs/data-states'
@@ -172,12 +172,24 @@ export function InstancesPage() {
   })
   const detailStatuses: Record<string, InstanceStatus> = {}
   const loadingIds = new Set<string>()
+  /* 逐卡详情失败必须传到卡片：此前只取 data/isLoading，isError 被静默丢掉 ⇒
+     失败卡的版本徽章凭空消失、四个指标全「—」，与「这台机器真的没有 TPS」不可分 */
+  const detailErrorIds = new Set<string>()
+  const detailIndexById = new Map<string, number>()
   detailsQueries.forEach((q, idx) => {
     const inst = instances[idx]
     if (!inst) return
+    detailIndexById.set(inst.id, idx)
     if (q.data) detailStatuses[inst.id] = q.data
     if (q.isLoading) loadingIds.add(inst.id)
+    if (queryFailed(q)) detailErrorIds.add(inst.id)
   })
+
+  /** 重试某实例的详情查询（失败卡的重试入口；index 由上面的遍历建立） */
+  const handleRetryDetail = (instanceId: string) => {
+    const idx = detailIndexById.get(instanceId)
+    if (idx != null) void detailsQueries[idx]?.refetch()
+  }
 
   /** 切换当前实例 */
   const handleSwitch = (inst: InstanceSummary) => {
@@ -185,8 +197,21 @@ export function InstancesPage() {
     toast.success(`已切换到 "${instanceLabel(inst)}"`, { duration: 1500 })
   }
 
-  /** 启动配置 → 实例设置弹窗 */
+  /**
+   * 启动配置 → 实例设置弹窗。
+   *
+   * 弹窗必须拿到详情才能预填（预填在 mount 时计算，未就绪挂载会把默认值固化），故详情
+   * 未就绪时弹窗延迟到查询完成才出现。但「详情失败」不会自愈——不给出反馈就是一个
+   * 死点击（用户不知道是没反应还是在等），故此时直接说明并给重试入口。
+   */
   const handleOpenSettings = (inst: InstanceSummary) => {
+    if (!detailStatuses[inst.id] && detailErrorIds.has(inst.id)) {
+      toast.error('实例详情获取失败，无法打开启动配置', {
+        description: '启动配置需要实例详情预填，请先重试获取详情。',
+      })
+      handleRetryDetail(inst.id)
+      return
+    }
     setSettingsTarget(inst)
   }
 
@@ -319,6 +344,8 @@ export function InstancesPage() {
             currentId={instanceId}
             detailStatuses={detailStatuses}
             loadingIds={loadingIds}
+            detailErrorIds={detailErrorIds}
+            onRetryDetail={handleRetryDetail}
             uninstallingId={
               // 同 runMutation：variables 成功后常驻，必须 isPending 才取（防按钮永久禁用）
               uninstallMutation.isPending ? (uninstallMutation.variables?.instanceId ?? null) : null
@@ -329,6 +356,13 @@ export function InstancesPage() {
               // 每次打开升级弹窗清空该实例残留进度，避免展示上一轮终态
               clearUpgradeProgress(inst.id)
               setUpgradeTarget(inst)
+              // 同上：升级弹窗以 detail 为 instance 入参，详情未就绪时不会挂载
+              if (!detailStatuses[inst.id] && detailErrorIds.has(inst.id)) {
+                toast.error('实例详情获取失败，无法打开升级向导', {
+                  description: '升级需要实例详情，请先重试获取详情。',
+                })
+                handleRetryDetail(inst.id)
+              }
             }}
             onUninstall={setUninstallTarget}
             onStart={handleStart}

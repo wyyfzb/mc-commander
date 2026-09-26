@@ -31,6 +31,8 @@ function baseProps(overrides: Partial<InstanceCardsProps> = {}): InstanceCardsPr
       alpha: { ...mockInstanceStatus, id: 'alpha', name: '虚构甲服', mcVersion: '1.21.4' },
     },
     loadingIds: new Set<string>(),
+    detailErrorIds: new Set<string>(),
+    onRetryDetail: vi.fn(),
     uninstallingId: null,
     onSwitch: vi.fn(),
     onOpenSettings: vi.fn(),
@@ -348,5 +350,85 @@ describe('InstanceCards', () => {
     expect(within(alphaCard).queryByText('当前')).not.toBeInTheDocument()
     const betaCard = container.querySelector('[data-instance-id="beta"]') as HTMLElement
     expect(within(betaCard).getByText('当前')).toBeInTheDocument()
+  })
+})
+
+/**
+ * 详情查询失败（条目 35）：失败必须与「本来就没有这个值」可分。
+ * 此前只取 data/isLoading，isError 被静默丢掉 ⇒ 版本徽章凭空消失、指标全「—」，
+ * 用户会把上游故障读成「这台机器就是没有 TPS/世界大小」。
+ */
+describe('InstanceCards 详情失败', () => {
+  it('失败且无旧值：给失败提示 + 重试，且版本徽章显「版本未知」而非消失', () => {
+    const onRetryDetail = vi.fn()
+    const { container } = render(
+      <InstanceCards
+        {...baseProps({
+          detailStatuses: {},
+          detailErrorIds: new Set(['beta']),
+          onRetryDetail,
+        })}
+      />,
+    )
+
+    const betaCard = container.querySelector('[data-instance-id="beta"]') as HTMLElement
+    expect(within(betaCard).getByText('运行详情获取失败，上方指标不可用')).toBeInTheDocument()
+    // 静默消失会让用户以为实例没问题；「版本未知」把「取不到」与「没有」分开
+    expect(within(betaCard).getByText('版本未知')).toBeInTheDocument()
+
+    fireEvent.click(within(betaCard).getByRole('button', { name: '重试' }))
+    expect(onRetryDetail).toHaveBeenCalledWith('beta')
+  })
+
+  it('他卡不受影响：未失败的卡既无失败提示也无「版本未知」', () => {
+    const { container } = render(
+      <InstanceCards {...baseProps({ detailErrorIds: new Set(['beta']) })} />,
+    )
+
+    const alphaCard = container.querySelector('[data-instance-id="alpha"]') as HTMLElement
+    expect(within(alphaCard).queryByText(/运行详情获取失败/)).not.toBeInTheDocument()
+    expect(within(alphaCard).queryByText('版本未知')).not.toBeInTheDocument()
+    expect(within(alphaCard).getByText('1.21.4')).toBeInTheDocument()
+  })
+
+  it('失败集不跨卡泄漏：只有卡在集里才出提示（无数据 + 未失败的卡两者皆无）', () => {
+    // alpha 有 detail、beta 未失败但也没有 detail（overrides 清空 detailStatuses）。
+    // 「有 detail」的卡即使失败集命中也会走 mcVersion 分支，看不出泄漏；
+    // 真正的判定面是**无数据且未失败**的卡——它必须既无提示也无「版本未知」，
+    // 否则说明实现用的是 detailErrorIds.size > 0 而非 .has(id)
+    const { container } = render(
+      <InstanceCards
+        {...baseProps({
+          detailStatuses: {
+            alpha: { ...mockInstanceStatus, id: 'alpha', name: '虚构甲服', mcVersion: '1.21.4' },
+          },
+          detailErrorIds: new Set(['alpha']),
+        })}
+      />,
+    )
+
+    const alphaCard = container.querySelector('[data-instance-id="alpha"]') as HTMLElement
+    // alpha 有旧值 ⇒ 不出失败提示（同 query-phase 的 stale 口径）
+    expect(within(alphaCard).queryByText(/运行详情获取失败/)).not.toBeInTheDocument()
+
+    const betaCard = container.querySelector('[data-instance-id="beta"]') as HTMLElement
+    // beta 无数据、未失败 ⇒ 不得因「别卡失败」而出现任何失败痕迹
+    expect(within(betaCard).queryByText(/运行详情获取失败/)).not.toBeInTheDocument()
+    expect(within(betaCard).queryByText('版本未知')).not.toBeInTheDocument()
+  })
+
+  it('有旧值可留时不出失败提示：旧数据仍在卡上，加提示只会打断', () => {
+    const { container } = render(
+      <InstanceCards
+        {...baseProps({
+          detailErrorIds: new Set(['alpha']),
+        })}
+      />,
+    )
+
+    const alphaCard = container.querySelector('[data-instance-id="alpha"]') as HTMLElement
+    expect(within(alphaCard).queryByText(/运行详情获取失败/)).not.toBeInTheDocument()
+    // 旧值照常渲染
+    expect(within(alphaCard).getByText('1.21.4')).toBeInTheDocument()
   })
 })

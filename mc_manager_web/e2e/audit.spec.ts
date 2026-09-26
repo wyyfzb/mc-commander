@@ -170,4 +170,104 @@ test.describe('审计页', () => {
     await page.waitForTimeout(300)
     await maybeShot(page, 'audit-filter-active-dark.png')
   })
+
+  /**
+   * 表格按内容收缩（两侧括号都要锁）：
+   * - 上方：行少时壳不得吃满剩余高度（曾是 235px 内容装在 618px 壳里，370+px 空面板）
+   * - 下方：行多时壳必须真的被约束住并出现滚动（收过头会把表格挤出视口、滚动条消失）
+   * jsdom 量不到几何，故只能在 e2e 锁。
+   */
+  test('表格按内容收缩：行少时壳贴合内容，行多时被约束在可用高度内且可滚动', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await setupConnection(page)
+    await page.goto('/audit')
+    await page.waitForLoadState('networkidle')
+    await page.waitForTimeout(600)
+
+    const geometry = () =>
+      page.evaluate(() => {
+        const tbl = document.querySelector('main table')
+        const shell = tbl?.parentElement as HTMLElement | null
+        const main = document.querySelector('main')
+        if (!shell || !main) return null
+        const sr = shell.getBoundingClientRect()
+        const tr = tbl!.getBoundingClientRect()
+        return {
+          shellH: Math.round(sr.height),
+          contentH: Math.round(tr.height),
+          mainH: Math.round(main.getBoundingClientRect().height),
+          shellFitsMain: Math.round(main.getBoundingClientRect().bottom - sr.bottom),
+          scrollable: shell.scrollHeight > shell.clientHeight,
+          clientH: shell.clientHeight,
+        }
+      })
+
+    // 上方括号：壳贴合内容（差值 ≤ 数像素的圆角/边框），且明显短于可用高度
+    const small = await geometry()
+    expect(small).not.toBeNull()
+    expect(small!.shellH - small!.contentH).toBeLessThanOrEqual(8)
+    expect(small!.shellH).toBeLessThan(small!.mainH - 100)
+
+    // 下方括号：把行数放大到远超一屏，壳必须保持「在可用高度内」且出现滚动
+    // 响应信封是 `data` 扁平数组 + 兄弟 `pagination`（见 scripts/mock-server.mjs）
+    await page.route('**/api/v1/audit-logs*', async (route) => {
+      const response = await route.fetch()
+      const body = await response.json()
+      const src: unknown[] = Array.isArray(body.data) ? body.data : []
+      const one = src[0]
+      if (!one) return route.fulfill({ response })
+      const many = Array.from({ length: 80 }, (_, i) => ({ ...one, id: `e2e-row-${i}` }))
+      await route.fulfill({
+        response,
+        json: {
+          ...body,
+          data: many,
+          pagination: { total: many.length, page: 1, pageSize: 20, totalPages: 4 },
+        },
+      })
+    })
+    await page.reload()
+    await page.waitForLoadState('networkidle')
+    await page.waitForTimeout(800)
+
+    const many = await geometry()
+    expect(many).not.toBeNull()
+    // 不被挤出视口：壳底边仍在 main 之内（允许 1px 舍入）
+    expect(many!.shellFitsMain).toBeGreaterThanOrEqual(-1)
+    // 且真的出现滚动——收缩不能收成「截断」
+    expect(many!.scrollable).toBe(true)
+  })
+
+  /**
+   * 短视口下壳不得溢出 flex 父级（下限必须可退让）。
+   *
+   * 缺口由来：收缩用的下限先写成固定 `min-h-40`，在可用高不足 160px 时不肯退让 ⇒
+   * 卡片溢出父级、盖住其后的兄弟节点。玩家页实测「显示全部列」开关在 667x375 与
+   * 812x375 由可点变**点击超时**。审计页的分页器在壳根内部（被一并推下去），只表现为
+   * 「多余滚动」，故这里断 overflow 而非断点击——玩家页的点击形态由
+   * `players.spec.ts` 的横屏用例覆盖（同一默认类，两处同改）。
+   * jsdom 量不到几何，只能在 e2e 锁。
+   */
+  test('短视口（手机横屏 667x375 / 矮窗 1440x400）：壳不溢出父级', async ({ page }) => {
+    await setupConnection(page)
+    for (const vp of [
+      { width: 667, height: 375 },
+      { width: 1440, height: 400 },
+    ]) {
+      await page.setViewportSize(vp)
+      await page.goto('/audit')
+      await page.waitForLoadState('networkidle')
+      await page.waitForTimeout(500)
+      const overflow = await page.evaluate(() => {
+        const tbl = document.querySelector('main table')
+        const card = tbl?.parentElement as HTMLElement | null
+        const root = card?.parentElement as HTMLElement | null
+        if (!card || !root) return null
+        return Math.round(card.getBoundingClientRect().bottom - root.getBoundingClientRect().bottom)
+      })
+      expect(overflow, `${vp.width}x${vp.height} 壳溢出父级`).not.toBeNull()
+      // 允许 1px 舍入：溢出超过这个值即说明下限不肯退让
+      expect(overflow!, `${vp.width}x${vp.height}`).toBeLessThanOrEqual(1)
+    }
+  })
 })

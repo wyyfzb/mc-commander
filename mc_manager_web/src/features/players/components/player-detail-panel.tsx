@@ -5,9 +5,10 @@
  * - 承载方式见 variant：lg 及以上内联右栏 / lg 以下由 Sheet 承载（此前窄屏是无 dialog 语义的覆盖层）
  * - 打开期间封禁记录 30s 轮询
  */
-import { X } from 'lucide-react'
+import { RefreshCw, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ErrorStateVisual } from '@/components/mcs/data-states'
 import { cn } from '@/lib/utils'
 import { queryPhase } from '@/lib/query-phase'
 import type { Player } from '@/api/types'
@@ -65,6 +66,11 @@ export function PlayerDetailPanel({
     player === null && detailName !== null ? detailName : null,
   )
   const effectivePlayer: Player | null = player ?? fallbackDetails.data ?? null
+
+  /* 回退端点失败时不能与「还在转」共用一态：两者都是 effectivePlayer 为 null，
+     但前者应给错误态 + 重试，后者才是骨架。取 failed 相（已失败且无数据可留——
+     本处无旧值可留，stale 相即退化为「显示上一次的详情」，由 data 分支自然承担）。 */
+  const fallbackPhase = queryPhase(fallbackDetails)
 
   // 封禁记录 30s 轮询（面板打开期间）
   const bansQuery = usePlayerBans(instanceId, detail !== null)
@@ -151,6 +157,25 @@ export function PlayerDetailPanel({
               </div>
             </div>
           </div>
+        ) : fallbackPhase === 'failed' ? (
+          /* 请求失败：头部给错误态 + 重试。此前与「加载中…」共用一态，
+             端点持续故障时用户看到的是永久骨架——把失败呈现成「还在转」 */
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <span className="truncate text-mcs-sm text-mcs-error-fg">详情加载失败</span>
+            <Button
+              variant="outline"
+              size="sm"
+              className="shrink-0"
+              disabled={fallbackDetails.isFetching}
+              onClick={() => void fallbackDetails.refetch()}
+            >
+              <RefreshCw
+                className={cn('size-3.5', fallbackDetails.isFetching && 'animate-spin')}
+                aria-hidden
+              />
+              重试
+            </Button>
+          </div>
         ) : (
           <div className="flex flex-1 items-center text-mcs-sm text-mcs-text-muted">加载中…</div>
         )}
@@ -186,54 +211,81 @@ export function PlayerDetailPanel({
 
       {/* ── 内容区 ── */}
       <div className="min-h-0 flex-1 overflow-auto px-3.5 py-3">
-        {effectiveTab === 'overview' && effectivePlayer && (
-          <OverviewTab
-            instanceId={instanceId}
-            player={effectivePlayer}
-            isRconConnected={isRconConnected}
-            bans={bans}
-            bansPhase={queryPhase(bansQuery)}
-            bansError={bansQuery.error}
-            onRetryBans={() => void bansQuery.refetch()}
-            onAction={onAction}
-            onOpenBanDialog={onOpenBanDialog}
-          />
+        {/* 详情端点失败且无旧值：整块错误态替代所有 Tab 内容。不给 Tab 各自渲染
+            「无数据」——那会把「取不到玩家」说成「这个玩家没有背包/没有传送点」，
+            把上游故障伪装成事实（同 lib/query-phase 的口径） */}
+        {fallbackPhase === 'failed' && !isBatchMode ? (
+          <div className="flex flex-col items-center gap-3 py-10">
+            <ErrorStateVisual
+              error={fallbackDetails.error}
+              retry={
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={fallbackDetails.isFetching}
+                  onClick={() => void fallbackDetails.refetch()}
+                >
+                  <RefreshCw
+                    className={cn('size-3.5', fallbackDetails.isFetching && 'animate-spin')}
+                    aria-hidden
+                  />
+                  重试
+                </Button>
+              }
+            />
+          </div>
+        ) : (
+          <>
+            {effectiveTab === 'overview' && effectivePlayer && (
+              <OverviewTab
+                instanceId={instanceId}
+                player={effectivePlayer}
+                isRconConnected={isRconConnected}
+                bans={bans}
+                bansPhase={queryPhase(bansQuery)}
+                bansError={bansQuery.error}
+                onRetryBans={() => void bansQuery.refetch()}
+                onAction={onAction}
+                onOpenBanDialog={onOpenBanDialog}
+              />
+            )}
+            {effectiveTab === 'inventory' && effectivePlayer && (
+              <InventoryTab player={effectivePlayer} />
+            )}
+            {effectiveTab === 'teleport' && (
+              <TeleportTab
+                player={isBatchMode ? null : effectivePlayer}
+                batchTargets={isBatchMode ? batchTargets : effectivePlayer ? [effectivePlayer] : []}
+                isBatchMode={isBatchMode}
+                instanceId={instanceId}
+                isRconConnected={isRconConnected}
+                onAction={onAction}
+              />
+            )}
+            {effectiveTab === 'give' && (
+              <GiveItemPanel
+                player={isBatchMode ? null : effectivePlayer}
+                batchTargets={isBatchMode ? batchTargets : effectivePlayer ? [effectivePlayer] : []}
+                isBatchMode={isBatchMode}
+                instanceId={instanceId}
+                mcVersion={mcVersion}
+                isRconConnected={isRconConnected}
+                onAction={onAction}
+              />
+            )}
+            {effectiveTab === 'actions' && (
+              <ActionForms
+                player={isBatchMode ? null : effectivePlayer}
+                batchTargets={isBatchMode ? batchTargets : effectivePlayer ? [effectivePlayer] : []}
+                isBatchMode={isBatchMode}
+                instanceId={instanceId}
+                isRconConnected={isRconConnected}
+                onAction={onAction}
+              />
+            )}
+            {effectiveTab === 'log' && effectivePlayer && <LogTab player={effectivePlayer} />}
+          </>
         )}
-        {effectiveTab === 'inventory' && effectivePlayer && (
-          <InventoryTab player={effectivePlayer} />
-        )}
-        {effectiveTab === 'teleport' && (
-          <TeleportTab
-            player={isBatchMode ? null : effectivePlayer}
-            batchTargets={isBatchMode ? batchTargets : effectivePlayer ? [effectivePlayer] : []}
-            isBatchMode={isBatchMode}
-            instanceId={instanceId}
-            isRconConnected={isRconConnected}
-            onAction={onAction}
-          />
-        )}
-        {effectiveTab === 'give' && (
-          <GiveItemPanel
-            player={isBatchMode ? null : effectivePlayer}
-            batchTargets={isBatchMode ? batchTargets : effectivePlayer ? [effectivePlayer] : []}
-            isBatchMode={isBatchMode}
-            instanceId={instanceId}
-            mcVersion={mcVersion}
-            isRconConnected={isRconConnected}
-            onAction={onAction}
-          />
-        )}
-        {effectiveTab === 'actions' && (
-          <ActionForms
-            player={isBatchMode ? null : effectivePlayer}
-            batchTargets={isBatchMode ? batchTargets : effectivePlayer ? [effectivePlayer] : []}
-            isBatchMode={isBatchMode}
-            instanceId={instanceId}
-            isRconConnected={isRconConnected}
-            onAction={onAction}
-          />
-        )}
-        {effectiveTab === 'log' && effectivePlayer && <LogTab player={effectivePlayer} />}
       </div>
     </aside>
   )

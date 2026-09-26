@@ -103,9 +103,23 @@ export function DataTableShell({
   const widths = skeletonWidths ?? Array(columns).fill('w-24')
 
   return (
+    /* 壳根保留 flex-1：它给下面的 `min()` 下限与 `max-h-full` 提供确定的高度参照
+       （父级由页面给满高），同时让行数多时（pageSize=-1 走虚拟滚动）表格仍能被
+       约束在可用高度内滚动。收缩的是**内层卡片**——见下面 Card 的注释。 */
     <div className={className ?? 'flex min-h-0 flex-1 flex-col'}>
-      {/* 表格外壳即卡片面：走 Card 基座，滚动与伸缩留给调用点 */}
-      <Card as="div" ref={scrollRef} className="min-h-0 flex-1 overflow-auto">
+      {/* 表格外壳即卡片面：走 Card 基座，滚动与伸缩留给调用点。
+          按内容收缩：行数少时（2-10 人服的默认形态）卡片不再吃满剩余高度。
+          实测 1440x900 下玩家表内容 237px / 壳 606px、审计页 235px / 618px，
+          即约 370-383px 是纯空面板，会被读成「还没加载完」。
+          不写 flex-1 ⇒ flex-basis auto 按内容定高（空间充裕时即收缩到内容高）。
+
+          下限取 `min(160px, 100%)` 而非固定 `min-h-40`：固定下限在**短视口**下
+          （实测 667x375 手机横屏、1440x400/430）不肯退让，卡片会溢出 flex 父级并盖住
+          其后的兄弟节点——玩家页的分页器与「显示全部列」开关实测由可点变点击失败。
+          取 min() 后下限随可用高收缩，既不挤掉兄弟也不会把表格压成一条线。
+          **overflow-auto 必须保留**：摘掉会让 sticky 表头改为对 main 吸顶
+          （滚动容器变了），行为变更。 */}
+      <Card as="div" ref={scrollRef} className="min-h-[min(10rem,100%)] max-h-full overflow-auto">
         <table className={cn('w-full text-mcs-sm', tableClassName)}>
           {header}
           {isLoading ? (

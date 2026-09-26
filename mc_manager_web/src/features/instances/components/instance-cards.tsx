@@ -21,6 +21,7 @@ import {
   ShieldAlert,
   Square,
   Trash2,
+  TriangleAlert,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -69,6 +70,10 @@ export interface InstanceCardsProps {
   detailStatuses: Record<string, InstanceStatus>
   /** 详情加载中的实例 id 集合（仅该卡版本徽章位置显示骨架） */
   loadingIds: ReadonlySet<string>
+  /** 详情查询失败的实例 id 集合（该卡指标区改显失败提示 + 重试，不把故障呈现成「—」） */
+  detailErrorIds: ReadonlySet<string>
+  /** 重试某实例的详情查询（详情失败卡的重试入口） */
+  onRetryDetail: (instanceId: string) => void
   /** 卸载中的实例 id（该卡操作菜单的「卸载实例」项禁用 + 文案切换为「卸载中」，触发器转 spinner） */
   uninstallingId: string | null
   /** 切换当前实例 */
@@ -96,6 +101,8 @@ export function InstanceCards({
   currentId,
   detailStatuses,
   loadingIds,
+  detailErrorIds,
+  onRetryDetail,
   uninstallingId,
   onSwitch,
   onOpenSettings,
@@ -130,6 +137,8 @@ export function InstanceCards({
           isCurrent={currentId === instance.id}
           detail={detailStatuses[instance.id]}
           detailLoading={loadingIds.has(instance.id)}
+          detailFailed={detailErrorIds.has(instance.id)}
+          onRetryDetail={() => onRetryDetail(instance.id)}
           isUninstalling={uninstallingId === instance.id}
           isBusy={busyId === instance.id}
           phase={phaseById[instance.id] ?? null}
@@ -158,6 +167,8 @@ function InstanceCard({
   isCurrent,
   detail,
   detailLoading,
+  detailFailed,
+  onRetryDetail,
   isUninstalling,
   isBusy,
   phase,
@@ -173,6 +184,9 @@ function InstanceCard({
   isCurrent: boolean
   detail: InstanceStatus | undefined
   detailLoading: boolean
+  /** 详情查询失败（无旧值可留——有旧值时仍按旧值渲染，不打扰用户） */
+  detailFailed: boolean
+  onRetryDetail: () => void
   isUninstalling: boolean
   isBusy: boolean
   phase: InstancePhase | null
@@ -252,6 +266,11 @@ function InstanceCard({
           <StatusPill tone="muted" className="font-mono text-mcs-2xs" title={mcVersion}>
             {mcVersion}
           </StatusPill>
+        ) : detailFailed ? (
+          /* 取值失败与「本来就没有版本号」必须可区分：静默消失会让用户以为实例没问题 */
+          <StatusPill tone="warning" className="text-mcs-2xs" title="版本号获取失败">
+            版本未知
+          </StatusPill>
         ) : null}
       </div>
 
@@ -277,6 +296,19 @@ function InstanceCard({
         />
         <Metric label="世界" value={formatWorldSize(detail?.worldSize)} />
       </div>
+
+      {/* 详情失败行：指标区此时满屏「—」，不说明就等于宣称「这台机器没有 TPS/内存/世界大小」。
+          只在无旧值可留时出现——有旧值时旧数据仍在卡片上，加提示反而打断（同 lib/query-phase 口径） */}
+      {detailFailed && !detail && (
+        <NoticeBanner variant="warning" icon={TriangleAlert}>
+          <span className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+            <span>运行详情获取失败，上方指标不可用</span>
+            <Button size="xs" variant="outline" onClick={onRetryDetail}>
+              重试
+            </Button>
+          </span>
+        </NoticeBanner>
+      )}
 
       {/* 熔断告警行（feat-5） */}
       {detail?.circuitBreakerTripped && (
