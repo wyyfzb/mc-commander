@@ -24,6 +24,7 @@ import { UnsavedConfirmDialog } from './components/unsaved-confirm-dialog'
 import { DeleteConfirmDialog } from './components/delete-confirm-dialog'
 import { NamePromptDialog } from './components/name-prompt-dialog'
 import { RenameDialog } from './components/rename-dialog'
+import { MoveDialog } from './components/move-dialog'
 import { UploadConflictDialog } from './components/upload-conflict-dialog'
 import { useFileUpload } from './use-file-upload'
 import { useFileDownload } from './use-file-download'
@@ -37,7 +38,7 @@ import {
   useUploadFile,
 } from './queries'
 import { InstanceRequiredState } from '@/features/instances/components/instance-required-state'
-import { parentDirOf } from './path-utils'
+import { normalizeDirInput, parentDirOf } from './path-utils'
 
 /** 名称校验：返回错误文案（null=通过）；空值/路径分隔符（文案与原实现逐字一致） */
 function entryNameError(name: string, label: string): null | string {
@@ -110,6 +111,8 @@ export function FilesPage() {
   const [newDirName, setNewDirName] = useState('')
   const [renameTarget, setRenameTarget] = useState<FileEntry | null>(null)
   const [renameValue, setRenameValue] = useState('')
+  const [moveTarget, setMoveTarget] = useState<FileEntry | null>(null)
+  const [moveDirValue, setMoveDirValue] = useState('')
 
   // ── 响应式：编辑器内联还是全屏覆盖，按**双栏区实宽**判定 ──
   // 视口断点在这里判不准：侧栏折叠使同视口下内容宽差 152px（767 视口退化成抽屉后内容有
@@ -261,6 +264,40 @@ export function FilesPage() {
     }
   }
 
+  /**
+   * 移动：换父目录的 rename。服务端 `POST /files/rename` 本就接受任意 newPath
+   * 并带 `renameNoClobber`（目标同名即拒），故此能力零新 API——
+   * 此前做不到只是因为前端名称校验禁含 `/`（只能改同目录内的名字）。
+   */
+  const confirmMove = async () => {
+    if (!moveTarget) return
+    const target = normalizeDirInput(moveDirValue)
+    if (target === null) {
+      toast.error('目标目录必须以 / 开头，且不含 . 或 .. 段')
+      return
+    }
+    const newPath = target === '/' ? `/${moveTarget.name}` : `${target}/${moveTarget.name}`
+    if (newPath === moveTarget.path) {
+      setMoveTarget(null)
+      return
+    }
+    try {
+      await renameMutation.mutateAsync({ oldPath: moveTarget.path, newPath })
+      // 编辑器打开的就是被移动的文件且无未保存修改 → 跟随新路径（同重命名口径）
+      if (selectedPath === moveTarget.path && !dirty) {
+        setSelectedPath(newPath)
+      } else if (selectedPath === moveTarget.path) {
+        setSelectedPath(null)
+        originalRef.current = null
+        setDraft('')
+      }
+      toast.success(`已移动到 ${target}`)
+      setMoveTarget(null)
+    } catch (e) {
+      toast.error(`移动失败：${getFriendlyErrorText(e)}`)
+    }
+  }
+
   return (
     /* 本页无 @container：编辑器「内联双栏 ↔ 全屏覆盖」由 useContainerWidth 测双栏区实宽
        切档（见 isEditorFullscreen），CSS 容器档在这里无事可做 */
@@ -295,6 +332,11 @@ export function FilesPage() {
             onRename={(entry) => {
               setRenameTarget(entry)
               setRenameValue(entry.name)
+            }}
+            onMove={(entry) => {
+              setMoveTarget(entry)
+              // 预填当前目录：多数移动是「换个同级目录」，留空反而要用户全手打
+              setMoveDirValue(parentDirOf(entry.path))
             }}
             onDownload={(entry) => void downloadFile(entry)}
             downloadingPath={downloadingPath}
@@ -399,6 +441,16 @@ export function FilesPage() {
         submitting={renameMutation.isPending}
         onSubmit={confirmRename}
         onClose={() => setRenameTarget(null)}
+      />
+
+      {/* ── 移动（换父目录；复用 rename 端点） ── */}
+      <MoveDialog
+        target={moveTarget}
+        targetDir={moveDirValue}
+        onTargetDirChange={setMoveDirValue}
+        submitting={renameMutation.isPending}
+        onSubmit={confirmMove}
+        onClose={() => setMoveTarget(null)}
       />
 
       {/* ── 上传同名冲突确认（覆盖/跳过，对齐插件市场冲突流程） ── */}

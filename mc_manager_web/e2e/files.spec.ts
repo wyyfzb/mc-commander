@@ -149,3 +149,157 @@ test.describe('文件页', () => {
     await maybeShot(page, 'files-new-file-dark.png')
   })
 })
+
+/**
+ * 长目录虚拟滚动：行高恒定、少渲染、滚动连续，以及截断时的如实提示。
+ *
+ * 缺口由来：mock 根目录只有 5 条，「条目多于一屏」的形态结构性不可达——
+ * 虚拟滚动的 estimateSize 前提（行高恒等）此前从未被实测。
+ * 夹具策略：在路由层放大既有 mock 响应，**不改 mock-server 的数据规模**
+ * （改 mock 会连带影响既有 spec 的文件名断言）。
+ * jsdom 无布局引擎（滚动容器恒 0 高）、也不评估行高，故只能在 e2e 锁。
+ *
+ * 行高常量在此**重复声明**而不从组件导入：e2e 的职责是独立见证真实渲染几何，
+ * 与实现共用常量会把「改常量忘改样式」这类漂移一起放行（本项正是这么被发现的：
+ * estimateSize 声明 40 而实高 42.39，逐行错位累积 290px、列表尾部滚不到）。
+ */
+const ROW_HEIGHT = 44
+const FILE_TOTAL = 120
+
+async function injectLongFileList(page: Page, truncated = false) {
+  await page.route('**/api/v1/instances/*/files*', async (route) => {
+    const url = route.request().url()
+    // 只放大列表端点，不碰 content/upload
+    if (!/\/files(\?|$)/.test(url)) return route.continue()
+    const response = await route.fetch()
+    const body = await response.json()
+    const one = body.data?.files?.[0]
+    if (!one) return route.fulfill({ response })
+    const files = Array.from({ length: FILE_TOTAL }, (_, i) => ({
+      ...one,
+      name: `fixture-${String(i).padStart(4, '0')}.txt`,
+      path: `/fixture-${String(i).padStart(4, '0')}.txt`,
+      isDirectory: false,
+      type: 'file',
+      size: 1024,
+    }))
+    await route.fulfill({
+      response,
+      json: { ...body, data: { ...body.data, files, ...(truncated ? { truncated: true } : {}) } },
+    })
+  })
+}
+
+test.describe('文件页 长目录虚拟滚动', () => {
+  /* 夹具路由是**异步改写响应**（route.fetch 再 fulfill），用例结束时若还有请求在飞，
+     Playwright 会以「route.fetch: Test ended」报错——那是收尾竞态、不是断言失败，
+     在满载（并行跑全量门禁）时尤其容易撞上。收尾统一解绑并吞掉在途错误。 */
+  test.afterEach(async ({ page }) => {
+    await page.unrouteAll({ behavior: 'ignoreErrors' })
+  })
+
+  test('120 条：行高恒定、只渲染视口内的行、末项滚得到', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await setupConnection(page)
+    await injectLongFileList(page)
+    await page.goto('/files')
+    await page.waitForLoadState('networkidle')
+    await page.waitForTimeout(600)
+
+    const snap = () =>
+      page.evaluate(() => {
+        const box = document.querySelector('main .overflow-y-auto') as HTMLElement | null
+        // 行走容器范围内的 role=button（面包屑不在滚动容器内，天然排除）
+        const rows = box ? [...box.querySelectorAll<HTMLElement>('[role="button"]')] : []
+        const last = rows[rows.length - 1]
+        const boxRect = box?.getBoundingClientRect()
+        const lastRect = last?.getBoundingClientRect()
+        const tops = rows.map((r) => Math.round(r.getBoundingClientRect().top))
+        return {
+          clientH: box?.clientHeight ?? 0,
+          scrollH: box?.scrollHeight ?? 0,
+          scrollTop: Math.round(box?.scrollTop ?? 0),
+          maxScroll: box ? box.scrollHeight - box.clientHeight : 0,
+          rendered: rows.length,
+          firstLabel: rows[0]?.getAttribute('aria-label') ?? null,
+          lastLabel: last?.getAttribute('aria-label') ?? null,
+          /** 行高去重集：虚拟滚动 estimateSize 的前提是恒等于 ROW_HEIGHT */
+          rowHeights: [...new Set(rows.map((r) => Math.round(r.getBoundingClientRect().height)))],
+          /** 相邻行间距去重集：唯一能抓「行实高 ≠ estimateSize」的观测量（错位由此累积） */
+          rowPitch: [...new Set(tops.slice(1).map((t, i) => t - tops[i]))],
+          /** 末行底边与容器底边的间距：≈0 即尾部无留白、末项够得着 */
+          tailGap: boxRect && lastRect ? Math.round(boxRect.bottom - lastRect.bottom) : null,
+          /** 行内文本块实高与行高之差：行盒被 height 钉死后，字号/内距改大了
+              只会让内容溢出（文字压到下一行），行高本身量不出问题——故单独量内容。 */
+          contentOverflow: rows.map((r) => {
+            const inner = r.querySelector('div')
+            return inner ? Math.round(inner.getBoundingClientRect().height - r.clientHeight) : 0
+          }),
+        }
+      })
+
+    const top = await snap()
+    // 虚拟化生效：渲染行数远少于总数（否则 120 行全进 DOM）
+    expect(top.rendered).toBeGreaterThan(0)
+    expect(top.rendered).toBeLessThan(FILE_TOTAL)
+    // 行高与行距恒等 —— estimateSize 的前提；两者都必须等于声明值
+    expect(top.rowHeights).toEqual([ROW_HEIGHT])
+    expect(top.rowPitch).toEqual([ROW_HEIGHT])
+    // 撑起的高度必须恰为「条数 × 行高」：少了就有内容落在可滚范围之外
+    expect(top.scrollH).toBe(FILE_TOTAL * ROW_HEIGHT)
+    expect(top.scrollH).toBeGreaterThan(top.clientH)
+    /* 内容必须装得进行盒（≤0 表示未溢出）。行盒被 height 钉死后，把字号/内距改大会
+       表现为内容溢出而不是行高变化——只看行高放行这类改动，故补这一条。 */
+    expect(Math.max(...top.contentOverflow)).toBeLessThanOrEqual(0)
+
+    // 滚到底：末项必须真的可见且贴容器底边（错位累积时最后若干条滚不到）
+    await page.evaluate(() => {
+      const box = document.querySelector('main .overflow-y-auto')
+      if (box) box.scrollTop = box.scrollHeight
+    })
+    await expect
+      .poll(async () => {
+        const s = await snap()
+        return (
+          Math.abs(s.maxScroll - s.scrollTop) <= 1 && s.tailGap !== null && Math.abs(s.tailGap) <= 4
+        )
+      })
+      .toBe(true)
+    const bottom = await snap()
+    expect(bottom.lastLabel).toBe(`选择文件 fixture-${String(FILE_TOTAL - 1).padStart(4, '0')}.txt`)
+    expect(bottom.rowHeights).toEqual([ROW_HEIGHT])
+    expect(bottom.rowPitch).toEqual([ROW_HEIGHT])
+    expect(bottom.firstLabel).not.toBe(top.firstLabel)
+
+    // 滚回顶部：首行与初次一致（滚动连续性）
+    await page.evaluate(() => {
+      const box = document.querySelector('main .overflow-y-auto')
+      if (box) box.scrollTop = 0
+    })
+    await expect.poll(async () => (await snap()).firstLabel).toBe(top.firstLabel)
+  })
+
+  test('服务端回报 truncated 时如实提示（少列了不能读成没有了）', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await setupConnection(page)
+    await injectLongFileList(page, true)
+    await page.goto('/files')
+    await page.waitForLoadState('networkidle')
+
+    await expect(page.getByText(/条目过多，仅显示前/)).toBeVisible()
+  })
+
+  test('未截断时不出现截断提示（提示不能常驻）', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await setupConnection(page)
+    await injectLongFileList(page, false)
+    await page.goto('/files')
+    await page.waitForLoadState('networkidle')
+    await page.waitForTimeout(400)
+
+    // 就绪门：列表没加载出来时「找不到横幅」同样成立——先证明列表真的在，
+    // 再断言横幅缺席（否则请求失败/夹具失效都会假绿）
+    await expect(page.getByRole('button', { name: '选择文件 fixture-0000.txt' })).toBeVisible()
+    await expect(page.getByText(/条目过多，仅显示前/)).toHaveCount(0)
+  })
+})

@@ -77,6 +77,10 @@ export const ErrorCode = {
   FILE_UPLOAD_TOO_LARGE: 40007,
   FILE_TYPE_NOT_ALLOWED: 40008,
   FILE_ALREADY_EXISTS: 40909,
+  /** 移动/重命名的目标目录不存在（与 40406「源不存在」分开，用户据此判断该改哪一头） */
+  FILE_TARGET_DIR_NOT_FOUND: 40414,
+  /** 把目录移进自己的子树（用户输入错；此前落 500 通用文案） */
+  FILE_MOVE_INTO_SELF: 40009,
 
   WEBHOOK_NOT_FOUND: 40410,
   WEBHOOK_INVALID_URL: 40010,
@@ -150,6 +154,8 @@ const LOCALIZED_MESSAGES: Partial<Record<ErrorCodeValue, string>> = {
   [ErrorCode.FILE_UPLOAD_TOO_LARGE]: '上传文件过大',
   [ErrorCode.FILE_TYPE_NOT_ALLOWED]: '该文件类型不允许上传',
   [ErrorCode.FILE_ALREADY_EXISTS]: '文件或目录已存在',
+  [ErrorCode.FILE_TARGET_DIR_NOT_FOUND]: '目标目录不存在（不会被自动创建，请先建好）',
+  [ErrorCode.FILE_MOVE_INTO_SELF]: '不能把目录移动到它自己的子目录里',
   [ErrorCode.WEBHOOK_NOT_FOUND]: 'Webhook 不存在',
   [ErrorCode.WEBHOOK_INVALID_URL]: 'Webhook URL 无效（仅允许 http/https）',
   [ErrorCode.WEBHOOK_INVALID_EVENTS]: '包含无效事件类型',

@@ -77,6 +77,99 @@ describe('File Routes - Path Traversal Protection', () => {
       expect(res.body.data.files.map((f) => f.name)).toContain('plugin.yml');
     });
 
+    /**
+     * 出参 path 一律 '/' 分隔（契约口径）。win32 上 `path.join` 产出 `\plugins\plugin.yml`，
+     * 前端按 '/' 取父目录（parentDirOf）会一律回退到 '/'，于是重命名/移动把文件
+     * 拼成 `/plugin.yml` 并真的搬过去——静默改目的地。故列表**子目录内**的
+     * path 必须实测到 '/' 形态（根目录下的条目在两种实现下都是 `\name`，同样能暴露）。
+     */
+    it('出参 path 用 / 分隔（win32 的 path.join 会产出反斜杠，前端据此取父目录）', async () => {
+      const res = await request(app).get('/api/instances/s1/files').query({ path: '/plugins' });
+
+      expect(res.status).toBe(200);
+      const entry = res.body.data.files.find((f) => f.name === 'plugin.yml');
+      expect(entry).toBeDefined();
+      expect(entry.path).toBe('/plugins/plugin.yml');
+      expect(entry.path).not.toContain('\\');
+
+      // 逐条都不得含反斜杠（含根目录列表的目录条目）
+      const root = await request(app).get('/api/instances/s1/files').query({ path: '/' });
+      for (const f of root.body.data.files) {
+        expect(f.path, `${f.name} 的 path 含反斜杠`).not.toContain('\\');
+        expect(f.path.startsWith('/')).toBe(true);
+      }
+    });
+
+    it('未截断时不回报 truncated（缺省即未截断，兼容旧客户端）', async () => {
+      const res = await request(app).get('/api/instances/s1/files').query({ path: '/' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.truncated).toBeUndefined();
+    });
+
+    it('条目数超上限 → 截断并回报 truncated=true（少列了不能读成没有了）', async () => {
+      /* 用 spy 造 2001 个条目而不是真写 2001 个文件：本项验证的是
+         「排序 → 截断 → 只对留下的条目 stat」这段逻辑，它只吃 dirent 列表，
+         与文件是否真实无关。真写盘实测约 5.5s（2001 次 writeFileSync + 2000 次
+         statSync + 递归清理），全量并行跑时曾撞上 15s 用例超时。
+         与下方 ENOENT 用例同一手法（都 spy readdirSync）。 */
+      const MANY = 2001;
+      const realReaddir = fs.readdirSync;
+      const realStat = fs.statSync;
+      const FAKE_NAME = /^f\d{5}\.txt$/;
+      const readdirSpy = vi.spyOn(fs, 'readdirSync').mockImplementation((p, opts) => {
+        const out = realReaddir(p, opts);
+        if (p !== tmpDir) return out;
+        const entries = Array.from({ length: MANY }, (_, i) => {
+          const name = `f${String(i).padStart(5, '0')}.txt`;
+          return { name, isDirectory: () => false, isFile: () => true };
+        });
+        return opts?.withFileTypes ? entries : entries.map((e) => e.name);
+      });
+      // 合成条目在磁盘上不存在：stat 由 spy 补齐（否则逐项 ENOENT 全被跳过）
+      const statSpy = vi.spyOn(fs, 'statSync').mockImplementation((p, opts) => {
+        if (typeof p === 'string' && FAKE_NAME.test(path.basename(p))) {
+          return { size: 1, mtime: new Date('2026-01-01T00:00:00.000Z'), isDirectory: () => false };
+        }
+        return realStat(p, opts);
+      });
+
+      const res = await request(app).get('/api/instances/s1/files').query({ path: '/' });
+
+      readdirSpy.mockRestore();
+      statSpy.mockRestore();
+      expect(res.status).toBe(200);
+      expect(res.body.data.files).toHaveLength(2000);
+      expect(res.body.data.truncated).toBe(true);
+      // 截断按名称序取前 N（不因截断打乱顺序）；多出的那一项被丢掉
+      expect(res.body.data.files[0].name).toBe('f00000.txt');
+      expect(res.body.data.files[1999].name).toBe('f01999.txt');
+      expect(res.body.data.files.map((f) => f.name)).not.toContain('f02000.txt');
+    });
+
+    it('并发删除的单条 ENOENT 跳过该项，不让整表 404', async () => {
+      // 模拟「readdir 之后、stat 之前被删掉」：声明存在但磁盘上没有（statSync 抛 ENOENT）
+      const realReaddir = fs.readdirSync;
+      const spy = vi.spyOn(fs, 'readdirSync').mockImplementation((p, opts) => {
+        const out = realReaddir(p, opts);
+        if (p !== tmpDir) return out;
+        return opts?.withFileTypes
+          ? [...out, { name: 'ghost.txt', isDirectory: () => false }]
+          : [...out, 'ghost.txt'];
+      });
+
+      const res = await request(app).get('/api/instances/s1/files').query({ path: '/' });
+
+      spy.mockRestore();
+      expect(res.status).toBe(200);
+      const names = res.body.data.files.map((f) => f.name);
+      expect(names).not.toContain('ghost.txt');
+      // 其余条目照常返回（不因一条坏项丢掉整表）
+      expect(names).toContain('server.properties');
+      // 目录在前、组内按名序（截断与跳过都不破坏既有排序口径）
+      expect(res.body.data.files[0].name).toBe('plugins');
+    });
+
     it('should reject path traversal with ../', async () => {
       const res = await request(app).get('/api/instances/s1/files').query({ path: '../' });
 

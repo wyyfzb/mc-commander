@@ -54,6 +54,24 @@ function detectBinary(buffer) {
 // UTF-8 BOM 标记（带 BOM 文件保存后需保留，避免 BOM 静默丢失）
 const UTF8_BOM = Buffer.from([0xef, 0xbb, 0xbf]);
 
+/// 单次目录列表的条目上限：正常服单目录远小于此（世界目录 region/ 是唯一可能很大的），
+/// 上限的作用是**兜住同步 IO 的量**——原实现先 readdir 后逐项 statSync 再排序，
+/// 一个几万条的目录会让请求卡在 N 次同步 stat 上。截断时如实回报 truncated（契约字段）。
+const MAX_FILE_LIST_ENTRIES = 2000;
+
+/**
+ * 虚拟路径（契约口径）：一律 '/' 分隔，与实例根相对。
+ *
+ * 对外出参必须过这一层：`path.join(dirPath, name)` 在 win32 上产出 `\world\region`，
+ * 而契约、前端与 mock 夹具全按 '/' 写（`apiListFiles` 收的也是 '/' 前缀），
+ * 前端 `parentDirOf` 按 '/' 切分取父目录——反斜杠形态会让它一律回退到 '/'
+ * （实测：重命名/移动一个 `\plugins\Foo\config.yml` 会拼出 `/config.yml`，
+ * 静默把文件搬到实例根）。正斜杠在 win32 上同样是合法分隔符，故服务端统一输出 '/'。
+ */
+function toVirtualPath(...segments) {
+  return path.posix.join('/', ...segments.map((s) => String(s).replace(/\\/g, '/')));
+}
+
 // 解码文件内容：UTF-8 严格解码优先（带 BOM 先剥离并标记），失败回退 GBK；二进制返回 null
 function decodeContent(buffer) {
   if (detectBinary(buffer)) return null;
@@ -265,31 +283,52 @@ export function createFileRoutes(serverManager) {
         const stats = fs.statSync(fullPath);
 
         if (stats.isDirectory()) {
-          const files = fs.readdirSync(fullPath).map((fileName) => {
-            const filePath = path.join(fullPath, fileName);
-            const fileStats = fs.statSync(filePath);
-            return {
-              name: fileName,
-              path: path.join(dirPath, fileName),
-              type: fileStats.isDirectory() ? 'directory' : 'file',
-              size: fileStats.size,
-              modifiedAt: fileStats.mtime.toISOString(),
-              isDirectory: fileStats.isDirectory(),
-            };
-          });
-
-          // 目录在前，文件在后，按名称排序
-          files.sort((a, b) => {
-            if (a.isDirectory && !b.isDirectory) return -1;
-            if (!a.isDirectory && b.isDirectory) return 1;
+          /* 用 withFileTypes 拿类型（dirname 已在 dirent 里，免一次 stat），
+             排序后再截断，**只对留下的条目** stat 取 size/mtime。
+             原实现是「先全量 stat 再排序」——目录很大时整个请求卡在 N 次同步 IO 上。 */
+          const dirents = fs.readdirSync(fullPath, { withFileTypes: true });
+          dirents.sort((a, b) => {
+            if (a.isDirectory() !== b.isDirectory()) return a.isDirectory() ? -1 : 1;
             return a.name.localeCompare(b.name);
           });
+          const truncated = dirents.length > MAX_FILE_LIST_ENTRIES;
+          const kept = truncated ? dirents.slice(0, MAX_FILE_LIST_ENTRIES) : dirents;
+
+          const files = [];
+          for (const dirent of kept) {
+            const isDirectory = dirent.isDirectory();
+            let fileStats;
+            try {
+              fileStats = fs.statSync(path.join(fullPath, dirent.name));
+            } catch (err) {
+              /* 逐项 ENOENT：并发删除（另一管理请求 / MC 重启清理 / 备份删除）会命中这里。
+                 整表 404 只让用户知道「出错了」却不知是哪一个没了；跳过该项——
+                 它本就不该出现在列表里。
+                 ENOENT 之外的错误（EACCES/ELOOP 等）同样跳过该项（否则整表全废），
+                 但要留痕：静默丢弃会让「读不到的条目」被读成「本来就没有」。 */
+              if (err.code !== 'ENOENT') {
+                logger.warn(
+                  `[Files] Skipping unreadable entry ${dirent.name}: ${err.code || err.message}`,
+                );
+              }
+              continue;
+            }
+            files.push({
+              name: dirent.name,
+              path: toVirtualPath(dirPath, dirent.name),
+              type: isDirectory ? 'directory' : 'file',
+              size: fileStats.size,
+              modifiedAt: fileStats.mtime.toISOString(),
+              isDirectory,
+            });
+          }
 
           res.json(
             validatedSuccess(fileListResponseSchema, {
               path: dirPath,
               isDirectory: true,
               files,
+              ...(truncated ? { truncated: true } : {}),
             }),
           );
         } else {
@@ -722,10 +761,26 @@ export function createFileRoutes(serverManager) {
           renameNoClobber(fullOldPath, fullNewPath);
         } catch (err) {
           if (err.code === 'ENOENT') {
-            throw new AppError(ErrorCodes.FILE_NOT_FOUND, 'Source file not found');
+            /* ENOENT 有两个来处：源没了，或**目标目录**不存在。renameNoClobber
+               先动源（lstatSync），源不存在时立即 ENOENT；源在则建占位，
+               目标父目录不存在时占位创建抛 ENOENT（Windows: ENOENT）。
+               两者对用户的含义完全不同，靠源是否存在分流，不再一律报「源不存在」。 */
+            if (!fs.existsSync(fullOldPath)) {
+              throw new AppError(ErrorCodes.FILE_NOT_FOUND, 'Source file not found');
+            }
+            throw new AppError(ErrorCodes.FILE_TARGET_DIR_NOT_FOUND);
           }
           if (err.code === 'EEXIST') {
             throw new AppError(ErrorCodes.FILE_ALREADY_EXISTS, 'Target already exists');
+          }
+          /* 目录移进自己的子树：win32 实测 EPERM（MoveFileEx 拒绝），POSIX 是 EINVAL。
+             这是用户输入错，不是服务端故障——不映射就会落 500 通用文案。 */
+          if (
+            (err.code === 'EPERM' || err.code === 'EINVAL') &&
+            fs.existsSync(fullOldPath) &&
+            fs.statSync(fullOldPath).isDirectory()
+          ) {
+            throw new AppError(ErrorCodes.FILE_MOVE_INTO_SELF);
           }
           throw err;
         }

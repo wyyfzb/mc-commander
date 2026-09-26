@@ -13,6 +13,13 @@ export const fileListResponseSchema = z.object({
   path: z.string(),
   isDirectory: z.boolean(),
   files: z.array(fileEntrySchema),
+  /**
+   * 结果被服务端截断（条目数超过上限）。
+   * 与 `playerInventorySchema.partial` 同口径：截断必须**明说**——
+   * 少列出来的文件与「本来就没有」在 UI 上无法区分。
+   * 可选以兼容旧客户端（缺省即未截断）。
+   */
+  truncated: z.boolean().optional(),
 })
 
 export const fileInfoResponseSchema = z.object({

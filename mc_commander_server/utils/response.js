@@ -100,6 +100,20 @@ export const ErrorCodes = {
   FILE_UPLOAD_TOO_LARGE: { code: 40007, message: 'File upload too large', status: 400 },
   FILE_TYPE_NOT_ALLOWED: { code: 40008, message: 'File type not allowed', status: 400 },
   FILE_ALREADY_EXISTS: { code: 40909, message: 'File already exists', status: 409 },
+  /* 移动/重命名的目标是**用户手打**的路径：「目标不存在」与「源不存在」是两回事，
+     共用 FILE_NOT_FOUND 时用户看到「源文件不存在」会去怀疑源文件，实际是目标写错了。 */
+  FILE_TARGET_DIR_NOT_FOUND: {
+    code: 40414,
+    message: 'Target directory does not exist',
+    status: 404,
+  },
+  /* 把目录移进自己的子树：底层是 EPERM/EINVAL，对用户毫无意义，
+     且此前落 500（用户输入被报成服务端故障）。语义是「这个目标不合法」。 */
+  FILE_MOVE_INTO_SELF: {
+    code: 40009,
+    message: 'Cannot move a directory into its own subtree',
+    status: 400,
+  },
 
   // Webhook 错误
   WEBHOOK_NOT_FOUND: { code: 40410, message: 'Webhook not found', status: 404 },

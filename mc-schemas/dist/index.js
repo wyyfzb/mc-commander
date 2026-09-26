@@ -4250,7 +4250,14 @@ const fileEntrySchema = objectType({
 const fileListResponseSchema = objectType({
 	path: stringType(),
 	isDirectory: booleanType(),
-	files: arrayType(fileEntrySchema)
+	files: arrayType(fileEntrySchema),
+	/**
+	* 结果被服务端截断（条目数超过上限）。
+	* 与 `playerInventorySchema.partial` 同口径：截断必须**明说**——
+	* 少列出来的文件与「本来就没有」在 UI 上无法区分。
+	* 可选以兼容旧客户端（缺省即未截断）。
+	*/
+	truncated: booleanType().optional()
 });
 const fileInfoResponseSchema = objectType({
 	name: stringType(),

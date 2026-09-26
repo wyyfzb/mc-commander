@@ -183,6 +183,44 @@ describe('POST /instances/:id/files/rename', () => {
     expect(res.status).toBe(403);
     expect(res.body.code).toBe(ErrorCodes.PATH_TRAVERSAL_DETECTED.code);
   });
+
+  /**
+   * 「目标目录不存在」与「源不存在」都从 renameNoClobber 抛 ENOENT，但对用户的含义
+   * 相反——前者是目标写错了，后者是源没了。此前一律报「Source file not found」，
+   * 用户会去怀疑那个其实好好的源文件。故显式分流到不同错误码。
+   */
+  it('目标目录不存在 → 404 指明是目标（不是误报「源不存在」）', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'test-inst', 'movable.txt'), 'x');
+
+    const res = await request(app)
+      .post('/api/v1/instances/test-inst/files/rename')
+      .set(authHeaders())
+      .send({ path: '/movable.txt', newPath: '/no-such-dir/movable.txt' });
+
+    expect(res.status).toBe(404);
+    expect(res.body.code).toBe(ErrorCodes.FILE_TARGET_DIR_NOT_FOUND.code);
+    // 失败路径不得动到源
+    expect(fs.existsSync(path.join(tmpDir, 'test-inst', 'movable.txt'))).toBe(true);
+  });
+
+  /**
+   * 把目录移进自己的子树：底层是 EPERM（win32）/ EINVAL（POSIX）。不映射就落 500
+   * 通用文案——用户输入错被报成服务端故障，用户也看不出该改什么。
+   */
+  it('目录移进自身子树 → 400 语义错误（不落 500）', async () => {
+    const instDir = path.join(tmpDir, 'test-inst');
+    fs.mkdirSync(path.join(instDir, 'mydir', 'inner'), { recursive: true });
+
+    const res = await request(app)
+      .post('/api/v1/instances/test-inst/files/rename')
+      .set(authHeaders())
+      .send({ path: '/mydir', newPath: '/mydir/inner/mydir' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe(ErrorCodes.FILE_MOVE_INTO_SELF.code);
+    // 源目录与其内容完好（失败路径不留残件）
+    expect(fs.existsSync(path.join(instDir, 'mydir', 'inner'))).toBe(true);
+  });
 });
 
 describe('POST /instances/:id/files/upload', () => {
