@@ -31,6 +31,15 @@ const SHALLOW_CALL_SITES = [
   'src/features/players/components/batch-bar.tsx',
   'src/features/players/components/overview-actions.tsx',
   'src/features/webhooks/webhook-page.tsx',
+  // 插件页批量删除：曾在 outline 上手写 text-mcs-error-fg（双轨并存）。门禁第 28 条只拦
+  // 「弱档危险描边 + 按钮语义同行」，纯文字色绕得过它（CTA 配额逐页重验时发现）。
+  // 注意本表两条断言的**实际守备面**（既有条目同样如此）：
+  //   ① `toContain('variant="destructive-outline"')` —— 全文件子串检查：只要文件里**还有**
+  //      一处用了该变体即通过，故它挡不住「本按钮手写、别处用变体」的混合态；
+  //   ② WEAK_ERROR_BORDER —— 只查**弱档危险描边**，对「仅手写文字色」零覆盖。
+  // 净效果＝能挡住本按钮被退回旧写法的逐字回退，挡不住同文件内的混合态。
+  // 那类「仅文字色的双轨」目前无静态守卫（门禁与用例都不覆盖），由审查把关。
+  'src/features/plugins/plugins-page.tsx',
 ]
 
 describe('危险按钮变体（唯一声明源）', () => {

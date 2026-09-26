@@ -284,7 +284,10 @@ export function MonacoEditorPane({
         >
           <X className="size-6 text-mcs-error-fg" aria-hidden />
           <p className="max-w-md text-center text-mcs-sm text-mcs-text-muted">{loadError}</p>
-          <Button variant="outline" size="sm" onClick={onRetry}>
+          {/* ghost：重试是无后果的辅助动作（与列表页「刷新」同族），且由加载失败这一
+              运行态条件渲染。用 outline 时本页会凑出三个非 ghost 次操作
+              （恢复 / 关闭编辑器 / 重试），超出「≤2」——实测该错误态。 */}
+          <Button variant="ghost" size="sm" onClick={onRetry}>
             <RotateCcw aria-hidden />
             重试
           </Button>

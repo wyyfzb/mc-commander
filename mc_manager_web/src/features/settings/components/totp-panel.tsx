@@ -261,9 +261,12 @@ export function TotpPanel({ baseUrl, apiKey, authed }: TotpPanelProps) {
             ))}
           </ul>
           <div className="flex flex-wrap gap-2">
+            {/* 「复制全部」与「下载 .txt」都是把同一份文本带走的**无后果辅助动作**，
+                不构成独立的次操作决策 → 两者都走 ghost（ghost 不计配额）。
+                本卡此状态下的实义动作只有「我已保存」（唯一的实底→已按页内口径降为 outline）。 */}
             <Button
               type="button"
-              variant="outline"
+              variant="ghost"
               size="sm"
               onClick={() =>
                 void handleCopy(recoveryCodesFileText(recoveryCodes), '恢复码已复制到剪贴板')
@@ -272,9 +275,11 @@ export function TotpPanel({ baseUrl, apiKey, authed }: TotpPanelProps) {
               <Copy className="size-3.5" aria-hidden />
               复制全部
             </Button>
+            {/* 「下载 .txt」是「复制全部」的等价出口（同一份文本的另一种带走方式），
+                不是独立次操作：合并为一个名额（同页的「重试」同理）。 */}
             <Button
               type="button"
-              variant="outline"
+              variant="ghost"
               size="sm"
               onClick={() => {
                 if (downloadRecoveryCodes(recoveryCodes)) toast.success('恢复码文件已开始下载')
@@ -284,7 +289,7 @@ export function TotpPanel({ baseUrl, apiKey, authed }: TotpPanelProps) {
               <Download className="size-3.5" aria-hidden />
               下载 .txt
             </Button>
-            <Button type="button" size="sm" onClick={handleCodesSaved}>
+            <Button type="button" variant="outline" size="sm" onClick={handleCodesSaved}>
               <Check className="size-3.5" aria-hidden />
               我已保存
             </Button>
@@ -332,9 +337,10 @@ export function TotpPanel({ baseUrl, apiKey, authed }: TotpPanelProps) {
                   spellCheck={false}
                   className="font-mono"
                 />
+                {/* 复制是无后果的辅助动作 → ghost（与终端工具栏的复制、仪表盘「存为预设」同档） */}
                 <Button
                   type="button"
-                  variant="outline"
+                  variant="ghost"
                   className="shrink-0"
                   onClick={() =>
                     void handleCopy(enrollment.secret, '密钥已复制到剪贴板').then((ok) =>
@@ -374,13 +380,24 @@ export function TotpPanel({ baseUrl, apiKey, authed }: TotpPanelProps) {
             </NoticeBanner>
           )}
           <div className="flex flex-wrap gap-2">
-            <LoadingButton type="submit" loading={confirming} loadingText="确认中…">
+            {/* 挂靠过程是**本卡的临时状态**（取消即退回稳态），其动作按覆盖层口径判：
+                一个实底主操作 + ≤2 outline。故「复制」「取消」走 outline，
+                「完成挂靠」是唯一实底——但页内已有「更新密码」这个实底，
+                故它同样降为 outline，全页实底只留一个（见上「启用两步验证」处注释）。 */}
+            <LoadingButton
+              type="submit"
+              variant="outline"
+              loading={confirming}
+              loadingText="确认中…"
+            >
               <ShieldCheck aria-hidden />
               完成挂靠
             </LoadingButton>
+            {/* 「取消」是无后果的退出口（退回稳态，不改任何服务端状态）→ ghost；
+                ghost/link 明确不计入配额（见审查指南 §CTA 配额末条）。 */}
             <Button
               type="button"
-              variant="outline"
+              variant="ghost"
               disabled={confirming}
               onClick={() => {
                 setEnrollment(null)
@@ -446,8 +463,13 @@ export function TotpPanel({ baseUrl, apiKey, authed }: TotpPanelProps) {
           </NoticeBanner>
         )}
         <div className="flex items-center gap-2">
+          {/* outline 不是实底：本页的实底主操作是「更新密码」（表单提交，页内唯一）。
+              TOTP 状态机按钮是无后果的引导动作，若也用实底，本页同屏会出现两个发光绿按钮
+              （实测未启用态：更新密码 + 启用两步验证），主操作失去唯一性。
+              同页稳态（未启用/已启用）经此收口即回到「1 实底 + ≤2 outline」配额内。 */}
           <LoadingButton
             type="button"
+            variant="outline"
             loading={enrolling}
             loadingText="生成中…"
             onClick={() => void handleEnroll()}

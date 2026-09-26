@@ -35,6 +35,7 @@ import { SearchInput } from '@/components/mcs/search-input'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
+import { IconButton } from '@/components/mcs/icon-button'
 import { EmptyState } from '@/components/mcs/empty-state'
 import { StaleQueryNotice } from '@/components/mcs/data-states'
 import { Card } from '@/components/mcs/card'
@@ -323,19 +324,22 @@ export function PluginsPage() {
         }
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
+            {/* 刷新走 ghost 图标档：它是无后果的辅助动作，与同页头两个真次操作
+                （检查更新 / 插件市场）并列时会凑出三个 outline，超出「页头次操作 ≤2」
+                （CTA 配额逐页重验时实测）。列表页的刷新在本仓一律是图标档
+                （files 的「刷新」、world 的「刷新」同为 IconButton） */}
+            <IconButton
+              variant="ghost"
               onClick={() => void pluginsQuery.refetch()}
               disabled={pluginsQuery.isFetching}
               aria-label="刷新插件列表"
+              title="刷新插件列表"
             >
               <RefreshCw
                 className={`size-3.5 ${pluginsQuery.isFetching ? 'animate-spin' : ''}`}
                 aria-hidden
               />
-              刷新
-            </Button>
+            </IconButton>
             <Button size="sm" onClick={() => fileInputRef.current?.click()} aria-label="上传插件">
               <ArrowUpFromLine className="size-3.5" aria-hidden />
               上传插件
@@ -396,12 +400,7 @@ export function PluginsPage() {
             <PowerOff className="size-3.5" aria-hidden />
             批量禁用
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-mcs-error-fg hover:text-mcs-error-fg"
-            onClick={() => setBatchDeleteOpen(true)}
-          >
+          <Button variant="destructive-outline" size="sm" onClick={() => setBatchDeleteOpen(true)}>
             <Trash2 className="size-3.5" aria-hidden />
             删除
           </Button>

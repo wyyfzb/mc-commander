@@ -129,7 +129,11 @@ export function AnnouncementCard() {
     >
       <CardHeader className="mb-2 gap-2">
         <CardTitle>公告发送</CardTitle>
+        {/* outline 不是 default：一页只允许一个绿色实底 CTA（页面主操作是终端「发送命令」）。
+            公告是同屏第二个「发送」动作且用同一枚 Send 图标，两个实底绿按钮会让主操作失去
+            唯一性——实测 1920×1080 同屏可见两个（下左终端、上右本卡）。 */}
         <Button
+          variant="outline"
           size="sm"
           onClick={requestSend}
           disabled={!isRunning || sending || !text.trim()}

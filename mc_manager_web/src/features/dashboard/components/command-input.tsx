@@ -318,8 +318,11 @@ export function CommandInput() {
         >
           &gt;
         </span>
+        {/* ghost（与终端工具栏其余五枚图标按钮同档）：它是实底「发送命令」旁的辅助图标动作，
+            用 outline 会在页面上多占一个次操作名额——同排五枚同类图标按钮都是 ghost，
+            只它一枚描边也读不出额外语义 */}
         <IconButton
-          variant="outline"
+          variant="ghost"
           size="icon"
           onClick={() => savePreset()}
           aria-label="存为预设"
