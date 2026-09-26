@@ -57,7 +57,8 @@ import {
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
-import { toneClasses, TONE_SELECTED_CLASSES } from '@/components/mcs/tone'
+import { TONE_SELECTED_CLASSES } from '@/components/mcs/tone'
+import { NoticeBanner } from '@/components/mcs/notice-banner'
 
 const EVENT_LABELS: Record<string, string> = {
   'player.join': '玩家加入',
@@ -400,9 +401,9 @@ export default function WebhookPage() {
 
       {/* ── 错误提示 ── */}
       {error && (
-        <div className={`rounded-mcs-sm border px-3 py-2 text-mcs-sm ${toneClasses('error')}`}>
+        <NoticeBanner variant="error" icon={AlertTriangle} role="alert">
           {getFriendlyErrorText(error)}
-        </div>
+        </NoticeBanner>
       )}
 
       {/* ── 列表容器 ── */}
@@ -619,17 +620,14 @@ export default function WebhookPage() {
                 </Button>
               </div>
               {eventTypesError && (
-                <div className="flex items-center justify-between rounded-mcs-xs border border-mcs-warning-border bg-mcs-warning-bg-subtle px-2 py-1.5">
-                  <p className="text-mcs-xs text-mcs-warning-fg">事件类型加载失败，无法勾选事件</p>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-5 px-1.5 text-mcs-2xs"
-                    onClick={() => void refetchEventTypes()}
-                  >
-                    重试
-                  </Button>
-                </div>
+                <NoticeBanner variant="warning" icon={AlertTriangle}>
+                  <span className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                    <span>事件类型加载失败，无法勾选事件</span>
+                    <Button size="xs" variant="outline" onClick={() => void refetchEventTypes()}>
+                      重试
+                    </Button>
+                  </span>
+                </NoticeBanner>
               )}
               <div className="flex flex-wrap gap-1">
                 {eventTypes?.map((evt) => (

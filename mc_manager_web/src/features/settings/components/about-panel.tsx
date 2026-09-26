@@ -19,6 +19,7 @@ import {
 import type { AboutPanelProps } from './contracts'
 import { toneClasses } from '@/components/mcs/tone'
 import { Card, CardBody, CardHeader } from '@/components/mcs/card'
+import { NoticeBanner } from '@/components/mcs/notice-banner'
 
 /** 开源仓库主页（GitHub 主仓；Releases/Issues 由子路径拼接） */
 const REPO_URL = 'https://github.com/wyyfzb/mc-commander'
@@ -71,16 +72,11 @@ export function AboutPanel(_props: AboutPanelProps) {
         </span>
       </Card>
 
-      {/* ── 开源卡片（success 色调三元组 token）── */}
-      <section className="flex items-center gap-3 rounded-mcs-md border border-mcs-success-border bg-mcs-success-bg-subtle px-4 py-3">
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-mcs-sm bg-mcs-success-bg-subtle">
-          <Heart className="size-4 text-mcs-success-fg" aria-hidden />
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="text-mcs-sm font-semibold text-mcs-text-default">开源项目</div>
-          <div className="text-mcs-xs text-mcs-text-muted">基于 AGPL-3.0 协议开源</div>
-        </div>
-      </section>
+      {/* ── 开源卡片 ── */}
+      <NoticeBanner variant="success" form="card" icon={Heart}>
+        <div className="font-semibold text-mcs-text-default">开源项目</div>
+        <div className="text-mcs-xs text-mcs-text-muted">基于 AGPL-3.0 协议开源</div>
+      </NoticeBanner>
 
       {/* ── 相关链接卡片 ── */}
       <Card>

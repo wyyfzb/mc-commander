@@ -51,7 +51,6 @@ import {
   STRENGTH_BAR_STYLES,
   STRENGTH_TEXT_STYLES,
 } from '@/lib/password-strength'
-import { toneClasses } from '@/components/mcs/tone'
 
 /** 简易 UA 描述（浏览器名 + 移动端标记；服务端存原文，展示层简化） */
 function describeUserAgent(ua: string | null): string {
@@ -220,13 +219,10 @@ export function AccountPanel() {
           )}
         </div>
         {!sessionApplies && (
-          <p
-            className={`mt-3 flex items-start gap-1.5 rounded-mcs-sm border px-2.5 py-2 text-mcs-xs ${toneClasses('warning')}`}
-          >
-            <TriangleAlert className="mt-0.5 size-3 shrink-0" aria-hidden />
+          <NoticeBanner variant="warning" icon={TriangleAlert} className="mt-3">
             当前使用明文 API Key
             直连。建议退出后使用管理员密码登录（令牌仅存服务端摘要，传输/存储更安全）。
-          </p>
+          </NoticeBanner>
         )}
       </SectionCard>
 

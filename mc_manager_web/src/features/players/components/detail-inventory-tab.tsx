@@ -13,7 +13,7 @@
  * 6. 选中槽位高亮 —— Web 简化：hover 边框高亮（不实现槽位详情弹层）
  * 7. 设计纪律：全部 --mcs-* 语义 token；格子实底（玻璃禁区）；不硬编码色值/间距/圆角
  */
-import { useState, type KeyboardEvent, type ReactNode } from 'react'
+import { useState, type KeyboardEvent } from 'react'
 import {
   AlertTriangle,
   CloudOff,
@@ -27,7 +27,7 @@ import { cn } from '@/lib/utils'
 import { fullItemId, itemImageUrl } from '@/lib/mc-items'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import type { InventoryItem, Player, PlayerInventory } from '@/api/types'
-import { toneClasses } from '@/components/mcs/tone'
+import { NoticeBanner } from '@/components/mcs/notice-banner'
 
 export interface InventoryTabProps {
   player: Player
@@ -424,29 +424,6 @@ function EmptyState({
       <Icon className="size-8 text-mcs-text-muted" aria-hidden />
       <p className="text-mcs-sm text-mcs-text-muted">{message}</p>
       {subtext && <p className="text-mcs-xs text-mcs-text-muted">{subtext}</p>}
-    </div>
-  )
-}
-
-/** 提示条（快照=info / 截断=warning） */
-function NoticeBanner({
-  variant,
-  icon: Icon,
-  children,
-}: {
-  variant: 'info' | 'warning'
-  icon: LucideIcon
-  children: ReactNode
-}) {
-  return (
-    <div
-      className={cn(
-        'flex items-center gap-1.5 rounded-mcs-xs border px-2.5 py-1.5 text-mcs-xs',
-        variant === 'info' ? toneClasses('info') : toneClasses('warning'),
-      )}
-    >
-      <Icon className="size-3.5 shrink-0" aria-hidden />
-      {children}
     </div>
   )
 }

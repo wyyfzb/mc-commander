@@ -9,13 +9,12 @@
 import { Ban, CheckCircle2, Loader2, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { DialogFooter } from '@/components/ui/dialog'
-import { cn } from '@/lib/utils'
 import { SERVER_TYPE_LABELS, recommendedJavaVersion, type ServerType } from '@/lib/mc-deploy'
 import { DEPLOY_STAGE_LABELS } from '@/stores/deploy'
 import type { DeployProgress, DeployResult } from '@/api/types'
 import type { AutoStartState } from './types'
 import { formatMB } from './utils'
-import { toneClasses } from '@/components/mcs/tone'
+import { NoticeBanner } from '@/components/mcs/notice-banner'
 
 interface DeployProgressViewProps {
   progress: DeployProgress | null
@@ -88,13 +87,9 @@ interface DeploySuccessViewProps {
 export function DeploySuccessView({ result, autoStart, onComplete }: DeploySuccessViewProps) {
   return (
     <div className="flex flex-col gap-3">
-      <div
-        role="status"
-        className="flex items-start gap-2 rounded-mcs-sm border border-mcs-success-border bg-mcs-success-bg-subtle px-3 py-2.5"
-      >
-        <CheckCircle2 className="mt-px size-4 shrink-0 text-mcs-success-fg" aria-hidden />
-        <div className="flex flex-col gap-0.5 text-mcs-sm">
-          <p className="font-medium text-mcs-success-fg">部署成功</p>
+      <NoticeBanner variant="success" form="card" icon={CheckCircle2}>
+        <div className="flex flex-col gap-0.5">
+          <p className="font-medium">部署成功</p>
           <p className="text-mcs-text-muted">实例 ID：{result.id}</p>
           <p className="text-mcs-text-muted">名称：{result.name}</p>
           <p className="text-mcs-text-muted">
@@ -105,29 +100,21 @@ export function DeploySuccessView({ result, autoStart, onComplete }: DeploySucce
             推荐 Java 版本：{recommendedJavaVersion(result.mcVersion)}
           </p>
         </div>
-      </div>
+      </NoticeBanner>
       {autoStart !== null && (
-        <div
-          role="status"
-          className={cn(
-            'flex items-center gap-2 rounded-mcs-sm border px-3 py-2 text-mcs-sm',
-            autoStart === 'ok' && toneClasses('success'),
-            autoStart === 'pending' &&
-              'border-mcs-border-muted bg-mcs-bg-muted text-mcs-text-muted',
-            autoStart === 'failed' && toneClasses('warning'),
-          )}
+        <NoticeBanner
+          /* pending 是中性在途态（既非成功也非失败）——走 neutral 档而非 info 蓝：
+             染成 info 会读成「有消息要看」，而它要说的只是「还没结束，请稍候」 */
+          variant={autoStart === 'ok' ? 'success' : autoStart === 'failed' ? 'warning' : 'neutral'}
+          icon={autoStart === 'pending' ? Loader2 : autoStart === 'ok' ? CheckCircle2 : XCircle}
+          iconClassName={autoStart === 'pending' ? 'animate-spin' : undefined}
         >
-          {autoStart === 'pending' && (
-            <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
-          )}
-          {autoStart === 'ok' && <CheckCircle2 className="size-4 shrink-0" aria-hidden />}
-          {autoStart === 'failed' && <XCircle className="size-4 shrink-0" aria-hidden />}
-          <p aria-live="polite">
+          <span aria-live="polite">
             {autoStart === 'pending' && '正在启动服务器…'}
             {autoStart === 'ok' && '已发送启动指令，服务器正在启动（状态可在仪表盘查看）'}
             {autoStart === 'failed' && '自动启动失败，可稍后在实例页手动启动'}
-          </p>
-        </div>
+          </span>
+        </NoticeBanner>
       )}
       <DialogFooter>
         <Button onClick={onComplete}>完成</Button>
@@ -146,13 +133,9 @@ interface DeployErrorViewProps {
 export function DeployErrorView({ errorText, onCancel, onRetry }: DeployErrorViewProps) {
   return (
     <div className="flex flex-col gap-3">
-      <div
-        role="alert"
-        className="flex items-start gap-2 rounded-mcs-sm border border-mcs-error-border bg-mcs-error-bg-subtle px-3 py-2.5"
-      >
-        <XCircle className="mt-px size-4 shrink-0 text-mcs-error-fg" aria-hidden />
-        <p className="text-mcs-sm text-mcs-error-fg">{errorText}</p>
-      </div>
+      <NoticeBanner variant="error" icon={XCircle} role="alert">
+        {errorText}
+      </NoticeBanner>
       <DialogFooter>
         <Button variant="outline" onClick={onCancel}>
           取消
@@ -174,15 +157,8 @@ interface DeployCancelledViewProps {
 export function DeployCancelledView({ cleanupError, onClose, onRetry }: DeployCancelledViewProps) {
   return (
     <div className="flex flex-col gap-3">
-      <div
-        role="status"
-        className={cn(
-          'flex items-start gap-2 rounded-mcs-sm border px-3 py-2.5',
-          toneClasses('info'),
-        )}
-      >
-        <Ban className="mt-px size-4 shrink-0" aria-hidden />
-        <div className="flex flex-col gap-0.5 text-mcs-sm">
+      <NoticeBanner variant="info" form="card" icon={Ban}>
+        <div className="flex flex-col gap-0.5">
           {/* 收尾是 best-effort：目录可能仍被正在退出的进程占用，删除失败时如实说明，
               不宣称「已清理」（否则用户按提示以为磁盘已干净） */}
           <p>部署已取消{cleanupError == null ? '，未完成的实例目录已清理。' : '。'}</p>
@@ -190,7 +166,7 @@ export function DeployCancelledView({ cleanupError, onClose, onRetry }: DeployCa
             <p className="text-mcs-text-muted">收尾未完成：{cleanupError}</p>
           )}
         </div>
-      </div>
+      </NoticeBanner>
       <DialogFooter>
         <Button variant="outline" onClick={onClose}>
           关闭

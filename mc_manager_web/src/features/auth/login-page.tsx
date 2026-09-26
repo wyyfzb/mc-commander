@@ -336,19 +336,13 @@ export function LoginPage() {
         {/* 不可达错误态 */}
         {phase === 'unreachable' && (
           <div className="space-y-4">
-            <div
-              role="alert"
-              className="flex items-start gap-2.5 rounded-mcs-md border border-mcs-error-border bg-mcs-error-bg-subtle p-3"
-            >
-              <ServerOff className="mt-0.5 size-4 shrink-0 text-mcs-error-fg" aria-hidden />
-              <div className="text-mcs-xs text-mcs-error-fg">
-                <p className="font-semibold">连接失败</p>
-                <p className="mt-0.5 opacity-90">
-                  请确认面板服务端已启动（默认端口 25566）。
-                  {baseUrl && ' 当前地址无法连接，可恢复默认地址重试。'}
-                </p>
-              </div>
-            </div>
+            <NoticeBanner variant="error" form="card" icon={ServerOff} role="alert">
+              <p className="font-semibold">连接失败</p>
+              <p className="mt-0.5 opacity-90">
+                请确认面板服务端已启动（默认端口 25566）。
+                {baseUrl && ' 当前地址无法连接，可恢复默认地址重试。'}
+              </p>
+            </NoticeBanner>
             <div className="flex gap-2">
               <Button type="button" className="flex-1" onClick={() => void probe(baseUrl)}>
                 <RefreshCw className="size-4" aria-hidden />

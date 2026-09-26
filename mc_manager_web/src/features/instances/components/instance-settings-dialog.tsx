@@ -25,6 +25,7 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { Slider } from '@/components/ui/slider'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
+import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { cn } from '@/lib/utils'
 import { instanceLabel } from '@/lib/instance-label'
 import { getFriendlyErrorText } from '@/api/errors'
@@ -408,12 +409,12 @@ export function InstanceSettingsDialog({
               </div>
 
               {/* 参数说明（逐行展示实际提交的参数） */}
-              <div className="flex flex-col gap-1.5 rounded-mcs-md border border-mcs-info-border bg-mcs-info-bg-subtle p-3">
-                <p className="flex items-center gap-1.5 text-mcs-xs font-semibold text-mcs-info-fg">
+              <NoticeBanner variant="info" form="card">
+                <p className="flex items-center gap-1.5 text-mcs-xs font-semibold">
                   <Info className="size-3.5" aria-hidden />
                   参数说明
                 </p>
-                <dl className="flex flex-col gap-1">
+                <dl className="mt-1.5 flex flex-col gap-1">
                   {(
                     [
                       [`-Xms${formatMemForJvm(startMem)}`, '初始堆内存（自动设为最大值的一半）'],
@@ -434,7 +435,7 @@ export function InstanceSettingsDialog({
                     </div>
                   ))}
                 </dl>
-              </div>
+              </NoticeBanner>
             </div>
           )}
         </div>

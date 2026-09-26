@@ -163,6 +163,14 @@ describe('DeployDialog', () => {
     expect(
       await screen.findByText('已发送启动指令，服务器正在启动（状态可在仪表盘查看）'),
     ).toBeInTheDocument()
+    // 自动启动状态块的档位：成功走 success 档，且不得混入 info 前景——它是「已受理」
+    // 而非「有消息要看」。断言色类而非仅存在性：走查发现该处曾被染色错档，
+    // 而存在性断言抓不到（文案对、颜色错）
+    const autoStartBanner = screen
+      .getByText('已发送启动指令，服务器正在启动（状态可在仪表盘查看）')
+      .closest('[role="status"]') as HTMLElement
+    expect(autoStartBanner.className).toContain('border-mcs-success-border')
+    expect(autoStartBanner.className).not.toContain('text-mcs-info-fg')
     expect(deployMock.lastBody?.eula).toBe(true)
     expect(eulaMock.calls).toBe(0)
     expect(startMock.calls).toBe(1)

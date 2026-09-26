@@ -9,6 +9,7 @@
 import { CheckCircle2, ExternalLink, Loader2, RefreshCw, WifiOff } from 'lucide-react'
 import { useCheckUpdate } from '@/api/queries'
 import { Card } from '@/components/mcs/card'
+import { NoticeBanner } from '@/components/mcs/notice-banner'
 
 export function UpdateCheckSection() {
   const { data, isLoading, isError, refetch } = useCheckUpdate()
@@ -52,26 +53,23 @@ export function UpdateCheckSection() {
 
   // 有更新可用
   return (
-    <section className="flex items-center gap-3 rounded-mcs-md border border-mcs-warning-border bg-mcs-warning-bg-subtle px-4 py-3">
-      <span className="flex size-8 shrink-0 items-center justify-center rounded-mcs-sm bg-mcs-warning-bg-subtle">
-        <RefreshCw className="size-4 text-mcs-warning-fg" aria-hidden />
-      </span>
-      <div className="min-w-0 flex-1">
-        <div className="text-mcs-sm font-semibold text-mcs-text-default">
-          发现新版本 v{data.latest}
+    <NoticeBanner variant="warning" form="card" icon={RefreshCw}>
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <div className="min-w-0">
+          <div className="font-semibold text-mcs-text-default">发现新版本 v{data.latest}</div>
+          <div className="text-mcs-xs text-mcs-text-muted">当前 v{data.current}</div>
         </div>
-        <div className="text-mcs-xs text-mcs-text-muted">当前 v{data.current}</div>
+        {data.url && (
+          <a
+            href={data.url}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex shrink-0 items-center gap-1 text-mcs-xs font-medium text-mcs-warning-fg hover:underline"
+          >
+            查看 <ExternalLink className="size-3" aria-hidden />
+          </a>
+        )}
       </div>
-      {data.url && (
-        <a
-          href={data.url}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-1 rounded-mcs-sm bg-mcs-warning-bg-subtle px-2.5 py-1.5 text-mcs-xs font-medium text-mcs-warning-fg hover:underline"
-        >
-          查看 <ExternalLink className="size-3" aria-hidden />
-        </a>
-      )}
-    </section>
+    </NoticeBanner>
   )
 }

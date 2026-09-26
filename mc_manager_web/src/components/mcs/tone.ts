@@ -13,7 +13,7 @@
  * 字号档与颜色档的分组已在 lib/utils.ts 里声明清楚（守卫用例见 lib/__tests__/tailwind-merge.test.ts）。
  *
  * 弱档「容器 border+bg / 子元素 fg」的拆写形态（弱档描边 `-border` + 内容面 tint 落在容器、
- * 前景留给子元素，如 features/players/components/batch-bar.tsx:111）**刻意不判**：
+ * 前景留给子元素，如 features/players/components/batch-bar.tsx 的批量操作条）**刻意不判**：
  * 弱档描边是低透明度（暗色 25% / 亮色 30%）的装饰线，不承担「已选中」信息，此形态在合法
  * 着色点里大量存在，收进词表或收进门禁都只会制造噪音——口径＝维持现状，词表不收弱档容器。
  */

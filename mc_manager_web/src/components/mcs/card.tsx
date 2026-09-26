@@ -19,8 +19,8 @@ const CARD_SURFACE = 'rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-mu
 
 /**
  * 卡片内距档位表（唯一声明处）。只收**卡片自己的**三档——Card 承载的是卡片面，
- * 卡内的工具条 / 嵌块 / 代码块不是卡片面，它们的内距不归这里管（那三类半档的现状与
- * 未决问题记在 mc_manager_web/docs/design-review-guidelines.md「容器内距」一节）。
+ * 卡内的工具条 / 嵌块 / 代码块不是卡片面，它们的内距不归这里管（那三类的切档维度见
+ * mc_manager_web/docs/design-review-guidelines.md「容器内距」一节）。
  *
  * 命名按角色不按像素：选档时问的是「这张卡多重」，不是「我要几 px」。
  * 间距无门禁（口径＝审查时判，见 AGENTS.md「间距」），本表是规范不是拦截。

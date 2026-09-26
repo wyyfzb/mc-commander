@@ -54,7 +54,7 @@ import {
   Ban,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { toneClasses } from '@/components/mcs/tone'
+import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { instanceLabel } from '@/lib/instance-label'
 
 const SERVER_TYPES = [
@@ -237,17 +237,12 @@ export function UpgradeDialog({ instance, open, onOpenChange }: UpgradeDialogPro
 
         <div className="space-y-4">
           {/* 警示条 */}
-          <div className={`rounded-mcs-sm border p-3 text-sm ${toneClasses('warning')}`}>
-            <div className="flex items-start gap-2">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-              <div>
-                <p className="font-medium">升级须知</p>
-                <p className="mt-1 text-mcs-text-muted">
-                  升级前自动创建备份，随后下载并替换服务端 JAR，启动校验失败将自动回滚。
-                </p>
-              </div>
-            </div>
-          </div>
+          <NoticeBanner variant="warning" form="card" icon={AlertTriangle}>
+            <p className="font-medium">升级须知</p>
+            <p className="mt-1 text-mcs-text-muted">
+              升级前自动创建备份，随后下载并替换服务端 JAR，启动校验失败将自动回滚。
+            </p>
+          </NoticeBanner>
 
           {/* 升级进行中：进度 + 取消入口（升级中唯一的可用出口） */}
           {upgrading && progress && (
