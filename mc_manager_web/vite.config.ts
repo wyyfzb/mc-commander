@@ -20,6 +20,8 @@ const NODE_ENV_TESTS = [
   // 门禁脚本内核（scripts/lib/design-token-rules.mjs）的纯逻辑用例：只处理源码字符串、不读 fs
   'scripts/__tests__/design-token-rules.test.mjs',
   'src/__tests__/token-integrity.test.ts',
+  // 字体子集覆盖：只读 woff2 字节（自带 cmap 解析），不碰 DOM
+  'src/__tests__/font-subset.test.ts',
   'src/api/__tests__/errors.test.ts',
   // 注意：`api/__tests__/{audit,files,files-enhanced}` **不能**放这里 —— 它们用相对 URL
   // （`/api/v1/...`）调 fetch，需要 jsdom 提供的 base URL，在 node 下会报

@@ -32,7 +32,7 @@ const BUDGETS = [
 
 // 字体资产预算（原字节，见头注释口径）= 当前实测 + 约 8% 余量，取整到 5KB
 const FONT_EXTENSIONS = new Set(['.ttf', '.woff', '.woff2', '.otf', '.eot'])
-const FONT_BUDGET = { label: '字体资产（dist 全量）', limitKb: 2525 }
+const FONT_BUDGET = { label: '字体资产（dist 全量）', limitKb: 2530 }
 
 const VERBOSE = process.argv.includes('--verbose')
 const gzipCache = new Map()

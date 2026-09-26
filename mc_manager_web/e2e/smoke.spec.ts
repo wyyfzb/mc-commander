@@ -22,6 +22,10 @@ async function setupConnection(page: Page) {
 }
 
 test.describe('冒烟', () => {
+  /* 字体子集覆盖（中文标点等）**不在 e2e 锁**：量宽与 `document.fonts.check()` 都
+     证不了「某码位在不在字体里」——前者对着一串字符求和时，子集里只要留任意一枚字形就通过
+     （实测：只含 `…` 的字体仍绿）；后者对子集外字符也返回 true。已改为码位级单测
+     `src/__tests__/font-subset.test.ts`（自带 WOFF2 cmap 解析，无第三方依赖）。 */
   test('页面加载：品牌、侧栏、顶栏元素可见', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/')
