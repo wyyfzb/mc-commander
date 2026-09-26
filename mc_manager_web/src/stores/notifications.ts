@@ -78,6 +78,15 @@ interface NotificationState {
   markAsRead: (id: string) => void
   markAllRead: () => void
   clearAll: () => void
+  /**
+   * 清空告警状态机（切换实例时调用）。
+   *
+   * activeAlerts 是「当前实例的 TPS/CPU 是否处于超标态」的跨事件记忆：不清就会串味——
+   * A 实例 TPS 低时置位 lowTps，切到 B 实例后若 B 的 TPS 正常，状态机会把它读成
+   * 「lowTps 恢复了」并推送一条**属于 B 的**「TPS 已恢复正常」（B 从没低过）；
+   * 反之若 B 也低，则因已在集合里而**不发告警**，真实的低 TPS 被静默吞掉。
+   */
+  resetAlerts: () => void
 }
 
 /**
@@ -237,6 +246,8 @@ export const useNotificationStore = create<NotificationState>()((set, get) => ({
       // 清空聚合缓存：避免旧键残留导致后续错误聚合
       return { items: [], unreadCount: 0, activeAlerts: new Set() }
     }),
+
+  resetAlerts: () => set({ activeAlerts: new Set() }),
 }))
 
 /**

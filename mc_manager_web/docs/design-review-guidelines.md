@@ -292,12 +292,16 @@ Radix Tooltip 只在 hover/focus 时出现，而 `<span>` 永不获得焦点，�
 
 ### 本仓现状与缺口登记
 
-- **「重启待生效」类状态在本仓没有常驻载体**：它由 `instances/components/instance-settings-dialog.tsx`
-  「保存后即关闭」的 dialog + 几秒即散的 toast 文案（`启动配置已保存，重启实例后生效`）承担。
-  ⇒ **已登记的已知缺口**：状态真实存续，却无可见常驻物，用户可能在重启前忘记自己改过启动配置。
-- **解决方向**（本轮未实现）：在实例页页头或启动配置入口给一处可见的「有待生效改动」常驻提示。
-  它需要状态跟踪（保存即置位 / 重启即清除 / 跨刷新持久化与旧存储迁移兼容），属**新能力**而非
-  反馈级别口径统一，已登记为**「功能级新能力池」候选**。
+- **「重启待生效」类状态：缺口已闭合**（2026-09-26）。此前它由 `instance-settings-dialog.tsx`
+  「保存后即关闭」的 dialog + 几秒即散的 toast 文案承担，属**已登记的已知缺口**——状态真实存续，
+  却无可见常驻物，用户可能在重启前忘记自己改过启动配置。
+  现在载体是 `features/instances/components/restart-pending-banner.tsx`（实例页常驻横幅），
+  状态跟踪落在 `stores/restart-pending.ts`：**保存即置位**（`instance-settings-dialog`）/
+  **重启即清除**（WS `started` 事件，判据见 `use-server-socket`）/
+  **跨刷新持久化**（zustand persist + 读回归一，防损坏载荷）。
+  **范围只有启动配置**：世界属性、server.properties 文件、插件启停三类同主题但语义不一
+  （属性有逐项例外、插件是文件级，且服务端仅在 isRunning 时返回 restartRequired），
+  混入会让「重启后真的都生效了吗」失准——它们是**各自独立的后续能力**，不是本缺口的遗留。
 
 ### 与单枚 Toaster 现状的关系
 
@@ -318,3 +322,36 @@ Radix Tooltip 只在 hover/focus 时出现，而 `<span>` 永不获得焦点，�
   判据下的不同级别**：`general-panel.tsx` 的自动重启（`apiUpdateInstance` + 失败回滚）与
   `webhooks/webhook-page.tsx` 的启停，其成功 toast 是级别 2 的**正确形态**（不是待删的冗余）；
   通知偏好的静默是级别 1 + 常驻说明的正确形态，不要为它补逐次 toast（一屏 20+ 开关会刷屏）。
+
+## 常驻告警条与指标口径（TPS / CPU 可比，内存不可比）
+
+仪表盘页头的常驻告警条（`features/dashboard/components/alert-banner.tsx`）显示
+`stores/notifications.ts` 的 `activeAlerts`——状态机（`lib/notifications.ts` 的
+`buildAlertNotifications`）本就在跑，但此前算完即丢、全仓无消费点。
+
+**三档的输入链路不同源，只有两档可用**：
+
+| 档 | 输入 | 状态 |
+| --- | --- | --- |
+| `lowTps` | `performanceUpdate.tps`（服务端采样 TPS） | 可用，阈值 `tpsLow`=15 |
+| `highCpu` | `performanceUpdate.cpu`（**进程** CPU，单核百分比） | 可用，阈值 `cpuWarning`=80 |
+| `highMemory` | **无合法分母** | **当前不会置位**（见下） |
+
+**`highMemory` 为何缺输入**：告警要的是「内存使用率」，而链路上只有
+`performanceUpdate.memory`（进程驻留内存：Windows `WorkingSet64` / Linux `statm` RSS /
+macOS `ps rss`，见 `mc_commander_server/services/mc-server/stats-collector.js`）。
+两个候选分母都不合法：
+
+- **整机 RAM**（`toStatus().totalMemory` = `os.totalmem()`）⇒ 得出「进程内存 / 整机总量」，
+  是 `features/dashboard/components/stat-cards.tsx` 明示的**失真比例**；
+- **`-Xmx` 堆上限**（`toStatus().maxMemory`）⇒ RSS ≠ 堆（含元空间/线程栈/直接内存/GC 余量），
+  RSS 可高于上限（>100%）也可远低于上限而堆已满。
+
+服务端目前**没有任何堆指标**（全仓无 `heapUsed`/`heapTotal`/`MemoryMXBean`/`jcmd`/`jstat`）。
+故本条不是「忘了接线」而是**能力缺口**：补它要先让服务端采集真实堆使用率。
+`AlertBanner` 的 `highMemory` 条目是**前向占位**（注释已声明）——状态机与阈值都在，
+服务端补上指标后即自动生效，不必再改前端。
+
+**告警条与失败横幅互斥**：`PageHeader` 的 `banner` 是单槽，且失败横幅（`failedSources`）
+优先——它说的是「这些数可能不是真的」，压过「数是真的但不好」；同屏两条也会被读成两件
+互不相干的事。互斥由结构保证（单槽 ReactNode），不需要显式优先级判断。

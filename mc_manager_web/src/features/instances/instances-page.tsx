@@ -29,6 +29,7 @@ import { useServerStore } from '@/stores/server'
 import { useDeployStore, DEPLOY_STAGE_LABELS } from '@/stores/deploy'
 import type { DeployResult, InstanceStatus, InstanceSummary } from '@/api/types'
 import { InstanceCards, INSTANCE_GRID_CLASS } from './components/instance-cards'
+import { RestartPendingBanner } from './components/restart-pending-banner'
 import { DeployDialog } from './components/deploy-dialog'
 import { InstanceSettingsDialog } from './components/instance-settings-dialog'
 import { UpgradeDialog } from './components/upgrade-dialog'
@@ -311,6 +312,9 @@ export function InstancesPage() {
 
       {/* ── 部署进行中横幅（刷新后 WS 补发恢复的可见标识；部署实例未入列表） ── */}
       <DeployingBanner />
+
+      {/* ── 启动配置待重启（常驻；重启后由 started 事件清除） ── */}
+      <RestartPendingBanner instances={instances} />
 
       {/* ── 实例卡片网格 ── */}
       <div className="min-h-0 flex-1 overflow-y-auto">

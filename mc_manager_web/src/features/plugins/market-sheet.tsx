@@ -32,6 +32,7 @@ import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { EmptyState } from '@/components/mcs/empty-state'
 import { InfoHint } from '@/components/mcs/info-hint'
 import { Skeleton } from '@/components/ui/skeleton'
+import { queryFailed } from '@/lib/query-phase'
 import { useConnectionStore } from '@/stores/connection'
 import { useServerStore } from '@/stores/server'
 import { usePlugins } from './queries'
@@ -92,10 +93,13 @@ export function MarketSheet({
 
   // 已安装文件名集合（卡片「已安装同名」提示 + 安装后即时刷新）
   const pluginsQuery = usePlugins(open ? instanceId : null)
+  /* 查询失败时集合为空会让「已安装同名」标记整体消失——用户可能因此对**已安装**的插件
+     再点安装。失败与「确实没装」必须可分，故把失败态一并传下去（卡片据此改显提示）。 */
   const installedFiles = useMemo(
     () => new Set((pluginsQuery.data?.plugins ?? []).map((p) => p.file)),
     [pluginsQuery.data],
   )
+  const installedUnknown = queryFailed(pluginsQuery) && pluginsQuery.data === undefined
 
   const fetchSearch = useCallback(
     async (offset: number) => {
@@ -317,6 +321,7 @@ export function MarketSheet({
                   panel={panel?.slug === hit.slug ? panel : null}
                   installingKey={installingKey}
                   installedFiles={installedFiles}
+                  installedUnknown={installedUnknown}
                   onToggle={() => void toggleVersions(hit)}
                   onInstall={(v) => void installOne(hit, v, false)}
                 />

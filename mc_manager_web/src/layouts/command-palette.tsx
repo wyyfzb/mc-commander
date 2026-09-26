@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router'
 import {
   CalendarClock,
   CloudUpload,
+  CircleAlert,
   FolderOpen,
   Globe,
   LayoutDashboard,
@@ -33,6 +34,7 @@ import {
   CommandShortcut,
 } from '@/components/ui/command'
 import { useUiStore } from '@/stores/ui'
+import { queryFailed } from '@/lib/query-phase'
 import { useCommandBus } from '@/stores/command-bus'
 import { useServerStore } from '@/stores/server'
 import { useConnectionStore } from '@/stores/connection'
@@ -257,6 +259,9 @@ export function CommandPalette() {
 
   // 玩家域：搜索玩家（远程数据），点选打开玩家页详情；cmdk 按 value 过滤
   const playersQuery = usePlayers(instanceId)
+  /* 取不到玩家列表与「确实没有玩家」在 UI 上都是空列表，必须分开呈现：
+     失败时给一条说明项，否则用户搜不到会以为是自己记错了名字 */
+  const playersFailed = queryFailed(playersQuery) && playersQuery.data === undefined
   const playerActions: PaletteAction[] = useMemo(() => {
     const players = playersQuery.data ?? []
     return [...players]
@@ -309,6 +314,25 @@ export function CommandPalette() {
                       {action.label}
                     </CommandItem>
                   ))}
+                </CommandGroup>
+              </>
+            )}
+            {/* 玩家列表取不到时必须说一句：否则搜玩家名得零结果，会被读成「没有这个玩家」。
+                「没有匹配」与「没取到」是两件事，用户据此决定「换个词搜」还是「重试」。
+
+                forceMount 挂 **group** 而非 item：cmdk 按 item 的 value 做模糊匹配，
+                本条的 value 是中文句子、而用户搜的是玩家名（`^[A-Za-z0-9_]{3,16}$`），
+                匹配分为 0 ⇒ 不挂 group 时它会被过滤掉，正好在最需要它的时刻（用户
+                搜不到玩家）消失。cmdk 的 Item 会解构掉自身的 forceMount 而不用于可见性
+                判定，可见性取的是 group 上下文，故只有 group 级生效。 */}
+            {instanceId && playersFailed && (
+              <>
+                <CommandSeparator />
+                <CommandGroup heading="玩家" forceMount>
+                  <CommandItem value="玩家列表加载失败，无法搜索玩家" disabled>
+                    <CircleAlert className="size-4 text-mcs-warning-fg" aria-hidden />
+                    玩家列表加载失败，无法搜索玩家
+                  </CommandItem>
                 </CommandGroup>
               </>
             )}

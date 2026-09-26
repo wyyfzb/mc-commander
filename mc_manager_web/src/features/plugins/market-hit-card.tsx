@@ -28,6 +28,8 @@ interface MarketHitCardProps {
   panel: VersionsPanel | null
   installingKey: string | null
   installedFiles: Set<string>
+  /** 已安装列表取不到（查询失败且无旧值）：此时不得把「没标记」呈现成「没装」 */
+  installedUnknown?: boolean
   onToggle: () => void
   onInstall: (version: MarketVersion) => void
 }
@@ -38,6 +40,7 @@ export function MarketHitCard({
   panel,
   installingKey,
   installedFiles,
+  installedUnknown = false,
   onToggle,
   onInstall,
 }: MarketHitCardProps) {
@@ -168,7 +171,15 @@ export function MarketHitCard({
                     ) : v.versionType === 'alpha' ? (
                       <StatusPill tone="error">Alpha</StatusPill>
                     ) : null}
-                    {installedSameFile(v) && <StatusPill tone="muted">同名已安装</StatusPill>}
+                    {/* 取不到已安装列表时不显示「同名已安装」（那是未知而非未装），
+                        改显中性说明——默默不标会让用户对已安装的插件再点安装 */}
+                    {installedUnknown ? (
+                      <StatusPill tone="muted" title="已安装列表获取失败，无法判断是否同名已安装">
+                        已装状态未知
+                      </StatusPill>
+                    ) : (
+                      installedSameFile(v) && <StatusPill tone="muted">同名已安装</StatusPill>
+                    )}
                     {/* loader 标签：区分 bukkit 系 / fabric / neoforge 构建产物 */}
                     {v.loaders.slice(0, 4).map((l) => (
                       <StatusPill key={l} tone={BUKKIT_LOADERS.has(l) ? 'info' : 'muted'}>

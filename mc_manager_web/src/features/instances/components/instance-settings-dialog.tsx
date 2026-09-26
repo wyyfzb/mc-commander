@@ -29,6 +29,7 @@ import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { cn } from '@/lib/utils'
 import { instanceLabel } from '@/lib/instance-label'
 import { getFriendlyErrorText } from '@/api/errors'
+import { useRestartPendingStore } from '@/stores/restart-pending'
 import { useUpdateInstance } from '../queries'
 import type { InstanceStatus, InstanceSummary, InstanceUpdatePayload } from '@/api/types'
 
@@ -172,6 +173,7 @@ export function InstanceSettingsDialog({
   onOpenChange,
 }: InstanceSettingsDialogProps) {
   const updateMutation = useUpdateInstance()
+  const markPending = useRestartPendingStore((s) => s.markPending)
 
   // ── 初始预填（挂载即打开：父组件条件渲染保证实例切换时重置）──
   const [initial] = useState(() => {
@@ -262,9 +264,18 @@ export function InstanceSettingsDialog({
     setIsSaving(true)
     try {
       await updateMutation.mutateAsync({ instanceId: instance.id, payload })
-      // 「重启后才生效」是持续状态（级别 3）但保存后本弹窗即关闭、无可见常驻载体 ⇒ 属文档
-      // §反馈级别三级口径 的「未满足的级别 3 要求」（已登记为缺口），故口径临时写进 toast 文案
-      toast.success('启动配置已保存，重启实例后生效')
+      /* 只在真的改动了才置位：保存按钮不判 dirty（详情未就绪也要能点），原样保存也走这条路
+         ——无条件置位会宣称「启动配置已修改」而实际逐字未变，诱导一次无必要重启。
+         改回原值是合法的 dirty=false 路径（用户改了又改回来），此时同样不该提示。 */
+      if (dirty) {
+        /* 置「待重启生效」：本弹窗保存后即关闭，是持续状态却没有可见载体（级别 3 的未满足
+           要求，见 docs/design-review-guidelines.md）。置位后由实例页页头的常驻指示器承担，
+           toast 只留动作回执本分——此前口径临时压在 toast 文案里，几秒即散。 */
+        markPending(instance.id)
+      }
+      toast.success(
+        dirty ? '启动配置已保存，重启实例后生效' : '启动配置已保存（与之前一致，无需重启）',
+      )
       onOpenChange(false)
     } catch (e) {
       toast.error(`保存失败：${getFriendlyErrorText(e)}`)

@@ -337,6 +337,30 @@ describe('notifications store 告警状态机（dispatchPerformance）', () => {
     expect(s.items).toHaveLength(0)
     expect(s.activeAlerts.size).toBe(0)
   })
+
+  it('resetAlerts 清空状态机：切实例后同一读数重新判定，不静默吞掉真实告警', () => {
+    // 场景：A 实例 TPS 低 → 置位。切到 B 实例（也低）：若不清空，B 会因「已在集合里」
+    // 而**不发告警**（真实异常被静默吞掉）。注意相同文案会被聚合（count++ 而非新增条目），
+    // 故判据取**聚合计数**而非条目数——两者都能证「告警再次发出」，计数更贴实现。
+    useNotificationStore.getState().dispatchPerformance({ tps: 10 })
+    const first = useNotificationStore.getState()
+    expect(first.activeAlerts.has('lowTps')).toBe(true)
+    const alertsBefore = first.items.length
+    expect(alertsBefore).toBeGreaterThan(0)
+    const countBefore = first.items.reduce((n, i) => n + i.count, 0)
+
+    useNotificationStore.getState().resetAlerts()
+    expect(useNotificationStore.getState().activeAlerts.size).toBe(0)
+
+    // B 也是低 TPS：清空后必须重新告警（若不清空则计数不变——本轮就是防它）
+    useNotificationStore.getState().dispatchPerformance({ tps: 10 })
+    const s = useNotificationStore.getState()
+    expect(s.activeAlerts.has('lowTps')).toBe(true)
+    const countAfter = s.items.reduce((n, i) => n + i.count, 0)
+    expect(countAfter).toBeGreaterThan(countBefore)
+    // 且不得误报成「恢复正常」
+    expect(s.items.some((i) => i.content.includes('已恢复正常'))).toBe(false)
+  })
 })
 
 describe('notifications store 初始化恢复与持久化容错（模块重载逐态验证）', () => {

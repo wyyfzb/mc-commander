@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -11,6 +11,7 @@ import { handlers, mockInstanceStatus, mockSystemStats } from '@/test/mocks/hand
 import { DashboardPage } from '../dashboard-page'
 import { useConnectionStore } from '@/stores/connection'
 import { useServerStore } from '@/stores/server'
+import { useNotificationStore } from '@/stores/notifications'
 
 /**
  * 仪表盘页横幅：两条查询各自失败都要有出口——
@@ -199,5 +200,47 @@ describe('DashboardPage 数据获取失败横幅', () => {
       expect(statusCalls).toBe(before.statusCalls + 1)
       expect(statsCalls).toBe(before.statsCalls + 1)
     })
+  })
+})
+
+/**
+ * 仪表盘告警条接线：把通知 store 的 activeAlerts 显示出来。
+ *
+ * 这条接线的存在意义就是「状态机算出的结果要有可见载体」——此前 activeAlerts 全仓零消费点
+ * （算完即丢）。断言的是**接线本身**：store 里置位 → 页头出现；清空 → 消失。
+ * 只测 AlertBanner 组件测不到这段（组件早已单测），删掉页面里的接线不会让任何用例变红。
+ */
+describe('DashboardPage 超标告警条接线', () => {
+  it('activeAlerts 置位 → 页头出现告警条；清空 → 自动消失', async () => {
+    renderPage()
+    // 先等首屏落地，确保不是「还在加载」蒙对
+    expect(await screen.findByText('健康')).toBeInTheDocument()
+    expect(screen.queryByText(/服务器状态异常/)).not.toBeInTheDocument()
+
+    // 置位（真实路径由 performanceUpdate 驱动，此处直接落到 store 的状态机产物）
+    await act(async () => {
+      useNotificationStore.setState({ activeAlerts: new Set(['lowTps']) })
+    })
+    expect(screen.getByText(/服务器状态异常/)).toBeInTheDocument()
+    expect(screen.getByText(/TPS 过低/)).toBeInTheDocument()
+
+    // 恢复 → 常驻载体必须自己撤下
+    await act(async () => {
+      useNotificationStore.setState({ activeAlerts: new Set() })
+    })
+    expect(screen.queryByText(/服务器状态异常/)).not.toBeInTheDocument()
+  })
+
+  it('查询失败与超标告警同屏时只有一个槽：失败横幅优先（可信度问题先讲）', async () => {
+    server.use(http.get('*/api/v1/system-stats', () => HttpResponse.error()))
+    renderPage()
+    expect(await screen.findByText('系统资源获取失败')).toBeInTheDocument()
+
+    await act(async () => {
+      useNotificationStore.setState({ activeAlerts: new Set(['lowTps']) })
+    })
+    // 失败横幅占槽时告警条让位（PageHeader 的 banner 是单槽），且不得两条同屏
+    expect(screen.getByText('系统资源获取失败')).toBeInTheDocument()
+    expect(screen.queryByText(/服务器状态异常/)).not.toBeInTheDocument()
   })
 })

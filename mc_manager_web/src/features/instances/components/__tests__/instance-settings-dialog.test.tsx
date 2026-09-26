@@ -17,6 +17,7 @@ import { apiGet } from '@/api/client'
 import { queryKeys } from '@/api/queries'
 import { handlers, mockInstanceStatus } from '@/test/mocks/handlers'
 import { useConnectionStore } from '@/stores/connection'
+import { useRestartPendingStore } from '@/stores/restart-pending'
 import { InstanceSettingsDialog } from '../instance-settings-dialog'
 import type { InstanceStatus, InstanceSummary } from '@/api/types'
 
@@ -130,6 +131,8 @@ beforeEach(() => {
   detailFetches = 0
   localStorage.clear()
   useConnectionStore.setState({ baseUrl: '', apiKey: 'test-key', status: 'ready' })
+  // 「待重启」集合按实例 id 记且跨用例残留，会污染「未改动就不置位」的判定
+  useRestartPendingStore.setState({ pending: {} })
   // sonner toast 存于模块级 store，跨测试残留会导致同文案 toast 重复匹配
   sonnerToast.dismiss()
 })
@@ -292,9 +295,28 @@ describe('InstanceSettingsDialog', () => {
     renderDialog(detailWith({ startCommand: 'java -Xmx3G -jar server.jar nogui' }))
 
     await user.click(screen.getByRole('button', { name: '保存配置' }))
-    expect(await screen.findByText('启动配置已保存，重启实例后生效')).toBeInTheDocument()
-    // 清除旧命令：否则 jvmArgs 空数组时 start() 回退 startCommand 静默覆盖新配置
+    // 本用例未改动任何可见项 ⇒ 走「无需重启」文案，且**不得**置「待重启」：
+    // 否则常驻横幅宣称「启动配置已修改」而实际逐字未变，诱导一次无必要重启。
+    expect(await screen.findByText('启动配置已保存（与之前一致，无需重启）')).toBeInTheDocument()
+    expect(useRestartPendingStore.getState().pending['alpha']).toBeUndefined()
+    // 清除旧命令：否则 jvmArgs 空数组时 start() 回退 startCommand 静默覆盖新配置。
+    // 这一项属内部归一（可见配置没变），故不影响上面「无需重启」的判定
     expect(putBodies[0]).toMatchObject({ startCommand: null })
+  })
+
+  it('改动了配置才置「待重启」并提示重启后生效（常驻指示器的唯一数据源）', async () => {
+    useRestartPendingStore.setState({ pending: {} })
+    const user = userEvent.setup()
+    renderDialog()
+
+    const slider = screen.getByRole('slider', { name: '内存分配' })
+    slider.focus()
+    await user.keyboard('{ArrowRight}')
+    await user.click(screen.getByRole('button', { name: '保存配置' }))
+
+    expect(await screen.findByText('启动配置已保存，重启实例后生效')).toBeInTheDocument()
+    // 漏了置位，实例页横幅就永不出现（它只读这个集合）
+    expect(useRestartPendingStore.getState().pending['alpha']).toBeTypeOf('number')
   })
 
   it('详情未就绪（undefined）：保存按钮禁用，防止默认值覆盖真实配置', () => {

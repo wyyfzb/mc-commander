@@ -7,8 +7,10 @@ import { CommandInput } from './components/command-input'
 import { McClockCard } from './components/mc-clock-card'
 import { RecentBackupsCard } from './components/recent-backups-card'
 import { AnnouncementCard } from './components/announcement-card'
+import { AlertBanner } from './components/alert-banner'
 import { useInstanceStatus, useSystemStats, queryKeys } from '@/api/queries'
 import { useServerStore } from '@/stores/server'
+import { useNotificationStore } from '@/stores/notifications'
 import { InstanceRequiredState } from '@/features/instances/components/instance-required-state'
 import { NoticeBanner, NoticeBannerAction } from '@/components/mcs/notice-banner'
 import { PageHeader } from '@/components/mcs/page-header'
@@ -26,6 +28,8 @@ export function DashboardPage() {
   const setSystemStats = useServerStore((s) => s.setSystemStats)
   const lastStatusEvent = useServerStore((s) => s.lastStatusEvent)
   const status = useServerStore((s) => s.status)
+  /** 超标告警状态（规则在 lib/notifications.ts，由 performanceUpdate 驱动跃迁） */
+  const activeAlerts = useNotificationStore((s) => s.activeAlerts)
 
   const statusQuery = useInstanceStatus(instanceId)
   const systemStatsQuery = useSystemStats()
@@ -84,6 +88,8 @@ export function DashboardPage() {
         inlineDescription
         banner={
           failedSources.length > 0 && !statusLoading ? (
+            /* 查询失败优先于超标告警：前者说的是「这些数可能不是真的」，后者是
+               「数是真的但不好」——先讲可信度，否则用户可能拿过期读数做判断 */
             <NoticeBanner variant="error" icon={AlertTriangle}>
               {/* 文案成块、动作靠右：文本折行时整句换行不产生孤字，按钮也不被挤进文本流 */}
               <span className="flex items-center justify-between gap-3">
@@ -96,7 +102,9 @@ export function DashboardPage() {
                 </NoticeBannerAction>
               </span>
             </NoticeBanner>
-          ) : undefined
+          ) : (
+            <AlertBanner alerts={activeAlerts} />
+          )
         }
       />
 

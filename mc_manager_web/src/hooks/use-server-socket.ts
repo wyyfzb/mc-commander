@@ -7,6 +7,7 @@ import { useConnectionStore } from '@/stores/connection'
 import { useAuthStore } from '@/stores/auth'
 import { useServerStore } from '@/stores/server'
 import { useDeployStore } from '@/stores/deploy'
+import { useRestartPendingStore } from '@/stores/restart-pending'
 import { applyUpgradeProgress, isUpgradeTerminal } from '@/stores/upgrade'
 import { applyBackupProgress, clearBackupProgress } from '@/stores/backup-progress'
 import { useNotificationStore } from '@/stores/notifications'
@@ -55,6 +56,8 @@ export function useServerSocket(instanceId: string | null) {
   const setHasConnectedOnce = useServerStore((s) => s.setHasConnectedOnce)
   const dispatchWsEvent = useNotificationStore((s) => s.dispatchWsEvent)
   const dispatchPerformance = useNotificationStore((s) => s.dispatchPerformance)
+  const resetAlerts = useNotificationStore((s) => s.resetAlerts)
+  const clearRestartPending = useRestartPendingStore((s) => s.clearPending)
   const clearPhase = useServerStore((s) => s.setPhase)
   const setLastOutputInstanceId = useUiStore((s) => s.setLastOutputInstanceId)
   const applyDeployProgress = useDeployStore((s) => s.applyDeployProgress)
@@ -228,6 +231,12 @@ export function useServerSocket(instanceId: string | null) {
               | 'save'
               | 'circuit_breaker'
             applyWsStatusEvent(ev)
+            /* 实例已启动 ⇒ 启动配置已生效，清「待重启」标记。
+               判据取 started 而非 stopped：服务端保存启动配置后不改运行中进程，
+               只有「重新起来」才算生效——stopped 只说明停下来了，此刻配置仍未被应用。 */
+            if (ev === 'started') {
+              clearRestartPending(msg.instanceId)
+            }
             // 启停中间态确认清除（issue 334）：started/stopped 为终态确认，crash/熔断为异常终态
             if (
               ev === 'started' ||
@@ -296,7 +305,15 @@ export function useServerSocket(instanceId: string | null) {
             awakePlayerNames: (data.awakePlayerNames as string[]) ?? [],
           }
           applyWsPerformance(p)
-          // 告警状态机（TPS/CPU/内存跃迁单次通知）
+          /* 告警状态机（TPS/CPU/内存跃迁单次通知）。
+             只传 tps/cpu，**刻意不传 memoryPercent**：payload 的 `memory` 是进程 RSS
+             （Windows WorkingSet / Linux statm RSS / macOS ps rss，见
+             mc-server/stats-collector.js），要得出「内存使用率」还缺一个合法分母——
+             整机 RAM 会让比例失真（stat-cards.tsx 明示「进程内存 / 整机总量」不可用），
+             -Xmx 堆上限又因 RSS ≠ 堆（含元空间/线程栈/直接内存/GC 余量）同样不准。
+             阈值 80% 因此在本链路上无可靠输入，highMemory 结构性不可触发；
+             补这条通道要先由服务端提供真实堆使用率（如 JMX / /proc 的堆指标），
+             属独立的能力项，不在前端接线范围内。 */
           dispatchPerformance({ tps: p.tps, cpu: p.cpu })
           break
         }
@@ -442,16 +459,21 @@ export function useServerSocket(instanceId: string | null) {
     applyDeployProgress,
     pushLog,
     clearPhase,
+    clearRestartPending,
     setLastOutputInstanceId,
     queryClient,
   ])
 
-  // 实例切换：更新订阅
+  // 实例切换：更新订阅 + 清空告警状态机。
+  // 告警状态机记的是「当前实例是否处于超标态」，跨实例沿用会串味：A 低 TPS 置位后切到
+  // 正常的 B，状态机会把 B 读成「恢复了」并推一条 B 从未发生过的恢复通知；反之 B 也低时
+  // 会因已在集合里而吞掉真实告警。清空后首个 performanceUpdate 会重新判定（该告警就告警）。
   useEffect(() => {
     const socket = socketSingleton
+    resetAlerts()
     if (!socket || !connectionReady || !instanceId) return
     socket.subscribe(instanceId)
-  }, [instanceId, connectionReady])
+  }, [instanceId, connectionReady, resetAlerts])
 
   return socketSingleton
 }
