@@ -13,11 +13,22 @@
  */
 import { useState } from 'react'
 import { flushSync } from 'react-dom'
-import { Eye, EyeOff, Info, Loader2, RefreshCw, Save, Wifi } from 'lucide-react'
+import {
+  ClipboardPaste,
+  Copy,
+  Eye,
+  EyeOff,
+  Info,
+  Loader2,
+  RefreshCw,
+  Save,
+  Wifi,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { Card } from '@/components/mcs/card'
@@ -30,8 +41,11 @@ import { useApiKeyCapabilities } from '@/api/queries'
 import {
   normalizeBaseUrl,
   needsHttpPlaintextWarning,
+  parseConnectionConfig,
+  serializeConnectionConfig,
   sessionAppliesToPanel,
 } from '@/lib/mc-connection'
+import { copyText } from '@/lib/clipboard'
 import { useUnsavedGuard } from '@/hooks/use-unsaved-guard'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { useAuthStore } from '@/stores/auth'
@@ -83,6 +97,10 @@ export function ConnectionForm({
   const [pendingAction, setPendingAction] = useState<PendingAction>(null)
   const [urlError, setUrlError] = useState('')
   const [keyError, setKeyError] = useState('')
+  /** 粘贴导入区是否展开（默认收起：它是「换设备/帮别人配」的旁路，不是每次配置都要走） */
+  const [importOpen, setImportOpen] = useState(false)
+  const [importText, setImportText] = useState('')
+  const [importError, setImportError] = useState('')
 
   /** 未保存修改（与 store 对比） */
   const dirty = url !== storedBaseUrl || apiKey !== storedApiKey
@@ -222,6 +240,61 @@ export function ConnectionForm({
     void runTest(base).then((r) => {
       if (r.ok) toast.success('连接成功')
     })
+  }
+
+  /**
+   * 复制当前连接配置（条目 23）。**只复制表单里的值，不读 store**：
+   * 用户此刻看到的地址/Key 就是他想给出去的那份，读 store 会在「改完未保存」时
+   * 复制出与他眼前所见不符的旧配置。
+   */
+  async function handleCopyConfig() {
+    if (!ensureFilled()) return
+    // copyText 内部降级 execCommand，且绝不抛异常（HTTP 非安全上下文也可用）
+    const ok = await copyText(serializeConnectionConfig({ baseUrl: normalizeBaseUrl(url), apiKey }))
+    if (ok) {
+      toast.success('连接配置已复制', {
+        description: '粘贴到另一台设备的「粘贴导入」即可，注意它含 API Key 明文',
+        duration: 4000,
+      })
+    } else {
+      toast.error('复制失败，请手动选中复制')
+    }
+  }
+
+  /** 粘贴导入：填入表单但**不自动保存**——走既有的「测试连接 → 保存」链路，用户仍有确认机会 */
+  function handleImport() {
+    const parsed = parseConnectionConfig(importText)
+    if (!parsed) {
+      setImportError('没找到面板地址：粘贴的内容里要有一行「面板地址: https://…」')
+      return
+    }
+    setUrl(parsed.baseUrl)
+    setApiKey(parsed.apiKey)
+    setTestedOk(false)
+    setUrlError('')
+    setKeyError('')
+    setImportError('')
+    setImportText('')
+    setImportOpen(false)
+
+    /* 导入的 Key 可能是**已被管理员关闭的通道**（服务端 .env API_KEY_ENABLED=false）：
+       那时它填了也连不上，而失败会以「凭据无效」的形式出现——与「Key 打错了」不可区分。
+       能力探测（POST /instances 之前的 GET /auth/capabilities）能提前告诉我们这一点，
+       故这里据实说明，而不是让用户去猜是不是自己抄错了。
+       注意地址是刚填进去的，探测结果对应的是**旧地址**——故只在地址未变时才据此提示。 */
+    if (parsed.apiKey !== '' && apiKeyChannelDisabled && parsed.baseUrl === storedBaseUrl) {
+      toast.warning('已填入，但当前面板已关闭 API Key 通道', {
+        description:
+          '该 Key 会被服务端拒绝（与「Key 无效」表现相同）。若你还有登录会话可用，清空 Key 也能连。',
+        duration: 6000,
+      })
+      return
+    }
+
+    toast.success(
+      parsed.apiKey === '' ? '已填入面板地址（未含 API Key）' : '已填入面板地址与 API Key',
+      { description: '请先「测试连接」，确认可用后再保存', duration: 4000 },
+    )
   }
 
   function handleSave() {
@@ -409,6 +482,63 @@ export function ConnectionForm({
           {saving ? saveLabels.busy : saveLabels.idle}
         </Button>
       </div>
+
+      {/* 复制 / 粘贴导入（条目 23）：跨设备或多人共用同一面板时免手抄地址与 Key。
+          两者都是「同一份配置换个载体」的辅助动作 → ghost，不占页面的次操作名额。 */}
+      <div className="flex flex-wrap items-center gap-2 border-t border-mcs-border-muted pt-3">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => void handleCopyConfig()}
+          disabled={testing || saving}
+        >
+          <Copy className="size-3.5" aria-hidden />
+          复制配置
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => {
+            setImportOpen((v) => !v)
+            setImportError('')
+          }}
+          aria-expanded={importOpen}
+        >
+          <ClipboardPaste className="size-3.5" aria-hidden />
+          粘贴导入
+        </Button>
+        <InfoHint label="复制配置说明">
+          复制出的文本含 API Key 明文，只应粘贴到你信任的设备；它相当于该面板的管理员凭据。
+        </InfoHint>
+      </div>
+
+      {importOpen && (
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="connection-import">粘贴连接配置</Label>
+          <Textarea
+            id="connection-import"
+            value={importText}
+            onChange={(e) => {
+              setImportText(e.target.value)
+              setImportError('')
+            }}
+            placeholder={['面板地址: https://192.168.1.100:25566', 'API Key: mc_…'].join('\n')}
+            spellCheck={false}
+            className="min-h-16 font-mono"
+          />
+          {importError !== '' && <p className="text-mcs-xs text-mcs-error-fg">{importError}</p>}
+          <div className="flex items-center gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={handleImport}>
+              填入表单
+            </Button>
+            <span className="text-mcs-xs text-mcs-text-muted">
+              只填入，不会自动保存——可先「测试连接」确认
+            </span>
+          </div>
+        </div>
+      )}
     </>
   )
 

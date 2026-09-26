@@ -1,6 +1,6 @@
 /**
  * mc-connection 单测：normalizeBaseUrl / panelAddress / sessionAppliesToPanel /
- * isInternalHost / needsHttpPlaintextWarning
+ * isInternalHost / needsHttpPlaintextWarning / serialize·parseConnectionConfig
  */
 import { describe, expect, it } from 'vitest'
 import {
@@ -8,6 +8,8 @@ import {
   needsHttpPlaintextWarning,
   normalizeBaseUrl,
   panelAddress,
+  parseConnectionConfig,
+  serializeConnectionConfig,
   sessionAppliesToPanel,
 } from '../mc-connection'
 
@@ -153,5 +155,79 @@ describe('sessionAppliesToPanel（会话是否属于目标面板）', () => {
     expect(
       sessionAppliesToPanel({ token: 'tok-1', issuedFor: '' }, 'https://panel-b.example.com'),
     ).toBe(true)
+  })
+})
+
+/**
+ * 连接配置的复制/粘贴往返（条目 23）。
+ *
+ * 文本格式刻意用 `key: value` 两行而非 JSON：这段文本要在聊天/笔记里人工传递，
+ * JSON 少一个引号就整段不可用，而逐行格式错一行只错一行。
+ * 解析面**只认「没有地址就拒绝」**——地址可达性与 Key 有效性交给「测试连接」，
+ * 前端预判会与服务端口径漂移。
+ */
+describe('serializeConnectionConfig / parseConnectionConfig', () => {
+  it('往返：序列化结果能被解析回原值', () => {
+    const cfg = { baseUrl: 'https://panel.example.com:25566', apiKey: 'fake-key-abcdef' }
+    expect(parseConnectionConfig(serializeConnectionConfig(cfg))).toEqual(cfg)
+  })
+
+  it('无 API Key 时省略该行（登录会话用户没有 Key，往返后 Key 为空串）', () => {
+    const text = serializeConnectionConfig({ baseUrl: 'https://panel.example.com', apiKey: '' })
+    expect(text).not.toContain('API Key')
+    expect(parseConnectionConfig(text)).toEqual({
+      baseUrl: 'https://panel.example.com',
+      apiKey: '',
+    })
+  })
+
+  it('没有地址即拒绝（其余字段有值也不算）', () => {
+    expect(parseConnectionConfig('API Key: fake-key-abcdef')).toBeNull()
+    expect(parseConnectionConfig('')).toBeNull()
+    expect(parseConnectionConfig('随便一段文本')).toBeNull()
+  })
+
+  it('宽容手抄差异：全角冒号、键名大小写与空白、行的前后空格', () => {
+    const text = [
+      '  面板地址 ： https://panel.example.com  ',
+      '',
+      'api   KEY:   fake-key-abcdef',
+    ].join('\n')
+    expect(parseConnectionConfig(text)).toEqual({
+      baseUrl: 'https://panel.example.com',
+      apiKey: 'fake-key-abcdef',
+    })
+  })
+
+  it('接受英文键名（url / key）以便跨语言复制', () => {
+    expect(parseConnectionConfig(['url: https://panel.example.com', 'key: k1'].join('\n'))).toEqual(
+      {
+        baseUrl: 'https://panel.example.com',
+        apiKey: 'k1',
+      },
+    )
+  })
+
+  it('无关行忽略、同名键后者优先（粘贴多段时不静默取第一段）', () => {
+    const text = [
+      '# 备注：这是 A 面板',
+      '面板地址: https://a.example.com',
+      '面板地址: https://b.example.com',
+    ].join('\n')
+    expect(parseConnectionConfig(text)?.baseUrl).toBe('https://b.example.com')
+  })
+
+  it('值里含冒号不被截断（地址带端口是最常见形态）', () => {
+    expect(parseConnectionConfig('面板地址: https://1.2.3.4:25566')?.baseUrl).toBe(
+      'https://1.2.3.4:25566',
+    )
+  })
+
+  it('CRLF 换行同样可解析（从 Windows 记事本/邮件复制）', () => {
+    const text = ['面板地址: https://panel.example.com', 'API Key: k1'].join('\r\n')
+    expect(parseConnectionConfig(text)).toEqual({
+      baseUrl: 'https://panel.example.com',
+      apiKey: 'k1',
+    })
   })
 })

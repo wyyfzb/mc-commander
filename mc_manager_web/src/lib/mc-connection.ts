@@ -4,6 +4,7 @@
  * - panelAddress / sessionAppliesToPanel：面板身份与「会话是否属于本面板」判定
  * - isInternalHost：本机/内网地址判断（localhost/::1/127.x/10.x/192.168.x/172.16-31.x）
  * - needsHttpPlaintextWarning：公网 http 明文传输警告判定
+ * - serialize/parseConnectionConfig：连接配置的文本互转（复制/粘贴导入）
  */
 
 /** 规范化面板地址：默认 https 协议 + 去尾斜杠（协议前缀大小写不敏感） */
@@ -82,4 +83,64 @@ export function needsHttpPlaintextWarning(url: string): boolean {
   const host = uri.hostname
   if (host === '') return false
   return !isInternalHost(host)
+}
+
+/**
+ * 连接配置的复制/粘贴文本格式。
+ *
+ * 用 `key: value` 两行而不是 JSON：这段文本的用途是**人在聊天/笔记里传递**，
+ * JSON 的引号与转义在人工编辑时极易弄坏（少个引号就整段不可用），
+ * 而 key: value 一行一项，缺一项只缺一项、错一行只错一行。
+ *
+ * 不使用 `url#key` 单行形态（owner 已拍板）：明文 API Key 进 URL 会留在浏览器历史、
+ * 剪贴板与聊天记录里，与本仓「只存摘要、明文只显示一次」的姿态相冲。
+ */
+const CONFIG_TEXT_URL_KEY = '面板地址'
+const CONFIG_TEXT_API_KEY_KEY = 'API Key'
+
+/** 序列化连接配置为可粘贴文本（API Key 为空则省略该行——登录会话用户没有 Key 也正常） */
+export function serializeConnectionConfig(config: { baseUrl: string; apiKey: string }): string {
+  const lines = [`${CONFIG_TEXT_URL_KEY}: ${config.baseUrl}`]
+  if (config.apiKey) lines.push(`${CONFIG_TEXT_API_KEY_KEY}: ${config.apiKey}`)
+  return lines.join('\n')
+}
+
+/**
+ * 解析粘贴的连接配置文本（解析不出地址时返回 null）。
+ *
+ * 宽容到什么程度是刻意的：**只认「键名 + 冒号 + 值」这一种结构**，但
+ * 键名接受中英文与常见变体、分隔符接受全角冒号、行的前后空白一律忽略——
+ * 因为这些差异全部来自「人手抄/聊天软件替换标点」，与配置本身无关，
+ * 为它们报错只会让用户反复重输。真正的形态错误（没有地址）才拒绝。
+ *
+ * 不校验地址是否可达、Key 是否有效：那是「测试连接」的职责（服务端裁决），
+ * 前端预判只会与服务端口径漂移。
+ */
+export function parseConnectionConfig(text: string): null | { baseUrl: string; apiKey: string } {
+  let baseUrl = ''
+  let apiKey = ''
+  for (const rawLine of text.split(/\r?\n/)) {
+    // 全角冒号是中文输入法的默认产物，一律按半角处理
+    const line = rawLine.replace(/：/g, ':').trim()
+    if (line === '') continue
+    const sep = line.indexOf(':')
+    if (sep < 0) continue
+    // 键名折叠空白与大小写后比对：`API Key` / `api key` / `apikey` 是同一件事，
+    // 差异只来自手抄习惯，不是用户填错了配置
+    const key = line.slice(0, sep).replace(/\s+/g, '').toLowerCase()
+    const value = line.slice(sep + 1).trim()
+    if (value === '') continue
+    // 键名的备选写法：序列化只产第一列，其余是「手抄/别处粘贴」的宽容面
+    if (
+      key === CONFIG_TEXT_URL_KEY.replace(/\s+/g, '').toLowerCase() ||
+      key === 'url' ||
+      key === '地址'
+    ) {
+      baseUrl = value
+    } else if (key === CONFIG_TEXT_API_KEY_KEY.replace(/\s+/g, '').toLowerCase() || key === 'key') {
+      apiKey = value
+    }
+  }
+  if (baseUrl === '') return null
+  return { baseUrl, apiKey }
 }

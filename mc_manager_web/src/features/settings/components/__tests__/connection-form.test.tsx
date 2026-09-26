@@ -11,7 +11,7 @@
  * mock 数据为结构占位（虚构地址/密钥），严禁真实服务器信息
  */
 import { describe, it, expect, beforeEach, afterEach, afterAll, beforeAll, vi } from 'vitest'
-import { act, cleanup, render, screen } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -24,6 +24,17 @@ import { useAuthStore, SESSION_EXPIRED_EVENT } from '@/stores/auth'
 import { useConnectionStore } from '@/stores/connection'
 import { useServerStore } from '@/stores/server'
 import { ConnectionForm } from '../connection-form'
+
+/**
+ * copyText 的模块级桩：本文件只在「复制配置」用例里断言**调用方传了什么文本**。
+ * 复制机制本身（安全上下文 → execCommand 降级）在 `lib/__tests__/clipboard` 覆盖，
+ * 这里真跑只会得到 false（jsdom 两条例行路径都不可用），反而掩盖调用点缺陷。
+ */
+const copyTextMock = vi.fn<(text: string) => Promise<boolean>>(async () => true)
+vi.mock('@/lib/clipboard', () => ({
+  copyText: (text: string) => copyTextMock(text),
+  hasAsyncClipboard: () => false,
+}))
 
 const server = setupServer(...handlers)
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
@@ -932,5 +943,165 @@ describe('ConnectionForm 能力探测不得改变本机登录态', () => {
 
     expect(captured.auth).toBe('Bearer sess-token-abc')
     expect(useAuthStore.getState().session?.token).toBe('sess-token-abc')
+  })
+})
+
+/**
+ * 复制 / 粘贴导入连接配置（条目 23）。
+ *
+ * 锁的是**表单值**而非 store：复制要给出用户眼前所见的那份（改完未保存时读 store
+ * 会复制出旧配置）；导入只填入、不自动保存（仍走「测试连接 → 保存」）。
+ * 文本格式的往返与宽容面在 `lib/__tests__/mc-connection.test.ts` 锁。
+ */
+describe('ConnectionForm 复制 / 粘贴导入', () => {
+  /** 本 describe 专用：按给定应答挂上能力探测（各 describe 作用域独立，不共享上文的 helper） */
+  function mockCapabilitiesHere(response: () => Response) {
+    server.use(http.get('*/api/v1/auth/capabilities', () => response()))
+  }
+
+  /**
+   * 记录 copyText 实际写出的文本。
+   * 直接 mock `@/lib/clipboard` 而不用真实剪贴板路径：jsdom 两条例行路径都不可用
+   * （无 navigator.clipboard，execCommand 未实现），真跑只会拿到 false，
+   * 而这里要断言的是**调用方传了什么文本**，不是复制机制本身（后者由 lib 自测覆盖）。
+   */
+  function captureClipboard() {
+    const written: string[] = []
+    copyTextMock.mockImplementation(async (text: string) => {
+      written.push(text)
+      return true
+    })
+    return written
+  }
+
+  it('复制配置：写出「面板地址 + API Key」两行文本', async () => {
+    useConnectionStore.setState({
+      baseUrl: 'https://panel-a.example.com',
+      apiKey: 'fake-key-abcdef',
+      status: 'ready',
+    })
+    const written = captureClipboard()
+    const user = userEvent.setup()
+    renderForm({ variant: 'settings' })
+    await user.click(screen.getByRole('button', { name: '复制配置' }))
+
+    await waitFor(() => expect(written).toHaveLength(1))
+    expect(written[0]).toBe('面板地址: https://panel-a.example.com\nAPI Key: fake-key-abcdef')
+    expect(await screen.findByText('连接配置已复制')).toBeInTheDocument()
+  })
+
+  /**
+   * **改完未保存时复制的是表单值**，不是 store 里的旧配置。
+   * 这是「复制」这件事的全部意义：用户要的是他眼前所见的那份。
+   * （变异验证：把实现改成读 store，本条即红——其余两条复制用例都发现不了。）
+   */
+  it('复制配置：改完未保存时复制表单当前值（不读 store 的旧值）', async () => {
+    setBoundSession('https://panel-a.example.com')
+    useConnectionStore.setState({
+      baseUrl: 'https://panel-a.example.com',
+      apiKey: 'old-key',
+      status: 'ready',
+    })
+    const written = captureClipboard()
+    const user = userEvent.setup()
+    renderForm({ variant: 'settings' })
+
+    // 改地址与 Key，但**不点保存**
+    const urlInput = screen.getByLabelText('面板地址')
+    await user.clear(urlInput)
+    await user.type(urlInput, 'https://panel-b.example.com')
+    const keyInput = screen.getByLabelText('API Key')
+    await user.clear(keyInput)
+    await user.type(keyInput, 'new-key')
+    await user.click(screen.getByRole('button', { name: '复制配置' }))
+
+    await waitFor(() => expect(written).toHaveLength(1))
+    expect(written[0]).toBe('面板地址: https://panel-b.example.com\nAPI Key: new-key')
+    // 确实没保存：store 仍是旧值
+    expect(useConnectionStore.getState().baseUrl).toBe('https://panel-a.example.com')
+    expect(useConnectionStore.getState().apiKey).toBe('old-key')
+  })
+
+  it('复制配置：无 API Key 时只写地址一行（登录会话用户没有 Key）', async () => {
+    // 有会话时 API Key 才不是必填——否则「复制」会被空值校验拦下（那是另一条路径）
+    setBoundSession('https://panel-a.example.com')
+    useConnectionStore.setState({
+      baseUrl: 'https://panel-a.example.com',
+      apiKey: '',
+      status: 'ready',
+    })
+    const written = captureClipboard()
+    const user = userEvent.setup()
+    renderForm({ variant: 'settings' })
+    await user.click(screen.getByRole('button', { name: '复制配置' }))
+
+    await waitFor(() => expect(written).toHaveLength(1))
+    expect(written[0]).toBe('面板地址: https://panel-a.example.com')
+  })
+
+  it('粘贴导入：填入地址与 Key、提示先测试，且**不写 store**（未保存）', async () => {
+    const user = userEvent.setup()
+    renderForm({ variant: 'settings' })
+    await user.click(screen.getByRole('button', { name: '粘贴导入' }))
+    await user.type(
+      screen.getByLabelText('粘贴连接配置'),
+      '面板地址: https://panel-b.example.com\nAPI Key: fake-key-xyz',
+    )
+    await user.click(screen.getByRole('button', { name: '填入表单' }))
+
+    expect(screen.getByLabelText('面板地址')).toHaveValue('https://panel-b.example.com')
+    expect(await screen.findByText('已填入面板地址与 API Key')).toBeInTheDocument()
+    // 只填入：store 不变，用户必须先测试/保存
+    expect(useConnectionStore.getState().baseUrl).toBe('')
+    expect(useConnectionStore.getState().apiKey).toBe('')
+  })
+
+  it('粘贴内容没有地址：行内报错，不填表单', async () => {
+    const user = userEvent.setup()
+    renderForm({ variant: 'settings' })
+    await user.click(screen.getByRole('button', { name: '粘贴导入' }))
+    await user.type(screen.getByLabelText('粘贴连接配置'), 'API Key: fake-key-no-url')
+    await user.click(screen.getByRole('button', { name: '填入表单' }))
+
+    expect(await screen.findByText(/没找到面板地址/)).toBeInTheDocument()
+    expect(screen.getByLabelText('面板地址')).toHaveValue('')
+  })
+
+  /**
+   * 导入一把**被禁用的** Key：服务端会拒它，且失败表现与「Key 打错了」无法区分。
+   * 能力探测已知通道关闭时据实说明，省得用户反复核对是不是自己抄错了。
+   */
+  it('导入的 Key 遇上「本面板已关闭 API Key 通道」：给出可解释提示', async () => {
+    // 无会话 ⇒ API Key 必填，故先给 store 一个 Key 让表单处于「可提交」态；
+    // 本用例只关心导入时的提示，不关心这条 Key 的来历
+    useConnectionStore.setState({
+      baseUrl: 'https://panel-a.example.com',
+      apiKey: 'existing-key',
+      status: 'ready',
+    })
+    // 三字段全是契约必填：缺一个会被 schema 拒，探测落 error 而非 success（实测踩过）
+    mockCapabilitiesHere(() =>
+      okEnvelope({
+        apiKeyEnabled: false,
+        readonlyApiKeyEnabled: false,
+        readonlyApiKeyConfigured: false,
+      }),
+    )
+    const user = userEvent.setup()
+    const { queryClient } = renderForm({ variant: 'settings' })
+    // 探测由输入地址后防抖触发；等它落定，否则 apiKeyChannelDisabled 仍是「未知」
+    await user.type(screen.getByLabelText('面板地址'), '{selectall}https://panel-a.example.com')
+    await waitCapabilitiesSettled(queryClient, 'https://panel-a.example.com')
+
+    await user.click(screen.getByRole('button', { name: '粘贴导入' }))
+    await user.type(
+      screen.getByLabelText('粘贴连接配置'),
+      '面板地址: https://panel-a.example.com\nAPI Key: fake-key-abcdef',
+    )
+    await user.click(screen.getByRole('button', { name: '填入表单' }))
+
+    expect(await screen.findByText(/已关闭 API Key 通道/)).toBeInTheDocument()
+    // 仍照常填入——用户可能确实要用它试（或改用登录会话）
+    expect(await screen.findByLabelText('API Key')).toHaveValue('fake-key-abcdef')
   })
 })
