@@ -50,6 +50,10 @@ const OnboardingPageLazy = lazy(() =>
 const AuditPageLazy = lazy(() =>
   import('@/features/audit/audit-page').then((m) => ({ default: m.AuditPage })),
 )
+// 帮助页内容在仓库根 docs/（`?raw` 构建期内联），与 app 其余部分无共享依赖
+const HelpPageLazy = lazy(() =>
+  import('@/features/help/help-page').then((m) => ({ default: m.HelpPage })),
+)
 const LoginPageLazy = lazy(() =>
   import('@/features/auth/login-page').then((m) => ({ default: m.LoginPage })),
 )
@@ -85,6 +89,7 @@ export const router = createBrowserRouter([
       { path: 'instances', Component: InstancesPage },
       { path: 'webhooks', Component: WebhookPage },
       { path: 'audit', Component: AuditPageLazy },
+      { path: 'help', Component: HelpPageLazy },
       {
         path: 'settings',
         Component: SettingsPage,

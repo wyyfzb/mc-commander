@@ -114,6 +114,14 @@ export default defineConfig({
     },
   },
   server: {
+    // 站内帮助页 `?raw` 直读仓库根 docs/user-guide.md（单一事实源，不在包内复制副本）：
+    // 该文件在包根之外，而 Vite 默认只放行包根（allow 未声明时 = [workspaceRoot]，
+    // 实测 dev 下裸 import 报 403「outside of Vite serving allow list」）。
+    // 显式声明时默认值**不再并入**，故必须带上包根本身；构建期 Rollup 直接走 fs、不受此限，
+    // 故本条只影响 dev。deny 默认项（.env / .npmrc / .git）不受 allow 变更影响。
+    fs: {
+      allow: [path.resolve(import.meta.dirname), path.resolve(import.meta.dirname, '../docs')],
+    },
     // 忽略 Mimosa 钩子运行时状态目录：其文件被锁定时 watch 报 EBUSY 导致 dev server 崩溃
     watch: {
       ignored: ['**/.mimosa/**'],

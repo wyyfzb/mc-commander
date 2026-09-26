@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router'
 import {
   CalendarClock,
-  CloudUpload,
   CircleAlert,
+  CircleHelp,
+  CloudUpload,
   FolderOpen,
   Globe,
   LayoutDashboard,
@@ -234,6 +235,13 @@ export function CommandPalette() {
       hint: '/audit',
       keywords: 'audit 审计 操作记录 命令历史',
       run: () => go('/audit'),
+    },
+    {
+      label: '帮助',
+      icon: CircleHelp,
+      hint: '/help',
+      keywords: 'help 帮助 向导 文档 手册 使用说明 怎么用',
+      run: () => go('/help'),
     },
     {
       label: '设置',

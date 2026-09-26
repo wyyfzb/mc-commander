@@ -3,6 +3,7 @@ import { NavLink } from 'react-router'
 import {
   ChevronsLeft,
   ChevronsRight,
+  CircleHelp,
   LayoutDashboard,
   Users,
   Globe,
@@ -49,7 +50,11 @@ const PRIMARY_NAV: NavItem[] = [
   { to: '/audit', label: '审计日志', icon: ScrollText },
 ]
 
-const BOTTOM_NAV: NavItem[] = [{ to: '/settings', label: '设置', icon: Settings }]
+// 底部辅助区与「设置」并列：帮助是查阅型静态内容，不进日常操作主序列（PRIMARY_NAV 保持 9 项）
+const BOTTOM_NAV: NavItem[] = [
+  { to: '/help', label: '帮助', icon: CircleHelp },
+  { to: '/settings', label: '设置', icon: Settings },
+]
 
 /**
  * useFocusTrap —— WAI-ARIA 焦点陷阱（hook 形式）
