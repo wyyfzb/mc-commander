@@ -159,7 +159,9 @@ describe('restoreBackup 路径与状态校验（实例级恢复）', () => {
       instance_id: 's1',
       status: 'completed',
       world_name: 'world',
-      file_path: 'D:/evil/outside',
+      // 越界样本须平台中立：'D:/evil/outside' 这类盘符路径只在 Windows 是绝对路径，
+      // POSIX 上只是名为 'D:' 的相对段，会落在实例根内而绕不过校验
+      file_path: path.join(config.backupsDir, '..', 'evil-outside'),
     });
     const service = new BackupService(null);
     await expect(service.restoreBackup(1)).rejects.toThrow('escapes instance root');
@@ -256,7 +258,8 @@ describe('deleteBackup 对 file_path 校验（异步化）', () => {
     MockBackupModel.findByIdWithPath.mockReturnValue({
       id: 1,
       instance_id: 's1',
-      file_path: 'D:/evil/outside',
+      // 平台中立的越界样本，理由同 restoreBackup 那条：盘符路径在 POSIX 上不是绝对路径
+      file_path: path.join(backupsDir, '..', 'evil-outside'),
     });
     const service = new BackupService(null);
     // deleteBackup 为异步（rm 大目录不阻塞事件循环），同步 throw 改为
