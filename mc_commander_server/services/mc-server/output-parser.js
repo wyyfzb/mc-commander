@@ -11,26 +11,6 @@ export function _parseOutput(text) {
   const lines = text.split('\n').filter((l) => l.trim());
 
   for (const line of lines) {
-    const responseMatch = line.match(/\[mcsmp_response:(\d+)\]/);
-    if (responseMatch) {
-      const commandId = parseInt(responseMatch[1]);
-      const promiseInfo = this._commandResponsePromises.get(commandId);
-      if (promiseInfo) {
-        promiseInfo.buffer.push(line.replace(/\[mcsmp_response:\d+\]\s*/, ''));
-      }
-      continue;
-    }
-
-    const responseEndMatch = line.match(/\[mcsmp_end:(\d+)\]/);
-    if (responseEndMatch) {
-      const commandId = parseInt(responseEndMatch[1]);
-      const promiseInfo = this._commandResponsePromises.get(commandId);
-      if (promiseInfo) {
-        promiseInfo.resolve(promiseInfo.buffer.join('\n'));
-      }
-      continue;
-    }
-
     const tpsMatch = line.match(/(\d+\.\d+) TPS/);
     if (tpsMatch) {
       this.tps = parseFloat(tpsMatch[1]);

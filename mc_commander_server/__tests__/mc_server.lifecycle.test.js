@@ -545,57 +545,36 @@ describe('MCServerInstance lifecycle / RCON / stats timers', () => {
     });
   });
 
-  describe('stdin/mcsmp fallback timeout', () => {
+  describe('无第二通道时的命令回执（RCON 未连接）', () => {
     function createStdinInstance() {
       const instance = createInstance();
       instance.isRunning = true;
       instance.process = makeFakeProcess();
-      instance.properties = {}; // RCON 未启用，走 stdin/mcsmp 协议
+      instance.properties = {}; // RCON 未启用
       return instance;
     }
 
-    it('rejects with Command timeout when no response arrives', async () => {
+    it('RCON 未连接：立即明确报错，不写 stdin、不留挂起 Promise、不空等超时', async () => {
       const instance = createStdinInstance();
 
       const promise = instance.sendCommandWithResponse('list', { timeout: 5000 });
-      const expectation = expect(promise).rejects.toThrow('Command timeout');
-
-      expect(instance.process.stdin.write).toHaveBeenCalledWith(
-        expect.stringMatching(/^mcsmp_\d+ list\n$/),
+      const expectation = expect(promise).rejects.toThrow(
+        'Command response unavailable: RCON is not connected',
       );
 
-      await vi.advanceTimersByTimeAsync(5000);
+      // 曾经这里会往 stdin 写一条需要配套 Mod 的自造协议行（那个 Mod 不存在）
+      expect(instance.process.stdin.write).not.toHaveBeenCalled();
+      expect(instance._commandResponsePromises).toBeUndefined();
+
       await expectation;
-      // 超时后清理挂起的响应 Promise
-      expect(instance._commandResponsePromises.size).toBe(0);
-    });
-
-    it('resolves and clears timeout timer when mcsmp response arrives', async () => {
-      const instance = createStdinInstance();
-
-      const promise = instance.sendCommandWithResponse('list', { timeout: 5000 });
-      const commandId = instance._commandIdCounter;
-
-      instance._parseOutput(`[mcsmp_response:${commandId}] There are 2 players`);
-      instance._parseOutput(`[mcsmp_end:${commandId}]`);
-
-      await expect(promise).resolves.toBe('There are 2 players');
-      expect(instance._commandResponsePromises.size).toBe(0);
-      // 超时定时器已清除
+      // 不挂计时器：错误是即刻给出的，不是等出来的
       expect(vi.getTimerCount()).toBe(0);
     });
 
-    it('respects custom timeout value', async () => {
+    it('该错误与「命令超时」可区分（调用方据此判因，不必猜）', async () => {
       const instance = createStdinInstance();
-
-      const promise = instance.sendCommandWithResponse('list', { timeout: 1000 });
-      const expectation = expect(promise).rejects.toThrow('Command timeout');
-
-      await vi.advanceTimersByTimeAsync(999);
-      expect(instance._commandResponsePromises.size).toBe(1);
-
-      await vi.advanceTimersByTimeAsync(1);
-      await expectation;
+      const err = await instance.sendCommandWithResponse('list').catch((e) => e);
+      expect(err.message).not.toContain('Command timeout');
     });
   });
 

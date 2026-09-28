@@ -324,8 +324,6 @@ export class MCServerInstance extends EventEmitter {
     this._statsTimer = null;
     this.lastOutput = '';
     this.properties = this._loadProperties();
-    this._commandResponsePromises = new Map();
-    this._commandIdCounter = 0;
     // RCON 客户端（rcon-client 库管理连接/认证/分包）
     this._rconClient = null;
     this._rconConnecting = null;
@@ -1138,30 +1136,12 @@ export class MCServerInstance extends EventEmitter {
         return;
       }
 
-      // Fallback: 使用 stdin/stdout + mcsmp 协议（需要 Mod 支持）
-      const commandId = ++this._commandIdCounter;
-      const responseBuffer = [];
-
-      const timeoutTimer = setTimeout(() => {
-        this._commandResponsePromises.delete(commandId);
-        reject(new Error('Command timeout'));
-      }, timeout);
-
-      this._commandResponsePromises.set(commandId, {
-        resolve: (output) => {
-          clearTimeout(timeoutTimer);
-          this._commandResponsePromises.delete(commandId);
-          resolve(output);
-        },
-        reject: (error) => {
-          clearTimeout(timeoutTimer);
-          this._commandResponsePromises.delete(commandId);
-          reject(error);
-        },
-        buffer: responseBuffer,
-      });
-
-      this._writeToStdin(`mcsmp_${commandId} ${command}\n`);
+      // 无第二通道可用：RCON 未连接时无法取得命令回执。
+      // 此前这里退回一条自造的 `mcsmp_<id>` stdin 行协议，但那个协议需要配套 Mod，
+      // 而该 Mod 在全仓与 git 历史中都不存在 ⇒ 正常部署下这条路径无人应答，用户只能
+      // 等到 5s 后一条含义不明的 `Command timeout`。明确报错比伪装成「发出去了」诚实。
+      // （与外部增强通信的正统路径是官方 MSMP，见 config 的 management-server-* 键。）
+      reject(new Error('Command response unavailable: RCON is not connected'));
     });
   }
 
