@@ -1,11 +1,13 @@
 import { create } from 'zustand'
 import {
   CLEANUP_TARGET,
+  DEFAULT_ALERT_THRESHOLDS,
   aggregateNotifications,
   buildAlertNotifications,
   buildNotifications,
   mergeNotifications,
   trimNotifications,
+  type AlertThresholds,
   type AlertType,
   type AppNotification,
   type WsEventInput,
@@ -74,6 +76,9 @@ interface NotificationState {
     tps?: number | null
     cpu?: number | null
     memoryPercent?: number | null
+    diskPercent?: number | null
+    /** 服务端下发的阈值（部分覆盖 DEFAULT_ALERT_THRESHOLDS） */
+    thresholds?: Partial<AlertThresholds>
   }) => void
   markAsRead: (id: string) => void
   markAllRead: () => void
@@ -202,7 +207,7 @@ export const useNotificationStore = create<NotificationState>()((set, get) => ({
   dispatchPerformance: (perf) => {
     const { notifications, activeAlerts } = buildAlertNotifications(
       perf,
-      undefined,
+      perf.thresholds ? { ...DEFAULT_ALERT_THRESHOLDS, ...perf.thresholds } : undefined,
       get().activeAlerts,
     )
     const enabled = notifications.filter((n) =>

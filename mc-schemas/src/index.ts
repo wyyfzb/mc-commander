@@ -309,10 +309,12 @@ export {
 export {
   diskInfoSchema,
   diskUsageSchema,
+  diskAlertThresholdsSchema,
   systemStatsSchema,
   updateCheckResultSchema,
   type DiskInfo,
   type DiskUsage,
+  type DiskAlertThresholds,
   type SystemStats,
   type UpdateCheckResult,
 } from './system'

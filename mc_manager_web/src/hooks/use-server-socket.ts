@@ -120,6 +120,25 @@ export function useServerSocket(instanceId: string | null) {
       // 全局系统资源统计推送（broadcastAll，无 instanceId）
       if (msg.type === 'systemStatsUpdate') {
         void queryClient.invalidateQueries({ queryKey: queryKeys.systemStats() })
+        /* 磁盘告警：读数与阈值都在这条载荷里（阈值唯一来源是服务端 config.diskAlert）。
+           磁盘与 TPS/CPU 不同源——后两者来自实例 performanceUpdate，磁盘是整机系统指标、
+           15s 一拍，故在此分发而非并入上面的 dispatchPerformance。
+           阈值缺失则不下发 diskPercent：buildAlertNotifications 便不会判磁盘（宁可不告警，
+           也不退回前端自带的一份数字与部署配置漂移）。 */
+        const stats = data as {
+          diskUsage?: { primary?: { percent?: number } }
+          diskAlert?: { warningPercent?: number; errorPercent?: number }
+        }
+        const diskPercent = stats.diskUsage?.primary?.percent
+        if (diskPercent != null && stats.diskAlert) {
+          dispatchPerformance({
+            diskPercent,
+            thresholds: {
+              diskWarning: stats.diskAlert.warningPercent,
+              diskError: stats.diskAlert.errorPercent,
+            },
+          })
+        }
         return
       }
 

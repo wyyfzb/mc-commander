@@ -47,4 +47,18 @@ describe('AlertBanner', () => {
     expect(screen.getByRole('status')).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
+
+  // 磁盘两档：状态机置位了却在这里漏配，用户就只剩一次性 toast、离开通知中心看不出异常
+  it('磁盘两档都被承载：warning 与 severe 各自出现在横幅里', () => {
+    render(<AlertBanner alerts={new Set<AlertType>(['highDisk'])} />)
+    expect(screen.getByText(/磁盘空间不足/)).toBeInTheDocument()
+  })
+
+  it('严重磁盘档用「严重不足」措辞，与被承载的告警档一致', () => {
+    render(<AlertBanner alerts={new Set<AlertType>(['criticalDisk'])} />)
+    const text = screen.getByText(/服务器状态异常/).textContent ?? ''
+    expect(text).toContain('磁盘空间严重不足')
+    // 不得退化成弱档措辞（那会让 96% 与 88% 在横幅上无从区分）
+    expect(text).not.toBe('服务器状态异常：磁盘空间不足（指标恢复正常后本条自动消失）')
+  })
 })

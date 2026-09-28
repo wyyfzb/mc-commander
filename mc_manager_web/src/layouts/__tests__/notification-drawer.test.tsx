@@ -266,7 +266,7 @@ describe('NotificationDrawer 语义色来源', () => {
 // ─── J5：类型 → 语义档的完整映射（改错档位必须变红） ───
 
 describe('NOTIFICATION_TONE 类型 → 语义档', () => {
-  it('33 个通知类型全部归入预期档位，中性档不占语义六色', () => {
+  it('35 个通知类型全部归入预期档位，中性档不占语义六色', () => {
     const expected: Record<string, string[]> = {
       success: [
         'join',
@@ -287,8 +287,9 @@ describe('NOTIFICATION_TONE 类型 → 语义档', () => {
         'webhookFailed',
         'deployFailed',
         'upgradeFailed',
+        'criticalDisk',
       ],
-      warning: ['lowTps', 'highCpu', 'highMemory', 'backupSkipped'],
+      warning: ['lowTps', 'highCpu', 'highMemory', 'highDisk', 'backupSkipped'],
       info: ['chat', 'sleep', 'save', 'weatherChange', 'backupStart', 'restoreStart'],
       purple: ['achievement'],
       neutral: [
@@ -308,7 +309,7 @@ describe('NOTIFICATION_TONE 类型 → 语义档', () => {
       expect(actual, `档位 ${tone}`).toEqual([...types].sort())
     }
     // 全量覆盖：不多不少（新增通知类型忘了归档会被这条拦下）
-    expect(Object.keys(NOTIFICATION_TONE)).toHaveLength(33)
+    expect(Object.keys(NOTIFICATION_TONE)).toHaveLength(35)
   })
 
   describe('NotificationDrawer 严重度单选组键盘模型', () => {

@@ -73,5 +73,7 @@ export function collectSystemStats() {
     loadAvg: os.loadavg(),
     uptime: os.uptime(),
     diskUsage: getDiskUsage(),
+    // 阈值随读数一并下发：前端是告警的裁决者，让它自己写一份数字必然与部署配置漂移
+    diskAlert: config.diskAlert,
   };
 }

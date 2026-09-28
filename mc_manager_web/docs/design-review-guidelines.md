@@ -354,19 +354,32 @@ Radix Tooltip 只在 hover/focus 时出现，而 `<span>` 永不获得焦点，�
   `webhooks/webhook-page.tsx` 的启停，其成功 toast 是级别 2 的**正确形态**（不是待删的冗余）；
   通知偏好的静默是级别 1 + 常驻说明的正确形态，不要为它补逐次 toast（一屏 20+ 开关会刷屏）。
 
-## 常驻告警条与指标口径（TPS / CPU 可比，内存不可比）
+## 常驻告警条与指标口径（TPS / CPU / 磁盘可比，内存不可比）
 
 仪表盘页头的常驻告警条（`features/dashboard/components/alert-banner.tsx`）显示
 `stores/notifications.ts` 的 `activeAlerts`——状态机（`lib/notifications.ts` 的
 `buildAlertNotifications`）本就在跑，但此前算完即丢、全仓无消费点。
 
-**三档的输入链路不同源，只有两档可用**：
+**五档的输入链路不同源，四档可用**：
 
 | 档 | 输入 | 状态 |
 | --- | --- | --- |
 | `lowTps` | `performanceUpdate.tps`（服务端采样 TPS） | 可用，阈值 `tpsLow`=15 |
 | `highCpu` | `performanceUpdate.cpu`（**进程** CPU，单核百分比） | 可用，阈值 `cpuWarning`=80 |
+| `highDisk` | `systemStatsUpdate.diskUsage.primary.percent`（**整机**磁盘使用率） | 可用，阈值由服务端下发 |
+| `criticalDisk` | 同上 | 可用，阈值由服务端下发 |
 | `highMemory` | **无合法分母** | **当前不会置位**（见下） |
+
+**磁盘档的两点特殊口径**：
+
+1. **阈值不在前端声明**（与 TPS/CPU 的 `DEFAULT_ALERT_THRESHOLDS` 不同）——它随
+   `systemStatsUpdate` / `GET /api/system-stats` 由服务端 `config.diskAlert` 下发。
+   运维在 `.env` 改 `DISK_WARNING_PERCENT`/`DISK_ERROR_PERCENT` 即生效；前端另写一份
+   必然与部署配置漂移。阈值缺失时**整段不判**（不退回前端自带数字）。
+2. **两档按「当前档位」比较**，升档/降档各只发一条：从 85% 直接冲到 96% 只报严重档
+   （不叠一条 warning），从严重档降回 warning 档报 warning（而非与事实相反的「已恢复」）。
+   `stat-cards.tsx` 的 `LOAD_WARN_PERCENT`/`LOAD_DANGER_PERCENT` 是**三条资源条共用的
+   视觉色阶**，与告警阈值同值但**不共用**——色阶是整机口径的展示阶梯，告警另有语义。
 
 **`highMemory` 为何缺输入**：告警要的是「内存使用率」，而链路上只有
 `performanceUpdate.memory`（进程驻留内存：Windows `WorkingSet64` / Linux `statm` RSS /

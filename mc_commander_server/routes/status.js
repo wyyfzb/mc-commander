@@ -267,8 +267,9 @@ export function createStatusRoutes(serverManager) {
         cpuCores: os.cpus().length,
         loadAvg: os.loadavg(),
         uptime: os.uptime(),
-        // 磁盘使用率
+        // 磁盘使用率与告警阈值（阈值唯一来源是 config.diskAlert）
         diskUsage: getDiskUsage(),
+        diskAlert: config.diskAlert,
       }),
     );
   });

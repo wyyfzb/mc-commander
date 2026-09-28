@@ -24,6 +24,8 @@ export type NotificationType =
   | 'lowTps'
   | 'highCpu'
   | 'highMemory'
+  | 'highDisk'
+  | 'criticalDisk'
   | 'weatherChange'
   | 'backupStart'
   | 'backupComplete'
@@ -85,6 +87,8 @@ export const NOTIFICATION_TYPE_META: Record<
   lowTps: { label: 'TPS 过低', category: 'server', severity: 'warning' },
   highCpu: { label: 'CPU 过高', category: 'server', severity: 'warning' },
   highMemory: { label: '内存过高', category: 'server', severity: 'warning' },
+  highDisk: { label: '磁盘空间不足', category: 'server', severity: 'warning' },
+  criticalDisk: { label: '磁盘空间严重不足', category: 'server', severity: 'severe' },
   weatherChange: { label: '天气变化', category: 'server', severity: 'info' },
   backupStart: { label: '备份开始', category: 'server', severity: 'info' },
   backupComplete: { label: '备份完成', category: 'server', severity: 'info' },
@@ -127,7 +131,7 @@ const CRITICAL_TYPES: ReadonlySet<NotificationType> = new Set([
 ])
 
 /** 告警类型集合（阈值跃迁语义，需 _activeAlerts 状态机） */
-export type AlertType = 'lowTps' | 'highCpu' | 'highMemory'
+export type AlertType = 'lowTps' | 'highCpu' | 'highMemory' | 'highDisk' | 'criticalDisk'
 
 /** 天气英文 → 中文 */
 const WEATHER_ZH: Record<string, string> = { clear: '晴天', rain: '雨天', thunder: '雷暴' }
@@ -156,6 +160,12 @@ export interface AlertThresholds {
   cpuWarning: number
   memoryWarning: number
   tpsLow: number // TPS 低于此值告警
+  /**
+   * 磁盘阈值由服务端下发（`config.diskAlert`），故为可选：缺省时**不判定磁盘告警**，
+   * 而不是退回一份前端硬编码——否则两份数字必然漂移。
+   */
+  diskWarning?: number
+  diskError?: number
 }
 
 /**
@@ -370,7 +380,12 @@ export function buildNotifications(
  * activeAlerts：当前激活的告警集合（传入并原地感知，返回新的激活集合与新增通知）。
  */
 export function buildAlertNotifications(
-  perf: { tps?: number | null; cpu?: number | null; memoryPercent?: number | null },
+  perf: {
+    tps?: number | null
+    cpu?: number | null
+    memoryPercent?: number | null
+    diskPercent?: number | null
+  },
   thresholds: AlertThresholds = DEFAULT_ALERT_THRESHOLDS,
   activeAlerts: ReadonlySet<AlertType> = new Set(),
 ): {
@@ -382,6 +397,7 @@ export function buildAlertNotifications(
   const tps = perf.tps
   const cpu = perf.cpu
   const mem = perf.memoryPercent
+  const disk = perf.diskPercent
 
   // TPS 告警（低于阈值 → 告警；恢复 → 恢复通知）
   if (tps != null) {
@@ -433,6 +449,43 @@ export function buildAlertNotifications(
         category: 'server',
         content: '内存使用率已恢复正常',
       })
+    }
+  }
+
+  /* 磁盘告警：两档阈值，按「当前档位」比较而非两个独立布尔，使升档/降档各只发一条
+     （否则从 85% 直接冲到 96% 会同时发 warning 与 error 两条，而降档时会发一条
+     「warning 已恢复」这种与事实相反的文案）。
+     阈值缺失则整段不判——含「只给一半」的情形：拿半套阈值推档位会把 error 档误报成
+     warning 档，宁可不判（服务端契约保证两档同时下发）。 */
+  const warn = thresholds.diskWarning
+  const err = thresholds.diskError
+  if (disk != null && warn != null && err != null) {
+    const tier = disk >= err ? 2 : disk >= warn ? 1 : 0
+    const prevTier = next.has('criticalDisk') ? 2 : next.has('highDisk') ? 1 : 0
+    if (tier !== prevTier) {
+      next.delete('highDisk')
+      next.delete('criticalDisk')
+      if (tier === 2) {
+        next.add('criticalDisk')
+        notifications.push({
+          type: 'criticalDisk',
+          category: 'server',
+          content: `磁盘空间严重不足: ${disk.toFixed(1)}%（阈值 ${err}%）`,
+        })
+      } else if (tier === 1) {
+        next.add('highDisk')
+        notifications.push({
+          type: 'highDisk',
+          category: 'server',
+          content: `磁盘空间不足: ${disk.toFixed(1)}%（阈值 ${warn}%）`,
+        })
+      } else {
+        notifications.push({
+          type: 'highDisk',
+          category: 'server',
+          content: '磁盘空间已恢复正常',
+        })
+      }
     }
   }
 

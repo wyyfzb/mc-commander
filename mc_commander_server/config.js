@@ -187,4 +187,13 @@ if (invalidNumberEnv.length > 0 || invalidBooleanEnv.length > 0) {
   );
 }
 
+// fail-fast：磁盘两档阈值必须严格递增。容错（不报错）会让「error 档」永远触达不到，
+// 或把 warning 档的读数误标成「严重不足」——配置错了却只在告警文案上显形，很难回溯。
+if (config.diskAlert.errorPercent <= config.diskAlert.warningPercent) {
+  throw new Error(
+    '启动中止：磁盘告警阈值必须严格递增（DISK_ERROR_PERCENT > DISK_WARNING_PERCENT），' +
+      `当前读到 warning=${config.diskAlert.warningPercent}、error=${config.diskAlert.errorPercent}。`,
+  );
+}
+
 export default config;

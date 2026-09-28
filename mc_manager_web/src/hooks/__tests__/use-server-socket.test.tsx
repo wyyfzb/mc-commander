@@ -504,6 +504,56 @@ describe('useServerSocket（状态跃迁通知接线）', () => {
     expect(qc.getQueryState(queryKeys.systemStats())?.isInvalidated).toBe(true)
   })
 
+  it('systemStatsUpdate 带阈值且磁盘越线 → 生成磁盘告警通知', async () => {
+    useConnectionStore.setState({ baseUrl: '', apiKey: 'k1', status: 'ready' })
+    const wrapper = createWrapper()
+    renderHook(() => useServerSocket('i-1'), { wrapper })
+    await waitFor(() => expect(FakeWebSocket.instances.length).toBe(1))
+    const ws = FakeWebSocket.instances[0]!
+    act(() => {
+      openAndAuth(ws)
+    })
+    await flushMicrotasks()
+
+    act(() => {
+      ws.receive({
+        type: 'systemStatsUpdate',
+        data: {
+          diskUsage: { primary: { mountpoint: '/', totalGB: 39, usedGB: 37, percent: 96.2 } },
+          diskAlert: { warningPercent: 85, errorPercent: 95 },
+        },
+      })
+    })
+
+    const items = useNotificationStore.getState().items
+    expect(items).toHaveLength(1)
+    expect(items[0]?.type).toBe('criticalDisk')
+    expect(items[0]?.content).toContain('磁盘空间严重不足')
+  })
+
+  it('systemStatsUpdate 缺阈值 → 不生成磁盘告警（不退回前端自带数字）', async () => {
+    useConnectionStore.setState({ baseUrl: '', apiKey: 'k1', status: 'ready' })
+    const wrapper = createWrapper()
+    renderHook(() => useServerSocket('i-1'), { wrapper })
+    await waitFor(() => expect(FakeWebSocket.instances.length).toBe(1))
+    const ws = FakeWebSocket.instances[0]!
+    act(() => {
+      openAndAuth(ws)
+    })
+    await flushMicrotasks()
+
+    act(() => {
+      ws.receive({
+        type: 'systemStatsUpdate',
+        data: {
+          diskUsage: { primary: { mountpoint: '/', totalGB: 39, usedGB: 37, percent: 96.2 } },
+        },
+      })
+    })
+
+    expect(useNotificationStore.getState().items).toHaveLength(0)
+  })
+
   it('deployProgress 透传 instanceId（取消部署要按实例 id 精确匹配服务端注册表）', async () => {
     const ws = await connectReady('i-1')
 
