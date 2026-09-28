@@ -1,4 +1,4 @@
-// 轻量结构化日志系统（issue #325，audit D-P0-2 / A2-1）：
+// 轻量结构化日志系统（issue #325）：
 // console 包装器四级日志（debug/info/warn/error）+ error 分流独立文件 + 简单轮转
 //
 // 设计约束（C 甄别方案，不引 pino）：

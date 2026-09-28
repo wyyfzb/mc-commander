@@ -299,7 +299,7 @@ export function _attachExitListener() {
     // 主动 stop/kill/restart 会设置 _manualStop=true；正常退出 code 通常为 0。
     const unexpectedExit = !this._manualStop && code !== 0;
     if (unexpectedExit) {
-      // ── 崩溃循环熔断检测（feat-5 运维韧性）──
+      // ── 崩溃循环熔断检测（运维韧性）──
       const now = Date.now();
       const { windowMs, maxCrashes } = config.crashLoop;
       // 滑动窗口：窗口外重置计数

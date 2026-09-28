@@ -191,7 +191,7 @@ describe('MCServerInstance - 进程异常退出与崩溃循环熔断', () => {
   });
 
   describe('崩溃循环熔断（crashLoop 300s 窗口 / 5 次阈值）', () => {
-    // 现状语义：start() 成功会清零计数（L1211-1213），连续意外退出且期间无成功启动
+    // 现状语义：start() 成功会清零计数，连续意外退出且期间无成功启动
     // 才会累积到阈值——用 autoRestart=false 隔离重启清零路径，纯验证 exit 计数与熔断
     async function crashNTimes(n) {
       instance.autoRestart = false;

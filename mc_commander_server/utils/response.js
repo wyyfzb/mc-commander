@@ -139,14 +139,14 @@ export const ErrorCodes = {
     status: 400,
   },
 
-  // 插件错误（feat-8 P0-5）
+  // 插件错误
   PLUGIN_NOT_FOUND: { code: 40411, message: 'Plugin not found', status: 404 },
   // 启停语义冲突：目标已是请求状态 / 重命名目标名已存在
   PLUGIN_STATE_CONFLICT: { code: 40910, message: 'Plugin state conflict', status: 409 },
   // 上传同名冲突：plugins/ 目录已存在同名文件且未显式 overwrite
   PLUGIN_FILE_EXISTS: { code: 40912, message: 'Plugin file already exists', status: 409 },
 
-  // 插件市场（feat-8 延伸：Modrinth 代理）
+  // 插件市场（延伸：Modrinth 代理）
   // Modrinth 上未找到项目（slug 无效或已下架）
   MARKET_PROJECT_NOT_FOUND: { code: 40412, message: 'Project not found on Modrinth', status: 404 },
   // Modrinth 上未找到指定版本号 / 版本无可下载文件

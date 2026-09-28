@@ -3,7 +3,7 @@
  * 设密模式三个凭据输入曾经只有「确认密码」是裸 input——两次输入里最容易打错、
  * 也最需要对照的那一格反而只能盲打。本用例把「两个密码框各有一个显隐切换」
  * 钉住，并验证切换只作用于自己那一格。
- * 单独成文件同 J59 先例（login-page.test.tsx 的修改会被工具链误拦）。
+ * 单独成文件同 先例（login-page.test.tsx 的修改会被工具链误拦）。
  * mock 数据为虚构内容，严禁真实服务器信息
  */
 import { describe, it, expect, beforeEach, afterEach, afterAll, beforeAll } from 'vitest'

@@ -558,10 +558,10 @@ describe('未配置只读 Key：该通道不存在（负向对照）', () => {
 });
 
 describe('WebSocket 握手', () => {
-  // Phase 2：只读凭据不再拒握手，改为「放行 + 按事件白名单过滤投递」。
+  // 只读凭据不再拒握手，改为「放行 + 按事件白名单过滤投递」。
   // 握手处的判据只剩「凭据本身是否有效、通道是否开启」；投递面的过滤在
   // websocket.js（fanOut / 直发 / 重放三处），事件矩阵见 websocket.readonly-filter.test.js
-  it('只读凭据可握手且角色落定为 readonly（Phase 2 起不再一律拒绝）', () => {
+  it('只读凭据可握手且角色落定为 readonly（不再一律拒绝）', () => {
     expect(authenticateWebSocket(READONLY_KEY, null)).toEqual({ role: 'readonly' });
     // 同时给出会话令牌时仍按 API Key 通道判定（只读优先，与 HTTP 中间件同序）
     expect(authenticateWebSocket(READONLY_KEY, seedSession())).toEqual({ role: 'readonly' });

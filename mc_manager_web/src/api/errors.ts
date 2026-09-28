@@ -93,12 +93,12 @@ export const ErrorCode = {
   UPGRADE_NOT_IN_PROGRESS: 40908,
   UPGRADE_VERSION_SAME: 40012,
 
-  // 插件管理（feat-8，routes/plugins.js）
+  // 插件管理（routes/plugins.js）
   PLUGIN_NOT_FOUND: 40411,
   PLUGIN_STATE_CONFLICT: 40910,
   PLUGIN_FILE_EXISTS: 40912,
 
-  // 插件市场（feat-8 延伸：Modrinth 代理）
+  // 插件市场（延伸：Modrinth 代理）
   MARKET_PROJECT_NOT_FOUND: 40412,
   MARKET_VERSION_NOT_FOUND: 40413,
   MARKET_UPSTREAM_ERROR: 50301,

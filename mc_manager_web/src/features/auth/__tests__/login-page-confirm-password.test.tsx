@@ -2,7 +2,7 @@
  * LoginPage 确认密码的清错回归
  * 同表单的「管理员密码」「SETUP_TOKEN」在 onChange 里都会清 errorText，
  * 唯独确认密码不清——「两次输入的密码不一致」会一直挂在页面上直到再次提交。
- * 单独成文件同 J59/J14 先例（login-page.test.tsx 的修改会被工具链误拦）。
+ * 单独成文件同 / 先例（login-page.test.tsx 的修改会被工具链误拦）。
  * mock 数据为虚构内容，严禁真实服务器信息
  */
 import { describe, it, expect, beforeEach, afterEach, afterAll, beforeAll } from 'vitest'

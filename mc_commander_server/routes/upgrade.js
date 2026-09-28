@@ -14,7 +14,7 @@ import { logger } from '../utils/logger.js';
 import { cancelTask, TASK_KINDS } from '../utils/cancellable-task.js';
 
 /**
- * 升级路由（P0-4）
+ * 升级路由
  * POST /instances/:id/upgrade —— 202 异步，WS 推送进度
  * GET /instances/:id/upgrade/status —— 查询当前升级状态
  *
@@ -34,7 +34,7 @@ export function createUpgradeRoutes(serverManager) {
       const { id } = req.params;
       const { mcVersion, type } = req.body;
 
-      // 白名单校验（S-P0-2）：仅允许点分数字版本形态，
+      // 白名单校验：仅允许点分数字版本形态，
       // 杜绝 '../../'、绝对路径、URL 特殊字符等 payload 进入文件名与上游 URL。
       // 正则从服务层导入，与服务层纵深防御同一口径。
       if (!MC_VERSION_REGEX.test(mcVersion)) {

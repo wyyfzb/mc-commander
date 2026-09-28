@@ -1,5 +1,5 @@
 /**
- * upgrade store 测试（P0-4）：
+ * upgrade store 测试：
  * - applyUpgradeProgress 按实例累积（多实例互不覆盖）
  * - clearUpgradeProgress 只清指定实例
  * - getUpgradeProgress 缺失返回 null

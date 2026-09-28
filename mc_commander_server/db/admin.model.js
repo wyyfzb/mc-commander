@@ -242,7 +242,7 @@ export class AdminSessionModel {
   }
 
   /**
-   * 会话数上限收口（P2-11）：先惰性清理过期行，再按最近活跃排序保留前
+   * 会话数上限收口：先惰性清理过期行，再按最近活跃排序保留前
    * maxSessions 条，其余删除（新登录挤掉最旧会话）。
    * 排序用 COALESCE(last_seen_at, created_at)：存量行两列均有默认值，
    * COALESCE 兼容未来可能引入的 NULL。

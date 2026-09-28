@@ -1,5 +1,5 @@
 /**
- * 升级接口安全加固测试（S-P0-2：mcVersion 白名单 + JAR 路径收口 + 下载域白名单）
+ * 升级接口安全加固测试（mcVersion 白名单 + JAR 路径收口 + 下载域白名单）
  *
  * 覆盖三层防线：
  * ① 路由白名单：恶意 mcVersion payload 一律 400（VALIDATION_ERROR），不触发审计与服务层
@@ -162,7 +162,7 @@ afterEach(() => {
 
 // ── ① 路由白名单矩阵 ──
 
-describe('路由 mcVersion 白名单（S-P0-2）', () => {
+describe('路由 mcVersion 白名单', () => {
   let serverManager;
   let request;
 

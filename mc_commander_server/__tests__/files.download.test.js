@@ -1,5 +1,5 @@
 /**
- * File Download 端点 + 文件操作审计（feat-9 文件管理器增强）
+ * File Download 端点 + 文件操作审计（文件管理器增强）
  * - GET /files/download：流式下载（内容一致/Content-Disposition/目录拒绝/404/
  *   路径穿越拒绝/symlink 越界拒绝/缺 path 参数 400）
  * - 审计：FILE_DOWNLOAD/FILE_UPLOAD/FILE_DELETE/FILE_RENAME/FILE_MKDIR/FILE_SAVE

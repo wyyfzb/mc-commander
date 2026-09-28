@@ -1,5 +1,5 @@
 /**
- * PluginsPage —— 插件管理页（feat-8 P0-5 最小闭环 + 上传/详情/批量延伸）
+ * PluginsPage —— 插件管理页（最小闭环 + 上传/详情/批量延伸）
  * - 插件卡片列表：元数据（plugin.yml）+ 启停状态 Chip + 启停/删除操作
  * - 上传：工具栏按钮（多选 .jar 顺序上传）+ 全页拖放（dragover 高亮遮罩），
  *   XHR 进度条（可取消）；同名冲突 → 确认弹窗后 overwrite=true 重传（服务端 40912）
@@ -75,7 +75,7 @@ export function PluginsPage() {
   const [detail, setDetail] = useState<PluginInfo | null>(null)
   /** 插件市场侧滑面板 */
   const [marketOpen, setMarketOpen] = useState(false)
-  /** 更新检测结果（file → status，feat-8 延伸：已装插件 vs Modrinth 最新版） */
+  /** 更新检测结果（file → status， 延伸：已装插件 vs Modrinth 最新版） */
   const [updateMap, setUpdateMap] = useState<Map<string, PluginUpdateStatus>>(new Map())
   const [updateChecking, setUpdateChecking] = useState(false)
   /** 市场预填搜索词（点「更新」时带上 plugin.yml name 直达） */
@@ -153,7 +153,7 @@ export function PluginsPage() {
   }
 
   /**
-   * 批量更新检测（feat-8 延伸）：POST check-updates（服务端搜索 Modrinth + 版本比对）。
+   * 批量更新检测（延伸）：POST check-updates（服务端搜索 Modrinth + 版本比对）。
    * 结果映射 file → status 供行内徽章消费；hasNewer（真落后）计数 toast 提示。
    * 检测按钮与行内「可更新」徽章联动；关闭市场面板即清预填。
    */
@@ -565,7 +565,7 @@ export function PluginsPage() {
         toggling={detail !== null && togglingFile === detail.file}
       />
 
-      {/* ── 插件市场（Modrinth 一键安装，feat-8 延伸） ── */}
+      {/* ── 插件市场（Modrinth 一键安装） ── */}
       <MarketSheet
         open={marketOpen}
         onOpenChange={(o) => {

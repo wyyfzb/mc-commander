@@ -1,5 +1,5 @@
 /**
- * 插件市场服务（feat-8 延伸：Modrinth 一键安装）
+ * 插件市场服务（延伸：Modrinth 一键安装）
  *
  * 数据源：Modrinth API v2（无需鉴权；要求携带可联系的 User-Agent，尊重其
  * ~300 req/min 限速 → 服务端代理 + 60s 内存 TTL 缓存，前端不直连外网）。
@@ -393,7 +393,7 @@ export async function downloadMarketFile(url) {
 }
 
 /**
- * 从 Modrinth 安装插件到实例 plugins/ 目录（feat-8 延伸核心端点）。
+ * 从 Modrinth 安装插件到实例 plugins/ 目录（延伸核心端点）。
  * 流程：拉取版本列表 → 按 versionNumber 定位版本 → 取 primary 文件 →
  * CDN 白名单校验 → 下载到临时目录 → uploadPlugin 复用落盘（zip 魔数 +
  * 文件名白名单 + 同名 40912/overwrite 语义 + 元数据读取）→ 清理临时文件。
@@ -467,7 +467,7 @@ export async function installPluginFromMarket(
   }
 }
 
-// ── 更新检测（feat-8 延伸：已装插件 vs Modrinth 最新版） ──────────────
+// ── 更新检测（延伸：已装插件 vs Modrinth 最新版） ──────────────
 
 /// 单次批量检测的插件数量上限：每个插件至少 1 次上游搜索请求，
 /// 20 个 ≈ 限速安全余量内的一次交互（缓存可复用时更少）
@@ -545,7 +545,7 @@ function matchProjectByPluginName(hits, pluginName) {
 }
 
 /**
- * 批量检测已装插件更新（feat-8 延伸）。
+ * 批量检测已装插件更新（延伸）。
  * 流程：listPlugins 读本地元数据 → 逐个 Modrinth 搜索（并发分批 + 搜索缓存复用）→
  * 名称命中后取最新版本号（getMarketProjectVersions 缓存复用）→ 版本比对。
  * 单个插件失败（上游错误/无结果）不拖垮整批：该插件 matched:false。

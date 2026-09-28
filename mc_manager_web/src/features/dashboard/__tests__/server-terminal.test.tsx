@@ -15,7 +15,7 @@ import { useConnectionStore } from '@/stores/connection'
 /**
  * 终端组件测试：Ctrl+L 清屏（xterm 在 jsdom 不可用，mock 掉；buffer 清空断言）/
  * 终端内搜索：搜索条开闭、Ctrl+F 拦截、Enter/上/下查找接线、n/m 计数、Esc 清理 /
- * JVM 眼睛切换：清屏全量重写（P2-27 复现修复）
+ * JVM 眼睛切换：清屏全量重写（复现修复）
  */
 
 /** 捕获 SearchAddon 与 xterm 内部注册物，供搜索/渲染交互断言（vi.hoisted 提升到 mock 工厂之前） */
@@ -305,7 +305,7 @@ describe('ServerTerminal 终端内搜索', () => {
   })
 })
 
-describe('ServerTerminal JVM 眼睛切换（P2-27 复现修复）', () => {
+describe('ServerTerminal JVM 眼睛切换（复现修复）', () => {
   const JVM_LINE = 'WARNING: A restricted method in java.lang.System.invoke has been called'
 
   /** 最近一次 clear 之后写入的行（全量重写断言窗口） */

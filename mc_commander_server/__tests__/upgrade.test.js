@@ -1,5 +1,5 @@
 /**
- * 升级路由 + 升级服务测试（P0-4）
+ * 升级路由 + 升级服务测试
  * - 路由：前置校验矩阵（必填/白名单/404/运行中/重复升级/同版本）+ 202 异步受理
  * - 服务：进度事件序列（backup → download 失败 → rolled_back/failed）
  *
@@ -80,7 +80,7 @@ beforeEach(() => {
 });
 
 // ── 桩 serverManager ──
-// serverPath 用真实临时目录：S-P0-2 路径收口后，resolveSafePath 的逐段
+// serverPath 用真实临时目录：路径收口后，resolveSafePath 的逐段
 // realpath 防线要求实例目录真实存在（与生产语义一致）
 let tmpDir;
 

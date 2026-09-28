@@ -282,7 +282,7 @@ function fileNameFromDisposition(header: string | null): string | null {
 }
 
 /**
- * 文件下载（feat-9 文件管理器增强）：
+ * 文件下载（文件管理器增强）：
  * - fetch 而非 window.open：需注入双通道凭据（Bearer 会话 / X-API-Key）+ 网关
  *   XTransformPort 适配；window.open 场景下会话令牌无法附带必然 401
  * - 流式读取（ReadableStream）而非直接 res.blob()：支持下载进度回调
@@ -385,7 +385,7 @@ export interface UploadOptions {
 }
 
 /**
- * multipart 文件上传（共享实现，feat-8 插件上传延伸）：
+ * multipart 文件上传（共享实现， 插件上传延伸）：
  * - XHR 而非 fetch：fetch 无法观测上传进度（onprogress 仅 fetch stream 读响应侧）
  * - 双通道凭据注入（Bearer 会话优先 / X-API-Key 回退，与 apiRequest 互斥逻辑一致）
  * - withTransformPort 网关适配（此前 files.ts 独立实现遗漏此处理，沙箱下上传必挂）

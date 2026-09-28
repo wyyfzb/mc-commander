@@ -1,13 +1,13 @@
 /**
- * P2 安全小批打包测试（audit P2-5/6/7/8/9/10/11 / issue 324）
+ * P2 安全小批打包测试（issue 324）
  *
  * 七项逐条覆盖：
- * - P2-5  scrypt N=2^17：新哈希参数断言 + 参数不匹配/畸形存储串一律校验失败
- * - P2-6  safeEqual 先 SHA-256 归一化再恒时比较：长度不等路径功能正确
- * - P2-7  认证前 JSON body 1MB：超限 413（entity.too.large 映射）
- * - P2-9  /health 精简断言（health.test.js 专文件覆盖，此处不重复）
- * - P2-10 deploy 脚本 Key 掩码（security.deploy.test.js 源码断言，此处不重复）
- * - P2-11 会话生命周期：30 天绝对过期（HTTP + WS 通道）、滑动续期 cap、
+ * - scrypt N=2^17：新哈希参数断言 + 参数不匹配/畸形存储串一律校验失败
+ * - safeEqual 先 SHA-256 归一化再恒时比较：长度不等路径功能正确
+ * - 认证前 JSON body 1MB：超限 413（entity.too.large 映射）
+ * - /health 精简断言（health.test.js 专文件覆盖，此处不重复）
+ * - deploy 脚本 Key 掩码（security.deploy.test.js 源码断言，此处不重复）
+ * - 会话生命周期：30 天绝对过期（HTTP + WS 通道）、滑动续期 cap、
  *          每用户 5 会话上限挤最旧、登录路径惰性清理
  *
  * 真实 SQLite（临时目录）+ supertest，离线确定性。
@@ -68,12 +68,12 @@ beforeEach(() => {
   app.use(errorHandler);
 });
 
-// ── P2-5：scrypt 成本参数 ──
+// ──：scrypt 成本参数 ──
 
 // 超时余量：本 describe 含 scrypt(N=131072) 哈希/校验（单次实测 ~270ms，成本由 N 决定）。
 // 5s 默认值按空载耗时设定，并行争抢下没有余量（本批同类用例实测 5.16s 越线）；
 // 显式放宽到本仓 15s 口径——scrypt 强度不因测试下调。
-describe('P2-5 scrypt 成本参数（N=2^17）', { timeout: 15_000 }, () => {
+describe(' scrypt 成本参数（N=2^17）', { timeout: 15_000 }, () => {
   it('新哈希使用 N=131072 自描述参数', () => {
     const stored = hashPassword('some-password-1');
     expect(stored).toMatch(/^scrypt\$131072\$8\$/);
@@ -115,9 +115,9 @@ describe('P2-5 scrypt 成本参数（N=2^17）', { timeout: 15_000 }, () => {
   });
 });
 
-// ── P2-6：safeEqual SHA-256 归一化 ──
+// ──：safeEqual SHA-256 归一化 ──
 
-describe('P2-6 safeEqual 归一化恒时比较', () => {
+describe(' safeEqual 归一化恒时比较', () => {
   it('等值 true / 不等 false', () => {
     expect(safeEqual('same-value', 'same-value')).toBe(true);
     expect(safeEqual('value-a', 'value-b')).toBe(false);
@@ -136,9 +136,9 @@ describe('P2-6 safeEqual 归一化恒时比较', () => {
   });
 });
 
-// ── P2-7：认证前 JSON body 1MB（413 语义） ──
+// ──：认证前 JSON body 1MB（413 语义） ──
 
-describe('P2-7 body 限制与 413 映射', () => {
+describe(' body 限制与 413 映射', () => {
   it('entity.too.large → 413（errorHandler 明确语义，不再落 500）', async () => {
     const mini = express();
     mini.use(express.json({ limit: '1kb' }));
@@ -161,9 +161,9 @@ describe('P2-7 body 限制与 413 映射', () => {
   });
 });
 
-// ── P2-11：会话生命周期 ──
+// ──：会话生命周期 ──
 
-describe('P2-11 会话 30 天绝对过期', () => {
+describe(' 会话 30 天绝对过期', () => {
   function seedSession({ createdAtOffsetMs = 0, expiresInMs = 60_000 } = {}) {
     const token = generateSessionToken();
     // production 同口径：CURRENT_TIMESTAMP 的无时区 UTC 串（写 ISO 会让裸解析
@@ -237,7 +237,7 @@ describe('P2-11 会话 30 天绝对过期', () => {
   });
 });
 
-describe('P2-11 会话并发上限（每用户 5 条挤最旧）', () => {
+describe(' 会话并发上限（每用户 5 条挤最旧）', () => {
   it('enforceLimit：保留最近活跃 5 条，挤掉最旧', () => {
     const ids = [];
     for (let i = 0; i < 7; i++) {

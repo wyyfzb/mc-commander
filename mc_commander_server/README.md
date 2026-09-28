@@ -446,13 +446,13 @@ mc_commander_server/
 │   ├── audit.js          # 审计日志查询
 │   ├── auth.js           # 管理员 setup/login/改密/会话状态（安全主线）
 │   ├── keys.js           # API Key 轮换
-│   └── upgrade.js        # 实例版本升级（P0-4）
+│   └── upgrade.js        # 实例版本升级
 ├── services/             # 业务逻辑
 │   ├── mc_server.js      # MC 实例管理 + RCON（rcon-client，从 SQLite 加载；死亡事件聚合）
 │   ├── mc-server/        # 启动生命周期 / 输出解析 / 日志尾随 / 状态采集 / 世界数据
 │   ├── backup.service.js # 备份操作（目录快照 + rsync/robocopy 增量）
 │   ├── panel-backup.service.js # 面板自身数据备份（SQLite 在线快照）
-│   ├── plugin.service.js # 插件扫描 / 启停 / 市场安装（feat-8）
+│   ├── plugin.service.js # 插件扫描 / 启停 / 市场安装
 │   ├── market.service.js # Modrinth 市场客户端
 │   ├── instance-properties.service.js # server.properties 读写（issue 514）
 │   ├── upgrade.service.js # 实例版本升级

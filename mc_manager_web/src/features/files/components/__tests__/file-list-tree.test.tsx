@@ -186,7 +186,7 @@ describe('FileList', () => {
     )
   })
 
-  // ── feat-9：二进制编辑保护 + 行级下载 ──
+  // ── ：二进制编辑保护 + 行级下载 ──
 
   /** 含二进制文件的列表项（server.jar / level.dat 混入常规文本文件） */
   const binaryFiles = [
@@ -224,7 +224,7 @@ describe('FileList', () => {
     )
   }
 
-  it('二进制文件不渲染编辑按钮（feat-9 编辑保护），文本文件正常', async () => {
+  it('二进制文件不渲染编辑按钮（编辑保护），文本文件正常', async () => {
     useBinaryList()
     renderWithClient(<FileList {...baseFileListProps} />)
     await screen.findByRole('button', { name: '文件 server.jar（二进制，可下载）' })

@@ -1,5 +1,5 @@
 /**
- * feat-5 运维韧性测试
+ * 运维韧性测试
  * - 崩溃循环熔断（滑动窗口计数 + 达阈值禁用 autoRestart + 持久化 + WS 事件）
  * - 磁盘使用率（getDiskUsage 缓存 + 去重 + statfsSync 返回值）
  * - check-update 端点（npm registry / 离线回退）

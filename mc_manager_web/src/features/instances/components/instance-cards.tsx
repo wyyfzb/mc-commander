@@ -310,7 +310,7 @@ function InstanceCard({
         </NoticeBanner>
       )}
 
-      {/* 熔断告警行（feat-5） */}
+      {/* 熔断告警行 */}
       {detail?.circuitBreakerTripped && (
         <NoticeBanner variant="error" icon={ShieldAlert}>
           崩溃循环熔断已触发，自动重启已禁用

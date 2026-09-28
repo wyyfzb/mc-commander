@@ -73,7 +73,7 @@ test.describe('玩家页', () => {
     await page.goto('/players')
     await page.getByRole('button', { name: 'Steve 操作菜单' }).click()
     await page.getByText('踢出').click()
-    // J15 口径：只有不可逆操作才走后果清单确认；踢出无逆操作 → 直执
+    // 口径：只有不可逆操作才走后果清单确认；踢出无逆操作 → 直执
     await expect(page.getByRole('heading', { name: '确认踢出' })).toHaveCount(0)
     await expect(page.getByText('已成功踢出 1 名玩家')).toBeVisible({ timeout: 10_000 })
   })

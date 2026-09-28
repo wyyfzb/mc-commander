@@ -59,7 +59,7 @@ const config = {
   // 写操作与敏感读（文件/日志/配置/命令史/审计/备份/会话）一律拒绝；WS 可握手但
   // 只收读数类事件（白名单见 websocket.js 的 READONLY_WS_EVENTS）。
   readonlyApiKeyHash: process.env.READONLY_API_KEY_HASH || '',
-  // 首访设密所有权证明（一次性 SETUP_TOKEN，audit S-P0-1 / issue #309）：
+  // 首访设密所有权证明（一次性 SETUP_TOKEN，/ issue #309）：
   // 部署脚本首次部署生成写入 .env；POST /auth/setup 强制校验，通过即作废
   //（内存清空 + .env 移除，重启后同样失效）。未配置 = 未开启（本机首发兼容）
   setupToken: process.env.SETUP_TOKEN || '',
@@ -80,7 +80,7 @@ const config = {
   // 用户仍可用绝对路径指到任意位置（与 publicDir 同语义）
   publicDir: path.resolve(__dirname, process.env.PUBLIC_DIR || './public'),
   logLevel: process.env.LOG_LEVEL || 'info',
-  // 认证前 JSON body 上限（P2-7）：全局 10mb 过宽（认证前攻击面），收紧至
+  // 认证前 JSON body 上限：全局 10mb 过宽（认证前攻击面），收紧至
   // 1mb；文件上传走 multer multipart 独立通道不受此值影响，大型插件/文件
   // 场景不受影响
   bodyLimitJson: process.env.BODY_LIMIT_JSON || '1mb',
@@ -89,12 +89,12 @@ const config = {
   // 单管理员自托管场景；TOTP 挂靠点见 admin_account.totp_secret）
   adminSession: {
     // 会话有效期（滑动）：默认 7 天，每次认证触达续期；续期上限 cap 在
-    // absoluteTtlMs 边界，不能无限推迟重登（P2-11）
+    // absoluteTtlMs 边界，不能无限推迟重登
     ttlMs: intFromEnv('ADMIN_SESSION_TTL_HOURS', '168') * 3600_000,
-    // 会话绝对存活期（P2-11）：自创建起 30 天后强制重登，限制被窃取令牌的
+    // 会话绝对存活期：自创建起 30 天后强制重登，限制被窃取令牌的
     // 永久有效窗口；设 0 关闭（不建议）
     absoluteTtlMs: intFromEnv('ADMIN_SESSION_ABSOLUTE_TTL_DAYS', '30') * 86400_000,
-    // 每用户会话上限（P2-11）：新登录挤掉最旧会话（last_seen_at 最旧）
+    // 每用户会话上限：新登录挤掉最旧会话（last_seen_at 最旧）
     maxSessions: intFromEnv('ADMIN_SESSION_MAX_SESSIONS', '5'),
     loginLockMaxFails: intFromEnv('AUTH_LOGIN_MAX_FAILS', '10'),
     loginLockMs: intFromEnv('AUTH_LOGIN_LOCK_MS', '300000'),

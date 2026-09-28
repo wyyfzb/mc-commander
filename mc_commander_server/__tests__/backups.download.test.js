@@ -8,7 +8,7 @@ import zlib from 'node:zlib';
 
 void os; // used inside vi.hoisted via require
 
-// feat-1 备份下载端点测试：mock DB + config，真实 fs + tar
+// 备份下载端点测试：mock DB + config，真实 fs + tar
 
 const { tmpDir, backupDir, mockRows } = vi.hoisted(() => {
   const nodeFs = require('node:fs');

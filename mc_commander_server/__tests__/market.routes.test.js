@@ -1,5 +1,5 @@
 /**
- * 插件市场路由集成测试（feat-8 延伸：Modrinth 代理端点）
+ * 插件市场路由集成测试（延伸：Modrinth 代理端点）
  *
  * got 全量 mock（离线语义）：
  * - 元数据 .json() 链：按 URL 路由 fixture / 拒绝

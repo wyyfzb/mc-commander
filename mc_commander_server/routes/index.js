@@ -128,7 +128,7 @@ export function createApiV1Router(serverManager, taskScheduler) {
 }
 
 export function setupRoutes(app, serverManager, taskScheduler) {
-  // 轻量健康检查：仅返回存活与版本（P2-9 信息暴露收口：未认证的 /health
+  // 轻量健康检查：仅返回存活与版本（信息暴露收口：未认证的 /health
   // 不再暴露 instanceCount/nodeVersion/uptime 运行细节；check-update 依赖的
   // version 保留），不调用 getAllInstances()。/health 挂在 app 上而非常规
   // /api 前缀下，故不经认证、也不受角色门管辖（既有公开语义保持不变）

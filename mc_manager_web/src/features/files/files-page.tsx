@@ -106,7 +106,7 @@ export function FilesPage() {
   const [newFileOpen, setNewFileOpen] = useState(false)
   const [newFileName, setNewFileName] = useState('')
   const [closeConfirmOpen, setCloseConfirmOpen] = useState(false)
-  // feat-3：新建目录 / 重命名
+  // ：新建目录 / 重命名
   const [newDirOpen, setNewDirOpen] = useState(false)
   const [newDirName, setNewDirName] = useState('')
   const [renameTarget, setRenameTarget] = useState<FileEntry | null>(null)
@@ -419,7 +419,7 @@ export function FilesPage() {
         onSubmit={createFile}
       />
 
-      {/* ── 新建目录对话框（feat-3） ── */}
+      {/* ── 新建目录对话框 ── */}
       <NamePromptDialog
         open={newDirOpen}
         onOpenChange={setNewDirOpen}
@@ -433,7 +433,7 @@ export function FilesPage() {
         onSubmit={createDirectory}
       />
 
-      {/* ── 重命名对话框（feat-3） ── */}
+      {/* ── 重命名对话框 ── */}
       <RenameDialog
         target={renameTarget}
         value={renameValue}
@@ -460,7 +460,7 @@ export function FilesPage() {
         onClose={() => setUploadConflictTarget(null)}
       />
 
-      {/* ── 隐藏上传 input（feat-3：multipart 直传，服务端落地到当前浏览目录） ── */}
+      {/* ── 隐藏上传 input（multipart 直传，服务端落地到当前浏览目录） ── */}
       <input
         ref={uploadInputRef}
         type="file"

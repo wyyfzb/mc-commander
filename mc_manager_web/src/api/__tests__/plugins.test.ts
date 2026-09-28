@@ -154,7 +154,7 @@ describe('plugins API', () => {
     expect(res.deleted).toBe('Vault.jar.disabled')
   })
 
-  describe('上传（apiUploadPlugin，feat-8 延伸）', () => {
+  describe('上传（apiUploadPlugin， 延伸）', () => {
     it('multipart 上传返回元数据（overwritten=false，201 语义）', async () => {
       const jar = new File(['PK-extracted-bytes'], 'Uploaded.jar', {
         type: 'application/java-archive',

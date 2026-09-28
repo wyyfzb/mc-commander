@@ -44,7 +44,7 @@ export const WS_EVENT_TYPES = [
 export const wsEventTypeSchema = z.enum(WS_EVENT_TYPES)
 
 export const wsMessageSchema = z.object({
-  // 'auth'：首帧鉴权回执（服务端 → 客户端 {type:'auth', ok:true}），H2-4b
+  // 'auth'：首帧鉴权回执（服务端 → 客户端 {type:'auth', ok:true}）
   type: z.union([wsEventTypeSchema, z.literal('pong'), z.literal('auth')]),
   ok: z.boolean().optional(),
   eventId: z.number().optional(),

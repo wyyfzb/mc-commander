@@ -1,5 +1,5 @@
 /**
- * MarketSheet 共享常量与纯工具（feat-8 延伸：Modrinth 一键安装）
+ * MarketSheet 共享常量与纯工具（延伸：Modrinth 一键安装）
  *
  * 拆分自 market-sheet.tsx（issue 473 治理线延续，纯搬移）：常量与格式化工具独立成模块，
  * 供主组件（搜索参数/预填校验/防抖步长）、过滤栏（加载器选项）与结果卡片

@@ -1,5 +1,5 @@
 /**
- * 实例版本升级服务（P0-4）
+ * 实例版本升级服务
  * 流程：前置校验 → 自动备份 → 下载新 JAR → 替换 → 首启校验 → 失败回滚
  *
  * 复用：got（已在依赖中）+ 既有 BackupService + server-jar.js 的下载 URL 解析
@@ -21,7 +21,7 @@ import { beginCancellableTask, TASK_KINDS, TaskCancelledError } from '../utils/c
 
 const VALID_TYPES = new Set(['vanilla', 'paper', 'purpur']);
 
-/// mcVersion 白名单（S-P0-2）：1-3 位数字段、最多 4 段点分形态（1 / 1.21 /
+/// mcVersion 白名单：1-3 位数字段、最多 4 段点分形态（1 / 1.21 /
 /// 1.21.4 / 265）。从源头杜绝 '..'、'/'、'\\'、空白、控制字符与 URL 特殊
 /// 字符进入文件名与上游 URL 路径；路由层先行校验，此处导出供其复用，
 /// 避免两处正则口径分叉。
@@ -29,7 +29,7 @@ export const MC_VERSION_REGEX = /^\d{1,3}(\.\d{1,3}){0,3}$/;
 
 /// 升级 JAR 入库文件名白名单：固定 server-<mcVersion>.jar 形态。mcVersion
 /// 已过上方白名单，此层双保险防 jarFile 入库值被后续流程（回恢复/启动）
-/// 当作穿越向量（S-P0-2「jarFile 入库值同样校验」）。
+/// 当作穿越向量（「jarFile 入库值同样校验」）。
 const SERVER_JAR_NAME_REGEX = /^server-\d{1,3}(\.\d{1,3}){0,3}\.jar$/;
 
 /// 上游下载域白名单：与 resolveDownloadUrl 三个分支实际产出的域一致。
@@ -45,7 +45,7 @@ const ALLOWED_DOWNLOAD_HOSTS = new Set([
 ]);
 
 /**
- * 断言下载 URL 的 host 在白名单内（S-P0-2 纵深防御，_downloadJar 唯一入口）。
+ * 断言下载 URL 的 host 在白名单内（纵深防御，_downloadJar 唯一入口）。
  * 非白名单域或畸形 URL 一律以 VALIDATION_ERROR 语义拒绝。
  */
 function assertAllowedDownloadHost(rawUrl) {
@@ -61,7 +61,7 @@ function assertAllowedDownloadHost(rawUrl) {
 }
 
 /**
- * 实例内落地路径收口（S-P0-2）：resolveSafePath 四步防线（归一化/前缀边界/
+ * 实例内落地路径收口：resolveSafePath 四步防线（归一化/前缀边界/
  * 逐段 realpath/最终 lstat），保证 JAR 写入与回滚覆盖均不逃逸实例目录。
  * PathTraversalError 转 VALIDATION_ERROR 语义（与 plugin.service 同口径）；
  * 实例目录缺失（ENOENT）原样上抛——那是部署配置问题而非安全事件。
@@ -105,7 +105,7 @@ export class UpgradeService {
     // 共享注册表：MCServerManager 构造时创建（websocket.js 连接补发读取），
     // 测试桩无该字段时回退实例本地 Map 保持隔离（serverManager 缺省场景见 health 路由）
     this._activeUpgrades = serverManager?.activeUpgrades ?? new Map();
-    // 下载体积上限可注入（测试用），默认 512MB（S-P1-1）
+    // 下载体积上限可注入（测试用），默认 512MB
     this.maxJarDownloadBytes = options.maxJarDownloadBytes ?? JAR_DOWNLOAD_MAX_BYTES;
   }
 
@@ -229,7 +229,7 @@ export class UpgradeService {
 
       let lastPct = -1;
       stream.on('downloadProgress', ({ percent, transferred, total }) => {
-        // 体积上限断言在前（S-P1-1）：超限即刻断流清理，不等下载自然结束
+        // 体积上限断言在前：超限即刻断流清理，不等下载自然结束
         try {
           assertSizeWithinLimit(transferred, this.maxJarDownloadBytes);
         } catch (err) {
@@ -522,7 +522,7 @@ export class UpgradeService {
     const oldMcVersion = instance.mcVersion;
     const oldJarPath = path.join(instance.serverPath, oldJarFile);
 
-    // ── S-P0-2 纵深防御：路由白名单被绕过时（直调服务层/未来调用方）的
+    // ── 路由白名单被绕过时（直调服务层/未来调用方）的
     // 最后一道防线。fail-fast 于任何副作用（备份/下载）之前。
     // ① jarFile 入库值白名单（固定 server-<version>.jar 形态）
     const newJarName = `server-${mcVersion}.jar`;

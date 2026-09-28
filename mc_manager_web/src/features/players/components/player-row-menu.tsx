@@ -1,7 +1,7 @@
 /**
  * PlayerRowMenu —— 表格行与窄屏卡片共用的操作菜单
  * 共用单一事实源：两种承载形态（表格行 / 卡片）渲染同一菜单，避免两套菜单各自漂移
- * J71 口径：需在线的项（传送/给予物品/踢出）用 onSelect——radix 的 disabled 只拦 onSelect，
+ * 口径：需在线的项（传送/给予物品/踢出）用 onSelect——radix 的 disabled 只拦 onSelect，
  * 用 onClick 时禁用只剩 data-disabled:pointer-events-none 的 CSS 兜底
  */
 import { Ban, Eye, Gift, MoreHorizontal, Send, ShieldCheck, ShieldX, UserX } from 'lucide-react'

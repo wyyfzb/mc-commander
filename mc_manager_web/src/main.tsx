@@ -17,7 +17,7 @@ startNotificationCleanupTimer()
 // 多标签页并行时的通知同步（各标签页独立持内存副本，靠 storage 事件按 id 合并）
 startNotificationStorageSync()
 
-// -- 全局运行时异常兜底（issue 333，audit F-P0-1 残留） --
+// -- 全局运行时异常兜底（issue 333，残留） --
 // ErrorBoundary 仅捕获 React 组件树内的渲染异常；
 // 以下兜底覆盖非 React 上下文的运行时错误（事件回调/定时器/异步代码），
 // 在控制台记录详情的同时向用户展示中文提示与引导。

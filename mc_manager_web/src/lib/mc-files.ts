@@ -3,7 +3,7 @@
  * - formatFileSize：B / KB / MB 一位小数
  * - formatModifiedAt：MM-DD HH:mm 本地时区；非法时间返回 '-'
  * - fileIconName：文件类型 → 图标名（扩展名映射；目录恒为 folder）
- * - isBinaryFileName / isEditableFile：二进制文件判定（feat-9 编辑保护）
+ * - isBinaryFileName / isEditableFile：二进制文件判定（编辑保护）
  */
 import type { FileEntry } from '@/api/types'
 import { formatStartTime } from './format'
@@ -41,7 +41,7 @@ function fileExtension(name: string): string {
 }
 
 /**
- * 已知二进制扩展名黑名单（feat-9）：
+ * 已知二进制扩展名黑名单：
  * 前端按扩展名启发式判断（服务端 /content 是内容级 NUL 检测，前端拿不到字节），
  * 黑名单方向保守——误禁文本文件的编辑只是少了便利（仍可下载本地编辑后上传），
  * 误放二进制文件进编辑器则会误导用户保存空内容（服务端会拒绝，但体验已受损）。

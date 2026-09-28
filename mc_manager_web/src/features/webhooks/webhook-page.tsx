@@ -178,7 +178,7 @@ export default function WebhookPage() {
   })
   const [dialogDirtyConfirm, setDialogDirtyConfirm] = useState(false)
   // 渠道预设单选组接线（roving tabindex + 方向键移动即选中、焦点跟随）统一走
-  // useRadioGroup，与 onboarding 部署方式、J55 批次的 17 组共用同一键盘模型。
+  // useRadioGroup，与 onboarding 部署方式、17 组共用同一键盘模型。
   // 异常值兜底（platform 不在清单内）：停靠点落首项但不谎报选中——hook 内建该归一
   const { groupProps, itemProps } = useRadioGroup<string>({
     label: 'Webhook 渠道预设',

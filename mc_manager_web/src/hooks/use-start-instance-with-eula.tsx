@@ -1,5 +1,5 @@
 /**
- * useStartInstanceWithEula —— 启动指令共享 mutation + EULA 首启特例（issue 312，清单 A4-1）
+ * useStartInstanceWithEula —— 启动指令共享 mutation + EULA 首启特例（issue 312）
  * - 两入口复用：实例页卡片「启动」/ 仪表盘 InstanceControls「启动」
  * - EULA 特例：start 失败含 EULA_NOT_ACCEPTED → 弹同意对话框（中文说明）→
  *   同意后写入 eula.txt（请求体 POST /eula {agreed:true} → 文件内容 eula=true）并自动续启

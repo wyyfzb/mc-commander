@@ -333,7 +333,7 @@ function createTables() {
   }
 
   // 管理员账号（安全主线：单管理员密码登录）。单行表 id 恒为 1；
-  // totp_secret 预留 TOTP 两步验证挂靠（roadmap）
+  // totp_secret 等两因素列由下方迁移 v12 补齐，语义见该处注释
   db.exec(`
     CREATE TABLE IF NOT EXISTS admin_account (
       id INTEGER PRIMARY KEY CHECK (id = 1),

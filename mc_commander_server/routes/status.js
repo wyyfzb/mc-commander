@@ -77,7 +77,7 @@ function statusSchemaForRole(req, list) {
   return readonly ? readonlyInstanceStatusSchema : instanceStatusSchema;
 }
 
-// ── 磁盘使用率（feat-5 运维韧性）：fs.statfsSync 零新增依赖，10s 缓存 ──
+// ── 磁盘使用率（运维韧性）：fs.statfsSync 零新增依赖，10s 缓存 ──
 let _diskCache = { ts: 0, result: null };
 function getDiskUsage() {
   const now = Date.now();
@@ -234,7 +234,7 @@ export function createStatusRoutes(serverManager) {
         // 兼容旧字段
         totalMemory: totalMemGB,
         freeMemory: Math.round((freeMemBytes / (1024 * 1024 * 1024)) * 10) / 10,
-        // 磁盘使用率（feat-5）
+        // 磁盘使用率
         diskUsage: getDiskUsage(),
         instances: instances.map((i) => ({
           id: i.id,
@@ -267,7 +267,7 @@ export function createStatusRoutes(serverManager) {
         cpuCores: os.cpus().length,
         loadAvg: os.loadavg(),
         uptime: os.uptime(),
-        // 磁盘使用率（feat-5）
+        // 磁盘使用率
         diskUsage: getDiskUsage(),
       }),
     );

@@ -21,7 +21,7 @@ function logAuthRejection(req, reason, level = 'warn', status = 401) {
 }
 
 /** 恒时比对 API Key：对入站明文做 SHA-256 后与存储的哈希比较。
- * safeEqual 复用 utils/password.js 的 SHA-256 归一化实现（P2-6：
+ * safeEqual 复用 utils/password.js 的 SHA-256 归一化实现（
  * 消除长度不等路径的提前返回，任意输入耗时一致） */
 function verifyApiKey(incomingKey) {
   const storedHash = config.apiKeyHash;
@@ -66,7 +66,7 @@ function sessionCreatedAt(session) {
 }
 
 /**
- * 会话绝对过期判定（P2-11）：无论滑动续期多久，自创建起超过
+ * 会话绝对过期判定：无论滑动续期多久，自创建起超过
  * absoluteTtlMs 后会话必须重新登录（限制被窃取令牌的永久有效窗口）。
  * 导出供跨时区用例直接断言（`auth-session-time.test.js` 在子进程固定 TZ 复算）。
  * @returns {boolean} true = 已达绝对过期
@@ -80,7 +80,7 @@ export function isAbsolutelyExpired(session) {
 }
 
 /**
- * 滑动续期目标过期时间（P2-11）：不超过 created_at + absoluteTtlMs 上限，
+ * 滑动续期目标过期时间：不超过 created_at + absoluteTtlMs 上限，
  * 防止活跃会话的续期无限推迟绝对重登边界。
  * absoluteTtlMs 为 0/负值（关闭绝对过期）时不参与 cap，与 isAbsolutelyExpired
  * 的守卫语义一致：否则 absolute = created_at（过去时刻）会把续期目标写回
@@ -168,7 +168,7 @@ export function authMiddleware(req, res, next) {
       logAuthRejection(req, 'session expired', 'debug');
       return res.status(401).json(error(ErrorCodes.AUTH_SESSION_EXPIRED, '会话已过期，请重新登录'));
     }
-    // 绝对过期（P2-11）：created_at + 30d 后强制重登，滑动续期不能绕过
+    // 绝对过期：created_at + 30d 后强制重登，滑动续期不能绕过
     if (isAbsolutelyExpired(session)) {
       AdminSessionModel.deleteById(session.id);
       logAuthRejection(req, 'session absolute expired', 'debug');
@@ -176,7 +176,7 @@ export function authMiddleware(req, res, next) {
         .status(401)
         .json(error(ErrorCodes.AUTH_SESSION_EXPIRED, '会话已达到最长存活期，请重新登录'));
     }
-    // 滑动续期（节流写库；上限 cap 在绝对过期边界，P2-11）
+    // 滑动续期（节流写库；上限 cap 在绝对过期边界）
     // last_seen_at 同为无时区 UTC 串，裸解析在 UTC+8 下恒判「已超 60s」→ 节流失效（每请求写库）
     if (Date.now() - parseDbTime(session.last_seen_at) > SESSION_TOUCH_INTERVAL_MS) {
       AdminSessionModel.touch(session.id, slidingExpiry(session));
@@ -278,7 +278,7 @@ export function requireAdminRole(req, res, next) {
  *   HTTP 通道的 60s 写库节流），会话活性由 HTTP Bearer 请求持续滑动续期。
  *   校验失败一律返回 null，由调用方以 1008 关闭。
  *
- * **返回值携带角色**（Phase 2）：只读凭据不再一律拒握手，而是以
+ * **返回值携带角色**：只读凭据不再一律拒握手，而是以
  * `{ role: 'readonly' }` 放行，由 websocket.js 按事件白名单过滤投递面。
  * 返回对象而非 boolean 的必要性：角色必须在连接建立时落定（`ws._role`），
  * 否则每条投递路径都要重验凭据。对象本身是 truthy，既有 `if (!ok)` 调用
@@ -305,7 +305,7 @@ export function authenticateWebSocket(apiKey, sessionToken = null) {
       AdminSessionModel.deleteById(session.id);
       return null;
     }
-    // 绝对过期同步校验（P2-11）：WS 通道与 HTTP 语义对齐，不给窃取令牌
+    // 绝对过期同步校验：WS 通道与 HTTP 语义对齐，不给窃取令牌
     // 绕过 HTTP 重登边界的口子
     if (isAbsolutelyExpired(session)) {
       AdminSessionModel.deleteById(session.id);

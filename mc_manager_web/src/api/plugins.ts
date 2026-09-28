@@ -1,5 +1,5 @@
 /**
- * 插件管理域 API 函数（feat-8 P0-5，对照服务端 routes/plugins.js 契约）
+ * 插件管理域 API 函数（对照服务端 routes/plugins.js 契约）
  * config 由调用方从 useConnectionStore 传入（与 src/api/tasks.ts 同模式）。
  * 启停 = jar ↔ jar.disabled 重命名（服务端原子执行），重启实例后生效。
  * 上传走 client.ts 共享 apiUploadFile（XHR 进度 + 双通道凭据 + 网关适配）。
@@ -66,7 +66,7 @@ export function apiUploadPlugin(
   )
 }
 
-// ── 插件市场（feat-8 延伸：Modrinth 代理，全部经服务端转发，前端不直连外网）──
+// ── 插件市场（延伸：Modrinth 代理，全部经服务端转发，前端不直连外网）──
 
 export interface MarketSearchParams {
   q: string
@@ -140,7 +140,7 @@ export function apiMarketInstall(
 }
 
 /**
- * 批量更新检测（POST /instances/:id/plugins/check-updates，feat-8 延伸）。
+ * 批量更新检测（POST /instances/:id/plugins/check-updates， 延伸）。
  * 服务端逐个搜索 Modrinth（并发 5 + 缓存），命中后比对版本；最坏情况
  * 20 插件 × 多次上游往返，超时放宽到 60s。
  */

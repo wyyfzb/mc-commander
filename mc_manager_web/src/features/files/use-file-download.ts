@@ -1,6 +1,6 @@
 /**
  * useFileDownload —— 文件下载逻辑外提（自 files-page.tsx 迁出，纯移动零行为变更）
- * - blob → a[download] 触发保存（feat-9；apiDownloadFile 内部封装 ObjectURL 生命周期）
+ * - blob → a[download] 触发保存（apiDownloadFile 内部封装 ObjectURL 生命周期）
  * - toast 复用同一 id 展示进度（>5% 才刷新，避免大文件高频重渲染）
  * - downloadingPath 行内 spinner 状态 + 防重复点击
  */
@@ -17,7 +17,7 @@ export function useFileDownload(instanceId: string | null) {
   const [downloadingPath, setDownloadingPath] = useState<string | null>(null)
 
   /**
-   * 下载文件到本地（feat-9）：blob → a[download] 触发保存。
+   * 下载文件到本地：blob → a[download] 触发保存。
    * toast 复用同一 id 展示进度（>5% 才刷新，避免大文件高频重渲染）；
    * 二进制/大文件是下载能力的主要受益者（编辑器对二进制不可用）。
    */

@@ -130,7 +130,7 @@ function parseSetupTokenHeader(header) {
 
 function createSession(req) {
   const token = generateSessionToken();
-  // 初始有效期与滑动续期共用同一 cap 语义（P2-11）：ttlMs 配置大于绝对
+  // 初始有效期与滑动续期共用同一 cap 语义：ttlMs 配置大于绝对
   // 存活期时初始值不越过绝对重登边界（created_at 取 now，见 slidingExpiry）
   const expiresAt = slidingExpiry({ created_at: new Date().toISOString() });
   const session = AdminSessionModel.create({
@@ -139,7 +139,7 @@ function createSession(req) {
     ip: clientIp(req),
     expiresAt,
   });
-  // 会话并发上限（P2-11）：新登录挤掉最旧会话（内部先惰性清理过期行）
+  // 会话并发上限：新登录挤掉最旧会话（内部先惰性清理过期行）
   AdminSessionModel.enforceLimit(config.adminSession.maxSessions);
   return { token, sessionId: session.id, expiresAt };
 }
@@ -227,7 +227,7 @@ export function createAuthRoutes() {
           .status(409)
           .json(error(ErrorCodes.AUTH_ALREADY_CONFIGURED, '管理员密码已设置，请直接登录'));
       }
-      // 所有权证明（audit S-P0-1 / #309）：公网部署时「部署完成 → 管理员设密」窗口内
+      // 所有权证明（#309）：公网部署时「部署完成 → 管理员设密」窗口内
       // 任何发现端口者可抢先设密永久接管面板；配置了 SETUP_TOKEN 则强制校验。
       // token 校验置于密码强度校验之前——未证明所有权不泄露后续校验语义
       const tokenRequired = isSetupTokenRequired();

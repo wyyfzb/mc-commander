@@ -1,5 +1,5 @@
 /**
- * 认证通道收口测试（S-P0-3 残留 + S-P1-4）
+ * 认证通道收口测试（残留）
  * ① 锁定键使用 socket.remoteAddress（不信任 X-Forwarded-For）
  * ② TRUST_PROXY 环境变量可配（默认 1）
  * ③ WS 心跳周期复验 sessionToken——踢出/过期后 close(1008)

@@ -302,7 +302,7 @@ export function createBackupRoutes(serverManager) {
     }),
   );
 
-  // feat-1: 备份下载（流式 tar.gz）
+  // : 备份下载（流式 tar.gz）
   // 安全链：findByIdWithPath（不泄露 file_path）→ resolveContained（目录包含 + symlink 复检）→
   // spawn 数组参数（无 shell 注入）→ 仅 completed 可下载
   router.get(

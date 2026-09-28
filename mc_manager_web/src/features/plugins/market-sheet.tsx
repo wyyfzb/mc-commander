@@ -1,5 +1,5 @@
 /**
- * MarketSheet —— 插件市场侧滑面板（feat-8 延伸：Modrinth 一键安装）
+ * MarketSheet —— 插件市场侧滑面板（延伸：Modrinth 一键安装）
  *
  * 交互设计（参考 Pterodactyl 浏览器/Modrinth 官网列表页交叉验证）：
  * - 工具栏「插件市场」按钮打开；空查询默认按下载量浏览热门插件（index=downloads）

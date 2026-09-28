@@ -1,5 +1,5 @@
 /**
- * 实例页 EULA 首启闭环测试（issue 312，清单 A4-1）：
+ * 实例页 EULA 首启闭环测试（issue 312）：
  * - 卡片「启动」命中 EULA 需求（403 EULA_NOT_ACCEPTED）→ 弹中文同意对话框
  * - 同意 → POST /eula 写入 + 自动续启（start 第二次调用成功）→ toast 反馈
  * - 拒绝 → 提示不启动，不写 EULA

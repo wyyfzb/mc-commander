@@ -12,7 +12,7 @@ import {
 } from '../utils/fs-utils.js';
 
 /**
- * 插件管理服务（feat-8 P0-5 插件管理最小闭环）。
+ * 插件管理服务（插件管理最小闭环）。
  *
  * 范围：Bukkit 系（Paper/Spigot/Purpur）`plugins/` 目录内 jar 插件的
  * 列表 / 启停 / 删除。启停 = 行业通用约定：jar 重命名追加/移除
@@ -20,7 +20,8 @@ import {
  * 不做依赖解析、不做运行期热卸载（Bukkit 插件仅在服务器启动时加载，
  * 启停后需重启实例生效，由前端明确提示）。
  *
- * 远景（roadmap P2）：数据包与 mod 管理（mods/ 目录复用同一套模型）。
+ * 目录名当前写死 `plugins/`（Bukkit 系约定）；若将来要覆盖 `mods/`、`datapacks/`，
+ * 需先把本文件的目录取值参数化，再复用同一套模型。
  */
 
 /// 插件文件名白名单：字母数字开头，允许 . _ - ，以 .jar 或 .jar.disabled 结尾。
@@ -123,7 +124,7 @@ export function readPluginMeta(jarPath) {
 }
 
 /**
- * 上传插件 jar（feat-8 延伸）：multer 已将 multipart 落盘到临时文件。
+ * 上传插件 jar（延伸）：multer 已将 multipart 落盘到临时文件。
  * - 文件名校验：PLUGIN_UPLOAD_NAME_REGEX（仅 .jar，拒绝路径分隔符/控制字符）
  * - zip 魔数校验：头部 4 字节必须为 PK\x03\x04（拒绝伪装成 jar 的任意文件）
  * - plugins/ 目录不存在时自动创建（首次启动前装插件是主流流程）

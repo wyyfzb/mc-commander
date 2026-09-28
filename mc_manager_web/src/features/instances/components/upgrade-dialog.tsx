@@ -1,5 +1,5 @@
 /**
- * UpgradeDialog - 实例版本升级弹窗（P0-4）
+ * UpgradeDialog - 实例版本升级弹窗
  * - 服务端类型三卡选择（vanilla/paper/purpur）+ 版本 Select
  * - 警示条（自动备份 + 失败自动回滚）
  * - 进度条经 WS upgradeProgress 事件驱动（upgrade store）

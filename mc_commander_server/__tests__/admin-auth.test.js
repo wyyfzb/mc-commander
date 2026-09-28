@@ -65,7 +65,7 @@ beforeEach(() => {
 describe('utils/password', () => {
   it('hash → verify 往返成功，参数自描述', () => {
     const stored = hashPassword('correct horse battery');
-    // P2-5：SCRYPT_N 提升至 2^17（131072，OWASP 推荐）
+    //：SCRYPT_N 提升至 2^17（131072，OWASP 推荐）
     expect(stored).toMatch(/^scrypt\$131072\$8\$1\$/);
     expect(verifyPassword('correct horse battery', stored)).toBe(true);
   });

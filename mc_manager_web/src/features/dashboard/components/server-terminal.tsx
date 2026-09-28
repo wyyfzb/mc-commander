@@ -242,7 +242,7 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
   }, [theme])
 
   // 缓冲增量渲染；眼睛开关切换 → 清屏 + 从头按新过滤态全量重写。
-  // （P2-27 复现修复：原独立切换 effect 只 clear 不重写，切换后历史行不回填、
+  // （原独立切换 effect 只 clear 不重写，切换后历史行不回填、
   // 终端空白直到下一条新日志到达——现合并到同一 effect，切换即重写）
   useEffect(() => {
     const term = xtermRef.current

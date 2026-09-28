@@ -63,7 +63,7 @@ export const ClientMessages = {
   AUTH: 'auth',
 };
 
-// ── 只读角色的实时事件白名单（Phase 2，唯一事实源）──────────────
+// ── 只读角色的实时事件白名单（唯一事实源）──────────────
 // 口径与 HTTP 只读白名单同一条：**只读＝监控读数**。故只放行「实例运行状态 /
 // 性能 / 天气 / 玩家在线情况」这类读数事件，其信息面不超过只读可达的 HTTP 端点
 // （/overview、/system-stats、/instances、/instances/:id、/instances/:id/players）。

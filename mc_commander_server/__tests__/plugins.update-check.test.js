@@ -1,5 +1,5 @@
 /**
- * 插件更新检测测试（feat-8 延伸：已装插件 vs Modrinth 最新版）
+ * 插件更新检测测试（延伸：已装插件 vs Modrinth 最新版）
  * - comparePluginVersions：semver 主段/缺段补零/预发布/非数字回退
  * - checkPluginUpdates：名称命中（title/slugify）、版本比对、未命中保守报告、
  *   上游失败不拖垮整批、20 个上限

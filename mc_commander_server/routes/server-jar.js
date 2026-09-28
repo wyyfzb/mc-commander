@@ -185,7 +185,7 @@ async function downloadWithProgress(
     // 全部广播会对所有在线客户端高频轰炸。节流：百分比变化 ≥1% 才发射
     let lastPct = -1;
     stream.on('downloadProgress', ({ percent, transferred, total }) => {
-      // 体积上限断言在前（S-P1-1）：超限即刻断流清理，不等下载自然结束
+      // 体积上限断言在前：超限即刻断流清理，不等下载自然结束
       try {
         assertSizeWithinLimit(transferred, maxBytes);
       } catch (err) {

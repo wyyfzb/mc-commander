@@ -299,7 +299,7 @@ describe('Plugin Routes', () => {
   });
 });
 
-describe('plugin.service - uploadPlugin（feat-8 上传延伸）', () => {
+describe('plugin.service - uploadPlugin（上传延伸）', () => {
   beforeEach(() => {
     fs.rmSync(pluginsDir, { recursive: true, force: true });
     vi.clearAllMocks();

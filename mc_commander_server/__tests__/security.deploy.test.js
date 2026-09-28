@@ -134,7 +134,7 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
     expect(script).toContain('解压后未找到 package.json');
   });
 
-  describe('SETUP_TOKEN 首访设密所有权证明（audit S-P0-1 / #309）', () => {
+  describe('SETUP_TOKEN 首访设密所有权证明（#309）', () => {
     it('首次部署生成一次性 SETUP_TOKEN（openssl rand -hex 32）并写入 .env', () => {
       expect(script).toContain('SETUP_TOKEN=$(openssl rand -hex 32)');
       expect(script).toContain('SETUP_TOKEN=$SETUP_TOKEN');
@@ -154,7 +154,7 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
     });
   });
 
-  describe('API Key 日志掩码（audit P2-10 / issue 324）', () => {
+  describe('API Key 日志掩码（issue 324）', () => {
     it('首次部署 log 行不再完整打印 Key（掩码保留前 4 位）', () => {
       // 「已生成 API Key」日志必须走掩码，防完整 Key 进入部署日志长期留存
       expect(script).toMatch(/已生成 API Key: \$\{API_KEY:0:4\}\*\*\*\*/);

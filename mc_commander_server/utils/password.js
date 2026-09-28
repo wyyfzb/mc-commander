@@ -34,7 +34,7 @@ export function hashPassword(password) {
 /**
  * 校验密码：解析存储串，参数须与当前参数完全一致且盐/摘要段均非空（不等的存储行
  * 按校验失败处理，不做旧参数重算——单一参数集），随后恒时比较（safeEqual：先
- * SHA-256 归一化，消除长度不等路径的提前返回——P2-6）。
+ * SHA-256 归一化，消除长度不等路径的提前返回——）。
  * 任何解析/格式异常一律返回 false（不抛出，登录失败语义统一）。
  */
 export function verifyPassword(password, stored) {
@@ -63,7 +63,7 @@ export function verifyPassword(password, stored) {
 }
 
 /**
- * 恒时比较（P2-6）：两侧先做 SHA-256 归一化（32B 定长）再 timingSafeEqual。
+ * 恒时比较：两侧先做 SHA-256 归一化（32B 定长）再 timingSafeEqual。
  * 原实现长度不等时提前返回 false，攻击者可通过响应时序差异探测存储摘要
  * 长度；归一化后任意输入路径耗时一致，长度信息不再泄漏。
  */

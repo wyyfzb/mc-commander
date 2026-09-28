@@ -1,5 +1,5 @@
 /**
- * 插件更新检测前端测试（feat-8 延伸）
+ * 插件更新检测前端测试（延伸）
  * - apiCheckPluginUpdates：MSW 拦截 POST check-updates（信封解包 + 超时参数）
  * - MarketSheet initialQuery：打开时预填搜索词（更新徽章 → 市场直达），关闭后清预填
  */

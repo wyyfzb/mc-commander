@@ -20,7 +20,7 @@ export function errorHandler(err, req, res, _next) {
     return res.status(400).json(error(ErrorCodes.VALIDATION_ERROR, 'Invalid JSON'));
   }
 
-  // body 超限（P2-7：认证前 1MB 收口）返回明确 413 语义，不再落 500
+  // body 超限（认证前 1MB 收口）返回明确 413 语义，不再落 500
   if (err.type === 'entity.too.large') {
     return res.status(413).json(error(ErrorCodes.VALIDATION_ERROR, 'Request body too large'));
   }

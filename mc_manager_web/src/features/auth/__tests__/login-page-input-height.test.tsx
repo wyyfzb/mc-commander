@@ -2,7 +2,7 @@
  * 输入高度基座归一的回归锁（全站标准档统一 40px）
  * 口径：`ui/input.tsx` 基座 h-10，`PasswordInput` 基座不自带高度，全站输入控件统一 40px 档。
  * 本用例钉住两端：基座自带 h-10 与登录页全部输入不再自带高度覆盖类。
- * 单独成文件同 J59/J14 先例（login-page.test.tsx 的修改会被工具链误拦）。
+ * 单独成文件同 / 先例（login-page.test.tsx 的修改会被工具链误拦）。
  * mock 数据为虚构内容，严禁真实服务器信息
  */
 import { describe, it, expect, beforeEach, afterEach, afterAll, beforeAll } from 'vitest'

@@ -343,7 +343,7 @@ export class MCServerInstance extends EventEmitter {
     this._deathAggBuffer = [];
     this._deathAggTimer = null;
     this._restartTimer = null; // 重启延迟启动定时器（stop/kill 时取消）
-    // 崩溃循环熔断（feat-5 运维韧性）
+    // 崩溃循环熔断（运维韧性）
     this._consecutiveCrashes = 0;
     this._crashWindowStart = null;
     this._circuitBreakerTripped = false;
@@ -1037,7 +1037,7 @@ export class MCServerInstance extends EventEmitter {
     }
     // 记录用户发送的命令到日志流（终端显示 "> 命令"，供操作反馈上下文）
     this.emit('log', { text: `> ${command}`, type: 'command' });
-    // feat-2: 命令历史落库（chokepoint finally）
+    // : 命令历史落库（chokepoint finally）
     const cmdStart = Date.now();
     let cmdSuccess = true;
     try {
@@ -1249,7 +1249,7 @@ export class MCServerInstance extends EventEmitter {
       awakePlayerNames: this._getAwakePlayerNames(),
       totalUptime: this._getTotalUptime(),
       startTime: this.startTime ? new Date(this.startTime).toISOString() : null,
-      // ── 运维韧性字段（feat-5）──
+      // ── 运维韧性字段──
       autoStart: this.autoStart,
       circuitBreakerTripped: this._circuitBreakerTripped,
       consecutiveCrashes: this._consecutiveCrashes,

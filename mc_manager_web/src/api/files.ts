@@ -103,7 +103,7 @@ export function apiUploadFile(
 }
 
 /**
- * 下载文件到本地（GET /instances/:id/files/download?path=，feat-9）。
+ * 下载文件到本地（GET /instances/:id/files/download?path=）。
  * 委托 client.ts 共享实现（流式进度 + 双通道凭据 + withTransformPort 网关适配）；
  * 取到 blob 后在浏览器侧触发保存（a[download] + ObjectURL，用后即 revoke）。
  * 文件名优先服务端 Content-Disposition（RFC 5987 中文安全），回退 entry.name。

@@ -970,7 +970,7 @@ export const handlers = [
       maxMemory: body.maxMemory ?? '2G',
     })
   }),
-  // ── 升级域（P0-4）──
+  // ── 升级域──
   http.post('*/api/v1/instances/:id/upgrade', async ({ request }) => {
     if (upgradeMock.conflict) {
       return HttpResponse.json(

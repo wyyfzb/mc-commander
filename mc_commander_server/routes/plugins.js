@@ -37,7 +37,7 @@ import {
 import config from '../config.js';
 
 /**
- * 插件管理路由（feat-8 P0-5 最小闭环 + 上传延伸 + Modrinth 市场延伸）
+ * 插件管理路由（最小闭环 + 上传延伸 + Modrinth 市场延伸）
  * GET    /api/v1/instances/:id/plugins                    —— 列表（含元数据与启停状态）
  * POST   /api/v1/instances/:id/plugins/upload             —— 上传插件 jar（multipart 字段 file；?overwrite=true 显式覆盖）
  * PUT    /api/v1/instances/:id/plugins/:file/enabled      —— 启用/禁用（body: {enabled}）
@@ -125,7 +125,7 @@ export function createPluginRoutes(serverManager) {
     return instance.serverPath || path.join(config.serversDir, id);
   }
 
-  // ── 市场延伸（feat-8）：必须在 :file 参数路由之前注册 ──────────
+  // ── 市场延伸：必须在 :file 参数路由之前注册 ──────────
 
   // GET /api/v1/instances/:id/plugins/market/search?q=&offset=&limit=&game_version=&loader=
   // 查询契约（issue 391）：q/game_version/loader 归一校验；offset/limit 为分页参数
@@ -203,7 +203,7 @@ export function createPluginRoutes(serverManager) {
     }),
   );
 
-  // ── 既有插件端点（feat-8 P0-5 最小闭环 + 上传延伸）────────────
+  // ── 既有插件端点（最小闭环 + 上传延伸）────────────
 
   // POST /api/v1/instances/:id/plugins/check-updates —— 批量更新检测（读操作，不审计；
   // POST 语义：触发多次上游请求 + 结果非幂等缓存，GET 会被中间层/浏览器误缓存）

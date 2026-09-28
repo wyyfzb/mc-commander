@@ -1,5 +1,5 @@
 /**
- * JAR 下载落地校验测试（audit S-P1-1 / issue 316）
+ * JAR 下载落地校验测试（issue 316）
  *
  * 覆盖：
  * ① guard 工具单测：hashFile 摘要计算 / assertDownloadIntegrity（null 跳过、
@@ -80,7 +80,7 @@ afterEach(() => {
   fs.rmSync(guardTmpDir, { recursive: true, force: true });
 });
 
-describe('jar-download-guard 工具（S-P1-1）', () => {
+describe('jar-download-guard 工具', () => {
   it('hashFile 流式计算 sha256/sha1 与 crypto 直接计算一致', async () => {
     const filePath = path.join(guardTmpDir, 'payload.bin');
     const content = crypto.randomBytes(256);

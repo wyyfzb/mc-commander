@@ -1,5 +1,5 @@
 /**
- * UpdateCheckSection —— 更新检查卡片（feat-5 运维韧性）
+ * UpdateCheckSection —— 更新检查卡片（运维韧性）
  * 查询 npm registry，1h staleTime，不轮询
  * - 加载中：spinner + 文案
  * - 最新版本：绿色 CheckCircle + 当前版本号 + 重试按钮

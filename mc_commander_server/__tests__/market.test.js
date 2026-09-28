@@ -1,5 +1,5 @@
 /**
- * 插件市场服务测试（feat-8 延伸：Modrinth 代理 + 一键安装）
+ * 插件市场服务测试（延伸：Modrinth 代理 + 一键安装）
  *
  * 网络隔离：got 全量 mock（离线语义）。
  * - got(...)（元数据 .json 链）：按 URL 前缀路由到 fixture
