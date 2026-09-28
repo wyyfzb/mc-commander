@@ -141,6 +141,15 @@ describe('verifyHardlinkDedup 硬链接去重探测', () => {
     fs.mkdirSync(snap, { recursive: true });
     fs.writeFileSync(path.join(base, 'level.dat'), 'worlddata');
     fs.copyFileSync(path.join(base, 'level.dat'), path.join(snap, 'level.dat'));
+    // 函数只对「内容未变」样本判 inode，故须让两侧 mtime 严格相等。copyFileSync 是否
+    // 保留 mtime 随平台而异（win32 保留、Linux 刷新为新值），而 utimesSync 传 Date 会
+    // 截断到整秒、传秒数值又有亚毫秒舍入——两侧统一取整到同一整秒才确定相等，这也正是
+    // rsync -t「保留时间但不硬链接」的真实形态。不对齐时样本被判内容已变而跳过，返回 null。
+    const stamp = new Date(
+      Math.floor(fs.statSync(path.join(base, 'level.dat')).mtimeMs / 1000) * 1000,
+    );
+    fs.utimesSync(path.join(base, 'level.dat'), stamp, stamp);
+    fs.utimesSync(path.join(snap, 'level.dat'), stamp, stamp);
 
     expect(verifyHardlinkDedup(base, snap)).toBe(false);
   });
