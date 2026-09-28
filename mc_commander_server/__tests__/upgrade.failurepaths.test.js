@@ -237,7 +237,7 @@ describe('resolveDownload 分支矩阵', () => {
     expect(res.expectedHash).toBeNull();
   });
 
-  it('paper v3：数组形态 + STABLE/RECOMMENDED 混合 → 按 build id 降序取最新并携带 sha256', async () => {
+  it('paper v3：数组形态 + STABLE/BETA 混合 → 按 build id 降序取最新并携带 checksums.sha256', async () => {
     const service = new UpgradeService(createMockServerManager());
     jsonImpl.current = () =>
       Promise.resolve([
@@ -247,17 +247,17 @@ describe('resolveDownload 分支矩阵', () => {
           downloads: {
             'server:default': {
               url: 'https://fill-data.papermc.io/b3.jar',
-              sha256: 'a'.repeat(64),
+              checksums: { sha256: 'a'.repeat(64) },
             },
           },
         },
         {
           id: 7,
-          channel: 'RECOMMENDED',
+          channel: 'STABLE',
           downloads: {
             'server:default': {
               url: 'https://fill-data.papermc.io/b7.jar',
-              sha256: 'b'.repeat(64),
+              checksums: { sha256: 'b'.repeat(64) },
             },
           },
         },
@@ -267,14 +267,14 @@ describe('resolveDownload 分支矩阵', () => {
     expect(res.expectedHash).toEqual({ algorithm: 'sha256', digest: 'b'.repeat(64) });
   });
 
-  it('paper v3：对象形态且无 stable build → 回退全部 builds，application 下载无摘要 → hash null', async () => {
+  it('paper v3：无 STABLE → 回退全部 builds；application 无 checksums → hash null', async () => {
     const service = new UpgradeService(createMockServerManager());
     jsonImpl.current = () =>
       Promise.resolve({
         builds: [
           {
             id: 9,
-            channel: 'EXPERIMENTAL',
+            channel: 'BETA',
             downloads: { application: { url: 'https://fill-data.papermc.io/b9.jar' } },
           },
         ],
@@ -292,27 +292,46 @@ describe('resolveDownload 分支矩阵', () => {
     );
   });
 
-  it('paper v3：latest 无 downloads → v2 回退拼接 URL（id 计算构建号）且 hash null', async () => {
+  it('paper v3：latest 无 downloads → 抛错（v2 拼接回退已随上游 sunset 移除，不得静默降级）', async () => {
     const service = new UpgradeService(createMockServerManager());
     jsonImpl.current = () => Promise.resolve({ builds: [{ id: 42 }] });
-    const res = await service.resolveDownload('1.21.4', 'paper');
-    expect(res.url).toBe(
-      'https://api.papermc.io/v2/projects/paper/versions/1.21.4/builds/42/downloads/paper-1.21.4-42.jar',
+    await expect(service.resolveDownload('1.21.4', 'paper')).rejects.toThrow(
+      'No Paper build download for 1.21.4',
     );
-    expect(res.expectedHash).toBeNull();
   });
 
-  it('paper v3：downloadInfo 有 name 无 url → v2 回退沿用该文件名，build 号回退 build 字段', async () => {
+  it('paper v3：downloadInfo 有 name 但无 url → 抛错（不得回退到已失效的 v2 路径）', async () => {
     const service = new UpgradeService(createMockServerManager());
     jsonImpl.current = () =>
       Promise.resolve({
-        builds: [{ build: 88, downloads: { 'server:default': { name: 'custom-name.jar' } } }],
+        builds: [{ id: 88, downloads: { 'server:default': { name: 'custom-name.jar' } } }],
       });
-    const res = await service.resolveDownload('1.21.4', 'paper');
-    expect(res.url).toBe(
-      'https://api.papermc.io/v2/projects/paper/versions/1.21.4/builds/88/downloads/custom-name.jar',
+    await expect(service.resolveDownload('1.21.4', 'paper')).rejects.toThrow(
+      'No Paper build download for 1.21.4',
     );
-    expect(res.expectedHash).toBeNull();
+  });
+
+  it('paper v3：命中真实响应形状时必须产出非空 expectedHash（防再次读错摘要字段）', async () => {
+    const service = new UpgradeService(createMockServerManager());
+    jsonImpl.current = () =>
+      Promise.resolve([
+        {
+          id: 232,
+          channel: 'STABLE',
+          downloads: {
+            'server:default': {
+              name: 'paper-1.21.4-232.jar',
+              checksums: { sha256: '5ee4f542'.padEnd(64, '0') },
+              size: 51437498,
+              url: 'https://fill-data.papermc.io/v1/objects/5ee4f542/paper-1.21.4-232.jar',
+            },
+          },
+        },
+      ]);
+    const res = await service.resolveDownload('1.21.4', 'paper');
+    expect(res.expectedHash).not.toBeNull();
+    expect(res.expectedHash.algorithm).toBe('sha256');
+    expect(res.expectedHash.digest).toHaveLength(64);
   });
 
   it('purpur：固定 latest/download URL 且无上游摘要', async () => {

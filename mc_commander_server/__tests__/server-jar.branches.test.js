@@ -253,12 +253,19 @@ describe('Paper 构建发现链形态缺口', () => {
       {
         id: 10,
         channel: 'STABLE',
-        downloads: { 'server:default': { url: 'https://dl/10.jar', sha256: null } },
+        downloads: {
+          'server:default': { url: 'https://fill-data.papermc.io/10.jar', checksums: {} },
+        },
       },
       {
         id: 12,
         channel: 'STABLE',
-        downloads: { 'server:default': { url: 'https://dl/12.jar', sha256: JAR_SHA256 } },
+        downloads: {
+          'server:default': {
+            url: 'https://fill-data.papermc.io/12.jar',
+            checksums: { sha256: JAR_SHA256 },
+          },
+        },
       },
     ]);
     const { app } = buildApp();
@@ -266,7 +273,7 @@ describe('Paper 构建发现链形态缺口', () => {
       .post('/api/instances/deploy')
       .send({ type: 'paper', mcVersion: '1.21.4', instanceName: 'Branch Fixture' });
     expect(res.status).toBe(200);
-    // sha256 null → expectedHash null：仅限流不强校验
+    // 选中 id=12（checksums.sha256 齐全 → 强制校验通过）
     expect(res.body.data.mcVersion).toBe('1.21.4');
   });
 
@@ -284,32 +291,28 @@ describe('Paper 构建发现链形态缺口', () => {
     );
   });
 
-  it('STABLE 空回退全量构建 + 无 id 无 downloads → build 字段组 v2 回退 URL', async () => {
+  it('STABLE 空回退全量构建 + 无 downloads → 502（v2 拼接回退已移除，不再返回 200）', async () => {
     definePaperChain([
-      // 双元素触发 sort 比较回调：均无 id → (b.id||0)/(a.id||0) 失败臂求值；无 downloads 键 → v2 回退
-      { build: 9, channel: 'EXPERIMENTAL' },
-      { build: 7, channel: 'LEGACY' },
+      { id: 9, channel: 'BETA' },
+      { id: 7, channel: 'ALPHA' },
     ]);
     const { app } = buildApp();
     const res = await request(app)
       .post('/api/instances/deploy')
       .send({ type: 'paper', mcVersion: '1.21.4', instanceName: 'Branch Fixture' });
-    // 唯一候选 id/build=9 → downloads 缺失 → v2 回退（fileName 缺省 paper-1.21.4-9.jar）
-    expect(res.status).toBe(200);
-    expect(res.body.data.id).toMatch(/^paper-[0-9a-f]{8}$/);
-    const { default: got } = await import('got');
-    expect(got.stream.mock.calls[0][0]).toBe(
-      'https://api.papermc.io/v2/projects/paper/versions/1.21.4/builds/9/downloads/paper-1.21.4-9.jar',
-    );
+    expect(res.status).toBe(502);
+    expect(res.body.message).toContain('No Paper build download');
   });
 
-  it('server:default 存在但无 sha256 → 直链下载且跳过强校验', async () => {
+  it('checksums 存在但无 sha256 → 直链下载且跳过强校验', async () => {
     definePaperChain({
       builds: [
         {
           id: 5,
           channel: 'STABLE',
-          downloads: { 'server:default': { url: 'https://dl/no-hash.jar' } },
+          downloads: {
+            'server:default': { url: 'https://fill-data.papermc.io/no-hash.jar', checksums: {} },
+          },
         },
       ],
     });
@@ -319,6 +322,33 @@ describe('Paper 构建发现链形态缺口', () => {
       .send({ type: 'paper', mcVersion: '1.21.4', instanceName: 'Branch Fixture' });
     expect(res.status).toBe(200);
     expect(res.body.data.mcVersion).toBe('1.21.4');
+  });
+
+  it('真实 v3 响应形状：摘要位于 downloads[server:default].checksums.sha256 → 强制校验通过', async () => {
+    definePaperChain([
+      {
+        id: 232,
+        time: '2026-05-11T11:43:09Z',
+        channel: 'STABLE',
+        downloads: {
+          'server:default': {
+            name: 'paper-1.21.4-232.jar',
+            checksums: { sha256: JAR_SHA256 },
+            size: 51437498,
+            url: 'https://fill-data.papermc.io/v1/objects/xxx/paper-1.21.4-232.jar',
+          },
+        },
+      },
+    ]);
+    const { app } = buildApp();
+    const res = await request(app)
+      .post('/api/instances/deploy')
+      .send({ type: 'paper', mcVersion: '1.21.4', instanceName: 'Real Shape' });
+    expect(res.status).toBe(200);
+    const { default: got } = await import('got');
+    expect(got.stream.mock.calls[0][0]).toBe(
+      'https://fill-data.papermc.io/v1/objects/xxx/paper-1.21.4-232.jar',
+    );
   });
 });
 

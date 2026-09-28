@@ -133,7 +133,7 @@ function defaultStreamImpl(jarBytes) {
   };
 }
 
-const PAPER_URL = 'https://api.papermc.io/v3';
+const PAPER_URL = 'https://fill.papermc.io/v3';
 const JAR_BYTES = Buffer.from('fake-paper-server-jar-payload');
 const JAR_SHA256 = crypto.createHash('sha256').update(JAR_BYTES).digest('hex');
 
@@ -314,7 +314,7 @@ describe('POST /instances/deploy · Paper 主链', () => {
               'server:default': {
                 name: 'paper-1.21.4-42.jar',
                 url: `${PAPER_URL}/projects/paper/versions/1.21.4/builds/42/downloads/paper-1.21.4-42.jar`,
-                sha256: badSha ? 'deadbeef'.repeat(8) : JAR_SHA256,
+                checksums: { sha256: badSha ? 'deadbeef'.repeat(8) : JAR_SHA256 },
               },
             },
       };
@@ -326,7 +326,7 @@ describe('POST /instances/deploy · Paper 主链', () => {
     }
   }
 
-  it('paper 全链成功：STABLE 构建选择 + server:default 摘要校验通过 + 实例落盘/入库/complete 事件', async () => {
+  it('paper 全链成功：STABLE 构建选择 + checksums.sha256 校验通过 + 实例落盘/入库/complete 事件', async () => {
     // builds 混入更高 id 的非稳定通道：验证 channel 过滤优先于 id 排序
     setPaperChain({
       builds: [
@@ -338,7 +338,7 @@ describe('POST /instances/deploy · Paper 主链', () => {
             'server:default': {
               name: 'paper-1.21.4-42.jar',
               url: `${PAPER_URL}/d/42`,
-              sha256: JAR_SHA256,
+              checksums: { sha256: JAR_SHA256 },
             },
           },
         },
@@ -403,24 +403,21 @@ describe('POST /instances/deploy · Paper 主链', () => {
     expect(manager.activeDeploys.get(instanceId)).toBeUndefined();
   });
 
-  it('paper：build 无 downloads 字段 → 回退 v2 URL 直链下载（无上游摘要，跳过校验）', async () => {
+  it('paper：build 无 downloads 字段 → 502（v2 拼接回退已随上游 sunset 移除，不得静默降级）', async () => {
     setPaperChain({ noDownloads: true });
     const { app } = buildApp();
 
     const res = await request(app)
       .post('/api/instances/deploy')
-      .send({ type: 'paper', mcVersion: '1.21.4', instanceName: 'V2 Fallback Server' });
+      .send({ type: 'paper', mcVersion: '1.21.4', instanceName: 'No Download Server' });
 
-    expect(res.status).toBe(200);
-    const { default: got } = await import('got');
-    const streamUrl = got.stream.mock.calls[0][0];
-    // v2 回退：build.id 拼 v2 直链 + 生成缺省文件名
-    expect(streamUrl).toBe(
-      'https://api.papermc.io/v2/projects/paper/versions/1.21.4/builds/42/downloads/paper-1.21.4-42.jar',
-    );
+    expect(res.status).toBe(502);
+    expect(res.body.message).toContain('No Paper build download');
+    const instanceId = lastDeployInstanceId();
+    expect(fs.existsSync(`${testState.serversDir}/${instanceId}`)).toBe(false);
   });
 
-  it('paper：落盘摘要与上游 sha256 不符 → 502 integrity + 残留清理（fail-closed）', async () => {
+  it('paper：落盘摘要与上游 checksums.sha256 不符 → 502 integrity + 残留清理（fail-closed）', async () => {
     setPaperChain({ badSha: true });
     const { app } = buildApp();
 
@@ -469,7 +466,7 @@ describe('部署注册表终态语义（issue 420）', () => {
               'server:default': {
                 name: 'paper-1.21.4-42.jar',
                 url: `${PAPER_URL}/d/42`,
-                sha256: badSha ? 'deadbeef'.repeat(8) : JAR_SHA256,
+                checksums: { sha256: badSha ? 'deadbeef'.repeat(8) : JAR_SHA256 },
               },
             },
           },

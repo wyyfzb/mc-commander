@@ -39,7 +39,6 @@ const SERVER_JAR_NAME_REGEX = /^server-\d{1,3}(\.\d{1,3}){0,3}\.jar$/;
 const ALLOWED_DOWNLOAD_HOSTS = new Set([
   'piston-meta.mojang.com', // vanilla manifest / version detail
   'piston-data.mojang.com', // vanilla server jar 实际文件域
-  'api.papermc.io', // paper v2/v3 API + v2 回退拼接
   'fill-data.papermc.io', // paper v3 downloads 实际文件域
   'api.purpurmc.org', // purpur latest/download
 ]);
@@ -145,9 +144,10 @@ export class UpgradeService {
     }
 
     if (type === 'paper') {
-      // PaperMC v3 API
+      // PaperMC downloads API（v3；主机为 fill.papermc.io——api.papermc.io 是旧域，
+      // 其 /v3 路径返回 403、/v2 已 sunset 返回 410，两者都不可用）
       const buildsData = await got(
-        `https://api.papermc.io/v3/projects/paper/versions/${mcVersion}/builds`,
+        `https://fill.papermc.io/v3/projects/paper/versions/${mcVersion}/builds`,
         {
           headers: { 'User-Agent': PAPER_USER_AGENT },
           timeout: { request: 15000 },
@@ -161,19 +161,14 @@ export class UpgradeService {
       const latest = candidates.sort((a, b) => (b.id || 0) - (a.id || 0))[0];
       const downloads = latest.downloads || {};
       const downloadInfo = downloads['server:default'] || downloads.application;
-      if (downloadInfo?.url) {
-        const expectedHash = downloadInfo.sha256
-          ? { algorithm: 'sha256', digest: downloadInfo.sha256 }
-          : null;
-        return { url: downloadInfo.url, expectedHash };
+      // 摘要位置是 downloadInfo.checksums.sha256（v3 无顶层 sha256 字段）；
+      // 读错字段会让 expectedHash 恒为 null 从而静默跳过完整性校验。
+      if (!downloadInfo?.url) {
+        throw new Error(`No Paper build download for ${mcVersion} (build ${latest.id})`);
       }
-      // v2 回退拼接路径无上游响应，拿不到摘要 → 跳过完整性校验
-      const buildNum = latest.id || latest.build;
-      const fileName = downloadInfo?.name || `paper-${mcVersion}-${buildNum}.jar`;
-      return {
-        url: `https://api.papermc.io/v2/projects/paper/versions/${mcVersion}/builds/${buildNum}/downloads/${fileName}`,
-        expectedHash: null,
-      };
+      const digest = downloadInfo.checksums?.sha256;
+      const expectedHash = digest ? { algorithm: 'sha256', digest } : null;
+      return { url: downloadInfo.url, expectedHash };
     }
 
     if (type === 'purpur') {

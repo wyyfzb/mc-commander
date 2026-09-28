@@ -38,7 +38,7 @@ import {
 
 const mcCoreManager = new MinecraftServerManager(new NodeAdapter());
 
-const PAPER_API_BASE = 'https://api.papermc.io/v3';
+const PAPER_API_BASE = 'https://fill.papermc.io/v3';
 // 版本号单一来源：package.json（见 utils/version.js）
 const PAPER_USER_AGENT = `MC_Commander/${getServerVersion()} (https://github.com/wyyfzb/mc-commander)`;
 
@@ -88,19 +88,13 @@ async function getPaperDownload(mcVersion) {
   if (!build) throw new Error(`No Paper build found for ${mcVersion}`);
   const downloads = build.downloads || {};
   const downloadInfo = downloads['server:default'] || downloads.application;
-  if (downloadInfo && downloadInfo.url) {
-    const expectedHash = downloadInfo.sha256
-      ? { algorithm: 'sha256', digest: downloadInfo.sha256 }
-      : null;
-    return { url: downloadInfo.url, expectedHash };
+  if (!downloadInfo?.url) {
+    throw new Error(`No Paper build download for ${mcVersion} (build ${build.id})`);
   }
-  // 回退到 v2 URL 格式（v3 用 id 字段；无上游摘要 → 跳过完整性校验）
-  const buildNum = build.id || build.build;
-  const fileName = downloadInfo?.name || `paper-${mcVersion}-${buildNum}.jar`;
-  return {
-    url: `https://api.papermc.io/v2/projects/paper/versions/${mcVersion}/builds/${buildNum}/downloads/${fileName}`,
-    expectedHash: null,
-  };
+  // 摘要位置是 downloadInfo.checksums.sha256（v3 无顶层 sha256 字段）
+  const digest = downloadInfo.checksums?.sha256;
+  const expectedHash = digest ? { algorithm: 'sha256', digest } : null;
+  return { url: downloadInfo.url, expectedHash };
 }
 
 /**
