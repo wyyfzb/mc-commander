@@ -86,11 +86,11 @@ describe('GamerulePanel 挂载查询与列表', () => {
 
   it('1.21.11+ 版本 → 新集 + 「1.21.11+ 新规则」徽章', async () => {
     renderPanel({ mcVersion: '26.1', onSendCommand: vi.fn().mockResolvedValue(newOutput()) })
-    expect(await screen.findByText('keepInventory')).toBeInTheDocument()
+    expect(await screen.findByText('keep_inventory')).toBeInTheDocument()
     expect(screen.getByText('1.21.11+ 新规则')).toBeInTheDocument()
-    // 新集无 doDaylightCycle（改名 advanceTime）
+    // 新集无 doDaylightCycle（改用资源位置名 advance_time）
     expect(screen.queryByText('doDaylightCycle')).not.toBeInTheDocument()
-    expect(screen.getByText('advanceTime')).toBeInTheDocument()
+    expect(screen.getByText('advance_time')).toBeInTheDocument()
   })
 })
 
@@ -201,20 +201,20 @@ describe('GamerulePanel 搜索与分类', () => {
   it('新集（1.21.11）：搜索按 name 过滤 + 分类 chips 筛选', async () => {
     const user = userEvent.setup()
     renderPanel({ mcVersion: '1.21.11', onSendCommand: vi.fn().mockResolvedValue(newOutput()) })
-    await screen.findByText('keepInventory')
-    // 搜索过滤（keepInventory 命中，mobGriefing 不命中）
+    await screen.findByText('keep_inventory')
+    // 搜索过滤（keep_inventory 命中，mob_griefing 不命中）
     await user.type(screen.getByLabelText('搜索规则'), 'keep')
-    expect(screen.getByText('keepInventory')).toBeInTheDocument()
-    expect(screen.queryByText('mobGriefing')).not.toBeInTheDocument()
+    expect(screen.getByText('keep_inventory')).toBeInTheDocument()
+    expect(screen.queryByText('mob_griefing')).not.toBeInTheDocument()
     await user.clear(screen.getByLabelText('搜索规则'))
-    // 分类筛选：玩家 → keepInventory（玩家）在，randomTickSpeed（世界更新）不在
+    // 分类筛选：玩家 → keep_inventory（玩家）在，random_tick_speed（世界更新）不在
     await user.click(screen.getByRole('button', { name: '玩家' }))
-    expect(screen.getByText('keepInventory')).toBeInTheDocument()
-    expect(screen.queryByText('randomTickSpeed')).not.toBeInTheDocument()
+    expect(screen.getByText('keep_inventory')).toBeInTheDocument()
+    expect(screen.queryByText('random_tick_speed')).not.toBeInTheDocument()
     // 全部恢复
     await user.click(screen.getByRole('button', { name: '全部' }))
-    expect(screen.getByText('randomTickSpeed')).toBeInTheDocument()
-    expect(screen.getByText('mobGriefing')).toBeInTheDocument()
+    expect(screen.getByText('random_tick_speed')).toBeInTheDocument()
+    expect(screen.getByText('mob_griefing')).toBeInTheDocument()
   })
 
   it('搜索无匹配显示空态', async () => {

@@ -1,7 +1,8 @@
 /**
  * gamerule 双版本数据 + 查询解析
  * 数据源：https://zh.minecraft.wiki/游戏规则 + /Java版1.21.11前
- * 双版本兼容：1.21.11+ 用新名（advanceTime/spawnMobs…），1.21.11 前用旧名（doDaylightCycle/doMobSpawning…）
+ * 双版本兼容：1.21.11 起规则名是 snake_case 资源位置（advance_time/spawn_mobs…，
+ * 命名空间缺省为 minecraft）；1.21.11 前是 camelCase（doDaylightCycle/doMobSpawning…）。
  * 布尔默认值在数据里存布尔字面量（int 存字符串），展示/命令拼装时统一 String() 转字符串
  */
 
@@ -16,259 +17,259 @@ export interface GameruleDef {
 /** 1.21.11+ 新命名体系（含 26.x） */
 export const MINECRAFT_GAMERULES: GameruleDef[] = [
   {
-    name: 'advanceTime',
+    name: 'advance_time',
     type: 'bool',
     defaultValue: true,
     category: '世界更新',
     desc: '是否进行昼夜更替和月相变化。',
   },
   {
-    name: 'advanceWeather',
+    name: 'advance_weather',
     type: 'bool',
     defaultValue: true,
     category: '世界更新',
     desc: '天气是否变化。',
   },
   {
-    name: 'allowEnteringNetherUsingPortals',
+    name: 'allow_entering_nether_using_portals',
     type: 'bool',
     defaultValue: true,
     category: '杂项',
     desc: '实体是否能通过下界传送门进入下界。',
   },
   {
-    name: 'blockDrops',
+    name: 'block_drops',
     type: 'bool',
     defaultValue: true,
     category: '掉落',
     desc: '方块被破坏时是否掉落物品。',
   },
   {
-    name: 'blockExplosionDropDecay',
+    name: 'block_explosion_drop_decay',
     type: 'bool',
     defaultValue: true,
     category: '掉落',
     desc: '由床或重生锚爆炸炸毁的方块是否会有概率不掉落。',
   },
   {
-    name: 'commandBlockOutput',
+    name: 'command_block_output',
     type: 'bool',
     defaultValue: true,
     category: '聊天',
     desc: '命令方块执行命令时是否在聊天框中向管理员显示。',
   },
   {
-    name: 'commandBlocksWork',
+    name: 'command_blocks_work',
     type: 'bool',
     defaultValue: true,
     category: '杂项',
     desc: '命令方块在游戏中是否被启用。',
   },
   {
-    name: 'drowningDamage',
+    name: 'drowning_damage',
     type: 'bool',
     defaultValue: true,
     category: '玩家',
     desc: '玩家是否承受窒息伤害。',
   },
   {
-    name: 'elytraMovementCheck',
+    name: 'elytra_movement_check',
     type: 'bool',
     defaultValue: true,
     category: '玩家',
     desc: '是否让服务器检查使用鞘翅玩家的移动速度。关闭时有助于减轻因服务器延迟而导致的飞行卡顿，但有可能导致生存模式下玩家飞行过快（作弊）。',
   },
   {
-    name: 'enderPearlsVanishOnDeath',
+    name: 'ender_pearls_vanish_on_death',
     type: 'bool',
     defaultValue: true,
     category: '玩家',
     desc: '被掷出的末影珍珠是否会在掷出它的玩家死亡后消失。',
   },
   {
-    name: 'entityDrops',
+    name: 'entity_drops',
     type: 'bool',
     defaultValue: true,
     category: '掉落',
     desc: '非生物实体是否掉落物品。',
   },
   {
-    name: 'fallDamage',
+    name: 'fall_damage',
     type: 'bool',
     defaultValue: true,
     category: '玩家',
     desc: '玩家是否承受伤害。',
   },
   {
-    name: 'fireDamage',
+    name: 'fire_damage',
     type: 'bool',
     defaultValue: true,
     category: '玩家',
     desc: '玩家是否承受火焰伤害。',
   },
   {
-    name: 'fireSpreadRadiusAroundPlayer',
+    name: 'fire_spread_radius_around_player',
     type: 'int',
     defaultValue: '128',
     category: '世界更新',
     desc: '决定了玩家周围会发生火的蔓延、自然熄灭及熔岩生成火的范围。将其设为0将禁用火的更新，设为-1则即使火在附近没有玩家时也可更新。',
   },
   {
-    name: 'forgiveDeadPlayers',
+    name: 'forgive_dead_players',
     type: 'bool',
     defaultValue: true,
     category: '生物',
     desc: '当被激怒的条件敌对生物的目标玩家死亡时，该生物是否恢复未激怒状态。',
   },
   {
-    name: 'freezeDamage',
+    name: 'freeze_damage',
     type: 'bool',
     defaultValue: true,
     category: '玩家',
     desc: '玩家是否承受冰冻伤害。',
   },
   {
-    name: 'globalSoundEvents',
+    name: 'global_sound_events',
     type: 'bool',
     defaultValue: true,
     category: '杂项',
     desc: '玩家是否能听到可无视距离播放给全部玩家的特定游戏事件音效。',
   },
   {
-    name: 'immediateRespawn',
+    name: 'immediate_respawn',
     type: 'bool',
     defaultValue: false,
     category: '玩家',
     desc: '玩家死亡时是否不显示死亡界面直接重生。',
   },
   {
-    name: 'keepInventory',
+    name: 'keep_inventory',
     type: 'bool',
     defaultValue: false,
     category: '玩家',
     desc: '玩家死亡后是否保留物品栏物品、经验（死亡时物品不掉落、经验不清空）。',
   },
   {
-    name: 'lavaSourceConversion',
+    name: 'lava_source_conversion',
     type: 'bool',
     defaultValue: false,
     category: '世界更新',
     desc: '流动的熔岩是否可产生熔岩源。',
   },
   {
-    name: 'limitedCrafting',
+    name: 'limited_crafting',
     type: 'bool',
     defaultValue: false,
     category: '玩家',
     desc: '玩家的合成配方是否需要解锁才能使用。',
   },
   {
-    name: 'locatorBar',
+    name: 'locator_bar',
     type: 'bool',
     defaultValue: true,
     category: '玩家',
     desc: '是否启用定位栏和路径点。',
   },
   {
-    name: 'logAdminCommands',
+    name: 'log_admin_commands',
     type: 'bool',
     defaultValue: true,
     category: '聊天',
     desc: '是否在服务器日志中记录管理员使用过的命令。',
   },
   {
-    name: 'maxBlockModifications',
+    name: 'max_block_modifications',
     type: 'int',
     defaultValue: '32768',
     category: '杂项',
     desc: '指定单次命令执行可更改的最大方块数。',
   },
   {
-    name: 'maxCommandForks',
+    name: 'max_command_forks',
     type: 'int',
     defaultValue: '65536',
     category: '杂项',
     desc: '决定了命令能使用的命令上下文的总数量。',
   },
   {
-    name: 'maxCommandSequenceLength',
+    name: 'max_command_sequence_length',
     type: 'int',
     defaultValue: '65536',
     category: '杂项',
     desc: '决定了连锁型命令方块和函数能连锁执行的总数量。',
   },
   {
-    name: 'maxEntityCramming',
+    name: 'max_entity_cramming',
     type: 'int',
     defaultValue: '24',
     category: '生物',
     desc: '控制挤压机制。同一位置的可推动实体的上限超过该游戏规则的数量时会引发挤压伤害。设置成0可以停用挤压机制。',
   },
   {
-    name: 'maxSnowAccumulationHeight',
+    name: 'max_snow_accumulation_height',
     type: 'int',
     defaultValue: '1',
     category: '世界更新',
     desc: '下雪时可在一格方块空间内堆积的雪的最高层数。',
   },
   {
-    name: 'mobDrops',
+    name: 'mob_drops',
     type: 'bool',
     defaultValue: true,
     category: '掉落',
     desc: '生物在死亡时是否掉落物品。',
   },
   {
-    name: 'mobExplosionDropDecay',
+    name: 'mob_explosion_drop_decay',
     type: 'bool',
     defaultValue: true,
     category: '掉落',
     desc: '由生物源爆炸炸毁的方块是否会有概率不掉落。',
   },
   {
-    name: 'mobGriefing',
+    name: 'mob_griefing',
     type: 'bool',
     defaultValue: true,
     category: '生物',
     desc: '生物是否能够进行破坏性行为，包括苦力怕、硫方怪、僵尸、末影人、恶灵、凋灵、末影龙、兔子、绵羊、村民和雪傀儡是否能放置、修改或破坏方块，生物是否能捡拾物品，以及唤魔者是否能将蓝色的绵羊变为红色。这个规则也会影响生物（如僵尸猪灵和溺尸）寻找海龟蛋的能力。这还将会阻止村民的繁殖。这一游戏规则不会影响TNT和末地水晶。',
   },
   {
-    name: 'naturalHealthRegeneration',
+    name: 'natural_health_regeneration',
     type: 'bool',
     defaultValue: true,
     category: '玩家',
     desc: '玩家是否能在饥饿值足够时自然恢复生命值（不影响外部治疗效果，如金苹果、生命恢复状态效果等）。',
   },
   {
-    name: 'playerMovementCheck',
+    name: 'player_movement_check',
     type: 'bool',
     defaultValue: true,
     category: '玩家',
     desc: '是否让服务器检查并限制玩家的移动速度。',
   },
   {
-    name: 'playersNetherPortalCreativeDelay',
+    name: 'players_nether_portal_creative_delay',
     type: 'int',
     defaultValue: '0',
     category: '玩家',
     desc: '创造模式下的玩家需要待在下界传送门内多少游戏刻才能进入另一个维度。',
   },
   {
-    name: 'playersNetherPortalDefaultDelay',
+    name: 'players_nether_portal_default_delay',
     type: 'int',
     defaultValue: '80',
     category: '玩家',
     desc: '非创造模式下的玩家需要待在下界传送门内多少游戏刻才能进入另一个维度。',
   },
   {
-    name: 'playersSleepingPercentage',
+    name: 'players_sleeping_percentage',
     type: 'int',
     defaultValue: '100',
     category: '玩家',
     desc: '设置跳过夜晚所需的入睡玩家所占百分比。设置为0时，1个玩家入睡即可跳过夜晚。设置为大于100的值会使玩家无法通过入睡跳过夜晚。',
   },
   {
-    name: 'projectilesCanBreakBlocks',
+    name: 'projectiles_can_break_blocks',
     type: 'bool',
     defaultValue: true,
     category: '掉落',
@@ -283,133 +284,133 @@ export const MINECRAFT_GAMERULES: GameruleDef[] = [
   },
   { name: 'raids', type: 'bool', defaultValue: true, category: '生物', desc: '是否启用袭击。' },
   {
-    name: 'randomTickSpeed',
+    name: 'random_tick_speed',
     type: 'int',
     defaultValue: '3',
     category: '世界更新',
     desc: '每游戏刻每区段中随机的方块刻发生的频率（例如植物生长，树叶腐烂等）。为0时禁用随机刻，较高的数字将增大随机刻频率。',
   },
   {
-    name: 'reducedDebugInfo',
+    name: 'reduced_debug_info',
     type: 'bool',
     defaultValue: false,
     category: '杂项',
     desc: '调试屏幕是否简化而非显示详细信息；同时影响实体碰撞箱（通过查看）和区块边界（通过查看）效果的显示。',
   },
   {
-    name: 'respawnRadius',
+    name: 'respawn_radius',
     type: 'int',
     defaultValue: '10',
     category: '玩家',
     desc: '首次进入服务器的玩家和没有重生点的死亡玩家在重生时与世界出生点坐标的距离。',
   },
   {
-    name: 'sendCommandFeedback',
+    name: 'send_command_feedback',
     type: 'bool',
     defaultValue: true,
     category: '聊天',
     desc: '玩家执行命令的返回信息是否在聊天框中显示。同时影响命令方块是否保存命令输出文本。',
   },
   {
-    name: 'showAdvancementMessages',
+    name: 'show_advancement_messages',
     type: 'bool',
     defaultValue: true,
     category: '聊天',
     desc: '是否在聊天框中公告玩家进度的达成。',
   },
   {
-    name: 'showDeathMessages',
+    name: 'show_death_messages',
     type: 'bool',
     defaultValue: true,
     category: '聊天',
     desc: '是否在聊天框中显示玩家的死亡消息。同样影响是否在宠物死亡时通知它的主人。',
   },
   {
-    name: 'spawnMobs',
+    name: 'spawn_mobs',
     type: 'bool',
     defaultValue: true,
     category: '生成',
     desc: '生物是否自然生成。不影响刷怪笼及/summon生成生物。',
   },
   {
-    name: 'spawnMonsters',
+    name: 'spawn_monsters',
     type: 'bool',
     defaultValue: true,
     category: '生成',
     desc: '敌对生物是否能自然生成。',
   },
   {
-    name: 'spawnPatrols',
+    name: 'spawn_patrols',
     type: 'bool',
     defaultValue: true,
     category: '生成',
     desc: '控制灾厄巡逻队的生成。',
   },
   {
-    name: 'spawnPhantoms',
+    name: 'spawn_phantoms',
     type: 'bool',
     defaultValue: true,
     category: '生成',
     desc: '幻翼是否在夜晚生成。',
   },
   {
-    name: 'spawnWanderingTraders',
+    name: 'spawn_wandering_traders',
     type: 'bool',
     defaultValue: true,
     category: '生成',
     desc: '控制流浪商人的生成。',
   },
   {
-    name: 'spawnWardens',
+    name: 'spawn_wardens',
     type: 'bool',
     defaultValue: true,
     category: '生成',
     desc: '监守者是否生成。',
   },
   {
-    name: 'spawnerBlocksWork',
+    name: 'spawner_blocks_work',
     type: 'bool',
     defaultValue: true,
     category: '杂项',
     desc: '是否允许刷怪笼与试炼刷怪笼运作。',
   },
   {
-    name: 'spectatorsGenerateChunks',
+    name: 'spectators_generate_chunks',
     type: 'bool',
     defaultValue: true,
     category: '玩家',
     desc: '是否允许旁观模式的玩家生成区块。',
   },
   {
-    name: 'spreadVines',
+    name: 'spread_vines',
     type: 'bool',
     defaultValue: true,
     category: '世界更新',
     desc: '决定藤蔓是否会向周围扩散，不影响洞穴藤蔓、缠怨藤和垂泪藤。',
   },
   {
-    name: 'tntExplodes',
+    name: 'tnt_explodes',
     type: 'bool',
     defaultValue: true,
     category: '杂项',
     desc: 'TNT是否会爆炸。',
   },
   {
-    name: 'tntExplosionDropDecay',
+    name: 'tnt_explosion_drop_decay',
     type: 'bool',
     defaultValue: false,
     category: '掉落',
     desc: '由TNT爆炸炸毁的方块是否会有概率不掉落。',
   },
   {
-    name: 'universalAnger',
+    name: 'universal_anger',
     type: 'bool',
     defaultValue: false,
     category: '生物',
     desc: '被激怒的条件敌对生物是否攻击附近任何玩家（而非只攻击激怒它们的玩家）。当关闭时会有更好的效果。',
   },
   {
-    name: 'waterSourceConversion',
+    name: 'water_source_conversion',
     type: 'bool',
     defaultValue: true,
     category: '世界更新',
@@ -844,7 +845,11 @@ export function buildGameruleSetCommand(ruleName: string, value: string): string
  * - 按行 split、trim，匹配 '名字 = (true|false|-?数字)'；首行提示/空行等不匹配行跳过
  * - 名字大小写不敏感与 defs 匹配，defs 里没有的名字跳过（旧版服务器列出的规则集可能小于前端 defs）
  * - 解析出的规则数 < defs 的 1/3 视为解析失败降级，返回 null
- * - 输出 Map<规范名, 值字符串>（名字以 defs 中的规范大小写为准）
+ * - 输出 Map<规范名, 值字符串>（名字以 defs 中的规范名称为准）
+ *
+ * 名字须接受 snake_case 与可选命名空间：1.21.11 起规则名是资源位置
+ * （`advance_time`，命名空间缺省为 `minecraft`），1.21.11 前是 camelCase。
+ * 只匹配字母数字会让 1.21.11+ 的整份输出无法解析。
  */
 export function parseGameruleOutput(
   output: string,
@@ -852,11 +857,15 @@ export function parseGameruleOutput(
 ): Map<string, string> | null {
   if (defs.length === 0) return null
   const lowerToDef = new Map<string, GameruleDef>()
-  for (const def of defs) lowerToDef.set(def.name.toLowerCase(), def)
+  for (const def of defs) {
+    lowerToDef.set(def.name.toLowerCase(), def)
+    // 同时登记带命名空间的形式：响应可能写作 minecraft:advance_time
+    lowerToDef.set(`minecraft:${def.name.toLowerCase()}`, def)
+  }
   const result = new Map<string, string>()
   for (const rawLine of output.split(/\r?\n/)) {
     const line = rawLine.trim()
-    const m = /^([A-Za-z][A-Za-z0-9]*)\s*=\s*(true|false|-?\d+)$/.exec(line)
+    const m = /^([A-Za-z_][A-Za-z0-9_:]*)\s*=\s*(true|false|-?\d+)$/.exec(line)
     if (!m) continue
     const def = lowerToDef.get(m[1]!.toLowerCase())
     if (!def) continue
