@@ -6,18 +6,60 @@ import type { AuditLogItem, CommandHistoryItem } from '../types'
 import type { ConnectionConfig } from '../client'
 
 const mockAuditLogs: AuditLogItem[] = [
-  { id: 1, instanceId: 'demo', action: 'INSTANCE_START', targetType: 'instance', targetId: 'demo', detail: null, source: 'api', createdAt: '2025-08-15T12:00:00Z' },
-  { id: 2, instanceId: 'other', action: 'PLAYER_BAN', targetType: 'player', targetId: 'Steve', detail: { reason: 'cheat' }, source: 'api', createdAt: '2025-08-15T12:01:00Z' },
+  {
+    id: 1,
+    instanceId: 'demo',
+    action: 'INSTANCE_START',
+    targetType: 'instance',
+    targetId: 'demo',
+    detail: null,
+    source: 'api',
+    createdAt: '2025-08-15T12:00:00Z',
+  },
+  {
+    id: 2,
+    instanceId: 'other',
+    action: 'PLAYER_BAN',
+    targetType: 'player',
+    targetId: 'Steve',
+    detail: { reason: 'cheat' },
+    source: 'api',
+    createdAt: '2025-08-15T12:01:00Z',
+  },
 ]
 
 const mockCmdHistory: CommandHistoryItem[] = [
-  { id: 1, instanceId: 'demo', command: 'say hello', source: 'api', success: true, response: '[Server] hello', durationMs: 42, createdAt: '2025-08-15T12:00:00Z' },
-  { id: 2, instanceId: 'demo', command: 'invalid_cmd', source: 'api', success: false, response: 'Unknown command', durationMs: 15, createdAt: '2025-08-15T12:01:00Z' },
+  {
+    id: 1,
+    instanceId: 'demo',
+    command: 'say hello',
+    source: 'api',
+    success: true,
+    response: '[Server] hello',
+    durationMs: 42,
+    createdAt: '2025-08-15T12:00:00Z',
+  },
+  {
+    id: 2,
+    instanceId: 'demo',
+    command: 'invalid_cmd',
+    source: 'api',
+    success: false,
+    response: 'Unknown command',
+    durationMs: 15,
+    createdAt: '2025-08-15T12:01:00Z',
+  },
 ]
 
-function ok<T>(data: T, pagination?: { total: number; page: number; pageSize: number; totalPages: number }) {
+function ok<T>(
+  data: T,
+  pagination?: { total: number; page: number; pageSize: number; totalPages: number },
+) {
   return HttpResponse.json({
-    status: 'ok', code: 0, message: 'Success', data,
+    status: 'ok',
+    code: 0,
+    message: 'Success',
+    data,
     ...(pagination ? { pagination } : {}),
     timestamp: new Date().toISOString(),
   })
@@ -27,11 +69,11 @@ const server = setupServer(
   http.get('*/api/v1/audit-logs', ({ request }) => {
     const url = new URL(request.url)
     const action = url.searchParams.get('action')
-    const filtered = action ? mockAuditLogs.filter(l => l.action === action) : mockAuditLogs
+    const filtered = action ? mockAuditLogs.filter((l) => l.action === action) : mockAuditLogs
     return ok(filtered, { total: filtered.length, page: 1, pageSize: 20, totalPages: 1 })
   }),
   http.get('*/api/v1/command-history', () =>
-    ok(mockCmdHistory, { total: mockCmdHistory.length, page: 1, pageSize: 20, totalPages: 1 })
+    ok(mockCmdHistory, { total: mockCmdHistory.length, page: 1, pageSize: 20, totalPages: 1 }),
   ),
 )
 
@@ -48,7 +90,9 @@ describe('审计 API', () => {
         capturedUrl = request.url
         const url = new URL(request.url)
         const instanceId = url.searchParams.get('instanceId')
-        const filtered = instanceId ? mockAuditLogs.filter(l => l.instanceId === instanceId) : mockAuditLogs
+        const filtered = instanceId
+          ? mockAuditLogs.filter((l) => l.instanceId === instanceId)
+          : mockAuditLogs
         return ok(filtered, { total: filtered.length, page: 1, pageSize: 20, totalPages: 1 })
       }),
     )

@@ -25,9 +25,9 @@ export function validateBody(schema) {
     const result = schema.safeParse(req.body ?? {});
     if (!result.success) {
       const messages = result.error.issues.map((i) => i.message);
-      return res.status(400).json(
-        error(ErrorCodes.VALIDATION_ERROR, messages.join('; '), formatIssues(result.error))
-      );
+      return res
+        .status(400)
+        .json(error(ErrorCodes.VALIDATION_ERROR, messages.join('; '), formatIssues(result.error)));
     }
     req.body = result.data;
     next();
@@ -59,9 +59,9 @@ export function validateQuery(schema, options = {}) {
         }
       }
       const messages = result.error.issues.map((i) => i.message);
-      return res.status(400).json(
-        error(ErrorCodes.VALIDATION_ERROR, messages.join('; '), formatIssues(result.error))
-      );
+      return res
+        .status(400)
+        .json(error(ErrorCodes.VALIDATION_ERROR, messages.join('; '), formatIssues(result.error)));
     }
     Object.defineProperty(req, 'query', {
       value: result.data,
@@ -73,26 +73,65 @@ export function validateQuery(schema, options = {}) {
   };
 }
 
+// ── 契约告警聚合：漂移告警按「首个 issue 的 path+code+message」签名节流，
+// 首次出现立即记录，窗口内的重复签名只累计计数、到窗才合并补报——轮询类
+// 热路径（玩家列表 30s）一旦漂移会每轮触发，不聚合会把日志刷成噪音，
+// 而「静默降级」会杀死漂移观测本身。签名数有界（>200 时清理过期项）。
+const CONTRACT_ALARM_WINDOW_MS = 5 * 60_000;
+const contractAlarms = new Map();
+
+function logContractAlarm(detail, issues) {
+  const first = issues[0] ?? {};
+  const signature = `${first.path}|${first.code}|${first.message}`;
+  const now = Date.now();
+  const state = contractAlarms.get(signature);
+  if (!state) {
+    contractAlarms.set(signature, { count: 1, lastLoggedAt: now });
+    logger.error('[contract] 响应数据与 schema 不一致:', detail);
+    return;
+  }
+  state.count += 1;
+  if (now - state.lastLoggedAt >= CONTRACT_ALARM_WINDOW_MS) {
+    logger.error(
+      `[contract] 响应数据与 schema 不一致（窗口内同签名已抑制 ${state.count - 1} 条）:`,
+      detail,
+    );
+    state.count = 0;
+    state.lastLoggedAt = now;
+  }
+  if (contractAlarms.size > 200) {
+    for (const [key, value] of contractAlarms) {
+      if (now - value.lastLoggedAt >= CONTRACT_ALARM_WINDOW_MS) contractAlarms.delete(key);
+    }
+  }
+}
+
 /** 成功响应 + 契约观测：信封结构与 success() 完全一致，data 漂移时打错误日志 */
 export function validatedSuccess(schema, data, message = 'Success') {
   const result = schema.safeParse(data);
   if (!result.success) {
-    logger.error('[contract] 响应数据与 schema 不一致:', JSON.stringify(formatIssues(result.error)));
+    const issues = formatIssues(result.error);
+    logContractAlarm(JSON.stringify(issues), issues);
   }
   return success(data, message);
 }
 
 /** 分页版响应 + 契约观测（逐条 parse 数组元素，精确定位漂移行） */
-export function validatedSuccessPaginated(schema, data, total, page, pageSize, message = 'Success') {
+export function validatedSuccessPaginated(
+  schema,
+  data,
+  total,
+  page,
+  pageSize,
+  message = 'Success',
+) {
   const items = Array.isArray(data) ? data : [];
   const mismatch = items
     .map((item, index) => ({ item, index, result: schema.safeParse(item) }))
     .find((entry) => !entry.result.success);
   if (mismatch) {
-    logger.error(
-      `[contract] 响应列表第 ${mismatch.index} 条与 schema 不一致:`,
-      JSON.stringify(formatIssues(mismatch.result.error))
-    );
+    const issues = formatIssues(mismatch.result.error);
+    logContractAlarm(JSON.stringify(issues), issues);
   }
   return successPaginated(data, total, page, pageSize, message);
 }

@@ -14,7 +14,9 @@ function maybeShot(page: Page, name: string) {
 }
 
 // 包版本（about-panel 由 vite define 编译期注入同源值），不逐版本改断言
-const APP_VERSION = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf-8')).version
+const APP_VERSION = JSON.parse(
+  fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf-8'),
+).version
 
 /** 注入连接配置（mock 假 key，mock server 不校验）——严禁真实服务器信息 */
 async function setupConnection(page: Page) {
@@ -24,6 +26,18 @@ async function setupConnection(page: Page) {
       JSON.stringify({ baseUrl: '', apiKey: 'e2e-mock-key-0000000000' }),
     )
   })
+}
+
+/**
+ * 把能力探测切到「API Key 通道关闭」态。
+ *
+ * 构造方式：mock 按请求头 `x-mock-api-key-enabled: 0` 判定（见 scripts/mock-server.mjs）。
+ * 之所以不在服务端启动时定死：Playwright 的 webServer 前后端共用一轮，环境变量改不了，
+ * 而同一 spec 文件里真假两态必须都能跑（false 态结构性不可达的夹具等于没有防线）。
+ * 只补一个请求头，不伪造响应体——走的仍是 mock 的真实应答路径。
+ */
+async function mockApiKeyChannel(page: Page, enabled: boolean) {
+  await page.setExtraHTTPHeaders({ 'x-mock-api-key-enabled': enabled ? '1' : '0' })
 }
 
 test.describe('设置页', () => {
@@ -36,7 +50,57 @@ test.describe('设置页', () => {
     for (const label of ['连接设置', '账号与安全', '通用设置', '通知设置', '备份管理', '关于']) {
       await expect(page.getByRole('link', { name: label })).toBeVisible()
     }
-    await expect(page.getByRole('link', { name: '连接设置' })).toHaveAttribute('aria-current', 'page')
+    await expect(page.getByRole('link', { name: '连接设置' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
+  })
+
+  /**
+   * 子导航「图标态 ↔ 文字态」按容器内容宽切档（@3xl=768px）。
+   * jsdom 不评估容器查询，阈值只能在这里锁。768 视口展开侧栏内容仅 528px：
+   * 改前视口 md 把子导航展成 200px 文字态，右表单区被压到 312px；现在必须保持
+   * 图标态、把宽度让给表单。1024 视口内容 784px 才展成文字态
+   */
+  test('子导航按容器宽切档：768 视口保持图标态（表单不被压窄），1024 展文字态', async ({
+    page,
+  }) => {
+    await setupConnection(page)
+
+    const geom = () =>
+      page.evaluate(() => {
+        const nav = document.querySelector("nav[aria-label='设置子导航']")!
+        const form = nav.nextElementSibling!
+        const label = nav.querySelector('span.hidden')!
+        return {
+          navW: Math.round(nav.getBoundingClientRect().width),
+          formW: Math.round(form.getBoundingClientRect().width),
+          expanded: label.getBoundingClientRect().width > 0,
+        }
+      })
+
+    // 768 展开侧栏：内容 528 < 768 ⇒ 图标态，表单 464px（改前 312px）
+    await page.setViewportSize({ width: 768, height: 900 })
+    await page.goto('/settings/account')
+    await expect(page.getByRole('heading', { name: '账号与安全', level: 2 })).toBeVisible()
+    const narrow = await geom()
+    expect(narrow.expanded).toBe(false)
+    expect(narrow.navW).toBe(48)
+    expect(narrow.formW).toBeGreaterThanOrEqual(440)
+
+    // 1024 展开侧栏：内容 784 ≥ 768 ⇒ 文字态，表单仍有余量
+    await page.setViewportSize({ width: 1024, height: 900 })
+    await expect(page.getByRole('link', { name: '账号与安全' })).toBeVisible()
+    const wide = await geom()
+    expect(wide.expanded).toBe(true)
+    expect(wide.navW).toBe(200)
+    expect(wide.formW).toBeGreaterThanOrEqual(540)
+
+    // 两态都不得横向溢出
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    )
+    expect(overflow).toBe(0)
   })
 
   test('连接设置：表单 + 测试连接 + 保存', async ({ page }) => {
@@ -45,16 +109,187 @@ test.describe('设置页', () => {
     // 表单字段（面板地址 + API Key）
     await expect(page.getByRole('textbox', { name: '面板地址' })).toBeVisible()
     await expect(page.getByRole('textbox', { name: 'API Key' })).toBeVisible()
-    // 已配置状态行
-    await expect(page.getByText('已连接')).toBeVisible()
+    // 已配置状态行（顶栏状态点同名文本亦为「已连接」，取首个避免 strict 违规）
+    await expect(page.getByText('已连接').first()).toBeVisible()
     // 填地址 → 测试连接（走 dev proxy 到 mock，成功）
-    await page.getByRole('textbox', { name: '面板地址' }).fill('http://localhost:5199')
+    // 地址取当前页 origin（端口随 MOCK_PORT/DEV_PORT 泳道变化），不硬编码端口
+    await page.getByRole('textbox', { name: '面板地址' }).fill(new URL(page.url()).origin)
     await page.getByRole('button', { name: '测试连接' }).click()
     await expect(page.getByText('连接成功')).toBeVisible()
     // 保存
     await page.getByRole('button', { name: '保存连接' }).click()
     await expect(page.getByText('连接配置已保存')).toBeVisible()
     await maybeShot(page, 'settings-connection-dark.png')
+  })
+
+  test('连接设置：登录会话属于别的面板 → 提示改用 API Key，且不把人踢下线', async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        'mcs-connection',
+        JSON.stringify({ baseUrl: '', apiKey: 'e2e-mock-key-0000000000' }),
+      )
+      // 会话绑定到另一个面板（虚构地址）：本面板用不上它
+      localStorage.setItem(
+        'mcs-session',
+        JSON.stringify({
+          token: 'e2e-foreign-session-token',
+          sessionId: 'e2e-sess-1',
+          expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+          issuedFor: 'https://panel-a.example.com',
+        }),
+      )
+    })
+    await page.goto('/settings/connection')
+    await expect(page.getByText(/当前登录会话属于/)).toBeVisible()
+
+    // 换成本面板地址 + 本面板 Key → 走 API Key 通道测试成功。
+    // 承重：mock 按未知 Bearer 回 40103（见 mock-server.mjs 请求入口），
+    // 旧实现无条件发 A 的令牌，这里拿不到「连接成功」。
+    // 地址同样取当前页 origin（端口随泳道变化，硬编码端口在非默认泳道下假红）
+    await page.getByRole('textbox', { name: '面板地址' }).fill(new URL(page.url()).origin)
+    await page.getByRole('textbox', { name: 'API Key' }).fill('e2e-mock-key-0000000000')
+    await page.getByRole('button', { name: '测试连接' }).click()
+    await expect(page.getByText('连接成功')).toBeVisible()
+    await maybeShot(page, 'settings-connection-foreign-session-dark.png')
+
+    // 应用内常规请求这一路（不经过探测的「不因会话过期跳登录」豁免）也不能被踢：
+    // 整页重载触发应用启动路径的请求（连接表单此时是脏的，in-app 导航会被未保存守卫拦下），
+    // 若把 A 的令牌发出去即被 40103 清会话 + 跳登录页
+    await page.goto('/dashboard')
+    await expect(page).toHaveURL(/\/dashboard/)
+    await expect(page.getByText('在线玩家').first()).toBeVisible()
+    expect(await page.evaluate(() => localStorage.getItem('mcs-session'))).toContain(
+      'e2e-foreign-session-token',
+    )
+  })
+
+  test('连接设置：API Key 通道开启 → 轮换入口可见可点', async ({ page }) => {
+    await setupConnection(page)
+    await mockApiKeyChannel(page, true)
+    await page.goto('/settings/connection')
+
+    // 能力探测只认「已落定的面板地址」（空地址是同源默认值，刻意不探测，见 useApiKeyCapabilities），
+    // 故先指明面板地址；地址取当前页 origin（端口随 MOCK_PORT/DEV_PORT 泳道变化）
+    await page.getByRole('textbox', { name: '面板地址' }).fill(new URL(page.url()).origin)
+
+    // 打开态：入口在；凭据定位说明已收进信息入口，点开即读到全文
+    await expect(page.getByRole('button', { name: '重新生成' })).toBeVisible()
+    await page.getByRole('button', { name: 'API Key 说明' }).click()
+    await expect(page.getByRole('dialog', { name: 'API Key 说明' })).toContainText(
+      '权限等同于管理员',
+    )
+    await page.keyboard.press('Escape')
+    await maybeShot(page, 'settings-connection-api-key-enabled-dark.png')
+
+    // 亮色复读：同一判定在另一主题下不得漂移（截图供视觉审查，判定本身与主题无关）
+    await page.getByRole('button', { name: '切换到亮色主题' }).click()
+    await expect(page.getByRole('button', { name: '重新生成' })).toBeVisible()
+    await maybeShot(page, 'settings-connection-api-key-enabled-light.png')
+  })
+
+  test('连接设置：API Key 通道关闭（API_KEY_ENABLED=false）→ 轮换入口不可见并说明原因', async ({
+    page,
+  }) => {
+    await setupConnection(page)
+    await mockApiKeyChannel(page, false)
+    await page.goto('/settings/connection')
+    await page.getByRole('textbox', { name: '面板地址' }).fill(new URL(page.url()).origin)
+
+    // 关闭态：入口消失 + 关闭原因可见；凭据输入框保留（已有 Key 仍可粘贴保存）。
+    // 用 toHaveCount(0) 而非 toBeHidden：后者对「元素根本不存在」同样通过，会放过回归
+    await expect(page.getByText(/部署配置已关闭 API Key 通道/)).toBeVisible()
+    await expect(page.getByRole('button', { name: '重新生成' })).toHaveCount(0)
+    await expect(page.getByRole('textbox', { name: 'API Key' })).toBeVisible()
+    await maybeShot(page, 'settings-connection-api-key-disabled-dark.png')
+
+    // 亮色复读：关闭态在另一主题下同样不显示入口
+    await page.getByRole('button', { name: '切换到亮色主题' }).click()
+    await expect(page.getByText(/部署配置已关闭 API Key 通道/)).toBeVisible()
+    await expect(page.getByRole('button', { name: '重新生成' })).toHaveCount(0)
+    await maybeShot(page, 'settings-connection-api-key-disabled-light.png')
+  })
+
+  test('能力探测端点未认证 → 401：mock 与真实服务端同门（不得放行匿名探测）', async ({ page }) => {
+    // 不带任何凭据直连该端点（page.request 不继承页面凭据）：真实服务端把它放在
+    // authMiddleware 公开白名单之外，未认证一律 401 + 40107（未提供凭据；与「凭据无效」
+    // 的 40101 分开）；mock 必须同判，否则「客户端忘了带凭据」在 e2e 里永远成功，
+    // 这层防线等于没有。
+    const res = await page.request.get('/api/v1/auth/capabilities')
+    expect(res.status()).toBe(401)
+    const body = (await res.json()) as { code: number; message: string }
+    expect(body.code).toBe(40107)
+    expect(body.message).toBe('未提供访问凭据：请携带 X-API-Key 头或登录会话令牌')
+  })
+
+  test('账号与安全：只读监控凭据——生成后明文只展示一次，收起即不可回看', async ({ page }) => {
+    await setupConnection(page)
+    // 初始态用请求头钉死（同轮 webServer 共享一个 mock 进程，其它用例可能已生成过凭据；
+    // 不依赖 /mock/reset——复位是进程级共享状态，按域复位也可能漏掉本用例关心的那一项）
+    await page.setExtraHTTPHeaders({ 'x-mock-readonly-configured': '0' })
+    await page.goto('/settings/account')
+
+    // 初始态：服务端未配置只读凭据（mock 台账初值 false）
+    const panel = page
+      .getByRole('heading', { name: '只读监控凭据' })
+      .locator('xpath=ancestor::section[1]')
+    await expect(panel.getByText('尚未创建')).toBeVisible()
+    // 权限范围收进信息入口：正文不常驻，点开才读到
+    await expect(panel.getByText(/仅能访问 5 个读数端点/)).toHaveCount(0)
+    await panel.getByRole('button', { name: '只读凭据权限范围' }).click()
+    await expect(page.getByRole('dialog', { name: '只读凭据权限范围' })).toContainText(
+      '仅能访问 5 个读数端点',
+    )
+    await page.keyboard.press('Escape')
+
+    // 生成：首次生成无需二次确认；明文一次性出现
+    await panel.getByRole('button', { name: /生成只读凭据/ }).click()
+    const issued = 'mcro-mock-1234-5678-90ab-cdef-1234-5678-90ab-cdef'
+    await expect(panel.getByText(issued)).toBeVisible()
+    await expect(panel.getByText(/只显示这一次/)).toBeVisible()
+
+    // 收起后明文消失，且刷新页面也拿不回来（服务端只存摘要）
+    await panel.getByRole('button', { name: /我已保存，收起/ }).click()
+    await expect(panel.getByText(issued)).toHaveCount(0)
+    // 撤掉请求头覆盖：让状态回到 mock 真实台账（生成已把它置真）
+    await page.setExtraHTTPHeaders({})
+    await page.reload()
+    await expect(page.getByText(issued)).toHaveCount(0)
+    // 状态下翻为「已配置」：入口文案变为重新生成
+    await expect(page.getByRole('button', { name: /重新生成只读凭据/ })).toBeVisible()
+  })
+
+  test('账号与安全：重新生成只读凭据需二次确认（说明旧凭据立即失效）', async ({ page }) => {
+    await setupConnection(page)
+    // 显式钉死「已配置」初始态（不依赖同轮其它用例先跑出状态）
+    await page.setExtraHTTPHeaders({ 'x-mock-readonly-configured': '1' })
+    await page.goto('/settings/account')
+    const panel = page
+      .getByRole('heading', { name: '只读监控凭据' })
+      .locator('xpath=ancestor::section[1]')
+
+    await panel.getByRole('button', { name: '重新生成只读凭据' }).click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog.getByText(/旧凭据立即失效/)).toBeVisible()
+    // 取消：不发起写请求（凭据状态保持已配置，且无新明文出现）
+    await dialog.getByRole('button', { name: '取消' }).click()
+    await expect(dialog).toHaveCount(0)
+    await expect(page.getByText('mcro-mock-1234-5678-90ab-cdef-1234-5678-90ab-cdef')).toHaveCount(0)
+  })
+
+  test('账号与安全：只读凭据通道关闭 → 入口禁用并说明恢复方法', async ({ page }) => {
+    await setupConnection(page)
+    await page.setExtraHTTPHeaders({
+      'x-mock-readonly-enabled': '0',
+      'x-mock-readonly-configured': '1',
+    })
+    await page.goto('/settings/account')
+
+    const panel = page
+      .getByRole('heading', { name: '只读监控凭据' })
+      .locator('xpath=ancestor::section[1]')
+    await expect(panel.getByText('通道已关闭')).toBeVisible()
+    await expect(panel.getByText(/READONLY_API_KEY_ENABLED=false/)).toBeVisible()
+    await expect(panel.getByRole('button', { name: '重新生成只读凭据' })).toBeDisabled()
   })
 
   test('通用设置：自动重启开关 + 主题切换', async ({ page }) => {
@@ -89,23 +324,73 @@ test.describe('设置页', () => {
     await page.goto('/settings/backup')
     // 面板标题（h3 面板内标题；页面级 h2 与其同名，按层级区分）
     await expect(page.getByRole('heading', { name: '备份管理', level: 3 })).toBeVisible()
-    // 快照机制说明
-    await expect(page.getByText('快照备份：未修改文件零拷贝增量传输，超出保留策略自动清理')).toBeVisible()
-    // 列表行（mock 3 条：completed snapshot / zip / failed）
-    await expect(page.getByText('手动备份 2026-08-14')).toBeVisible()
-    await expect(page.getByText('旧格式', { exact: true })).toBeVisible()
+    // 快照机制说明收进信息入口：正文不常驻，点开才读到
+    await expect(
+      page.getByText('快照备份：未修改文件零拷贝增量传输，超出保留策略自动清理'),
+    ).toHaveCount(0)
+    await page.getByRole('button', { name: '快照备份说明' }).click()
+    await expect(page.getByRole('dialog', { name: '快照备份说明' })).toContainText(
+      '快照备份：未修改文件零拷贝增量传输，超出保留策略自动清理',
+    )
+    await page.keyboard.press('Escape')
+    // 列表行（mock 2 条：completed / failed）。名称都用精确匹配：
+    // 子串匹配下夹具名重新内嵌日期也照样命中，等于没有防线
+    await expect(page.getByText('手动备份', { exact: true })).toBeVisible()
+    await expect(page.getByText('失败的备份', { exact: true })).toBeVisible()
     // 立即备份 → creating 行 + toast
     await page.getByRole('button', { name: '立即备份' }).click()
     await expect(page.getByText('备份任务已启动')).toBeVisible()
-    // 恢复确认（B3 危险弹窗：红色警示 + 输入实例名确认）→ 取消
-    await page.getByRole('button', { name: '手动备份 2026-08-14 恢复' }).click()
+    // 恢复确认（B3 危险弹窗：红色警示 + 输入实例名确认）
+    await page.getByRole('button', { name: '手动备份 恢复' }).click()
     await expect(page.getByRole('heading', { name: '恢复备份（危险操作）' })).toBeVisible()
-    await expect(
-      page.getByText(/覆盖当前世界数据，且不可撤销/),
-    ).toBeVisible()
+    await expect(page.getByText(/覆盖当前世界数据，且不可撤销/)).toBeVisible()
+
+    // 取消路径：不输入名字时确认按钮禁用（实例名确认是服务端强制的同一道闸门）
+    await expect(page.getByRole('button', { name: '确认恢复' })).toBeDisabled()
     await page.getByRole('button', { name: '取消' }).click()
+    await expect(page.getByRole('heading', { name: '恢复备份（危险操作）' })).toHaveCount(0)
+
+    // 确认路径：输入实例名 → 请求体必须带 confirmName（服务端按实例名强制校验；
+    // mock 与真实服务端同语义，缺名会回 400 40017）
+    await page.getByRole('button', { name: '手动备份 恢复' }).click()
+    const restoreReq = page.waitForRequest(
+      (r) => /\/api\/v1\/backups\/\d+\/restore$/.test(r.url()) && r.method() === 'POST',
+    )
+    await page.getByLabel(/输入实例名/).fill('E2E 演示实例')
+    await page.getByRole('button', { name: '确认恢复' }).click()
+    const req = await restoreReq
+    expect(req.postDataJSON()).toEqual({ confirmName: 'E2E 演示实例' })
+    await expect(page.getByText('恢复已开始，完成后请启动服务器生效')).toBeVisible()
     await expect(page.getByRole('heading', { name: '恢复备份（危险操作）' })).toBeHidden()
     await maybeShot(page, 'settings-backup-dark.png')
+  })
+
+  test('备份管理：归档快照（来自已卸载实例）可见且可挂载到本实例', async ({ page }) => {
+    await setupConnection(page)
+    // 按域复位 mock 的归档台账（同轮 webServer 共享一个 mock 进程；不传 only 的全量复位
+    // 会清掉并行升级用例的在途升级态）
+    await page.request.post('/api/v1/mock/reset', { data: { only: 'archive' } })
+    await page.goto('/settings/backup')
+
+    const archive = 'paper-1a2b3c4d'
+    await expect(page.getByText('归档快照（未建立索引）')).toBeVisible()
+    await expect(page.getByText(archive)).toBeVisible()
+    await expect(page.getByText(/来自已卸载实例/)).toBeVisible()
+    await expect(page.getByText(/可挂载 2\/3 份/)).toBeVisible()
+
+    // 挂载：二次确认讲清后果（不动磁盘 + 无第二份副本 + 计入配额受保留策略约束），
+    // 确认后 toast 报挂载与跳过份数
+    await page.getByRole('button', { name: /挂载到本实例/ }).click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toContainText(archive)
+    await expect(dialog).toContainText('原归档目录不会被复制或移动')
+    await expect(dialog).toContainText('删除这些条目会删除磁盘上的原归档快照')
+    await expect(dialog).toContainText('计入本实例的备份配额')
+    await dialog.getByRole('button', { name: '挂载' }).click()
+
+    await expect(page.getByText(/已挂载 2 份归档快照/)).toBeVisible()
+    // 挂载后清点收敛：区块消失（已无未索引项）
+    await expect(page.getByText('归档快照（未建立索引）')).toHaveCount(0)
   })
 
   test('关于：版本与链接', async ({ page }) => {

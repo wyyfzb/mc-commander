@@ -41,7 +41,14 @@ const taskA: ScheduledTask = {
 const createdTask: ScheduledTask = { ...taskA, id: 8, name: '每日备份', type: 'backup' }
 
 const mockHistory: TaskRunHistory[] = [
-  { id: 1, taskId: 7, runAt: '2026-01-01T04:00:00Z', status: 'success', error: null, durationMs: 3200 },
+  {
+    id: 1,
+    taskId: 7,
+    runAt: '2026-01-01T04:00:00Z',
+    status: 'success',
+    error: null,
+    durationMs: 3200,
+  },
 ]
 
 let listHits = 0
@@ -53,7 +60,10 @@ let historyHits = 0
 
 function ok<T>(data: T) {
   return HttpResponse.json({
-    status: 'ok', code: 0, message: 'Success', data,
+    status: 'ok',
+    code: 0,
+    message: 'Success',
+    data,
     timestamp: new Date().toISOString(),
   })
 }

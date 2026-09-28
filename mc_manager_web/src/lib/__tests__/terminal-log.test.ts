@@ -35,7 +35,9 @@ describe('级别推断', () => {
 
 describe('JVM 警告过滤', () => {
   it('匹配常见 JVM 启动警告', () => {
-    expect(isJvmWarning('WARNING: A restricted method in java.lang.System has been called')).toBe(true)
+    expect(isJvmWarning('WARNING: A restricted method in java.lang.System has been called')).toBe(
+      true,
+    )
     expect(isJvmWarning('WARNING: An illegal reflective access operation has occurred')).toBe(true)
     expect(isJvmWarning('WARNING: Please consider reporting this to the maintainers')).toBe(true)
     expect(isJvmWarning('WARNING: Removal of API ... has been deprecated')).toBe(true)

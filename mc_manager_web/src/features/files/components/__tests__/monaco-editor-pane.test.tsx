@@ -7,8 +7,9 @@
  * 3. languageForFile 为纯函数独立 export，直接单测
  * 测试路径全部为虚构示例（示例世界/示例文件名），禁真实服务器数据
  */
-import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import type { MonacoEditorPaneProps } from '../monaco-editor-pane'
 import { MonacoEditorPane, languageForFile } from '../monaco-editor-pane'
 
@@ -91,6 +92,10 @@ function makeProps(overrides: Partial<MonacoEditorPaneProps> = {}): MonacoEditor
   }
 }
 
+afterEach(() => {
+  vi.restoreAllMocks()
+})
+
 beforeEach(() => {
   editorCall.props = null
   editorCall.addCommand.mockClear()
@@ -165,9 +170,7 @@ describe('空态（无选中文件）', () => {
 describe('加载态（isLoading）', () => {
   it('显示文件名 + Skeleton 占位，隐藏 encoding 徽章与编辑器', () => {
     const { container } = render(
-      <MonacoEditorPane
-        {...makeProps({ path: PATH_PROPERTIES, isLoading: true, dirty: true })}
-      />,
+      <MonacoEditorPane {...makeProps({ path: PATH_PROPERTIES, isLoading: true, dirty: true })} />,
     )
     expect(screen.getByText('server.properties')).toBeInTheDocument()
     expect(container.querySelector('[data-slot="skeleton"]')).not.toBeNull()
@@ -212,6 +215,22 @@ describe('头部条', () => {
     expect(name.className).toContain('font-mono')
   })
 
+  it('server.properties 生效方式标识：收进信息入口，点开读到「需重启 + 指回属性面板」', async () => {
+    const user = userEvent.setup()
+    render(<MonacoEditorPane {...makeProps({ path: PATH_PROPERTIES })} />)
+    // 正文不常驻
+    expect(screen.queryByText(/保存后需重启实例生效/)).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '生效方式说明' }))
+    const hint = await screen.findByRole('dialog', { name: '生效方式说明' })
+    expect(hint).toHaveTextContent('保存后需重启实例生效')
+    expect(hint).toHaveTextContent('即时生效')
+  })
+
+  it('非 server.properties 文件不渲染生效方式标识', () => {
+    render(<MonacoEditorPane {...makeProps({ path: '/示例世界/logs/latest.log' })} />)
+    expect(screen.queryByText(/需重启实例生效/)).not.toBeInTheDocument()
+  })
+
   it('encoding 徽章：utf-8 → 「UTF-8」，gbk → 「GBK」', () => {
     const { rerender } = render(
       <MonacoEditorPane {...makeProps({ path: PATH_PROPERTIES, encoding: 'utf-8' })} />,
@@ -249,6 +268,16 @@ describe('头部条', () => {
     expect(onSave).toHaveBeenCalledTimes(1)
   })
 
+  it('保存提示按平台取词：macOS 显示 ⌘+S（Monaco 的 CtrlCmd 在 mac 即 Cmd）', () => {
+    vi.spyOn(navigator, 'platform', 'get').mockReturnValue('MacIntel')
+    render(<MonacoEditorPane {...makeProps({ path: PATH_PROPERTIES, dirty: true })} />)
+
+    expect(screen.getByText('⌘+S')).toBeInTheDocument()
+    expect(screen.queryByText('Ctrl+S')).not.toBeInTheDocument()
+    // 按钮 title 同口径（悬停提示同样不能给 mac 用户错键位）
+    expect(screen.getByRole('button', { name: /保存/ })).toHaveAttribute('title', '保存（⌘+S）')
+  })
+
   it('isSaving=true → 保存按钮禁用并显示「保存中…」', () => {
     render(
       <MonacoEditorPane {...makeProps({ path: PATH_PROPERTIES, dirty: true, isSaving: true })} />,
@@ -270,9 +299,7 @@ describe('头部条', () => {
 describe('编辑器（@monaco-editor/react mock）', () => {
   it('暗色主题 → mcs-dark；语言按扩展名映射；value/path 透传', () => {
     render(
-      <MonacoEditorPane
-        {...makeProps({ path: PATH_PROPERTIES, content: 'a=b', theme: 'dark' })}
-      />,
+      <MonacoEditorPane {...makeProps({ path: PATH_PROPERTIES, content: 'a=b', theme: 'dark' })} />,
     )
     expect(editorCall.props?.theme).toBe('mcs-dark')
     expect(editorCall.props?.language).toBe('properties')
@@ -296,11 +323,7 @@ describe('编辑器（@monaco-editor/react mock）', () => {
 
   it('编辑器输入 → onChange 透传新值', () => {
     const onChange = vi.fn()
-    render(
-      <MonacoEditorPane
-        {...makeProps({ path: PATH_PROPERTIES, content: 'a=b', onChange })}
-      />,
-    )
+    render(<MonacoEditorPane {...makeProps({ path: PATH_PROPERTIES, content: 'a=b', onChange })} />)
     const textarea = screen.getByTestId('monaco-editor')
     fireEvent.change(textarea, { target: { value: 'a=c' } })
     expect(onChange).toHaveBeenCalledWith('a=c')

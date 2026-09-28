@@ -22,7 +22,7 @@ if not exist .env (
     echo [提示] 未找到 .env 配置文件，正在从模板创建...
     copy .env.example .env >nul
     echo.
-    echo [重要] 请编辑 .env 文件，设置 API_KEY 后再启动！
+    echo [重要] 请编辑 .env 文件，设置 API_KEY_HASH（明文 Key 的 SHA-256 摘要）后再启动！
     echo.
     pause
     exit /b 1

@@ -73,8 +73,8 @@ export function entryFromWs(text: string, type: 'stdout' | 'stderr' | 'command')
 }
 
 /** 历史日志（GET /logs）→ 条目列表（仅填充非空行；stdout/stderr） */
-export function entriesFromHistory(logs: Array<{ text: string; type: 'stdout' | 'stderr' }>): TerminalLogEntry[] {
-  return logs
-    .filter((l) => l.text?.trim())
-    .map((l) => entryFromWs(l.text, l.type))
+export function entriesFromHistory(
+  logs: Array<{ text: string; type: 'stdout' | 'stderr' }>,
+): TerminalLogEntry[] {
+  return logs.filter((l) => l.text?.trim()).map((l) => entryFromWs(l.text, l.type))
 }

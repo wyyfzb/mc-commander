@@ -50,8 +50,22 @@ describe('GET /tasks/:id/history（issue #299）', () => {
     const { ScheduledTaskModel } = await import('../db/scheduled_task.model.js');
     ScheduledTaskModel.findById.mockReturnValue({ id: 7, name: '每日重启' });
     findRecentByTaskMock.mockReturnValue([
-      { id: 12, taskId: 7, runAt: '2026-09-02 12:05:00', status: 'success', error: null, durationMs: 900 },
-      { id: 11, taskId: 7, runAt: '2026-09-02 12:00:00', status: 'failed', error: 'RCON 不可用', durationMs: 3000 },
+      {
+        id: 12,
+        taskId: 7,
+        runAt: '2026-09-02 12:05:00',
+        status: 'success',
+        error: null,
+        durationMs: 900,
+      },
+      {
+        id: 11,
+        taskId: 7,
+        runAt: '2026-09-02 12:00:00',
+        status: 'failed',
+        error: 'RCON 不可用',
+        durationMs: 3000,
+      },
     ]);
 
     const res = await request(app).get('/api/v1/tasks/7/history');

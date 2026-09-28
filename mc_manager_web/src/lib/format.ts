@@ -16,10 +16,7 @@ export function formatUptime(seconds: number | null | undefined): string {
 }
 
 /** 启动时间：MM-dd HH:mm 本地时区；缺失/非法返回 emptyText（默认 '--'） */
-export function formatStartTime(
-  iso: string | null | undefined,
-  emptyText = '--',
-): string {
+export function formatStartTime(iso: string | null | undefined, emptyText = '--'): string {
   if (!iso) return emptyText
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return emptyText
@@ -46,23 +43,21 @@ export function formatRelativeTime(
 }
 
 /** 含秒时刻：MM-dd HH:mm:ss 本地时区；缺失/非法返回 emptyText */
-export function formatDateTime(
-  iso: string | null | undefined,
-  emptyText = '--',
-): string {
+export function formatDateTime(iso: string | null | undefined, emptyText = '--'): string {
   if (!iso) return emptyText
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return emptyText
   return `${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`
 }
 
-/** 完整时刻：YYYY-MM-DD HH:mm:ss 本地时区；缺失/非法返回 emptyText */
+/** 完整时刻：YYYY-MM-DD HH:mm:ss 本地时区；缺失/非法返回 emptyText。
+ *  入参兼容 ISO 串与 epoch 毫秒（事件 timestamp 契约＝毫秒数，其余字段为 ISO 串） */
 export function formatFullDateTime(
-  iso: string | null | undefined,
+  value: string | number | null | undefined,
   emptyText = '--',
 ): string {
-  if (!iso) return emptyText
-  const d = new Date(iso)
+  if (value == null || value === '') return emptyText
+  const d = new Date(value)
   if (Number.isNaN(d.getTime())) return emptyText
   return (
     `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ` +
@@ -71,10 +66,7 @@ export function formatFullDateTime(
 }
 
 /** 完整日期到分：YYYY-MM-DD HH:mm 本地时区；缺失/非法返回 emptyText */
-export function formatFullDateMinute(
-  iso: string | null | undefined,
-  emptyText = '--',
-): string {
+export function formatFullDateMinute(iso: string | null | undefined, emptyText = '--'): string {
   if (!iso) return emptyText
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return emptyText
@@ -84,27 +76,12 @@ export function formatFullDateMinute(
   )
 }
 
-/** 时刻 HH:mm 本地时区；缺失/非法返回 emptyText */
-export function formatClock(
-  iso: string | null | undefined,
-  emptyText = '--',
-): string {
-  if (!iso) return emptyText
-  const d = new Date(iso)
+/** 时刻 HH:mm 本地时区；缺失/非法返回 emptyText。入参兼容 ISO 串与 epoch 毫秒 */
+export function formatClock(value: string | number | null | undefined, emptyText = '--'): string {
+  if (value == null || value === '') return emptyText
+  const d = new Date(value)
   if (Number.isNaN(d.getTime())) return emptyText
   return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`
-}
-
-/**
- * SQLite CURRENT_TIMESTAMP（UTC 无时区标记，如 "2026-08-15 01:05:00"）→ 本地 MM-dd HH:mm。
- * 兼容已带 T（含时区标记）的 ISO 输入；解析失败原样返回输入（展示服务端原始值兜底）。
- */
-export function formatUtcNaive(utcNaive: string): string {
-  const d = new Date(
-    utcNaive.includes('T') ? utcNaive : `${utcNaive.replace(' ', 'T')}Z`,
-  )
-  if (Number.isNaN(d.getTime())) return utcNaive
-  return `${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`
 }
 
 /** 通知时间：今天 HH:mm / 昨天 HH:mm / 更早 MM-dd HH:mm */
@@ -148,6 +125,23 @@ export function worldTimePhase(worldTime: number | null | undefined): string {
   return '午夜'
 }
 
+/**
+ * 存档大小（GB 数值）→ 数值与单位拆分（CJK 单位拆出 mcs-num 的展示约定）。
+ * <1GB 换 MB（0.6279 GB 显示「643 MB」而非误导性的「0.6」）；≥1GB 保留一位小数 GB
+ */
+export function worldSizeParts(sizeGB: number | null | undefined): { value: string; unit: string } {
+  if (sizeGB == null || !Number.isFinite(sizeGB) || sizeGB <= 0) return { value: '0', unit: 'GB' }
+  if (sizeGB < 1) return { value: String(Math.round(sizeGB * 1024)), unit: 'MB' }
+  return { value: sizeGB.toFixed(1), unit: 'GB' }
+}
+
+/** 存档大小统一展示（实例卡/世界页共用）：入参 = 契约的 GB 数值（worldSize 对齐后） */
+export function formatWorldSize(raw: number | null | undefined): string {
+  if (raw == null || !Number.isFinite(raw)) return '—'
+  const { value, unit } = worldSizeParts(raw)
+  return `${value} ${unit}`
+}
+
 /** 秒基聚合分解共享核心（负值按 0 处理）：formatDurationSec/Full 两套输出语义共用 */
 function decomposeSeconds(sec: number): { h: number; m: number; s: number } {
   const total = Math.max(0, Math.floor(sec))
@@ -159,10 +153,7 @@ function decomposeSeconds(sec: number): { h: number; m: number; s: number } {
 }
 
 /** 短时长（毫秒基）：<1s 「Nms」/ 否则秒保留一位「X.Xs」；null/undefined → emptyText（默认 '-'） */
-export function formatDurationMs(
-  ms: number | null | undefined,
-  emptyText = '-',
-): string {
+export function formatDurationMs(ms: number | null | undefined, emptyText = '-'): string {
   if (ms == null) return emptyText
   if (ms < 1000) return `${ms}ms`
   return `${(ms / 1000).toFixed(1)}s`

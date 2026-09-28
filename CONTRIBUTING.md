@@ -16,10 +16,18 @@
 
 ```bash
 git clone <仓库地址>
-cd mc_commander
+cd mc-commander
+
+# 仓库根工具包（只装代码格式化器 Biome；不是 workspace 根）
+npm ci
+
+# 共享契约包（服务端运行时消费其构建产物 dist，须先装）
+cd mc-schemas
+npm ci
+npm test
 
 # 服务端
-cd mc_commander_server
+cd ../mc_commander_server
 cp .env.example .env       # 按需修改（本地默认即可跑测试）
 npm ci
 npm test
@@ -31,7 +39,13 @@ npm run build              # 或 npm run dev 起开发服务器
 npm run test
 ```
 
-两个子项目相互独立，各自安装依赖（无 workspace）。
+三个包相互独立，各自安装依赖（无 workspace 根）；仓库根另有一个工具包 `package.json`，
+只装全仓共用的代码格式化器 Biome（`npm ci` 后 `npm run format`），不参与构建与运行。
+
+`mc-schemas` 是 web 与服务端共用的 zod 契约包：改动其 `src/` 后必须 `npm run build`
+重建 `dist/` 并连同源码一并提交——服务端运行时经 `file:` 链接消费 `dist`，前端则经
+vite alias 直读 `src`，不重建会让服务端静默使用旧契约（本地一键检查与 CI 均有
+dist 同步守卫拦截）。
 
 ## 开发工作流
 
@@ -49,18 +63,37 @@ npm run test
 
 | 级别 | 场景 | 内容 |
 |---|---|---|
-| L1 | 单文件/小改动 | `npx tsc -b` + 相关测试文件 |
+| L1 | 单文件/小改动 | `npx tsc -b --noEmit` + 相关测试文件 |
 | L2 | 组件/交互改动 | L1 + 前端 `npm run test` 全量 |
 | L3 | 里程碑/收尾 | L2 + 按需 e2e + 服务端 `npm test` + `npm run build` |
 
-一键本地检查（lint + test 全量）：
+一键本地检查（契约包 + 服务端 + 前端，lint + 类型检查 + test 全量）：
 
 ```bash
-bash scripts/local-check.sh            # Git Bash / Linux / macOS
-# 或 --skip-frontend 仅跑服务端
+bash scripts/local-check.sh                     # Git Bash / Linux / macOS
+bash scripts/local-check.sh --skip-frontend     # 仅契约包 + 服务端
+bash scripts/local-check.sh --skip-schemas      # 跳过契约包
 ```
 
-CI 会在 PR 上运行与服务端/前端两套完整检查 + e2e + 密钥扫描，本地建议至少跑过 L1。
+CI 会在 PR 上运行三套完整检查 + 代码格式检查 + e2e + 密钥扫描，本地建议至少跑过 L1。
+
+### 代码格式
+
+格式化由仓库根目录的 **Biome** 统一负责（配置见 `biome.jsonc`，**只启用 formatter**，
+lint 归 oxlint，三个包同一把）：
+
+```bash
+npm run format          # 在仓库根执行：按配置格式化全仓
+npm run format:check    # 只检查不改写（CI 与 scripts/local-check.sh 跑这条）
+```
+
+- 范围：全仓 `.ts/.tsx/.js/.mjs` 与配置文件；**不含 CSS 与 Markdown**（设计 token 样式表由门禁脚本
+  解析、文档为手写排版），也不含 `dist/`、`public/`、`coverage/`、e2e 产物、锁文件与 `.ai/`、`.mimosa/`。
+- 风格参数向各包主导风格收敛（2 空格缩进、单引号、JSX 属性双引号、尾逗号 all、行宽 100；
+  分号按包分流：服务端有、前端/契约/e2e 无）。接入时少数偏离既有风格的现场被一并归一
+  （shadcn 生成的 `components/ui/*.tsx` 由双引号改单引号、个别服务端文件补分号），属一次性收敛。
+  此后**不要手工调整格式**——提交前跑一次 `npm run format` 即可；也不要引入其它格式化器
+  （Prettier 等），避免两把格式化器互相打架。
 
 ### 测试约定
 
@@ -69,12 +102,27 @@ CI 会在 PR 上运行与服务端/前端两套完整检查 + e2e + 密钥扫描
 - **测试数据一律虚构**：禁止出现真实服务器 IP、API Key、真实玩家数据
   （用 `1.2.3.4`、TEST-NET 网段、Steve/Alex 示例名）
 - e2e 配置会自动启动 mock 后端（5198）与 dev server（5199），无需手工准备
+- **mock 是进程级共享的**（并行 spec 连同一个「服务端」）：spec 触发的构造端点广播
+  （deploy/upgrade 的进度与终态）只投递给**同分组**的连接，分组头是 `x-mock-ws-group`。
+  触发广播的 spec 必须声明自己的分组（`page.setExtraHTTPHeaders`；`page.request.*`
+  不继承它，需在调用处显式传），断言「通知空态 / 进度」这类全局状态的 spec 也应声明分组——
+  否则并行 spec 的广播会打进来（实测让 dashboard 的通知抽屉空态偶发变红）
 
 ### 前端设计约束
 
-- 颜色/间距/圆角使用 `src/styles/` 的 `--mcs-*` 设计 token，**禁止硬编码色值**
-- 组件风格遵循既有 shadcn-ui + `components/mcs/` 模式
-- 数据密集区域用实底背景；玻璃拟态仅用于侧栏/顶栏/命令面板/弹窗/toast
+- 颜色/圆角/字号/动效/光影使用 `src/styles/` 的 `--mcs-*` 设计 token，**禁止硬编码色值**；
+  间距不设 token，统一走 Tailwind 默认 4px 刻度（结构间距 4px 倍数）；
+  文字两级（`text-mcs-text-default` / `text-mcs-text-muted`）、悬浮一档（`bg-mcs-state-hover`）、
+  圆角一套档位（6/8/12/16px）
+- 内容面 tint（`--mcs-{status,accent,dimension}-bg-subtle`，承载文字）**必须不透明**；
+  交互覆盖层（`--mcs-state-*`、`--mcs-scrim*`）保持半透明；同一元素只允许一个内容面 tint；
+  危险底用 `bg-mcs-error-bg-subtle`（禁 `bg-destructive/<alpha>`）
+- 交互元素禁用 `outline-none` 抵消 `focus-visible:outline-*`（会导致焦点环不可见）；
+  菜单/选项项须带 `focus:outline-2 focus:-outline-offset-2 focus:outline-mcs-focus-ring`
+- Z 轴禁裸 `z-<数字>`，用 `z-(--mcs-z-*)` 阶梯
+- 组件风格遵循既有 shadcn-ui + `mc_manager_web/src/components/mcs/` 模式
+- 数据密集区域用实底背景；玻璃同屏 ≤2 层（顶栏 `glass-chrome` + 确认弹窗 `glass-overlay`，
+  alpha ≤0.7；亮色 overlay ≤0.85），侧栏/抽屉/toast 用实底；门禁按「全站各 1 处」静态校验
 
 ## 行为准则
 

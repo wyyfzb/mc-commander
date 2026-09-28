@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'events';
-import { setupWebSocket, WSEvents } from '../websocket.js';
+import {
+  setupWebSocket,
+  WSEvents,
+  flushNotificationEvents,
+  resetNotificationEventQueue,
+} from '../websocket.js';
 
 // Mock 数据库：验证长任务终态通知落库（deployComplete/deployFailed/upgradeComplete/upgradeFailed）
 vi.mock('../db/index.js', () => ({
@@ -29,7 +34,10 @@ function connect(wss, req) {
 }
 
 function subscribe(ws, instanceId, lastEventId) {
-  ws.emit('message', JSON.stringify({ type: 'subscribe', instanceId, ...(lastEventId ? { lastEventId } : {}) }));
+  ws.emit(
+    'message',
+    JSON.stringify({ type: 'subscribe', instanceId, ...(lastEventId ? { lastEventId } : {}) }),
+  );
 }
 
 /** 解析客户端收到的第 n 条消息 */
@@ -44,6 +52,7 @@ describe('WebSocket 长任务（部署/升级）通知与补发', () => {
   let fakeDb;
 
   beforeEach(() => {
+    resetNotificationEventQueue();
     vi.useFakeTimers();
     wss = new EventEmitter();
     // 模拟真实 MCServerManager：长任务注册表 + 实例查询
@@ -56,6 +65,7 @@ describe('WebSocket 长任务（部署/升级）通知与补发', () => {
 
     fakeDb = {
       inserted: [],
+      transaction: vi.fn((fn) => (rows) => fn(rows)),
       prepare: vi.fn((sql) => {
         if (sql.includes('INSERT INTO notification_events')) {
           return {
@@ -64,6 +74,9 @@ describe('WebSocket 长任务（部署/升级）通知与补发', () => {
               return { lastInsertRowid: fakeDb.inserted.length };
             },
           };
+        }
+        if (sql.includes('MAX(id)')) {
+          return { get: () => ({ maxId: fakeDb.inserted.length }) };
         }
         return { run: vi.fn(), all: vi.fn(() => []) };
       }),
@@ -96,8 +109,10 @@ describe('WebSocket 长任务（部署/升级）通知与补发', () => {
       expect(notice.type).toBe(WSEvents.DEPLOY_COMPLETE);
       expect(notice.data.instanceName).toBe('生存服');
       // 落库：instance_id 为 NULL（无归属全局通知），类型与 data 校验
+      flushNotificationEvents();
       expect(fakeDb.inserted).toHaveLength(1);
-      const [instanceId, type, data] = fakeDb.inserted[0];
+      flushNotificationEvents();
+      const [, instanceId, type, data] = fakeDb.inserted[0];
       expect(instanceId).toBeNull();
       expect(type).toBe(WSEvents.DEPLOY_COMPLETE);
       expect(JSON.parse(data).instanceId).toBe('paper-abc1');
@@ -118,15 +133,45 @@ describe('WebSocket 长任务（部署/升级）通知与补发', () => {
       const notice = sentMessage(ws, 1);
       expect(notice.type).toBe(WSEvents.DEPLOY_FAILED);
       expect(notice.data.error).toBe('Forge installer timed out (120s)');
-      expect(fakeDb.inserted[0][1]).toBe(WSEvents.DEPLOY_FAILED);
+      flushNotificationEvents();
+      expect(fakeDb.inserted[0][2]).toBe(WSEvents.DEPLOY_FAILED);
+    });
+
+    it('deployProgress cancelled → 广播 deployCancelled 并落库（与 failed 分档，不显示成故障）', () => {
+      const ws = connect(wss);
+      serverManager.emit('deployProgress', {
+        stage: 'cancelled',
+        percent: 0,
+        instanceId: 'paper-abc3',
+        instanceName: '演示实例',
+        type: 'paper',
+        mcVersion: '1.21.4',
+      });
+
+      const notice = sentMessage(ws, 1);
+      expect(notice.type).toBe(WSEvents.DEPLOY_CANCELLED);
+      expect(notice.data.instanceName).toBe('演示实例');
+      // 全局通知（无实例归属）：取消后的实例未入库，订阅过滤不适用
+      flushNotificationEvents();
+      expect(fakeDb.inserted).toHaveLength(1);
+      flushNotificationEvents();
+      expect(fakeDb.inserted[0][1]).toBeNull();
+      flushNotificationEvents();
+      expect(fakeDb.inserted[0][2]).toBe(WSEvents.DEPLOY_CANCELLED);
     });
 
     it('进行中阶段（download）不产生通知事件（仅原事件广播）', () => {
       const ws = connect(wss);
-      serverManager.emit('deployProgress', { stage: 'download', percent: 0.42, transferred: 100, total: 240 });
+      serverManager.emit('deployProgress', {
+        stage: 'download',
+        percent: 0.42,
+        transferred: 100,
+        total: 240,
+      });
 
       // broadcastAll 对同类型有 15s 节流（既有设计），单事件仅验证通知不落库
       expect(ws.send).toHaveBeenCalledTimes(1);
+      flushNotificationEvents();
       expect(fakeDb.inserted).toHaveLength(0);
       expect(sentMessage(ws, 0).type).toBe(WSEvents.DEPLOY_PROGRESS);
     });
@@ -154,8 +199,9 @@ describe('WebSocket 长任务（部署/升级）通知与补发', () => {
       expect(notice.type).toBe(WSEvents.UPGRADE_COMPLETE);
       expect(notice.instanceId).toBe('paper-abc1');
       expect(notice.data.instanceName).toBe('生存服');
-      expect(fakeDb.inserted[0][1]).toBe(WSEvents.UPGRADE_COMPLETE);
-      expect(fakeDb.inserted[0][0]).toBe('paper-abc1');
+      flushNotificationEvents();
+      expect(fakeDb.inserted[0][2]).toBe(WSEvents.UPGRADE_COMPLETE);
+      expect(fakeDb.inserted[0][1]).toBe('paper-abc1');
     });
 
     it('upgradeProgress failed / rolled_back → 广播 upgradeFailed 并落库', () => {
@@ -183,7 +229,35 @@ describe('WebSocket 长任务（部署/升级）通知与补发', () => {
       expect(notice1.type).toBe(WSEvents.UPGRADE_FAILED);
       const notice3 = sentMessage(ws, 3);
       expect(notice3.type).toBe(WSEvents.UPGRADE_FAILED);
+      flushNotificationEvents();
       expect(fakeDb.inserted).toHaveLength(2);
+    });
+
+    it('upgradeProgress cancelled → 广播 upgradeCancelled 并落库（带实例归属，与 failed 分档）', () => {
+      const ws = connect(wss);
+      subscribe(ws, 'paper-abc1');
+      ws.send.mockClear();
+      fakeDb.inserted.length = 0;
+
+      serverManager.emit('instance:upgradeProgress', {
+        instanceId: 'paper-abc1',
+        stage: 'cancelled',
+        percent: 0,
+        detail: '已取消，已回滚到 1.20.4',
+        timestamp: Date.now(),
+      });
+
+      const notice = sentMessage(ws, 1);
+      expect(notice.type).toBe(WSEvents.UPGRADE_CANCELLED);
+      expect(notice.instanceId).toBe('paper-abc1');
+      // 通知文案读 detail（含是否回滚），服务端补实例名
+      expect(notice.data.detail).toBe('已取消，已回滚到 1.20.4');
+      expect(notice.data.instanceName).toBeTruthy();
+      flushNotificationEvents();
+      expect(fakeDb.inserted).toHaveLength(1);
+      flushNotificationEvents();
+      expect(fakeDb.inserted[0][2]).toBe(WSEvents.UPGRADE_CANCELLED);
+      expect(fakeDb.inserted[0][1]).toBe('paper-abc1');
     });
 
     it('upgradeProgress 进行中阶段不产生通知事件', () => {
@@ -201,12 +275,14 @@ describe('WebSocket 长任务（部署/升级）通知与补发', () => {
       });
 
       expect(ws.send).toHaveBeenCalledTimes(1);
+      flushNotificationEvents();
       expect(fakeDb.inserted).toHaveLength(0);
     });
   });
 
   describe('长任务状态补发（刷新/重连恢复）', () => {
     it('连接建立时补发进行中的部署快照（全局事件，无需订阅）', () => {
+      // updatedAt 由 trackDeployProgress 写入；读取判据按它判死快照（utils/deploy-inflight.js）
       serverManager.activeDeploys.set('paper-abc1', {
         instanceId: 'paper-abc1',
         instanceName: '生存服',
@@ -214,6 +290,7 @@ describe('WebSocket 长任务（部署/升级）通知与补发', () => {
         mcVersion: '1.21.4',
         stage: 'forge_install',
         percent: 0,
+        updatedAt: Date.now(),
       });
 
       const ws = connect(wss);
@@ -223,6 +300,23 @@ describe('WebSocket 长任务（部署/升级）通知与补发', () => {
       expect(snapshot.type).toBe(WSEvents.DEPLOY_PROGRESS);
       expect(snapshot.data.instanceId).toBe('paper-abc1');
       expect(snapshot.data.stage).toBe('forge_install');
+    });
+
+    it('死快照（超时限未更新）不补发：与 GET /instances/deploy/status 同口径', () => {
+      serverManager.activeDeploys.set('paper-stale', {
+        instanceId: 'paper-stale',
+        instanceName: '旧部署服',
+        type: 'paper',
+        mcVersion: '1.21.4',
+        stage: 'forge_install',
+        percent: 0,
+        updatedAt: Date.now() - 16 * 60 * 1000,
+      });
+
+      const ws = connect(wss);
+
+      // 补发一个早已结束的「部署中」会让前端误判服务端仍在部署
+      expect(ws.send).not.toHaveBeenCalled();
     });
 
     it('无进行中部署时连接不补发', () => {

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterAll, beforeAll } from 'vitest';
+import { describe, it, expect, vi, afterAll, beforeAll, beforeEach, afterEach } from 'vitest';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
@@ -43,7 +43,7 @@ import {
 } from '../services/backup.service.js';
 import { BackupModel as MockBackupModel } from '../db/backup.model.js';
 
-describe('resolveContained 路径包含校验', () => {
+describe('resolveContained 路径包含校验（收敛到 fs-utils 解析面后的错误形态翻译层）', () => {
   const tmpBase = fs.mkdtempSync(path.join(os.tmpdir(), 'backup-resolve-'));
   const base = path.join(tmpBase, 'base');
   fs.mkdirSync(base);
@@ -54,24 +54,26 @@ describe('resolveContained 路径包含校验', () => {
   });
 
   it('../ 越界目标抛 PATH_TRAVERSAL_DETECTED', () => {
-    expect(() => resolveContained(base, path.join(base, '..', 'evil')))
-      .toThrowError(/Path traversal detected/);
+    expect(() => resolveContained(base, path.join(base, '..', 'evil'))).toThrowError(
+      /escapes instance root/,
+    );
   });
 
   it('绝对路径逃逸抛 PATH_TRAVERSAL_DETECTED', () => {
-    expect(() => resolveContained(base, path.join(tmpBase, 'outside')))
-      .toThrowError(/Path traversal detected/);
+    expect(() => resolveContained(base, path.join(tmpBase, 'outside'))).toThrowError(
+      /escapes instance root/,
+    );
   });
 
   it('目标等于 base 本身被拒绝（相等排除）', () => {
-    expect(() => resolveContained(base, base)).toThrowError(/Path traversal detected/);
+    expect(() => resolveContained(base, base)).toThrowError(/resolves to instance root/);
   });
 
   it('前缀陷阱（/base-evil 非 /base 子路径）被拒绝', () => {
     const evil = path.join(tmpBase, 'base-evil');
     fs.mkdirSync(evil);
     try {
-      expect(() => resolveContained(base, evil)).toThrowError(/Path traversal detected/);
+      expect(() => resolveContained(base, evil)).toThrowError(/escapes instance root/);
     } finally {
       fs.rmSync(evil, { recursive: true, force: true });
     }
@@ -87,10 +89,16 @@ describe('resolveContained 路径包含校验', () => {
       linkCreated = false;
     }
     if (linkCreated) {
-      expect(() => resolveContained(base, path.join(base, 'world')))
-        .toThrowError(/Symlink escape detected/);
+      expect(() => resolveContained(base, path.join(base, 'world'))).toThrowError(/via symlink/);
     }
     fs.rmSync(outside, { recursive: true, force: true });
+  });
+
+  it('基座目录不存在时容忍（存在性由后续业务步骤判定，不在此报 ENOENT）', () => {
+    const missing = path.join(tmpBase, 'no-such-base');
+    expect(resolveContained(missing, path.join(missing, 'world'))).toBe(
+      path.join(missing, 'world'),
+    );
   });
 
   afterAll(() => {
@@ -101,16 +109,16 @@ describe('resolveContained 路径包含校验', () => {
 describe('createBackup 对 worldName 强制校验', () => {
   it('显式传入 ../ 恶意 worldName 拒绝创建（白名单）', async () => {
     const service = new BackupService(null);
-    await expect(
-      service.createBackup('s1', { worldName: '../../etc' })
-    ).rejects.toThrow('Invalid world name');
+    await expect(service.createBackup('s1', { worldName: '../../etc' })).rejects.toThrow(
+      'Invalid world name',
+    );
   });
 
   it('显式传入反斜杠穿越 worldName 拒绝创建（白名单）', async () => {
     const service = new BackupService(null);
-    await expect(
-      service.createBackup('s1', { worldName: '..\\..\\evil' })
-    ).rejects.toThrow('Invalid world name');
+    await expect(service.createBackup('s1', { worldName: '..\\..\\evil' })).rejects.toThrow(
+      'Invalid world name',
+    );
   });
 
   it('实例 properties 中的恶意 level-name 同样被拒绝', async () => {
@@ -134,7 +142,7 @@ describe('createBackup 对 worldName 强制校验', () => {
   it('合法 worldName 不误拒（目录不存在时走原有 World directory not found 路径）', async () => {
     const service = new BackupService(null);
     await expect(
-      service.createBackup('nonexistent-instance', { name: 'x', worldName: 'world' })
+      service.createBackup('nonexistent-instance', { name: 'x', worldName: 'world' }),
     ).rejects.toThrow('World directory not found');
   });
 });
@@ -151,11 +159,25 @@ describe('restoreBackup 路径与状态校验（实例级恢复）', () => {
       instance_id: 's1',
       status: 'completed',
       world_name: 'world',
-      format: 'snapshot',
-      file_path: 'D:/evil/outside',
+      // 越界样本须平台中立：'D:/evil/outside' 这类盘符路径只在 Windows 是绝对路径，
+      // POSIX 上只是名为 'D:' 的相对段，会落在实例根内而绕不过校验
+      file_path: path.join(config.backupsDir, '..', 'evil-outside'),
     });
     const service = new BackupService(null);
-    await expect(service.restoreBackup(1)).rejects.toThrow('Path traversal detected');
+    await expect(service.restoreBackup(1)).rejects.toThrow('escapes instance root');
+  });
+
+  it('file_path 指向另一个实例的合法快照 → 拒绝（归属校验，防跨实例灌数据）', async () => {
+    MockBackupModel.findByIdWithPath.mockReturnValue({
+      id: 1,
+      instance_id: 's1',
+      status: 'completed',
+      world_name: 'world',
+      file_path: path.join(config.backupsDir, 's2', 'other-instance-snapshot'),
+    });
+    const service = new BackupService(null);
+    // 只校验「在 backupsDir 内」会放行这条记录：恢复会把 s2 的世界数据灌进 s1
+    await expect(service.restoreBackup(1)).rejects.toThrow('escapes instance root');
   });
 
   it('file_path 在备份目录内但快照目录不存在时报原错误', async () => {
@@ -164,24 +186,10 @@ describe('restoreBackup 路径与状态校验（实例级恢复）', () => {
       instance_id: 's1',
       status: 'completed',
       world_name: 'world',
-      format: 'snapshot',
       file_path: path.join(config.backupsDir, 's1', 'nonexistent-snapshot'),
     });
     const service = new BackupService(null);
     await expect(service.restoreBackup(1)).rejects.toThrow('Snapshot directory not found');
-  });
-
-  it('旧格式（zip 压缩包）备份禁止恢复（40904，仅可删除）', async () => {
-    MockBackupModel.findByIdWithPath.mockReturnValue({
-      id: 1,
-      instance_id: 's1',
-      status: 'completed',
-      world_name: 'world',
-      format: 'zip',
-      file_path: path.join(config.backupsDir, 's1', 'legacy.zip'),
-    });
-    const service = new BackupService(null);
-    await expect(service.restoreBackup(1)).rejects.toThrow('旧格式备份');
   });
 
   it('未完成备份仍拒绝恢复（状态检查不受影响）', async () => {
@@ -190,11 +198,12 @@ describe('restoreBackup 路径与状态校验（实例级恢复）', () => {
       instance_id: 's1',
       status: 'creating',
       world_name: 'world',
-      format: 'snapshot',
       file_path: null,
     });
     const service = new BackupService(null);
-    await expect(service.restoreBackup(1)).rejects.toThrow('Only completed backups can be restored');
+    await expect(service.restoreBackup(1)).rejects.toThrow(
+      'Only completed backups can be restored',
+    );
   });
 
   it('同实例已有恢复进行中（restoring）时拒绝新的恢复', async () => {
@@ -203,7 +212,6 @@ describe('restoreBackup 路径与状态校验（实例级恢复）', () => {
       instance_id: 's1',
       status: 'completed',
       world_name: 'world',
-      format: 'snapshot',
       file_path: path.join(config.backupsDir, 's1', 'ok-snapshot'),
     });
     // 服务层互斥兜底：findAll 命中另一条 restoring 记录
@@ -219,7 +227,6 @@ describe('restoreBackup 路径与状态校验（实例级恢复）', () => {
       instance_id: 's1',
       status: 'completed',
       world_name: 'world',
-      format: 'snapshot',
       file_path: path.join(config.backupsDir, 's1', 'ok-snapshot'),
     });
     const manager = new EventEmitter();
@@ -230,15 +237,78 @@ describe('restoreBackup 路径与状态校验（实例级恢复）', () => {
 });
 
 describe('deleteBackup 对 file_path 校验（异步化）', () => {
+  let tmpRoot;
+  let backupsDir;
+  let serversDir;
+
+  beforeEach(() => {
+    tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'mcs-del-guard-'));
+    backupsDir = path.join(tmpRoot, 'backups');
+    serversDir = path.join(tmpRoot, 'servers');
+    fs.mkdirSync(backupsDir, { recursive: true });
+    fs.mkdirSync(serversDir, { recursive: true });
+    config.backupsDir = backupsDir;
+    config.serversDir = serversDir;
+  });
+  afterEach(() => {
+    if (tmpRoot) fs.rmSync(tmpRoot, { recursive: true, force: true });
+  });
+
   it('file_path 越界（DB 被篡改）拒绝删除', async () => {
     MockBackupModel.findByIdWithPath.mockReturnValue({
       id: 1,
-      file_path: 'D:/evil/outside',
+      instance_id: 's1',
+      // 平台中立的越界样本，理由同 restoreBackup 那条：盘符路径在 POSIX 上不是绝对路径
+      file_path: path.join(backupsDir, '..', 'evil-outside'),
     });
     const service = new BackupService(null);
     // deleteBackup 为异步（rm 大目录不阻塞事件循环），同步 throw 改为
     // Promise rejection
+    await expect(service.deleteBackup(1)).rejects.toThrowError(/escapes instance root/);
+  });
+
+  it('实例 id 缺失的异常记录：拒绝删除并给明确错误（不是裸 TypeError）', async () => {
+    MockBackupModel.findByIdWithPath.mockReturnValue({
+      id: 1,
+      file_path: path.join(backupsDir, 's1', 'snap'),
+    });
+    const service = new BackupService(null);
     await expect(service.deleteBackup(1)).rejects.toThrowError(/Path traversal detected/);
+  });
+
+  it('常规行指向另一个实例的快照 → 拒绝删除（记录被篡改不得 rm -rf 别人的副本）', async () => {
+    const victimDir = path.join(backupsDir, 'paper-1a2b3c4d', 'snap');
+    fs.mkdirSync(path.join(victimDir, 'world'), { recursive: true });
+    fs.writeFileSync(path.join(victimDir, 'world', 'level.dat'), 'other-instance-world');
+    MockBackupModel.findByIdWithPath.mockReturnValue({
+      id: 1,
+      instance_id: 's1',
+      status: 'completed',
+      file_path: victimDir,
+      source_archive_id: null,
+    });
+    const service = new BackupService(null);
+    await expect(service.deleteBackup(1)).rejects.toThrowError(/escapes instance root/);
+    // 别人的快照原样保留
+    expect(fs.existsSync(path.join(victimDir, 'world', 'level.dat'))).toBe(true);
+    expect(MockBackupModel.delete).not.toHaveBeenCalled();
+  });
+
+  it('挂载行删除照常放行（基准放宽到它声明的归档目录）', async () => {
+    const archivedSnap = path.join(backupsDir, 'paper-1a2b3c4d', 'snap');
+    fs.mkdirSync(path.join(archivedSnap, 'world'), { recursive: true });
+    fs.writeFileSync(path.join(archivedSnap, 'world', 'level.dat'), 'archived');
+    MockBackupModel.findByIdWithPath.mockReturnValue({
+      id: 1,
+      instance_id: 'fabric-99999999',
+      status: 'completed',
+      file_path: archivedSnap,
+      source_archive_id: 'paper-1a2b3c4d',
+    });
+    const service = new BackupService(null);
+    await expect(service.deleteBackup(1)).resolves.toBe(true);
+    expect(fs.existsSync(archivedSnap)).toBe(false);
+    expect(MockBackupModel.delete).toHaveBeenCalledWith(1);
   });
 
   it('恢复中（restoring）的备份拒绝删除（互斥状态机）', async () => {
@@ -305,7 +375,7 @@ describe('命令参数构造（目录快照：rsync --link-dest / robocopy /MIR�
     // /XF 文件排除（jar + pid/lock + JVM 崩溃日志）
     const xfIdx = args.indexOf('/XF');
     expect(args.slice(xfIdx + 1)).toEqual(
-      expect.arrayContaining(['server.jar', '*.pid', '*.lock', 'hs_err_pid*.log'])
+      expect.arrayContaining(['server.jar', '*.pid', '*.lock', 'hs_err_pid*.log']),
     );
   });
 

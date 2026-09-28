@@ -82,11 +82,22 @@ export function ConfirmDialog({
             {cancelText}
           </Button>
           {danger ? (
-            <LoadingButton variant="destructive" loading={loading} loadingText="处理中…" onClick={onConfirm} disabled={confirmDisabled}>
+            <LoadingButton
+              variant="destructive"
+              loading={loading}
+              loadingText="处理中…"
+              onClick={onConfirm}
+              disabled={confirmDisabled}
+            >
               {confirmText}
             </LoadingButton>
           ) : (
-            <LoadingButton loading={loading} loadingText="处理中…" onClick={onConfirm} disabled={confirmDisabled}>
+            <LoadingButton
+              loading={loading}
+              loadingText="处理中…"
+              onClick={onConfirm}
+              disabled={confirmDisabled}
+            >
               {confirmText}
             </LoadingButton>
           )}

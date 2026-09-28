@@ -5,14 +5,15 @@
  * - 编辑内容为组件 state，与 query 缓存隔离（保存成功由 mutation 失效列表/内容缓存）
  */
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { ServerOff, MonitorSmartphone } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
-import { useSearchParams, useNavigate } from 'react-router'
+import { useSearchParams } from 'react-router'
 import { toast } from 'sonner'
 import { getFriendlyErrorText } from '@/api/errors'
 import { queryKeys } from '@/api/queries'
-import { NoticeBanner } from '@/components/mcs/notice-banner'
+import { PageHeader } from '@/components/mcs/page-header'
+import { Card } from '@/components/mcs/card'
 import { useUnsavedGuard } from '@/hooks/use-unsaved-guard'
+import { useContainerWidth } from '@/hooks/use-container-width'
 import { useServerStore } from '@/stores/server'
 import { useUiStore } from '@/stores/ui'
 import type { FileEntry } from '@/api/types'
@@ -23,8 +24,8 @@ import { UnsavedConfirmDialog } from './components/unsaved-confirm-dialog'
 import { DeleteConfirmDialog } from './components/delete-confirm-dialog'
 import { NamePromptDialog } from './components/name-prompt-dialog'
 import { RenameDialog } from './components/rename-dialog'
+import { MoveDialog } from './components/move-dialog'
 import { UploadConflictDialog } from './components/upload-conflict-dialog'
-import { useMediaQuery, BREAKPOINT_MOBILE, BREAKPOINT_NARROW } from './use-media-query'
 import { useFileUpload } from './use-file-upload'
 import { useFileDownload } from './use-file-download'
 import { useFileEditor } from './use-file-editor'
@@ -36,20 +37,23 @@ import {
   useSaveFile,
   useUploadFile,
 } from './queries'
-import { EmptyState } from '@/components/mcs/empty-state'
-
-/** 父目录（'/' 前缀风格；与 files/queries.ts 的 parentDirOf 同规则） */
-function parentDirOf(path: string): string {
-  const idx = path.lastIndexOf('/')
-  return idx <= 0 ? '/' : path.slice(0, idx)
-}
+import { InstanceRequiredState } from '@/features/instances/components/instance-required-state'
+import { normalizeDirInput, parentDirOf } from './path-utils'
 
 /** 名称校验：返回错误文案（null=通过）；空值/路径分隔符（文案与原实现逐字一致） */
-function entryNameError(name: string, label: string): string | null {
+function entryNameError(name: string, label: string): null | string {
   if (name.length === 0) return `${label}不能为空`
   if (name.includes('/') || name.includes('\\')) return `${label}不能包含路径分隔符`
   return null
 }
+
+/**
+ * 编辑器内联双栏所需的内容宽：编辑器 w-45% 要 ≥320px 才谈得上可用
+ * （ Monaco 含行号槽与缩进图记，240px 级一行动作要横滚）⇒ 内容 ≥320/0.45≈711px，
+ * 取容器档 @2xl=672px（编辑器 302px 为下限，仍可读）。
+ * 低于此宽改全屏覆盖：列表与编辑器各拿一半，两边都读不了几行
+ */
+const EDITOR_INLINE_MIN_CONTENT = 672
 
 export function FilesPage() {
   const instanceId = useServerStore((s) => s.instanceId)
@@ -59,8 +63,8 @@ export function FilesPage() {
 
   // ── 导航状态（URL 深链接初始化；?dir= 目录 / ?file= 选中文件） ──
   const [dir, setDirState] = useState(() => searchParams.get('dir') ?? '/')
-  const [selectedPath, setSelectedPathState] = useState<string | null>(
-    () => searchParams.get('file'),
+  const [selectedPath, setSelectedPathState] = useState<string | null>(() =>
+    searchParams.get('file'),
   )
 
   /** 目录切换：state + URL（根目录时移除参数） */
@@ -73,13 +77,16 @@ export function FilesPage() {
   }
 
   /** 选中文件切换：state + URL（null 时移除参数）；useCallback 稳定引用（effect 依赖） */
-  const setSelectedPath = useCallback((path: string | null) => {
-    setSelectedPathState(path)
-    const next = new URLSearchParams(searchParams)
-    if (path === null) next.delete('file')
-    else next.set('file', path)
-    setSearchParams(next, { replace: true })
-  }, [searchParams, setSearchParams])
+  const setSelectedPath = useCallback(
+    (path: string | null) => {
+      setSelectedPathState(path)
+      const next = new URLSearchParams(searchParams)
+      if (path === null) next.delete('file')
+      else next.set('file', path)
+      setSearchParams(next, { replace: true })
+    },
+    [searchParams, setSearchParams],
+  )
 
   // 实例切换：目录/选中文件重置（跳过首次挂载；draft/基线重置见下方 useFileEditor 解构）
   const prevInstanceRef = useRef<string | null>(null)
@@ -99,15 +106,20 @@ export function FilesPage() {
   const [newFileOpen, setNewFileOpen] = useState(false)
   const [newFileName, setNewFileName] = useState('')
   const [closeConfirmOpen, setCloseConfirmOpen] = useState(false)
-  // feat-3：新建目录 / 重命名
+  // ：新建目录 / 重命名
   const [newDirOpen, setNewDirOpen] = useState(false)
   const [newDirName, setNewDirName] = useState('')
   const [renameTarget, setRenameTarget] = useState<FileEntry | null>(null)
   const [renameValue, setRenameValue] = useState('')
+  const [moveTarget, setMoveTarget] = useState<FileEntry | null>(null)
+  const [moveDirValue, setMoveDirValue] = useState('')
 
-  // ── 响应式断点 ──
-  const isMobile = useMediaQuery(BREAKPOINT_MOBILE)
-  const isNarrowDesktop = useMediaQuery(BREAKPOINT_NARROW)
+  // ── 响应式：编辑器内联还是全屏覆盖，按**双栏区实宽**判定 ──
+  // 视口断点在这里判不准：侧栏折叠使同视口下内容宽差 152px（767 视口退化成抽屉后内容有
+  // 711px，本可双栏却被 <768 判成全屏；768 视口展开侧栏内容仅 536px，双栏后 Monaco
+  // 只剩 241px 读不了几行）。阈值按编辑器最小可用宽反推：w-45% 要 ≥320px ⇒ 内容 ≥672px
+  const [bodyRef, bodyWidth] = useContainerWidth<HTMLDivElement>()
+  const isEditorFullscreen = bodyWidth != null && bodyWidth < EDITOR_INLINE_MIN_CONTENT
 
   const contentQuery = useFileContent(instanceId, selectedPath)
   const saveMutation = useSaveFile(instanceId)
@@ -139,17 +151,10 @@ export function FilesPage() {
 
   /** 路由切换守卫：编辑未保存切页确认 */
   const guard = useUnsavedGuard(dirty)
-  const navigate = useNavigate()
 
+  // 无实例门：加载中/加载失败/真空态/待选中四态各自诚实（见 InstanceRequiredState）
   if (!instanceId) {
-    return (
-      <EmptyState
-        icon={ServerOff}
-        title="暂无服务器实例"
-        hint="请先在服务端创建 MC 服务器实例"
-        action={{ label: '前往实例管理', onClick: () => navigate('/instances') }}
-      />
-    )
+    return <InstanceRequiredState />
   }
 
   /** 关闭编辑器：脏则先确认 */
@@ -173,7 +178,10 @@ export function FilesPage() {
       if (dir === target.path || dir.startsWith(`${target.path}/`)) {
         setDir(parentDirOf(target.path))
       }
-      if (selectedPath && (selectedPath === target.path || selectedPath.startsWith(`${target.path}/`))) {
+      if (
+        selectedPath &&
+        (selectedPath === target.path || selectedPath.startsWith(`${target.path}/`))
+      ) {
         setSelectedPath(null)
         originalRef.current = null
         setDraft('')
@@ -256,21 +264,53 @@ export function FilesPage() {
     }
   }
 
+  /**
+   * 移动：换父目录的 rename。服务端 `POST /files/rename` 本就接受任意 newPath
+   * 并带 `renameNoClobber`（目标同名即拒），故此能力零新 API——
+   * 此前做不到只是因为前端名称校验禁含 `/`（只能改同目录内的名字）。
+   */
+  const confirmMove = async () => {
+    if (!moveTarget) return
+    const target = normalizeDirInput(moveDirValue)
+    if (target === null) {
+      toast.error('目标目录必须以 / 开头，且不含 . 或 .. 段')
+      return
+    }
+    const newPath = target === '/' ? `/${moveTarget.name}` : `${target}/${moveTarget.name}`
+    if (newPath === moveTarget.path) {
+      setMoveTarget(null)
+      return
+    }
+    try {
+      await renameMutation.mutateAsync({ oldPath: moveTarget.path, newPath })
+      // 编辑器打开的就是被移动的文件且无未保存修改 → 跟随新路径（同重命名口径）
+      if (selectedPath === moveTarget.path && !dirty) {
+        setSelectedPath(newPath)
+      } else if (selectedPath === moveTarget.path) {
+        setSelectedPath(null)
+        originalRef.current = null
+        setDraft('')
+      }
+      toast.success(`已移动到 ${target}`)
+      setMoveTarget(null)
+    } catch (e) {
+      toast.error(`移动失败：${getFriendlyErrorText(e)}`)
+    }
+  }
+
   return (
+    /* 本页无 @container：编辑器「内联双栏 ↔ 全屏覆盖」由 useContainerWidth 测双栏区实宽
+       切档（见 isEditorFullscreen），CSS 容器档在这里无事可做 */
     <div className="flex h-full min-h-0 flex-col gap-1.5">
-      {/* ── 桌面窄窗降级条（≥768px <1024px） ── */}
-      {isNarrowDesktop && (
-        <div className="shrink-0 px-3 pt-1">
-          <NoticeBanner variant="info" icon={MonitorSmartphone}>
-            窗口较窄，部分内容可能被截断，建议使用更宽的视图以获得最佳体验
-          </NoticeBanner>
-        </div>
-      )}
+      {/* ── 页头（本页无 p-4 外层容器，标题随主体 p-3 档位对齐） ── */}
+      <div className="shrink-0 px-3 pt-3">
+        <PageHeader title="文件" description="浏览与编辑服务器文件" />
+      </div>
 
       {/* ── 双栏主体 ── */}
-      <div className="flex min-h-0 flex-1 gap-3 p-3">
+      <div ref={bodyRef} className="flex min-h-0 flex-1 gap-3 p-3">
         {/* 左栏：文件列表（桌面/移动同构：面包屑 + 工具栏导航）；flex-1 吃满编辑器以外宽度 */}
-        <section className="flex h-full min-h-0 min-w-0 flex-1 flex-col rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted shadow-mcs-card">
+        <Card className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
           {/* ── 上传进度条（对齐插件页交互：progressbar ARIA + 取消） ── */}
           {uploading && <UploadProgressBar uploading={uploading} onCancel={cancelUpload} />}
           <FileList
@@ -293,13 +333,18 @@ export function FilesPage() {
               setRenameTarget(entry)
               setRenameValue(entry.name)
             }}
+            onMove={(entry) => {
+              setMoveTarget(entry)
+              // 预填当前目录：多数移动是「换个同级目录」，留空反而要用户全手打
+              setMoveDirValue(parentDirOf(entry.path))
+            }}
             onDownload={(entry) => void downloadFile(entry)}
             downloadingPath={downloadingPath}
           />
-        </section>
+        </Card>
 
-        {/* 右栏：Monaco 编辑器（桌面端内联，移动端隐藏由全屏覆盖替代） */}
-        {!isMobile && (
+        {/* 右栏：Monaco 编辑器（内容宽并得下时内联；并不下改全屏覆盖，见 isEditorFullscreen） */}
+        {!isEditorFullscreen && (
           <EditorSlot
             variant="desktop"
             selectedPath={selectedPath}
@@ -317,8 +362,8 @@ export function FilesPage() {
         )}
       </div>
 
-      {/* ── 移动端：编辑器全屏覆盖 ── */}
-      {isMobile && selectedPath !== null && (
+      {/* ── 内容宽并不下编辑器时：全屏覆盖（与移动端同一组件，见 isEditorFullscreen） ── */}
+      {isEditorFullscreen && selectedPath !== null && (
         <EditorSlot
           variant="fullscreen"
           selectedPath={selectedPath}
@@ -374,7 +419,7 @@ export function FilesPage() {
         onSubmit={createFile}
       />
 
-      {/* ── 新建目录对话框（feat-3） ── */}
+      {/* ── 新建目录对话框 ── */}
       <NamePromptDialog
         open={newDirOpen}
         onOpenChange={setNewDirOpen}
@@ -388,7 +433,7 @@ export function FilesPage() {
         onSubmit={createDirectory}
       />
 
-      {/* ── 重命名对话框（feat-3） ── */}
+      {/* ── 重命名对话框 ── */}
       <RenameDialog
         target={renameTarget}
         value={renameValue}
@@ -398,6 +443,16 @@ export function FilesPage() {
         onClose={() => setRenameTarget(null)}
       />
 
+      {/* ── 移动（换父目录；复用 rename 端点） ── */}
+      <MoveDialog
+        target={moveTarget}
+        targetDir={moveDirValue}
+        onTargetDirChange={setMoveDirValue}
+        submitting={renameMutation.isPending}
+        onSubmit={confirmMove}
+        onClose={() => setMoveTarget(null)}
+      />
+
       {/* ── 上传同名冲突确认（覆盖/跳过，对齐插件市场冲突流程） ── */}
       <UploadConflictDialog
         target={uploadConflictTarget}
@@ -405,7 +460,7 @@ export function FilesPage() {
         onClose={() => setUploadConflictTarget(null)}
       />
 
-      {/* ── 隐藏上传 input（feat-3：multipart 直传，服务端落地到当前浏览目录） ── */}
+      {/* ── 隐藏上传 input（multipart 直传，服务端落地到当前浏览目录） ── */}
       <input
         ref={uploadInputRef}
         type="file"

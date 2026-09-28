@@ -34,7 +34,7 @@ describe('Status Routes', () => {
     mockManager = {
       instances: new Map(),
       getAllInstances: vi.fn(),
-      getInstance: vi.fn()
+      getInstance: vi.fn(),
     };
     app.use('/api', createStatusRoutes(mockManager));
     app.use(errorHandler); // 与生产环境一致：路由内部错误经全局 errorHandler 统一处理
@@ -44,7 +44,7 @@ describe('Status Routes', () => {
     it('should return overview with instance count and players', async () => {
       mockManager.getAllInstances.mockReturnValue([
         { id: 's1', name: 'S1', isRunning: true, playerCount: 5 },
-        { id: 's2', name: 'S2', isRunning: false, playerCount: 0 }
+        { id: 's2', name: 'S2', isRunning: false, playerCount: 0 },
       ]);
 
       const res = await request(app).get('/api/overview');
@@ -59,9 +59,7 @@ describe('Status Routes', () => {
 
   describe('GET /api/instances', () => {
     it('should return all instances', async () => {
-      mockManager.getAllInstances.mockReturnValue([
-        { id: 's1', name: 'S1' }
-      ]);
+      mockManager.getAllInstances.mockReturnValue([{ id: 's1', name: 'S1' }]);
 
       const res = await request(app).get('/api/instances');
 
@@ -73,7 +71,7 @@ describe('Status Routes', () => {
   describe('GET /api/instances/:id', () => {
     it('should return instance details', async () => {
       mockManager.getInstance.mockReturnValue({
-        toStatus: () => ({ id: 's1', name: 'S1', isRunning: true })
+        toStatus: () => ({ id: 's1', name: 'S1', isRunning: true }),
       });
 
       const res = await request(app).get('/api/instances/s1');
@@ -129,9 +127,7 @@ describe('Status Routes', () => {
       mockManager.getInstance.mockReturnValue(instance);
       InstanceModel.update.mockReturnValue({ changes: 1 });
 
-      const res = await request(app)
-        .put('/api/instances/s1')
-        .send({ name: 'S2' });
+      const res = await request(app).put('/api/instances/s1').send({ name: 'S2' });
 
       expect(res.status).toBe(200);
       expect(InstanceModel.update).toHaveBeenCalledWith('s1', { name: 'S2' });
@@ -161,14 +157,16 @@ describe('Status Routes', () => {
 
       expect(res.status).toBe(200);
       expect(recordAudit).toHaveBeenCalledTimes(1);
-      expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({
-        instanceId: 's1',
-        action: AuditActions.INSTANCE_UPDATE,
-        targetType: 'instance',
-        targetId: 's1',
-        // fields 记录本次实际生效的字段集合（allowedFields 遍历序，确定性）
-        detail: { fields: ['maxMemory', 'autoRestart'] },
-      }));
+      expect(recordAudit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          instanceId: 's1',
+          action: AuditActions.INSTANCE_UPDATE,
+          targetType: 'instance',
+          targetId: 's1',
+          // fields 记录本次实际生效的字段集合（allowedFields 遍历序，确定性）
+          detail: { fields: ['maxMemory', 'autoRestart'] },
+        }),
+      );
     });
 
     it('should not record audit when no valid fields provided (400)', async () => {
@@ -213,23 +211,32 @@ describe('Status Routes', () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-instance-'));
       try {
         const original = {
-          id: 's1', name: 'S1', type: 'vanilla', jarFile: 'server.jar',
-          maxMemory: '4G', minMemory: '2G', mcVersion: '26.2', javaPath: 'java',
+          id: 's1',
+          name: 'S1',
+          type: 'vanilla',
+          jarFile: 'server.jar',
+          maxMemory: '4G',
+          minMemory: '2G',
+          mcVersion: '26.2',
+          javaPath: 'java',
         };
         fs.writeFileSync(path.join(tmpDir, 'instance.json'), JSON.stringify(original));
 
         const instance = {
-          id: 's1', name: 'S1', startCommand: null, javaPath: 'java',
-          maxMemory: null, minMemory: null, jarFile: null,
+          id: 's1',
+          name: 'S1',
+          startCommand: null,
+          javaPath: 'java',
+          maxMemory: null,
+          minMemory: null,
+          jarFile: null,
           serverPath: tmpDir,
           toStatus: () => ({ id: 's1' }),
         };
         mockManager.getInstance.mockReturnValue(instance);
         InstanceModel.update.mockReturnValue({ changes: 1 });
 
-        const res = await request(app)
-          .put('/api/instances/s1')
-          .send({ name: 'Renamed' });
+        const res = await request(app).put('/api/instances/s1').send({ name: 'Renamed' });
 
         expect(res.status).toBe(200);
         const synced = JSON.parse(fs.readFileSync(path.join(tmpDir, 'instance.json'), 'utf-8'));
@@ -284,8 +291,10 @@ describe('Status Routes', () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-status-'));
       fs.writeFileSync(path.join(tmpDir, 'eula.txt'), 'eula=true\n');
       const mockInstance = {
-        start: vi.fn(() => { throw new Error('already running'); }),
-        serverPath: tmpDir
+        start: vi.fn(() => {
+          throw new Error('already running');
+        }),
+        serverPath: tmpDir,
       };
       mockManager.getInstance.mockReturnValue(mockInstance);
 
@@ -338,7 +347,7 @@ describe('Status Routes', () => {
   describe('GET /api/instances/:id/logs', () => {
     it('should return logs', async () => {
       const mockInstance = {
-        getLogs: vi.fn().mockReturnValue([{ time: 1, text: 'log' }])
+        getLogs: vi.fn().mockReturnValue([{ time: 1, text: 'log' }]),
       };
       mockManager.getInstance.mockReturnValue(mockInstance);
 
@@ -351,7 +360,7 @@ describe('Status Routes', () => {
 
   describe('GET/PUT /api/instances/:id/properties', () => {
     it('GET 重新读取文件，反映游戏内命令对 server.properties 的修改', async () => {
-      const freshProps = { 'white-list': 'true', 'pvp': 'true' };
+      const freshProps = { 'white-list': 'true', pvp: 'true' };
       const mockInstance = {
         properties: { 'white-list': 'false' }, // 内存缓存为旧值
         isRunning: false,
@@ -370,9 +379,9 @@ describe('Status Routes', () => {
     });
 
     it('GET difficulty 用运行中真实值覆盖、gamemode 读 level.dat（/difficulty、/defaultgamemode 不写回文件）', async () => {
-      const freshProps = { 'white-list': 'true', 'difficulty': 'hard', 'gamemode': 'survival' };
+      const freshProps = { 'white-list': 'true', difficulty: 'hard', gamemode: 'survival' };
       const mockInstance = {
-        properties: { 'difficulty': 'hard', 'gamemode': 'survival' }, // 文件旧值
+        properties: { difficulty: 'hard', gamemode: 'survival' }, // 文件旧值
         isRunning: true,
         isRconConnected: true,
         _loadProperties: vi.fn().mockReturnValue(freshProps),
@@ -391,9 +400,9 @@ describe('Status Routes', () => {
     });
 
     it('GET 运行值不可读时（未运行/无 level.dat），difficulty 与 gamemode 回退到文件值', async () => {
-      const freshProps = { 'difficulty': 'hard', 'gamemode': 'survival' };
+      const freshProps = { difficulty: 'hard', gamemode: 'survival' };
       const mockInstance = {
-        properties: { 'difficulty': 'hard', 'gamemode': 'survival' },
+        properties: { difficulty: 'hard', gamemode: 'survival' },
         isRunning: true,
         isRconConnected: false,
         _loadProperties: vi.fn().mockReturnValue(freshProps),
@@ -436,7 +445,7 @@ describe('Status Routes', () => {
 
     it('PUT 需重启属性不下发命令并返回 restartRequired', async () => {
       const mockInstance = {
-        properties: { 'pvp': 'true' },
+        properties: { pvp: 'true' },
         isRunning: true,
         saveProperties: vi.fn(function (props) {
           this.properties = { ...this.properties, ...props };
@@ -448,7 +457,7 @@ describe('Status Routes', () => {
       const res = await request(app)
         .put('/api/instances/s1/properties')
         .set('Content-Type', 'application/json')
-        .send({ 'pvp': 'false' });
+        .send({ pvp: 'false' });
 
       expect(res.status).toBe(200);
       // pvp 不支持运行中修改 → 不发送命令，返回需重启
@@ -458,7 +467,7 @@ describe('Status Routes', () => {
 
     it('PUT 服务器未运行时不需重启提示、不下发命令', async () => {
       const mockInstance = {
-        properties: { 'white-list': 'false', 'pvp': 'true' },
+        properties: { 'white-list': 'false', pvp: 'true' },
         isRunning: false,
         saveProperties: vi.fn(function (props) {
           this.properties = { ...this.properties, ...props };
@@ -470,7 +479,7 @@ describe('Status Routes', () => {
       const res = await request(app)
         .put('/api/instances/s1/properties')
         .set('Content-Type', 'application/json')
-        .send({ 'white-list': 'true', 'pvp': 'false' });
+        .send({ 'white-list': 'true', pvp: 'false' });
 
       expect(res.status).toBe(200);
       expect(mockInstance.sendCommand).not.toHaveBeenCalled();

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import express from 'express';
 import request from 'supertest';
 import fs from 'fs';
@@ -17,12 +17,23 @@ vi.mock('../config.js', async (importOriginal) => {
 import config from '../config.js';
 import { initDatabase } from '../db/index.js';
 import { AdminAccountModel, AdminSessionModel } from '../db/admin.model.js';
-import { hashPassword, verifyPassword, hashToken, generateSessionToken } from '../utils/password.js';
+import {
+  hashPassword,
+  verifyPassword,
+  hashToken,
+  generateSessionToken,
+} from '../utils/password.js';
 import { authMiddleware, authenticateWebSocket } from '../middleware/auth.js';
 import { createAuthRoutes, resetLoginLockState } from '../routes/auth.js';
 import { errorHandler } from '../middleware/error_handler.js';
+import { parseDbTime } from '../utils/db-time.js';
 
-// 测试用明文 Key（与 vitest.config.js 中 API_KEY 一致）
+// 超时余量：本文件 10 例含 scrypt(N=131072) 哈希/校验（单次实测 ~270ms，每例 2~7 次）。
+// 5s 默认值是按空载耗时定的，空载够用但并行争抢下没有余量（三泳道同时跑时实测 5758ms 越线）。
+// 文件级放宽到本仓既有 15s 口径；scrypt 强度不因测试下调。
+vi.setConfig({ testTimeout: 15_000 });
+
+// 测试用明文 Key（对应 vitest.config.js 注入的 API_KEY_HASH，虚拟值）
 const TEST_PLAINTEXT_KEY = 'test-api-key-for-unit-tests';
 
 let app;
@@ -54,7 +65,7 @@ beforeEach(() => {
 describe('utils/password', () => {
   it('hash → verify 往返成功，参数自描述', () => {
     const stored = hashPassword('correct horse battery');
-    // P2-5：SCRYPT_N 提升至 2^17（131072，OWASP 推荐）
+    //：SCRYPT_N 提升至 2^17（131072，OWASP 推荐）
     expect(stored).toMatch(/^scrypt\$131072\$8\$1\$/);
     expect(verifyPassword('correct horse battery', stored)).toBe(true);
   });
@@ -86,16 +97,16 @@ describe('authenticateWebSocket 会话通道（WS 握手双通道）', () => {
 
   it('有效会话令牌 → true（与 API Key 通道语义对齐）', () => {
     const token = seedSession();
-    expect(authenticateWebSocket(null, token)).toBe(true);
+    expect(authenticateWebSocket(null, token)).toEqual({ role: 'admin' });
   });
 
   it('未知令牌 → false', () => {
-    expect(authenticateWebSocket(null, 'no-such-token')).toBe(false);
+    expect(authenticateWebSocket(null, 'no-such-token')).toBe(null);
   });
 
   it('过期会话 → false 且记录被顺手清理', () => {
     const token = seedSession({ expiresInMs: -1_000 });
-    expect(authenticateWebSocket(null, token)).toBe(false);
+    expect(authenticateWebSocket(null, token)).toBe(null);
     // 惰性清理：库中不应残留过期行
     const rows = AdminSessionModel.listActive();
     expect(rows).toHaveLength(0);
@@ -103,13 +114,15 @@ describe('authenticateWebSocket 会话通道（WS 握手双通道）', () => {
 
   it('apiKey 与 sessionToken 同时传入 → apiKey 优先', () => {
     seedSession();
-    expect(authenticateWebSocket(TEST_PLAINTEXT_KEY, 'ignored-invalid-token')).toBe(true);
-    expect(authenticateWebSocket('wrong-key', 'ignored-invalid-token')).toBe(false);
+    expect(authenticateWebSocket(TEST_PLAINTEXT_KEY, 'ignored-invalid-token')).toEqual({
+      role: 'admin',
+    });
+    expect(authenticateWebSocket('wrong-key', 'ignored-invalid-token')).toBe(null);
   });
 
   it('两者皆空 → false', () => {
-    expect(authenticateWebSocket(null, null)).toBe(false);
-    expect(authenticateWebSocket('', '')).toBe(false);
+    expect(authenticateWebSocket(null, null)).toBe(null);
+    expect(authenticateWebSocket('', '')).toBe(null);
   });
 });
 
@@ -122,8 +135,12 @@ describe('认证中间件', () => {
 
   it('无凭据 401；非法 API Key 401；空 Bearer 401', async () => {
     expect((await request(app).get('/api/v1/protected')).status).toBe(401);
-    expect((await request(app).get('/api/v1/protected').set('X-API-Key', 'wrong')).status).toBe(401);
-    expect((await request(app).get('/api/v1/protected').set('Authorization', 'Bearer ')).status).toBe(401);
+    expect((await request(app).get('/api/v1/protected').set('X-API-Key', 'wrong')).status).toBe(
+      401,
+    );
+    expect(
+      (await request(app).get('/api/v1/protected').set('Authorization', 'Bearer ')).status,
+    ).toBe(401);
   });
 
   it('Bearer 会话通道：有效令牌通过并标记 source=session', async () => {
@@ -140,7 +157,9 @@ describe('认证中间件', () => {
   });
 
   it('Bearer：伪造令牌 401（AUTH_SESSION_EXPIRED）', async () => {
-    const res = await request(app).get('/api/v1/protected').set('Authorization', 'Bearer forged-token');
+    const res = await request(app)
+      .get('/api/v1/protected')
+      .set('Authorization', 'Bearer forged-token');
     expect(res.status).toBe(401);
     expect(res.body.code).toBe(40103);
   });
@@ -155,6 +174,152 @@ describe('认证中间件', () => {
     expect(res.status).toBe(401);
     expect(res.body.code).toBe(40103);
     expect(AdminSessionModel.getById(session.id)).toBeNull();
+  });
+});
+
+describe('滑动续期绝对过期 cap 语义（absoluteTtlMs 0/负值守卫）', () => {
+  // 守卫回归：absoluteTtlMs=0（文档化关闭语义）时 slidingExpiry 曾无守卫，
+  // Math.min 把续期目标写回 created_at → touch 后下一请求即自毁
+  const originalAdminSession = { ...config.adminSession };
+
+  afterEach(() => {
+    Object.assign(config.adminSession, originalAdminSession);
+  });
+
+  /** production 同款口径：SQLite CURRENT_TIMESTAMP 的无时区 UTC 串（秒级、空格分隔） */
+  const naive = (msAgo) =>
+    new Date(Date.now() - msAgo).toISOString().replace('T', ' ').slice(0, 19);
+
+  /** 构造一条需要续期的活跃会话（last_seen_at 超过 60s 触达节流阈值） */
+  function seedTouchableSession() {
+    const token = generateSessionToken();
+    const session = AdminSessionModel.create({
+      tokenHash: hashToken(token),
+      userAgent: 'vitest-cap',
+      ip: '127.0.0.1',
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    });
+    // 时间列一律写 CURRENT_TIMESTAMP 口径（而非 ISO）：用 ISO 种子时裸
+    // new Date() 在任何时区下都恰好解析正确，缺陷会整体逃逸——这正是该缺陷
+    // 第一次漏网的原因。改用同口径后，「调用点回退到裸解析」在非 UTC 宿主上会红。
+    db.prepare('UPDATE admin_sessions SET created_at = ?, last_seen_at = ? WHERE id = ?').run(
+      naive(120_000),
+      naive(120_000),
+      session.id,
+    );
+    return token;
+  }
+
+  it('absoluteTtlMs=0（关闭绝对过期）：touch 续期正常，会话不自毁', async () => {
+    config.adminSession.absoluteTtlMs = 0;
+    config.adminSession.ttlMs = 3_600_000; // 1h 滑动窗口，便于断言远期
+    const token = seedTouchableSession();
+    const res = await request(app).get('/api/v1/protected').set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    const session = AdminSessionModel.findByTokenHash(hashToken(token));
+    expect(session).not.toBeNull();
+    // 续期目标 = now + ttlMs，不受已关闭的绝对过期削减
+    expect(new Date(session.expires_at).getTime()).toBeGreaterThan(Date.now() + 3_000_000);
+  });
+
+  it('absoluteTtlMs 为负值：与 0 同守卫（关闭语义）', async () => {
+    config.adminSession.absoluteTtlMs = -1;
+    config.adminSession.ttlMs = 3_600_000;
+    const token = seedTouchableSession();
+    const res = await request(app).get('/api/v1/protected').set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(
+      new Date(AdminSessionModel.findByTokenHash(hashToken(token)).expires_at).getTime(),
+    ).toBeGreaterThan(Date.now() + 3_000_000);
+  });
+
+  it('默认 30 天 cap 保留：续期目标不超过 created_at + absoluteTtlMs', async () => {
+    config.adminSession.absoluteTtlMs = 30 * 86400_000;
+    config.adminSession.ttlMs = 100 * 86400_000; // 滑动窗口远超绝对上限
+    const token = seedTouchableSession();
+    const res = await request(app).get('/api/v1/protected').set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    const session = AdminSessionModel.findByTokenHash(hashToken(token));
+    // created_at 是 CURRENT_TIMESTAMP 的无时区 UTC 串，断言侧同样经 parseDbTime 归一化
+    const createdPlusCap = parseDbTime(session.created_at) + 30 * 86400_000;
+    // 续期被 cap 压回绝对重登边界附近（±2s 容差吸收执行耗时）
+    expect(new Date(session.expires_at).getTime()).toBeLessThanOrEqual(createdPlusCap + 2_000);
+    expect(new Date(session.expires_at).getTime()).toBeGreaterThan(createdPlusCap - 2_000);
+  });
+
+  it('createSession 初始 expiresAt 同样受绝对 cap 封顶（TTL_HOURS > ABSOLUTE_TTL_DAYS）', async () => {
+    config.adminSession.absoluteTtlMs = 1 * 86400_000; // 1 天绝对上限
+    config.adminSession.ttlMs = 100 * 86400_000; // 滑动 TTL 远超上限
+    const testPassword = ['cap-init', 'pass', '9'].join('-');
+    AdminAccountModel.setPassword(hashPassword(testPassword));
+    const login = await request(app).post('/api/v1/auth/login').send({ password: testPassword });
+    expect(login.status).toBe(200);
+    const session = AdminSessionModel.getById(login.body.data.sessionId);
+    // 初始 cap 以登录时刻为基准（createSession 内部用 ISO now 计算，无
+    // created_at 空格格式的本地时区解析偏差，故断言锚定 Date.now()）
+    expect(new Date(session.expires_at).getTime()).toBeLessThanOrEqual(
+      Date.now() + 86400_000 + 2_000,
+    );
+    expect(new Date(session.expires_at).getTime()).toBeGreaterThan(Date.now() + 86400_000 - 2_000);
+  });
+
+  // 该降级语义（见 middleware/auth.js 的 sessionCreatedAt 注释）此前无任何用例守住，
+  // 而它是「旧库缺列时 admin 不被锁在门外」的唯一依据——反过来也意味着该会话不再受
+  // 30 天绝对上限约束，仅剩滑动 TTL 兜底，属有意为之的取舍，必须钉死。
+  it('created_at 取不到（NULL/旧库缺列）：不施加绝对上限，会话不被判死且续期不被 cap 削减', async () => {
+    config.adminSession.absoluteTtlMs = 1 * 86400_000; // 1 天绝对上限
+    config.adminSession.ttlMs = 7 * 86400_000;
+    const token = seedTouchableSession();
+    db.prepare('UPDATE admin_sessions SET created_at = NULL WHERE token_hash = ?').run(
+      hashToken(token),
+    );
+
+    const res = await request(app).get('/api/v1/protected').set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+
+    const session = AdminSessionModel.findByTokenHash(hashToken(token));
+    // 若把取不到当作 epoch 0，续期目标会被 cap 写回创建时刻 → 下一请求即自毁
+    expect(new Date(session.expires_at).getTime()).toBeGreaterThan(Date.now() + 6 * 86400_000);
+  });
+
+  // 60s 写库节流此前无用例：last_seen_at 同为无时区串，裸解析在 UTC+8 下恒判
+  // 「已超 60s」，每个已认证请求都写一次库（性能回退而非功能错，CI 在 UTC 下不体现）。
+  it('续期写库节流：last_seen_at 在阈值内不写库，超阈值才写', async () => {
+    config.adminSession.absoluteTtlMs = 30 * 86400_000;
+    const mkSession = () => {
+      const token = generateSessionToken();
+      const s = AdminSessionModel.create({
+        tokenHash: hashToken(token),
+        userAgent: 'vitest-throttle',
+        ip: '127.0.0.1',
+        expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+      });
+      return { token, id: s.id };
+    };
+    const hit = async (token) =>
+      (await request(app).get('/api/v1/protected').set('Authorization', `Bearer ${token}`)).status;
+
+    // ① 刚刚触达过（5s 前）→ 节流命中，touch 不应改写 expires_at
+    const a = mkSession();
+    db.prepare('UPDATE admin_sessions SET created_at = ?, last_seen_at = ? WHERE id = ?').run(
+      naive(86_400_000),
+      naive(5_000),
+      a.id,
+    );
+    const beforeA = AdminSessionModel.getById(a.id).expires_at;
+    expect(await hit(a.token)).toBe(200);
+    expect(AdminSessionModel.getById(a.id).expires_at).toBe(beforeA);
+
+    // ② 超出阈值（120s 前）→ 续期写库，expires_at 被推到 now + ttlMs（默认 7 天）
+    const b = mkSession();
+    db.prepare('UPDATE admin_sessions SET created_at = ?, last_seen_at = ? WHERE id = ?').run(
+      naive(86_400_000),
+      naive(120_000),
+      b.id,
+    );
+    const beforeB = AdminSessionModel.getById(b.id).expires_at;
+    expect(await hit(b.token)).toBe(200);
+    expect(AdminSessionModel.getById(b.id).expires_at).not.toBe(beforeB);
   });
 });
 
@@ -174,9 +339,11 @@ describe('认证路由 - status/setup', () => {
 
     // 回归：全局认证动作的审计必须落库（v8 迁移前 instance_id NOT NULL
     // 导致写入被 recordAudit 静默吞掉——KEY_ROTATE 同病）
-    const audits = db.prepare(
-      "SELECT COUNT(*) AS n FROM audit_logs WHERE action = 'AUTH_SETUP' AND instance_id IS NULL",
-    ).get();
+    const audits = db
+      .prepare(
+        "SELECT COUNT(*) AS n FROM audit_logs WHERE action = 'AUTH_SETUP' AND instance_id IS NULL",
+      )
+      .get();
     expect(audits.n).toBe(1);
   });
 
@@ -208,7 +375,9 @@ describe('认证路由 - login/logout/sessions', () => {
     expect(wrong.status).toBe(401);
     expect(wrong.body.code).toBe(40102);
 
-    const login = await request(app).post('/api/v1/auth/login').send({ password: 'known-pass-123' });
+    const login = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ password: 'known-pass-123' });
     expect(login.status).toBe(200);
     expect(login.body.data.token).toBeTruthy();
     expect(login.body.data.expiresAt).toBeTruthy();
@@ -222,10 +391,14 @@ describe('认证路由 - login/logout/sessions', () => {
 
   it('logout：会话登出后令牌失效；API Key 通道登出 400', async () => {
     AdminAccountModel.setPassword(hashPassword('known-pass-123'));
-    const login = await request(app).post('/api/v1/auth/login').send({ password: 'known-pass-123' });
+    const login = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ password: 'known-pass-123' });
     const { token } = login.body.data;
 
-    const logout = await request(app).post('/api/v1/auth/logout').set('Authorization', `Bearer ${token}`);
+    const logout = await request(app)
+      .post('/api/v1/auth/logout')
+      .set('Authorization', `Bearer ${token}`);
     expect(logout.status).toBe(200);
 
     const after = await request(app)
@@ -241,8 +414,10 @@ describe('认证路由 - login/logout/sessions', () => {
 
   it('sessions 列表：多会话可见且 current 标记正确；踢出目标会话', async () => {
     AdminAccountModel.setPassword(hashPassword('known-pass-123'));
-    const a = (await request(app).post('/api/v1/auth/login').send({ password: 'known-pass-123' })).body.data;
-    const b = (await request(app).post('/api/v1/auth/login').send({ password: 'known-pass-123' })).body.data;
+    const a = (await request(app).post('/api/v1/auth/login').send({ password: 'known-pass-123' }))
+      .body.data;
+    const b = (await request(app).post('/api/v1/auth/login').send({ password: 'known-pass-123' }))
+      .body.data;
 
     const list = await request(app)
       .get('/api/v1/auth/sessions')
@@ -261,7 +436,8 @@ describe('认证路由 - login/logout/sessions', () => {
 
     // b 的令牌失效；踢不存在的会话 404
     expect(
-      (await request(app).get('/api/v1/protected').set('Authorization', `Bearer ${b.token}`)).status,
+      (await request(app).get('/api/v1/protected').set('Authorization', `Bearer ${b.token}`))
+        .status,
     ).toBe(401);
     const missing = await request(app)
       .delete('/api/v1/auth/sessions/00000000-0000-0000-0000-000000000000')
@@ -271,10 +447,15 @@ describe('认证路由 - login/logout/sessions', () => {
 });
 
 describe('认证路由 - 改密与登录锁定', () => {
-  it('改密：验旧密；成功后其余会话被踢、当前保留；新密码可登录', async () => {
+  // scrypt(N=2^17) 每次数百毫秒 × 本用例多次哈希/校验，全量并发下会越过 vitest
+  // 默认 5s（实测 5.3s，单独跑 3.6s）——属负载超时而非逻辑失败，故显式放宽；
+  // 不为测试下调 scrypt 成本（安全参数不向测试让路）。
+  it('改密：验旧密；成功后其余会话被踢、当前保留；新密码可登录', { timeout: 20_000 }, async () => {
     AdminAccountModel.setPassword(hashPassword('old-pass-1234'));
-    const a = (await request(app).post('/api/v1/auth/login').send({ password: 'old-pass-1234' })).body.data;
-    const b = (await request(app).post('/api/v1/auth/login').send({ password: 'old-pass-1234' })).body.data;
+    const a = (await request(app).post('/api/v1/auth/login').send({ password: 'old-pass-1234' }))
+      .body.data;
+    const b = (await request(app).post('/api/v1/auth/login').send({ password: 'old-pass-1234' }))
+      .body.data;
 
     const wrongOld = await request(app)
       .put('/api/v1/auth/password')
@@ -296,22 +477,30 @@ describe('认证路由 - 改密与登录锁定', () => {
     expect(change.body.data.kickedSessions).toBe(1); // 只有 b 被踢
 
     expect(
-      (await request(app).get('/api/v1/protected').set('Authorization', `Bearer ${a.token}`)).status,
+      (await request(app).get('/api/v1/protected').set('Authorization', `Bearer ${a.token}`))
+        .status,
     ).toBe(200);
     expect(
-      (await request(app).get('/api/v1/protected').set('Authorization', `Bearer ${b.token}`)).status,
+      (await request(app).get('/api/v1/protected').set('Authorization', `Bearer ${b.token}`))
+        .status,
     ).toBe(401);
 
-    const relogin = await request(app).post('/api/v1/auth/login').send({ password: 'new-pass-5678' });
+    const relogin = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ password: 'new-pass-5678' });
     expect(relogin.status).toBe(200);
   });
 
   it('login 失败锁定：连续失败达阈值 429，正确密码也被拒；重置后恢复', async () => {
     AdminAccountModel.setPassword(hashPassword('lock-test-pass'));
     for (let i = 0; i < config.adminSession.loginLockMaxFails; i++) {
-      await request(app).post('/api/v1/auth/login').send({ password: `bad-${i}` });
+      await request(app)
+        .post('/api/v1/auth/login')
+        .send({ password: `bad-${i}` });
     }
-    const locked = await request(app).post('/api/v1/auth/login').send({ password: 'lock-test-pass' });
+    const locked = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ password: 'lock-test-pass' });
     expect(locked.status).toBe(429);
     expect(locked.body.code).toBe(42901);
 

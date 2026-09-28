@@ -41,7 +41,10 @@ export function useSendCommand() {
 
   const send = (command: string) => {
     const trimmed = command.trim()
-    if (!trimmed || !isRunning || !instanceId || mutation.isPending) return false
+    // isPending 不做静默丢弃：时钟卡天气/时间连点是正常操作序列，
+    // 丢弃第二条命令无任何反馈（e2e 实证连点 weather rain + time set night
+    // 丢后者）——TanStack useMutation 天然按序串行处理后续 mutate
+    if (!trimmed || !isRunning || !instanceId) return false
     mutation.mutate(trimmed)
     return true
   }

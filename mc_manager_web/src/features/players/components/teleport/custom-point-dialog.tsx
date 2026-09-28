@@ -15,7 +15,12 @@ export interface CustomPointDialogProps {
   running: boolean
 }
 
-export function CustomPointDialog({ draft, onDraftChange, onAdd, running }: CustomPointDialogProps) {
+export function CustomPointDialog({
+  draft,
+  onDraftChange,
+  onAdd,
+  running,
+}: CustomPointDialogProps) {
   const handleConfirm = () => {
     if (!draft) return
     if (onAdd(draft)) onDraftChange(null)
@@ -42,7 +47,7 @@ export function CustomPointDialog({ draft, onDraftChange, onAdd, running }: Cust
             onChange={(e) => onDraftChange((d) => (d ? { ...d, name: e.target.value } : d))}
             placeholder="如：基地、刷怪塔"
             maxLength={24}
-            className="w-full rounded-mcs-xs border border-mcs-border-default bg-mcs-bg-default px-2.5 py-1.5 text-mcs-sm text-mcs-text-default placeholder:text-mcs-text-subtle focus:outline-none focus:ring-1 focus:ring-mcs-focus-ring"
+            className="w-full rounded-mcs-xs border border-mcs-border-default bg-mcs-bg-default px-2.5 py-1.5 text-mcs-sm text-mcs-text-default placeholder:text-mcs-text-muted focus:outline-none focus:ring-1 focus:ring-mcs-focus-ring"
           />
         </div>
         <div className="grid grid-cols-3 gap-2">

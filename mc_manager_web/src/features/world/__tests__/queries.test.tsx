@@ -41,7 +41,7 @@ const mockWorld: WorldInfo = {
 }
 
 const mockProps: ServerProperties = {
-  'motd': 'A Demo Server',
+  motd: 'A Demo Server',
   'view-distance': '10',
   'rcon.password': '********',
 }
@@ -52,7 +52,10 @@ let putHits = 0
 
 function ok<T>(data: T) {
   return HttpResponse.json({
-    status: 'ok', code: 0, message: 'Success', data,
+    status: 'ok',
+    code: 0,
+    message: 'Success',
+    data,
     timestamp: new Date().toISOString(),
   })
 }
@@ -142,7 +145,7 @@ describe('useServerProperties', () => {
     const { wrapper } = makeWrapper()
     const { result } = renderHook(() => useServerProperties('inst1'), { wrapper })
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
-    expect(result.current.data).toMatchObject({ 'motd': 'A Demo Server', 'view-distance': '10' })
+    expect(result.current.data).toMatchObject({ motd: 'A Demo Server', 'view-distance': '10' })
     expect(result.current.data?.['rcon.password']).toBe('********')
     expect(propsHits).toBe(1)
   })

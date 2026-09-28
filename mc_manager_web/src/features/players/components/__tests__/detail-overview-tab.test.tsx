@@ -8,6 +8,7 @@
 import { describe, expect, it } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import type { Player } from '@/api/types'
+import type { QueryPhase } from '@/lib/query-phase'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { OverviewTab } from '../detail-overview-tab'
 
@@ -52,12 +53,19 @@ function makePlayer(overrides: Partial<Player>): Player {
     inventory: null,
     events: [],
     sessions: [],
-    stats: { totalOnline: 0, loginCount: 0, offlineSince: 0, deathCount: 0, achievementCount: 0, sleepCount: 0 },
+    stats: {
+      totalOnline: 0,
+      loginCount: 0,
+      offlineSince: 0,
+      deathCount: 0,
+      achievementCount: 0,
+      sleepCount: 0,
+    },
     ...overrides,
   }
 }
 
-function renderOverview(player: Player) {
+function renderOverview(player: Player, bansPhase: QueryPhase = 'ready') {
   return render(
     <TooltipProvider>
       <OverviewTab
@@ -65,6 +73,9 @@ function renderOverview(player: Player) {
         player={player}
         isRconConnected={false}
         bans={[]}
+        bansPhase={bansPhase}
+        bansError={bansPhase === 'failed' ? new Error('boom') : null}
+        onRetryBans={() => {}}
         onAction={async () => {}}
         onOpenBanDialog={() => {}}
       />
@@ -73,6 +84,12 @@ function renderOverview(player: Player) {
 }
 
 describe('OverviewTab 生产契约回归', () => {
+  it('封禁查询失败时不得渲染「无封禁记录」——请求故障不能伪装成「该玩家干净」的结论', () => {
+    renderOverview(makePlayer({}), 'failed')
+    expect(screen.queryByText('无封禁记录')).not.toBeInTheDocument()
+    expect(screen.getByText(/封禁记录加载失败/)).toBeInTheDocument()
+  })
+
   it('真实服务端契约：无 potionEffects/ipHistory 字段（undefined）渲染不崩溃', () => {
     // 模拟真实详情接口 JSON：这两个键根本不存在（= undefined），
     // 类型断言仅为通过编译——运行时形态与生产一致

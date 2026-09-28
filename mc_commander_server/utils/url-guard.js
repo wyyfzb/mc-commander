@@ -9,20 +9,20 @@ import net from 'net';
 
 // 私网/保留 IPv4 段（CIDR 表示：[网络地址, 掩码位数]）
 const PRIVATE_IPV4_RANGES = [
-  ['0.0.0.0', 8],       // 本网络（含 0.0.0.0 未指定地址）
-  ['10.0.0.0', 8],      // 私网
-  ['100.64.0.0', 10],   // CGNAT 运营商级 NAT 共享地址
-  ['127.0.0.0', 8],     // 环回
-  ['169.254.0.0', 16],  // 链路本地（含云元数据端点 169.254.169.254）
-  ['172.16.0.0', 12],   // 私网
-  ['192.0.0.0', 24],    // IETF 协议保留
-  ['192.0.2.0', 24],    // TEST-NET-1（文档保留）
-  ['192.88.99.0', 24],  // 6to4 中继任播（已废弃）
-  ['192.168.0.0', 16],  // 私网
-  ['198.18.0.0', 15],   // 网络基准测试
+  ['0.0.0.0', 8], // 本网络（含 0.0.0.0 未指定地址）
+  ['10.0.0.0', 8], // 私网
+  ['100.64.0.0', 10], // CGNAT 运营商级 NAT 共享地址
+  ['127.0.0.0', 8], // 环回
+  ['169.254.0.0', 16], // 链路本地（含云元数据端点 169.254.169.254）
+  ['172.16.0.0', 12], // 私网
+  ['192.0.0.0', 24], // IETF 协议保留
+  ['192.0.2.0', 24], // TEST-NET-1（文档保留）
+  ['192.88.99.0', 24], // 6to4 中继任播（已废弃）
+  ['192.168.0.0', 16], // 私网
+  ['198.18.0.0', 15], // 网络基准测试
   ['198.51.100.0', 24], // TEST-NET-2（文档保留）
-  ['203.0.113.0', 24],  // TEST-NET-3（文档保留）
-  ['224.0.0.0', 3],     // 组播 + 保留段（224.0.0.0 - 255.255.255.255）
+  ['203.0.113.0', 24], // TEST-NET-3（文档保留）
+  ['224.0.0.0', 3], // 组播 + 保留段（224.0.0.0 - 255.255.255.255）
 ];
 
 /** IPv4 点分十进制 → 32 位无符号整数；非法返回 null */
@@ -44,7 +44,7 @@ function inPrivateIpv4(ip) {
   if (value === null) return false;
   return PRIVATE_IPV4_RANGES.some(([base, bits]) => {
     const baseVal = ipv4ToLong(base);
-    const mask = (0xFFFFFFFF << (32 - bits)) >>> 0;
+    const mask = (0xffffffff << (32 - bits)) >>> 0;
     return (value & mask) === (baseVal & mask);
   });
 }
@@ -62,10 +62,10 @@ function isPrivateIpv6(ip) {
     return inPrivateIpv4(`${(hi >> 8) & 0xff}.${hi & 0xff}.${(lo >> 8) & 0xff}.${lo & 0xff}`);
   }
   if (addr === '::' || addr === '::1') return true; // 未指定 / 环回
-  if (/^f[cd]/.test(addr)) return true;             // 唯一本地 fc00::/7
-  if (/^fe[89ab]/.test(addr)) return true;          // 链路本地 fe80::/10
-  if (/^ff/.test(addr)) return true;                // 组播 ff00::/8
-  if (addr.startsWith('64:ff9b')) return true;      // NAT64 转换前缀（常用于内网访问）
+  if (/^f[cd]/.test(addr)) return true; // 唯一本地 fc00::/7
+  if (/^fe[89ab]/.test(addr)) return true; // 链路本地 fe80::/10
+  if (/^ff/.test(addr)) return true; // 组播 ff00::/8
+  if (addr.startsWith('64:ff9b')) return true; // NAT64 转换前缀（常用于内网访问）
   return false;
 }
 
@@ -119,8 +119,8 @@ export async function checkPublicUrl(url, opts = {}) {
   }
 
   // 域名：解析后校验全部地址（防 DNS rebinding：解析结果含任一私网 IP 即拒绝）
-  const lookup = opts.lookup
-    || ((host) => dns.promises.lookup(host, { all: true, verbatim: true }));
+  const lookup =
+    opts.lookup || ((host) => dns.promises.lookup(host, { all: true, verbatim: true }));
   let addresses;
   try {
     addresses = await lookup(bare);
@@ -130,8 +130,8 @@ export async function checkPublicUrl(url, opts = {}) {
   if (!Array.isArray(addresses) || addresses.length === 0) {
     return { ok: false, reason: '域名无可用解析记录' };
   }
-  const resolved = addresses.map(a => a.address);
-  const blocked = resolved.find(ip => isPrivateIp(ip));
+  const resolved = addresses.map((a) => a.address);
+  const blocked = resolved.find((ip) => isPrivateIp(ip));
   if (blocked) {
     return { ok: false, reason: '域名解析到私网/保留 IP 地址，已拒绝' };
   }

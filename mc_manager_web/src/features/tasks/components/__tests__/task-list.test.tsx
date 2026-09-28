@@ -31,16 +31,16 @@ function renderList(overrides: Partial<TaskListProps> = {}) {
   }
   render(
     <TooltipProvider>
-    <TaskList
-      tasks={overrides.tasks ?? mockTasks}
-      isLoading={overrides.isLoading ?? false}
-      runningTaskId={overrides.runningTaskId ?? null}
-      onToggle={handlers.onToggle}
-      onRunNow={handlers.onRunNow}
-      onEdit={handlers.onEdit}
-      onDelete={handlers.onDelete}
-      onNewTask={handlers.onNewTask}
-    />
+      <TaskList
+        tasks={overrides.tasks ?? mockTasks}
+        isLoading={overrides.isLoading ?? false}
+        runningTaskId={overrides.runningTaskId ?? null}
+        onToggle={handlers.onToggle}
+        onRunNow={handlers.onRunNow}
+        onEdit={handlers.onEdit}
+        onDelete={handlers.onDelete}
+        onNewTask={handlers.onNewTask}
+      />
     </TooltipProvider>,
   )
   return handlers
@@ -68,10 +68,16 @@ describe('TaskList 渲染', () => {
     expect(screen.getByText('say 服务器每半小时自动公告')).toBeInTheDocument()
 
     // 时间行「上次运行/下次运行」（formatTaskDate 格式化；null → 从未）
-    const timeRows = screen.getAllByText((_, el) => el?.textContent?.startsWith('上次运行:') ?? false)
+    const timeRows = screen.getAllByText(
+      (_, el) => el?.textContent?.startsWith('上次运行:') ?? false,
+    )
     expect(timeRows).toHaveLength(3)
-    expect(timeRows[0]?.textContent).toContain(`上次运行: ${formatTaskDate(mockTasks[0]!.lastRunAt)}`)
-    expect(timeRows[0]?.textContent).toContain(`下次运行: ${formatTaskDate(mockTasks[0]!.nextRunAt)}（`)
+    expect(timeRows[0]?.textContent).toContain(
+      `上次运行: ${formatTaskDate(mockTasks[0]!.lastRunAt)}`,
+    )
+    expect(timeRows[0]?.textContent).toContain(
+      `下次运行: ${formatTaskDate(mockTasks[0]!.nextRunAt)}（`,
+    )
     // 下次运行追加倒计时（2h 前生成：2h 0m 后；容差断言，精确格式由 formatNextRunCountdown 单测锁定）
     expect(timeRows[0]?.textContent).toContain(
       `（${formatNextRunCountdown(mockTasks[0]!.nextRunAt, Date.now())}）`,
@@ -118,9 +124,15 @@ describe('TaskList 上次运行结果标记', () => {
     expect(screen.getByText('成功')).toBeInTheDocument()
   })
 
-  it('failed → 显示失败标记', () => {
+  it('failed → 显示失败标记', async () => {
     renderOneTask('failed', new Date().toISOString())
     expect(screen.getByText('失败')).toBeInTheDocument()
+
+    // 失败原因浮层内容 break-all：无空格长串（压缩 JSON/路径）不溢出浮层框。
+    // 点按而非 hover——解释走 Popover，键盘/触屏与鼠标必须走同一条路
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: '失败原因' }))
+    expect(await screen.findByText('RCON 不可用')).toHaveClass('break-all')
   })
 
   it('skipped → 显示跳过标记（warning 语义，备份互斥跳过）', () => {

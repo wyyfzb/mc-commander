@@ -9,16 +9,10 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import { isPathContained } from './fs-utils.js';
 
 /** 世界目录名白名单：仅字母/数字/_/-（不含路径分隔符与 ..，杜绝路径穿越） */
 const LEVEL_NAME_REGEX = /^[A-Za-z0-9_-]+$/;
-
-/** 路径包含校验（服务层兜底）：resolve 归一化后必须位于 base 之下 */
-export function isPathContained(basePath, targetPath) {
-  const base = path.resolve(basePath);
-  const target = path.resolve(base, targetPath);
-  return target === base || target.startsWith(base + path.sep);
-}
 
 /**
  * 生成离线模式 UUID（online-mode=false 时使用；MC 原版 MD5 v3 算法）
@@ -43,7 +37,7 @@ export function offlineUuid(playerName) {
  * @param {string} [opts.levelName] level-name 配置（非法/缺失回退 'world'）
  */
 export function getTotalPlayTime({ serverPath, uuid, playerName, levelName }) {
-  // find-008-read 服务层兜底：非法 worldName（含路径分隔符/..）回退 'world'
+  // 服务层兜底：非法 worldName（含路径分隔符/..）回退 'world'
   let worldName = (typeof levelName === 'string' && levelName) || 'world';
   if (!LEVEL_NAME_REGEX.test(worldName)) {
     worldName = 'world';
@@ -74,15 +68,16 @@ export function getTotalPlayTime({ serverPath, uuid, playerName, levelName }) {
     }
   }
   for (const statsPath of candidates) {
-    // find-008-read：候选路径 resolve 后必须位于 serverPath 内，越界丢弃（回退 'world' 已保证安全）
+    // 候选路径 resolve 后必须位于 serverPath 内，越界丢弃（回退 'world' 已保证安全）
     if (!isPathContained(serverPath, statsPath)) continue;
     if (!fs.existsSync(statsPath)) continue;
     try {
       const raw = JSON.parse(fs.readFileSync(statsPath, 'utf-8'));
-      const playTime = raw?.stats?.['minecraft:custom']?.['minecraft:play_time']
-        || raw?.['minecraft:custom']?.['minecraft:play_time']
-        || raw?.['minecraft:custom']?.['minecraft:total_world_time']
-        || 0;
+      const playTime =
+        raw?.stats?.['minecraft:custom']?.['minecraft:play_time'] ||
+        raw?.['minecraft:custom']?.['minecraft:play_time'] ||
+        raw?.['minecraft:custom']?.['minecraft:total_world_time'] ||
+        0;
       return Math.floor(playTime / 20);
     } catch {}
   }

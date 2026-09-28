@@ -38,13 +38,14 @@ export NEEDRESTART_MODE=a
 MC_COMMANDER_DIR="${MC_COMMANDER_DIR:-/opt/mc-commander}"
 # 默认锁定具体发布标签（vX.Y.Z），避免 master 可变分支被投毒/误覆盖后影响安装；
 # 仍保留 BRANCH 环境变量覆盖（例如 BRANCH=master 或指定 commit），但可变分支场景必须配合 PACKAGE_SHA256
-BRANCH="${BRANCH:-v0.1.0}"
+BRANCH="${BRANCH:-v1.2.0}"
 # GitHub Release 资产为权威来源（CI 构建）；国内网络可通过 PACKAGE_URL 覆盖为 gitee 镜像
 PACKAGE_URL="${PACKAGE_URL:-https://github.com/wyyfzb/mc-commander/releases/download/${BRANCH}/mc-commander-server-${BRANCH}.tar.gz}"
 # 预期代码包 sha256（强制完整性校验，防篡改/防发布版本错配）。
-# 当前值为本地构建参考值，发布新版本时必须按脚本头部注释流程同步更新；
+# 当前值与 BRANCH 默认值保持一致（对应最近一次含产物的 Release），
+# 新版本发布后由 release.yml 回写 PR 自动同步更新，无需手工维护；
 # 自定义 PACKAGE_URL 时通过 PACKAGE_SHA256 环境变量提供对应文件的 sha256
-EXPECTED_PACKAGE_SHA256="${PACKAGE_SHA256:-82193196194e514c2334dd8bb4949040682afe61c58f218419baef5ce0fccadf}"
+EXPECTED_PACKAGE_SHA256="${PACKAGE_SHA256:-544a34879c5c907182136106a0e5307d04c48389c86cae298bd510c237c8c526}"
 
 log()  { echo "[$(date '+%H:%M:%S')] $*"; }
 warn() { echo "[WARN] $*"; }
@@ -430,19 +431,26 @@ export npm_config_node_mirror="https://npmmirror.com/mirrors/node/"
 npm install --omit=dev
 
 # 9. 生成/读取 .env 配置（API Key 首次部署自动生成，更新时保留原有Key）
+# .env 只落 API_KEY_HASH（SHA-256 摘要），明文仅在完成横幅一次性展示
 # SETUP_TOKEN：首访设密所有权证明（audit S-P0-1 / #309）——仅首次部署生成；
 # 更新部署不读取不再生成（一次性凭据，避免重复展示扩大暴露面；存量部署
 # 需开启保护请手动向 .env 添加 SETUP_TOKEN 行后重启服务）
 SETUP_TOKEN=""
+API_KEY=""
 if [ ! -f .env ]; then
   log "首次部署，生成 API Key 和 .env 配置文件..."
-  API_KEY=$(openssl rand -hex 16)
+  # 32 字节（256 位）CSPRNG：与文档对「自填 Key」的要求同一把尺子，
+  # 也避免出现「要求部署方 32 字节、脚本自己发 16 字节」的不一致
+  API_KEY=$(openssl rand -hex 32)
   # 一次性令牌：浏览器首访设密时需粘贴（服务端校验 Authorization: SetupToken <token>），
   # 设密成功立即作废（内存清空 + .env 移除，重启后同样失效）
   SETUP_TOKEN=$(openssl rand -hex 32)
   cat > .env <<EOF
-API_KEY=$API_KEY
+API_KEY_HASH=$(printf '%s' "$API_KEY" | sha256sum | awk '{print $1}')
 SETUP_TOKEN=$SETUP_TOKEN
+# 脚本会开放 25566 并在完成横幅里给出公网访问地址，故显式对外监听：
+# 服务端默认 127.0.0.1（仅本机），不写这一行会让「部署完成」的地址打不开
+HOST=0.0.0.0
 PORT=25566
 SERVERS_DIR=./servers
 DATA_DIR=./data
@@ -452,23 +460,11 @@ RATE_LIMIT_WINDOW=60000
 RATE_LIMIT_MAX=100
 EOF
   # Key 掩码进日志（P2-10）：完整值仅在下方完成横幅一次性展示（交付通道），
-  # 不进 log 长期留存；.env 为唯一持久存储
+  # 不进 log 长期留存；.env 只存摘要
   log "已生成 API Key: ${API_KEY:0:4}****（完整值见部署完成横幅）"
   log "已生成一次性 SETUP_TOKEN（首访设密时需粘贴，用后作废）"
 else
-  log ".env 已存在，读取现有配置..."
-  # 从已有 .env 中读取 API_KEY（支持 API_KEY=xxx 或 API Key: xxx 格式）
-  API_KEY=$(grep -E '^API_KEY=' .env 2>/dev/null | cut -d= -f2 | tr -d ' "[:space:]')
-  if [ -z "$API_KEY" ]; then
-    API_KEY=$(grep -E '^API Key:' .env 2>/dev/null | cut -d: -f2 | tr -d ' "[:space:]')
-  fi
-  if [ -z "$API_KEY" ]; then
-    warn "未能从 .env 中读取到 API_KEY，将重新生成"
-    API_KEY=$(openssl rand -hex 16)
-    sed -i "s/^API_KEY=.*/API_KEY=$API_KEY/" .env 2>/dev/null || echo "API_KEY=$API_KEY" >> .env
-  else
-    log "已读取现有 API Key: ${API_KEY:0:4}****"
-  fi
+  log ".env 已存在，保留现有 API_KEY_HASH（不重新生成）..."
 fi
 
 # 9.5 开放防火墙端口（25566）
@@ -507,8 +503,12 @@ After=network.target
 [Service]
 Type=simple
 User=mc-commander
-# 生产模式：启用 NODE_ENV 门控行为（严格错误掩码、弱密钥校验等），避免环境不一致
+# 生产模式：启用 NODE_ENV 门控行为（严格错误掩码等），避免环境不一致
 Environment=NODE_ENV=production
+# 只向面板主进程发停止信号，不波及同 cgroup 的 MC 实例——面板停机不停实例
+# （owner 2026-09-09 拍板），实例由下次启动的 pid 文件接管。默认 control-group
+# 会把实例一并 SIGTERM 杀掉，使该语义失效
+KillMode=process
 WorkingDirectory=$MC_COMMANDER_DIR
 ExecStart=$(which node) index.js
 Restart=always
@@ -519,6 +519,12 @@ WantedBy=multi-user.target
 EOF
   systemctl daemon-reload
   systemctl enable mc-commander
+  # 面板停机不停实例（owner 2026-09-09 拍板）：重启后面板按 pid 文件接管运行态，
+  # 但接管实例的控制台管道不可恢复——命令需 RCON，无 RCON 的实例只能强制终止
+  if pgrep -f 'servers/.*/server\.jar' >/dev/null 2>&1; then
+    warn "检测到运行中的 MC 实例：面板重启后将自动接管（运行态恢复，日志从接管时刻起）"
+    warn "接管实例的命令需启用 RCON；未启用 RCON 的实例将只能强制终止"
+  fi
   systemctl restart mc-commander
   log "已注册并启动 systemd 服务: mc-commander（以专用低权限用户 mc-commander 运行）"
 elif command -v pm2 &>/dev/null; then
@@ -589,12 +595,19 @@ echo "╠═══════════════════════�
 echo "║                                                  ║"
 printf "║   ► 服务器地址:  %-34s ║\n" "$SERVER_IP"
 printf "║   ► 端口:        %-34s ║\n" "25566"
-printf "║   ► API Key:     %-34s ║\n" "$API_KEY"
+if [ -n "$API_KEY" ]; then
+# Key 长 76 字符（32 字节 hex + 分组连字符），不再塞进右侧带边框的一行——会顶飞边框
+echo "║   ► API Key（仅此一次显示，请立即保存；服务端只存摘要）："
+echo "║     $API_KEY"
+fi
 if [ -n "$SETUP_TOKEN" ]; then
-printf "║   ► SETUP_TOKEN: %-34s ║\n" "$SETUP_TOKEN"
-echo "║   ⓘ 仅首次设密使用：浏览器设密页粘贴，用后作废  ║"
+echo "║   ► SETUP_TOKEN（仅首次设密用：浏览器设密页粘贴，用后作废）："
+echo "║     $SETUP_TOKEN"
 echo "║                                                  ║"
 fi
+echo "║                                                  ║"
+echo "║   ⚠ 端口已对外开放：建议在云安全组/防火墙限制来源  ║"
+echo "║     IP，或经反向代理终止 TLS 后再对外暴露          ║"
 echo "║                                                  ║"
 if [ "$IP_WARN" -eq 1 ]; then
 echo "║  ⚠ 以上地址为内网IP/未获取到，请在云服务器控制台 ║"

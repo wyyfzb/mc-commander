@@ -25,16 +25,18 @@ describe('数据库 v5 迁移 - scheduled_tasks.last_run_status', () => {
     fs.rmSync(config.dataDir, { recursive: true, force: true });
   });
 
-  it('user_version 升到 10（v5→v6→v7→v8→v9→v10 连续）', () => {
-    expect(db.pragma('user_version', { simple: true })).toBe(10);
+  it('user_version 升到 14（v5→v6→…→v12→v13 连续）', () => {
+    expect(db.pragma('user_version', { simple: true })).toBe(14);
   });
 
   it('v10：task_run_history 表存在且随任务级联删除', () => {
-    const info = db.prepare(
-      "INSERT INTO scheduled_tasks (name, type, cron_expression) VALUES ('历史任务', 'command', '0 3 * * *')"
-    ).run();
+    const info = db
+      .prepare(
+        "INSERT INTO scheduled_tasks (name, type, cron_expression) VALUES ('历史任务', 'command', '0 3 * * *')",
+      )
+      .run();
     db.prepare(
-      "INSERT INTO task_run_history (task_id, status, error, duration_ms) VALUES (?, 'failed', 'boom', 100)"
+      "INSERT INTO task_run_history (task_id, status, error, duration_ms) VALUES (?, 'failed', 'boom', 100)",
     ).run(info.lastInsertRowid);
     expect(db.prepare('SELECT COUNT(*) AS c FROM task_run_history').get().c).toBe(1);
 
@@ -44,9 +46,11 @@ describe('数据库 v5 迁移 - scheduled_tasks.last_run_status', () => {
 
   it('新插入任务 last_run_status 默认 never', () => {
     db.prepare(
-      "INSERT INTO scheduled_tasks (name, type, cron_expression) VALUES ('测试任务', 'command', '0 3 * * *')"
+      "INSERT INTO scheduled_tasks (name, type, cron_expression) VALUES ('测试任务', 'command', '0 3 * * *')",
     ).run();
-    const row = db.prepare('SELECT last_run_status FROM scheduled_tasks ORDER BY id DESC LIMIT 1').get();
+    const row = db
+      .prepare('SELECT last_run_status FROM scheduled_tasks ORDER BY id DESC LIMIT 1')
+      .get();
     expect(row.last_run_status).toBe('never');
   });
 });

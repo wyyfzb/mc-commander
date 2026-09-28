@@ -66,4 +66,37 @@ describe('PageHeader', () => {
     expect(screen.getByText('基础描述')).toBeInTheDocument()
     expect(screen.getByTestId('extra')).toBeInTheDocument()
   })
+
+  it('inlineDescription：描述与标题同行（容器 ≥320px），标题与描述都不减少', () => {
+    const { container } = render(
+      <PageHeader title="仪表盘" description="实例运行状态 · 终端 · 快捷操作" inlineDescription />,
+    )
+    const wrapper = container.querySelector('header > div')
+    // 断点是容器档（@xs=320px）而非视口档：调用页根须声明 @container，
+    // 否则侧栏折叠会使同视口下内容宽差 152px，判不准「并得下并不了」
+    expect(wrapper?.className).toContain('@xs:flex-row')
+    expect(wrapper?.className).toContain('@xs:items-baseline')
+    // 信息不减少：两个节点都还在，且字号档未变（标题 xl / 描述 xs）
+    expect(screen.getByRole('heading', { level: 2 }).className).toContain('text-mcs-xl')
+    expect(screen.getByText('实例运行状态 · 终端 · 快捷操作').className).toContain('text-mcs-xs')
+  })
+
+  it('默认（无 inlineDescription）保持描述换行在标题下方', () => {
+    const { container } = render(<PageHeader title="测试标题" description="描述文本" />)
+    const wrapper = container.querySelector('header > div')
+    expect(wrapper?.className).toContain('flex-col')
+    expect(wrapper?.className).not.toContain('@xs:flex-row')
+  })
+
+  it('banner 是 header 的兄弟节点而非子级', () => {
+    // 调用点用 className 自己控制页头横竖排（插件页 flex-col @xl:flex-row）；
+    // 往 header 里插一层会让这些 className 作用到错误的节点上，窄屏页头排布随即走样
+    const { container } = render(
+      <PageHeader title="仪表盘" banner={<div data-testid="banner">告警</div>} />,
+    )
+    const header = container.querySelector('header')
+    expect(header).not.toBeNull()
+    expect(header?.querySelector('[data-testid="banner"]')).toBeNull()
+    expect(screen.getByTestId('banner').nextElementSibling).toBe(header)
+  })
 })

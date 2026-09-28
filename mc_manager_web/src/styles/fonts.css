@@ -1,18 +1,32 @@
 /**
  * 字体资产（设计文档 §4.2）
- * 思源黑体 GB2312 子集（3.7MB，archived 资产复用）+ JetBrains Mono 4 字重
+ * 思源黑体子集 + JetBrains Mono 4 字重。WOFF2 各现代浏览器均支持，无需 TTF 回退。
  * font-display: swap；回退 PingFang SC / Microsoft YaHei / Noto Sans SC
+ *
+ * 子集口径（2026-09 起）：6916 码位 = 原 GB2312 常用集 6858 ∪ 中文标点与 UI 符号 58。
+ * 此前子集**只收汉字**，`，。、「」（）` 一类标点全缺失，于是它们由回退字体渲染——
+ * 同一句话里标点与汉字来自两套字体，字形风格与字重都对不上（回退字体未必有 500 字重）。
+ * 这不是「少几个符号」，是中文正文的排版基线。
+ * 补充集按**码位并集驱动**从本机 VF 源重切（禁 --unicodes=*：源为 3.1 万字面，
+ * 全量重切会把 WOFF2 收益吃光），旧码位轮廓与 advance 实测逐字未变（重切脚本为
+ * 一次性工序，未入库；源与在库子集同源，version 2.04;241114210130）。
+ * 补充清单由脚本扫描源码得出（**不手抄**——手抄漏过 `←`，见 font-subset 单测兜底）。
+ * 仍未覆盖的符号：本树用到的 `▸▾↵⋮` 与 emoji **源字体本就没有**，继续由系统字体承担；
+ * 几何符号区（`▶▼▲◀●◆` 等 39 枚）源字体有、本树未用，按需可补，别误读成整区不可补。
+ *
+ * 覆盖范围由 `src/__tests__/font-subset.test.ts` 在**码位级**锁定（自带 WOFF2 cmap
+ * 解析）：e2e 量宽与 `document.fonts.check()` 都证不了「某码位在不在字体里」。
  */
 @font-face {
   font-family: 'Noto Sans SC Subset';
-  src: url('../assets/fonts/NotoSansSC-Subset.ttf') format('truetype');
+  src: url('../assets/fonts/NotoSansSC-Subset.woff2') format('woff2');
   font-weight: 400 600;
   font-display: swap;
 }
 
 @font-face {
   font-family: 'JetBrains Mono';
-  src: url('../assets/fonts/JetBrainsMono-Regular.ttf') format('truetype');
+  src: url('../assets/fonts/JetBrainsMono-Regular.woff2') format('woff2');
   font-weight: 400;
   font-style: normal;
   font-display: swap;
@@ -20,7 +34,7 @@
 
 @font-face {
   font-family: 'JetBrains Mono';
-  src: url('../assets/fonts/JetBrainsMono-Medium.ttf') format('truetype');
+  src: url('../assets/fonts/JetBrainsMono-Medium.woff2') format('woff2');
   font-weight: 500;
   font-style: normal;
   font-display: swap;
@@ -28,7 +42,7 @@
 
 @font-face {
   font-family: 'JetBrains Mono';
-  src: url('../assets/fonts/JetBrainsMono-SemiBold.ttf') format('truetype');
+  src: url('../assets/fonts/JetBrainsMono-SemiBold.woff2') format('woff2');
   font-weight: 600;
   font-style: normal;
   font-display: swap;
@@ -36,7 +50,7 @@
 
 @font-face {
   font-family: 'JetBrains Mono';
-  src: url('../assets/fonts/JetBrainsMono-Bold.ttf') format('truetype');
+  src: url('../assets/fonts/JetBrainsMono-Bold.woff2') format('woff2');
   font-weight: 700;
   font-style: normal;
   font-display: swap;

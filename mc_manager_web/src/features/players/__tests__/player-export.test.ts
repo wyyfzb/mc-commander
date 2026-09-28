@@ -64,8 +64,19 @@ function makePlayer(overrides: Partial<Player> = {}): Player {
 }
 
 const EXPECTED_HEADERS = [
-  '玩家名', 'UUID', '游戏模式', '维度', '坐标X', '坐标Y', '坐标Z',
-  '连接状态', '总时长(h)', 'OP', '白名单', '封禁', '假人',
+  '玩家名',
+  'UUID',
+  '游戏模式',
+  '维度',
+  '坐标X',
+  '坐标Y',
+  '坐标Z',
+  '连接状态',
+  '总时长(h)',
+  'OP',
+  '白名单',
+  '封禁',
+  '假人',
 ]
 
 /** 从下载 Blob 读回 ArrayBuffer（jsdom FileReader 路径） */
@@ -203,7 +214,13 @@ describe('exportPlayersToExcel', () => {
 
   it('封禁取或语义：isIpBanned 单独为真即封禁=是；总时长小数一位；假人=是', async () => {
     await exportPlayersToExcel([
-      makePlayer({ name: 'Alex', isBanned: false, isIpBanned: true, totalPlayTime: 5400, isFakePlayer: true }),
+      makePlayer({
+        name: 'Alex',
+        isBanned: false,
+        isIpBanned: true,
+        totalPlayTime: 5400,
+        isFakePlayer: true,
+      }),
     ])
     const wb = await readBack()
     const row = wb.getWorksheet('玩家数据')!.getRow(2).values as unknown[]

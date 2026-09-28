@@ -1,5 +1,5 @@
 /**
- * mc-backup 单测：formatBackupSize / formatBackupDate / backupStatusLabel / backupStatusTone / isLegacyFormat
+ * mc-backup 单测：formatBackupSize / formatBackupDate / backupStatusLabel / backupStatusTone
  */
 import { describe, expect, it } from 'vitest'
 import {
@@ -7,7 +7,6 @@ import {
   backupStatusTone,
   formatBackupDate,
   formatBackupSize,
-  isLegacyFormat,
 } from '../mc-backup'
 
 describe('formatBackupSize', () => {
@@ -85,13 +84,5 @@ describe('backupStatusTone', () => {
     expect(backupStatusTone('creating')).toBe('info')
     expect(backupStatusTone('unknown')).toBe('info')
     expect(backupStatusTone(null)).toBe('info')
-  })
-})
-
-describe('isLegacyFormat', () => {
-  it('zip → true（仅可删除，不可恢复）', () => {
-    expect(isLegacyFormat('zip')).toBe(true)
-    expect(isLegacyFormat('snapshot')).toBe(false)
-    expect(isLegacyFormat(null)).toBe(false)
   })
 })

@@ -24,7 +24,7 @@ export const features = tableFeatures({
 })
 
 export const PAGE_SIZE_OPTIONS = [10, 20, 50, -1] as const // -1 = 全部
-export const ROW_HEIGHT = 40 // 对齐设计文档 §4.3 default 档密度
+export const ROW_HEIGHT = 40 // 行高常量：虚拟化 estimateSize 与行高样式共用（玩家表固定紧凑档）
 
 export const GAME_MODE_LABELS: Record<string, string> = {
   survival: '生存',

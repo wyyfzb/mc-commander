@@ -38,7 +38,6 @@ vi.mock('../config.js', async () => {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-sec-test-'));
   return {
     default: {
-      apiKey: '',
       port: 0,
       serversDir: path.join(tmpRoot, 'servers'),
       dataDir: path.join(tmpRoot, 'data'),
@@ -133,14 +132,13 @@ describe('安全修复：start 结构化改造', () => {
     expect(spawn).toHaveBeenCalledWith(
       javaBin,
       ['-Xmx2G', '-Xms1G', '-jar', path.join(tmpDir, 'server.jar'), 'nogui'],
-      expect.objectContaining({ cwd: tmpDir })
+      expect.objectContaining({ cwd: tmpDir }),
     );
   });
 
   it('拒绝 -jar 路径越出实例目录（../ 路径穿越）', () => {
     const instance = createInstance();
-    expect(() => instance.start('java -Xmx4G -jar ../evil.jar nogui'))
-      .toThrow(/越出实例目录/);
+    expect(() => instance.start('java -Xmx4G -jar ../evil.jar nogui')).toThrow(/越出实例目录/);
     expect(spawn).not.toHaveBeenCalled();
   });
 
@@ -152,8 +150,9 @@ describe('安全修复：start 结构化改造', () => {
 
   it('拒绝非 -X/-D/-jar/nogui 白名单参数', () => {
     const instance = createInstance();
-    expect(() => instance.start('java -Xmx4G -jar server.jar nogui --exec evil.sh'))
-      .toThrow(/不支持的启动参数: --exec/);
+    expect(() => instance.start('java -Xmx4G -jar server.jar nogui --exec evil.sh')).toThrow(
+      /不支持的启动参数: --exec/,
+    );
     expect(spawn).not.toHaveBeenCalled();
   });
 
@@ -163,21 +162,19 @@ describe('安全修复：start 结构化改造', () => {
     expect(spawn).toHaveBeenCalledWith(
       'java',
       ['-Xmx4G', '-Xms2G', '-jar', 'server.jar', 'nogui'],
-      expect.objectContaining({ cwd: tmpDir })
+      expect.objectContaining({ cwd: tmpDir }),
     );
   });
 
   it('结构化 jvmArgs 拒绝越界 -jar 路径', () => {
     const instance = createInstance();
-    expect(() => instance.start({ jvmArgs: ['-jar', '../evil.jar'] }))
-      .toThrow(/越出实例目录/);
+    expect(() => instance.start({ jvmArgs: ['-jar', '../evil.jar'] })).toThrow(/越出实例目录/);
     expect(spawn).not.toHaveBeenCalled();
   });
 
   it('结构化 jvmArgs 拒绝非白名单参数', () => {
     const instance = createInstance();
-    expect(() => instance.start({ jvmArgs: ['-Xmx4G', '/bin/rm'] }))
-      .toThrow(/不支持的启动参数/);
+    expect(() => instance.start({ jvmArgs: ['-Xmx4G', '/bin/rm'] })).toThrow(/不支持的启动参数/);
     expect(spawn).not.toHaveBeenCalled();
   });
 
@@ -189,12 +186,14 @@ describe('安全修复：start 结构化改造', () => {
     expect(spawn).toHaveBeenCalledWith(
       'java',
       ['-Xmx3G', '-XX:+UseG1GC', '-jar', 'server.jar', 'nogui'],
-      expect.objectContaining({ cwd: tmpDir })
+      expect.objectContaining({ cwd: tmpDir }),
     );
   });
 
   it('旧 startCommand 字段含危险参数时拒绝启动', () => {
-    const instance = createInstance({ startCommand: 'java -jar server.jar nogui && touch /tmp/pwned' });
+    const instance = createInstance({
+      startCommand: 'java -jar server.jar nogui && touch /tmp/pwned',
+    });
     expect(() => instance.start()).toThrow(/不支持的启动参数/);
     expect(spawn).not.toHaveBeenCalled();
   });
@@ -207,8 +206,14 @@ describe('安全修复：start 结构化改造', () => {
     instance.start();
     expect(spawn).toHaveBeenCalledWith(
       'java',
-      expect.arrayContaining(['-Xmx4G', '-Xms2G', '-jar', expect.stringContaining('server.jar'), 'nogui']),
-      expect.anything()
+      expect.arrayContaining([
+        '-Xmx4G',
+        '-Xms2G',
+        '-jar',
+        expect.stringContaining('server.jar'),
+        'nogui',
+      ]),
+      expect.anything(),
     );
     // 旧 startCommand 的参数未被执行
     expect(JSON.stringify(spawn.mock.calls[0][1])).not.toContain('-Xmx1G');
@@ -225,8 +230,14 @@ describe('安全修复：start 结构化改造', () => {
     instance.start();
     expect(spawn).toHaveBeenCalledWith(
       'java',
-      expect.arrayContaining(['-Xmx2G', '-Xms1G', '-jar', expect.stringContaining('server.jar'), 'nogui']),
-      expect.anything()
+      expect.arrayContaining([
+        '-Xmx2G',
+        '-Xms1G',
+        '-jar',
+        expect.stringContaining('server.jar'),
+        'nogui',
+      ]),
+      expect.anything(),
     );
   });
 
@@ -241,11 +252,15 @@ describe('安全修复：start 结构化改造', () => {
     expect(spawn).toHaveBeenCalledWith(
       'java',
       [
-        '-Xmx2G', '-Xms1G',
-        '-XX:+UseG1GC', '-Daikars.new.flags=true',
-        '-jar', path.join(tmpDir, 'server.jar'), 'nogui',
+        '-Xmx2G',
+        '-Xms1G',
+        '-XX:+UseG1GC',
+        '-Daikars.new.flags=true',
+        '-jar',
+        path.join(tmpDir, 'server.jar'),
+        'nogui',
       ],
-      expect.objectContaining({ cwd: tmpDir })
+      expect.objectContaining({ cwd: tmpDir }),
     );
   });
 
@@ -265,8 +280,11 @@ describe('安全修复：saveProperties 换行转义', () => {
 
   function createInstance() {
     return new MCServerInstance({
-      id: 'sec-018', name: 'Sec 018', javaPath: 'java',
-      jarFile: 'server.jar', serverPath: tmpDir,
+      id: 'sec-018',
+      name: 'Sec 018',
+      javaPath: 'java',
+      jarFile: 'server.jar',
+      serverPath: tmpDir,
     });
   }
 
@@ -285,23 +303,20 @@ describe('安全修复：saveProperties 换行转义', () => {
     const content = fs.readFileSync(path.join(tmpDir, 'server.properties'), 'utf-8');
     // 写入的是字面 \\n（两字符），不存在独立走私键行
     expect(content).toContain('max-players=10\\nmotd=hacked');
-    expect(content.split('\n').filter(l => l.trim())).not.toContain('motd=hacked');
+    expect(content.split('\n').filter((l) => l.trim())).not.toContain('motd=hacked');
   });
 
   it('值内 \\r 同样被转义', () => {
     const instance = createInstance();
     fs.writeFileSync(path.join(tmpDir, 'server.properties'), '');
-    instance.saveProperties({ 'motd': 'a\rb' });
+    instance.saveProperties({ motd: 'a\rb' });
     const content = fs.readFileSync(path.join(tmpDir, 'server.properties'), 'utf-8');
     expect(content).toContain('motd=a\\rb');
   });
 
   it('保留注释行与磁盘旧键（未知键自动追加合并行为不破坏）', () => {
     const instance = createInstance();
-    fs.writeFileSync(
-      path.join(tmpDir, 'server.properties'),
-      '# comment line\nmax-players=20\n'
-    );
+    fs.writeFileSync(path.join(tmpDir, 'server.properties'), '# comment line\nmax-players=20\n');
     instance.saveProperties({ 'new-key': 'v' });
     const content = fs.readFileSync(path.join(tmpDir, 'server.properties'), 'utf-8');
     expect(content).toContain('# comment line');
@@ -311,7 +326,7 @@ describe('安全修复：saveProperties 换行转义', () => {
 
   it('_saveProperties 内部方法同样转义', () => {
     const instance = createInstance();
-    instance._saveProperties({ 'motd': 'x\ny' });
+    instance._saveProperties({ motd: 'x\ny' });
     const content = fs.readFileSync(path.join(tmpDir, 'server.properties'), 'utf-8');
     expect(content).toContain('motd=x\\ny');
   });
@@ -322,8 +337,11 @@ describe('安全修复：level-name 服务层兜底校验', () => {
 
   function createInstance() {
     return new MCServerInstance({
-      id: 'sec-extra1', name: 'Sec Extra1', javaPath: 'java',
-      jarFile: 'server.jar', serverPath: tmpDir,
+      id: 'sec-extra1',
+      name: 'Sec Extra1',
+      javaPath: 'java',
+      jarFile: 'server.jar',
+      serverPath: tmpDir,
     });
   }
 
@@ -400,8 +418,11 @@ describe('安全修复：读侧路径校验', () => {
 
   function createInstance() {
     return new MCServerInstance({
-      id: 'sec-008', name: 'Sec 008', javaPath: 'java',
-      jarFile: 'server.jar', serverPath: tmpDir,
+      id: 'sec-008',
+      name: 'Sec 008',
+      javaPath: 'java',
+      jarFile: 'server.jar',
+      serverPath: tmpDir,
     });
   }
 
@@ -417,28 +438,35 @@ describe('安全修复：读侧路径校验', () => {
     const instance = createInstance();
     const statsDir = path.join(tmpDir, 'world', 'players', 'stats');
     fs.mkdirSync(statsDir, { recursive: true });
-    fs.writeFileSync(path.join(statsDir, 'u1.json'), JSON.stringify({
-      stats: { 'minecraft:custom': { 'minecraft:play_time': 400 } },
-    }));
+    fs.writeFileSync(
+      path.join(statsDir, 'u1.json'),
+      JSON.stringify({
+        stats: { 'minecraft:custom': { 'minecraft:play_time': 400 } },
+      }),
+    );
     instance.properties = { 'level-name': '../../evil' };
     // 详情页等价调用（实例方法内部走共享函数 getTotalPlayTime）：
     // 非法 level-name 在共享函数内回退 world 后读到 400 tick
-    expect(getTotalPlayTime({
-      serverPath: tmpDir,
-      uuid: 'u1',
-      playerName: 'Steve',
-      levelName: instance.properties?.['level-name'],
-    })).toBe(20); // 400 tick / 20 = 20 秒
+    expect(
+      getTotalPlayTime({
+        serverPath: tmpDir,
+        uuid: 'u1',
+        playerName: 'Steve',
+        levelName: instance.properties?.['level-name'],
+      }),
+    ).toBe(20); // 400 tick / 20 = 20 秒
   });
 
   it('getTotalPlayTime：候选路径 resolve 越界时被丢弃（不读越界文件）', () => {
     // level-name 非法（含 ..）时回退 world；无文件 → 0（越界候选被过滤，不读外部文件）
-    expect(getTotalPlayTime({
-      serverPath: tmpDir,
-      uuid: 'u1',
-      playerName: 'Steve',
-      levelName: '../../evil',
-    })).toBe(0);
+    expect(
+      getTotalPlayTime({
+        serverPath: tmpDir,
+        uuid: 'u1',
+        playerName: 'Steve',
+        levelName: '../../evil',
+      }),
+    ).toBe(0);
   });
 
   it('_loadInventoryFromDat：非法 level-name 回退 world 路径读取 dat 快照', () => {
@@ -459,9 +487,12 @@ describe('安全修复：读侧路径校验', () => {
     const instance = createInstance();
     const statsDir = path.join(tmpDir, 'world', 'players', 'stats');
     fs.mkdirSync(statsDir, { recursive: true });
-    fs.writeFileSync(path.join(statsDir, 'u1.json'), JSON.stringify({
-      stats: { 'minecraft:custom': { 'minecraft:deaths': 7 } },
-    }));
+    fs.writeFileSync(
+      path.join(statsDir, 'u1.json'),
+      JSON.stringify({
+        stats: { 'minecraft:custom': { 'minecraft:deaths': 7 } },
+      }),
+    );
     vi.spyOn(instance, '_getPlayerUuid').mockReturnValue('u1');
     instance.properties = { 'level-name': '../evil' };
     const warnSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true); // logger.warn/error 均走 stderr
@@ -488,9 +519,12 @@ describe('安全修复：读侧路径校验', () => {
     const offline = offlineUuid('Steve');
     const statsDir = path.join(tmpDir, 'world', 'players', 'stats');
     fs.mkdirSync(statsDir, { recursive: true });
-    fs.writeFileSync(path.join(statsDir, `${offline}.json`), JSON.stringify({
-      stats: { 'minecraft:custom': { 'minecraft:deaths': 7 } },
-    }));
+    fs.writeFileSync(
+      path.join(statsDir, `${offline}.json`),
+      JSON.stringify({
+        stats: { 'minecraft:custom': { 'minecraft:deaths': 7 } },
+      }),
+    );
     vi.spyOn(instance, '_getPlayerUuid').mockReturnValue(null);
     const real = instance._loadPlayerRealStats('Steve');
     expect(real).not.toBeNull();
@@ -504,8 +538,11 @@ describe('安全修复：日志单行截断', () => {
 
   function createInstance() {
     return new MCServerInstance({
-      id: 'sec-023', name: 'Sec 023', javaPath: 'java',
-      jarFile: 'server.jar', serverPath: tmpDir,
+      id: 'sec-023',
+      name: 'Sec 023',
+      javaPath: 'java',
+      jarFile: 'server.jar',
+      serverPath: tmpDir,
     });
   }
 
@@ -564,7 +601,10 @@ describe('安全修复：日志单行截断', () => {
   it('正常长度日志不受截断影响', () => {
     const instance = createInstance();
     instance.start();
-    lastProc.stdout.emit('data', Buffer.from('[12:00:00] [Server thread/INFO]: Steve joined the game\n'));
+    lastProc.stdout.emit(
+      'data',
+      Buffer.from('[12:00:00] [Server thread/INFO]: Steve joined the game\n'),
+    );
     expect(instance.logBuffer[0].text).toContain('Steve joined the game');
     expect(instance.players.has('Steve')).toBe(true);
   });

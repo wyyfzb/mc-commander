@@ -1,12 +1,18 @@
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 import AdmZip from 'adm-zip';
 import { load as yamlLoad, FAILSAFE_SCHEMA } from 'js-yaml';
 import { AppError, ErrorCodes } from '../utils/response.js';
-import { resolveSafePath, PathTraversalError } from '../utils/fs-utils.js';
+import {
+  ensureDir,
+  renameNoClobber,
+  resolveSafePath,
+  PathTraversalError,
+} from '../utils/fs-utils.js';
 
 /**
- * 插件管理服务（feat-8 P0-5 插件管理最小闭环）。
+ * 插件管理服务（插件管理最小闭环）。
  *
  * 范围：Bukkit 系（Paper/Spigot/Purpur）`plugins/` 目录内 jar 插件的
  * 列表 / 启停 / 删除。启停 = 行业通用约定：jar 重命名追加/移除
@@ -14,7 +20,8 @@ import { resolveSafePath, PathTraversalError } from '../utils/fs-utils.js';
  * 不做依赖解析、不做运行期热卸载（Bukkit 插件仅在服务器启动时加载，
  * 启停后需重启实例生效，由前端明确提示）。
  *
- * 远景（roadmap P2）：数据包与 mod 管理（mods/ 目录复用同一套模型）。
+ * 目录名当前写死 `plugins/`（Bukkit 系约定）；若将来要覆盖 `mods/`、`datapacks/`，
+ * 需先把本文件的目录取值参数化，再复用同一套模型。
  */
 
 /// 插件文件名白名单：字母数字开头，允许 . _ - ，以 .jar 或 .jar.disabled 结尾。
@@ -84,13 +91,18 @@ export function readPluginMeta(jarPath) {
         name: typeof doc.name === 'string' ? doc.name : null,
         version: typeof doc.version === 'string' ? doc.version : null,
         main: typeof doc.main === 'string' ? doc.main : null,
-        apiVersion: typeof doc['api-version'] === 'string'
-          ? doc['api-version']
-          : (typeof doc.apiVersion === 'string' ? doc.apiVersion : null),
+        apiVersion:
+          typeof doc['api-version'] === 'string'
+            ? doc['api-version']
+            : typeof doc.apiVersion === 'string'
+              ? doc.apiVersion
+              : null,
         description: typeof doc.description === 'string' ? doc.description : null,
         authors: Array.isArray(doc.authors)
           ? doc.authors.filter((a) => typeof a === 'string').slice(0, 10)
-          : (typeof doc.author === 'string' ? [doc.author] : []),
+          : typeof doc.author === 'string'
+            ? [doc.author]
+            : [],
         depend: Array.isArray(doc.depend)
           ? doc.depend.filter((d) => typeof d === 'string').slice(0, 20)
           : [],
@@ -112,7 +124,7 @@ export function readPluginMeta(jarPath) {
 }
 
 /**
- * 上传插件 jar（feat-8 延伸）：multer 已将 multipart 落盘到临时文件。
+ * 上传插件 jar（延伸）：multer 已将 multipart 落盘到临时文件。
  * - 文件名校验：PLUGIN_UPLOAD_NAME_REGEX（仅 .jar，拒绝路径分隔符/控制字符）
  * - zip 魔数校验：头部 4 字节必须为 PK\x03\x04（拒绝伪装成 jar 的任意文件）
  * - plugins/ 目录不存在时自动创建（首次启动前装插件是主流流程）
@@ -139,13 +151,15 @@ export function uploadPlugin(serverPath, tmpFilePath, originalName, { overwrite 
     throw new AppError(ErrorCodes.SERVER_ERROR, `Failed to read uploaded file: ${err.message}`);
   }
   if (!head.subarray(0, 4).equals(ZIP_MAGIC)) {
-    throw new AppError(ErrorCodes.VALIDATION_ERROR,
-      'Uploaded file is not a valid jar (zip magic check failed)');
+    throw new AppError(
+      ErrorCodes.VALIDATION_ERROR,
+      'Uploaded file is not a valid jar (zip magic check failed)',
+    );
   }
 
   const pluginsDir = path.join(serverPath, 'plugins');
   try {
-    fs.mkdirSync(pluginsDir, { recursive: true });
+    ensureDir(pluginsDir);
   } catch (err) {
     throw new AppError(ErrorCodes.SERVER_ERROR, `Failed to create plugins dir: ${err.message}`);
   }
@@ -156,25 +170,39 @@ export function uploadPlugin(serverPath, tmpFilePath, originalName, { overwrite 
     throw new AppError(ErrorCodes.VALIDATION_ERROR, `Invalid plugin path: ${originalName}`);
   }
 
-  let overwritten = false;
-  if (fs.existsSync(targetFull)) {
-    if (!overwrite) {
-      throw new AppError(ErrorCodes.PLUGIN_FILE_EXISTS,
-        `Plugin file already exists: ${originalName}`);
-    }
+  // 同名冲突判定由写入动作本身承担，不用「existsSync 预检 + unlink + copy」三步：
+  // 预检与 unlink 之间被并发创建的同名插件会被静默删除，且 unlink 与 copy 之间
+  // 崩溃会留下「插件已消失」的中间态。overwrite=false 走 COPYFILE_EXCL（存在即
+  // EEXIST，独占创建语义）；overwrite=true 先写同目录临时文件再 rename 覆盖
+  // （rename 是原子替换）。
+  const existedBefore = fs.existsSync(targetFull); // 仅决定回执状态码 200/201，不承担并发闸门
+  if (overwrite) {
+    const staging = `${targetFull}.${crypto.randomUUID()}.tmp`;
     try {
-      fs.unlinkSync(targetFull);
+      fs.copyFileSync(tmpFilePath, staging);
+      fs.renameSync(staging, targetFull);
     } catch (err) {
-      throw new AppError(ErrorCodes.SERVER_ERROR, `Failed to replace plugin: ${err.message}`);
+      try {
+        fs.unlinkSync(staging);
+      } catch {
+        /* 未创建或已被 rename 消费 */
+      }
+      throw new AppError(ErrorCodes.SERVER_ERROR, `Failed to save plugin: ${err.message}`);
     }
-    overwritten = true;
+  } else {
+    try {
+      fs.copyFileSync(tmpFilePath, targetFull, fs.constants.COPYFILE_EXCL);
+    } catch (err) {
+      if (err.code === 'EEXIST') {
+        throw new AppError(
+          ErrorCodes.PLUGIN_FILE_EXISTS,
+          `Plugin file already exists: ${originalName}`,
+        );
+      }
+      throw new AppError(ErrorCodes.SERVER_ERROR, `Failed to save plugin: ${err.message}`);
+    }
   }
-
-  try {
-    fs.copyFileSync(tmpFilePath, targetFull);
-  } catch (err) {
-    throw new AppError(ErrorCodes.SERVER_ERROR, `Failed to save plugin: ${err.message}`);
-  }
+  const overwritten = overwrite && existedBefore;
 
   let stat;
   try {
@@ -252,21 +280,28 @@ export function setPluginEnabled(serverPath, fileName, enabled) {
   const full = resolvePluginFile(serverPath, fileName);
   const isDisabled = fileName.toLowerCase().endsWith('.jar.disabled');
   if (enabled === !isDisabled) {
-    throw new AppError(ErrorCodes.PLUGIN_STATE_CONFLICT,
-      enabled ? 'Plugin is already enabled' : 'Plugin is already disabled');
-  }
-  if (!fs.existsSync(full)) {
-    throw new AppError(ErrorCodes.PLUGIN_NOT_FOUND, `Plugin file not found: ${fileName}`);
+    throw new AppError(
+      ErrorCodes.PLUGIN_STATE_CONFLICT,
+      enabled ? 'Plugin is already enabled' : 'Plugin is already disabled',
+    );
   }
   const baseName = isDisabled ? fileName.slice(0, -'.disabled'.length) : fileName;
   const targetName = enabled ? baseName : `${fileName}.disabled`;
   const targetFull = path.join(path.dirname(full), targetName);
-  if (fs.existsSync(targetFull)) {
-    throw new AppError(ErrorCodes.PLUGIN_STATE_CONFLICT, `Target file already exists: ${targetName}`);
-  }
+  // 源不存在 / 目标被占用都由 renameNoClobber 的独占声明判定并抛原生错误码：
+  // 「existsSync 预检 + renameSync」之间目标被并发创建时，rename 会静默覆盖
   try {
-    fs.renameSync(full, targetFull);
+    renameNoClobber(full, targetFull);
   } catch (err) {
+    if (err.code === 'ENOENT') {
+      throw new AppError(ErrorCodes.PLUGIN_NOT_FOUND, `Plugin file not found: ${fileName}`);
+    }
+    if (err.code === 'EEXIST') {
+      throw new AppError(
+        ErrorCodes.PLUGIN_STATE_CONFLICT,
+        `Target file already exists: ${targetName}`,
+      );
+    }
     throw new AppError(ErrorCodes.SERVER_ERROR, `Failed to rename plugin: ${err.message}`);
   }
   return { file: targetName, enabled };
@@ -277,12 +312,13 @@ export function setPluginEnabled(serverPath, fileName, enabled) {
  */
 export function deletePlugin(serverPath, fileName) {
   const full = resolvePluginFile(serverPath, fileName);
-  if (!fs.existsSync(full)) {
-    throw new AppError(ErrorCodes.PLUGIN_NOT_FOUND, `Plugin file not found: ${fileName}`);
-  }
+  // 不做存在性预检：unlink 的 ENOENT 即「不存在」，映射为 404 语义
   try {
     fs.unlinkSync(full);
   } catch (err) {
+    if (err.code === 'ENOENT') {
+      throw new AppError(ErrorCodes.PLUGIN_NOT_FOUND, `Plugin file not found: ${fileName}`);
+    }
     throw new AppError(ErrorCodes.SERVER_ERROR, `Failed to delete plugin: ${err.message}`);
   }
   return { deleted: fileName };

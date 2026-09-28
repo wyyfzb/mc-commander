@@ -22,6 +22,10 @@ async function setupConnection(page: Page) {
 }
 
 test.describe('冒烟', () => {
+  /* 字体子集覆盖（中文标点等）**不在 e2e 锁**：量宽与 `document.fonts.check()` 都
+     证不了「某码位在不在字体里」——前者对着一串字符求和时，子集里只要留任意一枚字形就通过
+     （实测：只含 `…` 的字体仍绿）；后者对子集外字符也返回 true。已改为码位级单测
+     `src/__tests__/font-subset.test.ts`（自带 WOFF2 cmap 解析，无第三方依赖）。 */
   test('页面加载：品牌、侧栏、顶栏元素可见', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/')
@@ -32,8 +36,11 @@ test.describe('冒烟', () => {
       await expect(page.getByRole('link', { name: new RegExp(label) })).toBeVisible()
     }
     await expect(page.getByRole('button', { name: /搜索或执行命令/ })).toBeVisible()
-    // 顶栏实例选择器（mock 无 WS，状态点文案动态不稳，用实例名断言）
-    await expect(page.getByRole('button', { name: 'E2E 演示实例' })).toBeVisible()
+    // 顶栏实例标识（mock 无 WS，状态点文案动态不稳，用实例名断言）。
+    // mock 的实例列表恰好一个 ⇒ 选择器降级为纯展示：实例名不该挂在可点的按钮上
+    // （mock 若增到多实例，这里会红——那正是「该恢复下拉」的信号，不是脆断言）
+    await expect(page.getByText('E2E 演示实例').first()).toBeVisible()
+    await expect(page.getByRole('button', { name: 'E2E 演示实例' })).toHaveCount(0)
   })
 
   test('导航跳转：点击侧栏玩家进入占位页', async ({ page }) => {
@@ -69,10 +76,17 @@ test.describe('冒烟', () => {
     await page.setViewportSize({ width: 1440, height: 900 })
     await page.goto('/')
     await page.waitForLoadState('networkidle')
+    // 就绪门：networkidle 只代表网络静默，不保证 React 已挂载——Ctrl+K 若早于
+    // CommandPalette 注册 window keydown 监听就会丢键（空按），并行 worker 冷启动下偶发
+    await expect(page.locator('#main-content')).toBeVisible({ timeout: 30_000 })
     await maybeShot(page, 'dashboard-dark.png')
 
-    await page.keyboard.press('Control+k')
-    await expect(page.getByPlaceholder('输入页面名称或命令…')).toBeVisible()
+    // 可重试的按键：Ctrl+K 是**切换**语义，丢键（早于监听注册）时重按即开——用 toPass
+    // 与「监听何时注册」解耦，不再依赖某个前置可见信号恰好覆盖它
+    await expect(async () => {
+      await page.keyboard.press('Control+k')
+      await expect(page.getByPlaceholder('输入页面名称或命令…')).toBeVisible({ timeout: 3_000 })
+    }).toPass()
     await maybeShot(page, 'command-palette-dark.png')
     await page.keyboard.press('Escape')
 

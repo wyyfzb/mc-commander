@@ -19,14 +19,10 @@ import { initDatabase } from '../db/index.js';
 import { AdminAccountModel } from '../db/admin.model.js';
 import { hashPassword } from '../utils/password.js';
 import { authMiddleware } from '../middleware/auth.js';
-import {
-  createAuthRoutes,
-  resetLoginLockState,
-  _getLoginFailuresSize,
-} from '../routes/auth.js';
+import { createAuthRoutes, resetLoginLockState, _getLoginFailuresSize } from '../routes/auth.js';
 import { errorHandler } from '../middleware/error_handler.js';
 
-// 测试用明文 Key（与 vitest.config.js 中 API_KEY 一致）
+// 测试用明文 Key（对应 vitest.config.js 注入的 API_KEY_HASH，虚拟值）
 const TEST_PLAINTEXT_KEY = 'test-api-key-for-unit-tests';
 
 let app;
@@ -64,7 +60,9 @@ function expectValidationError(res, fieldPath) {
   expect(paths).toContain(fieldPath);
 }
 
-describe('auth 输入侧契约 - POST /auth/setup（#428）', () => {
+// 超时口径：冲突用例含 3 次 scrypt（N=131072，单次 ~2800ms），叠加同文件前一例的
+// 密码哈希后，默认 5s 在并发争抢下余量过薄（实测三次命中）→ 显式 15s（与本仓 web 侧口径同值）。
+describe('auth 输入侧契约 - POST /auth/setup（#428）', { timeout: 15_000 }, () => {
   it('缺失 password → 400 统一校验语义（不再落入 handler 隐式 undefined）', async () => {
     const res = await request(app).post('/api/v1/auth/setup').send({});
     expectValidationError(res, 'password');
@@ -97,7 +95,7 @@ describe('auth 输入侧契约 - POST /auth/setup（#428）', () => {
   });
 });
 
-describe('auth 输入侧契约 - POST /auth/login（#428）', () => {
+describe('auth 输入侧契约 - POST /auth/login（#428）', { timeout: 15_000 }, () => {
   it('缺失 password → 400（形状校验，不计入失败锁定）', async () => {
     const res = await request(app).post('/api/v1/auth/login').send({});
     expectValidationError(res, 'password');
@@ -105,7 +103,9 @@ describe('auth 输入侧契约 - POST /auth/login（#428）', () => {
   });
 
   it('password 非字符串（对象）→ 400 且不计入失败锁定', async () => {
-    const res = await request(app).post('/api/v1/auth/login').send({ password: { $gt: '' } });
+    const res = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ password: { $gt: '' } });
     expectValidationError(res, 'password');
     expect(_getLoginFailuresSize()).toBe(0);
   });
@@ -130,7 +130,7 @@ describe('auth 输入侧契约 - POST /auth/login（#428）', () => {
   });
 });
 
-describe('auth 输入侧契约 - PUT /auth/password（#428）', () => {
+describe('auth 输入侧契约 - PUT /auth/password（#428）', { timeout: 15_000 }, () => {
   /** 预置账号并返回有效会话令牌 */
   async function loginToken(password = 'old-pass-1234') {
     AdminAccountModel.setPassword(hashPassword(password));
@@ -185,7 +185,9 @@ describe('auth 输入侧契约 - PUT /auth/password（#428）', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.ok).toBe(true);
 
-    const relogin = await request(app).post('/api/v1/auth/login').send({ password: 'new-pass-5678' });
+    const relogin = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ password: 'new-pass-5678' });
     expect(relogin.status).toBe(200);
   });
 

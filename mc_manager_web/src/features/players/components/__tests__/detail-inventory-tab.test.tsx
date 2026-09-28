@@ -77,7 +77,15 @@ function makePlayer(overrides: Partial<Player> = {}): Player {
 }
 
 function makeItem(overrides: Partial<InventoryItem> = {}): InventoryItem {
-  return { id: 'diamond', count: 1, slot: 0, durability: null, enchanted: false, customName: null, ...overrides }
+  return {
+    id: 'diamond',
+    count: 1,
+    slot: 0,
+    durability: null,
+    enchanted: false,
+    customName: null,
+    ...overrides,
+  }
 }
 
 function renderTab(player: Player) {
@@ -92,13 +100,28 @@ function renderTab(player: Player) {
 function samplePlayer(overrides: Partial<Player> = {}): Player {
   return makePlayer({
     inventory: makeInventory({
-      quickbar: [makeItem({ id: 'diamond_sword', count: 1, slot: 0, durability: 0.8, enchanted: true, customName: '神剑' })],
+      quickbar: [
+        makeItem({
+          id: 'diamond_sword',
+          count: 1,
+          slot: 0,
+          durability: 0.8,
+          enchanted: true,
+          customName: '神剑',
+        }),
+      ],
       main: [
         makeItem({ id: 'diamond', count: 64, slot: 0 }),
         makeItem({ id: 'bread', count: 16, slot: 9 }),
       ],
       equipment: {
-        helmet: makeItem({ id: 'diamond_helmet', count: 1, slot: 103, durability: 0.2, enchanted: true }),
+        helmet: makeItem({
+          id: 'diamond_helmet',
+          count: 1,
+          slot: 103,
+          durability: 0.2,
+          enchanted: true,
+        }),
         chestplate: null,
         leggings: null,
         boots: null,
@@ -166,32 +189,48 @@ describe('InventoryTab 41 格布局', () => {
   })
 })
 
-describe('InventoryTab hover tooltip', () => {
+describe('InventoryTab 格子浮层（点按取解释，非 hover-only）', () => {
   it('显示 id/数量/耐久/附魔标记/自定义名', async () => {
     const user = userEvent.setup()
     renderTab(samplePlayer())
 
-    await user.hover(screen.getByAltText('diamond_sword'))
+    await user.click(screen.getByAltText('diamond_sword'))
     await waitFor(() => {
       expect(screen.getByText('minecraft:diamond_sword')).toBeInTheDocument()
-    }, { timeout: 3000 })
+    })
     expect(screen.getByText('神剑')).toBeInTheDocument()
     expect(screen.getByText(/数量 ×1/)).toBeInTheDocument()
     expect(screen.getByText(/耐久 80%/)).toBeInTheDocument()
     expect(screen.getByText(/已附魔/)).toBeInTheDocument()
   })
 
-  it('普通物品 tooltip 不含耐久/附魔标记（无该信息）', async () => {
+  it('普通物品浮层不含耐久/附魔标记（无该信息）', async () => {
     const user = userEvent.setup()
     renderTab(samplePlayer())
 
-    await user.hover(screen.getByAltText('bread'))
+    await user.click(screen.getByAltText('bread'))
     await waitFor(() => {
       expect(screen.getByText('minecraft:bread')).toBeInTheDocument()
-    }, { timeout: 3000 })
+    })
     expect(screen.getByText(/数量 ×16/)).toBeInTheDocument()
     expect(screen.queryByText(/耐久/)).not.toBeInTheDocument()
     expect(screen.queryByText(/已附魔/)).not.toBeInTheDocument()
+  })
+
+  it('自定义名 break-all：玩家可控长串折行防溢出浮层框', async () => {
+    const player = samplePlayer()
+    // 混入拉丁无空白段：CJK 串本可逐字折行（min-content=单字宽），拉丁串才真正触发溢出
+    player.inventory!.quickbar[0] = makeItem({
+      id: 'diamond_sword',
+      customName: 'LongCustomNameAaaaaaaaaaaaaaaaaaaaaaaaaaaaaa 通过命令写入的超长自定义名',
+    })
+    const user = userEvent.setup()
+    renderTab(player)
+
+    await user.click(screen.getByAltText('diamond_sword'))
+    expect(await screen.findByText(/LongCustomNameAaaa/)).toHaveClass('break-all')
+    // 物品 ID 行同防护：数据包可引入自定义命名空间 ID，长度无上限
+    expect(screen.getByText('minecraft:diamond_sword')).toHaveClass('break-all')
   })
 })
 
@@ -286,5 +325,43 @@ describe('InventoryTab 空态三分支', () => {
     renderTab(makePlayer({ isBanned: true, isOnline: true, inventory: null }))
     expect(screen.getByText('该玩家已被封禁，无法查看物品栏')).toBeInTheDocument()
     expect(screen.queryByText('RCON 不可用')).not.toBeInTheDocument()
+  })
+  it('漫游焦点：每张格网只占一个 Tab 落点，方向键按网格几何走不出行', async () => {
+    const user = userEvent.setup()
+    const player = samplePlayer()
+    // 摆成上下关系：diamond 在 slot 0、bread 在 slot 9（九列网格的正下方）
+    player.inventory!.main = [
+      makeItem({ id: 'diamond', count: 64, slot: 0 }),
+      ...Array(8).fill(null),
+      makeItem({ id: 'bread', count: 16, slot: 9 }),
+    ]
+    renderTab(player)
+
+    const slots = screen.getAllByTestId('inv-slot').filter((el) => el.tagName === 'BUTTON')
+    expect(slots).toHaveLength(5)
+    // 装备 / 主背包 / 快捷栏各留一个落点，其余占用格靠方向键到达
+    expect(slots.filter((el) => el.getAttribute('tabindex') === '0')).toHaveLength(3)
+    expect(slots.filter((el) => el.getAttribute('tabindex') === '-1')).toHaveLength(2)
+
+    const diamond = screen.getByRole('button', { name: 'minecraft:diamond' })
+    const bread = screen.getByRole('button', { name: 'minecraft:bread' })
+
+    // 「下」按列走：slot 0 → slot 9
+    diamond.focus()
+    await user.keyboard('{ArrowDown}')
+    expect(bread).toHaveFocus()
+
+    // 「右」不得跨行：slot 0 往右到行尾全是空槽，必须原地停住，
+    // 不能绕到下一行的 slot 9（那是按渲染序号步进才会犯的错）
+    diamond.focus()
+    await user.keyboard('{ArrowRight}')
+    expect(diamond).toHaveFocus()
+
+    // 「上」越界不循环：slot 9 往上是 slot 0（有物品）→ 应回到 diamond；
+    // 再按一次上越出表头，停在 diamond 而不是绕到表尾
+    await user.keyboard('{ArrowUp}')
+    expect(diamond).toHaveFocus()
+    await user.keyboard('{ArrowUp}')
+    expect(diamond).toHaveFocus()
   })
 })

@@ -3,15 +3,17 @@
  * config 由调用方从 useConnectionStore 传入（与 src/api/tasks.ts 同模式）。
  * 分页信封仅解包 data（pagination 丢失）——前端拉 pageSize=100 后 slice 最近 10 条。
  */
-import { apiDelete, apiGet, apiPost, type ConnectionConfig, ApiError, NetworkError } from './client'
-import type { BackupItem } from './types'
+import { apiDelete, apiDownloadFile, apiGet, apiPost, type ConnectionConfig } from './client'
+import type {
+  ArchivedSnapshotGroup,
+  BackupAttachResponse,
+  BackupCancelResponse,
+  BackupItem,
+} from './types'
 
 /** 备份列表（GET /instances/:id/backups?page=&pageSize=；分页信封） */
 export function apiGetBackups(config: ConnectionConfig, instanceId: string) {
-  return apiGet<BackupItem[]>(
-    `/api/v1/instances/${instanceId}/backups?page=1&pageSize=100`,
-    config,
-  )
+  return apiGet<BackupItem[]>(`/api/v1/instances/${instanceId}/backups?page=1&pageSize=100`, config)
 }
 
 /** 单备份（GET /backups/:id） */
@@ -28,9 +30,10 @@ export function apiCreateBackup(
   return apiPost<BackupItem>(`/api/v1/instances/${instanceId}/backups`, config, payload ?? {})
 }
 
-/** 恢复备份（POST /backups/:id/restore；202 异步后台执行 + WS 事件；仅 completed 可恢复） */
-export function apiRestoreBackup(config: ConnectionConfig, backupId: number) {
-  return apiPost<null>(`/api/v1/backups/${backupId}/restore`, config)
+/** 恢复备份（POST /backups/:id/restore；202 异步后台执行 + WS 事件；仅 completed 可恢复）。
+ *  confirmName 为该备份所属实例的名称：服务端强制比对（弹窗输入只是 UX） */
+export function apiRestoreBackup(config: ConnectionConfig, backupId: number, confirmName: string) {
+  return apiPost<null>(`/api/v1/backups/${backupId}/restore`, config, { confirmName })
 }
 
 /** 删除备份（DELETE /backups/:id；creating/restoring 中拒绝 40901） */
@@ -38,40 +41,46 @@ export function apiDeleteBackup(config: ConnectionConfig, backupId: number) {
   return apiDelete<null>(`/api/v1/backups/${backupId}`, config)
 }
 
-/** 下载备份（GET /backups/:id/download；流式 tar.gz blob，独立 120s 超时） */
+/**
+ * 取消该实例进行中的备份/恢复（POST /instances/:id/backups/cancel）。
+ * 取消是尽力而为：命中后服务端 abort 子进程，实际终态经 backup/restoreCancelled
+ * 事件推送；无进行中操作时 40904（刚完成的竞态，失效列表即可看到终态）。
+ */
+export function apiCancelBackupOperation(config: ConnectionConfig, instanceId: string) {
+  return apiPost<BackupCancelResponse>(`/api/v1/instances/${instanceId}/backups/cancel`, config, {})
+}
+
+/**
+ * 下载备份（GET /backups/:id/download；流式 tar.gz blob）。
+ * 走共享下载实现（apiDownloadFile）而不是自实现 fetch：凭据注入（会话 Bearer 优先、
+ * 不适用时才回落 X-API-Key）与 40103 会话过期处置必须与其它请求同口径——
+ * 原先只发 X-API-Key，纯密码登录（本机无 Key）的用户下载备份必然 40101 失败。
+ * 超时沿用 120s（共享实现的默认是 600s，备份体量远小于世界文件），
+ * 响应头的 Content-Disposition 不取——文件名由前端按备份元数据构造。
+ */
 export async function apiDownloadBackup(config: ConnectionConfig, backupId: number): Promise<Blob> {
-  const base = config.baseUrl.replace(/\/+$/, '')
-  const url = `${base}/api/v1/backups/${backupId}/download`
-  const timeout = new AbortController()
-  const timer = setTimeout(() => timeout.abort(), 120_000)
+  const { blob } = await apiDownloadFile(`/api/v1/backups/${backupId}/download`, config, {
+    timeoutMs: 120_000,
+  })
+  return blob
+}
 
-  try {
-    const res = await fetch(url, {
-      method: 'GET',
-      headers: { 'X-API-Key': config.apiKey },
-      signal: timeout.signal,
-    })
+/**
+ * 归档快照清点（GET /backups/archived）。
+ * 卸载实例会删掉备份表记录、但快照目录按设计保留在磁盘上——此后它们不出现在任何实例的
+ * 备份列表里，且会随保留期被自动清理。本端点把「磁盘上有、索引里没有」的那部分清点出来。
+ */
+export function apiGetArchivedSnapshots(config: ConnectionConfig) {
+  return apiGet<ArchivedSnapshotGroup[]>('/api/v1/backups/archived', config)
+}
 
-    if (!res.ok) {
-      try {
-        const errPayload = await res.json()
-        if (errPayload.status === 'error') {
-          throw new ApiError(errPayload.code, res.status, errPayload.message, errPayload.details)
-        }
-      } catch (e) {
-        if (e instanceof ApiError) throw e
-      }
-      throw new NetworkError(`备份下载失败（HTTP ${res.status}）`)
-    }
-
-    return await res.blob()
-  } catch (e) {
-    if (e instanceof ApiError || e instanceof NetworkError) throw e
-    if (e instanceof DOMException && e.name === 'AbortError') {
-      throw new NetworkError('备份下载超时')
-    }
-    throw e
-  } finally {
-    clearTimeout(timer)
-  }
+/**
+ * 挂载归档快照到实例（POST /instances/:id/backups/attach）。
+ * **只建索引，不复制、不移动磁盘内容**：挂载后这些快照出现在该实例的备份列表里，
+ * 可正常恢复/下载/删除。幂等：已挂载过的份数计 skipped。
+ */
+export function apiAttachArchive(config: ConnectionConfig, instanceId: string, archiveId: string) {
+  return apiPost<BackupAttachResponse>(`/api/v1/instances/${instanceId}/backups/attach`, config, {
+    archiveId,
+  })
 }

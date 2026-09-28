@@ -69,6 +69,8 @@ describe('GamerulePanel 挂载查询与列表', () => {
     expect(screen.getByText('旧版规则')).toBeInTheDocument()
     // 解析成功 → 无 warning 提示
     expect(screen.queryByText(/无法解析 gamerule 列表/)).not.toBeInTheDocument()
+    // 生效方式标识（与属性面板同一口径）：gamerule 全部即时生效
+    expect(screen.getByText('规则修改保存后即时生效，无需重启实例')).toBeInTheDocument()
     // 旧集分类全部为空串 → chips 仅「全部 + 其他」
     expect(screen.getByRole('button', { name: '其他' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '玩家' })).not.toBeInTheDocument()
@@ -84,11 +86,11 @@ describe('GamerulePanel 挂载查询与列表', () => {
 
   it('1.21.11+ 版本 → 新集 + 「1.21.11+ 新规则」徽章', async () => {
     renderPanel({ mcVersion: '26.1', onSendCommand: vi.fn().mockResolvedValue(newOutput()) })
-    expect(await screen.findByText('keepInventory')).toBeInTheDocument()
+    expect(await screen.findByText('keep_inventory')).toBeInTheDocument()
     expect(screen.getByText('1.21.11+ 新规则')).toBeInTheDocument()
-    // 新集无 doDaylightCycle（改名 advanceTime）
+    // 新集无 doDaylightCycle（改用资源位置名 advance_time）
     expect(screen.queryByText('doDaylightCycle')).not.toBeInTheDocument()
-    expect(screen.getByText('advanceTime')).toBeInTheDocument()
+    expect(screen.getByText('advance_time')).toBeInTheDocument()
   })
 })
 
@@ -113,7 +115,10 @@ describe('GamerulePanel 行级编辑', () => {
     expect(await screen.findByText('已更新规则 keepInventory = true')).toBeInTheDocument()
     // 编辑态退出，本地值已更新为 true
     expect(screen.queryByRole('button', { name: '保存' })).not.toBeInTheDocument()
-    expect(screen.getByRole('switch', { name: 'keepInventory 开关' })).toHaveAttribute('data-state', 'checked')
+    expect(screen.getByRole('switch', { name: 'keepInventory 开关' })).toHaveAttribute(
+      'data-state',
+      'checked',
+    )
   })
 
   it('bool：取消 → 回滚草稿（开关回到原值）', async () => {
@@ -123,7 +128,10 @@ describe('GamerulePanel 行级编辑', () => {
     await user.click(screen.getByRole('switch', { name: 'keepInventory 开关' }))
     await user.click(screen.getByRole('button', { name: '取消' }))
     expect(screen.queryByRole('button', { name: '保存' })).not.toBeInTheDocument()
-    expect(screen.getByRole('switch', { name: 'keepInventory 开关' })).toHaveAttribute('data-state', 'unchecked')
+    expect(screen.getByRole('switch', { name: 'keepInventory 开关' })).toHaveAttribute(
+      'data-state',
+      'unchecked',
+    )
     expect(onSendCommand).not.toHaveBeenCalledWith('gamerule keepInventory true')
   })
 
@@ -152,7 +160,10 @@ describe('GamerulePanel 行级编辑', () => {
     await user.click(screen.getByRole('button', { name: '保存' }))
     expect(await screen.findByText('规则更新失败：网络错误')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '保存' })).not.toBeInTheDocument()
-    expect(screen.getByRole('switch', { name: 'keepInventory 开关' })).toHaveAttribute('data-state', 'unchecked')
+    expect(screen.getByRole('switch', { name: 'keepInventory 开关' })).toHaveAttribute(
+      'data-state',
+      'unchecked',
+    )
   })
 })
 
@@ -190,20 +201,20 @@ describe('GamerulePanel 搜索与分类', () => {
   it('新集（1.21.11）：搜索按 name 过滤 + 分类 chips 筛选', async () => {
     const user = userEvent.setup()
     renderPanel({ mcVersion: '1.21.11', onSendCommand: vi.fn().mockResolvedValue(newOutput()) })
-    await screen.findByText('keepInventory')
-    // 搜索过滤（keepInventory 命中，mobGriefing 不命中）
+    await screen.findByText('keep_inventory')
+    // 搜索过滤（keep_inventory 命中，mob_griefing 不命中）
     await user.type(screen.getByLabelText('搜索规则'), 'keep')
-    expect(screen.getByText('keepInventory')).toBeInTheDocument()
-    expect(screen.queryByText('mobGriefing')).not.toBeInTheDocument()
+    expect(screen.getByText('keep_inventory')).toBeInTheDocument()
+    expect(screen.queryByText('mob_griefing')).not.toBeInTheDocument()
     await user.clear(screen.getByLabelText('搜索规则'))
-    // 分类筛选：玩家 → keepInventory（玩家）在，randomTickSpeed（世界更新）不在
+    // 分类筛选：玩家 → keep_inventory（玩家）在，random_tick_speed（世界更新）不在
     await user.click(screen.getByRole('button', { name: '玩家' }))
-    expect(screen.getByText('keepInventory')).toBeInTheDocument()
-    expect(screen.queryByText('randomTickSpeed')).not.toBeInTheDocument()
+    expect(screen.getByText('keep_inventory')).toBeInTheDocument()
+    expect(screen.queryByText('random_tick_speed')).not.toBeInTheDocument()
     // 全部恢复
     await user.click(screen.getByRole('button', { name: '全部' }))
-    expect(screen.getByText('randomTickSpeed')).toBeInTheDocument()
-    expect(screen.getByText('mobGriefing')).toBeInTheDocument()
+    expect(screen.getByText('random_tick_speed')).toBeInTheDocument()
+    expect(screen.getByText('mob_griefing')).toBeInTheDocument()
   })
 
   it('搜索无匹配显示空态', async () => {
@@ -230,7 +241,10 @@ describe('GamerulePanel RCON 未连接', () => {
     expect(screen.getByRole('button', { name: '刷新规则' })).toBeDisabled()
     // 默认值态（「默认」标记）
     expect(screen.getAllByText('默认').length).toBeGreaterThan(0)
-    expect(screen.getByRole('switch', { name: 'keepInventory 开关' })).toHaveAttribute('data-state', 'unchecked')
+    expect(screen.getByRole('switch', { name: 'keepInventory 开关' })).toHaveAttribute(
+      'data-state',
+      'unchecked',
+    )
   })
 })
 
@@ -242,15 +256,24 @@ describe('GamerulePanel 刷新', () => {
     const changed = LEGACY_GAMERULES.map((d) =>
       d.name === 'keepInventory' ? 'keepInventory = true' : `${d.name} = ${String(d.defaultValue)}`,
     ).join('\n')
-    const onSendCommand = vi.fn().mockResolvedValueOnce(legacyOutput()).mockResolvedValueOnce(changed)
+    const onSendCommand = vi
+      .fn()
+      .mockResolvedValueOnce(legacyOutput())
+      .mockResolvedValueOnce(changed)
     renderPanel({ onSendCommand })
     await screen.findByText('keepInventory')
-    expect(screen.getByRole('switch', { name: 'keepInventory 开关' })).toHaveAttribute('data-state', 'unchecked')
+    expect(screen.getByRole('switch', { name: 'keepInventory 开关' })).toHaveAttribute(
+      'data-state',
+      'unchecked',
+    )
     await user.click(screen.getByRole('button', { name: '刷新规则' }))
     await waitFor(() => expect(onSendCommand).toHaveBeenCalledTimes(2))
     expect(onSendCommand).toHaveBeenNthCalledWith(2, 'gamerule')
     await waitFor(() =>
-      expect(screen.getByRole('switch', { name: 'keepInventory 开关' })).toHaveAttribute('data-state', 'checked'),
+      expect(screen.getByRole('switch', { name: 'keepInventory 开关' })).toHaveAttribute(
+        'data-state',
+        'checked',
+      ),
     )
   })
 })

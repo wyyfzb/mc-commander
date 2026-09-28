@@ -3,6 +3,7 @@ import { NavLink } from 'react-router'
 import {
   ChevronsLeft,
   ChevronsRight,
+  CircleHelp,
   LayoutDashboard,
   Users,
   Globe,
@@ -20,6 +21,7 @@ import { BrandLogo } from '@/components/mcs/brand-logo'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useUiStore } from '@/stores/ui'
 import { useInstances } from '@/api/queries'
+import { instanceLabel } from '@/lib/instance-label'
 import { useServerStore } from '@/stores/server'
 
 /**
@@ -27,6 +29,7 @@ import { useServerStore } from '@/stores/server'
  * 导航：仪表盘/玩家/世界/文件/任务/实例 + 底部设置
  * 折叠由 zustand（useUiStore.sidebarCollapsed）驱动
  * 移动端（<768px）：fixed 抽屉 + 遮罩（useUiStore.mobileNavOpen 驱动）；底部实例迷你卡
+ * 两种形态的共用主体见 SidebarBody——形态差异由判别联合在编译期切开
  */
 
 interface NavItem {
@@ -47,14 +50,24 @@ const PRIMARY_NAV: NavItem[] = [
   { to: '/audit', label: '审计日志', icon: ScrollText },
 ]
 
-const BOTTOM_NAV: NavItem[] = [{ to: '/settings', label: '设置', icon: Settings }]
+// 底部辅助区与「设置」并列：帮助是查阅型静态内容，不进日常操作主序列（PRIMARY_NAV 保持 9 项）
+const BOTTOM_NAV: NavItem[] = [
+  { to: '/help', label: '帮助', icon: CircleHelp },
+  { to: '/settings', label: '设置', icon: Settings },
+]
 
 /**
- * FocusTrap —— WAI-ARIA 焦点陷阱
- * 打开时 Tab 循环在容器内；关闭后焦点还原到触发按钮。
+ * useFocusTrap —— WAI-ARIA 焦点陷阱（hook 形式）
+ * 返回的 keydown 处理器须挂在**包含容器在内的祖先**上：React 合成事件沿 fiber 祖先链传播，
+ * 挂在兄弟哨兵节点上的处理器永远收不到容器内的事件（Escape/Tab 均失效）。
+ * 打开时 Tab 循环在容器内、Escape 关闭；关闭后焦点还原到触发按钮。
  * 仅用于移动端抽屉（<768px），桌面侧栏无需焦点陷阱。
  */
-function FocusTrap({ active, containerRef, onDeactivate }: { active: boolean; containerRef: React.RefObject<HTMLElement | null>; onDeactivate: () => void }) {
+function useFocusTrap(
+  active: boolean,
+  containerRef: React.RefObject<HTMLElement | null>,
+  onDeactivate: () => void,
+) {
   const previousFocusRef = useRef<HTMLElement | null>(null)
 
   // 保存/还原焦点
@@ -62,7 +75,9 @@ function FocusTrap({ active, containerRef, onDeactivate }: { active: boolean; co
     if (active) {
       previousFocusRef.current = document.activeElement as HTMLElement
       // 自动聚焦容器内第一个可聚焦元素
-      const first = containerRef.current?.querySelector<HTMLElement>('a, button, [tabindex]:not([tabindex="-1"])')
+      const first = containerRef.current?.querySelector<HTMLElement>(
+        'a, button, [tabindex]:not([tabindex="-1"])',
+      )
       first?.focus()
     } else {
       previousFocusRef.current?.focus()
@@ -71,34 +86,37 @@ function FocusTrap({ active, containerRef, onDeactivate }: { active: boolean; co
   }, [active, containerRef])
 
   // Tab 循环 + Escape 关闭
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (!active || !containerRef.current) return
-    if (e.key === 'Escape') {
-      e.preventDefault()
-      onDeactivate()
-      return
-    }
-    if (e.key !== 'Tab') return
-    const focusable = containerRef.current.querySelectorAll<HTMLElement>('a, button, [tabindex]:not([tabindex="-1"])')
-    if (focusable.length === 0) return
-    const first = focusable[0]!
-    const last = focusable[focusable.length - 1]!
-    if (e.shiftKey) {
-      if (document.activeElement === first) {
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (!active || !containerRef.current) return
+      if (e.key === 'Escape') {
         e.preventDefault()
-        last.focus()
+        onDeactivate()
+        return
       }
-    } else {
-      if (document.activeElement === last) {
-        e.preventDefault()
-        first.focus()
+      if (e.key !== 'Tab') return
+      const focusable = containerRef.current.querySelectorAll<HTMLElement>(
+        'a, button, [tabindex]:not([tabindex="-1"])',
+      )
+      if (focusable.length === 0) return
+      const first = focusable[0]!
+      const last = focusable[focusable.length - 1]!
+      if (e.shiftKey) {
+        if (document.activeElement === first) {
+          e.preventDefault()
+          last.focus()
+        }
+      } else {
+        if (document.activeElement === last) {
+          e.preventDefault()
+          first.focus()
+        }
       }
-    }
-  }, [active, containerRef, onDeactivate])
+    },
+    [active, containerRef, onDeactivate],
+  )
 
-  if (!active) return null
-  // 不可见哨兵：接收焦点但不占空间
-  return <div onKeyDown={handleKeyDown} tabIndex={-1} style={{ position: 'absolute', width: 0, height: 0, overflow: 'hidden' }} />
+  return handleKeyDown
 }
 
 interface AppSidebarProps {
@@ -108,82 +126,40 @@ interface AppSidebarProps {
 }
 
 export function AppSidebar({ collapsed, mobileNavOpen, onMobileNavClose }: AppSidebarProps) {
-  const instanceId = useServerStore((s) => s.instanceId)
-  const instancesQuery = useInstances()
-  const current = instancesQuery.data?.find((i) => i.id === instanceId)
   const mobileDrawerRef = useRef<HTMLElement | null>(null)
   const toggleSidebar = useUiStore((s) => s.toggleSidebar)
-
-  const nav = (
-    <>
-      <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-2 py-2">
-        {PRIMARY_NAV.map(({ to, label, icon: Icon }) => (
-          <SidebarLink
-            key={to}
-            to={to}
-            label={label}
-            icon={Icon}
-            collapsed={collapsed}
-            onClick={onMobileNavClose}
-          />
-        ))}
-      </nav>
-
-      <nav className="flex flex-col gap-1 border-t border-mcs-border-muted px-2 py-2">
-        {BOTTOM_NAV.map(({ to, label, icon: Icon }) => (
-          <SidebarLink
-            key={to}
-            to={to}
-            label={label}
-            icon={Icon}
-            collapsed={collapsed}
-            onClick={onMobileNavClose}
-          />
-        ))}
-      </nav>
-
-      {/* 实例迷你卡（原型 side-foot：当前实例 + TPS + 人数；仅展开态展示） */}
-      {!collapsed && current && (
-        <div className="border-t border-mcs-border-muted p-2.5">
-          <div className="flex items-center gap-2 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted px-2.5 py-2 shadow-mcs-card">
-            <span
-              className={cn(
-                'size-2 shrink-0 rounded-full',
-                current.isRunning ? 'bg-mcs-accent shadow-mcs-glow-accent' : 'bg-mcs-text-subtle',
-              )}
-              aria-hidden
-            />
-            <div className="min-w-0">
-              <div className="truncate text-mcs-xs font-semibold text-mcs-text-default">
-                {current.name}
-              </div>
-              <div className="truncate font-mono text-mcs-2xs text-mcs-text-subtle">
-                {current.isRunning ? '运行中' : '已停止'} · {current.playerCount} 人在线
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </>
-  )
+  const handleDrawerKeyDown = useFocusTrap(mobileNavOpen, mobileDrawerRef, onMobileNavClose)
 
   return (
     <>
-      {/* 桌面侧栏（≥768px）；overflow-hidden 让常驻文字随宽度过渡裁剪（防收起中溢出） */}
+      {/* 桌面侧栏（≥768px）；overflow-hidden 让常驻文字随宽度过渡裁剪（防收起中溢出）
+          宽度过渡是布局属性：收起/展开要重排兄弟节点，transform 无法替代（除非改「滑出浮层」模型，
+          会改变交互语义）→ 保留宽度过渡，用 contain 把重排/重绘限制在侧栏内部 */}
       <aside
         className={cn(
-          'glass-chrome hidden h-full shrink-0 flex-col overflow-hidden border-r border-mcs-border-muted md:flex',
+          'hidden h-full shrink-0 flex-col overflow-hidden border-r border-mcs-border-muted contain-[layout_paint] md:flex',
+          'bg-mcs-bg-muted',
           'transition-[width] duration-mcs-base ease-mcs-snappy',
           collapsed ? 'w-14' : 'w-52',
         )}
         aria-label="主导航"
       >
-        <BrandRow collapsed={collapsed} onToggle={() => toggleSidebar()} />
-        {nav}
+        <SidebarBody
+          variant="rail"
+          collapsed={collapsed}
+          onToggle={() => toggleSidebar()}
+          onNavigate={onMobileNavClose}
+        />
       </aside>
 
-      {/* 移动端抽屉（<768px）：fixed 覆盖层 + 遮罩 */}
-      <div className={cn('fixed inset-0 z-50 md:hidden', !mobileNavOpen && 'pointer-events-none')}>
+      {/* 移动端抽屉（<768px）：fixed 覆盖层 + 遮罩；关闭态 inert 移出焦点顺序 */}
+      <div
+        className={cn(
+          'fixed inset-0 z-(--mcs-z-overlay) md:hidden',
+          !mobileNavOpen && 'pointer-events-none',
+        )}
+        onKeyDown={handleDrawerKeyDown}
+      >
         <div
           className={cn(
             'absolute inset-0 bg-mcs-scrim transition-opacity duration-mcs-base',
@@ -195,18 +171,90 @@ export function AppSidebar({ collapsed, mobileNavOpen, onMobileNavClose }: AppSi
         <aside
           ref={mobileDrawerRef}
           className={cn(
-            'glass-chrome relative inset-y-0 left-0 flex w-64 flex-col border-r border-mcs-border-muted',
+            'relative inset-y-0 left-0 flex w-64 flex-col border-r border-mcs-border-muted bg-mcs-bg-muted',
             'transition-transform duration-mcs-base ease-mcs-snappy',
             mobileNavOpen ? 'translate-x-0' : '-translate-x-full',
           )}
           aria-label="主导航（移动端）"
           aria-hidden={!mobileNavOpen}
+          inert={!mobileNavOpen}
         >
-          <FocusTrap active={mobileNavOpen} containerRef={mobileDrawerRef} onDeactivate={onMobileNavClose} />
-          <BrandRow collapsed={false} />
-          {nav}
+          <SidebarBody variant="drawer" onNavigate={onMobileNavClose} />
         </aside>
       </div>
+    </>
+  )
+}
+
+/**
+ * SidebarBody —— 侧栏主体（品牌行 + 导航 + 实例迷你卡），两种形态共用一份标记
+ *
+ * 形态差异用判别联合表达，且 **drawer 形态拿不到 collapsed**：
+ * - rail：桌面常驻导轨，占布局宽，可收起（w-52 ↔ w-14）⇒ 带 collapsed 与开合交互
+ * - drawer：<768 的 256px 浮层，不占布局宽 ⇒ 没有「收起」概念，恒展开态
+ *
+ * drawer 恒展开态是硬约束：桌面 sidebarCollapsed 渗进来会让窄屏下开抽屉只剩图标、
+ * 实例迷你卡也被条件卸载。判别联合把这条约束变成编译期事实，不依赖调用约定自觉。
+ */
+type SidebarBodyProps = {
+  onNavigate: () => void
+} & ({ variant: 'rail'; collapsed: boolean; onToggle: () => void } | { variant: 'drawer' })
+
+function SidebarBody(props: SidebarBodyProps) {
+  const { onNavigate } = props
+  const instanceId = useServerStore((s) => s.instanceId)
+  const instancesQuery = useInstances()
+  const current = instancesQuery.data?.find((i) => i.id === instanceId)
+  const isCollapsed = props.variant === 'rail' && props.collapsed
+
+  const links = (items: NavItem[], extraClass?: string) => (
+    <nav className={cn('flex flex-col gap-1 p-2', extraClass)}>
+      {items.map(({ to, label, icon: Icon }) => (
+        <SidebarLink
+          key={to}
+          to={to}
+          label={label}
+          icon={Icon}
+          collapsed={isCollapsed}
+          onClick={onNavigate}
+        />
+      ))}
+    </nav>
+  )
+
+  return (
+    <>
+      <BrandRow
+        collapsed={isCollapsed}
+        onToggle={props.variant === 'rail' ? props.onToggle : undefined}
+      />
+      {links(PRIMARY_NAV, 'flex-1 overflow-y-auto')}
+      {links(BOTTOM_NAV, 'border-t border-mcs-border-muted')}
+
+      {/* 实例迷你卡（原型 side-foot：当前实例 + TPS + 人数；仅展开态展示） */}
+      {!isCollapsed && current && (
+        <div className="border-t border-mcs-border-muted p-2.5">
+          <div className="flex items-center gap-2 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted px-2.5 py-2 shadow-mcs-card">
+            <span
+              className={cn(
+                'size-2 shrink-0 rounded-full',
+                current.isRunning
+                  ? 'bg-mcs-success-fg shadow-mcs-glow-accent'
+                  : 'bg-mcs-text-muted',
+              )}
+              aria-hidden
+            />
+            <div className="min-w-0">
+              <div className="truncate text-mcs-xs font-semibold text-mcs-text-default">
+                {instanceLabel(current)}
+              </div>
+              <div className="truncate font-mono text-mcs-2xs text-mcs-text-muted">
+                {current.isRunning ? '运行中' : '已停止'} · {current.playerCount} 人在线
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }
@@ -294,10 +342,10 @@ function SidebarLink({
         cn(
           'relative flex h-8 items-center gap-2.5 rounded-mcs-sm px-2.5 text-mcs-sm font-medium',
           'text-mcs-text-muted transition-colors duration-mcs-fast',
-          'hover:bg-mcs-state-hover hover:text-mcs-text-default',
+          'hover:bg-mcs-state-hover active:bg-mcs-state-pressed hover:text-mcs-text-default',
           'focus-visible:outline-2',
           // 激活指示条：2px accent 左缘 inset（伪元素常驻 + opacity 过渡，避免 display 切换不可过渡）
-          'before:pointer-events-none before:absolute before:inset-y-1 before:left-0 before:w-0.5 before:rounded-full before:bg-mcs-accent before:opacity-0 before:transition-opacity before:duration-mcs-fast',
+          'before:pointer-events-none before:absolute before:inset-y-1 before:left-0 before:w-0.5 before:rounded-full before:bg-mcs-accent-fg before:opacity-0 before:transition-opacity before:duration-mcs-fast',
           isActive && 'bg-mcs-accent-bg-subtle text-mcs-accent-fg before:opacity-100',
           collapsed && 'justify-center px-0',
         )

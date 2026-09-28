@@ -52,7 +52,8 @@ beforeAll(() => {
 
   db.exec(`CREATE TABLE IF NOT EXISTS webhooks (
     id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, url TEXT NOT NULL,
-    secret TEXT, events TEXT DEFAULT '[]', instance_id TEXT, is_enabled INTEGER DEFAULT 1,
+    secret TEXT, platform TEXT NOT NULL DEFAULT 'generic', events TEXT DEFAULT '[]',
+    instance_id TEXT, is_enabled INTEGER DEFAULT 1,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP
   )`);
   db.exec(`CREATE TABLE IF NOT EXISTS webhook_deliveries (
@@ -123,7 +124,10 @@ async function runDeliverToFruition(hook, eventType = 'player.join', payload = {
 describe('WebhookService.dispatch 主流程（issue #410）', () => {
   it('事件过滤：仅 events 包含该事件的 webhook 被投递（白名单语义在订阅方）', async () => {
     const joined = createHook({ url: 'https://hooks.example.com/joined', events: ['player.join'] });
-    const other = createHook({ url: 'https://hooks.example.com/other', events: ['instance.start'] });
+    const other = createHook({
+      url: 'https://hooks.example.com/other',
+      events: ['instance.start'],
+    });
     postImpl.current = vi.fn(async () => ({ statusCode: 200, body: 'ok' }));
 
     await WebhookService.dispatch('player.join', { instanceId: 'inst-1' });
@@ -188,7 +192,12 @@ describe('WebhookService.dispatch 主流程（issue #410）', () => {
   it('fire-and-forget：dispatch 返回不等待投递完成，投递异步落库', async () => {
     const hook = createHook();
     let release;
-    postImpl.current = vi.fn(() => new Promise((r) => { release = r; }));
+    postImpl.current = vi.fn(
+      () =>
+        new Promise((r) => {
+          release = r;
+        }),
+    );
 
     await WebhookService.dispatch('player.join', { instanceId: 'inst-1' });
     // 让 guard 校验完成、请求发出（guard 为 async，需 flush 微任务）

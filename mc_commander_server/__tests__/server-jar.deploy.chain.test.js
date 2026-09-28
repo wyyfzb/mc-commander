@@ -121,7 +121,11 @@ function defaultStreamImpl(jarBytes) {
   return (url, streamMod) => {
     const pt = new streamMod.PassThrough();
     queueMicrotask(() => {
-      pt.emit('downloadProgress', { percent: 0.5, transferred: jarBytes.length, total: jarBytes.length });
+      pt.emit('downloadProgress', {
+        percent: 0.5,
+        transferred: jarBytes.length,
+        total: jarBytes.length,
+      });
       pt.write(jarBytes);
       pt.end();
     });
@@ -129,7 +133,7 @@ function defaultStreamImpl(jarBytes) {
   };
 }
 
-const PAPER_URL = 'https://api.papermc.io/v3';
+const PAPER_URL = 'https://fill.papermc.io/v3';
 const JAR_BYTES = Buffer.from('fake-paper-server-jar-payload');
 const JAR_SHA256 = crypto.createHash('sha256').update(JAR_BYTES).digest('hex');
 
@@ -310,7 +314,7 @@ describe('POST /instances/deploy · Paper 主链', () => {
               'server:default': {
                 name: 'paper-1.21.4-42.jar',
                 url: `${PAPER_URL}/projects/paper/versions/1.21.4/builds/42/downloads/paper-1.21.4-42.jar`,
-                sha256: badSha ? 'deadbeef'.repeat(8) : JAR_SHA256,
+                checksums: { sha256: badSha ? 'deadbeef'.repeat(8) : JAR_SHA256 },
               },
             },
       };
@@ -322,12 +326,22 @@ describe('POST /instances/deploy · Paper 主链', () => {
     }
   }
 
-  it('paper 全链成功：STABLE 构建选择 + server:default 摘要校验通过 + 实例落盘/入库/complete 事件', async () => {
+  it('paper 全链成功：STABLE 构建选择 + checksums.sha256 校验通过 + 实例落盘/入库/complete 事件', async () => {
     // builds 混入更高 id 的非稳定通道：验证 channel 过滤优先于 id 排序
     setPaperChain({
       builds: [
         { id: 43, channel: 'SNAPSHOT', downloads: {} },
-        { id: 42, channel: 'STABLE', downloads: { 'server:default': { name: 'paper-1.21.4-42.jar', url: `${PAPER_URL}/d/42`, sha256: JAR_SHA256 } } },
+        {
+          id: 42,
+          channel: 'STABLE',
+          downloads: {
+            'server:default': {
+              name: 'paper-1.21.4-42.jar',
+              url: `${PAPER_URL}/d/42`,
+              checksums: { sha256: JAR_SHA256 },
+            },
+          },
+        },
         { id: 41, channel: 'STABLE', downloads: {} },
       ],
     });
@@ -335,20 +349,30 @@ describe('POST /instances/deploy · Paper 主链', () => {
 
     const res = await request(app)
       .post('/api/instances/deploy')
-      .send({ type: 'paper', mcVersion: '1.21.4', instanceName: 'Paper Chain Server' });
+      .send({ type: 'paper', mcVersion: '1.21.4', instanceName: 'Paper Chain Server', eula: true });
 
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('ok');
     const instanceId = res.body.data.id;
     expect(instanceId).toMatch(/^paper-[0-9a-f]{8}$/);
-    expect(res.body.data).toMatchObject({ type: 'paper', mcVersion: '1.21.4', maxMemory: '2G', javaVersion: '21' });
+    expect(res.body.data).toMatchObject({
+      type: 'paper',
+      mcVersion: '1.21.4',
+      maxMemory: '2G',
+      javaVersion: '21',
+    });
 
     const instancePath = `${testState.serversDir}/${instanceId}`;
     expect(fs.readFileSync(`${instancePath}/server.jar`)).toEqual(JAR_BYTES);
     expect(fs.readFileSync(`${instancePath}/eula.txt`, 'utf8')).toBe('eula=true\n');
     expect(fs.existsSync(`${instancePath}/instance.json`)).toBe(true);
     expect(InstanceModel.create).toHaveBeenCalledWith(
-      expect.objectContaining({ id: instanceId, name: 'Paper Chain Server', type: 'paper', mcVersion: '1.21.4' }),
+      expect.objectContaining({
+        id: instanceId,
+        name: 'Paper Chain Server',
+        type: 'paper',
+        mcVersion: '1.21.4',
+      }),
     );
 
     const stages = manager.emit.mock.calls.map(([, evt]) => evt.stage);
@@ -379,24 +403,21 @@ describe('POST /instances/deploy · Paper 主链', () => {
     expect(manager.activeDeploys.get(instanceId)).toBeUndefined();
   });
 
-  it('paper：build 无 downloads 字段 → 回退 v2 URL 直链下载（无上游摘要，跳过校验）', async () => {
+  it('paper：build 无 downloads 字段 → 502（v2 拼接回退已随上游 sunset 移除，不得静默降级）', async () => {
     setPaperChain({ noDownloads: true });
     const { app } = buildApp();
 
     const res = await request(app)
       .post('/api/instances/deploy')
-      .send({ type: 'paper', mcVersion: '1.21.4', instanceName: 'V2 Fallback Server' });
+      .send({ type: 'paper', mcVersion: '1.21.4', instanceName: 'No Download Server' });
 
-    expect(res.status).toBe(200);
-    const { default: got } = await import('got');
-    const streamUrl = got.stream.mock.calls[0][0];
-    // v2 回退：build.id 拼 v2 直链 + 生成缺省文件名
-    expect(streamUrl).toBe(
-      'https://api.papermc.io/v2/projects/paper/versions/1.21.4/builds/42/downloads/paper-1.21.4-42.jar',
-    );
+    expect(res.status).toBe(502);
+    expect(res.body.message).toContain('No Paper build download');
+    const instanceId = lastDeployInstanceId();
+    expect(fs.existsSync(`${testState.serversDir}/${instanceId}`)).toBe(false);
   });
 
-  it('paper：落盘摘要与上游 sha256 不符 → 502 integrity + 残留清理（fail-closed）', async () => {
+  it('paper：落盘摘要与上游 checksums.sha256 不符 → 502 integrity + 残留清理（fail-closed）', async () => {
     setPaperChain({ badSha: true });
     const { app } = buildApp();
 
@@ -437,17 +458,19 @@ describe('部署注册表终态语义（issue 420）', () => {
   function setPaperChain({ badSha = false } = {}) {
     gotState.jsonTable = {
       'projects/paper/versions': {
-        builds: [{
-          id: 42,
-          channel: 'STABLE',
-          downloads: {
-            'server:default': {
-              name: 'paper-1.21.4-42.jar',
-              url: `${PAPER_URL}/d/42`,
-              sha256: badSha ? 'deadbeef'.repeat(8) : JAR_SHA256,
+        builds: [
+          {
+            id: 42,
+            channel: 'STABLE',
+            downloads: {
+              'server:default': {
+                name: 'paper-1.21.4-42.jar',
+                url: `${PAPER_URL}/d/42`,
+                checksums: { sha256: badSha ? 'deadbeef'.repeat(8) : JAR_SHA256 },
+              },
             },
           },
-        }],
+        ],
       },
     };
   }
@@ -466,9 +489,12 @@ describe('部署注册表终态语义（issue 420）', () => {
       return origSet(k, v);
     };
 
-    const res = await request(app)
-      .post('/api/instances/deploy')
-      .send({ type: 'paper', mcVersion: '1.21.4', instanceName: 'Registry Life Server' });
+    const res = await request(app).post('/api/instances/deploy').send({
+      type: 'paper',
+      mcVersion: '1.21.4',
+      instanceName: 'Registry Life Server',
+      eula: true,
+    });
     expect(res.status).toBe(200);
     const instanceId = res.body.data.id;
 
@@ -493,14 +519,15 @@ describe('部署注册表终态语义（issue 420）', () => {
 
     const res = await request(app)
       .post('/api/instances/deploy')
-      .send({ type: 'paper', mcVersion: '1.21.4', instanceName: 'Snapshot Server' });
+      .send({ type: 'paper', mcVersion: '1.21.4', instanceName: 'Snapshot Server', eula: true });
     expect(res.status).toBe(200);
     const instanceId = res.body.data.id;
 
     // websocket.js 连接建立时遍历 activeDeploys.values() 补发——终态后注册表为空，
     // 等价于新连接不对已完成部署补发历史终态；进行中快照结构含完整 meta 归属
     expect(manager.activeDeploys.size).toBe(0);
-    const inFlightEvt = manager.emit.mock.calls.map(([, evt]) => evt)
+    const inFlightEvt = manager.emit.mock.calls
+      .map(([, evt]) => evt)
       .find((e) => e.stage === 'first_launch');
     expect(inFlightEvt).toMatchObject({
       instanceId,
@@ -522,7 +549,9 @@ describe('部署注册表终态语义（issue 420）', () => {
 
     // download 首事件已写入 entry（受理即入注册表），sha 校验失败进入 catch：
     // :580 delete 先清 entry，:581 error 终态只推送不写回——发射时点注册表必为空
-    const downloadEvt = manager.emit.mock.calls.map(([, evt]) => evt).find((e) => e.stage === 'download');
+    const downloadEvt = manager.emit.mock.calls
+      .map(([, evt]) => evt)
+      .find((e) => e.stage === 'download');
     expect(downloadEvt).toMatchObject({ instanceId });
     expect(manager.emit.mock.calls.find(([, evt]) => evt.stage === 'error')).toBeTruthy();
     expect(manager.activeDeploys.get(instanceId)).toBeUndefined();
@@ -532,7 +561,9 @@ describe('部署注册表终态语义（issue 420）', () => {
 
 describe('POST /instances/deploy · 下载异常与核心回退', () => {
   it('got.stream 中途 error → 502 + 残留清理', async () => {
-    testState.latestBuild = { downloads: { application: { url: 'https://example.invalid/jar/server.jar' } } };
+    testState.latestBuild = {
+      downloads: { application: { url: 'https://example.invalid/jar/server.jar' } },
+    };
     gotState.streamImpl = (url, streamMod) => {
       const pt = new streamMod.PassThrough();
       queueMicrotask(() => pt.emit('error', new Error('socket hang up')));
@@ -552,7 +583,9 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
 
   it('vanilla：core build.application 携带 sha256 → 防御式取值 + 摘要校验通过', async () => {
     testState.latestBuild = {
-      downloads: { application: { url: 'https://example.invalid/jar/server.jar', sha256: JAR_SHA256 } },
+      downloads: {
+        application: { url: 'https://example.invalid/jar/server.jar', sha256: JAR_SHA256 },
+      },
     };
     const { app } = buildApp();
 
@@ -575,7 +608,9 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
       .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Vanilla Sha1 Server' });
 
     expect(res.status).toBe(200);
-    expect(fs.readFileSync(`${testState.serversDir}/${res.body.data.id}/server.jar`)).toEqual(JAR_BYTES);
+    expect(fs.readFileSync(`${testState.serversDir}/${res.body.data.id}/server.jar`)).toEqual(
+      JAR_BYTES,
+    );
   });
 
   it('fabric：core 失败 → 回退 meta.fabricmc 直链（loaderVersion 缺省 0.16.10）下载成功', async () => {
@@ -597,9 +632,12 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
     testState.mcCoreThrow = true;
     const { app } = buildApp();
 
-    await request(app)
-      .post('/api/instances/deploy')
-      .send({ type: 'fabric', mcVersion: '1.21.4', instanceName: 'Fabric Loader Server', loaderVersion: '0.16.14' });
+    await request(app).post('/api/instances/deploy').send({
+      type: 'fabric',
+      mcVersion: '1.21.4',
+      instanceName: 'Fabric Loader Server',
+      loaderVersion: '0.16.14',
+    });
 
     const { default: got } = await import('got');
     expect(got.stream.mock.calls[0][0]).toContain('/0.16.14/');
@@ -615,13 +653,17 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
 
     expect(res.status).toBe(200);
     const { default: got } = await import('got');
-    expect(got.stream.mock.calls[0][0]).toBe('https://api.purpurmc.org/v2/purpur/1.21.4/latest/download');
+    expect(got.stream.mock.calls[0][0]).toBe(
+      'https://api.purpurmc.org/v2/purpur/1.21.4/latest/download',
+    );
   });
 
   it('forge：安装器退出后未产出 server jar → 502 Forge server jar not found', async () => {
     // forge-installer.jar 下载后 spawn --installServer 假进程 exit0，
     // 目录中除 installer 外无 forge-*.jar → 查找失败抛错
-    testState.latestBuild = { downloads: { application: { url: 'https://example.invalid/jar/forge-installer.jar' } } };
+    testState.latestBuild = {
+      downloads: { application: { url: 'https://example.invalid/jar/forge-installer.jar' } },
+    };
     const { app } = buildApp();
 
     const res = await request(app)
@@ -653,7 +695,9 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
 
   it('InstanceModel.create 抛错 → 部署不阻断仍 200（DB 故障仅降级记录）', async () => {
     testState.dbCreateError = new Error('SQLITE_BUSY: database is locked');
-    testState.latestBuild = { downloads: { application: { url: 'https://example.invalid/jar/server.jar' } } };
+    testState.latestBuild = {
+      downloads: { application: { url: 'https://example.invalid/jar/server.jar' } },
+    };
     const { app } = buildApp();
 
     const res = await request(app)
@@ -668,7 +712,9 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
 
 describe('generateServerProperties 落盘契约', () => {
   it('rcon.port/server-port 按 instanceId 后 4 位 hex 偏移 + enable-rcon + 16 位随机密码', async () => {
-    testState.latestBuild = { downloads: { application: { url: 'https://example.invalid/jar/server.jar' } } };
+    testState.latestBuild = {
+      downloads: { application: { url: 'https://example.invalid/jar/server.jar' } },
+    };
     const { app } = buildApp();
 
     const res = await request(app)
@@ -678,7 +724,10 @@ describe('generateServerProperties 落盘契约', () => {
     expect(res.status).toBe(200);
     const instanceId = res.body.data.id;
     const offset = parseInt(instanceId.slice(-4), 16) % 100;
-    const props = fs.readFileSync(`${testState.serversDir}/${instanceId}/server.properties`, 'utf8');
+    const props = fs.readFileSync(
+      `${testState.serversDir}/${instanceId}/server.properties`,
+      'utf8',
+    );
 
     expect(props).toContain(`rcon.port=${25575 + offset}`);
     expect(props).toContain(`server-port=${25565 + offset}`);
@@ -689,17 +738,26 @@ describe('generateServerProperties 落盘契约', () => {
     expect(pwd[1]).toHaveLength(16);
   });
 
-  it('instance.json 与 eula.txt 契约（部署产物可直接启动）', async () => {
-    testState.latestBuild = { downloads: { application: { url: 'https://example.invalid/jar/server.jar' } } };
+  it('instance.json 与 eula.txt 契约（已同意 EULA 时部署产物可直接启动）', async () => {
+    testState.latestBuild = {
+      downloads: { application: { url: 'https://example.invalid/jar/server.jar' } },
+    };
     const { app } = buildApp();
 
-    const res = await request(app)
-      .post('/api/instances/deploy')
-      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Eula Contract Server' });
+    const res = await request(app).post('/api/instances/deploy').send({
+      type: 'vanilla',
+      mcVersion: '1.21.4',
+      instanceName: 'Eula Contract Server',
+      eula: true,
+    });
 
     const instanceId = res.body.data.id;
-    expect(fs.readFileSync(`${testState.serversDir}/${instanceId}/eula.txt`, 'utf8')).toBe('eula=true\n');
-    const cfg = JSON.parse(fs.readFileSync(`${testState.serversDir}/${instanceId}/instance.json`, 'utf8'));
+    expect(fs.readFileSync(`${testState.serversDir}/${instanceId}/eula.txt`, 'utf8')).toBe(
+      'eula=true\n',
+    );
+    const cfg = JSON.parse(
+      fs.readFileSync(`${testState.serversDir}/${instanceId}/instance.json`, 'utf8'),
+    );
     expect(cfg).toMatchObject({
       id: instanceId,
       name: 'Eula Contract Server',
@@ -710,11 +768,55 @@ describe('generateServerProperties 落盘契约', () => {
       javaPath: '/usr/bin/java',
     });
   });
+
+  it('未同意 EULA（字段缺省）：写 eula=false、跳过首启，部署仍成功', async () => {
+    testState.latestBuild = {
+      downloads: { application: { url: 'https://example.invalid/jar/server.jar' } },
+    };
+    const { app, manager } = buildApp();
+
+    const res = await request(app)
+      .post('/api/instances/deploy')
+      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'No Consent Server' });
+
+    expect(res.status).toBe(200);
+    const instanceId = res.body.data.id;
+    // 面板不得代替用户表达同意：未同意即 eula=false，且 MC 首启强制要求 true 故必须跳过
+    expect(fs.readFileSync(`${testState.serversDir}/${instanceId}/eula.txt`, 'utf8')).toBe(
+      'eula=false\n',
+    );
+    const stages = manager.emit.mock.calls.map(([, evt]) => evt.stage);
+    expect(stages).not.toContain('first_launch');
+    expect(stages[stages.length - 1]).toBe('complete');
+  });
+
+  it('未同意 EULA（显式 false）：同样写 eula=false 且不首启', async () => {
+    testState.latestBuild = {
+      downloads: { application: { url: 'https://example.invalid/jar/server.jar' } },
+    };
+    const { app, manager } = buildApp();
+
+    const res = await request(app).post('/api/instances/deploy').send({
+      type: 'vanilla',
+      mcVersion: '1.21.4',
+      instanceName: 'Explicit Decline Server',
+      eula: false,
+    });
+
+    expect(res.status).toBe(200);
+    const instanceId = res.body.data.id;
+    expect(fs.readFileSync(`${testState.serversDir}/${instanceId}/eula.txt`, 'utf8')).toBe(
+      'eula=false\n',
+    );
+    expect(manager.emit.mock.calls.map(([, evt]) => evt.stage)).not.toContain('first_launch');
+  });
 });
 
 describe('runFirstLaunch 首启行为', () => {
   beforeEach(() => {
-    testState.latestBuild = { downloads: { application: { url: 'https://example.invalid/jar/server.jar' } } };
+    testState.latestBuild = {
+      downloads: { application: { url: 'https://example.invalid/jar/server.jar' } },
+    };
   });
 
   it('首启退出码非 0 且无 logs 目录 → 记录告警但不阻断部署（resolve）', async () => {
@@ -723,7 +825,7 @@ describe('runFirstLaunch 首启行为', () => {
 
     const res = await request(app)
       .post('/api/instances/deploy')
-      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Exit1 Server' });
+      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Exit1 Server', eula: true });
 
     expect(res.status).toBe(200);
     expect(res.body.data.id).toMatch(/^vanilla-[0-9a-f]{8}$/);
@@ -733,46 +835,56 @@ describe('runFirstLaunch 首启行为', () => {
     testState.spawnBehavior = 'error';
     const { app } = buildApp();
 
-    const res = await request(app)
-      .post('/api/instances/deploy')
-      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Spawn Error Server' });
+    const res = await request(app).post('/api/instances/deploy').send({
+      type: 'vanilla',
+      mcVersion: '1.21.4',
+      instanceName: 'Spawn Error Server',
+      eula: true,
+    });
 
     expect(res.status).toBe(200);
   });
 
   it('首启 60s 超时 → 按进程组终止（kill(-pid, SIGKILL)）+ 单进程兜底 + 部署完成', async () => {
-    testState.spawnBehavior = 'hang';
-    const killSpy = vi.spyOn(process, 'kill').mockReturnValue(true);
-    const { app } = buildApp();
+    // 进程树终止按 process.platform 分支：win32 走 taskkill /T，其他平台走 kill(-pid)。
+    // 本用例断言的是后者，固定 platform 才能在任意宿主覆盖该分支（CI 在 Linux 真跑同一路径）。
+    const origPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+    Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
+    try {
+      testState.spawnBehavior = 'hang';
+      const killSpy = vi.spyOn(process, 'kill').mockReturnValue(true);
+      const { app } = buildApp();
 
-    const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
-    const pending = request(app)
-      .post('/api/instances/deploy')
-      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Timeout Server' });
-    // supertest Test 为惰性 thenable：Promise.resolve 触发 then → 立即发起请求
-    const inflight = Promise.resolve(pending);
+      const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
+      const pending = request(app)
+        .post('/api/instances/deploy')
+        .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Timeout Server', eula: true });
+      // supertest Test 为惰性 thenable：Promise.resolve 触发 then → 立即发起请求
+      const inflight = Promise.resolve(pending);
 
-    // 轮询等待 runFirstLaunch 注册 60s 首启定时器（真实 IO 链在 tmp 目录毫秒级完成）
-    let timeoutCall = null;
-    for (let i = 0; i < 200 && !timeoutCall; i++) {
-      await new Promise((r) => setTimeout(r, 5));
-      timeoutCall = setTimeoutSpy.mock.calls.find(([, ms]) => ms === 60000) || null;
+      // 轮询等待 runFirstLaunch 注册 60s 首启定时器（真实 IO 链在 tmp 目录毫秒级完成）
+      let timeoutCall = null;
+      for (let i = 0; i < 200 && !timeoutCall; i++) {
+        await new Promise((r) => setTimeout(r, 5));
+        timeoutCall = setTimeoutSpy.mock.calls.find(([, ms]) => ms === 60000) || null;
+      }
+      expect(timeoutCall, 'runFirstLaunch 应注册 60s 首启定时器').not.toBeNull();
+
+      // 模拟 60s 到期：取消真实定时器后手动触发超时回调（进程树终止 + resolve）
+      const callIdx = setTimeoutSpy.mock.calls.findIndex(([, ms]) => ms === 60000);
+      clearTimeout(setTimeoutSpy.mock.results[callIdx].value);
+      timeoutCall[0]();
+
+      const res = await inflight;
+      expect(res.status).toBe(200);
+      expect(res.body.data.id).toMatch(/^vanilla-[0-9a-f]{8}$/);
+      // 进程树终止：Linux/macOS spawn 带 detached（pid 即 PGID）→ 负 pid 发组信号
+      expect(killSpy).toHaveBeenCalledWith(-42424, 'SIGKILL');
+      // 单进程 SIGKILL 兜底
+      const { spawn } = await import('child_process');
+      expect(spawn.mock.results[0].value.kill).toHaveBeenCalledWith('SIGKILL');
+    } finally {
+      Object.defineProperty(process, 'platform', origPlatform);
     }
-    expect(timeoutCall, 'runFirstLaunch 应注册 60s 首启定时器').not.toBeNull();
-
-    // 模拟 60s 到期：取消真实定时器后手动触发超时回调（进程树终止 + resolve）
-    const callIdx = setTimeoutSpy.mock.calls.findIndex(([, ms]) => ms === 60000);
-    clearTimeout(setTimeoutSpy.mock.results[callIdx].value);
-    timeoutCall[0]();
-
-    const res = await inflight;
-    expect(res.status).toBe(200);
-    expect(res.body.data.id).toMatch(/^vanilla-[0-9a-f]{8}$/);
-    // 进程树终止：Linux/macOS spawn 带 detached（pid 即 PGID）→ 负 pid 发组信号
-    expect(killSpy).toHaveBeenCalledWith(-42424, 'SIGKILL');
-    // 单进程 SIGKILL 兜底
-    const { spawn } = await import('child_process');
-    expect(spawn.mock.results[0].value.kill).toHaveBeenCalledWith('SIGKILL');
   });
 });
-

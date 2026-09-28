@@ -1,8 +1,8 @@
 import { lazy } from 'react'
 import { createBrowserRouter, redirect } from 'react-router'
 import { AppShell } from '@/layouts/app-shell'
-import { useConnectionStore } from '@/stores/connection'
-import { useAuthStore, SESSION_EXPIRED_EVENT } from '@/stores/auth'
+import { hasUsableCredentials } from '@/stores/connection'
+import { installSessionExpiryHandler } from '@/lib/session-expiry'
 import {
   AboutSettingsPage,
   AccountSettingsPage,
@@ -16,7 +16,7 @@ import {
 /**
  * 路由表（react-router v8 data mode）
  * - 路由必须静态定义（v8 data mode 约定）；URL 深链接/刷新保持原生支持
- * - 性能：页面组件 route-level React.lazy（Monaco/echarts 随页 chunk 懒加载）；
+ * - 性能：页面组件 route-level React.lazy（Monaco 随页 chunk 懒加载）；
  *   AppShell 与设置子页不 lazy（布局核心 + 设置页高频轻量）
  */
 
@@ -50,32 +50,26 @@ const OnboardingPageLazy = lazy(() =>
 const AuditPageLazy = lazy(() =>
   import('@/features/audit/audit-page').then((m) => ({ default: m.AuditPage })),
 )
-const EmergencyPageLazy = lazy(() =>
-  import('@/features/emergency/emergency-page').then((m) => ({ default: m.EmergencyPage })),
+// 帮助页内容在仓库根 docs/（`?raw` 构建期内联），与 app 其余部分无共享依赖
+const HelpPageLazy = lazy(() =>
+  import('@/features/help/help-page').then((m) => ({ default: m.HelpPage })),
 )
 const LoginPageLazy = lazy(() =>
   import('@/features/auth/login-page').then((m) => ({ default: m.LoginPage })),
 )
 
 /**
- * 凭据判定（安全主线守卫）：API Key（自动化通道）或管理员会话令牌（登录通道）
- * 任一存在即视为已连接。loader 与 React 渲染周期解耦，直接读 store 快照
+ * 连接守卫（D11 演进）：无本面板可用凭据 → 登录页（登录页内含首访设密向导）
+ * 凭据口径见 stores/connection.ts 的 hasUsableCredentials（会话只在签发它的面板上算数）
  */
-function hasCredentials(): boolean {
-  const { apiKey } = useConnectionStore.getState()
-  const { session } = useAuthStore.getState()
-  return Boolean(apiKey || session?.token)
-}
-
-/** 连接守卫（D11 演进）：无任何凭据 → 登录页（登录页内含首访设密向导） */
 function requireConfigured() {
-  if (!hasCredentials()) return redirect('/login')
+  if (!hasUsableCredentials()) return redirect('/login')
   return null
 }
 
 /** 无凭据守卫：已连接时访问登录页/引导页 → 回仪表盘 */
 function requireUnconfigured() {
-  if (hasCredentials()) return redirect('/dashboard')
+  if (hasUsableCredentials()) return redirect('/dashboard')
   return null
 }
 
@@ -95,6 +89,7 @@ export const router = createBrowserRouter([
       { path: 'instances', Component: InstancesPage },
       { path: 'webhooks', Component: WebhookPage },
       { path: 'audit', Component: AuditPageLazy },
+      { path: 'help', Component: HelpPageLazy },
       {
         path: 'settings',
         Component: SettingsPage,
@@ -121,29 +116,8 @@ export const router = createBrowserRouter([
     Component: OnboardingPageLazy,
     loader: requireUnconfigured,
   },
-  // 移动端紧急视图：独立于 AppShell 的窄屏处置页，PWA 主屏直达
-  {
-    path: '/emergency',
-    Component: EmergencyPageLazy,
-    loader: requireConfigured,
-  },
 ])
 
-/**
- * 会话过期全局处置：client.ts 检测 40103 时派发事件（与 React 无关的模块层），
- * 此处用 router.navigate 跳登录页——不依赖组件树，与 history/hash 路由模式无关。
- * 清会话由派发方（clearSessionAndDispatchExpired）完成，这里补一次 status 重算
- * 并带上 returnTo 便于登录后回跳。
- */
-if (typeof window !== 'undefined') {
-  window.addEventListener(SESSION_EXPIRED_EVENT, () => {
-    useConnectionStore.getState().refreshStatus()
-    const current = router.state.location.pathname
-    // 已在登录页/引导页时不再跳转（避免循环）
-    if (current === '/login' || current === '/onboarding') return
-    const search = new URLSearchParams()
-    if (current && current !== '/') search.set('returnTo', current)
-    const qs = search.toString()
-    void router.navigate(`/login${qs ? `?${qs}` : ''}`)
-  })
-}
+// 会话过期（40103）的全局处置：client.ts 派发事件 → 此处决策跳登录页或保留 Key 续用
+// （与 React 无关的模块层监听，不依赖组件树，history/hash 两种路由模式均正确）
+if (typeof window !== 'undefined') installSessionExpiryHandler(router)

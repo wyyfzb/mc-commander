@@ -1,0 +1,94 @@
+import { test, expect, type Page } from '@playwright/test'
+
+/**
+ * 升级取消 E2E（数据源：scripts/mock-server.mjs 结构占位虚构数据）
+ * 路径：实例为停止态才给升级入口（运行中菜单里没有该项）→ 操作菜单「升级版本」
+ *      → 选目标版本 → 开始升级 → WS 进度事件进入「升级中」视图 → 取消升级（二次确认）
+ *      → 服务端补发 cancelled 终态 → 展示取消块（不是失败块）
+ * mock 状态是进程级共享的：运行态由控制端点翻转，用例结束必须复位
+ */
+const CONNECTION_STORAGE = 'mcs-connection'
+
+/** WS 连接分组：本 spec 会触发 mock 的 upgrade 广播，而 mock 的广播按分组投递——
+ *  不声明分组就收不到自己触发的事件；声明后也不会打进并行 spec（dashboard 的
+ *  通知抽屉空态曾被本 spec 广播的 upgradeCancelled 塞进一条未读通知而偶发变红） */
+const WS_GROUP = 'upgrade-cancel'
+
+async function setupConnection(page: Page) {
+  // 假 Key 运行时拼接（仓库纪律：mock 凭据不写可用字面量）；mock 不校验 X-API-Key，取值任意
+  const fakeKey = ['e2e', 'mock', 'key', '0000000000'].join('-')
+  await page.addInitScript(
+    ([key, apiKey]) => {
+      localStorage.setItem(key as string, JSON.stringify({ baseUrl: '', apiKey }))
+    },
+    [CONNECTION_STORAGE, fakeKey] as const,
+  )
+  await page.setExtraHTTPHeaders({ 'x-mock-ws-group': WS_GROUP })
+}
+
+/** 场景态（实例已停止）：按请求头逐请求覆写，不动 mock 的全局状态。
+ * 全局状态是进程级共享的，翻转它会把并行 spec 正在断言的运行态改脏
+ * （dashboard 的命令输入框可用性依赖 isRunning，实测因此被拖到超时）。
+ * WS 握手同样带上该头，status 快照与 REST 同一口径。
+ * setExtraHTTPHeaders 是整体替换语义：分组头必须一并带上，否则 reload 后
+ * 连接退回无分组，本 spec 自己触发的广播就收不到了 */
+async function useStoppedInstance(page: Page) {
+  await page.setExtraHTTPHeaders({
+    'x-mock-ws-group': WS_GROUP,
+    'x-mock-instance-running': 'false',
+  })
+  await page.reload()
+}
+
+/** 场景态复位（只域复位在途升级；归档台账归归档用例管，全量复位会打断它的断言）：
+ *  失败路径也必须执行，故自成 try/catch */
+async function resetMockScenario(page: Page) {
+  try {
+    await page.request.post(
+      new URL('/api/v1/mock/reset', test.info().project.use.baseURL).toString(),
+      {
+        data: { only: 'upgrade' },
+      },
+    )
+  } catch {
+    // 复位失败不掩盖用例本身的失败原因（下一轮 e2e 是新 mock 进程，不跨运行泄漏）
+  }
+}
+
+test.describe('升级取消', () => {
+  test('升级中可取消：确认后展示 cancelled 终态块，而非失败块', async ({ page }) => {
+    await setupConnection(page)
+    // 先落地再覆写运行态（extraHTTPHeaders 在 reload 后对后续请求生效）
+    await page.goto('/instances')
+    await useStoppedInstance(page)
+    try {
+      await page.reload()
+      await page.getByRole('button', { name: 'E2E 演示实例 操作菜单' }).click()
+      await page.getByRole('menuitem', { name: '升级版本' }).click()
+      await expect(page.getByRole('heading', { name: /升级 E2E 演示实例/ })).toBeVisible()
+
+      // 选目标版本（当前 1.21.4 在选项里禁选，选 26.2）
+      await page.getByRole('combobox').click()
+      await page.getByRole('option', { name: '26.2' }).click()
+      await page.getByRole('button', { name: '开始升级' }).click()
+
+      // 受理后 WS 补发进度 → 升级中视图 + 取消入口（关闭按钮此时不可用）
+      const dialog = page.getByRole('dialog')
+      await expect(dialog.getByText('下载中')).toBeVisible()
+      await expect(page.getByRole('button', { name: '取消', exact: true })).toBeDisabled()
+
+      await page.getByRole('button', { name: '取消升级' }).click()
+      await expect(page.getByText('取消升级？')).toBeVisible()
+      await page.getByRole('button', { name: '中断升级' }).click()
+
+      // 服务端补发 cancelled 终态 → 取消块展示服务端 detail（含是否已回滚）
+      await expect(dialog.getByText('已取消，实例保持 1.21.4')).toBeVisible()
+      // 取消不是故障：不得出现失败块的错误色，也不再有进度条
+      expect(await dialog.locator('.text-mcs-error-fg').count()).toBe(0)
+      await expect(dialog.getByRole('progressbar')).toHaveCount(0)
+      await expect(dialog.getByRole('button', { name: '关闭', exact: true })).toBeEnabled()
+    } finally {
+      await resetMockScenario(page)
+    }
+  })
+})

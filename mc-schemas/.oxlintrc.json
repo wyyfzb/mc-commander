@@ -1,0 +1,25 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  // 契约包 lint 配置（2026-09-19 接入，全仓统一 oxlint）。
+  // 只开 correctness 档 + 与另两包同口径的显式规则；不设 no-undef（TS 编译期已覆盖，
+  // 对该规则重复告警只会制造噪音），也不引入 unicorn 等偏好插件。
+  "plugins": ["typescript", "oxc"],
+  "env": { "es2024": true },
+  // dist/ 是提交物（rolldown 产物）不参与 lint；coverage/ 为测试产物
+  "ignorePatterns": ["dist/**", "node_modules/**", "coverage/**"],
+  "categories": { "correctness": "error" },
+  "rules": {
+    "no-unused-vars": ["error", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
+    "no-empty": ["error", { "allowEmptyCatch": true }],
+    "no-constant-condition": ["error", { "checkLoops": false }],
+    "eqeqeq": ["warn", "smart"],
+    "no-console": "error",
+    // 补 eslint:recommended 缺口（同 web：6 条里省 no-redeclare，TS 侧由 tsc 覆盖，
+    // 且 oxlint 该规则无 ignoreDeclarationMerge 会对值/类型同名误报）
+    "no-case-declarations": "error",
+    "no-fallthrough": "error",
+    "no-prototype-builtins": "error",
+    "no-regex-spaces": "error",
+    "no-unexpected-multiline": "error"
+  }
+}

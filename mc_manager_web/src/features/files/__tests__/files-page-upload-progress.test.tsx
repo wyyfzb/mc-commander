@@ -7,7 +7,7 @@
  * 测试路径与文件名均为虚构示例，严禁真实服务器数据
  */
 import { describe, it, expect, beforeEach, afterEach, afterAll, beforeAll, vi } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { setupServer } from 'msw/node'
 import { createMemoryRouter, RouterProvider } from 'react-router'
@@ -119,7 +119,7 @@ async function pickFile(file: File) {
   const input = document.querySelector('input[type="file"]') as HTMLInputElement
   expect(input).not.toBeNull()
   fireEvent.change(input, { target: { files: [file] } })
-  // mutateAsync 同步启动 → XHR 已 send
+  // mutateAsync 经 query-core 数个微任务后才执行 mutationFn，XHR 的 send 晚于 fireEvent 同步栈
   await waitFor(() => expect(sentXHR).toHaveLength(1))
 }
 
@@ -145,12 +145,18 @@ describe('FilesPage 上传进度反馈', () => {
 
     const xhr = sentXHR[0]!
     xhr.emitProgress(5, 100)
-    await waitFor(() => expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '5'))
+    await waitFor(() =>
+      expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '5'),
+    )
     // 进度条直更（无 toast 文字节流）：5% → 7% 直接反映
     xhr.emitProgress(7, 100)
-    await waitFor(() => expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '7'))
+    await waitFor(() =>
+      expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '7'),
+    )
     xhr.emitProgress(100, 100)
-    await waitFor(() => expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '100'))
+    await waitFor(() =>
+      expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '100'),
+    )
     // 完成收尾：进度条消失 + success toast
     xhr.emitLoad(okUploadEnvelope())
     expect(await screen.findByText('已上传 /示例整合包.zip（1.0 KB）')).toBeInTheDocument()
@@ -180,7 +186,9 @@ describe('FilesPage 上传进度反馈', () => {
     // 第二次选择（第一个请求未放行仍处在途）
     const input = document.querySelector('input[type="file"]') as HTMLInputElement
     fireEvent.change(input, { target: { files: [new File(['b'], '示例B.zip')] } })
-    await new Promise((r) => setTimeout(r, 20))
+    // 在途守卫在 change 处理器内同步判定；但缺陷路径经 mutateAsync 要数个微任务后才发出 XHR，
+    // 先 act 让渡落定再断言（落定语义，非时长语义）
+    await act(async () => {})
     expect(sentXHR).toHaveLength(1)
     // 放行后完成收尾
     sentXHR[0]!.emitLoad(okUploadEnvelope())
@@ -196,10 +204,9 @@ describe('FilesPage 上传进度反馈', () => {
     const input = document.querySelector('input[type="file"]') as HTMLInputElement
     fireEvent.change(input, { target: { files: [oversized] } })
 
-    // 不发请求 + 明确上限提示
-    await new Promise((r) => setTimeout(r, 20))
-    expect(sentXHR).toHaveLength(0)
+    // 体积拦截在 change 处理器内同步判定；上限提示出现即证明拦截分支已执行
     expect(await screen.findByText(/超过单文件上限 50MB/)).toBeInTheDocument()
+    expect(sentXHR).toHaveLength(0)
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
   })
 
@@ -210,7 +217,9 @@ describe('FilesPage 上传进度反馈', () => {
 
     const xhr = sentXHR[0]!
     xhr.emitProgress(30, 100)
-    await waitFor(() => expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '30'))
+    await waitFor(() =>
+      expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '30'),
+    )
 
     fireEvent.click(screen.getByTestId('upload-cancel'))
     expect(abortSpy).toHaveBeenCalled()

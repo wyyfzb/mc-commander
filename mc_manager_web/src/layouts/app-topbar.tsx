@@ -1,4 +1,16 @@
-import { Bell, Copy, KeyRound, LogOut, Menu, Moon, Search, Server, Settings, Sun, UserRound } from 'lucide-react'
+import {
+  Bell,
+  Copy,
+  KeyRound,
+  LogOut,
+  Menu,
+  Moon,
+  Search,
+  Server,
+  Settings,
+  Sun,
+  UserRound,
+} from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
@@ -23,10 +35,16 @@ import { useAuthStore } from '@/stores/auth'
 import { logout } from '@/api/auth'
 import { useInstances } from '@/api/queries'
 import { copyText } from '@/lib/clipboard'
+import { sessionAppliesToPanel } from '@/lib/mc-connection'
+import { clearLocalCredentials, logoutToastText } from '@/lib/logout'
+import { primaryModifierLabel } from '@/lib/platform'
+import { cn } from '@/lib/utils'
+import { instanceLabel } from '@/lib/instance-label'
+import { instanceHueFillClass } from '@/lib/instance-hue'
 
 /**
  * AppTopBar —— 主顶栏（设计文档 §3.1）
- * 实例选择器 ▸ 全局搜索 (Cmd+K) ▸ 服务器状态点（WS 实时）▸ 通知铃铛（未读徽章+抽屉）▸ 主题切换
+ * 实例选择器 ▸ 全局搜索 (Cmd/Ctrl+K) ▸ 服务器状态点（WS 实时）▸ 通知铃铛（未读徽章+抽屉）▸ 主题切换
  */
 export function AppTopBar() {
   const navigate = useNavigate()
@@ -46,24 +64,28 @@ export function AppTopBar() {
   const unreadCount = useNotificationStore((s) => s.unreadCount)
 
   // 安全主线：用户菜单（会话登录显示管理员身份；API Key 直连显示凭据徽章）
-  const sessionToken = useAuthStore((s) => s.session?.token ?? null)
+  // 会话只在签发它的面板上算数：换地址后按 API Key 直连呈现（见 lib/mc-connection）
+  const session = useAuthStore((s) => s.session)
   const apiKey = useConnectionStore((s) => s.apiKey)
+  const baseUrl = useConnectionStore((s) => s.baseUrl)
+  const sessionToken = sessionAppliesToPanel(session, baseUrl) ? (session?.token ?? null) : null
   const [loggingOut, setLoggingOut] = useState(false)
 
   const handleLogout = async () => {
     setLoggingOut(true)
+    // 登出会一并清掉本机保存的 API Key（不可从浏览器恢复）——如实告知，不让用户在别处才发现
+    const doneToast = logoutToastText(Boolean(useConnectionStore.getState().apiKey))
     try {
       if (sessionToken) {
         await logout({ baseUrl: useConnectionStore.getState().baseUrl, apiKey })
       }
-      useAuthStore.getState().clearSession()
-      useConnectionStore.getState().refreshStatus()
-      toast.info('已退出登录')
+      clearLocalCredentials()
+      toast.info(doneToast)
       navigate('/login', { replace: true })
     } catch {
       // 服务端登出失败不阻塞本地登出（令牌已不可用）
-      useAuthStore.getState().clearSession()
-      useConnectionStore.getState().refreshStatus()
+      clearLocalCredentials()
+      toast.info(doneToast)
       navigate('/login', { replace: true })
     } finally {
       setLoggingOut(false)
@@ -72,7 +94,9 @@ export function AppTopBar() {
 
   const instancesQuery = useInstances()
 
-  // 状态点语义（三重编码；区分"初次连接"与"实时通道断开"——WS 断开时 HTTP 轮询保底，数据仍可用）
+  // 状态点语义（三重编码；区分"初次连接"与"实时通道断开"）：降级档只表达
+  // "实时通道断了"这一已知事实——面板是否同样不可达在此无从判定，
+  // 能否取到数据由页面错误态如实呈现（降级横幅另说定时轮询确实存在）
   let indicator: IndicatorStatus = 'disconnected'
   if (connectionStatus === 'unconfigured') {
     indicator = 'disconnected'
@@ -86,8 +110,36 @@ export function AppTopBar() {
     indicator = 'connected'
   }
 
-  const currentInstanceName =
-    instancesQuery.data?.find((i) => i.id === instanceId)?.name ?? '默认实例'
+  // 无匹配实例时不得假造「默认实例」这类并不存在的名字；也不得把「列表还没到」
+  // （加载中/请求失败）谎报成「一个实例都没有」——三种缺位各有诚实占位
+  const instanceList = instancesQuery.data ?? []
+  const selectedInstance = instanceList.find((i) => i.id === instanceId)
+  // 展示名统一走 instanceLabel（空名/纯空白名回退 id，避免顶栏出现「未选择实例」式的空壳）
+  const selectedInstanceName = selectedInstance ? instanceLabel(selectedInstance) : undefined
+  const instanceNameFallback =
+    instanceList.length > 0
+      ? '未选择实例'
+      : instancesQuery.isError
+        ? '实例列表加载失败'
+        : instancesQuery.isPending
+          ? '加载中…'
+          : '暂无实例'
+  const currentInstanceName = selectedInstanceName ?? instanceNameFallback
+  const noInstances = instancesQuery.isSuccess && instanceList.length === 0
+
+  /** 单实例且正是当前选中实例时才降级为纯展示：只有一个选项的下拉除了展开什么也做不了。
+      单实例但选中的是列表外的陈旧 id 时仍保留下拉——那时用户正需要靠它把那唯一实例选回来 */
+  const singleSelectedInstance = instanceList.length === 1 && instanceList[0]?.id === instanceId
+
+  /** 实例固定色相标识（非语义 identity：只回答「是哪个实例」，不表达运行/告警状态；
+      未选中实例时不渲染，避免与「暂无实例」等占位文案一起假装有个实例） */
+  const instanceHueDot = instanceId ? (
+    <span
+      data-instance-hue
+      className={cn('size-2 shrink-0 rounded-full', instanceHueFillClass(instanceId))}
+      aria-hidden
+    />
+  ) : null
 
   return (
     <header className="glass-chrome flex h-12 shrink-0 items-center gap-2 border-b border-mcs-border-muted px-3">
@@ -96,7 +148,7 @@ export function AppTopBar() {
         <Menu aria-hidden />
       </IconButton>
 
-      {/* 服务器地址（B15：原型顶栏地址 chip；带复制按钮，方便发给玩家直连） */}
+      {/* 服务器地址 chip（带复制按钮，方便发给玩家直连） */}
       {status?.address && (
         <span className="hidden items-center gap-1 rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-muted py-1 pr-1 pl-2 font-mono text-mcs-2xs text-mcs-text-muted lg:inline-flex">
           <Server className="size-3" aria-hidden />
@@ -111,55 +163,75 @@ export function AppTopBar() {
             }
             aria-label="复制服务器地址"
             title="复制地址发给玩家"
-            className="rounded-mcs-xs p-1 text-mcs-text-subtle transition-colors hover:bg-mcs-bg-hover hover:text-mcs-text-default focus-visible:outline-2 focus-visible:outline-mcs-focus-ring focus-visible:outline-offset-1"
+            className="rounded-mcs-xs p-1 text-mcs-text-muted transition-colors hover:bg-mcs-state-hover hover:text-mcs-text-default focus-visible:outline-2 focus-visible:outline-mcs-focus-ring focus-visible:outline-offset-1"
           >
             <Copy className="size-3" aria-hidden />
           </button>
         </span>
       )}
 
-      {/* 实例选择器（真实实例列表） */}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" className="gap-1.5 text-mcs-sm font-medium">
-            <Server className="size-4 text-mcs-text-muted" aria-hidden />
-            {currentInstanceName}
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-56">
-          <DropdownMenuLabel>服务器实例</DropdownMenuLabel>
-          {(instancesQuery.data ?? []).length === 0 && (
-            <DropdownMenuItem onClick={() => navigate('/instances?tab=deploy')}>
-              暂无实例，前往部署
-            </DropdownMenuItem>
-          )}
-          {(instancesQuery.data ?? []).map((inst) => (
-            <DropdownMenuItem
-              key={inst.id}
-              onClick={() => switchInstance(inst.id)}
-              className="flex items-center justify-between gap-2"
-            >
-              <span className="truncate">{inst.name}</span>
-              {inst.id === instanceId ? (
-                <span className="size-1.5 rounded-full bg-mcs-accent" aria-label="当前实例" />
-              ) : null}
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
+      {/* 实例选择器：单实例降级为纯展示（见 singleSelectedInstance）；0 实例 / 加载中 / 失败
+          仍保留下拉：那里要承载「前往部署」与诚实的缺位说明 */}
+      {singleSelectedInstance ? (
+        <span className="flex max-w-32 items-center gap-1.5 px-1 text-mcs-sm font-medium text-mcs-text-default">
+          <Server className="size-4 shrink-0 text-mcs-text-muted" aria-hidden />
+          {instanceHueDot}
+          <span className="truncate">{currentInstanceName}</span>
+        </span>
+      ) : (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" className="max-w-32 gap-1.5 text-mcs-sm font-medium">
+              <Server className="size-4 shrink-0 text-mcs-text-muted" aria-hidden />
+              {instanceHueDot}
+              <span className="truncate">{currentInstanceName}</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-56">
+            <DropdownMenuLabel>服务器实例</DropdownMenuLabel>
+            {/* 仅「确实一个实例都没有」才推去部署向导；列表未到/失败时不假装没有实例 */}
+            {noInstances && (
+              <DropdownMenuItem onClick={() => navigate('/instances?tab=deploy')}>
+                暂无实例，前往部署
+              </DropdownMenuItem>
+            )}
+            {instancesQuery.isError && (
+              <DropdownMenuItem disabled>实例列表加载失败</DropdownMenuItem>
+            )}
+            {instancesQuery.isPending && (
+              <DropdownMenuItem disabled>正在加载实例列表…</DropdownMenuItem>
+            )}
+            {instanceList.map((inst) => (
+              <DropdownMenuItem
+                key={inst.id}
+                onClick={() => switchInstance(inst.id)}
+                className="flex items-center justify-between gap-2"
+              >
+                <span className="truncate">{instanceLabel(inst)}</span>
+                {inst.id === instanceId ? (
+                  <span className="size-1.5 rounded-full bg-mcs-accent" aria-label="当前实例" />
+                ) : null}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
 
-      {/* 全局搜索（Cmd+K） */}
+      {/* 全局搜索（Cmd/Ctrl+K） */}
       <Button
         variant="outline"
-        className="ml-auto w-44 justify-between gap-2 text-mcs-sm text-mcs-text-subtle sm:w-56"
+        // 窄窗口文案被 hidden xs:inline 隐藏后按钮无可访问名（图标 aria-hidden）→ 显式补名
+        aria-label="搜索或执行命令"
+        className="ml-auto w-9 justify-center gap-2 text-mcs-sm text-mcs-text-muted xs:w-44 xs:justify-between sm:w-56"
         onClick={() => setCommandPaletteOpen(true)}
       >
-        <span className="inline-flex items-center gap-2">
-          <Search className="size-3.5" aria-hidden />
-          搜索或执行命令…
+        {/* 窄窗口防错位：文案区可截断收缩（min-w-0 + truncate），kbd 徽标 shrink-0 永不换行 */}
+        <span className="inline-flex min-w-0 flex-1 items-center gap-2">
+          <Search className="size-3.5 shrink-0" aria-hidden />
+          <span className="hidden truncate xs:inline">搜索或执行命令…</span>
         </span>
-        <kbd className="pointer-events-none inline-flex h-5 items-center gap-0.5 rounded border border-mcs-border-default bg-mcs-bg-default px-1.5 font-mono text-mcs-2xs font-medium text-mcs-text-muted">
-          Ctrl K
+        <kbd className="pointer-events-none hidden h-5 shrink-0 items-center gap-0.5 rounded border border-mcs-border-default bg-mcs-bg-default px-1.5 font-mono text-mcs-2xs font-medium whitespace-nowrap text-mcs-text-muted xs:inline-flex">
+          {`${primaryModifierLabel()} K`}
         </kbd>
       </Button>
 
@@ -218,14 +290,18 @@ export function AppTopBar() {
           ) : (
             <DropdownMenuItem
               onClick={() => {
-                useAuthStore.getState().clearSession()
-                useConnectionStore.getState().refreshStatus()
+                // API Key 直连登出=清除本浏览器凭据（该通道无服务端会话，无需调 logout API）；
+                // 不清则 /login 守卫弹回（与会话分支共用同一处置）
+                // 先取文案再清凭据：清完 Key 就没了，后取会恒判为「没清过」
+                const doneToast = logoutToastText(Boolean(useConnectionStore.getState().apiKey))
+                clearLocalCredentials()
+                toast.info(doneToast)
                 navigate('/login', { replace: true })
               }}
-              className="gap-2"
+              className="gap-2 text-mcs-error-fg focus:text-mcs-error-fg"
             >
               <LogOut className="size-4" aria-hidden />
-              改用密码登录
+              退出登录
             </DropdownMenuItem>
           )}
         </DropdownMenuContent>
@@ -233,6 +309,7 @@ export function AppTopBar() {
 
       {/* 主题切换 */}
       <IconButton
+        className="hidden xs:inline-flex"
         tooltip={theme === 'dark' ? '切换到亮色主题' : '切换到深色主题'}
         tooltipSide="bottom"
         onClick={toggleTheme}

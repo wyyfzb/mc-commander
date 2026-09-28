@@ -48,10 +48,12 @@ describe('POST /api/rotate-key', () => {
   });
 
   it('should rotate key: new key works, old key invalid, .env hash written back', async () => {
-    const res = await request(buildApp()).post('/api/rotate-key').set('x-api-key', TEST_PLAINTEXT_KEY);
+    const res = await request(buildApp())
+      .post('/api/rotate-key')
+      .set('x-api-key', TEST_PLAINTEXT_KEY);
     expect(res.status).toBe(200);
     const newKey = res.body.data.apiKey;
-    expect(newKey).toMatch(/^mcck-[0-9a-f]{8}-[0-9a-f]{8}-[0-9a-f]{8}$/);
+    expect(newKey).toMatch(/^mcck-[0-9a-f]{8}(-[0-9a-f]{8}){7}$/);
     expect(newKey).not.toBe(TEST_PLAINTEXT_KEY);
     // .env 原子写：临时文件写入 + rename
     expect(fs.writeFileSync).toHaveBeenCalled();
@@ -63,7 +65,9 @@ describe('POST /api/rotate-key', () => {
     const res2 = await request(buildApp()).post('/api/rotate-key').set('x-api-key', newKey);
     expect(res2.status).toBe(200);
     // 旧 key 立即失效
-    const res3 = await request(buildApp()).post('/api/rotate-key').set('x-api-key', TEST_PLAINTEXT_KEY);
+    const res3 = await request(buildApp())
+      .post('/api/rotate-key')
+      .set('x-api-key', TEST_PLAINTEXT_KEY);
     expect(res3.status).toBe(401);
   });
 });

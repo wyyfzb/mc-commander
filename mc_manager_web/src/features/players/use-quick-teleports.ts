@@ -15,7 +15,9 @@ export interface CustomPointDraft {
 }
 
 export function useQuickTeleports() {
-  const [quickSchema, setQuickSchema] = useState<QuickTeleportSchema>(() => loadQuickTeleports(window.localStorage))
+  const [quickSchema, setQuickSchema] = useState<QuickTeleportSchema>(() =>
+    loadQuickTeleports(window.localStorage),
+  )
 
   const persistQuick = (next: QuickTeleportSchema) => {
     setQuickSchema(next)

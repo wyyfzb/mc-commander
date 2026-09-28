@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { authMiddleware, authenticateWebSocket } from '../middleware/auth.js';
 
-// 测试用明文 Key（与 vitest.config.js 中 API_KEY 一致）
+// 测试用明文 Key（对应 vitest.config.js 注入的 API_KEY_HASH，虚拟值）
 const TEST_PLAINTEXT_KEY = 'test-api-key-for-unit-tests';
 
 describe('authMiddleware', () => {
@@ -11,7 +11,7 @@ describe('authMiddleware', () => {
     req = { query: {}, headers: {} };
     res = {
       status: vi.fn().mockReturnThis(),
-      json: vi.fn().mockReturnThis()
+      json: vi.fn().mockReturnThis(),
     };
     next = vi.fn();
   });
@@ -30,9 +30,7 @@ describe('authMiddleware', () => {
 
     expect(next).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(401);
-    expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ status: 'error' })
-    );
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ status: 'error' }));
   });
 
   it('should reject request with invalid apikey in header', () => {
@@ -63,9 +61,7 @@ describe('authMiddleware', () => {
 
     expect(next).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(401);
-    expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ status: 'error' })
-    );
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ status: 'error' }));
   });
 
   it('should reject request with Upgrade: websocket header and invalid api key', () => {
@@ -81,14 +77,14 @@ describe('authMiddleware', () => {
 
 describe('authenticateWebSocket', () => {
   it('should return true for valid apikey', () => {
-    expect(authenticateWebSocket(TEST_PLAINTEXT_KEY)).toBe(true);
+    expect(authenticateWebSocket(TEST_PLAINTEXT_KEY)).toEqual({ role: 'admin' });
   });
 
   it('should return false for invalid apikey', () => {
-    expect(authenticateWebSocket('wrong')).toBe(false);
+    expect(authenticateWebSocket('wrong')).toBe(null);
   });
 
   it('should return false for empty apikey', () => {
-    expect(authenticateWebSocket('')).toBe(false);
+    expect(authenticateWebSocket('')).toBe(null);
   });
 });

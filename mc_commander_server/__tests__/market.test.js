@@ -1,5 +1,5 @@
 /**
- * 插件市场服务测试（feat-8 延伸：Modrinth 代理 + 一键安装）
+ * 插件市场服务测试（延伸：Modrinth 代理 + 一键安装）
  *
  * 网络隔离：got 全量 mock（离线语义）。
  * - got(...)（元数据 .json 链）：按 URL 前缀路由到 fixture
@@ -115,7 +115,11 @@ function mockJsonResponse(fixture) {
  * 会先触发 TypeError，被 catch 后错误形态失真（拿不到 response.statusCode）。
  */
 function mockJsonRejection(err) {
-  return { json: async () => { throw err; } };
+  return {
+    json: async () => {
+      throw err;
+    },
+  };
 }
 
 /** 构造一个推送 bytes 后自动 end 的伪下载流 */
@@ -182,7 +186,11 @@ describe('market.service - searchMarketPlugins', () => {
     expect(facets).toContainEqual(['loaders:paper']);
 
     // 相同参数第二次：缓存命中，got 不再调用
-    const again = await searchMarketPlugins({ query: 'ess', gameVersion: '1.21.4', loader: 'paper' });
+    const again = await searchMarketPlugins({
+      query: 'ess',
+      gameVersion: '1.21.4',
+      loader: 'paper',
+    });
     expect(got).toHaveBeenCalledTimes(1);
     expect(again.cached).toBe(true);
   });
@@ -197,10 +205,18 @@ describe('market.service - searchMarketPlugins', () => {
   });
 
   it('非法参数：超长查询 / 非法加载器 / 非法版本号 → 40000', async () => {
-    await expect(searchMarketPlugins({ query: 'x'.repeat(101) })).rejects.toMatchObject({ code: ErrorCodes.VALIDATION_ERROR.code });
-    await expect(searchMarketPlugins({ query: 'ok', loader: 'fabric' })).rejects.toMatchObject({ code: ErrorCodes.VALIDATION_ERROR.code });
-    await expect(searchMarketPlugins({ query: 'ok', gameVersion: '1.21.x' })).rejects.toMatchObject({ code: ErrorCodes.VALIDATION_ERROR.code });
-    await expect(searchMarketPlugins({ query: 123 })).rejects.toMatchObject({ code: ErrorCodes.VALIDATION_ERROR.code });
+    await expect(searchMarketPlugins({ query: 'x'.repeat(101) })).rejects.toMatchObject({
+      code: ErrorCodes.VALIDATION_ERROR.code,
+    });
+    await expect(searchMarketPlugins({ query: 'ok', loader: 'fabric' })).rejects.toMatchObject({
+      code: ErrorCodes.VALIDATION_ERROR.code,
+    });
+    await expect(searchMarketPlugins({ query: 'ok', gameVersion: '1.21.x' })).rejects.toMatchObject(
+      { code: ErrorCodes.VALIDATION_ERROR.code },
+    );
+    await expect(searchMarketPlugins({ query: 123 })).rejects.toMatchObject({
+      code: ErrorCodes.VALIDATION_ERROR.code,
+    });
     expect(got).not.toHaveBeenCalled();
   });
 
@@ -252,7 +268,9 @@ describe('market.service - getMarketProjectVersions', () => {
   });
 
   it('非法 slug → 40000（不发请求）', async () => {
-    await expect(getMarketProjectVersions('../etc')).rejects.toMatchObject({ code: ErrorCodes.VALIDATION_ERROR.code });
+    await expect(getMarketProjectVersions('../etc')).rejects.toMatchObject({
+      code: ErrorCodes.VALIDATION_ERROR.code,
+    });
     expect(got).not.toHaveBeenCalled();
   });
 });
@@ -261,45 +279,70 @@ describe('market.service - getMarketProjectVersions', () => {
 
 describe('market.service - sanitizeMarketFileName', () => {
   it('常规文件名原样保留', () => {
-    expect(sanitizeMarketFileName('EssentialsX-2.21.0.jar', { slug: 'essentialsx', versionNumber: '2.21.0' }))
-      .toBe('EssentialsX-2.21.0.jar');
+    expect(
+      sanitizeMarketFileName('EssentialsX-2.21.0.jar', {
+        slug: 'essentialsx',
+        versionNumber: '2.21.0',
+      }),
+    ).toBe('EssentialsX-2.21.0.jar');
   });
 
   it('空格折叠为 -、白名单外字符删除、扩展名统一小写', () => {
-    expect(sanitizeMarketFileName('My Plugin (v1).jar', { slug: 'my-plugin', versionNumber: '1' }))
-      .toBe('My-Plugin-v1.jar');
-    expect(sanitizeMarketFileName('Plugin..JAR', { slug: 'p', versionNumber: '1' }))
-      .toBe('Plugin..jar'); // 大写扩展名统一为小写，满足上传白名单
-    expect(sanitizeMarketFileName('../../etc/passwd.jar', { slug: 'p', versionNumber: '1' }))
-      .toBe('passwd.jar'); // basename 防路径逃逸
+    expect(
+      sanitizeMarketFileName('My Plugin (v1).jar', { slug: 'my-plugin', versionNumber: '1' }),
+    ).toBe('My-Plugin-v1.jar');
+    expect(sanitizeMarketFileName('Plugin..JAR', { slug: 'p', versionNumber: '1' })).toBe(
+      'Plugin..jar',
+    ); // 大写扩展名统一为小写，满足上传白名单
+    expect(sanitizeMarketFileName('../../etc/passwd.jar', { slug: 'p', versionNumber: '1' })).toBe(
+      'passwd.jar',
+    ); // basename 防路径逃逸
   });
 
   it('回退名：空/全非法字符输入 → slug-version.jar（回退名同样净化）', () => {
     expect(sanitizeMarketFileName('', { slug: 'ess', versionNumber: '2.0' })).toBe('ess-2.0.jar');
-    expect(sanitizeMarketFileName('???', { slug: 'ess', versionNumber: '2.0+build.1' })).toBe('ess-2.0build.1.jar');
+    expect(sanitizeMarketFileName('???', { slug: 'ess', versionNumber: '2.0+build.1' })).toBe(
+      'ess-2.0build.1.jar',
+    );
     // 全非法回退 → 终极兜底
-    expect(sanitizeMarketFileName('///', { slug: '??', versionNumber: '+' })).toBe('modrinth-plugin.jar');
+    expect(sanitizeMarketFileName('///', { slug: '??', versionNumber: '+' })).toBe(
+      'modrinth-plugin.jar',
+    );
   });
 });
 
 // ── installPluginFromMarket（安装全链路，真实 zip 字节）───────────────
 
 describe('market.service - installPluginFromMarket', () => {
-  const JAR = jarBytes('name: EssentialsX\nversion: 2.21.0\nmain: net.essentialsx.Essentials\napi-version: "1.21"\n');
+  const JAR = jarBytes(
+    'name: EssentialsX\nversion: 2.21.0\nmain: net.essentialsx.Essentials\napi-version: "1.21"\n',
+  );
 
-  function mockUpstream({ versionNumber = '2.21.0', url = 'https://cdn.modrinth.com/data/x/versions/a/ess.jar', filename = 'ess.jar', bytes = JAR } = {}) {
-    vi.mocked(got).mockReturnValueOnce(mockJsonResponse(VERSIONS_FIXTURE.map((v) => ({
-      ...v,
-      version_number: versionNumber,
-      files: [{ url, filename, primary: true, size: bytes.length }],
-    }))));
+  function mockUpstream({
+    versionNumber = '2.21.0',
+    url = 'https://cdn.modrinth.com/data/x/versions/a/ess.jar',
+    filename = 'ess.jar',
+    bytes = JAR,
+  } = {}) {
+    vi.mocked(got).mockReturnValueOnce(
+      mockJsonResponse(
+        VERSIONS_FIXTURE.map((v) => ({
+          ...v,
+          version_number: versionNumber,
+          files: [{ url, filename, primary: true, size: bytes.length }],
+        })),
+      ),
+    );
     vi.mocked(got.stream).mockReturnValueOnce(streamFrom(bytes));
   }
 
   it('安装成功：下载→魔数校验→落盘→元数据读取→返回市场字段', async () => {
     mockUpstream({ filename: 'EssentialsX-2.21.0.jar' });
 
-    const result = await installPluginFromMarket(serverPath, { slug: 'essentialsx', versionNumber: '2.21.0' });
+    const result = await installPluginFromMarket(serverPath, {
+      slug: 'essentialsx',
+      versionNumber: '2.21.0',
+    });
 
     // 上游调用：versions 元数据 1 次 + stream 下载 1 次
     expect(got).toHaveBeenCalledTimes(1);
@@ -318,7 +361,9 @@ describe('market.service - installPluginFromMarket', () => {
     expect(result.meta).toMatchObject({ name: 'EssentialsX', version: '2.21.0' });
     expect(fs.existsSync(path.join(pluginsDir, 'EssentialsX-2.21.0.jar'))).toBe(true);
     // 临时下载文件已清理
-    const tmpFiles = fs.readdirSync(os.tmpdir()).filter((f) => f.startsWith('.market-download.tmp-'));
+    const tmpFiles = fs
+      .readdirSync(os.tmpdir())
+      .filter((f) => f.startsWith('.market-download.tmp-'));
     expect(tmpFiles).toHaveLength(0);
   });
 
@@ -335,16 +380,29 @@ describe('market.service - installPluginFromMarket', () => {
     // overwrite=true → 200 语义 overwritten
     mockUpstream();
     const result = await installPluginFromMarket(
-      serverPath, { slug: 'essentialsx', versionNumber: '2.21.0' }, { overwrite: true },
+      serverPath,
+      { slug: 'essentialsx', versionNumber: '2.21.0' },
+      { overwrite: true },
     );
     expect(result.overwritten).toBe(true);
   });
 
   it('下载 URL 非 Modrinth CDN 白名单 → 50301（SSRF/任意下载防护，不落盘）', async () => {
-    vi.mocked(got).mockReturnValueOnce(mockJsonResponse([{
-      ...VERSIONS_FIXTURE[0],
-      files: [{ url: 'https://evil.example.com/payload.jar', filename: 'evil.jar', primary: true, size: 1 }],
-    }]));
+    vi.mocked(got).mockReturnValueOnce(
+      mockJsonResponse([
+        {
+          ...VERSIONS_FIXTURE[0],
+          files: [
+            {
+              url: 'https://evil.example.com/payload.jar',
+              filename: 'evil.jar',
+              primary: true,
+              size: 1,
+            },
+          ],
+        },
+      ]),
+    );
     // stream 不应被调用
     await expect(
       installPluginFromMarket(serverPath, { slug: 'essentialsx', versionNumber: '2.21.0' }),
@@ -379,7 +437,9 @@ describe('market.service - installPluginFromMarket', () => {
     await expect(
       installPluginFromMarket(serverPath, { slug: 'essentialsx', versionNumber: '2.21.0' }),
     ).rejects.toMatchObject({ code: ErrorCodes.MARKET_UPSTREAM_ERROR.code });
-    const tmpFiles = fs.readdirSync(os.tmpdir()).filter((f) => f.startsWith('.market-download.tmp-'));
+    const tmpFiles = fs
+      .readdirSync(os.tmpdir())
+      .filter((f) => f.startsWith('.market-download.tmp-'));
     expect(tmpFiles).toHaveLength(0);
     expect(fs.existsSync(path.join(pluginsDir, 'ess.jar'))).toBe(false);
   });

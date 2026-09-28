@@ -133,7 +133,5 @@ export function getEntitiesByCategory(): Map<string, McEntity[]> {
 export function searchEntities(query: string): McEntity[] {
   const q = query.trim().toLowerCase()
   if (!q) return MINECRAFT_ENTITIES
-  return MINECRAFT_ENTITIES.filter(
-    (e) => e.id.toLowerCase().includes(q) || e.name.includes(q),
-  )
+  return MINECRAFT_ENTITIES.filter((e) => e.id.toLowerCase().includes(q) || e.name.includes(q))
 }

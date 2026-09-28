@@ -1,8 +1,8 @@
 /**
- * useStartInstanceWithEula —— 启动指令共享 mutation + EULA 首启特例（issue 312，清单 A4-1）
+ * useStartInstanceWithEula —— 启动指令共享 mutation + EULA 首启特例（issue 312）
  * - 两入口复用：实例页卡片「启动」/ 仪表盘 InstanceControls「启动」
  * - EULA 特例：start 失败含 EULA_NOT_ACCEPTED → 弹同意对话框（中文说明）→
- *   同意后写入 eula.txt（POST /eula {agreed:true}）并自动续启
+ *   同意后写入 eula.txt（请求体 POST /eula {agreed:true} → 文件内容 eula=true）并自动续启
  * - 回调经 callbacksRef 保留：EULA 续启路径复用入口注册的 onStarted/onSettled
  * - 调用方在返回树中渲染 eulaDialog；未提供 onStartError 时 hook 内 toast 兜底
  */
@@ -129,7 +129,7 @@ export function useStartInstanceWithEula() {
         if (!open) setEulaTargetId(null)
       }}
       title="Minecraft EULA 协议"
-      description="启动失败：Mojang 要求必须同意 EULA 协议才能运行服务器。同意后将在 eula.txt 中写入 agreed=true 并自动启动服务器。"
+      description="启动失败：Mojang 要求必须同意 EULA 协议才能运行服务器。同意后将在 eula.txt 中写入 eula=true 并自动启动服务器。"
       confirmText="同意并启动"
       cancelText="不同意"
       loading={eulaBusy}

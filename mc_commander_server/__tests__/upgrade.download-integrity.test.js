@@ -1,5 +1,5 @@
 /**
- * JAR 下载落地校验测试（audit S-P1-1 / issue 316）
+ * JAR 下载落地校验测试（issue 316）
  *
  * 覆盖：
  * ① guard 工具单测：hashFile 摘要计算 / assertDownloadIntegrity（null 跳过、
@@ -28,7 +28,7 @@ vi.mock('got', () => ({
   // got(url, opts) 返回 promise-like：resolveDownload 里链式 .json()
   default: Object.assign(
     vi.fn((...args) => ({ json: () => jsonImpl.current(...args) })),
-    { stream: vi.fn((...args) => streamImpl.current(...args)) }
+    { stream: vi.fn((...args) => streamImpl.current(...args)) },
   ),
 }));
 
@@ -80,17 +80,17 @@ afterEach(() => {
   fs.rmSync(guardTmpDir, { recursive: true, force: true });
 });
 
-describe('jar-download-guard 工具（S-P1-1）', () => {
+describe('jar-download-guard 工具', () => {
   it('hashFile 流式计算 sha256/sha1 与 crypto 直接计算一致', async () => {
     const filePath = path.join(guardTmpDir, 'payload.bin');
     const content = crypto.randomBytes(256);
     fs.writeFileSync(filePath, content);
 
     await expect(hashFile(filePath, 'sha256')).resolves.toBe(
-      crypto.createHash('sha256').update(content).digest('hex')
+      crypto.createHash('sha256').update(content).digest('hex'),
     );
     await expect(hashFile(filePath, 'sha1')).resolves.toBe(
-      crypto.createHash('sha1').update(content).digest('hex')
+      crypto.createHash('sha1').update(content).digest('hex'),
     );
   });
 
@@ -103,7 +103,9 @@ describe('jar-download-guard 工具（S-P1-1）', () => {
     fs.writeFileSync(filePath, 'whatever');
     await expect(assertDownloadIntegrity(filePath, null)).resolves.toBeUndefined();
     await expect(assertDownloadIntegrity(filePath, {})).resolves.toBeUndefined();
-    await expect(assertDownloadIntegrity(filePath, { algorithm: 'sha256' })).resolves.toBeUndefined();
+    await expect(
+      assertDownloadIntegrity(filePath, { algorithm: 'sha256' }),
+    ).resolves.toBeUndefined();
     await expect(assertDownloadIntegrity(filePath, { digest: 'abc' })).resolves.toBeUndefined();
   });
 
@@ -113,7 +115,7 @@ describe('jar-download-guard 工具（S-P1-1）', () => {
     fs.writeFileSync(filePath, content);
     const digest = crypto.createHash('sha256').update(content).digest('hex');
     await expect(
-      assertDownloadIntegrity(filePath, { algorithm: 'sha256', digest })
+      assertDownloadIntegrity(filePath, { algorithm: 'sha256', digest }),
     ).resolves.toBeUndefined();
   });
 
@@ -122,13 +124,13 @@ describe('jar-download-guard 工具（S-P1-1）', () => {
     fs.writeFileSync(filePath, 'tampered');
     const expectedDigest = 'e'.repeat(64); // 动态构造，非真实字面量
     await expect(
-      assertDownloadIntegrity(filePath, { algorithm: 'sha256', digest: expectedDigest })
+      assertDownloadIntegrity(filePath, { algorithm: 'sha256', digest: expectedDigest }),
     ).rejects.toMatchObject({
       name: 'AppError',
       code: ErrorCodes.SERVER_ERROR.code,
     });
     await expect(
-      assertDownloadIntegrity(filePath, { algorithm: 'sha256', digest: expectedDigest })
+      assertDownloadIntegrity(filePath, { algorithm: 'sha256', digest: expectedDigest }),
     ).rejects.toThrow(/expected sha256=.*got .*/);
   });
 
@@ -136,7 +138,7 @@ describe('jar-download-guard 工具（S-P1-1）', () => {
     expect(() => assertSizeWithinLimit(1024, 1024)).not.toThrow();
     expect(() => assertSizeWithinLimit(0, 1024)).not.toThrow();
     expect(() => assertSizeWithinLimit(2048, 1024)).toThrow(
-      /2048 bytes received, exceeds size limit of 1024 bytes/
+      /2048 bytes received, exceeds size limit of 1024 bytes/,
     );
     expect(() => assertSizeWithinLimit(2048, 1024)).toThrow(AppError);
     // 默认参数走 512MB 常量
@@ -175,17 +177,18 @@ function createMockInstance(overrides = {}) {
   return {
     id: 'inst-1',
     name: 'Test Server',
-    status: 'stopped',
     mcVersion: '1.20.4',
     jarFile: 'server-1.20.4.jar',
     serverPath: tmpDir,
     isRunning: false,
     start: vi.fn(() => {
       // 模拟首启 ready 事件（_startAndVerify 依赖）
-      queueMicrotask(() => serverManagerRef.current.emit('instance:status', {
-        instanceId: 'inst-1',
-        event: 'ready',
-      }));
+      queueMicrotask(() =>
+        serverManagerRef.current.emit('instance:status', {
+          instanceId: 'inst-1',
+          event: 'ready',
+        }),
+      );
     }),
     ...overrides,
   };
@@ -260,8 +263,9 @@ describe('upgrade.service 下载落地校验集成（issue 316）', () => {
 
     // 下载产物保留（无校验可失败）
     expect(fs.readdirSync(tmpDir)).toContain('server-1.21.4.jar');
-    expect(progressStages(serverManager)[progressStages(serverManager).length - 1])
-      .toBe(UPGRADE_STAGES.COMPLETED);
+    expect(progressStages(serverManager)[progressStages(serverManager).length - 1]).toBe(
+      UPGRADE_STAGES.COMPLETED,
+    );
   });
 
   it('vanilla manifest 提供 sha1 且匹配：校验通过完成升级', async () => {
@@ -272,11 +276,15 @@ describe('upgrade.service 下载落地校验集成（issue 316）', () => {
     jsonImpl.current = (url) => {
       if (url.includes('version_manifest')) {
         return Promise.resolve({
-          versions: [{ id: '1.21.4', type: 'release', url: 'https://piston-meta.mojang.com/v.json' }],
+          versions: [
+            { id: '1.21.4', type: 'release', url: 'https://piston-meta.mojang.com/v.json' },
+          ],
         });
       }
       return Promise.resolve({
-        downloads: { server: { url: 'https://piston-data.mojang.com/server-1.21.4.jar', sha1: emptySha1 } },
+        downloads: {
+          server: { url: 'https://piston-data.mojang.com/server-1.21.4.jar', sha1: emptySha1 },
+        },
       });
     };
     streamImpl.current = streamSucceeds();
@@ -284,8 +292,9 @@ describe('upgrade.service 下载落地校验集成（issue 316）', () => {
     await service.upgrade('inst-1', '1.21.4', 'vanilla');
 
     expect(fs.readdirSync(tmpDir)).toContain('server-1.21.4.jar');
-    expect(progressStages(serverManager)[progressStages(serverManager).length - 1])
-      .toBe(UPGRADE_STAGES.COMPLETED);
+    expect(progressStages(serverManager)[progressStages(serverManager).length - 1]).toBe(
+      UPGRADE_STAGES.COMPLETED,
+    );
   });
 
   it('vanilla manifest sha1 不匹配：fail-closed，残留清理 + failed 终态', async () => {
@@ -295,17 +304,21 @@ describe('upgrade.service 下载落地校验集成（issue 316）', () => {
     jsonImpl.current = (url) => {
       if (url.includes('version_manifest')) {
         return Promise.resolve({
-          versions: [{ id: '1.21.4', type: 'release', url: 'https://piston-meta.mojang.com/v.json' }],
+          versions: [
+            { id: '1.21.4', type: 'release', url: 'https://piston-meta.mojang.com/v.json' },
+          ],
         });
       }
       return Promise.resolve({
-        downloads: { server: { url: 'https://piston-data.mojang.com/server-1.21.4.jar', sha1: forgedSha1 } },
+        downloads: {
+          server: { url: 'https://piston-data.mojang.com/server-1.21.4.jar', sha1: forgedSha1 },
+        },
       });
     };
     streamImpl.current = streamSucceeds();
 
     await expect(service.upgrade('inst-1', '1.21.4', 'vanilla')).rejects.toThrow(
-      /Download integrity check failed: expected sha1=.*got .*/
+      /Download integrity check failed: expected sha1=.*got .*/,
     );
     await expect(service.upgrade('inst-1', '1.21.4', 'vanilla')).rejects.toMatchObject({
       name: 'AppError',
@@ -325,7 +338,9 @@ describe('upgrade.service 下载落地校验集成（issue 316）', () => {
     let destroyed = false;
     streamImpl.current = () => {
       const stream = makeFakeStream();
-      stream.destroy = () => { destroyed = true; };
+      stream.destroy = () => {
+        destroyed = true;
+      };
       queueMicrotask(() => {
         // transferred=11 > 上限 10：断言在进度广播前触发
         stream._emit('downloadProgress', { percent: 0, transferred: 11, total: 0 });
@@ -334,7 +349,7 @@ describe('upgrade.service 下载落地校验集成（issue 316）', () => {
     };
 
     await expect(service.upgrade('inst-1', '1.21.4', 'purpur')).rejects.toThrow(
-      /11 bytes received, exceeds size limit of 10 bytes/
+      /11 bytes received, exceeds size limit of 10 bytes/,
     );
     expect(destroyed).toBe(true);
 

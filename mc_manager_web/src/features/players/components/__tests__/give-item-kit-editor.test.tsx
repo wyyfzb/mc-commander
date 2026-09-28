@@ -5,7 +5,7 @@
  * mock 数据为结构占位（虚构礼包名），严禁真实玩家/服务器信息
  */
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, within, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { KitEditorDialog } from '../give-item-kit-editor'
 import type { KitPreset } from '@/lib/mc-kits'
@@ -84,7 +84,7 @@ describe('KitEditorDialog dirty 关闭拦截', { timeout: 15000 }, () => {
   it('图标改动后点遮罩需确认；放弃修改后关闭', async () => {
     const user = userEvent.setup()
     const { onClose } = renderEditor()
-    await user.click(screen.getByRole('button', { name: '选择图标 ⭐' }))
+    await user.click(screen.getByRole('radio', { name: '选择图标 ⭐' }))
     const overlay = document.querySelector('[data-slot="dialog-overlay"]')
     expect(overlay).not.toBeNull()
     await user.click(overlay!)
@@ -121,5 +121,22 @@ describe('KitEditorDialog dirty 关闭拦截', { timeout: 15000 }, () => {
     const confirm = await findConfirmDialog()
     await user.click(within(confirm).getByRole('button', { name: '放弃修改' }))
     expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  describe('KitEditorDialog 图标单选组键盘模型', { timeout: 15000 }, () => {
+    it('图标预设是单选组：方向键移动即选中且焦点跟随', () => {
+      renderEditor()
+      const group = screen.getByRole('radiogroup', { name: '礼包图标' })
+      const icons = within(group).getAllByRole('radio')
+      // 初始礼包图标为 📦 → 选中项即停靠点
+      const selected = icons.findIndex((el) => el.getAttribute('aria-checked') === 'true')
+      expect(selected).toBeGreaterThanOrEqual(0)
+      expect(icons[selected]).toHaveAttribute('tabindex', '0')
+
+      fireEvent.keyDown(group, { key: 'ArrowRight' })
+      const next = icons[(selected + 1) % icons.length]
+      expect(next).toHaveAttribute('aria-checked', 'true')
+      expect(document.activeElement).toBe(next)
+    })
   })
 })

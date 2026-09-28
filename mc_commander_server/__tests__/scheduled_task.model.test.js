@@ -114,7 +114,7 @@ describe('ScheduledTaskModel - 执行历史单点收口（issue #299）', () => 
     });
 
     expect(() =>
-      ScheduledTaskModel.updateLastRun(15, '2026-08-16T00:00:00Z', 'success')
+      ScheduledTaskModel.updateLastRun(15, '2026-08-16T00:00:00Z', 'success'),
     ).not.toThrow();
 
     fakeDb.prepare = origPrepare;

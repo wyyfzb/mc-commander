@@ -13,7 +13,7 @@
  * 全部数据为虚构占位，无真实服务器信息。
  */
 import { describe, expect, it, vi, beforeEach, beforeAll } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryRouter, RouterProvider } from 'react-router'
@@ -140,7 +140,7 @@ describe('快捷区间透传', () => {
     expect(lastCall().startTime).toBeUndefined()
     expect(lastCall().endTime).toBeUndefined()
 
-    await user.click(screen.getByRole('button', { name: '近 7 天' }))
+    await user.click(screen.getByRole('radio', { name: '近 7 天' }))
     const r = quickRangeDates(6)
     expect(lastCall()).toMatchObject({
       page: 1,
@@ -154,17 +154,17 @@ describe('快捷区间透传', () => {
     const user = userEvent.setup()
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: '今天' }))
+    await user.click(screen.getByRole('radio', { name: '今天' }))
     const r = quickRangeDates(0)
     expect(lastCall()).toMatchObject({
       startTime: toServerStart(r.start),
       endTime: toServerEnd(r.end),
     })
     // aria-pressed 高亮
-    expect(screen.getByRole('button', { name: '今天' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('radio', { name: '今天' })).toHaveAttribute('aria-checked', 'true')
 
-    await user.click(screen.getByRole('button', { name: '今天' }))
-    expect(screen.getByRole('button', { name: '今天' })).toHaveAttribute('aria-pressed', 'false')
+    await user.click(screen.getByRole('radio', { name: '今天' }))
+    expect(screen.getByRole('radio', { name: '今天' })).toHaveAttribute('aria-checked', 'false')
     expect(lastCall().startTime).toBeUndefined()
     expect(lastCall().endTime).toBeUndefined()
   })
@@ -179,7 +179,7 @@ describe('筛选变更重置分页', () => {
     await user.click(screen.getByRole('button', { name: '下一页' }))
     expect(lastCall().page).toBe(2)
 
-    await user.click(screen.getByRole('button', { name: '近 30 天' }))
+    await user.click(screen.getByRole('radio', { name: '近 30 天' }))
     const r = quickRangeDates(29)
     expect(lastCall()).toMatchObject({
       page: 1,
@@ -226,7 +226,7 @@ describe('清空恢复全量', () => {
     const user = userEvent.setup()
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: '近 7 天' }))
+    await user.click(screen.getByRole('radio', { name: '近 7 天' }))
     expect(lastCall().startTime).toBeDefined()
 
     await user.click(screen.getByRole('button', { name: '清空时间' }))
@@ -244,7 +244,7 @@ describe('与 action 筛选叠加', () => {
     await user.click(screen.getByLabelText('操作类型'))
     await user.click(await screen.findByRole('option', { name: '启动实例' }))
 
-    await user.click(screen.getByRole('button', { name: '近 7 天' }))
+    await user.click(screen.getByRole('radio', { name: '近 7 天' }))
     const r = quickRangeDates(6)
     expect(lastCall()).toMatchObject({
       action: 'INSTANCE_START',
@@ -270,7 +270,7 @@ describe('命令历史 tab 时间筛选（issue 385）', () => {
     expect(lastCmdCall().page).toBe(2)
 
     // 应用快捷区间 → 时间按服务端口径透传 + 回第 1 页
-    await user.click(screen.getByRole('button', { name: '近 7 天' }))
+    await user.click(screen.getByRole('radio', { name: '近 7 天' }))
     const r = quickRangeDates(6)
     expect(lastCmdCall()).toMatchObject({
       page: 1,
@@ -279,7 +279,7 @@ describe('命令历史 tab 时间筛选（issue 385）', () => {
     })
 
     // 再次点击同一快捷键 → 取消恢复全量
-    await user.click(screen.getByRole('button', { name: '近 7 天' }))
+    await user.click(screen.getByRole('radio', { name: '近 7 天' }))
     expect(lastCmdCall().startTime).toBeUndefined()
     expect(lastCmdCall().endTime).toBeUndefined()
   })
@@ -306,7 +306,33 @@ describe('命令历史 tab 时间筛选（issue 385）', () => {
 
     // URL 持久化：tab + cmd 起止同步写回（刷新/分享链接后筛选保持）
     await waitFor(() =>
-      expect(router.state.location.search).toBe('?tab=commands&cmdStart=2026-02-25&cmdEnd=2026-03-01'),
+      expect(router.state.location.search).toBe(
+        '?tab=commands&cmdStart=2026-02-25&cmdEnd=2026-03-01',
+      ),
     )
+  })
+
+  it('快捷时间范围单选组：方向键移动即选中；再次点击已选项清空 → 回到无选中态', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    const group = screen.getByRole('radiogroup', { name: '快捷时间范围' })
+    const radios = within(group).getAllByRole('radio')
+    const today = radios[0]!
+    const week = radios[1]!
+    expect(today).toHaveAttribute('aria-checked', 'false') // 初始无选中
+
+    // 无选中时首次方向键落在首项本身（此前从停靠点 0 再 +1，会落到第 2 项）
+    fireEvent.keyDown(group, { key: 'ArrowRight' })
+    expect(today).toHaveAttribute('aria-checked', 'true')
+    expect(document.activeElement).toBe(today)
+
+    fireEvent.keyDown(group, { key: 'ArrowRight' })
+    expect(week).toHaveAttribute('aria-checked', 'true')
+    expect(document.activeElement).toBe(week)
+
+    // 点击已选中的项 → 取消（无选中态是合法状态，不是错误）
+    await user.click(week)
+    expect(week).toHaveAttribute('aria-checked', 'false')
+    expect(today).toHaveAttribute('aria-checked', 'false')
   })
 })

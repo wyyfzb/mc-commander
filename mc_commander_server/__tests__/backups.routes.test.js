@@ -4,7 +4,7 @@
  * tar 进程错误分支无覆盖。
  *
  * 既有 backups.test.js 已锁定 restore 主链（202/404/409 运行中/restoring 互斥）、
- * backups.download.test.js 已锁定 download 安全链（流式/404/400/zip 409/路径
+ * backups.download.test.js 已锁定 download 安全链（流式/404/400/路径
  * 穿越/RFC 5987）——本文件只补缺口，不重复上述断言。
  *
  * 范式沿用 tasks.route.test.js（#413）：vi.mock 数据模型层与服务层隔离
@@ -62,14 +62,13 @@ function makeBackup(overrides = {}) {
     size: 1024,
     status: 'completed',
     worldName: 'world',
-    format: 'snapshot',
     createdAt: '2026-09-04 00:00:00',
     updatedAt: '2026-09-04 00:00:00',
     ...overrides,
   };
 }
 
-function buildApp({ getInstance = vi.fn(() => ({})) } = {}) {
+function buildApp({ getInstance = vi.fn(() => ({ name: '演示实例' })) } = {}) {
   const app = express();
   app.use(express.json());
   app.use('/api/v1', createBackupRoutes({ getInstance }));
@@ -96,16 +95,26 @@ describe('GET /instances/:instanceId/backups（列表）', () => {
     expect(res.body.data[0].name).toBe('Backup_2026-09-04');
     expect(res.body.pagination).toEqual({ total: 1, page: 1, pageSize: 20, totalPages: 1 });
     expect(BackupModel.findAll).toHaveBeenCalledWith({
-      instanceId: 's1', page: 1, pageSize: 20, type: undefined, status: undefined,
+      instanceId: 's1',
+      page: 1,
+      pageSize: 20,
+      type: undefined,
+      status: undefined,
     });
   });
 
   it('type/status 查询参数透传 + 自定义分页', async () => {
     const app = buildApp();
-    await request(app).get('/api/v1/instances/s1/backups?page=2&pageSize=50&type=manual&status=completed');
+    await request(app).get(
+      '/api/v1/instances/s1/backups?page=2&pageSize=50&type=manual&status=completed',
+    );
 
     expect(BackupModel.findAll).toHaveBeenCalledWith({
-      instanceId: 's1', page: 2, pageSize: 50, type: 'manual', status: 'completed',
+      instanceId: 's1',
+      page: 2,
+      pageSize: 50,
+      type: 'manual',
+      status: 'completed',
     });
   });
 
@@ -113,13 +122,13 @@ describe('GET /instances/:instanceId/backups（列表）', () => {
     const app = buildApp();
     await request(app).get('/api/v1/instances/s1/backups?pageSize=500');
 
-    expect(BackupModel.findAll).toHaveBeenCalledWith(
-      expect.objectContaining({ pageSize: 100 })
-    );
+    expect(BackupModel.findAll).toHaveBeenCalledWith(expect.objectContaining({ pageSize: 100 }));
   });
 
   it('findAll 抛错 → 全局 errorHandler 500(50000)', async () => {
-    BackupModel.findAll.mockImplementation(() => { throw new Error('db down'); });
+    BackupModel.findAll.mockImplementation(() => {
+      throw new Error('db down');
+    });
     const app = buildApp();
 
     const res = await request(app).get('/api/v1/instances/s1/backups');
@@ -175,7 +184,7 @@ describe('POST /instances/:instanceId/backups（创建）', () => {
 
   it('creating 互斥 → 409 BACKUP_IN_PROGRESS(40901)（findAll 按 status 分流）', async () => {
     BackupModel.findAll.mockImplementation(({ status }) =>
-      status === 'creating' ? { total: 1 } : { total: 0 }
+      status === 'creating' ? { total: 1 } : { total: 0 },
     );
     const app = buildApp();
 
@@ -187,7 +196,7 @@ describe('POST /instances/:instanceId/backups（创建）', () => {
 
   it('restoring 互斥 → 409 BACKUP_IN_PROGRESS(40901)（第二分支）', async () => {
     BackupModel.findAll.mockImplementation(({ status }) =>
-      status === 'restoring' ? { total: 1 } : { total: 0 }
+      status === 'restoring' ? { total: 1 } : { total: 0 },
     );
     const app = buildApp();
 
@@ -212,7 +221,9 @@ describe('POST /instances/:instanceId/backups（创建）', () => {
       expect(res.status).toBe(201);
       expect(res.body.code).toBe(0);
       expect(res.body.data.id).toBe(5);
-      const today = new Date().toISOString().slice(0, 10);
+      // 默认名日期取服务器本地时区：toISOString 是 UTC，UTC+8 的凌晨会写成昨天
+      const now = new Date();
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
       expect(svcCreate).toHaveBeenCalledWith('s1', {
         name: `Backup_${today}`,
         description: '',
@@ -238,7 +249,8 @@ describe('POST /instances/:instanceId/backups（创建）', () => {
     BackupService.prototype.createBackup = svcCreate;
 
     try {
-      await request(app).post('/api/v1/instances/s1/backups')
+      await request(app)
+        .post('/api/v1/instances/s1/backups')
         .send({ name: '我的备份', description: '恢复点' });
 
       expect(svcCreate).toHaveBeenCalledWith('s1', {
@@ -257,20 +269,69 @@ describe('POST /backups/:id/restore（互补分支：既有测试未覆盖）', 
     BackupModel.findById.mockReturnValue(makeBackup({ status: 'failed' }));
     const app = buildApp();
 
-    const res = await request(app).post('/api/v1/backups/1/restore');
+    const res = await request(app)
+      .post('/api/v1/backups/1/restore')
+      .send({ confirmName: '演示实例' });
 
     expect(res.status).toBe(400);
     expect(res.body.code).toBe(40000);
   });
 
+  it('缺 confirmName → 400 40017（服务端强制实例名确认，UI 输入框不再是唯一闸门）', async () => {
+    BackupModel.findById.mockReturnValue(makeBackup({ status: 'completed' }));
+    const app = buildApp();
+
+    // 缺字段由契约层拦（40000 + 字段级 details），不匹配由处理器拦（40017 语义化文案）
+    const missing = await request(app).post('/api/v1/backups/1/restore');
+    expect(missing.status).toBe(400);
+    expect(missing.body.code).toBe(40000);
+    expect(missing.body.details.some((d) => d.path === 'confirmName')).toBe(true);
+
+    const mismatched = await request(app)
+      .post('/api/v1/backups/1/restore')
+      .send({ confirmName: '另一个实例' });
+    expect(mismatched.status).toBe(400);
+    expect(mismatched.body.code).toBe(40017);
+    // 拒绝路径零副作用：不做互斥判定也不动服务层
+    expect(BackupModel.findAll).not.toHaveBeenCalled();
+  });
+
+  it('空名实例：确认目标退到备份名（实例名确认会空转，不得放行空串）', async () => {
+    BackupModel.findById.mockReturnValue(makeBackup({ status: 'completed', name: '手动备份-1' }));
+    const app = buildApp({ getInstance: vi.fn(() => ({ name: '' })) });
+
+    // 空串天然匹配实例名 → 若确认目标仍是实例名，这道闸门等于没有
+    const vacuous = await request(app).post('/api/v1/backups/1/restore').send({ confirmName: '' });
+    expect(vacuous.status).toBe(400);
+    expect(vacuous.body.code).toBe(40017);
+
+    const withBackupName = await request(app)
+      .post('/api/v1/backups/1/restore')
+      .send({ confirmName: '手动备份-1' });
+    expect(withBackupName.status).toBe(202);
+  });
+
+  it('confirmName 两侧 trim 后全等即放行（升级前旧值可能带首尾空白）', async () => {
+    BackupModel.findById.mockReturnValue(makeBackup({ status: 'completed' }));
+    const app = buildApp({ getInstance: vi.fn(() => ({ name: '演示实例 ' })) });
+
+    const res = await request(app)
+      .post('/api/v1/backups/1/restore')
+      .send({ confirmName: '演示实例' });
+
+    expect(res.status).toBe(202);
+  });
+
   it('creating 互斥 → 409 RESTORE_IN_PROGRESS(40903)（creating 分支，既有只测 restoring）', async () => {
     BackupModel.findById.mockReturnValue(makeBackup({ status: 'completed' }));
     BackupModel.findAll.mockImplementation(({ status }) =>
-      status === 'creating' ? { total: 1 } : { total: 0 }
+      status === 'creating' ? { total: 1 } : { total: 0 },
     );
     const app = buildApp();
 
-    const res = await request(app).post('/api/v1/backups/1/restore');
+    const res = await request(app)
+      .post('/api/v1/backups/1/restore')
+      .send({ confirmName: '演示实例' });
 
     expect(res.status).toBe(409);
     expect(res.body.code).toBe(40903);

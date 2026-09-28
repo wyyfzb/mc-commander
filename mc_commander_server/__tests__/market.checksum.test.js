@@ -46,7 +46,9 @@ function jarBytes(yml) {
   return zip.toBuffer();
 }
 
-const JAR = jarBytes('name: EssentialsX\nversion: 2.21.0\nmain: net.essentialsx.Essentials\napi-version: "1.21"\n');
+const JAR = jarBytes(
+  'name: EssentialsX\nversion: 2.21.0\nmain: net.essentialsx.Essentials\napi-version: "1.21"\n',
+);
 const JAR_SHA512 = crypto.createHash('sha512').update(JAR).digest('hex');
 // 篡改 1 字节后的产物哈希：精确复刻「位翻转即拒绝」的供应链污染场景
 const TAMPERED = Buffer.from(JAR);
@@ -54,23 +56,27 @@ TAMPERED[20] ^= 0x01;
 const TAMPERED_SHA512 = crypto.createHash('sha512').update(TAMPERED).digest('hex');
 
 function versionsFixture(sha512) {
-  return [{
-    name: 'EssentialsX 2.21.0',
-    version_number: '2.21.0',
-    version_type: 'release',
-    changelog: null,
-    date_published: '2026-01-01T00:00:00Z',
-    downloads: 1,
-    game_versions: ['1.21.4'],
-    loaders: ['paper'],
-    files: [{
-      url: URL,
-      filename: FILENAME,
-      primary: true,
-      size: JAR.length,
-      ...(sha512 === undefined ? {} : { hashes: { sha512 } }),
-    }],
-  }];
+  return [
+    {
+      name: 'EssentialsX 2.21.0',
+      version_number: '2.21.0',
+      version_type: 'release',
+      changelog: null,
+      date_published: '2026-01-01T00:00:00Z',
+      downloads: 1,
+      game_versions: ['1.21.4'],
+      loaders: ['paper'],
+      files: [
+        {
+          url: URL,
+          filename: FILENAME,
+          primary: true,
+          size: JAR.length,
+          ...(sha512 === undefined ? {} : { hashes: { sha512 } }),
+        },
+      ],
+    },
+  ];
 }
 
 function mockJsonResponse(fixture) {
@@ -138,7 +144,10 @@ describe('installPluginFromMarket - sha512 完整性校验（issue 537）', () =
   it('哈希比对通过 → 放行落盘（官方哈希大写形式亦归一通过）', async () => {
     mockUpstream(JAR_SHA512.toUpperCase());
 
-    const result = await installPluginFromMarket(serverPath, { slug: SLUG, versionNumber: '2.21.0' });
+    const result = await installPluginFromMarket(serverPath, {
+      slug: SLUG,
+      versionNumber: '2.21.0',
+    });
 
     expect(result).toMatchObject({
       file: FILENAME,
@@ -174,7 +183,10 @@ describe('installPluginFromMarket - sha512 完整性校验（issue 537）', () =
     const infoSpy = vi.spyOn(logger, 'info').mockImplementation(() => {});
     mockUpstream(undefined);
 
-    const result = await installPluginFromMarket(serverPath, { slug: SLUG, versionNumber: '2.21.0' });
+    const result = await installPluginFromMarket(serverPath, {
+      slug: SLUG,
+      versionNumber: '2.21.0',
+    });
 
     expect(result.source).toBe('modrinth');
     expect(fs.existsSync(path.join(pluginsDir, FILENAME))).toBe(true);

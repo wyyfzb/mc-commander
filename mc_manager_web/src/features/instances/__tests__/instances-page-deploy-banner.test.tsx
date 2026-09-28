@@ -10,6 +10,7 @@ import { render, screen, act } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { setupServer } from 'msw/node'
 import { createMemoryRouter, RouterProvider } from 'react-router'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { handlers } from '@/test/mocks/handlers'
 import { InstancesPage } from '../instances-page'
 import { useConnectionStore } from '@/stores/connection'
@@ -30,7 +31,9 @@ function renderPage() {
         path: '/instances',
         element: (
           <QueryClientProvider client={qc}>
-            <InstancesPage />
+            <TooltipProvider>
+              <InstancesPage />
+            </TooltipProvider>
           </QueryClientProvider>
         ),
       },
@@ -91,7 +94,9 @@ describe('InstancesPage 部署进行中横幅（issue 352）', () => {
     })
     renderPage()
 
-    expect(screen.getByText('有实例正在部署：「生存服」正在下载服务端核心…（45%）')).toBeInTheDocument()
+    expect(
+      screen.getByText('有实例正在部署：「生存服」正在下载服务端核心…（45%）'),
+    ).toBeInTheDocument()
   })
 
   it('无进行中部署：横幅不渲染', () => {

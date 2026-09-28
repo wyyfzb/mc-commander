@@ -68,15 +68,26 @@ test.describe('玩家页', () => {
     await maybeShot(page, 'detail-overview-dark.png')
   })
 
-  test('行内菜单：踢出确认（Tasteful Friction）', async ({ page }) => {
+  test('行内菜单：踢出直执（无逆操作 → 不弹确认，直接下发 + 回执）', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/players')
     await page.getByRole('button', { name: 'Steve 操作菜单' }).click()
     await page.getByText('踢出').click()
-    await expect(page.getByRole('heading', { name: '确认踢出' })).toBeVisible()
-    await expect(page.getByText('此操作不可撤销')).toBeVisible()
-    await page.getByRole('button', { name: '确认操作' }).click()
+    // 口径：只有不可逆操作才走后果清单确认；踢出无逆操作 → 直执
+    await expect(page.getByRole('heading', { name: '确认踢出' })).toHaveCount(0)
     await expect(page.getByText('已成功踢出 1 名玩家')).toBeVisible({ timeout: 10_000 })
+  })
+
+  test('行内菜单：OP 切换直执 + 5s 撤销（可逆操作不留确认弹窗）', async ({ page }) => {
+    await setupConnection(page)
+    await page.goto('/players')
+    await page.getByRole('button', { name: 'Alex 操作菜单' }).click()
+    await page.getByRole('menuitem', { name: '设为 OP' }).click()
+    await expect(page.getByRole('heading', { name: '确认设为 OP' })).toHaveCount(0)
+    await expect(page.getByText('已设置 Alex 为 OP')).toBeVisible({ timeout: 10_000 })
+    // 撤销入口在回执上（5s 窗口），点击后下发逆操作并回执
+    await page.getByRole('button', { name: '撤销' }).click()
+    await expect(page.getByText('已取消 Alex 的 OP')).toBeVisible({ timeout: 10_000 })
   })
 
   test('给予物品对话框：选择物品 → 命令预览实时生成（NBT 1.21.4 直接映射）', async ({ page }) => {
@@ -96,6 +107,43 @@ test.describe('玩家页', () => {
     await page.getByRole('button', { name: /附魔/ }).first().click()
     await expect(page.getByText('锋利')).toBeVisible()
     await maybeShot(page, 'give-dialog-dark.png')
+  })
+
+  /**
+   * 给予物品栅格列数按**面板实宽**切档（@container 在详情面板的 aside 上）。
+   * jsdom 不评估容器查询，阈值只能在这里锁。内联面板固定 w-105=420px，
+   * 视口 lg 却给 6 列 ⇒ 每格仅 ~54px，36px 缩略图下的物品名与 id 双双被 truncate 截掉。
+   * 两条各锁一头：内联 420px 必须 4 列（格子 ≥88px）；<1024 视口走 Sheet 全宽后
+   * 必须拿到 6 列（原来只给 5 列，白白少排一列）
+   */
+  test('给予物品栅格按面板实宽切档：内联 4 列、Sheet 全宽 6 列', async ({ page }) => {
+    await setupConnection(page)
+
+    // 内联面板（视口 1280 ⇒ 容器 1040 ≥ 900，面板内联 420px）⇒ 4 列
+    await page.setViewportSize({ width: 1280, height: 900 })
+    await page.goto('/players')
+    await page.getByText('Steve').first().click()
+    await page.getByRole('tab', { name: '给予物品' }).click()
+    const grid = page.getByTestId('give-item-grid')
+    await expect(grid).toBeVisible()
+    const inline = await grid.evaluate((el) => ({
+      cols: getComputedStyle(el).gridTemplateColumns.split(' ').length,
+      cellW: Math.round(el.firstElementChild!.getBoundingClientRect().width),
+      panelW: Math.round(el.closest('aside')!.getBoundingClientRect().width),
+    }))
+    expect(inline.panelW).toBe(420)
+    expect(inline.cols).toBe(4)
+    expect(inline.cellW).toBeGreaterThanOrEqual(88)
+
+    // Sheet 全宽（视口 1024 ⇒ 容器 784 < 900，面板移入 Sheet 吃满内容宽）⇒ 6 列
+    await page.setViewportSize({ width: 1024, height: 900 })
+    await expect(page.getByRole('dialog', { name: /Steve 详情/ })).toBeVisible()
+    const sheet = await grid.evaluate((el) => ({
+      cols: getComputedStyle(el).gridTemplateColumns.split(' ').length,
+      panelW: Math.round(el.closest('aside')!.getBoundingClientRect().width),
+    }))
+    expect(sheet.panelW).toBeGreaterThan(700)
+    expect(sheet.cols).toBe(6)
   })
 
   test('批量选择：底部浮动操作条 + 批量传送走详情批量模式', async ({ page }) => {

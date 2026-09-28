@@ -8,6 +8,7 @@ import { Link, Outlet, useLocation } from 'react-router'
 import { BellRing, DatabaseBackup, Info, Link2, ShieldCheck, SlidersHorizontal } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { TONE_SELECTED_CLASSES } from '@/components/mcs/tone'
 import { PageHeader } from '@/components/mcs/page-header'
 import { useServerStore } from '@/stores/server'
 import { ConnectionForm } from './components/connection-form'
@@ -34,13 +35,18 @@ export function SettingsPage() {
   const current = SUB_NAV.find((item) => pathname.startsWith(item.to)) ?? SUB_NAV[0]
 
   return (
-    <div className="flex h-full min-h-0 gap-4 p-4">
-      {/* ── 左子导航（实底卡，200px，标题「设置」；<md 折叠为纯图标） ── */}
+    /* @container：子导航「图标态 ↔ 文字态」按可用内容宽切档而非视口宽——侧栏可折叠
+       （56px ↔ 208px），同视口下内容宽差 152px：768 视口展开侧栏内容仅 528px，
+       视口 md 把子导航展成 200px 文字态，右表单区被压到 312px */
+    <div className="@container flex h-full min-h-0 gap-4 p-4">
+      {/* ── 左子导航（实底卡，内容宽 ≥768px 时展到 200px 带文字；否则纯图标 + title） ──
+          档位 @3xl=768px：展态占 200px，右表单区至少还剩 552px；低于此宽保持图标态，
+          把宽度让给表单（528px 内容宽下表单可得 464px，比展态的 312px 宽 152px） */}
       <nav
         aria-label="设置子导航"
-        className="flex w-12 shrink-0 flex-col gap-1 self-start rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted p-2 shadow-mcs-card md:w-50"
+        className="flex w-12 shrink-0 flex-col gap-1 self-start rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted p-2 shadow-mcs-card @3xl:w-50"
       >
-        <p className="hidden px-2 py-1.5 text-mcs-2xs font-semibold tracking-wider text-mcs-text-subtle md:block">
+        <p className="hidden px-2 py-1.5 text-mcs-2xs font-semibold text-mcs-text-muted @3xl:block">
           设置
         </p>
         {SUB_NAV.map(({ to, label, icon: Icon }) => {
@@ -52,14 +58,14 @@ export function SettingsPage() {
               title={label}
               aria-current={active ? 'page' : undefined}
               className={cn(
-                'flex items-center justify-center gap-2 rounded-mcs-sm border px-2 py-2 text-mcs-sm transition-colors md:justify-start md:px-2.5',
+                'flex items-center justify-center gap-2 rounded-mcs-sm border p-2 text-mcs-sm transition-colors @3xl:justify-start @3xl:px-2.5',
                 active
-                  ? 'border-mcs-accent-border bg-mcs-accent-bg-subtle font-semibold text-mcs-accent-fg'
-                  : 'border-transparent font-medium text-mcs-text-muted hover:bg-mcs-bg-hover hover:text-mcs-text-default',
+                  ? `${TONE_SELECTED_CLASSES} font-semibold`
+                  : 'border-transparent font-medium text-mcs-text-muted hover:bg-mcs-state-hover hover:text-mcs-text-default',
               )}
             >
               <Icon className="size-4 shrink-0" aria-hidden />
-              <span className="hidden md:inline">{label}</span>
+              <span className="hidden @3xl:inline">{label}</span>
             </Link>
           )
         })}

@@ -1,5 +1,5 @@
 /**
- * File Download 端点 + 文件操作审计（feat-9 文件管理器增强）
+ * File Download 端点 + 文件操作审计（文件管理器增强）
  * - GET /files/download：流式下载（内容一致/Content-Disposition/目录拒绝/404/
  *   路径穿越拒绝/symlink 越界拒绝/缺 path 参数 400）
  * - 审计：FILE_DOWNLOAD/FILE_UPLOAD/FILE_DELETE/FILE_RENAME/FILE_MKDIR/FILE_SAVE
@@ -92,7 +92,7 @@ describe('GET /api/instances/:id/files/download', () => {
 
     expect(res.status).toBe(200);
     const cd = res.headers['content-disposition'];
-    expect(cd).toContain("filename=\"__ __.txt\"");
+    expect(cd).toContain('filename="__ __.txt"');
     expect(cd).toContain("filename*=UTF-8''");
     expect(cd).toContain(encodeURIComponent('存档 备份.txt'));
     expect(res.body.toString()).toBe('中文内容');
@@ -111,9 +111,7 @@ describe('GET /api/instances/:id/files/download', () => {
   });
 
   it('目录 → 400（目录下载不支持）', async () => {
-    const res = await request(app)
-      .get('/api/instances/s1/files/download')
-      .query({ path: 'world' });
+    const res = await request(app).get('/api/instances/s1/files/download').query({ path: 'world' });
 
     expect(res.status).toBe(400);
     expect(res.body.code).toBe(ErrorCodes.VALIDATION_ERROR.code);
@@ -156,9 +154,7 @@ describe('GET /api/instances/:id/files/download', () => {
   });
 
   it('下载成功 → 审计 FILE_DOWNLOAD（含路径与体积）', async () => {
-    await request(app)
-      .get('/api/instances/s1/files/download')
-      .query({ path: 'server.properties' });
+    await request(app).get('/api/instances/s1/files/download').query({ path: 'server.properties' });
 
     expect(recordAudit).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -172,9 +168,7 @@ describe('GET /api/instances/:id/files/download', () => {
   });
 
   it('下载失败（目录）→ 不写审计', async () => {
-    await request(app)
-      .get('/api/instances/s1/files/download')
-      .query({ path: 'world' });
+    await request(app).get('/api/instances/s1/files/download').query({ path: 'world' });
 
     expect(recordAudit).not.toHaveBeenCalled();
   });
@@ -221,9 +215,7 @@ describe('文件操作审计（FILE_SAVE/DELETE/RENAME/MKDIR/UPLOAD）', () => {
   });
 
   it('DELETE 文件成功 → FILE_DELETE', async () => {
-    const res = await request(app)
-      .delete('/api/instances/s1/files')
-      .query({ path: 'notes.txt' });
+    const res = await request(app).delete('/api/instances/s1/files').query({ path: 'notes.txt' });
 
     expect(res.status).toBe(200);
     expect(recordAudit).toHaveBeenCalledWith(
@@ -238,9 +230,7 @@ describe('文件操作审计（FILE_SAVE/DELETE/RENAME/MKDIR/UPLOAD）', () => {
 
   it('DELETE 目录成功 → FILE_DELETE（isDirectory: true）', async () => {
     fs.mkdirSync(path.join(tmpDir, 'world'));
-    const res = await request(app)
-      .delete('/api/instances/s1/files')
-      .query({ path: 'world' });
+    const res = await request(app).delete('/api/instances/s1/files').query({ path: 'world' });
 
     expect(res.status).toBe(200);
     expect(recordAudit).toHaveBeenCalledWith(
@@ -285,9 +275,7 @@ describe('文件操作审计（FILE_SAVE/DELETE/RENAME/MKDIR/UPLOAD）', () => {
   });
 
   it('操作失败 → 不写审计', async () => {
-    await request(app)
-      .delete('/api/instances/s1/files')
-      .query({ path: 'missing.txt' });
+    await request(app).delete('/api/instances/s1/files').query({ path: 'missing.txt' });
 
     expect(recordAudit).not.toHaveBeenCalled();
   });

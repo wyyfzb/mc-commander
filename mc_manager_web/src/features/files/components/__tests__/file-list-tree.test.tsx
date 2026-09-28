@@ -84,7 +84,9 @@ describe('格式化函数（组件内）', () => {
   })
 
   it('fileIconName：目录恒为 folder，文件按扩展名映射', () => {
-    expect(fileIconName(fakeEntry({ name: 'world', isDirectory: true, type: 'directory' }))).toBe('folder')
+    expect(fileIconName(fakeEntry({ name: 'world', isDirectory: true, type: 'directory' }))).toBe(
+      'folder',
+    )
     expect(fileIconName(fakeEntry({ name: 'server.properties' }))).toBe('file-text')
     expect(fileIconName(fakeEntry({ name: 'readme.txt' }))).toBe('file-text')
     expect(fileIconName(fakeEntry({ name: 'latest.log' }))).toBe('file-text')
@@ -155,7 +157,11 @@ describe('FileList', () => {
     // 删除按钮：文件与目录均可，且不触发行单击
     fireEvent.click(screen.getByRole('button', { name: '删除 whitelist.json' }))
     expect(onDelete).toHaveBeenCalledWith(
-      expect.objectContaining({ name: 'whitelist.json', path: '/whitelist.json', isDirectory: false }),
+      expect.objectContaining({
+        name: 'whitelist.json',
+        path: '/whitelist.json',
+        isDirectory: false,
+      }),
     )
     fireEvent.click(screen.getByRole('button', { name: '删除 world' }))
     expect(onDelete).toHaveBeenLastCalledWith(
@@ -170,13 +176,44 @@ describe('FileList', () => {
     expect(row.className).toContain('bg-mcs-accent-bg-subtle')
   })
 
-  // ── feat-9：二进制编辑保护 + 行级下载 ──
+  it('当前预览文件行以 aria-current 暴露（底色只是视觉线索，读屏拿不到）', async () => {
+    renderWithClient(<FileList {...baseFileListProps} selectedPath="/server.properties" />)
+    const current = await screen.findByRole('button', { name: '选择文件 server.properties' })
+    expect(current).toHaveAttribute('aria-current', 'true')
+    // 未选中的行不设该属性（否则「当前项」在语义上等于每行都是）
+    expect(screen.getByRole('button', { name: '选择文件 ops.json' })).not.toHaveAttribute(
+      'aria-current',
+    )
+  })
+
+  // ── ：二进制编辑保护 + 行级下载 ──
 
   /** 含二进制文件的列表项（server.jar / level.dat 混入常规文本文件） */
   const binaryFiles = [
-    { name: 'server.jar', path: '/server.jar', type: 'file', size: 4096, modifiedAt: '2026-08-01T00:00:00Z', isDirectory: false },
-    { name: 'level.dat', path: '/level.dat', type: 'file', size: 8192, modifiedAt: '2026-08-01T00:00:00Z', isDirectory: false },
-    { name: 'server.properties', path: '/server.properties', type: 'file', size: 100, modifiedAt: '2026-08-01T00:00:00Z', isDirectory: false },
+    {
+      name: 'server.jar',
+      path: '/server.jar',
+      type: 'file',
+      size: 4096,
+      modifiedAt: '2026-08-01T00:00:00Z',
+      isDirectory: false,
+    },
+    {
+      name: 'level.dat',
+      path: '/level.dat',
+      type: 'file',
+      size: 8192,
+      modifiedAt: '2026-08-01T00:00:00Z',
+      isDirectory: false,
+    },
+    {
+      name: 'server.properties',
+      path: '/server.properties',
+      type: 'file',
+      size: 100,
+      modifiedAt: '2026-08-01T00:00:00Z',
+      isDirectory: false,
+    },
   ] as const
 
   function useBinaryList() {
@@ -187,7 +224,7 @@ describe('FileList', () => {
     )
   }
 
-  it('二进制文件不渲染编辑按钮（feat-9 编辑保护），文本文件正常', async () => {
+  it('二进制文件不渲染编辑按钮（编辑保护），文本文件正常', async () => {
     useBinaryList()
     renderWithClient(<FileList {...baseFileListProps} />)
     await screen.findByRole('button', { name: '文件 server.jar（二进制，可下载）' })
@@ -200,7 +237,9 @@ describe('FileList', () => {
     useBinaryList()
     const onSelectFile = vi.fn()
     renderWithClient(<FileList {...baseFileListProps} onSelectFile={onSelectFile} />)
-    fireEvent.click(await screen.findByRole('button', { name: '文件 server.jar（二进制，可下载）' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: '文件 server.jar（二进制，可下载）' }),
+    )
     expect(onSelectFile).not.toHaveBeenCalled()
     // 文本文件行单击不受影响
     fireEvent.click(screen.getByRole('button', { name: '选择文件 server.properties' }))
@@ -217,7 +256,14 @@ describe('FileList', () => {
           path: '/',
           isDirectory: true,
           files: [
-            { name: 'world', path: '/world', type: 'directory', size: 0, modifiedAt: '2026-08-01T00:00:00Z', isDirectory: true },
+            {
+              name: 'world',
+              path: '/world',
+              type: 'directory',
+              size: 0,
+              modifiedAt: '2026-08-01T00:00:00Z',
+              isDirectory: true,
+            },
             ...binaryFiles,
           ],
         }),
@@ -290,7 +336,13 @@ describe('FileList', () => {
         callCount++
         if (callCount === 1) {
           return HttpResponse.json(
-            { status: 'error', code: 500, message: '目录不存在', data: null, timestamp: new Date().toISOString() },
+            {
+              status: 'error',
+              code: 500,
+              message: '目录不存在',
+              data: null,
+              timestamp: new Date().toISOString(),
+            },
             { status: 500 },
           )
         }

@@ -133,29 +133,85 @@ export function _stopStatsCollection() {
 }
 
 export function _collectStats() {
-  if (!this.process || !this.isRunning) return;
-  const pid = this.process.pid;
+  // 接管实例（adopted）：管道不可恢复但 pid 有效（pid 文件记录），采样照常
+  if ((!this.process && !this.adopted) || !this.isRunning) return;
+  const pid = this.process?.pid ?? this.adoptedPid;
   if (!pid) return;
 
   const platform = process.platform;
   if (platform === 'win32') {
-    const cmd = `wmic process where ProcessId=${pid} get WorkingSetSize,UserModeTime,KernelModeTime /format:csv`;
-    exec(cmd, (err, stdout) => {
-      if (err) return;
-      try {
-        const lines = stdout.trim().split('\n').filter(l => l.trim());
-        if (lines.length >= 2) {
-          const parts = lines[lines.length - 1].split(',');
-          const workingSet = parseInt(parts[parts.length - 1]) || 0;
-          this._memoryUsage = workingSet / (1024 * 1024 * 1024);
+    // Windows 走 PowerShell 取进程指标：WMIC 自 Win11 24H2 起不随系统提供，
+    // 原 wmic 分支在现代 Windows 上静默失败——exec 报错即早退，内存指标恒为初值 0、
+    // CPU 从未被采集过。
+    // 一次取回 WorkingSet（字节）与累计 CPU 时间（秒，Get-Process 的 CPU 属性），后者与
+    // Linux 的 utime+stime 同语义，统一交给 _applyCpuSecondsSample 做差分。
+    // windowsHide：面板以 Windows 服务方式运行时，否则每轮采集闪一次控制台窗口
+    const cmd = `powershell -NoProfile -NonInteractive -Command "Get-Process -Id ${pid} | Select-Object WorkingSet64,CPU | ConvertTo-Json -Compress"`;
+    exec(cmd, { timeout: 8000, windowsHide: true }, (err, stdout) => {
+      if (err) {
+        // 静默失败正是本平台指标长期缺失无人察觉的原因（如权限不足读不到他人进程）：
+        // 只在「正常→失败」的转折处告警一次，避免每 5s 刷屏
+        if (!this._win32StatsError) {
+          this._win32StatsError = true;
+          logger.warn(`[${this.id}] Windows 实例指标采集失败（pid ${pid}）: ${err.message}`);
         }
+        return;
+      }
+      this._win32StatsError = false;
+      // 任何异常（解析失败、监听器抛错）都不得逃逸出 exec 回调：那里无人接管，
+      // 会命中进程级 uncaughtException 兜底把面板整个拉停；此处失败仅丢一次采样
+      try {
+        const info = JSON.parse(String(stdout).trim());
+        const workingSet = Number(info?.WorkingSet64);
+        if (Number.isFinite(workingSet) && workingSet > 0) {
+          // 与 Linux 分支同口径保留两位小数
+          this._memoryUsage = Math.round((workingSet / (1024 * 1024 * 1024)) * 100) / 100;
+        }
+        // CPU 可能为 null（受保护进程）：不能当成 0 建立基线——那会把下一个采样的差值放大成假高占用
+        const cpuSeconds = info?.CPU == null ? null : Number(info.CPU);
+        if (cpuSeconds !== null && Number.isFinite(cpuSeconds))
+          this._applyCpuSecondsSample(cpuSeconds);
         this._emitPerformance();
-      } catch {}
+      } catch (e) {
+        // 解析失败（真实 PowerShell 输出契约漂移）与监听器抛错都不得逃逸；只留 debug
+        // 而不告警——进程正常退出时的空 stdout 走同一路径，warn 会刷屏
+        logger.debug(`[${this.id}] Windows 实例指标解析/广播失败: ${e.message}`);
+      }
     });
   } else {
     // Linux: 从 /proc/[pid]/stat 读取 CPU 时间，计算瞬时使用率
     this._collectLinuxStats(pid);
   }
+}
+
+/**
+ * 由两次采样的「累计 CPU 秒数」差分出瞬时 CPU%；单进程上限 100%
+ * （多核并行也按单进程口径截断，与既有 Linux 行为一致）。
+ * 口径＝占**单核**百分比，**不按核数归一**：8 核机上主线程打满即 100%，
+ * 归一后只剩 12.5% 会把 MC 最关键的瓶颈信号抹掉。该值在前端唯一可见出口是
+ * CPU 告警（`mc_manager_web/src/lib/notifications.ts` 的 `cpuWarning`，文案标注
+ * 「单核口径」）；Dashboard 的 CPU 卡走**整机**口径（`systemStats.cpuUsage`，
+ * /proc/stat 差分），与本值不同源，勿互换。
+ * @param {number} cpuSeconds 该进程的累计 CPU 秒数
+ * @param {number} [sysSeconds] 整机累计 CPU 秒数（Linux 用；缺省时以「整机时钟有变化」计）
+ */
+export function _applyCpuSecondsSample(cpuSeconds, sysSeconds) {
+  const now = Date.now();
+  const last = this._lastCpuTime;
+  if (last === undefined) {
+    this._lastCpuTime = { cpu: cpuSeconds, sys: sysSeconds ?? 0, time: now };
+    this._cpuUsage = 0;
+    return;
+  }
+  const elapsed = (now - last.time) / 1000; // 秒
+  const cpuDiff = cpuSeconds - last.cpu;
+  const sysDiff = sysSeconds === undefined ? 1 : sysSeconds - last.sys;
+  this._lastCpuTime = { cpu: cpuSeconds, sys: sysSeconds ?? 0, time: now };
+  if (elapsed <= 0 || sysDiff <= 0 || cpuDiff < 0) {
+    this._cpuUsage = 0;
+    return;
+  }
+  this._cpuUsage = Math.max(0, Math.min(100, Math.round((cpuDiff / elapsed) * 100 * 100) / 100));
 }
 
 export function _collectLinuxStats(pid) {
@@ -175,7 +231,7 @@ export function _collectLinuxStats(pid) {
       const rssPages = parseInt(statmParts[1]) || 0;
       const pageSize = 4096;
       const rssBytes = rssPages * pageSize;
-      this._memoryUsage = Math.round(rssBytes / (1024 * 1024 * 1024) * 100) / 100;
+      this._memoryUsage = Math.round((rssBytes / (1024 * 1024 * 1024)) * 100) / 100;
     } catch {
       // statm 读取失败，保留旧值
     }
@@ -183,33 +239,16 @@ export function _collectLinuxStats(pid) {
     // 从 /proc/stat 读取系统总 CPU 时间用于计算
     const sysStat = fs.readFileSync('/proc/stat', 'utf-8');
     const cpuLine = sysStat.match(/^cpu\s+([\d\s]+)$/m);
-    const sysTotal = cpuLine ? cpuLine[1].trim().split(/\s+/).reduce((a, b) => a + parseInt(b), 0) : 0;
-
-    // 使用 _lastCpuTime 做差分计算瞬时 CPU
-    if (this._lastCpuTime === undefined) {
-      this._lastCpuTime = { cpu: totalCpu, sys: sysTotal, time: Date.now() };
-      this._cpuUsage = 0;
-      this._emitPerformance();
-      return;
-    }
-
-    const last = this._lastCpuTime;
-    const now = Date.now();
-    const elapsed = (now - last.time) / 1000; // 秒
-    const cpuDiff = totalCpu - last.cpu;
-    const sysDiff = sysTotal - last.sys;
-    this._lastCpuTime = { cpu: totalCpu, sys: sysTotal, time: now };
-
-    // clkTck = 100 (标准 Linux)，所以 diff/clkTck = diff/100 秒
-    const clkTck = 100;
-    const cpuSeconds = cpuDiff / clkTck;
-    const sysSeconds = sysDiff / clkTck;
-    // 瞬时 CPU% = cpuSeconds / elapsed / cpuCoreCount * 100
-    // 但单进程不能超过 100%，使用 min(100, ...)
-    const cpuPercent = sysSeconds > 0
-      ? Math.min(100, Math.round((cpuSeconds / elapsed) * 100 * 100) / 100)
+    const sysTotal = cpuLine
+      ? cpuLine[1]
+          .trim()
+          .split(/\s+/)
+          .reduce((a, b) => a + parseInt(b), 0)
       : 0;
-    this._cpuUsage = Math.max(0, cpuPercent);
+
+    // 使用 _lastCpuTime 做差分计算瞬时 CPU（Linux 的 utime+stime 以 clock tick 计）
+    const clkTck = 100;
+    this._applyCpuSecondsSample(totalCpu / clkTck, sysTotal / clkTck);
     this._emitPerformance();
   } catch {
     // 兜底: 使用 ps 命令
@@ -243,9 +282,7 @@ export async function _collectMspt() {
     // tick 命令不可用（旧版 vanilla）：回退 tps 命令（Paper 系列），
     // 由 TPS 反推每 tick 毫秒数（20 TPS = 50ms）
     const tpsResponse = await this._rconSend('tps');
-    const tpsMatch = String(tpsResponse || '').match(
-      /TPS from last 5s, 1m, 5m:\s*([\d.]+)/i
-    );
+    const tpsMatch = String(tpsResponse || '').match(/TPS from last 5s, 1m, 5m:\s*([\d.]+)/i);
     if (tpsMatch) {
       const tps = parseFloat(tpsMatch[1]);
       if (tps > 0) this._mspt = 1000 / tps;
@@ -262,7 +299,8 @@ export async function _collectMspt() {
 ///   - 从 level.dat 读取天气状态（自然天气变化不会产生日志，必须轮询）
 /// 任何值变化时推送 performanceUpdate / weatherUpdate 事件给前端。
 export async function _collectWorldState() {
-  if (!this.process || !this.isRunning) return;
+  // 接管实例仅走 RCON 查询（无管道依赖），与常规实例同语义
+  if ((!this.process && !this.adopted) || !this.isRunning) return;
 
   let changed = false;
 
@@ -397,15 +435,15 @@ export async function _collectPlayerStats() {
   for (const [name] of this.players) {
     try {
       // 串行查询，避免 RCON 并发导致响应错乱
-      const healthResult = await this._rconSend(`data get entity ${name} Health`).catch(e => {
+      const healthResult = await this._rconSend(`data get entity ${name} Health`).catch((e) => {
         logger.warn(`[${this.id}] RCON Health query failed for ${name}: ${e.message}`);
         return null;
       });
-      const posResult = await this._rconSend(`data get entity ${name} Pos`).catch(e => {
+      const posResult = await this._rconSend(`data get entity ${name} Pos`).catch((e) => {
         logger.warn(`[${this.id}] RCON Pos query failed for ${name}: ${e.message}`);
         return null;
       });
-      const sleepResult = await this._rconSend(`data get entity ${name} SleepTimer`).catch(e => {
+      const sleepResult = await this._rconSend(`data get entity ${name} SleepTimer`).catch((e) => {
         logger.warn(`[${this.id}] RCON SleepTimer query failed for ${name}: ${e.message}`);
         return null;
       });
@@ -415,7 +453,7 @@ export async function _collectPlayerStats() {
         (cmd) => this._rconSend(cmd),
         name,
         'minecraft:generic.armor',
-        'minecraft:armor'
+        'minecraft:armor',
       );
 
       let health = null;

@@ -5,15 +5,24 @@ import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useSendCommand } from '@/hooks/use-send-command'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
+import { Card, CardHeader, CardTitle } from '@/components/mcs/card'
+import { primaryModifierLabel } from '@/lib/platform'
 
 /**
  * 公告发送卡
  * - say 全服广播：预设胶囊填充 → 发送 → 命令回显终端
- * - 多行文本域：Enter 换行，Ctrl+Enter 发送；多行公告用 tellraw（JSON 文本组件）
+ * - 多行文本域：Enter 换行，Ctrl/⌘+Enter 发送；多行公告用 tellraw（JSON 文本组件）
  * - 广播影响全体在线玩家：发送前 ConfirmDialog 二次确认（Tasteful Friction）
  * - 预设（名称+文案）localStorage 持久化，可增删改（与命令快捷指令同模式）
  */
@@ -114,10 +123,17 @@ export function AnnouncementCard() {
   }
 
   return (
-    <section className="animate-mcs-fade-up mcs-delay-6 mcs-edge-top relative flex shrink-0 flex-col rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted p-4 shadow-mcs-card">
-      <header className="mb-2 flex items-center gap-2">
-        <h3 className="text-mcs-sm font-medium text-mcs-text-muted">公告发送</h3>
+    <Card
+      size="default"
+      className="animate-mcs-fade-up mcs-delay-6 mcs-edge-top relative flex shrink-0 flex-col"
+    >
+      <CardHeader className="mb-2 gap-2">
+        <CardTitle>公告发送</CardTitle>
+        {/* outline 不是 default：一页只允许一个绿色实底 CTA（页面主操作是终端「发送命令」）。
+            公告是同屏第二个「发送」动作且用同一枚 Send 图标，两个实底绿按钮会让主操作失去
+            唯一性——实测 1920×1080 同屏可见两个（下左终端、上右本卡）。 */}
         <Button
+          variant="outline"
           size="sm"
           onClick={requestSend}
           disabled={!isRunning || sending || !text.trim()}
@@ -127,7 +143,7 @@ export function AnnouncementCard() {
           <Send className="size-3.5" aria-hidden />
           发送
         </Button>
-      </header>
+      </CardHeader>
 
       <Textarea
         value={text}
@@ -136,7 +152,7 @@ export function AnnouncementCard() {
           // 文本域：Enter 换行（多行公告），Ctrl/Cmd+Enter 发送（同样经二次确认）
           if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') requestSend()
         }}
-        placeholder="输入公告内容…（Ctrl+Enter 发送，支持多行）"
+        placeholder={`输入公告内容…（${primaryModifierLabel()}+Enter 发送，支持多行）`}
         disabled={!isRunning}
         aria-label="公告内容"
         className="min-h-16 w-full"
@@ -166,7 +182,7 @@ export function AnnouncementCard() {
             <button
               type="button"
               aria-label={`编辑预设 ${preset.name}`}
-              className="cursor-pointer text-mcs-text-subtle hover:text-mcs-text-default"
+              className="cursor-pointer text-mcs-text-muted hover:text-mcs-text-default"
               onClick={() => openEditPreset(index)}
             >
               <Pencil className="size-3" aria-hidden />
@@ -174,7 +190,7 @@ export function AnnouncementCard() {
             <button
               type="button"
               aria-label={`删除预设 ${preset.name}`}
-              className="cursor-pointer text-mcs-text-subtle hover:text-mcs-error-fg"
+              className="cursor-pointer text-mcs-text-muted hover:text-mcs-error-fg"
               onClick={() => setDeleteIndex(index)}
             >
               <X className="size-3" aria-hidden />
@@ -184,7 +200,7 @@ export function AnnouncementCard() {
         <button
           type="button"
           aria-label="添加预设"
-          className="inline-flex cursor-pointer items-center gap-1 rounded-mcs-sm border border-dashed border-mcs-border-default px-2 py-1 text-mcs-xs text-mcs-text-subtle transition-colors hover:text-mcs-text-default"
+          className="inline-flex cursor-pointer items-center gap-1 rounded-mcs-sm border border-dashed border-mcs-border-default px-2 py-1 text-mcs-xs text-mcs-text-muted transition-colors hover:text-mcs-text-default"
           onClick={openNewPreset}
         >
           <Plus className="size-3" aria-hidden />
@@ -259,6 +275,6 @@ export function AnnouncementCard() {
           {text.trim()}
         </p>
       </ConfirmDialog>
-    </section>
+    </Card>
   )
 }

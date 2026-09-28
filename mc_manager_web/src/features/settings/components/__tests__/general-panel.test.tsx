@@ -147,7 +147,9 @@ describe('GeneralPanel autoRestart 切换', () => {
 
     await user.click(sw)
     // 失败 → 错误 toast（友好文案映射 50000）+ 回滚开启
-    expect(await screen.findByText('自动重启设置保存失败：服务器内部错误，请稍后重试')).toBeInTheDocument()
+    expect(
+      await screen.findByText('自动重启设置保存失败：服务器内部错误，请稍后重试'),
+    ).toBeInTheDocument()
     await waitFor(() => expect(sw).toHaveAttribute('data-state', 'checked'))
     // 无成功 toast
     expect(screen.queryByText('自动重启设置已保存')).not.toBeInTheDocument()

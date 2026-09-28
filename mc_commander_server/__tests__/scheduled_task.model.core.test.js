@@ -110,7 +110,11 @@ describe('ScheduledTaskModel - create 默认值链', () => {
   });
 
   it('instanceId 缺省 → instance_id 落 NULL（FK 可空，全服任务）', () => {
-    const task = ScheduledTaskModel.create({ name: 't', type: 'command', cronExpression: '* * * * *' });
+    const task = ScheduledTaskModel.create({
+      name: 't',
+      type: 'command',
+      cronExpression: '* * * * *',
+    });
     expect(task.instanceId).toBeNull();
   });
 
@@ -129,16 +133,40 @@ describe('ScheduledTaskModel - create 默认值链', () => {
 
 describe('ScheduledTaskModel - findAll 动态过滤与分页', () => {
   beforeEach(() => {
-    ScheduledTaskModel.create({ ...baseTask, name: 'a', instanceId: 's1', type: 'restart', isEnabled: true });
-    ScheduledTaskModel.create({ ...baseTask, name: 'b', instanceId: 's1', type: 'backup', isEnabled: false });
-    ScheduledTaskModel.create({ ...baseTask, name: 'c', instanceId: 's2', type: 'restart', isEnabled: true });
-    ScheduledTaskModel.create({ ...baseTask, name: 'd', instanceId: null, type: 'backup', isEnabled: false });
+    ScheduledTaskModel.create({
+      ...baseTask,
+      name: 'a',
+      instanceId: 's1',
+      type: 'restart',
+      isEnabled: true,
+    });
+    ScheduledTaskModel.create({
+      ...baseTask,
+      name: 'b',
+      instanceId: 's1',
+      type: 'backup',
+      isEnabled: false,
+    });
+    ScheduledTaskModel.create({
+      ...baseTask,
+      name: 'c',
+      instanceId: 's2',
+      type: 'restart',
+      isEnabled: true,
+    });
+    ScheduledTaskModel.create({
+      ...baseTask,
+      name: 'd',
+      instanceId: null,
+      type: 'backup',
+      isEnabled: false,
+    });
   });
 
   it('无过滤：全量 + total，按 id DESC 排序', () => {
     const r = ScheduledTaskModel.findAll();
     expect(r.total).toBe(4);
-    expect(r.tasks.map(t => t.name)).toEqual(['d', 'c', 'b', 'a']);
+    expect(r.tasks.map((t) => t.name)).toEqual(['d', 'c', 'b', 'a']);
     expect(r.page).toBe(1);
     expect(r.pageSize).toBe(20);
   });
@@ -146,13 +174,13 @@ describe('ScheduledTaskModel - findAll 动态过滤与分页', () => {
   it('instanceId 过滤（全服任务 instanceId null 不命中非空过滤）', () => {
     const r = ScheduledTaskModel.findAll({ instanceId: 's1' });
     expect(r.total).toBe(2);
-    expect(r.tasks.map(t => t.name).sort()).toEqual(['a', 'b']);
+    expect(r.tasks.map((t) => t.name).sort()).toEqual(['a', 'b']);
   });
 
   it('type 过滤', () => {
     const r = ScheduledTaskModel.findAll({ type: 'backup' });
     expect(r.total).toBe(2);
-    expect(r.tasks.map(t => t.name).sort()).toEqual(['b', 'd']);
+    expect(r.tasks.map((t) => t.name).sort()).toEqual(['b', 'd']);
   });
 
   it('isEnabled=true / false 分支（boolean → 1/0 落 SQL）', () => {
@@ -160,8 +188,8 @@ describe('ScheduledTaskModel - findAll 动态过滤与分页', () => {
     const disabled = ScheduledTaskModel.findAll({ isEnabled: false });
     expect(enabled.total).toBe(2);
     expect(disabled.total).toBe(2);
-    expect(enabled.tasks.every(t => t.isEnabled)).toBe(true);
-    expect(disabled.tasks.every(t => !t.isEnabled)).toBe(true);
+    expect(enabled.tasks.every((t) => t.isEnabled)).toBe(true);
+    expect(disabled.tasks.every((t) => !t.isEnabled)).toBe(true);
   });
 
   it('分页：page=2&pageSize=2 返回第二页 + total 不变', () => {
@@ -169,7 +197,7 @@ describe('ScheduledTaskModel - findAll 动态过滤与分页', () => {
     expect(r.page).toBe(2);
     expect(r.pageSize).toBe(2);
     expect(r.total).toBe(4);
-    expect(r.tasks.map(t => t.name)).toEqual(['b', 'a']);
+    expect(r.tasks.map((t) => t.name)).toEqual(['b', 'a']);
   });
 
   it('组合过滤：instanceId + type（AND 连接）', () => {
@@ -190,7 +218,14 @@ describe('ScheduledTaskModel - findById 与 _toCamel', () => {
 
   it('_toCamel(null) → null 防御；is_enabled 0 → false；status 缺省 never', () => {
     expect(ScheduledTaskModel._toCamel(null)).toBeNull();
-    const camel = ScheduledTaskModel._toCamel({ id: 1, instance_id: null, name: 'n', type: 'restart', cron_expression: 'c', is_enabled: 0 });
+    const camel = ScheduledTaskModel._toCamel({
+      id: 1,
+      instance_id: null,
+      name: 'n',
+      type: 'restart',
+      cron_expression: 'c',
+      is_enabled: 0,
+    });
     expect(camel.isEnabled).toBe(false);
     expect(camel.lastRunStatus).toBe('never');
     expect(camel.lastRunError).toBeNull();
@@ -222,7 +257,10 @@ describe('ScheduledTaskModel - update 白名单与布尔转换', () => {
 
   it('lastRunStatus/lastRunError 不在白名单：传入被忽略（防客户端篡改执行结果）', () => {
     const before = ScheduledTaskModel.findById(taskId);
-    const updated = ScheduledTaskModel.update(taskId, { lastRunStatus: 'success', lastRunError: 'x' });
+    const updated = ScheduledTaskModel.update(taskId, {
+      lastRunStatus: 'success',
+      lastRunError: 'x',
+    });
     expect(updated.lastRunStatus).toBe(before.lastRunStatus);
     expect(updated.lastRunError).toBe(before.lastRunError);
   });
@@ -256,7 +294,7 @@ describe('ScheduledTaskModel - delete 与 getEnabledTasks', () => {
     ScheduledTaskModel.create({ ...baseTask, name: 'on', isEnabled: true });
     ScheduledTaskModel.create({ ...baseTask, name: 'off', isEnabled: false });
     const rows = ScheduledTaskModel.getEnabledTasks();
-    expect(rows.map(t => t.name)).toEqual(['on']);
+    expect(rows.map((t) => t.name)).toEqual(['on']);
   });
 });
 
@@ -284,7 +322,13 @@ describe('ScheduledTaskModel - updateLastRun 状态链与历史落库', () => {
   });
 
   it('status=failed + error + durationMs：错误文案入库，历史完整落', () => {
-    ScheduledTaskModel.updateLastRun(taskId, '2026-09-04T08:00:00.000Z', 'failed', 'EULA 未接受', 120);
+    ScheduledTaskModel.updateLastRun(
+      taskId,
+      '2026-09-04T08:00:00.000Z',
+      'failed',
+      'EULA 未接受',
+      120,
+    );
 
     const row = ScheduledTaskModel.findById(taskId);
     expect(row.lastRunStatus).toBe('failed');
@@ -315,7 +359,7 @@ describe('ScheduledTaskModel - updateLastRun 状态链与历史落库', () => {
       throw new Error('history boom');
     });
     expect(() =>
-      ScheduledTaskModel.updateLastRun(taskId, '2026-09-04T08:00:00.000Z', 'success')
+      ScheduledTaskModel.updateLastRun(taskId, '2026-09-04T08:00:00.000Z', 'success'),
     ).not.toThrow();
     // 主更新已生效（异常发生在 history 段，不影响 UPDATE 已提交）
     expect(ScheduledTaskModel.findById(taskId).lastRunStatus).toBe('success');

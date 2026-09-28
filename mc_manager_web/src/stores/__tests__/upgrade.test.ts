@@ -1,9 +1,9 @@
 /**
- * upgrade store 测试（P0-4）：
+ * upgrade store 测试：
  * - applyUpgradeProgress 按实例累积（多实例互不覆盖）
  * - clearUpgradeProgress 只清指定实例
  * - getUpgradeProgress 缺失返回 null
- * - UPGRADE_STAGE_LABELS 覆盖全部 7 个阶段（中文标签）
+ * - UPGRADE_STAGE_LABELS 覆盖全部 8 个阶段（中文标签）
  */
 import { describe, it, expect, beforeEach } from 'vitest'
 import {
@@ -22,8 +22,20 @@ beforeEach(() => {
 describe('upgrade store', () => {
   it('applyUpgradeProgress 按实例累积，多实例互不覆盖', () => {
     applyUpgradeProgress({ instanceId: 'a', stage: 'backup', percent: 0, detail: '', timestamp: 1 })
-    applyUpgradeProgress({ instanceId: 'b', stage: 'download', percent: 30, detail: '', timestamp: 2 })
-    applyUpgradeProgress({ instanceId: 'a', stage: 'download', percent: 50, detail: '', timestamp: 3 })
+    applyUpgradeProgress({
+      instanceId: 'b',
+      stage: 'download',
+      percent: 30,
+      detail: '',
+      timestamp: 2,
+    })
+    applyUpgradeProgress({
+      instanceId: 'a',
+      stage: 'download',
+      percent: 50,
+      detail: '',
+      timestamp: 3,
+    })
 
     expect(Object.keys(useUpgradeStore.getState().progress).sort()).toEqual(['a', 'b'])
     expect(getUpgradeProgress('a')).toMatchObject({ stage: 'download', percent: 50 })
@@ -31,7 +43,13 @@ describe('upgrade store', () => {
   })
 
   it('clearUpgradeProgress 只清指定实例', () => {
-    applyUpgradeProgress({ instanceId: 'a', stage: 'completed', percent: 100, detail: '', timestamp: 1 })
+    applyUpgradeProgress({
+      instanceId: 'a',
+      stage: 'completed',
+      percent: 100,
+      detail: '',
+      timestamp: 1,
+    })
     applyUpgradeProgress({ instanceId: 'b', stage: 'failed', percent: 0, detail: '', timestamp: 2 })
 
     clearUpgradeProgress('a')
@@ -43,13 +61,21 @@ describe('upgrade store', () => {
     expect(getUpgradeProgress('ghost')).toBeNull()
   })
 
-  it('UPGRADE_STAGE_LABELS 覆盖全部 7 个阶段', () => {
+  it('UPGRADE_STAGE_LABELS 覆盖全部 8 个阶段', () => {
     const stages: UpgradeStage[] = [
-      'backup', 'download', 'replace', 'verify', 'completed', 'failed', 'rolled_back',
+      'backup',
+      'download',
+      'replace',
+      'verify',
+      'completed',
+      'failed',
+      'rolled_back',
+      'cancelled',
     ]
     expect(Object.keys(UPGRADE_STAGE_LABELS).sort()).toEqual([...stages].sort())
     expect(UPGRADE_STAGE_LABELS.backup).toBe('备份中')
     expect(UPGRADE_STAGE_LABELS.completed).toBe('升级完成')
     expect(UPGRADE_STAGE_LABELS.rolled_back).toBe('已回滚')
+    expect(UPGRADE_STAGE_LABELS.cancelled).toBe('已取消')
   })
 })

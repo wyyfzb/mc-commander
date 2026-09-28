@@ -14,6 +14,7 @@ import express from 'express';
 import request from 'supertest';
 import Database from 'better-sqlite3';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import {
   apiEnvelopeSchema,
@@ -26,11 +27,13 @@ import {
   overviewDataSchema,
 } from '@mc-commander/schemas';
 
-const TEST_DIR = './test-schema-contract-data';
+// 临时库放系统临时目录（与 admin-auth.test.js 同款）：此前落在服务端工作目录内，
+// 而 error-codes.contract.test.js 会递归扫描该目录树——本文件的建/删与扫描并发时
+// readdirSync 撞 ENOENT，整个契约检查随机变红。
+const TEST_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'mcs-schema-contract-'));
 let db;
 
 beforeAll(() => {
-  if (!fs.existsSync(TEST_DIR)) fs.mkdirSync(TEST_DIR, { recursive: true });
   db = new Database(path.join(TEST_DIR, 'test.db'));
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
@@ -41,7 +44,8 @@ beforeAll(() => {
   )`);
   db.exec(`CREATE TABLE IF NOT EXISTS webhooks (
     id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, url TEXT NOT NULL,
-    secret TEXT, events TEXT DEFAULT '[]', instance_id TEXT, is_enabled INTEGER DEFAULT 1,
+    secret TEXT, platform TEXT NOT NULL DEFAULT 'generic', events TEXT DEFAULT '[]',
+    instance_id TEXT, is_enabled INTEGER DEFAULT 1,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (instance_id) REFERENCES instances(id) ON DELETE CASCADE
   )`);
@@ -96,6 +100,7 @@ beforeAll(() => {
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (instance_id) REFERENCES instances(id) ON DELETE CASCADE
   )`);
+  // 镜像 database.js 的 backups DDL（加列时两处要同步；漏了会以 no such column 暴露）
   db.exec(`CREATE TABLE IF NOT EXISTS backups (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     instance_id TEXT NOT NULL,
@@ -106,7 +111,7 @@ beforeAll(() => {
     status TEXT DEFAULT 'creating',
     file_path TEXT,
     world_name TEXT,
-    format TEXT DEFAULT 'snapshot',
+    source_archive_id TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (instance_id) REFERENCES instances(id) ON DELETE CASCADE
@@ -127,9 +132,10 @@ vi.mock('../utils/audit.js', () => ({ recordAudit: vi.fn(), AuditActions: {} }))
 vi.mock('../utils/url-guard.js', async () => {
   const real = await vi.importActual('../utils/url-guard.js');
   return {
-    checkPublicUrl: (url) => real.checkPublicUrl(url, {
-      lookup: async () => [{ address: '93.184.216.34', family: 4 }],
-    }),
+    checkPublicUrl: (url) =>
+      real.checkPublicUrl(url, {
+        lookup: async () => [{ address: '93.184.216.34', family: 4 }],
+      }),
   };
 });
 
@@ -150,11 +156,13 @@ function getApp() {
 
 describe('响应契约：webhook 路由 × webhookSchema', () => {
   it('POST /webhooks 创建成功 → 信封与 data 均可 parse', async () => {
-    const res = await request(getApp()).post('/api/v1/webhooks').send({
-      name: '契约测试',
-      url: 'https://example.com/hook',
-      events: ['player.join'],
-    });
+    const res = await request(getApp())
+      .post('/api/v1/webhooks')
+      .send({
+        name: '契约测试',
+        url: 'https://example.com/hook',
+        events: ['player.join'],
+      });
     expect(res.status).toBe(200);
     expect(apiEnvelopeSchema.safeParse(res.body).success).toBe(true);
     expect(makeApiEnvelopeSchema(webhookSchema).safeParse(res.body).success).toBe(true);
@@ -182,7 +190,9 @@ describe('响应契约：webhook 路由 × webhookSchema', () => {
 
   it('POST /webhooks 非法类型字段（events 非数组）→ 40000', async () => {
     const res = await request(getApp()).post('/api/v1/webhooks').send({
-      name: 'x', url: 'https://example.com/hook', events: 'not-an-array',
+      name: 'x',
+      url: 'https://example.com/hook',
+      events: 'not-an-array',
     });
     expect(res.status).toBe(400);
     expect(res.body.code).toBe(40000);
@@ -192,7 +202,9 @@ describe('响应契约：webhook 路由 × webhookSchema', () => {
 describe('响应契约：任务路由 × scheduledTaskSchema', () => {
   it('POST /instances/:id/tasks 创建成功 → 201 且 data 可 parse', async () => {
     const res = await request(getApp()).post('/api/v1/instances/demo/tasks').send({
-      name: '每日重启', type: 'restart', cronExpression: '0 4 * * *',
+      name: '每日重启',
+      type: 'restart',
+      cronExpression: '0 4 * * *',
     });
     expect(res.status).toBe(201);
     expect(makeApiEnvelopeSchema(scheduledTaskSchema).safeParse(res.body).success).toBe(true);
@@ -200,7 +212,9 @@ describe('响应契约：任务路由 × scheduledTaskSchema', () => {
 
   it('POST /instances/:id/tasks 非法 type → 40000（schema 枚举替代手写 validTypes）', async () => {
     const res = await request(getApp()).post('/api/v1/instances/demo/tasks').send({
-      name: 'x', type: 'destroy-world', cronExpression: '0 4 * * *',
+      name: 'x',
+      type: 'destroy-world',
+      cronExpression: '0 4 * * *',
     });
     expect(res.status).toBe(400);
     expect(res.body.code).toBe(40000);
@@ -218,14 +232,17 @@ describe('响应契约：任务路由 × scheduledTaskSchema', () => {
 
   it('GET /tasks/:id/history → data 逐条通过 taskRunHistorySchema（倒序）', async () => {
     const created = await request(getApp()).post('/api/v1/instances/demo/tasks').send({
-      name: '历史契约', type: 'command', cronExpression: '0 5 * * *', command: 'say hi',
+      name: '历史契约',
+      type: 'command',
+      cronExpression: '0 5 * * *',
+      command: 'say hi',
     });
     const taskId = created.body.data.id;
     db.prepare(
-      "INSERT INTO task_run_history (task_id, run_at, status, error, duration_ms) VALUES (?, '2026-09-02 12:00:00', 'failed', 'RCON 不可用', 3000)"
+      "INSERT INTO task_run_history (task_id, run_at, status, error, duration_ms) VALUES (?, '2026-09-02 12:00:00', 'failed', 'RCON 不可用', 3000)",
     ).run(taskId);
     db.prepare(
-      "INSERT INTO task_run_history (task_id, run_at, status, error, duration_ms) VALUES (?, '2026-09-02 12:05:00', 'success', NULL, 800)"
+      "INSERT INTO task_run_history (task_id, run_at, status, error, duration_ms) VALUES (?, '2026-09-02 12:05:00', 'success', NULL, 800)",
     ).run(taskId);
 
     const res = await request(getApp()).get(`/api/v1/tasks/${taskId}/history`);
@@ -244,16 +261,18 @@ describe('响应契约：任务路由 × scheduledTaskSchema', () => {
 describe('响应契约：玩家路由 × banRecordSchema（#393 接入）', () => {
   it('GET /instances/:id/players/bans → data 逐条通过 banRecordSchema', async () => {
     db.prepare(
-      "INSERT INTO temp_bans (instance_id, target_type, target, reason, expires_at, is_active) VALUES (?, 'player', 'Steve', '破坏行为', ?, 1)"
+      "INSERT INTO temp_bans (instance_id, target_type, target, reason, expires_at, is_active) VALUES (?, 'player', 'Steve', '破坏行为', ?, 1)",
     ).run('demo', Date.now() + 3_600_000);
     db.prepare(
-      "INSERT INTO temp_bans (instance_id, target_type, target, reason, expires_at, is_active) VALUES (?, 'ip', '1.2.3.4', '恶意攻击', ?, 1)"
+      "INSERT INTO temp_bans (instance_id, target_type, target, reason, expires_at, is_active) VALUES (?, 'ip', '1.2.3.4', '恶意攻击', ?, 1)",
     ).run('demo', Date.now() + 7_200_000);
 
     const app = express();
     app.use(express.json());
     // serverPath 指向不存在目录：banned-*.json 原版封禁文件读取走静默跳过分支
-    const fakeManager = { getInstance: () => ({ id: 'demo', serverPath: './contract-test-nonexistent' }) };
+    const fakeManager = {
+      getInstance: () => ({ id: 'demo', serverPath: './contract-test-nonexistent' }),
+    };
     app.use('/api/v1', createPlayerRoutes(fakeManager));
 
     const res = await request(app).get('/api/v1/instances/demo/players/bans');
@@ -270,9 +289,7 @@ describe('响应契约：状态路由 × overviewDataSchema（#393 接入）', (
   it('GET /overview → 信封与 data 均通过 overviewDataSchema', async () => {
     const fakeManager = {
       instances: new Map(),
-      getAllInstances: () => [
-        { id: 'demo', name: '契约实例', isRunning: true, playerCount: 2 },
-      ],
+      getAllInstances: () => [{ id: 'demo', name: '契约实例', isRunning: true, playerCount: 2 }],
       getInstance: () => null,
     };
     const app = express();
@@ -289,7 +306,7 @@ describe('响应契约：状态路由 × overviewDataSchema（#393 接入）', (
 describe('响应契约：备份路由 × backupItemSchema（#393 接入）', () => {
   it('GET /instances/:instanceId/backups → 信封 + pagination 可 parse，data 逐条通过 backupItemSchema', async () => {
     db.prepare(
-      "INSERT INTO backups (instance_id, name, description, type, size, status, world_name, format) VALUES (?, ?, ?, 'manual', ?, 'completed', ?, 'snapshot')"
+      "INSERT INTO backups (instance_id, name, description, type, size, status, world_name) VALUES (?, ?, ?, 'manual', ?, 'completed', ?)",
     ).run('demo', '契约快照', null, 1024, 'world');
 
     const app = express();

@@ -59,7 +59,11 @@ describe('TaskScheduler - executeTask 完整结果语义', () => {
     scheduler.executeTask(makeTask({ type: 'start' }));
 
     expect(instance.start).toHaveBeenCalled();
-    expect(ScheduledTaskModel.updateLastRun).toHaveBeenCalledWith(100, expect.any(String), 'success');
+    expect(ScheduledTaskModel.updateLastRun).toHaveBeenCalledWith(
+      100,
+      expect.any(String),
+      'success',
+    );
   });
 
   it('stop 同步成功 → 结果落 success', () => {
@@ -69,7 +73,11 @@ describe('TaskScheduler - executeTask 完整结果语义', () => {
     scheduler.executeTask(makeTask({ type: 'stop' }));
 
     expect(instance.stop).toHaveBeenCalled();
-    expect(ScheduledTaskModel.updateLastRun).toHaveBeenCalledWith(100, expect.any(String), 'success');
+    expect(ScheduledTaskModel.updateLastRun).toHaveBeenCalledWith(
+      100,
+      expect.any(String),
+      'success',
+    );
   });
 
   it('start 同步 throw → 结果落 failed 且刷新 last_run_at（失败也消费本次触发）', () => {
@@ -85,7 +93,13 @@ describe('TaskScheduler - executeTask 完整结果语义', () => {
     expect(() => scheduler.executeTask(makeTask({ type: 'start' }))).not.toThrow();
 
     // updateLastRun 落库即同时写 last_run_at=CURRENT_TIMESTAMP，保证失败也记录触发时间
-    expect(ScheduledTaskModel.updateLastRun).toHaveBeenCalledWith(100, expect.any(String), 'failed', 'EULA 未接受', expect.any(Number));
+    expect(ScheduledTaskModel.updateLastRun).toHaveBeenCalledWith(
+      100,
+      expect.any(String),
+      'failed',
+      'EULA 未接受',
+      expect.any(Number),
+    );
   });
 
   it('command resolve → 触发先刷新时间戳（不写 status），异步回填 success', async () => {
@@ -96,21 +110,37 @@ describe('TaskScheduler - executeTask 完整结果语义', () => {
 
     expect(ScheduledTaskModel.updateLastRun).toHaveBeenCalledWith(100, expect.any(String));
     await flushAsync();
-    expect(ScheduledTaskModel.updateLastRunStatus).toHaveBeenCalledWith(100, 'success', null, expect.any(Number));
+    expect(ScheduledTaskModel.updateLastRunStatus).toHaveBeenCalledWith(
+      100,
+      'success',
+      null,
+      expect.any(Number),
+    );
   });
 
   it('command reject → 异步回填 failed（不崩）', async () => {
-    const instance = { isRunning: true, sendCommand: vi.fn(() => Promise.reject(new Error('RCON 不可用'))) };
+    const instance = {
+      isRunning: true,
+      sendCommand: vi.fn(() => Promise.reject(new Error('RCON 不可用'))),
+    };
     mockManager.getInstance.mockReturnValue(instance);
 
     scheduler.executeTask(makeTask({ type: 'command', command: 'list' }));
     await flushAsync();
 
-    expect(ScheduledTaskModel.updateLastRunStatus).toHaveBeenCalledWith(100, 'failed', 'RCON 不可用', expect.any(Number));
+    expect(ScheduledTaskModel.updateLastRunStatus).toHaveBeenCalledWith(
+      100,
+      'failed',
+      'RCON 不可用',
+      expect.any(Number),
+    );
   });
 
   it('command reject → 发出 instance:taskFailed 事件（含任务名与错误摘要）', async () => {
-    const instance = { isRunning: true, sendCommand: vi.fn(() => Promise.reject(new Error('RCON 不可用'))) };
+    const instance = {
+      isRunning: true,
+      sendCommand: vi.fn(() => Promise.reject(new Error('RCON 不可用'))),
+    };
     mockManager.getInstance.mockReturnValue(instance);
 
     scheduler.executeTask(makeTask({ type: 'command', command: 'list', name: '每日公告' }));
@@ -144,13 +174,23 @@ describe('TaskScheduler - executeTask 完整结果语义', () => {
 
     scheduler.executeTask(makeTask({ type: 'command', command: 'list' }));
 
-    expect(ScheduledTaskModel.updateLastRun).toHaveBeenCalledWith(100, expect.any(String), 'skipped');
+    expect(ScheduledTaskModel.updateLastRun).toHaveBeenCalledWith(
+      100,
+      expect.any(String),
+      'skipped',
+    );
   });
 
   it('未知任务类型 → 结果落 failed', () => {
     scheduler.executeTask(makeTask({ type: 'unknown-type' }));
 
-    expect(ScheduledTaskModel.updateLastRun).toHaveBeenCalledWith(100, expect.any(String), 'failed', expect.stringContaining('未知任务类型'), expect.any(Number));
+    expect(ScheduledTaskModel.updateLastRun).toHaveBeenCalledWith(
+      100,
+      expect.any(String),
+      'failed',
+      expect.stringContaining('未知任务类型'),
+      expect.any(Number),
+    );
   });
 
   it('未知任务类型 → 发出 instance:taskFailed 事件', () => {

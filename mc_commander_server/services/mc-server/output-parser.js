@@ -8,7 +8,7 @@
  */
 
 export function _parseOutput(text) {
-  const lines = text.split('\n').filter(l => l.trim());
+  const lines = text.split('\n').filter((l) => l.trim());
 
   for (const line of lines) {
     const responseMatch = line.match(/\[mcsmp_response:(\d+)\]/);
@@ -42,8 +42,9 @@ export function _parseOutput(text) {
       this._mspt = parseFloat(msptMatch[1]);
     }
     // 备用格式: "5.0 ms per tick" 或 "tick time: 5.0ms"
-    const msptFallback = line.match(/(\d+\.?\d*)\s*ms\s*per\s*tick/i) ||
-                         line.match(/tick\s*time[\s:]+(\d+\.?\d*)\s*ms/i);
+    const msptFallback =
+      line.match(/(\d+\.?\d*)\s*ms\s*per\s*tick/i) ||
+      line.match(/tick\s*time[\s:]+(\d+\.?\d*)\s*ms/i);
     if (msptFallback) {
       this._mspt = parseFloat(msptFallback[1]);
     }
@@ -74,7 +75,8 @@ export function _parseOutput(text) {
         sessions,
       };
       // 今日新增计数：savedData 无任何历史（时长/会话/事件全空）= 首次加入
-      const isFirstJoin = !savedData.totalPlayTime && !savedData.sessions?.length && !savedData.events?.length;
+      const isFirstJoin =
+        !savedData.totalPlayTime && !savedData.sessions?.length && !savedData.events?.length;
       if (isFirstJoin) {
         const key = this._todayKey();
         if (!this._todayNewCache || this._todayNewCache.date !== key) {
@@ -107,15 +109,16 @@ export function _parseOutput(text) {
     // 被动离开（踢出/封禁/IP 封禁/断开连接）：服务器日志输出 "lost connection" 或 "was kicked"，
     // 不输出 "left the game"，也应视为"离开服务器"事件。仅在玩家仍在线时处理，避免重复记录。
     const passiveLeaveMatch =
-      line.match(/([^\s\]<>[]+) lost connection: /) ||
-      line.match(/([^\s\]<>[]+) was kicked /);
+      line.match(/([^\s\]<>[]+) lost connection: /) || line.match(/([^\s\]<>[]+) was kicked /);
     if (passiveLeaveMatch) {
       this._handlePlayerLeave(passiveLeaveMatch[1]);
     }
 
     // 死亡事件 — 使用更精确的正则避免误匹配
     // MC 26.2 日志格式: "Player was slain by Zombie" / "Player fell from a high place"
-    const deathMatch = line.match(/([^\s\]<>[]+) (was slain by|was killed by|was shot by|was fireballed by|was blown up by|was stung by|was pummeled by|was squashed by|was impaled on|fell from a high place|fell off|drowned|blew up|hit the ground too hard|tried to swim in lava|went up in flames|burned to death|was pricked to death|was doomed to fall|was shot off|starved to death|suffocated in a wall|withered away|froze to death|died|was lost|disconnected|experienced kinetic energy)(?:\s+(.+))?/);
+    const deathMatch = line.match(
+      /([^\s\]<>[]+) (was slain by|was killed by|was shot by|was fireballed by|was blown up by|was stung by|was pummeled by|was squashed by|was impaled on|fell from a high place|fell off|drowned|blew up|hit the ground too hard|tried to swim in lava|went up in flames|burned to death|was pricked to death|was doomed to fall|was shot off|starved to death|suffocated in a wall|withered away|froze to death|died|was lost|disconnected|experienced kinetic energy)(?:\s+(.+))?/,
+    );
     if (deathMatch) {
       const playerName = deathMatch[1];
       const cause = deathMatch[2];
@@ -133,7 +136,7 @@ export function _parseOutput(text) {
         'was impaled on': '被刺穿',
         'fell from a high place': '从高处摔落',
         'fell off': '从高处掉落',
-        'drowned': '溺水身亡',
+        drowned: '溺水身亡',
         'blew up': '被炸飞',
         'hit the ground too hard': '重重地摔在地上',
         'tried to swim in lava': '试图在岩浆中游泳',
@@ -146,9 +149,9 @@ export function _parseOutput(text) {
         'suffocated in a wall': '在墙里窒息',
         'withered away': '凋零而死',
         'froze to death': '冻死了',
-        'died': '死了',
+        died: '死了',
         'was lost': '迷失了',
-        'disconnected': '断开了连接',
+        disconnected: '断开了连接',
         'experienced kinetic energy': '经历了动能',
       };
       const causeZh = deathCauseZh[cause] || cause;
@@ -167,7 +170,11 @@ export function _parseOutput(text) {
     const challengeMatch = line.match(/([^\s\]<>[]+) has completed the challenge \[(.+)\]/);
     if (challengeMatch) {
       this._addPlayerEvent(challengeMatch[1], 'achievement', `完成挑战: ${challengeMatch[2]}`);
-      this.emit('achievement', { name: challengeMatch[1], advancement: challengeMatch[2], isChallenge: true });
+      this.emit('achievement', {
+        name: challengeMatch[1],
+        advancement: challengeMatch[2],
+        isChallenge: true,
+      });
     }
 
     const respawnMatch = line.match(/([^\s\]<>[]+) respawned/);
@@ -178,8 +185,10 @@ export function _parseOutput(text) {
     }
 
     // ── 聊天事件解析 ──
-    // MC 日志格式: "<Player> message"
-    const chatMatch = line.match(/^<([^\s\]<>[]+)>\s+(.+)/);
+    // MC 日志格式: "<Player> message"；真实服务端输出行带 "[时间] [线程/级别]: " 前缀，
+    // 剥离后再锚定行首——裸聊天行无前缀，剥离为空操作，两种形态均兼容
+    const chatLine = line.replace(/^(?:\[[^\]]*\]\s*)*:\s*/, '');
+    const chatMatch = chatLine.match(/^<([^\s\]<>[]+)>\s+(.+)/);
     if (chatMatch) {
       this.emit('playerChat', { name: chatMatch[1], message: chatMatch[2] });
     }
@@ -188,6 +197,8 @@ export function _parseOutput(text) {
     // "Saving" 是存档开始，"Saved the game" 是存档完成，仅在完成时记录真实时刻
     if (line.includes('Saved the game')) {
       this._lastSaveTime = new Date().toISOString();
+      // 存档落盘=世界体积增长点：标记 _getWorldSize 缓存失效（顶层目录 mtime 感知不到子目录写入）
+      this._worldSizeDirty = true;
       this.emit('status', { event: 'save' });
     }
 
@@ -202,13 +213,18 @@ export function _parseOutput(text) {
     }
 
     if (line.includes('Done') && line.includes('For help, type')) {
+      // 启动完成（世界生成/首次写入结束）：标记存档大小缓存失效
+      this._worldSizeDirty = true;
       this.emit('status', { event: 'ready' });
     }
 
     // ── 天气变化日志解析 ──
     // MC 日志格式: "Changing to clear/rainy/thundering weather" 或 "Set the weather to clear/rain/thunder"
     // 注意：仅命令触发的天气变化会输出日志；自然天气变化无日志，依赖 _collectWorldState 轮询 level.dat
-    if (line.match(/Changing to (clear|rainy|thundering) weather/i) || line.match(/Set the weather to (clear|rain|thunder)/i)) {
+    if (
+      line.match(/Changing to (clear|rainy|thundering) weather/i) ||
+      line.match(/Set the weather to (clear|rain|thunder)/i)
+    ) {
       const lower = line.toLowerCase();
       if (lower.includes('thunder')) {
         this._weather = 'thunder';

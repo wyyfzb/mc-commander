@@ -11,6 +11,8 @@ import {
   type TeleportPoint,
 } from '@/lib/mc-teleport'
 import type { Player } from '@/api/types'
+import { cn } from '@/lib/utils'
+import { TONE_SELECTED_CLASSES } from '@/components/mcs/tone'
 import { QuickChip } from './quick-chip'
 import { Section } from './section'
 import { formatCoords } from './teleport-utils'
@@ -22,7 +24,11 @@ export interface QuickTeleportsSectionProps {
   isBatchMode: boolean
   quickSchema: QuickTeleportSchema
   running: boolean
-  onTeleport: (label: string, buildCommand: (name: string) => string, successText?: string) => Promise<void>
+  onTeleport: (
+    label: string,
+    buildCommand: (name: string) => string,
+    successText?: string,
+  ) => Promise<void>
   onRespawn: () => void
   onEditWorldSpawn: (draft: WorldSpawnDraft) => void
   onHideOrigin: () => void
@@ -69,7 +75,11 @@ export function QuickTeleportsSection({
         <QuickChip
           name="个人复活点"
           // 批量时每个玩家分别传送到各自复活点，坐标以 x, y, z 占位避免误导
-          coords={isBatchMode ? 'x, y, z' : formatCoords(resolveRespawnTarget(player?.respawnPoint, player?.spawnPoint))}
+          coords={
+            isBatchMode
+              ? 'x, y, z'
+              : formatCoords(resolveRespawnTarget(player?.respawnPoint, player?.spawnPoint))
+          }
           icon={<Bed aria-hidden />}
           onClick={onRespawn}
           disabled={running}
@@ -110,7 +120,10 @@ export function QuickTeleportsSection({
         <button
           type="button"
           onClick={onAddClick}
-          className="inline-flex items-center gap-1 rounded-mcs-md border border-mcs-accent-border bg-mcs-accent-bg-subtle px-2.5 py-1.5 text-mcs-xs font-medium text-mcs-accent-fg transition-colors hover:bg-mcs-bg-hover"
+          className={cn(
+            TONE_SELECTED_CLASSES,
+            'inline-flex items-center gap-1 rounded-mcs-md border px-2.5 py-1.5 text-mcs-xs font-medium transition-colors hover:bg-mcs-state-hover',
+          )}
         >
           <Plus className="size-3.5" aria-hidden />
           添加快捷传送点

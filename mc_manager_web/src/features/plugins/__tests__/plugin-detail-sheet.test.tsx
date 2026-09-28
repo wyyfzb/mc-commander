@@ -235,8 +235,16 @@ describe('PluginDetailSheet · 行内启停', () => {
     expect(onOpenChange).toHaveBeenCalledWith(false)
   })
 
-  it('面板底部渲染启停生效时机提示', () => {
+  it('面板底部：启停生效时机说明收进信息入口，点开读到全文', async () => {
+    const user = userEvent.setup()
     setup()
-    expect(screen.getByText('启停与增删在重启实例后生效（Bukkit 插件仅启动时加载）')).toBeInTheDocument()
+    // 正文不常驻
+    expect(
+      screen.queryByText('启停与增删在重启实例后生效（Bukkit 插件仅启动时加载）'),
+    ).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '启停生效时机说明' }))
+    expect(await screen.findByRole('dialog', { name: '启停生效时机说明' })).toHaveTextContent(
+      '启停与增删在重启实例后生效（Bukkit 插件仅启动时加载）',
+    )
   })
 })

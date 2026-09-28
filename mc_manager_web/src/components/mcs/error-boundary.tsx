@@ -40,16 +40,12 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   render() {
     if (this.state.hasError) {
       return (
-        <div className="flex h-full min-h-[200px] flex-col items-center justify-center gap-4 p-8">
+        <div className="flex h-full min-h-50 flex-col items-center justify-center gap-4 p-8">
           <AlertTriangle className="size-8 text-mcs-error-fg" aria-hidden="true" />
           <p className="text-center text-mcs-sm text-mcs-text-muted">
             页面渲染出现异常，请尝试重新加载
           </p>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={this.handleReset}
-          >
+          <Button variant="outline" size="sm" onClick={this.handleReset}>
             重新加载
           </Button>
         </div>

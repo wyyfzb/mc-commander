@@ -79,7 +79,9 @@ describe('GET /instances/:instanceId/tasks（实例任务列表）', () => {
     ScheduledTaskModel.findAll.mockReturnValue({ tasks: [makeTask()], total: 1 });
     const app = buildApp();
 
-    const res = await request(app).get('/api/v1/instances/inst-1/tasks?type=restart&isEnabled=true');
+    const res = await request(app).get(
+      '/api/v1/instances/inst-1/tasks?type=restart&isEnabled=true',
+    );
 
     expect(res.status).toBe(200);
     expect(res.body.code).toBe(0);
@@ -87,12 +89,18 @@ describe('GET /instances/:instanceId/tasks（实例任务列表）', () => {
     expect(res.body.data[0].name).toBe('每日重启');
     expect(res.body.pagination).toEqual({ total: 1, page: 1, pageSize: 20, totalPages: 1 });
     expect(ScheduledTaskModel.findAll).toHaveBeenCalledWith({
-      instanceId: 'inst-1', page: 1, pageSize: 20, type: 'restart', isEnabled: true,
+      instanceId: 'inst-1',
+      page: 1,
+      pageSize: 20,
+      type: 'restart',
+      isEnabled: true,
     });
   });
 
   it('findAll 抛错 → 全局 errorHandler 500(50000)', async () => {
-    ScheduledTaskModel.findAll.mockImplementation(() => { throw new Error('db down'); });
+    ScheduledTaskModel.findAll.mockImplementation(() => {
+      throw new Error('db down');
+    });
     const app = buildApp();
 
     const res = await request(app).get('/api/v1/instances/inst-1/tasks');
@@ -105,12 +113,18 @@ describe('GET /instances/:instanceId/tasks（实例任务列表）', () => {
     ScheduledTaskModel.findAll.mockReturnValue({ tasks: [], total: 101 });
     const app = buildApp();
 
-    const res = await request(app).get('/api/v1/instances/inst-1/tasks?page=2&pageSize=50&isEnabled=false');
+    const res = await request(app).get(
+      '/api/v1/instances/inst-1/tasks?page=2&pageSize=50&isEnabled=false',
+    );
 
     expect(res.status).toBe(200);
     expect(res.body.pagination).toEqual({ total: 101, page: 2, pageSize: 50, totalPages: 3 });
     expect(ScheduledTaskModel.findAll).toHaveBeenCalledWith({
-      instanceId: 'inst-1', page: 2, pageSize: 50, type: undefined, isEnabled: false,
+      instanceId: 'inst-1',
+      page: 2,
+      pageSize: 50,
+      type: undefined,
+      isEnabled: false,
     });
   });
 });
@@ -129,7 +143,11 @@ describe('GET /tasks（全量分页列表）', () => {
     expect(res.body.data).toHaveLength(1);
     expect(res.body.pagination).toEqual({ total: 25, page: 1, pageSize: 20, totalPages: 2 });
     expect(ScheduledTaskModel.findAll).toHaveBeenCalledWith({
-      instanceId: undefined, page: 1, pageSize: 20, type: undefined, isEnabled: undefined,
+      instanceId: undefined,
+      page: 1,
+      pageSize: 20,
+      type: undefined,
+      isEnabled: undefined,
     });
   });
 
@@ -142,12 +160,18 @@ describe('GET /tasks（全量分页列表）', () => {
     expect(res.status).toBe(200);
     expect(res.body.data).toEqual([]);
     expect(ScheduledTaskModel.findAll).toHaveBeenCalledWith({
-      instanceId: undefined, page: 1, pageSize: 20, type: 'backup', isEnabled: true,
+      instanceId: undefined,
+      page: 1,
+      pageSize: 20,
+      type: 'backup',
+      isEnabled: true,
     });
   });
 
   it('findAll 抛错 → 全局 errorHandler 500(50000)', async () => {
-    ScheduledTaskModel.findAll.mockImplementation(() => { throw new Error('db down'); });
+    ScheduledTaskModel.findAll.mockImplementation(() => {
+      throw new Error('db down');
+    });
     const app = buildApp();
 
     const res = await request(app).get('/api/v1/tasks');
@@ -219,8 +243,13 @@ describe('POST /instances/:instanceId/tasks（创建）', () => {
     const getInstance = vi.fn().mockReturnValue({ id: 'inst-1' });
     const app = buildApp({ getInstance });
 
-    const res = await request(app).post('/api/v1/instances/inst-1/tasks')
-      .send({ name: '每晚广播', type: 'command', cronExpression: '*/5 * * * *', command: 'say hi', isEnabled: false });
+    const res = await request(app).post('/api/v1/instances/inst-1/tasks').send({
+      name: '每晚广播',
+      type: 'command',
+      cronExpression: '*/5 * * * *',
+      command: 'say hi',
+      isEnabled: false,
+    });
 
     expect(res.status).toBe(201);
     expect(ScheduledTaskModel.create).toHaveBeenCalledWith(
@@ -232,7 +261,8 @@ describe('POST /instances/:instanceId/tasks（创建）', () => {
   it('type 非法枚举 → 400 zod 契约拒绝(40000)，结构化 details，不建任务不落审计', async () => {
     const app = buildApp();
 
-    const res = await request(app).post('/api/v1/instances/inst-1/tasks')
+    const res = await request(app)
+      .post('/api/v1/instances/inst-1/tasks')
       .send({ ...validPayload, type: 'teleport' });
 
     expect(res.status).toBe(400);
@@ -247,12 +277,29 @@ describe('POST /instances/:instanceId/tasks（创建）', () => {
     const getInstance = vi.fn();
     const app = buildApp({ getInstance });
 
-    const res = await request(app).post('/api/v1/instances/inst-1/tasks')
+    const res = await request(app)
+      .post('/api/v1/instances/inst-1/tasks')
       .send({ ...validPayload, cronExpression: 'not-a-cron' });
 
     expect(res.status).toBe(400);
     expect(res.body.code).toBe(40004);
     expect(getInstance).not.toHaveBeenCalled(); // 廉价校验前置：非法表达式不触发实例查询
+    expect(ScheduledTaskModel.create).not.toHaveBeenCalled();
+    expect(recordAudit).not.toHaveBeenCalled();
+  });
+
+  it('name 空/纯空白 → 400 zod 契约拒绝(40000)，不建无名任务', async () => {
+    const app = buildApp();
+
+    for (const name of ['', '   ']) {
+      const res = await request(app)
+        .post('/api/v1/instances/inst-1/tasks')
+        .send({ ...validPayload, name });
+
+      expect(res.status).toBe(400);
+      expect(res.body.code).toBe(40000);
+      expect(res.body.details[0]).toMatchObject({ path: 'name' });
+    }
     expect(ScheduledTaskModel.create).not.toHaveBeenCalled();
     expect(recordAudit).not.toHaveBeenCalled();
   });

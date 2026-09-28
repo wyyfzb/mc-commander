@@ -4,7 +4,7 @@
  *       世界目录定位（level-name 服务层兜底校验）、存档大小与保存时间读取。
  * 挂载方式：mc_server.js 顶部 import 后经 Object.assign(MCServerInstance.prototype, levelDat)
  * 注入原型——函数体内 this 语义与类内定义完全一致（实例方法调用时 this 绑定实例），
- * 全部调用点零改动，对外接口零变化；isPathContained 采用 utils/player-utils.js 全仓公共实现
+ * 全部调用点零改动，对外接口零变化；isPathContained 采用 utils/fs-utils.js 全仓公共实现
  * （mc_server.js 原有逐字副本已由 issue 499 收敛至本单源）。
  */
 import path from 'path';
@@ -12,9 +12,9 @@ import fs from 'fs';
 import zlib from 'zlib';
 import { parseUncompressed as parseNbtSync } from 'prismarine-nbt';
 import { logger } from '../../utils/logger.js';
-import { isPathContained } from '../../utils/player-utils.js';
+import { isPathContained } from '../../utils/fs-utils.js';
 
-/// level-name 服务层兜底校验（extra-1，与 status-route 路由层白名单双保险）：
+/// level-name 服务层兜底校验（与 status-route 路由层白名单双保险）：
 /// ①正则 ^[A-Za-z0-9_-]+$（不含路径分隔符/..，杜绝路径穿越）；
 /// ②resolve 后必须位于 serverPath 内（路径边界前缀校验）。
 /// 非法/越界时告警并回退 'world'（合法世界名恒在 serverPath 内），
@@ -22,7 +22,9 @@ import { isPathContained } from '../../utils/player-utils.js';
 export function _getSafeLevelName() {
   const raw = this.properties?.['level-name'] || 'world';
   if (typeof raw !== 'string' || !/^[A-Za-z0-9_-]+$/.test(raw)) {
-    logger.warn(`[Instance ${this.id}] 非法 level-name '${raw}'（仅允许字母/数字/_/-），回退 'world'`);
+    logger.warn(
+      `[Instance ${this.id}] 非法 level-name '${raw}'（仅允许字母/数字/_/-），回退 'world'`,
+    );
     return 'world';
   }
   if (!isPathContained(this.serverPath, raw)) {
@@ -39,25 +41,26 @@ export function _getWorldSize() {
   const worldPath = path.join(this.serverPath, levelName);
   if (!fs.existsSync(worldPath)) return 0;
 
-  // 带失效机制的缓存（与 _readSeedFromLevelDat 同型）：记录世界目录的
-  // mtimeMs/size，每次调用仅对该目录做一次 statSync 校验，目录结构或存档
-  // 变化（mtime/size 变化）才重算。worldSize 是低频变化数据（仅存档落盘
-  // 时变），若每次轮询都对全树做 readdirSync+statSync 同步遍历，数万文件
-  // 目录单次遍历约 3 秒，会同步阻塞 Node 事件循环（HTTP/WS/RCON/定时器
-  // 全部延迟）。目录被删除/替换（恢复备份、版本升级等）后 mtime/size 变化
-  // 即自动失效重算，对新旧 MC 版本目录结构差异（含 26.x 新增 dimension/
-  // minecraft:* 层级）同样生效，无需版本特判。仅成功时缓存：世界目录
-  // 不存在/遍历失败不缓存，便于世界生成后立即重算。
-  if (this._worldSizeCache !== undefined) {
-    const { value, mtimeMs, size } = this._worldSizeCache;
+  // 失效判定双条件：
+  // ① dirty 标记——存档完成（"Saved the game"）/启动就绪（Done）/进程退出时
+  //    置位（见 output-parser.js 与 start-lifecycle.js）。世界数据写入发生在
+  //    region/ 等子目录、level.dat 为就地改写，world/ 顶层目录 mtime 不随之
+  //    变化，仅靠 ② 判定会让展示值永久陈旧（实测存档 643MB 后仍显示初值）；
+  // ② world/ 顶层目录 stat 变化（mtimeMs/size）——兜底外部替换（恢复备份、
+  //    手动放置存档文件、版本升级目录迁移）等面板不感知的事件。
+  // 重算=全树 stat 遍历，触发频率从每轮询（5s）收敛到每次存档（默认 60s）一次，
+  // 避免大地图（数万文件 ~3s 同步遍历）高频阻塞事件循环。失败时保留旧值下次重试。
+  const cache = this._worldSizeCache;
+  if (cache && !this._worldSizeDirty) {
     try {
       const st = fs.statSync(worldPath);
-      if (st.mtimeMs === mtimeMs && st.size === size) return value;
+      if (st.mtimeMs === cache.mtimeMs && st.size === cache.size) return cache.value;
     } catch {
       // 世界目录被删除/替换 → 缓存失效，重新计算
     }
     this._worldSizeCache = undefined;
   }
+  this._worldSizeDirty = false;
 
   try {
     // 遍历前先取目录 stat 作缓存键：若遍历期间目录发生变化，下次调用
@@ -82,14 +85,15 @@ export function _getWorldSize() {
       }
     }
     this._worldSizeCache = {
-      value: Math.round(size / (1024 * 1024 * 1024) * 100) / 100,
+      value: Math.round((size / (1024 * 1024 * 1024)) * 100) / 100,
       mtimeMs: st.mtimeMs,
       size: st.size,
     };
     return this._worldSizeCache.value;
   } catch (err) {
     logger.warn(`[Instance ${this.id}] 计算存档大小失败:`, err.message);
-    return 0;
+    // 遍历/stat 失败（瞬时 IO 错误等）：回退旧缓存值，避免面板把有效存档显示为 0
+    return this._worldSizeCache?.value ?? 0;
   }
 }
 
@@ -260,9 +264,7 @@ export function _readLevelDatData() {
   const levelDatPath = path.join(this.serverPath, levelName, 'level.dat');
   if (!fs.existsSync(levelDatPath)) return null;
   try {
-    const parsed = parseNbtSync(
-      zlib.gunzipSync(fs.readFileSync(levelDatPath)),
-    );
+    const parsed = parseNbtSync(zlib.gunzipSync(fs.readFileSync(levelDatPath)));
     return parsed?.value?.Data?.value || parsed?.value || null;
   } catch (err) {
     logger.warn(`[Instance ${this.id}] 读取 level.dat 失败:`, err.message);
@@ -287,7 +289,7 @@ export function _getLastSaveTime() {
 
 /// 从存档文件读取天气状态（NBT 格式），兼容新旧 MC 版本。
 /// MC 26.x   : 天气已从 level.dat 移出，存于 <world>/data/minecraft/weather.dat 的 data 子节点
-/// 旧版      : level.dat 的 Data.raining / Data.thundering（含 isRaining/isThundering 兼容）
+/// 旧版      : level.dat 的 Data.raining / Data.thundering
 /// 返回 'clear' / 'rain' / 'thunder'，读取失败返回 null
 export function _readWeatherFromLevelDat() {
   const levelName = this._getSafeLevelName();
@@ -322,11 +324,8 @@ export function _readWeatherFromLevelDat() {
 
     // NBT 结构: { Data: { raining, thundering, clearWeatherTime, rainTime, thunderTime, ... } }
     const data = parsed?.value?.Data?.value || parsed?.value || {};
-    // MC 真实字段名为 raining/thundering；保留 isRaining/isThundering 兼容旧实现
-    const isRaining = data.raining?.value === 1 || data.raining?.value === true
-      || data.isRaining?.value === 1 || data.isRaining?.value === true;
-    const isThundering = data.thundering?.value === 1 || data.thundering?.value === true
-      || data.isThundering?.value === 1 || data.isThundering?.value === true;
+    const isRaining = data.raining?.value === 1 || data.raining?.value === true;
+    const isThundering = data.thundering?.value === 1 || data.thundering?.value === true;
 
     if (isThundering) return 'thunder';
     if (isRaining) return 'rain';
@@ -381,7 +380,9 @@ export function _readWorldSpawnFromLevelDat(rawOverride) {
       // 记录本次成功解析的原始字节，供 get _worldSpawn 做运行期变更检测；
       // 仅在成功解析后更新，解析失败时下次访问会重试
       this._worldSpawnRaw = raw;
-      logger.info(`[${this.id}] World spawn initialized from level.dat: ${spawnX}, ${spawnY}, ${spawnZ}`);
+      logger.info(
+        `[${this.id}] World spawn initialized from level.dat: ${spawnX}, ${spawnY}, ${spawnZ}`,
+      );
     }
   } catch (e) {
     logger.warn(`[${this.id}] Failed to read world spawn from level.dat:`, e.message);

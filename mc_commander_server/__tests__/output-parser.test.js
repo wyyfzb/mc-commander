@@ -19,7 +19,6 @@ vi.mock('../config.js', async () => {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-output-parser-test-'));
   return {
     default: {
-      apiKey: '',
       port: 0,
       serversDir: path.join(tmpRoot, 'servers'),
       dataDir: path.join(tmpRoot, 'data'),
@@ -30,7 +29,11 @@ vi.mock('../config.js', async () => {
   };
 });
 
-import { _parseOutput, _handlePlayerLeave, _addPlayerEvent } from '../services/mc-server/output-parser.js';
+import {
+  _parseOutput,
+  _handlePlayerLeave,
+  _addPlayerEvent,
+} from '../services/mc-server/output-parser.js';
 import { MCServerInstance } from '../services/mc_server.js';
 
 const tmpBase = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-output-parser-fixture-'));
@@ -97,7 +100,7 @@ describe('_parseOutput stdout 行解析（真实样本驱动）', () => {
   it('TPS/MSPT/时间日志行更新状态字段并广播 performanceUpdate', () => {
     const inst = makeBareInstance();
     const perf = [];
-    inst.on('performanceUpdate', e => perf.push(e));
+    inst.on('performanceUpdate', (e) => perf.push(e));
     inst._parseOutput('[12:00:00] [Server thread/INFO]: 19.5 TPS from the latest 3 ticks');
     inst._parseOutput('[12:00:00] [Server thread/INFO]: MSPT mean: 3.7');
     inst._parseOutput('[12:00:01] [Server thread/INFO]: Set the time to 13000');
@@ -116,20 +119,28 @@ describe('_parseOutput stdout 行解析（真实样本驱动）', () => {
     const chats = [];
     const achievements = [];
     const respawns = [];
-    inst.on('playerChat', e => chats.push(e));
-    inst.on('achievement', e => achievements.push(e));
-    inst.on('playerRespawn', e => respawns.push(e));
-    // 聊天正则锚定行首（^<），样本用裸聊天行（无日志前缀，如 mcsmp 回显/部分服务端形态）
+    inst.on('playerChat', (e) => chats.push(e));
+    inst.on('achievement', (e) => achievements.push(e));
+    inst.on('playerRespawn', (e) => respawns.push(e));
+    // 聊天两种形态均须识别：裸聊天行（mcsmp 回显/部分服务端）与带日志头的真实服务端输出
     inst._parseOutput('<Steve> hello world');
-    inst._parseOutput('[12:00:01] [Server thread/INFO]: Steve has completed the challenge [Sniper Duel]');
+    inst._parseOutput('[12:00:00] [Server thread/INFO]: <Alex> hi there');
+    inst._parseOutput('[12:00:00 INFO]: <Alex> paper format');
+    inst._parseOutput(
+      '[12:00:01] [Server thread/INFO]: Steve has completed the challenge [Sniper Duel]',
+    );
     inst._parseOutput('[12:00:02] [Server thread/INFO]: Steve respawned');
-    expect(chats).toEqual([{ name: 'Steve', message: 'hello world' }]);
+    expect(chats).toEqual([
+      { name: 'Steve', message: 'hello world' },
+      { name: 'Alex', message: 'hi there' },
+      { name: 'Alex', message: 'paper format' },
+    ]);
     expect(achievements).toEqual([
       { name: 'Steve', advancement: 'Sniper Duel', isChallenge: true },
     ]);
     expect(respawns).toEqual([{ name: 'Steve' }]);
     const events = inst.playerEvents.get('Steve');
-    expect(events.map(e => e.type)).toEqual(['respawn', 'achievement']);
+    expect(events.map((e) => e.type)).toEqual(['respawn', 'achievement']);
     expect(events[1].message).toBe('完成挑战: Sniper Duel');
     expect(events[0].message).toBe('已重生');
   });
@@ -138,8 +149,8 @@ describe('_parseOutput stdout 行解析（真实样本驱动）', () => {
     const inst = makeBareInstance();
     const weather = [];
     const status = [];
-    inst.on('weatherUpdate', e => weather.push(e));
-    inst.on('status', e => status.push(e));
+    inst.on('weatherUpdate', (e) => weather.push(e));
+    inst.on('status', (e) => status.push(e));
     inst._parseOutput('[12:00:00] [Server thread/INFO]: Changing to rainy weather');
     expect(inst._weather).toBe('rain');
     inst._parseOutput('[12:00:01] [Server thread/INFO]: Set the weather to thunder');
@@ -157,10 +168,12 @@ describe('_parseOutput stdout 行解析（真实样本驱动）', () => {
     const inst = makeBareInstance();
     const joins = [];
     const leaves = [];
-    inst.on('playerJoin', e => joins.push(e));
-    inst.on('playerLeave', e => leaves.push(e));
+    inst.on('playerJoin', (e) => joins.push(e));
+    inst.on('playerLeave', (e) => leaves.push(e));
     // 登录行先于 join 行到达（IP 解析），缓存等待
-    inst._parseOutput('[12:00:00] [Server thread/INFO]: Steve[/1.2.3.4:51234] logged in with entity id 123');
+    inst._parseOutput(
+      '[12:00:00] [Server thread/INFO]: Steve[/1.2.3.4:51234] logged in with entity id 123',
+    );
     expect(inst._pendingIps.get('Steve')).toBe('1.2.3.4');
     inst._parseOutput('[12:00:01] [Server thread/INFO]: Steve joined the game');
     expect(joins).toHaveLength(1);
@@ -181,10 +194,10 @@ describe('_parseOutput stdout 行解析（真实样本驱动）', () => {
     expect(inst._sleepingPlayers).toBe(1);
     // 会话关闭 + 落盘：playerdata/Steve.json 存在且携带累计时长
     const saved = JSON.parse(
-      fs.readFileSync(path.join(inst.serverPath, 'playerdata', 'Steve.json'), 'utf-8')
+      fs.readFileSync(path.join(inst.serverPath, 'playerdata', 'Steve.json'), 'utf-8'),
     );
     expect(saved.totalPlayTime).toBe(10);
     expect(saved.sessions[0].end).not.toBeNull();
-    expect(saved.events.some(e => e.type === 'leave' && e.message === '离开服务器')).toBe(true);
+    expect(saved.events.some((e) => e.type === 'leave' && e.message === '离开服务器')).toBe(true);
   });
 });

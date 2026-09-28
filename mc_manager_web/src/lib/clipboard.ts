@@ -37,8 +37,7 @@ function execCommandCopy(text: string): boolean {
     document.body.appendChild(textarea)
     // 保存用户既有选区（例如终端内选中的文本），复制后恢复
     const selection = document.getSelection()
-    previousRange =
-      selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null
+    previousRange = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null
     textarea.select()
     return document.execCommand('copy')
   } catch {

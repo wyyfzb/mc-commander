@@ -7,15 +7,17 @@ import { Toaster, toast } from 'sonner'
 import { PageLoader } from '@/components/mcs/page-loader'
 import { ErrorBoundary } from '@/components/mcs/error-boundary'
 import { ThemeClassSync } from '@/layouts/theme-class-sync'
-import { startNotificationCleanupTimer } from '@/stores/notifications'
+import { startNotificationCleanupTimer, startNotificationStorageSync } from '@/stores/notifications'
 import { useUiStore } from '@/stores/ui'
 import './index.css'
 import { router } from './routes'
 
-// 通知内存 5 分钟周期裁剪（长会话内存收敛，M2 差异 #3）
+// 通知内存 5 分钟周期裁剪（长会话内存收敛）
 startNotificationCleanupTimer()
+// 多标签页并行时的通知同步（各标签页独立持内存副本，靠 storage 事件按 id 合并）
+startNotificationStorageSync()
 
-// -- 全局运行时异常兜底（issue 333，audit F-P0-1 残留） --
+// -- 全局运行时异常兜底（issue 333，残留） --
 // ErrorBoundary 仅捕获 React 组件树内的渲染异常；
 // 以下兜底覆盖非 React 上下文的运行时错误（事件回调/定时器/异步代码），
 // 在控制台记录详情的同时向用户展示中文提示与引导。
@@ -33,9 +35,9 @@ window.addEventListener('unhandledrejection', (event) => {
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      retry: 1,           // 网络抖动只重试一次，避免请求风暴
+      retry: 1, // 网络抖动只重试一次，避免请求风暴
       refetchOnWindowFocus: false, // 管理面板不因切窗口打扰
-      staleTime: 10_000,  // 10s 内视为新鲜（与 WS 事件互补失效）
+      staleTime: 10_000, // 10s 内视为新鲜（与 WS 事件互补失效）
     },
   },
 })
@@ -49,7 +51,10 @@ function ThemedToaster() {
       position="top-center"
       toastOptions={{
         classNames: {
-          toast: 'glass-toast! border-mcs-border-default!',
+          toast: 'bg-mcs-bg-emphasis! border-mcs-border-default! shadow-mcs-overlay!',
+          // description 由调用方用 `\n` 拼多行明细（批量回执「• 目标：原因」、插件批量失败等），
+          // 不给 pre-line 时 HTML 把换行折成空格，多条明细会挤成一行
+          description: 'whitespace-pre-line',
         },
       }}
     />

@@ -300,7 +300,11 @@ describe('GiveItemPanel 药水面板', { timeout: 15000 }, () => {
   function openPotionPanel(effectId = 'swiftness') {
     fireEvent.click(screen.getByRole('button', { name: '药水' }))
     fireEvent.click(screen.getByTestId(`item-cell-${effectId}`))
-    fireEvent.click(screen.getByLabelText(`${MINECRAFT_POTIONS.find((e) => e.effectId === effectId)!.name} 药水配置`))
+    fireEvent.click(
+      screen.getByLabelText(
+        `${MINECRAFT_POTIONS.find((e) => e.effectId === effectId)!.name} 药水配置`,
+      ),
+    )
   }
 
   it('瓶型/等级/时长三 Select + 命令预览实时更新', async () => {
@@ -360,7 +364,9 @@ describe('GiveItemPanel 药水面板', { timeout: 15000 }, () => {
 
 // ── 执行链路 ─────────────────────────────────────────────────────
 
-describe('GiveItemPanel 执行链路', { timeout: 15000 }, () => {
+// 本组渲染 200+ 物品网格，全量并跑时 jsdom 耗时可达单跑的 4 倍以上，
+// 15s 全量下不稳（单跑恒绿、失败均为纯超时非断言失败），故放宽一档
+describe('GiveItemPanel 执行链路', { timeout: 30000 }, () => {
   it('RCON 守卫：附魔物品未连接 RCON → 提示并中止', async () => {
     const onAction = vi.fn().mockResolvedValue(undefined)
     renderPanel({ isRconConnected: false, onAction })
@@ -445,9 +451,7 @@ describe('GiveItemPanel 执行链路', { timeout: 15000 }, () => {
     // 批量需一次性确认后才发送命令
     expect(onAction).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: '确认给予' }))
-    expect(
-      await screen.findByText('批量给予完成：成功 1，失败 0，跳过离线 1'),
-    ).toBeInTheDocument()
+    expect(await screen.findByText('批量给予完成：成功 1，失败 0，跳过离线 1')).toBeInTheDocument()
     expect(onAction).toHaveBeenCalledTimes(1)
     expect(onAction).toHaveBeenCalledWith({
       kind: 'command',

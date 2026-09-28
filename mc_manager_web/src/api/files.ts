@@ -19,7 +19,6 @@ import type {
   FileSaveResponse,
 } from './types'
 
-
 const base = (instanceId: string) => `/api/v1/instances/${instanceId}`
 
 /** 上传体积上限（与服务端 multer 校验一致：50MB）；UI 层在选择文件阶段即用此值前置拦截 */
@@ -63,11 +62,9 @@ export function apiDeleteFile(config: ConnectionConfig, instanceId: string, path
 
 /** 新建目录（POST /instances/:id/files/mkdir） */
 export function apiCreateDirectory(config: ConnectionConfig, instanceId: string, dirPath: string) {
-  return apiPost<{ path: string; name: string }>(
-    `${base(instanceId)}/files/mkdir`,
-    config,
-    { path: dirPath },
-  )
+  return apiPost<{ path: string; name: string }>(`${base(instanceId)}/files/mkdir`, config, {
+    path: dirPath,
+  })
 }
 
 /** 重命名文件/目录（POST /instances/:id/files/rename） */
@@ -106,7 +103,7 @@ export function apiUploadFile(
 }
 
 /**
- * 下载文件到本地（GET /instances/:id/files/download?path=，feat-9）。
+ * 下载文件到本地（GET /instances/:id/files/download?path=）。
  * 委托 client.ts 共享实现（流式进度 + 双通道凭据 + withTransformPort 网关适配）；
  * 取到 blob 后在浏览器侧触发保存（a[download] + ObjectURL，用后即 revoke）。
  * 文件名优先服务端 Content-Disposition（RFC 5987 中文安全），回退 entry.name。

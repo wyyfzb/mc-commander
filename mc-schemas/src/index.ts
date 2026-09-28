@@ -69,6 +69,8 @@ export {
   instanceCommandRequestBodySchema,
   instancePropertiesRequestBodySchema,
   instanceEulaRequestBodySchema,
+  instanceDeleteRequestBodySchema,
+  instanceDeleteResponseSchema,
   overviewDataSchema,
   logEntrySchema,
   logEntriesSchema,
@@ -82,6 +84,8 @@ export {
   type InstanceCommandRequestBody,
   type InstancePropertiesRequestBody,
   type InstanceEulaRequestBody,
+  type InstanceDeleteRequestBody,
+  type InstanceDeleteResponse,
   type OverviewData,
   type LogEntry,
   type LogEntries,
@@ -92,8 +96,20 @@ export {
 export {
   backupItemSchema,
   backupCreateRequestSchema,
+  backupRestoreRequestSchema,
+  archivedSnapshotGroupSchema,
+  archivedSnapshotListSchema,
+  backupAttachRequestSchema,
+  backupAttachResponseSchema,
+  backupCancelResponseSchema,
+  restoreConfirmTarget,
   type BackupItem,
   type BackupCreateRequest,
+  type BackupRestoreRequest,
+  type ArchivedSnapshotGroup,
+  type BackupAttachRequest,
+  type BackupAttachResponse,
+  type BackupCancelResponse,
 } from './backup'
 
 // 定时任务
@@ -103,14 +119,23 @@ export {
   taskCreatePayloadSchema,
   taskUpdatePayloadSchema,
   taskRunHistorySchema,
+  taskRunHistoryListSchema,
   taskRunStatusSchema,
   type ScheduledTask,
   type ScheduledTaskType,
   type TaskCreatePayload,
   type TaskRunHistory,
+  type TaskRunHistoryList,
   type TaskRunStatus,
   type TaskUpdatePayload,
 } from './task'
+
+export {
+  systemMetricSampleSchema,
+  systemMetricsSeriesSchema,
+  type SystemMetricSample,
+  type SystemMetricsSeries,
+} from './metrics'
 
 // WebSocket
 export {
@@ -124,6 +149,7 @@ export {
   wsPlayerEventPayloadSchema,
   wsWeatherPayloadSchema,
   wsBackupPayloadSchema,
+  wsBackupProgressPayloadSchema,
   NOTIFICATION_EVENT_TYPES,
   type WsEventType,
   type WsMessage,
@@ -134,6 +160,7 @@ export {
   type WsPlayerEventPayload,
   type WsWeatherPayload,
   type WsBackupPayload,
+  type WsBackupProgressPayload,
 } from './ws'
 
 // 世界
@@ -193,10 +220,13 @@ export {
 
 // Webhook
 export {
+  WEBHOOK_PLATFORMS,
+  webhookPlatformSchema,
   webhookSchema,
   webhookCreatePayloadSchema,
   webhookDeliverySchema,
   webhookTestResultSchema,
+  type WebhookPlatform,
   type Webhook,
   type WebhookCreatePayload,
   type WebhookDelivery,
@@ -209,19 +239,27 @@ export {
   deployRequestSchema,
   deployResultSchema,
   deployProgressSchema,
+  deployCancelRequestSchema,
+  deployCancelResponseSchema,
+  deployStatusResponseSchema,
   upgradeStageSchema,
   upgradeProgressSchema,
   upgradeRequestSchema,
   upgradeStartResponseSchema,
+  upgradeCancelResponseSchema,
   upgradeStatusResponseSchema,
   type VersionsResponse,
   type DeployRequest,
   type DeployResult,
   type DeployProgress,
+  type DeployCancelRequest,
+  type DeployCancelResponse,
+  type DeployStatusResponse,
   type UpgradeStage,
   type UpgradeProgress,
   type UpgradeRequest,
   type UpgradeStartResponse,
+  type UpgradeCancelResponse,
   type UpgradeStatusResponse,
 } from './deploy'
 
@@ -284,6 +322,7 @@ export {
   authSessionResponseSchema,
   authSetupResponseSchema,
   authStatusResponseSchema,
+  authCapabilitiesResponseSchema,
   authPasswordChangeResponseSchema,
   authLogoutResponseSchema,
   authSessionItemSchema,
@@ -293,9 +332,16 @@ export {
   authSetupRequestBodySchema,
   authLoginRequestBodySchema,
   authPasswordChangeRequestBodySchema,
+  authTotpStatusResponseSchema,
+  authTotpEnrollResponseSchema,
+  authTotpConfirmRequestBodySchema,
+  authTotpConfirmResponseSchema,
+  authTotpDisableRequestBodySchema,
+  authTotpDisableResponseSchema,
   type AuthSessionResponse,
   type AuthSetupResponse,
   type AuthStatusResponse,
+  type AuthCapabilitiesResponse,
   type AuthPasswordChangeResponse,
   type AuthLogoutResponse,
   type AuthSessionItem,
@@ -305,4 +351,10 @@ export {
   type AuthSetupRequestBody,
   type AuthLoginRequestBody,
   type AuthPasswordChangeRequestBody,
+  type AuthTotpStatusResponse,
+  type AuthTotpEnrollResponse,
+  type AuthTotpConfirmRequestBody,
+  type AuthTotpConfirmResponse,
+  type AuthTotpDisableRequestBody,
+  type AuthTotpDisableResponse,
 } from './auth'

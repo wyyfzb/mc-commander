@@ -16,30 +16,25 @@
   --primary: var(--mcs-accent);
   --primary-foreground: var(--mcs-on-accent);
 
-  --secondary: var(--mcs-bg-hover);
+  --secondary: var(--mcs-bg-secondary);
   --secondary-foreground: var(--mcs-text-default);
 
   --muted: var(--mcs-bg-muted);
   --muted-foreground: var(--mcs-text-muted);
 
-  --accent: var(--mcs-bg-hover);
+  /* accent = 选中/聚焦填充（菜单项、命令面板、选项行）：必须取半透明状态覆盖层——
+     取不透明面时在弹窗上「变暗」，与弹窗面仅 1.12:1（审计 S31） */
+  --accent: var(--mcs-state-hover);
   --accent-foreground: var(--mcs-text-default);
 
-  /* destructive = 深红实底按钮（严禁亮色实底+白字：白字对深红 7.4:1 达标） */
-  --destructive: var(--ref-destructive);
-  --destructive-foreground: oklch(0.985 0 0);
+  /* destructive = 危险操作语义色：按钮/徽标用不透明 --mcs-error-bg-subtle 底 + 同色文字 +
+     --mcs-error-border-strong 边界（半透明 tint 在暗色面上仅 3.39-4.44:1，已废弃） */
+  --destructive: var(--mcs-error-fg);
 
   /* border=装饰发丝线（卡片描边/分隔线，豁免）；input=交互边框（≥3:1 达标） */
   --border: var(--mcs-border-muted);
   --input: var(--mcs-border-default);
   --ring: var(--mcs-focus-ring);
-
-  /* 图表色板（M1 预映射状态色共用色源；P0 洞察仪表盘时按色相环 ≥40° 采样细化） */
-  --chart-1: var(--mcs-success-fg);
-  --chart-2: var(--mcs-info-fg);
-  --chart-3: var(--mcs-purple-fg);
-  --chart-4: var(--mcs-warning-fg);
-  --chart-5: var(--mcs-orange-fg);
 
   --radius: var(--mcs-radius-md);
 
@@ -48,7 +43,7 @@
   --sidebar-foreground: var(--mcs-text-default);
   --sidebar-primary: var(--mcs-accent);
   --sidebar-primary-foreground: var(--mcs-on-accent);
-  --sidebar-accent: var(--mcs-bg-hover);
+  --sidebar-accent: var(--mcs-state-hover);
   --sidebar-accent-foreground: var(--mcs-text-default);
   --sidebar-border: var(--mcs-border-default);
   --sidebar-ring: var(--mcs-focus-ring);

@@ -9,8 +9,11 @@ import { useEffect, useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/api/queries'
 import {
+  apiCancelBackupOperation,
   apiCreateBackup,
+  apiAttachArchive,
   apiDeleteBackup,
+  apiGetArchivedSnapshots,
   apiGetBackups,
   apiRestoreBackup,
 } from '@/api/backups'
@@ -50,8 +53,9 @@ export function useRestoreBackup(instanceId: string | null) {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (backupId: number) => {
-      return apiRestoreBackup(config, backupId)
+    // confirmName 由调用点按契约层的 restoreConfirmTarget 派生（实例名 → 备份名 → 备份 id）
+    mutationFn: async (args: { backupId: number; confirmName: string }) => {
+      return apiRestoreBackup(config, args.backupId, args.confirmName)
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.backups(instanceId ?? '') })
@@ -75,6 +79,58 @@ export function useDeleteBackup(instanceId: string | null) {
 }
 
 /**
+ * 取消该实例进行中的备份/恢复。取消是尽力而为：命中后实际终态经
+ * backup/restoreCancelled 事件推送（事件刷新会失效列表）；无进行中操作
+ * （40904）多为「刚完成」的竞态，同样失效列表让 UI 看到终态即可
+ */
+export function useCancelBackupOperation(instanceId: string | null) {
+  const config = useConnectionStore()
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async () => {
+      if (!instanceId) throw new Error('未选择实例')
+      return apiCancelBackupOperation(config, instanceId)
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.backups(instanceId ?? '') })
+    },
+  })
+}
+
+/**
+ * 归档快照清点：磁盘上有、备份表里没有索引的实例级快照目录。
+ * 全局面（与所选实例无关），故 query key 不带实例 id；60s 轮询足够——
+ * 归档只在「卸载实例 / 手工挪回目录」时出现，且挂载动作后本 hook 会被失效。
+ */
+export function useArchivedSnapshots(enabled: boolean) {
+  const config = useConnectionStore()
+  return useQuery({
+    queryKey: queryKeys.archivedSnapshots(),
+    queryFn: () => apiGetArchivedSnapshots(config),
+    enabled: config.status === 'ready' && enabled,
+    refetchInterval: 60_000,
+  })
+}
+
+/** 挂载归档快照到当前实例；成功后失效该实例的备份列表与归档清点（挂过的不再出现） */
+export function useAttachArchive(instanceId: string | null) {
+  const config = useConnectionStore()
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (archiveId: string) => {
+      if (!instanceId) throw new Error('未选择实例')
+      return apiAttachArchive(config, instanceId, archiveId)
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.backups(instanceId ?? '') })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.archivedSnapshots() })
+    },
+  })
+}
+
+/**
  * 备份/恢复相关通知类型
  */
 const REFRESH_TRIGGER_TYPES: ReadonlySet<string> = new Set([
@@ -82,9 +138,11 @@ const REFRESH_TRIGGER_TYPES: ReadonlySet<string> = new Set([
   'backupComplete',
   'backupFailed',
   'backupSkipped',
+  'backupCancelled',
   'restoreStart',
   'restoreComplete',
   'restoreFailed',
+  'restoreCancelled',
 ])
 
 /**

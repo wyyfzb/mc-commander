@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router'
 import {
   CalendarClock,
+  CircleAlert,
+  CircleHelp,
   CloudUpload,
   FolderOpen,
   Globe,
@@ -30,8 +32,10 @@ import {
   CommandItem,
   CommandList,
   CommandSeparator,
+  CommandShortcut,
 } from '@/components/ui/command'
 import { useUiStore } from '@/stores/ui'
+import { queryFailed } from '@/lib/query-phase'
 import { useCommandBus } from '@/stores/command-bus'
 import { useServerStore } from '@/stores/server'
 import { useConnectionStore } from '@/stores/connection'
@@ -41,6 +45,7 @@ import { useCreateBackup } from '@/features/settings/queries'
 import { useStopInstance } from '@/hooks/use-instance-stop'
 import { apiPost } from '@/api/client'
 import { getFriendlyErrorText } from '@/api/errors'
+import { instanceLabel } from '@/lib/instance-label'
 import { queryKeys } from '@/api/queries'
 import { iconForCommand } from '@/lib/mc-commands'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
@@ -78,6 +83,8 @@ interface PaletteAction {
   label: string
   icon: LucideIcon
   keywords?: string
+  /** 右侧路径提示（导航项的落点面包屑；无落点语义的项不设） */
+  hint?: string
   run: () => void
 }
 
@@ -92,7 +99,9 @@ export function CommandPalette() {
   const baseRunner = useCommandBus((s) => s.baseRunner)
   const commandRunner = overlayRunner ?? baseRunner
   const instanceId = useServerStore((s) => s.instanceId)
-  const instanceName = useServerStore((s) => s.status?.name ?? null)
+  // 展示名走 instanceLabel：状态载荷自带 id，空名/纯空白名回退 id，命令项不会渲染成空白
+  const instanceStatus = useServerStore((s) => s.status)
+  const instanceName = instanceStatus ? instanceLabel(instanceStatus) : null
   const isInstanceRunning = useServerStore((s) => s.status?.isRunning ?? false)
   const openPlayerDetail = usePlayersUiStore((s) => s.openPlayerDetail)
 
@@ -164,16 +173,83 @@ export function CommandPalette() {
   }
 
   const pageActions: PaletteAction[] = [
-    { label: '仪表盘', icon: LayoutDashboard, keywords: 'dashboard 首页 状态 终端', run: () => go('/dashboard') },
-    { label: '玩家', icon: Users, keywords: 'players 玩家列表 封禁 传送', run: () => go('/players') },
-    { label: '世界', icon: Globe, keywords: 'world 属性 gamelogic 规则', run: () => go('/world') },
-    { label: '文件', icon: FolderOpen, keywords: 'files 文件管理 编辑器', run: () => go('/files') },
-    { label: '任务', icon: CalendarClock, keywords: 'tasks 定时 cron 备份', run: () => go('/tasks') },
-    { label: '插件', icon: Puzzle, keywords: 'plugins 插件市场 modrinth 上传 启用 禁用', run: () => go('/plugins') },
-    { label: '实例', icon: Server, keywords: 'instances 部署 服务器', run: () => go('/instances') },
-    { label: 'Webhook', icon: Webhook, keywords: 'webhooks 通知 推送 钩子', run: () => go('/webhooks') },
-    { label: '审计日志', icon: ScrollText, keywords: 'audit 审计 操作记录 命令历史', run: () => go('/audit') },
-    { label: '设置', icon: Settings, keywords: 'settings 连接 通用 关于', run: () => go('/settings') },
+    {
+      label: '仪表盘',
+      icon: LayoutDashboard,
+      hint: '/dashboard',
+      keywords: 'dashboard 首页 状态 终端',
+      run: () => go('/dashboard'),
+    },
+    {
+      label: '玩家',
+      icon: Users,
+      hint: '/players',
+      keywords: 'players 玩家列表 封禁 传送',
+      run: () => go('/players'),
+    },
+    {
+      label: '世界',
+      icon: Globe,
+      hint: '/world',
+      keywords: 'world 属性 gamelogic 规则',
+      run: () => go('/world'),
+    },
+    {
+      label: '文件',
+      icon: FolderOpen,
+      hint: '/files',
+      keywords: 'files 文件管理 编辑器',
+      run: () => go('/files'),
+    },
+    {
+      label: '任务',
+      icon: CalendarClock,
+      hint: '/tasks',
+      keywords: 'tasks 定时 cron 备份',
+      run: () => go('/tasks'),
+    },
+    {
+      label: '插件',
+      icon: Puzzle,
+      hint: '/plugins',
+      keywords: 'plugins 插件市场 modrinth 上传 启用 禁用',
+      run: () => go('/plugins'),
+    },
+    {
+      label: '实例',
+      icon: Server,
+      hint: '/instances',
+      keywords: 'instances 部署 服务器',
+      run: () => go('/instances'),
+    },
+    {
+      label: 'Webhook',
+      icon: Webhook,
+      hint: '/webhooks',
+      keywords: 'webhooks 通知 推送 钩子',
+      run: () => go('/webhooks'),
+    },
+    {
+      label: '审计日志',
+      icon: ScrollText,
+      hint: '/audit',
+      keywords: 'audit 审计 操作记录 命令历史',
+      run: () => go('/audit'),
+    },
+    {
+      label: '帮助',
+      icon: CircleHelp,
+      hint: '/help',
+      keywords: 'help 帮助 向导 文档 手册 使用说明 怎么用',
+      run: () => go('/help'),
+    },
+    {
+      label: '设置',
+      icon: Settings,
+      hint: '/settings',
+      keywords: 'settings 连接 通用 关于',
+      run: () => go('/settings'),
+    },
   ]
 
   const themeAction: PaletteAction = {
@@ -191,6 +267,9 @@ export function CommandPalette() {
 
   // 玩家域：搜索玩家（远程数据），点选打开玩家页详情；cmdk 按 value 过滤
   const playersQuery = usePlayers(instanceId)
+  /* 取不到玩家列表与「确实没有玩家」在 UI 上都是空列表，必须分开呈现：
+     失败时给一条说明项，否则用户搜不到会以为是自己记错了名字 */
+  const playersFailed = queryFailed(playersQuery) && playersQuery.data === undefined
   const playerActions: PaletteAction[] = useMemo(() => {
     const players = playersQuery.data ?? []
     return [...players]
@@ -211,108 +290,132 @@ export function CommandPalette() {
   return (
     <>
       <CommandDialog open={open} onOpenChange={setOpen}>
-      {/* shadcn 4.x：CommandDialog 仅提供 Dialog 外壳，cmdk 根必须显式包裹 */}
-      <Command>
-        <CommandInput placeholder="输入页面名称或命令…" />
-        <CommandList>
-          <CommandEmpty>未找到匹配项</CommandEmpty>
-          <CommandGroup heading="页面">
-            {pageActions.map((action) => (
-              <CommandItem
-                key={action.label}
-                value={`${action.label} ${action.keywords ?? ''}`}
-                onSelect={action.run}
-              >
-                <action.icon className="size-4" aria-hidden />
-                {action.label}
-              </CommandItem>
-            ))}
-          </CommandGroup>
-          {instanceId && playerActions.length > 0 && (
-            <>
-              <CommandSeparator />
-              <CommandGroup heading="玩家（点选打开详情）">
-                {playerActions.map((action) => (
-                  <CommandItem key={action.label} value={`${action.label} ${action.keywords ?? ''}`} onSelect={action.run}>
-                    <action.icon className="size-4" aria-hidden />
-                    {action.label}
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            </>
-          )}
-          {commandRunner && presets.length > 0 && (
-            <>
-              <CommandSeparator />
-              <CommandGroup heading="命令">
-                {presets.map((preset) => {
-                  const Icon = iconForCommand(preset.split(' ')[0]?.replace('/', '') ?? '')
-                  return (
+        {/* shadcn 4.x：CommandDialog 仅提供 Dialog 外壳，cmdk 根必须显式包裹 */}
+        <Command>
+          <CommandInput placeholder="输入页面名称或命令…" />
+          <CommandList>
+            <CommandEmpty>未找到匹配项</CommandEmpty>
+            <CommandGroup heading="页面">
+              {pageActions.map((action) => (
+                <CommandItem
+                  key={action.label}
+                  value={`${action.label} ${action.keywords ?? ''}`}
+                  onSelect={action.run}
+                >
+                  <action.icon className="size-4" aria-hidden />
+                  {action.label}
+                  {action.hint && <CommandShortcut>{action.hint}</CommandShortcut>}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+            {instanceId && playerActions.length > 0 && (
+              <>
+                <CommandSeparator />
+                <CommandGroup heading="玩家（点选打开详情）">
+                  {playerActions.map((action) => (
                     <CommandItem
-                      key={preset}
-                      value={`命令 ${preset}`}
-                      onSelect={() => {
-                        commandRunner(preset)
-                        setOpen(false)
-                      }}
+                      key={action.label}
+                      value={`${action.label} ${action.keywords ?? ''}`}
+                      onSelect={action.run}
                     >
-                      <Icon className="size-4" aria-hidden />
-                      <span className="font-mono text-mcs-xs">{preset}</span>
-                      <Terminal className="ml-auto size-3.5 text-mcs-text-subtle" aria-hidden />
+                      <action.icon className="size-4" aria-hidden />
+                      {action.label}
                     </CommandItem>
-                  )
-                })}
-              </CommandGroup>
-            </>
-          )}
-          {instanceId && instanceName && (
-            <>
-              <CommandSeparator />
-              <CommandGroup heading={`实例操作 · ${instanceName}`}>
-                <CommandItem
-                  value={`重启实例 ${instanceName} restart 重启`}
-                  disabled={!isInstanceRunning}
-                  onSelect={() => {
-                    setOpen(false)
-                    setPendingAction('重启')
-                  }}
-                >
-                  <RefreshCw className="size-4 text-mcs-info-fg" aria-hidden />
-                  重启实例 · {instanceName}
-                </CommandItem>
-                <CommandItem
-                  value={`备份实例 ${instanceName} backup 备份 save`}
-                  onSelect={() => {
-                    setOpen(false)
-                    void runBackup()
-                  }}
-                >
-                  <CloudUpload className="size-4 text-mcs-accent-fg" aria-hidden />
-                  备份实例 · {instanceName}
-                </CommandItem>
-                <CommandItem
-                  value={`停止实例 ${instanceName} stop 停止 shutdown`}
-                  disabled={!isInstanceRunning}
-                  onSelect={() => {
-                    setOpen(false)
-                    setPendingAction('停止')
-                  }}
-                >
-                  <Square className="size-4 text-mcs-error-fg" aria-hidden />
-                  停止实例 · {instanceName}
-                </CommandItem>
-              </CommandGroup>
-            </>
-          )}
-          <CommandSeparator />
-          <CommandGroup heading="外观">
-            <CommandItem value={`主题 ${themeAction.keywords ?? ''}`} onSelect={themeAction.run}>
-              <themeAction.icon className="size-4" aria-hidden />
-              {themeAction.label}
-            </CommandItem>
-          </CommandGroup>
-        </CommandList>
-      </Command>
+                  ))}
+                </CommandGroup>
+              </>
+            )}
+            {/* 玩家列表取不到时必须说一句：否则搜玩家名得零结果，会被读成「没有这个玩家」。
+                「没有匹配」与「没取到」是两件事，用户据此决定「换个词搜」还是「重试」。
+
+                forceMount 挂 **group** 而非 item：cmdk 按 item 的 value 做模糊匹配，
+                本条的 value 是中文句子、而用户搜的是玩家名（`^[A-Za-z0-9_]{3,16}$`），
+                匹配分为 0 ⇒ 不挂 group 时它会被过滤掉，正好在最需要它的时刻（用户
+                搜不到玩家）消失。cmdk 的 Item 会解构掉自身的 forceMount 而不用于可见性
+                判定，可见性取的是 group 上下文，故只有 group 级生效。 */}
+            {instanceId && playersFailed && (
+              <>
+                <CommandSeparator />
+                <CommandGroup heading="玩家" forceMount>
+                  <CommandItem value="玩家列表加载失败，无法搜索玩家" disabled>
+                    <CircleAlert className="size-4 text-mcs-warning-fg" aria-hidden />
+                    玩家列表加载失败，无法搜索玩家
+                  </CommandItem>
+                </CommandGroup>
+              </>
+            )}
+            {commandRunner && presets.length > 0 && (
+              <>
+                <CommandSeparator />
+                <CommandGroup heading="命令">
+                  {presets.map((preset) => {
+                    const Icon = iconForCommand(preset.split(' ')[0]?.replace('/', '') ?? '')
+                    return (
+                      <CommandItem
+                        key={preset}
+                        value={`命令 ${preset}`}
+                        onSelect={() => {
+                          commandRunner(preset)
+                          setOpen(false)
+                        }}
+                      >
+                        <Icon className="size-4" aria-hidden />
+                        <span className="font-mono text-mcs-xs">{preset}</span>
+                        <Terminal className="ml-auto size-3.5 text-mcs-text-muted" aria-hidden />
+                      </CommandItem>
+                    )
+                  })}
+                </CommandGroup>
+              </>
+            )}
+            {instanceId && instanceName && (
+              <>
+                <CommandSeparator />
+                <CommandGroup heading={`实例操作 · ${instanceName}`}>
+                  <CommandItem
+                    value={`重启实例 ${instanceName} restart 重启`}
+                    disabled={!isInstanceRunning}
+                    onSelect={() => {
+                      setOpen(false)
+                      setPendingAction('重启')
+                    }}
+                  >
+                    <RefreshCw className="size-4 text-mcs-info-fg" aria-hidden />
+                    重启实例 · {instanceName}
+                  </CommandItem>
+                  <CommandItem
+                    value={`备份实例 ${instanceName} backup 备份 save`}
+                    onSelect={() => {
+                      setOpen(false)
+                      void runBackup()
+                    }}
+                  >
+                    <CloudUpload className="size-4 text-mcs-accent-fg" aria-hidden />
+                    备份实例 · {instanceName}
+                  </CommandItem>
+                  <CommandItem
+                    value={`停止实例 ${instanceName} stop 停止 shutdown`}
+                    disabled={!isInstanceRunning}
+                    onSelect={() => {
+                      setOpen(false)
+                      setPendingAction('停止')
+                    }}
+                  >
+                    <Square className="size-4 text-mcs-error-fg" aria-hidden />
+                    停止实例 · {instanceName}
+                  </CommandItem>
+                </CommandGroup>
+              </>
+            )}
+            <CommandSeparator />
+            <CommandGroup heading="外观">
+              <CommandItem value={`主题 ${themeAction.keywords ?? ''}`} onSelect={themeAction.run}>
+                <themeAction.icon className="size-4" aria-hidden />
+                {themeAction.label}
+              </CommandItem>
+            </CommandGroup>
+          </CommandList>
+        </Command>
       </CommandDialog>
       {/* 实例操作二次确认（破坏性：重启/停止；必须在面板 Dialog 外独立挂载：
           面板关闭时其 children 会卸载，嵌套会连带丢掉确认弹窗） */}

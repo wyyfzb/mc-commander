@@ -33,6 +33,29 @@ describe('Chip', () => {
     expect(btn).not.toHaveAttribute('aria-pressed')
   })
 
+  it('role=radio 选中 → 单选语义，不再输出 aria-pressed（两套语义互斥）', () => {
+    render(
+      <Chip role="radio" aria-checked tabIndex={0} selected onClick={() => {}}>
+        晴天
+      </Chip>,
+    )
+    const radio = screen.getByRole('radio', { name: '晴天' })
+    expect(radio).toHaveAttribute('aria-checked', 'true')
+    // 同元素同时宣告「已选中」与「已按下」会让读屏双重播报，正是单选组要消灭的形态
+    expect(radio).not.toHaveAttribute('aria-pressed')
+  })
+
+  it('role=radio 未选中 → aria-checked=false，同样无 aria-pressed', () => {
+    render(
+      <Chip role="radio" aria-checked={false} tabIndex={-1} onClick={() => {}}>
+        雨天
+      </Chip>,
+    )
+    const radio = screen.getByRole('radio', { name: '雨天' })
+    expect(radio).toHaveAttribute('aria-checked', 'false')
+    expect(radio).not.toHaveAttribute('aria-pressed')
+  })
+
   it('disabled → 按钮禁用', () => {
     const onClick = vi.fn()
     render(
@@ -51,7 +74,11 @@ describe('Chip', () => {
   it('onPointerEnter/onPointerLeave 透传到 DOM', () => {
     const onEnter = vi.fn()
     const onLeave = vi.fn()
-    render(<Chip onPointerEnter={onEnter} onPointerLeave={onLeave}>hover</Chip>)
+    render(
+      <Chip onPointerEnter={onEnter} onPointerLeave={onLeave}>
+        hover
+      </Chip>,
+    )
     fireEvent.pointerEnter(screen.getByText('hover'))
     expect(onEnter).toHaveBeenCalledTimes(1)
     fireEvent.pointerLeave(screen.getByText('hover'))

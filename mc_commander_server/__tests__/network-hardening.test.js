@@ -1,13 +1,11 @@
 /**
- * 网络暴露收口测试（S-P0-5 + S-P1-2）
+ * 网络暴露收口测试
  * ① rcon.port 按实例配置派生（消除硬编码 25575）
  * ② HOST 环境变量可配（默认 127.0.0.1）
- * ③ 弱 API Key 检测（isWeakApiKey）
  */
 import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import path from 'path';
-import { isWeakApiKey } from '../utils/weak-key.js';
 
 // ── ① rcon.port 派生 ──
 
@@ -27,15 +25,14 @@ describe('rcon.port 按实例配置派生', () => {
     expect(src).toMatch(/rcon\.port.*25575/);
   });
 
-  const derive = (base, id) => base + parseInt(id.slice(-4), 16) % 100;
+  const derive = (base, id) => base + (parseInt(id.slice(-4), 16) % 100);
 
-  it.each([
-    ['inst-0001'],
-    ['inst-00ff'],
-    ['inst-abcd'],
-  ])('rcon.port 比对应 server-port 大 10（%s）', (id) => {
-    expect(derive(25575, id)).toBe(derive(25565, id) + 10);
-  });
+  it.each([['inst-0001'], ['inst-00ff'], ['inst-abcd']])(
+    'rcon.port 比对应 server-port 大 10（%s）',
+    (id) => {
+      expect(derive(25575, id)).toBe(derive(25565, id) + 10);
+    },
+  );
 });
 
 // ── ② HOST 可配 ──
@@ -55,31 +52,5 @@ describe('HOST 环境变量可配', () => {
   it('index.js 监听地址使用 config.host 而非硬编码', () => {
     const src = fs.readFileSync(path.join(__dirname, '../index.js'), 'utf-8');
     expect(src).toMatch(/server\.listen\(config\.port,\s*config\.host/);
-  });
-});
-
-// ── ③ 弱 API Key 检测 ──
-
-describe('isWeakApiKey', () => {
-  it.each([
-    ['short', true],
-    ['123456789012345', true],
-    ['aaaaaaaaaaaaaaaa', true],
-    ['1111111111111111', true],
-    ['               ', true],
-    [null, true],
-    [undefined, true],
-    [123, true],
-  ])('弱 Key: %p → %s', (key, expected) => {
-    expect(isWeakApiKey(key)).toBe(expected);
-  });
-
-  it.each([
-    ['1234567890123456', false],
-    ['a1b2c3d4e5f6g7h8', false],
-    ['mySecureApiKey123', false],
-    ['abcdefghijklmnop', false],
-  ])('强 Key: %s → false', (key) => {
-    expect(isWeakApiKey(key)).toBe(false);
   });
 });

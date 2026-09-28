@@ -21,7 +21,6 @@ vi.mock('../config.js', async () => {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-level-dat-test-'));
   return {
     default: {
-      apiKey: '',
       port: 0,
       serversDir: path.join(tmpRoot, 'servers'),
       dataDir: path.join(tmpRoot, 'data'),
@@ -32,7 +31,11 @@ vi.mock('../config.js', async () => {
   };
 });
 
-import { _makeSeedCache, _readLevelDatData, _getSafeLevelName } from '../services/mc-server/level-dat.js';
+import {
+  _makeSeedCache,
+  _readLevelDatData,
+  _getSafeLevelName,
+} from '../services/mc-server/level-dat.js';
 import { MCServerInstance } from '../services/mc_server.js';
 
 const tmpBase = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-level-dat-fixture-'));
@@ -59,9 +62,18 @@ describe('level-dat 模块 require 复用语义', () => {
   it('12 个域方法经 Object.assign 注入 MCServerInstance 原型，实例调用 this 绑定正确', () => {
     const inst = makeBareInstance(path.join(tmpBase, 'inst-a'));
     for (const m of [
-      '_getSafeLevelName', '_getWorldSize', '_readSeedFromLevelDat', '_readSeedFromWorldGenSettings',
-      '_makeSeedCache', 'readDifficulty', '_readGameTypeFromLevelDat', '_readDifficultyFromLevelDat',
-      '_readLevelDatData', '_getLastSaveTime', '_readWeatherFromLevelDat', '_readWorldSpawnFromLevelDat',
+      '_getSafeLevelName',
+      '_getWorldSize',
+      '_readSeedFromLevelDat',
+      '_readSeedFromWorldGenSettings',
+      '_makeSeedCache',
+      'readDifficulty',
+      '_readGameTypeFromLevelDat',
+      '_readDifficultyFromLevelDat',
+      '_readLevelDatData',
+      '_getLastSaveTime',
+      '_readWeatherFromLevelDat',
+      '_readWorldSpawnFromLevelDat',
     ]) {
       expect(typeof inst[m]).toBe('function');
     }
@@ -93,7 +105,9 @@ describe('level-dat 纯解析函数', () => {
     writeNbtFile(path.join(worldDir, 'level.dat'), {
       type: 'compound',
       name: '',
-      value: { Data: { type: 'compound', name: '', value: { GameType: { type: 'int', value: 1 } } } },
+      value: {
+        Data: { type: 'compound', name: '', value: { GameType: { type: 'int', value: 1 } } },
+      },
     });
     const inst = makeBareInstance(path.join(tmpBase, 'inst-c'));
     const data = inst._readLevelDatData();
@@ -103,5 +117,37 @@ describe('level-dat 纯解析函数', () => {
     fs.writeFileSync(path.join(tmpBase, 'inst-d', 'world', 'level.dat'), Buffer.from('corrupted'));
     const bad = makeBareInstance(path.join(tmpBase, 'inst-d'));
     expect(bad._readLevelDatData()).toBeNull();
+  });
+});
+
+describe('_getWorldSize 缓存失效：dirty 标记（实测缺陷回归：子目录增长顶层 mtime 不变）', () => {
+  const dir = path.join(tmpBase, 'ws-dirty');
+  const worldDir = path.join(dir, 'world');
+
+  it('存档写入发生在 region/ 子目录时顶层缓存判定不失效，_worldSizeDirty 强制重算并清除', () => {
+    fs.mkdirSync(path.join(worldDir, 'region'), { recursive: true });
+    // 51MB → 缓存精度（两位小数 GB）下 0.05；两个 51MB → 0.1，增量可区分
+    fs.writeFileSync(path.join(worldDir, 'region', 'r.-1.-1.mca'), Buffer.alloc(51 * 1024 * 1024));
+    const inst = makeBareInstance(dir);
+
+    const first = inst._getWorldSize();
+    expect(first).toBe(0.05);
+
+    // 模拟游戏推进：region/ 子目录内新增文件——world/ 顶层目录 mtime/size 不变
+    fs.writeFileSync(path.join(worldDir, 'region', 'r.0.-1.mca'), Buffer.alloc(51 * 1024 * 1024));
+    expect(inst._getWorldSize()).toBe(0.05); // 复现缺陷路径：仅靠顶层 stat 判定感知不到
+
+    // 存档事件置 dirty → 下次调用强制重算
+    inst._worldSizeDirty = true;
+    expect(inst._getWorldSize()).toBe(0.1);
+    // 重算后 dirty 清除、缓存刷新
+    expect(inst._worldSizeDirty).toBe(false);
+    expect(inst._worldSizeCache.value).toBe(0.1);
+  });
+
+  it('世界目录不存在 → 0 且不写缓存', () => {
+    const inst = makeBareInstance(path.join(tmpBase, 'ws-missing'));
+    expect(inst._getWorldSize()).toBe(0);
+    expect(inst._worldSizeCache).toBeUndefined();
   });
 });

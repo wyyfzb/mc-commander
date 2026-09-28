@@ -30,20 +30,22 @@ import { AppError, ErrorCodes } from '../utils/response.js';
 
 const SEARCH_FIXTURE = {
   total_hits: 1,
-  hits: [{
-    project_id: 'abc',
-    slug: 'demo',
-    title: 'Demo',
-    description: 'd',
-    author: 'a',
-    downloads: 1,
-    follows: 0,
-    icon_url: null,
-    date_modified: null,
-    display_categories: [],
-    server_side: null,
-    client_side: null,
-  }],
+  hits: [
+    {
+      project_id: 'abc',
+      slug: 'demo',
+      title: 'Demo',
+      description: 'd',
+      author: 'a',
+      downloads: 1,
+      follows: 0,
+      icon_url: null,
+      date_modified: null,
+      display_categories: [],
+      server_side: null,
+      client_side: null,
+    },
+  ],
 };
 
 // 统一的 .json() 链 mock：返回可配置值
@@ -122,8 +124,9 @@ describe('market.service 分支补测', () => {
     const tmpUploadsDir = path.join(os.tmpdir(), 'mc-commander-uploads');
 
     it('非 CDN 白名单 URL → 50301 且不创建临时文件', async () => {
-      await expect(downloadMarketFile('https://evil.example.com/x.jar'))
-        .rejects.toMatchObject({ code: 50301 });
+      await expect(downloadMarketFile('https://evil.example.com/x.jar')).rejects.toMatchObject({
+        code: 50301,
+      });
       expect(got.stream).not.toHaveBeenCalled();
     });
 
@@ -132,19 +135,16 @@ describe('market.service 分支补测', () => {
         throw new Error('disk full');
       });
 
-      await expect(downloadMarketFile('https://cdn.modrinth.com/x.jar'))
-        .rejects.toMatchObject({
-          code: ErrorCodes.SERVER_ERROR.code,
-          message: expect.stringContaining('Failed to create tmp dir: disk full'),
-        });
+      await expect(downloadMarketFile('https://cdn.modrinth.com/x.jar')).rejects.toMatchObject({
+        code: ErrorCodes.SERVER_ERROR.code,
+        message: expect.stringContaining('Failed to create tmp dir: disk full'),
+      });
       expect(got.stream).not.toHaveBeenCalled();
       mkdirSpy.mockRestore();
     });
 
     it('流式超限（>100MB）：计数中间层断流 → 50301 且半成品清理', async () => {
-      const before = new Set(
-        fs.existsSync(tmpUploadsDir) ? fs.readdirSync(tmpUploadsDir) : [],
-      );
+      const before = new Set(fs.existsSync(tmpUploadsDir) ? fs.readdirSync(tmpUploadsDir) : []);
       got.stream.mockImplementation(() => {
         const src = new PassThrough();
         (async () => {
@@ -152,20 +152,23 @@ describe('market.service 分支补测', () => {
             const chunk = Buffer.alloc(1_048_576, 0x41); // 1MB
             for (let i = 0; i < 102 && !src.destroyed; i++) src.write(chunk);
             if (!src.destroyed) src.end();
-          } catch { /* 下游断流后的写入可忽略 */ }
+          } catch {
+            /* 下游断流后的写入可忽略 */
+          }
         })();
         return src;
       });
 
-      await expect(downloadMarketFile('https://cdn.modrinth.com/big.jar'))
-        .rejects.toMatchObject({
-          code: 50301,
-          message: expect.stringContaining('exceeds download size limit (100MB)'),
-        });
+      await expect(downloadMarketFile('https://cdn.modrinth.com/big.jar')).rejects.toMatchObject({
+        code: 50301,
+        message: expect.stringContaining('exceeds download size limit (100MB)'),
+      });
 
       // 半成品清理：无新增 .market-download.tmp-* 残留
       const after = fs.readdirSync(tmpUploadsDir);
-      const leftovers = after.filter((f) => f.startsWith('.market-download.tmp-') && !before.has(f));
+      const leftovers = after.filter(
+        (f) => f.startsWith('.market-download.tmp-') && !before.has(f),
+      );
       expect(leftovers).toEqual([]);
     });
   });
@@ -193,20 +196,22 @@ describe('market.service 分支补测', () => {
     });
 
     it('超长文件名（>255）→ 回退（长度臂）', () => {
-      expect(sanitizeMarketFileName(`${'a'.repeat(300)}.jar`, opts))
-        .toBe('essentialsx-2.21.0.jar');
+      expect(sanitizeMarketFileName(`${'a'.repeat(300)}.jar`, opts)).toBe('essentialsx-2.21.0.jar');
     });
 
     it('slug/versionNumber 全非法 → 二级回退 modrinth-plugin.jar', () => {
-      expect(sanitizeMarketFileName(null, { slug: ';;;', versionNumber: ';;;' }))
-        .toBe('modrinth-plugin.jar');
+      expect(sanitizeMarketFileName(null, { slug: ';;;', versionNumber: ';;;' })).toBe(
+        'modrinth-plugin.jar',
+      );
     });
   });
 
   describe('translateUpstreamError 非常规臂（经 search 间接驱动）', () => {
     it('AppError 原样透传（不换码不换语义）', async () => {
       const passthrough = new AppError(ErrorCodes.RATE_LIMITED, 'rate limited');
-      got.mockImplementation(() => { throw passthrough; });
+      got.mockImplementation(() => {
+        throw passthrough;
+      });
 
       await expect(searchMarketPlugins({ query: 'x' })).rejects.toMatchObject({
         code: 42900,
@@ -216,7 +221,9 @@ describe('market.service 分支补测', () => {
 
     it('search 404：notFoundCode 亦为 50301（搜索域无独立 404 码）', async () => {
       const notFound = Object.assign(new Error('HTTPError'), { response: { statusCode: 404 } });
-      got.mockImplementation(() => { throw notFound; });
+      got.mockImplementation(() => {
+        throw notFound;
+      });
 
       await expect(searchMarketPlugins({ query: 'x' })).rejects.toMatchObject({
         code: 50301,
@@ -225,7 +232,9 @@ describe('market.service 分支补测', () => {
     });
 
     it('普通错误 → 50301 携带原始 message', async () => {
-      got.mockImplementation(() => { throw new Error('boom'); });
+      got.mockImplementation(() => {
+        throw new Error('boom');
+      });
 
       await expect(searchMarketPlugins({ query: 'x' })).rejects.toMatchObject({
         code: 50301,
@@ -234,7 +243,9 @@ describe('market.service 分支补测', () => {
     });
 
     it('无 message 异常 → 50301 兜底 unknown', async () => {
-      got.mockImplementation(() => { throw {}; });
+      got.mockImplementation(() => {
+        throw {};
+      });
 
       await expect(searchMarketPlugins({ query: 'x' })).rejects.toMatchObject({
         code: 50301,
@@ -245,18 +256,23 @@ describe('market.service 分支补测', () => {
 
   describe('installPluginFromMarket 补充臂', () => {
     it('版本 primary 文件 url 非 string → 40413「无可下载文件」且不发起下载', async () => {
-      got.mockReturnValue(mockJson([{
-        version_number: '1.0.0',
-        version_type: 'release',
-        name: 'v1',
-        files: [{ primary: true, filename: 'x.jar', url: 123 }], // url 非法 → 映射为 null
-      }]));
+      got.mockReturnValue(
+        mockJson([
+          {
+            version_number: '1.0.0',
+            version_type: 'release',
+            name: 'v1',
+            files: [{ primary: true, filename: 'x.jar', url: 123 }], // url 非法 → 映射为 null
+          },
+        ]),
+      );
 
-      await expect(installPluginFromMarket('/tmp/some-server', { slug: 'demo', versionNumber: '1.0.0' }))
-        .rejects.toMatchObject({
-          code: ErrorCodes.MARKET_VERSION_NOT_FOUND.code,
-          message: 'Version has no downloadable file',
-        });
+      await expect(
+        installPluginFromMarket('/tmp/some-server', { slug: 'demo', versionNumber: '1.0.0' }),
+      ).rejects.toMatchObject({
+        code: ErrorCodes.MARKET_VERSION_NOT_FOUND.code,
+        message: 'Version has no downloadable file',
+      });
       expect(got.stream).not.toHaveBeenCalled();
     });
   });
@@ -273,14 +289,27 @@ import { listPlugins } from '../services/plugin.service.js';
 import { comparePluginVersions, checkPluginUpdates } from '../services/market.service.js';
 
 const HIT_FIXTURE = {
-  project_id: 'abc', slug: 'essentialsx', title: 'EssentialsX', description: 'd',
-  author: 'a', downloads: 1, follows: 0, icon_url: null, date_modified: null,
-  display_categories: [], server_side: null, client_side: null,
+  project_id: 'abc',
+  slug: 'essentialsx',
+  title: 'EssentialsX',
+  description: 'd',
+  author: 'a',
+  downloads: 1,
+  follows: 0,
+  icon_url: null,
+  date_modified: null,
+  display_categories: [],
+  server_side: null,
+  client_side: null,
 };
-const VERSION_LATEST = [{
-  version_number: '2.21.0', version_type: 'release', name: 'v2.21.0',
-  files: [{ primary: true, filename: 'e.jar', url: 'https://cdn.modrinth.com/e.jar' }],
-}];
+const VERSION_LATEST = [
+  {
+    version_number: '2.21.0',
+    version_type: 'release',
+    name: 'v2.21.0',
+    files: [{ primary: true, filename: 'e.jar', url: 'https://cdn.modrinth.com/e.jar' }],
+  },
+];
 
 const HIT_LIST = { total_hits: 1, hits: [HIT_FIXTURE] };
 
@@ -374,7 +403,14 @@ describe('checkPluginUpdates 行为级（更新检测域收口）', () => {
       const u = String(url);
       if (u.includes('/search')) {
         // 三个插件名都能在结果里命中（slug 随插件名路由）
-        return mockJson({ total_hits: 3, hits: [HIT_FIXTURE, { ...HIT_FIXTURE, slug: 'newerplug', title: 'NewerPlug' }, { ...HIT_FIXTURE, slug: 'nover', title: 'NoVer' }] });
+        return mockJson({
+          total_hits: 3,
+          hits: [
+            HIT_FIXTURE,
+            { ...HIT_FIXTURE, slug: 'newerplug', title: 'NewerPlug' },
+            { ...HIT_FIXTURE, slug: 'nover', title: 'NoVer' },
+          ],
+        });
       }
       if (u.includes('/version')) {
         // nover 的版本列表为空 → latest null → cmp 0
@@ -401,9 +437,14 @@ describe('checkPluginUpdates 行为级（更新检测域收口）', () => {
     listPlugins.mockReturnValue({ plugins: [plugin()] });
     // 6 个候选均不匹配标题；匹配项排在第 6 位（超出审视窗口）
     const filler = (n) => ({ project_id: `p${n}`, slug: `other-${n}`, title: `Other ${n}` });
-    got.mockImplementation(routeUpstream({
-      search: { total_hits: 6, hits: [filler(1), filler(2), filler(3), filler(4), filler(5), HIT_FIXTURE] },
-    }));
+    got.mockImplementation(
+      routeUpstream({
+        search: {
+          total_hits: 6,
+          hits: [filler(1), filler(2), filler(3), filler(4), filler(5), HIT_FIXTURE],
+        },
+      }),
+    );
 
     const res = await checkPluginUpdates('/tmp/server');
 
@@ -415,9 +456,14 @@ describe('checkPluginUpdates 行为级（更新检测域收口）', () => {
     listPlugins.mockReturnValue({
       plugins: [plugin({ meta: { name: 'Vault Unlocked', version: '1.0' } })],
     });
-    got.mockImplementation(routeUpstream({
-      search: { total_hits: 1, hits: [{ ...HIT_FIXTURE, slug: 'VaultUnlocked', title: 'Totally Different' }] },
-    }));
+    got.mockImplementation(
+      routeUpstream({
+        search: {
+          total_hits: 1,
+          hits: [{ ...HIT_FIXTURE, slug: 'VaultUnlocked', title: 'Totally Different' }],
+        },
+      }),
+    );
 
     const res = await checkPluginUpdates('/tmp/server');
 
@@ -427,9 +473,11 @@ describe('checkPluginUpdates 行为级（更新检测域收口）', () => {
 
   it('候选字段非法被跳过后仍可命中后续项（continue 臂）', async () => {
     listPlugins.mockReturnValue({ plugins: [plugin()] });
-    got.mockImplementation(routeUpstream({
-      search: { total_hits: 2, hits: [{ title: 42, slug: null }, HIT_FIXTURE] },
-    }));
+    got.mockImplementation(
+      routeUpstream({
+        search: { total_hits: 2, hits: [{ title: 42, slug: null }, HIT_FIXTURE] },
+      }),
+    );
 
     const res = await checkPluginUpdates('/tmp/server');
 
@@ -465,7 +513,9 @@ describe('checkPluginUpdates 行为级（更新检测域收口）', () => {
     const plugins = [
       plugin({ file: 'disabled.jar', enabled: false }),
       plugin({ file: 'nometa.jar', meta: {} }),
-      ...Array.from({ length: 25 }, (_, i) => plugin({ file: `p${i}.jar`, meta: { name: `Plug ${i}`, version: '1.0' } })),
+      ...Array.from({ length: 25 }, (_, i) =>
+        plugin({ file: `p${i}.jar`, meta: { name: `Plug ${i}`, version: '1.0' } }),
+      ),
     ];
     listPlugins.mockReturnValue({ plugins });
     got.mockImplementation((url) => {
@@ -490,10 +540,19 @@ describe('checkPluginUpdates 行为级（更新检测域收口）', () => {
 
 describe('字段映射 null 臂与参数净化补充', () => {
   it('搜索结果字段缺失/类型非法 → 白名单归 null/0/[]', async () => {
-    got.mockReturnValue(mockJson({
-      total_hits: 'not-number',
-      hits: [{ downloads: 'x', follows: 'x', display_categories: 'not-array', icon_url: 'http://insecure' }],
-    }));
+    got.mockReturnValue(
+      mockJson({
+        total_hits: 'not-number',
+        hits: [
+          {
+            downloads: 'x',
+            follows: 'x',
+            display_categories: 'not-array',
+            icon_url: 'http://insecure',
+          },
+        ],
+      }),
+    );
 
     const res = await searchMarketPlugins({ query: 'degenerate' });
 
@@ -511,16 +570,20 @@ describe('字段映射 null 臂与参数净化补充', () => {
   });
 
   it('版本结果字段缺失/类型非法 → 白名单归 null/0/[]', async () => {
-    got.mockReturnValue(mockJson([{
-      version_number: 42,
-      version_type: 'dev',
-      name: 42,
-      changelog: 42,
-      downloads: 'x',
-      game_versions: 'not-array',
-      loaders: 'not-array',
-      files: [],
-    }]));
+    got.mockReturnValue(
+      mockJson([
+        {
+          version_number: 42,
+          version_type: 'dev',
+          name: 42,
+          changelog: 42,
+          downloads: 'x',
+          game_versions: 'not-array',
+          loaders: 'not-array',
+          files: [],
+        },
+      ]),
+    );
 
     const res = await getMarketProjectVersions('demo', {});
     expect(res.versions).toEqual([]); // 无 primary 文件 → 过滤出局（映射分支已执行）
@@ -552,22 +615,21 @@ describe('字段映射 null 臂与参数净化补充', () => {
 
   it('下载流普通错误 → 包装 50301「Failed to download plugin」且半成品清理', async () => {
     const tmpUploadsDir = path.join(os.tmpdir(), 'mc-commander-uploads');
-    const before = new Set(
-      fs.existsSync(tmpUploadsDir) ? fs.readdirSync(tmpUploadsDir) : [],
-    );
+    const before = new Set(fs.existsSync(tmpUploadsDir) ? fs.readdirSync(tmpUploadsDir) : []);
     got.stream.mockImplementation(() => {
       const src = new PassThrough();
       process.nextTick(() => src.destroy(new Error('conn reset')));
       return src;
     });
 
-    await expect(downloadMarketFile('https://cdn.modrinth.com/x.jar'))
-      .rejects.toMatchObject({
-        code: 50301,
-        message: expect.stringContaining('Failed to download plugin: conn reset'),
-      });
+    await expect(downloadMarketFile('https://cdn.modrinth.com/x.jar')).rejects.toMatchObject({
+      code: 50301,
+      message: expect.stringContaining('Failed to download plugin: conn reset'),
+    });
 
     const after = fs.readdirSync(tmpUploadsDir);
-    expect(after.filter((f) => f.startsWith('.market-download.tmp-') && !before.has(f))).toEqual([]);
+    expect(after.filter((f) => f.startsWith('.market-download.tmp-') && !before.has(f))).toEqual(
+      [],
+    );
   });
 });

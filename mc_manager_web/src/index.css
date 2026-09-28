@@ -9,9 +9,13 @@
 @import './styles/fonts.css';
 @import './styles/glass.css';
 @import './styles/effects.css';
-@import './styles/density.css';
 
 @custom-variant dark (&:is(.dark *));
+
+/* 自定义断点：窄窗口档（原 min-[480px] 任意值变体收敛为语义断点） */
+@theme {
+    --breakpoint-xs: 30rem;
+}
 
 /* MCS 语义 token 工具类注册：text-mcs-* / bg-mcs-* / border-mcs-* / rounded-mcs-* 等
    （inline：变量值随 .light/.dark 动态解析） */
@@ -20,10 +24,9 @@
     --color-mcs-bg-muted: var(--mcs-bg-muted);
     --color-mcs-bg-subtle: var(--mcs-bg-subtle);
     --color-mcs-bg-emphasis: var(--mcs-bg-emphasis);
-    --color-mcs-bg-hover: var(--mcs-bg-hover);
+    --color-mcs-bg-secondary: var(--mcs-bg-secondary);
     --color-mcs-text-default: var(--mcs-text-default);
     --color-mcs-text-muted: var(--mcs-text-muted);
-    --color-mcs-text-subtle: var(--mcs-text-subtle);
     --color-mcs-border-default: var(--mcs-border-default);
     --color-mcs-border-muted: var(--mcs-border-muted);
     --color-mcs-border-subtle: var(--mcs-border-subtle);
@@ -36,6 +39,7 @@
     --color-mcs-error-fg: var(--mcs-error-fg);
     --color-mcs-error-bg-subtle: var(--mcs-error-bg-subtle);
     --color-mcs-error-border: var(--mcs-error-border);
+    --color-mcs-error-border-strong: var(--mcs-error-border-strong);
     --color-mcs-info-fg: var(--mcs-info-fg);
     --color-mcs-info-bg-subtle: var(--mcs-info-bg-subtle);
     --color-mcs-info-border: var(--mcs-info-border);
@@ -43,32 +47,61 @@
     --color-mcs-purple-bg-subtle: var(--mcs-purple-bg-subtle);
     --color-mcs-purple-border: var(--mcs-purple-border);
     --color-mcs-orange-fg: var(--mcs-orange-fg);
-    --color-mcs-orange-bg-subtle: var(--mcs-orange-bg-subtle);
-    --color-mcs-orange-border: var(--mcs-orange-border);
     --color-mcs-accent: var(--mcs-accent);
-    --color-mcs-accent-hover: var(--mcs-accent-hover);
     --color-mcs-on-accent: var(--mcs-on-accent);
     --color-mcs-accent-fg: var(--mcs-accent-fg);
     --color-mcs-accent-bg-subtle: var(--mcs-accent-bg-subtle);
     --color-mcs-accent-border: var(--mcs-accent-border);
+    --color-mcs-accent-border-strong: var(--mcs-accent-border-strong);
+    /* 终端专用调色板（主题无关深底；command-preview 等终端场景消费） */
+    --color-mcs-terminal-bg: var(--mcs-terminal-bg);
+    --color-mcs-terminal-fg: var(--mcs-terminal-fg);
+    --color-mcs-terminal-fg-bright: var(--mcs-terminal-fg-bright);
+    --color-mcs-terminal-subtle: var(--mcs-terminal-subtle);
+    --color-mcs-terminal-accent: var(--mcs-terminal-accent);
+    --color-mcs-terminal-error: var(--mcs-terminal-error);
+    --color-mcs-terminal-warning: var(--mcs-terminal-warning);
+    /* 二维码承托亮面（主题无关；见 semantic.css 同名 token 的说明） */
+    --color-mcs-qr-surface: var(--mcs-qr-surface);
+    --color-mcs-dimension-overworld: var(--mcs-dimension-overworld);
+    --color-mcs-dimension-nether: var(--mcs-dimension-nether);
+    --color-mcs-dimension-end: var(--mcs-dimension-end);
+    --color-mcs-dimension-overworld-bg-subtle: var(--mcs-dimension-overworld-bg-subtle);
+    --color-mcs-dimension-nether-bg-subtle: var(--mcs-dimension-nether-bg-subtle);
+    --color-mcs-dimension-end-bg-subtle: var(--mcs-dimension-end-bg-subtle);
+    /* identity 六槽（非语义实例标识）：消费入口与用法边界见 docs/design-review-guidelines.md */
+    --color-mcs-identity-1: var(--mcs-identity-1);
+    --color-mcs-identity-2: var(--mcs-identity-2);
+    --color-mcs-identity-3: var(--mcs-identity-3);
+    --color-mcs-identity-4: var(--mcs-identity-4);
+    --color-mcs-identity-5: var(--mcs-identity-5);
+    --color-mcs-identity-6: var(--mcs-identity-6);
     --color-mcs-focus-ring: var(--mcs-focus-ring);
     --color-mcs-state-hover: var(--mcs-state-hover);
+    --color-mcs-state-hover-error: var(--mcs-state-hover-error);
     --color-mcs-state-focus: var(--mcs-state-focus);
     --color-mcs-state-pressed: var(--mcs-state-pressed);
     --color-mcs-scrim: var(--mcs-scrim);
-    --color-mcs-scrim-subtle: var(--mcs-scrim-subtle);
     --radius-mcs-xs: var(--mcs-radius-xs);
     --radius-mcs-sm: var(--mcs-radius-sm);
     --radius-mcs-md: var(--mcs-radius-md);
     --radius-mcs-lg: var(--mcs-radius-lg);
     --radius-mcs-xl: var(--mcs-radius-xl);
+    /* 字号档（6 个文字档 + 1 个非文字数字档）：逐档配对行高，小档不再吃正文 1.6——
+       配对写法见 Tailwind v4 `--text-<档>--line-height`；display 不配对（其消费点自身写
+       leading-none，且字号类与 leading-* 的互斥已在 lib/utils.ts 解除） */
     --text-mcs-2xs: var(--mcs-font-size-2xs);
+    --text-mcs-2xs--line-height: 1.5;
     --text-mcs-xs: var(--mcs-font-size-xs);
+    --text-mcs-xs--line-height: 1.5;
     --text-mcs-sm: var(--mcs-font-size-sm);
+    --text-mcs-sm--line-height: var(--mcs-line-height-body);
     --text-mcs-md: var(--mcs-font-size-md);
+    --text-mcs-md--line-height: 1.5;
     --text-mcs-lg: var(--mcs-font-size-lg);
+    --text-mcs-lg--line-height: 1.4;
     --text-mcs-xl: var(--mcs-font-size-xl);
-    --text-mcs-2xl: var(--mcs-font-size-2xl);
+    --text-mcs-xl--line-height: 1.3;
     --text-mcs-display: var(--mcs-font-size-display);
     --duration-mcs-fast: var(--mcs-motion-fast);
     --duration-mcs-base: var(--mcs-motion-base);
@@ -79,6 +112,7 @@
     --shadow-mcs-card: var(--mcs-shadow-card);
     --shadow-mcs-raised: var(--mcs-shadow-raised);
     --shadow-mcs-overlay: var(--mcs-shadow-overlay);
+    --shadow-mcs-thumb: var(--mcs-shadow-thumb);
     --shadow-mcs-accent-button: var(--mcs-shadow-accent-button);
     --shadow-mcs-glow-accent: var(--mcs-glow-accent);
     --shadow-mcs-glow-accent-strong: var(--mcs-glow-accent-strong);
@@ -98,11 +132,6 @@
     --color-sidebar-primary: var(--sidebar-primary);
     --color-sidebar-foreground: var(--sidebar-foreground);
     --color-sidebar: var(--sidebar);
-    --color-chart-5: var(--chart-5);
-    --color-chart-4: var(--chart-4);
-    --color-chart-3: var(--chart-3);
-    --color-chart-2: var(--chart-2);
-    --color-chart-1: var(--chart-1);
     --color-ring: var(--ring);
     --color-input: var(--input);
     --color-border: var(--border);
@@ -121,13 +150,15 @@
     --color-card: var(--card);
     --color-foreground: var(--foreground);
     --color-background: var(--background);
-    --radius-sm: calc(var(--radius) * 0.6);
-    --radius-md: calc(var(--radius) * 0.8);
-    --radius-lg: var(--radius);
-    --radius-xl: calc(var(--radius) * 1.4);
-    --radius-2xl: calc(var(--radius) * 1.8);
-    --radius-3xl: calc(var(--radius) * 2.2);
-    --radius-4xl: calc(var(--radius) * 2.6);
+    /* 单轨：shadcn 派生档直接绑 MCS 圆角档位。原 calc 派生（7.2/9.6/16.8/31.2px）
+       无一落在 6/8/12/16/20 档上，且 2xl 以上随 --radius 无上限放大 → 统一封到 lg */
+    --radius-sm: var(--mcs-radius-xs);   /* 6px */
+    --radius-md: var(--mcs-radius-sm);   /* 8px */
+    --radius-lg: var(--mcs-radius-md);   /* 12px */
+    --radius-xl: var(--mcs-radius-lg);   /* 16px */
+    --radius-2xl: var(--mcs-radius-lg);
+    --radius-3xl: var(--mcs-radius-lg);
+    --radius-4xl: var(--mcs-radius-lg);
 }
 
 /* 深色优先（P4）：html 默认 .dark；切亮色时替换为 .light（见 useTheme） */
@@ -141,7 +172,7 @@
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border outline-ring;
   }
   html {
     @apply font-sans;
@@ -163,10 +194,6 @@
   /* 禁中文斜体（无 italic 字库） */
   em, i, cite {
     font-style: normal;
-  }
-  /* 长文本行高 1.7-1.8 */
-  .prose-long {
-    line-height: var(--mcs-line-height-body-long);
   }
 
   /* 全局滚动条：细 + 圆角 + 融底（Windows 原生粗滚动条是廉价感来源）；hover 亮起 */
@@ -217,5 +244,8 @@ input[type="password"]::-ms-clear {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    /* delay 不归零时，mcs-delay-6(360ms) + both 仍先隐藏 360ms（审计 S29） */
+    animation-delay: 0.01ms !important;
+    transition-delay: 0.01ms !important;
   }
 }

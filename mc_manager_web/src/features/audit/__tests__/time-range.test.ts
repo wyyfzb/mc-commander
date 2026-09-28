@@ -5,7 +5,15 @@
  * 用固定时刻构造（不依赖运行时区），断言全部基于同一时区下换算的自洽性。
  */
 import { describe, expect, it } from 'vitest'
-import { QUICK_RANGES, isRangeInverted, localDateStr, quickRangeDates, toServerEnd, toServerStart, toServerUtc } from '../time-range'
+import {
+  QUICK_RANGES,
+  isRangeInverted,
+  localDateStr,
+  quickRangeDates,
+  toServerEnd,
+  toServerStart,
+  toServerUtc,
+} from '../time-range'
 
 describe('localDateStr / toServerUtc 格式锁定', () => {
   it('localDateStr 输出零填充 yyyy-MM-dd（本地日历日）', () => {

@@ -9,6 +9,20 @@
     // only-export-components（fast-refresh 粒度提示）关闭：项目固有模式为
     // 路由文件集中懒加载、shadcn 组件同文件导出 variants（上游标准写法）、
     // 卡片组件文件导出展示常量；逐文件拆分伤结构，代价仅为这些文件热更新时整页刷新
-    "react/only-export-components": "off"
+    "react/only-export-components": "off",
+    // 补 eslint:recommended 缺口（oxlint 有实现但不在 correctness 档，默认不启用）；
+    // 6 条里只补 5 条：no-redeclare 在 TS 侧由 tsc 覆盖真正的重复声明
+    // （Cannot redeclare block-scoped variable），而 oxlint 的该规则无
+    // ignoreDeclarationMerge，会对本仓合法的「值 + 类型同名」（erasableSyntaxOnly
+    // 下 const 对象 + 字面量类型）误报
+    "no-case-declarations": "error",
+    "no-fallthrough": "error",
+    "no-prototype-builtins": "error",
+    "no-regex-spaces": "error",
+    "no-unexpected-multiline": "error",
+    "no-empty": ["error", { "allowEmptyCatch": true }],
+    // 刻意不启 no-undef：TS 编译期已拦未定义标识符，该规则对 TS 项目只产噪音
+    // （且本包无 env 声明，浏览器全局会被它误报）
+    "no-undef": "off"
   }
 }

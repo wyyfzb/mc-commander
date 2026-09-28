@@ -1,14 +1,17 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import Database from 'better-sqlite3';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
+import { toDbUtcString } from '../utils/db-time.js';
 
-const TEST_DIR = './test-webhook-model-data';
+// 系统临时目录（勿落服务端工作目录）：error-codes.contract.test.js 会递归扫描
+// 该目录树，本文件建/删目录会与扫描并发撞 ENOENT，随机让整个契约检查变红
+const TEST_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'mcs-webhook-model-'));
 
 let db;
 
 beforeAll(() => {
-  if (!fs.existsSync(TEST_DIR)) fs.mkdirSync(TEST_DIR, { recursive: true });
   db = new Database(path.join(TEST_DIR, 'test.db'));
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
@@ -30,6 +33,7 @@ beforeAll(() => {
       name TEXT NOT NULL,
       url TEXT NOT NULL,
       secret TEXT,
+      platform TEXT NOT NULL DEFAULT 'generic',
       events TEXT DEFAULT '[]',
       instance_id TEXT,
       is_enabled INTEGER DEFAULT 1,
@@ -126,8 +130,18 @@ describe('WebhookModel', () => {
   });
 
   it('delete 级联删除投递日志', () => {
-    WebhookModel.createDelivery({ webhookId: 1, eventType: 'ping', payload: { test: true }, status: 'success' });
-    WebhookModel.createDelivery({ webhookId: 2, eventType: 'ping', payload: { test: true }, status: 'pending' });
+    WebhookModel.createDelivery({
+      webhookId: 1,
+      eventType: 'ping',
+      payload: { test: true },
+      status: 'success',
+    });
+    WebhookModel.createDelivery({
+      webhookId: 2,
+      eventType: 'ping',
+      payload: { test: true },
+      status: 'pending',
+    });
     expect(WebhookModel.delete(2)).toBe(true);
     // webhook 2 的投递日志也应被级联删除
     const dels = WebhookModel.findDeliveries({ webhookId: 2 });
@@ -143,7 +157,12 @@ describe('WebhookModel', () => {
 
   it('findAllEnabled 只返回启用的 webhook（原始 secret）', () => {
     // id=1 仍启用, 再创建一个禁用的
-    WebhookModel.create({ name: 'disabled', url: 'https://c.com/hook', isEnabled: false, secret: 'dis-secret' });
+    WebhookModel.create({
+      name: 'disabled',
+      url: 'https://c.com/hook',
+      isEnabled: false,
+      secret: 'dis-secret',
+    });
     const enabled = WebhookModel.findAllEnabled();
     // id=1 (enabled), id=3 (disabled) — 但 id=2 已被删除
     expect(enabled).toHaveLength(1);
@@ -153,8 +172,11 @@ describe('WebhookModel', () => {
 
   it('delivery CRUD + 分页', () => {
     const dId = WebhookModel.createDelivery({
-      webhookId: 1, eventType: 'player.join', instanceId: 'inst-1',
-      payload: { player: 'Steve' }, status: 'pending',
+      webhookId: 1,
+      eventType: 'player.join',
+      instanceId: 'inst-1',
+      payload: { player: 'Steve' },
+      status: 'pending',
     });
     expect(dId).toBeGreaterThan(0);
 
@@ -170,7 +192,12 @@ describe('WebhookModel', () => {
   });
 
   it('findDeliveries 按 eventType 过滤', () => {
-    WebhookModel.createDelivery({ webhookId: 1, eventType: 'instance.start', payload: {}, status: 'pending' });
+    WebhookModel.createDelivery({
+      webhookId: 1,
+      eventType: 'instance.start',
+      payload: {},
+      status: 'pending',
+    });
     const result = WebhookModel.findDeliveries({ webhookId: 1, eventType: 'instance.start' });
     expect(result.total).toBe(1);
     expect(result.deliveries[0].eventType).toBe('instance.start');
@@ -182,12 +209,29 @@ describe('WebhookModel', () => {
   });
 
   it('pruneDeliveries 清理旧投递日志', () => {
-    // 插入一个「旧」投递日志（直接 SQL 模拟）
+    // 与生产同口径：CURRENT_TIMESTAMP 的 naive UTC 串（写 ISO 会让 cutoff 口径错配不可见）
     db.prepare(`
       INSERT INTO webhook_deliveries (webhook_id, event_type, payload, status, created_at)
-      VALUES (?, 'ping', '{}', 'success', '2020-01-01T00:00:00Z')
+      VALUES (?, 'ping', '{}', 'success', '2020-01-01 00:00:00')
     `).run(1);
     const pruned = WebhookModel.pruneDeliveries(30);
     expect(pruned).toBeGreaterThanOrEqual(1);
+  });
+
+  it('pruneDeliveries 边界：cutoff 当日但晚于 cutoff 时刻的投递必须保留', () => {
+    const cutoffMs = Date.now() - 30 * 86_400_000;
+    const ins = db.prepare(`
+      INSERT INTO webhook_deliveries (webhook_id, event_type, payload, status, created_at)
+      VALUES (?, 'ping', '{}', 'success', ?)
+    `);
+    const keepId = ins.run(1, toDbUtcString(cutoffMs + 1_000)).lastInsertRowid;
+    const dropId = ins.run(1, toDbUtcString(cutoffMs - 1_000)).lastInsertRowid;
+    const exists = (id) =>
+      Boolean(db.prepare('SELECT id FROM webhook_deliveries WHERE id = ?').get(id));
+
+    WebhookModel.pruneDeliveries(30);
+    // cutoff 若用 toISOString()，同日记录的 ' '(0x20) < 'T'(0x54) 会让 keepId 被误删
+    expect(exists(keepId)).toBe(true);
+    expect(exists(dropId)).toBe(false);
   });
 });

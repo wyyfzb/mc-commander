@@ -3617,11 +3617,11 @@ const playerPositionSchema = objectType({
 const playerEventSchema = objectType({
 	type: stringType(),
 	message: stringType(),
-	timestamp: stringType()
+	timestamp: numberType()
 });
 const playerSessionSchema = objectType({
-	joinTime: stringType(),
-	leaveTime: stringType().nullable(),
+	start: numberType(),
+	end: numberType().nullable(),
 	duration: numberType()
 });
 const playerStatsSchema = objectType({
@@ -3674,7 +3674,7 @@ const playerSchema = objectType({
 	isOnline: booleanType(),
 	ip: stringType(),
 	joinTime: numberType().nullable(),
-	onlineTime: numberType(),
+	onlineTime: numberType().nullable(),
 	totalPlayTime: numberType(),
 	isOp: booleanType(),
 	isWhitelisted: booleanType(),
@@ -3737,7 +3737,7 @@ const banRecordSchema = objectType({
 	isActive: booleanType(),
 	isPermanent: booleanType(),
 	expiresAt: numberType().nullable(),
-	createdAt: stringType()
+	createdAt: stringType().nullable()
 });
 /** 封禁记录列表（生效中在前 + 历史，非分页信封） */
 const banRecordListSchema = arrayType(banRecordSchema);
@@ -3756,7 +3756,7 @@ const instanceSummarySchema = objectType({
 	playerCount: numberType()
 });
 const instanceUpdatePayloadSchema = objectType({
-	name: stringType().optional(),
+	name: stringType().trim().min(1).optional(),
 	description: stringType().optional(),
 	javaPath: stringType().optional(),
 	maxMemory: stringType().optional(),
@@ -3788,7 +3788,7 @@ const instanceStatusSchema = objectType({
 	cpuUsage: numberType(),
 	memoryUsage: numberType(),
 	totalMemory: numberType(),
-	worldSize: stringType().nullable(),
+	worldSize: numberType().nullable(),
 	seed: stringType().nullable(),
 	lastSave: stringType().nullable(),
 	lastOutput: stringType().nullable(),
@@ -3862,7 +3862,7 @@ const commandResponseSchema = stringType().nullable();
 *  isValidJavaExecutable 白名单分支）；maxMemory/minMemory/name 锁定 string——null 原行为
 *  会写入 DB 并导致响应侧 instanceStatusSchema 漂移，属本次收口治理目标） */
 const instanceSettingsRequestBodySchema = objectType({
-	name: stringType().optional(),
+	name: stringType().trim().min(1, "name 不能为空或纯空白").optional(),
 	description: stringType().nullable().optional(),
 	javaPath: stringType().nullable().optional(),
 	maxMemory: stringType().optional(),
@@ -3887,6 +3887,24 @@ const instanceEulaRequestBodySchema = objectType({ agreed: booleanType({
 	required_error: "agreed must be a boolean",
 	invalid_type_error: "agreed must be a boolean"
 }) });
+/** DELETE /instances/:id 请求体：confirmName 为实例名。本 schema 只锁类型（必须是字符串），
+*  **不设最小长度**：升级前库里既可能存着带首尾空白的旧值、也可能存着空名旧值，两者都只能靠
+*  空/空白入参确认，故归一化与相等判定全部由路由层承担（两侧 trim 后全等）。
+*  acknowledgeIrreversible 仅在实例没有任何备份时才被要求为 true */
+const instanceDeleteRequestBodySchema = objectType({
+	confirmName: stringType({
+		required_error: "confirmName is required",
+		invalid_type_error: "confirmName must be a string"
+	}),
+	acknowledgeIrreversible: booleanType().optional()
+});
+/** DELETE /instances/:id 成功响应：删除后仍保留在磁盘上的备份快照信息 */
+const instanceDeleteResponseSchema = objectType({
+	/** 保留的备份（快照目录）总份数 */
+	retainedBackupCount: numberType(),
+	/** 最近若干条快照目录名（按修改时间倒序，超出上限的只计数量不列名） */
+	retainedBackupNames: arrayType(stringType())
+});
 //#endregion
 //#region src/backup.ts
 const backupItemSchema = objectType({
@@ -3903,7 +3921,8 @@ const backupItemSchema = objectType({
 		"restoring"
 	]),
 	worldName: stringType(),
-	format: enumType(["snapshot", "zip"]),
+	/** 非空 = 该条目由「挂载归档快照」登记：快照不在本实例的备份目录内，而在原归档实例目录下 */
+	sourceArchiveId: stringType().nullable().optional(),
 	createdAt: stringType(),
 	updatedAt: stringType()
 });
@@ -3911,6 +3930,71 @@ const backupItemSchema = objectType({
 const backupCreateRequestSchema = objectType({
 	name: stringType().optional(),
 	description: stringType().optional()
+});
+/**
+* POST /backups/:id/restore 请求契约。
+* confirmName 必须是该备份所属实例的名称（服务端 trim 后全等比对）：恢复会用快照整体
+* 覆盖实例目录，前端弹窗的实例名输入此前是唯一闸门，直连 API 的调用方可无确认覆盖。
+*/
+const backupRestoreRequestSchema = objectType({ confirmName: stringType({ required_error: "confirmName 必填" }) });
+/**
+* POST /instances/:instanceId/backups/cancel 响应：取消命中的进行中操作。
+* kind=create 时备份记录与半成品快照一并清除（主动取消不留 failed 记录）；
+* kind=restore 时走既有回滚（pre_restore rename 回来），备份记录回 completed 可再次恢复。
+*/
+const backupCancelResponseSchema = objectType({
+	kind: enumType(["create", "restore"]),
+	backupId: numberType()
+});
+/**
+* 恢复确认的目标串（服务端校验与前端输入提示的唯一派生口径）。
+* 优先实例名；实例没有名称时退到备份名，备份名也为空再退到备份 id——确认串必须
+* 始终非空：空串天然匹配会让这道闸门空转（与卸载侧空名实例的加固同源问题），
+* 两处各写一份回退链则必然分叉，故放在契约层共用。
+*/
+function restoreConfirmTarget(input) {
+	const instanceName = (input.instanceName ?? "").trim();
+	if (instanceName !== "") return instanceName;
+	const backupName = (input.backupName ?? "").trim();
+	if (backupName !== "") return backupName;
+	return String(input.backupId);
+}
+/**
+* 归档快照组：磁盘上存在、但**备份表里没有索引**的实例级快照目录（清单 #27）。
+*
+* 来源是「卸载实例时快照按设计保留」——卸载会删掉备份表记录，目录留在
+* `backupsDir/<原实例 id>/`，此后 UI 完全看不到它们，只能靠人工去磁盘里翻，
+* 且会随保留期孤儿清扫被删。契约把这一面暴露出来，让管理员能在面板里把它们
+* **挂载**（登记回备份表）到某个实例上，随后即可正常恢复/下载/删除。
+*/
+const archivedSnapshotGroupSchema = objectType({
+	/** 备份目录名（原实例 id 形态：`<type>-<8 位 hex>`） */
+	archiveId: stringType(),
+	/** 同名实例当前是否仍存在（false = 已卸载的遗留归档） */
+	instanceExists: booleanType(),
+	/** 该目录下**尚未建立索引**的快照份数（已挂载的不计入；清点的是「看不见的那部分」） */
+	snapshotCount: numberType(),
+	/** 其中能认出世界数据的份数（挂载时会跳过认不出的） */
+	usableCount: numberType(),
+	/** 组内最近一次快照时间（ISO） */
+	latestMtime: stringType()
+});
+const archivedSnapshotListSchema = arrayType(archivedSnapshotGroupSchema);
+/**
+* 挂载归档快照到目标实例：把这些快照登记进备份表（**只建索引，不复制、不移动磁盘内容**），
+* 挂载后它们会出现在该实例的备份列表里，可正常恢复/下载/删除。
+*
+* 生命周期口径（UI 文案与服务端行为必须一致）：挂载后不再随孤儿清扫被删，但作为该实例的
+* 普通备份条目，仍计入该实例的备份配额——超出保留策略（数量/天数上限，按 `createdAt`
+* 最旧优先）或手工删除都会清掉它；删除条目会连带删除磁盘上的原归档快照（不复制 = 该目录
+* 就是唯一副本）。
+*/
+const backupAttachRequestSchema = objectType({ archiveId: stringType({ required_error: "archiveId 必填" }).min(1) });
+const backupAttachResponseSchema = objectType({
+	/** 本次新登记的快照数 */
+	attached: numberType(),
+	/** 跳过的份数（已在索引中 / 认不出世界数据） */
+	skipped: numberType()
 });
 //#endregion
 //#region src/task.ts
@@ -3942,7 +4026,7 @@ const scheduledTaskSchema = objectType({
 	updatedAt: stringType()
 });
 const taskCreatePayloadSchema = objectType({
-	name: stringType(),
+	name: stringType().trim().min(1, "name 不能为空或纯空白"),
 	type: scheduledTaskTypeSchema,
 	cronExpression: stringType(),
 	command: stringType().nullable().optional(),
@@ -3964,6 +4048,24 @@ const taskRunHistorySchema = objectType({
 	error: stringType().nullable(),
 	durationMs: numberType().nullable()
 });
+/** 执行历史列表（GET /tasks/:id/history：服务端限量的最近记录，非分页信封） */
+const taskRunHistoryListSchema = arrayType(taskRunHistorySchema);
+//#endregion
+//#region src/metrics.ts
+/**
+* 分钟级主机指标（GET /api/v1/metrics；metrics 采样器每 60s 落一行）。
+* captured_at 为 SQLite CURRENT_TIMESTAMP 口径的 UTC「YYYY-MM-DD HH:MM:SS」串
+* （与 audit/command-history 时间口径一致，消费方经 db-time 归一化）。
+*/
+const systemMetricSampleSchema = objectType({
+	capturedAt: stringType(),
+	cpuUsage: numberType().nullable(),
+	memoryUsedGb: numberType().nullable(),
+	memoryTotalGb: numberType().nullable(),
+	memoryPercent: numberType().nullable(),
+	playersOnline: numberType()
+});
+const systemMetricsSeriesSchema = arrayType(systemMetricSampleSchema);
 //#endregion
 //#region src/ws.ts
 const WS_EVENT_TYPES = [
@@ -3981,28 +4083,39 @@ const WS_EVENT_TYPES = [
 	"playerSleep",
 	"achievement",
 	"backupStart",
+	"backupProgress",
 	"backupComplete",
 	"backupFailed",
 	"backupSkipped",
+	"backupCancelled",
 	"restoreStart",
+	"restoreProgress",
 	"restoreComplete",
 	"restoreFailed",
+	"restoreCancelled",
 	"taskExecute",
 	"taskFailed",
 	"webhookDeliveryFailed",
 	"deployProgress",
 	"deployComplete",
 	"deployFailed",
+	"deployCancelled",
 	"circuit_breaker",
 	"upgradeProgress",
 	"upgradeComplete",
 	"upgradeFailed",
+	"upgradeCancelled",
 	"systemStatsUpdate",
 	"error"
 ];
 const wsEventTypeSchema = enumType(WS_EVENT_TYPES);
 const wsMessageSchema = objectType({
-	type: unionType([wsEventTypeSchema, literalType("pong")]),
+	type: unionType([
+		wsEventTypeSchema,
+		literalType("pong"),
+		literalType("auth")
+	]),
+	ok: booleanType().optional(),
 	eventId: numberType().optional(),
 	instanceId: stringType().optional(),
 	data: unknownType().optional(),
@@ -4064,6 +4177,11 @@ const wsBackupPayloadSchema = objectType({
 	id: numberType().optional(),
 	name: stringType().optional()
 }).passthrough();
+/** 备份/恢复进度（rsync --info=progress2 解析，服务端 1s 节流；robocopy/ditto 降级路径无进度） */
+const wsBackupProgressPayloadSchema = objectType({
+	backupId: numberType(),
+	percent: numberType().min(0).max(100)
+});
 /** 通知类事件集合（服务端落库，断线补齐用） */
 const NOTIFICATION_EVENT_TYPES = /* @__PURE__ */ new Set([
 	"playerJoin",
@@ -4077,9 +4195,11 @@ const NOTIFICATION_EVENT_TYPES = /* @__PURE__ */ new Set([
 	"backupComplete",
 	"backupFailed",
 	"backupSkipped",
+	"backupCancelled",
 	"restoreStart",
 	"restoreComplete",
 	"restoreFailed",
+	"restoreCancelled",
 	"taskFailed",
 	"webhookDeliveryFailed"
 ]);
@@ -4130,7 +4250,14 @@ const fileEntrySchema = objectType({
 const fileListResponseSchema = objectType({
 	path: stringType(),
 	isDirectory: booleanType(),
-	files: arrayType(fileEntrySchema)
+	files: arrayType(fileEntrySchema),
+	/**
+	* 结果被服务端截断（条目数超过上限）。
+	* 与 `playerInventorySchema.partial` 同口径：截断必须**明说**——
+	* 少列出来的文件与「本来就没有」在 UI 上无法区分。
+	* 可选以兼容旧客户端（缺省即未截断）。
+	*/
+	truncated: booleanType().optional()
 });
 const fileInfoResponseSchema = objectType({
 	name: stringType(),
@@ -4243,11 +4370,22 @@ const commandHistoryQuerySchema = objectType({
 });
 //#endregion
 //#region src/webhook.ts
+/** 渠道预设：generic=项目通用格式；其余为国内平台特化格式（签名协议/消息体互不兼容） */
+const WEBHOOK_PLATFORMS = [
+	"generic",
+	"feishu",
+	"dingtalk",
+	"wecom",
+	"serverchan",
+	"pushplus"
+];
+const webhookPlatformSchema = enumType(WEBHOOK_PLATFORMS);
 const webhookSchema = objectType({
 	id: numberType(),
 	name: stringType(),
 	url: stringType(),
 	secret: stringType().nullable(),
+	platform: webhookPlatformSchema.default("generic"),
 	events: arrayType(stringType()),
 	instanceId: stringType().nullable(),
 	isEnabled: booleanType(),
@@ -4258,6 +4396,7 @@ const webhookCreatePayloadSchema = objectType({
 	name: stringType(),
 	url: stringType(),
 	secret: stringType().nullable().optional(),
+	platform: webhookPlatformSchema.optional(),
 	events: arrayType(stringType()).optional(),
 	instanceId: stringType().nullable().optional(),
 	isEnabled: booleanType().optional()
@@ -4299,9 +4438,10 @@ const deployRequestSchema = objectType({
 		"purpur"
 	]),
 	mcVersion: stringType(),
-	instanceName: stringType(),
+	instanceName: stringType().trim().min(1, "instanceName 不能为空或纯空白"),
 	maxMemory: stringType().optional(),
-	loaderVersion: stringType().optional()
+	loaderVersion: stringType().optional(),
+	eula: booleanType().optional()
 });
 const deployResultSchema = objectType({
 	id: stringType(),
@@ -4311,6 +4451,18 @@ const deployResultSchema = objectType({
 	javaVersion: stringType(),
 	path: stringType(),
 	maxMemory: stringType()
+});
+/**
+* POST /instances/deploy/cancel 请求契约（取消在途部署）。
+* instanceId 必须是服务端当前在途部署的实例 id：部署实例在完成前未入库，
+* 服务端按 id 精确匹配注册表条目，不做「取消当前在途的那一个」的兜底推断
+* （滞后一个部署周期的取消请求会误杀随后发起的新部署）。
+*/
+const deployCancelRequestSchema = objectType({ instanceId: stringType().min(1, "instanceId 不能为空") });
+/** POST /instances/deploy/cancel 响应契约（已受理中断，终态由 deployProgress 事件推送） */
+const deployCancelResponseSchema = objectType({
+	instanceId: stringType(),
+	cancelled: literalType(true)
 });
 const deployProgressSchema = objectType({
 	stage: stringType(),
@@ -4323,6 +4475,27 @@ const deployProgressSchema = objectType({
 	type: stringType().optional(),
 	mcVersion: stringType().optional()
 });
+/**
+* GET /instances/deploy/status 响应契约（部署进度兜底查询）。
+* - deploying 为判别字段：true 表示服务端确有部署在途（进度对象展开），
+*   false 表示**空态**——从未部署过、部署已终态、或快照超出时限视为死快照，
+*   三种情况都返回同一空态而非 404（与 upgradeStatusResponseSchema 同口径）。
+* - 快照是内存态、按实例仅保留最近一次；服务重启会丢失快照，此时返回空态。
+* - updatedAt 为快照最后写入时刻，供前端识别陈旧在途快照。
+*/
+const deployStatusResponseSchema = discriminatedUnionType("deploying", [objectType({ deploying: literalType(false) }), objectType({
+	deploying: literalType(true),
+	instanceId: stringType(),
+	instanceName: stringType(),
+	type: stringType(),
+	mcVersion: stringType(),
+	stage: stringType(),
+	percent: numberType(),
+	transferred: numberType(),
+	total: numberType(),
+	updatedAt: numberType(),
+	error: stringType().optional()
+})]);
 const upgradeStageSchema = enumType([
 	"backup",
 	"download",
@@ -4330,7 +4503,8 @@ const upgradeStageSchema = enumType([
 	"verify",
 	"completed",
 	"failed",
-	"rolled_back"
+	"rolled_back",
+	"cancelled"
 ]);
 const upgradeProgressSchema = objectType({
 	instanceId: stringType(),
@@ -4359,6 +4533,11 @@ const upgradeStartResponseSchema = objectType({
 	instanceId: stringType(),
 	mcVersion: stringType(),
 	type: stringType()
+});
+/** POST /instances/:id/upgrade/cancel 响应契约（已受理中断，终态由 upgradeProgress 事件推送） */
+const upgradeCancelResponseSchema = objectType({
+	instanceId: stringType(),
+	cancelled: literalType(true)
 });
 /**
 * GET /instances/:id/upgrade/status 响应契约（issue 402 响应侧接入）。
@@ -4553,6 +4732,14 @@ const authSessionResponseSchema = objectType({
 const authSetupResponseSchema = authSessionResponseSchema.extend({ hasPassword: literalType(true) });
 /** status 探测响应：是否已设密（登录页首屏） */
 const authStatusResponseSchema = objectType({ hasPassword: booleanType() });
+/** 部署能力：API Key 通道是否开放（关闭时 rotate-key 及 Key 鉴权一律 403） */
+const authCapabilitiesResponseSchema = objectType({
+	apiKeyEnabled: booleanType(),
+	/** 只读机器凭据通道开关（READONLY_API_KEY_ENABLED；关闭时该凭据一律 403、轮换端点 403） */
+	readonlyApiKeyEnabled: booleanType(),
+	/** 服务端是否已配置只读凭据哈希（未配置 = 该通道不存在，轮换即「首次生成」） */
+	readonlyApiKeyConfigured: booleanType()
+});
 /** 改密成功响应（会话通道与 API Key 通道同构：kickedSessions 为被踢会话数） */
 const authPasswordChangeResponseSchema = objectType({
 	ok: literalType(true),
@@ -4579,14 +4766,44 @@ const authSessionKickResponseSchema = objectType({
 });
 /** API Key 轮换成功响应（明文新 Key 白名单单字段） */
 const apiKeyRotateResponseSchema = objectType({ apiKey: stringType() });
+/** 两步验证状态（管理端设置页数据源；任何情况下不返回 secret 与恢复码） */
+const authTotpStatusResponseSchema = objectType({
+	enabled: booleanType(),
+	confirmedAt: stringType().nullable(),
+	recoveryCodesRemaining: numberType()
+});
+/** enroll 响应：候选 secret + otpauth URI + 二维码 data URL（此时尚未启用） */
+const authTotpEnrollResponseSchema = objectType({
+	secret: stringType(),
+	otpauthUrl: stringType(),
+	qrDataUrl: stringType()
+});
+/** confirm 请求体：用当前动态口令证明已成功录入 secret */
+const authTotpConfirmRequestBodySchema = objectType({ code: stringType() });
+/** confirm 响应：启用态 + 10 个恢复码明文（唯一一次下发） */
+const authTotpConfirmResponseSchema = objectType({
+	enabled: literalType(true),
+	confirmedAt: stringType(),
+	recoveryCodes: arrayType(stringType())
+});
+/** disable 请求体：密码 + 第二因子（动态口令或恢复码）双重确认 */
+const authTotpDisableRequestBodySchema = objectType({
+	password: stringType(),
+	code: stringType()
+});
+/** disable 成功响应 */
+const authTotpDisableResponseSchema = objectType({ ok: literalType(true) });
 /** setup 请求体：首访设密（仅未设密时可用） */
 const authSetupRequestBodySchema = objectType({ password: stringType() });
-/** login 请求体：密码换会话令牌 */
-const authLoginRequestBodySchema = objectType({ password: stringType() });
+/** login 请求体：密码换会话令牌；已挂靠两步验证时须带 totpCode（动态口令或恢复码） */
+const authLoginRequestBodySchema = objectType({
+	password: stringType(),
+	totpCode: stringType().optional()
+});
 /** 改密请求体：验旧密 + 设新密 */
 const authPasswordChangeRequestBodySchema = objectType({
 	oldPassword: stringType(),
 	newPassword: stringType()
 });
 //#endregion
-export { NOTIFICATION_EVENT_TYPES, WS_EVENT_TYPES, apiEnvelopeSchema, apiErrorEnvelopeSchema, apiKeyRotateResponseSchema, auditLogItemSchema, auditLogsQuerySchema, authLoginRequestBodySchema, authLogoutResponseSchema, authPasswordChangeRequestBodySchema, authPasswordChangeResponseSchema, authSessionItemSchema, authSessionKickResponseSchema, authSessionResponseSchema, authSessionsResponseSchema, authSetupRequestBodySchema, authSetupResponseSchema, authStatusResponseSchema, backupCreateRequestSchema, backupItemSchema, banRecordListSchema, banRecordSchema, banRequestBodySchema, banResponseBodySchema, commandHistoryItemSchema, commandHistoryQuerySchema, commandResponseSchema, deployProgressSchema, deployRequestSchema, deployResultSchema, diskInfoSchema, diskUsageSchema, fileContentResponseSchema, fileEntrySchema, fileInfoResponseSchema, fileListRequestSchema, fileListResponseSchema, fileMkdirRequestSchema, fileMkdirResponseSchema, filePathRequestSchema, fileRenameRequestSchema, fileRenameResponseSchema, fileSaveRequestSchema, fileSaveResponseSchema, fileUploadQuerySchema, fileUploadResponseSchema, instanceCommandRequestBodySchema, instanceEulaRequestBodySchema, instancePropertiesRequestBodySchema, instanceSettingsRequestBodySchema, instanceStartRequestBodySchema, instanceStatusListSchema, instanceStatusSchema, instanceSummarySchema, instanceUpdatePayloadSchema, inventoryItemSchema, ipHistoryEntrySchema, logEntriesSchema, logEntrySchema, makeApiEnvelopeSchema, marketInstallRequestSchema, marketInstallResultSchema, marketSearchHitSchema, marketSearchRequestSchema, marketSearchResultSchema, marketVersionFileSchema, marketVersionSchema, marketVersionsRequestSchema, marketVersionsResultSchema, nullDataSchema, overviewDataSchema, paginationSchema, playerDetailsResponseSchema, playerDimensionSchema, playerEventSchema, playerGameModeSchema, playerInventorySchema, playerListSchema, playerPositionSchema, playerPotionEffectSchema, playerSchema, playerSessionSchema, playerStatsSchema, pluginDeleteResultSchema, pluginEnabledRequestSchema, pluginInfoSchema, pluginListSchema, pluginMetaSchema, pluginOverwriteQuerySchema, pluginToggleResultSchema, pluginUpdateCheckResultSchema, pluginUpdateStatusSchema, pluginUploadResultSchema, scheduledTaskSchema, scheduledTaskTypeSchema, serverPropertiesSchema, spawnPointSchema, systemStatsSchema, taskCreatePayloadSchema, taskRunHistorySchema, taskRunStatusSchema, taskUpdatePayloadSchema, updateCheckResultSchema, updatePropertiesResponseSchema, upgradeProgressSchema, upgradeRequestSchema, upgradeStageSchema, upgradeStartResponseSchema, upgradeStatusResponseSchema, versionsResponseSchema, weatherTypeSchema, webhookCreatePayloadSchema, webhookDeliverySchema, webhookSchema, webhookTestResultSchema, worldDimensionSchema, worldInfoSchema, wsBackupPayloadSchema, wsEventTypeSchema, wsLogPayloadSchema, wsMessageSchema, wsPerformancePayloadSchema, wsPlayerEventPayloadSchema, wsStatusEventPayloadSchema, wsStatusSnapshotSchema, wsWeatherPayloadSchema };
+export { NOTIFICATION_EVENT_TYPES, WEBHOOK_PLATFORMS, WS_EVENT_TYPES, apiEnvelopeSchema, apiErrorEnvelopeSchema, apiKeyRotateResponseSchema, archivedSnapshotGroupSchema, archivedSnapshotListSchema, auditLogItemSchema, auditLogsQuerySchema, authCapabilitiesResponseSchema, authLoginRequestBodySchema, authLogoutResponseSchema, authPasswordChangeRequestBodySchema, authPasswordChangeResponseSchema, authSessionItemSchema, authSessionKickResponseSchema, authSessionResponseSchema, authSessionsResponseSchema, authSetupRequestBodySchema, authSetupResponseSchema, authStatusResponseSchema, authTotpConfirmRequestBodySchema, authTotpConfirmResponseSchema, authTotpDisableRequestBodySchema, authTotpDisableResponseSchema, authTotpEnrollResponseSchema, authTotpStatusResponseSchema, backupAttachRequestSchema, backupAttachResponseSchema, backupCancelResponseSchema, backupCreateRequestSchema, backupItemSchema, backupRestoreRequestSchema, banRecordListSchema, banRecordSchema, banRequestBodySchema, banResponseBodySchema, commandHistoryItemSchema, commandHistoryQuerySchema, commandResponseSchema, deployCancelRequestSchema, deployCancelResponseSchema, deployProgressSchema, deployRequestSchema, deployResultSchema, deployStatusResponseSchema, diskInfoSchema, diskUsageSchema, fileContentResponseSchema, fileEntrySchema, fileInfoResponseSchema, fileListRequestSchema, fileListResponseSchema, fileMkdirRequestSchema, fileMkdirResponseSchema, filePathRequestSchema, fileRenameRequestSchema, fileRenameResponseSchema, fileSaveRequestSchema, fileSaveResponseSchema, fileUploadQuerySchema, fileUploadResponseSchema, instanceCommandRequestBodySchema, instanceDeleteRequestBodySchema, instanceDeleteResponseSchema, instanceEulaRequestBodySchema, instancePropertiesRequestBodySchema, instanceSettingsRequestBodySchema, instanceStartRequestBodySchema, instanceStatusListSchema, instanceStatusSchema, instanceSummarySchema, instanceUpdatePayloadSchema, inventoryItemSchema, ipHistoryEntrySchema, logEntriesSchema, logEntrySchema, makeApiEnvelopeSchema, marketInstallRequestSchema, marketInstallResultSchema, marketSearchHitSchema, marketSearchRequestSchema, marketSearchResultSchema, marketVersionFileSchema, marketVersionSchema, marketVersionsRequestSchema, marketVersionsResultSchema, nullDataSchema, overviewDataSchema, paginationSchema, playerDetailsResponseSchema, playerDimensionSchema, playerEventSchema, playerGameModeSchema, playerInventorySchema, playerListSchema, playerPositionSchema, playerPotionEffectSchema, playerSchema, playerSessionSchema, playerStatsSchema, pluginDeleteResultSchema, pluginEnabledRequestSchema, pluginInfoSchema, pluginListSchema, pluginMetaSchema, pluginOverwriteQuerySchema, pluginToggleResultSchema, pluginUpdateCheckResultSchema, pluginUpdateStatusSchema, pluginUploadResultSchema, restoreConfirmTarget, scheduledTaskSchema, scheduledTaskTypeSchema, serverPropertiesSchema, spawnPointSchema, systemMetricSampleSchema, systemMetricsSeriesSchema, systemStatsSchema, taskCreatePayloadSchema, taskRunHistoryListSchema, taskRunHistorySchema, taskRunStatusSchema, taskUpdatePayloadSchema, updateCheckResultSchema, updatePropertiesResponseSchema, upgradeCancelResponseSchema, upgradeProgressSchema, upgradeRequestSchema, upgradeStageSchema, upgradeStartResponseSchema, upgradeStatusResponseSchema, versionsResponseSchema, weatherTypeSchema, webhookCreatePayloadSchema, webhookDeliverySchema, webhookPlatformSchema, webhookSchema, webhookTestResultSchema, worldDimensionSchema, worldInfoSchema, wsBackupPayloadSchema, wsBackupProgressPayloadSchema, wsEventTypeSchema, wsLogPayloadSchema, wsMessageSchema, wsPerformancePayloadSchema, wsPlayerEventPayloadSchema, wsStatusEventPayloadSchema, wsStatusSnapshotSchema, wsWeatherPayloadSchema };

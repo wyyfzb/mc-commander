@@ -1,7 +1,7 @@
 /**
  * 错误码映射（设计文档 §5.1 errors.ts）
  * 对照服务端 utils/response.js ErrorCodes 全表；
- * 策略：服务端 message 已本地化的（40902/40904 等）直接透传，
+ * 策略：服务端 message 已本地化的（40902 等）直接透传，
  *       英文默认文案的用本地友好文案覆盖
  */
 import { ApiError } from './client'
@@ -15,6 +15,8 @@ export const ErrorCode = {
   RATE_LIMITED: 42900,
 
   INVALID_API_KEY: 40101,
+  /** 未提供任何凭据（无 API Key、无登录会话）：与「凭据无效」分开提示 */
+  AUTH_CREDENTIALS_REQUIRED: 40107,
 
   // 安全主线：管理员认证（routes/auth.js）
   AUTH_INVALID_CREDENTIALS: 40102,
@@ -24,17 +26,46 @@ export const ErrorCode = {
   AUTH_LOGIN_LOCKED: 42901,
   /** 首访设密 SETUP_TOKEN 校验失败（缺失/错误/已作废；公网部署所有权证明，issue 309） */
   AUTH_SETUP_TOKEN_INVALID: 40104,
+  /** 密码已通过、尚缺第二因子：据此显示动态口令输入框（服务端此时未签发会话） */
+  AUTH_TOTP_REQUIRED: 40105,
+  /** 第二因子错误（动态口令或恢复码），与密码错误分开提示 */
+  AUTH_TOTP_INVALID: 40106,
+  /** 两步验证尚未挂靠（无候选密钥或未确认） */
+  AUTH_TOTP_NOT_ENROLLED: 40015,
+  /** 两步验证已启用：需先关闭才能重新挂靠 */
+  AUTH_TOTP_ALREADY_ENABLED: 40913,
+  /** API Key 通道被部署配置关闭（API_KEY_ENABLED=false）：须改用会话登录 */
+  API_KEY_DISABLED: 40303,
+  /** 只读机器凭据通道被部署配置关闭（READONLY_API_KEY_ENABLED=false） */
+  READONLY_API_KEY_DISABLED: 40304,
+  /** 只读机器凭据访问白名单之外的端点（凭据有效但权限不足） */
+  AUTH_INSUFFICIENT_ROLE: 40305,
 
   INSTANCE_NOT_FOUND: 40401,
   INSTANCE_NOT_RUNNING: 40002,
   INSTANCE_RUNNING: 40003,
+  /** 卸载实例缺少/不匹配实例名确认（服务端强制，见 DELETE /instances/:id） */
+  INSTANCE_DELETE_CONFIRM_REQUIRED: 40016,
+  /** 卸载的实例没有任何备份：须显式确认不可恢复后才放行 */
+  INSTANCE_DELETE_NO_BACKUP: 40914,
+  /** 卸载的实例无名称：名称确认空转，须显式确认不可恢复后才放行 */
+  INSTANCE_DELETE_UNNAMED: 40916,
+  /** 部署互斥：已有部署在途 */
+  DEPLOY_IN_PROGRESS: 40905,
+  /** 取消部署但无可取消对象（部署已终态/已被取消/服务端重启后注册表为空） */
+  DEPLOY_NOT_IN_FLIGHT: 40906,
+  /** 用户取消导致长任务未完成（部署 POST 的响应；终态另由 deployProgress 推送 cancelled） */
+  TASK_CANCELLED: 40915,
 
   BACKUP_NOT_FOUND: 40402,
   BACKUP_IN_PROGRESS: 40901,
   BACKUP_RCON_UNAVAILABLE: 40902,
   RESTORE_IN_PROGRESS: 40903,
-  BACKUP_FORMAT_UNSUPPORTED: 40904,
+  /** 取消请求无命中：该实例当前没有进行中的备份/恢复操作 */
+  BACKUP_NOT_ACTIVE: 40904,
   BACKUP_FAILED: 50002,
+  /** 恢复缺少/不匹配实例名确认（服务端强制，见 POST /backups/:id/restore） */
+  BACKUP_RESTORE_CONFIRM_REQUIRED: 40017,
 
   TASK_NOT_FOUND: 40405,
   INVALID_CRON_EXPRESSION: 40004,
@@ -46,6 +77,10 @@ export const ErrorCode = {
   FILE_UPLOAD_TOO_LARGE: 40007,
   FILE_TYPE_NOT_ALLOWED: 40008,
   FILE_ALREADY_EXISTS: 40909,
+  /** 移动/重命名的目标目录不存在（与 40406「源不存在」分开，用户据此判断该改哪一头） */
+  FILE_TARGET_DIR_NOT_FOUND: 40414,
+  /** 把目录移进自己的子树（用户输入错；此前落 500 通用文案） */
+  FILE_MOVE_INTO_SELF: 40009,
 
   WEBHOOK_NOT_FOUND: 40410,
   WEBHOOK_INVALID_URL: 40010,
@@ -54,14 +89,16 @@ export const ErrorCode = {
 
   // 升级
   UPGRADE_IN_PROGRESS: 40907,
+  /** 取消升级但无可取消对象（升级已终态/已被取消/服务端重启后注册表为空） */
+  UPGRADE_NOT_IN_PROGRESS: 40908,
   UPGRADE_VERSION_SAME: 40012,
 
-  // 插件管理（feat-8，routes/plugins.js）
+  // 插件管理（routes/plugins.js）
   PLUGIN_NOT_FOUND: 40411,
   PLUGIN_STATE_CONFLICT: 40910,
   PLUGIN_FILE_EXISTS: 40912,
 
-  // 插件市场（feat-8 延伸：Modrinth 代理）
+  // 插件市场（延伸：Modrinth 代理）
   MARKET_PROJECT_NOT_FOUND: 40412,
   MARKET_VERSION_NOT_FOUND: 40413,
   MARKET_UPSTREAM_ERROR: 50301,
@@ -69,6 +106,9 @@ export const ErrorCode = {
 
   // RCON 不可用（命令路由需要 RCON 响应但连接未启用或已断开）
   RCON_UNAVAILABLE: 50302,
+
+  // 备份索引不可读（归档快照挂载需要备份表判断哪些快照已登记）
+  BACKUP_INDEX_UNAVAILABLE: 50303,
 } as const
 
 export type ErrorCodeValue = (typeof ErrorCode)[keyof typeof ErrorCode]
@@ -80,19 +120,31 @@ const LOCALIZED_MESSAGES: Partial<Record<ErrorCodeValue, string>> = {
   [ErrorCode.NOT_FOUND]: '请求的资源不存在',
   [ErrorCode.RATE_LIMITED]: '请求过于频繁，请稍后再试',
   [ErrorCode.INVALID_API_KEY]: 'API Key 无效或已过期',
+  [ErrorCode.AUTH_CREDENTIALS_REQUIRED]: '尚未提供访问凭据：请在设置页配置 API Key，或登录本面板',
   [ErrorCode.AUTH_INVALID_CREDENTIALS]: '密码错误',
   [ErrorCode.AUTH_SESSION_EXPIRED]: '登录会话已过期，请重新登录',
   [ErrorCode.AUTH_NOT_CONFIGURED]: '管理员密码尚未设置，请先完成初始化',
   [ErrorCode.AUTH_ALREADY_CONFIGURED]: '管理员密码已设置，请直接登录',
   [ErrorCode.AUTH_LOGIN_LOCKED]: '登录失败次数过多，请稍后再试',
   [ErrorCode.AUTH_SETUP_TOKEN_INVALID]: 'SETUP_TOKEN 缺失或错误：请粘贴部署完成时输出的一次性令牌',
+  [ErrorCode.AUTH_TOTP_REQUIRED]: '请输入两步验证码或恢复码',
+  [ErrorCode.AUTH_TOTP_INVALID]: '两步验证码或恢复码错误',
+  [ErrorCode.AUTH_TOTP_NOT_ENROLLED]: '两步验证尚未挂靠，请先完成挂靠',
+  [ErrorCode.AUTH_TOTP_ALREADY_ENABLED]: '两步验证已启用，请先关闭后再重新挂靠',
+  [ErrorCode.API_KEY_DISABLED]: 'API Key 通道已关闭，请改用管理员会话登录',
   [ErrorCode.INSTANCE_NOT_FOUND]: '服务器实例不存在',
   [ErrorCode.INSTANCE_NOT_RUNNING]: '实例未在运行',
   [ErrorCode.INSTANCE_RUNNING]: '实例正在运行',
+  [ErrorCode.DEPLOY_IN_PROGRESS]: '服务端已有部署在进行中，请等待其完成后再发起新部署',
+  [ErrorCode.DEPLOY_NOT_IN_FLIGHT]: '该部署已结束或不在进行中，无需取消',
+  [ErrorCode.TASK_CANCELLED]: '操作已取消',
   [ErrorCode.BACKUP_NOT_FOUND]: '备份不存在',
   [ErrorCode.BACKUP_IN_PROGRESS]: '已有备份任务进行中',
+  [ErrorCode.BACKUP_NOT_ACTIVE]: '没有进行中的备份或恢复操作',
   [ErrorCode.RESTORE_IN_PROGRESS]: '已有恢复任务进行中',
   [ErrorCode.BACKUP_FAILED]: '备份失败',
+  [ErrorCode.INSTANCE_DELETE_UNNAMED]: '该实例无名称，名称确认不构成有效确认，请确认不可恢复后再试',
+  [ErrorCode.BACKUP_RESTORE_CONFIRM_REQUIRED]: '需输入该备份所属实例的名称以确认恢复',
   [ErrorCode.TASK_NOT_FOUND]: '定时任务不存在',
   [ErrorCode.INVALID_CRON_EXPRESSION]: 'cron 表达式无效',
   [ErrorCode.FILE_NOT_FOUND]: '文件不存在',
@@ -102,6 +154,8 @@ const LOCALIZED_MESSAGES: Partial<Record<ErrorCodeValue, string>> = {
   [ErrorCode.FILE_UPLOAD_TOO_LARGE]: '上传文件过大',
   [ErrorCode.FILE_TYPE_NOT_ALLOWED]: '该文件类型不允许上传',
   [ErrorCode.FILE_ALREADY_EXISTS]: '文件或目录已存在',
+  [ErrorCode.FILE_TARGET_DIR_NOT_FOUND]: '目标目录不存在（不会被自动创建，请先建好）',
+  [ErrorCode.FILE_MOVE_INTO_SELF]: '不能把目录移动到它自己的子目录里',
   [ErrorCode.WEBHOOK_NOT_FOUND]: 'Webhook 不存在',
   [ErrorCode.WEBHOOK_INVALID_URL]: 'Webhook URL 无效（仅允许 http/https）',
   [ErrorCode.WEBHOOK_INVALID_EVENTS]: '包含无效事件类型',
@@ -112,16 +166,17 @@ const LOCALIZED_MESSAGES: Partial<Record<ErrorCodeValue, string>> = {
   [ErrorCode.MARKET_PROJECT_NOT_FOUND]: '插件市场：Modrinth 上未找到该项目（可能已下架）',
   [ErrorCode.MARKET_VERSION_NOT_FOUND]: '插件市场：Modrinth 上未找到该版本',
   [ErrorCode.MARKET_UPSTREAM_ERROR]: '插件市场：Modrinth 服务暂时不可用，请稍后再试',
-  [ErrorCode.MARKET_CHECKSUM_MISMATCH]: '插件市场：文件完整性校验失败，安装已拒绝（下载可能损坏，请重试）',
+  [ErrorCode.MARKET_CHECKSUM_MISMATCH]:
+    '插件市场：文件完整性校验失败，安装已拒绝（下载可能损坏，请重试）',
   [ErrorCode.RCON_UNAVAILABLE]: 'RCON 未启用或连接已断开，请在 server.properties 启用 RCON',
   [ErrorCode.UPGRADE_IN_PROGRESS]: '已有升级任务进行中',
+  [ErrorCode.UPGRADE_NOT_IN_PROGRESS]: '该升级已结束或不在进行中，无需取消',
   [ErrorCode.UPGRADE_VERSION_SAME]: '目标版本与当前版本相同',
 }
 
 /** 服务端已本地化的错误码（message 直接透传，不覆盖） */
 const SERVER_LOCALIZED_CODES: ReadonlySet<ErrorCodeValue> = new Set([
   ErrorCode.BACKUP_RCON_UNAVAILABLE, // 40902 中文文案
-  ErrorCode.BACKUP_FORMAT_UNSUPPORTED, // 40904 中文文案
 ])
 
 /**
@@ -146,7 +201,11 @@ function formatValidationDetails(details: unknown): string | null {
  * 服务端已本地化的 message 透传；英文默认文案按错误码映射。
  * 校验失败（40000）且携带结构化 details 时，拼接字段级错误帮助定位。
  */
-export function getFriendlyErrorMessage(code: number, serverMessage?: string, details?: unknown): string {
+export function getFriendlyErrorMessage(
+  code: number,
+  serverMessage?: string,
+  details?: unknown,
+): string {
   const base = SERVER_LOCALIZED_CODES.has(code as ErrorCodeValue)
     ? serverMessage || LOCALIZED_MESSAGES[code as ErrorCodeValue] || '操作失败'
     : LOCALIZED_MESSAGES[code as ErrorCodeValue] || serverMessage || `操作失败（错误码 ${code}）`

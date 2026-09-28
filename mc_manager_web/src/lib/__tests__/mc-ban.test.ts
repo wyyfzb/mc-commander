@@ -13,14 +13,31 @@ import {
 
 describe('封禁时长档位（6 档）', () => {
   it('档位顺序与映射（永久 = null duration）', () => {
-    expect(BAN_DURATION_OPTIONS.map((o) => o.label)).toEqual(['1小时', '12小时', '1天', '7天', '30天', '永久'])
+    expect(BAN_DURATION_OPTIONS.map((o) => o.label)).toEqual([
+      '1小时',
+      '12小时',
+      '1天',
+      '7天',
+      '30天',
+      '永久',
+    ])
     expect(BAN_DURATION_OPTIONS.map((o) => o.value)).toEqual(['1h', '12h', '1d', '7d', '30d', null])
   })
 })
 
 describe('封禁理由（9 项）', () => {
   it('理由清单与「其他」回退', () => {
-    expect(BAN_REASONS).toEqual(['作弊', '辱骂/骚扰', '恶意破坏', '广告', '刷屏', '恶意PVP', '不当语言', '使用Bug', '其他'])
+    expect(BAN_REASONS).toEqual([
+      '作弊',
+      '辱骂/骚扰',
+      '恶意破坏',
+      '广告',
+      '刷屏',
+      '恶意PVP',
+      '不当语言',
+      '使用Bug',
+      '其他',
+    ])
     expect(BAN_REASON_FALLBACK).toBe('其他')
   })
 })
@@ -67,19 +84,25 @@ describe('formatBanRemaining（封禁徽章剩余时间）', () => {
 
 describe('封禁表单校验', () => {
   it('IP 封禁需玩家有 IP 地址', () => {
-    expect(validateBanForm({ targetType: 'ip', duration: '1h', reason: '作弊', kickFirst: true }, null)).toBe(
-      '该玩家暂无 IP 信息',
-    )
-    expect(validateBanForm({ targetType: 'ip', duration: '1h', reason: '作弊', kickFirst: true }, '')).toBe(
-      '该玩家暂无 IP 信息',
-    )
+    expect(
+      validateBanForm({ targetType: 'ip', duration: '1h', reason: '作弊', kickFirst: true }, null),
+    ).toBe('该玩家暂无 IP 信息')
+    expect(
+      validateBanForm({ targetType: 'ip', duration: '1h', reason: '作弊', kickFirst: true }, ''),
+    ).toBe('该玩家暂无 IP 信息')
   })
   it('玩家封禁或 IP 存在时通过', () => {
     expect(
-      validateBanForm({ targetType: 'player', duration: null, reason: '作弊', kickFirst: true }, null),
+      validateBanForm(
+        { targetType: 'player', duration: null, reason: '作弊', kickFirst: true },
+        null,
+      ),
     ).toBeNull()
     expect(
-      validateBanForm({ targetType: 'ip', duration: '1d', reason: '作弊', kickFirst: true }, '10.0.0.1'),
+      validateBanForm(
+        { targetType: 'ip', duration: '1d', reason: '作弊', kickFirst: true },
+        '10.0.0.1',
+      ),
     ).toBeNull()
   })
 })

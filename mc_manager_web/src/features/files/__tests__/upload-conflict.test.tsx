@@ -5,7 +5,7 @@
  * 测试路径与文件名均为虚构示例，严禁真实服务器数据
  */
 import { describe, it, expect, beforeEach, afterEach, afterAll, beforeAll, vi } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { setupServer } from 'msw/node'
 import { createMemoryRouter, RouterProvider } from 'react-router'
@@ -127,12 +127,10 @@ describe('FilesPage 上传同名冲突确认（#328）', () => {
     expect(input).not.toBeNull()
     fireEvent.change(input, { target: { files: [new File(['new-data'], 'server.properties')] } })
 
-    // 不应直接发起上传请求（冲突弹窗阻断）
-    await new Promise((r) => setTimeout(r, 50))
-    expect(sentXHR).toHaveLength(0)
-
-    // 冲突确认对话框应出现
+    // 冲突确认对话框应出现（冲突探测在 change 处理器内同步判定）
     expect(await screen.findByText('同名文件已存在')).toBeInTheDocument()
+    // 冲突流程收口后再断言未发请求（冲突弹窗阻断）
+    expect(sentXHR).toHaveLength(0)
     expect(screen.getByText('覆盖')).toBeInTheDocument()
     expect(screen.getByText('跳过')).toBeInTheDocument()
   })
@@ -169,10 +167,11 @@ describe('FilesPage 上传同名冲突确认（#328）', () => {
     // 点击「跳过」
     fireEvent.click(screen.getByText('跳过'))
 
-    // 弹窗关闭，无上传请求
-    await new Promise((r) => setTimeout(r, 50))
+    // 弹窗关闭（跳过流程收口）后，无上传请求；act 让渡微任务，防将来跳过改走
+    // mutateAsync 时缺陷性上传晚于断言发出（query-core 的 mutationFn 非同步栈内执行）
+    await waitFor(() => expect(screen.queryByText('同名文件已存在')).not.toBeInTheDocument())
+    await act(async () => {})
     expect(sentXHR).toHaveLength(0)
-    expect(screen.queryByText('同名文件已存在')).not.toBeInTheDocument()
   })
 
   it('无冲突文件：直接上传不弹确认', async () => {

@@ -20,28 +20,46 @@ import { InstanceModel } from '../../db/index.js';
 import { reconcileTempBans } from '../../utils/ban-reconcile.js';
 import { logger } from '../../utils/logger.js';
 
-
 // 日志单行最大长度：超长行截断并加标记，防超长输出（崩溃堆栈/异常打印）撑爆
-// logBuffer 与 WebSocket 广播（find-023-server 单行截断）。
+// logBuffer 与 WebSocket 广播（单行截断）。
 const LOG_LINE_MAX_LENGTH = 4096;
 
 /// 单行日志截断：按行截断超过 LOG_LINE_MAX_LENGTH 的行，超长部分加 "…[truncated]" 标记。
 function truncateLogText(text) {
-  return String(text).split('\n').map((line) => {
-    if (line.length <= LOG_LINE_MAX_LENGTH) return line;
-    return line.substring(0, LOG_LINE_MAX_LENGTH) + '…[truncated]';
-  }).join('\n');
+  return String(text)
+    .split('\n')
+    .map((line) => {
+      if (line.length <= LOG_LINE_MAX_LENGTH) return line;
+      return line.substring(0, LOG_LINE_MAX_LENGTH) + '…[truncated]';
+    })
+    .join('\n');
+}
+
+/**
+ * EULA 是否已同意（全仓唯一实现，routes/status.js 的启动前置检查与本域共用）。
+ * 读取即判定：文件缺失（ENOENT）与内容不含 `eula=true` 都算未同意——不做
+ * existsSync 预检，预检与读之间的窗口会让「文件消失」以裸 ENOENT 冒泡成 500，
+ * 而语义上它就该是「未同意 EULA」。
+ * 行首锚定（^…$，多行）：`#eula=true` 这类注释行不算同意（旧实现的行内匹配会把
+ * 注释也认下，与路由侧口径分叉，两侧统一到严格口径）。已知与 MC 自身解析的差异：
+ * java.util.Properties 忽略行首空白（` eula=true` 对 MC 有效），本判定不认——面板
+ * 写入侧（routes/status.js、routes/server-jar.js）产生的都是无缩进的干净行，该差异
+ * 只在人工手改文件时可见，且路由侧一直是这个口径。
+ */
+export function isEulaAccepted(serverPath) {
+  let eulaContent;
+  try {
+    eulaContent = fs.readFileSync(path.join(serverPath, 'eula.txt'), 'utf-8');
+  } catch (err) {
+    if (err.code === 'ENOENT') return false;
+    throw err;
+  }
+  return /^eula\s*=\s*true\s*$/im.test(eulaContent);
 }
 
 export function _ensureEulaAccepted() {
   // EULA 检查：首次启动前必须同意 EULA
-  const eulaPath = path.join(this.serverPath, 'eula.txt');
-  let eulaAccepted = false;
-  if (fs.existsSync(eulaPath)) {
-    const eulaContent = fs.readFileSync(eulaPath, 'utf-8');
-    eulaAccepted = /eula\s*=\s*true/i.test(eulaContent);
-  }
-  if (!eulaAccepted) {
+  if (!isEulaAccepted(this.serverPath)) {
     throw new Error('EULA_NOT_ACCEPTED');
   }
 }
@@ -51,7 +69,9 @@ export function _reconcileTempBansSafe() {
   // banned-players.json 添加/删除封禁，导致面板 DB 与文件不一致。
   // 方向 1：文件有但 DB 无活跃记录 → 文件直接添加的封禁，补入 DB（永久）
   // 方向 2：DB 已过期但文件仍存在 → 停机期间到期未 pardon，清理文件 + 停用记录
-  try { reconcileTempBans(this.id, this.serverPath); } catch (e) {
+  try {
+    reconcileTempBans(this.id, this.serverPath);
+  } catch (e) {
     logger.warn(`[${this.id}] tempban 对账失败（不阻塞启动）:`, e.message);
   }
 }
@@ -61,22 +81,24 @@ export function _cleanWorldLock() {
   // 注意：不使用 pkill，避免误杀同名进程和命令注入风险
   this.process = null;
   // 使用 level-name 而非硬编码 'world'，兼容自定义世界目录名；
-  // 服务层兜底校验（extra-1）：非法/越界 level-name 回退 'world'，
+  // 服务层兜底校验：非法/越界 level-name 回退 'world'，
   // 保证 unlink 只作用于实例目录内的锁文件（越界拒绝并告警）
   const lockLevelName = this._getSafeLevelName();
   const lockPath = path.join(this.serverPath, lockLevelName, 'session.lock');
-  try { fs.unlinkSync(lockPath); } catch {}
+  try {
+    fs.unlinkSync(lockPath);
+  } catch {}
 }
 
 export function _resolveStartCommand(startCommand) {
   let command, args;
 
-  // ── 启动命令/参数构建（find-002-service 结构化改造，移除自由字符串执行能力）──
+  // ── 启动命令/参数构建（结构化改造，移除自由字符串执行能力）──
   // 四种来源（优先级从高到低）：
   // 1. 调用方结构化参数 start({ jvmArgs: [...] })：command 固定 javaPath，
   //    jvmArgs 过白名单校验（仅 -X/-D 前缀与 -jar，-jar 路径必须位于 serverPath 内）；
   // 2. 实例配置持久化的 jvmArgs（DB jvm_args 列，实例设置弹窗写入）：
-  //    与传参同规则校验，实现"结构化启动参数可持久化"闭环（find-002）；
+  //    与传参同规则校验，实现"结构化启动参数可持久化"闭环；
   // 3. 旧接口兼容：调用方传字符串命令 / 实例配置的旧 startCommand 字段，
   //    解析为 命令+参数 并逐项校验（java 可执行特征 + 参数白名单），
   //    不合法时拒绝启动并报清晰错误（不静默执行）。restart/自动重启/
@@ -84,24 +106,31 @@ export function _resolveStartCommand(startCommand) {
   // 4. 默认：javaPath + -Xmx/-Xms + -jar jarPath + nogui。
   if (startCommand && typeof startCommand === 'object' && Array.isArray(startCommand.jvmArgs)) {
     if (!this._isValidJavaExecutable(this.javaPath)) {
-      throw new Error(`非法 javaPath: ${this.javaPath}（仅允许 java 可执行文件，拒绝 bash/python/sh 等）`);
+      throw new Error(
+        `非法 javaPath: ${this.javaPath}（仅允许 java 可执行文件，拒绝 bash/python/sh 等）`,
+      );
     }
     command = this.javaPath;
     args = this._buildFullJvmArgs(startCommand.jvmArgs, this.serverPath);
   } else if (Array.isArray(this.jvmArgs) && this.jvmArgs.length > 0) {
     // 实例配置持久化的结构化参数（优先级高于遗留 startCommand）
     if (!this._isValidJavaExecutable(this.javaPath)) {
-      throw new Error(`非法 javaPath: ${this.javaPath}（仅允许 java 可执行文件，拒绝 bash/python/sh 等）`);
+      throw new Error(
+        `非法 javaPath: ${this.javaPath}（仅允许 java 可执行文件，拒绝 bash/python/sh 等）`,
+      );
     }
     command = this.javaPath;
     args = this._buildFullJvmArgs(this.jvmArgs, this.serverPath);
   } else {
-    const legacyCmd = (typeof startCommand === 'string' && startCommand.trim()) || this.startCommand;
+    const legacyCmd =
+      (typeof startCommand === 'string' && startCommand.trim()) || this.startCommand;
     if (legacyCmd) {
       ({ command, args } = this._parseLegacyStartCommand(legacyCmd));
     } else {
       if (!this._isValidJavaExecutable(this.javaPath)) {
-        throw new Error(`非法 javaPath: ${this.javaPath}（仅允许 java 可执行文件，拒绝 bash/python/sh 等）`);
+        throw new Error(
+          `非法 javaPath: ${this.javaPath}（仅允许 java 可执行文件，拒绝 bash/python/sh 等）`,
+        );
       }
       const jarPath = path.join(this.serverPath, this.jarFile);
       if (!fs.existsSync(jarPath)) {
@@ -110,11 +139,10 @@ export function _resolveStartCommand(startCommand) {
 
       command = this.javaPath;
       // 默认参数同样过白名单校验：jarFile 若被配置为 ../ 越界路径会被拒绝
-      args = this._validateJvmArgs([
-        `-Xmx${this.maxMemory}`,
-        `-Xms${this.minMemory}`,
-        '-jar', jarPath, 'nogui'
-      ], this.serverPath);
+      args = this._validateJvmArgs(
+        [`-Xmx${this.maxMemory}`, `-Xms${this.minMemory}`, '-jar', jarPath, 'nogui'],
+        this.serverPath,
+      );
     }
   }
   return { command, args };
@@ -167,7 +195,10 @@ export function _attachStdinErrorListener() {
   // 场景无 .on，防御跳过。
   if (typeof this.process.stdin.on === 'function') {
     this.process.stdin.on('error', (err) => {
-      logger.warn(`[${this.id}] Server stdin pipe error (server exited mid-command?):`, err.message);
+      logger.warn(
+        `[${this.id}] Server stdin pipe error (server exited mid-command?):`,
+        err.message,
+      );
     });
   }
 }
@@ -185,44 +216,56 @@ export function _initializeRuntimeState() {
   }
   this._readWorldSpawnFromLevelDat();
   this._sleepingPlayers = 0;
+  // 新一轮运行重新计数采集告警：否则上一轮留下的「已告警」位会让新进程的首个失败静默
+  this._win32StatsError = false;
   this._startStatsCollection();
+}
+
+/** 日志噪音行过滤（stdout 管道与接管实例的文件续读共用）：保留 [Rcon: ...]
+ *  命令执行反馈（小写 rcon），过滤线程/监听器/连接等纯系统噪音。 */
+export function _filterLogNoise(text) {
+  return text
+    .split('\n')
+    .filter((l) => {
+      const trimmed = l.trim();
+      if (!trimmed) return false;
+      if (trimmed.startsWith('[RCON')) return false; // [RCON Listener/Client #N/INFO]
+      if (trimmed.includes('Thread RCON')) return false; // Thread RCON Client ... shutting down
+      if (trimmed.includes('RCON Client')) return false; // RCON Client /127... 连接噪音
+      if (trimmed.includes('RCON Listener')) return false; // RCON Listener 监听噪音
+      if (trimmed.includes('RCON running on')) return false; // RCON running on 0.0.0.0:25575
+      if (trimmed.startsWith('WARNING:') && trimmed.includes('java.lang.System')) return false;
+      if (
+        trimmed.startsWith('Starting net.minecraft') &&
+        trimmed.includes('BundlerClassPathCapture')
+      )
+        return false;
+      return true;
+    })
+    .join('\n');
+}
+
+/** 日志文本统一摄取入口：stdout 管道、stderr 与接管实例的文件续读共用——
+ *  过滤（stdout 语义）→ 单行截断→ logBuffer 滚动 + WS 推送
+ *  + 输出解析。三条来源共用可保证接管实例的日志行为与常规实例完全一致。 */
+export function _ingestLogText(text, type = 'stdout') {
+  this.lastOutput = text;
+  const filtered = type === 'stdout' ? this._filterLogNoise(text) : text;
+  if (!filtered.trim()) return;
+  const finalText = truncateLogText(filtered);
+  this.logBuffer.push({ time: Date.now(), text: finalText, type });
+  if (this.logBuffer.length > 1000) this.logBuffer.shift();
+  this.emit('log', { text: finalText, type });
+  if (type === 'stdout') this._parseOutput(finalText);
 }
 
 export function _attachOutputStreamListeners() {
   this.process.stdout.on('data', (data) => {
-    const text = data.toString();
-    this.lastOutput = text;
-
-    // 选择性过滤 RCON 噪音：保留 [Rcon: ...] 命令执行反馈（小写 rcon），
-    // 过滤线程/监听器/连接等纯系统噪音（大写 RCON / Thread RCON / Client / Listener）
-    const filteredLines = text.split('\n').filter(l => {
-      const trimmed = l.trim();
-      if (!trimmed) return false;
-      if (trimmed.startsWith('[RCON')) return false;              // [RCON Listener/Client #N/INFO]
-      if (trimmed.includes('Thread RCON')) return false;          // Thread RCON Client ... shutting down
-      if (trimmed.includes('RCON Client')) return false;          // RCON Client /127... 连接噪音
-      if (trimmed.includes('RCON Listener')) return false;        // RCON Listener 监听噪音
-      if (trimmed.includes('RCON running on')) return false;      // RCON running on 0.0.0.0:25575
-      if (trimmed.startsWith('WARNING:') && trimmed.includes('java.lang.System')) return false;
-      if (trimmed.startsWith('Starting net.minecraft') && trimmed.includes('BundlerClassPathCapture')) return false;
-      return true;
-    }).join('\n');
-    if (!filteredLines.trim()) return;
-    // 单行截断（find-023-server）：超长行截断并加标记，防超长输出撑爆 logBuffer/WS 广播
-    const filteredText = truncateLogText(filteredLines);
-
-    this.logBuffer.push({ time: Date.now(), text: filteredText, type: 'stdout' });
-    if (this.logBuffer.length > 1000) this.logBuffer.shift();
-    this.emit('log', { text: filteredText, type: 'stdout' });
-    this._parseOutput(filteredText);
+    this._ingestLogText(data.toString(), 'stdout');
   });
 
   this.process.stderr.on('data', (data) => {
-    const text = data.toString();
-    // 单行截断（find-023-server）：stderr 同理，超长行截断并加标记
-    const truncated = truncateLogText(text);
-    this.logBuffer.push({ time: Date.now(), text: truncated, type: 'stderr' });
-    this.emit('log', { text: truncated, type: 'stderr' });
+    this._ingestLogText(data.toString(), 'stderr');
   });
 }
 
@@ -230,8 +273,13 @@ export function _attachExitListener() {
   this.process.on('exit', (code) => {
     this.isRunning = false;
     this.process = null;
+    // 关闭前的最终存档已落盘（graceful stop 保存世界）：标记大小缓存失效
+    this._worldSizeDirty = true;
     this._stopStatsCollection();
     this._rconCleanup();
+    // pid 文件随进程退出删除：残留文件会在下次面板启动时被 adopt 验活自然清理，
+    // 此处主动删是让「进程活着但面板误判」的窗口内不留过时线索
+    this._removePidFile();
     // 服务器关闭时所有在线玩家视为离开（记录"离开服务器"事件 + 保存数据）
     for (const name of [...this.players.keys()]) {
       this._handlePlayerLeave(name);
@@ -240,14 +288,18 @@ export function _attachExitListener() {
     // 持久化累计运行时长到数据库
     if (this.startTime) {
       const uptimeSeconds = Math.floor((Date.now() - this.startTime) / 1000);
-      try { InstanceModel.addUptime(this.id, uptimeSeconds); } catch (e) { logger.warn('Failed to persist uptime:', e.message); }
+      try {
+        InstanceModel.addUptime(this.id, uptimeSeconds);
+      } catch (e) {
+        logger.warn('Failed to persist uptime:', e.message);
+      }
     }
 
     // 区分「意外停止/崩溃」与「用户主动停止」：
     // 主动 stop/kill/restart 会设置 _manualStop=true；正常退出 code 通常为 0。
     const unexpectedExit = !this._manualStop && code !== 0;
     if (unexpectedExit) {
-      // ── 崩溃循环熔断检测（feat-5 运维韧性）──
+      // ── 崩溃循环熔断检测（运维韧性）──
       const now = Date.now();
       const { windowMs, maxCrashes } = config.crashLoop;
       // 滑动窗口：窗口外重置计数
@@ -261,12 +313,20 @@ export function _attachExitListener() {
       if (this._consecutiveCrashes >= maxCrashes && !this._circuitBreakerTripped) {
         this._circuitBreakerTripped = true;
         this.autoRestart = false;
-        try { InstanceModel.update(this.id, { autoRestart: false }); } catch { /* best-effort */ }
+        try {
+          InstanceModel.update(this.id, { autoRestart: false });
+        } catch {
+          /* best-effort */
+        }
         this.emit('log', {
           text: `[服务器] 崩溃循环熔断已触发（${windowMs / 1000}s 内崩溃 ${this._consecutiveCrashes} 次），自动重启已禁用。请在实例设置中手动重新启用。`,
           type: 'stdout',
         });
-        this.emit('status', { event: 'circuit_breaker', consecutiveCrashes: this._consecutiveCrashes, windowMs });
+        this.emit('status', {
+          event: 'circuit_breaker',
+          consecutiveCrashes: this._consecutiveCrashes,
+          windowMs,
+        });
       }
 
       // 意外停止：记录到日志流（终端可见），并按开关决定是否自动重启

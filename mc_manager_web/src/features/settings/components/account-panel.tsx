@@ -24,19 +24,16 @@ import {
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { DangerButton } from '@/components/mcs/danger-button'
+import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { LoadingButton } from '@/components/mcs/loading-button'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { PasswordInput } from '@/components/ui/password-input'
 import { StatusPill } from '@/components/mcs/status-pill'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+import { SettingsSectionCard as SectionCard } from './settings-section-card'
+import { TotpPanel } from './totp-panel'
+import { ReadonlyCredentialPanel } from './readonly-credential-panel'
+
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { EmptyState } from '@/components/mcs/empty-state'
 import { queryKeys } from '@/api/queries'
@@ -46,7 +43,9 @@ import { getFriendlyErrorText } from '@/api/errors'
 import { useUnsavedGuard } from '@/hooks/use-unsaved-guard'
 import { useAuthStore } from '@/stores/auth'
 import { useConnectionStore } from '@/stores/connection'
+import { sessionAppliesToPanel } from '@/lib/mc-connection'
 import { formatRelativeTime, formatStartTime as formatDateTime } from '@/lib/format'
+import { clearLocalCredentials, logoutToastText } from '@/lib/logout'
 import {
   assessPasswordStrength,
   STRENGTH_BAR_STYLES,
@@ -69,41 +68,18 @@ function describeUserAgent(ua: string | null): string {
   return `${browser}${mobile}`
 }
 
-/** 通用区块卡片（面板内三段复用） */
-function SectionCard({
-  icon: Icon,
-  title,
-  description,
-  children,
-}: {
-  icon: typeof ShieldCheck
-  title: string
-  description: string
-  children: React.ReactNode
-}) {
-  return (
-    <section className="rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-default p-5 shadow-mcs-card">
-      <div className="mb-4 flex items-start gap-3">
-        <div className="flex size-8 shrink-0 items-center justify-center rounded-mcs-sm bg-mcs-accent-bg-subtle">
-          <Icon className="size-4 text-mcs-accent-fg" aria-hidden />
-        </div>
-        <div>
-          <h3 className="text-mcs-sm font-semibold text-mcs-text-default">{title}</h3>
-          <p className="mt-0.5 text-mcs-2xs text-mcs-text-subtle">{description}</p>
-        </div>
-      </div>
-      {children}
-    </section>
-  )
-}
-
 export function AccountPanel() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const session = useAuthStore((s) => s.session)
   const apiKey = useConnectionStore((s) => s.apiKey)
   const baseUrl = useConnectionStore((s) => s.baseUrl)
-  const authed = Boolean(session?.token || apiKey)
+  /**
+   * 登录会话是否属于本面板：令牌只对签发它的面板有效，属于别面板时本页所有
+   * 「会话」语义都要按 API Key 通道呈现，否则界面会声称一个用不上的登录态
+   */
+  const sessionApplies = sessionAppliesToPanel(session, baseUrl)
+  const authed = Boolean(sessionApplies || apiKey)
 
   // ── 活跃会话（30s 轮询；API Key 直连时空态引导） ──
   const sessionsQuery = useQuery({
@@ -145,7 +121,9 @@ export function AccountPanel() {
     setChangeError('')
     try {
       const res = await changePassword({ baseUrl, apiKey }, currentPassword, newPassword)
-      toast.success(`密码已更新${res.kickedSessions > 0 ? `，已下线其他 ${res.kickedSessions} 个会话` : ''}`)
+      toast.success(
+        `密码已更新${res.kickedSessions > 0 ? `，已下线其他 ${res.kickedSessions} 个会话` : ''}`,
+      )
       setCurrentPassword('')
       setNewPassword('')
       setConfirmPassword('')
@@ -168,9 +146,11 @@ export function AccountPanel() {
       toast.success('会话已下线')
       void queryClient.invalidateQueries({ queryKey: queryKeys.authSessions() })
     } catch (err) {
-      // 踢自己：服务端删除后当前令牌失效 → 本地同步登出
       if (err instanceof ApiError && err.code === 40103) {
-        handleLogoutLocal('当前会话已被下线')
+        // 40103 已由 client.ts 全局处置（清会话 + 派发事件 → routes.tsx 决策跳登录页或保留 Key 续用）：
+        // 此处不再自行清凭据——那会连本机 API Key 一并销毁，与「Key 顶上继续用」的通道语义相反
+        // （自踢成功时服务端返回 200，此分支只在令牌已失效的竞态出现，刷新列表即可）
+        void queryClient.invalidateQueries({ queryKey: queryKeys.authSessions() })
       } else {
         toast.error(`操作失败：${getFriendlyErrorText(err)}`)
       }
@@ -185,22 +165,24 @@ export function AccountPanel() {
   const [loggingOut, setLoggingOut] = useState(false)
 
   const handleLogoutLocal = (message: string) => {
-    useAuthStore.getState().clearSession()
-    useConnectionStore.getState().refreshStatus()
+    // 本机侧登出＝清空全部凭据（会话 + API Key），与会话被自己踢下线/顶栏登出同口径
+    clearLocalCredentials()
     toast.info(message)
     navigate('/login', { replace: true })
   }
 
   const handleLogout = async () => {
     setLoggingOut(true)
+    // 清 Key 与清会话是同一动作的两半，提示口径与顶栏一致（清到了就说清）
+    const doneToast = logoutToastText(Boolean(useConnectionStore.getState().apiKey))
     try {
-      if (session?.token) {
+      if (sessionApplies) {
         await logout({ baseUrl, apiKey })
       }
-      handleLogoutLocal('已退出登录')
+      handleLogoutLocal(doneToast)
     } catch {
       // 服务端登出失败不阻塞本地登出（令牌已不可用）
-      handleLogoutLocal('已退出登录')
+      handleLogoutLocal(doneToast)
     } finally {
       setLoggingOut(false)
       setLogoutOpen(false)
@@ -218,7 +200,7 @@ export function AccountPanel() {
         description="浏览器访问面板所使用的认证通道与凭据状态"
       >
         <div className="flex flex-wrap items-center gap-2.5">
-          {session?.token ? (
+          {sessionApplies ? (
             <StatusPill tone="success" className="gap-1">
               <ShieldCheck className="size-3" aria-hidden />
               管理员会话
@@ -229,18 +211,18 @@ export function AccountPanel() {
               API Key 直连
             </StatusPill>
           )}
-          {session?.expiresAt && (
-            <span className="inline-flex items-center gap-1 text-mcs-2xs text-mcs-text-subtle">
+          {sessionApplies && session?.expiresAt && (
+            <span className="inline-flex items-center gap-1 text-mcs-2xs text-mcs-text-muted">
               <Clock className="size-3" aria-hidden />
               会话到期：{formatDateTime(session.expiresAt)}（活动自动续期）
             </span>
           )}
         </div>
-        {!session?.token && (
-          <p className="mt-3 flex items-start gap-1.5 rounded-mcs-sm border border-mcs-warning-border bg-mcs-warning-bg-subtle px-2.5 py-2 text-mcs-2xs text-mcs-warning-fg">
-            <TriangleAlert className="mt-0.5 size-3 shrink-0" aria-hidden />
-            当前使用明文 API Key 直连。建议退出后使用管理员密码登录（令牌仅存服务端摘要，传输/存储更安全）。
-          </p>
+        {!sessionApplies && (
+          <NoticeBanner variant="warning" icon={TriangleAlert} className="mt-3">
+            当前使用明文 API Key
+            直连。建议退出后使用管理员密码登录（令牌仅存服务端摘要，传输/存储更安全）。
+          </NoticeBanner>
         )}
       </SectionCard>
 
@@ -260,7 +242,6 @@ export function AccountPanel() {
               value={currentPassword}
               onChange={setCurrentPassword}
               autoComplete="current-password"
-              className="h-9"
             />
           </div>
           <div className="space-y-2">
@@ -272,7 +253,6 @@ export function AccountPanel() {
               value={newPassword}
               onChange={setNewPassword}
               autoComplete="new-password"
-              className="h-9"
             />
           </div>
           <div className="space-y-2">
@@ -284,7 +264,6 @@ export function AccountPanel() {
               value={confirmPassword}
               onChange={setConfirmPassword}
               autoComplete="new-password"
-              className="h-9"
             />
           </div>
 
@@ -295,12 +274,16 @@ export function AccountPanel() {
                   <div
                     key={i}
                     className={`h-1 flex-1 rounded-full transition-colors duration-mcs-base ${
-                      i < strength.score ? STRENGTH_BAR_STYLES[strength.score] : 'bg-mcs-border-muted'
+                      i < strength.score
+                        ? STRENGTH_BAR_STYLES[strength.score]
+                        : 'bg-mcs-border-muted'
                     }`}
                   />
                 ))}
               </div>
-              <p className={`mt-1 text-mcs-2xs font-medium ${STRENGTH_TEXT_STYLES[strength.score]}`}>
+              <p
+                className={`mt-1 text-mcs-2xs font-medium ${STRENGTH_TEXT_STYLES[strength.score]}`}
+              >
                 新密码强度：{strength.label}
                 {strength.score > 0 && strength.score < 3 && '（建议混合大小写字母、数字与符号）'}
               </p>
@@ -308,21 +291,24 @@ export function AccountPanel() {
           )}
 
           {changeError && (
-            <p
-              role="alert"
-              className="sm:col-span-3 rounded-mcs-sm border border-mcs-error-border bg-mcs-error-bg-subtle px-2.5 py-2 text-mcs-xs text-mcs-error-fg"
-            >
+            <NoticeBanner variant="error" role="alert" className="sm:col-span-3">
               {changeError}
-            </p>
+            </NoticeBanner>
           )}
 
           <div className="sm:col-span-3">
-            <LoadingButton type="submit" size="sm" loading={changing} disabled={!authed}>
+            <LoadingButton type="submit" loading={changing} disabled={!authed}>
               更新密码
             </LoadingButton>
           </div>
         </form>
       </SectionCard>
+
+      {/* ── 两步验证（TOTP）挂靠向导 ── */}
+      <TotpPanel baseUrl={baseUrl} apiKey={apiKey} authed={authed} />
+
+      {/* ── 只读监控凭据（机器凭据生命周期） ── */}
+      <ReadonlyCredentialPanel baseUrl={baseUrl} apiKey={apiKey} authed={authed} />
 
       {/* ── 活跃会话 ── */}
       <SectionCard
@@ -331,14 +317,19 @@ export function AccountPanel() {
         description="所有已登录设备；发现异常登录可立即下线（最长 7 天未活动自动过期）"
       >
         {sessionsQuery.isLoading ? (
-          <div className="flex items-center justify-center gap-2 py-8 text-mcs-xs text-mcs-text-subtle" role="status">
+          <div
+            className="flex items-center justify-center gap-2 py-8 text-mcs-xs text-mcs-text-muted"
+            role="status"
+          >
             <Loader2 className="size-4 animate-spin" aria-hidden />
             正在加载会话列表…
           </div>
         ) : sessionsQuery.isError ? (
           <div className="flex flex-col items-center gap-1.5 py-8 text-center">
             <TriangleAlert className="size-6 text-mcs-error-fg" aria-hidden />
-            <p className="text-mcs-xs text-mcs-error-fg">会话列表加载失败：{getFriendlyErrorText(sessionsQuery.error)}</p>
+            <p className="text-mcs-xs text-mcs-error-fg">
+              会话列表加载失败：{getFriendlyErrorText(sessionsQuery.error)}
+            </p>
             <Button variant="outline" size="sm" onClick={() => void sessionsQuery.refetch()}>
               重试
             </Button>
@@ -347,27 +338,38 @@ export function AccountPanel() {
           /* 空态：EmptyState 收敛写法（同 backup-panel），dashed 孤例已消除 */
           <EmptyState
             icon={MonitorSmartphone}
-            title={session?.token ? '暂无活跃会话' : '当前为 API Key 直连，暂无浏览器会话'}
-            hint={session?.token ? undefined : '退出登录后通过密码登录，即可在此管理设备会话'}
+            title={sessionApplies ? '暂无活跃会话' : '当前为 API Key 直连，暂无浏览器会话'}
+            hint={sessionApplies ? undefined : '退出登录后通过密码登录，即可在此管理设备会话'}
           />
         ) : (
           <div className="max-h-96 overflow-y-auto rounded-mcs-md border border-mcs-border-muted">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-mcs-bg-muted/60">
-                  <TableHead className="text-mcs-2xs">设备</TableHead>
-                  <TableHead className="text-mcs-2xs">IP 地址</TableHead>
-                  <TableHead className="text-mcs-2xs">最后活跃</TableHead>
-                  <TableHead className="text-mcs-2xs">到期时间</TableHead>
-                  <TableHead className="w-10 text-right text-mcs-2xs">
+            <table className="w-full border-collapse text-left">
+              <thead>
+                <tr className="border-b border-mcs-border-muted bg-mcs-bg-muted/60">
+                  <th scope="col" className="h-9 px-2 text-mcs-2xs font-medium text-mcs-text-muted">
+                    设备
+                  </th>
+                  <th scope="col" className="h-9 px-2 text-mcs-2xs font-medium text-mcs-text-muted">
+                    IP 地址
+                  </th>
+                  <th scope="col" className="h-9 px-2 text-mcs-2xs font-medium text-mcs-text-muted">
+                    最后活跃
+                  </th>
+                  <th scope="col" className="h-9 px-2 text-mcs-2xs font-medium text-mcs-text-muted">
+                    到期时间
+                  </th>
+                  <th
+                    scope="col"
+                    className="h-9 w-10 px-2 text-right text-mcs-2xs font-medium text-mcs-text-muted"
+                  >
                     <span className="sr-only">操作</span>
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
                 {sessions.map((s) => (
-                  <TableRow key={s.id}>
-                    <TableCell className="py-2.5">
+                  <tr key={s.id} className="border-b border-mcs-border-subtle last:border-b-0">
+                    <td className="px-2 py-2.5">
                       <div className="flex items-center gap-2">
                         <span className="text-mcs-xs font-medium text-mcs-text-default">
                           {describeUserAgent(s.userAgent)}
@@ -378,34 +380,37 @@ export function AccountPanel() {
                           </StatusPill>
                         )}
                       </div>
-                      <p className="mt-0.5 max-w-52 truncate text-mcs-2xs text-mcs-text-subtle" title={s.userAgent ?? undefined}>
+                      <p
+                        className="mt-0.5 max-w-52 truncate text-mcs-2xs text-mcs-text-muted"
+                        title={s.userAgent ?? undefined}
+                      >
                         登录于 {formatDateTime(s.createdAt)}
                       </p>
-                    </TableCell>
-                    <TableCell className="py-2.5 font-mono text-mcs-xs text-mcs-text-muted">
+                    </td>
+                    <td className="px-2 py-2.5 font-mono text-mcs-xs text-mcs-text-muted">
                       {s.ip ?? '—'}
-                    </TableCell>
-                    <TableCell className="py-2.5 text-mcs-xs text-mcs-text-muted">
+                    </td>
+                    <td className="px-2 py-2.5 text-mcs-xs text-mcs-text-muted">
                       {formatRelativeTime(s.lastSeenAt)}
-                    </TableCell>
-                    <TableCell className="py-2.5 text-mcs-xs text-mcs-text-muted">
+                    </td>
+                    <td className="px-2 py-2.5 text-mcs-xs text-mcs-text-muted">
                       {formatDateTime(s.expiresAt)}
-                    </TableCell>
-                    <TableCell className="py-2.5 text-right">
+                    </td>
+                    <td className="px-2 py-2.5 text-right">
                       <Button
                         variant="ghost"
                         size="icon-sm"
                         aria-label={`下线会话（${describeUserAgent(s.userAgent)}）`}
                         onClick={() => setKickTarget(String(s.id))}
-                        className="text-mcs-text-subtle hover:text-mcs-error-fg"
+                        className="text-mcs-text-muted hover:text-mcs-error-fg"
                       >
                         <Trash2 className="size-3.5" aria-hidden />
                       </Button>
-                    </TableCell>
-                  </TableRow>
+                    </td>
+                  </tr>
                 ))}
-              </TableBody>
-            </Table>
+              </tbody>
+            </table>
           </div>
         )}
       </SectionCard>
@@ -414,14 +419,16 @@ export function AccountPanel() {
       <SectionCard
         icon={LogOut}
         title="退出登录"
-        description="删除当前浏览器会话；API Key 直连不受影响"
+        description="清除本浏览器保存的全部凭据（登录会话与 API Key），下次访问需重新登录或重新配置连接"
       >
         <DangerButton
           type="button"
           size="sm"
           onClick={() => setLogoutOpen(true)}
-          disabled={!session?.token}
-          title={session?.token ? undefined : 'API Key 直连无会话可登出'}
+          // 会话与 API Key 任一存在都可清（描述承诺的是「全部凭据」，那就得对两种凭据都可达）；
+          // 这里问的是「本机有没有凭据可清」，故意**不用**面板判据（异面板会话也是本机凭据）
+          disabled={!session?.token && !apiKey}
+          title={session?.token || apiKey ? undefined : '本机已无凭据可清除'}
         >
           <LogOut className="size-3.5" aria-hidden />
           退出登录
@@ -451,7 +458,7 @@ export function AccountPanel() {
         open={logoutOpen}
         onOpenChange={setLogoutOpen}
         title="退出登录？"
-        description="当前浏览器会话将被删除，下次访问需重新输入管理员密码。"
+        description="将清除本浏览器保存的全部凭据（登录会话与 API Key），下次访问需重新登录或重新配置连接。"
         confirmText="退出登录"
         danger
         loading={loggingOut}

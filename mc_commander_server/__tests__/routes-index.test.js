@@ -26,22 +26,31 @@ vi.mock('../routes/server-jar.js', () => ({
 
 import { setupRoutes } from '../routes/index.js';
 import { errorHandler } from '../middleware/error_handler.js';
+import { authMiddleware } from '../middleware/auth.js';
 import config from '../config.js';
 
 // 版本号单一来源与 routes/index.js 同源：package.json
 const SERVER_VERSION = JSON.parse(
-  readFileSync(new URL('../package.json', import.meta.url), 'utf-8')
+  readFileSync(new URL('../package.json', import.meta.url), 'utf-8'),
 ).version;
+
+// 测试用明文 Key（与 vitest.config.js 注入的 API_KEY_HASH 一致）
+const TEST_API_KEY = 'test-api-key-for-unit-tests';
 
 describe('routes/index.js 聚合层', () => {
   let app;
   const fetchMock = vi.fn();
 
+  // v1 角色门要求显式角色（无 req.auth 一律 403），故必须与生产同序挂上认证层：
+  // 本文件不 mock 认证层，用真实 authMiddleware（API Key 分支只比摘要、不触库）
+  const apiGet = (url) => request(app).get(url).set('X-API-Key', TEST_API_KEY);
+
   beforeAll(() => {
     app = express();
+    app.use('/api/', authMiddleware);
     setupRoutes(app, { instances: new Map() }, {});
     // 与生产组装（index.js L189-191）同序：setupRoutes 之后挂 errorHandler，
-    // check-update 的 next(e) 跳过普通中间件 notFoundHandler 由 errorHandler 接住
+    // check-update 的意外异常经 asyncHandler 透传，跳过普通中间件 notFoundHandler 由 errorHandler 接住
     app.use(errorHandler);
   });
 
@@ -61,7 +70,7 @@ describe('routes/index.js 聚合层', () => {
         json: async () => ({ version: '9.9.9' }),
       });
 
-      const res = await request(app).get('/api/v1/check-update');
+      const res = await apiGet('/api/v1/check-update');
 
       expect(res.status).toBe(200);
       expect(res.body.status).toBe('ok');
@@ -74,7 +83,7 @@ describe('routes/index.js 聚合层', () => {
       // npm registry 查询使用 config.npmPkgName 拼接
       expect(fetchMock).toHaveBeenCalledWith(
         `https://registry.npmjs.org/${config.npmPkgName}/latest`,
-        expect.objectContaining({ signal: expect.anything() })
+        expect.objectContaining({ signal: expect.anything() }),
       );
     });
 
@@ -84,14 +93,14 @@ describe('routes/index.js 聚合层', () => {
         json: async () => ({ version: SERVER_VERSION }),
       });
 
-      const res = await request(app).get('/api/v1/check-update');
+      const res = await apiGet('/api/v1/check-update');
 
       expect(res.status).toBe(200);
       expect(res.body.data.latest).toBe(SERVER_VERSION);
       expect(res.body.data.hasUpdate).toBe(false);
       // url 判断条件是 latest truthy 而非 hasUpdate（锁定当前行为）
       expect(res.body.data.url).toBe(
-        `https://www.npmjs.com/package/${config.npmPkgName}/v/${SERVER_VERSION}`
+        `https://www.npmjs.com/package/${config.npmPkgName}/v/${SERVER_VERSION}`,
       );
     });
 
@@ -101,7 +110,7 @@ describe('routes/index.js 聚合层', () => {
         json: async () => ({}),
       });
 
-      const res = await request(app).get('/api/v1/check-update');
+      const res = await apiGet('/api/v1/check-update');
 
       expect(res.status).toBe(200);
       expect(res.body.data).toEqual({
@@ -119,7 +128,7 @@ describe('routes/index.js 聚合层', () => {
         json: async () => ({}),
       });
 
-      const res = await request(app).get('/api/v1/check-update');
+      const res = await apiGet('/api/v1/check-update');
 
       expect(res.status).toBe(500);
       expect(res.body.status).toBe('error');
@@ -132,7 +141,7 @@ describe('routes/index.js 聚合层', () => {
       abortErr.name = 'AbortError';
       fetchMock.mockRejectedValue(abortErr);
 
-      const res = await request(app).get('/api/v1/check-update');
+      const res = await apiGet('/api/v1/check-update');
 
       expect(res.status).toBe(200);
       expect(res.body.status).toBe('ok');
@@ -149,17 +158,17 @@ describe('routes/index.js 聚合层', () => {
       connErr.code = 'UND_ERR_CONNECTABLE';
       fetchMock.mockRejectedValue(connErr);
 
-      const res = await request(app).get('/api/v1/check-update');
+      const res = await apiGet('/api/v1/check-update');
 
       expect(res.status).toBe(200);
       expect(res.body.data.offline).toBe(true);
       expect(res.body.data.hasUpdate).toBe(false);
     });
 
-    it('其他异常（非 AbortError/连接错误）→ next(e) 走错误中间件 500', async () => {
+    it('其他异常（非 AbortError/连接错误）→ 经 asyncHandler 走错误中间件 500', async () => {
       fetchMock.mockRejectedValue(new TypeError('unexpected payload shape'));
 
-      const res = await request(app).get('/api/v1/check-update');
+      const res = await apiGet('/api/v1/check-update');
 
       expect(res.status).toBe(500);
       expect(res.body.code).toBe(50000);
@@ -169,18 +178,18 @@ describe('routes/index.js 聚合层', () => {
 
   describe('GET /api/v1/ 根清单', () => {
     it('endpoints 数组含核心端点且数量锁定，未知路径 404 由 notFoundHandler 收尾', async () => {
-      const res = await request(app).get('/api/v1/');
+      const res = await apiGet('/api/v1/');
       expect(res.status).toBe(200);
       expect(res.body.data.version).toBe('v1');
       // 验收指定核心端点
       expect(res.body.data.endpoints).toEqual(
-        expect.arrayContaining(['/instances', '/webhooks', '/check-update'])
+        expect.arrayContaining(['/instances', '/webhooks', '/check-update']),
       );
       // 清单数量锁定（23 项，防漂移）
       expect(res.body.data.endpoints).toHaveLength(23);
 
       // 未匹配路径穿透至 setupRoutes 尾部 notFoundHandler
-      const nf = await request(app).get('/api/v1/nonexistent');
+      const nf = await apiGet('/api/v1/nonexistent');
       expect(nf.status).toBe(404);
       expect(nf.body.status).toBe('error');
       expect(nf.body.code).toBe(40400);

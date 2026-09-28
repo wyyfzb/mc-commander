@@ -13,13 +13,15 @@ import type { ScheduledTask, TaskRunHistory } from '@/api/types'
 // 执行历史 hook 模块级 mock：对话框测试不依赖网络层/QueryClientProvider，
 // 由用例按需注入返回值（默认空数据 → 编辑模式显示「暂无执行记录」）
 const useTaskHistoryMock = vi.hoisted(() =>
-  vi.fn<() => {
-    data?: TaskRunHistory[]
-    isLoading: boolean
-    isError?: boolean
-    error?: Error | null
-    refetch?: () => Promise<unknown>
-  }>(() => ({ isLoading: false })),
+  vi.fn<
+    () => {
+      data?: TaskRunHistory[]
+      isLoading: boolean
+      isError?: boolean
+      error?: Error | null
+      refetch?: () => Promise<unknown>
+    }
+  >(() => ({ isLoading: false })),
 )
 vi.mock('../../queries', () => ({ useTaskHistory: useTaskHistoryMock }))
 
@@ -153,7 +155,10 @@ describe('TaskDialog Cron 表达式交互', { timeout: 15000 }, () => {
     await user.click(screen.getByRole('button', { name: '每天 4:00' }))
     expect(screen.getByLabelText('Cron 表达式')).toHaveValue('0 4 * * *')
     expect(screen.getByText('04:00每天执行')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '每天 4:00' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: '每天 4:00' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
   })
 
   it('预置 chip 点击自动填充名称建议（名称为空时）', async () => {
@@ -350,9 +355,30 @@ describe('TaskDialog dirty 关闭拦截', { timeout: 15000 }, () => {
 // ── 最近执行时间线（issue #299）──────────────────────────────────
 
 const RUN_HISTORY_MOCK: TaskRunHistory[] = [
-  { id: 12, taskId: 1, runAt: '2026-09-02 04:00:05', status: 'success', error: null, durationMs: 850 },
-  { id: 11, taskId: 1, runAt: '2026-09-01 04:00:03', status: 'failed', error: 'RCON 不可用', durationMs: 3000 },
-  { id: 10, taskId: 1, runAt: '2026-08-31 04:00:01', status: 'skipped', error: null, durationMs: null },
+  {
+    id: 12,
+    taskId: 1,
+    runAt: '2026-09-02T04:00:05.000Z',
+    status: 'success',
+    error: null,
+    durationMs: 850,
+  },
+  {
+    id: 11,
+    taskId: 1,
+    runAt: '2026-09-01T04:00:03.000Z',
+    status: 'failed',
+    error: 'RCON 不可用',
+    durationMs: 3000,
+  },
+  {
+    id: 10,
+    taskId: 1,
+    runAt: '2026-08-31T04:00:01.000Z',
+    status: 'skipped',
+    error: null,
+    durationMs: null,
+  },
 ]
 
 describe('TaskDialog 最近执行时间线（issue #299）', { timeout: 15000 }, () => {

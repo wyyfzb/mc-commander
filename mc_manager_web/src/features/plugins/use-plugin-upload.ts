@@ -48,27 +48,31 @@ export function usePluginUpload({ instanceId, refreshList }: UsePluginUploadOpti
   useEffect(() => () => uploadAbortRef.current?.abort(), [])
 
   /** 上传单个文件；40912 同名冲突时抛给调用方处理 */
-  const uploadOne = useCallback(async (file: File, overwrite: boolean) => {
-    if (!instanceId) return // 早退分支语义（此处尚未渲染，防御性 guard）
-    setUploading({ name: file.name, pct: 0 })
-    const controller = new AbortController()
-    uploadAbortRef.current = controller
-    try {
-      const result = await apiUploadPlugin(useConnectionStore.getState(), instanceId, file, {
-        overwrite,
-        onProgress: (pct) => setUploading({ name: file.name, pct }),
-        signal: controller.signal,
-      })
-      uploadSucceededRef.current += 1
-      toast.success(
-        result.overwritten
-          ? `已覆盖上传 ${file.name}，重启实例后生效`
-          : `已上传 ${file.name}${result.meta?.name ? `（${result.meta.name}）` : ''}，重启实例后生效`,
-      )
-    } finally {
-      uploadAbortRef.current = null
-    }
-  }, [instanceId])
+  const uploadOne = useCallback(
+    async (file: File, overwrite: boolean) => {
+      if (!instanceId) return // 早退分支语义（此处尚未渲染，防御性 guard）
+      setUploading({ name: file.name, pct: 0 })
+      const controller = new AbortController()
+      uploadAbortRef.current = controller
+      try {
+        const result = await apiUploadPlugin(useConnectionStore.getState(), instanceId, file, {
+          overwrite,
+          onProgress: (pct) => setUploading({ name: file.name, pct }),
+          signal: controller.signal,
+        })
+        uploadSucceededRef.current += 1
+        // 落地目录随 toast 外显（与 files 域 toast 带路径同口径；详情页 plugins/{file} 仅次级可见）
+        toast.success(
+          result.overwritten
+            ? `已覆盖上传 ${file.name}，落入 plugins/，重启实例后生效`
+            : `已上传 ${file.name}${result.meta?.name ? `（${result.meta.name}）` : ''}，落入 plugins/，重启实例后生效`,
+        )
+      } finally {
+        uploadAbortRef.current = null
+      }
+    },
+    [instanceId],
+  )
 
   /** 顺序上传队列：冲突时暂停并弹确认；取消/失败不阻断其余文件 */
   const runUploadQueue = useCallback(
@@ -102,7 +106,9 @@ export function usePluginUpload({ instanceId, refreshList }: UsePluginUploadOpti
       setUploading(null)
       setQueueRemaining(0)
       if (uploadFailedRef.current > 0) {
-        toast.warning(`上传完成：成功 ${uploadSucceededRef.current} 个，失败 ${uploadFailedRef.current} 个`)
+        toast.warning(
+          `上传完成：成功 ${uploadSucceededRef.current} 个，失败 ${uploadFailedRef.current} 个`,
+        )
       }
       void refreshList()
     },

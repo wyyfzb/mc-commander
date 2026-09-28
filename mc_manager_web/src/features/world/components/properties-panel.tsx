@@ -2,7 +2,10 @@
  * PropertiesPanel —— server.properties 属性表单
  * - 只读态/编辑态：快照 → 编辑（NoticeBanner + 取消/保存）→ PUT → 需重启项 Dialog 清单 + 可选一键重启
  * - 三分类 FilterChip + 搜索；未知属性自动追加展示（只读，服务端白名单外不可写）
- * - 敏感 9 键锁定（锁图标 + 占位符，tooltip 说明）；热改 4 键编辑态标记「即时生效」
+ * - 敏感 9 键锁定（锁图标 + 占位符，tooltip 说明）
+ * - 生效方式：常态（可写但非热改 ⇒ 改后需重启）由面板头部信息入口承担，只给热改例外逐项挂
+ *   「即时生效」标；入口只读态与编辑态都在，故不必等保存后的 Dialog 才知道要不要重启。
+ *   例外标在 xs 以下收起——窄屏逐项挂标会把键名压到 2 字可见，宽度还给键名更重要
  * - 编辑值在组件 state，与 30s 轮询 query data 隔离，无需暂停轮询
  */
 import { useMemo, useState } from 'react'
@@ -30,6 +33,7 @@ import {
 } from '@/components/ui/dialog'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
+import { InfoHint } from '@/components/mcs/info-hint'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { toast } from 'sonner'
 import { getFriendlyErrorText } from '@/api/errors'
@@ -72,7 +76,14 @@ interface PropertiesPanelProps {
   onRestart?: () => Promise<void>
 }
 
-export function PropertiesPanel({ properties, isLoading, onSave, onEditingChange, isRunning = false, onRestart }: PropertiesPanelProps) {
+export function PropertiesPanel({
+  properties,
+  isLoading,
+  onSave,
+  onEditingChange,
+  isRunning = false,
+  onRestart,
+}: PropertiesPanelProps) {
   const [isEditing, setIsEditingState] = useState(false)
 
   /** 编辑态统一入口（state + 通知页面守卫） */
@@ -114,7 +125,11 @@ export function PropertiesPanel({ properties, isLoading, onSave, onEditingChange
     return rows.filter((def) => {
       if (category !== 'all' && def.category !== category) return false
       if (q.length === 0) return true
-      return def.name.toLowerCase().includes(q) || def.label.toLowerCase().includes(q) || def.desc.toLowerCase().includes(q)
+      return (
+        def.name.toLowerCase().includes(q) ||
+        def.label.toLowerCase().includes(q) ||
+        def.desc.toLowerCase().includes(q)
+      )
     })
   }, [rows, category, search])
 
@@ -195,7 +210,8 @@ export function PropertiesPanel({ properties, isLoading, onSave, onEditingChange
   }
 
   /** 当前显示值：编辑态取 edited，否则取服务端值 */
-  const displayValue = (def: PropertyDef): string => (isEditing ? (edited[def.name] ?? snapshot[def.name] ?? '') : (properties?.[def.name] ?? ''))
+  const displayValue = (def: PropertyDef): string =>
+    isEditing ? (edited[def.name] ?? snapshot[def.name] ?? '') : (properties?.[def.name] ?? '')
 
   const setEditValue = (key: string, value: string) => {
     setEdited((prev) => ({ ...prev, [key]: value }))
@@ -206,9 +222,18 @@ export function PropertiesPanel({ properties, isLoading, onSave, onEditingChange
       {/* ── 头部：标题 + 编辑/取消/保存 ── */}
       <div className="flex items-center gap-2">
         <span className="text-mcs-sm font-semibold text-mcs-text-default">服务器属性</span>
-        <span className="text-mcs-2xs text-mcs-text-subtle">server.properties</span>
+        <span className="text-mcs-2xs text-mcs-text-muted">server.properties</span>
+        <InfoHint label="生效方式说明">
+          除标记「即时生效」的属性外，其余可写属性改动后需重启实例生效
+        </InfoHint>
         {!isEditing ? (
-          <Button variant="outline" size="sm" className="ml-auto" onClick={startEditing} disabled={isLoading || !properties}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="ml-auto"
+            onClick={startEditing}
+            disabled={isLoading || !properties}
+          >
             <Pencil aria-hidden />
             编辑
           </Button>
@@ -267,8 +292,10 @@ export function PropertiesPanel({ properties, isLoading, onSave, onEditingChange
                 key={item.key}
                 className="flex items-baseline gap-2 border-b border-mcs-border-subtle px-1 py-1.5 last:border-b-0"
               >
-                <span className="shrink-0 text-mcs-xs font-medium text-mcs-text-default">{item.label}</span>
-                <span className="min-w-0 flex-1 truncate font-mono text-mcs-2xs text-mcs-text-subtle">
+                <span className="shrink-0 text-mcs-xs font-medium text-mcs-text-default">
+                  {item.label}
+                </span>
+                <span className="min-w-0 flex-1 truncate font-mono text-mcs-2xs text-mcs-text-muted">
                   {item.oldValue} <span className="text-mcs-text-default">→</span> {item.newValue}
                 </span>
               </div>
@@ -276,17 +303,26 @@ export function PropertiesPanel({ properties, isLoading, onSave, onEditingChange
           </div>
           <DialogFooter className="flex-col gap-2 sm:flex-col">
             <div className="flex w-full items-center gap-2">
-              <Button variant="outline" size="sm" className="ml-auto" onClick={() => void handleCopy()}>
-                {copied ? <Check className="size-3.5" aria-hidden /> : <Copy className="size-3.5" aria-hidden />}
+              <Button
+                variant="outline"
+                size="sm"
+                className="ml-auto"
+                onClick={() => void handleCopy()}
+              >
+                {copied ? (
+                  <Check className="size-3.5" aria-hidden />
+                ) : (
+                  <Copy className="size-3.5" aria-hidden />
+                )}
                 {copied ? '已复制' : '复制清单'}
               </Button>
               {isRunning && onRestart && (
-                <Button
-                  size="sm"
-                  disabled={restarting}
-                  onClick={() => setConfirmRestartOpen(true)}
-                >
-                  {restarting ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <RefreshCw className="size-3.5" aria-hidden />}
+                <Button size="sm" disabled={restarting} onClick={() => setConfirmRestartOpen(true)}>
+                  {restarting ? (
+                    <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                  ) : (
+                    <RefreshCw className="size-3.5" aria-hidden />
+                  )}
                   {restarting ? '重启中…' : '立即重启'}
                 </Button>
               )}
@@ -315,7 +351,7 @@ export function PropertiesPanel({ properties, isLoading, onSave, onEditingChange
             ))}
           </div>
         ) : filteredRows.length === 0 ? (
-          <p className="py-8 text-center text-mcs-xs text-mcs-text-subtle">无匹配属性</p>
+          <p className="py-8 text-center text-mcs-xs text-mcs-text-muted">无匹配属性</p>
         ) : (
           <div className="flex flex-col">
             {filteredRows.map((def) => (
@@ -350,35 +386,52 @@ function PropertyRow({
   const isHotReload = HOT_RELOAD_KEYS.has(def.name)
 
   return (
-    <div className="flex items-center gap-3 border-b border-mcs-border-subtle px-2 py-1.5 last:border-b-0">
+    <div
+      data-prop={def.name}
+      // xs 以下键名与值上下堆叠：行内固定值列 + 长键名（enable-command-network-threshold
+      // 这类）会把键名裁到 2-3 字可见——按 scrollWidth-clientWidth 口径实测 320px 26/28 行、
+      // 375px 8/28 行被裁。
+      // xs 及以上保持行内：该档（480-639px）实测 0 行被裁，而按原计划收窄值列到 112px 反而有害——
+      // 160px 的输入/下拉会被压进 112px 列（level-type 下拉 min-content 140px 直接左溢出压进键名区），
+      // 收益为 0，故只做堆叠不动列宽
+      className="flex flex-col items-stretch gap-1 border-b border-mcs-border-subtle px-2 py-1.5 last:border-b-0 xs:flex-row xs:items-center xs:gap-3"
+    >
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
-          <span className="truncate font-mono text-mcs-xs text-mcs-text-default" title={def.name}>
+          <span
+            data-prop-name
+            className="truncate font-mono text-mcs-xs text-mcs-text-default"
+            title={def.name}
+          >
             {def.name}
           </span>
           {isSensitive && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <Lock className="size-3 shrink-0 text-mcs-text-subtle" aria-label="敏感属性" />
+                <Lock className="size-3 shrink-0 text-mcs-text-muted" aria-label="敏感属性" />
               </TooltipTrigger>
-              <TooltipContent>安全敏感项不可通过面板修改，请在服务器上直接编辑 server.properties</TooltipContent>
+              <TooltipContent>
+                安全敏感项不可通过面板修改，请在服务器上直接编辑 server.properties
+              </TooltipContent>
             </Tooltip>
           )}
           {isHotReload && (
-            <span className="shrink-0 rounded-mcs-xs bg-mcs-success-bg-subtle px-1 text-mcs-2xs text-mcs-success-fg">
+            // 例外才配标识（常态由下方那行说明承担）：320px 下逐项挂标会把键名压到 2 字可见，
+            // 故 xs 以下收起标识、把宽度还给键名——窄屏仍需知道规则时看那一行说明
+            <span className="hidden shrink-0 rounded-mcs-xs bg-mcs-success-bg-subtle px-1 text-mcs-2xs text-mcs-success-fg xs:inline">
               即时生效
             </span>
           )}
         </div>
-        <div className="truncate text-mcs-2xs text-mcs-text-subtle" title={def.desc}>
+        <div className="truncate text-mcs-2xs text-mcs-text-muted" title={def.desc}>
           {def.label} · {def.desc}
         </div>
       </div>
 
-      <div className="flex w-44 shrink-0 justify-end">
+      <div className="flex w-full shrink-0 justify-start xs:w-44 xs:justify-end">
         {isSensitive ? (
           // 敏感键：只读占位符（编辑态也锁定）
-          <span className="inline-flex items-center gap-1 rounded-mcs-xs bg-mcs-bg-muted px-2 py-1 font-mono text-mcs-xs text-mcs-text-subtle">
+          <span className="inline-flex items-center gap-1 rounded-mcs-xs bg-mcs-bg-muted px-2 py-1 font-mono text-mcs-xs text-mcs-text-muted">
             <Lock className="size-3" aria-hidden />
             {SENSITIVE_PROPERTY_PLACEHOLDER}
           </span>
@@ -411,7 +464,7 @@ function PropertyRow({
             value={value}
             onChange={(e) => onChange(e.target.value)}
             disabled={!isEditing || !def.isWritable}
-            className="h-7 w-40 font-mono text-mcs-xs"
+            className="h-7 w-40 font-mono"
             aria-label={`${def.label} 输入`}
           />
         )}

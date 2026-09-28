@@ -13,6 +13,13 @@ export const fileListResponseSchema = z.object({
   path: z.string(),
   isDirectory: z.boolean(),
   files: z.array(fileEntrySchema),
+  /**
+   * 结果被服务端截断（条目数超过上限）。
+   * 与 `playerInventorySchema.partial` 同口径：截断必须**明说**——
+   * 少列出来的文件与「本来就没有」在 UI 上无法区分。
+   * 可选以兼容旧客户端（缺省即未截断）。
+   */
+  truncated: z.boolean().optional(),
 })
 
 export const fileInfoResponseSchema = z.object({
@@ -67,9 +74,7 @@ export const fileListRequestSchema = z.object({
 
 /** GET download / GET content / DELETE files 查询：path 必填非空 */
 export const filePathRequestSchema = z.object({
-  path: z
-    .string({ required_error: 'File path is required' })
-    .min(1, 'File path is required'),
+  path: z.string({ required_error: 'File path is required' }).min(1, 'File path is required'),
 })
 
 /** PUT /instances/:id/files/content 保存内容请求体 */
@@ -107,6 +112,8 @@ export const fileUploadQuerySchema = z.object({
   targetDir: z
     .string()
     .min(1, 'Invalid targetDir')
+    // 控制字符校验是安全面刻意为之（拒绝 \x00-\x1f），非误用正则
+    // oxlint-disable-next-line no-control-regex
     .refine((v) => !/[\x00-\x1f]/.test(v), 'Invalid targetDir')
     .transform((v) => (v.startsWith('/') ? v : `/${v}`))
     .optional()

@@ -193,7 +193,9 @@ describe('InstanceModel.update 字段映射', () => {
   });
 
   it('autoStart/autoRestart 布尔落库为 0/1 整数', () => {
-    const row = db.prepare('SELECT auto_start, auto_restart FROM instances WHERE id = ?').get('inst-upd');
+    const row = db
+      .prepare('SELECT auto_start, auto_restart FROM instances WHERE id = ?')
+      .get('inst-upd');
     expect(row.auto_start).toBe(1);
     expect(row.auto_restart).toBe(0);
   });
@@ -237,6 +239,97 @@ describe('InstanceModel.delete / 运行时长', () => {
   it('getTotalUptime 存在返回累计值，缺失返回 0', () => {
     expect(InstanceModel.getTotalUptime('inst-up')).toBe(25);
     expect(InstanceModel.getTotalUptime('no-such')).toBe(0);
+  });
+});
+
+describe('InstanceModel.create 同 id 重写（窄列 upsert）', () => {
+  // 旧实现（INSERT OR REPLACE）在 id 冲突时先删后插，create() 未列出的 9 列被静默重置
+  // （8 列回退默认值/null，updated_at 重置为当前时刻）；这些列由 update()/运行期维护
+  const UNLISTED_PRESERVED_COLUMNS = [
+    'description',
+    'status',
+    'start_command',
+    'auto_start',
+    'auto_restart',
+    'total_uptime',
+    'jvm_args',
+    'created_at',
+  ];
+  // create() 显式列出的列（与 instance.model.js 的 SQL 一致）
+  const CREATE_COLUMNS = [
+    'id',
+    'name',
+    'mod_loader',
+    'jar_file',
+    'java_path',
+    'max_memory',
+    'min_memory',
+    'server_path',
+    'mc_version',
+    'port',
+  ];
+
+  it('未列出列口径 = 表定义 19 列 − create() 列出的 10 列 = 9 列（含 updated_at）', () => {
+    const tableColumns = db
+      .prepare('PRAGMA table_info(instances)')
+      .all()
+      .map((c) => c.name);
+
+    expect(tableColumns).toHaveLength(19);
+    expect(tableColumns.filter((c) => !CREATE_COLUMNS.includes(c)).sort()).toEqual(
+      [...UNLISTED_PRESERVED_COLUMNS, 'updated_at'].sort(),
+    );
+  });
+
+  it('同 id 二次 create 只更新列出的列，未列出的列逐列保留', () => {
+    InstanceModel.create({ id: 'inst-narrow', name: '首建' });
+    InstanceModel.update('inst-narrow', {
+      description: '服务器备注',
+      status: 'running',
+      startCommand: 'java -jar old.jar',
+      autoStart: true,
+      autoRestart: false,
+      jvmArgs: ['-Xmx2G'],
+    });
+    InstanceModel.addUptime('inst-narrow', 120);
+    const before = db.prepare('SELECT * FROM instances WHERE id = ?').get('inst-narrow');
+
+    InstanceModel.create({ id: 'inst-narrow', name: '重写', type: 'paper', port: 25580 });
+
+    const after = db.prepare('SELECT * FROM instances WHERE id = ?').get('inst-narrow');
+    expect(after.name).toBe('重写');
+    expect(after.mod_loader).toBe('Paper');
+    expect(after.port).toBe(25580);
+    for (const col of UNLISTED_PRESERVED_COLUMNS) {
+      expect(after[col], `列 ${col} 被 create() 回退`).toEqual(before[col]);
+    }
+    expect(after.status).toBe('running');
+    expect(after.jvm_args).toBe(JSON.stringify(['-Xmx2G']));
+  });
+
+  it('updated_at 是唯一被有意刷新的未列出列：旧值哨兵被覆盖，created_at 原样保留', () => {
+    InstanceModel.create({ id: 'inst-ts', name: '首建' });
+    // 远古时间戳作哨兵：任何「保留原值」的实现都会把它留在库里
+    db.prepare(
+      "UPDATE instances SET created_at = '2020-01-01 00:00:00', updated_at = '2020-01-01 00:00:00' WHERE id = ?",
+    ).run('inst-ts');
+
+    InstanceModel.create({ id: 'inst-ts', name: '重写' });
+
+    const after = db.prepare('SELECT * FROM instances WHERE id = ?').get('inst-ts');
+    expect(after.created_at).toBe('2020-01-01 00:00:00');
+    expect(after.updated_at).not.toBe('2020-01-01 00:00:00');
+  });
+
+  it('新 id 的首建语义不变（未列出列走表默认值）', () => {
+    InstanceModel.create({ id: 'inst-fresh-narrow', name: '首建' });
+
+    const row = db.prepare('SELECT * FROM instances WHERE id = ?').get('inst-fresh-narrow');
+    expect(row.status).toBe('stopped');
+    expect(row.auto_start).toBe(0);
+    expect(row.auto_restart).toBe(1);
+    expect(row.total_uptime).toBe(0);
+    expect(row.description).toBeNull();
   });
 });
 

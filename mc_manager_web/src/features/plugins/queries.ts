@@ -1,5 +1,5 @@
 /**
- * 插件管理域 TanStack Query hooks（feat-8 P0-5）
+ * 插件管理域 TanStack Query hooks
  * - usePlugins：插件列表（staleTime 10s，30s 轮询——与其他列表页一致）
  * - useTogglePlugin / useDeletePlugin：mutation，成功后失效列表
  */

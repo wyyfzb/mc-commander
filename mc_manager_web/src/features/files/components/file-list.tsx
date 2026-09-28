@@ -7,12 +7,17 @@
  *   （目录「文件夹 · MM-DD HH:mm」/ 文件「大小 · 修改时间」，B/KB/MB 一位小数格式化在组件内）
  * - 目录行单击 onOpenDir 进入；文件行单击 onSelectFile（选中态 bg-accent-bg-subtle）；
  *   行尾操作：可编辑文件有编辑按钮（二进制文件不提供——防误入文本编辑器，
- *   feat-9 编辑保护），全部文件有下载按钮（目录无），全部有删除按钮（error 色）
+ * 编辑保护），全部文件有下载按钮（目录无），全部有删除按钮（error 色）
  * - 空态：根目录「该实例根目录下没有文件」/ 子目录「此文件夹为空」；加载显示 Skeleton 行
+ * - 虚拟滚动：长目录（世界 region/ 可达数千条）只渲染视口内的行；行高恒定见 ROW_HEIGHT
  * - 设计纪律：全部 --mcs-* 语义 token；表格/列表实底，禁硬编码色值/间距/圆角
  */
-import { Fragment, useMemo } from 'react'
+import { Fragment, useMemo, useRef } from 'react'
+// TanStack Virtual 自管内部缓存，与 React Compiler 互斥（官方不兼容清单），不可自动 memo 化
+// eslint-disable-next-line react/incompatible-library
+import { useVirtualizer } from '@tanstack/react-virtual'
 import {
+  AlertTriangle,
   Archive,
   ArrowUp,
   Braces,
@@ -22,6 +27,7 @@ import {
   FilePlus,
   FileText,
   Folder,
+  FolderInput,
   FolderPlus,
   Home,
   Image,
@@ -36,15 +42,27 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/mcs/icon-button'
+import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { cn } from '@/lib/utils'
 import { fileIconName, formatFileSize, formatModifiedAt, isEditableFile } from '@/lib/mc-files'
-import {
-  EmptyStateVisual,
-  ErrorStateVisual,
-  ListSkeleton,
-} from '@/components/mcs/data-states'
+import { EmptyStateVisual, ErrorStateVisual, ListSkeleton } from '@/components/mcs/data-states'
 import { useFileList } from '../queries'
 import type { FileEntry } from '@/api/types'
+
+/**
+ * 行高（px，含行自带的下边框）：两行文本撑出来的实高取整到 4px 刻度 ——
+ * 姓名 14×1.6＝22.4（实测 22.39）+ 间距 2 + 元数据 12×1.5＝18 → 42.4，故取 44（h-11）。
+ * 行盒用 `height` 而非 `min-h`：**虚拟滚动按本值累加绝对偏移，行比它高就会逐行错位**
+ * （实测按 40 定位、实际 42.39 时，第 120 行已错开 290px，底部内容滚不到）。
+ * 两行都是 truncate（nowrap + 溢出裁切），故实高有上界、不会撑破行盒；
+ * 玩家表同理（`player-table-row.tsx` 的 `height: ROW_HEIGHT`）。
+ * 改字号档/内距档必须同步改本值——实高与行距由 e2e 锁（files.spec.ts「长目录虚拟滚动」）。
+ */
+const ROW_HEIGHT = 44
+
+/** 启用虚拟滚动的条目数阈值（约两屏）：低于它保持原 DOM 形状（jsdom 下无布局引擎，
+ *  滚动容器恒 0 高，走虚拟会让既有用例找不到行） */
+const VIRTUAL_THRESHOLD = 40
 
 export interface FileListProps {
   instanceId: string
@@ -70,6 +88,8 @@ export interface FileListProps {
   onCreateDirectory?: () => void
   /** 行级「重命名」 */
   onRename?: (entry: FileEntry) => void
+  /** 行级「移动到…」（换父目录；服务端由 rename 端点承担） */
+  onMove?: (entry: FileEntry) => void
   /** 行级「下载」（文件行） */
   onDownload?: (entry: FileEntry) => void
   /** 正在下载的文件路径（null = 无下载进行中） */
@@ -96,10 +116,14 @@ interface FileListRowProps {
   onDelete: (entry: FileEntry) => void
   /** 行级「重命名」（未提供则不渲染按钮） */
   onRename?: (entry: FileEntry) => void
+  /** 行级「移动到…」（未提供则不渲染按钮） */
+  onMove?: (entry: FileEntry) => void
   /** 行级「下载」（文件行；未提供则不渲染按钮） */
   onDownload?: (entry: FileEntry) => void
   /** 正在下载的文件路径（行内按钮转 spinner 并禁用） */
   downloadingPath: string | null
+  /** 目录末条：分隔线只画在行与行之间（末条画了会悬在列表尾部空白上方） */
+  isLast: boolean
 }
 
 function FileListRow({
@@ -109,8 +133,10 @@ function FileListRow({
   onOpenDir,
   onDelete,
   onRename,
+  onMove,
   onDownload,
   downloadingPath,
+  isLast,
 }: FileListRowProps) {
   const Icon = FILE_ICONS[fileIconName(entry)] ?? File
   const isDir = entry.isDirectory
@@ -126,18 +152,38 @@ function FileListRow({
     <div
       role="button"
       tabIndex={0}
-      aria-label={isDir ? `打开目录 ${entry.name}` : editable ? `选择文件 ${entry.name}` : `文件 ${entry.name}（二进制，可下载）`}
+      aria-label={
+        isDir
+          ? `打开目录 ${entry.name}`
+          : editable
+            ? `选择文件 ${entry.name}`
+            : `文件 ${entry.name}（二进制，可下载）`
+      }
+      // 当前预览文件：底色是视觉线索，语义位由 aria-current 承担（role=button 行不构成列表选中集）
+      aria-current={isSelected ? 'true' : undefined}
       onClick={handleRowClick}
       onKeyDown={(e) => {
+        // role="button" 行只处理落在行本身的激活键；行内图标按钮的冒泡不再触发行打开
+        if (e.target !== e.currentTarget) return
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault()
           handleRowClick()
         }
       }}
       className={cn(
-        'flex cursor-pointer items-center gap-3 px-4 py-2 transition-colors duration-mcs-fast focus-visible:bg-mcs-bg-hover',
-        isDir ? 'hover:bg-mcs-bg-hover' : cn('hover:bg-mcs-bg-hover', isSelected && 'bg-mcs-accent-bg-subtle'),
+        // 分隔线挂在行盒的 border 上（不是容器 divide-y）：虚拟分支的行是绝对定位的，
+        // 容器级 divide-y 对它们不生效；两分支共用同一份行配方才能视觉一致。
+        // 末条不画（否则一条线悬在列表尾部空白上方）——由 isLast 显式传入，
+        // 不用 last: 选择器：虚拟分支每行都是各自包装盒的独子，last: 会命中所有行。
+        'flex cursor-pointer items-center gap-3 border-b border-mcs-border-subtle px-4 transition-colors duration-mcs-fast focus-visible:bg-mcs-state-focus',
+        isLast && 'border-b-0',
+        isDir
+          ? 'hover:bg-mcs-state-hover'
+          : cn('hover:bg-mcs-state-hover', isSelected && 'bg-mcs-accent-bg-subtle'),
       )}
+      /* 行盒高度钉死 = ROW_HEIGHT（含下边框，border-box）：虚拟滚动按此值累加偏移，
+         用内容高度兜底会让行比偏移量高、逐行错位。见 ROW_HEIGHT 注释 */
+      style={{ height: ROW_HEIGHT }}
     >
       <Icon
         data-testid={`file-icon-${entry.name}`}
@@ -196,9 +242,22 @@ function FileListRow({
           <TextCursorInput className="size-3.5" aria-hidden />
         </IconButton>
       )}
+      {onMove && (
+        <IconButton
+          aria-label={`移动 ${entry.name}`}
+          title="移动到…"
+          className="text-mcs-text-muted hover:text-mcs-text-default"
+          onClick={(e) => {
+            e.stopPropagation()
+            onMove(entry)
+          }}
+        >
+          <FolderInput className="size-3.5" aria-hidden />
+        </IconButton>
+      )}
       <IconButton
         aria-label={`删除 ${entry.name}`}
-        className="text-mcs-error-fg hover:bg-mcs-error-bg-subtle hover:text-mcs-error-fg"
+        className="text-mcs-error-fg hover:bg-mcs-state-hover-error"
         onClick={(e) => {
           e.stopPropagation()
           onDelete(entry)
@@ -223,6 +282,7 @@ export function FileList({
   onUpload,
   onCreateDirectory,
   onRename,
+  onMove,
   onDownload,
   downloadingPath = null,
 }: FileListProps) {
@@ -240,10 +300,48 @@ export function FileList({
   /** 目录在前（同组保持服务端顺序；现代引擎稳定排序） */
   const entries = useMemo<FileEntry[]>(() => {
     if (!data || !('files' in data)) return []
-    return [...data.files].sort((a, b) => (a.isDirectory === b.isDirectory ? 0 : a.isDirectory ? -1 : 1))
+    return [...data.files].sort((a, b) =>
+      a.isDirectory === b.isDirectory ? 0 : a.isDirectory ? -1 : 1,
+    )
   }, [data])
 
   const isEmpty = data !== undefined && data.isDirectory === true && data.files.length === 0
+
+  /** 服务端因条目数上限截断了结果（契约字段，旧服务端不返回即视为未截断） */
+  const truncated = data !== undefined && 'truncated' in data && data.truncated === true
+
+  /* 虚拟滚动容器：世界 region/ 一类目录可达数千条，全量渲染会让每次键盘/选中态变化
+     都重排整棵列表。行高恒定（见 ROW_HEIGHT），故 estimateSize 可信。
+     注意与玩家表的差异：本列表**不换行、无动画**，故不需要 measureElement 的逐行实测；
+     视口高度由外层 flex 决定（滚动条在本元素上）。 */
+  const scrollRef = useRef<HTMLDivElement>(null)
+  // eslint-disable-next-line react/incompatible-library
+  const rowVirtualizer = useVirtualizer({
+    count: entries.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: 12,
+  })
+  const virtualItems = rowVirtualizer.getVirtualItems()
+  /* 仅在「条目数明显多于一屏」时启用虚拟化：短列表走虚拟反而让 DOM 空一层、
+     且 jsdom 下（无布局引擎、滚动容器恒 0 高）会让既有用例找不到行。
+     阈值取 40 行（约两屏），低于它的目录由 virtualizer 判定也基本全渲染，
+     取阈值是为了让「短列表保持原 DOM 形状」这件事显式可读。 */
+  const useVirtual = entries.length >= VIRTUAL_THRESHOLD
+  /* 两分支都产出同形参数，渲染层不必分叉处理行参数。
+     `isLast` 取**全列表**末条（不是本次渲染到的末行）——虚拟分支的可见窗口下方
+     还有未渲染的条目，若按「可见末行」判定会把线断在窗口边界上。 */
+  const visibleEntries: Array<{ entry: FileEntry; offset: number; isLast: boolean }> = useVirtual
+    ? virtualItems.map((v) => ({
+        entry: entries[v.index]!,
+        offset: v.start,
+        isLast: v.index === entries.length - 1,
+      }))
+    : entries.map((entry, i) => ({
+        entry,
+        offset: i * ROW_HEIGHT,
+        isLast: i === entries.length - 1,
+      }))
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -263,7 +361,7 @@ export function FileList({
               type="button"
               aria-label="根目录"
               onClick={() => onOpenDir('/')}
-              className="flex items-center rounded-sm p-0.5 text-mcs-accent-fg transition-colors duration-mcs-fast hover:bg-mcs-bg-hover"
+              className="flex items-center rounded-sm p-0.5 text-mcs-accent-fg transition-colors duration-mcs-fast hover:bg-mcs-state-hover"
             >
               <Home className="size-4" aria-hidden />
             </button>
@@ -271,7 +369,7 @@ export function FileList({
               const isLast = i === crumbs.length - 1
               return (
                 <Fragment key={c.path}>
-                  <ChevronRight className="size-3.5 shrink-0 text-mcs-text-subtle" aria-hidden />
+                  <ChevronRight className="size-3.5 shrink-0 text-mcs-text-muted" aria-hidden />
                   {isLast ? (
                     <span
                       aria-current="page"
@@ -283,7 +381,7 @@ export function FileList({
                     <button
                       type="button"
                       onClick={() => onOpenDir(c.path)}
-                      className="max-w-44 truncate rounded-sm px-1 py-0.5 text-mcs-accent-fg transition-colors duration-mcs-fast hover:bg-mcs-bg-hover"
+                      className="max-w-44 truncate rounded-sm px-1 py-0.5 text-mcs-accent-fg transition-colors duration-mcs-fast hover:bg-mcs-state-hover"
                     >
                       {c.label}
                     </button>
@@ -327,8 +425,16 @@ export function FileList({
         </div>
       </nav>
 
+      {/* 截断降级提示（服务端条目数达上限时回报）：少列出来的文件与「本来就没有」
+          在列表上无法区分，必须明说，否则用户会以为某个文件丢了 */}
+      {truncated && (
+        <NoticeBanner variant="warning" icon={AlertTriangle}>
+          {`该目录条目过多，仅显示前 ${entries.length} 项；请用「上传/下载」或 SSH 处理其余文件`}
+        </NoticeBanner>
+      )}
+
       {/* 文件列表（实底；玻璃禁区）——三态复用 data-states 共享视觉 */}
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
         {isLoading && <ListSkeleton rows={4} />}
         {!isLoading && isError && (
           <div className="flex flex-col items-center gap-3 px-4 py-10">
@@ -375,23 +481,54 @@ export function FileList({
             />
           </div>
         )}
-        {!isLoading && !isError && !isEmpty && (
-          <div className="divide-y divide-mcs-border-subtle">
-            {entries.map((entry) => (
-              <FileListRow
-                key={entry.path}
-                entry={entry}
-                isSelected={selectedPath === entry.path}
-                onSelectFile={onSelectFile}
-                onOpenDir={onOpenDir}
-                onDelete={onDelete}
-                onRename={onRename}
-                onDownload={onDownload}
-                downloadingPath={downloadingPath}
-              />
-            ))}
-          </div>
-        )}
+        {!isLoading &&
+          !isError &&
+          !isEmpty &&
+          (useVirtual ? (
+            /* 虚拟列表：总高由 virtualizer 给，可见行用 translateY 定位。
+               分隔线在行盒的 border 上（绝对定位的行上 divide-y 不生效） */
+            <div style={{ height: rowVirtualizer.getTotalSize() }} className="relative">
+              {visibleEntries.map(({ entry, offset, isLast }) => (
+                <div
+                  key={entry.path}
+                  className="absolute top-0 left-0 w-full"
+                  style={{ transform: `translateY(${offset}px)` }}
+                >
+                  <FileListRow
+                    entry={entry}
+                    isSelected={selectedPath === entry.path}
+                    onSelectFile={onSelectFile}
+                    onOpenDir={onOpenDir}
+                    onDelete={onDelete}
+                    onRename={onRename}
+                    onMove={onMove}
+                    onDownload={onDownload}
+                    downloadingPath={downloadingPath}
+                    isLast={isLast}
+                  />
+                </div>
+              ))}
+            </div>
+          ) : (
+            /* 与虚拟分支共用同一份行配方（含分隔线），故容器上不再用 divide-y */
+            <div>
+              {visibleEntries.map(({ entry, isLast }) => (
+                <FileListRow
+                  key={entry.path}
+                  entry={entry}
+                  isSelected={selectedPath === entry.path}
+                  onSelectFile={onSelectFile}
+                  onOpenDir={onOpenDir}
+                  onDelete={onDelete}
+                  onRename={onRename}
+                  onMove={onMove}
+                  onDownload={onDownload}
+                  downloadingPath={downloadingPath}
+                  isLast={isLast}
+                />
+              ))}
+            </div>
+          ))}
       </div>
     </div>
   )

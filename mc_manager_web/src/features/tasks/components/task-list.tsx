@@ -4,8 +4,7 @@
  *   → cron mono + 命令（有则 Terminal 图标）→「上次运行/下次运行」时间行 → 右侧启用
  *   Switch / 立即执行 / 编辑 / 删除
  * - TASK_TYPE_TONES：restart→warning / backup→info / command→purple /
- *   stop→error / start→success；tone 类统一 bg-mcs-{tone}-bg-subtle + text-mcs-{tone}-fg +
- *   border-mcs-{tone}-border（token 唯一来源 src/styles/）
+ *   stop→error / start→success；色值统一取自 components/mcs/tone（token 唯一来源 src/styles/）
  * - 时间行 formatTaskDate（MM-DD HH:mm 本地时区；null → '从未'）
  * - 容器：实底卡（风格 A 列表实底，禁 backdrop-blur）+ 行分隔；空态含新建任务按钮；加载骨架行
  */
@@ -14,15 +13,16 @@ import { IconButton } from '@/components/mcs/icon-button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { InfoHint } from '@/components/mcs/info-hint'
 import { StatusPill } from '@/components/mcs/status-pill'
+import { toneClasses } from '@/components/mcs/tone'
 import { EmptyState } from '@/components/mcs/empty-state'
+import { Card } from '@/components/mcs/card'
 import {
   TASK_TYPE_LABELS,
   TASK_TYPE_TONES,
   formatNextRunCountdown,
   formatTaskDate,
-  type TaskTypeTone,
 } from '@/lib/mc-deploy'
 import { useNow } from '@/hooks/use-now'
 import { cronDescription } from '@/lib/mc-cron'
@@ -43,15 +43,6 @@ export interface TaskListProps {
   onDelete: (task: ScheduledTask) => void
   /** 空态「新建任务」按钮（页面打开创建对话框） */
   onNewTask: () => void
-}
-
-/** tone → 图标/徽章类（完整字面量类名，Tailwind 主题色静态生成；全 token 引用） */
-const TONE_CLASSES: Record<TaskTypeTone, string> = {
-  warning: 'bg-mcs-warning-bg-subtle text-mcs-warning-fg border-mcs-warning-border',
-  info: 'bg-mcs-info-bg-subtle text-mcs-info-fg border-mcs-info-border',
-  purple: 'bg-mcs-purple-bg-subtle text-mcs-purple-fg border-mcs-purple-border',
-  error: 'bg-mcs-error-bg-subtle text-mcs-error-fg border-mcs-error-border',
-  success: 'bg-mcs-success-bg-subtle text-mcs-success-fg border-mcs-success-border',
 }
 
 /**
@@ -83,7 +74,7 @@ export function TaskList({
   // 列表级单一倒计时时钟（每行独立 useNow 会每行一个 60s 定时器）
   const now = useNow()
   return (
-    <div className="overflow-hidden rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted shadow-mcs-card">
+    <Card as="div" className="overflow-hidden">
       {isLoading ? (
         /* 骨架行 */
         <div data-testid="task-skeletons" className="space-y-1 p-4" aria-label="加载任务中">
@@ -122,7 +113,7 @@ export function TaskList({
           ))}
         </div>
       )}
-    </div>
+    </Card>
   )
 }
 
@@ -147,7 +138,7 @@ function TaskRow({
   onDelete: (task: ScheduledTask) => void
 }) {
   const tone = TASK_TYPE_TONES[task.type]
-  const toneClasses = TONE_CLASSES[tone]
+  const iconToneClasses = toneClasses(tone)
   const lastRunMeta = LAST_RUN_STATUS[task.lastRunStatus]
   /** 下次执行倒计时文案（null → 保持「从未」） */
   const nextRunCountdown = formatNextRunCountdown(task.nextRunAt, now)
@@ -156,7 +147,10 @@ function TaskRow({
     <div className="flex items-center gap-3 px-4 py-3">
       {/* 36px 类型图标（tone 浅底 + tone 前景） */}
       <span
-        className={cn('flex size-9 shrink-0 items-center justify-center rounded-mcs-sm', toneClasses)}
+        className={cn(
+          'flex size-9 shrink-0 items-center justify-center rounded-mcs-sm',
+          iconToneClasses,
+        )}
         aria-hidden
       >
         <Clock className="size-4.5" aria-hidden />
@@ -165,7 +159,10 @@ function TaskRow({
       <div className="min-w-0 flex-1">
         {/* 名称 + 类型徽章（同 tone） */}
         <div className="flex min-w-0 items-center gap-2">
-          <span className="truncate text-mcs-sm font-semibold text-mcs-text-default" title={task.name}>
+          <span
+            className="truncate text-mcs-sm font-semibold text-mcs-text-default"
+            title={task.name}
+          >
             {task.name}
           </span>
           <StatusPill tone={tone} className="text-mcs-xs">
@@ -175,15 +172,15 @@ function TaskRow({
 
         {/* cron mono + 中文可读描述（cronDescription 与编辑器预览同源）+ 命令（有则 Terminal 图标） */}
         <div className="mt-1 flex min-w-0 items-center gap-1.5 text-mcs-xs">
-          <Timer className="size-3 shrink-0 text-mcs-text-subtle" aria-hidden />
+          <Timer className="size-3 shrink-0 text-mcs-text-muted" aria-hidden />
           <span className="shrink-0 font-mono text-mcs-text-muted">{task.cronExpression}</span>
           {(() => {
             const desc = cronDescription(task.cronExpression)
-            return desc ? <span className="shrink-0 text-mcs-text-subtle">{desc}</span> : null
+            return desc ? <span className="shrink-0 text-mcs-text-muted">{desc}</span> : null
           })()}
           {task.command !== null && task.command.length > 0 && (
             <>
-              <Terminal className="size-3 shrink-0 text-mcs-text-subtle" aria-hidden />
+              <Terminal className="size-3 shrink-0 text-mcs-text-muted" aria-hidden />
               <span className="truncate font-mono text-mcs-text-muted" title={task.command}>
                 {task.command}
               </span>
@@ -195,31 +192,21 @@ function TaskRow({
             下次运行追加倒计时（useNow 每分钟刷新；null → 保持「从未」） */}
         <p className="mt-0.5 truncate text-mcs-xs text-mcs-text-muted">
           {`上次运行: ${formatTaskDate(task.lastRunAt)}`}
-          {lastRunMeta && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span
-                  className={cn(
-                    'ml-1.5 inline-flex items-center gap-1 font-medium',
-                    lastRunMeta.text,
-                    task.lastRunStatus === 'failed' && task.lastRunError && 'cursor-help underline decoration-dashed underline-offset-2',
-                  )}
-                >
-                  <span className={cn('size-1.5 rounded-full', lastRunMeta.dot)} aria-hidden />
-                  {lastRunMeta.label}
-                  {task.lastRunStatus === 'failed' && task.lastRunError && (
-                    <AlertCircle className="size-3" aria-hidden />
-                  )}
-                </span>
-              </TooltipTrigger>
-              {task.lastRunStatus === 'failed' && task.lastRunError && (
-                <TooltipContent side="bottom" className="max-w-xs">
-                  <p className="text-mcs-xs font-medium text-mcs-error-fg">失败原因</p>
-                  <p className="mt-1 text-xs text-mcs-text-default">{task.lastRunError}</p>
-                </TooltipContent>
-              )}
-            </Tooltip>
-          )}
+          {lastRunMeta &&
+            (task.lastRunStatus === 'failed' && task.lastRunError ? (
+              /* 走 InfoHint inline 而非 Tooltip：失败原因必须键盘与触屏都拿得到 */
+              <InfoHint
+                variant="inline"
+                label="失败原因"
+                term={<LastRunMetaMark meta={lastRunMeta} withAlert />}
+              >
+                <p className="text-mcs-xs font-medium text-mcs-error-fg">失败原因</p>
+                {/* 失败原因可能为无空格长串（压缩 JSON/路径），break-all 防溢出浮层框 */}
+                <p className="mt-1 text-xs break-all text-mcs-text-default">{task.lastRunError}</p>
+              </InfoHint>
+            ) : (
+              <LastRunMetaMark meta={lastRunMeta} />
+            ))}
           {`  ·  下次运行: ${nextRunCountdown === null ? '从未' : `${formatTaskDate(task.nextRunAt)}（${nextRunCountdown}）`}`}
         </p>
       </div>
@@ -237,7 +224,11 @@ function TaskRow({
           className="text-mcs-accent-fg"
           onClick={() => onRunNow(task)}
         >
-          {running ? <Hourglass className="size-3.5" aria-hidden /> : <Play className="size-3.5" aria-hidden />}
+          {running ? (
+            <Hourglass className="size-3.5" aria-hidden />
+          ) : (
+            <Play className="size-3.5" aria-hidden />
+          )}
         </IconButton>
         <IconButton
           aria-label={`${task.name} 编辑`}
@@ -246,14 +237,37 @@ function TaskRow({
         >
           <Pencil className="size-3.5" aria-hidden />
         </IconButton>
+        {/* 危险操作与普通操作的分组边界（V7）：删除与编辑/执行之间立分隔线 */}
+        <span className="h-5 w-px shrink-0 bg-mcs-border-muted" aria-hidden />
         <IconButton
           aria-label={`${task.name} 删除`}
-          className="text-mcs-error-fg hover:bg-mcs-error-bg-subtle hover:text-mcs-error-fg"
+          className="text-mcs-error-fg hover:bg-mcs-state-hover-error"
           onClick={() => onDelete(task)}
         >
           <Trash2 className="size-3.5" aria-hidden />
         </IconButton>
       </div>
     </div>
+  )
+}
+
+/**
+ * 上次运行结果标记：色点 + 文案（失败且带原因时追加警示图标）。
+ * 抽成组件是因为「有解释」与「无解释」两条分支必须共用同一段可见内容——
+ * 写两份就会各自漂移，而它是用户扫列表时判断「这条要不要点进去」的唯一依据。
+ */
+function LastRunMetaMark({
+  meta,
+  withAlert,
+}: {
+  meta: NonNullable<(typeof LAST_RUN_STATUS)[keyof typeof LAST_RUN_STATUS]>
+  withAlert?: boolean
+}) {
+  return (
+    <span className={cn('ml-1.5 inline-flex items-center gap-1 font-medium', meta.text)}>
+      <span className={cn('size-1.5 rounded-full', meta.dot)} aria-hidden />
+      {meta.label}
+      {withAlert && <AlertCircle className="size-3" aria-hidden />}
+    </span>
   )
 }

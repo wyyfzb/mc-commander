@@ -42,7 +42,7 @@ describe('GET /health', () => {
     };
   });
 
-  it('should return status + version only（P2-9 信息暴露收口）', async () => {
+  it('should return status + version only（信息暴露收口）', async () => {
     setupRoutes(app, mockManager);
 
     const res = await request(app).get('/health');
@@ -52,7 +52,7 @@ describe('GET /health', () => {
     expect(res.body.data.status).toBe('ok');
     expect(res.body.data.version).toBeTruthy();
 
-    // 信息暴露收口（audit P2-9）：以下字段不得再出现在未认证的 /health
+    // 信息暴露收口：以下字段不得再出现在未认证的 /health
     expect(res.body.data).not.toHaveProperty('instanceCount');
     expect(res.body.data).not.toHaveProperty('nodeVersion');
     expect(res.body.data).not.toHaveProperty('uptime');

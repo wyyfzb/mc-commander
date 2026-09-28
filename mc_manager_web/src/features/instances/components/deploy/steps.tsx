@@ -6,6 +6,7 @@
  * 纯展示组件：表单状态与派生逻辑留在编排层（deploy-dialog.tsx），经 props 回调上行
  */
 import { Info } from 'lucide-react'
+import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -18,7 +19,13 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
-import { SERVER_TYPES, SERVER_TYPE_LABELS, recommendedJavaVersion, type ServerType } from '@/lib/mc-deploy'
+import { TONE_SELECTED_SURFACE_CLASSES } from '@/components/mcs/tone'
+import {
+  SERVER_TYPES,
+  SERVER_TYPE_LABELS,
+  recommendedJavaVersion,
+  type ServerType,
+} from '@/lib/mc-deploy'
 import { SERVER_TYPE_DESCRIPTIONS, SERVER_TYPE_ICONS, MEMORY_OPTIONS } from './constants'
 import type { DeployForm } from './types'
 import { memoryToGB } from './utils'
@@ -64,8 +71,8 @@ export function DeployStepServer({
                 className={cn(
                   'flex cursor-pointer flex-col gap-0.5 rounded-mcs-sm border px-2.5 py-2 transition-colors',
                   selected
-                    ? 'border-mcs-accent bg-mcs-accent-bg-subtle text-mcs-text-default'
-                    : 'border-mcs-border-default text-mcs-text-muted hover:bg-mcs-bg-hover',
+                    ? `${TONE_SELECTED_SURFACE_CLASSES} text-mcs-text-default`
+                    : 'border-mcs-border-default text-mcs-text-muted hover:bg-mcs-state-hover',
                 )}
               >
                 <RadioGroupItem value={type} className="sr-only" />
@@ -73,13 +80,13 @@ export function DeployStepServer({
                   <Icon
                     className={cn(
                       'size-3.5 shrink-0',
-                      selected ? 'text-mcs-accent-fg' : 'text-mcs-text-subtle',
+                      selected ? 'text-mcs-accent-fg' : 'text-mcs-text-muted',
                     )}
                     aria-hidden
                   />
                   {SERVER_TYPE_LABELS[type]}
                 </span>
-                <span className="text-mcs-xs text-mcs-text-subtle">
+                <span className="text-mcs-xs text-mcs-text-muted">
                   {SERVER_TYPE_DESCRIPTIONS[type]}
                 </span>
               </label>
@@ -116,15 +123,13 @@ export function DeployStepServer({
           </SelectContent>
         </Select>
         {versionsError && (
-          <p className="text-mcs-xs text-mcs-warning-fg">
-            无法获取远程版本列表，使用本地缓存
-          </p>
+          <p className="text-mcs-xs text-mcs-warning-fg">无法获取远程版本列表，使用本地缓存</p>
         )}
         {form.version !== '' && (
-          <div className="flex items-center gap-1.5 rounded-mcs-sm border border-mcs-info-border bg-mcs-info-bg-subtle px-2.5 py-1.5 text-mcs-xs text-mcs-info-fg">
-            <Info className="size-3.5 shrink-0" aria-hidden />
-            推荐 Java 版本：{recommendedJavaVersion(form.version)}（服务端会自动检测并使用合适的 Java 版本）
-          </div>
+          <NoticeBanner variant="info" icon={Info}>
+            推荐 Java 版本：{recommendedJavaVersion(form.version)}（服务端会自动检测并使用合适的
+            Java 版本）
+          </NoticeBanner>
         )}
       </div>
 
@@ -178,21 +183,17 @@ export function DeployStepConfig({
           placeholder="例如: 我的生存服"
           maxLength={50}
         />
-        {nameError !== '' && (
-          <p className="text-mcs-xs text-mcs-error-fg">{nameError}</p>
-        )}
+        {nameError !== '' && <p className="text-mcs-xs text-mcs-error-fg">{nameError}</p>}
       </div>
 
       {/* 内存档位 */}
       <div className="flex flex-col gap-2">
         <Label>内存分配</Label>
         <div className="flex items-baseline gap-2">
-          <span className="font-mono text-mcs-2xl font-bold text-mcs-accent">
+          <span className="font-mono text-mcs-xl font-semibold text-mcs-accent-fg">
             {memoryToGB(form.memory).toFixed(1)} GB
           </span>
-          <span className="text-mcs-sm text-mcs-text-subtle">
-            / {totalMemory.toFixed(1)} GB
-          </span>
+          <span className="text-mcs-sm text-mcs-text-muted">/ {totalMemory.toFixed(1)} GB</span>
         </div>
         <Select value={form.memory} onValueChange={onMemoryChange}>
           <SelectTrigger className="w-full" aria-label="选择内存分配">
@@ -206,9 +207,7 @@ export function DeployStepConfig({
             ))}
           </SelectContent>
         </Select>
-        <p className="text-mcs-xs text-mcs-text-subtle">
-          选择 Minecraft 服务器可用的最大内存
-        </p>
+        <p className="text-mcs-xs text-mcs-text-muted">选择 Minecraft 服务器可用的最大内存</p>
         {/* 推荐提示（<=8G 推荐 50%，>8G 推荐 70%） */}
         <p className="flex items-center gap-1.5 text-mcs-xs text-mcs-warning-fg">
           <Info className="size-3.5 shrink-0" aria-hidden />
@@ -242,7 +241,9 @@ export function DeployStepConfirm({
           [
             ['服务端类型', SERVER_TYPE_LABELS[form.type]],
             ['版本', form.version],
-            ...(loaders.length > 0 && (form.type === 'fabric' || form.type === 'forge') && form.loader !== ''
+            ...(loaders.length > 0 &&
+            (form.type === 'fabric' || form.type === 'forge') &&
+            form.loader !== ''
               ? [['加载器', form.loader] as const]
               : []),
             ['实例名称', form.name.trim()],
@@ -254,16 +255,17 @@ export function DeployStepConfirm({
             key={label}
             className="flex items-center justify-between gap-3 px-3 py-1.5 text-mcs-sm"
           >
-            <span className="shrink-0 text-mcs-text-subtle">{label}</span>
-            <span className="min-w-0 truncate font-mono text-mcs-text-default">
-              {value}
-            </span>
+            <span className="shrink-0 text-mcs-text-muted">{label}</span>
+            <span className="min-w-0 truncate font-mono text-mcs-text-default">{value}</span>
           </div>
         ))}
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <label htmlFor="deploy-eula-agree" className="flex cursor-pointer items-start gap-2 text-mcs-sm text-mcs-text-default">
+        <label
+          htmlFor="deploy-eula-agree"
+          className="flex cursor-pointer items-start gap-2 text-mcs-sm text-mcs-text-default"
+        >
           <Checkbox
             id="deploy-eula-agree"
             checked={eulaAgreed}
@@ -272,15 +274,11 @@ export function DeployStepConfirm({
           />
           <span>我已阅读并同意 Minecraft EULA（Mojang 最终用户许可协议）</span>
         </label>
-        <p className="pl-6 text-mcs-xs text-mcs-text-subtle">
-          同意后将写入 eula.txt（eula=true），部署完成后自动启动服务器。
+        <p className="pl-6 text-mcs-xs text-mcs-text-muted">
+          {eulaAgreed
+            ? '同意后写入 eula.txt（eula=true），部署完成后自动启动服务器。'
+            : '未勾选也可部署：eula.txt 记为 eula=false，部署后不自动启动；需在实例详情同意 EULA 后才能启动服务器。'}
         </p>
-        {!eulaAgreed && (
-          <p className="flex items-center gap-1.5 pl-6 text-mcs-xs text-mcs-warning-fg">
-            <Info className="size-3.5 shrink-0" aria-hidden />
-            请先同意 EULA：未同意时无法启动服务器
-          </p>
-        )}
       </div>
     </div>
   )

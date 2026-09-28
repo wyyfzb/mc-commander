@@ -14,59 +14,109 @@ import { logger } from '../utils/logger.js';
 // 仅以下属性可通过命令运行中生效；其余属性（pvp、max-players、online-mode 等）
 // 修改后需重启服务器。
 export const RUNTIME_COMMAND_MAP = {
-  'white-list': (v) =>
-    String(v).toLowerCase() === 'true' ? 'whitelist on' : 'whitelist off',
+  'white-list': (v) => (String(v).toLowerCase() === 'true' ? 'whitelist on' : 'whitelist off'),
   'enforce-whitelist': (v) =>
-    String(v).toLowerCase() === 'true'
-      ? 'whitelist enforce on'
-      : 'whitelist enforce off',
-  'difficulty': (v) => `difficulty ${v}`,
-  'gamemode': (v) => `defaultgamemode ${v}`,
+    String(v).toLowerCase() === 'true' ? 'whitelist enforce on' : 'whitelist enforce off',
+  difficulty: (v) => `difficulty ${v}`,
+  gamemode: (v) => `defaultgamemode ${v}`,
 };
 
-// ── find-018 / find-015：PUT /properties 键白名单与值校验 ──
+// ── PUT /properties 键白名单与值校验 ──
 // 普通可写属性键白名单（前端世界属性页暴露 + MC 26.x 常用键，保持新旧版本
 // 兼容的宽松策略：对已知属性尽量放行，未知键才拒绝）。
 export const WRITABLE_PROPERTIES = new Set([
   // 世界
-  'level-name', 'level-type', 'level-seed', 'generator-settings',
-  'difficulty', 'gamemode', 'force-gamemode', 'hardcore', 'pvp',
-  'allow-flight', 'allow-nether', 'spawn-monsters', 'spawn-npcs',
-  'spawn-animals', 'spawn-protection', 'max-world-size', 'generate-structures',
+  'level-name',
+  'level-type',
+  'level-seed',
+  'generator-settings',
+  'difficulty',
+  'gamemode',
+  'force-gamemode',
+  'hardcore',
+  'pvp',
+  'allow-flight',
+  'allow-nether',
+  'spawn-monsters',
+  'spawn-npcs',
+  'spawn-animals',
+  'spawn-protection',
+  'max-world-size',
+  'generate-structures',
   // 玩家/性能
-  'max-players', 'view-distance', 'simulation-distance',
-  'player-idle-timeout', 'max-tick-time', 'network-compression-threshold',
-  'rate-limit', 'entity-broadcast-range-percentage', 'function-permission-level',
-  'op-permission-level', 'sync-chunk-writes', 'use-native-transport',
+  'max-players',
+  'view-distance',
+  'simulation-distance',
+  'player-idle-timeout',
+  'max-tick-time',
+  'network-compression-threshold',
+  'rate-limit',
+  'entity-broadcast-range-percentage',
+  'function-permission-level',
+  'op-permission-level',
+  'sync-chunk-writes',
+  'use-native-transport',
   'enable-jmx-monitoring',
   // 展示/交互
-  'motd', 'hide-online-players', 'enforce-secure-profile',
-  'prevent-proxy-connections', 'log-ips', 'broadcast-console-to-ops',
-  'broadcast-rcon-to-ops', 'snooper-enabled',
+  'motd',
+  'hide-online-players',
+  'enforce-secure-profile',
+  'prevent-proxy-connections',
+  'log-ips',
+  'broadcast-console-to-ops',
+  'broadcast-rcon-to-ops',
+  'snooper-enabled',
   // 资源包/内容过滤
-  'require-resource-pack', 'resource-pack', 'resource-pack-sha1',
-  'resource-pack-prompt', 'initial-enabled-packs', 'initial-disabled-packs',
+  'require-resource-pack',
+  'resource-pack',
+  'resource-pack-sha1',
+  'resource-pack-prompt',
+  'initial-enabled-packs',
+  'initial-disabled-packs',
   'text-filtering-config',
 ]);
 
 // 布尔型属性：仅接受 true/false
 export const BOOLEAN_PROPERTIES = new Set([
-  'white-list', 'enforce-whitelist', 'force-gamemode', 'hardcore', 'pvp',
-  'allow-flight', 'allow-nether', 'spawn-monsters', 'spawn-npcs',
-  'spawn-animals', 'generate-structures', 'hide-online-players',
-  'enforce-secure-profile', 'prevent-proxy-connections', 'log-ips',
-  'sync-chunk-writes', 'use-native-transport', 'broadcast-console-to-ops',
-  'broadcast-rcon-to-ops', 'snooper-enabled', 'enable-jmx-monitoring',
+  'white-list',
+  'enforce-whitelist',
+  'force-gamemode',
+  'hardcore',
+  'pvp',
+  'allow-flight',
+  'allow-nether',
+  'spawn-monsters',
+  'spawn-npcs',
+  'spawn-animals',
+  'generate-structures',
+  'hide-online-players',
+  'enforce-secure-profile',
+  'prevent-proxy-connections',
+  'log-ips',
+  'sync-chunk-writes',
+  'use-native-transport',
+  'broadcast-console-to-ops',
+  'broadcast-rcon-to-ops',
+  'snooper-enabled',
+  'enable-jmx-monitoring',
   'require-resource-pack',
 ]);
 
 // 数值型属性：仅接受整数（max-tick-time / network-compression-threshold
 // 允许 -1 表示禁用/不限制）
 export const NUMERIC_PROPERTIES = new Set([
-  'max-players', 'view-distance', 'simulation-distance',
-  'player-idle-timeout', 'max-tick-time', 'network-compression-threshold',
-  'rate-limit', 'entity-broadcast-range-percentage', 'function-permission-level',
-  'op-permission-level', 'spawn-protection', 'max-world-size',
+  'max-players',
+  'view-distance',
+  'simulation-distance',
+  'player-idle-timeout',
+  'max-tick-time',
+  'network-compression-threshold',
+  'rate-limit',
+  'entity-broadcast-range-percentage',
+  'function-permission-level',
+  'op-permission-level',
+  'spawn-protection',
+  'max-world-size',
 ]);
 
 // 敏感属性禁止 API 写入：enable-rcon/rcon.password/rcon.port 为 RCON
@@ -74,10 +124,24 @@ export const NUMERIC_PROPERTIES = new Set([
 // 绕过命令权限分级，online-mode 为正版验证，server-port/server-ip 控制
 // 网络暴露面。GET 时以占位符掩码返回，PUT 提交占位符视为未修改
 // （沿用磁盘现值），提交其余值一律 400 拒绝。
+//
+// management-server-secret 与 management-server-tls-keystore-password 是凭据：
+// MC 服务端开启 MSMP 且该键留空时会**自动生成** secret 并写回 server.properties，
+// 面板属性页即可读到密钥明文（与 rcon.password 的保护口径不一致）。
+// 前端 mc-properties.ts 的 SENSITIVE_PROPERTY_KEYS 必须同步增补——只改一侧会让
+// 前端把占位符当真实值参与重算/回写。
 export const SENSITIVE_PROPERTIES = new Set([
-  'enable-rcon', 'rcon.password', 'rcon.port',
-  'enable-query', 'enable-status', 'enable-command-block',
-  'online-mode', 'server-port', 'server-ip',
+  'enable-rcon',
+  'rcon.password',
+  'rcon.port',
+  'enable-query',
+  'enable-status',
+  'enable-command-block',
+  'online-mode',
+  'server-port',
+  'server-ip',
+  'management-server-secret',
+  'management-server-tls-keystore-password',
 ]);
 export const SENSITIVE_PLACEHOLDER = '********';
 
@@ -88,7 +152,7 @@ export const ALLOWED_PROPERTY_KEYS = new Set([
   ...Object.keys(RUNTIME_COMMAND_MAP),
 ]);
 
-// find-018：单键值校验。返回 { ok: true, value } 或 { ok: false, reason }
+// 单键值校验。返回 { ok: true, value } 或 { ok: false, reason }
 export function validatePropertyValue(key, rawValue) {
   if (rawValue === null || rawValue === undefined || typeof rawValue === 'object') {
     return { ok: false, reason: '值必须是标量' };
@@ -127,7 +191,7 @@ export function validatePropertyValue(key, rawValue) {
   return { ok: true, value };
 }
 
-// find-015：敏感属性（rcon.password 等）以占位符掩码返回，防止密码与
+// 敏感属性（rcon.password 等）以占位符掩码返回，防止密码与
 // 网络配置泄露给 API 调用方；客户端原样回传占位符时 PUT 视为未修改。
 export function maskSensitiveProperties(props) {
   const masked = { ...props };
@@ -225,9 +289,7 @@ export async function applyPropertyUpdates(instance, newProps) {
   instance.saveProperties(validated);
 
   // 对比新旧属性，区分「可运行中生效（下发命令）」与「需重启服务器」
-  const changedKeys = Object.keys(validated).filter(
-    (k) => oldProps[k] !== validated[k],
-  );
+  const changedKeys = Object.keys(validated).filter((k) => oldProps[k] !== validated[k]);
   const runtimeChanged = changedKeys.filter((k) => RUNTIME_COMMAND_MAP[k]);
   // 仅在服务器运行时才提示需重启（未运行时下次启动自然生效）
   const restartRequired = instance.isRunning

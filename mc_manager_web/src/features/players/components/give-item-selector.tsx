@@ -16,6 +16,11 @@ import {
 import { MINECRAFT_POTIONS, type PotionEffect } from '@/lib/mc-potions'
 import { effectColorHex } from './give-item-preview-bar'
 import type { SelectedEntry } from './give-item-enchant-editor'
+import {
+  TONE_SELECTED_CLASSES,
+  TONE_SELECTED_SURFACE_CLASSES,
+  toneClasses,
+} from '@/components/mcs/tone'
 
 /** 药水效果虚拟物品（id 用效果 id，category 固定「药水」，UI 展示用） */
 export const POTION_VIRTUAL_ITEMS: MinecraftItem[] = MINECRAFT_POTIONS.map((e) => ({
@@ -53,7 +58,7 @@ const ItemCell = memo(function ItemCell({
       className={cn(
         'relative flex flex-col items-center gap-0.5 rounded-mcs-sm border px-1 pb-1 pt-1 transition-colors',
         isSelected
-          ? 'border-mcs-accent-border bg-mcs-accent-bg-subtle'
+          ? TONE_SELECTED_SURFACE_CLASSES
           : 'border-mcs-border-subtle bg-mcs-bg-muted hover:border-mcs-border-default',
       )}
     >
@@ -73,16 +78,21 @@ const ItemCell = memo(function ItemCell({
           </span>
         )}
         {isSelected && entry !== undefined && Object.keys(entry.enchants).length > 0 && (
-          <span className="absolute left-0 top-0 rounded-mcs-xs border border-mcs-purple-border bg-mcs-purple-bg-subtle px-1 text-mcs-2xs font-semibold leading-tight text-mcs-purple-fg">
+          <span
+            className={`absolute left-0 top-0 rounded-mcs-xs border px-1 text-mcs-2xs font-semibold leading-tight ${toneClasses('purple')}`}
+          >
             附{Object.keys(entry.enchants).length}
           </span>
         )}
       </span>
-      <span className="w-full truncate text-center text-mcs-xs text-mcs-text-default" title={item.name}>
+      <span
+        className="w-full truncate text-center text-mcs-xs text-mcs-text-default"
+        title={item.name}
+      >
         {item.name}
       </span>
       <span
-        className="w-full truncate text-center font-mono text-mcs-2xs text-mcs-text-subtle"
+        className="w-full truncate text-center font-mono text-mcs-2xs text-mcs-text-muted"
         title={fullItemId(item.id)}
       >
         {item.id}
@@ -175,7 +185,7 @@ export function ItemSelector({
 
       {/* 分类 chips + 匹配数 */}
       <div className="flex items-center gap-2">
-        <span className="shrink-0 text-mcs-2xs text-mcs-text-subtle">
+        <span className="shrink-0 text-mcs-2xs text-mcs-text-muted">
           找到 {filteredItems.length} 个物品
         </span>
         <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto">
@@ -185,10 +195,10 @@ export function ItemSelector({
               type="button"
               onClick={() => onCategoryChangeWithPanelReset(cat)}
               className={cn(
-                'shrink-0 rounded-full px-2 py-0.5 text-mcs-xs transition-colors',
+                'shrink-0 rounded-full border border-transparent px-2 py-0.5 text-mcs-xs transition-colors',
                 activeCategory === cat
-                  ? 'bg-mcs-accent-bg-subtle font-medium text-mcs-accent-fg'
-                  : 'text-mcs-text-muted hover:bg-mcs-bg-hover hover:text-mcs-text-default',
+                  ? `${TONE_SELECTED_CLASSES} font-medium`
+                  : 'text-mcs-text-muted hover:bg-mcs-state-hover hover:text-mcs-text-default',
               )}
             >
               {cat}
@@ -197,14 +207,23 @@ export function ItemSelector({
         </div>
       </div>
 
-      {/* 物品网格 */}
+      {/* 物品网格：列数按**面板实宽**切档（@container 在 PlayerDetailPanel 的 aside 上）。
+          本面板 embedded 内嵌在详情面板里，容器宽在两种形态下差 580px（内联 w-105=420px /
+          Sheet 全宽约 1000px）。原来按视口断（sm 5 列 / lg 6 列）完全反向：内联 420px
+          在 1280 视口下拿到 6 列，每格仅 ~54px，36px 缩略图下的物品名与 id 双双被
+          truncate 截掉；而 Sheet 全宽在 <1024 视口下只给 5 列，白白少排一列。
+          档位按格子最小可用宽反推：一格要放得下 36px 缩略图 + 不截断的物品名 ⇒ ≥88px，
+          故 <576px 4 列、≥576px 5 列、≥896px 6 列 */}
       {filteredItems.length === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-1.5 py-8">
-          <Terminal className="size-6 text-mcs-text-subtle" aria-hidden />
-          <p className="text-mcs-sm text-mcs-text-subtle">没有找到匹配的物品</p>
+          <Terminal className="size-6 text-mcs-text-muted" aria-hidden />
+          <p className="text-mcs-sm text-mcs-text-muted">没有找到匹配的物品</p>
         </div>
       ) : (
-        <div className="grid flex-1 grid-cols-4 content-start gap-1.5 overflow-y-auto pb-1 sm:grid-cols-5 lg:grid-cols-6" data-testid="give-item-grid">
+        <div
+          className="grid flex-1 grid-cols-4 content-start gap-1.5 overflow-y-auto pb-1 @xl:grid-cols-5 @4xl:grid-cols-6"
+          data-testid="give-item-grid"
+        >
           {filteredItems.map((item) => (
             <ItemCell
               key={item.id}

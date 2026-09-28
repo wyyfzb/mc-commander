@@ -94,7 +94,10 @@ export interface BanFormModel {
 }
 
 /** 校验封禁表单：IP 封禁需玩家有 IP 地址 */
-export function validateBanForm(model: BanFormModel, playerIp: string | null | undefined): string | null {
+export function validateBanForm(
+  model: BanFormModel,
+  playerIp: string | null | undefined,
+): string | null {
   if (model.targetType === 'ip' && (!playerIp || playerIp.length === 0)) {
     return '该玩家暂无 IP 信息'
   }

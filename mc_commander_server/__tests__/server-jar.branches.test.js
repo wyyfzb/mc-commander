@@ -133,7 +133,11 @@ function defaultStreamImpl(jarBytes) {
   return (url, streamMod) => {
     const pt = new streamMod.PassThrough();
     queueMicrotask(() => {
-      pt.emit('downloadProgress', { percent: 0.5, transferred: jarBytes.length, total: jarBytes.length });
+      pt.emit('downloadProgress', {
+        percent: 0.5,
+        transferred: jarBytes.length,
+        total: jarBytes.length,
+      });
       pt.write(jarBytes);
       pt.end();
     });
@@ -246,15 +250,30 @@ describe('Paper 构建发现链形态缺口', () => {
 
   it('v3 裸数组响应：直接按构建数组过滤 STABLE 并选最新', async () => {
     definePaperChain([
-      { id: 10, channel: 'STABLE', downloads: { 'server:default': { url: 'https://dl/10.jar', sha256: null } } },
-      { id: 12, channel: 'STABLE', downloads: { 'server:default': { url: 'https://dl/12.jar', sha256: JAR_SHA256 } } },
+      {
+        id: 10,
+        channel: 'STABLE',
+        downloads: {
+          'server:default': { url: 'https://fill-data.papermc.io/10.jar', checksums: {} },
+        },
+      },
+      {
+        id: 12,
+        channel: 'STABLE',
+        downloads: {
+          'server:default': {
+            url: 'https://fill-data.papermc.io/12.jar',
+            checksums: { sha256: JAR_SHA256 },
+          },
+        },
+      },
     ]);
     const { app } = buildApp();
     const res = await request(app)
       .post('/api/instances/deploy')
       .send({ type: 'paper', mcVersion: '1.21.4', instanceName: 'Branch Fixture' });
     expect(res.status).toBe(200);
-    // sha256 null → expectedHash null：仅限流不强校验
+    // 选中 id=12（checksums.sha256 齐全 → 强制校验通过）
     expect(res.body.data.mcVersion).toBe('1.21.4');
   });
 
@@ -268,32 +287,34 @@ describe('Paper 构建发现链形态缺口', () => {
     expect(res.body.message).toContain('No Paper build found');
     expect(manager.emit).toHaveBeenCalledWith(
       'deployProgress',
-      expect.objectContaining({ stage: 'error' })
+      expect.objectContaining({ stage: 'error' }),
     );
   });
 
-  it('STABLE 空回退全量构建 + 无 id 无 downloads → build 字段组 v2 回退 URL', async () => {
+  it('STABLE 空回退全量构建 + 无 downloads → 502（v2 拼接回退已移除，不再返回 200）', async () => {
     definePaperChain([
-      // 双元素触发 sort 比较回调：均无 id → (b.id||0)/(a.id||0) 失败臂求值；无 downloads 键 → v2 回退
-      { build: 9, channel: 'EXPERIMENTAL' },
-      { build: 7, channel: 'LEGACY' },
+      { id: 9, channel: 'BETA' },
+      { id: 7, channel: 'ALPHA' },
     ]);
     const { app } = buildApp();
     const res = await request(app)
       .post('/api/instances/deploy')
       .send({ type: 'paper', mcVersion: '1.21.4', instanceName: 'Branch Fixture' });
-    // 唯一候选 id/build=9 → downloads 缺失 → v2 回退（fileName 缺省 paper-1.21.4-9.jar）
-    expect(res.status).toBe(200);
-    expect(res.body.data.id).toMatch(/^paper-[0-9a-f]{8}$/);
-    const { default: got } = await import('got');
-    expect(got.stream.mock.calls[0][0]).toBe(
-      'https://api.papermc.io/v2/projects/paper/versions/1.21.4/builds/9/downloads/paper-1.21.4-9.jar',
-    );
+    expect(res.status).toBe(502);
+    expect(res.body.message).toContain('No Paper build download');
   });
 
-  it('server:default 存在但无 sha256 → 直链下载且跳过强校验', async () => {
+  it('checksums 存在但无 sha256 → 直链下载且跳过强校验', async () => {
     definePaperChain({
-      builds: [{ id: 5, channel: 'STABLE', downloads: { 'server:default': { url: 'https://dl/no-hash.jar' } } }],
+      builds: [
+        {
+          id: 5,
+          channel: 'STABLE',
+          downloads: {
+            'server:default': { url: 'https://fill-data.papermc.io/no-hash.jar', checksums: {} },
+          },
+        },
+      ],
     });
     const { app } = buildApp();
     const res = await request(app)
@@ -301,6 +322,33 @@ describe('Paper 构建发现链形态缺口', () => {
       .send({ type: 'paper', mcVersion: '1.21.4', instanceName: 'Branch Fixture' });
     expect(res.status).toBe(200);
     expect(res.body.data.mcVersion).toBe('1.21.4');
+  });
+
+  it('真实 v3 响应形状：摘要位于 downloads[server:default].checksums.sha256 → 强制校验通过', async () => {
+    definePaperChain([
+      {
+        id: 232,
+        time: '2026-05-11T11:43:09Z',
+        channel: 'STABLE',
+        downloads: {
+          'server:default': {
+            name: 'paper-1.21.4-232.jar',
+            checksums: { sha256: JAR_SHA256 },
+            size: 51437498,
+            url: 'https://fill-data.papermc.io/v1/objects/xxx/paper-1.21.4-232.jar',
+          },
+        },
+      },
+    ]);
+    const { app } = buildApp();
+    const res = await request(app)
+      .post('/api/instances/deploy')
+      .send({ type: 'paper', mcVersion: '1.21.4', instanceName: 'Real Shape' });
+    expect(res.status).toBe(200);
+    const { default: got } = await import('got');
+    expect(got.stream.mock.calls[0][0]).toBe(
+      'https://fill-data.papermc.io/v1/objects/xxx/paper-1.21.4-232.jar',
+    );
   });
 });
 
@@ -311,7 +359,10 @@ describe('deploy · core 构建形态与 downloadServer 本地形态', () => {
 
   it('core build 顶层 url 形态 → 直链下载成功', async () => {
     defineVanilla();
-    testState.latestBuild = { url: 'https://core-dl/vanilla.jar', sha256: crypto.createHash('sha256').update(JAR_BYTES).digest('hex') };
+    testState.latestBuild = {
+      url: 'https://core-dl/vanilla.jar',
+      sha256: crypto.createHash('sha256').update(JAR_BYTES).digest('hex'),
+    };
     const { app } = buildApp();
     const res = await request(app)
       .post('/api/instances/deploy')
@@ -345,7 +396,9 @@ describe('deploy · core 构建形态与 downloadServer 本地形态', () => {
       .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Branch Fixture' });
     expect(res.status).toBe(200);
     const instanceId = AuditLogModel.create.mock.calls[0][0].instanceId;
-    const cfg = JSON.parse(fs.readFileSync(path.join(testState.serversDir, instanceId, 'instance.json'), 'utf-8'));
+    const cfg = JSON.parse(
+      fs.readFileSync(path.join(testState.serversDir, instanceId, 'instance.json'), 'utf-8'),
+    );
     expect(cfg.jarFile).toBe('server.jar');
     // 本地产物已 rename：core-server-build.jar 不存在、server.jar 存在
     const files = fs.readdirSync(path.join(testState.serversDir, instanceId));
@@ -377,10 +430,11 @@ describe('deploy · core 构建形态与 downloadServer 本地形态', () => {
       .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Branch Fixture' });
     expect(res.status).toBe(200);
     const instanceId = AuditLogModel.create.mock.calls[0][0].instanceId;
-    const cfg = JSON.parse(fs.readFileSync(path.join(testState.serversDir, instanceId, 'instance.json'), 'utf-8'));
+    const cfg = JSON.parse(
+      fs.readFileSync(path.join(testState.serversDir, instanceId, 'instance.json'), 'utf-8'),
+    );
     expect(cfg.jarFile).toBe('server.jar'); // 缺省 jarFile 原样落盘
   });
-
 });
 
 describe('下载进度节流与错误清理', () => {
@@ -411,7 +465,10 @@ describe('下载进度节流与错误清理', () => {
       .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Branch Fixture' });
     expect(res.status).toBe(200);
     const progressEvents = manager.emit.mock.calls
-      .filter(([evt, payload]) => evt === 'deployProgress' && payload.stage === 'download' && payload.transferred > 0)
+      .filter(
+        ([evt, payload]) =>
+          evt === 'deployProgress' && payload.stage === 'download' && payload.transferred > 0,
+      )
       .map(([, p]) => p.percent);
     // 事件 2 发射（percent 0.1），事件 3 被节流；事件 1 transferred=0 不计
     expect(progressEvents).toEqual([0.1]);
@@ -424,7 +481,11 @@ describe('下载进度节流与错误清理', () => {
     vi.spyOn(fs, 'createWriteStream').mockImplementation((p, opts) => {
       const ws = realCreate(p, opts);
       if (String(p).endsWith('.jar')) {
-        try { fs.closeSync(fs.openSync(p, 'a')); } catch { /* 已存在 */ }
+        try {
+          fs.closeSync(fs.openSync(p, 'a'));
+        } catch {
+          /* 已存在 */
+        }
       }
       return ws;
     });
@@ -453,7 +514,11 @@ describe('下载进度节流与错误清理', () => {
       const ws = realCreate(p, opts);
       if (String(p).endsWith('server.jar')) {
         queueMicrotask(() => {
-          try { fs.closeSync(fs.openSync(p, 'a')); } catch { /* 已存在 */ } // 确保存在 → unlink true 臂
+          try {
+            fs.closeSync(fs.openSync(p, 'a'));
+          } catch {
+            /* 已存在 */
+          } // 确保存在 → unlink true 臂
           ws.emit('error', new Error('ENOSPC: disk full'));
         });
       }
@@ -487,14 +552,16 @@ describe('forge 安装段分支', () => {
       .send({ type: 'forge', mcVersion: '1.21.4', instanceName: 'Forge OK' });
     expect(res.status).toBe(200);
     const instanceId = res.body.data.id;
-    const cfg = JSON.parse(fs.readFileSync(path.join(testState.serversDir, instanceId, 'instance.json'), 'utf-8'));
+    const cfg = JSON.parse(
+      fs.readFileSync(path.join(testState.serversDir, instanceId, 'instance.json'), 'utf-8'),
+    );
     expect(cfg.jarFile).toBe('forge-1.0.0-server.jar');
     const files = fs.readdirSync(path.join(testState.serversDir, instanceId));
     expect(files).toContain('forge-1.0.0-server.jar');
     expect(files).not.toContain('forge-installer.jar'); // unlinkSync 清理
     expect(manager.emit).toHaveBeenCalledWith(
       'deployProgress',
-      expect.objectContaining({ stage: 'forge_install', ...{ percent: 0 } })
+      expect.objectContaining({ stage: 'forge_install', ...{ percent: 0 } }),
     );
   });
 
@@ -520,11 +587,11 @@ describe('forge 安装段分支', () => {
     expect(res.body.message).toContain('spawn java ENOENT');
     expect(manager.emit).toHaveBeenCalledWith(
       'deployProgress',
-      expect.objectContaining({ stage: 'error' })
+      expect.objectContaining({ stage: 'error' }),
     );
   });
 
-  it('安装器 120s 超时 → kill 兜底 + 502 timed out', async () => {
+  it('安装器 120s 超时 → 进程树终止 + 502 timed out', async () => {
     defineForgeChain();
     testState.spawnBehavior = 'hang';
     const { app } = buildApp();
@@ -542,13 +609,23 @@ describe('forge 安装段分支', () => {
     expect(timerCall, 'forge 安装器应注册 120s 定时器').not.toBeNull();
     const callIdx = setTimeoutSpy.mock.calls.findIndex(([, ms]) => ms === 120000);
     clearTimeout(setTimeoutSpy.mock.results[callIdx].value);
-    timerCall[0](); // 手动触发超时回调：extractProc.kill() + reject
+    timerCall[0](); // 手动触发超时回调：终止进程树 + reject
 
     const res = await inflight;
     expect(res.status).toBe(502);
     expect(res.body.message).toContain('timed out (120s)');
-    const { spawn } = await import('child_process');
+    const { spawn, spawnSync } = await import('child_process');
+    // 单进程 SIGKILL 兜底
     expect(spawn.mock.results[0].value.kill).toHaveBeenCalled();
+    // 进程树终止（与实例 stop 同策略，见 utils/process-tree.js）：
+    // Windows 走 taskkill /T 递归；POSIX 上安装器未 detached（无进程组语义）→ 不做 kill(-pid)
+    if (process.platform === 'win32') {
+      expect(spawnSync).toHaveBeenCalledWith('taskkill', ['/F', '/T', '/PID', '42424'], {
+        stdio: 'ignore',
+      });
+    } else {
+      expect(spawnSync).not.toHaveBeenCalledWith('taskkill', expect.anything(), expect.anything());
+    }
   });
 });
 
@@ -564,7 +641,7 @@ describe('win32 平台分支与首启输出', () => {
       const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
       const pending = request(app)
         .post('/api/instances/deploy')
-        .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Win Server' });
+        .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Win Server', eula: true });
       const inflight = Promise.resolve(pending);
 
       let timeoutCall = null;
@@ -584,7 +661,9 @@ describe('win32 平台分支与首启输出', () => {
       const spawnOpts = spawn.mock.calls[0][2];
       expect(spawnOpts.detached).toBeUndefined();
       // 进程树终止：taskkill /F /T /PID
-      expect(spawnSync).toHaveBeenCalledWith('taskkill', ['/F', '/T', '/PID', '42424'], { stdio: 'ignore' });
+      expect(spawnSync).toHaveBeenCalledWith('taskkill', ['/F', '/T', '/PID', '42424'], {
+        stdio: 'ignore',
+      });
     } finally {
       Object.defineProperty(process, 'platform', origPlatform);
     }
@@ -618,7 +697,7 @@ describe('失败清理兜底', () => {
     expect(rmSpy).toHaveBeenCalled();
     expect(manager.emit).toHaveBeenCalledWith(
       'deployProgress',
-      expect.objectContaining({ stage: 'error' })
+      expect.objectContaining({ stage: 'error' }),
     );
   });
 });

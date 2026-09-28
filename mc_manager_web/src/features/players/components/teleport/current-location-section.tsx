@@ -16,7 +16,12 @@ export interface CurrentLocationSectionProps {
   onCopyCoords: (text: string) => void
 }
 
-export function CurrentLocationSection({ isBatchMode, batchTargets, player, onCopyCoords }: CurrentLocationSectionProps) {
+export function CurrentLocationSection({
+  isBatchMode,
+  batchTargets,
+  player,
+  onCopyCoords,
+}: CurrentLocationSectionProps) {
   const singlePosText = player?.position ? formatCoords(player.position) : null
 
   return (
@@ -26,21 +31,45 @@ export function CurrentLocationSection({ isBatchMode, batchTargets, player, onCo
           {batchTargets.map((t, i) => (
             <div
               key={`${t.uuid}-${i}`}
-              className={cn('flex items-center gap-2 px-3 py-2', i > 0 && 'border-t border-mcs-border-subtle')}
+              className={cn(
+                'flex items-center gap-2 px-3 py-2',
+                i > 0 && 'border-t border-mcs-border-subtle',
+              )}
             >
-              <PlayerAvatar name={t.name} isOnline={t.isOnline} isFakePlayer={t.isFakePlayer} size={24} />
-              <span className="min-w-0 flex-1 truncate text-mcs-sm font-medium text-mcs-text-default">{t.name}</span>
-              <MapPin className="size-3 shrink-0" style={{ color: dimensionColor(t.dimension) }} aria-hidden />
-              <span className="shrink-0 text-mcs-2xs text-mcs-text-subtle">{dimensionLabel(t.dimension)}</span>
-              <span className="shrink-0 font-mono text-mcs-xs text-mcs-text-default">{formatCoords(t.position)}</span>
+              <PlayerAvatar
+                name={t.name}
+                isOnline={t.isOnline}
+                isFakePlayer={t.isFakePlayer}
+                size={24}
+              />
+              <span className="min-w-0 flex-1 truncate text-mcs-sm font-medium text-mcs-text-default">
+                {t.name}
+              </span>
+              <MapPin
+                className="size-3 shrink-0"
+                style={{ color: dimensionColor(t.dimension) }}
+                aria-hidden
+              />
+              <span className="shrink-0 text-mcs-2xs text-mcs-text-muted">
+                {dimensionLabel(t.dimension)}
+              </span>
+              <span className="shrink-0 font-mono text-mcs-xs text-mcs-text-default">
+                {formatCoords(t.position)}
+              </span>
             </div>
           ))}
         </div>
       ) : (
         <div className="flex items-center justify-between gap-2 rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-default px-3 py-2.5">
           <div className="flex min-w-0 items-center gap-2">
-            <MapPin className="size-4 shrink-0" style={{ color: dimensionColor(player?.dimension) }} aria-hidden />
-            <span className="shrink-0 text-mcs-xs text-mcs-text-subtle">{dimensionLabel(player?.dimension)}</span>
+            <MapPin
+              className="size-4 shrink-0"
+              style={{ color: dimensionColor(player?.dimension) }}
+              aria-hidden
+            />
+            <span className="shrink-0 text-mcs-xs text-mcs-text-muted">
+              {dimensionLabel(player?.dimension)}
+            </span>
             <span className="truncate font-mono text-mcs-sm font-semibold text-mcs-text-default">
               {singlePosText ?? '--'}
             </span>
@@ -50,7 +79,7 @@ export function CurrentLocationSection({ isBatchMode, batchTargets, player, onCo
             aria-label="复制坐标"
             disabled={singlePosText === null}
             onClick={() => onCopyCoords(singlePosText ?? '')}
-            className="shrink-0 text-mcs-text-subtle transition-colors hover:text-mcs-text-default disabled:cursor-not-allowed disabled:opacity-50"
+            className="shrink-0 text-mcs-text-muted transition-colors hover:text-mcs-text-default disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Copy className="size-3.5" aria-hidden />
           </button>

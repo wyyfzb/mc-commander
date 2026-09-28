@@ -75,7 +75,8 @@ describe('MCServerInstance - getPlayerDetails RCON 链路与异常降级', () =>
       // attribute 查询（旧版 generic.* 失败 → 新版命中）
       if (cmd.startsWith('attribute ')) {
         if (cmd.includes('generic.')) return null;
-        if (cmd.includes('max_health')) return 'Base value of attribute minecraft:max_health is 20.0';
+        if (cmd.includes('max_health'))
+          return 'Base value of attribute minecraft:max_health is 20.0';
         if (cmd.includes('armor')) return 'Total value of attribute minecraft:armor is 8.5';
         return null;
       }
@@ -195,23 +196,33 @@ describe('MCServerInstance - getPlayerDetails RCON 链路与异常降级', () =>
       SpawnY: '71',
       SpawnZ: '-88',
     });
-    expect((await instance.getPlayerDetails('Steve')).respawnPoint)
-      .toEqual({ x: 120, y: 71, z: -88 });
+    expect((await instance.getPlayerDetails('Steve')).respawnPoint).toEqual({
+      x: 120,
+      y: 71,
+      z: -88,
+    });
   });
 
   it('respawn.pos 新旧格式坐标均解析（[I; x,y,z] 与 [x,y,z]）', async () => {
     mockRconData(instance, { 'respawn.pos': '[100, 64, -50]' });
-    expect((await instance.getPlayerDetails('Steve')).respawnPoint)
-      .toEqual({ x: 100, y: 64, z: -50 });
+    expect((await instance.getPlayerDetails('Steve')).respawnPoint).toEqual({
+      x: 100,
+      y: 64,
+      z: -50,
+    });
 
     mockRconData(instance, { 'respawn.pos': '[100.0d, 64.0d, -50.0d]' });
-    expect((await instance.getPlayerDetails('Steve')).respawnPoint)
-      .toEqual({ x: 100, y: 64, z: -50 });
+    expect((await instance.getPlayerDetails('Steve')).respawnPoint).toEqual({
+      x: 100,
+      y: 64,
+      z: -50,
+    });
   });
 
   it('在线 RCON 实时物品栏现状行为：_extractNbtFromResponse 从 { 截取丢失外层 [，列表解析为空 → 降级保留 dat 快照（行为锁定，与 _loadInventoryFromRcon 直测一致）', async () => {
     mockRconData(instance, {
-      Inventory: '[{id:"minecraft:diamond_sword",Count:1b,Slot:0b,Enchantments:[{id:"minecraft:sharpness"}]}]',
+      Inventory:
+        '[{id:"minecraft:diamond_sword",Count:1b,Slot:0b,Enchantments:[{id:"minecraft:sharpness"}]}]',
     });
     const d = await instance.getPlayerDetails('Steve');
     // 现状：实时查询降级返回 null，inventory 不被覆盖（无 dat 快照文件时保持 null）

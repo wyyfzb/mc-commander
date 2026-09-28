@@ -1,5 +1,7 @@
 import { http, HttpResponse } from 'msw'
+import { restoreConfirmTarget } from '@mc-commander/schemas'
 import { LEGACY_GAMERULES } from '@/lib/mc-gamerules'
+import { todayIso } from '@/lib/mc-calendar'
 import type {
   BackupItem,
   BanRecord,
@@ -85,7 +87,7 @@ export const mockInstanceStatus: InstanceStatus = {
   cpuUsage: 15,
   memoryUsage: 3.2,
   totalMemory: 16,
-  worldSize: '1.2GB',
+  worldSize: 1.2,
   seed: null,
   lastSave: new Date(Date.now() - 5 * 60_000).toISOString(),
   lastOutput: null,
@@ -249,7 +251,7 @@ export const mockWorldInfo: WorldInfo = {
   gameDays: 42,
   dimensions: [
     { name: '主世界', icon: '🌍', playerCount: 2 },
-    { name: '地狱', icon: '🔥', playerCount: 1 },
+    { name: '下界', icon: '🔥', playerCount: 1 },
     { name: '末地', icon: '🟣', playerCount: 0 },
   ],
 }
@@ -301,11 +303,46 @@ export const mockFileListRoot: FileListResponse = {
   path: '/',
   isDirectory: true,
   files: [
-    { name: 'server.properties', path: '/server.properties', type: 'file', size: 1024, modifiedAt: new Date(Date.now() - 3_600_000).toISOString(), isDirectory: false },
-    { name: 'whitelist.json', path: '/whitelist.json', type: 'file', size: 128, modifiedAt: new Date(Date.now() - 7_200_000).toISOString(), isDirectory: false },
-    { name: 'ops.json', path: '/ops.json', type: 'file', size: 64, modifiedAt: new Date(Date.now() - 86_400_000).toISOString(), isDirectory: false },
-    { name: 'world', path: '/world', type: 'directory', size: 0, modifiedAt: new Date(Date.now() - 86_400_000).toISOString(), isDirectory: true },
-    { name: 'logs', path: '/logs', type: 'directory', size: 0, modifiedAt: new Date(Date.now() - 86_400_000).toISOString(), isDirectory: true },
+    {
+      name: 'server.properties',
+      path: '/server.properties',
+      type: 'file',
+      size: 1024,
+      modifiedAt: new Date(Date.now() - 3_600_000).toISOString(),
+      isDirectory: false,
+    },
+    {
+      name: 'whitelist.json',
+      path: '/whitelist.json',
+      type: 'file',
+      size: 128,
+      modifiedAt: new Date(Date.now() - 7_200_000).toISOString(),
+      isDirectory: false,
+    },
+    {
+      name: 'ops.json',
+      path: '/ops.json',
+      type: 'file',
+      size: 64,
+      modifiedAt: new Date(Date.now() - 86_400_000).toISOString(),
+      isDirectory: false,
+    },
+    {
+      name: 'world',
+      path: '/world',
+      type: 'directory',
+      size: 0,
+      modifiedAt: new Date(Date.now() - 86_400_000).toISOString(),
+      isDirectory: true,
+    },
+    {
+      name: 'logs',
+      path: '/logs',
+      type: 'directory',
+      size: 0,
+      modifiedAt: new Date(Date.now() - 86_400_000).toISOString(),
+      isDirectory: true,
+    },
   ],
 }
 
@@ -313,8 +350,22 @@ export const mockFileListWorld: FileListResponse = {
   path: '/world',
   isDirectory: true,
   files: [
-    { name: 'level.dat', path: '/world/level.dat', type: 'file', size: 2048, modifiedAt: new Date(Date.now() - 3_600_000).toISOString(), isDirectory: false },
-    { name: 'region', path: '/world/region', type: 'directory', size: 0, modifiedAt: new Date(Date.now() - 86_400_000).toISOString(), isDirectory: true },
+    {
+      name: 'level.dat',
+      path: '/world/level.dat',
+      type: 'file',
+      size: 2048,
+      modifiedAt: new Date(Date.now() - 3_600_000).toISOString(),
+      isDirectory: false,
+    },
+    {
+      name: 'region',
+      path: '/world/region',
+      type: 'directory',
+      size: 0,
+      modifiedAt: new Date(Date.now() - 86_400_000).toISOString(),
+      isDirectory: true,
+    },
   ],
 }
 
@@ -376,7 +427,8 @@ export const mockTasks: ScheduledTask[] = [
   },
 ]
 
-export const mockBans: BanRecord[] = [  {
+export const mockBans: BanRecord[] = [
+  {
     targetType: 'player',
     target: 'Charlie',
     reason: '作弊',
@@ -397,7 +449,33 @@ export const mockBans: BanRecord[] = [  {
 ]
 
 /** 部署失败开关（测试注入：结构占位，非真实错误） */
-export const deployMock = { shouldFail: false }
+/** 部署 mock 控制：cancelEcho 模拟「部署被取消后在途请求以 409 40915 结束」 */
+export const deployMock: {
+  shouldFail: boolean
+  cancelEcho: boolean
+  /** 取消回声携带的收尾明细（服务端 details.cleanup；null = 收尾正常） */
+  cancelEchoDetails: unknown
+  lastBody: { eula?: boolean } | null
+} = {
+  shouldFail: false,
+  cancelEcho: false,
+  cancelEchoDetails: null,
+  lastBody: null,
+}
+
+/** 取消部署（POST /instances/deploy/cancel）mock 控制：notInFlight 模拟服务端 40906（任务已结束） */
+export const deployCancelMock: { notInFlight: boolean; lastBody: { instanceId?: string } | null } =
+  {
+    notInFlight: false,
+    lastBody: null,
+  }
+
+/**
+ * 部署进度兜底快照开关（测试注入）：默认空态（无在途部署），
+ * 用例置 active 后 mock GET /instances/deploy/status 返回在途快照
+ * （结构占位虚构数据，严禁真实服务器信息）
+ */
+export const deployStatusMock: { active: boolean } = { active: false }
 
 /** 实例列表运行态开关（测试注入：false → 卡片显示启动按钮，供 EULA 首启用例） */
 export const instanceListMock = { running: true }
@@ -408,8 +486,33 @@ export const startMock = { eulaRequired: false, shouldFail: false, calls: 0 }
 /** EULA 写入开关（测试注入：shouldFail=写入失败；calls 供断言自动同意） */
 export const eulaMock = { shouldFail: false, calls: 0 }
 
+/**
+ * 卸载开关（测试注入）：retainedBackupCount=0 走服务端 409 前置清单校验分支；
+ * bodies 记录每次请求体，供断言二次确认带上了 acknowledgeIrreversible；
+ * expectedName 覆盖「实例名不匹配 → 400」场景
+ */
+export const uninstallMock = {
+  calls: 0,
+  retainedBackupCount: 0,
+  bodies: [] as Record<string, unknown>[],
+  expectedName: null as string | null,
+}
+
 /** 升级失败开关（测试注入：结构占位，非真实错误） */
 export const upgradeMock = { shouldFail: false, conflict: false }
+
+/** 取消升级（POST /instances/:id/upgrade/cancel）mock 控制：notInProgress 模拟服务端 40908 */
+export const upgradeCancelMock: { notInProgress: boolean; calls: number } = {
+  notInProgress: false,
+  calls: 0,
+}
+
+/** 恢复端点 mock 控制：instanceName 覆盖实例名场景（空串 = 无名称实例）；bodies 供请求体断言 */
+export const restoreMock: {
+  instanceName: string | null
+  calls: number
+  bodies: { confirmName?: string }[]
+} = { instanceName: null, calls: 0, bodies: [] }
 
 /** 升级状态轮询 mock（测试注入：模拟断线后轮询返回的进度） */
 export const upgradeStatusMock = {
@@ -437,28 +540,14 @@ export const mockBackups: BackupItem[] = [
   {
     id: 11,
     instanceId: 'demo',
-    name: '手动备份 2026-08-14',
+    name: '手动备份',
     description: null,
     type: 'manual',
     size: 524_288_000,
     status: 'completed',
     worldName: 'world',
-    format: 'snapshot',
     createdAt: '2026-08-14T20:00:00.000Z',
     updatedAt: '2026-08-14T20:05:00.000Z',
-  },
-  {
-    id: 10,
-    instanceId: 'demo',
-    name: '旧格式压缩包',
-    description: null,
-    type: 'manual',
-    size: 102_400_000,
-    status: 'completed',
-    worldName: 'world',
-    format: 'zip',
-    createdAt: '2026-07-01T08:00:00.000Z',
-    updatedAt: '2026-07-01T08:10:00.000Z',
   },
   {
     id: 9,
@@ -469,7 +558,6 @@ export const mockBackups: BackupItem[] = [
     size: 0,
     status: 'failed',
     worldName: 'world',
-    format: 'snapshot',
     createdAt: '2026-07-02T08:00:00.000Z',
     updatedAt: '2026-07-02T08:00:30.000Z',
   },
@@ -478,54 +566,108 @@ export const mockBackups: BackupItem[] = [
 /** 备份域 mock 端点（服务端 routes/backups.js 契约） */
 const backupHandlers = [
   http.get('*/api/v1/instances/:id/backups', () => ok(backupItemSchema.array().parse(mockBackups))),
+  // 归档清点/挂载必须排在 `/backups/:id` 之前：MSW 首个匹配胜出，而 `:id` 是通配段，
+  // 排在前面会把 `/backups/archived` 当详情查询吃掉（返回 404 → 面板渲染清点失败）
+  // 归档快照：默认空清单（多数用例不关心）；需要的用例自行 use() 覆盖
+  http.get('*/api/v1/backups/archived', () => ok([])),
+  // 挂载：默认「没有可挂载项」；用例自行 use() 覆盖出参与失败分支
+  http.post('*/api/v1/instances/:id/backups/attach', () => ok({ attached: 0, skipped: 0 })),
   http.get('*/api/v1/backups/:id', ({ params }) => {
     const found = mockBackups.find((b) => String(b.id) === String(params.id))
-    return found ? ok(found) : HttpResponse.json(
-      { status: 'error', code: 40403, message: '备份不存在', details: null, timestamp: new Date().toISOString() },
-      { status: 404 },
-    )
+    return found
+      ? ok(found)
+      : HttpResponse.json(
+          {
+            status: 'error',
+            code: 40403,
+            message: '备份不存在',
+            details: null,
+            timestamp: new Date().toISOString(),
+          },
+          { status: 404 },
+        )
   }),
   http.post('*/api/v1/instances/:id/backups', () =>
     ok({
       id: 12,
       instanceId: 'demo',
-      name: '手动备份 2026-08-15',
+      // 与服务端默认命名同源（routes/backups.js：未传 name 时用 Backup_<本地日期>，
+      // 见服务端 utils/local-date.js——UTC 口径会在东八区凌晨写成昨天）
+      name: `Backup_${todayIso()}`,
       description: null,
       type: 'manual',
       size: 0,
       status: backupMock.createStatus,
       worldName: 'world',
-      format: 'snapshot',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     }),
   ),
-  http.post('*/api/v1/backups/:id/restore', () => ok(null)),
+  // 恢复：服务端强制确认串（缺/不匹配 → 400 40017）。按真实语义校验（同用契约层的
+  // restoreConfirmTarget 派生链），前端漏带/带错 confirmName 的回归会直接红
+  http.post('*/api/v1/backups/:id/restore', async ({ request, params }) => {
+    const body = (await request.json().catch(() => ({}))) as { confirmName?: string }
+    restoreMock.calls += 1
+    restoreMock.bodies.push(body)
+    const backup = mockBackups.find((b) => String(b.id) === String(params.id))
+    const expected = restoreConfirmTarget({
+      instanceName: restoreMock.instanceName ?? mockInstanceStatus.name,
+      backupName: backup?.name,
+      backupId: String(params.id ?? ''),
+    })
+    if ((body.confirmName ?? '').trim() !== expected) {
+      return HttpResponse.json(
+        {
+          status: 'error',
+          code: 40017,
+          message: '需在请求体提供 confirmName 且与该备份所属实例名完全一致才能恢复',
+          details: null,
+          timestamp: new Date().toISOString(),
+        },
+        { status: 400 },
+      )
+    }
+    return ok(null)
+  }),
   http.delete('*/api/v1/backups/:id', () => ok(null)),
   // 下载（GET /backups/:id/download；gzip magic bytes 占位流，服务端为 tar.gz 流）
-  http.get('*/api/v1/backups/:id/download', () =>
-    new HttpResponse(new Uint8Array([0x1f, 0x8b, 8, 0, 0, 0, 0, 0, 0, 3]), {
-      status: 200,
-      headers: { 'Content-Type': 'application/gzip' },
-    }),
+  http.get(
+    '*/api/v1/backups/:id/download',
+    () =>
+      new HttpResponse(new Uint8Array([0x1f, 0x8b, 8, 0, 0, 0, 0, 0, 0, 3]), {
+        status: 200,
+        headers: { 'Content-Type': 'application/gzip' },
+      }),
   ),
 ]
 
 /** 玩家域 mock 端点 */
 const playerHandlers = [
-  http.get('*/api/v1/instances/:id/players/bans', () => ok(banRecordSchema.array().parse(mockBans))),
+  http.get('*/api/v1/instances/:id/players/bans', () =>
+    ok(banRecordSchema.array().parse(mockBans)),
+  ),
   http.get('*/api/v1/instances/:id/players/:player/details', ({ params }) => {
     const found = mockPlayers.find((p) => p.name === params.player)
-    return found ? ok(found) : HttpResponse.json(
-      { status: 'error', code: 40403, message: '玩家不存在', details: null, timestamp: new Date().toISOString() },
-      { status: 404 },
-    )
+    return found
+      ? ok(found)
+      : HttpResponse.json(
+          {
+            status: 'error',
+            code: 40403,
+            message: '玩家不存在',
+            details: null,
+            timestamp: new Date().toISOString(),
+          },
+          { status: 404 },
+        )
   }),
   http.get('*/api/v1/instances/:id/players', () => ok(playerSchema.array().parse(mockPlayers))),
   http.post('*/api/v1/instances/:id/players/:player/op', () => ok(null)),
   http.delete('*/api/v1/instances/:id/players/:player/op', () => ok(null)),
   http.post('*/api/v1/instances/:id/players/:player/kick', () => ok(null)),
-  http.post('*/api/v1/instances/:id/players/:player/ban', () => ok({ expiresAt: Date.now() + 3_600_000 })),
+  http.post('*/api/v1/instances/:id/players/:player/ban', () =>
+    ok({ expiresAt: Date.now() + 3_600_000 }),
+  ),
   http.post('*/api/v1/instances/:id/players/:player/pardon', () => ok(null)),
   http.post('*/api/v1/instances/:id/players/bans/:target/pardon', () => ok(null)),
   http.post('*/api/v1/instances/:id/players/:player/whitelist/add', () => ok(null)),
@@ -542,7 +684,7 @@ export const handlers = [
         {
           id: 12,
           taskId: 1,
-          runAt: '2026-09-02 04:00:05',
+          runAt: '2026-09-02T04:00:05.000Z',
           status: 'success',
           error: null,
           durationMs: 850,
@@ -550,7 +692,7 @@ export const handlers = [
         {
           id: 11,
           taskId: 1,
-          runAt: '2026-09-01 04:00:03',
+          runAt: '2026-09-01T04:00:03.000Z',
           status: 'failed',
           error: 'RCON 不可用（虚构占位文案）',
           durationMs: 3000,
@@ -558,7 +700,7 @@ export const handlers = [
         {
           id: 10,
           taskId: 1,
-          runAt: '2026-08-31 04:00:01',
+          runAt: '2026-08-31T04:00:01.000Z',
           status: 'skipped',
           error: null,
           durationMs: null,
@@ -568,11 +710,72 @@ export const handlers = [
   ),
   http.get('*/api/v1/overview', () => ok(overviewDataSchema.parse(mockOverview))),
   http.get('*/api/v1/system-stats', () => ok(systemStatsSchema.parse(mockSystemStats))),
-  http.get('*/api/v1/check-update', () => ok({ current: '0.1.0', latest: null, hasUpdate: false, offline: true })),
+  http.get('*/api/v1/check-update', () =>
+    ok({ current: '0.1.0', latest: null, hasUpdate: false, offline: true }),
+  ),
   http.get('*/api/v1/instances', () =>
-    ok([instanceStatusSchema.parse({ ...mockInstanceStatus, isRunning: instanceListMock.running })]),
+    ok([
+      instanceStatusSchema.parse({ ...mockInstanceStatus, isRunning: instanceListMock.running }),
+    ]),
   ),
   http.get('*/api/v1/instances/:id', () => ok(instanceStatusSchema.parse(mockInstanceStatus))),
+  // DELETE /instances/:id 卸载：实例名确认由服务端强制（前端输入框只是 UX）；
+  // 备份清单为空时还必须带 acknowledgeIrreversible（与 routes/status.js 同语义）
+  http.delete('*/api/v1/instances/:id', async ({ request }) => {
+    uninstallMock.calls += 1
+    const body = (await request.json().catch(() => ({}))) as Record<string, unknown>
+    uninstallMock.bodies.push(body)
+    const expectedName = uninstallMock.expectedName ?? mockInstanceStatus.name
+    // 与服务端同口径：两侧 trim 后比对（兼容库里带首尾空白的旧实例名）
+    if (typeof body.confirmName !== 'string' || body.confirmName.trim() !== expectedName.trim()) {
+      return HttpResponse.json(
+        {
+          status: 'error',
+          code: 40016,
+          message: '需在请求体提供 confirmName 且与实例名完全一致才能卸载实例',
+          details: null,
+          timestamp: new Date().toISOString(),
+        },
+        { status: 400 },
+      )
+    }
+    // 与服务端同口径：空名实例的实例名确认空转 → 额外要求 acknowledgeIrreversible（40916）
+    if (expectedName.trim() === '' && body.acknowledgeIrreversible !== true) {
+      return HttpResponse.json(
+        {
+          status: 'error',
+          code: 40916,
+          message:
+            '该实例无名称，名称确认不构成有效确认；确认后请携带 acknowledgeIrreversible=true 重试',
+          details: null,
+          timestamp: new Date().toISOString(),
+        },
+        { status: 409 },
+      )
+    }
+    if (uninstallMock.retainedBackupCount === 0 && body.acknowledgeIrreversible !== true) {
+      return HttpResponse.json(
+        {
+          status: 'error',
+          code: 40914,
+          message:
+            '该实例没有任何备份，删除后世界数据与配置不可恢复；确认后请携带 acknowledgeIrreversible=true 重试',
+          details: null,
+          timestamp: new Date().toISOString(),
+        },
+        { status: 409 },
+      )
+    }
+    // 与真实契约同形：数量全量、名字只列最近 10 条（按修改时间倒序）
+    const count = uninstallMock.retainedBackupCount
+    return ok({
+      retainedBackupCount: count,
+      retainedBackupNames: Array.from(
+        { length: Math.min(count, 10) },
+        (_, i) => `快照-${String(i + 1).padStart(2, '0')}`,
+      ),
+    })
+  }),
   // PUT /instances/:id 实例配置更新（启动配置弹窗；回显提交字段，结构占位）
   http.put('*/api/v1/instances/:id', async ({ request, params }) => {
     const body = (await request.json()) as Record<string, unknown>
@@ -591,13 +794,25 @@ export const handlers = [
     if (startMock.eulaRequired) {
       // 服务端 start 前置检查：eula.txt 缺失或 eula=false → 403 EULA_NOT_ACCEPTED
       return HttpResponse.json(
-        { status: 'error', code: 40000, message: 'EULA_NOT_ACCEPTED', details: null, timestamp: new Date().toISOString() },
+        {
+          status: 'error',
+          code: 40000,
+          message: 'EULA_NOT_ACCEPTED',
+          details: null,
+          timestamp: new Date().toISOString(),
+        },
         { status: 403 },
       )
     }
     if (startMock.shouldFail) {
       return HttpResponse.json(
-        { status: 'error', code: 50000, message: 'start failed', details: null, timestamp: new Date().toISOString() },
+        {
+          status: 'error',
+          code: 50000,
+          message: 'start failed',
+          details: null,
+          timestamp: new Date().toISOString(),
+        },
         { status: 500 },
       )
     }
@@ -608,7 +823,13 @@ export const handlers = [
     eulaMock.calls += 1
     if (eulaMock.shouldFail) {
       return HttpResponse.json(
-        { status: 'error', code: 50000, message: 'eula write failed', details: null, timestamp: new Date().toISOString() },
+        {
+          status: 'error',
+          code: 50000,
+          message: 'eula write failed',
+          details: null,
+          timestamp: new Date().toISOString(),
+        },
         { status: 500 },
       )
     }
@@ -647,7 +868,11 @@ export const handlers = [
   }),
   http.put('*/api/v1/instances/:id/files/content', async ({ request }) => {
     const body = (await request.json()) as { path?: string }
-    return ok({ path: body.path ?? '/server.properties', size: 1024, modifiedAt: new Date().toISOString() })
+    return ok({
+      path: body.path ?? '/server.properties',
+      size: 1024,
+      modifiedAt: new Date().toISOString(),
+    })
   }),
   http.delete('*/api/v1/instances/:id/files', () => ok(null)),
   http.get('*/api/v1/instances/:id/files', ({ request }) => {
@@ -664,7 +889,56 @@ export const handlers = [
       ...('loaders' in mock ? { loaders: mock.loaders } : {}),
     })
   }),
+  // ── 部署域 ──
+  // 部署进度兜底快照（GET /instances/deploy/status；服务端契约 deployStatusResponseSchema）
+  http.get('*/api/v1/instances/deploy/status', () =>
+    ok(
+      deployStatusMock.active
+        ? {
+            deploying: true,
+            instanceId: 'paper-a1b2c3d4',
+            instanceName: '生存服',
+            type: 'paper',
+            mcVersion: '1.21.4',
+            stage: 'forge_install',
+            percent: 0.45,
+            transferred: 52_428_800,
+            total: 104_857_600,
+            updatedAt: Date.now(),
+          }
+        : { deploying: false },
+    ),
+  ),
+  http.post('*/api/v1/instances/deploy/cancel', async ({ request }) => {
+    const body = (await request.json()) as { instanceId?: string }
+    deployCancelMock.lastBody = body
+    if (deployCancelMock.notInFlight) {
+      return HttpResponse.json(
+        {
+          status: 'error',
+          code: 40906,
+          message: 'No deployment in progress for this instance',
+          details: null,
+          timestamp: new Date().toISOString(),
+        },
+        { status: 409 },
+      )
+    }
+    return ok({ instanceId: body.instanceId ?? 'paper-a1b2c3d4', cancelled: true })
+  }),
   http.post('*/api/v1/instances/deploy', async ({ request }) => {
+    if (deployMock.cancelEcho) {
+      return HttpResponse.json(
+        {
+          status: 'error',
+          code: 40915,
+          message: 'Task cancelled by user',
+          details: deployMock.cancelEchoDetails,
+          timestamp: new Date().toISOString(),
+        },
+        { status: 409 },
+      )
+    }
     if (deployMock.shouldFail) {
       return HttpResponse.json(
         {
@@ -683,7 +957,9 @@ export const handlers = [
       instanceName?: string
       maxMemory?: string
       loaderVersion?: string
+      eula?: boolean
     }
+    deployMock.lastBody = body
     return ok({
       id: 'inst-deploy-001',
       name: body.instanceName ?? '新实例',
@@ -694,7 +970,7 @@ export const handlers = [
       maxMemory: body.maxMemory ?? '2G',
     })
   }),
-  // ── 升级域（P0-4）──
+  // ── 升级域──
   http.post('*/api/v1/instances/:id/upgrade', async ({ request }) => {
     if (upgradeMock.conflict) {
       return HttpResponse.json(
@@ -737,16 +1013,31 @@ export const handlers = [
       { status: 202 },
     )
   }),
-  http.get('*/api/v1/instances/:id/upgrade/status', () =>
-    ok(upgradeStatusMock),
-  ),
-  // 未配置 API Key 场景：401
+  http.post('*/api/v1/instances/:id/upgrade/cancel', ({ params }) => {
+    upgradeCancelMock.calls += 1
+    if (upgradeCancelMock.notInProgress) {
+      return HttpResponse.json(
+        {
+          status: 'error',
+          code: 40908,
+          message: 'No upgrade in progress for this instance',
+          details: null,
+          timestamp: new Date().toISOString(),
+        },
+        { status: 409 },
+      )
+    }
+    return ok({ instanceId: String(params.id ?? 'inst-001'), cancelled: true })
+  }),
+  http.get('*/api/v1/instances/:id/upgrade/status', () => ok(upgradeStatusMock)),
+  // 未提供凭据场景：401（与服务端 authMiddleware 的无凭据分支同码同文案：
+  // 40107 AUTH_CREDENTIALS_REQUIRED，与「凭据无效」的 40101 分开）
   http.get('*/api/v1/unauthorized-probe', () =>
     HttpResponse.json(
       {
         status: 'error',
-        code: 40101,
-        message: 'Invalid or expired API Key',
+        code: 40107,
+        message: '未提供访问凭据：请携带 X-API-Key 头或登录会话令牌',
         details: null,
         timestamp: new Date().toISOString(),
       },
@@ -759,7 +1050,8 @@ export const handlers = [
       {
         status: 'error',
         code: 40902,
-        message: '无法执行在线备份：服务器未启用 RCON。请先停止服务器，或在 server.properties 启用 RCON',
+        message:
+          '无法执行在线备份：服务器未启用 RCON。请先停止服务器，或在 server.properties 启用 RCON',
         details: null,
         timestamp: new Date().toISOString(),
       },
@@ -798,11 +1090,20 @@ export const handlers = [
   http.get('*/api/v1/auth/status', () => ok({ hasPassword: true })),
   // 密码登录（固定测试凭据）
   http.post('*/api/v1/auth/login', async () =>
-    ok({ token: 'mock-session-token-0123456789abcdef', sessionId: 'sess-mock-1', expiresAt: new Date(Date.now() + 7 * 86_400_000).toISOString() }),
+    ok({
+      token: 'mock-session-token-0123456789abcdef',
+      sessionId: 'sess-mock-1',
+      expiresAt: new Date(Date.now() + 7 * 86_400_000).toISOString(),
+    }),
   ),
   // 首访设密（同登录响应）
   http.post('*/api/v1/auth/setup', async () =>
-    ok({ hasPassword: true, token: 'mock-session-token-0123456789abcdef', sessionId: 'sess-mock-1', expiresAt: new Date(Date.now() + 7 * 86_400_000).toISOString() }),
+    ok({
+      hasPassword: true,
+      token: 'mock-session-token-0123456789abcdef',
+      sessionId: 'sess-mock-1',
+      expiresAt: new Date(Date.now() + 7 * 86_400_000).toISOString(),
+    }),
   ),
   // 活跃会话列表
   http.get('*/api/v1/auth/sessions', () =>
@@ -824,4 +1125,16 @@ export const handlers = [
   http.post('*/api/v1/auth/logout', () => ok({ ok: true })),
   http.put('*/api/v1/auth/password', () => ok({ ok: true, kickedSessions: 2 })),
   http.delete('*/api/v1/auth/sessions/:id', () => ok({ ok: true, current: false })),
+  // 两步验证状态（默认未启用；各用例按需覆写 enabled/剩余数量）
+  http.get('*/api/v1/auth/totp/status', () =>
+    ok({ enabled: false, confirmedAt: null, recoveryCodesRemaining: 0 }),
+  ),
+  // 部署能力（默认 API Key 通道开放；关闭态由用例覆写为 apiKeyEnabled: false）
+  http.get('*/api/v1/auth/capabilities', () =>
+    ok({ apiKeyEnabled: true, readonlyApiKeyEnabled: true, readonlyApiKeyConfigured: false }),
+  ),
+  // 只读凭据生成/轮换（设置页面板用；默认返回标记串，具体用例自行 use() 覆盖）
+  http.post('*/api/v1/rotate-readonly-key', () =>
+    ok({ apiKey: 'mcro-mock-0000-0000-0000-0000-0000-0000-0000' }),
+  ),
 ]

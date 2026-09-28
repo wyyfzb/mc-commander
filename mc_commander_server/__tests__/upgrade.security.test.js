@@ -1,5 +1,5 @@
 /**
- * 升级接口安全加固测试（S-P0-2：mcVersion 白名单 + JAR 路径收口 + 下载域白名单）
+ * 升级接口安全加固测试（mcVersion 白名单 + JAR 路径收口 + 下载域白名单）
  *
  * 覆盖三层防线：
  * ① 路由白名单：恶意 mcVersion payload 一律 400（VALIDATION_ERROR），不触发审计与服务层
@@ -26,7 +26,7 @@ vi.mock('got', () => ({
   // got(url, opts) 返回 promise-like：resolveDownloadUrl 里链式 .json()
   default: Object.assign(
     vi.fn((...args) => ({ json: () => jsonImpl.current(...args) })),
-    { stream: vi.fn((...args) => streamImpl.current(...args)) }
+    { stream: vi.fn((...args) => streamImpl.current(...args)) },
   ),
 }));
 
@@ -90,17 +90,18 @@ function createMockInstance(overrides = {}) {
   return {
     id: 'inst-1',
     name: 'Test Server',
-    status: 'stopped',
     mcVersion: '1.20.4',
     jarFile: 'server-1.20.4.jar',
     serverPath: tmpDir,
     isRunning: false,
     start: vi.fn(() => {
       // 模拟首启 ready 事件（_startAndVerify 依赖）
-      queueMicrotask(() => serverManagerRef.current.emit('instance:status', {
-        instanceId: 'inst-1',
-        event: 'ready',
-      }));
+      queueMicrotask(() =>
+        serverManagerRef.current.emit('instance:status', {
+          instanceId: 'inst-1',
+          event: 'ready',
+        }),
+      );
     }),
     ...overrides,
   };
@@ -161,7 +162,7 @@ afterEach(() => {
 
 // ── ① 路由白名单矩阵 ──
 
-describe('路由 mcVersion 白名单（S-P0-2）', () => {
+describe('路由 mcVersion 白名单', () => {
   let serverManager;
   let request;
 
@@ -222,7 +223,9 @@ describe('服务层路径收口（真实临时目录 + 真实 fs）', () => {
 
     // fail-fast 于备份/下载之前：无任何副作用文件
     expect(fs.readdirSync(tmpDir)).toEqual([]);
-    expect(serverManager._emitted.filter((e) => e.event === 'instance:upgradeProgress')).toEqual([]);
+    expect(serverManager._emitted.filter((e) => e.event === 'instance:upgradeProgress')).toEqual(
+      [],
+    );
   });
 
   it('下载域白名单：上游 manifest 被污染指向任意主机时拒绝下载', async () => {
@@ -242,7 +245,7 @@ describe('服务层路径收口（真实临时目录 + 真实 fs）', () => {
     };
 
     await expect(service.upgrade('inst-1', '1.21.4', 'vanilla')).rejects.toThrow(
-      /Download host not allowed: evil\.example\.com/
+      /Download host not allowed: evil\.example\.com/,
     );
     // 污染 URL 未产生任何写入（回滚仅恢复升级前旧 jarFile 名——污染上下文的
     // 新版本文件名从未入库，#539）
@@ -261,7 +264,9 @@ describe('服务层路径收口（真实临时目录 + 真实 fs）', () => {
     jsonImpl.current = (url) => {
       if (url.includes('version_manifest')) {
         return Promise.resolve({
-          versions: [{ id: '1.21.4', type: 'release', url: 'https://piston-meta.mojang.com/v.json' }],
+          versions: [
+            { id: '1.21.4', type: 'release', url: 'https://piston-meta.mojang.com/v.json' },
+          ],
         });
       }
       return Promise.resolve({

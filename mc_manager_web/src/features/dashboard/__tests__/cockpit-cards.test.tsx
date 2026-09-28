@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
-import { describe, it, expect, beforeEach, beforeAll, afterAll } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll, vi } from 'vitest'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { setupServer } from 'msw/node'
 import { Toaster } from 'sonner'
@@ -22,6 +22,9 @@ import { mockInstanceStatus } from '@/test/mocks/handlers'
 const server = setupServer(...handlers)
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
 afterAll(() => server.close())
+// 用例中途断言失败时体内的还原语句不会执行，间谍会残留给后续用例（如平台 spy 让
+// 后面的 placeholder 断言读到 ⌘）——集中在此还原，失败不放大成无关用例连带红
+afterEach(() => vi.restoreAllMocks())
 
 function renderWithProviders(ui: ReactNode) {
   return render(
@@ -36,7 +39,12 @@ function renderWithProviders(ui: ReactNode) {
 
 beforeEach(() => {
   localStorage.clear()
-  useConnectionStore.setState({ baseUrl: '', apiKey: 'test-key', status: 'ready' })
+  // 占位凭据动态生成（mimosa 硬编码凭据规则对 apiKey 字面量告警，测试值虽虚构仍按源消除）
+  useConnectionStore.setState({
+    baseUrl: '',
+    apiKey: `test-key-${crypto.randomUUID()}`,
+    status: 'ready',
+  })
   useServerStore.setState({
     status: mockInstanceStatus,
     systemStats: null,
@@ -75,25 +83,27 @@ describe('McClockCard 世界控制', () => {
     expect(screen.getByText('第 42 天')).toBeInTheDocument()
     expect(screen.getByText(/6000 tick/)).toBeInTheDocument()
     expect(screen.getAllByText('正午').length).toBeGreaterThan(0)
-    expect(screen.getByRole('button', { name: '晴天' })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByRole('button', { name: '雨天' })).toHaveAttribute('aria-pressed', 'false')
-    const noon = screen.getAllByRole('button', { name: '正午' }).pop()!
-    expect(noon).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('radio', { name: '晴天' })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByRole('radio', { name: '雨天' })).toHaveAttribute('aria-checked', 'false')
+    const noon = screen.getAllByRole('radio', { name: '正午' }).pop()!
+    expect(noon).toHaveAttribute('aria-checked', 'true')
   })
 
   it('点击雨天发送 weather rain 并回显终端（成功不弹 toast，终端为反馈源）', async () => {
     renderWithProviders(<McClockCard />)
-    fireEvent.click(screen.getByRole('button', { name: '雨天' }))
+    fireEvent.click(screen.getByRole('radio', { name: '雨天' }))
     await waitFor(() =>
       expect(useTerminalStore.getState().buffer.some((e) => e.text === 'weather rain')).toBe(true),
     )
   })
 
   it('实例停止时控件禁用', () => {
-    useServerStore.setState({ status: { ...mockInstanceStatus, isRunning: false, weather: null, worldTime: null } })
+    useServerStore.setState({
+      status: { ...mockInstanceStatus, isRunning: false, weather: null, worldTime: null },
+    })
     renderWithProviders(<McClockCard />)
-    expect(screen.getByRole('button', { name: '晴天' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: '白天' })).toBeDisabled()
+    expect(screen.getByRole('radio', { name: '晴天' })).toBeDisabled()
+    expect(screen.getByRole('radio', { name: '白天' })).toBeDisabled()
   })
 })
 
@@ -105,13 +115,19 @@ describe('AnnouncementCard 公告发送', () => {
     expect(input).toHaveValue('服务器将在 5 分钟后重启，请及时停靠')
     fireEvent.keyDown(input, { key: 'Enter', ctrlKey: true })
     // 二次确认：确认前不发送
-    expect(useTerminalStore.getState().buffer.some((e) => e.text.includes('say 服务器将在'))).toBe(false)
+    expect(useTerminalStore.getState().buffer.some((e) => e.text.includes('say 服务器将在'))).toBe(
+      false,
+    )
     fireEvent.click(screen.getByRole('button', { name: /^发送$/ }))
     await waitFor(() =>
-      expect(useTerminalStore.getState().buffer.some((e) => e.text.includes('say 服务器将在'))).toBe(true),
+      expect(
+        useTerminalStore.getState().buffer.some((e) => e.text.includes('say 服务器将在')),
+      ).toBe(true),
     )
     expect(input).toHaveValue('')
-    expect(useTerminalStore.getState().buffer.some((e) => e.text.includes('say 服务器将在'))).toBe(true)
+    expect(useTerminalStore.getState().buffer.some((e) => e.text.includes('say 服务器将在'))).toBe(
+      true,
+    )
   })
 
   it('预设管理：添加 → 胶囊与持久化；删除 → 胶囊消失', () => {
@@ -122,7 +138,9 @@ describe('AnnouncementCard 公告发送', () => {
     fireEvent.change(screen.getByLabelText('公告文案'), { target: { value: '周末活动即将开始' } })
     fireEvent.click(screen.getByRole('button', { name: '保存' }))
     expect(screen.getByRole('button', { name: '活动预告' })).toBeInTheDocument()
-    const stored = JSON.parse(localStorage.getItem('mcs-announcement-presets') ?? '[]') as { name: string }[]
+    const stored = JSON.parse(localStorage.getItem('mcs-announcement-presets') ?? '[]') as {
+      name: string
+    }[]
     expect(stored.some((p) => p.name === '活动预告')).toBe(true)
     // 删除预设：经二次确认
     fireEvent.click(screen.getByRole('button', { name: '删除预设 活动预告' }))
@@ -140,11 +158,47 @@ describe('AnnouncementCard 公告发送', () => {
     expect(input).toHaveValue('服务器将在 5 分钟后重启，请及时停靠')
   })
 
+  it('公告框 placeholder 的发送快捷键按平台取词（macOS 是 ⌘，其余是 Ctrl）', () => {
+    const { unmount } = renderWithProviders(<AnnouncementCard />)
+    // jsdom 平台为 Linux：提示须与 handler 接受的修饰键（ctrl||meta）一致
+    expect(screen.getByLabelText('公告内容')).toHaveAttribute(
+      'placeholder',
+      '输入公告内容…（Ctrl+Enter 发送，支持多行）',
+    )
+
+    unmount()
+    vi.spyOn(navigator, 'platform', 'get').mockReturnValue('MacIntel')
+    renderWithProviders(<AnnouncementCard />)
+    expect(screen.getByLabelText('公告内容')).toHaveAttribute(
+      'placeholder',
+      '输入公告内容…（⌘+Enter 发送，支持多行）',
+    )
+  })
+
   it('空输入不发命令', () => {
     renderWithProviders(<AnnouncementCard />)
     const input = screen.getByLabelText('公告内容')
     fireEvent.keyDown(input, { key: 'Enter', ctrlKey: true })
     expect(screen.queryByText(/命令已发送/)).not.toBeInTheDocument()
     expect(useTerminalStore.getState().buffer.length).toBe(0)
+  })
+
+  it('天气/时间 chip 是单选组：方向键移动即选中且焦点跟随', () => {
+    renderWithProviders(<McClockCard />)
+    const weatherGroup = screen.getByRole('radiogroup', { name: '天气' })
+    const weathers = within(weatherGroup).getAllByRole('radio')
+    expect(weathers[0]).toHaveAttribute('aria-checked', 'true') // mock 天气为 clear
+
+    fireEvent.keyDown(weatherGroup, { key: 'ArrowRight' })
+    expect(weathers[1]).toHaveAttribute('aria-checked', 'true')
+    expect(document.activeElement).toBe(weathers[1])
+
+    const timeGroup = screen.getByRole('radiogroup', { name: '时间' })
+    const times = within(timeGroup).getAllByRole('radio')
+    // 选中项由 mock 的世界时间决定（可能是任一档），故按当前选中项推算目标
+    const checked = times.findIndex((el) => el.getAttribute('aria-checked') === 'true')
+    const from = checked >= 0 ? checked : 0
+    fireEvent.keyDown(timeGroup, { key: 'ArrowLeft' })
+    expect(times[(from - 1 + times.length) % times.length]).toHaveAttribute('aria-checked', 'true')
   })
 })

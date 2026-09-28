@@ -6,7 +6,8 @@
  *   命令历史不传 order（服务端固定最新优先）
  * - 排序回排：asc 反转（与页面所见一致）、desc 保持、原数组不被修改
  * - 端到端：Blob 构造 + anchor.download 文件名 + 触发点击 + 释放 URL；
- *   命令历史行构造（结果列 成功/失败 文本 + 耗时格式化）经 ExcelJS 读回验证
+ *   时间列（本地时区格式化到秒）与命令历史行构造（结果列 成功/失败 文本 + 耗时格式化）
+ *   经 ExcelJS 读回验证
  * 全部数据为虚构占位，无真实服务器信息。
  */
 import { describe, expect, it, vi, beforeAll, afterEach } from 'vitest'
@@ -33,7 +34,9 @@ vi.mock('@/api/audit', () => ({
   apiGetCommandHistoryPage: (...args: unknown[]) => cmdPageImpl.current(...args),
 }))
 
-const config = { baseUrl: 'http://test.local', apiKey: 'k-test' } as Parameters<typeof fetchAuditExportRows>[0]
+const config = { baseUrl: 'http://test.local', apiKey: 'k-test' } as Parameters<
+  typeof fetchAuditExportRows
+>[0]
 
 /** 构造单条记录（seq 递减模拟 desc 时间序：seq 越大越旧） */
 function mkRow(seq: number): AuditLogItem {
@@ -45,7 +48,7 @@ function mkRow(seq: number): AuditLogItem {
     targetId: `srv-${seq}`,
     detail: seq % 2 === 0 ? { reason: 'manual', seq } : null,
     source: 'api',
-    createdAt: '2026-09-03 20:00:00',
+    createdAt: '2026-09-03T20:00:00.000Z',
   }
 }
 
@@ -85,7 +88,7 @@ function mkCmdRow(seq: number): CommandHistoryItem {
     success: seq % 2 === 0,
     response: null,
     durationMs: seq % 3 === 1 ? null : 1500,
-    createdAt: '2026-09-03 21:00:00',
+    createdAt: '2026-09-03T21:00:00.000Z',
   }
 }
 
@@ -148,6 +151,13 @@ describe('审计导出工具（issue 384）', () => {
     const anchor = click.mock.instances[0] as HTMLAnchorElement
     expect(anchor.download).toMatch(/^审计日志_\d{8}_\d{4}\.xlsx$/)
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:mock-url')
+
+    // 时间列：服务端下发 ISO8601，导出须按本地时区格式化到秒（直写原串会带 T/Z 且溢出列宽）
+    const wb = new ExcelJS.Workbook()
+    await wb.xlsx.load(await blobArg.arrayBuffer())
+    const sheet = wb.getWorksheet('审计日志')!
+    expect(sheet.getRow(1).getCell(1).value).toBe('时间')
+    expect(sheet.getRow(2).getCell(1).value).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/)
   })
 })
 
@@ -162,7 +172,10 @@ describe('命令历史导出工具（issue 403）', () => {
       const p = params as { page: number; pageSize?: number; order?: string }
       expect(p.pageSize).toBe(200)
       expect('order' in p).toBe(false) // 命令历史无 order 语义：不传该键
-      return { data: Array.from({ length: 200 }, (_, i) => mkCmdRow((p.page - 1) * 200 + i)), pagination: { page: p.page, totalPages: 6, total: 1200 } }
+      return {
+        data: Array.from({ length: 200 }, (_, i) => mkCmdRow((p.page - 1) * 200 + i)),
+        pagination: { page: p.page, totalPages: 6, total: 1200 },
+      }
     }
     const rows = await fetchCommandExportRows(config, { startTime: '2026-01-01T00:00:00Z' })
     expect(rows).toHaveLength(AUDIT_EXPORT_MAX_ROWS)
@@ -175,7 +188,10 @@ describe('命令历史导出工具（issue 403）', () => {
     cmdPageImpl.current = (_configArg, params) => {
       calls += 1
       const p = params as { page: number }
-      return { data: Array.from({ length: p.page === 3 ? 50 : 200 }, (_, i) => mkCmdRow(i)), pagination: { page: p.page, totalPages: 3, total: 450 } }
+      return {
+        data: Array.from({ length: p.page === 3 ? 50 : 200 }, (_, i) => mkCmdRow(i)),
+        pagination: { page: p.page, totalPages: 3, total: 450 },
+      }
     }
     const rows = await fetchCommandExportRows(config, {})
     expect(calls).toBe(3)
@@ -210,5 +226,7 @@ describe('命令历史导出工具（issue 403）', () => {
     expect(sheet.getRow(3).getCell(5).value).toBe('-')
     expect(sheet.getRow(3).getCell(2).value).toBe('say hello-1')
     expect(sheet.getRow(4).getCell(3).value).toBe('成功')
+    // 时间列同审计日志：本地时区格式化到秒，非原样 ISO
+    expect(sheet.getRow(2).getCell(1).value).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/)
   })
 })

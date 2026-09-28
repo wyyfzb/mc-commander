@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 // config.js 模块加载时会读服务端目录 .env（外部 IO 边界）——mock 掉使 env 三态
 // 完全由测试掌控，不受本地 .env 内容影响
@@ -24,6 +27,7 @@ const TOUCHED = [
   'BACKUP_RETENTION_MAX',
   'BACKUP_RETENTION_DAYS',
   'DISK_WARNING_PERCENT',
+  'API_KEY_ENABLED',
 ];
 let snapshot;
 
@@ -132,12 +136,110 @@ describe('config 数值环境变量收口（intFromEnv）', () => {
     expect(text).not.toContain('BACKUP_RETENTION_MAX="10"');
   });
 
-  it('23 处调用点全部收口：配置赋值不再直接 parseInt(process.env)', async () => {
+  it('API_KEY_ENABLED 解析：默认开启，大小写与首尾空格不敏感的 false/0 关闭', async () => {
+    // 默认（.env 已 mock 掉，等价于未设置）
+    expect((await loadConfig()).default.apiKeyEnabled).toBe(true);
+    // 空串/纯空白等同未设置（与数值项同一口径）
+    process.env.API_KEY_ENABLED = '   ';
+    expect((await loadConfig()).default.apiKeyEnabled).toBe(true);
+    // 关闭：false 的任意大小写/空白变体，以及 0（FALSE 曾被静默忽略 ⇒ fail-open）
+    for (const value of ['false', 'FALSE', 'False', ' false ', '0']) {
+      process.env.API_KEY_ENABLED = value;
+      expect((await loadConfig()).default.apiKeyEnabled, `API_KEY_ENABLED=${value}`).toBe(false);
+    }
+    // 开启：true 的变体与 1
+    for (const value of ['true', 'TRUE', 'True', ' true ', '1']) {
+      process.env.API_KEY_ENABLED = value;
+      expect((await loadConfig()).default.apiKeyEnabled, `API_KEY_ENABLED=${value}`).toBe(true);
+    }
+  });
+
+  it('API_KEY_ENABLED 未识别取值启动 fail-fast（不静默取默认）', async () => {
+    // 'no'/'yes'/'2'/拼写错误都属未识别：静默取默认在两个方向上都是坑
+    for (const value of ['no', 'yes', '2', 'flase', 'enabled']) {
+      process.env.API_KEY_ENABLED = value;
+      const err = await loadConfig().catch((e) => e);
+      const text = String(err?.message ?? err);
+      expect(text, `API_KEY_ENABLED=${value}`).toContain('API_KEY_ENABLED');
+      expect(text, `API_KEY_ENABLED=${value}`).toContain(value);
+      expect(text).toContain('true/false/1/0');
+    }
+  });
+
+  it('数值与布尔两类非法项同一次启动全部列出', async () => {
+    process.env.PORT = '8O';
+    process.env.API_KEY_ENABLED = 'maybe';
+    const err = await loadConfig().catch((e) => e);
+    const text = String(err?.message ?? err);
+    expect(text).toContain('PORT');
+    expect(text).toContain('8O');
+    expect(text).toContain('API_KEY_ENABLED');
+    expect(text).toContain('maybe');
+    expect(text).toContain('2 个环境变量');
+  });
+
+  it('24 处调用点全部收口：配置赋值不再直接 parseInt(process.env)', async () => {
     const src = readFileSync(new URL('../config.js', import.meta.url), 'utf8');
     const codeLines = src.split('\n').filter((l) => !l.trim().startsWith('//'));
     // 对象属性形态的 parseInt 调用为 0（全部经 intFromEnv 收口）
     expect(codeLines.filter((l) => /:\s*parseInt\(/.test(l))).toEqual([]);
-    // 1 处定义 + 23 处调用
-    expect(src.split('intFromEnv(').length - 1).toBe(24);
+    // 1 处定义 + 24 处调用
+    expect(src.split('intFromEnv(').length - 1).toBe(25);
+  });
+});
+
+// 运行期目录锚定：三个数据目录与 publicDir 同款锚定 __dirname（服务端包目录），
+// 从任意 cwd 启动落点都不漂移。锚定失效是静默的——产物会悄悄写进启动目录
+// （如从仓库根跑服务端时写进仓库根），故用「改 cwd 后仍指向包目录」锁死口径
+describe('config 运行期目录锚定（__dirname，不随 cwd 漂移）', () => {
+  // 期望基准取包目录拼接值而非绝对字面量：任意机器 / 任意 checkout 路径都成立
+  const PKG_DIR = path.dirname(fileURLToPath(new URL('../config.js', import.meta.url)));
+  const DIR_KEYS = ['SERVERS_DIR', 'DATA_DIR', 'BACKUPS_DIR'];
+
+  // vitest.config.js 把三个目录注入为临时绝对路径（隔离真实数据目录），此处需
+  // 摘掉它们才能观察到缺省口径；用完按原值还原，不污染同 worker 其他用例
+  let dirSnapshot;
+  beforeEach(() => {
+    dirSnapshot = Object.fromEntries(DIR_KEYS.map((k) => [k, process.env[k]]));
+    for (const k of DIR_KEYS) delete process.env[k];
+  });
+
+  afterEach(() => {
+    for (const k of DIR_KEYS) {
+      if (dirSnapshot[k] === undefined) delete process.env[k];
+      else process.env[k] = dirSnapshot[k];
+    }
+  });
+
+  it('缺省值锚定服务端包目录，且与启动 cwd 无关', async () => {
+    const cwd = process.cwd();
+    try {
+      process.chdir(os.tmpdir());
+      const config = (await loadConfig()).default;
+      expect(config.serversDir).toBe(path.join(PKG_DIR, 'servers'));
+      expect(config.dataDir).toBe(path.join(PKG_DIR, 'data'));
+      expect(config.backupsDir).toBe(path.join(PKG_DIR, 'backups'));
+    } finally {
+      process.chdir(cwd);
+    }
+  });
+
+  it('env 传绝对路径时以其为准（与 publicDir 同语义，可指到安装目录之外）', async () => {
+    const absData = path.join(os.tmpdir(), 'mc-anchor-abs-data');
+    process.env.DATA_DIR = absData;
+    const config = (await loadConfig()).default;
+    expect(config.dataDir).toBe(absData);
+  });
+
+  it('env 传相对路径时按包目录解析，而非 cwd', async () => {
+    process.env.BACKUPS_DIR = './custom-backups';
+    const cwd = process.cwd();
+    try {
+      process.chdir(os.tmpdir());
+      const config = (await loadConfig()).default;
+      expect(config.backupsDir).toBe(path.join(PKG_DIR, 'custom-backups'));
+    } finally {
+      process.chdir(cwd);
+    }
   });
 });

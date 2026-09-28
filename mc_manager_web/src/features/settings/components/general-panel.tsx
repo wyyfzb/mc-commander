@@ -22,10 +22,12 @@ import {
 import { queryKeys, useInstanceStatus } from '@/api/queries'
 import { apiUpdateInstance } from '@/api/instances'
 import { getFriendlyErrorText } from '@/api/errors'
+import { queryPhase } from '@/lib/query-phase'
 import { useConnectionStore } from '@/stores/connection'
 import { useServerStore } from '@/stores/server'
 import { useUiStore, type ThemeMode } from '@/stores/ui'
 import type { GeneralPanelProps } from './contracts'
+import { Card, CardBody, CardHeader } from '@/components/mcs/card'
 
 export function GeneralPanel(_props: GeneralPanelProps) {
   const instanceId = useServerStore((s) => s.instanceId)
@@ -33,14 +35,15 @@ export function GeneralPanel(_props: GeneralPanelProps) {
   const queryClient = useQueryClient()
   const theme = useUiStore((s) => s.theme)
   const setTheme = useUiStore((s) => s.setTheme)
-  const density = useUiStore((s) => s.density)
-  const setDensity = useUiStore((s) => s.setDensity)
   const terminalAutoScroll = useUiStore((s) => s.terminalAutoScroll)
   const setTerminalAutoScroll = useUiStore((s) => s.setTerminalAutoScroll)
   const confirmCommands = useUiStore((s) => s.confirmCommands)
   const setConfirmCommands = useUiStore((s) => s.setConfirmCommands)
 
-  const { data: instance } = useInstanceStatus(instanceId)
+  const instanceQuery = useInstanceStatus(instanceId)
+  const instance = instanceQuery.data
+  /** 实例配置相位：失败时不得用默认值冒充服务端事实 */
+  const instancePhase = queryPhase(instanceQuery)
 
   /** 乐观翻转本地值（null = 跟随服务端 useInstanceStatus 数据） */
   const [autoRestartOverride, setAutoRestartOverride] = useState<boolean | null>(null)
@@ -73,33 +76,45 @@ export function GeneralPanel(_props: GeneralPanelProps) {
   }
 
   return (
-    <section className="rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted shadow-mcs-card">
-      <header className="flex items-center gap-3 border-b border-mcs-border-subtle px-4 py-3">
+    <Card>
+      <CardHeader className="gap-3 border-b border-mcs-border-subtle px-4 py-3">
         <span className="flex size-8 shrink-0 items-center justify-center rounded-mcs-sm bg-mcs-accent-bg-subtle">
-          <Settings2 className="size-4 text-mcs-accent" aria-hidden />
+          <Settings2 className="size-4 text-mcs-accent-fg" aria-hidden />
         </span>
-        <h3 className="text-mcs-md font-semibold">通用设置</h3>
-      </header>
+        <h3 className="text-mcs-lg font-semibold">通用设置</h3>
+      </CardHeader>
 
-      <div className="flex flex-col px-4">
+      <CardBody className="flex flex-col px-4">
         {instanceId ? (
           <div className="flex items-center gap-3 border-b border-mcs-border-subtle py-3 last:border-b-0">
             <div className="min-w-0 flex-1">
-              <div className="text-mcs-sm font-semibold text-mcs-text-default">意外停止自动重启</div>
-              <div className="mt-0.5 text-mcs-xs text-mcs-text-subtle">
+              <div className="text-mcs-sm font-semibold text-mcs-text-default">
+                意外停止自动重启
+              </div>
+              <div className="mt-0.5 text-mcs-xs text-mcs-text-muted">
                 服务器意外崩溃/退出后自动重启（手动停止不触发）
+                {instancePhase === 'failed' && (
+                  <span className="text-mcs-error-fg"> · 实例配置读取失败，下方状态不可信</span>
+                )}
               </div>
             </div>
-            <Switch
-              checked={autoRestart}
-              onCheckedChange={(checked) => void handleAutoRestartChange(checked)}
-              aria-label="意外停止自动重启"
-            />
+            {/* 查询失败时服务端值缺失，`?? true` 会把「读不到」显示成「已开启」——
+                这是肯定式假信息（用户会以为崩溃后真会自动重启）。无本地乐观意图时
+                不渲染开关，如实标「状态未知」；已有 override 说明用户刚操作过，仍显示其意图。 */}
+            {instancePhase === 'failed' && autoRestartOverride === null ? (
+              <span className="shrink-0 text-mcs-xs text-mcs-text-muted">状态未知</span>
+            ) : (
+              <Switch
+                checked={autoRestart}
+                onCheckedChange={(checked) => void handleAutoRestartChange(checked)}
+                aria-label="意外停止自动重启"
+              />
+            )}
           </div>
         ) : (
           <div className="border-b border-mcs-border-subtle py-3 last:border-b-0">
             <div className="text-mcs-sm font-semibold text-mcs-text-default">意外停止自动重启</div>
-            <p className="mt-0.5 text-mcs-xs text-mcs-text-subtle">
+            <p className="mt-0.5 text-mcs-xs text-mcs-text-muted">
               未选择实例 — 自动重启为服务器实例配置，选择实例后可修改
             </p>
           </div>
@@ -108,7 +123,7 @@ export function GeneralPanel(_props: GeneralPanelProps) {
         <div className="flex items-center gap-3 py-3">
           <div className="min-w-0 flex-1">
             <div className="text-mcs-sm font-semibold text-mcs-text-default">界面主题</div>
-            <div className="mt-0.5 text-mcs-xs text-mcs-text-subtle">深色/浅色主题切换</div>
+            <div className="mt-0.5 text-mcs-xs text-mcs-text-muted">深色/浅色主题切换</div>
           </div>
           <Select value={theme} onValueChange={handleThemeChange}>
             <SelectTrigger className="w-24" aria-label="界面主题">
@@ -124,20 +139,10 @@ export function GeneralPanel(_props: GeneralPanelProps) {
         {/* 三项偏好（本地持久化即时生效） */}
         <div className="flex items-center gap-3 border-t border-mcs-border-subtle py-3">
           <div className="min-w-0 flex-1">
-            <div className="text-mcs-sm font-semibold text-mcs-text-default">紧凑密度</div>
-            <div className="mt-0.5 text-mcs-xs text-mcs-text-subtle">列表行高 32px（默认 40px），数据密集区更紧凑</div>
-          </div>
-          <Switch
-            checked={density === 'compact'}
-            onCheckedChange={(checked) => setDensity(checked ? 'compact' : 'default')}
-            aria-label="紧凑密度"
-          />
-        </div>
-
-        <div className="flex items-center gap-3 border-t border-mcs-border-subtle py-3">
-          <div className="min-w-0 flex-1">
             <div className="text-mcs-sm font-semibold text-mcs-text-default">终端自动滚动</div>
-            <div className="mt-0.5 text-mcs-xs text-mcs-text-subtle">新日志自动滚动到底部（关闭后停留在当前位置）</div>
+            <div className="mt-0.5 text-mcs-xs text-mcs-text-muted">
+              新日志自动滚动到底部（关闭后停留在当前位置）
+            </div>
           </div>
           <Switch
             checked={terminalAutoScroll}
@@ -149,7 +154,9 @@ export function GeneralPanel(_props: GeneralPanelProps) {
         <div className="flex items-center gap-3 border-t border-mcs-border-subtle py-3">
           <div className="min-w-0 flex-1">
             <div className="text-mcs-sm font-semibold text-mcs-text-default">命令执行二次确认</div>
-            <div className="mt-0.5 text-mcs-xs text-mcs-text-subtle">危险命令执行前弹确认（终端输入不受影响）</div>
+            <div className="mt-0.5 text-mcs-xs text-mcs-text-muted">
+              危险命令执行前弹确认（终端输入不受影响）
+            </div>
           </div>
           <Switch
             checked={confirmCommands}
@@ -157,7 +164,7 @@ export function GeneralPanel(_props: GeneralPanelProps) {
             aria-label="命令执行二次确认"
           />
         </div>
-      </div>
-    </section>
+      </CardBody>
+    </Card>
   )
 }

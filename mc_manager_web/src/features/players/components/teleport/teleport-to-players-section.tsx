@@ -20,33 +20,47 @@ export interface TeleportToPlayersSectionProps {
   onTeleportTo: (target: Player) => void
 }
 
-export function TeleportToPlayersSection({ playersQuery, onlineOthers, running, onTeleportTo }: TeleportToPlayersSectionProps) {
+export function TeleportToPlayersSection({
+  playersQuery,
+  onlineOthers,
+  running,
+  onTeleportTo,
+}: TeleportToPlayersSectionProps) {
   return (
     <Section title="传送到玩家">
       <div className="overflow-hidden rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-default">
         {playersQuery.isLoading ? (
-          <p className="py-6 text-center text-mcs-xs text-mcs-text-subtle">正在加载玩家列表…</p>
+          <p className="py-6 text-center text-mcs-xs text-mcs-text-muted">正在加载玩家列表…</p>
         ) : playersQuery.isError ? (
           <div className="flex flex-col items-center gap-1.5 py-8">
-            <CircleAlert className="size-6 text-mcs-text-subtle" aria-hidden />
-            <p className="text-mcs-xs text-mcs-error-fg">玩家列表加载失败：{getFriendlyErrorText(playersQuery.error)}</p>
+            <CircleAlert className="size-6 text-mcs-text-muted" aria-hidden />
+            <p className="text-mcs-xs text-mcs-error-fg">
+              玩家列表加载失败：{getFriendlyErrorText(playersQuery.error)}
+            </p>
             <Button variant="outline" size="xs" onClick={() => void playersQuery.refetch()}>
               重试
             </Button>
           </div>
         ) : onlineOthers.length === 0 ? (
           <div className="flex flex-col items-center gap-1.5 py-8">
-            <Users className="size-6 text-mcs-text-subtle" aria-hidden />
-            <p className="text-mcs-xs text-mcs-text-subtle">暂无其他在线玩家</p>
+            <Users className="size-6 text-mcs-text-muted" aria-hidden />
+            <p className="text-mcs-xs text-mcs-text-muted">暂无其他在线玩家</p>
           </div>
         ) : (
           <div className="max-h-64 divide-y divide-mcs-border-subtle overflow-auto">
             {onlineOthers.map((target) => (
               <div key={target.uuid} className="flex items-center gap-2.5 px-3 py-2">
-                <PlayerAvatar name={target.name} isOnline={target.isOnline} isFakePlayer={target.isFakePlayer} size={28} />
+                <PlayerAvatar
+                  name={target.name}
+                  isOnline={target.isOnline}
+                  isFakePlayer={target.isFakePlayer}
+                  size={28}
+                />
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-mcs-sm font-medium text-mcs-text-default">{target.name}</div>
-                  <div className="flex items-center gap-1.5 text-mcs-2xs text-mcs-text-subtle">
+                  <div className="truncate text-mcs-sm font-medium text-mcs-text-default">
+                    {target.name}
+                  </div>
+                  <div className="flex items-center gap-1.5 text-mcs-2xs text-mcs-text-muted">
                     <MapPin
                       className="size-3 shrink-0"
                       style={{ color: dimensionColor(target.dimension) }}

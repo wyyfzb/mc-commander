@@ -113,7 +113,8 @@ export function potionLevelLabel(config: PotionConfig): string {
  */
 export function potionDisplayName(config: PotionConfig): string {
   const prefix = config.bottle.namePrefix
-  const levelText = config.level > 1 ? ` ${POTION_LEVEL_ROMAN[config.level - 1] ?? config.level}` : ''
+  const levelText =
+    config.level > 1 ? ` ${POTION_LEVEL_ROMAN[config.level - 1] ?? config.level}` : ''
   const customText = isCustomPotionLevel(config) ? '（自定义）' : ''
   return `${prefix}${config.effect.name}药水${levelText}${customText}`
 }

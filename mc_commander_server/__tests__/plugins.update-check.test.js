@@ -1,5 +1,5 @@
 /**
- * 插件更新检测测试（feat-8 延伸：已装插件 vs Modrinth 最新版）
+ * 插件更新检测测试（延伸：已装插件 vs Modrinth 最新版）
  * - comparePluginVersions：semver 主段/缺段补零/预发布/非数字回退
  * - checkPluginUpdates：名称命中（title/slugify）、版本比对、未命中保守报告、
  *   上游失败不拖垮整批、20 个上限
@@ -36,8 +36,10 @@ const serverPath = path.join(tmpRoot, 'inst1');
 /** 造含 plugin.yml 的真实 jar（meta 链路全真） */
 function writePluginJar(name, version) {
   const zip = new AdmZip();
-  zip.addFile('plugin.yml', Buffer.from(
-    `name: ${name}\nversion: ${version}\nmain: com.example.${name}\n`, 'utf8'));
+  zip.addFile(
+    'plugin.yml',
+    Buffer.from(`name: ${name}\nversion: ${version}\nmain: com.example.${name}\n`, 'utf8'),
+  );
   const dir = path.join(serverPath, 'plugins');
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, `${name}-${version}.jar`), zip.toBuffer());
@@ -67,17 +69,26 @@ function hit({ slug, title }) {
 
 /** Modrinth /project/:slug/version 响应（首条为最新版本） */
 function versionsFixture(versionNumber) {
-  return [{
-    name: `v${versionNumber}`,
-    version_number: versionNumber,
-    version_type: 'release',
-    changelog: null,
-    date_published: '2026-01-01T00:00:00Z',
-    downloads: 1,
-    game_versions: ['1.21.4'],
-    loaders: ['paper'],
-    files: [{ url: 'https://cdn.modrinth.com/data/x/a.jar', filename: 'a.jar', primary: true, size: 100 }],
-  }];
+  return [
+    {
+      name: `v${versionNumber}`,
+      version_number: versionNumber,
+      version_type: 'release',
+      changelog: null,
+      date_published: '2026-01-01T00:00:00Z',
+      downloads: 1,
+      game_versions: ['1.21.4'],
+      loaders: ['paper'],
+      files: [
+        {
+          url: 'https://cdn.modrinth.com/data/x/a.jar',
+          filename: 'a.jar',
+          primary: true,
+          size: 100,
+        },
+      ],
+    },
+  ];
 }
 
 /** got mock 按 URL 分发：search → QUERY_TO_HITS；version → SLUG_TO_VERSIONS */
@@ -94,7 +105,11 @@ function routeUpstream({ queryToHits = {}, slugToVersions = {} } = {}) {
       const versions = slugToVersions[m[1]];
       return { json: async () => (versions ? versionsFixture(versions) : []) };
     }
-    return { json: async () => { throw new Error('unexpected url: ' + url); } };
+    return {
+      json: async () => {
+        throw new Error('unexpected url: ' + url);
+      },
+    };
   });
 }
 
@@ -217,12 +232,18 @@ describe('checkPluginUpdates（服务端聚合）', () => {
     writePluginJar('BrokenUpstream', '1.0.0');
     writePluginJar('GoodPlugin', '1.0.0');
     vi.mocked(got).mockImplementation((url, opts = {}) => {
-      const q = url.endsWith('/search') ? opts.searchParams?.query ?? '' : '';
+      const q = url.endsWith('/search') ? (opts.searchParams?.query ?? '') : '';
       if (q === 'BrokenUpstream') {
-        return { json: async () => { throw new Error('upstream 502'); } };
+        return {
+          json: async () => {
+            throw new Error('upstream 502');
+          },
+        };
       }
       if (q === 'GoodPlugin') {
-        return { json: async () => searchFixture([hit({ slug: 'goodplugin', title: 'GoodPlugin' })]) };
+        return {
+          json: async () => searchFixture([hit({ slug: 'goodplugin', title: 'GoodPlugin' })]),
+        };
       }
       return { json: async () => [] };
     });

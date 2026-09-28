@@ -8,7 +8,9 @@ let cached = null;
 export function getServerVersion() {
   if (cached !== null) return cached;
   try {
-    cached = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf-8')).version;
+    cached = JSON.parse(
+      fs.readFileSync(new URL('../package.json', import.meta.url), 'utf-8'),
+    ).version;
   } catch {
     cached = '0.0.0';
   }

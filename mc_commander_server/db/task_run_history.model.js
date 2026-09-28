@@ -1,4 +1,5 @@
 import { getDb } from './database.js';
+import { toIsoUtc } from '../utils/db-time.js';
 
 /**
  * 定时任务执行历史模型（task_run_history 表，append-only）。
@@ -32,13 +33,15 @@ export class TaskRunHistoryModel {
   /** 某任务的最近执行记录，倒序（最新在前） */
   static findByTask(taskId, limit = 20) {
     const db = getDb();
-    const rows = db.prepare(`
+    const rows = db
+      .prepare(`
       SELECT * FROM task_run_history
       WHERE task_id = ?
       ORDER BY id DESC
       LIMIT ?
-    `).all(taskId, limit);
-    return rows.map(r => this._toCamel(r));
+    `)
+      .all(taskId, limit);
+    return rows.map((r) => this._toCamel(r));
   }
 
   static _toCamel(row) {
@@ -46,7 +49,8 @@ export class TaskRunHistoryModel {
     return {
       id: row.id,
       taskId: row.task_id,
-      runAt: row.run_at,
+      // run_at 为 CURRENT_TIMESTAMP 写入的无时区 UTC 串，下发前归一化（否则前端按本地时区解析偏移）
+      runAt: toIsoUtc(row.run_at),
       status: row.status,
       error: row.error ?? null,
       durationMs: row.duration_ms ?? null,

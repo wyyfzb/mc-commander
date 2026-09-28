@@ -3,6 +3,7 @@ import { ArrowRight, Check, Play, Send, ShieldAlert, Star, X } from 'lucide-reac
 import { toast } from 'sonner'
 import { useMutation } from '@tanstack/react-query'
 import { IconButton } from '@/components/mcs/icon-button'
+import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { apiPost } from '@/api/client'
 import { ApiError } from '@/api/client'
@@ -11,9 +12,15 @@ import { useConnectionStore } from '@/stores/connection'
 import { useServerStore } from '@/stores/server'
 import { useTerminalStore } from '@/stores/terminal'
 import { useCommandBus } from '@/stores/command-bus'
-import { colorForCommand, completeCommands, iconForCommand, type CompletionItem } from '@/lib/mc-commands'
+import {
+  colorForCommand,
+  completeCommands,
+  iconForCommand,
+  type CompletionItem,
+} from '@/lib/mc-commands'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
+import { Card } from '@/components/mcs/card'
 
 /**
  * 命令输入行
@@ -137,9 +144,10 @@ export function CommandInput() {
     },
     onSuccess: (response, command) => {
       // RCON 响应非空 → 手动插入终端（INFO 级；服务端日志不含 RCON 输出）
-      const text = typeof response === 'string' && response.trim()
-        ? response.trim()
-        : (response as { response?: string } | null)?.response?.trim()
+      const text =
+        typeof response === 'string' && response.trim()
+          ? response.trim()
+          : (response as { response?: string } | null)?.response?.trim()
       if (text && instanceId) {
         pushEntry(instanceId, text, 'stdout')
       }
@@ -241,7 +249,10 @@ export function CommandInput() {
   }
 
   return (
-    <section className="animate-mcs-fade-up mcs-delay-5 mcs-edge-top relative flex shrink-0 flex-col gap-2 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted p-3 shadow-mcs-card">
+    <Card
+      size="compact"
+      className="animate-mcs-fade-up mcs-delay-5 mcs-edge-top relative flex shrink-0 flex-col gap-2"
+    >
       {/* RCON 降级横幅：命令已发送但响应不可见 */}
       {isRunning && !isRconConnected && (
         <NoticeBanner variant="warning" icon={ShieldAlert}>
@@ -250,15 +261,25 @@ export function CommandInput() {
       )}
       {/* 历史导航状态指示器 */}
       {navStatus && navRef.current != null && (
-        <div className={"flex items-center gap-1 text-mcs-2xs " + (navStatus.status === 'sent' ? 'text-mcs-success-fg' : 'text-mcs-error-fg')}>
-          {navStatus.status === 'sent' ? <Check className="size-3" aria-hidden /> : <X className="size-3" aria-hidden />}
+        <div
+          className={
+            'flex items-center gap-1 text-mcs-2xs ' +
+            (navStatus.status === 'sent' ? 'text-mcs-success-fg' : 'text-mcs-error-fg')
+          }
+        >
+          {navStatus.status === 'sent' ? (
+            <Check className="size-3" aria-hidden />
+          ) : (
+            <X className="size-3" aria-hidden />
+          )}
           {navStatus.status === 'sent' ? '已送达' : `失败: ${navStatus.error ?? '未知'}`}
         </div>
       )}
 
       {/* 输入行 */}
       <div className="relative flex items-center gap-2">
-        <input
+        {/* 归 ui/input 基座；12px 需带 md: 同档——基座声明 md:text-sm，会盖掉未加变体的字号覆盖 */}
+        <Input
           ref={inputRef}
           value={value}
           onChange={(e) => {
@@ -287,7 +308,7 @@ export function CommandInput() {
           }}
           placeholder="输入服务器命令... (如 /say hello)"
           disabled={!isRunning}
-          className="h-8 min-w-0 flex-1 rounded-mcs-sm border border-input bg-mcs-bg-subtle py-0 pr-2.5 pl-7 font-mono text-mcs-xs text-mcs-text-default transition-colors outline-none placeholder:text-mcs-text-subtle focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+          className="min-w-0 flex-1 bg-mcs-bg-subtle pl-7 font-mono text-mcs-xs text-mcs-text-default md:text-mcs-xs"
           aria-label="服务器命令输入"
         />
         {/* shell 语义前缀：内嵌输入框内 */}
@@ -297,22 +318,32 @@ export function CommandInput() {
         >
           &gt;
         </span>
+        {/* ghost（与终端工具栏其余五枚图标按钮同档）：它是实底「发送命令」旁的辅助图标动作，
+            用 outline 会在页面上多占一个次操作名额——同排五枚同类图标按钮都是 ghost，
+            只它一枚描边也读不出额外语义 */}
         <IconButton
-          variant="outline"
+          variant="ghost"
+          size="icon"
           onClick={() => savePreset()}
           aria-label="存为预设"
           title="存为预设"
         >
-          <Star className="size-3.5" aria-hidden />
+          <Star className="size-4" aria-hidden />
         </IconButton>
-        <IconButton variant="default" onClick={() => send(value)} disabled={sending || !isRunning} aria-label="发送命令">
-          <Send className="size-3.5" aria-hidden />
+        <IconButton
+          variant="default"
+          size="icon"
+          onClick={() => send(value)}
+          disabled={sending || !isRunning}
+          aria-label="发送命令"
+        >
+          <Send className="size-4" aria-hidden />
         </IconButton>
 
         {/* 补全下拉 */}
         {completions.length > 0 && (
           <div
-            className="absolute bottom-full left-0 right-0 z-10 mb-1 max-h-44 overflow-y-auto rounded-mcs-sm border border-mcs-border-default bg-mcs-bg-emphasis p-1 shadow-lg"
+            className="absolute bottom-full left-0 right-0 z-(--mcs-z-dropdown) mb-1 max-h-44 overflow-y-auto rounded-mcs-sm border border-mcs-border-default bg-mcs-bg-emphasis p-1 shadow-mcs-raised"
             role="listbox"
             aria-label="命令补全"
           >
@@ -331,7 +362,9 @@ export function CommandInput() {
                 >
                   <Icon className="size-3 text-mcs-accent-fg" aria-hidden />
                   <span className="font-mono">{item.text}</span>
-                  {item.usage && <span className="ml-auto truncate text-mcs-text-subtle">{item.usage}</span>}
+                  {item.usage && (
+                    <span className="ml-auto truncate text-mcs-text-muted">{item.usage}</span>
+                  )}
                 </button>
               )
             })}
@@ -371,7 +404,7 @@ export function CommandInput() {
                     <button
                       type="button"
                       aria-label={`发送 ${preset}`}
-                      className="-m-1 cursor-pointer p-1 text-mcs-text-subtle hover:text-mcs-success-fg"
+                      className="-m-1 cursor-pointer p-1 text-mcs-text-muted hover:text-mcs-success-fg"
                       onClick={() => send(preset)}
                     >
                       <Play className="size-3" aria-hidden />
@@ -382,7 +415,7 @@ export function CommandInput() {
                 <button
                   type="button"
                   aria-label={`删除 ${preset}`}
-                  className="-m-1 cursor-pointer p-1 text-mcs-text-subtle hover:text-mcs-error-fg"
+                  className="-m-1 cursor-pointer p-1 text-mcs-text-muted hover:text-mcs-error-fg"
                   onClick={() => setDeleteTarget(preset)}
                 >
                   <X className="size-3" aria-hidden />
@@ -407,6 +440,6 @@ export function CommandInput() {
           if (deleteTarget != null) removePreset(deleteTarget)
         }}
       />
-    </section>
+    </Card>
   )
 }

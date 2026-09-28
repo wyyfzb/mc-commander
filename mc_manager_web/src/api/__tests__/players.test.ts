@@ -22,7 +22,10 @@ import { type ConnectionConfig } from '../client'
 
 function ok<T>(data: T) {
   return HttpResponse.json({
-    status: 'ok', code: 0, message: 'Success', data,
+    status: 'ok',
+    code: 0,
+    message: 'Success',
+    data,
     timestamp: new Date().toISOString(),
   })
 }
@@ -59,7 +62,9 @@ const server = setupServer(
     return ok(null)
   }),
   // 错误传播专用玩家（正常用例不可见，仅错误用例命中）
-  http.post('*/api/v1/instances/inst-err/players/Ghost/op', () => err(40402, 'instance not found', 404)),
+  http.post('*/api/v1/instances/inst-err/players/Ghost/op', () =>
+    err(40402, 'instance not found', 404),
+  ),
   // 200 error 信封（信封级错误不受 HTTP 200 误导）
   http.post('*/api/v1/instances/inst1/players/Offline/pardon', () =>
     HttpResponse.json(

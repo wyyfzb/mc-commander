@@ -6,7 +6,12 @@ import os from 'os';
 import path from 'path';
 import AdmZip from 'adm-zip';
 import { createPluginRoutes } from '../routes/plugins.js';
-import { listPlugins, setPluginEnabled, deletePlugin, readPluginMeta } from '../services/plugin.service.js';
+import {
+  listPlugins,
+  setPluginEnabled,
+  deletePlugin,
+  readPluginMeta,
+} from '../services/plugin.service.js';
 import { errorHandler } from '../middleware/error_handler.js';
 
 // mock 审计（recordAudit 内部吞错，直接 spy 断言调用参数）
@@ -33,7 +38,10 @@ function ensurePluginsDir() {
 }
 
 /// 创建带 plugin.yml 的真实 jar（adm-zip 产物与 Bukkit 插件同为 zip 容器）
-function writePluginJar(fileName, yml = 'name: EssentialsX\nversion: 2.20.1\nmain: net.essentialsx.Essentials\napi-version: "1.20"\nauthors: [EssentialsX Team]\ndepend: [Vault]\n') {
+function writePluginJar(
+  fileName,
+  yml = 'name: EssentialsX\nversion: 2.20.1\nmain: net.essentialsx.Essentials\napi-version: "1.20"\nauthors: [EssentialsX Team]\ndepend: [Vault]\n',
+) {
   const zip = new AdmZip();
   zip.addFile('plugin.yml', Buffer.from(yml, 'utf8'));
   zip.writeZip(path.join(pluginsDir, fileName));
@@ -56,11 +64,13 @@ describe('plugin.service - listPlugins', () => {
   it('列出启用/禁用插件，启用优先排序，读取 jar 内 plugin.yml 元数据', () => {
     ensurePluginsDir();
     writePluginJar('EssentialsX-2.20.1.jar');
-    writePluginJar('Vault.jar',
-      'name: Vault\nversion: 1.7.3\nmain: net.milkbowl.vault.Vault\n');
+    writePluginJar('Vault.jar', 'name: Vault\nversion: 1.7.3\nmain: net.milkbowl.vault.Vault\n');
     // 禁用插件：.disabled 后缀
     const zip = new AdmZip();
-    zip.addFile('plugin.yml', Buffer.from('name: WorldEdit\nversion: 7.3.0\nmain: com.sk89q.worldedit.WorldEdit\n', 'utf8'));
+    zip.addFile(
+      'plugin.yml',
+      Buffer.from('name: WorldEdit\nversion: 7.3.0\nmain: com.sk89q.worldedit.WorldEdit\n', 'utf8'),
+    );
     zip.writeZip(path.join(pluginsDir, 'WorldEdit.jar.disabled'));
     // 非 jar 文件与子目录应被忽略
     fs.writeFileSync(path.join(pluginsDir, 'README.txt'), 'not a plugin');
@@ -69,7 +79,11 @@ describe('plugin.service - listPlugins', () => {
     const { plugins } = listPlugins(serverPath);
     expect(plugins).toHaveLength(3);
     // 启用优先，再按文件名字典序
-    expect(plugins.map((p) => p.file)).toEqual(['EssentialsX-2.20.1.jar', 'Vault.jar', 'WorldEdit.jar.disabled']);
+    expect(plugins.map((p) => p.file)).toEqual([
+      'EssentialsX-2.20.1.jar',
+      'Vault.jar',
+      'WorldEdit.jar.disabled',
+    ]);
     expect(plugins[0].enabled).toBe(true);
     expect(plugins[2].enabled).toBe(false);
     // 元数据：来自 jar 内 plugin.yml
@@ -96,7 +110,13 @@ describe('plugin.service - listPlugins', () => {
   it('paper-plugin.yml 作为退回 descriptor 被读取', () => {
     ensurePluginsDir();
     const zip = new AdmZip();
-    zip.addFile('paper-plugin.yml', Buffer.from('name: PaperPlug\nversion: 1.0.0\nmain: com.example.PaperPlug\napiVersion: "1.21"\n', 'utf8'));
+    zip.addFile(
+      'paper-plugin.yml',
+      Buffer.from(
+        'name: PaperPlug\nversion: 1.0.0\nmain: com.example.PaperPlug\napiVersion: "1.21"\n',
+        'utf8',
+      ),
+    );
     zip.writeZip(path.join(pluginsDir, 'paperplug.jar'));
     const meta = readPluginMeta(path.join(pluginsDir, 'paperplug.jar'));
     expect(meta).toMatchObject({ name: 'PaperPlug', apiVersion: '1.21' });
@@ -137,7 +157,9 @@ describe('plugin.service - setPluginEnabled', () => {
     ensurePluginsDir();
     writePluginJar('Vault.jar');
     writePluginJar('Vault.jar.disabled');
-    expect(() => setPluginEnabled(serverPath, 'Vault.jar', false)).toThrowError(/Target file already exists/);
+    expect(() => setPluginEnabled(serverPath, 'Vault.jar', false)).toThrowError(
+      /Target file already exists/,
+    );
     expect(fs.existsSync(path.join(pluginsDir, 'Vault.jar'))).toBe(true);
     expect(fs.existsSync(path.join(pluginsDir, 'Vault.jar.disabled'))).toBe(true);
   });
@@ -220,12 +242,14 @@ describe('Plugin Routes', () => {
       .send({ enabled: false });
     expect(res.status).toBe(200);
     expect(res.body.data).toEqual({ file: 'Vault.jar.disabled', enabled: false });
-    expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({
-      instanceId: 'inst1',
-      action: 'PLUGIN_DISABLE',
-      targetType: 'plugin',
-      targetId: 'Vault.jar',
-    }));
+    expect(recordAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        instanceId: 'inst1',
+        action: 'PLUGIN_DISABLE',
+        targetType: 'plugin',
+        targetId: 'Vault.jar',
+      }),
+    );
   });
 
   it('PUT 启停：enabled 非布尔返回 400', async () => {
@@ -253,10 +277,12 @@ describe('Plugin Routes', () => {
     const res = await request(app).delete('/api/v1/instances/inst1/plugins/Vault.jar');
     expect(res.status).toBe(200);
     expect(res.body.data).toEqual({ deleted: 'Vault.jar' });
-    expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({
-      action: 'PLUGIN_DELETE',
-      targetId: 'Vault.jar',
-    }));
+    expect(recordAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'PLUGIN_DELETE',
+        targetId: 'Vault.jar',
+      }),
+    );
   });
 
   it('DELETE：非法文件名返回 400（路径逃逸防护穿透到路由层）', async () => {
@@ -273,7 +299,7 @@ describe('Plugin Routes', () => {
   });
 });
 
-describe('plugin.service - uploadPlugin（feat-8 上传延伸）', () => {
+describe('plugin.service - uploadPlugin（上传延伸）', () => {
   beforeEach(() => {
     fs.rmSync(pluginsDir, { recursive: true, force: true });
     vi.clearAllMocks();
@@ -290,13 +316,21 @@ describe('plugin.service - uploadPlugin（feat-8 上传延伸）', () => {
     // 故意不预建 plugins 目录（首启前装插件是主流流程）
     const tmp = stageUpload('essx.jar', Buffer.alloc(0));
     const zip = new AdmZip();
-    zip.addFile('plugin.yml', Buffer.from('name: EssentialsX\nversion: 2.20.1\nmain: net.essentialsx.Essentials\nwebsite: https://essentialsx.net\nsoftdepend: [Vault]\nload: POSTWORLD\n', 'utf8'));
+    zip.addFile(
+      'plugin.yml',
+      Buffer.from(
+        'name: EssentialsX\nversion: 2.20.1\nmain: net.essentialsx.Essentials\nwebsite: https://essentialsx.net\nsoftdepend: [Vault]\nload: POSTWORLD\n',
+        'utf8',
+      ),
+    );
     zip.writeZip(tmp);
 
     const result = uploadPlugin(serverPath, tmp, 'EssentialsX-2.20.1.jar');
     expect(result.file).toBe('EssentialsX-2.20.1.jar');
     expect(result.overwritten).toBe(false);
-    expect(result.sizeBytes).toBe(fs.statSync(path.join(pluginsDir, 'EssentialsX-2.20.1.jar')).size);
+    expect(result.sizeBytes).toBe(
+      fs.statSync(path.join(pluginsDir, 'EssentialsX-2.20.1.jar')).size,
+    );
     expect(result.meta).toMatchObject({
       name: 'EssentialsX',
       website: 'https://essentialsx.net',
@@ -308,21 +342,28 @@ describe('plugin.service - uploadPlugin（feat-8 上传延伸）', () => {
 
   it('非 jar 扩展名返回 400', () => {
     const tmp = stageUpload('notes.txt', 'hello');
-    expect(() => uploadPlugin(serverPath, tmp, 'notes.txt')).toThrowError(/Invalid plugin file name/);
+    expect(() => uploadPlugin(serverPath, tmp, 'notes.txt')).toThrowError(
+      /Invalid plugin file name/,
+    );
   });
 
   it('路径逃逸文件名返回 400', () => {
     const tmp = stageUpload('evil.jar', Buffer.from([0x50, 0x4b, 0x03, 0x04]));
-    expect(() => uploadPlugin(serverPath, tmp, '../evil.jar')).toThrowError(/Invalid plugin file name/);
+    expect(() => uploadPlugin(serverPath, tmp, '../evil.jar')).toThrowError(
+      /Invalid plugin file name/,
+    );
     expect(() => uploadPlugin(serverPath, tmp, 'a/b.jar')).toThrowError(/Invalid plugin file name/);
     // .disabled 状态不允许直接上传（启停走接口）
-    expect(() => uploadPlugin(serverPath, tmp, 'Vault.jar.disabled')).toThrowError(/Invalid plugin file name/);
+    expect(() => uploadPlugin(serverPath, tmp, 'Vault.jar.disabled')).toThrowError(
+      /Invalid plugin file name/,
+    );
   });
 
   it('非 zip 内容（伪装 .jar）返回 400（魔数校验）', () => {
     const tmp = stageUpload('fake.jar', 'this is not a zip file');
-    expect(() => uploadPlugin(serverPath, tmp, 'Fake.jar'))
-      .toThrowError(/not a valid jar \(zip magic check failed\)/);
+    expect(() => uploadPlugin(serverPath, tmp, 'Fake.jar')).toThrowError(
+      /not a valid jar \(zip magic check failed\)/,
+    );
     expect(fs.existsSync(path.join(pluginsDir, 'Fake.jar'))).toBe(false);
   });
 
@@ -330,7 +371,10 @@ describe('plugin.service - uploadPlugin（feat-8 上传延伸）', () => {
     writePluginJar('Vault.jar', 'name: Vault\nversion: 1.7.3\nmain: net.milkbowl.vault.Vault\n');
     const tmp = stageUpload('new.jar', Buffer.alloc(0));
     const zip = new AdmZip();
-    zip.addFile('plugin.yml', Buffer.from('name: Vault\nversion: 9.9.9\nmain: net.milkbowl.vault.Vault\n', 'utf8'));
+    zip.addFile(
+      'plugin.yml',
+      Buffer.from('name: Vault\nversion: 9.9.9\nmain: net.milkbowl.vault.Vault\n', 'utf8'),
+    );
     zip.writeZip(tmp);
 
     expect(() => uploadPlugin(serverPath, tmp, 'Vault.jar')).toThrowError(/already exists/);
@@ -343,7 +387,10 @@ describe('plugin.service - uploadPlugin（feat-8 上传延伸）', () => {
     writePluginJar('Vault.jar', 'name: Vault\nversion: 1.7.3\nmain: net.milkbowl.vault.Vault\n');
     const tmp = stageUpload('new.jar', Buffer.alloc(0));
     const zip = new AdmZip();
-    zip.addFile('plugin.yml', Buffer.from('name: Vault\nversion: 9.9.9\nmain: net.milkbowl.vault.Vault\n', 'utf8'));
+    zip.addFile(
+      'plugin.yml',
+      Buffer.from('name: Vault\nversion: 9.9.9\nmain: net.milkbowl.vault.Vault\n', 'utf8'),
+    );
     zip.writeZip(tmp);
 
     const result = uploadPlugin(serverPath, tmp, 'Vault.jar', { overwrite: true });
@@ -370,12 +417,24 @@ describe('Plugin Routes - POST upload', () => {
   it('上传合法 jar：201 + 元数据返回 + 审计 PLUGIN_UPLOAD + 临时文件清理', async () => {
     mockManager.getInstance.mockReturnValue({ serverPath });
     const zip = new AdmZip();
-    zip.addFile('plugin.yml', Buffer.from('name: LuckPerms\nversion: 5.4.140\nmain: me.lucko.luckperms.bukkit.LP Bukkit\n'.replace('LP Bukkit', 'LPBukkit'), 'utf8'));
+    zip.addFile(
+      'plugin.yml',
+      Buffer.from(
+        'name: LuckPerms\nversion: 5.4.140\nmain: me.lucko.luckperms.bukkit.LP Bukkit\n'.replace(
+          'LP Bukkit',
+          'LPBukkit',
+        ),
+        'utf8',
+      ),
+    );
     const jarBuffer = zip.toBuffer();
 
     const res = await request(app)
       .post('/api/v1/instances/inst1/plugins/upload')
-      .attach('file', jarBuffer, { filename: 'LuckPerms.jar', contentType: 'application/java-archive' });
+      .attach('file', jarBuffer, {
+        filename: 'LuckPerms.jar',
+        contentType: 'application/java-archive',
+      });
 
     expect(res.status).toBe(201);
     expect(res.body.status).toBe('ok');
@@ -383,12 +442,14 @@ describe('Plugin Routes - POST upload', () => {
     expect(res.body.data.overwritten).toBe(false);
     expect(res.body.data.meta.name).toBe('LuckPerms');
     expect(fs.existsSync(path.join(pluginsDir, 'LuckPerms.jar'))).toBe(true);
-    expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({
-      instanceId: 'inst1',
-      action: 'PLUGIN_UPLOAD',
-      targetId: 'LuckPerms.jar',
-      detail: expect.objectContaining({ overwritten: false }),
-    }));
+    expect(recordAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        instanceId: 'inst1',
+        action: 'PLUGIN_UPLOAD',
+        targetId: 'LuckPerms.jar',
+        detail: expect.objectContaining({ overwritten: false }),
+      }),
+    );
     // multer 临时文件应被清理（tmpdir 下无 .plugin-upload.tmp 残留）
     const tmpDir = path.join(os.tmpdir(), 'mc-commander-uploads');
     const leftovers = fs.existsSync(tmpDir)
@@ -401,7 +462,10 @@ describe('Plugin Routes - POST upload', () => {
     mockManager.getInstance.mockReturnValue({ serverPath });
     writePluginJar('Vault.jar');
     const zip = new AdmZip();
-    zip.addFile('plugin.yml', Buffer.from('name: Vault\nversion: 2.0\nmain: net.milkbowl.vault.Vault\n', 'utf8'));
+    zip.addFile(
+      'plugin.yml',
+      Buffer.from('name: Vault\nversion: 2.0\nmain: net.milkbowl.vault.Vault\n', 'utf8'),
+    );
     const res = await request(app)
       .post('/api/v1/instances/inst1/plugins/upload')
       .attach('file', zip.toBuffer(), { filename: 'Vault.jar' });
@@ -413,16 +477,21 @@ describe('Plugin Routes - POST upload', () => {
     mockManager.getInstance.mockReturnValue({ serverPath });
     writePluginJar('Vault.jar', 'name: Vault\nversion: 1.7.3\nmain: net.milkbowl.vault.Vault\n');
     const zip = new AdmZip();
-    zip.addFile('plugin.yml', Buffer.from('name: Vault\nversion: 2.0\nmain: net.milkbowl.vault.Vault\n', 'utf8'));
+    zip.addFile(
+      'plugin.yml',
+      Buffer.from('name: Vault\nversion: 2.0\nmain: net.milkbowl.vault.Vault\n', 'utf8'),
+    );
     const res = await request(app)
       .post('/api/v1/instances/inst1/plugins/upload?overwrite=true')
       .attach('file', zip.toBuffer(), { filename: 'Vault.jar' });
     expect(res.status).toBe(200);
     expect(res.body.data.overwritten).toBe(true);
     expect(readPluginMeta(path.join(pluginsDir, 'Vault.jar')).version).toBe('2.0');
-    expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({
-      detail: expect.objectContaining({ overwritten: true }),
-    }));
+    expect(recordAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        detail: expect.objectContaining({ overwritten: true }),
+      }),
+    );
   });
 
   it('非 .jar 扩展名返回 400', async () => {
@@ -496,13 +565,14 @@ describe('Plugin Routes zod 请求契约（issue 391）', () => {
   it('plugins/upload：?overwrite=yes 非法 → 400 且 multer 临时文件被清理（diskStorage 无残留）', async () => {
     // multer diskStorage 缓冲目录（routes/plugins.js pluginUploadStorage.destination）
     const tmpUploadDir = path.join(os.tmpdir(), 'mc-commander-uploads');
-    const snapshotBefore = new Set(
-      fs.existsSync(tmpUploadDir) ? fs.readdirSync(tmpUploadDir) : []
-    );
+    const snapshotBefore = new Set(fs.existsSync(tmpUploadDir) ? fs.readdirSync(tmpUploadDir) : []);
 
     const res = await request(app)
       .post('/api/v1/instances/inst1/plugins/upload?overwrite=yes')
-      .attach('file', Buffer.from('fake jar'), { filename: 'x.jar', contentType: 'application/java-archive' });
+      .attach('file', Buffer.from('fake jar'), {
+        filename: 'x.jar',
+        contentType: 'application/java-archive',
+      });
 
     expect(res.status).toBe(400);
     expect(res.body.details.some((d) => d.path === 'overwrite')).toBe(true);
@@ -510,9 +580,9 @@ describe('Plugin Routes zod 请求契约（issue 391）', () => {
     // validateQuery onError 钩子在 400 前清理落盘临时文件：
     // 本次请求新增的 .plugin-upload.tmp-* 不应残留在磁盘上
     const leftovers = fs.existsSync(tmpUploadDir)
-      ? fs.readdirSync(tmpUploadDir).filter(
-          (f) => f.startsWith('.plugin-upload.tmp-') && !snapshotBefore.has(f)
-        )
+      ? fs
+          .readdirSync(tmpUploadDir)
+          .filter((f) => f.startsWith('.plugin-upload.tmp-') && !snapshotBefore.has(f))
       : [];
     expect(leftovers).toEqual([]);
   });

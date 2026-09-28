@@ -146,7 +146,17 @@ describe('WorldInfoCard', () => {
     render(<WorldInfoCard world={makeWorld()} isLoading={false} onRefresh={() => {}} />)
 
     // 9 个标签齐全
-    const labels = ['世界名称', '世界类型', '种子', '存档大小', '游戏天数', '难度', '游戏模式', '视野距离', '在线玩家']
+    const labels = [
+      '世界名称',
+      '世界类型',
+      '种子',
+      '存档大小',
+      '游戏天数',
+      '难度',
+      '游戏模式',
+      '视野距离',
+      '在线玩家',
+    ]
     for (const label of labels) {
       expect(screen.getByText(label)).toBeInTheDocument()
     }
@@ -164,7 +174,9 @@ describe('WorldInfoCard', () => {
   })
 
   it('种子以 font-mono 显示 + title 完整值', () => {
-    const { container } = render(<WorldInfoCard world={makeWorld()} isLoading={false} onRefresh={() => {}} />)
+    const { container } = render(
+      <WorldInfoCard world={makeWorld()} isLoading={false} onRefresh={() => {}} />,
+    )
     const seed = container.querySelector('.font-mono')
     expect(seed).not.toBeNull()
     expect(seed?.textContent).toBe('9876543210123456789')
@@ -173,7 +185,9 @@ describe('WorldInfoCard', () => {
   })
 
   it('存档大小进度条宽度 = sizeGB/10，颜色走 --mcs-accent', () => {
-    const { container } = render(<WorldInfoCard world={makeWorld({ sizeGB: 3.2 })} isLoading={false} onRefresh={() => {}} />)
+    const { container } = render(
+      <WorldInfoCard world={makeWorld({ sizeGB: 3.2 })} isLoading={false} onRefresh={() => {}} />,
+    )
     const bar = container.querySelector('[role="progressbar"]')
     expect(bar).not.toBeNull()
     expect(bar?.getAttribute('aria-valuenow')).toBe('3.2')
@@ -183,7 +197,9 @@ describe('WorldInfoCard', () => {
   })
 
   it('存档大小超过 10GB 时进度条 clamp 到 100%', () => {
-    const { container } = render(<WorldInfoCard world={makeWorld({ sizeGB: 25 })} isLoading={false} onRefresh={() => {}} />)
+    const { container } = render(
+      <WorldInfoCard world={makeWorld({ sizeGB: 25 })} isLoading={false} onRefresh={() => {}} />,
+    )
     const fill = container.querySelector('[role="progressbar"] span') as HTMLElement
     expect(fill.style.width).toBe('100%')
   })
@@ -220,14 +236,22 @@ describe('WorldInfoCard', () => {
   })
 
   it('gameDays null 时显示「不可用」而非数字', () => {
-    render(<WorldInfoCard world={makeWorld({ gameDays: null })} isLoading={false} onRefresh={() => {}} />)
+    render(
+      <WorldInfoCard
+        world={makeWorld({ gameDays: null })}
+        isLoading={false}
+        onRefresh={() => {}}
+      />,
+    )
     expect(screen.getByText('不可用')).toBeInTheDocument()
     expect(screen.queryByText('42')).not.toBeInTheDocument()
   })
 
   it('点击刷新按钮触发 onRefresh；加载中禁用时点击不触发', () => {
     const onRefresh = vi.fn()
-    const { rerender } = render(<WorldInfoCard world={makeWorld()} isLoading={false} onRefresh={onRefresh} />)
+    const { rerender } = render(
+      <WorldInfoCard world={makeWorld()} isLoading={false} onRefresh={onRefresh} />,
+    )
     fireEvent.click(screen.getByRole('button', { name: '刷新' }))
     expect(onRefresh).toHaveBeenCalledTimes(1)
 
@@ -264,19 +288,21 @@ describe('DimensionCards', () => {
     expect(screen.getByText('🟣')).toBeInTheDocument()
   })
 
-  it('维度色条：按名称匹配维度 token（--mcs-dimension-*）', () => {
+  it('维度色条：按名称匹配维度 token 工具类（bg-mcs-dimension-*）', () => {
     const { container } = render(<DimensionCards dimensions={makeWorld().dimensions} />)
     const cards = container.querySelectorAll('[data-dimension-kind]')
     expect(cards).toHaveLength(3)
 
     const barOf = (kind: string) => {
-      const card = Array.from(cards).find((c) => c.getAttribute('data-dimension-kind') === kind) as HTMLElement
+      const card = Array.from(cards).find(
+        (c) => c.getAttribute('data-dimension-kind') === kind,
+      ) as HTMLElement
       return card.querySelector('[data-dimension-bar]') as HTMLElement
     }
-    // 主世界青绿 / 下界红橙 / 末地紫（断言引用的是语义 token 变量，非硬编码色值）
-    expect(barOf('overworld').style.backgroundColor).toBe('var(--mcs-dimension-overworld)')
-    expect(barOf('nether').style.backgroundColor).toBe('var(--mcs-dimension-nether)')
-    expect(barOf('end').style.backgroundColor).toBe('var(--mcs-dimension-end)')
+    // 主世界青绿 / 下界红橙 / 末地紫（断言语义 token 工具类，非硬编码色值）
+    expect(barOf('overworld').classList.contains('bg-mcs-dimension-overworld')).toBe(true)
+    expect(barOf('nether').classList.contains('bg-mcs-dimension-nether')).toBe(true)
+    expect(barOf('end').classList.contains('bg-mcs-dimension-end')).toBe(true)
     // 色条宽度 4px（w-1）
     expect(barOf('nether').classList.contains('w-1')).toBe(true)
   })

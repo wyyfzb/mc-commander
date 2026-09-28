@@ -69,10 +69,11 @@ export function PotionPanel({
           className="size-3.5 shrink-0 rounded-mcs-xs"
           style={{ backgroundColor: color }}
         />
-        <span className="truncate text-mcs-xs font-semibold" style={{ color }}>
+        {/* 数据色只作色点/描边：MC 药水色作文字时亮暗各有约半数不达 4.5:1（亮 1.09–2.24 / 暗 1.26–1.48） */}
+        <span className="truncate text-mcs-xs font-semibold text-mcs-text-default">
           药水 · {effect.name}
         </span>
-        <span className="shrink-0 text-mcs-2xs text-mcs-text-subtle">
+        <span className="shrink-0 text-mcs-2xs text-mcs-text-muted">
           等级 {potionLevelLabel(potion)}
         </span>
         <Button
@@ -87,7 +88,7 @@ export function PotionPanel({
       </div>
       <div className="flex flex-col gap-1.5">
         <div className="flex items-center gap-2">
-          <span className="w-8 shrink-0 text-mcs-xs text-mcs-text-subtle">瓶型</span>
+          <span className="w-8 shrink-0 text-mcs-xs text-mcs-text-muted">瓶型</span>
           <Select
             value={potion.bottle.itemId}
             onValueChange={(v) => {
@@ -108,11 +109,8 @@ export function PotionPanel({
           </Select>
         </div>
         <div className="flex items-center gap-2">
-          <span className="w-8 shrink-0 text-mcs-xs text-mcs-text-subtle">等级</span>
-          <Select
-            value={String(potion.level)}
-            onValueChange={(v) => onSetLevel(Number(v))}
-          >
+          <span className="w-8 shrink-0 text-mcs-xs text-mcs-text-muted">等级</span>
+          <Select value={String(potion.level)} onValueChange={(v) => onSetLevel(Number(v))}>
             <SelectTrigger size="sm" aria-label="效果等级" className="min-w-28">
               <SelectValue />
             </SelectTrigger>
@@ -129,11 +127,8 @@ export function PotionPanel({
         </div>
         {durations.length > 0 ? (
           <div className="flex items-center gap-2">
-            <span className="w-8 shrink-0 text-mcs-xs text-mcs-text-subtle">时长</span>
-            <Select
-              value={String(potion.duration)}
-              onValueChange={(v) => onSetDuration(Number(v))}
-            >
+            <span className="w-8 shrink-0 text-mcs-xs text-mcs-text-muted">时长</span>
+            <Select value={String(potion.duration)} onValueChange={(v) => onSetDuration(Number(v))}>
               <SelectTrigger size="sm" aria-label="时长" className="min-w-28">
                 <SelectValue />
               </SelectTrigger>
@@ -147,7 +142,7 @@ export function PotionPanel({
             </Select>
           </div>
         ) : (
-          <p className="text-mcs-xs text-mcs-text-subtle">
+          <p className="text-mcs-xs text-mcs-text-muted">
             <FlaskConical className="mr-1 inline size-3 align-[-1px]" aria-hidden />
             瞬时效果（duration=1tick），饮用即刻生效
           </p>

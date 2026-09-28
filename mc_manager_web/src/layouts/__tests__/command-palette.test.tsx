@@ -65,7 +65,11 @@ describe('CommandPalette 实例操作分组', () => {
   beforeEach(() => {
     localStorage.clear()
     useUiStore.setState({ commandPaletteOpen: false, lastOutputInstanceId: null })
-    useConnectionStore.setState({ status: 'ready', baseUrl: 'http://localhost:8080', apiKey: 'test-key' })
+    useConnectionStore.setState({
+      status: 'ready',
+      baseUrl: 'http://localhost:8080',
+      apiKey: 'test-key',
+    })
     useServerStore.setState({
       instanceId: 'demo',
       status: { ...mockInstanceStatus },
@@ -100,9 +104,7 @@ describe('CommandPalette 实例操作分组', () => {
     await user.click(screen.getByRole('button', { name: '停止' }))
 
     await waitFor(() => expect(stopCalled).toBe(true))
-    await waitFor(() =>
-      expect(screen.queryByText('确定要关闭服务器吗？')).not.toBeInTheDocument(),
-    )
+    await waitFor(() => expect(screen.queryByText('确定要关闭服务器吗？')).not.toBeInTheDocument())
   })
 
   it('重启：二次确认后发 POST restart', async () => {
@@ -141,14 +143,59 @@ describe('CommandPalette 实例操作分组', () => {
     })
     await openPaletteAndFindGroup()
     // radix CommandItem：data-disabled 恒存在，值 true/false
-    expect(screen.getByRole('option', { name: /重启实例/ })).toHaveAttribute('data-disabled', 'true')
-    expect(screen.getByRole('option', { name: /停止实例/ })).toHaveAttribute('data-disabled', 'true')
-    expect(screen.getByRole('option', { name: /备份实例/ })).toHaveAttribute('data-disabled', 'false')
+    expect(screen.getByRole('option', { name: /重启实例/ })).toHaveAttribute(
+      'data-disabled',
+      'true',
+    )
+    expect(screen.getByRole('option', { name: /停止实例/ })).toHaveAttribute(
+      'data-disabled',
+      'true',
+    )
+    expect(screen.getByRole('option', { name: /备份实例/ })).toHaveAttribute(
+      'data-disabled',
+      'false',
+    )
   })
 
   it('无实例名（status 未就绪）时分组不渲染', async () => {
     useServerStore.setState({ status: null })
     await openPaletteAndFindGroup()
     expect(screen.queryByText(/实例操作 ·/)).not.toBeInTheDocument()
+  })
+})
+
+describe('CommandPalette 操作辅助', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    useUiStore.setState({ commandPaletteOpen: false, lastOutputInstanceId: null })
+    useConnectionStore.setState({
+      status: 'ready',
+      baseUrl: 'http://localhost:8080',
+      apiKey: 'test-key',
+    })
+    useServerStore.setState({
+      instanceId: 'demo',
+      status: { ...mockInstanceStatus },
+      socketConnected: true,
+      lastStatusEvent: null,
+      phase: {},
+    })
+  })
+
+  it('键盘指引 footer 常驻：↑↓ 选择 / ↵ 确认 / Esc 关闭', async () => {
+    await openPaletteAndFindGroup()
+    expect(screen.getByText('选择')).toBeInTheDocument()
+    expect(screen.getByText('确认')).toBeInTheDocument()
+    expect(screen.getByText('关闭')).toBeInTheDocument()
+    // 键位徽标（kbd 元素）与文字标签并存
+    expect(screen.getByText('↑')).toBeInTheDocument()
+    expect(screen.getByText('Esc')).toBeInTheDocument()
+  })
+
+  it('页面导航项带路径提示（落点面包屑）', async () => {
+    await openPaletteAndFindGroup()
+    // 可访问名随路径提示扩展（icon aria-hidden，仅文本参与命名；JSX 相邻表达式无空白分隔）
+    expect(screen.getByRole('option', { name: /仪表盘\s*\/dashboard/ })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: /设置\s*\/settings/ })).toBeInTheDocument()
   })
 })

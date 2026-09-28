@@ -4,7 +4,14 @@
  * - 受控名称输入 + Enter 直提交；创建中 LoadingButton 防重复提交
  * - 名称校验（空值/路径分隔符）由父组件 onSubmit 负责（toast 提示行为不变）
  */
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { LoadingButton } from '@/components/mcs/loading-button'
 import { Input } from '@/components/ui/input'
@@ -63,7 +70,11 @@ export function NamePromptDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             取消
           </Button>
-          <LoadingButton onClick={() => void onSubmit()} loading={submitting} loadingText={loadingText}>
+          <LoadingButton
+            onClick={() => void onSubmit()}
+            loading={submitting}
+            loadingText={loadingText}
+          >
             {submitText}
           </LoadingButton>
         </DialogFooter>

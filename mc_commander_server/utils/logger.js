@@ -1,4 +1,4 @@
-// 轻量结构化日志系统（issue #325，audit D-P0-2 / A2-1）：
+// 轻量结构化日志系统（issue #325）：
 // console 包装器四级日志（debug/info/warn/error）+ error 分流独立文件 + 简单轮转
 //
 // 设计约束（C 甄别方案，不引 pino）：
@@ -20,10 +20,13 @@ const LEVELS = Object.freeze({ debug: 10, info: 20, warn: 30, error: 40 });
 const LEVEL_TAGS = Object.freeze({ debug: 'DEBUG', info: 'INFO', warn: 'WARN', error: 'ERROR' });
 const ERROR_FILE_NAME = 'error.log';
 
-// dataDir 容错：测试 vi.mock(config) 可能缺 dataDir 字段，模块加载期不得抛错
-//（缺省时回退仓库默认 './data/logs'；真实运行始终有值——config.js 默认 './data'）
+// dataDir 容错：测试 vi.mock(config) 可能缺 dataDir 字段，模块加载期不得抛错。
+// 缺省时先跟随 DATA_DIR 环境变量（测试注入临时目录），最后才落仓库相对路径；
+// 真实运行 config.dataDir 恒有值（config.js 默认 './data'），此分支不可达
 function defaultLogDir() {
-  return config.dataDir ? path.join(config.dataDir, 'logs') : path.resolve('./data/logs');
+  if (config.dataDir) return path.join(config.dataDir, 'logs');
+  if (process.env.DATA_DIR) return path.join(process.env.DATA_DIR, 'logs');
+  return path.resolve('./data/logs');
 }
 
 const DEFAULTS = Object.freeze({
@@ -37,7 +40,9 @@ let current = { ...DEFAULTS };
 let fileFailureWarned = false;
 
 function normalizeLevel(value) {
-  const lv = String(value || '').trim().toLowerCase();
+  const lv = String(value || '')
+    .trim()
+    .toLowerCase();
   return Object.hasOwn(LEVELS, lv) ? lv : 'info';
 }
 
@@ -52,15 +57,24 @@ function formatLine(level, args) {
 }
 
 // 写前轮转：error.log ≥ maxSizeBytes 时整体后移（.4→.5、.3→.4 … error.log→.1），
-// 最旧的 error.log.maxFiles 删除。同步实现（error 量级低频，与 better-sqlite3 同步风格一致）
+// 最旧的 error.log.maxFiles 删除。同步实现（error 量级低频，与 better-sqlite3 同步风格一致）。
+// 每一步都不做存在性预检：轮转是 best-effort（调用方整体 catch），预检与动作之间的
+// 窗口会把「文件不存在」抛成异常并让整轮轮转中断，直接吞掉 ENOENT 更稳
 function rotateIfNeeded(targetFile) {
   const st = fs.statSync(targetFile);
   if (st.size < current.maxSizeBytes) return;
   const oldest = `${targetFile}.${current.maxFiles}`;
-  if (fs.existsSync(oldest)) fs.unlinkSync(oldest);
+  try {
+    fs.unlinkSync(oldest);
+  } catch {
+    /* 最旧档不存在 */
+  }
   for (let i = current.maxFiles - 1; i >= 1; i--) {
-    const from = `${targetFile}.${i}`;
-    if (fs.existsSync(from)) fs.renameSync(from, `${targetFile}.${i + 1}`);
+    try {
+      fs.renameSync(`${targetFile}.${i}`, `${targetFile}.${i + 1}`);
+    } catch {
+      /* 该档不存在 */
+    }
   }
   fs.renameSync(targetFile, `${targetFile}.1`);
 }
@@ -69,7 +83,11 @@ function appendErrorFile(line) {
   const targetFile = path.join(current.dir, ERROR_FILE_NAME);
   try {
     fs.mkdirSync(current.dir, { recursive: true });
-    try { rotateIfNeeded(targetFile); } catch { /* 首次写入文件不存在等情况 */ }
+    try {
+      rotateIfNeeded(targetFile);
+    } catch {
+      /* 首次写入文件不存在等情况 */
+    }
     fs.appendFileSync(targetFile, line + '\n', 'utf-8');
     if (fileFailureWarned) fileFailureWarned = false; // 恢复后重置告警标志
   } catch (err) {
@@ -88,12 +106,22 @@ function emit(stream, level, args) {
 }
 
 export const logger = {
-  debug: (...args) => { if (enabled('debug')) emit(process.stdout, 'debug', args); },
-  info: (...args) => { if (enabled('info')) emit(process.stdout, 'info', args); },
-  warn: (...args) => { if (enabled('warn')) emit(process.stderr, 'warn', args); },
-  error: (...args) => { if (enabled('error')) emit(process.stderr, 'error', args); },
+  debug: (...args) => {
+    if (enabled('debug')) emit(process.stdout, 'debug', args);
+  },
+  info: (...args) => {
+    if (enabled('info')) emit(process.stdout, 'info', args);
+  },
+  warn: (...args) => {
+    if (enabled('warn')) emit(process.stderr, 'warn', args);
+  },
+  error: (...args) => {
+    if (enabled('error')) emit(process.stderr, 'error', args);
+  },
   // stderr 白名单通道：启动横幅等安全/引导输出。不受级别过滤（始终可见）、不落盘
-  banner: (...args) => { process.stderr.write(formatLine('info', args) + '\n'); },
+  banner: (...args) => {
+    process.stderr.write(formatLine('info', args) + '\n');
+  },
 };
 
 // ── 测试注入通道（生产代码勿用）────────────────────────

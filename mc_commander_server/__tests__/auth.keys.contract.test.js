@@ -30,6 +30,7 @@ import { createKeyRoutes } from '../routes/keys.js';
 import { errorHandler } from '../middleware/error_handler.js';
 import {
   authStatusResponseSchema,
+  authCapabilitiesResponseSchema,
   authSetupResponseSchema,
   authSessionResponseSchema,
   authPasswordChangeResponseSchema,
@@ -75,7 +76,9 @@ async function setupAndLogin() {
   return login.body.data.token;
 }
 
-describe('auth/keys 响应契约（validatedSuccess 观测）', () => {
+// 超时口径：setup+login 链路每例含 2~3 次 scrypt（N=131072，单次 ~2800ms），
+// 并发争抢下默认 5s 余量过薄 → 显式 15s（与本仓 web 侧口径同值）。
+describe('auth/keys 响应契约（validatedSuccess 观测）', { timeout: 15_000 }, () => {
   it('GET /auth/status：未设密 hasPassword=false 可 parse', async () => {
     const res = await request(app).get('/api/v1/auth/status');
     expect(res.status).toBe(200);
@@ -98,6 +101,33 @@ describe('auth/keys 响应契约（validatedSuccess 观测）', () => {
     const res = await request(app).post('/api/v1/auth/login').send({ password: SETUP_PASSWORD });
     expect(res.status).toBe(200);
     expect(authSessionResponseSchema.safeParse(res.body.data).success).toBe(true);
+  });
+
+  it('GET /auth/capabilities：能力探测响应可 parse（通道开关 + 只读凭据状态）', async () => {
+    const token = await setupAndLogin();
+    const originalEnabled = config.apiKeyEnabled;
+    try {
+      for (const enabled of [true, false]) {
+        config.apiKeyEnabled = enabled;
+        const res = await request(app)
+          .get('/api/v1/auth/capabilities')
+          .set('Authorization', `Bearer ${token}`);
+        expect(res.status).toBe(200);
+        const parsed = authCapabilitiesResponseSchema.safeParse(res.body.data);
+        expect(parsed.success).toBe(true);
+        expect(parsed.data.apiKeyEnabled).toBe(enabled);
+        // 契约面固定三项：通道开关 + 只读凭据的「开关/是否已配置」（其余部署配置不外泄）
+        expect(Object.keys(res.body.data).sort()).toEqual([
+          'apiKeyEnabled',
+          'readonlyApiKeyConfigured',
+          'readonlyApiKeyEnabled',
+        ]);
+        expect(typeof res.body.data.readonlyApiKeyConfigured).toBe('boolean');
+        expect(typeof res.body.data.readonlyApiKeyEnabled).toBe('boolean');
+      }
+    } finally {
+      config.apiKeyEnabled = originalEnabled;
+    }
   });
 
   it('PUT /auth/password：改密响应（ok 恒 true + kickedSessions 数值）', async () => {
@@ -157,12 +187,10 @@ describe('auth/keys 响应契约（validatedSuccess 观测）', () => {
     vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {});
     vi.spyOn(fs, 'renameSync').mockImplementation(() => {});
     try {
-      const res = await request(app)
-        .post('/api/rotate-key')
-        .set('x-api-key', TEST_PLAINTEXT_KEY);
+      const res = await request(app).post('/api/rotate-key').set('x-api-key', TEST_PLAINTEXT_KEY);
       expect(res.status).toBe(200);
       expect(apiKeyRotateResponseSchema.safeParse(res.body.data).success).toBe(true);
-      expect(res.body.data.apiKey).toMatch(/^mcck-[0-9a-f]{8}-[0-9a-f]{8}-[0-9a-f]{8}$/);
+      expect(res.body.data.apiKey).toMatch(/^mcck-[0-9a-f]{8}(-[0-9a-f]{8}){7}$/);
       expect(res.body.message).toContain('API Key 已轮换');
     } finally {
       config.apiKeyHash = originalHash;

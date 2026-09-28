@@ -1,5 +1,5 @@
 /**
- * JAR 下载落地校验工具（audit S-P1-1 / issue 316）
+ * JAR 下载落地校验工具（issue 316）
  *
  * 防线一：体积上限——流式字节数断言（默认 512MB），恶意/损坏上游推超大
  * 文件时立刻断流，防磁盘耗尽。与插件市场 100MB 截断先例（market.service
@@ -47,7 +47,7 @@ export async function assertDownloadIntegrity(filePath, expectedHash) {
   if (actual.toLowerCase() !== String(expectedHash.digest).toLowerCase()) {
     throw new AppError(
       ErrorCodes.SERVER_ERROR,
-      `Download integrity check failed: expected ${expectedHash.algorithm}=${expectedHash.digest}, got ${actual} (upstream file corrupted or tampered)`
+      `Download integrity check failed: expected ${expectedHash.algorithm}=${expectedHash.digest}, got ${actual} (upstream file corrupted or tampered)`,
     );
   }
 }
@@ -61,7 +61,7 @@ export function assertSizeWithinLimit(transferred, maxBytes = JAR_DOWNLOAD_MAX_B
   if (transferred > maxBytes) {
     throw new AppError(
       ErrorCodes.SERVER_ERROR,
-      `JAR download aborted: ${transferred} bytes received, exceeds size limit of ${maxBytes} bytes`
+      `JAR download aborted: ${transferred} bytes received, exceeds size limit of ${maxBytes} bytes`,
     );
   }
 }

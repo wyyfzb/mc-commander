@@ -1,5 +1,5 @@
 /**
- * 插件市场路由集成测试（feat-8 延伸：Modrinth 代理端点）
+ * 插件市场路由集成测试（延伸：Modrinth 代理端点）
  *
  * got 全量 mock（离线语义）：
  * - 元数据 .json() 链：按 URL 路由 fixture / 拒绝
@@ -45,41 +45,55 @@ const serverPath = path.join(tmpRoot, 'inst1');
 
 const SEARCH_FIXTURE = {
   total_hits: 1,
-  hits: [{
-    project_id: 'hXiIvTyT',
-    slug: 'essentialsx',
-    title: 'EssentialsX',
-    description: 'd',
-    author: 'a',
-    downloads: 10,
-    follows: 1,
-    icon_url: 'https://cdn.modrinth.com/i.png',
-    date_modified: '2026-01-01T00:00:00Z',
-    display_categories: ['paper'],
-    server_side: 'required',
-    client_side: 'unsupported',
-  }],
+  hits: [
+    {
+      project_id: 'hXiIvTyT',
+      slug: 'essentialsx',
+      title: 'EssentialsX',
+      description: 'd',
+      author: 'a',
+      downloads: 10,
+      follows: 1,
+      icon_url: 'https://cdn.modrinth.com/i.png',
+      date_modified: '2026-01-01T00:00:00Z',
+      display_categories: ['paper'],
+      server_side: 'required',
+      client_side: 'unsupported',
+    },
+  ],
 };
 
 const JAR = (() => {
   const zip = new AdmZip();
-  zip.addFile('plugin.yml', Buffer.from('name: EssentialsX\nversion: 2.21.0\nmain: net.essentialsx.Essentials\n', 'utf8'));
+  zip.addFile(
+    'plugin.yml',
+    Buffer.from('name: EssentialsX\nversion: 2.21.0\nmain: net.essentialsx.Essentials\n', 'utf8'),
+  );
   return zip.toBuffer();
 })();
 
 function mockVersionsResponse() {
   return {
-    json: async () => [{
-      name: 'EssentialsX 2.21.0',
-      version_number: '2.21.0',
-      version_type: 'release',
-      changelog: null,
-      date_published: '2026-01-01T00:00:00Z',
-      downloads: 1,
-      game_versions: ['1.21.4'],
-      loaders: ['paper'],
-      files: [{ url: 'https://cdn.modrinth.com/data/x/versions/a/EssentialsX-2.21.0.jar', filename: 'EssentialsX-2.21.0.jar', primary: true, size: JAR.length }],
-    }],
+    json: async () => [
+      {
+        name: 'EssentialsX 2.21.0',
+        version_number: '2.21.0',
+        version_type: 'release',
+        changelog: null,
+        date_published: '2026-01-01T00:00:00Z',
+        downloads: 1,
+        game_versions: ['1.21.4'],
+        loaders: ['paper'],
+        files: [
+          {
+            url: 'https://cdn.modrinth.com/data/x/versions/a/EssentialsX-2.21.0.jar',
+            filename: 'EssentialsX-2.21.0.jar',
+            primary: true,
+            size: JAR.length,
+          },
+        ],
+      },
+    ],
   };
 }
 
@@ -172,20 +186,26 @@ describe('routes/plugins.js - 市场端点', () => {
       overwritten: false,
     });
     expect(fs.existsSync(path.join(serverPath, 'plugins', 'EssentialsX-2.21.0.jar'))).toBe(true);
-    expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({
-      instanceId: 'inst1',
-      action: 'PLUGIN_MARKET_INSTALL',
-      targetType: 'plugin',
-      targetId: 'EssentialsX-2.21.0.jar',
-      detail: expect.objectContaining({ source: 'modrinth', slug: 'essentialsx' }),
-    }));
+    expect(recordAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        instanceId: 'inst1',
+        action: 'PLUGIN_MARKET_INSTALL',
+        targetType: 'plugin',
+        targetId: 'EssentialsX-2.21.0.jar',
+        detail: expect.objectContaining({ source: 'modrinth', slug: 'essentialsx' }),
+      }),
+    );
   });
 
   it('POST market/install：上游 404 → 响应体映射 40412', async () => {
     mockManager.getInstance.mockReturnValue({ serverPath });
     const err = new Error('not found');
     err.response = { statusCode: 404 };
-    vi.mocked(got).mockReturnValueOnce({ json: async () => { throw err; } });
+    vi.mocked(got).mockReturnValueOnce({
+      json: async () => {
+        throw err;
+      },
+    });
 
     const res = await request(app)
       .post('/api/v1/instances/inst1/plugins/market/install')

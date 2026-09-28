@@ -1,14 +1,13 @@
 /**
- * P2 安全小批打包测试（audit P2-5/6/7/8/9/10/11 / issue 324）
+ * P2 安全小批打包测试（issue 324）
  *
  * 七项逐条覆盖：
- * - P2-5  scrypt N 2^14→2^17：新哈希参数断言 + 旧参数哈希仍可校验（参数
- *   自描述）+ needsRehash 判定 + 登录成功后透明重哈希升级
- * - P2-6  safeEqual 先 SHA-256 归一化再恒时比较：长度不等路径功能正确
- * - P2-7  认证前 JSON body 1MB：超限 413（entity.too.large 映射）
- * - P2-9  /health 精简断言（health.test.js 专文件覆盖，此处不重复）
- * - P2-10 deploy 脚本 Key 掩码（security.deploy.test.js 源码断言，此处不重复）
- * - P2-11 会话生命周期：30 天绝对过期（HTTP + WS 通道）、滑动续期 cap、
+ * - scrypt N=2^17：新哈希参数断言 + 参数不匹配/畸形存储串一律校验失败
+ * - safeEqual 先 SHA-256 归一化再恒时比较：长度不等路径功能正确
+ * - 认证前 JSON body 1MB：超限 413（entity.too.large 映射）
+ * - /health 精简断言（health.test.js 专文件覆盖，此处不重复）
+ * - deploy 脚本 Key 掩码（security.deploy.test.js 源码断言，此处不重复）
+ * - 会话生命周期：30 天绝对过期（HTTP + WS 通道）、滑动续期 cap、
  *          每用户 5 会话上限挤最旧、登录路径惰性清理
  *
  * 真实 SQLite（临时目录）+ supertest，离线确定性。
@@ -35,7 +34,6 @@ import { AdminAccountModel, AdminSessionModel } from '../db/admin.model.js';
 import {
   hashPassword,
   verifyPassword,
-  needsRehash,
   safeEqual,
   hashToken,
   generateSessionToken,
@@ -43,6 +41,7 @@ import {
 import { authMiddleware, authenticateWebSocket } from '../middleware/auth.js';
 import { createAuthRoutes, resetLoginLockState } from '../routes/auth.js';
 import { errorHandler } from '../middleware/error_handler.js';
+import { parseDbTime } from '../utils/db-time.js';
 
 let app;
 let db;
@@ -69,54 +68,56 @@ beforeEach(() => {
   app.use(errorHandler);
 });
 
-// ── P2-5：scrypt 参数升级 + 透明重哈希 ──
+// ──：scrypt 成本参数 ──
 
-describe('P2-5 scrypt 参数升级（2^14 → 2^17）', () => {
+// 超时余量：本 describe 含 scrypt(N=131072) 哈希/校验（单次实测 ~270ms，成本由 N 决定）。
+// 5s 默认值按空载耗时设定，并行争抢下没有余量（本批同类用例实测 5.16s 越线）；
+// 显式放宽到本仓 15s 口径——scrypt 强度不因测试下调。
+describe(' scrypt 成本参数（N=2^17）', { timeout: 15_000 }, () => {
   it('新哈希使用 N=131072 自描述参数', () => {
     const stored = hashPassword('some-password-1');
     expect(stored).toMatch(/^scrypt\$131072\$8\$/);
     expect(verifyPassword('some-password-1', stored)).toBe(true);
   });
 
-  it('旧参数（2^14）哈希按存储参数校验仍通过（共存兼容）', () => {
-    // 用旧参数 N=16384 构造一个存储哈希（模拟存量部署数据），动态计算
+  it('参数与当前参数不一致的存储串一律校验失败（单一参数集，不重算旧参数）', () => {
+    // 用 N=16384 构造存储串：参数不匹配 → 直接 false，不进入重算路径
     const salt = crypto.randomBytes(16);
-    const oldHash = crypto.scryptSync('legacy-pass', salt, 64, { N: 16384, r: 8, p: 1 });
-    const legacyStored = `scrypt$16384$8$1$${salt.toString('base64')}$${oldHash.toString('base64')}`;
-    expect(verifyPassword('legacy-pass', legacyStored)).toBe(true);
-    expect(verifyPassword('wrong-pass', legacyStored)).toBe(false);
+    const legacyHash = crypto.scryptSync('legacy-pass', salt, 64, { N: 16384, r: 8, p: 1 });
+    const legacyStored = `scrypt$16384$8$1$${salt.toString('base64')}$${legacyHash.toString('base64')}`;
+    expect(verifyPassword('legacy-pass', legacyStored)).toBe(false);
+
+    const current = hashPassword('current-pass');
+    expect(verifyPassword('current-pass', current)).toBe(true);
+    expect(verifyPassword('wrong-pass', current)).toBe(false);
   });
 
-  it('needsRehash：旧参数 true、当前参数 false、畸形格式 false', () => {
-    expect(needsRehash('scrypt$16384$8$1$xx$yy')).toBe(true);
-    expect(needsRehash(hashPassword('whatever-pass'))).toBe(false);
-    expect(needsRehash('not-a-valid-hash')).toBe(false);
-    expect(needsRehash('md5$1$2$3$xx$yy')).toBe(false);
+  it('畸形存储串一律校验失败（不抛出）', () => {
+    expect(verifyPassword('any', 'not-a-valid-hash')).toBe(false);
+    expect(verifyPassword('any', 'md5$1$2$3$xx$yy')).toBe(false);
+    expect(verifyPassword('any', 'scrypt$131072$8$1$xx')).toBe(false);
+    expect(verifyPassword('any', 'scrypt$131072$8$1$xx$yy$zz')).toBe(false);
+    // 空段：0 字节摘要会让 scryptSync(pw, salt, 0) 成功、safeEqual(空,空) 恒真
+    expect(verifyPassword('any', 'scrypt$131072$8$1$$')).toBe(false);
+    expect(verifyPassword('', 'scrypt$131072$8$1$$')).toBe(false);
+    expect(verifyPassword('any', 'scrypt$131072$8$1$AAAAAA==$')).toBe(false);
+    expect(verifyPassword('any', 'scrypt$131072$8$1$$AAAAAA==')).toBe(false);
   });
 
-  it('登录成功后透明重哈希：旧参数存储被升级为当前参数（无需改密）', { timeout: 30000 }, async () => {
-    // 种一个旧参数账号（动态构造）
-    const salt = crypto.randomBytes(16);
-    const oldHash = crypto.scryptSync('upgrade-me-pass', salt, 64, { N: 16384, r: 8, p: 1 });
-    const legacyStored = `scrypt$16384$8$1$${salt.toString('base64')}$${oldHash.toString('base64')}`;
-    AdminAccountModel.setPassword(legacyStored);
-
-    const res = await request(app)
-      .post('/api/v1/auth/login')
-      .send({ password: 'upgrade-me-pass' });
-    expect(res.status).toBe(200);
-    expect(res.body.data.token).toBeTruthy();
-
-    // 存储哈希已按当前参数重写，且新哈希仍验证同一密码
-    const updated = AdminAccountModel.get().password_hash;
-    expect(updated).toMatch(/^scrypt\$131072\$8\$/);
-    expect(verifyPassword('upgrade-me-pass', updated)).toBe(true);
+  it('空摘要段的记录不能被任意密码通过（登录语义：一律 40102）', async () => {
+    // 直接种一行「0 字节摘要」的损坏记录：修复前该形状能让任意密码登录成功
+    for (const broken of ['scrypt$131072$8$1$$', 'scrypt$131072$8$1$AAAAAA==$']) {
+      AdminAccountModel.setPassword(broken);
+      const res = await request(app).post('/api/v1/auth/login').send({ password: 'whatever-pass' });
+      expect(res.status, `损坏记录 ${broken} 不得签发放行`).toBe(401);
+      expect(res.body.code).toBe(40102);
+    }
   });
 });
 
-// ── P2-6：safeEqual SHA-256 归一化 ──
+// ──：safeEqual SHA-256 归一化 ──
 
-describe('P2-6 safeEqual 归一化恒时比较', () => {
+describe(' safeEqual 归一化恒时比较', () => {
   it('等值 true / 不等 false', () => {
     expect(safeEqual('same-value', 'same-value')).toBe(true);
     expect(safeEqual('value-a', 'value-b')).toBe(false);
@@ -135,9 +136,9 @@ describe('P2-6 safeEqual 归一化恒时比较', () => {
   });
 });
 
-// ── P2-7：认证前 JSON body 1MB（413 语义） ──
+// ──：认证前 JSON body 1MB（413 语义） ──
 
-describe('P2-7 body 限制与 413 映射', () => {
+describe(' body 限制与 413 映射', () => {
   it('entity.too.large → 413（errorHandler 明确语义，不再落 500）', async () => {
     const mini = express();
     mini.use(express.json({ limit: '1kb' }));
@@ -160,12 +161,17 @@ describe('P2-7 body 限制与 413 映射', () => {
   });
 });
 
-// ── P2-11：会话生命周期 ──
+// ──：会话生命周期 ──
 
-describe('P2-11 会话 30 天绝对过期', () => {
+describe(' 会话 30 天绝对过期', () => {
   function seedSession({ createdAtOffsetMs = 0, expiresInMs = 60_000 } = {}) {
     const token = generateSessionToken();
-    const created = new Date(Date.now() + createdAtOffsetMs).toISOString();
+    // production 同口径：CURRENT_TIMESTAMP 的无时区 UTC 串（写 ISO 会让裸解析
+    // 在任何时区下恰好正确，中间件的时区缺陷无法被测出）
+    const created = new Date(Date.now() + createdAtOffsetMs)
+      .toISOString()
+      .replace('T', ' ')
+      .slice(0, 19);
     AdminSessionModel.create({
       tokenHash: hashToken(token),
       userAgent: 'vitest-p2',
@@ -174,8 +180,9 @@ describe('P2-11 会话 30 天绝对过期', () => {
     });
     // 回写 created_at / last_seen_at 模拟历史会话（create 均为 CURRENT_TIMESTAMP
     // 默认值；last_seen_at 同步回写以越过 60s touch 节流窗口）
-    db.prepare('UPDATE admin_sessions SET created_at = ?, last_seen_at = ? WHERE token_hash = ?')
-      .run(created, created, hashToken(token));
+    db.prepare(
+      'UPDATE admin_sessions SET created_at = ?, last_seen_at = ? WHERE token_hash = ?',
+    ).run(created, created, hashToken(token));
     return token;
   }
 
@@ -205,7 +212,7 @@ describe('P2-11 会话 30 天绝对过期', () => {
 
   it('WS 通道同步校验绝对过期：超 30 天 → false 且行清理', () => {
     const token = seedSession({ createdAtOffsetMs: -31 * 86400_000 });
-    expect(authenticateWebSocket(null, token)).toBe(false);
+    expect(authenticateWebSocket(null, token)).toBe(null);
     expect(AdminSessionModel.findByTokenHash(hashToken(token))).toBeNull();
   });
 
@@ -222,14 +229,15 @@ describe('P2-11 会话 30 天绝对过期', () => {
 
     const touched = AdminSessionModel.getById(session.id);
     const expiresAt = new Date(touched.expires_at).getTime();
-    const absoluteLimit = new Date(touched.created_at).getTime() + config.adminSession.absoluteTtlMs;
+    // created_at 为 CURRENT_TIMESTAMP 的无时区 UTC 串，断言侧同经 parseDbTime 归一化
+    const absoluteLimit = parseDbTime(touched.created_at) + config.adminSession.absoluteTtlMs;
     expect(expiresAt).toBeLessThanOrEqual(absoluteLimit);
     // 且确实被续期过（长于剩余滑动窗口起点）
     expect(expiresAt).toBeGreaterThan(Date.now());
   });
 });
 
-describe('P2-11 会话并发上限（每用户 5 条挤最旧）', () => {
+describe(' 会话并发上限（每用户 5 条挤最旧）', () => {
   it('enforceLimit：保留最近活跃 5 条，挤掉最旧', () => {
     const ids = [];
     for (let i = 0; i < 7; i++) {
@@ -237,10 +245,15 @@ describe('P2-11 会话并发上限（每用户 5 条挤最旧）', () => {
       db.prepare(
         `INSERT INTO admin_sessions (id, token_hash, user_agent, ip, created_at, last_seen_at, expires_at)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      ).run(id, `hash-${i}`, 'ua', '127.0.0.1',
+      ).run(
+        id,
+        `hash-${i}`,
+        'ua',
+        '127.0.0.1',
         new Date(Date.now() - (10 - i) * 1000).toISOString(),
         new Date(Date.now() - (10 - i) * 1000).toISOString(),
-        new Date(Date.now() + 3600_000).toISOString());
+        new Date(Date.now() + 3600_000).toISOString(),
+      );
       ids.push(id);
     }
     const evicted = AdminSessionModel.enforceLimit(5);
@@ -264,7 +277,9 @@ describe('P2-11 会话并发上限（每用户 5 条挤最旧）', () => {
     expect(AdminSessionModel.getById('expired-1')).toBeNull();
   });
 
-  it('登录路径集成：第 6 次登录挤掉最旧会话（登录即惰性清理触发点）', { timeout: 30000 }, async () => {
+  it('登录路径集成：第 6 次登录挤掉最旧会话（登录即惰性清理触发点）', {
+    timeout: 30000,
+  }, async () => {
     AdminAccountModel.setPassword(hashPassword('session-limit-pass'));
 
     const tokens = [];
@@ -279,8 +294,10 @@ describe('P2-11 会话并发上限（每用户 5 条挤最旧）', () => {
       // 时 SQLite 格式恒小于 ISO 格式（空格 0x20 < 'T' 0x54）导致排序失真。
       // 生产路径 touch() 始终写 CURRENT_TIMESTAMP，无此混合问题。
       const sqliteTs = (d) => d.toISOString().replace('T', ' ').slice(0, 19);
-      db.prepare('UPDATE admin_sessions SET last_seen_at = ? WHERE token_hash = ?')
-        .run(sqliteTs(new Date(Date.now() - (6 - i) * 60_000)), hashToken(tokens[i]));
+      db.prepare('UPDATE admin_sessions SET last_seen_at = ? WHERE token_hash = ?').run(
+        sqliteTs(new Date(Date.now() - (6 - i) * 60_000)),
+        hashToken(tokens[i]),
+      );
     }
 
     // 第 1 个（最旧）被挤出，第 2-6 个保留

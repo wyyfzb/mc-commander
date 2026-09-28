@@ -14,7 +14,11 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { AuditPage } from '../audit-page'
 
 const { auditParams } = vi.hoisted(() => ({
-  auditParams: { action: undefined as string | undefined, startTime: undefined as string | undefined, endTime: undefined as string | undefined },
+  auditParams: {
+    action: undefined as string | undefined,
+    startTime: undefined as string | undefined,
+    endTime: undefined as string | undefined,
+  },
 }))
 
 vi.mock('@/api/queries', () => ({
@@ -97,7 +101,9 @@ describe('AuditPage 空态 CTA（issue 343）', () => {
 
     // 清空筛选 → 复位 + 恢复普通空态
     await user.click(screen.getByTestId('audit-clear-filters'))
-    await waitFor(() => expect(screen.queryByText('当前筛选条件下暂无记录')).not.toBeInTheDocument())
+    await waitFor(() =>
+      expect(screen.queryByText('当前筛选条件下暂无记录')).not.toBeInTheDocument(),
+    )
     expect(screen.getByText('暂无记录')).toBeInTheDocument()
     expect(screen.queryByTestId('audit-clear-filters')).not.toBeInTheDocument()
     expect(auditParams.action).toBeUndefined()

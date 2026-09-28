@@ -11,7 +11,10 @@ const { fakeDb, prepareLog, setRows } = vi.hoisted(() => {
       const entry = { sql, params: undefined };
       prepareLog.push(entry);
       return {
-        all: (...args) => { entry.params = args; return rows; },
+        all: (...args) => {
+          entry.params = args;
+          return rows;
+        },
         get: () => ({ count: 0 }),
         run: (...params) => {
           entry.params = params;
@@ -20,7 +23,13 @@ const { fakeDb, prepareLog, setRows } = vi.hoisted(() => {
       };
     }),
   };
-  return { fakeDb, prepareLog, setRows: (r) => { rows = r; } };
+  return {
+    fakeDb,
+    prepareLog,
+    setRows: (r) => {
+      rows = r;
+    },
+  };
 });
 vi.mock('../db/database.js', () => ({ getDb: () => fakeDb }));
 
@@ -35,22 +44,41 @@ describe('TaskRunHistoryModel（issue #299）', () => {
     setRows([]);
   });
 
-  it('_toCamel 映射 snake_case 行，缺省 error/durationMs 回退 null', () => {
-    expect(TaskRunHistoryModel._toCamel({
-      id: 1, task_id: 9, run_at: '2026-09-02 12:00:00',
-      status: 'failed', error: 'boom', duration_ms: 1500,
-    })).toEqual({
-      id: 1, taskId: 9, runAt: '2026-09-02 12:00:00',
-      status: 'failed', error: 'boom', durationMs: 1500,
+  it('_toCamel 映射 snake_case 行、run_at 归一化为 ISO8601，缺省 error/durationMs 回退 null', () => {
+    expect(
+      TaskRunHistoryModel._toCamel({
+        id: 1,
+        task_id: 9,
+        run_at: '2026-09-02 12:00:00',
+        status: 'failed',
+        error: 'boom',
+        duration_ms: 1500,
+      }),
+    ).toEqual({
+      // run_at 是 CURRENT_TIMESTAMP 的无时区 UTC 串，下发前补 Z（前端 new Date() 才能正确换算本地时区）
+      id: 1,
+      taskId: 9,
+      runAt: '2026-09-02T12:00:00.000Z',
+      status: 'failed',
+      error: 'boom',
+      durationMs: 1500,
     });
-    expect(TaskRunHistoryModel._toCamel({
-      id: 2, task_id: 9, run_at: '2026-09-02 12:05:00', status: 'success',
-    }).durationMs).toBeNull();
+    expect(
+      TaskRunHistoryModel._toCamel({
+        id: 2,
+        task_id: 9,
+        run_at: '2026-09-02 12:05:00',
+        status: 'success',
+      }).durationMs,
+    ).toBeNull();
   });
 
   it('record 插入触发时刻与结果字段，error/durationMs 可空', () => {
     TaskRunHistoryModel.record({
-      taskId: 9, status: 'success', error: null, durationMs: 800,
+      taskId: 9,
+      status: 'success',
+      error: null,
+      durationMs: 800,
       runAt: '2026-09-02 12:00:00',
     });
 
@@ -83,8 +111,22 @@ describe('TaskRunHistoryModel（issue #299）', () => {
 
   it('findByTask 倒序返回（ORDER BY id DESC）并映射 camelCase', () => {
     setRows([
-      { id: 2, task_id: 9, run_at: '2026-09-02 12:05:00', status: 'success', error: null, duration_ms: 900 },
-      { id: 1, task_id: 9, run_at: '2026-09-02 12:00:00', status: 'failed', error: 'boom', duration_ms: 1500 },
+      {
+        id: 2,
+        task_id: 9,
+        run_at: '2026-09-02 12:05:00',
+        status: 'success',
+        error: null,
+        duration_ms: 900,
+      },
+      {
+        id: 1,
+        task_id: 9,
+        run_at: '2026-09-02 12:00:00',
+        status: 'failed',
+        error: 'boom',
+        duration_ms: 1500,
+      },
     ]);
 
     const runs = TaskRunHistoryModel.findByTask(9, 20);

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, within } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -32,7 +32,7 @@ function renderShell(initialPath = '/dashboard') {
     ],
     { initialEntries: [initialPath] },
   )
-  const qc = new QueryClient()
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={qc}>
       <TooltipProvider>
@@ -45,7 +45,13 @@ function renderShell(initialPath = '/dashboard') {
 describe('AppShell', () => {
   beforeEach(() => {
     localStorage.clear()
-    useUiStore.setState({ theme: 'dark', sidebarCollapsed: false, commandPaletteOpen: false })
+    useUiStore.setState({
+      theme: 'dark',
+      sidebarCollapsed: false,
+      // 抽屉态必须逐例重置：开着抽屉会多渲染一份同名导航链接，撞 strict 模式查询
+      mobileNavOpen: false,
+      commandPaletteOpen: false,
+    })
     // 未配置连接：useInstances/useServerSocket 均不激活
     useConnectionStore.setState({ baseUrl: '', apiKey: '', status: 'unconfigured' })
     useServerStore.setState({
@@ -70,10 +76,20 @@ describe('AppShell', () => {
     expect(screen.getByText('未连接')).toBeInTheDocument()
   })
 
+  it('实例列表未就绪时顶栏不假造实例名（空/失败/加载三态断言见 app-topbar.test.tsx）', () => {
+    renderShell()
+    // 本文件未挂 MSW 且连接未配置 → 列表永不就绪，名字位应是中性占位而非编造的实例名
+    expect(screen.getByText('加载中…')).toBeInTheDocument()
+    expect(screen.queryByText('默认实例')).not.toBeInTheDocument()
+  })
+
   it('点击侧栏导航跳转对应页面（玩家页：搜索框/筛选/表格）', async () => {
+    // 玩家页本体要求已选中实例（无实例时展示实例门，见 InstanceRequiredState）
+    useConnectionStore.setState({ apiKey: 'test-key', status: 'ready' })
+    useServerStore.setState({ instanceId: 'demo' })
     renderShell()
     fireEvent.click(screen.getByRole('link', { name: /玩家/ }))
-    // 玩家页：搜索框 + 状态筛选（未配置连接时无数据，筛选栏仍渲染）
+    // 玩家页：搜索框 + 状态筛选（列表即便取不到，筛选栏仍渲染）
     expect(await screen.findByPlaceholderText('搜索玩家名或 UUID…')).toBeInTheDocument()
   })
 
@@ -108,5 +124,27 @@ describe('AppShell', () => {
     expect(aside).toHaveClass('w-14')
     fireEvent.click(screen.getByRole('button', { name: /展开侧栏/ }))
     expect(aside).not.toHaveClass('w-14')
+  })
+
+  it('移动抽屉恒按展开态渲染：桌面「收起」态不渗入抽屉（窄屏拖动回归）', () => {
+    // 桌面收起 + 抽屉打开（关闭态抽屉 aria-hidden，role 查询取不到）
+    useUiStore.setState({ sidebarCollapsed: true, mobileNavOpen: true })
+    renderShell()
+    // 桌面侧栏确实处于收起态（这条保证下面断言测的是渗漏、不是状态没切成功）
+    expect(screen.getByRole('complementary', { name: '主导航' })).toHaveClass('w-14')
+
+    // 抽屉是 256px 浮层、不占布局宽 ⇒ 没有「收起」语义：链接带文字而非图标化
+    const drawer = screen.getByRole('complementary', { name: '主导航（移动端）' })
+    const link = within(drawer).getByRole('link', { name: '仪表盘' })
+    expect(link).toHaveClass('px-2.5')
+    expect(link).not.toHaveClass('justify-center')
+    expect(link).not.toHaveClass('px-0')
+    const label = within(drawer).getByText('仪表盘')
+    expect(label).toHaveClass('max-w-28', 'opacity-100')
+    expect(label).not.toHaveClass('max-w-0', 'opacity-0')
+
+    // drawer 形态不接入开合交互：整个抽屉里没有「收起/展开侧栏」按钮
+    // （rail 的那个在桌面 aside 里，两侧各一个，不会串）
+    expect(within(drawer).queryByRole('button', { name: /侧栏/ })).toBeNull()
   })
 })

@@ -21,7 +21,11 @@ describe('LoadingButton', () => {
   })
 
   it('loadingText: 加载态替换文案', () => {
-    render(<LoadingButton loading loadingText="处理中…">提交</LoadingButton>)
+    render(
+      <LoadingButton loading loadingText="处理中…">
+        提交
+      </LoadingButton>,
+    )
     expect(screen.getByRole('button', { name: /处理中/ })).toBeInTheDocument()
     expect(screen.queryByText('提交')).not.toBeInTheDocument()
   })
@@ -34,7 +38,11 @@ describe('LoadingButton', () => {
   })
 
   it('disabled + loading 同时生效', () => {
-    render(<LoadingButton loading disabled>禁用提交</LoadingButton>)
+    render(
+      <LoadingButton loading disabled>
+        禁用提交
+      </LoadingButton>,
+    )
     expect(screen.getByRole('button')).toBeDisabled()
   })
 

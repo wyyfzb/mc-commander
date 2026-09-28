@@ -1,4 +1,10 @@
 #!/usr/bin/env bash
+# ⚠️ 弃用：勿手动使用。本脚本缺少共享契约包的 staging 路径重写
+# （@mc-commander/schemas 依赖 file:../mc-schemas，位于服务端目录外，直接打包
+# 产出的 tarball 安装全绿但启动即崩）。完整打包流程以 .github/workflows/release.yml
+# 为准（staging 组装 + file:./mc-schemas 重写 + 发布前 sanity check）；本地部署
+# 打包走 .ai/tools/deploy/pack-deploy.sh（含同等重写逻辑，不入库）。
+#
 # 构建后端发布包（tar.gz），用于一键部署
 # 用法：bash scripts/build-release.sh
 # 环境变量：BUILD_WEB=0 跳过前端构建（默认构建并打入 public/）
@@ -51,6 +57,3 @@ SIZE=$(du -h "$OUTPUT" | cut -f1)
 echo "打包完成: $OUTPUT ($SIZE)"
 echo ""
 echo "文件数: $(tar -tzf "$OUTPUT" | wc -l)"
-echo ""
-echo "推送后部署命令："
-echo "  sudo bash -c \"curl -fsSL https://gitee.com/wyyfzb/mc_commander/raw/master/mc_commander_server/scripts/deploy-mc-commander.sh | bash\""

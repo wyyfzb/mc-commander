@@ -26,7 +26,7 @@ const { jsonImpl, streamImpl } = vi.hoisted(() => ({
 vi.mock('got', () => ({
   default: Object.assign(
     vi.fn(() => ({ json: () => jsonImpl.current() })),
-    { stream: vi.fn(() => streamImpl.current()) }
+    { stream: vi.fn(() => streamImpl.current()) },
   ),
 }));
 
@@ -83,7 +83,6 @@ function createMockInstance(overrides = {}) {
   return {
     id: 'inst-1',
     name: 'Test Server',
-    status: 'stopped',
     mcVersion: '1.20.4',
     jarFile: 'server-1.20.4.jar',
     serverPath: tmpDir,
@@ -136,20 +135,24 @@ function streamSucceeds() {
 /** 首启即 ready 的实例桩 */
 function startEmitsReady() {
   return vi.fn(() => {
-    queueMicrotask(() => serverManagerRef.current.emit('instance:status', {
-      instanceId: 'inst-1',
-      event: 'ready',
-    }));
+    queueMicrotask(() =>
+      serverManagerRef.current.emit('instance:status', {
+        instanceId: 'inst-1',
+        event: 'ready',
+      }),
+    );
   });
 }
 
 /** 首启即 crash 的实例桩 */
 function startEmitsCrash() {
   return vi.fn(() => {
-    queueMicrotask(() => serverManagerRef.current.emit('instance:status', {
-      instanceId: 'inst-1',
-      event: 'crash',
-    }));
+    queueMicrotask(() =>
+      serverManagerRef.current.emit('instance:status', {
+        instanceId: 'inst-1',
+        event: 'crash',
+      }),
+    );
   });
 }
 
@@ -215,13 +218,15 @@ describe('成功路径：被替换旧版本 jar 清理（#520 实锤①）', () 
     downloadData = 'V_1.21.6_CONTENT';
     await service.upgrade('inst-1', '1.21.6', 'purpur');
     await vi.waitFor(() =>
-      expect(fs.existsSync(path.join(tmpDir, 'server-1.21.4.jar'))).toBe(false)
+      expect(fs.existsSync(path.join(tmpDir, 'server-1.21.4.jar'))).toBe(false),
     );
 
     // 目录终态：仅剩当前版本 jar，无任何 ._upgrade_backup_ 残留
     const jars = fs.readdirSync(tmpDir).filter((f) => f.endsWith('.jar'));
     expect(jars).toEqual(['server-1.21.6.jar']);
-    expect(fs.readFileSync(path.join(tmpDir, 'server-1.21.6.jar'), 'utf8')).toBe('V_1.21.6_CONTENT');
+    expect(fs.readFileSync(path.join(tmpDir, 'server-1.21.6.jar'), 'utf8')).toBe(
+      'V_1.21.6_CONTENT',
+    );
     expect(fs.readdirSync(tmpDir).some((f) => f.startsWith('._upgrade_backup_'))).toBe(false);
   });
 
@@ -252,7 +257,7 @@ describe('失败/回滚路径：旧 jar 保留与回滚完成语义（#520）', 
     fs.writeFileSync(OLD_JAR(), 'OLD_JAR_CONTENT');
 
     await expect(service.upgrade('inst-1', '1.21.4', 'purpur')).rejects.toThrow(
-      'Server crashed during startup verification'
+      'Server crashed during startup verification',
     );
 
     // 旧 jar 本体：失败/回滚路径不删
@@ -268,7 +273,7 @@ describe('失败/回滚路径：旧 jar 保留与回滚完成语义（#520）', 
     fs.writeFileSync(OLD_JAR(), 'OLD_JAR_CONTENT');
 
     await expect(service.upgrade('inst-1', '1.21.4', 'purpur')).rejects.toThrow(
-      'Server crashed during startup verification'
+      'Server crashed during startup verification',
     );
 
     // _doRollback finally await unlink：调用方收到 reject 时清理已同步完成，
@@ -284,24 +289,28 @@ describe('失败/回滚路径：旧 jar 保留与回滚完成语义（#520）', 
 // ── ③ 复制异步化：API 选择与调用语义（#520 实锤②） ──
 
 describe('复制异步化：零 copyFileSync、promises.copyFile 参数正确', () => {
-  it('升级全程（含回滚）零 fs.copyFileSync；备份与回滚各一次异步复制且参数精确', async () => {
+  it('升级全程（含回滚）零 fs.copyFileSync；备份走 .part 原子改名、回滚一次异步复制', async () => {
     const manager = createMockServerManager({ start: startEmitsCrash() });
     const service = new UpgradeService(manager);
     fs.writeFileSync(OLD_JAR(), 'OLD_JAR_CONTENT');
 
     const syncCopySpy = vi.spyOn(fs, 'copyFileSync');
     const asyncCopySpy = vi.spyOn(fs.promises, 'copyFile');
+    const renameSpy = vi.spyOn(fs.promises, 'rename');
 
     await expect(service.upgrade('inst-1', '1.21.4', 'purpur')).rejects.toThrow(
-      'Server crashed during startup verification'
+      'Server crashed during startup verification',
     );
 
     // 同步 API 已彻底退出升级链路
     expect(syncCopySpy).not.toHaveBeenCalled();
 
-    // 异步复制恰好两次：replace 阶段备份 + 回滚恢复（目标=旧 jar 本体路径，#539）
+    // 异步复制恰好两次：replace 阶段备份 + 回滚恢复（目标=旧 jar 本体路径，#539）。
+    // 备份先写 .part 再改名：复制不可中断（取消/失败都可能落在复制中），
+    // 只有原子改名才能保证 rollback 源要么不存在、要么是完整副本
     expect(asyncCopySpy).toHaveBeenCalledTimes(2);
-    expect(asyncCopySpy).toHaveBeenNthCalledWith(1, OLD_JAR(), BACKUP_JAR());
+    expect(asyncCopySpy).toHaveBeenNthCalledWith(1, OLD_JAR(), `${BACKUP_JAR()}.part`);
+    expect(renameSpy).toHaveBeenCalledWith(`${BACKUP_JAR()}.part`, BACKUP_JAR());
     expect(asyncCopySpy).toHaveBeenNthCalledWith(2, BACKUP_JAR(), OLD_JAR());
 
     // 复制语义（内容恢复）由真实 fs 保证：旧 jar 本体内容 = 备份的旧内容

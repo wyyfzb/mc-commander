@@ -32,10 +32,10 @@ test.describe('实例页', () => {
     await expect(page.getByText(/运行中 · \d+ 人在线/).first()).toBeVisible()
     // 版本徽章（detailStatuses 拉取）
     await expect(page.getByText('1.21.4')).toBeVisible()
-    // 当前实例徽章 + 操作按钮
+    // 当前实例徽章 + 操作行（启停主操作 + 操作菜单触发器；配置/升级/卸载已收进菜单）
     await expect(page.getByText('当前')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'E2E 演示实例 启动配置' })).toBeVisible()
-    await expect(page.getByRole('button', { name: '卸载 E2E 演示实例' })).toBeVisible()
+    await expect(page.getByRole('button', { name: '停止 E2E 演示实例' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'E2E 演示实例 操作菜单' })).toBeVisible()
     await maybeShot(page, 'instances-cards-dark.png')
   })
 
@@ -55,15 +55,17 @@ test.describe('实例页', () => {
     await expect(page.getByText('实例配置')).toBeVisible()
     await page.getByLabel('实例名称').fill('E2E 新服务器')
     await page.getByRole('button', { name: '下一步' }).click()
-    // 步骤③：确认摘要 + EULA 同意勾选（首启闭环：未勾选时「部署并启动」禁用）
+    // 步骤③：确认摘要 + EULA 同意勾选（不阻断部署：未勾选为「仅部署」，勾选后为「部署并启动」）
     await expect(page.getByText('确认部署')).toBeVisible()
     await expect(page.getByText('E2E 新服务器')).toBeVisible()
-    await expect(page.getByRole('button', { name: '部署并启动' })).toBeDisabled()
+    await expect(page.getByRole('button', { name: '仅部署' })).toBeEnabled()
     await page.getByRole('checkbox', { name: /Minecraft EULA/ }).check()
     await page.getByRole('button', { name: '部署并启动' }).click()
     // mock 直接成功：结果块 + 自动启动状态（已勾选 EULA → 部署完成自动启动）+ 完成
     await expect(page.getByText('部署成功')).toBeVisible()
-    await expect(page.getByText('已发送启动指令，服务器正在启动（状态可在仪表盘查看）')).toBeVisible()
+    await expect(
+      page.getByText('已发送启动指令，服务器正在启动（状态可在仪表盘查看）'),
+    ).toBeVisible()
     await expect(page.getByText('新部署实例').first()).toBeVisible()
     await maybeShot(page, 'deploy-done-dark.png')
     await page.getByRole('button', { name: '完成' }).click()
@@ -73,7 +75,8 @@ test.describe('实例页', () => {
   test('实例启动配置弹窗：内存/Aikar/高级参数 + 保存关闭', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/instances')
-    await page.getByRole('button', { name: 'E2E 演示实例 启动配置' }).click()
+    await page.getByRole('button', { name: 'E2E 演示实例 操作菜单' }).click()
+    await page.getByRole('menuitem', { name: '启动配置' }).click()
     // 弹窗标题 + 实例名 + 内存预填（mock maxMemory 4096MB → 4.0 GB）
     await expect(page.getByRole('heading', { name: '启动配置' })).toBeVisible()
     await expect(page.getByText('4.0 GB')).toBeVisible()
@@ -95,14 +98,35 @@ test.describe('实例页', () => {
   test('卸载确认：对话框 + 取消', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/instances')
-    await page.getByRole('button', { name: '卸载 E2E 演示实例' }).click()
+    await page.getByRole('button', { name: 'E2E 演示实例 操作菜单' }).click()
+    await page.getByRole('menuitem', { name: '卸载实例' }).click()
     await expect(page.getByRole('heading', { name: '卸载实例' })).toBeVisible()
     await expect(page.getByText(/确定要卸载实例 "E2E 演示实例"/)).toBeVisible()
     // 三条款警告文案
     await expect(
-      page.getByText('此操作不可撤销！将会：停止运行中的服务器、删除所有世界数据和配置、从数据库中移除记录'),
+      page.getByText(
+        '此操作不可撤销！将会：停止运行中的服务器、删除所有世界数据和配置、从数据库中移除记录',
+      ),
     ).toBeVisible()
     await page.getByRole('button', { name: '取消' }).click()
+    await expect(page.getByRole('heading', { name: '卸载实例' })).toBeHidden()
+  })
+
+  test('卸载：输入实例名经服务端校验后成功，提示保留的备份份数', async ({ page }) => {
+    await setupConnection(page)
+    await page.goto('/instances')
+    await page.getByRole('button', { name: 'E2E 演示实例 操作菜单' }).click()
+    await page.getByRole('menuitem', { name: '卸载实例' }).click()
+
+    // 服务端强制实例名确认：名字未输入前确认按钮不可用（UI 前置态）
+    const confirmButton = page.getByRole('button', { name: '确认卸载' })
+    await expect(confirmButton).toBeDisabled()
+    await page.getByLabel(/输入实例名/).fill('E2E 演示实例')
+    await expect(confirmButton).toBeEnabled()
+    await confirmButton.click()
+
+    // mock 确认通过：卸载不再销毁备份，成功提示必须报出保留份数（e2e-demo 有 2 份快照）
+    await expect(page.getByText('实例 "E2E 演示实例" 已卸载，已保留 2 份备份')).toBeVisible()
     await expect(page.getByRole('heading', { name: '卸载实例' })).toBeHidden()
   })
 
@@ -116,5 +140,75 @@ test.describe('实例页', () => {
     // 取消关闭 → URL 参数清除
     await page.getByRole('button', { name: '取消' }).click()
     await expect(page).toHaveURL(/\/instances$/)
+  })
+
+  test('单实例：恒定三列网格 + 引导块跨两列（列数不随实例数变化）', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 })
+    await setupConnection(page)
+    await page.goto('/instances')
+
+    // mock 只有 1 个实例：网格仍是三列（列数恒定 ⇒ 骨架与真实网格不跳变），
+    // 卡片占 1 列、引导块跨 2 列补满整行
+    const grid = page.locator('[data-instance-id]').first().locator('..')
+    expect(
+      await grid.evaluate((el) => getComputedStyle(el).gridTemplateColumns.split(' ').length),
+    ).toBe(3)
+    const card = await page.locator('[data-instance-id]').first().boundingBox()
+    const tile = await page.getByTestId('deploy-guide-tile').boundingBox()
+    expect(card).not.toBeNull()
+    expect(tile).not.toBeNull()
+    // 跨两列 = 两倍卡宽 + 一个列间距（gap-3 = 12px）
+    expect(Math.abs(tile!.width - (card!.width * 2 + 12))).toBeLessThanOrEqual(1)
+    expect(tile!.x).toBeGreaterThan(card!.x)
+
+    // 引导块入口与页头 CTA 同源（打开同一部署向导）
+    await page.getByRole('button', { name: '打开部署向导' }).click()
+    await expect(page.getByText('选择服务端', { exact: true })).toBeVisible()
+    await page.getByRole('button', { name: '取消' }).click()
+
+    // 窄屏（375）引导块落到卡片下方整幅宽度，无横向溢出
+    await page.setViewportSize({ width: 375, height: 812 })
+    await expect(page.getByTestId('deploy-guide-tile')).toBeVisible()
+    const narrow = await page.evaluate(() => ({
+      scrollWidth: document.documentElement.scrollWidth,
+      clientWidth: document.documentElement.clientWidth,
+    }))
+    expect(narrow.scrollWidth).toBeLessThanOrEqual(narrow.clientWidth)
+  })
+
+  /**
+   * 栅格列数按容器内容宽切档（@2xl=672 两列 / @5xl=1024 三列）。
+   * jsdom 不评估容器查询，阈值只能在这里锁。768 视口展开侧栏内容 528px：
+   * 改前视口 `md` 给两列、每张 258px，卡内四格指标行被压到 44px/格（"3.2 GB" 截断），
+   * 现在必须单列。1279 视口折叠侧栏内容 1191px：改前差 1px 未达 `xl` 只给两列，
+   * 现在必须三列
+   */
+  test('栅格按容器宽切档：768 展开侧栏单列、1279 折叠侧栏三列', async ({ page }) => {
+    await setupConnection(page)
+
+    const cols = () =>
+      page
+        .locator('[data-instance-id]')
+        .first()
+        .locator('..')
+        .evaluate((el) => getComputedStyle(el).gridTemplateColumns.split(' ').length)
+
+    // 768 展开侧栏（内容 528 < 672）⇒ 单列；卡片吃满，指标格不被压扁
+    await page.setViewportSize({ width: 768, height: 900 })
+    await page.goto('/instances')
+    await expect(page.locator('[data-instance-id]').first()).toBeVisible()
+    expect(await cols()).toBe(1)
+
+    // 1279 折叠侧栏（内容 1191 ≥ 1024）⇒ 三列
+    await page.getByRole('button', { name: '收起侧栏' }).click()
+    await expect(page.getByRole('button', { name: '展开侧栏' })).toBeVisible()
+    await page.setViewportSize({ width: 1279, height: 900 })
+    expect(await cols()).toBe(3)
+
+    // 两态都不得横向溢出
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    )
+    expect(overflow).toBe(0)
   })
 })

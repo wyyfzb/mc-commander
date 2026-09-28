@@ -127,7 +127,7 @@ describe('WebSocket 资源上限与频率限制', () => {
     // 幂等重复订阅已有实例仍放行（不打断断线补齐重放）
     ws.send.mockClear();
     ws.emit('message', JSON.stringify({ type: 'subscribe', instanceId: 's0', lastEventId: 1 }));
-    expect(sentJson(ws).some((m) => m.id === 2)).toBe(true);
+    expect(sentJson(ws).some((m) => m.eventId === 2)).toBe(true);
   });
 
   it(`同一实例的断线补齐重放节流（${'REPLAY_THROTTLE_MS'}ms 内仅一次）`, () => {
@@ -139,7 +139,7 @@ describe('WebSocket 资源上限与频率限制', () => {
     };
 
     // 首次：正常重放 1 条（id=101）
-    expect(subscribeWithReplay().filter((m) => m.id === 101)).toHaveLength(1);
+    expect(subscribeWithReplay().filter((m) => m.eventId === 101)).toHaveLength(1);
 
     // 节流窗口内再次：无重放，返回 error 提示
     const msgs2 = subscribeWithReplay();
@@ -148,7 +148,7 @@ describe('WebSocket 资源上限与频率限制', () => {
 
     // 窗口滚动后恢复重放
     vi.advanceTimersByTime(REPLAY_THROTTLE_MS);
-    expect(subscribeWithReplay().filter((m) => m.id === 101)).toHaveLength(1);
+    expect(subscribeWithReplay().filter((m) => m.eventId === 101)).toHaveLength(1);
   });
 
   it(`消息频率超过上限（${'MAX_MESSAGES_PER_WINDOW'} msg/min）时断开连接（1008）`, () => {

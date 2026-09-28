@@ -11,6 +11,54 @@ import pkg from './package.json' with { type: 'json' }
 // 开发期经 proxy 转发规避跨域；生产 M7 由 Express 同源托管
 const proxyTarget = process.env.VITE_PROXY_TARGET || 'http://localhost:25566'
 
+// 纯逻辑用例（不碰 DOM/RTL，且**传递依赖**也不碰）：改跑 `node` 环境，省下每文件的 jsdom 构建
+// 与 jest-dom/RTL setup 导入 —— jsdom 环境构建是全量耗时大头（2026-09-15 实测环境累计 ~1046s、
+// setup ~306s）。维护规则：新增纯逻辑用例把路径加进来；若在 node 下报「x is not defined」就把它
+// 移回 dom 项目（失败是**明确报错**，不会静默跳过）。stores 域的 3 个用例暂不放入
+// （其 persist/localStorage 依赖经 jsdom 才成立）。
+const NODE_ENV_TESTS = [
+  // 门禁脚本内核（scripts/lib/design-token-rules.mjs）的纯逻辑用例：只处理源码字符串、不读 fs
+  'scripts/__tests__/design-token-rules.test.mjs',
+  'src/__tests__/token-integrity.test.ts',
+  // 字体子集覆盖：只读 woff2 字节（自带 cmap 解析），不碰 DOM
+  'src/__tests__/font-subset.test.ts',
+  'src/api/__tests__/errors.test.ts',
+  // 注意：`api/__tests__/{audit,files,files-enhanced}` **不能**放这里 —— 它们用相对 URL
+  // （`/api/v1/...`）调 fetch，需要 jsdom 提供的 base URL，在 node 下会报
+  // `TypeError: Failed to parse URL from /api/...`（2026-09-15 实测，已移回 dom 项目）。
+  'src/api/__tests__/players.test.ts',
+  'src/api/__tests__/tasks.test.ts',
+  'src/api/__tests__/world.test.ts',
+  'src/components/mcs/__tests__/tone.test.ts',
+  'src/features/audit/__tests__/time-range.test.ts',
+  'src/features/files/__tests__/path-utils.test.ts',
+  'src/features/instances/components/deploy/__tests__/utils.test.ts',
+  'src/features/players/__tests__/player-pagination.test.ts',
+  'src/features/webhooks/__tests__/webhook-api.test.ts',
+  'src/lib/__tests__/format.test.ts',
+  'src/lib/__tests__/mc-backup.test.ts',
+  'src/lib/__tests__/mc-ban.test.ts',
+  'src/lib/__tests__/mc-batch.test.ts',
+  'src/lib/__tests__/mc-calendar.test.ts',
+  'src/lib/__tests__/mc-commands.test.ts',
+  'src/lib/__tests__/mc-cron.test.ts',
+  'src/lib/__tests__/mc-deploy.test.ts',
+  'src/lib/__tests__/mc-enchantments.test.ts',
+  'src/lib/__tests__/mc-entities.test.ts',
+  'src/lib/__tests__/mc-files.test.ts',
+  'src/lib/__tests__/mc-gamerules.test.ts',
+  'src/lib/__tests__/mc-properties.test.ts',
+  'src/lib/__tests__/mc-teleport.test.ts',
+  'src/lib/__tests__/notifications.test.ts',
+  'src/lib/__tests__/password-strength.test.ts',
+  'src/lib/__tests__/radio-group.test.ts',
+  'src/lib/__tests__/second-factor.test.ts',
+  'src/lib/__tests__/tailwind-merge.test.ts',
+  'src/lib/__tests__/terminal-log.test.ts',
+  'src/test/mocks/__tests__/fixtures.test.ts',
+]
+const DOM_EXCLUDE = ['e2e/**', 'node_modules/**']
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
@@ -27,14 +75,19 @@ export default defineConfig({
         theme_color: '#0A0E1A',
         background_color: '#0A0E1A',
         display: 'standalone',
-        // PWA 主屏直达紧急视图（移动端处置场景；routes.tsx 同款注释的兑现）
-        start_url: '/emergency',
+        // PWA 主屏直达完整面板（原为 /emergency 移动端处置页，该页已移除）
+        start_url: '/dashboard',
         // 图标用相对路径：随 base 解析（根部署 /pwa-icon.svg；子路径部署
         // 如 /app/ 下为 /app/pwa-icon.svg），manifest 相对 URL 以 manifest
         // 所在目录为基准，两种部署形态均正确
         icons: [
           { src: './pwa-icon.svg', sizes: '512x512', type: 'image/svg+xml' },
-          { src: './pwa-maskable.svg', sizes: '512x512', type: 'image/svg+xml', purpose: 'maskable' },
+          {
+            src: './pwa-maskable.svg',
+            sizes: '512x512',
+            type: 'image/svg+xml',
+            purpose: 'maskable',
+          },
         ],
       },
       workbox: {
@@ -57,10 +110,18 @@ export default defineConfig({
       '@mc-commander/schemas': path.resolve(import.meta.dirname, '../mc-schemas/src/index.ts'),
       // mc-schemas 位于本包 node_modules 之外，其内部 import 'zod' 无法按目录链解析到
       // 本包依赖，统一钉到显式声明的 zod 副本（与 tsconfig.app.json paths 映射对齐）
-      'zod': path.resolve(import.meta.dirname, './node_modules/zod'),
+      zod: path.resolve(import.meta.dirname, './node_modules/zod'),
     },
   },
   server: {
+    // 站内帮助页 `?raw` 直读仓库根 docs/user-guide.md（单一事实源，不在包内复制副本）：
+    // 该文件在包根之外，而 Vite 默认只放行包根（allow 未声明时 = [workspaceRoot]，
+    // 实测 dev 下裸 import 报 403「outside of Vite serving allow list」）。
+    // 显式声明时默认值**不再并入**，故必须带上包根本身；构建期 Rollup 直接走 fs、不受此限，
+    // 故本条只影响 dev。deny 默认项（.env / .npmrc / .git）不受 allow 变更影响。
+    fs: {
+      allow: [path.resolve(import.meta.dirname), path.resolve(import.meta.dirname, '../docs')],
+    },
     // 忽略 Mimosa 钩子运行时状态目录：其文件被锁定时 watch 报 EBUSY 导致 dev server 崩溃
     watch: {
       ignored: ['**/.mimosa/**'],
@@ -92,12 +153,29 @@ export default defineConfig({
     },
   },
   test: {
-    environment: 'jsdom',
-    setupFiles: ['./src/test/setup.ts'],
-    include: ['src/**/*.test.{ts,tsx}'],
-    exclude: ['e2e/**', 'node_modules/**'],
     css: false, // 组件测试不解析 CSS（token 校验走独立脚本/测试）
     pool: 'threads', // 全量测试 107s → 64s（2026-08-20 实测；Windows 上 threads 显著快于默认 forks）
+    // 单例超时（默认 5s）必须大于 setup.ts 的异步查询上限，否则失败时先被 vitest
+    // 掐断、报「test timed out」而不是 RTL 的「找不到元素」——诊断信息会退化。
+    // 各 describe 里本地的 { timeout: 15000 } 与此同值，保留作兜底（全局若调低仍保 15s）
+    testTimeout: 15_000,
+    // 测试环境拆分（2026-09-15）：见 NODE_ENV_TESTS 上方说明。两个 project 各自声明环境与 setup，
+    // 纯逻辑用例不再付 jsdom + jest-dom/RTL 的构建代价。
+    projects: [
+      // extends: true —— inline project 默认**不继承**根配置（plugins/resolve.alias 都会丢，
+      // 实测表现为 `Failed to resolve import "@/lib/utils"`），必须显式继承。
+      { extends: true, test: { name: 'unit-node', environment: 'node', include: NODE_ENV_TESTS } },
+      {
+        extends: true,
+        test: {
+          name: 'unit-dom',
+          environment: 'jsdom',
+          setupFiles: ['./src/test/setup.ts'],
+          include: ['src/**/*.test.{ts,tsx}'],
+          exclude: [...DOM_EXCLUDE, ...NODE_ENV_TESTS],
+        },
+      },
+    ],
     coverage: {
       provider: 'v8',
       reporter: ['json', 'text'],

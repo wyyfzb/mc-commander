@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterAll, beforeAll, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, afterAll, beforeAll, vi } from 'vitest'
 import { render, fireEvent, waitFor, screen, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -15,7 +15,7 @@ import { useConnectionStore } from '@/stores/connection'
 /**
  * 终端组件测试：Ctrl+L 清屏（xterm 在 jsdom 不可用，mock 掉；buffer 清空断言）/
  * 终端内搜索：搜索条开闭、Ctrl+F 拦截、Enter/上/下查找接线、n/m 计数、Esc 清理 /
- * JVM 眼睛切换：清屏全量重写（P2-27 复现修复）
+ * JVM 眼睛切换：清屏全量重写（复现修复）
  */
 
 /** 捕获 SearchAddon 与 xterm 内部注册物，供搜索/渲染交互断言（vi.hoisted 提升到 mock 工厂之前） */
@@ -23,7 +23,12 @@ const xtermStub = vi.hoisted(() => {
   type ResultCb = (r: { resultIndex: number; resultCount: number }) => void
   type TermEvent = { op: 'write'; text: string } | { op: 'clear' }
   return {
-    customKeyHandlers: [] as ((e: { key: string; ctrlKey?: boolean; metaKey?: boolean; preventDefault: () => void }) => boolean)[],
+    customKeyHandlers: [] as ((e: {
+      key: string
+      ctrlKey?: boolean
+      metaKey?: boolean
+      preventDefault: () => void
+    }) => boolean)[],
     searchAddonInstances: [] as {
       findNext: ReturnType<typeof vi.fn>
       findPrevious: ReturnType<typeof vi.fn>
@@ -58,7 +63,14 @@ vi.mock('@xterm/xterm', () => ({
     onScroll() {
       return { dispose() {} }
     }
-    attachCustomKeyEventHandler(h: (e: { key: string; ctrlKey?: boolean; metaKey?: boolean; preventDefault: () => void }) => boolean) {
+    attachCustomKeyEventHandler(
+      h: (e: {
+        key: string
+        ctrlKey?: boolean
+        metaKey?: boolean
+        preventDefault: () => void
+      }) => boolean,
+    ) {
       xtermStub.customKeyHandlers.push(h)
     }
     constructor() {
@@ -93,6 +105,8 @@ vi.mock('@xterm/addon-search', () => ({
 const server = setupServer(...handlers)
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
 afterAll(() => server.close())
+// 用例中途断言失败时体内的还原语句不会执行，间谍会残留给后续用例——集中还原
+afterEach(() => vi.restoreAllMocks())
 
 beforeEach(() => {
   xtermStub.customKeyHandlers.length = 0
@@ -139,6 +153,20 @@ describe('ServerTerminal', () => {
     expect(useTerminalStore.getState().buffer).toHaveLength(0)
   })
 
+  it('实例切换同步清空 xterm——占位不再浮在旧实例日志上（重叠回归）', async () => {
+    renderTerminal()
+    await waitFor(() => expect(useTerminalStore.getState().buffer.length).toBeGreaterThan(0))
+    const clearCountBefore = xtermStub.events.filter((e) => e.op === 'clear').length
+    act(() => {
+      useServerStore.setState({ instanceId: 'other' })
+    })
+    // store 缓冲随 setInstance 归零，xterm 必须出现新的 clear 事件（旧日志不得残留）
+    await waitFor(() => expect(useTerminalStore.getState().instanceId).toBe('other'))
+    expect(xtermStub.events.filter((e) => e.op === 'clear').length).toBeGreaterThan(
+      clearCountBefore,
+    )
+  })
+
   it('不带修饰键的 L 不清屏', async () => {
     renderTerminal()
     await waitFor(() => expect(useTerminalStore.getState().buffer.length).toBeGreaterThan(0))
@@ -148,9 +176,7 @@ describe('ServerTerminal', () => {
 
   it('aria-live 屏读镜像区域存在且含终端文本', async () => {
     renderTerminal()
-    const srMirror = await waitFor(() =>
-      document.querySelector('[data-testid="sr-live-mirror"]'),
-    )
+    const srMirror = await waitFor(() => document.querySelector('[data-testid="sr-live-mirror"]'))
     expect(srMirror).toBeTruthy()
     expect(srMirror?.getAttribute('aria-live')).toBe('polite')
     expect(srMirror?.getAttribute('aria-label')).toBe('终端输出')
@@ -176,6 +202,21 @@ describe('ServerTerminal 终端内搜索', () => {
     expect(screen.queryByRole('search')).not.toBeInTheDocument()
   })
 
+  it('搜索按钮 tooltip 的快捷键按平台取词（macOS 是 ⌘，其余是 Ctrl）', async () => {
+    const user = userEvent.setup()
+    const { unmount } = renderTerminal()
+    // jsdom 平台为 Linux：提示须与 handler 接受的修饰键（ctrl||meta）一致，
+    // 也不能给 mac 用户按不出来的键
+    await user.hover(screen.getByRole('button', { name: '搜索终端内容' }))
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('搜索终端内容（Ctrl+F）')
+
+    unmount()
+    vi.spyOn(navigator, 'platform', 'get').mockReturnValue('MacIntel')
+    renderTerminal()
+    await user.hover(screen.getByRole('button', { name: '搜索终端内容' }))
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('搜索终端内容（⌘+F）')
+  })
+
   it('Ctrl+F 经 attachCustomKeyEventHandler 拦截：preventDefault + 打开搜索条（返回 false 阻断 xterm 处理）', () => {
     renderTerminal()
     expect(xtermStub.customKeyHandlers).toHaveLength(1)
@@ -199,7 +240,10 @@ describe('ServerTerminal 终端内搜索', () => {
     await user.type(input, 'ERROR')
     await user.keyboard('{Enter}')
     const addon = lastAddon()!
-    expect(addon.findNext).toHaveBeenCalledWith('ERROR', expect.objectContaining({ decorations: expect.any(Object) }))
+    expect(addon.findNext).toHaveBeenCalledWith(
+      'ERROR',
+      expect.objectContaining({ decorations: expect.any(Object) }),
+    )
     // addon 上报结果 → n/m 计数（resultIndex 0 起 → 显示 3/17）
     addon.fireResults({ resultIndex: 2, resultCount: 17 })
     expect(await screen.findByText('3/17')).toBeInTheDocument()
@@ -261,7 +305,7 @@ describe('ServerTerminal 终端内搜索', () => {
   })
 })
 
-describe('ServerTerminal JVM 眼睛切换（P2-27 复现修复）', () => {
+describe('ServerTerminal JVM 眼睛切换（复现修复）', () => {
   const JVM_LINE = 'WARNING: A restricted method in java.lang.System.invoke has been called'
 
   /** 最近一次 clear 之后写入的行（全量重写断言窗口） */
@@ -298,7 +342,9 @@ describe('ServerTerminal JVM 眼睛切换（P2-27 复现修复）', () => {
     // 初始态（默认隐藏 JVM 警告）：2 行可见，无 clear，不含 JVM 行
     expect(xtermStub.events.filter((e) => e.op === 'write')).toHaveLength(2)
     expect(xtermStub.events.some((e) => e.op === 'clear')).toBe(false)
-    expect(xtermStub.events.some((e) => e.op === 'write' && e.text.includes('restricted method'))).toBe(false)
+    expect(
+      xtermStub.events.some((e) => e.op === 'write' && e.text.includes('restricted method')),
+    ).toBe(false)
 
     // 切换显示：clear + 3 行全量重写（含 JVM 警告行）→ 历史行回填
     await user.click(screen.getByRole('button', { name: '显示 JVM 警告' }))
@@ -312,5 +358,18 @@ describe('ServerTerminal JVM 眼睛切换（P2-27 复现修复）', () => {
     await waitFor(() => expect(writesAfterLastClear()).toHaveLength(2))
     const rewrittenBack = writesAfterLastClear()
     expect(rewrittenBack.some((t) => t.includes('restricted method'))).toBe(false)
+  })
+
+  it('停止态且缓冲非空 → 显示「实例已停止」状态条；运行中不显示（DOM 状态条随运行态显隐，不再写画布残留）', async () => {
+    useServerStore.setState({ status: { isRunning: false } as never })
+    useTerminalStore.setState({
+      buffer: [{ text: '[19:37:44] Stopping server', level: 'info', jvmWarning: false }],
+    } as never)
+    renderTerminal()
+    expect(screen.getByRole('status').textContent).toContain('实例已停止')
+
+    // 翻转为运行中 → 状态条随显隐消失（旧实现写入 xterm 画布后无法擦除，刷新竞态下运行中残留停止标记）
+    useServerStore.setState({ status: { isRunning: true } as never })
+    await waitFor(() => expect(screen.queryByRole('status')).toBeNull())
   })
 })

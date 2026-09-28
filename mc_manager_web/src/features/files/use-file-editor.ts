@@ -1,7 +1,7 @@
 /**
  * useFileEditor —— 编辑器内容状态管理外提（自 files-page.tsx 迁出，纯移动零行为变更）
  * - draft 组件 state 与 query 缓存隔离；originalRef 为已加载/已保存基线
- * - 内容加载完成 → 同步 draft 与基线；二进制文件深链接守卫（feat-9）
+ * - 内容加载完成 → 同步 draft 与基线；二进制文件深链接守卫
  * - 保存竞态守卫（useSnapshotSave）：连续快速保存只有最后一次结果被采纳
  * - restoreDraft：编辑器「还原」按钮（基线存在才可恢复）
  */
@@ -68,7 +68,7 @@ export function useFileEditor({
   const dirty = selectedPath !== null && draft !== originalRef.current
 
   /**
-   * 二进制文件深链接守卫（feat-9）：URL ?file=/world/level.dat 直达二进制时，
+   * 二进制文件深链接守卫：URL ?file=/world/level.dat 直达二进制时，
    * 文本编辑器本就打不开（服务端 40006），主动清选择并提示改用下载，
    * 避免“编辑器 + 报错”的误导态。
    */

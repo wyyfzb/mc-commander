@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { toast } from 'sonner'
 import { getFriendlyErrorText } from '@/api/errors'
+import { formatDateTime } from '@/lib/format'
 import { queryKeys } from '@/api/queries'
 import { usePlayerBans } from '../queries'
 import type { BanRecord } from '@/api/types'
@@ -31,7 +32,12 @@ interface BanRecordsDialogProps {
   onAction: (req: PlayerActionRequest) => Promise<void>
 }
 
-export function BanRecordsDialog({ instanceId, open, onOpenChange, onAction }: BanRecordsDialogProps) {
+export function BanRecordsDialog({
+  instanceId,
+  open,
+  onOpenChange,
+  onAction,
+}: BanRecordsDialogProps) {
   const queryClient = useQueryClient()
   const { data: bans, isLoading, isError } = usePlayerBans(instanceId, open)
   const [pardonTarget, setPardonTarget] = useState<BanRecord | null>(null)
@@ -44,7 +50,11 @@ export function BanRecordsDialog({ instanceId, open, onOpenChange, onAction }: B
     setPardonTarget(null)
     setRunning(true)
     try {
-      await onAction({ kind: 'pardonTarget', playerName: target.target, targetType: target.targetType })
+      await onAction({
+        kind: 'pardonTarget',
+        playerName: target.target,
+        targetType: target.targetType,
+      })
       toast.success(`已解封 ${target.target}`)
       await queryClient.invalidateQueries({ queryKey: [...queryKeys.players(instanceId), 'bans'] })
     } catch (e) {
@@ -65,17 +75,17 @@ export function BanRecordsDialog({ instanceId, open, onOpenChange, onAction }: B
 
           <div className="max-h-[60vh] min-h-40 overflow-y-auto">
             {isLoading ? (
-              <div className="flex h-40 items-center justify-center text-mcs-text-subtle">
+              <div className="flex h-40 items-center justify-center text-mcs-text-muted">
                 <Loader2 className="size-5 animate-spin" aria-hidden />
               </div>
             ) : isError ? (
               <div className="flex h-40 flex-col items-center justify-center gap-2">
-                <p className="text-mcs-sm text-mcs-text-subtle">封禁记录加载失败，请稍后重试</p>
+                <p className="text-mcs-sm text-mcs-text-muted">封禁记录加载失败，请稍后重试</p>
               </div>
             ) : bans === undefined || bans.length === 0 ? (
               <div className="flex h-40 flex-col items-center justify-center gap-2">
                 <CheckCircle2 className="size-9 text-mcs-success-fg" aria-hidden />
-                <p className="text-mcs-sm text-mcs-text-subtle">暂无封禁记录</p>
+                <p className="text-mcs-sm text-mcs-text-muted">暂无封禁记录</p>
               </div>
             ) : (
               <div className="flex flex-col">
@@ -86,12 +96,20 @@ export function BanRecordsDialog({ instanceId, open, onOpenChange, onAction }: B
                   >
                     {ban.targetType === 'ip' ? (
                       <Globe
-                        className={ban.isActive ? 'size-5 shrink-0 text-mcs-error-fg' : 'size-5 shrink-0 text-mcs-text-subtle'}
+                        className={
+                          ban.isActive
+                            ? 'size-5 shrink-0 text-mcs-error-fg'
+                            : 'size-5 shrink-0 text-mcs-text-muted'
+                        }
                         aria-hidden
                       />
                     ) : (
                       <User
-                        className={ban.isActive ? 'size-5 shrink-0 text-mcs-error-fg' : 'size-5 shrink-0 text-mcs-text-subtle'}
+                        className={
+                          ban.isActive
+                            ? 'size-5 shrink-0 text-mcs-error-fg'
+                            : 'size-5 shrink-0 text-mcs-text-muted'
+                        }
                         aria-hidden
                       />
                     )}
@@ -99,14 +117,21 @@ export function BanRecordsDialog({ instanceId, open, onOpenChange, onAction }: B
                       <div className="text-mcs-sm font-semibold text-mcs-text-default">
                         {ban.targetType === 'ip' ? `${ban.target} (IP)` : ban.target}
                       </div>
-                      <div className="truncate text-mcs-xs text-mcs-text-subtle">{ban.reason || '无原因'}</div>
+                      <div className="truncate text-mcs-xs text-mcs-text-muted">
+                        {ban.reason || '无原因'}
+                      </div>
                     </div>
                     <div className="flex shrink-0 flex-col items-end">
                       <BanStatus ban={ban} />
                       <BanTimeText ban={ban} />
                     </div>
                     {ban.isActive && (
-                      <Button variant="outline" size="xs" disabled={running} onClick={() => setPardonTarget(ban)}>
+                      <Button
+                        variant="outline"
+                        size="xs"
+                        disabled={running}
+                        onClick={() => setPardonTarget(ban)}
+                      >
                         解封
                       </Button>
                     )}
@@ -144,7 +169,7 @@ export function BanRecordsDialog({ instanceId, open, onOpenChange, onAction }: B
 /** 状态文本与配色 */
 function BanStatus({ ban }: { ban: BanRecord }) {
   const cls = (color: string) => `text-mcs-xs font-semibold ${color}`
-  if (!ban.isActive) return <span className={cls('text-mcs-text-subtle')}>已解封</span>
+  if (!ban.isActive) return <span className={cls('text-mcs-text-muted')}>已解封</span>
   if (ban.isPermanent) return <span className={cls('text-mcs-error-fg')}>永久封禁</span>
   if (ban.expiresAt !== null) {
     // 渲染期取当前时间为可接受权衡：剩余时间精度到分钟、随列表数据刷新自然更新，非实时倒计时
@@ -154,8 +179,17 @@ function BanStatus({ ban }: { ban: BanRecord }) {
     const days = Math.floor(remain / 86_400_000)
     const hours = Math.floor((remain % 86_400_000) / 3_600_000)
     const minutes = Math.floor((remain % 3_600_000) / 60_000)
-    if (days >= 1) return <span className={cls('text-mcs-warning-fg')}>剩{days}天{hours}小时</span>
-    return <span className={cls('text-mcs-warning-fg')}>剩{hours}小时{minutes}分</span>
+    if (days >= 1)
+      return (
+        <span className={cls('text-mcs-warning-fg')}>
+          剩{days}天{hours}小时
+        </span>
+      )
+    return (
+      <span className={cls('text-mcs-warning-fg')}>
+        剩{hours}小时{minutes}分
+      </span>
+    )
   }
   return <span className={cls('text-mcs-warning-fg')}>临时封禁</span>
 }
@@ -166,12 +200,14 @@ function BanTimeText({ ban }: { ban: BanRecord }) {
     const t = new Date(ban.expiresAt)
     const two = (v: number) => String(v).padStart(2, '0')
     return (
-      <span className="text-mcs-xs text-mcs-text-subtle">
+      <span className="text-mcs-xs text-mcs-text-muted">
         到期 {two(t.getMonth() + 1)}-{two(t.getDate())} {two(t.getHours())}:{two(t.getMinutes())}
       </span>
     )
   }
-  return ban.createdAt.length >= 16 ? (
-    <span className="text-mcs-xs text-mcs-text-subtle">封禁于 {ban.createdAt.substring(0, 16)}</span>
-  ) : null
+  // 服务端下发 ISO8601（带 Z），按本地时区格式化；此前直接截断原串，展示的是 UTC 墙上时间
+  if (!ban.createdAt) return null
+  return (
+    <span className="text-mcs-xs text-mcs-text-muted">封禁于 {formatDateTime(ban.createdAt)}</span>
+  )
 }

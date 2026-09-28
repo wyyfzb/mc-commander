@@ -30,7 +30,7 @@ const { jsonImpl, streamImpl } = vi.hoisted(() => ({
 vi.mock('got', () => ({
   default: Object.assign(
     vi.fn(() => ({ json: () => jsonImpl.current() })),
-    { stream: vi.fn(() => streamImpl.current()) }
+    { stream: vi.fn(() => streamImpl.current()) },
   ),
 }));
 
@@ -87,7 +87,6 @@ function createMockInstance(overrides = {}) {
   return {
     id: 'inst-1',
     name: 'Test Server',
-    status: 'stopped',
     mcVersion: '1.20.4',
     jarFile: 'server-1.20.4.jar',
     serverPath: tmpDir,
@@ -138,10 +137,12 @@ function streamSucceeds({ data = 'NEW_JAR_CONTENT' } = {}) {
 /** 首启即 crash 的实例桩（触发 verify 失败 → 回滚） */
 function startEmitsCrash() {
   return vi.fn(() => {
-    queueMicrotask(() => serverManagerRef.current.emit('instance:status', {
-      instanceId: 'inst-1',
-      event: 'crash',
-    }));
+    queueMicrotask(() =>
+      serverManagerRef.current.emit('instance:status', {
+        instanceId: 'inst-1',
+        event: 'crash',
+      }),
+    );
   });
 }
 
@@ -175,7 +176,7 @@ describe('回滚终态三者自洽（#539 核心行为）', () => {
     fs.writeFileSync(OLD_JAR(), 'OLD_JAR_CONTENT');
 
     await expect(service.upgrade('inst-1', '1.21.4', 'purpur')).rejects.toThrow(
-      'Server crashed during startup verification'
+      'Server crashed during startup verification',
     );
 
     // DB：replace 写新名新版本 → 回滚回写旧名旧版本（最后一次调用=回滚回写）
@@ -186,9 +187,7 @@ describe('回滚终态三者自洽（#539 核心行为）', () => {
     });
 
     // 磁盘：旧 jar 本体唯一且内容=备份旧内容；错位副本（新名 jar）已删
-    expect(fs.readdirSync(tmpDir).filter((f) => f.endsWith('.jar'))).toEqual([
-      'server-1.20.4.jar',
-    ]);
+    expect(fs.readdirSync(tmpDir).filter((f) => f.endsWith('.jar'))).toEqual(['server-1.20.4.jar']);
     expect(fs.readFileSync(OLD_JAR(), 'utf8')).toBe('OLD_JAR_CONTENT');
     // 临时回滚源副本清零（await 语义：reject 时已不在磁盘）
     expect(fs.readdirSync(tmpDir).some((f) => f.startsWith('._upgrade_backup_'))).toBe(false);
@@ -218,9 +217,7 @@ describe('阶段 3 前失败：jarFile 未切换', () => {
       return stream;
     };
 
-    await expect(service.upgrade('inst-1', '1.21.4', 'purpur')).rejects.toThrow(
-      /download failed/
-    );
+    await expect(service.upgrade('inst-1', '1.21.4', 'purpur')).rejects.toThrow(/download failed/);
 
     // 旧 jar 本体原样保留（未被错位清理波及）
     expect(fs.readFileSync(OLD_JAR(), 'utf8')).toBe('OLD_JAR_CONTENT');
@@ -247,7 +244,7 @@ describe('错位副本删除失败容忍', () => {
     vi.spyOn(fs.promises, 'unlink').mockRejectedValue(new Error('EBUSY: resource busy'));
 
     await expect(service.upgrade('inst-1', '1.21.4', 'purpur')).rejects.toThrow(
-      'Server crashed during startup verification'
+      'Server crashed during startup verification',
     );
 
     // 删除失败被吞掉（错位副本/临时副本可能残留），但回滚核心语义完成

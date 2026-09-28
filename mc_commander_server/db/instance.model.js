@@ -1,4 +1,5 @@
 import { getDb } from './database.js';
+import { toIsoUtc } from '../utils/db-time.js';
 
 const COLUMN_TO_FIELD = {
   id: 'id',
@@ -19,7 +20,7 @@ const COLUMN_TO_FIELD = {
   total_uptime: 'totalUptime',
   jvm_args: 'jvmArgs',
   created_at: 'createdAt',
-  updated_at: 'updatedAt'
+  updated_at: 'updatedAt',
 };
 
 const FIELD_TO_COLUMN = {
@@ -38,7 +39,7 @@ const FIELD_TO_COLUMN = {
   autoStart: 'auto_start',
   autoRestart: 'auto_restart',
   totalUptime: 'total_uptime',
-  jvmArgs: 'jvm_args'
+  jvmArgs: 'jvm_args',
 };
 
 function capitalizeFirst(s) {
@@ -53,6 +54,10 @@ function rowToInstance(row) {
       let value = row[col];
       if ((col === 'auto_start' || col === 'auto_restart') && value !== null) {
         value = Boolean(value);
+      }
+      // created_at/updated_at 是 CURRENT_TIMESTAMP 的无时区 UTC 串，下发前归一化
+      if (col === 'created_at' || col === 'updated_at') {
+        value = toIsoUtc(value);
       }
       // jvm_args 存 JSON 数组文本，损坏/非法时回退 null（安全方向：不启动
       // 恶意参数，由服务层校验兜底）
@@ -75,11 +80,26 @@ export class InstanceModel {
     const modLoader = instanceData.type ? capitalizeFirst(instanceData.type) : 'Vanilla';
     const port = instanceData.port !== undefined ? instanceData.port : 25565;
 
+    // 窄列 upsert：整行覆盖（INSERT OR REPLACE）在 id 冲突时先删后插，未列出的列
+    // （description/status/start_command/auto_start/auto_restart/total_uptime/
+    // jvm_args）会被静默清空或重置、created_at 被重置；这些列只由 update() 维护，
+    // create() 一律不得回退它们。范式与 db/admin.model.js 的窄列 UPDATE 一致。
     db.prepare(`
-      INSERT OR REPLACE INTO instances (
+      INSERT INTO instances (
         id, name, mod_loader, jar_file, java_path, max_memory, min_memory,
         server_path, mc_version, port
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        name = excluded.name,
+        mod_loader = excluded.mod_loader,
+        jar_file = excluded.jar_file,
+        java_path = excluded.java_path,
+        max_memory = excluded.max_memory,
+        min_memory = excluded.min_memory,
+        server_path = excluded.server_path,
+        mc_version = excluded.mc_version,
+        port = excluded.port,
+        updated_at = CURRENT_TIMESTAMP
     `).run(
       instanceData.id,
       instanceData.name,
@@ -90,7 +110,7 @@ export class InstanceModel {
       instanceData.minMemory || '1G',
       instanceData.serverPath || null,
       instanceData.mcVersion || null,
-      port
+      port,
     );
 
     return instanceData.id;
@@ -146,7 +166,9 @@ export class InstanceModel {
   /// 累加实例的累计运行时长（秒），在服务器停止时调用
   static addUptime(id, seconds) {
     const db = getDb();
-    db.prepare('UPDATE instances SET total_uptime = total_uptime + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(Math.floor(seconds), id);
+    db.prepare(
+      'UPDATE instances SET total_uptime = total_uptime + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+    ).run(Math.floor(seconds), id);
     return this.getById(id);
   }
 

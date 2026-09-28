@@ -6,9 +6,24 @@
  */
 import { useQuery } from '@tanstack/react-query'
 import { apiGet } from './client'
+import { fetchAuthCapabilities } from './auth'
 import { useConnectionStore } from '@/stores/connection'
-import type { InstanceStatus, InstanceSummary, LogEntry, OverviewData, SystemStats, UpdateCheckResult } from './types'
+import { useAuthStore } from '@/stores/auth'
+import type {
+  InstanceStatus,
+  InstanceSummary,
+  LogEntry,
+  OverviewData,
+  SystemStats,
+  UpdateCheckResult,
+} from './types'
 import { apiGetAuditLogsPage, apiGetCommandHistoryPage, type AuditQueryParams } from './audit'
+
+/**
+ * WS 断开时的保底轮询间隔（毫秒）。单一事实源：degradation-banners 的
+ * 「每 N 秒」文案由此拼接——两处各自写死曾导致横幅长期谎报 5s（实际 30s）
+ */
+export const FALLBACK_POLL_INTERVAL_MS = 30_000
 
 // ── Query key 工厂（分层规范，防冲突）───────────────────────────
 export const queryKeys = {
@@ -17,6 +32,9 @@ export const queryKeys = {
   systemStats: () => [...queryKeys.all, 'system-stats'] as const,
   instances: () => [...queryKeys.all, 'instances'] as const,
   instance: (id: string) => [...queryKeys.all, 'instances', id] as const,
+  /** 部署进度兜底快照（单例查询：全局至多一条在途部署；置于 'deploy' 段下避免与
+   *  per-instance 的 ['mcs','instances',id] 前缀冲突——同名实例 id 会撞缓存条目） */
+  deployStatus: () => [...queryKeys.all, 'deploy', 'status'] as const,
   logs: (id: string) => [...queryKeys.all, 'logs', id] as const,
   players: (id: string, filters?: { q?: string; mode?: string }) =>
     [...queryKeys.all, 'players', id, filters ?? {}] as const,
@@ -32,12 +50,23 @@ export const queryKeys = {
   world: (id: string) => [...queryKeys.all, 'world', id] as const,
   properties: (id: string) => [...queryKeys.all, 'properties', id] as const,
   auditLogs: (params?: AuditQueryParams) => [...queryKeys.all, 'audit-logs', params ?? {}] as const,
-  commandHistory: (params?: AuditQueryParams) => [...queryKeys.all, 'command-history', params ?? {}] as const,
+  commandHistory: (params?: AuditQueryParams) =>
+    [...queryKeys.all, 'command-history', params ?? {}] as const,
   webhooks: () => [...queryKeys.all, 'webhooks'] as const,
   webhookDeliveries: (id: number) => [...queryKeys.all, 'webhooks', id, 'deliveries'] as const,
   checkUpdate: () => [...queryKeys.all, 'check-update'] as const,
   /** 管理员活跃会话列表（账号与安全面板，30s 轮询） */
   authSessions: () => [...queryKeys.all, 'auth-sessions'] as const,
+  /** 两步验证状态（账号与安全面板；挂靠/关闭成功后失效重取） */
+  totpStatus: () => [...queryKeys.all, 'totp-status'] as const,
+  /**
+   * 部署能力探测（当前仅 apiKeyEnabled）。按**面板身份**细分：能力属于面板而非本机，
+   * 换地址必须重取。凭据刻意不进 key——key 会进 devtools 与持久化缓存。
+   */
+  authCapabilities: (baseUrl: string, credential: string) =>
+    [...queryKeys.all, 'auth-capabilities', baseUrl, credential] as const,
+  /** 归档快照清点（全局面：不属于某个实例，卸载实例后遗留的快照都在这里） */
+  archivedSnapshots: () => [...queryKeys.all, 'archived-snapshots'] as const,
 }
 
 /** 面板概览（含云服务器系统级资源；未配置连接时禁用） */
@@ -47,7 +76,7 @@ export function useOverview() {
     queryKey: queryKeys.overview(),
     queryFn: ({ signal }) => apiGet<OverviewData>('/api/v1/overview', config, signal),
     enabled: config.status === 'ready',
-    refetchInterval: 30_000, // 轮询保底（与 WS 事件互补，设计文档 §5.2）
+    refetchInterval: FALLBACK_POLL_INTERVAL_MS, // 轮询保底（与 WS 事件互补，设计文档 §5.2）
   })
 }
 
@@ -58,7 +87,7 @@ export function useSystemStats() {
     queryKey: queryKeys.systemStats(),
     queryFn: ({ signal }) => apiGet<SystemStats>('/api/v1/system-stats', config, signal),
     enabled: config.status === 'ready',
-    refetchInterval: 30_000,
+    refetchInterval: FALLBACK_POLL_INTERVAL_MS,
     staleTime: 30_000,
   })
 }
@@ -71,7 +100,7 @@ export function useInstanceStatus(instanceId: string | null) {
     queryFn: ({ signal }) =>
       apiGet<InstanceStatus>(`/api/v1/instances/${instanceId}`, config, signal),
     enabled: config.status === 'ready' && Boolean(instanceId),
-    refetchInterval: 30_000,
+    refetchInterval: FALLBACK_POLL_INTERVAL_MS,
   })
 }
 
@@ -80,10 +109,9 @@ export function useInstances() {
   const config = useConnectionStore()
   return useQuery({
     queryKey: queryKeys.instances(),
-    queryFn: ({ signal }) =>
-      apiGet<InstanceSummary[]>(`/api/v1/instances`, config, signal),
+    queryFn: ({ signal }) => apiGet<InstanceSummary[]>(`/api/v1/instances`, config, signal),
     enabled: config.status === 'ready',
-    refetchInterval: 30_000,
+    refetchInterval: FALLBACK_POLL_INTERVAL_MS,
   })
 }
 
@@ -130,4 +158,46 @@ export function useCheckUpdate() {
     enabled: config.status === 'ready',
     staleTime: 3_600_000,
   })
+}
+
+/**
+ * 部署能力探测：服务端 API Key 通道是否开放（`GET /auth/capabilities`）。
+ *
+ * 为什么不吃 store 而由调用方传面板地址与 API Key：连接表单在**保存前**就要判定能力，
+ * 而这一刻 store 里还是旧地址/旧凭据——用表单草稿值才能让用户填完 Key 后立刻看到真结果。
+ * 地址应由调用方给**停止输入后落定**的值（连接表单用 useDebouncedValue）：每个中间态都是新的
+ * query key，落定是让请求数从「按键数」回到 1 的必要条件。请求数上限即按键数——27 字符的地址
+ * 最坏 27 发；门槛又挡掉 scheme 之前的中间态（`h`…`https://` 共 8 个）→ 实发 19 发。
+ * 门槛另担一项独占职责：空地址不发请求（见 isFetchableBaseUrl）。
+ *
+ * `credential` 只参与 query key（用于换凭据后重取），不进请求配置——请求凭据由 apiRequest
+ * 按双通道规则注入（会话优先）。
+ *
+ * `retry: false`：探测失败最多两类——地址不对（网络错误）或凭据还不对（401），
+ * 两者都不会因重试变好，每次落定最多打一发，不在用户输入过程中放大失败流量。
+ */
+export function useApiKeyCapabilities(baseUrl: string, credential: string, signal?: AbortSignal) {
+  const session = useAuthStore((s) => s.session)
+  return useQuery({
+    queryKey: queryKeys.authCapabilities(baseUrl, credential || session?.token || ''),
+    queryFn: () => fetchAuthCapabilities({ baseUrl, apiKey: credential }, signal),
+    enabled: (Boolean(credential) || Boolean(session?.token)) && isFetchableBaseUrl(baseUrl),
+    staleTime: 5 * 60_000,
+    retry: false,
+  })
+}
+
+/** 面板地址是否已落定到可请求形态（空串与输入中间态都不发探测请求） */
+function isFetchableBaseUrl(baseUrl: string): boolean {
+  // 空串 = 同源（onboarding 与 dev 的默认形态）。刻意不探测：那是「还没指明面板」的状态，
+  // 请求会打到本机 origin 并让 client 把「令牌被该地址接受」回填成会话的签发面板
+  // （backfillSessionPanel），把一个尚未选定的默认值钉成面板身份。
+  if (baseUrl === '') return false
+  if (!/^https?:\/\//.test(baseUrl)) return false
+  try {
+    // 无主机或主机里还夹着非法字符（`192.168.1.100:` 这类中间态）即判为草稿
+    return new URL(baseUrl).hostname !== ''
+  } catch {
+    return false
+  }
 }

@@ -1,5 +1,5 @@
 /**
- * 认证通道收口测试（S-P0-3 残留 + S-P1-4）
+ * 认证通道收口测试（残留）
  * ① 锁定键使用 socket.remoteAddress（不信任 X-Forwarded-For）
  * ② TRUST_PROXY 环境变量可配（默认 1）
  * ③ WS 心跳周期复验 sessionToken——踢出/过期后 close(1008)
@@ -61,6 +61,8 @@ vi.mock('../db/index.js', async (importOriginal) => {
 import { getDb } from '../db/index.js';
 import { AdminSessionModel } from '../db/index.js';
 import { setupWebSocket, WS_SESSION_REVALIDATE_INTERVAL } from '../websocket.js';
+import { authMiddleware } from '../middleware/auth.js';
+import { logger } from '../utils/logger.js';
 
 const TEST_API_KEY = 'test-api-key-for-unit-tests';
 const HEARTBEAT_MS = 30000;
@@ -211,5 +213,72 @@ describe('WS 心跳会话复验', () => {
   it('API Key 连接 _sessionToken 为 null（不触发复验）', () => {
     const ws = connectWithApiKey();
     expect(ws._sessionToken).toBeNull();
+  });
+});
+
+// ── ④ 401 认证失败补日志（此前认证失败全静默，爆破不可见）──
+
+describe('401 认证失败补日志', () => {
+  const next = vi.fn();
+  const IP = '203.0.113.9';
+
+  function makeReq(headers) {
+    return { headers, path: '/v1/instances', socket: { remoteAddress: IP } };
+  }
+
+  function makeRes() {
+    const res = {};
+    res.status = vi.fn(() => res);
+    res.json = vi.fn();
+    return res;
+  }
+
+  beforeEach(() => {
+    vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    vi.spyOn(logger, 'debug').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('无效 API Key → warn（含 ip/path，不含凭据本体）', () => {
+    // 无效键由测试键派生（不写第二份凭据字面量）；日志断言同时锁「凭据本体永不入日志」
+    const invalidKey = `${TEST_API_KEY}-wrong`;
+    const res = makeRes();
+    authMiddleware(makeReq({ 'x-api-key': invalidKey }), res, next);
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('invalid API key'));
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining(IP));
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('/v1/instances'));
+    expect(logger.warn).not.toHaveBeenCalledWith(expect.stringContaining(invalidKey));
+  });
+
+  it('完全缺失凭据 → warn', () => {
+    const res = makeRes();
+    authMiddleware(makeReq({}), res, next);
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('missing credentials'));
+  });
+
+  it('未知会话令牌 → warn（已登出/伪造令牌复用属攻击信号）', () => {
+    vi.spyOn(AdminSessionModel, 'findByTokenHash').mockReturnValue(null);
+    const res = makeRes();
+    authMiddleware(makeReq({ authorization: 'Bearer some-unknown-token' }), res, next);
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('unknown session token'));
+  });
+
+  it('会话正常过期 → debug（生命周期事件，客户端自动重登，不作攻击告警）', () => {
+    vi.spyOn(AdminSessionModel, 'findByTokenHash').mockReturnValue({
+      id: 'sess-1',
+      expires_at: new Date(Date.now() - 1000).toISOString(),
+    });
+    vi.spyOn(AdminSessionModel, 'deleteById').mockImplementation(() => true);
+    const res = makeRes();
+    authMiddleware(makeReq({ authorization: 'Bearer expired-token' }), res, next);
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('session expired'));
+    expect(logger.warn).not.toHaveBeenCalled();
   });
 });

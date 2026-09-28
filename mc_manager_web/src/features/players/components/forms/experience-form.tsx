@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input'
 import { CommandPreview } from '@/components/mcs/command-preview'
 import { LoadingButton } from '@/components/mcs/loading-button'
 import { Label } from '@/components/ui/label'
+import { useRadioGroup } from '@/hooks/use-radio-group'
 import { formatBatchSummary, formatFailureDetails, runBatchForTargets } from '@/lib/mc-batch'
 import type { ActionFormProps } from './types'
 import { OfflineBanner } from './offline-banner'
@@ -18,13 +19,41 @@ import { OfflineBanner } from './offline-banner'
 const XP_QUICK_AMOUNTS = [1, 10, 30, 50, 100, 500, 1000]
 const XP_QUICK_LEVELS = [1, 5, 10, 20, 30]
 
-export function ExperienceForm({ player, batchTargets, isBatchMode, isRconConnected, onAction }: ActionFormProps) {
+export function ExperienceForm({
+  player,
+  batchTargets,
+  isBatchMode,
+  isRconConnected,
+  onAction,
+}: ActionFormProps) {
   const [mode, setMode] = useState<'points' | 'levels'>('points')
   const [amount, setAmount] = useState('10')
   const [action, setAction] = useState<'add' | 'set' | 'remove'>('add')
   const [loading, setLoading] = useState(false)
 
   const numAmount = Number(amount) || 0
+
+  // 类型/操作/快捷数值都是互斥单选：语义与方向键由 hook 统一提供
+  // （快捷数值是「填数按钮」，用户手输其它值时无选中——合法的无选中态）
+  const modeGroup = useRadioGroup<'points' | 'levels'>({
+    label: '类型',
+    value: mode,
+    values: ['points', 'levels'],
+    onChange: setMode,
+  })
+  const actionGroup = useRadioGroup<'add' | 'set' | 'remove'>({
+    label: '操作',
+    value: action,
+    values: ['add', 'set', 'remove'],
+    onChange: setAction,
+  })
+  const quickAmountValues = (mode === 'levels' ? XP_QUICK_LEVELS : XP_QUICK_AMOUNTS).map(String)
+  const quickAmountGroup = useRadioGroup<string>({
+    label: mode === 'levels' ? '快捷等级' : '快捷经验值',
+    value: amount,
+    values: quickAmountValues,
+    onChange: setAmount,
+  })
 
   function buildCommand(targetName: string): string {
     if (action === 'set') {
@@ -53,7 +82,9 @@ export function ExperienceForm({ player, batchTargets, isBatchMode, isRconConnec
         const results = await runBatchForTargets({
           targets: batchTargets,
           requireOnline: true,
-          execute: async (p) => { await onAction({ kind: 'command', command: buildCommand(p.name) }) },
+          execute: async (p) => {
+            await onAction({ kind: 'command', command: buildCommand(p.name) })
+          },
         })
         toast.success(formatBatchSummary('给予经验', results), {
           description: formatFailureDetails(results),
@@ -67,7 +98,10 @@ export function ExperienceForm({ player, batchTargets, isBatchMode, isRconConnec
     }
   }
 
-  const canExecute = isRconConnected && numAmount > 0 && (!isBatchMode ? player?.isOnline : batchTargets.some((p) => p.isOnline))
+  const canExecute =
+    isRconConnected &&
+    numAmount > 0 &&
+    (!isBatchMode ? player?.isOnline : batchTargets.some((p) => p.isOnline))
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -75,24 +109,24 @@ export function ExperienceForm({ player, batchTargets, isBatchMode, isRconConnec
 
       {/* 模式切换 */}
       <div className="space-y-1.5">
-        <Label className="text-mcs-xs text-mcs-text-subtle">类型</Label>
-        <div className="flex gap-1.5">
+        <Label className="text-mcs-xs text-mcs-text-muted">类型</Label>
+        <div className="flex gap-1.5" {...modeGroup.groupProps}>
           <Button
             type="button"
-            variant={mode === 'points' ? 'default' : 'outline'}
+            variant={mode === 'points' ? 'selected' : 'outline'}
             size="sm"
+            {...modeGroup.itemProps(0)}
             onClick={() => setMode('points')}
-            aria-pressed={mode === 'points'}
             className="text-mcs-xs"
           >
             经验值
           </Button>
           <Button
             type="button"
-            variant={mode === 'levels' ? 'default' : 'outline'}
+            variant={mode === 'levels' ? 'selected' : 'outline'}
             size="sm"
+            {...modeGroup.itemProps(1)}
             onClick={() => setMode('levels')}
-            aria-pressed={mode === 'levels'}
             className="text-mcs-xs"
           >
             等级
@@ -102,16 +136,22 @@ export function ExperienceForm({ player, batchTargets, isBatchMode, isRconConnec
 
       {/* 操作 */}
       <div className="space-y-1.5">
-        <Label className="text-mcs-xs text-mcs-text-subtle">操作</Label>
-        <div className="flex gap-1.5">
-          {([['add', '给予'], ['set', '设置'], ['remove', '移除']] as const).map(([act, label]) => (
+        <Label className="text-mcs-xs text-mcs-text-muted">操作</Label>
+        <div className="flex gap-1.5" {...actionGroup.groupProps}>
+          {(
+            [
+              ['add', '给予'],
+              ['set', '设置'],
+              ['remove', '移除'],
+            ] as const
+          ).map(([act, label], index) => (
             <Button
               key={act}
               type="button"
-              variant={action === act ? 'default' : 'outline'}
+              variant={action === act ? 'selected' : 'outline'}
               size="sm"
+              {...actionGroup.itemProps(index)}
               onClick={() => setAction(act)}
-              aria-pressed={action === act}
               className="text-mcs-xs"
             >
               {label}
@@ -122,7 +162,7 @@ export function ExperienceForm({ player, batchTargets, isBatchMode, isRconConnec
 
       {/* 数值 */}
       <div className="space-y-1.5">
-        <Label className="text-mcs-xs text-mcs-text-subtle">
+        <Label className="text-mcs-xs text-mcs-text-muted">
           {mode === 'levels' ? '等级数' : '经验值'}
         </Label>
         <Input
@@ -131,20 +171,20 @@ export function ExperienceForm({ player, batchTargets, isBatchMode, isRconConnec
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
           placeholder={mode === 'levels' ? '输入等级' : '输入经验值'}
-          className="h-8 text-mcs-sm"
         />
-        <div className="flex flex-wrap gap-1">
-          {(mode === 'levels' ? XP_QUICK_LEVELS : XP_QUICK_AMOUNTS).map((v) => (
+        <div className="flex flex-wrap gap-1" {...quickAmountGroup.groupProps}>
+          {(mode === 'levels' ? XP_QUICK_LEVELS : XP_QUICK_AMOUNTS).map((v, index) => (
             <Button
               key={v}
               type="button"
               variant="outline"
               size="sm"
               className="h-6 px-2 text-mcs-2xs"
+              {...quickAmountGroup.itemProps(index)}
               onClick={() => setAmount(String(v))}
-              aria-pressed={amount === String(v)}
             >
-              {v}{mode === 'levels' ? 'L' : ''}
+              {v}
+              {mode === 'levels' ? 'L' : ''}
             </Button>
           ))}
         </div>

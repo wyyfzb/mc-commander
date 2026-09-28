@@ -1,0 +1,54 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  // 服务端 lint 配置（2026-09-19 由 eslint 迁入 oxlint，全仓一套 linter）。
+  // 规则面＝原 eslint 配置（js.configs.recommended + 6 条显式规则）的等价物，
+  // 逐条对照与差异如下：
+  //   js.configs.recommended  → categories.correctness 档 + 下方 6 条补丁规则
+  //     （correctness 档与 eslint:recommended 并非集合相等：漏 8 条、多 8 条。
+  //      8 条遗漏里 6 条 oxlint 有实现但分在 Pedantic/Suspicious/Restriction 档，
+  //      故显式补上；另 2 条 no-dupe-args / no-octal oxlint 无实现——本仓全 ESM
+  //      （模块即严格模式）下二者属解析期错误，由 oxlint 解析器直接拦截，无需规则）
+  //   no-unused-vars(+^_ 忽略) → 同名同参；oxlint 的 args 默认口径比 eslint 的
+  //     after-used 更严（(cmd, ...rest) 这类「首参未用、后续参数在用」eslint 不报、
+  //     oxlint 报），故 8 处 mock 签名按仓库惯例改为 _cmd
+  //   no-undef / no-empty(allowEmptyCatch) / no-constant-condition(checkLoops:false)
+  //   / eqeqeq(warn, smart) / no-console  → 同名同参（severity 亦保持）
+  // plugins 只留 oxc：显式声明会替换 oxlint 默认插件集（默认 typescript+unicorn+oxc，
+  //   共 111 条启用）；被关掉的 unicorn 13 条在 oxlint 表中属 Correctness 档，
+  //   相对旧 eslint 面并非「丢失」（unicorn 原本未启用），但本仓刻意不在此次迁移里
+  //   夹带规则扩张——若要启用应作为独立决策评估其 13 条建议
+  // env.node 预置 process/Buffer 等 Node 全局，避免 no-undef 误报
+  // 已知与旧 eslint 的两处机制差异（今日无影响，登记备查）：
+  //   ① oxlint 遵循 .gitignore（旧 flat-config eslint 不遵循）：放进被忽略目录的
+  //      调试脚本会逃逸 lint——调试残留请仍按纪律放 .ai/temp/ 或及时清理
+  //   ② 旧配置的 sourceType:'module' 无对应物（oxlint 顶层无该选项），改由文件内
+  //      有无 import/export 推断严格模式；本仓 221 个文件全含 import/export
+  // 存量 `// eslint-disable` 注释无需改写：oxlint 同时识别 eslint- 与 oxlint- 前缀
+  "plugins": ["oxc"],
+  "env": { "node": true, "es2024": true },
+  // 与旧 eslint 配置的 ignores 等价：运行时数据/备份/构建投放目录不参与 lint
+  "ignorePatterns": [
+    "node_modules/**",
+    "servers/**",
+    "backups/**",
+    "data/**",
+    "coverage/**",
+    "public/**"
+  ],
+  "categories": { "correctness": "error" },
+  "rules": {
+    "no-unused-vars": ["error", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
+    "no-undef": "error",
+    "no-empty": ["error", { "allowEmptyCatch": true }],
+    "no-constant-condition": ["error", { "checkLoops": false }],
+    "eqeqeq": ["warn", "smart"],
+    "no-console": "error",
+    // ↓ 补 eslint:recommended 缺口（oxlint 有实现但不在 correctness 档的 6 条）
+    "no-case-declarations": "error",
+    "no-fallthrough": "error",
+    "no-prototype-builtins": "error",
+    "no-redeclare": "error",
+    "no-regex-spaces": "error",
+    "no-unexpected-multiline": "error"
+  }
+}

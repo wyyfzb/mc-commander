@@ -2,6 +2,8 @@ import { useMemo } from 'react'
 import { useNavigate } from 'react-router'
 import { ArrowRight, CheckCircle2, History, MoonStar, Play, Save } from 'lucide-react'
 import { StatusPill } from '@/components/mcs/status-pill'
+import { ListSkeleton } from '@/components/mcs/data-states'
+import { Card, CardHeader, CardTitle } from '@/components/mcs/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useServerStore } from '@/stores/server'
 import { formatRelativeTime, formatStartTime, formatUptime } from '@/lib/format'
@@ -15,7 +17,7 @@ import { cn } from '@/lib/utils'
 
 /** TPS 阈值（≥19 健康 / 15-19 卡顿 / <15 严重卡顿） */
 export function tpsColor(tps: number | null, isRunning: boolean): string {
-  if (!isRunning || tps == null) return 'text-mcs-text-subtle'
+  if (!isRunning || tps == null) return 'text-mcs-text-muted'
   if (tps >= 19) return 'text-mcs-success-fg'
   if (tps >= 15) return 'text-mcs-warning-fg'
   return 'text-mcs-error-fg'
@@ -24,7 +26,10 @@ export function tpsColor(tps: number | null, isRunning: boolean): string {
 /** status 未就绪时的稳定空数组（避免 ?? [] 每次渲染新建引用、污染下游 useMemo） */
 const NO_NAMES: string[] = []
 
-function Card({
+/** 仪表盘统计卡外壳：卡片面 + 标题行（eyebrow 为右上角角标）走 mcs/card 基座。
+ *  内距取紧凑卡档 p-3（而非标准卡 p-4）：顶排三卡是首屏固定占位，p-4 加 gap-3 会把
+ *  终端可见高度压到 388px（1440×900 实测）；行距 gap-2 仍落在 4px 刻度内。 */
+function StatCard({
   title,
   eyebrow,
   eyebrowClass,
@@ -38,18 +43,18 @@ function Card({
   children: React.ReactNode
 }) {
   return (
-    <section
-      className={cn(
-        'mcs-edge-top relative flex min-w-0 flex-1 flex-col gap-3 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted p-4 shadow-mcs-card',
-        className,
-      )}
+    <Card
+      size="compact"
+      className={cn('mcs-edge-top relative flex min-w-0 flex-1 flex-col gap-2', className)}
     >
-      <header className="flex items-center justify-between gap-2">
-        <h2 className="text-mcs-sm font-medium text-mcs-text-muted">{title}</h2>
+      <CardHeader className="justify-between gap-2">
+        <CardTitle as="h2" variant="label">
+          {title}
+        </CardTitle>
         {eyebrow && <span className={cn('text-mcs-xs', eyebrowClass)}>{eyebrow}</span>}
-      </header>
+      </CardHeader>
       {children}
-    </section>
+    </Card>
   )
 }
 
@@ -67,19 +72,25 @@ export function BigStatCards({
   const tps = status?.tps ?? null
   const healthy = isRunning && (tps ?? 0) >= 19
 
-  const cpu = systemStats?.cpuUsage ?? status?.cpuUsage ?? 0
-  const memUsed = systemStats?.memoryUsage ?? status?.memoryUsage ?? 0
-  const memTotal = systemStats?.totalMemory ?? status?.totalMemory ?? 0
+  // 本卡是**整机**资源口径：实例状态里的 memoryUsage 是进程 RSS、cpuUsage 是进程 CPU%，
+  // 与整机口径不同源，不能互为后备（混用会得出「进程内存 / 整机总量」这类失真比例）。
+  // 整机数据未到时如实留空，由渲染层给「暂无数据」——与磁盘行既有做法一致。
+  const cpu = systemStats?.cpuUsage ?? null
+  const memUsed = systemStats?.memoryUsage ?? null
+  const memTotal = systemStats?.totalMemory ?? null
   const cores = systemStats?.cpuCores
-  const memPct = systemStats?.memoryPercent ?? (memTotal > 0 ? (memUsed / memTotal) * 100 : 0)
+  // 无数据时保持 null（不是 0）：0 会被进度条与读屏当成「占用 0%」播报，与「暂无数据」冲突
+  const hasMem = memUsed != null && memTotal != null
+  const memPct = hasMem ? (systemStats?.memoryPercent ?? (memUsed / memTotal) * 100) : null
   const diskUsage = systemStats?.diskUsage
   const primary = diskUsage?.primary ?? null
 
   // B17 首屏骨架：单卡同构占位（标题条 + 三行进度条）
   if (isLoading) {
     return (
-      <section
-        className="animate-mcs-fade-up mcs-delay-2 mcs-edge-top relative flex min-w-0 flex-col gap-3 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted p-4 shadow-mcs-card"
+      <Card
+        size="compact"
+        className="animate-mcs-fade-up mcs-delay-2 mcs-edge-top relative flex min-w-0 flex-col gap-2"
         aria-label="统计加载中"
         role="status"
       >
@@ -90,12 +101,12 @@ export function BigStatCards({
             <Skeleton className="h-1.5 w-full" />
           </div>
         ))}
-      </section>
+      </Card>
     )
   }
 
   return (
-    <Card
+    <StatCard
       title="资源使用"
       className="animate-mcs-fade-up mcs-delay-2"
       eyebrow={
@@ -105,10 +116,12 @@ export function BigStatCards({
               <CheckCircle2 className="size-3.5" aria-hidden />
               {healthy ? '健康' : '卡顿'}
             </StatusPill>
-            <span className={cn('mcs-num text-mcs-md leading-none', tpsColor(tps, isRunning))}>
+            {/* TPS 是卡级关键数字（Grafana 三段式：小标签 + 大数 + 后缀）：
+                数值占数字档 display，单位与状态词留在小档，不随数字放大 */}
+            <span className={cn('mcs-num text-mcs-display leading-none', tpsColor(tps, isRunning))}>
               {tps != null ? tps.toFixed(1) : '--'}
             </span>
-            <span className="text-mcs-2xs text-mcs-text-subtle">TPS</span>
+            <span className="text-mcs-lg text-mcs-text-muted">TPS</span>
           </span>
         ) : undefined
       }
@@ -116,46 +129,84 @@ export function BigStatCards({
       <div className="flex flex-col gap-3">
         <ResourceRow
           label="CPU"
-          eyebrow={cores ? <StatusPill tone="muted" className="text-mcs-2xs">{cores} 核</StatusPill> : undefined}
+          eyebrow={
+            cores ? (
+              <StatusPill tone="muted" className="text-mcs-2xs">
+                {cores} 核
+              </StatusPill>
+            ) : undefined
+          }
           value={
-            <>
-              {cpu.toFixed(1)}
-              <span className="text-mcs-sm font-medium text-mcs-text-subtle">%</span>
-            </>
+            cpu != null ? (
+              <>
+                {cpu.toFixed(1)}
+                <span className="text-mcs-sm font-medium text-mcs-text-muted">%</span>
+              </>
+            ) : (
+              <span className="font-sans text-mcs-sm font-medium text-mcs-text-muted">
+                暂无数据
+              </span>
+            )
           }
           percent={cpu}
+          barColor={cpu != null ? loadBarColor(cpu) : undefined}
         />
         <ResourceRow
           label="内存"
-          eyebrow={<StatusPill tone="muted" className="text-mcs-2xs">{memPct.toFixed(0)}%</StatusPill>}
-          value={
-            <>
-              {memUsed.toFixed(1)}
-              <span className="text-mcs-sm font-medium text-mcs-text-subtle"> / {memTotal.toFixed(0)}G</span>
-            </>
+          eyebrow={
+            memPct != null ? (
+              <StatusPill tone="muted" className="text-mcs-2xs">
+                {memPct.toFixed(0)}%
+              </StatusPill>
+            ) : undefined
           }
-          percent={memPct}
-        />
-        <ResourceRow
-          label="磁盘"
           value={
-            primary ? (
+            hasMem ? (
               <>
-                {primary.percent.toFixed(1)}
-                <span className="text-mcs-sm font-medium text-mcs-text-subtle">%</span>
-                <span className="ml-1 text-mcs-2xs font-normal text-mcs-text-subtle">
-                  {primary.usedGB}G / {primary.totalGB}G
+                {memUsed.toFixed(1)}
+                <span className="text-mcs-sm font-medium text-mcs-text-muted">
+                  {' '}
+                  / {memTotal.toFixed(0)}G
                 </span>
               </>
             ) : (
-              <span className="font-sans text-mcs-sm font-medium text-mcs-text-subtle">暂无磁盘数据</span>
+              <span className="font-sans text-mcs-sm font-medium text-mcs-text-muted">
+                暂无数据
+              </span>
             )
           }
-          percent={primary?.percent ?? 0}
-          barColor={primary ? diskBarColor(primary.percent) : undefined}
+          percent={memPct}
+          barColor={memPct != null ? loadBarColor(memPct) : undefined}
+        />
+        <ResourceRow
+          label="磁盘"
+          eyebrow={
+            primary ? (
+              <StatusPill tone="muted" className="text-mcs-2xs">
+                {primary.percent.toFixed(1)}%
+              </StatusPill>
+            ) : undefined
+          }
+          value={
+            primary ? (
+              <>
+                {primary.usedGB}
+                <span className="text-mcs-sm font-medium text-mcs-text-muted">
+                  {' '}
+                  / {primary.totalGB}G
+                </span>
+              </>
+            ) : (
+              <span className="font-sans text-mcs-sm font-medium text-mcs-text-muted">
+                暂无磁盘数据
+              </span>
+            )
+          }
+          percent={primary?.percent ?? null}
+          barColor={primary ? loadBarColor(primary.percent) : undefined}
         />
       </div>
-    </Card>
+    </StatCard>
   )
 }
 
@@ -170,10 +221,11 @@ function ResourceRow({
   label: string
   eyebrow?: React.ReactNode
   value: React.ReactNode
-  percent: number
+  /** null 表示无数据：此时不暴露进度语义（否则读屏播报「0%」，与「暂无数据」文案冲突） */
+  percent: number | null
   barColor?: string
 }) {
-  const p = Math.max(0, Math.min(100, percent))
+  const p = percent == null ? null : Math.max(0, Math.min(100, percent))
   return (
     <div>
       <div className="flex items-center justify-between gap-2">
@@ -181,16 +233,24 @@ function ResourceRow({
         {eyebrow}
         <span className="mcs-num text-mcs-lg leading-none">{value}</span>
       </div>
+      {/* 无数据时保留轨道（避免行高跳动）但不带语义，仅作装饰 */}
       <div
-        role="progressbar"
-        aria-valuenow={Math.round(p)}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-mcs-bg-emphasis"
+        {...(p == null
+          ? { 'aria-hidden': true }
+          : {
+              role: 'progressbar',
+              'aria-valuenow': Math.round(p),
+              'aria-valuemin': 0,
+              'aria-valuemax': 100,
+            })}
+        className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-mcs-bg-secondary"
       >
         <div
-          className="mcs-progress-sheen h-full rounded-full transition-[width] duration-mcs-base ease-mcs-snappy"
-          style={{ width: `${p}%`, background: barColor ?? 'var(--mcs-accent)' }}
+          className="mcs-progress-sheen h-full w-full rounded-full transition-transform duration-mcs-base ease-mcs-snappy"
+          style={{
+            transform: `translateX(${(p ?? 0) - 100}%)`,
+            background: barColor ?? 'var(--mcs-success-fg)',
+          }}
         />
       </div>
     </div>
@@ -201,7 +261,7 @@ function ResourceRow({
 /** 每列最多显示玩家数（Flutter 版 maxDisplay=3 同源），超出以 +N 汇总 */
 const MAX_COLUMN_ROWS = 3
 
-export function PlayersCard() {
+export function PlayersCard({ isLoading = false }: { isLoading?: boolean }) {
   const status = useServerStore((s) => s.status)
   const navigate = useNavigate()
   const isRunning = status?.isRunning ?? false
@@ -226,10 +286,10 @@ export function PlayersCard() {
     >
       <span
         className={cn(
-          'flex size-5 shrink-0 items-center justify-center rounded-full text-mcs-2xs font-bold',
+          'flex size-5 shrink-0 items-center justify-center rounded-full text-mcs-2xs font-semibold',
           isSleeping
             ? 'bg-mcs-info-bg-subtle text-mcs-info-fg'
-            : 'bg-mcs-accent-bg-subtle text-mcs-success-fg',
+            : 'bg-mcs-accent-bg-subtle text-mcs-accent-fg',
         )}
         aria-hidden
       >
@@ -256,12 +316,12 @@ export function PlayersCard() {
         <b className="tnum font-semibold">{count}</b>
       </div>
       {names.length === 0 ? (
-        <span className="pt-1 text-mcs-2xs text-mcs-text-subtle">—</span>
+        <span className="pt-1 text-mcs-2xs text-mcs-text-muted">—</span>
       ) : (
         <ol className="flex flex-col">
           {names.slice(0, MAX_COLUMN_ROWS).map((name) => renderPlayerRow(name, isSleeping))}
           {names.length > MAX_COLUMN_ROWS && (
-            <li className="px-1.5 py-0.5 text-mcs-2xs text-mcs-text-subtle">
+            <li className="px-1.5 py-0.5 text-mcs-2xs text-mcs-text-muted">
               +{names.length - MAX_COLUMN_ROWS}
             </li>
           )}
@@ -275,11 +335,15 @@ export function PlayersCard() {
     [sleepingNames, awakeNames],
   )
 
-  const body = !isRunning ? (
-    <p className="py-1 text-mcs-xs text-mcs-text-subtle">实例已停止，暂无玩家数据</p>
+  const body = isLoading ? (
+    // 首帧未落定不得抢答：此前 status 未到即按 isRunning=false 渲染
+    // 「实例已停止，暂无玩家数据」，把「还不知道」说成了一条确定结论
+    <ListSkeleton rows={3} />
+  ) : !isRunning ? (
+    <p className="py-1 text-mcs-xs text-mcs-text-muted">实例已停止，暂无玩家数据</p>
   ) : names.length === 0 ? (
     <div className="flex items-center gap-2 py-1">
-      <p className="text-mcs-xs text-mcs-text-subtle">
+      <p className="text-mcs-xs text-mcs-text-muted">
         {rconConnected ? '暂无玩家在线' : '需启用 RCON 才能读取在线玩家'}
       </p>
       {!rconConnected && (
@@ -312,7 +376,7 @@ export function PlayersCard() {
   )
 
   return (
-    <Card
+    <StatCard
       title="在线玩家"
       className="animate-mcs-fade-up mcs-delay-1"
       eyebrow={
@@ -332,9 +396,9 @@ export function PlayersCard() {
         <div className="flex flex-col gap-0.5">
           <span className="mcs-num text-mcs-display leading-none">
             {online}
-            <span className="text-mcs-lg font-normal text-mcs-text-subtle">/{max}</span>
+            <span className="text-mcs-lg font-normal text-mcs-text-muted">/{max}</span>
           </span>
-          <span className="text-mcs-2xs text-mcs-text-subtle">
+          <span className="text-mcs-2xs text-mcs-text-muted">
             今日新增 {status?.todayNewPlayers ?? 0}
           </span>
         </div>
@@ -344,7 +408,7 @@ export function PlayersCard() {
               OP {opCount}/{online}
             </StatusPill>
             {opNames.length > 0 && (
-              <span className="max-w-[140px] truncate text-mcs-2xs text-mcs-warning-fg">
+              <span className="max-w-35 truncate text-mcs-2xs text-mcs-warning-fg">
                 {opNames.slice(0, 2).join(', ')}
                 {opNames.length > 2 ? '…' : ''}
               </span>
@@ -353,12 +417,12 @@ export function PlayersCard() {
         )}
       </div>
       {body}
-    </Card>
+    </StatCard>
   )
 }
 
 // ── 顶部卡：实例信息 ────────────────────────────────────────
-export function RuntimeInfoCard() {
+export function RuntimeInfoCard({ isLoading = false }: { isLoading?: boolean }) {
   const status = useServerStore((s) => s.status)
   const isRunning = status?.isRunning ?? false
 
@@ -379,8 +443,11 @@ export function RuntimeInfoCard() {
       icon: Play,
     },
     {
+      // 绝对时间（与启动时间同格式）；相对时间降级为悬停提示——「刚刚」类
+      // 模糊值无法核对存档是否如期发生
       label: '上次存档',
-      value: formatRelativeTime(status?.lastSave),
+      value: formatStartTime(status?.lastSave),
+      tooltip: status?.lastSave ? `相对时间：${formatRelativeTime(status.lastSave)}` : undefined,
       icon: Save,
     },
   ]
@@ -393,39 +460,85 @@ export function RuntimeInfoCard() {
     : null
 
   return (
-    <Card
+    <StatCard
       title="实例信息"
       className="animate-mcs-fade-up mcs-delay-3"
       eyebrow={
         versionText ? (
-          <span className="tnum text-mcs-xs font-medium text-mcs-text-muted">{versionText}</span>
+          <StatusPill tone="muted" className="tnum text-mcs-2xs">
+            {versionText}
+          </StatusPill>
         ) : undefined
       }
     >
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-mcs-xs text-mcs-text-subtle">本次运行时长</p>
-        <p className={cn('mcs-num text-mcs-lg', !isRunning && 'text-mcs-text-subtle')}>
-          {formatUptime(isRunning ? uptime : null)}
-        </p>
-      </div>
-      <div className="flex flex-col gap-1.5 border-t border-mcs-border-muted pt-2">
-        {infoLines.map((line) => (
-          <div key={line.label} className="flex items-center justify-between text-mcs-xs" title={line.tooltip}>
-            <span className="flex items-center gap-1.5 text-mcs-text-muted">
-              <line.icon className="size-3 text-mcs-text-subtle" aria-hidden />
-              {line.label}
-            </span>
-            <span className="tnum font-medium">{line.value}</span>
+      {isLoading ? (
+        // 首帧未落定时本卡会给出「累计运行 0m」这类**肯定值**（totalUptime 在
+        // isRunning=false 下取 0），把「还不知道」说成「跑了 0 分钟」——故整块走骨架
+        <div className="flex flex-col gap-3" aria-hidden>
+          <div className="flex items-center justify-between gap-2">
+            <Skeleton className="h-3.5 w-20" />
+            <Skeleton className="h-7 w-24" />
           </div>
-        ))}
-      </div>
-    </Card>
+          <div className="flex flex-col gap-1.5 border-t border-mcs-border-muted pt-2">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="flex items-center justify-between">
+                <Skeleton className="h-3 w-16" />
+                <Skeleton className="h-3 w-20" />
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="flex items-center justify-between gap-2">
+            {/* 停止态下数值为 —（本次会话已结束），label 同步改「上次」避免语义误导 */}
+            <p className="text-mcs-xs text-mcs-text-muted">
+              {isRunning ? '本次运行时长' : '上次运行时长'}
+            </p>
+            {/* 本卡关键数字：与在线玩家 / 资源使用两卡同为顶排卡级大数（明细行留在 xs） */}
+            <p
+              className={cn(
+                'mcs-num text-mcs-display leading-none',
+                !isRunning && 'text-mcs-text-muted',
+              )}
+            >
+              {formatUptime(isRunning ? uptime : null)}
+            </p>
+          </div>
+          <div className="flex flex-col gap-1.5 border-t border-mcs-border-muted pt-2">
+            {infoLines.map((line) => (
+              <div
+                key={line.label}
+                className="flex items-center justify-between text-mcs-xs"
+                title={line.tooltip}
+              >
+                <span className="flex items-center gap-1.5 text-mcs-text-muted">
+                  <line.icon className="size-3 text-mcs-text-muted" aria-hidden />
+                  {line.label}
+                </span>
+                <span className="tnum font-medium">{line.value}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </StatCard>
   )
 }
 
 /** 磁盘使用率色阶（ResourceRow 磁盘行用）：正常 / 警告(≥85%) / 错误(≥95%) */
-function diskBarColor(percent: number): string {
-  if (percent >= 95) return 'var(--mcs-error-fg)'
-  if (percent >= 85) return 'var(--mcs-warning-fg)'
+/**
+ * 三行资源条（CPU / 内存 / 磁盘）共用的阈值阶梯：≥95 红 / ≥85 黄 / 其余绿。
+ * 同卡三行是同一套视觉语言，阶梯必须一致——此前只有磁盘行接它，CPU 与内存行恒绿，
+ * 于是「97% 的 CPU」和「12% 的 CPU」长得一模一样（违反 P1 的阈值对齐）。
+ * 刻意不复用告警系统的 80：那条是**进程** CPU 单核口径（见 lib/notifications.ts
+ * 的 DEFAULT_ALERT_THRESHOLDS 声明），与本卡的整机口径不同源、不可互为后备。
+ */
+const LOAD_WARN_PERCENT = 85
+const LOAD_DANGER_PERCENT = 95
+
+function loadBarColor(percent: number): string {
+  if (percent >= LOAD_DANGER_PERCENT) return 'var(--mcs-error-fg)'
+  if (percent >= LOAD_WARN_PERCENT) return 'var(--mcs-warning-fg)'
   return 'var(--mcs-success-fg)'
 }

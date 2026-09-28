@@ -8,7 +8,7 @@ import { useUiStore } from '@/stores/ui'
 import { useConnectionStore } from '@/stores/connection'
 import { useServerStore } from '@/stores/server'
 
-/** Escape 关闭行为验证（UX-01 专项） */
+/** Escape 关闭行为验证 */
 function renderShell(initialPath = '/dashboard') {
   const router = createMemoryRouter(
     [
@@ -30,12 +30,18 @@ function renderShell(initialPath = '/dashboard') {
   )
 }
 
-describe('命令面板 Escape 关闭（UX-01）', () => {
+describe('命令面板 Escape 关闭', () => {
   beforeEach(() => {
     localStorage.clear()
     useUiStore.setState({ theme: 'dark', sidebarCollapsed: false, commandPaletteOpen: false })
     useConnectionStore.setState({ baseUrl: '', apiKey: '', status: 'unconfigured' })
-    useServerStore.setState({ status: null, systemStats: null, instanceId: null, socketConnected: false, lastStatusEvent: null })
+    useServerStore.setState({
+      status: null,
+      systemStats: null,
+      instanceId: null,
+      socketConnected: false,
+      lastStatusEvent: null,
+    })
   })
 
   it('Escape 关闭已打开的命令面板', async () => {

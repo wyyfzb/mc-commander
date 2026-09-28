@@ -7,19 +7,24 @@ import { isPrivateIp, isLocalHostname, checkPublicUrl } from '../utils/url-guard
 
 // 注入的假 lookup：恒定返回给定地址列表（不触网）
 function fakeLookup(addresses) {
-  return async () => addresses.map(a => ({ address: a, family: a.includes(':') ? 6 : 4 }));
+  return async () => addresses.map((a) => ({ address: a, family: a.includes(':') ? 6 : 4 }));
 }
 
 describe('isPrivateIp IPv4 字面量', () => {
   const blocked = [
-    '127.0.0.1', '127.255.255.254',       // 环回
-    '10.0.0.1', '10.255.0.1',             // 私网
-    '172.16.0.1', '172.31.255.255',       // 私网（含边界内最大值）
-    '192.168.0.1', '192.168.255.255',     // 私网
-    '169.254.169.254',                    // 链路本地（云元数据端点）
-    '0.0.0.0',                            // 未指定
-    '100.64.0.1',                         // CGNAT
-    '224.0.0.1', '255.255.255.255',       // 组播/广播
+    '127.0.0.1',
+    '127.255.255.254', // 环回
+    '10.0.0.1',
+    '10.255.0.1', // 私网
+    '172.16.0.1',
+    '172.31.255.255', // 私网（含边界内最大值）
+    '192.168.0.1',
+    '192.168.255.255', // 私网
+    '169.254.169.254', // 链路本地（云元数据端点）
+    '0.0.0.0', // 未指定
+    '100.64.0.1', // CGNAT
+    '224.0.0.1',
+    '255.255.255.255', // 组播/广播
   ];
   for (const ip of blocked) {
     it(`应判定 ${ip} 为私网/保留地址`, () => {
@@ -30,12 +35,12 @@ describe('isPrivateIp IPv4 字面量', () => {
   const allowed = [
     '8.8.8.8',
     '1.1.1.1',
-    '93.184.216.34',    // RFC 6685 示例段（公网）
-    '172.32.0.1',       // 私网段外首个地址（边界外）
-    '172.15.255.255',   // 私网段前一个地址
-    '11.0.0.1',         // 10/8 段外
-    '100.63.255.255',   // CGNAT /10 段前一个地址（段外）
-    '100.128.0.1',      // CGNAT /10 段后首个地址（段外，段内末址为 100.127.255.255）
+    '93.184.216.34', // RFC 6685 示例段（公网）
+    '172.32.0.1', // 私网段外首个地址（边界外）
+    '172.15.255.255', // 私网段前一个地址
+    '11.0.0.1', // 10/8 段外
+    '100.63.255.255', // CGNAT /10 段前一个地址（段外）
+    '100.128.0.1', // CGNAT /10 段后首个地址（段外，段内末址为 100.127.255.255）
   ];
   for (const ip of allowed) {
     it(`应判定 ${ip} 为公网地址`, () => {
@@ -170,7 +175,9 @@ describe('checkPublicUrl DNS rebinding 防护', () => {
   });
   it('域名解析失败应拒绝', async () => {
     const result = await checkPublicUrl('https://nonexistent.example.com/hook', {
-      lookup: async () => { throw new Error('ENOTFOUND'); },
+      lookup: async () => {
+        throw new Error('ENOTFOUND');
+      },
     });
     expect(result.ok).toBe(false);
     expect(result.reason).toContain('解析失败');

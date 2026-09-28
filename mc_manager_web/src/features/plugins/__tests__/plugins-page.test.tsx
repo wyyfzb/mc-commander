@@ -16,7 +16,7 @@ import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { setupServer } from 'msw/node'
 import { http, HttpResponse } from 'msw'
-import { createMemoryRouter, RouterProvider } from 'react-router'
+import { createMemoryRouter, RouterProvider, useLocation } from 'react-router'
 import { Toaster, toast } from 'sonner'
 import { PluginsPage } from '../plugins-page'
 import { useConnectionStore } from '@/stores/connection'
@@ -176,10 +176,17 @@ function renderPage() {
           </QueryClientProvider>
         ),
       },
+      // 空态 CTA 的落点（回显 path+search，用于断言深链参数）
+      { path: '/instances', element: <ReachedInstances /> },
     ],
     { initialEntries: ['/plugins'] },
   )
   return render(<RouterProvider router={router} />)
+}
+
+function ReachedInstances() {
+  const location = useLocation()
+  return <div>{`reached:${location.pathname}${location.search}`}</div>
 }
 
 beforeEach(() => {
@@ -227,11 +234,44 @@ describe('PluginsPage 列表渲染', () => {
     expect(screen.getByText(/共 6 个（启用 2 \/ 禁用 4）/)).toBeInTheDocument()
   })
 
-  it('无实例时空态引导：暂无服务器实例 CTA', () => {
+  it('无实例时空态引导：暂无服务器实例 CTA 直达部署向导', async () => {
+    const user = userEvent.setup()
+    // 本地 server 不含 /instances（onUnhandledRequest: error）：显式覆写为「确实零实例」
+    server.use(
+      http.get('/api/v1/instances', () =>
+        HttpResponse.json({ status: 'ok', code: 0, message: 'ok', data: [] }),
+      ),
+    )
     useServerStore.setState({ instanceId: null })
     renderPage()
-    expect(screen.getByText('暂无服务器实例')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '前往实例管理' })).toBeInTheDocument()
+    expect(await screen.findByText('暂无服务器实例')).toBeInTheDocument()
+    // 零实例场景唯一有用的动作是建实例 → 深链直达部署向导（此前只跳 /instances 列表页）
+    await user.click(screen.getByRole('button', { name: '部署新实例' }))
+    expect(screen.getByText('reached:/instances?tab=deploy')).toBeInTheDocument()
+  })
+})
+
+describe('PluginsPage 页头说明载体', () => {
+  it('说明不常驻：描述行只留计数，全文挂在信息入口里', async () => {
+    renderPage()
+    await screen.findByText('EssentialsX')
+
+    // 常驻说明句会把标题列挤成一个字宽（实测 433px 下 40px），故只保留入口
+    expect(screen.queryByText(/管理 Bukkit 系插件（Paper\/Spigot）/)).not.toBeInTheDocument()
+    expect(screen.getByText(/共 6 个（启用 2 \/ 禁用 4）/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '插件管理说明' })).toBeInTheDocument()
+  })
+
+  it('信息不丢：点按入口可读到完整说明（含生效时机）', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    const trigger = await screen.findByRole('button', { name: '插件管理说明' })
+
+    await user.click(trigger)
+
+    const hint = await screen.findByRole('dialog', { name: '插件管理说明' })
+    expect(hint).toHaveTextContent('管理 Bukkit 系插件（Paper/Spigot）')
+    expect(hint).toHaveTextContent('启停与增删在重启实例后生效')
   })
 })
 
@@ -283,11 +323,15 @@ describe('PluginsPage 上传入口', () => {
     expect(bar).toHaveAttribute('aria-valuemax', '100')
     const xhr = sentXHR[0]!
     xhr.emitProgress(40, 100)
-    await waitFor(() => expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '40'))
+    await waitFor(() =>
+      expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '40'),
+    )
 
     // 完成收尾
     xhr.emitLoad(okUploadEnvelope('DemoX.jar'))
-    expect(await screen.findByText('已上传 DemoX.jar，重启实例后生效')).toBeInTheDocument()
+    expect(
+      await screen.findByText('已上传 DemoX.jar，落入 plugins/，重启实例后生效'),
+    ).toBeInTheDocument()
     await waitFor(() => expect(screen.queryByRole('progressbar')).not.toBeInTheDocument())
   })
 
@@ -296,9 +340,9 @@ describe('PluginsPage 上传入口', () => {
     await screen.findByText('EssentialsX')
     const input = document.querySelector('input[type="file"]') as HTMLInputElement
     fireEvent.change(input, { target: { files: [new File(['data'], 'note.zip')] } })
-    await new Promise((r) => setTimeout(r, 20))
-    expect(sentXHR).toHaveLength(0)
+    // .jar 过滤在选择处理器内同步判定；提示出现即证明过滤分支已执行
     expect(await screen.findByText('仅支持上传 .jar 插件文件')).toBeInTheDocument()
+    expect(sentXHR).toHaveLength(0)
   })
 })
 
@@ -347,7 +391,9 @@ describe('PluginsPage 启停与删除', () => {
     await screen.findByText('EssentialsX')
     await user.click(screen.getByRole('button', { name: '禁用 EssentialsX' }))
     // toast 文案用 plugin.name（此处等于文件名），非 meta.name
-    expect(await screen.findByText(/已禁用 EssentialsX-2\.21\.0\.jar，重启实例后生效/)).toBeInTheDocument()
+    expect(
+      await screen.findByText(/已禁用 EssentialsX-2\.21\.0\.jar，重启实例后生效/),
+    ).toBeInTheDocument()
   })
 
   it('行删除：确认弹窗 → DELETE 成功 → toast 提示', async () => {

@@ -1,12 +1,13 @@
 import { getDb } from './database.js';
 import { logger } from '../utils/logger.js';
+import { parseDbTime, toIsoUtc } from '../utils/db-time.js';
 
-// 对外查询列白名单（find-021）：显式列出字段，绝不返回 file_path。
+// 对外查询列白名单：显式列出字段，绝不返回 file_path。
 // file_path 是服务器本地磁盘路径，原样下发给 API 客户端会泄露服务器
 // 目录结构（且可被用于探测/构造路径）；file_path 仅服务层内部通过
 // findByIdWithPath 获取（restoreBackup/deleteBackup 需要）。
 const PUBLIC_COLUMNS =
-  'id, instance_id, name, description, type, size, status, world_name, format, created_at, updated_at';
+  'id, instance_id, name, description, type, size, status, world_name, source_archive_id, created_at, updated_at';
 
 export class BackupModel {
   static findAll(options = {}) {
@@ -34,25 +35,31 @@ export class BackupModel {
     const whereClause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
     const offset = (page - 1) * pageSize;
 
-    const backups = db.prepare(`
+    const backups = db
+      .prepare(`
       SELECT ${PUBLIC_COLUMNS} FROM backups
       ${whereClause}
       ORDER BY id DESC
       LIMIT ? OFFSET ?
-    `).all(...params, pageSize, offset);
+    `)
+      .all(...params, pageSize, offset);
 
-    const total = db.prepare(`
+    const total = db
+      .prepare(`
       SELECT COUNT(*) as count FROM backups ${whereClause}
-    `).get(...params).count;
+    `)
+      .get(...params).count;
 
-    return { backups: backups.map(r => this._toCamel(r)), total, page, pageSize };
+    return { backups: backups.map((r) => this._toCamel(r)), total, page, pageSize };
   }
 
   static findById(id) {
     const db = getDb();
-    const row = db.prepare(`
+    const row = db
+      .prepare(`
       SELECT ${PUBLIC_COLUMNS} FROM backups WHERE id = ?
-    `).get(id);
+    `)
+      .get(id);
     return row ? this._toCamel(row) : null;
   }
 
@@ -67,18 +74,10 @@ export class BackupModel {
   /**
    * 将 DB 的 snake_case 行映射为前端期望的 camelCase 对象。
    * size 保持字节原值，换算由前端完成。
-   * createdAt/updatedAt 转为 ISO8601 带 Z（SQLite CURRENT_TIMESTAMP 为
-   * UTC 且无时区标记，补 Z 后前端 toLocal() 正确换算）。
+   * createdAt/updatedAt 经 toIsoUtc 补 Z 转 ISO8601，前端 toLocal() 才能正确换算。
    */
   static _toCamel(row) {
     if (!row) return null;
-    const toIso = (t) => {
-      if (!t) return null;
-      const s = String(t).trim();
-      return /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}$/.test(s)
-        ? new Date(s.replace(' ', 'T') + 'Z').toISOString()
-        : s;
-    };
     return {
       id: row.id,
       instanceId: row.instance_id,
@@ -88,31 +87,35 @@ export class BackupModel {
       size: row.size,
       status: row.status,
       worldName: row.world_name,
-      format: row.format,
-      createdAt: toIso(row.created_at),
-      updatedAt: toIso(row.updated_at),
+      // 非空 = 挂载自归档（快照不在本实例的备份子目录内）。下发给前端是为了让
+      // 「删除」确认弹窗能如实告知：删掉这行会连带删除磁盘上的原归档快照
+      sourceArchiveId: row.source_archive_id ?? null,
+      createdAt: toIsoUtc(row.created_at),
+      updatedAt: toIsoUtc(row.updated_at),
     };
   }
 
   static create(data) {
     const db = getDb();
 
-    const result = db.prepare(`
+    const result = db
+      .prepare(`
       INSERT INTO backups (
         instance_id, name, description, type, size, status,
-        file_path, world_name, format
+        file_path, world_name, source_archive_id
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      data.instanceId,
-      data.name,
-      data.description || null,
-      data.type || 'manual',
-      data.size || 0,
-      data.status || 'creating',
-      data.filePath || null,
-      data.worldName || null,
-      data.format || 'snapshot'
-    );
+    `)
+      .run(
+        data.instanceId,
+        data.name,
+        data.description || null,
+        data.type || 'manual',
+        data.size || 0,
+        data.status || 'creating',
+        data.filePath || null,
+        data.worldName || null,
+        data.sourceArchiveId || null,
+      );
 
     return this.findById(result.lastInsertRowid);
   }
@@ -129,7 +132,6 @@ export class BackupModel {
       size: 'size',
       filePath: 'file_path',
       worldName: 'world_name',
-      format: 'format'
     };
 
     for (const [key, column] of Object.entries(fieldMap)) {
@@ -157,7 +159,7 @@ export class BackupModel {
    * 卡死恢复：进程崩溃时执行中的备份/恢复记录永久停留 creating/restoring
    * （fire-and-forget 的 finally 不会执行），导致该实例备份功能永久死锁
    * （互斥检查全部命中 409）。超过 maxAgeMs 的进行中记录按语义重置：
-   * - creating（备份执行中崩溃，zip 可能不完整）→ failed
+   * - creating（备份执行中崩溃，快照可能不完整）→ failed
    * - restoring（恢复执行中崩溃，备份文件本身未动）→ completed
    * 返回被重置的记录数。JS 侧比较避免 SQLite 时间函数时区差异。
    */
@@ -170,18 +172,24 @@ export class BackupModel {
       params.push(instanceId);
     }
 
-    const stale = db.prepare(`SELECT id, status, updated_at FROM backups WHERE ${where}`).all(...params);
+    const stale = db
+      .prepare(`SELECT id, status, updated_at FROM backups WHERE ${where}`)
+      .all(...params);
     const cutoff = Date.now() - maxAgeMs;
     let resetCount = 0;
 
     for (const row of stale) {
-      const ts = Date.parse(row.updated_at || row.created_at) || 0;
+      // 必须经 parseDbTime 归一化：SQLite 时间是无时区标记的 UTC 串，直接
+      // Date.parse 会按本地时区解释，非 UTC 时区下所有记录都会被误判为陈旧，
+      // 使下方互斥检查（backup.service）的 busyCount 恒为 0。
+      const ts = parseDbTime(row.updated_at || row.created_at);
       if (ts < cutoff) {
         const target = row.status === 'restoring' ? 'completed' : 'failed';
-        db.prepare(`UPDATE backups SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
-          .run(target, row.id);
+        db.prepare(
+          `UPDATE backups SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+        ).run(target, row.id);
         logger.warn(
-          `[Backup] Reset stale ${row.status} backup record #${row.id} -> ${target} (crashed process)`
+          `[Backup] Reset stale ${row.status} backup record #${row.id} -> ${target} (crashed process)`,
         );
         resetCount++;
       }
@@ -203,29 +211,48 @@ export class BackupModel {
     return result.changes > 0;
   }
 
+  /**
+   * 全部快照的磁盘路径清单（**仅服务层内部用**：归档挂载的「已索引」比对、
+   * 清扫兜底）。与 PUBLIC_COLUMNS 的取舍一致——file_path 不下发 API，
+   * 故这里单独开口子而不放宽对外查询列。
+   */
+  static listFilePaths() {
+    const db = getDb();
+    return db
+      .prepare('SELECT file_path FROM backups WHERE file_path IS NOT NULL')
+      .all()
+      .map((row) => row.file_path);
+  }
+
   static getLatestBackup(instanceId) {
     const db = getDb();
-    const row = db.prepare(`
+    const row = db
+      .prepare(`
       SELECT ${PUBLIC_COLUMNS} FROM backups
       WHERE instance_id = ? AND status = 'completed'
       ORDER BY id DESC
       LIMIT 1
-    `).get(instanceId);
+    `)
+      .get(instanceId);
     return row ? this._toCamel(row) : null;
   }
 
   static getBackupCount(instanceId) {
     const db = getDb();
-    return db.prepare(`
+    return db
+      .prepare(`
       SELECT COUNT(*) as count FROM backups WHERE instance_id = ?
-    `).get(instanceId).count;
+    `)
+      .get(instanceId).count;
   }
 
   static getTotalSize(instanceId) {
     const db = getDb();
-    const result = db.prepare(`
+    const result = db
+      .prepare(`
       SELECT COALESCE(SUM(size), 0) as total_size FROM backups WHERE instance_id = ?
-    `).get(instanceId);
+    `)
+      .get(instanceId);
     return result.total_size;
   }
 }

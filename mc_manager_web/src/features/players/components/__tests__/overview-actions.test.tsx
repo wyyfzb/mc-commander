@@ -1,8 +1,8 @@
 /**
  * OverviewActions 操作按钮组行为级测试（issue 489 拆分交付）
- * - 危险操作按钮（清空背包/踢出）点击上抛回调
- * - 游戏模式菜单项触发 runAction 携带 gamemode 命令
- * - 发送消息按钮上抛回调；OP 态切换文案与可逆操作对
+ * - 清空背包上抛宿主（不可逆 → 后果清单确认）；踢出直执（无逆操作 → 不挂撤销）
+ * - 游戏模式菜单项直执 + 逆操作（切回原模式，可逆口径）
+ * - 发送消息按钮上抛回调；OP 态切换文案与逆操作对
  * 数据全部为虚构占位
  */
 import { describe, expect, it, vi } from 'vitest'
@@ -10,7 +10,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import type { Player } from '@/api/types'
 import type { PlayerActionRequest } from '../../mutations'
-import { OverviewActions } from '../overview-actions'
+import { OverviewActions, type ActionOutcome } from '../overview-actions'
 
 function makePlayer(overrides: Partial<Player>): Player {
   return {
@@ -53,20 +53,27 @@ function makePlayer(overrides: Partial<Player>): Player {
     inventory: null,
     events: [],
     sessions: [],
-    stats: { totalOnline: 0, loginCount: 0, offlineSince: 0, deathCount: 0, achievementCount: 0, sleepCount: 0 },
+    stats: {
+      totalOnline: 0,
+      loginCount: 0,
+      offlineSince: 0,
+      deathCount: 0,
+      achievementCount: 0,
+      sleepCount: 0,
+    },
     ...overrides,
   }
 }
 
-function renderActions(player: Player, overrides: Partial<Parameters<typeof OverviewActions>[0]> = {}) {
+function renderActions(
+  player: Player,
+  overrides: Partial<Parameters<typeof OverviewActions>[0]> = {},
+) {
   const mocks = {
-    runAction: vi.fn<(key: string, req: PlayerActionRequest, successText?: string) => Promise<void>>(),
-    runReversibleAction: vi.fn<
-      (key: string, req: PlayerActionRequest, undoReq: PlayerActionRequest, successText: string, undoText: string) => Promise<void>
-    >(),
+    runAction:
+      vi.fn<(key: string, req: PlayerActionRequest, outcome?: ActionOutcome) => Promise<void>>(),
     onSendMessage: vi.fn(),
     onClearInventory: vi.fn(),
-    onKick: vi.fn(),
     onOpenBanDialog: vi.fn(),
   }
   render(
@@ -78,12 +85,17 @@ function renderActions(player: Player, overrides: Partial<Parameters<typeof Over
 }
 
 describe('OverviewActions 危险区与回调上抛', () => {
-  it('清空背包/踢出按钮点击上抛对应回调', () => {
+  it('清空背包上抛宿主确认；踢出直执且不挂撤销（无逆操作）', () => {
     const props = renderActions(makePlayer({ isOnline: true }))
     fireEvent.click(screen.getByRole('button', { name: /清空背包/ }))
-    fireEvent.click(screen.getByRole('button', { name: /踢出/ }))
     expect(props.onClearInventory).toHaveBeenCalledTimes(1)
-    expect(props.onKick).toHaveBeenCalledTimes(1)
+
+    fireEvent.click(screen.getByRole('button', { name: /踢出/ }))
+    expect(props.runAction).toHaveBeenCalledWith(
+      'kick',
+      { kind: 'kick', playerName: 'Steve' },
+      { successText: '已成功踢出 Steve' },
+    )
   })
 
   it('发送消息按钮点击上抛 onSendMessage；封禁按钮携带 player', () => {
@@ -97,34 +109,59 @@ describe('OverviewActions 危险区与回调上抛', () => {
 })
 
 describe('OverviewActions 游戏模式菜单', () => {
-  it('展开菜单后点击「创造」触发 runAction 携带 gamemode creative 命令', async () => {
+  it('展开菜单后点击「创造」直执 gamemode creative，并带切回原模式的逆操作', async () => {
     const userEvent = (await import('@testing-library/user-event')).default
     const props = renderActions(makePlayer({ isOnline: true, gameMode: 'survival' }))
     await userEvent.setup().click(screen.getByRole('button', { name: /游戏模式/ }))
     fireEvent.click(screen.getByRole('menuitem', { name: /创造/ }))
     expect(props.runAction).toHaveBeenCalledTimes(1)
-    const [key, req, successText] = props.runAction.mock.calls[0]!
+    const [key, req, outcome] = props.runAction.mock.calls[0]!
     expect(key).toBe('gamemode-creative')
     expect(req).toMatchObject({ kind: 'command', command: 'gamemode creative Steve' })
-    expect(successText).toContain('创造模式')
+    expect(outcome?.successText).toContain('创造模式')
+    expect(outcome?.undo?.req).toMatchObject({
+      kind: 'command',
+      command: 'gamemode survival Steve',
+    })
+  })
+
+  it('原模式未知（服务端未采集）时不提供逆操作（不猜默认档）', async () => {
+    const userEvent = (await import('@testing-library/user-event')).default
+    const props = renderActions(makePlayer({ isOnline: true, gameMode: null }))
+    await userEvent.setup().click(screen.getByRole('button', { name: /游戏模式/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /创造/ }))
+    expect(props.runAction.mock.calls[0]![2]?.undo).toBeUndefined()
   })
 
   it('当前模式菜单项禁用（survival 玩家菜单中生存项带 data-disabled）', async () => {
     const userEvent = (await import('@testing-library/user-event')).default
     renderActions(makePlayer({ isOnline: true, gameMode: 'survival' }))
     await userEvent.setup().click(screen.getByRole('button', { name: /游戏模式/ }))
-    expect(screen.getByRole('menuitem', { name: /生存/ }).getAttribute('data-disabled')).not.toBeNull()
+    expect(
+      screen.getByRole('menuitem', { name: /生存/ }).getAttribute('data-disabled'),
+    ).not.toBeNull()
+  })
+
+  it('当前模式菜单项禁用：点击不触发 runAction（门控由 onSelect 收口，不靠 CSS 兜底）', async () => {
+    const userEvent = (await import('@testing-library/user-event')).default
+    const props = renderActions(makePlayer({ isOnline: true, gameMode: 'survival' }))
+    await userEvent.setup().click(screen.getByRole('button', { name: /游戏模式/ }))
+
+    const current = screen.getByRole('menuitem', { name: /生存/ })
+    // 直派 click 绕过 data-disabled:pointer-events-none 的兜底
+    fireEvent.click(current)
+    expect(props.runAction).not.toHaveBeenCalled()
   })
 })
 
 describe('OverviewActions OP/白名单切换', () => {
-  it('非 OP 玩家点击「设为OP」触发 runReversibleAction op→deop 对', () => {
+  it('非 OP 玩家点击「设为OP」直执 op 并带 deop 逆操作（可逆口径）', () => {
     const props = renderActions(makePlayer({ isOp: false }))
     fireEvent.click(screen.getByRole('button', { name: /设为OP/ }))
-    expect(props.runReversibleAction).toHaveBeenCalledTimes(1)
-    const [key, req, undoReq] = props.runReversibleAction.mock.calls[0]!
+    expect(props.runAction).toHaveBeenCalledTimes(1)
+    const [key, req, outcome] = props.runAction.mock.calls[0]!
     expect(key).toBe('op')
     expect(req).toMatchObject({ kind: 'op', playerName: 'Steve' })
-    expect(undoReq).toMatchObject({ kind: 'deop', playerName: 'Steve' })
+    expect(outcome?.undo?.req).toMatchObject({ kind: 'deop', playerName: 'Steve' })
   })
 })

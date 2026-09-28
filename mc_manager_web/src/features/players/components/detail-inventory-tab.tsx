@@ -13,12 +13,21 @@
  * 6. 选中槽位高亮 —— Web 简化：hover 边框高亮（不实现槽位详情弹层）
  * 7. 设计纪律：全部 --mcs-* 语义 token；格子实底（玻璃禁区）；不硬编码色值/间距/圆角
  */
-import { useState, type ReactNode } from 'react'
-import { AlertTriangle, CloudOff, EyeOff, History, Hourglass, Lock, type LucideIcon } from 'lucide-react'
+import { useState, type KeyboardEvent } from 'react'
+import {
+  AlertTriangle,
+  CloudOff,
+  EyeOff,
+  History,
+  Hourglass,
+  Lock,
+  type LucideIcon,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { fullItemId, itemImageUrl } from '@/lib/mc-items'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import type { InventoryItem, Player, PlayerInventory } from '@/api/types'
+import { NoticeBanner } from '@/components/mcs/notice-banner'
 
 export interface InventoryTabProps {
   player: Player
@@ -34,6 +43,69 @@ const SUB_TABS: Array<{ value: SubTab; label: string }> = [
 
 /** 格子尺寸（契约建议 32-36px，取 32 适配 420px 面板 9 列紧凑网格） */
 const SLOT_SIZE = 32
+
+/**
+ * 格子网的漫游焦点（roving tabindex）：整张表只占**一个** Tab 停靠点，格间用方向键走。
+ * 41 格若各自 tabIndex=0，键盘用户要逐个 Tab 才能穿过物品栏——本仓日历已用同一范式
+ * （date-picker-calendar.tsx），不再造第二种键盘网格。
+ * 刻意不声明 role="grid"：九列是 CSS grid，没有可供 row/gridcell 挂靠的行结构，
+ * 只报 grid 不给行/单元是无效 ARIA，比不声明更糟。这里的收益是停靠点收敛与方向键导航。
+ *
+ * 方向按**槽位号**算而非按渲染出的按钮序号算：空槽不渲染按钮，若按序号走，
+ * 主背包 slot 0 按「右」会跳到 slot 9（视觉上在正下方）。空槽按方向跳过、
+ * 越界即停（不循环——绕到另一端会被误读成「跳到了别的物品」）。
+ */
+const ROVING_STEP: Record<string, number> = {
+  ArrowLeft: -1,
+  ArrowRight: 1,
+  ArrowUp: -1,
+  ArrowDown: 1,
+}
+
+function rovingGridKeys(event: KeyboardEvent<HTMLDivElement>, cols: number, total: number) {
+  const step =
+    event.key === 'ArrowUp' ? -cols : event.key === 'ArrowDown' ? cols : ROVING_STEP[event.key]
+  const cells = new Map<number, HTMLElement>()
+  for (const el of event.currentTarget.querySelectorAll<HTMLElement>('[data-slot-index]')) {
+    cells.set(Number(el.dataset.slotIndex), el)
+  }
+  if (!cells.size) return
+
+  if (event.key === 'Home' || event.key === 'End') {
+    const order = [...cells.keys()].sort((a, b) => a - b)
+    const target = event.key === 'Home' ? order[0] : order[order.length - 1]
+    if (target != null) {
+      event.preventDefault()
+      cells.get(target)?.focus()
+    }
+    return
+  }
+  if (step == null) return
+
+  let cur: number | null = null
+  for (const [idx, el] of cells) if (el === document.activeElement) cur = idx
+  if (cur == null) return
+
+  for (let at = cur + step; at >= 0 && at < total; at += step) {
+    // 横向不出行：行内一路是空槽时停住，不绕到下一行去（那会跳到视觉上方/下方的格子）
+    if (
+      (event.key === 'ArrowLeft' || event.key === 'ArrowRight') &&
+      Math.floor(at / cols) !== Math.floor(cur / cols)
+    )
+      return
+    const el = cells.get(at)
+    if (el) {
+      event.preventDefault()
+      el.focus()
+      return
+    }
+  }
+}
+
+/** 该格是否承载 Tab 落点＝本表第一个占用格（其余 tabIndex=-1，仍可被方向键聚焦） */
+function isFirstOccupied(items: (InventoryItem | null)[], index: number) {
+  return items.findIndex((it) => it != null) === index
+}
 
 export function InventoryTab({ player }: InventoryTabProps) {
   const [subTab, setSubTab] = useState<SubTab>('player')
@@ -64,7 +136,7 @@ export function InventoryTab({ player }: InventoryTabProps) {
 
   return (
     <div className="flex flex-col gap-3">
-      {/* ── 子 Tab 切换器（激活态 accent 底+边框）── */}
+      {/* ── 子 Tab 切换器（激活态 accent 底 + 前景；边界由轨道承载）── */}
       <div
         role="tablist"
         aria-label="物品栏子视图"
@@ -80,7 +152,7 @@ export function InventoryTab({ player }: InventoryTabProps) {
               'rounded-mcs-xs px-3 py-1 text-mcs-xs transition-colors',
               subTab === t.value
                 ? 'bg-mcs-accent-bg-subtle font-medium text-mcs-accent-fg'
-                : 'text-mcs-text-subtle hover:text-mcs-text-default',
+                : 'text-mcs-text-muted hover:text-mcs-text-default',
             )}
           >
             {t.label}
@@ -102,7 +174,11 @@ export function InventoryTab({ player }: InventoryTabProps) {
         </NoticeBanner>
       )}
 
-      {subTab === 'player' ? <PlayerInventoryPanel inventory={inventory} /> : <EnderChestPanel inventory={inventory} />}
+      {subTab === 'player' ? (
+        <PlayerInventoryPanel inventory={inventory} />
+      ) : (
+        <EnderChestPanel inventory={inventory} />
+      )}
     </div>
   )
 }
@@ -112,32 +188,58 @@ function PlayerInventoryPanel({ inventory }: { inventory: PlayerInventory }) {
   const quickbar = fillSlots(inventory.quickbar, 9)
   const main = fillSlots(inventory.main, 27)
   const equipment = inventory.equipment
-  const equipmentItems = [equipment.helmet, equipment.chestplate, equipment.leggings, equipment.boots, equipment.offhand]
+  const equipmentItems = [
+    equipment.helmet,
+    equipment.chestplate,
+    equipment.leggings,
+    equipment.boots,
+    equipment.offhand,
+  ]
   const equipmentLabels = ['头盔', '胸甲', '护腿', '靴子', '副手']
 
   return (
     <div className="flex flex-col items-center gap-2 rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-default p-3">
       {/* 装备 5 格（带标签：头盔/胸甲/护腿/靴子 + 副手） */}
-      <div className="flex items-end gap-2">
+      <div
+        className="flex items-end gap-2"
+        onKeyDown={(e) => rovingGridKeys(e, 5, equipmentItems.length)}
+      >
         {equipmentItems.map((item, i) => (
           <div key={equipmentLabels[i]} className="flex flex-col items-center gap-1">
-            <InventorySlot item={item} />
-            <span className="text-mcs-2xs text-mcs-text-subtle">{equipmentLabels[i]}</span>
+            <InventorySlot
+              item={item}
+              focusable={isFirstOccupied(equipmentItems, i)}
+              slotIndex={i}
+            />
+            <span className="text-mcs-2xs text-mcs-text-muted">{equipmentLabels[i]}</span>
           </div>
         ))}
       </div>
 
       {/* 主背包 27 格 9×3 */}
-      <div className="grid grid-cols-9 gap-1">
+      <div className="grid grid-cols-9 gap-1" onKeyDown={(e) => rovingGridKeys(e, 9, main.length)}>
         {main.map((item, i) => (
-          <InventorySlot key={`main-${i}`} item={item} />
+          <InventorySlot
+            key={`main-${i}`}
+            item={item}
+            focusable={isFirstOccupied(main, i)}
+            slotIndex={i}
+          />
         ))}
       </div>
 
       {/* 快捷栏 9 格 1 行 */}
-      <div className="grid grid-cols-9 gap-1">
+      <div
+        className="grid grid-cols-9 gap-1"
+        onKeyDown={(e) => rovingGridKeys(e, 9, quickbar.length)}
+      >
         {quickbar.map((item, i) => (
-          <InventorySlot key={`qb-${i}`} item={item} />
+          <InventorySlot
+            key={`qb-${i}`}
+            item={item}
+            focusable={isFirstOccupied(quickbar, i)}
+            slotIndex={i}
+          />
         ))}
       </div>
 
@@ -158,9 +260,15 @@ function EnderChestPanel({ inventory }: { inventory: PlayerInventory }) {
 
   return (
     <div className="flex flex-col items-center gap-2 rounded-mcs-sm border border-mcs-purple-border bg-mcs-bg-default p-3">
-      <div className="grid grid-cols-9 gap-1">
+      <div className="grid grid-cols-9 gap-1" onKeyDown={(e) => rovingGridKeys(e, 9, ender.length)}>
         {ender.map((item, i) => (
-          <InventorySlot key={`ender-${i}`} item={item} variant="ender" />
+          <InventorySlot
+            key={`ender-${i}`}
+            item={item}
+            variant="ender"
+            focusable={isFirstOccupied(ender, i)}
+            slotIndex={i}
+          />
         ))}
       </div>
 
@@ -169,13 +277,27 @@ function EnderChestPanel({ inventory }: { inventory: PlayerInventory }) {
         <SlotStat label="空位" value={`${27 - used}`} accent />
       </div>
 
-      <p className="text-mcs-2xs text-mcs-text-subtle">末影箱数据来自玩家存档（playerdata EnderItems）</p>
+      <p className="text-mcs-xs text-mcs-text-muted">
+        末影箱数据来自玩家存档（playerdata EnderItems）
+      </p>
     </div>
   )
 }
 
 /** 单格：贴图 / 数量角标 / 耐久条 / 附魔紫光 / hover tooltip */
-function InventorySlot({ item, variant = 'default' }: { item: InventoryItem | null; variant?: 'default' | 'ender' }) {
+function InventorySlot({
+  item,
+  variant = 'default',
+  focusable = true,
+  slotIndex,
+}: {
+  item: InventoryItem | null
+  variant?: 'default' | 'ender'
+  /** 漫游焦点：只有本表第一个占用格承载 Tab 落点 */
+  focusable?: boolean
+  /** 槽位号：方向键按网格几何算步进要用它（不是渲染序号） */
+  slotIndex: number
+}) {
   const slotStyle = { width: SLOT_SIZE, height: SLOT_SIZE }
 
   // 空槽（实底弱边框，无交互）
@@ -187,25 +309,37 @@ function InventorySlot({ item, variant = 'default' }: { item: InventoryItem | nu
         style={slotStyle}
         className={cn(
           'block rounded-mcs-xs border',
-          variant === 'ender' ? 'border-mcs-purple-border bg-mcs-purple-bg-subtle' : 'border-mcs-border-subtle bg-mcs-bg-muted',
+          variant === 'ender'
+            ? 'border-mcs-purple-border bg-mcs-purple-bg-subtle'
+            : 'border-mcs-border-subtle bg-mcs-bg-muted',
         )}
       />
     )
   }
 
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
           data-testid="inv-slot"
+          data-slot-index={slotIndex}
+          tabIndex={focusable ? 0 : -1}
+          aria-label={item.customName || fullItemId(item.id)}
           style={{
             ...slotStyle,
             // 附魔物品紫色微光（token 引用，非硬编码色值）
             ...(item.enchanted ? { boxShadow: '0 0 5px 0 var(--mcs-purple-fg)' } : {}),
           }}
           className={cn(
-            'relative block cursor-help rounded-mcs-xs border transition-colors hover:border-mcs-accent',
-            variant === 'ender' ? 'border-mcs-purple-border bg-mcs-purple-bg-subtle' : 'border-mcs-border-default bg-mcs-bg-muted',
+            // 格子是图形对象不是文本术语，故不套 InfoHint 的虚线下划线；
+            // 但触发器必须是可聚焦的 button 且浮层走 Popover——原先是
+            // Tooltip + 不可聚焦 <span>，键盘拿不到物品信息、触屏点按也不响应
+            'relative block cursor-help rounded-mcs-xs border transition-colors',
+            'hover:border-mcs-accent-border-strong focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-mcs-focus-ring',
+            variant === 'ender'
+              ? 'border-mcs-purple-border bg-mcs-purple-bg-subtle'
+              : 'border-mcs-border-default bg-mcs-bg-muted',
             item.enchanted && 'border-mcs-purple-border',
           )}
         >
@@ -227,20 +361,26 @@ function InventorySlot({ item, variant = 'default' }: { item: InventoryItem | nu
               />
             </span>
           )}
-        </span>
-      </TooltipTrigger>
-      <TooltipContent side="top">
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        side="top"
+        aria-label={item.customName || fullItemId(item.id)}
+        onOpenAutoFocus={(event) => event.preventDefault()}
+      >
         <span className="flex flex-col gap-0.5">
-          {item.customName && <span className="font-medium">{item.customName}</span>}
-          <span className="font-mono">{fullItemId(item.id)}</span>
+          {/* customName 玩家可控（铁砧限 35 字符但命令/数据包可超），break-all 防长串溢出浮层框 */}
+          {item.customName && <span className="break-all font-medium">{item.customName}</span>}
+          {/* 数据包可引入自定义命名空间 ID 且长度无上限，与 customName 行同防护 */}
+          <span className="break-all font-mono">{fullItemId(item.id)}</span>
           <span>
             {item.count > 1 ? `数量 ×${item.count}` : '数量 ×1'}
             {item.durability != null && ` · 耐久 ${Math.round(clamp01(item.durability) * 100)}%`}
             {item.enchanted && ' · 已附魔'}
           </span>
         </span>
-      </TooltipContent>
-    </Tooltip>
+      </PopoverContent>
+    </Popover>
   )
 }
 
@@ -270,46 +410,37 @@ function SlotIcon({ item }: { item: InventoryItem }) {
 }
 
 /** 空态卡片 */
-function EmptyState({ icon: Icon, message, subtext }: { icon: LucideIcon; message: string; subtext?: string }) {
-  return (
-    <div className="flex w-full flex-col items-center gap-2 rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-default px-6 py-10">
-      <Icon className="size-8 text-mcs-text-subtle" aria-hidden />
-      <p className="text-mcs-sm text-mcs-text-subtle">{message}</p>
-      {subtext && <p className="text-mcs-xs text-mcs-text-subtle/80">{subtext}</p>}
-    </div>
-  )
-}
-
-/** 提示条（快照=info / 截断=warning） */
-function NoticeBanner({
-  variant,
+function EmptyState({
   icon: Icon,
-  children,
+  message,
+  subtext,
 }: {
-  variant: 'info' | 'warning'
   icon: LucideIcon
-  children: ReactNode
+  message: string
+  subtext?: string
 }) {
   return (
-    <div
-      className={cn(
-        'flex items-center gap-1.5 rounded-mcs-xs border px-2.5 py-1.5 text-mcs-xs',
-        variant === 'info'
-          ? 'border-mcs-info-border bg-mcs-info-bg-subtle text-mcs-info-fg'
-          : 'border-mcs-warning-border bg-mcs-warning-bg-subtle text-mcs-warning-fg',
-      )}
-    >
-      <Icon className="size-3.5 shrink-0" aria-hidden />
-      {children}
+    <div className="flex w-full flex-col items-center gap-2 rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-default px-6 py-10">
+      <Icon className="size-8 text-mcs-text-muted" aria-hidden />
+      <p className="text-mcs-sm text-mcs-text-muted">{message}</p>
+      {subtext && <p className="text-mcs-xs text-mcs-text-muted">{subtext}</p>}
     </div>
   )
 }
 
 /** 统计小卡片 */
-function SlotStat({ label, value, accent = false }: { label: string; value: string; accent?: boolean }) {
+function SlotStat({
+  label,
+  value,
+  accent = false,
+}: {
+  label: string
+  value: string
+  accent?: boolean
+}) {
   return (
     <span className="flex flex-col items-center gap-0.5 rounded-mcs-xs bg-mcs-bg-muted px-2.5 py-1">
-      <span className="text-mcs-2xs text-mcs-text-subtle">{label}</span>
+      <span className="text-mcs-2xs text-mcs-text-muted">{label}</span>
       <span
         className={cn(
           'font-mono text-mcs-xs font-semibold tabular-nums',

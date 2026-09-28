@@ -1,9 +1,15 @@
 import { authenticateWebSocket } from './middleware/auth.js';
+import {
+  isLocked as isCredentialLocked,
+  recordFailure as recordCredentialFailure,
+  clearFailures as clearCredentialFailures,
+} from './utils/credential-lockout.js';
 import { getDb } from './db/index.js';
-import os from 'os';
-import fs from 'fs';
-import config from './config.js';
+
 import { logger } from './utils/logger.js';
+import { parseDbTime } from './utils/db-time.js';
+import { inFlightDeploys } from './utils/deploy-inflight.js';
+import { collectSystemStats } from './utils/system-stats.js';
 
 export const WSEvents = {
   LOG: 'log',
@@ -20,22 +26,31 @@ export const WSEvents = {
   PLAYER_SLEEP: 'playerSleep',
   ACHIEVEMENT: 'achievement',
   BACKUP_START: 'backupStart',
+  BACKUP_PROGRESS: 'backupProgress',
   BACKUP_COMPLETE: 'backupComplete',
   BACKUP_FAILED: 'backupFailed',
   BACKUP_SKIPPED: 'backupSkipped',
+  BACKUP_CANCELLED: 'backupCancelled',
   RESTORE_START: 'restoreStart',
+  RESTORE_PROGRESS: 'restoreProgress',
   RESTORE_COMPLETE: 'restoreComplete',
   RESTORE_FAILED: 'restoreFailed',
+  RESTORE_CANCELLED: 'restoreCancelled',
   TASK_EXECUTE: 'taskExecute',
   TASK_FAILED: 'taskFailed',
   WEBHOOK_DELIVERY_FAILED: 'webhookDeliveryFailed',
   DEPLOY_PROGRESS: 'deployProgress',
   DEPLOY_COMPLETE: 'deployComplete',
   DEPLOY_FAILED: 'deployFailed',
+  // 用户取消部署：与 failed 分开是因为它不是故障（通知中心与筛选按严重度分档，
+  // 复用 deployFailed 会让可控的主动取消显示成「部署失败」告警）
+  DEPLOY_CANCELLED: 'deployCancelled',
   CIRCUIT_BREAKER: 'circuit_breaker',
   UPGRADE_PROGRESS: 'upgradeProgress',
   UPGRADE_COMPLETE: 'upgradeComplete',
   UPGRADE_FAILED: 'upgradeFailed',
+  // 用户取消升级：与 failed 分开（取消不是故障，通知中心按严重度分档）
+  UPGRADE_CANCELLED: 'upgradeCancelled',
   SYSTEM_STATS_UPDATE: 'systemStatsUpdate',
   ERROR: 'error',
 };
@@ -45,9 +60,49 @@ export const ClientMessages = {
   SUBSCRIBE: 'subscribe',
   UNSUBSCRIBE: 'unsubscribe',
   PING: 'ping',
+  AUTH: 'auth',
 };
 
-// ── find-012 安全加固：资源上限与频率限制 ─────────────────────────────
+// ── 只读角色的实时事件白名单（唯一事实源）──────────────
+// 口径与 HTTP 只读白名单同一条：**只读＝监控读数**。故只放行「实例运行状态 /
+// 性能 / 天气 / 玩家在线情况」这类读数事件，其信息面不超过只读可达的 HTTP 端点
+// （/overview、/system-stats、/instances、/instances/:id、/instances/:id/players）。
+//
+// 明确拦下的都是 HTTP 只读信息面之外的东西：日志流与命令原文（log——连续的日志
+// 原文与 `> 命令` 回显，远宽于只读面里那一行 `lastOutput`）、玩家聊天（playerChat）、
+// 备份/恢复（backup*/restore*，快照名与失败原因可能含磁盘路径）、任务（task*）、
+// Webhook 投递失败（url 可能内嵌令牌）、部署/升级（deploy*/upgrade*，管理员生命周期
+// 信息）。错误回执（error）、pong、auth 回执是客户端自身消息的应答，不经本表判定。
+// 崩溃与熔断随 `status` 放行（运行时健康是监控的核心读数，且实例状态端点本就可见）。
+//
+// 与 WSEvents 同文件维护：新增事件时**必须**在此二分归类（归类哨兵见
+// __tests__/websocket.readonly-filter.test.js——未归类的新事件会让用例变红）。
+export const READONLY_WS_EVENTS = new Set([
+  WSEvents.STATUS, // 运行态跃迁与状态快照（含崩溃熔断提示，不含日志文本）
+  WSEvents.TPS_UPDATE, // 保留项：**当前无发射方**（已并入 performanceUpdate），性能读数语义
+  WSEvents.PERFORMANCE_UPDATE, // 性能读数（含睡眠/清醒玩家名）
+  WSEvents.WEATHER_UPDATE,
+  WSEvents.PLAYER_STATS_UPDATE, // 在线玩家血量/护甲/坐标
+  WSEvents.PLAYER_JOIN,
+  WSEvents.PLAYER_LEAVE,
+  WSEvents.PLAYER_DEATH,
+  WSEvents.PLAYER_RESPAWN,
+  WSEvents.PLAYER_SLEEP,
+  WSEvents.ACHIEVEMENT, // 游戏内本就全服广播的成就播报
+  WSEvents.SYSTEM_STATS_UPDATE, // 主机资源读数（/system-stats 对只读开放），由
+  // startSystemStatsBroadcast 每 15s 经 broadcastAll 推送
+]);
+
+/**
+ * 该连接是否允许收到该类型事件：只有角色为 admin 才放行全部，其余（含角色未落定的
+ * 异常连接）一律按只读白名单——判定方向朝收紧，漏设角色只会少收、不会多收。
+ */
+function mayReceiveEvent(client, type) {
+  if (client._role === 'admin') return true;
+  return READONLY_WS_EVENTS.has(type);
+}
+
+// ── WS 安全加固：资源上限与频率限制 ─────────────────────────────
 // 单服务端最大同时连接数：clients 集合已满时拒绝新连接（1013），
 // 防止恶意客户端无限建立连接导致 clients Set 内存膨胀
 export const MAX_CONNECTIONS = 32;
@@ -59,6 +114,10 @@ export const REPLAY_THROTTLE_MS = 5000;
 // 单连接消息速率限制窗口与上限：窗口内超过上限直接断开（1008），防消息风暴
 export const MESSAGE_RATE_WINDOW_MS = 60000;
 export const MAX_MESSAGES_PER_WINDOW = 60;
+// 首帧鉴权：pending 连接的 auth 等待超时。pending 连接不在 clients
+// 集合、不受消息速率限制管，但首条消息即定去留（超时/断开/首条处理），无需
+// 消息数护栏
+export const WS_AUTH_TIMEOUT_MS = 10_000;
 
 // 需要持久化的通知类事件：广播前落库，客户端断线重连后按 lastEventId 补齐。
 // 排除高频事件（log / status 快照 / performanceUpdate / tpsUpdate / weatherUpdate /
@@ -78,20 +137,26 @@ const NOTIFICATION_EVENT_TYPES = new Set([
   WSEvents.BACKUP_COMPLETE,
   WSEvents.BACKUP_FAILED,
   WSEvents.BACKUP_SKIPPED,
+  WSEvents.BACKUP_CANCELLED,
   WSEvents.RESTORE_START,
   WSEvents.RESTORE_COMPLETE,
   WSEvents.RESTORE_FAILED,
+  WSEvents.RESTORE_CANCELLED,
   // 任务失败与 backupFailed 同语义：低频高价值，落库断线补齐。
   // taskExecute 每次触发都发故不入集合（见上方注释），失败事件仅在异常时发射
   WSEvents.TASK_FAILED,
   // Webhook 投递失败：低频高价值，首次失败通知（连续失败去重后恢复）
   WSEvents.WEBHOOK_DELIVERY_FAILED,
   // 长任务终态（部署/升级完成与失败）：低频高价值，用户离开向导后
-  // 唯一得知结果的通道；落库后断线/离线重连也能补齐看到
+  // 唯一得知结果的通道；落库后断线/离线重连也能补齐看到。
+  // 注意本集合只对经 broadcast() 的事件生效——部署终态三项走的是
+  // broadcastGlobalNotification()（该入口无条件落库），在此列出只为同类事件同居一处
   WSEvents.DEPLOY_COMPLETE,
   WSEvents.DEPLOY_FAILED,
+  WSEvents.DEPLOY_CANCELLED,
   WSEvents.UPGRADE_COMPLETE,
   WSEvents.UPGRADE_FAILED,
+  WSEvents.UPGRADE_CANCELLED,
 ]);
 
 // notification_events 保留期：超过保留期的记录定期清理（表只增不删，
@@ -114,21 +179,113 @@ export function cleanupNotificationEvents() {
 }
 
 // status 事件中需要持久化的状态跃迁子事件（前端据此生成通知）
-const STATUS_EVENT_TYPES = new Set(['started', 'stopped', 'crash', 'ready', 'save', 'circuit_breaker']);
+const STATUS_EVENT_TYPES = new Set([
+  'started',
+  'stopped',
+  'crash',
+  'ready',
+  'save',
+  'circuit_breaker',
+]);
 
-/// 通知事件落库（广播前）：返回自增 id 供消息携带与断线补齐
-function persistNotificationEvent(instanceId, type, data) {
+// 跃迁子事件中属「意外失败」的关键事件：用户不一定正盯着出事的实例，投递面取全局，
+// 否则多实例部署下非当前实例的崩溃只有恰好打开该实例控制台才看得见。
+// 同口径的无订阅全局播报也适用于失败类事件（备份失败/任务失败/Webhook 投递失败，
+// 见 broadcastCriticalInstanceEvent）。started/stopped/ready/save 是常规生命周期
+// （多数由用户在面板上发起），保持订阅内投递——跨实例广播只会制造噪音
+const CRITICAL_STATUS_EVENTS = new Set(['crash', 'circuit_breaker']);
+
+/// 通知事件落库（广播前）：返回自增 id 供消息携带与断线补齐。
+/// 上线字段名必须是 eventId——契约（mc-schemas/src/ws.ts）与前端游标
+/// （api/ws.ts 的 saveLastEventId）都只认这个名字，发成 id 会让前端游标永不推进、
+/// 断线补齐静默失效（补齐逻辑与落库照常工作，只是永远不会被触发）
+// ── 通知事件落库队列：广播热路径不再逐条同步 INSERT ─────────────────
+// 事件 id 必须在入队时同步分配（消息体携带 eventId，客户端断线补齐游标只认
+// 这个名字），故计数器按「表内当前最大 id + 1」懒初始化、只增不减；刷写用
+// 显式 id 单事务批量 INSERT。触发条件＝攒满 50 条或 500ms 定时（unref 不阻
+// 停机）。读侧（replayEvents）与停机前先强制 flush，保证读到已提交行。
+const NOTIFICATION_FLUSH_INTERVAL_MS = 500;
+const NOTIFICATION_FLUSH_BATCH_SIZE = 50;
+const notificationQueue = { buffer: [], nextId: null, stmt: null, timer: null };
+
+export function flushNotificationEvents() {
+  if (notificationQueue.timer) {
+    clearTimeout(notificationQueue.timer);
+    notificationQueue.timer = null;
+  }
+  if (notificationQueue.buffer.length === 0) return;
+  const batch = notificationQueue.buffer.splice(0);
   try {
     const db = getDb();
-    const result = db
-      .prepare(
-        'INSERT INTO notification_events (instance_id, type, data) VALUES (?, ?, ?)'
-      )
-      .run(instanceId, type, JSON.stringify(data ?? {}));
-    return result.lastInsertRowid;
+    if (!notificationQueue.stmt) {
+      notificationQueue.stmt = db.prepare(
+        'INSERT INTO notification_events (id, instance_id, type, data) VALUES (?, ?, ?, ?)',
+      );
+    }
+    const insertAll = db.transaction((rows) => {
+      for (const row of rows) {
+        notificationQueue.stmt.run(row.id, row.instanceId, row.type, row.data);
+      }
+    });
+    insertAll(batch);
   } catch (err) {
     // 落库失败不阻断广播（通知投递优先），但记录日志便于审计
-    logger.error(`Failed to persist notification event (${type}):`, err);
+    logger.error(`Failed to persist ${batch.length} notification events:`, err);
+  }
+}
+
+/** 重置队列（幂等）：nextId 回到「表内 MAX+1」懒初始化——停机清理与测试隔离用 */
+export function resetNotificationEventQueue() {
+  if (notificationQueue.timer) {
+    clearTimeout(notificationQueue.timer);
+    notificationQueue.timer = null;
+  }
+  notificationQueue.buffer.length = 0;
+  notificationQueue.nextId = null;
+  notificationQueue.stmt = null;
+}
+
+function persistNotificationEvent(instanceId, type, data) {
+  try {
+    if (notificationQueue.nextId === null) {
+      // 计数器初始化：多面板共库非受支持部署，单进程内不会复用 id
+      try {
+        const db = getDb();
+        // AUTOINCREMENT 的 rowid 永不复用保护只覆盖 sqlite_sequence：表被保留期
+        // 清理清空 + 重启的组合下 MAX(id)=0，必须与 seq 取大，否则高游标客户端
+        // 的新事件 id 全部低于游标、断线补齐失效
+        const maxId =
+          db.prepare('SELECT COALESCE(MAX(id), 0) AS maxId FROM notification_events').get()
+            ?.maxId ?? 0;
+        let seq = 0;
+        try {
+          seq =
+            db.prepare("SELECT seq FROM sqlite_sequence WHERE name = 'notification_events'").get()
+              ?.seq ?? 0;
+        } catch {
+          /* sqlite_sequence 行不存在（从未插入过）即 0 */
+        }
+        notificationQueue.nextId = Math.max(maxId, seq) + 1;
+      } catch {
+        notificationQueue.nextId = 1;
+      }
+    }
+    const id = notificationQueue.nextId++;
+    notificationQueue.buffer.push({
+      id,
+      instanceId,
+      type,
+      data: JSON.stringify(data ?? {}),
+    });
+    if (notificationQueue.buffer.length >= NOTIFICATION_FLUSH_BATCH_SIZE) {
+      flushNotificationEvents();
+    } else if (!notificationQueue.timer) {
+      notificationQueue.timer = setTimeout(flushNotificationEvents, NOTIFICATION_FLUSH_INTERVAL_MS);
+      notificationQueue.timer.unref?.();
+    }
+    return id;
+  } catch (err) {
+    logger.error(`Failed to enqueue notification event (${type}):`, err);
     return null;
   }
 }
@@ -178,16 +335,19 @@ export function setupWebSocket(wss, serverManager) {
   const cleanupInterval = setInterval(cleanupNotificationEvents, 24 * 60 * 60 * 1000);
   wss.on('close', () => clearInterval(cleanupInterval));
 
-  wss.on('connection', (ws, req) => {
-    // 凭据由 handleProtocols 在 index.js 中提取并挂载到 req（双通道互斥，客户端只会带其一）
-    const apiKey = req._wsApiKey || null;
-    const sessionToken = req._wsSessionToken || null;
+  // 首帧鉴权 pending 连接集合（pending 不入 clients，独立容量护栏）
+  const pendingAuth = new Set();
 
-    if (!authenticateWebSocket(apiKey, sessionToken)) {
-      ws.close(1008, 'Unauthorized');
-      return;
-    }
+  /** 鉴权失败统一告警（'IP now locked' 一次性标记，不逐请求刷日志） */
+  function logAuthFailure(ip) {
+    const justLocked = recordCredentialFailure(ip);
+    logger.warn(
+      `WebSocket auth failed, closing 1008 (ip=${ip ?? 'unknown'}${justLocked ? ', IP now locked' : ''})`,
+    );
+  }
 
+  /** 鉴权通过后的客户端登记与消息管线（subprotocol 与首帧两条鉴权通道共用） */
+  function setupAuthenticatedClient(ws, { sessionToken, role = 'readonly' }) {
     // 连接数上限：clients 已满（≥ MAX_CONNECTIONS）时拒绝新连接，
     // 防止恶意客户端无限建连耗尽服务端资源
     if (clients.size >= MAX_CONNECTIONS) {
@@ -196,6 +356,10 @@ export function setupWebSocket(wss, serverManager) {
       return;
     }
 
+    // 角色必须在入册**之前**落定：clients 是投递侧的枚举源，先入册后赋角色会留下
+    // 一个「已在线但角色未定」的窗口（当前两句之间无 await，但顺序是免费的保险）。
+    // 默认值朝收紧方向（readonly）：漏传角色只会收不到事件，不会越权多收
+    ws._role = role;
     clients.add(ws);
     ws.isAlive = true;
     // 保存 session token 供心跳复验使用（API Key 认证无 token）
@@ -203,14 +367,21 @@ export function setupWebSocket(wss, serverManager) {
     ws.on('pong', () => {
       ws.isAlive = true;
     });
-    logger.info(`WebSocket client connected. Total: ${clients.size}`);
+    logger.info(`WebSocket client connected (role=${ws._role}). Total: ${clients.size}`);
 
     // 长任务状态补发：连接建立即推送进行中的部署快照。部署进度是全局事件
     // （部署实例未入库，无订阅语义），刷新页面/重连后前端据此恢复「部署中」
-    // 显示——长阶段（Forge 安装/首启）事件稀疏，仅靠阶段边界广播会零可见
+    // 显示——长阶段（Forge 安装/首启）事件稀疏，仅靠阶段边界广播会零可见。
+    // 读取判据与 GET /instances/deploy/status 同源（utils/deploy-inflight.js）：
+    // 死快照不补发，否则前端会恢复一个早已结束的「部署中」视图。
+    // 部署属管理员生命周期信息（HTTP 只读不可达），只读连接不补发
     try {
-      for (const dep of serverManager.activeDeploys?.values() ?? []) {
-        ws.send(JSON.stringify({ type: WSEvents.DEPLOY_PROGRESS, data: dep, timestamp: Date.now() }));
+      if (mayReceiveEvent(ws, WSEvents.DEPLOY_PROGRESS)) {
+        for (const dep of inFlightDeploys(serverManager)) {
+          ws.send(
+            JSON.stringify({ type: WSEvents.DEPLOY_PROGRESS, data: dep, timestamp: Date.now() }),
+          );
+        }
       }
     } catch (err) {
       logger.error('Failed to send active deploy snapshot:', err);
@@ -242,8 +413,8 @@ export function setupWebSocket(wss, serverManager) {
           // 订阅数上限：拒绝新增订阅（幂等重复订阅已有实例仍放行，
           // 不打断断线补齐重放）；超限返回 error 消息，不执行订阅
           if (
-            ws.subscribedInstances.size >= MAX_SUBSCRIPTIONS_PER_CLIENT
-            && !ws.subscribedInstances.has(msg.instanceId)
+            ws.subscribedInstances.size >= MAX_SUBSCRIPTIONS_PER_CLIENT &&
+            !ws.subscribedInstances.has(msg.instanceId)
           ) {
             sendError(ws, 'Too many subscriptions');
             return;
@@ -261,33 +432,44 @@ export function setupWebSocket(wss, serverManager) {
             }
           }
           // 进行中升级补发：订阅即恢复该实例的升级进度（重连/刷新后
-          // 升级弹窗与实例卡「升级中」标识可恢复）
+          // 升级弹窗与实例卡「升级中」标识可恢复）。
+          // 升级属管理员生命周期信息（HTTP 只读不可达），只读连接不补发
           try {
             const upgradeProgress = serverManager.activeUpgrades?.get(msg.instanceId);
-            if (upgradeProgress) {
-              ws.send(JSON.stringify({
-                type: WSEvents.UPGRADE_PROGRESS,
-                instanceId: msg.instanceId,
-                data: upgradeProgress,
-                timestamp: Date.now(),
-              }));
+            if (upgradeProgress && mayReceiveEvent(ws, WSEvents.UPGRADE_PROGRESS)) {
+              ws.send(
+                JSON.stringify({
+                  type: WSEvents.UPGRADE_PROGRESS,
+                  instanceId: msg.instanceId,
+                  data: upgradeProgress,
+                  timestamp: Date.now(),
+                }),
+              );
             }
           } catch (err) {
             logger.error('Failed to send active upgrade snapshot:', err);
           }
           const instance = serverManager.getInstance(msg.instanceId);
+          // 不带角色判据：status 本就在只读白名单内，包一层恒真的判据只会让后来者
+          // 误以为这条快照是「可拦的」（真判据在 fanOut 与重放处）。
+          // 四个字段逐项对齐 wsStatusSnapshotSchema（前端 applyWsSnapshot 与 e2e mock
+          // 同款口径）：ManagedInstance 上没有 status 字段（旧实现发 undefined，
+          // 违反契约的 z.string()）、players 是 Map（旧实现直接发出去会被
+          // JSON.stringify 成 {}，违反 z.array）。四项都不在只读裁剪清单内，故不分角色
           if (instance) {
-            ws.send(JSON.stringify({
-              type: WSEvents.STATUS,
-              instanceId: msg.instanceId,
-              data: {
-                status: instance.status,
-                isRunning: instance.isRunning,
-                players: instance.players || [],
-                tps: instance.tps || null
-              },
-              timestamp: Date.now()
-            }));
+            ws.send(
+              JSON.stringify({
+                type: WSEvents.STATUS,
+                instanceId: msg.instanceId,
+                data: {
+                  status: instance.isRunning ? 'running' : 'stopped',
+                  isRunning: Boolean(instance.isRunning),
+                  players: Array.from(instance.players?.values?.() ?? []),
+                  tps: typeof instance.tps === 'number' ? instance.tps : null,
+                },
+                timestamp: Date.now(),
+              }),
+            );
           }
         } else if (msg.type === ClientMessages.UNSUBSCRIBE) {
           ws.subscribedInstances.delete(msg.instanceId);
@@ -307,6 +489,91 @@ export function setupWebSocket(wss, serverManager) {
     ws.on('error', (err) => {
       logger.error('WebSocket error:', err);
     });
+  }
+
+  wss.on('connection', (ws, req) => {
+    // 凭据两条通道：① subprotocol 携带（handleProtocols 提取，向后兼容）；
+    // ② 首帧消息 auth（主线：兼容代理剥离 Sec-WebSocket-Protocol 的部署环境）
+    const apiKey = req._wsApiKey || null;
+    const sessionToken = req._wsSessionToken || null;
+    // 封禁键取直连 IP（与 HTTP 登录锁定同源，见 utils/credential-lockout.js）
+    const ip = req.socket?.remoteAddress || null;
+
+    // 认证失败 IP 临时封禁：锁定窗口内所有尝试一律拒绝（凭据正确也不放行），
+    // 堵住「无限次握手/首帧试凭据」的爆破口子
+    if (isCredentialLocked(ip)) {
+      logger.warn(
+        `Rejecting websocket connection: IP locked after auth failures (${ip ?? 'unknown'})`,
+      );
+      ws.close(1008, 'Too many auth failures');
+      return;
+    }
+
+    // 通道一（向后兼容）：凭据已在握手层携带，connection 时即完成校验
+    if (apiKey || sessionToken) {
+      const auth = authenticateWebSocket(apiKey, sessionToken);
+      if (!auth) {
+        logAuthFailure(ip);
+        ws.close(1008, 'Unauthorized');
+        return;
+      }
+      clearCredentialFailures(ip);
+      setupAuthenticatedClient(ws, { sessionToken, role: auth.role });
+      return;
+    }
+
+    // 通道二（主线）：首帧鉴权——第一条消息必须是 auth；首条非 auth/
+    // 凭据错误/坏 JSON 一律 1008 并计入封禁计数；超时与断开不计数（网络慢≠爆破）
+    if (pendingAuth.size >= MAX_CONNECTIONS) {
+      logger.warn('Rejecting websocket connection: too many pending auth connections');
+      ws.close(1013, 'Too many connections');
+      return;
+    }
+    pendingAuth.add(ws);
+    let settled = false;
+    let authTimer = null;
+    function leavePending() {
+      if (settled) return false;
+      settled = true;
+      pendingAuth.delete(ws);
+      clearTimeout(authTimer);
+      ws.removeListener('message', handleFirstMessage);
+      return true;
+    }
+    authTimer = setTimeout(() => {
+      if (leavePending()) ws.close(1008, 'Auth timeout');
+    }, WS_AUTH_TIMEOUT_MS);
+    function rejectPending(reason) {
+      if (!leavePending()) return;
+      logAuthFailure(ip);
+      ws.close(1008, reason);
+    }
+    function handleFirstMessage(data) {
+      let msg = null;
+      try {
+        msg = JSON.parse(data);
+      } catch {
+        rejectPending('Unauthorized');
+        return;
+      }
+      if (!msg || msg.type !== ClientMessages.AUTH) {
+        rejectPending('Unauthorized');
+        return;
+      }
+      const auth = authenticateWebSocket(msg.apiKey || null, msg.sessionToken || null);
+      if (!auth) {
+        rejectPending('Unauthorized');
+        return;
+      }
+      if (!leavePending()) return;
+      clearCredentialFailures(ip);
+      // 先回执 auth ok 再登记（登记时会补发 activeDeploys 快照——回执必须
+      // 先于快照到达，否则客户端鉴权门控会丢弃部署进度补发）
+      ws.send(JSON.stringify({ type: ClientMessages.AUTH, ok: true, timestamp: Date.now() }));
+      setupAuthenticatedClient(ws, { sessionToken: msg.sessionToken || null, role: auth.role });
+    }
+    ws.on('message', handleFirstMessage);
+    ws.on('close', () => leavePending());
   });
 
   /// 断线补齐重放节流：按实例记录最近一次重放时间，窗口内返回 true（应节流）。
@@ -323,50 +590,61 @@ export function setupWebSocket(wss, serverManager) {
   /// 断线补齐：重放 lastEventId 之后的通知事件（上限 500 条防积压）
   function replayEvents(ws, instanceId, lastEventId) {
     try {
+      flushNotificationEvents();
       const db = getDb();
+      // 角色过滤**下推到 SQL**：LIMIT 窗口必须只装该连接可见的候选行。只在循环里
+      // 过滤会让不可见事件占满 500 条配额——只读一条也收不到，而客户端只在收到带
+      // eventId 的消息时推进游标（web/src/api/ws.ts），于是下次重连仍带同一个
+      // lastEventId、仍撞上同一个被占满的窗口，永久补不到（忙碌服的 playerChat
+      // 是最易达的触发情形）。管理员不带 type 条件，窗口与改动前逐字一致
+      const allowlist = ws._role === 'readonly' ? [...READONLY_WS_EVENTS] : null;
+      const typeClause = allowlist ? ` AND type IN (${allowlist.map(() => '?').join(', ')})` : '';
       const events = db
         .prepare(
           `SELECT id, instance_id, type, data, created_at
            FROM notification_events
-           WHERE id > ? AND (instance_id = ? OR instance_id IS NULL)
-           ORDER BY id ASC LIMIT 500`
+           WHERE id > ? AND (instance_id = ? OR instance_id IS NULL)${typeClause}
+           ORDER BY id ASC LIMIT 500`,
         )
-        .all(lastEventId, instanceId);
+        .all(lastEventId, instanceId, ...(allowlist ?? []));
       for (const ev of events) {
-        ws.send(JSON.stringify({
-          id: ev.id,
-          type: ev.type,
-          instanceId: ev.instance_id,
-          data: JSON.parse(ev.data || '{}'),
-          timestamp: Date.parse(ev.created_at) || Date.now(),
-        }));
+        // 纵深防御：白名单只有一个事实源，这里再加一道闸防「SQL 过滤被改坏」——
+        // 重放是直发不经 fanOut，漏掉就是越权读取面
+        if (!mayReceiveEvent(ws, ev.type)) continue;
+        const data = JSON.parse(ev.data || '{}');
+        ws.send(
+          JSON.stringify({
+            eventId: ev.id,
+            type: ev.type,
+            // 归属回退到载荷：关键事件（crash/熔断）落库时 instance_id 置空以取得
+            // 全局补齐面，实例归属只存在于 data.instanceId（前端据信封字段决定跳转目标）
+            instanceId: ev.instance_id ?? data.instanceId ?? null,
+            data,
+            // parseDbTime 归一化：created_at 是无时区标记的 UTC 串，
+            // 直接 Date.parse 在非 UTC 时区下会把补发事件的时间整体偏移。
+            timestamp: parseDbTime(ev.created_at) || Date.now(),
+          }),
+        );
       }
       if (events.length > 0) {
-        logger.info(`Replayed ${events.length} notification events to client (after id ${lastEventId})`);
+        logger.info(
+          `Replayed ${events.length} notification events to client (after id ${lastEventId})`,
+        );
       }
     } catch (err) {
       logger.error('Failed to replay notification events:', err);
     }
   }
 
-  /// 广播（带背压保护）：通知类事件先落库并携带事件 id
-  function broadcast(instanceId, type, data) {
-    let eventId = null;
-    if (NOTIFICATION_EVENT_TYPES.has(type)) {
-      eventId = persistNotificationEvent(instanceId, type, data);
-    }
-    const message = JSON.stringify({
-      ...(eventId != null ? { id: eventId } : {}),
-      type,
-      instanceId,
-      data,
-      timestamp: Date.now()
-    });
-
+  /// 单条消息投递（带背压保护）：订阅过滤 + 角色过滤 + readyState + 慢客户端处置的
+  /// 唯一实现，四条投递路径（实例广播 / 关键事件 / 全局通知 / broadcastAll）共用，
+  /// 避免背压判据分叉。includeUnsubscribed=true 的关键事件与全局事件投递给全部在线
+  /// 客户端——**角色过滤必须在这里**：只在 subscribe 处拦会漏掉这四条全局路径
+  function fanOut(message, { type, instanceId = null, includeUnsubscribed = false }) {
     for (const client of clients) {
-      if (client.readyState !== 1 || !client.subscribedInstances.has(instanceId)) {
-        continue;
-      }
+      if (client.readyState !== 1) continue;
+      if (!mayReceiveEvent(client, type)) continue;
+      if (!includeUnsubscribed && !client.subscribedInstances.has(instanceId)) continue;
       // 背压保护：慢客户端缓冲超阈值时跳过高频 LOG，超上限则断开。
       if (client.bufferedAmount > 1024 * 1024) {
         if (type === WSEvents.LOG) continue;
@@ -380,14 +658,50 @@ export function setupWebSocket(wss, serverManager) {
     }
   }
 
+  /// 广播（带背压保护）：通知类事件先落库并携带事件 id
+  function broadcast(instanceId, type, data) {
+    let eventId = null;
+    if (NOTIFICATION_EVENT_TYPES.has(type)) {
+      eventId = persistNotificationEvent(instanceId, type, data);
+    }
+    const message = JSON.stringify({
+      ...(eventId != null ? { eventId } : {}),
+      type,
+      instanceId,
+      data,
+      timestamp: Date.now(),
+    });
+
+    fanOut(message, { type, instanceId });
+  }
+
   function sendError(ws, message) {
     if (ws.readyState === 1) {
-      ws.send(JSON.stringify({
-        type: WSEvents.ERROR,
-        data: { message },
-        timestamp: Date.now()
-      }));
+      ws.send(
+        JSON.stringify({
+          type: WSEvents.ERROR,
+          data: { message },
+          timestamp: Date.now(),
+        }),
+      );
     }
+  }
+
+  /// 关键实例事件派发（与 crash / 熔断同款）：落库为全局行（instance_id 置空，
+  /// 断线补齐对任何订阅者可见）+ 无订阅全局播发。适用「用户不一定正盯着出事
+  /// 实例」的意外失败——订阅过滤会把非当前实例的失败吞到只剩恰好打开该实例
+  /// 控制台的人。信封与载荷仍携带实例归属，前端据此跳转；角色过滤不受影响
+  /// （fanOut 内 mayReceiveEvent 照常生效，只读的失败静音是既有取舍）
+  function broadcastCriticalInstanceEvent(type, data) {
+    const eventId = persistNotificationEvent(null, type, data);
+    const message = JSON.stringify({
+      ...(eventId != null ? { eventId } : {}),
+      type,
+      instanceId: data?.instanceId ?? null,
+      data,
+      timestamp: Date.now(),
+    });
+    fanOut(message, { type, instanceId: data?.instanceId ?? null, includeUnsubscribed: true });
   }
 
   /// 全局通知广播：落库（instance_id NULL，重连补齐对所有订阅者可见）+
@@ -396,16 +710,12 @@ export function setupWebSocket(wss, serverManager) {
   function broadcastGlobalNotification(type, data) {
     const eventId = persistNotificationEvent(null, type, data);
     const message = JSON.stringify({
-      ...(eventId != null ? { id: eventId } : {}),
+      ...(eventId != null ? { eventId } : {}),
       type,
       data,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     });
-    for (const client of clients) {
-      if (client.readyState === 1) {
-        client.send(message);
-      }
-    }
+    fanOut(message, { type, includeUnsubscribed: true });
   }
 
   serverManager.on('instance:log', (data) => {
@@ -415,19 +725,22 @@ export function setupWebSocket(wss, serverManager) {
   serverManager.on('instance:status', (data) => {
     // status 快照高频（每 5s performance 附带）；仅状态跃迁子事件落库
     if (STATUS_EVENT_TYPES.has(data?.event)) {
-      const eventId = persistNotificationEvent(data.instanceId, WSEvents.STATUS, data);
-      const message = JSON.stringify({
-        ...(eventId != null ? { id: eventId } : {}),
-        type: WSEvents.STATUS,
-        instanceId: data.instanceId,
-        data,
-        timestamp: Date.now()
-      });
-      for (const client of clients) {
-        if (client.readyState === 1 && client.subscribedInstances.has(data.instanceId)) {
-          client.send(message);
-        }
+      if (CRITICAL_STATUS_EVENTS.has(data.event)) {
+        broadcastCriticalInstanceEvent(WSEvents.STATUS, data);
+        return;
       }
+      // 常规跃迁也落库（实例行，仅订阅者断线补齐可见），但投递仍按订阅过滤
+      const eventId = persistNotificationEvent(data.instanceId, WSEvents.STATUS, data);
+      fanOut(
+        JSON.stringify({
+          ...(eventId != null ? { eventId } : {}),
+          type: WSEvents.STATUS,
+          instanceId: data.instanceId,
+          data,
+          timestamp: Date.now(),
+        }),
+        { type: WSEvents.STATUS, instanceId: data.instanceId },
+      );
       return;
     }
     broadcast(data.instanceId, WSEvents.STATUS, data);
@@ -449,13 +762,35 @@ export function setupWebSocket(wss, serverManager) {
     broadcast(data.instanceId, WSEvents.BACKUP_START, data);
   });
 
+  // 备份失败：关键事件（无订阅全局播报 + 落库全局行）——出事实例未必是
+  // 当前视图实例，订阅过滤会让失败只有控制台读者看见
   serverManager.on('instance:backupFailed', (data) => {
-    broadcast(data.instanceId, WSEvents.BACKUP_FAILED, data);
+    broadcastCriticalInstanceEvent(WSEvents.BACKUP_FAILED, data);
   });
 
   // 定时备份因上一备份仍在进行而被跳过（task_scheduler 发出）
   serverManager.on('instance:backupSkipped', (data) => {
     broadcast(data.instanceId, WSEvents.BACKUP_SKIPPED, data);
+  });
+
+  // 备份/恢复进度（rsync --info=progress2 解析，服务端已 1s 节流）：
+  // 高频瞬态，不落库；仅在订阅了该实例的连接上转发
+  serverManager.on('instance:backupProgress', (data) => {
+    broadcast(data.instanceId, WSEvents.BACKUP_PROGRESS, data);
+  });
+
+  serverManager.on('instance:restoreProgress', (data) => {
+    broadcast(data.instanceId, WSEvents.RESTORE_PROGRESS, data);
+  });
+
+  // 用户取消备份/恢复（backup.service.js 取消分支发出）：落库通知中心，
+  // 其他标签页/断线重连后可见取消结局
+  serverManager.on('instance:backupCancelled', (data) => {
+    broadcast(data.instanceId, WSEvents.BACKUP_CANCELLED, data);
+  });
+
+  serverManager.on('instance:restoreCancelled', (data) => {
+    broadcast(data.instanceId, WSEvents.RESTORE_CANCELLED, data);
   });
 
   // 恢复异步化三事件（backup.service.js executeRestore 发出）
@@ -475,14 +810,14 @@ export function setupWebSocket(wss, serverManager) {
     broadcast(data.instanceId, WSEvents.TASK_EXECUTE, data);
   });
 
-  // 定时任务执行失败（task_scheduler 发出）：与 backupFailed 一致的通知链
+  // 定时任务执行失败（task_scheduler 发出）：与 backupFailed 同为关键事件
   serverManager.on('instance:taskFailed', (data) => {
-    broadcast(data.instanceId, WSEvents.TASK_FAILED, data);
+    broadcastCriticalInstanceEvent(WSEvents.TASK_FAILED, data);
   });
 
-  // Webhook 投递失败（webhook.service.js 重试耗尽后发出）：低频高价值，首次失败通知
+  // Webhook 投递失败（webhook.service.js 重试耗尽后发出）：同为关键事件，首次失败通知
   serverManager.on('instance:webhookDeliveryFailed', (data) => {
-    broadcast(data.instanceId, WSEvents.WEBHOOK_DELIVERY_FAILED, data);
+    broadcastCriticalInstanceEvent(WSEvents.WEBHOOK_DELIVERY_FAILED, data);
   });
 
   // 监听器注册：统一在 try 中注册并记录注册失败
@@ -492,9 +827,15 @@ export function setupWebSocket(wss, serverManager) {
     ['instance:playerChat', (data) => broadcast(data.instanceId, WSEvents.PLAYER_CHAT, data)],
     ['instance:achievement', (data) => broadcast(data.instanceId, WSEvents.ACHIEVEMENT, data)],
     ['instance:tpsUpdate', (data) => broadcast(data.instanceId, WSEvents.TPS_UPDATE, data)],
-    ['instance:performanceUpdate', (data) => broadcast(data.instanceId, WSEvents.PERFORMANCE_UPDATE, data)],
+    [
+      'instance:performanceUpdate',
+      (data) => broadcast(data.instanceId, WSEvents.PERFORMANCE_UPDATE, data),
+    ],
     ['instance:weatherUpdate', (data) => broadcast(data.instanceId, WSEvents.WEATHER_UPDATE, data)],
-    ['instance:playerStatsUpdate', (data) => broadcast(data.instanceId, WSEvents.PLAYER_STATS_UPDATE, data)],
+    [
+      'instance:playerStatsUpdate',
+      (data) => broadcast(data.instanceId, WSEvents.PLAYER_STATS_UPDATE, data),
+    ],
     ['instance:playerSleep', (data) => broadcast(data.instanceId, WSEvents.PLAYER_SLEEP, data)],
   ];
   for (const [eventName, handler] of EVENT_HANDLERS) {
@@ -518,24 +859,22 @@ export function setupWebSocket(wss, serverManager) {
     const message = JSON.stringify({
       type,
       data,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     });
 
-    for (const client of clients) {
-      if (client.readyState === 1) {
-        client.send(message);
-      }
-    }
+    fanOut(message, { type, includeUnsubscribed: true });
   }
 
   serverManager.on(WSEvents.DEPLOY_PROGRESS, (data) => {
     broadcastAll(WSEvents.DEPLOY_PROGRESS, data);
-    // 部署终态转通知事件：deployProgress 本身高频不落库，完成/失败仅此一次，
+    // 部署终态转通知事件：deployProgress 本身高频不落库，完成/失败/取消仅此一次，
     // 落库后通知中心可见且断线补齐覆盖（用户离开向导后唯一得知结果的方式）
     if (data?.stage === 'complete') {
       broadcastGlobalNotification(WSEvents.DEPLOY_COMPLETE, data);
     } else if (data?.stage === 'error') {
       broadcastGlobalNotification(WSEvents.DEPLOY_FAILED, data);
+    } else if (data?.stage === 'cancelled') {
+      broadcastGlobalNotification(WSEvents.DEPLOY_CANCELLED, data);
     }
   });
 
@@ -552,74 +891,32 @@ export function setupWebSocket(wss, serverManager) {
         broadcast(data.instanceId, WSEvents.UPGRADE_COMPLETE, notifyPayload);
       } else if (data.stage === 'failed' || data.stage === 'rolled_back') {
         broadcast(data.instanceId, WSEvents.UPGRADE_FAILED, notifyPayload);
+      } else if (data.stage === 'cancelled') {
+        broadcast(data.instanceId, WSEvents.UPGRADE_CANCELLED, notifyPayload);
       }
     } else {
       broadcastAll(WSEvents.UPGRADE_PROGRESS, data);
     }
   });
 
-  return { broadcast, broadcastAll, WSEvents, ClientMessages, startSystemStatsBroadcast };
+  return {
+    broadcast,
+    broadcastAll,
+    WSEvents,
+    ClientMessages,
+    startSystemStatsBroadcast,
+    flushNotificationEvents,
+  };
 
   /// 每 15s 通过 broadcastAll 推送系统资源统计（CPU/内存/磁盘）
-  /// 调用方在 index.js 启动后调用，返回 stop 函数供优雅停机
+  /// 调用方在 index.js 启动后调用，返回 stop 函数供优雅停机。
+  /// 无任何已连接客户端时跳过采集（采集读数与广播都只对连接有意义的
+  /// 消费者发生；客户端连上后的下一拍自然恢复），metrics 分钟级落库
+  /// 独立采样不依赖本函数
   function startSystemStatsBroadcast() {
-    // 磁盘使用率 10s 缓存（复用 status.js 同逻辑）
-    let _diskCache = { ts: 0, result: null };
-    function getDiskUsage() {
-      const now = Date.now();
-      if (_diskCache.result && now - _diskCache.ts < 10_000) return _diskCache.result;
-      const dirs = [config.serversDir, config.dataDir, config.backupsDir];
-      const seen = new Map();
-      for (const dir of dirs) {
-        try {
-          const stat = fs.statfsSync(dir);
-          const total = stat.bsize * stat.blocks;
-          const free = stat.bsize * stat.bfree;
-          const used = total - free;
-          const percent = total > 0 ? Math.round((used / total) * 1000) / 10 : 0;
-          const entry = {
-            mountpoint: stat.mounted || dir,
-            totalGB: Math.round(total / (1024 * 1024 * 1024) * 10) / 10,
-            usedGB: Math.round(used / (1024 * 1024 * 1024) * 10) / 10,
-            percent,
-          };
-          if (!seen.has(entry.mountpoint) || entry.percent > seen.get(entry.mountpoint).percent) {
-            seen.set(entry.mountpoint, entry);
-          }
-        } catch { /* skip */ }
-      }
-      const all = Array.from(seen.values());
-      const primary = all.sort((a, b) => b.percent - a.percent)[0] || null;
-      const result = { primary, all };
-      _diskCache = { ts: now, result };
-      return result;
-    }
-
-    // CPU 使用率：简单 loadavg 近似（避免复制 /proc/stat 状态机）
-    function getCpuUsage() {
-      const cores = os.cpus().length || 1;
-      const load = os.loadavg()[0] || 0;
-      return Math.min(100, Math.round((load / cores) * 100 * 10) / 10);
-    }
-
     function collectAndBroadcast() {
-      const totalMemBytes = os.totalmem();
-      const freeMemBytes = os.freemem();
-      const usedMemBytes = totalMemBytes - freeMemBytes;
-      const totalMemGB = Math.round(totalMemBytes / (1024 * 1024 * 1024) * 10) / 10;
-      const usedMemGB = Math.round(usedMemBytes / (1024 * 1024 * 1024) * 10) / 10;
-      const memUsagePercent = totalMemBytes > 0
-        ? Math.round((usedMemBytes / totalMemBytes) * 1000) / 10 : 0;
-      broadcastAll(WSEvents.SYSTEM_STATS_UPDATE, {
-        cpuUsage: getCpuUsage(),
-        memoryUsage: usedMemGB,
-        totalMemory: totalMemGB,
-        memoryPercent: memUsagePercent,
-        cpuCores: os.cpus().length,
-        loadAvg: os.loadavg(),
-        uptime: os.uptime(),
-        diskUsage: getDiskUsage(),
-      });
+      if (clients.size === 0) return;
+      broadcastAll(WSEvents.SYSTEM_STATS_UPDATE, collectSystemStats());
     }
 
     // 立即推送一次，然后每 15s 定时

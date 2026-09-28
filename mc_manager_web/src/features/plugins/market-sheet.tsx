@@ -1,5 +1,5 @@
 /**
- * MarketSheet —— 插件市场侧滑面板（feat-8 延伸：Modrinth 一键安装）
+ * MarketSheet —— 插件市场侧滑面板（延伸：Modrinth 一键安装）
  *
  * 交互设计（参考 Pterodactyl 浏览器/Modrinth 官网列表页交叉验证）：
  * - 工具栏「插件市场」按钮打开；空查询默认按下载量浏览热门插件（index=downloads）
@@ -30,7 +30,9 @@ import {
 import { StatusPill } from '@/components/mcs/status-pill'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { EmptyState } from '@/components/mcs/empty-state'
+import { InfoHint } from '@/components/mcs/info-hint'
 import { Skeleton } from '@/components/ui/skeleton'
+import { queryFailed } from '@/lib/query-phase'
 import { useConnectionStore } from '@/stores/connection'
 import { useServerStore } from '@/stores/server'
 import { usePlugins } from './queries'
@@ -46,17 +48,19 @@ interface MarketSheetProps {
   initialQuery?: string | null
 }
 
-export function MarketSheet({ open, onOpenChange, instanceId, initialQuery = null }: MarketSheetProps) {
+export function MarketSheet({
+  open,
+  onOpenChange,
+  instanceId,
+  initialQuery = null,
+}: MarketSheetProps) {
   const instanceMcVersion = useServerStore((s) => s.status?.mcVersion)
 
   const [query, setQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
 
   // 防抖回调（由 SearchInput 内部管理 debounce 定时器；清除时立即同步）
-  const handleDebouncedChange = useCallback(
-    (v: string) => setDebouncedQuery(v),
-    [],
-  )
+  const handleDebouncedChange = useCallback((v: string) => setDebouncedQuery(v), [])
   const [loader, setLoader] = useState<string>('')
   const [gameVersion, setGameVersion] = useState('')
 
@@ -89,10 +93,13 @@ export function MarketSheet({ open, onOpenChange, instanceId, initialQuery = nul
 
   // 已安装文件名集合（卡片「已安装同名」提示 + 安装后即时刷新）
   const pluginsQuery = usePlugins(open ? instanceId : null)
+  /* 查询失败时集合为空会让「已安装同名」标记整体消失——用户可能因此对**已安装**的插件
+     再点安装。失败与「确实没装」必须可分，故把失败态一并传下去（卡片据此改显提示）。 */
   const installedFiles = useMemo(
     () => new Set((pluginsQuery.data?.plugins ?? []).map((p) => p.file)),
     [pluginsQuery.data],
   )
+  const installedUnknown = queryFailed(pluginsQuery) && pluginsQuery.data === undefined
 
   const fetchSearch = useCallback(
     async (offset: number) => {
@@ -123,7 +130,8 @@ export function MarketSheet({ open, onOpenChange, instanceId, initialQuery = nul
         setCached(data.cached)
         firstLoadDoneRef.current = true
       } catch (e) {
-        if (controller.signal.aborted || (e instanceof DOMException && e.name === 'AbortError')) return
+        if (controller.signal.aborted || (e instanceof DOMException && e.name === 'AbortError'))
+          return
         setError(getFriendlyErrorText(e))
       } finally {
         if (!controller.signal.aborted) {
@@ -180,14 +188,20 @@ export function MarketSheet({ open, onOpenChange, instanceId, initialQuery = nul
   )
 
   // 关闭面板时清理进行中的请求
-  useEffect(() => () => {
-    searchAbortRef.current?.abort()
-    versionsAbortRef.current?.abort()
-  }, [])
+  useEffect(
+    () => () => {
+      searchAbortRef.current?.abort()
+      versionsAbortRef.current?.abort()
+    },
+    [],
+  )
 
   // ── 安装（单项目串行；40912 → 覆盖确认）──────────────────────
   const [installingKey, setInstallingKey] = useState<string | null>(null)
-  const [overwriteTarget, setOverwriteTarget] = useState<{ hit: MarketSearchHit; version: MarketVersion } | null>(null)
+  const [overwriteTarget, setOverwriteTarget] = useState<{
+    hit: MarketSearchHit
+    version: MarketVersion
+  } | null>(null)
 
   const installOne = useCallback(
     async (hit: MarketSearchHit, version: MarketVersion, overwrite: boolean) => {
@@ -233,7 +247,7 @@ export function MarketSheet({ open, onOpenChange, instanceId, initialQuery = nul
       >
         <SheetHeader className="border-b border-mcs-border-muted px-5 py-4">
           <SheetTitle className="flex items-center gap-2 text-mcs-text-default">
-            <Package className="size-4 text-mcs-accent" aria-hidden />
+            <Package className="size-4 text-mcs-accent-fg" aria-hidden />
             插件市场
             {cached && <StatusPill tone="muted">缓存</StatusPill>}
           </SheetTitle>
@@ -261,7 +275,10 @@ export function MarketSheet({ open, onOpenChange, instanceId, initialQuery = nul
           {loading ? (
             <div className="space-y-3" aria-busy="true" aria-label="搜索中">
               {Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className="flex gap-3 rounded-mcs-md border border-mcs-border-muted p-3">
+                <div
+                  key={i}
+                  className="flex gap-3 rounded-mcs-md border border-mcs-border-muted p-3"
+                >
                   <Skeleton className="size-10 rounded-mcs-md" />
                   <div className="flex-1 space-y-2">
                     <Skeleton className="h-4 w-1/3" />
@@ -304,6 +321,7 @@ export function MarketSheet({ open, onOpenChange, instanceId, initialQuery = nul
                   panel={panel?.slug === hit.slug ? panel : null}
                   installingKey={installingKey}
                   installedFiles={installedFiles}
+                  installedUnknown={installedUnknown}
                   onToggle={() => void toggleVersions(hit)}
                   onInstall={(v) => void installOne(hit, v, false)}
                 />
@@ -331,16 +349,19 @@ export function MarketSheet({ open, onOpenChange, instanceId, initialQuery = nul
           )}
         </div>
 
-        {/* ── 底注：安全说明 ── */}
-        <div className="border-t border-mcs-border-muted px-5 py-2.5 text-mcs-xs text-mcs-text-subtle">
-          数据源 modrinth.com（服务端代理转发，面板不出网）；文件经 zip 校验与文件名净化后落入 plugins/
+        {/* ── 底注：数据来源常驻（请求去向属须知情的信息）；安装处理细节收进浮层 ── */}
+        <div className="flex items-center gap-1 border-t border-mcs-border-muted px-5 py-2.5 text-mcs-xs text-mcs-text-muted">
+          <span>数据源 modrinth.com（服务端代理转发，面板不出网）</span>
+          <InfoHint label="插件文件处理说明">文件经 zip 校验与文件名净化后落入 plugins/</InfoHint>
         </div>
       </SheetContent>
 
       {/* 同名覆盖确认（与上传冲突确认同语义：升级是高影响操作） */}
       <ConfirmDialog
         open={overwriteTarget !== null}
-        onOpenChange={(o) => { if (!o) setOverwriteTarget(null) }}
+        onOpenChange={(o) => {
+          if (!o) setOverwriteTarget(null)
+        }}
         title="同名插件文件已存在"
         description={`plugins/ 目录已存在 ${overwriteTarget?.version.file.filename ?? ''}（净化后同名）。覆盖安装将替换旧文件，插件升级/降级可能影响存档兼容性。`}
         confirmText="覆盖安装"

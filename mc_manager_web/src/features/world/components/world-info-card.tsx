@@ -9,6 +9,7 @@ import { Globe, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
+import { worldSizeParts } from '@/lib/format'
 import type { WorldInfo } from '@/api/types'
 
 // ── 展示映射 ──
@@ -56,6 +57,7 @@ export function formatGameMode(gameMode: string): string {
 }
 
 import { StatusPill } from '@/components/mcs/status-pill'
+import { Card, CardBody, CardHeader } from '@/components/mcs/card'
 import type { ChipTone } from '@/components/mcs/chip'
 
 /** 难度 → 状态色（peaceful→info / easy→success / hard→error / 其余→warning） */
@@ -115,17 +117,12 @@ export function sizeProgress(sizeGB: number): number {
 /** 世界信息卡：9 行只读信息（名称/类型/种子/存档大小/游戏天数/难度/游戏模式/视野距离/在线玩家） */
 export function WorldInfoCard({ world, isLoading, onRefresh, className }: WorldInfoCardProps) {
   return (
-    <section
-      className={cn(
-        'mcs-edge-top relative rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted shadow-mcs-card',
-        className,
-      )}
-    >
-      <header className="flex items-center gap-3 border-b border-mcs-border-subtle px-4 py-3">
+    <Card className={cn('mcs-edge-top relative', className)}>
+      <CardHeader className="gap-3 border-b border-mcs-border-subtle px-4 py-3">
         <span className="flex size-8 shrink-0 items-center justify-center rounded-mcs-sm bg-mcs-accent-bg-subtle">
-          <Globe className="size-4 text-mcs-accent" aria-hidden />
+          <Globe className="size-4 text-mcs-accent-fg" aria-hidden />
         </span>
-        <h3 className="text-mcs-md font-semibold">世界信息</h3>
+        <h3 className="text-mcs-lg font-semibold">世界信息</h3>
         <div className="ml-auto">
           <Button
             variant="ghost"
@@ -138,9 +135,9 @@ export function WorldInfoCard({ world, isLoading, onRefresh, className }: WorldI
             <RefreshCw className={cn('size-3.5', isLoading && 'animate-spin')} aria-hidden />
           </Button>
         </div>
-      </header>
+      </CardHeader>
 
-      <div className="px-4 py-2">
+      <CardBody className="px-4 py-2">
         {isLoading ? (
           <div data-testid="world-info-skeleton" className="flex flex-col gap-3 py-2">
             {Array.from({ length: 6 }).map((_, i) => (
@@ -151,7 +148,7 @@ export function WorldInfoCard({ world, isLoading, onRefresh, className }: WorldI
             ))}
           </div>
         ) : !world ? (
-          <p className="py-8 text-center text-mcs-xs text-mcs-text-subtle">暂无世界信息</p>
+          <p className="py-8 text-center text-mcs-xs text-mcs-text-muted">暂无世界信息</p>
         ) : (
           <dl className="flex flex-col">
             <InfoRow label="世界名称">
@@ -164,15 +161,22 @@ export function WorldInfoCard({ world, isLoading, onRefresh, className }: WorldI
               </span>
             </InfoRow>
             <InfoRow label="存档大小">
-              <span className="mcs-num text-mcs-sm leading-none">{world.sizeGB.toFixed(1)}</span>
-              <span className="text-mcs-xs text-mcs-text-subtle"> GB</span>
+              {(() => {
+                const size = worldSizeParts(world.sizeGB)
+                return (
+                  <>
+                    <span className="mcs-num text-mcs-sm leading-none">{size.value}</span>
+                    <span className="text-mcs-xs text-mcs-text-muted"> {size.unit}</span>
+                  </>
+                )
+              })()}
               <span
                 role="progressbar"
                 aria-label="存档大小进度"
                 aria-valuemin={0}
                 aria-valuemax={10}
                 aria-valuenow={Math.min(Math.max(world.sizeGB, 0), 10)}
-                className="h-1.5 w-20 overflow-hidden rounded-mcs-xs bg-mcs-bg-subtle"
+                className="h-1.5 w-20 overflow-hidden rounded-mcs-xs bg-mcs-bg-secondary"
               >
                 <span
                   aria-hidden
@@ -185,17 +189,21 @@ export function WorldInfoCard({ world, isLoading, onRefresh, className }: WorldI
               {world.gameDays != null ? (
                 <>
                   <span className="mcs-num text-mcs-sm leading-none">{world.gameDays}</span>
-                  <span className="text-mcs-xs text-mcs-text-subtle"> 天</span>
+                  <span className="text-mcs-xs text-mcs-text-muted"> 天</span>
                 </>
               ) : (
                 '不可用'
               )}
             </InfoRow>
             <InfoRow label="难度">
-              <StatusPill tone={difficultyTone(world.difficulty)}>{formatDifficulty(world.difficulty)}</StatusPill>
+              <StatusPill tone={difficultyTone(world.difficulty)}>
+                {formatDifficulty(world.difficulty)}
+              </StatusPill>
             </InfoRow>
             <InfoRow label="游戏模式">
-              <StatusPill tone={gameModeTone(world.gameMode)}>{formatGameMode(world.gameMode)}</StatusPill>
+              <StatusPill tone={gameModeTone(world.gameMode)}>
+                {formatGameMode(world.gameMode)}
+              </StatusPill>
             </InfoRow>
             <InfoRow label="视野距离">
               <span className="mcs-num text-mcs-sm leading-none">{world.viewDistance}</span>
@@ -207,7 +215,7 @@ export function WorldInfoCard({ world, isLoading, onRefresh, className }: WorldI
             </InfoRow>
           </dl>
         )}
-      </div>
-    </section>
+      </CardBody>
+    </Card>
   )
 }

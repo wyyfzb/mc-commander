@@ -68,7 +68,7 @@ export const STRENGTH_BAR_STYLES: string[] = [
 
 /** 强度标签配色 */
 export const STRENGTH_TEXT_STYLES: string[] = [
-  'text-mcs-text-subtle',
+  'text-mcs-text-muted',
   'text-mcs-error-fg',
   'text-mcs-warning-fg',
   'text-mcs-success-fg',

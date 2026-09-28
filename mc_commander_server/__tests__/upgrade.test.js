@@ -1,5 +1,5 @@
 /**
- * 升级路由 + 升级服务测试（P0-4）
+ * 升级路由 + 升级服务测试
  * - 路由：前置校验矩阵（必填/白名单/404/运行中/重复升级/同版本）+ 202 异步受理
  * - 服务：进度事件序列（backup → download 失败 → rolled_back/failed）
  *
@@ -17,25 +17,28 @@ import path from 'path';
 
 // got：函数调用（.json 链）直接离线拒绝；stream 返回立即 error 的伪流
 vi.mock('got', () => ({
-  default: Object.assign(vi.fn(() => Promise.reject(new Error('offline (mocked)'))), {
-    stream: vi.fn(() => {
-      const listeners = {};
-      const stream = {
-        on(ev, cb) {
-          (listeners[ev] = listeners[ev] || []).push(cb);
-          return stream;
-        },
-        pipe() {
-          return stream;
-        },
-        destroy() {},
-      };
-      queueMicrotask(() => {
-        (listeners.error || []).forEach((cb) => cb(new Error('download failed (mocked)')));
-      });
-      return stream;
-    }),
-  }),
+  default: Object.assign(
+    vi.fn(() => Promise.reject(new Error('offline (mocked)'))),
+    {
+      stream: vi.fn(() => {
+        const listeners = {};
+        const stream = {
+          on(ev, cb) {
+            (listeners[ev] = listeners[ev] || []).push(cb);
+            return stream;
+          },
+          pipe() {
+            return stream;
+          },
+          destroy() {},
+        };
+        queueMicrotask(() => {
+          (listeners.error || []).forEach((cb) => cb(new Error('download failed (mocked)')));
+        });
+        return stream;
+      }),
+    },
+  ),
 }));
 
 // BackupService：备份即完成（触发 backupComplete 事件），restore 恒成功
@@ -77,7 +80,7 @@ beforeEach(() => {
 });
 
 // ── 桩 serverManager ──
-// serverPath 用真实临时目录：S-P0-2 路径收口后，resolveSafePath 的逐段
+// serverPath 用真实临时目录：路径收口后，resolveSafePath 的逐段
 // realpath 防线要求实例目录真实存在（与生产语义一致）
 let tmpDir;
 
@@ -85,7 +88,8 @@ function createMockInstance(overrides = {}) {
   return {
     id: 'inst-1',
     name: 'Test Server',
-    status: 'stopped',
+    // 不虚构 status 字段：真实 ManagedInstance 上只有 isRunning，桩多给一个
+    // 字段会让「守卫读错字段」保持绿灯（本套件曾因此掩盖 409 守卫恒假）
     mcVersion: '1.20.4',
     jarFile: 'server-1.20.4.jar',
     serverPath: tmpDir,
@@ -143,9 +147,7 @@ describe('Upgrade Routes', () => {
   });
 
   it('POST /instances/:id/upgrade - mcVersion 必填返回 400', async () => {
-    const res = await request
-      .post('/api/v1/instances/inst-1/upgrade')
-      .send({ type: 'vanilla' });
+    const res = await request.post('/api/v1/instances/inst-1/upgrade').send({ type: 'vanilla' });
     expect(res.status).toBe(400);
     expect(res.body.code).toBe(40000);
   });
@@ -178,7 +180,6 @@ describe('Upgrade Routes', () => {
   });
 
   it('POST /instances/:id/upgrade - 实例运行中返回 409（INSTANCE_RUNNING CONFLICT）', async () => {
-    serverManager._instance.status = 'running';
     serverManager._instance.isRunning = true;
     const res = await request
       .post('/api/v1/instances/inst-1/upgrade')
@@ -230,9 +231,7 @@ describe('UpgradeService 进度序列（离线 mock）', () => {
     const service = new UpgradeService(serverManager);
 
     // purpur：resolveDownloadUrl 无网络调用，直接进下载阶段 → mock 流报错
-    await expect(service.upgrade('inst-1', '1.21.4', 'purpur')).rejects.toThrow(
-      /download failed/
-    );
+    await expect(service.upgrade('inst-1', '1.21.4', 'purpur')).rejects.toThrow(/download failed/);
 
     const stages = serverManager._emitted
       .filter((e) => e.event === 'instance:upgradeProgress')
@@ -252,7 +251,7 @@ describe('UpgradeService 进度序列（离线 mock）', () => {
     const serverManager = createMockServerManager();
     const service = new UpgradeService(serverManager);
     await expect(service.upgrade('ghost', '1.21.4', 'purpur')).rejects.toThrow(
-      'Instance not found'
+      'Instance not found',
     );
   });
 

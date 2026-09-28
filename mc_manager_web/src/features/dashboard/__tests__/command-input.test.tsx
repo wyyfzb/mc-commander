@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, afterAll, beforeAll } from 'vitest'
-import { render, screen, fireEvent , waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { setupServer } from 'msw/node'
 import { http, HttpResponse } from 'msw'

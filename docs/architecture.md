@@ -4,6 +4,9 @@ MC_Commander 由两部分组成：**服务端**（Node.js，部署在 Minecraft 
 **Web 前端**（SPA，由服务端同源托管）。服主在浏览器中完成全部管理操作，
 无需在 Minecraft 服务端安装任何插件。
 
+两端的接口契约由共享包 `mc-schemas/`（zod）单一维护：前端经 vite alias 直读其 `src`，
+服务端经 `file:` 链接消费其构建产物 `dist`——因此改 `src` 后必须重建并一并提交 `dist`。
+
 ```
 ┌─────────────┐  HTTPS/WSS   ┌──────────────────────┐   RCON / HTTP   ┌──────────────┐
 │   浏览器     │ ───────────▶ │  mc_commander_server  │ ──────────────▶ │ Minecraft 服务端│
@@ -17,27 +20,29 @@ MC_Commander 由两部分组成：**服务端**（Node.js，部署在 Minecraft 
 ## 服务端（mc_commander_server/）
 
 - **入口**：`index.js`（Express + ws），同源托管 `public/` 下的前端产物
-- **认证**：全局 API Key（`X-API-Key` 头）+ 双级速率限制（见 SECURITY.md 信任模型）
+- **认证**：双通道 —— 管理员会话（`Authorization: Bearer`，面板默认路径）与全局 API Key
+  （`X-API-Key` 头，脚本/集成），+ 双级速率限制（见 SECURITY.md 信任模型）
 - **实例管理**：`services/mc_server.js` —— 子进程生命周期（spawn/崩溃检测/自动重启）、
   RCON 双向通道（命令下发 + 响应读取）、日志/性能指标采集、旧版与 26.x 新版
   目录结构兼容（如 `world_gen_settings.dat` 拆分）
 - **部署**：`routes/server-jar.js` —— PaperMC API 拉取版本清单/下载 jar（进度事件）、
   首启 eula/properties 生成、Forge installServer 支持
 - **备份**：`services/backup.service.js` —— 目录快照 + 硬链接增量
-  （rsync `--link-dest`，Windows 降级 robocopy；见 ADR-0003）
+  （rsync `--link-dest`，Windows 降级 robocopy）
 - **定时任务**：`services/task_scheduler.js`（croner）—— 5 类任务 + 临时封禁到期轮询
 - **数据**：better-sqlite3（实例/备份/计划任务/封禁记录），schema 迁移见 `db/database.js`
-- **实时**：`websocket.js` —— 23 种事件广播、断线补齐、心跳保活、背压保护
+- **实时**：`websocket.js` —— 32 种事件广播、断线补齐、心跳保活、背压保护
 
 ## Web 前端（mc_manager_web/）
 
 - **技术栈**：React 19 + TypeScript strict + Vite + Tailwind v4（`--mcs-*` 设计 token 体系）+
   shadcn-ui + TanStack Query（服务端状态）+ zustand（客户端状态）
 - **结构**：feature-based —— `src/features/<域>/`（players/instances/world/files/tasks/
-  settings/dashboard/onboarding/emergency），跨域复用下沉 `src/lib/`、`src/components/mcs/`
+  settings/dashboard/onboarding/plugins/webhooks/audit/auth），跨域复用下沉
+  `src/lib/`、`src/components/mcs/`
 - **通信**：REST（`src/api/`）+ WebSocket 优先、HTTP 轮询保底降级
-- **测试**：vitest + @testing-library + msw（单测 54 文件）；Playwright e2e 10 spec
-  （mock 后端 + dev server 双 webServer 自启）
+- **测试**：vitest + @testing-library + msw（单测 141 文件）；Playwright e2e 12 spec
+  （mock 后端 + dev server 双 webServer 自启）。（文件数为 v1.2.1 时点，仅示意规模）
 
 ## 版本兼容策略
 

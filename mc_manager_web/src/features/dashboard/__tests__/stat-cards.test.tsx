@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router'
 import { BigStatCards, PlayersCard, RuntimeInfoCard, tpsColor } from '../components/stat-cards'
 import { useServerStore } from '@/stores/server'
 import { mockInstanceStatus } from '@/test/mocks/handlers'
+import { formatStartTime } from '@/lib/format'
 
 /**
  * 统计卡组件测试：TPS 阈值变色 / 资源卡三行 / 在线玩家整行可点 / 运行信息
@@ -12,7 +13,15 @@ import { mockInstanceStatus } from '@/test/mocks/handlers'
 function setState(status = mockInstanceStatus) {
   useServerStore.setState({
     status,
-    systemStats: { cpuUsage: 12.5, memoryUsage: 4.2, totalMemory: 16, memoryPercent: 26.3, cpuCores: 4, loadAvg: [0.1], uptime: 86400 },
+    systemStats: {
+      cpuUsage: 12.5,
+      memoryUsage: 4.2,
+      totalMemory: 16,
+      memoryPercent: 26.3,
+      cpuCores: 4,
+      loadAvg: [0.1],
+      uptime: 86400,
+    },
     instanceId: 'demo',
     socketConnected: true,
     lastStatusEvent: null,
@@ -29,8 +38,8 @@ describe('tpsColor 阈值规则（≥19 健康 / 15-19 卡顿 / <15 严重）', 
   })
 
   it('未运行或 TPS 缺失 → 灰', () => {
-    expect(tpsColor(null, false)).toBe('text-mcs-text-subtle')
-    expect(tpsColor(20, false)).toBe('text-mcs-text-subtle')
+    expect(tpsColor(null, false)).toBe('text-mcs-text-muted')
+    expect(tpsColor(20, false)).toBe('text-mcs-text-muted')
   })
 })
 
@@ -46,8 +55,46 @@ describe('BigStatCards 资源卡', () => {
     expect(screen.getByText('4.2')).toBeInTheDocument()
     expect(screen.getByText((content) => content.includes('/ 16G'))).toBeInTheDocument()
     expect(screen.getByText('磁盘')).toBeInTheDocument()
-    // 进度条语义：CPU/内存/磁盘三行
-    expect(screen.getAllByRole('progressbar').length).toBe(3)
+    // 进度条语义：只有拿到数据的行才是 progressbar（本夹具无 diskUsage，磁盘行不带语义）
+    expect(screen.getAllByRole('progressbar')).toHaveLength(2)
+  })
+
+  it('数据卡标签行走标签档，TPS 大数走数字档、单位留小档（Grafana 三段式）', () => {
+    render(<BigStatCards />)
+    // 标签行不得升为区块标题档（否则与真区块标题同级）
+    const title = screen.getByRole('heading', { name: '资源使用' })
+    expect(title.className).toContain('text-mcs-sm')
+    expect(title.className).not.toContain('text-mcs-lg')
+    // 大数：display 档 + .mcs-num；同一次 cn 调用里的阈值色不得吞掉字号档（同组互吞）
+    const value = screen.getByText('20.0')
+    expect(value.className).toContain('mcs-num')
+    expect(value.className).toContain('text-mcs-display')
+    expect(value.className).toContain('text-mcs-success-fg')
+    expect(value.className).not.toContain('text-mcs-lg')
+    // 单位/后缀不随数字放大
+    expect(screen.getByText('TPS').className).toContain('text-mcs-lg')
+  })
+
+  it('顶排卡走紧凑卡档（p-3 / gap-2）：首屏高度必须还给终端', () => {
+    render(<BigStatCards />)
+    const card = screen.getByRole('heading', { name: '资源使用' }).closest('section')
+    expect(card).not.toBeNull()
+    expect(card!.className).toContain('p-3')
+    expect(card!.className).toContain('gap-2')
+    expect(card!.className).not.toContain('p-4')
+  })
+
+  it('整机数据未到：CPU/内存显示「暂无数据」，不拿实例口径（进程 RSS / 整机总量）顶替', () => {
+    // 实例状态在（status 有 memoryUsage=3.2 / cpuUsage），但 /system-stats 尚未送达
+    useServerStore.setState({ systemStats: null })
+    render(<BigStatCards />)
+
+    // 混用会渲染成「进程 RSS / 整机总量」的失真比例与百分比
+    expect(screen.getAllByText('暂无数据')).toHaveLength(2)
+    expect(screen.queryByText('3.2')).not.toBeInTheDocument()
+    expect(screen.queryByText((content) => content.includes('/ 16G'))).not.toBeInTheDocument()
+    // 无数据的行不得暴露进度语义：否则读屏播报「0%」，与可见文案「暂无数据」互相矛盾
+    expect(screen.queryAllByRole('progressbar')).toHaveLength(0)
   })
 
   it('TPS 卡顿显示「卡顿」+ warning 色', () => {
@@ -68,7 +115,15 @@ describe('BigStatCards 资源卡', () => {
   it('totalMemory 为 0 时内存进度条兜底为 0', () => {
     useServerStore.setState({
       status: mockInstanceStatus,
-      systemStats: { cpuUsage: 10, memoryUsage: 0, totalMemory: 0, memoryPercent: 0, cpuCores: 4, loadAvg: [0.1], uptime: 86400 },
+      systemStats: {
+        cpuUsage: 10,
+        memoryUsage: 0,
+        totalMemory: 0,
+        memoryPercent: 0,
+        cpuCores: 4,
+        loadAvg: [0.1],
+        uptime: 86400,
+      },
       instanceId: 'demo',
       socketConnected: true,
       lastStatusEvent: null,
@@ -134,19 +189,34 @@ describe('PlayersCard（右栏可点行）', () => {
   })
 
   it('RCON 未连接 → 提示启用 RCON', () => {
-    setState({ ...mockInstanceStatus, isRconConnected: false, sleepingPlayerNames: [], awakePlayerNames: [] })
+    setState({
+      ...mockInstanceStatus,
+      isRconConnected: false,
+      sleepingPlayerNames: [],
+      awakePlayerNames: [],
+    })
     renderCard()
     expect(screen.getByText('需启用 RCON 才能读取在线玩家')).toBeInTheDocument()
   })
 
   it('RCON 未连接 → 空态提供「前往服务器属性」深链（issue 343）', () => {
-    setState({ ...mockInstanceStatus, isRconConnected: false, sleepingPlayerNames: [], awakePlayerNames: [] })
+    setState({
+      ...mockInstanceStatus,
+      isRconConnected: false,
+      sleepingPlayerNames: [],
+      awakePlayerNames: [],
+    })
     renderCard()
     expect(screen.getByRole('button', { name: '前往服务器属性' })).toBeInTheDocument()
   })
 
   it('RCON 已连接 → 不渲染「前往服务器属性」深链', () => {
-    setState({ ...mockInstanceStatus, isRconConnected: true, sleepingPlayerNames: [], awakePlayerNames: [] })
+    setState({
+      ...mockInstanceStatus,
+      isRconConnected: true,
+      sleepingPlayerNames: [],
+      awakePlayerNames: [],
+    })
     renderCard()
     expect(screen.queryByRole('button', { name: '前往服务器属性' })).not.toBeInTheDocument()
   })
@@ -160,7 +230,11 @@ describe('RuntimeInfoCard', () => {
     expect(screen.getByText('2h 0m')).toBeInTheDocument() // 7200s
     expect(screen.getByText('1d 0h')).toBeInTheDocument() // 86400s=1天整
     expect(screen.getByText('上次存档')).toBeInTheDocument()
-    expect(screen.getByText('5分钟前')).toBeInTheDocument()
+    // 上次存档改绝对时间显示（「5分钟前」类模糊值降级为悬停提示）
+    expect(screen.getByText(formatStartTime(mockInstanceStatus.lastSave))).toBeInTheDocument()
+    expect(screen.queryByText('5分钟前')).not.toBeInTheDocument()
+    // 本卡关键数字与顶排另两卡同档（明细行留在 xs）
+    expect(screen.getByText('2h 0m').className).toContain('text-mcs-display')
   })
 
   it('未运行时显示「未运行」', () => {

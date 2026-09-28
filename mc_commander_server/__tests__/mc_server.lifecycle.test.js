@@ -129,7 +129,7 @@ describe('MCServerInstance lifecycle / RCON / stats timers', () => {
       expect(spawn).toHaveBeenCalledWith(
         'java',
         ['-Xmx2G', '-Xms1G', '-jar', path.join(tmpDir, 'server.jar'), 'nogui'],
-        expect.objectContaining({ cwd: tmpDir })
+        expect.objectContaining({ cwd: tmpDir }),
       );
       expect(instance.isRunning).toBe(true);
       expect(instance.startTime).not.toBeNull();
@@ -143,7 +143,7 @@ describe('MCServerInstance lifecycle / RCON / stats timers', () => {
       expect(spawn).toHaveBeenCalledWith(
         'java',
         ['-Xmx4G', '-jar', 'custom.jar', 'nogui'],
-        expect.objectContaining({ cwd: tmpDir })
+        expect.objectContaining({ cwd: tmpDir }),
       );
     });
 
@@ -187,9 +187,7 @@ describe('MCServerInstance lifecycle / RCON / stats timers', () => {
       // 模拟 spawn 失败：可执行文件不存在时 child_process 会 emit 'error'
       // 而非 'exit'。修复前无 error 监听 → EventEmitter 抛未捕获异常
       // （unhandled 'error' event 使整个服务端进程崩溃）。
-      expect(() =>
-        lastProc.emit('error', new Error('spawn java ENOENT')),
-      ).not.toThrow();
+      expect(() => lastProc.emit('error', new Error('spawn java ENOENT'))).not.toThrow();
 
       expect(instance.isRunning).toBe(false);
       expect(instance.process).toBeNull();
@@ -207,7 +205,7 @@ describe('MCServerInstance lifecycle / RCON / stats timers', () => {
       expect(spawn).toHaveBeenCalledWith(
         'java',
         ['-Xmx3G', '-XX:+UseG1GC', '-jar', 'server.jar', 'nogui'],
-        expect.objectContaining({ cwd: tmpDir })
+        expect.objectContaining({ cwd: tmpDir }),
       );
     });
 
@@ -241,7 +239,10 @@ describe('MCServerInstance lifecycle / RCON / stats timers', () => {
       const instance = createInstance();
       instance.start();
 
-      lastProc.stdout.emit('data', Buffer.from('[12:00:00] [Server thread/INFO]: Steve joined the game\n'));
+      lastProc.stdout.emit(
+        'data',
+        Buffer.from('[12:00:00] [Server thread/INFO]: Steve joined the game\n'),
+      );
 
       expect(instance.logBuffer.length).toBe(1);
       expect(instance.players.has('Steve')).toBe(true);
@@ -267,7 +268,11 @@ describe('MCServerInstance lifecycle / RCON / stats timers', () => {
     it('cleans up state on process exit', () => {
       const instance = createInstance();
       instance.start();
-      instance.players.set('Alice', { name: 'Alice', joinTime: Date.now() - 60000, totalPlayTime: 0 });
+      instance.players.set('Alice', {
+        name: 'Alice',
+        joinTime: Date.now() - 60000,
+        totalPlayTime: 0,
+      });
 
       const statusEvents = [];
       instance.on('status', (e) => statusEvents.push(e));
@@ -280,7 +285,7 @@ describe('MCServerInstance lifecycle / RCON / stats timers', () => {
       expect(statusEvents).toContainEqual({ event: 'stopped', code: 0 });
       // 在线玩家数据已持久化（累加在线时长）
       const saved = JSON.parse(
-        fs.readFileSync(path.join(tmpDir, 'playerdata', 'Alice.json'), 'utf-8')
+        fs.readFileSync(path.join(tmpDir, 'playerdata', 'Alice.json'), 'utf-8'),
       );
       expect(saved.totalPlayTime).toBe(60);
       // 累计运行时长写入数据库
@@ -368,12 +373,14 @@ describe('MCServerInstance lifecycle / RCON / stats timers', () => {
       const result = await instance.sendCommandWithResponse('list');
 
       expect(result).toBe('There are 0 of a max of 20 players online');
-      expect(Rcon).toHaveBeenCalledWith(expect.objectContaining({
-        host: '127.0.0.1',
-        port: 25575,
-        password: 'secret',
-        timeout: 5000,
-      }));
+      expect(Rcon).toHaveBeenCalledWith(
+        expect.objectContaining({
+          host: '127.0.0.1',
+          port: 25575,
+          password: 'secret',
+          timeout: 5000,
+        }),
+      );
       expect(client.send).toHaveBeenCalledWith('list');
     });
 
@@ -389,9 +396,11 @@ describe('MCServerInstance lifecycle / RCON / stats timers', () => {
     it('rejects when rcon connect times out and allows retry', async () => {
       const instance = createRconInstance();
       // new Rcon 返回连接失败的 client（connect reject）
-      mockRconReturns(makeFakeRconClient({
-        connect: vi.fn().mockRejectedValue(new Error('Connection timeout')),
-      }));
+      mockRconReturns(
+        makeFakeRconClient({
+          connect: vi.fn().mockRejectedValue(new Error('Connection timeout')),
+        }),
+      );
 
       await expect(instance.sendCommandWithResponse('list')).rejects.toThrow('Connection timeout');
       // 连接失败后清理 in-flight 状态，下次调用可重连
@@ -410,16 +419,25 @@ describe('MCServerInstance lifecycle / RCON / stats timers', () => {
       });
       mockRconReturns(client);
 
-      await expect(instance.sendCommandWithResponse('list')).rejects.toThrow('Timeout for packet id 5');
+      await expect(instance.sendCommandWithResponse('list')).rejects.toThrow(
+        'Timeout for packet id 5',
+      );
     });
 
     it('reuses in-flight connection promise for concurrent calls', async () => {
       const instance = createRconInstance();
       let resolveConnect;
       // new Rcon 返回 connect 挂起（等待 resolveConnect）的 client
-      mockRconReturns(makeFakeRconClient({
-        connect: vi.fn(() => new Promise((res) => { resolveConnect = res; })),
-      }));
+      mockRconReturns(
+        makeFakeRconClient({
+          connect: vi.fn(
+            () =>
+              new Promise((res) => {
+                resolveConnect = res;
+              }),
+          ),
+        }),
+      );
 
       const p1 = instance._rconEnsureConnected();
       const p2 = instance._rconEnsureConnected();
@@ -434,7 +452,9 @@ describe('MCServerInstance lifecycle / RCON / stats timers', () => {
       const instance = createRconInstance();
       const handlers = {};
       const client = makeFakeRconClient({
-        on: vi.fn((event, fn) => { handlers[event] = fn; }),
+        on: vi.fn((event, fn) => {
+          handlers[event] = fn;
+        }),
       });
       mockRconReturns(client);
 
@@ -466,8 +486,12 @@ describe('MCServerInstance lifecycle / RCON / stats timers', () => {
       const instance = createRconInstance();
       const order = [];
       const client = makeFakeRconClient({
-        on: vi.fn((event) => { order.push(`on:${event}`); }),
-        connect: vi.fn(async () => { order.push('connect'); }),
+        on: vi.fn((event) => {
+          order.push(`on:${event}`);
+        }),
+        connect: vi.fn(async () => {
+          order.push('connect');
+        }),
       });
       mockRconReturns(client);
 
@@ -481,7 +505,9 @@ describe('MCServerInstance lifecycle / RCON / stats timers', () => {
 
     it('rejects immediately when server is not running', async () => {
       const instance = createInstance();
-      await expect(instance.sendCommandWithResponse('list')).rejects.toThrow('Server is not running');
+      await expect(instance.sendCommandWithResponse('list')).rejects.toThrow(
+        'Server is not running',
+      );
     });
 
     it('records user commands to log stream as "> command"（终端命令回显）', async () => {
@@ -503,11 +529,14 @@ describe('MCServerInstance lifecycle / RCON / stats timers', () => {
       const logEvents = [];
       instance.on('log', (e) => logEvents.push(e));
 
-      lastProc.stdout.emit('data', Buffer.from(
-        '[01:00:00] [RCON Listener #1/INFO]: Thread RCON Listener started\n' +
-        '[01:00:01] [Server thread/INFO]: [Rcon: Teleported Steve to 100, 64, 100]\n' +
-        '[01:00:02] [Server thread/INFO]: Normal log line\n'
-      ));
+      lastProc.stdout.emit(
+        'data',
+        Buffer.from(
+          '[01:00:00] [RCON Listener #1/INFO]: Thread RCON Listener started\n' +
+            '[01:00:01] [Server thread/INFO]: [Rcon: Teleported Steve to 100, 64, 100]\n' +
+            '[01:00:02] [Server thread/INFO]: Normal log line\n',
+        ),
+      );
 
       const texts = logEvents.map((e) => e.text);
       expect(texts.some((t) => t.includes('Teleported Steve'))).toBe(true);
@@ -532,7 +561,7 @@ describe('MCServerInstance lifecycle / RCON / stats timers', () => {
       const expectation = expect(promise).rejects.toThrow('Command timeout');
 
       expect(instance.process.stdin.write).toHaveBeenCalledWith(
-        expect.stringMatching(/^mcsmp_\d+ list\n$/)
+        expect.stringMatching(/^mcsmp_\d+ list\n$/),
       );
 
       await vi.advanceTimersByTimeAsync(5000);
@@ -588,6 +617,13 @@ describe('MCServerInstance lifecycle / RCON / stats timers', () => {
       expect(instance._saveTimer).not.toBeNull();
     });
 
+    it('新一轮运行复位采集告警位（否则上一轮的告警位会让新进程首个失败静默）', () => {
+      const instance = createInstance();
+      instance._win32StatsError = true; // 上一轮持续失败留下的状态
+      instance._initializeRuntimeState();
+      expect(instance._win32StatsError).toBe(false);
+    });
+
     it('invokes collectors on their schedules', async () => {
       const instance = createInstance();
       const statsSpy = vi.spyOn(instance, '_collectStats').mockImplementation(() => {});
@@ -631,7 +667,9 @@ describe('MCServerInstance lifecycle / RCON / stats timers', () => {
       vi.spyOn(instance, '_collectMspt').mockResolvedValue();
       // RCON 查询挂起：模拟 RCON 卡顿（单轮执行时长 > 5s）
       let release;
-      const gate = new Promise((res) => { release = res; });
+      const gate = new Promise((res) => {
+        release = res;
+      });
       const sendSpy = vi.spyOn(instance, '_rconSend').mockImplementation(() => gate);
 
       instance.start(); // 内部置 isRunning=true 并启动采集调度
@@ -725,7 +763,7 @@ describe('MCServerInstance lifecycle / RCON / stats timers', () => {
       instance.properties = { 'enable-rcon': 'true', 'rcon.password': 'x' };
       // Paper/Vanilla 1.20.3+ 的 tick query 输出：mean 字段直接给出 MSPT
       vi.spyOn(instance, '_rconSend').mockResolvedValue(
-        'Server tick times (avg/min/max): 1.0/1.0/2.0 ms, mean: 15.25 ms, median: 15.0 ms'
+        'Server tick times (avg/min/max): 1.0/1.0/2.0 ms, mean: 15.25 ms, median: 15.0 ms',
       );
 
       await instance._collectMspt();
@@ -829,18 +867,20 @@ describe('MCServerInstance lifecycle / RCON / stats timers', () => {
       instance.players.set('Steve', { name: 'Steve', joinTime: Date.now(), totalPlayTime: 0 });
       Rcon.connect.mockResolvedValue(makeFakeRconClient());
       vi.spyOn(instance, '_rconSend')
-        .mockResolvedValueOnce('Steve has the following entity data: 20.0f')   // Health
+        .mockResolvedValueOnce('Steve has the following entity data: 20.0f') // Health
         .mockResolvedValueOnce('Steve has the following entity data: [1.0d, 64.0d, 2.0d]') // Pos
-        .mockResolvedValueOnce('Steve has the following entity data: 100');    // SleepTimer
+        .mockResolvedValueOnce('Steve has the following entity data: 100'); // SleepTimer
       const statsSpy = vi.fn();
       instance.on('playerStatsUpdate', statsSpy);
 
       await instance._collectPlayerStats();
 
       expect(instance._sleepingPlayers).toBe(1);
-      expect(statsSpy).toHaveBeenCalledWith(expect.objectContaining({
-        players: [expect.objectContaining({ name: 'Steve', isSleeping: true })]
-      }));
+      expect(statsSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          players: [expect.objectContaining({ name: 'Steve', isSleeping: true })],
+        }),
+      );
     });
 
     it('detects awake player when SleepTimer = 0', async () => {
@@ -929,7 +969,9 @@ describe('MCServerInstance lifecycle / RCON / stats timers', () => {
 
       // Alex 入睡，Steve 未计入
       expect(instance._sleepingPlayers).toBe(1);
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('SleepTimer query failed for Steve'));
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('SleepTimer query failed for Steve'),
+      );
       consoleSpy.mockRestore();
     });
 
@@ -958,7 +1000,9 @@ describe('MCServerInstance lifecycle / RCON / stats timers', () => {
         callOrder.push(cmd);
         // 模拟异步响应：/attribute 命令返回属性格式，其他返回实体数据格式
         if (cmd.startsWith('attribute ')) {
-          return Promise.resolve('Total value for attribute minecraft:generic.armor for Steve is 8.0');
+          return Promise.resolve(
+            'Total value for attribute minecraft:generic.armor for Steve is 8.0',
+          );
         }
         return Promise.resolve('Steve has the following entity data: 0');
       });
@@ -1009,7 +1053,9 @@ describe('MCServerInstance lifecycle / RCON / stats timers', () => {
     it('stopAll 等待所有运行中实例优雅停止（停机不丢玩家数据）', async () => {
       const manager = new MCServerManager();
       const instance = manager.createInstance({
-        id: 'graceful-stop', name: 'Graceful', jarFile: 'server.jar',
+        id: 'graceful-stop',
+        name: 'Graceful',
+        jarFile: 'server.jar',
         serverPath: tmpDir,
       });
       fs.writeFileSync(path.join(tmpDir, 'eula.txt'), 'eula=true\n');

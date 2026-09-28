@@ -1,11 +1,11 @@
 /**
  * BackupPanel 测试：
- * - 无实例空态 / 上次备份行（含无 completed 兜底）/ 列表行渲染（zip 旧格式徽章、failed 徽章、tone 类抽查）
- * - 恢复确认与 toast / zip·failed 行恢复禁用 / 任一行 restoring → 全列表恢复禁用
+ * - 无实例空态 / 上次备份行（含无 completed 兜底）/ 列表行渲染（failed 徽章、tone 类抽查）
+ * - 恢复确认与 toast / failed 行恢复禁用 / 任一行 restoring → 全列表恢复禁用
  * - 删除确认与 toast / 进行中（creating）行删除禁用
  * - 立即备份在途禁用 + 成功/失败 toast / 空态引导与「配置定时备份」跳转 /tasks
- * - 下载：completed 快照可下载（文件名含时间戳）→ a[download] 触发 + toast；
- *   zip/failed 禁用 + title 提示；下载中行级转圈禁用；失败错误 toast
+ * - 下载：completed 可下载（文件名含时间戳）→ a[download] 触发 + toast；
+ *   failed 禁用 + title 提示；下载中行级转圈禁用；失败错误 toast
  * mock 数据为结构占位（mockBackups 虚构内容），严禁真实服务器信息
  */
 import { describe, it, expect, beforeEach, afterAll, afterEach, beforeAll, vi } from 'vitest'
@@ -17,8 +17,10 @@ import { setupServer } from 'msw/node'
 import { createMemoryRouter, RouterProvider } from 'react-router'
 import { Toaster } from 'sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import { handlers, mockBackups } from '@/test/mocks/handlers'
+import { handlers, restoreMock, mockBackups } from '@/test/mocks/handlers'
+import { queryKeys } from '@/api/queries'
 import { useConnectionStore } from '@/stores/connection'
+import { applyBackupProgress, clearBackupProgress } from '@/stores/backup-progress'
 import { formatBackupDate, formatBackupSize } from '@/lib/mc-backup'
 import type { BackupItem } from '@/api/types'
 import { BackupPanel, buildBackupDownloadName } from '../backup-panel'
@@ -58,20 +60,34 @@ function renderPanel(instanceId: string | null = 'demo') {
     ],
     { initialEntries: ['/settings/backups'] },
   )
-  return render(<RouterProvider router={router} />)
+  render(<RouterProvider router={router} />)
+  // 返回 queryClient 供用例等待「数据真正落地」（只断挂载首帧的话任何响应都能蒙对）
+  return qc
 }
 
 beforeEach(() => {
   localStorage.clear()
   useConnectionStore.setState({ baseUrl: '', apiKey: 'test-key', status: 'ready' })
+  restoreMock.instanceName = null
+  restoreMock.calls = 0
+  restoreMock.bodies = []
 })
 
 describe('BackupPanel 空态', () => {
-  it('instanceId=null：无实例空态（复用其他页同文案）', () => {
+  it('instanceId=null 且列表为空：真零实例空态（复用其他页同文案）', async () => {
+    server.use(http.get('*/api/v1/instances', () => okEnvelope([])))
     renderPanel(null)
-    expect(screen.getByText('暂无服务器实例')).toBeInTheDocument()
-    expect(screen.getByText('请先在服务端创建 MC 服务器实例')).toBeInTheDocument()
+    expect(await screen.findByText('暂无服务器实例')).toBeInTheDocument()
+    expect(screen.getByText('使用部署向导创建第一个实例')).toBeInTheDocument()
     expect(screen.queryByText('备份管理')).not.toBeInTheDocument()
+  })
+
+  it('instanceId=null 但实例列表非空：过渡占位，不谎报零实例（app-shell 尚未选中首帧）', async () => {
+    const qc = renderPanel(null)
+    // 默认 handlers 返回 1 个实例：等它真正落地再断言，否则空列表也能对上首帧
+    await waitFor(() => expect(qc.getQueryData(queryKeys.instances())).toHaveLength(1))
+    expect(screen.getByText('正在载入服务器实例…')).toBeInTheDocument()
+    expect(screen.queryByText('暂无服务器实例')).not.toBeInTheDocument()
   })
 
   it('列表为空：引导文案 +「配置定时备份」跳转 /tasks', async () => {
@@ -85,14 +101,22 @@ describe('BackupPanel 空态', () => {
 })
 
 describe('BackupPanel 上次备份与列表渲染', () => {
-  it('标题 + 快照机制说明 + 上次备份行（最近一条 completed：日期 · 大小）', async () => {
+  it('标题 + 快照机制说明（收进信息入口）+ 上次备份行（最近一条 completed：日期 · 大小）', async () => {
+    const user = userEvent.setup()
     renderPanel()
     expect(await screen.findByText('备份管理')).toBeInTheDocument()
+    // 机制说明不常驻：正文只在点开信息入口后进入可访问性树
     expect(
-      screen.getByText('快照备份：未修改文件零拷贝增量传输，超出保留策略自动清理（默认保留策略见服务端配置）'),
-    ).toBeInTheDocument()
+      screen.queryByText(
+        '快照备份：未修改文件零拷贝增量传输，超出保留策略自动清理（默认保留策略见服务端配置）',
+      ),
+    ).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '快照备份说明' }))
+    expect(await screen.findByRole('dialog', { name: '快照备份说明' })).toHaveTextContent(
+      '快照备份：未修改文件零拷贝增量传输，超出保留策略自动清理（默认保留策略见服务端配置）',
+    )
     // 等待列表数据加载完成（标题为静态文案，先于数据渲染）
-    await screen.findByText('手动备份 2026-08-14')
+    await screen.findByText('手动备份')
     const completed = mockBackups.find((b) => b.status === 'completed')!
     const expected = `上次备份：${formatBackupDate(completed.createdAt)} · ${formatBackupSize(completed.size)}`
     expect(screen.getByText(expected)).toBeInTheDocument()
@@ -105,38 +129,33 @@ describe('BackupPanel 上次备份与列表渲染', () => {
     expect(await screen.findByText('尚未创建备份')).toBeInTheDocument()
   })
 
-  it('列表行渲染：名称 / 状态徽章 / 时间·大小 / 旧格式徽章（zip）', async () => {
+  it('列表行渲染：名称 / 状态徽章 / 时间·大小', async () => {
     renderPanel()
-    await screen.findByText('手动备份 2026-08-14')
-    expect(screen.getByText('旧格式压缩包')).toBeInTheDocument()
+    await screen.findByText('手动备份')
     expect(screen.getByText('失败的备份')).toBeInTheDocument()
 
-    // 状态徽章：completed ×2（已就绪）+ failed ×1（失败）
-    expect(screen.getAllByText('已就绪')).toHaveLength(2)
+    // 状态徽章：completed ×1（已就绪）+ failed ×1（失败）
+    expect(screen.getAllByText('已就绪')).toHaveLength(1)
     expect(screen.getByText('失败')).toBeInTheDocument()
 
-    // 旧格式徽章仅 zip 行
-    expect(screen.getByText('旧格式')).toBeInTheDocument()
-
-    // 时间 · 大小行（zip：日期 · 大小；failed size=0 → 仅日期）
-    const zip = mockBackups[1]!
+    // 时间 · 大小行（completed：日期 · 大小；failed size=0 → 仅日期）
+    const completed = mockBackups[0]!
     expect(
-      screen.getByText(`${formatBackupDate(zip.createdAt)} · ${formatBackupSize(zip.size)}`),
+      screen.getByText(
+        `${formatBackupDate(completed.createdAt)} · ${formatBackupSize(completed.size)}`,
+      ),
     ).toBeInTheDocument()
-    const failed = mockBackups[2]!
+    const failed = mockBackups[1]!
     expect(screen.getByText(formatBackupDate(failed.createdAt))).toBeInTheDocument()
 
     // 状态徽章 tone token 类抽查（token 纪律：禁硬编码色值）
-    const successBadge = screen.getAllByText('已就绪')[0]!
+    const successBadge = screen.getByText('已就绪')
     expect(successBadge.className).toContain('bg-mcs-success-bg-subtle')
     expect(successBadge.className).toContain('text-mcs-success-fg')
     expect(successBadge.className).toContain('border-mcs-success-border')
     const errorBadge = screen.getByText('失败')
     expect(errorBadge.className).toContain('bg-mcs-error-bg-subtle')
     expect(errorBadge.className).toContain('text-mcs-error-fg')
-    const legacyBadge = screen.getByText('旧格式')
-    expect(legacyBadge.className).toContain('bg-mcs-warning-bg-subtle')
-    expect(legacyBadge.className).toContain('text-mcs-warning-fg')
   })
 })
 
@@ -144,13 +163,11 @@ describe('BackupPanel 恢复', () => {
   it('恢复危险确认（标题/影响说明/实例名输入）：不匹配禁用 → 输入匹配 → 确认 → 成功 toast', async () => {
     const user = userEvent.setup()
     renderPanel()
-    await screen.findByText('手动备份 2026-08-14')
-    await user.click(screen.getByRole('button', { name: '手动备份 2026-08-14 恢复' }))
+    await screen.findByText('手动备份')
+    await user.click(screen.getByRole('button', { name: '手动备份 恢复' }))
     // 红色警示标题 + 影响说明
     expect(screen.getByText('恢复备份（危险操作）')).toBeInTheDocument()
-    expect(
-      screen.getByText(/将用备份 “手动备份 2026-08-14” 覆盖当前世界数据，且不可撤销/),
-    ).toBeInTheDocument()
+    expect(screen.getByText(/将用备份 “手动备份” 覆盖当前世界数据，且不可撤销/)).toBeInTheDocument()
     // 输入不匹配 → 确认禁用
     const confirmBtn = screen.getByRole('button', { name: '确认恢复' })
     expect(confirmBtn).toBeDisabled()
@@ -162,14 +179,70 @@ describe('BackupPanel 恢复', () => {
     expect(confirmBtn).toBeEnabled()
     await user.click(confirmBtn)
     expect(await screen.findByText('恢复已开始，完成后请启动服务器生效')).toBeInTheDocument()
+    // 显式断言请求体带确认串（服务端强制校验；只靠 mock 守卫则前端漏带时断言不承重）
+    expect(restoreMock.bodies[0]).toEqual({ confirmName: '演示实例' })
   })
 
-  it('zip 旧格式与 failed 备份：恢复按钮禁用，completed 快照可恢复', async () => {
+  it('无名称实例：确认目标退到备份名（实例名确认会空转），标签与请求体同步', async () => {
+    // 面板的实例名来自实例列表：空名实例（升级前旧值）要连列表一起换
+    server.use(
+      http.get('*/api/v1/instances', () =>
+        HttpResponse.json({
+          status: 'ok',
+          code: 0,
+          message: 'Success',
+          data: [{ id: 'demo', name: '', isRunning: true, playerCount: 0 }],
+          timestamp: new Date().toISOString(),
+        }),
+      ),
+    )
+    restoreMock.instanceName = ''
+    const user = userEvent.setup()
     renderPanel()
-    await screen.findByText('手动备份 2026-08-14')
-    expect(screen.getByRole('button', { name: '旧格式压缩包 恢复' })).toBeDisabled()
+    await screen.findByText('手动备份')
+    await user.click(screen.getByRole('button', { name: '手动备份 恢复' }))
+
+    // 实例没有名称 → 确认目标换成备份名，空输入不再构成确认
+    expect(screen.getByText('输入备份名「手动备份」以确认')).toBeInTheDocument()
+    const confirmBtn = screen.getByRole('button', { name: '确认恢复' })
+    expect(confirmBtn).toBeDisabled()
+
+    await user.type(screen.getByLabelText(/输入备份名/), '手动备份')
+    expect(confirmBtn).toBeEnabled()
+    await user.click(confirmBtn)
+
+    expect(await screen.findByText('恢复已开始，完成后请启动服务器生效')).toBeInTheDocument()
+    expect(restoreMock.bodies[0]).toEqual({ confirmName: '手动备份' })
+  })
+
+  it('failed 备份：恢复按钮禁用，completed 可恢复', async () => {
+    renderPanel()
+    await screen.findByText('手动备份')
     expect(screen.getByRole('button', { name: '失败的备份 恢复' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: '手动备份 2026-08-14 恢复' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: '手动备份 恢复' })).toBeEnabled()
+  })
+
+  // 升级前库里可能存着带首尾空白的实例名：两侧都归一化才可能确认得上。
+  // 服务端按 trim 后全等比对（见 POST /backups/:id/restore），前端按原样比对会让
+  // 按钮永久禁用（有备份却恢复不了）
+  it('实例名带尾空格（升级前旧值）：输入界面所见名字即可确认恢复', async () => {
+    server.use(
+      http.get('*/api/v1/instances', () =>
+        okEnvelope([{ id: 'demo', name: '演示实例 ', isRunning: true, playerCount: 0 }]),
+      ),
+    )
+    const user = userEvent.setup()
+    renderPanel()
+    await screen.findByText('手动备份')
+    await user.click(screen.getByRole('button', { name: '手动备份 恢复' }))
+
+    const confirmBtn = screen.getByRole('button', { name: '确认恢复' })
+    expect(confirmBtn).toBeDisabled()
+    await user.type(screen.getByLabelText(/输入实例名/), '演示实例')
+
+    expect(confirmBtn).toBeEnabled()
+    await user.click(confirmBtn)
+    expect(await screen.findByText('恢复已开始，完成后请启动服务器生效')).toBeInTheDocument()
   })
 
   it('任一行 restoring → 全列表恢复按钮禁用（含其余 completed 行）', async () => {
@@ -185,9 +258,82 @@ describe('BackupPanel 恢复', () => {
     // 恢复中行本身 + 其余 completed 行恢复全部禁用
     expect(screen.getByRole('button', { name: '恢复中的备份 恢复' })).toBeDisabled()
     expect(screen.getByRole('button', { name: '可恢复的备份 恢复' })).toBeDisabled()
-    // 恢复中行删除禁用；completed 行删除可用
-    expect(screen.getByRole('button', { name: '恢复中的备份 删除' })).toBeDisabled()
+    // 进行中行显示取消入口（替代禁用的删除）；completed 行删除可用
+    expect(screen.getByRole('button', { name: '恢复中的备份 取消' })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: '恢复中的备份 删除' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '可恢复的备份 删除' })).toBeEnabled()
+  })
+})
+
+describe('BackupPanel 取消与进度', () => {
+  it('列表有进行中行：显示进度区（无 WS 推送时转圈不确定态）+ 取消按钮', async () => {
+    const creatingList: BackupItem[] = [
+      { ...mockBackups[0]!, id: 30, status: 'creating', name: '创建中的备份' },
+    ]
+    server.use(http.get('*/api/v1/instances/:id/backups', () => okEnvelope(creatingList)))
+    renderPanel()
+    await screen.findByText('创建中的备份')
+    const zone = screen.getByTestId('backup-progress')
+    expect(zone).toBeInTheDocument()
+    expect(screen.getByText('取消操作')).toBeEnabled()
+    // 无 WS 推送：不确定态（文案「备份中…」），无 role=progressbar
+    expect(screen.getByText('备份中…')).toBeInTheDocument()
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
+  })
+
+  it('WS 进度推送后进度条呈现百分比（store → 面板联动）', async () => {
+    const creatingList: BackupItem[] = [
+      { ...mockBackups[0]!, id: 30, status: 'creating', name: '创建中的备份' },
+    ]
+    server.use(http.get('*/api/v1/instances/:id/backups', () => okEnvelope(creatingList)))
+    applyBackupProgress('demo', 'create', 30, 62.4)
+    renderPanel()
+    await screen.findByText('创建中的备份')
+    const bar = screen.getByRole('progressbar')
+    expect(bar).toHaveAttribute('aria-valuenow', '62')
+    expect(screen.getByText('62%')).toBeInTheDocument()
+    // store 是全局的：用例结束清理防串场
+    clearBackupProgress('demo')
+  })
+
+  it('取消命中 40904（操作刚结束的良性竞态）→ 提示「已结束」而非报取消失败', async () => {
+    const user = userEvent.setup()
+    server.use(
+      http.post('*/api/v1/instances/:id/backups/cancel', () =>
+        HttpResponse.json(
+          { status: 'error', code: 40904, message: 'No active backup operation', data: null },
+          { status: 409 },
+        ),
+      ),
+    )
+    const creatingList: BackupItem[] = [
+      { ...mockBackups[0]!, id: 30, status: 'creating', name: '创建中的备份' },
+    ]
+    server.use(http.get('*/api/v1/instances/:id/backups', () => okEnvelope(creatingList)))
+    renderPanel()
+    await screen.findByText('创建中的备份')
+    await user.click(screen.getByText('取消操作'))
+    expect(await screen.findByText('该操作已结束')).toBeInTheDocument()
+    expect(screen.queryByText(/取消失败/)).not.toBeInTheDocument()
+  })
+
+  it('点击取消 → 调用 cancel 端点并失效列表', async () => {
+    const user = userEvent.setup()
+    let cancelCalls = 0
+    server.use(
+      http.post('*/api/v1/instances/:id/backups/cancel', () => {
+        cancelCalls += 1
+        return okEnvelope({ kind: 'create', backupId: 30 })
+      }),
+    )
+    const creatingList: BackupItem[] = [
+      { ...mockBackups[0]!, id: 30, status: 'creating', name: '创建中的备份' },
+    ]
+    server.use(http.get('*/api/v1/instances/:id/backups', () => okEnvelope(creatingList)))
+    renderPanel()
+    await screen.findByText('创建中的备份')
+    await user.click(screen.getByText('取消操作'))
+    await waitFor(() => expect(cancelCalls).toBe(1))
   })
 })
 
@@ -195,10 +341,10 @@ describe('BackupPanel 删除', () => {
   it('删除确认对话框 → 确认 → 成功 toast（含备份名）', async () => {
     const user = userEvent.setup()
     renderPanel()
-    await screen.findByText('手动备份 2026-08-14')
-    await user.click(screen.getByRole('button', { name: '手动备份 2026-08-14 删除' }))
-    expect(screen.getByText('删除备份 “手动备份 2026-08-14”？')).toBeInTheDocument()
-    expect(screen.getByText('确定要删除备份 “手动备份 2026-08-14” 吗？')).toBeInTheDocument()
+    await screen.findByText('手动备份')
+    await user.click(screen.getByRole('button', { name: '手动备份 删除' }))
+    expect(screen.getByText('删除备份 “手动备份”？')).toBeInTheDocument()
+    expect(screen.getByText('确定要删除备份 “手动备份” 吗？')).toBeInTheDocument()
     // 不可逆提示以 warning 色小字独立呈现（全站删除确认统一规范）
     expect(screen.getByText('此操作不可撤销')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '删除' }))
@@ -213,8 +359,34 @@ describe('BackupPanel 删除', () => {
     renderPanel()
     await screen.findByText('创建中的备份')
     expect(screen.getByText('备份中')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '创建中的备份 删除' })).toBeDisabled()
+    // 进行中行：删除入口被取消替代；恢复仍禁用
+    expect(screen.getByRole('button', { name: '创建中的备份 取消' })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: '创建中的备份 删除' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '创建中的备份 恢复' })).toBeDisabled()
+  })
+
+  it('挂载来的归档条目：删除确认按「连带删除原归档快照」如实告知（不写通用不可逆提示）', async () => {
+    const user = userEvent.setup()
+    const mountedList: BackupItem[] = [
+      {
+        ...mockBackups[0]!,
+        id: 31,
+        name: '归档快照',
+        sourceArchiveId: 'paper-1a2b3c4d',
+      },
+    ]
+    server.use(http.get('*/api/v1/instances/:id/backups', () => okEnvelope(mountedList)))
+    renderPanel()
+    await screen.findByText('归档快照')
+    await user.click(screen.getByRole('button', { name: '归档快照 删除' }))
+
+    // 挂载不复制磁盘内容 ⇒ 该快照只有这一份：删除的后果必须写清
+    expect(
+      screen.getByText(
+        '此条目挂载自归档 paper-1a2b3c4d：删除会一并删除磁盘上的原归档快照（不复制，没有第二份副本）',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('此操作不可撤销')).not.toBeInTheDocument()
   })
 })
 
@@ -232,7 +404,7 @@ describe('BackupPanel 立即备份', () => {
       }),
     )
     renderPanel()
-    await screen.findByText('手动备份 2026-08-14')
+    await screen.findByText('手动备份')
     await user.click(screen.getByRole('button', { name: '立即备份' }))
     // 在途：禁用 + 备份中...（gate 未放行，状态稳定可断言）
     await waitFor(() => {
@@ -260,7 +432,7 @@ describe('BackupPanel 立即备份', () => {
       ),
     )
     renderPanel()
-    await screen.findByText('手动备份 2026-08-14')
+    await screen.findByText('手动备份')
     await user.click(screen.getByRole('button', { name: '立即备份' }))
     expect(await screen.findByText('操作失败：已有备份任务进行中')).toBeInTheDocument()
   })
@@ -341,7 +513,9 @@ describe('BackupPanel 下载', () => {
     downloads = []
     vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:mock-download')
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
-    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
       downloads.push(this.download)
     })
   })
@@ -350,11 +524,11 @@ describe('BackupPanel 下载', () => {
     vi.restoreAllMocks()
   })
 
-  it('completed 快照行可下载：点击 → a[download] 触发（文件名含时间戳）+ ObjectURL 用后即 revoke + 成功 toast', async () => {
+  it('completed 行可下载：点击 → a[download] 触发（文件名含时间戳）+ ObjectURL 用后即 revoke + 成功 toast', async () => {
     const user = userEvent.setup()
     renderPanel()
-    await screen.findByText('手动备份 2026-08-14')
-    await user.click(screen.getByRole('button', { name: '手动备份 2026-08-14 下载' }))
+    await screen.findByText('手动备份')
+    await user.click(screen.getByRole('button', { name: '手动备份 下载' }))
     expect(await screen.findByText('备份已开始下载')).toBeInTheDocument()
     expect(downloads).toHaveLength(1)
     expect(downloads[0]).toBe(buildBackupDownloadName(mockBackups[0]!))
@@ -364,14 +538,13 @@ describe('BackupPanel 下载', () => {
     expect(URL.revokeObjectURL).toHaveBeenCalledTimes(1)
   })
 
-  it('zip 旧格式/failed 行下载禁用 + title 提示；completed 快照可用', async () => {
+  it('failed 行下载禁用 + title 提示；completed 可用', async () => {
     renderPanel()
-    await screen.findByText('手动备份 2026-08-14')
-    const zipBtn = screen.getByRole('button', { name: '旧格式压缩包 下载' })
-    expect(zipBtn).toBeDisabled()
-    expect(zipBtn).toHaveAttribute('title', '旧格式备份不支持下载')
-    expect(screen.getByRole('button', { name: '失败的备份 下载' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: '手动备份 2026-08-14 下载' })).toBeEnabled()
+    await screen.findByText('手动备份')
+    const failedBtn = screen.getByRole('button', { name: '失败的备份 下载' })
+    expect(failedBtn).toBeDisabled()
+    expect(failedBtn).toHaveAttribute('title', '仅已就绪的备份可下载')
+    expect(screen.getByRole('button', { name: '手动备份 下载' })).toBeEnabled()
   })
 
   it('下载中：按钮转圈禁用（title=正在下载...）→ 完成后恢复 + 成功 toast', async () => {
@@ -390,11 +563,11 @@ describe('BackupPanel 下载', () => {
       }),
     )
     renderPanel()
-    await screen.findByText('手动备份 2026-08-14')
-    await user.click(screen.getByRole('button', { name: '手动备份 2026-08-14 下载' }))
+    await screen.findByText('手动备份')
+    await user.click(screen.getByRole('button', { name: '手动备份 下载' }))
     // 在途：禁用 + 转圈图标（gate 未放行，状态稳定可断言）
     await waitFor(() => {
-      const btn = screen.getByRole('button', { name: '手动备份 2026-08-14 下载' })
+      const btn = screen.getByRole('button', { name: '手动备份 下载' })
       expect(btn).toBeDisabled()
       expect(btn.querySelector('.animate-spin')).not.toBeNull()
     })
@@ -402,30 +575,30 @@ describe('BackupPanel 下载', () => {
     expect(await screen.findByText('备份已开始下载')).toBeInTheDocument()
     // 完成后按钮恢复可用
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: '手动备份 2026-08-14 下载' })).toBeEnabled()
+      expect(screen.getByRole('button', { name: '手动备份 下载' })).toBeEnabled()
     })
   })
 
-  it('下载失败 → 错误 toast（40904 服务端中文文案透传）', async () => {
+  it('下载失败 → 错误 toast（40000 前端本地化文案）', async () => {
     const user = userEvent.setup()
     server.use(
       http.get('*/api/v1/backups/:id/download', () =>
         HttpResponse.json(
           {
             status: 'error',
-            code: 40904,
-            message: '旧格式备份不支持下载',
+            code: 40000,
+            message: 'Validation failed',
             details: null,
             timestamp: new Date().toISOString(),
           },
-          { status: 409 },
+          { status: 400 },
         ),
       ),
     )
     renderPanel()
-    await screen.findByText('手动备份 2026-08-14')
-    await user.click(screen.getByRole('button', { name: '手动备份 2026-08-14 下载' }))
-    expect(await screen.findByText('下载失败：旧格式备份不支持下载')).toBeInTheDocument()
+    await screen.findByText('手动备份')
+    await user.click(screen.getByRole('button', { name: '手动备份 下载' }))
+    expect(await screen.findByText('下载失败：请求参数校验失败')).toBeInTheDocument()
     // 失败不触发浏览器下载
     expect(downloads).toHaveLength(0)
   })
@@ -434,5 +607,164 @@ describe('BackupPanel 下载', () => {
     expect(buildBackupDownloadName({ name: '坏时间备份', createdAt: 'not-a-date' })).toBe(
       '坏时间备份.tar.gz',
     )
+  })
+})
+
+/**
+ * 归档快照挂载：
+ * 卸载实例会保留快照目录但删掉备份表记录——这些「磁盘上有、索引里没有」的快照此前
+ * 在 UI 完全不可见。本组锁定：有可挂载项才出区块、挂载走二次确认、成功后据实提示、
+ * 空清单不出区块（不显示一个永远空的入口）。
+ */
+describe('BackupPanel 归档快照（未建立索引）', () => {
+  const archivedGroup = {
+    archiveId: 'paper-1a2b3c4d',
+    instanceExists: false,
+    snapshotCount: 3,
+    usableCount: 2,
+    latestMtime: '2026-09-01T00:00:00.000Z',
+  }
+
+  it('无可挂载项：不渲染归档区块（空态不出入口）', async () => {
+    server.use(http.get('*/api/v1/backups/archived', () => okEnvelope([])))
+    const qc = renderPanel()
+    await waitFor(() => expect(qc.getQueryData(queryKeys.backups('demo'))).toBeDefined())
+
+    expect(screen.queryByText('归档快照（未建立索引）')).not.toBeInTheDocument()
+  })
+
+  it('清点接口失败（如 503 索引不可读）：显示一句诚实的错误行，不静默当作「没有归档」', async () => {
+    server.use(
+      http.get('*/api/v1/backups/archived', () =>
+        HttpResponse.json(
+          {
+            status: 'error',
+            code: 50303,
+            message: '备份索引不可读，请稍后重试',
+            details: null,
+            timestamp: new Date().toISOString(),
+          },
+          { status: 503 },
+        ),
+      ),
+    )
+    const qc = renderPanel()
+    // 等查询真的失败（不是首帧的「还没请求」）：错误行只在 query 出错后渲染
+    await waitFor(() => expect(qc.getQueryState(queryKeys.archivedSnapshots())?.error).toBeTruthy())
+
+    expect(await screen.findByText(/归档快照清点失败/)).toBeInTheDocument()
+    expect(screen.queryByText('归档快照（未建立索引）')).not.toBeInTheDocument()
+  })
+
+  it('有可挂载项：展示来源/可挂载份数/最近时间；生命周期说明收进信息入口', async () => {
+    const user = userEvent.setup()
+    server.use(http.get('*/api/v1/backups/archived', () => okEnvelope([archivedGroup])))
+    const qc = renderPanel()
+    await waitFor(() => expect(qc.getQueryData(queryKeys.archivedSnapshots())).toBeDefined())
+
+    expect(await screen.findByText('归档快照（未建立索引）')).toBeInTheDocument()
+    expect(screen.getByText('paper-1a2b3c4d')).toBeInTheDocument()
+    expect(screen.getByText(/来自已卸载实例/)).toBeInTheDocument()
+    // 计数口径 = 未建立索引的份数中可挂载的那部分（已挂载的不计入）
+    expect(screen.getByText(/可挂载 2\/3 份/)).toBeInTheDocument()
+    // 机制说明不常驻
+    expect(screen.queryByText(/不复制、不移动\s*磁盘内容/)).not.toBeInTheDocument()
+    // 点开入口即读到全文：「挂载只建索引」+ 后续生命周期（计入配额、按最旧优先清理、删条目＝删唯一副本）
+    await user.click(screen.getByRole('button', { name: '归档快照说明' }))
+    const hint = await screen.findByRole('dialog', { name: '归档快照说明' })
+    expect(hint).toHaveTextContent('不复制、不移动磁盘内容')
+    expect(hint).toHaveTextContent('计入本实例的备份配额')
+    expect(hint).toHaveTextContent('按创建时间最旧优先')
+    expect(hint).toHaveTextContent('删除条目会连带删除磁盘上的原归档快照')
+  })
+
+  it('现存实例的未索引快照：文案据实（不误称「已卸载」）', async () => {
+    server.use(
+      http.get('*/api/v1/backups/archived', () =>
+        okEnvelope([{ ...archivedGroup, instanceExists: true }]),
+      ),
+    )
+    const qc = renderPanel()
+    await waitFor(() => expect(qc.getQueryData(queryKeys.archivedSnapshots())).toBeDefined())
+
+    expect(await screen.findByText(/现存实例的未索引快照/)).toBeInTheDocument()
+    expect(screen.queryByText(/来自已卸载实例/)).not.toBeInTheDocument()
+  })
+
+  it('挂载：二次确认后提交，成功 toast 报挂载与跳过份数并刷新归档清点', async () => {
+    const user = userEvent.setup()
+    let posted: Record<string, unknown> | null = null
+    let archivedCalls = 0
+    server.use(
+      http.get('*/api/v1/backups/archived', () => {
+        archivedCalls += 1
+        // 第一次返回可挂载项，挂载后（失效重取）返回空 —— 模拟服务端真实收敛
+        return okEnvelope(archivedCalls === 1 ? [archivedGroup] : [])
+      }),
+      http.post('*/api/v1/instances/:id/backups/attach', async ({ request }) => {
+        posted = (await request.json()) as Record<string, unknown>
+        return okEnvelope({ attached: 2, skipped: 1 })
+      }),
+    )
+    renderPanel()
+    await screen.findByText('归档快照（未建立索引）')
+
+    await user.click(screen.getByRole('button', { name: /挂载到本实例/ }))
+    const dialog = await screen.findByRole('dialog')
+    // 确认弹窗讲清后果与「不动磁盘」的性质
+    expect(dialog).toHaveTextContent('paper-1a2b3c4d')
+    expect(dialog).toHaveTextContent('原归档目录不会被复制或移动')
+    await user.click(screen.getByRole('button', { name: '挂载' }))
+
+    expect(await screen.findByText(/已挂载 2 份归档快照（跳过 1 份）/)).toBeInTheDocument()
+    expect(posted).toEqual({ archiveId: 'paper-1a2b3c4d' })
+    // 挂载后失效重取 → 区块消失（已无未索引项）
+    await waitFor(() =>
+      expect(screen.queryByText('归档快照（未建立索引）')).not.toBeInTheDocument(),
+    )
+  })
+
+  it('挂载失败（归档已被清理 404）：错误 toast，弹窗保持打开可重试', async () => {
+    const user = userEvent.setup()
+    server.use(
+      http.get('*/api/v1/backups/archived', () => okEnvelope([archivedGroup])),
+      http.post('*/api/v1/instances/:id/backups/attach', () =>
+        HttpResponse.json(
+          {
+            status: 'error',
+            code: 40402,
+            message: '归档目录不存在（可能已被清理）',
+            details: null,
+            timestamp: '',
+          },
+          { status: 404 },
+        ),
+      ),
+    )
+    renderPanel()
+    await screen.findByText('归档快照（未建立索引）')
+
+    await user.click(screen.getByRole('button', { name: /挂载到本实例/ }))
+    await user.click(await screen.findByRole('button', { name: '挂载' }))
+
+    expect(await screen.findByText(/挂载失败/)).toBeInTheDocument()
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+  })
+
+  it('全部份数都被跳过（重复挂载）：提示据实，不谎报挂载成功', async () => {
+    const user = userEvent.setup()
+    server.use(
+      http.get('*/api/v1/backups/archived', () => okEnvelope([archivedGroup])),
+      http.post('*/api/v1/instances/:id/backups/attach', () =>
+        okEnvelope({ attached: 0, skipped: 3 }),
+      ),
+    )
+    renderPanel()
+    await screen.findByText('归档快照（未建立索引）')
+
+    await user.click(screen.getByRole('button', { name: /挂载到本实例/ }))
+    await user.click(await screen.findByRole('button', { name: '挂载' }))
+
+    expect(await screen.findByText(/没有可挂载的快照/)).toBeInTheDocument()
   })
 })

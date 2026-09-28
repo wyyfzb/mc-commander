@@ -37,13 +37,30 @@ const mockTask: ScheduledTask = {
 const createdTask: ScheduledTask = { ...mockTask, id: 8, name: '每日备份', type: 'backup' }
 
 const mockHistory: TaskRunHistory[] = [
-  { id: 1, taskId: 7, runAt: '2026-01-01T04:00:00Z', status: 'success', error: null, durationMs: 3200 },
-  { id: 2, taskId: 7, runAt: '2025-12-31T04:00:00Z', status: 'failed', error: 'restart timed out', durationMs: 60000 },
+  {
+    id: 1,
+    taskId: 7,
+    runAt: '2026-01-01T04:00:00Z',
+    status: 'success',
+    error: null,
+    durationMs: 3200,
+  },
+  {
+    id: 2,
+    taskId: 7,
+    runAt: '2025-12-31T04:00:00Z',
+    status: 'failed',
+    error: 'restart timed out',
+    durationMs: 60000,
+  },
 ]
 
 function ok<T>(data: T) {
   return HttpResponse.json({
-    status: 'ok', code: 0, message: 'Success', data,
+    status: 'ok',
+    code: 0,
+    message: 'Success',
+    data,
     timestamp: new Date().toISOString(),
   })
 }

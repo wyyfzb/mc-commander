@@ -4,6 +4,7 @@
  * - fabric 加载器下拉（自动回填首个 loader）
  * - 部署中：进度条（useDeployStore.setState 注入 progress）+ stage 中文标签 + 传输字节 MB + 禁用关闭
  * - 部署失败：error 块 + 重试回到步骤①
+ * - 取消部署：确认后按实例 id 调服务端取消端点；cancelled 终态走「已取消」视图（非失败）
  * - dirty 关闭拦截（继续编辑 / 放弃配置）；未修改直接关闭
  * mock 数据为结构占位（虚构版本/实例），严禁真实服务器信息
  */
@@ -12,7 +13,15 @@ import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { setupServer } from 'msw/node'
-import { handlers, deployMock, startMock, eulaMock } from '@/test/mocks/handlers'
+import { Toaster, toast } from 'sonner'
+import {
+  handlers,
+  deployMock,
+  deployCancelMock,
+  deployStatusMock,
+  startMock,
+  eulaMock,
+} from '@/test/mocks/handlers'
 import { DeployDialog } from '../deploy-dialog'
 import { useDeployStore } from '@/stores/deploy'
 import { useConnectionStore } from '@/stores/connection'
@@ -41,6 +50,17 @@ function renderDialog() {
   return { onDeployed, onOpenChange }
 }
 
+/** 带 Toaster 的渲染（仅断言 toast 文案的用例需要；其余用例不挂以避免 toast 文本混入查询面） */
+function renderDialogWithToaster() {
+  const qc = new QueryClient()
+  render(
+    <QueryClientProvider client={qc}>
+      <Toaster />
+      <DeployDialog open onOpenChange={vi.fn()} onDeployed={vi.fn()} />
+    </QueryClientProvider>,
+  )
+}
+
 /** 等待版本列表就绪并自动回填（fabric 默认 mock 首个版本 1.21.4） */
 async function waitVersion() {
   await screen.findByText('1.21.4')
@@ -58,8 +78,16 @@ async function gotoStep3AndAgreeEula(user: ReturnType<typeof userEvent.setup>) {
 beforeEach(() => {
   localStorage.clear()
   useConnectionStore.setState({ baseUrl: '', apiKey: 'test-key', status: 'ready' })
-  useDeployStore.setState({ progress: null, deploying: false, lastResult: null })
+  // sonner toast store 是模块级：清残留防跨用例泄漏（反向断言「无失败提示」会被上一条污染）
+  toast.dismiss()
+  useDeployStore.setState({ progress: null, deploying: false, lastResult: null, cancelling: false })
   deployMock.shouldFail = false
+  deployMock.cancelEcho = false
+  deployMock.cancelEchoDetails = null
+  deployMock.lastBody = null
+  deployCancelMock.notInFlight = false
+  deployCancelMock.lastBody = null
+  deployStatusMock.active = false
   startMock.eulaRequired = false
   startMock.shouldFail = false
   startMock.calls = 0
@@ -77,14 +105,18 @@ describe('DeployDialog', () => {
     expect(screen.getAllByRole('radio')).toHaveLength(5)
     expect(screen.getByRole('radio', { name: /^Paper/ })).toBeChecked()
     await waitVersion()
-    expect(screen.getByRole('combobox', { name: '选择 Minecraft 版本' })).toHaveTextContent('1.21.4')
+    expect(screen.getByRole('combobox', { name: '选择 Minecraft 版本' })).toHaveTextContent(
+      '1.21.4',
+    )
     // Java 推荐提示
     expect(screen.getByText(/推荐 Java 版本：21/)).toBeInTheDocument()
 
     // 切换类型 → 版本随类型重新拉取（仍自动回填）
     await user.click(screen.getByRole('radio', { name: /fabric/i }))
     await waitFor(() =>
-      expect(screen.getByRole('combobox', { name: '选择 Minecraft 版本' })).toHaveTextContent('1.21.4'),
+      expect(screen.getByRole('combobox', { name: '选择 Minecraft 版本' })).toHaveTextContent(
+        '1.21.4',
+      ),
     )
 
     // 下一步 → 步骤②
@@ -110,10 +142,13 @@ describe('DeployDialog', () => {
     expect(screen.getByText('推荐 Java')).toBeInTheDocument()
     expect(screen.getByText('21')).toBeInTheDocument()
 
-    // EULA 勾选门控：未勾选时「部署并启动」禁用 + 提示；勾选后可点
-    const deployBtn = screen.getByRole('button', { name: '部署并启动' })
-    expect(deployBtn).toBeDisabled()
-    expect(screen.getByText('请先同意 EULA：未同意时无法启动服务器')).toBeInTheDocument()
+    // EULA 不再阻断部署：未勾选时主操作为「仅部署」（可点），勾选后变「部署并启动」
+    expect(screen.getByRole('button', { name: '仅部署' })).toBeEnabled()
+    expect(
+      screen.getByText(
+        '未勾选也可部署：eula.txt 记为 eula=false，部署后不自动启动；需在实例详情同意 EULA 后才能启动服务器。',
+      ),
+    ).toBeInTheDocument()
     await user.click(screen.getByRole('checkbox', { name: /Minecraft EULA/ }))
     expect(screen.getByRole('button', { name: '部署并启动' })).toBeEnabled()
 
@@ -124,9 +159,20 @@ describe('DeployDialog', () => {
     expect(screen.getByText('名称：我的生存服')).toBeInTheDocument()
     expect(screen.getByText('服务端：Fabric 1.21.4')).toBeInTheDocument()
     expect(screen.getByText('推荐 Java 版本：21')).toBeInTheDocument()
-    // 首启闭环：自动同意 EULA + 发启动指令，结果块展示启动状态
-    expect(await screen.findByText('已发送启动指令，服务器正在启动（状态可在仪表盘查看）')).toBeInTheDocument()
-    expect(eulaMock.calls).toBe(1)
+    // 首启闭环：EULA 同意随部署请求下发（服务端据此写 eula.txt），随后只发启动指令
+    expect(
+      await screen.findByText('已发送启动指令，服务器正在启动（状态可在仪表盘查看）'),
+    ).toBeInTheDocument()
+    // 自动启动状态块的档位：成功走 success 档，且不得混入 info 前景——它是「已受理」
+    // 而非「有消息要看」。断言色类而非仅存在性：走查发现该处曾被染色错档，
+    // 而存在性断言抓不到（文案对、颜色错）
+    const autoStartBanner = screen
+      .getByText('已发送启动指令，服务器正在启动（状态可在仪表盘查看）')
+      .closest('[role="status"]') as HTMLElement
+    expect(autoStartBanner.className).toContain('border-mcs-success-border')
+    expect(autoStartBanner.className).not.toContain('text-mcs-info-fg')
+    expect(deployMock.lastBody?.eula).toBe(true)
+    expect(eulaMock.calls).toBe(0)
     expect(startMock.calls).toBe(1)
 
     // 完成 → onDeployed(result) + 关闭
@@ -294,8 +340,8 @@ describe('DeployDialog', () => {
     expect(screen.queryByText('请填写实例名称')).not.toBeInTheDocument()
   })
 
-  it('EULA 勾选门控：默认不勾 + 未勾选提示；自动启动失败展示降级提示', async () => {
-    startMock.shouldFail = true // EULA 同意成功但启动指令失败
+  it('EULA 同意随请求下发；自动启动失败展示降级提示', async () => {
+    startMock.shouldFail = true // 同意已随部署下发，但启动指令失败
     renderDialog()
     const user = userEvent.setup()
 
@@ -304,11 +350,12 @@ describe('DeployDialog', () => {
     expect(await screen.findByText('部署成功')).toBeInTheDocument()
     // 自动启动失败：结果块降级提示（部署本身仍成功）
     expect(await screen.findByText('自动启动失败，可稍后在实例页手动启动')).toBeInTheDocument()
-    expect(eulaMock.calls).toBe(1)
+    expect(deployMock.lastBody?.eula).toBe(true)
+    expect(eulaMock.calls).toBe(0)
     expect(startMock.calls).toBe(1)
   })
 
-  it('未勾选 EULA 时不发自动启动请求（部署成功后无启动状态块）', async () => {
+  it('未勾选 EULA 仍可部署：eula=false 下发且不自动启动', async () => {
     renderDialog()
     const user = userEvent.setup()
 
@@ -316,9 +363,142 @@ describe('DeployDialog', () => {
     await user.click(screen.getByRole('button', { name: '下一步' }))
     await user.type(screen.getByLabelText('实例名称'), '我的生存服')
     await user.click(screen.getByRole('button', { name: '下一步' }))
-    // 不勾选 EULA（按钮禁用保护；此处直接断言禁用）
-    expect(screen.getByRole('button', { name: '部署并启动' })).toBeDisabled()
+    // 不勾选 EULA：主操作退化为「仅部署」，不再被禁用（不同意的用户也能完成部署）
+    await user.click(screen.getByRole('button', { name: '仅部署' }))
+    expect(await screen.findByText('部署成功')).toBeInTheDocument()
+    expect(deployMock.lastBody?.eula).toBe(false)
     expect(startMock.calls).toBe(0)
     expect(eulaMock.calls).toBe(0)
+  })
+})
+
+describe('DeployDialog 取消部署', () => {
+  /**
+   * 在途快照与注入的进度必须同源：兜底查询（挂载即问服务端真值）会覆盖 store，
+   * 若两边 instanceId 不同，取消请求带的是快照那个 id，断言就不再承重。
+   * 故这里直接吃 mock 快照的 id（真实场景下刷新恢复的 id 也来自该快照）。
+   */
+  const IN_FLIGHT = {
+    stage: 'forge_install',
+    percent: 0,
+    transferred: 0,
+    total: 0,
+    instanceId: 'paper-a1b2c3d4',
+    instanceName: '演示实例',
+  }
+
+  it('部署中：进度视图提供「取消部署」入口（点开前不显示确认框）', () => {
+    renderDialog()
+    act(() => {
+      useDeployStore.setState({ deploying: true, progress: { ...IN_FLIGHT } })
+    })
+    expect(screen.getByRole('button', { name: '取消部署' })).toBeEnabled()
+    expect(screen.queryByText('取消部署？')).not.toBeInTheDocument()
+  })
+
+  it('确认取消：按实例 id 调服务端取消端点，按钮转「正在取消…」并禁用', async () => {
+    deployStatusMock.active = true
+    const user = userEvent.setup()
+    renderDialog()
+    act(() => {
+      useDeployStore.setState({ deploying: true, progress: { ...IN_FLIGHT } })
+    })
+
+    await user.click(screen.getByRole('button', { name: '取消部署' }))
+    // 二次确认：中断会清理已下载内容，误触代价高
+    expect(await screen.findByText('取消部署？')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '中断并清理' }))
+
+    await waitFor(() => expect(deployCancelMock.lastBody).toEqual({ instanceId: 'paper-a1b2c3d4' }))
+    expect(useDeployStore.getState().cancelling).toBe(true)
+    expect(screen.getByRole('button', { name: '正在取消部署' })).toBeDisabled()
+  })
+
+  it('服务端回「无可取消对象」（40906）：失败可见且解除取消中状态，可重试', async () => {
+    deployStatusMock.active = true
+    deployCancelMock.notInFlight = true
+    renderDialogWithToaster()
+    const user = userEvent.setup()
+    act(() => {
+      useDeployStore.setState({ deploying: true, progress: { ...IN_FLIGHT } })
+    })
+
+    await user.click(screen.getByRole('button', { name: '取消部署' }))
+    await user.click(await screen.findByRole('button', { name: '中断并清理' }))
+
+    expect(await screen.findByText(/取消部署失败：该部署已结束或不在进行中/)).toBeInTheDocument()
+    await waitFor(() => expect(useDeployStore.getState().cancelling).toBe(false))
+    expect(screen.getByRole('button', { name: '取消部署' })).toBeEnabled()
+  })
+
+  it('取消终态：显示已取消视图（不是失败视图），「重新部署」回到步骤①', async () => {
+    const user = userEvent.setup()
+    renderDialog()
+    act(() => {
+      useDeployStore.setState({ deploying: true, progress: { ...IN_FLIGHT } })
+      // 服务端终态事件（WS deployProgress stage=cancelled）
+      useDeployStore.getState().applyDeployProgress({
+        stage: 'cancelled',
+        percent: 0,
+        transferred: 0,
+        total: 0,
+        instanceId: 'paper-cancel01',
+      })
+    })
+
+    expect(screen.getByText('部署已取消，未完成的实例目录已清理。')).toBeInTheDocument()
+    expect(screen.queryByText(/部署失败/)).not.toBeInTheDocument()
+    // 取消后实例未创建：主操作是重新部署，而不是「完成」
+    expect(screen.queryByRole('button', { name: '完成' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '重新部署' }))
+    expect(screen.getByRole('button', { name: '下一步' })).toBeInTheDocument()
+  })
+
+  it('部署请求以 409 TASK_CANCELLED 结束：走已取消视图而不是「部署失败」', async () => {
+    deployMock.cancelEcho = true
+    renderDialog()
+    const user = userEvent.setup()
+
+    await gotoStep3AndAgreeEula(user)
+    await user.click(screen.getByRole('button', { name: '部署并启动' }))
+
+    expect(await screen.findByText('部署已取消，未完成的实例目录已清理。')).toBeInTheDocument()
+    expect(screen.queryByText(/部署失败/)).not.toBeInTheDocument()
+    // 自动启动只跟成功路径走：取消后不得再发启动指令
+    expect(startMock.calls).toBe(0)
+  })
+
+  it('仅靠 POST 回声（WS 未送达）时据实显示收尾明细：不回落到「已清理」', async () => {
+    deployMock.cancelEcho = true
+    deployMock.cancelEchoDetails = { cleanup: '实例目录未能删除（EBUSY: resource busy）' }
+    renderDialog()
+    const user = userEvent.setup()
+
+    await gotoStep3AndAgreeEula(user)
+    await user.click(screen.getByRole('button', { name: '部署并启动' }))
+
+    expect(await screen.findByText(/收尾未完成：实例目录未能删除（EBUSY/)).toBeInTheDocument()
+    expect(screen.queryByText(/实例目录已清理/)).not.toBeInTheDocument()
+  })
+
+  it('收尾未完成（服务端带清理明细）：取消视图如实说明，不谎报已清理', () => {
+    renderDialog()
+    act(() => {
+      useDeployStore.setState({ deploying: true, progress: { ...IN_FLIGHT } })
+      useDeployStore.getState().applyDeployProgress({
+        stage: 'cancelled',
+        percent: 0,
+        transferred: 0,
+        total: 0,
+        instanceId: 'paper-a1b2c3d4',
+        error: '实例目录未能删除（EBUSY: resource busy）',
+      })
+    })
+
+    expect(screen.getByText('部署已取消。')).toBeInTheDocument()
+    expect(screen.getByText(/收尾未完成：实例目录未能删除（EBUSY/)).toBeInTheDocument()
+    // 反向断言：不得同时出现「已清理」的说法（两种口径同屏即自相矛盾）
+    expect(screen.queryByText(/实例目录已清理/)).not.toBeInTheDocument()
   })
 })

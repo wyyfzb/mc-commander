@@ -5,13 +5,14 @@
  *   + fabric/forge loader Select；步骤② 名称 + 内存档位；步骤③ 确认摘要 + EULA
  * - 自动回填：版本/加载器列表就绪回填首个；系统内存 → 推荐档位（用户手动调整后不覆盖），
  *   回填值同步基线不算 dirty
- * - 部署成功且已勾选 EULA：自动同意 EULA（POST /eula）+ 发启动指令（POST /start），
- *   结果块展示启动状态（首启闭环，issue 312）
- * - 视图状态机：部署中 → 成功 → 失败 → 表单三步；恢复场景保留进行中进度（issue 352）；
- *   部署中禁用上一步与关闭（ESC/遮罩拦截）
+ * - EULA 同意随部署请求下发（服务端据此写 eula.txt）；部署成功且已同意时发启动指令
+ *   （POST /start），结果块展示启动状态（首启闭环，issue 312）
+ * - 视图状态机：部署中 → 成功 → 已取消 → 失败 → 表单三步；恢复场景保留进行中进度（issue 352）；
+ *   服务端报告在途部署时禁止再次发起（消除重复部署）；部署中禁用上一步与关闭（ESC/遮罩拦截），
+ *   仅保留「取消部署」出口（服务端中断执行体并清理未完成目录）
  * - dirty 关闭拦截：表单与基线对比（自动回填的版本/加载器同步基线，不误判 dirty）
- * - 数据流：useDeployStore（progress/deploying/lastResult/startDeploy/finishDeploy/resetDeploy）
- *   + useDeployInstance().mutateAsync；关闭时 resetDeploy
+ * - 数据流：useDeployStore（progress/deploying/lastResult/cancelling/startDeploy/finishDeploy/resetDeploy）
+ *   + useDeployStatusFallback（挂载/断线兜底快照）+ useDeployInstance().mutateAsync + apiCancelDeploy；关闭时 resetDeploy
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { CloudDownload } from 'lucide-react'
@@ -26,18 +27,25 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { toast } from 'sonner'
-import { apiPost } from '@/api/client'
-import { getFriendlyErrorText } from '@/api/errors'
+import { apiPost, ApiError } from '@/api/client'
+import { getFriendlyErrorText, ErrorCode } from '@/api/errors'
 import { useConnectionStore } from '@/stores/connection'
 import { FALLBACK_VERSIONS, type ServerType } from '@/lib/mc-deploy'
 import { useDeployStore } from '@/stores/deploy'
 import { useOverview } from '@/api/queries'
 import { useDeployInstance, useServerVersions } from '../queries'
+import { useDeployStatusFallback } from '../hooks/use-deploy-status-fallback'
+import { apiCancelDeploy } from '@/api/instances'
 import type { DeployRequest, DeployResult } from '@/api/types'
 import { INITIAL_FORM, type AutoStartState, type DeployForm } from './deploy/types'
 import { recommendedMemoryGB } from './deploy/utils'
 import { Stepper } from './deploy/stepper'
-import { DeployErrorView, DeployProgressView, DeploySuccessView } from './deploy/views'
+import {
+  DeployCancelledView,
+  DeployErrorView,
+  DeployProgressView,
+  DeploySuccessView,
+} from './deploy/views'
 import { DeployStepConfig, DeployStepConfirm, DeployStepServer } from './deploy/steps'
 
 const EMPTY_STRINGS: string[] = []
@@ -62,15 +70,19 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
   const [nameError, setNameError] = useState('')
   const [result, setResult] = useState<DeployResult | null>(null)
   const [closeConfirmOpen, setCloseConfirmOpen] = useState(false)
-
+  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false)
   const deploying = useDeployStore((s) => s.deploying)
   const progress = useDeployStore((s) => s.progress)
   const lastResult = useDeployStore((s) => s.lastResult)
+  const cancelling = useDeployStore((s) => s.cancelling)
   const startDeploy = useDeployStore((s) => s.startDeploy)
   const finishDeploy = useDeployStore((s) => s.finishDeploy)
+  const setCancelling = useDeployStore((s) => s.setCancelling)
   const resetDeploy = useDeployStore((s) => s.resetDeploy)
 
   const deployMutation = useDeployInstance()
+  // 服务端快照兜底：刷新/断线后恢复在途进度，并作为「禁止重复部署」的服务端真值
+  const { duplicateDeployBlocked } = useDeployStatusFallback()
   const versionsQuery = useServerVersions(form.type)
   // 版本列表失败 → 本地缓存兜底（仍可部署）；useMemo 稳定引用（回填 effect 依赖）
   const versions = useMemo(
@@ -96,7 +108,8 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
       store.deploying &&
       store.progress != null &&
       store.progress.stage !== 'complete' &&
-      store.progress.stage !== 'error'
+      store.progress.stage !== 'error' &&
+      store.progress.stage !== 'cancelled'
     if (!resuming) {
       store.resetDeploy()
     }
@@ -125,7 +138,7 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
       baselineRef.current = { ...baselineRef.current, memory: next }
       return { ...f, memory: next }
     })
-  // oxlint-disable-next-line react-hooks/exhaustive-deps -- recommendedMemoryGB 模块级纯函数，setter/ref 稳定引用
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- recommendedMemoryGB 模块级纯函数，setter/ref 稳定引用
   }, [totalMemory, open])
 
   // 版本列表就绪 → 自动回填首个版本，并同步基线。
@@ -161,6 +174,20 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
     form.name !== baselineRef.current.name ||
     form.memory !== baselineRef.current.memory
 
+  /**
+   * 服务端报告在途部署 → 禁止再次发起（重复部署会产出重复实例目录与 DB 记录）。
+   * 本地已有本轮终态结果（lastResult 非空）时放行：那是刚结束的部署，
+   * 服务端快照可能尚未清理，不能因此永久禁用按钮（「重试」路径读同一条件）
+   */
+  const duplicateDeploy =
+    duplicateDeployBlocked &&
+    lastResult === null &&
+    !(
+      progress?.stage === 'complete' ||
+      progress?.stage === 'error' ||
+      progress?.stage === 'cancelled'
+    )
+
   const changeType = (type: ServerType) => {
     if (type === form.type) return
     // 切换类型重置版本与加载器（新数据就绪后自动回填）
@@ -178,11 +205,18 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
 
   const handleDeploy = async () => {
     if (form.version === '' || form.name.trim() === '') return
+    // 服务端在途部署时不再发起（服务端同样以 409 拒绝，这里省掉一次注定失败的往返）
+    if (duplicateDeploy) {
+      toast.error('服务端已有部署在进行中，请等待其完成后再发起新部署')
+      return
+    }
     const payload: DeployRequest = {
       type: form.type,
       mcVersion: form.version,
       instanceName: form.name.trim(),
       maxMemory: form.memory,
+      // EULA 同意随请求下发：服务端据此写 eula.txt（未同意写 false 且不首启）
+      eula: eulaAgreed,
     }
     if ((form.type === 'fabric' || form.type === 'forge') && form.loader !== '') {
       payload.loaderVersion = form.loader
@@ -192,11 +226,10 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
       const deployed = await deployMutation.mutateAsync(payload)
       setResult(deployed)
       finishDeploy({ ok: true, instanceId: deployed.id })
-      // 首启闭环（issue 312）：已同意 EULA → 写入 eula.txt + 发启动指令（启动异步，状态在仪表盘/终端可见）
+      // 首启闭环（issue 312）：EULA 已随部署请求写入，这里只需发启动指令（启动异步，状态在仪表盘/终端可见）
       if (eulaAgreed) {
         setAutoStart('pending')
         try {
-          await apiPost(`/api/v1/instances/${deployed.id}/eula`, config, { agreed: true })
           await apiPost(`/api/v1/instances/${deployed.id}/start`, config)
           setAutoStart('ok')
           toast.success('部署完成，服务器开始启动')
@@ -206,7 +239,38 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
         }
       }
     } catch (e) {
-      finishDeploy({ ok: false, error: getFriendlyErrorText(e) })
+      // 取消的回声（服务端以 409 TASK_CANCELLED 结束部署请求）：用户动作不能被
+      // 显示成「部署失败」，走 cancelled 终态；其余错误照旧。
+      // details.cleanup 是服务端的收尾明细（收尾未完成时才有）：WS 断线时前端只剩
+      // 这条回声，缺了它会把「收尾未完成」显示成「已清理」
+      if (e instanceof ApiError && e.code === ErrorCode.TASK_CANCELLED) {
+        const cleanup = (e.details as { cleanup?: string } | null)?.cleanup
+        finishDeploy({ ok: false, cancelled: true, ...(cleanup ? { error: cleanup } : {}) })
+      } else {
+        finishDeploy({ ok: false, error: getFriendlyErrorText(e) })
+      }
+    }
+  }
+
+  /**
+   * 取消部署（服务端中断下载/安装/首启并清理未完成的实例目录）。
+   * 只负责发请求：成功与否以服务端 cancelled 终态事件为准，此处不乐观置终态——
+   * 请求被受理但中断未能生效（如任务恰好刚结束）时，乐观置终态会让界面谎报已取消。
+   */
+  const handleCancelDeploy = async () => {
+    setCancelConfirmOpen(false)
+    const taskId = progress?.instanceId
+    if (!taskId) {
+      toast.error('无法定位在途部署的实例，请刷新页面后重试')
+      return
+    }
+    setCancelling(true)
+    try {
+      await apiCancelDeploy(config, taskId)
+      toast.success('已请求取消部署')
+    } catch (e) {
+      setCancelling(false)
+      toast.error(`取消部署失败：${getFriendlyErrorText(e)}`)
     }
   }
 
@@ -243,10 +307,13 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
     setStep(0)
   }
 
-  // ── 视图状态机：部署中 → 成功 → 失败 → 表单三步 ──
-  const showProgress = deploying || (progress != null && result === null && lastResult?.ok !== false)
+  // ── 视图状态机：部署中 → 成功 → 已取消 → 失败 → 表单三步 ──
+  const cancelled = lastResult?.cancelled === true
+  const showProgress =
+    !cancelled && (deploying || (progress != null && result === null && lastResult?.ok !== false))
   const showSuccess = result !== null
-  const showError = lastResult?.ok === false && result === null && !deploying
+  const showCancelled = cancelled && result === null
+  const showError = lastResult?.ok === false && !cancelled && result === null && !deploying
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -267,10 +334,24 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
           <DialogDescription>按步骤选择服务端类型、配置实例并创建。</DialogDescription>
         </DialogHeader>
 
-        {showProgress && <DeployProgressView progress={progress} />}
+        {showProgress && (
+          <DeployProgressView
+            progress={progress}
+            cancelling={cancelling}
+            onCancel={() => setCancelConfirmOpen(true)}
+          />
+        )}
 
         {showSuccess && result && (
           <DeploySuccessView result={result} autoStart={autoStart} onComplete={handleComplete} />
+        )}
+
+        {showCancelled && (
+          <DeployCancelledView
+            cleanupError={progress?.stage === 'cancelled' ? progress.error : undefined}
+            onClose={handleClose}
+            onRetry={handleRetry}
+          />
         )}
 
         {showError && (
@@ -281,7 +362,7 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
           />
         )}
 
-        {!showProgress && !showSuccess && !showError && (
+        {!showProgress && !showSuccess && !showCancelled && !showError && (
           <>
             <Stepper step={step} />
 
@@ -337,13 +418,23 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
                 </Button>
               )}
               {step < 2 ? (
-                <Button onClick={handleNext} disabled={step === 0 && form.version === ''} aria-label="下一步">
+                <Button
+                  onClick={handleNext}
+                  disabled={step === 0 && form.version === ''}
+                  aria-label="下一步"
+                >
                   下一步
                 </Button>
               ) : (
-                <Button onClick={() => void handleDeploy()} disabled={!eulaAgreed} aria-label="部署并启动">
+                <Button
+                  onClick={() => void handleDeploy()}
+                  disabled={duplicateDeploy}
+                  aria-label={
+                    duplicateDeploy ? '已有部署在进行中' : eulaAgreed ? '部署并启动' : '仅部署'
+                  }
+                >
                   <CloudDownload className="size-4" aria-hidden />
-                  部署并启动
+                  {duplicateDeploy ? '已有部署在进行中' : eulaAgreed ? '部署并启动' : '仅部署'}
                 </Button>
               )}
             </DialogFooter>
@@ -363,6 +454,18 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
             setCloseConfirmOpen(false)
             handleClose()
           }}
+        />
+
+        {/* 取消部署确认：中断不可撤销（已下载内容会被清理），故二次确认 */}
+        <ConfirmDialog
+          open={cancelConfirmOpen}
+          onOpenChange={setCancelConfirmOpen}
+          title="取消部署？"
+          description="将中断下载/安装/首启，并清理未完成的实例目录；需要时重新发起部署。"
+          cancelText="继续部署"
+          confirmText="中断并清理"
+          danger
+          onConfirm={() => void handleCancelDeploy()}
         />
       </DialogContent>
     </Dialog>

@@ -15,22 +15,28 @@ export const WS_EVENT_TYPES = [
   'playerSleep',
   'achievement',
   'backupStart',
+  'backupProgress',
   'backupComplete',
   'backupFailed',
   'backupSkipped',
+  'backupCancelled',
   'restoreStart',
+  'restoreProgress',
   'restoreComplete',
   'restoreFailed',
+  'restoreCancelled',
   'taskExecute',
   'taskFailed',
   'webhookDeliveryFailed',
   'deployProgress',
   'deployComplete',
   'deployFailed',
+  'deployCancelled',
   'circuit_breaker',
   'upgradeProgress',
   'upgradeComplete',
   'upgradeFailed',
+  'upgradeCancelled',
   'systemStatsUpdate',
   'error',
 ] as const
@@ -38,7 +44,9 @@ export const WS_EVENT_TYPES = [
 export const wsEventTypeSchema = z.enum(WS_EVENT_TYPES)
 
 export const wsMessageSchema = z.object({
-  type: z.union([wsEventTypeSchema, z.literal('pong')]),
+  // 'auth'：首帧鉴权回执（服务端 → 客户端 {type:'auth', ok:true}）
+  type: z.union([wsEventTypeSchema, z.literal('pong'), z.literal('auth')]),
+  ok: z.boolean().optional(),
   eventId: z.number().optional(),
   instanceId: z.string().optional(),
   data: z.unknown().optional(),
@@ -90,10 +98,18 @@ export const wsWeatherPayloadSchema = z.object({
   weather: z.enum(['clear', 'rain', 'thunder']),
 })
 
-export const wsBackupPayloadSchema = z.object({
-  id: z.number().optional(),
-  name: z.string().optional(),
-}).passthrough()
+export const wsBackupPayloadSchema = z
+  .object({
+    id: z.number().optional(),
+    name: z.string().optional(),
+  })
+  .passthrough()
+
+/** 备份/恢复进度（rsync --info=progress2 解析，服务端 1s 节流；robocopy/ditto 降级路径无进度） */
+export const wsBackupProgressPayloadSchema = z.object({
+  backupId: z.number(),
+  percent: z.number().min(0).max(100),
+})
 
 /** 通知类事件集合（服务端落库，断线补齐用） */
 export const NOTIFICATION_EVENT_TYPES: ReadonlySet<WsEventType> = new Set([
@@ -108,9 +124,11 @@ export const NOTIFICATION_EVENT_TYPES: ReadonlySet<WsEventType> = new Set([
   'backupComplete',
   'backupFailed',
   'backupSkipped',
+  'backupCancelled',
   'restoreStart',
   'restoreComplete',
   'restoreFailed',
+  'restoreCancelled',
   'taskFailed',
   'webhookDeliveryFailed',
 ])
@@ -124,3 +142,4 @@ export type WsStatusEventPayload = z.infer<typeof wsStatusEventPayloadSchema>
 export type WsPlayerEventPayload = z.infer<typeof wsPlayerEventPayloadSchema>
 export type WsWeatherPayload = z.infer<typeof wsWeatherPayloadSchema>
 export type WsBackupPayload = z.infer<typeof wsBackupPayloadSchema>
+export type WsBackupProgressPayload = z.infer<typeof wsBackupProgressPayloadSchema>

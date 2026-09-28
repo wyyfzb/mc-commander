@@ -33,7 +33,7 @@ vi.mock('got', () => ({
   // got(url, opts) 返回 promise-like：resolveDownload 里链式 .json()
   default: Object.assign(
     vi.fn((...args) => ({ json: () => jsonImpl.current(...args) })),
-    { stream: vi.fn((...args) => streamImpl.current(...args)) }
+    { stream: vi.fn((...args) => streamImpl.current(...args)) },
   ),
 }));
 
@@ -100,7 +100,6 @@ function createMockInstance(overrides = {}) {
   return {
     id: 'inst-1',
     name: 'Test Server',
-    status: 'stopped',
     mcVersion: '1.20.4',
     jarFile: 'server-1.20.4.jar',
     serverPath: tmpDir,
@@ -185,7 +184,9 @@ function progressStages(serverManager) {
 
 function progressPercents(serverManager) {
   return serverManager._emitted
-    .filter((e) => e.event === 'instance:upgradeProgress' && e.data.stage === UPGRADE_STAGES.DOWNLOAD)
+    .filter(
+      (e) => e.event === 'instance:upgradeProgress' && e.data.stage === UPGRADE_STAGES.DOWNLOAD,
+    )
     .map((e) => e.data.percent);
 }
 
@@ -196,7 +197,7 @@ describe('resolveDownload 分支矩阵', () => {
     const service = new UpgradeService(createMockServerManager());
     jsonImpl.current = () => Promise.resolve({ versions: [] });
     await expect(service.resolveDownload('1.21.4', 'vanilla')).rejects.toThrow(
-      'Vanilla version 1.21.4 not found'
+      'Vanilla version 1.21.4 not found',
     );
   });
 
@@ -205,13 +206,15 @@ describe('resolveDownload 分支矩阵', () => {
     jsonImpl.current = (url) => {
       if (url.includes('version_manifest')) {
         return Promise.resolve({
-          versions: [{ id: '1.21.4', type: 'release', url: 'https://piston-meta.mojang.com/v.json' }],
+          versions: [
+            { id: '1.21.4', type: 'release', url: 'https://piston-meta.mojang.com/v.json' },
+          ],
         });
       }
       return Promise.resolve({});
     };
     await expect(service.resolveDownload('1.21.4', 'vanilla')).rejects.toThrow(
-      'No server JAR download for 1.21.4'
+      'No server JAR download for 1.21.4',
     );
   });
 
@@ -220,7 +223,9 @@ describe('resolveDownload 分支矩阵', () => {
     jsonImpl.current = (url) => {
       if (url.includes('version_manifest')) {
         return Promise.resolve({
-          versions: [{ id: '1.21.4', type: 'release', url: 'https://piston-meta.mojang.com/v.json' }],
+          versions: [
+            { id: '1.21.4', type: 'release', url: 'https://piston-meta.mojang.com/v.json' },
+          ],
         });
       }
       return Promise.resolve({
@@ -232,23 +237,47 @@ describe('resolveDownload 分支矩阵', () => {
     expect(res.expectedHash).toBeNull();
   });
 
-  it('paper v3：数组形态 + STABLE/RECOMMENDED 混合 → 按 build id 降序取最新并携带 sha256', async () => {
+  it('paper v3：数组形态 + STABLE/BETA 混合 → 按 build id 降序取最新并携带 checksums.sha256', async () => {
     const service = new UpgradeService(createMockServerManager());
     jsonImpl.current = () =>
       Promise.resolve([
-        { id: 3, channel: 'STABLE', downloads: { 'server:default': { url: 'https://fill-data.papermc.io/b3.jar', sha256: 'a'.repeat(64) } } },
-        { id: 7, channel: 'RECOMMENDED', downloads: { 'server:default': { url: 'https://fill-data.papermc.io/b7.jar', sha256: 'b'.repeat(64) } } },
+        {
+          id: 3,
+          channel: 'STABLE',
+          downloads: {
+            'server:default': {
+              url: 'https://fill-data.papermc.io/b3.jar',
+              checksums: { sha256: 'a'.repeat(64) },
+            },
+          },
+        },
+        {
+          id: 7,
+          channel: 'STABLE',
+          downloads: {
+            'server:default': {
+              url: 'https://fill-data.papermc.io/b7.jar',
+              checksums: { sha256: 'b'.repeat(64) },
+            },
+          },
+        },
       ]);
     const res = await service.resolveDownload('1.21.4', 'paper');
     expect(res.url).toBe('https://fill-data.papermc.io/b7.jar');
     expect(res.expectedHash).toEqual({ algorithm: 'sha256', digest: 'b'.repeat(64) });
   });
 
-  it('paper v3：对象形态且无 stable build → 回退全部 builds，application 下载无摘要 → hash null', async () => {
+  it('paper v3：无 STABLE → 回退全部 builds；application 无 checksums → hash null', async () => {
     const service = new UpgradeService(createMockServerManager());
     jsonImpl.current = () =>
       Promise.resolve({
-        builds: [{ id: 9, channel: 'EXPERIMENTAL', downloads: { application: { url: 'https://fill-data.papermc.io/b9.jar' } } }],
+        builds: [
+          {
+            id: 9,
+            channel: 'BETA',
+            downloads: { application: { url: 'https://fill-data.papermc.io/b9.jar' } },
+          },
+        ],
       });
     const res = await service.resolveDownload('1.21.4', 'paper');
     expect(res.url).toBe('https://fill-data.papermc.io/b9.jar');
@@ -259,31 +288,50 @@ describe('resolveDownload 分支矩阵', () => {
     const service = new UpgradeService(createMockServerManager());
     jsonImpl.current = () => Promise.resolve({});
     await expect(service.resolveDownload('1.21.4', 'paper')).rejects.toThrow(
-      'No Paper build found for 1.21.4'
+      'No Paper build found for 1.21.4',
     );
   });
 
-  it('paper v3：latest 无 downloads → v2 回退拼接 URL（id 计算构建号）且 hash null', async () => {
+  it('paper v3：latest 无 downloads → 抛错（v2 拼接回退已随上游 sunset 移除，不得静默降级）', async () => {
     const service = new UpgradeService(createMockServerManager());
     jsonImpl.current = () => Promise.resolve({ builds: [{ id: 42 }] });
-    const res = await service.resolveDownload('1.21.4', 'paper');
-    expect(res.url).toBe(
-      'https://api.papermc.io/v2/projects/paper/versions/1.21.4/builds/42/downloads/paper-1.21.4-42.jar'
+    await expect(service.resolveDownload('1.21.4', 'paper')).rejects.toThrow(
+      'No Paper build download for 1.21.4',
     );
-    expect(res.expectedHash).toBeNull();
   });
 
-  it('paper v3：downloadInfo 有 name 无 url → v2 回退沿用该文件名，build 号回退 build 字段', async () => {
+  it('paper v3：downloadInfo 有 name 但无 url → 抛错（不得回退到已失效的 v2 路径）', async () => {
     const service = new UpgradeService(createMockServerManager());
     jsonImpl.current = () =>
       Promise.resolve({
-        builds: [{ build: 88, downloads: { 'server:default': { name: 'custom-name.jar' } } }],
+        builds: [{ id: 88, downloads: { 'server:default': { name: 'custom-name.jar' } } }],
       });
-    const res = await service.resolveDownload('1.21.4', 'paper');
-    expect(res.url).toBe(
-      'https://api.papermc.io/v2/projects/paper/versions/1.21.4/builds/88/downloads/custom-name.jar'
+    await expect(service.resolveDownload('1.21.4', 'paper')).rejects.toThrow(
+      'No Paper build download for 1.21.4',
     );
-    expect(res.expectedHash).toBeNull();
+  });
+
+  it('paper v3：命中真实响应形状时必须产出非空 expectedHash（防再次读错摘要字段）', async () => {
+    const service = new UpgradeService(createMockServerManager());
+    jsonImpl.current = () =>
+      Promise.resolve([
+        {
+          id: 232,
+          channel: 'STABLE',
+          downloads: {
+            'server:default': {
+              name: 'paper-1.21.4-232.jar',
+              checksums: { sha256: '5ee4f542'.padEnd(64, '0') },
+              size: 51437498,
+              url: 'https://fill-data.papermc.io/v1/objects/5ee4f542/paper-1.21.4-232.jar',
+            },
+          },
+        },
+      ]);
+    const res = await service.resolveDownload('1.21.4', 'paper');
+    expect(res.expectedHash).not.toBeNull();
+    expect(res.expectedHash.algorithm).toBe('sha256');
+    expect(res.expectedHash.digest).toHaveLength(64);
   });
 
   it('purpur：固定 latest/download URL 且无上游摘要', async () => {
@@ -296,7 +344,7 @@ describe('resolveDownload 分支矩阵', () => {
   it('未支持类型 → 抛 Unsupported server type', async () => {
     const service = new UpgradeService(createMockServerManager());
     await expect(service.resolveDownload('1.21.4', 'fabric')).rejects.toThrow(
-      'Unsupported server type: fabric'
+      'Unsupported server type: fabric',
     );
   });
 });
@@ -309,10 +357,10 @@ describe('_downloadJar 异常与进度矩阵', () => {
     const dest = path.join(tmpDir, 'server-1.21.4.jar');
     expect(() => service._downloadJar('::not a url::', dest, 'inst-1', null)).toThrow(AppError);
     expect(() => service._downloadJar('::not a url::', dest, 'inst-1', null)).toThrow(
-      /Invalid download URL/
+      /Invalid download URL/,
     );
     expect(() => service._downloadJar('::not a url::', dest, 'inst-1', null)).toThrow(
-      expect.objectContaining({ code: ErrorCodes.VALIDATION_ERROR.code })
+      expect.objectContaining({ code: ErrorCodes.VALIDATION_ERROR.code }),
     );
   });
 
@@ -320,7 +368,12 @@ describe('_downloadJar 异常与进度矩阵', () => {
     const service = new UpgradeService(createMockServerManager());
     const badDest = path.join(tmpDir, 'no-such-dir', 'server-1.21.4.jar');
     await expect(
-      service._downloadJar('https://piston-data.mojang.com/server-1.21.4.jar', badDest, 'inst-1', null)
+      service._downloadJar(
+        'https://piston-data.mojang.com/server-1.21.4.jar',
+        badDest,
+        'inst-1',
+        null,
+      ),
     ).rejects.toThrow(/ENOENT|no such file or directory/i);
   });
 
@@ -344,7 +397,12 @@ describe('_downloadJar 异常与进度矩阵', () => {
     };
 
     await expect(
-      service._downloadJar('https://piston-data.mojang.com/server-1.21.4.jar', path.join(tmpDir, 'x.jar'), 'inst-1', null)
+      service._downloadJar(
+        'https://piston-data.mojang.com/server-1.21.4.jar',
+        path.join(tmpDir, 'x.jar'),
+        'inst-1',
+        null,
+      ),
     ).rejects.toThrow(/download failed/);
 
     // 广播序列：0% → 50% → 99%（50.4% 被节流吸收）
@@ -375,6 +433,21 @@ describe('_createBackupAndWait 失败与超时', () => {
     });
   });
 
+  it('backupCancelled 事件（用户在备份面板取消预备份）→ 立即失败，不挂到 300s 超时', async () => {
+    const manager = createMockServerManager();
+    const service = new UpgradeService(manager);
+    service.backupService.createBackup = vi.fn(async (instanceId) => {
+      // 取消是唯一终态信号（取消分支不发 backupFailed）——漏听会挂满 300s
+      manager.emit('instance:backupCancelled', { instanceId, backupId: 'bk-1' });
+      throw new Error('unreachable');
+    });
+
+    const started = Date.now();
+    await expect(service.upgrade('inst-1', '1.21.4', 'purpur')).rejects.toThrow('Backup cancelled');
+    expect(Date.now() - started).toBeLessThan(5000);
+    expect(progressStages(manager)).toContain(UPGRADE_STAGES.ROLLED_BACK);
+  });
+
   it('backupFailed 事件缺 error 字段 → 兜底消息 Backup failed', async () => {
     const manager = createMockServerManager();
     const service = new UpgradeService(manager);
@@ -390,10 +463,12 @@ describe('_createBackupAndWait 失败与超时', () => {
     const manager = createMockServerManager();
     // 成功链路：首启需发射 ready 事件完成校验
     manager._instance.start = vi.fn(() => {
-      queueMicrotask(() => serverManagerRef.current.emit('instance:status', {
-        instanceId: 'inst-1',
-        event: 'ready',
-      }));
+      queueMicrotask(() =>
+        serverManagerRef.current.emit('instance:status', {
+          instanceId: 'inst-1',
+          event: 'ready',
+        }),
+      );
     });
     const service = new UpgradeService(manager);
     service.backupService.createBackup = vi.fn(async () => {
@@ -443,10 +518,12 @@ describe('_startAndVerify 失败与超时', () => {
   it('首启 crash → 校验拒绝 + 回滚恢复旧 JAR 内容 + DB 版本回写', async () => {
     const manager = createMockServerManager();
     manager._instance.start = vi.fn(() => {
-      queueMicrotask(() => serverManagerRef.current.emit('instance:status', {
-        instanceId: 'inst-1',
-        event: 'crash',
-      }));
+      queueMicrotask(() =>
+        serverManagerRef.current.emit('instance:status', {
+          instanceId: 'inst-1',
+          event: 'crash',
+        }),
+      );
     });
     const service = new UpgradeService(manager);
     // 旧 JAR 实际存在：replace 阶段会先复制到备份，crash 后回滚应恢复其内容
@@ -454,7 +531,7 @@ describe('_startAndVerify 失败与超时', () => {
     streamImpl.current = streamSucceeds({ data: 'NEW_JAR_CONTENT' });
 
     await expect(service.upgrade('inst-1', '1.21.4', 'purpur')).rejects.toThrow(
-      'Server crashed during startup verification'
+      'Server crashed during startup verification',
     );
 
     const stages = progressStages(manager);
@@ -468,7 +545,7 @@ describe('_startAndVerify 失败与超时', () => {
     // 临时备份 JAR 由 _doRollback finally 内异步 unlink 清理（fire-and-forget），
     // 与回滚 resolve 之间无同步屏障——waitFor 轮询等待落盘完成再断言
     await vi.waitFor(() =>
-      expect(fs.readdirSync(tmpDir)).not.toContain('._upgrade_backup_server-1.20.4.jar')
+      expect(fs.readdirSync(tmpDir)).not.toContain('._upgrade_backup_server-1.20.4.jar'),
     );
     // DB：replace 阶段写新版本，回滚阶段恢复旧 jarFile 名 + 原版本（#539）
     expect(InstanceModel.update).toHaveBeenCalledWith('inst-1', {
@@ -485,7 +562,10 @@ describe('_startAndVerify 失败与超时', () => {
     const manager = createMockServerManager();
     manager._instance.start = vi.fn(() => {
       queueMicrotask(() => {
-        serverManagerRef.current.emit('instance:status', { instanceId: 'inst-other', event: 'ready' });
+        serverManagerRef.current.emit('instance:status', {
+          instanceId: 'inst-other',
+          event: 'ready',
+        });
         serverManagerRef.current.emit('instance:status', { instanceId: 'inst-1', event: 'ready' });
       });
     });
@@ -493,21 +573,24 @@ describe('_startAndVerify 失败与超时', () => {
     streamImpl.current = streamSucceeds();
 
     await service.upgrade('inst-1', '1.21.4', 'purpur');
-    expect(progressStages(manager)[progressStages(manager).length - 1]).toBe(UPGRADE_STAGES.COMPLETED);
+    expect(progressStages(manager)[progressStages(manager).length - 1]).toBe(
+      UPGRADE_STAGES.COMPLETED,
+    );
   });
 
   it('verify 阶段实例内存缺失 → 抛 Instance not found in memory，回滚早退不回写 DB', async () => {
     const manager = createMockServerManager();
     const realGetInstance = manager.getInstance;
     // 第 1 次（编排入口）返回实例；verify 阶段起返回 null
-    manager.getInstance = vi.fn()
+    manager.getInstance = vi
+      .fn()
       .mockImplementationOnce((id) => realGetInstance(id))
       .mockReturnValue(null);
     const service = new UpgradeService(manager);
     streamImpl.current = streamSucceeds();
 
     await expect(service.upgrade('inst-1', '1.21.4', 'purpur')).rejects.toThrow(
-      'Instance not found in memory'
+      'Instance not found in memory',
     );
 
     const stages = progressStages(manager);
@@ -526,7 +609,9 @@ describe('_startAndVerify 失败与超时', () => {
     const service = new UpgradeService(manager);
     streamImpl.current = streamSucceeds();
 
-    await expect(service.upgrade('inst-1', '1.21.4', 'purpur')).rejects.toThrow('eula not accepted');
+    await expect(service.upgrade('inst-1', '1.21.4', 'purpur')).rejects.toThrow(
+      'eula not accepted',
+    );
     expect(progressStages(manager)).toContain(UPGRADE_STAGES.ROLLED_BACK);
   });
 
@@ -538,7 +623,9 @@ describe('_startAndVerify 失败与超时', () => {
     const service = new UpgradeService(manager);
     streamImpl.current = streamSucceeds();
 
-    await expect(service.upgrade('inst-1', '1.21.4', 'purpur')).rejects.toThrow('port already in use');
+    await expect(service.upgrade('inst-1', '1.21.4', 'purpur')).rejects.toThrow(
+      'port already in use',
+    );
     const stages = progressStages(manager);
     expect(stages[stages.length - 1]).toBe(UPGRADE_STAGES.FAILED);
   });
@@ -603,28 +690,30 @@ describe('_doRollback 分支行为', () => {
     const errorSpy = vi.spyOn(logger, 'error');
 
     await expect(service.upgrade('inst-1', '1.21.4', 'purpur')).rejects.toThrow(
-      'Server crashed during startup verification'
+      'Server crashed during startup verification',
     );
 
     expect(errorSpy).toHaveBeenCalledWith(
       expect.stringContaining('Rollback failed'),
-      expect.anything()
+      expect.anything(),
     );
     const stages = progressStages(manager);
     expect(stages[stages.length - 1]).toBe(UPGRADE_STAGES.FAILED);
     // 临时备份 JAR 仍被 finally 清理（异步 unlink，waitFor 与落盘同步）
     await vi.waitFor(() =>
-      expect(fs.readdirSync(tmpDir)).not.toContain('._upgrade_backup_server-1.20.4.jar')
+      expect(fs.readdirSync(tmpDir)).not.toContain('._upgrade_backup_server-1.20.4.jar'),
     );
   });
 
   it('备份恢复（restoreBackup）失败不阻塞主流程：原错误照常上抛', async () => {
     const manager = createMockServerManager();
     manager._instance.start = vi.fn(() => {
-      queueMicrotask(() => serverManagerRef.current.emit('instance:status', {
-        instanceId: 'inst-1',
-        event: 'crash',
-      }));
+      queueMicrotask(() =>
+        serverManagerRef.current.emit('instance:status', {
+          instanceId: 'inst-1',
+          event: 'crash',
+        }),
+      );
     });
     const service = new UpgradeService(manager);
     service.backupService.restoreBackup = vi.fn().mockRejectedValue(new Error('restore boom'));
@@ -632,7 +721,7 @@ describe('_doRollback 分支行为', () => {
 
     // 原始错误（crash）而非恢复错误（restore boom）上抛
     await expect(service.upgrade('inst-1', '1.21.4', 'purpur')).rejects.toThrow(
-      'Server crashed during startup verification'
+      'Server crashed during startup verification',
     );
     expect(service.backupService.restoreBackup).toHaveBeenCalledWith('bk-mock');
     const stages = progressStages(manager);

@@ -12,6 +12,60 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  format:
+    name: 代码格式（Biome formatter 检查）
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'push' ||
+      !github.event.pull_request.draft
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      # 仓库级工具包（根 package.json 只装 Biome，不是 workspace 根）。
+      # 只查 formatter，不含 lint——lint 由下方各包的 oxlint job 承担；
+      # 格式化范围与排除项（dist/public/coverage/e2e 产物/.ai/锁文件，以及 CSS 与 Markdown）
+      # 见 biome.jsonc。失败时本地执行 `npm run format` 即修复。
+      - run: npm run format:check
+
+  schemas:
+    name: 契约包（lint + schemas 测试 + dist 同步守卫）
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'push' ||
+      !github.event.pull_request.draft
+    defaults:
+      run:
+        working-directory: mc-schemas
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mc-schemas/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      # dist 同步守卫：dist/index.js 是服务端运行时消费物（server 经
+      # file: link + main 字段解析到 dist，前端则经 vite alias 直读 src），
+      # 改 src 不重建 dist 时其余 job 全绿但服务端消费陈旧契约——故对
+      # 提交版 dist 做重建 byte 级比对，漂移即红（本地与 CI 均验证过
+      # rolldown 确定性输出，跨环境不一致时改用「重建产物参与测试」等价守卫）
+      - name: dist 同步守卫（重建产物与提交版 byte 级比对）
+        run: |
+          cp dist/index.js "$RUNNER_TEMP/dist-committed.js"
+          npm run build
+          if ! cmp -s "$RUNNER_TEMP/dist-committed.js" dist/index.js; then
+            echo "::error file=mc-schemas/dist/index.js::提交的 dist 与 src 重建产物不一致——改 src 后必须 npm run build 并一并提交 dist（服务端运行时消费 dist）"
+            diff "$RUNNER_TEMP/dist-committed.js" dist/index.js | head -20 || true
+            exit 1
+          fi
+
   server:
     name: 服务端（lint + test）
     runs-on: ubuntu-latest
@@ -68,7 +122,7 @@ jobs:
           retention-days: 7
 
   coverage-gate:
-    name: 覆盖率门禁（≥ 65%）
+    name: 覆盖率门禁（≥ 70%）
     runs-on: ubuntu-latest
     if: >-
       github.event_name == 'push' ||
@@ -84,7 +138,7 @@ jobs:
         with:
           path: coverage-artifacts
       - name: 汇总两份覆盖率并与阈值比较
-        run: node scripts/check-coverage-gate.mjs coverage-artifacts/coverage-web/coverage-final.json coverage-artifacts/coverage-server/coverage-final.json 65
+        run: node scripts/check-coverage-gate.mjs coverage-artifacts/coverage-web/coverage-final.json coverage-artifacts/coverage-server/coverage-final.json 70
 
   web-e2e:
     name: 前端（build + e2e）
@@ -105,6 +159,8 @@ jobs:
       - run: npm ci
       # build 内含 tsc -b（类型检查），产物供 preview e2e 复用（E2E_SERVER=preview）
       - run: npm run build
+      # 首屏/路由首访体积门禁（gzip）：复用上面的构建产物，拦截重依赖回流高频路由
+      - run: npm run check:size
       - name: 缓存 Playwright 浏览器
         uses: actions/cache@v6
         with:

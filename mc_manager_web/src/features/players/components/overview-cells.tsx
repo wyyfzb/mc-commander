@@ -7,17 +7,29 @@ import type { ReactNode } from 'react'
 export function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <h4 className="text-mcs-xs font-medium text-mcs-text-subtle">{title}</h4>
+      <h4 className="text-mcs-xs font-medium text-mcs-text-muted">{title}</h4>
       {children}
     </div>
   )
 }
 
-export function InfoCell({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
+export function InfoCell({
+  label,
+  value,
+  mono = false,
+}: {
+  label: string
+  value: string
+  mono?: boolean
+}) {
   return (
     <div className="flex flex-col gap-0.5">
-      <span className="text-mcs-2xs text-mcs-text-subtle">{label}</span>
-      <span className={mono ? 'font-mono text-mcs-xs text-mcs-text-default' : 'text-mcs-xs text-mcs-text-default'}>
+      <span className="text-mcs-2xs text-mcs-text-muted">{label}</span>
+      <span
+        className={
+          mono ? 'font-mono text-mcs-xs text-mcs-text-default' : 'text-mcs-xs text-mcs-text-default'
+        }
+      >
         {value}
       </span>
     </div>
@@ -27,8 +39,10 @@ export function InfoCell({ label, value, mono = false }: { label: string; value:
 export function StatCell({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col gap-0.5 rounded-mcs-xs bg-mcs-bg-muted px-2 py-1.5">
-      <span className="text-mcs-2xs text-mcs-text-subtle">{label}</span>
-      <span className="mcs-num text-mcs-sm leading-none font-medium text-mcs-text-default">{value}</span>
+      <span className="text-mcs-2xs text-mcs-text-muted">{label}</span>
+      <span className="mcs-num text-mcs-sm leading-none font-medium text-mcs-text-default">
+        {value}
+      </span>
     </div>
   )
 }

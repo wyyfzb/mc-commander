@@ -3,7 +3,7 @@
  * mock 属性为虚构占位值，无真实服务器数据
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Toaster, toast as sonnerToast } from 'sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -48,6 +48,32 @@ describe('PropertiesPanel 渲染', () => {
     expect(screen.getAllByText('********').length).toBe(3)
     // 未知属性自动追加
     expect(screen.getByText('custom-unknown-key')).toBeInTheDocument()
+  })
+
+  it('生效方式：常态说明收进面板头部信息入口，只给热改例外逐项挂标（默认只读态即如此）', async () => {
+    const user = userEvent.setup()
+    const { container } = render(
+      <TooltipProvider>
+        <PropertiesPanel properties={mockProps} isLoading={false} onSave={vi.fn()} />
+        <Toaster />
+      </TooltipProvider>,
+    )
+    const row = (name: string) => container.querySelector(`[data-prop="${name}"]`) as HTMLElement
+
+    // 例外：热改 4 键（difficulty 是其一）逐项挂「即时生效」
+    expect(within(row('difficulty')).getByText('即时生效')).toBeInTheDocument()
+    // 常态：可写但非热改的项不逐项挂标（320px 下会把键名挤到 2 字可见），由信息入口统一讲清
+    expect(within(row('max-players')).queryByText('重启生效')).not.toBeInTheDocument()
+    // 正文不常驻，点开入口才读到全文
+    expect(
+      screen.queryByText(/除标记「即时生效」的属性外，其余可写属性改动后需重启实例生效/),
+    ).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '生效方式说明' }))
+    expect(await screen.findByRole('dialog', { name: '生效方式说明' })).toHaveTextContent(
+      '除标记「即时生效」的属性外，其余可写属性改动后需重启实例生效',
+    )
+    // 不可写/未知键改不动，谈不上生效方式，也不该挂例外标
+    expect(within(row('custom-unknown-key')).queryByText('即时生效')).not.toBeInTheDocument()
   })
 
   it('分类筛选 + 搜索过滤', async () => {

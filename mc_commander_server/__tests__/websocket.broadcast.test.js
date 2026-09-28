@@ -1,6 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'events';
-import { setupWebSocket, WSEvents } from '../websocket.js';
+import {
+  setupWebSocket,
+  WSEvents,
+  flushNotificationEvents,
+  resetNotificationEventQueue,
+} from '../websocket.js';
+import { resetSystemStatsCache } from '../utils/system-stats.js';
 
 // Mock 数据库：捕获通知事件落库（全局通知 id 透传 / 落库失败降级分支）
 vi.mock('../db/index.js', () => ({
@@ -16,7 +22,12 @@ vi.mock('os', async (importOriginal) => {
     ...actual,
     default: {
       ...actual.default,
-      cpus: vi.fn(() => [{ model: 'cpu0' }, { model: 'cpu1' }, { model: 'cpu2' }, { model: 'cpu3' }]),
+      cpus: vi.fn(() => [
+        { model: 'cpu0' },
+        { model: 'cpu1' },
+        { model: 'cpu2' },
+        { model: 'cpu3' },
+      ]),
       loadavg: vi.fn(() => [2.0, 1.0, 0.5]),
       totalmem: vi.fn(() => 8 * 1024 * 1024 * 1024),
       freemem: vi.fn(() => 2 * 1024 * 1024 * 1024),
@@ -80,6 +91,10 @@ describe('WebSocket 系统广播域（broadcastAll / 全局通知 / 系统统计
   let api;
 
   beforeEach(() => {
+    // 队列状态跨用例隔离：nextId 回到「表内 MAX+1」懒初始化，id 从 1 起可断言
+    resetNotificationEventQueue();
+    // 磁盘读数缓存同理（fake timers 下 10s 窗口不会自然过期）
+    resetSystemStatsCache();
     // fake timers 需在 setupWebSocket 之前启用：心跳 interval、广播节流窗口
     // 与系统统计 15s 周期都依赖可控时钟
     vi.useFakeTimers();
@@ -91,6 +106,8 @@ describe('WebSocket 系统广播域（broadcastAll / 全局通知 / 系统统计
     fakeDb = {
       inserted: [],
       failInsert: false,
+      // 队列刷写走事务包装（透传执行，记录行为与断言口径一致）
+      transaction: vi.fn((fn) => (rows) => fn(rows)),
       prepare: vi.fn((sql) => {
         if (sql.includes('INSERT INTO notification_events')) {
           return {
@@ -108,7 +125,12 @@ describe('WebSocket 系统广播域（broadcastAll / 全局通知 / 系统统计
 
     // 系统指标默认实现（用例内可重设；clearAllMocks 不清实现，这里显式复位防泄漏）
     vi.mocked(os.loadavg).mockReturnValue([2.0, 1.0, 0.5]);
-    vi.mocked(os.cpus).mockReturnValue([{ model: 'cpu0' }, { model: 'cpu1' }, { model: 'cpu2' }, { model: 'cpu3' }]);
+    vi.mocked(os.cpus).mockReturnValue([
+      { model: 'cpu0' },
+      { model: 'cpu1' },
+      { model: 'cpu2' },
+      { model: 'cpu3' },
+    ]);
     vi.mocked(os.totalmem).mockReturnValue(8 * 1024 * 1024 * 1024);
     vi.mocked(os.freemem).mockReturnValue(2 * 1024 * 1024 * 1024);
     vi.mocked(os.uptime).mockReturnValue(12345);
@@ -200,13 +222,15 @@ describe('WebSocket 系统广播域（broadcastAll / 全局通知 / 系统统计
 
       const notice = sentMessage(wsA, 1);
       expect(notice.type).toBe(WSEvents.DEPLOY_COMPLETE);
-      expect(notice.id).toBe(1);
+      expect(notice.eventId).toBe(1);
       expect('instanceId' in notice).toBe(false);
       expect(notice.data).toMatchObject({ instanceId: 'paper-x1', instanceName: '生存服' });
-      // 落库：instance_id NULL（无归属全局通知）
+      // 落库：instance_id NULL（无归属全局通知）；批量队列需显式刷写
+      flushNotificationEvents();
       expect(fakeDb.inserted).toHaveLength(1);
-      expect(fakeDb.inserted[0][0]).toBeNull();
-      expect(fakeDb.inserted[0][1]).toBe(WSEvents.DEPLOY_COMPLETE);
+      expect(fakeDb.inserted[0][0]).toBe(1);
+      expect(fakeDb.inserted[0][1]).toBeNull();
+      expect(fakeDb.inserted[0][2]).toBe(WSEvents.DEPLOY_COMPLETE);
     });
 
     it('readyState 非 1 的客户端对全局通知同样免疫', () => {
@@ -214,24 +238,104 @@ describe('WebSocket 系统广播域（broadcastAll / 全局通知 / 系统统计
       const wsOff = connect(wss);
       wsOff.readyState = 0;
 
-      serverManager.emit('deployProgress', { stage: 'error', percent: 0, error: 'download failed', instanceId: 'forge-x2', instanceName: 'Forge 服' });
+      serverManager.emit('deployProgress', {
+        stage: 'error',
+        percent: 0,
+        error: 'download failed',
+        instanceId: 'forge-x2',
+        instanceName: 'Forge 服',
+      });
 
       expect(wsOk.send).toHaveBeenCalledTimes(2);
       expect(wsOff.send).not.toHaveBeenCalled();
       expect(sentMessage(wsOk, 1).type).toBe(WSEvents.DEPLOY_FAILED);
     });
 
-    it('落库失败降级：通知无 id 字段但广播不中断（投递优先）', () => {
+    it('落库失败降级：id 入队即分配（消息仍带 eventId），flush 失败丢行不中断广播', () => {
       fakeDb.failInsert = true;
       const ws = connect(wss);
 
-      serverManager.emit('deployProgress', { stage: 'complete', percent: 1.0, instanceId: 'paper-x3', instanceName: '生存服' });
+      serverManager.emit('deployProgress', {
+        stage: 'complete',
+        percent: 1.0,
+        instanceId: 'paper-x3',
+        instanceName: '生存服',
+      });
 
-      // progress（无落库语义）+ notice 均送达，notice 无 id
+      // progress（无落库语义）+ notice 均送达；id 已随消息下发，flush 失败只丢行
       expect(ws.send).toHaveBeenCalledTimes(2);
       const notice = sentMessage(ws, 1);
       expect(notice.type).toBe(WSEvents.DEPLOY_COMPLETE);
-      expect('id' in notice).toBe(false);
+      expect(notice.eventId).toBe(1);
+      expect(() => flushNotificationEvents()).not.toThrow();
+    });
+  });
+
+  describe('关键状态跃迁（crash/熔断）全局面投递', () => {
+    it('未订阅该实例的客户端也收到 crash，归属仍由信封 instanceId 携带', () => {
+      const wsOther = connect(wss);
+      wsOther.subscribedInstances.add('s2');
+      const wsBare = connect(wss);
+
+      serverManager.emit('instance:status', { instanceId: 's1', event: 'crash', exitCode: 1 });
+
+      expect(wsOther.send).toHaveBeenCalledTimes(1);
+      expect(wsBare.send).toHaveBeenCalledTimes(1);
+      const msg = sentMessage(wsBare);
+      expect(msg.type).toBe(WSEvents.STATUS);
+      expect(msg.instanceId).toBe('s1');
+      expect(msg.data).toMatchObject({ event: 'crash', exitCode: 1 });
+    });
+
+    it('订阅者只收到一次（放开通投递不引入重复下发）', () => {
+      const ws = connect(wss);
+      ws.subscribedInstances.add('s1');
+
+      serverManager.emit('instance:status', { instanceId: 's1', event: 'crash' });
+
+      expect(ws.send).toHaveBeenCalledTimes(1);
+    });
+
+    it('关键事件落库 instance_id 置空（断线补齐取全局面）且消息携带自增 id', () => {
+      const ws = connect(wss);
+      ws.subscribedInstances.add('s1');
+
+      serverManager.emit('instance:status', {
+        instanceId: 's1',
+        event: 'circuit_breaker',
+        reason: '连续崩溃',
+      });
+
+      flushNotificationEvents();
+      expect(fakeDb.inserted).toHaveLength(1);
+      expect(fakeDb.inserted[0][0]).toBe(1);
+      expect(fakeDb.inserted[0][1]).toBeNull();
+      expect(fakeDb.inserted[0][2]).toBe(WSEvents.STATUS);
+      expect(sentMessage(ws).eventId).toBe(1);
+    });
+
+    it('常规跃迁（stopped）仍按订阅过滤并保留实例归属', () => {
+      const wsOther = connect(wss);
+      wsOther.subscribedInstances.add('s2');
+      const wsSub = connect(wss);
+      wsSub.subscribedInstances.add('s1');
+
+      serverManager.emit('instance:status', { instanceId: 's1', event: 'stopped', code: 0 });
+
+      expect(wsSub.send).toHaveBeenCalledTimes(1);
+      expect(wsOther.send).not.toHaveBeenCalled();
+      flushNotificationEvents();
+      expect(fakeDb.inserted[0][0]).toBe(1);
+      expect(fakeDb.inserted[0][1]).toBe('s1');
+    });
+
+    it('readyState 非 1 的客户端对关键事件同样免疫', () => {
+      const wsOff = connect(wss);
+      wsOff.readyState = 0;
+
+      serverManager.emit('instance:status', { instanceId: 's1', event: 'crash' });
+
+      expect(wsOff.send).not.toHaveBeenCalled();
     });
   });
 
@@ -339,7 +443,11 @@ describe('WebSocket 系统广播域（broadcastAll / 全局通知 / 系统统计
       const wsA = connect(wss);
       const wsB = connect(wss);
 
-      serverManager.emit('instance:upgradeProgress', { stage: 'download', percent: 40, detail: '正在下载...' });
+      serverManager.emit('instance:upgradeProgress', {
+        stage: 'download',
+        percent: 40,
+        detail: '正在下载...',
+      });
 
       // 兜底走全量广播：无实例归属，不校验订阅，不落库
       expect(wsA.send).toHaveBeenCalledTimes(1);
@@ -347,6 +455,7 @@ describe('WebSocket 系统广播域（broadcastAll / 全局通知 / 系统统计
       const msg = sentMessage(wsA);
       expect(msg.type).toBe(WSEvents.UPGRADE_PROGRESS);
       expect('instanceId' in msg).toBe(false);
+      flushNotificationEvents();
       expect(fakeDb.inserted).toHaveLength(0);
     });
 
@@ -373,14 +482,30 @@ describe('WebSocket 系统广播域（broadcastAll / 全局通知 / 系统统计
       ws.send.mockClear();
 
       const CASES = [
-        ['instance:playerDeath', WSEvents.PLAYER_DEATH, { instanceId: 's1', name: 'Steve', cause: 'lava' }],
+        [
+          'instance:playerDeath',
+          WSEvents.PLAYER_DEATH,
+          { instanceId: 's1', name: 'Steve', cause: 'lava' },
+        ],
         ['instance:playerRespawn', WSEvents.PLAYER_RESPAWN, { instanceId: 's1', name: 'Steve' }],
-        ['instance:playerChat', WSEvents.PLAYER_CHAT, { instanceId: 's1', name: 'Steve', message: 'hello' }],
-        ['instance:achievement', WSEvents.ACHIEVEMENT, { instanceId: 's1', name: 'Steve', achievement: 'Taking Inventory' }],
+        [
+          'instance:playerChat',
+          WSEvents.PLAYER_CHAT,
+          { instanceId: 's1', name: 'Steve', message: 'hello' },
+        ],
+        [
+          'instance:achievement',
+          WSEvents.ACHIEVEMENT,
+          { instanceId: 's1', name: 'Steve', achievement: 'Taking Inventory' },
+        ],
         ['instance:tpsUpdate', WSEvents.TPS_UPDATE, { instanceId: 's1', tps: 19.5 }],
         ['instance:performanceUpdate', WSEvents.PERFORMANCE_UPDATE, { instanceId: 's1', cpu: 30 }],
         ['instance:weatherUpdate', WSEvents.WEATHER_UPDATE, { instanceId: 's1', raining: true }],
-        ['instance:playerStatsUpdate', WSEvents.PLAYER_STATS_UPDATE, { instanceId: 's1', players: [{ name: 'Alex' }] }],
+        [
+          'instance:playerStatsUpdate',
+          WSEvents.PLAYER_STATS_UPDATE,
+          { instanceId: 's1', players: [{ name: 'Alex' }] },
+        ],
         ['instance:playerSleep', WSEvents.PLAYER_SLEEP, { instanceId: 's1', name: 'Steve' }],
       ];
       for (const [event, expectedType, data] of CASES) {
@@ -392,9 +517,12 @@ describe('WebSocket 系统广播域（broadcastAll / 全局通知 / 系统统计
       expect(ws.send).toHaveBeenCalledTimes(CASES.length);
     });
 
-    it('webhook 投递失败事件广播并落库（低频高价值通知链）', () => {
+    it('webhook 投递失败：关键事件派发（落库全局行 + 未订阅客户端也收到）', () => {
       const ws = connect(wss);
       ws.subscribedInstances.add('s1');
+      // 未订阅任何实例的另一客户端：失败事件与 crash/熔断同款，投递面取全局
+      const outsider = connect(wss);
+      outsider.send.mockClear();
       ws.send.mockClear();
 
       serverManager.emit('instance:webhookDeliveryFailed', {
@@ -405,11 +533,42 @@ describe('WebSocket 系统广播域（broadcastAll / 全局通知 / 系统统计
         error: 'request timeout',
       });
 
+      // 落库为全局行（instance_id 置空）：断线补齐对任何订阅者都可见
+      flushNotificationEvents();
       expect(fakeDb.inserted).toHaveLength(1);
+      expect(fakeDb.inserted[0][0]).toBe(1);
+      expect(fakeDb.inserted[0][1]).toBeNull();
+      expect(fakeDb.inserted[0][2]).toBe(WSEvents.WEBHOOK_DELIVERY_FAILED);
       const msg = sentMessage(ws);
       expect(msg.type).toBe(WSEvents.WEBHOOK_DELIVERY_FAILED);
-      expect(msg.id).toBe(1);
+      expect(msg.eventId).toBe(1);
+      // 信封仍携带实例归属（前端据此跳转实例页）
+      expect(msg.instanceId).toBe('s1');
       expect(msg.data).toMatchObject({ webhookId: 3, error: 'request timeout' });
+      // 未订阅客户端同样收到（关键事件无订阅播报）
+      const outsiderMsg = sentMessage(outsider);
+      expect(outsiderMsg.type).toBe(WSEvents.WEBHOOK_DELIVERY_FAILED);
+      expect(outsiderMsg.instanceId).toBe('s1');
+    });
+
+    it('备份失败与定时任务失败同走关键事件派发（未订阅也收到、落库全局行）', () => {
+      const outsider = connect(wss);
+      outsider.send.mockClear();
+
+      serverManager.emit('instance:backupFailed', { instanceId: 's1', error: 'rsync boom' });
+      serverManager.emit('instance:taskFailed', {
+        instanceId: 's1',
+        taskName: '每日备份',
+        error: 'boom',
+      });
+
+      const types = outsider.send.mock.calls.map(([m]) => JSON.parse(m).type);
+      expect(types).toEqual([WSEvents.BACKUP_FAILED, WSEvents.TASK_FAILED]);
+      // 两行均为全局行（批量队列先显式刷写）
+      flushNotificationEvents();
+      const recent = fakeDb.inserted.slice(-2);
+      expect(recent.map((r) => r[1])).toEqual([null, null]);
+      expect(recent.map((r) => r[2])).toEqual([WSEvents.BACKUP_FAILED, WSEvents.TASK_FAILED]);
     });
 
     it('客户端断开事件移出广播集合，error 事件仅记录无副作用', () => {

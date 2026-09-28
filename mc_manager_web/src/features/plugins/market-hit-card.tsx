@@ -6,13 +6,7 @@
  * 展开，降低请求压力）。
  */
 import { useCallback, useState } from 'react'
-import {
-  ChevronDown,
-  Download,
-  ExternalLink,
-  Loader2,
-  Package,
-} from 'lucide-react'
+import { ChevronDown, Download, ExternalLink, Loader2, Package } from 'lucide-react'
 import type { MarketSearchHit, MarketVersion } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { StatusPill } from '@/components/mcs/status-pill'
@@ -34,6 +28,8 @@ interface MarketHitCardProps {
   panel: VersionsPanel | null
   installingKey: string | null
   installedFiles: Set<string>
+  /** 已安装列表取不到（查询失败且无旧值）：此时不得把「没标记」呈现成「没装」 */
+  installedUnknown?: boolean
   onToggle: () => void
   onInstall: (version: MarketVersion) => void
 }
@@ -44,6 +40,7 @@ export function MarketHitCard({
   panel,
   installingKey,
   installedFiles,
+  installedUnknown = false,
   onToggle,
   onInstall,
 }: MarketHitCardProps) {
@@ -65,7 +62,9 @@ export function MarketHitCard({
   return (
     <li
       className={`rounded-mcs-md border bg-mcs-bg-default transition-colors duration-mcs-base ${
-        expanded ? 'border-mcs-accent/50' : 'border-mcs-border-muted hover:border-mcs-border-strong'
+        expanded
+          ? 'border-mcs-accent-border-strong'
+          : 'border-mcs-border-muted hover:border-mcs-border-default'
       }`}
       data-testid="market-hit"
     >
@@ -97,21 +96,26 @@ export function MarketHitCard({
             <span className="truncate text-mcs-sm font-medium text-mcs-text-default" title={title}>
               {title}
             </span>
-            {hit.author && <span className="text-mcs-xs text-mcs-text-subtle">{hit.author}</span>}
+            {hit.author && <span className="text-mcs-xs text-mcs-text-muted">{hit.author}</span>}
             {/* 已安装同名提示（按净化文件名比对） */}
             <StatusPill tone="success">↓ {formatCompact(hit.downloads)}</StatusPill>
           </div>
           {hit.description && (
-            <p className="mt-1 line-clamp-2 text-mcs-xs text-mcs-text-muted" title={hit.description}>
+            <p
+              className="mt-1 line-clamp-2 text-mcs-xs text-mcs-text-muted"
+              title={hit.description}
+            >
               {hit.description}
             </p>
           )}
           <div className="mt-1.5 flex flex-wrap items-center gap-1">
             {hit.categories.slice(0, 3).map((c) => (
-              <StatusPill key={c} tone="muted">{c}</StatusPill>
+              <StatusPill key={c} tone="muted">
+                {c}
+              </StatusPill>
             ))}
             {hit.dateModified && (
-              <span className="text-mcs-xs text-mcs-text-subtle">
+              <span className="text-mcs-xs text-mcs-text-muted">
                 {formatRelativeTime(hit.dateModified)} 更新
               </span>
             )}
@@ -119,23 +123,29 @@ export function MarketHitCard({
         </div>
 
         <ChevronDown
-          className={`mt-1 size-4 shrink-0 text-mcs-text-subtle transition-transform duration-mcs-base ${expanded ? 'rotate-180' : ''}`}
+          className={`mt-1 size-4 shrink-0 text-mcs-text-muted transition-transform duration-mcs-base ${expanded ? 'rotate-180' : ''}`}
           aria-hidden
         />
       </button>
 
       {/* 版本面板 */}
       {expanded && (
-        <div className="border-t border-mcs-border-muted bg-mcs-bg-muted/40 px-3 py-2.5" data-testid="market-versions">
+        <div
+          className="border-t border-mcs-border-muted bg-mcs-bg-muted/40 px-3 py-2.5"
+          data-testid="market-versions"
+        >
           {panel?.loading ? (
-            <div className="flex items-center gap-2 py-2 text-mcs-xs text-mcs-text-subtle" aria-busy="true">
+            <div
+              className="flex items-center gap-2 py-2 text-mcs-xs text-mcs-text-muted"
+              aria-busy="true"
+            >
               <Loader2 className="size-3.5 animate-spin" aria-hidden />
               正在获取版本列表…
             </div>
           ) : panel?.error ? (
-            <p className="py-1.5 text-mcs-xs text-mcs-danger">{panel.error}</p>
+            <p className="py-1.5 text-mcs-xs text-mcs-error-fg">{panel.error}</p>
           ) : panel && panel.versions.length === 0 ? (
-            <p className="py-1.5 text-mcs-xs text-mcs-text-subtle">
+            <p className="py-1.5 text-mcs-xs text-mcs-text-muted">
               当前过滤条件下没有可安装的版本（可尝试放宽版本/加载器过滤）
             </p>
           ) : panel ? (
@@ -146,9 +156,12 @@ export function MarketHitCard({
                 return (
                   <li
                     key={v.versionNumber}
-                    className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-mcs-sm px-2 py-1.5 hover:bg-mcs-bg-hover"
+                    className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-mcs-sm px-2 py-1.5 hover:bg-mcs-state-hover"
                   >
-                    <span className="font-mono text-mcs-xs text-mcs-text-default" title={v.name ?? v.versionNumber}>
+                    <span
+                      className="font-mono text-mcs-xs text-mcs-text-default"
+                      title={v.name ?? v.versionNumber}
+                    >
                       {v.versionNumber}
                     </span>
                     {v.versionType === 'release' ? (
@@ -158,19 +171,33 @@ export function MarketHitCard({
                     ) : v.versionType === 'alpha' ? (
                       <StatusPill tone="error">Alpha</StatusPill>
                     ) : null}
-                    {installedSameFile(v) && <StatusPill tone="muted">同名已安装</StatusPill>}
+                    {/* 取不到已安装列表时不显示「同名已安装」（那是未知而非未装），
+                        改显中性说明——默默不标会让用户对已安装的插件再点安装 */}
+                    {installedUnknown ? (
+                      <StatusPill tone="muted" title="已安装列表获取失败，无法判断是否同名已安装">
+                        已装状态未知
+                      </StatusPill>
+                    ) : (
+                      installedSameFile(v) && <StatusPill tone="muted">同名已安装</StatusPill>
+                    )}
                     {/* loader 标签：区分 bukkit 系 / fabric / neoforge 构建产物 */}
                     {v.loaders.slice(0, 4).map((l) => (
                       <StatusPill key={l} tone={BUKKIT_LOADERS.has(l) ? 'info' : 'muted'}>
                         {l}
                       </StatusPill>
                     ))}
-                    <span className="text-mcs-xs text-mcs-text-subtle">
+                    <span className="text-mcs-xs text-mcs-text-muted">
                       {formatFileSize(v.file.size)}
                       {v.datePublished && ` · ${formatRelativeTime(v.datePublished)}`}
                     </span>
-                    <span className="min-w-0 truncate text-mcs-xs text-mcs-text-subtle" title={v.gameVersions.join(', ')}>
-                      兼容 {v.gameVersions.length > 3 ? `${v.gameVersions.slice(0, 3).join(', ')} 等` : v.gameVersions.join(', ') || '—'}
+                    <span
+                      className="min-w-0 truncate text-mcs-xs text-mcs-text-muted"
+                      title={v.gameVersions.join(', ')}
+                    >
+                      兼容{' '}
+                      {v.gameVersions.length > 3
+                        ? `${v.gameVersions.slice(0, 3).join(', ')} 等`
+                        : v.gameVersions.join(', ') || '—'}
                     </span>
                     <div className="ml-auto flex items-center gap-1.5">
                       {hit.slug && (
@@ -178,7 +205,7 @@ export function MarketHitCard({
                           href={`https://modrinth.com/project/${hit.slug}`}
                           target="_blank"
                           rel="noreferrer noopener"
-                          className="inline-flex size-7 items-center justify-center rounded-mcs-sm text-mcs-text-subtle transition-colors hover:bg-mcs-bg-hover hover:text-mcs-text-default"
+                          className="inline-flex size-7 items-center justify-center rounded-mcs-sm text-mcs-text-muted transition-colors hover:bg-mcs-state-hover hover:text-mcs-text-default"
                           onClick={(e) => e.stopPropagation()}
                           aria-label={`在 Modrinth 打开 ${title}`}
                           title="在 Modrinth 打开"

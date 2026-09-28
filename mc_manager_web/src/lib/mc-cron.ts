@@ -87,7 +87,10 @@ export const CRON_PRESETS: CronFieldOption[] = [
 ]
 
 /** 可视化编辑器五字段选项 */
-export const CRON_FIELD_OPTIONS: Record<'minute' | 'hour' | 'day' | 'month' | 'weekday', CronFieldOption[]> = {
+export const CRON_FIELD_OPTIONS: Record<
+  'minute' | 'hour' | 'day' | 'month' | 'weekday',
+  CronFieldOption[]
+> = {
   minute: [
     { label: '每分钟', value: '*' },
     { label: '每5分', value: '*/5' },

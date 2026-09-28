@@ -88,9 +88,9 @@ describe('槽位推断 getItemSlotType（顺序敏感）', () => {
   it('钓鱼竿与萝卜钓竿', () => {
     expect(getItemSlotType(item('fishing_rod'))).toBe(ItemSlotType.fishingRod)
     // carrot_on_a_stick 不在物品目录中，构造验证
-    expect(getItemSlotType({ id: 'carrot_on_a_stick', name: 'x', category: '工具', stackSize: 1 })).toBe(
-      ItemSlotType.fishingRod,
-    )
+    expect(
+      getItemSlotType({ id: 'carrot_on_a_stick', name: 'x', category: '工具', stackSize: 1 }),
+    ).toBe(ItemSlotType.fishingRod)
   })
   it('护甲类', () => {
     expect(getItemSlotType(item('diamond_helmet'))).toBe(ItemSlotType.helmet)
@@ -211,7 +211,9 @@ describe('buildGiveCommand', () => {
       enchants: { sharpness: 5 },
       mcVersion: '26.2',
     })
-    expect(cmd26).toBe('give Steve minecraft:diamond_sword[enchantments={"minecraft:sharpness":5}] 1')
+    expect(cmd26).toBe(
+      'give Steve minecraft:diamond_sword[enchantments={"minecraft:sharpness":5}] 1',
+    )
   })
 
   it('1.20.5 - 1.21.1 levels 包装格式', () => {
@@ -252,7 +254,13 @@ describe('buildGiveCommand', () => {
 
   it('附魔映射空时不追加组件', () => {
     expect(
-      buildGiveCommand({ playerName: 'Steve', item: item('diamond_sword'), count: 1, enchants: {}, mcVersion: '1.21.4' }),
+      buildGiveCommand({
+        playerName: 'Steve',
+        item: item('diamond_sword'),
+        count: 1,
+        enchants: {},
+        mcVersion: '1.21.4',
+      }),
     ).toBe('give Steve minecraft:diamond_sword 1')
   })
 })

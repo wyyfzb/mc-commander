@@ -1,51 +1,55 @@
 /**
  * PlayerTable 列定义 —— 10 列规格（自 player-table.tsx 拆出，纯搬移零行为变更）
  * 工厂参数化注入选择集与操作回调；依赖常量见 player-table-config.ts
+ * 行内菜单交互口径：OP/白名单切换可逆 → 直执 + 5s 撤销；踢出无逆操作 → 直执 + 普通回执
+ * compact（表格区实宽 <1016px）：10 列合计约 1016px，装不下时表格会横向溢出把勾选框与玩家名推出视野，
+ * 故按列价值裁到核心四列（选择/玩家/状态/操作）；被裁列的字段在详情面板仍可查
+ * （判据取表格区实宽而非视口：侧栏折叠差 152px、详情面板内联再借走 420px）
  */
 import type { ColumnDef } from '@tanstack/react-table'
-import {
-  Ban,
-  Eye,
-  Gift,
-  MoreHorizontal,
-  Send,
-  ShieldCheck,
-  ShieldX,
-  UserX,
-} from 'lucide-react'
+import { Ban } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { Button } from '@/components/ui/button'
+import { InfoHint } from '@/components/mcs/info-hint'
 import { cn } from '@/lib/utils'
 import { formatRelativeTime } from '@/lib/format'
-import { formatBanRemaining } from '@/lib/mc-ban'
 import type { Player } from '@/api/types'
 import type { PlayerDetailTab } from '../store'
+import { paginatePlayerRows } from '../player-pagination'
 import { PlayerAvatar } from './player-avatar'
+import { PlayerBadges } from './player-badges'
+import { PlayerRowMenu } from './player-row-menu'
 import { HeartsArmor } from './hearts-armor'
 import { DIMENSION_META, GAME_MODE_LABELS, features } from './player-table-config'
 
-/** OP/白名单切换确认状态（主表格持有，操作列触发） */
-export interface ConfirmToggleState {
-  type: 'op' | 'whitelist'
-  player: Player
-}
+/** 列优先级：容器装不下时按此集合裁剪（保留 选择/玩家/状态/操作 —— 身份、在线状态、行动入口） */
+/** 窄容器下被裁掉的次要列；导出供调用点把「折叠了几列」如实告知用户 */
+export const SECONDARY_COLUMN_IDS = new Set([
+  'gameMode',
+  'dimension',
+  'position',
+  'ping',
+  'onlineDuration',
+  'totalPlayTime',
+])
 
+/** OP/白名单切换与踢出的行内执行回调（表格持有：执行 + 回执 + 撤销口径） */
 interface PlayerColumnsDeps {
   selectedSet: Set<string>
   onOpenDetail: (name: string, tab?: PlayerDetailTab) => void
   onOpenBan: (player: Player) => void
   toggleSelect: (uuid: string) => void
   toggleSelectPage: (pageUuids: string[]) => void
-  setConfirmToggle: (v: ConfirmToggleState | null) => void
-  setKickTarget: (v: Player | null) => void
+  /** 可逆：直执 + 5s 撤销 */
+  toggleOp: (player: Player) => void
+  /** 可逆：直执 + 5s 撤销 */
+  toggleWhitelist: (player: Player) => void
+  /** 无逆操作：直执 + 普通回执 */
+  kick: (player: Player) => void
+  /** 分页状态（-1 = 「全部」档）：表头全选只能作用于当前页，见 select 列 header */
+  pageSize: number
+  pageIndex: number
+  /** 窄容器：只留核心列（免横向滚动把勾选框/玩家名推出视野） */
+  compact: boolean
 }
 
 /** 在线时长短格式（Xh Ym） */
@@ -70,22 +74,30 @@ export function buildPlayerColumns({
   onOpenBan,
   toggleSelect,
   toggleSelectPage,
-  setConfirmToggle,
-  setKickTarget,
+  toggleOp,
+  toggleWhitelist,
+  kick,
+  pageSize,
+  pageIndex,
+  compact,
 }: PlayerColumnsDeps): ColumnDef<typeof features, Player>[] {
-  return [
+  const columns: ColumnDef<typeof features, Player>[] = [
     {
       id: 'select',
       enableSorting: false, // 无排序语义，且避免排序按钮嵌套 Checkbox（非法 HTML）
       header: ({ table }) => {
-        const pageIds = table.getRowModel().rows.map((r) => r.original.uuid)
+        // 分页由外层手动切片（table 未注册分页 feature，其 rows 是全量），
+        // 故此处按同一规则复算当前页，避免「全选当前页」实际选中全部筛选结果
+        const pageIds = paginatePlayerRows(table.getRowModel().rows, pageSize, pageIndex).rows.map(
+          (r) => r.original.uuid,
+        )
         const allSelected = pageIds.length > 0 && pageIds.every((u) => selectedSet.has(u))
         const someSelected = pageIds.some((u) => selectedSet.has(u))
         return (
           <Checkbox
             checked={allSelected ? true : someSelected ? 'indeterminate' : false}
             onCheckedChange={() => toggleSelectPage(pageIds)}
-            aria-label="全选当前页"
+            aria-label={pageSize === -1 ? '全选全部筛选结果' : '全选当前页'}
           />
         )
       },
@@ -107,39 +119,52 @@ export function buildPlayerColumns({
         const banned = p.isBanned || p.isIpBanned
         return (
           <div className="flex min-w-0 items-center gap-2.5">
-            <PlayerAvatar name={p.name} isOnline={p.isOnline} isFakePlayer={p.isFakePlayer} size={28} />
+            <PlayerAvatar
+              name={p.name}
+              isOnline={p.isOnline}
+              isFakePlayer={p.isFakePlayer}
+              size={28}
+            />
             <div className="min-w-0">
+              {/* 姓名行：身份 + 纯图标徽标（OP 仅 14px，从不是挤压姓名的元凶） */}
               <div className="flex items-center gap-1.5">
-                <span
+                <button
+                  type="button"
                   className={cn(
-                    'truncate text-mcs-sm font-medium',
-                    banned ? 'text-mcs-error-fg' : p.isOnline ? 'text-mcs-text-default' : 'text-mcs-text-muted',
+                    // 与其余单元格文字同款，仅补回 button 被 UA 设成居中所丢的对齐与指针
+                    'block max-w-full cursor-pointer truncate text-left text-mcs-sm font-medium',
+                    banned
+                      ? 'text-mcs-error-fg'
+                      : p.isOnline
+                        ? 'text-mcs-text-default'
+                        : 'text-mcs-text-muted',
                   )}
+                  // 超长名（假玩家可超 16 字）仍会被截断，title 是最后一个可读出口
+                  title={p.name}
+                  aria-label={`查看 ${p.name} 详情`}
+                  onClick={(e) => {
+                    // 行级 onClick 只服务指针便利；此处已处理，阻止冒泡避免重复调用
+                    e.stopPropagation()
+                    onOpenDetail(p.name)
+                  }}
                 >
                   {p.name}
-                </span>
-                {p.isOp && <ShieldCheck className="size-3.5 shrink-0 text-mcs-purple-fg" aria-label="OP" />}
-                {p.isAfk && (
-                  <span className="shrink-0 rounded-mcs-xs bg-mcs-bg-hover px-1 text-mcs-2xs text-mcs-text-muted">
-                    AFK
-                  </span>
-                )}
-                {p.isWhitelisted && (
-                  <span className="shrink-0 rounded-mcs-xs bg-mcs-info-bg-subtle px-1 text-mcs-2xs text-mcs-info-fg">
-                    白名单
-                  </span>
-                )}
-                {banned && (
-                  <span className="shrink-0 rounded-mcs-xs bg-mcs-error-bg-subtle px-1 text-mcs-2xs text-mcs-error-fg">
-                    {p.isBanned && p.banExpiresAt
-                      ? `封禁·${formatBanRemaining(p.banExpiresAt, Date.now()) ?? '即将解封'}`
-                      : '封禁'}
+                </button>
+                <PlayerBadges player={p} part="icons" />
+              </div>
+              {/* 次要行：文本徽标与 IP 分列。文本徽标此前与姓名同行，其 shrink-0 会把姓名挤到
+                  只剩几个字（1280 下 16 字名仅剩 3 字），故下移到此行。
+                  必须 nowrap：折行会把行撑过 ROW_HEIGHT，破坏「全部」档虚拟滚动的 estimateSize
+                  前提（实测 在线+临时封禁+IP 折行 → 行高 40→59px）；宽紧时由 IP 承担收缩裁切，
+                  徽标是状态信息，保持完整可见 */}
+              <div className="flex flex-nowrap items-center gap-1.5">
+                <PlayerBadges player={p} part="texts" />
+                {p.isOnline && p.ip && (
+                  <span className="min-w-0 truncate font-mono text-mcs-2xs text-mcs-text-muted">
+                    {p.ip}
                   </span>
                 )}
               </div>
-              {p.isOnline && p.ip && (
-                <div className="truncate font-mono text-mcs-2xs text-mcs-text-subtle">{p.ip}</div>
-              )}
             </div>
           </div>
         )
@@ -149,7 +174,7 @@ export function buildPlayerColumns({
     {
       id: 'gameMode',
       header: '模式',
-      accessorFn: (p) => (p.gameMode ? GAME_MODE_LABELS[p.gameMode] ?? p.gameMode : ''),
+      accessorFn: (p) => (p.gameMode ? (GAME_MODE_LABELS[p.gameMode] ?? p.gameMode) : ''),
       cell: ({ getValue }) => (
         <span className="text-mcs-xs text-mcs-text-muted">{String(getValue() || '--')}</span>
       ),
@@ -159,7 +184,9 @@ export function buildPlayerColumns({
       id: 'dimension',
       header: '维度',
       accessorFn: (p) =>
-        p.dimension ? DIMENSION_META[p.dimension as keyof typeof DIMENSION_META]?.label ?? p.dimension : '',
+        p.dimension
+          ? (DIMENSION_META[p.dimension as keyof typeof DIMENSION_META]?.label ?? p.dimension)
+          : '',
       cell: ({ row }) => {
         const dim = row.original.dimension as keyof typeof DIMENSION_META | null
         const meta = dim ? DIMENSION_META[dim] : null
@@ -173,7 +200,7 @@ export function buildPlayerColumns({
             {meta.label}
           </span>
         ) : (
-          <span className="text-mcs-xs text-mcs-text-subtle">--</span>
+          <span className="text-mcs-xs text-mcs-text-muted">--</span>
         )
       },
       size: 96,
@@ -188,7 +215,7 @@ export function buildPlayerColumns({
             {Math.round(pos.x)}, {Math.round(pos.y)}, {Math.round(pos.z)}
           </span>
         ) : (
-          <span className="text-mcs-xs text-mcs-text-subtle">--</span>
+          <span className="text-mcs-xs text-mcs-text-muted">--</span>
         )
       },
       size: 120,
@@ -222,19 +249,26 @@ export function buildPlayerColumns({
         // 服务端从不返回 ping（RCON 不暴露）——undefined 同样视为「需插件」
         if (ping == null) {
           return (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="cursor-help text-mcs-xs text-mcs-text-subtle">需插件</span>
-              </TooltipTrigger>
-              <TooltipContent>原版 RCON 不暴露玩家 ping</TooltipContent>
-            </Tooltip>
+            <span className="text-mcs-xs text-mcs-text-muted">
+              <InfoHint variant="inline" label="需插件">
+                原版 RCON 不暴露玩家 ping
+              </InfoHint>
+            </span>
           )
         }
         const color =
-          ping < 50 ? 'var(--mcs-accent)' : ping < 150 ? 'var(--mcs-warning-fg)' : 'var(--mcs-error-fg)'
+          ping < 50
+            ? 'var(--mcs-success-fg)'
+            : ping < 150
+              ? 'var(--mcs-warning-fg)'
+              : 'var(--mcs-error-fg)'
         return (
           <span className="inline-flex items-center justify-end gap-1.5 font-mono text-mcs-xs tabular-nums text-mcs-text-muted">
-            <span className="inline-block size-1.5 shrink-0 rounded-full" style={{ backgroundColor: color }} aria-hidden />
+            <span
+              className="inline-block size-1.5 shrink-0 rounded-full"
+              style={{ backgroundColor: color }}
+              aria-hidden
+            />
             {ping}
           </span>
         )
@@ -248,7 +282,9 @@ export function buildPlayerColumns({
         const p = row.original
         return (
           <span className="block text-right text-mcs-xs text-mcs-text-muted">
-            {p.isOnline ? formatOnlineTimeShort(p.onlineTime) : formatRelativeTime(p.lastSeen ?? null, Date.now(), '从未')}
+            {p.isOnline && p.onlineTime != null
+              ? formatOnlineTimeShort(p.onlineTime)
+              : formatRelativeTime(p.lastSeen ?? null, Date.now(), '从未')}
           </span>
         )
       },
@@ -269,51 +305,19 @@ export function buildPlayerColumns({
       id: 'actions',
       header: '',
       enableSorting: false,
-      cell: ({ row }) => {
-        const p = row.original
-        return (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon-sm" aria-label={`${p.name} 操作菜单`}>
-                <MoreHorizontal aria-hidden />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => onOpenDetail(p.name, 'overview')}>
-                <Eye aria-hidden />
-                详情
-              </DropdownMenuItem>
-              <DropdownMenuItem disabled={!p.isOnline} onClick={() => onOpenDetail(p.name, 'teleport')}>
-                <Send aria-hidden />
-                传送
-              </DropdownMenuItem>
-              <DropdownMenuItem disabled={!p.isOnline} onClick={() => onOpenDetail(p.name, 'give')}>
-                <Gift aria-hidden />
-                给予物品
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => setConfirmToggle({ type: 'op', player: p })}>
-                {p.isOp ? <ShieldX aria-hidden /> : <ShieldCheck aria-hidden />}
-                {p.isOp ? '取消 OP' : '设为 OP'}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setConfirmToggle({ type: 'whitelist', player: p })}>
-                {p.isWhitelisted ? <ShieldX aria-hidden /> : <ShieldCheck aria-hidden />}
-                {p.isWhitelisted ? '移除白名单' : '加入白名单'}
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem disabled={!p.isOnline} onClick={() => setKickTarget(p)}>
-                <UserX aria-hidden />
-                踢出
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onOpenBan(p)}>
-                <Ban aria-hidden />
-                封禁…
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )
-      },
+      cell: ({ row }) => (
+        <PlayerRowMenu
+          player={row.original}
+          onOpenDetail={onOpenDetail}
+          onOpenBan={onOpenBan}
+          toggleOp={toggleOp}
+          toggleWhitelist={toggleWhitelist}
+          kick={kick}
+        />
+      ),
       size: 48,
     },
   ]
+
+  return compact ? columns.filter((c) => !SECONDARY_COLUMN_IDS.has(c.id ?? '')) : columns
 }

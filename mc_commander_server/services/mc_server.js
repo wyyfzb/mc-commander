@@ -1,4 +1,3 @@
-import { spawnSync } from 'child_process';
 import { EventEmitter } from 'events';
 import path from 'path';
 import fs from 'fs';
@@ -8,19 +7,28 @@ import { Rcon } from 'rcon-client';
 import { parseUncompressed as parseNbtSync } from 'prismarine-nbt';
 import config from '../config.js';
 import { InstanceModel, CommandHistoryModel } from '../db/index.js';
-import { atomicWriteFile } from '../utils/fs-utils.js';
+import { atomicWriteFile, ensureDir } from '../utils/fs-utils.js';
+import { killProcessTree } from '../utils/process-tree.js';
+import { maskSensitiveCommand } from '../utils/command-mask.js';
+import { localDateKey } from '../utils/local-date.js';
 // offline uuid / stats 时长读取全仓公共实现（与 routes/players.js 共用 player-utils.js）
-import { isPathContained, offlineUuid as computeOfflineUuid, getTotalPlayTime } from '../utils/player-utils.js';
+import { offlineUuid as computeOfflineUuid, getTotalPlayTime } from '../utils/player-utils.js';
+import { isPathContained } from '../utils/fs-utils.js';
 import * as levelDat from './mc-server/level-dat.js';
 import * as outputParser from './mc-server/output-parser.js';
 import * as statsCollector from './mc-server/stats-collector.js';
 import * as startLifecycle from './mc-server/start-lifecycle.js';
+import * as adopt from './mc-server/adopt.js';
+import * as logTail from './mc-server/log-tail.js';
+import * as jarVersion from './mc-server/jar-version.js';
 import { logger } from '../utils/logger.js';
 
 // 原子写统一走 utils/fs-utils.js 公共实现（写唯一 .tmp 再 rename，失败清残留）。
 // 保留 re-export：routes/status.js（_syncInstanceJson 同步 instance.json）与
 // routes/server-jar.js（创建实例首次写入 instance.json）仍从本文件导入，
 // 避免这两个调用点各自定义本地副本。
+// isEulaAccepted 同理：EULA 判定的唯一实现在 start-lifecycle 域（启动前置检查），
+// 路由侧（POST /instances/:id/start）经此处消费，两侧不再各写一份正则。
 
 // MC 命令执行失败的 RCON 响应短语。
 // MC 服务器命令执行失败（离线玩家/未知物品/语法错误）不会抛异常，只输出错误文本，
@@ -44,6 +52,7 @@ function matchCommandFailure(response) {
 }
 
 export { atomicWriteFile };
+export { isEulaAccepted } from './mc-server/start-lifecycle.js';
 
 export class MCServerManager extends EventEmitter {
   constructor() {
@@ -59,9 +68,7 @@ export class MCServerManager extends EventEmitter {
   }
 
   loadInstances() {
-    if (!fs.existsSync(config.serversDir)) {
-      fs.mkdirSync(config.serversDir, { recursive: true });
-    }
+    ensureDir(config.serversDir);
 
     // 1. 从 SQLite 加载实例
     let dbInstances = [];
@@ -96,100 +103,145 @@ export class MCServerManager extends EventEmitter {
     }
 
     // 3. 迁移文件系统中的旧实例（instance.json 存在但 DB 无记录）
-    if (fs.existsSync(config.serversDir)) {
-      const dirs = fs.readdirSync(config.serversDir, { withFileTypes: true })
-        .filter(d => d.isDirectory());
+    // readdirSync 即判定：serversDir 已在方法起手 ensureDir 建好，故不做 existsSync
+    // 预检（预检也护不住紧随其后的 readdir——它不在预检的保护范围内）；极端并发
+    // 删除下 readdir 抛 ENOENT，语义等价于「没有旧实例可迁移」
+    let dirs;
+    try {
+      dirs = fs
+        .readdirSync(config.serversDir, { withFileTypes: true })
+        .filter((d) => d.isDirectory());
+    } catch (err) {
+      if (err.code !== 'ENOENT') throw err;
+      dirs = [];
+    }
 
-      for (const dir of dirs) {
-        const configPath = path.join(config.serversDir, dir.name, 'instance.json');
-        if (!fs.existsSync(configPath)) continue;
+    for (const dir of dirs) {
+      const configPath = path.join(config.serversDir, dir.name, 'instance.json');
+      if (!fs.existsSync(configPath)) continue;
 
-        try {
-          const instanceConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      try {
+        const instanceConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
 
-          // 已迁移标记，跳过
-          if (instanceConfig.migrated === true) {
-            // 如果 DB 中没有但已标记迁移，说明 DB 记录被删除了，重新迁移
-            const dbRecord = InstanceModel.getById(instanceConfig.id);
-            if (dbRecord) {
-              // 已在 DB 中，确保内存中也加载
-              if (!this.instances.has(instanceConfig.id)) {
-                this.createInstance({
-                  ...instanceConfig,
-                  serverPath: path.join(config.serversDir, dir.name)
-                });
-                logger.info(`Loaded migrated instance: ${instanceConfig.id}`);
-              }
-              continue;
-            }
-            // DB 无记录但已标记迁移，移除标记重新迁移
-            delete instanceConfig.migrated;
-          }
-
-          // 检查 DB 是否已有此实例
-          const existing = InstanceModel.getById(instanceConfig.id);
-          if (existing) {
-            // DB 已有记录，确保内存加载（避免重复）
+        // 已迁移标记，跳过
+        if (instanceConfig.migrated === true) {
+          // 如果 DB 中没有但已标记迁移，说明 DB 记录被删除了，重新迁移
+          const dbRecord = InstanceModel.getById(instanceConfig.id);
+          if (dbRecord) {
+            // 已在 DB 中，确保内存中也加载
             if (!this.instances.has(instanceConfig.id)) {
               this.createInstance({
                 ...instanceConfig,
-                serverPath: path.join(config.serversDir, dir.name)
+                serverPath: path.join(config.serversDir, dir.name),
               });
+              logger.info(`Loaded migrated instance: ${instanceConfig.id}`);
             }
-            // 标记为已迁移
-            instanceConfig.migrated = true;
-            atomicWriteFile(configPath, JSON.stringify(instanceConfig, null, 2));
             continue;
           }
-
-          // DB 无记录，执行迁移
-          logger.info(`Migrating instance ${instanceConfig.id} from JSON to DB...`);
-          const serverPath = path.join(config.serversDir, dir.name);
-          const migrated = InstanceModel.migrateFromJson(instanceConfig, serverPath);
-          if (migrated) {
-            // 确保内存加载
-            if (!this.instances.has(instanceConfig.id)) {
-              this.createInstance({
-                ...instanceConfig,
-                serverPath
-              });
-            }
-            // 标记为已迁移
-            instanceConfig.migrated = true;
-            atomicWriteFile(configPath, JSON.stringify(instanceConfig, null, 2));
-            logger.info(`Migrated instance ${instanceConfig.id} to DB`);
-          }
-        } catch (e) {
-          logger.error(`Failed to load/migrate instance ${dir.name}:`, e);
+          // DB 无记录但已标记迁移，移除标记重新迁移
+          delete instanceConfig.migrated;
         }
+
+        // 检查 DB 是否已有此实例
+        const existing = InstanceModel.getById(instanceConfig.id);
+        if (existing) {
+          // DB 已有记录，确保内存加载（避免重复）
+          if (!this.instances.has(instanceConfig.id)) {
+            this.createInstance({
+              ...instanceConfig,
+              serverPath: path.join(config.serversDir, dir.name),
+            });
+          }
+          // 标记为已迁移
+          instanceConfig.migrated = true;
+          atomicWriteFile(configPath, JSON.stringify(instanceConfig, null, 2));
+          continue;
+        }
+
+        // DB 无记录，执行迁移
+        logger.info(`Migrating instance ${instanceConfig.id} from JSON to DB...`);
+        const serverPath = path.join(config.serversDir, dir.name);
+        const migrated = InstanceModel.migrateFromJson(instanceConfig, serverPath);
+        if (migrated) {
+          // 确保内存加载
+          if (!this.instances.has(instanceConfig.id)) {
+            this.createInstance({
+              ...instanceConfig,
+              serverPath,
+            });
+          }
+          // 标记为已迁移
+          instanceConfig.migrated = true;
+          atomicWriteFile(configPath, JSON.stringify(instanceConfig, null, 2));
+          logger.info(`Migrated instance ${instanceConfig.id} to DB`);
+        }
+      } catch (e) {
+        logger.error(`Failed to load/migrate instance ${dir.name}:`, e);
       }
     }
   }
 
-  createInstance({ id, name, javaPath = 'java', jarFile, maxMemory = '2G', minMemory = '1G', serverPath, ...rest }) {
+  createInstance({
+    id,
+    name,
+    javaPath = 'java',
+    jarFile,
+    maxMemory = '2G',
+    minMemory = '1G',
+    serverPath,
+    ...rest
+  }) {
     const instancePath = serverPath || path.join(config.serversDir, id);
-    if (!fs.existsSync(instancePath)) {
-      fs.mkdirSync(instancePath, { recursive: true });
-    }
+    ensureDir(instancePath);
 
     const instance = new MCServerInstance({
-      id, name, javaPath, jarFile, maxMemory, minMemory, serverPath: instancePath, ...rest
+      id,
+      name,
+      javaPath,
+      jarFile,
+      maxMemory,
+      minMemory,
+      serverPath: instancePath,
+      ...rest,
     });
 
     this.instances.set(id, instance);
 
     instance.on('log', (data) => this.emit('instance:log', { instanceId: id, ...data }));
     instance.on('status', (data) => this.emit('instance:status', { instanceId: id, ...data }));
-    instance.on('playerJoin', (data) => this.emit('instance:playerJoin', { instanceId: id, ...data }));
-    instance.on('playerLeave', (data) => this.emit('instance:playerLeave', { instanceId: id, ...data }));
-    instance.on('playerDeath', (data) => this.emit('instance:playerDeath', { instanceId: id, ...data }));
-    instance.on('playerRespawn', (data) => this.emit('instance:playerRespawn', { instanceId: id, ...data }));
-    instance.on('achievement', (data) => this.emit('instance:achievement', { instanceId: id, ...data }));
-    instance.on('tpsUpdate', (data) => this.emit('instance:tpsUpdate', { instanceId: id, ...data }));
-    instance.on('performanceUpdate', (data) => this.emit('instance:performanceUpdate', { instanceId: id, ...data }));
-    instance.on('weatherUpdate', (data) => this.emit('instance:weatherUpdate', { instanceId: id, ...data }));
-    instance.on('playerStatsUpdate', (data) => this.emit('instance:playerStatsUpdate', { instanceId: id, ...data }));
-    instance.on('playerSleep', (data) => this.emit('instance:playerSleep', { instanceId: id, ...data }));
+    instance.on('playerJoin', (data) =>
+      this.emit('instance:playerJoin', { instanceId: id, ...data }),
+    );
+    instance.on('playerLeave', (data) =>
+      this.emit('instance:playerLeave', { instanceId: id, ...data }),
+    );
+    instance.on('playerDeath', (data) =>
+      this.emit('instance:playerDeath', { instanceId: id, ...data }),
+    );
+    instance.on('playerRespawn', (data) =>
+      this.emit('instance:playerRespawn', { instanceId: id, ...data }),
+    );
+    instance.on('playerChat', (data) =>
+      this.emit('instance:playerChat', { instanceId: id, ...data }),
+    );
+    instance.on('achievement', (data) =>
+      this.emit('instance:achievement', { instanceId: id, ...data }),
+    );
+    instance.on('tpsUpdate', (data) =>
+      this.emit('instance:tpsUpdate', { instanceId: id, ...data }),
+    );
+    instance.on('performanceUpdate', (data) =>
+      this.emit('instance:performanceUpdate', { instanceId: id, ...data }),
+    );
+    instance.on('weatherUpdate', (data) =>
+      this.emit('instance:weatherUpdate', { instanceId: id, ...data }),
+    );
+    instance.on('playerStatsUpdate', (data) =>
+      this.emit('instance:playerStatsUpdate', { instanceId: id, ...data }),
+    );
+    instance.on('playerSleep', (data) =>
+      this.emit('instance:playerSleep', { instanceId: id, ...data }),
+    );
 
     return instance;
   }
@@ -199,23 +251,37 @@ export class MCServerManager extends EventEmitter {
   }
 
   getAllInstances() {
-    return Array.from(this.instances.values()).map(i => i.toStatus());
+    return Array.from(this.instances.values()).map((i) => i.toStatus());
   }
 
-  // 优雅停止全部运行中实例：等待 stop 命令送达 + MC 正常退出，
-  // 超时兜底强杀，避免停机（systemctl stop / Ctrl+C）时 MC 子进程
-  // 残留为孤儿、在线玩家数据（离开事件/60s 保存）丢失。
+  // 显式停止全部运行中实例：等待 stop 命令送达 + MC 正常退出，超时兜底强杀，
+  // 避免残留孤儿进程、在线玩家数据（离开事件/60s 保存）丢失。
+  // 注意：面板停机（SIGTERM/SIGINT/崩溃）已不调用本方法——停机不停实例，
+  // 由下次启动的 adoptOrphanInstances 接管（owner 2026-09-09 拍板）。
   async stopAll({ timeout = 8000 } = {}) {
     await Promise.all(
       Array.from(this.instances.values())
         .filter((i) => i.isRunning)
-        .map((instance) => instance.stopGracefully({ timeout }))
+        .map((instance) => instance.stopGracefully({ timeout })),
     );
   }
 }
 
 export class MCServerInstance extends EventEmitter {
-  constructor({ id, name, javaPath, jarFile, maxMemory, minMemory, serverPath, startCommand, jvmArgs, autoRestart, autoStart, mcVersion }) {
+  constructor({
+    id,
+    name,
+    javaPath,
+    jarFile,
+    maxMemory,
+    minMemory,
+    serverPath,
+    startCommand,
+    jvmArgs,
+    autoRestart,
+    autoStart,
+    mcVersion,
+  }) {
     super();
     this.id = id;
     this.name = name;
@@ -225,7 +291,7 @@ export class MCServerInstance extends EventEmitter {
     this.minMemory = minMemory;
     this.serverPath = serverPath;
     this.startCommand = startCommand || null;
-    // 结构化 JVM 参数（find-002 闭环：实例级持久化，start() 无传参时使用）
+    // 结构化 JVM 参数（闭环：实例级持久化，start() 无传参时使用）
     this.jvmArgs = Array.isArray(jvmArgs) ? jvmArgs : null;
     // 意外停止自动重启开关（DB 持久化，默认开）
     this.autoRestart = autoRestart !== undefined ? Boolean(autoRestart) : true;
@@ -235,6 +301,15 @@ export class MCServerInstance extends EventEmitter {
     this._manualStop = false;
     this.process = null;
     this.isRunning = false;
+    // 孤儿接管态：adopted=本实例进程非本面板 spawn、由 pid 文件接管而来。
+    // 接管实例无 stdout/stdin 管道（this.process 保持 null），命令仅 RCON 通道，
+    // 退出感知走看门狗轮询（adopt.js），this.process 众多守卫据此放行。
+    this.adopted = false;
+    this.adoptedPid = null;
+    this._adoptTimer = null;
+    // 接管实例日志续读（log-tail 域）：定时器与读取游标
+    this._logTailTimer = null;
+    this._logTailState = null;
     this.startTime = null;
     this.logBuffer = [];
     this.players = new Map();
@@ -255,36 +330,84 @@ export class MCServerInstance extends EventEmitter {
     this._rconClient = null;
     this._rconConnecting = null;
     this._lastCpuTime = undefined;
+    // Windows 采集告警去重位（见 stats-collector 的 win32 分支）：记的是 exec 层失败，
+    // 只在「正常→失败」的转折处告警一次；每轮运行由 _initializeRuntimeState 复位
+    this._win32StatsError = false;
     this._saveTimer = null;
-    this._playerStatsTimer = null;  // 玩家血量/坐标/入睡状态采集定时器
-    this._playerStatsEpoch = 0;     // 采集代际：stop 时自增，作废在途回调的续链
-    this._msptTimer = null;         // MSPT 采集定时器
-    this._msptEpoch = 0;            // MSPT 采集代际：stop 时自增，作废在途回调的续链
-    this._worldStateTimer = null;   // 世界状态（时间/天气）采集定时器
-    this._worldStateEpoch = 0;      // 世界状态采集代际：stop 时自增，作废在途回调的续链
+    this._playerStatsTimer = null; // 玩家血量/坐标/入睡状态采集定时器
+    this._playerStatsEpoch = 0; // 采集代际：stop 时自增，作废在途回调的续链
+    this._msptTimer = null; // MSPT 采集定时器
+    this._msptEpoch = 0; // MSPT 采集代际：stop 时自增，作废在途回调的续链
+    this._worldStateTimer = null; // 世界状态（时间/天气）采集定时器
+    this._worldStateEpoch = 0; // 世界状态采集代际：stop 时自增，作废在途回调的续链
     // 死亡事件聚合窗口：团灭等批量场景 5s 内合并为单条事件（防通知风暴）
     this._deathAggBuffer = [];
     this._deathAggTimer = null;
-    this._restartTimer = null;      // 重启延迟启动定时器（stop/kill 时取消）
-    // 崩溃循环熔断（feat-5 运维韧性）
+    this._restartTimer = null; // 重启延迟启动定时器（stop/kill 时取消）
+    // 崩溃循环熔断（运维韧性）
     this._consecutiveCrashes = 0;
     this._crashWindowStart = null;
     this._circuitBreakerTripped = false;
-    this.autoStart = autoStart === true;  // 面板重启后自动恢复（DB 持久化，默认关）
-    this._lastSaveTime = null;      // 真实存档时刻（来自 "Saved the game" 日志）
+    this.autoStart = autoStart === true; // 面板重启后自动恢复（DB 持久化，默认关）
+    this._lastSaveTime = null; // 真实存档时刻（来自 "Saved the game" 日志）
     // 仪表盘扩展状态
-    this._weather = 'clear';       // clear / rain / thunder
-    this._worldTime = null;        // 0-24000 ticks
-    this._worldDay = null;         // MC 世界天数
-    this._sleepingPlayers = 0;     // 入睡玩家数
-    this._worldTimer = null;       // 世界时间查询定时器
-    this._publicIp = null;         // 公网 IP（异步探测后缓存）
-    this._worldSpawn = null;       // 世界出生点 { x, y, z }（从 level.dat 读取）
-    this._worldSpawnRaw = null;    // 上次成功解析时 level.dat 的原始字节，运行期变更检测用
+    this._weather = 'clear'; // clear / rain / thunder
+    this._worldTime = null; // 0-24000 ticks
+    this._worldDay = null; // MC 世界天数
+    this._sleepingPlayers = 0; // 入睡玩家数
+    this._worldTimer = null; // 世界时间查询定时器
+    this._publicIp = null; // 公网 IP（异步探测后缓存）
+    this._worldSpawn = null; // 世界出生点 { x, y, z }（从 level.dat 读取）
+    this._worldSpawnRaw = null; // 上次成功解析时 level.dat 的原始字节，运行期变更检测用
+    // JAR 版本信息缓存 { statKey, value }：getAllInstances() 会逐实例走 toStatus()，
+    // 无缓存时每次列表请求都要解压 55MB 的 jar（详见 jar-version.js 头注释）
+    this._jarVersionCache = undefined;
     // 异步探测公网 IP（环境变量 → 云元数据 → ipify），不阻塞构造
     this._detectPublicIp();
     // 启动时读取世界出生点（纯文件 I/O，不阻塞）
     this._readWorldSpawnFromLevelDat();
+    // 面板（重）启动时从 latest.log 回填当次运行日志，见方法注释
+    this._loadLogBufferFromLatestLog();
+  }
+
+  /// 面板（重）启动时从 vanilla 的 latest.log 回填日志缓冲：
+  /// logBuffer 是纯内存态，面板重启即清空——运行中实例的当次运行日志
+  /// （含启动段）随面板重启从终端消失，孤儿接管场景同样断档。
+  /// latest.log 由 MC 自身每次启动重写、持续落盘，天然就是「当次运行」
+  /// 的权威日志；取尾部至多 1000 行（与 logBuffer 滚动上限一致）注入。
+  /// start() 的 _initializeRuntimeState 仍会清空缓冲：新一次运行从空开始，
+  /// 与 vanilla 重写 latest.log 的行为一致。只读尾部 2MB 按行切分，
+  /// 避免长运行服务器全文件读入内存。
+  _loadLogBufferFromLatestLog() {
+    const logPath = path.join(this.serverPath, 'logs', 'latest.log');
+    try {
+      if (!fs.existsSync(logPath)) return;
+      const size = fs.statSync(logPath).size;
+      if (size === 0) return;
+      const readBytes = Math.min(size, 2 * 1024 * 1024);
+      const buf = Buffer.alloc(readBytes);
+      const fd = fs.openSync(logPath, 'r');
+      try {
+        fs.readSync(fd, buf, 0, readBytes, size - readBytes);
+      } finally {
+        fs.closeSync(fd);
+      }
+      let text = buf.toString('utf8');
+      // 非整块起点时首行可能被截断（含 UTF-8 多字节边界），丢弃首行残段
+      if (readBytes < size) {
+        const firstNewline = text.indexOf('\n');
+        if (firstNewline >= 0) text = text.slice(firstNewline + 1);
+      }
+      const lines = this._filterLogNoise(text.replace(/\r/g, ''))
+        .split('\n')
+        .filter((l) => l.trim().length > 0)
+        .slice(-1000);
+      if (lines.length === 0) return;
+      this.logBuffer = lines.map((l) => ({ time: Date.now(), text: l, type: 'stdout' }));
+      logger.info(`[${this.id}] Restored ${lines.length} log line(s) from latest.log`);
+    } catch (e) {
+      logger.warn(`[${this.id}] Failed to restore logs from latest.log:`, e.message);
+    }
   }
 
   /// 世界出生点缓存（从 level.dat 读取）。
@@ -368,7 +491,11 @@ export class MCServerInstance extends EventEmitter {
       return this.isRunning && fresh['enable-rcon'] === 'true' && !!fresh['rcon.password'];
     }
     // 文件缺失/解析失败：回退内存缓存（启动初期/无 properties 文件场景）
-    return this.isRunning && this.properties['enable-rcon'] === 'true' && !!this.properties['rcon.password'];
+    return (
+      this.isRunning &&
+      this.properties['enable-rcon'] === 'true' &&
+      !!this.properties['rcon.password']
+    );
   }
 
   _loadProperties() {
@@ -394,19 +521,17 @@ export class MCServerInstance extends EventEmitter {
   }
 
   /// 属性值转义：将值内真实换行（\n/\r）替换为字面 "\\n"/"\\r"，
-  /// 防止单属性值内嵌换行走私多键注入（find-018-service）。
+  /// 防止单属性值内嵌换行走私多键注入。
   /// server.properties 为逐行 key=value 格式，真实换行会被当作行分隔符解析。
   _escapePropertyValue(value) {
-    return String(value)
-      .replace(/\r\n/g, '\\n')
-      .replace(/\n/g, '\\n')
-      .replace(/\r/g, '\\r');
+    return String(value).replace(/\r\n/g, '\\n').replace(/\n/g, '\\n').replace(/\r/g, '\\r');
   }
 
   _saveProperties(props) {
     const propsPath = path.join(this.serverPath, 'server.properties');
-    const lines = Object.entries(props)
-      .map(([key, value]) => `${key}=${this._escapePropertyValue(value)}`);
+    const lines = Object.entries(props).map(
+      ([key, value]) => `${key}=${this._escapePropertyValue(value)}`,
+    );
     atomicWriteFile(propsPath, lines.join('\n') + '\n');
     this.properties = props;
   }
@@ -417,29 +542,30 @@ export class MCServerInstance extends EventEmitter {
   /// API 路径的键白名单由 status-route 路由层负责）。
   saveProperties(props) {
     const propsPath = path.join(this.serverPath, 'server.properties');
-    // 读取原文件，保留注释行
+    // 读取原文件，保留注释行。读取即判定：文件不存在（ENOENT）＝ 首次写入，
+    // 直接从空基址起写；不做 existsSync 预检——预检判定「不存在」而窗口内文件
+    // 被外部创建（files 路由/游戏内命令）时，会以空基址覆盖掉刚写入的整份配置
     let comments = [];
     let onDisk = {};
-    if (fs.existsSync(propsPath)) {
-      try {
-        const content = fs.readFileSync(propsPath, 'utf-8');
-        comments = content.split('\n').filter(l => l.trim().startsWith('#'));
-        // 合并基址取磁盘最新内容而非内存缓存：缓存仅构造时加载一次，
-        // 文件被外部编辑（files 路由/游戏内命令）后不刷新，以陈旧缓存
-        // 为基址会把文件编辑值回滚（如 max-players=100 被覆盖回 20）
-        onDisk = this._loadProperties();
-      } catch {}
+    try {
+      const content = fs.readFileSync(propsPath, 'utf-8');
+      comments = content.split('\n').filter((l) => l.trim().startsWith('#'));
+      // 合并基址取磁盘最新内容而非内存缓存：缓存仅构造时加载一次，
+      // 文件被外部编辑（files 路由/游戏内命令）后不刷新，以陈旧缓存
+      // 为基址会把文件编辑值回滚（如 max-players=100 被覆盖回 20）
+      onDisk = this._loadProperties();
+    } catch {
+      /* 不存在或读失败：按空基址合并 */
     }
     // 合并：磁盘原属性 → 新属性覆盖
     const merged = { ...onDisk, ...props };
     const lines = [
       ...comments,
-      ...Object.entries(merged).map(([key, value]) => `${key}=${this._escapePropertyValue(value)}`)
+      ...Object.entries(merged).map(([key, value]) => `${key}=${this._escapePropertyValue(value)}`),
     ];
     atomicWriteFile(propsPath, lines.join('\n') + '\n');
     this.properties = merged;
   }
-
 
   /// 获取服务器对外可达地址（仪表盘顶栏展示 + 复制）。
   /// 优先级：公网 IP（环境变量 PUBLIC_IP 或自动探测）→ server.properties 的 server-ip
@@ -467,8 +593,7 @@ export class MCServerInstance extends EventEmitter {
     return `localhost:${port}`;
   }
 
-
-  /// 校验可执行文件是否为合法 java 启动器（find-002-service javaPath 校验）：
+  /// 校验可执行文件是否为合法 java 启动器（javaPath 校验）：
   /// - 路径形式（含路径分隔符/绝对路径）：必须 existsSync，且文件名符合 java 特征
   ///   （java/javaw/java.exe/javaw.exe）；
   /// - 纯命令名：仅允许 java 系列（走 PATH，existsSync 对 PATH 命令恒 false 无法预校验），
@@ -486,11 +611,11 @@ export class MCServerInstance extends EventEmitter {
     return /^java(?:w)?(?:\.exe)?$/i.test(name);
   }
 
-  /// 启动参数白名单校验（find-002-service 结构化参数）：
+  /// 启动参数白名单校验（结构化参数）：
   /// 仅允许 -X/-D 前缀参数、'nogui' 与 '-jar'；'-jar' 的路径参数 resolve 后
   /// 必须位于 serverPath 内（越界拒绝）。非法参数抛错拒绝启动，
   /// 杜绝经 jvmArgs/旧 startCommand 注入任意可执行行为。
-  /// 结构化 jvmArgs 补全基础参数（find-002 回归修复）：
+  /// 结构化 jvmArgs 补全基础参数（回归修复）：
   /// 客户端语义为「附加 JVM flags」（-jar 之前的 token，见 instance_settings_dialog），
   /// -Xmx/-Xms 由 maxMemory/minMemory 字段管理、-jar/nogui 由 jarFile 字段管理；
   /// 此处按该语义补全缺失项（已显式提供则尊重原值，如显式 -jar 视为完整参数），
@@ -540,7 +665,7 @@ export class MCServerInstance extends EventEmitter {
     return result;
   }
 
-  /// 旧 startCommand 兼容解析（find-002-service 兼容读取）：
+  /// 旧 startCommand 兼容解析（兼容读取）：
   /// 旧实例配置的 startCommand / 调用方传入的字符串命令解析为 命令+参数，
   /// 逐项校验（可执行文件 java 特征 + 参数白名单），不合法时拒绝启动并报清晰错误，
   /// 而不是静默按自由字符串执行。
@@ -564,6 +689,9 @@ export class MCServerInstance extends EventEmitter {
 
     // 启动视为非主动停止（自动重启/崩溃恢复均会走这里）
     this._manualStop = false;
+    // 新 spawn 覆盖一切接管残留态（接管实例 restart 必经看门狗确认退出后才到这）
+    this.adopted = false;
+    this.adoptedPid = null;
 
     // 子阶段编排（各阶段实现见 start-lifecycle.js，经原型注入 this 绑定实例）：
     // EULA 检查 → tempban 对账 → world 锁清理 → 启动命令/参数构建（四种来源优先级）
@@ -575,6 +703,8 @@ export class MCServerInstance extends EventEmitter {
 
     const { command, args } = this._resolveStartCommand(startCommand);
     this._spawnServerProcess(command, args);
+    // pid 文件是面板重启后接管孤儿进程的唯一线索，spawn 成功即落盘
+    this._writePidFile();
     this._attachSpawnErrorListener();
     this._attachStdinErrorListener();
     this._initializeRuntimeState();
@@ -715,13 +845,19 @@ export class MCServerInstance extends EventEmitter {
   }
 
   stop() {
-    if (!this.isRunning || !this.process) {
+    if (!this.isRunning || (!this.process && !this.adopted)) {
       throw new Error('Server is not running');
     }
     // 用户主动停止：标记为手动，避免被误判为意外停止而触发自动重启，
     // 并取消重启的延迟启动（用户明确停止后不得 3 秒后被自动拉起）
     this._manualStop = true;
     this.cancelRestart();
+    // 接管实例无控制台管道：统一走优雅停流程（RCON stop / 失败则按平台
+    // 信号或 taskkill 兜底），fire-and-forget 语义与常规 stop 一致
+    if (this.adopted) {
+      this.stopGracefully().catch(() => {});
+      return;
+    }
     this.sendCommand('stop').catch(() => {});
   }
 
@@ -730,7 +866,7 @@ export class MCServerInstance extends EventEmitter {
   // fire-and-forget，停机时 MC 可能收不到命令就随父进程退出成为孤儿，
   // 在线玩家数据（离开事件/60s 保存）随之丢失。
   async stopGracefully({ timeout = 8000 } = {}) {
-    if (!this.isRunning || !this.process) return;
+    if (!this.isRunning || (!this.process && !this.adopted)) return;
     this._manualStop = true;
     this.cancelRestart();
     try {
@@ -738,21 +874,29 @@ export class MCServerInstance extends EventEmitter {
     } catch {
       // 发送失败（RCON 断开等）：直接进入等待/强杀流程
     }
-    if (!this.isRunning || !this.process) return; // 发送阶段就已退出
-    await new Promise((resolve) => {
-      const timer = setTimeout(() => {
-        this.process?.removeListener('exit', onExit);
-        resolve();
-      }, timeout);
-      const onExit = () => {
-        clearTimeout(timer);
-        resolve();
-      };
-      this.process.once('exit', onExit);
-    });
+    if (!this.isRunning) return; // 发送阶段就已退出
+    if (this.adopted) {
+      // 接管实例无 exit 事件：轮询 pid 验活等待，语义与下方 exit 等待一致
+      await this._waitForAdoptedExit(timeout);
+    } else {
+      if (!this.process) return;
+      await new Promise((resolve) => {
+        const timer = setTimeout(() => {
+          this.process?.removeListener('exit', onExit);
+          resolve();
+        }, timeout);
+        const onExit = () => {
+          clearTimeout(timer);
+          resolve();
+        };
+        this.process.once('exit', onExit);
+      });
+    }
     // 超时仍未退出 → 强杀，不留孤儿进程
     if (this.isRunning) {
-      try { this.kill(); } catch {}
+      try {
+        this.kill();
+      } catch {}
     }
   }
 
@@ -772,19 +916,43 @@ export class MCServerInstance extends EventEmitter {
     if (this._restartTimer) clearTimeout(this._restartTimer);
     this._restartTimer = setTimeout(() => {
       this._restartTimer = null;
-      // 延迟窗口内服务器已被其他路径启动 → 放弃
-      if (this.isRunning) return;
-      // 实例目录已被删除（用户卸载）→ 放弃延迟启动
-      if (!fs.existsSync(path.join(this.serverPath, this.jarFile))) {
-        logger.info(`[${this.id}] Restart cancelled: server jar no longer exists`);
-        return;
+      // 接管实例：stop 到进程退出经看门狗轮询感知（最长 ADOPT_WATCHDOG_INTERVAL_MS），
+      // 固定 3s 窗口可能早于死亡——轮询等待退出（上限 10s）后再启动。
+      // 轮询句柄复用 _restartTimer：stop/kill 的 cancelRestart() 可中断等待
+      if (this.adopted && this.isRunning) {
+        const begin = Date.now();
+        const waitAdoptedExit = () => {
+          if (!this.isRunning) {
+            this._restartTimer = null;
+            return this._startAfterRestartWindow();
+          }
+          if (Date.now() - begin >= 10000) {
+            this._restartTimer = null;
+            logger.warn(`[${this.id}] Restart cancelled: adopted process did not exit in time`);
+            return;
+          }
+          this._restartTimer = setTimeout(waitAdoptedExit, 250);
+        };
+        return waitAdoptedExit();
       }
-      try {
-        this.start();
-      } catch (e) {
-        logger.error('Restart failed:', e);
-      }
+      this._startAfterRestartWindow();
     }, 3000);
+  }
+
+  // 延迟窗口届满后的实际启动（窗口内已退出/已取消的守卫在此收敛）
+  _startAfterRestartWindow() {
+    // 延迟窗口内服务器已被其他路径启动 → 放弃
+    if (this.isRunning) return;
+    // 实例目录已被删除（用户卸载）→ 放弃延迟启动
+    if (!fs.existsSync(path.join(this.serverPath, this.jarFile))) {
+      logger.info(`[${this.id}] Restart cancelled: server jar no longer exists`);
+      return;
+    }
+    try {
+      this.start();
+    } catch (e) {
+      logger.error('Restart failed:', e);
+    }
   }
 
   // 取消待执行的延迟启动（用户 stop/kill 实例时调用）
@@ -800,28 +968,15 @@ export class MCServerInstance extends EventEmitter {
     // 并取消重启的延迟启动
     this._manualStop = true;
     this.cancelRestart();
-    if (this.process) {
-      const pid = this.process.pid;
-      // 只杀主进程不够：MC 1.18+/26.x 官方 server.jar 为 Bundler 结构，
-      // java 主进程（BundlerMain 引导器）经 ProcessBuilder 派生真正运行的
-      // 服务器 JVM，主进程被杀后 JVM 成为孤儿继续运行（Linux 被 init 收养
-      // 继续占用/写世界数据；Windows 上 libuv job object 的
-      // JOB_OBJECT_KILL_ON_JOB_CLOSE 因宿主 mc-commander 进程仍存活而不触发）。
-      // 旧版（1.17-）server.jar 直接运行服务器主类、无派生进程，进程树终止
-      // 对其同样有效，保持新旧版本兼容。
-      if (pid) {
-        if (process.platform === 'win32') {
-          // taskkill /T 从根进程向下递归遍历，根必须先存活才能定位整棵树
-          // （先杀根会让 taskkill 报"找不到进程"而无法递归）。
-          try { spawnSync('taskkill', ['/F', '/T', '/PID', String(pid)], { stdio: 'ignore' }); } catch {}
-        } else {
-          // Linux/macOS：start() 以 detached:true spawn 使主进程成为进程组组长
-          // （pid 即 PGID），kill(-pid) 一次性终止整组（含组长自身）
-          try { process.kill(-pid, 'SIGKILL'); } catch {}
-        }
-      }
-      // 单进程 SIGKILL 兜底（进程树杀失败/pid 缺失时仍杀主进程本身）
-      try { this.process.kill('SIGKILL'); } catch {}
+    // pid 来源：常规实例取子进程句柄；接管实例（管道不可恢复）取 pid 文件记录。
+    // 接管实例杀后的运行态收尾由看门狗轮询完成（检测死亡 → stopped 事件 →
+    // 清 pid 文件），此处不重复清理。
+    const pid = this.process?.pid ?? (this.adopted ? this.adoptedPid : null);
+    if (pid) {
+      // 终止整棵进程树（Bundler 结构的 server.jar 会派生真正运行的 JVM），
+      // 平台策略见 utils/process-tree.js；start() 在非 win32 上以 detached 启动，
+      // 故按进程组终止有效
+      killProcessTree(this.process, { pid, detached: true });
     }
     this._rconCleanup();
   }
@@ -845,7 +1000,7 @@ export class MCServerInstance extends EventEmitter {
   }
 
   async sendCommand(command) {
-    if (!this.isRunning || !this.process) {
+    if (!this.isRunning || (!this.process && !this.adopted)) {
       throw new Error('Server is not running');
     }
     // 兜底：剥离前导 `/` —— MC 服务器控制台/RCON 不接受 `/` 前缀
@@ -886,47 +1041,52 @@ export class MCServerInstance extends EventEmitter {
     }
     // 记录用户发送的命令到日志流（终端显示 "> 命令"，供操作反馈上下文）
     this.emit('log', { text: `> ${command}`, type: 'command' });
-    // feat-2: 命令历史落库（chokepoint finally）
+    // : 命令历史落库（chokepoint finally）
     const cmdStart = Date.now();
     let cmdSuccess = true;
     try {
       // 优先使用 RCON：stdin 管道对含特殊字符（" [ ] { }）的命令处理不可靠，
-    // 特别是 MC 1.20.5+ Data Components 格式（如 give ... [enchantments={...}]）
-    // 中的引号会被 stdin 错误解析，导致附魔装备给予失败。
-    // RCON 协议以二进制包传输，不存在字符转义问题。
-    if (this.isRconConnected) {
-      try {
-        // await 确保命令真正送达并收到响应后才返回，
-        // 让前端顺序 await 时多条命令串行化，避免并发投递导致丢失
-        const response = await this._rconSend(command);
-        // MC 命令执行失败（离线玩家/未知物品/语法错误）不会抛异常，只返回错误文本；
-        // 解析响应检测失败短语并抛错，避免前端误判为成功
-        if (typeof response === 'string') {
-          const failure = matchCommandFailure(response);
-          if (failure) {
-            const err = new Error(`命令执行失败: ${failure}`);
-            err.isCommandExecutionError = true;
-            throw err;
+      // 特别是 MC 1.20.5+ Data Components 格式（如 give ... [enchantments={...}]）
+      // 中的引号会被 stdin 错误解析，导致附魔装备给予失败。
+      // RCON 协议以二进制包传输，不存在字符转义问题。
+      if (this.isRconConnected) {
+        try {
+          // await 确保命令真正送达并收到响应后才返回，
+          // 让前端顺序 await 时多条命令串行化，避免并发投递导致丢失
+          const response = await this._rconSend(command);
+          // MC 命令执行失败（离线玩家/未知物品/语法错误）不会抛异常，只返回错误文本；
+          // 解析响应检测失败短语并抛错，避免前端误判为成功
+          if (typeof response === 'string') {
+            const failure = matchCommandFailure(response);
+            if (failure) {
+              const err = new Error(`命令执行失败: ${failure}`);
+              err.isCommandExecutionError = true;
+              throw err;
+            }
           }
+          return response;
+        } catch (err) {
+          // 命令执行失败（已解析出失败响应）→ 直接抛错，不回退 stdin（避免重复执行）
+          if (err && err.isCommandExecutionError) throw err;
+          // 仅当确认命令未送达（连接建立失败 / 队列滞留项：命令从未写入 RCON
+          // socket）才回退 stdin 兜底。其余错误（"Timeout for packet id N"、
+          // 在途断连 "Connection closed"）都发生在发包之后——超时仅代表响应未在
+          // 5s 内返回、命令很可能已执行（RCON 协议"响应超时≠命令未执行"），
+          // 回退 stdin 重发会让 give/kick/tp/ban 等非幂等命令重复生效
+          // → 直接向调用方抛错，保持 RCON 队列语义
+          if (!(err && err.rconConfirmedNotSent)) throw err;
+          logger.warn(`[Instance ${this.id}] RCON send failed, fallback to stdin:`, err.message);
+          this._writeToStdin(command + '\n');
+          return null;
         }
-        return response;
-      } catch (err) {
-        // 命令执行失败（已解析出失败响应）→ 直接抛错，不回退 stdin（避免重复执行）
-        if (err && err.isCommandExecutionError) throw err;
-        // 仅当确认命令未送达（连接建立失败 / 队列滞留项：命令从未写入 RCON
-        // socket）才回退 stdin 兜底。其余错误（"Timeout for packet id N"、
-        // 在途断连 "Connection closed"）都发生在发包之后——超时仅代表响应未在
-        // 5s 内返回、命令很可能已执行（RCON 协议"响应超时≠命令未执行"），
-        // 回退 stdin 重发会让 give/kick/tp/ban 等非幂等命令重复生效
-        // → 直接向调用方抛错，保持 RCON 队列语义
-        if (!(err && err.rconConfirmedNotSent)) throw err;
-        logger.warn(`[Instance ${this.id}] RCON send failed, fallback to stdin:`, err.message);
-        this._writeToStdin(command + '\n');
-        return null;
       }
-    }
-    this._writeToStdin(command + '\n');
-    return null;
+      // 接管实例无 stdin 管道（面板重启后接管，stdout/stdin 随旧面板进程消失）：
+      // RCON 不可达时命令没有任何投递通道，如实报错而非静默丢弃
+      if (!this.process && this.adopted) {
+        throw new Error('接管实例无控制台管道且 RCON 未连接，命令未送达——请在实例设置中启用 RCON');
+      }
+      this._writeToStdin(command + '\n');
+      return null;
     } catch (err) {
       cmdSuccess = false;
       throw err;
@@ -934,18 +1094,21 @@ export class MCServerInstance extends EventEmitter {
       try {
         CommandHistoryModel.create({
           instanceId: this.id,
-          command,
+          // 落库前遮蔽敏感值（用户自由输入的命令可能含密钥；见 utils/command-mask.js）
+          command: maskSensitiveCommand(command),
           source: 'api',
           success: cmdSuccess ? 1 : 0,
           durationMs: Date.now() - cmdStart,
         });
-      } catch { /* audit write failure never blocks command flow */ }
+      } catch {
+        /* audit write failure never blocks command flow */
+      }
     }
   }
 
   sendCommandWithResponse(command, { timeout = 5000 } = {}) {
     return new Promise((resolve, reject) => {
-      if (!this.isRunning || !this.process) {
+      if (!this.isRunning || (!this.process && !this.adopted)) {
         return reject(new Error('Server is not running'));
       }
 
@@ -970,7 +1133,7 @@ export class MCServerInstance extends EventEmitter {
           (err) => {
             clearTimeout(timeoutTimer);
             reject(err);
-          }
+          },
         );
         return;
       }
@@ -1001,7 +1164,6 @@ export class MCServerInstance extends EventEmitter {
       this._writeToStdin(`mcsmp_${commandId} ${command}\n`);
     });
   }
-
 
   /// 死亡事件聚合发射：5s 窗口内单条保持原格式；多条（团灭等批量场景）
   /// 合并为 { players: [...], count: N } 单条广播，防通知风暴刷屏。
@@ -1068,7 +1230,7 @@ export class MCServerInstance extends EventEmitter {
       mspt: this._mspt,
       cpuUsage: this._cpuUsage,
       memoryUsage: this._memoryUsage,
-      totalMemory: Math.round(os.totalmem() / (1024 * 1024 * 1024) * 10) / 10,
+      totalMemory: Math.round((os.totalmem() / (1024 * 1024 * 1024)) * 10) / 10,
       worldSize: this._getWorldSize(),
       seed: this._readSeedFromLevelDat(),
       lastSave: this._getLastSaveTime(),
@@ -1091,7 +1253,7 @@ export class MCServerInstance extends EventEmitter {
       awakePlayerNames: this._getAwakePlayerNames(),
       totalUptime: this._getTotalUptime(),
       startTime: this.startTime ? new Date(this.startTime).toISOString() : null,
-      // ── 运维韧性字段（feat-5）──
+      // ── 运维韧性字段──
       autoStart: this.autoStart,
       circuitBreakerTripped: this._circuitBreakerTripped,
       consecutiveCrashes: this._consecutiveCrashes,
@@ -1101,7 +1263,7 @@ export class MCServerInstance extends EventEmitter {
       javaPath: this.javaPath,
       maxMemory: this.maxMemory,
       minMemory: this.minMemory,
-      jarFile: this.jarFile
+      jarFile: this.jarFile,
     };
   }
 
@@ -1126,15 +1288,17 @@ export class MCServerInstance extends EventEmitter {
     return count;
   }
 
+  /// 本地时区日期键（「今日新增」缓存的分桶键，见 utils/local-date.js）
   _todayKey() {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    return localDateKey();
   }
 
   /// 获取累计运行时长（秒）：数据库持久化的累计值 + 本次运行时长
   _getTotalUptime() {
     let total = 0;
-    try { total = InstanceModel.getTotalUptime(this.id) || 0; } catch {}
+    try {
+      total = InstanceModel.getTotalUptime(this.id) || 0;
+    } catch {}
     if (this.isRunning && this.startTime) {
       total += Math.floor((Date.now() - this.startTime) / 1000);
     }
@@ -1148,10 +1312,12 @@ export class MCServerInstance extends EventEmitter {
       if (fs.existsSync(opsPath)) {
         const ops = JSON.parse(fs.readFileSync(opsPath, 'utf-8'));
         if (Array.isArray(ops)) {
-          return ops.map(op => op.name).filter(Boolean);
+          return ops.map((op) => op.name).filter(Boolean);
         }
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     return [];
   }
 
@@ -1211,8 +1377,7 @@ export class MCServerInstance extends EventEmitter {
             });
           }
         }
-      } catch {
-      }
+      } catch {}
     }
 
     const whitelistPath = path.join(this.serverPath, 'whitelist.json');
@@ -1231,8 +1396,7 @@ export class MCServerInstance extends EventEmitter {
             knownPlayers.get(entry.name).isWhitelisted = true;
           }
         }
-      } catch {
-      }
+      } catch {}
     }
 
     const opsPath = path.join(this.serverPath, 'ops.json');
@@ -1251,8 +1415,7 @@ export class MCServerInstance extends EventEmitter {
             knownPlayers.get(entry.name).isOp = true;
           }
         }
-      } catch {
-      }
+      } catch {}
     }
 
     const bannedPath = path.join(this.serverPath, 'banned-players.json');
@@ -1272,25 +1435,22 @@ export class MCServerInstance extends EventEmitter {
             knownPlayers.get(entry.name).banReason = entry.reason || '';
           }
         }
-      } catch {
-      }
+      } catch {}
     }
 
     return knownPlayers;
   }
 
+  /// MC 版本：以服务端 JAR 内 version.json 为权威（用户绕过面板手动换 jar 或外部升级
+  /// 后仍准确），DB 字段仅作 JAR 不可读时的回退。
+  /// 该值被两处功能性消费——gamerule 版本选集（1.21.11 前后规则名体系不同）与
+  /// 推荐 JDK——故陈旧值会让面板选错规则表、推荐错 Java，不只是显示不准。
   _getMcVersion() {
-    // DB 持久化版本优先（部署/升级时写入，重启后由 loadInstances 传入）
+    const info = this._getJarVersionInfo();
+    if (info?.id) return info.id;
+    // JAR 不可读（Fabric/Forge 的启动 jar 由安装器生成、不含 version.json，或实例
+    // 目录尚未产出 jar）：回退 DB 持久化版本（部署/升级时写入）
     if (this.mcVersion) return this.mcVersion;
-    // 兜底：扫描实例目录 versions/ 子目录（仅当 DB 无版本时）
-    const versionPath = path.join(this.serverPath, 'versions');
-    if (fs.existsSync(versionPath)) {
-      try {
-        const versions = fs.readdirSync(versionPath);
-        if (versions.length > 0) return versions[0];
-      } catch {
-      }
-    }
     return 'unknown';
   }
 
@@ -1303,8 +1463,7 @@ export class MCServerInstance extends EventEmitter {
       for (const file of files) {
         if (/^forge-.*-universal\.jar$/.test(file)) return 'Forge';
       }
-    } catch {
-    }
+    } catch {}
     return 'Vanilla';
   }
 
@@ -1327,7 +1486,7 @@ export class MCServerInstance extends EventEmitter {
   _savePlayerData(playerName, data) {
     try {
       const dir = path.join(this.serverPath, 'playerdata');
-      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      ensureDir(dir);
       const filePath = path.join(dir, `${playerName}.json`);
       const existing = this._loadPlayerData(playerName) || {};
       // 浅拷贝后再删除：调用方（60s 定时保存、玩家离开落盘）传入的是 this.players
@@ -1349,17 +1508,24 @@ export class MCServerInstance extends EventEmitter {
       // 先 truncate 再写）在 60s 定时保存/离开保存中途进程崩溃或断电时，会残留半写 JSON；
       // 重启后 _loadPlayerData 解析失败静默返回 null，下一次保存把旧 totalPlayTime/事件/
       // lastSeen 全部清空归零。原子写崩溃只影响 .tmp（finally 清理），目标文件保持完整。
-      atomicWriteFile(filePath, JSON.stringify({
-        ...existing,
-        ...dataCopy,
-        ...cached,
-        _cachedDetails: undefined,
-        events: mergedEvents,
-        // lastSeen 语义为「最后离线时间」：仅在玩家离开/服务器退出时由调用方
-        // 设置为离线时刻。日常 60s 自动保存/在线保存不得用 Date.now() 覆盖，
-        // 否则「最后在线时间」会被刷成「最后保存时间」。
-        lastSeen: dataCopy.lastSeen ?? existing.lastSeen ?? null,
-      }, null, 2));
+      atomicWriteFile(
+        filePath,
+        JSON.stringify(
+          {
+            ...existing,
+            ...dataCopy,
+            ...cached,
+            _cachedDetails: undefined,
+            events: mergedEvents,
+            // lastSeen 语义为「最后离线时间」：仅在玩家离开/服务器退出时由调用方
+            // 设置为离线时刻。日常 60s 自动保存/在线保存不得用 Date.now() 覆盖，
+            // 否则「最后在线时间」会被刷成「最后保存时间」。
+            lastSeen: dataCopy.lastSeen ?? existing.lastSeen ?? null,
+          },
+          null,
+          2,
+        ),
+      );
     } catch (e) {
       // 写盘失败（磁盘满/权限异常等）不得静默吞掉：
       // 60s 定时保存与离开/停机最终保存都会走这里，失败意味着
@@ -1428,7 +1594,8 @@ export class MCServerInstance extends EventEmitter {
       customName = this._extractTextName(tag.display.value.Name.value);
     }
     if (!customName && components) {
-      const cn = components['minecraft:custom_name']?.value || components['minecraft:item_name']?.value;
+      const cn =
+        components['minecraft:custom_name']?.value || components['minecraft:item_name']?.value;
       if (cn) customName = this._extractTextName(cn);
     }
 
@@ -1440,7 +1607,13 @@ export class MCServerInstance extends EventEmitter {
   _buildInventoryResult(invList, enderList, source, isPartial = false) {
     const quickbar = new Array(9).fill(null);
     const main = new Array(27).fill(null);
-    const equipment = { helmet: null, chestplate: null, leggings: null, boots: null, offhand: null };
+    const equipment = {
+      helmet: null,
+      chestplate: null,
+      leggings: null,
+      boots: null,
+      offhand: null,
+    };
     const enderChest = new Array(27).fill(null);
 
     const place = (item) => {
@@ -1455,8 +1628,8 @@ export class MCServerInstance extends EventEmitter {
       else if (slot === -106) equipment.offhand = data;
     };
 
-    for (const item of (invList || [])) place(item);
-    for (const item of (enderList || [])) {
+    for (const item of invList || []) place(item);
+    for (const item of enderList || []) {
       if (!item) continue;
       const { slot, ...data } = item;
       if (slot >= 0 && slot <= 26) enderChest[slot] = data;
@@ -1467,7 +1640,7 @@ export class MCServerInstance extends EventEmitter {
 
   // 从 playerdata/<uuid>.dat 读取物品栏（gzip NBT），返回快照数据
   _loadInventoryFromDat(uuid, playerName) {
-    // level-name 服务层兜底校验（find-008-read）：非法/越界回退 'world'
+    // level-name 服务层兜底校验：非法/越界回退 'world'
     const levelName = this._getSafeLevelName();
     const candidates = [
       // MC 26.1+ 新世界格式：players/data
@@ -1480,7 +1653,9 @@ export class MCServerInstance extends EventEmitter {
     ];
     const offlineUuid = computeOfflineUuid(playerName);
     if (offlineUuid && offlineUuid !== uuid) {
-      candidates.push(path.join(this.serverPath, levelName, 'players', 'data', `${offlineUuid}.dat`));
+      candidates.push(
+        path.join(this.serverPath, levelName, 'players', 'data', `${offlineUuid}.dat`),
+      );
       candidates.push(path.join(this.serverPath, 'world', 'players', 'data', `${offlineUuid}.dat`));
       candidates.push(path.join(this.serverPath, levelName, 'playerdata', `${offlineUuid}.dat`));
       candidates.push(path.join(this.serverPath, 'world', 'playerdata', `${offlineUuid}.dat`));
@@ -1489,9 +1664,12 @@ export class MCServerInstance extends EventEmitter {
 
     let datPath = null;
     for (const c of candidates) {
-      // 兜底防御（find-008-read）：候选路径 resolve 后必须位于 serverPath 内，越界丢弃
+      // 兜底防御：候选路径 resolve 后必须位于 serverPath 内，越界丢弃
       if (!isPathContained(this.serverPath, c)) continue;
-      if (fs.existsSync(c)) { datPath = c; break; }
+      if (fs.existsSync(c)) {
+        datPath = c;
+        break;
+      }
     }
     if (!datPath) return null;
 
@@ -1506,12 +1684,16 @@ export class MCServerInstance extends EventEmitter {
       const extractList = (tag) => {
         if (!tag) return [];
         const v = tag.value;
-        return Array.isArray(v) ? v : (v?.value || []);
+        return Array.isArray(v) ? v : v?.value || [];
       };
 
       // 兼容新旧字段名（1.20.5+ 用小写）
-      const invList = extractList(root.Inventory).map(i => this._parseNbtItem(i)).filter(Boolean);
-      const enderList = extractList(root.EnderItems).map(i => this._parseNbtItem(i)).filter(Boolean);
+      const invList = extractList(root.Inventory)
+        .map((i) => this._parseNbtItem(i))
+        .filter(Boolean);
+      const enderList = extractList(root.EnderItems)
+        .map((i) => this._parseNbtItem(i))
+        .filter(Boolean);
 
       // MC 26.1+ 新增 equipment 字段（装备物品独立存储，不在 Inventory 列表中）
       const eqNbt = root.equipment?.value || root.Equipment?.value;
@@ -1519,7 +1701,10 @@ export class MCServerInstance extends EventEmitter {
         const eqSlots = { head: 103, chest: 102, legs: 101, feet: 100, offhand: -106 };
         for (const [key, slotNum] of Object.entries(eqSlots)) {
           const item = this._parseNbtItem(eqNbt[key]);
-          if (item) { item.slot = slotNum; invList.push(item); }
+          if (item) {
+            item.slot = slotNum;
+            invList.push(item);
+          }
         }
       }
 
@@ -1577,20 +1762,38 @@ export class MCServerInstance extends EventEmitter {
     const inner = listMatch[1];
 
     const items = [];
-    let depth = 0, start = -1, inStr = false, strCh = '';
+    let depth = 0,
+      start = -1,
+      inStr = false,
+      strCh = '';
     for (let i = 0; i < inner.length; i++) {
       const ch = inner[i];
       if (inStr) {
-        if (ch === '\\') { i++; continue; }
+        if (ch === '\\') {
+          i++;
+          continue;
+        }
         if (ch === strCh) inStr = false;
         continue;
       }
-      if (ch === '"' || ch === "'") { inStr = true; strCh = ch; continue; }
-      if (ch === '{') { if (depth === 0) start = i; depth++; }
-      else if (ch === '}') { depth--; if (depth === 0 && start >= 0) { items.push(inner.substring(start, i + 1)); start = -1; } }
+      if (ch === '"' || ch === "'") {
+        inStr = true;
+        strCh = ch;
+        continue;
+      }
+      if (ch === '{') {
+        if (depth === 0) start = i;
+        depth++;
+      } else if (ch === '}') {
+        depth--;
+        if (depth === 0 && start >= 0) {
+          items.push(inner.substring(start, i + 1));
+          start = -1;
+        }
+      }
     }
 
-    return items.map(snbtItem => this._parseSnbtItem(snbtItem)).filter(Boolean);
+    return items.map((snbtItem) => this._parseSnbtItem(snbtItem)).filter(Boolean);
   }
 
   // 解析单个物品 SNBT 字符串（简化版，提取 id/count/slot，附魔检测）
@@ -1610,13 +1813,15 @@ export class MCServerInstance extends EventEmitter {
     const slot = slotMatch ? parseInt(slotMatch[1], 10) : 0;
 
     // 附魔检测
-    const enchanted = /Enchantments:\s*\[/i.test(snbt)
-      || /"minecraft:enchantments"/i.test(snbt)
-      || /"minecraft:stored_enchantments"/i.test(snbt);
+    const enchanted =
+      /Enchantments:\s*\[/i.test(snbt) ||
+      /"minecraft:enchantments"/i.test(snbt) ||
+      /"minecraft:stored_enchantments"/i.test(snbt);
 
     // 自定义名称（简化提取）
     let customName = null;
-    const nameMatch = snbt.match(/Name:\s*'(\{[^']*\})'/) || snbt.match(/"minecraft:custom_name":\s*'([^']*)'/);
+    const nameMatch =
+      snbt.match(/Name:\s*'(\{[^']*\})'/) || snbt.match(/"minecraft:custom_name":\s*'([^']*)'/);
     if (nameMatch) customName = this._extractTextName(nameMatch[1]);
 
     return { id, count, slot, durability: null, enchanted, customName };
@@ -1632,9 +1837,12 @@ export class MCServerInstance extends EventEmitter {
     const events = this._mergePlayerEvents(savedEvents, memEvents);
 
     // 会话历史：内存（含当前在线会话）或 playerdata
-    const sessions = (player?.sessions && player.sessions.length > 0)
-      ? player.sessions
-      : (Array.isArray(savedData?.sessions) ? savedData.sessions : []);
+    const sessions =
+      player?.sessions && player.sessions.length > 0
+        ? player.sessions
+        : Array.isArray(savedData?.sessions)
+          ? savedData.sessions
+          : [];
 
     // 统计（优先 MC 官方真实统计，回退会话/事件聚合）
     const stats = this._computePlayerStats(sessions, events, player, playerName);
@@ -1661,7 +1869,7 @@ export class MCServerInstance extends EventEmitter {
 
     // 优先使用我自行追踪的累计游戏时长（来自 playerdata 持久化）
     const accumulatedTime = player?.totalPlayTime || savedData?.totalPlayTime || 0;
-    const sessionSeconds = (player?.joinTime) ? Math.floor((Date.now() - player.joinTime) / 1000) : 0;
+    const sessionSeconds = player?.joinTime ? Math.floor((Date.now() - player.joinTime) / 1000) : 0;
     details.totalPlayTime = accumulatedTime + sessionSeconds;
 
     // 尝试从 stats 文件读取总游戏时长（MC 官方统计）。
@@ -1703,7 +1911,8 @@ export class MCServerInstance extends EventEmitter {
         const _r = (cmd) => this.sendCommandWithResponse(cmd, { timeout: 5000 }).catch(() => null);
         // 仅当响应是有效的 data get 成功输出（"xxx has the following entity data: 值"）时才解析，
         // 命令失败/连接错误的返回文本不包含该标记，直接跳过，避免被正则误解析为坐标/数值
-        const _isValidDataGet = (resp) => typeof resp === 'string' && resp.includes('has the following entity data');
+        const _isValidDataGet = (resp) =>
+          typeof resp === 'string' && resp.includes('has the following entity data');
 
         const posResult = await _r(`data get entity ${playerName} Pos`);
         const healthResult = await _r(`data get entity ${playerName} Health`);
@@ -1712,7 +1921,9 @@ export class MCServerInstance extends EventEmitter {
         const gmResult = await _r(`data get entity ${playerName} playerGameType`);
         const dimResult = await _r(`data get entity ${playerName} Dimension`);
 
-        const posMatch = _isValidDataGet(posResult) ? posResult.match(/\[(-?[\d.]+)(?:d)?, (-?[\d.]+)(?:d)?, (-?[\d.]+)(?:d)?\]/) : null;
+        const posMatch = _isValidDataGet(posResult)
+          ? posResult.match(/\[(-?[\d.]+)(?:d)?, (-?[\d.]+)(?:d)?, (-?[\d.]+)(?:d)?\]/)
+          : null;
         if (posMatch) {
           details.position = {
             x: parseFloat(posMatch[1]),
@@ -1723,16 +1934,29 @@ export class MCServerInstance extends EventEmitter {
 
         // 注意：data get entity 返回格式为 "玩家名 has the following entity data: 值"
         // 正则必须通过冒号定位避免匹配到玩家名中的数字
-        const healthMatch = _isValidDataGet(healthResult) ? healthResult.match(/:\s*([\d.]+)/) : null;
+        const healthMatch = _isValidDataGet(healthResult)
+          ? healthResult.match(/:\s*([\d.]+)/)
+          : null;
         if (healthMatch) details.health = parseFloat(healthMatch[1]);
 
         // MaxHealth：使用 /attribute 按属性名查询基值（兼容新旧版属性ID变更）
         // 旧代码用 Attributes[0].base 硬编码索引，插件改变属性顺序时会读到错误值
-        const maxHealthVal = await this._queryAttribute(_r, playerName, 'minecraft:generic.max_health', 'minecraft:max_health', true);
+        const maxHealthVal = await this._queryAttribute(
+          _r,
+          playerName,
+          'minecraft:generic.max_health',
+          'minecraft:max_health',
+          true,
+        );
         details.maxHealth = maxHealthVal != null ? maxHealthVal : 20;
 
         // 护甲：使用 /attribute 查询最终值（含装备加成），兼容新旧版
-        const armorVal = await this._queryAttribute(_r, playerName, 'minecraft:generic.armor', 'minecraft:armor');
+        const armorVal = await this._queryAttribute(
+          _r,
+          playerName,
+          'minecraft:generic.armor',
+          'minecraft:armor',
+        );
         if (armorVal != null) details.armor = armorVal;
 
         const hungerMatch = _isValidDataGet(hungerResult) ? hungerResult.match(/:\s*(\d+)/) : null;
@@ -1764,7 +1988,11 @@ export class MCServerInstance extends EventEmitter {
         let respawnPoint = null;
         const respawnPosResult = await _r(`data get entity ${playerName} respawn.pos`);
         // 匹配 [I; 100, 64, -50]、[100, 64, -50]、[100.0d, 64.0d, -50.0d] 等输出形态
-        const respawnPosMatch = _isValidDataGet(respawnPosResult) ? respawnPosResult.match(/\[(?:I;\s*)?(-?[\d.]+)[a-zA-Z]?[\s,]+(-?[\d.]+)[a-zA-Z]?[\s,]+(-?[\d.]+)[a-zA-Z]?/) : null;
+        const respawnPosMatch = _isValidDataGet(respawnPosResult)
+          ? respawnPosResult.match(
+              /\[(?:I;\s*)?(-?[\d.]+)[a-zA-Z]?[\s,]+(-?[\d.]+)[a-zA-Z]?[\s,]+(-?[\d.]+)[a-zA-Z]?/,
+            )
+          : null;
         if (respawnPosMatch) {
           respawnPoint = {
             x: parseInt(respawnPosMatch[1], 10),
@@ -1776,12 +2004,18 @@ export class MCServerInstance extends EventEmitter {
         // 旧版兜底：顶层 SpawnX/SpawnY/SpawnZ
         if (!respawnPoint) {
           const spawnXResult = await _r(`data get entity ${playerName} SpawnX`);
-          const spawnXMatch = _isValidDataGet(spawnXResult) ? spawnXResult.match(/:\s*(-?[\d.]+)/) : null;
+          const spawnXMatch = _isValidDataGet(spawnXResult)
+            ? spawnXResult.match(/:\s*(-?[\d.]+)/)
+            : null;
           if (spawnXMatch) {
             const spawnYResult = await _r(`data get entity ${playerName} SpawnY`);
             const spawnZResult = await _r(`data get entity ${playerName} SpawnZ`);
-            const spawnYMatch = _isValidDataGet(spawnYResult) ? spawnYResult.match(/:\s*(-?[\d.]+)/) : null;
-            const spawnZMatch = _isValidDataGet(spawnZResult) ? spawnZResult.match(/:\s*(-?[\d.]+)/) : null;
+            const spawnYMatch = _isValidDataGet(spawnYResult)
+              ? spawnYResult.match(/:\s*(-?[\d.]+)/)
+              : null;
+            const spawnZMatch = _isValidDataGet(spawnZResult)
+              ? spawnZResult.match(/:\s*(-?[\d.]+)/)
+              : null;
             if (spawnYMatch && spawnZMatch) {
               respawnPoint = {
                 x: parseInt(spawnXMatch[1], 10),
@@ -1796,27 +2030,27 @@ export class MCServerInstance extends EventEmitter {
           details.respawnPoint = respawnPoint;
         }
 
-      // 缓存 RCON 获取的详情到玩家对象
-      const playerEntry = this.players.get(playerName);
-      if (playerEntry) {
-        if (!playerEntry._cachedDetails) playerEntry._cachedDetails = {};
-        Object.assign(playerEntry._cachedDetails, details);
+        // 缓存 RCON 获取的详情到玩家对象
+        const playerEntry = this.players.get(playerName);
+        if (playerEntry) {
+          if (!playerEntry._cachedDetails) playerEntry._cachedDetails = {};
+          Object.assign(playerEntry._cachedDetails, details);
+        }
+
+        // 物品栏增强：在线玩家尝试 RCON 实时查询，成功则覆盖 dat 快照
+        // RCON 整包查询受 4096 字节限制，截断时降级保留 dat 快照
+        const rconInventory = await this._loadInventoryFromRcon(playerName);
+        if (rconInventory) details.inventory = rconInventory;
+
+        return details;
+      } catch (e) {
+        logger.warn(`RCON 获取玩家详情失败 ${playerName}:`, e.message);
       }
-
-      // 物品栏增强：在线玩家尝试 RCON 实时查询，成功则覆盖 dat 快照
-      // RCON 整包查询受 4096 字节限制，截断时降级保留 dat 快照
-      const rconInventory = await this._loadInventoryFromRcon(playerName);
-      if (rconInventory) details.inventory = rconInventory;
-
-      return details;
-    } catch (e) {
-      logger.warn(`RCON 获取玩家详情失败 ${playerName}:`, e.message);
     }
-  }
 
-  // RCON 不可用时返回基本详情（health/position 等字段为 null）
-  return details;
-}
+    // RCON 不可用时返回基本详情（health/position 等字段为 null）
+    return details;
+  }
 
   /// 合并玩家事件：内存（实时）与持久化（playerdata）去重合并，按时间倒序。
   /// 服务端重启后内存清空，需合并 playerdata 保证日志不丢失。
@@ -1851,8 +2085,12 @@ export class MCServerInstance extends EventEmitter {
       // 离线模式玩家的真实统计仍可读取
       const offlineUuid = computeOfflineUuid(playerName);
       if (offlineUuid && offlineUuid !== uuid) {
-        candidates.push(path.join(this.serverPath, levelName, 'players', 'stats', `${offlineUuid}.json`));
-        candidates.push(path.join(this.serverPath, 'world', 'players', 'stats', `${offlineUuid}.json`));
+        candidates.push(
+          path.join(this.serverPath, levelName, 'players', 'stats', `${offlineUuid}.json`),
+        );
+        candidates.push(
+          path.join(this.serverPath, 'world', 'players', 'stats', `${offlineUuid}.json`),
+        );
       }
       for (const statsPath of candidates) {
         // 兜底防御：候选路径 resolve 后必须位于 serverPath 内，越界丢弃
@@ -1884,14 +2122,22 @@ export class MCServerInstance extends EventEmitter {
     // 成就计数仍用日志解析事件（MC advancements 文件为进度树结构，解析复杂暂不接入）。
     if (playerName) {
       const real = this._loadPlayerRealStats(playerName);
-      if (real && (real.deaths != null || real.playTime != null || real.sleepInBed != null || real.leaveGame != null)) {
+      if (
+        real &&
+        (real.deaths != null ||
+          real.playTime != null ||
+          real.sleepInBed != null ||
+          real.leaveGame != null)
+      ) {
         let lastClosedEnd = null;
         for (const s of sessions) {
           if (s.end != null) lastClosedEnd = s.end;
         }
         const offlineSince = player
           ? 0
-          : (lastClosedEnd ? Math.max(0, Math.floor((now - lastClosedEnd) / 1000)) : 0);
+          : lastClosedEnd
+            ? Math.max(0, Math.floor((now - lastClosedEnd) / 1000))
+            : 0;
         let achievementCount = 0;
         for (const e of events) {
           if (e.type === 'achievement') achievementCount++;
@@ -1913,7 +2159,7 @@ export class MCServerInstance extends EventEmitter {
     let lastClosedEnd = null;
     for (const s of sessions) {
       // 进行中的会话（end 为 null）：在线玩家按当前时刻计算时长，离线玩家按开始时刻（0 时长）
-      const end = s.end != null ? s.end : (player ? now : s.start);
+      const end = s.end != null ? s.end : player ? now : s.start;
       totalOnline += Math.max(0, Math.floor((end - s.start) / 1000));
       if (s.end != null) lastClosedEnd = s.end;
     }
@@ -1921,7 +2167,9 @@ export class MCServerInstance extends EventEmitter {
     // 已离线：最后一个结束会话的结束时刻至今（在线玩家为 0）
     const offlineSince = player
       ? 0
-      : (lastClosedEnd ? Math.max(0, Math.floor((now - lastClosedEnd) / 1000)) : 0);
+      : lastClosedEnd
+        ? Math.max(0, Math.floor((now - lastClosedEnd) / 1000))
+        : 0;
 
     let deathCount = 0;
     let achievementCount = 0;
@@ -1955,3 +2203,14 @@ Object.assign(MCServerInstance.prototype, outputParser);
 // 模块函数体内 this 语义与类内定义完全一致（实例方法调用时 this 绑定实例），
 // 全部调用点零改动，对外接口零变化。
 Object.assign(MCServerInstance.prototype, statsCollector);
+
+// 接管实例日志续读域挂载（后续）：log-tail 模块经原型注入复用，
+// 接管实例改读 latest.log 尾部以恢复日志与事件解析（详见模块头注释）。
+Object.assign(MCServerInstance.prototype, logTail);
+
+// 孤儿进程接管域挂载（根修）：pid 文件与面板重启后接管，机制见 adopt.js 头注释。
+Object.assign(MCServerInstance.prototype, adopt);
+
+// 实例版本读取域挂载：从服务端 JAR 内 version.json 取权威 mcVersion/javaVersion，
+// 供 _getMcVersion 与 _getRequiredJavaVersion 使用（机制见 jar-version.js 头注释）。
+Object.assign(MCServerInstance.prototype, jarVersion);

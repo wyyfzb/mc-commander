@@ -18,6 +18,7 @@
  * "monaco-editor/editor/editor.worker?worker"（等价落到同一文件）。
  */
 import { useEffect, useMemo, useRef } from 'react'
+import { primaryModifierLabel } from '@/lib/platform'
 import Editor, { loader } from '@monaco-editor/react'
 import * as monaco from 'monaco-editor'
 import editorWorker from 'monaco-editor/editor/editor.worker?worker'
@@ -25,6 +26,8 @@ import jsonWorker from 'monaco-editor/language/json/json.worker?worker'
 import { FileEdit, RotateCcw, Save, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { InfoHint } from '@/components/mcs/info-hint'
+import { toneClasses } from '@/components/mcs/tone'
 
 // ── Monaco worker 配置（Vite 必需，否则控制台报错 "Could not create web worker"）──
 // self.MonacoEnvironment 由 monaco-editor 的 d.ts 声明为全局（Environment 接口），
@@ -75,7 +78,7 @@ function defineMcsDarkTheme() {
   const bgSubtle = cssVarToHex('--mcs-bg-subtle')
   const bgDefault = cssVarToHex('--mcs-bg-default')
   const borderSubtle = cssVarToHex('--mcs-border-subtle')
-  const textSubtle = cssVarToHex('--mcs-text-subtle')
+  const textMuted = cssVarToHex('--mcs-text-muted')
   const accent = cssVarToHex('--mcs-accent')
   if (!bgSubtle) return
   monaco.editor.defineTheme('mcs-dark', {
@@ -86,7 +89,7 @@ function defineMcsDarkTheme() {
       'editor.background': bgSubtle,
       'editor.lineHighlightBackground': bgDefault || bgSubtle,
       'editor.lineHighlightBorder': borderSubtle || 'transparent',
-      ...(textSubtle ? { 'editorLineNumber.foreground': textSubtle } : {}),
+      ...(textMuted ? { 'editorLineNumber.foreground': textMuted } : {}),
       ...(accent ? { 'editorCursor.foreground': accent } : {}),
     },
   })
@@ -174,9 +177,8 @@ export function MonacoEditorPane({
     editor: monaco.editor.IStandaloneCodeEditor,
     monacoInstance: typeof monaco,
   ) => {
-    editor.addCommand(
-      monacoInstance.KeyMod.CtrlCmd | monacoInstance.KeyCode.KeyS,
-      () => onSaveRef.current(),
+    editor.addCommand(monacoInstance.KeyMod.CtrlCmd | monacoInstance.KeyCode.KeyS, () =>
+      onSaveRef.current(),
     )
   }
 
@@ -194,8 +196,8 @@ export function MonacoEditorPane({
   if (!path) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-2 bg-mcs-bg-subtle">
-        <FileEdit className="size-6 text-mcs-text-subtle" aria-hidden />
-        <p className="text-mcs-sm text-mcs-text-subtle">选择文件进行编辑</p>
+        <FileEdit className="size-6 text-mcs-text-muted" aria-hidden />
+        <p className="text-mcs-sm text-mcs-text-muted">选择文件进行编辑</p>
       </div>
     )
   }
@@ -204,19 +206,29 @@ export function MonacoEditorPane({
     <div className="flex h-full min-h-0 flex-col">
       {/* ── 头部条：文件名 + encoding 徽章 + 脏标记 + 关闭 + 保存 ── */}
       <header className="flex h-10 shrink-0 items-center gap-2 border-b border-mcs-border-muted px-3">
-        <span
-          title={path}
-          className="min-w-0 flex-1 truncate font-mono text-mcs-sm text-mcs-text-default"
-        >
-          {fileNameOf(path)}
-        </span>
+        <div className="flex min-w-0 flex-1 items-center gap-1">
+          <span
+            title={path}
+            className="min-w-0 truncate font-mono text-mcs-sm text-mcs-text-default"
+          >
+            {fileNameOf(path)}
+          </span>
+          {/* 生效方式标识（与属性面板同一口径）：文件级修改一律需重启；热改项指回属性面板 */}
+          {fileNameOf(path).toLowerCase() === 'server.properties' && (
+            <InfoHint label="生效方式说明">
+              该文件保存后需重启实例生效；热改属性可在世界页「服务器属性」面板即时生效
+            </InfoHint>
+          )}
+        </div>
         {!isLoading && (
           <span className="rounded-mcs-xs border border-mcs-border-muted bg-mcs-bg-muted px-1.5 py-px font-mono text-mcs-2xs font-semibold text-mcs-text-muted">
             {encoding === 'utf-8' ? 'UTF-8' : 'GBK'}
           </span>
         )}
         {dirty && (
-          <span className="rounded-mcs-xs border border-mcs-warning-border bg-mcs-warning-bg-subtle px-1.5 py-px text-mcs-2xs font-semibold text-mcs-warning-fg">
+          <span
+            className={`rounded-mcs-xs border px-1.5 py-px text-mcs-2xs font-semibold ${toneClasses('warning')}`}
+          >
             未保存
           </span>
         )}
@@ -243,12 +255,12 @@ export function MonacoEditorPane({
           size="sm"
           onClick={onSave}
           disabled={!dirty || isSaving || isLoading || Boolean(loadError)}
-          title={dirty ? '保存（Ctrl+S）' : '内容未修改，无需保存'}
+          title={dirty ? `保存（${primaryModifierLabel()}+S）` : '内容未修改，无需保存'}
         >
           <Save aria-hidden />
           {isSaving ? '保存中…' : '保存'}
-          <kbd className="rounded-mcs-xs border border-mcs-border-muted bg-mcs-bg-muted px-1 font-mono text-mcs-2xs text-mcs-text-subtle">
-            Ctrl+S
+          <kbd className="rounded-mcs-xs border border-mcs-border-muted bg-mcs-bg-muted px-1 font-mono text-mcs-2xs text-mcs-text-muted">
+            {`${primaryModifierLabel()}+S`}
           </kbd>
         </Button>
       </header>
@@ -272,7 +284,10 @@ export function MonacoEditorPane({
         >
           <X className="size-6 text-mcs-error-fg" aria-hidden />
           <p className="max-w-md text-center text-mcs-sm text-mcs-text-muted">{loadError}</p>
-          <Button variant="outline" size="sm" onClick={onRetry}>
+          {/* ghost：重试是无后果的辅助动作（与列表页「刷新」同族），且由加载失败这一
+              运行态条件渲染。用 outline 时本页会凑出三个非 ghost 次操作
+              （恢复 / 关闭编辑器 / 重试），超出「≤2」——实测该错误态。 */}
+          <Button variant="ghost" size="sm" onClick={onRetry}>
             <RotateCcw aria-hidden />
             重试
           </Button>

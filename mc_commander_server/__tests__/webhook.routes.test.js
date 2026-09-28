@@ -6,9 +6,12 @@ import express from 'express';
 import request from 'supertest';
 import Database from 'better-sqlite3';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 
-const TEST_DIR = './test-webhook-routes-data';
+// 系统临时目录（勿落服务端工作目录）：error-codes.contract.test.js 会递归扫描
+// 该目录树，本文件建/删目录会与扫描并发撞 ENOENT，随机让整个契约检查变红
+const TEST_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'mcs-webhook-routes-'));
 let db;
 
 function createTestApp() {
@@ -20,7 +23,6 @@ function createTestApp() {
 }
 
 beforeAll(() => {
-  if (!fs.existsSync(TEST_DIR)) fs.mkdirSync(TEST_DIR, { recursive: true });
   db = new Database(path.join(TEST_DIR, 'test.db'));
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
@@ -31,7 +33,8 @@ beforeAll(() => {
   )`);
   db.exec(`CREATE TABLE IF NOT EXISTS webhooks (
     id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, url TEXT NOT NULL,
-    secret TEXT, events TEXT DEFAULT '[]', instance_id TEXT, is_enabled INTEGER DEFAULT 1,
+    secret TEXT, platform TEXT NOT NULL DEFAULT 'generic', events TEXT DEFAULT '[]',
+    instance_id TEXT, is_enabled INTEGER DEFAULT 1,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (instance_id) REFERENCES instances(id) ON DELETE CASCADE
   )`);
@@ -79,9 +82,10 @@ vi.mock('../services/webhook.service.js', async () => {
 vi.mock('../utils/url-guard.js', async () => {
   const real = await vi.importActual('../utils/url-guard.js');
   return {
-    checkPublicUrl: (url) => real.checkPublicUrl(url, {
-      lookup: async () => [{ address: '93.184.216.34', family: 4 }],
-    }),
+    checkPublicUrl: (url) =>
+      real.checkPublicUrl(url, {
+        lookup: async () => [{ address: '93.184.216.34', family: 4 }],
+      }),
   };
 });
 
@@ -109,12 +113,14 @@ describe('Webhook 路由', () => {
   });
 
   it('POST /webhooks 创建成功', async () => {
-    const res = await request(getApp()).post('/api/v1/webhooks').send({
-      name: 'Test Hook',
-      url: 'https://example.com/webhook',
-      secret: 's3cret',
-      events: ['player.join', 'player.death'],
-    });
+    const res = await request(getApp())
+      .post('/api/v1/webhooks')
+      .send({
+        name: 'Test Hook',
+        url: 'https://example.com/webhook',
+        secret: 's3cret',
+        events: ['player.join', 'player.death'],
+      });
     expect(res.status).toBe(200);
     expect(res.body.data.name).toBe('Test Hook');
     expect(res.body.data.secret).toBe('********');
@@ -141,10 +147,12 @@ describe('Webhook 路由', () => {
       'http://[::1]/hook',
     ];
     for (const url of blockedUrls) {
-      const res = await request(getApp()).post('/api/v1/webhooks').send({
-        name: `SSRF ${url}`,
-        url,
-      });
+      const res = await request(getApp())
+        .post('/api/v1/webhooks')
+        .send({
+          name: `SSRF ${url}`,
+          url,
+        });
       expect(res.status, `URL ${url} 应被拒绝`).toBe(400);
       expect(res.body.code).toBe(40010);
       expect(res.body.message).toContain('拒绝');
@@ -161,11 +169,13 @@ describe('Webhook 路由', () => {
   });
 
   it('POST /webhooks 事件类型白名单校验', async () => {
-    const res = await request(getApp()).post('/api/v1/webhooks').send({
-      name: 'Bad Events',
-      url: 'https://example.com/hook',
-      events: ['not.a.real.event'],
-    });
+    const res = await request(getApp())
+      .post('/api/v1/webhooks')
+      .send({
+        name: 'Bad Events',
+        url: 'https://example.com/hook',
+        events: ['not.a.real.event'],
+      });
     expect(res.status).toBe(400);
     expect(res.body.code).toBe(40011);
   });
@@ -209,7 +219,8 @@ describe('Webhook 路由', () => {
   it('DELETE /webhooks/:id 删除', async () => {
     // 先创建一个待删的
     await request(getApp()).post('/api/v1/webhooks').send({
-      name: 'To Delete', url: 'https://example.com/del',
+      name: 'To Delete',
+      url: 'https://example.com/del',
     });
     const res = await request(getApp()).delete('/api/v1/webhooks/2');
     expect(res.status).toBe(200);
@@ -362,7 +373,7 @@ describe('Webhook 三子路由行为收口', () => {
     });
     const id = createRes.body.data.id;
     const insert = db.prepare(
-      'INSERT INTO webhook_deliveries (webhook_id, event_type, payload, status, response_status, response_body, duration_ms, attempts) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO webhook_deliveries (webhook_id, event_type, payload, status, response_status, response_body, duration_ms, attempts) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
     );
     for (let i = 0; i < 3; i++) {
       insert.run(id, 'ping', '{}', 'success', 200, '{"ok":true}', 100 + i, 1);
@@ -385,7 +396,9 @@ describe('Webhook 三子路由行为收口', () => {
     });
     const id = createRes.body.data.id;
 
-    const res = await request(getApp()).get(`/api/v1/webhooks/${id}/deliveries?page=1&pageSize=999`);
+    const res = await request(getApp()).get(
+      `/api/v1/webhooks/${id}/deliveries?page=1&pageSize=999`,
+    );
     expect(res.status).toBe(200);
     expect(res.body.pagination.pageSize).toBe(200);
     expect(res.body.pagination.total).toBe(0);
@@ -405,7 +418,9 @@ describe('Webhook 三子路由行为收口', () => {
   });
 
   it('PUT /webhooks/:id 事件类型白名单 → 400 WEBHOOK_INVALID_EVENTS', async () => {
-    const res = await request(getApp()).put('/api/v1/webhooks/1').send({ events: ['not.real.event'] });
+    const res = await request(getApp())
+      .put('/api/v1/webhooks/1')
+      .send({ events: ['not.real.event'] });
     expect(res.status).toBe(400);
     expect(res.body.code).toBe(40011);
   });

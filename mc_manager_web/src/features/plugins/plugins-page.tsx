@@ -1,5 +1,5 @@
 /**
- * PluginsPage —— 插件管理页（feat-8 P0-5 最小闭环 + 上传/详情/批量延伸）
+ * PluginsPage —— 插件管理页（最小闭环 + 上传/详情/批量延伸）
  * - 插件卡片列表：元数据（plugin.yml）+ 启停状态 Chip + 启停/删除操作
  * - 上传：工具栏按钮（多选 .jar 顺序上传）+ 全页拖放（dragover 高亮遮罩），
  *   XHR 进度条（可取消）；同名冲突 → 确认弹窗后 overwrite=true 重传（服务端 40912）
@@ -26,16 +26,21 @@ import {
   Store,
   Trash2,
 } from 'lucide-react'
-import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
 import { getFriendlyErrorText } from '@/api/errors'
+import { queryPhase } from '@/lib/query-phase'
 import type { PluginInfo } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { SearchInput } from '@/components/mcs/search-input'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
+import { IconButton } from '@/components/mcs/icon-button'
 import { EmptyState } from '@/components/mcs/empty-state'
+import { StaleQueryNotice } from '@/components/mcs/data-states'
+import { Card } from '@/components/mcs/card'
+import { InfoHint } from '@/components/mcs/info-hint'
+import { InstanceRequiredState } from '@/features/instances/components/instance-required-state'
 import { PageHeader } from '@/components/mcs/page-header'
 import { useServerStore } from '@/stores/server'
 import { useConnectionStore } from '@/stores/connection'
@@ -48,11 +53,15 @@ import { PluginRow } from './components/plugin-row'
 import { PluginDetailSheet } from './components/plugin-detail-sheet'
 import { UploadProgressBar } from './components/upload-progress-bar'
 
+/** 插件管理说明全文（唯一声明源：展示点与测试都取这里） */
+const PLUGIN_EFFECT_HINT = '管理 Bukkit 系插件（Paper/Spigot）：启停与增删在重启实例后生效'
+
 export function PluginsPage() {
   const instanceId = useServerStore((s) => s.instanceId)
-  const navigate = useNavigate()
 
   const pluginsQuery = usePlugins(instanceId)
+  /** 列表相位：有旧值可留时不把一次轮询抖动呈现成整屏故障 */
+  const pluginsPhase = queryPhase(pluginsQuery)
   const toggleMutation = useTogglePlugin(instanceId)
   const deleteMutation = useDeletePlugin(instanceId)
 
@@ -66,7 +75,7 @@ export function PluginsPage() {
   const [detail, setDetail] = useState<PluginInfo | null>(null)
   /** 插件市场侧滑面板 */
   const [marketOpen, setMarketOpen] = useState(false)
-  /** 更新检测结果（file → status，feat-8 延伸：已装插件 vs Modrinth 最新版） */
+  /** 更新检测结果（file → status， 延伸：已装插件 vs Modrinth 最新版） */
   const [updateMap, setUpdateMap] = useState<Map<string, PluginUpdateStatus>>(new Map())
   const [updateChecking, setUpdateChecking] = useState(false)
   /** 市场预填搜索词（点「更新」时带上 plugin.yml name 直达） */
@@ -74,7 +83,7 @@ export function PluginsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   /** 正在启停的插件（行按钮 loading） */
-  const togglingFile = toggleMutation.isPending ? toggleMutation.variables?.file ?? null : null
+  const togglingFile = toggleMutation.isPending ? (toggleMutation.variables?.file ?? null) : null
 
   // 列表加载失败提示（TanStack Query 静默 → 页面补 error toast）
   const loadErrorShownRef = useRef(false)
@@ -138,19 +147,13 @@ export function PluginsPage() {
     [plugins, selected],
   )
 
+  // 无实例门：加载中/加载失败/真空态/待选中四态各自诚实（见 InstanceRequiredState）
   if (!instanceId) {
-    return (
-      <EmptyState
-        icon={Package}
-        title="暂无服务器实例"
-        hint="请先在服务端创建 MC 服务器实例"
-        action={{ label: '前往实例管理', onClick: () => navigate('/instances') }}
-      />
-    )
+    return <InstanceRequiredState />
   }
 
   /**
-   * 批量更新检测（feat-8 延伸）：POST check-updates（服务端搜索 Modrinth + 版本比对）。
+   * 批量更新检测（延伸）：POST check-updates（服务端搜索 Modrinth + 版本比对）。
    * 结果映射 file → status 供行内徽章消费；hasNewer（真落后）计数 toast 提示。
    * 检测按钮与行内「可更新」徽章联动；关闭市场面板即清预填。
    */
@@ -267,7 +270,9 @@ export function PluginsPage() {
 
   return (
     <div
-      className="relative flex h-full min-h-0 flex-col gap-4 p-4"
+      /* @container：页头的「上下堆叠 ↔ 同行」按可用内容宽切档而非视口宽
+         （侧栏可折叠，同视口下内容宽差 152px），见 PageHeader 的 className */
+      className="@container relative flex h-full min-h-0 flex-col gap-4 p-4"
       onDragEnter={onDragEnter}
       onDragLeave={onDragLeave}
       onDragOver={onDragOver}
@@ -276,10 +281,10 @@ export function PluginsPage() {
       {/* 拖放高亮遮罩 */}
       {dragActive && (
         <div
-          className="pointer-events-none absolute inset-2 z-30 flex items-center justify-center rounded-mcs-md border-2 border-dashed border-mcs-accent bg-mcs-accent/5"
+          className="pointer-events-none absolute inset-2 z-(--mcs-z-overlay) flex items-center justify-center rounded-mcs-md border-2 border-dashed border-mcs-accent-border-strong bg-mcs-accent/5"
           data-testid="drop-overlay"
         >
-          <div className="flex flex-col items-center gap-2 text-mcs-accent">
+          <div className="flex flex-col items-center gap-2 text-mcs-accent-fg">
             <ArrowUpFromLine className="size-8" aria-hidden />
             <p className="text-mcs-sm font-medium">松开以上传插件（.jar）</p>
           </div>
@@ -301,29 +306,40 @@ export function PluginsPage() {
       />
 
       <PageHeader
+        /* 内容宽 <576px 时改为上下堆叠：操作区四个按钮不可收缩（349px），与标题同排时
+           标题列只剩 39px，「插件管理」逐字竖排。断点取容器档（@xl=576px）而非视口档——
+           侧栏折叠会使同视口下内容宽差 152px，且 768 以下侧栏退化成抽屉（不占布局宽），
+           视口断点在这两种状态下给不出正确判据 */
+        className="flex-col items-stretch gap-3 @xl:flex-row @xl:items-center"
         title="插件管理"
         description={
-          <>
-            管理 Bukkit 系插件（Paper/Spigot）：启停与增删在重启实例后生效
+          <span className="inline-flex items-center gap-1">
             {plugins.length > 0 && (
-              <span className="ml-2 text-mcs-text-muted">
+              <>
                 共 {plugins.length} 个（启用 {enabledCount} / 禁用 {plugins.length - enabledCount}）
-              </span>
+              </>
             )}
-          </>
+            <InfoHint label="插件管理说明">{PLUGIN_EFFECT_HINT}</InfoHint>
+          </span>
         }
         actions={
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
+          <div className="flex flex-wrap items-center gap-2">
+            {/* 刷新走 ghost 图标档：它是无后果的辅助动作，与同页头两个真次操作
+                （检查更新 / 插件市场）并列时会凑出三个 outline，超出「页头次操作 ≤2」
+                （CTA 配额逐页重验时实测）。列表页的刷新在本仓一律是图标档
+                （files 的「刷新」、world 的「刷新」同为 IconButton） */}
+            <IconButton
+              variant="ghost"
               onClick={() => void pluginsQuery.refetch()}
               disabled={pluginsQuery.isFetching}
               aria-label="刷新插件列表"
+              title="刷新插件列表"
             >
-              <RefreshCw className={`size-3.5 ${pluginsQuery.isFetching ? 'animate-spin' : ''}`} aria-hidden />
-              刷新
-            </Button>
+              <RefreshCw
+                className={`size-3.5 ${pluginsQuery.isFetching ? 'animate-spin' : ''}`}
+                aria-hidden
+              />
+            </IconButton>
             <Button size="sm" onClick={() => fileInputRef.current?.click()} aria-label="上传插件">
               <ArrowUpFromLine className="size-3.5" aria-hidden />
               上传插件
@@ -336,7 +352,10 @@ export function PluginsPage() {
               aria-label="检查插件更新"
               data-testid="check-updates"
             >
-              <RefreshCw className={`size-3.5 ${updateChecking ? 'animate-spin' : ''}`} aria-hidden />
+              <RefreshCw
+                className={`size-3.5 ${updateChecking ? 'animate-spin' : ''}`}
+                aria-hidden
+              />
               检查更新
             </Button>
             <Button
@@ -355,13 +374,18 @@ export function PluginsPage() {
 
       {/* ── 上传进度条（顺序队列，可取消） ── */}
       {uploading && (
-        <UploadProgressBar uploading={uploading} queueRemaining={queueRemaining} onCancel={cancelUpload} />
+        <UploadProgressBar
+          uploading={uploading}
+          queueRemaining={queueRemaining}
+          onCancel={cancelUpload}
+        />
       )}
 
       {/* ── 批量操作条 ── */}
       {selected.size > 0 && (
-        <div
-          className="flex flex-wrap items-center gap-2 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted px-4 py-2.5 shadow-mcs-card"
+        <Card
+          as="div"
+          className="flex flex-wrap items-center gap-2 px-4 py-2.5"
           data-testid="batch-bar"
         >
           <span className="text-mcs-sm text-mcs-text-default">
@@ -376,19 +400,14 @@ export function PluginsPage() {
             <PowerOff className="size-3.5" aria-hidden />
             批量禁用
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-mcs-error-fg hover:text-mcs-error-fg"
-            onClick={() => setBatchDeleteOpen(true)}
-          >
+          <Button variant="destructive-outline" size="sm" onClick={() => setBatchDeleteOpen(true)}>
             <Trash2 className="size-3.5" aria-hidden />
             删除
           </Button>
           <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>
             取消选择
           </Button>
-        </div>
+        </Card>
       )}
 
       {/* ── 搜索（多插件时快速定位；过滤不改变统计数字） ── */}
@@ -402,10 +421,20 @@ export function PluginsPage() {
       )}
 
       {/* ── 内容区 ── */}
+      {pluginsPhase === 'stale' && (
+        <StaleQueryNotice
+          className="mb-2"
+          error={pluginsQuery.error}
+          onRetry={() => void pluginsQuery.refetch()}
+        />
+      )}
       {pluginsQuery.isPending ? (
         <div className="space-y-2" data-testid="plugin-skeletons" aria-label="加载插件中">
           {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="flex items-center gap-3 rounded-mcs-md border border-mcs-border-muted p-4">
+            <div
+              key={i}
+              className="flex items-center gap-3 rounded-mcs-md border border-mcs-border-muted p-4"
+            >
               <Skeleton className="size-9 shrink-0" />
               <div className="min-w-0 flex-1 space-y-1.5">
                 <Skeleton className="h-4 w-1/3" />
@@ -414,7 +443,7 @@ export function PluginsPage() {
             </div>
           ))}
         </div>
-      ) : pluginsQuery.isError ? (
+      ) : pluginsPhase === 'failed' ? (
         <div className="min-h-0 flex-1">
           <EmptyState
             icon={AlertTriangle}
@@ -431,13 +460,19 @@ export function PluginsPage() {
             hint={
               <>
                 将插件 jar 拖入本页或点击「上传插件」，放入实例{' '}
-                <code className="text-mcs-text-muted">plugins/</code> 目录，首次启动实例后会生成该目录
+                <code className="text-mcs-text-muted">plugins/</code>{' '}
+                目录，首次启动实例后会生成该目录
               </>
             }
             action={{ label: '上传插件', onClick: () => fileInputRef.current?.click() }}
           />
           <div className="mt-3 flex justify-center">
-            <Button variant="link" size="sm" onClick={() => setMarketOpen(true)} data-testid="open-market-empty">
+            <Button
+              variant="link"
+              size="sm"
+              onClick={() => setMarketOpen(true)}
+              data-testid="open-market-empty"
+            >
               <Store className="size-3.5" aria-hidden />
               或从插件市场一键安装
             </Button>
@@ -447,11 +482,11 @@ export function PluginsPage() {
         <div className="flex flex-col items-center gap-1.5 px-4 py-12 text-center text-mcs-text-muted">
           <Search className="size-8 opacity-60" aria-hidden />
           <p className="mt-1 text-mcs-sm">无匹配插件</p>
-          <p className="text-mcs-xs text-mcs-text-subtle">换个关键词试试</p>
+          <p className="text-mcs-xs text-mcs-text-muted">换个关键词试试</p>
         </div>
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <div className="overflow-hidden rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted shadow-mcs-card">
+          <Card as="div" className="overflow-hidden">
             <ul className="divide-y divide-mcs-border-subtle">
               {filtered.map((plugin) => (
                 <PluginRow
@@ -472,7 +507,7 @@ export function PluginsPage() {
                 />
               ))}
             </ul>
-          </div>
+          </Card>
         </div>
       )}
 
@@ -530,7 +565,7 @@ export function PluginsPage() {
         toggling={detail !== null && togglingFile === detail.file}
       />
 
-      {/* ── 插件市场（Modrinth 一键安装，feat-8 延伸） ── */}
+      {/* ── 插件市场（Modrinth 一键安装） ── */}
       <MarketSheet
         open={marketOpen}
         onOpenChange={(o) => {

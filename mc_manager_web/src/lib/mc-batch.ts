@@ -78,7 +78,10 @@ export async function runBatchForTargets(options: RunBatchOptions): Promise<Batc
       successCount++
     } catch (err) {
       failCount++
-      failures.push({ target: target.name, error: err instanceof Error ? err.message : String(err) })
+      failures.push({
+        target: target.name,
+        error: err instanceof Error ? err.message : String(err),
+      })
     }
   }
 

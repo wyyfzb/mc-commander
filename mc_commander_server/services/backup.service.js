@@ -5,9 +5,12 @@ import config from '../config.js';
 import { BackupModel } from '../db/backup.model.js';
 import { ScheduledTaskModel } from '../db/scheduled_task.model.js';
 import { AppError, ErrorCodes } from '../utils/response.js';
+import { ensureDir, resolveContainedPath, PathTraversalError } from '../utils/fs-utils.js';
 import { logger } from '../utils/logger.js';
+import { localTimestamp } from '../utils/local-date.js';
+import { INSTANCE_ID_PATTERN } from '../utils/instance-id.js';
 
-// 世界目录名白名单（find-004）：与路由层 server.properties level-name 校验
+// 世界目录名白名单：与路由层 server.properties level-name 校验
 // 一致（^[A-Za-z0-9_-]+$），单段字符集禁止 / \ . 等路径分隔/穿越字符。
 // MC 26.x 新旧版本的 level-name 均符合此字符集。
 const WORLD_NAME_REGEX = /^[A-Za-z0-9_-]+$/;
@@ -27,44 +30,27 @@ const EXCLUDED_DIRS = new Set([
   'backups',
 ]);
 
-// 路径包含校验（find-004）：将 target 解析后必须严格位于 baseDir 内。
-// ①path.resolve 归一化 ②严格前缀校验（相等排除 + 目录分隔符边界，
-// 避免 /base-evil 之类前缀陷阱）③已存在路径做 realpath 复检，
-// 防止 worldDir 是 symlink（指向实例目录外）时压缩跟随链接泄露外部数据、
-// 恢复时 rename/rmSync 伤及外部。模式与 utils/fs-utils.js 的 resolveSafePath
-// 一致，本文件内自实现以避免跨文件顺序依赖（并行开发约束）。
+// 路径包含校验已收敛到 utils/fs-utils.js 的解析面 resolveContainedPath
+// （四步防线：归一化 → 相等排除 + sep 边界 → 逐段 realpath → 最终目标 symlink 拒绝）。
+// 本文件保留导出名与一层错误形态翻译：路由层契约是 AppError(PATH_TRAVERSAL_DETECTED)，
+// 消息文本随 fs-utils 单源；baseMustExist=false——实例/世界目录的存在性由后续
+// 业务步骤判定（「World directory not found」比 ENOENT 更可操作）。
 export function resolveContained(baseDir, target) {
-  const base = path.resolve(baseDir);
-  const resolved = path.resolve(target);
-  const rel = path.relative(base, resolved);
-  if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) {
-    throw new AppError(ErrorCodes.PATH_TRAVERSAL_DETECTED, `Path traversal detected: ${target}`);
-  }
-  // 已存在路径：realpath 复检确认最终落点仍在 baseDir 内（防 symlink 逃逸）
-  let baseReal = base;
   try {
-    baseReal = fs.realpathSync(base);
-  } catch {
-    // baseDir 不存在时无法形成 symlink 链，前缀校验已足够
+    return resolveContainedPath(baseDir, target, { baseMustExist: false });
+  } catch (err) {
+    if (err instanceof PathTraversalError) {
+      throw new AppError(ErrorCodes.PATH_TRAVERSAL_DETECTED, err.message);
+    }
+    throw err;
   }
-  let real = null;
-  try {
-    real = fs.realpathSync(resolved);
-  } catch {
-    // 目标不存在：非 symlink，前缀校验已足够
-    return resolved;
-  }
-  if (real !== baseReal && !real.startsWith(baseReal + path.sep)) {
-    throw new AppError(ErrorCodes.PATH_TRAVERSAL_DETECTED, `Symlink escape detected: ${target}`);
-  }
-  return resolved;
 }
 
 // ── 快照工具命令构造 ──────────────────────────────────────────────
 // 快照方案：备份 = 完整目录快照 + 增量传输（Linux rsync --link-dest 硬链接
 // / Windows robocopy 全量镜像，rsync 不可用时自动降级）。恢复 = 目录复制
 // （禁止 mv——mv 会把共享 inode 移交实例目录，服务器运行后的 in-place
-// 写入会污染所有仍硬链接同一 inode 的旧快照）。压缩与解压链路整体移除。
+// 写入会污染所有仍硬链接同一 inode 的旧快照）。
 
 // 构造 Linux rsync 快照命令参数（实例级目录快照）：
 // cwd=serversDir 下源为相对路径 <instanceId>/（尾带 / 复制目录内容，
@@ -75,8 +61,15 @@ export function resolveContained(baseDir, target) {
 // 快照模式不加 --delete（目标恒为新建空目录，--delete 无作用且源文件
 // 临时消失时可能误删链中唯一引用）；--delete 仅用于恢复覆盖场景。
 // 首次快照不传 --link-dest（指向不存在目录只会发误导性警告）。
-export function buildRsyncArgs(instanceId, snapshotDir, { linkDest = null, jarFile = null } = {}) {
+export function buildRsyncArgs(
+  instanceId,
+  snapshotDir,
+  { linkDest = null, jarFile = null, progressInfo = false } = {},
+) {
   const args = ['-a'];
+  // --info=progress2 输出整体传输百分比（供进度解析）；仅 GNU rsync ≥3.1
+  // 支持——macOS openrsync 不识别会直接报错，darwin 分支恒不传
+  if (progressInfo) args.push('--info=progress2');
   if (linkDest) {
     args.push(`--link-dest=${linkDest}`);
   }
@@ -121,6 +114,53 @@ export function buildRobocopyArgs(instanceId, snapshotDir, { jarFile = null } = 
     'hs_err_pid*.log',
   ];
   return args;
+}
+
+// rsync 可执行文件名：RSYNC_BIN 环境变量指向 GNU rsync（macOS 上系统自带
+// openrsync 的 --link-dest 去重未经验证，brew install rsync 后指过来即与
+// Linux 行为一致）；缺省 'rsync'（PATH 解析）
+function rsyncBin() {
+  return process.env.RSYNC_BIN || 'rsync';
+}
+
+// 硬链接去重探测（macOS openrsync 兼容性验证；其余平台为诊断工具）：
+// 在基线快照中逐个取普通文件，与本次快照同相对路径的文件比对 inode——
+// dev+ino 相同即硬链接共享存储（去重生效）。取不到可比对文件返回 null
+// （首份快照/两侧无交集，无法判定）。极端情况（快照侧全部缺失）会遍历
+// 整棵基线树，仅运行在后台备份流程内
+export function verifyHardlinkDedup(baselineDir, snapshotDir) {
+  const stack = [baselineDir];
+  const basePrefix = baselineDir.endsWith(path.sep) ? baselineDir : baselineDir + path.sep;
+  while (stack.length > 0) {
+    const dir = stack.pop();
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const e of entries) {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) {
+        stack.push(full);
+        continue;
+      }
+      if (!e.isFile()) continue;
+      const rel = full.slice(basePrefix.length);
+      const mirrored = path.join(snapshotDir, rel);
+      try {
+        const baseStat = fs.statSync(full);
+        const snapStat = fs.statSync(mirrored);
+        // 内容未变（同大小）且同一 inode = 硬链接；不同 inode = 全量拷贝
+        if (baseStat.size === snapStat.size && baseStat.mtimeMs === snapStat.mtimeMs) {
+          return snapStat.ino === baseStat.ino && snapStat.dev === baseStat.dev;
+        }
+      } catch {
+        // 基线侧文件在快照中缺失/被替换：取下一个样本继续
+      }
+    }
+  }
+  return null;
 }
 
 // 备份文件名清洗：替换 Windows 非法文件名字符（含控制字符），
@@ -171,7 +211,7 @@ export async function estimateDirSize(dir, { jarFile = null } = {}) {
 
 // 磁盘剩余空间预检：备份目标盘可用空间不足预估大小 1.5 倍时拒绝。
 // 磁盘满时 save 写入截断是世界损坏第一大诱因（业界共识），预检提前
-// 失败比压缩中失败（zip 截断 + save-on 前中断）安全得多。
+// 失败比快照中途失败（save-on 前中断）安全得多。
 function checkDiskSpace(backupsDir, estimateBytes) {
   try {
     const statfs = fs.statfsSync(backupsDir);
@@ -180,7 +220,7 @@ function checkDiskSpace(backupsDir, estimateBytes) {
     if (freeBytes < required) {
       throw new AppError(
         ErrorCodes.BACKUP_FAILED,
-        `磁盘剩余空间不足（需约 ${(required / 1024 / 1024).toFixed(0)} MB，实际剩余 ${(freeBytes / 1024 / 1024).toFixed(0)} MB），请清理后重试`
+        `磁盘剩余空间不足（需约 ${(required / 1024 / 1024).toFixed(0)} MB，实际剩余 ${(freeBytes / 1024 / 1024).toFixed(0)} MB），请清理后重试`,
       );
     }
   } catch (err) {
@@ -197,16 +237,12 @@ export class BackupService {
   }
 
   ensureBackupsDir() {
-    if (!fs.existsSync(this.backupsDir)) {
-      fs.mkdirSync(this.backupsDir, { recursive: true });
-    }
+    ensureDir(this.backupsDir);
   }
 
   getInstanceBackupDir(instanceId) {
     const dir = path.join(this.backupsDir, instanceId);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
+    ensureDir(dir);
     return dir;
   }
 
@@ -248,7 +284,7 @@ export class BackupService {
       worldName = instance?.properties?.['level-name'] || 'world';
     }
 
-    // find-004：worldName 白名单校验——level-name 未经校验时 ../ 可指向
+    // worldName 白名单校验——level-name 未经校验时 ../ 可指向
     // 任意目录被压缩（任意文件泄露）。显式传入的 worldName 同样校验。
     if (typeof worldName !== 'string' || !WORLD_NAME_REGEX.test(worldName)) {
       const err = new AppError(ErrorCodes.VALIDATION_ERROR, `Invalid world name: ${worldName}`);
@@ -257,13 +293,16 @@ export class BackupService {
     }
 
     const instanceDir = path.join(config.serversDir, instanceId);
-    // find-004：resolveContained 兜底保证世界目录必须位于实例目录内
+    // resolveContained 兜底保证世界目录必须位于实例目录内
     // （严格前缀 + 分隔符边界，相等排除；已存在路径 realpath 复检防 symlink）
     const worldDir = resolveContained(instanceDir, path.join(instanceDir, worldName));
 
     // 检查世界目录是否存在。
     // 同步抛错路径（此时无 backupId，未创建记录）也要发 backupFailed 事件：
     // 旧实现此处仅被定时调度器 .catch 记日志，用户对唯一灾备手段失效完全无感知
+    // （保留了存在性判定：它是「在任何花费与副作用之前给出明确领域错误」的
+    // 前置校验门，判定为假时直接中止且不改动任何文件；竞态下目录被删则会由
+    // 后续 rsync/robocopy 失败路径接手，两处都有明确失败出口）
     if (!fs.existsSync(worldDir)) {
       const err = new Error(`World directory not found: ${worldDir}`);
       this._failSetup(instanceId, err);
@@ -271,20 +310,20 @@ export class BackupService {
     }
 
     // 磁盘空间预检：预估实例目录大小（排除清单外）→ 校验备份盘剩余空间。
-    // 大世界压缩耗时长，磁盘满时中途失败（zip 截断）远比提前拒绝难处理
-    const estimateBytes = await estimateDirSize(instanceDir, { jarFile: instance?.jarFile || null });
+    // 大世界快照耗时长，磁盘满时中途失败远比提前拒绝难处理
+    const estimateBytes = await estimateDirSize(instanceDir, {
+      jarFile: instance?.jarFile || null,
+    });
     checkDiskSpace(this.backupsDir, estimateBytes);
 
     // 生成快照目录名（清洗 name 防止路径遍历）。
     // 只替换 Windows 非法文件名字符，保留中文/Unicode：旧实现用
     // [^\w.-] 清洗（\w 为 ASCII）会把中文名（如定时任务"每日备份"）
     // 全部替换为下划线，目录名失去可读性。路径安全由下方
-    // resolvedBackupPath 前缀校验兜底。快照 = 完整目录树（无 .zip 扩展名），
+    // resolvedBackupPath 前缀校验兜底。快照 = 完整目录树，
     // 命名 <safeName>-<时间戳> 保证唯一（定时任务名可能重复触发）
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const safeName = name
-      ? sanitizeFileName(path.basename(name))
-      : `backup_${timestamp}`;
+    const safeName = name ? sanitizeFileName(path.basename(name)) : `backup_${timestamp}`;
     const snapshotName = `${safeName}-${timestamp}`;
     const backupDir = this.getInstanceBackupDir(instanceId);
     const snapshotDir = path.join(backupDir, snapshotName);
@@ -299,14 +338,15 @@ export class BackupService {
     // 创建备份记录
     const backupRecord = BackupModel.create({
       instanceId,
-      name: name || `Backup ${timestamp}`,
+      // 用户可见名取本地时刻（与列表按本地时区渲染 createdAt 同口径，见 utils/local-date.js）；
+      // 快照目录名仍用 UTC ISO——那是路径唯一性/排序用的，不面向用户
+      name: name || `Backup ${localTimestamp()}`,
       description: description || '',
       type,
       status: 'creating',
       filePath: snapshotDir,
       worldName,
       createdBy,
-      format: 'snapshot'
     });
 
     // 异步执行备份（fire-and-forget：互斥由 status='creating' 记录承担，
@@ -315,7 +355,11 @@ export class BackupService {
       estimateBytes,
       jarFile: instance?.jarFile || null,
       taskId,
-    }).catch(err => {
+    }).catch((err) => {
+      // 取消已在 executeBackup 内自行收敛（删记录 + 事件），此处不再按 id 回写：
+      // 记录已删，UPDATE 只会空转；且 SQLite 复用被删的最大 rowid，回写窗口
+      // 内新发起的备份可能拿到同一 id 被误标 failed
+      if (err?.code === 'CANCELLED') return;
       logger.error('Backup failed:', err);
       try {
         BackupModel.update(backupRecord.id, { status: 'failed' });
@@ -343,10 +387,25 @@ export class BackupService {
   }
 
   // 执行备份（异步）：实例级备份——目录快照整个实例（排除运行时产物，
-  // Linux rsync --link-dest 硬链接增量 / Windows robocopy 全量镜像降级）
-  async executeBackup(instanceId, backupId, snapshotDir, { estimateBytes = 0, jarFile = null, taskId = null } = {}) {
+  // Linux rsync --link-dest 硬链接增量 / Windows robocopy 全量镜像降级）。
+  // AbortController 注册进模块级取消表（key=实例 id）：取消 API 经
+  // requestCancelBackup 命中后 abort → spawnProcess kill 子进程 → 下方
+  // catch 以 code='CANCELLED' 区分取消与失败
+  async executeBackup(
+    instanceId,
+    backupId,
+    snapshotDir,
+    { estimateBytes = 0, jarFile = null, taskId = null } = {},
+  ) {
     // 执行起点：定时备份结果回写历史时换算 duration_ms（快照耗时是排障关键指标）
     const startTs = Date.now();
+    const controller = new AbortController();
+    const activeEntry = { controller, backupId, kind: 'create' };
+    activeOperations.set(instanceId, activeEntry);
+    // 进度推送（1s 节流）；robocopy/ditto 降级路径无 stdout 进度，前端保持不确定态
+    const pushProgress = this.serverManager
+      ? createProgressPush(this.serverManager, instanceId, backupId, 'instance:backupProgress')
+      : null;
     try {
       // 触发备份开始事件
       if (this.serverManager) {
@@ -370,7 +429,7 @@ export class BackupService {
             logger.info(`[Backup] Sending save-all flush for ${instanceId}...`);
             await instance.sendCommandWithResponse('save-all flush', { timeout: 5000 });
             // 等待磁盘写入完成
-            await new Promise(resolve => setTimeout(resolve, 2000));
+            await new Promise((resolve) => setTimeout(resolve, 2000));
           } catch (rconErr) {
             logger.warn(`[Backup] RCON save commands failed (non-fatal): ${rconErr.message}`);
           }
@@ -379,22 +438,27 @@ export class BackupService {
 
       // 快照子进程超时按预估规模动态计算（每 MB 约 4s，下限 5min，
       // 上限配置值）：固定 300s 会误杀 GB 级世界的定时备份。
-      // 快照（rsync 增量/robocopy 复制）远快于 zip 压缩，此估算偏保守
+      // 快照（rsync 增量/robocopy 复制）耗时估算偏保守
       // 但不会误杀（timeout 是上限而非目标）
       const timeout = Math.min(
         config.backupSpawnTimeoutMs,
-        Math.max(300000, Math.round((estimateBytes / 1024 / 1024) * 4000))
+        Math.max(300000, Math.round((estimateBytes / 1024 / 1024) * 4000)),
       );
 
       // 创建快照：Windows 优先 rsync（MSYS2，硬链接增量，与 Linux 参数
       // 完全同构），未安装时自动降级为系统自带 robocopy 全量镜像；
       // Linux 固定 rsync。返回实际使用的工具（robocopy 降级时记录日志）
-      await this._createSnapshot(instanceId, snapshotDir, { jarFile, timeout });
+      await this._createSnapshot(instanceId, snapshotDir, {
+        jarFile,
+        timeout,
+        signal: controller.signal,
+        onStdout: pushProgress ? createRsyncProgressParser(pushProgress) : null,
+      });
 
       // 快照完整性校验：快照 = 实例目录镜像，必须有世界数据（level.dat 位于
       // level-name 目录直接层）且非空。rsync 退出 0/24 已保证文件完整，
-      // 此处拦截"空快照/无世界"的无效备份（与旧 zip 的 CRC 校验等价：
-      // 半成品快照目录在失败路径统一清理）
+      // 此处拦截"空快照/无世界"的无效备份（半成品快照目录
+      // 在失败路径统一清理）
       await this._verifySnapshot(snapshotDir);
 
       // 获取快照大小：递归统计目录总字节（= 单快照逻辑大小，恢复该快照
@@ -405,7 +469,7 @@ export class BackupService {
       // 更新备份记录
       BackupModel.update(backupId, {
         status: 'completed',
-        size
+        size,
       });
 
       // 定时备份任务的结果回写：真实成功（快照完成+校验通过）而非 createBackup
@@ -438,9 +502,49 @@ export class BackupService {
           content: `备份完成: ${backupName}（${sizeMb} MB）`,
         });
       }
-
     } catch (err) {
-      logger.error('Backup execution failed:', err);
+      const cancelled = err?.code === 'CANCELLED';
+      // 用户取消不是故障：ERROR 级堆栈会误导排障（取消在日志里应一眼可辨）
+      if (cancelled) {
+        logger.info(`[Backup] Backup cancelled by user: ${snapshotDir}`);
+      } else {
+        logger.error('Backup execution failed:', err);
+      }
+
+      // 清理失败的半成品快照目录（rsync/robocopy 失败可能残留部分文件）。
+      // force 容忍 ENOENT，不做存在性预检。取消与失败共用：取消留下的
+      // 同样是半成品，一律不留现场。
+      // 独立 try/catch：取消是刚 kill 子进程后立即删目录（Windows 上 EBUSY/
+      // EPERM 概率高于既有失败路径），清理失败不得吞掉下方的取消记账
+      // （记录删除 + backupCancelled 事件）——那会让用户看到「取消无反应」
+      try {
+        fs.rmSync(snapshotDir, { recursive: true, force: true });
+      } catch (cleanupErr) {
+        logger.warn(`[Backup] 清理半成品快照失败 ${snapshotDir}: ${cleanupErr.message}`);
+      }
+
+      if (cancelled) {
+        // 用户取消：备份记录直接删除（主动取消不留 failed 记录污染列表；
+        // 半成品快照已在上方清理，记录已无对应实体）。事件进通知中心
+        // （backupCancelled 在落库集合内），其他标签页/断线重连后可见
+        try {
+          BackupModel.delete(backupId);
+        } catch (e) {
+          logger.error('Failed to delete cancelled backup record:', e);
+        }
+        // 定时备份被取消＝任务未完成，按失败回写（原因「已取消」）
+        if (taskId != null) {
+          ScheduledTaskModel.updateLastRunStatus(taskId, 'failed', '已取消', Date.now() - startTs);
+        }
+        if (this.serverManager) {
+          this.serverManager.emit('instance:backupCancelled', {
+            instanceId,
+            backupId,
+            content: '备份已取消，未产生备份',
+          });
+        }
+        throw err;
+      }
 
       // 触发备份失败事件（content 携带失败原因，磁盘满/压缩超时等对用户可见）
       if (this.serverManager) {
@@ -462,56 +566,91 @@ export class BackupService {
 
       // 定时备份任务的结果回写：执行阶段真实失败（快照/校验/压缩）
       if (taskId != null) {
-        ScheduledTaskModel.updateLastRunStatus(taskId, 'failed', err?.message ?? String(err), Date.now() - startTs);
-      }
-
-      // 清理失败的半成品快照目录（rsync/robocopy 失败可能残留部分文件）
-      if (fs.existsSync(snapshotDir)) {
-        fs.rmSync(snapshotDir, { recursive: true, force: true });
+        ScheduledTaskModel.updateLastRunStatus(
+          taskId,
+          'failed',
+          err?.message ?? String(err),
+          Date.now() - startTs,
+        );
       }
 
       throw err;
     } finally {
+      // 取消注册表项仅当仍是本操作时移除（防误删后来者——现经互斥状态机
+      // 不可能并发，判定为防御）
+      if (activeOperations.get(instanceId) === activeEntry) {
+        activeOperations.delete(instanceId);
+      }
       // 恢复自动保存：save-off 与 save-on 必须成对。
-      // 无论压缩/统计成功与否都补发 save-on，否则 zip 失败等异常路径会
+      // 无论快照/统计成功与否都补发 save-on，否则异常路径会
       // 让 MC 服务器永久停留在自动保存关闭状态，崩溃/断电时世界数据回退。
       await this._restoreSaveOn(instanceId);
     }
   }
 
   // 创建快照：Windows 优先 rsync（MSYS2），ENOENT 自动降级 robocopy；
-  // Linux 固定 rsync。返回实际使用的工具名（'rsync' / 'robocopy'）
-  async _createSnapshot(instanceId, snapshotDir, { jarFile = null, timeout = 300000 } = {}) {
+  // Linux 固定 rsync；macOS 走 darwin 分支（openrsync 兼容探测 + 降级）。
+  // 返回实际使用的工具名（'rsync' / 'robocopy' / 'ditto'）。
+  // signal 全路径透传（取消）；onStdout 只给 win32/linux 的 rsync——robocopy/
+  // ditto 无百分比输出，darwin 的 openrsync 不识别 --info=progress2（不传参数
+  // 即无输出，传监听也只是空转）
+  async _createSnapshot(
+    instanceId,
+    snapshotDir,
+    { jarFile = null, timeout = 300000, signal = null, onStdout = null } = {},
+  ) {
     if (process.platform === 'win32') {
       try {
-        await this._rsyncSnapshot(instanceId, snapshotDir, { jarFile, timeout });
+        await this._rsyncSnapshot(instanceId, snapshotDir, {
+          jarFile,
+          timeout,
+          signal,
+          onStdout,
+          progressInfo: true,
+        });
         return 'rsync';
       } catch (err) {
         // rsync 缺失（未安装 MSYS2/不在 PATH）：降级 robocopy 全量镜像。
         // 其余错误（命令执行失败）原样上抛——降级只针对工具缺失
         if (err.code !== 'ENOENT') throw err;
         logger.warn(`[Backup] rsync 不可用，降级为 robocopy 全量快照: ${err.message}`);
-        await this._robocopySnapshot(instanceId, snapshotDir, { jarFile, timeout });
+        await this._robocopySnapshot(instanceId, snapshotDir, { jarFile, timeout, signal });
         return 'robocopy';
       }
     }
-    await this._rsyncSnapshot(instanceId, snapshotDir, { jarFile, timeout });
+    if (process.platform === 'darwin') {
+      return this._darwinSnapshot(instanceId, snapshotDir, { jarFile, timeout, signal });
+    }
+    await this._rsyncSnapshot(instanceId, snapshotDir, {
+      jarFile,
+      timeout,
+      signal,
+      onStdout,
+      progressInfo: true,
+    });
     return 'rsync';
   }
 
-  // rsync 快照（Linux 主路径 / Windows MSYS2 主路径）：
-  // --link-dest 指向该实例最近一次快照。基线选择按目录 mtime 取最新
-  // （目录名前缀是用户可变的备份名，中英文混排时整串字典序≠时间序，
-  // 曾导致 linkDest 指向数周前旧快照、增量失效退化为大范围全量复制）；
-  // 快照创建后不被改写，mtime 即创建时间，排序可靠。未变化文件硬链接
-  // 共享 inode 零拷贝。首次无历史快照不传 --link-dest（全量复制；
-  // 指向不存在目录只会发误导性警告）。
-  // 退出码：0=成功；24=源文件在传输中消失（容忍，记警告）；其余失败
-  async _rsyncSnapshot(instanceId, snapshotDir, { jarFile = null, timeout = 300000 } = {}) {
+  // macOS 快照：系统自带 rsync 自 11.5 起为 openrsync，--link-dest 硬链接去重
+  // 未经验证。三级策略：
+  // ① RSYNC_BIN 指向 GNU rsync（brew install rsync）时行为与 Linux 一致，
+  //    由 verifyHardlinkDedup 探测确认去重生效；
+  // ② openrsync 对 --link-dest 直接报错的版本：退回无 --link-dest 的全量
+  //    rsync 再试一次（快照完整、仅无增量）；
+  // ③ rsync 整体缺失：ditto 全量复制（darwin 自带，无 --delete 顾虑——
+  //    快照目标目录由本服务独占创建，每次为空目录）。
+  // 三条路径产出都是完整可恢复快照，差别只在空间/耗时；去重未生效时
+  // 记警告提示 RSYNC_BIN，不为此引入第二套复制器。
+  async _darwinSnapshot(
+    instanceId,
+    snapshotDir,
+    { jarFile = null, timeout = 300000, signal = null } = {},
+  ) {
     const instanceBackupDir = this.getInstanceBackupDir(instanceId);
     let linkDest = null;
     try {
-      const snapshots = fs.readdirSync(instanceBackupDir, { withFileTypes: true })
+      const snapshots = fs
+        .readdirSync(instanceBackupDir, { withFileTypes: true })
         .filter((e) => e.isDirectory())
         .map((e) => e.name)
         .sort((a, b) => {
@@ -524,17 +663,102 @@ export class BackupService {
             return 0;
           }
         });
-      if (snapshots.length > 0) {
+      if (snapshots.length > 0)
         linkDest = path.join(instanceBackupDir, snapshots[snapshots.length - 1]);
-      }
     } catch {
       // 备份目录不可读：按无历史快照处理（全量复制），不阻断备份
     }
-    const args = buildRsyncArgs(instanceId, snapshotDir, { linkDest, jarFile });
-    const code = await spawnProcess('rsync', args, {
+    try {
+      await this._rsyncSnapshot(instanceId, snapshotDir, { jarFile, timeout, signal, linkDest });
+    } catch (err) {
+      if (err.code === 'ENOENT') {
+        // ditto 无排除清单能力（logs/libraries 等会进快照），磁盘预检按排除口径
+        // 估算会偏小——仅作 rsync 完全缺失时的兜底，警告提示空间代价
+        logger.warn(
+          '[Backup] macOS rsync 不可用，降级为 ditto 全量快照（无排除清单，快照体积将偏大）',
+        );
+        await spawnProcess('ditto', [path.join(config.serversDir, instanceId), snapshotDir], {
+          timeout,
+          signal,
+        });
+        return 'ditto';
+      }
+      if (linkDest) {
+        // openrsync 对 --link-dest 报错的兜底：退全量 rsync（无 --link-dest）
+        logger.warn(`[Backup] macOS rsync --link-dest 失败（${err.message}），退全量 rsync 重试`);
+        await this._rsyncSnapshot(instanceId, snapshotDir, {
+          jarFile,
+          timeout,
+          signal,
+          linkDest: null,
+        });
+        return 'rsync';
+      }
+      throw err;
+    }
+    if (linkDest && verifyHardlinkDedup(linkDest, snapshotDir) === false) {
+      logger.warn(
+        '[Backup] macOS rsync 硬链接去重未生效（openrsync --link-dest 兼容性？），' +
+          '本次为全量拷贝；可设 RSYNC_BIN 指向 GNU rsync（brew install rsync）启用增量',
+      );
+    }
+    return 'rsync';
+  }
+
+  // rsync 快照（Linux 主路径 / Windows MSYS2 主路径）：
+  // --link-dest 指向该实例最近一次快照。基线选择按目录 mtime 取最新
+  // （目录名前缀是用户可变的备份名，中英文混排时整串字典序≠时间序，
+  // 曾导致 linkDest 指向数周前旧快照、增量失效退化为大范围全量复制）；
+  // 快照创建后不被改写，mtime 即创建时间，排序可靠。未变化文件硬链接
+  // 共享 inode 零拷贝。首次无历史快照不传 --link-dest（全量复制；
+  // 指向不存在目录只会发误导性警告）。
+  // 退出码：0=成功；24=源文件在传输中消失（容忍，记警告）；其余失败
+  async _rsyncSnapshot(
+    instanceId,
+    snapshotDir,
+    {
+      jarFile = null,
+      timeout = 300000,
+      linkDest: linkDestOverride = undefined,
+      signal = null,
+      onStdout = null,
+      progressInfo = false,
+    } = {},
+  ) {
+    const instanceBackupDir = this.getInstanceBackupDir(instanceId);
+    let linkDest = null;
+    if (linkDestOverride !== undefined) {
+      linkDest = linkDestOverride; // 调用方显式指定（darwin 重试退全量时传 null）
+    } else {
+      try {
+        const snapshots = fs
+          .readdirSync(instanceBackupDir, { withFileTypes: true })
+          .filter((e) => e.isDirectory())
+          .map((e) => e.name)
+          .sort((a, b) => {
+            try {
+              return (
+                fs.statSync(path.join(instanceBackupDir, a)).mtimeMs -
+                fs.statSync(path.join(instanceBackupDir, b)).mtimeMs
+              );
+            } catch {
+              return 0;
+            }
+          });
+        if (snapshots.length > 0) {
+          linkDest = path.join(instanceBackupDir, snapshots[snapshots.length - 1]);
+        }
+      } catch {
+        // 备份目录不可读：按无历史快照处理（全量复制），不阻断备份
+      }
+    }
+    const args = buildRsyncArgs(instanceId, snapshotDir, { linkDest, jarFile, progressInfo });
+    const code = await spawnProcess(rsyncBin(), args, {
       cwd: config.serversDir,
       timeout,
       okCodes: [0, 24],
+      signal,
+      onStdout,
     });
     if (code === 24) {
       logger.warn('[Backup] rsync: 部分源文件在传输中消失（exit 24），快照已容忍处理');
@@ -544,26 +768,36 @@ export class BackupService {
   // robocopy 全量镜像快照（Windows 降级路径，rsync 缺失时）：
   // 文件级全量复制（robocopy 无硬链接增量能力），排除清单同 rsync。
   // 退出码位标志 0-7 全部为成功（1=有复制、2=清理多余、4=不匹配），
-  // 8+ 才为失败——由 _spawn okCodes 承接
-  async _robocopySnapshot(instanceId, snapshotDir, { jarFile = null, timeout = 300000 } = {}) {
+  // 8+ 才为失败——由 _spawn okCodes 承接。无进度输出（/MT:16 多线程
+  // 交错 + 无字节进度行），前端保持不确定态；取消经 signal 生效
+  async _robocopySnapshot(
+    instanceId,
+    snapshotDir,
+    { jarFile = null, timeout = 300000, signal = null } = {},
+  ) {
     const args = buildRobocopyArgs(instanceId, snapshotDir, { jarFile });
     await spawnProcess('robocopy', args, {
       timeout,
       okCodes: [0, 1, 2, 3, 4, 5, 6, 7],
+      signal,
     });
   }
 
   // 快照完整性校验：快照 = 实例目录镜像（level-name 目录直接层有 level.dat
-  // 且目录非空）。空快照/无世界快照的恢复会毁掉原世界（与旧 zip CRC 校验
-  // 等价的作用），创建时即拦截，失败路径由调用方清理半成品。
+  // 且目录非空）。空快照/无世界快照的恢复会毁掉原世界，创建时即拦截，
+  // 失败路径由调用方清理半成品。
   //
   // 设计约定：快照目录由服务进程独占生成、无外部输入入口，恢复不做 symlink
   // 条目拒绝（若未来开放"导入备份"或接入共享存储，须在此补充恢复前 symlink 扫描）。
   async _verifySnapshot(snapshotDir) {
-    if (!fs.existsSync(snapshotDir)) {
-      throw new Error('Snapshot directory not found');
+    // 读取即判定：readdirSync 的 ENOENT 就是「快照目录不存在」，不再先 existsSync
+    let entries;
+    try {
+      entries = fs.readdirSync(snapshotDir);
+    } catch (err) {
+      if (err.code === 'ENOENT') throw new Error('Snapshot directory not found');
+      throw err;
     }
-    const entries = fs.readdirSync(snapshotDir);
     if (entries.length === 0) {
       throw new Error('Snapshot is empty');
     }
@@ -589,8 +823,51 @@ export class BackupService {
         instanceId,
         error: rconErr.message,
         phase: 'save-on',
-        content: '备份已完成，但恢复自动保存失败（服务器可能停留在自动保存关闭状态，请手动执行 save-on）',
+        content:
+          '备份已完成，但恢复自动保存失败（服务器可能停留在自动保存关闭状态，请手动执行 save-on）',
       });
+    }
+  }
+
+  // 快照归属校验（兜底）：防 DB 记录被改成指向别处后，恢复/删除把
+  // 不属于本实例的数据灌进来或删掉。两类行口径不同：
+  // - 常规快照：必须位于「本行所属实例」的备份子目录内（backupsDir/<instanceId>/…）。
+  //   只校验「在 backupsDir 内」不够——记录被改成指向另一个实例的合法快照时，
+  //   恢复会把别的实例的世界数据灌进本实例
+  // - 挂载来的归档快照（source_archive_id 非空）：它按设计住在**原归档实例**目录下
+  //   （实例 id 不复用，卸载后只能被别的实例挂载），故基准放宽为 backupsDir 本身。
+  //   放宽后仍被两条判据卡住：必须在 backupsDir 内（resolveContained，含 symlink 复检），
+  //   且一级目录名必须等于本行声明的归档 id —— 指向 backupsDir 之外、或指向另一个
+  //   未声明的实例目录依旧拒绝
+  _assertSnapshotOwnership(backup, snapshotDir) {
+    const archiveId = backup.source_archive_id;
+    if (!archiveId) {
+      // 归属基准是「本行所属实例」：实例 id 缺失的记录（异常数据）无法定基准，
+      // 一律拒绝——否则 path.join 会抛裸 TypeError，看不出是记录损坏
+      if (typeof backup.instance_id !== 'string' || backup.instance_id.trim() === '') {
+        throw new AppError(
+          ErrorCodes.PATH_TRAVERSAL_DETECTED,
+          `Path traversal detected: ${snapshotDir}`,
+        );
+      }
+      resolveContained(path.join(this.backupsDir, backup.instance_id), snapshotDir);
+      return;
+    }
+    const resolved = resolveContained(this.backupsDir, snapshotDir);
+    const rel = path.relative(path.resolve(this.backupsDir), resolved);
+    const segments = rel.split(path.sep);
+    // 必须是「实例级目录 → 快照」两级：一级直接命中归档目录＝指向目录而非快照
+    // （挂载不会造出这种行），与 INSTANCE_ID_PATTERN 一起把放宽后的自由度钉死在
+    // 「backupsDir/<声明的归档 id>/<快照>」这一形态上
+    if (
+      segments.length < 2 ||
+      segments[0] !== archiveId ||
+      !INSTANCE_ID_PATTERN.test(segments[0])
+    ) {
+      throw new AppError(
+        ErrorCodes.PATH_TRAVERSAL_DETECTED,
+        `Path traversal detected: ${snapshotDir}`,
+      );
     }
   }
 
@@ -598,7 +875,7 @@ export class BackupService {
   // 后台）。三入口（创建/恢复/删除）统一 status='restoring' 状态机互斥，
   // 路由快速 202 返回，进度经 restoreStart/restoreComplete/restoreFailed 事件推送。
   async restoreBackup(backupId) {
-    // find-021：file_path 仅服务层内部使用，走专用查询获取完整行
+    // file_path 仅服务层内部使用，走专用查询获取完整行
     const backup = BackupModel.findByIdWithPath(backupId);
 
     if (!backup) {
@@ -607,12 +884,6 @@ export class BackupService {
 
     if (backup.status !== 'completed') {
       throw new Error('Only completed backups can be restored');
-    }
-
-    // 旧格式（zip 压缩包）备份禁止恢复：恢复链路为目录复制
-    // （rsync -a/robocopy /MIR），zip 无解压路径，仅保留可删
-    if (backup.format === 'zip') {
-      throw new AppError(ErrorCodes.BACKUP_FORMAT_UNSUPPORTED);
     }
 
     const instanceId = backup.instance_id;
@@ -635,24 +906,40 @@ export class BackupService {
       throw new AppError(ErrorCodes.INSTANCE_RUNNING, '实例正在运行，请先停止服务器再恢复备份');
     }
 
-    const instanceDir = resolveContained(config.serversDir, path.join(config.serversDir, instanceId));
+    const instanceDir = resolveContained(
+      config.serversDir,
+      path.join(config.serversDir, instanceId),
+    );
+    // 保留存在性判定：这是同步段的前置校验门——失败要立刻回给调用方（404 语义），
+    // 不能降级为后台恢复任务里的异步失败；判定为假时零副作用，竞态下目录被删则由
+    // executeRestore 的 renameSync 失败路径接手
     if (!fs.existsSync(instanceDir)) {
       throw new Error(`Instance directory not found: ${instanceDir}`);
     }
 
     const snapshotDir = backup.file_path;
-    // find-004 兜底：快照目录路径必须位于备份目录内（防 DB 被篡改后
-    // 删除/复制任意路径目录）
-    if (snapshotDir) {
-      resolveContained(this.backupsDir, snapshotDir);
+    // 记录必须带非空字符串路径：null/非字符串解析不出路径，空串则被
+    // fs/path 当作 cwd，绕过下方包含校验
+    if (typeof snapshotDir !== 'string' || snapshotDir.trim() === '') {
+      throw new AppError(ErrorCodes.BACKUP_NOT_FOUND);
     }
+    // 路径兜底 + 归属校验（见 _assertSnapshotOwnership）
+    this._assertSnapshotOwnership(backup, snapshotDir);
 
-    if (!fs.existsSync(snapshotDir)) {
-      throw new Error('Snapshot directory not found');
+    // 快照路径的判定只取一次 stat：ENOENT ＝ 记录指向的快照不存在（404 语义），
+    // 省掉 existsSync 预检——预检与 stat 之间的窗口里快照被删会抛裸 ENOENT
+    let snapshotStat;
+    try {
+      snapshotStat = fs.statSync(snapshotDir);
+    } catch (err) {
+      if (err.code === 'ENOENT') {
+        throw new AppError(ErrorCodes.BACKUP_NOT_FOUND, 'Snapshot directory not found');
+      }
+      throw err;
     }
-    // 快照必须是目录（file_path 指向文件的记录为异常数据/旧格式错标）
-    if (!fs.statSync(snapshotDir).isDirectory()) {
-      throw new Error('Snapshot path is not a directory');
+    // 快照必须是目录（file_path 指向文件的记录为异常数据，非服务端故障）
+    if (!snapshotStat.isDirectory()) {
+      throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Snapshot path is not a directory');
     }
 
     // 置 restoring 状态（互斥锁）：此后的创建/恢复/删除入口全部命中
@@ -662,8 +949,12 @@ export class BackupService {
     // 后台执行恢复（fire-and-forget）
     this.executeRestore(backupId, backup, instanceDir, snapshotDir, {
       jarFile: instance?.jarFile || null,
-    }).catch(err => {
-      logger.error('Restore failed:', err);
+    }).catch((err) => {
+      // 取消已在 executeRestore 内自行收敛（回滚 + restoreCancelled 事件 + 状态回写），
+      // 此处只按非取消失败记日志；状态回写保留（对取消是幂等的 completed）
+      if (err?.code !== 'CANCELLED') {
+        logger.error('Restore failed:', err);
+      }
       // 恢复失败：备份文件未动，重置为 completed 供重试（释放互斥锁）
       try {
         BackupModel.update(backupId, { status: 'completed' });
@@ -689,6 +980,18 @@ export class BackupService {
     // 时可能把上次崩溃遗留的旧版本 rename 回实例目录，本次真实原数据
     // 被遗弃为孤儿目录）
     let preRestoreDir = null;
+    // 回滚判据是「本次恢复是否已把实例目录换成 pre_restore」这个状态位，不是
+    // 事后对 preRestoreDir 的存在性判定：后者在 catch 里再探文件系统，既可能
+    // 因并发删除误判（把唯一副本丢在一边），又会在判定与 rename 之间抛错时
+    // 掩盖原始失败并让实例目录永久消失
+    let swappedToPreRestore = false;
+    // 取消通道：注册表模块级共享（见 executeBackup 注释）；进度 1s 节流推送
+    const controller = new AbortController();
+    const activeEntry = { controller, backupId, kind: 'restore' };
+    activeOperations.set(instanceId, activeEntry);
+    const pushProgress = this.serverManager
+      ? createProgressPush(this.serverManager, instanceId, backupId, 'instance:restoreProgress')
+      : null;
     try {
       // 触发恢复开始事件
       if (this.serverManager) {
@@ -700,9 +1003,8 @@ export class BackupService {
       }
 
       // ① 快照完整性预检（rename 之前执行：快照损坏时直接失败，
-      // 原实例目录未被触碰，无需回滚——比 zip 时代"解压后才发现坏包"
-      // 更安全）。restoreBackup 同步段已校验存在性/目录类型，此处校验
-      // 内容（level.dat + 非空），双保险防快照被外部改动
+      // 原实例目录未被触碰，无需回滚）。restoreBackup 同步段已校验存在性/
+      // 目录类型，此处校验内容（level.dat + 非空），双保险防快照被外部改动
       await this._verifySnapshot(snapshotDir);
 
       // ①.5 后台执行期间再次确认实例未运行：restoreBackup 同步段的
@@ -719,15 +1021,20 @@ export class BackupService {
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
       preRestoreDir = path.join(config.serversDir, `${instanceId}_pre_restore_${timestamp}`);
       fs.renameSync(instanceDir, preRestoreDir);
+      swappedToPreRestore = true; // rename 成功即置位：此后失败必须回滚
 
       // ③ 复制快照 → 实例目录（复制而非移动；--delete 仅恢复场景使用，
       // 清理实例目录中快照已不存在的文件）。子进程超时按快照规模动态
       // 计算（快照逻辑大小，估算方法与备份一致）
       const timeout = Math.min(
         config.backupSpawnTimeoutMs,
-        Math.max(300000, Math.round(((await estimateDirSize(snapshotDir)) / 1024 / 1024) * 4000))
+        Math.max(300000, Math.round(((await estimateDirSize(snapshotDir)) / 1024 / 1024) * 4000)),
       );
-      await this._restoreFromSnapshot(snapshotDir, instanceDir, { timeout });
+      await this._restoreFromSnapshot(snapshotDir, instanceDir, {
+        timeout,
+        signal: controller.signal,
+        onStdout: pushProgress ? createRsyncProgressParser(pushProgress) : null,
+      });
 
       // ④ 复制回启动 jar：快照排除 jar（可重建），恢复后需从
       // pre_restore 取回（jarFile 配置优先，缺省扫描根目录 *.jar）
@@ -742,9 +1049,13 @@ export class BackupService {
 
       // ⑥ 成功：删除 pre_restore，状态置回 completed（快照可继续用于
       // 未来恢复），发送恢复完成事件（提示启动服务器使新世界生效）
-      if (fs.existsSync(preRestoreDir)) {
-        fs.rmSync(preRestoreDir, { recursive: true, force: true });
-      }
+      // force 容忍 ENOENT，不做存在性预检
+      fs.rmSync(preRestoreDir, { recursive: true, force: true });
+      // pre_restore 一删，「回滚能力」随之消失：此后（DB 回写、日志、事件派发）
+      // 任一步失败都必须保留**已恢复成功**的实例目录，不能落进下面的回滚分支
+      // 去删它——清掉状态位是这条边界的唯一判据（旧实现靠 existsSync(preRestoreDir)
+      // 事后探盘，恰好也在这条路径上返回 false，换成状态位后必须显式复位）
+      swappedToPreRestore = false;
       BackupModel.update(backupId, { status: 'completed' });
 
       logger.info(`Backup restored: ${snapshotDir}`);
@@ -756,18 +1067,44 @@ export class BackupService {
         });
       }
       return true;
-
     } catch (err) {
-      logger.error('Restore failed:', err);
+      const cancelled = err?.code === 'CANCELLED';
+      // 用户取消不是故障（回滚会照常执行）；ERROR 级堆栈会误导排障
+      if (cancelled) {
+        logger.info('[Restore] Restore cancelled by user, rolling back...');
+      } else {
+        logger.error('Restore failed:', err);
+      }
 
       // 失败回滚：删除半解压的新实例目录，rename 本次 pre_restore 回来。
-      // 精确匹配本次目录名（preRestoreDir 局部变量）而非前缀扫描——
-      // 失败点可能在校验/复制之前（preRestoreDir 未创建时无需回滚）
-      if (preRestoreDir && fs.existsSync(preRestoreDir)) {
-        if (fs.existsSync(instanceDir)) {
+      // 精确匹配本次目录名（preRestoreDir 局部变量）+ 本次是否真的换过目录
+      // （swappedToPreRestore 状态位），不做事后存在性判定。
+      // 回滚动作逐条自保：catch 块内再抛错会替换掉原始失败（用户看到的是回滚的
+      // 错误而非恢复失败原因），并在 rename 失败时留下「实例目录已删、原数据还
+      // 在 pre_restore」的最坏状态却无人知晓——故每步独立 try/catch 并记日志。
+      // 用户取消走同一条回滚路径（abort 只触发本 catch，不并行改状态）
+      let rollbackFailed = false;
+      if (swappedToPreRestore) {
+        try {
           fs.rmSync(instanceDir, { recursive: true, force: true });
+        } catch (cleanupErr) {
+          logger.error(
+            `[Restore] 回滚时删除半成品实例目录失败 ${instanceDir}:`,
+            cleanupErr.message,
+          );
         }
-        fs.renameSync(preRestoreDir, instanceDir);
+        try {
+          fs.renameSync(preRestoreDir, instanceDir);
+        } catch (rollbackErr) {
+          rollbackFailed = true;
+          // 措辞据实：ENOENT 说明 pre_restore 已不在（能走到这里只能是它被删/被移走），
+          // 此时没有「原数据仍在」可指，唯一出路是按快照重试恢复
+          const hint =
+            rollbackErr.code === 'ENOENT'
+              ? `回滚失败：${preRestoreDir} 已不存在，实例目录需用快照重新恢复`
+              : `回滚失败：原数据仍在 ${preRestoreDir}，需人工恢复`;
+          logger.error(`[Restore] ${hint}:`, rollbackErr.message);
+        }
       }
       // 状态置回 completed（备份文件完好，可重试恢复），发送失败事件
       try {
@@ -776,14 +1113,29 @@ export class BackupService {
         logger.error('Failed to reset backup status after failed restore:', e);
       }
       if (this.serverManager) {
-        this.serverManager.emit('instance:restoreFailed', {
-          instanceId,
-          backupId,
-          error: err.message,
-          content: `恢复失败: ${err.message}`,
-        });
+        if (cancelled) {
+          // 用户取消：回滚已执行完，文案按回滚实际结局措辞（回滚失败时不谎报已还原）
+          this.serverManager.emit('instance:restoreCancelled', {
+            instanceId,
+            backupId,
+            content: rollbackFailed
+              ? '恢复已取消，但原数据回滚失败，请检查实例目录或残留的 pre_restore 目录'
+              : '恢复已取消，原实例数据已还原',
+          });
+        } else {
+          this.serverManager.emit('instance:restoreFailed', {
+            instanceId,
+            backupId,
+            error: err.message,
+            content: `恢复失败: ${err.message}`,
+          });
+        }
       }
       throw err;
+    } finally {
+      if (activeOperations.get(instanceId) === activeEntry) {
+        activeOperations.delete(instanceId);
+      }
     }
   }
 
@@ -796,12 +1148,29 @@ export class BackupService {
   // （源尾 / 复制目录内容；--delete 清理实例目录中快照已不存在的文件——
   // 仅恢复场景使用，快照创建场景严禁 --delete）
   // Windows 降级：robocopy /MIR（镜像语义，等价 --delete）
-  async _restoreFromSnapshot(snapshotDir, instanceDir, { timeout = 300000 } = {}) {
+  // Windows 降级：robocopy /MIR（镜像语义，等价 --delete）。
+  // signal/onStdout：rsync 路径透传（取消 + --info=progress2 进度）；
+  // robocopy/ditto 路径无进度输出但取消仍生效（signal 透传）
+  async _restoreFromSnapshot(
+    snapshotDir,
+    instanceDir,
+    { timeout = 300000, signal = null, onStdout = null } = {},
+  ) {
+    // 参数按平台分支而非 onStdout 单条件门控：darwin 的 rsync（15+ 为 openrsync、
+    // ≤14 为 rsync 2.6.9）不识别 --info=progress2，传了直接 exit 1——而
+    // executeRestore 在生产路径恒传进度解析器，若共用一份含 --info 的参数，
+    // macOS 上恢复会整体失败（回滚保住数据但功能全废）
+    const baseArgs = ['-a', '--delete', `${snapshotDir}/`, `${instanceDir}/`];
+    const progressArgs = onStdout
+      ? ['-a', '--delete', '--info=progress2', `${snapshotDir}/`, `${instanceDir}/`]
+      : baseArgs;
     if (process.platform === 'win32') {
       try {
-        await spawnProcess('rsync', ['-a', '--delete', `${snapshotDir}/`, `${instanceDir}/`], {
+        await spawnProcess(rsyncBin(), progressArgs, {
           timeout,
           okCodes: [0, 24],
+          signal,
+          onStdout,
         });
         return;
       } catch (err) {
@@ -809,29 +1178,34 @@ export class BackupService {
         if (err.code !== 'ENOENT') throw err;
         logger.warn(`[Backup] rsync 不可用，恢复降级为 robocopy: ${err.message}`);
       }
+    } else if (process.platform === 'darwin') {
+      // macOS：恢复目标目录经 pre_restore 换出后为空目录，无需镜像删除语义，
+      // ditto 全量拷贝即等价（rsync 缺失时；有 rsync 仍走 -a --delete）。
+      // 恒用 baseArgs 且不传 onStdout（无 --info 即无进度输出，与
+      // _darwinSnapshot 同口径）
+      try {
+        await spawnProcess(rsyncBin(), baseArgs, { timeout, okCodes: [0, 24], signal });
+        return;
+      } catch (err) {
+        if (err.code !== 'ENOENT') throw err;
+        logger.warn('[Backup] macOS rsync 不可用，恢复降级为 ditto 全量拷贝');
+        await spawnProcess('ditto', [snapshotDir, instanceDir], { timeout, signal });
+        return;
+      }
     } else {
-      await spawnProcess('rsync', ['-a', '--delete', `${snapshotDir}/`, `${instanceDir}/`], {
-        timeout,
-        okCodes: [0, 24],
-      });
+      await spawnProcess(rsyncBin(), progressArgs, { timeout, okCodes: [0, 24], signal, onStdout });
       return;
     }
     // Windows robocopy 降级：/MIR 镜像快照到实例目录
-    await spawnProcess('robocopy', [
-      snapshotDir,
-      instanceDir,
-      '/E',
-      '/MIR',
-      '/MT:16',
-      '/R:2',
-      '/W:5',
-      '/NFL',
-      '/NDL',
-      '/NP',
-    ], {
-      timeout,
-      okCodes: [0, 1, 2, 3, 4, 5, 6, 7],
-    });
+    await spawnProcess(
+      'robocopy',
+      [snapshotDir, instanceDir, '/E', '/MIR', '/MT:16', '/R:2', '/W:5', '/NFL', '/NDL', '/NP'],
+      {
+        timeout,
+        okCodes: [0, 1, 2, 3, 4, 5, 6, 7],
+        signal,
+      },
+    );
   }
 
   // 从 pre_restore 目录复制回启动 jar（备份排除 jar，恢复后需还原）：
@@ -847,13 +1221,13 @@ export class BackupService {
       // pre_restore 不可读（不应发生）：按配置的 jarFile 尝试
     }
     for (const name of jarNames) {
-      const src = path.join(preRestoreDir, name);
-      if (fs.existsSync(src)) {
-        try {
-          fs.copyFileSync(src, path.join(newInstanceDir, name));
-        } catch (e) {
-          logger.warn(`[Backup] Failed to copy back jar ${name}:`, e.message);
-        }
+      // 不做存在性预检：copyFileSync 的 ENOENT 就是「该 jar 不在 pre_restore 里」，
+      // 与预检失败同属可跳过情形（唯一副本可能被并发清理），且预检与复制之间的
+      // 窗口同样会抛 ENOENT
+      try {
+        fs.copyFileSync(path.join(preRestoreDir, name), path.join(newInstanceDir, name));
+      } catch (e) {
+        logger.warn(`[Backup] Failed to copy back jar ${name}:`, e.message);
       }
     }
   }
@@ -881,7 +1255,7 @@ export class BackupService {
   // 快照（含中间快照）不影响其他快照——只有某文件在所有快照中最后一次
   // 出现（引用计数归零）才真正释放磁盘
   async deleteBackup(backupId) {
-    // find-021：file_path 仅服务层内部使用，走专用查询获取完整行
+    // file_path 仅服务层内部使用，走专用查询获取完整行
     const backup = BackupModel.findByIdWithPath(backupId);
 
     if (!backup) {
@@ -894,13 +1268,15 @@ export class BackupService {
       throw new AppError(ErrorCodes.BACKUP_IN_PROGRESS);
     }
 
-    // find-004 兜底：快照目录路径必须位于备份目录内（防 DB 被篡改后
-    // rmSync 递归删除任意目录）
+    // 路径兜底 + 归属校验：与恢复同一口径（见 _assertSnapshotOwnership）——
+    // 常规行必须落在本实例的备份子目录内，挂载行落在它声明的归档目录内。
+    // 只校验「在 backupsDir 内」不够：记录被改成指向别的实例的合法快照时，
+    // 删除会 rm -rf 掉别人的（可能是唯一）副本
     if (backup.file_path) {
-      resolveContained(this.backupsDir, backup.file_path);
+      this._assertSnapshotOwnership(backup, backup.file_path);
     }
-    // 删除快照目录（zip 旧格式为文件，rm force 兼容两者）
-    if (backup.file_path && fs.existsSync(backup.file_path)) {
+    // 删除快照目录（force 容忍 ENOENT，不做存在性预检）
+    if (backup.file_path) {
       await fs.promises.rm(backup.file_path, { recursive: true, force: true });
     }
 
@@ -917,7 +1293,7 @@ export class BackupService {
     const result = BackupModel.findAll({
       instanceId,
       status: 'completed',
-      pageSize: 1000
+      pageSize: 1000,
     });
 
     const backups = result.backups;
@@ -963,13 +1339,14 @@ export class BackupService {
   // 恢复中段时遗留），告警提示人工确认——不自动处理（无法判断用户意图）
   detectOrphanedPreRestoreDirs() {
     try {
-      const orphans = fs.readdirSync(config.serversDir)
+      const orphans = fs
+        .readdirSync(config.serversDir)
         .filter((name) => /_pre_restore_\d{4}-\d{2}-\d{2}T/.test(name) && !EXCLUDED_DIRS.has(name))
         .map((name) => path.join(config.serversDir, name));
       for (const dir of orphans) {
         logger.warn(
           `[Backup] 检测到残留的恢复暂存目录（进程可能在上次恢复中崩溃）: ${dir}。` +
-          `请人工确认后处理（数据恢复完成可删除；如需回滚请用其中内容覆盖实例目录）`
+            `请人工确认后处理（数据恢复完成可删除；如需回滚请用其中内容覆盖实例目录）`,
         );
       }
       return orphans.length;
@@ -980,21 +1357,59 @@ export class BackupService {
 }
 
 // 安全的 spawn 封装：支持 cwd（rsync 快照需相对 serversDir 归档）、
-// 动态超时（大世界备份按预估规模放大，固定 300s 会误杀）与 okCodes
+// 动态超时（大世界备份按预估规模放大，固定 300s 会误杀）、okCodes
 // （退出码白名单——rsync 24=源文件消失需容忍；robocopy 位标志 0-7 全为
-// 成功，绝不能按 code===0 判定）。resolve 返回实际退出码供调用方分支。
-function spawnProcess(cmd, args, options = {}) {
-  const { cwd, timeout = 300000, okCodes = [0] } = options;
+// 成功，绝不能按 code===0 判定）、AbortSignal（取消进行中操作：abort 即
+// kill 子进程，close 后以 code='CANCELLED' 上抛供调用方区分取消与失败）
+// 与 onStdout（rsync --info=progress2 进度解析需要读子进程 stdout；
+// 无监听时保持 ignore，零管道开销）。
+export function spawnProcess(cmd, args, options = {}) {
+  const { cwd, timeout = 300000, okCodes = [0], signal = null, onStdout = null } = options;
   return new Promise((resolve, reject) => {
-    const proc = spawn(cmd, args, { stdio: 'ignore', timeout, cwd });
+    const proc = spawn(cmd, args, {
+      stdio: onStdout ? ['ignore', 'pipe', 'ignore'] : 'ignore',
+      timeout,
+      cwd,
+    });
+    // 取消判据是本 promise 闭包内的标记而非事后检查 signal.aborted：
+    // close 可能与 abort 几乎同时（取消那一刻进程恰好自然退出），此时
+    // 按取消上报会让用户看到「已取消」而实际快照已完成——以 kill 是否
+    // 发生为准。已知边界：kill 与自然退出同帧竞态时取消语义优先，半成品
+    // 清理与状态回滚路径对两种结局都收敛
+    let cancelled = false;
+    const onAbort = () => {
+      cancelled = true;
+      // abort 早于进程创建完成时 kill() 返回 false（无从杀起）——挂到
+      // spawn 事件补杀，否则取消会在「取消请求先到、进程刚要起」的窗口里失效
+      if (!proc.kill()) {
+        proc.once('spawn', () => proc.kill());
+      }
+    };
+    if (signal) {
+      if (signal.aborted) {
+        onAbort();
+      } else {
+        signal.addEventListener('abort', onAbort, { once: true });
+      }
+    }
+    if (onStdout && proc.stdout) {
+      proc.stdout.on('data', (chunk) => onStdout(String(chunk)));
+    }
+    const removeAbortListener = () => {
+      if (signal) signal.removeEventListener('abort', onAbort);
+    };
     proc.on('close', (code) => {
-      if (okCodes.includes(code)) {
+      removeAbortListener();
+      if (cancelled) {
+        reject(Object.assign(new Error('操作已被取消'), { code: 'CANCELLED' }));
+      } else if (okCodes.includes(code)) {
         resolve(code);
       } else {
         reject(new Error(`Exit code ${code}`));
       }
     });
     proc.on('error', (err) => {
+      removeAbortListener();
       // 命令缺失时给出明确错误并保留 code='ENOENT'（Windows 分支据此
       // 降级 robocopy）：'spawn rsync ENOENT' 无法让用户理解，转译为
       // 可操作提示
@@ -1002,12 +1417,58 @@ function spawnProcess(cmd, args, options = {}) {
         err && err.code === 'ENOENT'
           ? Object.assign(
               new Error(`Command not found: ${cmd}（请安装 ${cmd}，如 apt-get install -y ${cmd}）`),
-              { code: 'ENOENT' }
+              { code: 'ENOENT' },
             )
-          : err
+          : err,
       );
     });
   });
+}
+
+// ── 进行中操作的取消注册表（模块级）─────────────────────────────
+// BackupService 在备份路由、定时调度器、升级服务里各自实例化，进行中
+// 操作必须登记在模块层，取消 API 才能命中任意入口发起的操作。key=实例 id：
+// 同实例的创建/恢复经 status 互斥状态机保证同时至多一个，无需复合键
+const activeOperations = new Map();
+
+/** 请求取消该实例进行中的备份/恢复；无进行中操作返回 null */
+export function requestCancelBackup(instanceId) {
+  const entry = activeOperations.get(instanceId);
+  if (!entry) return null;
+  entry.controller.abort();
+  return { kind: entry.kind, backupId: entry.backupId };
+}
+
+// 进度推送（1s 节流）：rsync --info=progress2 每秒刷新约 10 次，
+// 不过节流会让 WS 每连接每秒承受 10 条无意义消息
+function createProgressPush(serverManager, instanceId, backupId, eventName) {
+  let lastEmit = 0;
+  return (percent) => {
+    const now = Date.now();
+    if (now - lastEmit < 1000) return;
+    lastEmit = now;
+    serverManager.emit(eventName, {
+      instanceId,
+      backupId,
+      percent: Math.min(100, Math.max(0, Math.round(percent))),
+    });
+  };
+}
+
+// rsync stdout → 百分比解析器（有状态：progress2 在同一行内用 \r 刷新，
+// chunk 边界可能截断百分比数字，残余部分留待下一个 chunk 拼接）。
+// 无进度输出（robocopy/ditto 降级路径或 --info 不受支持）时恒为 no-op
+export function createRsyncProgressParser(onPercent) {
+  let pending = '';
+  return (chunk) => {
+    pending += chunk;
+    const parts = pending.split(/[\r\n]/);
+    pending = parts.pop() ?? '';
+    const matches = parts.join('\n').match(/(\d+(?:\.\d+)?)%/g);
+    if (matches && matches.length > 0) {
+      onPercent(Number.parseFloat(matches[matches.length - 1]));
+    }
+  };
 }
 
 // 单例

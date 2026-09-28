@@ -1,5 +1,5 @@
 /**
- * useStopInstance —— 停止指令共享 mutation（issue 334，A4-2）
+ * useStopInstance —— 停止指令共享 mutation（issue 334）
  * - 两入口收敛：实例页卡片「停止」/ 仪表盘 InstanceControls「停止」（原先各自实现）
  * - phase 中间态：发令前置 'stopping'（按钮禁用防连点）；WS stopped 确认清除（hook 层），
  *   mutation settled 兜底清除（WS 断线时防按钮永久禁用）

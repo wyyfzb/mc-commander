@@ -49,9 +49,11 @@ describe('Backup Routes - restore（异步化 + restoring 状态机）', () => {
       status: 'completed',
       worldName: 'world',
     });
-    mockManager.getInstance.mockReturnValue({ isRunning: true });
+    mockManager.getInstance.mockReturnValue({ isRunning: true, name: '演示实例' });
 
-    const res = await request(app).post('/api/v1/backups/1/restore');
+    const res = await request(app)
+      .post('/api/v1/backups/1/restore')
+      .send({ confirmName: '演示实例' });
 
     expect(res.status).toBe(409);
     expect(res.body.code).toBe(40003);
@@ -65,9 +67,11 @@ describe('Backup Routes - restore（异步化 + restoring 状态机）', () => {
       status: 'completed',
       worldName: 'world',
     });
-    mockManager.getInstance.mockReturnValue({ isRunning: false });
+    mockManager.getInstance.mockReturnValue({ isRunning: false, name: '演示实例' });
 
-    const res = await request(app).post('/api/v1/backups/2/restore');
+    const res = await request(app)
+      .post('/api/v1/backups/2/restore')
+      .send({ confirmName: '演示实例' });
 
     // 修复前：路由 await restoreBackup 同步解压完成才响应（大世界解压远超
     // 客户端 10s 超时 → 客户端超时误报 + 用户重复点击触发并发恢复）
@@ -81,11 +85,13 @@ describe('Backup Routes - restore（异步化 + restoring 状态机）', () => {
       status: 'completed',
       worldName: 'world',
     });
-    mockManager.getInstance.mockReturnValue({ isRunning: false });
+    mockManager.getInstance.mockReturnValue({ isRunning: false, name: '演示实例' });
     // 另一条备份记录正处于 restoring（恢复中）→ 互斥命中
     BackupModel.findAll.mockReturnValue({ total: 1 });
 
-    const res = await request(app).post('/api/v1/backups/3/restore');
+    const res = await request(app)
+      .post('/api/v1/backups/3/restore')
+      .send({ confirmName: '演示实例' });
 
     // 修复前：restore 入口不检查进行中操作，重复点击可并发执行两个
     // restore 对同一实例目录并发 rename/rmSync/解压，数据二次覆盖
@@ -96,7 +102,9 @@ describe('Backup Routes - restore（异步化 + restoring 状态机）', () => {
   it('备份不存在返回 404', async () => {
     BackupModel.findById.mockReturnValue(null);
 
-    const res = await request(app).post('/api/v1/backups/999/restore');
+    const res = await request(app)
+      .post('/api/v1/backups/999/restore')
+      .send({ confirmName: '演示实例' });
 
     expect(res.status).toBe(404);
   });

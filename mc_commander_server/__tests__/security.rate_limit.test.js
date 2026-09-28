@@ -42,7 +42,7 @@ describe('rateLimit keyGenerator', () => {
     limiter(req, res, next);
     expect(res.status).toHaveBeenCalledWith(429);
     expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ status: 'error', code: 42900 })
+      expect.objectContaining({ status: 'error', code: 42900 }),
     );
   });
 

@@ -13,14 +13,14 @@
   --ref-dark-base: oklch(0.1663 0.0262 269.37);      /* #0A0E1A 基面（终端/深嵌区） */
   --ref-dark-bg: oklch(0.19 0.0262 269.37);          /* 旧页面底档（保留作悬浮渐变参考） */
   --ref-dark-card: oklch(0.235 0.0262 269.37);       /* 卡片（L=0.235） */
-  --ref-dark-hover: oklch(0.28 0.0262 269.37);       /* 悬浮（L=0.28） */
+  --ref-dark-secondary: oklch(0.28 0.0262 269.37);   /* 次级面（L=0.28：chip/轨道/交替行） */
   --ref-dark-popover: oklch(0.325 0.0262 269.37);    /* 弹窗（L=0.325） */
   --ref-dark-border: oklch(0.37 0.0262 269.37);      /* 装饰线参考（L=0.37，见 --ref-border-interactive） */
 
-  /* ── 暗色文字三级（全层背景 ≥4.5:1，WCAG AA）── */
+  /* ── 暗色文字参考档（default/muted 两级对全部背景 ≥4.5:1；subtle 仅供终端深底）── */
   --ref-dark-text-default: oklch(0.9588 0.0086 247.92);  /* #EDF2F7 */
   --ref-dark-text-muted: oklch(0.816 0.0261 255.58);     /* #B8C4D4 */
-  --ref-dark-text-subtle: oklch(0.695 0.0407 257.42);    /* 次要文字（全层 ≥4.5:1，WCAG AA） */
+  --ref-dark-text-subtle: oklch(0.695 0.0407 257.42);    /* 终端次级文字（--mcs-terminal-subtle 专用） */
 
   /* ── 状态六色（暗底全部 ≥4.5:1 实测）── */
   --ref-success: oklch(0.8003 0.1821 151.71);   /* #4ADE80 品牌翠绿 11.1:1 */
@@ -33,14 +33,13 @@
   /* ── 亮色中性（独立映射，不镜像暗色）── */
   --ref-light-bg: oklch(0.9814 0.0045 258.32);  /* #F7F9FC */
   --ref-light-card: oklch(1 0 none);            /* #FFFFFF */
-  --ref-light-hover: oklch(0.9608 0.0039 258.32);   /* #EDF1F6 悬浮 */
+  --ref-light-secondary: oklch(0.9608 0.0039 258.32);   /* #EDF1F6 次级面 */
   --ref-light-popover: oklch(1 0 none);         /* #FFFFFF */
   --ref-light-border: oklch(0.9118 0.0058 258.32);  /* #DCE3EA */
 
-  /* ── 亮色文字三级（全层背景 ≥4.5:1，WCAG AA）── */
+  /* ── 亮色文字两级（全层背景 ≥4.5:1，WCAG AA）── */
   --ref-light-text-default: oklch(0.2795 0.0368 260.03); /* #1E293B */
-  --ref-light-text-muted: oklch(0.4455 0.0374 257.28);   /* #475569 */
-  --ref-light-text-subtle: oklch(0.535 0.0407 257.42);   /* 次要文字（全层 ≥4.5:1，WCAG AA） */
+  --ref-light-text-muted: oklch(0.4455 0.0374 257.28);   /* #475569 次要文字（全程 ≥6:1） */
 
   /* ── 状态六色亮色变体（换档不换色：同色相加深，白底 ≥4.5:1 实测）── */
   --ref-success-light: oklch(0.4479 0.1083 151.33); /* #166534 green-800，对 hover 6.3:1 */
@@ -48,7 +47,7 @@
   --ref-error-light: oklch(0.5054 0.1905 27.52);    /* #B91C1C 6.5:1 */
   --ref-info-light: oklch(0.5 0.1193 242.75);       /* #0369A1 5.9:1 */
   --ref-purple-light: oklch(0.4907 0.2412 292.58);  /* #6D28D9 7.1:1 */
-  --ref-orange-light: oklch(0.5534 0.1739 38.4);    /* #C2410C 5.2:1 */
+  --ref-orange-light: oklch(0.543 0.1739 38.4);    /* #BF3E05（原 #C2410C 在亮色玻璃面上仅 4.38:1） */
 
   /* ── 品牌 accent（亮暗同源翠绿；亮色模式提明度降饱和 + 深绿黑字 10.6:1）
    * WCAG AA 对比度实测（2026-09-01，OKLCH→sRGB→WCAG 相对亮度公式）：
@@ -66,9 +65,6 @@
   --ref-on-accent: oklch(0.2664 0.0628 152.93);   /* #052E16 深绿黑（亮色 accent 上的文字） */
   --ref-on-accent-dark: oklch(0.1663 0.0262 269.37); /* 暗色 accent 上的文字 = 基面 */
 
-  /* ── 破坏性操作深红底（destructive 按钮实底：白字 7.4:1 达标，铁律豁免项）── */
-  --ref-destructive: oklch(0.4865 0.1853 27.42);  /* #991B1B red-800，暗亮同值 */
-
   /* ── 维度三色（Flutter 玩家页维度语义色 #4EC9B0/#F48771/#C586C0 的 OKLCH 等价；
         8px 色点小图形用途，暗底 ≥3:1）── */
   --ref-dimension-overworld: oklch(0.7603 0.1152 177.17);      /* 主世界青绿 */
@@ -77,6 +73,20 @@
   --ref-dimension-overworld-light: oklch(0.4941 0.0723 177.33); /* 亮色加深变体 */
   --ref-dimension-nether-light: oklch(0.4781 0.0844 32.31);
   --ref-dimension-end-light: oklch(0.4582 0.0663 328.62);
+
+  /* ── identity 六槽（非语义实例标识）：色值定档依据与用法边界见 docs/design-review-guidelines.md ── */
+  --ref-identity-1: oklch(0.82 0.09 10);
+  --ref-identity-2: oklch(0.82 0.09 70);
+  --ref-identity-3: oklch(0.82 0.09 130);
+  --ref-identity-4: oklch(0.82 0.09 190);
+  --ref-identity-5: oklch(0.82 0.09 250);
+  --ref-identity-6: oklch(0.82 0.09 310);
+  --ref-identity-1-light: oklch(0.5 0.1 15);
+  --ref-identity-2-light: oklch(0.5 0.1 75);
+  --ref-identity-3-light: oklch(0.5 0.1 135);
+  --ref-identity-4-light: oklch(0.5 0.1 195);
+  --ref-identity-5-light: oklch(0.5 0.1 255);
+  --ref-identity-6-light: oklch(0.5 0.1 315);
 
   /* ── 发丝边框（装饰豁免，白 5-8% 透明）── */
   --ref-border-hairline: rgba(255, 255, 255, 0.06);
@@ -108,5 +118,4 @@
 
   /* ── 遮罩（弹窗/抽屉背板；深黑透明，亮暗同值）── */
   --ref-scrim: rgba(2, 6, 23, 0.5);
-  --ref-scrim-subtle: rgba(2, 6, 23, 0.1);
 }

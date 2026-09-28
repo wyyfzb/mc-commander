@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
+import crypto from 'crypto';
 import { EventEmitter } from 'events';
 
 // ---------- BackupService 编排层错误路径防护网（issue 500） ----------
@@ -34,15 +35,23 @@ vi.mock('child_process', async (importOriginal) => {
 });
 
 import config from '../config.js';
-import { BackupService, getBackupService, sanitizeFileName, estimateDirSize } from '../services/backup.service.js';
+import {
+  BackupService,
+  getBackupService,
+  sanitizeFileName,
+  estimateDirSize,
+} from '../services/backup.service.js';
 import { BackupModel as MockBackupModel } from '../db/backup.model.js';
 import { spawn as mockSpawn } from 'child_process';
-import { ErrorCodes } from '../utils/response.js';
+import { ErrorCodes, AppError } from '../utils/response.js';
 
 // 等待事件（fire-and-forget 流程以事件作为完成信号）
 function waitForEvent(emitter, eventName, timeoutMs = 10000) {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`Timeout waiting for ${eventName}`)), timeoutMs);
+    const timer = setTimeout(
+      () => reject(new Error(`Timeout waiting for ${eventName}`)),
+      timeoutMs,
+    );
     emitter.on(eventName, (data) => {
       clearTimeout(timer);
       resolve(data);
@@ -83,6 +92,26 @@ function createTestInstance(serversDir, instanceId = 's1') {
   return dir;
 }
 
+/** 目录树逐字节快照：相对路径 + sha256，用于断言「原目录未动」 */
+function snapshotTree(dir) {
+  const out = [];
+  const walk = (cur) => {
+    for (const entry of fs
+      .readdirSync(cur, { withFileTypes: true })
+      .sort((a, b) => a.name.localeCompare(b.name))) {
+      const full = path.join(cur, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else
+        out.push([
+          path.relative(dir, full),
+          crypto.createHash('sha256').update(fs.readFileSync(full)).digest('hex'),
+        ]);
+    }
+  };
+  walk(dir);
+  return out;
+}
+
 function makeManager(instanceStub = null) {
   const manager = new EventEmitter();
   manager.getInstance = vi.fn(() => instanceStub);
@@ -99,19 +128,25 @@ describe('spawnProcess 封装：退出码白名单与 ENOENT 转译', () => {
 
   it('退出码不在 okCodes：reject Exit code N（rsync 快照命令失败）', async () => {
     spawnEmits((proc) => proc.emit('close', 1));
-    await expect(service._rsyncSnapshot('s1', path.join(config.backupsDir, 's1', 'snap'), {}))
-      .rejects.toThrow('Exit code 1');
+    await expect(
+      service._rsyncSnapshot('s1', path.join(config.backupsDir, 's1', 'snap'), {}),
+    ).rejects.toThrow('Exit code 1');
   });
 
   it('rsync exit 24（源文件传输中消失）容忍为成功（okCodes [0,24] 语义）', async () => {
     spawnEmits((proc) => proc.emit('close', 24));
-    await expect(service._rsyncSnapshot('s1', path.join(config.backupsDir, 's1', 'snap'), {}))
-      .resolves.toBeUndefined();
+    await expect(
+      service._rsyncSnapshot('s1', path.join(config.backupsDir, 's1', 'snap'), {}),
+    ).resolves.toBeUndefined();
   });
 
   it('命令缺失：ENOENT 转译为可操作提示并保留 code（供降级分支判定）', async () => {
-    spawnEmits((proc) => proc.emit('error', Object.assign(new Error('spawn rsync ENOENT'), { code: 'ENOENT' })));
-    const err = await service._rsyncSnapshot('s1', path.join(config.backupsDir, 's1', 'snap'), {}).catch((e) => e);
+    spawnEmits((proc) =>
+      proc.emit('error', Object.assign(new Error('spawn rsync ENOENT'), { code: 'ENOENT' })),
+    );
+    const err = await service
+      ._rsyncSnapshot('s1', path.join(config.backupsDir, 's1', 'snap'), {})
+      .catch((e) => e);
     expect(err.message).toContain('Command not found: rsync');
     expect(err.code).toBe('ENOENT');
   });
@@ -141,7 +176,9 @@ describe('_createSnapshot 平台分支：win32 降级与 Linux 主路径', () =>
     mockSpawn.mockImplementation((cmd) => {
       const proc = new EventEmitter();
       if (cmd === 'rsync') {
-        queueMicrotask(() => proc.emit('error', Object.assign(new Error('spawn rsync ENOENT'), { code: 'ENOENT' })));
+        queueMicrotask(() =>
+          proc.emit('error', Object.assign(new Error('spawn rsync ENOENT'), { code: 'ENOENT' })),
+        );
       } else {
         queueMicrotask(() => proc.emit('close', 1));
       }
@@ -183,7 +220,9 @@ describe('_restoreFromSnapshot 平台分支：恢复降级路径', () => {
     mockSpawn.mockImplementation((cmd) => {
       const proc = new EventEmitter();
       if (cmd === 'rsync') {
-        queueMicrotask(() => proc.emit('error', Object.assign(new Error('spawn rsync ENOENT'), { code: 'ENOENT' })));
+        queueMicrotask(() =>
+          proc.emit('error', Object.assign(new Error('spawn rsync ENOENT'), { code: 'ENOENT' })),
+        );
       } else {
         queueMicrotask(() => proc.emit('close', 0));
       }
@@ -194,10 +233,30 @@ describe('_restoreFromSnapshot 平台分支：恢复降级路径', () => {
     expect(robocopyCall[1]).toContain('/MIR');
   });
 
-  it('Linux：rsync -a --delete（--delete 仅恢复场景使用）', async () => {
+  it('Linux：rsync -a --delete（--delete 仅恢复场景使用；无进度监听不加 --info）', async () => {
     spawnEmits((proc) => proc.emit('close', 0));
     await service._restoreFromSnapshot('/snap', '/inst', {});
     expect(mockSpawn.mock.calls[0][0]).toBe('rsync');
+    expect(mockSpawn.mock.calls[0][1]).toEqual(['-a', '--delete', '/snap/', '/inst/']);
+  });
+
+  it('Linux：传 onStdout 时才加 --info=progress2（GNU rsync <3.1 不识别该参数，无监听不加）', async () => {
+    spawnEmits((proc) => proc.emit('close', 0));
+    await service._restoreFromSnapshot('/snap', '/inst', { onStdout: () => {} });
+    expect(mockSpawn.mock.calls[0][1]).toEqual([
+      '-a',
+      '--delete',
+      '--info=progress2',
+      '/snap/',
+      '/inst/',
+    ]);
+  });
+
+  it('darwin：即使传 onStdout 也不加 --info=progress2（openrsync/rsync 2.6.9 不识别，传了恢复整体失败）', async () => {
+    setPlatform('darwin');
+    spawnEmits((proc) => proc.emit('close', 0));
+    // 生产路径恒传进度解析器：参数门控必须按平台分支，不能只看 onStdout
+    await service._restoreFromSnapshot('/snap', '/inst', { onStdout: () => {} });
     expect(mockSpawn.mock.calls[0][1]).toEqual(['-a', '--delete', '/snap/', '/inst/']);
   });
 
@@ -217,11 +276,14 @@ describe('_verifySnapshot 完整性边界', () => {
     service = new BackupService(null);
     tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'bu-verify-'));
   });
-  afterEach(() => { if (tmpRoot) fs.rmSync(tmpRoot, { recursive: true, force: true }); });
+  afterEach(() => {
+    if (tmpRoot) fs.rmSync(tmpRoot, { recursive: true, force: true });
+  });
 
   it('快照目录不存在：明确报错（与 restoreBackup 同步段双保险）', async () => {
-    await expect(service._verifySnapshot(path.join(tmpRoot, 'ghost')))
-      .rejects.toThrow('Snapshot directory not found');
+    await expect(service._verifySnapshot(path.join(tmpRoot, 'ghost'))).rejects.toThrow(
+      'Snapshot directory not found',
+    );
   });
 
   it('空快照目录：拒绝（空快照恢复会毁掉原世界）', async () => {
@@ -257,7 +319,9 @@ describe('executeBackup：RCON 保存序列与对称恢复', () => {
     config.backupsDir = backupsDir;
     manager = makeManager();
   });
-  afterEach(() => { if (tmpRoot) fs.rmSync(tmpRoot, { recursive: true, force: true }); });
+  afterEach(() => {
+    if (tmpRoot) fs.rmSync(tmpRoot, { recursive: true, force: true });
+  });
 
   function snapshotWithWorld() {
     const snapshotDir = path.join(backupsDir, 's1', 'snap');
@@ -272,7 +336,12 @@ describe('executeBackup：RCON 保存序列与对称恢复', () => {
     createTestInstance(serversDir);
     const snapshotDir = snapshotWithWorld();
     const send = vi.fn().mockResolvedValue('ok');
-    manager.getInstance = vi.fn(() => ({ isRunning: true, isRconConnected: true, sendCommandWithResponse: send, jarFile: 'server.jar' }));
+    manager.getInstance = vi.fn(() => ({
+      isRunning: true,
+      isRconConnected: true,
+      sendCommandWithResponse: send,
+      jarFile: 'server.jar',
+    }));
     const service = new BackupService(manager);
 
     const done = waitForEvent(manager, 'instance:backupComplete');
@@ -282,35 +351,51 @@ describe('executeBackup：RCON 保存序列与对称恢复', () => {
     expect(send).toHaveBeenCalledWith('save-off', { timeout: 3000 });
     expect(send).toHaveBeenCalledWith('save-all flush', { timeout: 5000 });
     expect(send).toHaveBeenCalledWith('save-on', { timeout: 3000 });
-    expect(send.mock.calls.indexOf(send.mock.calls.find((c) => c[0] === 'save-off')))
-      .toBeLessThan(send.mock.calls.indexOf(send.mock.calls.find((c) => c[0] === 'save-all flush')));
+    expect(send.mock.calls.indexOf(send.mock.calls.find((c) => c[0] === 'save-off'))).toBeLessThan(
+      send.mock.calls.indexOf(send.mock.calls.find((c) => c[0] === 'save-all flush')),
+    );
   });
 
   it('save 序列 RCON 失败非致命：快照继续完成，save-on 仍在 finally 补发', async () => {
     createTestInstance(serversDir);
     const snapshotDir = snapshotWithWorld();
-    const send = vi.fn()
-      .mockRejectedValueOnce(new Error('RCON timeout'))   // save-off 失败
-      .mockRejectedValueOnce(new Error('RCON timeout'));  // save-all flush 失败
-    manager.getInstance = vi.fn(() => ({ isRunning: true, isRconConnected: true, sendCommandWithResponse: send, jarFile: 'server.jar' }));
+    const send = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('RCON timeout')) // save-off 失败
+      .mockRejectedValueOnce(new Error('RCON timeout')); // save-all flush 失败
+    manager.getInstance = vi.fn(() => ({
+      isRunning: true,
+      isRconConnected: true,
+      sendCommandWithResponse: send,
+      jarFile: 'server.jar',
+    }));
     const service = new BackupService(manager);
 
     const done = waitForEvent(manager, 'instance:backupComplete');
     await expect(service.executeBackup('s1', 1, snapshotDir, {})).resolves.toBeUndefined();
     await done;
 
-    expect(MockBackupModel.update).toHaveBeenCalledWith(1, { status: 'completed', size: expect.any(Number) });
+    expect(MockBackupModel.update).toHaveBeenCalledWith(1, {
+      status: 'completed',
+      size: expect.any(Number),
+    });
     expect(send).toHaveBeenCalledWith('save-on', { timeout: 3000 });
   });
 
   it('save-on 失败：backupFailed 事件（phase=save-on）暴露给用户（防永久停写）', async () => {
     createTestInstance(serversDir);
     const snapshotDir = snapshotWithWorld();
-    const send = vi.fn()
-      .mockResolvedValueOnce('ok')                         // save-off
-      .mockResolvedValueOnce('ok')                         // save-all flush
+    const send = vi
+      .fn()
+      .mockResolvedValueOnce('ok') // save-off
+      .mockResolvedValueOnce('ok') // save-all flush
       .mockRejectedValueOnce(new Error('connection lost')); // save-on（finally 中）
-    manager.getInstance = vi.fn(() => ({ isRunning: true, isRconConnected: true, sendCommandWithResponse: send, jarFile: 'server.jar' }));
+    manager.getInstance = vi.fn(() => ({
+      isRunning: true,
+      isRconConnected: true,
+      sendCommandWithResponse: send,
+      jarFile: 'server.jar',
+    }));
     const service = new BackupService(manager);
 
     const done = waitForEvent(manager, 'instance:backupComplete');
@@ -332,7 +417,10 @@ describe('executeBackup：RCON 保存序列与对称恢复', () => {
     const noInstance = new BackupService(manager);
     await expect(noInstance._restoreSaveOn('s1')).resolves.toBeUndefined();
 
-    manager.getInstance = vi.fn(() => ({ isRconConnected: false, sendCommandWithResponse: vi.fn() }));
+    manager.getInstance = vi.fn(() => ({
+      isRconConnected: false,
+      sendCommandWithResponse: vi.fn(),
+    }));
     const noRcon = new BackupService(manager);
     await expect(noRcon._restoreSaveOn('s1')).resolves.toBeUndefined();
   });
@@ -358,7 +446,9 @@ describe('executeRestore 安全网：后台竞态放弃与中段失败回滚', (
     manager = makeManager();
     service = new BackupService(manager);
   });
-  afterEach(() => { if (tmpRoot) fs.rmSync(tmpRoot, { recursive: true, force: true }); });
+  afterEach(() => {
+    if (tmpRoot) fs.rmSync(tmpRoot, { recursive: true, force: true });
+  });
 
   function goodSnapshot() {
     const snapshotDir = path.join(backupsDir, 's1', 'snap-good');
@@ -379,12 +469,14 @@ describe('executeRestore 安全网：后台竞态放弃与中段失败回滚', (
     const failed = waitForEvent(manager, 'instance:restoreFailed');
 
     await expect(
-      service.executeRestore(1, backup, path.join(serversDir, 's1'), snapshotDir, {})
+      service.executeRestore(1, backup, path.join(serversDir, 's1'), snapshotDir, {}),
     ).rejects.toThrow('实例正在运行');
     await failed;
 
     // 二次运行检查发生在 rename 之前：原实例目录完好，无暂存残留
-    expect(fs.readFileSync(path.join(serversDir, 's1', 'world', 'level.dat'), 'utf8')).toBe('world-data');
+    expect(fs.readFileSync(path.join(serversDir, 's1', 'world', 'level.dat'), 'utf8')).toBe(
+      'world-data',
+    );
     expect(fs.readdirSync(serversDir).filter((n) => n.includes('_pre_restore_'))).toEqual([]);
     expect(MockBackupModel.update).toHaveBeenCalledWith(1, { status: 'completed' });
   });
@@ -401,13 +493,17 @@ describe('executeRestore 安全网：后台竞态放弃与中段失败回滚', (
     const failed = waitForEvent(manager, 'instance:restoreFailed');
 
     await expect(
-      service.executeRestore(1, backup, path.join(serversDir, 's1'), snapshotDir, {})
+      service.executeRestore(1, backup, path.join(serversDir, 's1'), snapshotDir, {}),
     ).rejects.toThrow('no level.dat');
     await failed;
 
     // 回滚后：原实例目录（含原始世界数据）从 pre_restore rename 回来
-    expect(fs.readFileSync(path.join(serversDir, 's1', 'world', 'level.dat'), 'utf8')).toBe('world-data');
-    expect(fs.readFileSync(path.join(serversDir, 's1', 'server.properties'), 'utf8')).toBe('level-name=world\n');
+    expect(fs.readFileSync(path.join(serversDir, 's1', 'world', 'level.dat'), 'utf8')).toBe(
+      'world-data',
+    );
+    expect(fs.readFileSync(path.join(serversDir, 's1', 'server.properties'), 'utf8')).toBe(
+      'level-name=world\n',
+    );
     expect(fs.readdirSync(serversDir).filter((n) => n.includes('_pre_restore_'))).toEqual([]);
     expect(fs.existsSync(snapshotDir)).toBe(true); // 快照本身不受影响
     expect(MockBackupModel.update).toHaveBeenCalledWith(1, { status: 'completed' });
@@ -421,13 +517,49 @@ describe('executeRestore 安全网：后台竞态放弃与中段失败回滚', (
       fs.mkdirSync(path.join(serversDir, 's1'), { recursive: true });
       fs.writeFileSync(path.join(serversDir, 's1', 'server.properties'), 'partial-copy');
     });
-    MockBackupModel.update.mockImplementation(() => { throw new Error('db locked'); });
+    MockBackupModel.update.mockImplementation(() => {
+      throw new Error('db locked');
+    });
 
     await expect(
-      service.executeRestore(1, backup, path.join(serversDir, 's1'), snapshotDir, {})
+      service.executeRestore(1, backup, path.join(serversDir, 's1'), snapshotDir, {}),
     ).rejects.toThrow('no level.dat');
     // 回滚的文件系统动作不受状态回写失败影响：原世界已还原
-    expect(fs.readFileSync(path.join(serversDir, 's1', 'world', 'level.dat'), 'utf8')).toBe('world-data');
+    expect(fs.readFileSync(path.join(serversDir, 's1', 'world', 'level.dat'), 'utf8')).toBe(
+      'world-data',
+    );
+  });
+
+  // 状态位复位回归守卫（审查 M1）：pre_restore 在步骤⑥被删掉之后，「回滚能力」已消失，
+  // 此后（DB 回写/日志/事件派发）失败必须保留**已恢复成功**的实例目录。判据若是「本次
+  // 是否换过目录」这个状态位而不复位，就会把一次成功的恢复反向销毁（删掉新目录 +
+  // rename 已不存在的 pre_restore → 实例目录彻底消失）
+  it('恢复已成功后置步骤（状态回写）失败：保留已恢复目录，不得反向销毁', async () => {
+    createTestInstance(serversDir);
+    const snapshotDir = goodSnapshot();
+    manager.getInstance = vi.fn(() => ({ isRunning: false, isRconConnected: false }));
+    // 复制成功且带世界数据：⑤ 校验通过，流程走到 ⑥（删 pre_restore → 回写状态）
+    vi.spyOn(service, '_restoreFromSnapshot').mockImplementation(async (_snap, target) => {
+      fs.mkdirSync(path.join(target, 'world'), { recursive: true });
+      fs.writeFileSync(path.join(target, 'world', 'level.dat'), 'RESTORED');
+    });
+    MockBackupModel.update.mockImplementation(() => {
+      throw new Error('db locked');
+    });
+    const failed = waitForEvent(manager, 'instance:restoreFailed');
+
+    await expect(
+      service.executeRestore(1, backup, path.join(serversDir, 's1'), snapshotDir, {}),
+    ).rejects.toThrow('db locked');
+    await failed;
+
+    // 已恢复的实例目录必须原样保留（内容是新世界，不是被回滚掉的旧数据）
+    expect(fs.readFileSync(path.join(serversDir, 's1', 'world', 'level.dat'), 'utf8')).toBe(
+      'RESTORED',
+    );
+    // 且没有把 pre_restore 又搬回来（旧目录在 ⑥ 已按设计删除）
+    expect(fs.readdirSync(serversDir).filter((n) => n.includes('_pre_restore_'))).toEqual([]);
+    expect(fs.existsSync(snapshotDir)).toBe(true);
   });
 
   it('_copyBackJarFiles：配置 jar 与扫描 *.jar 均复制回；单文件复制失败不中断', async () => {
@@ -458,7 +590,9 @@ describe('executeRestore 安全网：后台竞态放弃与中段失败回滚', (
   it('_copyBackJarFiles：pre_restore 不可读时按配置 jarFile 兜底（不抛错）', () => {
     const newInstance = path.join(serversDir, 'new');
     fs.mkdirSync(newInstance, { recursive: true });
-    expect(() => service._copyBackJarFiles(path.join(serversDir, 'ghost-pre'), newInstance, 'server.jar')).not.toThrow();
+    expect(() =>
+      service._copyBackJarFiles(path.join(serversDir, 'ghost-pre'), newInstance, 'server.jar'),
+    ).not.toThrow();
     expect(fs.existsSync(path.join(newInstance, 'server.jar'))).toBe(false);
   });
 
@@ -493,13 +627,17 @@ describe('createBackup / restoreBackup / deleteBackup 入口校验缺口收口',
     manager = makeManager();
     service = new BackupService(manager);
   });
-  afterEach(() => { if (tmpRoot) fs.rmSync(tmpRoot, { recursive: true, force: true }); });
+  afterEach(() => {
+    if (tmpRoot) fs.rmSync(tmpRoot, { recursive: true, force: true });
+  });
 
   it('同实例已有 creating 中：互斥拒绝（BACKUP_IN_PROGRESS，覆盖调度器入口）', async () => {
     MockBackupModel.findAll.mockImplementation((q) =>
-      q.status === 'creating' ? { total: 1, backups: [] } : { total: 0, backups: [] });
-    await expect(service.createBackup('s1', {}))
-      .rejects.toMatchObject({ code: ErrorCodes.BACKUP_IN_PROGRESS.code });
+      q.status === 'creating' ? { total: 1, backups: [] } : { total: 0, backups: [] },
+    );
+    await expect(service.createBackup('s1', {})).rejects.toMatchObject({
+      code: ErrorCodes.BACKUP_IN_PROGRESS.code,
+    });
     expect(MockBackupModel.create).not.toHaveBeenCalled();
   });
 
@@ -523,43 +661,264 @@ describe('createBackup / restoreBackup / deleteBackup 入口校验缺口收口',
 
   it('restoreBackup：备份不存在 → BACKUP_NOT_FOUND', async () => {
     MockBackupModel.findByIdWithPath.mockReturnValue(null);
-    await expect(service.restoreBackup(404))
-      .rejects.toMatchObject({ code: ErrorCodes.BACKUP_NOT_FOUND.code });
+    await expect(service.restoreBackup(404)).rejects.toMatchObject({
+      code: ErrorCodes.BACKUP_NOT_FOUND.code,
+    });
   });
 
   it('restoreBackup：实例目录不存在 → 明确报错（同步段拦截）', async () => {
     const snapshotDir = path.join(backupsDir, 'gone', 'snap');
     fs.mkdirSync(snapshotDir, { recursive: true });
     MockBackupModel.findByIdWithPath.mockReturnValue({
-      id: 2, instance_id: 'gone', status: 'completed', format: 'snapshot', file_path: snapshotDir,
+      id: 2,
+      instance_id: 'gone',
+      status: 'completed',
+      file_path: snapshotDir,
     });
     await expect(service.restoreBackup(2)).rejects.toThrow('Instance directory not found');
   });
 
-  it('restoreBackup：file_path 指向文件而非目录 → 拒绝（异常数据/旧格式错标）', async () => {
-    createTestInstance(serversDir);
+  it('restoreBackup：file_path 指向文件而非目录 → 4xx（VALIDATION_ERROR，与下载侧同码）且原实例目录未动', async () => {
+    const instanceDir = createTestInstance(serversDir);
+    // 哨兵：恢复若在任何阶段触碰实例目录，下面的逐字节快照必然变化
+    fs.writeFileSync(path.join(instanceDir, 'SENTINEL.txt'), 'DO-NOT-TOUCH');
+    const before = snapshotTree(instanceDir);
+
     const filePath = path.join(backupsDir, 's1', 'not-a-dir');
     fs.mkdirSync(path.join(backupsDir, 's1'), { recursive: true });
-    fs.writeFileSync(filePath, 'legacy zip bytes');
+    fs.writeFileSync(filePath, 'stray file bytes');
     MockBackupModel.findByIdWithPath.mockReturnValue({
-      id: 3, instance_id: 's1', status: 'completed', format: 'snapshot', file_path: filePath,
+      id: 3,
+      instance_id: 's1',
+      status: 'completed',
+      file_path: filePath,
     });
-    await expect(service.restoreBackup(3)).rejects.toThrow('Snapshot path is not a directory');
+
+    const err = await service.restoreBackup(3).then(
+      () => null,
+      (e) => e,
+    );
+    // 钉住错误形状：4xx 语义的 AppError，不是普通 Error（500）
+    expect(err).toBeInstanceOf(AppError);
+    expect(err.code).toBe(ErrorCodes.VALIDATION_ERROR.code);
+    expect(err.status).toBe(ErrorCodes.VALIDATION_ERROR.status);
+    expect(err.message).toBe('Snapshot path is not a directory');
+    // 同步段拦截：未置 restoring、未开后台恢复
+    expect(MockBackupModel.update).not.toHaveBeenCalled();
+    // 原实例目录逐字节未动（含 sentinel），且无 pre_restore 暂存残留
+    expect(snapshotTree(instanceDir)).toEqual(before);
+    expect(fs.readdirSync(serversDir).filter((n) => n.includes('_pre_restore_'))).toEqual([]);
+  });
+
+  it.each([
+    ['null', null],
+    ['empty string', ''],
+    ['whitespace-only', '   '],
+    ['non-string', 12345],
+  ])(
+    'restoreBackup：file_path 为 %s → BACKUP_NOT_FOUND（不被当作 cwd，也不抛普通 Error）',
+    async (_label, filePath) => {
+      createTestInstance(serversDir);
+      MockBackupModel.findByIdWithPath.mockReturnValue({
+        id: 4,
+        instance_id: 's1',
+        status: 'completed',
+        file_path: filePath,
+      });
+      await expect(service.restoreBackup(4)).rejects.toMatchObject({
+        code: ErrorCodes.BACKUP_NOT_FOUND.code,
+      });
+    },
+  );
+
+  it('restoreBackup：快照目录在磁盘上不存在 → BACKUP_NOT_FOUND（与下载侧同码，不再落 500）', async () => {
+    const instanceDir = createTestInstance(serversDir);
+    const before = snapshotTree(instanceDir);
+    MockBackupModel.findByIdWithPath.mockReturnValue({
+      id: 5,
+      instance_id: 's1',
+      status: 'completed',
+      file_path: path.join(service.backupsDir, 's1', 'ghost-snapshot'),
+    });
+    const err = await service.restoreBackup(5).then(
+      () => null,
+      (e) => e,
+    );
+    expect(err).toBeInstanceOf(AppError);
+    expect(err.code).toBe(ErrorCodes.BACKUP_NOT_FOUND.code);
+    expect(err.status).toBe(ErrorCodes.BACKUP_NOT_FOUND.status);
+    expect(MockBackupModel.update).not.toHaveBeenCalled();
+    expect(snapshotTree(instanceDir)).toEqual(before);
   });
 
   it('deleteBackup：备份不存在 → BACKUP_NOT_FOUND', async () => {
     MockBackupModel.findByIdWithPath.mockReturnValue(null);
-    await expect(service.deleteBackup(404))
-      .rejects.toMatchObject({ code: ErrorCodes.BACKUP_NOT_FOUND.code });
+    await expect(service.deleteBackup(404)).rejects.toMatchObject({
+      code: ErrorCodes.BACKUP_NOT_FOUND.code,
+    });
   });
 
   it('deleteBackup：creating 状态互斥（与 restoring 同一拒绝分支）', async () => {
     MockBackupModel.findByIdWithPath.mockReturnValue({
-      id: 5, instance_id: 's1', status: 'creating', file_path: null,
+      id: 5,
+      instance_id: 's1',
+      status: 'creating',
+      file_path: null,
     });
-    await expect(service.deleteBackup(5))
-      .rejects.toMatchObject({ code: ErrorCodes.BACKUP_IN_PROGRESS.code });
+    await expect(service.deleteBackup(5)).rejects.toMatchObject({
+      code: ErrorCodes.BACKUP_IN_PROGRESS.code,
+    });
     expect(MockBackupModel.delete).not.toHaveBeenCalled();
+  });
+});
+
+// 快照归属校验：常规快照必须住在「本行实例」的备份子目录内；挂载来的
+// 归档快照（source_archive_id 非空）住在**原归档实例**目录下，基准放宽到 backupsDir，
+// 但仍被「一级目录 = 声明的归档 id」卡住。放宽是本轮修的关键：归档快照的实例 id
+// 不复用，标注行却按常规基准校验时，跨实例挂载出来的条目一恢复就是 403
+describe('restoreBackup 快照归属校验：常规行严格 / 挂载行放宽但不越界', () => {
+  let tmpRoot;
+  let serversDir;
+  let backupsDir;
+  let service;
+  let executeSpy;
+
+  const ARCHIVE_ID = 'paper-1a2b3c4d';
+
+  /** 造一份可用快照（level.dat 位于 <world>/ 直接层）并返回路径 */
+  function makeSnapshot(parentDir, name = 'snap-a', worldName = 'world') {
+    const dir = path.join(parentDir, name);
+    fs.mkdirSync(path.join(dir, worldName), { recursive: true });
+    fs.writeFileSync(path.join(dir, worldName, 'level.dat'), 'archived-world');
+    return dir;
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    MockBackupModel.findAll.mockReturnValue({ total: 0, backups: [] });
+    MockBackupModel.update.mockReset().mockImplementation((id, data) => ({ id, ...data }));
+    MockBackupModel.resetStaleInProgress.mockReset();
+    tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'bu-own-'));
+    serversDir = path.join(tmpRoot, 'servers');
+    backupsDir = path.join(tmpRoot, 'backups');
+    fs.mkdirSync(serversDir, { recursive: true });
+    fs.mkdirSync(backupsDir, { recursive: true });
+    config.serversDir = serversDir;
+    config.backupsDir = backupsDir;
+    service = new BackupService(makeManager());
+    // 同步段通过后 restoreBackup 会 fire-and-forget 后台恢复：本组只验归属门，
+    // 替身后台执行，断言「放行 = 置 restoring 并进入后台」
+    executeSpy = vi.spyOn(BackupService.prototype, 'executeRestore').mockResolvedValue(true);
+  });
+  afterEach(() => {
+    if (tmpRoot) fs.rmSync(tmpRoot, { recursive: true, force: true });
+  });
+
+  it('挂载行：快照位于原归档实例目录下 → 放行（跨实例挂载后一键恢复可达）', async () => {
+    createTestInstance(serversDir, 'fabric-99999999');
+    const snapshotDir = makeSnapshot(path.join(backupsDir, ARCHIVE_ID));
+    MockBackupModel.findByIdWithPath.mockReturnValue({
+      id: 7,
+      instance_id: 'fabric-99999999',
+      status: 'completed',
+      file_path: snapshotDir,
+      source_archive_id: ARCHIVE_ID,
+    });
+
+    await expect(service.restoreBackup(7)).resolves.toBe(true);
+    expect(MockBackupModel.update).toHaveBeenCalledWith(7, { status: 'restoring' });
+    expect(executeSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('挂载行：声明归档 id 与所在目录不一致（记录被改）→ 403 且不置 restoring', async () => {
+    createTestInstance(serversDir, 'fabric-99999999');
+    const snapshotDir = makeSnapshot(path.join(backupsDir, 'paper-9f9f9f9f'));
+    MockBackupModel.findByIdWithPath.mockReturnValue({
+      id: 8,
+      instance_id: 'fabric-99999999',
+      status: 'completed',
+      file_path: snapshotDir,
+      source_archive_id: ARCHIVE_ID,
+    });
+
+    const err = await service.restoreBackup(8).then(
+      () => null,
+      (e) => e,
+    );
+    expect(err).toBeInstanceOf(AppError);
+    expect(err.code).toBe(ErrorCodes.PATH_TRAVERSAL_DETECTED.code);
+    expect(err.status).toBe(ErrorCodes.PATH_TRAVERSAL_DETECTED.status);
+    expect(MockBackupModel.update).not.toHaveBeenCalled();
+    expect(executeSpy).not.toHaveBeenCalled();
+  });
+
+  it('挂载行：file_path 指到 backupsDir 之外 → 403（放宽不等于放弃包含校验）', async () => {
+    createTestInstance(serversDir, 'fabric-99999999');
+    const outsideDir = path.join(tmpRoot, 'elsewhere', ARCHIVE_ID, 'snap-a');
+    fs.mkdirSync(path.join(outsideDir, 'world'), { recursive: true });
+    fs.writeFileSync(path.join(outsideDir, 'world', 'level.dat'), 'x');
+    MockBackupModel.findByIdWithPath.mockReturnValue({
+      id: 9,
+      instance_id: 'fabric-99999999',
+      status: 'completed',
+      file_path: outsideDir,
+      source_archive_id: ARCHIVE_ID,
+    });
+
+    await expect(service.restoreBackup(9)).rejects.toMatchObject({
+      code: ErrorCodes.PATH_TRAVERSAL_DETECTED.code,
+    });
+    expect(MockBackupModel.update).not.toHaveBeenCalled();
+  });
+
+  it('挂载行：file_path 指向归档目录本身（不是快照子目录）→ 403', async () => {
+    createTestInstance(serversDir, 'fabric-99999999');
+    const archiveDir = path.join(backupsDir, ARCHIVE_ID);
+    makeSnapshot(archiveDir);
+    MockBackupModel.findByIdWithPath.mockReturnValue({
+      id: 10,
+      instance_id: 'fabric-99999999',
+      status: 'completed',
+      file_path: archiveDir,
+      source_archive_id: ARCHIVE_ID,
+    });
+
+    await expect(service.restoreBackup(10)).rejects.toMatchObject({
+      code: ErrorCodes.PATH_TRAVERSAL_DETECTED.code,
+    });
+    expect(MockBackupModel.update).not.toHaveBeenCalled();
+  });
+
+  it('常规行（无挂载标记）：指向另一个实例的快照目录 → 403（原判据不因本次放宽而松动）', async () => {
+    createTestInstance(serversDir, 's1');
+    const snapshotDir = makeSnapshot(path.join(backupsDir, 'paper-1a2b3c4d'));
+    MockBackupModel.findByIdWithPath.mockReturnValue({
+      id: 11,
+      instance_id: 's1',
+      status: 'completed',
+      file_path: snapshotDir,
+      source_archive_id: null,
+    });
+
+    await expect(service.restoreBackup(11)).rejects.toMatchObject({
+      code: ErrorCodes.PATH_TRAVERSAL_DETECTED.code,
+    });
+    expect(MockBackupModel.update).not.toHaveBeenCalled();
+  });
+
+  it('常规行：指向本实例备份子目录 → 照常放行（放宽分支不影响既有路径）', async () => {
+    createTestInstance(serversDir, 's1');
+    const snapshotDir = makeSnapshot(path.join(backupsDir, 's1'));
+    MockBackupModel.findByIdWithPath.mockReturnValue({
+      id: 12,
+      instance_id: 's1',
+      status: 'completed',
+      file_path: snapshotDir,
+      source_archive_id: null,
+    });
+
+    await expect(service.restoreBackup(12)).resolves.toBe(true);
+    expect(executeSpy).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -593,7 +952,8 @@ describe('cleanupOldBackups：时间上限与失败容忍', () => {
       return { id: i + 1, createdAt: d.toISOString() };
     });
     MockBackupModel.findAll.mockReturnValue({ total: 3, backups });
-    const deleteSpy = vi.spyOn(service, 'deleteBackup')
+    const deleteSpy = vi
+      .spyOn(service, 'deleteBackup')
       .mockRejectedValueOnce(new Error('rm failed'))
       .mockResolvedValue(true);
 
@@ -613,7 +973,9 @@ describe('detectOrphanedPreRestoreDirs：崩溃残留检测', () => {
     fs.mkdirSync(serversDir, { recursive: true });
     config.serversDir = serversDir;
   });
-  afterEach(() => { if (tmpRoot) fs.rmSync(tmpRoot, { recursive: true, force: true }); });
+  afterEach(() => {
+    if (tmpRoot) fs.rmSync(tmpRoot, { recursive: true, force: true });
+  });
 
   it('残留 pre_restore 目录检出并告警；正常实例目录不计入', () => {
     fs.mkdirSync(path.join(serversDir, 's1_pre_restore_2026-09-05T10-00-00-000Z'));
@@ -635,7 +997,9 @@ describe('estimateDirSize 边界：目录缺失 / 排除清单 / 统计竞态', 
   beforeEach(() => {
     tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'bu-size-'));
   });
-  afterEach(() => { if (tmpRoot) fs.rmSync(tmpRoot, { recursive: true, force: true }); });
+  afterEach(() => {
+    if (tmpRoot) fs.rmSync(tmpRoot, { recursive: true, force: true });
+  });
 
   it('目录不存在：返回 0（由后续备份/恢复路径报错）', async () => {
     await expect(estimateDirSize(path.join(tmpRoot, 'ghost'))).resolves.toBe(0);

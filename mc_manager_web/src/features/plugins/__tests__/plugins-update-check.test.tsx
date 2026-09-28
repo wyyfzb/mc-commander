@@ -1,5 +1,5 @@
 /**
- * 插件更新检测前端测试（feat-8 延伸）
+ * 插件更新检测前端测试（延伸）
  * - apiCheckPluginUpdates：MSW 拦截 POST check-updates（信封解包 + 超时参数）
  * - MarketSheet initialQuery：打开时预填搜索词（更新徽章 → 市场直达），关闭后清预填
  */
@@ -48,7 +48,10 @@ const UPDATE_FIXTURE = {
 let updateStatus = 200
 const server = setupServer(
   http.post('/api/v1/instances/demo/plugins/check-updates', () =>
-    HttpResponse.json({ status: 'ok', code: 0, message: 'ok', data: UPDATE_FIXTURE }, { status: updateStatus }),
+    HttpResponse.json(
+      { status: 'ok', code: 0, message: 'ok', data: UPDATE_FIXTURE },
+      { status: updateStatus },
+    ),
   ),
   http.get('/api/v1/instances/demo/plugins', () =>
     HttpResponse.json({ status: 'ok', code: 0, message: 'ok', data: { plugins: [] } }),
@@ -111,7 +114,9 @@ describe('apiCheckPluginUpdates', () => {
         ),
       ),
     )
-    await expect(apiCheckPluginUpdates(useConnectionStore.getState(), 'demo')).rejects.toMatchObject({
+    await expect(
+      apiCheckPluginUpdates(useConnectionStore.getState(), 'demo'),
+    ).rejects.toMatchObject({
       code: 50301,
     })
   })

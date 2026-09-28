@@ -5,6 +5,7 @@
  */
 import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Card } from '@/components/mcs/card'
 
 interface UploadProgressBarProps {
   /** 上传中条目（单文件同一时刻仅一个活跃） */
@@ -14,8 +15,9 @@ interface UploadProgressBarProps {
 
 export function UploadProgressBar({ uploading, onCancel }: UploadProgressBarProps) {
   return (
-    <div
-      className="mx-3 mt-2 flex shrink-0 items-center gap-3 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted px-4 py-3 shadow-mcs-card"
+    <Card
+      as="div"
+      className="mx-3 mt-2 flex shrink-0 items-center gap-3 px-4 py-3"
       data-testid="upload-progress"
       aria-live="polite"
     >
@@ -24,7 +26,9 @@ export function UploadProgressBar({ uploading, onCancel }: UploadProgressBarProp
           <p className="truncate text-mcs-sm text-mcs-text-default" title={uploading.name}>
             正在上传 {uploading.name}
           </p>
-          <span className="mcs-num text-mcs-xs leading-none text-mcs-text-muted">{uploading.pct}%</span>
+          <span className="mcs-num text-mcs-xs leading-none text-mcs-text-muted">
+            {uploading.pct}%
+          </span>
         </div>
         <div
           role="progressbar"
@@ -32,11 +36,11 @@ export function UploadProgressBar({ uploading, onCancel }: UploadProgressBarProp
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={uploading.pct}
-          className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-mcs-bg-hover"
+          className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-mcs-bg-secondary"
         >
           <div
-            className="h-full rounded-full bg-mcs-accent transition-[width] duration-mcs-base"
-            style={{ width: `${uploading.pct}%` }}
+            className="h-full w-full rounded-full bg-mcs-accent transition-transform duration-mcs-base"
+            style={{ transform: `translateX(${uploading.pct - 100}%)` }}
           />
         </div>
       </div>
@@ -44,6 +48,6 @@ export function UploadProgressBar({ uploading, onCancel }: UploadProgressBarProp
         <X className="size-3.5" aria-hidden />
         取消
       </Button>
-    </div>
+    </Card>
   )
 }

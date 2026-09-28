@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import type { AuditLogItem } from '@/api/types'
-import { AuditBody } from '../audit-tables'
+import userEvent from '@testing-library/user-event'
+import { TooltipProvider } from '@/components/ui/tooltip'
+import type { AuditLogItem, CommandHistoryItem } from '@/api/types'
+import { AuditBody, CmdBody } from '../audit-tables'
 
 /** 字段结构对齐 mc-schemas 的 auditLogItemSchema，值一律虚构 */
 function makeLog(overrides: Partial<AuditLogItem>): AuditLogItem {
@@ -14,6 +16,21 @@ function makeLog(overrides: Partial<AuditLogItem>): AuditLogItem {
     detail: null,
     source: 'web',
     createdAt: 'not-a-date',
+    ...overrides,
+  }
+}
+
+/** 字段结构对齐 mc-schemas 的 commandHistoryItemSchema，值一律虚构 */
+function makeCmd(overrides: Partial<CommandHistoryItem>): CommandHistoryItem {
+  return {
+    id: 1,
+    instanceId: 'demo',
+    command: 'whitelist add Steve',
+    source: 'web',
+    success: true,
+    response: null,
+    durationMs: 12,
+    createdAt: '2026-01-02T03:04:05Z',
     ...overrides,
   }
 }
@@ -52,9 +69,7 @@ describe('AuditBody（issue 481 拆分后行为级测试）', () => {
   })
 
   it('嵌套对象详情降级 JSON 字符串展示（审计详情兜底路径）', () => {
-    const logs: AuditLogItem[] = [
-      makeLog({ action: 'CONFIG_CHANGE', detail: { extra: { a: 1 } } }),
-    ]
+    const logs: AuditLogItem[] = [makeLog({ action: 'CONFIG_CHANGE', detail: { extra: { a: 1 } } })]
     render(
       <table>
         <AuditBody logs={logs} />
@@ -62,5 +77,47 @@ describe('AuditBody（issue 481 拆分后行为级测试）', () => {
     )
     expect(screen.getByText('配置修改')).toBeInTheDocument()
     expect(screen.getByText('extra: {"a":1}')).toBeInTheDocument()
+  })
+
+  it('详情单元格 title 保留原始 JSON（人性化文案截断时的悬停兜底）', () => {
+    const logs: AuditLogItem[] = [
+      makeLog({ action: 'CONFIG_CHANGE', detail: { key: 'view-distance', from: '10', to: '12' } }),
+    ]
+    render(
+      <table>
+        <AuditBody logs={logs} />
+      </table>,
+    )
+    expect(screen.getByText('view-distance: 10 → 12')).toHaveAttribute(
+      'title',
+      '{"key":"view-distance","from":"10","to":"12"}',
+    )
+  })
+})
+
+describe('CmdBody（命令历史表体）', () => {
+  it('失败行取解释：response 内容 break-all 防长串溢出', async () => {
+    const user = userEvent.setup()
+    render(
+      <TooltipProvider>
+        <table>
+          <CmdBody cmds={[makeCmd({ success: false, response: 'ECONNREFUSED 1.2.3.4' })]} />
+        </table>
+      </TooltipProvider>,
+    )
+    // 点按而非 hover：解释走 Popover，键盘/触屏与鼠标必须走同一条路
+    await user.click(screen.getByRole('button', { name: '失败原因' }))
+    expect(await screen.findByText('ECONNREFUSED 1.2.3.4')).toHaveClass('break-all')
+  })
+
+  it('成功行不渲染失败 tooltip', () => {
+    render(
+      <TooltipProvider>
+        <table>
+          <CmdBody cmds={[makeCmd({ success: true })]} />
+        </table>
+      </TooltipProvider>,
+    )
+    expect(screen.queryByText('失败原因')).not.toBeInTheDocument()
   })
 })

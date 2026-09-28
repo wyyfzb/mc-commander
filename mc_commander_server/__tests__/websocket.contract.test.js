@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { EventEmitter } from 'events';
 import { setupWebSocket, WSEvents } from '../websocket.js';
+import { wsStatusSnapshotSchema } from '@mc-commander/schemas';
 
-// vitest.config.js 注入 API_KEY=test-api-key-for-unit-tests，
-// authenticateWebSocket 通过 config.apiKey 读取该值，无需 mock 认证逻辑
+// vitest.config.js 注入 API_KEY_HASH（对应明文 test-api-key-for-unit-tests），
+// authenticateWebSocket 通过 config.apiKeyHash 校验该值，无需 mock 认证逻辑
 const TEST_API_KEY = 'test-api-key-for-unit-tests';
 
 /** 构造一个假的 WebSocket 客户端（EventEmitter + send 间谍） */
@@ -65,7 +66,11 @@ describe('WebSocket 事件格式契约', () => {
     it('instance:log 应广播 type=log 且 data 含 text/type 字段', () => {
       const ws = connectAndSubscribe('s1');
 
-      serverManager.emit('instance:log', { instanceId: 's1', text: '[Server] Done', type: 'stdout' });
+      serverManager.emit('instance:log', {
+        instanceId: 's1',
+        text: '[Server] Done',
+        type: 'stdout',
+      });
 
       const msg = sentMessage(ws);
       expect(msg.type).toBe('log');
@@ -86,11 +91,14 @@ describe('WebSocket 事件格式契约', () => {
       expect(msg.data).toMatchObject({ event: 'stopped', code: 0 });
     });
 
-    it('subscribe 应立即回发 status 快照，data 含 status/isRunning/players/tps', () => {
+    it('subscribe 应立即回发 status 快照，且逐字段满足 wsStatusSnapshotSchema', () => {
+      // 桩用真实 ManagedInstance 的形状：没有 status 字段、players 是 Map。
+      // 旧实现手抄了 {status, isRunning, players, tps}：status 取到 undefined、
+      // players 被 JSON.stringify 成 {} —— 两项都违反契约 schema，且与 e2e mock
+      // 及前端 applyWsSnapshot 的口径不一致
       serverManager.getInstance.mockReturnValue({
-        status: 'running',
         isRunning: true,
-        players: [{ name: 'Alice' }],
+        players: new Map([['Alice', { name: 'Alice' }]]),
         tps: 20,
       });
       const ws = createFakeWs();
@@ -103,7 +111,25 @@ describe('WebSocket 事件格式契约', () => {
       expect(msg.instanceId).toBe('s1');
       expect(Object.keys(msg.data).sort()).toEqual(['isRunning', 'players', 'status', 'tps']);
       expect(msg.data.isRunning).toBe(true);
-      expect(msg.data.players).toEqual([{ name: 'Alice' }]);
+      expect(msg.data.status).toBe('running'); // 由 isRunning 派生（与 mock 同款）
+      expect(msg.data.players).toEqual([{ name: 'Alice' }]); // Map → 数组
+      expect(msg.data.tps).toBe(20);
+      // 契约面：客户端可用契约 schema 直接校验该 payload
+      expect(wsStatusSnapshotSchema.safeParse(msg.data).success).toBe(true);
+    });
+
+    it('停止态快照：status 派生为 stopped、tps 非数值时归 null（契约允许 nullable）', () => {
+      serverManager.getInstance.mockReturnValue({
+        isRunning: false,
+        players: new Map(),
+        tps: null,
+      });
+      const ws = createFakeWs();
+      wss.emit('connection', ws, { _wsApiKey: TEST_API_KEY });
+      ws.emit('message', JSON.stringify({ type: 'subscribe', instanceId: 's1' }));
+
+      const msg = sentMessage(ws);
+      expect(msg.data).toEqual({ status: 'stopped', isRunning: false, players: [], tps: null });
     });
   });
 

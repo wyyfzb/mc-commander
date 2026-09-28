@@ -1,9 +1,17 @@
 /**
- * 玩家筛选/排序纯函数单测
+ * 玩家筛选/排序纯函数单测 + UI store 持久化
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest'
 import type { Player } from '@/api/types'
-import { applyPlayersFilter, matchesModeFilter, matchesSearch, sortPlayers } from '../store'
+import {
+  applyPlayersFilter,
+  matchesModeFilter,
+  matchesSearch,
+  sortPlayers,
+  DEFAULT_PLAYERS_FILTER,
+  usePlayersUiStore,
+  type PlayersFilter,
+} from '../store'
 
 const basePlayer = (overrides: Partial<Player>): Player => ({
   name: 'Steve',
@@ -88,8 +96,12 @@ describe('matchesSearch', () => {
 
 describe('sortPlayers（收敛排序规则）', () => {
   it('在线优先', () => {
-    expect(sortPlayers(basePlayer({ isOnline: true }), basePlayer({ isOnline: false }))).toBeLessThan(0)
-    expect(sortPlayers(basePlayer({ isOnline: false }), basePlayer({ isOnline: true }))).toBeGreaterThan(0)
+    expect(
+      sortPlayers(basePlayer({ isOnline: true }), basePlayer({ isOnline: false })),
+    ).toBeLessThan(0)
+    expect(
+      sortPlayers(basePlayer({ isOnline: false }), basePlayer({ isOnline: true })),
+    ).toBeGreaterThan(0)
   })
   it('同为在线：OP 优先', () => {
     expect(sortPlayers(basePlayer({ isOp: true }), basePlayer({ isOp: false }))).toBeLessThan(0)
@@ -115,8 +127,18 @@ describe('sortPlayers（收敛排序规则）', () => {
 describe('applyPlayersFilter（完整流水线）', () => {
   const players = [
     basePlayer({ name: 'Steve', isOnline: true, isOp: true, totalPlayTime: 100 }),
-    basePlayer({ name: 'Alex', isOnline: false, totalPlayTime: 9000, lastSeen: '2026-08-13T00:00:00.000Z' }),
-    basePlayer({ name: 'Zed', isOnline: false, isBanned: true, lastSeen: '2026-08-10T00:00:00.000Z' }),
+    basePlayer({
+      name: 'Alex',
+      isOnline: false,
+      totalPlayTime: 9000,
+      lastSeen: '2026-08-13T00:00:00.000Z',
+    }),
+    basePlayer({
+      name: 'Zed',
+      isOnline: false,
+      isBanned: true,
+      lastSeen: '2026-08-10T00:00:00.000Z',
+    }),
     basePlayer({ name: 'Bot_x', isOnline: true, isFakePlayer: true }),
   ]
 
@@ -126,9 +148,19 @@ describe('applyPlayersFilter（完整流水线）', () => {
   })
 
   it('搜索 + 状态筛选组合', () => {
-    const result = applyPlayersFilter(players, { q: '', mode: 'banned', gameMode: '', dimension: '' })
+    const result = applyPlayersFilter(players, {
+      q: '',
+      mode: 'banned',
+      gameMode: '',
+      dimension: '',
+    })
     expect(result.map((p) => p.name)).toEqual(['Zed'])
-    const bySearch = applyPlayersFilter(players, { q: 'bot', mode: 'all', gameMode: '', dimension: '' })
+    const bySearch = applyPlayersFilter(players, {
+      q: 'bot',
+      mode: 'all',
+      gameMode: '',
+      dimension: '',
+    })
     expect(bySearch.map((p) => p.name)).toEqual(['Bot_x'])
   })
 
@@ -138,14 +170,84 @@ describe('applyPlayersFilter（完整流水线）', () => {
       basePlayer({ name: 'B', gameMode: 'survival' }),
     ]
     expect(
-      applyPlayersFilter(gmPlayers, { q: '', mode: 'all', gameMode: 'creative', dimension: '' }).map((p) => p.name),
+      applyPlayersFilter(gmPlayers, {
+        q: '',
+        mode: 'all',
+        gameMode: 'creative',
+        dimension: '',
+      }).map((p) => p.name),
     ).toEqual(['A'])
     const dimPlayers = [
       basePlayer({ name: 'A', dimension: 'nether' }),
       basePlayer({ name: 'B', dimension: 'end' }),
     ]
     expect(
-      applyPlayersFilter(dimPlayers, { q: '', mode: 'all', gameMode: '', dimension: 'nether' }).map((p) => p.name),
+      applyPlayersFilter(dimPlayers, { q: '', mode: 'all', gameMode: '', dimension: 'nether' }).map(
+        (p) => p.name,
+      ),
     ).toEqual(['A'])
+  })
+})
+
+describe('usePlayersUiStore persist（筛选状态记忆）', () => {
+  const STORAGE_KEY = 'mcs-players-ui'
+
+  beforeEach(() => {
+    localStorage.clear()
+    usePlayersUiStore.setState({ filter: { ...DEFAULT_PLAYERS_FILTER } })
+  })
+
+  afterEach(() => {
+    localStorage.clear()
+  })
+
+  it('筛选变更写入 localStorage（刷新/重开浏览器不丢筛选条件）', () => {
+    usePlayersUiStore.getState().setFilter({ q: 'Steve', mode: 'online' })
+
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY)!) as {
+      state: { filter: PlayersFilter }
+    }
+    expect(stored.state.filter).toMatchObject({ q: 'Steve', mode: 'online' })
+  })
+
+  it('会话态（选中集/详情面板）不持久化', () => {
+    usePlayersUiStore.setState({
+      selectedUuids: ['uuid-1'],
+      detail: { playerName: 'Steve', tab: 'overview', batchMode: false },
+    })
+
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY)!) as {
+      state: Record<string, unknown>
+    }
+    expect(stored.state).not.toHaveProperty('selectedUuids')
+    expect(stored.state).not.toHaveProperty('detail')
+  })
+
+  it('切换实例重置筛选（resetForInstance 同步清除持久化值）', () => {
+    usePlayersUiStore.getState().setFilter({ q: 'Steve' })
+    usePlayersUiStore.getState().resetForInstance()
+
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY)!) as {
+      state: { filter: PlayersFilter }
+    }
+    expect(stored.state.filter).toEqual(DEFAULT_PLAYERS_FILTER)
+  })
+
+  it('旧存储缺新字段时以默认值兜底（防止列表被静默过滤成空）', async () => {
+    // 模拟「未来版本新增筛选字段、旧 localStorage 只有 q」的存储形态
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ state: { filter: { q: 'Steve' } }, version: 0 }),
+    )
+
+    // 动态 import 触发 store 重建 + 重合并
+    vi.resetModules()
+    const { usePlayersUiStore: reloaded } = await import('../store')
+    const filter = reloaded.getState().filter
+
+    expect(filter.q).toBe('Steve')
+    expect(filter.mode).toBe('all')
+    expect(filter.gameMode).toBe('')
+    expect(filter.dimension).toBe('')
   })
 })

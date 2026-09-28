@@ -1,8 +1,8 @@
 /**
- * server.properties 66 属性元数据
+ * server.properties 71 属性元数据
  *
- * 服务端契约：mc_commander_server/routes/status.js
- * - GET /properties 对 SENSITIVE_PROPERTIES 9 键返回 '********' 占位符
+ * 服务端契约：mc_commander_server/services/instance-properties.service.js
+ * - GET /properties 对 SENSITIVE_PROPERTIES 11 键返回 '********' 占位符
  * - PUT /properties 提交占位符视为未修改（沿用磁盘现值），提交其他值整批 400 拒绝
  * - RUNTIME_COMMAND_MAP 4 键可运行期热改（走斜杠命令），其余属性需重启生效
  * - WRITABLE_PROPERTIES 白名单（isWritable 依据）；未知键提交会被 400 拒绝
@@ -37,7 +37,7 @@ export interface PropertyDef {
 /** 敏感属性掩码占位符（与服务端 SENSITIVE_PLACEHOLDER 一致） */
 export const SENSITIVE_PROPERTY_PLACEHOLDER = '********'
 
-/** 敏感属性键（9 键，与服务端 SENSITIVE_PROPERTIES 保持一致） */
+/** 敏感属性键（11 键，与服务端 SENSITIVE_PROPERTIES 保持一致） */
 export const SENSITIVE_PROPERTY_KEYS: ReadonlySet<string> = new Set([
   'rcon.password',
   'rcon.port',
@@ -48,6 +48,9 @@ export const SENSITIVE_PROPERTY_KEYS: ReadonlySet<string> = new Set([
   'online-mode',
   'server-port',
   'server-ip',
+  // MSMP 凭据：MC 开启该协议且 secret 留空时会自动生成并写回 server.properties
+  'management-server-secret',
+  'management-server-tls-keystore-password',
 ])
 
 /** 运行期热改键（4 键，与服务端 RUNTIME_COMMAND_MAP 保持一致） */

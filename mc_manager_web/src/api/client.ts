@@ -1,12 +1,18 @@
 /**
  * API 客户端（设计文档 §5.1 client.ts）
  * fetch 封装：双通道凭据注入、10s 超时、响应信封解析、错误码 → ApiError
- * 凭据优先级（安全主线）：会话 Bearer 令牌 > X-API-Key（自动化/回退通道）；
+ * 凭据优先级（安全主线）：会话 Bearer 令牌 > X-API-Key（自动化/回退通道），
+ * 且令牌只在**签发它的面板**上使用（见下方 sessionAppliesTo）；
  * 会话过期（40103）时派发全局事件由路由层跳登录页
  * 连接配置来自 useConnectionStore（onboarding 配置，默认同源 dev proxy）
  */
 import type { ApiEnvelope, ApiErrorEnvelope } from './types'
-import { getStoredSession, clearSessionAndDispatchExpired } from '@/stores/auth'
+import { sessionAppliesToPanel } from '@/lib/mc-connection'
+import {
+  getStoredSession,
+  clearSessionAndDispatchExpired,
+  backfillSessionPanel,
+} from '@/stores/auth'
 
 export class ApiError extends Error {
   readonly code: number
@@ -33,6 +39,12 @@ export interface ConnectionConfig {
   /** 面板地址（空串 = 同源，dev 走 Vite proxy /api） */
   baseUrl: string
   apiKey: string
+  /**
+   * 公开端点（无需任何凭据）：即便本机有登录会话也不携带认证头。
+   * 服务端对 auth/status|login|setup 直接放行、不校验凭据，带 Bearer 既无意义，
+   * 又会让「请求成功 ⇒ 令牌被该地址接受」这条回填依据在这些端点上失效。
+   */
+  noCredentials?: boolean
 }
 
 const REQUEST_TIMEOUT_MS = 10_000
@@ -48,6 +60,13 @@ interface ApiRequestOptions {
   timeoutMs?: number
   /** 额外请求头（如 setup 阶段的 Authorization: SetupToken；与认证头叠加，不覆盖常规认证头键） */
   extraHeaders?: Record<string, string>
+  /**
+   * 探测类请求（连接测试）：地址未必是本面板，其会话过期码不触发全局登出——
+   * 面板判据已保证异地址不发 Bearer（也就拿不到 40103），故该开关只在
+   * 「目标就是本面板」时生效：此时过期是真的，但只该在表单内提示，不把人从表单里
+   * 直接弹走。上传统一实现不读该选项（当前无调用方）。
+   */
+  ignoreSessionExpiry?: boolean
 }
 
 function buildUrl(config: ConnectionConfig, path: string): string {
@@ -57,26 +76,43 @@ function buildUrl(config: ConnectionConfig, path: string): string {
 }
 
 /**
- * 认证头注入（双通道互斥）：
- * - 会话令牌存在 → Authorization: Bearer（浏览器登录主线）
- * - 否则 apiKey 非空 → X-API-Key（自动化 / 高级用户通道，行为兼容）
- * - 两者皆无（公开端点：auth/status|login|setup）→ 不带认证头
+ * 本次请求要用的会话令牌（**发起时取一次**）：会话令牌只在**签发它的面板**上使用
+ * （见 lib/mc-connection.ts 的 sessionAppliesToPanel）。拿 A 面板的令牌去请求 B 面板，
+ * 只会换回 40103（会话不属于 B），进而把用户从 A 的登录态踢下线——「页面填了 B 的
+ * 地址 + B 的 Key」本是正常操作。故地址不匹配时不发 Bearer，交给 B 的 API Key 通道；
+ * 此时 40103 也不当作会话过期。公开端点（noCredentials）一律不带任何凭据。
  */
-function hasSessionToken(): boolean {
-  return Boolean(getStoredSession()?.token)
+function authTokenFor(config: ConnectionConfig): string | null {
+  if (config.noCredentials) return null
+  const session = getStoredSession()
+  if (!session?.token) return null
+  return sessionAppliesToPanel(session, config.baseUrl) ? session.token : null
 }
 
-function buildAuthHeaders(): Record<string, string> {
-  const session = getStoredSession()
-  if (session?.token) {
-    return { Authorization: `Bearer ${session.token}` }
-  }
-  return {}
+/**
+ * 认证头注入（双通道互斥，不叠加）：会话令牌优先（浏览器登录主线），
+ * 否则 apiKey（自动化 / 高级用户通道，行为兼容）；两者皆无（公开端点）不带认证头。
+ */
+function authHeadersFor(
+  config: ConnectionConfig,
+  sessionToken: string | null,
+): Record<string, string> {
+  if (config.noCredentials) return {}
+  if (sessionToken) return { Authorization: `Bearer ${sessionToken}` }
+  return config.apiKey ? { 'X-API-Key': config.apiKey } : {}
 }
 
 /** 会话过期统一处置：清会话 + 派发全局事件（路由层监听跳登录） */
 function handleSessionExpired(): void {
   clearSessionAndDispatchExpired()
+}
+
+/**
+ * 40103 回收前复核：错误码是「发起时那条会话」的结果，期间若已登出并在别处重新登录
+ * （本机令牌已变），旧响应不该把新会话清掉。
+ */
+function sessionTokenStillCurrent(sessionToken: string): boolean {
+  return getStoredSession()?.token === sessionToken
 }
 
 /**
@@ -92,13 +128,14 @@ async function requestEnvelope<T>(
 ): Promise<ApiEnvelope<T>> {
   const timeout = new AbortController()
   const timer = setTimeout(() => timeout.abort(), options.timeoutMs ?? REQUEST_TIMEOUT_MS)
+  // 判据在发起时取一次：响应返回时本机会话可能已被别的请求清掉/换掉，两处各算一次会分叉
+  const sessionToken = authTokenFor(config)
 
   try {
     const res = await fetch(buildUrl(config, path), {
       method: options.method ?? 'GET',
       headers: {
-        ...buildAuthHeaders(),
-        ...(!hasSessionToken() && config.apiKey ? { 'X-API-Key': config.apiKey } : {}),
+        ...authHeadersFor(config, sessionToken),
         ...(options.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
         ...(options.extraHeaders ?? {}),
       },
@@ -111,7 +148,14 @@ async function requestEnvelope<T>(
       try {
         const errPayload = (await res.json()) as ApiErrorEnvelope
         if (errPayload.status === 'error') {
-          if (errPayload.code === AUTH_SESSION_EXPIRED_CODE) handleSessionExpired()
+          if (
+            errPayload.code === AUTH_SESSION_EXPIRED_CODE &&
+            sessionToken !== null &&
+            !options.ignoreSessionExpiry &&
+            sessionTokenStillCurrent(sessionToken)
+          ) {
+            handleSessionExpired()
+          }
           throw new ApiError(errPayload.code, res.status, errPayload.message, errPayload.details)
         }
       } catch (e) {
@@ -128,6 +172,8 @@ async function requestEnvelope<T>(
     }
 
     if (payload.status === 'ok') {
+      // 令牌被本地址接受 → 旧会话（无签发面板信息）可确认签发方就是它
+      if (sessionToken) backfillSessionPanel(config.baseUrl)
       return payload as ApiEnvelope<T>
     }
 
@@ -159,12 +205,20 @@ export async function apiRequest<T>(
 }
 
 /** GET 便捷方法（解包信封，仅返回 data） */
-export function apiGet<T>(path: string, config: ConnectionConfig, signal?: AbortSignal): Promise<T> {
+export function apiGet<T>(
+  path: string,
+  config: ConnectionConfig,
+  signal?: AbortSignal,
+): Promise<T> {
   return apiRequest<T>(path, config, { method: 'GET', signal })
 }
 
 /** GET 信封级变体：返回完整信封（含 pagination），供分页控件消费（与 apiRequest 单源请求链） */
-export function apiGetEnvelope<T>(path: string, config: ConnectionConfig, signal?: AbortSignal): Promise<ApiEnvelope<T>> {
+export function apiGetEnvelope<T>(
+  path: string,
+  config: ConnectionConfig,
+  signal?: AbortSignal,
+): Promise<ApiEnvelope<T>> {
   return requestEnvelope<T>(path, config, { method: 'GET', signal })
 }
 
@@ -188,11 +242,11 @@ export function apiPut<T>(
   return apiRequest<T>(path, config, { method: 'PUT', body, ...options })
 }
 
-/** DELETE 便捷方法 */
+/** DELETE 便捷方法（options.body 供带确认信息的破坏性操作使用） */
 export function apiDelete<T>(
   path: string,
   config: ConnectionConfig,
-  options?: { signal?: AbortSignal },
+  options?: { signal?: AbortSignal; body?: unknown },
 ): Promise<T> {
   return apiRequest<T>(path, config, { method: 'DELETE', ...options })
 }
@@ -202,6 +256,8 @@ export interface DownloadOptions {
   onProgress?: (pct: number) => void
   /** 取消下载（用户主动中止） */
   signal?: AbortSignal
+  /** 超时覆盖（默认 10 分钟；备份等小文件可收紧） */
+  timeoutMs?: number
 }
 
 export interface DownloadResult {
@@ -221,13 +277,12 @@ function fileNameFromDisposition(header: string | null): string | null {
       // 编码异常回退到 filename=
     }
   }
-  const plain =
-    /filename="([^"]+)"/.exec(header)?.[1] ?? /filename=([^;]+)/.exec(header)?.[1]
+  const plain = /filename="([^"]+)"/.exec(header)?.[1] ?? /filename=([^;]+)/.exec(header)?.[1]
   return plain ? plain.trim() : null
 }
 
 /**
- * 文件下载（feat-9 文件管理器增强）：
+ * 文件下载（文件管理器增强）：
  * - fetch 而非 window.open：需注入双通道凭据（Bearer 会话 / X-API-Key）+ 网关
  *   XTransformPort 适配；window.open 场景下会话令牌无法附带必然 401
  * - 流式读取（ReadableStream）而非直接 res.blob()：支持下载进度回调
@@ -242,17 +297,17 @@ export async function apiDownloadFile(
   options: DownloadOptions = {},
 ): Promise<DownloadResult> {
   const timeout = new AbortController()
-  const timer = setTimeout(() => timeout.abort(), 600_000)
+  const timer = setTimeout(() => timeout.abort(), options.timeoutMs ?? 600_000)
   // 外部 signal 中止转发到内部 controller（fetch 只接受单一 signal）
   const onExternalAbort = () => timeout.abort()
   options.signal?.addEventListener('abort', onExternalAbort, { once: true })
+  const sessionToken = authTokenFor(config)
 
   try {
     const res = await fetch(buildUrl(config, path), {
       method: 'GET',
       headers: {
-        ...buildAuthHeaders(),
-        ...(!hasSessionToken() && config.apiKey ? { 'X-API-Key': config.apiKey } : {}),
+        ...authHeadersFor(config, sessionToken),
       },
       signal: timeout.signal,
     })
@@ -262,7 +317,13 @@ export async function apiDownloadFile(
         try {
           const errPayload = (await res.json()) as ApiErrorEnvelope
           if (errPayload.status === 'error') {
-            if (errPayload.code === AUTH_SESSION_EXPIRED_CODE) handleSessionExpired()
+            if (
+              errPayload.code === AUTH_SESSION_EXPIRED_CODE &&
+              sessionToken !== null &&
+              sessionTokenStillCurrent(sessionToken)
+            ) {
+              handleSessionExpired()
+            }
             throw new ApiError(errPayload.code, res.status, errPayload.message, errPayload.details)
           }
         } catch (e) {
@@ -271,6 +332,9 @@ export async function apiDownloadFile(
       }
       throw new NetworkError(`下载失败（HTTP ${res.status}）`)
     }
+
+    // 令牌被本地址接受 → 旧会话（无签发面板信息）可确认签发方就是它
+    if (sessionToken) backfillSessionPanel(config.baseUrl)
 
     const fileName = fileNameFromDisposition(res.headers.get('Content-Disposition'))
     const total = Number(res.headers.get('Content-Length') ?? 0)
@@ -321,7 +385,7 @@ export interface UploadOptions {
 }
 
 /**
- * multipart 文件上传（共享实现，feat-8 插件上传延伸）：
+ * multipart 文件上传（共享实现， 插件上传延伸）：
  * - XHR 而非 fetch：fetch 无法观测上传进度（onprogress 仅 fetch stream 读响应侧）
  * - 双通道凭据注入（Bearer 会话优先 / X-API-Key 回退，与 apiRequest 互斥逻辑一致）
  * - withTransformPort 网关适配（此前 files.ts 独立实现遗漏此处理，沙箱下上传必挂）
@@ -338,16 +402,16 @@ export function apiUploadFile<T>(
     const url = buildUrl(config, options.query ? `${path}?${options.query}` : path)
     const form = new FormData()
     form.append(options.fieldName ?? 'file', file, file.name)
+    // 判据在发起时取一次（上传最长 10 分钟，响应时再算会与发起时不一致）
+    const sessionToken = authTokenFor(config)
 
     const xhr = new XMLHttpRequest()
     xhr.open('POST', url)
     xhr.responseType = 'text'
 
     // 凭据注入（双通道互斥，与 apiRequest 一致）
-    const authHeaders = buildAuthHeaders()
-    for (const [k, v] of Object.entries(authHeaders)) xhr.setRequestHeader(k, v)
-    if (!hasSessionToken() && config.apiKey) {
-      xhr.setRequestHeader('X-API-Key', config.apiKey)
+    for (const [k, v] of Object.entries(authHeadersFor(config, sessionToken))) {
+      xhr.setRequestHeader(k, v)
     }
 
     // 10 分钟兜底超时
@@ -374,11 +438,19 @@ export function apiUploadFile<T>(
         return
       }
       if (payload.status === 'ok') {
+        // 令牌被本地址接受 → 旧会话（无签发面板信息）可确认签发方就是它
+        if (sessionToken) backfillSessionPanel(config.baseUrl)
         resolve((payload as ApiEnvelope<T>).data)
         return
       }
       const err = payload as ApiErrorEnvelope
-      if (err.code === AUTH_SESSION_EXPIRED_CODE) handleSessionExpired()
+      if (
+        err.code === AUTH_SESSION_EXPIRED_CODE &&
+        sessionToken !== null &&
+        sessionTokenStillCurrent(sessionToken)
+      ) {
+        handleSessionExpired()
+      }
       reject(new ApiError(err.code, xhr.status, err.message, err.details))
     })
 

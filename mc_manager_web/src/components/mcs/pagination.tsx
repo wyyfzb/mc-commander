@@ -13,13 +13,7 @@ const DEFAULT_PAGE_SIZES = [10, 20, 50] as const
 
 /** 生成带省略号的页码数组 */
 function buildPageNumbers(current: number, total: number): Array<number | '…'> {
-  const set = new Set([
-    1,
-    total,
-    current - 1,
-    current,
-    current + 1,
-  ])
+  const set = new Set([1, total, current - 1, current, current + 1])
   const sorted = [...set].filter((n) => n >= 1 && n <= total).sort((a, b) => a - b)
   const withGaps: Array<number | '…'> = []
   for (let i = 0; i < sorted.length; i++) {
@@ -44,7 +38,7 @@ export interface PaginationProps {
   disabled?: boolean
   /** 每页条数选择（仅 numbers 模式） */
   pageSize?: number
-   pageSizeOptions?: number[]
+  pageSizeOptions?: number[]
   onPageSizeChange?: (size: number) => void
   /** 显示「全部」选项（仅 numbers 模式） */
   showAllOption?: boolean
@@ -66,6 +60,9 @@ export function Pagination({
   showPageSizeSelector = false,
 }: PaginationProps) {
   const safePage = Math.max(1, Math.min(page, totalPages || 1))
+  // 单页（含「全部」档、空结果）没有可翻的页：页码组与方向箭头只会暗示「还有别的页」，
+  // 两种模式一并省略；左侧的条数/每页选择器保留——那是「全部」档切回分页的唯一入口
+  const showPager = totalPages > 1
 
   // 页码模式：生成带省略号的页码
   const pageNumbers = useMemo(
@@ -74,9 +71,12 @@ export function Pagination({
   )
 
   return (
-    <div className="flex items-center justify-between border-t border-mcs-border-muted px-4 py-2">
+    <div className="flex flex-wrap items-center justify-between gap-y-2 border-t border-mcs-border-muted px-4 py-2">
+      {/* flex-wrap（外层与左组各一层）与下方文案的 whitespace-nowrap 是一对：条数/页码的
+          CJK 断行点落在任意字符间，不锁 nowrap 会在 375 下被逐字压成竖排；只锁 nowrap
+          则 min-content 变成整行文案宽，把分页栏撑出横向溢出 */}
       {/* 左侧：信息 + 可选的每页条数 */}
-      <div className="flex items-center gap-2 text-mcs-xs text-mcs-text-subtle">
+      <div className="flex flex-wrap items-center gap-2 text-mcs-xs text-mcs-text-muted">
         {variant === 'numbers' && showPageSizeSelector && (
           <>
             每页
@@ -88,22 +88,30 @@ export function Pagination({
               aria-label="每页行数"
             >
               {pageSizeOptions.map((s) => (
-                <option key={s} value={s}>{s}</option>
+                <option key={s} value={s}>
+                  {s}
+                </option>
               ))}
               {showAllOption && <option value={-1}>全部</option>}
             </select>
           </>
         )}
         {totalItems != null ? (
-          <span>共 {totalItems} 条 · 第 {safePage}/{totalPages} 页</span>
-        ) : totalPages > 0 ? (
-          <span>第 {safePage} / {totalPages} 页</span>
+          <span className="whitespace-nowrap">
+            {showPager
+              ? `共 ${totalItems} 条 · 第 ${safePage}/${totalPages} 页`
+              : `共 ${totalItems} 条`}
+          </span>
+        ) : showPager ? (
+          <span className="whitespace-nowrap">
+            第 {safePage} / {totalPages} 页
+          </span>
         ) : null}
       </div>
 
       {/* 右侧：翻页按钮 */}
       <div className="flex items-center gap-1.5">
-        {variant === 'numbers' ? (
+        {variant === 'numbers' && showPager ? (
           <>
             <IconButton
               disabled={disabled || safePage <= 1}
@@ -114,7 +122,9 @@ export function Pagination({
             </IconButton>
             {pageNumbers.map((n, i) =>
               n === '…' ? (
-                <span key={`gap${i}`} className="px-1 text-mcs-xs text-mcs-text-subtle">…</span>
+                <span key={`gap${i}`} className="px-1 text-mcs-xs text-mcs-text-muted">
+                  …
+                </span>
               ) : (
                 <Button
                   key={n}
@@ -122,6 +132,8 @@ export function Pagination({
                   size="icon-sm"
                   disabled={disabled}
                   onClick={() => onPageChange(n)}
+                  // 当前页要有可编程判定的语义：底色只是视觉线索，读屏与弱视用户都拿不到
+                  aria-current={safePage === n ? 'page' : undefined}
                   aria-label={`第 ${n} 页`}
                 >
                   {n}
@@ -136,7 +148,7 @@ export function Pagination({
               <ChevronRight aria-hidden />
             </IconButton>
           </>
-        ) : (
+        ) : variant !== 'numbers' && showPager ? (
           <>
             <Button
               variant="outline"
@@ -155,7 +167,7 @@ export function Pagination({
               下一页
             </Button>
           </>
-        )}
+        ) : null}
       </div>
     </div>
   )
