@@ -42,7 +42,7 @@ MC_Commander 由两部分组成：**服务端**（Node.js，部署在 Minecraft 
   `src/lib/`、`src/components/mcs/`
 - **通信**：REST（`src/api/`）+ WebSocket 优先、HTTP 轮询保底降级
 - **测试**：vitest + @testing-library + msw（单测 141 文件）；Playwright e2e 12 spec
-  （mock 后端 + dev server 双 webServer 自启）。（文件数为 v1.2.1 时点，仅示意规模）
+  （mock 后端 + dev server 双 webServer 自启）。（文件数为 v0.2.1 时点，仅示意规模）
 
 ## 版本兼容策略
 
