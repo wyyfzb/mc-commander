@@ -15,10 +15,16 @@ import path from 'path';
 
 // ── 模块 mock（vi.mock 提升，factory 内不得引用外部变量） ──
 
-// got：函数调用（.json 链）直接离线拒绝；stream 返回立即 error 的伪流
+// got：函数调用（.json 链）默认离线拒绝；但 purpur 现在会先查 /latest 取 md5 摘要，
+// 而以 purpur 为载体的用例需要走到下载阶段，故对该域名返回可解析响应。
+// 其余上游一律拒绝，保持「未预期的网络调用必暴露」的隔离语义。
 vi.mock('got', () => ({
   default: Object.assign(
-    vi.fn(() => Promise.reject(new Error('offline (mocked)'))),
+    vi.fn((url) =>
+      String(url).includes('/purpur/')
+        ? { json: () => Promise.resolve({ build: '2416' }) }
+        : Promise.reject(new Error('offline (mocked)')),
+    ),
     {
       stream: vi.fn(() => {
         const listeners = {};

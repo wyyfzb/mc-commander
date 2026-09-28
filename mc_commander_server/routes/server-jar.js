@@ -21,6 +21,7 @@ import { validateBody, validatedSuccess } from '../middleware/validate.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import {
   JAR_DOWNLOAD_MAX_BYTES,
+  JAR_HASH_ALGORITHMS,
   assertDownloadIntegrity,
   assertSizeWithinLimit,
 } from '../utils/jar-download-guard.js';
@@ -566,18 +567,21 @@ export function createServerJarRoutes(serverManager) {
         } else {
           try {
             const build = await mcCoreManager.getLatestBuild(type.toLowerCase(), mcVersion);
-            if (
-              build &&
-              build.downloads &&
-              build.downloads.application &&
-              build.downloads.application.url
-            ) {
-              downloadUrl = build.downloads.application.url;
+            // 真实形状：minecraft-core 的 UnifiedBuild 只有 downloads.application 一层
+            // （实测 vanilla=sha1 / purpur=md5 / mohist=sha256，fabric 与 forge 无 hash）。
+            // 下面对顶层 url/downloadUrl/sha256/sha1 的取值**纯属防御**：这些字段在
+            // UnifiedBuild 里并不存在，读它们的旧代码会让 expectedHash 恒 null、
+            // 静默跳过完整性校验（issue #545）。
+            const artifact = build?.downloads?.application;
+            if (artifact?.url) {
+              downloadUrl = artifact.url;
             } else if (build && build.url) {
               downloadUrl = build.url;
             } else if (build && build.downloadUrl) {
               downloadUrl = build.downloadUrl;
             } else {
+              // 由依赖包自行下载并落盘。此路下**面板侧的体积上限不生效**，完整性校验
+              // 也交给包内实现（它对 binary 产物会比对 artifact.hash 并在不匹配时删除文件）。
               const downloadInfo = await mcCoreManager.downloadServer({
                 core: type.toLowerCase(),
                 version: mcVersion,
@@ -589,17 +593,13 @@ export function createServerJarRoutes(serverManager) {
                 downloadUrl = downloadInfo.url;
               }
             }
-            // minecraft-core 各核心返回结构不一，防御式取摘要字段：
-            // v3 downloads.application.sha256 / 顶层 sha256 / 顶层 sha1（有则校验）
-            const buildHash = build?.downloads?.application?.sha256 || build?.sha256 || build?.sha1;
-            if (downloadUrl && buildHash) {
-              expectedHash = {
-                algorithm:
-                  build?.sha1 && !build?.sha256 && !build?.downloads?.application?.sha256
-                    ? 'sha1'
-                    : 'sha256',
-                digest: String(buildHash),
-              };
+            const buildHash = artifact?.hash || build?.sha256 || build?.sha1;
+            // hashType 决定算法：认不出就整体放弃校验（宁可跳过，也不能拿 md5 当 sha256 比，
+            // 那会把正常下载误判成损坏并对用户报 502）
+            const hashType =
+              artifact?.hashType || (build?.sha256 ? 'sha256' : build?.sha1 ? 'sha1' : null);
+            if (downloadUrl && buildHash && JAR_HASH_ALGORITHMS.has(hashType)) {
+              expectedHash = { algorithm: hashType, digest: String(buildHash) };
             }
           } catch (mcErr) {
             logger.error(`minecraft-core failed for ${type}:`, mcErr.message);

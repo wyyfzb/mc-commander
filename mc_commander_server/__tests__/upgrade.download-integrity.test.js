@@ -61,6 +61,7 @@ vi.mock('../utils/audit.js', () => ({
 
 import {
   JAR_DOWNLOAD_MAX_BYTES,
+  JAR_HASH_ALGORITHMS,
   hashFile,
   assertDownloadIntegrity,
   assertSizeWithinLimit,
@@ -96,6 +97,35 @@ describe('jar-download-guard 工具', () => {
 
   it('JAR_DOWNLOAD_MAX_BYTES 常量为 512MB', () => {
     expect(JAR_DOWNLOAD_MAX_BYTES).toBe(512 * 1024 * 1024);
+  });
+
+  it('hashFile 流式计算 md5 与 crypto 直接计算一致（purpur 上游只给 md5）', async () => {
+    const filePath = path.join(guardTmpDir, 'payload-md5.bin');
+    const content = crypto.randomBytes(256);
+    fs.writeFileSync(filePath, content);
+
+    await expect(hashFile(filePath, 'md5')).resolves.toBe(
+      crypto.createHash('md5').update(content).digest('hex'),
+    );
+  });
+
+  it('JAR_HASH_ALGORITHMS 白名单只含 sha256/sha1/md5（未知算法必须被挡在比对之外）', () => {
+    expect([...JAR_HASH_ALGORITHMS].sort()).toEqual(['md5', 'sha1', 'sha256']);
+  });
+
+  it('assertDownloadIntegrity：md5 摘要匹配通过、不匹配 fail-closed', async () => {
+    const filePath = path.join(guardTmpDir, 'payload-md5-assert.bin');
+    const content = crypto.randomBytes(256);
+    fs.writeFileSync(filePath, content);
+    const digest = crypto.createHash('md5').update(content).digest('hex');
+
+    await expect(
+      assertDownloadIntegrity(filePath, { algorithm: 'md5', digest }),
+    ).resolves.toBeUndefined();
+
+    await expect(
+      assertDownloadIntegrity(filePath, { algorithm: 'md5', digest: 'f'.repeat(32) }),
+    ).rejects.toThrow(/integrity check failed/);
   });
 
   it('assertDownloadIntegrity：expectedHash 为 null 或字段缺失时跳过（不抛）', async () => {
@@ -235,7 +265,12 @@ function streamSucceeds({ transferred = 1, total = 1, data = '' } = {}) {
 beforeEach(() => {
   vi.clearAllMocks();
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-jar-dl-'));
-  jsonImpl.current = () => Promise.reject(new Error('offline (mocked)'));
+  // purpur 现在会先查 /latest 取 md5 摘要；默认 mock 需能回答该查询，否则以 purpur
+  // 为载体的用例会停在「offline」而非待测阶段。其余上游一律拒绝，保持隔离语义。
+  jsonImpl.current = (url) => {
+    if (String(url).includes('/purpur/')) return Promise.resolve({ build: '2416' });
+    return Promise.reject(new Error('offline (mocked)'));
+  };
   streamImpl.current = () => {
     const stream = makeFakeStream();
     queueMicrotask(() => stream._emit('error', new Error('download failed (mocked)')));
@@ -254,18 +289,40 @@ function progressStages(serverManager) {
 }
 
 describe('upgrade.service 下载落地校验集成（issue 316）', () => {
-  it('purpur 上游无摘要：跳过完整性校验，正常完成', async () => {
+  it('purpur：/latest 给出 md5 且匹配 → 校验通过完成升级', async () => {
     const serverManager = createMockServerManager();
     const service = new UpgradeService(serverManager);
+    // fake 流写入空文件 → 期望摘要 = 空内容 md5（动态计算）
+    const emptyMd5 = crypto.createHash('md5').update('').digest('hex');
+    const realPurpur = jsonImpl.current;
+    jsonImpl.current = (url) => {
+      if (url.includes('/purpur/')) return Promise.resolve({ build: '2416', md5: emptyMd5 });
+      return realPurpur(url);
+    };
     streamImpl.current = streamSucceeds();
 
     await service.upgrade('inst-1', '1.21.4', 'purpur');
 
-    // 下载产物保留（无校验可失败）
     expect(fs.readdirSync(tmpDir)).toContain('server-1.21.4.jar');
     expect(progressStages(serverManager)[progressStages(serverManager).length - 1]).toBe(
       UPGRADE_STAGES.COMPLETED,
     );
+  });
+
+  it('purpur：md5 不匹配 → 升级失败并清理残留（fail-closed）', async () => {
+    const serverManager = createMockServerManager();
+    const service = new UpgradeService(serverManager);
+    const realPurpur = jsonImpl.current;
+    jsonImpl.current = (url) => {
+      if (url.includes('/purpur/')) return Promise.resolve({ build: '2416', md5: 'f'.repeat(32) });
+      return realPurpur(url);
+    };
+    streamImpl.current = streamSucceeds();
+
+    await expect(service.upgrade('inst-1', '1.21.4', 'purpur')).rejects.toThrow(
+      /integrity check failed/,
+    );
+    expect(fs.readdirSync(tmpDir)).not.toContain('server-1.21.4.jar');
   });
 
   it('vanilla manifest 提供 sha1 且匹配：校验通过完成升级', async () => {

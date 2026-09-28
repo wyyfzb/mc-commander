@@ -150,7 +150,13 @@ function streamSucceeds({ transferred = 1, total = 1, data = '' } = {}) {
 beforeEach(() => {
   vi.clearAllMocks();
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-upgrade-fp-'));
-  jsonImpl.current = () => Promise.reject(new Error('offline (mocked)'));
+  // purpur 是多数生命周期用例的载体（无需构造 manifest）；它现在会先查 /latest 取
+  // md5 摘要，故默认 mock 必须能回答该查询，否则用例会停在「offline」而非待测阶段。
+  // 其余上游（vanilla/paper）一律拒绝，保持「未预期的网络调用必暴露」的隔离语义。
+  jsonImpl.current = (url) => {
+    if (String(url).includes('/purpur/')) return Promise.resolve({ build: '2416' });
+    return Promise.reject(new Error('offline (mocked)'));
+  };
   streamImpl.current = () => {
     const stream = makeFakeStream();
     queueMicrotask(() => stream._emit('error', new Error('download failed (mocked)')));
@@ -334,10 +340,28 @@ describe('resolveDownload 分支矩阵', () => {
     expect(res.expectedHash.digest).toHaveLength(64);
   });
 
-  it('purpur：固定 latest/download URL 且无上游摘要', async () => {
+  it('purpur：先查 /latest 取 md5 摘要，下载直链锚定到同一 build（防摘要与构建错位）', async () => {
+    const realPurpur = jsonImpl.current;
+    jsonImpl.current = (url) => {
+      if (url.includes('/purpur/')) {
+        return Promise.resolve({ build: '2416', md5: 'a'.repeat(32) });
+      }
+      return realPurpur(url);
+    };
     const service = new UpgradeService(createMockServerManager());
     const res = await service.resolveDownload('1.21.4', 'purpur');
-    expect(res.url).toBe('https://api.purpurmc.org/v2/purpur/1.21.4/latest/download');
+    expect(res.url).toBe('https://api.purpurmc.org/v2/purpur/1.21.4/2416/download');
+    expect(res.expectedHash).toEqual({ algorithm: 'md5', digest: 'a'.repeat(32) });
+  });
+
+  it('purpur：/latest 无 md5 字段 → 降级为无摘要（不阻断升级）', async () => {
+    const realPurpur = jsonImpl.current;
+    jsonImpl.current = (url) => {
+      if (url.includes('/purpur/')) return Promise.resolve({ build: '2416' });
+      return realPurpur(url);
+    };
+    const service = new UpgradeService(createMockServerManager());
+    const res = await service.resolveDownload('1.21.4', 'purpur');
     expect(res.expectedHash).toBeNull();
   });
 

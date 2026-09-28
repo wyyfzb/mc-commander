@@ -175,7 +175,16 @@ const DEPLOY_BODY = {
 beforeEach(() => {
   vi.clearAllMocks();
   testState.spawnBehavior = 'exit0';
-  testState.latestBuild = { url: 'https://core-dl/server.jar', sha256: JAR_SHA256 };
+  // minecraft-core 的真实返回形状：摘要只在 downloads.application 的 hash + hashType
+  testState.latestBuild = {
+    downloads: {
+      application: {
+        url: 'https://core-dl/server.jar',
+        hash: JAR_SHA256,
+        hashType: 'sha256',
+      },
+    },
+  };
   gotState.streamImpl = completingStream(JAR_BYTES);
 });
 
@@ -283,7 +292,15 @@ describe('取消在途部署', () => {
     expect(cancel.status).toBe(200);
 
     // 放行上游查询：续延立即撞上取消判据，而非继续下载
-    releaseQuery({ url: 'https://core-dl/server.jar', sha256: JAR_SHA256 });
+    releaseQuery({
+      downloads: {
+        application: {
+          url: 'https://core-dl/server.jar',
+          hash: JAR_SHA256,
+          hashType: 'sha256',
+        },
+      },
+    });
     const res = await deploying;
 
     expect(res.status).toBe(409);

@@ -357,11 +357,17 @@ describe('deploy · core 构建形态与 downloadServer 本地形态', () => {
     defineManifest();
   }
 
-  it('core build 顶层 url 形态 → 直链下载成功', async () => {
+  it('core build 真实形状（downloads.application.url）→ 直链下载成功', async () => {
     defineVanilla();
+    // minecraft-core 的 UnifiedBuild 无顶层 url/sha 字段，地址与摘要都在 application 层
     testState.latestBuild = {
-      url: 'https://core-dl/vanilla.jar',
-      sha256: crypto.createHash('sha256').update(JAR_BYTES).digest('hex'),
+      downloads: {
+        application: {
+          url: 'https://core-dl/vanilla.jar',
+          hash: crypto.createHash('sha1').update(JAR_BYTES).digest('hex'),
+          hashType: 'sha1',
+        },
+      },
     };
     const { app } = buildApp();
     const res = await request(app)
@@ -371,9 +377,17 @@ describe('deploy · core 构建形态与 downloadServer 本地形态', () => {
     expect(res.body.data.name).toBe('Url Form');
   });
 
-  it('core build 顶层 downloadUrl 形态 → 直链下载成功', async () => {
+  it('core build 无 application.url（path 形态）→ 走 downloadServer 本地落盘', async () => {
     defineVanilla();
-    testState.latestBuild = { downloadUrl: 'https://core-dl/vanilla-dl.jar' };
+    // 真实形状里 downloadType='path' 的构建没有可直链的 url
+    testState.latestBuild = {
+      downloads: { application: { downloadType: 'path' } },
+    };
+    testState.downloadServerImpl = (opts) => {
+      fs.writeFileSync(path.join(opts.outputDir, 'core-server-build.jar'), 'local jar payload');
+      fs.mkdirSync(path.join(opts.outputDir, 'logs'), { recursive: true });
+      return { path: opts.outputDir };
+    };
     const { app } = buildApp();
     const res = await request(app)
       .post('/api/instances/deploy')
@@ -440,7 +454,9 @@ describe('deploy · core 构建形态与 downloadServer 本地形态', () => {
 describe('下载进度节流与错误清理', () => {
   function defineVanillaChain() {
     defineManifest();
-    testState.latestBuild = { url: 'https://core-dl/vanilla.jar' };
+    testState.latestBuild = {
+      downloads: { application: { url: 'https://core-dl/vanilla.jar' } },
+    };
   }
 
   it('进度节流：percent=0 按 transferred/total 折算发射，<1% 增量被抑制', async () => {
@@ -632,7 +648,9 @@ describe('forge 安装段分支', () => {
 describe('win32 平台分支与首启输出', () => {
   it('win32：spawn 不带 detached + 60s 超时走 taskkill /T 进程树终止', async () => {
     defineManifest();
-    testState.latestBuild = { url: 'https://core-dl/vanilla.jar' };
+    testState.latestBuild = {
+      downloads: { application: { url: 'https://core-dl/vanilla.jar' } },
+    };
     testState.spawnBehavior = 'hang';
     const origPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
     Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
@@ -671,7 +689,9 @@ describe('win32 平台分支与首启输出', () => {
 
   it('首启 stdout/stderr 输出累积 + 退出码非 0 且无 logs → 告警不阻断', async () => {
     defineManifest();
-    testState.latestBuild = { url: 'https://core-dl/vanilla.jar' };
+    testState.latestBuild = {
+      downloads: { application: { url: 'https://core-dl/vanilla.jar' } },
+    };
     testState.spawnBehavior = 'emit-data';
     const { app } = buildApp();
     const res = await request(app)
