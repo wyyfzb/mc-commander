@@ -265,10 +265,5 @@ mock 是**进程级共享**的（并行 spec 连同一个「服务端」）：�
 
 Conventional Commits（`feat`/`fix`/`refactor`/`docs`/`chore`/`test` + scope），
 描述用中文，例：`feat(web): 玩家详情新增成就标签页`。详见 CONTRIBUTING.md。
-
-- **AI 协作署名（Co-authored-by）**：Agent 发起或协助生成的提交，在 commit footer 附带共同作者声明，例如：
-  ```text
-  Co-authored-by: ZCode Agent <noreply@zcode.ai>
-  ```
 - **分支与合并**：2026-09-13 起为本地单线开发（远端冻结、多 agent 协作与 PR 流退役），改动经全量自测 + 独立审查后直接提交，不再走特性分支 + PR。提交分支以 owner 当次指令为准（2026-09-13 任务循环授权提交 localdev 分支；push 与合并 main 须 owner 另行授权，操作编排见本地 `.ai/workflows.md`）。
 
