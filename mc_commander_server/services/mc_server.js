@@ -20,6 +20,7 @@ import * as statsCollector from './mc-server/stats-collector.js';
 import * as startLifecycle from './mc-server/start-lifecycle.js';
 import * as adopt from './mc-server/adopt.js';
 import * as logTail from './mc-server/log-tail.js';
+import * as jarVersion from './mc-server/jar-version.js';
 import { logger } from '../utils/logger.js';
 
 // 原子写统一走 utils/fs-utils.js 公共实现（写唯一 .tmp 再 rename，失败清残留）。
@@ -358,6 +359,9 @@ export class MCServerInstance extends EventEmitter {
     this._publicIp = null; // 公网 IP（异步探测后缓存）
     this._worldSpawn = null; // 世界出生点 { x, y, z }（从 level.dat 读取）
     this._worldSpawnRaw = null; // 上次成功解析时 level.dat 的原始字节，运行期变更检测用
+    // JAR 版本信息缓存 { statKey, value }：getAllInstances() 会逐实例走 toStatus()，
+    // 无缓存时每次列表请求都要解压 55MB 的 jar（详见 jar-version.js 头注释）
+    this._jarVersionCache = undefined;
     // 异步探测公网 IP（环境变量 → 云元数据 → ipify），不阻塞构造
     this._detectPublicIp();
     // 启动时读取世界出生点（纯文件 I/O，不阻塞）
@@ -1437,17 +1441,16 @@ export class MCServerInstance extends EventEmitter {
     return knownPlayers;
   }
 
+  /// MC 版本：以服务端 JAR 内 version.json 为权威（用户绕过面板手动换 jar 或外部升级
+  /// 后仍准确），DB 字段仅作 JAR 不可读时的回退。
+  /// 该值被两处功能性消费——gamerule 版本选集（1.21.11 前后规则名体系不同）与
+  /// 推荐 JDK——故陈旧值会让面板选错规则表、推荐错 Java，不只是显示不准。
   _getMcVersion() {
-    // DB 持久化版本优先（部署/升级时写入，重启后由 loadInstances 传入）
+    const info = this._getJarVersionInfo();
+    if (info?.id) return info.id;
+    // JAR 不可读（Fabric/Forge 的启动 jar 由安装器生成、不含 version.json，或实例
+    // 目录尚未产出 jar）：回退 DB 持久化版本（部署/升级时写入）
     if (this.mcVersion) return this.mcVersion;
-    // 兜底：扫描实例目录 versions/ 子目录（仅当 DB 无版本时）
-    const versionPath = path.join(this.serverPath, 'versions');
-    if (fs.existsSync(versionPath)) {
-      try {
-        const versions = fs.readdirSync(versionPath);
-        if (versions.length > 0) return versions[0];
-      } catch {}
-    }
     return 'unknown';
   }
 
@@ -2207,3 +2210,7 @@ Object.assign(MCServerInstance.prototype, logTail);
 
 // 孤儿进程接管域挂载（根修）：pid 文件与面板重启后接管，机制见 adopt.js 头注释。
 Object.assign(MCServerInstance.prototype, adopt);
+
+// 实例版本读取域挂载：从服务端 JAR 内 version.json 取权威 mcVersion/javaVersion，
+// 供 _getMcVersion 与 _getRequiredJavaVersion 使用（机制见 jar-version.js 头注释）。
+Object.assign(MCServerInstance.prototype, jarVersion);

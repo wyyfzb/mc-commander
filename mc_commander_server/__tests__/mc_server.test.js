@@ -3,6 +3,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import zlib from 'zlib';
+import AdmZip from 'adm-zip';
 import { writeUncompressed } from 'prismarine-nbt';
 
 // ── Mock 隔离：子进程 / RCON / SQLite 模型 / 配置目录 ──
@@ -52,6 +53,14 @@ import { MCServerManager } from '../services/mc_server.js';
 function writeNbtFile(filePath, nbtData) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, zlib.gzipSync(writeUncompressed(nbtData)));
+}
+
+/** 构造含 version.json 的最小 jar（vanilla/Paper 该文件均在包根，实测同构） */
+function writeJarWithVersionJson(jarPath, versionJson) {
+  fs.mkdirSync(path.dirname(jarPath), { recursive: true });
+  const zip = new AdmZip();
+  zip.addFile('version.json', Buffer.from(JSON.stringify(versionJson), 'utf8'));
+  zip.writeZip(jarPath);
 }
 
 describe('MCServerManager', () => {
@@ -126,33 +135,61 @@ describe('MCServerManager', () => {
 
   describe('MCServerInstance', () => {
     describe('mcVersion 传播', () => {
-      it('DB 有版本且无 versions/ 目录时返回 DB 值', () => {
+      it('JAR 内 version.json 优先于 DB 值（用户手动换 jar 后仍准确）', () => {
+        const instance = manager.createInstance({
+          id: 'ver-jar',
+          name: 'Jar Version',
+          jarFile: 'server.jar',
+          mcVersion: '1.21.4',
+        });
+        // 真实 jar 内 version.json 的结构（vanilla 与 Paper 均同构）
+        writeJarWithVersionJson(path.join(instance.serverPath, 'server.jar'), {
+          id: '26.3',
+          java_version: 25,
+          protocol_version: 777,
+        });
+        const status = instance.toStatus();
+        expect(status.mcVersion).toBe('26.3');
+      });
+
+      it('JAR 不可读（不存在/非 zip）时回退 DB 值', () => {
         const instance = manager.createInstance({
           id: 'ver-db',
           name: 'DB Version',
           jarFile: 'server.jar',
           mcVersion: '1.21.4',
         });
-        // toStatus 内部调用 _getMcVersion
         const status = instance.toStatus();
         expect(status.mcVersion).toBe('1.21.4');
       });
 
-      it('DB 无版本且有 versions/ 目录时回退目录探测', () => {
+      it('非 zip 的 jar（如 Fabric 启动器写坏/占位文件）不抛错，回退 DB 值', () => {
         const instance = manager.createInstance({
-          id: 'ver-fs',
-          name: 'FS Version',
+          id: 'ver-badzip',
+          name: 'Bad Zip',
           jarFile: 'server.jar',
+          mcVersion: '1.20.4',
         });
-        // 手动创建 versions/ 目录并写入版本文件
-        const versionsDir = path.join(instance.serverPath, 'versions');
-        fs.mkdirSync(versionsDir, { recursive: true });
-        fs.writeFileSync(path.join(versionsDir, '1.20.4'), '');
+        fs.writeFileSync(path.join(instance.serverPath, 'server.jar'), 'not a zip');
         const status = instance.toStatus();
         expect(status.mcVersion).toBe('1.20.4');
       });
 
-      it('DB 无版本且无 versions/ 目录时返回 unknown', () => {
+      it('version.json 缺 id 字段时视为无效，回退 DB 值', () => {
+        const instance = manager.createInstance({
+          id: 'ver-noid',
+          name: 'No Id',
+          jarFile: 'server.jar',
+          mcVersion: '1.21.4',
+        });
+        writeJarWithVersionJson(path.join(instance.serverPath, 'server.jar'), {
+          java_version: 21,
+        });
+        const status = instance.toStatus();
+        expect(status.mcVersion).toBe('1.21.4');
+      });
+
+      it('DB 无版本且无 JAR 时返回 unknown', () => {
         const instance = manager.createInstance({
           id: 'ver-none',
           name: 'No Version',
@@ -162,19 +199,31 @@ describe('MCServerManager', () => {
         expect(status.mcVersion).toBe('unknown');
       });
 
-      it('DB 版本优先于 versions/ 目录', () => {
+      it('已不再回退 versions/ 目录探测（该目录是运行期产物，不是权威版本源）', () => {
         const instance = manager.createInstance({
-          id: 'ver-priority',
-          name: 'Priority',
+          id: 'ver-fs',
+          name: 'FS Version',
           jarFile: 'server.jar',
-          mcVersion: '1.21.4',
         });
-        // 即使有 versions/ 目录，DB 值优先
         const versionsDir = path.join(instance.serverPath, 'versions');
         fs.mkdirSync(versionsDir, { recursive: true });
-        fs.writeFileSync(path.join(versionsDir, '1.20.1'), '');
-        const status = instance.toStatus();
-        expect(status.mcVersion).toBe('1.21.4');
+        fs.writeFileSync(path.join(versionsDir, '1.20.4'), '');
+        expect(instance.toStatus().mcVersion).toBe('unknown');
+      });
+
+      it('jar 被替换后版本随之更新（stat 键失效缓存）', () => {
+        const instance = manager.createInstance({
+          id: 'ver-refresh',
+          name: 'Refresh',
+          jarFile: 'server.jar',
+          mcVersion: '1.20.4',
+        });
+        const jarPath = path.join(instance.serverPath, 'server.jar');
+        writeJarWithVersionJson(jarPath, { id: '1.21.4', java_version: 21 });
+        expect(instance.toStatus().mcVersion).toBe('1.21.4');
+        // 外部替换为另一版本：mtime/size 变化 → 缓存失效重读
+        writeJarWithVersionJson(jarPath, { id: '26.1', java_version: 25, pad: 'x'.repeat(64) });
+        expect(instance.toStatus().mcVersion).toBe('26.1');
       });
     });
 
