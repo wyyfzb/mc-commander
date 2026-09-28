@@ -21,6 +21,8 @@ trae/
 # Agent 私有配置/技能/MCP（本机工作环境，不入库；AGENTS.md/CLAUDE.md 为社区版入库）
 .claude/
 .ai/
+# roadmap.md 属开发意图（缺口候选/排期口径/不做清单），按 AGENTS.md「开发意图类不入库」移入 .ai/
+roadmap.md
 # AgentTeams 工作流已于 2026-09-16 退役（owner）；规则保留，防止宿主再次生成该目录时被误入库
 .agent-teams/
 .zcode/
@@ -80,7 +82,7 @@ Thumbs.db
 desktop.ini
 
 # 本地笔记（不入库；docs/ 为公开文档入库）
-CHANGELOG.md
+# 注：CHANGELOG.md 不在此列——它是发版日志，必须入库（根级）
 mc_commander_optimization_plan.md
 服务器日志.md
 repowiki/
