@@ -2,7 +2,7 @@
  * 进程输出解析域模块行为级测试（issue 494 拆分交付）
  * - 模块直接 import 可用（与 mc_server.js 原型注入同源），注入后裸实例 this 绑定正确
  * - 真实 stdout 行样本驱动事件断言；聚焦宿主测试文件未覆盖面：
- *   mcsmp 协议行 / TPS+MSPT+时间行 / 聊天·挑战·重生 / 天气·存档·ready / join→leave 落盘
+ *   TPS+MSPT+时间行 / 聊天·挑战·重生 / 天气·存档·ready / join→leave 落盘
  * 数据全部为虚构占位（Steve/1.2.3.4）
  */
 import { describe, it, expect, vi, afterAll } from 'vitest';
@@ -83,18 +83,9 @@ describe('输出解析域模块 require 复用语义', () => {
 });
 
 describe('_parseOutput stdout 行解析（真实样本驱动）', () => {
-  it('mcsmp 协议行：response 行入 buffer、end 行按序 resolve，未知 id 安全忽略', () => {
+  it('已删除的自造 mcsmp 协议行不再被特殊处理（当作普通日志行，不抛错、不产生副作用）', () => {
     const inst = makeBareInstance();
-    const resolve = vi.fn();
-    inst._commandResponsePromises.set(7, { buffer: [], resolve });
-    inst._parseOutput('[mcsmp_response:7] say hi');
-    inst._parseOutput('[mcsmp_response:7] ok');
-    inst._parseOutput('[mcsmp_end:7]');
-    expect(resolve).toHaveBeenCalledTimes(1);
-    expect(resolve).toHaveBeenCalledWith('say hi\nok');
-    // 未注册 id 的协议行不产生任何副作用
-    expect(() => inst._parseOutput('[mcsmp_response:99] orphan\n[mcsmp_end:99]')).not.toThrow();
-    expect(resolve).toHaveBeenCalledTimes(1);
+    expect(() => inst._parseOutput('[mcsmp_response:7] say hi\n[mcsmp_end:7]')).not.toThrow();
   });
 
   it('TPS/MSPT/时间日志行更新状态字段并广播 performanceUpdate', () => {
@@ -122,7 +113,7 @@ describe('_parseOutput stdout 行解析（真实样本驱动）', () => {
     inst.on('playerChat', (e) => chats.push(e));
     inst.on('achievement', (e) => achievements.push(e));
     inst.on('playerRespawn', (e) => respawns.push(e));
-    // 聊天两种形态均须识别：裸聊天行（mcsmp 回显/部分服务端）与带日志头的真实服务端输出
+    // 聊天两种形态均须识别：裸聊天行（部分服务端不打日志头）与带日志头的真实服务端输出
     inst._parseOutput('<Steve> hello world');
     inst._parseOutput('[12:00:00] [Server thread/INFO]: <Alex> hi there');
     inst._parseOutput('[12:00:00 INFO]: <Alex> paper format');
