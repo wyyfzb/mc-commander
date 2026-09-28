@@ -22,6 +22,7 @@ const { auditParams } = vi.hoisted(() => ({
 }))
 
 vi.mock('@/api/queries', () => ({
+  useInstances: () => ({ data: [] }),
   useAuditLogs: (params: Record<string, unknown>) => {
     // 捕获当前查询参数（清空筛选后 action/time 应消失）
     auditParams.action = params.action as string | undefined

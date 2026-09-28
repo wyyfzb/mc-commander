@@ -537,11 +537,12 @@ export function createStatusRoutes(serverManager) {
 
   // POST /api/instances/:id/command
   // 输入侧契约（issue 486）：非空字符串 + 长度上限 schema 前置（仅拒收类型/长度非法，行为零变化）
+  // source 为白名单枚举，用于把「审计页的行内重发」与普通下发区分开（见契约注释）
   router.post(
     '/instances/:id/command',
     validateBody(instanceCommandRequestBodySchema),
     asyncHandler(async (req, res) => {
-      const { command } = req.body;
+      const { command, source } = req.body;
       if (!command) {
         return res.status(400).json(error(ErrorCodes.VALIDATION_ERROR, 'Command is required'));
       }
@@ -556,7 +557,7 @@ export function createStatusRoutes(serverManager) {
       }
 
       try {
-        const response = await instance.sendCommand(command);
+        const response = await instance.sendCommand(command, { source });
         res.json(validatedSuccess(commandResponseSchema, response, 'Command sent'));
       } catch (err) {
         // RCON 连接断开/超时：返回专用错误码，前端可区分引导用户启用 RCON

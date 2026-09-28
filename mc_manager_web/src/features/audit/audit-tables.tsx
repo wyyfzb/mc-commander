@@ -4,13 +4,15 @@
  */
 import { StatusPill } from '@/components/mcs/status-pill'
 import { InfoHint } from '@/components/mcs/info-hint'
+import { Button } from '@/components/ui/button'
+import { RotateCw } from 'lucide-react'
 import { formatDurationMs } from '@/lib/format'
 import type { AuditLogItem, CommandHistoryItem } from '@/api/types'
 import { getActionLabel } from './action-labels'
 import { formatTime, formatAuditDetail } from './audit-format'
 
 export const AUDIT_COLUMNS = 4
-export const CMD_COLUMNS = 5
+export const CMD_COLUMNS = 6
 
 /** 审计日志表头 */
 export function AuditHeader() {
@@ -79,13 +81,26 @@ export function CmdHeader() {
         <th scope="col" className="px-3 py-2 font-medium text-mcs-text-muted">
           耗时
         </th>
+        <th scope="col" className="px-3 py-2 font-medium text-mcs-text-muted">
+          操作
+        </th>
       </tr>
     </thead>
   )
 }
 
-/** 命令历史表体 */
-export function CmdBody({ cmds }: { cmds: CommandHistoryItem[] }) {
+/** 命令历史表体（含行内「重发」动作） */
+export function CmdBody({
+  cmds,
+  onReplay,
+  replayingId,
+}: {
+  cmds: CommandHistoryItem[]
+  /** 重发该行命令（调用方负责二次确认与提交） */
+  onReplay?: (cmd: CommandHistoryItem) => void
+  /** 正在重发的行 id（禁用该行按钮，防连点重复下发非幂等命令） */
+  replayingId?: number | null
+}) {
   return (
     <tbody>
       {cmds.map((cmd) => (
@@ -116,6 +131,24 @@ export function CmdBody({ cmds }: { cmds: CommandHistoryItem[] }) {
           <td className="px-3 py-2 text-mcs-text-muted">{cmd.source}</td>
           <td className="px-3 py-2 text-mcs-text-muted font-mono text-mcs-xs">
             {formatDurationMs(cmd.durationMs)}
+          </td>
+          <td className="px-3 py-2">
+            <Button
+              variant="outline"
+              size="sm"
+              /* 行内小档 h-6 两族之一：size="sm" + 覆盖高度，字号须跟着压到 2xs，
+                 否则 sm 基座的 12px 会落在 10px 档位里（见 AGENTS.md 控件高度档位） */
+              className="h-6 text-mcs-2xs"
+              disabled={!cmd.instanceId || replayingId === cmd.id}
+              onClick={() => onReplay?.(cmd)}
+              aria-label={`重发命令 ${cmd.command}`}
+            >
+              <RotateCw
+                aria-hidden
+                className={replayingId === cmd.id ? 'animate-spin' : undefined}
+              />
+              重发
+            </Button>
           </td>
         </tr>
       ))}

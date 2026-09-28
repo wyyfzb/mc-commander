@@ -28,6 +28,7 @@ const { auditCalls, cmdCalls, auditPageState } = vi.hoisted(() => ({
 }))
 
 vi.mock('@/api/queries', () => ({
+  useInstances: () => ({ data: [] }),
   useAuditLogs: (params: Record<string, unknown>) => {
     auditCalls.push(params)
     return {

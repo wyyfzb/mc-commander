@@ -73,7 +73,19 @@ export function apiRemoveWhitelist(
   return apiDelete<null>(`${base(instanceId)}/players/${playerName}/whitelist`, config)
 }
 
-/** 发送任意命令（POST /instances/:id/command；给予/传送/gamemode/clear/tell/effect 的通用落点） */
-export function apiSendCommand(config: ConnectionConfig, instanceId: string, command: string) {
-  return apiPost<unknown>(`${base(instanceId)}/command`, config, { command })
+/**
+ * 发送任意命令（POST /instances/:id/command；给予/传送/gamemode/clear/tell/effect 的通用落点）
+ * @param source 命令史来源标记。`replay` 用于审计页的行内重发，使重发在命令史里可辨认
+ *   （白名单枚举，见 instanceCommandRequestBodySchema）；省略即 `api`。
+ */
+export function apiSendCommand(
+  config: ConnectionConfig,
+  instanceId: string,
+  command: string,
+  source?: 'api' | 'replay',
+) {
+  return apiPost<unknown>(`${base(instanceId)}/command`, config, {
+    command,
+    ...(source ? { source } : {}),
+  })
 }
