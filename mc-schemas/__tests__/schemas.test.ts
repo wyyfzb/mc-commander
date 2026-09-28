@@ -381,6 +381,38 @@ describe('schemas 基础校验', () => {
     })
     expect(s.cpuCores).toBe(4)
   })
+
+  it('systemStats schema 解析磁盘告警阈值（前端据此判告警，故须随读数下发）', () => {
+    const s = systemStatsSchema.parse({
+      cpuUsage: 25.5,
+      memoryUsage: 512,
+      totalMemory: 2048,
+      memoryPercent: 25,
+      cpuCores: 4,
+      loadAvg: [0.5, 0.3, 0.2],
+      uptime: 86400,
+      diskUsage: {
+        primary: { mountpoint: '/', totalGB: 39, usedGB: 37, percent: 94.9 },
+        all: [{ mountpoint: '/', totalGB: 39, usedGB: 37, percent: 94.9 }],
+      },
+      diskAlert: { warningPercent: 85, errorPercent: 95 },
+    })
+    expect(s.diskAlert).toEqual({ warningPercent: 85, errorPercent: 95 })
+    expect(s.diskUsage?.primary?.percent).toBe(94.9)
+  })
+
+  it('systemStats schema：diskAlert 可选（旧服务端不出该字段仍可解析）', () => {
+    const s = systemStatsSchema.parse({
+      cpuUsage: 25.5,
+      memoryUsage: 512,
+      totalMemory: 2048,
+      memoryPercent: 25,
+      cpuCores: 4,
+      loadAvg: [0.5, 0.3, 0.2],
+      uptime: 86400,
+    })
+    expect(s.diskAlert).toBeUndefined()
+  })
 })
 
 describe('请求侧契约（issue 391 路由层 zod 统一）', () => {

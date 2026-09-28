@@ -52,6 +52,11 @@ export const mockSystemStats: SystemStats = {
   cpuCores: 4,
   loadAvg: [0.1, 0.2, 0.15],
   uptime: 86_400,
+  diskUsage: {
+    primary: { mountpoint: '/', totalGB: 39, usedGB: 5.5, percent: 14.2 },
+    all: [{ mountpoint: '/', totalGB: 39, usedGB: 5.5, percent: 14.2 }],
+  },
+  diskAlert: { warningPercent: 85, errorPercent: 95 },
 }
 
 function ok<T>(data: T) {

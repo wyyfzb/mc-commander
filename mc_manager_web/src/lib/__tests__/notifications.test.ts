@@ -3,8 +3,10 @@ import {
   aggregateNotifications,
   buildAlertNotifications,
   buildNotifications,
+  DEFAULT_ALERT_THRESHOLDS,
   mergeNotifications,
   NOTIFICATION_TYPE_META,
+  type AlertThresholds,
   type AppNotification,
 } from '../notifications'
 
@@ -377,6 +379,98 @@ describe('buildAlertNotifications 告警状态机', () => {
 
     const recovered = buildAlertNotifications({ cpu: 50 }, undefined, new Set(['highCpu']))
     expect(recovered.notifications[0]?.content).toBe('CPU 使用率已恢复正常')
+  })
+
+  describe('磁盘两档阈值', () => {
+    // 完整阈值对象：AlertThresholds 的 cpu/memory/tps 为必填，磁盘两项可选
+    const disk: AlertThresholds = { ...DEFAULT_ALERT_THRESHOLDS, diskWarning: 85, diskError: 95 }
+
+    it('越过 warning 档 → 一条 warning 告警', () => {
+      const { notifications, activeAlerts } = buildAlertNotifications(
+        { diskPercent: 88 },
+        disk,
+        new Set(),
+      )
+      expect(notifications).toHaveLength(1)
+      expect(notifications[0]?.type).toBe('highDisk')
+      expect(notifications[0]?.content).toBe('磁盘空间不足: 88.0%（阈值 85%）')
+      expect(activeAlerts.has('highDisk')).toBe(true)
+    })
+
+    it('warning 与 error 之间不重复告警（跃迁单次）', () => {
+      const { notifications } = buildAlertNotifications(
+        { diskPercent: 90 },
+        disk,
+        new Set(['highDisk']),
+      )
+      expect(notifications).toHaveLength(0)
+    })
+
+    it('直接冲到 error 档 → 只发一条 severe，不叠加 warning', () => {
+      const { notifications, activeAlerts } = buildAlertNotifications(
+        { diskPercent: 96 },
+        disk,
+        new Set(),
+      )
+      expect(notifications).toHaveLength(1)
+      expect(notifications[0]?.type).toBe('criticalDisk')
+      expect(activeAlerts.has('criticalDisk')).toBe(true)
+      expect(activeAlerts.has('highDisk')).toBe(false)
+    })
+
+    it('error 档降回 warning 档 → 发 warning（不是「已恢复」，与事实不符）', () => {
+      const { notifications, activeAlerts } = buildAlertNotifications(
+        { diskPercent: 88 },
+        disk,
+        new Set(['criticalDisk']),
+      )
+      expect(notifications).toHaveLength(1)
+      expect(notifications[0]?.type).toBe('highDisk')
+      expect(activeAlerts.has('criticalDisk')).toBe(false)
+      expect(activeAlerts.has('highDisk')).toBe(true)
+    })
+
+    it('降到阈值以下 → 恢复通知并清空两档', () => {
+      const { notifications, activeAlerts } = buildAlertNotifications(
+        { diskPercent: 40 },
+        disk,
+        new Set(['highDisk']),
+      )
+      expect(notifications).toHaveLength(1)
+      expect(notifications[0]?.content).toBe('磁盘空间已恢复正常')
+      expect(activeAlerts.size).toBe(0)
+    })
+
+    it('阈值取「大于等于」：正好等于 warning/error 即告警（边界闭区间）', () => {
+      const atWarn = buildAlertNotifications({ diskPercent: 85 }, disk, new Set())
+      expect(atWarn.notifications[0]?.type).toBe('highDisk')
+      expect(atWarn.activeAlerts.has('highDisk')).toBe(true)
+
+      const atErr = buildAlertNotifications({ diskPercent: 95 }, disk, new Set())
+      expect(atErr.notifications[0]?.type).toBe('criticalDisk')
+      expect(atErr.activeAlerts.has('criticalDisk')).toBe(true)
+    })
+
+    it('阈值未下发（服务端未提供）→ 不判定磁盘告警', () => {
+      const { notifications, activeAlerts } = buildAlertNotifications(
+        { diskPercent: 99 },
+        undefined,
+        new Set(),
+      )
+      expect(notifications).toHaveLength(0)
+      expect(activeAlerts.size).toBe(0)
+    })
+
+    it('阈值只给一半（缺 errorPercent）→ 整段不判（fail-closed，不用半套阈值猜）', () => {
+      const partial: AlertThresholds = { ...DEFAULT_ALERT_THRESHOLDS, diskWarning: 85 }
+      const { notifications, activeAlerts } = buildAlertNotifications(
+        { diskPercent: 99 },
+        partial,
+        new Set(),
+      )
+      expect(notifications).toHaveLength(0)
+      expect(activeAlerts.size).toBe(0)
+    })
   })
 })
 

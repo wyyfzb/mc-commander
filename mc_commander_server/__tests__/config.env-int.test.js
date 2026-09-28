@@ -127,6 +127,23 @@ describe('config 数值环境变量收口（intFromEnv）', () => {
     expect(String(err?.message ?? err)).toContain('３０００');
   });
 
+  it('磁盘阈值倒置（error ≤ warning）拒绝启动：容错会让 error 档永不触发', async () => {
+    process.env.DISK_WARNING_PERCENT = '95';
+    process.env.DISK_ERROR_PERCENT = '85';
+    const err = await loadConfig().catch((e) => e);
+    const text = String(err?.message ?? err);
+    expect(text).toContain('必须严格递增');
+    expect(text).toContain('95');
+    expect(text).toContain('85');
+  });
+
+  it('磁盘阈值相等也拒绝（两档重合会让 warning 档永不可达）', async () => {
+    process.env.DISK_WARNING_PERCENT = '90';
+    process.env.DISK_ERROR_PERCENT = '90';
+    const err = await loadConfig().catch((e) => e);
+    expect(String(err?.message ?? err)).toContain('必须严格递增');
+  });
+
   it('链式候选首个已设置项生效即校验：非法时报第一候选变量名，不下探', async () => {
     process.env.PANEL_BACKUP_RETENTION_MAX = 'abc';
     process.env.BACKUP_RETENTION_MAX = '10';

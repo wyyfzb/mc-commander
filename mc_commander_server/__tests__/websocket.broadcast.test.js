@@ -340,7 +340,7 @@ describe('WebSocket 系统广播域（broadcastAll / 全局通知 / 系统统计
   });
 
   describe('startSystemStatsBroadcast 系统资源统计推送', () => {
-    it('启动立即推送一次，指标数据与采集源一致（CPU/内存/磁盘八字段）', () => {
+    it('启动立即推送一次，指标数据与采集源一致（CPU/内存/磁盘 + 告警阈值九字段）', () => {
       const ws = connect(wss);
       ws.send.mockClear();
 
@@ -364,6 +364,8 @@ describe('WebSocket 系统广播域（broadcastAll / 全局通知 / 系统统计
             { mountpoint: '/mnt/mc-b', totalGB: 10, usedGB: 1, percent: 10 },
           ],
         },
+        // 阈值随读数下发：前端据此判磁盘告警，不另写一份数字
+        diskAlert: { warningPercent: 85, errorPercent: 95 },
       });
     });
 

@@ -183,7 +183,7 @@ describe('Status Routes · 端点缺口收口', () => {
       Object.defineProperty(process, 'platform', origPlatform);
     });
 
-    it('成功：八字段精确断言（CPU 冷采样为 0 + 内存换算 + 磁盘三目录聚合降序）', async () => {
+    it('成功：九字段精确断言（CPU 冷采样为 0 + 内存换算 + 磁盘三目录聚合降序 + 告警阈值下发）', async () => {
       __state.procStatContent = 'cpu  100 0 100 500 0 0 0 0 0 0';
       const res = await request(app).get('/api/system-stats');
 
@@ -206,6 +206,8 @@ describe('Status Routes · 端点缺口收口', () => {
             { mountpoint: config.backupsDir, totalGB: 10, usedGB: 1, percent: 10 },
           ],
         },
+        // 阈值随读数下发：前端据此判磁盘告警，不另写一份数字
+        diskAlert: { warningPercent: 85, errorPercent: 95 },
       });
     });
 
