@@ -18,7 +18,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/mcs/page-header'
 import { DataTableShell } from '@/components/mcs/data-table-shell'
-import { useAuditLogs, useCommandHistory } from '@/api/queries'
+import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
+import { useAuditLogs, useCommandHistory, useInstances } from '@/api/queries'
+import { apiSendCommand } from '@/api/players'
+import { getFriendlyErrorText } from '@/api/errors'
+import { instanceLabel } from '@/lib/instance-label'
+import type { CommandHistoryItem } from '@/api/types'
 import {
   QUICK_RANGES,
   isRangeInverted,
@@ -42,6 +47,9 @@ import { CmdFilterBar } from './cmd-filter-bar'
 
 /** URL 日期参数校验：仅接受 yyyy-MM-dd（与 input type=date 值同构，非法值回退默认不过滤） */
 const DATE_PARAM_RE = /^\d{4}-\d{2}-\d{2}$/
+
+/** 入库遮蔽留下的占位（`maskSensitiveCommand` 把敏感值替换为 `***`） */
+const MASKED_COMMAND_RE = /\*\*\*/
 
 export function AuditPage() {
   // ── 筛选状态 URL 持久化（issue 381）：state 为唯一真源，URL 为镜像 ──
@@ -235,6 +243,46 @@ export function AuditPage() {
   })
 
   const config = useConnectionStore()
+
+  /* ── 命令重发（行内动作） ──
+     历史里含 `stop`/`ban` 这类不可逆命令，故一律先二次确认（不按命令名白名单放行：
+     命令空间是开放的，判「哪些危险」必然漏）。
+     目标实例取**该行自己的 instanceId**，不是全局选中实例——审计页不随实例切换，
+     而命令历史是跨实例的汇总（服务端按 instance_id 落库），取全局实例会发错机器。
+     来源标 `replay`：命令史是审计资产，「谁重发了什么」与「谁首次下发」必须可分辨。 */
+  const [replayTarget, setReplayTarget] = useState<CommandHistoryItem | null>(null)
+  const [replayingId, setReplayingId] = useState<number | null>(null)
+  const replaying = replayingId !== null
+
+  // 目标实例名：对话框显示 id 用户认不出是哪个实例（命令史表里也没有实例列）
+  const instancesQuery = useInstances()
+  const targetLabel = useMemo(() => {
+    const id = replayTarget?.instanceId
+    if (!id) return ''
+    const found = instancesQuery.data?.find((i) => i.id === id)
+    return found ? instanceLabel(found) : id
+  }, [replayTarget, instancesQuery.data])
+
+  const confirmReplay = async () => {
+    const target = replayTarget
+    // 无实例归属的行不提供重发（按钮已禁用，此为防御兜底）
+    if (!target?.instanceId) {
+      setReplayTarget(null)
+      return
+    }
+    setReplayingId(target.id)
+    try {
+      await apiSendCommand(config, target.instanceId, target.command, 'replay')
+      toast.success('命令已重发')
+      // 新行由服务端落库，重取才看得到
+      void cmdQuery.refetch()
+    } catch (err) {
+      toast.error(`重发失败：${getFriendlyErrorText(err)}`)
+    } finally {
+      setReplayingId(null)
+      setReplayTarget(null)
+    }
+  }
   // 导出：按当前筛选 + 排序口径拉取（服务端零改动，上限 1000 条，issue 384）
   const [exporting, setExporting] = useState(false)
   const handleExport = async () => {
@@ -391,7 +439,7 @@ export function AuditPage() {
             error={cmdQuery.isError ? cmdQuery.error : undefined}
             isEmpty={!cmdQuery.isLoading && !cmdQuery.isError && cmdQuery.data?.data.length === 0}
             emptyText="暂无记录"
-            skeletonWidths={['w-20', 'w-40', 'w-10', 'w-14', 'w-12']}
+            skeletonWidths={['w-20', 'w-40', 'w-10', 'w-14', 'w-12', 'w-16']}
             header={<CmdHeader />}
             pagination={
               cmdQuery.data?.pagination
@@ -406,10 +454,34 @@ export function AuditPage() {
                 : undefined
             }
           >
-            <CmdBody cmds={cmdQuery.data?.data ?? []} />
+            <CmdBody
+              cmds={cmdQuery.data?.data ?? []}
+              onReplay={setReplayTarget}
+              replayingId={replayingId}
+            />
           </DataTableShell>
         </TabsContent>
       </Tabs>
+
+      <ConfirmDialog
+        open={replayTarget !== null}
+        onOpenChange={(open) => {
+          if (!open && !replaying) setReplayTarget(null)
+        }}
+        title="重发这条命令？"
+        description={replayTarget ? `将向实例「${targetLabel}」重发：${replayTarget.command}` : ''}
+        warning={
+          /* 命令史落库前会遮蔽敏感值（services/mc_server.js 的 maskSensitiveCommand），
+             含密钥的命令存成 `login ***` ⇒ 重发会原样发出遮蔽后的文本并失败。这是入库
+             遮蔽的既有取舍，此处如实告知，不假装重发一定等价于当初那次。 */
+          replayTarget && MASKED_COMMAND_RE.test(replayTarget.command)
+            ? '这条命令含被遮蔽的敏感值（如 ***），重发会把遮蔽后的文本原样发出，多半会失败'
+            : '历史里可能含 stop / ban 等不可逆命令，重发会真实执行'
+        }
+        confirmText="重发"
+        loading={replaying}
+        onConfirm={confirmReplay}
+      />
     </div>
   )
 }

@@ -21,6 +21,7 @@ const { exportImpl, exportCalls } = vi.hoisted(() => ({
 }))
 
 vi.mock('@/api/queries', () => ({
+  useInstances: () => ({ data: [] }),
   useAuditLogs: () => ({
     isLoading: false,
     isFetching: false,

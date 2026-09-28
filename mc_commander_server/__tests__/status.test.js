@@ -319,7 +319,8 @@ describe('Status Routes', () => {
         .send({ command: 'list' });
 
       expect(res.status).toBe(200);
-      expect(mockInstance.sendCommand).toHaveBeenCalledWith('list');
+      // 第二实参是命令史来源标记：请求未带 source 时为 undefined，sendCommand 自身落回 'api'
+      expect(mockInstance.sendCommand).toHaveBeenCalledWith('list', { source: undefined });
     });
 
     it('should return 400 if command missing', async () => {

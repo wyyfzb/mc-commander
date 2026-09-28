@@ -424,6 +424,55 @@ describe('Status Routes · 端点缺口收口', () => {
       expect(res.status).toBe(500);
       expect(res.body.message).toBe('Internal Server Error');
     });
+
+    it('省略 source → 以 undefined 透传（sendCommand 自身默认 api，行为不变）', async () => {
+      const instance = {
+        id: 's1',
+        isRunning: true,
+        isRconConnected: true,
+        sendCommand: vi.fn().mockResolvedValue('ok'),
+      };
+      mockManager.getInstance.mockReturnValue(instance);
+
+      await request(app).post('/api/instances/s1/command').send({ command: 'list' });
+
+      expect(instance.sendCommand).toHaveBeenCalledWith('list', { source: undefined });
+    });
+
+    it('source=replay → 透传给 sendCommand（命令史据此可辨认「重发」）', async () => {
+      const instance = {
+        id: 's1',
+        isRunning: true,
+        isRconConnected: true,
+        sendCommand: vi.fn().mockResolvedValue('ok'),
+      };
+      mockManager.getInstance.mockReturnValue(instance);
+
+      const res = await request(app)
+        .post('/api/instances/s1/command')
+        .send({ command: 'list', source: 'replay' });
+
+      expect(res.status).toBe(200);
+      expect(instance.sendCommand).toHaveBeenCalledWith('list', { source: 'replay' });
+    });
+
+    it('source 只接受白名单：伪造 scheduler/rcon 被 400 拒绝（否则审计来源可冒充）', async () => {
+      const instance = {
+        id: 's1',
+        isRunning: true,
+        isRconConnected: true,
+        sendCommand: vi.fn().mockResolvedValue('ok'),
+      };
+      mockManager.getInstance.mockReturnValue(instance);
+
+      const res = await request(app)
+        .post('/api/instances/s1/command')
+        .send({ command: 'list', source: 'scheduler' });
+
+      expect(res.status).toBe(400);
+      expect(res.body.code).toBe(40000);
+      expect(instance.sendCommand).not.toHaveBeenCalled();
+    });
   });
 
   // ── 404 边界统一收口 ──

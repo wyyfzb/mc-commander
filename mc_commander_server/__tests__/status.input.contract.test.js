@@ -321,7 +321,8 @@ describe('status 输入侧契约 - POST /instances/:id/command（issue 486）', 
   it('合法命令 → 200 + sendCommand 调用 + 回显（控制台链路行为不变）', async () => {
     const res = await request(app).post('/api/v1/instances/s1/command').send({ command: 'list' });
     expect(res.status).toBe(200);
-    expect(instance.sendCommand).toHaveBeenCalledWith('list');
+    // 第二实参是命令史来源标记：请求未带 source 时为 undefined，sendCommand 自身落回 'api'
+    expect(instance.sendCommand).toHaveBeenCalledWith('list', { source: undefined });
     expect(res.body.data).toBe('OK');
   });
 });

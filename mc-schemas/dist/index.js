@@ -3876,10 +3876,19 @@ const instanceSettingsRequestBodySchema = objectType({
 /** POST /instances/:id/start 请求体：禁用键契约——startCommand 出现即 400（find-002 RCE 封堵） */
 const instanceStartRequestBodySchema = objectType({ startCommand: neverType({ invalid_type_error: "startCommand 已不再支持通过 API 传入" }).optional() });
 /** POST /instances/:id/command 请求体：非空字符串 + 长度上限（上限宽松覆盖长 tellraw/NBT 命令，仅拒收超长滥用） */
-const instanceCommandRequestBodySchema = objectType({ command: stringType({
-	required_error: "Command is required",
-	invalid_type_error: "Command must be a string"
-}).min(1, "Command is required").max(2e3) });
+const instanceCommandRequestBodySchema = objectType({
+	command: stringType({
+		required_error: "Command is required",
+		invalid_type_error: "Command must be a string"
+	}).min(1, "Command is required").max(2e3),
+	/**
+	* 命令来源标记（落 `command_history.source`）。
+	* **取值是白名单枚举，不是自由字符串**：source 是审计字段，若放开成自由值，
+	* 调用方可把命令标成 `scheduler`/`rcon` 从而冒充别的来源，审计可回溯性即失效。
+	* 省略时为 `api`（既有行为不变）。
+	*/
+	source: enumType(["api", "replay"]).optional()
+});
 /** PUT /instances/:id/properties 请求体：属性键值对（passthrough 保留全部键；数组/标量/null 拒绝） */
 const instancePropertiesRequestBodySchema = objectType({}, { invalid_type_error: "请求体必须是 JSON 对象" }).passthrough();
 /** POST /instances/:id/eula 请求体：EULA 确认布尔（文案与原 400 一致） */

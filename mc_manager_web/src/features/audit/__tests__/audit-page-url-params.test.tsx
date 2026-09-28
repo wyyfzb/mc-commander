@@ -25,6 +25,7 @@ const { auditParams } = vi.hoisted(() => ({
 }))
 
 vi.mock('@/api/queries', () => ({
+  useInstances: () => ({ data: [] }),
   useAuditLogs: (params: Record<string, unknown>) => {
     // 捕获当前查询参数（URL 恢复的筛选应原样透传）
     auditParams.action = params.action as string | undefined

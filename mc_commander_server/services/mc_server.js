@@ -997,7 +997,14 @@ export class MCServerInstance extends EventEmitter {
     }
   }
 
-  async sendCommand(command) {
+  /**
+   * 执行一条命令并落命令史。
+   * @param {string} command
+   * @param {{ source?: string }} [options] 命令史来源标记（默认 `api`）。
+   *   仅供调用方区分「同一端点的不同语义」——目前是审计页的行内重发（`replay`），
+   *   使重发在命令史里可辨认，而不是与一次普通下发混同。
+   */
+  async sendCommand(command, { source = 'api' } = {}) {
     if (!this.isRunning || (!this.process && !this.adopted)) {
       throw new Error('Server is not running');
     }
@@ -1094,7 +1101,7 @@ export class MCServerInstance extends EventEmitter {
           instanceId: this.id,
           // 落库前遮蔽敏感值（用户自由输入的命令可能含密钥；见 utils/command-mask.js）
           command: maskSensitiveCommand(command),
-          source: 'api',
+          source,
           success: cmdSuccess ? 1 : 0,
           durationMs: Date.now() - cmdStart,
         });
