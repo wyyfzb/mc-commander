@@ -29,7 +29,7 @@ const { jsonImpl, streamImpl } = vi.hoisted(() => ({
 
 vi.mock('got', () => ({
   default: Object.assign(
-    vi.fn(() => ({ json: () => jsonImpl.current() })),
+    vi.fn((...args) => ({ json: () => jsonImpl.current(...args) })),
     { stream: vi.fn(() => streamImpl.current()) },
   ),
 }));
@@ -149,7 +149,12 @@ function startEmitsCrash() {
 beforeEach(() => {
   vi.clearAllMocks();
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-upgrade-rollback-'));
-  jsonImpl.current = () => Promise.reject(new Error('offline (mocked)'));
+  // purpur 现在会先查 /latest 取 md5 摘要；默认 mock 需能回答该查询，否则以 purpur
+  // 为载体的用例会停在「offline」而非待测阶段。其余上游一律拒绝，保持隔离语义。
+  jsonImpl.current = (url) => {
+    if (String(url).includes('/purpur/')) return Promise.resolve({ build: '2416' });
+    return Promise.reject(new Error('offline (mocked)'));
+  };
   streamImpl.current = streamSucceeds();
 });
 

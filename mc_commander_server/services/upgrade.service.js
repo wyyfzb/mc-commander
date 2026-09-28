@@ -112,9 +112,8 @@ export class UpgradeService {
    * 解析 JAR 下载地址与期望摘要（issue 316：上游提供 sha 时返回 expectedHash，
    * 下载完成后由 _downloadJar 强制校验）。
    * 各上游摘要可用性：vanilla Piston detail.downloads.server.sha1（官方提供
-   * sha1）；paper v3 downloadInfo.sha256（v2 回退拼接路径无摘要可用）；
-   * purpur latest/download 无摘要。无摘要时 expectedHash 为 null，
-   * _downloadJar 跳过完整性校验但仍执行体积上限。
+   * sha1）；paper v3 downloadInfo.checksums.sha256；purpur /latest 的顶层 md5。
+   * 无摘要时 expectedHash 为 null，_downloadJar 跳过完整性校验但仍执行体积上限。
    * @param {string} mcVersion
    * @param {string} type - vanilla | paper | purpur
    * @returns {Promise<{ url: string, expectedHash: { algorithm: string, digest: string } | null }>}
@@ -172,10 +171,23 @@ export class UpgradeService {
     }
 
     if (type === 'purpur') {
-      // Purpur API（上游不提供摘要 → 跳过完整性校验，仍执行体积上限）
+      // Purpur API：摘要只在 /latest 响应的顶层 md5 字段里（实测与真实 jar 字节一致），
+      // 下载直链本身不带摘要 ⇒ 必须先查 /latest 才能校验。
+      // 查不到（网络异常/md5 缺失）时降级为无摘要跳过，不阻断升级。
+      const latest = await got(`https://api.purpurmc.org/v2/purpur/${mcVersion}/latest`, {
+        timeout: { request: 15000 },
+        retry: { limit: 2 },
+      }).json();
+      const digest = latest.md5;
+      // 用 latest.build 而非 /latest/download：否则查询到的摘要与下载的构建可能不是同一个
+      // （中间有新构建发布时会错位，导致对正常文件报完整性失败）
+      const url =
+        latest.build != null
+          ? `https://api.purpurmc.org/v2/purpur/${mcVersion}/${latest.build}/download`
+          : `https://api.purpurmc.org/v2/purpur/${mcVersion}/latest/download`;
       return {
-        url: `https://api.purpurmc.org/v2/purpur/${mcVersion}/latest/download`,
-        expectedHash: null,
+        url,
+        expectedHash: digest ? { algorithm: 'md5', digest } : null,
       };
     }
 

@@ -24,7 +24,13 @@ const testState = vi.hoisted(() => ({
 /** 下载流桩：hang 模式永不结束（把升级停在下载阶段），failure 模式立即 error */
 vi.mock('got', () => ({
   default: Object.assign(
-    vi.fn(() => Promise.reject(new Error('offline (mocked)'))),
+    // purpur 现在会先查 /latest 取 md5 摘要；本文件全部用 purpur 作载体，
+    // 故该查询必须可解析，否则用例会停在「offline」而非待测阶段
+    vi.fn((url) =>
+      String(url).includes('/purpur/')
+        ? { json: () => Promise.resolve({ build: '2416' }) }
+        : Promise.reject(new Error('offline (mocked)')),
+    ),
     {
       stream: vi.fn(() => {
         const listeners = {};

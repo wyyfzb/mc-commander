@@ -581,10 +581,14 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
     expect(fs.existsSync(`${testState.serversDir}/${instanceId}`)).toBe(false);
   });
 
-  it('vanilla：core build.application 携带 sha256 → 防御式取值 + 摘要校验通过', async () => {
+  it('vanilla：core build.application 携带真实 hash/hashType=sha256 → 摘要校验通过', async () => {
     testState.latestBuild = {
       downloads: {
-        application: { url: 'https://example.invalid/jar/server.jar', sha256: JAR_SHA256 },
+        application: {
+          url: 'https://example.invalid/jar/server.jar',
+          hash: JAR_SHA256,
+          hashType: 'sha256',
+        },
       },
     };
     const { app } = buildApp();
@@ -598,14 +602,108 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
     expect(fs.readFileSync(`${testState.serversDir}/${instanceId}/server.jar`)).toEqual(JAR_BYTES);
   });
 
-  it('vanilla：core 顶层 sha1（无 url 直链形态）→ sha1 算法选择 + 校验通过', async () => {
+  it('vanilla：真实 hashType=sha1 → 按 sha1 算法校验通过', async () => {
     const jarSha1 = crypto.createHash('sha1').update(JAR_BYTES).digest('hex');
-    testState.latestBuild = { url: 'https://example.invalid/jar/server.jar', sha1: jarSha1 };
+    testState.latestBuild = {
+      downloads: {
+        application: {
+          url: 'https://example.invalid/jar/server.jar',
+          hash: jarSha1,
+          hashType: 'sha1',
+        },
+      },
+    };
     const { app } = buildApp();
 
     const res = await request(app)
       .post('/api/instances/deploy')
       .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Vanilla Sha1 Server' });
+
+    expect(res.status).toBe(200);
+    expect(fs.readFileSync(`${testState.serversDir}/${res.body.data.id}/server.jar`)).toEqual(
+      JAR_BYTES,
+    );
+  });
+
+  it('purpur：真实 hashType=md5 → 按 md5 校验通过（上游只给 md5）', async () => {
+    const jarMd5 = crypto.createHash('md5').update(JAR_BYTES).digest('hex');
+    testState.latestBuild = {
+      downloads: {
+        application: {
+          url: 'https://example.invalid/jar/purpur.jar',
+          hash: jarMd5,
+          hashType: 'md5',
+        },
+      },
+    };
+    const { app } = buildApp();
+
+    const res = await request(app)
+      .post('/api/instances/deploy')
+      .send({ type: 'purpur', mcVersion: '1.21.4', instanceName: 'Purpur Md5 Server' });
+
+    expect(res.status).toBe(200);
+  });
+
+  it('purpur：md5 不匹配 → 502（证明 md5 确实被校验，而非当作无摘要放行）', async () => {
+    testState.latestBuild = {
+      downloads: {
+        application: {
+          url: 'https://example.invalid/jar/purpur.jar',
+          hash: 'f'.repeat(32),
+          hashType: 'md5',
+        },
+      },
+    };
+    const { app } = buildApp();
+
+    const res = await request(app)
+      .post('/api/instances/deploy')
+      .send({ type: 'purpur', mcVersion: '1.21.4', instanceName: 'Purpur Md5 Mismatch' });
+
+    expect(res.status).toBe(502);
+    expect(res.body.message).toMatch(/integrity check failed/);
+  });
+
+  it('摘要不匹配 → 502 且清理残留（fail-closed，不静默落盘损坏 jar）', async () => {
+    testState.latestBuild = {
+      downloads: {
+        application: {
+          url: 'https://example.invalid/jar/server.jar',
+          // 故意给错的摘要：真实字节与之不符
+          hash: crypto.createHash('sha256').update('different-payload').digest('hex'),
+          hashType: 'sha256',
+        },
+      },
+    };
+    const { app } = buildApp();
+
+    const res = await request(app)
+      .post('/api/instances/deploy')
+      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Integrity Mismatch Server' });
+
+    expect(res.status).toBe(502);
+    const instanceId = lastDeployInstanceId();
+    expect(fs.existsSync(`${testState.serversDir}/${instanceId}`)).toBe(false);
+    expect(InstanceModel.create).not.toHaveBeenCalled();
+  });
+
+  it('hashType 无法识别 → 视为无摘要跳过校验（不拿未知算法比对而误报损坏）', async () => {
+    testState.latestBuild = {
+      downloads: {
+        application: {
+          url: 'https://example.invalid/jar/server.jar',
+          // 故意用非摘要形态，避免读成「像 md5 的值配错了算法」
+          hash: 'not-a-recognized-digest',
+          hashType: 'crc32',
+        },
+      },
+    };
+    const { app } = buildApp();
+
+    const res = await request(app)
+      .post('/api/instances/deploy')
+      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Unknown HashType Server' });
 
     expect(res.status).toBe(200);
     expect(fs.readFileSync(`${testState.serversDir}/${res.body.data.id}/server.jar`)).toEqual(
