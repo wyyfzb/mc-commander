@@ -111,8 +111,8 @@ describe('instance-properties.service · 敏感键掩码 maskSensitiveProperties
     expect(src['rcon.password']).toBe('secret');
   });
 
-  it('敏感键集合覆盖 9 个网络/权限键（收口面不缩水）', () => {
-    expect(SENSITIVE_PROPERTIES.size).toBe(9);
+  it('敏感键集合覆盖 11 个网络/权限/凭据键（收口面不缩水）', () => {
+    expect(SENSITIVE_PROPERTIES.size).toBe(11);
     for (const key of [
       'enable-rcon',
       'rcon.password',
@@ -123,9 +123,33 @@ describe('instance-properties.service · 敏感键掩码 maskSensitiveProperties
       'online-mode',
       'server-port',
       'server-ip',
+      // MSMP 凭据：MC 开启该协议且 secret 留空时自动生成并写回 server.properties
+      'management-server-secret',
+      'management-server-tls-keystore-password',
     ]) {
       expect(SENSITIVE_PROPERTIES.has(key)).toBe(true);
     }
+  });
+
+  it('MSMP 凭据键在 GET 视图中被掩码（不得明文回显）', async () => {
+    const SECRET = 'S3CR3T-40-CHAR-abcdefghijklmnopqrstuvwxyz01';
+    const instance = {
+      properties: {
+        'management-server-enabled': 'true',
+        'management-server-secret': SECRET,
+        'management-server-tls-keystore-password': 'KEYSTORE_PW',
+        'rcon.password': 'RCON_PW',
+      },
+      _loadProperties: () => instance.properties,
+      readDifficulty: async () => null,
+      _readGameTypeFromLevelDat: () => null,
+    };
+    const view = await getPropertiesView(instance);
+    expect(view['management-server-secret']).toBe(SENSITIVE_PLACEHOLDER);
+    expect(view['management-server-tls-keystore-password']).toBe(SENSITIVE_PLACEHOLDER);
+    // 对照组：既有凭据口径不变
+    expect(view['rcon.password']).toBe(SENSITIVE_PLACEHOLDER);
+    expect(JSON.stringify(view)).not.toContain(SECRET);
   });
 });
 

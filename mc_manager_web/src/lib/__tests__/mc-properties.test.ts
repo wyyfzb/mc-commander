@@ -35,7 +35,7 @@ describe('SERVER_PROPERTY_DEFS 总量与分类分布（71 条 = 19/18/34）', ()
   })
 })
 
-describe('敏感键（9 键）与热改键（4 键）', () => {
+describe('敏感键（11 键）与热改键（4 键）', () => {
   it('敏感键集合与服务端 SENSITIVE_PROPERTIES 完全一致', () => {
     expect([...SENSITIVE_PROPERTY_KEYS].sort()).toEqual(
       [
@@ -48,9 +48,11 @@ describe('敏感键（9 键）与热改键（4 键）', () => {
         'online-mode',
         'server-port',
         'server-ip',
+        'management-server-secret',
+        'management-server-tls-keystore-password',
       ].sort(),
     )
-    expect(SENSITIVE_PROPERTY_KEYS.size).toBe(9)
+    expect(SENSITIVE_PROPERTY_KEYS.size).toBe(11)
   })
 
   it('热改键集合与服务端 RUNTIME_COMMAND_MAP 完全一致（4 键）', () => {
@@ -60,9 +62,16 @@ describe('敏感键（9 键）与热改键（4 键）', () => {
     expect(HOT_RELOAD_KEYS.size).toBe(4)
   })
 
-  it('敏感键与热改键均为已知属性（存在定义）', () => {
+  it('敏感键与热改键均为已知属性，或走未知键定义（仍标记敏感）', () => {
     for (const key of [...SENSITIVE_PROPERTY_KEYS, ...HOT_RELOAD_KEYS]) {
-      expect(SERVER_PROPERTY_DEF_MAP.get(key)?.name).toBe(key)
+      const def = SERVER_PROPERTY_DEF_MAP.get(key)
+      if (def) {
+        expect(def.name).toBe(key)
+      } else {
+        // management-server-* 这类官方键面板未建静态定义，由 buildUnknownPropertyDef
+        // 兜底；该路径同样按敏感集标记，防明文旁路
+        expect(buildUnknownPropertyDef(key, 'x').isSensitive, `${key} 应标敏感`).toBe(true)
+      }
     }
   })
 
@@ -118,9 +127,14 @@ describe('每条属性定义合法性', () => {
     }
   })
 
-  it('敏感键一律不可写（不在服务端白名单）', () => {
+  it('敏感键一律不可写（已知定义不标可写；未知键走兜底定义亦不可写）', () => {
     for (const key of SENSITIVE_PROPERTY_KEYS) {
-      expect(SERVER_PROPERTY_DEF_MAP.get(key)?.isWritable, `${key} 不应可写`).toBe(false)
+      const def = SERVER_PROPERTY_DEF_MAP.get(key)
+      if (def) {
+        expect(def.isWritable, `${key} 不应可写`).toBe(false)
+      } else {
+        expect(buildUnknownPropertyDef(key, 'x').isWritable, `${key} 不应可写`).toBe(false)
+      }
     }
   })
 })

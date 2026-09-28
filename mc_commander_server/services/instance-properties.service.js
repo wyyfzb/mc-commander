@@ -124,6 +124,12 @@ export const NUMERIC_PROPERTIES = new Set([
 // 绕过命令权限分级，online-mode 为正版验证，server-port/server-ip 控制
 // 网络暴露面。GET 时以占位符掩码返回，PUT 提交占位符视为未修改
 // （沿用磁盘现值），提交其余值一律 400 拒绝。
+//
+// management-server-secret 与 management-server-tls-keystore-password 是凭据：
+// MC 服务端开启 MSMP 且该键留空时会**自动生成** secret 并写回 server.properties，
+// 面板属性页即可读到密钥明文（与 rcon.password 的保护口径不一致）。
+// 前端 mc-properties.ts 的 SENSITIVE_PROPERTY_KEYS 必须同步增补——只改一侧会让
+// 前端把占位符当真实值参与重算/回写。
 export const SENSITIVE_PROPERTIES = new Set([
   'enable-rcon',
   'rcon.password',
@@ -134,6 +140,8 @@ export const SENSITIVE_PROPERTIES = new Set([
   'online-mode',
   'server-port',
   'server-ip',
+  'management-server-secret',
+  'management-server-tls-keystore-password',
 ]);
 export const SENSITIVE_PLACEHOLDER = '********';
 
