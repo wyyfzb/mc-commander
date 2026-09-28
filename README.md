@@ -7,7 +7,13 @@
 <h1 align="center">MC_Commander</h1>
 <p align="center">自托管 Minecraft 服务器管理面板 — 图形化免命令管理你的 MC 服务器（预览版）</p>
 
-MC_Commander 是一个自托管的 Minecraft 服务器管理工具。**核心定位：图形化界面拼装指令，服主无需手敲任何 MC 命令**——可视化给予物品（含附魔/药水）、传送、封禁、踢出等操作全部由面板自动生成指令。架构为 **Web 前端（React 19）+ Node.js 服务端（Express + WebSocket + better-sqlite3）**，浏览器直接访问即用。愿景：覆盖 MC 服务器全生命周期——建服、运营、扩展、排障、迁移——以友好直观的界面与交互，打造高效、省心、值得信赖的服务器控制面板。国内用户可访问 gitee 镜像仓库（`https://gitee.com/wyyfzb/mc-commander`，分支/标签自动同步，Release 附件不随镜像）。
+MC_Commander 是一个自托管的 Minecraft 服务器管理工具。**核心定位：图形化界面拼装指令，服主无需手敲任何 MC 命令**——可视化给予物品（含附魔/药水）、传送、封禁、踢出等操作全部由面板自动生成指令。架构为 **Web 前端（React 19）+ Node.js 服务端（Express + WebSocket + better-sqlite3）**，浏览器直接访问即用。**面板本身不要求你在 MC 服务端安装任何东西**（不需要前置插件、也不进游戏）：管理操作经 RCON 下发原版命令，状态回读直接解析服务端文件，因此 Vanilla / Paper / Purpur / Fabric / Forge 各类服务端都能直接用。**起步依赖极少**：一个 Node.js 22+ 进程即可跑起来（Java 由部署脚本按 MC 版本自动安装），**不强制任何容器或数据库中间件**；需要容器化编排时也能自行容器化部署。功能覆盖 MC 服务器全生命周期——建服、运营、扩展、排障、迁移——以友好直观的界面与交互，打造高效、省心、值得信赖的服务器控制面板。国内用户可访问 gitee 镜像仓库（`https://gitee.com/wyyfzb/mc-commander`，分支/标签自动同步，Release 附件不随镜像）。
+
+> **能力边界（先说清，避免预期错配）**：本面板通过 RCON 与存档文件工作，因此能力上限受
+> **原版命令空间 + 文件格式**约束——例如「离线玩家背包写入」「禁言」这类原版做不到、
+> 文件也写不进去的操作，本面板**不做伪实现**。需要装插件才能实现的管理功能
+> （权限组、经济、领地等）不在本面板范围内——本面板管的是**服务器与玩家本身**，
+> 不替代服务端插件生态。
 
 ---
 
@@ -53,10 +59,10 @@ MC_Commander 是一个自托管的 Minecraft 服务器管理工具。**核心定
 - 踢出、OP/取消 OP、白名单增删（离线玩家也有效）、切换游戏模式、清空背包、治疗/喂饱（效果命令封装）、私聊、玩家详情 5-Tab 浮层（概览/物品栏/传送/给予物品/日志）、**Excel 导出**
 
 ### 世界与服务器
-- **server.properties 全表单化** — 80 余个已知属性（玩法/世界生成/服务器设置三大类）可视化编辑，**未知属性自动追加**（自动识别布尔/数值），保存提示需重启项，热改属性服务端自动转命令即时生效
+- **server.properties 全表单化** — 70 余个已知属性（玩法/世界生成/服务器设置三大类）可视化编辑，**未知属性自动追加**（自动识别布尔/数值），保存提示需重启项，热改属性服务端自动转命令即时生效
 - **游戏规则** — 全量 gamerule 查询/行级编辑，命令输出双版本解析（MC 26.x 与旧版）
-- **仪表盘** — 实时状态卡片、MC 时钟、日志流、**公告发送**（say/tellraw 自动转义）、**天气/时间分段按钮**（乐观更新）、快捷命令 chips（持久化）、命令自动补全（50 余条 12 分类）、EULA 引导、断线重连 Banner
-- **定时任务** — 重启/备份/执行命令/停止/启动 5 种类型，cron **可视化编辑器**（分/时/日/月/周）+ 8 个预设模板，立即执行，最近运行状态回显
+- **仪表盘** — 实时状态卡片、MC 时钟、日志流、**公告发送**（say/tellraw 自动转义）、**天气/时间分段按钮**（乐观更新）、快捷命令 chips（持久化）、命令自动补全（30 余条 14 分类）、EULA 引导、断线重连 Banner
+- **定时任务** — 重启/备份/执行命令/停止/启动 5 种类型，cron **可视化编辑器**（分/时/日/月/周）+ 预设模板，立即执行，最近运行状态回显
 - **文件管理** — 在线浏览/编辑，Monaco 全屏编辑器（语法高亮/行号/多步撤销重做/Ctrl/⌘+S/CRLF 保真/脏标记拦截），删除确认
 
 ### 部署与运维
@@ -290,11 +296,14 @@ ws.onmessage = (event) => {
 | **引导页** | 服务器连接配置（三种部署引导 + 手动配置）、API Key 校验、明文连接警告 |
 | **仪表盘** | 状态卡片、MC 时钟、实时日志流、公告/天气/时间按钮、快捷命令、命令补全、通知面板 |
 | **玩家管理** | 玩家列表（筛选/排序/分页）、批量操作栏、玩家详情 5-Tab 浮层（概览/物品栏/传送/给予物品/日志）、封禁记录、Excel 导出 |
-| **世界管理** | 世界信息、维度概览、server.properties 全表单（66 已知 + 未知自动追加，编辑守卫 + 30s 自动刷新）、游戏规则 |
+| **世界管理** | 世界信息、维度概览、server.properties 全表单（70 余项已知 + 未知自动追加，编辑守卫 + 30s 自动刷新）、游戏规则 |
 | **文件管理** | 三栏文件浏览、全屏编辑器（Monaco：语法高亮/撤销重做/Ctrl/⌘+S/CRLF 保真）、删除 |
 | **定时任务** | Cron 任务管理（5 类型 + 可视化编辑器 + 预设模板 + 立即执行 + 上次运行状态） |
 | **实例管理** | 一键部署（5 服务端类型/版本/内存）、实例卡片（启停/切换 + 操作菜单：启动配置/升级/卸载） |
-| **设置** | 连接配置、账号与安全（改密 / 两步验证 / 只读监控凭据）、通用设置（自动重启等）、通知开关（22 类型两组）、备份管理、关于 |
+| **插件管理** | 插件列表（元数据/启停状态）、上传/删除/启停、**Modrinth 市场一键安装**与更新检测 |
+| **Webhook** | 飞书/钉钉/企微/Server酱/PushPlus 五渠道预设、签名与消息体自动构造、投递记录 |
+| **审计与命令历史** | 审计日志（操作记录）与命令历史双 Tab、时间筛选、Excel 导出 |
+| **设置** | 连接配置、账号与安全（改密 / 两步验证 / 只读监控凭据）、通用设置（自动重启等）、通知开关（30 余类型两组）、备份管理、关于 |
 
 ## 环境变量
 
@@ -361,7 +370,7 @@ mc-commander/
 │   ├── src/
 │   │   ├── main.tsx       # 入口（QueryClient + Tooltip + Router + Toaster）
 │   │   ├── routes.tsx     # 路由表（react-router v8 data mode）
-│   │   ├── features/      # 功能域（dashboard/players/world/files/tasks/instances/settings/onboarding）
+│   │   ├── features/      # 功能域（dashboard/players/world/files/tasks/instances/plugins/webhooks/audit/settings/help/onboarding/auth）
 │   │   ├── components/    # 通用组件 + mcs/ 设计系统组件
 │   │   ├── stores/        # zustand store（连接/通知偏好/部署）
 │   │   ├── api/           # REST/WS 客户端 + 类型契约
@@ -379,7 +388,8 @@ mc-commander/
 │   ├── middleware/       # 中间件（auth/cors/error_handler/rate_limit）
 │   ├── db/               # SQLite 模型（instance/backup/scheduled_task/ban）
 │   └── utils/            # 工具（response/java-detector/player-utils）
-├── docs/                     # 架构说明 / 用户指南 / 产品截图
+├── screenshots/              # 产品截图（README 引用）
+├── docs/                     # 架构说明 / 用户指南
 ├── .github/                  # CI 工作流 / Issue 与 PR 模板 / Dependabot
 ├── AGENTS.md                 # AI 编码工具上手指南（人类贡献者同样适用）
 └── scripts/                  # 通用脚本（local-check 一键本地检查）
@@ -407,7 +417,7 @@ mc-commander/
 ## 开发与测试
 
 ```bash
-# 服务端（vitest，1700+ 用例）
+# 服务端（vitest，2200+ 用例）
 cd mc_commander_server
 npm install
 npm run dev        # 热重载开发
@@ -418,13 +428,13 @@ cd mc_manager_web
 npm install
 npm run dev        # 开发（默认 5173，代理指向 25566）
 
-# 前端单测（vitest，1400+ 用例）/ 类型检查 / lint / 生产构建
+# 前端单测（vitest，2000+ 用例）/ 类型检查 / lint / 生产构建
 npm test
 npx tsc -b --noEmit
 npm run lint
 npm run build
 
-# E2E（自动起 mock 服务 + dev server；12 spec）
+# E2E（自动起 mock 服务 + dev server；18 spec）
 npm run test:e2e
 ```
 
