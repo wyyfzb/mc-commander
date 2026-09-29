@@ -21,6 +21,17 @@ export const diskAlertThresholdsSchema = z.object({
   errorPercent: z.number(),
 })
 
+/**
+ * 内存告警阈值。同 `diskAlert` 的理由：由服务端下发，前端不另写一份数字。
+ *
+ * 口径是**整机**内存使用率（`os.freemem()` 反推），与 `memoryPercent` 同源——
+ * 不是 MC 进程的 RSS，也不是 JVM 堆。判「这台机器内存吃紧」要用整机口径；
+ * 「这个 JVM 是否快 OOM」是另一个问题（进程 RSS ÷ 整机 RAM 的分子分母不同源，会失真）。
+ */
+export const memoryAlertThresholdsSchema = z.object({
+  warningPercent: z.number(),
+})
+
 export const systemStatsSchema = z.object({
   cpuUsage: z.number(),
   memoryUsage: z.number(),
@@ -31,6 +42,7 @@ export const systemStatsSchema = z.object({
   uptime: z.number(),
   diskUsage: diskUsageSchema.optional(),
   diskAlert: diskAlertThresholdsSchema.optional(),
+  memoryAlert: memoryAlertThresholdsSchema.optional(),
 })
 
 export const updateCheckResultSchema = z.object({
@@ -44,5 +56,6 @@ export const updateCheckResultSchema = z.object({
 export type DiskInfo = z.infer<typeof diskInfoSchema>
 export type DiskUsage = z.infer<typeof diskUsageSchema>
 export type DiskAlertThresholds = z.infer<typeof diskAlertThresholdsSchema>
+export type MemoryAlertThresholds = z.infer<typeof memoryAlertThresholdsSchema>
 export type SystemStats = z.infer<typeof systemStatsSchema>
 export type UpdateCheckResult = z.infer<typeof updateCheckResultSchema>

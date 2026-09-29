@@ -270,6 +270,8 @@ export function createStatusRoutes(serverManager) {
         // 磁盘使用率与告警阈值（阈值唯一来源是 config.diskAlert）
         diskUsage: getDiskUsage(),
         diskAlert: config.diskAlert,
+        // 整机内存告警阈值（唯一来源是 config.memoryAlert；口径见该配置项注释）
+        memoryAlert: config.memoryAlert,
       }),
     );
   });

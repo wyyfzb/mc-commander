@@ -144,6 +144,30 @@ describe('config 数值环境变量收口（intFromEnv）', () => {
     expect(String(err?.message ?? err)).toContain('必须严格递增');
   });
 
+  // 内存阈值只有一档，故校验的是区间 (0, 100]。越界的两种后果都在告警文案上显形、
+  // 很难回溯到配置：>100 会让告警**永不触发**（机器吃满到 OOM killer 介入都无感知），
+  // ≤0 会让它**恒触发**（告警疲劳，真出事时没人再看这条）。
+  it('内存阈值越界（>100）拒绝启动：过大等于告警永不触发', async () => {
+    process.env.MEMORY_WARNING_PERCENT = '101';
+    const err = await loadConfig().catch((e) => e);
+    const text = String(err?.message ?? err);
+    expect(text).toContain('MEMORY_WARNING_PERCENT');
+    expect(text).toContain('101');
+  });
+
+  it('内存阈值越界（0 与负数）拒绝启动：非正等于告警恒触发', async () => {
+    process.env.MEMORY_WARNING_PERCENT = '0';
+    expect(String(await loadConfig().catch((e) => e))).toContain('(0, 100]');
+    process.env.MEMORY_WARNING_PERCENT = '-5';
+    expect(String(await loadConfig().catch((e) => e))).toContain('(0, 100]');
+  });
+
+  it('内存阈值边界值 100 合法（区间右端闭）', async () => {
+    process.env.MEMORY_WARNING_PERCENT = '100';
+    const cfg = await loadConfig();
+    expect(cfg.default.memoryAlert.warningPercent).toBe(100);
+  });
+
   it('链式候选首个已设置项生效即校验：非法时报第一候选变量名，不下探', async () => {
     process.env.PANEL_BACKUP_RETENTION_MAX = 'abc';
     process.env.BACKUP_RETENTION_MAX = '10';
@@ -195,13 +219,14 @@ describe('config 数值环境变量收口（intFromEnv）', () => {
     expect(text).toContain('2 个环境变量');
   });
 
-  it('24 处调用点全部收口：配置赋值不再直接 parseInt(process.env)', async () => {
+  it('25 处调用点全部收口：配置赋值不再直接 parseInt(process.env)', async () => {
     const src = readFileSync(new URL('../config.js', import.meta.url), 'utf8');
     const codeLines = src.split('\n').filter((l) => !l.trim().startsWith('//'));
     // 对象属性形态的 parseInt 调用为 0（全部经 intFromEnv 收口）
     expect(codeLines.filter((l) => /:\s*parseInt\(/.test(l))).toEqual([]);
-    // 1 处定义 + 24 处调用
-    expect(src.split('intFromEnv(').length - 1).toBe(25);
+    // 1 处定义 + 25 处调用（新增配置项时同步 +1：这个数字就是「全部收口」的守卫，
+    // 忘了走 intFromEnv 直接 parseInt(process.env) 会被上一条断言拦下）
+    expect(src.split('intFromEnv(').length - 1).toBe(26);
   });
 });
 

@@ -166,6 +166,14 @@ const config = {
     warningPercent: intFromEnv('DISK_WARNING_PERCENT', '85'),
     errorPercent: intFromEnv('DISK_ERROR_PERCENT', '95'),
   },
+  // 整机内存使用率告警阈值（百分比）。与 diskAlert 同范式：阈值由服务端下发，
+  // 前端不另写一份数字。口径是**整机**已用 ÷ 整机总量（collectSystemStats 的
+  // memoryPercent，源自 os.freemem），不是 MC 进程 RSS、也不是 JVM 堆——
+  // 「这台机器内存吃紧」与「这个 JVM 快 OOM」是两个问题，混用分子分母会失真。
+  // 缺省 90 高于磁盘的 85：内存压力到 90% 才进入 OOM killer 的射程。
+  memoryAlert: {
+    warningPercent: intFromEnv('MEMORY_WARNING_PERCENT', '90'),
+  },
   // 面板重启后自动恢复实例间隔（ms）
   autoStartDelayMs: intFromEnv('AUTO_START_DELAY_MS', '3000'),
   // npm 包名（更新检查用）
@@ -193,6 +201,20 @@ if (config.diskAlert.errorPercent <= config.diskAlert.warningPercent) {
   throw new Error(
     '启动中止：磁盘告警阈值必须严格递增（DISK_ERROR_PERCENT > DISK_WARNING_PERCENT），' +
       `当前读到 warning=${config.diskAlert.warningPercent}、error=${config.diskAlert.errorPercent}。`,
+  );
+}
+
+// fail-fast：内存告警阈值必须落在 (0, 100]。越界的后果是**告警永不触发**或**恒触发**——
+// 前者会让机器悄悄吃满内存直到 OOM killer 介入，后者会把正常水位一直报成告警，
+// 两种都只在告警文案上显形，很难回溯到配置。
+if (
+  !Number.isFinite(config.memoryAlert.warningPercent) ||
+  config.memoryAlert.warningPercent <= 0 ||
+  config.memoryAlert.warningPercent > 100
+) {
+  throw new Error(
+    '启动中止：内存告警阈值必须落在 (0, 100] 区间（MEMORY_WARNING_PERCENT），' +
+      `当前读到 ${config.memoryAlert.warningPercent}。`,
   );
 }
 

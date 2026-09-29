@@ -21,9 +21,9 @@ import type { AlertType } from '@/lib/notifications'
 const ALERT_LABELS: Record<AlertType, string> = {
   lowTps: 'TPS 过低',
   highCpu: 'CPU 使用率过高',
-  /* highMemory 保留：状态机与阈值都在（lib/notifications.ts），但输入链路暂无可靠分母
-     （进程 RSS ÷ 整机 RAM 是失真比例，见 use-server-socket 的 payload 注释），
-     故它当前不会置位；服务端补上真实堆指标后本条自动生效，无需再改这里。 */
+  /* highMemory 的口径是**整机**内存使用率（`systemStatsUpdate.memoryPercent`，
+     读数与阈值同源来自服务端 config.memoryAlert）——不是 MC 进程内存，也不是 JVM 堆。
+     「进程 RSS ÷ 整机 RAM」那种分子分母不同源的比值才是失真比例，本告警不用它。 */
   highMemory: '内存使用率过高',
   highDisk: '磁盘空间不足',
   criticalDisk: '磁盘空间严重不足',

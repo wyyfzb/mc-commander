@@ -158,6 +158,10 @@ export interface WsEventInput {
 export interface AlertThresholds {
   tpsWarning?: number // 预留：百分比语义（当前实现走 tpsLow）
   cpuWarning: number
+  /**
+   * **整机**内存使用率告警阈值。服务端下发（`config.memoryAlert`）时覆盖；
+   * 缺省 80 仅作兜底——正常链路由 `systemStatsUpdate` 携带服务端阈值。
+   */
   memoryWarning: number
   tpsLow: number // TPS 低于此值告警
   /**
@@ -439,7 +443,9 @@ export function buildAlertNotifications(
         notifications.push({
           type: 'highMemory',
           category: 'server',
-          content: `内存使用率过高: ${mem.toFixed(1)}%`,
+          // 标注口径：这是**整机**内存，不是 MC 进程内存。不写会让用户把它读成
+          // 「服务器进程吃满了」（那是另一个数、另一条链路）
+          content: `内存使用率过高: ${mem.toFixed(1)}%（整机口径）`,
         })
       }
     } else if (next.has('highMemory')) {

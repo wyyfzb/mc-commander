@@ -208,6 +208,7 @@ describe('Status Routes · 端点缺口收口', () => {
         },
         // 阈值随读数下发：前端据此判磁盘告警，不另写一份数字
         diskAlert: { warningPercent: 85, errorPercent: 95 },
+        memoryAlert: { warningPercent: 90 },
       });
     });
 

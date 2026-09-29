@@ -120,25 +120,47 @@ export function useServerSocket(instanceId: string | null) {
       // 全局系统资源统计推送（broadcastAll，无 instanceId）
       if (msg.type === 'systemStatsUpdate') {
         void queryClient.invalidateQueries({ queryKey: queryKeys.systemStats() })
-        /* 磁盘告警：读数与阈值都在这条载荷里（阈值唯一来源是服务端 config.diskAlert）。
-           磁盘与 TPS/CPU 不同源——后两者来自实例 performanceUpdate，磁盘是整机系统指标、
-           15s 一拍，故在此分发而非并入上面的 dispatchPerformance。
-           阈值缺失则不下发 diskPercent：buildAlertNotifications 便不会判磁盘（宁可不告警，
-           也不退回前端自带的一份数字与部署配置漂移）。 */
+        /* 整机告警（磁盘 + 内存）：读数与阈值都在这条载荷里（阈值唯一来源分别是服务端
+           config.diskAlert / config.memoryAlert）。整机指标与 TPS/CPU 不同源——后两者来自
+           实例 performanceUpdate，整机是 15s 一拍的系统读数，故在此分发而非并入
+           dispatchPerformance 的实例链路。
+           阈值缺失则不下发对应读数：buildAlertNotifications 便不判该项（宁可不告警，
+           也不退回前端自带的一份数字与部署配置漂移）。
+           ⚠️ memoryPercent 是**整机**已用 ÷ 整机总量，不是 MC 进程 RSS（那是
+           performanceUpdate 的 memory 字段，分子分母不同源、不可当比例用），也不是 JVM 堆。 */
         const stats = data as {
+          memoryPercent?: number
           diskUsage?: { primary?: { percent?: number } }
           diskAlert?: { warningPercent?: number; errorPercent?: number }
+          memoryAlert?: { warningPercent?: number }
         }
         const diskPercent = stats.diskUsage?.primary?.percent
+        const memoryPercent = stats.memoryPercent
+        // 阈值必须**合并进同一个对象**再下发：dispatchPerformance 只读一个 thresholds 键，
+        // 若把磁盘与内存各写一个 thresholds 键（对象字面量里后者覆盖前者），磁盘阈值会
+        // 被静默丢掉——表现是「磁盘告警消失」而内存告警照常，很难回溯。
+        const thresholds: {
+          diskWarning?: number
+          diskError?: number
+          memoryWarning?: number
+        } = {}
+        const perf: {
+          diskPercent?: number
+          memoryPercent?: number
+          thresholds?: typeof thresholds
+        } = {}
+        // 读数与其阈值同源成对生效：只有一方到位时不判该项（宁可不告警，也不退回前端数字）
         if (diskPercent != null && stats.diskAlert) {
-          dispatchPerformance({
-            diskPercent,
-            thresholds: {
-              diskWarning: stats.diskAlert.warningPercent,
-              diskError: stats.diskAlert.errorPercent,
-            },
-          })
+          perf.diskPercent = diskPercent
+          thresholds.diskWarning = stats.diskAlert.warningPercent
+          thresholds.diskError = stats.diskAlert.errorPercent
         }
+        if (memoryPercent != null && stats.memoryAlert) {
+          perf.memoryPercent = memoryPercent
+          thresholds.memoryWarning = stats.memoryAlert.warningPercent
+        }
+        if (Object.keys(thresholds).length > 0) perf.thresholds = thresholds
+        dispatchPerformance(perf)
         return
       }
 

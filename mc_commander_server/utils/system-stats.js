@@ -75,5 +75,7 @@ export function collectSystemStats() {
     diskUsage: getDiskUsage(),
     // 阈值随读数一并下发：前端是告警的裁决者，让它自己写一份数字必然与部署配置漂移
     diskAlert: config.diskAlert,
+    // 内存阈值同理随 `memoryPercent` 一并下发（同一份读数、同一个来源，不必前端各判一次）
+    memoryAlert: config.memoryAlert,
   };
 }

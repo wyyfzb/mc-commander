@@ -364,8 +364,9 @@ describe('WebSocket 系统广播域（broadcastAll / 全局通知 / 系统统计
             { mountpoint: '/mnt/mc-b', totalGB: 10, usedGB: 1, percent: 10 },
           ],
         },
-        // 阈值随读数下发：前端据此判磁盘告警，不另写一份数字
+        // 阈值随读数下发：前端据此判磁盘/内存告警，不另写一份数字
         diskAlert: { warningPercent: 85, errorPercent: 95 },
+        memoryAlert: { warningPercent: 90 },
       });
     });
 
