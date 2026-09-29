@@ -157,6 +157,12 @@ jobs:
       - name: 创建 GitHub Release
         uses: softprops/action-gh-release@v3
         with:
+          # tag_name 必须显式传：该 action 默认取 github.ref_name，push tag 时它正好是
+          # tag 名（巧合成立），而 workflow_dispatch 补跑时是分支名 main ⇒ 报
+          # 「⚠️ GitHub Releases requires a tag」并中止，产物全不上传。
+          # v1.2.1 / v0.3.0 / v0.4.0 的 Release 零资产即此因（release-please 用
+          # GITHUB_TOKEN 打的 tag 不触发 push 事件，只能走 dispatch 补跑）。
+          tag_name: ${{ env.TAG_REF }}
           generate_release_notes: true
           files: |
             mc-commander-server-${{ env.TAG_REF }}.tar.gz

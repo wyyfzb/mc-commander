@@ -70,7 +70,7 @@ npm run dev                  # node --watch 热重载
 - 涉及页面渲染 / 展示文案的改动，加跑相关 e2e spec（`npx playwright test <spec>`）。
 - 全量 e2e 由 CI 兜底，本地按需。
 - 自测证据必须附全量结果（通过数 / 总数），仅写「相关测试通过」视为自测未完成；
-  本地单线开发下证据落在提交信息或任务回复里（PR 流已退役，见「提交规范」）。
+  PR 流下证据落在提交信息与 PR 描述里（见「提交规范」）。
 
 ## 工程纪律
 
@@ -265,5 +265,12 @@ mock 是**进程级共享**的（并行 spec 连同一个「服务端」）：�
 
 Conventional Commits（`feat`/`fix`/`refactor`/`docs`/`chore`/`test` + scope），
 描述用中文，例：`feat(web): 玩家详情新增成就标签页`。详见 CONTRIBUTING.md。
-- **分支与合并**：2026-09-13 起为本地单线开发（远端冻结、多 agent 协作与 PR 流退役），改动经全量自测 + 独立审查后直接提交，不再走特性分支 + PR。提交分支以 owner 当次指令为准（2026-09-13 任务循环授权提交 localdev 分支；push 与合并 main 须 owner 另行授权，操作编排见本地 `.ai/workflows.md`）。
+- **分支与合并**：走**特性分支 + PR**（改动经全量自测 + 独立审查后开 PR，CI 全绿再合并 main）。
+  `main` 受规则集 `main-protect` 保护：禁删除、禁强推、5 项必需检查且 `strict`（要求分支与
+  main 齐平，故合并前须 rebase）。合并方式默认保留历史（squash 会把提交压平、切断与
+  CHANGELOG 的对应关系）。push 与合并 main 须 owner 授权；操作编排见本地 `.ai/workflows.md`
+  §4.4（owner 一条指令 = 授权该 PR 全生命周期）。
+  ⚠️ 自动发版现行：`release-please.yml` 解析 main 的提交并维护 Release PR，合并后**自动**打
+  tag 并建 GitHub Release；该 tag 不触发 push 事件，故产物构建由 `release.yml` 的
+  `workflow_dispatch` 从 main 补跑。合并 Release PR 前的**人工实测是硬性 gate**。
 
