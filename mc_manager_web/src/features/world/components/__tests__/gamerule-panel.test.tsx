@@ -10,6 +10,8 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Toaster, toast as sonnerToast } from 'sonner'
+import { ApiError } from '@/api/client'
+import { ErrorCode } from '@/api/errors'
 import { GamerulePanel } from '../gamerule-panel'
 import { LEGACY_GAMERULES, MINECRAFT_GAMERULES } from '@/lib/mc-gamerules'
 
@@ -275,5 +277,32 @@ describe('GamerulePanel 刷新', () => {
         'checked',
       ),
     )
+  })
+})
+
+describe('失败文案带字段级 details（防调用点丢掉第三参）', () => {
+  it('ApiError 带 details 时，toast 文案含字段 path 与 message（不只笼统文案）', async () => {
+    const user = userEvent.setup()
+    sonnerToast.dismiss()
+    const onSendCommand = vi
+      .fn<SendCommand>()
+      .mockResolvedValueOnce(legacyOutput())
+      .mockRejectedValueOnce(
+        // ApiError(code, httpStatus, message, details) —— details 是第四参
+        new ApiError(ErrorCode.VALIDATION_ERROR, 400, 'Validation failed', [
+          { path: 'gamerule', code: 'invalid', message: '未知规则名' },
+        ]),
+      )
+    renderPanel({ onSendCommand })
+    await screen.findByText('keepInventory')
+
+    // 触发一次真实保存：改 bool 开关 → 行尾出现保存
+    await user.click(screen.getByRole('switch', { name: 'keepInventory 开关' }))
+    await user.click(screen.getByRole('button', { name: '保存' }))
+
+    // 只断言「有失败提示」不够——丢掉 details 时也会弹笼统文案；
+    // 必须断言字段级定位信息真的到达用户，否则第三参丢了测试也照样绿。
+    // 文案由 getFriendlyErrorMessage 拼成「<通用文案>：<path> <message>」。
+    expect(await screen.findByText(/gamerule 未知规则名/)).toBeInTheDocument()
   })
 })

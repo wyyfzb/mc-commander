@@ -114,7 +114,7 @@ export function useStartInstanceWithEula() {
       }
       toast.error(
         err instanceof ApiError
-          ? getFriendlyErrorMessage(err.code, err.message)
+          ? getFriendlyErrorMessage(err.code, err.message, err.details)
           : `启动失败：${getFriendlyErrorText(err)}`,
       )
     } finally {

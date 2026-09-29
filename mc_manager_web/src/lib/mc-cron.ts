@@ -142,6 +142,26 @@ export function parseCronFields(cron: string): string[] | null {
   return parts.length >= 5 ? parts.slice(0, 5) : null
 }
 
+/**
+ * cron 表达式是否会被调度器接受。
+ *
+ * **必须用服务端同一个解析器**（`croner`，服务端 `routes/tasks.js` 的 `assertValidCron`
+ * 亦然）：客户端另写一套「看起来合法」的判断只会与服务端判据漂移，把非法表达式放过去，
+ * 而非法表达式入库后任务**静默永不触发**（只在运行期记日志）。
+ *
+ * ⚠️ 两侧是**各自独立安装**的 `croner`（本仓无 workspace 根），故判据一致靠的是
+ * 同一个 caret 范围 + 同一调用形态，而非共享锁文件——升级一侧时须同步另一侧。
+ */
+export function isValidCron(cron: string): boolean {
+  if (!cron.trim()) return false
+  try {
+    new Cron(cron, { paused: true })
+    return true
+  } catch {
+    return false
+  }
+}
+
 /** 将 5 字段 cron 表达式转换为中文可读描述；无法识别返回空串 */
 export function cronDescription(cron: string): string {
   const parts = parseCronFields(cron)

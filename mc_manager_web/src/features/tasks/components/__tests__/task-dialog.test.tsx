@@ -119,6 +119,34 @@ describe('TaskDialog 新建模式与校验', { timeout: 15000 }, () => {
     expect(onSave).not.toHaveBeenCalled()
   })
 
+  it('cron 非空但非法（字段不足）：行内给出格式错误且不触发 onSave', async () => {
+    // 非空即放行是此前的行为：非法表达式入库后任务静默永不触发，故必须在前端拦下。
+    // 用与服务端同一解析器判定，此处锁住「接线生效」——只测 isValidCron 本身不够，
+    // 关掉这个分支时本用例必须变红。
+    const user = userEvent.setup()
+    const { onSave } = renderDialog()
+    await user.type(screen.getByLabelText('任务名称'), '非法 cron')
+    await user.type(screen.getByLabelText('Cron 表达式'), '0 4 * *')
+    await user.click(screen.getByRole('button', { name: '创建' }))
+    expect(screen.getByText('Cron 表达式不合法，请检查字段格式')).toBeInTheDocument()
+    expect(onSave).not.toHaveBeenCalled()
+  })
+
+  it('cron 合法（字段补全后）：行内错误消失且放行 onSave', async () => {
+    // 反向断言：别把合法表达式也拦掉（假阴性会让用户存不了任务）
+    const user = userEvent.setup()
+    const { onSave } = renderDialog()
+    await user.type(screen.getByLabelText('任务名称'), '合法 cron')
+    await user.type(screen.getByLabelText('Cron 表达式'), '0 4 * *')
+    await user.click(screen.getByRole('button', { name: '创建' }))
+    expect(screen.getByText('Cron 表达式不合法，请检查字段格式')).toBeInTheDocument()
+    // 补成 5 字段后应放行
+    await user.type(screen.getByLabelText('Cron 表达式'), ' *')
+    await user.click(screen.getByRole('button', { name: '创建' }))
+    expect(screen.queryByText('Cron 表达式不合法，请检查字段格式')).not.toBeInTheDocument()
+    expect(onSave).toHaveBeenCalled()
+  })
+
   it('类型切换：command 显示命令框，切回其他类型隐藏', async () => {
     const user = userEvent.setup()
     renderDialog()

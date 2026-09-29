@@ -33,7 +33,7 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { Chip } from '@/components/mcs/chip'
-import { CRON_PRESETS, cronDescription, formatNextRun } from '@/lib/mc-cron'
+import { CRON_PRESETS, cronDescription, formatNextRun, isValidCron } from '@/lib/mc-cron'
 import { formatDurationMs } from '@/lib/format'
 import { TASK_TYPE_OPTIONS, formatTaskDate, type TaskType } from '@/lib/mc-deploy'
 import { CronEditor } from './cron-editor'
@@ -100,6 +100,10 @@ export function TaskDialog({ task, onClose, onSave, saving }: TaskDialogProps) {
     }
     if (cron.trim().length === 0) {
       setCronError('请填写 Cron 表达式')
+      valid = false
+    } else if (!isValidCron(cron)) {
+      // 与调度器同一解析器：非法表达式会让任务静默永不触发，必须在提交前拦下
+      setCronError('Cron 表达式不合法，请检查字段格式')
       valid = false
     } else {
       setCronError('')
