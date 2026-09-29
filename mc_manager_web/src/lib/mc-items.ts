@@ -99,7 +99,9 @@ export const MINECRAFT_ITEMS: MinecraftItem[] = [
   { id: 'sea_lantern', name: '海晶灯', category: '建筑材料', stackSize: 64 },
   { id: 'glowstone', name: '荧石', category: '建筑材料', stackSize: 64 },
   { id: 'shroomlight', name: '菌光体', category: '建筑材料', stackSize: 64 },
-  { id: 'concrete', name: '混凝土', category: '建筑材料', stackSize: 64 },
+  // 官方**没有**裸 `concrete`——混凝土只有 16 种染色变体（`white_concrete` 等）；
+  // 而 `terracotta` 相反：裸形式存在，染色形式才是 `white_terracotta`
+  { id: 'white_concrete', name: '白色混凝土', category: '建筑材料', stackSize: 64 },
   { id: 'terracotta', name: '陶瓦', category: '建筑材料', stackSize: 64 },
   { id: 'white_wool', name: '白色羊毛', category: '建筑材料', stackSize: 64 },
   { id: 'oak_log', name: '橡木原木', category: '建筑材料', stackSize: 64 },
@@ -232,8 +234,6 @@ export const MINECRAFT_ITEMS: MinecraftItem[] = [
   { id: 'respawn_anchor', name: '重生锚', category: '装饰方块', stackSize: 64 },
   { id: 'beacon', name: '信标', category: '装饰方块', stackSize: 64 },
   { id: 'red_bed', name: '床', category: '装饰方块', stackSize: 64 },
-  // 26.2 新装饰
-  { id: 'geyser', name: '间歇泉', category: '装饰方块', stackSize: 64 },
 
   // ── 工具 ──────────────────────────────────────────────────
   { id: 'fishing_rod', name: '钓鱼竿', category: '工具', stackSize: 1 },
@@ -279,8 +279,8 @@ export const MINECRAFT_ITEMS: MinecraftItem[] = [
   { id: 'music_disc_pigstep', name: '唱片 Pigstep', category: '杂项', stackSize: 1 },
   // 26.2 新唱片
   { id: 'music_disc_bounce', name: '唱片 Bounce', category: '杂项', stackSize: 1 },
-  // 26.2 硫磺史莱姆相关
-  { id: 'bucket_of_sulfur_cube', name: '硫磺史莱姆桶', category: '杂项', stackSize: 1 },
+  // 26.2 硫磺史莱姆相关（桶的官方 id 是 `sulfur_cube_bucket`，不是 `bucket_of_*` 语序）
+  { id: 'sulfur_cube_bucket', name: '硫磺史莱姆桶', category: '杂项', stackSize: 1 },
   { id: 'sulfur_cube_spawn_egg', name: '硫磺史莱姆刷怪蛋', category: '杂项', stackSize: 64 },
   // 特殊物品
   { id: 'dragon_egg', name: '龙蛋', category: '杂项', stackSize: 1 },

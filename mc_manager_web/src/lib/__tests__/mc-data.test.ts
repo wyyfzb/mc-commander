@@ -1,5 +1,5 @@
 /**
- * 静态数据完整性单测：212 物品 / 20 药水 / 6 礼包 + 礼包 schema 往返
+ * 静态数据完整性单测：211 物品 / 20 药水 / 6 礼包 + 礼包 schema 往返
  */
 import { describe, expect, it } from 'vitest'
 import { ITEM_CATEGORIES, MINECRAFT_ITEMS, fullItemId, itemImageUrl } from '../mc-items'
@@ -22,9 +22,9 @@ import {
   saveKitsToStorage,
 } from '../mc-kits'
 
-describe('物品目录完整性（212 种）', () => {
-  it('共 212 种物品', () => {
-    expect(MINECRAFT_ITEMS).toHaveLength(212)
+describe('物品目录完整性（211 种）', () => {
+  it('共 211 种物品', () => {
+    expect(MINECRAFT_ITEMS).toHaveLength(211)
   })
 
   it('物品 ID 无重复', () => {
@@ -42,10 +42,10 @@ describe('物品目录完整性（212 种）', () => {
     expect(byCategory.get('工具')).toBe(26)
     expect(byCategory.get('食物')).toBe(25)
     expect(byCategory.get('自然资源')).toBe(22)
-    expect(byCategory.get('装饰方块')).toBe(22)
+    expect(byCategory.get('装饰方块')).toBe(21)
     expect(byCategory.get('杂项')).toBe(18)
     expect(byCategory.get('红石元件')).toBe(18)
-    expect([...byCategory.values()].reduce((a, b) => a + b, 0)).toBe(212)
+    expect([...byCategory.values()].reduce((a, b) => a + b, 0)).toBe(211)
   })
 
   it('stackSize 取值合法（1/16/64），分类均在 ITEM_CATEGORIES 中', () => {
@@ -60,18 +60,14 @@ describe('物品目录完整性（212 种）', () => {
     expect(itemImageUrl('diamond')).toBe('https://mc-heads.net/item/diamond/36')
   })
 
-  it('覆盖 26.x 新物品（金蒲公英/硫磺系列/朱砂系列/新唱片/间歇泉）', () => {
+  it('覆盖 26.x 新物品（金蒲公英/硫磺系列/朱砂系列/新唱片/重锤）', () => {
     const ids = MINECRAFT_ITEMS.map((i) => i.id)
-    for (const id of [
-      'golden_dandelion',
-      'sulfur',
-      'cinnabar',
-      'music_disc_bounce',
-      'geyser',
-      'mace',
-    ]) {
+    for (const id of ['golden_dandelion', 'sulfur', 'cinnabar', 'music_disc_bounce', 'mace']) {
       expect(ids).toContain(id)
     }
+    // `geyser` 已被移除：官方 item/block 注册表（1.20.5 … 26.4-snapshot-1）都查不到该 id，
+    // 而 26.2 实际新增的全是硫磺/朱砂族方块（已由上面的 sulfur / cinnabar 覆盖）
+    expect(ids).not.toContain('geyser')
   })
 })
 
@@ -148,11 +144,17 @@ describe('默认礼包（6 个）与持久化 schema', () => {
     expect(potionKit.items.every((i) => i.id === 'potion' && i.count === 3)).toBe(true)
   })
 
-  it('礼包可含目录外物品 id（brick_block/quartz_block），调用方容错跳过', () => {
+  it('礼包可含目录外物品 id（quartz_block），调用方容错跳过', () => {
+    // 本意是「套件允许引用目录里没有的物品 id，渲染方要容错」。原用例拿 `brick_block`
+    // 当样本，但它其实是**写错的官方 id**（应为 `bricks`，官方注册表无 `brick_block`），
+    // 已订正；保留的目录外样本是 `quartz_block`。
     const buildKit = DEFAULT_KITS.find((k) => k.name === '建材包')!
     const ids = buildKit.items.map((i) => i.id)
-    expect(ids).toContain('brick_block')
+    const catalog = new Set(MINECRAFT_ITEMS.map((i) => i.id))
+    expect(ids).toContain('bricks')
     expect(ids).toContain('quartz_block')
+    expect(catalog.has('bricks')).toBe(true) // 已收进目录
+    expect(catalog.has('quartz_block')).toBe(false) // 仍是目录外
   })
 
   it('schema 往返一致', () => {

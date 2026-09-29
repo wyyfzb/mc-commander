@@ -79,13 +79,15 @@ export const DEFAULT_KITS: KitPreset[] = [
       { id: 'stone', count: 64 },
       { id: 'oak_planks', count: 64 },
       { id: 'glass', count: 64 },
-      { id: 'brick_block', count: 64 },
+      // 官方 id 是 `bricks`（砖块），`brick_block` 不存在
+      { id: 'bricks', count: 64 },
       { id: 'sandstone', count: 64 },
       { id: 'quartz_block', count: 64 },
       { id: 'cobblestone', count: 64 },
       { id: 'oak_log', count: 64 },
       { id: 'terracotta', count: 64 },
-      { id: 'concrete', count: 64 },
+      // 官方没有裸 `concrete`（混凝土只有染色变体），原写法 give 必失败
+      { id: 'white_concrete', count: 64 },
     ],
   },
   {
