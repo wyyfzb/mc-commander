@@ -271,6 +271,9 @@ Conventional Commits（`feat`/`fix`/`refactor`/`docs`/`chore`/`test` + scope）�
   CHANGELOG 的对应关系）。push 与合并 main 须 owner 授权；操作编排见本地 `.ai/workflows.md`
   §4.4（owner 一条指令 = 授权该 PR 全生命周期）。
   ⚠️ 自动发版现行：`release-please.yml` 解析 main 的提交并维护 Release PR，合并后**自动**打
-  tag 并建 GitHub Release；该 tag 不触发 push 事件，故产物构建由 `release.yml` 的
-  `workflow_dispatch` 从 main 补跑。合并 Release PR 前的**人工实测是硬性 gate**。
+  tag、建 **draft** release，并在同一个 run 内接续构建产物、上传、发布
+  （`release.yml` 以 `workflow_call` 复用同一套构建逻辑；`workflow_dispatch` 只作失败补跑兜底）。
+  `draft` 与 `force-tag-creation` 必须成对——GitHub 对 draft release 采取 lazy tag creation，
+  只开 draft 会让 release-please 找不到上一个 release 而算错 CHANGELOG。合并 Release PR 前的
+  **人工实测是硬性 gate**。
 
