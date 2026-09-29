@@ -73,4 +73,23 @@ describe('MetricsModel（分钟级主机指标历史）', () => {
     expect(removed).toBe(1);
     expect(MetricsModel.list(72)).toHaveLength(1);
   });
+
+  // 保留期默认值决定「不传参」那条路径的行为。48h 是**口径**而非随手取的值：
+  // 清理每日一次 ⇒ 窗口在 [保留期, 保留期+24h) 之间摆动；取 24h 会让「昨日」这个完整
+  // 本地日历日在清理后只剩 1387/1440 分钟。此断言防它被改回 24。
+  it('deleteOlderThan 默认保留期为 48h（24h 会让「昨日」算不全）', () => {
+    const insert = (offset) =>
+      getDb()
+        .prepare(
+          `INSERT INTO metrics_history (captured_at, cpu_usage, players_online) VALUES (datetime('now', ?), 0, 0)`,
+        )
+        .run(offset);
+    insert('-40 hours');
+    insert('-60 hours');
+
+    // 40h 前的样本落在 48h 保留期内 ⇒ 保留；60h 前的样本超期 ⇒ 删除
+    const removed = MetricsModel.deleteOlderThan();
+    expect(removed).toBe(1);
+    expect(MetricsModel.list(72)).toHaveLength(1);
+  });
 });

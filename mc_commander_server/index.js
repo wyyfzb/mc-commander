@@ -227,11 +227,15 @@ const wsSetup = setupWebSocket(wss, serverManager);
 // 另一方是 /proc/stat 差分，故数值只以 HTTP 为准。返回的 stop 句柄接入停机路径
 const stopSystemStatsBroadcast = wsSetup.startSystemStatsBroadcast();
 
-// 分钟级主机指标落库（60s 一行，24h 保留期）：观测数据面，供 GET /api/v1/metrics
+// 分钟级主机指标落库（60s 一行，48h 保留期）：观测数据面，供 GET /api/v1/metrics
 // 与后续 dashboard「昨日摘要」消费。在线玩家数从全部已加载实例汇总。
-// 每日顺带清一次保留期外样本
+//
+// 保留期 48h 而非 24h：清理是**每日一次**，故窗口实际在 [保留期, 保留期+24h) 之间摆动。
+// 保留期取 24h 时，清理后「昨日」这个完整本地日历日只剩 1387/1440 分钟——同一张卡在
+// 一天里的不同时刻会给出不同口径的数。取 48h 可让「昨日」在全天任意时刻都完整可算。
 const METRICS_SAMPLE_INTERVAL_MS = 60_000;
-const METRICS_RETENTION_HOURS = 24;
+const METRICS_RETENTION_HOURS = 48;
+const METRICS_SWEEP_INTERVAL_MS = 24 * 3600_000;
 let lastRetentionSweep = 0;
 
 function countOnlinePlayers() {
@@ -252,7 +256,7 @@ function recordMetricsSample() {
       memoryPercent: stats.memoryPercent,
       playersOnline: countOnlinePlayers(),
     });
-    if (Date.now() - lastRetentionSweep > 24 * 3600_000) {
+    if (Date.now() - lastRetentionSweep > METRICS_SWEEP_INTERVAL_MS) {
       lastRetentionSweep = Date.now();
       const removed = MetricsModel.deleteOlderThan(METRICS_RETENTION_HOURS);
       if (removed > 0) logger.info(`[Metrics] Pruned ${removed} stale samples`);

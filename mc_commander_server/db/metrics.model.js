@@ -36,8 +36,12 @@ export const MetricsModel = {
       }));
   },
 
-  /** 删除保留期外的样本（采样器每日调用一次）；返回删除行数 */
-  deleteOlderThan(hours = 24) {
+  /**
+   * 删除保留期外的样本（采样器每日调用一次）；返回删除行数。
+   * 默认值与 index.js 的 METRICS_RETENTION_HOURS 对齐——留 24 会让「不传参」这条路径
+   * 静默用上已废弃的旧保留期。
+   */
+  deleteOlderThan(hours = 48) {
     const db = getDb();
     const result = db
       .prepare(`DELETE FROM metrics_history WHERE captured_at < datetime('now', ?)`)
