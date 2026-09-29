@@ -27,6 +27,7 @@ import {
   installPluginFromMarket,
   sanitizeMarketFileName,
   clearMarketCache,
+  loadersForProjectType,
 } from '../services/market.service.js';
 import { ErrorCodes } from '../utils/response.js';
 
@@ -442,5 +443,68 @@ describe('market.service - installPluginFromMarket', () => {
       .filter((f) => f.startsWith('.market-download.tmp-'));
     expect(tmpFiles).toHaveLength(0);
     expect(fs.existsSync(path.join(pluginsDir, 'ess.jar'))).toBe(false);
+  });
+});
+
+describe('market.service - 条目类型参数化（plugin / mod）', () => {
+  beforeEach(() => {
+    clearMarketCache();
+    vi.clearAllMocks();
+  });
+
+  it('projectType 缺省仍是 plugin（既有调用方行为零变化）', async () => {
+    vi.mocked(got).mockReturnValueOnce(mockJsonResponse(SEARCH_FIXTURE));
+    await searchMarketPlugins({ query: 'x' });
+    const [, opts] = vi.mocked(got).mock.calls[0];
+    expect(JSON.parse(opts.searchParams.facets)).toEqual([['project_type:plugin']]);
+  });
+
+  it('projectType=mod 时 facets 用 project_type:mod 且接受 Fabric/Forge loader', async () => {
+    vi.mocked(got).mockReturnValueOnce(mockJsonResponse(SEARCH_FIXTURE));
+    await searchMarketPlugins({ query: 'sodium', projectType: 'mod', loader: 'fabric' });
+    const [, opts] = vi.mocked(got).mock.calls[0];
+    const facets = JSON.parse(opts.searchParams.facets);
+    expect(facets).toContainEqual(['project_type:mod']);
+    expect(facets).toContainEqual(['loaders:fabric']);
+    // 关键：不得出现 plugin 字样（混用会过滤出空集）
+    expect(JSON.stringify(facets)).not.toContain('project_type:plugin');
+  });
+
+  it('loader 合法性相对条目类型判定：paper 对 mod 非法、fabric 对 plugin 非法', async () => {
+    // 同一 loader 名在不同类型下合法性不同——只用一张全局白名单会放行自相矛盾的组合
+    await expect(
+      searchMarketPlugins({ query: 'x', projectType: 'mod', loader: 'paper' }),
+    ).rejects.toThrowError(/Invalid loader for mod/);
+    await expect(
+      searchMarketPlugins({ query: 'x', projectType: 'plugin', loader: 'fabric' }),
+    ).rejects.toThrowError(/Invalid loader for plugin/);
+  });
+
+  it('未知 projectType 报错而不回落到 plugin（回落会让「搜模组」静默变成「搜插件」）', async () => {
+    await expect(searchMarketPlugins({ query: 'x', projectType: 'datapack' })).rejects.toThrowError(
+      /Invalid project type/,
+    );
+  });
+
+  it('缓存键含 projectType：同名查询在两种类型下不互相命中', async () => {
+    vi.mocked(got).mockReturnValue(mockJsonResponse(SEARCH_FIXTURE));
+    await searchMarketPlugins({ query: 'same' });
+    await searchMarketPlugins({ query: 'same', projectType: 'mod' });
+    // 两次都应打上游（缓存键必须带类型，否则第二次会拿到 plugin 的结果集）
+    expect(vi.mocked(got).mock.calls.length).toBe(2);
+  });
+
+  it('getMarketProjectVersions 的 loader 也按类型校验', async () => {
+    await expect(
+      getMarketProjectVersions('sodium', { projectType: 'mod', loader: 'paper' }),
+    ).rejects.toThrowError(/Invalid loader for mod/);
+  });
+
+  it('loadersForProjectType 暴露两类白名单（前端无需另抄一份）', () => {
+    expect(loadersForProjectType('plugin')).toContain('paper');
+    expect(loadersForProjectType('plugin')).not.toContain('fabric');
+    expect(loadersForProjectType('mod')).toContain('fabric');
+    expect(loadersForProjectType('mod')).not.toContain('paper');
+    expect(() => loadersForProjectType('bogus')).toThrowError(/Invalid project type/);
   });
 });

@@ -49,8 +49,36 @@ const MARKET_DOWNLOAD_MAX_SIZE = 100 * 1024 * 1024;
 const CACHE_TTL_MS = 60_000;
 const CACHE_MAX_ENTRIES = 200;
 
-/// 插件类加载器白名单（Modrinth facets 用；Bukkit 系）
-const ALLOWED_LOADERS = new Set(['paper', 'spigot', 'bukkit', 'purpur', 'folia']);
+/**
+ * Modrinth `project_type` → 可接受的 loader 白名单。
+ *
+ * **两类 loader 不能混**：Bukkit 系（plugin）与 Fabric/Forge 系（mod）在 Modrinth 上是
+ * 不同的 loader 取值，混用会让 facets 过滤出空集（用户搜到零结果却不知为什么）。
+ * 白名单按 project_type 分组，而不是合成一张大表——合成后 `project_type:plugin`
+ * 配上 `loaders:fabric` 这种自相矛盾的组合会被放行。
+ */
+const LOADERS_BY_PROJECT_TYPE = Object.freeze({
+  plugin: Object.freeze(['paper', 'spigot', 'bukkit', 'purpur', 'folia']),
+  mod: Object.freeze(['fabric', 'forge', 'neoforge', 'quilt']),
+});
+
+/** 市场条目类型（与插件/模组装载目标同名的两类） */
+export const MARKET_PROJECT_TYPES = Object.freeze(Object.keys(LOADERS_BY_PROJECT_TYPE));
+
+/** 默认条目类型：既有调用方不传时行为逐字不变（仍是插件市场） */
+const DEFAULT_PROJECT_TYPE = 'plugin';
+
+/**
+ * 解析条目类型；未知类型报错而非回落到 plugin——回落会让「搜模组」静默变成
+ * 「搜插件」，用户得到一个看似正常却答非所问的结果列表。
+ */
+function sanitizeProjectType(v) {
+  if (v === undefined || v === null || v === '') return DEFAULT_PROJECT_TYPE;
+  if (typeof v !== 'string' || !MARKET_PROJECT_TYPES.includes(v)) {
+    throw new AppError(ErrorCodes.VALIDATION_ERROR, `Invalid project type: ${v}`);
+  }
+  return v;
+}
 
 /// MC 版本号格式（普通版 1.21.4 / 新纪元 26.2 / 快照组合均放宽为数字段）
 const GAME_VERSION_REGEX = /^\d{1,3}(\.\d{1,3}){0,2}(-pre\d*)?$/;
@@ -130,25 +158,36 @@ function sanitizeGameVersion(v) {
   return v;
 }
 
-/** 参数校验：加载器（可空） */
-function sanitizeLoader(v) {
+/**
+ * 参数校验：加载器（可空）。合法性**相对条目类型**判定——同一 loader 名在不同
+ * project_type 下未必合法（`fabric` 对 plugin 无意义、`paper` 对 mod 无意义），
+ * 故必须带上 projectType 一起校验，不能只用一张全局白名单。
+ */
+function sanitizeLoader(v, projectType = DEFAULT_PROJECT_TYPE) {
   if (v === undefined || v === null || v === '') return null;
-  if (typeof v !== 'string' || !ALLOWED_LOADERS.has(v)) {
-    throw new AppError(ErrorCodes.VALIDATION_ERROR, `Invalid loader: ${v}`);
+  const allowed = LOADERS_BY_PROJECT_TYPE[projectType] ?? [];
+  if (typeof v !== 'string' || !allowed.includes(v)) {
+    throw new AppError(ErrorCodes.VALIDATION_ERROR, `Invalid loader for ${projectType}: ${v}`);
   }
   return v;
 }
 
-/** 组装 Modrinth facets（project_type=plugin 恒定；版本/加载器可选） */
-function buildFacets({ gameVersion, loader }) {
-  const facets = [['project_type:plugin']];
+/** 组装 Modrinth facets（project_type 由调用方定；版本/加载器可选） */
+function buildFacets({ gameVersion, loader, projectType = DEFAULT_PROJECT_TYPE }) {
+  const facets = [[`project_type:${projectType}`]];
   if (gameVersion) facets.push([`game_versions:${gameVersion}`]);
   if (loader) facets.push([`loaders:${loader}`]);
   return facets;
 }
 
+/** 该条目类型的可选 loader 列表（供前端渲染筛选项，避免前端另抄一份白名单） */
+export function loadersForProjectType(projectType) {
+  return [...(LOADERS_BY_PROJECT_TYPE[sanitizeProjectType(projectType)] ?? [])];
+}
+
 /**
- * 搜索插件市场（Modrinth /search 代理 + TTL 缓存）。
+ * 搜索市场（Modrinth /search 代理 + TTL 缓存）。
+ * `projectType` 决定 facets 的 `project_type` 与合法 loader 集合（plugin / mod）。
  * @returns {{ totalHits: number, hits: Array, cached: boolean }}
  */
 export async function searchMarketPlugins({
@@ -157,25 +196,27 @@ export async function searchMarketPlugins({
   limit = 20,
   gameVersion = null,
   loader = null,
+  projectType = DEFAULT_PROJECT_TYPE,
 }) {
+  const pt = sanitizeProjectType(projectType);
   const q = sanitizeQuery(query);
   const gv = sanitizeGameVersion(gameVersion);
-  const ld = sanitizeLoader(loader);
+  const ld = sanitizeLoader(loader, pt);
 
   const off = Number.isInteger(offset) && offset >= 0 ? Math.min(offset, 10_000) : 0;
   const lim = Number.isInteger(limit) && limit >= 1 ? Math.min(limit, 20) : 20;
 
-  const cacheKey = `search:${q ?? ''}:${off}:${lim}:${gv ?? ''}:${ld ?? ''}`;
+  const cacheKey = `search:${pt}:${q ?? ''}:${off}:${lim}:${gv ?? ''}:${ld ?? ''}`;
   const cached = cacheGet(cacheKey);
   if (cached) return { ...cached, cached: true };
 
   try {
-    // 空关键词 = 浏览模式：按下载量排序的热门插件（Modrinth search 的 query 可选）
+    // 空关键词 = 浏览模式：按下载量排序的热门条目（Modrinth search 的 query 可选）
     const searchParams = {
       offset: off,
       limit: lim,
       index: q ? 'relevance' : 'downloads',
-      facets: JSON.stringify(buildFacets({ gameVersion: gv, loader: ld })),
+      facets: JSON.stringify(buildFacets({ gameVersion: gv, loader: ld, projectType: pt })),
     };
     if (q) searchParams.query = q;
 
@@ -220,14 +261,19 @@ export async function searchMarketPlugins({
  * 按 date_published 倒序返回（上游默认即倒序，这里显式保证）。
  * @returns {{ projectSlug: string, versions: Array, cached: boolean }}
  */
-export async function getMarketProjectVersions(slug, { gameVersion = null, loader = null } = {}) {
+export async function getMarketProjectVersions(
+  slug,
+  { gameVersion = null, loader = null, projectType = DEFAULT_PROJECT_TYPE } = {},
+) {
   if (typeof slug !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(slug)) {
     throw new AppError(ErrorCodes.VALIDATION_ERROR, `Invalid project slug: ${slug}`);
   }
+  const pt = sanitizeProjectType(projectType);
   const gv = sanitizeGameVersion(gameVersion);
-  const ld = sanitizeLoader(loader);
+  // loader 的合法性相对条目类型判定（fabric 对 plugin 无意义，反之亦然）
+  const ld = sanitizeLoader(loader, pt);
 
-  const cacheKey = `versions:${slug}:${gv ?? ''}:${ld ?? ''}`;
+  const cacheKey = `versions:${pt}:${slug}:${gv ?? ''}:${ld ?? ''}`;
   const cached = cacheGet(cacheKey);
   if (cached) return { ...cached, cached: true };
 

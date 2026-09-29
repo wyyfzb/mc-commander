@@ -37,7 +37,7 @@ import {
 import config from '../config.js';
 
 /**
- * 插件管理路由（最小闭环 + 上传延伸 + Modrinth 市场延伸）
+ * 插件与模组管理路由（最小闭环 + 上传延伸 + Modrinth 市场延伸）
  * GET    /api/v1/instances/:id/plugins                    —— 列表（含元数据与启停状态）
  * POST   /api/v1/instances/:id/plugins/upload             —— 上传插件 jar（multipart 字段 file；?overwrite=true 显式覆盖）
  * PUT    /api/v1/instances/:id/plugins/:file/enabled      —— 启用/禁用（body: {enabled}）
@@ -48,6 +48,13 @@ import config from '../config.js';
  * GET  /api/v1/instances/:id/plugins/market/projects/:slug/versions      —— 版本列表（game_version/loader）
  * POST /api/v1/instances/:id/plugins/market/install                      —— 一键安装（body: {slug, versionNumber}；?overwrite=true）
  * POST /api/v1/instances/:id/plugins/check-updates                       —— 批量更新检测（已装插件 vs Modrinth 最新版）
+ *
+ * 模组（`mods/` 复用同一套模型，目录名由 service 的 kind 参数化）：
+ * GET    /api/v1/instances/:id/mods              —— 列表
+ * POST   /api/v1/instances/:id/mods/upload       —— 上传（multipart 字段 file；?overwrite=true）
+ * DELETE /api/v1/instances/:id/mods/:file        —— 删除
+ * **刻意没有 enabled 端点**：`.disabled` 是 Bukkit 系约定，Forge/Fabric 无文件层等价物；
+ * 提供它会让用户以为能启停而实际无效（service 层同样拒绝，双保险）。
  *
  * 设计要点：
  * - :file 为白名单文件名（见 plugin.service PLUGIN_FILE_REGEX），非任意路径
@@ -323,6 +330,95 @@ export function createPluginRoutes(serverManager) {
         instanceId: id,
         action: AuditActions.PLUGIN_DELETE,
         targetType: 'plugin',
+        targetId: file,
+        detail: null,
+      });
+      res.json(validatedSuccess(pluginDeleteResultSchema, result));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // ── 模组（Fabric/Forge）────────────────────────────────────────────
+  // mods/ 复用同一套模型（白名单 / zip 魔数 / 40912 语义 / 数量上限），差异只在目录名
+  // 与「不支持文件级启停」。**不提供 enabled 端点**：Forge/Fabric 无 `.disabled` 通用
+  // 约定，提供它会让用户以为能启停而实际无效（service 层也会拒绝，这里是双保险）。
+
+  // GET /api/v1/instances/:id/mods
+  router.get('/instances/:id/mods', (req, res, next) => {
+    try {
+      const serverPath = requireInstance(req.params.id);
+      if (!serverPath) {
+        return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND, 'Instance not found'));
+      }
+      res.json(validatedSuccess(pluginListSchema, listPlugins(serverPath, { kind: 'mod' })));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // POST /api/v1/instances/:id/mods/upload  multipart 字段 file；?overwrite=true 显式覆盖
+  router.post(
+    '/instances/:id/mods/upload',
+    (req, res, next) => {
+      pluginUpload.single('file')(req, res, (err) => handleMulterError(err, next));
+    },
+    validateQuery(pluginOverwriteQuerySchema, {
+      onError: (req) => {
+        if (req.file?.path) {
+          try {
+            fs.unlinkSync(req.file.path);
+          } catch {}
+        }
+      },
+    }),
+    (req, res, next) => {
+      const uploaded = req.file;
+      try {
+        const { id } = req.params;
+        if (!uploaded) {
+          throw new AppError(ErrorCodes.VALIDATION_ERROR, 'No file uploaded');
+        }
+        const serverPath = requireInstance(id);
+        if (!serverPath) {
+          return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND, 'Instance not found'));
+        }
+        const overwrite = req.query.overwrite === 'true';
+        const result = uploadPlugin(serverPath, uploaded.path, uploaded.originalname, {
+          overwrite,
+          kind: 'mod',
+        });
+        recordAudit({
+          instanceId: id,
+          action: AuditActions.MOD_UPLOAD,
+          targetType: 'mod',
+          targetId: result.file,
+          detail: { sizeBytes: result.sizeBytes, overwritten: result.overwritten },
+        });
+        res
+          .status(result.overwritten ? 200 : 201)
+          .json(validatedSuccess(pluginUploadResultSchema, result));
+      } catch (err) {
+        next(err);
+      } finally {
+        cleanupTmp(uploaded);
+      }
+    },
+  );
+
+  // DELETE /api/v1/instances/:id/mods/:file
+  router.delete('/instances/:id/mods/:file', (req, res, next) => {
+    try {
+      const { id, file } = req.params;
+      const serverPath = requireInstance(id);
+      if (!serverPath) {
+        return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND, 'Instance not found'));
+      }
+      const result = deletePlugin(serverPath, file, { kind: 'mod' });
+      recordAudit({
+        instanceId: id,
+        action: AuditActions.MOD_DELETE,
+        targetType: 'mod',
         targetId: file,
         detail: null,
       });
