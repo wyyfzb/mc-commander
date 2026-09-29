@@ -14,6 +14,7 @@ import {
   type MinecraftItem,
 } from '@/lib/mc-items'
 import { MINECRAFT_POTIONS, type PotionEffect } from '@/lib/mc-potions'
+import { isItemAvailableIn, requiredVersionFor } from '@/lib/mc-item-versions'
 import { effectColorHex } from './give-item-preview-bar'
 import type { SelectedEntry } from './give-item-enchant-editor'
 import {
@@ -35,20 +36,29 @@ export function potionEffectFor(itemId: string): PotionEffect | undefined {
   return MINECRAFT_POTIONS.find((e) => e.effectId === itemId)
 }
 
-/** 物品网格单元格（memo：212 项大列表，仅选中/数量/附魔变化时重渲染；onToggle 由 useCallback 稳定） */
+/** 物品网格单元格（memo：211 项大列表，仅选中/数量/附魔变化时重渲染；onToggle 由 useCallback 稳定） */
 const ItemCell = memo(function ItemCell({
   item,
   entry,
   effect,
   isSelected,
   onToggle,
+  mcVersion,
 }: {
   item: MinecraftItem
   entry: SelectedEntry | undefined
   effect?: PotionEffect
   isSelected: boolean
   onToggle: (item: MinecraftItem) => void
+  mcVersion?: string
 }) {
+  // 目标版本装不下这个物品时打警示角标（而不是隐藏它）：用户可能正想确认
+  // 「这东西哪版才有」，藏起来反而答不了。拼装层还会再拦一次（双保险）。
+  // 先把 mcVersion 收窄成 string：`mcVersion` 是可选的，直接传会让 TS 报
+  // 「string | undefined 不可赋给 string」，也避免空串被当成真实版本去比较。
+  const target = mcVersion ?? ''
+  const needs = target ? requiredVersionFor(item.id) : null
+  const unavailable = needs !== null && target !== '' && !isItemAvailableIn(item.id, target)
   return (
     <button
       type="button"
@@ -70,6 +80,16 @@ const ItemCell = memo(function ItemCell({
             aria-label="已选中"
           >
             <Check className="size-2.5" aria-hidden />
+          </span>
+        )}
+        {/* 版本角标：仅对「已知晚于目标版本」的物品显示，未标注的不显示任何角标
+            （注册表只覆盖正式版，「未标注」= 无版本要求，不是「不适用」） */}
+        {needs !== null && unavailable && (
+          <span
+            className={`absolute left-0 top-0 rounded-mcs-xs border px-1 text-mcs-2xs font-semibold leading-tight ${toneClasses('warning')}`}
+            title={`需要 MC ${needs}+，当前实例为 ${mcVersion}`}
+          >
+            {needs}+
           </span>
         )}
         {isSelected && entry !== undefined && entry.count > 1 && (
@@ -144,6 +164,7 @@ export function ItemSelector({
   onCategoryChangeWithPanelReset,
   selected,
   onToggle,
+  mcVersion = '',
 }: {
   search: string
   onSearchChange: (v: string) => void
@@ -151,6 +172,11 @@ export function ItemSelector({
   onCategoryChangeWithPanelReset: (cat: string) => void
   selected: Map<string, SelectedEntry>
   onToggle: (item: MinecraftItem) => void
+  /**
+   * 目标实例的 MC 版本，用于给「晚于该版本的物品」打版本徽章。
+   * 缺省空串 = 未知版本 ⇒ 全部按「不判断」处理（不显示「不适用」的假告警）。
+   */
+  mcVersion?: string
 }) {
   const filteredItems = useMemo(() => {
     let items: MinecraftItem[]
@@ -232,6 +258,7 @@ export function ItemSelector({
               effect={potionEffectFor(item.id)}
               isSelected={selected.has(item.id)}
               onToggle={onToggle}
+              mcVersion={mcVersion}
             />
           ))}
         </div>
