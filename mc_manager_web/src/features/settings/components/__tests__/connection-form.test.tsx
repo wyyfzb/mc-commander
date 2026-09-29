@@ -1100,7 +1100,10 @@ describe('ConnectionForm 复制 / 粘贴导入', () => {
     )
     await user.click(screen.getByRole('button', { name: '填入表单' }))
 
-    expect(await screen.findByText(/已关闭 API Key 通道/)).toBeInTheDocument()
+    // 必须用 toast 标题全文：/已关闭 API Key 通道/ 这类片段正则同时命中行内常驻状态行
+    // （探测已落定 ⇒ apiKeyChannelDisabled 为真），命中两个即抛错；而 toast 未渲染时它
+    // 又会命中那一行而假绿——实测把 toast.warning 整个删掉，本用例照样通过。
+    expect(await screen.findByText('已填入，但当前面板已关闭 API Key 通道')).toBeInTheDocument()
     // 仍照常填入——用户可能确实要用它试（或改用登录会话）
     expect(await screen.findByLabelText('API Key')).toHaveValue('fake-key-abcdef')
   })
