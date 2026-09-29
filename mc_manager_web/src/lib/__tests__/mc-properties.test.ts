@@ -233,8 +233,11 @@ describe('vanilla 官方默认值', () => {
     expect(SERVER_PROPERTY_DEF_MAP.get('sync-chunk-writes')?.defaultValue).toBe('true')
   })
 
-  it('white-list=false', () => {
-    expect(SERVER_PROPERTY_DEF_MAP.get('white-list')?.defaultValue).toBe('false')
+  // 26.3 起官方把 white-list 默认值改为 true（发行说明 Server Properties 节原文：
+  // 「The `white-list` property is now `true` by default」）⇒ 升级到 26.3 的既有实例
+  // 可能突然启用白名单，故该值必须跟随官方而非沿用旧的 false
+  it('white-list=true（26.3 官方新默认）', () => {
+    expect(SERVER_PROPERTY_DEF_MAP.get('white-list')?.defaultValue).toBe('true')
   })
 
   it('query.port=25565', () => {
