@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -51,37 +52,134 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
       expect(execPipes).toHaveLength(0);
     });
 
-    it('内嵌预期 sha256（64 位十六进制）并在下载后强制校验', () => {
-      const match = script.match(/EXPECTED_PACKAGE_SHA256="\$\{PACKAGE_SHA256:-([0-9a-f]{64})\}"/);
-      expect(match).not.toBeNull();
-      expect(script).toContain('sha256sum "$TMP_TGZ" | awk');
-      expect(script).toContain('if [ "$ACTUAL_SHA256" != "$EXPECTED_PACKAGE_SHA256" ]');
+    it('不再内嵌预期 sha256（摘要改从同一 Release 现取）', () => {
+      // 内嵌值会把安装版本钉死在脚本里，与 VERSION 默认 latest 自相矛盾（latest 每次取到的
+      // 内容都不同，固定摘要必然错配）。故整个脚本不得再出现内嵌摘要与 64 位十六进制字面量
+      expect(script).not.toContain('EXPECTED_PACKAGE_SHA256');
+      expect(script).not.toContain('PACKAGE_SHA256=');
+      expect(script).not.toMatch(/[0-9a-f]{64}/);
     });
 
-    it('校验失败即中止并删除临时文件（fail-closed）', () => {
-      const failBlock = script
-        .split('代码包 sha256 校验失败')[1]
-        ?.split('\n')
-        .slice(0, 10)
-        .join('\n');
-      expect(failBlock).toBeDefined();
-      expect(failBlock).toContain('exit 1');
-      expect(failBlock).toContain('rm -rf "$TMP_TGZ" "$TMP_EXTRACT"');
+    it('代码包与摘要同源：都从 RELEASE_BASE 派生', () => {
+      // 摘要若来自别处，就只能防传输损坏、防不了资产被单方面替换
+      expect(script).toContain('PACKAGE_URL="${PACKAGE_URL:-$RELEASE_BASE/$ASSET_NAME}"');
+      expect(script).toContain('SHA256SUMS_URL="${SHA256SUMS_URL:-$RELEASE_BASE/SHA256SUMS.txt}"');
     });
 
-    it('PACKAGE_URL 默认锁定具体 tag 而非可变 master 分支', () => {
-      // 默认分支变量不再是 master；默认值锁定具体发布 tag（版本随 Release 回写演进，按模式断言防漂移）
-      expect(script).toMatch(/BRANCH="\$\{BRANCH:-v\d+\.\d+\.\d+\}"/);
-      expect(script).not.toContain('BRANCH="${BRANCH:-master}"');
-      // 默认 PACKAGE_URL 使用 BRANCH 变量（因此默认解析为固定 tag 的 GitHub Release 资产）
-      expect(script).toContain(
-        'PACKAGE_URL="${PACKAGE_URL:-https://github.com/wyyfzb/mc-commander/releases/download/${BRANCH}/mc-commander-server-${BRANCH}.tar.gz}"',
+    it('按下载地址的 basename 从摘要文件里取目标条目（自定义 URL 同样适用）', () => {
+      expect(script).toContain('PKG_BASENAME=$(basename "$PACKAGE_URL")');
+      expect(script).toMatch(/awk -v f="\$PKG_BASENAME"/);
+    });
+
+    it('摘要解析能吃两种 sha256sum 行格式（两空格 / 星号二进制前缀）', () => {
+      // 直接执行脚本里的那个 awk，而不是在测试里复述一份——复述版会在脚本逻辑被改坏时依然全绿。
+      // Git-bash 的 coreutils 实测输出 `*<file>` 二进制前缀，CI 的 GNU 版输出两空格，两种都要能取到
+      const program = script.match(/awk -v f="\$PKG_BASENAME" '([^']+)'/)?.[1];
+      expect(program).toBeTruthy();
+
+      const runAwk = (sumsLines, assetName) => {
+        const dir = mkdtempSync(path.join(os.tmpdir(), 'mcs-sums-'));
+        try {
+          const sumsPath = path.join(dir, 'SHA256SUMS.txt');
+          writeFileSync(sumsPath, sumsLines.join('\n') + '\n');
+          const r = spawnSync(
+            BASH_BIN,
+            ['-c', `awk -v f='${assetName}' '${program}' '${sumsPath}'`],
+            {
+              encoding: 'utf8',
+            },
+          );
+          expect(r.error).toBeUndefined();
+          return r.stdout.trim();
+        } finally {
+          rmSync(dir, { recursive: true, force: true });
+        }
+      };
+
+      const asset = 'mc-commander-server.tar.gz';
+      const hash = 'a'.repeat(64);
+
+      // 两空格（CI/GNU 形态）
+      expect(runAwk([`${hash}  ${asset}`], asset)).toBe(hash);
+      // 星号二进制前缀（Git-bash 实测形态）
+      expect(runAwk([`${hash} *${asset}`], asset)).toBe(hash);
+      // 多资产条目：只取目标那个，不被别的条目带跑
+      expect(runAwk([`${'b'.repeat(64)}  other.zip`, `${hash}  ${asset}`], asset)).toBe(hash);
+      // 摘要里没有目标资产：必须取不到（调用方据此 fail-closed 中止）
+      expect(runAwk([`${'b'.repeat(64)}  other.zip`], asset)).toBe('');
+      // 自定义 PACKAGE_URL 的文件名同样能取到
+      expect(runAwk([`${hash}  custom.tar.gz`], 'custom.tar.gz')).toBe(hash);
+    });
+
+    it('摘要中找不到目标资产即中止（不允许静默跳过校验）', () => {
+      expect(script).toContain('SHA256SUMS.txt 中未找到 $PKG_BASENAME 的摘要条目');
+      // 守卫必须发生在比对之前：若把比对包进 `[ -n "$EXPECTED_SHA256" ] && [ ... != ... ]`，
+      // 漏条目时会静默跳过校验而不是中止——那等于没有校验
+      expect(script).toMatch(
+        /if \[ -z "\$EXPECTED_SHA256" \]; then[\s\S]*?exit 1\nfi\nACTUAL_SHA256=/,
       );
     });
 
-    it('保留 BRANCH / PACKAGE_SHA256 环境变量覆盖能力', () => {
-      expect(script).toMatch(/BRANCH="\$\{BRANCH:-v\d+\.\d+\.\d+\}"/);
-      expect(script).toMatch(/EXPECTED_PACKAGE_SHA256="\$\{PACKAGE_SHA256:-/);
+    it('每一条清理路径都删除全部三个临时文件', () => {
+      // 漏掉 TMP_SUMS 会在安装目录残留 .tmp_SHA256SUMS.txt；逐条断言，防止只锁住其中一条
+      const rmLines = [...script.matchAll(/rm -rf [^\n]*TMP_TGZ[^\n]*/g)].map((m) => m[0]);
+      expect(rmLines.length).toBeGreaterThanOrEqual(8);
+      expect(rmLines.every((l) => l.includes('"$TMP_TGZ" "$TMP_SUMS" "$TMP_EXTRACT"'))).toBe(true);
+    });
+
+    it('摘要下载失败也是 fail-closed（不能因取不到摘要就放行）', () => {
+      const block = script.split('SHA256SUMS.txt 下载失败')[1];
+      expect(block).toBeDefined();
+      expect(block).toContain('exit 1');
+      expect(block).toContain('rm -rf "$TMP_TGZ" "$TMP_SUMS" "$TMP_EXTRACT"');
+    });
+
+    it('校验失败即中止并删除全部临时文件（fail-closed）', () => {
+      const failBlock = script
+        .split('代码包 sha256 校验失败')[1]
+        ?.split('\n')
+        .slice(0, 12)
+        .join('\n');
+      expect(failBlock).toBeDefined();
+      expect(failBlock).toContain('exit 1');
+      // 三个临时文件都必须清掉：漏掉 TMP_SUMS 会在安装目录残留 .tmp_SHA256SUMS.txt
+      expect(failBlock).toContain('rm -rf "$TMP_TGZ" "$TMP_SUMS" "$TMP_EXTRACT"');
+      expect(failBlock).toContain('ACTUAL_SHA256');
+    });
+
+    it('VERSION 默认 latest，BRANCH 保留为兼容别名', () => {
+      // latest 让部署零维护；BRANCH 是旧名，老用户 BRANCH=v1.2.0 形式的调用不能被打断
+      expect(script).toContain('VERSION="${VERSION:-${BRANCH:-latest}}"');
+      expect(script).not.toMatch(/BRANCH="\$\{BRANCH:-v\d+\.\d+\.\d+\}"/);
+      expect(script).not.toContain('BRANCH="${BRANCH:-master}"');
+    });
+
+    it('latest 与显式 tag 走不同 download 前缀', () => {
+      // releases/latest/download 无法预知 tag，故 latest 与显式 tag 必须分开拼前缀
+      expect(script).toContain(
+        'RELEASE_BASE="https://github.com/wyyfzb/mc-commander/releases/latest/download"',
+      );
+      expect(script).toContain(
+        'RELEASE_BASE="https://github.com/wyyfzb/mc-commander/releases/download/$VERSION"',
+      );
+      expect(script).toMatch(/if \[ "\$VERSION" = "latest" \]; then/);
+    });
+
+    it('资产名固定不含 tag（否则 latest/download 不可用）', () => {
+      expect(script).toContain('ASSET_NAME="mc-commander-server.tar.gz"');
+      // 资产名不得再由版本号拼接而成
+      expect(script).not.toMatch(/mc-commander-server-\$\{?[A-Za-z_]+\}?\.tar\.gz/);
+      expect(script).not.toContain('mc-commander-server-${BRANCH}.tar.gz');
+    });
+
+    it('latest 取到无产物版本时，报错指向可执行动作', () => {
+      expect(script).toContain('VERSION=latest 取到的最新发布版没有可用的 $ASSET_NAME 产物');
+      expect(script).toContain('VERSION=<tag> 显式指定一个含产物的版本');
+    });
+
+    it('不含 gitee 镜像下载路径', () => {
+      // mirror job 只推 tags 与 branches、不推 Release 资产，gitee 取预打包 tarball 的前提不成立
+      expect(script.toLowerCase()).not.toContain('gitee');
     });
   });
 

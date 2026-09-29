@@ -2,8 +2,11 @@
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
   "release-type": "node",
   "include-component-in-tag": false,
+  "draft": true,
+  "force-tag-creation": true,
   "packages": {
     "mc_commander_server": {
+      "changelog-path": "/CHANGELOG.md",
       "extra-files": [
         "/mc_manager_web/package.json",
         "/mc_manager_web/package-lock.json",

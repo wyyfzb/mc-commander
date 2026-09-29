@@ -2,17 +2,28 @@
 
 # 解析 main 上 Conventional Commits（fix→patch / feat→minor / !→major），
 # 维护一个 Release PR（bump 三包 version + lock + README + 生成 CHANGELOG.md；
-# 三包同步靠 release-please-config.json 的 extra-files 登记）。
-# 合并 Release PR 后 **release-please 自动打 vX.Y.Z tag 并建 GitHub Release**；
-# 但 GITHUB_TOKEN 打的 tag 不触发 push 事件，故 release.yml 不会自动跑——
-# 需从 main 手动 dispatch `release.yml` 并传 tag 名补跑（见该文件的 workflow_dispatch）。
-# Release PR 由 GITHUB_TOKEN 开启，按 GitHub 防循环机制不触发 CI，
-# 属机械 bump 提交，豁免交叉审查；合并该 PR 即代表发版确认（人工实测是合并前的硬性 gate）。
+# 三包同步靠 release-please-config.json 的 extra-files 登记，CHANGELOG 落仓库根
+# 由该配置的 changelog-path 指定——只移文件不改配置会让它按默认路径在包内重建一份）。
+# 合并 Release PR 后 release-please 自动打 vX.Y.Z tag 并建 GitHub Release，
+# 产物构建由本工作流同 run 的 build-and-publish job 接续完成（release.yml 双入口之一）。
+#
+# draft + force-tag-creation 必须同时开启：GitHub 对 draft release 采取 lazy tag creation，
+# 直到发布才建 Git tag，release-please 会因此找不到上一个 release 而算错 CHANGELOG 版本区间，
+# 后续 job 也无法按 tag checkout。force-tag-creation 走 git.createRef 显式建 tag 补上这一环。
+# 产物上传到 draft（不受 immutable 约束）后由该 job 末尾显式发布，此刻才转为不可变。
+#
+# Release PR 由 release-please 经 Git Data API 开启，其 head 提交会正常获得 CI 检查
+# （实测 #552 / #567 各有 8 个 check-run），满足规则集必需检查，可正常合并。
 name: Release Please
 
 on:
   push:
     branches: [main]
+
+# 串行化：main 上连续推送会让多轮 run 抢同一个 Release PR / release
+concurrency:
+  group: release-please
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -21,8 +32,42 @@ permissions:
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    outputs:
+      # 输出名与 release-please-config.json 的 packages 键绑定：setPathOutput() 仅在 path === '.'
+      # 时才输出不带前缀的 release_created / tag_name，非 root 包一律加 `<path>--` 前缀。
+      # 本仓库 package key 是 mc_commander_server，故 tag 名只能从 mc_commander_server--tag_name 取。
+      # releases_created 是全局输出（不带头缀），任何包建了发布都为 true，可用于门禁判断。
+      release_created: ${{ steps.release.outputs.releases_created }}
+      tag_name: ${{ steps.release.outputs.mc_commander_server--tag_name }}
     steps:
       - uses: googleapis/release-please-action@v4
+        id: release
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+      # 输出名与 packages 键是隐式耦合，改任一侧不同步就会让上面的 tag_name 取空值，
+      # 进而使 build-and-publish 被静默跳过——发布照常落一个零资产 draft，且无任何失败日志。
+      # 故在这里把「发布了却取不到 tag」变成显式失败
+      - name: 校验发布输出可用
+        if: steps.release.outputs.releases_created == 'true'
+        env:
+          RELEASES_CREATED: ${{ steps.release.outputs.releases_created }}
+          TAG_NAME: ${{ steps.release.outputs.mc_commander_server--tag_name }}
+        run: |
+          if [ -z "$TAG_NAME" ]; then
+            echo "::error::release-please 报告已创建发布，但未取到 tag 名。"
+            echo "::error::输出名与本仓库的 package key 绑定（<path>--tag_name）。请核对 release-please-config.json 的 packages 键与上一处 outputs 声明是否一致。"
+            exit 1
+          fi
+          echo "发布输出就绪: releases_created=$RELEASES_CREATED tag=$TAG_NAME"
+
+  # Release PR 合并这一轮才创建 release；其余轮次 releases_created 为 'false'，直接跳过。
+  # 产物逻辑复用 release.yml，正常路径与手动补跑同一条实现。
+  build-and-publish:
+    name: 构建并发布产物
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.release-please.outputs.tag_name }}
