@@ -364,7 +364,9 @@ if ! curl -fSL --connect-timeout 15 --retry 2 -o "$TMP_TGZ" "$PACKAGE_URL"; then
     else
       err "VERSION=latest 取到的最新发布版没有可用的 $ASSET_NAME 产物。"
       err "请用 VERSION=<tag> 显式指定一个含产物的版本后重试，例如："
-      err "  VERSION=v0.6.0 sudo bash deploy-mc-commander.sh"
+      # 变量必须写在 sudo 之后：`VERSION=x sudo cmd` 只给 sudo 自己设了变量，
+      # sudo 默认 env_reset 会丢掉它，脚本仍按 latest 跑（静默不生效）
+      err "  sudo VERSION=v0.6.0 bash deploy-mc-commander.sh"
     fi
   else
     err "请检查版本号 $VERSION 是否已发布且含产物，或手动指定 PACKAGE_URL 环境变量"

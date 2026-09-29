@@ -177,6 +177,18 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
       expect(script).toContain('VERSION=<tag> 显式指定一个含产物的版本');
     });
 
+    it('给出的 sudo 用法把变量写在 sudo 之后（写在前面会被 env_reset 丢掉）', () => {
+      // `VERSION=x sudo cmd` 只给 sudo 自己设了变量，sudo 默认 env_reset 会丢掉它，
+      // 脚本仍按 latest 跑——用户以为指定了版本、实际没有，属静默失效。
+      // 只看真正会被打印的 err 行：注释里会引用反面写法当例子，不能一并算进去
+      const hintLines = script
+        .split('\n')
+        .filter((l) => l.trim().startsWith('err '))
+        .join('\n');
+      expect(hintLines).not.toMatch(/VERSION=\S+\s+sudo/);
+      expect(hintLines).toMatch(/sudo VERSION=\S+ bash/);
+    });
+
     it('不含 gitee 镜像下载路径', () => {
       // mirror job 只推 tags 与 branches、不推 Release 资产，gitee 取预打包 tarball 的前提不成立
       expect(script.toLowerCase()).not.toContain('gitee');
