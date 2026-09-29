@@ -80,6 +80,24 @@ describe('装载目标表（目录名的唯一声明源）', () => {
     expect(() => resolveLoadTarget('')).toThrowError(/Unknown load target/);
   });
 
+  it('原型链键必须同样被拒（否则 dir/label 全 undefined，删除会先删再抛）', () => {
+    // 直接下标会走原型链：这些键在旧实现下被判为「合法目标」，随后 dir 为 undefined、
+    // listPlugins/deletePlugin 抛原生 TypeError（对外 500），且 deletePlugin 会在抛错
+    // **之前**真的删掉文件。这是「决定改哪个目录」的守卫，必须 own-property 判定。
+    for (const key of ['__proto__', 'constructor', 'toString', 'valueOf', 'hasOwnProperty']) {
+      expect(() => resolveLoadTarget(key), key).toThrowError(/Unknown load target/);
+    }
+  });
+
+  it('原型链键不会造成任何文件被删（拒绝必须发生在 unlink 之前）', () => {
+    ensureModsDir();
+    writeModJar('canary.jar');
+    expect(() => deletePlugin(serverPath, 'canary.jar', { kind: 'constructor' })).toThrowError(
+      /Unknown load target/,
+    );
+    expect(fs.existsSync(path.join(modsDir, 'canary.jar')), '文件不得被删').toBe(true);
+  });
+
   it('不传 kind 时默认 plugins（既有调用方行为零变化）', () => {
     expect(resolveLoadTarget().dir).toBe('plugins');
   });
@@ -202,6 +220,26 @@ describe('上传与删除走 mods/', () => {
         /Invalid mod path|Invalid mod file name/,
       );
     }
+  });
+
+  it('父目录包含校验真的在承重：文件名合法但解析结果不在目标目录时被拒', () => {
+    // 上一个用例喂的名字**全部**已被 PLUGIN_FILE_REGEX 挡下，故它只证明了正则有效，
+    // 没证明 resolveSafePath + 父目录校验这一层。这里直接调用解析结果校验的判据：
+    // 让 mods/ 内出现一个**指向外部目录**的文件级 symlink（名字合法：linked.jar），
+    // 它必须被 realpath 那一步拦下——这层若被改坏，上一条用例照样绿。
+    ensureModsDir();
+    const outsideDir = path.join(tmpRoot, 'outside');
+    fs.mkdirSync(outsideDir, { recursive: true });
+    fs.writeFileSync(path.join(outsideDir, 'target.jar'), 'SENSITIVE');
+    try {
+      fs.symlinkSync(path.join(outsideDir, 'target.jar'), path.join(modsDir, 'linked.jar'), 'file');
+    } catch {
+      return; // 平台不允许创建 symlink（无权限）时跳过：本用例的前提无法建立
+    }
+    expect(() => deletePlugin(serverPath, 'linked.jar', { kind: 'mod' })).toThrowError(
+      /Invalid mod path/,
+    );
+    expect(fs.existsSync(path.join(outsideDir, 'target.jar')), '外部文件不得被删').toBe(true);
   });
 });
 

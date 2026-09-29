@@ -21,11 +21,10 @@ import {
  *   启动时加载，启停后需重启实例生效，由前端明确提示）。
  * - `mod`：Fabric/Forge `mods/` 目录内的 jar。**只做列表 / 上传 / 删除**——启停
  *   **刻意不支持**：`.disabled` 是 Bukkit 系约定，Forge/Fabric 在文件层面**没有**通用
- *   等价物，照搬会让用户以为「已禁用」而实际仍被加载。要启停得走各自 loader 的配置，
- *   那是另一件事（见下方 MOD_ENABLE_UNSUPPORTED）。
+ *   等价物，照搬会让用户以为「已禁用」而实际仍被加载。要启停得走各自 loader 自己的
+ *   配置文件，本服务不代劳。
  *
- * 目录名**由 kind 参数化**：此前写死 `plugins/`，本次抽成 LOAD_TARGETS 一处声明，
- * 新增目标不再散落到三个函数里各改一遍。
+ * 目录名由 `kind` 参数化（`LOAD_TARGETS` 一处声明）：新增目标不必散落到各函数里改。
  */
 
 /**
@@ -44,9 +43,16 @@ export const DEFAULT_LOAD_TARGET = 'plugin';
 /**
  * 解析装载目标：未知 kind 报错而不是回落到 plugins/——回落会把「拼错的 kind」
  * 变成「操作了错误的目录」（对 mods 的危险是双向的：既可能删错，也可能删不掉）。
+ *
+ * 用 `Object.hasOwn` 而非直接下标：`LOAD_TARGETS[kind]` 会走**原型链**，故
+ * `__proto__`/`constructor`/`toString` 等键被判为「合法目标」——实测其后果是
+ * `dir`/`label`/`supportsToggle` 全为 undefined，`listPlugins`/`deletePlugin` 随后抛
+ * 原生 TypeError（对外是 500 而非 400），且 `deletePlugin` 会在抛错**之前**真的删掉文件。
+ * 今天 kind 全部来自代码字面量、够不到；但它是「决定改哪个目录」的那个守卫，
+ * 一旦将来 kind 由输入派生（loader 安装器的自然演进）就会立刻变成活的。
  */
 export function resolveLoadTarget(kind = DEFAULT_LOAD_TARGET) {
-  const target = LOAD_TARGETS[kind];
+  const target = Object.hasOwn(LOAD_TARGETS, kind) ? LOAD_TARGETS[kind] : undefined;
   if (!target) {
     throw new AppError(ErrorCodes.VALIDATION_ERROR, `Unknown load target: ${kind}`);
   }
@@ -230,12 +236,15 @@ export function uploadPlugin(
       fs.copyFileSync(tmpFilePath, targetFull, fs.constants.COPYFILE_EXCL);
     } catch (err) {
       if (err.code === 'EEXIST') {
+        // 错误码共用 PLUGIN_FILE_EXISTS/40912（前端按码判定，两端同一语义=同名冲突）；
+        // 文案按 kind 分流，否则上传模组失败却提示「Plugin file」会让人以为操作错了对象
+        const noun = kind === 'mod' ? 'Mod' : 'Plugin';
         throw new AppError(
           ErrorCodes.PLUGIN_FILE_EXISTS,
-          `Plugin file already exists: ${originalName}`,
+          `${noun} file already exists: ${originalName}`,
         );
       }
-      throw new AppError(ErrorCodes.SERVER_ERROR, `Failed to save plugin: ${err.message}`);
+      throw new AppError(ErrorCodes.SERVER_ERROR, `Failed to save ${kind}: ${err.message}`);
     }
   }
   const overwritten = overwrite && existedBefore;
@@ -264,7 +273,7 @@ export function uploadPlugin(
  * 改键名会让旧前端取不到数据；语义上它就是「条目列表」。
  */
 export function listPlugins(serverPath, { kind = DEFAULT_LOAD_TARGET } = {}) {
-  const { dir, label } = resolveLoadTarget(kind);
+  const { dir } = resolveLoadTarget(kind);
   const targetDir = path.join(serverPath, dir);
   let entries;
   try {
@@ -274,7 +283,7 @@ export function listPlugins(serverPath, { kind = DEFAULT_LOAD_TARGET } = {}) {
     if (err.code === 'ENOTDIR') {
       throw new AppError(ErrorCodes.VALIDATION_ERROR, `${dir} is not a directory`);
     }
-    throw new AppError(ErrorCodes.SERVER_ERROR, `Failed to list ${label}: ${err.message}`);
+    throw new AppError(ErrorCodes.SERVER_ERROR, `Failed to list ${kind}: ${err.message}`);
   }
 
   const plugins = [];

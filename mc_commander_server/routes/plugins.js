@@ -37,7 +37,7 @@ import {
 import config from '../config.js';
 
 /**
- * 插件管理路由（最小闭环 + 上传延伸 + Modrinth 市场延伸）
+ * 插件与模组管理路由（最小闭环 + 上传延伸 + Modrinth 市场延伸）
  * GET    /api/v1/instances/:id/plugins                    —— 列表（含元数据与启停状态）
  * POST   /api/v1/instances/:id/plugins/upload             —— 上传插件 jar（multipart 字段 file；?overwrite=true 显式覆盖）
  * PUT    /api/v1/instances/:id/plugins/:file/enabled      —— 启用/禁用（body: {enabled}）
@@ -48,6 +48,13 @@ import config from '../config.js';
  * GET  /api/v1/instances/:id/plugins/market/projects/:slug/versions      —— 版本列表（game_version/loader）
  * POST /api/v1/instances/:id/plugins/market/install                      —— 一键安装（body: {slug, versionNumber}；?overwrite=true）
  * POST /api/v1/instances/:id/plugins/check-updates                       —— 批量更新检测（已装插件 vs Modrinth 最新版）
+ *
+ * 模组（`mods/` 复用同一套模型，目录名由 service 的 kind 参数化）：
+ * GET    /api/v1/instances/:id/mods              —— 列表
+ * POST   /api/v1/instances/:id/mods/upload       —— 上传（multipart 字段 file；?overwrite=true）
+ * DELETE /api/v1/instances/:id/mods/:file        —— 删除
+ * **刻意没有 enabled 端点**：`.disabled` 是 Bukkit 系约定，Forge/Fabric 无文件层等价物；
+ * 提供它会让用户以为能启停而实际无效（service 层同样拒绝，双保险）。
  *
  * 设计要点：
  * - :file 为白名单文件名（见 plugin.service PLUGIN_FILE_REGEX），非任意路径
