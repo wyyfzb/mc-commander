@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.5.0](https://github.com/wyyfzb/mc-commander/compare/v0.4.0...v0.5.0) (2026-09-29)
+
+
+### Features
+
+* 接通 highMemory 告警——走整机内存口径，不做 JVM 堆采集 ([b3bda44](https://github.com/wyyfzb/mc-commander/commit/b3bda4461a8703c1822c054f8bc10b46801e7e9e))
+* 接通 highMemory 告警——走整机内存口径，不做 JVM 堆采集 ([f98443d](https://github.com/wyyfzb/mc-commander/commit/f98443d8358899c5bbf0e007ea142346b291dae2))
+
+
+### Bug Fixes
+
+* **server:** 指标保留期 24h→48h，使「昨日」在一天内任意时刻都可完整计算 ([44a5153](https://github.com/wyyfzb/mc-commander/commit/44a5153389a8e02dc1a041b8b4d1ac6319b487ae))
+* **server:** 指标保留期 24h→48h，使「昨日」在一天内任意时刻都可完整计算 ([dbce349](https://github.com/wyyfzb/mc-commander/commit/dbce349a426c361cfc07ada8e0257e658a224368))
+
 ## [0.4.0](https://github.com/wyyfzb/mc-commander/compare/v0.3.0...v0.4.0) (2026-09-29)
 
 
