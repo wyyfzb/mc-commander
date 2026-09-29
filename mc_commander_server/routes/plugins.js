@@ -332,5 +332,94 @@ export function createPluginRoutes(serverManager) {
     }
   });
 
+  // ── 模组（Fabric/Forge）────────────────────────────────────────────
+  // mods/ 复用同一套模型（白名单 / zip 魔数 / 40912 语义 / 数量上限），差异只在目录名
+  // 与「不支持文件级启停」。**不提供 enabled 端点**：Forge/Fabric 无 `.disabled` 通用
+  // 约定，提供它会让用户以为能启停而实际无效（service 层也会拒绝，这里是双保险）。
+
+  // GET /api/v1/instances/:id/mods
+  router.get('/instances/:id/mods', (req, res, next) => {
+    try {
+      const serverPath = requireInstance(req.params.id);
+      if (!serverPath) {
+        return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND, 'Instance not found'));
+      }
+      res.json(validatedSuccess(pluginListSchema, listPlugins(serverPath, { kind: 'mod' })));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // POST /api/v1/instances/:id/mods/upload  multipart 字段 file；?overwrite=true 显式覆盖
+  router.post(
+    '/instances/:id/mods/upload',
+    (req, res, next) => {
+      pluginUpload.single('file')(req, res, (err) => handleMulterError(err, next));
+    },
+    validateQuery(pluginOverwriteQuerySchema, {
+      onError: (req) => {
+        if (req.file?.path) {
+          try {
+            fs.unlinkSync(req.file.path);
+          } catch {}
+        }
+      },
+    }),
+    (req, res, next) => {
+      const uploaded = req.file;
+      try {
+        const { id } = req.params;
+        if (!uploaded) {
+          throw new AppError(ErrorCodes.VALIDATION_ERROR, 'No file uploaded');
+        }
+        const serverPath = requireInstance(id);
+        if (!serverPath) {
+          return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND, 'Instance not found'));
+        }
+        const overwrite = req.query.overwrite === 'true';
+        const result = uploadPlugin(serverPath, uploaded.path, uploaded.originalname, {
+          overwrite,
+          kind: 'mod',
+        });
+        recordAudit({
+          instanceId: id,
+          action: AuditActions.MOD_UPLOAD,
+          targetType: 'mod',
+          targetId: result.file,
+          detail: { sizeBytes: result.sizeBytes, overwritten: result.overwritten },
+        });
+        res
+          .status(result.overwritten ? 200 : 201)
+          .json(validatedSuccess(pluginUploadResultSchema, result));
+      } catch (err) {
+        next(err);
+      } finally {
+        cleanupTmp(uploaded);
+      }
+    },
+  );
+
+  // DELETE /api/v1/instances/:id/mods/:file
+  router.delete('/instances/:id/mods/:file', (req, res, next) => {
+    try {
+      const { id, file } = req.params;
+      const serverPath = requireInstance(id);
+      if (!serverPath) {
+        return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND, 'Instance not found'));
+      }
+      const result = deletePlugin(serverPath, file, { kind: 'mod' });
+      recordAudit({
+        instanceId: id,
+        action: AuditActions.MOD_DELETE,
+        targetType: 'mod',
+        targetId: file,
+        detail: null,
+      });
+      res.json(validatedSuccess(pluginDeleteResultSchema, result));
+    } catch (err) {
+      next(err);
+    }
+  });
+
   return router;
 }
