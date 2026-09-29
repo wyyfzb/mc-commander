@@ -12,8 +12,12 @@
 # 后续 job 也无法按 tag checkout。force-tag-creation 走 git.createRef 显式建 tag 补上这一环。
 # 产物上传到 draft（不受 immutable 约束）后由该 job 末尾显式发布，此刻才转为不可变。
 #
-# Release PR 由 release-please 经 Git Data API 开启，其 head 提交会正常获得 CI 检查
-# （实测 #552 / #567 各有 8 个 check-run），满足规则集必需检查，可正常合并。
+# Release PR 的 CI 需要先人工批准才会跑：其 head 提交由 github-actions[bot] 创建，
+# 公开仓库把非本人 actor 的 run 停在 action_required（0 个 job、0 个 check-run），
+# 此时 PR 因缺必需检查而 BLOCKED。批准后才开始跑：
+#   gh api --method POST repos/<owner>/<repo>/actions/runs/<run_id>/approve
+# （把 main 合并进该分支——GitHub UI 的 Update branch——会让 head 变成本人提交，
+#  那时 CI 直接就跑，实测 v0.5.0 的 #567 即此路径；两条路都通。）
 name: Release Please
 
 on:
