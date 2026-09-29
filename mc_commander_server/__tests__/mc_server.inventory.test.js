@@ -392,7 +392,7 @@ describe('MCServerInstance - 物品栏解析域（NBT/SNBT/装配）', () => {
       expect(await instance._loadInventoryFromRcon('Steve')).toBeNull();
     });
 
-    it('在线查询现状行为：完整列表响应经 _extractNbtFromResponse（从 { 截取丢外层 [）后列表解析为空 → 降级 null（行为锁定）', async () => {
+    it('完整列表响应能解析出实时背包（提取起点须含外层 [，此前从 { 截取导致恒降级）', async () => {
       rconConnected(instance, true);
       vi.spyOn(instance, 'sendCommandWithResponse').mockImplementation(async (cmd) => {
         if (cmd.includes('Inventory')) {
@@ -400,7 +400,17 @@ describe('MCServerInstance - 物品栏解析域（NBT/SNBT/装配）', () => {
         }
         return 'Steve has the following entity data: []';
       });
-      expect(await instance._loadInventoryFromRcon('Steve')).toBeNull();
+      const result = await instance._loadInventoryFromRcon('Steve');
+      // 此前该用例锁定的是「降级为 null」——那正是本条修复的缺陷：提取丢外层 `[`
+      // 使列表解析永不命中，且截断检测先把它判成「已截断」。现在必须拿到实时读数。
+      expect(result).not.toBeNull();
+      expect(result.source).toBe('realtime');
+      // 结果是**按槽位装配**的结构（quickbar 9 / main 27 / equipment / enderChest），
+      // 不是扁平 items 数组：Slot:1b 的钻石应落在快捷栏第 1 格
+      expect(result.quickbar[1]).not.toBeNull();
+      // id 由解析层归一化去掉 minecraft: 前缀（与前端物品表的键口径一致）
+      expect(result.quickbar[1].id).toBe('diamond');
+      expect(result.quickbar[1].count).toBe(3);
     });
 
     it('Inventory 响应截断（未以 ] 结尾）降级返回 null', async () => {
