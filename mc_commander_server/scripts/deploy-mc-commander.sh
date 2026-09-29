@@ -4,29 +4,24 @@
 # 用法（远程两步命令，推荐先下载再执行，便于审查脚本内容）:
 #   curl -fsSL -o /tmp/deploy-mc-commander.sh https://raw.githubusercontent.com/wyyfzb/mc-commander/main/mc_commander_server/scripts/deploy-mc-commander.sh
 #   sudo bash /tmp/deploy-mc-commander.sh
-#   （国内网络不畅时可改用 gitee 镜像同路径）
 #
 # 用法（本地执行）:
 #   sudo bash deploy-mc-commander.sh
 #
 # 环境变量覆盖:
 #   MC_COMMANDER_DIR=/opt/mc-commander  安装目录
-#   BRANCH=v0.1.0                       发布标签/分支（默认锁定具体 tag，避免 master 可变分支被篡改；
-#                                       显式覆盖为可变分支时，必须同时提供 PACKAGE_SHA256 完成完整性校验）
-#   PACKAGE_URL=xxx                     后端代码包下载地址（tar.gz，默认 GitHub Release 固定标签；
-#                                       国内网络可覆盖为 gitee 镜像同文件地址）
-#   PACKAGE_SHA256=xxx                  预期代码包 sha256（自定义 PACKAGE_URL 时必填，用于覆盖内嵌默认值）
+#   VERSION=latest                      发布版本：latest（默认）取最新发布版，或 v0.6.0 这类具体 tag。
+#                                       旧名 BRANCH 仍作兼容别名生效
+#   PACKAGE_URL=xxx                     后端代码包下载地址（tar.gz），默认取 GitHub Release 资产
+#   SHA256SUMS_URL=xxx                  摘要文件地址，默认与 PACKAGE_URL 同 Release；自定义 PACKAGE_URL 时需一并设置
 #   NODE_VERSION=v22.23.2               官方二进制兜底安装时固定的 Node.js LTS 版本号
 #
 # 安全说明：
-#   - 代码包下载后强制校验 sha256（与内嵌预期值比对），校验失败立即中止并删除临时文件
+#   - 代码包下载后取**同一 Release** 的 SHA256SUMS.txt 比对校验，不一致立即中止并删除临时文件。
+#     摘要与资产同源，故防的是传输损坏与单方面替换资产（Release 已开 Immutable Releases：
+#     发布后资产不可增删改、tag 不可删移）；要防「发布方本身被攻陷」需另行核对 tag 签名
 #   - 不使用第三方 curl|bash 引导脚本；Node.js 优先发行版官方源，兜底用官方二进制包 + SHASUMS256.txt 校验
 #   - systemd 服务以专用低权限用户 mc-commander 运行（25566 高位端口无需 root）
-#
-# 发布新版本时须同步更新（保证脚本与代码包版本一致）：
-#   1) 推送新 tag → CI release.yml 自动构建并上传 mc-commander-server-<tag>.tar.gz
-#   2) 下载该 Release 产物取 sha256 → 更新下方 EXPECTED_PACKAGE_SHA256
-#   3) 提交脚本更新并推送（tag 产物内容不变，无需重打）
 set -euo pipefail
 
 # 禁止 apt/debconf 在安装过程中弹出交互式配置界面（如 needrestart 服务重启提示）
@@ -36,16 +31,20 @@ export DEBIAN_FRONTEND=noninteractive
 export NEEDRESTART_MODE=a
 
 MC_COMMANDER_DIR="${MC_COMMANDER_DIR:-/opt/mc-commander}"
-# 默认锁定具体发布标签（vX.Y.Z），避免 master 可变分支被投毒/误覆盖后影响安装；
-# 仍保留 BRANCH 环境变量覆盖（例如 BRANCH=master 或指定 commit），但可变分支场景必须配合 PACKAGE_SHA256
-BRANCH="${BRANCH:-v1.2.0}"
-# GitHub Release 资产为权威来源（CI 构建）；国内网络可通过 PACKAGE_URL 覆盖为 gitee 镜像
-PACKAGE_URL="${PACKAGE_URL:-https://github.com/wyyfzb/mc-commander/releases/download/${BRANCH}/mc-commander-server-${BRANCH}.tar.gz}"
-# 预期代码包 sha256（强制完整性校验，防篡改/防发布版本错配）。
-# 当前值与 BRANCH 默认值保持一致（对应最近一次含产物的 Release），
-# 新版本发布后由 release.yml 回写 PR 自动同步更新，无需手工维护；
-# 自定义 PACKAGE_URL 时通过 PACKAGE_SHA256 环境变量提供对应文件的 sha256
-EXPECTED_PACKAGE_SHA256="${PACKAGE_SHA256:-544a34879c5c907182136106a0e5307d04c48389c86cae298bd510c237c8c526}"
+# VERSION：latest（默认）总是装最新发布版，零维护；指定具体 tag（v0.6.0）则做可复现安装。
+# BRANCH 是该变量的旧名，保留为兼容别名——既有 BRANCH=v1.2.0 形式的调用不能被打断。
+VERSION="${VERSION:-${BRANCH:-latest}}"
+# 资产名固定不含 tag：releases/latest/download/<asset> 无法预知 tag，名字不固定就用不了 latest
+ASSET_NAME="mc-commander-server.tar.gz"
+# latest 与显式 tag 的下载前缀不同，故分开拼
+if [ "$VERSION" = "latest" ]; then
+  RELEASE_BASE="https://github.com/wyyfzb/mc-commander/releases/latest/download"
+else
+  RELEASE_BASE="https://github.com/wyyfzb/mc-commander/releases/download/$VERSION"
+fi
+# GitHub Release 资产为权威来源（CI 构建）
+PACKAGE_URL="${PACKAGE_URL:-$RELEASE_BASE/$ASSET_NAME}"
+SHA256SUMS_URL="${SHA256SUMS_URL:-$RELEASE_BASE/SHA256SUMS.txt}"
 
 log()  { echo "[$(date '+%H:%M:%S')] $*"; }
 warn() { echo "[WARN] $*"; }
@@ -93,7 +92,6 @@ install_pkg() {
 }
 
 # 2. 安装基础工具（curl、tar、rsync）
-# 通过 Gitee raw 接口下载预打包的 tar.gz，绕过 archive 接口的人机验证和 git 认证拦截
 # rsync 为备份功能依赖（目录快照 + --link-dest 硬链接增量，缺失时备份降级失败）
 for tool in curl tar rsync; do
   if ! command -v "$tool" &>/dev/null; then
@@ -347,21 +345,32 @@ fi
 cd "$MC_COMMANDER_DIR"
 
 # 6. 下载后端代码
-# 使用 Gitee raw 文件接口下载预打包的 tar.gz，完全绕过：
-#   - archive 接口的人机验证（验证码页面，返回 400/HTML）
-#   - git clone HTTPS 的认证提示（云服务器 IP 被风控要求 Username）
-# raw 接口支持匿名访问，脚本自身就是通过此接口下载的，已验证可靠
-log "下载 MC_Commander 后端代码..."
+log "下载 MC_Commander 后端代码（VERSION=$VERSION）..."
 TMP_TGZ="$MC_COMMANDER_DIR/.tmp_package.tar.gz"
+TMP_SUMS="$MC_COMMANDER_DIR/.tmp_SHA256SUMS.txt"
 TMP_EXTRACT="$MC_COMMANDER_DIR/.tmp_extract"
-rm -rf "$TMP_TGZ" "$TMP_EXTRACT"
+rm -rf "$TMP_TGZ" "$TMP_SUMS" "$TMP_EXTRACT"
 mkdir -p "$TMP_EXTRACT"
 # 下载 tar.gz（-f 失败即退出，-S 显示错误，-L 跟随重定向，--connect-timeout 防止长时间挂起）
 if ! curl -fSL --connect-timeout 15 --retry 2 -o "$TMP_TGZ" "$PACKAGE_URL"; then
   err "代码包下载失败：$PACKAGE_URL"
-  err "请检查网络连接或手动指定 PACKAGE_URL 环境变量"
+  # latest 指向「最新发布版」：若该版本早于固定资产名改造，或产物尚未构建，这里就会 404。
+  # 报错须指向可执行动作，而不是泛泛的网络问题
+  if [ "$VERSION" = "latest" ]; then
+    if [ -n "${PACKAGE_URL:-}" ]; then
+      # 自定义 PACKAGE_URL 时，latest 那套提示会文不对题，先排除这条
+      err "自定义 PACKAGE_URL 下载失败；未设置 SHA256SUMS_URL 时也无从校验完整性。"
+      err "请确认 PACKAGE_URL 可达，并一并设置指向同一 Release 的 SHA256SUMS_URL"
+    else
+      err "VERSION=latest 取到的最新发布版没有可用的 $ASSET_NAME 产物。"
+      err "请用 VERSION=<tag> 显式指定一个含产物的版本后重试，例如："
+      err "  VERSION=v0.6.0 sudo bash deploy-mc-commander.sh"
+    fi
+  else
+    err "请检查版本号 $VERSION 是否已发布且含产物，或手动指定 PACKAGE_URL 环境变量"
+  fi
   err "也可以手动将后端代码解压到 $MC_COMMANDER_DIR 后重新运行此脚本"
-  rm -rf "$TMP_TGZ" "$TMP_EXTRACT"
+  rm -rf "$TMP_TGZ" "$TMP_SUMS" "$TMP_EXTRACT"
   exit 1
 fi
 # 校验文件类型：tar.gz (gzip) 魔术字节为 1f 8b
@@ -370,38 +379,55 @@ if [ "$GZ_MAGIC" != "1f8b" ]; then
   err "下载的文件不是有效的 tar.gz 包（魔术字节: ${GZ_MAGIC:-空}）"
   err "可能是网络错误或文件不存在，请检查 URL："
   err "  $PACKAGE_URL"
-  rm -rf "$TMP_TGZ" "$TMP_EXTRACT"
+  rm -rf "$TMP_TGZ" "$TMP_SUMS" "$TMP_EXTRACT"
   exit 1
 fi
-# 完整性校验：下载文件的 sha256 必须与内嵌预期值一致（防篡改/防发布版本错配）。
+# 完整性校验：取同一 Release 的 SHA256SUMS.txt，按其中登记的值比对下载文件。
+# 摘要与资产同源同 Release，Release 又已开 Immutable Releases，故这一对值不可被单方面替换。
 # 校验失败立即中止并清理临时文件（fail-closed，绝不执行未经验证的代码）
 if ! command -v sha256sum &>/dev/null; then
   install_pkg coreutils
 fi
+if ! curl -fSL --connect-timeout 15 --retry 2 -o "$TMP_SUMS" "$SHA256SUMS_URL"; then
+  err "SHA256SUMS.txt 下载失败：$SHA256SUMS_URL"
+  err "自定义 PACKAGE_URL 时请同时设置 SHA256SUMS_URL，否则无从校验完整性"
+  rm -rf "$TMP_TGZ" "$TMP_SUMS" "$TMP_EXTRACT"
+  exit 1
+fi
+# 摘要文件由 `sha256sum <file>` 生成，行格式为「<hash>  <文件名>」；
+# 也可能带二进制模式前缀 `*`。按下载地址的 basename 找条目，自定义 URL 同样适用
+PKG_BASENAME=$(basename "$PACKAGE_URL")
+EXPECTED_SHA256=$(awk -v f="$PKG_BASENAME" '$2 == f || $2 == "*" f {print $1; exit}' "$TMP_SUMS")
+if [ -z "$EXPECTED_SHA256" ]; then
+  err "SHA256SUMS.txt 中未找到 $PKG_BASENAME 的摘要条目：$SHA256SUMS_URL"
+  err "该 Release 的产物名与本脚本预期不一致，或摘要文件与代码包不是同一 Release"
+  rm -rf "$TMP_TGZ" "$TMP_SUMS" "$TMP_EXTRACT"
+  exit 1
+fi
 ACTUAL_SHA256=$(sha256sum "$TMP_TGZ" | awk '{print $1}')
-if [ "$ACTUAL_SHA256" != "$EXPECTED_PACKAGE_SHA256" ]; then
+if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
   err "代码包 sha256 校验失败！"
-  err "  预期: $EXPECTED_PACKAGE_SHA256"
-  err "  实际: $ACTUAL_SHA256"
-  err "下载文件可能已被篡改，或脚本与代码包版本不匹配（脚本未随新版本同步更新校验值）"
+  err "  预期（$SHA256SUMS_URL）: $EXPECTED_SHA256"
+  err "  实际（$PACKAGE_URL）: $ACTUAL_SHA256"
+  err "下载文件可能已被篡改，或代码包与摘要不是同一 Release 的产物"
   err "已中止安装并删除临时文件。排查建议："
-  err "  1. 使用官方发布包时，请从 master 分支重新获取最新部署脚本"
-  err "  2. 自定义 PACKAGE_URL 安装时，请同时设置 PACKAGE_SHA256 环境变量"
+  err "  1. 重新运行脚本（latest 会取到最新发布版，可能已修正）"
+  err "  2. 自定义 PACKAGE_URL 安装时，请确认 PACKAGE_URL 与 SHA256SUMS_URL 指向同一 Release"
   err "  3. 仍无法解决时，请先人工核实下载内容来源"
-  rm -rf "$TMP_TGZ" "$TMP_EXTRACT"
+  rm -rf "$TMP_TGZ" "$TMP_SUMS" "$TMP_EXTRACT"
   exit 1
 fi
 log "代码包 sha256 校验通过"
 # 解压到临时目录
 if ! tar -xzf "$TMP_TGZ" -C "$TMP_EXTRACT"; then
   err "解压失败，tar.gz 文件可能已损坏"
-  rm -rf "$TMP_TGZ" "$TMP_EXTRACT"
+  rm -rf "$TMP_TGZ" "$TMP_SUMS" "$TMP_EXTRACT"
   exit 1
 fi
 # 验证解压结果：必须存在 package.json（后端入口标识）
 if [ ! -f "$TMP_EXTRACT/package.json" ]; then
   err "解压后未找到 package.json，代码包结构异常"
-  rm -rf "$TMP_TGZ" "$TMP_EXTRACT"
+  rm -rf "$TMP_TGZ" "$TMP_SUMS" "$TMP_EXTRACT"
   exit 1
 fi
 # 复制代码到安装目录（首次部署与更新共用此逻辑）
@@ -412,7 +438,7 @@ if [ ! -f "$MC_COMMANDER_DIR/.env" ] && [ -f "$TMP_EXTRACT/.env.example" ]; then
   cp -f "$TMP_EXTRACT/.env.example" "$MC_COMMANDER_DIR/"
 fi
 # 清理临时文件
-rm -rf "$TMP_TGZ" "$TMP_EXTRACT"
+rm -rf "$TMP_TGZ" "$TMP_SUMS" "$TMP_EXTRACT"
 log "代码下载完成"
 
 # 7. 安装编译工具（better-sqlite3 等原生模块需要）
