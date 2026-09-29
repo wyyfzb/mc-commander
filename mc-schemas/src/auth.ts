@@ -86,6 +86,66 @@ export const apiKeyRotateResponseSchema = z.object({
 })
 
 // ---------------------------------------------------------------------------
+// 作用域化机器凭据（可命名的委托身份；一期只发放只读作用域）
+//
+// 契约边界：明文 token **只在创建那一次响应里**出现（与 apiKey 轮换同款）——
+// 列表与详情恒不含明文，也不含摘要。test 字段用于「这把 Key 能做什么」的自检。
+// ---------------------------------------------------------------------------
+
+/** 作用域取值：扁平 `resource:action`。一期只有只读三档。 */
+export const machineScopeSchema = z.enum(['system:read', 'instance:read', 'player:read'])
+
+/** 凭据条目（不含任何凭据本体） */
+export const machineCredentialSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  /** 前缀 + 前 8 位 hex（共 12 字符），仅供运维辨认「是哪一把」（不足以还原明文） */
+  tokenPrefix: z.string(),
+  scopes: z.array(machineScopeSchema),
+  isEnabled: z.boolean(),
+  revokedAt: z.string().nullable(),
+  lastUsedAt: z.string().nullable(),
+  createdAt: z.string().nullable(),
+})
+
+/** 列表响应 */
+export const machineCredentialListSchema = z.array(machineCredentialSchema)
+
+/** 创建响应：条目 + 明文 token（唯一出口） */
+export const machineCredentialCreateResponseSchema = machineCredentialSchema.extend({
+  token: z.string(),
+})
+
+/** 创建入参：名称 + 作用域（作用域必填且非空——空作用域凭据无任何用途，
+ *  放开只会让用户以为「建好了」却处处 403） */
+export const machineCredentialCreateBodySchema = z.object({
+  name: z.string().min(1).max(64),
+  scopes: z.array(machineScopeSchema).min(1),
+})
+
+/** 启停入参 */
+export const machineCredentialToggleBodySchema = z.object({
+  isEnabled: z.boolean(),
+})
+
+/** 自检响应：调用方自己的身份与实际持有的作用域（用于「我的 Key 能做什么」）。
+ *  role 让调用方区分「受限凭据」「管理员」「`.env` 固定通道」——三者的 scopes
+ *  语义不同（管理员不按作用域判定），只报 scopes 会被读成「管理员也只有这三项」。 */
+export const machineCredentialSelfSchema = z.object({
+  role: z.enum(['admin', 'readonly']),
+  name: z.string(),
+  scopes: z.array(machineScopeSchema),
+})
+
+export type MachineScope = z.infer<typeof machineScopeSchema>
+export type MachineCredential = z.infer<typeof machineCredentialSchema>
+export type MachineCredentialList = z.infer<typeof machineCredentialListSchema>
+export type MachineCredentialCreateResponse = z.infer<typeof machineCredentialCreateResponseSchema>
+export type MachineCredentialCreateBody = z.infer<typeof machineCredentialCreateBodySchema>
+export type MachineCredentialToggleBody = z.infer<typeof machineCredentialToggleBodySchema>
+export type MachineCredentialSelf = z.infer<typeof machineCredentialSelfSchema>
+
+// ---------------------------------------------------------------------------
 // TOTP 两步验证（RFC 6238）
 //
 // 契约边界：secret 与恢复码明文**只在生成它的那一次响应里**出现——status 恒不含

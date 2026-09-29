@@ -7,6 +7,10 @@ import { createTaskRoutes } from './tasks.js';
 import { createFileRoutes } from './files.js';
 import { createServerJarRoutes } from './server-jar.js';
 import { createKeyRoutes } from './keys.js';
+import {
+  createMachineCredentialRoutes,
+  createMachineCredentialSelfRoutes,
+} from './machine_credentials.js';
 import { createMetricsRoutes } from './metrics.js';
 import { createAuditRoutes } from './audit.js';
 import { createWebhookRoutes } from './webhooks.js';
@@ -46,6 +50,8 @@ export function createApiV1Router(serverManager, taskScheduler) {
   v1Router.use('/', createFileRoutes(serverManager));
   v1Router.use('/', createServerJarRoutes(serverManager));
   v1Router.use('/', createKeyRoutes());
+  v1Router.use('/', createMachineCredentialRoutes());
+  v1Router.use('/', createMachineCredentialSelfRoutes());
   v1Router.use('/', createMetricsRoutes());
   v1Router.use('/', createAuditRoutes());
   v1Router.use('/', createWebhookRoutes());

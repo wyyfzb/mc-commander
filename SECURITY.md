@@ -65,10 +65,10 @@ MC Commander 是**单管理员自托管面板**，架构上不区分多租户/�
 | 维度 | 实际行为 |
 |---|---|
 | 形态 | **单例全局凭据**：一个部署只有一把只读 Key（`READONLY_API_KEY_HASH` 只存 SHA-256 摘要，明文仅在轮换那一次响应里出现），明文前缀 `mcro-`（仅便于运维辨认，鉴权只看摘要） |
-| 权限范围 | **仅只读白名单 5 个端点**：`GET /overview`、`GET /system-stats`、`GET /instances`、`GET /instances/:id`、`GET /instances/:id/players`。其余 86 个端点中 **83 个一律 403**（`AUTH_INSUFFICIENT_ROLE`/40305），包括全部写操作与全部敏感读；另 3 个是认证前公开端点（`/auth/status`、`/auth/login`、`/auth/setup`），本就不经认证、与凭据角色无关 |
+| 权限范围 | **仅只读白名单 6 个端点**：`GET /overview`、`GET /system-stats`、`GET /instances`、`GET /instances/:id`、`GET /instances/:id/players`，以及免作用域的身份自省面 `GET /machine-credentials/self`（只回显调用方自己的身份）。其余 92 个端点中 **89 个一律 403**（`AUTH_INSUFFICIENT_ROLE`/40305），包括全部写操作与全部敏感读；另 3 个是认证前公开端点（`/auth/status`、`/auth/login`、`/auth/setup`），本就不经认证、与凭据角色无关 |
 | 字段裁剪 | `GET /instances` 与 `GET /instances/:id` 对只读**按角色裁剪响应**：剔除 `jvmArgs`、`startCommand`（自由文本，运维常把 JMX/DB 口令写进 JVM 参数）、`javaPath`（主机目录布局）、`seed`（世界种子）；监控所需字段（`id`/`name`/`address`/`isRunning`/`playerCount`/`tps`/`mspt`/CPU/内存/`uptime`/版本等）全部保留。**管理员响应不裁剪、逐字节不变**。裁剪只发生在 `routes/status.js` 的出参构造处，角色门不改写响应体 |
 | 明确不能做 | 读文件内容/目录（`files*`）、读日志原文（`logs`）、读配置内容（`properties`）、读世界数据（`world`）、读玩家存档明细与封禁记录（`players/:player/details`、`players/bans`）、下载或列出备份（`backups*`）、读命令史（`command-history`）、读审计明细（`audit-logs`）、读会话清单（`auth/sessions`）、读任务定义（`tasks*`）、读 Webhook 配置（`webhooks*`）、插件与升级/部署运维面、以及**任何**写操作 |
-| 默认拒绝的方向 | 判定是「**不在白名单 ⇒ 要求 admin**」而非「逐个列举要拦谁」：新增路由无需登记即自动对只读关闭，漏登记只会更严、不会更松。回归测试从 Express 实际注册的路由表枚举全部端点并断言非白名单端点对只读 403，新端点自动纳入覆盖 |
+| 默认拒绝的方向 | 判定是「**不在作用域表内 ⇒ 没有任何作用域可满足**」而非「逐个列举要拦谁」：新增路由无需登记即自动对只读关闭，漏登记只会更严、不会更松。回归测试从 Express 实际注册的路由表枚举全部端点并断言非白名单端点对只读 403，新端点自动纳入覆盖 |
 | WebSocket | **可握手，但按事件白名单投递**：只读连接只收「状态 / 性能 / 天气 / 玩家在线情况」这类读数事件（`status`、`performanceUpdate`、`weatherUpdate`、`playerStatsUpdate`、`playerJoin/Leave/Death/Respawn/Sleep`、`achievement`）；崩溃与熔断随 `status` 放行（运行时健康是监控的核心读数，实例状态端点本就可见）；另有 `tpsUpdate` 与 `systemStatsUpdate` 也在许可面内，但当前服务端未发射这两个事件；日志与命令原文（`log`）、玩家聊天、备份/恢复、任务、Webhook 投递失败、部署/升级一律不下发。过滤覆盖**四条投递路径**（实例广播 / 全局与跨订阅投递 / 连接与订阅时的直发补发 / 断线补齐重放）——漏任一条都是越权读取面，回归矩阵见 `__tests__/websocket.readonly-filter.test.js`。CLIENT→SERVER 方向无任何写操作消息（只有 `subscribe`/`unsubscribe`/`ping`/`auth`），故不存在「借 WS 执行命令」的通道 |
 | 有效期 | **无过期**：不随会话 TTL/绝对存活期失效 |
 | 与两步验证的关系 | 与全局 API Key 相同，不走交互式登录 |
@@ -84,9 +84,42 @@ MC Commander 是**单管理员自托管面板**，架构上不区分多租户/�
   `javaPath`/`seed` 已按角色裁剪，但**实例配置里不要放凭据**仍是基本原则：白名单是收窄面，不是
   凭据托管处的许可。）
 - **只读凭据泄露的处置**：在设置页「账号与安全 → 只读监控凭据」一键重新生成（或调 `POST /api/v1/rotate-readonly-key`）立即轮换，或按上文彻底关闭。
+
+### 作用域化机器凭据（多把、自带名字与作用域）
+
+上面那两把是**部署方自填的固定通道**（一把一角色、改值即覆写 `.env`）。若你要让**用户自己的
+AI/脚本**接面板做运维，需要的是「**多把、可命名、可限权、可单独吊销**」的委托身份——这就是
+本节。设计依据是 OWASP LLM03 *Excessive Agency* 的首条缓解 **complete mediation**：权限必须由
+下游系统裁决，不能靠提示词约束模型自律。
+
+| 维度 | 实际行为 |
+|---|---|
+| 形态 | **台账凭据**（`machine_credentials` 表）：每把有名字、作用域、启停位、吊销位、最近使用时刻。明文前缀 `mcs-`，仅存 SHA-256 摘要，**明文只在创建那一次响应里出现** |
+| 与固定通道的关系 | **两条独立通道**：台账凭据先解析，未命中才落回 `.env` 两条。台账为空或表未迁移时不改变固定通道的任何行为 |
+| 作用域命名 | 扁平 `resource:action`（**不做 ABAC、不做实例级 ACL**）。一期**只发放只读三档**：`system:read`、`instance:read`、`player:read`；**不发放任何写作用域** |
+| 端点映射 | `utils/scopes.js` 的 `SCOPE_ENDPOINTS` 是「端点需要什么作用域」的**唯一声明源**；只读白名单由它推导（`READONLY_ALLOWED`），不再独立维护——两处各写一份必然漂移，且漂移方向是「白名单比作用域更宽」＝越权 |
+| 逐档隔离 | 作用域是**并列**关系而非包含：持 `instance:read` 打不开玩家端点，持 `player:read` 打不开实例列表。**方法参与判定**（`GET` 的作用域不可用于同路径 `POST`） |
+| 默认拒绝 | 不在 `SCOPE_ENDPOINTS` 内的端点**没有任何作用域可满足**，故对台账凭据一律 403（`AUTH_INSUFFICIENT_ROLE`/40305），包括全部写操作与全部敏感读 |
+| 身份自省 | `GET /machine-credentials/self` **免作用域**：只回显调用方**自己**的名字与作用域，不读任何服务端资源（那份信息调用方本就持有）。没有它，AI 只能靠「发请求看是否 403」试错判断权限面 |
+| 停用与吊销 | 两者都在**热路径查询条件里**排除（`is_enabled = 1 AND revoked_at IS NULL`），故**立即失效**、无缓存窗口。停用**可逆**（保留摘要，重新启用即恢复）；吊销**不可逆**但**保留台账行**——要能回答「这把 Key 曾经是谁」 |
+| 自我提权 | 凭据管理端点（列表/创建/启停/吊销）**不在** `SCOPE_ENDPOINTS` 内 ⇒ 台账凭据对其一律 403，**即使它持有全部只读作用域**，也无法创建新凭据或修改自身权限 |
+| WebSocket | **不能握手**（`authenticateWebSocket` 只认固定通道）。这是**刻意 fail-closed**：WS 只按 `role` 两档过滤，没有作用域维度，放行一把只持 `instance:read` 的凭据会让它拿到**全部只读事件**（含日志/命令/备份/任务），等于绕过逐档隔离。接入 WS 需先给事件面补作用域维度 |
+| 数量与命名 | 单部署上限 50 把；**名字唯一**（名字是人在列表里辨认「吊销哪一把」的唯一线索，重名会让处置变成猜谜） |
+| 轮换 | 轮换 = 新建一把 + 吊销旧的（台账凭据无「原地改值」）。这样「换 Key」在审计里留下两条可追溯记录，而不是静默覆写 |
+
+> **一期边界**：本节只交付**只读**作用域。写作用域（如 `instance:write`、`command:write`）尚未
+> 定义——`GRANTABLE_SCOPES` 与 `SCOPES` 刻意分开，将来新增写作用域时**必须显式决定它是否可
+> 发放**，不会因为「被定义了」就自动可授予（有回归测试钉住这条）。
+
+由此推出的操作纪律：
+
+- **给 AI 的凭据按最小作用域发放**：只要读实例状态就只给 `instance:read`，不要图省事给三档全量。
+  逐档隔离是本节唯一的实际防线——作用域给宽了，其余机制都拦不住。
+- **用完即吊销**：一次性任务（如批量排障）结束后吊销，不要长期留着。
+- **吊销 ≠ 删除**：吊销保留台账行用于追溯，这是刻意设计，不是残留数据。
 - **需要敏感读请用管理员凭据**：白名单是刻意收窄的；把某个敏感端点加进白名单等同于把该数据的
-  读取权交给一台常驻机器，必须作为一次安全评审来做（`middleware/auth.js` 的 `READONLY_ALLOWED`
-  是唯一事实源，回归测试会钉住它的每一条）。
+  读取权交给一台常驻机器，必须作为一次安全评审来做（`utils/scopes.js` 的 `SCOPE_ENDPOINTS`
+  是唯一事实源，`READONLY_ALLOWED` 由它推导，回归测试会钉住它的每一条）。
 
 ## 威胁模型（STRIDE 一页纸）
 

@@ -324,3 +324,62 @@ describe('响应契约：备份路由 × backupItemSchema（#393 接入）', () 
     }
   });
 });
+
+describe('响应契约：机器凭据路由 × 凭据 schema（防摘要漏进响应）', () => {
+  // 本文件自建最小 schema（不起完整迁移），故机器凭据表需就地建一次。
+  // 与 db/database.js 的 v15 迁移同构：字段名与约束必须一致，否则契约测试会在
+  // 「服务端真表」与「测试桩表」之间产生假绿
+  beforeAll(() => {
+    db.exec(`CREATE TABLE IF NOT EXISTS machine_credentials (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      token_hash TEXT NOT NULL UNIQUE,
+      token_prefix TEXT NOT NULL,
+      scopes TEXT NOT NULL DEFAULT '',
+      is_enabled INTEGER NOT NULL DEFAULT 1,
+      revoked_at TEXT,
+      last_used_at TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`);
+  });
+
+  it('POST /machine-credentials → 201，data 通过 create-response schema（多一个字段即失败）', async () => {
+    const { createMachineCredentialRoutes } = await import('../routes/machine_credentials.js');
+    const { machineCredentialCreateResponseSchema } = await import('@mc-commander/schemas');
+
+    const app = express();
+    app.use(express.json());
+    app.use('/api/v1', createMachineCredentialRoutes());
+    const { errorHandler } = await import('../middleware/error_handler.js');
+    app.use(errorHandler);
+
+    const res = await request(app)
+      .post('/api/v1/machine-credentials')
+      .send({ name: '契约凭据', scopes: ['instance:read'] });
+
+    expect(res.status).toBe(201);
+    expect(apiEnvelopeSchema.safeParse(res.body).success).toBe(true);
+    // 严格 parse：schema 未声明的字段（如 tokenHash）会让本断言失败——
+    // 这条是「摘要不得外泄」在契约层的承重点，比任何子串断言都硬
+    const parsed = machineCredentialCreateResponseSchema.safeParse(res.body.data);
+    expect(parsed.success, JSON.stringify(parsed.error?.issues)).toBe(true);
+    expect(res.body.data).not.toHaveProperty('tokenHash');
+  });
+
+  it('GET /machine-credentials → data 逐条通过 list schema（摘要同样不得出现）', async () => {
+    const { createMachineCredentialRoutes } = await import('../routes/machine_credentials.js');
+    const { machineCredentialSchema } = await import('@mc-commander/schemas');
+
+    const app = express();
+    app.use(express.json());
+    app.use('/api/v1', createMachineCredentialRoutes());
+
+    const res = await request(app).get('/api/v1/machine-credentials');
+    expect(res.status).toBe(200);
+    expect(apiEnvelopeSchema.safeParse(res.body).success).toBe(true);
+    for (const item of res.body.data) {
+      expect(machineCredentialSchema.safeParse(item).success).toBe(true);
+      expect(item).not.toHaveProperty('tokenHash');
+    }
+  });
+});

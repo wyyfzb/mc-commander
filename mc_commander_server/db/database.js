@@ -440,6 +440,38 @@ function createTables() {
     logger.info('Migration: added metrics_history table');
   }
 
+  // 迁移 v15：机器凭据台账（可作用域化的多 Key 体系，一期只发放只读作用域）。
+  //
+  // 此前两把 Key 只是 .env 里的两个哈希：无台账、无 scope、无启停、无吊销、无法分辨
+  // 「哪个调用方」，也就无法回答「这条审计是谁干的」。本表补的正是这层身份。
+  //
+  // - token_hash 唯一：同一摘要只允许一条（并发轮换不会造出两行指向同一凭据）
+  // - scopes 存逗号分隔字符串（`resource:action` 扁平命名；一期全部只读）。
+  //   不建关联表：作用域是**凭据自身的属性**、数量小，且判定发生在每个请求的热路径上，
+  //   一次主键查找比一次 join 更省
+  // - revoked_at 保留行而不删：吊销后仍要能回答「这把 Key 曾经是谁」，删行会丢审计线索
+  // - is_enabled 与 revoked_at 分离：停用是**可恢复**的（保留摘要），吊销是不可逆的
+  if (userVersion < 15) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS machine_credentials (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        token_hash TEXT NOT NULL UNIQUE,
+        token_prefix TEXT NOT NULL,
+        scopes TEXT NOT NULL DEFAULT '',
+        is_enabled INTEGER NOT NULL DEFAULT 1,
+        revoked_at TEXT,
+        last_used_at TEXT,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    // 不再另建 token_hash 索引：`UNIQUE` 已生成 sqlite_autoindex，热路径的等值查找
+    // 走的就是它（EXPLAIN QUERY PLAN 实测 SEARCH … USING INDEX sqlite_autoindex_…）。
+    // 另建一份只增加写入开销与库体积，查询计划不会用它
+    db.pragma('user_version = 15');
+    logger.info('Migration: added machine_credentials table');
+  }
+
   // 创建索引
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_admin_sessions_expires ON admin_sessions(expires_at);
