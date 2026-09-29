@@ -392,7 +392,7 @@ mc-commander/
 ├── docs/                     # 架构说明 / 用户指南
 ├── .github/                  # CI 工作流 / Issue 与 PR 模板 / Dependabot
 ├── AGENTS.md                 # AI 编码工具上手指南（人类贡献者同样适用）
-└── scripts/                  # 通用脚本（local-check 一键本地检查）
+└── scripts/                  # 通用脚本（local-check 一键本地检查 / pull-backups 离机副本）
 ```
 
 ## 环境要求

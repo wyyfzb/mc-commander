@@ -29,7 +29,7 @@ describe('HelpPage（真实文档）', () => {
       .getAllByRole('link')
       .map((a) => a.getAttribute('href'))
       .filter((h): h is string => h !== null && h.startsWith('#'))
-    expect(anchors).toHaveLength(11)
+    expect(anchors).toHaveLength(12)
     const missing = anchors.filter((h) => document.getElementById(h.slice(1)) === null)
     expect(missing).toEqual([])
   })
