@@ -554,6 +554,71 @@ describe('useServerSocket（状态跃迁通知接线）', () => {
     expect(useNotificationStore.getState().items).toHaveLength(0)
   })
 
+  it('systemStatsUpdate 的整机内存越阈值 → highMemory（读数与阈值同源）', async () => {
+    const ws = await connectReady('i-1')
+
+    act(() => {
+      ws.receive({
+        type: 'systemStatsUpdate',
+        data: { memoryPercent: 93.4, memoryAlert: { warningPercent: 90 } },
+      })
+    })
+
+    const items = useNotificationStore.getState().items
+    expect(items).toHaveLength(1)
+    expect(items[0]?.type).toBe('highMemory')
+    // 阈值来自载荷（90）而非前端兜底（80）：93.4 < 90 才是「不该告警」；
+    // 若错用前端 80，同一读数同样告警，故这里用「低于前端兜底、高于服务端阈值」的读数
+    expect(items[0]?.content).toContain('93.4%')
+  })
+
+  it('服务端阈值高于读数 → 不告警（证明用的是载荷阈值而非前端兜底 80）', async () => {
+    const ws = await connectReady('i-1')
+
+    act(() => {
+      ws.receive({
+        type: 'systemStatsUpdate',
+        data: { memoryPercent: 85, memoryAlert: { warningPercent: 90 } },
+      })
+    })
+
+    // 85 > 前端兜底 80 却 < 服务端 90 ⇒ 无告警。这一条正是「阈值走契约」的判据：
+    // 若前端拿自己的 80 判，这里会错误地产生一条 highMemory
+    expect(useNotificationStore.getState().items).toHaveLength(0)
+  })
+
+  it('systemStatsUpdate 缺 memoryAlert → 不生成内存告警（不退回前端自带数字）', async () => {
+    const ws = await connectReady('i-1')
+
+    act(() => {
+      ws.receive({ type: 'systemStatsUpdate', data: { memoryPercent: 99 } })
+    })
+
+    expect(useNotificationStore.getState().items).toHaveLength(0)
+  })
+
+  it('整机内存与磁盘可同时告警（两条链路同源下发，互不吞并）', async () => {
+    const ws = await connectReady('i-1')
+
+    act(() => {
+      ws.receive({
+        type: 'systemStatsUpdate',
+        data: {
+          memoryPercent: 95,
+          memoryAlert: { warningPercent: 90 },
+          diskUsage: { primary: { mountpoint: '/', totalGB: 39, usedGB: 37, percent: 96.2 } },
+          diskAlert: { warningPercent: 85, errorPercent: 95 },
+        },
+      })
+    })
+
+    const types = useNotificationStore
+      .getState()
+      .items.map((i) => i.type)
+      .sort()
+    expect(types).toEqual(['criticalDisk', 'highMemory'])
+  })
+
   it('deployProgress 透传 instanceId（取消部署要按实例 id 精确匹配服务端注册表）', async () => {
     const ws = await connectReady('i-1')
 
