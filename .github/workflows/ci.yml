@@ -12,14 +12,18 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  format:
-    name: 代码格式（Biome formatter 检查）
+  # 仓库级静态检查合成一个 job：格式与密钥扫描都是全仓扫描、都不需要装三个包的依赖，
+  # 拆成两个 job 只是各多付一次 checkout + setup-node + npm ci。gitleaks 需全量历史故 fetch-depth: 0
+  hygiene:
+    name: 仓库卫生（代码格式 + 密钥泄漏扫描）
     runs-on: ubuntu-latest
     if: >-
       github.event_name == 'push' ||
       !github.event.pull_request.draft
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v7
         with:
           node-version: 22
@@ -31,6 +35,9 @@ jobs:
       # 格式化范围与排除项（dist/public/coverage/e2e 产物/.ai/锁文件，以及 CSS 与 Markdown）
       # 见 biome.jsonc。失败时本地执行 `npm run format` 即修复。
       - run: npm run format:check
+      - uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   schemas:
     name: 契约包（lint + schemas 测试 + dist 同步守卫）
@@ -50,7 +57,9 @@ jobs:
           cache-dependency-path: mc-schemas/package-lock.json
       - run: npm ci
       - run: npm run lint
-      - run: npm test
+      # 覆盖率阈值配在 vitest.config.js，由各包自己判——不汇总到单独 job，
+      # 合计判阈值会让一个包掉到 30%、另一个 95% 也照样通过
+      - run: npm run test:coverage
       # dist 同步守卫：dist/index.js 是服务端运行时消费物（server 经
       # file: link + main 字段解析到 dist，前端则经 vite alias 直读 src），
       # 改 src 不重建 dist 时其余 job 全绿但服务端消费陈旧契约——故对
@@ -85,12 +94,6 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run test:coverage
-      - name: 上传覆盖率报告
-        uses: actions/upload-artifact@v7
-        with:
-          name: coverage-server
-          path: mc_commander_server/coverage/coverage-final.json
-          retention-days: 7
 
   web-check:
     name: 前端（lint + test）
@@ -114,31 +117,6 @@ jobs:
       # 设计 token 守门（色板类/dark:/transition-all/动效/圆角 + 对比度）——与 lint/test 并列拦截
       - run: npm run check:design-tokens
       - run: npm run check:contrast
-      - name: 上传覆盖率报告
-        uses: actions/upload-artifact@v7
-        with:
-          name: coverage-web
-          path: mc_manager_web/coverage/coverage-final.json
-          retention-days: 7
-
-  coverage-gate:
-    name: 覆盖率门禁（≥ 70%）
-    runs-on: ubuntu-latest
-    if: >-
-      github.event_name == 'push' ||
-      !github.event.pull_request.draft
-    needs: [server, web-check]
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-      - name: 下载覆盖率产物
-        uses: actions/download-artifact@v7
-        with:
-          path: coverage-artifacts
-      - name: 汇总两份覆盖率并与阈值比较
-        run: node scripts/check-coverage-gate.mjs coverage-artifacts/coverage-web/coverage-final.json coverage-artifacts/coverage-server/coverage-final.json 70
 
   web-e2e:
     name: 前端（build + e2e）
@@ -177,18 +155,3 @@ jobs:
           name: playwright-report
           path: mc_manager_web/playwright-report/
           retention-days: 7
-
-  # 敏感信息扫描（PR 与主干推送）
-  gitleaks:
-    name: 密钥泄漏扫描
-    runs-on: ubuntu-latest
-    if: >-
-      github.event_name == 'push' ||
-      !github.event.pull_request.draft
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@v3
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
