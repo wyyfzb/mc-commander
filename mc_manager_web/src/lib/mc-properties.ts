@@ -733,8 +733,11 @@ export const SERVER_PROPERTY_DEFS: PropertyDef[] = [
   },
   {
     name: 'rate-limit',
-    label: '数据包速率限制',
-    desc: '单个客户端每秒最大数据包数（0=禁用）',
+    // 这里的「数据包」是**网络包**（packet），与 datapack 是两回事——本表
+    // initial-enabled/disabled-datapacks 的「数据包」才是 datapack。中文同名，
+    // 故 label 必须点明「网络」，否则会被读成「datapack 的速率限制」。
+    label: '网络包速率限制',
+    desc: '单个客户端每秒最大网络包数（0=禁用）',
     category: 'serverSettings',
     type: 'input',
     defaultValue: '0',
