@@ -24,7 +24,14 @@ export interface PropertyDef {
   type: 'checkbox' | 'input' | 'dropdown'
   /** 下拉选项（仅 dropdown 类型使用） */
   options?: string[]
-  /** 显示默认值（vanilla server.properties 官方默认，仅属性完全缺失时用于展示） */
+  /**
+   * vanilla `server.properties` 的官方默认值。
+   *
+   * ⚠️ **当前没有任何 UI 消费它**（属性页不渲染默认值、也没有「恢复默认」入口）——
+   * 它的实际用途是① 作为「官方默认是什么」的单一事实源供测试钉住（`mc-properties.test.ts`
+   * 逐条断言关键键），② 将来做「恢复默认」时的依据。**改官方默认值时必须同步改它**，
+   * 否则这里会变成一份看着权威、实际已过期的数据（26.3 的 `white-list` 即此例）。
+   */
   defaultValue: string
   /** 敏感键：读写均以占位符掩码，提交永远只回传占位符 */
   isSensitive: boolean
@@ -509,13 +516,16 @@ export const SERVER_PROPERTY_DEFS: PropertyDef[] = [
 
   // ── 服务器设置（serverSettings，34） ──
   {
-    // vanilla 默认 false；热改键（whitelist on/off）
+    // 26.3 起官方默认值由 false 改为 **true**（26.3 发行说明 Server Properties 节
+    // 原文：「The `white-list` property is now `true` by default」）⇒ 升级到 26.3 的
+    // 既有实例可能**突然启用白名单**。此处只订正默认值本身；「升级后要不要提示用户」
+    // 属交互决策，未做。热改键（whitelist on/off）
     name: 'white-list',
     label: '白名单',
     desc: '启用白名单',
     category: 'serverSettings',
     type: 'checkbox',
-    defaultValue: 'false',
+    defaultValue: 'true',
     isSensitive: false,
     isHotReload: true,
     isWritable: true,
@@ -733,8 +743,11 @@ export const SERVER_PROPERTY_DEFS: PropertyDef[] = [
   },
   {
     name: 'rate-limit',
-    label: '数据包速率限制',
-    desc: '单个客户端每秒最大数据包数（0=禁用）',
+    // 这里的「数据包」是**网络包**（packet），与 datapack 是两回事——本表
+    // initial-enabled/disabled-datapacks 的「数据包」才是 datapack。中文同名，
+    // 故 label 必须点明「网络」，否则会被读成「datapack 的速率限制」。
+    label: '网络包速率限制',
+    desc: '单个客户端每秒最大网络包数（0=禁用）',
     category: 'serverSettings',
     type: 'input',
     defaultValue: '0',
