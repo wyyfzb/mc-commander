@@ -307,11 +307,16 @@ describe('notifications store 告警状态机（dispatchPerformance）', () => {
     expect(s.items).toHaveLength(1)
   })
 
-  it('内存越阈值 → highMemory', () => {
+  it('内存越阈值 → highMemory（文案标注整机口径）', () => {
     useNotificationStore.getState().dispatchPerformance({ memoryPercent: 85.5 })
 
     const s = useNotificationStore.getState()
-    expect(s.items[0]).toMatchObject({ type: 'highMemory', content: '内存使用率过高: 85.5%' })
+    // 「整机口径」四字是必要的：不写会被读成「MC 进程吃满了内存」，
+    // 而进程内存走的是另一条链路（performanceUpdate.memory）
+    expect(s.items[0]).toMatchObject({
+      type: 'highMemory',
+      content: '内存使用率过高: 85.5%（整机口径）',
+    })
     expect(s.activeAlerts.has('highMemory')).toBe(true)
   })
 

@@ -310,11 +310,13 @@ export {
   diskInfoSchema,
   diskUsageSchema,
   diskAlertThresholdsSchema,
+  memoryAlertThresholdsSchema,
   systemStatsSchema,
   updateCheckResultSchema,
   type DiskInfo,
   type DiskUsage,
   type DiskAlertThresholds,
+  type MemoryAlertThresholds,
   type SystemStats,
   type UpdateCheckResult,
 } from './system'
