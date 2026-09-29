@@ -333,6 +333,7 @@ export function GiveItemPanel({
             onCategoryChangeWithPanelReset={handleCategoryChange}
             selected={selected}
             onToggle={toggleItem}
+            mcVersion={mcVersion}
           />
           <SelectedItemsBar
             entries={entries}

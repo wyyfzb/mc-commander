@@ -11,6 +11,7 @@
 import type { MinecraftItem } from './mc-items'
 import type { PotionConfig } from './mc-potions'
 import { fullBottleId, potionDisplayName } from './mc-potions'
+import { isItemAvailableIn, requiredVersionFor } from './mc-item-versions'
 
 /** 物品槽位类型，用于附魔适用性过滤（erasableSyntaxOnly 禁 enum，用 const 对象 + 字面量类型） */
 export const ItemSlotType = {
@@ -503,6 +504,18 @@ export function buildGiveCommand(params: GiveCommandParams): string {
   // 药水物品 ID 由瓶型决定（minecraft:potion / splash_potion / lingering_potion），
   // 而非效果 id（UI 中效果药水用效果 id 作为虚拟 MinecraftItem）
   const itemId = potion !== null ? fullBottleId(potion.bottle) : `minecraft:${item.id}`
+
+  // 物品自身的存在性：晚于目标版本的物品在服务端注册表里没有，命令必失败。
+  // 药水虚拟物品用效果 id、不查此表；`mcVersion` 为空（调用方未定版本）时跳过。
+  // 抛出而非静默生成：让用户看到「这个物品 26.2 才有，你的服是 1.21」，
+  // 而不是拿到一条服务端已拒绝、面板还显示成功的命令。
+  if (potion === null && mcVersion) {
+    const need = requiredVersionFor(item.id)
+    if (need !== null && !isItemAvailableIn(item.id, mcVersion)) {
+      throw new Error(`物品「${item.name}」需要 MC ${need}+（目标版本 ${mcVersion}）`)
+    }
+  }
+
   let buf = `give ${playerName} ${itemId}`
 
   // 药水组件：potion_contents（custom_effects 自定义效果）+ custom_name（写明效果）。
