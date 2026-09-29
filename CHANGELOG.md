@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.1](https://github.com/wyyfzb/mc-commander/compare/v0.5.0...v0.5.1) (2026-09-29)
+
+
+### Bug Fixes
+
+* 收口工作流重构的遗留——悬空注释、失效文档与 deploy 脚本的错误 sudo 用法 ([fa65136](https://github.com/wyyfzb/mc-commander/commit/fa65136fd9555f5c683f893a906d6e33a66e9df0))
+* 收口工作流重构的遗留——悬空注释、失效文档与 deploy 脚本的错误 sudo 用法 ([c1b1a20](https://github.com/wyyfzb/mc-commander/commit/c1b1a20f18f15cb48b4ee0c9dac73b2f37faf66f))
+
 ## [0.5.0](https://github.com/wyyfzb/mc-commander/compare/v0.4.0...v0.5.0) (2026-09-29)
 
 
