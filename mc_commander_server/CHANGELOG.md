@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.4.0](https://github.com/wyyfzb/mc-commander/compare/v0.3.0...v0.4.0) (2026-09-29)
+
+
+### Features
+
+* **server:** mods 目录抽象化（含审查修复）+ Modrinth 条目类型参数化 ([0aa32c4](https://github.com/wyyfzb/mc-commander/commit/0aa32c40ec8277ff3f74fa34ee7fd5cb40b7ad8d))
+* **server:** 机器凭据作用域地基（一期只发放只读作用域） ([3a9f5ff](https://github.com/wyyfzb/mc-commander/commit/3a9f5ff462387539e6728604ec23cbc31765cc8b))
+* **server:** 机器凭据作用域地基（一期只发放只读作用域） ([b0edc42](https://github.com/wyyfzb/mc-commander/commit/b0edc422c0867b75bd136620c04e86fb2ab77ca0))
+* **server:** 模组管理（mods 目录抽象化 + Modrinth 条目类型参数化） ([5b9d174](https://github.com/wyyfzb/mc-commander/commit/5b9d174925bcd3e5ece7c0970bae9570491f7e87))
+* **server:** 模组管理（mods/ 复用插件模型：列表 / 上传 / 删除） ([0c88b1f](https://github.com/wyyfzb/mc-commander/commit/0c88b1fc83124e4c1547a4a37635ad95140e08ea))
+* **web:** 命令历史支持行内重发（二次确认 + 来源标记） ([578ecc0](https://github.com/wyyfzb/mc-commander/commit/578ecc0827db6b6532b3000646e832f5b395143a))
+* **web:** 命令历史支持行内重发（二次确认 + 来源标记） ([60d91fe](https://github.com/wyyfzb/mc-commander/commit/60d91fe9a341ba1fd794e40dd5d5242e8c5c6738))
+* **web:** 接通磁盘告警——阈值随契约下发，两档按档位跃迁 ([9cf9d90](https://github.com/wyyfzb/mc-commander/commit/9cf9d907075455fc3a16142dfdaf743cc3945bc1))
+* **web:** 接通磁盘告警——阈值随契约下发，两档按档位跃迁 ([1f3b893](https://github.com/wyyfzb/mc-commander/commit/1f3b8933a92163c381f9993c7a3230ed0c1b6332))
+
+
+### Bug Fixes
+
+* **server:** jar 下载完整性校验字段错位，部署与升级两条路径恒零校验 ([0259f7d](https://github.com/wyyfzb/mc-commander/commit/0259f7d6477607363813a49a9fb68d1e21c6a5f2))
+* **server:** jar 下载完整性校验字段错位，部署与升级两条路径恒零校验 ([0e57986](https://github.com/wyyfzb/mc-commander/commit/0e57986d7bc2da8e9682c4461d841786b5427440))
+* **server:** RCON 物品栏提取丢掉 SNBT 外层 [，致实时背包恒降级为存档快照 ([2c2d6d8](https://github.com/wyyfzb/mc-commander/commit/2c2d6d8346a9434a493b5ca4ad7bbf168ac44777))
+* **server:** RCON 物品栏提取丢掉 SNBT 外层 `[`，致实时背包恒降级为存档快照 ([3ec2313](https://github.com/wyyfzb/mc-commander/commit/3ec2313e70ce63c73b59cf1322f4b704c7af4ab4))
+
 ## [0.3.0](https://github.com/wyyfzb/mc-commander/compare/v0.2.1...v0.3.0) (2026-09-28)
 
 
