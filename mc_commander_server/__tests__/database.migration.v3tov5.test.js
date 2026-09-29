@@ -55,8 +55,8 @@ describe('数据库 v3→v5 升级迁移（存量库 + 存量行）', () => {
     fs.rmSync(config.dataDir, { recursive: true, force: true });
   });
 
-  it('user_version 升到 14（v3 起经 v5→…→v12→v13 连续）', () => {
-    expect(db.pragma('user_version', { simple: true })).toBe(14);
+  it('user_version 升到 15（v3 起经 v5→…→v12→v13 连续）', () => {
+    expect(db.pragma('user_version', { simple: true })).toBe(15);
   });
 
   it('存量行 last_run_status 回填 never（ALTER 默认值）', () => {

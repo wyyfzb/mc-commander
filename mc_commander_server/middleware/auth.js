@@ -1,9 +1,15 @@
 import config from '../config.js';
 import { ErrorCodes, error } from '../utils/response.js';
-import { AdminSessionModel } from '../db/index.js';
+import { AdminSessionModel, MachineCredentialModel } from '../db/index.js';
 import { hashToken, safeEqual } from '../utils/password.js';
 import { parseDbTime } from '../utils/db-time.js';
 import { logger } from '../utils/logger.js';
+import {
+  isReadonlyAllowed,
+  READONLY_ALLOWED,
+  READONLY_SCOPES,
+  scopeCovers,
+} from '../utils/scopes.js';
 
 /** 直连 IP（日志用；与锁定键同源，不信任可伪造的代理头） */
 function clientIp(req) {
@@ -106,6 +112,25 @@ export function authMiddleware(req, res, next) {
     return next();
   }
 
+  /**
+   * 按摘要解析用户自建的作用域化机器凭据；未命中（含表未建/清理期）返回 null。
+   *
+   * 摘要比对是**等价查询**（token_hash UNIQUE），与 `.env` 通道的恒时比对不同：
+   * 后者比的是「一个已知摘要」，前者要在**多行**里找匹配。这里用 SQL 索引查找而非
+   * 逐行恒时比较——逐行比较会把凭据数量暴露成响应时间差（凭据越多越慢），而索引
+   * 查找的耗时与凭据条数无关。摘要本身是 SHA-256，攻击者无法从时长反推明文。
+   */
+  function findMachineCredential(incomingKey) {
+    try {
+      return MachineCredentialModel.findActiveByTokenHash(hashToken(incomingKey));
+    } catch (err) {
+      // 表尚未迁移（旧库升级中）或查询异常：按「未命中」处理并落到既有通道，
+      // 不让新增能力把既有部署的鉴权打断
+      logger.warn(`[auth] machine credential lookup failed: ${err.message}`);
+      return null;
+    }
+  }
+
   // 通道一：API Key（自动化 / API 调用通道，与既有行为完全兼容）
   // API_KEY_ENABLED=false 时整条通道 fail-closed：不校验、不降级，直接拒绝并
   // 指引会话登录（关掉自动化凭据的部署形态下，浏览器通道是唯一正常入口）
@@ -114,6 +139,28 @@ export function authMiddleware(req, res, next) {
   const apiKey =
     typeof req.headers['x-api-key'] === 'string' ? req.headers['x-api-key'].trim() : null;
   if (apiKey) {
+    // 通道零：用户自建的作用域化机器凭据（台账内有名字、有 scope、可停用/吊销）。
+    // **先于** `.env` 两条固定通道解析：本表是新增能力，`.env` 是既有部署形态，
+    // 两者摘要碰撞在密码学上不可行，先后顺序不影响既有通道的判定结果。
+    const credential = findMachineCredential(apiKey);
+    if (credential) {
+      // 停用/吊销已在查询条件里排除（见 MachineCredentialModel.findActiveByTokenHash），
+      // 能走到这里即为可用凭据
+      req.auth = {
+        source: 'apiKey',
+        role: 'readonly',
+        scopes: credential.scopes,
+        keyId: credential.id,
+        credentialName: credential.name,
+      };
+      // 最近使用时刻（节流写库，失败不影响请求：观测字段不该让请求 500）
+      try {
+        MachineCredentialModel.touchLastUsed(credential.id);
+      } catch (err) {
+        logger.warn(`[auth] touch last_used failed id=${credential.id}: ${err.message}`);
+      }
+      return next();
+    }
     // 只读凭据先判定：两条机器通道的开关相互独立，先吃 API_KEY_ENABLED 会把
     // 「关闭管理员 Key」绑架成「只读监控也不可用」；未配置只读哈希时此处恒 false，
     // 既有部署（含 API_KEY_ENABLED=false）的判定顺序与结果逐字不变
@@ -129,7 +176,9 @@ export function authMiddleware(req, res, next) {
             ),
           );
       }
-      req.auth = { source: 'apiKey', role: 'readonly', key: apiKey };
+      // `.env` 只读通道持**全部只读作用域**：它是既有部署形态，行为必须逐字不变
+      // （此前它靠 READONLY_ALLOWED 白名单放行，等价于持全部只读作用域）
+      req.auth = { source: 'apiKey', role: 'readonly', scopes: [...READONLY_SCOPES], key: apiKey };
       return next();
     }
     if (!config.apiKeyEnabled) {
@@ -198,55 +247,19 @@ export function authMiddleware(req, res, next) {
 }
 
 /**
- * 只读角色可达的端点白名单（唯一事实源，逐条理由见 SECURITY.md「只读凭据」）。
+ * 只读作用域可达的端点白名单（唯一事实源已移至 `utils/scopes.js` 的 SCOPE_ENDPOINTS）。
  *
- * 判定方向是「不在表里 ⇒ 要求 admin」：新增端点无需在此登记即自动对只读关闭，
- * 逐条列举的是**放行**而非拒绝，所以漏登记只会更严、不会更松。键为
- * `METHOD 路径`，路径相对 v1Router 挂载点（/api/v1）；:param 为任意单段占位。
+ * 此处只做**再导出**：判定方向是「不在表里 ⇒ 拒绝」，逐条列举的是**放行**而非拒绝，
+ * 所以漏登记只会更严、不会更松。从前这份清单在本文件独立维护，与作用域表并存
+ * 必然漂移，而漂移方向恰好是「白名单比作用域更宽」＝越权，故收归一处。
+ *
  * 收录标准：只读监控/仪表盘真正需要的实时状态观测端点，且不返回凭据、文件内容、
  * 日志、配置内容、命令史、备份、会话或审计明细。返回历史/管理记录的一律不收。
  * 白名单只决定「能不能进」，不保证「进来后看到什么」：命中白名单的端点若其响应
  * 含凭据可能驻留的字段，必须在**出参构造处**按角色裁剪（见 routes/status.js 的
  * statusForRole —— /instances 两条即此例）；只加白名单不裁剪等于把该数据交出去。
  */
-export const READONLY_ALLOWED = Object.freeze([
-  'GET /overview',
-  'GET /system-stats',
-  'GET /instances',
-  'GET /instances/:id',
-  'GET /instances/:id/players',
-]);
-
-/**
- * 段级匹配：白名单项与请求路径段数必须一致，:param 段接受任意非空段。
- * 路径尾部斜杠在调用前已归一化（与 Express 路由 `strict:false` 一致）：`/instances/`
- * 与 `/instances` 命中同一个已授权处理器，故不算放宽权限面。
- * 空段（`//`）一律不匹配：Express 的 `:param` 不匹配空段，若在此按「过滤空段后比对」
- * 放行，角色门的判断就会比路由表更宽。
- */
-function matchesPattern(method, pattern, reqPath) {
-  const [patternMethod, patternPath] = pattern.split(' ');
-  if (patternMethod !== method) return false;
-  const expected = segments(patternPath);
-  const actual = segments(reqPath);
-  if (expected.includes('') || actual.includes('')) return false;
-  if (expected.length !== actual.length) return false;
-  return expected.every((seg, i) => seg.startsWith(':') || seg === actual[i]);
-}
-
-/** 路径 → 非空段数组（首尾斜杠不产生段） */
-function segments(p) {
-  const trimmed = p.replace(/^\/+/, '').replace(/\/+$/, '');
-  return trimmed === '' ? [] : trimmed.split('/');
-}
-
-/**
- * 只读凭据是否可访问该方法+路径（路径相对 v1Router）。
- * 导出供路由表枚举测试直接断言，避免测试另写一份匹配逻辑而与运行时漂移
- */
-export function isReadonlyAllowed(method, reqPath) {
-  return READONLY_ALLOWED.some((entry) => matchesPattern(method, entry, reqPath));
-}
+export { READONLY_ALLOWED, isReadonlyAllowed };
 
 /**
  * fail-closed 角色门（挂载在 routes/index.js 的 v1Router 上，早于全部子 router）：
@@ -262,7 +275,15 @@ export function requireAdminRole(req, res, next) {
   const role = req.auth?.role;
   if (role === 'admin' || role === 'public') return next();
   const relPath = (req.path || '/').replace(/\/+$/, '') || '/';
-  if (role === 'readonly' && isReadonlyAllowed(req.method, relPath)) return next();
+  if (role === 'readonly') {
+    // 作用域化凭据按**自身持有的作用域**判定；`.env` 只读通道持有全部只读作用域，
+    // 故其判定结果与收归前的白名单逐字等价。
+    // 凭据未带 scopes 字段（理论上不该发生）时回落到只读作用域全集：role=readonly
+    // 本身就是「只读凭据」的事实，缺字段不该被读成「凭空多出权限」也不该被读成
+    // 「什么都不许」——用全集与白名单口径对齐，避免把既有通道判死。
+    const held = Array.isArray(req.auth?.scopes) ? req.auth.scopes : READONLY_SCOPES;
+    if (scopeCovers(req.method, relPath, held)) return next();
+  }
   logAuthRejection(req, `role=${role ?? 'none'} denied`, 'warn', 403);
   return res.status(403).json(error(ErrorCodes.AUTH_INSUFFICIENT_ROLE));
 }

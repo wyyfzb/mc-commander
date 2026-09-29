@@ -60,8 +60,8 @@ describe('数据库 v11→v12 迁移（存量库 + 存量行）', () => {
     fs.rmSync(config.dataDir, { recursive: true, force: true });
   });
 
-  it('user_version 升到 14（v11→v12→v13 连续；后续迁移块照常衔接）', () => {
-    expect(db.pragma('user_version', { simple: true })).toBe(14);
+  it('user_version 升到 15（v11→v12→v13 连续；后续迁移块照常衔接）', () => {
+    expect(db.pragma('user_version', { simple: true })).toBe(15);
   });
 
   it('admin_account 补齐三列，类型与默认值符合契约', () => {
@@ -118,7 +118,7 @@ describe('数据库 v11→v12 迁移（存量库 + 存量行）', () => {
     db.close();
     db = initDatabase();
 
-    expect(db.pragma('user_version', { simple: true })).toBe(14);
+    expect(db.pragma('user_version', { simple: true })).toBe(15);
     expect(db.prepare('SELECT totp_secret FROM admin_account WHERE id = 1').get().totp_secret).toBe(
       'KEEP-ME-PLEASE',
     );
