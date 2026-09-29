@@ -111,7 +111,7 @@ sudo bash /tmp/deploy-mc-commander.sh
 tarball 带 sha256 完整性校验）。
 **SETUP_TOKEN 仅首次设密使用**：公网部署时，浏览器首访设密页需粘贴部署输出中的 SETUP_TOKEN
 （防部署完成到设密窗口内被抢先接管面板，一次性，用后作废）。
-（国内网络可改用 gitee 镜像源（分支为 `main`，无 `master`）：`https://gitee.com/wyyfzb/mc-commander/raw/main/...` 同路径，并配合 `PACKAGE_URL`/`PACKAGE_SHA256` 环境变量）
+（国内网络可改用 gitee 镜像源（分支为 `main`，无 `master`）：`https://gitee.com/wyyfzb/mc-commander/raw/main/...` 同路径，并配合 `PACKAGE_URL`/`SHA256SUMS_URL` 环境变量）
 
 #### 方式二：手动部署
 

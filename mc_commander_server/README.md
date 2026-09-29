@@ -88,11 +88,13 @@ sudo bash /tmp/deploy-mc-commander.sh
 
 ### 回滚路径
 
-脚本默认拉取固定标签的 Release 代码包。回滚到旧版本时将 `BRANCH` 指定为旧标签；可变分支/commit 场景必须配合 `PACKAGE_SHA256`：
+脚本默认取**最新发布版**（`VERSION=latest`）。回滚到旧版本时把 `VERSION` 指定为旧标签：
 
 ```bash
-sudo BRANCH=<旧版本标签> PACKAGE_SHA256=<该代码包 sha256> bash /tmp/deploy-mc-commander.sh
+sudo VERSION=<旧版本标签> bash /tmp/deploy-mc-commander.sh
 ```
+
+`BRANCH` 是该变量的旧名，仍作兼容别名生效（既有 `BRANCH=v1.2.0` 形式的调用不会被打断）。
 
 `.env`、`data/`、`servers/`、`backups/` 不受回滚影响（数据不回退，仅回退代码）。
 
@@ -100,8 +102,11 @@ sudo BRANCH=<旧版本标签> PACKAGE_SHA256=<该代码包 sha256> bash /tmp/dep
 
 代码包下载后强制 sha256 校验，与预期值不一致立即中止并删除临时文件：
 
-1. **默认 Release 产物**：预期 sha256 内嵌于脚本（`EXPECTED_PACKAGE_SHA256`），下载后自动比对，无需额外配置；发新版时按脚本头注释先取 Release 产物 sha256 更新该值
-2. **自定义 `PACKAGE_URL`**：必须先取该文件的 sha256，通过 `PACKAGE_SHA256` 环境变量传入后再执行脚本（未提供则中止）
+1. **默认 Release 产物**：脚本按同一 Release 的 `SHA256SUMS.txt` 取预期值比对，无需额外配置。
+   该摘要在发布时即被 GitHub Immutable Releases 锁定（发布后资产不可增删改、tag 不可删移），
+   故摘要与代码包不可能被单方面替换
+2. **自定义 `PACKAGE_URL`**：必须同时用 `SHA256SUMS_URL` 指定对应摘要文件地址，
+   脚本从中按代码包文件名取出预期值（不提供则中止，绝不跳过校验）
 
 ## 环境变量
 
