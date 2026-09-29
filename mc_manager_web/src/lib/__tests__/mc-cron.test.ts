@@ -16,10 +16,30 @@ import {
   parseCronFields,
   parseWeekdayField,
   serializeWeekdayField,
+  isValidCron,
   WEEKDAY_CHIPS,
   WEEKDAY_COMBOS,
   weekdayName,
 } from '../mc-cron'
+
+describe('isValidCron（与服务端 assertValidCron 同一解析器）', () => {
+  it('合法表达式通过', () => {
+    expect(isValidCron('0 4 * * *')).toBe(true)
+    expect(isValidCron('*/5 * * * *')).toBe(true)
+    expect(isValidCron('0 0 1 1 *')).toBe(true)
+  })
+
+  it('字段不足 / 文本 / 越界值一律拒绝（这些入库后任务会静默永不触发）', () => {
+    expect(isValidCron('0 4 * *')).toBe(false) // 只有 4 字段
+    expect(isValidCron('not a cron')).toBe(false)
+    expect(isValidCron('99 99 * * *')).toBe(false) // 分钟/小时越界
+  })
+
+  it('空串与纯空白拒绝', () => {
+    expect(isValidCron('')).toBe(false)
+    expect(isValidCron('   ')).toBe(false)
+  })
+})
 
 describe('parseCronFields', () => {
   it('5 字段正常解析；不足 5 字段返回 null', () => {

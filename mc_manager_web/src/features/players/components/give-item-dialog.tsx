@@ -40,8 +40,10 @@ export interface GiveItemPanelProps {
 }
 
 const MAX_COUNT = 6400
+// 第三参 err.details 带服务端算出的字段级校验错误（path + message）：丢掉它，
+// 用户只看到「请求参数校验失败」，不知道是哪个字段错了
 const friendlyError = (err: unknown) =>
-  err instanceof ApiError ? getFriendlyErrorMessage(err.code, err.message) : '网络错误'
+  err instanceof ApiError ? getFriendlyErrorMessage(err.code, err.message, err.details) : '网络错误'
 
 export function GiveItemPanel({
   player,

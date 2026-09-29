@@ -42,7 +42,8 @@ interface GamerulePanelProps {
 
 /** 错误 → 友好文案（与 give-item-dialog 一致：ApiError 走错误码映射，其余网络错误兜底） */
 function friendlyError(err: unknown): string {
-  if (err instanceof ApiError) return getFriendlyErrorMessage(err.code, err.message)
+  // 第三参 err.details 带字段级校验错误（path + message），丢掉只剩笼统文案
+  if (err instanceof ApiError) return getFriendlyErrorMessage(err.code, err.message, err.details)
   return '网络错误'
 }
 
