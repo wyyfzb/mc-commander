@@ -36,6 +36,11 @@ export default defineConfig({
       reporter: ['json', 'text'],
       include: ['routes/**', 'services/**', 'utils/**', 'db/**', 'websocket.js'],
       exclude: ['routes/*.test.js', '**/__tests__/**'],
+      // 阈值由本包自己判，不做跨包合计——合计判阈值会让一个包掉到 30%、
+      // 另一个 95% 也照样通过（口径见 scripts/check-coverage-gate.mjs 的废弃说明）
+      thresholds: {
+        statements: 70,
+      },
     },
   },
 });

@@ -181,6 +181,11 @@ export default defineConfig({
       reporter: ['json', 'text'],
       include: ['src/**/*.{ts,tsx}'],
       exclude: ['src/**/*.test.{ts,tsx}', 'src/test/**', 'src/**/__tests__/**'],
+      // 阈值由本包自己判，不做跨包合计——合计判阈值会让一个包掉到 30%、
+      // 另一个 95% 也照样通过
+      thresholds: {
+        statements: 70,
+      },
     },
   },
   define: {
