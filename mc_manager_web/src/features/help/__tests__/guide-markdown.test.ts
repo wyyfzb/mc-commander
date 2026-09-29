@@ -36,16 +36,16 @@ describe('真实文档：构件覆盖', () => {
     expect(h1).toEqual([])
   })
 
-  it('标题层级与顺序：7 个二级 + 5 个三级', () => {
+  it('标题层级与顺序：7 个二级 + 6 个三级', () => {
     const heads = guide.blocks.filter((b) => b.kind === 'heading')
     expect(heads.filter((b) => b.depth === 2)).toHaveLength(7)
-    expect(heads.filter((b) => b.depth === 3)).toHaveLength(5)
+    expect(heads.filter((b) => b.depth === 3)).toHaveLength(6)
   })
 
-  it('目录里 11 条锚点链接全部能在标题 id 上解析（改标题不更目录即红）', () => {
+  it('目录里 12 条锚点链接全部能在标题 id 上解析（改标题不更目录即红）', () => {
     const ids = new Set(guide.blocks.flatMap((b) => (b.kind === 'heading' ? [b.id] : [])))
     const anchors = [...guideRaw.matchAll(/\]\(#([^)]+)\)/g)].map((m) => m[1]!)
-    expect(anchors).toHaveLength(11)
+    expect(anchors).toHaveLength(12)
     const dangling = anchors.filter((a) => !ids.has(a))
     expect(dangling).toEqual([])
   })
@@ -59,17 +59,17 @@ describe('真实文档：构件覆盖', () => {
     }
   })
 
-  it('列表：目录 1 个有序项 + 5 个嵌套子项；正文列表齐备', () => {
+  it('列表：目录 1 个有序项 + 6 个嵌套子项；正文列表齐备', () => {
     const lists = guide.blocks.flatMap((b) => (b.kind === 'list' ? [b.list] : []))
     const toc = lists[0]!
     expect(toc.ordered).toBe(true)
     expect(toc.items).toHaveLength(6)
-    expect(toc.items[4]!.sub?.items).toHaveLength(5)
+    expect(toc.items[4]!.sub?.items).toHaveLength(6)
     expect(toc.items[4]!.sub?.ordered).toBe(false)
   })
 
-  it('引用块 2 处、分隔线 6 条', () => {
-    expect(guide.blocks.filter((b) => b.kind === 'quote')).toHaveLength(2)
+  it('引用块 3 处、分隔线 6 条', () => {
+    expect(guide.blocks.filter((b) => b.kind === 'quote')).toHaveLength(3)
     expect(guide.blocks.filter((b) => b.kind === 'divider')).toHaveLength(6)
   })
 
