@@ -1731,12 +1731,24 @@ export class MCServerInstance extends EventEmitter {
     }
   }
 
-  // 从 RCON 响应文本提取 NBT 部分（"Player has the following entity data: {...}"）
+  // 从 RCON 响应文本提取 NBT 部分（"Player has the following entity data: [...]"）
+  //
+  // 起点取首个 `[` 或 `{` 中**位置靠前者**，不能只找 `{`：
+  // `data get entity <玩家> Inventory` 返回的是**列表** `[{...},{...}]`，只找 `{` 会
+  // 丢掉最外层 `[`。丢了它会有两处连锁后果（都让实时背包恒不可用）：
+  //   ① `_parseSnbtItemList` 靠 `/\[(.*)\]/s` 匹配 ⇒ 永不命中，返回空列表；
+  //   ② 截断检测判「完整」的条件是 `endsWith(']')` ⇒ 丢 `[` 后提取结果以 `}` 结尾，
+  //      即便解析能命中也会先被判成「已截断」而返回 null。
+  // 两者叠加使在线玩家背包**恒降级为 `.dat` 快照**（用户一直看到「数据来自上次存档
+  // 快照，可能非实时」）。找 `{` 对单对象返回（如 `data get entity <玩家> SelectedItem`
+  // 或 NBT 对象形态）仍然正确，故取二者较小者而非改成只找 `[`。
   _extractNbtFromResponse(text) {
     if (!text) return null;
-    const idx = text.indexOf('{');
-    if (idx === -1) return null;
-    return text.substring(idx);
+    const objIdx = text.indexOf('{');
+    const listIdx = text.indexOf('[');
+    const candidates = [objIdx, listIdx].filter((i) => i !== -1);
+    if (candidates.length === 0) return null;
+    return text.substring(Math.min(...candidates));
   }
 
   // 简化 SNBT 物品列表解析：用括号匹配提取每个顶层 {} 物品，再正则提取字段
