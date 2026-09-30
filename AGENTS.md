@@ -246,8 +246,11 @@ mock 是**进程级共享**的（并行 spec 连同一个「服务端」）：�
 Conventional Commits（`feat`/`fix`/`refactor`/`docs`/`chore`/`test` + scope），描述用中文，
 例：`feat(web): 玩家详情新增成就标签页`；scope 取 `web` / `server` / `schemas` / `ci` / `docs` 等。
 
-**提交类型决定发版的版本跃迁**（feat→minor / fix→patch / `!`→major）——仓库根 `CHANGELOG.md`
-与三包版本号均由它自动生成，故类型必须与实际改动相符。
+**提交类型决定发版的版本跃迁**（feat→minor / fix→patch）——仓库根 `CHANGELOG.md`
+与三包版本号均由它自动生成，故类型必须与实际改动相符。含 `!` 或 `BREAKING CHANGE:` 的提交
+同样只 bump minor：项目尚未发布正式版，主版本号在 1.0.0 之前保持为 0（`bump-minor-pre-major`）。
+真正触发发版的是 `feat` / `fix` / `perf` / `revert` 四类；`docs` / `chore` / `ci` / `style` /
+`refactor` / `test` / `build` 单独提交不会产生新版本（但它们带 `!` 时仍会触发）。
 
 改动走**特性分支 + PR** 提交到 `main`。`main` 受规则集 `main-protect` 保护：禁删除、禁强推、
 6 项必需检查且 `strict`（要求分支与 `main` 齐平，合并前须 rebase）。合并统一用 **squash**

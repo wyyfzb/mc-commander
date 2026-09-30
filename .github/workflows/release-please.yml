@@ -1,9 +1,20 @@
 # Release Please（发版流程自动化）
 
-# 解析 main 上 Conventional Commits（fix→patch / feat→minor / !→major），
+# 解析 main 上 Conventional Commits（fix→patch / feat→minor；breaking 在 0.x 期亦只 minor，
+# 由 release-please-config.json 的 bump-minor-pre-major 决定，上线转 1.x 时再撤该键），
 # 维护一个 Release PR（bump 三包 version + lock + README + 生成 CHANGELOG.md；
 # 三包同步靠 release-please-config.json 的 extra-files 登记，CHANGELOG 落仓库根
 # 由该配置的 changelog-path 指定——只移文件不改配置会让它按默认路径在包内重建一份）。
+#
+# packages 键必须是仓库根 "."（而非某个子包）：release-please 只在 path === '.' 时
+# 把「全部提交」都算进来（manifest 的 ROOT_PROJECT_PATH 旁路，非根路径则按目录过滤提交），
+# 子包路径会按目录过滤提交。曾用 mc_commander_server 作键，导致「只改前端/契约包的提交」
+# 被整条丢弃——#582（前端依赖修复）因此从未进入 CHANGELOG、也从未发版，而它的产物其实会
+# 打进 tarball（见下方构建步骤）。改用根键后：全仓任一改动都能触发发版，三包版本元数据由
+# extra-files 同步 bump，与 release.yml 的「tag ↔ 三包 version 一致」校验保持同一步调。
+# 策略取 simple 而非 node：根 package.json 是无 version 的私有工具包，node 策略会原生
+# 读写它并凭空注入 version 字段（多出两个与发版无关的文件）。
+#
 # 合并 Release PR 后 release-please 自动打 vX.Y.Z tag 并建 GitHub Release，
 # 产物构建由本工作流同 run 的 build-and-publish job 接续完成（release.yml 双入口之一）。
 #
@@ -39,10 +50,10 @@ jobs:
     outputs:
       # 输出名与 release-please-config.json 的 packages 键绑定：setPathOutput() 仅在 path === '.'
       # 时才输出不带前缀的 release_created / tag_name，非 root 包一律加 `<path>--` 前缀。
-      # 本仓库 package key 是 mc_commander_server，故 tag 名只能从 mc_commander_server--tag_name 取。
+      # 本仓库 packages 键现为根键 "."（见文件头说明），故 tag 名直接取无前缀的 tag_name。
       # releases_created 是全局输出（不带头缀），任何包建了发布都为 true，可用于门禁判断。
       release_created: ${{ steps.release.outputs.releases_created }}
-      tag_name: ${{ steps.release.outputs.mc_commander_server--tag_name }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
       - uses: googleapis/release-please-action@v4
         id: release
@@ -57,11 +68,11 @@ jobs:
         if: steps.release.outputs.releases_created == 'true'
         env:
           RELEASES_CREATED: ${{ steps.release.outputs.releases_created }}
-          TAG_NAME: ${{ steps.release.outputs.mc_commander_server--tag_name }}
+          TAG_NAME: ${{ steps.release.outputs.tag_name }}
         run: |
           if [ -z "$TAG_NAME" ]; then
             echo "::error::release-please 报告已创建发布，但未取到 tag 名。"
-            echo "::error::输出名与本仓库的 package key 绑定（<path>--tag_name）。请核对 release-please-config.json 的 packages 键与上一处 outputs 声明是否一致。"
+            echo "::error::输出名与本仓库的 packages 键绑定：根键 '.' 用无前缀 tag_name，子包用 <path>--tag_name。请核对 release-please-config.json 的 packages 键与上一处 outputs 声明是否一致。"
             exit 1
           fi
           echo "发布输出就绪: releases_created=$RELEASES_CREATED tag=$TAG_NAME"
