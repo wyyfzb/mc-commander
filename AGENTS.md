@@ -267,8 +267,14 @@ Conventional Commits（`feat`/`fix`/`refactor`/`docs`/`chore`/`test` + scope）�
 描述用中文，例：`feat(web): 玩家详情新增成就标签页`。详见 CONTRIBUTING.md。
 - **分支与合并**：走**特性分支 + PR**（改动经全量自测 + 独立审查后开 PR，CI 全绿再合并 main）。
   `main` 受规则集 `main-protect` 保护：禁删除、禁强推、5 项必需检查且 `strict`（要求分支与
-  main 齐平，故合并前须 rebase）。合并方式默认保留历史（squash 会把提交压平、切断与
-  CHANGELOG 的对应关系）。push 与合并 main 须 owner 授权；操作编排见本地 `.ai/workflows.md`
+  main 齐平，故合并前须 rebase）。合并统一用 **squash**，仓库已禁用 merge commit
+  （`allow_merge_commit=false`）：合并提交的正文会带 PR 标题，而 release-please 按
+  「空行 + Conventional 前缀」切分提交消息（`splitMessages`），于是同一条改动被
+  分支提交与合并提交正文**各记一次**，CHANGELOG 每条重复两份（实测 v0.5.1 2 条重复 1、
+  v0.5.0 4 条重复 2、v0.4.0 13 条重复 4；v0.3.0 区间无合并提交故 0 重复）。三种合法的
+  合并提交消息组合（`MERGE_MESSAGE+PR_TITLE`／`PR_TITLE+BLANK`／`PR_TITLE+PR_BODY`）
+  均无法避免——分支提交始终在历史里。squash 只留一个提交，一个 PR 对应一条记录。
+  push 与合并 main 须 owner 授权；操作编排见本地 `.ai/workflows.md`
   §4.4（owner 一条指令 = 授权该 PR 全生命周期）。
   ⚠️ 自动发版现行：`release-please.yml` 解析 main 的提交并维护 Release PR，合并后**自动**打
   tag、建 **draft** release，并在同一个 run 内接续构建产物、上传、发布
