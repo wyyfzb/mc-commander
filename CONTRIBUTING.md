@@ -1,5 +1,9 @@
 # 贡献指南
 
+> **贡献必须满足的项目规范（代码规范、CI 检查项、提交规范）见 [`AGENTS.md`](AGENTS.md)**；
+> 本文件只做上手补充。**开发流程由你自己决定**——用不用 TDD、本地跑多少测试、编辑器是什么，
+> 都不在项目约束范围内，只要你的 PR 最终通过 CI 即可。
+
 感谢参与 MC_Commander！无论提交 Issue、修复 Bug 还是开发新功能，都欢迎。
 
 ## 快速上手
@@ -59,15 +63,10 @@ dist 同步守卫拦截）。
   - scope 可选：`web` / `server` / `ci` / `docs` 等
 - PR 目标分支为 `main`；较大变更建议先开 Issue 或 Discussion 对齐
 
-### 验证分级（按改动范围选择，避免无谓全量）
+### CI 与本地检查
 
-| 级别 | 场景 | 内容 |
-|---|---|---|
-| L1 | 单文件/小改动 | `npx tsc -b --noEmit` + 相关测试文件 |
-| L2 | 组件/交互改动 | L1 + 前端 `npm run test` 全量 |
-| L3 | 里程碑/收尾 | L2 + 按需 e2e + 服务端 `npm test` + `npm run build` |
-
-一键本地检查（契约包 + 服务端 + 前端，lint + 类型检查 + test 全量）：
+PR 必须让 CI 全绿才能合并（6 项必需检查，见 `AGENTS.md`「CI 检查」）。仓库提供一键本地入口，
+**按你自己的习惯跑多少都行**，只要最终 CI 通过：
 
 ```bash
 bash scripts/local-check.sh                     # Git Bash / Linux / macOS
@@ -75,7 +74,11 @@ bash scripts/local-check.sh --skip-frontend     # 仅契约包 + 服务端
 bash scripts/local-check.sh --skip-schemas      # 跳过契约包
 ```
 
-CI 会在 PR 上运行三套完整检查 + 代码格式检查 + e2e + 密钥扫描，本地建议至少跑过 L1。
+CI 在 PR 上运行：代码格式检查、三包 lint / 类型检查 / test（含覆盖率）、契约包 dist 同步守卫、
+设计 token 与对比度门禁、构建体积检查、Playwright e2e、密钥泄漏扫描、三包生产依赖漏洞扫描
+（`npm audit --omit=dev`，阈值 high）。
+
+涉及页面渲染 / 展示文案的改动，建议加跑相关 e2e spec（`npx playwright test <spec>`）。
 
 ### 代码格式
 

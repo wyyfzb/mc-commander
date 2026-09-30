@@ -18,7 +18,7 @@ mc_manager_web/give-proto.html
 trae/
 *.code-workspace
 
-# Agent 私有配置/技能/MCP（本机工作环境，不入库；AGENTS.md/CLAUDE.md 为社区版入库）
+# Agent 私有配置/技能/MCP（本机工作环境，不入库）
 .claude/
 .ai/
 # roadmap.md 属开发意图（缺口候选/排期口径/不做清单），按 AGENTS.md「开发意图类不入库」移入 .ai/
@@ -29,6 +29,8 @@ roadmap.md
 .mimosa/
 .workbuddy/
 .mcp.json
+# CLAUDE.md 是 owner 私有 overlay（本机工作环境），AGENTS.md 是唯一入库的社区版规则
+CLAUDE.md
 CLAUDE.local.md
 skills-lock.json
 
