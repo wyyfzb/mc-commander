@@ -23,8 +23,8 @@
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^4.1.11",
-    "oxlint": "^1.80.0",
-    "rolldown": "^1.2.4",
+    "oxlint": "^1.85.0",
+    "rolldown": "^1.2.11",
     "typescript": "^7.0.2",
     "vitest": "^4.1.11"
   },
