@@ -13,7 +13,7 @@
 
 ## 自查清单
 
-- [ ] `bash scripts/local-check.sh` 全绿（或按 CONTRIBUTING 的验证分级跑了对应级别）
+- [ ] `bash scripts/local-check.sh` 全绿
 - [ ] 新增/变更逻辑有对应测试覆盖
 - [ ] 测试与文档中无真实服务器信息（IP / API Key / 真实玩家数据）
 - [ ] 前端改动未硬编码色值/间距（使用 `--mcs-*` token）
