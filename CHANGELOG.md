@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.5.3](https://github.com/wyyfzb/mc-commander/compare/v0.5.2...v0.5.3) (2026-09-30)
+
+
+### Bug Fixes
+
+* **deps:** 前端 6 条依赖 advisory 清零 + 补生产依赖漏洞门禁 ([#582](https://github.com/wyyfzb/mc-commander/issues/582)) ([32fa26d](https://github.com/wyyfzb/mc-commander/commit/32fa26d860372f9e9fd40542b043cac808d937f2))
+* **web:** 仅前端改动 ([b820894](https://github.com/wyyfzb/mc-commander/commit/b820894816b4ca934c27f644693e3e8b892b94dc))
+* **web:** 仅前端改动 ([bbbc612](https://github.com/wyyfzb/mc-commander/commit/bbbc612e5af7e209455027f9a01fc38fa28b2976))
+* **web:** 仅前端改动 ([1e58a94](https://github.com/wyyfzb/mc-commander/commit/1e58a94e70a290f37c3d79519ab1191448804df0))
+* **web:** 探测前端改动 ([65f38ad](https://github.com/wyyfzb/mc-commander/commit/65f38ad22ff99db3f307f2ebb779dd80a2d238e8))
+* **web:** 探测前端改动2 ([25cdb67](https://github.com/wyyfzb/mc-commander/commit/25cdb677a23766dd4e0f30208941094cb84d23fc))
+
 ## [0.5.2](https://github.com/wyyfzb/mc-commander/compare/v0.5.1...v0.5.2) (2026-09-30)
 
 
