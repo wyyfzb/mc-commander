@@ -22,7 +22,7 @@
     "zod": "^3.25.67"
   },
   "devDependencies": {
-    "@vitest/coverage-v8": "^4.1.11",
+    "@vitest/coverage-v8": "^5.0.2",
     "oxlint": "^1.85.0",
     "rolldown": "^1.2.11",
     "typescript": "^7.0.2",
