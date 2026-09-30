@@ -6,6 +6,14 @@ version: 2
 # 并入 public/），故属 fix 语义。
 # 两处例外，均**有意**保持 chore：仓库根工具包（只有 devDependencies、不进 tarball，
 # 不该让每次格式化器升级都切一个 patch 版本）与 github-actions（只影响 CI 自身）。
+#
+# 为什么三个包都多一个 `vitest` 分组：`@vitest/coverage-v8` 的 peer 锁死**同版** vitest
+# （实测 5.0.2 的 peerDependencies = {vitest: "5.0.2"}），而 dependabot 默认把每个依赖
+# 单独开 PR，于是单独升 vitest 或单独升 coverage-v8 都会在 `npm ci` 阶段 ERESOLVE——
+# 两边都红，谁先合都堵死（实测 #594/#595/#598/#600 四条全因此红）。
+# 放进同一分组后二者在同一 PR 内同步升版，peer 才满足。分组按「先匹配到的先用」，
+# 故 vitest 组必须排在 minor-and-patch 之前；且**不限 update-types**——
+# 正是 major（4→5）才触发了这个死锁。
 updates:
   - package-ecosystem: npm
     directory: /mc_commander_server
@@ -15,6 +23,9 @@ updates:
     commit-message:
       prefix: "fix(deps)"
     groups:
+      # vitest 与其 coverage 同伴必须同 PR 升版（见文件头说明）
+      vitest:
+        patterns: ["vitest", "@vitest/*"]
       minor-and-patch:
         update-types: [minor, patch]
 
@@ -26,6 +37,9 @@ updates:
     commit-message:
       prefix: "fix(deps)"
     groups:
+      # vitest 与其 coverage 同伴必须同 PR 升版（见文件头说明）
+      vitest:
+        patterns: ["vitest", "@vitest/*"]
       minor-and-patch:
         update-types: [minor, patch]
 
@@ -56,6 +70,9 @@ updates:
     commit-message:
       prefix: "fix(deps)"
     groups:
+      # vitest 与其 coverage 同伴必须同 PR 升版（见文件头说明）
+      vitest:
+        patterns: ["vitest", "@vitest/*"]
       minor-and-patch:
         update-types: [minor, patch]
 
