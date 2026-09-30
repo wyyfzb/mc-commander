@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.2](https://github.com/wyyfzb/mc-commander/compare/v0.5.1...v0.5.2) (2026-09-30)
+
+
+### Bug Fixes
+
+* **deps:** 服务端 7 条高危 advisory 清零（multer / adm-zip） ([6b57d53](https://github.com/wyyfzb/mc-commander/commit/6b57d5395f6633adb1c7059181b59dc3a09c99bf))
+* **deps:** 服务端 7 条高危 advisory 清零（multer / adm-zip） ([4af2c55](https://github.com/wyyfzb/mc-commander/commit/4af2c551c50596b3f44337db8f5c3f8695c45022))
+
 ## [0.5.1](https://github.com/wyyfzb/mc-commander/compare/v0.5.0...v0.5.1) (2026-09-29)
 
 
