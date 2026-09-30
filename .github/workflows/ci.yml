@@ -39,6 +39,37 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  # 生产依赖漏洞门禁：只读 lock 文件，不需要 node_modules 也不需要 npm ci
+  # （实测 npm audit 仅凭 package.json + package-lock.json 即可判定），故独立成 job
+  # 只要一次 checkout，不与三个包 job 争 setup-node 的缓存。
+  # 只判生产依赖（--omit=dev）：devDependencies 不进产物，其 advisory 不构成上线风险；
+  # 阈值取 high（实测 --audit-level=high 对仅 moderate 的样本 exit 0、moderate 档 exit 1），
+  # 留出 moderate/low 的处置余量，避免上游发 advisory 时无关 PR 被红灯堵住。
+  # 三包任一有 high 及以上即失败。
+  dependency-audit:
+    name: 生产依赖漏洞门禁（npm audit --omit=dev）
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'push' ||
+      !github.event.pull_request.draft
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: 三包生产依赖零高危
+        run: |
+          failed=0
+          for pkg in mc-schemas mc_commander_server mc_manager_web; do
+            echo "::group::$pkg"
+            if ! (cd "$pkg" && npm audit --omit=dev --audit-level=high); then
+              echo "::error file=$pkg/package-lock.json::$pkg 存在 high 及以上生产依赖漏洞——本地执行 (cd $pkg && npm audit fix) 处置"
+              failed=1
+            fi
+            echo "::endgroup::"
+          done
+          exit $failed
+
   schemas:
     name: 契约包（lint + schemas 测试 + dist 同步守卫）
     runs-on: ubuntu-latest

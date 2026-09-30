@@ -27,15 +27,33 @@ ensure_deps() {
   (cd "$1" && npm ci --no-audit --no-fund)
 }
 
-echo "=== [1/4] 代码格式检查（Biome formatter；范围与排除项见 biome.jsonc）==="
+echo "=== [1/5] 代码格式检查（Biome formatter；范围与排除项见 biome.jsonc）==="
 # 仓库级工具包（根 package.json 只装 Biome，不是 workspace 根）
 ensure_deps "$PROJECT_DIR"
 (cd "$PROJECT_DIR" && npm run format:check)
 
+# 生产依赖漏洞门禁（与 ci.yml 的 dependency-audit job 同口径）：只判生产依赖
+# （--omit=dev，devDependencies 不进产物），阈值 high。npm audit 仅凭 lock 文件即可
+# 判定、不需要 node_modules，故不等 ensure_deps。
+echo "=== [2/5] 三包生产依赖漏洞门禁（npm audit --omit=dev --audit-level=high）==="
+AUDIT_FAILED=0
+for pkg in "mc-schemas" "mc_commander_server" "mc_manager_web"; do
+  if (cd "$PROJECT_DIR/$pkg" && npm audit --omit=dev --audit-level=high); then
+    :
+  else
+    echo "错误：$pkg 存在 high 及以上生产依赖漏洞"
+    echo "      本地执行 (cd $pkg && npm audit fix) 处置后再提交"
+    AUDIT_FAILED=1
+  fi
+done
+if [ "$AUDIT_FAILED" -ne 0 ]; then
+  exit 1
+fi
+
 # 契约包最先跑：服务端运行时经 file: link 消费其 dist，前端经 vite alias 直读 src，
 # dist 落后于 src 时服务端会静默使用旧契约，故须先确保 dist 与 src 同步。
 if [ "$SKIP_SCHEMAS" -eq 0 ]; then
-  echo "=== [2/4] 共享契约包 mc-schemas（lint + 测试 + dist 同步守卫）==="
+  echo "=== [3/5] 共享契约包 mc-schemas（lint + 测试 + dist 同步守卫）==="
   if [ ! -d "$SCHEMAS_DIR" ]; then
     echo "错误：未找到 mc-schemas 目录"
     exit 1
@@ -67,7 +85,7 @@ if [ "$SKIP_SCHEMAS" -eq 0 ]; then
   rm -f "$DIST_COMMITTED"
 fi
 
-echo "=== [3/4] 后端 Lint + 单元测试 ==="
+echo "=== [4/5] 后端 Lint + 单元测试 ==="
 if [ ! -d "$SERVER_DIR" ]; then
   echo "错误：未找到 mc_commander_server 目录"
   exit 1
@@ -82,7 +100,7 @@ if [ "$SKIP_FRONTEND" -eq 1 ]; then
   exit 0
 fi
 
-echo "=== [4/4] 前端 Lint + 类型检查 + 设计 token 守门 + 单元测试 ==="
+echo "=== [5/5] 前端 Lint + 类型检查 + 设计 token 守门 + 单元测试 ==="
 if [ ! -d "$WEB_DIR" ]; then
   echo "错误：未找到 mc_manager_web 目录"
   exit 1
