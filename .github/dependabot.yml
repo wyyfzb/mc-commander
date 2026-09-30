@@ -1,4 +1,11 @@
 version: 2
+# 会进 tarball 的 npm 包（mc_commander_server / mc_manager_web / mc-schemas）用 fix(deps) 而非
+# chore(deps)：release-please 只把 feat/fix/perf/revert 当「用户可见」，chore/docs/ci 等一律
+# hidden ⇒ 用 chore 前缀的依赖升级既进不了 CHANGELOG、也不 bump 版本，安全修复会静默留在
+# main 上不随产物发出。这些包的依赖升级会实际改变交付物（前端产物由 release.yml 的 cp 阶段
+# 并入 public/），故属 fix 语义。
+# 两处例外，均**有意**保持 chore：仓库根工具包（只有 devDependencies、不进 tarball，
+# 不该让每次格式化器升级都切一个 patch 版本）与 github-actions（只影响 CI 自身）。
 updates:
   - package-ecosystem: npm
     directory: /mc_commander_server
@@ -6,7 +13,7 @@ updates:
       interval: weekly
     rebase-strategy: auto
     commit-message:
-      prefix: "chore(deps)"
+      prefix: "fix(deps)"
     groups:
       minor-and-patch:
         update-types: [minor, patch]
@@ -17,13 +24,17 @@ updates:
       interval: weekly
     rebase-strategy: auto
     commit-message:
-      prefix: "chore(deps)"
+      prefix: "fix(deps)"
     groups:
       minor-and-patch:
         update-types: [minor, patch]
 
   # 仓库根工具包（只装代码格式化器 Biome）：漏掉本目录会让格式化器长期停在旧版本，
-  # 与 CI 的 format job 及各贡献者的本地输出产生版本漂移
+  # 与 CI 的 format job 及各贡献者的本地输出产生版本漂移。
+  # 前缀保持 chore(deps) 与前三个包不同，是**有意为之**：本包只有 devDependencies、
+  # 不进 tarball（release.yml 的 staging 只取 mc_commander_server + mc-schemas），
+  # 按「devDependencies 不进产物 ⇒ 不算上线风险」的既有口径（见 ci.yml 的依赖门禁注释），
+  # 它不该触发发版——否则每升一次格式化器都要切一个 patch 版本。
   - package-ecosystem: npm
     directory: /
     schedule:
@@ -43,7 +54,7 @@ updates:
       interval: weekly
     rebase-strategy: auto
     commit-message:
-      prefix: "chore(deps)"
+      prefix: "fix(deps)"
     groups:
       minor-and-patch:
         update-types: [minor, patch]
