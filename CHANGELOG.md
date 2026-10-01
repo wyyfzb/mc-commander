@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.5.3](https://github.com/wyyfzb/mc-commander/compare/v0.5.2...v0.5.3) (2026-10-01)
+
+
+### Bug Fixes
+
+* **ci:** dependabot 把 vitest 与其 coverage 同伴归入同一分组，解开 peer 死锁 ([#601](https://github.com/wyyfzb/mc-commander/issues/601)) ([0d98e61](https://github.com/wyyfzb/mc-commander/commit/0d98e6145f8f6ac3a5cd11c7fda2563ae894a324))
+* **ci:** dependabot 的依赖升级前缀改 fix(deps)，安全修复不再静默不发版 ([#588](https://github.com/wyyfzb/mc-commander/issues/588)) ([1fd5440](https://github.com/wyyfzb/mc-commander/commit/1fd544042c698191624a54806de425cef4afbed2))
+* **ci:** 修发版触发面——packages 改用根键，前端/契约包改动不再被丢弃 ([#585](https://github.com/wyyfzb/mc-commander/issues/585)) ([422f7b0](https://github.com/wyyfzb/mc-commander/commit/422f7b044337545871a0f3b2021939e7f31da8ae))
+* **deps:** bump dotenv from 17.4.2 to 18.0.4 in /mc_commander_server ([#593](https://github.com/wyyfzb/mc-commander/issues/593)) ([873f1ec](https://github.com/wyyfzb/mc-commander/commit/873f1eca0e05e1fcd5a2da0b55fd3fd4ac5e1949))
+* **deps:** bump got from 15.1.0 to 16.0.0 in /mc_commander_server ([#592](https://github.com/wyyfzb/mc-commander/issues/592)) ([604435c](https://github.com/wyyfzb/mc-commander/commit/604435cc0f5aecfe04708298dcc566f374e33002))
+* **deps:** bump the minor-and-patch group across 1 directory with 2 updates ([#591](https://github.com/wyyfzb/mc-commander/issues/591)) ([2f07008](https://github.com/wyyfzb/mc-commander/commit/2f070087985e70624a452ceeb66206796fd6f7b4))
+* **deps:** bump the minor-and-patch group across 1 directory with 3 updates ([#589](https://github.com/wyyfzb/mc-commander/issues/589)) ([5af5b57](https://github.com/wyyfzb/mc-commander/commit/5af5b5796d9524df2b4f2d10316cec5aba7cdaa7))
+* **deps:** dompurify 收紧到 &gt;=3.4.16，清掉运行时 XSS（GHSA-p98j-92pf-mc4p） ([#602](https://github.com/wyyfzb/mc-commander/issues/602)) ([6b389f3](https://github.com/wyyfzb/mc-commander/commit/6b389f32d7196dd093b718a974b25cb1b1e11440))
+* **deps:** jsdom 钉在 30.0.1 并落地 [#597](https://github.com/wyyfzb/mc-commander/issues/597) 的其余 43 项升级，解开 msw 兼容死锁 ([#604](https://github.com/wyyfzb/mc-commander/issues/604)) ([a80f741](https://github.com/wyyfzb/mc-commander/commit/a80f7411c94d22d124ec3331e019277e20e6c2a4))
+* **deps:** 前端 6 条依赖 advisory 清零 + 补生产依赖漏洞门禁 ([#582](https://github.com/wyyfzb/mc-commander/issues/582)) ([32fa26d](https://github.com/wyyfzb/mc-commander/commit/32fa26d860372f9e9fd40542b043cac808d937f2))
+* **schemas:** zod 3 → 4 迁移，逐字保留用户可见的错误文案契约 ([#603](https://github.com/wyyfzb/mc-commander/issues/603)) ([fc79475](https://github.com/wyyfzb/mc-commander/commit/fc79475f6b7925568c4e40eb6f04256a52566192))
+
 ## [0.5.2](https://github.com/wyyfzb/mc-commander/compare/v0.5.1...v0.5.2) (2026-09-30)
 
 
