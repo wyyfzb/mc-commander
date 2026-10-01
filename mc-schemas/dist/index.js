@@ -5596,7 +5596,7 @@ const apiEnvelopeSchema = object({
 	status: literal("ok"),
 	code: literal(0),
 	message: string(),
-	data: unknown(),
+	data: unknown().optional(),
 	pagination: paginationSchema.optional(),
 	timestamp: string()
 });
@@ -5616,7 +5616,7 @@ const apiErrorEnvelopeSchema = object({
 	status: literal("error"),
 	code: number(),
 	message: string(),
-	details: unknown(),
+	details: unknown().optional(),
 	timestamp: string()
 });
 /** 无载荷操作的成功响应 data（启动/停止/删除/解封等副作用端点固定返回 null） */
@@ -5913,7 +5913,7 @@ const instanceSettingsRequestBodySchema = object({
 const instanceStartRequestBodySchema = object({ startCommand: never({ error: () => "startCommand 已不再支持通过 API 传入" }).optional() });
 /** POST /instances/:id/command 请求体：非空字符串 + 长度上限（上限宽松覆盖长 tellraw/NBT 命令，仅拒收超长滥用） */
 const instanceCommandRequestBodySchema = object({
-	command: string({ error: (iss) => iss.input === void 0 ? "Command is required" : "Command must be a string" }).min(1, "Command is required").max(2e3),
+	command: string({ error: (iss) => iss.code === "invalid_type" ? iss.input === void 0 ? "Command is required" : "Command must be a string" : void 0 }).min(1, "Command is required").max(2e3, "String must contain at most 2000 character(s)"),
 	/**
 	* 命令来源标记（落 `command_history.source`）。
 	* **取值是白名单枚举，不是自由字符串**：source 是审计字段，若放开成自由值，
@@ -6025,7 +6025,7 @@ const archivedSnapshotListSchema = array(archivedSnapshotGroupSchema);
 * 最旧优先）或手工删除都会清掉它；删除条目会连带删除磁盘上的原归档快照（不复制 = 该目录
 * 就是唯一副本）。
 */
-const backupAttachRequestSchema = object({ archiveId: string({ error: (iss) => iss.input === void 0 ? "archiveId 必填" : void 0 }).min(1) });
+const backupAttachRequestSchema = object({ archiveId: string({ error: (iss) => iss.input === void 0 ? "archiveId 必填" : void 0 }).min(1, "String must contain at least 1 character(s)") });
 const backupAttachResponseSchema = object({
 	/** 本次新登记的快照数 */
 	attached: number(),
@@ -6363,7 +6363,7 @@ const auditLogItemSchema = object({
 	action: string(),
 	targetType: string().nullable(),
 	targetId: string().nullable(),
-	detail: unknown(),
+	detail: unknown().optional(),
 	source: string(),
 	createdAt: string()
 });
@@ -6442,7 +6442,7 @@ const webhookDeliverySchema = object({
 	webhookId: number(),
 	eventType: string(),
 	instanceId: string().nullable(),
-	payload: unknown(),
+	payload: unknown().optional(),
 	status: _enum([
 		"pending",
 		"success",
@@ -6845,8 +6845,8 @@ const machineCredentialCreateResponseSchema = machineCredentialSchema.extend({ t
 /** 创建入参：名称 + 作用域（作用域必填且非空——空作用域凭据无任何用途，
 *  放开只会让用户以为「建好了」却处处 403） */
 const machineCredentialCreateBodySchema = object({
-	name: string().min(1).max(64),
-	scopes: array(machineScopeSchema).min(1)
+	name: string().min(1, "String must contain at least 1 character(s)").max(64, "String must contain at most 64 character(s)"),
+	scopes: array(machineScopeSchema).min(1, "Array must contain at least 1 element(s)")
 });
 /** 启停入参 */
 const machineCredentialToggleBodySchema = object({ isEnabled: boolean() });

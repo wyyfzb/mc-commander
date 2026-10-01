@@ -178,11 +178,18 @@ export const instanceStartRequestBodySchema = z.object({
 export const instanceCommandRequestBodySchema = z.object({
   command: z
     .string({
+      // 必须按 code 限定：schema 级 error 回调会接管该 schema 上**所有** check 的默认
+      // 文案，不限定就会把 .max() 的 too_big 也报成「Command must be a string」（误导性
+      // 文案，且与 v3 的「String must contain at most 2000 character(s)」不一致）
       error: (iss) =>
-        iss.input === undefined ? 'Command is required' : 'Command must be a string',
+        iss.code === 'invalid_type'
+          ? iss.input === undefined
+            ? 'Command is required'
+            : 'Command must be a string'
+          : undefined,
     })
     .min(1, 'Command is required')
-    .max(2000),
+    .max(2000, 'String must contain at most 2000 character(s)'),
   /**
    * 命令来源标记（落 `command_history.source`）。
    * **取值是白名单枚举，不是自由字符串**：source 是审计字段，若放开成自由值，

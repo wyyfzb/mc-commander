@@ -41,7 +41,7 @@ export const webhookDeliverySchema = z.object({
   webhookId: z.number(),
   eventType: z.string(),
   instanceId: z.string().nullable(),
-  payload: z.unknown(),
+  payload: z.unknown().optional(),
   status: z.enum(['pending', 'success', 'failed']),
   responseStatus: z.number().nullable(),
   responseBody: z.string().nullable(),

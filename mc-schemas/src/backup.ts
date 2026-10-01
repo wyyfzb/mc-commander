@@ -95,7 +95,7 @@ export const archivedSnapshotListSchema = z.array(archivedSnapshotGroupSchema)
 export const backupAttachRequestSchema = z.object({
   archiveId: z
     .string({ error: (iss) => (iss.input === undefined ? 'archiveId 必填' : undefined) })
-    .min(1),
+    .min(1, 'String must contain at least 1 character(s)'),
 })
 
 export const backupAttachResponseSchema = z.object({

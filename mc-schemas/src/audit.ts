@@ -6,7 +6,7 @@ export const auditLogItemSchema = z.object({
   action: z.string(),
   targetType: z.string().nullable(),
   targetId: z.string().nullable(),
-  detail: z.unknown(),
+  detail: z.unknown().optional(),
   source: z.string(),
   createdAt: z.string(),
 })
