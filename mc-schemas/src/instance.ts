@@ -160,7 +160,7 @@ export const instanceSettingsRequestBodySchema = z.object({
   jvmArgs: z.array(z.string()).optional(),
   startCommand: z
     .null({
-      invalid_type_error: 'startCommand 已不再支持通过 API 更新（如需清除旧配置请传 null）',
+      error: () => 'startCommand 已不再支持通过 API 更新（如需清除旧配置请传 null）',
     })
     .optional(),
 })
@@ -169,7 +169,7 @@ export const instanceSettingsRequestBodySchema = z.object({
 export const instanceStartRequestBodySchema = z.object({
   startCommand: z
     .never({
-      invalid_type_error: 'startCommand 已不再支持通过 API 传入',
+      error: () => 'startCommand 已不再支持通过 API 传入',
     })
     .optional(),
 })
@@ -178,8 +178,8 @@ export const instanceStartRequestBodySchema = z.object({
 export const instanceCommandRequestBodySchema = z.object({
   command: z
     .string({
-      required_error: 'Command is required',
-      invalid_type_error: 'Command must be a string',
+      error: (iss) =>
+        iss.input === undefined ? 'Command is required' : 'Command must be a string',
     })
     .min(1, 'Command is required')
     .max(2000),
@@ -194,14 +194,13 @@ export const instanceCommandRequestBodySchema = z.object({
 
 /** PUT /instances/:id/properties 请求体：属性键值对（passthrough 保留全部键；数组/标量/null 拒绝） */
 export const instancePropertiesRequestBodySchema = z
-  .object({}, { invalid_type_error: '请求体必须是 JSON 对象' })
+  .object({}, { error: (iss) => (iss.input === undefined ? 'Required' : '请求体必须是 JSON 对象') })
   .passthrough()
 
 /** POST /instances/:id/eula 请求体：EULA 确认布尔（文案与原 400 一致） */
 export const instanceEulaRequestBodySchema = z.object({
   agreed: z.boolean({
-    required_error: 'agreed must be a boolean',
-    invalid_type_error: 'agreed must be a boolean',
+    error: () => 'agreed must be a boolean',
   }),
 })
 
@@ -223,8 +222,8 @@ export type InstanceEulaRequestBody = z.infer<typeof instanceEulaRequestBodySche
  *  acknowledgeIrreversible 仅在实例没有任何备份时才被要求为 true */
 export const instanceDeleteRequestBodySchema = z.object({
   confirmName: z.string({
-    required_error: 'confirmName is required',
-    invalid_type_error: 'confirmName must be a string',
+    error: (iss) =>
+      iss.input === undefined ? 'confirmName is required' : 'confirmName must be a string',
   }),
   acknowledgeIrreversible: z.boolean().optional(),
 })

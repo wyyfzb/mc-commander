@@ -27,7 +27,9 @@ export const backupCreateRequestSchema = z.object({
  * 覆盖实例目录，前端弹窗的实例名输入此前是唯一闸门，直连 API 的调用方可无确认覆盖。
  */
 export const backupRestoreRequestSchema = z.object({
-  confirmName: z.string({ required_error: 'confirmName 必填' }),
+  confirmName: z.string({
+    error: (iss) => (iss.input === undefined ? 'confirmName 必填' : undefined),
+  }),
 })
 
 /**
@@ -91,7 +93,9 @@ export const archivedSnapshotListSchema = z.array(archivedSnapshotGroupSchema)
  * 就是唯一副本）。
  */
 export const backupAttachRequestSchema = z.object({
-  archiveId: z.string({ required_error: 'archiveId 必填' }).min(1),
+  archiveId: z
+    .string({ error: (iss) => (iss.input === undefined ? 'archiveId 必填' : undefined) })
+    .min(1),
 })
 
 export const backupAttachResponseSchema = z.object({

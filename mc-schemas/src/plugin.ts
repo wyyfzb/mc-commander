@@ -153,7 +153,7 @@ export const marketInstallRequestSchema = z.object({
 
 /** PUT /instances/:id/plugins/:file/enabled 请求体契约 */
 export const pluginEnabledRequestSchema = z.object({
-  enabled: z.boolean({ invalid_type_error: 'enabled must be a boolean' }),
+  enabled: z.boolean({ error: () => 'enabled must be a boolean' }),
 })
 
 export type PluginMeta = z.infer<typeof pluginMetaSchema>

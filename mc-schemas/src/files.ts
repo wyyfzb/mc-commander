@@ -74,31 +74,43 @@ export const fileListRequestSchema = z.object({
 
 /** GET download / GET content / DELETE files 查询：path 必填非空 */
 export const filePathRequestSchema = z.object({
-  path: z.string({ required_error: 'File path is required' }).min(1, 'File path is required'),
+  path: z
+    .string({ error: (iss) => (iss.input === undefined ? 'File path is required' : undefined) })
+    .min(1, 'File path is required'),
 })
 
 /** PUT /instances/:id/files/content 保存内容请求体 */
 export const fileSaveRequestSchema = z.object({
   path: z
-    .string({ required_error: 'File path and content are required' })
+    .string({
+      error: (iss) => (iss.input === undefined ? 'File path and content are required' : undefined),
+    })
     .min(1, 'File path is required'),
-  content: z.string({ required_error: 'File path and content are required' }),
+  content: z.string({
+    error: (iss) => (iss.input === undefined ? 'File path and content are required' : undefined),
+  }),
 })
 
 /** POST /instances/:id/files/mkdir 新建目录请求体 */
 export const fileMkdirRequestSchema = z.object({
   path: z
-    .string({ required_error: 'Directory path is required' })
+    .string({
+      error: (iss) => (iss.input === undefined ? 'Directory path is required' : undefined),
+    })
     .min(1, 'Directory path is required'),
 })
 
 /** POST /instances/:id/files/rename 重命名请求体 */
 export const fileRenameRequestSchema = z.object({
   path: z
-    .string({ required_error: 'Old path and new path are required' })
+    .string({
+      error: (iss) => (iss.input === undefined ? 'Old path and new path are required' : undefined),
+    })
     .min(1, 'Old path and new path are required'),
   newPath: z
-    .string({ required_error: 'Old path and new path are required' })
+    .string({
+      error: (iss) => (iss.input === undefined ? 'Old path and new path are required' : undefined),
+    })
     .min(1, 'Old path and new path are required'),
 })
 
