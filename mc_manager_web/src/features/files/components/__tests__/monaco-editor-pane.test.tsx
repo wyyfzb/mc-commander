@@ -22,18 +22,29 @@ const PATH_LOG = '/示例世界/logs/latest.log'
 const PATH_TXT = '/示例世界/readme.txt'
 
 // ── @monaco-editor/react mock：捕获 props + 模拟 onMount（假编辑器/假 monaco 常量）──
-const editorCall = vi.hoisted(() => ({
-  props: null as null | {
-    path?: string
-    language?: string
-    theme?: string
-    value?: string
-    onChange?: (v: string) => void
-    onMount?: (editor: unknown, monaco: unknown) => void
-  },
-  addCommand: vi.fn(),
-  loaderConfig: vi.fn(),
-}))
+const editorCall = vi.hoisted(() => {
+  // loader.config 由组件模块在**导入期**调用一次，而 vitest 5 会在模块求值后重置
+  // hoisted 的 `vi.fn()`（实测：调用确已发生——经 globalThis 计数确认为 1 次——但
+  // `mock.calls` 读回 0，因为记录落在了被替换掉的实例上）。故这里用普通数组自行留痕，
+  // 不用 `vi.fn()`；否则本用例在 vitest 5 下会假红。
+  const loaderConfigCalls: unknown[][] = []
+  const loaderConfig = (...args: unknown[]) => {
+    loaderConfigCalls.push(args)
+  }
+  return {
+    props: null as null | {
+      path?: string
+      language?: string
+      theme?: string
+      value?: string
+      onChange?: (v: string) => void
+      onMount?: (editor: unknown, monaco: unknown) => void
+    },
+    addCommand: vi.fn(),
+    loaderConfig,
+    loaderConfigCalls,
+  }
+})
 
 // ── monaco-editor mock：组件仅消费 KeyMod/KeyCode 常量与类型 ──
 const monacoMock = vi.hoisted(() => ({
@@ -144,8 +155,8 @@ describe('languageForFile', () => {
 describe('Monaco 本地化配置（禁 CDN）', () => {
   it('loader.config 调用一次且注入本地 monaco 包', () => {
     render(<MonacoEditorPane {...makeProps({ path: PATH_PROPERTIES, content: 'a=b' })} />)
-    expect(editorCall.loaderConfig).toHaveBeenCalledTimes(1)
-    expect(editorCall.loaderConfig.mock.calls[0]?.[0]).toEqual({ monaco: monacoMock })
+    expect(editorCall.loaderConfigCalls).toHaveLength(1)
+    expect(editorCall.loaderConfigCalls[0]?.[0]).toEqual({ monaco: monacoMock })
   })
 
   it('self.MonacoEnvironment 已配置本地 worker 工厂（editor 通用 + json 按需）', () => {
