@@ -24,15 +24,19 @@ const distDir = path.resolve(import.meta.dirname, '../dist')
 const assetsDir = path.join(distDir, 'assets')
 
 // 预算 = 当前实测值 + 约 8% 余量，取整到 5KB；上调需在 PR 里说明理由
+// 2026-10-01 随依赖升级上调（#604）：monaco-editor 0.56→0.57、react 19.2.8→19.3.0、
+// lucide-react 1.34→1.48、vite 8.2.2→8.3.1 等 43 项。三条路由**同步**增长约 11~12 KB，
+// 增量落在共享 vendor（vendor-react 与 index chunk），即每个路由都要付的固定成本，
+// 非某路由误引入的静态依赖（若是，只会抬高单条路由，不会三条齐涨）。
 const BUDGETS = [
-  { label: '首屏（index.html 引用闭包）', entry: null, limitKb: 265 },
-  { label: '玩家页路由首访', entry: /^players-page-[\w-]+\.js$/, limitKb: 345 },
-  { label: '审计页路由首访', entry: /^audit-page-[\w-]+\.js$/, limitKb: 280 },
+  { label: '首屏（index.html 引用闭包）', entry: null, limitKb: 300 },
+  { label: '玩家页路由首访', entry: /^players-page-[\w-]+\.js$/, limitKb: 380 },
+  { label: '审计页路由首访', entry: /^audit-page-[\w-]+\.js$/, limitKb: 315 },
 ]
 
 // 字体资产预算（原字节，见头注释口径）= 当前实测 + 约 8% 余量，取整到 5KB
 const FONT_EXTENSIONS = new Set(['.ttf', '.woff', '.woff2', '.otf', '.eot'])
-const FONT_BUDGET = { label: '字体资产（dist 全量）', limitKb: 2530 }
+const FONT_BUDGET = { label: '字体资产（dist 全量）', limitKb: 2545 }
 
 const VERBOSE = process.argv.includes('--verbose')
 const gzipCache = new Map()

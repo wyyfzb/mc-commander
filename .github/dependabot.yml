@@ -36,6 +36,16 @@ updates:
     rebase-strategy: auto
     commit-message:
       prefix: "fix(deps)"
+    # jsdom 钉在 30.0.1：30.1.x 用 `implForWrapperWithInterface` + interface descriptor
+    # 替换了旧的 `exports.is(this)` 品牌校验，而 msw 的 @mswjs/interceptors 在
+    # `recordRawHeaders` 里迭代 FormData 时会走到未初始化的 impl 上，抛
+    # `TypeError: Cannot read properties of undefined (reading '_buffer')`——
+    # 前端 11 条 XHR 上传测试（apiUploadFile 路径）全崩。实测拦阻手段无效：
+    # 把 @mswjs/interceptors 升到最新 0.45.6 仍崩（问题在 jsdom 侧）；
+    # 30.1.1 已是 jsdom 最新版，故只能钉版等上游适配。
+    ignore:
+      - dependency-name: "jsdom"
+        versions: [">=30.1.0"]
     groups:
       # vitest 与其 coverage 同伴必须同 PR 升版（见文件头说明）
       vitest:
