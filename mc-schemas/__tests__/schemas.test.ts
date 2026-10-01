@@ -44,6 +44,8 @@ import {
   instanceCommandRequestBodySchema,
   instancePropertiesRequestBodySchema,
   instanceEulaRequestBodySchema,
+  backupAttachRequestSchema,
+  backupRestoreRequestSchema,
   instanceDeleteRequestBodySchema,
   taskCreatePayloadSchema,
   taskUpdatePayloadSchema,
@@ -315,7 +317,12 @@ describe('schemas 基础校验', () => {
         JSON.stringify(bad),
       ).toBe(false)
     }
-    expect(instanceDeleteRequestBodySchema.safeParse({}).success).toBe(false)
+    // 文案也是契约：缺键与类型错走的是 error 回调的两个分支，须逐字锁住
+    // （zod 4 的 `error` 回调若不按 `issue.code` 限定，会连 check 的默认文案一起接管）
+    expect(() => instanceDeleteRequestBodySchema.parse({})).toThrow(/confirmName is required/)
+    expect(() => instanceDeleteRequestBodySchema.parse({ confirmName: 42 })).toThrow(
+      /confirmName must be a string/,
+    )
   })
 
   it('pluginInfo schema 解析插件信息', () => {
@@ -426,8 +433,8 @@ describe('请求侧契约（issue 391 路由层 zod 统一）', () => {
 
   it('filePathRequestSchema：path 必填非空，剥离未知字段', () => {
     expect(filePathRequestSchema.parse({ path: '/a.txt', junk: 1 })).toEqual({ path: '/a.txt' })
-    expect(() => filePathRequestSchema.parse({ path: '' })).toThrow()
-    expect(() => filePathRequestSchema.parse({})).toThrow()
+    expect(() => filePathRequestSchema.parse({ path: '' })).toThrow(/File path is required/)
+    expect(() => filePathRequestSchema.parse({})).toThrow(/File path is required/)
   })
 
   it('fileSaveRequestSchema：path/content 类型守护', () => {
@@ -882,7 +889,11 @@ describe('实例控制面输入侧契约（issue 486 五 body 端点）', () => 
     expect(() => instanceCommandRequestBodySchema.parse({ command: 123 })).toThrow(
       /Command must be a string/,
     )
-    expect(() => instanceCommandRequestBodySchema.parse({ command: 'x'.repeat(2001) })).toThrow()
+    // 超长走的是 .max() 的 too_big 分支，文案必须仍是 v3 的那句：error 回调若不按
+    // issue.code 限定，会把它接管成 'Command must be a string'（对用户是误导性表述）
+    expect(() => instanceCommandRequestBodySchema.parse({ command: 'x'.repeat(2001) })).toThrow(
+      /String must contain at most 2000 character\(s\)/,
+    )
     expect(
       instanceCommandRequestBodySchema.parse({ command: 'x'.repeat(2000) }).command,
     ).toHaveLength(2000)
@@ -905,5 +916,52 @@ describe('实例控制面输入侧契约（issue 486 五 body 端点）', () => 
     expect(() => instanceEulaRequestBodySchema.parse({ agreed: 'yes' })).toThrow(
       /agreed must be a boolean/,
     )
+  })
+})
+
+describe('备份请求侧契约（attach / restore 的必填文案）', () => {
+  // 这两个 schema 此前零 schema 级覆盖：服务端的 attach 用例只断言 status=400、
+  // restore 只断言路由层比对，文案写错不会转红 ⇒ 补齐（zod 4 的 error 回调若不按
+  // issue.code 限定，会把 check 的默认文案一并接管）
+  it('backupRestoreRequestSchema：confirmName 缺键报原文案', () => {
+    expect(() => backupRestoreRequestSchema.parse({})).toThrow(/confirmName 必填/)
+    // 类型错走的是回调的 else 分支（返回 undefined ⇒ 回退 v4 默认文案）
+    expect(() => backupRestoreRequestSchema.parse({ confirmName: 42 })).toThrow()
+    expect(backupRestoreRequestSchema.parse({ confirmName: '' }).confirmName).toBe('')
+  })
+
+  it('backupAttachRequestSchema：archiveId 缺键与空串各报原文案', () => {
+    expect(() => backupAttachRequestSchema.parse({})).toThrow(/archiveId 必填/)
+    // .min(1) 显式带文案：v4 默认文案与 v3 不同，而该 400 直接对用户可见
+    expect(() => backupAttachRequestSchema.parse({ archiveId: '' })).toThrow(
+      /String must contain at least 1 character\(s\)/,
+    )
+    expect(backupAttachRequestSchema.parse({ archiveId: 'paper-1a2b3c4d' }).archiveId).toBe(
+      'paper-1a2b3c4d',
+    )
+  })
+})
+
+describe('信封的未知负载字段（zod 4 起 z.unknown() 不再隐式可选）', () => {
+  // zod 3 里对象字段的 z.unknown() 缺键即通过；zod 4 改为报 invalid_type。
+  // 本仓生产路径恒给这些字段赋值（response.js 的 `data || null` / `details || null`、
+  // audit.model 与 webhook.model 的 `let x = null`），故必须显式 .optional() 保持原语义，
+  // 否则缺键响应会触发 validate.js 的假契约告警（logContractAlarm）。
+  const base = { status: 'ok', code: 0, message: 'ok', timestamp: '2026-01-01T00:00:00.000Z' }
+  it('apiEnvelopeSchema：缺 data / pagination 应通过', () => {
+    expect(apiEnvelopeSchema.safeParse(base).success).toBe(true)
+    expect(apiEnvelopeSchema.safeParse({ ...base, data: null }).success).toBe(true)
+    expect(apiEnvelopeSchema.safeParse({ ...base, data: { a: 1 } }).success).toBe(true)
+  })
+
+  it('apiErrorEnvelopeSchema：缺 details 应通过', () => {
+    const err = {
+      status: 'error',
+      code: 40000,
+      message: 'bad',
+      timestamp: '2026-01-01T00:00:00.000Z',
+    }
+    expect(apiErrorEnvelopeSchema.safeParse(err).success).toBe(true)
+    expect(apiErrorEnvelopeSchema.safeParse({ ...err, details: null }).success).toBe(true)
   })
 })

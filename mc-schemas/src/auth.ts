@@ -119,8 +119,14 @@ export const machineCredentialCreateResponseSchema = machineCredentialSchema.ext
 /** 创建入参：名称 + 作用域（作用域必填且非空——空作用域凭据无任何用途，
  *  放开只会让用户以为「建好了」却处处 403） */
 export const machineCredentialCreateBodySchema = z.object({
-  name: z.string().min(1).max(64),
-  scopes: z.array(machineScopeSchema).min(1),
+  // 三条 check 显式带上文案：v4 的默认文案与 v3 不同（如
+  // 'String must contain at least 1 character(s)' → 'Too small: expected string to have >=1
+  // characters'），而本 schema 经 validateBody 直接进用户可见的 400 message
+  name: z
+    .string()
+    .min(1, 'String must contain at least 1 character(s)')
+    .max(64, 'String must contain at most 64 character(s)'),
+  scopes: z.array(machineScopeSchema).min(1, 'Array must contain at least 1 element(s)'),
 })
 
 /** 启停入参 */

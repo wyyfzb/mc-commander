@@ -315,6 +315,8 @@ describe('status 输入侧契约 - POST /instances/:id/command（issue 486）', 
       .send({ command: 'x'.repeat(2001) });
     expect(res.status).toBe(400);
     expect(res.body.code).toBe(40000);
+    // 文案锁定：超长属 too_big，不得被 error 回调接管成「Command must be a string」
+    expect(res.body.message).toContain('String must contain at most 2000 character(s)');
     expect(instance.sendCommand).not.toHaveBeenCalled();
   });
 

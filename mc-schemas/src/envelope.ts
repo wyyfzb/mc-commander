@@ -13,7 +13,7 @@ export const apiEnvelopeSchema = z.object({
   status: z.literal('ok'),
   code: z.literal(0),
   message: z.string(),
-  data: z.unknown(),
+  data: z.unknown().optional(),
   pagination: paginationSchema.optional(),
   timestamp: z.string(),
 })
@@ -35,7 +35,7 @@ export const apiErrorEnvelopeSchema = z.object({
   status: z.literal('error'),
   code: z.number(),
   message: z.string(),
-  details: z.unknown(),
+  details: z.unknown().optional(),
   timestamp: z.string(),
 })
 
