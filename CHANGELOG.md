@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.5.4](https://github.com/wyyfzb/mc-commander/compare/v0.5.3...v0.5.4) (2026-10-01)
+
+
+### Bug Fixes
+
+* **ci:** 修 dependabot.yml 重复 ignore 键（jsdom 被静默吃掉），并撤除已失效的 jsdom 钉版 ([#611](https://github.com/wyyfzb/mc-commander/issues/611)) ([64b0620](https://github.com/wyyfzb/mc-commander/commit/64b0620290fde4444bc82fd4b3673c5fd51b2032))
+* **deps:** bump oxlint from 1.85.0 to 1.86.0 in /mc-schemas in the minor-and-patch group ([#609](https://github.com/wyyfzb/mc-commander/issues/609)) ([4165fe1](https://github.com/wyyfzb/mc-commander/commit/4165fe1056fd5be2d0cf2dc9de5ac9f412617093))
+* **deps:** bump the minor-and-patch group in /mc_manager_web with 2 updates ([#610](https://github.com/wyyfzb/mc-commander/issues/610)) ([e30aefe](https://github.com/wyyfzb/mc-commander/commit/e30aefe2afed032b020e63d7d08ea7afdca3358c))
+* **deps:** 三包 vitest 与 coverage-v8 成对升到 5.0.3，并登记为 dependabot 已知例外 ([#607](https://github.com/wyyfzb/mc-commander/issues/607)) ([0bd4b06](https://github.com/wyyfzb/mc-commander/commit/0bd4b06f78c9f567104dd454cf0d1aad94145544))
+
 ## [0.5.3](https://github.com/wyyfzb/mc-commander/compare/v0.5.2...v0.5.3) (2026-10-01)
 
 
