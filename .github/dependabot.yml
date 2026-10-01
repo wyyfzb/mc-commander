@@ -7,13 +7,22 @@ version: 2
 # 两处例外，均**有意**保持 chore：仓库根工具包（只有 devDependencies、不进 tarball，
 # 不该让每次格式化器升级都切一个 patch 版本）与 github-actions（只影响 CI 自身）。
 #
-# 为什么三个包都多一个 `vitest` 分组：`@vitest/coverage-v8` 的 peer 锁死**同版** vitest
-# （实测 5.0.2 的 peerDependencies = {vitest: "5.0.2"}），而 dependabot 默认把每个依赖
-# 单独开 PR，于是单独升 vitest 或单独升 coverage-v8 都会在 `npm ci` 阶段 ERESOLVE——
-# 两边都红，谁先合都堵死（实测 #594/#595/#598/#600 四条全因此红）。
-# 放进同一分组后二者在同一 PR 内同步升版，peer 才满足。分组按「先匹配到的先用」，
-# 故 vitest 组必须排在 minor-and-patch 之前；且**不限 update-types**——
-# 正是 major（4→5）才触发了这个死锁。
+# `vitest` 与 `@vitest/coverage-v8` 是**已知无法自动化的例外**：三包一律 ignore，
+# 由维护者成对升级（两者必须改成同一个版本号并重新生成 lock）。
+#
+# 根因是 peer 需求**不对称**：`@vitest/coverage-v8` 把 vitest 钉成精确同版（非 optional，
+# 实测 5.0.3 的 peerDependencies = {vitest: "5.0.3"}），而 `vitest` 对 `@vitest/coverage-v8`
+# 只是 optional peer。dependabot 据此认为「单独升 vitest 不违反 peer」，于是只提 vitest、
+# 丢掉同伴，而 `npm ci` 时同伴那条精确 peer 立刻 ERESOLVE。
+# 实测记录：独立 PR（#594/#595/#598/#600 四条）+ 加了 `vitest` 分组之后（#605/#606 两条）
+# **六条全红** —— 分组救不了它，因为分组只合并「各自都能更新成功的条目」，而 coverage-v8
+# 单独升必然违反 peer，于是永远进不了组。版本选择还受默认 3 天 cooldown 影响：#605 创建时
+# 5.0.3 才发布 21 小时仍在冷却期，dependabot 只能退选**装不上**的 5.0.2（npm arborist 空指针，
+# 非本机问题）。故不再折腾分组配置，直接登记为例外。
+#
+# 升级步骤：把三包 package.json 的这两个依赖**同时**写到目标版本（用 `^` 或精确版都行，
+# 但两者必须一致），再各自 `npm install --registry=https://registry.npmjs.org` 重新生成 lock，
+# 最后跑 `bash scripts/local-check.sh`。
 updates:
   - package-ecosystem: npm
     directory: /mc_commander_server
@@ -22,10 +31,11 @@ updates:
     rebase-strategy: auto
     commit-message:
       prefix: "fix(deps)"
+    # vitest 与其 coverage 同伴由维护者成对升级（见文件头说明），不交给 dependabot
+    ignore:
+      - dependency-name: "vitest"
+      - dependency-name: "@vitest/coverage-v8"
     groups:
-      # vitest 与其 coverage 同伴必须同 PR 升版（见文件头说明）
-      vitest:
-        patterns: ["vitest", "@vitest/*"]
       minor-and-patch:
         update-types: [minor, patch]
 
@@ -46,10 +56,11 @@ updates:
     ignore:
       - dependency-name: "jsdom"
         versions: [">=30.1.0"]
+    # vitest 与其 coverage 同伴由维护者成对升级（见文件头说明），不交给 dependabot
+    ignore:
+      - dependency-name: "vitest"
+      - dependency-name: "@vitest/coverage-v8"
     groups:
-      # vitest 与其 coverage 同伴必须同 PR 升版（见文件头说明）
-      vitest:
-        patterns: ["vitest", "@vitest/*"]
       minor-and-patch:
         update-types: [minor, patch]
 
@@ -79,10 +90,11 @@ updates:
     rebase-strategy: auto
     commit-message:
       prefix: "fix(deps)"
+    # vitest 与其 coverage 同伴由维护者成对升级（见文件头说明），不交给 dependabot
+    ignore:
+      - dependency-name: "vitest"
+      - dependency-name: "@vitest/coverage-v8"
     groups:
-      # vitest 与其 coverage 同伴必须同 PR 升版（见文件头说明）
-      vitest:
-        patterns: ["vitest", "@vitest/*"]
       minor-and-patch:
         update-types: [minor, patch]
 
