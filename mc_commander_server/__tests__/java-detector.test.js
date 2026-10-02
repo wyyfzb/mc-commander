@@ -11,11 +11,12 @@
  *   中间目录校验、读取失败跳过等分支全部可达
  * - os.platform 注入 linux / win32 / darwin 覆盖三平台探测分支
  * - which / where 经 child_process.execSync 注入，java -version 经
- *   execFileSync 注入（stdout 正常路径 / stderr 异常路径 / 无输出路径）
+ *   spawnSync 注入（stdout 路径 / stderr 路径 / 无输出路径 / 进程起不来）
  *
- * 行为锚定说明：expandGlob 对绝对 glob 模式按相对 CWD 语义逐段展开
- * （walk 自空串起拼段，'/usr/...' 模式实际探测 'usr/...'），本文件按该
- * 现行为构建探测树，固定单元逻辑本身（通配展开与存在性校验）。
+ * 绝对路径语义：expandGlob 对以 '/' 开头的模式必须保留根（从 '/' 起拼段）。
+ * 曾出现过「从空串起拼段」的缺陷——`path.join('', 'usr')` 丢掉根变成相对路径，
+ * 使所有硬编码绝对 glob 只在 cwd 恰为 '/' 时命中（实测 systemd 部署下 getAllJavaVersions 恒返回空）。
+ * 故探测树与断言一律使用**绝对路径**，并由「绝对 glob 必须命中」用例承重防回归。
  *
  * 平台约束：探测树的键、expandGlob 的展开结果、which/where 的输出三者都按
  * **宿主分隔符**归一（夹具与 mock 用 path.normalize，命令输出用 path.sep），
@@ -42,7 +43,7 @@ const fsState = vi.hoisted(() => ({
 
 const osState = vi.hoisted(() => ({ platform: vi.fn(() => 'linux') }));
 
-const cpState = vi.hoisted(() => ({ execSync: vi.fn(), execFileSync: vi.fn() }));
+const cpState = vi.hoisted(() => ({ execSync: vi.fn(), spawnSync: vi.fn() }));
 
 vi.mock('fs', async (importOriginal) => {
   const actual = await importOriginal();
@@ -66,9 +67,9 @@ vi.mock('child_process', async (importOriginal) => {
   const actual = await importOriginal();
   return {
     ...actual,
-    default: { ...actual.default, execSync: cpState.execSync, execFileSync: cpState.execFileSync },
+    default: { ...actual.default, execSync: cpState.execSync, spawnSync: cpState.spawnSync },
     execSync: cpState.execSync,
-    execFileSync: cpState.execFileSync,
+    spawnSync: cpState.spawnSync,
   };
 });
 
@@ -138,19 +139,18 @@ beforeEach(() => {
   osState.platform.mockImplementation(() => 'linux');
 
   cpState.execSync.mockReset();
-  cpState.execFileSync.mockReset();
+  cpState.spawnSync.mockReset();
   // 默认：PATH 探测失败（which 不存在）；java -version 按注册表分发——
   // 未注册路径走「执行失败且无 stderr」路径（版本解析返回 null）
   cpState.execSync.mockImplementation(() => {
     throw new Error('command not found');
   });
-  cpState.execFileSync.mockImplementation((javaPath) => {
+  // spawnSync 语义：不抛错，stdout/stderr 各自可能为空。
+  // 未注册路径模拟「进程起不来」——两个流都空、error 非空。
+  cpState.spawnSync.mockImplementation((javaPath) => {
     const spec = versionByPath.get(norm(javaPath));
-    if (!spec) throw new Error(`spawn ${javaPath} failed`);
-    if (spec.err !== undefined) {
-      throw Object.assign(new Error('exit 1'), { stderr: spec.err });
-    }
-    return spec.out;
+    if (!spec) return { stdout: '', stderr: '', error: new Error(`spawn ${javaPath} ENOENT`) };
+    return { stdout: spec.out ?? '', stderr: spec.err ?? '', error: null };
   });
 
   delete process.env.JAVA_HOME;
@@ -255,9 +255,19 @@ describe('getAllJavaVersions · JAVA_HOME 探测与 java -version 输出解析',
     expect(getAllJavaVersions()[0].version).toBe('8');
   });
 
-  it('execFileSync 异常但 stderr 携带版本串时仍可解析（java -version 走 stderr 的真实行为）', () => {
+  // java -version 的真实行为：版本写 stderr、退出码 0。修复前只读 stdout ⇒ 恒 null。
+  // 这两条用例分别锚定「只有 stderr」与「只有 stdout」两种来源，缺一不可。
+  it('版本串只在 stderr 时仍可解析（java -version 的真实输出位置）', () => {
     setupJavaHome(JDK17, `${JDK17}/bin/java`, { err: 'openjdk version "11.0.2" 2019-01-15' });
     expect(getAllJavaVersions()).toEqual([{ version: '11', path: norm(`${JDK17}/bin/java`) }]);
+  });
+
+  it('版本串在 stderr 且退出码为 0（成功路径不抛错）——stderr 必须被读取', () => {
+    // 关键回归点：真实 java -version 退出码 0，若实现只在 catch 里读 stderr，
+    // 这条会拿到空 stdout ⇒ 解析 null ⇒ Java 全部探测不到（实测 systemd 部署即此症状）
+    setupJavaHome(JDK17, `${JDK17}/bin/java`, { err: 'openjdk version "25.0.4.1" 2026-08-18 LTS' });
+    const found = getAllJavaVersions();
+    expect(found).toEqual([{ version: '25', path: norm(`${JDK17}/bin/java`) }]);
   });
 
   it('输出无 version 串或执行异常且无 stderr → 版本为 null → 不收录', () => {
@@ -290,12 +300,12 @@ describe('getAllJavaVersions · JAVA_HOME 探测与 java -version 输出解析',
   });
 });
 
-// Linux glob 探测树（expandGlob 相对 CWD 语义的现行为锚定，见文件头说明）
+// Linux glob 探测树（绝对路径语义，见文件头说明）
 function buildLinuxTree() {
-  addDir('usr');
-  addDir('usr/lib');
-  addDir('usr/lib/jvm');
-  addEntries('usr/lib/jvm', [
+  addDir('/usr');
+  addDir('/usr/lib');
+  addDir('/usr/lib/jvm');
+  addEntries('/usr/lib/jvm', [
     ['java-17-openjdk-amd64', 'dir'],
     ['java-19-openjdk-amd64', 'dir'],
     ['java-30-openjdk-broken', 'dir'],
@@ -306,33 +316,33 @@ function buildLinuxTree() {
   ]);
 
   // 命中通配的发行版目录（readdir 注入）
-  addDir('usr/lib/jvm/java-17-openjdk-amd64');
-  addDir('usr/lib/jvm/java-17-openjdk-amd64/bin');
-  addFile('usr/lib/jvm/java-17-openjdk-amd64/bin/java');
-  setVersionOutput('usr/lib/jvm/java-17-openjdk-amd64/bin/java', {
+  addDir('/usr/lib/jvm/java-17-openjdk-amd64');
+  addDir('/usr/lib/jvm/java-17-openjdk-amd64/bin');
+  addFile('/usr/lib/jvm/java-17-openjdk-amd64/bin/java');
+  setVersionOutput('/usr/lib/jvm/java-17-openjdk-amd64/bin/java', {
     out: 'openjdk version "17.0.1"',
   });
 
-  addDir('usr/lib/jvm/java-8-amazon-corretto');
-  addDir('usr/lib/jvm/java-8-amazon-corretto/bin');
-  addFile('usr/lib/jvm/java-8-amazon-corretto/bin/java');
-  setVersionOutput('usr/lib/jvm/java-8-amazon-corretto/bin/java', {
+  addDir('/usr/lib/jvm/java-8-amazon-corretto');
+  addDir('/usr/lib/jvm/java-8-amazon-corretto/bin');
+  addFile('/usr/lib/jvm/java-8-amazon-corretto/bin/java');
+  setVersionOutput('/usr/lib/jvm/java-8-amazon-corretto/bin/java', {
     out: 'java version "1.8.0_292"',
   });
 
-  addDir('usr/lib/jvm/temurin-25-jre');
-  addDir('usr/lib/jvm/temurin-25-jre/bin');
-  addFile('usr/lib/jvm/temurin-25-jre/bin/java');
-  setVersionOutput('usr/lib/jvm/temurin-25-jre/bin/java', { out: 'openjdk version "25"' });
+  addDir('/usr/lib/jvm/temurin-25-jre');
+  addDir('/usr/lib/jvm/temurin-25-jre/bin');
+  addFile('/usr/lib/jvm/temurin-25-jre/bin/java');
+  setVersionOutput('/usr/lib/jvm/temurin-25-jre/bin/java', { out: 'openjdk version "25"' });
 
-  addDir('usr/lib/jvm/jdk-11');
-  addDir('usr/lib/jvm/jdk-11/bin');
-  addFile('usr/lib/jvm/jdk-11/bin/java');
-  setVersionOutput('usr/lib/jvm/jdk-11/bin/java', { out: 'openjdk version "11"' });
+  addDir('/usr/lib/jvm/jdk-11');
+  addDir('/usr/lib/jvm/jdk-11/bin');
+  addFile('/usr/lib/jvm/jdk-11/bin/java');
+  setVersionOutput('/usr/lib/jvm/jdk-11/bin/java', { out: 'openjdk version "11"' });
 
   // java-19：目录与 bin 存在但 java 可执行文件不存在 → 终点 fileExists false 不收录
-  addDir('usr/lib/jvm/java-19-openjdk-amd64');
-  addDir('usr/lib/jvm/java-19-openjdk-amd64/bin');
+  addDir('/usr/lib/jvm/java-19-openjdk-amd64');
+  addDir('/usr/lib/jvm/java-19-openjdk-amd64/bin');
   // java-30：通配命中但 readdir 失败 → 该分支静默跳过
 }
 
@@ -342,10 +352,10 @@ describe('getAllJavaVersions · Linux glob 探测（expandGlob 注入）', () =>
     const found = getAllJavaVersions();
     const paths = found.map((x) => x.path).sort();
     expect(paths).toEqual([
-      norm('usr/lib/jvm/java-17-openjdk-amd64/bin/java'),
-      norm('usr/lib/jvm/java-8-amazon-corretto/bin/java'),
-      norm('usr/lib/jvm/jdk-11/bin/java'),
-      norm('usr/lib/jvm/temurin-25-jre/bin/java'),
+      norm('/usr/lib/jvm/java-17-openjdk-amd64/bin/java'),
+      norm('/usr/lib/jvm/java-8-amazon-corretto/bin/java'),
+      norm('/usr/lib/jvm/jdk-11/bin/java'),
+      norm('/usr/lib/jvm/temurin-25-jre/bin/java'),
     ]);
     expect(found.map((x) => x.version).sort()).toEqual(['11', '17', '25', '8']);
   });
@@ -353,7 +363,7 @@ describe('getAllJavaVersions · Linux glob 探测（expandGlob 注入）', () =>
   it('通配命中目录但 java 可执行文件不存在 → 不收录（java-19 空壳）', () => {
     buildLinuxTree();
     const paths = getAllJavaVersions().map((x) => x.path);
-    expect(paths).not.toContain(norm('usr/lib/jvm/java-19-openjdk-amd64/bin/java'));
+    expect(paths).not.toContain(norm('/usr/lib/jvm/java-19-openjdk-amd64/bin/java'));
   });
 
   it('JAVA_HOME 指向存在但版本解析失败的 java → 该项不收录，glob 结果不受影响', () => {
@@ -375,7 +385,7 @@ describe('getAllJavaVersions · Linux glob 探测（expandGlob 注入）', () =>
       [hostPath('usr/lib/jvm/jdk-11/bin/java'), hostPath('/usr/local/bin/java')].join('\n'),
     );
     const paths = getAllJavaVersions().map((x) => x.path);
-    expect(paths.filter((p) => p === norm('usr/lib/jvm/jdk-11/bin/java'))).toHaveLength(1);
+    expect(paths.filter((p) => p === norm('/usr/lib/jvm/jdk-11/bin/java'))).toHaveLength(1);
     expect(paths).toContain(norm('/usr/local/bin/java'));
     expect(paths).toHaveLength(5);
   });
@@ -388,24 +398,45 @@ describe('getAllJavaVersions · Linux glob 探测（expandGlob 注入）', () =>
   it('中间字面目录存在但 statSync 抛错 → 整支跳过不崩溃', () => {
     buildLinuxTree();
     // jdk-11 经 jdk-* 通配段进入后，bin 为字面量中间段：existsSync true 但 statSync 抛错
-    addBroken('usr/lib/jvm/jdk-11/bin');
+    addBroken('/usr/lib/jvm/jdk-11/bin');
     const paths = getAllJavaVersions().map((x) => x.path);
-    expect(paths).not.toContain(norm('usr/lib/jvm/jdk-11/bin/java'));
+    expect(paths).not.toContain(norm('/usr/lib/jvm/jdk-11/bin/java'));
     expect(paths).toHaveLength(3);
   });
 
   it('终点文件存在但 statSync 抛错 → fileExists 容错返回 false 不收录', () => {
     buildLinuxTree();
-    addBroken('usr/lib/jvm/temurin-25-jre/bin/java');
+    addBroken('/usr/lib/jvm/temurin-25-jre/bin/java');
     const paths = getAllJavaVersions().map((x) => x.path);
-    expect(paths).not.toContain(norm('usr/lib/jvm/temurin-25-jre/bin/java'));
+    expect(paths).not.toContain(norm('/usr/lib/jvm/temurin-25-jre/bin/java'));
     expect(paths).toHaveLength(3);
   });
 
   it('通配段 readdir 失败 → 该层全部跳过不崩溃', () => {
     buildLinuxTree();
-    fsState.entries.delete(norm('usr/lib/jvm'));
+    fsState.entries.delete(norm('/usr/lib/jvm'));
     expect(getAllJavaVersions()).toEqual([]);
+  });
+
+  // 承重不变量：绝对 glob 的命中**不得依赖进程 cwd**。
+  // 历史缺陷正相反——expandGlob 从空串起拼段，只有 cwd=='/' 时才碰巧命中，
+  // 而 systemd 的 WorkingDirectory 是安装目录，于是生产环境恒返回空。
+  // 本用例把同一棵树分别以「根下」与「根下 + 一层无关 cwd」两次求值，断言结果一致。
+  it('绝对 glob 命中不依赖 cwd（cwd 变化不改变探测结果）', () => {
+    buildLinuxTree();
+    const before = getAllJavaVersions()
+      .map((x) => x.path)
+      .sort();
+    const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue('/opt/mc-commander');
+    try {
+      const after = getAllJavaVersions()
+        .map((x) => x.path)
+        .sort();
+      expect(after).toEqual(before);
+      expect(after).toHaveLength(4);
+    } finally {
+      cwdSpy.mockRestore();
+    }
   });
 });
 
@@ -447,23 +478,24 @@ describe('getAllJavaVersions · Windows 平台分支', () => {
 describe('getAllJavaVersions · macOS 平台分支', () => {
   it('JavaVirtualMachines 通配探测', () => {
     osState.platform.mockImplementation(() => 'darwin');
-    addDir('Library');
-    addDir('Library/Java');
-    addDir('Library/Java/JavaVirtualMachines');
-    addEntries('Library/Java/JavaVirtualMachines', [['zulu-21', 'dir']]);
-    addDir('Library/Java/JavaVirtualMachines/zulu-21');
-    addDir('Library/Java/JavaVirtualMachines/zulu-21/Contents');
-    addDir('Library/Java/JavaVirtualMachines/zulu-21/Contents/Home');
-    addDir('Library/Java/JavaVirtualMachines/zulu-21/Contents/Home/bin');
-    addFile('Library/Java/JavaVirtualMachines/zulu-21/Contents/Home/bin/java');
-    setVersionOutput('Library/Java/JavaVirtualMachines/zulu-21/Contents/Home/bin/java', {
+    // macOS 模式同样是绝对路径（/Library/...），故探测树必须建在根下
+    addDir('/Library');
+    addDir('/Library/Java');
+    addDir('/Library/Java/JavaVirtualMachines');
+    addEntries('/Library/Java/JavaVirtualMachines', [['zulu-21', 'dir']]);
+    addDir('/Library/Java/JavaVirtualMachines/zulu-21');
+    addDir('/Library/Java/JavaVirtualMachines/zulu-21/Contents');
+    addDir('/Library/Java/JavaVirtualMachines/zulu-21/Contents/Home');
+    addDir('/Library/Java/JavaVirtualMachines/zulu-21/Contents/Home/bin');
+    addFile('/Library/Java/JavaVirtualMachines/zulu-21/Contents/Home/bin/java');
+    setVersionOutput('/Library/Java/JavaVirtualMachines/zulu-21/Contents/Home/bin/java', {
       out: 'openjdk version "21" 2023-09-19',
     });
 
     expect(getAllJavaVersions()).toEqual([
       {
         version: '21',
-        path: norm('Library/Java/JavaVirtualMachines/zulu-21/Contents/Home/bin/java'),
+        path: norm('/Library/Java/JavaVirtualMachines/zulu-21/Contents/Home/bin/java'),
       },
     ]);
   });
@@ -483,7 +515,7 @@ describe('findJavaPath —— 精确匹配 / 较新回退 / 默认回退三级�
     buildLinuxTree();
     const got = findJavaPath('9');
     // 较新集合 {11, 17, 25, 8→排除} 的最小为 11
-    expect(got).toBe(norm('usr/lib/jvm/jdk-11/bin/java'));
+    expect(got).toBe(norm('/usr/lib/jvm/jdk-11/bin/java'));
   });
 
   it('环境无任何可用 Java → 回退系统 java 命令并告警', () => {

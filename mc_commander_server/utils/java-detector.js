@@ -1,4 +1,4 @@
-import { execSync, execFileSync } from 'child_process';
+import { execSync, spawnSync } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -87,22 +87,13 @@ export function getRecommendedJavaVersion(mcVersion) {
  * @returns {string|null} Java 主版本号字符串，失败时返回 null
  */
 function getJavaVersionFromPath(javaPath) {
-  try {
-    const output = execFileSync(javaPath, ['-version'], {
-      stdio: 'pipe',
-      encoding: 'utf-8',
-      timeout: 10000,
-    });
-    // java -version 输出到 stderr，但 execFileSync 在 stdio: 'pipe' 时通过异常的 stderr 字段返回
-    return parseJavaVersionOutput(output);
-  } catch (err) {
-    // java -version 通常返回非零退出码或将输出写入 stderr
-    const stderr = err && err.stderr ? err.stderr : '';
-    if (stderr) {
-      return parseJavaVersionOutput(stderr);
-    }
-    return null;
-  }
+  // java -version 把版本写到 **stderr** 且**退出码为 0**，故不能只读 stdout：
+  // execFileSync 在成功路径丢弃 stderr，返回空串 ⇒ 解析恒得 null，且 catch 永不触发
+  // （实测：默认 java=17 时面板仍判「未找到 Java」，用 17 启动 26.3 会 UnsupportedClassVersionError）。
+  // spawnSync 不抛错、stdout/stderr 都在手上，合并后解析对两种输出位置都成立。
+  const res = spawnSync(javaPath, ['-version'], { encoding: 'utf-8', timeout: 10000 });
+  const output = `${res.stdout || ''}${res.stderr || ''}`;
+  return parseJavaVersionOutput(output);
 }
 
 /**
@@ -208,7 +199,10 @@ function expandGlob(pattern) {
     }
   }
 
-  walk(0, '');
+  // 绝对模式必须以 '/' 起拼：pattern.split('/') 的首段是空串（代表根），
+  // 从 '' 起拼会让 path.join('', 'usr') 丢掉根变成相对路径 'usr/...'，
+  // 于是所有硬编码的绝对 glob（Linux/macOS 那几组）只在 cwd 恰为 '/' 时命中。
+  walk(0, pattern.startsWith('/') ? '/' : '');
   return results;
 }
 
