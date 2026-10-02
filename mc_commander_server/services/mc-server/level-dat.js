@@ -85,7 +85,11 @@ export function _getWorldSize() {
       }
     }
     this._worldSizeCache = {
-      value: Math.round((size / (1024 * 1024 * 1024)) * 100) / 100,
+      // 保留 6 位小数（分辨率约 1KB）而非 2 位：2 位小数会把 <5.12MB 的世界全部
+      // 归零——新建实例实测 2.4MB → 0.00 → 界面显示「0 GB」，读起来像没有存档。
+      // 前端 worldSizeParts 本就把 <1GB 换算成 MB 展示，在服务端过早取整会让该
+      // 分支永远拿到 0（其注释正写着「避免误导性的 0.6」，故精度必须保留到前端）。
+      value: Math.round((size / (1024 * 1024 * 1024)) * 1e6) / 1e6,
       mtimeMs: st.mtimeMs,
       size: st.size,
     };

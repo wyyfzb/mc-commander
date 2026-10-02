@@ -126,23 +126,43 @@ describe('_getWorldSize 缓存失效：dirty 标记（实测缺陷回归：子�
 
   it('存档写入发生在 region/ 子目录时顶层缓存判定不失效，_worldSizeDirty 强制重算并清除', () => {
     fs.mkdirSync(path.join(worldDir, 'region'), { recursive: true });
-    // 51MB → 缓存精度（两位小数 GB）下 0.05；两个 51MB → 0.1，增量可区分
+    // 51MB ≈ 0.049805 GB（服务端保留 6 位小数，换算成 MB 由前端做）；
+    // 两个 51MB ≈ 0.099609 GB，增量可区分
     fs.writeFileSync(path.join(worldDir, 'region', 'r.-1.-1.mca'), Buffer.alloc(51 * 1024 * 1024));
     const inst = makeBareInstance(dir);
 
     const first = inst._getWorldSize();
-    expect(first).toBe(0.05);
+    expect(first).toBeCloseTo(0.049805, 6);
 
     // 模拟游戏推进：region/ 子目录内新增文件——world/ 顶层目录 mtime/size 不变
     fs.writeFileSync(path.join(worldDir, 'region', 'r.0.-1.mca'), Buffer.alloc(51 * 1024 * 1024));
-    expect(inst._getWorldSize()).toBe(0.05); // 复现缺陷路径：仅靠顶层 stat 判定感知不到
+    expect(inst._getWorldSize()).toBeCloseTo(0.049805, 6); // 复现缺陷路径：仅靠顶层 stat 判定感知不到
 
     // 存档事件置 dirty → 下次调用强制重算
     inst._worldSizeDirty = true;
-    expect(inst._getWorldSize()).toBe(0.1);
+    expect(inst._getWorldSize()).toBeCloseTo(0.099609, 6);
     // 重算后 dirty 清除、缓存刷新
     expect(inst._worldSizeDirty).toBe(false);
-    expect(inst._worldSizeCache.value).toBe(0.1);
+    expect(inst._worldSizeCache.value).toBeCloseTo(0.099609, 6);
+  });
+
+  // 实测缺陷回归：服务端曾把 GB 值取整到 2 位小数，导致 <5.12MB 的世界一律归零。
+  // 界面于是显示「0 GB」，与「没有存档」无法区分（新建实例实测 2.4MB 即命中）。
+  // 前端 worldSizeParts 专门有 <1GB 换算 MB 的分支，取整过早会让它永远拿到 0。
+  it('小存档不被取整归零（2.4MB → 约 0.002289 GB，而非 0）', () => {
+    // 独立目录：与上一用例共用 worldDir 会读到其 102MB 残留，断言失去意义
+    const smallDir = path.join(tmpBase, 'ws-small');
+    const smallWorld = path.join(smallDir, 'world');
+    fs.mkdirSync(path.join(smallWorld, 'region'), { recursive: true });
+    const bytes = 2_400_000;
+    fs.writeFileSync(path.join(smallWorld, 'region', 'r.0.0.mca'), Buffer.alloc(bytes));
+    const inst = makeBareInstance(smallDir);
+    const gb = inst._getWorldSize();
+    expect(gb).toBeGreaterThan(0);
+    expect(gb).toBeCloseTo(bytes / 1024 ** 3, 6);
+    // 前端 worldSizeParts 走 <1GB 分支时按 GB*1024 取整成 MB，结果须非零，
+    // 否则界面仍显示「0 MB」——即服务端精度必须撑得住这一步换算
+    expect(Math.round(gb * 1024)).toBeGreaterThan(0);
   });
 
   it('世界目录不存在 → 0 且不写缓存', () => {
