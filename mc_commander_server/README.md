@@ -35,9 +35,9 @@ sudo bash /tmp/deploy-mc-commander.sh
 ```
 
 > 先下载脚本再执行，便于执行前审阅。国内网络可把域名换成 gitee 镜像
-> `https://gitee.com/wyyfzb/mc-commander/raw/main/...`（分支 `main`，无 `master`）——注意
-> **镜像只同步源码，不同步 Release 附件**：换镜像只换到脚本，它下载的代码包仍来自 GitHub Release。
-> 代码包拉不动时，自行取到 `mc-commander-server.tar.gz` 解压进安装目录后执行
+> `https://gitee.com/wyyfzb/mc-commander/raw/main/...`（分支 `main`，无 `master`，与 GitHub 等价）。
+> **发布产物也会同步到 gitee 的 Release**，脚本先探测 GitHub、不通则自动改用 gitee，
+> 无需额外参数。两个源都拉不动时，自行取到 `mc-commander-server.tar.gz` 解压进安装目录后执行
 > `sudo SKIP_DOWNLOAD=1 bash deploy-mc-commander.sh`（详见根 README「快速开始」）。
 
 脚本会自动安装 Java 17/21/25 / Node.js 22+、下载代码、生成 API Key 与一次性 SETUP_TOKEN、注册 systemd 服务并启动（代码包下载带 sha256 强校验，且每处下载都有停滞中止与断点续传）。
