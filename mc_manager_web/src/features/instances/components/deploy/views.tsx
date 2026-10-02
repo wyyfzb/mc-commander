@@ -6,7 +6,7 @@
  * - 失败：error 块 + 取消/重试
  * - 已取消：中性结果块 + 关闭/重新部署（用户动作而非故障，故不占 error 档）
  */
-import { Ban, CheckCircle2, Loader2, XCircle } from 'lucide-react'
+import { Ban, CheckCircle2, Info, Loader2, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { DialogFooter } from '@/components/ui/dialog'
 import { SERVER_TYPE_LABELS, recommendedJavaVersion, type ServerType } from '@/lib/mc-deploy'
@@ -78,7 +78,7 @@ export function DeployProgressView({ progress, cancelling, onCancel }: DeployPro
 
 interface DeploySuccessViewProps {
   result: DeployResult
-  /** 自动启动状态（null = 未勾选 EULA，不展示状态块） */
+  /** 自动启动状态（null = 未同意 EULA，未尝试启动——此时必须交代「尚未启动」） */
   autoStart: AutoStartState
   onComplete: () => void
 }
@@ -101,7 +101,16 @@ export function DeploySuccessView({ result, autoStart, onComplete }: DeploySucce
           </p>
         </div>
       </NoticeBanner>
-      {autoStart !== null && (
+      {/* autoStart === null 表示「未同意 EULA，故未尝试启动」。
+          此前这一支**什么都不渲染**：用户只看到「部署成功」，没有任何线索表明
+          服务器还起不来，直到去点「启动」才被拦下——而那一刻被呈现为「启动失败」。
+          结果必须交代清楚，否则「成功」是误导。 */}
+      {autoStart === null ? (
+        <NoticeBanner variant="info" icon={Info}>
+          实例已创建，但服务器尚未启动：Minecraft 要求先同意 EULA 才能运行。
+          到实例页点「启动」会弹出同意提示，同意后即自动开始运行。
+        </NoticeBanner>
+      ) : (
         <NoticeBanner
           /* pending 是中性在途态（既非成功也非失败）——走 neutral 档而非 info 蓝：
              染成 info 会读成「有消息要看」，而它要说的只是「还没结束，请稍候」 */

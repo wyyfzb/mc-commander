@@ -7,12 +7,19 @@
  */
 import { apiGet, apiPost, apiPut, apiDelete, apiRequest } from './client'
 import type { ConnectionConfig } from './client'
-import type { ApiKeyRotateResponse, AuthCapabilitiesResponse } from '@mc-commander/schemas'
+import type {
+  ApiKeyRotateResponse,
+  AuthCapabilitiesResponse,
+  AuthStatusResponse,
+} from '@mc-commander/schemas'
 import type { StoredSession } from '@/stores/auth'
 
-export interface AuthStatusData {
-  hasPassword: boolean
-}
+/**
+ * 从契约派生，不再手写副本：手写的本地类型会与服务端契约静默漂移——
+ * 本次新增 setupTokenRequired 时，契约与实现都改了，只有这份副本没跟上，
+ * 直到类型检查才暴露。派生后契约加字段即自动可见。
+ */
+export type AuthStatusData = AuthStatusResponse
 
 /** 登录/设密成功返回的会话凭据（setup 额外带 hasPassword: true） */
 export type AuthSessionData = StoredSession

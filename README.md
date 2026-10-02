@@ -7,7 +7,7 @@
 <h1 align="center">MC_Commander</h1>
 <p align="center">自托管 Minecraft 服务器管理面板 — 图形化免命令管理你的 MC 服务器</p>
 
-MC_Commander 是一个自托管的 Minecraft 服务器管理工具。**核心定位：图形化界面拼装指令，服主无需手敲任何 MC 命令**——可视化给予物品（含附魔/药水）、传送、封禁、踢出等操作全部由面板自动生成指令。架构为 **Web 前端（React 19）+ Node.js 服务端（Express + WebSocket + better-sqlite3）**，浏览器直接访问即用。**面板本身不要求你在 MC 服务端安装任何东西**（不需要前置插件、也不进游戏）：管理操作经 RCON 下发原版命令，状态回读直接解析服务端文件，因此 Vanilla / Paper / Purpur / Fabric / Forge 各类服务端都能直接用。**起步依赖极少**：一个 Node.js 22+ 进程即可跑起来（Java 由部署脚本按 MC 版本自动安装），**不强制任何容器或数据库中间件**；需要容器化编排时也能自行容器化部署。功能覆盖 MC 服务器全生命周期——建服、运营、扩展、排障、迁移——以友好直观的界面与交互，打造高效、省心、值得信赖的服务器控制面板。国内用户可访问 gitee 镜像仓库（`https://gitee.com/wyyfzb/mc-commander`，分支/标签自动同步，Release 附件不随镜像）。
+MC_Commander 是一个自托管的 Minecraft 服务器管理工具。**核心定位：图形化界面拼装指令，服主无需手敲任何 MC 命令**——可视化给予物品（含附魔/药水）、传送、封禁、踢出等操作全部由面板自动生成指令。架构为 **Web 前端（React 19）+ Node.js 服务端（Express + WebSocket + better-sqlite3）**，浏览器直接访问即用。**面板本身不要求你在 MC 服务端安装任何东西**（不需要前置插件、也不进游戏）：管理操作经 RCON 下发原版命令，状态回读直接解析服务端文件，因此 Vanilla / Paper / Purpur / Fabric / Forge 各类服务端都能直接用。**起步依赖极少**：一个 Node.js 22+ 进程即可跑起来（Java 由部署脚本按 MC 版本自动安装），**不强制任何容器或数据库中间件**；需要容器化编排时也能自行容器化部署。功能覆盖 MC 服务器全生命周期——建服、运营、扩展、排障、迁移——以友好直观的界面与交互，打造高效、省心、值得信赖的服务器控制面板。国内用户可访问 gitee 镜像仓库（`https://gitee.com/wyyfzb/mc-commander`，分支/标签自动同步；**发布产物与校验摘要由 CI 同步到其 Release**，部署脚本会自动选用最快的源，无需任何配置）。
 
 > **能力边界（先说清，避免预期错配）**：本面板通过 RCON 与存档文件工作，因此能力上限受
 > **原版命令空间 + 文件格式 + 官方管理协议（MSMP）**约束——例如「离线玩家背包写入」
@@ -111,7 +111,20 @@ sudo bash /tmp/deploy-mc-commander.sh
 tarball 带 sha256 完整性校验）。
 **SETUP_TOKEN 仅首次设密使用**：公网部署时，浏览器首访设密页需粘贴部署输出中的 SETUP_TOKEN
 （防部署完成到设密窗口内被抢先接管面板，一次性，用后作废）。
-（国内网络可改用 gitee 镜像源（分支为 `main`，无 `master`）：`https://gitee.com/wyyfzb/mc-commander/raw/main/...` 同路径，并配合 `PACKAGE_URL`/`SHA256SUMS_URL` 环境变量）
+**下载卡住或失败怎么办**：脚本对每处下载都做了「停滞中止 + 断点续传」——60 秒内均速低于 1KB/s
+即中止，并从已下载处续传（最多 5 次），不会再无限等待。若最终仍失败，按报错提示二选一：
+① `sudo VERSION=vX.Y.Z bash deploy-mc-commander.sh` 指定具体版本；② 自行取到
+`mc-commander-server.tar.gz` 解压进安装目录（默认 `/opt/mc-commander`）后执行
+`sudo SKIP_DOWNLOAD=1 bash deploy-mc-commander.sh`。
+**国内网络**：gitee 镜像（分支 `main`，无 `master`）除了源码，**也同步发布产物与 `SHA256SUMS.txt`**
+（由 CI 在发版时上传到 Gitee Release）。部署脚本会先探测 GitHub，
+探测超时或下载失败即**自动切到 Gitee 重试**——你不需要传任何参数，
+两条命令照旧。两个源的包与摘要始终同源，sha256 校验强度不变。
+
+镜像取脚本（可选，与 GitHub 等价）：
+`https://gitee.com/wyyfzb/mc-commander/raw/main/mc_commander_server/scripts/deploy-mc-commander.sh`
+
+若两个源都拉不动，仍可走上面的 ②（自行取包 + `SKIP_DOWNLOAD=1`）或下方「方式二：手动部署」。
 
 #### 方式二：手动部署
 

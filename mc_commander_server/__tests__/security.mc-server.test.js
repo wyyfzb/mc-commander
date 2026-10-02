@@ -330,6 +330,131 @@ describe('安全修复：saveProperties 换行转义', () => {
     const content = fs.readFileSync(path.join(tmpDir, 'server.properties'), 'utf-8');
     expect(content).toContain('motd=x\\ny');
   });
+
+  // 字面反斜杠必须转义：MC 按 Java properties 语义解析该文件，未转义的 `\t`
+  // 会被读成制表符 —— 即面板存的值与 MC 实际读到的值不一致（用户输入 C:\temp，
+  // 游戏里 motd 变成 C:<TAB>emp）。这是转义的第二重职责，不止防换行注入。
+  it('值内字面反斜杠被转义为 \\\\（否则 MC 会读成转义序列）', () => {
+    const instance = createInstance();
+    instance._saveProperties({ motd: 'C:\\temp' });
+    const content = fs.readFileSync(path.join(tmpDir, 'server.properties'), 'utf-8');
+    expect(content).toContain('motd=C:\\\\temp');
+    // 内联 style 之外，反斜杠转义必须先行：新生成的 \n 不得被二次转义成 \\n
+    expect(content).not.toContain('motd=C:\\\\temp\\\\n');
+  });
+
+  it('反斜杠先于换行转义（换行产出的是单层 \\n，不是 \\\\n）', () => {
+    const instance = createInstance();
+    instance._saveProperties({ motd: 'a\nb' });
+    const content = fs.readFileSync(path.join(tmpDir, 'server.properties'), 'utf-8');
+    // 若顺序反了会写成 a\\nb（读回是字面 "\n" 三字符），MC 读不到换行
+    expect(content).toContain('motd=a\\nb');
+    expect(content).not.toContain('motd=a\\\\nb');
+  });
+});
+
+describe('properties 读取侧反解义（与写入侧成对的 Java properties 语义）', () => {
+  let tmpDir;
+
+  function createInstance() {
+    return new MCServerInstance({
+      id: 'sec-019',
+      name: 'Sec 019',
+      javaPath: 'java',
+      jarFile: 'server.jar',
+      serverPath: tmpDir,
+    });
+  }
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-sec-019-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  function writeProps(content) {
+    fs.writeFileSync(path.join(tmpDir, 'server.properties'), content);
+  }
+
+  // 实测缺陷：MC 26.3 自己把 level-type 写成 `minecraft\:normal`，面板读取时不反解，
+  // 该转义形式原样流到世界页，显示成「世界类型 minecraft\:normal」。
+  it('反解 MC 写入的转义冒号（实测 minecraft\\:normal → minecraft:normal）', () => {
+    const instance = createInstance();
+    writeProps('level-type=minecraft\\:normal\n');
+    expect(instance._loadProperties()['level-type']).toBe('minecraft:normal');
+  });
+
+  it('反解 \\n / \\r / \\t 为其真实字符', () => {
+    const instance = createInstance();
+    writeProps('a=x\\ny\nb=p\\tq\nc=r\\rs\n');
+    const props = instance._loadProperties();
+    expect(props.a).toBe('x\ny');
+    expect(props.b).toBe('p\tq');
+    expect(props.c).toBe('r\rs');
+  });
+
+  it('反解 \\uXXXX 为对应字符', () => {
+    const instance = createInstance();
+    writeProps('motd=\\u4f60\\u597d\n');
+    expect(instance._loadProperties().motd).toBe('你好');
+  });
+
+  it('反斜杠转义的字面字符（\\\\ \\: \\= \\# \\!）还原为字面值', () => {
+    const instance = createInstance();
+    writeProps('a=C:\\\\temp\nb=minecraft\\:normal\nc=k\\=v\nd=\\#tag\n');
+    const props = instance._loadProperties();
+    expect(props.a).toBe('C:\\temp');
+    expect(props.b).toBe('minecraft:normal');
+    expect(props.c).toBe('k=v');
+    expect(props.d).toBe('#tag');
+  });
+
+  it('行尾孤立反斜杠不吞字符（不越界、不丢内容）', () => {
+    const instance = createInstance();
+    writeProps('motd=abc\\\n');
+    expect(instance._loadProperties().motd).toBe('abc\\');
+  });
+
+  it('未知转义序列退化为字面字符（\\. → .），不丢反斜杠之外的内容', () => {
+    const instance = createInstance();
+    writeProps('motd=a\\.b\n');
+    // Java properties 对未知转义丢弃反斜杠，保留字符本身
+    expect(instance._loadProperties().motd).toBe('a.b');
+  });
+
+  it('往返恒等：写入再读回，值不变（含反斜杠、冒号、换行、制表符）', () => {
+    const instance = createInstance();
+    const original = {
+      'level-type': 'minecraft:normal',
+      motd: 'C:\\temp 与 a\tb 与换行\n结尾',
+      'resource-pack': 'https://example.com/pack.zip',
+    };
+    instance._saveProperties(original);
+    const readBack = instance._loadProperties();
+    expect(readBack['level-type']).toBe('minecraft:normal');
+    expect(readBack.motd).toBe('C:\\temp 与 a\tb 与换行\n结尾');
+    expect(readBack['resource-pack']).toBe('https://example.com/pack.zip');
+  });
+
+  it('回归：数值/布尔/空值与含点的键不受反解影响', () => {
+    const instance = createInstance();
+    writeProps('max-players=20\npvp=true\nresource-pack=\nrcon.port=25575\n');
+    const props = instance._loadProperties();
+    expect(props['max-players']).toBe('20');
+    expect(props.pvp).toBe('true');
+    expect(props['resource-pack']).toBe('');
+    expect(props['rcon.port']).toBe('25575');
+  });
+
+  it('注释行与空行仍被跳过', () => {
+    const instance = createInstance();
+    writeProps('# comment\n\n  \nmotd=hi\n');
+    const props = instance._loadProperties();
+    expect(props.motd).toBe('hi');
+    expect(Object.keys(props)).toHaveLength(1);
+  });
 });
 
 describe('安全修复：level-name 服务层兜底校验', () => {

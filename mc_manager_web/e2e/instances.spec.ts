@@ -43,9 +43,10 @@ test.describe('实例页', () => {
     await setupConnection(page)
     await page.goto('/instances')
     await page.getByRole('button', { name: '部署新实例' }).click()
-    // 步骤①：默认 Paper 已选中；版本下拉自动查询回填
+    // 步骤①：默认原版（Vanilla）已选中；版本下拉自动查询回填
+    // （默认值取原版而非 Paper——预选 Paper 会让没注意的用户装错类型）
     await expect(page.getByText('选择服务端', { exact: true })).toBeVisible()
-    await expect(page.getByRole('radio', { name: /^Paper/ })).toBeChecked()
+    await expect(page.getByRole('radio', { name: /^原版/ })).toBeChecked()
     await expect(page.getByLabel('选择 Minecraft 版本')).toContainText('26.2')
     // Java 推荐提示
     await expect(page.getByText(/推荐 Java 版本/)).toBeVisible()
@@ -55,10 +56,11 @@ test.describe('实例页', () => {
     await expect(page.getByText('实例配置')).toBeVisible()
     await page.getByLabel('实例名称').fill('E2E 新服务器')
     await page.getByRole('button', { name: '下一步' }).click()
-    // 步骤③：确认摘要 + EULA 同意勾选（不阻断部署：未勾选为「仅部署」，勾选后为「部署并启动」）
+    // 步骤③：确认摘要 + EULA 同意勾选（不阻断部署：未同意为「部署（暂不启动）」，同意后为「部署并启动」）
+    // 文案说后果而非流程模式——「仅部署」曾与「部署并启动」并列，读起来像平级选项
     await expect(page.getByText('确认部署')).toBeVisible()
     await expect(page.getByText('E2E 新服务器')).toBeVisible()
-    await expect(page.getByRole('button', { name: '仅部署' })).toBeEnabled()
+    await expect(page.getByRole('button', { name: '部署（暂不启动）' })).toBeEnabled()
     await page.getByRole('checkbox', { name: /Minecraft EULA/ }).check()
     await page.getByRole('button', { name: '部署并启动' }).click()
     // mock 直接成功：结果块 + 自动启动状态（已勾选 EULA → 部署完成自动启动）+ 完成
@@ -135,7 +137,7 @@ test.describe('实例页', () => {
     await page.goto('/instances?tab=deploy')
     // 向导自动打开（无需点击「部署新实例」）
     await expect(page.getByText('选择服务端', { exact: true })).toBeVisible()
-    await expect(page.getByRole('radio', { name: /^Paper/ })).toBeChecked()
+    await expect(page.getByRole('radio', { name: /^原版/ })).toBeChecked()
     await expect(page).toHaveURL(/tab=deploy/)
     // 取消关闭 → URL 参数清除
     await page.getByRole('button', { name: '取消' }).click()

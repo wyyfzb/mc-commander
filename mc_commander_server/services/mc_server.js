@@ -509,7 +509,7 @@ export class MCServerInstance extends EventEmitter {
         if (eqIndex > 0) {
           const key = trimmed.substring(0, eqIndex).trim();
           const value = trimmed.substring(eqIndex + 1).trim();
-          props[key] = value;
+          props[key] = this._unescapePropertyValue(value);
         }
       }
       return props;
@@ -518,11 +518,48 @@ export class MCServerInstance extends EventEmitter {
     }
   }
 
-  /// 属性值转义：将值内真实换行（\n/\r）替换为字面 "\\n"/"\\r"，
-  /// 防止单属性值内嵌换行走私多键注入。
-  /// server.properties 为逐行 key=value 格式，真实换行会被当作行分隔符解析。
+  /// 属性值反解义：把 Java properties 的转义序列还原为字面值。
+  /// 与 _escapePropertyValue 成对——只写不读会让 `minecraft\:normal` 这类转义形式
+  /// 原样流到界面（实测世界类型显示成 `minecraft\:normal`），而它是文件格式的编码细节，
+  /// 不是用户该看到的值。MC 自身按 properties 语义解析该文件，故读取侧必须同语义。
+  _unescapePropertyValue(value) {
+    const s = String(value);
+    let out = '';
+    for (let i = 0; i < s.length; i++) {
+      if (s[i] !== '\\' || i === s.length - 1) {
+        out += s[i];
+        continue;
+      }
+      const next = s[i + 1];
+      if (next === 'n') out += '\n';
+      else if (next === 'r') out += '\r';
+      else if (next === 't') out += '\t';
+      else if (next === 'u' && /^[0-9a-fA-F]{4}$/.test(s.slice(i + 2, i + 6))) {
+        out += String.fromCharCode(parseInt(s.slice(i + 2, i + 6), 16));
+        i += 4;
+      } else {
+        // \\ \: \= \# \! 等：反斜杠是转义前缀，丢弃它保留字面字符
+        out += next;
+      }
+      i++;
+    }
+    return out;
+  }
+
+  /// 属性值转义：与 _unescapePropertyValue 成对，按 Java properties 语义编码。
+  /// ① 反斜杠必须**最先**转义——否则会把后面新生成的 `\n`/`\r` 再转义一层，
+  ///    写成 `\\n`（读回是字面 `\n` 两字符）而非换行；
+  /// ② 值内真实换行（\n/\r）转成字面 "\\n"/"\\r"，防止单属性值内嵌换行走私多键注入
+  ///    （server.properties 为逐行 key=value，真实换行会被当作行分隔符）；
+  /// ③ 用户输入的**字面**反斜杠（如 motd 里的 `C:\temp`）必须转义成 `\\`：
+  ///    MC 按 Java properties 解析该文件，未转义的 `\t` 会被读成制表符，
+  ///    即面板存进去的值与 MC 实际读到的值不一致。
   _escapePropertyValue(value) {
-    return String(value).replace(/\r\n/g, '\\n').replace(/\n/g, '\\n').replace(/\r/g, '\\r');
+    return String(value)
+      .replace(/\\/g, '\\\\')
+      .replace(/\r\n/g, '\\n')
+      .replace(/\n/g, '\\n')
+      .replace(/\r/g, '\\r');
   }
 
   _saveProperties(props) {

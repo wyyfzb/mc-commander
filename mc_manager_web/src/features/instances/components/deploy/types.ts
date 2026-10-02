@@ -14,7 +14,10 @@ export interface DeployForm {
 }
 
 export const INITIAL_FORM: DeployForm = {
-  type: 'paper',
+  // 默认「原版」而非 Paper：服主的第一诉求通常是「我要一个原版服」，
+  // 预选 Paper 会让没注意到的用户装错类型（Paper 行为与原版不同，且要重来）。
+  // 想装 Paper 的用户主动点一下即可，代价远小于「装错了才发现」。
+  type: 'vanilla',
   version: '',
   loader: '',
   name: '',

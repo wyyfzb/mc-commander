@@ -19,6 +19,7 @@ import config from '../config.js';
 import { initDatabase } from '../db/index.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { createAuthRoutes } from '../routes/auth.js';
+import { authStatusResponseSchema } from '@mc-commander/schemas';
 import { errorHandler } from '../middleware/error_handler.js';
 import {
   isSetupTokenRequired,
@@ -139,6 +140,34 @@ describe('consumeSetupToken（内存 + .env 双重作废）', () => {
       envRemoved: false,
     });
     expect(_getSetupToken()).toBe('');
+  });
+});
+
+// 承重用例：首屏探测必须能预知「是否需要令牌」。
+// 修复前 /auth/status 只答 hasPassword，前端只能靠先提交一次拿 40104 才展开输入框，
+// 于是每个新装用户都被迫以「报错」的形式学习下一步。
+describe('GET /auth/status × setupTokenRequired（首屏预知，无需先失败一次）', () => {
+  it('未配置 token → setupTokenRequired=false，且契约可 parse', async () => {
+    const res = await request(app).get('/api/v1/auth/status');
+    expect(res.status).toBe(200);
+    expect(authStatusResponseSchema.safeParse(res.body.data).success).toBe(true);
+    expect(res.body.data.setupTokenRequired).toBe(false);
+  });
+
+  it('已配置 token → setupTokenRequired=true（前端首屏即渲染令牌框）', async () => {
+    _setSetupToken(TOKEN_A);
+    const res = await request(app).get('/api/v1/auth/status');
+    expect(res.status).toBe(200);
+    expect(res.body.data.setupTokenRequired).toBe(true);
+  });
+
+  it('该端点绝不回传令牌本身（只答「要不要」）', async () => {
+    _setSetupToken(TOKEN_A);
+    const res = await request(app).get('/api/v1/auth/status');
+    const raw = JSON.stringify(res.body);
+    expect(raw).not.toContain(TOKEN_A);
+    // 键集合固定，不夹带其它部署配置
+    expect(Object.keys(res.body.data).sort()).toEqual(['hasPassword', 'setupTokenRequired']);
   });
 });
 

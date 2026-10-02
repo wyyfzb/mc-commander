@@ -5,7 +5,7 @@
  * - 步骤③ 确认摘要 + EULA 同意勾选
  * 纯展示组件：表单状态与派生逻辑留在编排层（deploy-dialog.tsx），经 props 回调上行
  */
-import { Info } from 'lucide-react'
+import { Check, Info } from 'lucide-react'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
@@ -69,13 +69,21 @@ export function DeployStepServer({
               <label
                 key={type}
                 className={cn(
-                  'flex cursor-pointer flex-col gap-0.5 rounded-mcs-sm border px-2.5 py-2 transition-colors',
+                  'relative flex cursor-pointer flex-col gap-0.5 rounded-mcs-sm border px-2.5 py-2 transition-colors',
                   selected
                     ? `${TONE_SELECTED_SURFACE_CLASSES} text-mcs-text-default`
                     : 'border-mcs-border-default text-mcs-text-muted hover:bg-mcs-state-hover',
                 )}
               >
                 <RadioGroupItem value={type} className="sr-only" />
+                {/* 选中态不能只靠描边色差：色弱用户与「悬停高亮」都难以区分，
+                    故补一个显式的对勾标记，让「当前选的是哪个」可以被扫读到 */}
+                {selected && (
+                  <Check
+                    className="absolute top-1.5 right-1.5 size-3.5 text-mcs-accent-fg"
+                    aria-hidden
+                  />
+                )}
                 <span className="flex items-center gap-1.5 text-mcs-sm">
                   <Icon
                     className={cn(
@@ -274,10 +282,13 @@ export function DeployStepConfirm({
           />
           <span>我已阅读并同意 Minecraft EULA（Mojang 最终用户许可协议）</span>
         </label>
+        {/* 未同意时**先说后果**再给出路：EULA 是运行服务器的前置条件，不是可选模式。
+            此前文案以「未勾选也可部署」开头，把「你仍可部署」放在「服务器起不来」之前，
+            读起来像一个平级选项，用户容易以为只是少个自动启动。 */}
         <p className="pl-6 text-mcs-xs text-mcs-text-muted">
           {eulaAgreed
             ? '同意后写入 eula.txt（eula=true），部署完成后自动启动服务器。'
-            : '未勾选也可部署：eula.txt 记为 eula=false，部署后不自动启动；需在实例详情同意 EULA 后才能启动服务器。'}
+            : '未同意：服务器无法启动（Mojang 要求）。仍可先部署，稍后在实例页点「启动」按提示同意即可运行。'}
         </p>
       </div>
     </div>

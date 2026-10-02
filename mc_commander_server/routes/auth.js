@@ -193,14 +193,21 @@ export function createAuthRoutes() {
   // GET /api/v1/auth/status —— 公开：登录页首屏探测
   router.get('/auth/status', (req, res) => {
     res.json(
-      validatedSuccess(authStatusResponseSchema, { hasPassword: AdminAccountModel.isConfigured() }),
+      validatedSuccess(authStatusResponseSchema, {
+        hasPassword: AdminAccountModel.isConfigured(),
+        // 首屏就要知道「设密是否需要一次性令牌」，否则前端只能先提交一次拿 40104
+        // 才渲染输入框——每个新装用户都被迫以报错的形式学习流程（见契约字段注释）
+        setupTokenRequired: isSetupTokenRequired(),
+      }),
     );
   });
 
   // GET /api/v1/auth/capabilities —— 认证：部署能力探测
   //
   // 为什么单开一个受保护端点、而不是往公开的 /auth/status 加字段：那是未认证可达的
-  // 信息面，部署配置不该出现在那里（status 只答「是否已设密」）。本端点落在
+  // 信息面，部署配置不该出现在那里。**唯一例外是 setupTokenRequired**——它只答
+  // 「要不要出示令牌」，不泄露令牌本身与路径/端口等配置，却是首屏体验的必要信息
+  // （详见契约里该字段的注释）。本端点落在
   // authMiddleware 的公开白名单之外，未认证一律 401。
   //
   // 只暴露「通道开关 + 凭据是否已配置」：客户端据此决定「API Key 轮换」与
