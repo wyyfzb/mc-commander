@@ -6784,8 +6784,20 @@ const authSessionResponseSchema = object({
 });
 /** setup 成功响应：设密即登录（hasPassword 恒 true + 新会话） */
 const authSetupResponseSchema = authSessionResponseSchema.extend({ hasPassword: literal(true) });
-/** status 探测响应：是否已设密（登录页首屏） */
-const authStatusResponseSchema = object({ hasPassword: boolean() });
+/** status 探测响应：是否已设密（登录页首屏） + 首访设密是否需要一次性令牌 */
+const authStatusResponseSchema = object({
+	hasPassword: boolean(),
+	/**
+	* 首访设密是否需要粘贴 SETUP_TOKEN（部署脚本首次部署会生成，公网部署的所有权证明）。
+	*
+	* 为什么这个布尔可以进公开面：它只答「要不要出示令牌」，**不泄露令牌本身**，
+	* 也不暴露任何路径/端口/后端开关；而「要不要」这件事**本就无法从客户端侧推断**——
+	* 前端只能靠先提交一次拿 40104 才知道，于是每个新装用户都被迫以「报错」的形式学习流程。
+	* 部署脚本的完成横幅已经把该令牌直接印给用户，所以「存在令牌」这一位不构成新增泄露面。
+	* 令牌的真伪校验仍只在 POST /auth/setup 内进行（先于密码强度校验，不泄露后续语义）。
+	*/
+	setupTokenRequired: boolean()
+});
 /** 部署能力：API Key 通道是否开放（关闭时 rotate-key 及 Key 鉴权一律 403） */
 const authCapabilitiesResponseSchema = object({
 	apiKeyEnabled: boolean(),

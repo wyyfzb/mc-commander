@@ -139,6 +139,10 @@ export function LoginPage() {
       const status = await fetchAuthStatus(base)
       if (seq !== probeSeq.current) return
       setPhase(status.hasPassword ? 'login' : 'setup')
+      // 首屏就按服务端下发的判定渲染 SETUP_TOKEN 输入框：
+      // 此前只能等提交后拿 40104 才展开，导致每个新装用户都要先失败一次。
+      // 仍保留 40104 分支兜底（服务端在探测后、提交前被改成需要令牌时同样能救回来）。
+      setNeedsSetupToken(status.setupTokenRequired)
     } catch {
       if (seq !== probeSeq.current) return
       setPhase('unreachable')
@@ -428,8 +432,34 @@ export function LoginPage() {
                 tabIndex={-1}
               />
             </div>
+            {phase === 'setup' && needsSetupToken && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-1">
+                  <Label htmlFor="setup-token">
+                    第 1 步 · SETUP_TOKEN（一次性，部署完成时输出）
+                  </Label>
+                  <InfoHint label="部署保护说明">
+                    该面板已开启部署保护：公网部署场景下需证明您是部署者
+                    （令牌见部署脚本完成输出，用后即作废）。填好它再设置下面的管理员密码。
+                  </InfoHint>
+                </div>
+                <PasswordInput
+                  id="setup-token"
+                  value={setupToken}
+                  onChange={(v) => {
+                    setSetupToken(v)
+                    setErrorText('')
+                  }}
+                  placeholder="粘贴部署输出中的 SETUP_TOKEN"
+                  autoComplete="off"
+                  autoFocus
+                />
+              </div>
+            )}
             <div className="space-y-2">
-              <Label htmlFor="admin-password">管理员密码</Label>
+              <Label htmlFor="admin-password">
+                {phase === 'setup' && needsSetupToken ? '第 2 步 · 管理员密码' : '管理员密码'}
+              </Label>
               <PasswordInput
                 id="admin-password"
                 value={password}
@@ -441,7 +471,8 @@ export function LoginPage() {
                 }}
                 placeholder={phase === 'setup' ? '设置 8–128 位密码' : '输入密码'}
                 autoComplete={phase === 'setup' ? 'new-password' : 'current-password'}
-                autoFocus={!totpRequired}
+                // 设密且需令牌时，焦点应落在第 1 步的令牌框，密码框不再抢焦点
+                autoFocus={!totpRequired && !(phase === 'setup' && needsSetupToken)}
               />
             </div>
             {phase === 'login' && totpRequired && (
@@ -480,26 +511,6 @@ export function LoginPage() {
                   }}
                   placeholder="再次输入密码"
                   autoComplete="new-password"
-                />
-              </div>
-            )}
-            {phase === 'setup' && needsSetupToken && (
-              <div className="space-y-2">
-                <div className="flex items-center gap-1">
-                  <Label htmlFor="setup-token">SETUP_TOKEN（一次性，部署完成时输出）</Label>
-                  <InfoHint label="部署保护说明">
-                    该面板已开启部署保护：公网部署场景下需证明您是部署者（令牌见部署脚本完成输出，用后即作废）。
-                  </InfoHint>
-                </div>
-                <PasswordInput
-                  id="setup-token"
-                  value={setupToken}
-                  onChange={(v) => {
-                    setSetupToken(v)
-                    setErrorText('')
-                  }}
-                  placeholder="粘贴部署输出中的 SETUP_TOKEN"
-                  autoComplete="off"
                 />
               </div>
             )}
