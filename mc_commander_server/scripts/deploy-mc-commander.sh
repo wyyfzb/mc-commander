@@ -43,6 +43,10 @@ else
   RELEASE_BASE="https://github.com/wyyfzb/mc-commander/releases/download/$VERSION"
 fi
 # GitHub Release 资产为权威来源（CI 构建）
+# 先记录「用户是否显式设过」：下面的默认值赋值会让变量恒非空，
+# 之后就无法区分「用户指定了 URL」与「脚本填的默认值」，报错分支会指错方向。
+CUSTOM_PACKAGE_URL=0
+[ -n "${PACKAGE_URL:-}" ] && CUSTOM_PACKAGE_URL=1
 PACKAGE_URL="${PACKAGE_URL:-$RELEASE_BASE/$ASSET_NAME}"
 SHA256SUMS_URL="${SHA256SUMS_URL:-$RELEASE_BASE/SHA256SUMS.txt}"
 
@@ -89,6 +93,35 @@ install_pkg() {
     apk) apk add --no-cache "$@" ;;
     dnf) dnf install -y "$@" ;;
   esac
+}
+
+# 带「停滞检测 + 断点续传」的下载：跨境/弱网链路上，连接建立后可能长时间零字节
+# （实测本机到 GitHub：ESTAB 但 2.5 分钟无增长，且不会自行失败）。
+# --connect-timeout 只约束建连阶段，救不了这种挂起，故必须叠加：
+#   --speed-limit/--speed-time  60s 内均速低于 1KB/s 即中止（比 --max-time 精准，不误杀慢但活着的下载）
+#   -C -                        保留已下载字节续传，避免每次重试都从 0 开始
+#   --retry-all-errors          让「读中断」也计入重试（默认只重试部分错误）
+# 返回非 0 表示耗尽重试仍失败。
+DOWNLOAD_RETRIES="${DOWNLOAD_RETRIES:-5}"
+download_with_resume() {
+  local url="$1" out="$2" label="${3:-文件}" i=0
+  for i in $(seq 1 "$DOWNLOAD_RETRIES"); do
+    if curl -fSL -C - \
+        --connect-timeout 15 --retry 2 --retry-all-errors \
+        --speed-limit 1024 --speed-time 60 \
+        --progress-bar \
+        -o "$out" "$url"; then
+      echo "" # 进度条不换行，补一个
+      return 0
+    fi
+    if [ "$i" -lt "$DOWNLOAD_RETRIES" ]; then
+      local have=0
+      [ -f "$out" ] && have=$(stat -c %s "$out" 2>/dev/null || echo 0)
+      warn "$label 下载中断，1 秒后从 $((have / 1024)) KB 处续传（第 $((i + 1))/$DOWNLOAD_RETRIES 次）"
+      sleep 1
+    fi
+  done
+  return 1
 }
 
 # 2. 安装基础工具（curl、tar、rsync）
@@ -246,7 +279,7 @@ install_node_official() {
   tmp_dir="$(mktemp -d)"
   log "下载 Node.js 官方二进制包 ${NODE_VERSION} (linux-${arch})..."
   # 先取官方校验文件（与包同目录、同通道）
-  if ! curl -fsSL --connect-timeout 15 --retry 2 -o "$tmp_dir/SHASUMS256.txt" "$base/SHASUMS256.txt"; then
+  if ! download_with_resume "$base/SHASUMS256.txt" "$tmp_dir/SHASUMS256.txt" "Node.js 官方校验文件"; then
     err "无法获取 Node.js 官方校验文件（SHASUMS256.txt），已中止安装"
     rm -rf "$tmp_dir"
     exit 1
@@ -258,7 +291,7 @@ install_node_official() {
     rm -rf "$tmp_dir"
     exit 1
   fi
-  if ! curl -fsSL --connect-timeout 15 --retry 2 -o "$tmp_dir/$file" "$base/$file"; then
+  if ! download_with_resume "$base/$file" "$tmp_dir/$file" "Node.js 二进制包"; then
     err "Node.js 二进制包下载失败，已中止安装"
     rm -rf "$tmp_dir"
     exit 1
@@ -345,33 +378,53 @@ fi
 cd "$MC_COMMANDER_DIR"
 
 # 6. 下载后端代码
+# SKIP_DOWNLOAD=1：跳过下载、直接用安装目录里已有的代码（需 package.json + index.js）。
+# 这是报错提示里承诺的出路——「手动放好代码再跑」必须真的能生效，
+# 否则弱网用户下载反复失败后就没有任何自救手段（此前提示与实现矛盾）。
+SKIP_DOWNLOAD="${SKIP_DOWNLOAD:-0}"
+cd "$MC_COMMANDER_DIR"
+
+if [ "$SKIP_DOWNLOAD" = "1" ]; then
+  if [ -f "$MC_COMMANDER_DIR/package.json" ] && [ -f "$MC_COMMANDER_DIR/index.js" ]; then
+    log "SKIP_DOWNLOAD=1 且已检测到代码（package.json + index.js），跳过下载"
+  else
+    err "SKIP_DOWNLOAD=1 但 $MC_COMMANDER_DIR 下没有可用的代码（缺 package.json 或 index.js）"
+    err "请先把后端代码解压到该目录，或在无 SKIP_DOWNLOAD 的情况下重新运行以走正常下载"
+    exit 1
+  fi
+else
 log "下载 MC_Commander 后端代码（VERSION=$VERSION）..."
 TMP_TGZ="$MC_COMMANDER_DIR/.tmp_package.tar.gz"
 TMP_SUMS="$MC_COMMANDER_DIR/.tmp_SHA256SUMS.txt"
 TMP_EXTRACT="$MC_COMMANDER_DIR/.tmp_extract"
 rm -rf "$TMP_TGZ" "$TMP_SUMS" "$TMP_EXTRACT"
 mkdir -p "$TMP_EXTRACT"
-# 下载 tar.gz（-f 失败即退出，-S 显示错误，-L 跟随重定向，--connect-timeout 防止长时间挂起）
-if ! curl -fSL --connect-timeout 15 --retry 2 -o "$TMP_TGZ" "$PACKAGE_URL"; then
+# 下载 tar.gz（-f 失败即退出，-L 跟随重定向；停滞检测与续传见 download_with_resume）
+if ! download_with_resume "$PACKAGE_URL" "$TMP_TGZ" "代码包"; then
   err "代码包下载失败：$PACKAGE_URL"
-  # latest 指向「最新发布版」：若该版本早于固定资产名改造，或产物尚未构建，这里就会 404。
-  # 报错须指向可执行动作，而不是泛泛的网络问题
+  # 判据必须是「用户是否显式设过 PACKAGE_URL」——不能用 `[ -n "$PACKAGE_URL" ]`：
+  # 上面的默认值赋值会让它恒非空，使 VERSION=<tag> 那条真正有用的提示变成死代码
+  # （实测：默认安装失败时，用户被告知「自定义 PACKAGE_URL 下载失败」，而他从没设过）
   if [ "$VERSION" = "latest" ]; then
-    if [ -n "${PACKAGE_URL:-}" ]; then
+    if [ "$CUSTOM_PACKAGE_URL" -eq 1 ]; then
       # 自定义 PACKAGE_URL 时，latest 那套提示会文不对题，先排除这条
       err "自定义 PACKAGE_URL 下载失败；未设置 SHA256SUMS_URL 时也无从校验完整性。"
       err "请确认 PACKAGE_URL 可达，并一并设置指向同一 Release 的 SHA256SUMS_URL"
     else
-      err "VERSION=latest 取到的最新发布版没有可用的 $ASSET_NAME 产物。"
-      err "请用 VERSION=<tag> 显式指定一个含产物的版本后重试，例如："
+      err "从最新发布版下载代码包失败（多次重试且已续传）。"
+      err "可能原因：网络到 GitHub 不稳定，或该版本尚无 $ASSET_NAME 产物。"
+      err "可按顺序尝试："
+      err "  1) 重跑本脚本（已下载的部分会续传，不必从 0 开始）"
       # 变量必须写在 sudo 之后：`VERSION=x sudo cmd` 只给 sudo 自己设了变量，
       # sudo 默认 env_reset 会丢掉它，脚本仍按 latest 跑（静默不生效）
-      err "  sudo VERSION=v0.6.0 bash deploy-mc-commander.sh"
+      err "  2) 显式指定版本：  sudo VERSION=v0.6.0 bash deploy-mc-commander.sh"
+      err "  3) 自行下载 $ASSET_NAME 并解压到 $MC_COMMANDER_DIR，然后："
+      err "     sudo SKIP_DOWNLOAD=1 bash deploy-mc-commander.sh"
     fi
   else
     err "请检查版本号 $VERSION 是否已发布且含产物，或手动指定 PACKAGE_URL 环境变量"
+    err "也可以自行下载并解压到 $MC_COMMANDER_DIR 后，用 SKIP_DOWNLOAD=1 重跑"
   fi
-  err "也可以手动将后端代码解压到 $MC_COMMANDER_DIR 后重新运行此脚本"
   rm -rf "$TMP_TGZ" "$TMP_SUMS" "$TMP_EXTRACT"
   exit 1
 fi
@@ -390,7 +443,7 @@ fi
 if ! command -v sha256sum &>/dev/null; then
   install_pkg coreutils
 fi
-if ! curl -fSL --connect-timeout 15 --retry 2 -o "$TMP_SUMS" "$SHA256SUMS_URL"; then
+if ! download_with_resume "$SHA256SUMS_URL" "$TMP_SUMS" "摘要文件"; then
   err "SHA256SUMS.txt 下载失败：$SHA256SUMS_URL"
   err "自定义 PACKAGE_URL 时请同时设置 SHA256SUMS_URL，否则无从校验完整性"
   rm -rf "$TMP_TGZ" "$TMP_SUMS" "$TMP_EXTRACT"
@@ -442,6 +495,7 @@ fi
 # 清理临时文件
 rm -rf "$TMP_TGZ" "$TMP_SUMS" "$TMP_EXTRACT"
 log "代码下载完成"
+fi  # SKIP_DOWNLOAD
 
 # 7. 安装编译工具（better-sqlite3 等原生模块需要）
 log "安装编译工具..."

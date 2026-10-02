@@ -172,9 +172,40 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
       expect(script).not.toContain('mc-commander-server-${BRANCH}.tar.gz');
     });
 
-    it('latest 取到无产物版本时，报错指向可执行动作', () => {
-      expect(script).toContain('VERSION=latest 取到的最新发布版没有可用的 $ASSET_NAME 产物');
-      expect(script).toContain('VERSION=<tag> 显式指定一个含产物的版本');
+    it('latest 下载失败时，报错指向可执行动作', () => {
+      expect(script).toContain('从最新发布版下载代码包失败');
+      expect(script).toContain('显式指定版本');
+      // 出路必须包含「自行取包 + SKIP_DOWNLOAD」——弱网下这是用户唯一的自助手段
+      expect(script).toContain('SKIP_DOWNLOAD=1 bash deploy-mc-commander.sh');
+    });
+
+    it('报错分支按「用户是否显式设过 PACKAGE_URL」分流，不用变量非空判定', () => {
+      // 回归点：默认值赋值会让 PACKAGE_URL 恒非空，`[ -n "$PACKAGE_URL" ]` 恒真，
+      // 于是默认安装失败时用户被告知「自定义 PACKAGE_URL 下载失败」——而他从没设过，
+      // 真正有用的 VERSION=<tag> 提示被吞成死代码。
+      expect(script).toContain('CUSTOM_PACKAGE_URL=0');
+      expect(script).toMatch(/\[ -n "\$\{PACKAGE_URL:-\}" \] && CUSTOM_PACKAGE_URL=1/);
+      expect(script).toContain('[ "$CUSTOM_PACKAGE_URL" -eq 1 ]');
+      expect(script).not.toMatch(/if \[ -n "\$\{PACKAGE_URL:-\}" \]; then/);
+    });
+
+    it('每处代码包/摘要下载都走带停滞检测与续传的封装', () => {
+      // 回归点：--connect-timeout 只管建连，连上后零字节会无限挂死（实测 197s 不退出）。
+      // 故依赖下载必须经 download_with_resume（内含 --speed-limit/--speed-time 与 -C -）
+      expect(script).toContain('download_with_resume()');
+      expect(script).toMatch(/--speed-limit 1024 --speed-time 60/);
+      expect(script).toMatch(/-C -/);
+      // 主下载点与摘要下载点都必须走封装，不得残留裸 curl 直下
+      expect(script).not.toMatch(/curl -fSL --connect-timeout 15 --retry 2 -o "\$TMP_TGZ"/);
+      expect(script).not.toMatch(/curl -fSL --connect-timeout 15 --retry 2 -o "\$TMP_SUMS"/);
+    });
+
+    it('SKIP_DOWNLOAD 开关存在且校验代码完整性（缺 package.json/index.js 即失败）', () => {
+      expect(script).toContain('SKIP_DOWNLOAD="${SKIP_DOWNLOAD:-0}"');
+      expect(script).toMatch(/\[ "\$SKIP_DOWNLOAD" = "1" \]/);
+      expect(script).toMatch(
+        /-f "\$MC_COMMANDER_DIR\/package\.json" \] && \[ -f "\$MC_COMMANDER_DIR\/index\.js" \]/,
+      );
     });
 
     it('给出的 sudo 用法把变量写在 sudo 之后（写在前面会被 env_reset 丢掉）', () => {
