@@ -426,15 +426,26 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
                   下一步
                 </Button>
               ) : (
+                // 按钮文案说「点下去的后果」，不说流程模式：「仅部署」曾与「部署并启动」
+                // 并列为看似平级的选项，而前者实际通向「服务器起不来」——同一信息两个词，
+                // 用户无法预判该点哪个。改为「部署（暂不启动）」，语义与勾选框解耦。
                 <Button
                   onClick={() => void handleDeploy()}
                   disabled={duplicateDeploy}
                   aria-label={
-                    duplicateDeploy ? '已有部署在进行中' : eulaAgreed ? '部署并启动' : '仅部署'
+                    duplicateDeploy
+                      ? '已有部署在进行中'
+                      : eulaAgreed
+                        ? '部署并启动'
+                        : '部署（暂不启动）'
                   }
                 >
                   <CloudDownload className="size-4" aria-hidden />
-                  {duplicateDeploy ? '已有部署在进行中' : eulaAgreed ? '部署并启动' : '仅部署'}
+                  {duplicateDeploy
+                    ? '已有部署在进行中'
+                    : eulaAgreed
+                      ? '部署并启动'
+                      : '部署（暂不启动）'}
                 </Button>
               )}
             </DialogFooter>

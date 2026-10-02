@@ -100,10 +100,11 @@ describe('DeployDialog', () => {
     const { onDeployed, onOpenChange } = renderDialog()
     const user = userEvent.setup()
 
-    // 步骤①：5 张类型卡（默认 paper 选中）+ 版本列表自动回填
-    // （注意 purpur 说明「Paper 分支」含 Paper，需 ^ 锚定精确匹配）
+    // 步骤①：5 张类型卡（默认 vanilla 选中）+ 版本列表自动回填
+    // （注意 purpur 说明「Paper 分支」含 Paper，需 ^ 锚定精确匹配；
+    //   默认值取原版而非 Paper——预选 Paper 会让没注意的用户装错类型）
     expect(screen.getAllByRole('radio')).toHaveLength(5)
-    expect(screen.getByRole('radio', { name: /^Paper/ })).toBeChecked()
+    expect(screen.getByRole('radio', { name: /^原版 \(Vanilla\)/ })).toBeChecked()
     await waitVersion()
     expect(screen.getByRole('combobox', { name: '选择 Minecraft 版本' })).toHaveTextContent(
       '1.21.4',
@@ -142,11 +143,14 @@ describe('DeployDialog', () => {
     expect(screen.getByText('推荐 Java')).toBeInTheDocument()
     expect(screen.getByText('21')).toBeInTheDocument()
 
-    // EULA 不再阻断部署：未勾选时主操作为「仅部署」（可点），勾选后变「部署并启动」
-    expect(screen.getByRole('button', { name: '仅部署' })).toBeEnabled()
+    // EULA 不再阻断部署：未同意时主操作为「部署（暂不启动）」（可点），同意后变「部署并启动」。
+    // 文案说后果而非流程模式——「仅部署」曾与「部署并启动」并列，读起来像平级选项，
+    // 而前者实际通向「服务器起不来」（见 UAT-09 复盘）。
+    expect(screen.getByRole('button', { name: '部署（暂不启动）' })).toBeEnabled()
+    // 未同意时**先说后果**（服务器无法启动）再给出路，不把「仍可部署」放在前面
     expect(
       screen.getByText(
-        '未勾选也可部署：eula.txt 记为 eula=false，部署后不自动启动；需在实例详情同意 EULA 后才能启动服务器。',
+        '未同意：服务器无法启动（Mojang 要求）。仍可先部署，稍后在实例页点「启动」按提示同意即可运行。',
       ),
     ).toBeInTheDocument()
     await user.click(screen.getByRole('checkbox', { name: /Minecraft EULA/ }))
@@ -363,12 +367,18 @@ describe('DeployDialog', () => {
     await user.click(screen.getByRole('button', { name: '下一步' }))
     await user.type(screen.getByLabelText('实例名称'), '我的生存服')
     await user.click(screen.getByRole('button', { name: '下一步' }))
-    // 不勾选 EULA：主操作退化为「仅部署」，不再被禁用（不同意的用户也能完成部署）
-    await user.click(screen.getByRole('button', { name: '仅部署' }))
+    // 不勾选 EULA：主操作退化为「部署（暂不启动）」，不再被禁用（不同意的用户也能完成部署）
+    await user.click(screen.getByRole('button', { name: '部署（暂不启动）' }))
     expect(await screen.findByText('部署成功')).toBeInTheDocument()
     expect(deployMock.lastBody?.eula).toBe(false)
     expect(startMock.calls).toBe(0)
     expect(eulaMock.calls).toBe(0)
+    // 承重断言：未同意 EULA 时**必须交代「尚未启动」**。
+    // 此前这一支不渲染任何状态块，用户只看到「部署成功」、无从知道服务器还起不来，
+    // 直到点「启动」才被拦下——而那一刻被呈现成「启动失败」（见 UAT-12）。
+    expect(screen.getByText(/服务器尚未启动/)).toBeInTheDocument()
+    // 且不得出现启动类文案（未尝试启动就不该暗示正在启动）
+    expect(screen.queryByText(/正在启动服务器/)).not.toBeInTheDocument()
   })
 })
 
