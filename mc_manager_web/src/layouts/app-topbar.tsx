@@ -28,6 +28,7 @@ import { StatusIndicator, type IndicatorStatus } from '@/components/mcs/status-i
 import { NotificationDrawer } from '@/layouts/notification-drawer'
 import { useUiStore } from '@/stores/ui'
 import { useServerStore } from '@/stores/server'
+import { useInstanceStatus } from '@/api/queries'
 import { useInstanceSwitch } from '@/hooks/use-instance-switch'
 import { useNotificationStore } from '@/stores/notifications'
 import { useConnectionStore } from '@/stores/connection'
@@ -60,6 +61,12 @@ export function AppTopBar() {
   const hasConnectedOnce = useServerStore((s) => s.hasConnectedOnce)
   const status = useServerStore((s) => s.status)
   const instanceId = useServerStore((s) => s.instanceId)
+  // 连接地址的数据源与页面解耦：以前只有仪表盘会把实例详情写进 store，
+  // 于是切到其它页面后顶栏的地址 chip 会消失（用户以为地址"时有时无"）。
+  // 这里让顶栏自己订阅当前实例详情，任意页面都能拿到 address。
+  const { data: instanceDetail } = useInstanceStatus(instanceId)
+  // 自订阅优先；实例详情尚未到达时回退到 store 里的值（保持既有行为，避免闪断）
+  const serverAddress = instanceDetail?.address || status?.address || null
   const { switchInstance } = useInstanceSwitch()
   const unreadCount = useNotificationStore((s) => s.unreadCount)
 
@@ -149,14 +156,14 @@ export function AppTopBar() {
       </IconButton>
 
       {/* 服务器地址 chip（带复制按钮，方便发给玩家直连） */}
-      {status?.address && (
+      {serverAddress && (
         <span className="hidden items-center gap-1 rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-muted py-1 pr-1 pl-2 font-mono text-mcs-2xs text-mcs-text-muted lg:inline-flex">
           <Server className="size-3" aria-hidden />
-          <span title="MC 客户端连接地址（含端口）">{status.address}</span>
+          <span title="MC 客户端连接地址（含端口）">{serverAddress}</span>
           <button
             type="button"
             onClick={() =>
-              void copyText(status.address).then((ok) => {
+              void copyText(serverAddress).then((ok) => {
                 if (ok) toast.success('服务器地址已复制', { duration: 1500 })
                 else toast.error('复制失败，请手动复制')
               })
