@@ -50,9 +50,71 @@ CUSTOM_PACKAGE_URL=0
 PACKAGE_URL="${PACKAGE_URL:-$RELEASE_BASE/$ASSET_NAME}"
 SHA256SUMS_URL="${SHA256SUMS_URL:-$RELEASE_BASE/SHA256SUMS.txt}"
 
+# Gitee 镜像源（国内网络）：同一份发布产物在校验通过后同步到 Gitee Release。
+# 为什么需要它：本机实测 GitHub 资产约 5KB/s 且会静默挂死（连 --connect-timeout
+# 也救不了，因为 TCP 已建连），而 Gitee 同规模下载 2.3MB/s——相差约 460 倍。
+# 为什么不给用户一个开关：本项目的用户多为低代码/无代码服主，让他们先判断
+# 「我的网络到 GitHub 通不通」再选参数，是把跨境的复杂度转嫁给最没能力处理的人。
+# 故这里自动选路——先 GitHub（权威源），探测不通或下载失败则自动切 Gitee。
+GITEE_OWNER="${GITEE_OWNER:-wyyfzb}"
+GITEE_REPO="${GITEE_REPO:-mc-commander}"
+GITEE_API="https://gitee.com/api/v5/repos/$GITEE_OWNER/$GITEE_REPO"
+# 置 0 可强制只用 GitHub（排查问题用；正常用户不需要知道这个变量）
+ALLOW_GITEE_FALLBACK="${ALLOW_GITEE_FALLBACK:-1}"
+# 探测超时（秒）：GitHub 挂死时 HEAD 实测在 10s 内超时，故不必等下载函数的 60s
+PROBE_TIMEOUT="${PROBE_TIMEOUT:-12}"
+# 当前实际使用的源，供报错文案与日志显示
+SOURCE="GitHub"
+
 log()  { echo "[$(date '+%H:%M:%S')] $*"; }
 warn() { echo "[WARN] $*"; }
 err()  { echo "[ERROR] $*" >&2; }
+
+# 把 $VERSION/$ASSET_NAME 解析为某源的下载前缀。
+# Gitee 没有 releases/latest/download（实测 302 到 repository/archive 后 404，
+# 即便该版本确实有 release），故 latest 必须先用匿名 API 解析出真实 tag。
+gitee_release_base() {
+  local tag="$VERSION"
+  if [ "$tag" = "latest" ]; then
+    # /releases/latest 可匿名调用；不能用 /releases 列表——实测其排序不可靠
+    # （某仓库列表首项 v1.62.3，而真实最新为 v3.142.01）
+    tag=$(curl -fsSL --max-time "$PROBE_TIMEOUT" "$GITEE_API/releases/latest" 2>/dev/null |
+            sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+    [ -n "$tag" ] || return 1
+  fi
+  echo "https://gitee.com/$GITEE_OWNER/$GITEE_REPO/releases/download/$tag"
+}
+
+# 探测某源首个字节能否在超时内到达。只读 1 字节：既验证可达，又几乎不耗流量。
+# 用范围请求而非 HEAD：Gitee 的下载会 302 到带签名的 CDN，HEAD 在部分实现上不可靠；
+# 而 -r 0-0 在两端实测都稳定返回。
+source_reachable() {
+  local url="$1"
+  curl -fsSL -r 0-0 --max-time "$PROBE_TIMEOUT" -o /dev/null "$url" 2>/dev/null
+}
+
+# 切换下载源（幂等）。切换后 PACKAGE_URL/SHA256SUMS_URL 一并指向新源，
+# 保证「包 + 摘要」同源——跨源取摘要会让完整性校验失去意义。
+#
+# 必须先确认该源上「产物真的在」再切：Gitee 的 release 可能只有元数据而无附件
+# （手工占位建的、或同步尚未跑过），切过去必然 404，而留在原源重试或许能成功
+# ⇒ 会把一个本来装得上的场景做成失败。故探测实际资产可达性，不可达即拒绝切换。
+use_gitee() {
+  local base
+  base=$(gitee_release_base) || {
+    warn "无法从 Gitee 解析版本信息（API 不可达或该版本尚未同步）"
+    return 1
+  }
+  if ! source_reachable "$base/$ASSET_NAME"; then
+    warn "Gitee 上该版本尚无 $ASSET_NAME 产物，保持原源重试"
+    return 1
+  fi
+  PACKAGE_URL="$base/$ASSET_NAME"
+  SHA256SUMS_URL="$base/SHA256SUMS.txt"
+  SOURCE="Gitee"
+  log "已切换到 Gitee 镜像源：$base"
+  return 0
+}
 
 # 0. root 权限检查（systemd 注册需要）
 if [ "$(id -u)" -ne 0 ]; then
@@ -399,8 +461,42 @@ TMP_SUMS="$MC_COMMANDER_DIR/.tmp_SHA256SUMS.txt"
 TMP_EXTRACT="$MC_COMMANDER_DIR/.tmp_extract"
 rm -rf "$TMP_TGZ" "$TMP_SUMS" "$TMP_EXTRACT"
 mkdir -p "$TMP_EXTRACT"
+
+# 自动选路（仅默认源时）：先探测 GitHub 首个字节能否到达，不通则直接切 Gitee。
+# 探测先于下载的理由：GitHub 的失败形态是「TCP 已建连但零字节」，直接进下载函数
+# 要等满 60s 停滞检测才放弃；而探测实测 10s 内即超时，用户少等一分钟。
+# 用户显式设过 PACKAGE_URL 时不介入（那是明确指定，尊重用户意图）。
+if [ "$CUSTOM_PACKAGE_URL" -eq 0 ] && [ "$ALLOW_GITEE_FALLBACK" = "1" ]; then
+  if source_reachable "$PACKAGE_URL"; then
+    log "GitHub 源可达，使用：$PACKAGE_URL"
+  elif use_gitee; then
+    log "GitHub 源探测超时（${PROBE_TIMEOUT}s 内未收到数据），已自动改用 Gitee 镜像"
+  else
+    warn "GitHub 源探测超时，且 Gitee 也不可用，仍按 GitHub 重试"
+  fi
+fi
+
 # 下载 tar.gz（-f 失败即退出，-L 跟随重定向；停滞检测与续传见 download_with_resume）
+# 用显式标志记录成败，而非事后看文件是否存在：失败会留下非空的半截文件，
+# 「文件存在且非空」会把一次失败读成成功，报错文案随即被跳过（现象是用户只看到
+# 后续的魔术字节/摘要错误，而真正原因「下载失败」从未打印）。
+PKG_DOWNLOAD_OK=1
 if ! download_with_resume "$PACKAGE_URL" "$TMP_TGZ" "代码包"; then
+  # 兜底：探测说 GitHub 通、实际下载仍失败（探测只读 1 字节，之后可能才劣化）。
+  # 切换源前必须删除半截文件——续传靠 -C -，而两个源的字节拼接会产出损坏的包
+  # （且魔术字节检查未必能发现，因为 gzip 头来自第一个源）。
+  if [ "$CUSTOM_PACKAGE_URL" -eq 0 ] && [ "$ALLOW_GITEE_FALLBACK" = "1" ] && [ "$SOURCE" = "GitHub" ]; then
+    warn "GitHub 源下载失败，改用 Gitee 镜像源重试"
+    rm -f "$TMP_TGZ"
+    if use_gitee && download_with_resume "$PACKAGE_URL" "$TMP_TGZ" "代码包（Gitee）"; then
+      log "已通过 Gitee 镜像获取代码包"
+      PKG_DOWNLOAD_OK=0
+    fi
+  fi
+else
+  PKG_DOWNLOAD_OK=0
+fi
+if [ "$PKG_DOWNLOAD_OK" -ne 0 ]; then
   err "代码包下载失败：$PACKAGE_URL"
   # 判据必须是「用户是否显式设过 PACKAGE_URL」——不能用 `[ -n "$PACKAGE_URL" ]`：
   # 上面的默认值赋值会让它恒非空，使 VERSION=<tag> 那条真正有用的提示变成死代码
@@ -411,8 +507,8 @@ if ! download_with_resume "$PACKAGE_URL" "$TMP_TGZ" "代码包"; then
       err "自定义 PACKAGE_URL 下载失败；未设置 SHA256SUMS_URL 时也无从校验完整性。"
       err "请确认 PACKAGE_URL 可达，并一并设置指向同一 Release 的 SHA256SUMS_URL"
     else
-      err "从最新发布版下载代码包失败（多次重试且已续传）。"
-      err "可能原因：网络到 GitHub 不稳定，或该版本尚无 $ASSET_NAME 产物。"
+      err "从发布版下载代码包失败（已重试续传，并已在 GitHub 与 Gitee 两个源上尝试）。"
+      err "可能原因：本机到两个源的网络都不通，或该版本尚无 $ASSET_NAME 产物。"
       err "可按顺序尝试："
       err "  1) 重跑本脚本（已下载的部分会续传，不必从 0 开始）"
       # 变量必须写在 sudo 之后：`VERSION=x sudo cmd` 只给 sudo 自己设了变量，
@@ -444,10 +540,22 @@ if ! command -v sha256sum &>/dev/null; then
   install_pkg coreutils
 fi
 if ! download_with_resume "$SHA256SUMS_URL" "$TMP_SUMS" "摘要文件"; then
-  err "SHA256SUMS.txt 下载失败：$SHA256SUMS_URL"
-  err "自定义 PACKAGE_URL 时请同时设置 SHA256SUMS_URL，否则无从校验完整性"
-  rm -rf "$TMP_TGZ" "$TMP_SUMS" "$TMP_EXTRACT"
-  exit 1
+  # 摘要单独失败时也试另一个源：摘要只是校验输入，下面的 sha256 比对是 fail-closed 的，
+  # 故跨源取摘要不会降低安全性（对不上就中止），但能救「包下完了、摘要恰好没下来」。
+  SUMS_OK=1
+  if [ "$CUSTOM_PACKAGE_URL" -eq 0 ] && [ "$ALLOW_GITEE_FALLBACK" = "1" ] && [ "$SOURCE" = "GitHub" ]; then
+    warn "GitHub 摘要文件下载失败，改用 Gitee 镜像源重试"
+    rm -f "$TMP_SUMS"
+    if use_gitee && download_with_resume "$SHA256SUMS_URL" "$TMP_SUMS" "摘要文件（Gitee）"; then
+      SUMS_OK=0
+    fi
+  fi
+  if [ "$SUMS_OK" -ne 0 ]; then
+    err "SHA256SUMS.txt 下载失败：$SHA256SUMS_URL"
+    err "自定义 PACKAGE_URL 时请同时设置 SHA256SUMS_URL，否则无从校验完整性"
+    rm -rf "$TMP_TGZ" "$TMP_SUMS" "$TMP_EXTRACT"
+    exit 1
+  fi
 fi
 # 摘要文件由 `sha256sum <file>` 生成，行格式为「<hash>  <文件名>」；
 # 也可能带二进制模式前缀 `*`。按下载地址的 basename 找条目，自定义 URL 同样适用

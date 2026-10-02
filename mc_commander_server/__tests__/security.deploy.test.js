@@ -173,7 +173,10 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
     });
 
     it('latest 下载失败时，报错指向可执行动作', () => {
-      expect(script).toContain('从最新发布版下载代码包失败');
+      // 文案已改为「从发布版下载代码包失败」并在同一句交代「两个源都试过」——
+      // 自动回退上线后仍只说「网络到 GitHub 不稳定」会误导用户去排查一个已不成立的假设
+      expect(script).toContain('从发布版下载代码包失败');
+      expect(script).toContain('两个源');
       expect(script).toContain('显式指定版本');
       // 出路必须包含「自行取包 + SKIP_DOWNLOAD」——弱网下这是用户唯一的自助手段
       expect(script).toContain('SKIP_DOWNLOAD=1 bash deploy-mc-commander.sh');
@@ -220,9 +223,69 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
       expect(hintLines).toMatch(/sudo VERSION=\S+ bash/);
     });
 
-    it('不含 gitee 镜像下载路径', () => {
-      // mirror job 只推 tags 与 branches、不推 Release 资产，gitee 取预打包 tarball 的前提不成立
-      expect(script.toLowerCase()).not.toContain('gitee');
+    // 此前的断言是「脚本不得出现 gitee」——理由是「mirror 只推 tags/branches、不推 Release 资产」。
+    // 该前提已被改变：release.yml 的 sync-gitee job 会把产物与 SHA256SUMS 一并同步到 Gitee
+    // （仓库镜像不同步 release，所以必须由 workflow 显式上传附件）。
+    // 故这里不再禁止 gitee，而是锁定现在真正要守的性质。
+    it('Gitee 只作 GitHub 的兜底：默认仍以 GitHub 为权威源', () => {
+      // GitHub 是权威源（CI 构建产物 + Immutable Releases 签名），Gitee 是镜像
+      expect(script).toMatch(/RELEASE_BASE="https:\/\/github\.com\/wyyfzb\/mc-commander/);
+      expect(script).toContain('ALLOW_GITEE_FALLBACK="${ALLOW_GITEE_FALLBACK:-1}"');
+    });
+
+    it('Gitee 源不允许出现 releases/latest/download（该路径在 Gitee 实测 404）', () => {
+      // Gitee 会把 latest 当 archive ref：302 到 repository/archive/latest/download/... 再 404，
+      // 即使该版本确实有 release。故 latest 必须先用匿名 API 解析出真实 tag。
+      const giteeBase = script.match(/echo "https:\/\/gitee\.com\/[^"]*"/g) || [];
+      for (const line of giteeBase) {
+        expect(line).not.toContain('releases/latest/download');
+      }
+      expect(script).toContain('gitee_release_base');
+      expect(script).toContain('$GITEE_API/releases/latest');
+    });
+
+    it('切换前先确认目标源真有产物（否则会把能装上的场景做成失败）', () => {
+      // Gitee 的 release 可能只有元数据而无附件（手工占位建的、或同步尚未跑过）。
+      // 切过去必然 404，而留在原源重试或许能成功 ⇒ use_gitee 必须先探测资产可达性。
+      const fn = script.match(/use_gitee\(\) \{[\s\S]*?\n\}/);
+      expect(fn, 'use_gitee 未找到').toBeTruthy();
+      expect(fn[0]).toContain('source_reachable "$base/$ASSET_NAME"');
+      expect(fn[0]).toMatch(/return 1/);
+    });
+
+    it('切换源时包与摘要必须同源（跨源校验同一版本的前提）', () => {
+      // 摘要只是校验输入，但「包来自 A、摘要来自 B」会让校验失去意义
+      // （B 的摘要在原理上无法证明 A 的字节正确）。use_gitee 必须同时改两个 URL。
+      const fn = script.match(/use_gitee\(\) \{[\s\S]*?\n\}/);
+      expect(fn, 'use_gitee 未找到').toBeTruthy();
+      expect(fn[0]).toContain('PACKAGE_URL="$base/$ASSET_NAME"');
+      expect(fn[0]).toContain('SHA256SUMS_URL="$base/SHA256SUMS.txt"');
+    });
+
+    it('跨源重试前删除半截文件（否则两个源的字节会被 -C - 拼接成损坏包）', () => {
+      // download_with_resume 的续传依赖 -C -，而续传只对「同一文件的未完成下载」成立。
+      // 换源后若保留旧源的部分字节，会拼出损坏的 tar.gz，且魔术字节来自第一个源，
+      // 后端检查未必拦得住 ⇒ 切换前必须 rm。
+      const block = script.match(/GitHub 源下载失败，改用 Gitee[\s\S]{0,200}/);
+      expect(block, '兜底分支未找到').toBeTruthy();
+      expect(block[0]).toContain('rm -f "$TMP_TGZ"');
+    });
+
+    it('用户显式指定 PACKAGE_URL 时不介入自动选路（尊重明确意图）', () => {
+      // 自动回退只在「脚本自己填的默认源」上生效；用户给了 URL 就按他的来，
+      // 否则会把「我指了地址却下了别的源」变成新的困惑来源。
+      const guards =
+        script.match(
+          /\[ "\$CUSTOM_PACKAGE_URL" -eq 0 \] && \[ "\$ALLOW_GITEE_FALLBACK" = "1" \]/g,
+        ) || [];
+      expect(guards.length).toBeGreaterThanOrEqual(2); // 至少覆盖探测分支与下载失败分支
+    });
+
+    it('探测不可达时快速失败而非等到下载停滞检测（60s）', () => {
+      expect(script).toContain('source_reachable');
+      expect(script).toMatch(/PROBE_TIMEOUT="\$\{PROBE_TIMEOUT:-[0-9]+\}"/);
+      // 探测用范围请求只读 1 字节，几乎不耗流量
+      expect(script).toMatch(/curl -fsSL -r 0-0 --max-time "\$PROBE_TIMEOUT"/);
     });
   });
 
