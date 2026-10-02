@@ -86,3 +86,6 @@ jobs:
     uses: ./.github/workflows/release.yml
     with:
       tag: ${{ needs.release-please.outputs.tag_name }}
+    # 必须透传：release.yml 是可复用工作流（workflow_call），不 inherit 时其内部
+    # 拿不到 GITEE_TOKEN——README 所记的「空值静默跳过」不会报错，只是同步永不发生
+    secrets: inherit

@@ -201,3 +201,134 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release edit "$TAG_REF" --draft=false --latest
+
+  # Gitee 镜像产物同步（国内用户下载出路）
+  # 为什么是兄弟 job 而不是 on: release 触发的独立工作流：本 job 的上游 build 用
+  # ${{ github.token }} 执行 gh release edit，而「用 GITHUB_TOKEN 执行的动作所触发的事件
+  # 不会创建新的 workflow run」（GitHub 防递归机制）⇒ on: release 永远不会被触发。
+  # 必须同 run 内接续，且在 build 之后（资产刚发布、同源可取）。
+  #
+  # 失败隔离：build 不 needs 本 job，故 build 的结论在本 job 开始前就已定稿——
+  # Gitee 侧任何失败在结构上都不可能阻断 GitHub 发布；continue-on-error 让它不把 run 标红
+  # （避免误判成「发布失败」而重跑，重跑在 Immutable Releases 下是危险的）。
+  sync-gitee:
+    name: 同步产物到 Gitee Release
+    needs: build
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    # 未配置 GITEE_TOKEN（如 fork、或 owner 尚未设置）时静默跳过，不噪声失败
+    if: ${{ github.repository == 'wyyfzb/mc-commander' }}
+    permissions:
+      contents: read # 只读 GitHub：产物从本仓库 Release 取，最小权限
+    env:
+      TAG_REF: ${{ inputs.tag || github.ref_name }}
+      GITEE_OWNER: wyyfzb
+      GITEE_REPO: mc-commander
+      # 资产名与 release.yml 打包步骤保持一致
+      ASSETS: mc-commander-server.tar.gz SHA256SUMS.txt
+    steps:
+      - name: 检查 GITEE_TOKEN 是否配置
+        id: cfg
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+        run: |
+          if [ -z "$GITEE_TOKEN" ]; then
+            echo "::notice::未配置 GITEE_TOKEN，跳过 Gitee 同步（GitHub 发布不受影响）"
+            echo "skip=1" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Gitee 的仓库镜像有滞后（最小同步间隔数分钟），tag 未到就建 release 会失败。
+      # 轮询而非固定 sleep：多数情况下几秒内就绪，避免白等。
+      - name: 等待 Gitee 侧 tag 同步
+        if: steps.cfg.outputs.skip != '1'
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sS --max-time 20 -H "Authorization: token $GITEE_TOKEN" \
+                 "https://gitee.com/api/v5/repos/$GITEE_OWNER/$GITEE_REPO/tags?per_page=100" \
+               | grep -qF "\"name\":\"$TAG_REF\""; then
+              echo "Gitee 侧 tag $TAG_REF 已就绪"
+              exit 0
+            fi
+            echo "等待 tag 同步… ($i/30)"
+            sleep 60
+          done
+          echo "::warning::等待 30 分钟仍未在 Gitee 看到 tag $TAG_REF，本次不同步"
+          exit 1
+
+      - name: 同步产物与摘要到 Gitee Release
+        if: steps.cfg.outputs.skip != '1'
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          API="https://gitee.com/api/v5/repos/$GITEE_OWNER/$GITEE_REPO"
+          AUTH="Authorization: token $GITEE_TOKEN"
+
+          # 取 release：存在则复用其 id，不存在才创建。
+          # 必须复用而非「存在就跳过」——已存在的 release 可能一个附件都没有
+          # （例如手工占位建的），跳过会让这个版本永远缺产物。
+          RID=$(curl -sS --max-time 30 -H "$AUTH" "$API/releases/tags/$TAG_REF" \
+                | jq -r 'if type=="object" and .id then .id else empty end')
+
+          if [ -z "$RID" ]; then
+            echo "→ Gitee 侧无 $TAG_REF 的 release，创建"
+            RID=$(curl -sS --max-time 30 -X POST -H "$AUTH" \
+                    --data-urlencode "tag_name=$TAG_REF" \
+                    --data-urlencode "name=$TAG_REF" \
+                    --data-urlencode "body=详见仓库根 CHANGELOG.md 对应版本段落。" \
+                    --data-urlencode "target_commitish=main" \
+                    "$API/releases" | jq -r '.id // empty')
+          else
+            # 已存在则修正占位名（手工建的可能是 "test" 之类），并保证 body 非空
+            echo "→ 复用已有 release id=$RID，并规整 title"
+            curl -sS --max-time 30 -X PATCH -H "$AUTH" \
+              --data-urlencode "name=$TAG_REF" \
+              --data-urlencode "body=详见仓库根 CHANGELOG.md 对应版本段落。" \
+              "$API/releases/$RID" >/dev/null
+          fi
+          [ -n "$RID" ] || { echo "::warning::未能取得 Gitee release id"; exit 1; }
+          echo "Gitee release id=$RID"
+
+          failed=0
+          for f in $ASSETS; do
+            # 从 GitHub Release 取资产（同 run 刚发布，同源、无跨境风险）
+            curl -fsSL --retry 3 --max-time 300 -o "/tmp/$f" \
+              "https://github.com/${{ github.repository }}/releases/download/$TAG_REF/$f" \
+              || { echo "::warning::GitHub 侧取 $f 失败"; failed=1; continue; }
+
+            # 幂等：同名附件先删再传（Gitee 附件可增删，重跑安全）
+            OLD=$(curl -sS --max-time 30 -H "$AUTH" "$API/releases/$RID/attach_files?per_page=100" \
+                  | jq -r --arg n "$f" '.[] | select(.name==$n) | .id' | head -1)
+            [ -n "$OLD" ] && curl -sS --max-time 30 -X DELETE -H "$AUTH" \
+                              "$API/releases/$RID/attach_files/$OLD" >/dev/null
+
+            curl -fsS --max-time 300 -X POST -H "$AUTH" \
+              -F "file=@/tmp/$f" "$API/releases/$RID/attach_files" >/dev/null \
+              || { echo "::warning::上传 $f 到 Gitee 失败"; failed=1; continue; }
+            echo "✓ 已上传 $f"
+          done
+
+          # 回读校验：确认附件真的在（以 Gitee 的登记为准，不信上传时的响应）
+          curl -sS --max-time 30 -H "$AUTH" "$API/releases/$RID/attach_files?per_page=100" \
+            | jq -r '.[] | "  \(.name)  \(.size) bytes"'
+          got=$(curl -sS --max-time 30 -H "$AUTH" "$API/releases/$RID/attach_files?per_page=100" \
+                | jq -r '.[].name' | sort | tr '\n' ' ')
+          echo "Gitee 附件: $got"
+
+          for f in $ASSETS; do
+            echo "$got" | grep -qF "$f" || { echo "::warning::Gitee 侧缺少 $f"; failed=1; }
+          done
+          exit $failed
+
+      # 同步完成即回读校验下载可达性：用真实下载路径而非 API，
+      # 因为 API 有附件 ≠ 用户能下载（Gitee 的下载会 302 到带签名的 CDN）
+      - name: 校验 Gitee 下载路径可达
+        if: steps.cfg.outputs.skip != '1'
+        run: |
+          curl -fsSL --max-time 60 -o /dev/null \
+            "https://gitee.com/$GITEE_OWNER/$GITEE_REPO/releases/download/$TAG_REF/SHA256SUMS.txt" \
+            && echo "✓ Gitee 下载路径可达" \
+            || echo "::warning::Gitee 下载路径不可达（附件可能尚未就绪）"
