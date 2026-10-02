@@ -111,7 +111,15 @@ sudo bash /tmp/deploy-mc-commander.sh
 tarball 带 sha256 完整性校验）。
 **SETUP_TOKEN 仅首次设密使用**：公网部署时，浏览器首访设密页需粘贴部署输出中的 SETUP_TOKEN
 （防部署完成到设密窗口内被抢先接管面板，一次性，用后作废）。
-（国内网络可改用 gitee 镜像源（分支为 `main`，无 `master`）：`https://gitee.com/wyyfzb/mc-commander/raw/main/...` 同路径，并配合 `PACKAGE_URL`/`SHA256SUMS_URL` 环境变量）
+**下载卡住或失败怎么办**：脚本对每处下载都做了「停滞中止 + 断点续传」——60 秒内均速低于 1KB/s
+即中止，并从已下载处续传（最多 5 次），不会再无限等待。若最终仍失败，按报错提示二选一：
+① `sudo VERSION=vX.Y.Z bash deploy-mc-commander.sh` 指定具体版本；② 自行取到
+`mc-commander-server.tar.gz` 解压进安装目录（默认 `/opt/mc-commander`）后执行
+`sudo SKIP_DOWNLOAD=1 bash deploy-mc-commander.sh`。
+**国内网络**：gitee 镜像（分支 `main`，无 `master`）**只同步源码，不同步 Release 附件**——
+脚本本身可从 `https://gitee.com/wyyfzb/mc-commander/raw/main/mc_commander_server/scripts/deploy-mc-commander.sh`
+取到，但它下载的**代码包仍来自 GitHub Release**。国内用户若拉不动代码包，
+请走上面的 ②（自行取包 + `SKIP_DOWNLOAD=1`）或下方「方式二：手动部署」。
 
 #### 方式二：手动部署
 
