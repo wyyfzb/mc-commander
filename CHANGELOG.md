@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/wyyfzb/mc-commander/compare/v0.5.4...v0.6.0) (2026-10-02)
+
+
+### Features
+
+* 修复实机走查发现的部署与检测缺陷，并新增 Gitee 产物同步 ([61cac13](https://github.com/wyyfzb/mc-commander/commit/61cac13e7306b476e399368b5df7e76686dbe905))
+
 ## [0.5.4](https://github.com/wyyfzb/mc-commander/compare/v0.5.3...v0.5.4) (2026-10-01)
 
 
