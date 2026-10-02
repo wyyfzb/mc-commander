@@ -15,12 +15,24 @@ on:
         description: '补跑的 tag 名（如 v0.6.0），必须已存在且与三包 version 一致。仅用于该 tag 的产物尚未成功构建时——已发布成功的 tag 在 Immutable Releases 下资产不可覆盖，重跑会失败'
         required: true
         type: string
+      sync_only:
+        description: '只同步产物到 Gitee、不重新构建（用于给已发布版本补产物：重跑构建会因 Immutable Releases 失败）'
+        required: false
+        default: false
+        type: boolean
   workflow_call:
     inputs:
       tag:
         description: 'release-please 本次创建的 tag 名'
         required: true
         type: string
+      # 显式声明而非依赖「未声明即空」：正常发版必须构建，声明成 default false 语义明确，
+      # 也避免 job 级 if 引用未声明输入时的行为歧义
+      sync_only:
+        description: '只同步产物到 Gitee、不构建（正常发版恒为 false）'
+        required: false
+        default: false
+        type: boolean
 
 # 双入口 + 重试可能并发打到同一个 release 上；发布动作不可中断，故排队而不取消
 concurrency:
@@ -34,6 +46,10 @@ jobs:
   build:
     name: 构建发布产物
     runs-on: ubuntu-latest
+    # sync_only 路径下刻意跳过：给「已发布」的版本补产物时重跑构建会走到
+    # gh release upload --clobber，而 Immutable Releases 下已发布资产不可增删改 ⇒ 必然失败。
+    # 其余入口（push tag / workflow_call）该输入为空，条件为真，构建照常。
+    if: ${{ inputs.sync_only != true }}
     # TAG_REF：push tag 事件 = tag 名；dispatch / workflow_call 补跑 = 入参 tag
     env:
       TAG_REF: ${{ inputs.tag || github.ref_name }}
@@ -216,8 +232,12 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     continue-on-error: true
-    # 未配置 GITEE_TOKEN（如 fork、或 owner 尚未设置）时静默跳过，不噪声失败
-    if: ${{ github.repository == 'wyyfzb/mc-commander' }}
+    # 三件事：
+    # ① always() 必需——默认「上游被跳过则下游也跳过」，而 sync_only 路径下 build 正是被跳过的，
+    #    不加就永远补不上产物；
+    # ② 但只接受 success 或 skipped：build 真失败时不同步，否则会把一个残缺版本的产物推出去；
+    # ③ 限本仓库，fork 与未配置场景不噪声失败（job 内还有 token 空值静默跳过）。
+    if: ${{ always() && github.repository == 'wyyfzb/mc-commander' && (needs.build.result == 'success' || needs.build.result == 'skipped') }}
     permissions:
       contents: read # 只读 GitHub：产物从本仓库 Release 取，最小权限
     env:
