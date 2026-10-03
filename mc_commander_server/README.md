@@ -463,7 +463,7 @@ mc_commander_server/
 ├── routes/               # API 路由（统一挂 /api/v1）
 │   ├── index.js          # v1 路由装配
 │   ├── status.js         # 实例状态/属性/世界/日志
-│   ├── server-jar.js     # MC 服务端部署（minecraft-core + got + Paper v3）
+│   ├── server-jar.js     # MC 服务端部署（minecraft-core + Paper v3）
 │   ├── players.js        # 玩家管理 + 封禁（临时封禁自实现 + 封禁记录合并）
 │   ├── plugins.js        # 插件管理 + Modrinth 市场（搜索/版本/一键安装/更新检测）
 │   ├── backups.js        # 备份管理

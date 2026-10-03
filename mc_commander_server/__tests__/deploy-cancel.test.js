@@ -83,14 +83,12 @@ vi.mock('child_process', async (importOriginal) => {
 });
 
 // 三个具名导出都要给：SUT（server-jar.js）用 ESM 具名导入，缺一个就是模块解析期报错
-// 假流工厂保持旧 got.stream 的注入形状（第二参为 node:stream 模块），
-// httpStream 的第三个参数（选项）由工厂忽略——注入点只关心 url
 vi.mock('../utils/http-client.js', async () => {
   const streamMod = await import('node:stream');
   return {
     httpJson: vi.fn(async () => ({})),
     httpPost: vi.fn(),
-    httpStream: vi.fn((url, opts) => httpState.streamImpl(url, streamMod, opts)),
+    httpStream: vi.fn((url, opts) => httpState.streamImpl(url, opts, streamMod)),
   };
 });
 
@@ -101,9 +99,13 @@ const { errorHandler } = await import('../middleware/error_handler.js');
 const JAR_BYTES = Buffer.from('fake-server-jar-payload');
 const JAR_SHA256 = crypto.createHash('sha256').update(JAR_BYTES).digest('hex');
 
-/** 下载流：正常完成（写完即 end）；第三参（httpStream 选项）忽略 */
+/**
+ * 下载流：正常完成（写完即 end）。
+ * 第三参 streamMod 由 mock 工厂注入（工厂在模块级只 import 一次），
+ * 便于工厂与假流共用同一份 node:stream。
+ */
 function completingStream(jarBytes) {
-  return (url, streamMod) => {
+  return (url, opts, streamMod) => {
     const pt = new streamMod.PassThrough();
     queueMicrotask(() => {
       pt.emit('downloadProgress', {
@@ -123,7 +125,7 @@ function completingStream(jarBytes) {
  * 返回真实 PassThrough：SUT 以 pipe() 接文件写流收尾，取消路径对该流调 .destroy()
  */
 function hangingStream() {
-  return (url, streamMod) => new streamMod.PassThrough();
+  return (url, opts, streamMod) => new streamMod.PassThrough();
 }
 
 function buildApp() {

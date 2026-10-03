@@ -25,7 +25,8 @@ export class HttpError extends Error {
     this.name = 'HttpError';
     this.method = method;
     this.url = url;
-    // 与 got 的 HTTPError 同形：上游错误分支读 err.response.statusCode 判定 404
+    // 上游错误分支按 err.response.statusCode 判 404（市场据此区分「条目不存在」与网络故障），
+    // 故该嵌套形状是契约的一部分，不是冗余包装
     this.response = { statusCode, body };
     this.statusCode = statusCode;
   }

@@ -94,7 +94,7 @@ function versionsFixture(versionNumber) {
 
 /** http-client mock 按 URL 分发：search → QUERY_TO_HITS；version → SLUG_TO_VERSIONS */
 function routeUpstream({ queryToHits = {}, slugToVersions = {} } = {}) {
-  // httpJson 直接 resolve 解析后的 JSON，没有 got 的 `{ json: () => ... }` 链
+  // httpJson 自身即 Promise，直接 resolve 解析后的 JSON
   vi.mocked(httpJson).mockImplementation(async (url, opts = {}) => {
     if (url.endsWith('/search')) {
       const q = opts.searchParams?.query ?? '';
