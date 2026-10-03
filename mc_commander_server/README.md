@@ -27,15 +27,17 @@
 
 ### 一键部署（推荐）
 
-在目标 Linux 服务器上执行：
+在目标 Linux 服务器上执行（**复制整段**，两源任一成功即可；都失败则不会执行任何脚本）：
 
 ```bash
-curl -fsSL -o /tmp/deploy-mc-commander.sh https://raw.githubusercontent.com/wyyfzb/mc-commander/main/mc_commander_server/scripts/deploy-mc-commander.sh
+rm -f /tmp/deploy-mc-commander.sh && \
+( curl -fsSL --connect-timeout 10 --max-time 60 -o /tmp/deploy-mc-commander.sh https://raw.githubusercontent.com/wyyfzb/mc-commander/main/mc_commander_server/scripts/deploy-mc-commander.sh || \
+  curl -fsSL --connect-timeout 10 --max-time 60 -o /tmp/deploy-mc-commander.sh https://gitee.com/wyyfzb/mc-commander/raw/main/mc_commander_server/scripts/deploy-mc-commander.sh ) && \
 sudo bash /tmp/deploy-mc-commander.sh
 ```
 
-> 先下载脚本再执行，便于执行前审阅。国内网络可把域名换成 gitee 镜像
-> `https://gitee.com/wyyfzb/mc-commander/raw/main/...`（分支 `main`，无 `master`，与 GitHub 等价）。
+> 先下载脚本再执行，便于执行前审阅；`--max-time 60` 让 GitHub 源在长期无响应时快速失败并
+> 自动换 gitee 镜像（分支 `main`，无 `master`，与 GitHub 等价），不会无限期卡住。
 > **发布产物也会同步到 gitee 的 Release**，脚本先探测 GitHub、不通则自动改用 gitee，
 > 无需额外参数。两个源都拉不动时，自行取到 `mc-commander-server.tar.gz` 解压进安装目录后执行
 > `sudo SKIP_DOWNLOAD=1 bash deploy-mc-commander.sh`（详见根 README「快速开始」）。
@@ -72,7 +74,9 @@ npm start
 部署脚本幂等，发布新版本后重新执行同一脚本即完成升级：
 
 ```bash
-curl -fsSL -o /tmp/deploy-mc-commander.sh https://raw.githubusercontent.com/wyyfzb/mc-commander/main/mc_commander_server/scripts/deploy-mc-commander.sh
+rm -f /tmp/deploy-mc-commander.sh && \
+( curl -fsSL --connect-timeout 10 --max-time 60 -o /tmp/deploy-mc-commander.sh https://raw.githubusercontent.com/wyyfzb/mc-commander/main/mc_commander_server/scripts/deploy-mc-commander.sh || \
+  curl -fsSL --connect-timeout 10 --max-time 60 -o /tmp/deploy-mc-commander.sh https://gitee.com/wyyfzb/mc-commander/raw/main/mc_commander_server/scripts/deploy-mc-commander.sh ) && \
 sudo bash /tmp/deploy-mc-commander.sh
 ```
 
@@ -89,6 +93,20 @@ sudo bash /tmp/deploy-mc-commander.sh
 升级完成后自动 `systemctl restart mc-commander` 生效。
 
 > SETUP_TOKEN 仅首次设密使用（一次性，设密成功即作废，升级流程无需配置）。如需重新开启设密保护，手动向 `.env` 添加 `SETUP_TOKEN` 行后重启服务。
+
+### 卸载
+
+一键部署在系统上留下 4 处痕迹：安装目录（默认 `/opt/mc-commander`）、专用用户
+`mc-commander`、`/etc/systemd/system/mc-commander.service` 与该服务的开机自启。
+用 `--uninstall` 一次清干净：
+
+```bash
+sudo bash /tmp/deploy-mc-commander.sh --uninstall
+```
+
+默认**保留数据**（`servers/` 世界存档、`data/`、`backups/`），只移除面板本身并打印数据位置；
+要连数据一起删用 `--uninstall --purge`（需交互确认，`--yes` 可跳过）。
+端口 `25566` 的防火墙放行不会自动移除（可能被其它服务共用）。
 
 ### 回滚路径
 

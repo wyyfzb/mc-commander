@@ -102,10 +102,21 @@ MC_Commander 是一个自托管的 Minecraft 服务器管理工具。**核心定
 
 #### 方式一：Linux 一键部署（推荐）
 
+**复制下面整段**（先后取自建源与国内镜像源，任一成功就用它；**两条都失败则不会执行任何脚本**——
+避免把上一次的残留/半截文件当脚本用 `sudo` 跑起来）：
+
 ```bash
-curl -fsSL -o /tmp/deploy-mc-commander.sh https://raw.githubusercontent.com/wyyfzb/mc-commander/main/mc_commander_server/scripts/deploy-mc-commander.sh
+rm -f /tmp/deploy-mc-commander.sh && \
+( curl -fsSL --connect-timeout 10 --max-time 60 -o /tmp/deploy-mc-commander.sh https://raw.githubusercontent.com/wyyfzb/mc-commander/main/mc_commander_server/scripts/deploy-mc-commander.sh || \
+  curl -fsSL --connect-timeout 10 --max-time 60 -o /tmp/deploy-mc-commander.sh https://gitee.com/wyyfzb/mc-commander/raw/main/mc_commander_server/scripts/deploy-mc-commander.sh ) && \
 sudo bash /tmp/deploy-mc-commander.sh
 ```
+
+> 第一条是 GitHub 源，国内网络可能很慢甚至**长时间无输出**。命令里的 `--max-time 60` 保证它
+> 最多等 60 秒就会失败并自动换第二条（gitee 镜像），不会无限期卡住；两源内容逐字节一致。
+> 如果你只想用其中一条，单独执行它也行：
+> GitHub `https://raw.githubusercontent.com/wyyfzb/mc-commander/main/mc_commander_server/scripts/deploy-mc-commander.sh`、
+> 镜像 `https://gitee.com/wyyfzb/mc-commander/raw/main/mc_commander_server/scripts/deploy-mc-commander.sh`。
 
 脚本会自动安装 Java/Node.js、下载代码、生成 API Key 与一次性 SETUP_TOKEN 并注册 systemd 服务（下载
 tarball 带 sha256 完整性校验）。
@@ -116,13 +127,10 @@ tarball 带 sha256 完整性校验）。
 ① `sudo VERSION=vX.Y.Z bash deploy-mc-commander.sh` 指定具体版本；② 自行取到
 `mc-commander-server.tar.gz` 解压进安装目录（默认 `/opt/mc-commander`）后执行
 `sudo SKIP_DOWNLOAD=1 bash deploy-mc-commander.sh`。
-**国内网络**：gitee 镜像（分支 `main`，无 `master`）除了源码，**也同步发布产物与 `SHA256SUMS.txt`**
-（由 CI 在发版时上传到 Gitee Release）。部署脚本会先探测 GitHub，
-探测超时或下载失败即**自动切到 Gitee 重试**——你不需要传任何参数，
-两条命令照旧。两个源的包与摘要始终同源，sha256 校验强度不变。
-
-镜像取脚本（可选，与 GitHub 等价）：
-`https://gitee.com/wyyfzb/mc-commander/raw/main/mc_commander_server/scripts/deploy-mc-commander.sh`
+**国内网络（脚本内部下载）**：gitee 镜像（分支 `main`，无 `master`）除了源码，**也同步发布产物与
+`SHA256SUMS.txt`**（由 CI 在发版时上传到 Gitee Release）。部署脚本会先探测 GitHub，
+探测超时或下载失败即**自动切到 Gitee 重试**——你不需要传任何参数。两个源的包与摘要始终同源，
+sha256 校验强度不变。
 
 若两个源都拉不动，仍可走上面的 ②（自行取包 + `SKIP_DOWNLOAD=1`）或下方「方式二：手动部署」。
 
@@ -157,6 +165,29 @@ npm start
 不降级为「每次重启换一把」的临时凭据。
 
 服务端默认运行在 `http://localhost:25566`
+
+#### 卸载
+
+一键部署会在系统上留下 4 处痕迹：安装目录（默认 `/opt/mc-commander`）、专用低权限用户
+`mc-commander`、`/etc/systemd/system/mc-commander.service`、以及该服务的开机自启。用
+`--uninstall` 一次清干净：
+
+```bash
+sudo bash /tmp/deploy-mc-commander.sh --uninstall
+```
+
+**默认保留你的数据**——`servers/`（每个实例的完整 Minecraft 世界存档）、`data/`、`backups/`
+都会原样留下，只是面板本身被移除；脚本结束时会打印它们的位置。想连数据一起删：
+
+```bash
+sudo bash /tmp/deploy-mc-commander.sh --uninstall --purge   # 会二次确认，需输入 yes
+```
+
+`--purge` 会删除整个世界存档且**不可恢复**，故必须交互确认；自动化场景加 `--yes` 跳过。
+防火墙端口 `25566` 的放行规则不会被自动移除（可能被其它服务共用），如不再需要请自行清理。
+
+> 手动部署（方式二）没有系统级痕迹，直接删掉目录即可；若用 `systemd` 等方式自行托管，
+> 请一并停掉你创建的服务。
 
 ### Web 前端运行
 

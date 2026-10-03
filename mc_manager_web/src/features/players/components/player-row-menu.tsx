@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
 import type { Player } from '@/api/types'
+import { OP_LABELS } from '@/features/players/mutations'
 import type { PlayerDetailTab } from '../store'
 
 interface PlayerRowMenuProps {
@@ -59,7 +60,7 @@ export function PlayerRowMenu({
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => toggleOp(p)}>
           {p.isOp ? <ShieldX aria-hidden /> : <ShieldCheck aria-hidden />}
-          {p.isOp ? '取消 OP' : '设为 OP'}
+          {p.isOp ? OP_LABELS.revoke : OP_LABELS.grant}
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => toggleWhitelist(p)}>
           {p.isWhitelisted ? <ShieldX aria-hidden /> : <ShieldCheck aria-hidden />}

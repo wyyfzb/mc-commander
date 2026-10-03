@@ -44,6 +44,30 @@ export interface PlayerActionRequest {
 }
 
 /**
+ * OP 动作文案的唯一声明源（行内菜单 / 详情抽屉按钮 / 批量条三处共用）。
+ *
+ * 以前三处各写各的：`设为 OP`、`设为OP`、`设置OP`、`取消OP` —— 同一个动作
+ * 用户看到四种写法，还要自己认出它们是同一件事（短期记忆负担）。
+ * 收在类型旁边：改动作语义时文案跟着走，不会漏掉某个入口。
+ *
+ * 两组用词刻意不同、各有用途：
+ * - `grant`/`revoke` 面向按钮与菜单项，说「点下去会发生什么」⇒ 动词「设为/取消」
+ * - `batchGrant`/`batchRevoke` 面向 `formatBatchSummary`（会前置「批量」）⇒ 名词化「设置 OP」
+ */
+export const OP_LABELS = {
+  /** 按钮/菜单项：未授予 OP 时显示 */
+  grant: '设为 OP',
+  /** 按钮/菜单项：已授予 OP 时显示 */
+  revoke: '取消 OP',
+  /** 批量汇总里的动作名（formatBatchSummary 会前置「批量」） */
+  batchGrant: '设置 OP',
+  batchRevoke: '取消 OP',
+  /** 操作成功回执 */
+  granted: '已设置 OP',
+  revoked: '已取消 OP',
+} as const
+
+/**
  * 通用玩家操作 mutation。
  * 成功与失败由调用方处理（toast/批量汇总），本 hook 只负责请求与失效刷新。
  */

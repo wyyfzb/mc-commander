@@ -109,41 +109,49 @@ export function InstanceControls() {
     return { ok: false, message: '服务器启动失败，请检查配置和日志', instanceId: id }
   }
 
+  /** 启动：无二次确认（EULA 前置条件由共享 hook 的对话框承担），直接发令 */
+  const doStart = () => {
+    setBusyAction('启动')
+    startInstance(instanceId ?? '', {
+      onStarted: async () => {
+        // start：终端联动 + 轮询至运行
+        resetTerminal()
+        const result = await waitForStart(instanceId ?? '')
+        if (result.ok) {
+          toast.success('服务器已启动')
+        } else {
+          toast.error(result.message, {
+            // 深入链接：失败时进程可能已留下末尾输出（issue 343）
+            ...(result.instanceId
+              ? {
+                  action: {
+                    label: '查看末尾日志',
+                    onClick: () => setLastOutputInstanceId(result.instanceId!),
+                  },
+                }
+              : {}),
+          })
+        }
+        await queryClient.invalidateQueries({ queryKey: queryKeys.instance(instanceId ?? '') })
+      },
+      onStartError: (err) => {
+        toast.error(`启动失败：${getFriendlyErrorText(err)}`)
+      },
+      onSettled: () => setBusyAction(null),
+    })
+  }
+
+  /** 保存：无确认直接发送 */
+  const doSave = () => {
+    setBusyAction('保存')
+    mutation.mutate('save', { onSettled: () => setBusyAction(null) })
+  }
+
+  /** 确认对话框的落点（只剩需要确认的动作：停止/重启） */
   const doConfirm = () => {
     const action = confirmAction
     setConfirmAction(null)
     if (!action) return
-    if (action === '启动') {
-      setBusyAction('启动')
-      startInstance(instanceId ?? '', {
-        onStarted: async () => {
-          // start：终端联动 + 轮询至运行
-          resetTerminal()
-          const result = await waitForStart(instanceId ?? '')
-          if (result.ok) {
-            toast.success('服务器已启动')
-          } else {
-            toast.error(result.message, {
-              // 深入链接：失败时进程可能已留下末尾输出（issue 343）
-              ...(result.instanceId
-                ? {
-                    action: {
-                      label: '查看末尾日志',
-                      onClick: () => setLastOutputInstanceId(result.instanceId!),
-                    },
-                  }
-                : {}),
-            })
-          }
-          await queryClient.invalidateQueries({ queryKey: queryKeys.instance(instanceId ?? '') })
-        },
-        onStartError: (err) => {
-          toast.error(`启动失败：${getFriendlyErrorText(err)}`)
-        },
-        onSettled: () => setBusyAction(null),
-      })
-      return
-    }
     setBusyAction(action)
     if (action === '停止') {
       stopMutation.mutate(instanceId ?? '', { onSettled: () => setBusyAction(null) })
@@ -173,7 +181,11 @@ export function InstanceControls() {
       icon: Play,
       disabled: isRunning || busyAction !== null || startBusy,
       color: SEMANTIC_TONE_CLASSES.success.text,
-      confirm: { title: '启动服务器', description: '确定要启动服务器吗？' },
+      // 启动不需要二次确认：它不破坏任何东西，而真正需要用户知情的「EULA 未同意」
+      // 由共享 hook 的 EULA 对话框承担（原因+动作+后果）。以前这里先弹
+      // 「确定要启动服务器吗？」，用户确认后才被告知起不来——白问一次，
+      // 且第一个框隐瞒了唯一要看的信息。
+      confirm: null,
     },
     {
       action: '停止' as const,
@@ -219,11 +231,17 @@ export function InstanceControls() {
                 disabled={b.disabled}
                 aria-label={b.action}
                 onClick={() => {
-                  if (b.confirm) setConfirmAction(b.action)
-                  else {
-                    setBusyAction('保存')
-                    mutation.mutate('save', { onSettled: () => setBusyAction(null) })
+                  // 按动作分派，不用「非确认即保存」的兜底——那会让任何新增的
+                  // 免确认动作（如启动）静默执行成保存
+                  if (b.action === '启动') {
+                    doStart()
+                    return
                   }
+                  if (b.action === '保存') {
+                    doSave()
+                    return
+                  }
+                  setConfirmAction(b.action)
                 }}
               >
                 {busyAction === b.action ||

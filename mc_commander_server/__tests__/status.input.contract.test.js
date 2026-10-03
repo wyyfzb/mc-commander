@@ -51,6 +51,7 @@ function makeStatusFixture(overrides = {}) {
     consecutiveCrashes: 0,
     uptime: 100,
     address: 'localhost:25565',
+    addressType: 'private',
     players: [],
     playerCount: 0,
     maxPlayers: 20,

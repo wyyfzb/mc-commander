@@ -33,6 +33,10 @@ export const instanceStatusSchema = z.object({
   consecutiveCrashes: z.number(),
   uptime: z.number(),
   address: z.string(),
+  // 地址可达范围：'public' 为公网（可直接发给玩家），'private' 为内网/环回
+  // （仅同一网络内可连）。前端据此标注，避免把「玩家连不上的地址」当对外地址展示；
+  // 判据在服务端由 isPrivateIp 派生，不在前端重算（双端各算一次必然漂移）
+  addressType: z.enum(['public', 'private']),
   players: z.array(z.unknown()),
   playerCount: z.number(),
   maxPlayers: z.number(),

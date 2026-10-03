@@ -5814,6 +5814,7 @@ const instanceStatusSchema = object({
 	consecutiveCrashes: number(),
 	uptime: number(),
 	address: string(),
+	addressType: _enum(["public", "private"]),
 	players: array(unknown()),
 	playerCount: number(),
 	maxPlayers: number(),

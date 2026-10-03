@@ -8,6 +8,11 @@
 # 用法（本地执行）:
 #   sudo bash deploy-mc-commander.sh
 #
+# 卸载:
+#   sudo bash deploy-mc-commander.sh --uninstall         移除面板（保留 servers/ data/ backups/）
+#   sudo bash deploy-mc-commander.sh --uninstall --purge 连数据一起删（需确认，--yes 可跳过）
+#   bash deploy-mc-commander.sh --help                   查看全部用法
+#
 # 环境变量覆盖:
 #   MC_COMMANDER_DIR=/opt/mc-commander  安装目录
 #   VERSION=latest                      发布版本：latest（默认）取最新发布版，或 v0.6.0 这类具体 tag。
@@ -116,6 +121,159 @@ use_gitee() {
   return 0
 }
 
+# ─────────────────────────── 卸载子命令 ───────────────────────────
+# 安装会产生 4 类系统级副作用，用户想「干净重来/彻底不装了」时无从下手：
+#   ① 安装目录（默认 /opt/mc-commander）  ② 专用系统用户 mc-commander
+#   ③ /etc/systemd/system/mc-commander.service  ④ 已 enable 的符号链接
+# 默认**保留**数据（servers/ 是玩家的世界，删掉不可恢复）：只停服务、
+# 卸 systemd、删目录里的代码，数据目录原样留下并打印位置。
+# 要连数据一起删，必须显式 --purge 且交互确认（或 --yes 跳过确认）。
+uninstall_usage() {
+  cat <<'USAGE'
+用法：
+  sudo bash deploy-mc-commander.sh                 安装 / 升级（默认，取最新发布版）
+  sudo bash deploy-mc-commander.sh --uninstall     卸载（保留数据）
+  sudo bash deploy-mc-commander.sh --help          显示本帮助
+
+安装 / 升级常用环境变量（详见脚本头部注释）：
+  MC_COMMANDER_DIR=/opt/mc-commander   安装目录
+  VERSION=latest | v0.6.0              发布版本（latest 取最新；指定 tag 可复现安装）
+  SKIP_DOWNLOAD=1                      跳过下载，用安装目录里已有的代码
+  PACKAGE_URL=… / SHA256SUMS_URL=…     自定义代码包与其摘要地址
+
+卸载选项（--uninstall 之后）：
+  --purge            连安装目录一起删除（含所有世界存档，不可恢复）
+  --yes              跳过交互确认（配合 --purge 做自动化；请自行确认目录无误）
+
+卸载默认只做「移除面板本身」，Minecraft 实例目录与备份一律保留。
+USAGE
+}
+
+do_uninstall() {
+  local purge=0 assume_yes=0
+  shift # 丢掉 --uninstall 本身
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --purge) purge=1 ;;
+      --yes|-y) assume_yes=1 ;;
+      -h|--help) uninstall_usage; return 0 ;;
+      *)
+        err "未知选项：$1"
+        uninstall_usage
+        return 2
+        ;;
+    esac
+    shift
+  done
+
+  if [ "$(id -u)" -ne 0 ]; then
+    err "卸载需要 root（要停服务、删 systemd 单元与专用用户）"
+    err "请用：sudo bash $0 --uninstall"
+    return 1
+  fi
+
+  # 目录安全校验：宁可拒绝也不 rm -rf 一个危险路径。
+  # 允许用户用 MC_COMMANDER_DIR 覆盖，但绝不允许 / 、/usr 、/etc 这类位置——
+  # 一个手误的 MC_COMMANDER_DIR=/ 会让 --purge 抹掉整个系统。
+  case "$MC_COMMANDER_DIR" in
+    /|/usr|/usr/|/etc|/etc/|/var|/var/|/opt|/opt/|/home|/home/|/root|/root/|""|/)
+      err "拒绝在危险路径上执行卸载：MC_COMMANDER_DIR=$MC_COMMANDER_DIR"
+      err "请显式指定安装目录，例如：sudo MC_COMMANDER_DIR=/opt/mc-commander bash $0 --uninstall"
+      return 1
+      ;;
+  esac
+
+  log "卸载 MC_Commander（安装目录：$MC_COMMANDER_DIR）"
+
+  # 1. 停服务并禁止开机自启（先停再删单元，否则 systemd 可能残留 failed 状态）
+  #
+  # systemd 单元与专用用户都是**按名字全局唯一**的，而安装目录是可覆盖的：
+  # 拿另一个 MC_COMMANDER_DIR 跑 --uninstall 时，/etc/systemd/system/mc-commander.service
+  # 指向的可能是**另一份安装**。故先核对单元的 WorkingDirectory 是否就是本次要卸的目录，
+  # 不一致就只卸目录内容、不动全局的服务与用户（否则会误伤同一个机器上的另一套部署）。
+  local unit_path=/etc/systemd/system/mc-commander.service
+  local unit_matches=0
+  if [ -f "$unit_path" ]; then
+    local unit_dir
+    unit_dir=$(sed -n 's/^[[:space:]]*WorkingDirectory=//p' "$unit_path" | head -1)
+    if [ "$unit_dir" = "$MC_COMMANDER_DIR" ]; then
+      unit_matches=1
+    else
+      warn "发现已存在的 mc-commander.service 指向 $unit_dir（不是本次的 $MC_COMMANDER_DIR）"
+      warn "将保留该服务与用户 mc-commander，只卸载 $MC_COMMANDER_DIR 里的内容"
+    fi
+  fi
+
+  if [ "$unit_matches" -eq 1 ] && command -v systemctl &>/dev/null; then
+    log "停止并禁用 systemd 服务..."
+    systemctl stop mc-commander 2>/dev/null || true
+    systemctl disable mc-commander 2>/dev/null || true
+    rm -f "$unit_path"
+    systemctl daemon-reload 2>/dev/null || true
+    systemctl reset-failed mc-commander 2>/dev/null || true
+    log "已删除 /etc/systemd/system/mc-commander.service"
+  elif [ "$unit_matches" -eq 0 ] && [ ! -f "$unit_path" ]; then
+    log "未发现 systemd 服务（可能当初以非 root 部署）"
+  fi
+
+  # 2. 删除专用用户（仅在确认单元归属本目录、或压根没有单元时）
+  # 家目录就是安装目录，先删用户不影响后续 rm
+  if [ "$unit_matches" -eq 1 ] && id -u mc-commander &>/dev/null; then
+    if userdel mc-commander 2>/dev/null; then
+      log "已删除系统用户 mc-commander"
+    else
+      warn "删除用户 mc-commander 失败（可能有进程仍以该用户运行），可稍后手动 userdel"
+    fi
+  fi
+
+  # 3. 目录处理：默认保留数据，--purge 才整体删除
+  if [ "$purge" -eq 1 ]; then
+    if [ "$assume_yes" -ne 1 ]; then
+      echo ""
+      warn "即将永久删除：$MC_COMMANDER_DIR"
+      warn "其中 servers/ 下的每个实例都是**完整的 Minecraft 世界存档**，删掉无法恢复。"
+      printf "确认删除请输入 yes："
+      read -r answer
+      if [ "$answer" != "yes" ]; then
+        log "已取消（未删除任何数据）"
+        return 0
+      fi
+    fi
+    rm -rf "$MC_COMMANDER_DIR"
+    log "已删除安装目录（含全部世界存档）"
+  else
+    # 只删面板自己的代码与依赖，保留三个数据目录
+    log "保留数据目录（servers/ data/ backups/）"
+    for item in index.js config.js websocket.js package.json package-lock.json \
+                services routes utils middleware db public mc-schemas; do
+      [ -e "$MC_COMMANDER_DIR/$item" ] && rm -rf "${MC_COMMANDER_DIR:?}/$item"
+    done
+    if [ -d "$MC_COMMANDER_DIR" ]; then
+      echo ""
+      log "面板已卸载。以下数据**仍然保留**在 $MC_COMMANDER_DIR："
+      for d in servers data backups; do
+        [ -d "$MC_COMMANDER_DIR/$d" ] && log "  - $d/"
+      done
+      log "确认不再需要时，可手动删除整个目录：sudo rm -rf $MC_COMMANDER_DIR"
+    fi
+  fi
+
+  echo ""
+  log "卸载完成。防火墙端口 25566 的放行规则未自动移除"
+  log "（可能被其它服务共用，如不再需要请自行清理：ufw delete allow 25566/tcp）"
+  return 0
+}
+
+# 子命令分派：必须在任何安装动作之前，卸载流程不该触发 apt/npm/下载
+if [ "${1:-}" = "--uninstall" ]; then
+  do_uninstall "$@"
+  exit $?
+fi
+if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
+  uninstall_usage
+  exit 0
+fi
+
 # 0. root 权限检查（systemd 注册需要）
 if [ "$(id -u)" -ne 0 ]; then
   warn "当前不是 root 用户，将跳过 systemd 服务注册。"
@@ -184,6 +342,53 @@ download_with_resume() {
     fi
   done
   return 1
+}
+
+# 公网 IP 探测：优先国内服务，其次国外，最后云厂商元数据。
+# 全部失败则从本地网卡筛非私有地址，仍无则返回空串。
+#
+# 只探测一次并复用（写进 .env 的 PUBLIC_IP + 完成横幅共用同一个值）：
+# 服务端原本自己再探一遍，且用的源与这里不同 ⇒ 同一台机器两个组件可能给出
+# **互相矛盾**的公网 IP（多网卡或出口 NAT 池时必然如此）。
+# 写进 .env 后服务端优先读它（mc_server.js 的 PUBLIC_IP 分支），不确定性消失。
+get_public_ip() {
+  local ip=""
+  ip=$(curl -sf --connect-timeout 3 https://myip.ipip.net 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1) && echo "$ip" && return
+  ip=$(curl -sf --connect-timeout 3 https://ip.sb 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1) && echo "$ip" && return
+  ip=$(curl -sf --connect-timeout 3 https://ifconfig.me 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1) && echo "$ip" && return
+  ip=$(curl -sf --connect-timeout 3 https://icanhazip.com 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1) && echo "$ip" && return
+  ip=$(curl -sf --connect-timeout 3 https://api.ipify.org 2>/dev/null) && echo "$ip" && return
+  ip=$(curl -sf --connect-timeout 3 https://ident.me 2>/dev/null) && echo "$ip" && return
+  # 云厂商元数据 API（腾讯云/阿里云，需 -k 跳过自签名证书）
+  ip=$(curl -sf --connect-timeout 2 https://metadata.tencentyun.com/latest/meta-data/public-ipv4 2>/dev/null) && echo "$ip" && return
+  ip=$(curl -sfk --connect-timeout 2 https://100.100.100.200/latest/meta-data/public-ipv4 2>/dev/null) && echo "$ip" && return
+  # 从本地网卡 IP 中筛选：逐个排除私网/保留段，取第一个公网 IP
+  # （判据与 is_private_ip 同源，不再内联第二份排除正则）
+  local candidate
+  while IFS= read -r candidate; do
+    [ -n "$candidate" ] || continue
+    if ! is_private_ip "$candidate"; then
+      echo "$candidate"
+      return
+    fi
+  done < <(hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$')
+  echo ""
+}
+
+# 是否为私网/保留 IPv4（与服务端 utils/url-guard.js 的 PRIVATE_IPV4_RANGES **逐段对应**）。
+#
+# 为什么不能各写一份：这里与服务端判的是同一件事（「这个地址能不能发给玩家」），
+# 而两侧曾各写一份正则——脚本这份漏了 100.64.0.0/10(CGNAT)、198.18.0.0/15、
+# 192.0.0.0/24、192.88.99.0/24 与三段 TEST-NET ⇒ 实测 100.64.0.1 在脚本侧被判为「公网」，
+# 写进 .env 后面板按 public 展示，CGNAT 出口下的用户看不到「内网地址」警示。
+#
+# 段表（两侧必须一致，security.deploy.test.js 有比对守卫）：
+#   0/8  10/8  100.64/10  127/8  169.254/16  172.16/12  192.0.0/24
+#   192.0.2/24  192.88.99/24  192.168/16  198.18/15  198.51.100/24
+#   203.0.113/24  224/3（组播+保留）
+PRIVATE_IPV4_RE='^(0\.|10\.|100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.|127\.|169\.254\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.0\.0\.|192\.0\.2\.|192\.88\.99\.|192\.168\.|198\.1[89]\.|198\.51\.100\.|203\.0\.113\.|2(2[4-9]|[3-9][0-9])\.)'
+is_private_ip() {
+  echo "$1" | grep -qE "$PRIVATE_IPV4_RE"
 }
 
 # 2. 安装基础工具（curl、tar、rsync）
@@ -439,6 +644,24 @@ fi
 
 cd "$MC_COMMANDER_DIR"
 
+# 5.6 探测公网 IP 并缓存（供 .env 与完成横幅共用，见 get_public_ip 头注释）
+# 放在 .env 生成之前：写进 .env 的 PUBLIC_IP 是服务端的**首选**来源，
+# 不写它，服务端就要自己异步探测（探测期间顶栏会退回显示局域网 IP——
+# 而那是玩家连不上的地址，用户会照着复制发给朋友）。整体超时上限随探测链，
+# 各源 --connect-timeout 3s、最多 8 个源，最坏约 20s，仅首次部署时发生。
+log "探测公网 IP（用于面板展示服务器地址）..."
+PUBLIC_IP_DETECTED=$(get_public_ip)
+if [ -n "$PUBLIC_IP_DETECTED" ]; then
+  if is_private_ip "$PUBLIC_IP_DETECTED"; then
+    warn "探测到的是内网地址（$PUBLIC_IP_DETECTED），玩家可能无法直连；"
+    warn "部署完成后可在 $MC_COMMANDER_DIR/.env 里改 PUBLIC_IP 为真实公网 IP"
+  else
+    log "公网 IP: $PUBLIC_IP_DETECTED（已写入 .env 的 PUBLIC_IP）"
+  fi
+else
+  warn "未能探测到公网 IP；面板将按局域网地址展示，可在 .env 里手动设 PUBLIC_IP"
+fi
+
 # 6. 下载后端代码
 # SKIP_DOWNLOAD=1：跳过下载、直接用安装目录里已有的代码（需 package.json + index.js）。
 # 这是报错提示里承诺的出路——「手动放好代码再跑」必须真的能生效，
@@ -649,6 +872,15 @@ LOG_LEVEL=info
 RATE_LIMIT_WINDOW=60000
 RATE_LIMIT_MAX=100
 EOF
+  # PUBLIC_IP 单独追加（仅探测成功时）：不确定的公网 IP 不如不写——
+  # 写空值会让服务端以为「已显式配置」而短路掉整条探测链
+  if [ -n "$PUBLIC_IP_DETECTED" ] && ! is_private_ip "$PUBLIC_IP_DETECTED"; then
+    {
+      echo "# 服务端展示给玩家的服务器地址用它（见 mc_server.js 的 PUBLIC_IP 分支）。"
+      echo "# 云服务器换弹性 IP、或探测值不对时，改这里后重启面板即可。"
+      echo "PUBLIC_IP=$PUBLIC_IP_DETECTED"
+    } >> .env
+  fi
   # Key 掩码进日志（P2-10）：完整值仅在下方完成横幅一次性展示（交付通道），
   # 不进 log 长期留存；.env 只存摘要
   log "已生成 API Key: ${API_KEY:0:4}****（完整值见部署完成横幅）"
@@ -744,31 +976,8 @@ for i in $(seq 1 30); do
 done
 
 # 12. 输出部署信息
-# 获取公网 IP，按优先级尝试多个服务（国内+国外），增加超时防止卡住
-# 最终 fallback 从所有网卡 IP 中筛选出非私有地址
-get_public_ip() {
-  local ip=""
-  # 公网 IP 查询服务（设置短超时，失败立即尝试下一个）
-  # 国内优先
-  ip=$(curl -sf --connect-timeout 3 https://myip.ipip.net 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1) && echo "$ip" && return
-  ip=$(curl -sf --connect-timeout 3 https://ip.sb 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1) && echo "$ip" && return
-  ip=$(curl -sf --connect-timeout 3 https://ifconfig.me 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1) && echo "$ip" && return
-  ip=$(curl -sf --connect-timeout 3 https://icanhazip.com 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1) && echo "$ip" && return
-  ip=$(curl -sf --connect-timeout 3 https://api.ipify.org 2>/dev/null) && echo "$ip" && return
-  ip=$(curl -sf --connect-timeout 3 https://ident.me 2>/dev/null) && echo "$ip" && return
-  # 云厂商元数据 API（腾讯云/阿里云，需 -k 跳过自签名证书）
-  ip=$(curl -sf --connect-timeout 2 https://metadata.tencentyun.com/latest/meta-data/public-ipv4 2>/dev/null) && echo "$ip" && return
-  ip=$(curl -sfk --connect-timeout 2 https://100.100.100.200/latest/meta-data/public-ipv4 2>/dev/null) && echo "$ip" && return
-  # 从本地网卡 IP 中筛选：排除私有地址段，取第一个公网 IP
-  # 排除: 10.x, 172.16-31.x, 192.168.x, 127.x, 169.254.x, 0.x, 224-255.x
-  ip=$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -vE '^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.|127\.|169\.254\.|0\.|2[2-5][0-9]\.)' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
-  echo "$ip"
-}
-SERVER_IP=$(get_public_ip)
-# 判断是否为私有/内网 IP
-is_private_ip() {
-  echo "$1" | grep -qE '^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.|127\.|169\.254\.|0\.)'
-}
+# 公网 IP 在步骤 5.6 已探测并写入 .env（服务端优先读它，不再自行探测），此处复用同一个值
+SERVER_IP="${PUBLIC_IP_DETECTED:-}"
 if [ -z "$SERVER_IP" ]; then
   SERVER_IP="<请手动填入服务器公网IP>"
   IP_WARN=1

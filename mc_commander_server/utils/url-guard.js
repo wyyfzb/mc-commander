@@ -85,6 +85,23 @@ export function isLocalHostname(hostname) {
 }
 
 /**
+ * 地址对公网玩家是否可达（'public' | 'private'）。
+ *
+ * 判据只看**地址本身**，不看它从哪来：同一个 IP 无论是经 PUBLIC_IP 注入、写进
+ * server.properties 的 server-ip，还是从本机网卡回退得到，都必须给出同一个答案。
+ * 按来源判会出现「PUBLIC_IP=100.64.0.1 标 public、server-ip=100.64.0.1 却标 private」
+ * 这类同值两判（实测），既误导用户又无法解释。
+ *
+ * 复用 isPrivateIp 的网段表：地址「能不能发给玩家」与「能不能作为出站目标」是
+ * 同一套可达性语义，各写一份正则会漂移（如漏掉 100.64.0.0/10 CGNAT 段）。
+ * 非 IP 的主机名按公网处理（域名正是玩家该用的形式），本机名按私网。
+ */
+export function addressReachability(host) {
+  if (typeof host !== 'string' || host === '') return 'private';
+  return isLocalHostname(host) || isPrivateIp(host) ? 'private' : 'public';
+}
+
+/**
  * 校验 URL 是否安全可投递（SSRF 防护核心）
  * - 仅允许 http/https 协议
  * - 主机名：拒绝 localhost 字面量与私网/保留 IP 字面量

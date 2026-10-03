@@ -20,6 +20,7 @@ import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { toast } from 'sonner'
 import { getFriendlyErrorText } from '@/api/errors'
 import { formatBatchSummary, formatFailureDetails, runBatchForTargets } from '@/lib/mc-batch'
+import { OP_LABELS } from '@/features/players/mutations'
 import { GAME_MODE_OPTIONS, usePlayersUiStore } from '../store'
 import { toastWithUndo } from '../reversible-action'
 import type { Player } from '@/api/types'
@@ -139,11 +140,11 @@ export function BatchBar({ selectedPlayers, onOpenBatchDetail, onAction }: Batch
 
   const runOpToggle = (grant: boolean) =>
     void runBatch(
-      grant ? '设置OP' : '取消OP',
+      grant ? OP_LABELS.batchGrant : OP_LABELS.batchRevoke,
       false,
       (p) => onAction({ kind: grant ? 'op' : 'deop', playerName: p.name }),
       (succeeded) => ({
-        text: grant ? '已取消OP' : '已设置OP',
+        text: grant ? OP_LABELS.revoked : OP_LABELS.granted,
         run: () =>
           undoEach(succeeded, (p) => ({ kind: grant ? 'deop' : 'op', playerName: p.name })),
       }),
@@ -225,11 +226,11 @@ export function BatchBar({ selectedPlayers, onOpenBatchDetail, onAction }: Batch
       </Button>
       <Button variant="outline" size="sm" onClick={() => runOpToggle(true)} disabled={running}>
         <ShieldCheck aria-hidden />
-        OP
+        {OP_LABELS.grant}
       </Button>
       <Button variant="outline" size="sm" onClick={() => runOpToggle(false)} disabled={running}>
         <ShieldX aria-hidden />
-        取消OP
+        {OP_LABELS.revoke}
       </Button>
 
       <span className="h-5 w-px shrink-0 bg-mcs-border-muted" aria-hidden />

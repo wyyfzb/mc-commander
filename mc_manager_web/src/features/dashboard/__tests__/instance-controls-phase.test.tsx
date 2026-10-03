@@ -7,7 +7,7 @@
  * store 状态全部虚构（inst-1），无真实凭据
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { useServerStore } from '@/stores/server'
@@ -15,10 +15,18 @@ import { useConnectionStore } from '@/stores/connection'
 import type { InstanceStatus } from '@/api/types'
 import { InstanceControls } from '../components/instance-controls'
 
+// apiPost 间谍：用于断言「点启动没有误发 save-all」
+const apiPost = vi.fn((..._args: unknown[]) => Promise.resolve(null))
+vi.mock('@/api/client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/client')>()),
+  apiPost: (...args: unknown[]) => apiPost(...args),
+}))
+
 // 启动共享 hook 桩（phase 置入逻辑在其内部，此处只验证消费端禁用行为）
+const startInstance = vi.fn((..._args: unknown[]) => undefined)
 vi.mock('@/hooks/use-start-instance-with-eula', () => ({
   useStartInstanceWithEula: () => ({
-    startInstance: vi.fn(),
+    startInstance,
     startPending: false,
     pendingStartId: null,
     eulaBusy: false,
@@ -55,8 +63,66 @@ function renderControls() {
 
 beforeEach(() => {
   stopMutate.mockClear()
+  startInstance.mockClear()
+  apiPost.mockClear()
   useConnectionStore.setState({ baseUrl: '', apiKey: 'test-key', status: 'ready' })
   useServerStore.setState({ instanceId: 'inst-1', status: null, phase: {} })
+})
+
+// 启动不再走通用二次确认：它不破坏任何东西，而真正要看的信息（EULA 未同意）
+// 由共享 hook 的对话框承担。以前先弹「确定要启动服务器吗？」，确认后才被告知
+// 起不来——白问一次，且第一个框隐瞒了唯一要看的信息。
+describe('InstanceControls 启动确认（EULA 前置条件前移）', () => {
+  it('启动：不弹通用确认框，直接发令（不再先问一次再报 EULA）', () => {
+    setStatus(false) // 未运行 → 启动可用
+    renderControls()
+
+    expect(screen.queryByText('确定要启动服务器吗？')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '启动' }))
+
+    // 直接调 startInstance：确认框不该出现（EULA 对话框由该 hook 内部分支决定）
+    expect(startInstance).toHaveBeenCalledTimes(1)
+    expect(startInstance.mock.calls[0]?.[0]).toBe('inst-1')
+    expect(screen.queryByText('确定要启动服务器吗？')).not.toBeInTheDocument()
+  })
+
+  it('启动不走「非确认即保存」兜底：点击不得误发 save-all', () => {
+    setStatus(false)
+    renderControls()
+    fireEvent.click(screen.getByRole('button', { name: '启动' }))
+    // 按动作分派的回归防线：以前 else 分支硬编码 save，
+    // 任何新增的免确认动作都会被静默执行成「保存」
+    const saveCalls = apiPost.mock.calls.filter((c) => String(c[0]).includes('/command'))
+    expect(saveCalls).toHaveLength(0)
+  })
+
+  it('停止仍需确认（高危动作保留二次确认）', () => {
+    setStatus(true)
+    renderControls()
+
+    fireEvent.click(screen.getByRole('button', { name: '停止' }))
+    expect(screen.getByText('关闭服务器')).toBeInTheDocument()
+  })
+
+  it('重启仍需确认（高危动作保留二次确认）', () => {
+    setStatus(true)
+    renderControls()
+
+    fireEvent.click(screen.getByRole('button', { name: '重启' }))
+    expect(screen.getByText('重启服务器')).toBeInTheDocument()
+  })
+
+  it('保存：无确认直接发 save-all（原行为保留）', async () => {
+    setStatus(true)
+    renderControls()
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    // mutationFn 是异步的：等它跑完再断言，否则读到的是空调用表
+    await waitFor(() => {
+      const saveCalls = apiPost.mock.calls.filter((c) => String(c[0]).includes('/command'))
+      expect(saveCalls).toHaveLength(1)
+    })
+    expect(screen.queryByText(/确定要保存/)).not.toBeInTheDocument()
+  })
 })
 
 describe('InstanceControls phase 中间态（issue 334）', () => {

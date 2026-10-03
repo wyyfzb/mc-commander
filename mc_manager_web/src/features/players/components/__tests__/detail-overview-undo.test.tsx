@@ -102,7 +102,7 @@ describe('OverviewTab 可逆操作：直执 + 撤销', () => {
     renderOverview(makePlayer({ isOp: false }))
 
     await act(async () => {
-      fireEvent.click(screen.getByText('设为OP'))
+      fireEvent.click(screen.getByText('设为 OP'))
     })
 
     expect(mockAction).toHaveBeenCalledWith({ kind: 'op', playerName: 'Steve' })
@@ -120,7 +120,7 @@ describe('OverviewTab 可逆操作：直执 + 撤销', () => {
     renderOverview(makePlayer({ isOp: true }))
 
     await act(async () => {
-      fireEvent.click(screen.getByText('取消OP'))
+      fireEvent.click(screen.getByText('取消 OP'))
     })
 
     expect(mockAction).toHaveBeenCalledWith({ kind: 'deop', playerName: 'Steve' })
@@ -188,7 +188,7 @@ describe('OverviewTab 可逆操作：直执 + 撤销', () => {
     renderOverview(makePlayer({ isOp: false }))
 
     await act(async () => {
-      fireEvent.click(screen.getByText('设为OP'))
+      fireEvent.click(screen.getByText('设为 OP'))
     })
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1)
@@ -238,10 +238,10 @@ describe('OverviewTab 不可逆 / 无逆操作', () => {
     renderOverview(makePlayer({ isOp: false }))
 
     await act(async () => {
-      fireEvent.click(screen.getByText('设为OP'))
+      fireEvent.click(screen.getByText('设为 OP'))
     })
 
     expect(mockAction).toHaveBeenCalledWith({ kind: 'op', playerName: 'Steve' })
-    expect(screen.queryByText('确认设为OP')).not.toBeInTheDocument()
+    expect(screen.queryByText('确认设为 OP')).not.toBeInTheDocument()
   })
 })

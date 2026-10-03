@@ -96,7 +96,11 @@ const instance = {
   isRconConnected: true,
   autoRestart: true,
   uptime: 7200,
-  address: 'localhost:25565',
+  // 截图/演示用：给一个可直连的公网地址，避免每张产品截图都挂着「内网地址」警示。
+  // 注意 addressType 必须与 address 同源（1.2.3.4 是公网 ⇒ public），
+  // 否则会出现「地址是公网、类型却标 private」的自相矛盾
+  address: '1.2.3.4:25565',
+  addressType: 'public',
   players: [{ name: 'Steve' }, { name: 'Alex' }, { name: 'Bob' }],
   playerCount: 3,
   maxPlayers: 20,
