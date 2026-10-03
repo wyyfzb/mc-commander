@@ -156,6 +156,9 @@ async function downloadWithProgress(
       timeoutMs: 120000,
       retryLimit: 2,
       headers: { 'User-Agent': PAPER_USER_AGENT },
+      // 必须把取消信号一并交给传输层：实测仅靠下面的 stream.destroy() 在
+      // 「响应头尚未到达」时无法中止 fetch，慢上游会把 socket 挂到超时
+      signal,
     });
 
     // 取消（用户中断部署）与自身失败共用同一收尾：清理半成品 + 断流 + reject
@@ -187,7 +190,9 @@ async function downloadWithProgress(
         abort(err);
         return;
       }
-      const pct = percent > 0 ? percent : total > 0 ? transferred / total : 0;
+      // 直接采信客户端的 percent：httpStream 恒按 transferred/total 折算（total 未知时为 0）。
+      // 不在此处就地重算——同一公式两处实现必然漂移
+      const pct = percent;
       if (pct - lastPct < 0.01) return;
       lastPct = pct;
       trackDeployProgress(serverManager, deployMeta, {

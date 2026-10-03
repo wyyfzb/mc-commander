@@ -93,6 +93,7 @@ vi.mock('../utils/http-client.js', async () => {
 });
 
 const { createServerJarRoutes } = await import('../routes/server-jar.js');
+const { httpStream } = await import('../utils/http-client.js');
 const { InstanceModel, AuditLogModel } = await import('../db/index.js');
 const { errorHandler } = await import('../middleware/error_handler.js');
 
@@ -109,8 +110,9 @@ function completingStream(jarBytes) {
     const pt = new streamMod.PassThrough();
     queueMicrotask(() => {
       pt.emit('downloadProgress', {
+        // percent 与 transferred/total 自洽（半程），忠实 httpStream 的产出形状
         percent: 0.5,
-        transferred: jarBytes.length,
+        transferred: jarBytes.length / 2,
         total: jarBytes.length,
       });
       pt.write(jarBytes);
@@ -266,6 +268,10 @@ describe('取消在途部署', () => {
     expect(stages(manager)).not.toContain('error');
     expect(fs.existsSync(instanceDir)).toBe(false);
     expect(manager.activeDeploys.has(id)).toBe(false);
+    // 取消信号必须交给传输层：仅靠 stream.destroy() 在「响应头尚未到达」时拆不掉
+    // 那个 fetch，慢上游会把 socket 挂到超时（http-client.test.js 有该能力的正向断言）
+    const streamOpts = vi.mocked(httpStream).mock.calls.at(-1)?.[1];
+    expect(streamOpts?.signal).toBeInstanceOf(AbortSignal);
   });
 
   it('首启阶段取消：已入库的行一并回滚（不留指向已删目录的幽灵实例）', async () => {

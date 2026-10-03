@@ -125,7 +125,7 @@ function streamSucceeds({ data = 'NEW_JAR_CONTENT' } = {}) {
   return () => {
     const stream = makeFakeStream();
     queueMicrotask(() => {
-      stream._emit('downloadProgress', { percent: 1, transferred: 1, total: 1 });
+      stream._emit('downloadProgress', { percent: 1, transferred: 1, total: 1 }); // 1/1 = 1，自洽
       if (data) stream._file.write(data);
       stream._file.end();
     });

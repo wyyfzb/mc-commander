@@ -138,7 +138,12 @@ function streamSucceeds({ transferred = 1, total = 1, data = '' } = {}) {
   return () => {
     const stream = makeFakeStream();
     queueMicrotask(() => {
-      stream._emit('downloadProgress', { percent: total > 0 ? 1 : 0, transferred, total });
+      // percent 忠实 httpStream 公式（total 未知记 0），使夹具在任何参数下都自洽
+      stream._emit('downloadProgress', {
+        percent: total > 0 ? transferred / total : 0,
+        transferred,
+        total,
+      });
       if (data) stream._file.write(data);
       stream._file.end();
     });
@@ -400,7 +405,7 @@ describe('_downloadJar 异常与进度矩阵', () => {
     ).rejects.toThrow(/ENOENT|no such file or directory/i);
   });
 
-  it('进度百分比回退与节流：percent 缺失按 transferred/total、total 缺失记 0、增量 <1% 早退', async () => {
+  it('进度百分比节流：按客户端 percent 直采、total 缺失记 0、增量 <1% 早退', async () => {
     const manager = createMockServerManager();
     const service = new UpgradeService(manager);
     streamImpl.current = () => {
@@ -408,13 +413,12 @@ describe('_downloadJar 异常与进度矩阵', () => {
       queueMicrotask(() => {
         // total 缺失（0）→ 客户端 percent 亦为 0 → pct 记 0
         stream._emit('downloadProgress', { percent: 0, transferred: 0, total: 0 });
-        // percent 缺失形态 → pct 回退按 transferred/total
-        stream._emit('downloadProgress', { percent: 0, transferred: 50, total: 100 });
-        // 客户端实际形态（percent = transferred/total）：与上一拍同为 50%，被节流吸收
+        // 客户端实际形态：percent 恒等于 transferred/total
+        stream._emit('downloadProgress', { percent: 0.5, transferred: 50, total: 100 });
+        // 与上一拍同为 50% → 节流吸收
         stream._emit('downloadProgress', { percent: 0.5, transferred: 50, total: 100 });
         // 增量 0.4% < 1% → 节流早退，不广播
-        stream._emit('downloadProgress', { percent: 0, transferred: 50.4, total: 100 });
-        // percent 直供
+        stream._emit('downloadProgress', { percent: 0.504, transferred: 50.4, total: 100 });
         stream._emit('downloadProgress', { percent: 0.99, transferred: 99, total: 100 });
         stream._emit('error', new Error('download failed (mocked)'));
       });
@@ -430,7 +434,7 @@ describe('_downloadJar 异常与进度矩阵', () => {
       ),
     ).rejects.toThrow(/download failed/);
 
-    // 广播序列：0% → 50% → 99%（同值与 50.4% 两拍被节流吸收）
+    // 广播序列：0% → 50% → 99%（同值与 0.4% 增量两拍被节流吸收）
     expect(progressPercents(manager)).toEqual([0, 50, 99]);
   });
 });

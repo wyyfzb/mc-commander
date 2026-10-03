@@ -259,3 +259,45 @@ describe('生产调用点的选项透传（守卫：单测全量 mock 掉 http-c
     expect(Date.now() - t0).toBeLessThan(3000); // 没有挂死
   });
 });
+
+describe('signal：取消必须能中止「响应头尚未到达」的请求', () => {
+  // 这条锁「abort 能中止尚未拿到响应头的请求」——即 signal 的存在理由：
+  // 上游迟迟不给响应头时，调用方的收尾路径（destroy 流）拆不掉那个 fetch，
+  // 只能靠把信号交给传输层。对照组（destroy 不具该能力）实测受时序影响不稳定，
+  // 故不写成断言，只留这条正向断言。
+  it('abort 后连接立即关闭（上游永不发响应头）', async () => {
+    server.removeAllListeners('request');
+    let closedAt = null;
+    let cancelAt = null;
+    server.on('request', (req) => {
+      req.on('close', () => {
+        closedAt = Date.now();
+      });
+      /* 故意不 writeHead / end */
+    });
+
+    const ac = new AbortController();
+    const stream = httpStream(`${base}/never`, { timeoutMs: 30_000, signal: ac.signal });
+    stream.on('error', () => {});
+    await new Promise((r) => setTimeout(r, 200)); // 让请求真的发出去
+    cancelAt = Date.now();
+    ac.abort();
+
+    await new Promise((r) => setTimeout(r, 1500));
+    expect(closedAt).not.toBeNull(); // 连接确实被关
+    expect(closedAt - cancelAt).toBeLessThan(1000); // 且是「立刻」而不是等到超时
+  });
+
+  it('已 aborted 的信号不会发起请求', async () => {
+    const before = hits.length;
+    const ac = new AbortController();
+    ac.abort();
+    const stream = httpStream(`${base}/pre`, { timeoutMs: 5000, signal: ac.signal });
+    await new Promise((r) => {
+      stream.on('error', r);
+      stream.on('close', r);
+      setTimeout(r, 1000);
+    });
+    expect(hits.length).toBe(before); // 一个请求都没发出
+  });
+});

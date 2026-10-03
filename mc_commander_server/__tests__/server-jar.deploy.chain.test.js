@@ -123,8 +123,9 @@ function defaultStreamImpl(jarBytes) {
     const pt = new streamMod.PassThrough();
     queueMicrotask(() => {
       pt.emit('downloadProgress', {
+        // percent 与 transferred/total 自洽（半程），忠实 httpStream 的产出形状
         percent: 0.5,
-        transferred: jarBytes.length,
+        transferred: jarBytes.length / 2,
         total: jarBytes.length,
       });
       pt.write(jarBytes);

@@ -253,7 +253,12 @@ function streamSucceeds({ transferred = 1, total = 1, data = '' } = {}) {
   return () => {
     const stream = makeFakeStream();
     queueMicrotask(() => {
-      stream._emit('downloadProgress', { percent: total > 0 ? 1 : 0, transferred, total });
+      // percent 忠实 httpStream 公式（total 未知记 0），使夹具在任何参数下都自洽
+      stream._emit('downloadProgress', {
+        percent: total > 0 ? transferred / total : 0,
+        transferred,
+        total,
+      });
       if (data) stream._file.write(data);
       stream._file.end();
     });

@@ -135,8 +135,9 @@ function defaultStreamImpl(jarBytes) {
     const pt = new streamMod.PassThrough();
     queueMicrotask(() => {
       pt.emit('downloadProgress', {
+        // percent 与 transferred/total 自洽（半程），忠实 httpStream 的产出形状
         percent: 0.5,
-        transferred: jarBytes.length,
+        transferred: jarBytes.length / 2,
         total: jarBytes.length,
       });
       pt.write(jarBytes);
@@ -460,17 +461,17 @@ describe('下载进度节流与错误清理', () => {
     };
   }
 
-  it('进度节流：percent=0 按 transferred/total 折算发射，<1% 增量被抑制', async () => {
+  it('进度节流：按客户端 percent 直采发射，<1% 增量被抑制', async () => {
     defineVanillaChain();
     httpState.streamImpl = (url, streamMod) => {
       const pt = new streamMod.PassThrough();
       queueMicrotask(() => {
-        // 事件 1：percent=0、total=0 → pct=0（0 与 lastPct=-1 差 1 → 发射）
+        // 事件 1：total=0 → 客户端 percent 亦为 0 → pct=0（0 与 lastPct=-1 差 1 → 发射）
         pt.emit('downloadProgress', { percent: 0, transferred: 0, total: 0 });
-        // 事件 2：percent=0、total=1000、transferred=100 → pct=0.1（发射）
-        pt.emit('downloadProgress', { percent: 0, transferred: 100, total: 1000 });
+        // 事件 2：percent 恒等于 transferred/total = 0.1 → 发射
+        pt.emit('downloadProgress', { percent: 0.1, transferred: 100, total: 1000 });
         // 事件 3：增量 0.005 < 0.01 → 节流跳过
-        pt.emit('downloadProgress', { percent: 0, transferred: 105, total: 1000 });
+        pt.emit('downloadProgress', { percent: 0.105, transferred: 105, total: 1000 });
         pt.write(JAR_BYTES);
         pt.end();
       });

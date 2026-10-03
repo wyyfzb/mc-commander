@@ -214,6 +214,9 @@ export class UpgradeService {
         timeoutMs: 120000,
         retryLimit: 2,
         headers: { 'User-Agent': PAPER_USER_AGENT },
+        // 必须把取消信号一并交给传输层：实测仅靠下面的 stream.destroy() 在
+        // 「响应头尚未到达」时无法中止 fetch，慢上游会把 socket 挂到超时
+        signal,
       });
 
       const detach = () => signal?.removeEventListener('abort', onCancel);
@@ -235,7 +238,7 @@ export class UpgradeService {
       signal?.addEventListener('abort', onCancel, { once: true });
 
       let lastPct = -1;
-      stream.on('downloadProgress', ({ percent, transferred, total }) => {
+      stream.on('downloadProgress', ({ percent, transferred }) => {
         // 体积上限断言在前：超限即刻断流清理，不等下载自然结束
         try {
           assertSizeWithinLimit(transferred, this.maxJarDownloadBytes);
@@ -243,7 +246,9 @@ export class UpgradeService {
           abort(err);
           return;
         }
-        const pct = percent > 0 ? percent : total > 0 ? transferred / total : 0;
+        // 直接采信客户端的 percent：httpStream 恒按 transferred/total 折算（total 未知时为 0）。
+        // 不在此处就地重算——同一公式两处实现必然漂移
+        const pct = percent;
         if (pct - lastPct < 0.01) return;
         lastPct = pct;
         this._emitProgress(instanceId, UPGRADE_STAGES.DOWNLOAD, Math.round(pct * 100));

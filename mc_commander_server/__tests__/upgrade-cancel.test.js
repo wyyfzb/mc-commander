@@ -30,8 +30,11 @@ vi.mock('../utils/http-client.js', () => ({
       ? Promise.resolve({ build: '2416' })
       : Promise.reject(new Error('offline (mocked)')),
   ),
-  // httpStream：Node Readable 契约，按 testState.streamBehavior 注入 hang/failure/success
-  httpStream: vi.fn(() => {
+  // httpStream：Node Readable 契约，按 testState.streamBehavior 注入 hang/failure/success。
+  // 转发参数：取消接线断言要读取调用选项（signal 是否交给了传输层）
+  httpStream: vi.fn((url, opts) => {
+    void url;
+    void opts;
     const listeners = {};
     const stream = {
       on(ev, cb) {
@@ -95,6 +98,7 @@ vi.mock('../utils/audit.js', () => ({
 const { createUpgradeRoutes } = await import('../routes/upgrade.js');
 const { UpgradeService, UPGRADE_STAGES } = await import('../services/upgrade.service.js');
 const { cancelTask, TASK_KINDS } = await import('../utils/cancellable-task.js');
+const { httpStream } = await import('../utils/http-client.js');
 const { InstanceModel } = await import('../db/index.js');
 
 const OLD_JAR_NAME = 'server-1.20.4.jar';
@@ -240,6 +244,10 @@ describe('取消窗口与收尾口径', () => {
     // 下载半成品不留在实例目录（新增 jar 名与 .part 都不该存在）
     expect(fs.existsSync(path.join(testState.tmpDir, 'server-1.21.4.jar'))).toBe(false);
     expect(fs.readdirSync(testState.tmpDir).some((f) => f.endsWith('.part'))).toBe(false);
+    // 取消信号必须交给传输层：仅靠 stream.destroy() 在「响应头尚未到达」时拆不掉
+    // 那个 fetch，慢上游会把 socket 挂到超时（http-client.test.js 有该能力的正向断言）
+    const streamOpts = vi.mocked(httpStream).mock.calls.at(-1)?.[1];
+    expect(streamOpts?.signal).toBeInstanceOf(AbortSignal);
   });
 
   it('替换复制窗口内取消（新 jar 已下载）：清掉下载产物与 .part，实例保持旧版本', async () => {
