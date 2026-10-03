@@ -22,45 +22,43 @@ const testState = vi.hoisted(() => ({
 }));
 
 /** 下载流桩：hang 模式永不结束（把升级停在下载阶段），failure 模式立即 error */
-vi.mock('got', () => ({
-  default: Object.assign(
-    // purpur 现在会先查 /latest 取 md5 摘要；本文件全部用 purpur 作载体，
-    // 故该查询必须可解析，否则用例会停在「offline」而非待测阶段
-    vi.fn((url) =>
-      String(url).includes('/purpur/')
-        ? { json: () => Promise.resolve({ build: '2416' }) }
-        : Promise.reject(new Error('offline (mocked)')),
-    ),
-    {
-      stream: vi.fn(() => {
-        const listeners = {};
-        const stream = {
-          on(ev, cb) {
-            (listeners[ev] = listeners[ev] || []).push(cb);
-            return stream;
-          },
-          pipe(file) {
-            stream._file = file;
-            return stream;
-          },
-          destroy() {
-            stream._destroyed = true;
-          },
-        };
-        stream._emit = (ev, ...args) => (listeners[ev] || []).forEach((cb) => cb(...args));
-        if (testState.streamBehavior === 'failure') {
-          queueMicrotask(() => stream._emit('error', new Error('download failed (mocked)')));
-        } else if (testState.streamBehavior === 'success') {
-          // 真正落盘并 end：只有 end 才触发 file.on('finish') → 摘要校验 → 推进到 verify
-          queueMicrotask(() => {
-            stream._emit('downloadProgress', { percent: 1, transferred: 1, total: 1 });
-            stream._file.end();
-          });
-        }
-        return stream;
-      }),
-    },
+vi.mock('../utils/http-client.js', () => ({
+  // purpur 现在会先查 /latest 取 md5 摘要；本文件全部用 purpur 作载体，
+  // 故该查询必须可解析，否则用例会停在「offline」而非待测阶段
+  httpJson: vi.fn((url) =>
+    String(url).includes('/purpur/')
+      ? Promise.resolve({ build: '2416' })
+      : Promise.reject(new Error('offline (mocked)')),
   ),
+  // httpStream：Node Readable 契约，按 testState.streamBehavior 注入 hang/failure/success
+  httpStream: vi.fn(() => {
+    const listeners = {};
+    const stream = {
+      on(ev, cb) {
+        (listeners[ev] = listeners[ev] || []).push(cb);
+        return stream;
+      },
+      pipe(file) {
+        stream._file = file;
+        return stream;
+      },
+      destroy() {
+        stream._destroyed = true;
+      },
+    };
+    stream._emit = (ev, ...args) => (listeners[ev] || []).forEach((cb) => cb(...args));
+    if (testState.streamBehavior === 'failure') {
+      queueMicrotask(() => stream._emit('error', new Error('download failed (mocked)')));
+    } else if (testState.streamBehavior === 'success') {
+      // 真正落盘并 end：只有 end 才触发 file.on('finish') → 摘要校验 → 推进到 verify
+      queueMicrotask(() => {
+        stream._emit('downloadProgress', { percent: 1, transferred: 1, total: 1 });
+        stream._file.end();
+      });
+    }
+    return stream;
+  }),
+  httpPost: vi.fn(),
 }));
 
 /** 备份服务桩：createBackup 触发完成事件（除非处于 backup-hang 模式）；restore 记录调用 */

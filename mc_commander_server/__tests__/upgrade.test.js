@@ -3,7 +3,7 @@
  * - 路由：前置校验矩阵（必填/白名单/404/运行中/重复升级/同版本）+ 202 异步受理
  * - 服务：进度事件序列（backup → download 失败 → rolled_back/failed）
  *
- * 网络隔离：got 全量 mock（离线语义），backup.service / db / audit 全 mock，
+ * 网络隔离：http-client 全量 mock（离线语义），backup.service / db / audit 全 mock，
  * 保证 CI 无外网也能确定性通过。
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -15,36 +15,34 @@ import path from 'path';
 
 // ── 模块 mock（vi.mock 提升，factory 内不得引用外部变量） ──
 
-// got：函数调用（.json 链）默认离线拒绝；但 purpur 现在会先查 /latest 取 md5 摘要，
-// 而以 purpur 为载体的用例需要走到下载阶段，故对该域名返回可解析响应。
-// 其余上游一律拒绝，保持「未预期的网络调用必暴露」的隔离语义。
-vi.mock('got', () => ({
-  default: Object.assign(
-    vi.fn((url) =>
-      String(url).includes('/purpur/')
-        ? { json: () => Promise.resolve({ build: '2416' }) }
-        : Promise.reject(new Error('offline (mocked)')),
-    ),
-    {
-      stream: vi.fn(() => {
-        const listeners = {};
-        const stream = {
-          on(ev, cb) {
-            (listeners[ev] = listeners[ev] || []).push(cb);
-            return stream;
-          },
-          pipe() {
-            return stream;
-          },
-          destroy() {},
-        };
-        queueMicrotask(() => {
-          (listeners.error || []).forEach((cb) => cb(new Error('download failed (mocked)')));
-        });
-        return stream;
-      }),
-    },
+// httpJson 默认离线拒绝（reject 即最终值，无 .json 链）；但 purpur 现在会先查
+// /latest 取 md5 摘要，而以 purpur 为载体的用例需要走到下载阶段，故对该域名
+// 返回可解析响应。其余上游一律拒绝，保持「未预期的网络调用必暴露」的隔离语义。
+vi.mock('../utils/http-client.js', () => ({
+  httpJson: vi.fn((url) =>
+    String(url).includes('/purpur/')
+      ? Promise.resolve({ build: '2416' })
+      : Promise.reject(new Error('offline (mocked)')),
   ),
+  // httpStream：返回 Node Readable（.on/.pipe/.destroy），此处立刻以 error 事件收场（下载失败载体）
+  httpStream: vi.fn(() => {
+    const listeners = {};
+    const stream = {
+      on(ev, cb) {
+        (listeners[ev] = listeners[ev] || []).push(cb);
+        return stream;
+      },
+      pipe() {
+        return stream;
+      },
+      destroy() {},
+    };
+    queueMicrotask(() => {
+      (listeners.error || []).forEach((cb) => cb(new Error('download failed (mocked)')));
+    });
+    return stream;
+  }),
+  httpPost: vi.fn(),
 }));
 
 // BackupService：备份即完成（触发 backupComplete 事件），restore 恒成功
@@ -236,7 +234,7 @@ describe('UpgradeService 进度序列（离线 mock）', () => {
     const serverManager = createMockServerManager();
     const service = new UpgradeService(serverManager);
 
-    // purpur：resolveDownloadUrl 无网络调用，直接进下载阶段 → mock 流报错
+    // purpur：/latest 摘要查询由 mock 应答，解析后直接进下载阶段 → mock 流报错
     await expect(service.upgrade('inst-1', '1.21.4', 'purpur')).rejects.toThrow(/download failed/);
 
     const stages = serverManager._emitted

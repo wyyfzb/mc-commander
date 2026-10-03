@@ -52,13 +52,12 @@ vi.mock('../utils/java-detector.js', () => ({
 
 vi.mock('../services/mc_server.js', () => ({ atomicWriteFile: vi.fn() }));
 
-vi.mock('got', () => ({
-  default: Object.assign(
-    vi.fn(() => ({ json: () => Promise.reject(new Error('no network in test')) })),
-    {
-      stream: vi.fn(),
-    },
-  ),
+vi.mock('../utils/http-client.js', () => ({
+  // 本组只测状态兜底与重复部署门控，上游一律不可达（httpJson 直接 reject）
+  httpJson: vi.fn(() => Promise.reject(new Error('no network in test'))),
+  httpStream: vi.fn(),
+  // 具名导出必须齐全：SUT 用 ESM 具名导入，缺一个即模块解析期整体失败
+  httpPost: vi.fn(),
 }));
 
 const { createServerJarRoutes } = await import('../routes/server-jar.js');

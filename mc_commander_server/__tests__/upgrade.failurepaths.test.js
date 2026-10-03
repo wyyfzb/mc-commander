@@ -15,7 +15,7 @@
  *    （#539）、oldJarPath 为空跳过复制、_originalMcVersion/oldJarFile 缺失
  *    跳过回写、回滚自身失败兜底日志、备份恢复失败不阻塞
  *
- * 网络隔离：got 全量 mock（json/stream 行为按用例注入），CI 离线确定性。
+ * 网络隔离：http-client 全量 mock（json/stream 行为按用例注入），CI 离线确定性。
  * 超时用例用 vi fake timers；其余用真实临时目录 + 真实 fs。
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -29,12 +29,11 @@ const { jsonImpl, streamImpl } = vi.hoisted(() => ({
   streamImpl: { current: null },
 }));
 
-vi.mock('got', () => ({
-  // got(url, opts) 返回 promise-like：resolveDownload 里链式 .json()
-  default: Object.assign(
-    vi.fn((...args) => ({ json: () => jsonImpl.current(...args) })),
-    { stream: vi.fn((...args) => streamImpl.current(...args)) },
-  ),
+vi.mock('../utils/http-client.js', () => ({
+  // httpJson 的返回值即最终 JSON（无 .json 链）
+  httpJson: vi.fn((...args) => jsonImpl.current(...args)),
+  httpStream: vi.fn((...args) => streamImpl.current(...args)),
+  httpPost: vi.fn(),
 }));
 
 vi.mock('../services/backup.service.js', () => ({
@@ -407,10 +406,12 @@ describe('_downloadJar 异常与进度矩阵', () => {
     streamImpl.current = () => {
       const stream = makeFakeStream();
       queueMicrotask(() => {
-        // total 缺失（0）→ pct 记 0
+        // total 缺失（0）→ 客户端 percent 亦为 0 → pct 记 0
         stream._emit('downloadProgress', { percent: 0, transferred: 0, total: 0 });
-        // percent 缺失且 total>0 → pct = transferred/total
+        // percent 缺失形态 → pct 回退按 transferred/total
         stream._emit('downloadProgress', { percent: 0, transferred: 50, total: 100 });
+        // 客户端实际形态（percent = transferred/total）：与上一拍同为 50%，被节流吸收
+        stream._emit('downloadProgress', { percent: 0.5, transferred: 50, total: 100 });
         // 增量 0.4% < 1% → 节流早退，不广播
         stream._emit('downloadProgress', { percent: 0, transferred: 50.4, total: 100 });
         // percent 直供
@@ -429,7 +430,7 @@ describe('_downloadJar 异常与进度矩阵', () => {
       ),
     ).rejects.toThrow(/download failed/);
 
-    // 广播序列：0% → 50% → 99%（50.4% 被节流吸收）
+    // 广播序列：0% → 50% → 99%（同值与 50.4% 两拍被节流吸收）
     expect(progressPercents(manager)).toEqual([0, 50, 99]);
   });
 });

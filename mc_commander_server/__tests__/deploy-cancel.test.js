@@ -18,7 +18,7 @@ const testState = vi.hoisted(() => ({
   latestBuild: {},
 }));
 
-const gotState = vi.hoisted(() => ({ streamImpl: null }));
+const httpState = vi.hoisted(() => ({ streamImpl: null }));
 
 vi.mock('../db/index.js', () => ({
   InstanceModel: {
@@ -82,11 +82,16 @@ vi.mock('child_process', async (importOriginal) => {
   };
 });
 
-vi.mock('got', async () => {
+// 三个具名导出都要给：SUT（server-jar.js）用 ESM 具名导入，缺一个就是模块解析期报错
+// 假流工厂保持旧 got.stream 的注入形状（第二参为 node:stream 模块），
+// httpStream 的第三个参数（选项）由工厂忽略——注入点只关心 url
+vi.mock('../utils/http-client.js', async () => {
   const streamMod = await import('node:stream');
-  const gotFn = vi.fn(() => ({ json: () => Promise.resolve({}) }));
-  gotFn.stream = vi.fn((url) => gotState.streamImpl(url, streamMod));
-  return { default: gotFn };
+  return {
+    httpJson: vi.fn(async () => ({})),
+    httpPost: vi.fn(),
+    httpStream: vi.fn((url, opts) => httpState.streamImpl(url, streamMod, opts)),
+  };
 });
 
 const { createServerJarRoutes } = await import('../routes/server-jar.js');
@@ -96,7 +101,7 @@ const { errorHandler } = await import('../middleware/error_handler.js');
 const JAR_BYTES = Buffer.from('fake-server-jar-payload');
 const JAR_SHA256 = crypto.createHash('sha256').update(JAR_BYTES).digest('hex');
 
-/** 下载流：正常完成（写完即 end） */
+/** 下载流：正常完成（写完即 end）；第三参（httpStream 选项）忽略 */
 function completingStream(jarBytes) {
   return (url, streamMod) => {
     const pt = new streamMod.PassThrough();
@@ -113,7 +118,10 @@ function completingStream(jarBytes) {
   };
 }
 
-/** 下载流：永不结束（停在下载阶段，等待取消中断） */
+/**
+ * 下载流：永不结束（停在下载阶段，等待取消中断）。
+ * 返回真实 PassThrough：SUT 以 pipe() 接文件写流收尾，取消路径对该流调 .destroy()
+ */
 function hangingStream() {
   return (url, streamMod) => new streamMod.PassThrough();
 }
@@ -185,7 +193,7 @@ beforeEach(() => {
       },
     },
   };
-  gotState.streamImpl = completingStream(JAR_BYTES);
+  httpState.streamImpl = completingStream(JAR_BYTES);
 });
 
 afterEach(() => {
@@ -208,7 +216,7 @@ describe('POST /instances/deploy/cancel 受理语义', () => {
   });
 
   it('instanceId 不匹配：409 且不中断在途部署（滞后一周期的取消不得误杀新部署）', async () => {
-    gotState.streamImpl = hangingStream();
+    httpState.streamImpl = hangingStream();
     const { app, manager } = buildApp();
     const deploying = startDeploy(app, DEPLOY_BODY);
     const id = await waitFor(() => deployId(manager));
@@ -237,7 +245,7 @@ describe('POST /instances/deploy/cancel 受理语义', () => {
 
 describe('取消在途部署', () => {
   it('下载阶段取消：cancelled 终态 + 目录清理 + 注册表清空 + POST 回 409 40915', async () => {
-    gotState.streamImpl = hangingStream();
+    httpState.streamImpl = hangingStream();
     const { app, manager } = buildApp();
     const deploying = startDeploy(app, DEPLOY_BODY);
     const id = await waitFor(() => deployId(manager));
@@ -312,7 +320,7 @@ describe('取消在途部署', () => {
   });
 
   it('收尾失败（目录被占用）也要据实回报：cancelled 终态带清理明细，不宣称已清理', async () => {
-    gotState.streamImpl = hangingStream();
+    httpState.streamImpl = hangingStream();
     const { app, manager } = buildApp();
     const deploying = startDeploy(app, DEPLOY_BODY);
     const id = await waitFor(() => deployId(manager));
@@ -341,7 +349,7 @@ describe('取消在途部署', () => {
   });
 
   it('取消后注册表释放：可再次发起部署（不被 DEPLOY_IN_PROGRESS 拦）', async () => {
-    gotState.streamImpl = hangingStream();
+    httpState.streamImpl = hangingStream();
     const { app, manager } = buildApp();
     const deploying = startDeploy(app, DEPLOY_BODY);
     const id = await waitFor(() => deployId(manager));
@@ -354,7 +362,7 @@ describe('取消在途部署', () => {
     expect(again.body.code).toBe(40906);
 
     // 再次部署：本次让下载正常完成，验证取消没有留下阻塞（注册表/门控均已释放）
-    gotState.streamImpl = completingStream(JAR_BYTES);
+    httpState.streamImpl = completingStream(JAR_BYTES);
     manager.emit.mockClear();
     const redeploy = await request(app).post('/api/instances/deploy').send(DEPLOY_BODY);
     expect(redeploy.status).toBe(200);

@@ -8,7 +8,7 @@
  * - runFirstLaunch（退出码/错误/60s 超时进程树终止）
  *
  * mock 边界（对齐 PR#413/#412/#409 范式：仅替身外部依赖，importOriginal 保留语义）：
- * - got：HTTP 层替身（json 按 URL 注册表返回；stream 注入可控字节流）
+ * - utils/http-client：HTTP 层替身（httpJson 按 URL 注册表返回；httpStream 注入可控字节流）
  * - minecraft-core：核心版本发现替身（getVersions/getLatestBuild 可控行为）
  * - child_process：假 java/forge 进程（importOriginal 保留 spawnSync）
  * - java-detector / db / config.serversDir（tmp 目录）：隔离宿主环境
@@ -29,7 +29,7 @@ const testState = vi.hoisted(() => ({
   dbCreateError: null,
 }));
 
-const gotState = vi.hoisted(() => ({ jsonTable: {}, streamImpl: null }));
+const httpState = vi.hoisted(() => ({ jsonTable: {}, streamImpl: null }));
 
 vi.mock('../db/index.js', () => ({
   InstanceModel: {
@@ -94,29 +94,30 @@ vi.mock('child_process', async (importOriginal) => {
   };
 });
 
-vi.mock('got', async () => {
+vi.mock('../utils/http-client.js', async () => {
   const streamMod = await import('node:stream');
+  // 按 URL 子串命中注册表；未命中即抛错（URL 形状漂移时给出可定位的失败，而非静默 undefined）
   const findJson = (url) => {
-    const keys = Object.keys(gotState.jsonTable).sort((a, b) => b.length - a.length);
-    for (const k of keys) if (url.includes(k)) return gotState.jsonTable[k];
-    throw new Error(`unexpected got.json url: ${url}`);
+    const keys = Object.keys(httpState.jsonTable).sort((a, b) => b.length - a.length);
+    for (const k of keys) if (url.includes(k)) return httpState.jsonTable[k];
+    throw new Error(`unexpected json url: ${url}`);
   };
-  const gotFn = vi.fn((url) => ({
-    json: () => {
-      const entry = findJson(url);
-      if (entry instanceof Error) return Promise.reject(entry);
-      return Promise.resolve(entry);
-    },
-  }));
-  gotFn.stream = vi.fn((url) => gotState.streamImpl(url, streamMod));
-  return { default: gotFn };
+  // httpJson 契约：直接返回解析后的值（Promisified），值为 Error 实例时 reject
+  const httpJson = vi.fn((url) => {
+    const entry = findJson(url);
+    if (entry instanceof Error) return Promise.reject(entry);
+    return Promise.resolve(entry);
+  });
+  const httpStream = vi.fn((url) => httpState.streamImpl(url, streamMod));
+  // 三个具名导出必须齐全：SUT 用 ESM 具名导入，缺一个即模块解析期整体失败
+  return { httpJson, httpStream, httpPost: vi.fn() };
 });
 
 const { createServerJarRoutes } = await import('../routes/server-jar.js');
 const { InstanceModel, AuditLogModel } = await import('../db/index.js');
 const { errorHandler } = await import('../middleware/error_handler.js');
 
-/** 注入假 jar 字节流的默认下载实现（可被单个用例覆写 gotState.streamImpl） */
+/** 注入假 jar 字节流的默认下载实现（可被单个用例覆写 httpState.streamImpl） */
 function defaultStreamImpl(jarBytes) {
   return (url, streamMod) => {
     const pt = new streamMod.PassThrough();
@@ -167,8 +168,8 @@ beforeEach(() => {
   testState.mcCoreVersions = [];
   testState.mcCoreThrow = false;
   testState.dbCreateError = null;
-  gotState.jsonTable = {};
-  gotState.streamImpl = defaultStreamImpl(JAR_BYTES);
+  httpState.jsonTable = {};
+  httpState.streamImpl = defaultStreamImpl(JAR_BYTES);
 });
 
 afterEach(() => {
@@ -181,7 +182,7 @@ describe('GET /versions 多核心版本分发', () => {
     // 34 个条目混入 2 个预发布：验证展平/过滤/截断三段逻辑
     const groupA = Array.from({ length: 20 }, (_, i) => `1.21.${i}`);
     const groupB = [...Array.from({ length: 14 }, (_, i) => `1.20.${i}`), '26.x-pre1', '1.19-rc1'];
-    gotState.jsonTable = { 'projects/paper': { project: 'paper', versions: { groupA, groupB } } };
+    httpState.jsonTable = { 'projects/paper': { project: 'paper', versions: { groupA, groupB } } };
     const { app } = buildApp();
 
     const res = await request(app).get('/api/versions?type=paper');
@@ -195,7 +196,7 @@ describe('GET /versions 多核心版本分发', () => {
   });
 
   it('paper：versions 为数组形态（非版本组对象）——直通过滤', async () => {
-    gotState.jsonTable = {
+    httpState.jsonTable = {
       'projects/paper': { project: 'paper', versions: ['1.21.4', '26.x-pre1', '1.21.3'] },
     };
     const { app } = buildApp();
@@ -207,7 +208,7 @@ describe('GET /versions 多核心版本分发', () => {
   });
 
   it('paper：上游请求失败 → 502 SERVER_ERROR', async () => {
-    gotState.jsonTable = { 'projects/paper': new Error('connect ETIMEDOUT') };
+    httpState.jsonTable = { 'projects/paper': new Error('connect ETIMEDOUT') };
     const { app } = buildApp();
 
     const res = await request(app).get('/api/versions?type=paper');
@@ -219,7 +220,7 @@ describe('GET /versions 多核心版本分发', () => {
   });
 
   it('vanilla：Mojang manifest 仅保留 release 且截断 30', async () => {
-    gotState.jsonTable = {
+    httpState.jsonTable = {
       version_manifest_v2: {
         versions: [
           ...Array.from({ length: 32 }, (_, i) => ({ id: `1.21.${i}`, type: 'release' })),
@@ -239,7 +240,7 @@ describe('GET /versions 多核心版本分发', () => {
 
   it('fabric：core 版本列表 + loader stable 过滤截断 10', async () => {
     testState.mcCoreVersions = ['1.21.4', '1.21.3', '1.21.1'];
-    gotState.jsonTable = {
+    httpState.jsonTable = {
       'versions/loader': [
         ...Array.from({ length: 12 }, (_, i) => ({ version: `0.16.${i}`, stable: true })),
         { version: '0.17.0-beta', stable: false },
@@ -258,7 +259,7 @@ describe('GET /versions 多核心版本分发', () => {
 
   it('fabric：loader 上游失败 → loaders 空数组兜底（版本列表不受影响）', async () => {
     testState.mcCoreVersions = ['1.21.4'];
-    gotState.jsonTable = { 'versions/loader': new Error('loader api down') };
+    httpState.jsonTable = { 'versions/loader': new Error('loader api down') };
     const { app } = buildApp();
 
     const res = await request(app).get('/api/versions?type=fabric');
@@ -269,7 +270,7 @@ describe('GET /versions 多核心版本分发', () => {
   });
 
   it('forge：promotions 去重 + 1.x 过滤 + 倒序截断 30', async () => {
-    gotState.jsonTable = {
+    httpState.jsonTable = {
       promotions_slim: {
         promos: {
           '1.21.4-latest': '51.0.0',
@@ -318,11 +319,11 @@ describe('POST /instances/deploy · Paper 主链', () => {
               },
             },
       };
-      gotState.jsonTable = {
+      httpState.jsonTable = {
         'projects/paper/versions': { builds: [build] },
       };
     } else {
-      gotState.jsonTable = { 'projects/paper/versions': { builds } };
+      httpState.jsonTable = { 'projects/paper/versions': { builds } };
     }
   }
 
@@ -434,7 +435,7 @@ describe('POST /instances/deploy · Paper 主链', () => {
   it('paper：下载体积超过 512MB 上限 → 即刻断流 + 502 exceeds size limit + 清理', async () => {
     setPaperChain(); // 正常 sha（校验不应到达——超限先中断）
     const overLimit = 512 * 1024 * 1024 + 1;
-    gotState.streamImpl = (url, streamMod) => {
+    httpState.streamImpl = (url, streamMod) => {
       const pt = new streamMod.PassThrough();
       queueMicrotask(() => {
         pt.emit('downloadProgress', { percent: 1.0, transferred: overLimit, total: overLimit });
@@ -456,7 +457,7 @@ describe('POST /instances/deploy · Paper 主链', () => {
 
 describe('部署注册表终态语义（issue 420）', () => {
   function setPaperChain({ badSha = false } = {}) {
-    gotState.jsonTable = {
+    httpState.jsonTable = {
       'projects/paper/versions': {
         builds: [
           {
@@ -560,11 +561,11 @@ describe('部署注册表终态语义（issue 420）', () => {
 });
 
 describe('POST /instances/deploy · 下载异常与核心回退', () => {
-  it('got.stream 中途 error → 502 + 残留清理', async () => {
+  it('httpStream 中途 error → 502 + 残留清理', async () => {
     testState.latestBuild = {
       downloads: { application: { url: 'https://example.invalid/jar/server.jar' } },
     };
-    gotState.streamImpl = (url, streamMod) => {
+    httpState.streamImpl = (url, streamMod) => {
       const pt = new streamMod.PassThrough();
       queueMicrotask(() => pt.emit('error', new Error('socket hang up')));
       return pt;
@@ -720,8 +721,8 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
       .send({ type: 'fabric', mcVersion: '1.21.4', instanceName: 'Fabric Fallback Server' });
 
     expect(res.status).toBe(200);
-    const { default: got } = await import('got');
-    expect(got.stream.mock.calls[0][0]).toBe(
+    const { httpStream } = await import('../utils/http-client.js');
+    expect(httpStream.mock.calls[0][0]).toBe(
       'https://meta.fabricmc.net/v2/versions/loader/1.21.4/0.16.10/1.0.1/server/jar',
     );
   });
@@ -737,8 +738,8 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
       loaderVersion: '0.16.14',
     });
 
-    const { default: got } = await import('got');
-    expect(got.stream.mock.calls[0][0]).toContain('/0.16.14/');
+    const { httpStream } = await import('../utils/http-client.js');
+    expect(httpStream.mock.calls[0][0]).toContain('/0.16.14/');
   });
 
   it('purpur：core 失败 → 回退 purpur API latest 直链下载成功', async () => {
@@ -750,8 +751,8 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
       .send({ type: 'purpur', mcVersion: '1.21.4', instanceName: 'Purpur Fallback Server' });
 
     expect(res.status).toBe(200);
-    const { default: got } = await import('got');
-    expect(got.stream.mock.calls[0][0]).toBe(
+    const { httpStream } = await import('../utils/http-client.js');
+    expect(httpStream.mock.calls[0][0]).toBe(
       'https://api.purpurmc.org/v2/purpur/1.21.4/latest/download',
     );
   });

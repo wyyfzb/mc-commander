@@ -3,8 +3,8 @@
  *
  * 防线一：体积上限——流式字节数断言（默认 512MB），恶意/损坏上游推超大
  * 文件时立刻断流，防磁盘耗尽。与插件市场 100MB 截断先例（market.service
- * PassThrough 计数中间层）同一思路，此处由调用方在 got downloadProgress
- * 回调逐次传入累计 transferred（got 已做流式统计，语义等价）。
+ * PassThrough 计数中间层）同一思路，此处由调用方在 httpStream 的
+ * downloadProgress 回调逐次传入累计 transferred（客户端已做流式统计，语义等价）。
  *
  * 防线二：落地完整性——下载完成后对落盘文件流式计算摘要，与上游 manifest
  * 提供的期望值比对（vanilla Piston 提供 sha1、Paper v3 提供 sha256、purpur 提供

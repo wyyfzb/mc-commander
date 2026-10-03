@@ -13,7 +13,7 @@
  * ③ 错位副本删除失败不阻塞回滚主流程（DB 回写与内存同步照常完成）
  * ④ 直调 _doRollback（阶段 3 已切换模拟）：恢复复制目标为旧本体路径
  *
- * 网络隔离：got 全量 mock（CI 离线确定性）；真实临时目录 + 真实 fs，
+ * 网络隔离：http-client 全量 mock（CI 离线确定性）；真实临时目录 + 真实 fs，
  * 复制/删除落盘行为可断言（禁止占位断言）。
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -27,11 +27,10 @@ const { jsonImpl, streamImpl } = vi.hoisted(() => ({
   streamImpl: { current: null },
 }));
 
-vi.mock('got', () => ({
-  default: Object.assign(
-    vi.fn((...args) => ({ json: () => jsonImpl.current(...args) })),
-    { stream: vi.fn(() => streamImpl.current()) },
-  ),
+vi.mock('../utils/http-client.js', () => ({
+  httpJson: vi.fn((...args) => jsonImpl.current(...args)),
+  httpStream: vi.fn((...args) => streamImpl.current(...args)),
+  httpPost: vi.fn(),
 }));
 
 vi.mock('../services/backup.service.js', () => ({

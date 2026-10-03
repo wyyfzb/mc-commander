@@ -23,8 +23,8 @@ import path from 'path';
 import crypto from 'crypto';
 import { PassThrough } from 'stream';
 import { pipeline } from 'stream/promises';
-import got from 'got';
 import { AppError, ErrorCodes } from '../utils/response.js';
+import { httpJson, httpStream } from '../utils/http-client.js';
 import { uploadPlugin, listPlugins } from './plugin.service.js';
 import { getServerVersion } from '../utils/version.js';
 import { logger } from '../utils/logger.js';
@@ -220,12 +220,12 @@ export async function searchMarketPlugins({
     };
     if (q) searchParams.query = q;
 
-    const data = await got(`${MODRINTH_API_BASE}/search`, {
+    const data = await httpJson(`${MODRINTH_API_BASE}/search`, {
       searchParams,
       headers: { 'User-Agent': USER_AGENT },
-      timeout: { request: API_TIMEOUT_MS },
-      retry: { limit: 1 },
-    }).json();
+      timeoutMs: API_TIMEOUT_MS,
+      retryLimit: 1,
+    });
 
     const result = {
       totalHits: typeof data.total_hits === 'number' ? data.total_hits : 0,
@@ -282,12 +282,15 @@ export async function getMarketProjectVersions(
   if (ld) searchParams.loaders = JSON.stringify([ld]);
 
   try {
-    const data = await got(`${MODRINTH_API_BASE}/project/${encodeURIComponent(slug)}/version`, {
-      searchParams,
-      headers: { 'User-Agent': USER_AGENT },
-      timeout: { request: API_TIMEOUT_MS },
-      retry: { limit: 1 },
-    }).json();
+    const data = await httpJson(
+      `${MODRINTH_API_BASE}/project/${encodeURIComponent(slug)}/version`,
+      {
+        searchParams,
+        headers: { 'User-Agent': USER_AGENT },
+        timeoutMs: API_TIMEOUT_MS,
+        retryLimit: 1,
+      },
+    );
 
     const versions = (Array.isArray(data) ? data : [])
       .map((v) => {
@@ -391,11 +394,10 @@ export async function downloadMarketFile(url) {
     `.market-download.tmp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
   );
 
-  const source = got.stream(url, {
+  const source = httpStream(url, {
     headers: { 'User-Agent': USER_AGENT },
-    timeout: { request: DOWNLOAD_TIMEOUT_MS },
-    retry: { limit: 1 },
-    // 注：got v13+ 移除 isResponseOk 选项；默认 throwHttpErrors 已对非 2xx 抛错
+    timeoutMs: DOWNLOAD_TIMEOUT_MS,
+    retryLimit: 1,
   });
 
   // 计数中间层：流式实时统计字节数，超限立刻断流（比 Content-Length 预检更可靠——

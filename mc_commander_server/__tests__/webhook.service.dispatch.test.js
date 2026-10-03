@@ -5,7 +5,7 @@
  * 4xx 短路、重试耗尽落库（attempts/durationMs）、失败通知去重（首次通知/重复抑制/成功恢复）、
  * _sign HMAC-SHA256 契约（硬编码期望值）、_truncateBody 边界、SSRF 拦截落库、事件桥接映射。
  *
- * got / url-guard / database / logger 全 mock：不触网，真实 better-sqlite3（:memory:）断言落库。
+ * utils/http-client / url-guard / database / logger 全 mock：不触网，真实 better-sqlite3（:memory:）断言落库。
  *
  * 行为锚定说明（观察项，未改业务代码）：
  * - dispatch 入口无集中事件白名单校验：事件过滤语义在订阅方 webhook.events 字段
@@ -26,8 +26,12 @@ const { postImpl, guardImpl, dbRef } = vi.hoisted(() => ({
   dbRef: { current: null },
 }));
 
-vi.mock('got', () => ({
-  default: { post: (...args) => postImpl.current(...args) },
+// 三个具名导出都要给：SUT 用 ESM 具名导入，缺一个就是模块解析期报错（整个文件全红）
+vi.mock('../utils/http-client.js', () => ({
+  httpJson: vi.fn(),
+  httpStream: vi.fn(),
+  // 每次调用只调一次注入实现：本文件的重试次数断言（3 次 / 5 次）依赖这一点
+  httpPost: (...args) => postImpl.current(...args),
 }));
 
 vi.mock('../utils/url-guard.js', () => ({
@@ -450,7 +454,7 @@ describe('WebhookService 背压保护（issue #410）', () => {
 
     for (let i = 0; i < 6; i++) {
       await WebhookService.dispatch('player.join', { instanceId: 'inst-1' });
-      // 让 fire-and-forget 的 _deliver 确定性地完成计数（走到挂起的 got.post）
+      // 让 fire-and-forget 的 _deliver 确定性地完成计数（走到挂起的 httpPost）
       await new Promise((r) => setImmediate(r));
     }
 

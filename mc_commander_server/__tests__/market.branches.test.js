@@ -1,7 +1,7 @@
 /**
  * market.service.js 分支补测（issue 518：缓存行为/下载安全臂/清洗回退/错误翻译）
  *
- * 范式与 market.test.js 同构：got 全量 mock（离线语义），本文件聚焦既有用例
+ * 范式与 market.test.js 同构：http-client 全量 mock（离线语义），本文件聚焦既有用例
  * 未触达的分支面——cacheGet 过期清理臂、cacheSet 近似 LRU 淘汰、下载超限中断流、
  * tmp dir 创建失败、文件名清洗 fallback 双臂、translateUpstreamError 非常规臂。
  */
@@ -11,13 +11,13 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-vi.mock('got', () => {
-  const gotFn = vi.fn();
-  gotFn.stream = vi.fn();
-  return { default: gotFn };
-});
+vi.mock('../utils/http-client.js', () => ({
+  httpJson: vi.fn(),
+  httpStream: vi.fn(),
+  httpPost: vi.fn(),
+}));
 
-import got from 'got';
+import { httpJson, httpStream } from '../utils/http-client.js';
 import {
   searchMarketPlugins,
   getMarketProjectVersions,
@@ -48,11 +48,6 @@ const SEARCH_FIXTURE = {
   ],
 };
 
-// 统一的 .json() 链 mock：返回可配置值
-function mockJson(value) {
-  return { json: vi.fn().mockResolvedValue(value) };
-}
-
 describe('market.service 分支补测', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -68,55 +63,55 @@ describe('market.service 分支补测', () => {
     it('TTL 过期条目被清理并重新请求上游（cacheGet 过期臂）', async () => {
       vi.useFakeTimers();
       vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
-      got.mockReturnValue(mockJson(SEARCH_FIXTURE));
+      httpJson.mockResolvedValue(SEARCH_FIXTURE);
 
       await searchMarketPlugins({ query: 'cache-exp' });
-      expect(got).toHaveBeenCalledTimes(1);
+      expect(httpJson).toHaveBeenCalledTimes(1);
 
       // 未过期：命中缓存
       const hit = await searchMarketPlugins({ query: 'cache-exp' });
       expect(hit.cached).toBe(true);
-      expect(got).toHaveBeenCalledTimes(1);
+      expect(httpJson).toHaveBeenCalledTimes(1);
 
       // 越过 60s TTL：过期条目删除 → 重新请求
       vi.setSystemTime(new Date('2026-01-01T00:01:01Z'));
       const refetched = await searchMarketPlugins({ query: 'cache-exp' });
       expect(refetched.cached).toBe(false);
-      expect(got).toHaveBeenCalledTimes(2);
+      expect(httpJson).toHaveBeenCalledTimes(2);
     });
 
     it('容量 200：未满不淘汰，满后触发近似 LRU（最早过期条目出局）', async () => {
       vi.useFakeTimers();
       vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
-      got.mockImplementation(() => mockJson(SEARCH_FIXTURE));
+      httpJson.mockResolvedValue(SEARCH_FIXTURE);
 
       // 填满 200 条（CACHE_MAX_ENTRIES）
       for (let i = 0; i < 200; i++) {
         await searchMarketPlugins({ query: `lru-${i}` });
       }
-      expect(got).toHaveBeenCalledTimes(200);
+      expect(httpJson).toHaveBeenCalledTimes(200);
 
       // 容量恰好未超：最早条目仍在缓存（命中不增请求）
       const oldestHit = await searchMarketPlugins({ query: 'lru-0' });
       expect(oldestHit.cached).toBe(true);
-      expect(got).toHaveBeenCalledTimes(200);
+      expect(httpJson).toHaveBeenCalledTimes(200);
 
       // 第 201 条：触发淘汰循环，删除最早过期条目（lru-0）
       await searchMarketPlugins({ query: 'lru-200' });
-      expect(got).toHaveBeenCalledTimes(201);
+      expect(httpJson).toHaveBeenCalledTimes(201);
 
       // 次早条目仍命中（证明只淘汰一个最早者）
       const survivor = await searchMarketPlugins({ query: 'lru-1' });
       expect(survivor.cached).toBe(true);
-      expect(got).toHaveBeenCalledTimes(201);
+      expect(httpJson).toHaveBeenCalledTimes(201);
 
       // 被淘汰条目重新请求（miss）；重插本身占满容量，再淘汰下一个最早者（lru-1）
       const evicted = await searchMarketPlugins({ query: 'lru-0' });
       expect(evicted.cached).toBe(false);
-      expect(got).toHaveBeenCalledTimes(202);
+      expect(httpJson).toHaveBeenCalledTimes(202);
       const reEvicted = await searchMarketPlugins({ query: 'lru-1' });
       expect(reEvicted.cached).toBe(false);
-      expect(got).toHaveBeenCalledTimes(203);
+      expect(httpJson).toHaveBeenCalledTimes(203);
     });
   });
 
@@ -127,7 +122,7 @@ describe('market.service 分支补测', () => {
       await expect(downloadMarketFile('https://evil.example.com/x.jar')).rejects.toMatchObject({
         code: 50301,
       });
-      expect(got.stream).not.toHaveBeenCalled();
+      expect(httpStream).not.toHaveBeenCalled();
     });
 
     it('tmp dir 创建失败 → 50000 SERVER_ERROR（附失败原因）', async () => {
@@ -139,13 +134,13 @@ describe('market.service 分支补测', () => {
         code: ErrorCodes.SERVER_ERROR.code,
         message: expect.stringContaining('Failed to create tmp dir: disk full'),
       });
-      expect(got.stream).not.toHaveBeenCalled();
+      expect(httpStream).not.toHaveBeenCalled();
       mkdirSpy.mockRestore();
     });
 
     it('流式超限（>100MB）：计数中间层断流 → 50301 且半成品清理', async () => {
       const before = new Set(fs.existsSync(tmpUploadsDir) ? fs.readdirSync(tmpUploadsDir) : []);
-      got.stream.mockImplementation(() => {
+      httpStream.mockImplementation(() => {
         const src = new PassThrough();
         (async () => {
           try {
@@ -207,9 +202,10 @@ describe('market.service 分支补测', () => {
   });
 
   describe('translateUpstreamError 非常规臂（经 search 间接驱动）', () => {
+    // httpJson 契约：上游失败以 reject 到达（无 .json() 链），mock 需返回被拒的 Promise
     it('AppError 原样透传（不换码不换语义）', async () => {
       const passthrough = new AppError(ErrorCodes.RATE_LIMITED, 'rate limited');
-      got.mockImplementation(() => {
+      httpJson.mockImplementation(async () => {
         throw passthrough;
       });
 
@@ -221,7 +217,7 @@ describe('market.service 分支补测', () => {
 
     it('search 404：notFoundCode 亦为 50301（搜索域无独立 404 码）', async () => {
       const notFound = Object.assign(new Error('HTTPError'), { response: { statusCode: 404 } });
-      got.mockImplementation(() => {
+      httpJson.mockImplementation(async () => {
         throw notFound;
       });
 
@@ -232,7 +228,7 @@ describe('market.service 分支补测', () => {
     });
 
     it('普通错误 → 50301 携带原始 message', async () => {
-      got.mockImplementation(() => {
+      httpJson.mockImplementation(async () => {
         throw new Error('boom');
       });
 
@@ -243,7 +239,7 @@ describe('market.service 分支补测', () => {
     });
 
     it('无 message 异常 → 50301 兜底 unknown', async () => {
-      got.mockImplementation(() => {
+      httpJson.mockImplementation(async () => {
         throw {};
       });
 
@@ -256,16 +252,14 @@ describe('market.service 分支补测', () => {
 
   describe('installPluginFromMarket 补充臂', () => {
     it('版本 primary 文件 url 非 string → 40413「无可下载文件」且不发起下载', async () => {
-      got.mockReturnValue(
-        mockJson([
-          {
-            version_number: '1.0.0',
-            version_type: 'release',
-            name: 'v1',
-            files: [{ primary: true, filename: 'x.jar', url: 123 }], // url 非法 → 映射为 null
-          },
-        ]),
-      );
+      httpJson.mockResolvedValue([
+        {
+          version_number: '1.0.0',
+          version_type: 'release',
+          name: 'v1',
+          files: [{ primary: true, filename: 'x.jar', url: 123 }], // url 非法 → 映射为 null
+        },
+      ]);
 
       await expect(
         installPluginFromMarket('/tmp/some-server', { slug: 'demo', versionNumber: '1.0.0' }),
@@ -273,7 +267,7 @@ describe('market.service 分支补测', () => {
         code: ErrorCodes.MARKET_VERSION_NOT_FOUND.code,
         message: 'Version has no downloadable file',
       });
-      expect(got.stream).not.toHaveBeenCalled();
+      expect(httpStream).not.toHaveBeenCalled();
     });
   });
 });
@@ -314,10 +308,11 @@ const VERSION_LATEST = [
 const HIT_LIST = { total_hits: 1, hits: [HIT_FIXTURE] };
 
 function routeUpstream({ search = HIT_LIST, versions = VERSION_LATEST } = {}) {
-  return (url) => {
+  // httpJson 是 async：mock 实现同样用 async，throw 即等价于 reject（与真实契约一致）
+  return async (url) => {
     const u = String(url);
-    if (u.includes('/search')) return mockJson(search);
-    if (u.includes('/version')) return mockJson(versions);
+    if (u.includes('/search')) return search;
+    if (u.includes('/version')) return versions;
     throw new Error(`unexpected upstream url: ${u}`);
   };
 }
@@ -377,7 +372,7 @@ describe('checkPluginUpdates 行为级（更新检测域收口）', () => {
 
   it('命中且有新版：matched + updateAvailable + hasNewer 全量呈现', async () => {
     listPlugins.mockReturnValue({ plugins: [plugin()] });
-    got.mockImplementation(routeUpstream());
+    httpJson.mockImplementation(routeUpstream());
 
     const res = await checkPluginUpdates('/tmp/server');
 
@@ -399,22 +394,22 @@ describe('checkPluginUpdates 行为级（更新检测域收口）', () => {
         plugin({ file: 'c.jar', meta: { name: 'NoVer', version: '9.9.9' } }),
       ],
     });
-    got.mockImplementation((url) => {
+    httpJson.mockImplementation(async (url) => {
       const u = String(url);
       if (u.includes('/search')) {
         // 三个插件名都能在结果里命中（slug 随插件名路由）
-        return mockJson({
+        return {
           total_hits: 3,
           hits: [
             HIT_FIXTURE,
             { ...HIT_FIXTURE, slug: 'newerplug', title: 'NewerPlug' },
             { ...HIT_FIXTURE, slug: 'nover', title: 'NoVer' },
           ],
-        });
+        };
       }
       if (u.includes('/version')) {
         // nover 的版本列表为空 → latest null → cmp 0
-        return mockJson(u.includes('/project/nover/version') ? [] : VERSION_LATEST);
+        return u.includes('/project/nover/version') ? [] : VERSION_LATEST;
       }
       throw new Error('unexpected');
     });
@@ -437,7 +432,7 @@ describe('checkPluginUpdates 行为级（更新检测域收口）', () => {
     listPlugins.mockReturnValue({ plugins: [plugin()] });
     // 6 个候选均不匹配标题；匹配项排在第 6 位（超出审视窗口）
     const filler = (n) => ({ project_id: `p${n}`, slug: `other-${n}`, title: `Other ${n}` });
-    got.mockImplementation(
+    httpJson.mockImplementation(
       routeUpstream({
         search: {
           total_hits: 6,
@@ -456,7 +451,7 @@ describe('checkPluginUpdates 行为级（更新检测域收口）', () => {
     listPlugins.mockReturnValue({
       plugins: [plugin({ meta: { name: 'Vault Unlocked', version: '1.0' } })],
     });
-    got.mockImplementation(
+    httpJson.mockImplementation(
       routeUpstream({
         search: {
           total_hits: 1,
@@ -473,7 +468,7 @@ describe('checkPluginUpdates 行为级（更新检测域收口）', () => {
 
   it('候选字段非法被跳过后仍可命中后续项（continue 臂）', async () => {
     listPlugins.mockReturnValue({ plugins: [plugin()] });
-    got.mockImplementation(
+    httpJson.mockImplementation(
       routeUpstream({
         search: { total_hits: 2, hits: [{ title: 42, slug: null }, HIT_FIXTURE] },
       }),
@@ -491,14 +486,14 @@ describe('checkPluginUpdates 行为级（更新检测域收口）', () => {
         plugin({ file: 'good.jar', meta: { name: 'EssentialsX', version: '2.20.0' } }),
       ],
     });
-    got.mockImplementation((url, options) => {
+    httpJson.mockImplementation(async (url, options) => {
       const u = String(url);
       if (u.includes('/search')) {
         // 按 query 区分（参数在 options.searchParams）：Boom → 抛错；EssentialsX → 正常
         if (options?.searchParams?.query === 'Boom') throw new Error('upstream 500');
-        return mockJson(HIT_LIST);
+        return HIT_LIST;
       }
-      if (u.includes('/version')) return mockJson(VERSION_LATEST);
+      if (u.includes('/version')) return VERSION_LATEST;
       throw new Error('unexpected');
     });
 
@@ -518,11 +513,11 @@ describe('checkPluginUpdates 行为级（更新检测域收口）', () => {
       ),
     ];
     listPlugins.mockReturnValue({ plugins });
-    got.mockImplementation((url) => {
+    httpJson.mockImplementation(async (url) => {
       const u = String(url);
       if (u.includes('/search')) {
         // 无候选命中（Plug i 不在 fixture）→ 全部 matched:false
-        return mockJson({ total_hits: 0, hits: [] });
+        return { total_hits: 0, hits: [] };
       }
       throw new Error('unexpected');
     });
@@ -540,19 +535,17 @@ describe('checkPluginUpdates 行为级（更新检测域收口）', () => {
 
 describe('字段映射 null 臂与参数净化补充', () => {
   it('搜索结果字段缺失/类型非法 → 白名单归 null/0/[]', async () => {
-    got.mockReturnValue(
-      mockJson({
-        total_hits: 'not-number',
-        hits: [
-          {
-            downloads: 'x',
-            follows: 'x',
-            display_categories: 'not-array',
-            icon_url: 'http://insecure',
-          },
-        ],
-      }),
-    );
+    httpJson.mockResolvedValue({
+      total_hits: 'not-number',
+      hits: [
+        {
+          downloads: 'x',
+          follows: 'x',
+          display_categories: 'not-array',
+          icon_url: 'http://insecure',
+        },
+      ],
+    });
 
     const res = await searchMarketPlugins({ query: 'degenerate' });
 
@@ -570,41 +563,39 @@ describe('字段映射 null 臂与参数净化补充', () => {
   });
 
   it('版本结果字段缺失/类型非法 → 白名单归 null/0/[]', async () => {
-    got.mockReturnValue(
-      mockJson([
-        {
-          version_number: 42,
-          version_type: 'dev',
-          name: 42,
-          changelog: 42,
-          downloads: 'x',
-          game_versions: 'not-array',
-          loaders: 'not-array',
-          files: [],
-        },
-      ]),
-    );
+    httpJson.mockResolvedValue([
+      {
+        version_number: 42,
+        version_type: 'dev',
+        name: 42,
+        changelog: 42,
+        downloads: 'x',
+        game_versions: 'not-array',
+        loaders: 'not-array',
+        files: [],
+      },
+    ]);
 
     const res = await getMarketProjectVersions('demo', {});
     expect(res.versions).toEqual([]); // 无 primary 文件 → 过滤出局（映射分支已执行）
   });
 
   it('offset/limit 非法值回退默认（非整数/负值/超限）', async () => {
-    got.mockReturnValue(mockJson(SEARCH_FIXTURE));
+    httpJson.mockResolvedValue(SEARCH_FIXTURE);
 
     // 独立 query 隔离缓存键（同 query 同收敛参数会命中缓存不发请求）
     await searchMarketPlugins({ query: 'p1', offset: 1.5, limit: 0 });
-    let params = got.mock.calls[0][1].searchParams;
+    let params = httpJson.mock.calls[0][1].searchParams;
     expect(params.offset).toBe(0);
     expect(params.limit).toBe(20);
 
     await searchMarketPlugins({ query: 'p2', offset: -5, limit: 999 });
-    params = got.mock.calls[1][1].searchParams;
+    params = httpJson.mock.calls[1][1].searchParams;
     expect(params.offset).toBe(0);
     expect(params.limit).toBe(20);
 
     await searchMarketPlugins({ query: 'p3', offset: 50_000, limit: 10 });
-    params = got.mock.calls[2][1].searchParams;
+    params = httpJson.mock.calls[2][1].searchParams;
     expect(params.offset).toBe(10_000); // 上限收敛
     expect(params.limit).toBe(10);
   });
@@ -616,7 +607,7 @@ describe('字段映射 null 臂与参数净化补充', () => {
   it('下载流普通错误 → 包装 50301「Failed to download plugin」且半成品清理', async () => {
     const tmpUploadsDir = path.join(os.tmpdir(), 'mc-commander-uploads');
     const before = new Set(fs.existsSync(tmpUploadsDir) ? fs.readdirSync(tmpUploadsDir) : []);
-    got.stream.mockImplementation(() => {
+    httpStream.mockImplementation(() => {
       const src = new PassThrough();
       process.nextTick(() => src.destroy(new Error('conn reset')));
       return src;

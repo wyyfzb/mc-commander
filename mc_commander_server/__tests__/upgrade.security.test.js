@@ -7,7 +7,7 @@
  *    收口保证写入/备份/回滚均不逃逸实例目录（真实临时目录 + 真实 fs）
  * ③ 下载域白名单：上游 API 响应被污染（URL 指向任意主机）时拒绝下载
  *
- * 网络隔离：got 全量 mock（json/stream 行为按用例注入），保证 CI 离线确定性。
+ * 网络隔离：http-client 全量 mock（json/stream 行为按用例注入），保证 CI 离线确定性。
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import express from 'express';
@@ -22,12 +22,11 @@ const { jsonImpl, streamImpl } = vi.hoisted(() => ({
   streamImpl: { current: null },
 }));
 
-vi.mock('got', () => ({
-  // got(url, opts) 返回 promise-like：resolveDownloadUrl 里链式 .json()
-  default: Object.assign(
-    vi.fn((...args) => ({ json: () => jsonImpl.current(...args) })),
-    { stream: vi.fn((...args) => streamImpl.current(...args)) },
-  ),
+vi.mock('../utils/http-client.js', () => ({
+  // httpJson 的返回值即最终 JSON（无 .json 链）；默认实现在 beforeEach 中注入
+  httpJson: vi.fn((...args) => jsonImpl.current(...args)),
+  httpStream: vi.fn((...args) => streamImpl.current(...args)),
+  httpPost: vi.fn(),
 }));
 
 vi.mock('../services/backup.service.js', () => ({
@@ -315,7 +314,7 @@ describe('服务层路径收口（真实临时目录 + 真实 fs）', () => {
     const serverManager = createMockServerManager();
     const service = new UpgradeService(serverManager);
 
-    // purpur：resolveDownloadUrl 无 json 调用；下载流 mock 报错（beforeEach 默认）
+    // purpur：resolveDownload 只查 /latest（httpJson，由 mock 应答）；下载流 mock 报错（beforeEach 默认）
     await expect(service.upgrade('inst-1', '1.21.4', 'purpur')).rejects.toThrow(/download failed/);
 
     const stages = serverManager._emitted

@@ -1,9 +1,9 @@
 /**
  * 插件市场服务测试（延伸：Modrinth 代理 + 一键安装）
  *
- * 网络隔离：got 全量 mock（离线语义）。
- * - got(...)（元数据 .json 链）：按 URL 前缀路由到 fixture
- * - got.stream(...)（CDN 下载）：返回推送真实 zip 字节的可读流（adm-zip 产物）
+ * 网络隔离：http-client 全量 mock（离线语义）。
+ * - httpJson(...)（元数据，直接 resolve 解析后的 JSON）：按 URL 前缀路由到 fixture
+ * - httpStream(...)（CDN 下载）：返回推送真实 zip 字节的可读流（adm-zip 产物）
  * 安装链路不做任何网络 mock 放行——落盘复用 uploadPlugin 的 zip 魔数/白名单校验，
  * 即测试里下载到临时目录的是"真 jar"。
  */
@@ -14,13 +14,13 @@ import os from 'os';
 import path from 'path';
 import AdmZip from 'adm-zip';
 
-vi.mock('got', () => {
-  const gotFn = vi.fn();
-  gotFn.stream = vi.fn();
-  return { default: gotFn };
-});
+vi.mock('../utils/http-client.js', () => ({
+  httpJson: vi.fn(),
+  httpStream: vi.fn(),
+  httpPost: vi.fn(),
+}));
 
-import got from 'got';
+import { httpJson, httpStream } from '../utils/http-client.js';
 import {
   searchMarketPlugins,
   getMarketProjectVersions,
@@ -105,24 +105,6 @@ function jarBytes(yml) {
   return zip.toBuffer();
 }
 
-function mockJsonResponse(fixture) {
-  return { json: async () => fixture };
-}
-
-/**
- * 模拟 got(...).json() 链式拒绝：got v15 返回 promise-like（带 .json 方法），
- * 拒绝发生在 .json() 内部而非 got(...) 调用本身。
- * 若用 mockRejectedValueOnce，got(...) 返回原生 Promise，服务侧 .json() 访问
- * 会先触发 TypeError，被 catch 后错误形态失真（拿不到 response.statusCode）。
- */
-function mockJsonRejection(err) {
-  return {
-    json: async () => {
-      throw err;
-    },
-  };
-}
-
 /** 构造一个推送 bytes 后自动 end 的伪下载流 */
 function streamFrom(bytes) {
   return Readable.from([bytes]);
@@ -149,12 +131,12 @@ beforeEach(() => {
 
 describe('market.service - searchMarketPlugins', () => {
   it('搜索：组装 facets（project_type=plugin）并映射字段白名单', async () => {
-    vi.mocked(got).mockReturnValueOnce(mockJsonResponse(SEARCH_FIXTURE));
+    vi.mocked(httpJson).mockResolvedValueOnce(SEARCH_FIXTURE);
 
     const result = await searchMarketPlugins({ query: 'essentials' });
 
-    expect(got).toHaveBeenCalledTimes(1);
-    const [url, opts] = vi.mocked(got).mock.calls[0];
+    expect(httpJson).toHaveBeenCalledTimes(1);
+    const [url, opts] = vi.mocked(httpJson).mock.calls[0];
     expect(url).toBe('https://api.modrinth.com/v2/search');
     const facets = JSON.parse(opts.searchParams.facets);
     expect(facets).toEqual([['project_type:plugin']]);
@@ -178,29 +160,29 @@ describe('market.service - searchMarketPlugins', () => {
   });
 
   it('版本/加载器过滤进入 facets；命中 60s TTL 缓存时不再请求上游', async () => {
-    vi.mocked(got).mockReturnValue(mockJsonResponse(SEARCH_FIXTURE));
+    vi.mocked(httpJson).mockResolvedValue(SEARCH_FIXTURE);
 
     await searchMarketPlugins({ query: 'ess', gameVersion: '1.21.4', loader: 'paper' });
-    const [, opts] = vi.mocked(got).mock.calls[0];
+    const [, opts] = vi.mocked(httpJson).mock.calls[0];
     const facets = JSON.parse(opts.searchParams.facets);
     expect(facets).toContainEqual(['game_versions:1.21.4']);
     expect(facets).toContainEqual(['loaders:paper']);
 
-    // 相同参数第二次：缓存命中，got 不再调用
+    // 相同参数第二次：缓存命中，httpJson 不再调用
     const again = await searchMarketPlugins({
       query: 'ess',
       gameVersion: '1.21.4',
       loader: 'paper',
     });
-    expect(got).toHaveBeenCalledTimes(1);
+    expect(httpJson).toHaveBeenCalledTimes(1);
     expect(again.cached).toBe(true);
   });
 
   it('空关键词浏览模式：index=downloads 且不带 query 参数', async () => {
-    vi.mocked(got).mockReturnValueOnce(mockJsonResponse(SEARCH_FIXTURE));
+    vi.mocked(httpJson).mockResolvedValueOnce(SEARCH_FIXTURE);
 
     await searchMarketPlugins({ query: '' });
-    const [, opts] = vi.mocked(got).mock.calls[0];
+    const [, opts] = vi.mocked(httpJson).mock.calls[0];
     expect(opts.searchParams.index).toBe('downloads');
     expect(opts.searchParams.query).toBeUndefined();
   });
@@ -218,13 +200,13 @@ describe('market.service - searchMarketPlugins', () => {
     await expect(searchMarketPlugins({ query: 123 })).rejects.toMatchObject({
       code: ErrorCodes.VALIDATION_ERROR.code,
     });
-    expect(got).not.toHaveBeenCalled();
+    expect(httpJson).not.toHaveBeenCalled();
   });
 
   it('上游 500 → 50301 MARKET_UPSTREAM_ERROR（保留 502 语义）', async () => {
     const err = new Error('boom');
     err.response = { statusCode: 500 };
-    vi.mocked(got).mockReturnValueOnce(mockJsonRejection(err));
+    vi.mocked(httpJson).mockRejectedValueOnce(err);
 
     await expect(searchMarketPlugins({ query: 'ess' })).rejects.toMatchObject({
       code: ErrorCodes.MARKET_UPSTREAM_ERROR.code,
@@ -237,13 +219,13 @@ describe('market.service - searchMarketPlugins', () => {
 
 describe('market.service - getMarketProjectVersions', () => {
   it('版本列表：映射 primary 文件，过滤无可下载文件的版本', async () => {
-    vi.mocked(got).mockReturnValueOnce(mockJsonResponse(VERSIONS_FIXTURE));
+    vi.mocked(httpJson).mockResolvedValueOnce(VERSIONS_FIXTURE);
 
     const { projectSlug, versions } = await getMarketProjectVersions('essentialsx');
 
     expect(projectSlug).toBe('essentialsx');
-    expect(got).toHaveBeenCalledTimes(1);
-    const [url] = vi.mocked(got).mock.calls[0];
+    expect(httpJson).toHaveBeenCalledTimes(1);
+    const [url] = vi.mocked(httpJson).mock.calls[0];
     expect(url).toBe('https://api.modrinth.com/v2/project/essentialsx/version');
 
     // 2.20.1 无 files → 被过滤，只剩 2.21.0
@@ -260,7 +242,7 @@ describe('market.service - getMarketProjectVersions', () => {
   it('项目不存在（404）→ 40412 MARKET_PROJECT_NOT_FOUND', async () => {
     const err = new Error('not found');
     err.response = { statusCode: 404 };
-    vi.mocked(got).mockReturnValueOnce(mockJsonRejection(err));
+    vi.mocked(httpJson).mockRejectedValueOnce(err);
 
     await expect(getMarketProjectVersions('ghost-project')).rejects.toMatchObject({
       code: ErrorCodes.MARKET_PROJECT_NOT_FOUND.code,
@@ -272,7 +254,7 @@ describe('market.service - getMarketProjectVersions', () => {
     await expect(getMarketProjectVersions('../etc')).rejects.toMatchObject({
       code: ErrorCodes.VALIDATION_ERROR.code,
     });
-    expect(got).not.toHaveBeenCalled();
+    expect(httpJson).not.toHaveBeenCalled();
   });
 });
 
@@ -325,16 +307,14 @@ describe('market.service - installPluginFromMarket', () => {
     filename = 'ess.jar',
     bytes = JAR,
   } = {}) {
-    vi.mocked(got).mockReturnValueOnce(
-      mockJsonResponse(
-        VERSIONS_FIXTURE.map((v) => ({
-          ...v,
-          version_number: versionNumber,
-          files: [{ url, filename, primary: true, size: bytes.length }],
-        })),
-      ),
+    vi.mocked(httpJson).mockResolvedValueOnce(
+      VERSIONS_FIXTURE.map((v) => ({
+        ...v,
+        version_number: versionNumber,
+        files: [{ url, filename, primary: true, size: bytes.length }],
+      })),
     );
-    vi.mocked(got.stream).mockReturnValueOnce(streamFrom(bytes));
+    vi.mocked(httpStream).mockReturnValueOnce(streamFrom(bytes));
   }
 
   it('安装成功：下载→魔数校验→落盘→元数据读取→返回市场字段', async () => {
@@ -346,9 +326,9 @@ describe('market.service - installPluginFromMarket', () => {
     });
 
     // 上游调用：versions 元数据 1 次 + stream 下载 1 次
-    expect(got).toHaveBeenCalledTimes(1);
-    expect(got.stream).toHaveBeenCalledTimes(1);
-    const [streamUrl, streamOpts] = vi.mocked(got.stream).mock.calls[0];
+    expect(httpJson).toHaveBeenCalledTimes(1);
+    expect(httpStream).toHaveBeenCalledTimes(1);
+    const [streamUrl, streamOpts] = vi.mocked(httpStream).mock.calls[0];
     expect(streamUrl).toBe('https://cdn.modrinth.com/data/x/versions/a/ess.jar');
     expect(streamOpts.headers['User-Agent']).toContain('MC_Commander');
 
@@ -389,31 +369,29 @@ describe('market.service - installPluginFromMarket', () => {
   });
 
   it('下载 URL 非 Modrinth CDN 白名单 → 50301（SSRF/任意下载防护，不落盘）', async () => {
-    vi.mocked(got).mockReturnValueOnce(
-      mockJsonResponse([
-        {
-          ...VERSIONS_FIXTURE[0],
-          files: [
-            {
-              url: 'https://evil.example.com/payload.jar',
-              filename: 'evil.jar',
-              primary: true,
-              size: 1,
-            },
-          ],
-        },
-      ]),
-    );
+    vi.mocked(httpJson).mockResolvedValueOnce([
+      {
+        ...VERSIONS_FIXTURE[0],
+        files: [
+          {
+            url: 'https://evil.example.com/payload.jar',
+            filename: 'evil.jar',
+            primary: true,
+            size: 1,
+          },
+        ],
+      },
+    ]);
     // stream 不应被调用
     await expect(
       installPluginFromMarket(serverPath, { slug: 'essentialsx', versionNumber: '2.21.0' }),
     ).rejects.toMatchObject({ code: ErrorCodes.MARKET_UPSTREAM_ERROR.code, status: 502 });
-    expect(got.stream).not.toHaveBeenCalled();
+    expect(httpStream).not.toHaveBeenCalled();
     expect(fs.existsSync(pluginsDir)).toBe(false);
   });
 
   it('版本不存在 → 40413 MARKET_VERSION_NOT_FOUND；非法 slug/版本号 → 40000', async () => {
-    vi.mocked(got).mockReturnValueOnce(mockJsonResponse(VERSIONS_FIXTURE));
+    vi.mocked(httpJson).mockResolvedValueOnce(VERSIONS_FIXTURE);
     await expect(
       installPluginFromMarket(serverPath, { slug: 'essentialsx', versionNumber: '9.9.9' }),
     ).rejects.toMatchObject({ code: ErrorCodes.MARKET_VERSION_NOT_FOUND.code });
@@ -427,13 +405,13 @@ describe('market.service - installPluginFromMarket', () => {
   });
 
   it('下载中断（流错误）→ 50301 且无残留临时文件/目标文件', async () => {
-    vi.mocked(got).mockReturnValueOnce(mockJsonResponse(VERSIONS_FIXTURE));
+    vi.mocked(httpJson).mockResolvedValueOnce(VERSIONS_FIXTURE);
     const badStream = new Readable({
       read() {
         process.nextTick(() => this.destroy(new Error('connection reset')));
       },
     });
-    vi.mocked(got.stream).mockReturnValueOnce(badStream);
+    vi.mocked(httpStream).mockReturnValueOnce(badStream);
 
     await expect(
       installPluginFromMarket(serverPath, { slug: 'essentialsx', versionNumber: '2.21.0' }),
@@ -453,16 +431,16 @@ describe('market.service - 条目类型参数化（plugin / mod）', () => {
   });
 
   it('projectType 缺省仍是 plugin（既有调用方行为零变化）', async () => {
-    vi.mocked(got).mockReturnValueOnce(mockJsonResponse(SEARCH_FIXTURE));
+    vi.mocked(httpJson).mockResolvedValueOnce(SEARCH_FIXTURE);
     await searchMarketPlugins({ query: 'x' });
-    const [, opts] = vi.mocked(got).mock.calls[0];
+    const [, opts] = vi.mocked(httpJson).mock.calls[0];
     expect(JSON.parse(opts.searchParams.facets)).toEqual([['project_type:plugin']]);
   });
 
   it('projectType=mod 时 facets 用 project_type:mod 且接受 Fabric/Forge loader', async () => {
-    vi.mocked(got).mockReturnValueOnce(mockJsonResponse(SEARCH_FIXTURE));
+    vi.mocked(httpJson).mockResolvedValueOnce(SEARCH_FIXTURE);
     await searchMarketPlugins({ query: 'sodium', projectType: 'mod', loader: 'fabric' });
-    const [, opts] = vi.mocked(got).mock.calls[0];
+    const [, opts] = vi.mocked(httpJson).mock.calls[0];
     const facets = JSON.parse(opts.searchParams.facets);
     expect(facets).toContainEqual(['project_type:mod']);
     expect(facets).toContainEqual(['loaders:fabric']);
@@ -487,11 +465,11 @@ describe('market.service - 条目类型参数化（plugin / mod）', () => {
   });
 
   it('缓存键含 projectType：同名查询在两种类型下不互相命中', async () => {
-    vi.mocked(got).mockReturnValue(mockJsonResponse(SEARCH_FIXTURE));
+    vi.mocked(httpJson).mockResolvedValue(SEARCH_FIXTURE);
     await searchMarketPlugins({ query: 'same' });
     await searchMarketPlugins({ query: 'same', projectType: 'mod' });
     // 两次都应打上游（缓存键必须带类型，否则第二次会拿到 plugin 的结果集）
-    expect(vi.mocked(got).mock.calls.length).toBe(2);
+    expect(vi.mocked(httpJson).mock.calls.length).toBe(2);
   });
 
   it('getMarketProjectVersions 的 loader 也按类型校验', async () => {
