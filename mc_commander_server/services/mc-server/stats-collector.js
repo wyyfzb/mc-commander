@@ -44,6 +44,10 @@ export function _startStatsCollection() {
       }
     });
   this._collectStats();
+  // 在线名单对账随采集矩阵启停（roster-sync 域）：它与下面几条同属「实例运行期
+  // 定时任务」，生命周期完全一致——常规启动、接管、停止、进程退出的每个现场都已
+  // 各自调本方法/stop，在此挂一处即可全覆盖，无需在各生命周期现场重复接线。
+  this._startRosterSync();
 }
 
 // 玩家状态采集调度（串行化）：递归 setTimeout，上一轮完成后才排下一轮。
@@ -126,6 +130,7 @@ export function _stopStatsCollection() {
   this._playerStatsEpoch++;
   this._msptEpoch++;
   this._worldStateEpoch++;
+  this._stopRosterSync();
   if (this._worldStateTimer) {
     clearTimeout(this._worldStateTimer);
     this._worldStateTimer = null;

@@ -31,42 +31,7 @@ export function _parseOutput(text) {
 
     const joinMatch = line.match(/([^\s\]<>[]+) joined the game/);
     if (joinMatch) {
-      const playerIp = this._pendingIps.get(joinMatch[1]) || '';
-      this._pendingIps.delete(joinMatch[1]);
-      // 从持久化文件加载已有总游戏时长与会话历史
-      const savedData = this._loadPlayerData(joinMatch[1]) || {};
-      const savedPlayTime = savedData.totalPlayTime || 0;
-      const sessions = Array.isArray(savedData.sessions) ? savedData.sessions : [];
-      // 若最后一个会话未结束（服务端异常退出），补一个零时长会话，保证会话完整
-      const lastSession = sessions[sessions.length - 1];
-      if (lastSession && lastSession.end == null) {
-        lastSession.end = lastSession.start;
-        lastSession.duration = 0;
-      }
-      // 开启新会话（会话历史用于日志 Tab 的树状时间线）
-      sessions.push({ start: Date.now(), end: null, duration: 0 });
-      // 限制会话历史数量（保留最近 20 段，避免无限增长）
-      if (sessions.length > 20) sessions.splice(0, sessions.length - 20);
-      const player = {
-        name: joinMatch[1],
-        joinTime: Date.now(),
-        ip: playerIp,
-        totalPlayTime: savedPlayTime,
-        sessions,
-      };
-      // 今日新增计数：savedData 无任何历史（时长/会话/事件全空）= 首次加入
-      const isFirstJoin =
-        !savedData.totalPlayTime && !savedData.sessions?.length && !savedData.events?.length;
-      if (isFirstJoin) {
-        const key = this._todayKey();
-        if (!this._todayNewCache || this._todayNewCache.date !== key) {
-          this._todayNewCache = { date: key, count: 0 };
-        }
-        this._todayNewCache.count++;
-      }
-      this.players.set(joinMatch[1], player);
-      this._addPlayerEvent(joinMatch[1], 'join', '进入服务器');
-      this.emit('playerJoin', player);
+      this._registerPlayerJoin(joinMatch[1]);
     }
 
     // 解析玩家 IP（登录日志行包含 IP 地址，可能在 join 前到达）
@@ -225,6 +190,49 @@ export function _parseOutput(text) {
     // ── 玩家离开时减少入睡计数 ──
     // (在 leaveMatch 处理块中已处理)
   }
+}
+
+/// 处理玩家加入：载入落盘历史、开新会话、登记在线表并广播。
+/// 日志解析与名单对账（roster-sync）共用此唯一入口——加入语义只有一份实现，
+/// 免得对账来的玩家在累计时长、会话与事件上与日志来的分叉。
+export function _registerPlayerJoin(playerName) {
+  const playerIp = this._pendingIps.get(playerName) || '';
+  this._pendingIps.delete(playerName);
+  // 从持久化文件加载已有总游戏时长与会话历史
+  const savedData = this._loadPlayerData(playerName) || {};
+  const savedPlayTime = savedData.totalPlayTime || 0;
+  const sessions = Array.isArray(savedData.sessions) ? savedData.sessions : [];
+  // 若最后一个会话未结束（服务端异常退出），补一个零时长会话，保证会话完整
+  const lastSession = sessions[sessions.length - 1];
+  if (lastSession && lastSession.end == null) {
+    lastSession.end = lastSession.start;
+    lastSession.duration = 0;
+  }
+  // 开启新会话（会话历史用于日志 Tab 的树状时间线）
+  sessions.push({ start: Date.now(), end: null, duration: 0 });
+  // 限制会话历史数量（保留最近 20 段，避免无限增长）
+  if (sessions.length > 20) sessions.splice(0, sessions.length - 20);
+  const player = {
+    name: playerName,
+    joinTime: Date.now(),
+    ip: playerIp,
+    totalPlayTime: savedPlayTime,
+    sessions,
+  };
+  // 今日新增计数：savedData 无任何历史（时长/会话/事件全空）= 首次加入
+  const isFirstJoin =
+    !savedData.totalPlayTime && !savedData.sessions?.length && !savedData.events?.length;
+  if (isFirstJoin) {
+    const key = this._todayKey();
+    if (!this._todayNewCache || this._todayNewCache.date !== key) {
+      this._todayNewCache = { date: key, count: 0 };
+    }
+    this._todayNewCache.count++;
+  }
+  this.players.set(playerName, player);
+  this._addPlayerEvent(playerName, 'join', '进入服务器');
+  this.emit('playerJoin', player);
+  return player;
 }
 
 /// 处理玩家离开：保存数据、累计在线时长、关闭会话、记录"离开服务器"事件、移除在线表并广播。

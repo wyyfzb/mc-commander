@@ -25,6 +25,7 @@ import * as startLifecycle from './mc-server/start-lifecycle.js';
 import * as adopt from './mc-server/adopt.js';
 import * as logTail from './mc-server/log-tail.js';
 import * as jarVersion from './mc-server/jar-version.js';
+import * as rosterSync from './mc-server/roster-sync.js';
 import { logger } from '../utils/logger.js';
 
 // 原子写统一走 utils/fs-utils.js 公共实现（写唯一 .tmp 再 rename，失败清残留）。
@@ -342,6 +343,8 @@ export class MCServerInstance extends EventEmitter {
     this._msptEpoch = 0; // MSPT 采集代际：stop 时自增，作废在途回调的续链
     this._worldStateTimer = null; // 世界状态（时间/天气）采集定时器
     this._worldStateEpoch = 0; // 世界状态采集代际：stop 时自增，作废在途回调的续链
+    this._rosterTimer = null; // 在线名单对账定时器
+    this._rosterEpoch = 0; // 名单对账代际：stop 时自增，作废在途回调的续链
     // 死亡事件聚合窗口：团灭等批量场景 5s 内合并为单条事件（防通知风暴）
     this._deathAggBuffer = [];
     this._deathAggTimer = null;
@@ -2278,3 +2281,7 @@ Object.assign(MCServerInstance.prototype, adopt);
 // 实例版本读取域挂载：从服务端 JAR 内 version.json 取权威 mcVersion/javaVersion，
 // 供 _getMcVersion 与 _getRequiredJavaVersion 使用（机制见 jar-version.js 头注释）。
 Object.assign(MCServerInstance.prototype, jarVersion);
+
+// 在线名单对账域挂载：RCON `list` 作为在线名单权威来源，接管时补齐缺席期间的
+// 在线玩家、运行期周期性纠偏（机制见 roster-sync.js 头注释）。
+Object.assign(MCServerInstance.prototype, rosterSync);
