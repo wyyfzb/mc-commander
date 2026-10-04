@@ -7,10 +7,27 @@
  * 经 this 按原型链解析。
  */
 
+/**
+ * 取日志行的**消息体**（剥掉 `[时间] [线程/级别]: ` 前缀）。
+ *
+ * 事件解析一律只认消息体、且锚定其行首。理由是**玩家能影响这一行的内容**：
+ * 聊天也会落进日志，形如 `<玩家> 文本`。此前事件正则在整个行内任意位置找
+ * `名字 + 事件短语`，于是玩家在聊天框打出 `../instance joined the game` 就会被
+ * 当成一次真实加入——名字随即被拼进档案路径，可覆盖服务端根目录下的
+ * `instance.json` / `ops.json` / `whitelist.json` 等（实测）。
+ *
+ * 锚定行首后这种伪造不成立：聊天行的行首必然是 `<玩家> ` 或 `* 玩家 `（`/me`），
+ * 二者都不满足「行首即事件形态」。裸行（无前缀）剥离是空操作，两种形态都兼容。
+ */
+function logMessageBody(line) {
+  return line.replace(/^(?:\[[^\]]*\]\s*)*:\s*/, '');
+}
+
 export function _parseOutput(text) {
   const lines = text.split('\n').filter((l) => l.trim());
 
   for (const line of lines) {
+    const body = logMessageBody(line);
     const tpsMatch = line.match(/(\d+\.\d+) TPS/);
     if (tpsMatch) {
       this.tps = parseFloat(tpsMatch[1]);
@@ -29,13 +46,13 @@ export function _parseOutput(text) {
       this._mspt = parseFloat(msptFallback[1]);
     }
 
-    const joinMatch = line.match(/([^\s\]<>[]+) joined the game/);
+    const joinMatch = body.match(/^([^\s\]<>[]+) joined the game/);
     if (joinMatch) {
       this._registerPlayerJoin(joinMatch[1]);
     }
 
     // 解析玩家 IP（登录日志行包含 IP 地址，可能在 join 前到达）
-    const loginIpMatch = line.match(/([^\s\]<>[]+)\[\/?([\d.]+):\d+\] logged in with entity id/);
+    const loginIpMatch = body.match(/^([^\s\]<>[]+)\[\/?([\d.]+):\d+\] logged in with entity id/);
     if (loginIpMatch) {
       // 如果玩家已存在，直接设 IP；否则缓存等待 join
       const existing = this.players.get(loginIpMatch[1]);
@@ -46,7 +63,7 @@ export function _parseOutput(text) {
       }
     }
 
-    const leaveMatch = line.match(/([^\s\]<>[]+) left the game/);
+    const leaveMatch = body.match(/^([^\s\]<>[]+) left the game/);
     if (leaveMatch) {
       this._handlePlayerLeave(leaveMatch[1]);
     }
@@ -54,15 +71,15 @@ export function _parseOutput(text) {
     // 被动离开（踢出/封禁/IP 封禁/断开连接）：服务器日志输出 "lost connection" 或 "was kicked"，
     // 不输出 "left the game"，也应视为"离开服务器"事件。仅在玩家仍在线时处理，避免重复记录。
     const passiveLeaveMatch =
-      line.match(/([^\s\]<>[]+) lost connection: /) || line.match(/([^\s\]<>[]+) was kicked /);
+      body.match(/^([^\s\]<>[]+) lost connection: /) || body.match(/^([^\s\]<>[]+) was kicked /);
     if (passiveLeaveMatch) {
       this._handlePlayerLeave(passiveLeaveMatch[1]);
     }
 
     // 死亡事件 — 使用更精确的正则避免误匹配
     // MC 26.2 日志格式: "Player was slain by Zombie" / "Player fell from a high place"
-    const deathMatch = line.match(
-      /([^\s\]<>[]+) (was slain by|was killed by|was shot by|was fireballed by|was blown up by|was stung by|was pummeled by|was squashed by|was impaled on|fell from a high place|fell off|drowned|blew up|hit the ground too hard|tried to swim in lava|went up in flames|burned to death|was pricked to death|was doomed to fall|was shot off|starved to death|suffocated in a wall|withered away|froze to death|died|was lost|disconnected|experienced kinetic energy)(?:\s+(.+))?/,
+    const deathMatch = body.match(
+      /^([^\s\]<>[]+) (was slain by|was killed by|was shot by|was fireballed by|was blown up by|was stung by|was pummeled by|was squashed by|was impaled on|fell from a high place|fell off|drowned|blew up|hit the ground too hard|tried to swim in lava|went up in flames|burned to death|was pricked to death|was doomed to fall|was shot off|starved to death|suffocated in a wall|withered away|froze to death|died|was lost|disconnected|experienced kinetic energy)(?:\s+(.+))?/,
     );
     if (deathMatch) {
       const playerName = deathMatch[1];
@@ -106,13 +123,13 @@ export function _parseOutput(text) {
       this._emitDeathAggregated(playerName, message, killer);
     }
 
-    const achievementMatch = line.match(/([^\s\]<>[]+) has made the advancement \[(.+)\]/);
+    const achievementMatch = body.match(/^([^\s\]<>[]+) has made the advancement \[(.+)\]/);
     if (achievementMatch) {
       this._addPlayerEvent(achievementMatch[1], 'achievement', `获得成就: ${achievementMatch[2]}`);
       this.emit('achievement', { name: achievementMatch[1], advancement: achievementMatch[2] });
     }
 
-    const challengeMatch = line.match(/([^\s\]<>[]+) has completed the challenge \[(.+)\]/);
+    const challengeMatch = body.match(/^([^\s\]<>[]+) has completed the challenge \[(.+)\]/);
     if (challengeMatch) {
       this._addPlayerEvent(challengeMatch[1], 'achievement', `完成挑战: ${challengeMatch[2]}`);
       this.emit('achievement', {
@@ -122,7 +139,7 @@ export function _parseOutput(text) {
       });
     }
 
-    const respawnMatch = line.match(/([^\s\]<>[]+) respawned/);
+    const respawnMatch = body.match(/^([^\s\]<>[]+) respawned/);
     if (respawnMatch) {
       this._addPlayerEvent(respawnMatch[1], 'respawn', '已重生');
       // 广播复活事件给 WebSocket 客户端
@@ -132,8 +149,9 @@ export function _parseOutput(text) {
     // ── 聊天事件解析 ──
     // MC 日志格式: "<Player> message"；真实服务端输出行带 "[时间] [线程/级别]: " 前缀，
     // 剥离后再锚定行首——裸聊天行无前缀，剥离为空操作，两种形态均兼容
-    const chatLine = line.replace(/^(?:\[[^\]]*\]\s*)*:\s*/, '');
-    const chatMatch = chatLine.match(/^<([^\s\]<>[]+)>\s+(.+)/);
+    // `[Not Secure] ` 是服务端给**未签名**聊天加的前缀（离线模式、未启用安全档案时
+    // 全部聊天都带它）。剥离前缀后它仍在消息体里，不认它会让这类聊天的面板事件恒空。
+    const chatMatch = body.match(/^(?:\[Not Secure\] )?<([^\s\]<>[]+)>\s+(.+)/);
     if (chatMatch) {
       this.emit('playerChat', { name: chatMatch[1], message: chatMatch[2] });
     }

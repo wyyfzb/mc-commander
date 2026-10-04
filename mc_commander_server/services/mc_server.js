@@ -1551,8 +1551,17 @@ export class MCServerInstance extends EventEmitter {
   _savePlayerData(playerName, data) {
     try {
       const dir = path.join(this.serverPath, 'playerdata');
-      ensureDir(dir);
       const filePath = path.join(dir, `${playerName}.json`);
+      // 玩家名是不可信文本（来自服务端 stdout、MSMP 返回、以及本机 usercache.json），
+      // 直接拼进路径可越出 playerdata 目录写到服务端根下——实测 `../instance` 能覆盖
+      // `instance.json`，同类可达 `ops.json`/`whitelist.json`/`banned-*.json`。此处断言
+      // 包含关系，越界一律拒写。上游收紧（事件锚定、档案改按 UUID）不能替代这一层：
+      // 名字来源会继续增加，落点必须自证。
+      if (!isPathContained(dir, filePath)) {
+        logger.error(`[${this.id}] 拒绝落盘越界玩家档案: ${JSON.stringify(playerName)}`);
+        return;
+      }
+      ensureDir(dir);
       const existing = this._loadPlayerData(playerName) || {};
       // 浅拷贝后再删除：调用方（60s 定时保存、玩家离开落盘）传入的是 this.players
       // 的内存 player 对象同一引用，直接 delete data._cachedDetails 会把写盘时的
@@ -1601,7 +1610,11 @@ export class MCServerInstance extends EventEmitter {
 
   _loadPlayerData(playerName) {
     try {
-      const filePath = path.join(this.serverPath, 'playerdata', `${playerName}.json`);
+      const dir = path.join(this.serverPath, 'playerdata');
+      const filePath = path.join(dir, `${playerName}.json`);
+      // 与 _savePlayerData 同一不变量：读侧同样只能读 playerdata 内的文件，
+      // 否则越界名可让详情页读出服务端根下的任意 .json
+      if (!isPathContained(dir, filePath)) return null;
       if (!fs.existsSync(filePath)) return null;
       return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
     } catch {

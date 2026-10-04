@@ -4,6 +4,7 @@ import path from 'path';
 import { error, ErrorCodes } from '../utils/response.js';
 import { BanModel } from '../db/index.js';
 import { getTotalPlayTime } from '../utils/player-utils.js';
+import { isPathContained } from '../utils/fs-utils.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
 import {
   banRecordListSchema,
@@ -476,7 +477,12 @@ export function createPlayerRoutes(serverManager) {
 
   function loadPlayerData(serverPath, playerName) {
     try {
-      const filePath = path.join(serverPath, 'playerdata', `${playerName}.json`);
+      const dir = path.join(serverPath, 'playerdata');
+      const filePath = path.join(dir, `${playerName}.json`);
+      // 与实例方法 _loadPlayerData 同一不变量：玩家名不可信，读侧也只能读
+      // playerdata 内的文件。路由入参虽已过 validatePlayerName，但落点必须自证——
+      // 本函数被三处端点复用，别处的入参约束不在这里保证。
+      if (!isPathContained(dir, filePath)) return null;
       if (!fs.existsSync(filePath)) return null;
       return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
     } catch {

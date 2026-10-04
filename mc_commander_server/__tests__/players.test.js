@@ -88,6 +88,38 @@ describe('Player Routes', () => {
       expect(res.body.data[0].stats.loginCount).toBe(1);
     });
 
+    it('玩家名含路径分量时不得读出 serverPath 根下的 .json（读侧越界守）', async () => {
+      // 名字来自 instance.players（服务端 stdout / 名单），不是 HTTP 入参，
+      // 所以这个端点上的 validatePlayerName 管不到它——落点必须自证
+      const victim = path.join(tmpServerPath, 'instance.json');
+      fs.writeFileSync(victim, JSON.stringify({ totalPlayTime: 999999 }));
+      const now = Date.now();
+      const mockInstance = {
+        isRunning: true,
+        serverPath: tmpServerPath,
+        players: new Map([['../instance', { name: '../instance', joinTime: now, sessions: [] }]]),
+        getAllKnownPlayers: () => new Map(),
+        playerEvents: new Map(),
+        _worldSpawn: null,
+        _computePlayerStats: () => ({
+          totalOnline: 0,
+          loginCount: 1,
+          offlineSince: 0,
+          deathCount: 0,
+          achievementCount: 0,
+          sleepCount: 0,
+        }),
+        _mergePlayerEvents: (a, b) => [...(a || []), ...(b || [])],
+      };
+      mockManager.getInstance.mockReturnValue(mockInstance);
+
+      const res = await request(app).get('/api/instances/s1/players');
+
+      expect(res.status).toBe(200);
+      // 越界读被拒 ⇒ 不会把受害文件里的值当作战绩时长带进响应
+      expect(JSON.stringify(res.body)).not.toContain('999999');
+    });
+
     it('should return 404 for non-existent instance', async () => {
       mockManager.getInstance.mockReturnValue(undefined);
 
