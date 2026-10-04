@@ -13,8 +13,12 @@
  * 取不到名单（RCON 未连接 / 命令失败 / 返回措辞不认识）一律**保持现状**：把名单
  * 清空比留着旧值更糟——界面会显示 0 人在线，而「显示 0 人」正是本域要修的症状。
  *
- * 顺带覆盖了「面板启动即接管」这条路径：接管时 RCON 通常尚未握手，本域不做一次性
- * 立即重建，等首轮对账时 RCON 已就绪，名单自然补齐。
+ * 本域只解决「此刻谁在线」，**不猜「这次会话从何时开始」**：服务器日志只有时分秒
+ * 没有日期（实测），落盘的影子档案里那段未闭合会话无法区分「面板缺席期间一直在同一
+ * 会话」与「缺席期间离开过又回来」。故补缺一律走 `_registerPlayerJoin`——会话从补缺
+ * 时刻起算，落盘的累计时长与会话历史原样保留（`_registerPlayerJoin` 会把遗留的未闭合
+ * 会话以零时长闭合）。宁可少算一段没人观测到的时长，也不把离线时段计进游戏时长：
+ * 前者只是显示偏小，后者会污染持久化的累计值。
  */
 
 import { parseListResponse } from './list-response.js';
@@ -45,46 +49,20 @@ export async function _fetchOnlineRoster() {
 }
 
 /**
- * 由面板落盘的 playerdata 还原一个在线条目——面板缺席期间的加入专用（静默）。
- *
- * 判据是「末段会话未闭合」：面板每次落盘都在玩家仍在线时进行，故未闭合意味着面板
- * 没来得及记 leave 就失去了该玩家（崩溃/重启），而不是刚发生一次漏解析的加入。
- * 固有精度上限：玩家若在面板缺席期间退出又重进，落盘的未闭合会话仍是退出前那段
- * （面板没看见那次退出），在线时长会高估一个重进间隔——它量的是「面板眼中的连续
- * 会话」，不是「玩家眼中的本次登录」。
- *
- * joinTime 取该会话的 start：面板缺席期间玩家仍在同一会话里，该时刻就是真实加入
- * 时刻（精度受 60s 保存周期限制）。让 joinTime 落到对账时刻会同时错两处——在线时长
- * 从 0 重新计（丢掉整个面板停机时段），且 `_handlePlayerLeave` 届时只累计停机后的
- * 时长。ip 同理取落盘值：未闭合会话说明它就是本次会话的地址，而 IP 封禁匹配依赖
- * 它非空。
- *
- * 不补发 join 事件、不计今日新增：加入发生在面板缺席期间，此刻补发是假事件。
- * @param {string} name 玩家名
- * @returns {object|null} 无「面板缺席期间的加入」线索时返回 null
- */
-export function _restoreOnlinePlayerEntry(name) {
-  const saved = this._loadPlayerData(name) || {};
-  const sessions = Array.isArray(saved.sessions) ? saved.sessions : [];
-  const open = sessions[sessions.length - 1];
-  if (!open || open.end != null || !open.start) return null;
-  return {
-    name,
-    joinTime: open.start,
-    ip: saved.ip || '',
-    totalPlayTime: saved.totalPlayTime || 0,
-    sessions,
-  };
-}
-
-/**
  * 运行期对账：与内存 players 求差集，只补缺与移除，**不重置**已有条目
  * （累计时长、会话历史、事件都在条目里，整体重建会把它们清掉）。
- * 两个方向各自复用唯一权威路径——离开走 `_handlePlayerLeave`（关会话/落盘/事件），
- * 加入按落盘线索分流（见下），免得对账来的玩家在时长口径与事件上与日志来的分叉。
+ * 两个方向都走唯一权威路径——离开 `_handlePlayerLeave`（关会话/落盘/事件）、
+ * 加入 `_registerPlayerJoin`（幂等），免得对账来的玩家在时长口径与事件上
+ * 与日志来的分叉。
  */
 export async function _reconcilePlayers() {
+  // 命令在途期间实例可能被 stop/kill/卸载或崩溃退出（退出路径会清空 players 并
+  // 停止采集），此时旧名单已是历史快照。据此写入会留下永远无人清理的幽灵在线
+  // 玩家——服务器已停 ⇒ 后续对账永远取不到名单 ⇒ 按「保持现状」语义永不清除。
+  // 代际比对同时挡住 stop→start：实例又在运行了，但那是新的一轮，旧名单不该生效。
+  const epoch = this._rosterEpoch;
   const roster = await this._fetchOnlineRoster();
+  if (!this.isRunning || epoch !== this._rosterEpoch) return;
   if (!roster) return;
   const online = new Set(roster.names);
   for (const name of [...this.players.keys()]) {
@@ -92,15 +70,8 @@ export async function _reconcilePlayers() {
   }
   for (const name of roster.names) {
     if (this.players.has(name)) continue;
-    // 面板缺席期间的加入：按落盘线索静默还原
-    const restored = this._restoreOnlinePlayerEntry(name);
-    if (restored) {
-      this.players.set(name, restored);
-    } else {
-      // 真·新加入（漏掉了刚那行日志）：走与日志解析同一入口，事件与今日新增加数照记。
-      // 来源 IP 未知——那行登录日志已错过，留给界面按未知呈现，不拿上一次会话的旧值顶替
-      this._registerPlayerJoin(name);
-    }
+    // 来源 IP 未知（那行登录日志已错过）：留给界面按未知呈现，不拿上一次会话的旧值顶替
+    this._registerPlayerJoin(name);
   }
 }
 

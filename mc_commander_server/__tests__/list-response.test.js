@@ -40,16 +40,52 @@ describe('parseListResponse', () => {
     expect(parseListResponse(42)).toBeNull();
   });
 
-  it('无 online: 标记返回 null', () => {
+  it('无 online: 标记返回 null（措辞完全不同）', () => {
     expect(parseListResponse('Unknown command. Type "/help" for help.')).toBeNull();
   });
 
-  it('非法玩家名返回 null（措辞变了不能部分认识）', () => {
-    expect(parseListResponse('There are 1 of a max of 20 players online: <not-a-name>')).toBeNull();
-    expect(parseListResponse('There are 1 of a max of 20 players online: 玩家甲')).toBeNull();
+  it('认得出句子形态但名字一个都没认出来 → null（不能当成「没有人在线」）', () => {
+    // 换个语言/服务端实现后名字列表形态变了：当成空名单会让界面显示 0 人在线，
+    // 而清空名单正是要避免的方向
+    expect(parseListResponse('There are 1 of a max of 20 players online: \u0000\u0001')).toBeNull();
   });
 
-  it('尾随逗号视为非法（宁可返回 null 也不吞掉异常形态）', () => {
-    expect(parseListResponse('There are 1 of a max of 20 players online: Steve,')).toBeNull();
+  it('非 Java 规范的名字（中文/带空格）照常返回：它们是真实在线玩家', () => {
+    // 多人在线时只要有一位模组/跨端/插件名的形态不合 Java 规范，作废整份会让对账
+    // 永久静默停摆——症状与不修一模一样。名字合法性不是本解析器的职责：
+    // 判进来就要如实上报，让界面按原样呈现。
+    expect(
+      parseListResponse('There are 3 of a max of 20 players online: Steve, 玩家甲, Alex'),
+    ).toEqual({ names: ['Steve', '玩家甲', 'Alex'] });
+    expect(
+      parseListResponse('There are 2 of a max of 20 players online: Steve, Shop Keeper'),
+    ).toEqual({ names: ['Steve', 'Shop Keeper'] });
+  });
+
+  it('超长 token（整段散文被误当名字）被跳过，其余名字仍可用', () => {
+    const prose = 'x'.repeat(65);
+    expect(parseListResponse(`There are 2 of a max of 20 players online: Steve, ${prose}`)).toEqual(
+      { names: ['Steve'] },
+    );
+  });
+
+  it('含控制字符/换行的 token 被跳过（该行被截断或串了别的输出）', () => {
+    expect(parseListResponse('There are 2 of a max of 20 players online: Steve, Bro\nken')).toEqual(
+      { names: ['Steve'] },
+    );
+  });
+
+  it('取第一个 online: 之后的名单（名字里含该子串时不截断前半段）', () => {
+    // 取最后一个 marker 会把前一名截断成 bot——名字里含该子串虽然罕见，
+    // 但前缀本身只出现一次，没有理由往右找
+    expect(
+      parseListResponse('There are 2 of a max of 20 players online: Steveonline:bot, Alex'),
+    ).toEqual({ names: ['Steveonline:bot', 'Alex'] });
+  });
+
+  it('尾随逗号/连续逗号产生的空 token 被跳过，不作废整份名单', () => {
+    expect(parseListResponse('There are 2 of a max of 20 players online: Steve,, Alex,')).toEqual({
+      names: ['Steve', 'Alex'],
+    });
   });
 });

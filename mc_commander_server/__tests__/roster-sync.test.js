@@ -130,24 +130,25 @@ describe('_fetchOnlineRoster 取名单的失败语义', () => {
 });
 
 describe('_reconcilePlayers 补齐面板缺席期间的加入', () => {
-  it('有未闭合会话 → 按落盘档案还原，joinTime/ip/累计时长取落盘值且不重开会话', async () => {
+  it('落盘有未闭合会话 → 仍从对账时刻起算会话，不把缺席时段计成在线时长', async () => {
     const inst = makeInstance('restore');
-    writeShadow(inst, 'Steve', { ip: '192.0.2.10', totalPlayTime: 300 });
+    writeShadow(inst, 'Steve', { totalPlayTime: 300 });
     inst.sendCommandWithResponse = vi.fn(async () => listOf('Steve'));
 
     await inst._reconcilePlayers();
 
     const p = inst.players.get('Steve');
     expect(p).toBeDefined();
-    // 真实加入时刻（面板缺席期间仍在同一会话）——落到对账时刻会把在线时长清零
-    expect(Date.now() - p.joinTime).toBeGreaterThan(500000);
-    expect(p.ip).toBe('192.0.2.10');
+    // 日志只有时分秒、档案区分不出「一直在同一会话」与「离开过又回来」，
+    // 故不猜缺席期间那次会话的起点：落到对账时刻只是少算一段无人观测的时长
+    expect(Date.now() - p.joinTime).toBeLessThan(5000);
+    // 落盘累计时长保留，遗留的未闭合会话以零时长闭合，再开一段新会话
     expect(p.totalPlayTime).toBe(300);
-    expect(p.sessions).toHaveLength(2);
+    expect(p.sessions).toHaveLength(3);
+    expect(p.sessions[0].duration).toBe(50);
+    expect(p.sessions[1].duration).toBe(0);
+    expect(p.sessions[1].end).not.toBeNull();
     expect(p.sessions.at(-1).end).toBeNull();
-    // 静默还原：不补发 join 事件、不计今日新增（加入发生在面板缺席期间）
-    expect(inst.playerEvents.has('Steve')).toBe(false);
-    expect(inst._todayNewCache).toBeNull();
   });
 
   it('无落盘档案 → 走 _registerPlayerJoin（记 join 事件 + playerJoin 广播）', async () => {
@@ -165,19 +166,6 @@ describe('_reconcilePlayers 补齐面板缺席期间的加入', () => {
     expect(events).toEqual([p]);
   });
 
-  it('落盘档案末段会话已闭合（面板记过 leave）→ 不当作缺席加入，走常规入口', async () => {
-    const inst = makeInstance('closed');
-    writeShadow(inst, 'Steve', { open: false });
-    inst.sendCommandWithResponse = vi.fn(async () => listOf('Steve'));
-
-    await inst._reconcilePlayers();
-
-    // 常规入口开新会话：末段闭合会话被保留、新增一段未闭合的
-    expect(Date.now() - inst.players.get('Steve').joinTime).toBeLessThan(5000);
-    expect(inst.players.get('Steve').sessions).toHaveLength(3);
-    expect(inst.playerEvents.get('Steve')[0].type).toBe('join');
-  });
-
   it('取不到名单 → 保持现状，不清空已有在线玩家', async () => {
     const inst = makeInstance('keep');
     inst.players.set('Steve', { name: 'Steve', joinTime: Date.now(), ip: '', sessions: [] });
@@ -190,7 +178,7 @@ describe('_reconcilePlayers 补齐面板缺席期间的加入', () => {
     expect(inst.players.has('Steve')).toBe(true);
   });
 
-  it('还原来的玩家真正离开时，累计时长按真实加入时刻算且会话闭合', async () => {
+  it('补缺来的玩家离开时，只累计可观测的那段，会话闭合', async () => {
     const inst = makeInstance('restore-leave');
     writeShadow(inst, 'Steve', { totalPlayTime: 300 });
     inst.sendCommandWithResponse = vi.fn(async () => listOf('Steve'));
@@ -202,13 +190,10 @@ describe('_reconcilePlayers 补齐面板缺席期间的加入', () => {
 
     expect(inst.players.has('Steve')).toBe(false);
     const saved = inst._savePlayerData.mock.calls[0][1];
-    expect(saved.totalPlayTime).toBeGreaterThanOrEqual(900);
+    // 300（落盘累计）+ 本轮补缺到离开之间的秒数；不含缺席时段
+    expect(saved.totalPlayTime).toBeGreaterThanOrEqual(300);
+    expect(saved.totalPlayTime).toBeLessThan(300 + 60);
     expect(saved.sessions.at(-1).end).not.toBeNull();
-    // 落盘后档案不再有未闭合会话 ⇒ 下次对账不会把一次新加入误判成缺席加入
-    const onDisk = JSON.parse(
-      fs.readFileSync(path.join(inst.serverPath, 'playerdata', 'Steve.json'), 'utf8'),
-    );
-    expect(onDisk.sessions.at(-1).duration).toBe(0);
   });
 });
 
@@ -271,23 +256,116 @@ describe('_reconcilePlayers 运行期纠偏', () => {
     expect(events).toEqual([]);
   });
 
-  it('还原来的玩家被移除后又重新加入 → 走常规入口（不重复计缺席）', async () => {
+  it('玩家离开后重新加入 → 开新会话，不累积重复条目', async () => {
     const inst = makeInstance('rejoin');
-    writeShadow(inst, 'Steve', { open: true });
     inst.sendCommandWithResponse = vi.fn(async () => listOf('Steve'));
     await inst._reconcilePlayers();
-    const first = inst.players.get('Steve');
-    expect(first.sessions).toHaveLength(2);
+    expect(inst.players.get('Steve').sessions).toHaveLength(1);
 
-    // 离开（落盘闭合会话）后再加入：此时档案无未闭合会话，且 _savePlayerData 已写盘
     inst.sendCommandWithResponse = vi.fn(async () => LIST_EMPTY);
     await inst._reconcilePlayers();
     inst.sendCommandWithResponse = vi.fn(async () => listOf('Steve'));
     await inst._reconcilePlayers();
 
     const second = inst.players.get('Steve');
-    expect(second.sessions).toHaveLength(3);
+    expect(second.sessions).toHaveLength(2);
+    expect(second.sessions[0].end).not.toBeNull();
     expect(Date.now() - second.joinTime).toBeLessThan(5000);
+  });
+
+  it('对账补缺的玩家随后被日志再次报加入 → 幂等，不重复计今日新增', async () => {
+    const inst = makeInstance('dedupe');
+    inst._todayKey = () => '2026-10-04';
+    inst.sendCommandWithResponse = vi.fn(async () => listOf('Alex'));
+
+    await inst._reconcilePlayers(); // 名单先到
+    const entry = inst.players.get('Alex');
+    inst._parseOutput('[12:00:00] [Server thread/INFO]: Alex joined the game'); // 日志后到
+
+    expect(inst.players.get('Alex')).toBe(entry);
+    expect(inst.players.get('Alex').sessions).toHaveLength(1);
+    expect((inst.playerEvents.get('Alex') || []).filter((e) => e.type === 'join')).toHaveLength(1);
+    expect(inst._todayNewCache.count).toBe(1);
+  });
+
+  it('日志先到、名单后到同样幂等', async () => {
+    const inst = makeInstance('dedupe2');
+    inst._todayKey = () => '2026-10-04';
+    inst._parseOutput('[12:00:00] [Server thread/INFO]: Alex joined the game');
+    const entry = inst.players.get('Alex');
+    inst.sendCommandWithResponse = vi.fn(async () => listOf('Alex'));
+
+    await inst._reconcilePlayers();
+
+    expect(inst.players.get('Alex')).toBe(entry);
+    expect(inst.players.get('Alex').sessions).toHaveLength(1);
+    expect(inst._todayNewCache.count).toBe(1);
+  });
+});
+
+describe('_reconcilePlayers 与实例停止的竞态', () => {
+  it('名单在途时实例停止（退出路径清空在线表）→ 不写回幽灵在线玩家', async () => {
+    const inst = makeInstance('stop-race');
+    let release;
+    const gate = new Promise((r) => {
+      release = r;
+    });
+    inst.sendCommandWithResponse = vi.fn(async () => {
+      await gate;
+      return listOf('Steve');
+    });
+
+    const pending = inst._reconcilePlayers();
+    await new Promise((r) => setImmediate(r));
+    // 停止：与 _attachExitListener / adopt 看门狗同序——清空在线表并停采集
+    inst.isRunning = false;
+    inst.players.clear();
+    inst._stopRosterSync();
+    release();
+    await pending;
+
+    expect(inst.players.size).toBe(0);
+  });
+
+  it('名单在途时 spawn 失败（未推进代际，仅 isRunning=false）→ 不写回幽灵在线玩家', async () => {
+    const inst = makeInstance('spawn-error-race');
+    let release;
+    const gate = new Promise((r) => {
+      release = r;
+    });
+    inst.sendCommandWithResponse = vi.fn(async () => {
+      await gate;
+      return listOf('Steve');
+    });
+
+    const pending = inst._reconcilePlayers();
+    await new Promise((r) => setImmediate(r));
+    // spawn 失败路径：置 isRunning=false 但不动代际，也可能不经过 clear()
+    inst.isRunning = false;
+    release();
+    await pending;
+
+    expect(inst.players.has('Steve')).toBe(false);
+  });
+
+  it('名单在途时 stop→start（代际推进）→ 旧名单不写进新一轮', async () => {
+    const inst = makeInstance('restart-race');
+    let release;
+    const gate = new Promise((r) => {
+      release = r;
+    });
+    inst.sendCommandWithResponse = vi.fn(async () => {
+      await gate;
+      return listOf('Steve');
+    });
+
+    const pending = inst._reconcilePlayers();
+    await new Promise((r) => setImmediate(r));
+    inst._startRosterSync(); // 新一轮：代际自增
+    release();
+    await pending;
+
+    expect(inst.players.has('Steve')).toBe(false);
   });
 });
 
@@ -383,45 +461,39 @@ describe('采集矩阵启停联动', () => {
   });
 });
 
-describe('_restoreOnlinePlayerEntry 边界', () => {
-  it('末段会话 start 为 0（脏数据）时不认作未闭合', async () => {
-    const inst = makeInstance('dirty');
-    fs.mkdirSync(path.join(inst.serverPath, 'playerdata'), { recursive: true });
-    fs.writeFileSync(
-      path.join(inst.serverPath, 'playerdata', 'Steve.json'),
-      JSON.stringify({ sessions: [{ start: 0, end: null, duration: 0 }] }),
-    );
-    inst.sendCommandWithResponse = vi.fn(async () => listOf('Steve'));
-
-    await inst._reconcilePlayers();
-
-    // 走常规入口 ⇒ joinTime 为当前时刻而非 0
-    expect(inst.players.get('Steve').joinTime).toBeGreaterThan(0);
-  });
-
-  it('无 playerdata 文件 → null（无缺席线索，交由常规加入入口）', () => {
-    const inst = makeInstance('nofile');
-    expect(inst._restoreOnlinePlayerEntry('Alex')).toBeNull();
-  });
-
-  it('落盘字段缺失/类型异常 → null（不因脏数据抛出）', () => {
-    const inst = makeInstance('malformed');
+describe('落盘档案脏数据不影响对账', () => {
+  it('sessions 字段为各种异常形态时不抛错，仍能把玩家登记为在线', async () => {
+    const dirName = 'malformed';
+    const inst = makeInstance(dirName);
     const dir = path.join(inst.serverPath, 'playerdata');
     fs.mkdirSync(dir, { recursive: true });
     for (const [label, body] of [
       ['sessions 为空', { sessions: [] }],
       ['sessions 为 null', { sessions: null }],
+      ['sessions 非数组', { sessions: { length: 1, 0: { start: Date.now(), end: null } } }],
       ['末段为 null', { sessions: [null] }],
       ['末段缺 start', { sessions: [{ end: null }] }],
       ['JSON 损坏', null],
     ]) {
-      const file = path.join(dir, `${label}.json`);
-      fs.writeFileSync(file, body === null ? '{ not json' : JSON.stringify(body));
-      expect(inst._restoreOnlinePlayerEntry(label), label).toBeNull();
+      inst.playerEvents.clear();
+      inst.players.clear();
+      fs.writeFileSync(
+        path.join(dir, `${label}.json`),
+        body === null ? '{ not json' : JSON.stringify(body),
+      );
+      inst.sendCommandWithResponse = vi.fn(async () => listOf(label));
+
+      await inst._reconcilePlayers();
+
+      const p = inst.players.get(label);
+      expect(p, label).toBeDefined();
+      expect(Array.isArray(p.sessions), label).toBe(true);
+      expect(Date.now() - p.joinTime, label).toBeLessThan(5000);
+      expect(p.totalPlayTime, label).toBe(0);
     }
   });
 
-  it('sessions 非数组时不得把它带进内存条目（下游按数组消费）', () => {
+  it('落盘 sessions 非数组时不得把它带进内存条目（下游按数组消费）', async () => {
     const inst = makeInstance('notarray');
     const dir = path.join(inst.serverPath, 'playerdata');
     fs.mkdirSync(dir, { recursive: true });
@@ -431,23 +503,10 @@ describe('_restoreOnlinePlayerEntry 边界', () => {
       path.join(dir, 'Steve.json'),
       JSON.stringify({ sessions: { length: 1, 0: { start: Date.now(), end: null } } }),
     );
+    inst.sendCommandWithResponse = vi.fn(async () => listOf('Steve'));
 
-    expect(inst._restoreOnlinePlayerEntry('Steve')).toBeNull();
-  });
+    await inst._reconcilePlayers();
 
-  it('落盘值缺失时按零值兜底，不把 undefined 带进内存条目', () => {
-    const inst = makeInstance('sparse');
-    const dir = path.join(inst.serverPath, 'playerdata');
-    fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(
-      path.join(dir, 'Alex.json'),
-      JSON.stringify({ sessions: [{ start: Date.now() - 1000, end: null }] }),
-    );
-
-    const entry = inst._restoreOnlinePlayerEntry('Alex');
-
-    expect(entry.ip).toBe('');
-    expect(entry.totalPlayTime).toBe(0);
-    expect(entry.name).toBe('Alex');
+    expect(Array.isArray(inst.players.get('Steve').sessions)).toBe(true);
   });
 });

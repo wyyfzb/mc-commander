@@ -195,7 +195,14 @@ export function _parseOutput(text) {
 /// 处理玩家加入：载入落盘历史、开新会话、登记在线表并广播。
 /// 日志解析与名单对账（roster-sync）共用此唯一入口——加入语义只有一份实现，
 /// 免得对账来的玩家在累计时长、会话与事件上与日志来的分叉。
+///
+/// 幂等：已在在线表里的玩家直接返回既有条目。两个来源都在报同一次加入
+/// （名单先到、`joined the game` 行后到，或反之），不设此守卫会重复计一次
+/// 今日新增、多记一条 join 事件与通知，并把先登记那次开的会话整段丢掉
+/// （每次都从落盘历史重建条目）。
 export function _registerPlayerJoin(playerName) {
+  const existing = this.players.get(playerName);
+  if (existing) return existing;
   const playerIp = this._pendingIps.get(playerName) || '';
   this._pendingIps.delete(playerName);
   // 从持久化文件加载已有总游戏时长与会话历史
