@@ -55,11 +55,11 @@ describe('敏感键（11 键）与热改键（4 键）', () => {
     expect(SENSITIVE_PROPERTY_KEYS.size).toBe(11)
   })
 
-  it('热改键集合与服务端 RUNTIME_COMMAND_MAP 完全一致（4 键）', () => {
+  it('热改键集合与服务端 RUNTIME_COMMAND_MAP 完全一致（5 键）', () => {
     expect([...HOT_RELOAD_KEYS].sort()).toEqual(
-      ['white-list', 'enforce-whitelist', 'difficulty', 'gamemode'].sort(),
+      ['white-list', 'enforce-whitelist', 'difficulty', 'gamemode', 'player-idle-timeout'].sort(),
     )
-    expect(HOT_RELOAD_KEYS.size).toBe(4)
+    expect(HOT_RELOAD_KEYS.size).toBe(5)
   })
 
   it('敏感键与热改键均为已知属性，或走未知键定义（仍标记敏感）', () => {

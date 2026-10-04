@@ -179,6 +179,24 @@ describe('instance-properties.service · PUT 校验阶段 validatePropertySubmis
     expect(r.validated).toEqual({ pvp: 'true', 'max-players': '30', motd: 'Aether' });
   });
 
+  it('player-idle-timeout 映射到官方 /setidletimeout（分钟）', () => {
+    // 官方运行期直达路径：不加这条，改这项只能写文件 + 重启
+    expect(RUNTIME_COMMAND_MAP['player-idle-timeout']('30')).toBe('setidletimeout 30');
+    expect(RUNTIME_COMMAND_MAP['player-idle-timeout']('0')).toBe('setidletimeout 0');
+  });
+
+  it.each([
+    ['0（禁用）', '0', true],
+    ['正数分钟', '30', true],
+    ['负数（语义无意义，会让命令被服务端拒绝）', '-5', false],
+    ['小数', '1.5', false],
+    ['非数字', 'abc', false],
+  ])('player-idle-timeout 值校验：%s', (_label, value, ok) => {
+    const r = validatePropertyValue('player-idle-timeout', value);
+    expect(r.ok).toBe(ok);
+    if (!ok) expect(r.reason).toBeTruthy();
+  });
+
   it('运行期命令键在白名单并集内（命令键不可绕过白名单）', () => {
     for (const key of Object.keys(RUNTIME_COMMAND_MAP)) {
       expect(ALLOWED_PROPERTY_KEYS.has(key)).toBe(true);

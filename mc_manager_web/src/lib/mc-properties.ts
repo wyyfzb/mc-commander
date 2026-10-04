@@ -66,6 +66,8 @@ export const HOT_RELOAD_KEYS: ReadonlySet<string> = new Set([
   'enforce-whitelist',
   'difficulty',
   'gamemode',
+  // 对应服务端 RUNTIME_COMMAND_MAP：改这项走 /setidletimeout，无需重启
+  'player-idle-timeout',
 ])
 
 /** 判断属性值是否为布尔（server.properties 中布尔值为 "true"/"false"） */
@@ -223,7 +225,7 @@ export const SERVER_PROPERTY_DEFS: PropertyDef[] = [
     type: 'input',
     defaultValue: '0',
     isSensitive: false,
-    isHotReload: false,
+    isHotReload: true,
     isWritable: true,
   },
   {

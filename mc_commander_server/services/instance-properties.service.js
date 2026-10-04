@@ -19,6 +19,9 @@ export const RUNTIME_COMMAND_MAP = {
     String(v).toLowerCase() === 'true' ? 'whitelist enforce on' : 'whitelist enforce off',
   difficulty: (v) => `difficulty ${v}`,
   gamemode: (v) => `defaultgamemode ${v}`,
+  // 官方运行期直达：/setidletimeout <分钟>（op 3）。不加这条只能写文件 + 重启，
+  // 而 server.properties 的运行时不重载是官方明文，故这是第二条有效路径。
+  'player-idle-timeout': (v) => `setidletimeout ${v}`,
 };
 
 // ── PUT /properties 键白名单与值校验 ──
@@ -168,6 +171,11 @@ export function validatePropertyValue(key, rawValue) {
   if (NUMERIC_PROPERTIES.has(key)) {
     if (!/^-?\d+$/.test(value)) {
       return { ok: false, reason: '数值属性仅接受整数' };
+    }
+    // 通用数值分支允许负整数，但挂机超时以分钟计、0 即禁用，负数无意义：
+    // 放行会拼出 `setidletimeout -5`，服务端拒绝后只留一条警告，用户以为已生效。
+    if (key === 'player-idle-timeout' && !/^\d+$/.test(value)) {
+      return { ok: false, reason: '挂机超时仅接受非负整数（分钟，0=禁用）' };
     }
     return { ok: true, value };
   }
