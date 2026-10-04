@@ -238,9 +238,6 @@ export class MCServerManager extends EventEmitter {
     instance.on('achievement', (data) =>
       this.emit('instance:achievement', { instanceId: id, ...data }),
     );
-    instance.on('tpsUpdate', (data) =>
-      this.emit('instance:tpsUpdate', { instanceId: id, ...data }),
-    );
     instance.on('performanceUpdate', (data) =>
       this.emit('instance:performanceUpdate', { instanceId: id, ...data }),
     );
@@ -1264,7 +1261,7 @@ export class MCServerInstance extends EventEmitter {
       sleepingPlayerNames,
       awakePlayerNames,
     });
-    // tps 随 performanceUpdate 的 payload 统一广播，不再单独发送 tpsUpdate
+    // tps 随 performanceUpdate 的 payload 统一广播——契约里没有独立的 tps 事件
     // 事件（避免 websocket 双消息冗余）
   }
 

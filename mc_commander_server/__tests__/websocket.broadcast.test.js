@@ -501,7 +501,6 @@ describe('WebSocket 系统广播域（broadcastAll / 全局通知 / 系统统计
           WSEvents.ACHIEVEMENT,
           { instanceId: 's1', name: 'Steve', achievement: 'Taking Inventory' },
         ],
-        ['instance:tpsUpdate', WSEvents.TPS_UPDATE, { instanceId: 's1', tps: 19.5 }],
         ['instance:performanceUpdate', WSEvents.PERFORMANCE_UPDATE, { instanceId: 's1', cpu: 30 }],
         ['instance:weatherUpdate', WSEvents.WEATHER_UPDATE, { instanceId: 's1', raining: true }],
         [

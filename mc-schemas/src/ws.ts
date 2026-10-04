@@ -3,7 +3,6 @@ import { z } from 'zod'
 export const WS_EVENT_TYPES = [
   'log',
   'status',
-  'tpsUpdate',
   'performanceUpdate',
   'weatherUpdate',
   'playerStatsUpdate',

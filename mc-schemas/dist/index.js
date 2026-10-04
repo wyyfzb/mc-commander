@@ -6117,7 +6117,6 @@ const systemMetricsSeriesSchema = array(systemMetricSampleSchema);
 const WS_EVENT_TYPES = [
 	"log",
 	"status",
-	"tpsUpdate",
 	"performanceUpdate",
 	"weatherUpdate",
 	"playerStatsUpdate",

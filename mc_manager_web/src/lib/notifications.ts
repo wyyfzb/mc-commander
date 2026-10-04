@@ -1,3 +1,4 @@
+import { TPS_WARNING_MIN } from './mc-tps'
 /**
  * 通知系统纯逻辑
  * - WS 事件 → 中文文案模板
@@ -184,7 +185,7 @@ export interface AlertThresholds {
 export const DEFAULT_ALERT_THRESHOLDS: AlertThresholds = {
   cpuWarning: 80,
   memoryWarning: 80,
-  tpsLow: 15, // TPS <15 告警（与统计卡"卡顿"阈值 15 对齐）
+  tpsLow: TPS_WARNING_MIN, // 唯一源见 mc-tps：与统计卡分级同源，避免卡片说健康却弹告警
 }
 
 /**
@@ -405,7 +406,7 @@ export function buildAlertNotifications(
 
   // TPS 告警（低于阈值 → 告警；恢复 → 恢复通知）
   if (tps != null) {
-    if (tps < (thresholds.tpsLow ?? 15)) {
+    if (tps < (thresholds.tpsLow ?? TPS_WARNING_MIN)) {
       if (!next.has('lowTps')) {
         next.add('lowTps')
         notifications.push({
