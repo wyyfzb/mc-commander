@@ -14,18 +14,18 @@ import {
   SERVER_PROPERTY_DEF_MAP,
 } from '../mc-properties'
 
-describe('SERVER_PROPERTY_DEFS 总量与分类分布（71 条 = 19/18/34）', () => {
-  it('共 71 条且键名唯一', () => {
-    expect(SERVER_PROPERTY_DEFS).toHaveLength(71)
+describe('SERVER_PROPERTY_DEFS 总量与分类分布（68 条 = 18/17/33）', () => {
+  it('共 68 条且键名唯一', () => {
+    expect(SERVER_PROPERTY_DEFS).toHaveLength(68)
     const names = SERVER_PROPERTY_DEFS.map((d) => d.name)
-    expect(new Set(names).size).toBe(71)
+    expect(new Set(names).size).toBe(68)
   })
 
-  it('三分类分布 gameplay 19 / worldGen 18 / serverSettings 34', () => {
+  it('三分类分布 gameplay 18 / worldGen 17 / serverSettings 33', () => {
     const count = (cat: string) => SERVER_PROPERTY_DEFS.filter((d) => d.category === cat).length
-    expect(count('gameplay')).toBe(19)
-    expect(count('worldGen')).toBe(18)
-    expect(count('serverSettings')).toBe(34)
+    expect(count('gameplay')).toBe(18)
+    expect(count('worldGen')).toBe(17)
+    expect(count('serverSettings')).toBe(33)
   })
 
   it('分类取值合法（无其他类别）', () => {
