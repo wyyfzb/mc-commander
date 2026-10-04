@@ -639,6 +639,47 @@ describe('安全修复：读侧路径校验', () => {
     expect(inv.source).toBe('snapshot');
   });
 
+  it.each([
+    ['usercache 的 uuid', 'u1', false],
+    ['离线派生 uuid（无 usercache）', null, true],
+  ])(
+    '_loadPlayerRealStats：旧版目录版式（<level>/stats）在两种 uuid 来源下都要能读到：%s',
+    (_label, uuidValue, useOffline) => {
+      // 1.20.5–1.21.10 的统计文件在 <level>/stats，26.1+ 才搬到 <level>/players/stats。
+      // 两条 uuid 分支都必须覆盖两种版式——离线分支曾漏掉 stats/ 这条，旧版本的离线玩家
+      // 因此读不到统计（在线分支有，故只测在线会漏掉）。
+      const instance = createInstance();
+      const id = useOffline ? offlineUuid('Steve') : uuidValue;
+      const statsDir = path.join(tmpDir, 'world', 'stats');
+      fs.mkdirSync(statsDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(statsDir, `${id}.json`),
+        JSON.stringify({ stats: { 'minecraft:custom': { 'minecraft:deaths': 11 } } }),
+      );
+      vi.spyOn(instance, '_getPlayerUuid').mockReturnValue(uuidValue);
+      const real = instance._loadPlayerRealStats('Steve');
+      expect(real).not.toBeNull();
+      expect(real.deaths).toBe(11);
+    },
+  );
+
+  it('_loadPlayerRealStats：自定义合法 level-name 时优先读该世界目录', () => {
+    // 此前只有「非法 level-name 回退 world」的用例，合法自定义名那条分支无覆盖——
+    // 候选生成重构时把版式收进两层循环，这条分支一并进入被改动范围，故补上。
+    const instance = createInstance();
+    const statsDir = path.join(tmpDir, 'my_world', 'players', 'stats');
+    fs.mkdirSync(statsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(statsDir, 'u1.json'),
+      JSON.stringify({ stats: { 'minecraft:custom': { 'minecraft:deaths': 3 } } }),
+    );
+    vi.spyOn(instance, '_getPlayerUuid').mockReturnValue('u1');
+    instance.properties = { 'level-name': 'my_world' };
+    const real = instance._loadPlayerRealStats('Steve');
+    expect(real).not.toBeNull();
+    expect(real.deaths).toBe(3);
+  });
+
   it('_loadPlayerRealStats：无 usercache（uuid null）时 offline uuid 候选读取真实统计', () => {
     const instance = createInstance();
     const offline = offlineUuid('Steve');

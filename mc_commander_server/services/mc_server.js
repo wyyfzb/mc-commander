@@ -2164,22 +2164,20 @@ export class MCServerInstance extends EventEmitter {
       const uuid = this._getPlayerUuid(playerName);
       // level-name 服务层兜底校验：非法/越界回退 'world'
       const levelName = this._getSafeLevelName();
-      const candidates = [
-        path.join(this.serverPath, levelName, 'players', 'stats', `${uuid}.json`),
-        path.join(this.serverPath, 'world', 'players', 'stats', `${uuid}.json`),
-        path.join(this.serverPath, levelName, 'stats', `${uuid}.json`),
-        path.join(this.serverPath, 'world', 'stats', `${uuid}.json`),
-      ];
-      // offline uuid 候选无条件追加：无 usercache 记录时
-      // 离线模式玩家的真实统计仍可读取
+      // 两种 UUID（usercache 的 / 离线派生的）乘两条目录版式：
+      // 26.1+ 在 <level>/players/stats，1.20.5–1.21.10 在 <level>/stats。
+      // 此处曾把两条 UUID 分支各写一遍候选，而离线分支漏了 `stats/` 版式——
+      // 旧版本的离线玩家因此读不到统计。改成两层循环，版式只有一处定义。
+      const uuids = [uuid];
       const offlineUuid = computeOfflineUuid(playerName);
-      if (offlineUuid && offlineUuid !== uuid) {
-        candidates.push(
-          path.join(this.serverPath, levelName, 'players', 'stats', `${offlineUuid}.json`),
-        );
-        candidates.push(
-          path.join(this.serverPath, 'world', 'players', 'stats', `${offlineUuid}.json`),
-        );
+      // 无 usercache 记录（Carpet 假人 / usercache 被剪枝）时用离线派生 UUID 兜底
+      if (offlineUuid && offlineUuid !== uuid) uuids.push(offlineUuid);
+      const candidates = [];
+      for (const id of uuids) {
+        for (const dirName of [levelName, 'world']) {
+          candidates.push(path.join(this.serverPath, dirName, 'players', 'stats', `${id}.json`));
+          candidates.push(path.join(this.serverPath, dirName, 'stats', `${id}.json`));
+        }
       }
       for (const statsPath of candidates) {
         // 兜底防御：候选路径 resolve 后必须位于 serverPath 内，越界丢弃
