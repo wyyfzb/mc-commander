@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/wyyfzb/mc-commander/compare/v0.6.0...v0.6.1) (2026-10-04)
+
+
+### Bug Fixes
+
+* 修复实机走查第二轮缺陷，并移除 got 根治审计门禁 ([#614](https://github.com/wyyfzb/mc-commander/issues/614)) ([6b912ff](https://github.com/wyyfzb/mc-commander/commit/6b912ffc868f331fb3437e400fbd4ccefc62cf04))
+
 ## [0.6.0](https://github.com/wyyfzb/mc-commander/compare/v0.5.4...v0.6.0) (2026-10-02)
 
 
