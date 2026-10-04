@@ -25,6 +25,7 @@ import {
   assertDownloadIntegrity,
   assertSizeWithinLimit,
 } from '../utils/jar-download-guard.js';
+import { assertAllowedDownloadHost, allowedDownloadHosts } from '../utils/jar-download-guard.js';
 import { logger } from '../utils/logger.js';
 import { getServerVersion } from '../utils/version.js';
 import { isDeployInFlight, latestInFlightDeploy } from '../utils/deploy-inflight.js';
@@ -585,8 +586,10 @@ export function createServerJarRoutes(serverManager) {
             } else if (build && build.downloadUrl) {
               downloadUrl = build.downloadUrl;
             } else {
-              // 由依赖包自行下载并落盘。此路下**面板侧的体积上限不生效**，完整性校验
-              // 也交给包内实现（它对 binary 产物会比对 artifact.hash 并在不匹配时删除文件）。
+              // 由依赖包自行下载并落盘。此路下**面板侧的体积上限与下载域白名单都不生效**，
+              // 完整性校验也交给包内实现（它对 binary 产物会比对 artifact.hash 并在不匹配时
+              // 删除文件）。域白名单只在 URL 经过本文件时才有机会断言——库内自取的那一步
+              // 面板看不见，这是该防线的已知边界。
               const downloadInfo = await mcCoreManager.downloadServer({
                 core: type.toLowerCase(),
                 version: mcVersion,
@@ -624,6 +627,10 @@ export function createServerJarRoutes(serverManager) {
         task.throwIfCancelled();
 
         if (downloadUrl) {
+          // 下载 URL 全部来自上游响应（minecraft-core 的 UnifiedBuild、paper v3、
+          // 以及本文件的 fabric/purpur 兜底），上游被污染即可指向任意主机。升级路径
+          // 一直有此断言，部署路径此前缺——同一个入参面不该只有一条路守。
+          assertAllowedDownloadHost(downloadUrl, allowedDownloadHosts([type.toLowerCase()]));
           logger.info(`Download URL: ${downloadUrl}`);
           await downloadWithProgress(downloadUrl, jarPath, serverManager, 'download', {
             expectedHash,

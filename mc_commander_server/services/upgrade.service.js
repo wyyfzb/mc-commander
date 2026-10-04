@@ -10,6 +10,7 @@ import { httpJson, httpStream } from '../utils/http-client.js';
 import { BackupService } from './backup.service.js';
 import { resolveSafePath, PathTraversalError } from '../utils/fs-utils.js';
 import { AppError, ErrorCodes } from '../utils/response.js';
+import { assertAllowedDownloadHost, allowedDownloadHosts } from '../utils/jar-download-guard.js';
 import {
   JAR_DOWNLOAD_MAX_BYTES,
   assertDownloadIntegrity,
@@ -32,32 +33,13 @@ export const MC_VERSION_REGEX = /^\d{1,3}(\.\d{1,3}){0,3}$/;
 /// 当作穿越向量（「jarFile 入库值同样校验」）。
 const SERVER_JAR_NAME_REGEX = /^server-\d{1,3}(\.\d{1,3}){0,3}\.jar$/;
 
-/// 上游下载域白名单：与 resolveDownloadUrl 三个分支实际产出的域一致。
-/// 上游 API 响应中的 URL 字段（piston manifest 的 versionEntry.url /
-/// downloads.server.url、paper v3 downloads）理论可携带任意 host，下载前
-/// 统一断言，防污染响应把下载流导向任意主机。
-const ALLOWED_DOWNLOAD_HOSTS = new Set([
-  'piston-meta.mojang.com', // vanilla manifest / version detail
-  'piston-data.mojang.com', // vanilla server jar 实际文件域
-  'fill-data.papermc.io', // paper v3 downloads 实际文件域
-  'api.purpurmc.org', // purpur latest/download
-]);
-
-/**
- * 断言下载 URL 的 host 在白名单内（纵深防御，_downloadJar 唯一入口）。
- * 非白名单域或畸形 URL 一律以 VALIDATION_ERROR 语义拒绝。
- */
-function assertAllowedDownloadHost(rawUrl) {
-  let host;
-  try {
-    host = new URL(rawUrl).hostname;
-  } catch {
-    throw new AppError(ErrorCodes.VALIDATION_ERROR, `Invalid download URL: ${rawUrl}`);
-  }
-  if (!ALLOWED_DOWNLOAD_HOSTS.has(host)) {
-    throw new AppError(ErrorCodes.VALIDATION_ERROR, `Download host not allowed: ${host}`);
-  }
-}
+/// 上游下载域白名单：按本服务支持的类型取子集（与 resolveDownloadUrl 三个分支
+/// 实际产出的域一致）。上游 API 响应中的 URL 字段（piston manifest 的
+/// versionEntry.url / downloads.server.url、paper v3 downloads）理论可携带任意
+/// host，下载前统一断言，防污染响应把下载流导向任意主机。
+/// 逐类型取子集而非共用并集：升级不支持 fabric/forge，给并集等于把白名单放宽到
+/// 那些域，污染响应就能被放行。
+const ALLOWED_DOWNLOAD_HOSTS = allowedDownloadHosts([...VALID_TYPES]);
 
 /**
  * 实例内落地路径收口：resolveSafePath 四步防线（归一化/前缀边界/
@@ -204,7 +186,7 @@ export class UpgradeService {
    */
   _downloadJar(url, destPath, instanceId, expectedHash = null, signal = null) {
     // 域白名单断言在下载流创建前（唯一下载入口，覆盖三个 resolveDownload 分支）
-    assertAllowedDownloadHost(url);
+    assertAllowedDownloadHost(url, ALLOWED_DOWNLOAD_HOSTS);
     // AbortSignal 不重放：信号在挂监听前就已中止时，监听永远不会触发 —— 必须在这里
     // 立刻失败，否则调用方会照常走完（取消被吞）
     if (signal?.aborted) return Promise.reject(new TaskCancelledError());

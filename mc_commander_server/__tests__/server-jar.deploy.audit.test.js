@@ -111,7 +111,7 @@ afterAll(async () => {
 beforeEach(() => {
   vi.clearAllMocks();
   testState.latestBuild = {
-    downloads: { application: { url: 'https://example.invalid/jar/server.jar' } },
+    downloads: { application: { url: 'https://piston-data.mojang.com/jar/server.jar' } },
   };
 });
 

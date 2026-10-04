@@ -365,7 +365,7 @@ describe('deploy · core 构建形态与 downloadServer 本地形态', () => {
     testState.latestBuild = {
       downloads: {
         application: {
-          url: 'https://core-dl/vanilla.jar',
+          url: 'https://piston-data.mojang.com/vanilla.jar',
           hash: crypto.createHash('sha1').update(JAR_BYTES).digest('hex'),
           hashType: 'sha1',
         },
@@ -428,7 +428,9 @@ describe('deploy · core 构建形态与 downloadServer 本地形态', () => {
   it('downloadServer 返回 { url } → 转直链下载', async () => {
     defineVanilla();
     testState.latestBuild = null;
-    testState.downloadServerImpl = () => ({ url: 'https://core-dl/fallback-url.jar' });
+    testState.downloadServerImpl = () => ({
+      url: 'https://piston-data.mojang.com/fallback-url.jar',
+    });
     const { app } = buildApp();
     const res = await request(app)
       .post('/api/instances/deploy')
@@ -457,7 +459,7 @@ describe('下载进度节流与错误清理', () => {
   function defineVanillaChain() {
     defineManifest();
     testState.latestBuild = {
-      downloads: { application: { url: 'https://core-dl/vanilla.jar' } },
+      downloads: { application: { url: 'https://piston-data.mojang.com/vanilla.jar' } },
     };
   }
 
@@ -557,7 +559,7 @@ describe('forge 安装段分支', () => {
     defineManifest();
     // forge 走 core 链：提供 build.downloads.application.url 直链下载 installer
     testState.latestBuild = {
-      downloads: { application: { url: 'https://core-dl/forge-installer.jar' } },
+      downloads: { application: { url: 'https://maven.minecraftforge.net/forge-installer.jar' } },
     };
   }
 
@@ -651,7 +653,7 @@ describe('win32 平台分支与首启输出', () => {
   it('win32：spawn 不带 detached + 60s 超时走 taskkill /T 进程树终止', async () => {
     defineManifest();
     testState.latestBuild = {
-      downloads: { application: { url: 'https://core-dl/vanilla.jar' } },
+      downloads: { application: { url: 'https://piston-data.mojang.com/vanilla.jar' } },
     };
     testState.spawnBehavior = 'hang';
     const origPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
@@ -692,7 +694,7 @@ describe('win32 平台分支与首启输出', () => {
   it('首启 stdout/stderr 输出累积 + 退出码非 0 且无 logs → 告警不阻断', async () => {
     defineManifest();
     testState.latestBuild = {
-      downloads: { application: { url: 'https://core-dl/vanilla.jar' } },
+      downloads: { application: { url: 'https://piston-data.mojang.com/vanilla.jar' } },
     };
     testState.spawnBehavior = 'emit-data';
     const { app } = buildApp();

@@ -260,6 +260,33 @@ describe('服务层路径收口（真实临时目录 + 真实 fs）', () => {
     });
   });
 
+  it('升级不支持的类型域被拒：白名单按类型收窄，不是全类型并集', async () => {
+    const serverManager = createMockServerManager();
+    const service = new UpgradeService(serverManager);
+
+    // vanilla 升级，但污染的响应把下载指向 forge 的文件域。
+    // 若白名单被写成「全类型并集」，这里会被放行——故该用例钉住「逐类型取子集」。
+    jsonImpl.current = (url) => {
+      if (url.includes('version_manifest')) {
+        return Promise.resolve({
+          versions: [
+            { id: '1.21.4', type: 'release', url: 'https://piston-meta.mojang.com/v.json' },
+          ],
+        });
+      }
+      return Promise.resolve({
+        downloads: {
+          server: { url: 'https://maven.minecraftforge.net/forge/1.21.4-installer.jar' },
+        },
+      });
+    };
+
+    await expect(service.upgrade('inst-1', '1.21.4', 'vanilla')).rejects.toThrow(
+      /Download host not allowed: maven\.minecraftforge\.net/,
+    );
+    expect(fs.readdirSync(tmpDir)).toEqual([]);
+  });
+
   it('全链路成功：白名单域下载落盘在实例目录内，jarFile 入库值合规', async () => {
     const serverManager = createMockServerManager();
     const service = new UpgradeService(serverManager);

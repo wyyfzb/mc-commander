@@ -564,7 +564,7 @@ describe('部署注册表终态语义（issue 420）', () => {
 describe('POST /instances/deploy · 下载异常与核心回退', () => {
   it('httpStream 中途 error → 502 + 残留清理', async () => {
     testState.latestBuild = {
-      downloads: { application: { url: 'https://example.invalid/jar/server.jar' } },
+      downloads: { application: { url: 'https://piston-data.mojang.com/jar/server.jar' } },
     };
     httpState.streamImpl = (url, streamMod) => {
       const pt = new streamMod.PassThrough();
@@ -583,11 +583,44 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
     expect(fs.existsSync(`${testState.serversDir}/${instanceId}`)).toBe(false);
   });
 
+  it('上游响应指向非白名单域 → 502 Download host not allowed，且不留实例目录', async () => {
+    // 部署路径的域断言必须真的接在链路上：只测守卫函数本身，删掉这处调用不会变红
+    testState.latestBuild = {
+      downloads: { application: { url: 'https://evil.example.com/jar/server.jar' } },
+    };
+    const { app } = buildApp();
+
+    const res = await request(app)
+      .post('/api/instances/deploy')
+      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Poisoned Host Server' });
+
+    expect(res.status).toBe(502);
+    expect(res.body.message).toContain('Download host not allowed: evil.example.com');
+    const instanceId = lastDeployInstanceId();
+    expect(fs.existsSync(`${testState.serversDir}/${instanceId}`)).toBe(false);
+  });
+
+  it('自定义类型（fabric/forge）的域按类型放行，不被 vanilla 的集合误伤', async () => {
+    testState.latestBuild = {
+      downloads: {
+        application: { url: 'https://maven.minecraftforge.net/jar/forge-installer.jar' },
+      },
+    };
+    const { app } = buildApp();
+
+    const res = await request(app)
+      .post('/api/instances/deploy')
+      .send({ type: 'forge', mcVersion: '1.21.4', instanceName: 'Forge Host Server' });
+
+    // 域放行 ⇒ 不会因白名单被拒（后续可能因别的原因此失败，但错误信息不是域拒绝）
+    expect(res.body.message || '').not.toContain('Download host not allowed');
+  });
+
   it('vanilla：core build.application 携带真实 hash/hashType=sha256 → 摘要校验通过', async () => {
     testState.latestBuild = {
       downloads: {
         application: {
-          url: 'https://example.invalid/jar/server.jar',
+          url: 'https://piston-data.mojang.com/jar/server.jar',
           hash: JAR_SHA256,
           hashType: 'sha256',
         },
@@ -609,7 +642,7 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
     testState.latestBuild = {
       downloads: {
         application: {
-          url: 'https://example.invalid/jar/server.jar',
+          url: 'https://piston-data.mojang.com/jar/server.jar',
           hash: jarSha1,
           hashType: 'sha1',
         },
@@ -632,7 +665,7 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
     testState.latestBuild = {
       downloads: {
         application: {
-          url: 'https://example.invalid/jar/purpur.jar',
+          url: 'https://api.purpurmc.org/jar/purpur.jar',
           hash: jarMd5,
           hashType: 'md5',
         },
@@ -651,7 +684,7 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
     testState.latestBuild = {
       downloads: {
         application: {
-          url: 'https://example.invalid/jar/purpur.jar',
+          url: 'https://api.purpurmc.org/jar/purpur.jar',
           hash: 'f'.repeat(32),
           hashType: 'md5',
         },
@@ -671,7 +704,7 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
     testState.latestBuild = {
       downloads: {
         application: {
-          url: 'https://example.invalid/jar/server.jar',
+          url: 'https://piston-data.mojang.com/jar/server.jar',
           // 故意给错的摘要：真实字节与之不符
           hash: crypto.createHash('sha256').update('different-payload').digest('hex'),
           hashType: 'sha256',
@@ -694,7 +727,7 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
     testState.latestBuild = {
       downloads: {
         application: {
-          url: 'https://example.invalid/jar/server.jar',
+          url: 'https://piston-data.mojang.com/jar/server.jar',
           // 故意用非摘要形态，避免读成「像 md5 的值配错了算法」
           hash: 'not-a-recognized-digest',
           hashType: 'crc32',
@@ -762,7 +795,9 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
     // forge-installer.jar 下载后 spawn --installServer 假进程 exit0，
     // 目录中除 installer 外无 forge-*.jar → 查找失败抛错
     testState.latestBuild = {
-      downloads: { application: { url: 'https://example.invalid/jar/forge-installer.jar' } },
+      downloads: {
+        application: { url: 'https://maven.minecraftforge.net/jar/forge-installer.jar' },
+      },
     };
     const { app } = buildApp();
 
@@ -796,7 +831,7 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
   it('InstanceModel.create 抛错 → 部署不阻断仍 200（DB 故障仅降级记录）', async () => {
     testState.dbCreateError = new Error('SQLITE_BUSY: database is locked');
     testState.latestBuild = {
-      downloads: { application: { url: 'https://example.invalid/jar/server.jar' } },
+      downloads: { application: { url: 'https://piston-data.mojang.com/jar/server.jar' } },
     };
     const { app } = buildApp();
 
@@ -813,7 +848,7 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
 describe('generateServerProperties 落盘契约', () => {
   it('rcon.port/server-port 按 instanceId 后 4 位 hex 偏移 + enable-rcon + 16 位随机密码', async () => {
     testState.latestBuild = {
-      downloads: { application: { url: 'https://example.invalid/jar/server.jar' } },
+      downloads: { application: { url: 'https://piston-data.mojang.com/jar/server.jar' } },
     };
     const { app } = buildApp();
 
@@ -840,7 +875,7 @@ describe('generateServerProperties 落盘契约', () => {
 
   it('instance.json 与 eula.txt 契约（已同意 EULA 时部署产物可直接启动）', async () => {
     testState.latestBuild = {
-      downloads: { application: { url: 'https://example.invalid/jar/server.jar' } },
+      downloads: { application: { url: 'https://piston-data.mojang.com/jar/server.jar' } },
     };
     const { app } = buildApp();
 
@@ -871,7 +906,7 @@ describe('generateServerProperties 落盘契约', () => {
 
   it('未同意 EULA（字段缺省）：写 eula=false、跳过首启，部署仍成功', async () => {
     testState.latestBuild = {
-      downloads: { application: { url: 'https://example.invalid/jar/server.jar' } },
+      downloads: { application: { url: 'https://piston-data.mojang.com/jar/server.jar' } },
     };
     const { app, manager } = buildApp();
 
@@ -892,7 +927,7 @@ describe('generateServerProperties 落盘契约', () => {
 
   it('未同意 EULA（显式 false）：同样写 eula=false 且不首启', async () => {
     testState.latestBuild = {
-      downloads: { application: { url: 'https://example.invalid/jar/server.jar' } },
+      downloads: { application: { url: 'https://piston-data.mojang.com/jar/server.jar' } },
     };
     const { app, manager } = buildApp();
 
@@ -915,7 +950,7 @@ describe('generateServerProperties 落盘契约', () => {
 describe('runFirstLaunch 首启行为', () => {
   beforeEach(() => {
     testState.latestBuild = {
-      downloads: { application: { url: 'https://example.invalid/jar/server.jar' } },
+      downloads: { application: { url: 'https://piston-data.mojang.com/jar/server.jar' } },
     };
   });
 

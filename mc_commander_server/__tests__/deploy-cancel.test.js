@@ -191,7 +191,7 @@ beforeEach(() => {
   testState.latestBuild = {
     downloads: {
       application: {
-        url: 'https://core-dl/server.jar',
+        url: 'https://piston-data.mojang.com/server.jar',
         hash: JAR_SHA256,
         hashType: 'sha256',
       },
@@ -311,7 +311,7 @@ describe('取消在途部署', () => {
     releaseQuery({
       downloads: {
         application: {
-          url: 'https://core-dl/server.jar',
+          url: 'https://piston-data.mojang.com/server.jar',
           hash: JAR_SHA256,
           hashType: 'sha256',
         },
