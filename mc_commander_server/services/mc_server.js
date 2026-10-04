@@ -1440,7 +1440,11 @@ export class MCServerInstance extends EventEmitter {
             knownPlayers.set(entry.name, {
               name: entry.name,
               uuid: entry.uuid || '',
-              lastSeen: entry.expiresOn || null,
+              // usercache **不携带**最后在线时间：它的 expiresOn 是「条目创建 + 1 个月」
+              // 的缓存过期时刻，与最后在线无关。此前拿它当 lastSeen，界面会显示一个
+              // 看似权威、实为「缓存创建 + 1 个月」的时间。准确的 lastSeen 由自有影子
+              // 档案提供（玩家离开时写入，见 _supplementKnownPlayersFromProfiles）。
+              lastSeen: null,
             });
           }
         }
@@ -1505,7 +1509,42 @@ export class MCServerInstance extends EventEmitter {
       } catch {}
     }
 
+    // 自有影子档案补足：usercache 会被 MC 按 expiresOn 剪枝（条目创建 + 1 个月），
+    // 只依赖它会让历史玩家从名单里静默消失；且它是唯一携带准确 lastSeen 的来源。
+    this._supplementKnownPlayersFromProfiles(knownPlayers);
+
     return knownPlayers;
+  }
+
+  /// 用 `playerdata/<uuid>.json` 补足已知玩家名单。
+  /// 文件名即 UUID（档案按 UUID 落盘），档案内的 `name`/`lastSeen` 由本仓在玩家离开时写入。
+  _supplementKnownPlayersFromProfiles(knownPlayers) {
+    const dir = path.join(this.serverPath, 'playerdata');
+    let files;
+    try {
+      files = fs.readdirSync(dir);
+    } catch {
+      return; // 目录不存在＝从未有玩家落盘
+    }
+    for (const file of files) {
+      if (!file.endsWith('.json')) continue;
+      const filePath = path.join(dir, file);
+      if (!isPathContained(dir, filePath)) continue;
+      let profile;
+      try {
+        profile = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+      } catch {
+        continue; // 半写/损坏的档案跳过，不影响其余玩家
+      }
+      const name = typeof profile?.name === 'string' && profile.name ? profile.name : null;
+      if (!name) continue;
+      const uuid = file.slice(0, -'.json'.length);
+      const entry = knownPlayers.get(name) || { name, uuid, lastSeen: null };
+      if (!entry.uuid) entry.uuid = uuid;
+      // 档案是唯一准确的最后在线来源：有值就用它，没有则保持未知（不拿别的字段顶替）
+      if (profile.lastSeen) entry.lastSeen = profile.lastSeen;
+      knownPlayers.set(name, entry);
+    }
   }
 
   /// MC 版本：以服务端 JAR 内 version.json 为权威（用户绕过面板手动换 jar 或外部升级

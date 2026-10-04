@@ -1688,8 +1688,11 @@ describe('MCServerManager', () => {
     });
   });
 
-  describe('MCServerInstance - getAllKnownPlayers 从 usercache.json 读取 lastSeen', () => {
-    it('usercache.json 使用真实字段名 expiresOn（字符串时间戳）时，lastSeen 应取到该值而非 null', () => {
+  describe('MCServerInstance - getAllKnownPlayers 不从 usercache 取 lastSeen', () => {
+    // 这条用例此前断言「expiresOn 应成为 lastSeen」——那是把缺陷当规格锁住：
+    // expiresOn 是条目创建 + 1 个月的**缓存过期时刻**，与最后在线无关。
+    // MC 会按它剪枝 usercache，故它连「玩家是否还在名单里」都说明不了。
+    it('usercache.json 的 expiresOn 不得成为 lastSeen（它是缓存过期时刻）', () => {
       const id = `known-players-${Date.now()}`;
       const instance = manager.createInstance({
         id,
@@ -1714,9 +1717,11 @@ describe('MCServerManager', () => {
       );
 
       const known = instance.getAllKnownPlayers();
-      expect(known.get('Steve').lastSeen).toBe('2026-08-10 10:00:00 +0000');
-      expect(known.get('Alex').lastSeen).toBe('2026-08-09 08:30:00 +0800');
+      // uuid 仍然取用（它是稳定身份），但 lastSeen 必须为空 —— 宁可显示「未知」，
+      // 也不能给用户一个看似权威、实为「缓存创建 + 1 个月」的时间
       expect(known.get('Steve').uuid).toBe('069a79f4-44e9-4726-a5be-fca90e38aaf5');
+      expect(known.get('Steve').lastSeen).toBeNull();
+      expect(known.get('Alex').lastSeen).toBeNull();
     });
   });
 
