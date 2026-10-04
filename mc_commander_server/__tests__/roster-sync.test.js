@@ -65,7 +65,7 @@ function makeInstance(name = 'inst') {
 }
 
 const LIST_EMPTY = 'There are 0 of a max of 20 players online: ';
-/** 实机样本形态（见 .ai/References/2026-10-04-实机取模样本.md） */
+/** 实机返回形态（逐字样本见 list-response.test.js） */
 function listOf(...names) {
   return `There are ${names.length} of a max of 20 players online: ${names.join(', ')}${
     names.length ? '' : ' '
@@ -112,6 +112,16 @@ describe('_fetchOnlineRoster 取名单的失败语义', () => {
   it('空名单解析为 []：是合法答案而非「取不到」', async () => {
     const inst = makeInstance('empty');
     expect(await inst._fetchOnlineRoster()).toEqual({ names: [] });
+  });
+
+  it('查询带调用方级超时：rcon-client 只在请求出队时才计时，队列滞留期无上限', async () => {
+    const inst = makeInstance('timeout');
+    await inst._fetchOnlineRoster();
+    expect(inst.sendCommandWithResponse).toHaveBeenCalledWith('list', {
+      timeout: expect.any(Number),
+    });
+    const [, opts] = inst.sendCommandWithResponse.mock.calls[0];
+    expect(opts.timeout).toBeGreaterThan(0);
   });
 
   it('命令抛错（队列拒绝/RCON 卡顿）→ null，不向上抛', async () => {
