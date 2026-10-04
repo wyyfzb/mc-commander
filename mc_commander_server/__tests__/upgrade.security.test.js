@@ -48,6 +48,17 @@ vi.mock('../db/index.js', () => ({
   InstanceModel: { update: vi.fn() },
 }));
 
+// Java 探测在真机上扫描 /usr/lib/jvm，结果随环境变化。本文件测的是升级的安全加固
+// （mcVersion 白名单/路径收口/下载域），不该因机器上装没装某个 JDK 而红绿不定，
+// 故固定为「总是满足」——Java 校验本身由 upgrade.java-check.test.js 专门覆盖。
+vi.mock('../utils/java-detector.js', () => ({
+  getRecommendedJavaVersion: vi.fn(() => '21'),
+  isJavaSatisfied: vi.fn(() => true),
+  findJavaPathStrict: vi.fn(() => null),
+  findJavaPath: vi.fn(() => 'java'),
+  getAllJavaVersions: vi.fn(() => []),
+}));
+
 vi.mock('../utils/audit.js', () => ({
   recordAudit: vi.fn(),
   AuditActions: {

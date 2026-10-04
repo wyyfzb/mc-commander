@@ -17,6 +17,12 @@ import {
   assertSizeWithinLimit,
 } from '../utils/jar-download-guard.js';
 import { logger } from '../utils/logger.js';
+import {
+  findJavaPathStrict,
+  getRecommendedJavaVersion,
+  isJavaSatisfied,
+} from '../utils/java-detector.js';
+import { readJarVersionInfo } from './mc-server/jar-version.js';
 import { getServerVersion } from '../utils/version.js';
 import { beginCancellableTask, TASK_KINDS, TaskCancelledError } from '../utils/cancellable-task.js';
 
@@ -184,6 +190,21 @@ export class UpgradeService {
    * @param {{ algorithm: string, digest: string } | null} expectedHash - 上游摘要，null 跳过校验
    * @param {AbortSignal|null} [signal] 取消信号（用户中断升级时断流 + 清理半成品）
    */
+  /**
+   * 目标版本要求的 Java 主版本号（字符串）。
+   * 优先级：新 jar 内 version.json 的 java_version → 与部署同一套推荐表 → null（不阻塞）。
+   * @param {string} newJarPath 刚下载、尚未替换的新 jar 绝对路径
+   * @param {string} mcVersion 目标 MC 版本
+   * @returns {string|null}
+   */
+  _resolveRequiredJava(newJarPath, mcVersion) {
+    // 动态 import 避免与 jar-version 域形成顶层循环依赖
+    const info = readJarVersionInfo(newJarPath);
+    if (info?.javaVersion) return String(info.javaVersion);
+    const recommended = getRecommendedJavaVersion(mcVersion);
+    return recommended || null;
+  }
+
   _downloadJar(url, destPath, instanceId, expectedHash = null, signal = null) {
     // 域白名单断言在下载流创建前（唯一下载入口，覆盖三个 resolveDownload 分支）
     assertAllowedDownloadHost(url, ALLOWED_DOWNLOAD_HOSTS);
@@ -554,6 +575,34 @@ export class UpgradeService {
       this._emitProgress(instanceId, UPGRADE_STAGES.DOWNLOAD, 0, '正在下载...');
       await this._downloadJar(downloadUrl, newJarPath, instanceId, expectedHash, task.signal);
       this._emitProgress(instanceId, UPGRADE_STAGES.DOWNLOAD, 100, '下载完成');
+      task.throwIfCancelled();
+
+      // 阶段 2.5：Java 校验。**必须落在替换之前**——替换一旦执行就已改掉 DB 与实例
+      // jar，那是整条链路里最难回退的时点；而跨 Java 大版本升级（1.20.x 的 Java 17
+      // → 26.3 的 Java 25）此前会一路改完后才在首启时崩，用户拿到的是「升完起不来」。
+      // 权威来源是刚下载的新 jar 内 version.json 的 java_version（服务端自带），
+      // 不手写版本矩阵；读不到就退回与部署同一套推荐表，再读不到则不阻塞（无法证明）。
+      const requiredJava = this._resolveRequiredJava(newJarPath, mcVersion);
+      if (requiredJava) {
+        const currentJava = instance.javaPath;
+        if (!isJavaSatisfied(currentJava, requiredJava)) {
+          const replacement = findJavaPathStrict(requiredJava);
+          if (!replacement) {
+            // 找不到满足要求的 Java ⇒ 中止升级，交给外层回滚（备份与旧 jar 都还在）
+            throw new AppError(
+              ErrorCodes.VALIDATION_ERROR,
+              `升级到 ${mcVersion} 需要 Java ${requiredJava}，本机未找到可用版本；` +
+                `当前实例使用 ${currentJava || '(未设置)'}。请先安装 Java ${requiredJava} 再重试`,
+            );
+          }
+          logger.info(
+            `[upgrade ${instanceId}] Java ${currentJava} 不满足 ${requiredJava}，改为 ${replacement}`,
+          );
+          instance.javaPath = replacement;
+          const { InstanceModel: Model } = await import('../db/index.js');
+          Model.update(instanceId, { javaPath: replacement });
+        }
+      }
       task.throwIfCancelled();
 
       // 阶段 3：替换 JAR
