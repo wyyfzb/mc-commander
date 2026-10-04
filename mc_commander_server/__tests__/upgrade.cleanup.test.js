@@ -9,7 +9,7 @@
  *    unlink：回滚完成（含临时备份清理）后才 resolve，调用方不提前 cleanup
  * ③ 连续两次升级模拟后实例目录仅保留当前版本 jar
  *
- * 网络隔离：got 全量 mock（CI 离线确定性）；真实临时目录 + 真实 fs，
+ * 网络隔离：http-client 全量 mock（CI 离线确定性）；真实临时目录 + 真实 fs，
  * 复制/删除落盘行为可断言（禁止占位断言）。
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -23,11 +23,10 @@ const { jsonImpl, streamImpl } = vi.hoisted(() => ({
   streamImpl: { current: null },
 }));
 
-vi.mock('got', () => ({
-  default: Object.assign(
-    vi.fn((...args) => ({ json: () => jsonImpl.current(...args) })),
-    { stream: vi.fn(() => streamImpl.current()) },
-  ),
+vi.mock('../utils/http-client.js', () => ({
+  httpJson: vi.fn((...args) => jsonImpl.current(...args)),
+  httpStream: vi.fn((...args) => streamImpl.current(...args)),
+  httpPost: vi.fn(),
 }));
 
 vi.mock('../services/backup.service.js', () => ({

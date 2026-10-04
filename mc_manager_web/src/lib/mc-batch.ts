@@ -93,7 +93,10 @@ export function formatBatchSummary(actionLabel: string, result: BatchResult): st
   if (result.allOffline) return '所选玩家均已离线，无法执行'
   const parts = [`成功 ${result.successCount}`, `失败 ${result.failCount}`]
   if (result.skippedCount > 0) parts.push(`跳过离线 ${result.skippedCount}`)
-  return `批量${actionLabel}完成：${parts.join('，')}`
+  // 动作名以拉丁字母结尾时（如「设置 OP」）与后面的「完成」之间补一个空格：
+  // 中文与西文相邻不空格会挤在一起（「批量设置 OP完成」），是全站文案的既有约定
+  const sep = /[A-Za-z0-9]$/.test(actionLabel) ? ' ' : ''
+  return `批量${actionLabel}${sep}完成：${parts.join('，')}`
 }
 
 /** 失败详情文案（Toast description，仅 failures 非空时有内容） */

@@ -80,7 +80,11 @@ export const mockInstanceStatus: InstanceStatus = {
   circuitBreakerTripped: false,
   consecutiveCrashes: 0,
   uptime: 7200,
-  address: 'localhost:25565',
+  address: '1.2.3.4:25565',
+  // 与 address 同源：1.2.3.4 是公网 ⇒ public。默认夹具用「可直连」的正常态，
+  // 免得无关用例的顶栏都挂着「内网地址」警示；要测警示分支的用例如
+  // app-topbar.test.tsx 自行覆盖为 private
+  addressType: 'public',
   players: [],
   playerCount: 3,
   maxPlayers: 20,

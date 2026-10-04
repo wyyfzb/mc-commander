@@ -271,6 +271,133 @@ describe('MCServerManager', () => {
     });
   });
 
+  // 服务器对外地址与可达范围（address / addressType）：
+  // addressType 是前端「内网地址」标注的唯一依据，必须与 address 同源产出——
+  // 分两处各算一次会出现「地址是内网、类型却标 public」的自相矛盾。
+  describe('服务器地址与可达范围（address / addressType）', () => {
+    let instance;
+
+    beforeEach(() => {
+      instance = manager.createInstance({
+        id: 'addr',
+        name: 'Addr Test',
+        jarFile: 'server.jar',
+      });
+    });
+
+    it('探测到公网 IP 时：地址用公网 IP，标 public', () => {
+      instance._publicIp = '1.2.3.4';
+      instance.properties = { 'server-port': '25565' };
+      expect(instance._resolveServerAddress(instance.properties)).toEqual({
+        address: '1.2.3.4:25565',
+        addressType: 'public',
+      });
+    });
+
+    it('无公网 IP、server-ip 写的是公网地址时：标 public', () => {
+      instance._publicIp = null;
+      instance.properties = { 'server-port': '25565', 'server-ip': '1.2.3.4' };
+      expect(instance._resolveServerAddress(instance.properties)).toEqual({
+        address: '1.2.3.4:25565',
+        addressType: 'public',
+      });
+    });
+
+    it('无公网 IP、server-ip 写的是内网地址时：标 private', () => {
+      instance._publicIp = null;
+      instance.properties = { 'server-port': '25565', 'server-ip': '192.168.1.20' };
+      expect(instance._resolveServerAddress(instance.properties)).toEqual({
+        address: '192.168.1.20:25565',
+        addressType: 'private',
+      });
+    });
+
+    it('无公网 IP、server-ip 为 0.0.0.0 时视同未设置，回退并标 private', () => {
+      instance._publicIp = null;
+      instance.properties = { 'server-port': '25565', 'server-ip': '0.0.0.0' };
+      const { address, addressType } = instance._resolveServerAddress(instance.properties);
+      expect(address.endsWith(':25565')).toBe(true);
+      // 回退到本机网卡/环回：玩家都直连不上，必须标 private
+      expect(addressType).toBe('private');
+    });
+
+    it('toStatus() 同时给出 address 与 addressType，且两者同源', () => {
+      instance._publicIp = '1.2.3.4';
+      instance.properties = { 'server-port': '25565' };
+      const status = instance.toStatus();
+      expect(status.address).toBe('1.2.3.4:25565');
+      expect(status.addressType).toBe('public');
+    });
+
+    it('toStatus() 在内网回退场景下把 addressType 标成 private', () => {
+      instance._publicIp = null;
+      instance.properties = { 'server-port': '25565', 'server-ip': '10.1.2.3' };
+      const status = instance.toStatus();
+      expect(status.address).toBe('10.1.2.3:25565');
+      expect(status.addressType).toBe('private');
+    });
+
+    // 可达范围必须由**地址本身**决定，不能由「地址是从哪个分支来的」决定。
+    // 曾经 PUBLIC_IP 分支硬编码 public、server-ip 分支按值判 ⇒ 同一个 CGNAT 地址
+    // 经 .env 注入算「公网」、写进 server.properties 却算「内网」，用户看到哪种结果
+    // 取决于他用了哪条配置路径——这不可解释也无法自证。
+    it('同一地址经不同注入路径必须得到同一个 addressType（不按来源判）', () => {
+      const cgnat = '100.64.0.1'; // 运营商级 NAT：玩家直连不上，与经哪条路径无关
+      instance._publicIp = cgnat;
+      instance.properties = { 'server-port': '25565' };
+      const viaEnv = instance._resolveServerAddress(instance.properties);
+
+      instance._publicIp = null;
+      instance.properties = { 'server-port': '25565', 'server-ip': cgnat };
+      const viaProps = instance._resolveServerAddress(instance.properties);
+
+      expect(viaEnv.address).toBe(viaProps.address);
+      expect(viaEnv.addressType).toBe(viaProps.addressType);
+      expect(viaEnv.addressType).toBe('private');
+    });
+
+    it('PUBLIC_IP 填了内网地址时标 private（不能因为「它来自 PUBLIC_IP」就当公网）', () => {
+      instance._publicIp = '10.1.2.3';
+      instance.properties = { 'server-port': '25565' };
+      expect(instance._resolveServerAddress(instance.properties)).toEqual({
+        address: '10.1.2.3:25565',
+        addressType: 'private',
+      });
+    });
+
+    it('PUBLIC_IP 填了公网地址时仍标 public', () => {
+      instance._publicIp = '1.2.3.4';
+      instance.properties = { 'server-port': '25565' };
+      expect(instance._resolveServerAddress(instance.properties)).toEqual({
+        address: '1.2.3.4:25565',
+        addressType: 'public',
+      });
+    });
+
+    // 网卡回退分支的反向误判：机器网卡上就是公网 IP（探测服务不可达时的常见云主机）
+    // 不该因为「走了兜底分支」被标成内网——那会让用户以为自己的服玩家连不上。
+    it('网卡回退到公网 IP 时标 public（不按「走了兜底分支」判）', () => {
+      instance._publicIp = null;
+      instance.properties = { 'server-port': '25565' };
+      const nets = os.networkInterfaces();
+      const publicIf = Object.values(nets)
+        .flat()
+        .find((n) => n && n.family === 'IPv4' && !n.internal);
+      // 本机没有非环回 IPv4 时该分支走不到，跳过（不改用 mock 伪造环境）
+      if (!publicIf) return;
+      const { addressType } = instance._resolveServerAddress(instance.properties);
+      // 断言语义：类型与地址网段自洽，而不是恒等于 private
+      const host = publicIf.address;
+      const expected =
+        /^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.|127\.|169\.254\.|0\.|100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.)/.test(
+          host,
+        )
+          ? 'private'
+          : 'public';
+      expect(addressType).toBe(expected);
+    });
+  });
+
   describe('events', () => {
     it('should detect player join from logs', () => {
       const instance = manager.createInstance({

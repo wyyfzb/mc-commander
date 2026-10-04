@@ -9,7 +9,7 @@
  *    sha1 匹配通过；sha1 不匹配 → 残留清理 + failed 终态；体积超限（注入
  *    小上限）→ 断流 + 残留清理 + failed 终态
  *
- * 网络隔离：got 全量 mock（json/stream 行为按用例注入），保证 CI 离线确定性。
+ * 网络隔离：http-client 全量 mock（json/stream 行为按用例注入），保证 CI 离线确定性。
  * 摘要期望值一律动态计算（crypto.createHash），不写 hex 字面量。
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -24,12 +24,11 @@ const { jsonImpl, streamImpl } = vi.hoisted(() => ({
   streamImpl: { current: null },
 }));
 
-vi.mock('got', () => ({
-  // got(url, opts) 返回 promise-like：resolveDownload 里链式 .json()
-  default: Object.assign(
-    vi.fn((...args) => ({ json: () => jsonImpl.current(...args) })),
-    { stream: vi.fn((...args) => streamImpl.current(...args)) },
-  ),
+vi.mock('../utils/http-client.js', () => ({
+  // httpJson 的返回值即最终 JSON（无 .json 链）
+  httpJson: vi.fn((...args) => jsonImpl.current(...args)),
+  httpStream: vi.fn((...args) => streamImpl.current(...args)),
+  httpPost: vi.fn(),
 }));
 
 vi.mock('../services/backup.service.js', () => ({
@@ -254,7 +253,12 @@ function streamSucceeds({ transferred = 1, total = 1, data = '' } = {}) {
   return () => {
     const stream = makeFakeStream();
     queueMicrotask(() => {
-      stream._emit('downloadProgress', { percent: total > 0 ? 1 : 0, transferred, total });
+      // percent 忠实 httpStream 公式（total 未知记 0），使夹具在任何参数下都自洽
+      stream._emit('downloadProgress', {
+        percent: total > 0 ? transferred / total : 0,
+        transferred,
+        total,
+      });
       if (data) stream._file.write(data);
       stream._file.end();
     });

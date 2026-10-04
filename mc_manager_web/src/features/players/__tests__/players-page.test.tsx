@@ -163,8 +163,8 @@ describe('PlayersPage', () => {
     renderPage()
     await screen.findByText('Steve')
     await user.click(screen.getByText('Steve').closest('tr')!)
-    // 详情面板出现（概览操作组；Steve 为 OP → 显示「取消OP」）
-    expect(await screen.findByRole('button', { name: /取消OP|设为OP/ })).toBeInTheDocument()
+    // 详情面板出现（概览操作组；Steve 为 OP → 显示「取消 OP」）
+    expect(await screen.findByRole('button', { name: /取消 OP|设为 OP/ })).toBeInTheDocument()
     expect(screen.getByText('基本信息')).toBeInTheDocument()
     // 关闭按钮
     fireEvent.click(screen.getByRole('button', { name: '关闭详情面板' }))
@@ -183,7 +183,7 @@ describe('PlayersPage', () => {
     // 行内真控件才是键盘入口（原生 button：回车与空格都可激活）
     screen.getByRole('button', { name: '查看 Steve 详情' }).focus()
     await user.keyboard('{Enter}')
-    expect(await screen.findByRole('button', { name: /取消OP|设为OP/ })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /取消 OP|设为 OP/ })).toBeInTheDocument()
   })
 
   it('行内溢出菜单：封禁入口打开封禁对话框', async () => {
@@ -215,8 +215,8 @@ describe('PlayersPage', () => {
       '给予物品',
       '白名单',
       '移除白名单',
-      'OP',
-      '取消OP',
+      '设为 OP',
+      '取消 OP',
       '清空背包',
       '踢出',
     ]) {

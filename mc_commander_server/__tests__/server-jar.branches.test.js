@@ -25,7 +25,7 @@ const testState = vi.hoisted(() => ({
   dbCreateError: null,
 }));
 
-const gotState = vi.hoisted(() => ({ jsonTable: {}, streamImpl: null }));
+const httpState = vi.hoisted(() => ({ jsonTable: {}, streamImpl: null }));
 
 vi.mock('../db/index.js', () => ({
   InstanceModel: {
@@ -107,22 +107,23 @@ vi.mock('child_process', async (importOriginal) => {
   };
 });
 
-vi.mock('got', async () => {
+vi.mock('../utils/http-client.js', async () => {
   const streamMod = await import('node:stream');
+  // 按 URL 子串命中注册表；未命中即抛错（URL 形状漂移时给出可定位的失败，而非静默 undefined）
   const findJson = (url) => {
-    const keys = Object.keys(gotState.jsonTable).sort((a, b) => b.length - a.length);
-    for (const k of keys) if (url.includes(k)) return gotState.jsonTable[k];
-    throw new Error(`unexpected got.json url: ${url}`);
+    const keys = Object.keys(httpState.jsonTable).sort((a, b) => b.length - a.length);
+    for (const k of keys) if (url.includes(k)) return httpState.jsonTable[k];
+    throw new Error(`unexpected json url: ${url}`);
   };
-  const gotFn = vi.fn((url) => ({
-    json: () => {
-      const entry = findJson(url);
-      if (entry instanceof Error) return Promise.reject(entry);
-      return Promise.resolve(entry);
-    },
-  }));
-  gotFn.stream = vi.fn((url) => gotState.streamImpl(url, streamMod));
-  return { default: gotFn };
+  // httpJson 契约：直接返回解析后的值（Promisified），值为 Error 实例时 reject
+  const httpJson = vi.fn((url) => {
+    const entry = findJson(url);
+    if (entry instanceof Error) return Promise.reject(entry);
+    return Promise.resolve(entry);
+  });
+  const httpStream = vi.fn((url) => httpState.streamImpl(url, streamMod));
+  // 三个具名导出必须齐全：SUT 用 ESM 具名导入，缺一个即模块解析期整体失败
+  return { httpJson, httpStream, httpPost: vi.fn() };
 });
 
 const { createServerJarRoutes } = await import('../routes/server-jar.js');
@@ -134,8 +135,9 @@ function defaultStreamImpl(jarBytes) {
     const pt = new streamMod.PassThrough();
     queueMicrotask(() => {
       pt.emit('downloadProgress', {
+        // percent 与 transferred/total 自洽（半程），忠实 httpStream 的产出形状
         percent: 0.5,
-        transferred: jarBytes.length,
+        transferred: jarBytes.length / 2,
         total: jarBytes.length,
       });
       pt.write(jarBytes);
@@ -171,8 +173,8 @@ beforeEach(() => {
   testState.mcCoreVersionsValue = [];
   testState.downloadServerImpl = null;
   testState.dbCreateError = null;
-  gotState.jsonTable = {};
-  gotState.streamImpl = defaultStreamImpl(JAR_BYTES);
+  httpState.jsonTable = {};
+  httpState.streamImpl = defaultStreamImpl(JAR_BYTES);
 });
 
 afterEach(() => {
@@ -181,7 +183,7 @@ afterEach(() => {
 });
 
 function defineManifest() {
-  gotState.jsonTable['version_manifest'] = {
+  httpState.jsonTable['version_manifest'] = {
     versions: [
       { type: 'release', id: '1.21.4' },
       { type: 'snapshot', id: '26w1a' },
@@ -202,7 +204,7 @@ describe('GET /versions 分发缺口', () => {
 
   it('fabric：core 返回对象形态（versions 键）+ loader 正常', async () => {
     testState.mcCoreVersionsValue = { versions: ['1.21.4', '1.21'] };
-    gotState.jsonTable['meta.fabricmc.net'] = [
+    httpState.jsonTable['meta.fabricmc.net'] = [
       { version: '0.16.9', stable: false },
       { version: '0.16.10', stable: true },
       { version: '0.16.11', stable: true },
@@ -216,7 +218,7 @@ describe('GET /versions 分发缺口', () => {
 
   it('fabric：core 对象无 versions 键 → Object.keys 兑底提取', async () => {
     testState.mcCoreVersionsValue = { neoA: {}, neoB: {} };
-    gotState.jsonTable['meta.fabricmc.net'] = [];
+    httpState.jsonTable['meta.fabricmc.net'] = [];
     const { app } = buildApp();
     const res = await request(app).get('/api/versions?type=fabric');
     expect(res.status).toBe(200);
@@ -224,7 +226,7 @@ describe('GET /versions 分发缺口', () => {
   });
 
   it('forge：promos 键缺失 → promos 兜底空对象 → 版本列表为空不抛错', async () => {
-    gotState.jsonTable['promotions_slim'] = {};
+    httpState.jsonTable['promotions_slim'] = {};
     const { app } = buildApp();
     const res = await request(app).get('/api/versions?type=forge');
     expect(res.status).toBe(200);
@@ -245,7 +247,7 @@ describe('Paper 构建发现链形态缺口', () => {
   function definePaperChain(buildsResp) {
     // key 用 projects/paper/versions（比 projects/paper 长，优先命中 builds URL，
     // 避免短 key 将发现链请求误匹配到版本列表响应）
-    gotState.jsonTable['projects/paper/versions'] = buildsResp;
+    httpState.jsonTable['projects/paper/versions'] = buildsResp;
   }
 
   it('v3 裸数组响应：直接按构建数组过滤 STABLE 并选最新', async () => {
@@ -345,8 +347,8 @@ describe('Paper 构建发现链形态缺口', () => {
       .post('/api/instances/deploy')
       .send({ type: 'paper', mcVersion: '1.21.4', instanceName: 'Real Shape' });
     expect(res.status).toBe(200);
-    const { default: got } = await import('got');
-    expect(got.stream.mock.calls[0][0]).toBe(
+    const { httpStream } = await import('../utils/http-client.js');
+    expect(httpStream.mock.calls[0][0]).toBe(
       'https://fill-data.papermc.io/v1/objects/xxx/paper-1.21.4-232.jar',
     );
   });
@@ -459,17 +461,17 @@ describe('下载进度节流与错误清理', () => {
     };
   }
 
-  it('进度节流：percent=0 按 transferred/total 折算发射，<1% 增量被抑制', async () => {
+  it('进度节流：按客户端 percent 直采发射，<1% 增量被抑制', async () => {
     defineVanillaChain();
-    gotState.streamImpl = (url, streamMod) => {
+    httpState.streamImpl = (url, streamMod) => {
       const pt = new streamMod.PassThrough();
       queueMicrotask(() => {
-        // 事件 1：percent=0、total=0 → pct=0（0 与 lastPct=-1 差 1 → 发射）
+        // 事件 1：total=0 → 客户端 percent 亦为 0 → pct=0（0 与 lastPct=-1 差 1 → 发射）
         pt.emit('downloadProgress', { percent: 0, transferred: 0, total: 0 });
-        // 事件 2：percent=0、total=1000、transferred=100 → pct=0.1（发射）
-        pt.emit('downloadProgress', { percent: 0, transferred: 100, total: 1000 });
+        // 事件 2：percent 恒等于 transferred/total = 0.1 → 发射
+        pt.emit('downloadProgress', { percent: 0.1, transferred: 100, total: 1000 });
         // 事件 3：增量 0.005 < 0.01 → 节流跳过
-        pt.emit('downloadProgress', { percent: 0, transferred: 105, total: 1000 });
+        pt.emit('downloadProgress', { percent: 0.105, transferred: 105, total: 1000 });
         pt.write(JAR_BYTES);
         pt.end();
       });
@@ -505,7 +507,7 @@ describe('下载进度节流与错误清理', () => {
       }
       return ws;
     });
-    gotState.streamImpl = (url, streamMod) => {
+    httpState.streamImpl = (url, streamMod) => {
       const pt = new streamMod.PassThrough();
       queueMicrotask(() => {
         pt.write(JAR_BYTES); // 先落盘部分字节（文件已存在）
@@ -704,7 +706,7 @@ describe('win32 平台分支与首启输出', () => {
 describe('失败清理兜底', () => {
   it('部署失败且 rmSync 清理抛错 → 仅告警，仍返回 502 + error 事件', async () => {
     defineManifest();
-    gotState.jsonTable['projects/paper'] = { versions: {} };
+    httpState.jsonTable['projects/paper'] = { versions: {} };
     // paper 发现链失败 → 进入 catch 清理段
     const rmSpy = vi.spyOn(fs, 'rmSync').mockImplementation(() => {
       throw new Error('EBUSY: resource busy');

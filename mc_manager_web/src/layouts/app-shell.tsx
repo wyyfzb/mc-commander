@@ -29,12 +29,22 @@ export function AppShell() {
   const instanceId = useServerStore((s) => s.instanceId)
   const setInstanceId = useServerStore((s) => s.setInstanceId)
 
-  // 默认实例选择：列表就绪且未选择时取第一个（单实例场景）
+  // 默认实例选择：列表就绪后
+  // - 未选择过 → 取第一个（单实例场景；列表按创建时间倒序，即最近创建的）
+  // - 已选择（含从 localStorage 读回的）→ 只有当它**仍在列表里**才保留；
+  //   不在了（实例被删、或换了另一个面板）则回落到第一个。
+  // 不能无条件保留：陈旧 id 会让所有 per-instance 查询 404，界面停在
+  // 「加载失败」，而用户看着顶栏一个根本不存在的实例名。
   const instancesQuery = useInstances()
   useEffect(() => {
-    const first = instancesQuery.data?.[0]
-    if (!instanceId && first) {
-      setInstanceId(first.id)
+    const list = instancesQuery.data
+    if (!list || list.length === 0) return
+    if (!instanceId) {
+      setInstanceId(list[0]!.id)
+      return
+    }
+    if (!list.some((i) => i.id === instanceId)) {
+      setInstanceId(list[0]!.id)
     }
   }, [instancesQuery.data, instanceId, setInstanceId])
 

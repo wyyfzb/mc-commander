@@ -2,7 +2,7 @@
  * WebhookService.testDelivery 落库测试（issue #356）
  * 验收：成功 / 非 2xx / 网络异常 三路径均落一条 event_type=ping 的投递记录；
  * SSRF 拦截与 webhook 不存在发生在投递尝试前，不落记录。
- * got / url-guard / getDb 全 mock：不触网，真实 better-sqlite3 断言落库。
+ * utils/http-client / url-guard / getDb 全 mock：不触网，真实 better-sqlite3 断言落库。
  */
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import Database from 'better-sqlite3';
@@ -20,8 +20,11 @@ const { postImpl, guardImpl } = vi.hoisted(() => ({
   guardImpl: { current: null },
 }));
 
-vi.mock('got', () => ({
-  default: { post: (...args) => postImpl.current(...args) },
+// 三个具名导出都要给：SUT 用 ESM 具名导入，缺一个就是模块解析期报错（整个文件全红）
+vi.mock('../utils/http-client.js', () => ({
+  httpJson: vi.fn(),
+  httpStream: vi.fn(),
+  httpPost: (...args) => postImpl.current(...args),
 }));
 
 vi.mock('../utils/url-guard.js', () => ({
@@ -49,7 +52,7 @@ beforeAll(() => {
     FOREIGN KEY (webhook_id) REFERENCES webhooks(id) ON DELETE CASCADE
   )`);
 
-  // 默认：url guard 放行 + got 可按用例覆写
+  // 默认：url guard 放行 + httpPost 可按用例覆写
   guardImpl.current = async () => ({ ok: true });
   postImpl.current = async () => ({ statusCode: 200, body: 'ok' });
 });
@@ -103,7 +106,7 @@ describe('WebhookService.testDelivery 落库（issue #356）', () => {
     expect(JSON.parse(row.payload).event).toBe('ping');
   });
 
-  it('非 2xx 路径（throwHttpErrors=false）：返回 success=false + 落 failed 记录含响应码', async () => {
+  it('非 2xx 路径（httpPost 不因非 2xx 抛错）：返回 success=false + 落 failed 记录含响应码', async () => {
     postImpl.current = async () => ({ statusCode: 503, body: 'Service Unavailable' });
 
     const result = await WebhookService.testDelivery(hook.id);

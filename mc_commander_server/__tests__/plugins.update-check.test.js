@@ -4,7 +4,7 @@
  * - checkPluginUpdates：名称命中（title/slugify）、版本比对、未命中保守报告、
  *   上游失败不拖垮整批、20 个上限
  * - POST /plugins/check-updates 路由：200 信封 / 404 实例不存在
- * got 全量 mock（与 market.routes.test.js 同模式，离线语义）
+ * utils/http-client 全量 mock（与 market.routes.test.js 同模式，离线语义）
  */
 import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
 import express from 'express';
@@ -14,18 +14,19 @@ import os from 'os';
 import path from 'path';
 import AdmZip from 'adm-zip';
 
-vi.mock('got', () => {
-  const gotFn = vi.fn();
-  gotFn.stream = vi.fn();
-  return { default: gotFn };
-});
+// 三个具名导出都要给：SUT 用 ESM 具名导入，缺一个就是模块解析期报错（整个文件全红）
+vi.mock('../utils/http-client.js', () => ({
+  httpJson: vi.fn(),
+  httpStream: vi.fn(),
+  httpPost: vi.fn(),
+}));
 
 vi.mock('../utils/audit.js', () => ({
   AuditActions: {},
   recordAudit: vi.fn(),
 }));
 
-import got from 'got';
+import { httpJson } from '../utils/http-client.js';
 import { createPluginRoutes } from '../routes/plugins.js';
 import { errorHandler } from '../middleware/error_handler.js';
 import { clearMarketCache, comparePluginVersions } from '../services/market.service.js';
@@ -91,25 +92,22 @@ function versionsFixture(versionNumber) {
   ];
 }
 
-/** got mock 按 URL 分发：search → QUERY_TO_HITS；version → SLUG_TO_VERSIONS */
+/** http-client mock 按 URL 分发：search → QUERY_TO_HITS；version → SLUG_TO_VERSIONS */
 function routeUpstream({ queryToHits = {}, slugToVersions = {} } = {}) {
-  vi.mocked(got).mockImplementation((url, opts = {}) => {
+  // httpJson 自身即 Promise，直接 resolve 解析后的 JSON
+  vi.mocked(httpJson).mockImplementation(async (url, opts = {}) => {
     if (url.endsWith('/search')) {
       const q = opts.searchParams?.query ?? '';
       const hits = queryToHits[q];
-      if (!hits) return { json: async () => ({ total_hits: 0, hits: [] }) };
-      return { json: async () => searchFixture(hits) };
+      if (!hits) return { total_hits: 0, hits: [] };
+      return searchFixture(hits);
     }
     const m = /\/project\/([^/]+)\/version$/.exec(url);
     if (m) {
       const versions = slugToVersions[m[1]];
-      return { json: async () => (versions ? versionsFixture(versions) : []) };
+      return versions ? versionsFixture(versions) : [];
     }
-    return {
-      json: async () => {
-        throw new Error('unexpected url: ' + url);
-      },
-    };
+    throw new Error('unexpected url: ' + url);
   });
 }
 
@@ -231,21 +229,15 @@ describe('checkPluginUpdates（服务端聚合）', () => {
   it('单插件上游抛错不拖垮整批（其余插件正常报告）', async () => {
     writePluginJar('BrokenUpstream', '1.0.0');
     writePluginJar('GoodPlugin', '1.0.0');
-    vi.mocked(got).mockImplementation((url, opts = {}) => {
+    vi.mocked(httpJson).mockImplementation(async (url, opts = {}) => {
       const q = url.endsWith('/search') ? (opts.searchParams?.query ?? '') : '';
       if (q === 'BrokenUpstream') {
-        return {
-          json: async () => {
-            throw new Error('upstream 502');
-          },
-        };
+        throw new Error('upstream 502');
       }
       if (q === 'GoodPlugin') {
-        return {
-          json: async () => searchFixture([hit({ slug: 'goodplugin', title: 'GoodPlugin' })]),
-        };
+        return searchFixture([hit({ slug: 'goodplugin', title: 'GoodPlugin' })]);
       }
-      return { json: async () => [] };
+      return [];
     });
 
     const res = await request(app).post('/api/v1/instances/i1/plugins/check-updates');

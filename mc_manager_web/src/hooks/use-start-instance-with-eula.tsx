@@ -122,6 +122,13 @@ export function useStartInstanceWithEula() {
     }
   }
 
+  /**
+   * EULA 弹窗文案：首启（点「启动」触发）与部署后（点「启动」触发）都走这里。
+   * 不说「启动失败」——它是**前置条件未满足**，不是故障；说成失败会让用户去查日志。
+   * 这不是「往窗口挪位置」：通用的「确定要启动服务器吗？」确认已在本轮移除
+   * （它只重复问一次、且隐瞒了「还没同意 EULA」这个真正要看的信息），
+   * 于是用户点「启动」直接看到这条——原因、动作、后果一次说清。
+   */
   const eulaDialog = (
     <ConfirmDialog
       open={eulaTargetId !== null}
@@ -129,7 +136,7 @@ export function useStartInstanceWithEula() {
         if (!open) setEulaTargetId(null)
       }}
       title="Minecraft EULA 协议"
-      description="启动失败：Mojang 要求必须同意 EULA 协议才能运行服务器。同意后将在 eula.txt 中写入 eula=true 并自动启动服务器。"
+      description="Minecraft 要求先同意 EULA 协议才能运行服务器（当前 eula.txt 未同意）。同意后将在 eula.txt 中写入 eula=true 并自动启动服务器。"
       confirmText="同意并启动"
       cancelText="不同意"
       loading={eulaBusy}

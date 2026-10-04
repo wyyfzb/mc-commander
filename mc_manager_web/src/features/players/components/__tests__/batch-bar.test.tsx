@@ -118,8 +118,8 @@ describe('BatchBar', () => {
       '给予物品',
       '白名单',
       '移除白名单',
-      'OP',
-      '取消OP',
+      '设为 OP',
+      '取消 OP',
       '游戏模式',
       '清空背包',
       '踢出',
@@ -142,8 +142,8 @@ describe('BatchBar', () => {
   it.each([
     ['白名单', 'whitelistAdd', '添加白名单', 'whitelistRemove'],
     ['移除白名单', 'whitelistRemove', '移除白名单', 'whitelistAdd'],
-    ['OP', 'op', '设置OP', 'deop'],
-    ['取消OP', 'deop', '取消OP', 'op'],
+    ['设为 OP', 'op', '设置 OP', 'deop'],
+    ['取消 OP', 'deop', '取消 OP', 'op'],
   ])(
     '名单类 %s：直执（无确认弹窗）+ 回执挂撤销，撤销对偶动作；离线玩家仍执行',
     async (label, kind, actionLabel, undoKind) => {
@@ -152,7 +152,9 @@ describe('BatchBar', () => {
 
       // 直执：无任何确认弹窗
       expect(screen.queryByRole('button', { name: '确认操作' })).not.toBeInTheDocument()
-      await screen.findByText(`批量${actionLabel}完成：成功 1，失败 0`)
+      // 动作名以拉丁字母结尾时与「完成」之间有空格的既有约定（见 formatBatchSummary）
+      const sep = /[A-Za-z0-9]$/.test(actionLabel) ? ' ' : ''
+      await screen.findByText(`批量${actionLabel}${sep}完成：成功 1，失败 0`)
       expect(onAction).toHaveBeenCalledTimes(1)
       expect(onAction).toHaveBeenCalledWith({ kind, playerName: 'Alex' })
 

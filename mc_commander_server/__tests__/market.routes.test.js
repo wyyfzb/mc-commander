@@ -1,9 +1,9 @@
 /**
  * 插件市场路由集成测试（延伸：Modrinth 代理端点）
  *
- * got 全量 mock（离线语义）：
- * - 元数据 .json() 链：按 URL 路由 fixture / 拒绝
- * - got.stream：推送真实 zip 字节（安装链路全真，仅网络层离线）
+ * http-client 全量 mock（离线语义）：
+ * - httpJson：按 URL 路由 fixture / 拒绝（直接 resolve 解析结果，无 .json() 链）
+ * - httpStream：推送真实 zip 字节（安装链路全真，仅网络层离线）
  *
  * 重点覆盖路由层契约：注册顺序（market/* 不被 :file 参数路由吞掉）、
  * 实例存在性校验、查询参数透传、错误码映射、审计 PLUGIN_MARKET_INSTALL。
@@ -17,11 +17,11 @@ import path from 'path';
 import { Readable } from 'stream';
 import AdmZip from 'adm-zip';
 
-vi.mock('got', () => {
-  const gotFn = vi.fn();
-  gotFn.stream = vi.fn();
-  return { default: gotFn };
-});
+vi.mock('../utils/http-client.js', () => ({
+  httpJson: vi.fn(),
+  httpStream: vi.fn(),
+  httpPost: vi.fn(),
+}));
 
 vi.mock('../utils/audit.js', () => ({
   AuditActions: {
@@ -34,7 +34,7 @@ vi.mock('../utils/audit.js', () => ({
   recordAudit: vi.fn(),
 }));
 
-import got from 'got';
+import { httpJson, httpStream } from '../utils/http-client.js';
 import { recordAudit } from '../utils/audit.js';
 import { createPluginRoutes } from '../routes/plugins.js';
 import { errorHandler } from '../middleware/error_handler.js';
@@ -73,28 +73,26 @@ const JAR = (() => {
 })();
 
 function mockVersionsResponse() {
-  return {
-    json: async () => [
-      {
-        name: 'EssentialsX 2.21.0',
-        version_number: '2.21.0',
-        version_type: 'release',
-        changelog: null,
-        date_published: '2026-01-01T00:00:00Z',
-        downloads: 1,
-        game_versions: ['1.21.4'],
-        loaders: ['paper'],
-        files: [
-          {
-            url: 'https://cdn.modrinth.com/data/x/versions/a/EssentialsX-2.21.0.jar',
-            filename: 'EssentialsX-2.21.0.jar',
-            primary: true,
-            size: JAR.length,
-          },
-        ],
-      },
-    ],
-  };
+  return [
+    {
+      name: 'EssentialsX 2.21.0',
+      version_number: '2.21.0',
+      version_type: 'release',
+      changelog: null,
+      date_published: '2026-01-01T00:00:00Z',
+      downloads: 1,
+      game_versions: ['1.21.4'],
+      loaders: ['paper'],
+      files: [
+        {
+          url: 'https://cdn.modrinth.com/data/x/versions/a/EssentialsX-2.21.0.jar',
+          filename: 'EssentialsX-2.21.0.jar',
+          primary: true,
+          size: JAR.length,
+        },
+      ],
+    },
+  ];
 }
 
 let app;
@@ -118,7 +116,7 @@ beforeEach(() => {
 describe('routes/plugins.js - 市场端点', () => {
   it('GET market/search：实例存在返回 200 与搜索结果', async () => {
     mockManager.getInstance.mockReturnValue({ serverPath });
-    vi.mocked(got).mockReturnValueOnce({ json: async () => SEARCH_FIXTURE });
+    vi.mocked(httpJson).mockResolvedValueOnce(SEARCH_FIXTURE);
 
     const res = await request(app)
       .get('/api/v1/instances/inst1/plugins/market/search')
@@ -129,7 +127,7 @@ describe('routes/plugins.js - 市场端点', () => {
     expect(res.body.data.totalHits).toBe(1);
     expect(res.body.data.hits[0].slug).toBe('essentialsx');
     // 查询参数透传
-    const [url, opts] = vi.mocked(got).mock.calls[0];
+    const [url, opts] = vi.mocked(httpJson).mock.calls[0];
     expect(url).toBe('https://api.modrinth.com/v2/search');
     expect(opts.searchParams.query).toBe('essentials');
   });
@@ -143,20 +141,20 @@ describe('routes/plugins.js - 市场端点', () => {
 
   it('GET market/search：缺 q 合法（浏览模式，index=downloads）', async () => {
     mockManager.getInstance.mockReturnValue({ serverPath });
-    vi.mocked(got).mockReturnValueOnce({ json: async () => SEARCH_FIXTURE });
+    vi.mocked(httpJson).mockResolvedValueOnce(SEARCH_FIXTURE);
 
     const res = await request(app).get('/api/v1/instances/inst1/plugins/market/search');
     expect(res.status).toBe(200);
     expect(res.body.data.totalHits).toBe(1);
     // 浏览模式：无 query 参数，按下载量排序
-    const [, opts] = vi.mocked(got).mock.calls[0];
+    const [, opts] = vi.mocked(httpJson).mock.calls[0];
     expect(opts.searchParams.index).toBe('downloads');
     expect(opts.searchParams.query).toBeUndefined();
   });
 
   it('GET market/versions：200 + 版本映射', async () => {
     mockManager.getInstance.mockReturnValue({ serverPath });
-    vi.mocked(got).mockReturnValueOnce(mockVersionsResponse());
+    vi.mocked(httpJson).mockResolvedValueOnce(mockVersionsResponse());
 
     const res = await request(app)
       .get('/api/v1/instances/inst1/plugins/market/projects/essentialsx/versions')
@@ -170,8 +168,8 @@ describe('routes/plugins.js - 市场端点', () => {
 
   it('POST market/install：201 + 落盘 + 审计 PLUGIN_MARKET_INSTALL', async () => {
     mockManager.getInstance.mockReturnValue({ serverPath });
-    vi.mocked(got).mockReturnValueOnce(mockVersionsResponse());
-    vi.mocked(got.stream).mockReturnValueOnce(Readable.from([JAR]));
+    vi.mocked(httpJson).mockResolvedValueOnce(mockVersionsResponse());
+    vi.mocked(httpStream).mockReturnValueOnce(Readable.from([JAR]));
 
     const res = await request(app)
       .post('/api/v1/instances/inst1/plugins/market/install')
@@ -201,11 +199,7 @@ describe('routes/plugins.js - 市场端点', () => {
     mockManager.getInstance.mockReturnValue({ serverPath });
     const err = new Error('not found');
     err.response = { statusCode: 404 };
-    vi.mocked(got).mockReturnValueOnce({
-      json: async () => {
-        throw err;
-      },
-    });
+    vi.mocked(httpJson).mockRejectedValueOnce(err);
 
     const res = await request(app)
       .post('/api/v1/instances/inst1/plugins/market/install')

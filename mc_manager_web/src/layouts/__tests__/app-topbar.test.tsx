@@ -140,6 +140,69 @@ describe('AppTopBar 实例名三态', () => {
     expect(await screen.findByRole('menuitem', { name: /演示实例/ })).toBeInTheDocument()
   })
 
+  // 地址 chip：内网地址必须显式标注，否则用户照着「复制给玩家」却连不上且无线索。
+  // 判据来自服务端契约 addressType，前端不自己按网段猜（双端各判一次必然漂移）。
+  it('addressType=private：chip 标注「内网地址」并改用警示色', async () => {
+    server.use(
+      http.get('*/api/v1/instances/:id', () =>
+        HttpResponse.json({
+          status: 'ok',
+          code: 0,
+          message: 'Success',
+          data: { ...mockInstanceStatus, address: '10.1.2.3:25565', addressType: 'private' },
+          timestamp: new Date().toISOString(),
+        }),
+      ),
+    )
+    useServerStore.setState({ instanceId: 'demo' })
+    renderTopbar()
+    // 地址照常可见（仍有用：同一网络内可直连），但必须带「内网地址」标注
+    expect(await screen.findByText('10.1.2.3:25565')).toBeInTheDocument()
+    expect(screen.getByText('内网地址')).toBeInTheDocument()
+  })
+
+  it('addressType=public：不出现「内网地址」标注', async () => {
+    server.use(
+      http.get('*/api/v1/instances/:id', () =>
+        HttpResponse.json({
+          status: 'ok',
+          code: 0,
+          message: 'Success',
+          data: { ...mockInstanceStatus, address: '1.2.3.4:25565', addressType: 'public' },
+          timestamp: new Date().toISOString(),
+        }),
+      ),
+    )
+    useServerStore.setState({ instanceId: 'demo' })
+    renderTopbar()
+    expect(await screen.findByText('1.2.3.4:25565')).toBeInTheDocument()
+    expect(screen.queryByText('内网地址')).not.toBeInTheDocument()
+  })
+
+  it('复制内网地址：提示「公网玩家连不上」，不只回「已复制」', async () => {
+    const user = userEvent.setup()
+    const warning = vi.spyOn(toast, 'warning')
+    const success = vi.spyOn(toast, 'success')
+    server.use(
+      http.get('*/api/v1/instances/:id', () =>
+        HttpResponse.json({
+          status: 'ok',
+          code: 0,
+          message: 'Success',
+          data: { ...mockInstanceStatus, address: '10.1.2.3:25565', addressType: 'private' },
+          timestamp: new Date().toISOString(),
+        }),
+      ),
+    )
+    useServerStore.setState({ instanceId: 'demo' })
+    renderTopbar()
+    await screen.findByText('10.1.2.3:25565')
+    await user.click(screen.getByRole('button', { name: '复制服务器地址' }))
+    // 用户复制它就是为了发给玩家，而这份地址玩家多半连不上——必须说清楚
+    await waitFor(() => expect(warning).toHaveBeenCalled())
+    expect(success).not.toHaveBeenCalled()
+  })
+
   it('多实例：仍给下拉，可切换实例', async () => {
     server.use(
       http.get('*/api/v1/instances', () =>

@@ -1,9 +1,9 @@
 /**
  * 市场安装 sha512 完整性校验测试（issue 537）
  *
- * 网络隔离：got 全量 mock（与 market.test.js 同范式）。
- * - 元数据 .json 链：fixture 直接内联真实 hashes.sha512（对 JAR 字节预计算）
- * - got.stream(...)：推送真实 zip 字节（adm-zip 产物）
+ * 网络隔离：http-client 全量 mock（与 market.test.js 同范式）。
+ * - httpJson(...)（直出解析结果）：fixture 直接内联真实 hashes.sha512（对 JAR 字节预计算）
+ * - httpStream(...)：推送真实 zip 字节（adm-zip 产物）
  *
  * 核心场景（行为级，真实字节流）：
  * - 哈希比对通过 → 放行落盘
@@ -19,13 +19,13 @@ import path from 'path';
 import crypto from 'crypto';
 import AdmZip from 'adm-zip';
 
-vi.mock('got', () => {
-  const gotFn = vi.fn();
-  gotFn.stream = vi.fn();
-  return { default: gotFn };
-});
+vi.mock('../utils/http-client.js', () => ({
+  httpJson: vi.fn(),
+  httpStream: vi.fn(),
+  httpPost: vi.fn(),
+}));
 
-import got from 'got';
+import { httpJson, httpStream } from '../utils/http-client.js';
 import {
   getMarketProjectVersions,
   installPluginFromMarket,
@@ -79,18 +79,14 @@ function versionsFixture(sha512) {
   ];
 }
 
-function mockJsonResponse(fixture) {
-  return { json: async () => fixture };
-}
-
 function streamFrom(bytes) {
   return Readable.from([bytes]);
 }
 
 /** 组装一次安装的上游 mock：元数据 1 次 + CDN 流 1 次（推送真实 JAR 字节） */
 function mockUpstream(sha512) {
-  vi.mocked(got).mockReturnValueOnce(mockJsonResponse(versionsFixture(sha512)));
-  vi.mocked(got.stream).mockReturnValueOnce(streamFrom(JAR));
+  vi.mocked(httpJson).mockResolvedValueOnce(versionsFixture(sha512));
+  vi.mocked(httpStream).mockReturnValueOnce(streamFrom(JAR));
 }
 
 // ── 临时实例目录 ─────────────────────────────────────────────────────
@@ -116,7 +112,7 @@ function tmpLeftovers() {
 
 describe('getMarketProjectVersions - hashes.sha512 透传（issue 537）', () => {
   it('上游提供 hashes.sha512 → file.sha512 原样透传', async () => {
-    vi.mocked(got).mockReturnValueOnce(mockJsonResponse(versionsFixture(JAR_SHA512)));
+    vi.mocked(httpJson).mockResolvedValueOnce(versionsFixture(JAR_SHA512));
 
     const { versions } = await getMarketProjectVersions(SLUG);
     expect(versions).toHaveLength(1);
@@ -125,14 +121,14 @@ describe('getMarketProjectVersions - hashes.sha512 透传（issue 537）', () =>
   });
 
   it('上游缺 hashes 字段 / hashes 非 string → file.sha512 置 null（不炸）', async () => {
-    vi.mocked(got).mockReturnValueOnce(mockJsonResponse(versionsFixture(undefined)));
+    vi.mocked(httpJson).mockResolvedValueOnce(versionsFixture(undefined));
     const missing = await getMarketProjectVersions(SLUG);
     expect(missing.versions[0].file.sha512).toBeNull();
 
     clearMarketCache();
     const fixture = versionsFixture(undefined);
     fixture[0].files[0].hashes = { sha512: 12345 }; // 非法类型
-    vi.mocked(got).mockReturnValueOnce(mockJsonResponse(fixture));
+    vi.mocked(httpJson).mockResolvedValueOnce(fixture);
     const invalid = await getMarketProjectVersions(SLUG);
     expect(invalid.versions[0].file.sha512).toBeNull();
   });

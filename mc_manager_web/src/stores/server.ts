@@ -1,10 +1,13 @@
 import { create } from 'zustand'
+import { persist, createJSONStorage } from 'zustand/middleware'
 import type {
   InstanceStatus,
   SystemStats,
   WsPerformancePayload,
   WsStatusSnapshot,
 } from '@/api/types'
+
+const STORAGE_KEY = 'mcs-server'
 
 /**
  * 服务器实时状态 store（WS 事件 → 分派；Query 轮询 30s 保底互补，设计文档 §5.2）
@@ -52,64 +55,84 @@ interface ServerState {
   applyWsStatusEvent: (event: StatusEvent['event']) => void
 }
 
-export const useServerStore = create<ServerState>()((set) => ({
-  status: null,
-  systemStats: null,
-  instanceId: null,
-  socketConnected: false,
-  hasConnectedOnce: false,
-  lastStatusEvent: null,
-  phase: {},
+export const useServerStore = create<ServerState>()(
+  persist(
+    (set) => ({
+      status: null,
+      systemStats: null,
+      instanceId: null,
+      socketConnected: false,
+      hasConnectedOnce: false,
+      lastStatusEvent: null,
+      phase: {},
 
-  setStatus: (status) => set({ status }),
-  setSystemStats: (systemStats) => set({ systemStats }),
-  setInstanceId: (instanceId) => set({ instanceId }),
-  setSocketConnected: (socketConnected) => set({ socketConnected }),
-  setHasConnectedOnce: (hasConnectedOnce) => set({ hasConnectedOnce }),
+      setStatus: (status) => set({ status }),
+      setSystemStats: (systemStats) => set({ systemStats }),
+      setInstanceId: (instanceId) => set({ instanceId }),
+      setSocketConnected: (socketConnected) => set({ socketConnected }),
+      setHasConnectedOnce: (hasConnectedOnce) => set({ hasConnectedOnce }),
 
-  setPhase: (instanceId, phase) =>
-    set((s) => {
-      if (!phase) {
-        if (!(instanceId in s.phase)) return {}
-        const next = { ...s.phase }
-        delete next[instanceId]
-        return { phase: next }
-      }
-      return { phase: { ...s.phase, [instanceId]: phase } }
-    }),
+      setPhase: (instanceId, phase) =>
+        set((s) => {
+          if (!phase) {
+            if (!(instanceId in s.phase)) return {}
+            const next = { ...s.phase }
+            delete next[instanceId]
+            return { phase: next }
+          }
+          return { phase: { ...s.phase, [instanceId]: phase } }
+        }),
 
-  applyWsSnapshot: (instanceId, snapshot) =>
-    set((s) => {
-      if (s.instanceId !== instanceId) return {}
-      return {
-        status: s.status
-          ? {
+      applyWsSnapshot: (instanceId, snapshot) =>
+        set((s) => {
+          if (s.instanceId !== instanceId) return {}
+          return {
+            status: s.status
+              ? {
+                  ...s.status,
+                  isRunning: snapshot.isRunning,
+                  tps: snapshot.tps ?? s.status.tps,
+                }
+              : null,
+          }
+        }),
+
+      applyWsPerformance: (payload) =>
+        set((s) => {
+          if (!s.status) return {}
+          return {
+            status: {
               ...s.status,
-              isRunning: snapshot.isRunning,
-              tps: snapshot.tps ?? s.status.tps,
-            }
-          : null,
-      }
-    }),
+              cpuUsage: payload.cpu,
+              memoryUsage: payload.memory,
+              tps: payload.tps,
+              mspt: payload.mspt,
+              worldTime: payload.worldTime,
+              worldDay: payload.worldDay,
+              sleepingPlayers: payload.sleepingPlayers,
+              sleepingPlayerNames: payload.sleepingPlayerNames,
+              awakePlayerNames: payload.awakePlayerNames,
+            },
+          }
+        }),
 
-  applyWsPerformance: (payload) =>
-    set((s) => {
-      if (!s.status) return {}
-      return {
-        status: {
-          ...s.status,
-          cpuUsage: payload.cpu,
-          memoryUsage: payload.memory,
-          tps: payload.tps,
-          mspt: payload.mspt,
-          worldTime: payload.worldTime,
-          worldDay: payload.worldDay,
-          sleepingPlayers: payload.sleepingPlayers,
-          sleepingPlayerNames: payload.sleepingPlayerNames,
-          awakePlayerNames: payload.awakePlayerNames,
-        },
-      }
+      applyWsStatusEvent: (event) => set({ lastStatusEvent: { event, timestamp: Date.now() } }),
     }),
-
-  applyWsStatusEvent: (event) => set({ lastStatusEvent: { event, timestamp: Date.now() } }),
-}))
+    {
+      name: STORAGE_KEY,
+      storage: createJSONStorage(() => localStorage),
+      /**
+       * 只持久化「用户在看哪个实例」这一个选择，不持久化任何实时数据：
+       * status/systemStats 是会话态，存下来会在刷新后先显示一份**过期快照**
+       * （面板明明停了，界面还显示运行中），比短暂空白更有害。
+       * phase 是启停中间态，跨刷新已无意义。
+       */
+      partialize: (state) => ({ instanceId: state.instanceId }),
+      /** 读回时归一：非字符串（损坏/手改的载荷）一律当未选择 */
+      merge: (persisted, current) => {
+        const raw = (persisted as { instanceId?: unknown } | undefined)?.instanceId
+        return { ...current, instanceId: typeof raw === 'string' && raw ? raw : null }
+      },
+    },
+  ),
+)

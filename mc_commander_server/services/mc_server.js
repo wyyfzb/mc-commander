@@ -14,6 +14,10 @@ import { localDateKey } from '../utils/local-date.js';
 // offline uuid / stats 时长读取全仓公共实现（与 routes/players.js 共用 player-utils.js）
 import { offlineUuid as computeOfflineUuid, getTotalPlayTime } from '../utils/player-utils.js';
 import { isPathContained } from '../utils/fs-utils.js';
+// addressReachability / isPrivateIp 复用 url-guard 的私有网段判定（SSRF 防护用的同一把尺子）：
+// 地址「能不能发给玩家」与「能不能作为出站目标」用的是同一套可达性语义，
+// 各写一份正则会漂移（如漏掉 100.64.0.0/10 这类 CGNAT 段）
+import { addressReachability } from '../utils/url-guard.js';
 import * as levelDat from './mc-server/level-dat.js';
 import * as outputParser from './mc-server/output-parser.js';
 import * as statsCollector from './mc-server/stats-collector.js';
@@ -440,9 +444,11 @@ export class MCServerInstance extends EventEmitter {
 
   /// 异步探测公网 IP。
   /// 优先级：环境变量 PUBLIC_IP → 阿里云元数据服务 → ifconfig.me → null
-  /// 探测结果缓存到 this._publicIp，供 _getServerAddress() 同步使用。
+  /// 探测结果缓存到 this._publicIp，供 _resolveServerAddress() 同步使用。
+  /// 一键部署脚本会把探测值写进 .env 的 PUBLIC_IP，故正常部署走第一个分支、
+  /// 不需要联网探测（探测链本身不可靠：多网卡/NAT 出口池会拿到非入口地址）。
   async _detectPublicIp() {
-    // 1. 环境变量 PUBLIC_IP 优先（部署时由用户/systemd 注入）
+    // 1. 环境变量 PUBLIC_IP 优先（部署脚本写入 .env，或用户手改）
     if (process.env.PUBLIC_IP && process.env.PUBLIC_IP.trim()) {
       this._publicIp = process.env.PUBLIC_IP.trim();
       return;
@@ -474,7 +480,7 @@ export class MCServerInstance extends EventEmitter {
         }
       }
     } catch {}
-    // 4. 探测失败，保持 null，_getServerAddress 回退到局域网 IP
+    // 4. 探测失败，保持 null，_resolveServerAddress 回退到局域网 IP（标 private）
   }
 
   get isRconConnected() {
@@ -605,27 +611,45 @@ export class MCServerInstance extends EventEmitter {
   /// 获取服务器对外可达地址（仪表盘顶栏展示 + 复制）。
   /// 优先级：公网 IP（环境变量 PUBLIC_IP 或自动探测）→ server.properties 的 server-ip
   ///         （非空、非 0.0.0.0）→ 本机局域网 IPv4 → localhost 兜底。
-  _getServerAddress(props) {
+  /// 返回 { address, addressType }：addressType 由 addressReachability 按**地址本身**派生，
+  /// 供前端标注「这条地址玩家能不能直连」。两条纪律：
+  /// ① 不在前端重算——双端各算一次必然漂移；
+  /// ② 不按来源判——同一个 IP 从哪个分支来都必须得到同一个结论。
+  ///    曾经 PUBLIC_IP 分支硬编码 public、网卡分支硬编码 private，于是
+  ///    「PUBLIC_IP=100.64.0.1」标 public 而「server-ip=100.64.0.1」标 private（同值两判），
+  ///    且网卡上挂着真实公网 IP 的机器（探测失败时）会被误标成内网。
+  _resolveServerAddress(props) {
     const port = props['server-port'] || '25565';
-    // 优先使用公网 IP（云服务器场景下局域网 IP 对客户端不可达）
+    // 优先使用公网 IP（云服务器场景下局域网 IP 对客户端不可达）。
+    // PUBLIC_IP 由部署脚本或用户写入，值本身可能是内网（CGNAT、手填错误），故照值判。
     if (this._publicIp) {
-      return `${this._publicIp}:${port}`;
+      return {
+        address: `${this._publicIp}:${port}`,
+        addressType: addressReachability(this._publicIp),
+      };
     }
     const ip = props['server-ip'];
     if (ip && ip.trim() && ip !== '0.0.0.0' && ip !== '::') {
-      return `${ip}:${port}`;
+      // server-ip 可能是公网，也可能是内网（同机房互连常见写法），按实际值判
+      return { address: `${ip}:${port}`, addressType: addressReachability(ip) };
     }
     try {
       const nets = os.networkInterfaces();
       for (const name of Object.keys(nets)) {
         for (const net of nets[name]) {
           if (net.family === 'IPv4' && !net.internal) {
-            return `${net.address}:${port}`;
+            // 回退到网卡地址：是不是「玩家连不上」由地址本身决定，不由「走了兜底分支」决定——
+            // 网卡上挂公网 IP 的机器（探测服务不可达时）不该被误标成内网。
+            return {
+              address: `${net.address}:${port}`,
+              addressType: addressReachability(net.address),
+            };
           }
         }
       }
     } catch {}
-    return `localhost:${port}`;
+    // localhost 兜底：环回，本机以外一律连不上
+    return { address: `localhost:${port}`, addressType: 'private' };
   }
 
   /// 校验可执行文件是否为合法 java 启动器（javaPath 校验）：
@@ -1236,6 +1260,9 @@ export class MCServerInstance extends EventEmitter {
   toStatus() {
     const props = this.properties;
     const uptimeMs = this.isRunning && this.startTime ? Date.now() - this.startTime : 0;
+    // 地址与可达范围必须同源产出：分两处各算一次，会出现「地址是内网、类型却标公网」
+    // 这类自相矛盾（前端只信 addressType 就会把内网地址当对外地址展示）
+    const { address, addressType } = this._resolveServerAddress(props);
     return {
       id: this.id,
       name: this.name,
@@ -1244,7 +1271,8 @@ export class MCServerInstance extends EventEmitter {
       // 意外停止自动重启开关（供前端设置页读写）
       autoRestart: this.autoRestart,
       uptime: Math.floor(uptimeMs / 1000),
-      address: this._getServerAddress(props),
+      address,
+      addressType,
       players: Array.from(this.players.values()),
       playerCount: this.players.size,
       maxPlayers: parseInt(props['max-players'] || '20'),

@@ -9,6 +9,7 @@ import {
   Server,
   Settings,
   Sun,
+  TriangleAlert,
   UserRound,
 } from 'lucide-react'
 import { useState } from 'react'
@@ -25,6 +26,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { IconButton } from '@/components/mcs/icon-button'
 import { StatusIndicator, type IndicatorStatus } from '@/components/mcs/status-indicator'
+import { toneClasses } from '@/components/mcs/tone'
 import { NotificationDrawer } from '@/layouts/notification-drawer'
 import { useUiStore } from '@/stores/ui'
 import { useServerStore } from '@/stores/server'
@@ -67,6 +69,11 @@ export function AppTopBar() {
   const { data: instanceDetail } = useInstanceStatus(instanceId)
   // 自订阅优先；实例详情尚未到达时回退到 store 里的值（保持既有行为，避免闪断）
   const serverAddress = instanceDetail?.address || status?.address || null
+  // 地址可达范围同样来自服务端（契约里的 addressType），前端不自己按网段猜——
+  // 双端各判一次必然在某个特征段上漂移（如 CGNAT 100.64/10）。与地址同源取值，
+  // 避免「地址取详情、类型取 store」时两者版本错配。
+  const addressType = instanceDetail?.addressType ?? status?.addressType ?? null
+  const isPrivateAddress = addressType === 'private'
   const { switchInstance } = useInstanceSwitch()
   const unreadCount = useNotificationStore((s) => s.unreadCount)
 
@@ -155,22 +162,59 @@ export function AppTopBar() {
         <Menu aria-hidden />
       </IconButton>
 
-      {/* 服务器地址 chip（带复制按钮，方便发给玩家直连） */}
+      {/* 服务器地址 chip（带复制按钮，方便发给玩家直连）。
+          内网地址必须显式标注：那通常是「探测不到公网 IP」时的回退值，
+          玩家直连不上。不标注的话用户会照着复制发给朋友，然后对着
+          「连不上」却没有任何线索（这正是本 chip 存在的意义——发给玩家）。 */}
       {serverAddress && (
-        <span className="hidden items-center gap-1 rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-muted py-1 pr-1 pl-2 font-mono text-mcs-2xs text-mcs-text-muted lg:inline-flex">
-          <Server className="size-3" aria-hidden />
-          <span title="MC 客户端连接地址（含端口）">{serverAddress}</span>
+        <span
+          className={cn(
+            'hidden items-center gap-1 rounded-mcs-sm py-1 pr-1 pl-2 font-mono text-mcs-2xs lg:inline-flex',
+            isPrivateAddress
+              ? toneClasses('warning')
+              : 'border border-mcs-border-muted bg-mcs-bg-muted text-mcs-text-muted',
+          )}
+        >
+          {isPrivateAddress ? (
+            <TriangleAlert className="size-3" aria-hidden />
+          ) : (
+            <Server className="size-3" aria-hidden />
+          )}
+          <span
+            title={
+              isPrivateAddress
+                ? '这是内网地址，仅同一网络内可直连；公网玩家无法连接。请设置 PUBLIC_IP 后重启面板'
+                : 'MC 客户端连接地址（含端口）'
+            }
+          >
+            {serverAddress}
+          </span>
+          {isPrivateAddress && <span className="font-sans">内网地址</span>}
           <button
             type="button"
             onClick={() =>
               void copyText(serverAddress).then((ok) => {
-                if (ok) toast.success('服务器地址已复制', { duration: 1500 })
-                else toast.error('复制失败，请手动复制')
+                if (!ok) {
+                  toast.error('复制失败，请手动复制')
+                  return
+                }
+                // 内网地址复制出去时明确提示：用户复制它就是为了发给玩家，
+                // 而这份地址玩家多半连不上——不能只回「已复制」让他去踩坑
+                if (isPrivateAddress) {
+                  toast.warning('已复制，但这是内网地址，公网玩家连不上', { duration: 4000 })
+                  return
+                }
+                toast.success('服务器地址已复制', { duration: 1500 })
               })
             }
             aria-label="复制服务器地址"
-            title="复制地址发给玩家"
-            className="rounded-mcs-xs p-1 text-mcs-text-muted transition-colors hover:bg-mcs-state-hover hover:text-mcs-text-default focus-visible:outline-2 focus-visible:outline-mcs-focus-ring focus-visible:outline-offset-1"
+            title={isPrivateAddress ? '复制内网地址（仅同一网络可直连）' : '复制地址发给玩家'}
+            className={cn(
+              'rounded-mcs-xs p-1 transition-colors hover:bg-mcs-state-hover focus-visible:outline-2 focus-visible:outline-mcs-focus-ring focus-visible:outline-offset-1',
+              isPrivateAddress
+                ? 'text-mcs-warning-fg'
+                : 'text-mcs-text-muted hover:text-mcs-text-default',
+            )}
           >
             <Copy className="size-3" aria-hidden />
           </button>

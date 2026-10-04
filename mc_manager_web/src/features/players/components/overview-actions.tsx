@@ -25,6 +25,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { GAME_MODE_LABELS } from './detail-overview-format'
 import type { Player } from '@/api/types'
+import { OP_LABELS } from '@/features/players/mutations'
 import type { PlayerActionRequest } from '../mutations'
 
 /** 操作收尾规格：成功回执 + 可选逆操作（有逆操作才挂撤销入口） */
@@ -91,7 +92,7 @@ export function OverviewActions({
         }
       >
         {player.isOp ? <ShieldX aria-hidden /> : <ShieldCheck aria-hidden />}
-        {player.isOp ? '取消OP' : '设为OP'}
+        {player.isOp ? OP_LABELS.revoke : OP_LABELS.grant}
       </Button>
 
       <Button

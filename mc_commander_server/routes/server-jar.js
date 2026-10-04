@@ -3,7 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { spawn } from 'child_process';
 import crypto from 'crypto';
-import got from 'got';
+import { httpJson, httpStream } from '../utils/http-client.js';
 import { MinecraftServerManager, NodeAdapter } from 'minecraft-core';
 import config from '../config.js';
 import { success, error, ErrorCodes } from '../utils/response.js';
@@ -44,11 +44,11 @@ const PAPER_API_BASE = 'https://fill.papermc.io/v3';
 const PAPER_USER_AGENT = `MC_Commander/${getServerVersion()} (https://github.com/wyyfzb/mc-commander)`;
 
 async function getPaperVersions() {
-  const data = await got(`${PAPER_API_BASE}/projects/paper`, {
+  const data = await httpJson(`${PAPER_API_BASE}/projects/paper`, {
     headers: { 'User-Agent': PAPER_USER_AGENT },
-    timeout: { request: 15000 },
-    retry: { limit: 2 },
-  }).json();
+    timeoutMs: 15000,
+    retryLimit: 2,
+  });
   // v3 响应格式：{ project: 'paper', versions: { '1.21': ['1.21.4', '1.21.3', ...], '1.20': [...], ... } }
   // versions 是对象，键是版本组，值是该组下的具体版本号数组
   const versionsObj = data.versions;
@@ -69,11 +69,11 @@ async function getPaperVersions() {
 }
 
 async function getPaperBuild(mcVersion) {
-  const data = await got(`${PAPER_API_BASE}/projects/paper/versions/${mcVersion}/builds`, {
+  const data = await httpJson(`${PAPER_API_BASE}/projects/paper/versions/${mcVersion}/builds`, {
     headers: { 'User-Agent': PAPER_USER_AGENT },
-    timeout: { request: 15000 },
-    retry: { limit: 2 },
-  }).json();
+    timeoutMs: 15000,
+    retryLimit: 2,
+  });
   // v3 响应直接是构建数组（非 {builds: [...]} 结构）
   const builds = Array.isArray(data) ? data : data.builds || [];
   const stable = builds.filter((b) => b.channel === 'STABLE' || b.channel === 'RECOMMENDED');
@@ -152,10 +152,13 @@ async function downloadWithProgress(
 ) {
   return new Promise((resolve, reject) => {
     const file = fs.createWriteStream(destPath);
-    const stream = got.stream(url, {
-      timeout: { request: 120000 },
-      retry: { limit: 2 },
+    const stream = httpStream(url, {
+      timeoutMs: 120000,
+      retryLimit: 2,
       headers: { 'User-Agent': PAPER_USER_AGENT },
+      // 必须把取消信号一并交给传输层：实测仅靠下面的 stream.destroy() 在
+      // 「响应头尚未到达」时无法中止 fetch，慢上游会把 socket 挂到超时
+      signal,
     });
 
     // 取消（用户中断部署）与自身失败共用同一收尾：清理半成品 + 断流 + reject
@@ -176,7 +179,7 @@ async function downloadWithProgress(
 
     signal?.addEventListener('abort', onCancel, { once: true });
 
-    // 下载进度节流：got 的 downloadProgress 每个 chunk 触发（大 jar 每秒可达多次），
+    // 下载进度节流：httpStream 的 downloadProgress 每个 chunk 触发（大 jar 每秒可达多次），
     // 全部广播会对所有在线客户端高频轰炸。节流：百分比变化 ≥1% 才发射
     let lastPct = -1;
     stream.on('downloadProgress', ({ percent, transferred, total }) => {
@@ -187,7 +190,9 @@ async function downloadWithProgress(
         abort(err);
         return;
       }
-      const pct = percent > 0 ? percent : total > 0 ? transferred / total : 0;
+      // 直接采信客户端的 percent：httpStream 恒按 transferred/total 折算（total 未知时为 0）。
+      // 不在此处就地重算——同一公式两处实现必然漂移
+      const pct = percent;
       if (pct - lastPct < 0.01) return;
       lastPct = pct;
       trackDeployProgress(serverManager, deployMeta, {
@@ -399,13 +404,13 @@ export function createServerJarRoutes(serverManager) {
 
         if (type === 'vanilla') {
           // Vanilla 使用 Mojang 官方 manifest 并过滤 release 版本（minecraft-core 返回包含 snapshot）
-          const manifest = await got(
+          const manifest = await httpJson(
             'https://piston-meta.mojang.com/mc/game/version_manifest_v2.json',
             {
-              timeout: { request: 15000 },
-              retry: { limit: 2 },
+              timeoutMs: 15000,
+              retryLimit: 2,
             },
-          ).json();
+          );
           const releases = manifest.versions
             .filter((v) => v.type === 'release')
             .slice(0, 30)
@@ -420,10 +425,10 @@ export function createServerJarRoutes(serverManager) {
             : rawVersions.versions || Object.keys(rawVersions);
           let loaders = [];
           try {
-            const loaderData = await got('https://meta.fabricmc.net/v2/versions/loader', {
-              timeout: { request: 15000 },
-              retry: { limit: 2 },
-            }).json();
+            const loaderData = await httpJson('https://meta.fabricmc.net/v2/versions/loader', {
+              timeoutMs: 15000,
+              retryLimit: 2,
+            });
             loaders = loaderData
               .filter((v) => v.stable)
               .map((v) => v.version)
@@ -433,13 +438,13 @@ export function createServerJarRoutes(serverManager) {
         }
 
         if (type === 'forge') {
-          const promotions = await got(
+          const promotions = await httpJson(
             'https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json',
             {
-              timeout: { request: 15000 },
-              retry: { limit: 2 },
+              timeoutMs: 15000,
+              retryLimit: 2,
             },
-          ).json();
+          );
           const versions = [
             ...new Set(
               Object.keys(promotions.promos || {}).map((v) =>

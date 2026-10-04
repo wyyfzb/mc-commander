@@ -8,8 +8,8 @@
  * - 背压保护（单 webhook 最大 5 并发）
  */
 import crypto from 'crypto';
-import got from 'got';
 import { WebhookModel } from '../db/index.js';
+import { httpPost } from '../utils/http-client.js';
 import { checkPublicUrl } from '../utils/url-guard.js';
 import { logger } from '../utils/logger.js';
 
@@ -173,7 +173,7 @@ export class WebhookService {
           const requestBody = platformRequest ? platformRequest.body : payload;
           const requestUrl = platformRequest ? platformRequest.url : webhook.url;
 
-          const response = await got.post(requestUrl, {
+          const response = await httpPost(requestUrl, {
             json: requestBody,
             headers: {
               'Content-Type': 'application/json',
@@ -182,9 +182,9 @@ export class WebhookService {
               'X-MC-Timestamp': timestamp,
               'X-MC-Signature': signature,
             },
-            timeout: { request: 15000 },
-            throwHttpErrors: false,
-            retry: { limit: 0 },
+            timeoutMs: 15000,
+            // 重试由本服务的 RETRY_DELAYS 循环负责（间隔与落库时机都在那里）；
+            // httpPost 本身不做重试，否则 4xx 短路判定会被内层重试绕过
           });
 
           responseStatus = response.statusCode;
@@ -284,7 +284,7 @@ export class WebhookService {
       const payloadStr = JSON.stringify(payload);
       const signature = this._sign(webhook.secret, timestamp, payloadStr);
 
-      const response = await got.post(requestUrl, {
+      const response = await httpPost(requestUrl, {
         json: requestBody,
         headers: {
           'Content-Type': 'application/json',
@@ -292,9 +292,7 @@ export class WebhookService {
           'X-MC-Timestamp': timestamp,
           'X-MC-Signature': signature,
         },
-        timeout: { request: 15000 },
-        throwHttpErrors: false,
-        retry: { limit: 0 },
+        timeoutMs: 15000,
       });
 
       const success = response.statusCode >= 200 && response.statusCode < 300;

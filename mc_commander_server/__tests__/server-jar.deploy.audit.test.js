@@ -3,7 +3,7 @@
  *
  * 部署链路重依赖（网络下载 / java 子进程 / forge 安装）全部 mock：
  * - minecraft-core：getLatestBuild 返回 hoisted 可控 build（vanilla 路径不走 paper API）
- * - got.stream：PassThrough 注入假 jar 字节流（expectedHash 缺省 → 跳过摘要校验）
+ * - utils/http-client：httpStream 用 PassThrough 注入假 jar 字节流（expectedHash 缺省 → 跳过摘要校验）
  * - child_process.spawn：假进程立即 exit(0)（first launch 不阻塞）
  * - java-detector：固定 java 路径（避免探测宿主环境）
  * - db / config.serversDir（tmp 目录）：隔离真实数据库与文件系统落点
@@ -68,21 +68,22 @@ vi.mock('child_process', async (importOriginal) => {
   };
 });
 
-vi.mock('got', async () => {
+vi.mock('../utils/http-client.js', async () => {
   const streamMod = await import('node:stream');
   return {
-    default: {
-      // PassThrough 注入假 jar 字节（无 expectedHash → 跳过摘要校验，仅限流语义）
-      stream: vi.fn(() => {
-        const pt = new streamMod.PassThrough();
-        queueMicrotask(() => {
-          pt.emit('downloadProgress', { percent: 0.5, transferred: 512, total: 1024 });
-          pt.write('fake-jar-bytes');
-          pt.end();
-        });
-        return pt;
-      }),
-    },
+    // PassThrough 注入假 jar 字节（无 expectedHash → 跳过摘要校验，仅限流语义）
+    httpStream: vi.fn(() => {
+      const pt = new streamMod.PassThrough();
+      queueMicrotask(() => {
+        pt.emit('downloadProgress', { percent: 0.5, transferred: 512, total: 1024 });
+        pt.write('fake-jar-bytes');
+        pt.end();
+      });
+      return pt;
+    }),
+    // 本组只走 vanilla/local 落盘路径，不触达 JSON 接口；具名导出必须齐全，否则模块解析期失败
+    httpJson: vi.fn(),
+    httpPost: vi.fn(),
   };
 });
 

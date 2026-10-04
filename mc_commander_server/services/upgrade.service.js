@@ -2,11 +2,11 @@
  * 实例版本升级服务
  * 流程：前置校验 → 自动备份 → 下载新 JAR → 替换 → 首启校验 → 失败回滚
  *
- * 复用：got（已在依赖中）+ 既有 BackupService + server-jar.js 的下载 URL 解析
+ * 复用：utils/http-client + 既有 BackupService + server-jar.js 的下载 URL 解析
  */
 import fs from 'fs';
 import path from 'path';
-import got from 'got';
+import { httpJson, httpStream } from '../utils/http-client.js';
 import { BackupService } from './backup.service.js';
 import { resolveSafePath, PathTraversalError } from '../utils/fs-utils.js';
 import { AppError, ErrorCodes } from '../utils/response.js';
@@ -121,21 +121,21 @@ export class UpgradeService {
   async resolveDownload(mcVersion, type) {
     if (type === 'vanilla') {
       // Mojang Piston API
-      const manifest = await got(
+      const manifest = await httpJson(
         'https://piston-meta.mojang.com/mc/game/version_manifest_v2.json',
         {
-          timeout: { request: 15000 },
-          retry: { limit: 2 },
+          timeoutMs: 15000,
+          retryLimit: 2,
         },
-      ).json();
+      );
       const versionEntry = manifest.versions?.find(
         (v) => v.id === mcVersion && v.type === 'release',
       );
       if (!versionEntry?.url) throw new Error(`Vanilla version ${mcVersion} not found`);
-      const versionDetail = await got(versionEntry.url, {
-        timeout: { request: 15000 },
-        retry: { limit: 2 },
-      }).json();
+      const versionDetail = await httpJson(versionEntry.url, {
+        timeoutMs: 15000,
+        retryLimit: 2,
+      });
       const serverJar = versionDetail.downloads?.server;
       if (!serverJar?.url) throw new Error(`No server JAR download for ${mcVersion}`);
       const expectedHash = serverJar.sha1 ? { algorithm: 'sha1', digest: serverJar.sha1 } : null;
@@ -145,14 +145,14 @@ export class UpgradeService {
     if (type === 'paper') {
       // PaperMC downloads API（v3；主机为 fill.papermc.io——api.papermc.io 是旧域，
       // 其 /v3 路径返回 403、/v2 已 sunset 返回 410，两者都不可用）
-      const buildsData = await got(
+      const buildsData = await httpJson(
         `https://fill.papermc.io/v3/projects/paper/versions/${mcVersion}/builds`,
         {
           headers: { 'User-Agent': PAPER_USER_AGENT },
-          timeout: { request: 15000 },
-          retry: { limit: 2 },
+          timeoutMs: 15000,
+          retryLimit: 2,
         },
-      ).json();
+      );
       const builds = Array.isArray(buildsData) ? buildsData : buildsData.builds || [];
       const stable = builds.filter((b) => b.channel === 'STABLE' || b.channel === 'RECOMMENDED');
       const candidates = stable.length > 0 ? stable : builds;
@@ -174,10 +174,10 @@ export class UpgradeService {
       // Purpur API：摘要只在 /latest 响应的顶层 md5 字段里（实测与真实 jar 字节一致），
       // 下载直链本身不带摘要 ⇒ 必须先查 /latest 才能校验。
       // 查不到（网络异常/md5 缺失）时降级为无摘要跳过，不阻断升级。
-      const latest = await got(`https://api.purpurmc.org/v2/purpur/${mcVersion}/latest`, {
-        timeout: { request: 15000 },
-        retry: { limit: 2 },
-      }).json();
+      const latest = await httpJson(`https://api.purpurmc.org/v2/purpur/${mcVersion}/latest`, {
+        timeoutMs: 15000,
+        retryLimit: 2,
+      });
       const digest = latest.md5;
       // 用 latest.build 而非 /latest/download：否则查询到的摘要与下载的构建可能不是同一个
       // （中间有新构建发布时会错位，导致对正常文件报完整性失败）
@@ -210,10 +210,13 @@ export class UpgradeService {
     if (signal?.aborted) return Promise.reject(new TaskCancelledError());
     return new Promise((resolve, reject) => {
       const file = fs.createWriteStream(destPath);
-      const stream = got.stream(url, {
-        timeout: { request: 120000 },
-        retry: { limit: 2 },
+      const stream = httpStream(url, {
+        timeoutMs: 120000,
+        retryLimit: 2,
         headers: { 'User-Agent': PAPER_USER_AGENT },
+        // 必须把取消信号一并交给传输层：实测仅靠下面的 stream.destroy() 在
+        // 「响应头尚未到达」时无法中止 fetch，慢上游会把 socket 挂到超时
+        signal,
       });
 
       const detach = () => signal?.removeEventListener('abort', onCancel);
@@ -235,7 +238,7 @@ export class UpgradeService {
       signal?.addEventListener('abort', onCancel, { once: true });
 
       let lastPct = -1;
-      stream.on('downloadProgress', ({ percent, transferred, total }) => {
+      stream.on('downloadProgress', ({ percent, transferred }) => {
         // 体积上限断言在前：超限即刻断流清理，不等下载自然结束
         try {
           assertSizeWithinLimit(transferred, this.maxJarDownloadBytes);
@@ -243,7 +246,9 @@ export class UpgradeService {
           abort(err);
           return;
         }
-        const pct = percent > 0 ? percent : total > 0 ? transferred / total : 0;
+        // 直接采信客户端的 percent：httpStream 恒按 transferred/total 折算（total 未知时为 0）。
+        // 不在此处就地重算——同一公式两处实现必然漂移
+        const pct = percent;
         if (pct - lastPct < 0.01) return;
         lastPct = pct;
         this._emitProgress(instanceId, UPGRADE_STAGES.DOWNLOAD, Math.round(pct * 100));

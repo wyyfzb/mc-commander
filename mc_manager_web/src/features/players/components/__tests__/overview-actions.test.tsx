@@ -155,9 +155,9 @@ describe('OverviewActions 游戏模式菜单', () => {
 })
 
 describe('OverviewActions OP/白名单切换', () => {
-  it('非 OP 玩家点击「设为OP」直执 op 并带 deop 逆操作（可逆口径）', () => {
+  it('非 OP 玩家点击「设为 OP」直执 op 并带 deop 逆操作（可逆口径）', () => {
     const props = renderActions(makePlayer({ isOp: false }))
-    fireEvent.click(screen.getByRole('button', { name: /设为OP/ }))
+    fireEvent.click(screen.getByRole('button', { name: '设为 OP' }))
     expect(props.runAction).toHaveBeenCalledTimes(1)
     const [key, req, outcome] = props.runAction.mock.calls[0]!
     expect(key).toBe('op')

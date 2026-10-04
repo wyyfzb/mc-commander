@@ -1,7 +1,9 @@
-import { describe, it, expect, beforeEach } from 'vitest'
-import { render, screen, fireEvent, within } from '@testing-library/react'
+import { describe, it, expect, beforeEach, beforeAll, afterAll, afterEach } from 'vitest'
+import { render, screen, fireEvent, within, waitFor } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { HttpResponse, http } from 'msw'
+import { setupServer } from 'msw/node'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { AppShell } from '../app-shell'
 import { useUiStore } from '@/stores/ui'
@@ -10,8 +12,23 @@ import { useServerStore } from '@/stores/server'
 import { PlayersPage } from '@/features/players/players-page'
 
 /**
- * AppShell 组件测试：布局渲染 / 导航跳转 / 主题切换 / Cmd+K 面板
+ * AppShell 组件测试：布局渲染 / 导航跳转 / 主题切换 / Cmd+K 面板 / 实例自动选择
  */
+
+const server = setupServer()
+beforeAll(() => server.listen({ onUnhandledRequest: 'bypass' }))
+afterAll(() => server.close())
+afterEach(() => server.resetHandlers())
+
+function instancesOk(data: unknown) {
+  return HttpResponse.json({
+    status: 'ok',
+    code: 0,
+    message: 'Success',
+    data,
+    timestamp: new Date().toISOString(),
+  })
+}
 
 function renderShell(initialPath = '/dashboard') {
   const router = createMemoryRouter(
@@ -146,5 +163,63 @@ describe('AppShell', () => {
     // drawer 形态不接入开合交互：整个抽屉里没有「收起/展开侧栏」按钮
     // （rail 的那个在桌面 aside 里，两侧各一个，不会串）
     expect(within(drawer).queryByRole('button', { name: /侧栏/ })).toBeNull()
+  })
+
+  // 实例自动选择的两个方向：已选项有效时必须**保留**（以前刷新后一律跳回
+  // 列表第一个，用户会对着错误的服务器操作），失效时才回落到第一个。
+  describe('实例自动选择', () => {
+    function readyWith(instances: Array<{ id: string; name: string }>) {
+      useConnectionStore.setState({ baseUrl: '', apiKey: 'test-key', status: 'ready' })
+      server.use(http.get('*/api/v1/instances', () => instancesOk(instances)))
+    }
+
+    it('已选实例仍在列表里：保留该选择，不跳回第一个', async () => {
+      // 列表顺序 = 创建时间倒序 ⇒ [0] 是「最新创建」的那个，正是以前会跳过去的位置
+      readyWith([
+        { id: 'newest', name: '最新实例' },
+        { id: 'chosen', name: '我选的那个' },
+      ])
+      useServerStore.setState({ instanceId: 'chosen' })
+      renderShell()
+      // 断言顶栏**渲染出**被选中的那个名字：只断言 store 值等于初值的话，
+      // 即便自动选择被改成「无条件跳第一个」也照样通过（初值本来就是 chosen
+      // → 空转假绿）。顶栏显示「我选的那个」才是保留生效的可观测证据。
+      await waitFor(() => {
+        expect(screen.getAllByText('我选的那个').length).toBeGreaterThan(0)
+      })
+      expect(screen.queryByText('最新实例')).not.toBeInTheDocument()
+      expect(useServerStore.getState().instanceId).toBe('chosen')
+    })
+
+    it('已选实例不在列表里（被删/换了面板）：回落到第一个，不留陈旧 id', async () => {
+      readyWith([{ id: 'newest', name: '最新实例' }])
+      useServerStore.setState({ instanceId: 'ghost' })
+      renderShell()
+      // 陈旧 id 保留会让所有 per-instance 查询 404，界面停在加载失败
+      await waitFor(() => {
+        expect(useServerStore.getState().instanceId).toBe('newest')
+      })
+    })
+
+    it('未选择过：取第一个', async () => {
+      readyWith([
+        { id: 'newest', name: '最新实例' },
+        { id: 'older', name: '旧实例' },
+      ])
+      useServerStore.setState({ instanceId: null })
+      renderShell()
+      await waitFor(() => {
+        expect(useServerStore.getState().instanceId).toBe('newest')
+      })
+    })
+
+    it('列表为空：不选择（也不报错）', async () => {
+      readyWith([])
+      useServerStore.setState({ instanceId: null })
+      renderShell()
+      // 给足一拍确认没有副作用
+      await new Promise((r) => setTimeout(r, 50))
+      expect(useServerStore.getState().instanceId).toBeNull()
+    })
   })
 })

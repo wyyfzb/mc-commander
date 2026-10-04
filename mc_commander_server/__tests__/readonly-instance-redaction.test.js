@@ -73,6 +73,9 @@ const BASELINE_STATUS = {
   consecutiveCrashes: 0,
   uptime: 3600,
   address: '1.2.3.4:25565',
+  // 与 address 同源：1.2.3.4 是公网地址，故为 public。本夹具自称 toStatus() 的产物，
+  // 两者必须一致，否则会误导后来者以为可以是任意组合
+  addressType: 'public',
   players: [],
   playerCount: 2,
   maxPlayers: 20,
@@ -279,6 +282,9 @@ describe('敏感字段 × 裁剪清单哨兵（新增契约字段必须显式分
       'consecutiveCrashes',
       'uptime',
       'address',
+      // 与 address 同属「客户端连接信息」：只说明该地址是公网还是内网，
+      // 不泄露任何凭据/路径，readonly 视图本就给了 address，故一并保留
+      'addressType',
       'players',
       'playerCount',
       'maxPlayers',

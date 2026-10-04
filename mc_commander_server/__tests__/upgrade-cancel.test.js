@@ -22,45 +22,46 @@ const testState = vi.hoisted(() => ({
 }));
 
 /** 下载流桩：hang 模式永不结束（把升级停在下载阶段），failure 模式立即 error */
-vi.mock('got', () => ({
-  default: Object.assign(
-    // purpur 现在会先查 /latest 取 md5 摘要；本文件全部用 purpur 作载体，
-    // 故该查询必须可解析，否则用例会停在「offline」而非待测阶段
-    vi.fn((url) =>
-      String(url).includes('/purpur/')
-        ? { json: () => Promise.resolve({ build: '2416' }) }
-        : Promise.reject(new Error('offline (mocked)')),
-    ),
-    {
-      stream: vi.fn(() => {
-        const listeners = {};
-        const stream = {
-          on(ev, cb) {
-            (listeners[ev] = listeners[ev] || []).push(cb);
-            return stream;
-          },
-          pipe(file) {
-            stream._file = file;
-            return stream;
-          },
-          destroy() {
-            stream._destroyed = true;
-          },
-        };
-        stream._emit = (ev, ...args) => (listeners[ev] || []).forEach((cb) => cb(...args));
-        if (testState.streamBehavior === 'failure') {
-          queueMicrotask(() => stream._emit('error', new Error('download failed (mocked)')));
-        } else if (testState.streamBehavior === 'success') {
-          // 真正落盘并 end：只有 end 才触发 file.on('finish') → 摘要校验 → 推进到 verify
-          queueMicrotask(() => {
-            stream._emit('downloadProgress', { percent: 1, transferred: 1, total: 1 });
-            stream._file.end();
-          });
-        }
-        return stream;
-      }),
-    },
+vi.mock('../utils/http-client.js', () => ({
+  // purpur 现在会先查 /latest 取 md5 摘要；本文件全部用 purpur 作载体，
+  // 故该查询必须可解析，否则用例会停在「offline」而非待测阶段
+  httpJson: vi.fn((url) =>
+    String(url).includes('/purpur/')
+      ? Promise.resolve({ build: '2416' })
+      : Promise.reject(new Error('offline (mocked)')),
   ),
+  // httpStream：Node Readable 契约，按 testState.streamBehavior 注入 hang/failure/success。
+  // 转发参数：取消接线断言要读取调用选项（signal 是否交给了传输层）
+  httpStream: vi.fn((url, opts) => {
+    void url;
+    void opts;
+    const listeners = {};
+    const stream = {
+      on(ev, cb) {
+        (listeners[ev] = listeners[ev] || []).push(cb);
+        return stream;
+      },
+      pipe(file) {
+        stream._file = file;
+        return stream;
+      },
+      destroy() {
+        stream._destroyed = true;
+      },
+    };
+    stream._emit = (ev, ...args) => (listeners[ev] || []).forEach((cb) => cb(...args));
+    if (testState.streamBehavior === 'failure') {
+      queueMicrotask(() => stream._emit('error', new Error('download failed (mocked)')));
+    } else if (testState.streamBehavior === 'success') {
+      // 真正落盘并 end：只有 end 才触发 file.on('finish') → 摘要校验 → 推进到 verify
+      queueMicrotask(() => {
+        stream._emit('downloadProgress', { percent: 1, transferred: 1, total: 1 });
+        stream._file.end();
+      });
+    }
+    return stream;
+  }),
+  httpPost: vi.fn(),
 }));
 
 /** 备份服务桩：createBackup 触发完成事件（除非处于 backup-hang 模式）；restore 记录调用 */
@@ -97,6 +98,7 @@ vi.mock('../utils/audit.js', () => ({
 const { createUpgradeRoutes } = await import('../routes/upgrade.js');
 const { UpgradeService, UPGRADE_STAGES } = await import('../services/upgrade.service.js');
 const { cancelTask, TASK_KINDS } = await import('../utils/cancellable-task.js');
+const { httpStream } = await import('../utils/http-client.js');
 const { InstanceModel } = await import('../db/index.js');
 
 const OLD_JAR_NAME = 'server-1.20.4.jar';
@@ -242,6 +244,10 @@ describe('取消窗口与收尾口径', () => {
     // 下载半成品不留在实例目录（新增 jar 名与 .part 都不该存在）
     expect(fs.existsSync(path.join(testState.tmpDir, 'server-1.21.4.jar'))).toBe(false);
     expect(fs.readdirSync(testState.tmpDir).some((f) => f.endsWith('.part'))).toBe(false);
+    // 取消信号必须交给传输层：仅靠 stream.destroy() 在「响应头尚未到达」时拆不掉
+    // 那个 fetch，慢上游会把 socket 挂到超时（http-client.test.js 有该能力的正向断言）
+    const streamOpts = vi.mocked(httpStream).mock.calls.at(-1)?.[1];
+    expect(streamOpts?.signal).toBeInstanceOf(AbortSignal);
   });
 
   it('替换复制窗口内取消（新 jar 已下载）：清掉下载产物与 .part，实例保持旧版本', async () => {

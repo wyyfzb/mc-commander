@@ -152,14 +152,14 @@ describe('formatBatchSummary（汇总 Toast 文案）', () => {
   })
   it('无跳过时不显示跳过段', () => {
     expect(
-      formatBatchSummary('设置OP', {
+      formatBatchSummary('设置 OP', {
         successCount: 5,
         failCount: 0,
         skippedCount: 0,
         allOffline: false,
         failures: [],
       }),
-    ).toBe('批量设置OP完成：成功 5，失败 0')
+    ).toBe('批量设置 OP 完成：成功 5，失败 0')
   })
   it('全部离线提示', () => {
     expect(

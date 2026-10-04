@@ -4,6 +4,7 @@ import { spawnSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isPrivateIp } from '../utils/url-guard.js';
 
 // 部署脚本安全回归测试（下载完整性 / systemd 低权限 / NODE_ENV 门控）
 // 部署脚本是 bash 发布脚本，不直接执行（避免真实安装副作用），
@@ -369,6 +370,101 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
       // 横幅的独占行 echo 是唯一完整展示点（用户取 Key 的交付通道，有意保留）
       expect(script).toContain('► API Key');
       expect(script).toContain('echo "║     $API_KEY"');
+    });
+  });
+
+  // 私网判定是「这个地址能不能发给玩家」的唯一判据，脚本（决定写不写进 .env、
+  // 要不要告警）与服务端（决定 addressType、要不要标注「内网地址」）各持一份实现。
+  // 两侧曾漂移：脚本漏了 100.64.0.0/10 等段 ⇒ 同一个 100.64.0.1 在脚本侧算「公网」、
+  // 在服务端算「内网」，CGNAT 出口的用户拿不到任何警示。
+  // 故此处不只断言脚本自身，而是**把 bash 真的跑起来与服务端逐段对拍**：
+  // 任何一侧改段表而另一侧没跟上，这里都会红。
+  describe('私网判定段表：脚本与服务端必须一致', () => {
+    const fnSource = script.match(
+      /PRIVATE_IPV4_RE='[^']+'\n[\s\S]*?is_private_ip\(\) \{[\s\S]*?\n\}/,
+    );
+    if (!fnSource) throw new Error('未能在部署脚本中定位 PRIVATE_IPV4_RE / is_private_ip');
+
+    /** 把脚本里的判定函数原样搬到 bash 里批量求值（不执行脚本其余部分） */
+    function classifyByScript(ips) {
+      const result = runBash([
+        '-c',
+        `${fnSource[0]}\n${ips.map((ip) => `is_private_ip "${ip}" && echo private || echo public`).join('\n')}`,
+      ]);
+      expect(result.status).toBe(0);
+      return result.stdout
+        .trim()
+        .split('\n')
+        .map((s) => s.trim());
+    }
+
+    it('覆盖全部保留段与边界：两侧判定逐个一致', () => {
+      const ips = [
+        // 各段内部 + 段外相邻地址（错一个段或边界就会在这里分叉）
+        '0.0.0.0',
+        '0.255.255.255',
+        '1.0.0.0',
+        '10.0.0.0',
+        '10.255.255.255',
+        '11.0.0.0',
+        '100.63.255.255',
+        '100.64.0.0',
+        '100.64.0.1',
+        '100.127.255.255',
+        '100.128.0.0',
+        '127.0.0.1',
+        '127.255.255.255',
+        '128.0.0.1',
+        '169.254.0.0',
+        '169.254.169.254',
+        '169.255.0.0',
+        '172.15.255.255',
+        '172.16.0.0',
+        '172.31.255.255',
+        '172.32.0.0',
+        '192.0.0.0',
+        '192.0.0.255',
+        '192.0.1.0',
+        '192.0.2.0',
+        '192.0.2.255',
+        '192.0.3.0',
+        '192.88.99.0',
+        '192.88.99.255',
+        '192.88.100.0',
+        '192.168.0.0',
+        '192.168.255.255',
+        '192.169.0.0',
+        '198.17.255.255',
+        '198.18.0.0',
+        '198.19.255.255',
+        '198.20.0.0',
+        '198.51.100.0',
+        '198.51.100.255',
+        '198.51.101.0',
+        '203.0.113.0',
+        '203.0.113.255',
+        '203.0.114.0',
+        '223.255.255.255',
+        '224.0.0.0',
+        '239.255.255.255',
+        '240.0.0.0',
+        '255.255.255.255',
+        // 公网样本（真实可达地址，全部虚构/文档段以外）
+        '1.2.3.4',
+        '8.8.8.8',
+        '93.184.216.34',
+        '110.40.207.3',
+      ];
+      const byScript = classifyByScript(ips);
+      const bad = ips.filter((ip, i) => (isPrivateIp(ip) ? 'private' : 'public') !== byScript[i]);
+      expect(bad, `以下地址两侧判定不一致（服务端 vs 脚本）：${bad.join(', ')}`).toEqual([]);
+    });
+
+    it('CGNAT（100.64.0.0/10）被两侧一致判为私网——本轮修复的具体缺口', () => {
+      // 修复前脚本侧返回 public，故该地址会被写进 .env 且面板不标注「内网地址」
+      const byScript = classifyByScript(['100.64.0.1']);
+      expect(byScript[0]).toBe('private');
+      expect(isPrivateIp('100.64.0.1')).toBe(true);
     });
   });
 });

@@ -58,8 +58,8 @@ test.describe('玩家页', () => {
     await setupConnection(page)
     await page.goto('/players')
     await page.getByText('Steve').first().click()
-    // 概览 Tab：OP 操作按钮（Steve 是 OP → 取消OP）+ 基本信息
-    await expect(page.getByRole('button', { name: /取消OP/ })).toBeVisible()
+    // 概览 Tab：OP 操作按钮（Steve 是 OP → 取消 OP）+ 基本信息
+    await expect(page.getByRole('button', { name: /取消 OP/ })).toBeVisible()
     await expect(page.getByText('基本信息')).toBeVisible()
     await expect(page.getByRole('heading', { name: '封禁记录' })).toBeVisible()
     // 关闭面板
