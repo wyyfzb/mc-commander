@@ -4,6 +4,7 @@ import os from 'os';
 import path from 'path';
 import { createPlayerRoutes, parseDuration } from '../routes/players.js';
 import { errorHandler } from '../middleware/error_handler.js';
+import { shadowProfilePath } from '../utils/player-utils.js';
 import { logger } from '../utils/logger.js';
 import express from 'express';
 import request from 'supertest';
@@ -78,10 +79,11 @@ describe('Player Routes 分支补测', () => {
     };
   }
 
-  function writePlayerData(playerName, content) {
+  function writePlayerData(playerName, content, uuid) {
     const dir = path.join(tmpServerPath, 'playerdata');
     fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, `${playerName}.json`), content);
+    // 与实现同源：影子档案键是 UUID，不是玩家名
+    fs.writeFileSync(shadowProfilePath({ serverPath: tmpServerPath, playerName, uuid }), content);
   }
 
   describe('parseDuration 单元（导出函数直测）', () => {
@@ -657,6 +659,7 @@ describe('Player Routes 分支补测', () => {
     });
 
     it('离线玩家：持久化数据完整呈现（时长覆盖/IP 封禁/物品栏/世界出生点）', async () => {
+      // 夹具必须与该用例 getAllKnownPlayers 声明的 uuid 一致，否则路径对不上
       writePlayerData(
         'OfflineP',
         JSON.stringify({
@@ -673,6 +676,7 @@ describe('Player Routes 分支补测', () => {
           sessions: [{ start: 1, end: 2, duration: 1 }],
           events: [{ type: 'quit', message: '离开服务器', timestamp: 1717331400000 }],
         }),
+        'uuid-off',
       );
       fs.writeFileSync(
         path.join(tmpServerPath, 'banned-ips.json'),

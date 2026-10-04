@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { error, ErrorCodes } from '../utils/response.js';
 import { BanModel } from '../db/index.js';
-import { getTotalPlayTime } from '../utils/player-utils.js';
+import { getTotalPlayTime, shadowProfilePath } from '../utils/player-utils.js';
 import { isPathContained } from '../utils/fs-utils.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
 import {
@@ -127,8 +127,8 @@ export function createPlayerRoutes(serverManager) {
           levelName: instance.properties?.['level-name'],
         });
 
-        // 优先使用自行追踪的游戏时长
-        const savedData = loadPlayerData(instance.serverPath, name) || {};
+        // 优先使用自行追踪的游戏时长（uuid 已由上面的 known 解析过，传下去省一次读盘）
+        const savedData = loadPlayerData(instance.serverPath, name, known.uuid) || {};
         if (savedData.totalPlayTime && savedData.totalPlayTime > totalPlayTime) {
           totalPlayTime = savedData.totalPlayTime;
         }
@@ -245,7 +245,7 @@ export function createPlayerRoutes(serverManager) {
         });
 
         // 从持久化文件加载离线数据（优先使用自行追踪的游戏时长）
-        const savedData = loadPlayerData(instance.serverPath, name) || {};
+        const savedData = loadPlayerData(instance.serverPath, name, knownInfo.uuid) || {};
         if (savedData.totalPlayTime && savedData.totalPlayTime > totalPlayTime) {
           totalPlayTime = savedData.totalPlayTime;
         }
@@ -475,13 +475,13 @@ export function createPlayerRoutes(serverManager) {
     }),
   );
 
-  function loadPlayerData(serverPath, playerName) {
+  // 影子档案键与实例方法 _loadPlayerData 同源（UUID，不是玩家名），
+  // 否则「按 UUID 写、按名字读」会让档案时有时无。
+  function loadPlayerData(serverPath, playerName, uuid) {
     try {
       const dir = path.join(serverPath, 'playerdata');
-      const filePath = path.join(dir, `${playerName}.json`);
-      // 与实例方法 _loadPlayerData 同一不变量：玩家名不可信，读侧也只能读
-      // playerdata 内的文件。路由入参虽已过 validatePlayerName，但落点必须自证——
-      // 本函数被三处端点复用，别处的入参约束不在这里保证。
+      const filePath = shadowProfilePath({ serverPath, playerName, uuid });
+      // usercache 是本机文件、可被篡改，落点仍须自证包含关系
       if (!isPathContained(dir, filePath)) return null;
       if (!fs.existsSync(filePath)) return null;
       return JSON.parse(fs.readFileSync(filePath, 'utf-8'));

@@ -33,6 +33,7 @@ vi.mock('../db/index.js', () => ({
 import { spawn } from 'child_process';
 import { Rcon } from 'rcon-client';
 import { InstanceModel } from '../db/index.js';
+import { shadowProfilePath } from '../utils/player-utils.js';
 import { MCServerInstance, MCServerManager } from '../services/mc_server.js';
 
 // 构造一个模拟的 java 子进程（stdout/stderr/stdin/exit 均可控）
@@ -285,7 +286,7 @@ describe('MCServerInstance lifecycle / RCON / stats timers', () => {
       expect(statusEvents).toContainEqual({ event: 'stopped', code: 0 });
       // 在线玩家数据已持久化（累加在线时长）
       const saved = JSON.parse(
-        fs.readFileSync(path.join(tmpDir, 'playerdata', 'Alice.json'), 'utf-8'),
+        fs.readFileSync(shadowProfilePath({ serverPath: tmpDir, playerName: 'Alice' }), 'utf-8'),
       );
       expect(saved.totalPlayTime).toBe(60);
       // 累计运行时长写入数据库

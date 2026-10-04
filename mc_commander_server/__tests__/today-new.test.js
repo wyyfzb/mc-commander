@@ -3,6 +3,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { MCServerInstance } from '../services/mc_server.js';
+import { shadowProfilePath } from '../utils/player-utils.js';
 
 // 今日新增玩家统计（getTodayNewPlayers）测试：join 增量 + 跨天惰性全量重算。
 // 全部使用临时目录 mock 玩家数据，不包含任何真实数据。
@@ -71,13 +72,13 @@ describe('getTodayNewPlayers', () => {
       ]),
     );
     fs.writeFileSync(
-      path.join(tmpDir, 'playerdata', 'Bob.json'),
+      shadowProfilePath({ serverPath: tmpDir, playerName: 'Bob' }),
       JSON.stringify({
         sessions: [{ start: todayMs() + 2000, end: null, duration: 0 }],
       }),
     );
     fs.writeFileSync(
-      path.join(tmpDir, 'playerdata', 'Creeper.json'),
+      shadowProfilePath({ serverPath: tmpDir, playerName: 'Creeper' }),
       JSON.stringify({
         sessions: [{ start: yesterdayMs(), end: null, duration: 0 }],
       }),

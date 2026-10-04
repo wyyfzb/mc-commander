@@ -6,6 +6,7 @@ import { createPlayerRoutes } from '../routes/players.js';
 import { errorHandler } from '../middleware/error_handler.js';
 import express from 'express';
 import request from 'supertest';
+import { shadowProfilePath } from '../utils/player-utils.js';
 
 // mock BanModel，避免测试依赖真实 DB
 vi.mock('../db/index.js', () => ({
@@ -167,7 +168,7 @@ describe('Player Routes', () => {
       const playerdataDir = path.join(tmpServerPath, 'playerdata');
       fs.mkdirSync(playerdataDir, { recursive: true });
       fs.writeFileSync(
-        path.join(playerdataDir, 'Steve.json'),
+        shadowProfilePath({ serverPath: tmpServerPath, playerName: 'Steve' }),
         JSON.stringify({
           events: [{ type: 'achievement', message: 'Stone Age', timestamp: now - 1000 }],
           totalPlayTime: 120,

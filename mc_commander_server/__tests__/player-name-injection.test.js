@@ -34,6 +34,7 @@ vi.mock('../config.js', async () => {
 });
 
 import { MCServerInstance } from '../services/mc_server.js';
+import { shadowProfilePath } from '../utils/player-utils.js';
 
 /** 实机原始日志行（逐字，仅把真实探针名换成本仓通用的虚构名） */
 const REAL_JOIN = '[05:05:23] [Server thread/INFO]: Steve joined the game';
@@ -225,5 +226,55 @@ describe('档案路径越界（写侧与读侧同守）', () => {
       expect(inst._loadPlayerData(name), name).not.toBeNull();
       expect(inst._loadPlayerData(name).totalPlayTime, name).toBe(3);
     }
+  });
+});
+
+describe('影子档案按 UUID 落盘（改名不断链）', () => {
+  it('正版模式下改名后仍读到同一份档案（usercache 给了稳定 UUID）', () => {
+    const inst = makeInstance('rename');
+    // Mojang UUID 与名字无关：同一个玩家先后用两个名字出现
+    fs.writeFileSync(
+      path.join(inst.serverPath, 'usercache.json'),
+      JSON.stringify([
+        { name: 'OldName', uuid: '853c80ef-3c37-49fd-aa49-938b674adae6' },
+        { name: 'NewName', uuid: '853c80ef-3c37-49fd-aa49-938b674adae6' },
+      ]),
+    );
+    inst._savePlayerData('OldName', { name: 'OldName', totalPlayTime: 4242, sessions: [] });
+
+    const after = inst._loadPlayerData('NewName');
+    expect(after).not.toBeNull();
+    expect(after.totalPlayTime).toBe(4242);
+  });
+
+  it('落盘文件名是 UUID 而不是玩家名（与官方 playerdata 同键）', () => {
+    const inst = makeInstance('uuidfile');
+    inst._savePlayerData('Steve', { name: 'Steve', totalPlayTime: 1, sessions: [] });
+    const files = fs.readdirSync(path.join(inst.serverPath, 'playerdata'));
+    expect(files).toHaveLength(1);
+    expect(files[0]).toMatch(/^[0-9a-f-]{36}\.json$/);
+    // 用名字命名的旧版式不再产生
+    expect(files).not.toContain('Steve.json');
+  });
+
+  it('无 usercache（Carpet 假人/被剪枝）→ 用离线算法派生的 UUID 兜底', () => {
+    const inst = makeInstance('offlinekey');
+    inst._savePlayerData('FakeBot', { name: 'FakeBot', totalPlayTime: 9, sessions: [] });
+    expect(
+      fs.existsSync(shadowProfilePath({ serverPath: inst.serverPath, playerName: 'FakeBot' })),
+    ).toBe(true);
+  });
+
+  it('usercache 里的 UUID 被篡改成路径分量 → 仍不得越界（UUID 化不能替代落点断言）', () => {
+    const inst = makeInstance('tampered');
+    const victim = path.join(inst.serverPath, 'instance.json');
+    fs.writeFileSync(victim, 'ORIGINAL');
+    fs.writeFileSync(
+      path.join(inst.serverPath, 'usercache.json'),
+      JSON.stringify([{ name: 'Steve', uuid: '../instance' }]),
+    );
+    inst._savePlayerData('Steve', { name: 'Steve', totalPlayTime: 1, sessions: [] });
+    expect(fs.readFileSync(victim, 'utf-8')).toBe('ORIGINAL');
+    expect(inst._loadPlayerData('Steve')).toBeNull();
   });
 });

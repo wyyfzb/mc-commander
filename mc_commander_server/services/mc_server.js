@@ -12,7 +12,12 @@ import { killProcessTree } from '../utils/process-tree.js';
 import { maskSensitiveCommand } from '../utils/command-mask.js';
 import { localDateKey } from '../utils/local-date.js';
 // offline uuid / stats 时长读取全仓公共实现（与 routes/players.js 共用 player-utils.js）
-import { offlineUuid as computeOfflineUuid, getTotalPlayTime } from '../utils/player-utils.js';
+import {
+  offlineUuid as computeOfflineUuid,
+  getTotalPlayTime,
+  readUuidFromUsercache,
+  shadowProfilePath,
+} from '../utils/player-utils.js';
 import { isPathContained } from '../utils/fs-utils.js';
 // addressReachability / isPrivateIp 复用 url-guard 的私有网段判定（SSRF 防护用的同一把尺子）：
 // 地址「能不能发给玩家」与「能不能作为出站目标」用的是同一套可达性语义，
@@ -1537,30 +1542,27 @@ export class MCServerInstance extends EventEmitter {
   }
 
   _getPlayerUuid(playerName) {
-    const cachePath = path.join(this.serverPath, 'usercache.json');
-    if (!fs.existsSync(cachePath)) return null;
-    try {
-      const cache = JSON.parse(fs.readFileSync(cachePath, 'utf-8'));
-      for (const entry of cache) {
-        if (entry.name === playerName && entry.uuid) return entry.uuid;
-      }
-    } catch {}
-    return null;
+    return readUuidFromUsercache(this.serverPath, playerName);
+  }
+
+  /// 影子档案路径：键是 UUID，不是玩家名（改名不再断链，见 player-utils 的
+  /// shadowProfileKey / shadowProfilePath）。返回 null 表示键越界——usercache 是本机文件、可被篡改，
+  /// 落点仍须自证，UUID 化不能替代这一层。
+  _shadowProfilePath(playerName, uuid) {
+    const dir = path.join(this.serverPath, 'playerdata');
+    const filePath = shadowProfilePath({ serverPath: this.serverPath, playerName, uuid });
+    if (!isPathContained(dir, filePath)) {
+      logger.error(`[${this.id}] 拒绝越界影子档案路径: ${JSON.stringify(filePath)}`);
+      return null;
+    }
+    return filePath;
   }
 
   _savePlayerData(playerName, data) {
     try {
       const dir = path.join(this.serverPath, 'playerdata');
-      const filePath = path.join(dir, `${playerName}.json`);
-      // 玩家名是不可信文本（来自服务端 stdout、MSMP 返回、以及本机 usercache.json），
-      // 直接拼进路径可越出 playerdata 目录写到服务端根下——实测 `../instance` 能覆盖
-      // `instance.json`，同类可达 `ops.json`/`whitelist.json`/`banned-*.json`。此处断言
-      // 包含关系，越界一律拒写。上游收紧（事件锚定、档案改按 UUID）不能替代这一层：
-      // 名字来源会继续增加，落点必须自证。
-      if (!isPathContained(dir, filePath)) {
-        logger.error(`[${this.id}] 拒绝落盘越界玩家档案: ${JSON.stringify(playerName)}`);
-        return;
-      }
+      const filePath = this._shadowProfilePath(playerName);
+      if (!filePath) return;
       ensureDir(dir);
       const existing = this._loadPlayerData(playerName) || {};
       // 浅拷贝后再删除：调用方（60s 定时保存、玩家离开落盘）传入的是 this.players
@@ -1610,11 +1612,8 @@ export class MCServerInstance extends EventEmitter {
 
   _loadPlayerData(playerName) {
     try {
-      const dir = path.join(this.serverPath, 'playerdata');
-      const filePath = path.join(dir, `${playerName}.json`);
-      // 与 _savePlayerData 同一不变量：读侧同样只能读 playerdata 内的文件，
-      // 否则越界名可让详情页读出服务端根下的任意 .json
-      if (!isPathContained(dir, filePath)) return null;
+      const filePath = this._shadowProfilePath(playerName);
+      if (!filePath) return null;
       if (!fs.existsSync(filePath)) return null;
       return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
     } catch {

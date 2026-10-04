@@ -35,6 +35,7 @@ import {
   _stopRosterSync,
 } from '../services/mc-server/roster-sync.js';
 import { MCServerInstance } from '../services/mc_server.js';
+import { shadowProfilePath } from '../utils/player-utils.js';
 
 const tmpBase = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-roster-fixture-'));
 
@@ -78,7 +79,7 @@ function writeShadow(inst, name, { open = true, ip = '192.0.2.10', totalPlayTime
   const start = Date.now() - 600000;
   fs.mkdirSync(path.join(inst.serverPath, 'playerdata'), { recursive: true });
   fs.writeFileSync(
-    path.join(inst.serverPath, 'playerdata', `${name}.json`),
+    shadowProfilePath({ serverPath: inst.serverPath, playerName: name }),
     JSON.stringify({
       name,
       joinTime: start,
