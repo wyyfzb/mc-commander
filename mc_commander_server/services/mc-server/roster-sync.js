@@ -1,5 +1,5 @@
 /**
- * 在线名单对账域（根修）：RCON `list` 作为在线名单的权威来源。
+ * 在线名单对账域（根修）：向服务端要一份权威名单，与内存名单求差集。
  *
  * 背景：在线名单此前只有一个来源——stdout 正则（output-parser 的 joined/left）。
  * 该来源在两类边界上必然丢事件，是同一根因的两处现场：
@@ -7,10 +7,12 @@
  *     落盘，而日志续读从文件末尾起读（log-tail.js），永不回放 ⇒ 接管后名单恒空；
  *  ② 运行期漏解析（噪音过滤、整行截断、管道分块切断一行）⇒ 名单静默漂移。
  *
- * 机制：`list` 是官方只读命令（op 0；`hide-online-players` 只影响 SLP 的玩家列表，
- * 不影响它）。周期性与内存名单求差集，只补缺与移除，**不重置**已有条目。
+ * 名单来源按能力择优，两条产出的都是 `{names}`：
+ *  - **MSMP**（1.21.9+ 且用户已开启）：结构化数组，无需解析文本，措辞漂移风险为零；
+ *  - **RCON `list`**：官方只读命令（op 0；`hide-online-players` 只影响 SLP 的玩家
+ *    列表，不影响它），覆盖全部版本与全部已配 RCON 的实例。
  *
- * 取不到名单（RCON 未连接 / 命令失败 / 返回措辞不认识）一律**保持现状**：把名单
+ * 取不到名单（两条通道都不可用 / 命令失败 / 返回措辞不认识）一律**保持现状**：把名单
  * 清空比留着旧值更糟——界面会显示 0 人在线，而「显示 0 人」正是本域要修的症状。
  *
  * 本域只解决「此刻谁在线」，**不猜「这次会话从何时开始」**：服务器日志只有时分秒
@@ -32,11 +34,20 @@ export const ROSTER_FIRST_RECONCILE_MS = 10000;
 const ROSTER_QUERY_TIMEOUT_MS = 5000;
 
 /**
- * 取权威在线名单。
+ * 取权威在线名单：MSMP 优先，RCON 兜底。
+ *
+ * MSMP 的可用性是**测得**的而不是**推断**的——本函数就是那次测量：拿到结构化名单
+ * 即记可用，否则记不可用。用版本号推断不行（服务端可能没开、端口随机、或经反代）。
+ *
  * @returns {Promise<{names: string[]} | null>} 取不到返回 null
  */
 export async function _fetchOnlineRoster() {
-  if (!this.isRunning || !this.isRconConnected) return null;
+  if (!this.isRunning) return null;
+  const viaMsmp = await this._msmpFetchOnlinePlayers();
+  this._msmpAvailable = !!viaMsmp;
+  if (viaMsmp) return viaMsmp;
+  // RCON 未连接时没有第二条通道可取回执
+  if (!this.isRconConnected) return null;
   // 空名单是合法答案（解析出 0 人），与「取不到」必须区分——后者才是不作为的理由
   try {
     return parseListResponse(

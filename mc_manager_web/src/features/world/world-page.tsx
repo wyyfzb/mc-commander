@@ -53,7 +53,7 @@ export function WorldPage() {
     return <InstanceRequiredState />
   }
 
-  const isRconConnected = statusQuery.data?.isRconConnected ?? false
+  const isRconConnected = statusQuery.data?.capabilities.rcon ?? false
   const mcVersion = statusQuery.data?.mcVersion ?? ''
 
   /** 当前 Tab（URL 深链接初始化；非法值回退 properties） */

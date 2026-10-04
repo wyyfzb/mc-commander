@@ -26,6 +26,7 @@ import * as adopt from './mc-server/adopt.js';
 import * as logTail from './mc-server/log-tail.js';
 import * as jarVersion from './mc-server/jar-version.js';
 import * as rosterSync from './mc-server/roster-sync.js';
+import * as msmpClient from './mc-server/msmp-client.js';
 import { logger } from '../utils/logger.js';
 
 // 原子写统一走 utils/fs-utils.js 公共实现（写唯一 .tmp 再 rename，失败清残留）。
@@ -345,6 +346,8 @@ export class MCServerInstance extends EventEmitter {
     this._worldStateEpoch = 0; // 世界状态采集代际：stop 时自增，作废在途回调的续链
     this._rosterTimer = null; // 在线名单对账定时器
     this._rosterEpoch = 0; // 名单对账代际：stop 时自增，作废在途回调的续链
+    // MSMP 可用性：由名单查询实测得出（拿到结构化名单即记可用），不用版本号推断
+    this._msmpAvailable = false;
     // 死亡事件聚合窗口：团灭等批量场景 5s 内合并为单条事件（防通知风暴）
     this._deathAggBuffer = [];
     this._deathAggTimer = null;
@@ -1270,7 +1273,14 @@ export class MCServerInstance extends EventEmitter {
       id: this.id,
       name: this.name,
       isRunning: this.isRunning,
-      isRconConnected: this.isRconConnected,
+      // 可用通道分开报：「能不能执行命令」与「能不能读到结构化事实」是两件事。
+      // rcon 判据是配置齐全且在运行（RCON 无握手概念，配置即判据，每次实时读）；
+      // msmp 判据是**最近一次查询实测成功**（端口可随机、可被反代，配置推不出可用性）。
+      // 实例已停时 msmp 一律报 false：那是上一次运行的残留实测值，不是当前状态。
+      capabilities: {
+        rcon: this.isRconConnected,
+        msmp: this.isRunning && this._msmpAvailable,
+      },
       // 意外停止自动重启开关（供前端设置页读写）
       autoRestart: this.autoRestart,
       uptime: Math.floor(uptimeMs / 1000),
@@ -2285,3 +2295,7 @@ Object.assign(MCServerInstance.prototype, jarVersion);
 // 在线名单对账域挂载：RCON `list` 作为在线名单权威来源，接管时补齐缺席期间的
 // 在线玩家、运行期周期性纠偏（机制见 roster-sync.js 头注释）。
 Object.assign(MCServerInstance.prototype, rosterSync);
+
+// MSMP 查询域挂载：结构化查询面（1.21.9+ 且用户开启时可用）。命令面进不来——
+// MSMP 没有执行控制台命令的方法，故命令通道仍是 RCON/stdin（见 msmp-client.js 头注释）。
+Object.assign(MCServerInstance.prototype, msmpClient);

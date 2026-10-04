@@ -74,7 +74,7 @@ export const mockInstanceStatus: InstanceStatus = {
   id: 'demo',
   name: '演示实例',
   isRunning: true,
-  isRconConnected: true,
+  capabilities: { rcon: true, msmp: false },
   autoRestart: true,
   autoStart: false,
   circuitBreakerTripped: false,

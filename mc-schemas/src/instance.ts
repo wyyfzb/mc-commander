@@ -22,11 +22,24 @@ export const instanceUpdatePayloadSchema = z.object({
   startCommand: z.string().nullable().optional(),
 })
 
+/**
+ * 实例可用通道。分两个布尔而非一个「管理通道」：两者的能力面不同，
+ * 差异会被读成故障——RCON 能执行控制台命令，MSMP 不能（无 run_command 方法），
+ * 但 MSMP 能给出结构化事实。UI 据各自的可用来决定「哪些操作可行」。
+ */
+export const instanceCapabilitiesSchema = z.object({
+  // RCON：命令面唯一出口。判据是配置齐全且实例在运行（RCON 无握手概念）
+  rcon: z.boolean(),
+  // MSMP：结构化查询面（1.21.9+）。判据是最近一次查询实测成功——端口默认可随机、
+  // 链路可被反代，配置推不出可用性
+  msmp: z.boolean(),
+})
+
 export const instanceStatusSchema = z.object({
   id: z.string(),
   name: z.string(),
   isRunning: z.boolean(),
-  isRconConnected: z.boolean(),
+  capabilities: instanceCapabilitiesSchema,
   autoRestart: z.boolean(),
   autoStart: z.boolean(),
   circuitBreakerTripped: z.boolean(),

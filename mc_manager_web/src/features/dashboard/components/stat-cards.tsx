@@ -265,7 +265,7 @@ export function PlayersCard({ isLoading = false }: { isLoading?: boolean }) {
   const status = useServerStore((s) => s.status)
   const navigate = useNavigate()
   const isRunning = status?.isRunning ?? false
-  const rconConnected = status?.isRconConnected ?? false
+  const rconConnected = status?.capabilities.rcon ?? false
   const online = status?.playerCount ?? 0
   const max = status?.maxPlayers ?? 20
   const opCount = status?.opCount ?? 0

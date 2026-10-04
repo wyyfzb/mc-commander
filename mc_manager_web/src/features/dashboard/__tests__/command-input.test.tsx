@@ -171,7 +171,7 @@ describe('CommandInput', () => {
   describe('RCON 降级横幅', () => {
     it('isRunning + !isRconConnected 时显示降级横幅', () => {
       useServerStore.setState({
-        status: { isRunning: true, isRconConnected: false } as NonNullable<
+        status: { isRunning: true, capabilities: { rcon: false, msmp: false } } as NonNullable<
           ReturnType<typeof useServerStore.getState>['status']
         >,
       })
@@ -183,7 +183,7 @@ describe('CommandInput', () => {
 
     it('isRunning + isRconConnected 时不显示横幅', () => {
       useServerStore.setState({
-        status: { isRunning: true, isRconConnected: true } as NonNullable<
+        status: { isRunning: true, capabilities: { rcon: true, msmp: false } } as NonNullable<
           ReturnType<typeof useServerStore.getState>['status']
         >,
       })

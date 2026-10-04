@@ -5803,11 +5803,20 @@ const instanceUpdatePayloadSchema = object({
 	jvmArgs: array(string()).optional(),
 	startCommand: string().nullable().optional()
 });
+/**
+* 实例可用通道。分两个布尔而非一个「管理通道」：两者的能力面不同，
+* 差异会被读成故障——RCON 能执行控制台命令，MSMP 不能（无 run_command 方法），
+* 但 MSMP 能给出结构化事实。UI 据各自的可用来决定「哪些操作可行」。
+*/
+const instanceCapabilitiesSchema = object({
+	rcon: boolean(),
+	msmp: boolean()
+});
 const instanceStatusSchema = object({
 	id: string(),
 	name: string(),
 	isRunning: boolean(),
-	isRconConnected: boolean(),
+	capabilities: instanceCapabilitiesSchema,
 	autoRestart: boolean(),
 	autoStart: boolean(),
 	circuitBreakerTripped: boolean(),

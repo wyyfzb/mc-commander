@@ -56,6 +56,7 @@ function makeInstance(name = 'inst') {
   inst._todayNewCache = null;
   inst._rosterTimer = null;
   inst._rosterEpoch = 0;
+  inst._msmpAvailable = false;
   inst._deathAggBuffer = [];
   inst._sleepingPlayers = 0;
   enableRcon(inst);
@@ -96,6 +97,55 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+});
+
+describe('_fetchOnlineRoster 通道择优（MSMP 优先，RCON 兜底）', () => {
+  it('MSMP 可用 → 用 MSMP 结果，且不再走 RCON', async () => {
+    const inst = makeInstance('msmp-first');
+    inst._msmpFetchOnlinePlayers = vi.fn(async () => ({ names: ['Steve'] }));
+    expect(await inst._fetchOnlineRoster()).toEqual({ names: ['Steve'] });
+    expect(inst.sendCommandWithResponse).not.toHaveBeenCalled();
+  });
+
+  it('MSMP 取到结构化名单 → 记能力可用（界面据此显示 MSMP 已启用）', async () => {
+    const inst = makeInstance('msmp-cap-on');
+    inst._msmpAvailable = false;
+    inst._msmpFetchOnlinePlayers = vi.fn(async () => ({ names: ['Steve'] }));
+    await inst._fetchOnlineRoster();
+    expect(inst._msmpAvailable).toBe(true);
+  });
+
+  it('MSMP 不可用 → 回退 RCON，并把能力记回不可用（能力是测得而非推断）', async () => {
+    const inst = makeInstance('msmp-fallback');
+    inst._msmpAvailable = true;
+    inst._msmpFetchOnlinePlayers = vi.fn(async () => null);
+    inst.sendCommandWithResponse = vi.fn(async () => listOf('Alex'));
+    expect(await inst._fetchOnlineRoster()).toEqual({ names: ['Alex'] });
+    expect(inst._msmpAvailable).toBe(false);
+  });
+
+  it('空名单也算实测成功：MSMP 返回 0 人时不得回退 RCON', async () => {
+    const inst = makeInstance('msmp-empty');
+    // 「0 人」是合法答案；若把它当失败去回退，等于用一个更弱的来源推翻权威答案
+    inst._msmpFetchOnlinePlayers = vi.fn(async () => ({ names: [] }));
+    expect(await inst._fetchOnlineRoster()).toEqual({ names: [] });
+    expect(inst.sendCommandWithResponse).not.toHaveBeenCalled();
+  });
+
+  it('两条通道都取不到 → null（保持现状，不清空名单）', async () => {
+    const inst = makeInstance('both-down');
+    inst._msmpFetchOnlinePlayers = vi.fn(async () => null);
+    inst.properties = {};
+    expect(await inst._fetchOnlineRoster()).toBeNull();
+  });
+
+  it('实例已停 → 两条通道都不试', async () => {
+    const inst = makeInstance('stopped');
+    inst.isRunning = false;
+    inst._msmpFetchOnlinePlayers = vi.fn(async () => ({ names: ['Steve'] }));
+    expect(await inst._fetchOnlineRoster()).toBeNull();
+    expect(inst._msmpFetchOnlinePlayers).not.toHaveBeenCalled();
+  });
 });
 
 describe('_fetchOnlineRoster 取名单的失败语义', () => {

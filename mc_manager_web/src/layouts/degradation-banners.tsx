@@ -29,7 +29,7 @@ export function DegradationBanners() {
   const { duplicateDeployBlocked, connectStalled } = useDeployStatusFallback()
 
   const wsDown = connectionReady && !socketConnected && (hasConnectedOnce || connectStalled)
-  const rconDown = status?.isRunning === true && status.isRconConnected === false
+  const rconDown = status?.isRunning === true && status.capabilities.rcon === false
 
   if (!wsDown && !rconDown) return null
 
