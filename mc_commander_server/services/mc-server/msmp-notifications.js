@@ -45,6 +45,14 @@ export const MSMP_NOTIFICATION_ALLOWLIST = new Set([
   'minecraft:notification/server/stopping',
 ]);
 
+/** 世界格式升级的 4 个通知 → 归一化状态（消费方不必认识方法名） */
+const WORLD_UPGRADE_STATES = {
+  'minecraft:notification/world/upgrade_started': 'started',
+  'minecraft:notification/world/upgrade_progress': 'progress',
+  'minecraft:notification/world/upgrade_finished': 'finished',
+  'minecraft:notification/world/upgrade_failed': 'failed',
+};
+
 /** 心跳周期：半开连接（对端消失但不发 FIN）不会触发 close，只能靠自己探测 */
 const HEARTBEAT_MS = 30_000;
 /** 发出 ping 后等 pong 的宽限；超时即判定半开并重连 */
@@ -210,5 +218,18 @@ export function _msmpNotifHandleMessage(data) {
 
   // 零参通知的 params **整个键缺席**（实测），故统一成 null 再交给消费方
   const params = message.params ?? null;
+
+  // 世界格式升级归一化成一条事件：消费方不该去认识 4 个方法名，
+  // 更不该知道「只有 progress 带进度」这种协议细节
+  const state = WORLD_UPGRADE_STATES[method];
+  if (state) {
+    this.emit('worldUpgrade', {
+      state,
+      // 实测只有 world/upgrade_progress 带 { progress: 0..1 }；其余三者的 params 形态
+      // 未实测，故按「是 number 就取、否则 null」处理，不假设字段名
+      progress: typeof params?.progress === 'number' ? params.progress : null,
+    });
+  }
+
   this.emit('msmpNotification', { method, params });
 }

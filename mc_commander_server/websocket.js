@@ -16,6 +16,7 @@ export const WSEvents = {
   STATUS: 'status',
   PERFORMANCE_UPDATE: 'performanceUpdate',
   WEATHER_UPDATE: 'weatherUpdate',
+  WORLD_UPGRADE: 'worldUpgrade',
   PLAYER_STATS_UPDATE: 'playerStatsUpdate',
   PLAYER_JOIN: 'playerJoin',
   PLAYER_LEAVE: 'playerLeave',
@@ -834,6 +835,7 @@ export function setupWebSocket(wss, serverManager) {
       (data) => broadcast(data.instanceId, WSEvents.PLAYER_STATS_UPDATE, data),
     ],
     ['instance:playerSleep', (data) => broadcast(data.instanceId, WSEvents.PLAYER_SLEEP, data)],
+    ['instance:worldUpgrade', (data) => broadcast(data.instanceId, WSEvents.WORLD_UPGRADE, data)],
   ];
   for (const [eventName, handler] of EVENT_HANDLERS) {
     try {

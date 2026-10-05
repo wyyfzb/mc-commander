@@ -32,6 +32,9 @@ describe('MCServerManager 实例事件转发', () => {
     ['playerChat', { name: 'Steve', message: 'hello' }],
     ['achievement', { name: 'Steve', advancement: 'Stone Age' }],
     ['playerSleep', { name: 'Steve', sleeping: true }],
+    // 世界格式升级（MSMP 通知面一期）：漏注册即成死监听——websocket.js 只监听转发后的
+    // 事件名，实例直接 emit 的那个名字没有任何人订阅（playerChat 曾因此全链路断裂）
+    ['worldUpgrade', { state: 'progress', progress: 0.5 }],
   ];
 
   it.each(GAME_EVENTS)('实例 %s 事件转发为 instance:%s 且携带 instanceId', (evt, payload) => {

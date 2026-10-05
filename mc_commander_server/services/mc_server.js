@@ -252,6 +252,9 @@ export class MCServerManager extends EventEmitter {
     instance.on('playerSleep', (data) =>
       this.emit('instance:playerSleep', { instanceId: id, ...data }),
     );
+    instance.on('worldUpgrade', (data) =>
+      this.emit('instance:worldUpgrade', { instanceId: id, ...data }),
+    );
 
     return instance;
   }

@@ -140,15 +140,15 @@ describe('通知处理：白名单与形态', () => {
         }),
       ),
     );
-    expect(inst.emitted).toEqual([
-      {
-        name: 'msmpNotification',
-        payload: {
-          method: 'minecraft:notification/world/upgrade_progress',
-          params: { progress: 0.42 },
-        },
+    // 世界升级会同时发 worldUpgrade（归一化）与 msmpNotification（原样）；
+    // 这里只钉通用的那条，归一化那条由下面专门的世界升级用例负责
+    expect(inst.emitted).toContainEqual({
+      name: 'msmpNotification',
+      payload: {
+        method: 'minecraft:notification/world/upgrade_progress',
+        params: { progress: 0.42 },
       },
-    ]);
+    });
   });
 
   it('零参通知的 params 键缺席 → 归一成 null（第一版探针就死在这上面）', () => {
@@ -176,6 +176,56 @@ describe('通知处理：白名单与形态', () => {
       expect(MSMP_NOTIFICATION_ALLOWLIST.has(m)).toBe(false);
     }
     expect(inst.emitted).toEqual([]);
+  });
+
+  it('世界升级 4 个通知归一化成 worldUpgrade（消费方不必认识方法名）', () => {
+    const cases = [
+      ['minecraft:notification/world/upgrade_started', 'started'],
+      ['minecraft:notification/world/upgrade_progress', 'progress'],
+      ['minecraft:notification/world/upgrade_finished', 'finished'],
+      ['minecraft:notification/world/upgrade_failed', 'failed'],
+    ];
+    for (const [method, state] of cases) {
+      // 每个 case 用新实例：同一个实例上累积多次发送后，find 会命中上一轮的旧事件
+      const inst = makeInstance();
+      inst._msmpNotifHandleMessage(
+        Buffer.from(JSON.stringify({ jsonrpc: '2.0', method, params: { progress: 0.5 } })),
+      );
+      expect(inst.emitted.find((e) => e.name === 'worldUpgrade')).toEqual({
+        name: 'worldUpgrade',
+        payload: { state, progress: 0.5 },
+      });
+    }
+  });
+
+  it.each([
+    ['params 键整个缺席（实测形态）', undefined, null],
+    ['progress 是字符串（不算数）', { progress: '0.5' }, null],
+    ['progress 是 0（合法进度，不能当 falsy 丢掉）', { progress: 0 }, 0],
+    ['params 不是对象', 'nope', null],
+  ])('progress 取值：%s', (_label, params, expected) => {
+    const inst = makeInstance();
+    inst._msmpNotifHandleMessage(
+      Buffer.from(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'minecraft:notification/world/upgrade_progress',
+          ...(params === undefined ? {} : { params }),
+        }),
+      ),
+    );
+    const evt = inst.emitted.find((e) => e.name === 'worldUpgrade');
+    expect(evt.payload).toEqual({ state: 'progress', progress: expected });
+  });
+
+  it('非世界升级的通知不发 worldUpgrade（只有 server/stopping 这类别的）', () => {
+    const inst = makeInstance();
+    inst._msmpNotifHandleMessage(
+      Buffer.from(
+        JSON.stringify({ jsonrpc: '2.0', method: 'minecraft:notification/server/stopping' }),
+      ),
+    );
+    expect(inst.emitted.map((e) => e.name)).toEqual(['msmpNotification']);
   });
 
   it('白名单外的通知（名单类）一律不转——一期刻意不接，接了就要先定去重', () => {

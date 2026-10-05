@@ -158,6 +158,7 @@ export {
   wsStatusEventPayloadSchema,
   wsPlayerEventPayloadSchema,
   wsWeatherPayloadSchema,
+  wsWorldUpgradePayloadSchema,
   wsBackupPayloadSchema,
   wsBackupProgressPayloadSchema,
   NOTIFICATION_EVENT_TYPES,
@@ -169,6 +170,7 @@ export {
   type WsStatusEventPayload,
   type WsPlayerEventPayload,
   type WsWeatherPayload,
+  type WsWorldUpgradePayload,
   type WsBackupPayload,
   type WsBackupProgressPayload,
 } from './ws'
