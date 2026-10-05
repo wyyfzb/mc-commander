@@ -14,9 +14,9 @@ import { collectSystemStats } from './utils/system-stats.js';
 export const WSEvents = {
   LOG: 'log',
   STATUS: 'status',
-  TPS_UPDATE: 'tpsUpdate',
   PERFORMANCE_UPDATE: 'performanceUpdate',
   WEATHER_UPDATE: 'weatherUpdate',
+  WORLD_UPGRADE: 'worldUpgrade',
   PLAYER_STATS_UPDATE: 'playerStatsUpdate',
   PLAYER_JOIN: 'playerJoin',
   PLAYER_LEAVE: 'playerLeave',
@@ -79,7 +79,6 @@ export const ClientMessages = {
 // __tests__/websocket.readonly-filter.test.js——未归类的新事件会让用例变红）。
 export const READONLY_WS_EVENTS = new Set([
   WSEvents.STATUS, // 运行态跃迁与状态快照（含崩溃熔断提示，不含日志文本）
-  WSEvents.TPS_UPDATE, // 保留项：**当前无发射方**（已并入 performanceUpdate），性能读数语义
   WSEvents.PERFORMANCE_UPDATE, // 性能读数（含睡眠/清醒玩家名）
   WSEvents.WEATHER_UPDATE,
   WSEvents.PLAYER_STATS_UPDATE, // 在线玩家血量/护甲/坐标
@@ -120,7 +119,7 @@ export const MAX_MESSAGES_PER_WINDOW = 60;
 export const WS_AUTH_TIMEOUT_MS = 10_000;
 
 // 需要持久化的通知类事件：广播前落库，客户端断线重连后按 lastEventId 补齐。
-// 排除高频事件（log / status 快照 / performanceUpdate / tpsUpdate / weatherUpdate /
+// 排除高频事件（log / status 快照 / performanceUpdate / weatherUpdate /
 // playerStatsUpdate）——status 事件仅在 event 字段为状态跃迁时单独落库。
 // taskExecute 移出落库集合：前端零消费（仅路由进 statusStream 无人监听），
 // 每次任务执行必落库会挤占断线补齐 500 条配额（玩家进出密集的服上
@@ -826,7 +825,6 @@ export function setupWebSocket(wss, serverManager) {
     ['instance:playerRespawn', (data) => broadcast(data.instanceId, WSEvents.PLAYER_RESPAWN, data)],
     ['instance:playerChat', (data) => broadcast(data.instanceId, WSEvents.PLAYER_CHAT, data)],
     ['instance:achievement', (data) => broadcast(data.instanceId, WSEvents.ACHIEVEMENT, data)],
-    ['instance:tpsUpdate', (data) => broadcast(data.instanceId, WSEvents.TPS_UPDATE, data)],
     [
       'instance:performanceUpdate',
       (data) => broadcast(data.instanceId, WSEvents.PERFORMANCE_UPDATE, data),
@@ -837,6 +835,7 @@ export function setupWebSocket(wss, serverManager) {
       (data) => broadcast(data.instanceId, WSEvents.PLAYER_STATS_UPDATE, data),
     ],
     ['instance:playerSleep', (data) => broadcast(data.instanceId, WSEvents.PLAYER_SLEEP, data)],
+    ['instance:worldUpgrade', (data) => broadcast(data.instanceId, WSEvents.WORLD_UPGRADE, data)],
   ];
   for (const [eventName, handler] of EVENT_HANDLERS) {
     try {

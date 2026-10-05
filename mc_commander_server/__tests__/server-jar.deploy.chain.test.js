@@ -9,7 +9,7 @@
  *
  * mock 边界（对齐 PR#413/#412/#409 范式：仅替身外部依赖，importOriginal 保留语义）：
  * - utils/http-client：HTTP 层替身（httpJson 按 URL 注册表返回；httpStream 注入可控字节流）
- * - minecraft-core：核心版本发现替身（getVersions/getLatestBuild 可控行为）
+ * - 上游 HTTP：vanilla/purpur/forge 的构建解析由 httpJson 替身按夹具合成
  * - child_process：假 java/forge 进程（importOriginal 保留 spawnSync）
  * - java-detector / db / config.serversDir（tmp 目录）：隔离宿主环境
  * - jar-download-guard / audit / validateBody：真实 import，语义原样
@@ -48,19 +48,6 @@ vi.mock('../config.js', async () => {
   return { default: { serversDir: testState.serversDir } };
 });
 
-vi.mock('minecraft-core', () => ({
-  MinecraftServerManager: class {
-    async getVersions() {
-      return testState.mcCoreVersions;
-    }
-    async getLatestBuild() {
-      if (testState.mcCoreThrow) throw new Error('core registry unavailable');
-      return testState.latestBuild;
-    }
-  },
-  NodeAdapter: class {},
-}));
-
 vi.mock('../utils/java-detector.js', () => ({
   getRecommendedJavaVersion: vi.fn(() => '21'),
   findJavaPath: vi.fn(() => '/usr/bin/java'),
@@ -97,16 +84,56 @@ vi.mock('child_process', async (importOriginal) => {
 vi.mock('../utils/http-client.js', async () => {
   const streamMod = await import('node:stream');
   // 按 URL 子串命中注册表；未命中即抛错（URL 形状漂移时给出可定位的失败，而非静默 undefined）
-  const findJson = (url) => {
+  const findJsonOrNull = (url) => {
     const keys = Object.keys(httpState.jsonTable).sort((a, b) => b.length - a.length);
     for (const k of keys) if (url.includes(k)) return httpState.jsonTable[k];
-    throw new Error(`unexpected json url: ${url}`);
+    return null;
+  };
+  // vanilla 构建解析已改走 Piston manifest（与升级共用一份实现，见 services/vanilla-manifest.js）。
+  // 夹具接缝仍是 testState.latestBuild —— 由它**合成** Piston 形状的响应：
+  // 逐条改写 30 多处夹具等于把「谁提供下载地址」这件事在测试里散成 30 份，改一处就漏一处。
+  const VANILLA_VERSION = '1.21.4';
+  const pistonManifest = {
+    latest: { release: VANILLA_VERSION },
+    versions: [
+      {
+        id: VANILLA_VERSION,
+        type: 'release',
+        url: 'https://piston-meta.mojang.com/v1/packages/uat/1.21.4.json',
+      },
+    ],
+  };
+  // Piston 对 server jar 给的就是 sha1 ⇒ 夹具里原有的 hash 直接当作 sha1（旧路径按 hashType 分流）
+  const pistonDetail = () => {
+    const art = testState.latestBuild?.downloads?.application;
+    return art ? { downloads: { server: { url: art.url, sha1: art.hash } } } : { downloads: {} };
   };
   // httpJson 契约：直接返回解析后的值（Promisified），值为 Error 实例时 reject
   const httpJson = vi.fn((url) => {
-    const entry = findJson(url);
-    if (entry instanceof Error) return Promise.reject(entry);
-    return Promise.resolve(entry);
+    const u = String(url);
+    // **先查夹具表**：用例可以自己提供 manifest（如版本列表那几个用例），
+    // 合成层只在该 URL 没有夹具时兜底 —— 顺序反了会把用例自己的夹具顶掉。
+    const entry = findJsonOrNull(u);
+    if (entry !== null) {
+      return entry instanceof Error ? Promise.reject(entry) : Promise.resolve(entry);
+    }
+    if (u.includes('version_manifest_v2.json')) return Promise.resolve(pistonManifest);
+    if (u.includes('/v1/packages/uat/')) return Promise.resolve(pistonDetail());
+    // forge 的构建号在 promotions 里（没有构建详情接口）——同样由合成层兜底
+    // purpur：摘要只在 /latest 的顶层 md5（下载直链不带摘要）——夹具的 hash 即当作它
+    if (u.includes('api.purpurmc.org') && u.includes('/latest')) {
+      const art = testState.latestBuild?.downloads?.application;
+      return Promise.resolve({
+        build: testState.purpurBuild === undefined ? 2416 : testState.purpurBuild,
+        md5: art?.hash,
+      });
+    }
+    if (u.includes('promotions_slim')) {
+      return Promise.resolve({
+        promos: { '1.21.4-recommended': '51.0.0', '1.21.4-latest': '51.0.0' },
+      });
+    }
+    throw new Error(`unexpected json url: ${url}`);
   });
   const httpStream = vi.fn((url) => httpState.streamImpl(url, streamMod));
   // 三个具名导出必须齐全：SUT 用 ESM 具名导入，缺一个即模块解析期整体失败
@@ -239,9 +266,15 @@ describe('GET /versions 多核心版本分发', () => {
     expect(res.body.data.versions).not.toContain('26x_snapshot');
   });
 
-  it('fabric：core 版本列表 + loader stable 过滤截断 10', async () => {
-    testState.mcCoreVersions = ['1.21.4', '1.21.3', '1.21.1'];
+  it('fabric：上游 game 列表 + loader stable 过滤截断 10', async () => {
     httpState.jsonTable = {
+      // 上游真实形态：`[{ version, stable }]`（快照/rc 也在列表里，stable=false）
+      'versions/game': [
+        { version: '26.4-snapshot-1', stable: false },
+        { version: '1.21.4', stable: true },
+        { version: '1.21.3', stable: true },
+        { version: '1.21.1', stable: true },
+      ],
       'versions/loader': [
         ...Array.from({ length: 12 }, (_, i) => ({ version: `0.16.${i}`, stable: true })),
         { version: '0.17.0-beta', stable: false },
@@ -259,8 +292,10 @@ describe('GET /versions 多核心版本分发', () => {
   });
 
   it('fabric：loader 上游失败 → loaders 空数组兜底（版本列表不受影响）', async () => {
-    testState.mcCoreVersions = ['1.21.4'];
-    httpState.jsonTable = { 'versions/loader': new Error('loader api down') };
+    httpState.jsonTable = {
+      'versions/game': [{ version: '1.21.4', stable: true }],
+      'versions/loader': new Error('loader api down'),
+    };
     const { app } = buildApp();
 
     const res = await request(app).get('/api/versions?type=fabric');
@@ -291,15 +326,12 @@ describe('GET /versions 多核心版本分发', () => {
     expect(res.body.data.versions).toEqual(['1.20.1', '1.21.4']);
   });
 
-  it('未知 type：走 minecraft-core getVersions 直通（数组返回形态）', async () => {
-    testState.mcCoreVersions = ['1.21.4', '1.20.6'];
+  it('未知 type：如实 400（不再透传给库「什么都能答」）', async () => {
     const { app } = buildApp();
 
     const res = await request(app).get('/api/versions?type=quilt');
 
-    expect(res.status).toBe(200);
-    expect(res.body.data.type).toBe('quilt');
-    expect(res.body.data.versions).toEqual(['1.21.4', '1.20.6']);
+    expect(res.status).toBe(400);
   });
 });
 
@@ -564,7 +596,7 @@ describe('部署注册表终态语义（issue 420）', () => {
 describe('POST /instances/deploy · 下载异常与核心回退', () => {
   it('httpStream 中途 error → 502 + 残留清理', async () => {
     testState.latestBuild = {
-      downloads: { application: { url: 'https://example.invalid/jar/server.jar' } },
+      downloads: { application: { url: 'https://piston-data.mojang.com/jar/server.jar' } },
     };
     httpState.streamImpl = (url, streamMod) => {
       const pt = new streamMod.PassThrough();
@@ -583,13 +615,49 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
     expect(fs.existsSync(`${testState.serversDir}/${instanceId}`)).toBe(false);
   });
 
-  it('vanilla：core build.application 携带真实 hash/hashType=sha256 → 摘要校验通过', async () => {
+  it('上游响应指向非白名单域 → 502 Download host not allowed，且不留实例目录', async () => {
+    // 部署路径的域断言必须真的接在链路上：只测守卫函数本身，删掉这处调用不会变红
+    testState.latestBuild = {
+      downloads: { application: { url: 'https://evil.example.com/jar/server.jar' } },
+    };
+    const { app } = buildApp();
+
+    const res = await request(app)
+      .post('/api/instances/deploy')
+      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Poisoned Host Server' });
+
+    expect(res.status).toBe(502);
+    expect(res.body.message).toContain('Download host not allowed: evil.example.com');
+    const instanceId = lastDeployInstanceId();
+    expect(fs.existsSync(`${testState.serversDir}/${instanceId}`)).toBe(false);
+  });
+
+  it('自定义类型（fabric/forge）的域按类型放行，不被 vanilla 的集合误伤', async () => {
+    testState.latestBuild = {
+      downloads: {
+        application: { url: 'https://maven.minecraftforge.net/jar/forge-installer.jar' },
+      },
+    };
+    const { app } = buildApp();
+
+    const res = await request(app)
+      .post('/api/instances/deploy')
+      .send({ type: 'forge', mcVersion: '1.21.4', instanceName: 'Forge Host Server' });
+
+    // 域放行 ⇒ 不会因白名单被拒（后续可能因别的原因此失败，但错误信息不是域拒绝）
+    expect(res.body.message || '').not.toContain('Download host not allowed');
+  });
+
+  it('vanilla：摘要只认 Piston 的 sha1 —— 不符即 502，不再有 hashType 回退放行', async () => {
+    // 旧实现按 hashType 在 `artifact.hash || build.sha256 || build.sha1` 之间回退，
+    // 认不出算法就**静默跳过校验**。改成与升级共用 Piston 解析后，vanilla 的摘要只有一个
+    // 来源（`downloads.server.sha1`）；给一个不相符的摘要必须**报错**而不是放行。
+    const wrongSha1 = crypto.createHash('sha1').update('别的字节').digest('hex');
     testState.latestBuild = {
       downloads: {
         application: {
-          url: 'https://example.invalid/jar/server.jar',
-          hash: JAR_SHA256,
-          hashType: 'sha256',
+          url: 'https://piston-data.mojang.com/jar/server.jar',
+          hash: wrongSha1,
         },
       },
     };
@@ -597,11 +665,10 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
 
     const res = await request(app)
       .post('/api/instances/deploy')
-      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Vanilla Sha256 Server' });
+      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Vanilla Bad Sha1 Server' });
 
-    expect(res.status).toBe(200);
-    const instanceId = res.body.data.id;
-    expect(fs.readFileSync(`${testState.serversDir}/${instanceId}/server.jar`)).toEqual(JAR_BYTES);
+    expect(res.status).toBe(502);
+    expect(res.body.message).toMatch(/integrity check failed/);
   });
 
   it('vanilla：真实 hashType=sha1 → 按 sha1 算法校验通过', async () => {
@@ -609,7 +676,7 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
     testState.latestBuild = {
       downloads: {
         application: {
-          url: 'https://example.invalid/jar/server.jar',
+          url: 'https://piston-data.mojang.com/jar/server.jar',
           hash: jarSha1,
           hashType: 'sha1',
         },
@@ -632,7 +699,7 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
     testState.latestBuild = {
       downloads: {
         application: {
-          url: 'https://example.invalid/jar/purpur.jar',
+          url: 'https://api.purpurmc.org/jar/purpur.jar',
           hash: jarMd5,
           hashType: 'md5',
         },
@@ -651,7 +718,7 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
     testState.latestBuild = {
       downloads: {
         application: {
-          url: 'https://example.invalid/jar/purpur.jar',
+          url: 'https://api.purpurmc.org/jar/purpur.jar',
           hash: 'f'.repeat(32),
           hashType: 'md5',
         },
@@ -671,7 +738,7 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
     testState.latestBuild = {
       downloads: {
         application: {
-          url: 'https://example.invalid/jar/server.jar',
+          url: 'https://piston-data.mojang.com/jar/server.jar',
           // 故意给错的摘要：真实字节与之不符
           hash: crypto.createHash('sha256').update('different-payload').digest('hex'),
           hashType: 'sha256',
@@ -690,14 +757,14 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
     expect(InstanceModel.create).not.toHaveBeenCalled();
   });
 
-  it('hashType 无法识别 → 视为无摘要跳过校验（不拿未知算法比对而误报损坏）', async () => {
+  it('上游未给 sha1 → 按无摘要处理并照常部署（判据是字段在不在，不是算法认不认）', async () => {
+    // 旧实现的「跳过校验」判据是「算法认不出来」；新实现的判据是「Piston 有没有给 sha1」。
+    // 这一支仍然必须存在：Piston 偶尔不给摘要时不能把部署卡死，但也不能拿别的字段顶替。
     testState.latestBuild = {
       downloads: {
         application: {
-          url: 'https://example.invalid/jar/server.jar',
-          // 故意用非摘要形态，避免读成「像 md5 的值配错了算法」
-          hash: 'not-a-recognized-digest',
-          hashType: 'crc32',
+          url: 'https://piston-data.mojang.com/jar/server.jar',
+          // 不给 hash ⇒ 合成的 Piston 详情里就没有 sha1
         },
       },
     };
@@ -705,7 +772,7 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
 
     const res = await request(app)
       .post('/api/instances/deploy')
-      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Unknown HashType Server' });
+      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'No Digest Server' });
 
     expect(res.status).toBe(200);
     expect(fs.readFileSync(`${testState.serversDir}/${res.body.data.id}/server.jar`)).toEqual(
@@ -743,8 +810,10 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
     expect(httpStream.mock.calls[0][0]).toContain('/0.16.14/');
   });
 
-  it('purpur：core 失败 → 回退 purpur API latest 直链下载成功', async () => {
-    testState.mcCoreThrow = true;
+  it('purpur：/latest 未给 build → 退到 latest/download（有 build 时必须用具体构建号）', async () => {
+    // 用具体构建号的原因是：查询到的摘要与实际下载的构建必须是同一个，
+    // 否则中间发新构建时会拿旧摘要校验新文件、对正常文件报完整性失败。
+    testState.purpurBuild = null;
     const { app } = buildApp();
 
     const res = await request(app)
@@ -756,13 +825,31 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
     expect(httpStream.mock.calls[0][0]).toBe(
       'https://api.purpurmc.org/v2/purpur/1.21.4/latest/download',
     );
+    testState.purpurBuild = undefined;
+  });
+
+  it('purpur：/latest 给了 build → 用具体构建号下载（与摘要同源）', async () => {
+    testState.purpurBuild = 2416;
+    const { app } = buildApp();
+
+    const res = await request(app)
+      .post('/api/instances/deploy')
+      .send({ type: 'purpur', mcVersion: '1.21.4', instanceName: 'Purpur Build Server' });
+
+    expect(res.status).toBe(200);
+    const { httpStream } = await import('../utils/http-client.js');
+    expect(httpStream.mock.calls[0][0]).toBe(
+      'https://api.purpurmc.org/v2/purpur/1.21.4/2416/download',
+    );
   });
 
   it('forge：安装器退出后未产出 server jar → 502 Forge server jar not found', async () => {
     // forge-installer.jar 下载后 spawn --installServer 假进程 exit0，
     // 目录中除 installer 外无 forge-*.jar → 查找失败抛错
     testState.latestBuild = {
-      downloads: { application: { url: 'https://example.invalid/jar/forge-installer.jar' } },
+      downloads: {
+        application: { url: 'https://maven.minecraftforge.net/jar/forge-installer.jar' },
+      },
     };
     const { app } = buildApp();
 
@@ -796,7 +883,7 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
   it('InstanceModel.create 抛错 → 部署不阻断仍 200（DB 故障仅降级记录）', async () => {
     testState.dbCreateError = new Error('SQLITE_BUSY: database is locked');
     testState.latestBuild = {
-      downloads: { application: { url: 'https://example.invalid/jar/server.jar' } },
+      downloads: { application: { url: 'https://piston-data.mojang.com/jar/server.jar' } },
     };
     const { app } = buildApp();
 
@@ -813,7 +900,7 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
 describe('generateServerProperties 落盘契约', () => {
   it('rcon.port/server-port 按 instanceId 后 4 位 hex 偏移 + enable-rcon + 16 位随机密码', async () => {
     testState.latestBuild = {
-      downloads: { application: { url: 'https://example.invalid/jar/server.jar' } },
+      downloads: { application: { url: 'https://piston-data.mojang.com/jar/server.jar' } },
     };
     const { app } = buildApp();
 
@@ -840,7 +927,7 @@ describe('generateServerProperties 落盘契约', () => {
 
   it('instance.json 与 eula.txt 契约（已同意 EULA 时部署产物可直接启动）', async () => {
     testState.latestBuild = {
-      downloads: { application: { url: 'https://example.invalid/jar/server.jar' } },
+      downloads: { application: { url: 'https://piston-data.mojang.com/jar/server.jar' } },
     };
     const { app } = buildApp();
 
@@ -871,7 +958,7 @@ describe('generateServerProperties 落盘契约', () => {
 
   it('未同意 EULA（字段缺省）：写 eula=false、跳过首启，部署仍成功', async () => {
     testState.latestBuild = {
-      downloads: { application: { url: 'https://example.invalid/jar/server.jar' } },
+      downloads: { application: { url: 'https://piston-data.mojang.com/jar/server.jar' } },
     };
     const { app, manager } = buildApp();
 
@@ -892,7 +979,7 @@ describe('generateServerProperties 落盘契约', () => {
 
   it('未同意 EULA（显式 false）：同样写 eula=false 且不首启', async () => {
     testState.latestBuild = {
-      downloads: { application: { url: 'https://example.invalid/jar/server.jar' } },
+      downloads: { application: { url: 'https://piston-data.mojang.com/jar/server.jar' } },
     };
     const { app, manager } = buildApp();
 
@@ -915,7 +1002,7 @@ describe('generateServerProperties 落盘契约', () => {
 describe('runFirstLaunch 首启行为', () => {
   beforeEach(() => {
     testState.latestBuild = {
-      downloads: { application: { url: 'https://example.invalid/jar/server.jar' } },
+      downloads: { application: { url: 'https://piston-data.mojang.com/jar/server.jar' } },
     };
   });
 

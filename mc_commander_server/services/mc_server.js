@@ -12,7 +12,12 @@ import { killProcessTree } from '../utils/process-tree.js';
 import { maskSensitiveCommand } from '../utils/command-mask.js';
 import { localDateKey } from '../utils/local-date.js';
 // offline uuid / stats 时长读取全仓公共实现（与 routes/players.js 共用 player-utils.js）
-import { offlineUuid as computeOfflineUuid, getTotalPlayTime } from '../utils/player-utils.js';
+import {
+  offlineUuid as computeOfflineUuid,
+  getTotalPlayTime,
+  readUuidFromUsercache,
+  shadowProfilePath,
+} from '../utils/player-utils.js';
 import { isPathContained } from '../utils/fs-utils.js';
 // addressReachability / isPrivateIp 复用 url-guard 的私有网段判定（SSRF 防护用的同一把尺子）：
 // 地址「能不能发给玩家」与「能不能作为出站目标」用的是同一套可达性语义，
@@ -25,6 +30,10 @@ import * as startLifecycle from './mc-server/start-lifecycle.js';
 import * as adopt from './mc-server/adopt.js';
 import * as logTail from './mc-server/log-tail.js';
 import * as jarVersion from './mc-server/jar-version.js';
+import * as rosterSync from './mc-server/roster-sync.js';
+import * as msmpClient from './mc-server/msmp-client.js';
+import * as msmpNotifications from './mc-server/msmp-notifications.js';
+import * as crashArtifacts from './mc-server/crash-artifacts.js';
 import { logger } from '../utils/logger.js';
 
 // 原子写统一走 utils/fs-utils.js 公共实现（写唯一 .tmp 再 rename，失败清残留）。
@@ -231,9 +240,6 @@ export class MCServerManager extends EventEmitter {
     instance.on('achievement', (data) =>
       this.emit('instance:achievement', { instanceId: id, ...data }),
     );
-    instance.on('tpsUpdate', (data) =>
-      this.emit('instance:tpsUpdate', { instanceId: id, ...data }),
-    );
     instance.on('performanceUpdate', (data) =>
       this.emit('instance:performanceUpdate', { instanceId: id, ...data }),
     );
@@ -245,6 +251,9 @@ export class MCServerManager extends EventEmitter {
     );
     instance.on('playerSleep', (data) =>
       this.emit('instance:playerSleep', { instanceId: id, ...data }),
+    );
+    instance.on('worldUpgrade', (data) =>
+      this.emit('instance:worldUpgrade', { instanceId: id, ...data }),
     );
 
     return instance;
@@ -342,6 +351,18 @@ export class MCServerInstance extends EventEmitter {
     this._msptEpoch = 0; // MSPT 采集代际：stop 时自增，作废在途回调的续链
     this._worldStateTimer = null; // 世界状态（时间/天气）采集定时器
     this._worldStateEpoch = 0; // 世界状态采集代际：stop 时自增，作废在途回调的续链
+    this._rosterTimer = null; // 在线名单对账定时器
+    this._rosterEpoch = 0; // 名单对账代际：stop 时自增，作废在途回调的续链
+    // MSMP 可用性：由名单查询实测得出（拿到结构化名单即记可用），不用版本号推断
+    this._msmpAvailable = false;
+    // MSMP 通知面（一期）连接状态：socket/定时器/退避，生命周期由 _msmpNotifStart/Stop 管
+    this._msmpNotifActive = false;
+    this._msmpNotifSocket = null;
+    this._msmpNotifHeartbeat = null;
+    this._msmpNotifPongTimer = null;
+    this._msmpNotifReconnectTimer = null;
+    this._msmpNotifBackoffMs = 0;
+    this._msmpNotifAlive = false;
     // 死亡事件聚合窗口：团灭等批量场景 5s 内合并为单条事件（防通知风暴）
     this._deathAggBuffer = [];
     this._deathAggTimer = null;
@@ -1253,7 +1274,7 @@ export class MCServerInstance extends EventEmitter {
       sleepingPlayerNames,
       awakePlayerNames,
     });
-    // tps 随 performanceUpdate 的 payload 统一广播，不再单独发送 tpsUpdate
+    // tps 随 performanceUpdate 的 payload 统一广播——契约里没有独立的 tps 事件
     // 事件（避免 websocket 双消息冗余）
   }
 
@@ -1267,7 +1288,14 @@ export class MCServerInstance extends EventEmitter {
       id: this.id,
       name: this.name,
       isRunning: this.isRunning,
-      isRconConnected: this.isRconConnected,
+      // 可用通道分开报：「能不能执行命令」与「能不能读到结构化事实」是两件事。
+      // rcon 判据是配置齐全且在运行（RCON 无握手概念，配置即判据，每次实时读）；
+      // msmp 判据是**最近一次查询实测成功**（端口可随机、可被反代，配置推不出可用性）。
+      // 实例已停时 msmp 一律报 false：那是上一次运行的残留实测值，不是当前状态。
+      capabilities: {
+        rcon: this.isRconConnected,
+        msmp: this.isRunning && this._msmpAvailable,
+      },
       // 意外停止自动重启开关（供前端设置页读写）
       autoRestart: this.autoRestart,
       uptime: Math.floor(uptimeMs / 1000),
@@ -1425,7 +1453,11 @@ export class MCServerInstance extends EventEmitter {
             knownPlayers.set(entry.name, {
               name: entry.name,
               uuid: entry.uuid || '',
-              lastSeen: entry.expiresOn || null,
+              // usercache **不携带**最后在线时间：它的 expiresOn 是「条目创建 + 1 个月」
+              // 的缓存过期时刻，与最后在线无关。此前拿它当 lastSeen，界面会显示一个
+              // 看似权威、实为「缓存创建 + 1 个月」的时间。准确的 lastSeen 由自有影子
+              // 档案提供（玩家离开时写入，见 _supplementKnownPlayersFromProfiles）。
+              lastSeen: null,
             });
           }
         }
@@ -1490,7 +1522,42 @@ export class MCServerInstance extends EventEmitter {
       } catch {}
     }
 
+    // 自有影子档案补足：usercache 会被 MC 按 expiresOn 剪枝（条目创建 + 1 个月），
+    // 只依赖它会让历史玩家从名单里静默消失；且它是唯一携带准确 lastSeen 的来源。
+    this._supplementKnownPlayersFromProfiles(knownPlayers);
+
     return knownPlayers;
+  }
+
+  /// 用 `playerdata/<uuid>.json` 补足已知玩家名单。
+  /// 文件名即 UUID（档案按 UUID 落盘），档案内的 `name`/`lastSeen` 由本仓在玩家离开时写入。
+  _supplementKnownPlayersFromProfiles(knownPlayers) {
+    const dir = path.join(this.serverPath, 'playerdata');
+    let files;
+    try {
+      files = fs.readdirSync(dir);
+    } catch {
+      return; // 目录不存在＝从未有玩家落盘
+    }
+    for (const file of files) {
+      if (!file.endsWith('.json')) continue;
+      const filePath = path.join(dir, file);
+      if (!isPathContained(dir, filePath)) continue;
+      let profile;
+      try {
+        profile = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+      } catch {
+        continue; // 半写/损坏的档案跳过，不影响其余玩家
+      }
+      const name = typeof profile?.name === 'string' && profile.name ? profile.name : null;
+      if (!name) continue;
+      const uuid = file.slice(0, -'.json'.length);
+      const entry = knownPlayers.get(name) || { name, uuid, lastSeen: null };
+      if (!entry.uuid) entry.uuid = uuid;
+      // 档案是唯一准确的最后在线来源：有值就用它，没有则保持未知（不拿别的字段顶替）
+      if (profile.lastSeen) entry.lastSeen = profile.lastSeen;
+      knownPlayers.set(name, entry);
+    }
   }
 
   /// MC 版本：以服务端 JAR 内 version.json 为权威（用户绕过面板手动换 jar 或外部升级
@@ -1524,22 +1591,28 @@ export class MCServerInstance extends EventEmitter {
   }
 
   _getPlayerUuid(playerName) {
-    const cachePath = path.join(this.serverPath, 'usercache.json');
-    if (!fs.existsSync(cachePath)) return null;
-    try {
-      const cache = JSON.parse(fs.readFileSync(cachePath, 'utf-8'));
-      for (const entry of cache) {
-        if (entry.name === playerName && entry.uuid) return entry.uuid;
-      }
-    } catch {}
-    return null;
+    return readUuidFromUsercache(this.serverPath, playerName);
+  }
+
+  /// 影子档案路径：键是 UUID，不是玩家名（改名不再断链，见 player-utils 的
+  /// shadowProfileKey / shadowProfilePath）。返回 null 表示键越界——usercache 是本机文件、可被篡改，
+  /// 落点仍须自证，UUID 化不能替代这一层。
+  _shadowProfilePath(playerName, uuid) {
+    const dir = path.join(this.serverPath, 'playerdata');
+    const filePath = shadowProfilePath({ serverPath: this.serverPath, playerName, uuid });
+    if (!isPathContained(dir, filePath)) {
+      logger.error(`[${this.id}] 拒绝越界影子档案路径: ${JSON.stringify(filePath)}`);
+      return null;
+    }
+    return filePath;
   }
 
   _savePlayerData(playerName, data) {
     try {
       const dir = path.join(this.serverPath, 'playerdata');
+      const filePath = this._shadowProfilePath(playerName);
+      if (!filePath) return;
       ensureDir(dir);
-      const filePath = path.join(dir, `${playerName}.json`);
       const existing = this._loadPlayerData(playerName) || {};
       // 浅拷贝后再删除：调用方（60s 定时保存、玩家离开落盘）传入的是 this.players
       // 的内存 player 对象同一引用，直接 delete data._cachedDetails 会把写盘时的
@@ -1588,7 +1661,8 @@ export class MCServerInstance extends EventEmitter {
 
   _loadPlayerData(playerName) {
     try {
-      const filePath = path.join(this.serverPath, 'playerdata', `${playerName}.json`);
+      const filePath = this._shadowProfilePath(playerName);
+      if (!filePath) return null;
       if (!fs.existsSync(filePath)) return null;
       return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
     } catch {
@@ -2139,22 +2213,20 @@ export class MCServerInstance extends EventEmitter {
       const uuid = this._getPlayerUuid(playerName);
       // level-name 服务层兜底校验：非法/越界回退 'world'
       const levelName = this._getSafeLevelName();
-      const candidates = [
-        path.join(this.serverPath, levelName, 'players', 'stats', `${uuid}.json`),
-        path.join(this.serverPath, 'world', 'players', 'stats', `${uuid}.json`),
-        path.join(this.serverPath, levelName, 'stats', `${uuid}.json`),
-        path.join(this.serverPath, 'world', 'stats', `${uuid}.json`),
-      ];
-      // offline uuid 候选无条件追加：无 usercache 记录时
-      // 离线模式玩家的真实统计仍可读取
+      // 两种 UUID（usercache 的 / 离线派生的）乘两条目录版式：
+      // 26.1+ 在 <level>/players/stats，1.20.5–1.21.10 在 <level>/stats。
+      // 此处曾把两条 UUID 分支各写一遍候选，而离线分支漏了 `stats/` 版式——
+      // 旧版本的离线玩家因此读不到统计。改成两层循环，版式只有一处定义。
+      const uuids = [uuid];
       const offlineUuid = computeOfflineUuid(playerName);
-      if (offlineUuid && offlineUuid !== uuid) {
-        candidates.push(
-          path.join(this.serverPath, levelName, 'players', 'stats', `${offlineUuid}.json`),
-        );
-        candidates.push(
-          path.join(this.serverPath, 'world', 'players', 'stats', `${offlineUuid}.json`),
-        );
+      // 无 usercache 记录（Carpet 假人 / usercache 被剪枝）时用离线派生 UUID 兜底
+      if (offlineUuid && offlineUuid !== uuid) uuids.push(offlineUuid);
+      const candidates = [];
+      for (const id of uuids) {
+        for (const dirName of [levelName, 'world']) {
+          candidates.push(path.join(this.serverPath, dirName, 'players', 'stats', `${id}.json`));
+          candidates.push(path.join(this.serverPath, dirName, 'stats', `${id}.json`));
+        }
       }
       for (const statsPath of candidates) {
         // 兜底防御：候选路径 resolve 后必须位于 serverPath 内，越界丢弃
@@ -2275,6 +2347,22 @@ Object.assign(MCServerInstance.prototype, logTail);
 // 孤儿进程接管域挂载（根修）：pid 文件与面板重启后接管，机制见 adopt.js 头注释。
 Object.assign(MCServerInstance.prototype, adopt);
 
+// 崩溃诊断产物域挂载：读取并解析 crash-reports/crash-*.txt 与 hs_err_pid*.log，
+// 只读呈现（格式依据与实测样本见模块头注释）。
+Object.assign(MCServerInstance.prototype, crashArtifacts);
+
 // 实例版本读取域挂载：从服务端 JAR 内 version.json 取权威 mcVersion/javaVersion，
 // 供 _getMcVersion 与 _getRequiredJavaVersion 使用（机制见 jar-version.js 头注释）。
 Object.assign(MCServerInstance.prototype, jarVersion);
+
+// 在线名单对账域挂载：RCON `list` 作为在线名单权威来源，接管时补齐缺席期间的
+// 在线玩家、运行期周期性纠偏（机制见 roster-sync.js 头注释）。
+Object.assign(MCServerInstance.prototype, rosterSync);
+
+// MSMP 查询域挂载：结构化查询面（1.21.9+ 且用户开启时可用）。命令面进不来——
+// MSMP 没有执行控制台命令的方法，故命令通道仍是 RCON/stdin（见 msmp-client.js 头注释）。
+Object.assign(MCServerInstance.prototype, msmpClient);
+
+// MSMP 通知面（一期）域挂载：常驻连接接收服务端推送的 world/upgrade_* 与
+// server/started|stopping|saving|saved（与 stdout 解析零冲突的两族，见模块头注释）。
+Object.assign(MCServerInstance.prototype, msmpNotifications);

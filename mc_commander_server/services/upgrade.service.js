@@ -10,12 +10,21 @@ import { httpJson, httpStream } from '../utils/http-client.js';
 import { BackupService } from './backup.service.js';
 import { resolveSafePath, PathTraversalError } from '../utils/fs-utils.js';
 import { AppError, ErrorCodes } from '../utils/response.js';
+import { assertAllowedDownloadHost, allowedDownloadHosts } from '../utils/jar-download-guard.js';
 import {
   JAR_DOWNLOAD_MAX_BYTES,
   assertDownloadIntegrity,
   assertSizeWithinLimit,
 } from '../utils/jar-download-guard.js';
 import { logger } from '../utils/logger.js';
+import { resolveVanillaDownload } from './vanilla-manifest.js';
+import { resolvePurpurDownload } from './loader-upstreams.js';
+import {
+  findJavaPathStrict,
+  getRecommendedJavaVersion,
+  isJavaSatisfied,
+} from '../utils/java-detector.js';
+import { readJarVersionInfo } from './mc-server/jar-version.js';
 import { getServerVersion } from '../utils/version.js';
 import { beginCancellableTask, TASK_KINDS, TaskCancelledError } from '../utils/cancellable-task.js';
 
@@ -32,32 +41,13 @@ export const MC_VERSION_REGEX = /^\d{1,3}(\.\d{1,3}){0,3}$/;
 /// 当作穿越向量（「jarFile 入库值同样校验」）。
 const SERVER_JAR_NAME_REGEX = /^server-\d{1,3}(\.\d{1,3}){0,3}\.jar$/;
 
-/// 上游下载域白名单：与 resolveDownloadUrl 三个分支实际产出的域一致。
-/// 上游 API 响应中的 URL 字段（piston manifest 的 versionEntry.url /
-/// downloads.server.url、paper v3 downloads）理论可携带任意 host，下载前
-/// 统一断言，防污染响应把下载流导向任意主机。
-const ALLOWED_DOWNLOAD_HOSTS = new Set([
-  'piston-meta.mojang.com', // vanilla manifest / version detail
-  'piston-data.mojang.com', // vanilla server jar 实际文件域
-  'fill-data.papermc.io', // paper v3 downloads 实际文件域
-  'api.purpurmc.org', // purpur latest/download
-]);
-
-/**
- * 断言下载 URL 的 host 在白名单内（纵深防御，_downloadJar 唯一入口）。
- * 非白名单域或畸形 URL 一律以 VALIDATION_ERROR 语义拒绝。
- */
-function assertAllowedDownloadHost(rawUrl) {
-  let host;
-  try {
-    host = new URL(rawUrl).hostname;
-  } catch {
-    throw new AppError(ErrorCodes.VALIDATION_ERROR, `Invalid download URL: ${rawUrl}`);
-  }
-  if (!ALLOWED_DOWNLOAD_HOSTS.has(host)) {
-    throw new AppError(ErrorCodes.VALIDATION_ERROR, `Download host not allowed: ${host}`);
-  }
-}
+/// 上游下载域白名单：按本服务支持的类型取子集（与 resolveDownloadUrl 三个分支
+/// 实际产出的域一致）。上游 API 响应中的 URL 字段（piston manifest 的
+/// versionEntry.url / downloads.server.url、paper v3 downloads）理论可携带任意
+/// host，下载前统一断言，防污染响应把下载流导向任意主机。
+/// 逐类型取子集而非共用并集：升级不支持 fabric/forge，给并集等于把白名单放宽到
+/// 那些域，污染响应就能被放行。
+const ALLOWED_DOWNLOAD_HOSTS = allowedDownloadHosts([...VALID_TYPES]);
 
 /**
  * 实例内落地路径收口：resolveSafePath 四步防线（归一化/前缀边界/
@@ -120,26 +110,8 @@ export class UpgradeService {
    */
   async resolveDownload(mcVersion, type) {
     if (type === 'vanilla') {
-      // Mojang Piston API
-      const manifest = await httpJson(
-        'https://piston-meta.mojang.com/mc/game/version_manifest_v2.json',
-        {
-          timeoutMs: 15000,
-          retryLimit: 2,
-        },
-      );
-      const versionEntry = manifest.versions?.find(
-        (v) => v.id === mcVersion && v.type === 'release',
-      );
-      if (!versionEntry?.url) throw new Error(`Vanilla version ${mcVersion} not found`);
-      const versionDetail = await httpJson(versionEntry.url, {
-        timeoutMs: 15000,
-        retryLimit: 2,
-      });
-      const serverJar = versionDetail.downloads?.server;
-      if (!serverJar?.url) throw new Error(`No server JAR download for ${mcVersion}`);
-      const expectedHash = serverJar.sha1 ? { algorithm: 'sha1', digest: serverJar.sha1 } : null;
-      return { url: serverJar.url, expectedHash };
+      // 与部署共用同一实现（services/vanilla-manifest.js）：同一个事实只留一种取法
+      return resolveVanillaDownload(mcVersion);
     }
 
     if (type === 'paper') {
@@ -171,24 +143,8 @@ export class UpgradeService {
     }
 
     if (type === 'purpur') {
-      // Purpur API：摘要只在 /latest 响应的顶层 md5 字段里（实测与真实 jar 字节一致），
-      // 下载直链本身不带摘要 ⇒ 必须先查 /latest 才能校验。
-      // 查不到（网络异常/md5 缺失）时降级为无摘要跳过，不阻断升级。
-      const latest = await httpJson(`https://api.purpurmc.org/v2/purpur/${mcVersion}/latest`, {
-        timeoutMs: 15000,
-        retryLimit: 2,
-      });
-      const digest = latest.md5;
-      // 用 latest.build 而非 /latest/download：否则查询到的摘要与下载的构建可能不是同一个
-      // （中间有新构建发布时会错位，导致对正常文件报完整性失败）
-      const url =
-        latest.build != null
-          ? `https://api.purpurmc.org/v2/purpur/${mcVersion}/${latest.build}/download`
-          : `https://api.purpurmc.org/v2/purpur/${mcVersion}/latest/download`;
-      return {
-        url,
-        expectedHash: digest ? { algorithm: 'md5', digest } : null,
-      };
+      // 与部署共用同一实现（services/loader-upstreams.js）
+      return resolvePurpurDownload(mcVersion);
     }
 
     throw new Error(`Unsupported server type: ${type}`);
@@ -202,9 +158,24 @@ export class UpgradeService {
    * @param {{ algorithm: string, digest: string } | null} expectedHash - 上游摘要，null 跳过校验
    * @param {AbortSignal|null} [signal] 取消信号（用户中断升级时断流 + 清理半成品）
    */
+  /**
+   * 目标版本要求的 Java 主版本号（字符串）。
+   * 优先级：新 jar 内 version.json 的 java_version → 与部署同一套推荐表 → null（不阻塞）。
+   * @param {string} newJarPath 刚下载、尚未替换的新 jar 绝对路径
+   * @param {string} mcVersion 目标 MC 版本
+   * @returns {string|null}
+   */
+  _resolveRequiredJava(newJarPath, mcVersion) {
+    // 动态 import 避免与 jar-version 域形成顶层循环依赖
+    const info = readJarVersionInfo(newJarPath);
+    if (info?.javaVersion) return String(info.javaVersion);
+    const recommended = getRecommendedJavaVersion(mcVersion);
+    return recommended || null;
+  }
+
   _downloadJar(url, destPath, instanceId, expectedHash = null, signal = null) {
     // 域白名单断言在下载流创建前（唯一下载入口，覆盖三个 resolveDownload 分支）
-    assertAllowedDownloadHost(url);
+    assertAllowedDownloadHost(url, ALLOWED_DOWNLOAD_HOSTS);
     // AbortSignal 不重放：信号在挂监听前就已中止时，监听永远不会触发 —— 必须在这里
     // 立刻失败，否则调用方会照常走完（取消被吞）
     if (signal?.aborted) return Promise.reject(new TaskCancelledError());
@@ -572,6 +543,34 @@ export class UpgradeService {
       this._emitProgress(instanceId, UPGRADE_STAGES.DOWNLOAD, 0, '正在下载...');
       await this._downloadJar(downloadUrl, newJarPath, instanceId, expectedHash, task.signal);
       this._emitProgress(instanceId, UPGRADE_STAGES.DOWNLOAD, 100, '下载完成');
+      task.throwIfCancelled();
+
+      // 阶段 2.5：Java 校验。**必须落在替换之前**——替换一旦执行就已改掉 DB 与实例
+      // jar，那是整条链路里最难回退的时点；而跨 Java 大版本升级（1.20.x 的 Java 17
+      // → 26.3 的 Java 25）此前会一路改完后才在首启时崩，用户拿到的是「升完起不来」。
+      // 权威来源是刚下载的新 jar 内 version.json 的 java_version（服务端自带），
+      // 不手写版本矩阵；读不到就退回与部署同一套推荐表，再读不到则不阻塞（无法证明）。
+      const requiredJava = this._resolveRequiredJava(newJarPath, mcVersion);
+      if (requiredJava) {
+        const currentJava = instance.javaPath;
+        if (!isJavaSatisfied(currentJava, requiredJava)) {
+          const replacement = findJavaPathStrict(requiredJava);
+          if (!replacement) {
+            // 找不到满足要求的 Java ⇒ 中止升级，交给外层回滚（备份与旧 jar 都还在）
+            throw new AppError(
+              ErrorCodes.VALIDATION_ERROR,
+              `升级到 ${mcVersion} 需要 Java ${requiredJava}，本机未找到可用版本；` +
+                `当前实例使用 ${currentJava || '(未设置)'}。请先安装 Java ${requiredJava} 再重试`,
+            );
+          }
+          logger.info(
+            `[upgrade ${instanceId}] Java ${currentJava} 不满足 ${requiredJava}，改为 ${replacement}`,
+          );
+          instance.javaPath = replacement;
+          const { InstanceModel: Model } = await import('../db/index.js');
+          Model.update(instanceId, { javaPath: replacement });
+        }
+      }
       task.throwIfCancelled();
 
       // 阶段 3：替换 JAR

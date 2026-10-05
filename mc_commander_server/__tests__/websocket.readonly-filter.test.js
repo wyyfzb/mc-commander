@@ -370,6 +370,11 @@ describe('只读角色的 WS 事件过滤', () => {
       WSEvents.UPGRADE_CANCELLED,
       WSEvents.CIRCUIT_BREAKER,
       WSEvents.ERROR,
+      // MC 世界格式升级进度（MSMP 通知面一期）。归类到「拦下」而不是白名单，理由：
+      // 它伴随服务端版本变更出现，是**管理员动作的余波**（与 upgradeProgress 同类语境），
+      // 而白名单的自检正则正是按 `upgrade` 这个词排除这一类；要放行就得放宽那条正则，
+      // 得不偿失。口径是「漏登记只会更严不会更松」，将来要放行再单独拍板。
+      WSEvents.WORLD_UPGRADE,
     ];
 
     it('白名单 ∪ 拦下列表 == 全部 WSEvents，且两集合不相交', () => {

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/wyyfzb/mc-commander/compare/v0.6.1...v0.7.0) (2026-10-05)
+
+
+### Features
+
+* 台账批次收口（玩家名判据、崩溃产物呈现、数据包面板、MSMP 推送通道） ([#621](https://github.com/wyyfzb/mc-commander/issues/621)) ([254696a](https://github.com/wyyfzb/mc-commander/commit/254696a141bc74550dd417e57a29741c4fdfd7f3))
+
 ## [0.6.1](https://github.com/wyyfzb/mc-commander/compare/v0.6.0...v0.6.1) (2026-10-04)
 
 

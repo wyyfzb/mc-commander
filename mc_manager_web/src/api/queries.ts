@@ -10,6 +10,7 @@ import { fetchAuthCapabilities } from './auth'
 import { useConnectionStore } from '@/stores/connection'
 import { useAuthStore } from '@/stores/auth'
 import type {
+  CrashArtifact,
   InstanceStatus,
   InstanceSummary,
   LogEntry,
@@ -49,6 +50,9 @@ export const queryKeys = {
     [...queryKeys.all, 'files', id, 'content', filePath] as const,
   world: (id: string) => [...queryKeys.all, 'world', id] as const,
   properties: (id: string) => [...queryKeys.all, 'properties', id] as const,
+  crashArtifact: (id: string) => [...queryKeys.all, 'crash-artifact', id] as const,
+  datapacks: (id: string) => [...queryKeys.all, 'datapacks', id] as const,
+  pushChannel: (id: string) => [...queryKeys.all, 'push-channel', id] as const,
   auditLogs: (params?: AuditQueryParams) => [...queryKeys.all, 'audit-logs', params ?? {}] as const,
   commandHistory: (params?: AuditQueryParams) =>
     [...queryKeys.all, 'command-history', params ?? {}] as const,
@@ -93,6 +97,24 @@ export function useSystemStats() {
 }
 
 /** 实例全量状态（WS 优先模式 30s 保底轮询；WS 事件即时更新走 server store） */
+/**
+ * 最新一份崩溃诊断产物（MC 崩溃报告或 JVM 崩溃日志）。
+ *
+ * **不轮询**：崩溃产物是事后产物，只在崩溃后新增——按需拉取即可，轮询等于每次都给
+ * 磁盘做一次目录枚举 + 解析。崩溃事件发生时由调用方 invalidate（见 dashboard-page）。
+ * 从未崩溃过时服务端返回 null，这是正常空态（不是 loading、也不是错误）。
+ */
+export function useCrashArtifact(instanceId: string | null) {
+  const config = useConnectionStore()
+  return useQuery({
+    queryKey: queryKeys.crashArtifact(instanceId ?? ''),
+    queryFn: ({ signal }) =>
+      apiGet<CrashArtifact | null>(`/api/v1/instances/${instanceId}/crash-report`, config, signal),
+    enabled: config.status === 'ready' && Boolean(instanceId),
+    retry: false,
+  })
+}
+
 export function useInstanceStatus(instanceId: string | null) {
   const config = useConnectionStore()
   return useQuery({

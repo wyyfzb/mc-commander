@@ -4,6 +4,7 @@ import os from 'os';
 import path from 'path';
 import { createPlayerRoutes, parseDuration } from '../routes/players.js';
 import { errorHandler } from '../middleware/error_handler.js';
+import { shadowProfilePath } from '../utils/player-utils.js';
 import { logger } from '../utils/logger.js';
 import express from 'express';
 import request from 'supertest';
@@ -78,10 +79,11 @@ describe('Player Routes 分支补测', () => {
     };
   }
 
-  function writePlayerData(playerName, content) {
+  function writePlayerData(playerName, content, uuid) {
     const dir = path.join(tmpServerPath, 'playerdata');
     fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, `${playerName}.json`), content);
+    // 与实现同源：影子档案键是 UUID，不是玩家名
+    fs.writeFileSync(shadowProfilePath({ serverPath: tmpServerPath, playerName, uuid }), content);
   }
 
   describe('parseDuration 单元（导出函数直测）', () => {
@@ -166,14 +168,20 @@ describe('Player Routes 分支补测', () => {
   });
 
   describe('validatePlayerName 参数校验', () => {
-    it('非法玩家名（含特殊字符）返回 400 VALIDATION_ERROR', async () => {
+    it('危险名字（前导 @ 会被当选择器）返回 400 且说明原因', async () => {
+      // 旧用例用的是 `steve!@`——它锁的是「正版名合法性」这条**已被推翻**的判据：
+      // 实测服务端收 `!`/`@` 这类字符（`-dash-`、`../etc/passwd` 都当字面量收下）。
+      // 真正必须拦的是**前导 @**：不加引号时 `whitelist add @a` 走选择器语义
+      // （回 `No player was found` 而非字面量名的 `That player does not exist`），
+      // 即 `ban @a` 会波及全部在线玩家。
       mockManager.getInstance.mockReturnValue(makeInstance());
 
-      const res = await request(app).get('/api/instances/s1/players/steve!@/details');
+      const res = await request(app).get('/api/instances/s1/players/@a/details');
 
       expect(res.status).toBe(400);
       expect(res.body.code).toBe(40000);
       expect(res.body.message).toContain('Invalid player name');
+      expect(res.body.message).toContain('目标选择器');
     });
   });
 
@@ -657,6 +665,7 @@ describe('Player Routes 分支补测', () => {
     });
 
     it('离线玩家：持久化数据完整呈现（时长覆盖/IP 封禁/物品栏/世界出生点）', async () => {
+      // 夹具必须与该用例 getAllKnownPlayers 声明的 uuid 一致，否则路径对不上
       writePlayerData(
         'OfflineP',
         JSON.stringify({
@@ -673,6 +682,7 @@ describe('Player Routes 分支补测', () => {
           sessions: [{ start: 1, end: 2, duration: 1 }],
           events: [{ type: 'quit', message: '离开服务器', timestamp: 1717331400000 }],
         }),
+        'uuid-off',
       );
       fs.writeFileSync(
         path.join(tmpServerPath, 'banned-ips.json'),

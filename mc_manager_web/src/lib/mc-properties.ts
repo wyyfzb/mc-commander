@@ -66,6 +66,8 @@ export const HOT_RELOAD_KEYS: ReadonlySet<string> = new Set([
   'enforce-whitelist',
   'difficulty',
   'gamemode',
+  // 对应服务端 RUNTIME_COMMAND_MAP：改这项走 /setidletimeout，无需重启
+  'player-idle-timeout',
 ])
 
 /** 判断属性值是否为布尔（server.properties 中布尔值为 "true"/"false"） */
@@ -74,12 +76,12 @@ export function isBoolValue(v: string): boolean {
 }
 
 /**
- * 已知 server.properties 属性的元数据（71 条）
+ * 已知 server.properties 属性的元数据（68 条）
  * 覆盖 vanilla 1.20.5 – 1.21+ 全部已知属性；保留少量废弃字段以兼容旧配置。
- * 分类分布：gameplay 19 / worldGen 18 / serverSettings 34。
+ * 分类分布：gameplay 18 / worldGen 17 / serverSettings 33。
  */
 export const SERVER_PROPERTY_DEFS: PropertyDef[] = [
-  // ── 游戏玩法（gameplay，19） ──
+  // ── 游戏玩法（gameplay，18） ──
   {
     name: 'difficulty',
     label: '难度',
@@ -223,7 +225,7 @@ export const SERVER_PROPERTY_DEFS: PropertyDef[] = [
     type: 'input',
     defaultValue: '0',
     isSensitive: false,
-    isHotReload: false,
+    isHotReload: true,
     isWritable: true,
   },
   {
@@ -285,21 +287,8 @@ export const SERVER_PROPERTY_DEFS: PropertyDef[] = [
     isHotReload: false,
     isWritable: true,
   },
-  {
-    // 兼容旧拼写（部分文档/旧版可能使用）；非 vanilla 标准键
-    name: 'ops-permission-level',
-    label: 'OP权限等级(旧)',
-    desc: 'OP默认权限等级（旧拼写，建议用 op-permission-level）',
-    category: 'gameplay',
-    type: 'dropdown',
-    options: ['1', '2', '3', '4'],
-    defaultValue: '2',
-    isSensitive: false,
-    isHotReload: false,
-    isWritable: false,
-  },
 
-  // ── 世界生成（worldGen，18） ──
+  // ── 世界生成（worldGen，17） ──
   {
     name: 'view-distance',
     label: '视距',
@@ -435,17 +424,6 @@ export const SERVER_PROPERTY_DEFS: PropertyDef[] = [
     isWritable: true,
   },
   {
-    name: 'world-creation-seed',
-    label: '世界创建种子',
-    desc: '1.20+ 世界生成种子（与 level-seed 同步）',
-    category: 'worldGen',
-    type: 'input',
-    defaultValue: '',
-    isSensitive: false,
-    isHotReload: false,
-    isWritable: false,
-  },
-  {
     name: 'region-file-compression',
     label: '区块文件压缩',
     desc: '区域文件压缩算法（1.20.5+）',
@@ -514,7 +492,7 @@ export const SERVER_PROPERTY_DEFS: PropertyDef[] = [
     isWritable: true,
   },
 
-  // ── 服务器设置（serverSettings，34） ──
+  // ── 服务器设置（serverSettings，33） ──
   {
     // 26.3 起官方默认值由 false 改为 **true**（26.3 发行说明 Server Properties 节
     // 原文：「The `white-list` property is now `true` by default」）⇒ 升级到 26.3 的
@@ -875,17 +853,6 @@ export const SERVER_PROPERTY_DEFS: PropertyDef[] = [
     isSensitive: false,
     isHotReload: false,
     isWritable: true,
-  },
-  {
-    name: 'max-chain-command-length',
-    label: '命令链长度(废弃)',
-    desc: '命令方块连锁最大长度（旧拼写，建议用 max-chained-neighbor-updates）',
-    category: 'serverSettings',
-    type: 'input',
-    defaultValue: '',
-    isSensitive: false,
-    isHotReload: false,
-    isWritable: false,
   },
   {
     name: 'server-name',

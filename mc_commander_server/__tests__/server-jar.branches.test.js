@@ -44,23 +44,6 @@ vi.mock('../config.js', async () => {
   return { default: { serversDir: testState.serversDir } };
 });
 
-vi.mock('minecraft-core', () => ({
-  MinecraftServerManager: class {
-    async getVersions() {
-      return testState.mcCoreVersionsValue;
-    }
-    async getLatestBuild() {
-      if (testState.latestBuild instanceof Error) throw testState.latestBuild;
-      return testState.latestBuild;
-    }
-    async downloadServer(opts) {
-      if (testState.downloadServerImpl) return testState.downloadServerImpl(opts);
-      return {};
-    }
-  },
-  NodeAdapter: class {},
-}));
-
 vi.mock('../utils/java-detector.js', () => ({
   getRecommendedJavaVersion: vi.fn(() => '21'),
   findJavaPath: vi.fn(() => '/usr/bin/java'),
@@ -110,16 +93,45 @@ vi.mock('child_process', async (importOriginal) => {
 vi.mock('../utils/http-client.js', async () => {
   const streamMod = await import('node:stream');
   // 按 URL 子串命中注册表；未命中即抛错（URL 形状漂移时给出可定位的失败，而非静默 undefined）
-  const findJson = (url) => {
+  const findJsonOrNull = (url) => {
     const keys = Object.keys(httpState.jsonTable).sort((a, b) => b.length - a.length);
     for (const k of keys) if (url.includes(k)) return httpState.jsonTable[k];
-    throw new Error(`unexpected json url: ${url}`);
+    return null;
+  };
+  // vanilla 构建解析已改走 Piston manifest（与升级共用一份实现，见 services/vanilla-manifest.js）。
+  // 夹具接缝仍是 testState.latestBuild —— 由它合成 Piston 形状的响应，避免逐条改夹具。
+  const VANILLA_VERSION = '1.21.4';
+  const pistonManifest = {
+    latest: { release: VANILLA_VERSION },
+    versions: [
+      {
+        id: VANILLA_VERSION,
+        type: 'release',
+        url: 'https://piston-meta.mojang.com/v1/packages/uat/1.21.4.json',
+      },
+    ],
+  };
+  const pistonDetail = () => {
+    const art = testState.latestBuild?.downloads?.application;
+    return art ? { downloads: { server: { url: art.url, sha1: art.hash } } } : { downloads: {} };
   };
   // httpJson 契约：直接返回解析后的值（Promisified），值为 Error 实例时 reject
   const httpJson = vi.fn((url) => {
-    const entry = findJson(url);
-    if (entry instanceof Error) return Promise.reject(entry);
-    return Promise.resolve(entry);
+    const u = String(url);
+    // 先查夹具表（用例可自带 manifest），合成层只兜底
+    const entry = findJsonOrNull(u);
+    if (entry !== null) {
+      return entry instanceof Error ? Promise.reject(entry) : Promise.resolve(entry);
+    }
+    if (u.includes('version_manifest_v2.json')) return Promise.resolve(pistonManifest);
+    if (u.includes('/v1/packages/uat/')) return Promise.resolve(pistonDetail());
+    // forge 的构建号在 promotions 里（没有构建详情接口）——同样由合成层兜底
+    if (u.includes('promotions_slim')) {
+      return Promise.resolve({
+        promos: { '1.21.4-recommended': '51.0.0', '1.21.4-latest': '51.0.0' },
+      });
+    }
+    throw new Error(`unexpected json url: ${url}`);
   });
   const httpStream = vi.fn((url) => httpState.streamImpl(url, streamMod));
   // 三个具名导出必须齐全：SUT 用 ESM 具名导入，缺一个即模块解析期整体失败
@@ -127,7 +139,6 @@ vi.mock('../utils/http-client.js', async () => {
 });
 
 const { createServerJarRoutes } = await import('../routes/server-jar.js');
-const { AuditLogModel } = await import('../db/index.js');
 const { errorHandler } = await import('../middleware/error_handler.js');
 
 function defaultStreamImpl(jarBytes) {
@@ -183,9 +194,15 @@ afterEach(() => {
 });
 
 function defineManifest() {
+  // url 是部署路径要用的（版本列表只看 id/type，但构建解析要顺着 url 取每版详情）。
+  // 合成层对未登记的 URL 会按 /v1/packages/uat/ 兜底返回详情（见 http-client 替身）。
   httpState.jsonTable['version_manifest'] = {
     versions: [
-      { type: 'release', id: '1.21.4' },
+      {
+        type: 'release',
+        id: '1.21.4',
+        url: 'https://piston-meta.mojang.com/v1/packages/uat/1.21.4.json',
+      },
       { type: 'snapshot', id: '26w1a' },
       { type: 'release', id: '1.21' },
     ],
@@ -202,9 +219,16 @@ describe('GET /versions 分发缺口', () => {
     expect(res.body.data.versions).toEqual(['1.21.4', '1.21']);
   });
 
-  it('fabric：core 返回对象形态（versions 键）+ loader 正常', async () => {
-    testState.mcCoreVersionsValue = { versions: ['1.21.4', '1.21'] };
-    httpState.jsonTable['meta.fabricmc.net'] = [
+  it('fabric：直连上游 game 列表，只取 stable，loader 同理', async () => {
+    // 上游真实形态（打真实请求核过）：`[{ version, stable }]`，由新到旧，
+    // 快照与 rc 也在列表里但 stable=false
+    httpState.jsonTable['meta.fabricmc.net/v2/versions/game'] = [
+      { version: '26.4-snapshot-1', stable: false },
+      { version: '26.3', stable: true },
+      { version: '26.3-rc-2', stable: false },
+      { version: '1.21.4', stable: true },
+    ];
+    httpState.jsonTable['meta.fabricmc.net/v2/versions/loader'] = [
       { version: '0.16.9', stable: false },
       { version: '0.16.10', stable: true },
       { version: '0.16.11', stable: true },
@@ -212,17 +236,31 @@ describe('GET /versions 分发缺口', () => {
     const { app } = buildApp();
     const res = await request(app).get('/api/versions?type=fabric');
     expect(res.status).toBe(200);
-    expect(res.body.data.versions).toEqual(['1.21.4', '1.21']);
+    // 快照/rc 不进部署选项
+    expect(res.body.data.versions).toEqual(['26.3', '1.21.4']);
     expect(res.body.data.loaders).toEqual(['0.16.10', '0.16.11']);
   });
 
-  it('fabric：core 对象无 versions 键 → Object.keys 兑底提取', async () => {
-    testState.mcCoreVersionsValue = { neoA: {}, neoB: {} };
-    httpState.jsonTable['meta.fabricmc.net'] = [];
+  it('fabric：上游返回非数组（异常形态）→ 空列表而不是抛错', async () => {
+    httpState.jsonTable['meta.fabricmc.net/v2/versions/game'] = { unexpected: true };
+    httpState.jsonTable['meta.fabricmc.net/v2/versions/loader'] = [];
     const { app } = buildApp();
     const res = await request(app).get('/api/versions?type=fabric');
     expect(res.status).toBe(200);
-    expect(res.body.data.versions).toEqual(['neoA', 'neoB']);
+    expect(res.body.data.versions).toEqual([]);
+  });
+
+  it('purpur：上游由旧到新，必须反向后给出（取最新在前）', async () => {
+    httpState.jsonTable['api.purpurmc.org'] = {
+      project: 'purpur',
+      metadata: { current: '26.2' },
+      versions: ['1.20.4', '1.21.4', '26.2'],
+    };
+    const { app } = buildApp();
+    const res = await request(app).get('/api/versions?type=purpur');
+    expect(res.status).toBe(200);
+    // 顺带钉住「按 limit 截断前先反向」——先截断会永远拿到最旧那几档
+    expect(res.body.data.versions).toEqual(['26.2', '1.21.4', '1.20.4']);
   });
 
   it('forge：promos 键缺失 → promos 兜底空对象 → 版本列表为空不抛错', async () => {
@@ -234,12 +272,12 @@ describe('GET /versions 分发缺口', () => {
     expect(res.body.data.versions).toEqual([]);
   });
 
-  it('未知 type：core 返回普通对象（无 versions 键）→ Object.keys 提取', async () => {
-    testState.mcCoreVersionsValue = { neo1: {}, neo2: {} };
+  it('未知 type：如实 400（不再委托库「什么都能答」）', async () => {
+    // 部署契约只允许 vanilla/paper/fabric/forge/purpur；未知类型走到这里是非法入参。
+    // 旧实现会把任意 type 透传给 minecraft-core 并接受其返回，等于对非法入参也给答案。
     const { app } = buildApp();
     const res = await request(app).get('/api/versions?type=neoforge');
-    expect(res.status).toBe(200);
-    expect(res.body.data.versions).toEqual(['neo1', 'neo2']);
+    expect(res.status).toBe(400);
   });
 });
 
@@ -354,18 +392,22 @@ describe('Paper 构建发现链形态缺口', () => {
   });
 });
 
-describe('deploy · core 构建形态与 downloadServer 本地形态', () => {
+describe('deploy · 上游直链形态', () => {
+  // 曾有一组「downloadServer 本地落盘」用例（build 为 path 形态 / build 为 null /
+  // 库返回 url / 库返回空对象）。它们测的是 minecraft-core 的**库内自取**那条路，
+  // 而那条路已被移除——它下面板侧的体积上限与下载域白名单都不生效（URL 不经过本仓，
+  // 断言不到）。故随实现一并删除，不是被跳过。
   function defineVanilla() {
     defineManifest();
   }
 
   it('core build 真实形状（downloads.application.url）→ 直链下载成功', async () => {
     defineVanilla();
-    // minecraft-core 的 UnifiedBuild 无顶层 url/sha 字段，地址与摘要都在 application 层
+    // 夹具仍以 downloads.application.url 形态给地址，由合成层转成 Piston 详情
     testState.latestBuild = {
       downloads: {
         application: {
-          url: 'https://core-dl/vanilla.jar',
+          url: 'https://piston-data.mojang.com/vanilla.jar',
           hash: crypto.createHash('sha1').update(JAR_BYTES).digest('hex'),
           hashType: 'sha1',
         },
@@ -378,86 +420,13 @@ describe('deploy · core 构建形态与 downloadServer 本地形态', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.name).toBe('Url Form');
   });
-
-  it('core build 无 application.url（path 形态）→ 走 downloadServer 本地落盘', async () => {
-    defineVanilla();
-    // 真实形状里 downloadType='path' 的构建没有可直链的 url
-    testState.latestBuild = {
-      downloads: { application: { downloadType: 'path' } },
-    };
-    testState.downloadServerImpl = (opts) => {
-      fs.writeFileSync(path.join(opts.outputDir, 'core-server-build.jar'), 'local jar payload');
-      fs.mkdirSync(path.join(opts.outputDir, 'logs'), { recursive: true });
-      return { path: opts.outputDir };
-    };
-    const { app } = buildApp();
-    const res = await request(app)
-      .post('/api/instances/deploy')
-      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Branch Fixture' });
-    expect(res.status).toBe(200);
-  });
-
-  it('build 为 null → downloadServer 落盘本地 jar → rename 为 server.jar + logs 预置跳过首启', async () => {
-    defineVanilla();
-    testState.latestBuild = null;
-    testState.downloadServerImpl = (opts) => {
-      fs.writeFileSync(path.join(opts.outputDir, 'core-server-build.jar'), 'local jar payload');
-      // 预置 logs 目录：runFirstLaunch 检测到即跳过 java 进程
-      fs.mkdirSync(path.join(opts.outputDir, 'logs'), { recursive: true });
-      return { path: opts.outputDir };
-    };
-    const { app } = buildApp();
-    const res = await request(app)
-      .post('/api/instances/deploy')
-      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Branch Fixture' });
-    expect(res.status).toBe(200);
-    const instanceId = AuditLogModel.create.mock.calls[0][0].instanceId;
-    const cfg = JSON.parse(
-      fs.readFileSync(path.join(testState.serversDir, instanceId, 'instance.json'), 'utf-8'),
-    );
-    expect(cfg.jarFile).toBe('server.jar');
-    // 本地产物已 rename：core-server-build.jar 不存在、server.jar 存在
-    const files = fs.readdirSync(path.join(testState.serversDir, instanceId));
-    expect(files).toContain('server.jar');
-    expect(files).not.toContain('core-server-build.jar');
-    // logs 已预置 → 首启跳过：无 java spawn
-    const { spawn } = await import('child_process');
-    expect(spawn).not.toHaveBeenCalled();
-  });
-
-  it('downloadServer 返回 { url } → 转直链下载', async () => {
-    defineVanilla();
-    testState.latestBuild = null;
-    testState.downloadServerImpl = () => ({ url: 'https://core-dl/fallback-url.jar' });
-    const { app } = buildApp();
-    const res = await request(app)
-      .post('/api/instances/deploy')
-      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Branch Fixture' });
-    expect(res.status).toBe(200);
-  });
-
-  it('downloadServer 返回空对象且目录无 jar → 不 rename，部署仍完成', async () => {
-    defineVanilla();
-    testState.latestBuild = null;
-    testState.downloadServerImpl = () => ({});
-    const { app } = buildApp();
-    const res = await request(app)
-      .post('/api/instances/deploy')
-      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Branch Fixture' });
-    expect(res.status).toBe(200);
-    const instanceId = AuditLogModel.create.mock.calls[0][0].instanceId;
-    const cfg = JSON.parse(
-      fs.readFileSync(path.join(testState.serversDir, instanceId, 'instance.json'), 'utf-8'),
-    );
-    expect(cfg.jarFile).toBe('server.jar'); // 缺省 jarFile 原样落盘
-  });
 });
 
 describe('下载进度节流与错误清理', () => {
   function defineVanillaChain() {
     defineManifest();
     testState.latestBuild = {
-      downloads: { application: { url: 'https://core-dl/vanilla.jar' } },
+      downloads: { application: { url: 'https://piston-data.mojang.com/vanilla.jar' } },
     };
   }
 
@@ -557,7 +526,7 @@ describe('forge 安装段分支', () => {
     defineManifest();
     // forge 走 core 链：提供 build.downloads.application.url 直链下载 installer
     testState.latestBuild = {
-      downloads: { application: { url: 'https://core-dl/forge-installer.jar' } },
+      downloads: { application: { url: 'https://maven.minecraftforge.net/forge-installer.jar' } },
     };
   }
 
@@ -651,7 +620,7 @@ describe('win32 平台分支与首启输出', () => {
   it('win32：spawn 不带 detached + 60s 超时走 taskkill /T 进程树终止', async () => {
     defineManifest();
     testState.latestBuild = {
-      downloads: { application: { url: 'https://core-dl/vanilla.jar' } },
+      downloads: { application: { url: 'https://piston-data.mojang.com/vanilla.jar' } },
     };
     testState.spawnBehavior = 'hang';
     const origPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
@@ -692,7 +661,7 @@ describe('win32 平台分支与首启输出', () => {
   it('首启 stdout/stderr 输出累积 + 退出码非 0 且无 logs → 告警不阻断', async () => {
     defineManifest();
     testState.latestBuild = {
-      downloads: { application: { url: 'https://core-dl/vanilla.jar' } },
+      downloads: { application: { url: 'https://piston-data.mojang.com/vanilla.jar' } },
     };
     testState.spawnBehavior = 'emit-data';
     const { app } = buildApp();

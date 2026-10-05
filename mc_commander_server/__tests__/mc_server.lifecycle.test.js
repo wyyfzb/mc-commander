@@ -33,6 +33,7 @@ vi.mock('../db/index.js', () => ({
 import { spawn } from 'child_process';
 import { Rcon } from 'rcon-client';
 import { InstanceModel } from '../db/index.js';
+import { shadowProfilePath } from '../utils/player-utils.js';
 import { MCServerInstance, MCServerManager } from '../services/mc_server.js';
 
 // 构造一个模拟的 java 子进程（stdout/stderr/stdin/exit 均可控）
@@ -285,7 +286,7 @@ describe('MCServerInstance lifecycle / RCON / stats timers', () => {
       expect(statusEvents).toContainEqual({ event: 'stopped', code: 0 });
       // 在线玩家数据已持久化（累加在线时长）
       const saved = JSON.parse(
-        fs.readFileSync(path.join(tmpDir, 'playerdata', 'Alice.json'), 'utf-8'),
+        fs.readFileSync(shadowProfilePath({ serverPath: tmpDir, playerName: 'Alice' }), 'utf-8'),
       );
       expect(saved.totalPlayTime).toBe(60);
       // 累计运行时长写入数据库
@@ -644,6 +645,8 @@ describe('MCServerInstance lifecycle / RCON / stats timers', () => {
       vi.spyOn(instance, '_collectStats').mockImplementation(() => {});
       vi.spyOn(instance, '_collectWorldState').mockResolvedValue();
       vi.spyOn(instance, '_collectMspt').mockResolvedValue();
+      // 在线名单对账同样走 _rconSend（`list`）；本用例只数玩家状态采集的调用
+      vi.spyOn(instance, '_reconcilePlayers').mockResolvedValue();
       // RCON 查询挂起：模拟 RCON 卡顿（单轮执行时长 > 5s）
       let release;
       const gate = new Promise((res) => {
@@ -698,10 +701,10 @@ describe('MCServerInstance lifecycle / RCON / stats timers', () => {
       instance._startStatsCollection();
       instance._startStatsCollection();
 
-      // 两次启动只保留一组定时器（3 个：统计 interval + MSPT/玩家状态递归
-      // setTimeout；世界状态首轮立即执行，在途首轮为 promise 而非定时器，
-      // 续链句柄在首轮完成后才创建，且 stop 代际 epoch 会作废旧链续链）
-      expect(vi.getTimerCount()).toBe(3);
+      // 两次启动只保留一组定时器（4 个：统计 interval + MSPT/玩家状态/在线名单
+      // 对账三条递归 setTimeout；世界状态首轮立即执行，在途首轮为 promise 而非
+      // 定时器，续链句柄在首轮完成后才创建，且 stop 代际 epoch 会作废旧链续链）
+      expect(vi.getTimerCount()).toBe(4);
       instance._stopStatsCollection();
       expect(vi.getTimerCount()).toBe(0);
     });

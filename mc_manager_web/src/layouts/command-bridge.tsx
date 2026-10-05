@@ -14,12 +14,24 @@ import { useConnectionStore } from '@/stores/connection'
 import { useServerStore } from '@/stores/server'
 import { useUiStore } from '@/stores/ui'
 
-/** 安全白名单：只读/低风险命令（正则；确认偏好下免确认直接执行） */
+/**
+ * 安全白名单：只读/低风险命令（正则；确认偏好下免确认直接执行）。
+ *
+ * 前导 `/` 统一容忍：命令管道（服务端 sendCommand）会剥掉它，但本判据的入参是命令
+ * 面板里的**原样文本**，无法保证一定不带。此前只为 `seed` 单写了一条带斜杠的替代分支，
+ * 其余命令带上斜杠就落进「需要确认」——同一件事两种待遇。改为整条容忍。
+ *
+ * `gamerule` **只放行单参数形态**：`gamerule <规则名>` 是「读一条规则」（写形态必须带第二个
+ * 参数，故读不进来）。裸 `gamerule` **不是**只读列表——实测 MC 26.3 与 1.21.4 都返回
+ * `Unknown or incomplete command`；真正的只读列表面是 `/help gamerule`，已由 `help` 覆盖。
+ * 规则名在 26.3 起是 snake_case（`keep_inventory`），1.21.x 是 camelCase（`keepInventory`），
+ * 面板只按字符集校验、不按版本改写名字。
+ */
 const SAFE_COMMAND_PATTERNS: RegExp[] = [
-  /^(list|tps|help|save-all|say\s+|whitelist\s+(list|show)|gamerule\s+\S+\s*$|seed|version|\/seed)/i,
+  /^\/?(list|tps|help|save-all|say\s+|whitelist\s+(list|show)|gamerule\s+\S+\s*$|seed|version)/i,
 ]
 
-function isSafeCommand(command: string): boolean {
+export function isSafeCommand(command: string): boolean {
   return SAFE_COMMAND_PATTERNS.some((re) => re.test(command.trim()))
 }
 

@@ -365,6 +365,47 @@ export function findJavaPath(requiredVersion) {
   return 'java';
 }
 
+/**
+ * 严格版查找：**找不到满足要求的 Java 时返回 null**，不回落系统 `java`。
+ *
+ * 为什么与 `findJavaPath` 分开：部署路径要保持「回落系统 java」的既有行为
+ * （用户机器上只有系统 java 时也得能装上），而升级路径必须能区分「确实找到了」
+ * 与「只能碰运气」——后者意味着升级完极可能起不来，此时应当中止而不是照升。
+ * @param {string} requiredVersion 需要的 Java 主版本号字符串
+ * @returns {string|null}
+ */
+export function findJavaPathStrict(requiredVersion) {
+  const all = getAllJavaVersions();
+  const required = parseInt(requiredVersion, 10);
+  if (!Number.isInteger(required)) return null;
+  for (const item of all) {
+    if (parseInt(item.version, 10) === required) return item.path;
+  }
+  const newer = all
+    .filter((item) => parseInt(item.version, 10) >= required)
+    .sort((a, b) => parseInt(a.version, 10) - parseInt(b.version, 10));
+  return newer.length > 0 ? newer[0].path : null;
+}
+
+/**
+ * 判断给定 javaPath 是否满足目标 Java 主版本要求。
+ *
+ * `javaPath` 可能是裸命令 `java`（部署的回落值），此时先解析成真实绝对路径再比对，
+ * 否则会把「系统 java 其实够新」误判成不满足并触发一次不必要的重选。
+ * @param {string} javaPath
+ * @param {string} requiredVersion
+ * @returns {boolean}
+ */
+export function isJavaSatisfied(javaPath, requiredVersion) {
+  const required = parseInt(requiredVersion, 10);
+  if (!Number.isInteger(required)) return true; // 要求未知 ⇒ 不阻塞
+  if (!javaPath) return false;
+  const all = getAllJavaVersions();
+  const resolved = all.find((item) => item.path === javaPath);
+  const version = resolved ? parseInt(resolved.version, 10) : null;
+  return version !== null && version >= required;
+}
+
 export default {
   getRecommendedJavaVersion,
   getAllJavaVersions,

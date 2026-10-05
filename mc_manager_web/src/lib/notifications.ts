@@ -1,3 +1,4 @@
+import { TPS_WARNING_MIN } from './mc-tps'
 /**
  * 通知系统纯逻辑
  * - WS 事件 → 中文文案模板
@@ -44,6 +45,10 @@ export type NotificationType =
   | 'upgradeComplete'
   | 'upgradeFailed'
   | 'upgradeCancelled'
+  // MC **世界格式**升级（服务端推送，与面板自己的 jar 升级是两件事）
+  | 'worldUpgradeStart'
+  | 'worldUpgradeComplete'
+  | 'worldUpgradeFailed'
 
 export interface AppNotification {
   id: string
@@ -111,6 +116,11 @@ export const NOTIFICATION_TYPE_META: Record<
   upgradeFailed: { label: '升级失败', category: 'server', severity: 'severe' },
   // 用户主动取消不是故障：severity 保持 info，不进严重告警档
   upgradeCancelled: { label: '升级已取消', category: 'server', severity: 'info' },
+  // 世界格式升级：由服务端在启动/转换存档时推送。开始与结束都要说——
+  // 这段时间服务器连不上，用户不知道就会以为坏了（原来对这段完全是黑箱）
+  worldUpgradeStart: { label: '世界格式升级开始', category: 'server', severity: 'warning' },
+  worldUpgradeComplete: { label: '世界格式升级完成', category: 'server', severity: 'info' },
+  worldUpgradeFailed: { label: '世界格式升级失败', category: 'server', severity: 'severe' },
 }
 
 /** 设置页显示顺序：game 组在前、server 组在后 */
@@ -128,6 +138,7 @@ const CRITICAL_TYPES: ReadonlySet<NotificationType> = new Set([
   'webhookFailed',
   'deployFailed',
   'upgradeFailed',
+  'worldUpgradeFailed',
 ])
 
 /** 告警类型集合（阈值跃迁语义，需 _activeAlerts 状态机） */
@@ -184,7 +195,7 @@ export interface AlertThresholds {
 export const DEFAULT_ALERT_THRESHOLDS: AlertThresholds = {
   cpuWarning: 80,
   memoryWarning: 80,
-  tpsLow: 15, // TPS <15 告警（与统计卡"卡顿"阈值 15 对齐）
+  tpsLow: TPS_WARNING_MIN, // 唯一源见 mc-tps：与统计卡分级同源，避免卡片说健康却弹告警
 }
 
 /**
@@ -272,6 +283,29 @@ export function buildNotifications(
     case 'weatherUpdate': {
       const zh = WEATHER_ZH[String(d.weather)] ?? String(d.weather)
       return [{ type: 'weatherChange', category: 'server', content: `天气变为${zh}` }]
+    }
+    case 'worldUpgrade': {
+      // progress 刻意不产生通知：服务端限流 1 条/秒，做成弹窗会刷屏。
+      // 「开始/完成/失败」三个跃迁才是用户需要被告知的信息（进度条属独立设计）。
+      const state = String(d.state ?? '')
+      if (state === 'started') {
+        return [
+          {
+            type: 'worldUpgradeStart',
+            category: 'server',
+            content: '服务器正在升级世界存档格式，期间可能无法连接',
+          },
+        ]
+      }
+      if (state === 'finished') {
+        return [
+          { type: 'worldUpgradeComplete', category: 'server', content: '世界存档格式升级完成' },
+        ]
+      }
+      if (state === 'failed') {
+        return [{ type: 'worldUpgradeFailed', category: 'server', content: '世界存档格式升级失败' }]
+      }
+      return []
     }
     case 'taskFailed': {
       const errText = d.error ? `: ${d.error}` : ''
@@ -405,7 +439,7 @@ export function buildAlertNotifications(
 
   // TPS 告警（低于阈值 → 告警；恢复 → 恢复通知）
   if (tps != null) {
-    if (tps < (thresholds.tpsLow ?? 15)) {
+    if (tps < (thresholds.tpsLow ?? TPS_WARNING_MIN)) {
       if (!next.has('lowTps')) {
         next.add('lowTps')
         notifications.push({

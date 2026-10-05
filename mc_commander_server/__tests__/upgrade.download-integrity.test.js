@@ -24,6 +24,17 @@ const { jsonImpl, streamImpl } = vi.hoisted(() => ({
   streamImpl: { current: null },
 }));
 
+// 升级流程会校验目标版本的 Java 要求，而 Java 探测在真机上扫描 /usr/lib/jvm：
+// 结果随环境变化，还会额外写一次 javaPath（打乱对 InstanceModel.update 的断言）。
+// 本文件不测 Java 校验（那由 upgrade.java-check.test.js 专门覆盖），故固定为「总是满足」。
+vi.mock('../utils/java-detector.js', () => ({
+  getRecommendedJavaVersion: vi.fn(() => '21'),
+  isJavaSatisfied: vi.fn(() => true),
+  findJavaPathStrict: vi.fn(() => null),
+  findJavaPath: vi.fn(() => 'java'),
+  getAllJavaVersions: vi.fn(() => []),
+}));
+
 vi.mock('../utils/http-client.js', () => ({
   // httpJson 的返回值即最终 JSON（无 .json 链）
   httpJson: vi.fn((...args) => jsonImpl.current(...args)),

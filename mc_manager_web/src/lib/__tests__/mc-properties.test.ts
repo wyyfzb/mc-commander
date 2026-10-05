@@ -14,18 +14,18 @@ import {
   SERVER_PROPERTY_DEF_MAP,
 } from '../mc-properties'
 
-describe('SERVER_PROPERTY_DEFS 总量与分类分布（71 条 = 19/18/34）', () => {
-  it('共 71 条且键名唯一', () => {
-    expect(SERVER_PROPERTY_DEFS).toHaveLength(71)
+describe('SERVER_PROPERTY_DEFS 总量与分类分布（68 条 = 18/17/33）', () => {
+  it('共 68 条且键名唯一', () => {
+    expect(SERVER_PROPERTY_DEFS).toHaveLength(68)
     const names = SERVER_PROPERTY_DEFS.map((d) => d.name)
-    expect(new Set(names).size).toBe(71)
+    expect(new Set(names).size).toBe(68)
   })
 
-  it('三分类分布 gameplay 19 / worldGen 18 / serverSettings 34', () => {
+  it('三分类分布 gameplay 18 / worldGen 17 / serverSettings 33', () => {
     const count = (cat: string) => SERVER_PROPERTY_DEFS.filter((d) => d.category === cat).length
-    expect(count('gameplay')).toBe(19)
-    expect(count('worldGen')).toBe(18)
-    expect(count('serverSettings')).toBe(34)
+    expect(count('gameplay')).toBe(18)
+    expect(count('worldGen')).toBe(17)
+    expect(count('serverSettings')).toBe(33)
   })
 
   it('分类取值合法（无其他类别）', () => {
@@ -55,11 +55,11 @@ describe('敏感键（11 键）与热改键（4 键）', () => {
     expect(SENSITIVE_PROPERTY_KEYS.size).toBe(11)
   })
 
-  it('热改键集合与服务端 RUNTIME_COMMAND_MAP 完全一致（4 键）', () => {
+  it('热改键集合与服务端 RUNTIME_COMMAND_MAP 完全一致（5 键）', () => {
     expect([...HOT_RELOAD_KEYS].sort()).toEqual(
-      ['white-list', 'enforce-whitelist', 'difficulty', 'gamemode'].sort(),
+      ['white-list', 'enforce-whitelist', 'difficulty', 'gamemode', 'player-idle-timeout'].sort(),
     )
-    expect(HOT_RELOAD_KEYS.size).toBe(4)
+    expect(HOT_RELOAD_KEYS.size).toBe(5)
   })
 
   it('敏感键与热改键均为已知属性，或走未知键定义（仍标记敏感）', () => {

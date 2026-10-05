@@ -35,6 +35,7 @@ import {
   _addPlayerEvent,
 } from '../services/mc-server/output-parser.js';
 import { MCServerInstance } from '../services/mc_server.js';
+import { shadowProfilePath } from '../utils/player-utils.js';
 
 const tmpBase = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-output-parser-fixture-'));
 
@@ -183,9 +184,12 @@ describe('_parseOutput stdout 行解析（真实样本驱动）', () => {
     expect(leaves).toEqual([{ name: 'Steve' }]);
     expect(inst.players.has('Steve')).toBe(false);
     expect(inst._sleepingPlayers).toBe(1);
-    // 会话关闭 + 落盘：playerdata/Steve.json 存在且携带累计时长
+    // 会话关闭 + 落盘：影子档案（键是 UUID）存在且携带累计时长
     const saved = JSON.parse(
-      fs.readFileSync(path.join(inst.serverPath, 'playerdata', 'Steve.json'), 'utf-8'),
+      fs.readFileSync(
+        shadowProfilePath({ serverPath: inst.serverPath, playerName: 'Steve' }),
+        'utf-8',
+      ),
     );
     expect(saved.totalPlayTime).toBe(10);
     expect(saved.sessions[0].end).not.toBeNull();

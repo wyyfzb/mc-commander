@@ -26,6 +26,37 @@ const CANDIDATE_JAR_NAMES = ['server.jar', 'paper.jar', 'purpur.jar', 'fabric-se
  * 返回值全部可空：文件不存在/不是 zip/缺字段/越界 一律回退 null，由调用方决定降级。
  * @returns {{ id: string, javaVersion: number|null, protocolVersion: number|null } | null}
  */
+/**
+ * 读单个 jar 内的 version.json。**接绝对路径**，供升级路径读「刚下载、尚未替换」的新 jar。
+ * 返回值全部可空：不存在/不是 zip/缺字段 一律 null，由调用方决定降级。
+ * @param {string} jarPath
+ * @returns {{ id: string, javaVersion: number|null, protocolVersion: number|null } | null}
+ */
+export function readJarVersionInfo(jarPath) {
+  let zip;
+  try {
+    if (!fs.statSync(jarPath).isFile()) return null;
+    zip = new AdmZip(jarPath);
+  } catch {
+    return null; // 不存在/打不开（非 zip、正在被写）
+  }
+  try {
+    const entry = zip.getEntry('version.json');
+    if (!entry) return null;
+    const info = JSON.parse(zip.readAsText(entry));
+    const id = typeof info?.id === 'string' && info.id.trim() ? info.id.trim() : null;
+    if (!id) return null;
+    return {
+      id,
+      javaVersion: Number.isInteger(info.java_version) ? info.java_version : null,
+      protocolVersion: Number.isInteger(info.protocol_version) ? info.protocol_version : null,
+    };
+  } catch (e) {
+    logger.warn(`读取 ${path.basename(jarPath)} 内 version.json 失败:`, e.message);
+    return null;
+  }
+}
+
 export function _readJarVersionInfo() {
   const candidates = [];
   // DB 的 jarFile 优先（Forge 实例是 forge-*-universal.jar，且部署已把它落到实例根）
@@ -38,27 +69,8 @@ export function _readJarVersionInfo() {
     const jarPath = path.join(this.serverPath, name);
     // 与 players/stats 读取同口径：resolve 后必须落在实例目录内，越界即丢弃
     if (!isPathContained(this.serverPath, jarPath)) continue;
-    let zip;
-    try {
-      if (!fs.statSync(jarPath).isFile()) continue;
-      zip = new AdmZip(jarPath);
-    } catch {
-      continue; // 不存在/打不开（非 zip、正在被写）→ 试下一个
-    }
-    try {
-      const entry = zip.getEntry('version.json');
-      if (!entry) continue;
-      const info = JSON.parse(zip.readAsText(entry));
-      const id = typeof info?.id === 'string' && info.id.trim() ? info.id.trim() : null;
-      if (!id) continue;
-      return {
-        id,
-        javaVersion: Number.isInteger(info.java_version) ? info.java_version : null,
-        protocolVersion: Number.isInteger(info.protocol_version) ? info.protocol_version : null,
-      };
-    } catch (e) {
-      logger.warn(`[${this.id}] 读取 ${name} 内 version.json 失败:`, e.message);
-    }
+    const info = readJarVersionInfo(jarPath);
+    if (info) return info;
   }
   return null;
 }

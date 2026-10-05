@@ -273,6 +273,39 @@ describe('useServerSocket（WS 单例治理，issue #311）', () => {
     expect(subs.some((m) => m.instanceId === 'i-2')).toBe(true)
   })
 
+  it('worldUpgrade 会经 hook 分发到通知层（漏 case 会静默丢弃，是死接线）', async () => {
+    // 这条专治「加了事件类型与映射、却忘了在 switch 里放行」：hook 的 switch 带
+    // `default: break`，未列的 type 会被静默丢掉——前面 playerChat 就这样断过全链路。
+    useConnectionStore.setState({ baseUrl: '', apiKey: 'k1', status: 'ready' })
+    useAuthStore.setState({ session: makeSession('token-world') })
+
+    renderHook(() => useServerSocket('i-1'), { wrapper: createWrapper() })
+    await waitFor(() => expect(FakeWebSocket.instances.length).toBe(1))
+    const ws = FakeWebSocket.instances[0]!
+    act(() => {
+      openAndAuth(ws)
+    })
+    await flushMicrotasks()
+
+    act(() => {
+      ws.receive({
+        type: 'worldUpgrade',
+        instanceId: 'i-1',
+        data: { state: 'started', progress: null },
+      })
+    })
+    expect(useNotificationStore.getState().items[0]?.type).toBe('worldUpgradeStart')
+
+    act(() => {
+      ws.receive({ type: 'worldUpgrade', instanceId: 'i-1', data: { state: 'progress' } })
+    })
+    // progress 刻意不产生条目（1 条/秒），但**不能因此把整个事件丢掉**
+    expect(useNotificationStore.getState().items.some((n) => n.type === 'worldUpgradeStart')).toBe(
+      true,
+    )
+    expect(useNotificationStore.getState().items.length).toBe(1)
+  })
+
   it('凭据重建后断线补齐游标保持有效（lastEventId 存 localStorage，不随单例丢失）', async () => {
     useConnectionStore.setState({ baseUrl: '', apiKey: 'k1', status: 'ready' })
     useAuthStore.setState({ session: makeSession('token-old') })

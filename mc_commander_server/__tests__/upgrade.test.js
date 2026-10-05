@@ -18,6 +18,17 @@ import path from 'path';
 // httpJson 默认离线拒绝（reject 即最终值，无 .json 链）；但 purpur 现在会先查
 // /latest 取 md5 摘要，而以 purpur 为载体的用例需要走到下载阶段，故对该域名
 // 返回可解析响应。其余上游一律拒绝，保持「未预期的网络调用必暴露」的隔离语义。
+// 升级流程会校验目标版本的 Java 要求，而 Java 探测在真机上扫描 /usr/lib/jvm：
+// 结果随环境变化，还会额外写一次 javaPath（打乱对 InstanceModel.update 的断言）。
+// 本文件不测 Java 校验（那由 upgrade.java-check.test.js 专门覆盖），故固定为「总是满足」。
+vi.mock('../utils/java-detector.js', () => ({
+  getRecommendedJavaVersion: vi.fn(() => '21'),
+  isJavaSatisfied: vi.fn(() => true),
+  findJavaPathStrict: vi.fn(() => null),
+  findJavaPath: vi.fn(() => 'java'),
+  getAllJavaVersions: vi.fn(() => []),
+}));
+
 vi.mock('../utils/http-client.js', () => ({
   httpJson: vi.fn((url) =>
     String(url).includes('/purpur/')

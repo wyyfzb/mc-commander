@@ -75,6 +75,9 @@ const SENSITIVE_READS = [
   'GET /instances/probe/files/content',
   'GET /instances/probe/files/download',
   'GET /instances/probe/logs',
+  // 崩溃报告含系统详情（版本/OS/JVM/内存/CPU）与崩溃现场（可能含玩家坐标），
+  // 与日志同属运维内部信息：只读凭据默认拒绝，这里显式点名以便被删/被放行时立刻可见
+  'GET /instances/probe/crash-report',
   'GET /instances/probe/properties',
   'GET /instances/probe/world',
   'GET /instances/probe/tasks',
@@ -200,11 +203,11 @@ function seedSession() {
 
 describe('路由表枚举本身（结构性前提）', () => {
   it('枚举到全部已注册端点且数量不低于现状（枚举空转会让下面的断言假绿）', () => {
-    // 现网 /api/v1 下 101 个端点（另有 app 级未认证 /health，不在 v1Router 管辖范围）。
+    // 现网 /api/v1 下 104 个端点（另有 app 级未认证 /health，不在 v1Router 管辖范围）。
     // 这个数字是「不许静默减少」的基线：新增端点时必须**显式**改它（新增端点默认对只读
     // 关闭，走的是下方枚举断言；改数字这一步是让「新增了什么」出现在 diff 里）
-    expect(endpoints.length).toBe(101);
-    expect(new Set(endpoints.map((e) => `${e.method} ${e.pattern}`)).size).toBe(101);
+    expect(endpoints.length).toBe(104);
+    expect(new Set(endpoints.map((e) => `${e.method} ${e.pattern}`)).size).toBe(104);
     // 三个公开端点在册（下方豁免逻辑依赖它们存在）
     expect(PUBLIC_V1).toEqual(new Set(['/auth/status', '/auth/login', '/auth/setup']));
   });
@@ -257,7 +260,7 @@ describe('结构性默认拒绝：非白名单端点对只读凭据一律 403', 
     expect(reached.length).toBe(EXPECTED_READONLY_ALLOWED.length);
   });
 
-  it('敏感读逐条 403：文件族 / 日志 / 配置 / 世界 / 备份 / 命令史 / 审计 / 会话 / 任务定义', async () => {
+  it('敏感读逐条 403：文件族 / 日志 / 崩溃报告 / 配置 / 世界 / 备份 / 命令史 / 审计 / 会话 / 任务定义', async () => {
     for (const entry of SENSITIVE_READS) {
       const [method, path] = entry.split(' ');
       const res = await asReadonly(method, API_V1_MOUNT + path);

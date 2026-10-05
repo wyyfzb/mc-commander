@@ -2,8 +2,14 @@
  * 世界/属性域 API 函数（对照服务端 routes/status.js 契约）
  * config 由调用方从 useConnectionStore 传入（与 src/api/players.ts 同模式）。
  */
-import { apiGet, apiPut, type ConnectionConfig } from './client'
-import type { ServerProperties, UpdatePropertiesResponse, WorldInfo } from './types'
+import { apiGet, apiPost, apiPut, type ConnectionConfig } from './client'
+import type {
+  PushChannelState,
+  PushChannelToggleResponse,
+  ServerProperties,
+  UpdatePropertiesResponse,
+  WorldInfo,
+} from './types'
 
 const base = (instanceId: string) => `/api/v1/instances/${instanceId}`
 
@@ -31,4 +37,18 @@ export function apiUpdateProperties(
   props: ServerProperties,
 ) {
   return apiPut<UpdatePropertiesResponse>(`${base(instanceId)}/properties`, config, props)
+}
+
+/**
+ * 推送通道（MSMP）状态（GET /instances/:id/push-channel）。
+ * 单独一个端点而非走 properties：那三项必须**一起写**（只写 enabled 会让服务器起不来），
+ * 通用 PUT 的逐键语义表达不了这个原子约束。
+ */
+export function apiGetPushChannel(config: ConnectionConfig, instanceId: string) {
+  return apiGet<PushChannelState>(`${base(instanceId)}/push-channel`, config)
+}
+
+/** 开/关推送通道（POST /instances/:id/push-channel） */
+export function apiSetPushChannel(config: ConnectionConfig, instanceId: string, enabled: boolean) {
+  return apiPost<PushChannelToggleResponse>(`${base(instanceId)}/push-channel`, config, { enabled })
 }

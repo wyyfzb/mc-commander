@@ -22,6 +22,18 @@ const testState = vi.hoisted(() => ({
 }));
 
 /** 下载流桩：hang 模式永不结束（把升级停在下载阶段），failure 模式立即 error */
+// 升级流程会校验目标版本的 Java 要求。Java 探测在真机上扫描 /usr/lib/jvm，结果随环境
+// 变化，且会额外写一次 javaPath（打乱本文件对 InstanceModel.update 调用次数的断言）。
+// 本文件测的是取消/回滚语义，故固定为「总是满足」；Java 校验本身由
+// upgrade.java-check.test.js 专门覆盖。
+vi.mock('../utils/java-detector.js', () => ({
+  getRecommendedJavaVersion: vi.fn(() => '21'),
+  isJavaSatisfied: vi.fn(() => true),
+  findJavaPathStrict: vi.fn(() => null),
+  findJavaPath: vi.fn(() => 'java'),
+  getAllJavaVersions: vi.fn(() => []),
+}));
+
 vi.mock('../utils/http-client.js', () => ({
   // purpur 现在会先查 /latest 取 md5 摘要；本文件全部用 purpur 作载体，
   // 故该查询必须可解析，否则用例会停在「offline」而非待测阶段
