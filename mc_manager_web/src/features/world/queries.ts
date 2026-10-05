@@ -10,6 +10,7 @@ import { queryKeys } from '@/api/queries'
 import { apiGetProperties, apiGetWorld, apiUpdateProperties } from '@/api/world'
 import { useConnectionStore } from '@/stores/connection'
 import type { ServerProperties } from '@/api/types'
+import { buildDatapackListCommand, parseDatapackList } from '@/lib/mc-datapack'
 
 /** 世界信息（30s 轮询；WS 事件/属性保存后另行失效） */
 export function useWorldInfo(instanceId: string | null) {
@@ -47,5 +48,33 @@ export function useUpdateProperties(instanceId: string | null) {
       void queryClient.invalidateQueries({ queryKey: queryKeys.properties(instanceId ?? '') })
       void queryClient.invalidateQueries({ queryKey: queryKeys.world(instanceId ?? '') })
     },
+  })
+}
+
+/**
+ * 数据包列表（`datapack list` 的命令返回）。
+ *
+ * **不轮询**：数据包的增删只来自本面板发出的命令，动作完成后由调用方 `refetch` 即可；
+ * 轮询等于每次都给服务器发一条命令并解析。
+ *
+ * 命令通道没回执、或返回措辞不认识时**抛错**——显示一个空列表会让用户以为
+ * 「这个实例一个数据包都没有」，那是把「读不到」谎报成「没有」。
+ */
+export function useDatapackList(
+  instanceId: string | null,
+  sendCommand: (command: string) => Promise<string | null>,
+  isReady: boolean,
+) {
+  return useQuery({
+    queryKey: queryKeys.datapacks(instanceId ?? ''),
+    queryFn: async () => {
+      const raw = await sendCommand(buildDatapackListCommand())
+      if (raw == null) throw new Error('命令通道没有返回内容，读不到数据包列表')
+      const parsed = parseDatapackList(raw)
+      if (parsed.unparsed !== null) throw new Error(`无法识别服务端返回：${parsed.unparsed}`)
+      return parsed
+    },
+    enabled: isReady && Boolean(instanceId),
+    retry: false,
   })
 }

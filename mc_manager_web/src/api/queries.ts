@@ -51,6 +51,7 @@ export const queryKeys = {
   world: (id: string) => [...queryKeys.all, 'world', id] as const,
   properties: (id: string) => [...queryKeys.all, 'properties', id] as const,
   crashArtifact: (id: string) => [...queryKeys.all, 'crash-artifact', id] as const,
+  datapacks: (id: string) => [...queryKeys.all, 'datapacks', id] as const,
   auditLogs: (params?: AuditQueryParams) => [...queryKeys.all, 'audit-logs', params ?? {}] as const,
   commandHistory: (params?: AuditQueryParams) =>
     [...queryKeys.all, 'command-history', params ?? {}] as const,
