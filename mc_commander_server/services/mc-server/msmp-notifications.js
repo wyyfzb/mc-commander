@@ -12,6 +12,11 @@
  *   否则会像我第一次探针那样直接 `undefined.slice()` 崩掉。
  * - `minecraft:server/save` 需**一个必填布尔** `flush`（`params: [true]`），
  *   传 `[]` 会回 `Invalid params: Expected exactly one element`。
+ * - **通知的参数是「位置参数数组」**，不是具名对象：实测一次真实世界升级推来
+ *   `world/upgrade_started`（无 params）、`world/upgrade_progress`（**`params: [0]`**）、
+ *   `world/upgrade_finished`（无 params）。这一点我最初读 `rpc.discover` 时理解错了——
+ *   它的 `params: [{name:'progress', …}]` 是**位置**列表，不是对象字段表；
+ *   照对象读会**永远取到 null**（进度条恒空），而且单测用自造的 `{progress: 0.5}` 还测不出来。
  * - `rpc.discover` 实测列出 89 个方法，其中通知 25 个（本模块只接其中 8 个）。
  *
  * **一期白名单＝实测确认「stdout 没有对应用户可见事件」的那些**。这个范围比原计划窄，
@@ -44,6 +49,15 @@ export const MSMP_NOTIFICATION_ALLOWLIST = new Set([
   // 停机：stdout 侧解析器没接，故也不重复
   'minecraft:notification/server/stopping',
 ]);
+
+/**
+ * 取位置参数数组里的第一个数字（MSMP 的参数是位置形态，见文件头）。
+ * 非数组 / 首元素不是数字 → null：宁可显示「进度未知」，也不要编一个数出来。
+ */
+function firstNumberParam(params) {
+  if (!Array.isArray(params)) return null;
+  return typeof params[0] === 'number' ? params[0] : null;
+}
 
 /** 世界格式升级的 4 个通知 → 归一化状态（消费方不必认识方法名） */
 const WORLD_UPGRADE_STATES = {
@@ -227,7 +241,9 @@ export function _msmpNotifHandleMessage(data) {
       state,
       // 实测只有 world/upgrade_progress 带 { progress: 0..1 }；其余三者的 params 形态
       // 未实测，故按「是 number 就取、否则 null」处理，不假设字段名
-      progress: typeof params?.progress === 'number' ? params.progress : null,
+      // 实测形态是**位置参数数组**：`world/upgrade_progress` 的 params 为 `[0]`。
+      // 不写成 `params.progress`——那样恒取到 undefined（探针在真机上就是这么翻车的）
+      progress: firstNumberParam(params),
     });
   }
 

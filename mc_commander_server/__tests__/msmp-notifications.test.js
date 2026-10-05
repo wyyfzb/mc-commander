@@ -189,7 +189,7 @@ describe('通知处理：白名单与形态', () => {
       // 每个 case 用新实例：同一个实例上累积多次发送后，find 会命中上一轮的旧事件
       const inst = makeInstance();
       inst._msmpNotifHandleMessage(
-        Buffer.from(JSON.stringify({ jsonrpc: '2.0', method, params: { progress: 0.5 } })),
+        Buffer.from(JSON.stringify({ jsonrpc: '2.0', method, params: [0.5] })),
       );
       expect(inst.emitted.find((e) => e.name === 'worldUpgrade')).toEqual({
         name: 'worldUpgrade',
@@ -199,10 +199,14 @@ describe('通知处理：白名单与形态', () => {
   });
 
   it.each([
-    ['params 键整个缺席（实测形态）', undefined, null],
-    ['progress 是字符串（不算数）', { progress: '0.5' }, null],
-    ['progress 是 0（合法进度，不能当 falsy 丢掉）', { progress: 0 }, 0],
-    ['params 不是对象', 'nope', null],
+    // 实机形态是**位置参数数组**（`params: [0]`）；写成对象会让进度恒为 null，
+    // 而单测若也跟着自造对象就永远发现不了——这组夹具按真机原文来
+    ['真机形态 [0]', [0], 0],
+    ['真机形态 [0.42]', [0.42], 0.42],
+    ['params 键整个缺席（started/finished 的实测形态）', undefined, null],
+    ['数组首元素不是数字', ['0.5'], null],
+    ['空数组', [], null],
+    ['不是数组（对象形态，真机上不出现）', { progress: 0.5 }, null],
   ])('progress 取值：%s', (_label, params, expected) => {
     const inst = makeInstance();
     inst._msmpNotifHandleMessage(

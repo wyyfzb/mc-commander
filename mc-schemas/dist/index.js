@@ -6296,9 +6296,13 @@ const wsWeatherPayloadSchema = object({ weather: _enum([
 * ⚠️ 与 `upgradeProgress` 不是一回事：那个是**面板自己的 jar/MC 版本升级**；
 * 本事件是服务端升级**世界存档格式**。两者刻意不同名——同名会让两个来源互相打架。
 *
-* 载荷只归一化出 `state` 与 `progress`：实测 `world/upgrade_progress` 的 params 是
-* `{ progress: number }`（0..1，服务端限流 1 条/秒），其余三个事件的 params 形态**未实测**，
-* 故按「有 number 就取、没有就 null」处理，不假设字段名。
+* 载荷只归一化出 `state` 与 `progress`。**`progress` 是 0..1 的分数（不是百分数）**，
+* 取不到时为 null。
+*
+* 实机实测（MC 26.3，一次真实的 1.20.4→26.3 世界格式升级）：`world/upgrade_started`
+* 与 `world/upgrade_finished` 无 params，`world/upgrade_progress` 的 params 是
+* **位置参数数组 `[0]`**（服务端限流 1 条/秒）——注意不是 `{ progress: 0 }`。
+* `world/upgrade_failed` 未触发，其 params 形态未实测（消费方按 null 处理即可）。
 */
 const wsWorldUpgradePayloadSchema = object({
 	state: _enum([
