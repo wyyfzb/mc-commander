@@ -88,7 +88,7 @@ export function McClockCard() {
   /* eslint-enable react/refs, react/purity */
   const weather = status?.weather ?? null
   const worldDay = status?.worldDay ?? null
-  const rcon = status?.isRconConnected ?? false
+  const rcon = status?.capabilities.rcon ?? false
   const canControl = isRunning && rcon && tick != null
 
   // 乐观更新窗口（对齐 Flutter 版 _weatherOptimisticUntil/_timeOptimisticUntil）：

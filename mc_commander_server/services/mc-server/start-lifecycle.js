@@ -373,6 +373,10 @@ export function _finalizeStartup() {
 
   this.emit('status', { event: 'started' });
 
+  // MSMP 通知面（一期）：进程起来了就守着通道。此刻 MSMP 可能还没绑好端口，
+  // 由该域的指数退避重连兜住，不必在这里等。
+  this._msmpNotifStart();
+
   // 每 60 秒自动保存在线玩家数据
   this._saveTimer = setInterval(() => {
     for (const [name, player] of this.players) {

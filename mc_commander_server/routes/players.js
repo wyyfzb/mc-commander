@@ -3,7 +3,12 @@ import fs from 'fs';
 import path from 'path';
 import { error, ErrorCodes } from '../utils/response.js';
 import { BanModel } from '../db/index.js';
-import { getTotalPlayTime } from '../utils/player-utils.js';
+import {
+  getTotalPlayTime,
+  playerNameRejectionReason,
+  shadowProfilePath,
+} from '../utils/player-utils.js';
+import { isPathContained } from '../utils/fs-utils.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
 import {
   banRecordListSchema,
@@ -17,8 +22,8 @@ import { validateBody, validatedSuccess } from '../middleware/validate.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { logger } from '../utils/logger.js';
 
-// Minecraft 玩家名规范：3-16 位字母数字下划线
-const PLAYER_NAME_REGEX = /^[A-Za-z0-9_]{3,16}$/;
+// 玩家名判据见 utils/player-utils.js 的 isSafePlayerName：**安全性质**，不是正版名合法性
+// （旧的正版名正则会把 Floodgate 前缀名/中文名等**服务端本可寻址**的名字一并挡掉）
 
 // ban-ip 目标必须是合法 IPv4 地址
 const IP_REGEX = /^(\d{1,3}\.){3}\d{1,3}$/;
@@ -48,10 +53,13 @@ export function parseDuration(duration) {
 // 校验玩家名参数中间件
 function validatePlayerName(req, res, next) {
   const playerName = req.params.player;
-  if (!playerName || !PLAYER_NAME_REGEX.test(playerName)) {
+  const reason = playerNameRejectionReason(playerName);
+  if (reason) {
+    // 带上具体原因：这些名字里有一部分是**服务端命令根本寻址不到**的（含空格/方括号），
+    // 只说「非法名字」会让用户以为是自己写错了
     return res
       .status(400)
-      .json(error(ErrorCodes.VALIDATION_ERROR, `Invalid player name: ${playerName}`));
+      .json(error(ErrorCodes.VALIDATION_ERROR, `Invalid player name: ${playerName}（${reason}）`));
   }
   next();
 }
@@ -126,8 +134,8 @@ export function createPlayerRoutes(serverManager) {
           levelName: instance.properties?.['level-name'],
         });
 
-        // 优先使用自行追踪的游戏时长
-        const savedData = loadPlayerData(instance.serverPath, name) || {};
+        // 优先使用自行追踪的游戏时长（uuid 已由上面的 known 解析过，传下去省一次读盘）
+        const savedData = loadPlayerData(instance.serverPath, name, known.uuid) || {};
         if (savedData.totalPlayTime && savedData.totalPlayTime > totalPlayTime) {
           totalPlayTime = savedData.totalPlayTime;
         }
@@ -244,7 +252,7 @@ export function createPlayerRoutes(serverManager) {
         });
 
         // 从持久化文件加载离线数据（优先使用自行追踪的游戏时长）
-        const savedData = loadPlayerData(instance.serverPath, name) || {};
+        const savedData = loadPlayerData(instance.serverPath, name, knownInfo.uuid) || {};
         if (savedData.totalPlayTime && savedData.totalPlayTime > totalPlayTime) {
           totalPlayTime = savedData.totalPlayTime;
         }
@@ -474,9 +482,14 @@ export function createPlayerRoutes(serverManager) {
     }),
   );
 
-  function loadPlayerData(serverPath, playerName) {
+  // 影子档案键与实例方法 _loadPlayerData 同源（UUID，不是玩家名），
+  // 否则「按 UUID 写、按名字读」会让档案时有时无。
+  function loadPlayerData(serverPath, playerName, uuid) {
     try {
-      const filePath = path.join(serverPath, 'playerdata', `${playerName}.json`);
+      const dir = path.join(serverPath, 'playerdata');
+      const filePath = shadowProfilePath({ serverPath, playerName, uuid });
+      // usercache 是本机文件、可被篡改，落点仍须自证包含关系
+      if (!isPathContained(dir, filePath)) return null;
       if (!fs.existsSync(filePath)) return null;
       return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
     } catch {

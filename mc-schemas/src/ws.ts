@@ -3,9 +3,9 @@ import { z } from 'zod'
 export const WS_EVENT_TYPES = [
   'log',
   'status',
-  'tpsUpdate',
   'performanceUpdate',
   'weatherUpdate',
+  'worldUpgrade',
   'playerStatsUpdate',
   'playerJoin',
   'playerLeave',
@@ -98,6 +98,25 @@ export const wsWeatherPayloadSchema = z.object({
   weather: z.enum(['clear', 'rain', 'thunder']),
 })
 
+/**
+ * MC **世界格式升级**进度（`world/upgrade_*` 通知）。
+ *
+ * ⚠️ 与 `upgradeProgress` 不是一回事：那个是**面板自己的 jar/MC 版本升级**；
+ * 本事件是服务端升级**世界存档格式**。两者刻意不同名——同名会让两个来源互相打架。
+ *
+ * 载荷只归一化出 `state` 与 `progress`。**`progress` 是 0..1 的分数（不是百分数）**，
+ * 取不到时为 null。
+ *
+ * 实机实测（MC 26.3，一次真实的 1.20.4→26.3 世界格式升级）：`world/upgrade_started`
+ * 与 `world/upgrade_finished` 无 params，`world/upgrade_progress` 的 params 是
+ * **位置参数数组 `[0]`**（服务端限流 1 条/秒）——注意不是 `{ progress: 0 }`。
+ * `world/upgrade_failed` 未触发，其 params 形态未实测（消费方按 null 处理即可）。
+ */
+export const wsWorldUpgradePayloadSchema = z.object({
+  state: z.enum(['started', 'progress', 'finished', 'failed']),
+  progress: z.number().nullable(),
+})
+
 export const wsBackupPayloadSchema = z
   .object({
     id: z.number().optional(),
@@ -141,5 +160,6 @@ export type WsLogPayload = z.infer<typeof wsLogPayloadSchema>
 export type WsStatusEventPayload = z.infer<typeof wsStatusEventPayloadSchema>
 export type WsPlayerEventPayload = z.infer<typeof wsPlayerEventPayloadSchema>
 export type WsWeatherPayload = z.infer<typeof wsWeatherPayloadSchema>
+export type WsWorldUpgradePayload = z.infer<typeof wsWorldUpgradePayloadSchema>
 export type WsBackupPayload = z.infer<typeof wsBackupPayloadSchema>
 export type WsBackupProgressPayload = z.infer<typeof wsBackupProgressPayloadSchema>

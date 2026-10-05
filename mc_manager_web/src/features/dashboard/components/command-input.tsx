@@ -110,7 +110,7 @@ export function CommandInput() {
   const config = useConnectionStore()
   const instanceId = useServerStore((s) => s.instanceId)
   const isRunning = useServerStore((s) => s.status?.isRunning ?? false)
-  const isRconConnected = useServerStore((s) => s.status?.isRconConnected ?? false)
+  const isRconConnected = useServerStore((s) => s.status?.capabilities.rcon ?? false)
   const pushEntry = useTerminalStore((s) => s.pushEntry)
   const [value, setValue] = useState('')
   const [presets, setPresets] = useState<string[]>(readPresets)

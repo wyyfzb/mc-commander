@@ -15,6 +15,7 @@ import { createMetricsRoutes } from './metrics.js';
 import { createAuditRoutes } from './audit.js';
 import { createWebhookRoutes } from './webhooks.js';
 import { createUpgradeRoutes } from './upgrade.js';
+import { createMsmpRoutes } from './msmp.js';
 import { createPluginRoutes } from './plugins.js';
 import { createAuthRoutes } from './auth.js';
 import { success } from '../utils/response.js';
@@ -56,6 +57,7 @@ export function createApiV1Router(serverManager, taskScheduler) {
   v1Router.use('/', createAuditRoutes());
   v1Router.use('/', createWebhookRoutes());
   v1Router.use('/', createUpgradeRoutes(serverManager));
+  v1Router.use('/', createMsmpRoutes(serverManager));
   v1Router.use('/', createPluginRoutes(serverManager));
   v1Router.use('/', createAuthRoutes());
 

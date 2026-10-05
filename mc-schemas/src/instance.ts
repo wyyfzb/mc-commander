@@ -22,11 +22,24 @@ export const instanceUpdatePayloadSchema = z.object({
   startCommand: z.string().nullable().optional(),
 })
 
+/**
+ * 实例可用通道。分两个布尔而非一个「管理通道」：两者的能力面不同，
+ * 差异会被读成故障——RCON 能执行控制台命令，MSMP 不能（无 run_command 方法），
+ * 但 MSMP 能给出结构化事实。UI 据各自的可用来决定「哪些操作可行」。
+ */
+export const instanceCapabilitiesSchema = z.object({
+  // RCON：命令面唯一出口。判据是配置齐全且实例在运行（RCON 无握手概念）
+  rcon: z.boolean(),
+  // MSMP：结构化查询面（1.21.9+）。判据是最近一次查询实测成功——端口默认可随机、
+  // 链路可被反代，配置推不出可用性
+  msmp: z.boolean(),
+})
+
 export const instanceStatusSchema = z.object({
   id: z.string(),
   name: z.string(),
   isRunning: z.boolean(),
-  isRconConnected: z.boolean(),
+  capabilities: instanceCapabilitiesSchema,
   autoRestart: z.boolean(),
   autoStart: z.boolean(),
   circuitBreakerTripped: z.boolean(),
@@ -215,6 +228,46 @@ export const instanceEulaRequestBodySchema = z.object({
   }),
 })
 
+/**
+ * 推送通道（MSMP）状态与开关。
+ *
+ * 为什么要有这个专用端点而不是把 `management-server-*` 加进 properties 白名单：
+ * 这三项**必须一起写**——只写 `enabled=true` 而 TLS 保持默认 true（keystore 默认为空）
+ * 会让服务器**再也起不来**（实测 `TLS is enabled but keystore is not configured`）。
+ * 通用 PUT 是「逐键提交」的语义，天然表达不了这个原子约束。
+ */
+export const pushChannelStateSchema = z.object({
+  /** 当前是否已开启（读磁盘的 management-server-enabled） */
+  enabled: z.boolean(),
+  /** 是否启用了 TLS（读磁盘；面板开启时会确保它与 keystore 的组合不会让服务器起不来） */
+  tlsEnabled: z.boolean(),
+  /** 当前绑定的主机（MC 默认 localhost＝仅本机；非本机时界面应提示暴露面） */
+  host: z.string(),
+  /** 当前端口（0＝由服务端随机分配，实际端口见启动播报行） */
+  port: z.number(),
+  /** secret 是否已配置且合法（40 位字母数字）；不返回内容——它是凭据 */
+  secretConfigured: z.boolean(),
+})
+
+/** POST /instances/:id/push-channel 请求体 */
+export const pushChannelRequestBodySchema = z.object({
+  enabled: z.boolean({
+    error: () => 'enabled must be a boolean',
+  }),
+})
+
+export const pushChannelToggleResponseSchema = z.object({
+  enabled: z.boolean(),
+  /** 服务器正在运行时需重启才生效（MSMP 只在启动时读取） */
+  restartRequired: z.boolean(),
+  /** 本次是否新生成了 secret（仅用于给用户一句如实说明，不回传内容） */
+  secretGenerated: z.boolean(),
+})
+
+export type PushChannelState = z.infer<typeof pushChannelStateSchema>
+export type PushChannelRequestBody = z.infer<typeof pushChannelRequestBodySchema>
+export type PushChannelToggleResponse = z.infer<typeof pushChannelToggleResponseSchema>
+
 export type InstanceSettingsRequestBody = z.infer<typeof instanceSettingsRequestBodySchema>
 export type InstanceStartRequestBody = z.infer<typeof instanceStartRequestBodySchema>
 export type InstanceCommandRequestBody = z.infer<typeof instanceCommandRequestBodySchema>
@@ -249,3 +302,50 @@ export const instanceDeleteResponseSchema = z.object({
 
 export type InstanceDeleteRequestBody = z.infer<typeof instanceDeleteRequestBodySchema>
 export type InstanceDeleteResponse = z.infer<typeof instanceDeleteResponseSchema>
+
+/**
+ * GET /instances/:id/crash-report 成功响应。
+ *
+ * 崩溃诊断产物有**两类**（MC 崩溃报告与 JVM 崩溃日志），且解析出的字段随产物类型与
+ * 崩溃时点而异（如 `-- Affected level --` 只在推进到世界/刻循环的崩溃里出现），
+ * 故解析结果统一表达为**有序的 label/value 列表**而不是固定字段：
+ * 既能原样呈现「已核实字段」，也不必为不存在的段造空键。
+ *
+ * `parseError` 非空表示如实降级（读失败 / 格式不识别）——此时 `excerpt` 仍可能可用，
+ * 界面不得把它当「没有报错」。
+ */
+export const crashArtifactFieldSchema = z.object({
+  label: z.string(),
+  value: z.string(),
+})
+
+export const crashArtifactSchema = z.object({
+  /** 是否真的取到了产物（false 表示枚举/读取失败，与「从未崩溃过」的 null 不同） */
+  available: z.boolean(),
+  /** 产物类型：crash-report = MC 崩溃报告，jvm-crash = hs_err_pid*.log */
+  kind: z.enum(['crash-report', 'jvm-crash']).optional(),
+  fileName: z.string().optional(),
+  mtimeMs: z.number().optional(),
+  sizeBytes: z.number().optional(),
+  /** 已核实字段（有序）；解析失败时为空数组 */
+  summary: z.array(crashArtifactFieldSchema).optional(),
+  /** 崩溃报告：顶层异常行 */
+  exception: z.string().nullable().optional(),
+  /** 崩溃报告：顶层栈帧（文本） */
+  stack: z.array(z.string()).optional(),
+  /** 崩溃报告：`Caused by:` 链 */
+  causedBy: z.array(z.string()).optional(),
+  /** 崩溃报告：`-- <段名> --` 段名列表 */
+  sections: z.array(z.string()).optional(),
+  /** JVM 崩溃日志：故障行 */
+  failure: z.array(z.string()).optional(),
+  /** JVM 崩溃日志：问题帧（OOM 型没有该段） */
+  problematicFrame: z.string().nullable().optional(),
+  /** 头部节选原文（未解析部分整体呈现） */
+  excerpt: z.string().optional(),
+  /** 如实降级的原因；null/缺省表示解析正常 */
+  parseError: z.string().nullable().optional(),
+})
+
+export type CrashArtifactField = z.infer<typeof crashArtifactFieldSchema>
+export type CrashArtifact = z.infer<typeof crashArtifactSchema>

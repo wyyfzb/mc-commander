@@ -8,6 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useServerStore } from '@/stores/server'
 import { formatRelativeTime, formatStartTime, formatUptime } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { TPS_HEALTHY_MIN, tpsLevel } from '@/lib/mc-tps'
 
 /**
  * 仪表盘统计卡（顶部四卡 + 右栏在线玩家/运行信息）
@@ -15,11 +16,12 @@ import { cn } from '@/lib/utils'
  * 右栏在线玩家卡：整行可点直达玩家详情（?player= 深链）
  */
 
-/** TPS 阈值（≥19 健康 / 15-19 卡顿 / <15 严重卡顿） */
+/** TPS 文字色：分级判据取自 mc-tps 的唯一声明源，本函数只负责分级 → 类名 */
 export function tpsColor(tps: number | null, isRunning: boolean): string {
   if (!isRunning || tps == null) return 'text-mcs-text-muted'
-  if (tps >= 19) return 'text-mcs-success-fg'
-  if (tps >= 15) return 'text-mcs-warning-fg'
+  const level = tpsLevel(tps)
+  if (level === 'healthy') return 'text-mcs-success-fg'
+  if (level === 'warning') return 'text-mcs-warning-fg'
   return 'text-mcs-error-fg'
 }
 
@@ -70,7 +72,7 @@ export function BigStatCards({
 
   const isRunning = status?.isRunning ?? false
   const tps = status?.tps ?? null
-  const healthy = isRunning && (tps ?? 0) >= 19
+  const healthy = isRunning && (tps ?? 0) >= TPS_HEALTHY_MIN
 
   // 本卡是**整机**资源口径：实例状态里的 memoryUsage 是进程 RSS、cpuUsage 是进程 CPU%，
   // 与整机口径不同源，不能互为后备（混用会得出「进程内存 / 整机总量」这类失真比例）。
@@ -265,7 +267,7 @@ export function PlayersCard({ isLoading = false }: { isLoading?: boolean }) {
   const status = useServerStore((s) => s.status)
   const navigate = useNavigate()
   const isRunning = status?.isRunning ?? false
-  const rconConnected = status?.isRconConnected ?? false
+  const rconConnected = status?.capabilities.rcon ?? false
   const online = status?.playerCount ?? 0
   const max = status?.maxPlayers ?? 20
   const opCount = status?.opCount ?? 0

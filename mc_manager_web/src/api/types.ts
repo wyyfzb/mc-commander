@@ -28,6 +28,7 @@ export type {
   LogEntry,
 } from '@mc-commander/schemas'
 export type { InstanceDeleteRequestBody, InstanceDeleteResponse } from '@mc-commander/schemas'
+export type { CrashArtifact, CrashArtifactField } from '@mc-commander/schemas'
 
 // ── 天气（从 player 模块导出） ──
 export type { WeatherType } from '@mc-commander/schemas'
@@ -81,6 +82,13 @@ export type {
   WorldInfo,
   ServerProperties,
   UpdatePropertiesResponse,
+} from '@mc-commander/schemas'
+
+// ── 推送通道（MSMP）──
+export type {
+  PushChannelState,
+  PushChannelRequestBody,
+  PushChannelToggleResponse,
 } from '@mc-commander/schemas'
 
 // ── 文件 ──

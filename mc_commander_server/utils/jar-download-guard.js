@@ -15,6 +15,66 @@ import crypto from 'crypto';
 import fs from 'fs';
 import { AppError, ErrorCodes } from './response.js';
 
+/**
+ * 各服务端类型允许的下载域（API 域与文件域都列，调用方按类型取子集）。
+ *
+ * 存在的理由：下载 URL **来自上游响应**（vanilla 的 `downloads.server.url`、paper v3 的
+ * `downloadInfo.url`、Piston 详情的 `downloads.server.url`），
+ * 上游被污染即可让面板去任意主机取一个 jar 并落进实例目录。故实际发起请求前断言域。
+ *
+ * **按类型取子集而不是共用一个大集合**：升级只支持 vanilla/paper/purpur，若给它并集，
+ * 一个被污染的 Piston 响应就能指向 forge 的文件域而被放行——那是白名单被悄悄放宽。
+ *
+ * 域来源为静态核对（本仓常量 + 各上游的 URL 模板 + 实测响应），
+ * 少一个域会让该加载器**部署直接失败**，故每个域都附了来处。
+ */
+export const DOWNLOAD_HOSTS_BY_TYPE = {
+  vanilla: [
+    'piston-meta.mojang.com', // 版本清单与详情
+    'piston-data.mojang.com', // 服务端 jar 实际文件域（详情响应给出）
+  ],
+  paper: [
+    'fill.papermc.io', // v3 API
+    'fill-data.papermc.io', // v3 下载 URL 的实际域（实测响应）
+  ],
+  purpur: ['api.purpurmc.org'], // API 与文件同一域
+  fabric: ['meta.fabricmc.net'], // API 与 server jar 同一域
+  forge: [
+    'files.minecraftforge.net', // promotions API
+    'maven.minecraftforge.net', // 安装器文件域
+  ],
+};
+
+/**
+ * 取若干类型允许的域并集。
+ * @param {string[]} types
+ * @returns {Set<string>}
+ */
+export function allowedDownloadHosts(types) {
+  const allowed = new Set();
+  for (const type of types) {
+    for (const host of DOWNLOAD_HOSTS_BY_TYPE[type] || []) allowed.add(host);
+  }
+  return allowed;
+}
+
+/**
+ * 断言下载 URL 的 host 在给定白名单内。畸形 URL 与非白名单域一律 VALIDATION_ERROR。
+ * @param {string} rawUrl
+ * @param {Set<string>} allowedHosts
+ */
+export function assertAllowedDownloadHost(rawUrl, allowedHosts) {
+  let host;
+  try {
+    host = new URL(rawUrl).hostname;
+  } catch {
+    throw new AppError(ErrorCodes.VALIDATION_ERROR, `Invalid download URL: ${rawUrl}`);
+  }
+  if (!allowedHosts.has(host)) {
+    throw new AppError(ErrorCodes.VALIDATION_ERROR, `Download host not allowed: ${host}`);
+  }
+}
+
 /// JAR 下载体积上限（字节）：主流服务端 jar 均在 50MB 内，放宽至 512MB
 /// 兼容大型核心包；超过即视为恶意/损坏上游。
 export const JAR_DOWNLOAD_MAX_BYTES = 512 * 1024 * 1024;

@@ -165,10 +165,10 @@ describe('McSocket（对照服务端 websocket.js 契约，首帧鉴权）', () 
 
     const handler = vi.fn()
     const off = socket.on(handler)
-    ws.receive({ type: 'tpsUpdate', instanceId: 'i', data: { tps: 20 } })
+    ws.receive({ type: 'performanceUpdate', instanceId: 'i', data: { tps: 20 } })
     expect(handler).toHaveBeenCalledTimes(1)
     off()
-    ws.receive({ type: 'tpsUpdate', instanceId: 'i', data: { tps: 19 } })
+    ws.receive({ type: 'performanceUpdate', instanceId: 'i', data: { tps: 19 } })
     expect(handler).toHaveBeenCalledTimes(1)
   })
 

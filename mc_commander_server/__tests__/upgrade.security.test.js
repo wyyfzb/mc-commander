@@ -48,6 +48,17 @@ vi.mock('../db/index.js', () => ({
   InstanceModel: { update: vi.fn() },
 }));
 
+// Java 探测在真机上扫描 /usr/lib/jvm，结果随环境变化。本文件测的是升级的安全加固
+// （mcVersion 白名单/路径收口/下载域），不该因机器上装没装某个 JDK 而红绿不定，
+// 故固定为「总是满足」——Java 校验本身由 upgrade.java-check.test.js 专门覆盖。
+vi.mock('../utils/java-detector.js', () => ({
+  getRecommendedJavaVersion: vi.fn(() => '21'),
+  isJavaSatisfied: vi.fn(() => true),
+  findJavaPathStrict: vi.fn(() => null),
+  findJavaPath: vi.fn(() => 'java'),
+  getAllJavaVersions: vi.fn(() => []),
+}));
+
 vi.mock('../utils/audit.js', () => ({
   recordAudit: vi.fn(),
   AuditActions: {
@@ -258,6 +269,33 @@ describe('服务层路径收口（真实临时目录 + 真实 fs）', () => {
       jarFile: 'server-1.21.4.jar',
       mcVersion: '1.21.4',
     });
+  });
+
+  it('升级不支持的类型域被拒：白名单按类型收窄，不是全类型并集', async () => {
+    const serverManager = createMockServerManager();
+    const service = new UpgradeService(serverManager);
+
+    // vanilla 升级，但污染的响应把下载指向 forge 的文件域。
+    // 若白名单被写成「全类型并集」，这里会被放行——故该用例钉住「逐类型取子集」。
+    jsonImpl.current = (url) => {
+      if (url.includes('version_manifest')) {
+        return Promise.resolve({
+          versions: [
+            { id: '1.21.4', type: 'release', url: 'https://piston-meta.mojang.com/v.json' },
+          ],
+        });
+      }
+      return Promise.resolve({
+        downloads: {
+          server: { url: 'https://maven.minecraftforge.net/forge/1.21.4-installer.jar' },
+        },
+      });
+    };
+
+    await expect(service.upgrade('inst-1', '1.21.4', 'vanilla')).rejects.toThrow(
+      /Download host not allowed: maven\.minecraftforge\.net/,
+    );
+    expect(fs.readdirSync(tmpDir)).toEqual([]);
   });
 
   it('全链路成功：白名单域下载落盘在实例目录内，jarFile 入库值合规', async () => {

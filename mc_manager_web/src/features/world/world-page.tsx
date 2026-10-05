@@ -24,6 +24,8 @@ import { WorldInfoCard } from './components/world-info-card'
 import { DimensionCards } from './components/dimension-cards'
 import { PropertiesPanel } from './components/properties-panel'
 import { GamerulePanel } from './components/gamerule-panel'
+import { DatapackPanel } from './components/datapack-panel'
+import { PushChannelCard } from './components/push-channel-card'
 import { useServerProperties, useUpdateProperties, useWorldInfo } from './queries'
 import { InstanceRequiredState } from '@/features/instances/components/instance-required-state'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
@@ -32,7 +34,7 @@ import { PageHeader } from '@/components/mcs/page-header'
 import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router'
 
-type WorldTab = 'properties' | 'gamerule'
+type WorldTab = 'properties' | 'gamerule' | 'datapack'
 
 export function WorldPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -53,12 +55,13 @@ export function WorldPage() {
     return <InstanceRequiredState />
   }
 
-  const isRconConnected = statusQuery.data?.isRconConnected ?? false
+  const isRconConnected = statusQuery.data?.capabilities.rcon ?? false
   const mcVersion = statusQuery.data?.mcVersion ?? ''
 
   /** 当前 Tab（URL 深链接初始化；非法值回退 properties） */
   const tabParam = searchParams.get('tab')
-  const activeTab: WorldTab = tabParam === 'gamerule' ? 'gamerule' : 'properties'
+  const activeTab: WorldTab =
+    tabParam === 'gamerule' || tabParam === 'datapack' ? tabParam : 'properties'
   const setActiveTab = (tab: WorldTab) => {
     const next = new URLSearchParams(searchParams)
     if (tab === 'properties') next.delete('tab')
@@ -165,19 +168,27 @@ export function WorldPage() {
               <TabsTrigger value="gamerule" className="h-10 px-3 text-mcs-sm after:bg-mcs-accent">
                 游戏规则
               </TabsTrigger>
+              <TabsTrigger value="datapack" className="h-10 px-3 text-mcs-sm after:bg-mcs-accent">
+                数据包
+              </TabsTrigger>
             </TabsList>
             <TabsContent
               value="properties"
               className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4"
             >
-              <PropertiesPanel
-                properties={propertiesQuery.data}
-                isLoading={propertiesQuery.isLoading}
-                onSave={handleSaveProperties}
-                onEditingChange={setPropertiesEditing}
-                isRunning={isRunning}
-                onRestart={() => handleRestart()}
-              />
+              {/* 推送通道写在属性页签内：它写的就是 server.properties 里的键，
+                  而属性表把这几项渲染成只读行——开关放在同一屏，用户才不必去手改文件 */}
+              <div className="flex flex-col gap-4">
+                <PushChannelCard instanceId={instanceId} isRunning={isRunning} />
+                <PropertiesPanel
+                  properties={propertiesQuery.data}
+                  isLoading={propertiesQuery.isLoading}
+                  onSave={handleSaveProperties}
+                  onEditingChange={setPropertiesEditing}
+                  isRunning={isRunning}
+                  onRestart={() => handleRestart()}
+                />
+              </div>
             </TabsContent>
             <TabsContent
               value="gamerule"
@@ -186,6 +197,16 @@ export function WorldPage() {
               <GamerulePanel
                 instanceId={instanceId}
                 mcVersion={mcVersion}
+                isRconConnected={isRconConnected}
+                onSendCommand={handleSendCommand}
+              />
+            </TabsContent>
+            <TabsContent
+              value="datapack"
+              className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4"
+            >
+              <DatapackPanel
+                instanceId={instanceId}
                 isRconConnected={isRconConnected}
                 onSendCommand={handleSendCommand}
               />

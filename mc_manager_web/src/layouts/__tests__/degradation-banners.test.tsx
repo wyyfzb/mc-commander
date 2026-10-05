@@ -67,7 +67,7 @@ describe('DegradationBanners', () => {
     useServerStore.setState({
       socketConnected: true,
       hasConnectedOnce: true,
-      status: { isRunning: true, isRconConnected: true } as never,
+      status: { isRunning: true, capabilities: { rcon: true, msmp: false } } as never,
     })
     useConnectionStore.setState({ status: 'ready' })
     useDeployStore.getState().resetDeploy()
@@ -127,7 +127,7 @@ describe('DegradationBanners', () => {
 
   it('RCON 未连接（运行中）：warning 横幅写明服务器侧动作，不给做不到的出口', () => {
     useServerStore.setState({
-      status: { isRunning: true, isRconConnected: false } as never,
+      status: { isRunning: true, capabilities: { rcon: false, msmp: false } } as never,
     })
     renderBanners()
     expect(screen.getByText(/RCON 未连接/)).toBeInTheDocument()

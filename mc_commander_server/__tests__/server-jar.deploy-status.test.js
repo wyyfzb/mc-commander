@@ -33,18 +33,6 @@ vi.mock('../config.js', async () => {
   return { default: { serversDir: testState.serversDir } };
 });
 
-vi.mock('minecraft-core', () => ({
-  MinecraftServerManager: class {
-    async getVersions() {
-      return [];
-    }
-    async getLatestBuild() {
-      return {};
-    }
-  },
-  NodeAdapter: class {},
-}));
-
 vi.mock('../utils/java-detector.js', () => ({
   getRecommendedJavaVersion: vi.fn(() => '21'),
   findJavaPath: vi.fn(() => '/usr/bin/java'),

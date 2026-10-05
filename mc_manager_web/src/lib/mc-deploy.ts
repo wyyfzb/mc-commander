@@ -43,10 +43,19 @@ export function recommendedJavaVersion(mcVersion: string | null | undefined): st
 }
 
 /**
- * 版本列表本地缓存 fallback（硬编码）
- * 远程版本服务不可用时仍可部署；默认首个 26.2
+ * 版本列表本地兜底（**快照**，按下标降序的人工选集，不是完整列表）。
+ *
+ * 仅在「版本端点请求失败」时使用（`deploy-dialog.tsx`：`versionsQuery.isError` 才取它），
+ * 让离线/上游故障时仍能部署；正常情况下版本列表的唯一事实源是端点的 Piston manifest。
+ *
+ * ⚠️ **它会随发行版前进而陈旧**：内容是本表的快照，新版本发布后不会自动出现。
+ * 判据是「首个条目＝当前最新正式版」——快照日期见下；**大版本发布后需手工刷新本表**。
+ * `mc-deploy.fallback-versions.test.ts` 钉住排序/去重/格式，避免它悄悄劣化成第二事实源。
+ *
+ * 快照日期：2026-10-05（当时最新正式版为 26.3，取自 Piston manifest 的 `latest.release`）
  */
 export const FALLBACK_VERSIONS = [
+  '26.3',
   '26.2',
   '26.1',
   '1.21.4',

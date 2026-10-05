@@ -4,9 +4,16 @@ import fs from 'fs';
 import { spawn } from 'child_process';
 import crypto from 'crypto';
 import { httpJson, httpStream } from '../utils/http-client.js';
-import { MinecraftServerManager, NodeAdapter } from 'minecraft-core';
+import { listVanillaReleases, resolveVanillaDownload } from '../services/vanilla-manifest.js';
+import {
+  listFabricGameVersions,
+  listPurpurVersions,
+  resolveFabricDownload,
+  resolveForgeInstallerDownload,
+  resolvePurpurDownload,
+} from '../services/loader-upstreams.js';
 import config from '../config.js';
-import { success, error, ErrorCodes } from '../utils/response.js';
+import { success, error, ErrorCodes, AppError } from '../utils/response.js';
 import { getRecommendedJavaVersion, findJavaPath } from '../utils/java-detector.js';
 import { InstanceModel } from '../db/index.js';
 import { atomicWriteFile } from '../services/mc_server.js';
@@ -21,10 +28,10 @@ import { validateBody, validatedSuccess } from '../middleware/validate.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import {
   JAR_DOWNLOAD_MAX_BYTES,
-  JAR_HASH_ALGORITHMS,
   assertDownloadIntegrity,
   assertSizeWithinLimit,
 } from '../utils/jar-download-guard.js';
+import { assertAllowedDownloadHost, allowedDownloadHosts } from '../utils/jar-download-guard.js';
 import { logger } from '../utils/logger.js';
 import { getServerVersion } from '../utils/version.js';
 import { isDeployInFlight, latestInFlightDeploy } from '../utils/deploy-inflight.js';
@@ -36,8 +43,6 @@ import {
   TASK_KINDS,
   TaskCancelledError,
 } from '../utils/cancellable-task.js';
-
-const mcCoreManager = new MinecraftServerManager(new NodeAdapter());
 
 const PAPER_API_BASE = 'https://fill.papermc.io/v3';
 // 版本号单一来源：package.json（见 utils/version.js）
@@ -403,26 +408,14 @@ export function createServerJarRoutes(serverManager) {
         }
 
         if (type === 'vanilla') {
-          // Vanilla 使用 Mojang 官方 manifest 并过滤 release 版本（minecraft-core 返回包含 snapshot）
-          const manifest = await httpJson(
-            'https://piston-meta.mojang.com/mc/game/version_manifest_v2.json',
-            {
-              timeoutMs: 15000,
-              retryLimit: 2,
-            },
-          );
-          const releases = manifest.versions
-            .filter((v) => v.type === 'release')
-            .slice(0, 30)
-            .map((v) => v.id);
+          // 与升级共用同一实现；只认 release（快照不进部署选项）
+          const releases = await listVanillaReleases();
           return res.json(success({ type: 'vanilla', versions: releases }));
         }
 
         if (type === 'fabric') {
-          const rawVersions = await mcCoreManager.getVersions('fabric');
-          const versions = Array.isArray(rawVersions)
-            ? rawVersions
-            : rawVersions.versions || Object.keys(rawVersions);
+          // 与其余加载器一致：直连上游，经本仓（不再委托 minecraft-core）
+          const versions = await listFabricGameVersions();
           let loaders = [];
           try {
             const loaderData = await httpJson('https://meta.fabricmc.net/v2/versions/loader', {
@@ -458,11 +451,17 @@ export function createServerJarRoutes(serverManager) {
           return res.json(success({ type: 'forge', versions }));
         }
 
-        const rawVersions = await mcCoreManager.getVersions(type);
-        const versions = Array.isArray(rawVersions)
-          ? rawVersions
-          : rawVersions.versions || Object.keys(rawVersions);
-        return res.json(success({ type, versions: versions.slice(0, 30) }));
+        if (type === 'purpur') {
+          return res.json(success({ type: 'purpur', versions: await listPurpurVersions() }));
+        }
+
+        // 其余类型不再委托库：部署契约只允许 vanilla/paper/fabric/forge/purpur，
+        // 走到这里就是非法入参，如实报错而不是回落到一个「什么都能答」的库
+        return res
+          .status(400)
+          .json(
+            error(ErrorCodes.VALIDATION_ERROR, `Unsupported server type for versions: ${type}`),
+          );
       } catch (e) {
         logger.error(`Failed to fetch ${type} versions:`, e.message);
         return res
@@ -569,54 +568,28 @@ export function createServerJarRoutes(serverManager) {
         let expectedHash = null; // 上游摘要（issue 316）：有则强校验，无则仅限流
         if (type.toLowerCase() === 'paper') {
           ({ url: downloadUrl, expectedHash } = await getPaperDownload(mcVersion));
+        } else if (type.toLowerCase() === 'vanilla') {
+          // 与升级共用同一实现（此前走 minecraft-core 的 UnifiedBuild，是两套夹具的根源）。
+          // 该实现取不到版本/地址时**直接抛错**——不给多级哈希回退，也不静默跳过校验。
+          ({ url: downloadUrl, expectedHash } = await resolveVanillaDownload(mcVersion));
+        } else if (type.toLowerCase() === 'purpur') {
+          ({ url: downloadUrl, expectedHash } = await resolvePurpurDownload(mcVersion));
+        } else if (type.toLowerCase() === 'fabric') {
+          // fabric 上游不提供摘要 ⇒ expectedHash 恒 null（如实表达，不拿别的字段凑）
+          ({ url: downloadUrl, expectedHash } = await resolveFabricDownload(
+            mcVersion,
+            loaderVersion,
+          ));
+        } else if (type.toLowerCase() === 'forge') {
+          // forge 没有构建详情接口：构建号取 promotions，下载地址按 maven 路径拼。
+          // 此前由依赖包代下并落盘——那条路下面板侧的体积上限与域白名单都不生效。
+          ({ url: downloadUrl, expectedHash } = await resolveForgeInstallerDownload(mcVersion));
         } else {
-          try {
-            const build = await mcCoreManager.getLatestBuild(type.toLowerCase(), mcVersion);
-            // 真实形状：minecraft-core 的 UnifiedBuild 只有 downloads.application 一层
-            // （实测 vanilla=sha1 / purpur=md5 / mohist=sha256，fabric 与 forge 无 hash）。
-            // 下面对顶层 url/downloadUrl/sha256/sha1 的取值**纯属防御**：这些字段在
-            // UnifiedBuild 里并不存在，读它们的旧代码会让 expectedHash 恒 null、
-            // 静默跳过完整性校验（issue #545）。
-            const artifact = build?.downloads?.application;
-            if (artifact?.url) {
-              downloadUrl = artifact.url;
-            } else if (build && build.url) {
-              downloadUrl = build.url;
-            } else if (build && build.downloadUrl) {
-              downloadUrl = build.downloadUrl;
-            } else {
-              // 由依赖包自行下载并落盘。此路下**面板侧的体积上限不生效**，完整性校验
-              // 也交给包内实现（它对 binary 产物会比对 artifact.hash 并在不匹配时删除文件）。
-              const downloadInfo = await mcCoreManager.downloadServer({
-                core: type.toLowerCase(),
-                version: mcVersion,
-                outputDir: instancePath,
-              });
-              if (downloadInfo && (downloadInfo.path || downloadInfo.filePath)) {
-                downloadUrl = null;
-              } else if (downloadInfo && downloadInfo.url) {
-                downloadUrl = downloadInfo.url;
-              }
-            }
-            const buildHash = artifact?.hash || build?.sha256 || build?.sha1;
-            // hashType 决定算法：认不出就整体放弃校验（宁可跳过，也不能拿 md5 当 sha256 比，
-            // 那会把正常下载误判成损坏并对用户报 502）
-            const hashType =
-              artifact?.hashType || (build?.sha256 ? 'sha256' : build?.sha1 ? 'sha1' : null);
-            if (downloadUrl && buildHash && JAR_HASH_ALGORITHMS.has(hashType)) {
-              expectedHash = { algorithm: hashType, digest: String(buildHash) };
-            }
-          } catch (mcErr) {
-            logger.error(`minecraft-core failed for ${type}:`, mcErr.message);
-            if (type.toLowerCase() === 'fabric') {
-              const loader = loaderVersion || '0.16.10';
-              downloadUrl = `https://meta.fabricmc.net/v2/versions/loader/${mcVersion}/${loader}/1.0.1/server/jar`;
-            } else if (type.toLowerCase() === 'purpur') {
-              downloadUrl = `https://api.purpurmc.org/v2/purpur/${mcVersion}/latest/download`;
-            } else {
-              throw mcErr;
-            }
-          }
+          // 走到这里就是非法入参（契约只允许 vanilla/paper/fabric/forge/purpur）
+          throw new AppError(
+            ErrorCodes.VALIDATION_ERROR,
+            `Unsupported server type for deploy: ${type}`,
+          );
         }
 
         // 版本查询是第一个 await 边界：取消落在下载开始前时这里就要拦住，
@@ -624,6 +597,10 @@ export function createServerJarRoutes(serverManager) {
         task.throwIfCancelled();
 
         if (downloadUrl) {
+          // 下载 URL 全部来自上游响应（Piston 详情、paper v3、
+          // 以及本文件的 fabric/purpur 兜底），上游被污染即可指向任意主机。升级路径
+          // 一直有此断言，部署路径此前缺——同一个入参面不该只有一条路守。
+          assertAllowedDownloadHost(downloadUrl, allowedDownloadHosts([type.toLowerCase()]));
           logger.info(`Download URL: ${downloadUrl}`);
           await downloadWithProgress(downloadUrl, jarPath, serverManager, 'download', {
             expectedHash,

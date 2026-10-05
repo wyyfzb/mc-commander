@@ -8,6 +8,7 @@ import { McClockCard } from './components/mc-clock-card'
 import { RecentBackupsCard } from './components/recent-backups-card'
 import { AnnouncementCard } from './components/announcement-card'
 import { AlertBanner } from './components/alert-banner'
+import { CrashReportCard } from './components/crash-report-card'
 import { useInstanceStatus, useSystemStats, queryKeys } from '@/api/queries'
 import { useServerStore } from '@/stores/server'
 import { useNotificationStore } from '@/stores/notifications'
@@ -38,6 +39,14 @@ export function DashboardPage() {
   useEffect(() => {
     if (statusQuery.data) setStatus(statusQuery.data)
   }, [statusQuery.data, setStatus])
+
+  // 崩溃后重取崩溃产物：它是事后新增的文件，轮询没有意义（每次都要枚举目录 + 解析），
+  // 只在崩溃事件到达时失效一次
+  useEffect(() => {
+    if (instanceId && lastStatusEvent?.event === 'crash') {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.crashArtifact(instanceId) })
+    }
+  }, [lastStatusEvent, instanceId, queryClient])
 
   useEffect(() => {
     if (systemStatsQuery.data) setSystemStats(systemStatsQuery.data)
@@ -126,6 +135,8 @@ export function DashboardPage() {
           @5xl 起恢复 min-h-0 flex-1，终端保底约 672px，右栏自身滚动。 */}
       <div className="grid flex-1 grid-cols-1 gap-4 @5xl:min-h-0 @5xl:grid-cols-[minmax(0,1fr)_336px]">
         <div className="flex flex-col gap-4 @5xl:min-h-0">
+          {/* 崩溃诊断产物置于终端之上：只在真的崩过时渲染，那正是用户要找它的时刻 */}
+          <CrashReportCard instanceId={instanceId} />
           <ServerTerminal isLoading={statusLoading} />
           <CommandInput />
         </div>

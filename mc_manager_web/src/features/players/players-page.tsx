@@ -205,7 +205,7 @@ export function PlayersPage() {
     return <InstanceRequiredState />
   }
 
-  const isRconConnected = statusQuery.data?.isRconConnected ?? false
+  const isRconConnected = statusQuery.data?.capabilities.rcon ?? false
   const mcVersion = statusQuery.data?.mcVersion ?? ''
   /** 列表相位：有旧值可留时不把一次轮询抖动呈现成整屏故障 */
   const playersPhase = queryPhase(playersQuery)

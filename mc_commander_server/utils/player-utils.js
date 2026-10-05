@@ -27,6 +27,50 @@ export function offlineUuid(playerName) {
 }
 
 /**
+ * 从本机 `usercache.json` 取玩家 UUID。
+ *
+ * 两种模式都会写这个文件：正版模式下是 Mojang 的稳定 UUID（改名不变），
+ * 离线模式下是离线算法派生的 UUID（实测：离线实例里 `ChatBot` 也有条目）。
+ * 因此它是影子档案键的首选来源。
+ */
+export function readUuidFromUsercache(serverPath, playerName) {
+  try {
+    const cachePath = path.join(serverPath, 'usercache.json');
+    if (!fs.existsSync(cachePath)) return null;
+    const cache = JSON.parse(fs.readFileSync(cachePath, 'utf-8'));
+    for (const entry of cache) {
+      if (entry.name === playerName && entry.uuid) return entry.uuid;
+    }
+  } catch {}
+  return null;
+}
+
+/**
+ * 影子档案的键：**UUID**，不是玩家名。
+ *
+ * 按名字落盘会在玩家改名后断链——旧档案成孤儿、新档案为空，累计时长与行为事件
+ * 全丢。官方 `world/playerdata` 本就是 UUID 键，对齐它。玩家名从此只作展示字段。
+ *
+ * 三级来源：调用方已知的 UUID → 本机 usercache → 离线算法派生（Carpet 假人、
+ * 被 MC 按过期时间剪枝的条目）。三级都是服务端侧的不变量，不含用户输入文本。
+ */
+export function shadowProfileKey({ serverPath, playerName, uuid }) {
+  return uuid || readUuidFromUsercache(serverPath, playerName) || offlineUuid(playerName);
+}
+
+/**
+ * 影子档案的落盘路径：`<serverPath>/playerdata/<UUID>.json`。
+ * 生产与测试共用本函数，避免「实现改了、测试还按旧版式造夹具」而假绿。
+ */
+export function shadowProfilePath({ serverPath, playerName, uuid }) {
+  return path.join(
+    serverPath,
+    'playerdata',
+    `${shadowProfileKey({ serverPath, playerName, uuid })}.json`,
+  );
+}
+
+/**
  * 读取玩家 stats 总游戏时长（秒；play_time tick / 20）。
  * uuid 为空串也可用：playerName 提供时自动尝试 offline uuid 候选
  * （无 usercache 玩家——Carpet 假人/26.x usercache 缺失——的兜底路径）。
@@ -82,4 +126,45 @@ export function getTotalPlayTime({ serverPath, uuid, playerName, levelName }) {
     } catch {}
   }
   return 0;
+}
+
+/**
+ * 玩家名**安全谓词**（不是「正版名合法性」）。
+ *
+ * 边界由实机 RCON 实测确定（MC 26.3）：
+ * - 服务端**接受**：`Bot_Steve`、`.BedrockName`（Floodgate 前缀）、`中文名`、`-dash-`、
+ *   甚至 `../etc/passwd`——这些都不是正版名形态，而旧正则 `^[A-Za-z0-9_]{3,16}$`
+ *   把它们**全部挡在门外**；服务端自己并不校验长度（实测 2 字符 `ab` 与 17 字符都收）。
+ * - 服务端**拒绝**：含空格、含 `[`/`]`（回 `Incorrect argument for command`）⇒ 这类名字在
+ *   命令层根本寻址不到。面板提前拒绝并说明原因，好过发出去再把服务端原文抛给用户。
+ * - **前导 `@` 必须拒绝**：实测不加引号时 `whitelist add @a` 走的是**选择器**语义
+ *   （回 `No player was found`，而非字面量名才回的 `That player does not exist`）
+ *   ⇒ 若不拦，`ban @a` 会波及全部在线玩家。加引号可中和（实测 `whitelist add "@a"` 回
+ *   `That player does not exist`），但这里直接拒绝：合法玩家名本就不以 `@` 开头，
+ *   拒绝比依赖每个调用点都记得加引号更省一层。
+ * - 控制字符/路径分隔符/`..` 一并拒绝：属纵深防御（影子档案已改按 UUID 落盘，
+ *   名字不再是路径分量，但名字仍会进命令与审计记录）。
+ *
+ * ⚠️ 长度上限不取 16：那是正版 Java 名上限，而服务端不校验（实测 17 字符照收）。
+ * 这里取一个**有界但宽松**的值，只防病态输入。
+ */
+const MAX_PLAYER_NAME_LENGTH = 32;
+
+/** 返回拒绝原因（中文，供界面直接展示）；名字可用时返回 null */
+export function playerNameRejectionReason(name) {
+  if (typeof name !== 'string' || name.length === 0) return '名字为空';
+  if (name.length > MAX_PLAYER_NAME_LENGTH)
+    return `名字过长（上限 ${MAX_PLAYER_NAME_LENGTH} 字符）`;
+  // eslint-disable-next-line no-control-regex -- 就是要匹配控制字符
+  if (/[\u0000-\u001f\u007f]/.test(name)) return '含控制字符';
+  if (/[\\/]/.test(name) || name.includes('..')) return '含路径分隔符或上跳片段';
+  if (/\s/.test(name)) return '含空白：Minecraft 命令无法寻址含空格的名字';
+  if (/["'[\]]/.test(name)) return '含引号或方括号：Minecraft 命令无法寻址这类名字';
+  if (name.startsWith('@')) return '以 @ 开头会被当作目标选择器（如 @a 表示全部玩家）';
+  return null;
+}
+
+/** 玩家名是否可安全用于命令与落盘（见上方实测边界） */
+export function isSafePlayerName(name) {
+  return playerNameRejectionReason(name) === null;
 }
