@@ -29,7 +29,7 @@
     "adm-zip": "^0.6.0",
     "better-sqlite3": "^13.0.3",
     "croner": "^10.0.1",
-    "dotenv": "^18.0.4",
+    "dotenv": "^18.0.5",
     "express": "^5.2.1",
     "helmet": "^8.3.0",
     "iconv-lite": "^0.7.3",
@@ -44,7 +44,7 @@
   "devDependencies": {
     "@vitest/coverage-v8": "^5.0.3",
     "oxlint": "^1.80.0",
-    "supertest": "^7.3.0",
+    "supertest": "^7.3.1",
     "vitest": "^5.0.3"
   }
 }
