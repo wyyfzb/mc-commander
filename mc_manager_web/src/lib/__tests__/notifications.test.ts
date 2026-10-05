@@ -73,6 +73,38 @@ describe('buildNotifications 文案模板', () => {
     ).toBe('服务器意外退出，正在自动重启')
   })
 
+  describe('worldUpgrade（MC 世界格式升级，服务端推送）', () => {
+    it('开始 → 提示「期间可能无法连接」（用户不知道就会以为服务器坏了）', () => {
+      const [n] = buildNotifications({
+        type: 'worldUpgrade',
+        data: { state: 'started', progress: null },
+      })
+      expect(n?.type).toBe('worldUpgradeStart')
+      expect(n?.content).toContain('世界存档格式')
+      expect(n?.content).toContain('可能无法连接')
+    })
+
+    it('完成 / 失败各自成一档', () => {
+      expect(
+        buildNotifications({ type: 'worldUpgrade', data: { state: 'finished' } })[0]?.type,
+      ).toBe('worldUpgradeComplete')
+      expect(buildNotifications({ type: 'worldUpgrade', data: { state: 'failed' } })[0]?.type).toBe(
+        'worldUpgradeFailed',
+      )
+    })
+
+    it('progress 不产生通知（服务端 1 条/秒，做成弹窗会刷屏）', () => {
+      expect(
+        buildNotifications({ type: 'worldUpgrade', data: { state: 'progress', progress: 0.5 } }),
+      ).toEqual([])
+    })
+
+    it('未知 state 不产生通知（协议演进时宁可不报，也不报错话）', () => {
+      expect(buildNotifications({ type: 'worldUpgrade', data: { state: 'wat' } })).toEqual([])
+      expect(buildNotifications({ type: 'worldUpgrade', data: {} })).toEqual([])
+    })
+  })
+
   it('weatherUpdate 英文映射中文', () => {
     const [n] = buildNotifications({ type: 'weatherUpdate', data: { weather: 'thunder' } })
     expect(n?.content).toBe('天气变为雷暴')

@@ -39,12 +39,12 @@ describe('NotificationsPanel', () => {
     expect(screen.queryByTestId('notification-group-management')).not.toBeInTheDocument()
   })
 
-  it('组内行数与类型顺序与 NOTIFICATION_TYPE_ORDER 一致（game 7 行 / server 28 行，磁盘两档入列后）', () => {
+  it('组内行数与类型顺序与 NOTIFICATION_TYPE_ORDER 一致（game 7 行 / server 31 行，磁盘两档与世界格式升级三档入列后）', () => {
     render(<NotificationsPanel />)
     const gameTypes = typesOf('game')
     const serverTypes = typesOf('server')
     expect(gameTypes.length).toBe(7)
-    expect(serverTypes.length).toBe(28)
+    expect(serverTypes.length).toBe(31)
 
     const gameGroup = screen.getByTestId('notification-group-game')
     const serverGroup = screen.getByTestId('notification-group-server')

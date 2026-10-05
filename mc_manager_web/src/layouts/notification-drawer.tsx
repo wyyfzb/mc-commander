@@ -91,6 +91,10 @@ const TYPE_ICON: Record<NotificationType, LucideIcon> = {
   upgradeComplete: CheckCircle2,
   upgradeFailed: XCircle,
   upgradeCancelled: Ban,
+  // 世界格式升级（服务端推送）：用 AlertTriangle 表达「期间连不上，属需要注意的过程」
+  worldUpgradeStart: AlertTriangle,
+  worldUpgradeComplete: CheckCircle2,
+  worldUpgradeFailed: XCircle,
 }
 
 /** 中性档（进出/停服等无成败含义的事件）：次级底，不占语义六色 */
@@ -140,6 +144,9 @@ export const NOTIFICATION_TONE: Record<NotificationType, SemanticTone | 'neutral
   upgradeComplete: 'success',
   upgradeFailed: 'error',
   upgradeCancelled: 'neutral',
+  worldUpgradeStart: 'warning',
+  worldUpgradeComplete: 'success',
+  worldUpgradeFailed: 'error',
 }
 
 /** 气泡图标/边框/底色（三处同档） */

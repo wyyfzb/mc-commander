@@ -448,7 +448,12 @@ export function useServerSocket(instanceId: string | null) {
             instanceId: msg.instanceId,
           })
           break
+        // worldUpgrade（MC 世界格式升级，服务端经 MSMP 推送）也并入这一组：
+        // 事件原样交给通知层，progress 由通知层刻意丢弃（1 条/秒会刷屏），
+        // 见 lib/notifications.ts。注释放在组**之前**——夹在 case 标签之间会被
+        // no-fallthrough 判成有意穿落，而这里本就是空标签组。
         case 'weatherUpdate':
+        case 'worldUpgrade':
         case 'backupSkipped':
         case 'taskFailed':
         case 'webhookDeliveryFailed':
