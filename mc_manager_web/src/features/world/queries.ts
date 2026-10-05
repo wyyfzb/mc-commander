@@ -7,7 +7,13 @@
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/api/queries'
-import { apiGetProperties, apiGetWorld, apiUpdateProperties } from '@/api/world'
+import {
+  apiGetProperties,
+  apiGetPushChannel,
+  apiGetWorld,
+  apiSetPushChannel,
+  apiUpdateProperties,
+} from '@/api/world'
 import { useConnectionStore } from '@/stores/connection'
 import type { ServerProperties } from '@/api/types'
 import { buildDatapackListCommand, parseDatapackList } from '@/lib/mc-datapack'
@@ -76,5 +82,36 @@ export function useDatapackList(
     },
     enabled: isReady && Boolean(instanceId),
     retry: false,
+  })
+}
+
+/**
+ * 推送通道（MSMP）状态。
+ *
+ * 与 properties 同步失效：开关写的就是 server.properties 里的键，属性面板也展示它们，
+ * 两条缓存各留一份旧值会让用户看到自相矛盾的界面。
+ *
+ * 不轮询：状态只可能被本页的开关或外部手改改变，前者由 mutation 失效、后者刷新页面即得。
+ */
+export function usePushChannel(instanceId: string | null) {
+  const config = useConnectionStore()
+  return useQuery({
+    queryKey: queryKeys.pushChannel(instanceId ?? ''),
+    queryFn: () => apiGetPushChannel(config, instanceId ?? ''),
+    enabled: config.status === 'ready' && Boolean(instanceId),
+    retry: false,
+  })
+}
+
+/** 开关推送通道；成功后同时失效 push-channel 与 properties（两者展示同一份事实） */
+export function useSetPushChannel(instanceId: string | null) {
+  const config = useConnectionStore()
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (enabled: boolean) => apiSetPushChannel(config, instanceId ?? '', enabled),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.pushChannel(instanceId ?? '') })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.properties(instanceId ?? '') })
+    },
   })
 }

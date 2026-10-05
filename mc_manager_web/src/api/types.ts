@@ -84,6 +84,13 @@ export type {
   UpdatePropertiesResponse,
 } from '@mc-commander/schemas'
 
+// ── 推送通道（MSMP）──
+export type {
+  PushChannelState,
+  PushChannelRequestBody,
+  PushChannelToggleResponse,
+} from '@mc-commander/schemas'
+
 // ── 文件 ──
 export type {
   FileEntry,
