@@ -21,12 +21,14 @@ import { useUiStore } from '@/stores/ui'
  * 面板里的**原样文本**，无法保证一定不带。此前只为 `seed` 单写了一条带斜杠的替代分支，
  * 其余命令带上斜杠就落进「需要确认」——同一件事两种待遇。改为整条容忍。
  *
- * `gamerule` 单独处理：**不带参数时是只读列表**（`/gamerule` 列出全部规则），
- * 此前要求必须带规则名才算安全，导致这条只读命令反而要二次确认。
- * 带规则名是读、带「规则名 + 值」才是写 —— 故只放行「无参」与「单参数」两种形态。
+ * `gamerule` **只放行单参数形态**：`gamerule <规则名>` 是「读一条规则」（写形态必须带第二个
+ * 参数，故读不进来）。裸 `gamerule` **不是**只读列表——实测 MC 26.3 与 1.21.4 都返回
+ * `Unknown or incomplete command`；真正的只读列表面是 `/help gamerule`，已由 `help` 覆盖。
+ * 规则名在 26.3 起是 snake_case（`keep_inventory`），1.21.x 是 camelCase（`keepInventory`），
+ * 面板只按字符集校验、不按版本改写名字。
  */
 const SAFE_COMMAND_PATTERNS: RegExp[] = [
-  /^\/?(list|tps|help|save-all|say\s+|whitelist\s+(list|show)|gamerule(\s+\S+\s*)?$|seed|version)/i,
+  /^\/?(list|tps|help|save-all|say\s+|whitelist\s+(list|show)|gamerule\s+\S+\s*$|seed|version)/i,
 ]
 
 export function isSafeCommand(command: string): boolean {
