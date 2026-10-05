@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.7.1](https://github.com/wyyfzb/mc-commander/compare/v0.7.0...v0.7.1) (2026-10-05)
+
+
+### Bug Fixes
+
+* **deps:** bump rolldown from 1.2.11 to 1.2.12 in /mc-schemas in the minor-and-patch group across 1 directory ([#617](https://github.com/wyyfzb/mc-commander/issues/617)) ([3dcd98e](https://github.com/wyyfzb/mc-commander/commit/3dcd98e739a612caa748436f30165271dbc70237))
+* **deps:** bump the minor-and-patch group across 1 directory with 2 updates ([#623](https://github.com/wyyfzb/mc-commander/issues/623)) ([fd85328](https://github.com/wyyfzb/mc-commander/commit/fd8532865cd02c677fbc579424eaf12b95884f05))
+* **deps:** bump the minor-and-patch group across 1 directory with 5 updates ([#624](https://github.com/wyyfzb/mc-commander/issues/624)) ([1dffc0d](https://github.com/wyyfzb/mc-commander/commit/1dffc0d6a27ac204b57431284be9c70b46017c74))
+* **deps:** msw 升级到 3.0.2 并适配其 API 变更 ([#626](https://github.com/wyyfzb/mc-commander/issues/626)) ([3bf6b64](https://github.com/wyyfzb/mc-commander/commit/3bf6b6408e8c0afd92aab50a40d8a1d635fb7a8a))
+
 ## [0.7.0](https://github.com/wyyfzb/mc-commander/compare/v0.6.1...v0.7.0) (2026-10-05)
 
 
