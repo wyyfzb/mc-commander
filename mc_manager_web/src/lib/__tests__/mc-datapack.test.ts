@@ -11,6 +11,7 @@ import {
   buildDatapackDisableCommand,
   buildDatapackCreateCommand,
   parseDatapackList,
+  parseDatapackAction,
 } from '../mc-datapack'
 
 describe('datapack 命令拼装', () => {
@@ -150,5 +151,75 @@ describe('datapack list 解析（夹具＝实机原文）', () => {
   it('没有来源限定时不臆造 source', () => {
     const r = parseDatapackList('There are 1 data pack(s) enabled: [file/plain.zip]')
     expect(r.enabled).toEqual([{ name: 'file/plain.zip', source: null }])
+  })
+})
+
+describe('datapack enable/disable/create 返回分类（夹具＝实机原文逐字）', () => {
+  it.each([
+    [
+      '启用成功',
+      'Enabling data pack [file/uatpack.zip (world)]',
+      { outcome: 'enabled', entry: { name: 'file/uatpack.zip', source: 'world' } },
+    ],
+    [
+      '禁用 vanilla 也允许',
+      'Disabling data pack [vanilla (built-in)]',
+      { outcome: 'disabled', entry: { name: 'vanilla', source: 'built-in' } },
+    ],
+    [
+      '重复启用：幂等提示，既非成功也非失败',
+      "Pack 'file/uatpack.zip' is already enabled!",
+      { outcome: 'already-enabled', name: 'file/uatpack.zip' },
+    ],
+    [
+      '名字不存在（enable 与 disable 同措辞）',
+      "Unknown data pack 'file/nope.zip'",
+      { outcome: 'unknown-pack', name: 'file/nope.zip' },
+    ],
+    [
+      '创建成功',
+      "Created new empty pack with name 'uatcreated'",
+      { outcome: 'created', name: 'uatcreated' },
+    ],
+    [
+      '名字非法（服务端校验）',
+      "Invalid characters in new pack name 'Bad Id!'",
+      { outcome: 'invalid-name', name: 'Bad Id!' },
+    ],
+  ])('%s', (_label, response, expected) => {
+    expect(parseDatapackAction(response)).toEqual(expected)
+  })
+
+  it('参数不合法：描述没加引号时的原文（带 <--[HERE] 标记）', () => {
+    const r = parseDatapackAction('Incorrect argument for command...eated UAT 新建数据包<--[HERE]')
+    expect(r.outcome).toBe('bad-arguments')
+  })
+
+  it('措辞不认识 → 保留原文，不猜成成功或失败', () => {
+    // 「不认识就当作成功」是最危险的猜法：用户会以为已生效
+    expect(parseDatapackAction('Something entirely new')).toEqual({
+      outcome: 'unrecognized',
+      raw: 'Something entirely new',
+    })
+    expect(parseDatapackAction('')).toEqual({ outcome: 'unrecognized', raw: '' })
+  })
+
+  it('措辞对但条目解析不出来 → 同样按未识别，不返回半成品', () => {
+    // 前缀认识、里面却没有 `[...]` 形态
+    expect(parseDatapackAction('Enabling data pack 没有方括号')).toEqual({
+      outcome: 'unrecognized',
+      raw: 'Enabling data pack 没有方括号',
+    })
+  })
+
+  it.each([
+    ['unknown-pack 分支', 'Unknown data pack 没有引号'],
+    ['created 分支', 'Created new empty pack with name 没有引号'],
+    ['invalid-name 分支', 'Invalid characters in new pack name 没有引号'],
+    ['already-enabled 分支', 'Pack 没有引号 is already enabled!'],
+  ])('引号形态缺失名字时按未识别（不返回空名字）：%s', (_label, response) => {
+    // 各分支都要覆盖：只测其中一个时，另一个分支的 null 守卫不被承重
+    // （探针实测——只测 unknown-pack 时，把 created 的守卫去掉照样全绿）
+    expect(parseDatapackAction(response).outcome).toBe('unrecognized')
   })
 })

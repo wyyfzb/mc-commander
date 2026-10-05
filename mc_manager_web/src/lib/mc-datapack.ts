@@ -178,3 +178,77 @@ export function parseDatapackList(response: string): DatapackListResult {
 
   return { enabled, available, unparsed: null }
 }
+
+/**
+ * 一条 `enable`/`disable`/`create` 的返回分类。
+ *
+ * 措辞全部取自 **MC 26.3 实机**（原文见 `.ai/References/2026-10-05-实机取模样本.md` 第七节）：
+ * ```text
+ * Enabling data pack [file/uatpack.zip (world)]      启用成功
+ * Disabling data pack [vanilla (built-in)]           禁用成功（vanilla 也允许禁）
+ * Pack 'file/uatpack.zip' is already enabled!        重复启用——幂等提示，不是失败
+ * Unknown data pack 'file/nope.zip'                  名字不存在（enable/disable 同措辞）
+ * Created new empty pack with name 'uatcreated'      创建成功
+ * Invalid characters in new pack name 'Bad Id!'      名字非法（服务端校验）
+ * Incorrect argument for command…                    参数不合法（如描述没加引号）
+ * ```
+ *
+ * 分成逐档而不是「成功/失败」两档：**「已是启用状态」既不是失败也不是成功**——
+ * 把它当失败会弹红报错，当成功又会让用户以为这次操作真改了排序。界面据此给出不同反馈。
+ */
+export type DatapackActionOutcome =
+  | { outcome: 'enabled'; entry: DatapackEntry }
+  | { outcome: 'disabled'; entry: DatapackEntry }
+  /** 已经处于目标状态：幂等提示，不改排序 */
+  | { outcome: 'already-enabled'; name: string }
+  | { outcome: 'unknown-pack'; name: string }
+  | { outcome: 'created'; name: string }
+  | { outcome: 'invalid-name'; name: string }
+  | { outcome: 'bad-arguments'; detail: string }
+  /** 措辞不认识：保留原文让界面如实展示，不猜 */
+  | { outcome: 'unrecognized'; raw: string }
+
+/** 从 `Pack '<名>' …` / `Unknown data pack '<名>'` 这类引号形态里取名 */
+function quotedName(text: string): string | null {
+  const m = /'([^']+)'/.exec(text)
+  return m ? (m[1] ?? null) : null
+}
+
+export function parseDatapackAction(response: string): DatapackActionOutcome {
+  const text = (response ?? '').trim()
+  if (!text) return { outcome: 'unrecognized', raw: '' }
+
+  for (const [prefix, outcome] of [
+    ['Enabling data pack ', 'enabled'],
+    ['Disabling data pack ', 'disabled'],
+  ] as const) {
+    if (text.startsWith(prefix)) {
+      const entries = parseEntries(text.slice(prefix.length))
+      // 措辞认识但条目解析不出来 ⇒ 不猜，按未识别处理
+      if (entries.length === 1 && entries[0]) return { outcome, entry: entries[0] }
+    }
+  }
+
+  if (text.startsWith('Pack ') && text.endsWith(' is already enabled!')) {
+    const name = quotedName(text)
+    if (name) return { outcome: 'already-enabled', name }
+  }
+  if (text.startsWith('Unknown data pack ')) {
+    const name = quotedName(text)
+    if (name) return { outcome: 'unknown-pack', name }
+  }
+  if (text.startsWith('Created new empty pack with name ')) {
+    const name = quotedName(text)
+    if (name) return { outcome: 'created', name }
+  }
+  if (text.startsWith('Invalid characters in new pack name ')) {
+    const name = quotedName(text)
+    if (name) return { outcome: 'invalid-name', name }
+  }
+  // 参数错误：服务端会把出错位置用 `<--[HERE]` 标出，原文里带这一串
+  if (text.startsWith('Incorrect argument for command') || text.includes('<--[HERE]')) {
+    return { outcome: 'bad-arguments', detail: text }
+  }
+
+  return { outcome: 'unrecognized', raw: text }
+}
