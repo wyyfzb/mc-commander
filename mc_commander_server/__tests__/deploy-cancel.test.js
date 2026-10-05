@@ -18,7 +18,7 @@ const testState = vi.hoisted(() => ({
   latestBuild: {},
 }));
 
-const httpState = vi.hoisted(() => ({ streamImpl: null }));
+const httpState = vi.hoisted(() => ({ streamImpl: null, manifestPromise: null }));
 
 vi.mock('../db/index.js', () => ({
   InstanceModel: {
@@ -86,7 +86,32 @@ vi.mock('child_process', async (importOriginal) => {
 vi.mock('../utils/http-client.js', async () => {
   const streamMod = await import('node:stream');
   return {
-    httpJson: vi.fn(async () => ({})),
+    // vanilla 构建解析已改走 Piston manifest（与升级共用一份实现）。
+    // 夹具接缝仍是 testState.latestBuild —— 由它合成 Piston 形状的响应。
+    httpJson: vi.fn((url) => {
+      const u = String(url);
+      if (u.includes('version_manifest_v2.json')) {
+        // 用例可挂住「版本查询」这一窗口（manifestPromise 未设时立即返回）
+        if (httpState.manifestPromise) return httpState.manifestPromise;
+        return Promise.resolve({
+          latest: { release: '1.21.4' },
+          versions: [
+            {
+              id: '1.21.4',
+              type: 'release',
+              url: 'https://piston-meta.mojang.com/v1/packages/uat/1.21.4.json',
+            },
+          ],
+        });
+      }
+      if (u.includes('/v1/packages/uat/')) {
+        const art = testState.latestBuild?.downloads?.application;
+        return Promise.resolve(
+          art ? { downloads: { server: { url: art.url, sha1: art.hash } } } : { downloads: {} },
+        );
+      }
+      return Promise.resolve({});
+    }),
     httpPost: vi.fn(),
     httpStream: vi.fn((url, opts) => httpState.streamImpl(url, opts, streamMod)),
   };
@@ -98,7 +123,8 @@ const { InstanceModel, AuditLogModel } = await import('../db/index.js');
 const { errorHandler } = await import('../middleware/error_handler.js');
 
 const JAR_BYTES = Buffer.from('fake-server-jar-payload');
-const JAR_SHA256 = crypto.createHash('sha256').update(JAR_BYTES).digest('hex');
+/** vanilla 走 Piston 时摘要只有 sha1 一种口径（见 services/vanilla-manifest.js） */
+const JAR_SHA1 = crypto.createHash('sha1').update(JAR_BYTES).digest('hex');
 
 /**
  * 下载流：正常完成（写完即 end）。
@@ -192,8 +218,8 @@ beforeEach(() => {
     downloads: {
       application: {
         url: 'https://piston-data.mojang.com/server.jar',
-        hash: JAR_SHA256,
-        hashType: 'sha256',
+        // vanilla 的摘要只来自 Piston 的 sha1；给 sha256 会被当作 sha1 比对而失败
+        hash: JAR_SHA1,
       },
     },
   };
@@ -288,6 +314,7 @@ describe('取消在途部署', () => {
 
     expect(res.status).toBe(409);
     expect(res.body.code).toBe(40915);
+    httpState.manifestPromise = null;
     expect(stages(manager)).toContain('cancelled');
     expect(InstanceModel.delete).toHaveBeenCalledWith(id);
     expect(fs.existsSync(`${testState.serversDir}/${id}`)).toBe(false);
@@ -296,8 +323,10 @@ describe('取消在途部署', () => {
   it('上游版本查询窗口内取消：无在途 IO 可中断时靠 await 边界拦下（不下载/不建目录/不入库）', async () => {
     // 版本查询是部署的第一个 await：此窗口内既没有下载流也没有子进程，
     // 取消只能靠 await 边界后的 throwIfCancelled 生效
+    // vanilla 的第一个 await 现在是 Piston manifest 查询（与升级同一实现），
+    // 不再经过 minecraft-core 的版本查询 ⇒ 挂住这一处
     let releaseQuery = () => {};
-    testState.latestBuild = new Promise((resolve) => {
+    httpState.manifestPromise = new Promise((resolve) => {
       releaseQuery = resolve;
     });
     const { app, manager } = buildApp();
@@ -309,13 +338,14 @@ describe('取消在途部署', () => {
 
     // 放行上游查询：续延立即撞上取消判据，而非继续下载
     releaseQuery({
-      downloads: {
-        application: {
-          url: 'https://piston-data.mojang.com/server.jar',
-          hash: JAR_SHA256,
-          hashType: 'sha256',
+      latest: { release: '1.21.4' },
+      versions: [
+        {
+          id: '1.21.4',
+          type: 'release',
+          url: 'https://piston-meta.mojang.com/v1/packages/uat/1.21.4.json',
         },
-      },
+      ],
     });
     const res = await deploying;
 

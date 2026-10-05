@@ -17,6 +17,7 @@ import {
   assertSizeWithinLimit,
 } from '../utils/jar-download-guard.js';
 import { logger } from '../utils/logger.js';
+import { resolveVanillaDownload } from './vanilla-manifest.js';
 import {
   findJavaPathStrict,
   getRecommendedJavaVersion,
@@ -108,26 +109,8 @@ export class UpgradeService {
    */
   async resolveDownload(mcVersion, type) {
     if (type === 'vanilla') {
-      // Mojang Piston API
-      const manifest = await httpJson(
-        'https://piston-meta.mojang.com/mc/game/version_manifest_v2.json',
-        {
-          timeoutMs: 15000,
-          retryLimit: 2,
-        },
-      );
-      const versionEntry = manifest.versions?.find(
-        (v) => v.id === mcVersion && v.type === 'release',
-      );
-      if (!versionEntry?.url) throw new Error(`Vanilla version ${mcVersion} not found`);
-      const versionDetail = await httpJson(versionEntry.url, {
-        timeoutMs: 15000,
-        retryLimit: 2,
-      });
-      const serverJar = versionDetail.downloads?.server;
-      if (!serverJar?.url) throw new Error(`No server JAR download for ${mcVersion}`);
-      const expectedHash = serverJar.sha1 ? { algorithm: 'sha1', digest: serverJar.sha1 } : null;
-      return { url: serverJar.url, expectedHash };
+      // 与部署共用同一实现（services/vanilla-manifest.js）：同一个事实只留一种取法
+      return resolveVanillaDownload(mcVersion);
     }
 
     if (type === 'paper') {

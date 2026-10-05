@@ -82,7 +82,30 @@ vi.mock('../utils/http-client.js', async () => {
       return pt;
     }),
     // 本组只走 vanilla/local 落盘路径，不触达 JSON 接口；具名导出必须齐全，否则模块解析期失败
-    httpJson: vi.fn(),
+    // vanilla 构建解析已改走 Piston manifest（与升级共用一份实现）。
+    // 夹具接缝仍是 testState.latestBuild —— 由它合成 Piston 形状的响应。
+    httpJson: vi.fn((url) => {
+      const u = String(url);
+      if (u.includes('version_manifest_v2.json')) {
+        return Promise.resolve({
+          latest: { release: '1.21.4' },
+          versions: [
+            {
+              id: '1.21.4',
+              type: 'release',
+              url: 'https://piston-meta.mojang.com/v1/packages/uat/1.21.4.json',
+            },
+          ],
+        });
+      }
+      if (u.includes('/v1/packages/uat/')) {
+        const art = testState.latestBuild?.downloads?.application;
+        return Promise.resolve(
+          art ? { downloads: { server: { url: art.url, sha1: art.hash } } } : { downloads: {} },
+        );
+      }
+      return Promise.resolve({});
+    }),
     httpPost: vi.fn(),
   };
 });

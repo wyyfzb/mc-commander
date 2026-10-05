@@ -5,6 +5,7 @@ import { spawn } from 'child_process';
 import crypto from 'crypto';
 import { httpJson, httpStream } from '../utils/http-client.js';
 import { MinecraftServerManager, NodeAdapter } from 'minecraft-core';
+import { listVanillaReleases, resolveVanillaDownload } from '../services/vanilla-manifest.js';
 import config from '../config.js';
 import { success, error, ErrorCodes } from '../utils/response.js';
 import { getRecommendedJavaVersion, findJavaPath } from '../utils/java-detector.js';
@@ -404,18 +405,8 @@ export function createServerJarRoutes(serverManager) {
         }
 
         if (type === 'vanilla') {
-          // Vanilla 使用 Mojang 官方 manifest 并过滤 release 版本（minecraft-core 返回包含 snapshot）
-          const manifest = await httpJson(
-            'https://piston-meta.mojang.com/mc/game/version_manifest_v2.json',
-            {
-              timeoutMs: 15000,
-              retryLimit: 2,
-            },
-          );
-          const releases = manifest.versions
-            .filter((v) => v.type === 'release')
-            .slice(0, 30)
-            .map((v) => v.id);
+          // 与升级共用同一实现；只认 release（快照不进部署选项）
+          const releases = await listVanillaReleases();
           return res.json(success({ type: 'vanilla', versions: releases }));
         }
 
@@ -570,6 +561,10 @@ export function createServerJarRoutes(serverManager) {
         let expectedHash = null; // 上游摘要（issue 316）：有则强校验，无则仅限流
         if (type.toLowerCase() === 'paper') {
           ({ url: downloadUrl, expectedHash } = await getPaperDownload(mcVersion));
+        } else if (type.toLowerCase() === 'vanilla') {
+          // 与升级共用同一实现（此前走 minecraft-core 的 UnifiedBuild，是两套夹具的根源）。
+          // 该实现取不到版本/地址时**直接抛错**——不给多级哈希回退，也不静默跳过校验。
+          ({ url: downloadUrl, expectedHash } = await resolveVanillaDownload(mcVersion));
         } else {
           try {
             const build = await mcCoreManager.getLatestBuild(type.toLowerCase(), mcVersion);

@@ -110,16 +110,39 @@ vi.mock('child_process', async (importOriginal) => {
 vi.mock('../utils/http-client.js', async () => {
   const streamMod = await import('node:stream');
   // 按 URL 子串命中注册表；未命中即抛错（URL 形状漂移时给出可定位的失败，而非静默 undefined）
-  const findJson = (url) => {
+  const findJsonOrNull = (url) => {
     const keys = Object.keys(httpState.jsonTable).sort((a, b) => b.length - a.length);
     for (const k of keys) if (url.includes(k)) return httpState.jsonTable[k];
-    throw new Error(`unexpected json url: ${url}`);
+    return null;
+  };
+  // vanilla 构建解析已改走 Piston manifest（与升级共用一份实现，见 services/vanilla-manifest.js）。
+  // 夹具接缝仍是 testState.latestBuild —— 由它合成 Piston 形状的响应，避免逐条改夹具。
+  const VANILLA_VERSION = '1.21.4';
+  const pistonManifest = {
+    latest: { release: VANILLA_VERSION },
+    versions: [
+      {
+        id: VANILLA_VERSION,
+        type: 'release',
+        url: 'https://piston-meta.mojang.com/v1/packages/uat/1.21.4.json',
+      },
+    ],
+  };
+  const pistonDetail = () => {
+    const art = testState.latestBuild?.downloads?.application;
+    return art ? { downloads: { server: { url: art.url, sha1: art.hash } } } : { downloads: {} };
   };
   // httpJson 契约：直接返回解析后的值（Promisified），值为 Error 实例时 reject
   const httpJson = vi.fn((url) => {
-    const entry = findJson(url);
-    if (entry instanceof Error) return Promise.reject(entry);
-    return Promise.resolve(entry);
+    const u = String(url);
+    // 先查夹具表（用例可自带 manifest），合成层只兜底
+    const entry = findJsonOrNull(u);
+    if (entry !== null) {
+      return entry instanceof Error ? Promise.reject(entry) : Promise.resolve(entry);
+    }
+    if (u.includes('version_manifest_v2.json')) return Promise.resolve(pistonManifest);
+    if (u.includes('/v1/packages/uat/')) return Promise.resolve(pistonDetail());
+    throw new Error(`unexpected json url: ${url}`);
   });
   const httpStream = vi.fn((url) => httpState.streamImpl(url, streamMod));
   // 三个具名导出必须齐全：SUT 用 ESM 具名导入，缺一个即模块解析期整体失败
@@ -183,9 +206,15 @@ afterEach(() => {
 });
 
 function defineManifest() {
+  // url 是部署路径要用的（版本列表只看 id/type，但构建解析要顺着 url 取每版详情）。
+  // 合成层对未登记的 URL 会按 /v1/packages/uat/ 兜底返回详情（见 http-client 替身）。
   httpState.jsonTable['version_manifest'] = {
     versions: [
-      { type: 'release', id: '1.21.4' },
+      {
+        type: 'release',
+        id: '1.21.4',
+        url: 'https://piston-meta.mojang.com/v1/packages/uat/1.21.4.json',
+      },
       { type: 'snapshot', id: '26w1a' },
       { type: 'release', id: '1.21' },
     ],
@@ -379,8 +408,7 @@ describe('deploy · core 构建形态与 downloadServer 本地形态', () => {
     expect(res.body.data.name).toBe('Url Form');
   });
 
-  it('core build 无 application.url（path 形态）→ 走 downloadServer 本地落盘', async () => {
-    defineVanilla();
+  it('purpur：build 无 application.url（path 形态）→ 走 downloadServer 本地落盘', async () => {
     // 真实形状里 downloadType='path' 的构建没有可直链的 url
     testState.latestBuild = {
       downloads: { application: { downloadType: 'path' } },
@@ -393,12 +421,11 @@ describe('deploy · core 构建形态与 downloadServer 本地形态', () => {
     const { app } = buildApp();
     const res = await request(app)
       .post('/api/instances/deploy')
-      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Branch Fixture' });
+      .send({ type: 'purpur', mcVersion: '1.21.4', instanceName: 'Branch Fixture' });
     expect(res.status).toBe(200);
   });
 
-  it('build 为 null → downloadServer 落盘本地 jar → rename 为 server.jar + logs 预置跳过首启', async () => {
-    defineVanilla();
+  it('purpur：build 为 null → downloadServer 落盘本地 jar → rename 为 server.jar + logs 预置跳过首启', async () => {
     testState.latestBuild = null;
     testState.downloadServerImpl = (opts) => {
       fs.writeFileSync(path.join(opts.outputDir, 'core-server-build.jar'), 'local jar payload');
@@ -409,7 +436,7 @@ describe('deploy · core 构建形态与 downloadServer 本地形态', () => {
     const { app } = buildApp();
     const res = await request(app)
       .post('/api/instances/deploy')
-      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Branch Fixture' });
+      .send({ type: 'purpur', mcVersion: '1.21.4', instanceName: 'Branch Fixture' });
     expect(res.status).toBe(200);
     const instanceId = AuditLogModel.create.mock.calls[0][0].instanceId;
     const cfg = JSON.parse(
@@ -425,27 +452,26 @@ describe('deploy · core 构建形态与 downloadServer 本地形态', () => {
     expect(spawn).not.toHaveBeenCalled();
   });
 
-  it('downloadServer 返回 { url } → 转直链下载', async () => {
-    defineVanilla();
+  it('purpur：downloadServer 返回 { url } → 转直链下载', async () => {
     testState.latestBuild = null;
     testState.downloadServerImpl = () => ({
-      url: 'https://piston-data.mojang.com/fallback-url.jar',
+      url: 'https://api.purpurmc.org/fallback-url.jar',
     });
     const { app } = buildApp();
     const res = await request(app)
       .post('/api/instances/deploy')
-      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Branch Fixture' });
+      .send({ type: 'purpur', mcVersion: '1.21.4', instanceName: 'Branch Fixture' });
     expect(res.status).toBe(200);
   });
 
-  it('downloadServer 返回空对象且目录无 jar → 不 rename，部署仍完成', async () => {
+  it('purpur：downloadServer 返回空对象且目录无 jar → 不 rename，部署仍完成', async () => {
     defineVanilla();
     testState.latestBuild = null;
     testState.downloadServerImpl = () => ({});
     const { app } = buildApp();
     const res = await request(app)
       .post('/api/instances/deploy')
-      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Branch Fixture' });
+      .send({ type: 'purpur', mcVersion: '1.21.4', instanceName: 'Branch Fixture' });
     expect(res.status).toBe(200);
     const instanceId = AuditLogModel.create.mock.calls[0][0].instanceId;
     const cfg = JSON.parse(

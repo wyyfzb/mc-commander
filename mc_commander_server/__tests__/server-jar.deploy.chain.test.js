@@ -97,16 +97,42 @@ vi.mock('child_process', async (importOriginal) => {
 vi.mock('../utils/http-client.js', async () => {
   const streamMod = await import('node:stream');
   // 按 URL 子串命中注册表；未命中即抛错（URL 形状漂移时给出可定位的失败，而非静默 undefined）
-  const findJson = (url) => {
+  const findJsonOrNull = (url) => {
     const keys = Object.keys(httpState.jsonTable).sort((a, b) => b.length - a.length);
     for (const k of keys) if (url.includes(k)) return httpState.jsonTable[k];
-    throw new Error(`unexpected json url: ${url}`);
+    return null;
+  };
+  // vanilla 构建解析已改走 Piston manifest（与升级共用一份实现，见 services/vanilla-manifest.js）。
+  // 夹具接缝仍是 testState.latestBuild —— 由它**合成** Piston 形状的响应：
+  // 逐条改写 30 多处夹具等于把「谁提供下载地址」这件事在测试里散成 30 份，改一处就漏一处。
+  const VANILLA_VERSION = '1.21.4';
+  const pistonManifest = {
+    latest: { release: VANILLA_VERSION },
+    versions: [
+      {
+        id: VANILLA_VERSION,
+        type: 'release',
+        url: 'https://piston-meta.mojang.com/v1/packages/uat/1.21.4.json',
+      },
+    ],
+  };
+  // Piston 对 server jar 给的就是 sha1 ⇒ 夹具里原有的 hash 直接当作 sha1（旧路径按 hashType 分流）
+  const pistonDetail = () => {
+    const art = testState.latestBuild?.downloads?.application;
+    return art ? { downloads: { server: { url: art.url, sha1: art.hash } } } : { downloads: {} };
   };
   // httpJson 契约：直接返回解析后的值（Promisified），值为 Error 实例时 reject
   const httpJson = vi.fn((url) => {
-    const entry = findJson(url);
-    if (entry instanceof Error) return Promise.reject(entry);
-    return Promise.resolve(entry);
+    const u = String(url);
+    // **先查夹具表**：用例可以自己提供 manifest（如版本列表那几个用例），
+    // 合成层只在该 URL 没有夹具时兜底 —— 顺序反了会把用例自己的夹具顶掉。
+    const entry = findJsonOrNull(u);
+    if (entry !== null) {
+      return entry instanceof Error ? Promise.reject(entry) : Promise.resolve(entry);
+    }
+    if (u.includes('version_manifest_v2.json')) return Promise.resolve(pistonManifest);
+    if (u.includes('/v1/packages/uat/')) return Promise.resolve(pistonDetail());
+    throw new Error(`unexpected json url: ${url}`);
   });
   const httpStream = vi.fn((url) => httpState.streamImpl(url, streamMod));
   // 三个具名导出必须齐全：SUT 用 ESM 具名导入，缺一个即模块解析期整体失败
@@ -616,13 +642,16 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
     expect(res.body.message || '').not.toContain('Download host not allowed');
   });
 
-  it('vanilla：core build.application 携带真实 hash/hashType=sha256 → 摘要校验通过', async () => {
+  it('vanilla：摘要只认 Piston 的 sha1 —— 不符即 502，不再有 hashType 回退放行', async () => {
+    // 旧实现按 hashType 在 `artifact.hash || build.sha256 || build.sha1` 之间回退，
+    // 认不出算法就**静默跳过校验**。改成与升级共用 Piston 解析后，vanilla 的摘要只有一个
+    // 来源（`downloads.server.sha1`）；给一个不相符的摘要必须**报错**而不是放行。
+    const wrongSha1 = crypto.createHash('sha1').update('别的字节').digest('hex');
     testState.latestBuild = {
       downloads: {
         application: {
           url: 'https://piston-data.mojang.com/jar/server.jar',
-          hash: JAR_SHA256,
-          hashType: 'sha256',
+          hash: wrongSha1,
         },
       },
     };
@@ -630,11 +659,10 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
 
     const res = await request(app)
       .post('/api/instances/deploy')
-      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Vanilla Sha256 Server' });
+      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Vanilla Bad Sha1 Server' });
 
-    expect(res.status).toBe(200);
-    const instanceId = res.body.data.id;
-    expect(fs.readFileSync(`${testState.serversDir}/${instanceId}/server.jar`)).toEqual(JAR_BYTES);
+    expect(res.status).toBe(502);
+    expect(res.body.message).toMatch(/integrity check failed/);
   });
 
   it('vanilla：真实 hashType=sha1 → 按 sha1 算法校验通过', async () => {
@@ -723,14 +751,14 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
     expect(InstanceModel.create).not.toHaveBeenCalled();
   });
 
-  it('hashType 无法识别 → 视为无摘要跳过校验（不拿未知算法比对而误报损坏）', async () => {
+  it('上游未给 sha1 → 按无摘要处理并照常部署（判据是字段在不在，不是算法认不认）', async () => {
+    // 旧实现的「跳过校验」判据是「算法认不出来」；新实现的判据是「Piston 有没有给 sha1」。
+    // 这一支仍然必须存在：Piston 偶尔不给摘要时不能把部署卡死，但也不能拿别的字段顶替。
     testState.latestBuild = {
       downloads: {
         application: {
           url: 'https://piston-data.mojang.com/jar/server.jar',
-          // 故意用非摘要形态，避免读成「像 md5 的值配错了算法」
-          hash: 'not-a-recognized-digest',
-          hashType: 'crc32',
+          // 不给 hash ⇒ 合成的 Piston 详情里就没有 sha1
         },
       },
     };
@@ -738,7 +766,7 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
 
     const res = await request(app)
       .post('/api/instances/deploy')
-      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Unknown HashType Server' });
+      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'No Digest Server' });
 
     expect(res.status).toBe(200);
     expect(fs.readFileSync(`${testState.serversDir}/${res.body.data.id}/server.jar`)).toEqual(
