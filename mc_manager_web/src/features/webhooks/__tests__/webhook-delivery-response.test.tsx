@@ -95,7 +95,7 @@ const server = setupServer(
   http.get('*/api/v1/webhooks/1/deliveries', () => envelope(mockDeliveries)),
 )
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }))
 afterAll(() => server.close())
 
 beforeEach(() => {

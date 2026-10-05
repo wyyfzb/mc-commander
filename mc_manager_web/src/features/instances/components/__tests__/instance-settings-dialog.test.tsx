@@ -82,7 +82,7 @@ const detailCounter = http.get('*/api/v1/instances/:id', () => {
 })
 
 const server = setupServer(...handlers)
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }))
 afterAll(() => server.close())
 // 运行时 use() 覆盖同名端点（优先级高于 setupServer 列表；afterEach 恢复基座）
 beforeEach(() => {

@@ -18,7 +18,7 @@ import { useServerStore } from '@/stores/server'
 import { useDeployStore } from '@/stores/deploy'
 
 const server = setupServer(...handlers)
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }))
 afterAll(() => server.close())
 
 function renderPage() {

@@ -22,7 +22,7 @@ import { useNotificationStore } from '@/stores/notifications'
 vi.mock('../components/server-terminal', () => ({ ServerTerminal: () => null }))
 
 const server = setupServer(...handlers)
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }))
 afterAll(() => server.close())
 afterEach(() => {
   server.resetHandlers()

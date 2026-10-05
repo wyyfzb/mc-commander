@@ -15,7 +15,7 @@ import { useAuthStore, SESSION_EXPIRED_EVENT } from '@/stores/auth'
 
 const server = setupServer(...handlers)
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }))
 afterAll(() => server.close())
 
 const config: ConnectionConfig = { baseUrl: '', apiKey: 'test-key' }
@@ -51,7 +51,7 @@ describe('API 客户端（统一信封契约）', () => {
   })
 
   it('网络不可达抛 NetworkError', async () => {
-    // 未 mock 的路径 → msw onUnhandledRequest 会报错，改为直接测试封装逻辑：
+    // 未 mock 的路径 → msw onUnhandledFrame 会报错，改为直接测试封装逻辑：
     // 关闭 msw 后 fetch 到不存在端口会失败
     server.close()
     try {
@@ -59,7 +59,7 @@ describe('API 客户端（统一信封契约）', () => {
         apiGet('/api/v1/overview', { baseUrl: 'http://127.0.0.1:1', apiKey: 'k' }),
       ).rejects.toBeInstanceOf(NetworkError)
     } finally {
-      server.listen({ onUnhandledRequest: 'error' })
+      server.listen({ onUnhandledFrame: 'error' })
     }
   })
 })

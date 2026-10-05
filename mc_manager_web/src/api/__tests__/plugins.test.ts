@@ -120,11 +120,13 @@ const server = setupServer(
   ),
 )
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }))
 afterAll(() => server.close())
 
+// 面板地址取页面自身源：XHR 在 jsdom 下会执行 CORS 预检（fetch 不会），跨源地址会先发
+// OPTIONS 而被拦下；面板在生产与 dev 都是同源托管，跨源不是可达形态
 const config: ConnectionConfig = {
-  baseUrl: 'http://localhost:25566',
+  baseUrl: window.location.origin,
   apiKey: 'test-key',
   status: 'ready',
 } as unknown as ConnectionConfig

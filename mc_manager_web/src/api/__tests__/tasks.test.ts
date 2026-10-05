@@ -101,7 +101,7 @@ const server = setupServer(
   ),
 )
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }))
 afterAll(() => server.close())
 
 const config: ConnectionConfig = { baseUrl: 'http://localhost:25566', apiKey: 'test-key' }

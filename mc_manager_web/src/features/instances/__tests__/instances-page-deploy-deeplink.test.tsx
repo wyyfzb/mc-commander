@@ -19,7 +19,7 @@ import { useConnectionStore } from '@/stores/connection'
 import { useServerStore } from '@/stores/server'
 
 const server = setupServer(...handlers)
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }))
 afterAll(() => server.close())
 
 type Router = ReturnType<typeof createMemoryRouter>

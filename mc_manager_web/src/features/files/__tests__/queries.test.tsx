@@ -118,7 +118,7 @@ const server = setupServer(
   http.delete('*/api/v1/instances/inst-err/files', () => err(40031, 'delete denied', 400)),
 )
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }))
 afterAll(() => server.close())
 
 // ── FakeXHR：替换全局 XMLHttpRequest，手动编排 upload load 响应（apiUploadFile 走 XHR 非 fetch） ──

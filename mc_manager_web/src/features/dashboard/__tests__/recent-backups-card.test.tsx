@@ -20,7 +20,7 @@ import { useServerStore } from '@/stores/server'
 import { RecentBackupsCard } from '../components/recent-backups-card'
 
 const server = setupServer(...handlers)
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }))
 afterAll(() => server.close())
 
 /** 备份列表端点（覆盖用例用；默认走 handlers 的 mockBackups） */

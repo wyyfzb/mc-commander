@@ -19,7 +19,7 @@ import { useConnectionStore } from '@/stores/connection'
 import { useServerStore } from '@/stores/server'
 
 const server = setupServer(...handlers)
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }))
 afterAll(() => server.close())
 // server.use 的覆盖是追加式且跨用例存活的：用例自己挂的场景必须在用例后复位
 afterEach(() => server.resetHandlers())

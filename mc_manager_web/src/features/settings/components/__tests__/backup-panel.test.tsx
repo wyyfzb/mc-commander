@@ -26,7 +26,7 @@ import type { BackupItem } from '@/api/types'
 import { BackupPanel, buildBackupDownloadName } from '../backup-panel'
 
 const server = setupServer(...handlers)
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }))
 afterEach(() => server.resetHandlers())
 afterAll(() => server.close())
 

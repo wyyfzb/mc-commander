@@ -23,7 +23,7 @@ import { useUiStore } from '@/stores/ui'
 import { CommandPalette } from '../command-palette'
 
 const server = setupServer(...handlers)
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }))
 afterEach(() => {
   server.resetHandlers()
   toast.dismiss()

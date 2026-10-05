@@ -159,7 +159,7 @@ const server = setupServer(
   ),
 )
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }))
 afterEach(() => server.resetHandlers())
 afterAll(() => server.close())
 
@@ -236,7 +236,7 @@ describe('PluginsPage 列表渲染', () => {
 
   it('无实例时空态引导：暂无服务器实例 CTA 直达部署向导', async () => {
     const user = userEvent.setup()
-    // 本地 server 不含 /instances（onUnhandledRequest: error）：显式覆写为「确实零实例」
+    // 本地 server 不含 /instances（onUnhandledFrame: error）：显式覆写为「确实零实例」
     server.use(
       http.get('/api/v1/instances', () =>
         HttpResponse.json({ status: 'ok', code: 0, message: 'ok', data: [] }),

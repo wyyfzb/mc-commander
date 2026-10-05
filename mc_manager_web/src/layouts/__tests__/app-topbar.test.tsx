@@ -23,7 +23,7 @@ import { useServerStore } from '@/stores/server'
 import { useAuthStore } from '@/stores/auth'
 
 const server = setupServer(...handlers)
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }))
 afterAll(() => server.close())
 
 function renderTopbar() {

@@ -18,7 +18,7 @@ import { useConnectionStore } from '@/stores/connection'
 import { AccountPanel } from '../account-panel'
 
 const server = setupServer(...handlers)
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }))
 // 运行时 handler 会累积到后续用例
 afterEach(() => server.resetHandlers())
 afterAll(() => server.close())

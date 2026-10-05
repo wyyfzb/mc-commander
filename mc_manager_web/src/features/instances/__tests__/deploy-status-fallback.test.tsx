@@ -28,7 +28,7 @@ import * as instancesApi from '@/api/instances'
 import type { DeployStatusResponse } from '@/api/types'
 
 const server = setupServer(...handlers)
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }))
 afterAll(() => server.close())
 
 /** 在途快照（结构占位虚构数据） */

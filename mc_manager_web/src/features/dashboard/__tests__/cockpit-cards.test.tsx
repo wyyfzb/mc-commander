@@ -20,7 +20,7 @@ import { mockInstanceStatus } from '@/test/mocks/handlers'
  */
 
 const server = setupServer(...handlers)
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }))
 afterAll(() => server.close())
 // 用例中途断言失败时体内的还原语句不会执行，间谍会残留给后续用例（如平台 spy 让
 // 后面的 placeholder 断言读到 ⌘）——集中在此还原，失败不放大成无关用例连带红
