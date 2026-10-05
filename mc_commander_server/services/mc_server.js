@@ -32,6 +32,7 @@ import * as logTail from './mc-server/log-tail.js';
 import * as jarVersion from './mc-server/jar-version.js';
 import * as rosterSync from './mc-server/roster-sync.js';
 import * as msmpClient from './mc-server/msmp-client.js';
+import * as crashArtifacts from './mc-server/crash-artifacts.js';
 import { logger } from '../utils/logger.js';
 
 // 原子写统一走 utils/fs-utils.js 公共实现（写唯一 .tmp 再 rename，失败清残留）。
@@ -2333,6 +2334,10 @@ Object.assign(MCServerInstance.prototype, logTail);
 
 // 孤儿进程接管域挂载（根修）：pid 文件与面板重启后接管，机制见 adopt.js 头注释。
 Object.assign(MCServerInstance.prototype, adopt);
+
+// 崩溃诊断产物域挂载：读取并解析 crash-reports/crash-*.txt 与 hs_err_pid*.log，
+// 只读呈现（格式依据与实测样本见模块头注释）。
+Object.assign(MCServerInstance.prototype, crashArtifacts);
 
 // 实例版本读取域挂载：从服务端 JAR 内 version.json 取权威 mcVersion/javaVersion，
 // 供 _getMcVersion 与 _getRequiredJavaVersion 使用（机制见 jar-version.js 头注释）。

@@ -1,0 +1,45 @@
+#
+# A fatal error has been detected by the Java Runtime Environment:
+#
+#  SIGSEGV (0xb) at pc=0x00007e9be6698e4f (sent by kill), pid=2601333, tid=2601333
+#
+# JRE version: OpenJDK Runtime Environment (21.0.12.1+1) (build 21.0.12.1+1-1-24.04.4)
+# Java VM: OpenJDK 64-Bit Server VM (21.0.12.1+1-1-24.04.4, mixed mode, sharing, tiered, compressed oops, compressed class ptrs, g1 gc, linux-amd64)
+# Problematic frame:
+# C  [libc.so.6+0x98e4f]
+#
+# Core dump will be written. Default location: Determined by the following: "/usr/share/apport/apport -p%p -s%s -c%c -d%d -P%P -u%u -g%g -F%F -- %E" (alternatively, falling back to /srv/minecraft/instance/core.2601333)
+#
+# If you would like to submit a bug report, please visit:
+#   https://bugs.launchpad.net/ubuntu/+source/openjdk-21
+#
+
+---------------  S U M M A R Y ------------
+
+Command Line: --add-modules=ALL-DEFAULT jdk.compiler/com.sun.tools.javac.launcher.Main Spin.java
+
+Host: Example CPU, 2 cores, 7G, Example Linux 1.0
+Time: Mon Oct  5 07:38:25 2026 CST elapsed time: 6.015398 seconds (0d 0h 0m 6s)
+
+---------------  T H R E A D  ---------------
+
+Current thread is native thread
+
+Stack: [0x00007ffd7b326000,0x00007ffd7bb25000],  sp=0x00007ffd7bb1fed0,  free space=8167k
+Native frames: (J=compiled Java code, j=interpreted, Vv=VM code, C=native code)
+C  [libc.so.6+0x98e4f]
+C  [libc.so.6+0x9e883]
+C  [libjli.so+0x90e3]  CallJavaMainInNewThread+0x63
+C  [libjli.so+0x60d1]  ContinueInNewThread+0x61
+C  [libjli.so+0x6bca]  JLI_Launch+0x8da
+C  [java+0x12b1]
+C  [libc.so.6+0x2a1ca]
+C  [libc.so.6+0x2a28b]  __libc_start_main+0x8b
+
+siginfo: si_signo: 11 (SIGSEGV), si_code: 0 (SI_USER), si_pid: 2601331, si_uid: 1002
+
+Registers:
+RAX=0x00000000000000ca, RBX=0x0000000000000000, RCX=0x00007e9be6698e51, RDX=0x000000000027b177
+RSP=0x00007ffd7bb1fed0, RBP=0x00007ffd7bb1ff10, RSI=0x0000000000000109, RDI=0x00007e9be4fff990
+R8 =0x0000000000000000, R9 =0x00000000ffffffff, R10=0x0000000000000000, R11=0x0000000000000246
+R12=0x000000000027b177, R13=0x0000000000000000, R14=0x00007e9be4fff990, R15=0x00007e9be4fff6c0

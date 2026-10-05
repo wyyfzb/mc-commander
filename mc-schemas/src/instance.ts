@@ -262,3 +262,50 @@ export const instanceDeleteResponseSchema = z.object({
 
 export type InstanceDeleteRequestBody = z.infer<typeof instanceDeleteRequestBodySchema>
 export type InstanceDeleteResponse = z.infer<typeof instanceDeleteResponseSchema>
+
+/**
+ * GET /instances/:id/crash-report 成功响应。
+ *
+ * 崩溃诊断产物有**两类**（MC 崩溃报告与 JVM 崩溃日志），且解析出的字段随产物类型与
+ * 崩溃时点而异（如 `-- Affected level --` 只在推进到世界/刻循环的崩溃里出现），
+ * 故解析结果统一表达为**有序的 label/value 列表**而不是固定字段：
+ * 既能原样呈现「已核实字段」，也不必为不存在的段造空键。
+ *
+ * `parseError` 非空表示如实降级（读失败 / 格式不识别）——此时 `excerpt` 仍可能可用，
+ * 界面不得把它当「没有报错」。
+ */
+export const crashArtifactFieldSchema = z.object({
+  label: z.string(),
+  value: z.string(),
+})
+
+export const crashArtifactSchema = z.object({
+  /** 是否真的取到了产物（false 表示枚举/读取失败，与「从未崩溃过」的 null 不同） */
+  available: z.boolean(),
+  /** 产物类型：crash-report = MC 崩溃报告，jvm-crash = hs_err_pid*.log */
+  kind: z.enum(['crash-report', 'jvm-crash']).optional(),
+  fileName: z.string().optional(),
+  mtimeMs: z.number().optional(),
+  sizeBytes: z.number().optional(),
+  /** 已核实字段（有序）；解析失败时为空数组 */
+  summary: z.array(crashArtifactFieldSchema).optional(),
+  /** 崩溃报告：顶层异常行 */
+  exception: z.string().nullable().optional(),
+  /** 崩溃报告：顶层栈帧（文本） */
+  stack: z.array(z.string()).optional(),
+  /** 崩溃报告：`Caused by:` 链 */
+  causedBy: z.array(z.string()).optional(),
+  /** 崩溃报告：`-- <段名> --` 段名列表 */
+  sections: z.array(z.string()).optional(),
+  /** JVM 崩溃日志：故障行 */
+  failure: z.array(z.string()).optional(),
+  /** JVM 崩溃日志：问题帧（OOM 型没有该段） */
+  problematicFrame: z.string().nullable().optional(),
+  /** 头部节选原文（未解析部分整体呈现） */
+  excerpt: z.string().optional(),
+  /** 如实降级的原因；null/缺省表示解析正常 */
+  parseError: z.string().nullable().optional(),
+})
+
+export type CrashArtifactField = z.infer<typeof crashArtifactFieldSchema>
+export type CrashArtifact = z.infer<typeof crashArtifactSchema>

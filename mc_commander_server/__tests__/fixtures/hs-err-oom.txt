@@ -1,0 +1,45 @@
+#
+# A fatal error has been detected by the Java Runtime Environment:
+#
+#  Internal Error (debug.cpp:271), pid=2600947, tid=2600948
+#  fatal error: OutOfMemory encountered: Java heap space
+#
+# JRE version: OpenJDK Runtime Environment (21.0.12.1+1) (build 21.0.12.1+1-1-24.04.4)
+# Java VM: OpenJDK 64-Bit Server VM (21.0.12.1+1-1-24.04.4, mixed mode, sharing, tiered, compressed oops, compressed class ptrs, g1 gc, linux-amd64)
+# Core dump will be written. Default location: Determined by the following: "/usr/share/apport/apport -p%p -s%s -c%c -d%d -P%P -u%u -g%g -F%F -- %E" (alternatively, falling back to /srv/minecraft/instance/core.2600947)
+#
+
+---------------  S U M M A R Y ------------
+
+Command Line: -Xmx32m -XX:+CrashOnOutOfMemoryError --add-modules=ALL-DEFAULT jdk.compiler/com.sun.tools.javac.launcher.Main Oom.java
+
+Host: Example CPU, 2 cores, 7G, Example Linux 1.0
+Time: Mon Oct  5 07:36:50 2026 CST elapsed time: 1.350155 seconds (0d 0h 0m 1s)
+
+---------------  T H R E A D  ---------------
+
+Current thread (0x00007d9e100191e0):  JavaThread "main"             [_thread_in_vm, id=2600948, stack(0x00007d9e17300000,0x00007d9e17400000) (1024K)]
+
+Stack: [0x00007d9e17300000,0x00007d9e17400000],  sp=0x00007d9e173fe0b0,  free space=1016k
+Native frames: (J=compiled Java code, j=interpreted, Vv=VM code, C=native code)
+V  [libjvm.so+0x102155d]  VMError::report_and_die(int, char const*, char const*, __va_list_tag*, Thread*, unsigned char*, void*, void*, char const*, int, unsigned long)+0x27d  (debug.cpp:271)
+V  [libjvm.so+0x6b5a69]  report_fatal(VMErrorType, char const*, int, char const*, ...)+0x109
+V  [libjvm.so+0x6b5d31]  report_java_out_of_memory(char const*)+0x101
+V  [libjvm.so+0xc59362]  MemAllocator::Allocation::check_out_of_memory()+0x72
+V  [libjvm.so+0xc59f36]  MemAllocator::allocate() const+0xb6
+V  [libjvm.so+0xfc0f69]  TypeArrayKlass::allocate_common(int, bool, JavaThread*)+0xb9
+V  [libjvm.so+0x90b784]  InterpreterRuntime::newarray(JavaThread*, BasicType, int)+0x24
+j  Oom.main([Ljava/lang/String;)V+11
+j  java.lang.invoke.LambdaForm$DMH+0x00007d9da4031000.invokeStatic(Ljava/lang/Object;Ljava/lang/Object;)V+10 java.base@21.0.12.1
+j  java.lang.invoke.LambdaForm$MH+0x00007d9da4141400.invoke(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;+33 java.base@21.0.12.1
+j  java.lang.invoke.Invokers$Holder.invokeExact_MT(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;+20 java.base@21.0.12.1
+j  jdk.internal.reflect.DirectMethodHandleAccessor.invokeImpl(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;+55 java.base@21.0.12.1
+j  jdk.internal.reflect.DirectMethodHandleAccessor.invoke(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;+23 java.base@21.0.12.1
+j  java.lang.reflect.Method.invoke(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;+102 java.base@21.0.12.1
+j  com.sun.tools.javac.launcher.Main.execute(Ljava/lang/String;[Ljava/lang/String;Lcom/sun/tools/javac/launcher/Main$Context;)V+291 jdk.compiler@21.0.12.1
+j  com.sun.tools.javac.launcher.Main.run([Ljava/lang/String;[Ljava/lang/String;)V+54 jdk.compiler@21.0.12.1
+j  com.sun.tools.javac.launcher.Main.main([Ljava/lang/String;)V+17 jdk.compiler@21.0.12.1
+v  ~StubRoutines::call_stub 0x00007d9dffd38cc6
+V  [libjvm.so+0x9199ea]  JavaCalls::call_helper(JavaValue*, methodHandle const&, JavaCallArguments*, JavaThread*)+0x2da
+V  [libjvm.so+0x9be9bd]  jni_invoke_static(JNIEnv_*, JavaValue*, _jobject*, JNICallType, _jmethodID*, JNI_ArgumentPusher*, JavaThread*) [clone .constprop.1]+0x35d
+V  [libjvm.so+0x9d1f22]  jni_CallStaticVoidMethod+0x252
