@@ -18,9 +18,13 @@ vi.mock('../utils/http-client.js', () => ({
   httpPost: vi.fn(),
 }));
 
-const { listFabricGameVersions, listPurpurVersions } = await import(
-  '../services/loader-upstreams.js'
-);
+const {
+  listFabricGameVersions,
+  listPurpurVersions,
+  resolvePurpurDownload,
+  resolveForgeInstallerDownload,
+  resolveFabricDownload,
+} = await import('../services/loader-upstreams.js');
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -88,5 +92,62 @@ describe('listPurpurVersions', () => {
   it('非字符串项跳过', async () => {
     jsonImpl.current = () => Promise.resolve({ versions: ['a', 42, null, 'b'] });
     expect(await listPurpurVersions()).toEqual(['b', 'a']);
+  });
+});
+
+describe('resolvePurpurDownload', () => {
+  it('有 build 时用具体构建号下载（与查询到的摘要同源）', async () => {
+    jsonImpl.current = () => Promise.resolve({ build: 2416, md5: 'a'.repeat(32) });
+    expect(await resolvePurpurDownload('1.21.4')).toEqual({
+      url: 'https://api.purpurmc.org/v2/purpur/1.21.4/2416/download',
+      expectedHash: { algorithm: 'md5', digest: 'a'.repeat(32) },
+    });
+  });
+
+  it('没有 build 时退到 latest/download（不拼出 undefined 路径）', async () => {
+    jsonImpl.current = () => Promise.resolve({ md5: 'a'.repeat(32) });
+    const r = await resolvePurpurDownload('1.21.4');
+    expect(r.url).toBe('https://api.purpurmc.org/v2/purpur/1.21.4/latest/download');
+  });
+
+  it('没有 md5 → expectedHash 为 null（如实表达「上游没给」，不拿别的字段凑）', async () => {
+    jsonImpl.current = () => Promise.resolve({ build: 2416 });
+    expect((await resolvePurpurDownload('1.21.4')).expectedHash).toBe(null);
+  });
+});
+
+describe('resolveForgeInstallerDownload', () => {
+  it('优先 recommended，地址是 maven 的 <mc>-<forge> 路径', async () => {
+    jsonImpl.current = () =>
+      Promise.resolve({
+        promos: { '1.21.4-recommended': '51.0.0', '1.21.4-latest': '52.0.0' },
+      });
+    expect(await resolveForgeInstallerDownload('1.21.4')).toEqual({
+      url: 'https://maven.minecraftforge.net/net/minecraftforge/forge/1.21.4-51.0.0/forge-1.21.4-51.0.0-installer.jar',
+      expectedHash: null,
+    });
+  });
+
+  it('只有 latest 时用 latest', async () => {
+    jsonImpl.current = () => Promise.resolve({ promos: { '1.21.4-latest': '52.0.0' } });
+    expect((await resolveForgeInstallerDownload('1.21.4')).url).toContain('1.21.4-52.0.0');
+  });
+
+  it('该 MC 版本没有 forge 构建 → 抛错（不给出一个必然 404 的地址）', async () => {
+    jsonImpl.current = () => Promise.resolve({ promos: {} });
+    await expect(resolveForgeInstallerDownload('1.21.4')).rejects.toThrow(/No Forge build/);
+  });
+});
+
+describe('resolveFabricDownload', () => {
+  it('按 loader 版本拼固定路径；上游不提供摘要 ⇒ 恒为 null', async () => {
+    expect(await resolveFabricDownload('1.21.4', '0.16.10')).toEqual({
+      url: 'https://meta.fabricmc.net/v2/versions/loader/1.21.4/0.16.10/1.0.1/server/jar',
+      expectedHash: null,
+    });
+  });
+
+  it('loader 缺失时用默认值（不该让整条部署失败）', async () => {
+    expect((await resolveFabricDownload('1.21.4', undefined)).url).toContain('/1.21.4/0.16.10/');
   });
 });

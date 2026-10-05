@@ -36,21 +36,6 @@ vi.mock('../config.js', async () => {
   return { default: { serversDir: testState.serversDir } };
 });
 
-vi.mock('minecraft-core', () => ({
-  MinecraftServerManager: class {
-    async getVersions() {
-      return [];
-    }
-    async getLatestBuild() {
-      return testState.latestBuild;
-    }
-    async downloadServer() {
-      return {};
-    }
-  },
-  NodeAdapter: class {},
-}));
-
 vi.mock('../utils/java-detector.js', () => ({
   getRecommendedJavaVersion: vi.fn(() => '21'),
   findJavaPath: vi.fn(() => '/usr/bin/java'),
@@ -213,7 +198,7 @@ const DEPLOY_BODY = {
 beforeEach(() => {
   vi.clearAllMocks();
   testState.spawnBehavior = 'exit0';
-  // minecraft-core 的真实返回形状：摘要只在 downloads.application 的 hash + hashType
+  // 夹具接缝 testState.latestBuild：由合成层喂给 vanilla 的 Piston 详情（摘要即 sha1）
   testState.latestBuild = {
     downloads: {
       application: {

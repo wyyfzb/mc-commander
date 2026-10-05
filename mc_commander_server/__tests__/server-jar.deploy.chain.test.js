@@ -9,7 +9,7 @@
  *
  * mock 边界（对齐 PR#413/#412/#409 范式：仅替身外部依赖，importOriginal 保留语义）：
  * - utils/http-client：HTTP 层替身（httpJson 按 URL 注册表返回；httpStream 注入可控字节流）
- * - minecraft-core：核心版本发现替身（getVersions/getLatestBuild 可控行为）
+ * - 上游 HTTP：vanilla/purpur/forge 的构建解析由 httpJson 替身按夹具合成
  * - child_process：假 java/forge 进程（importOriginal 保留 spawnSync）
  * - java-detector / db / config.serversDir（tmp 目录）：隔离宿主环境
  * - jar-download-guard / audit / validateBody：真实 import，语义原样
@@ -47,19 +47,6 @@ vi.mock('../config.js', async () => {
   testState.serversDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'mcs-deploy-chain-'));
   return { default: { serversDir: testState.serversDir } };
 });
-
-vi.mock('minecraft-core', () => ({
-  MinecraftServerManager: class {
-    async getVersions() {
-      return testState.mcCoreVersions;
-    }
-    async getLatestBuild() {
-      if (testState.mcCoreThrow) throw new Error('core registry unavailable');
-      return testState.latestBuild;
-    }
-  },
-  NodeAdapter: class {},
-}));
 
 vi.mock('../utils/java-detector.js', () => ({
   getRecommendedJavaVersion: vi.fn(() => '21'),
@@ -132,6 +119,20 @@ vi.mock('../utils/http-client.js', async () => {
     }
     if (u.includes('version_manifest_v2.json')) return Promise.resolve(pistonManifest);
     if (u.includes('/v1/packages/uat/')) return Promise.resolve(pistonDetail());
+    // forge 的构建号在 promotions 里（没有构建详情接口）——同样由合成层兜底
+    // purpur：摘要只在 /latest 的顶层 md5（下载直链不带摘要）——夹具的 hash 即当作它
+    if (u.includes('api.purpurmc.org') && u.includes('/latest')) {
+      const art = testState.latestBuild?.downloads?.application;
+      return Promise.resolve({
+        build: testState.purpurBuild === undefined ? 2416 : testState.purpurBuild,
+        md5: art?.hash,
+      });
+    }
+    if (u.includes('promotions_slim')) {
+      return Promise.resolve({
+        promos: { '1.21.4-recommended': '51.0.0', '1.21.4-latest': '51.0.0' },
+      });
+    }
     throw new Error(`unexpected json url: ${url}`);
   });
   const httpStream = vi.fn((url) => httpState.streamImpl(url, streamMod));
@@ -809,8 +810,10 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
     expect(httpStream.mock.calls[0][0]).toContain('/0.16.14/');
   });
 
-  it('purpur：core 失败 → 回退 purpur API latest 直链下载成功', async () => {
-    testState.mcCoreThrow = true;
+  it('purpur：/latest 未给 build → 退到 latest/download（有 build 时必须用具体构建号）', async () => {
+    // 用具体构建号的原因是：查询到的摘要与实际下载的构建必须是同一个，
+    // 否则中间发新构建时会拿旧摘要校验新文件、对正常文件报完整性失败。
+    testState.purpurBuild = null;
     const { app } = buildApp();
 
     const res = await request(app)
@@ -821,6 +824,22 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
     const { httpStream } = await import('../utils/http-client.js');
     expect(httpStream.mock.calls[0][0]).toBe(
       'https://api.purpurmc.org/v2/purpur/1.21.4/latest/download',
+    );
+    testState.purpurBuild = undefined;
+  });
+
+  it('purpur：/latest 给了 build → 用具体构建号下载（与摘要同源）', async () => {
+    testState.purpurBuild = 2416;
+    const { app } = buildApp();
+
+    const res = await request(app)
+      .post('/api/instances/deploy')
+      .send({ type: 'purpur', mcVersion: '1.21.4', instanceName: 'Purpur Build Server' });
+
+    expect(res.status).toBe(200);
+    const { httpStream } = await import('../utils/http-client.js');
+    expect(httpStream.mock.calls[0][0]).toBe(
+      'https://api.purpurmc.org/v2/purpur/1.21.4/2416/download',
     );
   });
 

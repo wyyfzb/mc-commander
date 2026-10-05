@@ -2,7 +2,7 @@
  * Deploy 端点审计断言（INSTANCE_CREATE，issue 373）
  *
  * 部署链路重依赖（网络下载 / java 子进程 / forge 安装）全部 mock：
- * - minecraft-core：getLatestBuild 返回 hoisted 可控 build（vanilla 路径不走 paper API）
+ * - 上游 HTTP：vanilla 的构建解析走 Piston manifest（由 httpJson 替身合成）
  * - utils/http-client：httpStream 用 PassThrough 注入假 jar 字节流（expectedHash 缺省 → 跳过摘要校验）
  * - child_process.spawn：假进程立即 exit(0)（first launch 不阻塞）
  * - java-detector：固定 java 路径（避免探测宿主环境）
@@ -31,15 +31,6 @@ vi.mock('../config.js', async () => {
   testState.serversDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'mcs-deploy-audit-'));
   return { default: { serversDir: testState.serversDir } };
 });
-
-vi.mock('minecraft-core', () => ({
-  MinecraftServerManager: class {
-    async getLatestBuild() {
-      return testState.latestBuild;
-    }
-  },
-  NodeAdapter: class {},
-}));
 
 vi.mock('../utils/java-detector.js', () => ({
   getRecommendedJavaVersion: vi.fn(() => '21'),

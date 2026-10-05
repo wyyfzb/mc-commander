@@ -44,23 +44,6 @@ vi.mock('../config.js', async () => {
   return { default: { serversDir: testState.serversDir } };
 });
 
-vi.mock('minecraft-core', () => ({
-  MinecraftServerManager: class {
-    async getVersions() {
-      return testState.mcCoreVersionsValue;
-    }
-    async getLatestBuild() {
-      if (testState.latestBuild instanceof Error) throw testState.latestBuild;
-      return testState.latestBuild;
-    }
-    async downloadServer(opts) {
-      if (testState.downloadServerImpl) return testState.downloadServerImpl(opts);
-      return {};
-    }
-  },
-  NodeAdapter: class {},
-}));
-
 vi.mock('../utils/java-detector.js', () => ({
   getRecommendedJavaVersion: vi.fn(() => '21'),
   findJavaPath: vi.fn(() => '/usr/bin/java'),
@@ -142,6 +125,12 @@ vi.mock('../utils/http-client.js', async () => {
     }
     if (u.includes('version_manifest_v2.json')) return Promise.resolve(pistonManifest);
     if (u.includes('/v1/packages/uat/')) return Promise.resolve(pistonDetail());
+    // forge 的构建号在 promotions 里（没有构建详情接口）——同样由合成层兜底
+    if (u.includes('promotions_slim')) {
+      return Promise.resolve({
+        promos: { '1.21.4-recommended': '51.0.0', '1.21.4-latest': '51.0.0' },
+      });
+    }
     throw new Error(`unexpected json url: ${url}`);
   });
   const httpStream = vi.fn((url) => httpState.streamImpl(url, streamMod));
@@ -150,7 +139,6 @@ vi.mock('../utils/http-client.js', async () => {
 });
 
 const { createServerJarRoutes } = await import('../routes/server-jar.js');
-const { AuditLogModel } = await import('../db/index.js');
 const { errorHandler } = await import('../middleware/error_handler.js');
 
 function defaultStreamImpl(jarBytes) {
@@ -404,14 +392,18 @@ describe('Paper 构建发现链形态缺口', () => {
   });
 });
 
-describe('deploy · core 构建形态与 downloadServer 本地形态', () => {
+describe('deploy · 上游直链形态', () => {
+  // 曾有一组「downloadServer 本地落盘」用例（build 为 path 形态 / build 为 null /
+  // 库返回 url / 库返回空对象）。它们测的是 minecraft-core 的**库内自取**那条路，
+  // 而那条路已被移除——它下面板侧的体积上限与下载域白名单都不生效（URL 不经过本仓，
+  // 断言不到）。故随实现一并删除，不是被跳过。
   function defineVanilla() {
     defineManifest();
   }
 
   it('core build 真实形状（downloads.application.url）→ 直链下载成功', async () => {
     defineVanilla();
-    // minecraft-core 的 UnifiedBuild 无顶层 url/sha 字段，地址与摘要都在 application 层
+    // 夹具仍以 downloads.application.url 形态给地址，由合成层转成 Piston 详情
     testState.latestBuild = {
       downloads: {
         application: {
@@ -427,78 +419,6 @@ describe('deploy · core 构建形态与 downloadServer 本地形态', () => {
       .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Url Form' });
     expect(res.status).toBe(200);
     expect(res.body.data.name).toBe('Url Form');
-  });
-
-  it('purpur：build 无 application.url（path 形态）→ 走 downloadServer 本地落盘', async () => {
-    // 真实形状里 downloadType='path' 的构建没有可直链的 url
-    testState.latestBuild = {
-      downloads: { application: { downloadType: 'path' } },
-    };
-    testState.downloadServerImpl = (opts) => {
-      fs.writeFileSync(path.join(opts.outputDir, 'core-server-build.jar'), 'local jar payload');
-      fs.mkdirSync(path.join(opts.outputDir, 'logs'), { recursive: true });
-      return { path: opts.outputDir };
-    };
-    const { app } = buildApp();
-    const res = await request(app)
-      .post('/api/instances/deploy')
-      .send({ type: 'purpur', mcVersion: '1.21.4', instanceName: 'Branch Fixture' });
-    expect(res.status).toBe(200);
-  });
-
-  it('purpur：build 为 null → downloadServer 落盘本地 jar → rename 为 server.jar + logs 预置跳过首启', async () => {
-    testState.latestBuild = null;
-    testState.downloadServerImpl = (opts) => {
-      fs.writeFileSync(path.join(opts.outputDir, 'core-server-build.jar'), 'local jar payload');
-      // 预置 logs 目录：runFirstLaunch 检测到即跳过 java 进程
-      fs.mkdirSync(path.join(opts.outputDir, 'logs'), { recursive: true });
-      return { path: opts.outputDir };
-    };
-    const { app } = buildApp();
-    const res = await request(app)
-      .post('/api/instances/deploy')
-      .send({ type: 'purpur', mcVersion: '1.21.4', instanceName: 'Branch Fixture' });
-    expect(res.status).toBe(200);
-    const instanceId = AuditLogModel.create.mock.calls[0][0].instanceId;
-    const cfg = JSON.parse(
-      fs.readFileSync(path.join(testState.serversDir, instanceId, 'instance.json'), 'utf-8'),
-    );
-    expect(cfg.jarFile).toBe('server.jar');
-    // 本地产物已 rename：core-server-build.jar 不存在、server.jar 存在
-    const files = fs.readdirSync(path.join(testState.serversDir, instanceId));
-    expect(files).toContain('server.jar');
-    expect(files).not.toContain('core-server-build.jar');
-    // logs 已预置 → 首启跳过：无 java spawn
-    const { spawn } = await import('child_process');
-    expect(spawn).not.toHaveBeenCalled();
-  });
-
-  it('purpur：downloadServer 返回 { url } → 转直链下载', async () => {
-    testState.latestBuild = null;
-    testState.downloadServerImpl = () => ({
-      url: 'https://api.purpurmc.org/fallback-url.jar',
-    });
-    const { app } = buildApp();
-    const res = await request(app)
-      .post('/api/instances/deploy')
-      .send({ type: 'purpur', mcVersion: '1.21.4', instanceName: 'Branch Fixture' });
-    expect(res.status).toBe(200);
-  });
-
-  it('purpur：downloadServer 返回空对象且目录无 jar → 不 rename，部署仍完成', async () => {
-    defineVanilla();
-    testState.latestBuild = null;
-    testState.downloadServerImpl = () => ({});
-    const { app } = buildApp();
-    const res = await request(app)
-      .post('/api/instances/deploy')
-      .send({ type: 'purpur', mcVersion: '1.21.4', instanceName: 'Branch Fixture' });
-    expect(res.status).toBe(200);
-    const instanceId = AuditLogModel.create.mock.calls[0][0].instanceId;
-    const cfg = JSON.parse(
-      fs.readFileSync(path.join(testState.serversDir, instanceId, 'instance.json'), 'utf-8'),
-    );
-    expect(cfg.jarFile).toBe('server.jar'); // 缺省 jarFile 原样落盘
   });
 });
 

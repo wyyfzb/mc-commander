@@ -19,13 +19,13 @@ import { AppError, ErrorCodes } from './response.js';
  * 各服务端类型允许的下载域（API 域与文件域都列，调用方按类型取子集）。
  *
  * 存在的理由：下载 URL **来自上游响应**（vanilla 的 `downloads.server.url`、paper v3 的
- * `downloadInfo.url`、minecraft-core 的 `UnifiedBuild.downloads.application.url`），
+ * `downloadInfo.url`、Piston 详情的 `downloads.server.url`），
  * 上游被污染即可让面板去任意主机取一个 jar 并落进实例目录。故实际发起请求前断言域。
  *
  * **按类型取子集而不是共用一个大集合**：升级只支持 vanilla/paper/purpur，若给它并集，
  * 一个被污染的 Piston 响应就能指向 forge 的文件域而被放行——那是白名单被悄悄放宽。
  *
- * 域来源为静态核对（本仓常量 + `minecraft-core` 的 URL 模板 + 实测响应），
+ * 域来源为静态核对（本仓常量 + 各上游的 URL 模板 + 实测响应），
  * 少一个域会让该加载器**部署直接失败**，故每个域都附了来处。
  */
 export const DOWNLOAD_HOSTS_BY_TYPE = {

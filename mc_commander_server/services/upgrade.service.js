@@ -18,6 +18,7 @@ import {
 } from '../utils/jar-download-guard.js';
 import { logger } from '../utils/logger.js';
 import { resolveVanillaDownload } from './vanilla-manifest.js';
+import { resolvePurpurDownload } from './loader-upstreams.js';
 import {
   findJavaPathStrict,
   getRecommendedJavaVersion,
@@ -142,24 +143,8 @@ export class UpgradeService {
     }
 
     if (type === 'purpur') {
-      // Purpur API：摘要只在 /latest 响应的顶层 md5 字段里（实测与真实 jar 字节一致），
-      // 下载直链本身不带摘要 ⇒ 必须先查 /latest 才能校验。
-      // 查不到（网络异常/md5 缺失）时降级为无摘要跳过，不阻断升级。
-      const latest = await httpJson(`https://api.purpurmc.org/v2/purpur/${mcVersion}/latest`, {
-        timeoutMs: 15000,
-        retryLimit: 2,
-      });
-      const digest = latest.md5;
-      // 用 latest.build 而非 /latest/download：否则查询到的摘要与下载的构建可能不是同一个
-      // （中间有新构建发布时会错位，导致对正常文件报完整性失败）
-      const url =
-        latest.build != null
-          ? `https://api.purpurmc.org/v2/purpur/${mcVersion}/${latest.build}/download`
-          : `https://api.purpurmc.org/v2/purpur/${mcVersion}/latest/download`;
-      return {
-        url,
-        expectedHash: digest ? { algorithm: 'md5', digest } : null,
-      };
+      // 与部署共用同一实现（services/loader-upstreams.js）
+      return resolvePurpurDownload(mcVersion);
     }
 
     throw new Error(`Unsupported server type: ${type}`);
