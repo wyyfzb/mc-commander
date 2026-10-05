@@ -18,7 +18,7 @@ import WebhookPage from '../webhook-page'
 import { useConnectionStore } from '@/stores/connection'
 
 const server = setupServer(...handlers)
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }))
 afterAll(() => server.close())
 afterEach(() => server.resetHandlers())
 

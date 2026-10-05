@@ -37,7 +37,7 @@ vi.mock('@/lib/clipboard', () => ({
 }))
 
 const server = setupServer(...handlers)
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }))
 afterAll(() => server.close())
 // 用例级 server.use 覆写必须在每例后回收：否则前一例的「挂起/401/403」应答会漏到后一例
 afterEach(() => server.resetHandlers())

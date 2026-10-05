@@ -105,7 +105,7 @@ const server = setupServer(
   http.post('*/api/v1/instances/inst-err/tasks', () => err(40022, 'invalid cron', 400)),
 )
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }))
 afterAll(() => server.close())
 
 function makeWrapper() {

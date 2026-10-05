@@ -34,7 +34,7 @@ const server = setupServer(
 )
 
 beforeEach(() => {
-  server.listen({ onUnhandledRequest: 'bypass' })
+  server.listen({ onUnhandledFrame: 'bypass' })
   useAuthStore.getState().clearSession()
 })
 afterEach(() => server.close())

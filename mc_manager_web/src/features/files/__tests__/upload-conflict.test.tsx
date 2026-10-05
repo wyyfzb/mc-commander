@@ -103,7 +103,7 @@ function okUploadEnvelope(name: string, path: string) {
 }
 
 describe('FilesPage 上传同名冲突确认（#328）', () => {
-  beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
+  beforeAll(() => server.listen({ onUnhandledFrame: 'error' }))
   afterAll(() => server.close())
   afterEach(() => {
     server.resetHandlers()

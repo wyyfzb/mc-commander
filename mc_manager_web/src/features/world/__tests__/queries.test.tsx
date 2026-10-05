@@ -85,7 +85,7 @@ const server = setupServer(
   http.put('*/api/v1/instances/inst-err/properties', () => err(40024, 'invalid property key', 400)),
 )
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }))
 afterAll(() => server.close())
 
 function makeWrapper() {

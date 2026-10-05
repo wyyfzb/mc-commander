@@ -18,7 +18,7 @@ import { useUiStore } from '@/stores/ui'
 import { LastOutputDialog } from '../last-output-dialog'
 
 const server = setupServer(...handlers)
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }))
 afterEach(() => server.resetHandlers())
 afterAll(() => server.close())
 

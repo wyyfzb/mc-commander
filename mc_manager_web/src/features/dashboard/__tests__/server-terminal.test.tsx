@@ -103,7 +103,7 @@ vi.mock('@xterm/addon-search', () => ({
 }))
 
 const server = setupServer(...handlers)
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }))
 afterAll(() => server.close())
 // 用例中途断言失败时体内的还原语句不会执行，间谍会残留给后续用例——集中还原
 afterEach(() => vi.restoreAllMocks())

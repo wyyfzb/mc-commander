@@ -72,7 +72,7 @@ const server = setupServer(
   http.get('*/api/v1/instances/inst-err/world', () => err(50300, 'server offline', 503)),
 )
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }))
 afterAll(() => server.close())
 
 const config: ConnectionConfig = { baseUrl: 'http://localhost:25566', apiKey: 'test-key' }

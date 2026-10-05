@@ -36,7 +36,7 @@ const server = setupServer(
   ),
 )
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }))
 afterAll(() => server.close())
 
 afterEach(() => {
@@ -48,7 +48,9 @@ afterEach(() => {
   server.resetHandlers()
 })
 
-const config: ConnectionConfig = { baseUrl: 'http://localhost:25566', apiKey: 'test-key' }
+// 面板地址取页面自身源：XHR 在 jsdom 下会执行 CORS 预检（fetch 不会），跨源地址会先发
+// OPTIONS 而被拦下；面板在生产与 dev 都是同源托管，跨源不是可达形态
+const config: ConnectionConfig = { baseUrl: window.location.origin, apiKey: 'test-key' }
 
 describe('apiDownloadFile · Content-Disposition 解析', () => {
   const dl = (header?: string) =>
@@ -323,7 +325,9 @@ describe('apiUploadFile（XHR 共享实现）', () => {
       await expect(
         apiUploadFile(
           '/api/v1/upload',
-          { baseUrl: 'https://panel-b.example.com', apiKey: 'key-b' },
+          // 「异面板」由会话的 issuedFor 承担差异（判据是签发面板 vs 目标地址），与传输是否跨源
+          // 无关；此处用同源地址，理由同上方 config
+          { baseUrl: window.location.origin, apiKey: 'key-b' },
           file(),
         ),
       ).rejects.toMatchObject({ code: 40103 })
@@ -375,7 +379,7 @@ describe('apiUploadFile（XHR 共享实现）', () => {
         apiUploadFile('/api/v1/upload', { baseUrl: 'http://127.0.0.1:1', apiKey: 'k' }, file()),
       ).rejects.toMatchObject({ name: 'NetworkError' })
     } finally {
-      server.listen({ onUnhandledRequest: 'error' })
+      server.listen({ onUnhandledFrame: 'error' })
     }
   })
 })

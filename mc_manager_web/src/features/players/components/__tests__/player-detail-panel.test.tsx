@@ -102,7 +102,7 @@ function renderPanel(player: Player | null = null) {
   )
 }
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'bypass' }))
+beforeAll(() => server.listen({ onUnhandledFrame: 'bypass' }))
 afterEach(() => server.resetHandlers())
 afterAll(() => server.close())
 

@@ -21,7 +21,7 @@ import { useConnectionStore } from '@/stores/connection'
 import { useUiStore } from '@/stores/ui'
 
 const server = setupServer(...handlers)
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }))
 afterAll(() => server.close())
 
 // radix Select 依赖 Pointer Capture API（jsdom 未实现，缺失会崩溃；deploy-dialog 同款补丁）

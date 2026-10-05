@@ -19,7 +19,7 @@ import { useConnectionStore } from '@/stores/connection'
 import { InstanceRequiredState } from '../instance-required-state'
 
 const server = setupServer(...handlers)
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }))
 // 运行时 handler 会累积到后续用例：不 reset 会让前一例的响应串场（本文件首例故意挂起）
 afterEach(() => server.resetHandlers())
 afterAll(() => server.close())

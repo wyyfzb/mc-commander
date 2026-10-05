@@ -84,7 +84,7 @@ const server = setupServer(
   }),
 )
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'bypass' }))
+beforeAll(() => server.listen({ onUnhandledFrame: 'bypass' }))
 afterAll(() => server.close())
 
 describe('Webhook API', () => {

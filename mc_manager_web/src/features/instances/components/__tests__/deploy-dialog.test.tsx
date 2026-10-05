@@ -28,7 +28,7 @@ import { useConnectionStore } from '@/stores/connection'
 import type { DeployResult } from '@/api/types'
 
 const server = setupServer(...handlers)
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }))
 afterAll(() => server.close())
 
 // radix Select/下拉依赖 Pointer Capture API（jsdom 未实现，缺失会崩溃）

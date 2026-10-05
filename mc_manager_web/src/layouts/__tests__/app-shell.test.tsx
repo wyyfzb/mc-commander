@@ -16,7 +16,7 @@ import { PlayersPage } from '@/features/players/players-page'
  */
 
 const server = setupServer()
-beforeAll(() => server.listen({ onUnhandledRequest: 'bypass' }))
+beforeAll(() => server.listen({ onUnhandledFrame: 'bypass' }))
 afterAll(() => server.close())
 afterEach(() => server.resetHandlers())
 
