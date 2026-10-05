@@ -168,14 +168,20 @@ describe('Player Routes 分支补测', () => {
   });
 
   describe('validatePlayerName 参数校验', () => {
-    it('非法玩家名（含特殊字符）返回 400 VALIDATION_ERROR', async () => {
+    it('危险名字（前导 @ 会被当选择器）返回 400 且说明原因', async () => {
+      // 旧用例用的是 `steve!@`——它锁的是「正版名合法性」这条**已被推翻**的判据：
+      // 实测服务端收 `!`/`@` 这类字符（`-dash-`、`../etc/passwd` 都当字面量收下）。
+      // 真正必须拦的是**前导 @**：不加引号时 `whitelist add @a` 走选择器语义
+      // （回 `No player was found` 而非字面量名的 `That player does not exist`），
+      // 即 `ban @a` 会波及全部在线玩家。
       mockManager.getInstance.mockReturnValue(makeInstance());
 
-      const res = await request(app).get('/api/instances/s1/players/steve!@/details');
+      const res = await request(app).get('/api/instances/s1/players/@a/details');
 
       expect(res.status).toBe(400);
       expect(res.body.code).toBe(40000);
       expect(res.body.message).toContain('Invalid player name');
+      expect(res.body.message).toContain('目标选择器');
     });
   });
 

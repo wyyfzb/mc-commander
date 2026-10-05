@@ -127,3 +127,44 @@ export function getTotalPlayTime({ serverPath, uuid, playerName, levelName }) {
   }
   return 0;
 }
+
+/**
+ * 玩家名**安全谓词**（不是「正版名合法性」）。
+ *
+ * 边界由实机 RCON 实测确定（MC 26.3）：
+ * - 服务端**接受**：`Bot_Steve`、`.BedrockName`（Floodgate 前缀）、`中文名`、`-dash-`、
+ *   甚至 `../etc/passwd`——这些都不是正版名形态，而旧正则 `^[A-Za-z0-9_]{3,16}$`
+ *   把它们**全部挡在门外**；服务端自己并不校验长度（实测 2 字符 `ab` 与 17 字符都收）。
+ * - 服务端**拒绝**：含空格、含 `[`/`]`（回 `Incorrect argument for command`）⇒ 这类名字在
+ *   命令层根本寻址不到。面板提前拒绝并说明原因，好过发出去再把服务端原文抛给用户。
+ * - **前导 `@` 必须拒绝**：实测不加引号时 `whitelist add @a` 走的是**选择器**语义
+ *   （回 `No player was found`，而非字面量名才回的 `That player does not exist`）
+ *   ⇒ 若不拦，`ban @a` 会波及全部在线玩家。加引号可中和（实测 `whitelist add "@a"` 回
+ *   `That player does not exist`），但这里直接拒绝：合法玩家名本就不以 `@` 开头，
+ *   拒绝比依赖每个调用点都记得加引号更省一层。
+ * - 控制字符/路径分隔符/`..` 一并拒绝：属纵深防御（影子档案已改按 UUID 落盘，
+ *   名字不再是路径分量，但名字仍会进命令与审计记录）。
+ *
+ * ⚠️ 长度上限不取 16：那是正版 Java 名上限，而服务端不校验（实测 17 字符照收）。
+ * 这里取一个**有界但宽松**的值，只防病态输入。
+ */
+const MAX_PLAYER_NAME_LENGTH = 32;
+
+/** 返回拒绝原因（中文，供界面直接展示）；名字可用时返回 null */
+export function playerNameRejectionReason(name) {
+  if (typeof name !== 'string' || name.length === 0) return '名字为空';
+  if (name.length > MAX_PLAYER_NAME_LENGTH)
+    return `名字过长（上限 ${MAX_PLAYER_NAME_LENGTH} 字符）`;
+  // eslint-disable-next-line no-control-regex -- 就是要匹配控制字符
+  if (/[\u0000-\u001f\u007f]/.test(name)) return '含控制字符';
+  if (/[\\/]/.test(name) || name.includes('..')) return '含路径分隔符或上跳片段';
+  if (/\s/.test(name)) return '含空白：Minecraft 命令无法寻址含空格的名字';
+  if (/["'[\]]/.test(name)) return '含引号或方括号：Minecraft 命令无法寻址这类名字';
+  if (name.startsWith('@')) return '以 @ 开头会被当作目标选择器（如 @a 表示全部玩家）';
+  return null;
+}
+
+/** 玩家名是否可安全用于命令与落盘（见上方实测边界） */
+export function isSafePlayerName(name) {
+  return playerNameRejectionReason(name) === null;
+}
