@@ -228,6 +228,46 @@ export const instanceEulaRequestBodySchema = z.object({
   }),
 })
 
+/**
+ * 推送通道（MSMP）状态与开关。
+ *
+ * 为什么要有这个专用端点而不是把 `management-server-*` 加进 properties 白名单：
+ * 这三项**必须一起写**——只写 `enabled=true` 而 TLS 保持默认 true（keystore 默认为空）
+ * 会让服务器**再也起不来**（实测 `TLS is enabled but keystore is not configured`）。
+ * 通用 PUT 是「逐键提交」的语义，天然表达不了这个原子约束。
+ */
+export const pushChannelStateSchema = z.object({
+  /** 当前是否已开启（读磁盘的 management-server-enabled） */
+  enabled: z.boolean(),
+  /** 是否启用了 TLS（读磁盘；面板开启时会确保它与 keystore 的组合不会让服务器起不来） */
+  tlsEnabled: z.boolean(),
+  /** 当前绑定的主机（MC 默认 localhost＝仅本机；非本机时界面应提示暴露面） */
+  host: z.string(),
+  /** 当前端口（0＝由服务端随机分配，实际端口见启动播报行） */
+  port: z.number(),
+  /** secret 是否已配置且合法（40 位字母数字）；不返回内容——它是凭据 */
+  secretConfigured: z.boolean(),
+})
+
+/** POST /instances/:id/push-channel 请求体 */
+export const pushChannelRequestBodySchema = z.object({
+  enabled: z.boolean({
+    error: () => 'enabled must be a boolean',
+  }),
+})
+
+export const pushChannelToggleResponseSchema = z.object({
+  enabled: z.boolean(),
+  /** 服务器正在运行时需重启才生效（MSMP 只在启动时读取） */
+  restartRequired: z.boolean(),
+  /** 本次是否新生成了 secret（仅用于给用户一句如实说明，不回传内容） */
+  secretGenerated: z.boolean(),
+})
+
+export type PushChannelState = z.infer<typeof pushChannelStateSchema>
+export type PushChannelRequestBody = z.infer<typeof pushChannelRequestBodySchema>
+export type PushChannelToggleResponse = z.infer<typeof pushChannelToggleResponseSchema>
+
 export type InstanceSettingsRequestBody = z.infer<typeof instanceSettingsRequestBodySchema>
 export type InstanceStartRequestBody = z.infer<typeof instanceStartRequestBodySchema>
 export type InstanceCommandRequestBody = z.infer<typeof instanceCommandRequestBodySchema>
