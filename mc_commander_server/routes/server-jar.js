@@ -6,6 +6,7 @@ import crypto from 'crypto';
 import { httpJson, httpStream } from '../utils/http-client.js';
 import { MinecraftServerManager, NodeAdapter } from 'minecraft-core';
 import { listVanillaReleases, resolveVanillaDownload } from '../services/vanilla-manifest.js';
+import { listFabricGameVersions, listPurpurVersions } from '../services/loader-upstreams.js';
 import config from '../config.js';
 import { success, error, ErrorCodes } from '../utils/response.js';
 import { getRecommendedJavaVersion, findJavaPath } from '../utils/java-detector.js';
@@ -411,10 +412,8 @@ export function createServerJarRoutes(serverManager) {
         }
 
         if (type === 'fabric') {
-          const rawVersions = await mcCoreManager.getVersions('fabric');
-          const versions = Array.isArray(rawVersions)
-            ? rawVersions
-            : rawVersions.versions || Object.keys(rawVersions);
+          // 与其余加载器一致：直连上游，经本仓（不再委托 minecraft-core）
+          const versions = await listFabricGameVersions();
           let loaders = [];
           try {
             const loaderData = await httpJson('https://meta.fabricmc.net/v2/versions/loader', {
@@ -450,11 +449,17 @@ export function createServerJarRoutes(serverManager) {
           return res.json(success({ type: 'forge', versions }));
         }
 
-        const rawVersions = await mcCoreManager.getVersions(type);
-        const versions = Array.isArray(rawVersions)
-          ? rawVersions
-          : rawVersions.versions || Object.keys(rawVersions);
-        return res.json(success({ type, versions: versions.slice(0, 30) }));
+        if (type === 'purpur') {
+          return res.json(success({ type: 'purpur', versions: await listPurpurVersions() }));
+        }
+
+        // 其余类型不再委托库：部署契约只允许 vanilla/paper/fabric/forge/purpur，
+        // 走到这里就是非法入参，如实报错而不是回落到一个「什么都能答」的库
+        return res
+          .status(400)
+          .json(
+            error(ErrorCodes.VALIDATION_ERROR, `Unsupported server type for versions: ${type}`),
+          );
       } catch (e) {
         logger.error(`Failed to fetch ${type} versions:`, e.message);
         return res

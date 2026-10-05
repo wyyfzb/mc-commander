@@ -231,9 +231,16 @@ describe('GET /versions 分发缺口', () => {
     expect(res.body.data.versions).toEqual(['1.21.4', '1.21']);
   });
 
-  it('fabric：core 返回对象形态（versions 键）+ loader 正常', async () => {
-    testState.mcCoreVersionsValue = { versions: ['1.21.4', '1.21'] };
-    httpState.jsonTable['meta.fabricmc.net'] = [
+  it('fabric：直连上游 game 列表，只取 stable，loader 同理', async () => {
+    // 上游真实形态（打真实请求核过）：`[{ version, stable }]`，由新到旧，
+    // 快照与 rc 也在列表里但 stable=false
+    httpState.jsonTable['meta.fabricmc.net/v2/versions/game'] = [
+      { version: '26.4-snapshot-1', stable: false },
+      { version: '26.3', stable: true },
+      { version: '26.3-rc-2', stable: false },
+      { version: '1.21.4', stable: true },
+    ];
+    httpState.jsonTable['meta.fabricmc.net/v2/versions/loader'] = [
       { version: '0.16.9', stable: false },
       { version: '0.16.10', stable: true },
       { version: '0.16.11', stable: true },
@@ -241,17 +248,31 @@ describe('GET /versions 分发缺口', () => {
     const { app } = buildApp();
     const res = await request(app).get('/api/versions?type=fabric');
     expect(res.status).toBe(200);
-    expect(res.body.data.versions).toEqual(['1.21.4', '1.21']);
+    // 快照/rc 不进部署选项
+    expect(res.body.data.versions).toEqual(['26.3', '1.21.4']);
     expect(res.body.data.loaders).toEqual(['0.16.10', '0.16.11']);
   });
 
-  it('fabric：core 对象无 versions 键 → Object.keys 兑底提取', async () => {
-    testState.mcCoreVersionsValue = { neoA: {}, neoB: {} };
-    httpState.jsonTable['meta.fabricmc.net'] = [];
+  it('fabric：上游返回非数组（异常形态）→ 空列表而不是抛错', async () => {
+    httpState.jsonTable['meta.fabricmc.net/v2/versions/game'] = { unexpected: true };
+    httpState.jsonTable['meta.fabricmc.net/v2/versions/loader'] = [];
     const { app } = buildApp();
     const res = await request(app).get('/api/versions?type=fabric');
     expect(res.status).toBe(200);
-    expect(res.body.data.versions).toEqual(['neoA', 'neoB']);
+    expect(res.body.data.versions).toEqual([]);
+  });
+
+  it('purpur：上游由旧到新，必须反向后给出（取最新在前）', async () => {
+    httpState.jsonTable['api.purpurmc.org'] = {
+      project: 'purpur',
+      metadata: { current: '26.2' },
+      versions: ['1.20.4', '1.21.4', '26.2'],
+    };
+    const { app } = buildApp();
+    const res = await request(app).get('/api/versions?type=purpur');
+    expect(res.status).toBe(200);
+    // 顺带钉住「按 limit 截断前先反向」——先截断会永远拿到最旧那几档
+    expect(res.body.data.versions).toEqual(['26.2', '1.21.4', '1.20.4']);
   });
 
   it('forge：promos 键缺失 → promos 兜底空对象 → 版本列表为空不抛错', async () => {
@@ -263,12 +284,12 @@ describe('GET /versions 分发缺口', () => {
     expect(res.body.data.versions).toEqual([]);
   });
 
-  it('未知 type：core 返回普通对象（无 versions 键）→ Object.keys 提取', async () => {
-    testState.mcCoreVersionsValue = { neo1: {}, neo2: {} };
+  it('未知 type：如实 400（不再委托库「什么都能答」）', async () => {
+    // 部署契约只允许 vanilla/paper/fabric/forge/purpur；未知类型走到这里是非法入参。
+    // 旧实现会把任意 type 透传给 minecraft-core 并接受其返回，等于对非法入参也给答案。
     const { app } = buildApp();
     const res = await request(app).get('/api/versions?type=neoforge');
-    expect(res.status).toBe(200);
-    expect(res.body.data.versions).toEqual(['neo1', 'neo2']);
+    expect(res.status).toBe(400);
   });
 });
 

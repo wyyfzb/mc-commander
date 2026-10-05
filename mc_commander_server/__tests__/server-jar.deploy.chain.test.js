@@ -265,9 +265,15 @@ describe('GET /versions 多核心版本分发', () => {
     expect(res.body.data.versions).not.toContain('26x_snapshot');
   });
 
-  it('fabric：core 版本列表 + loader stable 过滤截断 10', async () => {
-    testState.mcCoreVersions = ['1.21.4', '1.21.3', '1.21.1'];
+  it('fabric：上游 game 列表 + loader stable 过滤截断 10', async () => {
     httpState.jsonTable = {
+      // 上游真实形态：`[{ version, stable }]`（快照/rc 也在列表里，stable=false）
+      'versions/game': [
+        { version: '26.4-snapshot-1', stable: false },
+        { version: '1.21.4', stable: true },
+        { version: '1.21.3', stable: true },
+        { version: '1.21.1', stable: true },
+      ],
       'versions/loader': [
         ...Array.from({ length: 12 }, (_, i) => ({ version: `0.16.${i}`, stable: true })),
         { version: '0.17.0-beta', stable: false },
@@ -285,8 +291,10 @@ describe('GET /versions 多核心版本分发', () => {
   });
 
   it('fabric：loader 上游失败 → loaders 空数组兜底（版本列表不受影响）', async () => {
-    testState.mcCoreVersions = ['1.21.4'];
-    httpState.jsonTable = { 'versions/loader': new Error('loader api down') };
+    httpState.jsonTable = {
+      'versions/game': [{ version: '1.21.4', stable: true }],
+      'versions/loader': new Error('loader api down'),
+    };
     const { app } = buildApp();
 
     const res = await request(app).get('/api/versions?type=fabric');
@@ -317,15 +325,12 @@ describe('GET /versions 多核心版本分发', () => {
     expect(res.body.data.versions).toEqual(['1.20.1', '1.21.4']);
   });
 
-  it('未知 type：走 minecraft-core getVersions 直通（数组返回形态）', async () => {
-    testState.mcCoreVersions = ['1.21.4', '1.20.6'];
+  it('未知 type：如实 400（不再透传给库「什么都能答」）', async () => {
     const { app } = buildApp();
 
     const res = await request(app).get('/api/versions?type=quilt');
 
-    expect(res.status).toBe(200);
-    expect(res.body.data.type).toBe('quilt');
-    expect(res.body.data.versions).toEqual(['1.21.4', '1.20.6']);
+    expect(res.status).toBe(400);
   });
 });
 
