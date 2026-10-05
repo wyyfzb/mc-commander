@@ -1,7 +1,7 @@
 /**
  * 数据包面板。
  *
- * 夹具是 MC 26.3 实机返回的**逐字原文**（`.ai/References/2026-10-05-实机取模样本.md` 第七节）。
+ * 夹具是 MC 26.3 实机返回的**逐字原文**。
  * 取数走 react-query，故这里给一个独立的 QueryClient 并把 `onSendCommand` 做成可控替身。
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'

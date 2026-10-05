@@ -4,8 +4,7 @@
  * **与 mods 的区别是根本性的**：`datapacks/` 有官方命令面，可**运行期**启停与排序；
  * `mods/` 只能改文件 + 重启。两条实现路径不通用，不要互相套用。
  *
- * 全部形态依据来自 **MC 26.3 实机实测**（原文逐字存档见
- * `.ai/References/2026-10-05-实机取模样本.md` 第七节）：
+ * 全部形态依据来自 **MC 26.3 实机实测**（下文的返回原文均为逐字存档）：
  *
  * - 条目形态是 `[<名字> (<来源>)]`，多条之间用 `, ` 连接：
  *   `There are 2 data pack(s) enabled: [vanilla (built-in)], [file/uatpack.zip (world)]`
@@ -100,7 +99,7 @@ export function buildDatapackDisableCommand(name: string): DatapackBuildResult {
 /**
  * `datapack create <id> <description>`。
  *
- * `create` 是**较新版本**才有的子命令：台账记为 1.21.6+（op 4），本次实机只在 26.3 上
+ * `create` 是**较新版本**才有的子命令：1.21.6+（op 4），本次实机只在 26.3 上
  * 验证过它存在，**未取到边界版本**——是否可用应由调用方按目标版本判断，本函数只负责拼装。
  *
  * 描述一律加引号：实测不加引号的多词描述直接被拒（`Incorrect argument for command`）。
@@ -182,7 +181,7 @@ export function parseDatapackList(response: string): DatapackListResult {
 /**
  * 一条 `enable`/`disable`/`create` 的返回分类。
  *
- * 措辞全部取自 **MC 26.3 实机**（原文见 `.ai/References/2026-10-05-实机取模样本.md` 第七节）：
+ * 措辞全部取自 **MC 26.3 实机返回原文**（逐字存档）：
  * ```text
  * Enabling data pack [file/uatpack.zip (world)]      启用成功
  * Disabling data pack [vanilla (built-in)]           禁用成功（vanilla 也允许禁）

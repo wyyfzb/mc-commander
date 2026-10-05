@@ -1,5 +1,5 @@
 /**
- * 免确认命令白名单的两处瑕疵（任务 14）。
+ * 免确认命令白名单的两处瑕疵。
  *
  * 承重点：这是**安全判据**——放行即意味着「按偏好免二次确认直接下发」。
  * 故两个方向都要钉住：只读命令必须放行（否则用户被无谓打扰），
@@ -41,7 +41,7 @@ describe('免确认白名单', () => {
   })
 
   it('只读列表面走 help（裸 gamerule 不是列表面：实测两版均报 incomplete command）', () => {
-    // 台账原以为裸 gamerule 是「只读列出全部规则」，实测两个版本都返回
+    // 曾以为裸 gamerule 是「只读列出全部规则」，实测两个版本都返回
     // `Unknown or incomplete command`；真正的列表面是 /help gamerule
     expect(isSafeCommand('help gamerule')).toBe(true)
     expect(isSafeCommand('gamerule')).toBe(false)
