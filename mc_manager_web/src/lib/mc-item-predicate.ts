@@ -45,6 +45,8 @@ export type PredicateBuildError =
   | 'empty-predicate'
   | 'unsupported-version'
   | 'invalid-level-range'
+  /** 区间（≥N / ≤N / N~M）在 `enchantments` 组件里**表达不出来**（实测见 exactLevel） */
+  | 'unsupported-level-range'
   | 'invalid-id'
 
 export interface PredicateBuildResult {
@@ -57,16 +59,25 @@ export interface PredicateBuildResult {
 const ID_REGEX = /^[a-z0-9][a-z0-9_./-]*$/
 
 /** 附魔条件 → `levels` 组件值；两级/单级/无上界三种形态 */
-function levelsClause({ minLevel, maxLevel }: EnchantPredicate): string | null {
+/**
+ * 把 `minLevel`/`maxLevel` 收敛成**单个精确等级**；区间表达不了时返回 `'range'`。
+ *
+ * 实测依据（MC 1.21.4 真实服务端，`/clear <玩家> <谓词> 0`）：该组件的 `levels` 是
+ * 「附魔 id → **数字**」的映射，区间写法一律被拒：
+ * ```text
+ * levels:{min:6}                          → Malformed …: Not a number missed input: {min:6}
+ * levels:{"minecraft:sharpness":{min:6}}  → Malformed …: Not a number missed input: {...}
+ * levels:{"minecraft:sharpness":5}        → Found 2 matching item(s) on player …   ← 可用形态
+ * ```
+ * ⇒ 「≥N 级」与「带该附魔但不论等级」**在一条命令里都表达不出来**。这里如实返回 `'range'`，
+ * 由调用方报错，而不是拼出一条服务端必然拒绝的命令（旧实现正是拼了 `{min:N}`，全部被拒）。
+ */
+function exactLevel({ minLevel, maxLevel }: EnchantPredicate): number | 'range' | null {
   const hasMin = typeof minLevel === 'number'
   const hasMax = typeof maxLevel === 'number'
-  if (!hasMin && !hasMax) return null
-  // 精确值：官方写法是裸整数（`levels:5`），不是 `{min:5,max:5}`
-  if (hasMin && hasMax && minLevel === maxLevel) return String(minLevel)
-  const parts: string[] = []
-  if (hasMin) parts.push(`min:${minLevel}`)
-  if (hasMax) parts.push(`max:${maxLevel}`)
-  return `{${parts.join(',')}}`
+  if (!hasMin && !hasMax) return null // 「带该附魔」——见上，同样不可表达
+  if (hasMin && hasMax) return minLevel === maxLevel ? minLevel : 'range'
+  return 'range' // 只给一端即区间
 }
 
 /**
@@ -95,13 +106,14 @@ export function buildClearPredicate(
     return { predicate: null, error: 'unsupported-version' }
   }
 
-  const base = itemId ? `minecraft:${itemId}` : 'minecraft:*'
+  // 通配：实测 `/clear <玩家> * 0` 有效（`Found 8 matching item(s)`），
+  // 而旧实现写的 `minecraft:*` 会被拒（`Unknown item 'minecraft:'`）
+  const base = itemId ? `minecraft:${itemId}` : '*'
 
-  const entries: string[] = []
+  const levels = new Map<string, number>()
   for (const e of enchantments) {
     if (!ID_REGEX.test(e.id)) return { predicate: null, error: 'invalid-id' }
-    const levels = levelsClause(e)
-    // min > max 的区间永远匹配不到任何东西——报错而不是发一条注定无效的命令
+    // min > max 的区间永远匹配不到任何东西——先报这个更具体的错
     if (
       typeof e.minLevel === 'number' &&
       typeof e.maxLevel === 'number' &&
@@ -109,17 +121,18 @@ export function buildClearPredicate(
     ) {
       return { predicate: null, error: 'invalid-level-range' }
     }
-    entries.push(
-      levels
-        ? `{enchantments:"minecraft:${e.id}",levels:${levels}}`
-        : `{enchantments:"minecraft:${e.id}"}`,
-    )
+    const lv = exactLevel(e)
+    if (lv === 'range') return { predicate: null, error: 'unsupported-level-range' }
+    if (lv === null) return { predicate: null, error: 'unsupported-level-range' }
+    levels.set(`minecraft:${e.id}`, lv)
   }
 
-  // 单条件时无需数组包裹（官方两种写法等价，短的那个更易读）
-  const component =
-    entries.length === 0 ? '' : entries.length === 1 ? `[${entries[0]}]` : `[${entries.join(',')}]`
-  return { predicate: `${base}${component}`, error: null }
+  if (levels.size === 0) return { predicate: base, error: null }
+
+  // 实测可用形态：`[enchantments={levels:{"minecraft:x":N,...}}]`
+  //（旧实现写成 `[{enchantments:"…",levels:N}]`，实测 `Invalid ID`——see 模块头注释）
+  const pairs = [...levels.entries()].map(([id, lv]) => `"${id}":${lv}`).join(',')
+  return { predicate: `${base}[enchantments={levels:{${pairs}}}]`, error: null }
 }
 
 /**
@@ -173,9 +186,14 @@ export function buildClearCommand(
 /**
  * 由「原版上限」生成挂端附魔判据：等级 ≥ maxLevel + 1 即为超限。
  *
- * 这是条目 8「非法物品识别」的核心判据：`mc-enchantments.ts` 的 `maxLevel` 是原版
- * 上限，超出即为刷物/挂端产物。用 `min` 表达「≥上限+1」，**纯命令即可匹配**，
- * 无需把玩家背包拉回本地逐格比对。
+ * 这是「非法物品识别」的核心判据：`mc-enchantments.ts` 的 `maxLevel` 是原版上限，
+ * 超出即为刷物/挂端产物。
+ *
+ * ⚠️ **本函数产出的判据目前无法直接用于 `/clear`**：它表达的是「≥上限+1」，而
+ * `enchantments` 组件的 `levels` 只接受**精确数字**（实测 `levels:{min:6}` 与
+ * `levels:{"id":{min:6}}` 均报 `Not a number`）⇒ 区间在一条命令里表达不出来。
+ * 原注释写的「纯命令即可匹配、无需读背包」已被实测推翻。缺口如何补（本地比对背包后
+ * 按精确等级清缴 / 只按物品清缴 / 其它）属产品决策，未定前本函数保留产出但**不可直连**。
  */
 export function overLimitEnchantments(
   enchantments: Array<{ id: string; maxLevel: number }>,
