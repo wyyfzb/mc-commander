@@ -131,6 +131,9 @@ export function _stopStatsCollection() {
   this._msptEpoch++;
   this._worldStateEpoch++;
   this._stopRosterSync();
+  // MSMP 通知面（一期）：停实例必须断连并**停掉重连**，否则会对着一个已停的
+  // 服务端无限退避重试（并且每次重试都是一次真实连接尝试）
+  this._msmpNotifStop();
   if (this._worldStateTimer) {
     clearTimeout(this._worldStateTimer);
     this._worldStateTimer = null;

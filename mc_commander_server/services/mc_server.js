@@ -32,6 +32,7 @@ import * as logTail from './mc-server/log-tail.js';
 import * as jarVersion from './mc-server/jar-version.js';
 import * as rosterSync from './mc-server/roster-sync.js';
 import * as msmpClient from './mc-server/msmp-client.js';
+import * as msmpNotifications from './mc-server/msmp-notifications.js';
 import * as crashArtifacts from './mc-server/crash-artifacts.js';
 import { logger } from '../utils/logger.js';
 
@@ -351,6 +352,14 @@ export class MCServerInstance extends EventEmitter {
     this._rosterEpoch = 0; // 名单对账代际：stop 时自增，作废在途回调的续链
     // MSMP 可用性：由名单查询实测得出（拿到结构化名单即记可用），不用版本号推断
     this._msmpAvailable = false;
+    // MSMP 通知面（一期）连接状态：socket/定时器/退避，生命周期由 _msmpNotifStart/Stop 管
+    this._msmpNotifActive = false;
+    this._msmpNotifSocket = null;
+    this._msmpNotifHeartbeat = null;
+    this._msmpNotifPongTimer = null;
+    this._msmpNotifReconnectTimer = null;
+    this._msmpNotifBackoffMs = 0;
+    this._msmpNotifAlive = false;
     // 死亡事件聚合窗口：团灭等批量场景 5s 内合并为单条事件（防通知风暴）
     this._deathAggBuffer = [];
     this._deathAggTimer = null;
@@ -2350,3 +2359,7 @@ Object.assign(MCServerInstance.prototype, rosterSync);
 // MSMP 查询域挂载：结构化查询面（1.21.9+ 且用户开启时可用）。命令面进不来——
 // MSMP 没有执行控制台命令的方法，故命令通道仍是 RCON/stdin（见 msmp-client.js 头注释）。
 Object.assign(MCServerInstance.prototype, msmpClient);
+
+// MSMP 通知面（一期）域挂载：常驻连接接收服务端推送的 world/upgrade_* 与
+// server/started|stopping|saving|saved（与 stdout 解析零冲突的两族，见模块头注释）。
+Object.assign(MCServerInstance.prototype, msmpNotifications);
