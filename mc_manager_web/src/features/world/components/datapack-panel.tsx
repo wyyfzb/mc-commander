@@ -205,7 +205,9 @@ export function DatapackPanel({ instanceId, isRconConnected, onSendCommand }: Da
                       {p.source && <Chip ariaLabel={`来源 ${p.source}`}>{p.source}</Chip>}
                     </span>
                     <span className="flex shrink-0 items-center gap-1">
-                      {/* 三种位置形态各给一个入口：数据包的加载顺序会影响谁覆盖谁 */}
+                      {/* 位置形态只在「尚未启用」时有效：实测 26.3 对已启用的包执行
+                          enable … first/last 只回 already enabled 且不改顺序，
+                          故这些入口只出现在本侧，已启用一侧只给「禁用」 */}
                       <Button
                         type="button"
                         variant="outline"

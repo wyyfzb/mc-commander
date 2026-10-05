@@ -195,6 +195,10 @@ export function parseDatapackList(response: string): DatapackListResult {
  *
  * 分成逐档而不是「成功/失败」两档：**「已是启用状态」既不是失败也不是成功**——
  * 把它当失败会弹红报错，当成功又会让用户以为这次操作真改了排序。界面据此给出不同反馈。
+ *
+ * 实测（MC 26.3）：对**已启用**的包执行 `datapack enable <名> first|last`，服务端只回
+ * `Pack '<名>' is already enabled!` 且**不动加载顺序** ⇒ 排序只在「尚未启用」时生效。
+ * 故「置顶/置底」类的入口只该出现在「可用未启用」一侧。
  */
 export type DatapackActionOutcome =
   | { outcome: 'enabled'; entry: DatapackEntry }
