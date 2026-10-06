@@ -20,13 +20,18 @@ const LIST_ONE_ENABLED_ONLY =
 const LIST_ONE_AND_ONE =
   'There are 1 data pack(s) enabled: [vanilla (built-in)]There are 1 data pack(s) available: [file/uatpack.zip (world)]'
 
-function renderPanel(opts: { send: (cmd: string) => Promise<string | null>; connected?: boolean }) {
+function renderPanel(opts: {
+  send: (cmd: string) => Promise<string | null>
+  connected?: boolean
+  mcVersion?: string
+}) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const utils = render(
     <QueryClientProvider client={qc}>
       <DatapackPanel
         instanceId="inst-1"
         isRconConnected={opts.connected ?? true}
+        mcVersion={opts.mcVersion ?? '26.3'}
         onSendCommand={opts.send}
       />
     </QueryClientProvider>,
@@ -155,5 +160,28 @@ describe('DatapackPanel', () => {
     await waitFor(() => expect(send).toHaveBeenCalledWith('datapack create uatnew "UAT 新建"'))
     expect(await screen.findByText('已创建 uatnew')).toBeInTheDocument()
     await waitFor(() => expect(screen.getByLabelText('新数据包名字')).toHaveValue(''))
+  })
+
+  it('低于 create 边界（1.21.5）收起新建入口并说明原因，而不是让用户点了才失败', async () => {
+    const send = vi.fn(async () => LIST_TWO_ENABLED)
+    renderPanel({ send, mcVersion: '1.21.5' })
+    await screen.findByText('file/uatpack.zip')
+
+    expect(screen.queryByLabelText('新数据包名字')).toBeNull()
+    expect(screen.queryByRole('button', { name: '创建' })).toBeNull()
+    // 说清为什么：低版本对 create 只回 Unknown or incomplete command，
+    // 会被措辞分类读成「参数不被接受」，用户会以为是自己描述写错了
+    const note = screen.getByText(/创建空包需要 1\.21\.6 及以上/)
+    expect(note).toHaveTextContent('1.21.5')
+    expect(note).toHaveTextContent('/datapack create')
+  })
+
+  it('恰好到边界（1.21.6）时新建入口在', async () => {
+    const send = vi.fn(async () => LIST_TWO_ENABLED)
+    renderPanel({ send, mcVersion: '1.21.6' })
+    await screen.findByText('file/uatpack.zip')
+
+    expect(screen.getByLabelText('新数据包名字')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '创建' })).toBeInTheDocument()
   })
 })

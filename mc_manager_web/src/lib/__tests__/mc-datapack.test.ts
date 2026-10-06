@@ -11,6 +11,7 @@ import {
   buildDatapackCreateCommand,
   parseDatapackList,
   parseDatapackAction,
+  supportsDatapackCreate,
 } from '../mc-datapack'
 
 describe('datapack 命令拼装', () => {
@@ -221,4 +222,45 @@ describe('datapack enable/disable/create 返回分类（夹具＝实机原文逐
     // （探针实测——只测 unknown-pack 时，把 created 的守卫去掉照样全绿）
     expect(parseDatapackAction(response).outcome).toBe('unrecognized')
   })
+})
+
+describe('supportsDatapackCreate（create 的版本边界）', () => {
+  /*
+   * 边界不是自述，而是从**服务端产物**里读出来的，可复核：
+   * 官方 server.jar 是 bundler jar，真正的服务端在内层
+   * `META-INF/versions/<版本>/server-<版本>.jar`；`commands.datapack.create.*`
+   * 这组翻译键只在子命令注册时存在。逐字节扫内层 jar 的 class：
+   *
+   *   1.21.5  server.jar 57269758 B / sha1 e6ec2f64e608… → 只有
+   *           list/enable/disable/modify 的键，**没有 create 的任何键**
+   *   1.21.6  server.jar 57554576 B / sha1 6e64dcabba3c… → create 六个键
+   *           （already_exists / invalid_name / invalid_full_name / io_failure /
+   *            metadata_encode_failure / success）开始出现
+   *   26.3    server.jar 62294556 B / sha1 33680f5f2ac3… → 键集与 1.21.6 **逐字相同**
+   *
+   * 方法与 26.3 这条已知为真（该版本已实机验证过 create 存在）互为自证；
+   * jar 的 size + sha1 都核过（本机链路有静默截断史，只看文件存在会得出错结论）。
+   */
+  it.each([
+    ['1.21.5', false],
+    ['1.21.6', true],
+    ['1.21.10', true],
+    ['26.3', true],
+    ['1.22', true],
+    ['2.0', true],
+  ])('%s → %s', (version, expected) => {
+    expect(supportsDatapackCreate(version)).toBe(expected)
+  })
+
+  it('1.21.10 不因字符串比较被误判为小于 1.21.6', () => {
+    // 字符串比较下 '1.21.10' < '1.21.6' 为真，会把有 create 的版本判成没有
+    expect(supportsDatapackCreate('1.21.10')).toBe(true)
+  })
+
+  it.each([[''], ['unknown'], ['26.3-snapshot-2']])(
+    '版本不可解析（「%s」）按支持处置：不隐藏能力，最坏只是服务端回一句措辞',
+    (version) => {
+      expect(supportsDatapackCreate(version)).toBe(true)
+    },
+  )
 })
