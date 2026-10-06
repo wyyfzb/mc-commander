@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.7.2](https://github.com/wyyfzb/mc-commander/compare/v0.7.1...v0.7.2) (2026-10-06)
+
+
+### Bug Fixes
+
+* **deps:** bump source-map-js from 1.2.1 to 1.2.2 in /mc_commander_server ([#633](https://github.com/wyyfzb/mc-commander/issues/633)) ([45a7849](https://github.com/wyyfzb/mc-commander/commit/45a78496d2cfed825ca4a5f2072878807c0e1759))
+* **deps:** bump source-map-js from 1.2.1 to 1.2.2 in /mc-schemas ([#632](https://github.com/wyyfzb/mc-commander/issues/632)) ([2243ec2](https://github.com/wyyfzb/mc-commander/commit/2243ec23b98d39a37953f94553f9f35aa59bef44))
+* **deps:** 修 proxy-addr 的 IP 欺骗漏洞（2.0.7 → 2.0.8） ([#630](https://github.com/wyyfzb/mc-commander/issues/630)) ([3d4f43d](https://github.com/wyyfzb/mc-commander/commit/3d4f43df7696aa00e70cb2f666e98d8176e1449e))
+* **web:** 世界格式升级的进度就地更新成进度条 ([#628](https://github.com/wyyfzb/mc-commander/issues/628)) ([d89ae46](https://github.com/wyyfzb/mc-commander/commit/d89ae46f24bc7ad9b240303a49b95cff87712b31))
+* **web:** 按实测边界收起低版本的「新建数据包」入口 ([#629](https://github.com/wyyfzb/mc-commander/issues/629)) ([72be018](https://github.com/wyyfzb/mc-commander/commit/72be018d085b68cd3980951bb9f40784abc1a6a8))
+
 ## [0.7.1](https://github.com/wyyfzb/mc-commander/compare/v0.7.0...v0.7.1) (2026-10-05)
 
 
