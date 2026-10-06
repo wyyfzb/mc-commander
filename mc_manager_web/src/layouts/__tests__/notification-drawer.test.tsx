@@ -9,6 +9,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useNotificationStore } from '@/stores/notifications'
+import { useWorldUpgradeProgressStore } from '@/stores/world-upgrade-progress'
 import type { AppNotification } from '@/lib/notifications'
 import { useUiStore } from '@/stores/ui'
 import { NotificationDrawer, NOTIFICATION_TONE } from '../notification-drawer'
@@ -56,7 +57,87 @@ beforeEach(() => {
   navigateMock.mockClear()
   seedStore()
   useUiStore.setState({ notificationsOpen: true })
+  useWorldUpgradeProgressStore.setState({ progress: {} })
   seq = 0 // makeItem 编号基线：每用例从「通知内容 1」重新计数
+})
+
+describe('NotificationDrawer 世界格式升级进度（就地更新的进度条）', () => {
+  /** 只放一条「升级开始」，并给该实例一个可选的就地进度 */
+  function seedUpgrade(percent?: number) {
+    useNotificationStore.setState({
+      items: [
+        {
+          id: 'n-up',
+          type: 'worldUpgradeStart',
+          category: 'server',
+          content: '服务器正在升级世界存档格式，期间可能无法连接',
+          timestamp: Date.now(),
+          count: 1,
+          read: false,
+          instanceId: 'inst-1',
+        },
+      ],
+      unreadCount: 1,
+      activeAlerts: new Set(),
+    })
+    useWorldUpgradeProgressStore.setState({
+      progress: percent === undefined ? {} : { 'inst-1': percent },
+    })
+  }
+
+  it('有进度时在「升级开始」那条上就地渲染进度条与百分比', () => {
+    seedUpgrade(42)
+    renderDrawer()
+
+    const bar = screen.getByRole('progressbar')
+    expect(bar).toHaveAttribute('aria-valuenow', '42')
+    expect(screen.getByText('42%')).toBeInTheDocument()
+    // 就地：挂在升级那条上，而不是别处
+    const entry = screen.getByText('服务器正在升级世界存档格式，期间可能无法连接').closest('button')
+    expect(entry).not.toBeNull()
+    expect(entry).toContainElement(bar)
+  })
+
+  it('只有开始事件、进度尚未到达时不渲染进度条（不摆一个恒空的条）', () => {
+    seedUpgrade(undefined)
+    renderDrawer()
+
+    expect(screen.queryByRole('progressbar')).toBeNull()
+  })
+
+  it('进度只挂「升级开始」那条：该实例的别的条目不会长出进度条', () => {
+    seedStore() // serverCrash（同样带 inst-1）
+    useWorldUpgradeProgressStore.setState({ progress: { 'inst-1': 42 } })
+    renderDrawer()
+
+    expect(screen.queryByRole('progressbar')).toBeNull()
+  })
+
+  it('百分比取整显示（服务端给小数时不出现 42.5%）', () => {
+    seedUpgrade(42.5)
+    renderDrawer()
+
+    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '43')
+    expect(screen.getByText('43%')).toBeInTheDocument()
+  })
+
+  it('进度值进得了无障碍树：拼进该条目的 aria-label', () => {
+    // 条目整体是 <button> ⇒ 子节点在无障碍树里一律 presentational，DOM 上的
+    // role="progressbar" 读不到；故数值必须进 aria-label。这条按**可访问名**查，
+    // 改回只挂 DOM 属性就会转红。
+    seedUpgrade(42)
+    renderDrawer()
+
+    const entry = screen.getByRole('button', { name: /升级进度 42%/ })
+    expect(entry).toHaveTextContent('服务器正在升级世界存档格式')
+  })
+
+  it('没有进度时 aria-label 里不出现进度（不凭空播报一个不存在的值）', () => {
+    seedUpgrade(undefined)
+    renderDrawer()
+
+    expect(screen.queryByRole('button', { name: /升级进度/ })).toBeNull()
+  })
 })
 
 describe('NotificationDrawer 条目跳转（issue 334）', () => {
