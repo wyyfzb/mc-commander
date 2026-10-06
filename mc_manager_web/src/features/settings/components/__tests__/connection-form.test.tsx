@@ -1043,10 +1043,10 @@ describe('ConnectionForm 复制 / 粘贴导入', () => {
     const user = userEvent.setup()
     renderForm({ variant: 'settings' })
     await user.click(screen.getByRole('button', { name: '粘贴导入' }))
-    await user.type(
-      screen.getByLabelText('粘贴连接配置'),
-      '面板地址: https://panel-b.example.com\nAPI Key: fake-key-xyz',
-    )
+    // 该框的交互就是粘贴（一次原子的 input 事件），不逐键打字
+    const box = screen.getByLabelText('粘贴连接配置')
+    await user.click(box)
+    await user.paste('面板地址: https://panel-b.example.com\nAPI Key: fake-key-xyz')
     await user.click(screen.getByRole('button', { name: '填入表单' }))
 
     expect(screen.getByLabelText('面板地址')).toHaveValue('https://panel-b.example.com')
@@ -1060,7 +1060,9 @@ describe('ConnectionForm 复制 / 粘贴导入', () => {
     const user = userEvent.setup()
     renderForm({ variant: 'settings' })
     await user.click(screen.getByRole('button', { name: '粘贴导入' }))
-    await user.type(screen.getByLabelText('粘贴连接配置'), 'API Key: fake-key-no-url')
+    const box = screen.getByLabelText('粘贴连接配置')
+    await user.click(box)
+    await user.paste('API Key: fake-key-no-url')
     await user.click(screen.getByRole('button', { name: '填入表单' }))
 
     expect(await screen.findByText(/没找到面板地址/)).toBeInTheDocument()
@@ -1094,17 +1096,23 @@ describe('ConnectionForm 复制 / 粘贴导入', () => {
     await waitCapabilitiesSettled(queryClient, 'https://panel-a.example.com')
 
     await user.click(screen.getByRole('button', { name: '粘贴导入' }))
-    await user.type(
-      screen.getByLabelText('粘贴连接配置'),
-      '面板地址: https://panel-a.example.com\nAPI Key: fake-key-abcdef',
-    )
+    // 这一段用**粘贴**而不是逐键输入：该面板本行就是「粘贴导入」，粘贴是一次原子的
+    // 默认行为（一个 input 事件），逐键输入则把 70 余个字符摊在几十次事件里——
+    // 满负载下只要中途有字符没进到组件状态，导入就会走「没找到面板地址」提前返回，
+    // 表现正是本用例历史上偶发的「一个 toast 都没有」（无 toast ⇒ 没有走到任何分支）。
+    const importBox = screen.getByLabelText('粘贴连接配置')
+    await user.click(importBox)
+    await user.paste('面板地址: https://panel-a.example.com\nAPI Key: fake-key-abcdef')
     await user.click(screen.getByRole('button', { name: '填入表单' }))
 
-    // 必须用 toast 标题全文：/已关闭 API Key 通道/ 这类片段正则同时命中行内常驻状态行
-    // （探测已落定 ⇒ apiKeyChannelDisabled 为真），命中两个即抛错；而 toast 未渲染时它
-    // 又会命中那一行而假绿——实测把 toast.warning 整个删掉，本用例照样通过。
-    expect(await screen.findByText('已填入，但当前面板已关闭 API Key 通道')).toBeInTheDocument()
+    // 断言顺序即失败时的诊断信息：先证「导入确实生效」，再看提示。
+    // 若这里先红 ⇒ 问题在导入交互层（没进组件状态）；若这里绿而下面红 ⇒ 问题只在
+    // toast 通道（渲染/时机）。两者修法完全不同，顺序颠倒会让诊断信息骗人。
     // 仍照常填入——用户可能确实要用它试（或改用登录会话）
     expect(await screen.findByLabelText('API Key')).toHaveValue('fake-key-abcdef')
+    // 必须用 toast 标题全文：/已关闭 API Key 通道/ 这类片段正则同时命中行内常驻状态行
+    // （探测已落定 ⇒ apiKeyChannelDisabled 为真），命中两个即抛错；而该正则又会在
+    // toast 未渲染时命中那一行而假绿。
+    expect(await screen.findByText('已填入，但当前面板已关闭 API Key 通道')).toBeInTheDocument()
   })
 })
