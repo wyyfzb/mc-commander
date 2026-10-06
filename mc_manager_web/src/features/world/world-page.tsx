@@ -208,6 +208,7 @@ export function WorldPage() {
               <DatapackPanel
                 instanceId={instanceId}
                 isRconConnected={isRconConnected}
+                mcVersion={mcVersion}
                 onSendCommand={handleSendCommand}
               />
             </TabsContent>

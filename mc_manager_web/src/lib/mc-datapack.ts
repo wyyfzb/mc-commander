@@ -15,6 +15,10 @@
  * - `create` 的描述**必须带引号**（多词不加引号 → `Incorrect argument for command`），
  *   且名字有服务端字符校验（`Invalid characters in new pack name '<名>'`）。
  */
+import { compareVersions } from '@/lib/mc-item-versions'
+
+/** `/datapack create` 的引入版本（实测边界，见下方 supportsDatapackCreate） */
+const DATAPACK_CREATE_SINCE_VERSION = '1.21.6'
 
 /** 列表里的一个数据包：名字 + 来源限定（`built-in` / `world` / …） */
 export interface DatapackEntry {
@@ -254,4 +258,22 @@ export function parseDatapackAction(response: string): DatapackActionOutcome {
   }
 
   return { outcome: 'unrecognized', raw: text }
+}
+
+/**
+ * `/datapack create` 是否可用（**实测边界：1.21.6**）。
+ *
+ * 判据直接取自服务端 jar 本身，不靠猜：jar 内层 `server-<版本>.jar` 里
+ * `commands.datapack.create.*` 这组翻译键**只在子命令注册时存在**——1.21.5 只有
+ * list/enable/disable/modify 的键，1.21.6 起才有 create（键集与 26.3 逐字一致）。
+ * 边界用例连同 jar 的 size/sha1 一起留在 `__tests__/mc-datapack.test.ts`，可复核。
+ *
+ * 版本比较复用既有的 `compareVersions`（逐段数值），不另写一份解析：本仓已因
+ * 「字符串比较把 1.9 排在 1.10 之后」踩过坑。
+ * 版本不可解析（空串/非版本文本）按**支持**处置，与 `pickGameruleSet` 同口径：
+ * 未知时不隐藏能力，最坏结果只是服务端回一句措辞（已由 parseDatapackAction 如实分类）。
+ */
+export function supportsDatapackCreate(mcVersion: string): boolean {
+  if (!/(\d+)\.(\d+)/.test(mcVersion)) return true
+  return compareVersions(mcVersion, DATAPACK_CREATE_SINCE_VERSION) >= 0
 }
