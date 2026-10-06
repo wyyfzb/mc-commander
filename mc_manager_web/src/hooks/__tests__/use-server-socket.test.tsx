@@ -8,6 +8,7 @@ import { useAuthStore, type StoredSession } from '@/stores/auth'
 import { useNotificationStore } from '@/stores/notifications'
 import { useDeployStore } from '@/stores/deploy'
 import { useBackupProgressStore, clearBackupProgress } from '@/stores/backup-progress'
+import { useWorldUpgradeProgressStore } from '@/stores/world-upgrade-progress'
 import { queryKeys } from '@/api/queries'
 import type { WebSocketLike, WebSocketCtor } from '@/api/ws'
 
@@ -115,6 +116,8 @@ describe('useServerSocket（WS 单例治理，issue #311）', () => {
     // 清理跨测试遗留的单例：无凭据跑一次 hook 触发「关闭置空」分支
     useConnectionStore.setState({ baseUrl: '', apiKey: '', status: 'unconfigured' })
     useAuthStore.setState({ session: null })
+    // 世界格式升级进度是模块级瞬态 store：不清会把上一条用例的百分比漏给下一条
+    useWorldUpgradeProgressStore.setState({ progress: {} })
     const { unmount } = renderHook(() => useServerSocket(null), { wrapper: createWrapper() })
     unmount()
   })
@@ -250,6 +253,8 @@ describe('useServerSocket（WS 单例治理，issue #311）', () => {
   it('effect 重跑（实例切换）不产生双 WebSocket：connect 幂等复用同一连接', async () => {
     useConnectionStore.setState({ baseUrl: '', apiKey: 'k1', status: 'ready' })
     useAuthStore.setState({ session: null })
+    // 世界格式升级进度是模块级瞬态 store：不清会把上一条用例的百分比漏给下一条
+    useWorldUpgradeProgressStore.setState({ progress: {} })
 
     const { rerender } = renderHook(({ id }) => useServerSocket(id), {
       wrapper: createWrapper(),
@@ -306,6 +311,67 @@ describe('useServerSocket（WS 单例治理，issue #311）', () => {
     expect(useNotificationStore.getState().items.length).toBe(1)
   })
 
+  it('worldUpgrade 的进度落进瞬态 store 而非通知条目，终态把它清掉', async () => {
+    useConnectionStore.setState({ baseUrl: '', apiKey: 'k1', status: 'ready' })
+    useAuthStore.setState({ session: makeSession('token-world-progress') })
+
+    renderHook(() => useServerSocket('i-1'), { wrapper: createWrapper() })
+    await waitFor(() => expect(FakeWebSocket.instances.length).toBe(1))
+    const ws = FakeWebSocket.instances[0]!
+    act(() => {
+      openAndAuth(ws)
+    })
+    await flushMicrotasks()
+
+    act(() => {
+      ws.receive({ type: 'worldUpgrade', instanceId: 'i-1', data: { state: 'started' } })
+      // 夹具用真机量纲：协议给的是 0..1 的**分数**（见 mc-schemas 的载荷 schema）
+      ws.receive({
+        type: 'worldUpgrade',
+        instanceId: 'i-1',
+        data: { state: 'progress', progress: 0.37 },
+      })
+    })
+    // 换算成百分数落进进度条的数据源（直灌原值会让条恒在 1% 以下、标签恒 0%）
+    expect(useWorldUpgradeProgressStore.getState().progress['i-1']).toBeCloseTo(37)
+    expect(useNotificationStore.getState().items[0]?.type).toBe('worldUpgradeStart')
+
+    act(() => {
+      ws.receive({ type: 'worldUpgrade', instanceId: 'i-1', data: { state: 'finished' } })
+    })
+    // 终态：进度清掉（否则界面上会留着一条不动的百分比），终态通知照常入中心
+    expect(useWorldUpgradeProgressStore.getState().progress['i-1']).toBeUndefined()
+    expect(useNotificationStore.getState().items[0]?.type).toBe('worldUpgradeComplete')
+  })
+
+  it.each([
+    [
+      '字段缺失（零参通知的 params 整个缺席 ⇒ 服务端发 null）',
+      { state: 'progress', progress: null },
+    ],
+    ['字段整个不在', { state: 'progress' }],
+    ['非数值', { state: 'progress', progress: 'n/a' }],
+  ])(
+    'worldUpgrade 的 progress %s 时不写进度（Number(null) 是 0，会把「没取到」画成 0%）',
+    async (_label, data) => {
+      useConnectionStore.setState({ baseUrl: '', apiKey: 'k1', status: 'ready' })
+      useAuthStore.setState({ session: makeSession('token-world-nan') })
+
+      renderHook(() => useServerSocket('i-1'), { wrapper: createWrapper() })
+      await waitFor(() => expect(FakeWebSocket.instances.length).toBe(1))
+      const ws = FakeWebSocket.instances[0]!
+      act(() => {
+        openAndAuth(ws)
+      })
+      await flushMicrotasks()
+
+      act(() => {
+        ws.receive({ type: 'worldUpgrade', instanceId: 'i-1', data })
+      })
+      expect(useWorldUpgradeProgressStore.getState().progress['i-1']).toBeUndefined()
+    },
+  )
+
   it('凭据重建后断线补齐游标保持有效（lastEventId 存 localStorage，不随单例丢失）', async () => {
     useConnectionStore.setState({ baseUrl: '', apiKey: 'k1', status: 'ready' })
     useAuthStore.setState({ session: makeSession('token-old') })
@@ -350,6 +416,8 @@ describe('useServerSocket（备份进度与取消接线，清单 #16）', () => 
     vi.stubGlobal('WebSocket', FakeCtor)
     useConnectionStore.setState({ baseUrl: '', apiKey: '', status: 'unconfigured' })
     useAuthStore.setState({ session: null })
+    // 世界格式升级进度是模块级瞬态 store：不清会把上一条用例的百分比漏给下一条
+    useWorldUpgradeProgressStore.setState({ progress: {} })
     useNotificationStore.setState({ items: [], unreadCount: 0, activeAlerts: new Set() })
     clearBackupProgress('i-1')
     const { unmount } = renderHook(() => useServerSocket(null), { wrapper: createWrapper() })
@@ -429,6 +497,8 @@ describe('useServerSocket（状态跃迁通知接线）', () => {
     vi.stubGlobal('WebSocket', FakeCtor)
     useConnectionStore.setState({ baseUrl: '', apiKey: '', status: 'unconfigured' })
     useAuthStore.setState({ session: null })
+    // 世界格式升级进度是模块级瞬态 store：不清会把上一条用例的百分比漏给下一条
+    useWorldUpgradeProgressStore.setState({ progress: {} })
     // notifications store 为全局单例：清内存态防跨用例残留（items/告警状态机）
     useNotificationStore.setState({ items: [], unreadCount: 0, activeAlerts: new Set() })
     const { unmount } = renderHook(() => useServerSocket(null), { wrapper: createWrapper() })
