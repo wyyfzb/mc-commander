@@ -1091,28 +1091,85 @@ describe('ConnectionForm 复制 / 粘贴导入', () => {
     )
     const user = userEvent.setup()
     const { queryClient } = renderForm({ variant: 'settings' })
-    // 探测由输入地址后防抖触发；等它落定，否则 apiKeyChannelDisabled 仍是「未知」
-    await user.type(screen.getByLabelText('面板地址'), '{selectall}https://panel-a.example.com')
+    /*
+     * 地址**不要重打**：store 里已经是这个地址，表单挂载时就带着它，能力探测随即按它起飞。
+     *
+     * 重打会改掉 `url`（`{selectall}` 之后再打字并不保证是「替换」——实测是追加），于是探测的
+     * query key 换成一个新值；新 key 在响应回来之前 `data` 为 `undefined`，
+     * `apiKeyChannelDisabled` 就退化成 false ⇒ handleImport 走**成功分支**，警告提示自然不出现。
+     * 这个「换 key → pending 窗口」正是本用例历史上偶发失败的来源：前置等待看到的是**旧 key**
+     * 渲染出的关闭态，所以它绿着通过，而点击落在 pending 窗口里。
+     * 实测记录（给组件临时插桩）：settledUrl 变化后先 `pending / disabled=false`，
+     * 落定后才 `success / disabled=true`。
+     */
     await waitCapabilitiesSettled(queryClient, 'https://panel-a.example.com')
+    // 前置等**渲染出来的**关闭态：它才是 handleImport 那条 if 的取值来源
+    expect(await screen.findByText(/Key 在 HTTP 与 WebSocket 上一律被拒绝/)).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '粘贴导入' }))
     // 这一段用**粘贴**而不是逐键输入：该面板本行就是「粘贴导入」，粘贴是一次原子的
-    // 默认行为（一个 input 事件），逐键输入则把 70 余个字符摊在几十次事件里——
-    // 满负载下只要中途有字符没进到组件状态，导入就会走「没找到面板地址」提前返回，
-    // 表现正是本用例历史上偶发的「一个 toast 都没有」（无 toast ⇒ 没有走到任何分支）。
+    // 默认行为（一个 input 事件），逐键输入则把 70 余个字符摊在几十次事件里。
     const importBox = screen.getByLabelText('粘贴连接配置')
     await user.click(importBox)
     await user.paste('面板地址: https://panel-a.example.com\nAPI Key: fake-key-abcdef')
+    const pastedText = (importBox as HTMLTextAreaElement).value
+    // 点击前记下 API Key 输入框的值：它进 capabilities 的 query key，变了就会重开一条 query
+    const apiKeyBeforeImport = (screen.getByLabelText('API Key') as HTMLInputElement).value
+    // 行内关闭态是 apiKeyChannelDisabled 在 DOM 上的投影；React 的点击闭包必然取自最后一次
+    // 提交的渲染，故「点击前它已消失」就足以解释「导入走了成功分支」
+    const rowBeforeImport = /Key 在 HTTP 与 WebSocket 上一律被拒绝/.test(
+      document.body.textContent ?? '',
+    )
+    const toastCountBefore = sonnerToast.getHistory().length
     await user.click(screen.getByRole('button', { name: '填入表单' }))
 
-    // 断言顺序即失败时的诊断信息：先证「导入确实生效」，再看提示。
-    // 若这里先红 ⇒ 问题在导入交互层（没进组件状态）；若这里绿而下面红 ⇒ 问题只在
-    // toast 通道（渲染/时机）。两者修法完全不同，顺序颠倒会让诊断信息骗人。
-    // 仍照常填入——用户可能确实要用它试（或改用登录会话）
+    // 先证「导入确实生效」：若这里红，问题在导入交互层，与下面的 toast 无关
     expect(await screen.findByLabelText('API Key')).toHaveValue('fake-key-abcdef')
-    // 必须用 toast 标题全文：/已关闭 API Key 通道/ 这类片段正则同时命中行内常驻状态行
-    // （探测已落定 ⇒ apiKeyChannelDisabled 为真），命中两个即抛错；而该正则又会在
-    // toast 未渲染时命中那一行而假绿。
-    expect(await screen.findByText('已填入，但当前面板已关闭 API Key 通道')).toBeInTheDocument()
+
+    /*
+     * 断言「按这条标题**派发过**」，而不是「此刻 DOM 里能查到它」。
+     *
+     * 依据（都是实测，不是猜的）：
+     * - 2026-10-06 的 CI 上本用例红过一次，失败点是这一条，而「导入生效」那条是绿的；
+     *   ⇒ 导入与落库都对，问题只在这条提示走了**哪一支**。
+     * - handleImport 的分支只有两个出口，警告支要求三个条件同时成立（`parsed.apiKey` 非空、
+     *   `apiKeyChannelDisabled`、`parsed.baseUrl === storedBaseUrl`）。CI 上派发出来的是
+     *   「已填入面板地址与 API Key」⇒ 第一个条件成立，故失败项必在另两个之间。
+     *   这两个变量的取值在测试里**都可直接读到**（导入后的地址输入框 = parsed.baseUrl；
+     *   store 的 baseUrl；行内关闭态是否还在），故一并塞进断言消息——本用例的 flake 靠
+     *   「失败信息自己说出机制」收敛，而不是靠猜。
+     * - toast 是门户里的瞬态渲染：本仓 setup.ts 已记过这类断言在满负载下会超时抖动
+     *   （单跑 ~139ms、满载 452~522ms，窗口 5s 仍不够）。派发是同步记录、不随渲染时机漂移。
+     * - ⚠️ 不能用 RTL 失败时的 DOM 转储推断「toast 没渲染」：那是 prettyDOM 输出、有长度上限
+     *   （本次现场停在 `</body>` 之前），portal 挂在 body 末尾 ⇒ 转储里没有 ≠ DOM 里没有。
+     */
+    const dispatched = sonnerToast
+      .getHistory()
+      .slice(toastCountBefore)
+      // 历史是「已挂载条目 + 已撤销条目」的联合类型，取标题前先收窄
+      .map((t) => ('title' in t ? String(t.title) : ''))
+    const diag = {
+      派发的标题: dispatched,
+      粘贴进去的原文: pastedText,
+      点击前的APIKey框: apiKeyBeforeImport,
+      点击前行内关闭态: rowBeforeImport,
+      导入后的地址: (screen.getByLabelText('面板地址') as HTMLInputElement).value,
+      store地址: useConnectionStore.getState().baseUrl,
+      行内关闭态还在: /Key 在 HTTP 与 WebSocket 上一律被拒绝/.test(document.body.textContent ?? ''),
+      能力探测缓存: queryClient
+        .getQueryCache()
+        .findAll()
+        .filter((q) => q.queryKey[1] === 'auth-capabilities')
+        .map((q) => ({
+          地址: q.queryKey[2],
+          凭据: q.queryKey[3],
+          状态: q.state.status,
+          错误: q.state.error instanceof Error ? q.state.error.message.slice(0, 90) : null,
+          通道关闭: (q.state.data as { apiKeyEnabled?: boolean } | undefined)?.apiKeyEnabled,
+        })),
+    }
+    expect(dispatched, `失败现场：${JSON.stringify(diag, null, 1)}`).toContain(
+      '已填入，但当前面板已关闭 API Key 通道',
+    )
   })
 })
