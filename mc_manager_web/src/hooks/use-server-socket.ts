@@ -10,6 +10,10 @@ import { useDeployStore } from '@/stores/deploy'
 import { useRestartPendingStore } from '@/stores/restart-pending'
 import { applyUpgradeProgress, isUpgradeTerminal } from '@/stores/upgrade'
 import { applyBackupProgress, clearBackupProgress } from '@/stores/backup-progress'
+import {
+  applyWorldUpgradeProgress,
+  clearWorldUpgradeProgress,
+} from '@/stores/world-upgrade-progress'
 import { useNotificationStore } from '@/stores/notifications'
 import { useTerminalStore } from '@/stores/terminal'
 import { useUiStore } from '@/stores/ui'
@@ -448,12 +452,31 @@ export function useServerSocket(instanceId: string | null) {
             instanceId: msg.instanceId,
           })
           break
-        // worldUpgrade（MC 世界格式升级，服务端经 MSMP 推送）也并入这一组：
-        // 事件原样交给通知层，progress 由通知层刻意丢弃（1 条/秒会刷屏），
-        // 见 lib/notifications.ts。注释放在组**之前**——夹在 case 标签之间会被
-        // no-fallthrough 判成有意穿落，而这里本就是空标签组。
+        // worldUpgrade（MC 世界格式升级，服务端经 MSMP 推送）单列：进度是「同一条消息的
+        // 连续修正」（1 条/秒），交通知层会刷爆列表，故就地更新一条进度条，只有跃迁
+        // （started / finished / failed）才交回通知层——见 lib/notifications.ts。
+        case 'worldUpgrade': {
+          const data = msg.data as Record<string, unknown>
+          const state = String(data.state ?? '')
+          if (state === 'progress') {
+            const raw = data.progress
+            // 量纲是 **0..1 的分数**（见 mc-schemas 的 wsWorldUpgradePayloadSchema 注释与服务端
+            // 归一化处），进度条吃百分数，故这里换算——按原值直灌会让条恒在 1% 以下、标签恒 0%
+            // （真机唯一样本 `[0]` 与「分数」相容，不构成反证）。
+            // 判据必须是 typeof number：零参通知的 params 整个缺席 ⇒ 服务端发 null，
+            // 而 `Number(null) === 0` 会被当成合法的 0% 渲染出一条恒空的条。
+            if (typeof raw === 'number' && Number.isFinite(raw)) {
+              applyWorldUpgradeProgress(msg.instanceId, raw * 100)
+            }
+            break
+          }
+          // 开始与终态都清一次：开始清掉上一轮残留（服务端被强杀时没有终态事件），
+          // 终态清掉本条进度条
+          clearWorldUpgradeProgress(msg.instanceId)
+          dispatchEvent({ type: msg.type, data, instanceId: msg.instanceId })
+          break
+        }
         case 'weatherUpdate':
-        case 'worldUpgrade':
         case 'backupSkipped':
         case 'taskFailed':
         case 'webhookDeliveryFailed':

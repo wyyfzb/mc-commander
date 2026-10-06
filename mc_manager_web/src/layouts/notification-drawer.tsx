@@ -39,8 +39,10 @@ import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/mcs/chip'
 import { SEMANTIC_TONE_CLASSES, type SemanticTone, type ToneClasses } from '@/components/mcs/tone'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
+import { ProgressBar } from '@/components/mcs/progress-bar'
 import { useRadioGroup } from '@/hooks/use-radio-group'
 import { useNotificationStore } from '@/stores/notifications'
+import { useWorldUpgradeProgressStore } from '@/stores/world-upgrade-progress'
 import { formatNotificationTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { instanceHueFillClass } from '@/lib/instance-hue'
@@ -176,6 +178,9 @@ export function NotificationDrawer({ open, onOpenChange }: NotificationDrawerPro
   const navigate = useNavigate()
   const items = useNotificationStore((s) => s.items)
   const unreadCount = useNotificationStore((s) => s.unreadCount)
+  // 世界格式升级的实时进度：按实例读**瞬态** store（不进通知条目、不落盘），
+  // 就地更新「升级开始」那条的进度条
+  const worldUpgradeProgress = useWorldUpgradeProgressStore((s) => s.progress)
   const markAsRead = useNotificationStore((s) => s.markAsRead)
   const markAllRead = useNotificationStore((s) => s.markAllRead)
   const clearAll = useNotificationStore((s) => s.clearAll)
@@ -269,6 +274,11 @@ export function NotificationDrawer({ open, onOpenChange }: NotificationDrawerPro
               const Icon = TYPE_ICON[n.type]
               const color = notificationColor(n.type)
               const isGame = n.category === 'game'
+              // 只在「升级开始」那条上挂实时进度（见 stores/world-upgrade-progress）
+              const upgradePercent =
+                n.type === 'worldUpgradeStart' && n.instanceId
+                  ? worldUpgradeProgress[n.instanceId]
+                  : undefined
               // 关联实例条目可跳转（issue 334）：关闭抽屉 → 实例页 focus 深链接切换
               const jumpToInstance = () => {
                 markAsRead(n.id)
@@ -277,6 +287,18 @@ export function NotificationDrawer({ open, onOpenChange }: NotificationDrawerPro
                   navigate(`/instances?focus=${encodeURIComponent(n.instanceId)}`)
                 }
               }
+              const baseLabel = n.read
+                ? n.instanceId
+                  ? `${n.content}，点击查看关联实例`
+                  : n.content
+                : `未读：${n.content}${n.instanceId ? '，点击查看关联实例' : ''}`
+              // 条目整体是 button ⇒ 子节点在无障碍树里一律 presentational，进度条与可见的
+              // 百分比都读不到，故把数值拼进 aria-label。**不做 aria-live 播报**：服务端
+              // 1 条/秒，逐秒播报只会变成噪音（值在聚焦时可读即可）。
+              const entryLabel =
+                upgradePercent === undefined
+                  ? baseLabel
+                  : `${baseLabel}，升级进度 ${Math.round(upgradePercent)}%`
               return (
                 <button
                   key={n.id}
@@ -293,13 +315,7 @@ export function NotificationDrawer({ open, onOpenChange }: NotificationDrawerPro
                     n.instanceId &&
                       'cursor-pointer transition-colors hover:border-mcs-accent-border',
                   )}
-                  aria-label={
-                    n.read
-                      ? n.instanceId
-                        ? `${n.content}，点击查看关联实例`
-                        : n.content
-                      : `未读：${n.content}${n.instanceId ? '，点击查看关联实例' : ''}`
-                  }
+                  aria-label={entryLabel}
                 >
                   {/* 实例固定色相标识（非语义 identity）：独立左列，**不进**「查看实例」那行——
                        那行整体是 info 语义色，色点嵌在里面（同为圆点 + 2px 间距）会被读成 info 语义点 */}
@@ -332,6 +348,18 @@ export function NotificationDrawer({ open, onOpenChange }: NotificationDrawerPro
                       {n.content}
                       {n.count > 1 && <span className="text-mcs-accent-fg"> ×{n.count}</span>}
                     </span>
+                    {/* 世界格式升级的进度就地显示在这条通知上：不新增条目、不弹 toast
+                        （服务端 1 条/秒），终态事件到达即随 store 清除而消失 */}
+                    {upgradePercent !== undefined && (
+                      <span className="flex items-center gap-2">
+                        <ProgressBar percent={upgradePercent} />
+                        {/* 与备份面板同语义的百分比同档（xs）：它承载的是「还要等多久」的
+                            读数，不是可扫读的角标 */}
+                        <span className="shrink-0 text-mcs-xs text-mcs-text-muted tnum">
+                          {Math.round(upgradePercent)}%
+                        </span>
+                      </span>
+                    )}
                     {n.instanceId && (
                       <span className="flex items-center gap-0.5 text-mcs-2xs text-mcs-info-fg">
                         查看实例
