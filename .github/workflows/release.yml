@@ -329,16 +329,21 @@ jobs:
               || { echo "::warning::GitHub 侧取 $f 失败"; failed=1; continue; }
 
             # 幂等：同名附件先删再传（Gitee 附件可增删，重跑安全）。
-            # 查不到（或查询失败）就跳过删除并如实标注，不因此中断——上传本身仍会建立附件。
-            OLD=$(curl -sS "${RETRY[@]}" --max-time 30 -H "$AUTH" \
-                    "$API/releases/$RID/attach_files?per_page=100" \
-                  | jq -r --arg n "$f" '.[] | select(.name==$n) | .id' | head -1 || true)
-            if [ -z "$OLD" ]; then
+            # 同名可能**不止一条**（Gitee 允许重名：一次「查询失败 ⇒ 跳过删除 ⇒ 直接上传」
+            # 就会留下重复，实测 v0.7.1 上出现过两份 SHA256SUMS.txt），故列出全部同名 id
+            # 逐个删除，否则重复会随每次重跑累积。
+            OLDS=$(curl -sS "${RETRY[@]}" --max-time 30 -H "$AUTH" \
+                     "$API/releases/$RID/attach_files?per_page=100" \
+                   | jq -r --arg n "$f" '.[] | select(.name==$n) | .id' || true)
+            if [ -z "$OLDS" ]; then
               echo "::notice::未查到同名旧附件（或查询失败），直接上传 $f"
             else
-              curl -sS "${RETRY[@]}" --max-time 30 -X DELETE -H "$AUTH" \
-                "$API/releases/$RID/attach_files/$OLD" >/dev/null \
-                || echo "::warning::删除旧附件 $f 失败（随后上传可能因重名被拒）"
+              for old in $OLDS; do
+                curl -sS "${RETRY[@]}" --max-time 30 -X DELETE -H "$AUTH" \
+                  "$API/releases/$RID/attach_files/$old" >/dev/null \
+                  || echo "::warning::删除同名旧附件 $f（id=$old）失败"
+              done
+              echo "已清理同名旧附件 $f：$(echo $OLDS | wc -w) 条"
             fi
 
             # 上传必须自带重试：这条链路（跨境 + Gitee 附件接口）会在 300s 处超时或被 reset，
@@ -348,7 +353,11 @@ jobs:
             # --http1.1 + 关掉 Expect: 100-continue 针对实测签名：大 body 的 multipart POST 会
             # 「300s 后 0 字节收到」（连响应都没开始），而同一时刻 93B 的小附件能传上去。
             # curl 对大 body 会先发 Expect: 100-continue 等应答，配 HTTP/2 在跨境链路上容易卡死。
-            curl -fsS --max-time 300 --http1.1 -H "Expect:" \
+            # --max-time 放宽到 30 分钟：curl 那句 “0 bytes received” 对 POST 而言往往只是
+            # 「超时前还没传完」（v0.7.3 那次 7.5MB 约用 4 分钟），不等于连接死了。
+            # 真正卡死改由 --speed-limit/--speed-time 判：60 秒内平均不足 1KB/s 才放弃，
+            # 于是「慢但在动」能传完、「不动」只等一分钟就重试。
+            curl -fsS --max-time 1800 --speed-limit 1024 --speed-time 60 --http1.1 -H "Expect:" \
               --retry 3 --retry-delay 5 --retry-all-errors \
               -X POST -H "$AUTH" -F "file=@/tmp/$f" "$API/releases/$RID/attach_files" >/dev/null \
               || { echo "::warning::上传 $f 到 Gitee 失败"; failed=1; continue; }
