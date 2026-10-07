@@ -31,3 +31,15 @@ export function clearWorldUpgradeProgress(instanceId: string) {
     return { progress: next }
   })
 }
+
+/**
+ * 把协议的 **0..1 分数**换算成进度条吃的百分数并落库。
+ *
+ * 量纲只在这里换算一次：实时 `progress` 事件与状态快照带回来的在途值都走它，就不会出现
+ * 「某条路直灌原值 ⇒ 条恒在 1% 以下、标签恒 0%」这类分叉。取不到数值（null / 非有限数）
+ * 时**不动**已有值——「没读到」不该被当成「读到了 0」。
+ */
+export function applyWorldUpgradeFraction(instanceId: string, fraction: number | null | undefined) {
+  if (typeof fraction !== 'number' || !Number.isFinite(fraction)) return
+  applyWorldUpgradeProgress(instanceId, fraction * 100)
+}
