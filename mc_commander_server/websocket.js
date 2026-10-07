@@ -1,5 +1,9 @@
 import { authenticateWebSocket } from './middleware/auth.js';
-import { NOTIFICATION_EVENT_TYPES } from '@mc-commander/schemas';
+import {
+  NOTIFICATION_EVENT_TYPES,
+  WS_STATUS_EVENT_NAMES,
+  CRITICAL_STATUS_EVENTS,
+} from '@mc-commander/schemas';
 import {
   isLocked as isCredentialLocked,
   recordFailure as recordCredentialFailure,
@@ -177,21 +181,13 @@ const STATE_SNAPSHOTS = {
 };
 
 // status 事件中需要持久化的状态跃迁子事件（前端据此生成通知）
-const STATUS_EVENT_TYPES = new Set([
-  'started',
-  'stopped',
-  'crash',
-  'ready',
-  'save',
-  'circuit_breaker',
-]);
+const STATUS_EVENT_TYPES = new Set(WS_STATUS_EVENT_NAMES);
 
 // 跃迁子事件中属「意外失败」的关键事件：用户不一定正盯着出事的实例，投递面取全局，
 // 否则多实例部署下非当前实例的崩溃只有恰好打开该实例控制台才看得见。
 // 同口径的无订阅全局播报也适用于失败类事件（备份失败/任务失败/Webhook 投递失败，
 // 见 broadcastCriticalInstanceEvent）。started/stopped/ready/save 是常规生命周期
 // （多数由用户在面板上发起），保持订阅内投递——跨实例广播只会制造噪音
-const CRITICAL_STATUS_EVENTS = new Set(['crash', 'circuit_breaker']);
 
 /// 通知事件落库（广播前）：返回自增 id 供消息携带与断线补齐。
 /// 上线字段名必须是 eventId——契约（mc-schemas/src/ws.ts）与前端游标

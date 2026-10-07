@@ -88,8 +88,32 @@ export const wsLogPayloadSchema = z.object({
   type: z.enum(['stdout', 'stderr', 'command']),
 })
 
+/** 运行态**跃迁**的取值（`statusEvent` 载荷的 `event` 字段） */
+export const WS_STATUS_EVENT_NAMES = [
+  'started',
+  'stopped',
+  'ready',
+  'crash',
+  'save',
+  'circuit_breaker',
+] as const
+
+export type WsStatusEventName = (typeof WS_STATUS_EVENT_NAMES)[number]
+
+/**
+ * 关键跃迁子事件：落库时**实例归属置空**（全局行）⇒ 任何订阅者断线补齐都看得到
+ * （「用户不一定正盯着出事的实例」，多实例下尤其重要）。
+ *
+ * 这一格类型级落库面（`NOTIFICATION_EVENT_TYPES`）描述不了——它按「类型 + 载荷取值」两级判定。
+ * 服务端那条无条件落库的路径直接取用本声明，两边不会再各自演化。
+ */
+export const CRITICAL_STATUS_EVENTS: ReadonlySet<WsStatusEventName> = new Set([
+  'crash',
+  'circuit_breaker',
+])
+
 export const wsStatusEventPayloadSchema = z.object({
-  event: z.enum(['started', 'stopped', 'ready', 'crash', 'save', 'circuit_breaker']),
+  event: z.enum(WS_STATUS_EVENT_NAMES),
   code: z.number().nullable().optional(),
   autoRestart: z.boolean().optional(),
   consecutiveCrashes: z.number().optional(),

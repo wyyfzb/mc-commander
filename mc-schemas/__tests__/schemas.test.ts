@@ -11,6 +11,9 @@ import {
   WS_EVENT_TYPES,
   WS_EVENT_KINDS,
   WS_STATE_RECOVERY,
+  WS_STATUS_EVENT_NAMES,
+  CRITICAL_STATUS_EVENTS,
+  wsStatusEventPayloadSchema,
   fileEntrySchema,
   auditLogItemSchema,
   deployRequestSchema,
@@ -965,6 +968,27 @@ describe('信封的未知负载字段（zod 4 起 z.unknown() 不再隐式可选
     }
     expect(apiErrorEnvelopeSchema.safeParse(err).success).toBe(true)
     expect(apiErrorEnvelopeSchema.safeParse({ ...err, details: null }).success).toBe(true)
+  })
+})
+
+describe('运行态跃迁的取值与关键子事件', () => {
+  it('关键子事件必须是合法的跃迁取值（否则服务端落库那条路径永远不匹配）', () => {
+    const names = new Set<string>(WS_STATUS_EVENT_NAMES)
+    expect(CRITICAL_STATUS_EVENTS.size).toBeGreaterThan(0)
+    for (const ev of CRITICAL_STATUS_EVENTS) {
+      expect(names.has(ev), `${ev} 不在 WS_STATUS_EVENT_NAMES 里`).toBe(true)
+    }
+  })
+
+  it('关键子事件是显式清单：改这里＝承认落库面（全局补齐）变了', () => {
+    // 用 it.each 遍历集合只能发现「多了一格」，删掉一格会静默少跑一行 ⇒ 这里锁死内容
+    expect([...CRITICAL_STATUS_EVENTS].sort()).toEqual(['circuit_breaker', 'crash'])
+  })
+
+  it('载荷 schema 接受全部跃迁取值（枚举与取值清单同源）', () => {
+    for (const ev of WS_STATUS_EVENT_NAMES) {
+      expect(wsStatusEventPayloadSchema.safeParse({ event: ev }).success, ev).toBe(true)
+    }
   })
 })
 

@@ -7,7 +7,12 @@ import {
   resetNotificationEventQueue,
 } from '../websocket.js';
 import { resetSystemStatsCache } from '../utils/system-stats.js';
-import { NOTIFICATION_EVENT_TYPES, WS_EVENT_TYPES, WS_EVENT_KINDS } from '@mc-commander/schemas';
+import {
+  NOTIFICATION_EVENT_TYPES,
+  WS_EVENT_TYPES,
+  WS_EVENT_KINDS,
+  CRITICAL_STATUS_EVENTS,
+} from '@mc-commander/schemas';
 
 // Mock 数据库：捕获通知事件落库（全局通知 id 透传 / 落库失败降级分支）
 vi.mock('../db/index.js', () => ({
@@ -585,6 +590,36 @@ describe('WebSocket 系统广播域（broadcastAll / 全局通知 / 系统统计
       api.broadcastAll(WSEvents.SYSTEM_STATS_UPDATE, { seq: 1 });
       expect(wsStay.send).toHaveBeenCalledTimes(1);
       expect(wsGone.send).not.toHaveBeenCalled();
+    });
+  });
+  describe('关键跃迁子事件的落库面与契约声明一致', () => {
+    it.each([...CRITICAL_STATUS_EVENTS])(
+      '%s：落库为全局行（实例归属置空）⇒ 任何订阅者的断线补齐都看得到',
+      (ev) => {
+        const ws = connect(wss);
+        ws.emit('message', JSON.stringify({ type: 'subscribe', instanceId: 's1' }));
+        ws.send.mockClear();
+        serverManager.emit('instance:status', {
+          instanceId: 's1',
+          event: ev,
+          consecutiveCrashes: 3,
+        });
+        flushNotificationEvents();
+
+        const persisted = fakeDb.inserted.at(-1);
+        expect(persisted[1], '关键子事件必须落成全局行').toBeNull();
+        expect(ws.send).toHaveBeenCalled();
+      },
+    );
+
+    it('常规跃迁（started/stopped）落库带实例归属：不进全局补齐面', () => {
+      const ws = connect(wss);
+      ws.emit('message', JSON.stringify({ type: 'subscribe', instanceId: 's1' }));
+      serverManager.emit('instance:status', { instanceId: 's1', event: 'stopped', code: 0 });
+      flushNotificationEvents();
+
+      const persisted = fakeDb.inserted.at(-1);
+      expect(persisted[1]).toBe('s1');
     });
   });
 });
