@@ -15,7 +15,7 @@
  * - `create` 的描述**必须带引号**（多词不加引号 → `Incorrect argument for command`），
  *   且名字有服务端字符校验（`Invalid characters in new pack name '<名>'`）。
  */
-import { compareVersions } from '@/lib/mc-item-versions'
+import { isVersionAtLeast } from '@/lib/mc-version'
 
 /** `/datapack create` 的引入版本（实测边界，见下方 supportsDatapackCreate） */
 const DATAPACK_CREATE_SINCE_VERSION = '1.21.6'
@@ -274,6 +274,6 @@ export function parseDatapackAction(response: string): DatapackActionOutcome {
  * 未知时不隐藏能力，最坏结果只是服务端回一句措辞（已由 parseDatapackAction 如实分类）。
  */
 export function supportsDatapackCreate(mcVersion: string): boolean {
-  if (!/(\d+)\.(\d+)/.test(mcVersion)) return true
-  return compareVersions(mcVersion, DATAPACK_CREATE_SINCE_VERSION) >= 0
+  // 版本不可解析（空串/非版本文本）按「支持」处置：未知时不隐藏能力
+  return isVersionAtLeast(mcVersion, DATAPACK_CREATE_SINCE_VERSION, true)
 }

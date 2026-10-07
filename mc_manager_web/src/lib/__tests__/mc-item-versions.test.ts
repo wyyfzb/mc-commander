@@ -2,10 +2,10 @@ import { describe, it, expect } from 'vitest'
 import {
   ITEM_SINCE_VERSION,
   ITEM_VERSION_FLOOR,
-  compareVersions,
   isItemAvailableIn,
   requiredVersionFor,
 } from '../mc-item-versions'
+import { compareVersions } from '../mc-version'
 import { MINECRAFT_ITEMS } from '../mc-items'
 import { buildGiveCommand } from '../mc-enchantments'
 
@@ -17,27 +17,6 @@ import { buildGiveCommand } from '../mc-enchantments'
  * 而是：① 比较函数正确（字符串比较会把 1.9 排在 1.10 之后）；② 语义边界正确
  * （未标注 = 无版本要求，不是「不适用」）；③ 拼装层的守卫真的拦住。
  */
-describe('compareVersions - 逐段数值比较', () => {
-  it('按段比较而非字符串比较（1.9 < 1.10）', () => {
-    // 字符串比较会得出 '1.9' > '1.10'（'9' > '1'），这是本函数存在的唯一理由
-    expect(compareVersions('1.9', '1.10')).toBeLessThan(0)
-    expect(compareVersions('1.10', '1.9')).toBeGreaterThan(0)
-  })
-
-  it('主/次/修订逐级比较', () => {
-    expect(compareVersions('1.20.5', '1.21')).toBeLessThan(0)
-    expect(compareVersions('1.21', '1.21.2')).toBeLessThan(0)
-    expect(compareVersions('1.21.2', '1.21.10')).toBeLessThan(0)
-    expect(compareVersions('26.1', '26.2')).toBeLessThan(0)
-    expect(compareVersions('26.3', '1.21.11')).toBeGreaterThan(0)
-  })
-
-  it('相同版本为 0（含缺段视为 0）', () => {
-    expect(compareVersions('1.21', '1.21')).toBe(0)
-    expect(compareVersions('1.21', '1.21.0')).toBe(0)
-  })
-})
-
 describe('isItemAvailableIn - 语义边界', () => {
   it('未标注的物品在所有版本可用（未标注 = 无版本要求，不是「不适用」）', () => {
     // diamond 是远古物品，不在表里 ⇒ 面板下限 1.20.5 起都可用
