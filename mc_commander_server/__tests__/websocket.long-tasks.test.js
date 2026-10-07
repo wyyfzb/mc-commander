@@ -6,6 +6,7 @@ import {
   flushNotificationEvents,
   resetNotificationEventQueue,
 } from '../websocket.js';
+import { WS_EVENT_TYPES, WS_STATE_RECOVERY } from '@mc-commander/schemas';
 
 // Mock 数据库：验证长任务终态通知落库（deployComplete/deployFailed/upgradeComplete/upgradeFailed）
 vi.mock('../db/index.js', () => ({
@@ -87,6 +88,28 @@ describe('WebSocket 长任务（部署/升级）通知与补发', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  describe('契约声明为 snapshot 的 state 事件，服务端都有实际补发路径', () => {
+    /**
+     * 探针表：契约里每声明一个 `snapshot` 自愈的 state 事件，这里必须有一格指向**真正跑它的
+     * 用例**。键集不一致即失败——这样「加了一条快照声明却没实现」不能靠忘记而通过。
+     */
+    const snapshotProbes = {
+      status: 'status 快照：字段集与派生值（websocket.contract.test.js）',
+      deployProgress: 'subscribe 时补发该实例进行中的升级快照（本文件，activeDeploys）',
+      upgradeProgress: 'subscribe 时补发该实例进行中的升级快照（本文件，activeUpgrades）',
+      worldUpgrade: 'subscribe 的状态快照带上在途的世界格式升级（本文件）',
+    };
+
+    it('探针表与契约声明一一对应', () => {
+      const declared = WS_EVENT_TYPES.filter((type) => WS_STATE_RECOVERY[type] === 'snapshot');
+      expect(Object.keys(snapshotProbes).sort()).toEqual([...declared].sort());
+      for (const [type, where] of Object.entries(snapshotProbes)) {
+        expect(typeof where, `${type} 的探针说明不能为空`).toBe('string');
+        expect(where.length).toBeGreaterThan(0);
+      }
+    });
   });
 
   describe('部署终态通知（落库 + 全局广播）', () => {
