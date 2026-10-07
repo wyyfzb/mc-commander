@@ -20,7 +20,7 @@ const mockWorld: WorldInfo = {
   type: 'normal',
   seed: '1234567890',
   sizeGB: 1.2,
-  difficulty: 'normal',
+  difficulty: 'easy',
   gameMode: 'survival',
   viewDistance: 10,
   simulationDistance: 10,
@@ -113,7 +113,7 @@ describe('useWorldInfo', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     expect(result.current.data).toMatchObject({
       name: 'world',
-      difficulty: 'normal',
+      difficulty: 'easy',
       gameMode: 'survival',
     })
     expect(result.current.data?.dimensions).toHaveLength(1)

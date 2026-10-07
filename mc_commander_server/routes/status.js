@@ -934,7 +934,7 @@ export function createStatusRoutes(serverManager) {
 
       // 运行时难度优先；readDifficulty 意外异常时保留文件值/默认值，不影响
       // world 信息主体响应（与 properties 路由同一兜底策略）。
-      let difficulty = props['difficulty'] || 'normal';
+      let difficulty = props['difficulty'] || 'easy'; // 与 vanilla server.properties 的默认难度一致
       try {
         difficulty = (await instance.readDifficulty()) || difficulty;
       } catch {}

@@ -67,7 +67,7 @@ function makeStatusFixture(overrides = {}) {
     lastSave: null,
     lastOutput: null,
     gameMode: 'survival',
-    difficulty: 'normal',
+    difficulty: 'easy',
     whitelisted: false,
     onlineMode: true,
     viewDistance: 10,

@@ -15,7 +15,7 @@ const mockWorld: WorldInfo = {
   type: 'normal',
   seed: '1234567890',
   sizeGB: 1.2,
-  difficulty: 'normal',
+  difficulty: 'easy',
   gameMode: 'survival',
   viewDistance: 10,
   simulationDistance: 10,
@@ -81,7 +81,7 @@ describe('world API', () => {
   it('GET 世界信息：嵌套字段解包（dimensions 数组保持结构）', async () => {
     const res = await apiGetWorld(config, 'inst1')
     expect(res.name).toBe('world')
-    expect(res.difficulty).toBe('normal')
+    expect(res.difficulty).toBe('easy')
     expect(res.gameMode).toBe('survival')
     expect(res.dimensions).toHaveLength(1)
     expect(res.dimensions[0]).toMatchObject({ name: 'overworld', playerCount: 0 })

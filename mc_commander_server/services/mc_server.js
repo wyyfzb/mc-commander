@@ -1321,7 +1321,7 @@ export class MCServerInstance extends EventEmitter {
       lastSave: this._getLastSaveTime(),
       lastOutput: this.lastOutput,
       gameMode: props['gamemode'] || 'survival',
-      difficulty: props['difficulty'] || 'normal',
+      difficulty: props['difficulty'] || 'easy', // 同上：与 vanilla 默认一致，别让读不到值时显示错难度
       whitelisted: props['white-list'] === 'true',
       onlineMode: props['online-mode'] !== 'false',
       viewDistance: parseInt(props['view-distance'] || '10'),
