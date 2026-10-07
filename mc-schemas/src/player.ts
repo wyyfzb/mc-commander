@@ -157,6 +157,12 @@ export const banRecordSchema = z.object({
   isActive: z.boolean(),
   isPermanent: z.boolean(),
   expiresAt: z.number().nullable(),
+  /**
+   * 是否**由到期结束**（已过期，而非有人解封）。只有官方封禁文件里的条目判得准——
+   * 解封会把条目从文件里删掉，故「文件里还在但到期时间已过」只可能是到期；
+   * 面板自己的临时封禁记录无法区分「提前解封」与「到期」，一律 false（按已解封展示）。
+   */
+  expired: z.boolean(),
   // 原版封禁文件的 created 字段可缺省（旧版/手工编辑的封禁文件）
   createdAt: z.string().nullable(),
 })

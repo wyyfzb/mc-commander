@@ -1,6 +1,7 @@
 import express from 'express';
 import fs from 'fs';
 import path from 'path';
+import { parseBanExpires } from '../utils/ban-expires.js';
 import { error, ErrorCodes } from '../utils/response.js';
 import { BanModel } from '../db/index.js';
 import {
@@ -355,6 +356,8 @@ export function createPlayerRoutes(serverManager) {
           isActive: b.isActive,
           isPermanent: false,
           expiresAt: b.expiresAt,
+          // 面板自己的临时封禁记录不记结束原因：提前解封与到期都只落 is_active=false
+          expired: false,
           createdAt: b.createdAt,
         });
       }
@@ -380,13 +383,18 @@ export function createPlayerRoutes(serverManager) {
           for (const entry of JSON.parse(fs.readFileSync(file.path, 'utf-8'))) {
             const target = entry[file.key] || '';
             if (activeTempKeys.has(`${file.targetType}:${target}`)) continue;
+            // 官条目也带 expires：临时封禁在此显示到期时间，过期的归入历史
+            const { isPermanent, expiresAt } = parseBanExpires(entry.expires);
+            // 条目仍在文件里却已过到期时间 ⇒ 只可能是到期（解封会删条目）
+            const expired = !isPermanent && expiresAt !== null && expiresAt <= Date.now();
             bans.push({
               targetType: file.targetType,
               target,
               reason: entry.reason || '',
-              isActive: true,
-              isPermanent: true,
-              expiresAt: null,
+              isActive: !expired,
+              isPermanent,
+              expiresAt,
+              expired,
               createdAt: entry.created || null,
             });
           }

@@ -21,6 +21,7 @@ vi.mock('../utils/fs-utils.js', () => ({
 import { reconcileTempBans } from '../utils/ban-reconcile.js';
 import { BanModel } from '../db/ban.model.js';
 import { atomicWriteFile } from '../utils/fs-utils.js';
+import { PERMANENT_EXPIRES } from '../utils/ban-expires.js';
 
 describe('reconcileTempBans', () => {
   let tmpDir;
@@ -188,5 +189,50 @@ describe('reconcileTempBans', () => {
     const writtenData = JSON.parse(atomicWriteFile.mock.calls[0][1]);
     expect(writtenData).toHaveLength(2);
     expect(writtenData.map((e) => e.name)).toEqual(['Bob', 'Steve']);
+  });
+
+  it('文件里带 expires 的条目按真实到期时间镜像进 DB，不写死永久', () => {
+    fs.writeFileSync(
+      bannedPath,
+      JSON.stringify([
+        {
+          name: 'Steve',
+          reason: '临时',
+          created: '2026-10-01 00:00:00 +0000',
+          expires: '2030-01-01 06:00:00 +0000',
+        },
+      ]),
+    );
+    BanModel.findActiveByInstance.mockReturnValue([]);
+    BanModel.findExpiredActive.mockReturnValue([]);
+
+    reconcileTempBans('inst-1', tmpDir);
+
+    expect(BanModel.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        target: 'Steve',
+        expiresAt: Date.parse('2030-01-01T06:00:00Z'),
+      }),
+    );
+  });
+
+  it('永久哨兵与解析不出的 expires 都落远未来值（不擅自替用户解封）', () => {
+    fs.writeFileSync(
+      bannedPath,
+      JSON.stringify([
+        { name: 'Alex', expires: 'forever' },
+        { name: 'Bob', expires: '不是时间' },
+      ]),
+    );
+    BanModel.findActiveByInstance.mockReturnValue([]);
+    BanModel.findExpiredActive.mockReturnValue([]);
+
+    reconcileTempBans('inst-1', tmpDir);
+
+    for (const name of ['Alex', 'Bob']) {
+      expect(BanModel.create).toHaveBeenCalledWith(
+        expect.objectContaining({ target: name, expiresAt: PERMANENT_EXPIRES }),
+      );
+    }
   });
 });

@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { BanModel } from '../db/ban.model.js';
 import { atomicWriteFile } from './fs-utils.js';
+import { PERMANENT_EXPIRES, parseBanExpires } from './ban-expires.js';
 
 /**
  * 实例启动前 tempban 对账：同步 banned-players.json 与 DB temp_bans 表。
@@ -56,17 +57,18 @@ export function reconcileTempBans(instanceId, serverPath) {
   }
 
   // 方向 1：文件中存在但 DB 无活跃记录的封禁 → 补入 DB
-  // expiresAt 远未来值表示永久：findExpiredActive 使用 <= now 比较，
-  // Number.MAX_SAFE_INTEGER（约 285,000 年）永远不会到期
-  const PERMANENT_EXPIRES = Number.MAX_SAFE_INTEGER;
+  // 官条目带 expires 时按它镜像，否则方向 2 永远等不到这条记录到期；
+  // 永久（哨兵/缺失）与解析不出都落到 PERMANENT_EXPIRES（远未来值，findExpiredActive
+  // 的 <= now 比较永不匹配）——解析不出时宁可不动它，也不擅自替用户解封
   for (const entry of fileBans) {
     if (!entry.name || activePlayerTargets.has(entry.name)) continue;
+    const { expiresAt } = parseBanExpires(entry.expires);
     BanModel.create({
       instanceId,
       targetType: 'player',
       target: entry.name,
       reason: entry.reason || null,
-      expiresAt: PERMANENT_EXPIRES,
+      expiresAt: expiresAt ?? PERMANENT_EXPIRES,
     });
   }
 

@@ -445,6 +445,7 @@ export const mockBans: BanRecord[] = [
     isActive: true,
     isPermanent: false,
     expiresAt: Date.now() + 43_200_000,
+    expired: false,
     createdAt: new Date(Date.now() - 43_200_000).toISOString(),
   },
   {
@@ -454,6 +455,8 @@ export const mockBans: BanRecord[] = [
     isActive: false,
     isPermanent: false,
     expiresAt: Date.now() - 3_600_000,
+    // 提前解封、原到期时间后来也过了：结束原因由服务端判定，这里是「解封」而非「到期」
+    expired: false,
     createdAt: new Date(Date.now() - 86_400_000).toISOString(),
   },
 ]

@@ -202,9 +202,11 @@ describe('schemas 基础校验', () => {
       isActive: true,
       isPermanent: false,
       expiresAt: 1704153600000,
+      expired: false,
       createdAt: '2026-01-01T00:00:00Z',
     })
     expect(ban.isPermanent).toBe(false)
+    expect(ban.expired).toBe(false)
   })
 
   it('backupItem schema 解析备份条目', () => {

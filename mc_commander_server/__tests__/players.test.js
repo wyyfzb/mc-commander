@@ -241,6 +241,125 @@ describe('Player Routes', () => {
       expect(res.status).toBe(500);
     });
 
+    it('官方封禁条目按 expires 判定：临时条出到期时间、哨兵为永久、过期归历史', async () => {
+      vi.clearAllMocks();
+      fs.writeFileSync(
+        path.join(tmpServerPath, 'banned-players.json'),
+        JSON.stringify([
+          {
+            name: 'Steve',
+            reason: '临时',
+            created: '2026-10-01 00:00:00 +0000',
+            expires: '2030-01-01 06:00:00 +0000',
+          },
+          {
+            name: 'Alex',
+            reason: '永久',
+            created: '2026-10-01 00:00:00 +0000',
+            expires: 'forever',
+          },
+          {
+            name: 'Bob',
+            reason: '过期',
+            created: '2026-10-01 00:00:00 +0000',
+            expires: '1999-01-01 00:00:00 +0000',
+          },
+          { name: 'Carol', reason: '缺字段', created: '2026-10-01 00:00:00 +0000' },
+        ]),
+      );
+      mockManager.getInstance.mockReturnValue({
+        isRunning: true,
+        serverPath: tmpServerPath,
+        players: new Map(),
+        getAllKnownPlayers: () => new Map(),
+        playerEvents: new Map(),
+      });
+
+      // 上一个用例给 findAllByInstance 装了抛错实现，而 clearAllMocks 不清实现：显式复位
+      BanModel.findAllByInstance.mockImplementation(() => []);
+      BanModel.findActiveByInstance.mockImplementation(() => []);
+
+      const res = await request(app).get('/api/instances/s1/players/bans');
+
+      expect(res.status).toBe(200);
+      const byTarget = Object.fromEntries(res.body.data.map((b) => [b.target, b]));
+      expect(byTarget.Steve).toMatchObject({
+        isPermanent: false,
+        expiresAt: Date.parse('2030-01-01T06:00:00Z'),
+        isActive: true,
+      });
+      expect(byTarget.Alex).toMatchObject({ isPermanent: true, expiresAt: null, isActive: true });
+      expect(byTarget.Carol).toMatchObject({ isPermanent: true, expiresAt: null, isActive: true });
+      // 过期的官条目仍列出（是历史），但不再是生效中——此前一律 isActive: true 且显示「永久」
+      expect(byTarget.Bob).toMatchObject({
+        isPermanent: false,
+        expiresAt: Date.parse('1999-01-01T00:00:00Z'),
+        isActive: false,
+        expired: true,
+      });
+      // 生效中的条目不该带「到期结束」标记
+      expect(byTarget.Steve.expired).toBe(false);
+    });
+
+    it('真实 26.3 落盘的官方条目（服务端本地时区 +0800）解出正确到期时刻', async () => {
+      vi.clearAllMocks();
+      // 夹具是真实 26.3 服务端经 MSMP bans/add 写出的原样文件：到期时间带 +0800 偏移，
+      // 等价于 2030-01-01T06:00:00Z
+      fs.copyFileSync(
+        path.join(import.meta.dirname, 'fixtures', 'banned-players-real.json'),
+        path.join(tmpServerPath, 'banned-players.json'),
+      );
+      BanModel.findAllByInstance.mockImplementation(() => []);
+      BanModel.findActiveByInstance.mockImplementation(() => []);
+      mockManager.getInstance.mockReturnValue({
+        isRunning: true,
+        serverPath: tmpServerPath,
+        players: new Map(),
+        getAllKnownPlayers: () => new Map(),
+        playerEvents: new Map(),
+      });
+
+      const res = await request(app).get('/api/instances/s1/players/bans');
+
+      expect(res.status).toBe(200);
+      expect(res.body.data[0]).toMatchObject({
+        target: 'ProbeUser',
+        isPermanent: false,
+        expiresAt: Date.parse('2030-01-01T06:00:00Z'),
+        isActive: true,
+        expired: false,
+        createdAt: '2026-10-08 06:16:07 +0800',
+      });
+    });
+
+    it('官方封禁条目的 expires 解析不出：非永久且到期时间未知，仍算生效中', async () => {
+      vi.clearAllMocks();
+      fs.writeFileSync(
+        path.join(tmpServerPath, 'banned-players.json'),
+        JSON.stringify([{ name: 'Steve', reason: 'x', expires: '不是时间' }]),
+      );
+      mockManager.getInstance.mockReturnValue({
+        isRunning: true,
+        serverPath: tmpServerPath,
+        players: new Map(),
+        getAllKnownPlayers: () => new Map(),
+        playerEvents: new Map(),
+      });
+
+      // 上一个用例给 findAllByInstance 装了抛错实现，而 clearAllMocks 不清实现：显式复位
+      BanModel.findAllByInstance.mockImplementation(() => []);
+      BanModel.findActiveByInstance.mockImplementation(() => []);
+
+      const res = await request(app).get('/api/instances/s1/players/bans');
+
+      expect(res.body.data[0]).toMatchObject({
+        target: 'Steve',
+        isPermanent: false,
+        expiresAt: null,
+        isActive: true,
+      });
+    });
+
     it('should mark online player as ip-banned when IP in banned-ips.json', async () => {
       vi.clearAllMocks();
       fs.writeFileSync(
