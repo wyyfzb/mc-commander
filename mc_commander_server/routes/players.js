@@ -515,7 +515,7 @@ export function createPlayerRoutes(serverManager) {
         return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND));
       }
       if (!requireRunning(instance, res)) return;
-      await instance.sendCommand(`op ${req.params.player}`);
+      await instance.opPlayer(req.params.player);
       recordAudit({
         instanceId: req.params.id,
         action: AuditActions.PLAYER_OP,
@@ -536,7 +536,7 @@ export function createPlayerRoutes(serverManager) {
         return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND));
       }
       if (!requireRunning(instance, res)) return;
-      await instance.sendCommand(`deop ${req.params.player}`);
+      await instance.deopPlayer(req.params.player);
       recordAudit({
         instanceId: req.params.id,
         action: AuditActions.PLAYER_DEOP,
@@ -559,7 +559,7 @@ export function createPlayerRoutes(serverManager) {
       if (!requireRunning(instance, res)) return;
       // express 5：无 JSON body 的请求 req.body 为 undefined（v4 是 {}）
       const reason = sanitizeReason(req.body?.reason) || 'Kicked by operator';
-      await instance.sendCommand(`kick ${req.params.player} ${reason}`);
+      await instance.kickPlayer(req.params.player, reason);
       recordAudit({
         instanceId: req.params.id,
         action: AuditActions.PLAYER_KICK,
@@ -611,9 +611,9 @@ export function createPlayerRoutes(serverManager) {
 
       try {
         if (ip) {
-          await instance.sendCommand(`ban-ip ${ip} ${reason}`);
+          await instance.banIp(ip, reason);
         } else {
-          await instance.sendCommand(`ban ${req.params.player} ${reason}`);
+          await instance.banPlayer(req.params.player, reason);
         }
       } catch (err) {
         // 命令执行失败：回滚已写入的临时记录，保持「记录 ⇔ 封禁」一致，
@@ -664,7 +664,7 @@ export function createPlayerRoutes(serverManager) {
       // 先清理记录：清理失败（同步抛错）时命令尚未执行，无中间态
       BanModel.deactivateByPlayer(req.params.id, req.params.player);
       try {
-        await instance.sendCommand(`pardon ${req.params.player}`);
+        await instance.pardonPlayer(req.params.player);
       } catch (err) {
         // 命令执行失败：恢复已清理的记录，保持「记录 ⇔ 封禁」一致
         for (const b of tempBans) {
@@ -733,9 +733,9 @@ export function createPlayerRoutes(serverManager) {
       }
       try {
         if (targetType === 'ip') {
-          await instance.sendCommand(`pardon-ip ${target}`);
+          await instance.pardonIp(target);
         } else {
-          await instance.sendCommand(`pardon ${target}`);
+          await instance.pardonPlayer(target);
         }
       } catch (err) {
         // 命令执行失败：恢复已清理的记录，保持「记录 ⇔ 封禁」一致
@@ -778,7 +778,7 @@ export function createPlayerRoutes(serverManager) {
         return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND));
       }
       if (!requireRunning(instance, res)) return;
-      await instance.sendCommand(`whitelist add ${req.params.player}`);
+      await instance.whitelistAdd(req.params.player);
       // detail.op 与 remove 端点成对标注：add/remove 共用 PLAYER_WHITELIST，靠 detail 区分方向
       recordAudit({
         instanceId: req.params.id,
@@ -801,7 +801,7 @@ export function createPlayerRoutes(serverManager) {
         return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND));
       }
       if (!requireRunning(instance, res)) return;
-      await instance.sendCommand(`whitelist remove ${req.params.player}`);
+      await instance.whitelistRemove(req.params.player);
       // 审计复用 PLAYER_WHITELIST：前端映射「白名单操作」本就方向中性（add/remove 共用），
       // 拆新枚举会让过滤下拉出现两个半语义项；detail.op 区分加入/移除，与 add 端点成对标注。
       recordAudit({

@@ -26,6 +26,7 @@ vi.mock('../utils/audit.js', async (importOriginal) => {
   return { ...actual, recordAudit: vi.fn() };
 });
 import { recordAudit, AuditActions } from '../utils/audit.js';
+import { asInstance } from './helpers/msmp-instance.js';
 
 describe('Player Routes', () => {
   let app;
@@ -78,7 +79,7 @@ describe('Player Routes', () => {
         }),
         _mergePlayerEvents: (a, b) => [...(a || []), ...(b || [])],
       };
-      mockManager.getInstance.mockReturnValue(mockInstance);
+      mockManager.getInstance.mockReturnValue(asInstance(mockInstance));
 
       const res = await request(app).get('/api/instances/s1/players');
 
@@ -112,7 +113,7 @@ describe('Player Routes', () => {
         }),
         _mergePlayerEvents: (a, b) => [...(a || []), ...(b || [])],
       };
-      mockManager.getInstance.mockReturnValue(mockInstance);
+      mockManager.getInstance.mockReturnValue(asInstance(mockInstance));
 
       const res = await request(app).get('/api/instances/s1/players');
 
@@ -149,7 +150,7 @@ describe('Player Routes', () => {
         }),
         _mergePlayerEvents: (a, b) => [...(a || []), ...(b || [])],
       };
-      mockManager.getInstance.mockReturnValue(mockInstance);
+      mockManager.getInstance.mockReturnValue(asInstance(mockInstance));
       BanModel.findActiveByInstance.mockReturnValue([
         { targetType: 'player', target: 'Steve', expiresAt: now + 86_400_000 },
       ]);
@@ -191,7 +192,7 @@ describe('Player Routes', () => {
         }),
         _mergePlayerEvents: (a, b) => [...(a || []), ...(b || [])],
       };
-      mockManager.getInstance.mockReturnValue(mockInstance);
+      mockManager.getInstance.mockReturnValue(asInstance(mockInstance));
 
       const res = await request(app).get('/api/instances/s1/players');
 
@@ -213,7 +214,7 @@ describe('Player Routes', () => {
         playerEvents: new Map(),
         _worldSpawn: null,
       };
-      mockManager.getInstance.mockReturnValue(mockInstance);
+      mockManager.getInstance.mockReturnValue(asInstance(mockInstance));
 
       const res = await request(app).get('/api/instances/s1/players');
 
@@ -231,7 +232,7 @@ describe('Player Routes', () => {
         getAllKnownPlayers: () => new Map(),
         playerEvents: new Map(),
       };
-      mockManager.getInstance.mockReturnValue(mockInstance);
+      mockManager.getInstance.mockReturnValue(asInstance(mockInstance));
       BanModel.findAllByInstance.mockImplementation(() => {
         throw new Error('DB down');
       });
@@ -394,7 +395,7 @@ describe('Player Routes', () => {
         }),
         _mergePlayerEvents: (a, b) => [...(a || []), ...(b || [])],
       };
-      mockManager.getInstance.mockReturnValue(mockInstance);
+      mockManager.getInstance.mockReturnValue(asInstance(mockInstance));
 
       const res = await request(app).get('/api/instances/s1/players');
 
@@ -433,7 +434,7 @@ describe('Player Routes', () => {
         }),
         _mergePlayerEvents: (a, b) => [...(a || []), ...(b || [])],
       };
-      mockManager.getInstance.mockReturnValue(mockInstance);
+      mockManager.getInstance.mockReturnValue(asInstance(mockInstance));
       BanModel.findActiveByInstance.mockReturnValue([
         { targetType: 'ip', target: '5.6.7.8', expiresAt: now + 3_600_000 },
       ]);
@@ -491,7 +492,7 @@ describe('Player Routes', () => {
         isRunning: true,
         serverPath: tmpServerPath,
       };
-      mockManager.getInstance.mockReturnValue(mockInstance);
+      mockManager.getInstance.mockReturnValue(asInstance(mockInstance));
 
       const res = await request(app).get('/api/instances/s1/players/bans');
 
@@ -553,7 +554,7 @@ describe('Player Routes', () => {
         isRunning: true,
         serverPath: tmpServerPath,
       };
-      mockManager.getInstance.mockReturnValue(mockInstance);
+      mockManager.getInstance.mockReturnValue(asInstance(mockInstance));
 
       const res = await request(app).get('/api/instances/s1/players/bans');
 
@@ -577,12 +578,45 @@ describe('Player Routes', () => {
         isRunning: true,
         sendCommand: vi.fn(),
       };
-      mockManager.getInstance.mockReturnValue(mockInstance);
+      mockManager.getInstance.mockReturnValue(asInstance(mockInstance));
 
       const res = await request(app).post('/api/instances/s1/players/Steve/op');
 
       expect(res.status).toBe(200);
       expect(mockInstance.sendCommand).toHaveBeenCalledWith('op Steve');
+    });
+
+    it('MSMP 可用时走结构化方法：不再发命令', async () => {
+      const mockInstance = {
+        isRunning: true,
+        sendCommand: vi.fn(),
+        _msmpRequest: vi.fn(async () => [{ player: { name: 'Steve' }, permissionLevel: 4 }]),
+      };
+      mockManager.getInstance.mockReturnValue(asInstance(mockInstance));
+
+      const res = await request(app).post('/api/instances/s1/players/Steve/op');
+
+      expect(res.status).toBe(200);
+      expect(mockInstance._msmpRequest).toHaveBeenCalledWith(
+        'minecraft:operators/add',
+        [[{ player: { name: 'Steve' }, permissionLevel: 4, bypassesPlayerLimit: false }]],
+        expect.any(Number),
+      );
+      expect(mockInstance.sendCommand).not.toHaveBeenCalled();
+    });
+
+    it('MSMP 有答复但目标没落地：接口报错，且不回退命令重复执行', async () => {
+      const mockInstance = {
+        isRunning: true,
+        sendCommand: vi.fn(),
+        _msmpRequest: vi.fn(async () => []),
+      };
+      mockManager.getInstance.mockReturnValue(asInstance(mockInstance));
+
+      const res = await request(app).post('/api/instances/s1/players/Steve/op');
+
+      expect(res.status).toBe(500);
+      expect(mockInstance.sendCommand).not.toHaveBeenCalled();
     });
   });
 
@@ -592,7 +626,7 @@ describe('Player Routes', () => {
         isRunning: true,
         sendCommand: vi.fn(),
       };
-      mockManager.getInstance.mockReturnValue(mockInstance);
+      mockManager.getInstance.mockReturnValue(asInstance(mockInstance));
 
       const res = await request(app).delete('/api/instances/s1/players/Steve/op');
 
@@ -607,7 +641,7 @@ describe('Player Routes', () => {
         isRunning: true,
         sendCommand: vi.fn(),
       };
-      mockManager.getInstance.mockReturnValue(mockInstance);
+      mockManager.getInstance.mockReturnValue(asInstance(mockInstance));
 
       const res = await request(app)
         .post('/api/instances/s1/players/Steve/kick')
@@ -623,7 +657,7 @@ describe('Player Routes', () => {
         isRunning: true,
         sendCommand: vi.fn(),
       };
-      mockManager.getInstance.mockReturnValue(mockInstance);
+      mockManager.getInstance.mockReturnValue(asInstance(mockInstance));
 
       const res = await request(app).post('/api/instances/s1/players/Steve/kick');
 
@@ -639,7 +673,7 @@ describe('Player Routes', () => {
         isRunning: true,
         sendCommand: vi.fn(),
       };
-      mockManager.getInstance.mockReturnValue(mockInstance);
+      mockManager.getInstance.mockReturnValue(asInstance(mockInstance));
 
       const res = await request(app)
         .post('/api/instances/s1/players/Steve/ban')
@@ -658,7 +692,7 @@ describe('Player Routes', () => {
         isRunning: true,
         sendCommand: vi.fn(),
       };
-      mockManager.getInstance.mockReturnValue(mockInstance);
+      mockManager.getInstance.mockReturnValue(asInstance(mockInstance));
 
       const before = Date.now();
       const res = await request(app)
@@ -682,7 +716,7 @@ describe('Player Routes', () => {
         isRunning: true,
         sendCommand: vi.fn(),
       };
-      mockManager.getInstance.mockReturnValue(mockInstance);
+      mockManager.getInstance.mockReturnValue(asInstance(mockInstance));
 
       const res = await request(app)
         .post('/api/instances/s1/players/Steve/ban')
@@ -702,7 +736,7 @@ describe('Player Routes', () => {
         isRunning: true,
         sendCommand: vi.fn(),
       };
-      mockManager.getInstance.mockReturnValue(mockInstance);
+      mockManager.getInstance.mockReturnValue(asInstance(mockInstance));
 
       const res = await request(app)
         .post('/api/instances/s1/players/Steve/ban')
@@ -719,7 +753,7 @@ describe('Player Routes', () => {
         isRunning: true,
         sendCommand: vi.fn(),
       };
-      mockManager.getInstance.mockReturnValue(mockInstance);
+      mockManager.getInstance.mockReturnValue(asInstance(mockInstance));
 
       const res = await request(app)
         .post('/api/instances/s1/players/Steve/ban')
@@ -739,7 +773,7 @@ describe('Player Routes', () => {
         isRunning: true,
         sendCommand: vi.fn(),
       };
-      mockManager.getInstance.mockReturnValue(mockInstance);
+      mockManager.getInstance.mockReturnValue(asInstance(mockInstance));
 
       const res = await request(app).post('/api/instances/s1/players/Steve/pardon');
 
@@ -757,7 +791,7 @@ describe('Player Routes', () => {
         isRunning: true,
         sendCommand: vi.fn(),
       };
-      mockManager.getInstance.mockReturnValue(mockInstance);
+      mockManager.getInstance.mockReturnValue(asInstance(mockInstance));
 
       const res = await request(app)
         .post('/api/instances/s1/players/bans/1.2.3.4/pardon')
@@ -775,7 +809,7 @@ describe('Player Routes', () => {
         isRunning: true,
         sendCommand: vi.fn(),
       };
-      mockManager.getInstance.mockReturnValue(mockInstance);
+      mockManager.getInstance.mockReturnValue(asInstance(mockInstance));
 
       const res = await request(app)
         .post('/api/instances/s1/players/bans/Steve/pardon')
@@ -792,7 +826,7 @@ describe('Player Routes', () => {
         isRunning: true,
         sendCommand: vi.fn(),
       };
-      mockManager.getInstance.mockReturnValue(mockInstance);
+      mockManager.getInstance.mockReturnValue(asInstance(mockInstance));
 
       const res = await request(app)
         .post('/api/instances/s1/players/bans/Steve/pardon')
@@ -817,7 +851,7 @@ describe('Player Routes', () => {
         isRunning: true,
         sendCommand: vi.fn(),
       };
-      mockManager.getInstance.mockReturnValue(mockInstance);
+      mockManager.getInstance.mockReturnValue(asInstance(mockInstance));
 
       const res = await request(app)
         .post('/api/instances/s1/players/bans/1.2.3.4/pardon')
@@ -842,7 +876,7 @@ describe('Player Routes', () => {
         isRunning: true,
         sendCommand: vi.fn().mockRejectedValue(new Error('rcon timeout')),
       };
-      mockManager.getInstance.mockReturnValue(mockInstance);
+      mockManager.getInstance.mockReturnValue(asInstance(mockInstance));
 
       const res = await request(app)
         .post('/api/instances/s1/players/bans/Steve/pardon')
@@ -859,7 +893,7 @@ describe('Player Routes', () => {
         isRunning: true,
         sendCommand: vi.fn(),
       };
-      mockManager.getInstance.mockReturnValue(mockInstance);
+      mockManager.getInstance.mockReturnValue(asInstance(mockInstance));
 
       const res = await request(app)
         .post('/api/instances/s1/players/bans/not-an-ip/pardon')
@@ -875,7 +909,7 @@ describe('Player Routes', () => {
         isRunning: true,
         sendCommand: vi.fn(),
       };
-      mockManager.getInstance.mockReturnValue(mockInstance);
+      mockManager.getInstance.mockReturnValue(asInstance(mockInstance));
 
       const res = await request(app)
         .post('/api/instances/s1/players/bans/x/pardon')
@@ -893,7 +927,7 @@ describe('Player Routes', () => {
         isRunning: true,
         sendCommand: vi.fn(),
       };
-      mockManager.getInstance.mockReturnValue(mockInstance);
+      mockManager.getInstance.mockReturnValue(asInstance(mockInstance));
 
       const res = await request(app).post('/api/instances/s1/players/Steve/whitelist/add');
 
@@ -918,7 +952,7 @@ describe('Player Routes', () => {
         isRunning: true,
         sendCommand: vi.fn(),
       };
-      mockManager.getInstance.mockReturnValue(mockInstance);
+      mockManager.getInstance.mockReturnValue(asInstance(mockInstance));
 
       const res = await request(app).delete('/api/instances/s1/players/Steve/whitelist');
 
@@ -943,7 +977,7 @@ describe('Player Routes', () => {
         isRunning: true,
         sendCommand: vi.fn().mockRejectedValue(new Error('rcon timeout')),
       };
-      mockManager.getInstance.mockReturnValue(mockInstance);
+      mockManager.getInstance.mockReturnValue(asInstance(mockInstance));
 
       const res = await request(app).delete('/api/instances/s1/players/Steve/whitelist');
 

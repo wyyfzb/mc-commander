@@ -19,6 +19,7 @@ vi.mock('../db/index.js', () => ({
 }));
 
 import { BanModel } from '../db/index.js';
+import { asInstance } from './helpers/msmp-instance.js';
 
 describe('File Routes - Path Traversal Protection', () => {
   let app;
@@ -268,7 +269,7 @@ describe('File Routes - Path Traversal Protection', () => {
         isRunning: true,
         sendCommand: vi.fn().mockResolvedValue(''),
       };
-      mockManager.getInstance.mockReturnValue(mockInstance);
+      mockManager.getInstance.mockReturnValue(asInstance(mockInstance));
 
       const res = await request(app)
         .put('/api/instances/s1/files/content')
@@ -378,7 +379,7 @@ describe('File Routes - Path Traversal Protection', () => {
         isRunning: true,
         sendCommand: vi.fn().mockResolvedValue(''),
       };
-      mockManager.getInstance.mockReturnValue(mockInstance);
+      mockManager.getInstance.mockReturnValue(asInstance(mockInstance));
 
       const res = await request(app)
         .delete('/api/instances/s1/files')
@@ -525,13 +526,14 @@ describe('File Routes - Path Traversal Protection', () => {
     let banTmpDir;
     let sendCommand;
 
-    // 运行中的实例（带 sendCommand mock）
-    const runningInstance = () => ({
-      id: 's1',
-      serverPath: banTmpDir,
-      isRunning: true,
-      sendCommand,
-    });
+    // 运行中的实例（方法面 + sendCommand mock）：MSMP 默认不可用 ⇒ 命令通道，断言口径不变
+    const runningInstance = () =>
+      asInstance({
+        id: 's1',
+        serverPath: banTmpDir,
+        isRunning: true,
+        sendCommand,
+      });
 
     beforeEach(() => {
       banTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-files-ban-'));
@@ -676,12 +678,14 @@ describe('File Routes - Path Traversal Protection', () => {
     });
 
     it('should not run commands but still clean temp bans when instance is not running', async () => {
-      banManager.getInstance.mockReturnValue({
-        id: 's1',
-        serverPath: banTmpDir,
-        isRunning: false,
-        sendCommand,
-      });
+      banManager.getInstance.mockReturnValue(
+        asInstance({
+          id: 's1',
+          serverPath: banTmpDir,
+          isRunning: false,
+          sendCommand,
+        }),
+      );
       fs.writeFileSync(
         path.join(banTmpDir, 'banned-players.json'),
         JSON.stringify([
@@ -801,12 +805,13 @@ describe('File Routes - Path Traversal Protection', () => {
     let wlTmpDir;
     let sendCommand;
 
-    const runningInstance = () => ({
-      id: 's1',
-      serverPath: wlTmpDir,
-      isRunning: true,
-      sendCommand,
-    });
+    const runningInstance = () =>
+      asInstance({
+        id: 's1',
+        serverPath: wlTmpDir,
+        isRunning: true,
+        sendCommand,
+      });
 
     beforeEach(() => {
       wlTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-files-wl-'));
@@ -897,12 +902,14 @@ describe('File Routes - Path Traversal Protection', () => {
     });
 
     it('should not run commands when instance is not running (whitelist)', async () => {
-      wlManager.getInstance.mockReturnValue({
-        id: 's1',
-        serverPath: wlTmpDir,
-        isRunning: false,
-        sendCommand,
-      });
+      wlManager.getInstance.mockReturnValue(
+        asInstance({
+          id: 's1',
+          serverPath: wlTmpDir,
+          isRunning: false,
+          sendCommand,
+        }),
+      );
       fs.writeFileSync(
         path.join(wlTmpDir, 'whitelist.json'),
         JSON.stringify([{ name: 'Alex', uuid: 'aaa' }]),

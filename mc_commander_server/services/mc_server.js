@@ -33,6 +33,7 @@ import * as jarVersion from './mc-server/jar-version.js';
 import * as rosterSync from './mc-server/roster-sync.js';
 import * as msmpClient from './mc-server/msmp-client.js';
 import * as msmpNotifications from './mc-server/msmp-notifications.js';
+import * as msmpMethods from './mc-server/msmp-methods.js';
 import * as crashArtifacts from './mc-server/crash-artifacts.js';
 import * as structuredLogConfig from './mc-server/structured-log-config.js';
 import { logger } from '../utils/logger.js';
@@ -2380,3 +2381,7 @@ Object.assign(MCServerInstance.prototype, msmpNotifications);
 // 结构化日志域挂载：为实例写一份 log4j2 覆盖配置（纯文本通道不变 + 多一份 JSONL），
 // 启动时经 -D 注入（版本门槛与选型依据见模块头注释）。
 Object.assign(MCServerInstance.prototype, structuredLogConfig);
+
+// 方法面域挂载：白名单/OP/踢人/封禁走结构化方法、拿不到再退回等价命令
+// （判据与两条通道的差异见模块头注释）。依赖 msmp-client 的 _msmpRequest。
+Object.assign(MCServerInstance.prototype, msmpMethods);
