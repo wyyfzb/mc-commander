@@ -13,6 +13,7 @@ import os from 'os';
 import path from 'path';
 import * as crashArtifacts from '../services/mc-server/crash-artifacts.js';
 import { parseCrashReport, parseHsErr } from '../services/mc-server/crash-artifacts.js';
+import { crashArtifactSchema } from '@mc-commander/schemas';
 
 // 夹具一律用 .txt：服务端包 .gitignore 忽略 *.log，用真扩展名会被静默排除在提交之外，
 // 于是本地绿、CI 红（找不到夹具）
@@ -313,5 +314,83 @@ describe('崩溃产物历史（getCrashArtifactHistory）', () => {
     const instance = makeInstance(path.join(tmpDir, 'not-exist-dir'));
     expect(() => instance.getCrashArtifactHistory()).not.toThrow();
     expect(instance.getCrashArtifactHistory().items).toEqual([]);
+  });
+});
+
+// 诊断映射接进产物读取：卡片一次请求就能拿到「结论 + 已验证版本」
+describe('getCrashArtifact 带诊断结论', () => {
+  it('真实 26.1 样本：命中 MSMP 密钥非法，并指出该结论在 26.1 验证过', () => {
+    writeCrashReport('crash-2026-10-05_01.10.36-server.txt', read('crash-invalid-secret.txt'));
+
+    const artifact = makeInstance(tmpDir).getCrashArtifact();
+
+    expect(artifact.description).toBe('Exception in server tick loop');
+    expect(artifact.minecraftVersion).toBe('26.1');
+    expect(artifact.diagnosis.matched).toBe(true);
+    expect(artifact.diagnosis.entry.id).toBe('msmp-invalid-secret');
+    expect(artifact.diagnosis.entry.matchedBy).toBe('exception');
+    expect(artifact.diagnosis.instanceVersion).toBe('26.1');
+    expect(artifact.diagnosis.verifiedForInstance).toBe(true);
+    expect(artifact.diagnosis.entry.actions.length).toBeGreaterThan(0);
+  });
+
+  it('真实 26.1 样本：TLS 未配 keystore 走另一条具体词条（不被泛化条目顶替）', () => {
+    writeCrashReport('crash-2026-10-05_01.11.30-server.txt', read('crash-tls-keystore.txt'));
+
+    const artifact = makeInstance(tmpDir).getCrashArtifact();
+
+    expect(artifact.diagnosis.entry.id).toBe('msmp-tls-without-keystore');
+  });
+
+  it('未收录的崩溃：matched=false 且不给版本适用性结论（不猜）', () => {
+    writeCrashReport(
+      'crash-2026-10-05_02.00.00-server.txt',
+      // Description 与异常行都换成未收录的内容：该条样本的具体词条锚在异常行上，
+      // 只改 Description 仍会命中（这正是「具体优先」应有的行为）
+      read('crash-invalid-secret.txt')
+        .replace(
+          'Description: Exception in server tick loop',
+          'Description: Something We Have Never Seen',
+        )
+        .replace(
+          'java.lang.IllegalStateException: Invalid management server secret, must be 40 alphanumeric characters',
+          'java.lang.IllegalStateException: 未收录的初始化失败',
+        ),
+    );
+
+    const artifact = makeInstance(tmpDir).getCrashArtifact();
+
+    expect(artifact.diagnosis.matched).toBe(false);
+    expect(artifact.diagnosis.entry).toBeNull();
+    expect(artifact.diagnosis.verifiedForInstance).toBeNull();
+    // 未命中也要让用户看得到原始依据
+    expect(artifact.excerpt).toContain('Something We Have Never Seen');
+    // 契约自校验：路由的 validatedSuccess 只记不一致、不拦响应，漂移必须在这里转红
+    expect(crashArtifactSchema.safeParse(artifact).success).toBe(true);
+  });
+
+  it('崩溃报告没写版本时回落到实例版本；两者都没有则为 null', () => {
+    const text = read('crash-invalid-secret.txt').replace(/Minecraft Version:.*\n/, '');
+    writeCrashReport('crash-2026-10-05_03.00.00-server.txt', text);
+
+    const noVersion = makeInstance(tmpDir).getCrashArtifact();
+    expect(noVersion.minecraftVersion).toBeNull();
+    expect(noVersion.diagnosis.instanceVersion).toBeNull();
+
+    const withDbVersion = Object.assign(makeInstance(tmpDir), { _getMcVersion: () => '26.1' });
+    expect(withDbVersion.getCrashArtifact().diagnosis.instanceVersion).toBe('26.1');
+
+    const unknownVersion = Object.assign(makeInstance(tmpDir), { _getMcVersion: () => 'unknown' });
+    expect(unknownVersion.getCrashArtifact().diagnosis.instanceVersion).toBeNull();
+  });
+
+  it('hs_err 没有可锚的键：未命中（原样展示已解析字段，不猜）', () => {
+    writeHsErr('hs_err_pid2601333.log', read('hs-err-segv.txt'));
+
+    const artifact = makeInstance(tmpDir).getCrashArtifact();
+
+    expect(artifact.kind).toBe('jvm-crash');
+    expect(artifact.diagnosis.matched).toBe(false);
+    expect(artifact.summary.length).toBeGreaterThan(0);
   });
 });

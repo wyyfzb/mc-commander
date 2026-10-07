@@ -24,6 +24,7 @@
 import fs from 'fs';
 import path from 'path';
 import { logger } from '../../utils/logger.js';
+import { diagnoseCrash } from './crash-diagnosis.js';
 
 /** 崩溃报告目录（与 `backup.service.js` 的排除项同名） */
 const CRASH_REPORT_DIR = 'crash-reports';
@@ -201,7 +202,17 @@ export function parseCrashReport(text) {
   push('服务端品牌', fieldFrom(lines, 'Server brand'));
   push('崩溃时在线玩家', fieldFrom(lines, 'All players'));
 
-  return { summary, exception, stack, causedBy, sections };
+  return {
+    summary,
+    // 诊断映射的锚：Description 是固定词表，值得作为一等字段（不再靠 summary 的标签去取）
+    description: fieldFrom(lines, 'Description'),
+    // 崩溃报告自己写的版本，比 DB/jar 更贴近「是谁崩的」
+    minecraftVersion: fieldFrom(detailsBlock, 'Minecraft Version'),
+    exception,
+    stack,
+    causedBy,
+    sections,
+  };
 }
 
 /** 解析 JVM 崩溃日志；无法识别时返回 { parseError } */
@@ -353,7 +364,16 @@ export function getCrashArtifact() {
   }
 
   const parsed = latest.kind === 'crash-report' ? parseCrashReport(text) : parseHsErr(text);
-  return { ...base, ...parsed, excerpt: excerptOf(text) };
+  // 版本优先取崩溃报告自己写的：它才是「崩的那一份」；取不到再回落实例版本（unknown 视同未知）
+  const instanceVersion = parsed.minecraftVersion || this._getMcVersion?.() || null;
+  const mcVersion = instanceVersion === 'unknown' ? null : instanceVersion;
+  // hs_err 没有可锚的键（故障行不属于允许的键类型）⇒ 必然未命中，原样展示已解析字段
+  const diagnosis = diagnoseCrash({
+    description: parsed.description ?? null,
+    exception: parsed.exception ?? null,
+    mcVersion,
+  });
+  return { ...base, ...parsed, excerpt: excerptOf(text), diagnosis };
 }
 
 export default {

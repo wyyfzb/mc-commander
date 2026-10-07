@@ -319,6 +319,36 @@ export const crashArtifactFieldSchema = z.object({
   value: z.string(),
 })
 
+/**
+ * 崩溃诊断词条：命中的结论 + 处置动作 + 该结论的**已验证 MC 版本**。
+ *
+ * `matchedBy` 说明是靠哪个键命中的（`description` = 崩溃报告的 `Description:`，
+ * `exception` = 顶层异常行行首前缀，`logger` = 日志 logger），前端据此解释结论来处。
+ */
+export const crashDiagnosisEntrySchema = z.object({
+  id: z.string(),
+  matchedBy: z.enum(['description', 'exception', 'logger']),
+  title: z.string(),
+  detail: z.string(),
+  actions: z.array(z.string()),
+  verifiedVersions: z.array(z.string()),
+  evidence: z.array(z.enum(['实测', '静态提取'])),
+})
+
+/**
+ * 一次崩溃的诊断结果。
+ *
+ * `matched=false` 表示**没有命中任何词条**（或该产物类型没有可锚的键，如 hs_err）——
+ * 此时呈现层原样展示已解析字段并给出一键反馈出路，**不猜**。
+ * `verifiedForInstance` 为 null 表示实例版本未知（既不说适用也不说不适用）。
+ */
+export const crashDiagnosisSchema = z.object({
+  matched: z.boolean(),
+  entry: crashDiagnosisEntrySchema.nullable(),
+  instanceVersion: z.string().nullable(),
+  verifiedForInstance: z.boolean().nullable(),
+})
+
 export const crashArtifactSchema = z.object({
   /** 是否真的取到了产物（false 表示枚举/读取失败，与「从未崩溃过」的 null 不同） */
   available: z.boolean(),
@@ -329,6 +359,12 @@ export const crashArtifactSchema = z.object({
   sizeBytes: z.number().optional(),
   /** 已核实字段（有序）；解析失败时为空数组 */
   summary: z.array(crashArtifactFieldSchema).optional(),
+  /** 崩溃报告：`Description:`（固定词表，诊断映射的锚） */
+  description: z.string().nullable().optional(),
+  /** 崩溃报告 System Details 里的 Minecraft 版本（比 DB/jar 更贴近「是谁崩的」） */
+  minecraftVersion: z.string().nullable().optional(),
+  /** 诊断映射结果（未命中时为 matched:false，由呈现层走出路） */
+  diagnosis: crashDiagnosisSchema.optional(),
   /** 崩溃报告：顶层异常行 */
   exception: z.string().nullable().optional(),
   /** 崩溃报告：顶层栈帧（文本） */
@@ -349,6 +385,8 @@ export const crashArtifactSchema = z.object({
 
 export type CrashArtifactField = z.infer<typeof crashArtifactFieldSchema>
 export type CrashArtifact = z.infer<typeof crashArtifactSchema>
+export type CrashDiagnosisEntry = z.infer<typeof crashDiagnosisEntrySchema>
+export type CrashDiagnosis = z.infer<typeof crashDiagnosisSchema>
 
 /**
  * 崩溃产物历史里的一条。
