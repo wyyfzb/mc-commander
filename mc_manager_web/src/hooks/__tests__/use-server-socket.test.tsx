@@ -302,7 +302,11 @@ describe('useServerSocket（WS 单例治理，issue #311）', () => {
     expect(useNotificationStore.getState().items[0]?.type).toBe('worldUpgradeStart')
 
     act(() => {
-      ws.receive({ type: 'worldUpgrade', instanceId: 'i-1', data: { state: 'progress' } })
+      ws.receive({
+        type: 'worldUpgrade',
+        instanceId: 'i-1',
+        data: { state: 'progress', progress: null },
+      })
     })
     // progress 刻意不产生条目（1 条/秒），但**不能因此把整个事件丢掉**
     expect(useNotificationStore.getState().items.some((n) => n.type === 'worldUpgradeStart')).toBe(
@@ -324,7 +328,11 @@ describe('useServerSocket（WS 单例治理，issue #311）', () => {
     await flushMicrotasks()
 
     act(() => {
-      ws.receive({ type: 'worldUpgrade', instanceId: 'i-1', data: { state: 'started' } })
+      ws.receive({
+        type: 'worldUpgrade',
+        instanceId: 'i-1',
+        data: { state: 'started', progress: null },
+      })
       // 夹具用真机量纲：协议给的是 0..1 的**分数**（见 mc-schemas 的载荷 schema）
       ws.receive({
         type: 'worldUpgrade',
@@ -337,23 +345,71 @@ describe('useServerSocket（WS 单例治理，issue #311）', () => {
     expect(useNotificationStore.getState().items[0]?.type).toBe('worldUpgradeStart')
 
     act(() => {
-      ws.receive({ type: 'worldUpgrade', instanceId: 'i-1', data: { state: 'finished' } })
+      ws.receive({
+        type: 'worldUpgrade',
+        instanceId: 'i-1',
+        data: { state: 'finished', progress: null },
+      })
     })
     // 终态：进度清掉（否则界面上会留着一条不动的百分比），终态通知照常入中心
     expect(useWorldUpgradeProgressStore.getState().progress['i-1']).toBeUndefined()
     expect(useNotificationStore.getState().items[0]?.type).toBe('worldUpgradeComplete')
   })
 
+  it('载荷的 state 不在契约枚举里：留痕，并按终态路径处置（不把整条事件静默丢掉）', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    useConnectionStore.setState({ baseUrl: '', apiKey: 'k1', status: 'ready' })
+    useAuthStore.setState({ session: makeSession('token-world-drift') })
+
+    renderHook(() => useServerSocket('i-1'), { wrapper: createWrapper() })
+    await waitFor(() => expect(FakeWebSocket.instances.length).toBe(1))
+    const ws = FakeWebSocket.instances[0]!
+    act(() => {
+      openAndAuth(ws)
+    })
+    await flushMicrotasks()
+
+    act(() => {
+      ws.receive({
+        type: 'worldUpgrade',
+        instanceId: 'i-1',
+        data: { state: 'started', progress: null },
+      })
+      ws.receive({
+        type: 'worldUpgrade',
+        instanceId: 'i-1',
+        data: { state: 'progress', progress: 0.5 },
+      })
+      // 契约只认 started/progress/finished/failed；大小写写错即漂移
+      ws.receive({
+        type: 'worldUpgrade',
+        instanceId: 'i-1',
+        data: { state: 'PROGRESS', progress: 0.9 },
+      })
+    })
+
+    // 漂移的载荷不能整条消失：留痕 + 按宽松路径处置（非 progress ⇒ 终态：清进度、进通知层）
+    expect(warn).toHaveBeenCalledWith(
+      '[ws] worldUpgrade 载荷不符合契约，按宽松读取处置',
+      expect.anything(),
+    )
+    expect(useWorldUpgradeProgressStore.getState().progress['i-1']).toBeUndefined()
+    expect(useNotificationStore.getState().items.length).toBeGreaterThan(0)
+  })
+
   it.each([
     [
       '字段缺失（零参通知的 params 整个缺席 ⇒ 服务端发 null）',
       { state: 'progress', progress: null },
+      // 契约里 progress 是 number|null，故 null 合法，不该留痕
+      false,
     ],
-    ['字段整个不在', { state: 'progress' }],
-    ['非数值', { state: 'progress', progress: 'n/a' }],
+    ['字段整个不在', { state: 'progress' }, true],
+    ['非数值', { state: 'progress', progress: 'n/a' }, true],
   ])(
     'worldUpgrade 的 progress %s 时不写进度（Number(null) 是 0，会把「没取到」画成 0%）',
-    async (_label, data) => {
+    async (_label, data, expectsContractWarning) => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
       useConnectionStore.setState({ baseUrl: '', apiKey: 'k1', status: 'ready' })
       useAuthStore.setState({ session: makeSession('token-world-nan') })
 
@@ -368,6 +424,15 @@ describe('useServerSocket（WS 单例治理，issue #311）', () => {
       act(() => {
         ws.receive({ type: 'worldUpgrade', instanceId: 'i-1', data })
       })
+      // 契约不认的载荷要留痕，同时**不能整条丢掉**（宽松路径照旧处置）
+      if (expectsContractWarning) {
+        expect(warn).toHaveBeenCalledWith(
+          '[ws] worldUpgrade 载荷不符合契约，按宽松读取处置',
+          expect.anything(),
+        )
+      } else {
+        expect(warn).not.toHaveBeenCalled()
+      }
       expect(useWorldUpgradeProgressStore.getState().progress['i-1']).toBeUndefined()
     },
   )

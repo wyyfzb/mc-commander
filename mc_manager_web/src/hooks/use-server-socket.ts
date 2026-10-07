@@ -20,6 +20,7 @@ import { useUiStore } from '@/stores/ui'
 import { sessionAppliesToPanel } from '@/lib/mc-connection'
 import type { InstanceSummary } from '@/api/types'
 import type { Player, UpgradeStage, WsMessage } from '@/api/types'
+import { wsWorldUpgradePayloadSchema } from '@mc-commander/schemas'
 
 /**
  * useServerSocket —— WS 单例 hook（设计文档 §5.2）
@@ -457,14 +458,20 @@ export function useServerSocket(instanceId: string | null) {
         // （started / finished / failed）才交回通知层——见 lib/notifications.ts。
         case 'worldUpgrade': {
           const data = msg.data as Record<string, unknown>
-          const state = String(data.state ?? '')
+          // 按契约解析，但**不因为解析失败就整条丢掉**：本分支存在的意义就是让进度可见，
+          // 静默丢弃会把「服务端改了字段」表现成「进度条有时不出现」。故失败时照旧按宽松读取
+          // 处置，并留一条痕给出定位线索。
+          const parsed = wsWorldUpgradePayloadSchema.safeParse(msg.data)
+          if (!parsed.success) {
+            console.warn('[ws] worldUpgrade 载荷不符合契约，按宽松读取处置', parsed.error.issues)
+          }
+          const state = parsed.success ? parsed.data.state : String(data.state ?? '')
           if (state === 'progress') {
-            const raw = data.progress
-            // 量纲是 **0..1 的分数**（见 mc-schemas 的 wsWorldUpgradePayloadSchema 注释与服务端
-            // 归一化处），进度条吃百分数，故这里换算——按原值直灌会让条恒在 1% 以下、标签恒 0%
-            // （真机唯一样本 `[0]` 与「分数」相容，不构成反证）。
-            // 判据必须是 typeof number：零参通知的 params 整个缺席 ⇒ 服务端发 null，
-            // 而 `Number(null) === 0` 会被当成合法的 0% 渲染出一条恒空的条。
+            const raw = parsed.success ? parsed.data.progress : data.progress
+            // 量纲是 **0..1 的分数**（契约 schema 的注释与服务端归一化处同口径），进度条吃百分数，
+            // 故这里换算——按原值直灌会让条恒在 1% 以下、标签恒 0%。
+            // 判据必须是 typeof number：契约允许 progress 为 null（零参通知的 params 整个缺席
+            // 时服务端就发 null），而 `Number(null) === 0` 会被当成合法的 0% 渲染出一条恒空的条。
             if (typeof raw === 'number' && Number.isFinite(raw)) {
               applyWorldUpgradeProgress(msg.instanceId, raw * 100)
             }

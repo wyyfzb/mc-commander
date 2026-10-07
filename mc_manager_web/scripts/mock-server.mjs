@@ -1268,6 +1268,24 @@ const server = createServer((req, res) => {
     // 取消在途部署（对齐服务端 POST /instances/deploy/cancel）：受理后按真实链路
     // 补一条 cancelled 终态进度事件——前端据此从「部署中」切到「已取消」视图，
     // 只回 HTTP 而不发事件会让用例停在「正在取消…」（真实服务端不会）
+    // MC 世界格式升级（真实形态是服务端经 MSMP 自己推送，没有 REST 触发点）：
+    // 这里给一个**按需单发**的构造端点，让用例精确控制时间轴，不必与定时器赛跑。
+    // progress 用真机量纲（0..1 的分数，见契约 wsWorldUpgradePayloadSchema）。
+    if (path === '/api/v1/instances/e2e-demo/world-upgrade/emit' && req.method === 'POST') {
+      let payload = {}
+      try {
+        payload = JSON.parse(body || '{}')
+      } catch {
+        payload = {}
+      }
+      broadcastWs(
+        'worldUpgrade',
+        { state: payload.state ?? 'progress', progress: payload.progress ?? null },
+        String(payload.instanceId ?? 'e2e-demo'),
+        wsGroupOf(req),
+      )
+      return res.end(ok({ emitted: true }))
+    }
     if (path === '/api/v1/instances/deploy/cancel' && req.method === 'POST') {
       let requestedId = ''
       try {
