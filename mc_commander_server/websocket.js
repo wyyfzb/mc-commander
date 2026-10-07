@@ -590,7 +590,9 @@ export function setupWebSocket(wss, serverManager) {
       if (!leavePending()) return;
       clearCredentialFailures(ip);
       // 先回执 auth ok 再登记（登记时会补发 activeDeploys 快照——回执必须
-      // 先于快照到达，否则客户端鉴权门控会丢弃部署进度补发）
+      // 先于快照到达，否则客户端鉴权门控会丢弃部署进度补发）。
+      // 触发点选登记而非订阅：部署是**全局**视图（向导不依赖实例订阅），挂在订阅上会让
+      // 不看实例的页面永远收不到补偿；实例作用域的状态才走订阅时的补发（见 STATE_SNAPSHOTS）
       ws.send(JSON.stringify({ type: ClientMessages.AUTH, ok: true, timestamp: Date.now() }));
       setupAuthenticatedClient(ws, { sessionToken: msg.sessionToken || null, role: auth.role });
     }

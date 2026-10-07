@@ -97,7 +97,7 @@ describe('WebSocket 长任务（部署/升级）通知与补发', () => {
      */
     const snapshotProbes = {
       status: 'status 快照：字段集与派生值（websocket.contract.test.js）',
-      deployProgress: 'register 时补发在途部署快照（websocket.broadcast.test.js，activeDeploys）',
+      deployProgress: '登记时补发在途部署快照、订阅时不重复（本文件，inFlightDeploys）',
       upgradeProgress: 'subscribe 时补发该实例进行中的升级快照（本文件，activeUpgrades）',
       worldUpgrade: 'subscribe 的状态快照带上在途的世界格式升级（本文件）',
       weatherUpdate: 'subscribe 时补发当前天气（本文件，instance._weather）',
@@ -371,6 +371,33 @@ describe('WebSocket 长任务（部署/升级）通知与补发', () => {
         .find((m) => m.type === WSEvents.UPGRADE_PROGRESS);
       expect(upgradeMsg.instanceId).toBe('paper-abc1');
       expect(upgradeMsg.data.percent).toBe(55);
+    });
+
+    it('部署快照在**登记**时补发、订阅时不重复（全局视图 ⇒ 触发点按作用域选）', () => {
+      serverManager.activeDeploys.set('paper-abc1', {
+        instanceId: 'paper-abc1',
+        instanceName: '生存服',
+        type: 'paper',
+        mcVersion: '1.21.4',
+        stage: 'download',
+        percent: 45,
+        transferred: 1,
+        total: 2,
+        updatedAt: Date.now(),
+      });
+
+      const ws = connect(wss);
+      // 部署向导可能根本没订阅任何实例 ⇒ 补偿只能挂在登记上（见 register 分支注释）
+      expect(ws.send.mock.calls.map((c) => JSON.parse(c[0]).type)).toContain(
+        WSEvents.DEPLOY_PROGRESS,
+      );
+
+      ws.send.mockClear();
+      subscribe(ws, 'paper-abc1');
+      // 订阅时不再发：部署不是实例作用域的状态，重复补发只会让「取消部署后再订阅」反复刷进度
+      expect(ws.send.mock.calls.map((c) => JSON.parse(c[0]).type)).not.toContain(
+        WSEvents.DEPLOY_PROGRESS,
+      );
     });
 
     it('subscribe 的状态快照带上在途的世界格式升级，且不再补发伪造的 started', () => {
