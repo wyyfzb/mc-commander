@@ -24,6 +24,7 @@ function renderPanel(opts: {
   send: (cmd: string) => Promise<string | null>
   connected?: boolean
   mcVersion?: string
+  mcVersionPending?: boolean
 }) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const utils = render(
@@ -32,6 +33,7 @@ function renderPanel(opts: {
         instanceId="inst-1"
         isRconConnected={opts.connected ?? true}
         mcVersion={opts.mcVersion ?? '26.3'}
+        mcVersionPending={opts.mcVersionPending ?? false}
         onSendCommand={opts.send}
       />
     </QueryClientProvider>,
@@ -182,6 +184,27 @@ describe('DatapackPanel', () => {
     await screen.findByText('file/uatpack.zip')
 
     expect(screen.getByLabelText('新数据包名字')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '创建' })).toBeInTheDocument()
+  })
+
+  it('版本在途：创建区整段不渲染——既不画入口，也不说「版本低」', async () => {
+    const send = vi.fn(async () => LIST_TWO_ENABLED)
+    // 版本为空串时 supportsDatapackCreate 按「支持」处置，若不区在途，就会先画入口再在
+    // status 落定后收掉（用户在首帧开始输入，随后连输入框一起消失）
+    renderPanel({ send, mcVersion: '', mcVersionPending: true })
+    await screen.findByText('file/uatpack.zip')
+
+    expect(screen.queryByLabelText('新数据包名字')).toBeNull()
+    expect(screen.queryByRole('button', { name: '创建' })).toBeNull()
+    // 也不能反过来去说「你的版本太低」——那时版本根本还没读到
+    expect(screen.queryByText(/创建空包需要 1\.21\.6 及以上/)).toBeNull()
+  })
+
+  it('版本未知但不再在途（查询已落定、版本仍是空串）：按「支持」处置，入口保留', async () => {
+    const send = vi.fn(async () => LIST_TWO_ENABLED)
+    renderPanel({ send, mcVersion: '', mcVersionPending: false })
+    await screen.findByText('file/uatpack.zip')
+
     expect(screen.getByRole('button', { name: '创建' })).toBeInTheDocument()
   })
 })

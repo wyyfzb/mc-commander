@@ -48,6 +48,7 @@ import { cn } from '@/lib/utils'
 import { instanceHueFillClass } from '@/lib/instance-hue'
 import {
   NOTIFICATION_TYPE_META,
+  type AppNotification,
   type NotificationSeverity,
   type NotificationType,
 } from '@/lib/notifications'
@@ -174,14 +175,117 @@ interface NotificationDrawerProps {
   onOpenChange: (open: boolean) => void
 }
 
+/**
+ * 单条通知行。
+ *
+ * 为什么单独成组件：升级进度是 1 条/秒的推送，在抽屉根订阅整张进度表会让**全部条目**跟着
+ * 重渲染；订阅下沉到行内、且只取本条实例那一个数值，就只有该行会更新。
+ */
+function NotificationRow({
+  item,
+  onOpenChange,
+}: {
+  item: AppNotification
+  onOpenChange: (open: boolean) => void
+}) {
+  const navigate = useNavigate()
+  const markAsRead = useNotificationStore((s) => s.markAsRead)
+  // 只在「升级开始」那条上挂实时进度（见 stores/world-upgrade-progress）
+  const upgradePercent = useWorldUpgradeProgressStore((s) =>
+    item.type === 'worldUpgradeStart' && item.instanceId ? s.progress[item.instanceId] : undefined,
+  )
+  const Icon = TYPE_ICON[item.type]
+  const color = notificationColor(item.type)
+  const isGame = item.category === 'game'
+  item.type === 'worldUpgradeStart' && item.instanceId
+  // 关联实例条目可跳转（issue 334）：关闭抽屉 → 实例页 focus 深链接切换
+  const jumpToInstance = () => {
+    markAsRead(item.id)
+    if (item.instanceId) {
+      onOpenChange(false)
+      navigate(`/instances?focus=${encodeURIComponent(item.instanceId)}`)
+    }
+  }
+  const baseLabel = item.read
+    ? item.instanceId
+      ? `${item.content}，点击查看关联实例`
+      : item.content
+    : `未读：${item.content}${item.instanceId ? '，点击查看关联实例' : ''}`
+  // 条目整体是 button ⇒ 子节点在无障碍树里一律 presentational，进度条与可见的
+  // 百分比都读不到，故把数值拼进 aria-label。**不做 aria-live 播报**：服务端
+  // 1 条/秒，逐秒播报只会变成噪音（值在聚焦时可读即可）。
+  const entryLabel =
+    upgradePercent === undefined
+      ? baseLabel
+      : `${baseLabel}，升级进度 ${Math.round(upgradePercent)}%`
+  return (
+    <button
+      type="button"
+      onClick={jumpToInstance}
+      className={cn(
+        // 横向两列：左列只在有实例时出现（实例色相标识），右列是原有内容
+        'flex max-w-65 gap-2 rounded-mcs-sm border px-3 py-2 text-left',
+        isGame ? 'self-start rounded-bl-mcs-xs' : 'self-end rounded-br-mcs-xs bg-mcs-bg-secondary',
+        isGame && color.bg,
+        item.read ? 'border-mcs-border-muted' : cn('border', color.border),
+        item.instanceId && 'cursor-pointer transition-colors hover:border-mcs-accent-border',
+      )}
+      aria-label={entryLabel}
+    >
+      {/* 实例固定色相标识（非语义 identity）：独立左列，**不进**「查看实例」那行——
+           那行整体是 info 语义色，色点嵌在里面（同为圆点 + 2px 间距）会被读成 info 语义点 */}
+      {item.instanceId && (
+        <span className="flex shrink-0 items-start pt-0.5" aria-hidden>
+          <span
+            data-instance-hue
+            className={cn('size-2 rounded-full', instanceHueFillClass(item.instanceId))}
+          />
+        </span>
+      )}
+      <span className="flex min-w-0 flex-1 flex-col gap-1">
+        <span className="flex items-center gap-1.5">
+          <Icon className={cn('size-3', color.text)} aria-hidden />
+          {!item.read && <span className="size-1.5 rounded-full bg-mcs-accent" aria-hidden />}
+          <span className={cn('text-mcs-2xs text-mcs-text-muted tnum')}>
+            {formatNotificationTime(item.timestamp)}
+          </span>
+        </span>
+        <span
+          className={cn(
+            'line-clamp-3 text-mcs-xs',
+            item.read ? 'font-normal text-mcs-text-muted' : 'font-medium text-mcs-text-default',
+          )}
+        >
+          {item.content}
+          {item.count > 1 && <span className="text-mcs-accent-fg"> ×{item.count}</span>}
+        </span>
+        {/* 世界格式升级的进度就地显示在这条通知上：不新增条目、不弹 toast
+            （服务端 1 条/秒），终态事件到达即随 store 清除而消失 */}
+        {upgradePercent !== undefined && (
+          <span className="flex items-center gap-2">
+            <ProgressBar percent={upgradePercent} />
+            {/* 与备份面板同语义的百分比同档（xs）：它承载的是「还要等多久」的
+                读数，不是可扫读的角标 */}
+            <span className="shrink-0 text-mcs-xs text-mcs-text-muted tnum">
+              {Math.round(upgradePercent)}%
+            </span>
+          </span>
+        )}
+        {item.instanceId && (
+          <span className="flex items-center gap-0.5 text-mcs-2xs text-mcs-info-fg">
+            查看实例
+            <ChevronRight className="size-3" aria-hidden />
+          </span>
+        )}
+      </span>
+    </button>
+  )
+}
+
 export function NotificationDrawer({ open, onOpenChange }: NotificationDrawerProps) {
   const navigate = useNavigate()
   const items = useNotificationStore((s) => s.items)
   const unreadCount = useNotificationStore((s) => s.unreadCount)
-  // 世界格式升级的实时进度：按实例读**瞬态** store（不进通知条目、不落盘），
-  // 就地更新「升级开始」那条的进度条
-  const worldUpgradeProgress = useWorldUpgradeProgressStore((s) => s.progress)
-  const markAsRead = useNotificationStore((s) => s.markAsRead)
   const markAllRead = useNotificationStore((s) => s.markAllRead)
   const clearAll = useNotificationStore((s) => s.clearAll)
   const [severityFilter, setSeverityFilter] = useState<'all' | NotificationSeverity>('all')
@@ -270,106 +374,9 @@ export function NotificationDrawer({ open, onOpenChange }: NotificationDrawerPro
               {items.length === 0 ? '暂无动态' : '该严重度下暂无通知'}
             </div>
           ) : (
-            visibleItems.map((n) => {
-              const Icon = TYPE_ICON[n.type]
-              const color = notificationColor(n.type)
-              const isGame = n.category === 'game'
-              // 只在「升级开始」那条上挂实时进度（见 stores/world-upgrade-progress）
-              const upgradePercent =
-                n.type === 'worldUpgradeStart' && n.instanceId
-                  ? worldUpgradeProgress[n.instanceId]
-                  : undefined
-              // 关联实例条目可跳转（issue 334）：关闭抽屉 → 实例页 focus 深链接切换
-              const jumpToInstance = () => {
-                markAsRead(n.id)
-                if (n.instanceId) {
-                  onOpenChange(false)
-                  navigate(`/instances?focus=${encodeURIComponent(n.instanceId)}`)
-                }
-              }
-              const baseLabel = n.read
-                ? n.instanceId
-                  ? `${n.content}，点击查看关联实例`
-                  : n.content
-                : `未读：${n.content}${n.instanceId ? '，点击查看关联实例' : ''}`
-              // 条目整体是 button ⇒ 子节点在无障碍树里一律 presentational，进度条与可见的
-              // 百分比都读不到，故把数值拼进 aria-label。**不做 aria-live 播报**：服务端
-              // 1 条/秒，逐秒播报只会变成噪音（值在聚焦时可读即可）。
-              const entryLabel =
-                upgradePercent === undefined
-                  ? baseLabel
-                  : `${baseLabel}，升级进度 ${Math.round(upgradePercent)}%`
-              return (
-                <button
-                  key={n.id}
-                  type="button"
-                  onClick={jumpToInstance}
-                  className={cn(
-                    // 横向两列：左列只在有实例时出现（实例色相标识），右列是原有内容
-                    'flex max-w-65 gap-2 rounded-mcs-sm border px-3 py-2 text-left',
-                    isGame
-                      ? 'self-start rounded-bl-mcs-xs'
-                      : 'self-end rounded-br-mcs-xs bg-mcs-bg-secondary',
-                    isGame && color.bg,
-                    n.read ? 'border-mcs-border-muted' : cn('border', color.border),
-                    n.instanceId &&
-                      'cursor-pointer transition-colors hover:border-mcs-accent-border',
-                  )}
-                  aria-label={entryLabel}
-                >
-                  {/* 实例固定色相标识（非语义 identity）：独立左列，**不进**「查看实例」那行——
-                       那行整体是 info 语义色，色点嵌在里面（同为圆点 + 2px 间距）会被读成 info 语义点 */}
-                  {n.instanceId && (
-                    <span className="flex shrink-0 items-start pt-0.5" aria-hidden>
-                      <span
-                        data-instance-hue
-                        className={cn('size-2 rounded-full', instanceHueFillClass(n.instanceId))}
-                      />
-                    </span>
-                  )}
-                  <span className="flex min-w-0 flex-1 flex-col gap-1">
-                    <span className="flex items-center gap-1.5">
-                      <Icon className={cn('size-3', color.text)} aria-hidden />
-                      {!n.read && (
-                        <span className="size-1.5 rounded-full bg-mcs-accent" aria-hidden />
-                      )}
-                      <span className={cn('text-mcs-2xs text-mcs-text-muted tnum')}>
-                        {formatNotificationTime(n.timestamp)}
-                      </span>
-                    </span>
-                    <span
-                      className={cn(
-                        'line-clamp-3 text-mcs-xs',
-                        n.read
-                          ? 'font-normal text-mcs-text-muted'
-                          : 'font-medium text-mcs-text-default',
-                      )}
-                    >
-                      {n.content}
-                      {n.count > 1 && <span className="text-mcs-accent-fg"> ×{n.count}</span>}
-                    </span>
-                    {/* 世界格式升级的进度就地显示在这条通知上：不新增条目、不弹 toast
-                        （服务端 1 条/秒），终态事件到达即随 store 清除而消失 */}
-                    {upgradePercent !== undefined && (
-                      <span className="flex items-center gap-2">
-                        <ProgressBar percent={upgradePercent} />
-                        {/* 与备份面板同语义的百分比同档（xs）：它承载的是「还要等多久」的
-                            读数，不是可扫读的角标 */}
-                        <span className="shrink-0 text-mcs-xs text-mcs-text-muted tnum">
-                          {Math.round(upgradePercent)}%
-                        </span>
-                      </span>
-                    )}
-                    {n.instanceId && (
-                      <span className="flex items-center gap-0.5 text-mcs-2xs text-mcs-info-fg">
-                        查看实例
-                        <ChevronRight className="size-3" aria-hidden />
-                      </span>
-                    )}
-                  </span>
-                </button>
-              )
-            })
+            visibleItems.map((n) => (
+              <NotificationRow key={n.id} item={n} onOpenChange={onOpenChange} />
+            ))
           )}
         </div>
 

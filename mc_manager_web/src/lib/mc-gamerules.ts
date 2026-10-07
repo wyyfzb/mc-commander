@@ -1,3 +1,5 @@
+import { isVersionAtLeast } from '@/lib/mc-version'
+
 /**
  * gamerule 双版本数据 + 查询解析
  * 数据源：https://zh.minecraft.wiki/游戏规则 + /Java版1.21.11前
@@ -817,17 +819,8 @@ export const LEGACY_GAMERULES: GameruleDef[] = [
 
 /** 按服务器版本选择规则集（新旧版本兼容；版本比较走数值化防 1.21.2 > 1.21.11 字符串坑） */
 export function pickGameruleSet(mcVersion: string): GameruleDef[] {
-  const parse = (v: string) => {
-    const m = v.match(/(\d+)\.(\d+)(?:\.(\d+))?/)
-    if (!m) return null
-    return [Number(m[1]), Number(m[2]), Number(m[3] ?? 0)] as const
-  }
-  const ver = parse(mcVersion)
   // 版本未知/空串按最新（与 NBT 三格式判定策略一致）
-  if (!ver) return MINECRAFT_GAMERULES
-  const [ma, mi, pa] = ver
-  const atLeast12111 = ma > 1 || (ma === 1 && (mi > 21 || (mi === 21 && pa >= 11)))
-  return atLeast12111 ? MINECRAFT_GAMERULES : LEGACY_GAMERULES
+  return isVersionAtLeast(mcVersion, '1.21.11', true) ? MINECRAFT_GAMERULES : LEGACY_GAMERULES
 }
 
 /** gamerule 查询命令（无参列出全部规则值，RCON 响应文本解析用） */

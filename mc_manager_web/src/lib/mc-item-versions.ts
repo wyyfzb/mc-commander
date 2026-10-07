@@ -1,3 +1,5 @@
+import { isVersionAtLeast } from '@/lib/mc-version'
+
 /**
  * 物品版本元数据的**权威来源**（条目 9）。
  *
@@ -52,25 +54,6 @@ export const ITEM_SINCE_VERSION: Readonly<Record<string, string>> = {
   sulfur_wall: '26.2',
 }
 
-/** 版本号三元组（缺失段为 0，便于比较） */
-function triple(v: string): [number, number, number] {
-  const p = v.split('.').map((x) => Number.parseInt(x, 10))
-  return [p[0] ?? 0, p[1] ?? 0, p[2] ?? 0]
-}
-
-/**
- * 比较两个点分版本号。返回 <0 / 0 / >0，语义同 `Array.prototype.sort` 的比较器。
- *
- * 逐段数值比较而非字符串比较：字符串比较会把 `1.9` 排在 `1.10` 之后。
- */
-export function compareVersions(a: string, b: string): number {
-  const [a1, a2, a3] = triple(a)
-  const [b1, b2, b3] = triple(b)
-  if (a1 !== b1) return a1 - b1
-  if (a2 !== b2) return a2 - b2
-  return a3 - b3
-}
-
 /**
  * 该物品是否在目标版本可用。
  *
@@ -81,7 +64,8 @@ export function compareVersions(a: string, b: string): number {
 export function isItemAvailableIn(itemId: string, mcVersion: string): boolean {
   const since = ITEM_SINCE_VERSION[itemId]
   if (!since) return true
-  return compareVersions(mcVersion, since) >= 0
+  // 版本不可解析时按「不可用」处置：宁可少列可用物品，也不给出服务端会拒绝的 id
+  return isVersionAtLeast(mcVersion, since, false)
 }
 
 /**

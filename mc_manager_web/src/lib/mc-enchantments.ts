@@ -9,6 +9,7 @@
  *   1.20.4 及以下    : give <player> minecraft:<id>{ench:[{id:"minecraft:sharpness",lvl:5}]} <count>
  */
 import type { MinecraftItem } from './mc-items'
+import { isVersionAtLeast } from '@/lib/mc-version'
 import type { PotionConfig } from './mc-potions'
 import { fullBottleId, potionDisplayName } from './mc-potions'
 import { isItemAvailableIn, requiredVersionFor } from './mc-item-versions'
@@ -384,20 +385,6 @@ export function isEnchantmentDisabledBy(
 
 // ── MC 版本判定（NBT 三格式自适应）──────────────────────────
 
-/** 解析版本号为主/次/修订三元组；无法解析的段返回 null */
-function parseVersion(mcVersion: string): {
-  major: number | null
-  minor: number | null
-  patch: number | null
-} {
-  const parts = mcVersion.split('.')
-  return {
-    major: parts.length > 0 ? Number.parseInt(parts[0]!, 10) : null,
-    minor: parts.length > 1 ? Number.parseInt(parts[1]!, 10) : null,
-    patch: parts.length > 2 ? Number.parseInt(parts[2]!, 10) : null,
-  }
-}
-
 /**
  * 判断 MC 版本是否支持 Data Components（1.20.5+）。
  * 1.20.5 引入物品堆叠组件，附魔从旧 NBT `{ench:[{id,lvl}]}`
@@ -405,15 +392,7 @@ function parseVersion(mcVersion: string): {
  * 版本字符串无法解析时假设新版（Data Components），因当前主流为 1.21+。
  */
 export function supportsDataComponents(mcVersion: string): boolean {
-  const { major, minor, patch } = parseVersion(mcVersion)
-  if (major === null || minor === null) return true
-  if (Number.isNaN(major) || Number.isNaN(minor)) return true
-  if (major > 1) return true
-  if (major < 1) return false
-  if (minor > 20) return true
-  if (minor < 20) return false
-  const patchNum = patch ?? 0
-  return patchNum >= 5
+  return isVersionAtLeast(mcVersion, '1.20.5', true)
 }
 
 /**
@@ -424,16 +403,8 @@ export function supportsDataComponents(mcVersion: string): boolean {
  * 版本字符串无法解析时假设新版（直接映射），因当前主流为 1.21.2+。
  */
 export function usesDirectEnchantmentMap(mcVersion: string): boolean {
-  const { major, minor, patch } = parseVersion(mcVersion)
-  if (major === null || minor === null) return true
-  if (Number.isNaN(major) || Number.isNaN(minor)) return true
-  if (major > 1) return true // 2.x+ / 26.x+ → 直接映射
-  if (major < 1) return false
-  if (minor > 21) return true // 1.22+ → 直接映射
-  if (minor < 21) return false // 1.20.x → 旧格式（levels 包装层）
-  // minor == 21
-  const patchNum = patch ?? 0
-  return patchNum >= 2 // 1.21.2+ → 直接映射，1.21.0-1.21.1 → 旧格式
+  // 1.21.2+ → 直接映射，1.20.5-1.21.1 → 旧格式（levels 包装层）
+  return isVersionAtLeast(mcVersion, '1.21.2', true)
 }
 
 /**
@@ -443,9 +414,7 @@ export function usesDirectEnchantmentMap(mcVersion: string): boolean {
  * 版本无法解析时假设新版（26.x）。
  */
 export function isMc26(mcVersion: string): boolean {
-  const { major } = parseVersion(mcVersion)
-  if (major === null) return true
-  return Number.isNaN(major) || major >= 26
+  return isVersionAtLeast(mcVersion, '26', true)
 }
 
 // ── give 命令生成 ──────────────────────────────────────────

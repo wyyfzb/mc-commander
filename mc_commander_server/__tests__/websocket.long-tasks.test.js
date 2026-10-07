@@ -347,6 +347,84 @@ describe('WebSocket 长任务（部署/升级）通知与补发', () => {
       expect(upgradeMsg.data.percent).toBe(55);
     });
 
+    it('subscribe 时补发该实例进行中的世界格式升级：先补 started（载体）再补当前进度', () => {
+      // 事件经 setupWebSocket 注册的处理器流过，故用 emit 驱动（而不是直接改内部快照）
+      serverManager.emit('instance:worldUpgrade', {
+        instanceId: 'paper-abc1',
+        state: 'started',
+        progress: null,
+      });
+      serverManager.emit('instance:worldUpgrade', {
+        instanceId: 'paper-abc1',
+        state: 'progress',
+        progress: 0.42,
+      });
+
+      const ws = connect(wss);
+      ws.send.mockClear();
+      subscribe(ws, 'paper-abc1');
+
+      const worldMsgs = ws.send.mock.calls
+        .map((c) => JSON.parse(c[0]))
+        .filter((m) => m.type === WSEvents.WORLD_UPGRADE);
+      // 必须两条：进度挂在「升级开始」那条通知上，只补 progress 会得到一个没有载体的百分比
+      expect(worldMsgs.map((m) => m.data.state)).toEqual(['started', 'progress']);
+      expect(worldMsgs[0].instanceId).toBe('paper-abc1');
+      expect(worldMsgs[1].data.progress).toBeCloseTo(0.42);
+    });
+
+    it('世界格式升级到终态后不再补发（否则上一轮的百分比会补给后来连上的客户端）', () => {
+      serverManager.emit('instance:worldUpgrade', {
+        instanceId: 'paper-abc1',
+        state: 'progress',
+        progress: 0.42,
+      });
+      serverManager.emit('instance:worldUpgrade', {
+        instanceId: 'paper-abc1',
+        state: 'finished',
+        progress: null,
+      });
+
+      const ws = connect(wss);
+      ws.send.mockClear();
+      subscribe(ws, 'paper-abc1');
+
+      const types = ws.send.mock.calls.map((c) => JSON.parse(c[0]).type);
+      expect(types).not.toContain(WSEvents.WORLD_UPGRADE);
+    });
+
+    it('只读连接不补发世界格式升级快照（与 fanOut 同源：不在只读白名单内）', () => {
+      serverManager.emit('instance:worldUpgrade', {
+        instanceId: 'paper-abc1',
+        state: 'progress',
+        progress: 0.42,
+      });
+
+      const ws = connect(wss);
+      // 角色落定本身由 websocket.readonly-filter.test.js 覆盖；这里只测补发的角色判据
+      ws._role = 'readonly';
+      ws.send.mockClear();
+      subscribe(ws, 'paper-abc1');
+
+      const types = ws.send.mock.calls.map((c) => JSON.parse(c[0]).type);
+      expect(types).not.toContain(WSEvents.WORLD_UPGRADE);
+    });
+
+    it('subscribe 其他实例不补发无关实例的世界格式升级', () => {
+      serverManager.emit('instance:worldUpgrade', {
+        instanceId: 'paper-abc1',
+        state: 'progress',
+        progress: 0.42,
+      });
+
+      const ws = connect(wss);
+      ws.send.mockClear();
+      subscribe(ws, 'vanilla-other');
+
+      const types = ws.send.mock.calls.map((c) => JSON.parse(c[0]).type);
+      expect(types).not.toContain(WSEvents.WORLD_UPGRADE);
+    });
+
     it('subscribe 其他实例不补发无关实例的升级快照', () => {
       serverManager.activeUpgrades.set('paper-abc1', {
         instanceId: 'paper-abc1',
