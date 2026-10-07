@@ -34,6 +34,7 @@ import * as rosterSync from './mc-server/roster-sync.js';
 import * as msmpClient from './mc-server/msmp-client.js';
 import * as msmpNotifications from './mc-server/msmp-notifications.js';
 import * as crashArtifacts from './mc-server/crash-artifacts.js';
+import * as structuredLogConfig from './mc-server/structured-log-config.js';
 import { logger } from '../utils/logger.js';
 
 // 原子写统一走 utils/fs-utils.js 公共实现（写唯一 .tmp 再 rename，失败清残留）。
@@ -363,6 +364,8 @@ export class MCServerInstance extends EventEmitter {
     this._msmpNotifReconnectTimer = null;
     this._msmpNotifBackoffMs = 0;
     this._msmpNotifAlive = false;
+    // 结构化日志覆盖配置的绝对路径：启动前置阶段解析（版本不达门槛时为 null＝不启用）
+    this._structuredLogConfigPath = null;
     // 死亡事件聚合窗口：团灭等批量场景 5s 内合并为单条事件（防通知风暴）
     this._deathAggBuffer = [];
     this._deathAggTimer = null;
@@ -774,12 +777,14 @@ export class MCServerInstance extends EventEmitter {
     this.adoptedPid = null;
 
     // 子阶段编排（各阶段实现见 start-lifecycle.js，经原型注入 this 绑定实例）：
-    // EULA 检查 → tempban 对账 → world 锁清理 → 启动命令/参数构建（四种来源优先级）
+    // EULA 检查 → tempban 对账 → world 锁清理 → 结构化日志配置（写覆盖配置，供下一步注入 -D）
+    // → 启动命令/参数构建（四种来源优先级）
     // → spawn 与进程/stdin/输出/exit 监听器挂载 → 运行时状态初始化 → 收尾
     // （熔断重置 → started 事件 → 定时存档）。按原始执行顺序依次调用，行为零变化。
     this._ensureEulaAccepted();
     this._reconcileTempBansSafe();
     this._cleanWorldLock();
+    this._ensureStructuredLogConfig();
 
     const { command, args } = this._resolveStartCommand(startCommand);
     this._spawnServerProcess(command, args);
@@ -2371,3 +2376,7 @@ Object.assign(MCServerInstance.prototype, msmpClient);
 // MSMP 通知面（一期）域挂载：常驻连接接收服务端推送的 world/upgrade_* 与
 // server/started|stopping|saving|saved（与 stdout 解析零冲突的两族，见模块头注释）。
 Object.assign(MCServerInstance.prototype, msmpNotifications);
+
+// 结构化日志域挂载：为实例写一份 log4j2 覆盖配置（纯文本通道不变 + 多一份 JSONL），
+// 启动时经 -D 注入（版本门槛与选型依据见模块头注释）。
+Object.assign(MCServerInstance.prototype, structuredLogConfig);

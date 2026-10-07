@@ -145,7 +145,8 @@ export function _resolveStartCommand(startCommand) {
       );
     }
   }
-  return { command, args };
+  // 四条来源合一后注入结构化日志参数：单点注入，避免每条分支各写一份（未启用时原样返回）
+  return { command, args: this._withStructuredLogArg(args) };
 }
 
 export function _spawnServerProcess(command, args) {
