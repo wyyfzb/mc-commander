@@ -283,7 +283,7 @@ describe('WebSocket 系统广播域（broadcastAll / 全局通知 / 系统统计
       expect(wsOther.send).toHaveBeenCalledTimes(1);
       expect(wsBare.send).toHaveBeenCalledTimes(1);
       const msg = sentMessage(wsBare);
-      expect(msg.type).toBe(WSEvents.STATUS);
+      expect(msg.type).toBe(WSEvents.STATUS_EVENT);
       expect(msg.instanceId).toBe('s1');
       expect(msg.data).toMatchObject({ event: 'crash', exitCode: 1 });
     });
@@ -311,7 +311,7 @@ describe('WebSocket 系统广播域（broadcastAll / 全局通知 / 系统统计
       expect(fakeDb.inserted).toHaveLength(1);
       expect(fakeDb.inserted[0][0]).toBe(1);
       expect(fakeDb.inserted[0][1]).toBeNull();
-      expect(fakeDb.inserted[0][2]).toBe(WSEvents.STATUS);
+      expect(fakeDb.inserted[0][2]).toBe(WSEvents.STATUS_EVENT);
       expect(sentMessage(ws).eventId).toBe(1);
     });
 

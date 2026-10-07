@@ -96,7 +96,7 @@ describe('WebSocket 长任务（部署/升级）通知与补发', () => {
      * 用例**。键集不一致即失败——这样「加了一条快照声明却没实现」不能靠忘记而通过。
      */
     const snapshotProbes = {
-      status: 'status 快照：字段集与派生值（websocket.contract.test.js）',
+      statusSnapshot: 'status 快照：字段集与派生值（websocket.contract.test.js）',
       deployProgress: '登记时补发在途部署快照、订阅时不重复（本文件，inFlightDeploys）',
       upgradeProgress: 'subscribe 时补发该实例进行中的升级快照（本文件，activeUpgrades）',
       worldUpgrade: 'subscribe 的状态快照带上在途的世界格式升级（本文件）',
@@ -417,7 +417,7 @@ describe('WebSocket 长任务（部署/升级）通知与补发', () => {
       subscribe(ws, 'paper-abc1');
 
       const messages = ws.send.mock.calls.map((c) => JSON.parse(c[0]));
-      const snapshot = messages.find((m) => m.type === WSEvents.STATUS);
+      const snapshot = messages.find((m) => m.type === WSEvents.STATUS_SNAPSHOT);
       expect(snapshot.data.worldUpgrade).toEqual({ progress: 0.42 });
       // 不补发边沿：补一条 started 会把「开始时间」改成现在（篡改事实），并给客户端一个
       // 只能由边沿创建的载体（进度条的挂载点）
@@ -441,7 +441,7 @@ describe('WebSocket 长任务（部署/升级）通知与补发', () => {
       subscribe(ws, 'paper-abc1');
 
       const messages = ws.send.mock.calls.map((c) => JSON.parse(c[0]));
-      const snapshot = messages.find((m) => m.type === WSEvents.STATUS);
+      const snapshot = messages.find((m) => m.type === WSEvents.STATUS_SNAPSHOT);
       // 必须是「有字段且为 null」，不是「字段缺席」：缺席＝未知（保持现状），null＝确认空闲（清掉）
       expect(snapshot.data).toHaveProperty('worldUpgrade', null);
       expect(messages.map((m) => m.type)).not.toContain(WSEvents.WORLD_UPGRADE);
@@ -461,7 +461,7 @@ describe('WebSocket 长任务（部署/升级）通知与补发', () => {
       subscribe(ws, 'paper-abc1');
 
       const messages = ws.send.mock.calls.map((c) => JSON.parse(c[0]));
-      const snapshot = messages.find((m) => m.type === WSEvents.STATUS);
+      const snapshot = messages.find((m) => m.type === WSEvents.STATUS_SNAPSHOT);
       expect(snapshot.data).not.toHaveProperty('worldUpgrade');
       expect(messages.map((m) => m.type)).not.toContain(WSEvents.WORLD_UPGRADE);
     });
@@ -484,7 +484,7 @@ describe('WebSocket 长任务（部署/升级）通知与补发', () => {
 
       const snapshot = ws.send.mock.calls
         .map((c) => JSON.parse(c[0]))
-        .find((m) => m.type === WSEvents.STATUS);
+        .find((m) => m.type === WSEvents.STATUS_SNAPSHOT);
       expect(snapshot.instanceId).toBe('vanilla-other');
       expect(snapshot.data).toHaveProperty('worldUpgrade', null);
     });

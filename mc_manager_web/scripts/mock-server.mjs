@@ -1770,7 +1770,7 @@ server.on('upgrade', (req, socket) => {
       socket.write(
         encodeTextFrame(
           JSON.stringify({
-            type: 'status',
+            type: 'statusSnapshot',
             instanceId: msg.instanceId,
             data: {
               status: (socket.mockRunning ?? instance.isRunning) ? 'running' : 'stopped',

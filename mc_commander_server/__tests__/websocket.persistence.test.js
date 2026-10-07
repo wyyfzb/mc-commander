@@ -231,7 +231,7 @@ describe('WebSocket 通知持久化与断线补齐', () => {
             {
               id: lastEventId + 1,
               instance_id: null,
-              type: WSEvents.STATUS,
+              type: WSEvents.STATUS_EVENT,
               data: JSON.stringify({ instanceId: 's9', event: 'crash', exitCode: 1 }),
               created_at: '2026-08-11T00:00:00.000Z',
             },

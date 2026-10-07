@@ -6187,7 +6187,8 @@ const systemMetricsSeriesSchema = array(systemMetricSampleSchema);
 //#region src/ws.ts
 const WS_EVENT_TYPES = [
 	"log",
-	"status",
+	"statusSnapshot",
+	"statusEvent",
 	"performanceUpdate",
 	"weatherUpdate",
 	"worldUpgrade",
@@ -6369,7 +6370,8 @@ const NOTIFICATION_EVENT_TYPES = /* @__PURE__ */ new Set([
 	"upgradeCancelled"
 ]);
 const WS_EVENT_KINDS = {
-	status: "state",
+	statusSnapshot: "state",
+	statusEvent: "event",
 	performanceUpdate: "state",
 	weatherUpdate: "state",
 	worldUpgrade: "state",
@@ -6409,7 +6411,7 @@ const WS_EVENT_KINDS = {
 	error: "event"
 };
 const WS_STATE_RECOVERY = {
-	status: "snapshot",
+	statusSnapshot: "snapshot",
 	deployProgress: "snapshot",
 	upgradeProgress: "snapshot",
 	worldUpgrade: "snapshot",

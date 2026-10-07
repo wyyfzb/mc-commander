@@ -2,7 +2,8 @@ import { z } from 'zod'
 
 export const WS_EVENT_TYPES = [
   'log',
-  'status',
+  'statusSnapshot',
+  'statusEvent',
   'performanceUpdate',
   'weatherUpdate',
   'worldUpgrade',
@@ -204,7 +205,10 @@ export type WsStateRecovery = 'snapshot' | 'poll' | 'cadence' | 'none'
 
 export const WS_EVENT_KINDS: Readonly<Record<WsEventType, WsEventKind>> = {
   // ── state：此刻的状态 ──
-  status: 'state',
+  // 运行态拆两个类型：快照是**状态**（订阅时必须能读到），跃迁是**事件**（发生过的瞬间事实）。
+  // 合成一个 `status` 时靠「有没有 event 字段」区分两种语义，类别声明只能写成 state——那是不准的。
+  statusSnapshot: 'state',
+  statusEvent: 'event',
   performanceUpdate: 'state',
   weatherUpdate: 'state',
   worldUpgrade: 'state',
@@ -247,7 +251,7 @@ export const WS_EVENT_KINDS: Readonly<Record<WsEventType, WsEventKind>> = {
 }
 
 export const WS_STATE_RECOVERY: Readonly<Partial<Record<WsEventType, WsStateRecovery>>> = {
-  status: 'snapshot',
+  statusSnapshot: 'snapshot',
   deployProgress: 'snapshot',
   upgradeProgress: 'snapshot',
   worldUpgrade: 'snapshot',

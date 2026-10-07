@@ -45,7 +45,8 @@ describe('WebSocket 事件格式契约', () => {
   describe('WSEvents 事件名常量（前后端契约）', () => {
     it('核心事件名必须保持稳定（对外契约，改名即破坏性变更）', () => {
       expect(WSEvents.LOG).toBe('log');
-      expect(WSEvents.STATUS).toBe('status');
+      expect(WSEvents.STATUS_SNAPSHOT).toBe('statusSnapshot');
+      expect(WSEvents.STATUS_EVENT).toBe('statusEvent');
       expect(WSEvents.PLAYER_JOIN).toBe('playerJoin');
     });
   });
@@ -80,13 +81,13 @@ describe('WebSocket 事件格式契约', () => {
   });
 
   describe('status 事件', () => {
-    it('instance:status 应广播 type=status 且 data 含 event 字段', () => {
+    it('instance:status 的跃迁应广播 type=statusEvent 且 data 含 event 字段', () => {
       const ws = connectAndSubscribe('s1');
 
       serverManager.emit('instance:status', { instanceId: 's1', event: 'stopped', code: 0 });
 
       const msg = sentMessage(ws);
-      expect(msg.type).toBe('status');
+      expect(msg.type).toBe('statusEvent');
       expect(msg.instanceId).toBe('s1');
       expect(msg.data).toMatchObject({ event: 'stopped', code: 0 });
     });
@@ -107,7 +108,7 @@ describe('WebSocket 事件格式契约', () => {
       ws.emit('message', JSON.stringify({ type: 'subscribe', instanceId: 's1' }));
 
       const msg = sentMessage(ws);
-      expect(msg.type).toBe('status');
+      expect(msg.type).toBe('statusSnapshot');
       expect(msg.instanceId).toBe('s1');
       // worldUpgrade 是状态快照的固定字段：null＝确认空闲（字段缺席＝未知，两态要分清）
       expect(Object.keys(msg.data).sort()).toEqual([

@@ -14,7 +14,8 @@ import { collectSystemStats } from './utils/system-stats.js';
 
 export const WSEvents = {
   LOG: 'log',
-  STATUS: 'status',
+  STATUS_SNAPSHOT: 'statusSnapshot',
+  STATUS_EVENT: 'statusEvent',
   PERFORMANCE_UPDATE: 'performanceUpdate',
   WEATHER_UPDATE: 'weatherUpdate',
   WORLD_UPGRADE: 'worldUpgrade',
@@ -79,7 +80,8 @@ export const ClientMessages = {
 // 与 WSEvents 同文件维护：新增事件时**必须**在此二分归类（归类哨兵见
 // __tests__/websocket.readonly-filter.test.js——未归类的新事件会让用例变红）。
 export const READONLY_WS_EVENTS = new Set([
-  WSEvents.STATUS, // 运行态跃迁与状态快照（含崩溃熔断提示，不含日志文本）
+  WSEvents.STATUS_SNAPSHOT, // 运行态快照（运行/在线/tps，不含日志文本）
+  WSEvents.STATUS_EVENT, // 运行态跃迁与崩溃熔断提示
   WSEvents.PERFORMANCE_UPDATE, // 性能读数（含睡眠/清醒玩家名）
   WSEvents.WEATHER_UPDATE,
   WSEvents.PLAYER_STATS_UPDATE, // 在线玩家血量/护甲/坐标
@@ -463,7 +465,7 @@ export function setupWebSocket(wss, serverManager) {
               : undefined;
             ws.send(
               JSON.stringify({
-                type: WSEvents.STATUS,
+                type: WSEvents.STATUS_SNAPSHOT,
                 instanceId: msg.instanceId,
                 data: {
                   status: instance.isRunning ? 'running' : 'stopped',
@@ -750,24 +752,25 @@ export function setupWebSocket(wss, serverManager) {
     // status 快照高频（每 5s performance 附带）；仅状态跃迁子事件落库
     if (STATUS_EVENT_TYPES.has(data?.event)) {
       if (CRITICAL_STATUS_EVENTS.has(data.event)) {
-        broadcastCriticalInstanceEvent(WSEvents.STATUS, data);
+        broadcastCriticalInstanceEvent(WSEvents.STATUS_EVENT, data);
         return;
       }
       // 常规跃迁也落库（实例行，仅订阅者断线补齐可见），但投递仍按订阅过滤
-      const eventId = persistNotificationEvent(data.instanceId, WSEvents.STATUS, data);
+      const eventId = persistNotificationEvent(data.instanceId, WSEvents.STATUS_EVENT, data);
       fanOut(
         JSON.stringify({
           ...(eventId != null ? { eventId } : {}),
-          type: WSEvents.STATUS,
+          type: WSEvents.STATUS_EVENT,
           instanceId: data.instanceId,
           data,
           timestamp: Date.now(),
         }),
-        { type: WSEvents.STATUS, instanceId: data.instanceId },
+        { type: WSEvents.STATUS_EVENT, instanceId: data.instanceId },
       );
       return;
     }
-    broadcast(data.instanceId, WSEvents.STATUS, data);
+    // 没有 event 字段 ⇒ 这是**快照形状**的周期性广播（每 5s 随性能附带），不是跃迁
+    broadcast(data.instanceId, WSEvents.STATUS_SNAPSHOT, data);
   });
 
   serverManager.on('instance:playerJoin', (data) => {

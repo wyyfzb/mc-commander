@@ -245,7 +245,7 @@ export function buildNotifications(
           content: d.sleeping ? `${d.name} 入睡了` : `${d.name} 醒来了`,
         },
       ]
-    case 'status': {
+    case 'statusEvent': {
       const ev = d.event as string | undefined
       if (ev === 'started') {
         return [{ type: 'serverStart', category: 'server', content: '服务器已启动' }]

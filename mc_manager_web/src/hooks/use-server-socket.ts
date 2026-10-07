@@ -189,7 +189,7 @@ export function useServerSocket(instanceId: string | null) {
       }
       if (msg.instanceId && msg.instanceId !== instanceRef.current) {
         const isCriticalStatus =
-          msg.type === 'status' && (data.event === 'crash' || data.event === 'circuit_breaker')
+          msg.type === 'statusEvent' && (data.event === 'crash' || data.event === 'circuit_breaker')
         if (isCriticalStatus) {
           dispatchEvent({
             type: msg.type,
@@ -267,83 +267,82 @@ export function useServerSocket(instanceId: string | null) {
       if (!msg.instanceId || msg.instanceId !== instanceRef.current) return
 
       switch (msg.type) {
-        case 'status': {
-          if (data.event && typeof data.event === 'string') {
-            const ev = data.event as
-              | 'started'
-              | 'stopped'
-              | 'ready'
-              | 'crash'
-              | 'save'
-              | 'circuit_breaker'
-            applyWsStatusEvent(ev)
-            /* 实例已启动 ⇒ 启动配置已生效，清「待重启」标记。
+        case 'statusEvent': {
+          // 跃迁是**事件**（发生过的瞬间事实）；快照走 `statusSnapshot`（见下一个 case）。
+          // 缺 `event` 字段说明不是跃迁（旧服务端或形状漂移）：当跃迁处理会给出一堆 undefined 跃迁
+          if (!data.event || typeof data.event !== 'string') break
+          const ev = data.event as
+            | 'started'
+            | 'stopped'
+            | 'ready'
+            | 'crash'
+            | 'save'
+            | 'circuit_breaker'
+          applyWsStatusEvent(ev)
+          /* 实例已启动 ⇒ 启动配置已生效，清「待重启」标记。
                判据取 started 而非 stopped：服务端保存启动配置后不改运行中进程，
                只有「重新起来」才算生效——stopped 只说明停下来了，此刻配置仍未被应用。 */
-            if (ev === 'started') {
-              clearRestartPending(msg.instanceId)
-            }
-            // 启停中间态确认清除（issue 334）：started/stopped 为终态确认，crash/熔断为异常终态
-            if (
-              ev === 'started' ||
-              ev === 'stopped' ||
-              ev === 'crash' ||
-              ev === 'circuit_breaker'
-            ) {
-              clearPhase(msg.instanceId, null)
-            }
-            // 实例列表状态变化时刷新列表（runningCount 等）
-            void queryClient.invalidateQueries({ queryKey: queryKeys.instances() })
-            // 详情同步失效：isRunning 镜像自详情 query（server store），只刷列表会让
-            // 面板外停止（如终端输 stop）后的停止状态条滞后到 30s 轮询才翻转
-            void queryClient.invalidateQueries({ queryKey: queryKeys.instance(msg.instanceId) })
-            // critical 事件（当前实例）：入通知中心 + 持久 toast（手动关闭防错过）
-            if (ev === 'crash' || ev === 'circuit_breaker') {
-              dispatchEvent({
-                type: 'status',
-                data: msg.data as Record<string, unknown>,
-                instanceId: msg.instanceId,
-              })
-              const name = getInstanceName(queryClient, msg.instanceId)
-              const crashedInstanceId = msg.instanceId
-              toast.error(
-                ev === 'crash'
-                  ? `实例「${name}」服务器意外退出${data.autoRestart ? '，正在自动重启' : ''}`
-                  : `实例「${name}」连续崩溃 ${Number(data.consecutiveCrashes ?? 0)} 次，已触发熔断保护`,
-                {
-                  duration: Infinity,
-                  // 深入链接：一键查看进程末尾日志（issue 343，消费 lastOutput）
-                  action: {
-                    label: '查看末尾日志',
-                    onClick: () => setLastOutputInstanceId(crashedInstanceId),
-                  },
-                },
-              )
-            } else {
-              // started/stopped/ready/save 常规跃迁：入通知中心（文案映射见
-              // lib/notifications buildNotifications），不弹 toast 防打断
-              dispatchEvent({
-                type: 'status',
-                data: msg.data as Record<string, unknown>,
-                instanceId: msg.instanceId,
-              })
-            }
-          } else {
-            applyWsSnapshot(msg.instanceId, {
-              status: String(data.status ?? ''),
-              isRunning: Boolean(data.isRunning),
-              players: (data.players as unknown[]) ?? [],
-              tps: typeof data.tps === 'number' ? data.tps : null,
+          if (ev === 'started') {
+            clearRestartPending(msg.instanceId)
+          }
+          // 启停中间态确认清除（issue 334）：started/stopped 为终态确认，crash/熔断为异常终态
+          if (ev === 'started' || ev === 'stopped' || ev === 'crash' || ev === 'circuit_breaker') {
+            clearPhase(msg.instanceId, null)
+          }
+          // 实例列表状态变化时刷新列表（runningCount 等）
+          void queryClient.invalidateQueries({ queryKey: queryKeys.instances() })
+          // 详情同步失效：isRunning 镜像自详情 query（server store），只刷列表会让
+          // 面板外停止（如终端输 stop）后的停止状态条滞后到 30s 轮询才翻转
+          void queryClient.invalidateQueries({ queryKey: queryKeys.instance(msg.instanceId) })
+          // critical 事件（当前实例）：入通知中心 + 持久 toast（手动关闭防错过）
+          if (ev === 'crash' || ev === 'circuit_breaker') {
+            dispatchEvent({
+              type: 'statusEvent',
+              data: msg.data as Record<string, unknown>,
+              instanceId: msg.instanceId,
             })
-            // 世界格式升级属 state 类事件（契约 WS_EVENT_KINDS），权威读法随快照回来。
-            // 三态必须分开：对象＝在途、null＝**确认空闲**（清掉本地残留）、
-            // **字段缺席＝未知**（旧服务端或无权限，保持现状）——缺席时若按「没有升级」处理，
-            // 会把正在跑的进度条抹掉。
-            if ('worldUpgrade' in data) {
-              const inFlight = data.worldUpgrade as { progress?: number | null } | null
-              if (inFlight === null) clearWorldUpgradeProgress(msg.instanceId)
-              else applyWorldUpgradeFraction(msg.instanceId, inFlight?.progress)
-            }
+            const name = getInstanceName(queryClient, msg.instanceId)
+            const crashedInstanceId = msg.instanceId
+            toast.error(
+              ev === 'crash'
+                ? `实例「${name}」服务器意外退出${data.autoRestart ? '，正在自动重启' : ''}`
+                : `实例「${name}」连续崩溃 ${Number(data.consecutiveCrashes ?? 0)} 次，已触发熔断保护`,
+              {
+                duration: Infinity,
+                // 深入链接：一键查看进程末尾日志（issue 343，消费 lastOutput）
+                action: {
+                  label: '查看末尾日志',
+                  onClick: () => setLastOutputInstanceId(crashedInstanceId),
+                },
+              },
+            )
+          } else {
+            // started/stopped/ready/save 常规跃迁：入通知中心（文案映射见
+            // lib/notifications buildNotifications），不弹 toast 防打断
+            dispatchEvent({
+              type: 'statusEvent',
+              data: msg.data as Record<string, unknown>,
+              instanceId: msg.instanceId,
+            })
+          }
+          break
+        }
+        case 'statusSnapshot': {
+          // 快照是**状态**（此刻的值）：订阅时补发 + 周期性广播，客户端直接覆盖即可
+          applyWsSnapshot(msg.instanceId, {
+            status: String(data.status ?? ''),
+            isRunning: Boolean(data.isRunning),
+            players: (data.players as unknown[]) ?? [],
+            tps: typeof data.tps === 'number' ? data.tps : null,
+          })
+          // 世界格式升级属 state 类事件（契约 WS_EVENT_KINDS），权威读法随快照回来。
+          // 三态必须分开：对象＝在途、null＝**确认空闲**（清掉本地残留）、
+          // **字段缺席＝未知**（旧服务端或无权限，保持现状）——缺席时若按「没有升级」处理，
+          // 会把正在跑的进度条抹掉。
+          if ('worldUpgrade' in data) {
+            const inFlight = data.worldUpgrade as { progress?: number | null } | null
+            if (inFlight === null) clearWorldUpgradeProgress(msg.instanceId)
+            else applyWorldUpgradeFraction(msg.instanceId, inFlight?.progress)
           }
           break
         }
