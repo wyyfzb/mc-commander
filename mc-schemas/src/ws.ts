@@ -58,6 +58,16 @@ export const wsStatusSnapshotSchema = z.object({
   isRunning: z.boolean(),
   players: z.array(z.unknown()),
   tps: z.number().nullable(),
+  /**
+   * 在途的**世界格式升级**（`state` 类事件的权威读法，见 `WS_EVENT_KINDS`）。
+   *
+   * 三种取值刻意分开，因为它们对界面是三个不同结论：
+   * - 对象：正在升级，`progress` 是 0..1 的分数（取不到时为 null）；
+   * - `null`：**确认空闲**（没有升级在跑）⇒ 客户端应清掉本地残留进度；
+   * - **字段缺席**：**未知**（旧服务端 / 非 status 通道）⇒ 客户端保持现状，不要清。
+   * 少了 `null` 与缺席的区分，「服务端没告诉我」会被读成「没有升级」，清掉正在跑的进度条。
+   */
+  worldUpgrade: z.object({ progress: z.number().nullable() }).nullable().optional(),
 })
 
 export const wsPerformancePayloadSchema = z.object({
