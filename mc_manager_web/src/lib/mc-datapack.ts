@@ -268,8 +268,8 @@ export function parseDatapackAction(response: string): DatapackActionOutcome {
  * list/enable/disable/modify 的键，1.21.6 起才有 create（键集与 26.3 逐字一致）。
  * 边界用例连同 jar 的 size/sha1 一起留在 `__tests__/mc-datapack.test.ts`，可复核。
  *
- * 版本比较复用既有的 `compareVersions`（逐段数值），不另写一份解析：本仓已因
- * 「字符串比较把 1.9 排在 1.10 之后」踩过坑。
+ * 版本比较复用既有的 `compareVersions`（逐段数值），不另写一份解析——字符串比较会把
+ * `1.9` 排在 `1.10` 之后，那不是版本序。
  * 版本不可解析（空串/非版本文本）按**支持**处置，与 `pickGameruleSet` 同口径：
  * 未知时不隐藏能力，最坏结果只是服务端回一句措辞（已由 parseDatapackAction 如实分类）。
  */
