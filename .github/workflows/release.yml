@@ -286,28 +286,37 @@ jobs:
           set -uo pipefail
           API="https://gitee.com/api/v5/repos/$GITEE_OWNER/$GITEE_REPO"
           AUTH="Authorization: token $GITEE_TOKEN"
+          # Gitee 的 API 与附件接口都会抖动，而 GitHub 给 run: 的默认 shell 是 `bash -e`：
+          # 任何一处没 guard 的 curl 失败都会让脚本**带着裸退出码死在半路、且不留消息**
+          # （实测过一次 `Process completed with exit code 28`，零消息，镜像只更新到一半）。
+          # 故统一带重试，并按「必须成功 / 尽力而为」分别显式处理。
+          RETRY=(--retry 2 --retry-delay 5 --retry-all-errors)
 
           # 取 release：存在则复用其 id，不存在才创建。
           # 必须复用而非「存在就跳过」——已存在的 release 可能一个附件都没有
           # （例如手工占位建的），跳过会让这个版本永远缺产物。
-          RID=$(curl -sS --max-time 30 -H "$AUTH" "$API/releases/tags/$TAG_REF" \
-                | jq -r 'if type=="object" and .id then .id else empty end')
+          # || true：查询失败与「真的没有」都落到空串，随后按空串走创建/报错分支，
+          # 不把一次 API 抖动升级成裸退出码
+          RID=$(curl -sS "${RETRY[@]}" --max-time 30 -H "$AUTH" "$API/releases/tags/$TAG_REF" \
+                | jq -r 'if type=="object" and .id then .id else empty end' || true)
 
           if [ -z "$RID" ]; then
-            echo "→ Gitee 侧无 $TAG_REF 的 release，创建"
-            RID=$(curl -sS --max-time 30 -X POST -H "$AUTH" \
+            echo "→ Gitee 侧无 $TAG_REF 的 release（或查询失败），尝试创建"
+            RID=$(curl -sS "${RETRY[@]}" --max-time 30 -X POST -H "$AUTH" \
                     --data-urlencode "tag_name=$TAG_REF" \
                     --data-urlencode "name=$TAG_REF" \
                     --data-urlencode "body=详见仓库根 CHANGELOG.md 对应版本段落。" \
                     --data-urlencode "target_commitish=main" \
-                    "$API/releases" | jq -r '.id // empty')
+                    "$API/releases" | jq -r '.id // empty' || true)
           else
-            # 已存在则修正占位名（手工建的可能是 "test" 之类），并保证 body 非空
+            # 已存在则修正占位名（手工建的可能是 "test" 之类），并保证 body 非空。
+            # 这一步是装饰性的：失败只告警，不能因此中断产物同步。
             echo "→ 复用已有 release id=$RID，并规整 title"
-            curl -sS --max-time 30 -X PATCH -H "$AUTH" \
+            curl -sS "${RETRY[@]}" --max-time 30 -X PATCH -H "$AUTH" \
               --data-urlencode "name=$TAG_REF" \
               --data-urlencode "body=详见仓库根 CHANGELOG.md 对应版本段落。" \
-              "$API/releases/$RID" >/dev/null
+              "$API/releases/$RID" >/dev/null \
+              || echo "::warning::规整 Gitee release title 失败（与产物无关，继续）"
           fi
           [ -n "$RID" ] || { echo "::warning::未能取得 Gitee release id"; exit 1; }
           echo "Gitee release id=$RID"
@@ -319,11 +328,18 @@ jobs:
               "https://github.com/${{ github.repository }}/releases/download/$TAG_REF/$f" \
               || { echo "::warning::GitHub 侧取 $f 失败"; failed=1; continue; }
 
-            # 幂等：同名附件先删再传（Gitee 附件可增删，重跑安全）
-            OLD=$(curl -sS --max-time 30 -H "$AUTH" "$API/releases/$RID/attach_files?per_page=100" \
-                  | jq -r --arg n "$f" '.[] | select(.name==$n) | .id' | head -1)
-            [ -n "$OLD" ] && curl -sS --max-time 30 -X DELETE -H "$AUTH" \
-                              "$API/releases/$RID/attach_files/$OLD" >/dev/null
+            # 幂等：同名附件先删再传（Gitee 附件可增删，重跑安全）。
+            # 查不到（或查询失败）就跳过删除并如实标注，不因此中断——上传本身仍会建立附件。
+            OLD=$(curl -sS "${RETRY[@]}" --max-time 30 -H "$AUTH" \
+                    "$API/releases/$RID/attach_files?per_page=100" \
+                  | jq -r --arg n "$f" '.[] | select(.name==$n) | .id' | head -1 || true)
+            if [ -z "$OLD" ]; then
+              echo "::notice::未查到同名旧附件（或查询失败），直接上传 $f"
+            else
+              curl -sS "${RETRY[@]}" --max-time 30 -X DELETE -H "$AUTH" \
+                "$API/releases/$RID/attach_files/$OLD" >/dev/null \
+                || echo "::warning::删除旧附件 $f 失败（随后上传可能因重名被拒）"
+            fi
 
             # 上传必须自带重试：这条链路（跨境 + Gitee 附件接口）会在 300s 处超时或被 reset，
             # 实测 v0.7.3 两个附件都因此没传上去，留下一个残缺镜像。curl 默认只重试它认定的
