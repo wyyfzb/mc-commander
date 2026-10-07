@@ -177,6 +177,18 @@ export function cleanupNotificationEvents() {
   }
 }
 
+/**
+ * 每实例最近一次**世界格式升级**的在途快照（`started`/`progress` 记、终态清）。
+ *
+ * 为什么需要：世界格式升级的进度是「同一条消息的连续修正」，故不落库、不进重放面
+ * （1 条/秒写库是纯放大）；但没有快照时，**升级中途才连上的客户端拿不到任何东西**——
+ * 界面上既没有进度条、也没有那条通知（载体是 `started` 建的）。
+ *
+ * 只活在内存里：它表达的是「此刻正在发生」，进程重启后 MSMP 链路本就要重建，快照随之失效
+ * 才是正确的；落库反而会制造「上次那轮升级」的幽灵。
+ */
+const worldUpgradeInFlight = new Map();
+
 // status 事件中需要持久化的状态跃迁子事件（前端据此生成通知）
 const STATUS_EVENT_TYPES = new Set([
   'started',
@@ -447,6 +459,36 @@ export function setupWebSocket(wss, serverManager) {
             }
           } catch (err) {
             logger.error('Failed to send active upgrade snapshot:', err);
+          }
+          // 世界格式升级补发：订阅即把**当前这一轮**的状态补齐。补两条是有意的——
+          // `started` 是客户端那条通知与进度条的**载体**（进度挂在「升级开始」那条上，
+          // 只补 progress 会得到一个没有载体、界面上什么都不显示的百分比），
+          // `progress` 才是当前值。与上面的 jar 升级补发同款：属管理员生命周期信息，
+          // 只读连接不补发（WORLD_UPGRADE 不在只读白名单内，此处判据与 fanOut 同源）
+          try {
+            const worldUpgrade = worldUpgradeInFlight.get(msg.instanceId);
+            if (worldUpgrade && mayReceiveEvent(ws, WSEvents.WORLD_UPGRADE)) {
+              ws.send(
+                JSON.stringify({
+                  type: WSEvents.WORLD_UPGRADE,
+                  instanceId: msg.instanceId,
+                  data: { state: 'started', progress: null },
+                  timestamp: Date.now(),
+                }),
+              );
+              if (worldUpgrade.progress !== null) {
+                ws.send(
+                  JSON.stringify({
+                    type: WSEvents.WORLD_UPGRADE,
+                    instanceId: msg.instanceId,
+                    data: { state: 'progress', progress: worldUpgrade.progress },
+                    timestamp: Date.now(),
+                  }),
+                );
+              }
+            }
+          } catch (err) {
+            logger.error('Failed to send world upgrade snapshot:', err);
           }
           const instance = serverManager.getInstance(msg.instanceId);
           // 不带角色判据：status 本就在只读白名单内，包一层恒真的判据只会让后来者
@@ -835,7 +877,22 @@ export function setupWebSocket(wss, serverManager) {
       (data) => broadcast(data.instanceId, WSEvents.PLAYER_STATS_UPDATE, data),
     ],
     ['instance:playerSleep', (data) => broadcast(data.instanceId, WSEvents.PLAYER_SLEEP, data)],
-    ['instance:worldUpgrade', (data) => broadcast(data.instanceId, WSEvents.WORLD_UPGRADE, data)],
+    [
+      'instance:worldUpgrade',
+      (data) => {
+        // 先记快照再广播：新订阅者据此补发（见 subscribe 分支的世界格式升级补发）
+        if (data.state === 'started' || data.state === 'progress') {
+          worldUpgradeInFlight.set(data.instanceId, {
+            state: data.state,
+            progress: typeof data.progress === 'number' ? data.progress : null,
+          });
+        } else {
+          // 终态：清掉，否则「上次那轮」的百分比会补给后来连上的客户端
+          worldUpgradeInFlight.delete(data.instanceId);
+        }
+        broadcast(data.instanceId, WSEvents.WORLD_UPGRADE, data);
+      },
+    ],
   ];
   for (const [eventName, handler] of EVENT_HANDLERS) {
     try {
