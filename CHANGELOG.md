@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.5](https://github.com/wyyfzb/mc-commander/compare/v0.7.4...v0.7.5) (2026-10-07)
+
+
+### Bug Fixes
+
+* 立事件「状态 vs 事件」口径，并修世界格式升级进度与三条自愈缺口 ([a3d8f78](https://github.com/wyyfzb/mc-commander/commit/a3d8f78aae04c1c60293a48f9d8cb54cc3a8b694))
+
 ## [0.7.4](https://github.com/wyyfzb/mc-commander/compare/v0.7.3...v0.7.4) (2026-10-07)
 
 
