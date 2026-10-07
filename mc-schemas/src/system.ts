@@ -53,9 +53,42 @@ export const updateCheckResultSchema = z.object({
   url: z.string().optional(),
 })
 
+/**
+ * 面板自身错误日志（`error.log` 及轮转档）中的一条。
+ *
+ * `message` 可能多行：写入侧走 `util.format`，异常堆栈一类会带换行，故解析按
+ * 「行首是 `[时间] [级别]` 才是新条目、其余行归上一条」的规则还原。
+ */
+export const panelErrorEntrySchema = z.object({
+  time: z.string(),
+  level: z.string(),
+  message: z.string(),
+})
+
+/**
+ * 面板自身错误日志的读取结果。
+ *
+ * `available=false` 表示日志文件不存在（全新自托管机器的常态），**不是读取失败**——
+ * 二者在前端是两种不同的空态，不能合并成一个「无数据」。
+ * `hasMore=true` 表示还有更早的条目未返回：读取按尾部字节截断（单档上限 20MB），不整读。
+ */
+export const panelErrorsSchema = z.object({
+  available: z.boolean(),
+  entries: z.array(panelErrorEntrySchema),
+  hasMore: z.boolean(),
+  logFile: z.string(),
+})
+
+/** 读取条数上限：够看清「刚才为什么失败」，又不至于把整档日志灌给前端 */
+export const panelErrorsQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(200).catch(50),
+})
+
 export type DiskInfo = z.infer<typeof diskInfoSchema>
 export type DiskUsage = z.infer<typeof diskUsageSchema>
 export type DiskAlertThresholds = z.infer<typeof diskAlertThresholdsSchema>
 export type MemoryAlertThresholds = z.infer<typeof memoryAlertThresholdsSchema>
 export type SystemStats = z.infer<typeof systemStatsSchema>
 export type UpdateCheckResult = z.infer<typeof updateCheckResultSchema>
+export type PanelErrorEntry = z.infer<typeof panelErrorEntrySchema>
+export type PanelErrors = z.infer<typeof panelErrorsSchema>

@@ -332,12 +332,17 @@ export {
   memoryAlertThresholdsSchema,
   systemStatsSchema,
   updateCheckResultSchema,
+  panelErrorEntrySchema,
+  panelErrorsSchema,
+  panelErrorsQuerySchema,
   type DiskInfo,
   type DiskUsage,
   type DiskAlertThresholds,
   type MemoryAlertThresholds,
   type SystemStats,
   type UpdateCheckResult,
+  type PanelErrorEntry,
+  type PanelErrors,
 } from './system'
 
 // 认证与 API Key

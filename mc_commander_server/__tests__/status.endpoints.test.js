@@ -78,6 +78,8 @@ import { recordAudit, AuditActions } from '../utils/audit.js';
 import { listInstanceSnapshotDirs } from '../services/backup-snapshot.service.js';
 import { errorHandler } from '../middleware/error_handler.js';
 import config from '../config.js';
+import { __configureLogger, __resetLogger } from '../utils/logger.js';
+import { panelErrorsSchema } from '@mc-commander/schemas';
 
 const GB = 1024 * 1024 * 1024;
 const INSTANCE_PATH = '/tmp/mc-test-s1';
@@ -1097,5 +1099,116 @@ describe('Status Routes · 端点缺口收口', () => {
       expect(res.body.data.gameDays).toBeNull();
       expect(res.body.data.difficulty).toBe('peaceful');
     });
+  });
+});
+
+// ── GET /system-errors：面板自身错误日志读取面 ──
+// 这一面的价值是「用户能看到过去为什么失败」，故断言落在真实文件读回上，
+// 而不是断言路由把入参回显了一遍。
+describe('GET /api/system-errors', () => {
+  let errDir;
+  let errApp;
+
+  beforeEach(() => {
+    // 自建 app：本面的路由不依赖 serverManager，自足一份比借用外层作用域更清楚
+    errApp = express();
+    errApp.use(express.json());
+    errApp.use(
+      '/api',
+      createStatusRoutes({ instances: new Map(), getAllInstances: vi.fn(), getInstance: vi.fn() }),
+    );
+    errApp.use(errorHandler);
+    errDir = __state.actualFs.mkdtempSync(path.join(os.tmpdir(), 'mc-system-errors-'));
+    // 本文件的 fs 替身把 statSync 收成了 vi.fn()（供磁盘采样用例摆布），
+    // 读取面要真读文件 ⇒ 这一处转回真实实现
+    fs.statSync.mockImplementation((...args) => __state.actualFs.statSync(...args));
+    __configureLogger({ dir: errDir });
+  });
+
+  afterEach(() => {
+    __resetLogger();
+    __state.actualFs.rmSync(errDir, { recursive: true, force: true });
+  });
+
+  it('读回面板自身错误：最新在前，契约字段齐', async () => {
+    __state.actualFs.writeFileSync(
+      path.join(errDir, 'error.log'),
+      '[2026-10-05T08:29:36.113Z] [ERROR] [UpgradeRoute] Upgrade failed for s1: Server crashed during startup verification\n' +
+        '[2026-10-05T09:00:00.000Z] [ERROR] second-failure\n',
+      'utf-8',
+    );
+
+    const res = await request(errApp).get('/api/system-errors');
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.available).toBe(true);
+    expect(res.body.data.entries.map((e) => e.message)).toEqual([
+      'second-failure',
+      '[UpgradeRoute] Upgrade failed for s1: Server crashed during startup verification',
+    ]);
+    expect(res.body.data.logFile).toBe(path.join(errDir, 'error.log'));
+    expect(res.body.data.hasMore).toBe(false);
+    // 契约自校验：validatedSuccess 只记不一致日志、不拦响应，漂移必须在这里转红
+    expect(panelErrorsSchema.safeParse(res.body.data).success).toBe(true);
+  });
+
+  it('limit 生效：按请求条数返回最近几条', async () => {
+    const lines = [];
+    for (let i = 0; i < 5; i++) {
+      lines.push(`[2026-10-05T09:00:0${i}.000Z] [ERROR] e${i}`);
+    }
+    __state.actualFs.writeFileSync(
+      path.join(errDir, 'error.log'),
+      lines.join('\n') + '\n',
+      'utf-8',
+    );
+
+    const res = await request(errApp).get('/api/system-errors?limit=2');
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.entries.map((e) => e.message)).toEqual(['e4', 'e3']);
+    expect(res.body.data.hasMore).toBe(true);
+  });
+
+  it('日志文件不存在：available=false —— 空态，不是读取失败', async () => {
+    const res = await request(errApp).get('/api/system-errors');
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.available).toBe(false);
+    expect(res.body.data.entries).toEqual([]);
+  });
+
+  it('limit 越界由契约回落 50（不接受把整档日志一次拉走）', async () => {
+    const lines = [];
+    for (let i = 0; i < 60; i++) {
+      lines.push(`[2026-10-05T09:00:${String(i % 60).padStart(2, '0')}.000Z] [ERROR] e${i}`);
+    }
+    __state.actualFs.writeFileSync(
+      path.join(errDir, 'error.log'),
+      lines.join('\n') + '\n',
+      'utf-8',
+    );
+
+    const res = await request(errApp).get('/api/system-errors?limit=9999');
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.entries).toHaveLength(50);
+    expect(res.body.data.hasMore).toBe(true);
+    expect(res.body.data.entries[0].message).toBe('e59');
+  });
+
+  it('多行消息（堆栈）在响应里仍是一条', async () => {
+    __state.actualFs.writeFileSync(
+      path.join(errDir, 'error.log'),
+      '[2026-10-05T09:00:00.000Z] [ERROR] boom\n  at a.b.C(D.java:1)\n  at d.e.F(G.java:2)\n',
+      'utf-8',
+    );
+
+    const res = await request(errApp).get('/api/system-errors');
+
+    expect(res.body.data.entries).toHaveLength(1);
+    expect(res.body.data.entries[0].message).toBe(
+      'boom\n  at a.b.C(D.java:1)\n  at d.e.F(G.java:2)',
+    );
   });
 });

@@ -1013,7 +1013,7 @@ function datetime(args) {
 }
 const anyString = /^[\s\S]{0,}$/;
 const integer = /^-?\d+$/;
-const number$1 = /^-?\d+(?:\.\d+)?$/;
+const number$2 = /^-?\d+(?:\.\d+)?$/;
 const boolean$1 = /^(?:true|false)$/i;
 const _null$2 = /^null$/i;
 const lowercase = /^[^A-Z]*$/;
@@ -1797,7 +1797,7 @@ const $ZodJWT = /*@__PURE__*/ $constructor("$ZodJWT", (inst, def) => {
 });
 const $ZodNumber = /*@__PURE__*/ $constructor("$ZodNumber", (inst, def) => {
 	$ZodType.init(inst, def);
-	inst._zod.pattern = number$1;
+	inst._zod.pattern = number$2;
 	inst._zod.parse = (payload, _ctx) => {
 		if (def.coerce) try {
 			payload.value = Number(payload.value);
@@ -2493,7 +2493,7 @@ const $ZodRecord = /*@__PURE__*/ $constructor("$ZodRecord", (inst, def) => {
 					issues: []
 				}, ctx);
 				if (keyResult instanceof Promise) throw new Error("Async schemas not supported in object keys currently");
-				if (typeof key === "string" && number$1.test(key) && keyResult.issues.length) {
+				if (typeof key === "string" && number$2.test(key) && keyResult.issues.length) {
 					const retryResult = def.keyType._zod.run({
 						value: Number(key),
 						issues: []
@@ -3503,6 +3503,15 @@ function _number(Class, params) {
 	}));
 }
 // @__NO_SIDE_EFFECTS__
+function _coercedNumber(Class, params) {
+	return new Class(snapshotChecks({
+		type: "number",
+		coerce: true,
+		checks: [],
+		...normalizeParams(params)
+	}));
+}
+// @__NO_SIDE_EFFECTS__
 function _int(Class, params) {
 	return new Class({
 		type: "number",
@@ -4481,7 +4490,7 @@ function stringifyKeyNames(bySchema, json, visited) {
 	else if (typeof rest.const === "number") rest.const = String(rest.const);
 	if (!numericType) return rest;
 	rest.type = "string";
-	if (!values) rest.pattern = (types.includes("number") ? number$1 : integer).source;
+	if (!values) rest.pattern = (types.includes("number") ? number$2 : integer).source;
 	return rest;
 }
 /** Every record of one conversion, so the carriers are found in a single pass rather than once per record. */
@@ -5178,7 +5187,7 @@ const ZodNumber = /*@__PURE__*/ $constructor("ZodNumber", (inst, def) => {
 		return this;
 	}
 }));
-function number(params) {
+function number$1(params) {
 	return /* @__PURE__ */ _number(ZodNumber, params);
 }
 const ZodNumberFormat = /*@__PURE__*/ $constructor("ZodNumberFormat", (inst, def) => {
@@ -5583,13 +5592,18 @@ function superRefine(fn, params) {
 	return /* @__PURE__ */ _superRefine(fn, params);
 }
 //#endregion
+//#region node_modules/zod/v4/classic/coerce.js
+function number(params) {
+	return /* @__PURE__ */ _coercedNumber(ZodNumber, params);
+}
+//#endregion
 //#region src/envelope.ts
 /** 统一分页结构 */
 const paginationSchema = object({
-	total: number(),
-	page: number(),
-	pageSize: number(),
-	totalPages: number()
+	total: number$1(),
+	page: number$1(),
+	pageSize: number$1(),
+	totalPages: number$1()
 });
 /** 成功响应信封 */
 const apiEnvelopeSchema = object({
@@ -5614,7 +5628,7 @@ function makeApiEnvelopeSchema(dataSchema) {
 /** 错误响应信封 */
 const apiErrorEnvelopeSchema = object({
 	status: literal("error"),
-	code: number(),
+	code: number$1(),
 	message: string(),
 	details: unknown().optional(),
 	timestamp: string()
@@ -5640,51 +5654,51 @@ const weatherTypeSchema = _enum([
 	"thunder"
 ]);
 const spawnPointSchema = object({
-	x: number(),
-	y: number(),
-	z: number(),
+	x: number$1(),
+	y: number$1(),
+	z: number$1(),
 	dimension: string().optional()
 });
 const playerPositionSchema = object({
-	x: number(),
-	y: number(),
-	z: number()
+	x: number$1(),
+	y: number$1(),
+	z: number$1()
 });
 const playerEventSchema = object({
 	type: string(),
 	message: string(),
-	timestamp: number()
+	timestamp: number$1()
 });
 const playerSessionSchema = object({
-	start: number(),
-	end: number().nullable(),
-	duration: number()
+	start: number$1(),
+	end: number$1().nullable(),
+	duration: number$1()
 });
 const playerStatsSchema = object({
-	totalOnline: number(),
-	loginCount: number(),
-	offlineSince: number(),
-	deathCount: number(),
-	achievementCount: number(),
-	sleepCount: number()
+	totalOnline: number$1(),
+	loginCount: number$1(),
+	offlineSince: number$1(),
+	deathCount: number$1(),
+	achievementCount: number$1(),
+	sleepCount: number$1()
 });
 const playerPotionEffectSchema = object({
 	id: string(),
 	name: string(),
-	level: number(),
-	durationSeconds: number(),
+	level: number$1(),
+	durationSeconds: number$1(),
 	isBeneficial: boolean()
 });
 const ipHistoryEntrySchema = object({
 	ip: string(),
 	lastSeen: string(),
-	count: number()
+	count: number$1()
 });
 const inventoryItemSchema = object({
 	id: string(),
-	count: number(),
-	slot: number(),
-	durability: number().nullable(),
+	count: number$1(),
+	slot: number$1(),
+	durability: number$1().nullable(),
 	enchanted: boolean(),
 	customName: string().nullable()
 });
@@ -5709,29 +5723,29 @@ const playerSchema = object({
 	uuid: string(),
 	isOnline: boolean(),
 	ip: string(),
-	joinTime: number().nullable(),
-	onlineTime: number().nullable(),
-	totalPlayTime: number(),
+	joinTime: number$1().nullable(),
+	onlineTime: number$1().nullable(),
+	totalPlayTime: number$1(),
 	isOp: boolean(),
 	isWhitelisted: boolean(),
 	isBanned: boolean(),
-	banExpiresAt: number().nullable(),
+	banExpiresAt: number$1().nullable(),
 	isIpBanned: boolean(),
-	ipBanExpiresAt: number().nullable(),
+	ipBanExpiresAt: number$1().nullable(),
 	isFakePlayer: boolean(),
 	lastSeen: string().nullable(),
-	health: number().nullable(),
-	maxHealth: number().nullable(),
-	hunger: number().nullable(),
-	xpLevel: number().nullable(),
+	health: number$1().nullable(),
+	maxHealth: number$1().nullable(),
+	hunger: number$1().nullable(),
+	xpLevel: number$1().nullable(),
 	spawnPoint: spawnPointSchema.nullable(),
 	respawnPoint: spawnPointSchema.nullable(),
 	position: playerPositionSchema.nullable(),
 	gameMode: playerGameModeSchema.nullable(),
 	dimension: playerDimensionSchema.nullable(),
-	armor: number().nullable(),
-	xpProgress: number().nullable(),
-	ping: number().nullable(),
+	armor: number$1().nullable(),
+	xpProgress: number$1().nullable(),
+	ping: number$1().nullable(),
 	isSleeping: boolean(),
 	isAfk: boolean(),
 	isFlying: boolean(),
@@ -5760,11 +5774,11 @@ const playerDetailsResponseSchema = object({
 	isOp: boolean(),
 	isWhitelisted: boolean(),
 	isBanned: boolean(),
-	totalPlayTime: number(),
+	totalPlayTime: number$1(),
 	lastSeen: string().nullable()
 });
 /** 封禁操作响应（临时封禁返回到期时间，永久/未传时长为 null） */
-const banResponseBodySchema = object({ expiresAt: number().nullable() });
+const banResponseBodySchema = object({ expiresAt: number$1().nullable() });
 /** 封禁记录 */
 const banRecordSchema = object({
 	targetType: _enum(["player", "ip"]),
@@ -5772,7 +5786,7 @@ const banRecordSchema = object({
 	reason: string(),
 	isActive: boolean(),
 	isPermanent: boolean(),
-	expiresAt: number().nullable(),
+	expiresAt: number$1().nullable(),
 	createdAt: string().nullable()
 });
 /** 封禁记录列表（生效中在前 + 历史，非分页信封） */
@@ -5789,7 +5803,7 @@ const instanceSummarySchema = object({
 	id: string(),
 	name: string(),
 	isRunning: boolean(),
-	playerCount: number()
+	playerCount: number$1()
 });
 const instanceUpdatePayloadSchema = object({
 	name: string().trim().min(1).optional(),
@@ -5820,21 +5834,21 @@ const instanceStatusSchema = object({
 	autoRestart: boolean(),
 	autoStart: boolean(),
 	circuitBreakerTripped: boolean(),
-	consecutiveCrashes: number(),
-	uptime: number(),
+	consecutiveCrashes: number$1(),
+	uptime: number$1(),
 	address: string(),
 	addressType: _enum(["public", "private"]),
 	players: array(unknown()),
-	playerCount: number(),
-	maxPlayers: number(),
+	playerCount: number$1(),
+	maxPlayers: number$1(),
 	mcVersion: string(),
 	modLoader: string(),
-	tps: number(),
-	mspt: number(),
-	cpuUsage: number(),
-	memoryUsage: number(),
-	totalMemory: number(),
-	worldSize: number().nullable(),
+	tps: number$1(),
+	mspt: number$1(),
+	cpuUsage: number$1(),
+	memoryUsage: number$1(),
+	totalMemory: number$1(),
+	worldSize: number$1().nullable(),
 	seed: string().nullable(),
 	lastSave: string().nullable(),
 	lastOutput: string().nullable(),
@@ -5842,53 +5856,53 @@ const instanceStatusSchema = object({
 	difficulty: string(),
 	whitelisted: boolean(),
 	onlineMode: boolean(),
-	viewDistance: number(),
-	spawnProtection: number(),
-	worldDay: number().nullable(),
-	worldTime: number().nullable(),
+	viewDistance: number$1(),
+	spawnProtection: number$1(),
+	worldDay: number$1().nullable(),
+	worldTime: number$1().nullable(),
 	weather: _enum([
 		"clear",
 		"rain",
 		"thunder"
 	]).nullable(),
-	opCount: number(),
+	opCount: number$1(),
 	opNames: array(string()),
-	todayNewPlayers: number(),
-	sleepingPlayers: number(),
+	todayNewPlayers: number$1(),
+	sleepingPlayers: number$1(),
 	sleepingPlayerNames: array(string()),
 	awakePlayerNames: array(string()),
-	totalUptime: number(),
+	totalUptime: number$1(),
 	startTime: string().nullable(),
 	startCommand: string().nullable(),
 	jvmArgs: array(string()).nullable(),
 	javaPath: string(),
-	maxMemory: union([string(), number()]),
-	minMemory: union([string(), number()]),
+	maxMemory: union([string(), number$1()]),
+	minMemory: union([string(), number$1()]),
 	jarFile: string()
 });
 const overviewDataSchema = object({
 	version: string(),
-	instanceCount: number(),
-	runningCount: number(),
-	totalPlayers: number(),
-	systemCpuUsage: number(),
-	systemMemoryUsage: number(),
-	systemMemoryTotal: number(),
-	systemMemoryPercent: number(),
-	totalMemory: number(),
-	freeMemory: number(),
+	instanceCount: number$1(),
+	runningCount: number$1(),
+	totalPlayers: number$1(),
+	systemCpuUsage: number$1(),
+	systemMemoryUsage: number$1(),
+	systemMemoryTotal: number$1(),
+	systemMemoryPercent: number$1(),
+	totalMemory: number$1(),
+	freeMemory: number$1(),
 	diskUsage: object({
 		primary: object({
 			mountpoint: string(),
-			totalGB: number(),
-			usedGB: number(),
-			percent: number()
+			totalGB: number$1(),
+			usedGB: number$1(),
+			percent: number$1()
 		}).nullable(),
 		all: array(object({
 			mountpoint: string(),
-			totalGB: number(),
-			usedGB: number(),
-			percent: number()
+			totalGB: number$1(),
+			usedGB: number$1(),
+			percent: number$1()
 		}))
 	}).optional(),
 	instances: array(instanceSummarySchema)
@@ -5952,7 +5966,7 @@ const pushChannelStateSchema = object({
 	/** 当前绑定的主机（MC 默认 localhost＝仅本机；非本机时界面应提示暴露面） */
 	host: string(),
 	/** 当前端口（0＝由服务端随机分配，实际端口见启动播报行） */
-	port: number(),
+	port: number$1(),
 	/** secret 是否已配置且合法（40 位字母数字）；不返回内容——它是凭据 */
 	secretConfigured: boolean()
 });
@@ -5976,7 +5990,7 @@ const instanceDeleteRequestBodySchema = object({
 /** DELETE /instances/:id 成功响应：删除后仍保留在磁盘上的备份快照信息 */
 const instanceDeleteResponseSchema = object({
 	/** 保留的备份（快照目录）总份数 */
-	retainedBackupCount: number(),
+	retainedBackupCount: number$1(),
 	/** 最近若干条快照目录名（按修改时间倒序，超出上限的只计数量不列名） */
 	retainedBackupNames: array(string())
 });
@@ -6001,8 +6015,8 @@ const crashArtifactSchema = object({
 	/** 产物类型：crash-report = MC 崩溃报告，jvm-crash = hs_err_pid*.log */
 	kind: _enum(["crash-report", "jvm-crash"]).optional(),
 	fileName: string().optional(),
-	mtimeMs: number().optional(),
-	sizeBytes: number().optional(),
+	mtimeMs: number$1().optional(),
+	sizeBytes: number$1().optional(),
 	/** 已核实字段（有序）；解析失败时为空数组 */
 	summary: array(crashArtifactFieldSchema).optional(),
 	/** 崩溃报告：顶层异常行 */
@@ -6025,12 +6039,12 @@ const crashArtifactSchema = object({
 //#endregion
 //#region src/backup.ts
 const backupItemSchema = object({
-	id: number(),
+	id: number$1(),
 	instanceId: string(),
 	name: string(),
 	description: string().nullable().optional(),
 	type: literal("manual"),
-	size: number(),
+	size: number$1(),
 	status: _enum([
 		"completed",
 		"failed",
@@ -6061,7 +6075,7 @@ const backupRestoreRequestSchema = object({ confirmName: string({ error: (iss) =
 */
 const backupCancelResponseSchema = object({
 	kind: _enum(["create", "restore"]),
-	backupId: number()
+	backupId: number$1()
 });
 /**
 * 恢复确认的目标串（服务端校验与前端输入提示的唯一派生口径）。
@@ -6090,9 +6104,9 @@ const archivedSnapshotGroupSchema = object({
 	/** 同名实例当前是否仍存在（false = 已卸载的遗留归档） */
 	instanceExists: boolean(),
 	/** 该目录下**尚未建立索引**的快照份数（已挂载的不计入；清点的是「看不见的那部分」） */
-	snapshotCount: number(),
+	snapshotCount: number$1(),
 	/** 其中能认出世界数据的份数（挂载时会跳过认不出的） */
-	usableCount: number(),
+	usableCount: number$1(),
 	/** 组内最近一次快照时间（ISO） */
 	latestMtime: string()
 });
@@ -6109,9 +6123,9 @@ const archivedSnapshotListSchema = array(archivedSnapshotGroupSchema);
 const backupAttachRequestSchema = object({ archiveId: string({ error: (iss) => iss.input === void 0 ? "archiveId 必填" : void 0 }).min(1, "String must contain at least 1 character(s)") });
 const backupAttachResponseSchema = object({
 	/** 本次新登记的快照数 */
-	attached: number(),
+	attached: number$1(),
 	/** 跳过的份数（已在索引中 / 认不出世界数据） */
-	skipped: number()
+	skipped: number$1()
 });
 //#endregion
 //#region src/task.ts
@@ -6123,7 +6137,7 @@ const scheduledTaskTypeSchema = _enum([
 	"start"
 ]);
 const scheduledTaskSchema = object({
-	id: number(),
+	id: number$1(),
 	instanceId: string().nullable(),
 	name: string(),
 	type: scheduledTaskTypeSchema,
@@ -6158,12 +6172,12 @@ const taskRunStatusSchema = _enum([
 ]);
 /** 定时任务执行历史行（task_run_history 表，append-only + 每任务保留上限） */
 const taskRunHistorySchema = object({
-	id: number(),
-	taskId: number(),
+	id: number$1(),
+	taskId: number$1(),
 	runAt: string(),
 	status: taskRunStatusSchema,
 	error: string().nullable(),
-	durationMs: number().nullable()
+	durationMs: number$1().nullable()
 });
 /** 执行历史列表（GET /tasks/:id/history：服务端限量的最近记录，非分页信封） */
 const taskRunHistoryListSchema = array(taskRunHistorySchema);
@@ -6176,11 +6190,11 @@ const taskRunHistoryListSchema = array(taskRunHistorySchema);
 */
 const systemMetricSampleSchema = object({
 	capturedAt: string(),
-	cpuUsage: number().nullable(),
-	memoryUsedGb: number().nullable(),
-	memoryTotalGb: number().nullable(),
-	memoryPercent: number().nullable(),
-	playersOnline: number()
+	cpuUsage: number$1().nullable(),
+	memoryUsedGb: number$1().nullable(),
+	memoryTotalGb: number$1().nullable(),
+	memoryPercent: number$1().nullable(),
+	playersOnline: number$1()
 });
 const systemMetricsSeriesSchema = array(systemMetricSampleSchema);
 //#endregion
@@ -6234,16 +6248,16 @@ const wsMessageSchema = object({
 		literal("auth")
 	]),
 	ok: boolean().optional(),
-	eventId: number().optional(),
+	eventId: number$1().optional(),
 	instanceId: string().optional(),
 	data: unknown().optional(),
-	timestamp: number().optional()
+	timestamp: number$1().optional()
 });
 const wsStatusSnapshotSchema = object({
 	status: string(),
 	isRunning: boolean(),
 	players: array(unknown()),
-	tps: number().nullable(),
+	tps: number$1().nullable(),
 	/**
 	* 在途的**世界格式升级**（`state` 类事件的权威读法，见 `WS_EVENT_KINDS`）。
 	*
@@ -6253,16 +6267,16 @@ const wsStatusSnapshotSchema = object({
 	* - **字段缺席**：**未知**（旧服务端 / 非 status 通道）⇒ 客户端保持现状，不要清。
 	* 少了 `null` 与缺席的区分，「服务端没告诉我」会被读成「没有升级」，清掉正在跑的进度条。
 	*/
-	worldUpgrade: object({ progress: number().nullable() }).nullable().optional()
+	worldUpgrade: object({ progress: number$1().nullable() }).nullable().optional()
 });
 const wsPerformancePayloadSchema = object({
-	cpu: number(),
-	memory: number(),
-	tps: number(),
-	mspt: number(),
-	worldTime: number().nullable(),
-	worldDay: number().nullable(),
-	sleepingPlayers: number(),
+	cpu: number$1(),
+	memory: number$1(),
+	tps: number$1(),
+	mspt: number$1(),
+	worldTime: number$1().nullable(),
+	worldDay: number$1().nullable(),
+	sleepingPlayers: number$1(),
 	sleepingPlayerNames: array(string()),
 	awakePlayerNames: array(string())
 });
@@ -6293,10 +6307,10 @@ const WS_STATUS_EVENT_NAMES = [
 const CRITICAL_STATUS_EVENTS = /* @__PURE__ */ new Set(["crash", "circuit_breaker"]);
 const wsStatusEventPayloadSchema = object({
 	event: _enum(WS_STATUS_EVENT_NAMES),
-	code: number().nullable().optional(),
+	code: number$1().nullable().optional(),
 	autoRestart: boolean().optional(),
-	consecutiveCrashes: number().optional(),
-	windowMs: number().optional()
+	consecutiveCrashes: number$1().optional(),
+	windowMs: number$1().optional()
 });
 const wsPlayerEventPayloadSchema = object({
 	name: string().optional(),
@@ -6332,16 +6346,16 @@ const wsWorldUpgradePayloadSchema = object({
 		"finished",
 		"failed"
 	]),
-	progress: number().nullable()
+	progress: number$1().nullable()
 });
 const wsBackupPayloadSchema = object({
-	id: number().optional(),
+	id: number$1().optional(),
 	name: string().optional()
 }).passthrough();
 /** 备份/恢复进度（rsync --info=progress2 解析，服务端 1s 节流；robocopy/ditto 降级路径无进度） */
 const wsBackupProgressPayloadSchema = object({
-	backupId: number(),
-	percent: number().min(0).max(100)
+	backupId: number$1(),
+	percent: number$1().min(0).max(100)
 });
 /**
 * 落库面（服务端落库、断线补齐用）——**服务端从这里取，不再各存一份**。
@@ -6437,21 +6451,21 @@ const WS_STATE_RECOVERY = {
 const worldDimensionSchema = object({
 	name: string(),
 	icon: string(),
-	playerCount: number()
+	playerCount: number$1()
 });
 const worldInfoSchema = object({
 	name: string(),
 	type: string(),
 	seed: string(),
-	sizeGB: number(),
+	sizeGB: number$1(),
 	difficulty: string(),
 	gameMode: string(),
-	viewDistance: number(),
-	simulationDistance: number(),
-	onlinePlayers: number(),
-	maxPlayers: number(),
-	spawnProtection: number(),
-	maxWorldSize: number(),
+	viewDistance: number$1(),
+	simulationDistance: number$1(),
+	onlinePlayers: number$1(),
+	maxPlayers: number$1(),
+	spawnProtection: number$1(),
+	maxWorldSize: number$1(),
 	allowFlight: boolean(),
 	hardcore: boolean(),
 	pvp: boolean(),
@@ -6460,7 +6474,7 @@ const worldInfoSchema = object({
 	whiteList: boolean(),
 	onlineMode: boolean(),
 	lastSave: string().nullable(),
-	gameDays: number().nullable(),
+	gameDays: number$1().nullable(),
 	dimensions: array(worldDimensionSchema)
 });
 /** server.properties 键值对（GET /properties 全量响应，值均为 properties 文件文本） */
@@ -6472,7 +6486,7 @@ const fileEntrySchema = object({
 	name: string(),
 	path: string(),
 	type: _enum(["directory", "file"]),
-	size: number(),
+	size: number$1(),
 	modifiedAt: string(),
 	isDirectory: boolean()
 });
@@ -6492,21 +6506,21 @@ const fileInfoResponseSchema = object({
 	name: string(),
 	path: string(),
 	type: literal("file"),
-	size: number(),
+	size: number$1(),
 	modifiedAt: string(),
 	isDirectory: literal(false)
 });
 const fileContentResponseSchema = object({
 	path: string(),
 	name: string(),
-	size: number(),
+	size: number$1(),
 	content: string(),
 	encoding: _enum(["utf-8", "gbk"]),
 	modifiedAt: string()
 });
 const fileSaveResponseSchema = object({
 	path: string(),
-	size: number(),
+	size: number$1(),
 	modifiedAt: string()
 });
 const fileMkdirResponseSchema = object({
@@ -6521,7 +6535,7 @@ const fileRenameResponseSchema = object({
 const fileUploadResponseSchema = object({
 	path: string(),
 	name: string(),
-	size: number(),
+	size: number$1(),
 	modifiedAt: string(),
 	isDirectory: literal(false)
 });
@@ -6551,7 +6565,7 @@ const fileUploadQuerySchema = object({ targetDir: string().min(1, "Invalid targe
 //#endregion
 //#region src/audit.ts
 const auditLogItemSchema = object({
-	id: number(),
+	id: number$1(),
 	instanceId: string().nullable(),
 	action: string(),
 	targetType: string().nullable(),
@@ -6561,13 +6575,13 @@ const auditLogItemSchema = object({
 	createdAt: string()
 });
 const commandHistoryItemSchema = object({
-	id: number(),
+	id: number$1(),
 	instanceId: string().nullable(),
 	command: string(),
 	source: string(),
 	success: boolean(),
 	response: string().nullable(),
-	durationMs: number().nullable(),
+	durationMs: number$1().nullable(),
 	createdAt: string()
 });
 /**
@@ -6610,7 +6624,7 @@ const WEBHOOK_PLATFORMS = [
 ];
 const webhookPlatformSchema = _enum(WEBHOOK_PLATFORMS);
 const webhookSchema = object({
-	id: number(),
+	id: number$1(),
 	name: string(),
 	url: string(),
 	secret: string().nullable(),
@@ -6631,8 +6645,8 @@ const webhookCreatePayloadSchema = object({
 	isEnabled: boolean().optional()
 });
 const webhookDeliverySchema = object({
-	id: number(),
-	webhookId: number(),
+	id: number$1(),
+	webhookId: number$1(),
 	eventType: string(),
 	instanceId: string().nullable(),
 	payload: unknown().optional(),
@@ -6641,14 +6655,14 @@ const webhookDeliverySchema = object({
 		"success",
 		"failed"
 	]),
-	responseStatus: number().nullable(),
+	responseStatus: number$1().nullable(),
 	responseBody: string().nullable(),
-	durationMs: number().nullable(),
-	attempts: number(),
+	durationMs: number$1().nullable(),
+	attempts: number$1(),
 	createdAt: string()
 });
 const webhookTestResultSchema = object({
-	statusCode: number(),
+	statusCode: number$1(),
 	body: string().nullable()
 });
 //#endregion
@@ -6695,9 +6709,9 @@ const deployCancelResponseSchema = object({
 });
 const deployProgressSchema = object({
 	stage: string(),
-	percent: number(),
-	transferred: number(),
-	total: number(),
+	percent: number$1(),
+	transferred: number$1(),
+	total: number$1(),
 	error: string().optional(),
 	instanceId: string().optional(),
 	instanceName: string().optional(),
@@ -6719,10 +6733,10 @@ const deployStatusResponseSchema = discriminatedUnion("deploying", [object({ dep
 	type: string(),
 	mcVersion: string(),
 	stage: string(),
-	percent: number(),
-	transferred: number(),
-	total: number(),
-	updatedAt: number(),
+	percent: number$1(),
+	transferred: number$1(),
+	total: number$1(),
+	updatedAt: number$1(),
 	error: string().optional()
 })]);
 const upgradeStageSchema = _enum([
@@ -6738,9 +6752,9 @@ const upgradeStageSchema = _enum([
 const upgradeProgressSchema = object({
 	instanceId: string(),
 	stage: upgradeStageSchema,
-	percent: number(),
+	percent: number$1(),
 	detail: string(),
-	timestamp: number()
+	timestamp: number$1()
 });
 /**
 * POST /instances/:id/upgrade 请求体契约（issue 391 接入路由层）。
@@ -6777,9 +6791,9 @@ const upgradeStatusResponseSchema = discriminatedUnion("upgrading", [object({ up
 	upgrading: literal(true),
 	instanceId: string(),
 	stage: upgradeStageSchema,
-	percent: number(),
+	percent: number$1(),
 	detail: string(),
-	timestamp: number()
+	timestamp: number$1()
 })]);
 //#endregion
 //#region src/plugin.ts
@@ -6799,8 +6813,8 @@ const pluginInfoSchema = object({
 	file: string(),
 	name: string(),
 	enabled: boolean(),
-	sizeBytes: number(),
-	mtimeMs: number(),
+	sizeBytes: number$1(),
+	mtimeMs: number$1(),
 	meta: pluginMetaSchema.nullable()
 });
 const pluginListSchema = object({ plugins: array(pluginInfoSchema) });
@@ -6828,8 +6842,8 @@ const pluginToggleResultSchema = object({
 const pluginDeleteResultSchema = object({ deleted: string() });
 const pluginUploadResultSchema = object({
 	file: string(),
-	sizeBytes: number(),
-	mtimeMs: number(),
+	sizeBytes: number$1(),
+	mtimeMs: number$1(),
 	meta: pluginMetaSchema.nullable(),
 	overwritten: boolean()
 });
@@ -6839,8 +6853,8 @@ const marketSearchHitSchema = object({
 	title: string().nullable(),
 	description: string().nullable(),
 	author: string().nullable(),
-	downloads: number(),
-	follows: number(),
+	downloads: number$1(),
+	follows: number$1(),
 	iconUrl: string().nullable(),
 	dateModified: string().nullable(),
 	categories: array(string()),
@@ -6848,14 +6862,14 @@ const marketSearchHitSchema = object({
 	clientSide: string().nullable()
 });
 const marketSearchResultSchema = object({
-	totalHits: number(),
+	totalHits: number$1(),
 	hits: array(marketSearchHitSchema),
 	cached: boolean()
 });
 const marketVersionFileSchema = object({
 	url: string().nullable(),
 	filename: string(),
-	size: number(),
+	size: number$1(),
 	sha512: string().nullable()
 });
 const marketVersionSchema = object({
@@ -6868,7 +6882,7 @@ const marketVersionSchema = object({
 	name: string().nullable(),
 	changelog: string().nullable(),
 	datePublished: string().nullable(),
-	downloads: number(),
+	downloads: number$1(),
 	gameVersions: array(string()),
 	loaders: array(string()),
 	file: marketVersionFileSchema
@@ -6917,9 +6931,9 @@ const pluginEnabledRequestSchema = object({ enabled: boolean({ error: () => "ena
 //#region src/system.ts
 const diskInfoSchema = object({
 	mountpoint: string(),
-	totalGB: number(),
-	usedGB: number(),
-	percent: number()
+	totalGB: number$1(),
+	usedGB: number$1(),
+	percent: number$1()
 });
 const diskUsageSchema = object({
 	primary: diskInfoSchema.nullable(),
@@ -6930,8 +6944,8 @@ const diskUsageSchema = object({
 * 避免前端另写一份数字而与部署配置漂移。
 */
 const diskAlertThresholdsSchema = object({
-	warningPercent: number(),
-	errorPercent: number()
+	warningPercent: number$1(),
+	errorPercent: number$1()
 });
 /**
 * 内存告警阈值。同 `diskAlert` 的理由：由服务端下发，前端不另写一份数字。
@@ -6940,15 +6954,15 @@ const diskAlertThresholdsSchema = object({
 * 不是 MC 进程的 RSS，也不是 JVM 堆。判「这台机器内存吃紧」要用整机口径；
 * 「这个 JVM 是否快 OOM」是另一个问题（进程 RSS ÷ 整机 RAM 的分子分母不同源，会失真）。
 */
-const memoryAlertThresholdsSchema = object({ warningPercent: number() });
+const memoryAlertThresholdsSchema = object({ warningPercent: number$1() });
 const systemStatsSchema = object({
-	cpuUsage: number(),
-	memoryUsage: number(),
-	totalMemory: number(),
-	memoryPercent: number(),
-	cpuCores: number(),
-	loadAvg: array(number()),
-	uptime: number(),
+	cpuUsage: number$1(),
+	memoryUsage: number$1(),
+	totalMemory: number$1(),
+	memoryPercent: number$1(),
+	cpuCores: number$1(),
+	loadAvg: array(number$1()),
+	uptime: number$1(),
 	diskUsage: diskUsageSchema.optional(),
 	diskAlert: diskAlertThresholdsSchema.optional(),
 	memoryAlert: memoryAlertThresholdsSchema.optional()
@@ -6960,6 +6974,32 @@ const updateCheckResultSchema = object({
 	offline: boolean().optional(),
 	url: string().optional()
 });
+/**
+* 面板自身错误日志（`error.log` 及轮转档）中的一条。
+*
+* `message` 可能多行：写入侧走 `util.format`，异常堆栈一类会带换行，故解析按
+* 「行首是 `[时间] [级别]` 才是新条目、其余行归上一条」的规则还原。
+*/
+const panelErrorEntrySchema = object({
+	time: string(),
+	level: string(),
+	message: string()
+});
+/**
+* 面板自身错误日志的读取结果。
+*
+* `available=false` 表示日志文件不存在（全新自托管机器的常态），**不是读取失败**——
+* 二者在前端是两种不同的空态，不能合并成一个「无数据」。
+* `hasMore=true` 表示还有更早的条目未返回：读取按尾部字节截断（单档上限 20MB），不整读。
+*/
+const panelErrorsSchema = object({
+	available: boolean(),
+	entries: array(panelErrorEntrySchema),
+	hasMore: boolean(),
+	logFile: string()
+});
+/** 读取条数上限：够看清「刚才为什么失败」，又不至于把整档日志灌给前端 */
+const panelErrorsQuerySchema = object({ limit: number().int().min(1).max(200).catch(50) });
 //#endregion
 //#region src/auth.ts
 /**
@@ -7002,7 +7042,7 @@ const authCapabilitiesResponseSchema = object({
 /** 改密成功响应（会话通道与 API Key 通道同构：kickedSessions 为被踢会话数） */
 const authPasswordChangeResponseSchema = object({
 	ok: literal(true),
-	kickedSessions: number()
+	kickedSessions: number$1()
 });
 /** 登出成功响应 */
 const authLogoutResponseSchema = object({ ok: literal(true) });
@@ -7067,7 +7107,7 @@ const machineCredentialSelfSchema = object({
 const authTotpStatusResponseSchema = object({
 	enabled: boolean(),
 	confirmedAt: string().nullable(),
-	recoveryCodesRemaining: number()
+	recoveryCodesRemaining: number$1()
 });
 /** enroll 响应：候选 secret + otpauth URI + 二维码 data URL（此时尚未启用） */
 const authTotpEnrollResponseSchema = object({
@@ -7103,4 +7143,4 @@ const authPasswordChangeRequestBodySchema = object({
 	newPassword: string()
 });
 //#endregion
-export { CRITICAL_STATUS_EVENTS, NOTIFICATION_EVENT_TYPES, WEBHOOK_PLATFORMS, WS_EVENT_KINDS, WS_EVENT_TYPES, WS_STATE_RECOVERY, WS_STATUS_EVENT_NAMES, apiEnvelopeSchema, apiErrorEnvelopeSchema, apiKeyRotateResponseSchema, archivedSnapshotGroupSchema, archivedSnapshotListSchema, auditLogItemSchema, auditLogsQuerySchema, authCapabilitiesResponseSchema, authLoginRequestBodySchema, authLogoutResponseSchema, authPasswordChangeRequestBodySchema, authPasswordChangeResponseSchema, authSessionItemSchema, authSessionKickResponseSchema, authSessionResponseSchema, authSessionsResponseSchema, authSetupRequestBodySchema, authSetupResponseSchema, authStatusResponseSchema, authTotpConfirmRequestBodySchema, authTotpConfirmResponseSchema, authTotpDisableRequestBodySchema, authTotpDisableResponseSchema, authTotpEnrollResponseSchema, authTotpStatusResponseSchema, backupAttachRequestSchema, backupAttachResponseSchema, backupCancelResponseSchema, backupCreateRequestSchema, backupItemSchema, backupRestoreRequestSchema, banRecordListSchema, banRecordSchema, banRequestBodySchema, banResponseBodySchema, commandHistoryItemSchema, commandHistoryQuerySchema, commandResponseSchema, crashArtifactFieldSchema, crashArtifactSchema, deployCancelRequestSchema, deployCancelResponseSchema, deployProgressSchema, deployRequestSchema, deployResultSchema, deployStatusResponseSchema, diskAlertThresholdsSchema, diskInfoSchema, diskUsageSchema, fileContentResponseSchema, fileEntrySchema, fileInfoResponseSchema, fileListRequestSchema, fileListResponseSchema, fileMkdirRequestSchema, fileMkdirResponseSchema, filePathRequestSchema, fileRenameRequestSchema, fileRenameResponseSchema, fileSaveRequestSchema, fileSaveResponseSchema, fileUploadQuerySchema, fileUploadResponseSchema, instanceCommandRequestBodySchema, instanceDeleteRequestBodySchema, instanceDeleteResponseSchema, instanceEulaRequestBodySchema, instancePropertiesRequestBodySchema, instanceSettingsRequestBodySchema, instanceStartRequestBodySchema, instanceStatusListSchema, instanceStatusSchema, instanceSummarySchema, instanceUpdatePayloadSchema, inventoryItemSchema, ipHistoryEntrySchema, logEntriesSchema, logEntrySchema, machineCredentialCreateBodySchema, machineCredentialCreateResponseSchema, machineCredentialListSchema, machineCredentialSchema, machineCredentialSelfSchema, machineCredentialToggleBodySchema, machineScopeSchema, makeApiEnvelopeSchema, marketInstallRequestSchema, marketInstallResultSchema, marketSearchHitSchema, marketSearchRequestSchema, marketSearchResultSchema, marketVersionFileSchema, marketVersionSchema, marketVersionsRequestSchema, marketVersionsResultSchema, memoryAlertThresholdsSchema, nullDataSchema, overviewDataSchema, paginationSchema, playerDetailsResponseSchema, playerDimensionSchema, playerEventSchema, playerGameModeSchema, playerInventorySchema, playerListSchema, playerPositionSchema, playerPotionEffectSchema, playerSchema, playerSessionSchema, playerStatsSchema, pluginDeleteResultSchema, pluginEnabledRequestSchema, pluginInfoSchema, pluginListSchema, pluginMetaSchema, pluginOverwriteQuerySchema, pluginToggleResultSchema, pluginUpdateCheckResultSchema, pluginUpdateStatusSchema, pluginUploadResultSchema, pushChannelRequestBodySchema, pushChannelStateSchema, pushChannelToggleResponseSchema, restoreConfirmTarget, scheduledTaskSchema, scheduledTaskTypeSchema, serverPropertiesSchema, spawnPointSchema, systemMetricSampleSchema, systemMetricsSeriesSchema, systemStatsSchema, taskCreatePayloadSchema, taskRunHistoryListSchema, taskRunHistorySchema, taskRunStatusSchema, taskUpdatePayloadSchema, updateCheckResultSchema, updatePropertiesResponseSchema, upgradeCancelResponseSchema, upgradeProgressSchema, upgradeRequestSchema, upgradeStageSchema, upgradeStartResponseSchema, upgradeStatusResponseSchema, versionsResponseSchema, weatherTypeSchema, webhookCreatePayloadSchema, webhookDeliverySchema, webhookPlatformSchema, webhookSchema, webhookTestResultSchema, worldDimensionSchema, worldInfoSchema, wsBackupPayloadSchema, wsBackupProgressPayloadSchema, wsEventTypeSchema, wsLogPayloadSchema, wsMessageSchema, wsPerformancePayloadSchema, wsPlayerEventPayloadSchema, wsStatusEventPayloadSchema, wsStatusSnapshotSchema, wsWeatherPayloadSchema, wsWorldUpgradePayloadSchema };
+export { CRITICAL_STATUS_EVENTS, NOTIFICATION_EVENT_TYPES, WEBHOOK_PLATFORMS, WS_EVENT_KINDS, WS_EVENT_TYPES, WS_STATE_RECOVERY, WS_STATUS_EVENT_NAMES, apiEnvelopeSchema, apiErrorEnvelopeSchema, apiKeyRotateResponseSchema, archivedSnapshotGroupSchema, archivedSnapshotListSchema, auditLogItemSchema, auditLogsQuerySchema, authCapabilitiesResponseSchema, authLoginRequestBodySchema, authLogoutResponseSchema, authPasswordChangeRequestBodySchema, authPasswordChangeResponseSchema, authSessionItemSchema, authSessionKickResponseSchema, authSessionResponseSchema, authSessionsResponseSchema, authSetupRequestBodySchema, authSetupResponseSchema, authStatusResponseSchema, authTotpConfirmRequestBodySchema, authTotpConfirmResponseSchema, authTotpDisableRequestBodySchema, authTotpDisableResponseSchema, authTotpEnrollResponseSchema, authTotpStatusResponseSchema, backupAttachRequestSchema, backupAttachResponseSchema, backupCancelResponseSchema, backupCreateRequestSchema, backupItemSchema, backupRestoreRequestSchema, banRecordListSchema, banRecordSchema, banRequestBodySchema, banResponseBodySchema, commandHistoryItemSchema, commandHistoryQuerySchema, commandResponseSchema, crashArtifactFieldSchema, crashArtifactSchema, deployCancelRequestSchema, deployCancelResponseSchema, deployProgressSchema, deployRequestSchema, deployResultSchema, deployStatusResponseSchema, diskAlertThresholdsSchema, diskInfoSchema, diskUsageSchema, fileContentResponseSchema, fileEntrySchema, fileInfoResponseSchema, fileListRequestSchema, fileListResponseSchema, fileMkdirRequestSchema, fileMkdirResponseSchema, filePathRequestSchema, fileRenameRequestSchema, fileRenameResponseSchema, fileSaveRequestSchema, fileSaveResponseSchema, fileUploadQuerySchema, fileUploadResponseSchema, instanceCommandRequestBodySchema, instanceDeleteRequestBodySchema, instanceDeleteResponseSchema, instanceEulaRequestBodySchema, instancePropertiesRequestBodySchema, instanceSettingsRequestBodySchema, instanceStartRequestBodySchema, instanceStatusListSchema, instanceStatusSchema, instanceSummarySchema, instanceUpdatePayloadSchema, inventoryItemSchema, ipHistoryEntrySchema, logEntriesSchema, logEntrySchema, machineCredentialCreateBodySchema, machineCredentialCreateResponseSchema, machineCredentialListSchema, machineCredentialSchema, machineCredentialSelfSchema, machineCredentialToggleBodySchema, machineScopeSchema, makeApiEnvelopeSchema, marketInstallRequestSchema, marketInstallResultSchema, marketSearchHitSchema, marketSearchRequestSchema, marketSearchResultSchema, marketVersionFileSchema, marketVersionSchema, marketVersionsRequestSchema, marketVersionsResultSchema, memoryAlertThresholdsSchema, nullDataSchema, overviewDataSchema, paginationSchema, panelErrorEntrySchema, panelErrorsQuerySchema, panelErrorsSchema, playerDetailsResponseSchema, playerDimensionSchema, playerEventSchema, playerGameModeSchema, playerInventorySchema, playerListSchema, playerPositionSchema, playerPotionEffectSchema, playerSchema, playerSessionSchema, playerStatsSchema, pluginDeleteResultSchema, pluginEnabledRequestSchema, pluginInfoSchema, pluginListSchema, pluginMetaSchema, pluginOverwriteQuerySchema, pluginToggleResultSchema, pluginUpdateCheckResultSchema, pluginUpdateStatusSchema, pluginUploadResultSchema, pushChannelRequestBodySchema, pushChannelStateSchema, pushChannelToggleResponseSchema, restoreConfirmTarget, scheduledTaskSchema, scheduledTaskTypeSchema, serverPropertiesSchema, spawnPointSchema, systemMetricSampleSchema, systemMetricsSeriesSchema, systemStatsSchema, taskCreatePayloadSchema, taskRunHistoryListSchema, taskRunHistorySchema, taskRunStatusSchema, taskUpdatePayloadSchema, updateCheckResultSchema, updatePropertiesResponseSchema, upgradeCancelResponseSchema, upgradeProgressSchema, upgradeRequestSchema, upgradeStageSchema, upgradeStartResponseSchema, upgradeStatusResponseSchema, versionsResponseSchema, weatherTypeSchema, webhookCreatePayloadSchema, webhookDeliverySchema, webhookPlatformSchema, webhookSchema, webhookTestResultSchema, worldDimensionSchema, worldInfoSchema, wsBackupPayloadSchema, wsBackupProgressPayloadSchema, wsEventTypeSchema, wsLogPayloadSchema, wsMessageSchema, wsPerformancePayloadSchema, wsPlayerEventPayloadSchema, wsStatusEventPayloadSchema, wsStatusSnapshotSchema, wsWeatherPayloadSchema, wsWorldUpgradePayloadSchema };
