@@ -1252,7 +1252,8 @@ export class MCServerInstance extends EventEmitter {
     }, 5000);
   }
 
-  _emitPerformance() {
+  /** 性能读数的当前值。拼装与广播分开，是为了让「订阅即补一份」能复用同一份拼装 */
+  _performancePayload() {
     // 基于内存中的玩家入睡状态聚合名称列表，供仪表盘卡片显示
     const sleepingPlayerNames = [];
     const awakePlayerNames = [];
@@ -1263,7 +1264,7 @@ export class MCServerInstance extends EventEmitter {
         awakePlayerNames.push(name);
       }
     }
-    this.emit('performanceUpdate', {
+    return {
       cpu: this._cpuUsage,
       memory: this._memoryUsage,
       tps: this.tps,
@@ -1273,7 +1274,11 @@ export class MCServerInstance extends EventEmitter {
       sleepingPlayers: this._sleepingPlayers,
       sleepingPlayerNames,
       awakePlayerNames,
-    });
+    };
+  }
+
+  _emitPerformance() {
+    this.emit('performanceUpdate', this._performancePayload());
     // tps 随 performanceUpdate 的 payload 统一广播——契约里没有独立的 tps 事件
     // 事件（避免 websocket 双消息冗余）
   }

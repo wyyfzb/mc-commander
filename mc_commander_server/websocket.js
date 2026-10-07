@@ -157,6 +157,23 @@ export function cleanupNotificationEvents() {
  */
 const worldUpgradeInFlight = new Map();
 
+/**
+ * state 类事件的「订阅即补当前值」表——契约里声明 `snapshot` 且**独立成事件**的通道在这里各占
+ * 一格（运行态与世界格式升级由状态快照自带、部署快照在登记时补发，故不在此表）。
+ *
+ * 读的全是实例上已有的缓存（`services/mc-server/stats-collector.js`、`_performancePayload`），
+ * **不额外采集、不落库**。取不到值一律返回 null ⇒ 不发：缺省不等于空值，客户端应保持现状。
+ * 键集由 `__tests__/websocket.long-tasks.test.js` 的探针表与契约声明锁在一起。
+ */
+const STATE_SNAPSHOTS = {
+  [WSEvents.WEATHER_UPDATE]: (instance) =>
+    instance._weather ? { weather: instance._weather } : null,
+  [WSEvents.PERFORMANCE_UPDATE]: (instance) =>
+    typeof instance._performancePayload === 'function' ? instance._performancePayload() : null,
+  [WSEvents.PLAYER_STATS_UPDATE]: (instance) =>
+    typeof instance._playerStatsSnapshot === 'function' ? instance._playerStatsSnapshot() : null,
+};
+
 // status 事件中需要持久化的状态跃迁子事件（前端据此生成通知）
 const STATUS_EVENT_TYPES = new Set([
   'started',
@@ -460,6 +477,21 @@ export function setupWebSocket(wss, serverManager) {
                 timestamp: Date.now(),
               }),
             );
+            // state 类事件：订阅即补当前值（见 STATE_SNAPSHOTS）。发的是**同一事件类型 + 当前值**，
+            // 不是伪造一条边沿——客户端按状态处理，不会产生「刚刚发生」的假事实。
+            for (const [type, build] of Object.entries(STATE_SNAPSHOTS)) {
+              if (!mayReceiveEvent(ws, type)) continue;
+              const payload = build(instance);
+              if (payload === null) continue;
+              ws.send(
+                JSON.stringify({
+                  type,
+                  instanceId: msg.instanceId,
+                  data: payload,
+                  timestamp: Date.now(),
+                }),
+              );
+            }
           }
         } else if (msg.type === ClientMessages.UNSUBSCRIBE) {
           ws.subscribedInstances.delete(msg.instanceId);

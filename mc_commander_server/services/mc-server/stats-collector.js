@@ -525,6 +525,8 @@ export async function _collectPlayerStats() {
     }
   }
 
+  // 留一份最近读数供「订阅即补」用（stats-collector 之外没有别处持有它）
+  this._lastPlayerStats = stats;
   if (stats.length > 0) {
     this.emit('playerStatsUpdate', { players: stats });
   }
@@ -534,4 +536,16 @@ export async function _collectPlayerStats() {
     this._sleepingPlayers = sleepingCount;
     this._emitPerformance();
   }
+}
+
+/**
+ * 当前在线玩家的最近一次读数（供订阅补发用）。
+ *
+ * 两点是刻意的：**没采过 ⇒ 返回 null**（未知，不是「没有玩家」——客户端据此保持现状）；
+ * **按当前在线名单过滤**，离场玩家的旧读数不复活（否则界面上会留着一条已经下线的人的读数）。
+ */
+export function _playerStatsSnapshot() {
+  if (!this._lastPlayerStats) return null;
+  const online = new Set(this.players.keys());
+  return { players: this._lastPlayerStats.filter((s) => online.has(s.name)) };
 }

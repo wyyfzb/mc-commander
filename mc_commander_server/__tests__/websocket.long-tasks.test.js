@@ -97,9 +97,12 @@ describe('WebSocket 长任务（部署/升级）通知与补发', () => {
      */
     const snapshotProbes = {
       status: 'status 快照：字段集与派生值（websocket.contract.test.js）',
-      deployProgress: 'subscribe 时补发该实例进行中的升级快照（本文件，activeDeploys）',
+      deployProgress: 'register 时补发在途部署快照（websocket.broadcast.test.js，activeDeploys）',
       upgradeProgress: 'subscribe 时补发该实例进行中的升级快照（本文件，activeUpgrades）',
       worldUpgrade: 'subscribe 的状态快照带上在途的世界格式升级（本文件）',
+      weatherUpdate: 'subscribe 时补发当前天气（本文件，instance._weather）',
+      performanceUpdate: 'subscribe 时补发最近一帧性能读数（本文件，_performancePayload）',
+      playerStatsUpdate: 'subscribe 时补发在线玩家的最近读数（本文件，_playerStatsSnapshot）',
     };
 
     it('探针表与契约声明一一对应', () => {
@@ -457,6 +460,79 @@ describe('WebSocket 长任务（部署/升级）通知与补发', () => {
         .find((m) => m.type === WSEvents.STATUS);
       expect(snapshot.instanceId).toBe('vanilla-other');
       expect(snapshot.data).toHaveProperty('worldUpgrade', null);
+    });
+
+    it('subscribe 时补发当前天气：值不再变化也拿得到（state 类的自愈）', () => {
+      serverManager.getInstance.mockReturnValue({
+        id: 'paper-abc1',
+        name: '生存服',
+        mcVersion: '1.21.4',
+        isRunning: true,
+        players: new Map(),
+        tps: 20,
+        _weather: 'rain',
+      });
+
+      const ws = connect(wss);
+      ws.send.mockClear();
+      subscribe(ws, 'paper-abc1');
+
+      const weather = ws.send.mock.calls
+        .map((c) => JSON.parse(c[0]))
+        .find((m) => m.type === WSEvents.WEATHER_UPDATE);
+      expect(weather).toBeTruthy();
+      expect(weather.data).toEqual({ weather: 'rain' });
+    });
+
+    it('subscribe 时补发最近一帧性能读数（拼装与广播共用同一份）', () => {
+      serverManager.getInstance.mockReturnValue({
+        id: 'paper-abc1',
+        name: '生存服',
+        mcVersion: '1.21.4',
+        isRunning: true,
+        players: new Map(),
+        tps: 20,
+        _performancePayload: () => ({ cpu: 12.5, memory: 1.2, tps: 20, mspt: 8 }),
+      });
+
+      const ws = connect(wss);
+      ws.send.mockClear();
+      subscribe(ws, 'paper-abc1');
+
+      const perf = ws.send.mock.calls
+        .map((c) => JSON.parse(c[0]))
+        .find((m) => m.type === WSEvents.PERFORMANCE_UPDATE);
+      expect(perf?.data).toMatchObject({ cpu: 12.5, mspt: 8 });
+    });
+
+    it('subscribe 时补发在线玩家的最近读数；取不到值时**不发**（缺省≠空值）', () => {
+      const snapshot = vi.fn(() => ({ players: [{ name: 'Alice', health: 20 }] }));
+      serverManager.getInstance.mockReturnValue({
+        id: 'paper-abc1',
+        name: '生存服',
+        mcVersion: '1.21.4',
+        isRunning: true,
+        players: new Map([['Alice', {}]]),
+        tps: 20,
+        _playerStatsSnapshot: snapshot,
+      });
+
+      const ws = connect(wss);
+      ws.send.mockClear();
+      subscribe(ws, 'paper-abc1');
+      const stats = ws.send.mock.calls
+        .map((c) => JSON.parse(c[0]))
+        .find((m) => m.type === WSEvents.PLAYER_STATS_UPDATE);
+      expect(stats?.data).toEqual({ players: [{ name: 'Alice', health: 20 }] });
+
+      // 未知 ⇒ 不发：客户端保持现状，而不是把「没读到」画成「没有玩家」
+      snapshot.mockReturnValue(null);
+      const ws2 = connect(wss);
+      ws2.send.mockClear();
+      subscribe(ws2, 'paper-abc1');
+      expect(ws2.send.mock.calls.map((c) => JSON.parse(c[0]).type)).not.toContain(
+        WSEvents.PLAYER_STATS_UPDATE,
+      );
     });
 
     it('subscribe 其他实例不补发无关实例的升级快照', () => {
