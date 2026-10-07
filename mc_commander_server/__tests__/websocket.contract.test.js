@@ -109,7 +109,14 @@ describe('WebSocket 事件格式契约', () => {
       const msg = sentMessage(ws);
       expect(msg.type).toBe('status');
       expect(msg.instanceId).toBe('s1');
-      expect(Object.keys(msg.data).sort()).toEqual(['isRunning', 'players', 'status', 'tps']);
+      // worldUpgrade 是状态快照的固定字段：null＝确认空闲（字段缺席＝未知，两态要分清）
+      expect(Object.keys(msg.data).sort()).toEqual([
+        'isRunning',
+        'players',
+        'status',
+        'tps',
+        'worldUpgrade',
+      ]);
       expect(msg.data.isRunning).toBe(true);
       expect(msg.data.status).toBe('running'); // 由 isRunning 派生（与 mock 同款）
       expect(msg.data.players).toEqual([{ name: 'Alice' }]); // Map → 数组
@@ -129,7 +136,13 @@ describe('WebSocket 事件格式契约', () => {
       ws.emit('message', JSON.stringify({ type: 'subscribe', instanceId: 's1' }));
 
       const msg = sentMessage(ws);
-      expect(msg.data).toEqual({ status: 'stopped', isRunning: false, players: [], tps: null });
+      expect(msg.data).toEqual({
+        status: 'stopped',
+        isRunning: false,
+        players: [],
+        tps: null,
+        worldUpgrade: null,
+      });
     });
   });
 

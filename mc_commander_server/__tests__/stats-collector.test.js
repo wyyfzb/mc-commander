@@ -43,6 +43,7 @@ import { exec } from 'child_process';
 
 import {
   _startStatsCollection,
+  _playerStatsSnapshot,
   _schedulePlayerStats,
   _scheduleMspt,
   _scheduleWorldState,
@@ -1013,5 +1014,29 @@ describe('_collectPlayerStats：玩家状态采集与错误隔离', () => {
     expect(stats[0].players.map((p) => p.name)).toEqual(['Steve']);
     expect(stats[0].players[0].armor).toBe(8);
     expect(stats[0].players[0].isSleeping).toBe(true);
+  });
+});
+
+describe('_playerStatsSnapshot：供订阅补发的当前值', () => {
+  it('按当前在线名单过滤：离场玩家的旧读数不复活', () => {
+    const inst = makeBareInstance();
+    inst.players = new Map([
+      ['Alice', {}],
+      ['Bob', {}],
+    ]);
+    inst._lastPlayerStats = [
+      { name: 'Alice', health: 20 },
+      { name: 'Steve', health: 3 }, // 已离场：最近一轮采集时在，现在不在名单里
+    ];
+
+    expect(_playerStatsSnapshot.call(inst)).toEqual({ players: [{ name: 'Alice', health: 20 }] });
+  });
+
+  it('从未采过 ⇒ null（未知，不是「没有玩家」）', () => {
+    const inst = makeBareInstance();
+    inst.players = new Map([['Alice', {}]]);
+    inst._lastPlayerStats = undefined;
+
+    expect(_playerStatsSnapshot.call(inst)).toBeNull();
   });
 });

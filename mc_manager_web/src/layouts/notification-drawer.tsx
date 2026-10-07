@@ -176,6 +176,48 @@ interface NotificationDrawerProps {
 }
 
 /**
+ * 「进行中」的升级行——**载体由状态决定，不由通知条目决定**。
+ *
+ * 那条「升级开始」通知只能由一次性边沿事件创建，于是三种情况下进度会无处显示：用户点了
+ * 「清除全部」、中途才连上（没收到 started）、重连后错过了聚合窗口。这里直接按瞬态进度
+ * store 渲染，与「有没有收到过那条通知」无关；已有可见的「升级开始」行时不重复渲染。
+ */
+function InFlightUpgradeRows({
+  items,
+  onOpenChange,
+}: {
+  items: AppNotification[]
+  onOpenChange: (open: boolean) => void
+}) {
+  const progress = useWorldUpgradeProgressStore((s) => s.progress)
+  const pending = Object.keys(progress).filter(
+    (instanceId) =>
+      !items.some((n) => n.type === 'worldUpgradeStart' && n.instanceId === instanceId),
+  )
+  return (
+    <>
+      {pending.map((instanceId) => (
+        <NotificationRow
+          key={`world-upgrade:${instanceId}`}
+          live
+          onOpenChange={onOpenChange}
+          item={{
+            id: `world-upgrade:${instanceId}`,
+            type: 'worldUpgradeStart',
+            category: 'server',
+            content: '服务器正在升级世界存档格式，期间可能无法连接',
+            timestamp: 0,
+            count: 1,
+            read: false,
+            instanceId,
+          }}
+        />
+      ))}
+    </>
+  )
+}
+
+/**
  * 单条通知行。
  *
  * 为什么单独成组件：升级进度是 1 条/秒的推送，在抽屉根订阅整张进度表会让**全部条目**跟着
@@ -184,9 +226,12 @@ interface NotificationDrawerProps {
 function NotificationRow({
   item,
   onOpenChange,
+  live = false,
 }: {
   item: AppNotification
   onOpenChange: (open: boolean) => void
+  /** 「进行中」行：没有真实发生时间可显示 ⇒ 不渲染时间（编造一个「现在」就是篡改事实） */
+  live?: boolean
 }) {
   const navigate = useNavigate()
   const markAsRead = useNotificationStore((s) => s.markAsRead)
@@ -247,7 +292,7 @@ function NotificationRow({
           <Icon className={cn('size-3', color.text)} aria-hidden />
           {!item.read && <span className="size-1.5 rounded-full bg-mcs-accent" aria-hidden />}
           <span className={cn('text-mcs-2xs text-mcs-text-muted tnum')}>
-            {formatNotificationTime(item.timestamp)}
+            {!live && formatNotificationTime(item.timestamp)}
           </span>
         </span>
         <span
@@ -286,6 +331,9 @@ export function NotificationDrawer({ open, onOpenChange }: NotificationDrawerPro
   const navigate = useNavigate()
   const items = useNotificationStore((s) => s.items)
   const unreadCount = useNotificationStore((s) => s.unreadCount)
+  // 只订阅一个**布尔**：空态判断要知道「有没有在途升级」，但逐秒变化的百分比不该让整张
+  // 抽屉重渲染（真正的进度读取下沉在行组件里）
+  const hasInFlight = useWorldUpgradeProgressStore((s) => Object.keys(s.progress).length > 0)
   const markAllRead = useNotificationStore((s) => s.markAllRead)
   const clearAll = useNotificationStore((s) => s.clearAll)
   const [severityFilter, setSeverityFilter] = useState<'all' | NotificationSeverity>('all')
@@ -369,14 +417,17 @@ export function NotificationDrawer({ open, onOpenChange }: NotificationDrawerPro
         )}
 
         <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-4">
-          {visibleItems.length === 0 ? (
+          {visibleItems.length === 0 && !hasInFlight ? (
             <div className="flex flex-1 items-center justify-center text-mcs-text-muted">
               {items.length === 0 ? '暂无动态' : '该严重度下暂无通知'}
             </div>
           ) : (
-            visibleItems.map((n) => (
-              <NotificationRow key={n.id} item={n} onOpenChange={onOpenChange} />
-            ))
+            <>
+              <InFlightUpgradeRows items={visibleItems} onOpenChange={onOpenChange} />
+              {visibleItems.map((n) => (
+                <NotificationRow key={n.id} item={n} onOpenChange={onOpenChange} />
+              ))}
+            </>
           )}
         </div>
 

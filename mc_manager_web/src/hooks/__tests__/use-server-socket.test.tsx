@@ -356,6 +356,81 @@ describe('useServerSocket（WS 单例治理，issue #311）', () => {
     expect(useNotificationStore.getState().items[0]?.type).toBe('worldUpgradeComplete')
   })
 
+  it('状态快照带回在途的世界格式升级：0..1 分数换算成百分数落进进度数据源', async () => {
+    useConnectionStore.setState({ baseUrl: '', apiKey: 'k1', status: 'ready' })
+    useAuthStore.setState({ session: makeSession('token-snapshot-world') })
+
+    renderHook(() => useServerSocket('i-1'), { wrapper: createWrapper() })
+    await waitFor(() => expect(FakeWebSocket.instances.length).toBe(1))
+    const ws = FakeWebSocket.instances[0]!
+    act(() => {
+      openAndAuth(ws)
+    })
+    await flushMicrotasks()
+
+    act(() => {
+      ws.receive({
+        type: 'status',
+        instanceId: 'i-1',
+        data: {
+          status: 'running',
+          isRunning: true,
+          players: [],
+          tps: 20,
+          worldUpgrade: { progress: 0.42 },
+        },
+      })
+    })
+    // 快照回来的是分数，进度条吃百分数；这一条是「中途才连上的客户端」唯一的权威来源
+    expect(useWorldUpgradeProgressStore.getState().progress['i-1']).toBeCloseTo(42)
+  })
+
+  it('快照里 worldUpgrade 为 null：确认空闲，清掉本地残留', async () => {
+    useConnectionStore.setState({ baseUrl: '', apiKey: 'k1', status: 'ready' })
+    useAuthStore.setState({ session: makeSession('token-snapshot-idle') })
+    useWorldUpgradeProgressStore.setState({ progress: { 'i-1': 66 } })
+
+    renderHook(() => useServerSocket('i-1'), { wrapper: createWrapper() })
+    await waitFor(() => expect(FakeWebSocket.instances.length).toBe(1))
+    const ws = FakeWebSocket.instances[0]!
+    act(() => {
+      openAndAuth(ws)
+    })
+    await flushMicrotasks()
+
+    act(() => {
+      ws.receive({
+        type: 'status',
+        instanceId: 'i-1',
+        data: { status: 'running', isRunning: true, players: [], tps: 20, worldUpgrade: null },
+      })
+    })
+    expect(useWorldUpgradeProgressStore.getState().progress['i-1']).toBeUndefined()
+  })
+
+  it('快照里没有 worldUpgrade 字段：未知 ⇒ 不动已有值（不能读成「没有升级」）', async () => {
+    useConnectionStore.setState({ baseUrl: '', apiKey: 'k1', status: 'ready' })
+    useAuthStore.setState({ session: makeSession('token-snapshot-unknown') })
+    useWorldUpgradeProgressStore.setState({ progress: { 'i-1': 66 } })
+
+    renderHook(() => useServerSocket('i-1'), { wrapper: createWrapper() })
+    await waitFor(() => expect(FakeWebSocket.instances.length).toBe(1))
+    const ws = FakeWebSocket.instances[0]!
+    act(() => {
+      openAndAuth(ws)
+    })
+    await flushMicrotasks()
+
+    act(() => {
+      ws.receive({
+        type: 'status',
+        instanceId: 'i-1',
+        data: { status: 'running', isRunning: true, players: [], tps: 20 },
+      })
+    })
+    expect(useWorldUpgradeProgressStore.getState().progress['i-1']).toBe(66)
+  })
+
   it('载荷的 state 不在契约枚举里：留痕，并按终态路径处置（不把整条事件静默丢掉）', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     useConnectionStore.setState({ baseUrl: '', apiKey: 'k1', status: 'ready' })

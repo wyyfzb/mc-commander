@@ -105,12 +105,36 @@ describe('NotificationDrawer 世界格式升级进度（就地更新的进度条
     expect(screen.queryByRole('progressbar')).toBeNull()
   })
 
-  it('进度只挂「升级开始」那条：该实例的别的条目不会长出进度条', () => {
+  it('进度不挂到别的条目上：载体是**独立的**进行中行，而不是 serverCrash 那条', () => {
     seedStore() // serverCrash（同样带 inst-1）
     useWorldUpgradeProgressStore.setState({ progress: { 'inst-1': 42 } })
     renderDrawer()
 
-    expect(screen.queryByRole('progressbar')).toBeNull()
+    // 载体由状态决定（见通知抽屉的 InFlightUpgradeRows）：有实时进度就有自己的行
+    const live = screen.getByRole('button', { name: /升级进度 42%/ })
+    expect(live).toHaveTextContent('服务器正在升级世界存档格式')
+    // 同实例的崩溃条目仍不长进度条——进度不寄生在无关条目上
+    expect(screen.getByRole('button', { name: /服务器意外退出/ })).not.toHaveTextContent('42%')
+  })
+
+  it('「清除全部」后进行中行仍在：进度不因通知被删而消失', () => {
+    seedUpgrade(42)
+    useNotificationStore.setState({ items: [], unreadCount: 0 }) // 用户点了清除全部
+    renderDrawer()
+
+    const live = screen.getByRole('button', { name: /升级进度 42%/ })
+    expect(live).toBeInTheDocument()
+    // 不编造开始时间：那条边沿本来就没发生在我们眼前，写一个 HH:MM 就是篡改事实
+    expect(live).not.toHaveTextContent(/\d{1,2}:\d{2}/)
+  })
+
+  it('已有可见的「升级开始」行时不重复渲染进行中行', () => {
+    seedUpgrade(42)
+    renderDrawer()
+
+    // 同一条升级只该有一行：既有通知行（带时间）承担显示，不再叠加一个 live 行
+    expect(screen.getAllByRole('button', { name: /升级进度 42%/ })).toHaveLength(1)
+    expect(screen.getAllByRole('progressbar')).toHaveLength(1)
   })
 
   it('百分比取整显示（服务端给小数时不出现 42.5%）', () => {

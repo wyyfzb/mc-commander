@@ -1,4 +1,5 @@
 import { authenticateWebSocket } from './middleware/auth.js';
+import { NOTIFICATION_EVENT_TYPES } from '@mc-commander/schemas';
 import {
   isLocked as isCredentialLocked,
   recordFailure as recordCredentialFailure,
@@ -124,39 +125,6 @@ export const WS_AUTH_TIMEOUT_MS = 10_000;
 // taskExecute 移出落库集合：前端零消费（仅路由进 statusStream 无人监听），
 // 每次任务执行必落库会挤占断线补齐 500 条配额（玩家进出密集的服上
 // 最新事件含 backupFailed 关键通知会被挤出）。
-const NOTIFICATION_EVENT_TYPES = new Set([
-  WSEvents.PLAYER_JOIN,
-  WSEvents.PLAYER_LEAVE,
-  WSEvents.PLAYER_DEATH,
-  WSEvents.PLAYER_RESPAWN,
-  WSEvents.PLAYER_CHAT,
-  WSEvents.PLAYER_SLEEP,
-  WSEvents.ACHIEVEMENT,
-  WSEvents.BACKUP_START,
-  WSEvents.BACKUP_COMPLETE,
-  WSEvents.BACKUP_FAILED,
-  WSEvents.BACKUP_SKIPPED,
-  WSEvents.BACKUP_CANCELLED,
-  WSEvents.RESTORE_START,
-  WSEvents.RESTORE_COMPLETE,
-  WSEvents.RESTORE_FAILED,
-  WSEvents.RESTORE_CANCELLED,
-  // 任务失败与 backupFailed 同语义：低频高价值，落库断线补齐。
-  // taskExecute 每次触发都发故不入集合（见上方注释），失败事件仅在异常时发射
-  WSEvents.TASK_FAILED,
-  // Webhook 投递失败：低频高价值，首次失败通知（连续失败去重后恢复）
-  WSEvents.WEBHOOK_DELIVERY_FAILED,
-  // 长任务终态（部署/升级完成与失败）：低频高价值，用户离开向导后
-  // 唯一得知结果的通道；落库后断线/离线重连也能补齐看到。
-  // 注意本集合只对经 broadcast() 的事件生效——部署终态三项走的是
-  // broadcastGlobalNotification()（该入口无条件落库），在此列出只为同类事件同居一处
-  WSEvents.DEPLOY_COMPLETE,
-  WSEvents.DEPLOY_FAILED,
-  WSEvents.DEPLOY_CANCELLED,
-  WSEvents.UPGRADE_COMPLETE,
-  WSEvents.UPGRADE_FAILED,
-  WSEvents.UPGRADE_CANCELLED,
-]);
 
 // notification_events 保留期：超过保留期的记录定期清理（表只增不删，
 // 玩家进出/聊天事件长期累积，断线补齐 500 条配额被历史事件挤占）
@@ -188,6 +156,23 @@ export function cleanupNotificationEvents() {
  * 才是正确的；落库反而会制造「上次那轮升级」的幽灵。
  */
 const worldUpgradeInFlight = new Map();
+
+/**
+ * state 类事件的「订阅即补当前值」表——契约里声明 `snapshot` 且**独立成事件**的通道在这里各占
+ * 一格（运行态与世界格式升级由状态快照自带、部署快照在登记时补发，故不在此表）。
+ *
+ * 读的全是实例上已有的缓存（`services/mc-server/stats-collector.js`、`_performancePayload`），
+ * **不额外采集、不落库**。取不到值一律返回 null ⇒ 不发：缺省不等于空值，客户端应保持现状。
+ * 键集由 `__tests__/websocket.long-tasks.test.js` 的探针表与契约声明锁在一起。
+ */
+const STATE_SNAPSHOTS = {
+  [WSEvents.WEATHER_UPDATE]: (instance) =>
+    instance._weather ? { weather: instance._weather } : null,
+  [WSEvents.PERFORMANCE_UPDATE]: (instance) =>
+    typeof instance._performancePayload === 'function' ? instance._performancePayload() : null,
+  [WSEvents.PLAYER_STATS_UPDATE]: (instance) =>
+    typeof instance._playerStatsSnapshot === 'function' ? instance._playerStatsSnapshot() : null,
+};
 
 // status 事件中需要持久化的状态跃迁子事件（前端据此生成通知）
 const STATUS_EVENT_TYPES = new Set([
@@ -460,36 +445,6 @@ export function setupWebSocket(wss, serverManager) {
           } catch (err) {
             logger.error('Failed to send active upgrade snapshot:', err);
           }
-          // 世界格式升级补发：订阅即把**当前这一轮**的状态补齐。补两条是有意的——
-          // `started` 是客户端那条通知与进度条的**载体**（进度挂在「升级开始」那条上，
-          // 只补 progress 会得到一个没有载体、界面上什么都不显示的百分比），
-          // `progress` 才是当前值。与上面的 jar 升级补发同款：属管理员生命周期信息，
-          // 只读连接不补发（WORLD_UPGRADE 不在只读白名单内，此处判据与 fanOut 同源）
-          try {
-            const worldUpgrade = worldUpgradeInFlight.get(msg.instanceId);
-            if (worldUpgrade && mayReceiveEvent(ws, WSEvents.WORLD_UPGRADE)) {
-              ws.send(
-                JSON.stringify({
-                  type: WSEvents.WORLD_UPGRADE,
-                  instanceId: msg.instanceId,
-                  data: { state: 'started', progress: null },
-                  timestamp: Date.now(),
-                }),
-              );
-              if (worldUpgrade.progress !== null) {
-                ws.send(
-                  JSON.stringify({
-                    type: WSEvents.WORLD_UPGRADE,
-                    instanceId: msg.instanceId,
-                    data: { state: 'progress', progress: worldUpgrade.progress },
-                    timestamp: Date.now(),
-                  }),
-                );
-              }
-            }
-          } catch (err) {
-            logger.error('Failed to send world upgrade snapshot:', err);
-          }
           const instance = serverManager.getInstance(msg.instanceId);
           // 不带角色判据：status 本就在只读白名单内，包一层恒真的判据只会让后来者
           // 误以为这条快照是「可拦的」（真判据在 fanOut 与重放处）。
@@ -498,6 +453,14 @@ export function setupWebSocket(wss, serverManager) {
           // 违反契约的 z.string()）、players 是 Map（旧实现直接发出去会被
           // JSON.stringify 成 {}，违反 z.array）。四项都不在只读裁剪清单内，故不分角色
           if (instance) {
+            // 世界格式升级（state 类，见契约 WS_EVENT_KINDS）的权威读法放在状态快照里：
+            // 对象＝在途、null＝确认空闲、**裁剪掉＝未知**。不再补发一条伪造的 started——那会
+            // 同时篡改事实（开始时间变成「现在」）并给客户端一个只能由边沿创建的载体。
+            // 角色裁剪与 fanOut 同源：升级属管理员生命周期信息（WORLD_UPGRADE 不在只读白名单内），
+            // 而状态快照本身是只读也能收的 ⇒ 不裁剪就会从这里漏出去
+            const inFlight = mayReceiveEvent(ws, WSEvents.WORLD_UPGRADE)
+              ? (worldUpgradeInFlight.get(msg.instanceId) ?? null)
+              : undefined;
             ws.send(
               JSON.stringify({
                 type: WSEvents.STATUS,
@@ -507,10 +470,28 @@ export function setupWebSocket(wss, serverManager) {
                   isRunning: Boolean(instance.isRunning),
                   players: Array.from(instance.players?.values?.() ?? []),
                   tps: typeof instance.tps === 'number' ? instance.tps : null,
+                  ...(inFlight === undefined
+                    ? {}
+                    : { worldUpgrade: inFlight && { progress: inFlight.progress } }),
                 },
                 timestamp: Date.now(),
               }),
             );
+            // state 类事件：订阅即补当前值（见 STATE_SNAPSHOTS）。发的是**同一事件类型 + 当前值**，
+            // 不是伪造一条边沿——客户端按状态处理，不会产生「刚刚发生」的假事实。
+            for (const [type, build] of Object.entries(STATE_SNAPSHOTS)) {
+              if (!mayReceiveEvent(ws, type)) continue;
+              const payload = build(instance);
+              if (payload === null) continue;
+              ws.send(
+                JSON.stringify({
+                  type,
+                  instanceId: msg.instanceId,
+                  data: payload,
+                  timestamp: Date.now(),
+                }),
+              );
+            }
           }
         } else if (msg.type === ClientMessages.UNSUBSCRIBE) {
           ws.subscribedInstances.delete(msg.instanceId);

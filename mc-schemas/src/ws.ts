@@ -58,6 +58,16 @@ export const wsStatusSnapshotSchema = z.object({
   isRunning: z.boolean(),
   players: z.array(z.unknown()),
   tps: z.number().nullable(),
+  /**
+   * 在途的**世界格式升级**（`state` 类事件的权威读法，见 `WS_EVENT_KINDS`）。
+   *
+   * 三种取值刻意分开，因为它们对界面是三个不同结论：
+   * - 对象：正在升级，`progress` 是 0..1 的分数（取不到时为 null）；
+   * - `null`：**确认空闲**（没有升级在跑）⇒ 客户端应清掉本地残留进度；
+   * - **字段缺席**：**未知**（旧服务端 / 非 status 通道）⇒ 客户端保持现状，不要清。
+   * 少了 `null` 与缺席的区分，「服务端没告诉我」会被读成「没有升级」，清掉正在跑的进度条。
+   */
+  worldUpgrade: z.object({ progress: z.number().nullable() }).nullable().optional(),
 })
 
 export const wsPerformancePayloadSchema = z.object({
@@ -130,7 +140,16 @@ export const wsBackupProgressPayloadSchema = z.object({
   percent: z.number().min(0).max(100),
 })
 
-/** 通知类事件集合（服务端落库，断线补齐用） */
+/**
+ * 落库面（服务端落库、断线补齐用）——**服务端从这里取，不再各存一份**。
+ *
+ * 收进来的判据是「低频高价值 + 用户离开现场后唯一能得知结果的通道」：只收**发生过的事实**
+ * （与 `WS_EVENT_KINDS` 的 `state` 类不相交——进度类写库是纯放大，1 条/秒）。
+ * 两类刻意**不在**此列：
+ * - `taskExecute`：每次触发都发，属高频；
+ * - 部署/面板升级的终态：走的是无条件落库的那个全局入口，在这里列出只为同类事件同居一处
+ *   （本集合只对经 `broadcast()` 的事件生效）。
+ */
 export const NOTIFICATION_EVENT_TYPES: ReadonlySet<WsEventType> = new Set([
   'playerJoin',
   'playerLeave',
@@ -150,7 +169,98 @@ export const NOTIFICATION_EVENT_TYPES: ReadonlySet<WsEventType> = new Set([
   'restoreCancelled',
   'taskFailed',
   'webhookDeliveryFailed',
+  // 部署/面板自身升级的终态：与上面同类（都是「发生过的事实」，落库供断线补齐）。
+  // 早先只有服务端本地那份清单含这六项，契约包这份落后了 ⇒ 两边说法不一。
+  'deployComplete',
+  'deployFailed',
+  'deployCancelled',
+  'upgradeComplete',
+  'upgradeFailed',
+  'upgradeCancelled',
 ])
+
+/**
+ * 事件类别——**本仓事件通道唯一的口径**，新加事件必须在这里落一格。
+ *
+ * - `state`：**此刻的状态**（进度、运行态、读数）。晚订阅者必须能直接读到，否则界面上是
+ *   「这一块根本不存在」，不是「少了一条通知」。自愈路径见 `WS_STATE_RECOVERY`。
+ * - `event`：**发生过的瞬间事实**（玩家进出、备份完成）。可丢、可重放；丢一条只是少一条记录。
+ *
+ * 为什么必须声明：两者物理上是不同机制——状态靠快照/轮询/周期重发，事件靠落库 + 游标重放。
+ * 不声明就只能逐通道即兴发挥，而**用补发「边沿事件」去恢复「状态」**会一次犯两个错：
+ * 篡改事实（那条「升级开始」其实发生在十分钟前）与漏掉状态（没有载体的百分比无处显示）。
+ */
+export type WsEventKind = 'state' | 'event'
+
+/**
+ * `state` 类事件的自愈路径（判据：晚订阅者在有限时间内能拿到当前值）：
+ * - `snapshot`：服务端保留在途值，订阅/登记时补发
+ * - `poll`：前端按 REST 轮询权威状态
+ * - `cadence`：该通道由周期性采集驱动，等一个周期即自愈
+ * - `none`：**已知缺口**——读代码确认没有上述任一路径。列在这里是为了让缺口可见，
+ *   而不是留在「以为它会自己好」的状态
+ */
+export type WsStateRecovery = 'snapshot' | 'poll' | 'cadence' | 'none'
+
+export const WS_EVENT_KINDS: Readonly<Record<WsEventType, WsEventKind>> = {
+  // ── state：此刻的状态 ──
+  status: 'state',
+  performanceUpdate: 'state',
+  weatherUpdate: 'state',
+  worldUpgrade: 'state',
+  playerStatsUpdate: 'state',
+  backupProgress: 'state',
+  restoreProgress: 'state',
+  deployProgress: 'state',
+  upgradeProgress: 'state',
+  systemStatsUpdate: 'state',
+  // ── event：发生过的事实 ──
+  // `log` 属事件：每一行是「发生过」而不是「此刻的值」，丢行不影响历史（终端历史走 REST）。
+  log: 'event',
+  playerJoin: 'event',
+  playerLeave: 'event',
+  playerDeath: 'event',
+  playerRespawn: 'event',
+  playerChat: 'event',
+  playerSleep: 'event',
+  achievement: 'event',
+  backupStart: 'event',
+  backupComplete: 'event',
+  backupFailed: 'event',
+  backupSkipped: 'event',
+  backupCancelled: 'event',
+  restoreStart: 'event',
+  restoreComplete: 'event',
+  restoreFailed: 'event',
+  restoreCancelled: 'event',
+  taskExecute: 'event',
+  taskFailed: 'event',
+  webhookDeliveryFailed: 'event',
+  deployComplete: 'event',
+  deployFailed: 'event',
+  deployCancelled: 'event',
+  circuit_breaker: 'event',
+  upgradeComplete: 'event',
+  upgradeFailed: 'event',
+  upgradeCancelled: 'event',
+  error: 'event',
+}
+
+export const WS_STATE_RECOVERY: Readonly<Partial<Record<WsEventType, WsStateRecovery>>> = {
+  status: 'snapshot',
+  deployProgress: 'snapshot',
+  upgradeProgress: 'snapshot',
+  worldUpgrade: 'snapshot',
+  backupProgress: 'poll',
+  restoreProgress: 'poll',
+  systemStatsUpdate: 'cadence',
+  // 以下三条原先声明为 `none`（缺口）：它们只在**值变化时**推送，值长时间不变时晚订阅者拿不到
+  // 当前值。实测这些值本就在实例上缓存着（CPU/内存/世界时间/天气/最近一次玩家读数），
+  // 故改为订阅即补一份 —— 不额外采集、不落库。
+  performanceUpdate: 'snapshot',
+  weatherUpdate: 'snapshot',
+  playerStatsUpdate: 'snapshot',
+}
 
 export type WsEventType = (typeof WS_EVENT_TYPES)[number]
 export type WsMessage = z.infer<typeof wsMessageSchema>

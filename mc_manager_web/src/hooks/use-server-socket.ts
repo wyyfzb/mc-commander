@@ -11,7 +11,7 @@ import { useRestartPendingStore } from '@/stores/restart-pending'
 import { applyUpgradeProgress, isUpgradeTerminal } from '@/stores/upgrade'
 import { applyBackupProgress, clearBackupProgress } from '@/stores/backup-progress'
 import {
-  applyWorldUpgradeProgress,
+  applyWorldUpgradeFraction,
   clearWorldUpgradeProgress,
 } from '@/stores/world-upgrade-progress'
 import { useNotificationStore } from '@/stores/notifications'
@@ -335,6 +335,15 @@ export function useServerSocket(instanceId: string | null) {
               players: (data.players as unknown[]) ?? [],
               tps: typeof data.tps === 'number' ? data.tps : null,
             })
+            // 世界格式升级属 state 类事件（契约 WS_EVENT_KINDS），权威读法随快照回来。
+            // 三态必须分开：对象＝在途、null＝**确认空闲**（清掉本地残留）、
+            // **字段缺席＝未知**（旧服务端或无权限，保持现状）——缺席时若按「没有升级」处理，
+            // 会把正在跑的进度条抹掉。
+            if ('worldUpgrade' in data) {
+              const inFlight = data.worldUpgrade as { progress?: number | null } | null
+              if (inFlight === null) clearWorldUpgradeProgress(msg.instanceId)
+              else applyWorldUpgradeFraction(msg.instanceId, inFlight?.progress)
+            }
           }
           break
         }
@@ -468,13 +477,10 @@ export function useServerSocket(instanceId: string | null) {
           const state = parsed.success ? parsed.data.state : String(data.state ?? '')
           if (state === 'progress') {
             const raw = parsed.success ? parsed.data.progress : data.progress
-            // 量纲是 **0..1 的分数**（契约 schema 的注释与服务端归一化处同口径），进度条吃百分数，
-            // 故这里换算——按原值直灌会让条恒在 1% 以下、标签恒 0%。
             // 判据必须是 typeof number：契约允许 progress 为 null（零参通知的 params 整个缺席
             // 时服务端就发 null），而 `Number(null) === 0` 会被当成合法的 0% 渲染出一条恒空的条。
-            if (typeof raw === 'number' && Number.isFinite(raw)) {
-              applyWorldUpgradeProgress(msg.instanceId, raw * 100)
-            }
+            // 量纲（0..1 分数 → 百分数）在 applyWorldUpgradeFraction 里只换算一次。
+            if (typeof raw === 'number') applyWorldUpgradeFraction(msg.instanceId, raw)
             break
           }
           // 开始与终态都清一次：开始清掉上一轮残留（服务端被强杀时没有终态事件），

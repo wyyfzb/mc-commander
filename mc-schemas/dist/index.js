@@ -6242,7 +6242,17 @@ const wsStatusSnapshotSchema = object({
 	status: string(),
 	isRunning: boolean(),
 	players: array(unknown()),
-	tps: number().nullable()
+	tps: number().nullable(),
+	/**
+	* 在途的**世界格式升级**（`state` 类事件的权威读法，见 `WS_EVENT_KINDS`）。
+	*
+	* 三种取值刻意分开，因为它们对界面是三个不同结论：
+	* - 对象：正在升级，`progress` 是 0..1 的分数（取不到时为 null）；
+	* - `null`：**确认空闲**（没有升级在跑）⇒ 客户端应清掉本地残留进度；
+	* - **字段缺席**：**未知**（旧服务端 / 非 status 通道）⇒ 客户端保持现状，不要清。
+	* 少了 `null` 与缺席的区分，「服务端没告诉我」会被读成「没有升级」，清掉正在跑的进度条。
+	*/
+	worldUpgrade: object({ progress: number().nullable() }).nullable().optional()
 });
 const wsPerformancePayloadSchema = object({
 	cpu: number(),
@@ -6322,7 +6332,16 @@ const wsBackupProgressPayloadSchema = object({
 	backupId: number(),
 	percent: number().min(0).max(100)
 });
-/** 通知类事件集合（服务端落库，断线补齐用） */
+/**
+* 落库面（服务端落库、断线补齐用）——**服务端从这里取，不再各存一份**。
+*
+* 收进来的判据是「低频高价值 + 用户离开现场后唯一能得知结果的通道」：只收**发生过的事实**
+* （与 `WS_EVENT_KINDS` 的 `state` 类不相交——进度类写库是纯放大，1 条/秒）。
+* 两类刻意**不在**此列：
+* - `taskExecute`：每次触发都发，属高频；
+* - 部署/面板升级的终态：走的是无条件落库的那个全局入口，在这里列出只为同类事件同居一处
+*   （本集合只对经 `broadcast()` 的事件生效）。
+*/
 const NOTIFICATION_EVENT_TYPES = /* @__PURE__ */ new Set([
 	"playerJoin",
 	"playerLeave",
@@ -6341,8 +6360,66 @@ const NOTIFICATION_EVENT_TYPES = /* @__PURE__ */ new Set([
 	"restoreFailed",
 	"restoreCancelled",
 	"taskFailed",
-	"webhookDeliveryFailed"
+	"webhookDeliveryFailed",
+	"deployComplete",
+	"deployFailed",
+	"deployCancelled",
+	"upgradeComplete",
+	"upgradeFailed",
+	"upgradeCancelled"
 ]);
+const WS_EVENT_KINDS = {
+	status: "state",
+	performanceUpdate: "state",
+	weatherUpdate: "state",
+	worldUpgrade: "state",
+	playerStatsUpdate: "state",
+	backupProgress: "state",
+	restoreProgress: "state",
+	deployProgress: "state",
+	upgradeProgress: "state",
+	systemStatsUpdate: "state",
+	log: "event",
+	playerJoin: "event",
+	playerLeave: "event",
+	playerDeath: "event",
+	playerRespawn: "event",
+	playerChat: "event",
+	playerSleep: "event",
+	achievement: "event",
+	backupStart: "event",
+	backupComplete: "event",
+	backupFailed: "event",
+	backupSkipped: "event",
+	backupCancelled: "event",
+	restoreStart: "event",
+	restoreComplete: "event",
+	restoreFailed: "event",
+	restoreCancelled: "event",
+	taskExecute: "event",
+	taskFailed: "event",
+	webhookDeliveryFailed: "event",
+	deployComplete: "event",
+	deployFailed: "event",
+	deployCancelled: "event",
+	circuit_breaker: "event",
+	upgradeComplete: "event",
+	upgradeFailed: "event",
+	upgradeCancelled: "event",
+	error: "event"
+};
+const WS_STATE_RECOVERY = {
+	status: "snapshot",
+	deployProgress: "snapshot",
+	upgradeProgress: "snapshot",
+	worldUpgrade: "snapshot",
+	backupProgress: "poll",
+	restoreProgress: "poll",
+	systemStatsUpdate: "cadence",
+	performanceUpdate: "snapshot",
+	weatherUpdate: "snapshot",
+	playerStatsUpdate: "snapshot"
+};
 //#endregion
 //#region src/world.ts
 const worldDimensionSchema = object({
@@ -7014,4 +7091,4 @@ const authPasswordChangeRequestBodySchema = object({
 	newPassword: string()
 });
 //#endregion
-export { NOTIFICATION_EVENT_TYPES, WEBHOOK_PLATFORMS, WS_EVENT_TYPES, apiEnvelopeSchema, apiErrorEnvelopeSchema, apiKeyRotateResponseSchema, archivedSnapshotGroupSchema, archivedSnapshotListSchema, auditLogItemSchema, auditLogsQuerySchema, authCapabilitiesResponseSchema, authLoginRequestBodySchema, authLogoutResponseSchema, authPasswordChangeRequestBodySchema, authPasswordChangeResponseSchema, authSessionItemSchema, authSessionKickResponseSchema, authSessionResponseSchema, authSessionsResponseSchema, authSetupRequestBodySchema, authSetupResponseSchema, authStatusResponseSchema, authTotpConfirmRequestBodySchema, authTotpConfirmResponseSchema, authTotpDisableRequestBodySchema, authTotpDisableResponseSchema, authTotpEnrollResponseSchema, authTotpStatusResponseSchema, backupAttachRequestSchema, backupAttachResponseSchema, backupCancelResponseSchema, backupCreateRequestSchema, backupItemSchema, backupRestoreRequestSchema, banRecordListSchema, banRecordSchema, banRequestBodySchema, banResponseBodySchema, commandHistoryItemSchema, commandHistoryQuerySchema, commandResponseSchema, crashArtifactFieldSchema, crashArtifactSchema, deployCancelRequestSchema, deployCancelResponseSchema, deployProgressSchema, deployRequestSchema, deployResultSchema, deployStatusResponseSchema, diskAlertThresholdsSchema, diskInfoSchema, diskUsageSchema, fileContentResponseSchema, fileEntrySchema, fileInfoResponseSchema, fileListRequestSchema, fileListResponseSchema, fileMkdirRequestSchema, fileMkdirResponseSchema, filePathRequestSchema, fileRenameRequestSchema, fileRenameResponseSchema, fileSaveRequestSchema, fileSaveResponseSchema, fileUploadQuerySchema, fileUploadResponseSchema, instanceCommandRequestBodySchema, instanceDeleteRequestBodySchema, instanceDeleteResponseSchema, instanceEulaRequestBodySchema, instancePropertiesRequestBodySchema, instanceSettingsRequestBodySchema, instanceStartRequestBodySchema, instanceStatusListSchema, instanceStatusSchema, instanceSummarySchema, instanceUpdatePayloadSchema, inventoryItemSchema, ipHistoryEntrySchema, logEntriesSchema, logEntrySchema, machineCredentialCreateBodySchema, machineCredentialCreateResponseSchema, machineCredentialListSchema, machineCredentialSchema, machineCredentialSelfSchema, machineCredentialToggleBodySchema, machineScopeSchema, makeApiEnvelopeSchema, marketInstallRequestSchema, marketInstallResultSchema, marketSearchHitSchema, marketSearchRequestSchema, marketSearchResultSchema, marketVersionFileSchema, marketVersionSchema, marketVersionsRequestSchema, marketVersionsResultSchema, memoryAlertThresholdsSchema, nullDataSchema, overviewDataSchema, paginationSchema, playerDetailsResponseSchema, playerDimensionSchema, playerEventSchema, playerGameModeSchema, playerInventorySchema, playerListSchema, playerPositionSchema, playerPotionEffectSchema, playerSchema, playerSessionSchema, playerStatsSchema, pluginDeleteResultSchema, pluginEnabledRequestSchema, pluginInfoSchema, pluginListSchema, pluginMetaSchema, pluginOverwriteQuerySchema, pluginToggleResultSchema, pluginUpdateCheckResultSchema, pluginUpdateStatusSchema, pluginUploadResultSchema, pushChannelRequestBodySchema, pushChannelStateSchema, pushChannelToggleResponseSchema, restoreConfirmTarget, scheduledTaskSchema, scheduledTaskTypeSchema, serverPropertiesSchema, spawnPointSchema, systemMetricSampleSchema, systemMetricsSeriesSchema, systemStatsSchema, taskCreatePayloadSchema, taskRunHistoryListSchema, taskRunHistorySchema, taskRunStatusSchema, taskUpdatePayloadSchema, updateCheckResultSchema, updatePropertiesResponseSchema, upgradeCancelResponseSchema, upgradeProgressSchema, upgradeRequestSchema, upgradeStageSchema, upgradeStartResponseSchema, upgradeStatusResponseSchema, versionsResponseSchema, weatherTypeSchema, webhookCreatePayloadSchema, webhookDeliverySchema, webhookPlatformSchema, webhookSchema, webhookTestResultSchema, worldDimensionSchema, worldInfoSchema, wsBackupPayloadSchema, wsBackupProgressPayloadSchema, wsEventTypeSchema, wsLogPayloadSchema, wsMessageSchema, wsPerformancePayloadSchema, wsPlayerEventPayloadSchema, wsStatusEventPayloadSchema, wsStatusSnapshotSchema, wsWeatherPayloadSchema, wsWorldUpgradePayloadSchema };
+export { NOTIFICATION_EVENT_TYPES, WEBHOOK_PLATFORMS, WS_EVENT_KINDS, WS_EVENT_TYPES, WS_STATE_RECOVERY, apiEnvelopeSchema, apiErrorEnvelopeSchema, apiKeyRotateResponseSchema, archivedSnapshotGroupSchema, archivedSnapshotListSchema, auditLogItemSchema, auditLogsQuerySchema, authCapabilitiesResponseSchema, authLoginRequestBodySchema, authLogoutResponseSchema, authPasswordChangeRequestBodySchema, authPasswordChangeResponseSchema, authSessionItemSchema, authSessionKickResponseSchema, authSessionResponseSchema, authSessionsResponseSchema, authSetupRequestBodySchema, authSetupResponseSchema, authStatusResponseSchema, authTotpConfirmRequestBodySchema, authTotpConfirmResponseSchema, authTotpDisableRequestBodySchema, authTotpDisableResponseSchema, authTotpEnrollResponseSchema, authTotpStatusResponseSchema, backupAttachRequestSchema, backupAttachResponseSchema, backupCancelResponseSchema, backupCreateRequestSchema, backupItemSchema, backupRestoreRequestSchema, banRecordListSchema, banRecordSchema, banRequestBodySchema, banResponseBodySchema, commandHistoryItemSchema, commandHistoryQuerySchema, commandResponseSchema, crashArtifactFieldSchema, crashArtifactSchema, deployCancelRequestSchema, deployCancelResponseSchema, deployProgressSchema, deployRequestSchema, deployResultSchema, deployStatusResponseSchema, diskAlertThresholdsSchema, diskInfoSchema, diskUsageSchema, fileContentResponseSchema, fileEntrySchema, fileInfoResponseSchema, fileListRequestSchema, fileListResponseSchema, fileMkdirRequestSchema, fileMkdirResponseSchema, filePathRequestSchema, fileRenameRequestSchema, fileRenameResponseSchema, fileSaveRequestSchema, fileSaveResponseSchema, fileUploadQuerySchema, fileUploadResponseSchema, instanceCommandRequestBodySchema, instanceDeleteRequestBodySchema, instanceDeleteResponseSchema, instanceEulaRequestBodySchema, instancePropertiesRequestBodySchema, instanceSettingsRequestBodySchema, instanceStartRequestBodySchema, instanceStatusListSchema, instanceStatusSchema, instanceSummarySchema, instanceUpdatePayloadSchema, inventoryItemSchema, ipHistoryEntrySchema, logEntriesSchema, logEntrySchema, machineCredentialCreateBodySchema, machineCredentialCreateResponseSchema, machineCredentialListSchema, machineCredentialSchema, machineCredentialSelfSchema, machineCredentialToggleBodySchema, machineScopeSchema, makeApiEnvelopeSchema, marketInstallRequestSchema, marketInstallResultSchema, marketSearchHitSchema, marketSearchRequestSchema, marketSearchResultSchema, marketVersionFileSchema, marketVersionSchema, marketVersionsRequestSchema, marketVersionsResultSchema, memoryAlertThresholdsSchema, nullDataSchema, overviewDataSchema, paginationSchema, playerDetailsResponseSchema, playerDimensionSchema, playerEventSchema, playerGameModeSchema, playerInventorySchema, playerListSchema, playerPositionSchema, playerPotionEffectSchema, playerSchema, playerSessionSchema, playerStatsSchema, pluginDeleteResultSchema, pluginEnabledRequestSchema, pluginInfoSchema, pluginListSchema, pluginMetaSchema, pluginOverwriteQuerySchema, pluginToggleResultSchema, pluginUpdateCheckResultSchema, pluginUpdateStatusSchema, pluginUploadResultSchema, pushChannelRequestBodySchema, pushChannelStateSchema, pushChannelToggleResponseSchema, restoreConfirmTarget, scheduledTaskSchema, scheduledTaskTypeSchema, serverPropertiesSchema, spawnPointSchema, systemMetricSampleSchema, systemMetricsSeriesSchema, systemStatsSchema, taskCreatePayloadSchema, taskRunHistoryListSchema, taskRunHistorySchema, taskRunStatusSchema, taskUpdatePayloadSchema, updateCheckResultSchema, updatePropertiesResponseSchema, upgradeCancelResponseSchema, upgradeProgressSchema, upgradeRequestSchema, upgradeStageSchema, upgradeStartResponseSchema, upgradeStatusResponseSchema, versionsResponseSchema, weatherTypeSchema, webhookCreatePayloadSchema, webhookDeliverySchema, webhookPlatformSchema, webhookSchema, webhookTestResultSchema, worldDimensionSchema, worldInfoSchema, wsBackupPayloadSchema, wsBackupProgressPayloadSchema, wsEventTypeSchema, wsLogPayloadSchema, wsMessageSchema, wsPerformancePayloadSchema, wsPlayerEventPayloadSchema, wsStatusEventPayloadSchema, wsStatusSnapshotSchema, wsWeatherPayloadSchema, wsWorldUpgradePayloadSchema };
