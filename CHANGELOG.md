@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.3](https://github.com/wyyfzb/mc-commander/compare/v0.7.2...v0.7.3) (2026-10-06)
+
+
+### Bug Fixes
+
+* **deps:** bump @modelcontextprotocol/sdk from 1.30.0 to 1.32.1 in /mc_manager_web ([#638](https://github.com/wyyfzb/mc-commander/issues/638)) ([8029a09](https://github.com/wyyfzb/mc-commander/commit/8029a09f481b8ac5e20fa3ce2cef8eb13267770e))
+
 ## [0.7.2](https://github.com/wyyfzb/mc-commander/compare/v0.7.1...v0.7.2) (2026-10-06)
 
 
