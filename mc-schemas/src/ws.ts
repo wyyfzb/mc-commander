@@ -150,7 +150,97 @@ export const NOTIFICATION_EVENT_TYPES: ReadonlySet<WsEventType> = new Set([
   'restoreCancelled',
   'taskFailed',
   'webhookDeliveryFailed',
+  // 部署/面板自身升级的终态：与上面同类（都是「发生过的事实」，落库供断线补齐）。
+  // 早先只有服务端本地那份清单含这六项，契约包这份落后了 ⇒ 两边说法不一。
+  'deployComplete',
+  'deployFailed',
+  'deployCancelled',
+  'upgradeComplete',
+  'upgradeFailed',
+  'upgradeCancelled',
 ])
+
+/**
+ * 事件类别——**本仓事件通道唯一的口径**，新加事件必须在这里落一格。
+ *
+ * - `state`：**此刻的状态**（进度、运行态、读数）。晚订阅者必须能直接读到，否则界面上是
+ *   「这一块根本不存在」，不是「少了一条通知」。自愈路径见 `WS_STATE_RECOVERY`。
+ * - `event`：**发生过的瞬间事实**（玩家进出、备份完成）。可丢、可重放；丢一条只是少一条记录。
+ *
+ * 为什么必须声明：两者物理上是不同机制——状态靠快照/轮询/周期重发，事件靠落库 + 游标重放。
+ * 不声明就只能逐通道即兴发挥，而**用补发「边沿事件」去恢复「状态」**会一次犯两个错：
+ * 篡改事实（那条「升级开始」其实发生在十分钟前）与漏掉状态（没有载体的百分比无处显示）。
+ */
+export type WsEventKind = 'state' | 'event'
+
+/**
+ * `state` 类事件的自愈路径（判据：晚订阅者在有限时间内能拿到当前值）：
+ * - `snapshot`：服务端保留在途值，订阅/登记时补发
+ * - `poll`：前端按 REST 轮询权威状态
+ * - `cadence`：该通道由周期性采集驱动，等一个周期即自愈
+ * - `none`：**已知缺口**——读代码确认没有上述任一路径。列在这里是为了让缺口可见，
+ *   而不是留在「以为它会自己好」的状态
+ */
+export type WsStateRecovery = 'snapshot' | 'poll' | 'cadence' | 'none'
+
+export const WS_EVENT_KINDS: Readonly<Record<WsEventType, WsEventKind>> = {
+  // ── state：此刻的状态 ──
+  status: 'state',
+  performanceUpdate: 'state',
+  weatherUpdate: 'state',
+  worldUpgrade: 'state',
+  playerStatsUpdate: 'state',
+  backupProgress: 'state',
+  restoreProgress: 'state',
+  deployProgress: 'state',
+  upgradeProgress: 'state',
+  systemStatsUpdate: 'state',
+  // ── event：发生过的事实 ──
+  // `log` 属事件：每一行是「发生过」而不是「此刻的值」，丢行不影响历史（终端历史走 REST）。
+  log: 'event',
+  playerJoin: 'event',
+  playerLeave: 'event',
+  playerDeath: 'event',
+  playerRespawn: 'event',
+  playerChat: 'event',
+  playerSleep: 'event',
+  achievement: 'event',
+  backupStart: 'event',
+  backupComplete: 'event',
+  backupFailed: 'event',
+  backupSkipped: 'event',
+  backupCancelled: 'event',
+  restoreStart: 'event',
+  restoreComplete: 'event',
+  restoreFailed: 'event',
+  restoreCancelled: 'event',
+  taskExecute: 'event',
+  taskFailed: 'event',
+  webhookDeliveryFailed: 'event',
+  deployComplete: 'event',
+  deployFailed: 'event',
+  deployCancelled: 'event',
+  circuit_breaker: 'event',
+  upgradeComplete: 'event',
+  upgradeFailed: 'event',
+  upgradeCancelled: 'event',
+  error: 'event',
+}
+
+export const WS_STATE_RECOVERY: Readonly<Partial<Record<WsEventType, WsStateRecovery>>> = {
+  status: 'snapshot',
+  deployProgress: 'snapshot',
+  upgradeProgress: 'snapshot',
+  worldUpgrade: 'snapshot',
+  backupProgress: 'poll',
+  restoreProgress: 'poll',
+  systemStatsUpdate: 'cadence',
+  // 以下三条是声明出来的缺口：`stats-collector` 只在**值变化时**推送，没有「订阅即补一帧」，
+  // 也没有对应的 REST 读法 ⇒ 值长时间不变时，晚订阅者拿不到当前值。
+  performanceUpdate: 'none',
+  weatherUpdate: 'none',
+  playerStatsUpdate: 'none',
+}
 
 export type WsEventType = (typeof WS_EVENT_TYPES)[number]
 export type WsMessage = z.infer<typeof wsMessageSchema>

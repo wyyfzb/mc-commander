@@ -9,6 +9,8 @@ import {
   paginationSchema,
   wsMessageSchema,
   WS_EVENT_TYPES,
+  WS_EVENT_KINDS,
+  WS_STATE_RECOVERY,
   fileEntrySchema,
   auditLogItemSchema,
   deployRequestSchema,
@@ -963,5 +965,44 @@ describe('信封的未知负载字段（zod 4 起 z.unknown() 不再隐式可选
     }
     expect(apiErrorEnvelopeSchema.safeParse(err).success).toBe(true)
     expect(apiErrorEnvelopeSchema.safeParse({ ...err, details: null }).success).toBe(true)
+  })
+})
+
+describe('事件通道口径（状态 vs 事件）', () => {
+  it('每个事件都被分类，且没有多余键', () => {
+    expect(Object.keys(WS_EVENT_KINDS).sort()).toEqual([...WS_EVENT_TYPES].sort())
+  })
+
+  it('state 类必须声明自愈路径，event 类不得声明', () => {
+    const states = WS_EVENT_TYPES.filter((t) => WS_EVENT_KINDS[t] === 'state')
+    expect(Object.keys(WS_STATE_RECOVERY).sort()).toEqual([...states].sort())
+  })
+
+  it('落库面只收「发生过的事实」：与 state 类不相交', () => {
+    for (const t of NOTIFICATION_EVENT_TYPES) {
+      expect(WS_EVENT_KINDS[t], `${t} 是 state 类，进度写库是纯放大`).toBe('event')
+    }
+  })
+
+  it('落库面覆盖服务端实际落库的部署/升级终态（两处清单曾不一致）', () => {
+    for (const t of [
+      'deployComplete',
+      'deployFailed',
+      'deployCancelled',
+      'upgradeComplete',
+      'upgradeFailed',
+      'upgradeCancelled',
+    ] as const) {
+      expect(NOTIFICATION_EVENT_TYPES.has(t)).toBe(true)
+    }
+  })
+
+  it('已知缺口是显式清单：多一个缺口就得改这里', () => {
+    const gaps = Object.entries(WS_STATE_RECOVERY)
+      .filter(([, path]) => path === 'none')
+      .map(([type]) => type)
+      .sort()
+    // 缺口不是「可以忽略」，而是「已登记、等 owner 定」。改这个数组＝承认又多了一个。
+    expect(gaps).toEqual(['performanceUpdate', 'playerStatsUpdate', 'weatherUpdate'])
   })
 })
