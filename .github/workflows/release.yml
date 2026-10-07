@@ -287,9 +287,8 @@ jobs:
           API="https://gitee.com/api/v5/repos/$GITEE_OWNER/$GITEE_REPO"
           AUTH="Authorization: token $GITEE_TOKEN"
           # Gitee 的 API 与附件接口都会抖动，而 GitHub 给 run: 的默认 shell 是 `bash -e`：
-          # 任何一处没 guard 的 curl 失败都会让脚本**带着裸退出码死在半路、且不留消息**
-          # （实测过一次 `Process completed with exit code 28`，零消息，镜像只更新到一半）。
-          # 故统一带重试，并按「必须成功 / 尽力而为」分别显式处理。
+          # 未 guard 的 curl 一失败就会让脚本带着裸退出码中止。故统一带重试，
+          # 并按「必须成功 / 尽力而为」分别显式处理。
           RETRY=(--retry 2 --retry-delay 5 --retry-all-errors)
 
           # 取 release：存在则复用其 id，不存在才创建。
@@ -330,8 +329,7 @@ jobs:
 
             # 幂等：同名附件先删再传（Gitee 附件可增删，重跑安全）。
             # 同名可能**不止一条**（Gitee 允许重名：一次「查询失败 ⇒ 跳过删除 ⇒ 直接上传」
-            # 就会留下重复，实测 v0.7.1 上出现过两份 SHA256SUMS.txt），故列出全部同名 id
-            # 逐个删除，否则重复会随每次重跑累积。
+            # 就会留下重复），故列出全部同名 id 逐个删除，否则重复会随每次重跑累积。
             OLDS=$(curl -sS "${RETRY[@]}" --max-time 30 -H "$AUTH" \
                      "$API/releases/$RID/attach_files?per_page=100" \
                    | jq -r --arg n "$f" '.[] | select(.name==$n) | .id' || true)
@@ -346,17 +344,14 @@ jobs:
               echo "已清理同名旧附件 $f：$(echo $OLDS | wc -w) 条"
             fi
 
-            # 上传必须自带重试：这条链路（跨境 + Gitee 附件接口）会在 300s 处超时或被 reset，
-            # 实测 v0.7.3 两个附件都因此没传上去，留下一个残缺镜像。curl 默认只重试它认定的
-            # 「瞬时错误」，故显式加 --retry-all-errors 覆盖超时/连接重置；幂等由上面的
-            # 「先删同名附件」保证，重试不会产生重复附件。
-            # --http1.1 + 关掉 Expect: 100-continue 针对实测签名：大 body 的 multipart POST 会
-            # 「300s 后 0 字节收到」（连响应都没开始），而同一时刻 93B 的小附件能传上去。
-            # curl 对大 body 会先发 Expect: 100-continue 等应答，配 HTTP/2 在跨境链路上容易卡死。
-            # --max-time 放宽到 30 分钟：curl 那句 “0 bytes received” 对 POST 而言往往只是
-            # 「超时前还没传完」（v0.7.3 那次 7.5MB 约用 4 分钟），不等于连接死了。
-            # 真正卡死改由 --speed-limit/--speed-time 判：60 秒内平均不足 1KB/s 才放弃，
-            # 于是「慢但在动」能传完、「不动」只等一分钟就重试。
+            # 上传必须自带重试：跨境上传会在超时或 reset 上半途失败，留下残缺镜像。
+            # curl 默认只重试它认定的「瞬时错误」，故显式加 --retry-all-errors；
+            # 幂等由上面的「先删同名附件」保证。
+            # --http1.1 + 关掉 Expect: 100-continue：curl 对大 body 会先发 100-continue 等应答，
+            # 配 HTTP/2 在跨境链路上会卡在「连响应都没开始」的状态。
+            # --max-time 给到 30 分钟：curl 那句 “0 bytes received” 对 POST 而言往往只是
+            # 「超时前还没传完」，不等于连接死了。真正卡死交给 --speed-limit/--speed-time 判
+            # （60 秒内平均不足 1KB/s 才放弃）⇒「慢但在动」能传完，「不动」一分钟就重试。
             curl -fsS --max-time 1800 --speed-limit 1024 --speed-time 60 --http1.1 -H "Expect:" \
               --retry 3 --retry-delay 5 --retry-all-errors \
               -X POST -H "$AUTH" -F "file=@/tmp/$f" "$API/releases/$RID/attach_files" >/dev/null \
