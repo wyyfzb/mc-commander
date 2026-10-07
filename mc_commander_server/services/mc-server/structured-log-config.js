@@ -1,10 +1,15 @@
 /**
- * 结构化日志通道：面板自带一份 log4j2 配置，让实例同时吐出「人类可读纯文本」与「逐行 JSON」。
+ * 结构化日志通道：面板自带一份 log4j2 配置，让实例的每条日志都带上类型化字段。
  *
  * 为什么要有它：MC 用 log4j2 输出，而 Mojang 随包的配置只有纯文本 ⇒ 面板只能靠正则从文本里
  * **剥**出线程名/级别/前缀（解析出来的，不是读到的），前缀形态一变就静默失效。本模块在实例目录
- * 写一份自己的配置、并让服务端从它启动（`-Dlog4j.configurationFile`），于是同一批日志多出一份
- * 字段是**读到**的 JSON 行；纯文本通道逐字节保持不变。
+ * 写一份自己的配置、并让服务端从它启动（`-Dlog4j.configurationFile`），字段由此变成**读到的**。
+ *
+ * 三条通道各司其职（覆盖的是 stdout 与新增文件，`logs/latest.log` 保持原样）：
+ * - `SysOut`（stdout）＝ JSON 行：面板实时摄取，`normalizeLogText` 还原成既有纯文本形态交给
+ *   展示与解析（见 output-parser.js），于是下游四条消费路径与格式变化解耦；
+ * - `logs/latest.log` ＝ 纯文本：给人看、给接管续读与面板重启回填读（pattern 与 Mojang 逐字符一致）；
+ * - `logs/mc-commander.jsonl` ＝ JSON 行：面板的持久结构化记录（诊断按 level/logger 取用）。
  *
  * 三条选型依据（均为实测，不是推断）：
  * - **不引新依赖**：26.3 的 `libraries/` 里没有 Jackson、也没有 `log4j-layout-template-json`，但
@@ -14,13 +19,12 @@
  * - **不复用 Mojang 配置里的 `Queue`/`Listener` appender**：它们是 `com.mojang:logging` 的自有插件类，
  *   版本间可能增删，而**配置初始化失败会让 log4j 退回默认配置**（只剩 ERROR 级）⇒ 面板连带丢掉
  *   全部 INFO。故本配置只用 `log4j-core` 自带的 appender/filter，跨版本自洽。
- * - **纯文本格式原样照抄 Mojang**（`[%d{HH:mm:ss}] [%t/%level]: %msg{nolookups}`）：它是面板既有
- *   正则、以及 `logs/latest.log` 全部消费方（接管续读、面板重启回填）的既有契约，改它等于同时改
- *   三处消费侧；日志**展示**要继续给人看，所以 JSON 走**另一个文件**而不是替换 latest.log。
+ * - **latest.log 的 pattern 原样照抄 Mojang**：它是接管续读与面板重启回填的既有契约，改它等于同时
+ *   改两处消费侧，而那段文本本来就是给人看的。
  *
  * 版本门槛：`%encode` 在更老的 log4j 上未经验证，而配置初始化失败会连带丢掉日志 ⇒ 只在实例自带的
  * log4j-core 版本 ≥ 已验证下限时启用；取不到版本（Paper/Forge 等非标准 libraries 布局）同样不启用。
- * **不启用即今天的行为**，实例可用性不受影响。
+ * **不启用即回落**：stdout 仍是纯文本，面板两条路径都认（见 output-parser.js 的双格式兼容）。
  */
 import fs from 'fs';
 import path from 'path';
@@ -47,7 +51,7 @@ const MIN_VERIFIED_LOG4J = [2, 24, 1];
 const JSONL_PATTERN =
   '{"ts":"%d{yyyy-MM-dd HH:mm:ss}","lvl":"%level","thr":"%t","logger":"%logger","msg":"%encode{%msg}{json}"}%n';
 
-/** 纯文本 pattern：与 Mojang 随包配置逐字符一致，是面板既有解析的契约 */
+/** 纯文本 pattern：与 Mojang 随包配置逐字符一致，是 latest.log 消费方的契约 */
 const PLAIN_PATTERN = '[%d{HH:mm:ss}] [%t/%level]: %msg{nolookups}%n';
 
 /** 渲染覆盖配置。无用户输入参与拼接，故无需转义。 */
@@ -56,7 +60,7 @@ export function renderStructuredLogConfig() {
 <Configuration status="WARN">
   <Appenders>
     <Console name="SysOut" target="SYSTEM_OUT">
-      <PatternLayout pattern="${PLAIN_PATTERN}"/>
+      <PatternLayout pattern='${JSONL_PATTERN}'/>
     </Console>
     <RollingRandomAccessFile name="File" fileName="logs/latest.log" filePattern="logs/%d{yyyy-MM-dd}-%i.log.gz">
       <PatternLayout pattern="${PLAIN_PATTERN}"/>

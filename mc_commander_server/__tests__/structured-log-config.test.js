@@ -121,16 +121,17 @@ function createInstance(serverPath) {
 }
 
 describe('覆盖配置的渲染契约', () => {
-  it('纯文本通道与 Mojang 一致：latest.log + 逐字符 pattern + 网络包过滤 + 三个 appender 都挂上', () => {
+  it('三条通道各司其职：stdout 结构化、latest.log 纯文本、网络包过滤、三个 appender 都挂上', () => {
     const xml = renderStructuredLogConfig();
-    // 三个 appender 齐备：控制台（面板实时摄取）、纯文本文件（接管续读/重启回填）、JSONL（结构化）
-    expect(xml).toContain('<Console name="SysOut"');
-    expect(xml).toContain('<RollingRandomAccessFile name="File"');
-    expect(xml).toContain('<RollingRandomAccessFile name="Jsonl"');
     for (const ref of ['SysOut', 'File', 'Jsonl']) {
       expect(xml).toContain(`<AppenderRef ref="${ref}"/>`);
     }
-    // latest.log 的文件名与格式是既有消费方的契约，改成别的路径/格式等于同时改三处消费侧
+    // stdout 是面板的实时结构化来源 ⇒ SysOut 必须是 JSON pattern（展示层负责还原成纯文本）
+    expect(xml).toMatch(/<Console name="SysOut"[^>]*>\s*<PatternLayout pattern='\{"ts":/);
+    // latest.log 给人看、给接管续读与面板重启回填读 ⇒ 必须仍是 Mojang 那套逐字符纯文本
+    expect(xml).toMatch(
+      /<RollingRandomAccessFile name="File"[^>]*>\s*<PatternLayout pattern="\[%d\{HH:mm:ss\}\] \[%t\/%level\]: %msg\{nolookups\}%n"\/>/,
+    );
     expect(xml).toContain('fileName="logs/latest.log"');
     expect(xml).toContain(MOJANG_PLAIN_PATTERN);
     // NETWORK_PACKETS 标记必须继续被拒，否则网络包日志会灌满面板的日志视图

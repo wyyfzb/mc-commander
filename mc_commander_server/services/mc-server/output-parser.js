@@ -23,6 +23,64 @@ function logMessageBody(line) {
   return line.replace(/^(?:\[[^\]]*\]\s*)*:\s*/, '');
 }
 
+/**
+ * 解析一行结构化日志（面板自带 log4j2 配置产出，见 structured-log-config.js）。
+ *
+ * 判据是「像我们的日志行」而不只是「能被 JSON 解析」：stdout 上除 log4j 行外还有 JVM 警告、
+ * bundler 提示、库直接打到 stderr 的堆栈等任意内容，认错了就会把无关输出当日志渲染。
+ * 故要求对象形态且 `msg`/`lvl` 均为字符串，其余字段缺失按空串补。
+ */
+export function parseStructuredLogLine(line) {
+  const trimmed = String(line).trim();
+  if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) return null;
+  let parsed;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== 'object') return null;
+  if (typeof parsed.msg !== 'string' || typeof parsed.lvl !== 'string') return null;
+  return {
+    ts: typeof parsed.ts === 'string' ? parsed.ts : '',
+    lvl: parsed.lvl,
+    thr: typeof parsed.thr === 'string' ? parsed.thr : '',
+    logger: typeof parsed.logger === 'string' ? parsed.logger : '',
+    msg: parsed.msg,
+  };
+}
+
+/**
+ * 把结构化日志行还原成面板既有的人类可读形态 `[HH:mm:ss] [线程/级别]: 消息`。
+ *
+ * 这个形态是面板全部下游消费方的契约（噪音过滤、事件正则、`lastOutput` 呈现、日志查看面板），
+ * 所以「展示层还原」必须逐字符对齐它而不是另造格式；消息里的换行照原样保留——纯文本通道下
+ * 多行消息本就铺成多行，二者行为一致。缺 `ts` 时按当前时刻补，避免出现 `[]` 这种破形态。
+ */
+export function renderStructuredLogLine(entry) {
+  const time = /(\d{2}:\d{2}:\d{2})/.exec(entry.ts || '')?.[1] ?? formatClock(new Date());
+  return `[${time}] [${entry.thr}/${entry.lvl}]: ${entry.msg}`;
+}
+
+function formatClock(date) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
+/**
+ * 把一段进程输出规范成面板既有的纯文本形态：结构化行还原，其余行原样（逐行处理）。
+ * 「结构化行与其等价纯文本行的规范结果完全一致」有用例锁住——这是格式切换不回归的依据。
+ */
+export function normalizeLogText(text) {
+  return String(text)
+    .split('\n')
+    .map((line) => {
+      const structured = parseStructuredLogLine(line);
+      return structured ? renderStructuredLogLine(structured) : line;
+    })
+    .join('\n');
+}
+
 export function _parseOutput(text) {
   const lines = text.split('\n').filter((l) => l.trim());
 

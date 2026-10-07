@@ -19,10 +19,14 @@ import config from '../../config.js';
 import { InstanceModel } from '../../db/index.js';
 import { reconcileTempBans } from '../../utils/ban-reconcile.js';
 import { logger } from '../../utils/logger.js';
+import { normalizeLogText } from './output-parser.js';
 
 // 日志单行最大长度：超长行截断并加标记，防超长输出（崩溃堆栈/异常打印）撑爆
 // logBuffer 与 WebSocket 广播（单行截断）。
 const LOG_LINE_MAX_LENGTH = 4096;
+
+// 流式输出的残留上限：超过即强制吐出（对无换行的刷屏输出兜底，避免 remainder 无限增长）
+const STREAM_REMAINDER_MAX_CHARS = 64 * 1024;
 
 /// 单行日志截断：按行截断超过 LOG_LINE_MAX_LENGTH 的行，超长部分加 "…[truncated]" 标记。
 function truncateLogText(text) {
@@ -209,6 +213,9 @@ export function _initializeRuntimeState() {
   this.startTime = Date.now();
   // 清空上一次会话的日志缓冲，避免冷启动时混杂旧日志
   this.logBuffer = [];
+  // 流式输出的按行组装残留同样按次清零：上一轮的尾巴不能混进新一轮
+  this._stdoutRemainder = '';
+  this._stderrRemainder = '';
   // 服务器启动时从 level.dat 读取初始天气状态和世界出生点
   const initialWeather = this._readWeatherFromLevelDat();
   if (initialWeather) {
@@ -247,11 +254,14 @@ export function _filterLogNoise(text) {
 }
 
 /** 日志文本统一摄取入口：stdout 管道、stderr 与接管实例的文件续读共用——
- *  过滤（stdout 语义）→ 单行截断→ logBuffer 滚动 + WS 推送
- *  + 输出解析。三条来源共用可保证接管实例的日志行为与常规实例完全一致。 */
+ *  规范化（结构化行还原为纯文本形态）→ 过滤（stdout 语义）→ 单行截断→ logBuffer 滚动 +
+ *  WS 推送 + 输出解析。三条来源共用可保证接管实例的日志行为与常规实例完全一致。 */
 export function _ingestLogText(text, type = 'stdout') {
-  this.lastOutput = text;
-  const filtered = type === 'stdout' ? this._filterLogNoise(text) : text;
+  // 面板自带配置把 JSON 送上 stdout（见 structured-log-config.js），此处先还原成既有纯文本形态：
+  // 噪音过滤、事件正则、lastOutput 呈现、日志查看四条下游路径因此与格式变化解耦
+  const normalized = normalizeLogText(text);
+  this.lastOutput = normalized;
+  const filtered = type === 'stdout' ? this._filterLogNoise(normalized) : normalized;
   if (!filtered.trim()) return;
   const finalText = truncateLogText(filtered);
   this.logBuffer.push({ time: Date.now(), text: finalText, type });
@@ -260,19 +270,59 @@ export function _ingestLogText(text, type = 'stdout') {
   if (type === 'stdout') this._parseOutput(finalText);
 }
 
+/**
+ * 按行组装流式输出后摄取。
+ *
+ * chunk 边界会把一行切成两半：纯文本时代价只是显示难看，而结构化行被切开后连 JSON 解析都
+ * 不成立（半截花括号会以原始形态露给用户）⇒ 未见到换行的尾巴留到下一 chunk 再拼。
+ * 组装只作用于「流」这条来源；接管续读走的是按行切分的文件读取，自带 remainder 处理。
+ */
+export function _ingestStreamChunk(data, type) {
+  const key = type === 'stderr' ? '_stderrRemainder' : '_stdoutRemainder';
+  const raw = (this[key] || '') + data.toString();
+  const lastNewline = raw.lastIndexOf('\n');
+  if (lastNewline < 0) {
+    // 无换行的超长输出（进度条式刷屏）：按上限强制吐出，避免 remainder 无限增长
+    if (raw.length > STREAM_REMAINDER_MAX_CHARS) {
+      this[key] = '';
+      this._ingestLogText(raw, type);
+      return;
+    }
+    this[key] = raw;
+    return;
+  }
+  this[key] = raw.slice(lastNewline + 1);
+  const body = raw.slice(0, lastNewline + 1);
+  if (body.trim()) this._ingestLogText(body, type);
+}
+
+/** 进程退出时补吐残留尾巴：末行没有换行也不会丢（今天直接摄取时它是会显示的） */
+export function _flushStreamRemainders() {
+  for (const [key, type] of [
+    ['_stdoutRemainder', 'stdout'],
+    ['_stderrRemainder', 'stderr'],
+  ]) {
+    const rest = this[key];
+    this[key] = '';
+    if (rest && rest.trim()) this._ingestLogText(rest, type);
+  }
+}
+
 export function _attachOutputStreamListeners() {
   this.process.stdout.on('data', (data) => {
-    this._ingestLogText(data.toString(), 'stdout');
+    this._ingestStreamChunk(data, 'stdout');
   });
 
   this.process.stderr.on('data', (data) => {
-    this._ingestLogText(data.toString(), 'stderr');
+    this._ingestStreamChunk(data, 'stderr');
   });
 }
 
 export function _attachExitListener() {
   this.process.on('exit', (code) => {
     this.isRunning = false;
+    // 末行往往没有换行：退出前补吐组装残留，否则最后一行会凭空消失
+    this._flushStreamRemainders();
     this.process = null;
     // 关闭前的最终存档已落盘（graceful stop 保存世界）：标记大小缓存失效
     this._worldSizeDirty = true;
