@@ -254,11 +254,12 @@ describe('MCServerInstance lifecycle / RCON / stats timers', () => {
   // 进程生命周期：stop / kill / exit
   // ══════════════════════════════════════════
   describe('stop', () => {
-    it('sends stop command to process stdin', () => {
+    it('sends stop command to process stdin', async () => {
       const instance = createInstance();
       instance.start();
       instance.stop();
-      expect(lastProc.stdin.write).toHaveBeenCalledWith('stop\n');
+      // 停机先试结构化通道，MSMP 不可用才回退命令 ⇒ 命令下发晚一个微任务
+      await vi.waitFor(() => expect(lastProc.stdin.write).toHaveBeenCalledWith('stop\n'));
     });
 
     it('throws when server is not running', () => {
@@ -309,13 +310,13 @@ describe('MCServerInstance lifecycle / RCON / stats timers', () => {
   });
 
   describe('restart', () => {
-    it('stops running server then starts again after 3s delay', () => {
+    it('stops running server then starts again after 3s delay', async () => {
       const instance = createInstance();
       instance.start();
       const firstProc = lastProc;
 
       instance.restart();
-      expect(firstProc.stdin.write).toHaveBeenCalledWith('stop\n');
+      await vi.waitFor(() => expect(firstProc.stdin.write).toHaveBeenCalledWith('stop\n'));
 
       // 模拟服务器在 3 秒内退出
       firstProc.emit('exit', 0);

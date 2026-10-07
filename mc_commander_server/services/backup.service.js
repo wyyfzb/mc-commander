@@ -427,7 +427,7 @@ export class BackupService {
             logger.info(`[Backup] Sending save-off for ${instanceId}...`);
             await instance.sendCommandWithResponse('save-off', { timeout: 3000 });
             logger.info(`[Backup] Sending save-all flush for ${instanceId}...`);
-            await instance.sendCommandWithResponse('save-all flush', { timeout: 5000 });
+            await instance.saveWorld();
             // 等待磁盘写入完成
             await new Promise((resolve) => setTimeout(resolve, 2000));
           } catch (rconErr) {

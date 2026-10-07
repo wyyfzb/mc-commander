@@ -22,6 +22,12 @@
 
 /** 单次结构化写超时：与查询同档，写操作要等服务器真正落地 */
 export const MSMP_WRITE_TIMEOUT_MS = 5000;
+/**
+ * 停机的结构化超时单独收短：调用方在停机路径上会「等进程退出 → 超时强杀」，
+ * 而服务端可能正卡着不答（这正是要停它的原因）；等满一个查询超时再回退命令，
+ * 会让优雅停机白等好几秒。实测健康服务端 27ms 就回 `true`。
+ */
+export const MSMP_STOP_TIMEOUT_MS = 1500;
 
 /** 原版封禁条目里的 `source`：控制台/RCON 下发时原版写的就是它，保持一致 */
 const COMMAND_SOURCE = 'Server';
@@ -43,15 +49,15 @@ function _resultHasIp(result, ip) {
  *
  * @param {{method: string, params: unknown[], verify?: (result: unknown) => boolean,
  *          unverifiedMessage?: string} | null} structured 结构化通道（null = 该方法无结构化等价物）
- * @param {() => Promise<unknown>} runCommand 等价的命令通道
- * @returns {Promise<'msmp' | 'command'>} 实际生效的通道
+ * @param {(() => Promise<unknown>) | null} runCommand 等价的命令通道（null = 该动作没有命令等价物）
+ * @returns {Promise<'msmp' | 'command' | 'skipped'>} 实际生效的通道；skipped = 无命令等价物且结构化通道不可用
  */
 export async function _writeViaPreferredChannel(structured, runCommand) {
   if (structured) {
     const result = await this._msmpRequest(
       structured.method,
       structured.params,
-      MSMP_WRITE_TIMEOUT_MS,
+      structured.timeoutMs ?? MSMP_WRITE_TIMEOUT_MS,
     );
     if (result !== null && result !== undefined) {
       // 只在成功时置能力位：写失败可能是参数/对象问题，不足以判定整条通道不可用
@@ -62,8 +68,147 @@ export async function _writeViaPreferredChannel(structured, runCommand) {
       throw err;
     }
   }
+  // 没有等价命令 ⇒ 这条属性本次没法在运行中生效（调用方据此计入「需重启」）
+  if (!runCommand) return 'skipped';
   await runCommand();
   return 'command';
+}
+
+/**
+ * 面板属性键 → MSMP 服务器设置方法。
+ *
+ * 逐条实测（26.3）核对过「setter 回读＝server.properties 落盘值」，单位与 properties 一致；
+ * 两处必须留意的实测结论：
+ * - `player_idle_timeout` 的 schema 与参数名都写 `seconds`，**实测是分钟**（设 120 → 服务端日志
+ *   「Update player idle timeout from 0 minutes to 120 minutes」、落盘 `player-idle-timeout=120`），
+ *   与面板 UI（分钟）同单位，故**直接透传不换算**；
+ * - `status_heartbeat_interval` 与 `status_replies` 两个 setter 在 26.3 不生效（前者设 7 回读 0
+ *   且文件无变化、后者调用失败），**不纳入**。
+ *
+ * `fallbackCommand` 只在这 5 个键上存在（原版有等价命令）；其余键在 MSMP 不可用时退回
+ * 「写文件 + 提示重启」这条既有路径，不假造命令。
+ */
+export const SERVER_SETTING_METHODS = {
+  'white-list': {
+    method: 'minecraft:serversettings/use_allowlist/set',
+    toValue: (v) => String(v).toLowerCase() === 'true',
+    fallbackCommand: (v) => (String(v).toLowerCase() === 'true' ? 'whitelist on' : 'whitelist off'),
+  },
+  'enforce-whitelist': {
+    method: 'minecraft:serversettings/enforce_allowlist/set',
+    toValue: (v) => String(v).toLowerCase() === 'true',
+    fallbackCommand: (v) =>
+      String(v).toLowerCase() === 'true' ? 'whitelist enforce on' : 'whitelist enforce off',
+  },
+  difficulty: {
+    method: 'minecraft:serversettings/difficulty/set',
+    toValue: (v) => String(v),
+    fallbackCommand: (v) => `difficulty ${v}`,
+  },
+  gamemode: {
+    method: 'minecraft:serversettings/game_mode/set',
+    toValue: (v) => String(v),
+    fallbackCommand: (v) => `defaultgamemode ${v}`,
+  },
+  'force-gamemode': {
+    method: 'minecraft:serversettings/force_game_mode/set',
+    toValue: (v) => String(v).toLowerCase() === 'true',
+  },
+  'max-players': {
+    method: 'minecraft:serversettings/max_players/set',
+    toValue: (v) => Number(v),
+  },
+  motd: { method: 'minecraft:serversettings/motd/set', toValue: (v) => String(v) },
+  'view-distance': {
+    method: 'minecraft:serversettings/view_distance/set',
+    toValue: (v) => Number(v),
+  },
+  'simulation-distance': {
+    method: 'minecraft:serversettings/simulation_distance/set',
+    toValue: (v) => Number(v),
+  },
+  'spawn-protection': {
+    method: 'minecraft:serversettings/spawn_protection_radius/set',
+    toValue: (v) => Number(v),
+  },
+  'allow-flight': {
+    method: 'minecraft:serversettings/allow_flight/set',
+    toValue: (v) => String(v).toLowerCase() === 'true',
+  },
+  'player-idle-timeout': {
+    method: 'minecraft:serversettings/player_idle_timeout/set',
+    toValue: (v) => Number(v),
+    fallbackCommand: (v) => `setidletimeout ${v}`,
+  },
+  'hide-online-players': {
+    method: 'minecraft:serversettings/hide_online_players/set',
+    toValue: (v) => String(v).toLowerCase() === 'true',
+  },
+  'op-permission-level': {
+    method: 'minecraft:serversettings/operator_user_permission_level/set',
+    toValue: (v) => Number(v),
+  },
+  'entity-broadcast-range-percentage': {
+    method: 'minecraft:serversettings/entity_broadcast_range/set',
+    toValue: (v) => Number(v),
+  },
+};
+
+/** 能运行期热改的属性键（`restartRequired` 的判据与前端热改标记都以它为准） */
+export const SERVER_SETTING_KEYS = new Set(Object.keys(SERVER_SETTING_METHODS));
+
+/**
+ * 运行期应用一条面板属性。
+ *
+ * 判据用**setter 自己的回读值**：MSMP 的 setter 返回它实际生效的值，值不一致即没生效
+ * （实测 `status_heartbeat_interval` 就是这样被识别为静默失效的），据此报错而不是报成功。
+ *
+ * @returns {Promise<'msmp' | 'command' | 'skipped'>} skipped = 该键无结构化方法，或
+ *   MSMP 不可用且没有等价命令（此时调用方应把它计入「需重启」）
+ */
+export function applyServerSetting(key, rawValue) {
+  const spec = SERVER_SETTING_METHODS[key];
+  if (!spec) return Promise.resolve('skipped');
+  const value = spec.toValue(rawValue);
+  const runCommand = spec.fallbackCommand
+    ? () => this.sendCommand(spec.fallbackCommand(rawValue))
+    : null;
+  return this._writeViaPreferredChannel(
+    {
+      method: spec.method,
+      params: [value],
+      verify: (result) => result === value,
+      unverifiedMessage: `${key} 未在运行中生效：服务端返回的值与提交值不一致`,
+    },
+    runCommand,
+  );
+}
+
+/** 让世界落盘：`flush=true` 等价 `save-all flush`（实测返回 `true`） */
+export function saveWorld() {
+  return this._writeViaPreferredChannel(
+    {
+      method: 'minecraft:server/save',
+      params: [true],
+      verify: (result) => result === true,
+      unverifiedMessage: '保存世界未成功：服务端未确认落盘',
+    },
+    () => this.sendCommandWithResponse('save-all flush', { timeout: 5000 }),
+  );
+}
+
+/** 停机：实测 `server/stop` 会在关服前回 `true`（27ms），故不会误触发回退重发 */
+export function stopServer() {
+  return this._writeViaPreferredChannel(
+    {
+      method: 'minecraft:server/stop',
+      params: [],
+      timeoutMs: MSMP_STOP_TIMEOUT_MS,
+      verify: (result) => result === true,
+      unverifiedMessage: '停机未生效：服务端未确认',
+    },
+    () => this.sendCommand('stop'),
+  );
 }
 
 /** 加入白名单：MSMP `allowlist/add` ↔ 命令 `whitelist add` */
@@ -171,7 +316,13 @@ export function pardonIp(ip) {
 
 export default {
   MSMP_WRITE_TIMEOUT_MS,
+  MSMP_STOP_TIMEOUT_MS,
+  SERVER_SETTING_METHODS,
+  SERVER_SETTING_KEYS,
   _writeViaPreferredChannel,
+  applyServerSetting,
+  saveWorld,
+  stopServer,
   whitelistAdd,
   whitelistRemove,
   opPlayer,

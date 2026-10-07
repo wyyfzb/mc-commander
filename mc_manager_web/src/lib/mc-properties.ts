@@ -4,7 +4,8 @@
  * 服务端契约：mc_commander_server/services/instance-properties.service.js
  * - GET /properties 对 SENSITIVE_PROPERTIES 11 键返回 '********' 占位符
  * - PUT /properties 提交占位符视为未修改（沿用磁盘现值），提交其他值整批 400 拒绝
- * - RUNTIME_COMMAND_MAP 4 键可运行期热改（走斜杠命令），其余属性需重启生效
+ * - 服务端 `SERVER_SETTING_METHODS`（15 键）可运行期热改：优先走 MSMP 结构化 setter，
+ *   MSMP 不可用时其中 5 键退回原版等价命令，其余键退回「写文件 + 重启生效」
  * - WRITABLE_PROPERTIES 白名单（isWritable 依据）；未知键提交会被 400 拒绝
  *
  * 默认值以 vanilla server.properties 官方默认值为准（版本差异在属性注释中标注）。
@@ -60,14 +61,23 @@ export const SENSITIVE_PROPERTY_KEYS: ReadonlySet<string> = new Set([
   'management-server-tls-keystore-password',
 ])
 
-/** 运行期热改键（4 键，与服务端 RUNTIME_COMMAND_MAP 保持一致） */
+/** 运行期热改键（15 键，与服务端 `SERVER_SETTING_METHODS` 一致；判据是逐条实测过的 setter 回读） */
 export const HOT_RELOAD_KEYS: ReadonlySet<string> = new Set([
   'white-list',
   'enforce-whitelist',
   'difficulty',
   'gamemode',
-  // 对应服务端 RUNTIME_COMMAND_MAP：改这项走 /setidletimeout，无需重启
+  'force-gamemode',
+  'max-players',
+  'motd',
+  'view-distance',
+  'simulation-distance',
+  'spawn-protection',
+  'allow-flight',
   'player-idle-timeout',
+  'hide-online-players',
+  'op-permission-level',
+  'entity-broadcast-range-percentage',
 ])
 
 /** 判断属性值是否为布尔（server.properties 中布尔值为 "true"/"false"） */
@@ -136,7 +146,7 @@ export const SERVER_PROPERTY_DEFS: PropertyDef[] = [
     type: 'checkbox',
     defaultValue: 'false',
     isSensitive: false,
-    isHotReload: false,
+    isHotReload: true,
     isWritable: true,
   },
   {
@@ -147,7 +157,7 @@ export const SERVER_PROPERTY_DEFS: PropertyDef[] = [
     type: 'input',
     defaultValue: '16',
     isSensitive: false,
-    isHotReload: false,
+    isHotReload: true,
     isWritable: true,
   },
   {
@@ -159,7 +169,7 @@ export const SERVER_PROPERTY_DEFS: PropertyDef[] = [
     type: 'checkbox',
     defaultValue: 'false',
     isSensitive: false,
-    isHotReload: false,
+    isHotReload: true,
     isWritable: true,
   },
   {
@@ -214,7 +224,7 @@ export const SERVER_PROPERTY_DEFS: PropertyDef[] = [
     type: 'input',
     defaultValue: '20',
     isSensitive: false,
-    isHotReload: false,
+    isHotReload: true,
     isWritable: true,
   },
   {
@@ -284,7 +294,7 @@ export const SERVER_PROPERTY_DEFS: PropertyDef[] = [
     options: ['1', '2', '3', '4'],
     defaultValue: '4',
     isSensitive: false,
-    isHotReload: false,
+    isHotReload: true,
     isWritable: true,
   },
 
@@ -297,7 +307,7 @@ export const SERVER_PROPERTY_DEFS: PropertyDef[] = [
     type: 'input',
     defaultValue: '10',
     isSensitive: false,
-    isHotReload: false,
+    isHotReload: true,
     isWritable: true,
   },
   {
@@ -308,7 +318,7 @@ export const SERVER_PROPERTY_DEFS: PropertyDef[] = [
     type: 'input',
     defaultValue: '10',
     isSensitive: false,
-    isHotReload: false,
+    isHotReload: true,
     isWritable: true,
   },
   {
@@ -443,7 +453,7 @@ export const SERVER_PROPERTY_DEFS: PropertyDef[] = [
     type: 'input',
     defaultValue: '100',
     isSensitive: false,
-    isHotReload: false,
+    isHotReload: true,
     isWritable: true,
   },
   {
@@ -628,7 +638,7 @@ export const SERVER_PROPERTY_DEFS: PropertyDef[] = [
     type: 'input',
     defaultValue: '',
     isSensitive: false,
-    isHotReload: false,
+    isHotReload: true,
     isWritable: true,
   },
   {
@@ -752,7 +762,7 @@ export const SERVER_PROPERTY_DEFS: PropertyDef[] = [
     type: 'checkbox',
     defaultValue: 'false',
     isSensitive: false,
-    isHotReload: false,
+    isHotReload: true,
     isWritable: true,
   },
   {

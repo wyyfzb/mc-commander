@@ -81,6 +81,7 @@ import config from '../config.js';
 import { __configureLogger, __resetLogger } from '../utils/logger.js';
 import { panelErrorsSchema } from '@mc-commander/schemas';
 import { crashArtifactHistorySchema } from '@mc-commander/schemas';
+import { asInstance } from './helpers/msmp-instance.js';
 
 const GB = 1024 * 1024 * 1024;
 const INSTANCE_PATH = '/tmp/mc-test-s1';
@@ -279,7 +280,7 @@ describe('Status Routes · 端点缺口收口', () => {
   describe('POST /api/instances/:id/stop', () => {
     it('成功：stop 调用 + DB 状态同步 stopped + INSTANCE_STOP 审计', async () => {
       const instance = { id: 's1', stop: vi.fn() };
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
 
       const res = await request(app).post('/api/instances/s1/stop');
 
@@ -294,7 +295,7 @@ describe('Status Routes · 端点缺口收口', () => {
     });
 
     it('404：实例不存在', async () => {
-      mockManager.getInstance.mockReturnValue(undefined);
+      mockManager.getInstance.mockReturnValue(asInstance(undefined));
       const res = await request(app).post('/api/instances/s1/stop');
 
       expect(res.status).toBe(404);
@@ -304,7 +305,7 @@ describe('Status Routes · 端点缺口收口', () => {
 
     it('DB 状态同步失败降级：update 抛错仅警告，停止流程不受阻', async () => {
       const instance = { id: 's1', stop: vi.fn() };
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
       InstanceModel.update.mockImplementation(() => {
         throw new Error('db down');
       });
@@ -320,7 +321,7 @@ describe('Status Routes · 端点缺口收口', () => {
   // ── POST /instances/:id/start 分支补口 ──
   describe('POST /api/instances/:id/start（分支补口）', () => {
     it('404：实例不存在', async () => {
-      mockManager.getInstance.mockReturnValue(undefined);
+      mockManager.getInstance.mockReturnValue(asInstance(undefined));
       const res = await request(app).post('/api/instances/s1/start');
 
       expect(res.status).toBe(404);
@@ -329,7 +330,7 @@ describe('Status Routes · 端点缺口收口', () => {
 
     it('EULA 未接受：eula.txt 不存在 → 403 EULA_NOT_ACCEPTED，不调用 start', async () => {
       const instance = { id: 's1', start: vi.fn(), serverPath: INSTANCE_PATH };
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
       // existsSync 默认 false → eula.txt 不存在
 
       const res = await request(app).post('/api/instances/s1/start');
@@ -342,7 +343,7 @@ describe('Status Routes · 端点缺口收口', () => {
 
     it('DB 状态同步失败降级：EULA 已同意、update 抛错 → 仍 200 启动', async () => {
       const instance = { id: 's1', start: vi.fn(), serverPath: INSTANCE_PATH };
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
       fs.existsSync.mockImplementation((p) => p === EULA_PATH);
       fs.readFileSync.mockImplementation((p) =>
         p === EULA_PATH ? 'eula=true\n' : __state.actualFs.readFileSync(p),
@@ -366,7 +367,7 @@ describe('Status Routes · 端点缺口收口', () => {
   describe('POST /api/instances/:id/restart', () => {
     it('成功：restart 调用 + INSTANCE_RESTART 审计 + Server restarting', async () => {
       const instance = { id: 's1', restart: vi.fn() };
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
 
       const res = await request(app).post('/api/instances/s1/restart');
 
@@ -380,7 +381,7 @@ describe('Status Routes · 端点缺口收口', () => {
     });
 
     it('404：实例不存在', async () => {
-      mockManager.getInstance.mockReturnValue(undefined);
+      mockManager.getInstance.mockReturnValue(asInstance(undefined));
       const res = await request(app).post('/api/instances/s1/restart');
 
       expect(res.status).toBe(404);
@@ -392,7 +393,7 @@ describe('Status Routes · 端点缺口收口', () => {
   // ── POST /instances/:id/command 分支补口 ──
   describe('POST /api/instances/:id/command（分支补口）', () => {
     it('404：实例不存在（命令非空校验通过后）', async () => {
-      mockManager.getInstance.mockReturnValue(undefined);
+      mockManager.getInstance.mockReturnValue(asInstance(undefined));
       const res = await request(app).post('/api/instances/s1/command').send({ command: 'list' });
 
       expect(res.status).toBe(404);
@@ -406,7 +407,7 @@ describe('Status Routes · 端点缺口收口', () => {
         isRconConnected: false,
         sendCommand: vi.fn().mockRejectedValue(new Error('rcon timeout')),
       };
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
 
       const res = await request(app).post('/api/instances/s1/command').send({ command: 'say hi' });
 
@@ -421,7 +422,7 @@ describe('Status Routes · 端点缺口收口', () => {
         isRconConnected: true,
         sendCommand: vi.fn().mockRejectedValue(new Error('boom')),
       };
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
 
       const res = await request(app).post('/api/instances/s1/command').send({ command: 'say hi' });
 
@@ -436,7 +437,7 @@ describe('Status Routes · 端点缺口收口', () => {
         isRconConnected: true,
         sendCommand: vi.fn().mockResolvedValue('ok'),
       };
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
 
       await request(app).post('/api/instances/s1/command').send({ command: 'list' });
 
@@ -450,7 +451,7 @@ describe('Status Routes · 端点缺口收口', () => {
         isRconConnected: true,
         sendCommand: vi.fn().mockResolvedValue('ok'),
       };
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
 
       const res = await request(app)
         .post('/api/instances/s1/command')
@@ -467,7 +468,7 @@ describe('Status Routes · 端点缺口收口', () => {
         isRconConnected: true,
         sendCommand: vi.fn().mockResolvedValue('ok'),
       };
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
 
       const res = await request(app)
         .post('/api/instances/s1/command')
@@ -482,14 +483,14 @@ describe('Status Routes · 端点缺口收口', () => {
   // ── 404 边界统一收口 ──
   describe('GET 端点 404 边界', () => {
     it('GET /instances/:id/logs：实例不存在 → 404', async () => {
-      mockManager.getInstance.mockReturnValue(undefined);
+      mockManager.getInstance.mockReturnValue(asInstance(undefined));
       const res = await request(app).get('/api/instances/s1/logs');
       expect(res.status).toBe(404);
       expect(res.body.code).toBe(40401);
     });
 
     it('GET /instances/:id/properties：实例不存在 → 404', async () => {
-      mockManager.getInstance.mockReturnValue(undefined);
+      mockManager.getInstance.mockReturnValue(asInstance(undefined));
       const res = await request(app).get('/api/instances/s1/properties');
       expect(res.status).toBe(404);
       expect(res.body.code).toBe(40401);
@@ -499,7 +500,7 @@ describe('Status Routes · 端点缺口收口', () => {
   // ── PUT /instances/:id/properties 分支补口 ──
   describe('PUT /api/instances/:id/properties（分支补口）', () => {
     it('404：实例不存在', async () => {
-      mockManager.getInstance.mockReturnValue(undefined);
+      mockManager.getInstance.mockReturnValue(asInstance(undefined));
       const res = await request(app).put('/api/instances/s1/properties').send({ motd: 'hello' });
 
       expect(res.status).toBe(404);
@@ -523,7 +524,7 @@ describe('Status Routes · 端点缺口收口', () => {
         saveProperties: vi.fn(),
         _loadProperties: vi.fn().mockReturnValue(null),
       };
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
 
       const res = await request(app)
         .put('/api/instances/s1/properties')
@@ -542,7 +543,7 @@ describe('Status Routes · 端点缺口收口', () => {
         saveProperties: vi.fn(),
         _loadProperties: vi.fn().mockReturnValue({ 'level-name': 'fresh-world' }),
       };
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
 
       const res = await request(app).put('/api/instances/s1/properties').send({ motd: 'new' });
 
@@ -561,7 +562,7 @@ describe('Status Routes · 端点缺口收口', () => {
         sendCommand: vi.fn().mockResolvedValue('ok'),
         _loadProperties: vi.fn().mockReturnValue(null),
       };
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
 
       const res = await request(app).put('/api/instances/s1/properties').send({
         'white-list': 'true',
@@ -580,6 +581,32 @@ describe('Status Routes · 端点缺口收口', () => {
       ]);
     });
 
+    it('MSMP 可用时运行期属性走结构化 setter：命令通道零调用，且不计入需重启', async () => {
+      const instance = {
+        id: 's1',
+        properties: { difficulty: 'peaceful', 'view-distance': '10' },
+        isRunning: true,
+        saveProperties: vi.fn(),
+        sendCommand: vi.fn().mockResolvedValue('ok'),
+        _loadProperties: vi.fn().mockReturnValue(null),
+        _msmpRequest: vi.fn(async (method) => (method.endsWith('view_distance/set') ? 7 : 'hard')),
+      };
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
+
+      const res = await request(app).put('/api/instances/s1/properties').send({
+        difficulty: 'hard',
+        'view-distance': '7',
+      });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.restartRequired).toEqual([]);
+      expect(instance._msmpRequest.mock.calls.map((c) => c[0])).toEqual([
+        'minecraft:serversettings/difficulty/set',
+        'minecraft:serversettings/view_distance/set',
+      ]);
+      expect(instance.sendCommand).not.toHaveBeenCalled();
+    });
+
     it('命令下发失败降级：runtime 命令抛错仅警告，保存与响应不受阻', async () => {
       const instance = {
         id: 's1',
@@ -589,15 +616,16 @@ describe('Status Routes · 端点缺口收口', () => {
         sendCommand: vi.fn().mockRejectedValue(new Error('rcon down')),
         _loadProperties: vi.fn().mockReturnValue(null),
       };
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
 
       const res = await request(app)
         .put('/api/instances/s1/properties')
         .send({ difficulty: 'hard', motd: 'updated' });
 
       expect(res.status).toBe(200);
-      // motd 非 runtime 键：运行中实例需重启生效
-      expect(res.body.data.restartRequired).toEqual(['motd']);
+      // motd 无结构化 setter：运行中实例需重启生效；difficulty 的通道全部失败，
+      // 也如实列入（此前只看「表里有没有这个键」，失败也报「无需重启」）
+      expect(res.body.data.restartRequired).toEqual(['difficulty', 'motd']);
       expect(instance.saveProperties).toHaveBeenCalled();
     });
   });
@@ -617,7 +645,7 @@ describe('Status Routes · 端点缺口收口', () => {
         jvmArgs: null,
         toStatus: () => ({ id: 's1' }),
       };
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
 
       const res = await request(app)
         .put('/api/instances/s1')
@@ -653,7 +681,7 @@ describe('Status Routes · 端点缺口收口', () => {
         _consecutiveCrashes: 3,
         _crashWindowStart: 123456,
       };
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
 
       const res = await request(app).put('/api/instances/s1').send({ autoRestart: true });
 
@@ -670,7 +698,7 @@ describe('Status Routes · 端点缺口收口', () => {
         javaPath: 'java',
         toStatus: () => ({ id: 's1' }),
       };
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
       fs.statSync.mockImplementation(() => ({ isFile: () => false }));
 
       const res = await request(app)
@@ -703,7 +731,7 @@ describe('Status Routes · 端点缺口收口', () => {
     });
 
     it('404：实例不存在（先于确认校验，无 body 也不进 400 分支）', async () => {
-      mockManager.getInstance.mockReturnValue(undefined);
+      mockManager.getInstance.mockReturnValue(asInstance(undefined));
       const res = await request(app).delete('/api/instances/s1');
       expect(res.status).toBe(404);
       expect(res.body.code).toBe(40401);
@@ -712,7 +740,7 @@ describe('Status Routes · 端点缺口收口', () => {
 
     it('未运行实例卸载成功：定时器取消 + 实例目录删除 + 备份目录保留 + 备份 DB 清理 + 内存移除 + 实例 DB 删除 + 双阶段审计', async () => {
       const instance = makeInstance();
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
       mockManager.instances.set('s1', instance);
       fs.existsSync.mockImplementation((p) => p === INSTANCE_PATH || p === backupDir);
 
@@ -743,7 +771,7 @@ describe('Status Routes · 端点缺口收口', () => {
       ]) {
         vi.clearAllMocks();
         const instance = makeInstance();
-        mockManager.getInstance.mockReturnValue(instance);
+        mockManager.getInstance.mockReturnValue(asInstance(instance));
 
         const res = await uninstall(body);
 
@@ -759,7 +787,7 @@ describe('Status Routes · 端点缺口收口', () => {
 
     it('确认校验：首尾空白被归一化（" 演示实例 " 放行）', async () => {
       const instance = makeInstance();
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
       mockManager.instances.set('s1', instance);
       fs.existsSync.mockImplementation(() => false);
 
@@ -771,7 +799,7 @@ describe('Status Routes · 端点缺口收口', () => {
 
     it('零备份清单：仅确认不够 → 409，且不停机/不删文件/不改 DB/不写审计', async () => {
       const instance = makeInstance();
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
 
       const res = await uninstall();
 
@@ -786,7 +814,7 @@ describe('Status Routes · 端点缺口收口', () => {
 
     it('零备份清单 + acknowledgeIrreversible:true → 放行，响应回报 0 份保留', async () => {
       const instance = makeInstance();
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
       mockManager.instances.set('s1', instance);
       fs.existsSync.mockImplementation(() => false);
 
@@ -800,7 +828,7 @@ describe('Status Routes · 端点缺口收口', () => {
     it('清单非空：确认即可放行，响应回报保留的快照目录名', async () => {
       listInstanceSnapshotDirs.mockReturnValue(['每日备份-2026-09-01T04-00-00-000Z']);
       const instance = makeInstance();
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
       mockManager.instances.set('s1', instance);
       fs.existsSync.mockImplementation((p) => p === INSTANCE_PATH);
 
@@ -817,7 +845,7 @@ describe('Status Routes · 端点缺口收口', () => {
 
     it('审计先于文件操作：意图记录落盘时实例目录仍在，删除后补结果记录', async () => {
       const instance = makeInstance();
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
       mockManager.instances.set('s1', instance);
       // 意图审计写入时刻的真实盘面：实例目录尚未删除
       fs.existsSync.mockImplementation((p) => p === INSTANCE_PATH);
@@ -852,7 +880,7 @@ describe('Status Routes · 端点缺口收口', () => {
         stopGracefully: vi.fn().mockResolvedValue(),
         process: proc,
       });
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
       mockManager.instances.set('s1', instance);
       fs.existsSync.mockImplementation(() => false);
 
@@ -873,7 +901,7 @@ describe('Status Routes · 端点缺口收口', () => {
         isRunning: true,
         stopGracefully: vi.fn().mockRejectedValue(new Error('stop timeout')),
       });
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
       mockManager.instances.set('s1', instance);
       fs.existsSync.mockImplementation(() => false);
 
@@ -886,7 +914,7 @@ describe('Status Routes · 端点缺口收口', () => {
 
     it('DB 删除失败降级：实例目录已清理后 DB 删除抛错仅警告，仍返回成功', async () => {
       const instance = makeInstance();
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
       mockManager.instances.set('s1', instance);
       fs.existsSync.mockImplementation((p) => p === INSTANCE_PATH);
       InstanceModel.delete.mockImplementation(() => {
@@ -903,7 +931,7 @@ describe('Status Routes · 端点缺口收口', () => {
     // ── 备份互斥（#530）：creating/restoring 进行中拒绝卸载，防恢复竞争数据事故 ──
     it('restoring 记录存在 → 409 拒绝：不触碰实例目录/快照目录/任何 DB 记录', async () => {
       const instance = makeInstance();
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
       mockManager.instances.set('s1', instance);
       fs.existsSync.mockImplementation((p) => p === INSTANCE_PATH || p === backupDir);
       BackupModel.findAll.mockImplementation(({ status }) => ({
@@ -926,7 +954,7 @@ describe('Status Routes · 端点缺口收口', () => {
 
     it('creating 记录存在 → 409 拒绝（在线备份中卸载同被拦下）', async () => {
       const instance = makeInstance();
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
       mockManager.instances.set('s1', instance);
       BackupModel.findAll.mockImplementation(({ status }) => ({
         backups: [],
@@ -944,7 +972,7 @@ describe('Status Routes · 端点缺口收口', () => {
 
     it('卡死记录先经 resetStaleInProgress 按语义重置，重置后无进行中记录 → 正常卸载（三清回归）', async () => {
       const instance = makeInstance();
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
       mockManager.instances.set('s1', instance);
       fs.existsSync.mockImplementation((p) => p === INSTANCE_PATH || p === backupDir);
       BackupModel.resetStaleInProgress.mockReturnValue(1);
@@ -967,7 +995,7 @@ describe('Status Routes · 端点缺口收口', () => {
         isRunning: true,
         stopGracefully: vi.fn().mockResolvedValue(),
       });
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
       mockManager.instances.set('s1', instance);
       BackupModel.findAll.mockImplementation(({ status }) => ({
         backups: [],
@@ -988,7 +1016,7 @@ describe('Status Routes · 端点缺口收口', () => {
   // ── POST /instances/:id/eula：EULA 确认写入（整段缺口）──
   describe('POST /api/instances/:id/eula', () => {
     it('404：实例不存在', async () => {
-      mockManager.getInstance.mockReturnValue(undefined);
+      mockManager.getInstance.mockReturnValue(asInstance(undefined));
       const res = await request(app).post('/api/instances/s1/eula').send({ agreed: true });
       expect(res.status).toBe(404);
       expect(res.body.code).toBe(40401);
@@ -996,7 +1024,7 @@ describe('Status Routes · 端点缺口收口', () => {
 
     it('agreed 非 boolean → 400，不写文件', async () => {
       const instance = { id: 's1', serverPath: INSTANCE_PATH };
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
 
       const res = await request(app).post('/api/instances/s1/eula').send({ agreed: 'yes' });
 
@@ -1007,7 +1035,7 @@ describe('Status Routes · 端点缺口收口', () => {
 
     it('agreed=true：写入 eula=true 内容，返回 EULA accepted', async () => {
       const instance = { id: 's1', serverPath: INSTANCE_PATH };
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
 
       const res = await request(app).post('/api/instances/s1/eula').send({ agreed: true });
 
@@ -1023,7 +1051,7 @@ describe('Status Routes · 端点缺口收口', () => {
 
     it('agreed=false：写入 eula=false 内容，返回 EULA declined', async () => {
       const instance = { id: 's1', serverPath: INSTANCE_PATH };
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
 
       const res = await request(app).post('/api/instances/s1/eula').send({ agreed: false });
 
@@ -1041,7 +1069,7 @@ describe('Status Routes · 端点缺口收口', () => {
   // ── GET /instances/:id/world：世界信息（分支补口）──
   describe('GET /api/instances/:id/world', () => {
     it('404：实例不存在', async () => {
-      mockManager.getInstance.mockReturnValue(undefined);
+      mockManager.getInstance.mockReturnValue(asInstance(undefined));
       const res = await request(app).get('/api/instances/s1/world');
       expect(res.status).toBe(404);
       expect(res.body.code).toBe(40401);
@@ -1264,7 +1292,7 @@ describe('GET /api/instances/:id/crash-reports', () => {
   });
 
   it('实例不存在：404 且不去碰产物', async () => {
-    manager.getInstance.mockReturnValue(null);
+    manager.getInstance.mockReturnValue(asInstance(null));
     const res = await request(histApp).get('/api/instances/nope/crash-reports');
     expect(res.status).toBe(404);
     expect(getHistory).not.toHaveBeenCalled();

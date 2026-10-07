@@ -8,18 +8,10 @@
 import { vi } from 'vitest';
 import * as msmpMethods from '../../services/mc-server/msmp-methods.js';
 
-const METHOD_NAMES = [
-  '_writeViaPreferredChannel',
-  'whitelistAdd',
-  'whitelistRemove',
-  'opPlayer',
-  'deopPlayer',
-  'kickPlayer',
-  'banPlayer',
-  'banIp',
-  'pardonPlayer',
-  'pardonIp',
-];
+/** 模块导出的全部函数（除 default）：新增方法不必再改这里 */
+const METHOD_NAMES = Object.entries(msmpMethods)
+  .filter(([name, value]) => typeof value === 'function' && name !== 'default')
+  .map(([name]) => name);
 
 /** 幂等：同一个桩被包两次不会叠加 */
 export function asInstance(stub) {

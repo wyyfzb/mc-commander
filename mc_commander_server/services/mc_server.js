@@ -944,7 +944,7 @@ export class MCServerInstance extends EventEmitter {
       this.stopGracefully().catch(() => {});
       return;
     }
-    this.sendCommand('stop').catch(() => {});
+    this.stopServer().catch(() => {});
   }
 
   // 优雅停止：await 发送 stop 命令并等待 MC 正常退出（exit 事件），
@@ -956,7 +956,7 @@ export class MCServerInstance extends EventEmitter {
     this._manualStop = true;
     this.cancelRestart();
     try {
-      await this.sendCommand('stop');
+      await this.stopServer();
     } catch {
       // 发送失败（RCON 断开等）：直接进入等待/强杀流程
     }
@@ -990,7 +990,7 @@ export class MCServerInstance extends EventEmitter {
     if (this.isRunning) {
       // 主动重启：标记为手动停止，避免 stop 阶段触发自动重启
       this._manualStop = true;
-      this.sendCommand('stop').catch(() => {});
+      this.stopServer().catch(() => {});
     }
     this._scheduleRestartStart();
   }

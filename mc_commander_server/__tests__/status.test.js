@@ -23,6 +23,7 @@ vi.mock('../utils/audit.js', async (importOriginal) => {
   return { ...actual, recordAudit: vi.fn() };
 });
 import { recordAudit, AuditActions } from '../utils/audit.js';
+import { asInstance } from './helpers/msmp-instance.js';
 
 describe('Status Routes', () => {
   let app;
@@ -81,7 +82,7 @@ describe('Status Routes', () => {
     });
 
     it('should return 404 for non-existent instance', async () => {
-      mockManager.getInstance.mockReturnValue(undefined);
+      mockManager.getInstance.mockReturnValue(asInstance(undefined));
 
       const res = await request(app).get('/api/instances/nonexistent');
 
@@ -101,7 +102,7 @@ describe('Status Routes', () => {
         jarFile: null,
         toStatus: () => ({ id: 's1', name: 'S1' }),
       };
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
       InstanceModel.update.mockReturnValue({ changes: 1 });
 
       const res = await request(app)
@@ -124,7 +125,7 @@ describe('Status Routes', () => {
         jarFile: null,
         toStatus: () => ({ id: 's1', name: 'S1' }),
       };
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
       InstanceModel.update.mockReturnValue({ changes: 1 });
 
       const res = await request(app).put('/api/instances/s1').send({ name: 'S2' });
@@ -148,7 +149,7 @@ describe('Status Routes', () => {
         jarFile: null,
         toStatus: () => ({ id: 's1', name: 'S1' }),
       };
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
       InstanceModel.update.mockReturnValue({ changes: 1 });
 
       const res = await request(app)
@@ -195,7 +196,7 @@ describe('Status Routes', () => {
         jarFile: null,
         toStatus: () => ({ id: 's1', name: 'S1' }),
       };
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
 
       const res = await request(app)
         .put('/api/instances/s1')
@@ -233,7 +234,7 @@ describe('Status Routes', () => {
           serverPath: tmpDir,
           toStatus: () => ({ id: 's1' }),
         };
-        mockManager.getInstance.mockReturnValue(instance);
+        mockManager.getInstance.mockReturnValue(asInstance(instance));
         InstanceModel.update.mockReturnValue({ changes: 1 });
 
         const res = await request(app).put('/api/instances/s1').send({ name: 'Renamed' });
@@ -262,7 +263,7 @@ describe('Status Routes', () => {
     });
 
     it('should return 404 for non-existent instance', async () => {
-      mockManager.getInstance.mockReturnValue(undefined);
+      mockManager.getInstance.mockReturnValue(asInstance(undefined));
 
       // 载荷用合法空对象：输入侧 schema（issue 486）前置于实例存在性检查
       // （与 files/plugins 契约端点同构），非法载荷会先落到 400 而非 404
@@ -278,7 +279,7 @@ describe('Status Routes', () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-status-'));
       fs.writeFileSync(path.join(tmpDir, 'eula.txt'), 'eula=true\n');
       const mockInstance = { start: vi.fn(), serverPath: tmpDir };
-      mockManager.getInstance.mockReturnValue(mockInstance);
+      mockManager.getInstance.mockReturnValue(asInstance(mockInstance));
 
       const res = await request(app).post('/api/instances/s1/start');
 
@@ -296,7 +297,7 @@ describe('Status Routes', () => {
         }),
         serverPath: tmpDir,
       };
-      mockManager.getInstance.mockReturnValue(mockInstance);
+      mockManager.getInstance.mockReturnValue(asInstance(mockInstance));
 
       const res = await request(app).post('/api/instances/s1/start');
 
@@ -311,7 +312,7 @@ describe('Status Routes', () => {
   describe('POST /api/instances/:id/command', () => {
     it('should send command', async () => {
       const mockInstance = { sendCommand: vi.fn(), isRunning: true };
-      mockManager.getInstance.mockReturnValue(mockInstance);
+      mockManager.getInstance.mockReturnValue(asInstance(mockInstance));
 
       const res = await request(app)
         .post('/api/instances/s1/command')
@@ -350,7 +351,7 @@ describe('Status Routes', () => {
       const mockInstance = {
         getLogs: vi.fn().mockReturnValue([{ time: 1, text: 'log' }]),
       };
-      mockManager.getInstance.mockReturnValue(mockInstance);
+      mockManager.getInstance.mockReturnValue(asInstance(mockInstance));
 
       const res = await request(app).get('/api/instances/s1/logs');
 
@@ -370,7 +371,7 @@ describe('Status Routes', () => {
         readDifficulty: vi.fn().mockResolvedValue(null),
         _readGameTypeFromLevelDat: vi.fn().mockReturnValue(null),
       };
-      mockManager.getInstance.mockReturnValue(mockInstance);
+      mockManager.getInstance.mockReturnValue(asInstance(mockInstance));
 
       const res = await request(app).get('/api/instances/s1/properties');
 
@@ -389,7 +390,7 @@ describe('Status Routes', () => {
         readDifficulty: vi.fn().mockResolvedValue('easy'),
         _readGameTypeFromLevelDat: vi.fn().mockReturnValue('creative'),
       };
-      mockManager.getInstance.mockReturnValue(mockInstance);
+      mockManager.getInstance.mockReturnValue(asInstance(mockInstance));
 
       const res = await request(app).get('/api/instances/s1/properties');
 
@@ -410,7 +411,7 @@ describe('Status Routes', () => {
         readDifficulty: vi.fn().mockResolvedValue(null),
         _readGameTypeFromLevelDat: vi.fn().mockReturnValue(null),
       };
-      mockManager.getInstance.mockReturnValue(mockInstance);
+      mockManager.getInstance.mockReturnValue(asInstance(mockInstance));
 
       const res = await request(app).get('/api/instances/s1/properties');
 
@@ -428,7 +429,7 @@ describe('Status Routes', () => {
         }),
         sendCommand: vi.fn(async () => null),
       };
-      mockManager.getInstance.mockReturnValue(mockInstance);
+      mockManager.getInstance.mockReturnValue(asInstance(mockInstance));
 
       const res = await request(app)
         .put('/api/instances/s1/properties')
@@ -453,7 +454,7 @@ describe('Status Routes', () => {
         }),
         sendCommand: vi.fn(async () => null),
       };
-      mockManager.getInstance.mockReturnValue(mockInstance);
+      mockManager.getInstance.mockReturnValue(asInstance(mockInstance));
 
       const res = await request(app)
         .put('/api/instances/s1/properties')
@@ -475,7 +476,7 @@ describe('Status Routes', () => {
         }),
         sendCommand: vi.fn(async () => null),
       };
-      mockManager.getInstance.mockReturnValue(mockInstance);
+      mockManager.getInstance.mockReturnValue(asInstance(mockInstance));
 
       const res = await request(app)
         .put('/api/instances/s1/properties')
@@ -490,7 +491,7 @@ describe('Status Routes', () => {
 
     it('PUT 无效 body 返回 400', async () => {
       const mockInstance = { properties: {}, saveProperties: vi.fn() };
-      mockManager.getInstance.mockReturnValue(mockInstance);
+      mockManager.getInstance.mockReturnValue(asInstance(mockInstance));
 
       const res = await request(app)
         .put('/api/instances/s1/properties')

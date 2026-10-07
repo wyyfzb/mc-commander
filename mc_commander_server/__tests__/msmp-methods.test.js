@@ -18,6 +18,12 @@ import {
   banIp,
   pardonPlayer,
   pardonIp,
+  applyServerSetting,
+  saveWorld,
+  stopServer,
+  SERVER_SETTING_KEYS,
+  SERVER_SETTING_METHODS,
+  MSMP_STOP_TIMEOUT_MS,
 } from '../services/mc-server/msmp-methods.js';
 
 /** 最小实例桩：只带方法面依赖的两个成员 */
@@ -45,6 +51,9 @@ function withMethods(msmpResult) {
     banIp,
     pardonPlayer,
     pardonIp,
+    applyServerSetting,
+    saveWorld,
+    stopServer,
   })) {
     inst[name] = fn.bind(inst);
   }
@@ -199,5 +208,129 @@ describe('_writeViaPreferredChannel 的边界', () => {
       ),
     ).resolves.toBe('msmp');
     expect(runCommand).not.toHaveBeenCalled();
+  });
+});
+
+describe('运行期属性热改：结构化 setter 与生效判据', () => {
+  it('布尔键：按类型传值，落的是结构化方法而不是命令', async () => {
+    const inst = withMethods(true);
+
+    await expect(inst.applyServerSetting('allow-flight', 'true')).resolves.toBe('msmp');
+    expect(inst._msmpRequest).toHaveBeenCalledWith(
+      'minecraft:serversettings/allow_flight/set',
+      [true],
+      expect.any(Number),
+    );
+    expect(inst.sendCommand).not.toHaveBeenCalled();
+  });
+
+  it('数值键：字符串表单转成数字（否则服务端按类型拒绝）', async () => {
+    const inst = withMethods(7);
+
+    await expect(inst.applyServerSetting('view-distance', '7')).resolves.toBe('msmp');
+    expect(inst._msmpRequest).toHaveBeenCalledWith(
+      'minecraft:serversettings/view_distance/set',
+      [7],
+      expect.any(Number),
+    );
+  });
+
+  it('回读值≠提交值 ⇒ 报错（setter 静默失效时不报成功）', async () => {
+    // 实测 26.3 的 status_heartbeat_interval 就是这样：设 7 回读 0
+    const inst = withMethods(0);
+
+    await expect(inst.applyServerSetting('player-idle-timeout', '7')).rejects.toThrow(
+      /player-idle-timeout 未在运行中生效/,
+    );
+  });
+
+  it('MSMP 不可用：有等价命令的键退回命令，命令与原实现逐字一致', async () => {
+    const inst = withMethods(null);
+
+    await expect(inst.applyServerSetting('player-idle-timeout', '30')).resolves.toBe('command');
+    expect(inst.sendCommand).toHaveBeenCalledWith('setidletimeout 30');
+  });
+
+  it('MSMP 不可用且无等价命令：返回 skipped（调用方据此计入「需重启」）', async () => {
+    const inst = withMethods(null);
+
+    await expect(inst.applyServerSetting('view-distance', '7')).resolves.toBe('skipped');
+    expect(inst.sendCommand).not.toHaveBeenCalled();
+  });
+
+  it('未纳入表的键：skipped', async () => {
+    const inst = withMethods(true);
+
+    await expect(inst.applyServerSetting('pvp', 'true')).resolves.toBe('skipped');
+  });
+
+  it('热改键集锁定：15 键，且都指向 serversettings 的 set 方法', () => {
+    // 键集是「面板说这条属性即时生效」的唯一依据，多一个少一个都会让界面与事实不符
+    expect([...SERVER_SETTING_KEYS].sort()).toEqual([
+      'allow-flight',
+      'difficulty',
+      'enforce-whitelist',
+      'entity-broadcast-range-percentage',
+      'force-gamemode',
+      'gamemode',
+      'hide-online-players',
+      'max-players',
+      'motd',
+      'op-permission-level',
+      'player-idle-timeout',
+      'simulation-distance',
+      'spawn-protection',
+      'view-distance',
+      'white-list',
+    ]);
+    for (const [key, spec] of Object.entries(SERVER_SETTING_METHODS)) {
+      expect(spec.method, key).toMatch(/^minecraft:serversettings\/.+\/set$/);
+    }
+  });
+});
+
+describe('存档与停机', () => {
+  it('存档：结构化 server/save 带 flush', async () => {
+    const inst = withMethods(true);
+
+    await expect(inst.saveWorld()).resolves.toBe('msmp');
+    expect(inst._msmpRequest).toHaveBeenCalledWith(
+      'minecraft:server/save',
+      [true],
+      expect.any(Number),
+    );
+  });
+
+  it('存档回退：与原备份路径逐字一致（含 5s 超时）', async () => {
+    const inst = withMethods(null);
+    inst.sendCommandWithResponse = vi.fn(async () => 'Saved the game');
+
+    await expect(inst.saveWorld()).resolves.toBe('command');
+    expect(inst.sendCommandWithResponse).toHaveBeenCalledWith('save-all flush', { timeout: 5000 });
+  });
+
+  it('存档未被确认 ⇒ 报错', async () => {
+    const inst = withMethods(false);
+
+    await expect(inst.saveWorld()).rejects.toThrow(/保存世界未成功/);
+  });
+
+  it('停机：结构化 server/stop，用更短的专用超时（等进程退出的路径不该白等查询超时）', async () => {
+    const inst = withMethods(true);
+
+    await expect(inst.stopServer()).resolves.toBe('msmp');
+    expect(inst._msmpRequest).toHaveBeenCalledWith(
+      'minecraft:server/stop',
+      [],
+      MSMP_STOP_TIMEOUT_MS,
+    );
+    expect(inst.sendCommand).not.toHaveBeenCalled();
+  });
+
+  it('停机回退：命令通道仍是 stop', async () => {
+    const inst = withMethods(null);
+
+    await expect(inst.stopServer()).resolves.toBe('command');
+    expect(inst.sendCommand).toHaveBeenCalledWith('stop');
   });
 });
