@@ -325,17 +325,39 @@ jobs:
             [ -n "$OLD" ] && curl -sS --max-time 30 -X DELETE -H "$AUTH" \
                               "$API/releases/$RID/attach_files/$OLD" >/dev/null
 
-            curl -fsS --max-time 300 -X POST -H "$AUTH" \
-              -F "file=@/tmp/$f" "$API/releases/$RID/attach_files" >/dev/null \
+            # 上传必须自带重试：这条链路（跨境 + Gitee 附件接口）会在 300s 处超时或被 reset，
+            # 实测 v0.7.3 两个附件都因此没传上去，留下一个残缺镜像。curl 默认只重试它认定的
+            # 「瞬时错误」，故显式加 --retry-all-errors 覆盖超时/连接重置；幂等由上面的
+            # 「先删同名附件」保证，重试不会产生重复附件。
+            # --http1.1 + 关掉 Expect: 100-continue 针对实测签名：大 body 的 multipart POST 会
+            # 「300s 后 0 字节收到」（连响应都没开始），而同一时刻 93B 的小附件能传上去。
+            # curl 对大 body 会先发 Expect: 100-continue 等应答，配 HTTP/2 在跨境链路上容易卡死。
+            curl -fsS --max-time 300 --http1.1 -H "Expect:" \
+              --retry 3 --retry-delay 5 --retry-all-errors \
+              -X POST -H "$AUTH" -F "file=@/tmp/$f" "$API/releases/$RID/attach_files" >/dev/null \
               || { echo "::warning::上传 $f 到 Gitee 失败"; failed=1; continue; }
             echo "✓ 已上传 $f"
           done
 
           # 回读校验：确认附件真的在（以 Gitee 的登记为准，不信上传时的响应）
-          curl -sS --max-time 30 -H "$AUTH" "$API/releases/$RID/attach_files?per_page=100" \
-            | jq -r '.[] | "  \(.name)  \(.size) bytes"'
-          got=$(curl -sS --max-time 30 -H "$AUTH" "$API/releases/$RID/attach_files?per_page=100" \
-                | jq -r '.[].name' | sort | tr '\n' ' ')
+          # 「读不到」与「附件缺失」必须分开报——列表接口同样会抖动，把读失败当成缺失会报出
+          # 假缺失（判据缺失 ≠ 判据为假）。读成功才判缺失；读失败则如实说「未能核验」并让
+          # 该 job 红（continue-on-error 保证它不把 run 标红，补跑走 sync_only 路径即可）。
+          got=""
+          for attempt in 1 2 3; do
+            if files=$(curl -fsS --max-time 30 --retry 2 --retry-delay 5 --retry-all-errors \
+                        -H "$AUTH" "$API/releases/$RID/attach_files?per_page=100"); then
+              printf '%s' "$files" | jq -r '.[] | "  \(.name)  \(.size) bytes"'
+              got=$(printf '%s' "$files" | jq -r '.[].name' | sort | tr '\n' ' ')
+              break
+            fi
+            echo "::warning::回读 Gitee 附件列表失败（第 $attempt 次）"
+            sleep 5
+          done
+          if [ -z "$got" ]; then
+            echo "::warning::无法回读 Gitee 附件列表 ⇒ 本次**未核验**（不是「附件缺失」）"
+            exit 1
+          fi
           echo "Gitee 附件: $got"
 
           for f in $ASSETS; do
@@ -348,7 +370,8 @@ jobs:
       - name: 校验 Gitee 下载路径可达
         if: steps.cfg.outputs.skip != '1'
         run: |
-          curl -fsSL --max-time 60 -o /dev/null \
+          # 同样加重试：这条软校验只 warn 不红，但没有重试时一次抖动会被读成「路径不可达」
+          curl -fsSL --max-time 60 --retry 2 --retry-delay 5 --retry-all-errors -o /dev/null \
             "https://gitee.com/$GITEE_OWNER/$GITEE_REPO/releases/download/$TAG_REF/SHA256SUMS.txt" \
             && echo "✓ Gitee 下载路径可达" \
             || echo "::warning::Gitee 下载路径不可达（附件可能尚未就绪）"
