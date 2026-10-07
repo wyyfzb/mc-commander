@@ -112,16 +112,28 @@ export function _crashArtifactStat(filePath) {
   }
 }
 
-/** 读取产物头部文本（超长文件只读前 MAX_READ_BYTES 字节） */
-function readHead(filePath) {
+/** 读取产物头部文本（超长文件只读前 maxBytes 字节；历史摘要只需头部，传更小的窗口即可） */
+function readHead(filePath, maxBytes = MAX_READ_BYTES) {
   const fd = fs.openSync(filePath, 'r');
   try {
-    const buf = Buffer.alloc(MAX_READ_BYTES);
-    const read = fs.readSync(fd, buf, 0, MAX_READ_BYTES, 0);
+    const buf = Buffer.alloc(maxBytes);
+    const read = fs.readSync(fd, buf, 0, maxBytes, 0);
     return buf.subarray(0, read).toString('utf-8');
   } finally {
     fs.closeSync(fd);
   }
+}
+
+/** 顶层异常行判据（含包名的类名 + 异常/错误）：解析与历史摘要共用一份，避免两处规则漂移 */
+const TOP_EXCEPTION_RE = /^[\w.$]+(Exception|Error|Throwable)\b/;
+
+/** 在给定范围内找第一条顶层异常行 */
+function findTopException(lines, endIndex = lines.length) {
+  for (let i = 0; i < endIndex; i++) {
+    const trimmed = lines[i].trim();
+    if (TOP_EXCEPTION_RE.test(trimmed)) return trimmed;
+  }
+  return null;
 }
 
 /** 从 `Key: value` 形态的行里取字段（崩溃报告的上下文段即此形态） */
@@ -156,7 +168,7 @@ export function parseCrashReport(text) {
       causedBy.push(line.slice('Caused by: '.length).trim());
       continue;
     }
-    if (!exception && /^[\w.$]+(Exception|Error|Throwable)\b/.test(line.trim())) {
+    if (!exception && TOP_EXCEPTION_RE.test(line.trim())) {
       exception = line.trim();
       continue;
     }
@@ -253,6 +265,62 @@ function excerptOf(text) {
     : text;
 }
 
+/** 历史摘要只需头部：崩溃报告的 Time/Description 与 hs_err 的故障行都在前几行 */
+const HISTORY_HEAD_BYTES = 8 * 1024;
+
+/**
+ * 崩溃产物**历史**（最新的在前）。
+ *
+ * 为什么要有它：`crash-reports/` 与 `hs_err_pid*.log` 本就跨面板重启留着，但此前只暴露「最新
+ * 一份」——反复崩溃的实例在界面上和偶尔崩一次没有区别，用户看不到「什么时候崩过几次、每次
+ * 为什么」。这里不新建存储：产物文件本身就是持久面，只是把它读出来。
+ *
+ * 每份只读头部小窗口并只取「时间 + 原因 + 顶层异常/问题帧」：列表要的是可扫读的原因，
+ * 不是每份的完整解析（点开单份仍走 getCrashArtifact）。读不到就留空字段，**不猜**。
+ */
+export function getCrashArtifactHistory({ limit = 20 } = {}) {
+  let artifacts;
+  try {
+    artifacts = this._listCrashArtifacts();
+  } catch (e) {
+    logger.warn(`[${this.id}] 枚举崩溃产物失败:`, e.message);
+    return { items: [], total: 0, hasMore: false };
+  }
+
+  const items = [];
+  for (const artifact of artifacts.slice(0, limit)) {
+    const item = {
+      kind: artifact.kind,
+      fileName: artifact.fileName,
+      mtimeMs: artifact.mtimeMs,
+      sizeBytes: artifact.sizeBytes,
+      time: null,
+      reason: null,
+      detail: null,
+    };
+    try {
+      const text = readHead(artifact.filePath, HISTORY_HEAD_BYTES);
+      const lines = text.split(/\r?\n/);
+      if (artifact.kind === 'crash-report') {
+        item.time = fieldFrom(lines, 'Time');
+        item.reason = fieldFrom(lines, 'Description');
+        item.detail = findTopException(lines);
+      } else {
+        // hs_err 的头部即故障描述；问题帧只有信号型才有（OOM 型没有该段）
+        const parsed = parseHsErr(text);
+        item.reason = parsed.failure && parsed.failure.length ? parsed.failure.join('；') : null;
+        item.detail = parsed.problematicFrame ?? null;
+      }
+    } catch (e) {
+      // 单份读不到不影响整列：元信息仍在，原因留空由界面回落到文件名
+      logger.warn(`[${this.id}] 读取崩溃产物 ${artifact.fileName} 失败:`, e.message);
+    }
+    items.push(item);
+  }
+
+  return { items, total: artifacts.length, hasMore: artifacts.length > limit };
+}
+
 /**
  * 取最新的一份崩溃诊断产物并解析。
  * 无产物返回 null（正常的空态，不是错误）；解析失败如实降级为 parseError，不静默给空。
@@ -293,6 +361,7 @@ export default {
   _crashArtifactContained,
   _crashArtifactStat,
   getCrashArtifact,
+  getCrashArtifactHistory,
   parseCrashReport,
   parseHsErr,
 };

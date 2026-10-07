@@ -225,3 +225,93 @@ describe('getCrashArtifact 取用与降级', () => {
     }
   });
 });
+
+// 实例报错持久面：产物文件本身跨面板重启留存，历史面只是把它读出来
+describe('崩溃产物历史（getCrashArtifactHistory）', () => {
+  /** 固定产物 mtime，让「最新在前」有确定含义 */
+  function touch(fileName, mtimeMs, dir = tmpDir) {
+    const target = path.join(dir, fileName);
+    const seconds = mtimeMs / 1000;
+    fs.utimesSync(target, seconds, seconds);
+  }
+
+  it('从未崩溃：空列表（正常空态，不是读取失败）', () => {
+    const instance = makeInstance(tmpDir);
+    expect(instance.getCrashArtifactHistory()).toEqual({ items: [], total: 0, hasMore: false });
+  });
+
+  it('多份产物按 mtime 最新在前，各自带时间/原因/顶层异常；hs_err 的时间留空', () => {
+    writeCrashReport('crash-2026-10-05_01.10.36-server.txt', read('crash-invalid-secret.txt'));
+    writeCrashReport('crash-2026-10-04_02.00.00-server.txt', read('crash-tls-keystore.txt'));
+    writeHsErr('hs_err_pid2601333.log', read('hs-err-segv.txt'));
+    touch(path.join('crash-reports', 'crash-2026-10-05_01.10.36-server.txt'), 3000);
+    touch(path.join('crash-reports', 'crash-2026-10-04_02.00.00-server.txt'), 1000);
+    touch('hs_err_pid2601333.log', 5000);
+
+    const history = makeInstance(tmpDir).getCrashArtifactHistory();
+
+    expect(history.total).toBe(3);
+    expect(history.hasMore).toBe(false);
+    expect(history.items.map((i) => i.fileName)).toEqual([
+      'hs_err_pid2601333.log',
+      'crash-2026-10-05_01.10.36-server.txt',
+      'crash-2026-10-04_02.00.00-server.txt',
+    ]);
+    // hs_err：原因取故障行、详情取问题帧；时间留空（其 Time 行形态含 elapsed time，交由界面用 mtime）
+    expect(history.items[0].kind).toBe('jvm-crash');
+    expect(history.items[0].reason).toContain('SIGSEGV');
+    expect(history.items[0].detail).toBeTruthy();
+    expect(history.items[0].time).toBeNull();
+    // 崩溃报告：Time/Description 直接取自产物，顶层异常行作为详情
+    expect(history.items[1]).toMatchObject({
+      kind: 'crash-report',
+      time: '2026-10-05 01:10:36',
+      reason: 'Exception in server tick loop',
+    });
+    expect(history.items[1].detail).toMatch(/(Exception|Error)\b/);
+    expect(history.items[2].reason).toBeTruthy();
+  });
+
+  it('limit 裁剪最早的那些，total/hasMore 如实反映总量', () => {
+    writeCrashReport('crash-a-server.txt', read('crash-invalid-secret.txt'));
+    writeCrashReport('crash-b-server.txt', read('crash-tls-keystore.txt'));
+    touch(path.join('crash-reports', 'crash-a-server.txt'), 2000);
+    touch(path.join('crash-reports', 'crash-b-server.txt'), 1000);
+
+    const history = makeInstance(tmpDir).getCrashArtifactHistory({ limit: 1 });
+
+    expect(history.items.map((i) => i.fileName)).toEqual(['crash-a-server.txt']);
+    expect(history.total).toBe(2);
+    expect(history.hasMore).toBe(true);
+  });
+
+  it('单份读不到不影响整列：该条保留元信息、原因留空（不猜），其余照常解析', () => {
+    writeCrashReport('crash-a-server.txt', read('crash-invalid-secret.txt'));
+    writeCrashReport('crash-b-server.txt', read('crash-tls-keystore.txt'));
+    touch(path.join('crash-reports', 'crash-a-server.txt'), 2000);
+    touch(path.join('crash-reports', 'crash-b-server.txt'), 1000);
+    const origOpen = fs.openSync.bind(fs);
+    vi.spyOn(fs, 'openSync').mockImplementation((target, ...rest) => {
+      if (String(target).endsWith('crash-a-server.txt')) throw new Error('EACCES: 权限不足');
+      return origOpen(target, ...rest);
+    });
+
+    const history = makeInstance(tmpDir).getCrashArtifactHistory();
+
+    expect(history.total).toBe(2);
+    expect(history.items[0]).toMatchObject({
+      fileName: 'crash-a-server.txt',
+      reason: null,
+      detail: null,
+      time: null,
+    });
+    expect(history.items[0].sizeBytes).toBeGreaterThan(0); // 元信息仍在，界面能回落到文件名
+    expect(history.items[1].reason).toBeTruthy();
+  });
+
+  it('产物目录不可读时不抛错（读取面不能把面板拖下去）', () => {
+    const instance = makeInstance(path.join(tmpDir, 'not-exist-dir'));
+    expect(() => instance.getCrashArtifactHistory()).not.toThrow();
+    expect(instance.getCrashArtifactHistory().items).toEqual([]);
+  });
+});

@@ -80,6 +80,7 @@ import { errorHandler } from '../middleware/error_handler.js';
 import config from '../config.js';
 import { __configureLogger, __resetLogger } from '../utils/logger.js';
 import { panelErrorsSchema } from '@mc-commander/schemas';
+import { crashArtifactHistorySchema } from '@mc-commander/schemas';
 
 const GB = 1024 * 1024 * 1024;
 const INSTANCE_PATH = '/tmp/mc-test-s1';
@@ -1210,5 +1211,62 @@ describe('GET /api/system-errors', () => {
     expect(res.body.data.entries[0].message).toBe(
       'boom\n  at a.b.C(D.java:1)\n  at d.e.F(G.java:2)',
     );
+  });
+});
+
+// ── GET /instances/:id/crash-reports：崩溃产物历史面 ──
+// 与 /crash-report（单份完整解析）分工不同，这里锁的是「透传 limit + 契约 + 实例不存在」。
+describe('GET /api/instances/:id/crash-reports', () => {
+  let histApp;
+  let manager;
+  let getHistory;
+
+  beforeEach(() => {
+    histApp = express();
+    histApp.use(express.json());
+    getHistory = vi.fn(() => ({
+      items: [
+        {
+          kind: 'crash-report',
+          fileName: 'crash-2026-10-05_01.10.36-server.txt',
+          mtimeMs: 1759600000000,
+          sizeBytes: 306,
+          time: '2026-10-05 01:10:36',
+          reason: 'Exception in server tick loop',
+          detail: 'java.lang.RuntimeException: boom',
+        },
+      ],
+      total: 1,
+      hasMore: false,
+    }));
+    manager = {
+      instances: new Map(),
+      getAllInstances: vi.fn(),
+      getInstance: vi.fn(() => ({ getCrashArtifactHistory: getHistory })),
+    };
+    histApp.use('/api', createStatusRoutes(manager));
+    histApp.use(errorHandler);
+  });
+
+  it('返回历史并按 limit 透传（契约自校验）', async () => {
+    const res = await request(histApp).get('/api/instances/s1/crash-reports?limit=5');
+
+    expect(res.status).toBe(200);
+    expect(getHistory).toHaveBeenCalledWith({ limit: 5 });
+    expect(res.body.data.items[0].reason).toBe('Exception in server tick loop');
+    expect(crashArtifactHistorySchema.safeParse(res.body.data).success).toBe(true);
+  });
+
+  it('limit 非法由契约回落 20', async () => {
+    const res = await request(histApp).get('/api/instances/s1/crash-reports?limit=abc');
+    expect(res.status).toBe(200);
+    expect(getHistory).toHaveBeenCalledWith({ limit: 20 });
+  });
+
+  it('实例不存在：404 且不去碰产物', async () => {
+    manager.getInstance.mockReturnValue(null);
+    const res = await request(histApp).get('/api/instances/nope/crash-reports');
+    expect(res.status).toBe(404);
+    expect(getHistory).not.toHaveBeenCalled();
   });
 });

@@ -349,3 +349,40 @@ export const crashArtifactSchema = z.object({
 
 export type CrashArtifactField = z.infer<typeof crashArtifactFieldSchema>
 export type CrashArtifact = z.infer<typeof crashArtifactSchema>
+
+/**
+ * 崩溃产物历史里的一条。
+ *
+ * `time`/`reason`/`detail` 都可能为 null：前者是产物本身没写（如 hs_err 无可靠时间），
+ * 后两者是「读不到或取不出」，此时界面回落到文件名——**不猜**，不拿别的字段顶替。
+ */
+export const crashArtifactHistoryItemSchema = z.object({
+  kind: z.enum(['crash-report', 'jvm-crash']),
+  fileName: z.string(),
+  mtimeMs: z.number(),
+  sizeBytes: z.number(),
+  /** 崩溃报告的 `Time:` 字段；取不到为 null（界面用 mtimeMs 兜底） */
+  time: z.string().nullable(),
+  /** 崩溃报告的 `Description:`；hs_err 的故障行 */
+  reason: z.string().nullable(),
+  /** 崩溃报告的顶层异常行；hs_err 的问题帧 */
+  detail: z.string().nullable(),
+})
+
+/**
+ * 崩溃产物历史（最新的在前）。产物文件本身即持久面，故不新建存储：
+ * `total` 是实例目录里全部产物的份数，`hasMore` 表示还有更早的没返回。
+ */
+export const crashArtifactHistorySchema = z.object({
+  items: z.array(crashArtifactHistoryItemSchema),
+  total: z.number(),
+  hasMore: z.boolean(),
+})
+
+/** 历史份数上限：够看清「崩过几次」，又不至于把几十份产物一次灌给前端 */
+export const crashArtifactHistoryQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).catch(20),
+})
+
+export type CrashArtifactHistoryItem = z.infer<typeof crashArtifactHistoryItemSchema>
+export type CrashArtifactHistory = z.infer<typeof crashArtifactHistorySchema>

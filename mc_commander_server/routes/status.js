@@ -20,6 +20,8 @@ import {
   instanceSettingsRequestBodySchema,
   instanceStartRequestBodySchema,
   logEntriesSchema,
+  crashArtifactHistoryQuerySchema,
+  crashArtifactHistorySchema,
   crashArtifactSchema,
   nullDataSchema,
   overviewDataSchema,
@@ -606,6 +608,23 @@ export function createStatusRoutes(serverManager) {
     const artifact = instance.getCrashArtifact();
     res.json(validatedSuccess(crashArtifactSchema.nullable(), artifact));
   });
+
+  // GET /api/instances/:id/crash-reports - 崩溃产物历史（最新的在前）
+  //
+  // 与上一条的分工：这一条只给「什么时候崩过几次、每次为什么」（时间/原因/顶层异常），
+  // 点开单份的完整解析仍走 /crash-report。产物文件本身跨面板重启留存，故不需要新存储。
+  router.get(
+    '/instances/:id/crash-reports',
+    validateQuery(crashArtifactHistoryQuerySchema),
+    (req, res) => {
+      const instance = serverManager.getInstance(req.params.id);
+      if (!instance) {
+        return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND));
+      }
+      const history = instance.getCrashArtifactHistory({ limit: req.query.limit });
+      res.json(validatedSuccess(crashArtifactHistorySchema, history));
+    },
+  );
 
   // GET /api/instances/:id/properties - 获取 server.properties
   // 展示视图（重读文件 → 运行状态型属性覆盖 → 敏感键掩码）见
