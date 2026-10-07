@@ -1,4 +1,5 @@
 import { authenticateWebSocket } from './middleware/auth.js';
+import { NOTIFICATION_EVENT_TYPES } from '@mc-commander/schemas';
 import {
   isLocked as isCredentialLocked,
   recordFailure as recordCredentialFailure,
@@ -124,39 +125,6 @@ export const WS_AUTH_TIMEOUT_MS = 10_000;
 // taskExecute 移出落库集合：前端零消费（仅路由进 statusStream 无人监听），
 // 每次任务执行必落库会挤占断线补齐 500 条配额（玩家进出密集的服上
 // 最新事件含 backupFailed 关键通知会被挤出）。
-const NOTIFICATION_EVENT_TYPES = new Set([
-  WSEvents.PLAYER_JOIN,
-  WSEvents.PLAYER_LEAVE,
-  WSEvents.PLAYER_DEATH,
-  WSEvents.PLAYER_RESPAWN,
-  WSEvents.PLAYER_CHAT,
-  WSEvents.PLAYER_SLEEP,
-  WSEvents.ACHIEVEMENT,
-  WSEvents.BACKUP_START,
-  WSEvents.BACKUP_COMPLETE,
-  WSEvents.BACKUP_FAILED,
-  WSEvents.BACKUP_SKIPPED,
-  WSEvents.BACKUP_CANCELLED,
-  WSEvents.RESTORE_START,
-  WSEvents.RESTORE_COMPLETE,
-  WSEvents.RESTORE_FAILED,
-  WSEvents.RESTORE_CANCELLED,
-  // 任务失败与 backupFailed 同语义：低频高价值，落库断线补齐。
-  // taskExecute 每次触发都发故不入集合（见上方注释），失败事件仅在异常时发射
-  WSEvents.TASK_FAILED,
-  // Webhook 投递失败：低频高价值，首次失败通知（连续失败去重后恢复）
-  WSEvents.WEBHOOK_DELIVERY_FAILED,
-  // 长任务终态（部署/升级完成与失败）：低频高价值，用户离开向导后
-  // 唯一得知结果的通道；落库后断线/离线重连也能补齐看到。
-  // 注意本集合只对经 broadcast() 的事件生效——部署终态三项走的是
-  // broadcastGlobalNotification()（该入口无条件落库），在此列出只为同类事件同居一处
-  WSEvents.DEPLOY_COMPLETE,
-  WSEvents.DEPLOY_FAILED,
-  WSEvents.DEPLOY_CANCELLED,
-  WSEvents.UPGRADE_COMPLETE,
-  WSEvents.UPGRADE_FAILED,
-  WSEvents.UPGRADE_CANCELLED,
-]);
 
 // notification_events 保留期：超过保留期的记录定期清理（表只增不删，
 // 玩家进出/聊天事件长期累积，断线补齐 500 条配额被历史事件挤占）

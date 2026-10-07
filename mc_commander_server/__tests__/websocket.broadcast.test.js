@@ -7,6 +7,7 @@ import {
   resetNotificationEventQueue,
 } from '../websocket.js';
 import { resetSystemStatsCache } from '../utils/system-stats.js';
+import { NOTIFICATION_EVENT_TYPES, WS_EVENT_TYPES, WS_EVENT_KINDS } from '@mc-commander/schemas';
 
 // Mock 数据库：捕获通知事件落库（全局通知 id 透传 / 落库失败降级分支）
 vi.mock('../db/index.js', () => ({
@@ -585,5 +586,20 @@ describe('WebSocket 系统广播域（broadcastAll / 全局通知 / 系统统计
       expect(wsStay.send).toHaveBeenCalledTimes(1);
       expect(wsGone.send).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('事件目录与落库面的单一事实源', () => {
+  it('服务端 WSEvents 与契约包 WS_EVENT_TYPES 逐项一致（防两边各自加事件）', () => {
+    expect([...Object.values(WSEvents)].sort()).toEqual([...WS_EVENT_TYPES].sort());
+  });
+
+  it('落库面取自契约包，且只收「发生过的事实」', () => {
+    const declared = Object.values(WSEvents);
+    for (const type of NOTIFICATION_EVENT_TYPES) {
+      // 进度类是 state：写库是纯放大，且会让「一条消息的连续修正」变成 1 条/秒的日志
+      expect(WS_EVENT_KINDS[type], `${type} 是 state 类，不该进落库面`).toBe('event');
+      expect(declared, `${type} 不在事件目录里`).toContain(type);
+    }
   });
 });

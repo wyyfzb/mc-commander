@@ -130,7 +130,16 @@ export const wsBackupProgressPayloadSchema = z.object({
   percent: z.number().min(0).max(100),
 })
 
-/** 通知类事件集合（服务端落库，断线补齐用） */
+/**
+ * 落库面（服务端落库、断线补齐用）——**服务端从这里取，不再各存一份**。
+ *
+ * 收进来的判据是「低频高价值 + 用户离开现场后唯一能得知结果的通道」：只收**发生过的事实**
+ * （与 `WS_EVENT_KINDS` 的 `state` 类不相交——进度类写库是纯放大，1 条/秒）。
+ * 两类刻意**不在**此列：
+ * - `taskExecute`：每次触发都发，属高频；
+ * - 部署/面板升级的终态：走的是无条件落库的那个全局入口，在这里列出只为同类事件同居一处
+ *   （本集合只对经 `broadcast()` 的事件生效）。
+ */
 export const NOTIFICATION_EVENT_TYPES: ReadonlySet<WsEventType> = new Set([
   'playerJoin',
   'playerLeave',
