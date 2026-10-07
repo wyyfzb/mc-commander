@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.4](https://github.com/wyyfzb/mc-commander/compare/v0.7.3...v0.7.4) (2026-10-07)
+
+
+### Bug Fixes
+
+* 补齐世界格式升级进度可见性，并收敛版本解析与依赖锁 ([#645](https://github.com/wyyfzb/mc-commander/issues/645)) ([5023cf1](https://github.com/wyyfzb/mc-commander/commit/5023cf1cdee40e9c4489fd74ff4501fbcd5c4472))
+
 ## [0.7.3](https://github.com/wyyfzb/mc-commander/compare/v0.7.2...v0.7.3) (2026-10-06)
 
 
