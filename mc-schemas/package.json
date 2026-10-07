@@ -1,6 +1,6 @@
 {
   "name": "@mc-commander/schemas",
-  "version": "0.7.3",
+  "version": "0.7.4",
   "description": "Shared zod schemas for API/WS/notification contracts",
   "type": "module",
   "main": "./dist/index.js",
