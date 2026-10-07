@@ -6416,9 +6416,9 @@ const WS_STATE_RECOVERY = {
 	backupProgress: "poll",
 	restoreProgress: "poll",
 	systemStatsUpdate: "cadence",
-	performanceUpdate: "none",
-	weatherUpdate: "none",
-	playerStatsUpdate: "none"
+	performanceUpdate: "snapshot",
+	weatherUpdate: "snapshot",
+	playerStatsUpdate: "snapshot"
 };
 //#endregion
 //#region src/world.ts

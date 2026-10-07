@@ -254,11 +254,12 @@ export const WS_STATE_RECOVERY: Readonly<Partial<Record<WsEventType, WsStateReco
   backupProgress: 'poll',
   restoreProgress: 'poll',
   systemStatsUpdate: 'cadence',
-  // 以下三条是声明出来的缺口：`stats-collector` 只在**值变化时**推送，没有「订阅即补一帧」，
-  // 也没有对应的 REST 读法 ⇒ 值长时间不变时，晚订阅者拿不到当前值。
-  performanceUpdate: 'none',
-  weatherUpdate: 'none',
-  playerStatsUpdate: 'none',
+  // 以下三条原先声明为 `none`（缺口）：它们只在**值变化时**推送，值长时间不变时晚订阅者拿不到
+  // 当前值。实测这些值本就在实例上缓存着（CPU/内存/世界时间/天气/最近一次玩家读数），
+  // 故改为订阅即补一份 —— 不额外采集、不落库。
+  performanceUpdate: 'snapshot',
+  weatherUpdate: 'snapshot',
+  playerStatsUpdate: 'snapshot',
 }
 
 export type WsEventType = (typeof WS_EVENT_TYPES)[number]

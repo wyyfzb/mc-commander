@@ -997,12 +997,13 @@ describe('事件通道口径（状态 vs 事件）', () => {
     }
   })
 
-  it('已知缺口是显式清单：多一个缺口就得改这里', () => {
+  it('已知缺口是显式清单：当前为空，再出现就必须登记', () => {
     const gaps = Object.entries(WS_STATE_RECOVERY)
       .filter(([, path]) => path === 'none')
       .map(([type]) => type)
       .sort()
-    // 缺口不是「可以忽略」，而是「已登记、等 owner 定」。改这个数组＝承认又多了一个。
-    expect(gaps).toEqual(['performanceUpdate', 'playerStatsUpdate', 'weatherUpdate'])
+    // 曾经的三条（性能读数 / 天气 / 玩家读数）已改成订阅即补。缺口不是「可以忽略」，而是
+    // 「已登记、等 owner 定」——往这个数组里加名字，就是承认又多了一个没有自愈路径的通道。
+    expect(gaps).toEqual([])
   })
 })
