@@ -209,7 +209,7 @@ describe('readDifficulty 意外异常兜底（issue #295）', () => {
     expect(res.body.data.difficulty).toBe('easy');
   });
 
-  it('GET /world readDifficulty 拒绝且文件无值时难度回退默认 normal', async () => {
+  it('GET /world readDifficulty 拒绝且文件无值时难度回退 vanilla 默认 easy', async () => {
     const mockInstance = {
       id: 's1',
       isRunning: false,
@@ -228,6 +228,6 @@ describe('readDifficulty 意外异常兜底（issue #295）', () => {
     const res = await request(app).get('/api/instances/s1/world');
 
     expect(res.status).toBe(200);
-    expect(res.body.data.difficulty).toBe('normal');
+    expect(res.body.data.difficulty).toBe('easy');
   });
 });

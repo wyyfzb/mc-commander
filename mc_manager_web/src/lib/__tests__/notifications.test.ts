@@ -58,17 +58,17 @@ describe('buildNotifications 文案模板', () => {
   })
 
   it('status 事件映射（started/ready/stopped/crash/save）', () => {
-    expect(buildNotifications({ type: 'status', data: { event: 'started' } })[0]?.content).toBe(
-      '服务器已启动',
-    )
-    expect(buildNotifications({ type: 'status', data: { event: 'ready' } })[0]?.content).toBe(
+    expect(
+      buildNotifications({ type: 'statusEvent', data: { event: 'started' } })[0]?.content,
+    ).toBe('服务器已启动')
+    expect(buildNotifications({ type: 'statusEvent', data: { event: 'ready' } })[0]?.content).toBe(
       '服务器已就绪',
     )
-    expect(buildNotifications({ type: 'status', data: { event: 'stopped' } })[0]?.content).toBe(
-      '服务器已停止',
-    )
     expect(
-      buildNotifications({ type: 'status', data: { event: 'crash', autoRestart: true } })[0]
+      buildNotifications({ type: 'statusEvent', data: { event: 'stopped' } })[0]?.content,
+    ).toBe('服务器已停止')
+    expect(
+      buildNotifications({ type: 'statusEvent', data: { event: 'crash', autoRestart: true } })[0]
         ?.content,
     ).toBe('服务器意外退出，正在自动重启')
   })
@@ -175,7 +175,7 @@ describe('buildNotifications 文案模板', () => {
 
   it('status circuit_breaker → circuitBreaker severe 通知（含连崩次数）', () => {
     const [n] = buildNotifications({
-      type: 'status',
+      type: 'statusEvent',
       data: { event: 'circuit_breaker', consecutiveCrashes: 3, windowMs: 120000 },
     })
     expect(n).toMatchObject({ type: 'circuitBreaker', category: 'server' })
@@ -183,7 +183,7 @@ describe('buildNotifications 文案模板', () => {
   })
 
   it('status circuit_breaker 缺次数字段时显示 0', () => {
-    const [n] = buildNotifications({ type: 'status', data: { event: 'circuit_breaker' } })
+    const [n] = buildNotifications({ type: 'statusEvent', data: { event: 'circuit_breaker' } })
     expect(n?.content).toBe('连续崩溃 0 次，已触发熔断保护（自动重启暂停，请检查日志）')
   })
 

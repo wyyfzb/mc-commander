@@ -108,7 +108,7 @@ describe('notifications store instanceId 透传（issue 334）', () => {
 
   it('server 类事件携带 instanceId → 通知条目透传（供跳转实例页）', () => {
     useNotificationStore.getState().dispatchWsEvent({
-      type: 'status',
+      type: 'statusEvent',
       data: { event: 'crash', autoRestart: false },
       instanceId: 'inst-1',
     })

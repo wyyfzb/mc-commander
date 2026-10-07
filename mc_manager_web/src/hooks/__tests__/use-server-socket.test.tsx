@@ -370,7 +370,7 @@ describe('useServerSocket（WS 单例治理，issue #311）', () => {
 
     act(() => {
       ws.receive({
-        type: 'status',
+        type: 'statusSnapshot',
         instanceId: 'i-1',
         data: {
           status: 'running',
@@ -400,7 +400,7 @@ describe('useServerSocket（WS 单例治理，issue #311）', () => {
 
     act(() => {
       ws.receive({
-        type: 'status',
+        type: 'statusSnapshot',
         instanceId: 'i-1',
         data: { status: 'running', isRunning: true, players: [], tps: 20, worldUpgrade: null },
       })
@@ -423,7 +423,7 @@ describe('useServerSocket（WS 单例治理，issue #311）', () => {
 
     act(() => {
       ws.receive({
-        type: 'status',
+        type: 'statusSnapshot',
         instanceId: 'i-1',
         data: { status: 'running', isRunning: true, players: [], tps: 20 },
       })
@@ -668,7 +668,7 @@ describe('useServerSocket（状态跃迁通知接线）', () => {
     const ws = await connectReady('i-1')
 
     act(() => {
-      ws.receive({ type: 'status', instanceId: 'i-1', data: { event: 'started' } })
+      ws.receive({ type: 'statusEvent', instanceId: 'i-1', data: { event: 'started' } })
     })
     const afterStart = useNotificationStore.getState().items
     expect(afterStart[0]?.type).toBe('serverStart')
@@ -676,7 +676,7 @@ describe('useServerSocket（状态跃迁通知接线）', () => {
     expect(afterStart[0]?.instanceId).toBe('i-1')
 
     act(() => {
-      ws.receive({ type: 'status', instanceId: 'i-1', data: { event: 'stopped' } })
+      ws.receive({ type: 'statusEvent', instanceId: 'i-1', data: { event: 'stopped' } })
     })
     const afterStop = useNotificationStore.getState().items
     expect(afterStop[0]?.type).toBe('serverStop')
@@ -689,12 +689,12 @@ describe('useServerSocket（状态跃迁通知接线）', () => {
     const ws = await connectReady('i-1')
 
     act(() => {
-      ws.receive({ type: 'status', instanceId: 'i-other', data: { event: 'started' } })
+      ws.receive({ type: 'statusEvent', instanceId: 'i-other', data: { event: 'started' } })
     })
     expect(useNotificationStore.getState().items.length).toBe(0)
 
     act(() => {
-      ws.receive({ type: 'status', instanceId: 'i-other', data: { event: 'crash' } })
+      ws.receive({ type: 'statusEvent', instanceId: 'i-other', data: { event: 'crash' } })
     })
     const items = useNotificationStore.getState().items
     expect(items[0]?.type).toBe('serverCrash')
@@ -716,7 +716,7 @@ describe('useServerSocket（状态跃迁通知接线）', () => {
     await flushMicrotasks()
 
     act(() => {
-      ws.receive({ type: 'status', instanceId: 'i-1', data: { event: 'stopped' } })
+      ws.receive({ type: 'statusEvent', instanceId: 'i-1', data: { event: 'stopped' } })
     })
 
     // 详情与列表都进入失效态：详情 refetch 后 isRunning 翻转，停止状态条即时出现

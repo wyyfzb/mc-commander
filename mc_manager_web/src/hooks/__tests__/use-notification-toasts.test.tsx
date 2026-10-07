@@ -56,7 +56,7 @@ describe('useNotificationToasts', () => {
   it('server 类事件不播报（沿用只入通知中心策略）', () => {
     renderHook(() => useNotificationToasts())
 
-    dispatch('status', { event: 'started' })
+    dispatch('statusEvent', { event: 'started' })
 
     expect(useNotificationStore.getState().items).toHaveLength(1)
     expect(mockedToast).not.toHaveBeenCalled()

@@ -11,7 +11,7 @@ import { PropertiesPanel } from '../properties-panel'
 
 // 虚构属性（结构与 mock-server/MSW 同步；敏感键掩码）
 const mockProps: Record<string, string> = {
-  difficulty: 'normal',
+  difficulty: 'easy',
   gamemode: 'survival',
   'white-list': 'false',
   pvp: 'true',

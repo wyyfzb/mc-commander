@@ -1,5 +1,9 @@
 import { authenticateWebSocket } from './middleware/auth.js';
-import { NOTIFICATION_EVENT_TYPES } from '@mc-commander/schemas';
+import {
+  NOTIFICATION_EVENT_TYPES,
+  WS_STATUS_EVENT_NAMES,
+  CRITICAL_STATUS_EVENTS,
+} from '@mc-commander/schemas';
 import {
   isLocked as isCredentialLocked,
   recordFailure as recordCredentialFailure,
@@ -14,7 +18,8 @@ import { collectSystemStats } from './utils/system-stats.js';
 
 export const WSEvents = {
   LOG: 'log',
-  STATUS: 'status',
+  STATUS_SNAPSHOT: 'statusSnapshot',
+  STATUS_EVENT: 'statusEvent',
   PERFORMANCE_UPDATE: 'performanceUpdate',
   WEATHER_UPDATE: 'weatherUpdate',
   WORLD_UPGRADE: 'worldUpgrade',
@@ -79,7 +84,8 @@ export const ClientMessages = {
 // 与 WSEvents 同文件维护：新增事件时**必须**在此二分归类（归类哨兵见
 // __tests__/websocket.readonly-filter.test.js——未归类的新事件会让用例变红）。
 export const READONLY_WS_EVENTS = new Set([
-  WSEvents.STATUS, // 运行态跃迁与状态快照（含崩溃熔断提示，不含日志文本）
+  WSEvents.STATUS_SNAPSHOT, // 运行态快照（运行/在线/tps，不含日志文本）
+  WSEvents.STATUS_EVENT, // 运行态跃迁与崩溃熔断提示
   WSEvents.PERFORMANCE_UPDATE, // 性能读数（含睡眠/清醒玩家名）
   WSEvents.WEATHER_UPDATE,
   WSEvents.PLAYER_STATS_UPDATE, // 在线玩家血量/护甲/坐标
@@ -175,21 +181,13 @@ const STATE_SNAPSHOTS = {
 };
 
 // status 事件中需要持久化的状态跃迁子事件（前端据此生成通知）
-const STATUS_EVENT_TYPES = new Set([
-  'started',
-  'stopped',
-  'crash',
-  'ready',
-  'save',
-  'circuit_breaker',
-]);
+const STATUS_EVENT_TYPES = new Set(WS_STATUS_EVENT_NAMES);
 
 // 跃迁子事件中属「意外失败」的关键事件：用户不一定正盯着出事的实例，投递面取全局，
 // 否则多实例部署下非当前实例的崩溃只有恰好打开该实例控制台才看得见。
 // 同口径的无订阅全局播报也适用于失败类事件（备份失败/任务失败/Webhook 投递失败，
 // 见 broadcastCriticalInstanceEvent）。started/stopped/ready/save 是常规生命周期
 // （多数由用户在面板上发起），保持订阅内投递——跨实例广播只会制造噪音
-const CRITICAL_STATUS_EVENTS = new Set(['crash', 'circuit_breaker']);
 
 /// 通知事件落库（广播前）：返回自增 id 供消息携带与断线补齐。
 /// 上线字段名必须是 eventId——契约（mc-schemas/src/ws.ts）与前端游标
@@ -463,7 +461,7 @@ export function setupWebSocket(wss, serverManager) {
               : undefined;
             ws.send(
               JSON.stringify({
-                type: WSEvents.STATUS,
+                type: WSEvents.STATUS_SNAPSHOT,
                 instanceId: msg.instanceId,
                 data: {
                   status: instance.isRunning ? 'running' : 'stopped',
@@ -590,7 +588,9 @@ export function setupWebSocket(wss, serverManager) {
       if (!leavePending()) return;
       clearCredentialFailures(ip);
       // 先回执 auth ok 再登记（登记时会补发 activeDeploys 快照——回执必须
-      // 先于快照到达，否则客户端鉴权门控会丢弃部署进度补发）
+      // 先于快照到达，否则客户端鉴权门控会丢弃部署进度补发）。
+      // 触发点选登记而非订阅：部署是**全局**视图（向导不依赖实例订阅），挂在订阅上会让
+      // 不看实例的页面永远收不到补偿；实例作用域的状态才走订阅时的补发（见 STATE_SNAPSHOTS）
       ws.send(JSON.stringify({ type: ClientMessages.AUTH, ok: true, timestamp: Date.now() }));
       setupAuthenticatedClient(ws, { sessionToken: msg.sessionToken || null, role: auth.role });
     }
@@ -748,24 +748,25 @@ export function setupWebSocket(wss, serverManager) {
     // status 快照高频（每 5s performance 附带）；仅状态跃迁子事件落库
     if (STATUS_EVENT_TYPES.has(data?.event)) {
       if (CRITICAL_STATUS_EVENTS.has(data.event)) {
-        broadcastCriticalInstanceEvent(WSEvents.STATUS, data);
+        broadcastCriticalInstanceEvent(WSEvents.STATUS_EVENT, data);
         return;
       }
       // 常规跃迁也落库（实例行，仅订阅者断线补齐可见），但投递仍按订阅过滤
-      const eventId = persistNotificationEvent(data.instanceId, WSEvents.STATUS, data);
+      const eventId = persistNotificationEvent(data.instanceId, WSEvents.STATUS_EVENT, data);
       fanOut(
         JSON.stringify({
           ...(eventId != null ? { eventId } : {}),
-          type: WSEvents.STATUS,
+          type: WSEvents.STATUS_EVENT,
           instanceId: data.instanceId,
           data,
           timestamp: Date.now(),
         }),
-        { type: WSEvents.STATUS, instanceId: data.instanceId },
+        { type: WSEvents.STATUS_EVENT, instanceId: data.instanceId },
       );
       return;
     }
-    broadcast(data.instanceId, WSEvents.STATUS, data);
+    // 没有 event 字段 ⇒ 这是**快照形状**的周期性广播（每 5s 随性能附带），不是跃迁
+    broadcast(data.instanceId, WSEvents.STATUS_SNAPSHOT, data);
   });
 
   serverManager.on('instance:playerJoin', (data) => {

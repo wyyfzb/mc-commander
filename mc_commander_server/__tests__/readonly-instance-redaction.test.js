@@ -91,7 +91,7 @@ const BASELINE_STATUS = {
   lastSave: '2026-09-16T00:00:00.000Z',
   lastOutput: 'Done (1.234s)! For help, type "help"',
   gameMode: 'survival',
-  difficulty: 'normal',
+  difficulty: 'easy',
   whitelisted: false,
   onlineMode: true,
   viewDistance: 10,

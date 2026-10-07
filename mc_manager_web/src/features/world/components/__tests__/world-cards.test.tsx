@@ -27,7 +27,7 @@ function makeWorld(overrides: Partial<WorldInfo> = {}): WorldInfo {
     type: 'minecraft:normal',
     seed: '9876543210123456789',
     sizeGB: 3.2,
-    difficulty: 'normal',
+    difficulty: 'easy',
     gameMode: 'survival',
     viewDistance: 10,
     simulationDistance: 10,
@@ -169,7 +169,7 @@ describe('WorldInfoCard', () => {
     expect(screen.getByText('3.2')).toBeInTheDocument()
     expect(screen.getByText('GB')).toBeInTheDocument()
     // 难度/模式 PillBadge 文本
-    expect(screen.getByText('普通')).toBeInTheDocument()
+    expect(screen.getByText('简单')).toBeInTheDocument()
     expect(screen.getByText('生存')).toBeInTheDocument()
   })
 

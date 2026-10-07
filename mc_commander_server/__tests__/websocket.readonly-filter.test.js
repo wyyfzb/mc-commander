@@ -125,7 +125,9 @@ describe('只读角色的 WS 事件过滤', () => {
     });
 
     it.each([
-      ['instance:status', WSEvents.STATUS, { event: 'started', isRunning: true }],
+      ['instance:status', WSEvents.STATUS_EVENT, { event: 'started', isRunning: true }],
+      // 同一 emitter 的两种载荷形状：带 event 是跃迁、不带是快照（标题由类型区分）
+      ['instance:status', WSEvents.STATUS_SNAPSHOT, { status: 'running', isRunning: true }],
       ['instance:performanceUpdate', WSEvents.PERFORMANCE_UPDATE, { tps: 20 }],
       ['instance:weatherUpdate', WSEvents.WEATHER_UPDATE, { weather: 'clear' }],
       ['instance:playerStatsUpdate', WSEvents.PLAYER_STATS_UPDATE, { players: [] }],
@@ -164,7 +166,7 @@ describe('只读角色的 WS 事件过滤', () => {
       const ro = connect(READONLY_KEY);
       ro.send.mockClear();
       serverManager.emit('instance:status', { instanceId: 's1', event: 'started' });
-      expect(receivedTypes(ro)).not.toContain(WSEvents.STATUS);
+      expect(receivedTypes(ro)).not.toContain(WSEvents.STATUS_EVENT);
     });
   });
 
@@ -177,7 +179,7 @@ describe('只读角色的 WS 事件过滤', () => {
         consecutiveCrashes: 3,
         windowMs: 60000,
       });
-      expect(receivedTypes(ro)).toContain(WSEvents.STATUS);
+      expect(receivedTypes(ro)).toContain(WSEvents.STATUS_EVENT);
     });
 
     it('systemStatsUpdate（broadcastAll 全局）对只读放行', () => {
@@ -242,7 +244,7 @@ describe('只读角色的 WS 事件过滤', () => {
       ro.emit('message', JSON.stringify({ type: 'subscribe', instanceId: 's1' }));
       const types = receivedTypes(ro);
       expect(types).not.toContain(WSEvents.UPGRADE_PROGRESS);
-      expect(types).toContain(WSEvents.STATUS);
+      expect(types).toContain(WSEvents.STATUS_SNAPSHOT);
     });
   });
 
