@@ -209,6 +209,7 @@ export function WorldPage() {
                 instanceId={instanceId}
                 isRconConnected={isRconConnected}
                 mcVersion={mcVersion}
+                mcVersionPending={statusQuery.isPending}
                 onSendCommand={handleSendCommand}
               />
             </TabsContent>

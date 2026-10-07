@@ -36,6 +36,8 @@ interface DatapackPanelProps {
   isRconConnected: boolean
   /** 服务器版本（世界页来自 status 查询）：用于判定 `create` 子命令是否可用 */
   mcVersion: string
+  /** 版本还没落定（status 查询在途）。与「版本未知」分开：在途时整段不渲染，避免闪一下再收 */
+  mcVersionPending: boolean
   onSendCommand: (command: string) => Promise<string | null>
 }
 
@@ -69,6 +71,7 @@ export function DatapackPanel({
   instanceId,
   isRconConnected,
   mcVersion,
+  mcVersionPending,
   onSendCommand,
 }: DatapackPanelProps) {
   // 列表走 query：loading/error/refetch 都由它管，不必自己写 effect + setState
@@ -265,7 +268,9 @@ export function DatapackPanel({
 
         <section className="flex flex-col gap-1.5">
           <h3 className="text-mcs-xs font-medium text-mcs-text-muted">新建数据包</h3>
-          {canCreate ? (
+          {/* 版本在途时不渲染这一段：`supportsDatapackCreate('')` 按「支持」处置，先画出来再在
+              status 落定后收掉，会让用户在首帧开始输入、随后连输入框一起消失 */}
+          {mcVersionPending ? null : canCreate ? (
             <>
               <div className="flex items-center gap-1.5">
                 <Input
