@@ -428,36 +428,6 @@ export function setupWebSocket(wss, serverManager) {
           } catch (err) {
             logger.error('Failed to send active upgrade snapshot:', err);
           }
-          // 世界格式升级补发：订阅即把**当前这一轮**的状态补齐。补两条是有意的——
-          // `started` 是客户端那条通知与进度条的**载体**（进度挂在「升级开始」那条上，
-          // 只补 progress 会得到一个没有载体、界面上什么都不显示的百分比），
-          // `progress` 才是当前值。与上面的 jar 升级补发同款：属管理员生命周期信息，
-          // 只读连接不补发（WORLD_UPGRADE 不在只读白名单内，此处判据与 fanOut 同源）
-          try {
-            const worldUpgrade = worldUpgradeInFlight.get(msg.instanceId);
-            if (worldUpgrade && mayReceiveEvent(ws, WSEvents.WORLD_UPGRADE)) {
-              ws.send(
-                JSON.stringify({
-                  type: WSEvents.WORLD_UPGRADE,
-                  instanceId: msg.instanceId,
-                  data: { state: 'started', progress: null },
-                  timestamp: Date.now(),
-                }),
-              );
-              if (worldUpgrade.progress !== null) {
-                ws.send(
-                  JSON.stringify({
-                    type: WSEvents.WORLD_UPGRADE,
-                    instanceId: msg.instanceId,
-                    data: { state: 'progress', progress: worldUpgrade.progress },
-                    timestamp: Date.now(),
-                  }),
-                );
-              }
-            }
-          } catch (err) {
-            logger.error('Failed to send world upgrade snapshot:', err);
-          }
           const instance = serverManager.getInstance(msg.instanceId);
           // 不带角色判据：status 本就在只读白名单内，包一层恒真的判据只会让后来者
           // 误以为这条快照是「可拦的」（真判据在 fanOut 与重放处）。
@@ -466,6 +436,14 @@ export function setupWebSocket(wss, serverManager) {
           // 违反契约的 z.string()）、players 是 Map（旧实现直接发出去会被
           // JSON.stringify 成 {}，违反 z.array）。四项都不在只读裁剪清单内，故不分角色
           if (instance) {
+            // 世界格式升级（state 类，见契约 WS_EVENT_KINDS）的权威读法放在状态快照里：
+            // 对象＝在途、null＝确认空闲、**裁剪掉＝未知**。不再补发一条伪造的 started——那会
+            // 同时篡改事实（开始时间变成「现在」）并给客户端一个只能由边沿创建的载体。
+            // 角色裁剪与 fanOut 同源：升级属管理员生命周期信息（WORLD_UPGRADE 不在只读白名单内），
+            // 而状态快照本身是只读也能收的 ⇒ 不裁剪就会从这里漏出去
+            const inFlight = mayReceiveEvent(ws, WSEvents.WORLD_UPGRADE)
+              ? (worldUpgradeInFlight.get(msg.instanceId) ?? null)
+              : undefined;
             ws.send(
               JSON.stringify({
                 type: WSEvents.STATUS,
@@ -475,6 +453,9 @@ export function setupWebSocket(wss, serverManager) {
                   isRunning: Boolean(instance.isRunning),
                   players: Array.from(instance.players?.values?.() ?? []),
                   tps: typeof instance.tps === 'number' ? instance.tps : null,
+                  ...(inFlight === undefined
+                    ? {}
+                    : { worldUpgrade: inFlight && { progress: inFlight.progress } }),
                 },
                 timestamp: Date.now(),
               }),

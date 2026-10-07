@@ -347,8 +347,7 @@ describe('WebSocket 长任务（部署/升级）通知与补发', () => {
       expect(upgradeMsg.data.percent).toBe(55);
     });
 
-    it('subscribe 时补发该实例进行中的世界格式升级：先补 started（载体）再补当前进度', () => {
-      // 事件经 setupWebSocket 注册的处理器流过，故用 emit 驱动（而不是直接改内部快照）
+    it('subscribe 的状态快照带上在途的世界格式升级，且不再补发伪造的 started', () => {
       serverManager.emit('instance:worldUpgrade', {
         instanceId: 'paper-abc1',
         state: 'started',
@@ -364,16 +363,15 @@ describe('WebSocket 长任务（部署/升级）通知与补发', () => {
       ws.send.mockClear();
       subscribe(ws, 'paper-abc1');
 
-      const worldMsgs = ws.send.mock.calls
-        .map((c) => JSON.parse(c[0]))
-        .filter((m) => m.type === WSEvents.WORLD_UPGRADE);
-      // 必须两条：进度挂在「升级开始」那条通知上，只补 progress 会得到一个没有载体的百分比
-      expect(worldMsgs.map((m) => m.data.state)).toEqual(['started', 'progress']);
-      expect(worldMsgs[0].instanceId).toBe('paper-abc1');
-      expect(worldMsgs[1].data.progress).toBeCloseTo(0.42);
+      const messages = ws.send.mock.calls.map((c) => JSON.parse(c[0]));
+      const snapshot = messages.find((m) => m.type === WSEvents.STATUS);
+      expect(snapshot.data.worldUpgrade).toEqual({ progress: 0.42 });
+      // 不补发边沿：补一条 started 会把「开始时间」改成现在（篡改事实），并给客户端一个
+      // 只能由边沿创建的载体（进度条的挂载点）
+      expect(messages.map((m) => m.type)).not.toContain(WSEvents.WORLD_UPGRADE);
     });
 
-    it('世界格式升级到终态后不再补发（否则上一轮的百分比会补给后来连上的客户端）', () => {
+    it('世界格式升级到终态后快照里是 null（确认空闲，客户端据此清残留）', () => {
       serverManager.emit('instance:worldUpgrade', {
         instanceId: 'paper-abc1',
         state: 'progress',
@@ -389,11 +387,14 @@ describe('WebSocket 长任务（部署/升级）通知与补发', () => {
       ws.send.mockClear();
       subscribe(ws, 'paper-abc1');
 
-      const types = ws.send.mock.calls.map((c) => JSON.parse(c[0]).type);
-      expect(types).not.toContain(WSEvents.WORLD_UPGRADE);
+      const messages = ws.send.mock.calls.map((c) => JSON.parse(c[0]));
+      const snapshot = messages.find((m) => m.type === WSEvents.STATUS);
+      // 必须是「有字段且为 null」，不是「字段缺席」：缺席＝未知（保持现状），null＝确认空闲（清掉）
+      expect(snapshot.data).toHaveProperty('worldUpgrade', null);
+      expect(messages.map((m) => m.type)).not.toContain(WSEvents.WORLD_UPGRADE);
     });
 
-    it('只读连接不补发世界格式升级快照（与 fanOut 同源：不在只读白名单内）', () => {
+    it('只读连接的状态快照里不含 worldUpgrade（不从这里漏管理员生命周期信息）', () => {
       serverManager.emit('instance:worldUpgrade', {
         instanceId: 'paper-abc1',
         state: 'progress',
@@ -401,16 +402,23 @@ describe('WebSocket 长任务（部署/升级）通知与补发', () => {
       });
 
       const ws = connect(wss);
-      // 角色落定本身由 websocket.readonly-filter.test.js 覆盖；这里只测补发的角色判据
+      // 角色落定本身由 websocket.readonly-filter.test.js 覆盖；这里只测快照的裁剪
       ws._role = 'readonly';
       ws.send.mockClear();
       subscribe(ws, 'paper-abc1');
 
-      const types = ws.send.mock.calls.map((c) => JSON.parse(c[0]).type);
-      expect(types).not.toContain(WSEvents.WORLD_UPGRADE);
+      const messages = ws.send.mock.calls.map((c) => JSON.parse(c[0]));
+      const snapshot = messages.find((m) => m.type === WSEvents.STATUS);
+      expect(snapshot.data).not.toHaveProperty('worldUpgrade');
+      expect(messages.map((m) => m.type)).not.toContain(WSEvents.WORLD_UPGRADE);
     });
 
-    it('subscribe 其他实例不补发无关实例的世界格式升级', () => {
+    it('别的实例在途不影响本实例的快照（worldUpgrade 为 null，不是借来的进度）', () => {
+      serverManager.getInstance = vi.fn((id) =>
+        id === 'paper-abc1' || id === 'vanilla-other'
+          ? { id, name: id, mcVersion: '1.21.4', isRunning: true, players: new Map(), tps: 20 }
+          : null,
+      );
       serverManager.emit('instance:worldUpgrade', {
         instanceId: 'paper-abc1',
         state: 'progress',
@@ -421,8 +429,11 @@ describe('WebSocket 长任务（部署/升级）通知与补发', () => {
       ws.send.mockClear();
       subscribe(ws, 'vanilla-other');
 
-      const types = ws.send.mock.calls.map((c) => JSON.parse(c[0]).type);
-      expect(types).not.toContain(WSEvents.WORLD_UPGRADE);
+      const snapshot = ws.send.mock.calls
+        .map((c) => JSON.parse(c[0]))
+        .find((m) => m.type === WSEvents.STATUS);
+      expect(snapshot.instanceId).toBe('vanilla-other');
+      expect(snapshot.data).toHaveProperty('worldUpgrade', null);
     });
 
     it('subscribe 其他实例不补发无关实例的升级快照', () => {
