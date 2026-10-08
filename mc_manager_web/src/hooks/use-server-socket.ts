@@ -408,6 +408,12 @@ export function useServerSocket(instanceId: string | null) {
           })
           break
         }
+        // 官方名单变化（面板外的 /op、/whitelist、/ban 也会推来）：只失效重取，
+        // **不落通知条目**——面板自己的操作已经给过反馈，落条目会让同一次操作在通知中心
+        // 出现两条（这正是「重复不双报」要避免的）
+        case 'nameListChanged':
+          void queryClient.invalidateQueries({ queryKey: queryKeys.players(msg.instanceId) })
+          break
         case 'playerJoin':
         case 'playerLeave':
         case 'playerDeath':

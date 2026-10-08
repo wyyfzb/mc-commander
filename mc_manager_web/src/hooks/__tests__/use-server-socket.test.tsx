@@ -907,4 +907,44 @@ describe('useServerSocket（状态跃迁通知接线）', () => {
     expect(items[0]?.type).toBe('deployCancelled')
     expect(items[0]?.content).toBe('实例「演示实例」部署已取消')
   })
+
+  it('名单变化：只失效重取，不落通知条目（面板自己的操作不该在通知中心出现两条）', async () => {
+    useConnectionStore.setState({ baseUrl: '', apiKey: 'k1', status: 'ready' })
+    useAuthStore.setState({ session: makeSession('token-1') })
+
+    // 在渲染前换成探针：hook 在 render 时捕获 action 引用，之后再换就测不到了
+    const dispatchSpy = vi.fn()
+    useNotificationStore.setState({ dispatchWsEvent: dispatchSpy as never })
+
+    const wrapper = createWrapper()
+    // 先在缓存里放两个名单类查询（列表 + 封禁记录），否则「失效」无对象可标
+    wrapper.qc.setQueryData(queryKeys.players('i-1'), [])
+    wrapper.qc.setQueryData([...queryKeys.players('i-1'), 'bans'], [])
+    const listKey = queryKeys.players('i-1')
+
+    renderHook(() => useServerSocket('i-1'), { wrapper })
+    await waitFor(() => expect(FakeWebSocket.instances.length).toBe(1))
+    const ws = FakeWebSocket.instances[0]!
+    act(() => {
+      openAndAuth(ws)
+    })
+    await flushMicrotasks()
+
+    act(() => {
+      ws.receive({
+        type: 'nameListChanged',
+        instanceId: 'i-1',
+        data: { list: 'bans', action: 'added', target: 'Steve' },
+      })
+    })
+    await flushMicrotasks()
+
+    // 失效重取：名单类查询全部落在 players 前缀下（列表与封禁记录一起被标脏）
+    expect(wrapper.qc.getQueryState(listKey)?.isInvalidated).toBe(true)
+    expect(wrapper.qc.getQueryState([...queryKeys.players('i-1'), 'bans'])?.isInvalidated).toBe(
+      true,
+    )
+    // 不落条目：面板自身封禁已给过反馈，这里再落一条就是双报
+    expect(dispatchSpy).not.toHaveBeenCalled()
+  })
 })

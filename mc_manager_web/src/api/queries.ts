@@ -26,6 +26,16 @@ import { apiGetAuditLogsPage, apiGetCommandHistoryPage, type AuditQueryParams } 
  */
 export const FALLBACK_POLL_INTERVAL_MS = 30_000
 
+/**
+ * 推送面（MSMP）在线时名单类查询的保底轮询间隔。
+ *
+ * 名单由推送即时驱动（加入/离开 + 官方名单变化都会失效重取），30s 一轮纯属空转；
+ * 但不关掉轮询：推送半开、服务端卡住这类情况下它就是唯一能自愈的路径。
+ * 判据取自 `capabilities.msmpPush`（服务端按常驻连接是否建立上报），掉线后
+ * 这条查询会回到 30s。
+ */
+export const PUSHED_POLL_INTERVAL_MS = 300_000
+
 // ── Query key 工厂（分层规范，防冲突）───────────────────────────
 export const queryKeys = {
   all: ['mcs'] as const,
