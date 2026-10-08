@@ -3,6 +3,9 @@
  * API/WS/通知三方同源，根治契约漂移
  */
 
+// 版本号解析与比较（web 与服务端共用唯一一份）
+export { parseVersion, compareVersions, type VersionTriple } from './version'
+
 // 信封
 export {
   paginationSchema,
