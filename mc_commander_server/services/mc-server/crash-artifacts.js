@@ -333,17 +333,22 @@ export function getCrashArtifactHistory({ limit = 20 } = {}) {
 }
 
 /**
- * 取最新的一份崩溃诊断产物并解析。
- * 无产物返回 null（正常的空态，不是错误）；解析失败如实降级为 parseError，不静默给空。
+ * 取一份崩溃诊断产物并解析；不传 `fileName` 就取最新的一份。
+ * 无产物、或指定的文件名不在枚举结果里，都返回 null（正常空态，不是错误）；
+ * 解析失败如实降级为 parseError，不静默给空。
+ *
+ * 选择**只做枚举结果的白名单匹配**，不参与任何路径拼接：文件名来自请求，拼路径等于把目录
+ * 穿越面开到接口上（枚举里没有的名字一律当作「不存在」）。
  */
-export function getCrashArtifact() {
-  let latest;
+export function getCrashArtifact({ fileName } = {}) {
+  let artifacts;
   try {
-    latest = this._listCrashArtifacts()[0];
+    artifacts = this._listCrashArtifacts();
   } catch (e) {
     logger.warn(`[${this.id}] 枚举崩溃产物失败:`, e.message);
     return { available: false, parseError: `枚举崩溃产物失败: ${e.message}` };
   }
+  const latest = fileName ? artifacts.find((a) => a.fileName === fileName) : artifacts[0];
   if (!latest) return null;
 
   const base = {

@@ -167,6 +167,37 @@ describe('getCrashArtifact 取用与降级', () => {
     expect(r.available).toBe(true);
   });
 
+  it('指定文件名时取那一份（帮助页点开历史里任意一条看完整诊断）', () => {
+    writeCrashReport('crash-2026-10-05_01.00.00-server.txt', read('crash-invalid-secret.txt'));
+    writeHsErr('hs_err_pid123.log', read('hs-err-segv.txt'));
+    const older = path.join(tmpDir, 'crash-reports', 'crash-2026-10-05_01.00.00-server.txt');
+    const past = Date.now() / 1000 - 3600;
+    fs.utimesSync(older, past, past);
+
+    // 先自证「缺省取最新」仍然成立，否则「指定生效」可能是选择逻辑整体没跑
+    expect(makeInstance(tmpDir).getCrashArtifact().fileName).toBe('hs_err_pid123.log');
+
+    const picked = makeInstance(tmpDir).getCrashArtifact({
+      fileName: 'crash-2026-10-05_01.00.00-server.txt',
+    });
+    expect(picked.kind).toBe('crash-report');
+    expect(picked.fileName).toBe('crash-2026-10-05_01.00.00-server.txt');
+  });
+
+  it('文件名只在枚举结果里匹配：目录穿越写法与未知名字都返回 null，且不读任何文件', () => {
+    writeCrashReport('crash-2026-10-05_01.00.00-server.txt', read('crash-invalid-secret.txt'));
+    // 造一个「穿越目标真实存在」的现场：光断言 null 无法区分「被拦下」与「本来就没有」
+    const secret = path.join(tmpDir, 'secret.txt');
+    fs.writeFileSync(secret, '不该被读到');
+    const inst = makeInstance(tmpDir);
+
+    for (const name of ['../secret.txt', 'crash-reports/../secret.txt', 'hs_err_pid999.log']) {
+      expect(inst.getCrashArtifact({ fileName: name })).toBeNull();
+    }
+    // 穿透目标仍在原处（没被当作产物读走/写坏）
+    expect(fs.readFileSync(secret, 'utf-8')).toBe('不该被读到');
+  });
+
   it('只认约定命名：其它文件不当作崩溃产物', () => {
     writeCrashReport('notes.txt', read('crash-invalid-secret.txt'));
     writeHsErr('hs_err_pid1.log.bak', read('hs-err-segv.txt'));

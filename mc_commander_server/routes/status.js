@@ -22,6 +22,7 @@ import {
   logEntriesSchema,
   crashArtifactHistoryQuerySchema,
   crashArtifactHistorySchema,
+  crashArtifactQuerySchema,
   crashArtifactSchema,
   nullDataSchema,
   overviewDataSchema,
@@ -597,15 +598,16 @@ export function createStatusRoutes(serverManager) {
     res.json(validatedSuccess(logEntriesSchema, instance.getLogs(lines)));
   });
 
-  // GET /api/instances/:id/crash-report
-  // 最新一份崩溃诊断产物（MC 崩溃报告或 JVM 崩溃日志）的解析结果。
-  // 从未崩溃过时返回 null —— 那是正常空态，不是错误（与 available:false 的读取失败区分）。
-  router.get('/instances/:id/crash-report', (req, res) => {
+  // GET /api/instances/:id/crash-report[?file=<产物文件名>]
+  // 一份崩溃诊断产物（MC 崩溃报告或 JVM 崩溃日志）的解析结果；缺省取最新一份。
+  // 从未崩溃过、或指定文件已不在（轮转清理）时返回 null —— 那是正常空态，不是错误
+  // （与 available:false 的读取失败区分）。
+  router.get('/instances/:id/crash-report', validateQuery(crashArtifactQuerySchema), (req, res) => {
     const instance = serverManager.getInstance(req.params.id);
     if (!instance) {
       return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND));
     }
-    const artifact = instance.getCrashArtifact();
+    const artifact = instance.getCrashArtifact({ fileName: req.query.file });
     res.json(validatedSuccess(crashArtifactSchema.nullable(), artifact));
   });
 

@@ -1242,6 +1242,48 @@ describe('GET /api/system-errors', () => {
   });
 });
 
+// ── GET /instances/:id/crash-report[?file=]：单份完整解析面 ──
+// 锁的是「file 透传到选取、缺省不带、非法长度被契约拦下」——文件名怎么被安全使用是
+// crash-artifacts.js 的职责（白名单匹配，另有单测），这里只管接口把参数原样交下去。
+describe('GET /api/instances/:id/crash-report', () => {
+  let app;
+  let manager;
+  let getArtifact;
+
+  beforeEach(() => {
+    app = express();
+    app.use(express.json());
+    getArtifact = vi.fn(() => null);
+    manager = {
+      instances: new Map(),
+      getAllInstances: vi.fn(),
+      getInstance: vi.fn(() => ({ getCrashArtifact: getArtifact })),
+    };
+    app.use('/api', createStatusRoutes(manager));
+    app.use(errorHandler);
+  });
+
+  it('?file= 透传给选取（帮助页点开历史里任意一条）', async () => {
+    const res = await request(app).get('/api/instances/s1/crash-report?file=hs_err_pid123.log');
+
+    expect(res.status).toBe(200);
+    expect(getArtifact).toHaveBeenCalledWith({ fileName: 'hs_err_pid123.log' });
+    // 选取不到时 data 为 null：正常空态，不是错误信封
+    expect(res.body.data).toBeNull();
+  });
+
+  it('不带 ?file= ⇒ 不传文件名（服务端取最新一份）', async () => {
+    await request(app).get('/api/instances/s1/crash-report');
+    expect(getArtifact).toHaveBeenCalledWith({ fileName: undefined });
+  });
+
+  it('file 超长被契约拦下（400），不进入选取', async () => {
+    const res = await request(app).get(`/api/instances/s1/crash-report?file=${'a'.repeat(300)}`);
+    expect(res.status).toBe(400);
+    expect(getArtifact).not.toHaveBeenCalled();
+  });
+});
+
 // ── GET /instances/:id/crash-reports：崩溃产物历史面 ──
 // 与 /crash-report（单份完整解析）分工不同，这里锁的是「透传 limit + 契约 + 实例不存在」。
 describe('GET /api/instances/:id/crash-reports', () => {
