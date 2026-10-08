@@ -17,6 +17,9 @@ vi.mock('../services/instance-properties.service.js', async (orig) => {
   return { ...actual, reloadProperties: vi.fn() };
 });
 
+// 打桩后的 reloadProperties：用于构造「内存缓存与磁盘不一致」的场景
+const { reloadProperties } = await import('../services/instance-properties.service.js');
+
 const {
   ensureMsmpConfigured,
   generateMsmpSecret,
@@ -294,5 +297,44 @@ describe('ensureMsmpConfigured：启动前自动补齐', () => {
   it('恰好等于最低版本 → 写（边界含等号）', () => {
     const inst = makeInstance({}, { mcVersion: '1.21.9' });
     expect(ensureMsmpConfigured(inst)?.enabled).toBe(true);
+  });
+});
+
+// MC 侧的布尔读法是 Boolean.valueOf（大小写不敏感，javap 实证）⇒ 写 TRUE/True 时 MC 是开着的。
+// 面板若按严格小写比较，会长期显示「未开启」这个与事实相反的假状态。
+describe('管理协议布尔值的大小写口径（与 MC 一致）', () => {
+  it('readPushChannelState：enabled=TRUE / True 都算开启', () => {
+    expect(
+      readPushChannelState(makeInstance({ 'management-server-enabled': 'TRUE' })).enabled,
+    ).toBe(true);
+    expect(
+      readPushChannelState(makeInstance({ 'management-server-enabled': 'True' })).enabled,
+    ).toBe(true);
+  });
+
+  it('readPushChannelState：tls-enabled=FALSE 算关闭（键缺失才是默认 true）', () => {
+    expect(
+      readPushChannelState(makeInstance({ 'management-server-tls-enabled': 'FALSE' })).tlsEnabled,
+    ).toBe(false);
+    expect(readPushChannelState(makeInstance({})).tlsEnabled).toBe(true);
+  });
+
+  it('ensureMsmpConfigured：enabled=TRUE 视为用户已表态，绝不再改', () => {
+    const inst = makeInstance({ 'management-server-enabled': 'TRUE' });
+    expect(ensureMsmpConfigured(inst)).toBeNull();
+    expect(inst.saveProperties).not.toHaveBeenCalled();
+  });
+
+  it('ensureMsmpConfigured：判断前重读磁盘——缓存陈旧时不得覆盖用户显式关闭', () => {
+    // 面板启动后文件被面板之外改过：缓存里没有该键，磁盘上用户写的是 false
+    const inst = makeInstance({});
+    inst.saveProperties = vi.fn();
+    const orig = reloadProperties.getMockImplementation();
+    reloadProperties.mockImplementation((target) => {
+      target.properties['management-server-enabled'] = 'false';
+    });
+    expect(ensureMsmpConfigured(inst)).toBeNull();
+    expect(inst.saveProperties).not.toHaveBeenCalled();
+    reloadProperties.mockImplementation(orig);
   });
 });

@@ -59,9 +59,11 @@ export function readPushChannelState(instance) {
   reloadProperties(instance);
   const props = instance.properties ?? {};
   return {
-    enabled: props['management-server-enabled'] === 'true',
+    // MC 读布尔走 Boolean.valueOf（大小写不敏感，javap 实证）：写 TRUE/True 时 MC 是开着的，
+    // 严格比较会让面板长期报「未开启」这个与事实相反的假状态
+    enabled: String(props['management-server-enabled']).toLowerCase() === 'true',
     // MC 的默认是 true，故「键不存在」要按 true 读，否则界面会在键缺失时报「未启用 TLS」
-    tlsEnabled: props['management-server-tls-enabled'] !== 'false',
+    tlsEnabled: String(props['management-server-tls-enabled']).toLowerCase() !== 'false',
     host: props['management-server-host'] || DEFAULT_MSMP_HOST,
     port: Number.parseInt(props['management-server-port'] ?? '0', 10) || 0,
     secretConfigured: isValidMsmpSecret(props['management-server-secret']),
@@ -105,6 +107,9 @@ function isMsmpSupportedVersion(version) {
  * 写入复用 `setPushChannel`：三项必须一次性写成自洽组合（否则会踩「TLS 开 + 证书空」那组必崩组合）。
  */
 export function ensureMsmpConfigured(instance) {
+  // 先重读磁盘再判「用户是否表过态」：内存缓存是构造时快照，面板运行期间文件可能被
+  // 面板之外改过（SSH 手改），用陈旧缓存判会把用户的显式关闭又改回开启
+  if (instance) reloadProperties(instance);
   const props = instance?.properties ?? {};
   if (props['management-server-enabled'] !== undefined) return null;
   if (!isMsmpSupportedVersion(instance?.mcVersion)) return null;

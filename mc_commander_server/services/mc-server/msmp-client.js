@@ -50,7 +50,10 @@ export function _msmpResolveEndpointResult() {
   const fresh = this._loadProperties?.();
   if (fresh && Object.keys(fresh).length > 0) this.properties = fresh;
   const props = this.properties || {};
-  if (props['management-server-enabled'] !== 'true') return { endpoint: null, reason: 'disabled' };
+  // 同 readPushChannelState：MC 侧大小写不敏感，这里严格比较会让「开着但连不上」
+  if (String(props['management-server-enabled']).toLowerCase() !== 'true') {
+    return { endpoint: null, reason: 'disabled' };
+  }
   const secret = props['management-server-secret'];
   if (!secret) return { endpoint: null, reason: 'no-secret' };
   const host = props['management-server-host'] || 'localhost';

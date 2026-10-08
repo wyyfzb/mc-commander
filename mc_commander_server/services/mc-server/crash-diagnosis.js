@@ -57,7 +57,8 @@ export const CRASH_DIAGNOSIS_TABLE = [
     detail:
       '服务端启动时校验 management-server-secret 失败：该值必须是 40 位字母数字，否则服务端在初始化阶段直接崩溃。',
     actions: [
-      '到实例设置的「管理协议」里重新生成密钥（或先关闭再重新开启）',
+      // 面板侧唯一入口：实例设置里的「实时推送」开关。关一次再打开会重写自洽三项
+      '到实例设置 →「实时推送」把它关一次再重新开启（面板会一次写对 enabled/secret/TLS 三项）',
       '确认 server.properties 的 management-server-secret 不是手工填写的短串',
     ],
     verifiedVersions: ['26.1'],
@@ -69,7 +70,7 @@ export const CRASH_DIAGNOSIS_TABLE = [
     title: '管理协议（MSMP）开了 TLS 但没配 keystore',
     detail: '服务端按配置启用管理协议 TLS，却找不到可用的 keystore，于是启动阶段抛错退出。',
     actions: [
-      '在实例设置的「管理协议」里关闭 TLS（内网/本机自用通常不需要）',
+      '到实例设置 →「实时推送」先关闭再开启（不配证书时面板会把 TLS 一并关掉，内网/本机自用通常不需要 TLS）',
       '或补齐 keystore 与口令后再开启 TLS',
     ],
     verifiedVersions: ['26.1'],
