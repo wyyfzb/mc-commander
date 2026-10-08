@@ -183,6 +183,10 @@ export function readErrorLog({ limit = 50 } = {}) {
   const entries = [];
   let available = false;
   let hasMore = false;
+  // ENOENT（本来就是全新机器）与其它 errno（权限/磁盘故障）必须分开：后者才是「读取失败」，
+  // 两者都并进 available=false 时，界面只能对用户说「不存在，或存在但读不到」——
+  // 而这两件事指向完全不同的排查方向
+  let sawNonEnoentFailure = false;
   for (const name of files) {
     if (entries.length >= limit) {
       hasMore = true;
@@ -214,8 +218,10 @@ export function readErrorLog({ limit = 50 } = {}) {
         else dropFirstLine = true;
       }
       available = true;
-    } catch {
-      continue; // 该档不存在或读不到：跳过，继续看更旧的档
+    } catch (e) {
+      // 该档不存在或读不到：跳过，继续看更旧的档
+      if (e?.code && e.code !== 'ENOENT') sawNonEnoentFailure = true;
+      continue;
     }
     const parsed = parseErrorLogText(text, { dropFirstLine }).reverse();
     const room = limit - entries.length;
@@ -224,7 +230,9 @@ export function readErrorLog({ limit = 50 } = {}) {
     // 尾部截断意味着本档更早的条目没进来
     if (fromTail) hasMore = true;
   }
-  return { available, entries, hasMore, logFile: errorLogPath() };
+  // 读到任意一档即 ok；一档都没读到才需要区分「本来没有」与「读不到」
+  const readState = available ? 'ok' : sawNonEnoentFailure ? 'unreadable' : 'no-file';
+  return { readState, available, entries, hasMore, logFile: errorLogPath() };
 }
 
 // ── 测试注入通道（生产代码勿用）────────────────────────

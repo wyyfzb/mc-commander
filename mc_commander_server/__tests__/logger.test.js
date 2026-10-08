@@ -188,19 +188,50 @@ describe('readErrorLog 面板自身错误读取', () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  it('日志文件不存在：available=false（首次启动的常态，不是读取失败）', () => {
+  it('日志文件不存在：readState=no-file（首次启动的常态，不是读取失败）', () => {
     const result = readErrorLog();
+    expect(result.readState).toBe('no-file');
     expect(result.available).toBe(false);
     expect(result.entries).toEqual([]);
     expect(result.hasMore).toBe(false);
     expect(result.logFile).toBe(path.join(dir, 'error.log'));
   });
 
+  it('文件存在但读不到（EACCES）：readState=unreadable —— 与「本来没有」分开', () => {
+    // 权限位在 root 下不生效（CAP_DAC_OVERRIDE），故用一个真实存在的**目录**占住文件名：
+    // 读它会得到 EISDIR（非 ENOENT），正是这条要区分的形态
+    fs.mkdirSync(path.join(dir, 'error.log'));
+    const result = readErrorLog();
+    expect(result.readState).toBe('unreadable');
+    expect(result.entries).toEqual([]);
+  });
+
+  it('读到任意一档即 ok（更旧的轮转档可读时，不因最新一档读不到而报读不到）', () => {
+    fs.mkdirSync(path.join(dir, 'error.log'));
+    fs.writeFileSync(
+      path.join(dir, 'error.log.1'),
+      '[2026-01-01T00:00:00.000Z] [ERROR] older-rotated\n',
+      'utf-8',
+    );
+    const result = readErrorLog();
+    expect(result.readState).toBe('ok');
+    expect(result.entries.map((e) => e.message)).toEqual(['older-rotated']);
+  });
+
+  it('文件在、里面没条目：readState=ok 且 entries 为空（与 no-file / unreadable 都不同形）', () => {
+    fs.writeFileSync(path.join(dir, 'error.log'), '', 'utf-8');
+    const result = readErrorLog();
+    expect(result.readState).toBe('ok');
+    expect(result.available).toBe(true);
+    expect(result.entries).toEqual([]);
+  });
+
   it('读回真实写入的错误：最新在前，时间/级别/消息齐', () => {
     logger.error('first-failure');
     logger.error('second-failure');
 
-    const { available, entries } = readErrorLog();
+    const { available, entries, readState } = readErrorLog();
+    expect(readState).toBe('ok');
     expect(available).toBe(true);
     expect(entries.map((e) => e.message)).toEqual(['second-failure', 'first-failure']);
     expect(entries[0].level).toBe('ERROR');
