@@ -202,8 +202,9 @@ describe('buildChecks：判据', () => {
     expect(checkOf(checks, 'crash').verdict).toBe('读不到崩溃历史')
   })
 
-  it('面板日志文件不存在时只说「没有读到错误」，不替用户断言面板没出错', () => {
+  it('日志文件还不存在（no-file）⇒ 判正常，理由说成「全新安装的常态」而不是撞事实', () => {
     const missing: PanelErrors = {
+      readState: 'no-file',
       available: false,
       entries: [],
       hasMore: false,
@@ -212,7 +213,22 @@ describe('buildChecks：判据', () => {
     const check = checkOf(buildChecks({ instanceId: 'inst-1', errors: missing }), 'panel')
     expect(check.tone).toBe('ok')
     expect(check.verdict).toBe('没有读到错误')
-    expect(check.basis).toContain('或存在但读不到')
+    expect(check.basis).toContain('还不存在')
+  })
+
+  it('文件存在但读不到（unreadable）⇒ 报出来，不并进「没有读到错误」', () => {
+    const broken: PanelErrors = {
+      readState: 'unreadable',
+      available: false,
+      entries: [],
+      hasMore: false,
+      logFile: '/x/error.log',
+    }
+    const check = checkOf(buildChecks({ instanceId: 'inst-1', errors: broken }), 'panel')
+    // 不说出来，用户会把「看不到错误史」读成「面板没出错」
+    expect(check.tone).toBe('warn')
+    expect(check.verdict).toBe('读不到错误日志')
+    expect(check.basis).toContain('看不到错误史')
   })
 
   it('面板错误日志取不到（请求失败）⇒ 判「读不到」而不是「没有读到错误」', () => {
@@ -294,6 +310,7 @@ describe('panelErrorsCopyText：复制载荷', () => {
 
   it('超长正文留截断痕，且尾部说明不被长正文挤掉', () => {
     const text = panelErrorsCopyText({
+      readState: 'ok',
       available: true,
       hasMore: true,
       logFile: '/srv/panel/data/logs/error.log',
@@ -419,6 +436,31 @@ describe('DiagnosticsPanel：走真实 mock 端点', () => {
     expect(text).toContain('- 实例运行：')
     // 版本取自既有 check-update 契约（夹具 current: '0.1.0'），不为它新增接口
     expect(text).toContain('面板版本：0.1.0')
+  })
+
+  it('面板错误日志读不到（文件在但读不到）⇒ 卡内警示，不退化成「没有读到错误」空态', async () => {
+    server.use(
+      http.get('*/api/v1/system-errors*', () =>
+        HttpResponse.json({
+          status: 'ok',
+          code: 0,
+          message: 'ok',
+          timestamp: new Date().toISOString(),
+          data: {
+            readState: 'unreadable',
+            available: false,
+            entries: [],
+            hasMore: false,
+            logFile: '/srv/panel/data/logs/error.log',
+          },
+        }),
+      ),
+    )
+    renderPanel()
+    const card = await screen.findByText(/面板读不到自己的错误日志/)
+    expect(card).toBeInTheDocument()
+    // 「看不到错误史」不能说成「没有错误」
+    expect(within(document.getElementById('panel-errors')!).queryByText('没有读到错误')).toBeNull()
   })
 
   it('崩溃历史为空时给空态，而不是空白一块', async () => {

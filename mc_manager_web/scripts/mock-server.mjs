@@ -1486,6 +1486,7 @@ const server = createServer((req, res) => {
       ]
       return res.end(
         ok({
+          readState: 'ok',
           available: true,
           entries: entries.slice(0, limit),
           hasMore: false,

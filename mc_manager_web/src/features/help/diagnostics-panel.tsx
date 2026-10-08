@@ -315,13 +315,26 @@ export function buildChecks(input: {
       verdict: '读不到面板错误日志',
       basis: '请求失败或还没返回；这一项判不出来，不代表面板没出错',
     })
+  } else if (errors.readState === 'unreadable') {
+    // 这是**确定的事实**（文件在，面板读不到：权限/磁盘），不是「判不出来」——
+    // 不说出来，用户会把「看不到错误史」读成「面板没出错」
+    checks.push({
+      key: 'panel',
+      name: '面板自身错误',
+      tone: 'warn',
+      verdict: '读不到错误日志',
+      basis: '日志文件存在但读不到（多为权限或磁盘问题）；看不到错误史 ≠ 没有出错',
+    })
   } else if (errorCount === 0) {
     checks.push({
       key: 'panel',
       name: '面板自身错误',
       tone: 'ok',
       verdict: '没有读到错误',
-      basis: '面板错误日志里没有可读条目（日志文件不存在，或存在但读不到）',
+      basis:
+        errors.readState === 'no-file'
+          ? '面板错误日志还不存在（全新安装的常态）'
+          : '日志文件里没有条目',
     })
   } else {
     const latest = errors!.entries[0]!
@@ -712,16 +725,21 @@ function PanelErrorsCard() {
             </NoticeBanner>
           ) : !data ? (
             <p className="text-mcs-xs text-mcs-text-muted">读取中…</p>
+          ) : data.readState === 'unreadable' ? (
+            // 读不到要说出来：不说的话，用户会把「看不到错误史」读成「面板没出错」
+            <NoticeBanner variant="warning" icon={TriangleAlert}>
+              面板读不到自己的错误日志（文件存在但读取失败，多为权限或磁盘问题）。这一段看不到
+              错误史，不代表面板没出错 —— 可检查 {data.logFile} 的权限。
+            </NoticeBanner>
           ) : entries.length === 0 ? (
             <EmptyState
               icon={CircleCheck}
               title="没有读到错误"
-              // 契约里 available=false 是「没读到任何一条」：文件不存在与存在但读不到同形，
-              // 说成「日志文件还不存在」就是替服务端断言它给不出的东西
+              // 契约把「文件不在」与「读不到」分成了两个事实，这里也就敢把话说死
               hint={
-                data.available
-                  ? '日志文件里没有条目'
-                  : '日志文件不存在，或存在但面板读不到（这两种在这条接口上同形）'
+                data.readState === 'no-file'
+                  ? '面板错误日志还不存在（全新安装的常态）'
+                  : '日志文件里没有条目'
               }
             />
           ) : (

@@ -314,6 +314,7 @@ export const mockCrashHistory: CrashArtifactHistoryItem[] = [
 
 /** 面板自身错误日志夹具：两条（一条 ERROR 一条 WARN），路径与消息均为虚构值 */
 export const mockPanelErrors: PanelErrors = {
+  readState: 'ok',
   available: true,
   entries: [
     {
