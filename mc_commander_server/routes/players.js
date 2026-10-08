@@ -1,7 +1,7 @@
 import express from 'express';
 import fs from 'fs';
 import path from 'path';
-import { parseBanExpires } from '../utils/ban-expires.js';
+import { isBanExpired, parseBanExpires } from '../utils/ban-expires.js';
 import { error, ErrorCodes } from '../utils/response.js';
 import { BanModel } from '../db/index.js';
 import {
@@ -385,8 +385,7 @@ export function createPlayerRoutes(serverManager) {
             if (activeTempKeys.has(`${file.targetType}:${target}`)) continue;
             // 官条目也带 expires：临时封禁在此显示到期时间，过期的归入历史
             const { isPermanent, expiresAt } = parseBanExpires(entry.expires);
-            // 条目仍在文件里却已过到期时间 ⇒ 只可能是到期（解封会删条目）
-            const expired = !isPermanent && expiresAt !== null && expiresAt <= Date.now();
+            const expired = isBanExpired(entry.expires);
             bans.push({
               targetType: file.targetType,
               target,
@@ -610,10 +609,13 @@ export function createPlayerRoutes(serverManager) {
       }
 
       try {
+        // 带时长交给方法面：结构化通道把 expires 写进官方条目（时长由官方数据承载），
+        // 回退到命令通道时官方条目是永久的，时长仍由 temp_bans 记录承载——两条路都对得上
+        const banOptions = expiresAt ? { expiresAt } : {};
         if (ip) {
-          await instance.banIp(ip, reason);
+          await instance.banIp(ip, reason, banOptions);
         } else {
-          await instance.banPlayer(req.params.player, reason);
+          await instance.banPlayer(req.params.player, reason, banOptions);
         }
       } catch (err) {
         // 命令执行失败：回滚已写入的临时记录，保持「记录 ⇔ 封禁」一致，

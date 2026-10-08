@@ -269,6 +269,11 @@ export class MCServerManager extends EventEmitter {
     return Array.from(this.instances.values()).map((i) => i.toStatus());
   }
 
+  /** 运行中的实例对象（到期清扫要按实例扫官方封禁文件，DB 里未必有对应记录） */
+  getRunningInstances() {
+    return Array.from(this.instances.values()).filter((i) => i.isRunning);
+  }
+
   // 显式停止全部运行中实例：等待 stop 命令送达 + MC 正常退出，超时兜底强杀，
   // 避免残留孤儿进程、在线玩家数据（离开事件/60s 保存）丢失。
   // 注意：面板停机（SIGTERM/SIGINT/崩溃）已不调用本方法——停机不停实例，

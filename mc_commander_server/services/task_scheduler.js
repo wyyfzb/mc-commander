@@ -12,6 +12,7 @@ import config from '../config.js';
 import { logger } from '../utils/logger.js';
 import { localTimestamp } from '../utils/local-date.js';
 import { parseDbTime } from '../utils/db-time.js';
+import { findExpiredOfficialBans } from '../utils/ban-reconcile.js';
 
 /**
  * 定时任务调度器
@@ -265,32 +266,52 @@ export class TaskScheduler {
 
   /**
    * 临时封禁到期自动解封。
-   * 扫描 temp_bans 中已到期且生效的记录，对运行中的实例执行原版 pardon/pardon-ip。
-   * 实例未运行时跳过（记录保持生效，实例启动后的下一次轮询再处理），
-   * 实例被删除时 DB 外键级联删除记录。
+   *
+   * 两个来源都要扫：DB 里已到期且生效的记录（命令通道写下的临时封禁，官方条目是永久的），
+   * 以及**官方文件里已过期的条目**——后者覆盖面板之外建立的临时封禁（别的工具经 MSMP 写下
+   * `expires`、手工编辑文件），它们在 DB 里没有记录，而实测 26.3 不会因为过期就放行
+   * （`UserBanList.isBanned` 只判 `contains`），不扫就会把玩家永久挡在门外。
+   *
+   * 实例未运行时跳过（记录保持生效，实例启动后的下一次轮询再处理；官方条目则在启动时的
+   * `reconcileTempBans` 里补进 DB）。实例被删除时 DB 外键级联删除记录。
    */
   checkExpiredBans() {
     try {
-      const expired = BanModel.findExpiredActive();
-      for (const ban of expired) {
+      const handled = new Set();
+      for (const ban of BanModel.findExpiredActive()) {
         const instance = ban.instanceId ? this.serverManager.getInstance(ban.instanceId) : null;
         if (!instance || !instance.isRunning) continue;
+        handled.add(`${ban.instanceId}:${ban.targetType}:${ban.target}`);
+        this._pardonExpiredBan(instance, ban.targetType, ban.target, ban.id);
+      }
 
-        const cmd = ban.targetType === 'ip' ? `pardon-ip ${ban.target}` : `pardon ${ban.target}`;
-        instance
-          .sendCommand(cmd)
-          .then(() => {
-            BanModel.deactivate(ban.id);
-            logger.info(`Auto-pardoned ${ban.targetType} ${ban.target} (expired temp ban)`);
-          })
-          .catch((err) => {
-            // 发送失败时保留记录，下次轮询重试
-            logger.error(`Failed to auto-pardon ${ban.target} (${ban.targetType}):`, err.message);
-          });
+      for (const instance of this.serverManager.getRunningInstances()) {
+        for (const { targetType, target } of findExpiredOfficialBans(instance.serverPath)) {
+          // 同一条封禁可能两种来源都有（面板建的临时封禁：DB 记录 + 官方条目），只解一次
+          if (handled.has(`${instance.id}:${targetType}:${target}`)) continue;
+          this._pardonExpiredBan(instance, targetType, target, null);
+        }
       }
     } catch (err) {
       logger.error('Error checking expired temp bans:', err);
     }
+  }
+
+  /**
+   * 解封一条到期封禁。
+   * @param {number|null} banId DB 记录 id：有则在解封成功后停用；官方条目驱动的解封没有记录
+   */
+  _pardonExpiredBan(instance, targetType, target, banId) {
+    const pardon = targetType === 'ip' ? instance.pardonIp(target) : instance.pardonPlayer(target);
+    pardon
+      .then(() => {
+        if (banId != null) BanModel.deactivate(banId);
+        logger.info(`Auto-pardoned ${targetType} ${target} (expired temp ban)`);
+      })
+      .catch((err) => {
+        // 失败时保留记录/条目，下次轮询重试
+        logger.error(`Failed to auto-pardon ${target} (${targetType}):`, err.message);
+      });
   }
 
   executeTask(task) {

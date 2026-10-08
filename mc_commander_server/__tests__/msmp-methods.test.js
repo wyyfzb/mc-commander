@@ -334,3 +334,54 @@ describe('存档与停机', () => {
     expect(inst.sendCommand).toHaveBeenCalledWith('stop');
   });
 });
+
+describe('封禁时长：官方条目承载 expires', () => {
+  it('带时长时 expires 用 ISO 串（服务端只接受可解析日期，落盘再转本地时区）', async () => {
+    const inst = withMethods([{ player: { name: 'Steve' }, reason: '刷屏' }]);
+    const expiresAt = Date.parse('2030-01-01T06:00:00Z');
+
+    await expect(inst.banPlayer('Steve', '刷屏', { expiresAt })).resolves.toBe('msmp');
+    expect(inst._msmpRequest).toHaveBeenCalledWith(
+      'minecraft:bans/add',
+      [
+        [
+          {
+            player: { name: 'Steve' },
+            reason: '刷屏',
+            source: 'Server',
+            expires: '2030-01-01T06:00:00.000Z',
+          },
+        ],
+      ],
+      expect.any(Number),
+    );
+  });
+
+  it('不带时长即永久：**不能**传 forever/空串（服务端会判非法参数）', async () => {
+    const inst = withMethods([{ player: { name: 'Steve' } }]);
+
+    await inst.banPlayer('Steve', '');
+    const params = inst._msmpRequest.mock.calls[0][1][0][0];
+    expect('expires' in params).toBe(false);
+  });
+
+  it('IP 封禁同样带 expires', async () => {
+    const inst = withMethods([{ ip: '1.2.3.4' }]);
+
+    await inst.banIp('1.2.3.4', '代理', { expiresAt: Date.parse('2030-01-01T06:00:00Z') });
+    expect(inst._msmpRequest).toHaveBeenCalledWith(
+      'minecraft:ip_bans/add',
+      [[{ ip: '1.2.3.4', reason: '代理', source: 'Server', expires: '2030-01-01T06:00:00.000Z' }]],
+      expect.any(Number),
+    );
+  });
+
+  it('回退命令通道时官方条目是永久的：时长由 temp_bans 记录承载，故命令不带到期', async () => {
+    const inst = withMethods(null);
+
+    await expect(inst.banPlayer('Steve', '刷屏', { expiresAt: Date.now() + 60000 })).resolves.toBe(
+      'command',
+    );
+    expect(inst.sendCommand).toHaveBeenCalledWith('ban Steve 刷屏');
+  });
+});

@@ -5,7 +5,7 @@
  * 于是任何带 `expires` 的官方条目在面板里都显示「永久」，用户看不出它什么时候解封。
  */
 import { describe, it, expect } from 'vitest';
-import { parseBanExpires, PERMANENT_EXPIRES } from '../utils/ban-expires.js';
+import { isBanExpired, parseBanExpires, PERMANENT_EXPIRES } from '../utils/ban-expires.js';
 
 describe('parseBanExpires', () => {
   it('缺失、空串与哨兵 = 永久（MC 自己在无到期时间时写哨兵）', () => {
@@ -48,5 +48,20 @@ describe('parseBanExpires', () => {
 
   it('永久哨兵值与 DB 口径用的远未来值不是一回事', () => {
     expect(PERMANENT_EXPIRES).toBeGreaterThan(Date.now());
+  });
+});
+
+describe('isBanExpired', () => {
+  const NOW = Date.parse('2026-10-08T00:00:00Z');
+
+  it('过期时间已过 = 到期；未到 = 未到期', () => {
+    expect(isBanExpired('2026-10-07 15:00:00 +0800', NOW)).toBe(true); // = 07:00Z，早于 NOW
+    expect(isBanExpired('2026-10-09 15:00:00 +0800', NOW)).toBe(false);
+  });
+
+  it('永久（缺失/哨兵）与解析不出的都不算到期：不擅自替用户解封', () => {
+    expect(isBanExpired(undefined, NOW)).toBe(false);
+    expect(isBanExpired('forever', NOW)).toBe(false);
+    expect(isBanExpired('下周三', NOW)).toBe(false);
   });
 });

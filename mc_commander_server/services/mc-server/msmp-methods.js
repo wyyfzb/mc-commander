@@ -211,6 +211,22 @@ export function stopServer() {
   );
 }
 
+/**
+ * 封禁时长字段：**省略即永久**。
+ *
+ * 实测 26.3：`expires` 传 `forever` 或空串会被服务端拒绝（不是「永久」的另一种写法），
+ * 永久只能是「不带这个字段」；带值时要可解析（ISO 8601 可，落盘转成服务端本地时区
+ * `yyyy-MM-dd HH:mm:ss Z`）。
+ *
+ * ⚠️ 到期**不等于**自动解封：实测 `UserBanList.isBanned()` 只做 `contains()`、`BanList`
+ * 也不清理过期条目（字节码核对 + 到期 50s 后条目不消失、`/banlist` 仍列出）⇒ 到点必须有
+ * 人来移除条目，否则玩家会被永久挡在门外。面板的到期清扫因此不能退役，见
+ * `task_scheduler.js` 的 `checkExpiredBans`。
+ */
+function _expiresField(options) {
+  return options.expiresAt ? { expires: new Date(options.expiresAt).toISOString() } : {};
+}
+
 /** 加入白名单：MSMP `allowlist/add` ↔ 命令 `whitelist add` */
 export function whitelistAdd(name) {
   return this._writeViaPreferredChannel(
@@ -271,12 +287,14 @@ export function kickPlayer(name, reason) {
  * 封禁玩家：不带 `expires` ⇒ 原版写永久条目（与 `ban` 命令落盘一致）。
  * 时长型封禁的载体在调用方（临时封禁记录），本方法只负责让条目落盘。
  */
-export function banPlayer(name, reason) {
+export function banPlayer(name, reason, options = {}) {
   const text = reason || '';
   return this._writeViaPreferredChannel(
     {
       method: 'minecraft:bans/add',
-      params: [[{ player: { name }, reason: text, source: COMMAND_SOURCE }]],
+      params: [
+        [{ player: { name }, reason: text, source: COMMAND_SOURCE, ..._expiresField(options) }],
+      ],
       verify: (result) => _resultHasPlayer(result, name),
       unverifiedMessage: `无法封禁 ${name}：服务端查不到该玩家的档案`,
     },
@@ -285,12 +303,12 @@ export function banPlayer(name, reason) {
 }
 
 /** 封禁 IP */
-export function banIp(ip, reason) {
+export function banIp(ip, reason, options = {}) {
   const text = reason || '';
   return this._writeViaPreferredChannel(
     {
       method: 'minecraft:ip_bans/add',
-      params: [[{ ip, reason: text, source: COMMAND_SOURCE }]],
+      params: [[{ ip, reason: text, source: COMMAND_SOURCE, ..._expiresField(options) }]],
       verify: (result) => _resultHasIp(result, ip),
       unverifiedMessage: `无法封禁 IP ${ip}`,
     },

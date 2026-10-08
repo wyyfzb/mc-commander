@@ -51,4 +51,15 @@ export function parseBanExpires(expires) {
   return { isPermanent: false, expiresAt: null };
 }
 
-export default { parseBanExpires, PERMANENT_EXPIRES };
+/**
+ * 条目是否**已过到期时间**（「还在文件里却过了点」＝到期；解封是直接删条目）。
+ *
+ * 解析不出到期时间的（`expiresAt === null`）一律不算过期：那可能是别的工具写的新格式，
+ * 宁可不动它，也不擅自替用户解封。
+ */
+export function isBanExpired(expires, now = Date.now()) {
+  const { isPermanent, expiresAt } = parseBanExpires(expires);
+  return !isPermanent && expiresAt !== null && expiresAt <= now;
+}
+
+export default { parseBanExpires, isBanExpired, PERMANENT_EXPIRES };

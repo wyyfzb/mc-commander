@@ -710,6 +710,49 @@ describe('Player Routes', () => {
       expect(record.expiresAt).toBeGreaterThanOrEqual(before + 3_600_000);
     });
 
+    it('MSMP 可用时临时封禁把 expires 写进官方条目（时长由官方数据承载）', async () => {
+      vi.clearAllMocks();
+      const mockInstance = {
+        isRunning: true,
+        sendCommand: vi.fn(),
+        _msmpRequest: vi.fn(async () => [{ player: { name: 'Steve' }, reason: 'Cheating' }]),
+      };
+      mockManager.getInstance.mockReturnValue(asInstance(mockInstance));
+
+      const before = Date.now();
+      const res = await request(app)
+        .post('/api/instances/s1/players/Steve/ban')
+        .set('Content-Type', 'application/json')
+        .send({ reason: 'Cheating', duration: '1h' });
+
+      expect(res.status).toBe(200);
+      const entry = mockInstance._msmpRequest.mock.calls[0][1][0][0];
+      expect(entry.expires).toBeDefined();
+      expect(Date.parse(entry.expires)).toBeGreaterThanOrEqual(before + 3_600_000);
+      // 记录仍要写：回退通道与面板的封禁历史都靠它
+      expect(BanModel.create).toHaveBeenCalledTimes(1);
+      expect(mockInstance.sendCommand).not.toHaveBeenCalled();
+    });
+
+    it('永久封禁不带 expires（服务端不接受 forever/空串）', async () => {
+      vi.clearAllMocks();
+      const mockInstance = {
+        isRunning: true,
+        sendCommand: vi.fn(),
+        _msmpRequest: vi.fn(async () => [{ player: { name: 'Steve' } }]),
+      };
+      mockManager.getInstance.mockReturnValue(asInstance(mockInstance));
+
+      const res = await request(app)
+        .post('/api/instances/s1/players/Steve/ban')
+        .set('Content-Type', 'application/json')
+        .send({ reason: 'Cheating' });
+
+      expect(res.status).toBe(200);
+      const entry = mockInstance._msmpRequest.mock.calls[0][1][0][0];
+      expect('expires' in entry).toBe(false);
+    });
+
     it('should ban IP when ip provided', async () => {
       vi.clearAllMocks();
       const mockInstance = {
