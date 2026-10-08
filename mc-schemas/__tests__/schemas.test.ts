@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   compareVersions,
   parseVersion,
+  wsStatusSnapshotSchema,
   playerSchema,
   banRecordSchema,
   backupItemSchema,
@@ -1057,5 +1058,23 @@ describe('版本号解析与比较（契约包唯一一份）', () => {
   it('任一串读不懂 ⇒ 返回 null（不返回 NaN 三元组，避免所有分支静默为 false）', () => {
     expect(compareVersions('weird', '1.0.0')).toBeNull()
     expect(compareVersions('1.0.0', '')).toBeNull()
+  })
+})
+
+// 快照载荷里的 msmpPush 沿用 worldUpgrade 的三态口径：布尔＝权威值、**字段缺席＝未知**
+// （旧服务端）⇒ 客户端保持现状，不能读成「断开」。
+describe('状态快照载荷：msmpPush 可选', () => {
+  const base = { status: 'running', isRunning: true, players: [], tps: 20 }
+
+  it('带上布尔值 ⇒ 解析通过', () => {
+    expect(wsStatusSnapshotSchema.parse({ ...base, msmpPush: false }).msmpPush).toBe(false)
+  })
+
+  it('字段缺席 ⇒ 解析通过且不臆断（未知，不是 false）', () => {
+    expect(wsStatusSnapshotSchema.parse(base).msmpPush).toBeUndefined()
+  })
+
+  it('类型不对 ⇒ 拦下（不能把字符串当布尔用）', () => {
+    expect(() => wsStatusSnapshotSchema.parse({ ...base, msmpPush: 'true' })).toThrow()
   })
 })

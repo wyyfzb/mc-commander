@@ -6376,7 +6376,16 @@ const wsStatusSnapshotSchema = object({
 	* - **字段缺席**：**未知**（旧服务端 / 非 status 通道）⇒ 客户端保持现状，不要清。
 	* 少了 `null` 与缺席的区分，「服务端没告诉我」会被读成「没有升级」，清掉正在跑的进度条。
 	*/
-	worldUpgrade: object({ progress: number$1().nullable() }).nullable().optional()
+	worldUpgrade: object({ progress: number$1().nullable() }).nullable().optional(),
+	/**
+	* MSMP 推送面是否已连通（与 REST 状态里的 `capabilities.msmpPush` 同义）。
+	*
+	* 为什么要在快照里带上它：REST 详情是轮询取的，而推送面**断连**不会触发详情失效
+	* ⇒ 界面最多滞后一个轮询周期才把「实时」翻成「轮询」，期间它在说一件已经不再成立的事。
+	* 快照是推送的，所以连上/断开时随快照即时告诉客户端真相。
+	* 同样按 `worldUpgrade` 的三态口径：**字段缺席＝未知**（旧服务端）⇒ 客户端保持现状。
+	*/
+	msmpPush: boolean().optional()
 });
 const wsPerformancePayloadSchema = object({
 	cpu: number$1(),
