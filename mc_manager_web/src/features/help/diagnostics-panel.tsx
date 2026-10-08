@@ -18,7 +18,6 @@ import {
   CircleHelp,
   CircleX,
   ClipboardCopy,
-  Info,
   FileWarning,
   History,
   Stethoscope,
@@ -44,6 +43,7 @@ import { useNow } from '@/hooks/use-now'
 import {
   useCrashArtifact,
   useCrashHistory,
+  useCheckUpdate,
   useInstanceStatus,
   useSystemErrors,
   useSystemStats,
@@ -346,9 +346,11 @@ export function buildChecks(input: {
  */
 export function selfCheckCopyText(
   checks: Check[],
-  meta: { instanceName?: string; mcVersion?: string; nowMs: number },
+  meta: { instanceName?: string; mcVersion?: string; nowMs: number; panelVersion?: string },
 ): string {
   const head = ['MC_Commander 自检结果']
+  // 面板版本要带上：接收方据此定位「这行为属于哪一版」
+  if (meta.panelVersion) head.push(`面板版本：${meta.panelVersion}`)
   if (meta.instanceName)
     head.push(`实例：${meta.instanceName}${meta.mcVersion ? `（MC ${meta.mcVersion}）` : ''}`)
   head.push(`时间：${new Date(meta.nowMs).toISOString()}`)
@@ -394,7 +396,7 @@ function CheckRow({ check }: { check: Check }) {
 /** 复制自检结果并给出反馈：成功/失败都要说，静默失败等于让用户以为已经贴出去了 */
 async function copySelfCheck(
   checks: Check[],
-  meta: { instanceName?: string; mcVersion?: string; nowMs: number },
+  meta: { instanceName?: string; mcVersion?: string; nowMs: number; panelVersion?: string },
 ) {
   const ok = await copyText(selfCheckCopyText(checks, meta))
   if (ok) toast.success('自检结果已复制', { duration: 1500 })
@@ -409,11 +411,13 @@ function SelfCheckCard({
   instanceName,
   mcVersion,
   nowMs,
+  panelVersion,
 }: {
   checks: Check[]
   instanceName?: string
   mcVersion?: string
   nowMs: number
+  panelVersion?: string
 }) {
   const [showNormal, setShowNormal] = useState(false)
   const bad = checks.filter((c) => c.tone === 'bad').length
@@ -438,7 +442,7 @@ function SelfCheckCard({
   }
 
   return (
-    <Card size="default" className="flex flex-col gap-3">
+    <Card size="default" data-testid="self-check" className="flex flex-col gap-3">
       <CardHeader className="flex-row items-center justify-between gap-2">
         <CardTitle className="flex items-center gap-2">
           <Stethoscope className="size-4 text-mcs-text-muted" aria-hidden="true" />
@@ -474,7 +478,9 @@ function SelfCheckCard({
           <Button
             size="xs"
             variant="ghost"
-            onClick={() => void copySelfCheck(checks, { instanceName, mcVersion, nowMs })}
+            onClick={() =>
+              void copySelfCheck(checks, { instanceName, mcVersion, nowMs, panelVersion })
+            }
           >
             <ClipboardCopy className="size-3.5" aria-hidden="true" />
             复制自检结果
@@ -498,26 +504,28 @@ const KIND_LABEL: Record<string, string> = {
  */
 function CrashArtifactDetail({ instanceId, fileName }: { instanceId: string; fileName: string }) {
   const query = useCrashArtifact(instanceId, fileName)
+  const updateQuery = useCheckUpdate()
   const nowMs = useNow()
+  const panelVersion = updateQuery.data?.current
 
   if (query.isLoading) {
     return <p className="text-mcs-xs text-mcs-text-muted">读取中…</p>
   }
   if (queryFailed(query)) {
     return (
-      <NoticeBanner variant="warning" icon={Info}>
+      <NoticeBanner variant="warning" icon={TriangleAlert}>
         读取这份产物失败（面板没能取到它），可以稍后重试或直接看服务器目录里的崩溃产物文件。
       </NoticeBanner>
     )
   }
   if (!query.data) {
     return (
-      <NoticeBanner variant="warning" icon={Info}>
+      <NoticeBanner variant="warning" icon={TriangleAlert}>
         {fileName} 已不在（日志轮转或手工清理会删掉旧产物），上面列表里的摘要仍然有效。
       </NoticeBanner>
     )
   }
-  return <CrashReportView data={query.data} nowMs={nowMs} />
+  return <CrashReportView data={query.data} nowMs={nowMs} panelVersion={panelVersion} />
 }
 
 /**
@@ -649,8 +657,10 @@ const LEVEL_TONES: Record<string, ChipTone> = {
  * 尾部说明放在截断判定之后，否则一段长堆栈会把「只取了最近 N 条」一起挤掉——那是
  * 「这不是全部」的唯一交代。
  */
-export function panelErrorsCopyText(data: PanelErrors): string {
-  const head = ['MC_Commander 面板错误反馈', `日志文件：${data.logFile}`]
+export function panelErrorsCopyText(data: PanelErrors, panelVersion?: string): string {
+  const head = ['MC_Commander 面板错误反馈']
+  if (panelVersion) head.push(`面板版本：${panelVersion}`)
+  head.push(`日志文件：${data.logFile}`)
   const body = data.entries.map((e) => `[${e.time}] [${e.level}] ${e.message}`)
   const tail = data.hasMore ? [`（只取了最近 ${data.entries.length} 条，更早的见日志文件）`] : []
   const text = [...head, ...body].join('\n')
@@ -660,6 +670,8 @@ export function panelErrorsCopyText(data: PanelErrors): string {
 
 function PanelErrorsCard() {
   const errorsQuery = useSystemErrors()
+  const updateQuery = useCheckUpdate()
+  const panelVersion = updateQuery.data?.current
   const nowMs = useNow()
   const data = errorsQuery.data
   const [expanded, setExpanded] = useState(false)
@@ -670,8 +682,8 @@ function PanelErrorsCard() {
 
   const copy = async () => {
     if (!data) return
-    const ok = await copyText(panelErrorsCopyText(data))
-    if (ok) toast.success('错误日志已复制', { duration: 1500 })
+    const ok = await copyText(panelErrorsCopyText(data, panelVersion))
+    if (ok) toast.success('面板错误日志已复制', { duration: 1500 })
     else toast.error('复制失败，请手动复制')
   }
 
@@ -695,7 +707,7 @@ function PanelErrorsCard() {
 
           {failed ? (
             // 请求失败要有自己的样子：面板日志读不到时，排障页最该告诉用户的就是这件事
-            <NoticeBanner variant="warning" icon={Info}>
+            <NoticeBanner variant="warning" icon={TriangleAlert}>
               读取面板错误日志失败（面板没能取到它）。日志文件本身可能没问题，可稍后重试。
             </NoticeBanner>
           ) : !data ? (
@@ -739,7 +751,7 @@ function PanelErrorsCard() {
               <div className="flex flex-wrap items-center gap-2">
                 <Button size="xs" variant="ghost" onClick={() => void copy()}>
                   <ClipboardCopy className="size-3.5" aria-hidden="true" />
-                  复制错误日志
+                  复制面板错误日志
                 </Button>
                 {entries.length > EXPANDED_LIMIT && (
                   <Button
@@ -774,6 +786,7 @@ export function DiagnosticsPanel(): ReactNode {
   const statsQuery = useSystemStats()
   const historyQuery = useCrashHistory(instanceId)
   const errorsQuery = useSystemErrors()
+  const updateQuery = useCheckUpdate()
 
   const nowMs = useNow()
   const checks = buildChecks({
@@ -791,6 +804,7 @@ export function DiagnosticsPanel(): ReactNode {
         checks={checks}
         instanceName={statusQuery.data?.name}
         mcVersion={statusQuery.data?.mcVersion}
+        panelVersion={updateQuery.data?.current}
         nowMs={nowMs}
       />
       <CrashHistorySection />

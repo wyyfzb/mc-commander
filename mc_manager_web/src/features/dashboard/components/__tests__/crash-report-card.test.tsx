@@ -13,8 +13,8 @@ import { CrashReportView, CrashPointerCard } from '../crash-report-card'
 
 const NOW = new Date('2026-10-05T08:00:00.000Z').getTime()
 
-function renderView(data: CrashArtifact) {
-  return render(<CrashReportView data={data} nowMs={NOW} />)
+function renderView(data: CrashArtifact, panelVersion?: string) {
+  return render(<CrashReportView data={data} nowMs={NOW} panelVersion={panelVersion} />)
 }
 
 // 取数层在包装组件里；这里替换掉 hook 只验证「空态不渲染」
@@ -245,13 +245,13 @@ describe('CrashReportView 诊断结论', () => {
 
   it('未命中（崩溃报告）：明说不猜、给出路；复制的是原始字段与原文，并给复制反馈', async () => {
     const user = userEvent.setup()
-    renderView(missReport())
+    renderView(missReport(), '0.9.9')
 
     expect(screen.getByTestId('crash-diagnosis-miss')).toBeInTheDocument()
     expect(screen.getByText('这次崩溃不在已知词条里')).toBeInTheDocument()
     expect(screen.getByText(/面板不猜原因/)).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: /复制反馈信息/ }))
+    await user.click(screen.getByRole('button', { name: /复制崩溃信息/ }))
 
     expect(copyText).toHaveBeenCalledTimes(1)
     expect(copyText).toHaveBeenCalledWith(expect.stringContaining('MC_Commander 崩溃诊断反馈'))
@@ -260,12 +260,14 @@ describe('CrashReportView 诊断结论', () => {
       expect.stringContaining('java.lang.IllegalStateException: 未收录的初始化失败'),
     )
     expect(copyText).toHaveBeenCalledWith(expect.stringContaining('崩溃报告里的 MC 版本：26.3'))
+    // 面板版本：接收方（模组作者/维护者）据此定位「这行为属于哪一版」
+    expect(copyText).toHaveBeenCalledWith(expect.stringContaining('面板版本：0.9.9'))
     // 用户拿去给模组作者的就是调用栈与原文，载荷必须带上
     expect(copyText).toHaveBeenCalledWith(
       expect.stringContaining('at net.minecraft.server.MinecraftServer.runServer'),
     )
     await vi.waitFor(
-      () => expect(toastSuccess).toHaveBeenCalledWith('反馈信息已复制', { duration: 1500 }),
+      () => expect(toastSuccess).toHaveBeenCalledWith('崩溃信息已复制', { duration: 1500 }),
       { timeout: 5000 },
     )
   })
@@ -275,7 +277,7 @@ describe('CrashReportView 诊断结论', () => {
     copyText.mockResolvedValueOnce(false)
     renderView(missReport())
 
-    await user.click(screen.getByRole('button', { name: /复制反馈信息/ }))
+    await user.click(screen.getByRole('button', { name: /复制崩溃信息/ }))
 
     await vi.waitFor(() => expect(toastError).toHaveBeenCalledWith('复制失败，请手动复制'), {
       timeout: 5000,

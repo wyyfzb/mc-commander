@@ -285,8 +285,9 @@ describe('自检卡：摘要聚合与层级', () => {
 })
 
 describe('panelErrorsCopyText：复制载荷', () => {
-  it('含日志路径与每条的时刻+级别，便于直接贴给维护者', () => {
-    const text = panelErrorsCopyText(mockPanelErrors)
+  it('含面板版本、日志路径与每条的时刻+级别，便于直接贴给维护者', () => {
+    const text = panelErrorsCopyText(mockPanelErrors, '0.9.9')
+    expect(text).toContain('面板版本：0.9.9')
     expect(text).toContain('/srv/panel/data/logs/error.log')
     expect(text).toContain('[2026-10-05T07:20:11.000Z] [ERROR] 升级实例失败')
   })
@@ -315,8 +316,11 @@ describe('selfCheckCopyText：自检结果复制载荷', () => {
       instanceName: '生存服',
       mcVersion: '1.21.4',
       nowMs: NOW,
+      panelVersion: '0.9.9',
     })
     expect(text).toContain('实例：生存服（MC 1.21.4）')
+    // 面板版本要带上：接收方据此定位「这行为属于哪一版」
+    expect(text).toContain('面板版本：0.9.9')
     expect(text).toContain('2026-10-08T10:00:00.000Z')
     expect(text).toContain('- 实例运行：运行中｜已运行 2h 0m')
     // 依据必须一起带上：只给结论，维护者无从判断
@@ -413,6 +417,8 @@ describe('DiagnosticsPanel：走真实 mock 端点', () => {
     const text = copyText.mock.calls[0]![0]
     expect(text).toContain('MC_Commander 自检结果')
     expect(text).toContain('- 实例运行：')
+    // 版本取自既有 check-update 契约（夹具 current: '0.1.0'），不为它新增接口
+    expect(text).toContain('面板版本：0.1.0')
   })
 
   it('崩溃历史为空时给空态，而不是空白一块', async () => {

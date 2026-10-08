@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronDown, Copy, ExternalLink, FileWarning, Info } from 'lucide-react'
+import { ChevronDown, Copy, ExternalLink, FileWarning, Info, TriangleAlert } from 'lucide-react'
 import { toast } from 'sonner'
 import { Card, CardBody, CardHeader, CardTitle } from '@/components/mcs/card'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
@@ -41,8 +41,11 @@ const FEEDBACK_BODY_MAX = 1200
 const FEEDBACK_TEXT_MAX = 8000
 
 /** 反馈正文：只放产物里的原始字段与原文，不放面板的推断 */
-function feedbackText(data: CrashArtifact): string {
-  const lines = ['MC_Commander 崩溃诊断反馈', `产物文件：${data.fileName ?? '未知'}`]
+function feedbackText(data: CrashArtifact, panelVersion?: string): string {
+  const lines = ['MC_Commander 崩溃诊断反馈']
+  // 面板版本要带上：接收方（模组作者或维护者）据此定位「这行为属于哪一版」
+  if (panelVersion) lines.push(`面板版本：${panelVersion}`)
+  lines.push(`产物文件：${data.fileName ?? '未知'}`)
   if (data.minecraftVersion) lines.push(`崩溃报告里的 MC 版本：${data.minecraftVersion}`)
   if (data.description) lines.push(`Description: ${data.description}`)
   if (data.exception) lines.push(`顶层异常：${data.exception}`)
@@ -57,13 +60,13 @@ function feedbackText(data: CrashArtifact): string {
  * 标题按产物类型分岔：崩溃报告是我们「没有收录这条」，而 JVM 崩溃日志**没有可锚的键**，
  * 说成「未收录」是面板无从知道的判断。
  */
-function feedbackIssueUrl(data: CrashArtifact): string {
+function feedbackIssueUrl(data: CrashArtifact, panelVersion?: string): string {
   const subject = data.description ?? data.exception ?? data.fileName ?? '未知崩溃'
   const title =
     data.kind === 'jvm-crash'
       ? `[崩溃诊断] JVM 崩溃日志：${data.fileName ?? '未知文件'}`
       : `[崩溃诊断] 未收录：${subject}`
-  const body = `${feedbackText(data).slice(0, FEEDBACK_BODY_MAX)}\n\n（由 MC_Commander 面板生成）`
+  const body = `${feedbackText(data, panelVersion).slice(0, FEEDBACK_BODY_MAX)}\n\n（由 MC_Commander 面板生成）`
   return `${REPO_URL}/issues/new?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`
 }
 
@@ -107,7 +110,7 @@ function Collapsible({ title, children }: { title: string; children: React.React
  * 诊断结论区：命中就给结论与处置动作；未命中就如实说「不猜」，并给出反馈入口。
  * 放在卡片正文最前——用户先要答案，再看细节。
  */
-function DiagnosisBlock({ data }: { data: CrashArtifact }) {
+function DiagnosisBlock({ data, panelVersion }: { data: CrashArtifact; panelVersion?: string }) {
   const diagnosis = data.diagnosis
   if (!diagnosis) return null
 
@@ -155,8 +158,8 @@ function DiagnosisBlock({ data }: { data: CrashArtifact }) {
     : '面板不猜原因。下面已把产物原文与已核实字段摆出来：可对照「顶层异常」与「由以下引起」链里的包名判断；装有模组或插件时，把崩溃报告全文提供给对应作者通常最快。'
 
   const copy = async () => {
-    const ok = await copyText(feedbackText(data))
-    if (ok) toast.success('反馈信息已复制', { duration: 1500 })
+    const ok = await copyText(feedbackText(data, panelVersion))
+    if (ok) toast.success('崩溃信息已复制', { duration: 1500 })
     else toast.error('复制失败，请手动复制')
   }
 
@@ -170,10 +173,10 @@ function DiagnosisBlock({ data }: { data: CrashArtifact }) {
       <div className="flex flex-wrap items-center gap-2">
         <Button size="xs" variant="ghost" onClick={() => void copy()}>
           <Copy className="size-3" aria-hidden="true" />
-          复制反馈信息
+          复制崩溃信息
         </Button>
         <Button size="xs" variant="outline" asChild>
-          <a href={feedbackIssueUrl(data)} target="_blank" rel="noreferrer noopener">
+          <a href={feedbackIssueUrl(data, panelVersion)} target="_blank" rel="noreferrer noopener">
             <ExternalLink className="size-3" aria-hidden="true" />
             反馈到 GitHub
           </a>
@@ -193,7 +196,16 @@ export const RECENT_CRASH_MS = 24 * 60 * 60 * 1000
  * 纯展示：取数由取数包装（仪表盘指引条 / 帮助页完整诊断）承担，本组件只管把已有数据画出来。
  * 分开的理由是测试——本仓组件测试一律以 props 喂数据，不引 msw。
  */
-export function CrashReportView({ data, nowMs }: { data: CrashArtifact; nowMs: number }) {
+export function CrashReportView({
+  data,
+  nowMs,
+  panelVersion,
+}: {
+  data: CrashArtifact
+  nowMs: number
+  /** 面板自身版本：只进复制载荷与反馈链接，让接收方能定位「这行为属于哪一版」 */
+  panelVersion?: string
+}) {
   const isJvm = data.kind === 'jvm-crash'
   const title = isJvm ? 'JVM 崩溃日志' : '崩溃报告'
 
@@ -215,11 +227,11 @@ export function CrashReportView({ data, nowMs }: { data: CrashArtifact; nowMs: n
       </CardHeader>
 
       <CardBody className="flex flex-col gap-3">
-        <DiagnosisBlock data={data} />
+        <DiagnosisBlock data={data} panelVersion={panelVersion} />
 
         {/* 解析失败如实说「读不到」，不显示空内容让用户以为「没有报错」 */}
         {data.parseError && (
-          <NoticeBanner variant="warning" icon={Info}>
+          <NoticeBanner variant="warning" icon={TriangleAlert}>
             {data.parseError}
           </NoticeBanner>
         )}
