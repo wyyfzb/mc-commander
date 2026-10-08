@@ -224,6 +224,7 @@ export function _msmpNotifConnect() {
     this._msmpNotifConnected = true;
     this._msmpNotifHeartbeat = setInterval(() => this._msmpNotifPing(), HEARTBEAT_MS);
     this._msmpNotifHeartbeat.unref?.();
+    this._emitPushChannelState();
   });
   socket.on('message', (data) => this._msmpNotifHandleMessage(data));
   socket.on('pong', () => {
@@ -233,13 +234,36 @@ export function _msmpNotifConnect() {
       this._msmpNotifPongTimer = null;
     }
   });
+  // error 与 close 常成对到达 ⇒ 只在真的从「连上」翻到「断开」时广播一次，
+  // 避免前端为同一次断开重复写缓存
   socket.on('error', () => {
+    const wasConnected = this._msmpNotifConnected;
     this._msmpNotifConnected = false;
+    if (wasConnected) this._emitPushChannelState();
     this._msmpNotifScheduleReconnect();
   });
   socket.on('close', () => {
+    const wasConnected = this._msmpNotifConnected;
     this._msmpNotifConnected = false;
+    if (wasConnected) this._emitPushChannelState();
     this._msmpNotifScheduleReconnect();
+  });
+}
+
+/**
+ * 推送面连通状态变化时，立刻广播一份状态快照（带 `msmpPush`）。
+ *
+ * 为什么必须主动广播：REST 详情是**轮询**取的，而断连不会让前端失效那份详情 ⇒ 界面最多滞后
+ * 一个轮询周期才把「实时」翻成「轮询」，期间它在说一件已经不再成立的事。快照是推送的，
+ * 连上/断开各广播一次即可即时对齐。载荷与订阅时那份快照同形（无 `event` ⇒ 走快照分支）。
+ */
+export function _emitPushChannelState() {
+  this.emit('status', {
+    status: this.isRunning ? 'running' : 'stopped',
+    isRunning: Boolean(this.isRunning),
+    players: Array.from(this.players?.values?.() ?? []),
+    tps: typeof this.tps === 'number' ? this.tps : null,
+    msmpPush: Boolean(this.isRunning && this._msmpNotifConnected),
   });
 }
 

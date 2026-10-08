@@ -470,6 +470,8 @@ export function setupWebSocket(wss, serverManager) {
                   isRunning: Boolean(instance.isRunning),
                   players: Array.from(instance.players?.values?.() ?? []),
                   tps: typeof instance.tps === 'number' ? instance.tps : null,
+                  // 推送面真值随订阅快照一起给（与 REST 的 capabilities.msmpPush 同源同义）
+                  msmpPush: Boolean(instance.isRunning && instance._msmpNotifConnected),
                   ...(inFlight === undefined
                     ? {}
                     : { worldUpgrade: inFlight && { progress: inFlight.progress } }),

@@ -58,6 +58,7 @@ const {
   _msmpNotifPing,
   _msmpNotifScheduleReconnect,
   _msmpNotifWaitForEndpoint,
+  _emitPushChannelState,
   _msmpNotificationTarget,
   MSMP_NOTIFICATION_ALLOWLIST,
 } = await import('../services/mc-server/msmp-notifications.js');
@@ -97,6 +98,8 @@ function makeInstance(
     _msmpNotifPing,
     _msmpNotifScheduleReconnect,
     _msmpNotifWaitForEndpoint,
+    // 新函数必须一并绑到假实例上：订阅 open/close 会调它，漏绑会让既有重连用例直接抛错
+    _emitPushChannelState,
   })) {
     inst[k] = v;
   }
@@ -589,5 +592,63 @@ describe('可信连通状态', () => {
     expect(inst._msmpNotifConnected).toBe(true);
     inst._msmpNotifStop();
     expect(inst._msmpNotifConnected).toBe(false);
+  });
+});
+
+// 推送面连通状态改变必须**立刻**告诉客户端：REST 详情是轮询取的，断连不会让它失效，
+// 界面会滞后一个轮询周期才把「实时」翻成「轮询」——期间它在说一件已经不再成立的事。
+describe('推送面连通状态变化：即时广播快照', () => {
+  function lastSnapshot(inst) {
+    const snapshots = inst.emitted.filter((e) => e.name === 'status' && !('event' in e.payload));
+    return snapshots[snapshots.length - 1]?.payload;
+  }
+
+  it('连上 ⇒ 广播一份带 msmpPush=true 的快照（载荷与订阅快照同形）', () => {
+    const inst = makeInstance();
+    inst._msmpNotifStart();
+    inst.emitted.length = 0;
+
+    instances[0].emit('open');
+
+    const payload = lastSnapshot(inst);
+    expect(payload.msmpPush).toBe(true);
+    expect(payload).toMatchObject({ status: 'running', isRunning: true, tps: null, players: [] });
+    // 无 event 字段 ⇒ websocket 侧按**快照**分支广播，不会被当成状态跃迁落库
+    expect('event' in payload).toBe(false);
+  });
+
+  it('断开 ⇒ 广播 msmpPush=false（这是那条滞后窗口的消除点）', () => {
+    const inst = makeInstance();
+    inst._msmpNotifStart();
+    instances[0].emit('open');
+    inst.emitted.length = 0;
+
+    instances[0].emit('close');
+
+    expect(lastSnapshot(inst).msmpPush).toBe(false);
+  });
+
+  it('error 与 close 成对到达 ⇒ 只广播一次，不为同一次断开重复写缓存', () => {
+    const inst = makeInstance();
+    inst._msmpNotifStart();
+    instances[0].emit('open');
+    inst.emitted.length = 0;
+
+    instances[0].emit('error');
+    instances[0].emit('close');
+
+    expect(inst.emitted.filter((e) => e.name === 'status')).toHaveLength(1);
+  });
+
+  it('实例已停 ⇒ 即便连接态还是 true 也报 false（不留上一次运行的残留）', () => {
+    const inst = makeInstance();
+    inst._msmpNotifStart();
+    instances[0].emit('open');
+    inst.isRunning = false;
+    inst.emitted.length = 0;
+
+    inst._emitPushChannelState();
+
+    expect(lastSnapshot(inst).msmpPush).toBe(false);
   });
 });

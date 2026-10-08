@@ -111,13 +111,17 @@ describe('WebSocket 事件格式契约', () => {
       expect(msg.type).toBe('statusSnapshot');
       expect(msg.instanceId).toBe('s1');
       // worldUpgrade 是状态快照的固定字段：null＝确认空闲（字段缺席＝未知，两态要分清）
+      // msmpPush 也是固定字段：REST 详情是轮询取的，推送面断连不会让它失效，
+      // 这条真值必须随推送的快照即时到达，界面才不会滞后一个周期继续说「实时」
       expect(Object.keys(msg.data).sort()).toEqual([
         'isRunning',
+        'msmpPush',
         'players',
         'status',
         'tps',
         'worldUpgrade',
       ]);
+      expect(msg.data.msmpPush).toBe(false); // 订阅时还没建立常驻连接
       expect(msg.data.isRunning).toBe(true);
       expect(msg.data.status).toBe('running'); // 由 isRunning 派生（与 mock 同款）
       expect(msg.data.players).toEqual([{ name: 'Alice' }]); // Map → 数组
@@ -143,6 +147,8 @@ describe('WebSocket 事件格式契约', () => {
         players: [],
         tps: null,
         worldUpgrade: null,
+        // 实例已停 ⇒ 一律 false：那是上一次运行的残留实测值，不是当前状态
+        msmpPush: false,
       });
     });
   });
