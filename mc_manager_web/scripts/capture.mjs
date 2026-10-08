@@ -71,6 +71,8 @@ const ROUTES = [
   { path: 'plugins', file: 'plugins' },
   { path: 'webhooks', file: 'webhooks' },
   { path: 'audit', file: 'audit' },
+  // 帮助中心（排障自检 + 崩溃历史 + 面板错误 + 使用向导）：此前无视觉基线
+  { path: 'help', file: 'help' },
   { path: 'settings/notifications', file: 'settings-notifications' },
   { path: 'settings/backup', file: 'settings-backup' },
   // 设置页其余四子页：connection 是 /settings 的默认落地页，此前长期无视觉基线

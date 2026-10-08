@@ -3,6 +3,7 @@ import { ChevronDown, Copy, ExternalLink, FileWarning, Info } from 'lucide-react
 import { toast } from 'sonner'
 import { Card, CardBody, CardHeader, CardTitle } from '@/components/mcs/card'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
+import { Link } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { useCrashArtifact } from '@/api/queries'
 import type { CrashArtifact, CrashDiagnosisEntry } from '@/api/types'
@@ -183,7 +184,13 @@ function DiagnosisBlock({ data }: { data: CrashArtifact }) {
 }
 
 /**
- * 纯展示：取数由 `CrashReportCard` 承担，本组件只管把已有数据画出来。
+ * 「刚崩过」的窗口。帮助页自检与仪表盘指引条共用这一个常量：两处对同一份产物
+ * 必须给同一个口径（曾经一边说「当前稳定」、一边常驻琥珀告警）。
+ */
+export const RECENT_CRASH_MS = 24 * 60 * 60 * 1000
+
+/**
+ * 纯展示：取数由取数包装（仪表盘指引条 / 帮助页完整诊断）承担，本组件只管把已有数据画出来。
  * 分开的理由是测试——本仓组件测试一律以 props 喂数据，不引 msw。
  */
 export function CrashReportView({ data, nowMs }: { data: CrashArtifact; nowMs: number }) {
@@ -254,14 +261,43 @@ export function CrashReportView({ data, nowMs }: { data: CrashArtifact; nowMs: n
 }
 
 /**
- * 薄包装：取最新一份崩溃诊断产物。
- * 从未崩溃过（服务端返回 null）时**整卡不渲染**——没崩过的实例不该多一张空卡。
+ * 仪表盘的崩溃指引条：只说「什么时候崩过 + 去哪看」，完整诊断在帮助页。
+ *
+ * 为什么不在这里摊开完整诊断：诊断要摆已核实字段、调用栈、产物原文，还会随历史切换，
+ * 那是一屏「我来查一下为什么」的内容 —— 它属于帮助页。但崩溃那一刻用户多半正看着仪表盘，
+ * 所以这里不能什么都不说，用一行提示把路指过去。
+ * 从未崩溃过（服务端返回 null）时不渲染。
  */
-export function CrashReportCard({ instanceId }: { instanceId: string | null }) {
+export function CrashPointerCard({ instanceId }: { instanceId: string | null }) {
   const { data } = useCrashArtifact(instanceId)
-  // 相对时间要随时间自己走：渲染期直接 Date.now() 是不纯的（React Compiler 会告警），
-  // 用仓库既有的分钟级时间源
+  // 相对时间要随时间自己走：渲染期直接 Date.now() 是不纯的（React Compiler 会告警）
   const nowMs = useNow()
   if (!data) return null
-  return <CrashReportView data={data} nowMs={nowMs} />
+
+  const title = data.kind === 'jvm-crash' ? 'JVM 崩溃日志' : '崩溃报告'
+  // 反馈级别按「状态是否还在」定：刚崩过要提醒，几天前崩过一次只是历史事实——
+  // 常驻琥珀告警会把同屏真正的告警稀释掉（与帮助页自检的 24 小时窗口同源）
+  const recent = data.mtimeMs != null && nowMs - data.mtimeMs < RECENT_CRASH_MS
+  return (
+    <NoticeBanner variant={recent ? 'warning' : 'neutral'} icon={FileWarning}>
+      <span className="flex flex-wrap items-center gap-x-2">
+        <span>
+          {formatRelativeTime(
+            data.mtimeMs != null ? new Date(data.mtimeMs).toISOString() : null,
+            nowMs,
+            '时间未知',
+          )}
+          崩过一次（{title}
+          {data.diagnosis?.matched && data.diagnosis.entry ? `：${data.diagnosis.entry.title}` : ''}
+          ）
+        </span>
+        <Link
+          to="/help"
+          className="font-medium text-mcs-accent-fg underline-offset-2 hover:underline"
+        >
+          看诊断
+        </Link>
+      </span>
+    </NoticeBanner>
+  )
 }

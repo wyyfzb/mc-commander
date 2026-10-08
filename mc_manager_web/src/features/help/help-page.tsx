@@ -1,5 +1,5 @@
 /**
- * HelpPage —— 站内使用向导（`/help`）
+ * HelpPage —— 帮助中心（`/help`）
  *
  * 内容直接来自仓库根 `docs/user-guide.md`（`?raw` 构建期内联），**不在包内另存副本**：
  * 仓库文档与面板内帮助是同一份，改一处即两处同步，不会出现「文档更新了、面板里还是旧版」。
@@ -15,6 +15,8 @@ import type { ReactNode } from 'react'
 import { ExternalLink, ImageOff } from 'lucide-react'
 import { PageHeader } from '@/components/mcs/page-header'
 import { Card } from '@/components/mcs/card'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { DiagnosticsPanel } from './diagnostics-panel'
 import { cn } from '@/lib/utils'
 import guideRaw from '../../../../docs/user-guide.md?raw'
 import { parseGuide, type GuideBlock, type GuideInline, type GuideList } from './guide-markdown'
@@ -202,16 +204,38 @@ export function GuideBlocks({ blocks }: { blocks: GuideBlock[] }) {
   )
 }
 
+/**
+ * 使用向导标签页内容。
+ *
+ * 文档一级标题（`guide.title`）**不再**当页头：本页现在是「排障 / 使用向导」两态，
+ * 页头要能同时罩住两者；向导自身的标题由标签名承担，避免同屏出现两个「这是什么页」的标题。
+ */
+export function GuideTab(): ReactNode {
+  return (
+    <Card className="flex max-w-3xl flex-col gap-3 p-4 @xl:p-6">
+      <GuideBlocks blocks={guide.blocks} />
+    </Card>
+  )
+}
+
 export function HelpPage(): ReactNode {
   return (
     <div className="@container flex flex-col gap-4 p-4">
-      <PageHeader
-        title={guide.title}
-        description="面板的完整使用流程：从部署、首次设密到日常管理"
-      />
-      <Card className="flex max-w-3xl flex-col gap-3 p-4 @xl:p-6">
-        <GuideBlocks blocks={guide.blocks} />
-      </Card>
+      <PageHeader title="帮助中心" description="出问题先自检与查崩溃历史；想学怎么用看使用向导" />
+      {/* 两态的心理路径不同：排障是「我遇到问题了」，向导是「我要学怎么用」。
+          默认停在排障——进帮助页的人多数是被某个问题推来的 */}
+      <Tabs defaultValue="diagnose" className="flex flex-col gap-4">
+        <TabsList>
+          <TabsTrigger value="diagnose">排障</TabsTrigger>
+          <TabsTrigger value="guide">使用向导</TabsTrigger>
+        </TabsList>
+        <TabsContent value="diagnose">
+          <DiagnosticsPanel />
+        </TabsContent>
+        <TabsContent value="guide">
+          <GuideTab />
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

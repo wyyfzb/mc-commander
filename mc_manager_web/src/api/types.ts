@@ -17,7 +17,15 @@ export interface ApiEnvelope<T> {
 }
 
 // ── 系统统计 ──
-export type { DiskInfo, DiskUsage, SystemStats, UpdateCheckResult } from '@mc-commander/schemas'
+export type {
+  CrashArtifactHistory,
+  CrashArtifactHistoryItem,
+  DiskInfo,
+  DiskUsage,
+  PanelErrors,
+  SystemStats,
+  UpdateCheckResult,
+} from '@mc-commander/schemas'
 
 // ── 实例 ──
 export type {

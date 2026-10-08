@@ -8,7 +8,8 @@ import { beforeEach, describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { CrashArtifact } from '@/api/types'
-import { CrashReportView, CrashReportCard } from '../crash-report-card'
+import { MemoryRouter } from 'react-router'
+import { CrashReportView, CrashPointerCard } from '../crash-report-card'
 
 const NOW = new Date('2026-10-05T08:00:00.000Z').getTime()
 
@@ -33,13 +34,7 @@ vi.mock('@/api/queries', async (importOriginal) => ({
   useCrashArtifact: () => useCrashArtifact(),
 }))
 
-describe('CrashReportCard', () => {
-  it('从未崩溃过（服务端返回 null）→ 取数包装整卡不渲染', () => {
-    useCrashArtifact.mockReturnValue({ data: null })
-    const { container } = render(<CrashReportCard instanceId="inst-1" />)
-    expect(container).toBeEmptyDOMElement()
-  })
-
+describe('CrashReportView（帮助页的完整诊断与仪表盘共用同一份呈现）', () => {
   it('崩溃报告：呈现已核实字段与顶层异常', async () => {
     renderView({
       available: true,
@@ -331,5 +326,34 @@ describe('CrashReportView 诊断结论', () => {
     expect(screen.queryByTestId('crash-diagnosis')).not.toBeInTheDocument()
     expect(screen.queryByTestId('crash-diagnosis-miss')).not.toBeInTheDocument()
     expect(screen.getByText(/java.lang.RuntimeException: boom/)).toBeInTheDocument()
+  })
+})
+
+describe('CrashPointerCard（仪表盘的崩溃指引条）', () => {
+  // 完整诊断已收进帮助页；仪表盘只在崩过时留一句指引，不能什么都不说
+  const renderPointer = () =>
+    render(
+      <MemoryRouter>
+        <CrashPointerCard instanceId="inst-1" />
+      </MemoryRouter>,
+    )
+
+  it('有产物时给一句「什么时候崩过 + 去哪看」', () => {
+    useCrashArtifact.mockReturnValue({
+      data: {
+        kind: 'crash-report',
+        mtimeMs: NOW - 3 * 60 * 60 * 1000,
+        diagnosis: { matched: false },
+      },
+    })
+    renderPointer()
+    expect(screen.getByText(/崩过一次/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '看诊断' })).toHaveAttribute('href', '/help')
+  })
+
+  it('从未崩溃过时不渲染（没崩过的实例不该多一条提示）', () => {
+    useCrashArtifact.mockReturnValue({ data: null })
+    const { container } = renderPointer()
+    expect(container).toBeEmptyDOMElement()
   })
 })

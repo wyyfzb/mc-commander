@@ -1,30 +1,51 @@
 /**
  * HelpPage 渲染锁定。两条腿，缺一不可：
- * ① **真实文档**（`docs/user-guide.md` → `?raw` 内联）：锁「文档 → 页面」这条链路。
+ * ① **真实文档**（`docs/user-guide.md` → `?raw` 内联）：锁「文档 → 页面」这条链路（渲染 `GuideTab`）。
  *    文档改了标题层级或表格形状而页面没跟上 → 这里红。
  * ② **夹具**（`GuideBlocks` / `Block` / `Inline`）：真实文档里没有外链（实测 0 处）、
  *    没有三级以下标题、引用块也不含块级内容 —— 只对着真实文档测，这些分支等于零覆盖。
  */
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
-import { Block, GuideBlocks, HelpPage, Inline } from '../help-page'
+import userEvent from '@testing-library/user-event'
+import { Block, GuideBlocks, GuideTab, HelpPage, Inline } from '../help-page'
 import { parseGuide } from '../guide-markdown'
 
-describe('HelpPage（真实文档）', () => {
-  it('页头标题取自文档一级标题（不是页面里手写的另一份）', () => {
+// 页面壳用例只关心「两个标签 + 默认停在哪」；排障面板自己要连网络，另有独立用例（含 MSW）
+vi.mock('../diagnostics-panel', () => ({
+  DiagnosticsPanel: () => <div data-testid="diagnostics-panel" />,
+}))
+
+describe('HelpPage 页面壳', () => {
+  it('页头是「帮助中心」，两个标签都在，默认停在排障', () => {
     render(<HelpPage />)
-    expect(screen.getByRole('heading', { name: 'MC_Commander 用户向导' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '帮助中心' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: '排障' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: '使用向导' })).toBeInTheDocument()
+    // 进帮助页的人多数是被某个问题推来的 ⇒ 默认展开排障
+    expect(screen.getByTestId('diagnostics-panel')).toBeInTheDocument()
   })
 
-  it('渲染文档章节标题', () => {
+  it('切到使用向导才渲染文档（默认不挂在 DOM 里）', async () => {
+    const user = userEvent.setup()
     render(<HelpPage />)
+    expect(screen.queryByRole('heading', { name: /部署面板/ })).toBeNull()
+
+    await user.click(screen.getByRole('tab', { name: '使用向导' }))
+    expect(screen.getByRole('heading', { name: /部署面板/ })).toBeInTheDocument()
+  })
+})
+
+describe('使用向导（真实文档）', () => {
+  it('渲染文档章节标题', () => {
+    render(<GuideTab />)
     for (const section of ['部署面板', '首次设密', '创建 MC 实例', '常见问题']) {
       expect(screen.getByRole('heading', { name: new RegExp(section) })).toBeInTheDocument()
     }
   })
 
   it('目录锚点可跳转：目录里每条链接都指向页面上真实存在的标题 id', () => {
-    render(<HelpPage />)
+    render(<GuideTab />)
     const anchors = screen
       .getAllByRole('link')
       .map((a) => a.getAttribute('href'))
@@ -35,14 +56,14 @@ describe('HelpPage（真实文档）', () => {
   })
 
   it('目录项锚点落在标题上（不只是「有个同 id 的元素」）', () => {
-    render(<HelpPage />)
+    render(<GuideTab />)
     const link = screen.getByRole('link', { name: '部署面板' })
     const id = link.getAttribute('href')!.slice(1)
     expect(document.getElementById(id)!.tagName).toBe('H2')
   })
 
   it('表格渲染为真表格（部署方式表：表头 2 列 + 2 行数据）', () => {
-    render(<HelpPage />)
+    render(<GuideTab />)
     const tables = screen.getAllByRole('table')
     expect(tables).toHaveLength(2)
     const first = tables[0]!
@@ -53,27 +74,27 @@ describe('HelpPage（真实文档）', () => {
   })
 
   it('行内构件不留字面量标记（反引号 / 双星号）', () => {
-    const { container } = render(<HelpPage />)
+    const { container } = render(<GuideTab />)
     const text = container.textContent ?? ''
     expect(text).not.toContain('`')
     expect(text).not.toContain('**')
   })
 
   it('加粗渲染为 strong（文档里「操作路径」等被加粗）', () => {
-    const { container } = render(<HelpPage />)
+    const { container } = render(<GuideTab />)
     const strongs = [...container.querySelectorAll('strong')]
     expect(strongs.length).toBeGreaterThan(0)
     expect(strongs.some((s) => s.textContent?.includes('操作路径'))).toBe(true)
   })
 
   it('行内代码渲染为 code（如 server.jar）', () => {
-    const { container } = render(<HelpPage />)
+    const { container } = render(<GuideTab />)
     const codes = [...container.querySelectorAll('code')]
     expect(codes.some((c) => c.textContent === 'server.jar')).toBe(true)
   })
 
   it('截图不伪装成图片：以「截图见仓库文档」的诚实说明呈现', () => {
-    render(<HelpPage />)
+    render(<GuideTab />)
     // 产物内没有 screenshots/（Release tarball 只打包服务端 + 内联 mc-schemas），
     // 渲染 <img> 只会是坏图
     expect(screen.queryAllByRole('img')).toHaveLength(0)
@@ -81,7 +102,7 @@ describe('HelpPage（真实文档）', () => {
   })
 
   it('无 unknown 块泄漏到页面（解析器兜底路径不该在真实文档下命中）', () => {
-    const { container } = render(<HelpPage />)
+    const { container } = render(<GuideTab />)
     expect(container.querySelectorAll('.text-mcs-error-fg')).toHaveLength(0)
   })
 })

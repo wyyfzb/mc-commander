@@ -8,8 +8,8 @@ import { McClockCard } from './components/mc-clock-card'
 import { RecentBackupsCard } from './components/recent-backups-card'
 import { AnnouncementCard } from './components/announcement-card'
 import { AlertBanner } from './components/alert-banner'
-import { CrashReportCard } from './components/crash-report-card'
-import { useInstanceStatus, useSystemStats, queryKeys } from '@/api/queries'
+import { CrashPointerCard } from './components/crash-report-card'
+import { queryKeys, useInstanceStatus, useSystemErrors, useSystemStats } from '@/api/queries'
 import { useServerStore } from '@/stores/server'
 import { useNotificationStore } from '@/stores/notifications'
 import { InstanceRequiredState } from '@/features/instances/components/instance-required-state'
@@ -34,19 +34,13 @@ export function DashboardPage() {
 
   const statusQuery = useInstanceStatus(instanceId)
   const systemStatsQuery = useSystemStats()
+  // 与面板错误卡同一查询键 ⇒ 共用缓存条目，本处只为把失败接进上面的横幅
+  const systemErrorsQuery = useSystemErrors()
 
   // Query 结果 → store（WS 合并基线）
   useEffect(() => {
     if (statusQuery.data) setStatus(statusQuery.data)
   }, [statusQuery.data, setStatus])
-
-  // 崩溃后重取崩溃产物：它是事后新增的文件，轮询没有意义（每次都要枚举目录 + 解析），
-  // 只在崩溃事件到达时失效一次
-  useEffect(() => {
-    if (instanceId && lastStatusEvent?.event === 'crash') {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.crashArtifact(instanceId) })
-    }
-  }, [lastStatusEvent, instanceId, queryClient])
 
   useEffect(() => {
     if (systemStatsQuery.data) setSystemStats(systemStatsQuery.data)
@@ -67,17 +61,24 @@ export function DashboardPage() {
   // 两条查询各自失败都要有出口：只报状态失败会把「资源卡永久停在暂无数据、又无重试」
   // 留成静默。两条都失败时合并为一条横幅、一次重试，避免横幅堆叠。
   const statsFailed = queryFailed(systemStatsQuery)
+  // 面板错误日志也走同一出口：它读不到时卡片本就静默（「有错才出现」），没有横幅的话
+  // 「面板错误读不到」这件事在整个界面上无处说明
+  const panelErrorsFailed = queryFailed(systemErrorsQuery)
   const failedSources = [
     statusFailed ? '服务器状态' : null,
     statsFailed ? '系统资源' : null,
+    panelErrorsFailed ? '面板错误日志' : null,
   ].filter((v): v is string => v != null)
   // 只按「已失败且正在重取」的那几条算重试在途：健康查询的 30s 保底轮询/WS 失效
   // 重取与用户点重试无关，把它算进来会让按钮在无关窗口里无故变灰
   const retryInFlight =
-    (statusFailed && statusQuery.isFetching) || (statsFailed && systemStatsQuery.isFetching)
+    (statusFailed && statusQuery.isFetching) ||
+    (statsFailed && systemStatsQuery.isFetching) ||
+    (panelErrorsFailed && systemErrorsQuery.isFetching)
   const retryFailedQueries = () => {
     if (statusFailed) void statusQuery.refetch()
     if (statsFailed) void systemStatsQuery.refetch()
+    if (panelErrorsFailed) void systemErrorsQuery.refetch()
   }
 
   // 无实例门：加载中/加载失败/真空态/待选中四态各自诚实（见 InstanceRequiredState）
@@ -135,8 +136,9 @@ export function DashboardPage() {
           @5xl 起恢复 min-h-0 flex-1，终端保底约 672px，右栏自身滚动。 */}
       <div className="grid flex-1 grid-cols-1 gap-4 @5xl:min-h-0 @5xl:grid-cols-[minmax(0,1fr)_336px]">
         <div className="flex flex-col gap-4 @5xl:min-h-0">
-          {/* 崩溃诊断产物置于终端之上：只在真的崩过时渲染，那正是用户要找它的时刻 */}
-          <CrashReportCard instanceId={instanceId} />
+          {/* 崩溃指引条置于终端之上：只在真的崩过时渲染，那正是用户要找它的时刻。
+              完整诊断在帮助页（那里还有崩溃历史与自检），这里只把路指过去 */}
+          <CrashPointerCard instanceId={instanceId} />
           <ServerTerminal isLoading={statusLoading} />
           <CommandInput />
         </div>

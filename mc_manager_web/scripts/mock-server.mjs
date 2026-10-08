@@ -20,6 +20,50 @@ import { createHash } from 'node:crypto'
 
 const PORT = Number(process.env.MOCK_PORT) || 5198
 
+// 崩溃历史夹具：时间固定在 2026-10 上旬，与其余 mock 数据的「现在」同一档（相对时间才显示得出
+// 1 天前 / 6 天前）。文件名与消息均为虚构值。
+// 单份产物夹具（与历史第一条同文件名，默认选中它时前后一致）
+const CRASH_ARTIFACT = {
+  available: true,
+  kind: 'crash-report',
+  fileName: 'crash-2026-10-07_09-14-02-server.txt',
+  mtimeMs: Date.parse('2026-10-07T09:14:02Z'),
+  sizeBytes: 14213,
+  description: 'Ticking entity',
+  minecraftVersion: '26.3',
+  exception: 'java.lang.NullPointerException: Cannot invoke "Entity.getType()"',
+  summary: [
+    { label: '时间', value: '2026-10-07 09:14:02' },
+    { label: '描述', value: 'Ticking entity' },
+    { label: 'Minecraft 版本', value: '26.3' },
+  ],
+  diagnosis: { matched: false, entry: null, instanceVersion: '26.3', verifiedForInstance: null },
+  excerpt: '# A detailed walkthrough of the error, its reason and stacktrace',
+  stack: ['at net.minecraft.server.MinecraftServer.tick(MinecraftServer.java:1)'],
+}
+
+const CRASH_HISTORY_ITEMS = [
+  {
+    kind: 'crash-report',
+    fileName: 'crash-2026-10-07_09-14-02-server.txt',
+    mtimeMs: Date.parse('2026-10-07T09:14:02Z'),
+    sizeBytes: 14213,
+    time: '2026-10-07 09:14:02',
+    reason: 'Ticking entity',
+    detail:
+      'java.lang.NullPointerException: Cannot invoke "Entity.getType()" because "entity" is null',
+  },
+  {
+    kind: 'jvm-crash',
+    fileName: 'hs_err_pid2601333.log',
+    mtimeMs: Date.parse('2026-10-02T21:40:11Z'),
+    sizeBytes: 96214,
+    time: null,
+    reason: 'SIGSEGV (0xb) at pc=0x0000716d71298e4f (sent by kill), pid=2601333, tid=2601333',
+    detail: 'V  [libjvm.so+0x7a1c2f]  JVM_handle_linux_signal+0x1cf',
+  },
+]
+
 const now = () => new Date().toISOString()
 
 /** 本地时区日期键（与服务端 utils/local-date.js 同口径；toISOString 是 UTC，东八区凌晨会写成昨天） */
@@ -181,6 +225,7 @@ const systemStats = {
     all: [{ mountpoint: '/', totalGB: 39, usedGB: 5.5, percent: 14.2 }],
   },
   diskAlert: { warningPercent: 85, errorPercent: 95 },
+  memoryAlert: { warningPercent: 90 },
 }
 
 const logs = [
@@ -1407,6 +1452,48 @@ const server = createServer((req, res) => {
 
     // ── 世界/属性域 ──
     if (path === '/api/v1/instances/e2e-demo/world') return res.end(ok(worldInfo))
+    // 单份产物（崩溃历史第一条的完整解析）：帮助页「完整诊断」与仪表盘崩溃指引条都读它。
+    // 指定了别的文件名 ⇒ null，模拟「旧产物已被轮转清理」
+    if (/^\/api\/v1\/instances\/[^/]+\/crash-report$/.test(path)) {
+      const file = new URL(url, 'http://x').searchParams.get('file')
+      if (file && file !== CRASH_ARTIFACT.fileName) return res.end(ok(null))
+      return res.end(ok(CRASH_ARTIFACT))
+    }
+
+    // 崩溃历史：给两条（一条崩溃报告、一条 JVM 崩溃日志）——排障页的「崩溃历史」与自检项
+    // 都需要它；都给空的话那两块在 e2e 与截图里永远只剩空态
+    if (/^\/api\/v1\/instances\/[^/]+\/crash-reports$/.test(path)) {
+      return res.end(
+        ok({ items: CRASH_HISTORY_ITEMS, total: CRASH_HISTORY_ITEMS.length, hasMore: false }),
+      )
+    }
+
+    // 面板自身错误日志：给两条（一条 ERROR 一条 WARN），否则「面板错误卡」在 e2e 与截图里永不出现
+    if (path === '/api/v1/system-errors') {
+      const limit = Number(new URL(url, 'http://x').searchParams.get('limit') ?? 20)
+      const entries = [
+        {
+          time: '2026-10-05T07:20:11.000Z',
+          level: 'ERROR',
+          message: '升级实例失败：jar 校验不通过\n  at verifyJar (services/upgrade.service.js:120)',
+        },
+        // 两条都用 ERROR：写入侧只在 level==='error' 时落盘，这个文件里不会出现 WARN 行
+        {
+          time: '2026-10-05T06:02:44.000Z',
+          level: 'ERROR',
+          message: '备份校验失败：文件摘要不匹配',
+        },
+      ]
+      return res.end(
+        ok({
+          available: true,
+          entries: entries.slice(0, limit),
+          hasMore: false,
+          logFile: '/srv/panel/data/logs/error.log',
+        }),
+      )
+    }
+
     // 推送通道（MSMP）：mock 里通道是关的，与 status.capabilities 的 msmp/msmpPush=false 同一套说法
     if (path === '/api/v1/instances/e2e-demo/push-channel') {
       if (req.method === 'POST') {

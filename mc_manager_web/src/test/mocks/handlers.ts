@@ -4,12 +4,15 @@ import { LEGACY_GAMERULES } from '@/lib/mc-gamerules'
 import { todayIso } from '@/lib/mc-calendar'
 import type {
   BackupItem,
+  CrashArtifact,
   BanRecord,
+  CrashArtifactHistoryItem,
   ScheduledTask,
   FileContentResponse,
   FileListResponse,
   InstanceStatus,
   OverviewData,
+  PanelErrors,
   Player,
   PushChannelState,
   ServerProperties,
@@ -58,6 +61,7 @@ export const mockSystemStats: SystemStats = {
     all: [{ mountpoint: '/', totalGB: 39, usedGB: 5.5, percent: 14.2 }],
   },
   diskAlert: { warningPercent: 85, errorPercent: 95 },
+  memoryAlert: { warningPercent: 90 },
 }
 
 function ok<T>(data: T) {
@@ -268,6 +272,62 @@ export const mockWorldInfo: WorldInfo = {
 }
 
 /** 9 个敏感键占位符掩码 + 常用键（结构与真实 server.properties 对齐） */
+/** 单份产物的完整解析夹具：与崩溃历史第一条同文件名，默认选中它时才前后一致 */
+export const mockCrashArtifact: CrashArtifact = {
+  available: true,
+  kind: 'crash-report',
+  fileName: 'crash-2026-10-07_09-14-02-server.txt',
+  mtimeMs: Date.parse('2026-10-07T09:14:02Z'),
+  sizeBytes: 14213,
+  description: 'Ticking entity',
+  minecraftVersion: '26.3',
+  exception: 'java.lang.NullPointerException: Cannot invoke "Entity.getType()"',
+  summary: [
+    { label: '时间', value: '2026-10-07 09:14:02' },
+    { label: '描述', value: 'Ticking entity' },
+  ],
+  diagnosis: { matched: false, entry: null, instanceVersion: '26.3', verifiedForInstance: null },
+  excerpt: '# A detailed walkthrough of the error',
+}
+
+/** 崩溃历史夹具：一条崩溃报告 + 一条 JVM 崩溃日志（文件名与消息均为虚构值） */
+export const mockCrashHistory: CrashArtifactHistoryItem[] = [
+  {
+    kind: 'crash-report',
+    fileName: 'crash-2026-10-07_09-14-02-server.txt',
+    mtimeMs: Date.parse('2026-10-07T09:14:02Z'),
+    sizeBytes: 14213,
+    time: '2026-10-07 09:14:02',
+    reason: 'Ticking entity',
+    detail: 'java.lang.NullPointerException: Cannot invoke "Entity.getType()"',
+  },
+  {
+    kind: 'jvm-crash',
+    fileName: 'hs_err_pid2601333.log',
+    mtimeMs: Date.parse('2026-10-02T21:40:11Z'),
+    sizeBytes: 96214,
+    time: null,
+    reason: 'SIGSEGV (0xb) at pc=0x0000716d71298e4f (sent by kill), pid=2601333, tid=2601333',
+    detail: 'V  [libjvm.so+0x7a1c2f]  JVM_handle_linux_signal+0x1cf',
+  },
+]
+
+/** 面板自身错误日志夹具：两条（一条 ERROR 一条 WARN），路径与消息均为虚构值 */
+export const mockPanelErrors: PanelErrors = {
+  available: true,
+  entries: [
+    {
+      time: '2026-10-05T07:20:11.000Z',
+      level: 'ERROR',
+      message: '升级实例失败：jar 校验不通过\n  at verifyJar (services/upgrade.service.js:120)',
+    },
+    // 两条都用 ERROR：写入侧只在 level==='error' 时落盘，这个文件里不会出现 WARN 行
+    { time: '2026-10-05T06:02:44.000Z', level: 'ERROR', message: '备份校验失败：文件摘要不匹配' },
+  ],
+  hasMore: false,
+  logFile: '/srv/panel/data/logs/error.log',
+}
+
 /** 推送通道状态的 mock 基座：与 mockProperties 同一组字段口径（通道关闭、无 secret） */
 export const mockPushChannel: PushChannelState = {
   enabled: false,
@@ -885,6 +945,23 @@ export const handlers = [
   http.post('*/api/v1/instances/:id/push-channel', () =>
     ok({ enabled: true, restartRequired: true, secretGenerated: true }),
   ),
+  http.get('*/api/v1/instances/:id/crash-reports', () =>
+    ok({ items: mockCrashHistory, total: mockCrashHistory.length, hasMore: false }),
+  ),
+  // 单份产物：默认给历史里最新那份的完整解析（帮助页「完整诊断」与仪表盘指引条都读它）。
+  // 指定了别的文件名 ⇒ null，模拟「旧产物已被轮转清理」这一支
+  http.get('*/api/v1/instances/:id/crash-report', ({ request }) => {
+    const file = new URL(request.url).searchParams.get('file')
+    if (file && file !== mockCrashArtifact.fileName) return ok(null)
+    return ok(mockCrashArtifact)
+  }),
+  http.get('*/api/v1/system-errors', ({ request }) => {
+    const limit = Number(new URL(request.url).searchParams.get('limit') ?? 20)
+    return ok({
+      ...mockPanelErrors,
+      entries: mockPanelErrors.entries.slice(0, limit),
+    })
+  }),
   // ── 文件域 ──
   http.get('*/api/v1/instances/:id/files/content', ({ request }) => {
     const filePath = new URL(request.url).searchParams.get('path') ?? '/server.properties'

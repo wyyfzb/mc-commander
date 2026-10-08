@@ -294,6 +294,15 @@ export function useServerSocket(instanceId: string | null) {
           // 详情同步失效：isRunning 镜像自详情 query（server store），只刷列表会让
           // 面板外停止（如终端输 stop）后的停止状态条滞后到 30s 轮询才翻转
           void queryClient.invalidateQueries({ queryKey: queryKeys.instance(msg.instanceId) })
+          // 崩溃产物与崩溃历史都是事后新增的文件，轮询没有意义（每次都要枚举目录 + 解析），
+          // 只在崩溃事件到达时失效一次。放在这里而不是页面里：帮助页、仪表盘都可能正开着，
+          // 页面级失效只对「当时挂载着的那个页面」生效。
+          if (ev === 'crash') {
+            void queryClient.invalidateQueries({
+              queryKey: queryKeys.crashArtifact(msg.instanceId),
+            })
+            void queryClient.invalidateQueries({ queryKey: queryKeys.crashHistory(msg.instanceId) })
+          }
           // critical 事件（当前实例）：入通知中心 + 持久 toast（手动关闭防错过）
           if (ev === 'crash' || ev === 'circuit_breaker') {
             dispatchEvent({

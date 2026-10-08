@@ -255,6 +255,42 @@ test.describe('仪表盘', () => {
     await maybeShot(page, 'notification-drawer-instance-light.png')
   })
 
+  // 崩溃诊断已收进帮助页，仪表盘只留一句指引：这里锁「崩过就有指引 + 指得对」，
+  // 并顺带验证点进去落在帮助页的排障标签上（帮助页自身暂无 spec，这条是它唯一的 e2e 覆盖）
+  test('崩溃指引条：崩过时给一句指引，点「看诊断」落在帮助页排障', async ({ page }) => {
+    await setupConnection(page)
+    await page.goto('/dashboard')
+
+    const pointer = page.getByText(/崩过一次/)
+    await expect(pointer).toBeVisible()
+    await page.getByRole('link', { name: '看诊断' }).click()
+
+    await expect(page).toHaveURL(/\/help$/)
+    await expect(page.getByRole('heading', { name: '帮助中心' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: '自检' })).toBeVisible()
+  })
+
+  test('崩溃指引条：没有产物时整条不出现', async ({ page }) => {
+    await setupConnection(page)
+    await page.route('**/api/v1/instances/*/crash-report*', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          status: 'ok',
+          code: 0,
+          message: 'ok',
+          timestamp: new Date().toISOString(),
+          data: null,
+        }),
+      }),
+    )
+    await page.goto('/dashboard')
+
+    await expect(page.getByText('MC 时钟 · 世界控制').first()).toBeVisible()
+    await expect(page.getByText(/崩过一次/)).toHaveCount(0)
+  })
+
   test('顶栏状态点：WS 连接后显示已连接', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/dashboard')

@@ -11,10 +11,12 @@ import { useConnectionStore } from '@/stores/connection'
 import { useAuthStore } from '@/stores/auth'
 import type {
   CrashArtifact,
+  CrashArtifactHistory,
   InstanceStatus,
   InstanceSummary,
   LogEntry,
   OverviewData,
+  PanelErrors,
   SystemStats,
   UpdateCheckResult,
 } from './types'
@@ -41,6 +43,11 @@ export const queryKeys = {
   all: ['mcs'] as const,
   overview: () => [...queryKeys.all, 'overview'] as const,
   systemStats: () => [...queryKeys.all, 'system-stats'] as const,
+  /**
+   * 面板自身错误日志。**独立键，不挂在 `systemStats` 前缀下**：那个前缀每 15 秒被 WS 的
+   * 系统统计推送整片失效，靠前缀匹配会把这个读取面一起拖成 15s 一轮（注释写的却是 30s）。
+   */
+  panelErrors: () => [...queryKeys.all, 'panel-errors'] as const,
   instances: () => [...queryKeys.all, 'instances'] as const,
   instance: (id: string) => [...queryKeys.all, 'instances', id] as const,
   /** 部署进度兜底快照（单例查询：全局至多一条在途部署；置于 'deploy' 段下避免与
@@ -61,6 +68,7 @@ export const queryKeys = {
   world: (id: string) => [...queryKeys.all, 'world', id] as const,
   properties: (id: string) => [...queryKeys.all, 'properties', id] as const,
   crashArtifact: (id: string) => [...queryKeys.all, 'crash-artifact', id] as const,
+  crashHistory: (id: string) => [...queryKeys.all, 'crash-history', id] as const,
   datapacks: (id: string) => [...queryKeys.all, 'datapacks', id] as const,
   pushChannel: (id: string) => [...queryKeys.all, 'push-channel', id] as const,
   auditLogs: (params?: AuditQueryParams) => [...queryKeys.all, 'audit-logs', params ?? {}] as const,
@@ -94,6 +102,25 @@ export function useOverview() {
   })
 }
 
+/**
+ * 面板自身错误日志（`error.log` 及轮转档）最近若干条。
+ *
+ * 只读暴露、不做检索（服务端口径）；30s 一轮是因为读取按尾部 256KB 截断，代价与文件大小无关。
+ * `available=false` 是「没读到任何一条错误」——文件不存在或存在但读不到，**服务端合并了这一档**
+ * （契约注释同口径），消费方不能把它当成「读取失败」的信号。请求本身的失败另算：仪表盘已把本查询
+ * 纳入失败横幅（`failedSources`），与 status/systemStats 同一出口。
+ */
+export function useSystemErrors(limit = 20) {
+  const config = useConnectionStore()
+  return useQuery({
+    queryKey: [...queryKeys.panelErrors(), limit] as const,
+    queryFn: ({ signal }) =>
+      apiGet<PanelErrors>(`/api/v1/system-errors?limit=${limit}`, config, signal),
+    enabled: config.status === 'ready',
+    refetchInterval: FALLBACK_POLL_INTERVAL_MS,
+  })
+}
+
 /** 系统资源统计（云服务器资源，WS 推送 + 30s 保底轮询） */
 export function useSystemStats() {
   const config = useConnectionStore()
@@ -112,14 +139,44 @@ export function useSystemStats() {
  *
  * **不轮询**：崩溃产物是事后产物，只在崩溃后新增——按需拉取即可，轮询等于每次都给
  * 磁盘做一次目录枚举 + 解析。崩溃事件发生时由调用方 invalidate（见 dashboard-page）。
- * 从未崩溃过时服务端返回 null，这是正常空态（不是 loading、也不是错误）。
+ * 不传 `fileName` 取最新一份；传了按产物文件名取（帮助页点开历史里任意一条）。
+ * 取不到时服务端返回 null，这是正常空态（不是 loading、也不是错误）——它同时覆盖
+ * 「从未崩溃过」与「这份产物已被清理」两种情形，界面据上下文说清是哪一种。
  */
-export function useCrashArtifact(instanceId: string | null) {
+export function useCrashArtifact(instanceId: string | null, fileName?: string) {
   const config = useConnectionStore()
   return useQuery({
-    queryKey: queryKeys.crashArtifact(instanceId ?? ''),
+    // 文件名进键：帮助页点开不同历史条目是不同数据，共用一条缓存键会串数据
+    queryKey: [...queryKeys.crashArtifact(instanceId ?? ''), fileName ?? null] as const,
     queryFn: ({ signal }) =>
-      apiGet<CrashArtifact | null>(`/api/v1/instances/${instanceId}/crash-report`, config, signal),
+      apiGet<CrashArtifact | null>(
+        `/api/v1/instances/${instanceId}/crash-report${
+          fileName ? `?file=${encodeURIComponent(fileName)}` : ''
+        }`,
+        config,
+        signal,
+      ),
+    enabled: config.status === 'ready' && Boolean(instanceId),
+    retry: false,
+  })
+}
+
+/**
+ * 崩溃产物历史（时间/原因/要点，最新在前）。与 `useCrashArtifact` 一样**不轮询**：
+ * 崩溃产物是事后产物，新增只可能来自一次崩溃，那由调用方 invalidate。
+ * 枚举失败与「从未崩溃过」在契约上同形（都是空列表），故消费方不得把空列表说成
+ * 「从未崩溃过」，只能说「没有读到崩溃记录」。
+ */
+export function useCrashHistory(instanceId: string | null, limit = 20) {
+  const config = useConnectionStore()
+  return useQuery({
+    queryKey: [...queryKeys.crashHistory(instanceId ?? ''), limit] as const,
+    queryFn: ({ signal }) =>
+      apiGet<CrashArtifactHistory>(
+        `/api/v1/instances/${instanceId}/crash-reports?limit=${limit}`,
+        config,
+        signal,
+      ),
     enabled: config.status === 'ready' && Boolean(instanceId),
     retry: false,
   })
