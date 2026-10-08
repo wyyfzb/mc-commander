@@ -6,6 +6,13 @@ import { toIsoUtc } from '../utils/db-time.js';
  *
  * 服务端自实现的时长效禁：执行原版 `ban`/`ban-ip` 立即封禁，
  * 记录到期时间，由 TaskScheduler 轮询到期记录自动执行 `pardon`/`pardon-ip`。
+ *
+ * **为什么 MSMP 之后仍然保留它**（曾评估「官方条目带 expires ⇒ 本表可退役」，结论是不行）：
+ * ① 命令通道回退时原版 `ban` 不接受时长，**时长只能记在这里**（MSMP 不可用时唯一载体）；
+ * ② 面板的封禁历史（含「提前解封」与「到期」的区分）取自本表；
+ * ③ 审计表当不了替代品——它按 `AUDIT_LOG_RETENTION_DAYS`（默认 90 天）定期 prune，
+ *    超长封禁会在到期前失去记录，清扫就再也解不开，玩家被永久挡在门外。
+ * 官方条目那一侧只承担「有效期内把它挡在门外」，与本表的职责不重叠。
  */
 export class BanModel {
   static _toCamel(row) {
