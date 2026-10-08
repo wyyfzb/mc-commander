@@ -17,15 +17,21 @@ vi.mock('../services/instance-properties.service.js', async (orig) => {
   return { ...actual, reloadProperties: vi.fn() };
 });
 
-const { generateMsmpSecret, isValidMsmpSecret, readPushChannelState, setPushChannel } =
-  await import('../services/msmp.service.js');
+const {
+  ensureMsmpConfigured,
+  generateMsmpSecret,
+  isValidMsmpSecret,
+  readPushChannelState,
+  setPushChannel,
+} = await import('../services/msmp.service.js');
 
 /** 最小实例替身：properties 是读写的唯一事实源，saveProperties 是唯一的落盘口 */
-function makeInstance(props = {}, { isRunning = false } = {}) {
+function makeInstance(props = {}, { isRunning = false, mcVersion = '26.3' } = {}) {
   const instance = {
     id: 'i1',
     serverPath: '/tmp/does-not-matter',
     isRunning,
+    mcVersion,
     properties: { ...props },
     saveProperties: vi.fn(function (updates) {
       this.properties = { ...this.properties, ...updates };
@@ -238,5 +244,55 @@ describe('setPushChannel：关闭', () => {
     const inst = makeInstance({});
     setPushChannel(inst, false);
     expect(inst.saveProperties.mock.calls[0][0]).not.toHaveProperty('management-server-secret');
+  });
+});
+
+// 启动前自动补齐：用户要的是「状态变化及时到达」这个结果，MSMP 只是实现 ⇒ 默认开启、零交互。
+// 两条边界（只在键缺失时写、版本不够不写）与「失败不挡启动」都由这里锁住。
+describe('ensureMsmpConfigured：启动前自动补齐', () => {
+  it('键缺失且版本支持 → 一次写三项（复用 setPushChannel 的自洽组合）', () => {
+    const inst = makeInstance({}, { mcVersion: '26.3' });
+    const r = ensureMsmpConfigured(inst);
+
+    expect(inst.saveProperties).toHaveBeenCalledTimes(1);
+    const written = inst.saveProperties.mock.calls[0][0];
+    expect(Object.keys(written).sort()).toEqual([
+      'management-server-enabled',
+      'management-server-secret',
+      'management-server-tls-enabled',
+    ]);
+    expect(written['management-server-enabled']).toBe('true');
+    expect(written['management-server-tls-enabled']).toBe('false');
+    expect(isValidMsmpSecret(written['management-server-secret'])).toBe(true);
+    expect(r.enabled).toBe(true);
+  });
+
+  it('用户已显式关闭（键存在且为 false）→ 绝不动它：否则「关了又被打开」', () => {
+    const inst = makeInstance({ 'management-server-enabled': 'false' });
+    expect(ensureMsmpConfigured(inst)).toBeNull();
+    expect(inst.saveProperties).not.toHaveBeenCalled();
+  });
+
+  it('已开启（键存在）→ 幂等跳过，不重写文件', () => {
+    const inst = makeInstance({ 'management-server-enabled': 'true' });
+    expect(ensureMsmpConfigured(inst)).toBeNull();
+    expect(inst.saveProperties).not.toHaveBeenCalled();
+  });
+
+  it('版本低于最低要求 → 不写（往用户文件里塞无用键没有任何收益）', () => {
+    const inst = makeInstance({}, { mcVersion: '1.21.4' });
+    expect(ensureMsmpConfigured(inst)).toBeNull();
+    expect(inst.saveProperties).not.toHaveBeenCalled();
+  });
+
+  it('版本未知 → 不写（宁可不配置，也不塞无用键）', () => {
+    const inst = makeInstance({}, { mcVersion: null });
+    expect(ensureMsmpConfigured(inst)).toBeNull();
+    expect(inst.saveProperties).not.toHaveBeenCalled();
+  });
+
+  it('恰好等于最低版本 → 写（边界含等号）', () => {
+    const inst = makeInstance({}, { mcVersion: '1.21.9' });
+    expect(ensureMsmpConfigured(inst)?.enabled).toBe(true);
   });
 });

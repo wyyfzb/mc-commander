@@ -22,6 +22,8 @@
  */
 import crypto from 'crypto';
 import { reloadProperties } from './instance-properties.service.js';
+import { MSMP_MIN_MC_VERSION } from '@mc-commander/schemas';
+import { logger } from '../utils/logger.js';
 
 /** MC 对 `management-server-secret` 的硬要求（实测：非此形态直接崩在启动期） */
 const SECRET_LENGTH = 40;
@@ -64,6 +66,51 @@ export function readPushChannelState(instance) {
     port: Number.parseInt(props['management-server-port'] ?? '0', 10) || 0,
     secretConfigured: isValidMsmpSecret(props['management-server-secret']),
   };
+}
+
+/**
+ * 版本是否支持这条通道（MC >= MSMP_MIN_MC_VERSION）。
+ *
+ * 解析口径与前端 `lib/mc-version.ts` 一致（取第一段连续数字及其后的点分段，缺失段按 0），
+ * 但**只用到一处**：面板不替不支持的版本写无用键。解析器本身只该有一份，收进契约包属跨包
+ * 重构，已登记待办、未在本轮夹带。
+ */
+function isMsmpSupportedVersion(version) {
+  const parse = (v) => {
+    const m = String(v ?? '').match(/(\d+)(?:\.(\d+))?(?:\.(\d+))?/);
+    return m ? [Number(m[1]), Number(m[2] ?? 0), Number(m[3] ?? 0)] : null;
+  };
+  const a = parse(version);
+  const b = parse(MSMP_MIN_MC_VERSION);
+  if (!a || !b) return false; // 版本未知或读不懂 ⇒ 不写（宁可不配置，也不往用户文件里塞无用键）
+  for (let i = 0; i < 3; i += 1) {
+    if (a[i] !== b[i]) return a[i] > b[i];
+  }
+  return true;
+}
+
+/**
+ * 启动前自动补齐推送配置（幂等，返回写入结果或 null）。
+ *
+ * **为什么默认开启、不给用户选择**：用户要的是「状态变化及时到达」这个结果，MSMP 只是实现，
+ * 30 秒轮询是兜底——把实现摊到用户面前（开关 + 监听/凭据字段 + 手改警告）对零代码用户是纯噪音。
+ * 配置在**启动前**补齐，服务器本次启动即读到，于是「运行中改动要重启才生效」这条实现细节
+ * 根本不必进入界面。
+ *
+ * 两条边界：
+ * - **只在 `management-server-enabled` 键缺失时写**：键存在＝用户或面板已表过态（含显式关闭），
+ *   必须尊重——否则用户关了又被自动打开。
+ * - **版本不够就不写**：没有这条通道的版本，写进去只是往用户文件里塞无用键。
+ *
+ * 写入复用 `setPushChannel`：三项必须一次性写成自洽组合（否则会踩「TLS 开 + 证书空」那组必崩组合）。
+ */
+export function ensureMsmpConfigured(instance) {
+  const props = instance?.properties ?? {};
+  if (props['management-server-enabled'] !== undefined) return null;
+  if (!isMsmpSupportedVersion(instance?.mcVersion)) return null;
+  const result = setPushChannel(instance, true);
+  logger.info(`[${instance.id}] 已自动开启实时推送（management-server-* 三项），本次启动即生效`);
+  return result;
 }
 
 /**

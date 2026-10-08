@@ -793,6 +793,7 @@ export class MCServerInstance extends EventEmitter {
 
     // 子阶段编排（各阶段实现见 start-lifecycle.js，经原型注入 this 绑定实例）：
     // EULA 检查 → tempban 对账 → world 锁清理 → 结构化日志配置（写覆盖配置，供下一步注入 -D）
+    // → 实时推送配置补齐（写 management-server-* 三项，服务器启动时读）
     // → 启动命令/参数构建（四种来源优先级）
     // → spawn 与进程/stdin/输出/exit 监听器挂载 → 运行时状态初始化 → 收尾
     // （熔断重置 → started 事件 → 定时存档）。按原始执行顺序依次调用，行为零变化。
@@ -800,6 +801,8 @@ export class MCServerInstance extends EventEmitter {
     this._reconcileTempBansSafe();
     this._cleanWorldLock();
     this._ensureStructuredLogConfig();
+    // 实时推送配置也在启动前补齐：服务器本次启动即读到，用户零交互
+    this._ensureMsmpConfiguredSafe();
 
     const { command, args } = this._resolveStartCommand(startCommand);
     this._spawnServerProcess(command, args);

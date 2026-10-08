@@ -137,6 +137,41 @@ describe('MCServerInstance lifecycle / RCON / stats timers', () => {
       expect(statusEvents).toContainEqual({ event: 'started' });
     });
 
+    it('启动前自动补齐实时推送配置：本次启动即生效，用户零交互', () => {
+      // 端到端走编排（不是直接调服务层）：证明这个阶段真的挂在 start() 上——
+      // 漏挂时单测全绿而功能不存在，这条断言就是为那一刻准备的
+      const instance = createInstance({ mcVersion: '26.3' });
+      instance.start();
+
+      const props = fs.readFileSync(path.join(tmpDir, 'server.properties'), 'utf-8');
+      expect(props).toMatch(/^management-server-enabled=true$/m);
+      expect(props).toMatch(/^management-server-tls-enabled=false$/m);
+      // secret 必须是 40 位字母数字，否则服务器启动即崩
+      expect(props).toMatch(/^management-server-secret=[A-Za-z0-9]{40}$/m);
+    });
+
+    it('用户显式关掉过（键存在）→ 启动时不动它，也不影响启动', () => {
+      fs.writeFileSync(path.join(tmpDir, 'server.properties'), 'management-server-enabled=false\n');
+      const instance = createInstance({ mcVersion: '26.3' });
+      instance.start();
+
+      expect(fs.readFileSync(path.join(tmpDir, 'server.properties'), 'utf-8')).toBe(
+        'management-server-enabled=false\n',
+      );
+      expect(spawn).toHaveBeenCalledTimes(1);
+    });
+
+    it('补齐失败（写不进去）不挡启动：轮询兜底，实例照常拉起', () => {
+      const instance = createInstance({ mcVersion: '26.3' });
+      vi.spyOn(instance, 'saveProperties').mockImplementation(() => {
+        throw new Error('EACCES: permission denied');
+      });
+
+      expect(() => instance.start()).not.toThrow();
+      expect(spawn).toHaveBeenCalledTimes(1);
+      expect(instance.isRunning).toBe(true);
+    });
+
     it('uses custom start command when provided', () => {
       const instance = createInstance();
       instance.start('java -Xmx4G -jar custom.jar nogui');

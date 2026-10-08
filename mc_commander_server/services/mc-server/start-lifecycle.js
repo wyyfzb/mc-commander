@@ -18,6 +18,7 @@ import fs from 'fs';
 import config from '../../config.js';
 import { InstanceModel } from '../../db/index.js';
 import { reconcileTempBans } from '../../utils/ban-reconcile.js';
+import { ensureMsmpConfigured } from '../msmp.service.js';
 import { logger } from '../../utils/logger.js';
 import { normalizeLogText } from './output-parser.js';
 
@@ -77,6 +78,18 @@ export function _reconcileTempBansSafe() {
     reconcileTempBans(this.id, this.serverPath);
   } catch (e) {
     logger.warn(`[${this.id}] tempban 对账失败（不阻塞启动）:`, e.message);
+  }
+}
+
+/**
+ * 启动前置：自动补齐实时推送配置（与 tempban 对账同口径——**任何异常都不挡启动**，
+ * 写不进去就让 30 秒轮询兜底）。
+ */
+export function _ensureMsmpConfiguredSafe() {
+  try {
+    ensureMsmpConfigured(this);
+  } catch (e) {
+    logger.warn(`[${this.id}] 实时推送自动配置失败（不阻塞启动）:`, e.message);
   }
 }
 
