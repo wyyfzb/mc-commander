@@ -9,7 +9,10 @@
  * - `SysOut`（stdout）＝ JSON 行：面板实时摄取，`normalizeLogText` 还原成既有纯文本形态交给
  *   展示与解析（见 output-parser.js），于是下游四条消费路径与格式变化解耦；
  * - `logs/latest.log` ＝ 纯文本：给人看、给接管续读与面板重启回填读（pattern 与 Mojang 逐字符一致）；
- * - `logs/mc-commander.jsonl` ＝ JSON 行：面板的持久结构化记录（诊断按 level/logger 取用）。
+ * - `logs/mc-commander.jsonl` ＝ JSON 行：留在磁盘上的持久结构化记录（自带轮转归档）。
+ *   **面板不读它**——实时摄取走上面的 stdout；这份文件的价值是「人/外部工具可直接按
+ *   level·logger 过滤」，在文件浏览器里也能打开。刻意写清这一点，免得后来者以为
+ *   「没人读 ⇒ 写它是多余的」而删掉它。
  *
  * 三条选型依据（均为实测，不是推断）：
  * - **不引新依赖**：26.3 的 `libraries/` 里没有 Jackson、也没有 `log4j-layout-template-json`，但
