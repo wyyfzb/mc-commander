@@ -7,9 +7,8 @@ import { BanModel } from '../db/index.js';
 import {
   getTotalPlayTime,
   playerNameRejectionReason,
-  shadowProfilePath,
+  readShadowProfile,
 } from '../utils/player-utils.js';
-import { isPathContained } from '../utils/fs-utils.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
 import {
   banRecordListSchema,
@@ -136,7 +135,9 @@ export function createPlayerRoutes(serverManager) {
         });
 
         // 优先使用自行追踪的游戏时长（uuid 已由上面的 known 解析过，传下去省一次读盘）
-        const savedData = loadPlayerData(instance.serverPath, name, known.uuid) || {};
+        const savedData =
+          loadPlayerData({ serverPath: instance.serverPath, playerName: name, uuid: known.uuid }) ||
+          {};
         if (savedData.totalPlayTime && savedData.totalPlayTime > totalPlayTime) {
           totalPlayTime = savedData.totalPlayTime;
         }
@@ -253,7 +254,12 @@ export function createPlayerRoutes(serverManager) {
         });
 
         // 从持久化文件加载离线数据（优先使用自行追踪的游戏时长）
-        const savedData = loadPlayerData(instance.serverPath, name, knownInfo.uuid) || {};
+        const savedData =
+          loadPlayerData({
+            serverPath: instance.serverPath,
+            playerName: name,
+            uuid: knownInfo.uuid,
+          }) || {};
         if (savedData.totalPlayTime && savedData.totalPlayTime > totalPlayTime) {
           totalPlayTime = savedData.totalPlayTime;
         }
@@ -452,7 +458,8 @@ export function createPlayerRoutes(serverManager) {
         res.json(validatedSuccess(playerDetailsResponseSchema, { ...baseInfo, ...details }));
       } catch (e) {
         logger.error(`Failed to get player details for ${playerName}:`, e);
-        const fallbackSaved = loadPlayerData(instance.serverPath, playerName) || {};
+        const fallbackSaved =
+          loadPlayerData({ serverPath: instance.serverPath, playerName: playerName }) || {};
         // 与成功路径字段集对齐：缺 sessions/stats/inventory/armor/xpProgress
         // 会让前端把 undefined 当数组访问崩溃——detail-log-tab 对 sessions 展开
         const mergedEvents = instance._mergePlayerEvents(
@@ -489,20 +496,10 @@ export function createPlayerRoutes(serverManager) {
     }),
   );
 
-  // 影子档案键与实例方法 _loadPlayerData 同源（UUID，不是玩家名），
-  // 否则「按 UUID 写、按名字读」会让档案时有时无。
-  function loadPlayerData(serverPath, playerName, uuid) {
-    try {
-      const dir = path.join(serverPath, 'playerdata');
-      const filePath = shadowProfilePath({ serverPath, playerName, uuid });
-      // usercache 是本机文件、可被篡改，落点仍须自证包含关系
-      if (!isPathContained(dir, filePath)) return null;
-      if (!fs.existsSync(filePath)) return null;
-      return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-    } catch {
-      return null;
-    }
-  }
+  // 影子档案读取走共享实现（`readShadowProfile`）：键是 UUID 不是玩家名，且落点自证
+  // 包含关系——实例与路由曾经各写一份，分叉风险与「路由那份不告警」都出在这里。
+  const loadPlayerData = ({ serverPath, playerName, uuid }) =>
+    readShadowProfile({ serverPath, playerName, uuid });
 
   // POST /api/instances/:id/players/:player/op
   router.post(

@@ -34,7 +34,12 @@ vi.mock('../config.js', async () => {
 });
 
 import { MCServerInstance } from '../services/mc_server.js';
-import { shadowProfilePath } from '../utils/player-utils.js';
+import {
+  readShadowProfile,
+  resolveShadowProfilePath,
+  shadowProfilePath,
+} from '../utils/player-utils.js';
+import { logger } from '../utils/logger.js';
 
 /** 实机原始日志行（逐字，仅把真实探针名换成本仓通用的虚构名） */
 const REAL_JOIN = '[05:05:23] [Server thread/INFO]: Steve joined the game';
@@ -211,6 +216,52 @@ describe('档案路径越界（写侧与读侧同守）', () => {
     const victim = path.join(inst.serverPath, 'instance.json');
     fs.writeFileSync(victim, JSON.stringify({ secret: 'panel-metadata' }));
     expect(inst._loadPlayerData(evil)).toBeNull();
+  });
+
+  // 落点守卫在「名字」这一侧其实**不可达**：影子档案的键取 UUID（usercache → 离线算法派生），
+  // 名字永远不成为文件名。它能被触发的唯一场景是 **usercache 被篡改**（它的注释写的就是这个），
+  // 而这一段此前没有用例 ⇒ 删掉守卫不会有任何用例变红。以下三条把那条路径钉住。
+  it('共享入口：实例与路由共用同一处校验（篡改 usercache ⇒ null + 告警；正常名仍可用）', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-inject-shared-'));
+    fs.writeFileSync(
+      path.join(dir, 'usercache.json'),
+      JSON.stringify([{ name: 'Evil', uuid: '../escaped' }]),
+    );
+    const spy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    expect(resolveShadowProfilePath({ serverPath: dir, playerName: 'Evil' })).toBeNull();
+    expect(readShadowProfile({ serverPath: dir, playerName: 'Evil' })).toBeNull();
+    expect(spy.mock.calls.some((c) => String(c[0]).includes('拒绝越界影子档案路径'))).toBe(true);
+
+    // 同一个入口对正常名字照常给出 playerdata/ 下的路径（收敛校验不等于收紧语义）
+    const ok = resolveShadowProfilePath({ serverPath: dir, playerName: 'Steve' });
+    expect(ok.startsWith(path.join(dir, 'playerdata') + path.sep)).toBe(true);
+  });
+
+  it('usercache 被篡改成越界 UUID 时，写侧拒绝且不落盘到根下', () => {
+    const inst = makeInstance('tamper-write');
+    fs.writeFileSync(
+      path.join(inst.serverPath, 'usercache.json'),
+      JSON.stringify([{ name: 'Evil', uuid: '../escaped' }]),
+    );
+    const escaped = path.join(inst.serverPath, 'escaped.json');
+    inst._savePlayerData('Evil', { name: 'Evil', totalPlayTime: 1, sessions: [] });
+    expect(fs.existsSync(escaped)).toBe(false);
+    // 也不该在 playerdata/ 之外留下任何新文件
+    const entries = fs
+      .readdirSync(inst.serverPath)
+      .filter((f) => f !== 'usercache.json' && f !== 'playerdata');
+    expect(entries).toEqual([]);
+  });
+
+  it('usercache 被篡改成越界 UUID 时，读侧拒绝并留告警', () => {
+    const inst = makeInstance('tamper-read');
+    fs.writeFileSync(
+      path.join(inst.serverPath, 'usercache.json'),
+      JSON.stringify([{ name: 'Evil', uuid: '../escaped' }]),
+    );
+    const spy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    expect(inst._loadPlayerData('Evil')).toBeNull();
+    expect(spy.mock.calls.some((c) => String(c[0]).includes('拒绝越界影子档案路径'))).toBe(true);
   });
 
   it('正常名字照常读写（不算误伤）', () => {

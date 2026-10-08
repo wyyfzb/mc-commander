@@ -16,7 +16,8 @@ import {
   offlineUuid as computeOfflineUuid,
   getTotalPlayTime,
   readUuidFromUsercache,
-  shadowProfilePath,
+  readShadowProfile,
+  resolveShadowProfilePath,
 } from '../utils/player-utils.js';
 import { isPathContained } from '../utils/fs-utils.js';
 // addressReachability / isPrivateIp 复用 url-guard 的私有网段判定（SSRF 防护用的同一把尺子）：
@@ -1626,13 +1627,7 @@ export class MCServerInstance extends EventEmitter {
   /// shadowProfileKey / shadowProfilePath）。返回 null 表示键越界——usercache 是本机文件、可被篡改，
   /// 落点仍须自证，UUID 化不能替代这一层。
   _shadowProfilePath(playerName, uuid) {
-    const dir = path.join(this.serverPath, 'playerdata');
-    const filePath = shadowProfilePath({ serverPath: this.serverPath, playerName, uuid });
-    if (!isPathContained(dir, filePath)) {
-      logger.error(`[${this.id}] 拒绝越界影子档案路径: ${JSON.stringify(filePath)}`);
-      return null;
-    }
-    return filePath;
+    return resolveShadowProfilePath({ serverPath: this.serverPath, playerName, uuid });
   }
 
   _savePlayerData(playerName, data) {
@@ -1688,14 +1683,7 @@ export class MCServerInstance extends EventEmitter {
   }
 
   _loadPlayerData(playerName) {
-    try {
-      const filePath = this._shadowProfilePath(playerName);
-      if (!filePath) return null;
-      if (!fs.existsSync(filePath)) return null;
-      return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-    } catch {
-      return null;
-    }
+    return readShadowProfile({ serverPath: this.serverPath, playerName });
   }
 
   // ══════════════════════════════════════════════════════════

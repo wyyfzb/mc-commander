@@ -10,6 +10,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { isPathContained } from './fs-utils.js';
+import { logger } from './logger.js';
 
 /** 世界目录名白名单：仅字母/数字/_/-（不含路径分隔符与 ..，杜绝路径穿越） */
 const LEVEL_NAME_REGEX = /^[A-Za-z0-9_-]+$/;
@@ -68,6 +69,41 @@ export function shadowProfilePath({ serverPath, playerName, uuid }) {
     'playerdata',
     `${shadowProfileKey({ serverPath, playerName, uuid })}.json`,
   );
+}
+
+/**
+ * 影子档案路径 + **落点自证**（面板写档案、路由读档案、实例读档案的唯一入口）。
+ *
+ * 为什么键是 UUID 还要自证：正常玩家名永远变不成文件名（见 `shadowProfileKey`），
+ * 能越界的只剩**被篡改的 usercache**——它把 `uuid` 写成 `../x` 时路径就出去了。
+ * 三条消费路径共用这一处，是因为「只有一处校验」才守得住：曾经实例与路由各写一份，
+ * 路由那份还静默 `return null`，篡改就无人知晓。
+ *
+ * 越界返回 null 并留告警（这是唯一可能触发的场景，静默等于放过）。
+ */
+export function resolveShadowProfilePath({ serverPath, playerName, uuid }) {
+  const dir = path.join(serverPath, 'playerdata');
+  const filePath = shadowProfilePath({ serverPath, playerName, uuid });
+  if (!isPathContained(dir, filePath)) {
+    logger.error(`[${serverPath}] 拒绝越界影子档案路径: ${JSON.stringify(filePath)}`);
+    return null;
+  }
+  return filePath;
+}
+
+/**
+ * 读取影子档案。返回 null 统一表示「越界拒绝 / 文件不存在 / 内容不可解析」——
+ * 读侧对这三种情形本就一视同仁（都按「没有档案」处理），调用方无需分辨；
+ * 越界与不可解析都在 `resolveShadowProfilePath` / 解析处留痕。
+ */
+export function readShadowProfile({ serverPath, playerName, uuid }) {
+  try {
+    const filePath = resolveShadowProfilePath({ serverPath, playerName, uuid });
+    if (!filePath || !fs.existsSync(filePath)) return null;
+    return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+  } catch {
+    return null;
+  }
 }
 
 /**
