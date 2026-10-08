@@ -86,6 +86,19 @@ describe('CrashReportView（帮助页的完整诊断与仪表盘共用同一份�
     expect(screen.getByText(/libc\.so\.6/)).toBeInTheDocument()
   })
 
+  it('可编程滚动区可键盘聚焦（Chromium 127+ 才默认给滚动容器焦点，Firefox/Safari 不能）', async () => {
+    const user = userEvent.setup()
+    renderView(missReport())
+    // 调用栈与产物原文默认折起，展开后各自的滚动区都要能 Tab 进去
+    await user.click(screen.getByRole('button', { name: /调用栈/ }))
+    expect(screen.getByText(/at net\.minecraft/).closest('pre')).toHaveAttribute('tabindex', '0')
+    await user.click(screen.getByRole('button', { name: /完整产物原文/ }))
+    expect(screen.getByText(/Minecraft Crash Report/).closest('pre')).toHaveAttribute(
+      'tabindex',
+      '0',
+    )
+  })
+
   it('解析失败：如实说明原因，且不当成空卡', async () => {
     renderView({
       available: true,

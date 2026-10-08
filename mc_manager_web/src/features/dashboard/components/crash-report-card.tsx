@@ -254,7 +254,10 @@ export function CrashReportView({
 
         {data.stack && data.stack.length > 0 && (
           <Collapsible title={`调用栈（${data.stack.length} 帧）`}>
-            <pre className="max-h-60 overflow-auto rounded-mcs-sm bg-mcs-bg-muted p-2 text-mcs-2xs text-mcs-text-default">
+            <pre
+              tabIndex={0}
+              className="max-h-60 overflow-auto rounded-mcs-sm bg-mcs-bg-muted p-2 text-mcs-2xs text-mcs-text-default focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-mcs-focus-ring"
+            >
               {data.stack.join('\n')}
             </pre>
           </Collapsible>
@@ -262,7 +265,10 @@ export function CrashReportView({
 
         {data.excerpt && (
           <Collapsible title="完整产物原文">
-            <pre className="max-h-80 overflow-auto rounded-mcs-sm bg-mcs-bg-muted p-2 text-mcs-2xs whitespace-pre-wrap text-mcs-text-default">
+            <pre
+              tabIndex={0}
+              className="max-h-80 overflow-auto rounded-mcs-sm bg-mcs-bg-muted p-2 text-mcs-2xs whitespace-pre-wrap text-mcs-text-default focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-mcs-focus-ring"
+            >
               {data.excerpt}
             </pre>
           </Collapsible>
