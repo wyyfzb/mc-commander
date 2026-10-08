@@ -23,6 +23,15 @@ export const instanceUpdatePayloadSchema = z.object({
 })
 
 /**
+ * MSMP（结构化查询/推送面）支持的**最低 MC 版本**。
+ *
+ * 放在契约包是因为它是 `capabilities.msmp` 的**语义前提**：低于此版本的实例，该能力为 false
+ * 不是「故障」而是「这个版本没有这个面」。消费方（帮助页自检）据此区分「未开启，可去开」
+ * 与「不适用，无需处理」——少了它只能一律报「未开启」，对老版本用户就是误报。
+ */
+export const MSMP_MIN_MC_VERSION = '1.21.9'
+
+/**
  * 实例可用通道。分两个布尔而非一个「管理通道」：两者的能力面不同，
  * 差异会被读成故障——RCON 能执行控制台命令，MSMP 不能（无 run_command 方法），
  * 但 MSMP 能给出结构化事实。UI 据各自的可用来决定「哪些操作可行」。
@@ -418,6 +427,14 @@ export const crashArtifactHistorySchema = z.object({
   items: z.array(crashArtifactHistoryItemSchema),
   total: z.number(),
   hasMore: z.boolean(),
+})
+
+/**
+ * 单份产物查询参数。`file` 缺省取最新一份；给值时按**产物文件名**选取（服务端只在枚举结果里匹配，
+ * 不接受路径）——帮助页点开历史里任意一条看完整诊断就靠它。
+ */
+export const crashArtifactQuerySchema = z.object({
+  file: z.string().min(1).max(255).optional(),
 })
 
 /** 历史份数上限：够看清「崩过几次」，又不至于把几十份产物一次灌给前端 */

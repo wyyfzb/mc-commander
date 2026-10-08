@@ -60,6 +60,8 @@ export {
 
 // 实例
 export {
+  MSMP_MIN_MC_VERSION,
+  crashArtifactQuerySchema,
   instanceSummarySchema,
   instanceStatusSchema,
   instanceStatusListSchema,
