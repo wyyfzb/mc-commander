@@ -344,6 +344,20 @@ export function useServerSocket(instanceId: string | null) {
             players: (data.players as unknown[]) ?? [],
             tps: typeof data.tps === 'number' ? data.tps : null,
           })
+          // 推送面连通状态（`capabilities.msmpPush`）也随快照回来：REST 详情是轮询取的，
+          // 断连不会让它失效，界面会滞后一个轮询周期才把「实时」翻成「轮询」——期间它在说一件
+          // 已经不再成立的事。快照是推送的 ⇒ 就地写进详情缓存，界面即时对齐。
+          // 三态同 `worldUpgrade`：布尔＝权威值、**字段缺席＝未知**（旧服务端）⇒ 保持现状。
+          if (typeof data.msmpPush === 'boolean') {
+            queryClient.setQueryData(queryKeys.instance(msg.instanceId), (prev) => {
+              if (!prev || typeof prev !== 'object') return prev
+              const detail = prev as { capabilities?: Record<string, unknown> }
+              return {
+                ...detail,
+                capabilities: { ...detail.capabilities, msmpPush: data.msmpPush },
+              }
+            })
+          }
           // 世界格式升级属 state 类事件（契约 WS_EVENT_KINDS），权威读法随快照回来。
           // 三态必须分开：对象＝在途、null＝**确认空闲**（清掉本地残留）、
           // **字段缺席＝未知**（旧服务端或无权限，保持现状）——缺席时若按「没有升级」处理，

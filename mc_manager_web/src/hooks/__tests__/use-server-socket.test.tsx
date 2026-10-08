@@ -431,6 +431,79 @@ describe('useServerSocket（WS 单例治理，issue #311）', () => {
     expect(useWorldUpgradeProgressStore.getState().progress['i-1']).toBe(66)
   })
 
+  it('快照带 msmpPush：就地写进详情缓存，界面不必等下一次轮询才翻转', async () => {
+    useConnectionStore.setState({ baseUrl: '', apiKey: 'k1', status: 'ready' })
+    useAuthStore.setState({ session: makeSession('token-msmp-push') })
+
+    const wrapper = createWrapper()
+    // 预置一份「已连通」的详情缓存：推送面断连不会让 REST 详情失效，
+    // 界面若只靠轮询，会在这段时间里继续说「实时」
+    wrapper.qc.setQueryData(queryKeys.instance('i-1'), {
+      id: 'i-1',
+      capabilities: { rcon: true, msmp: true, msmpPush: true },
+    })
+    renderHook(() => useServerSocket('i-1'), { wrapper })
+    await waitFor(() => expect(FakeWebSocket.instances.length).toBe(1))
+    const ws = FakeWebSocket.instances[0]!
+    act(() => {
+      openAndAuth(ws)
+    })
+    await flushMicrotasks()
+
+    act(() => {
+      ws.receive({
+        type: 'statusSnapshot',
+        instanceId: 'i-1',
+        data: { status: 'running', isRunning: true, players: [], tps: 20, msmpPush: false },
+      })
+    })
+    expect(
+      (
+        wrapper.qc.getQueryData(queryKeys.instance('i-1')) as {
+          capabilities: { msmpPush: boolean }
+        }
+      ).capabilities.msmpPush,
+    ).toBe(false)
+    // 其余能力位与详情字段不能被这次合并弄丢
+    expect(
+      (wrapper.qc.getQueryData(queryKeys.instance('i-1')) as { capabilities: { msmp: boolean } })
+        .capabilities.msmp,
+    ).toBe(true)
+  })
+
+  it('快照里没有 msmpPush 字段：未知（旧服务端）⇒ 保持缓存现状，不臆断成断开', async () => {
+    useConnectionStore.setState({ baseUrl: '', apiKey: 'k1', status: 'ready' })
+    useAuthStore.setState({ session: makeSession('token-msmp-unknown') })
+
+    const wrapper = createWrapper()
+    wrapper.qc.setQueryData(queryKeys.instance('i-1'), {
+      id: 'i-1',
+      capabilities: { rcon: true, msmp: true, msmpPush: true },
+    })
+    renderHook(() => useServerSocket('i-1'), { wrapper })
+    await waitFor(() => expect(FakeWebSocket.instances.length).toBe(1))
+    const ws = FakeWebSocket.instances[0]!
+    act(() => {
+      openAndAuth(ws)
+    })
+    await flushMicrotasks()
+
+    act(() => {
+      ws.receive({
+        type: 'statusSnapshot',
+        instanceId: 'i-1',
+        data: { status: 'running', isRunning: true, players: [], tps: 20 },
+      })
+    })
+    expect(
+      (
+        wrapper.qc.getQueryData(queryKeys.instance('i-1')) as {
+          capabilities: { msmpPush: boolean }
+        }
+      ).capabilities.msmpPush,
+    ).toBe(true)
+  })
+
   it('载荷的 state 不在契约枚举里：留痕，并按终态路径处置（不把整条事件静默丢掉）', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     useConnectionStore.setState({ baseUrl: '', apiKey: 'k1', status: 'ready' })
