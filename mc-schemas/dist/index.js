@@ -5830,7 +5830,8 @@ const instanceUpdatePayloadSchema = object({
 */
 const instanceCapabilitiesSchema = object({
 	rcon: boolean(),
-	msmp: boolean()
+	msmp: boolean(),
+	msmpPush: boolean()
 });
 const instanceStatusSchema = object({
 	id: string(),

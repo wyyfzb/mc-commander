@@ -370,6 +370,11 @@ export class MCServerInstance extends EventEmitter {
     this._msmpNotifReconnectTimer = null;
     this._msmpNotifBackoffMs = 0;
     this._msmpNotifAlive = false;
+    // 可信连通状态：open 置真、close/error/stop 置假。`_msmpNotifAlive` 只表示
+    // 「上一轮心跳有回音」（半开探测用），不能当连通性读——两者语义不同
+    this._msmpNotifConnected = false;
+    // 端点等待已累计的时长（有界等待窗口用）
+    this._msmpNotifEndpointWaitedMs = 0;
     // 结构化日志覆盖配置的绝对路径：启动前置阶段解析（版本不达门槛时为 null＝不启用）
     this._structuredLogConfigPath = null;
     // 死亡事件聚合窗口：团灭等批量场景 5s 内合并为单条事件（防通知风暴）
@@ -1310,7 +1315,11 @@ export class MCServerInstance extends EventEmitter {
       // 实例已停时 msmp 一律报 false：那是上一次运行的残留实测值，不是当前状态。
       capabilities: {
         rcon: this.isRconConnected,
+        // MSMP 查询面
         msmp: this.isRunning && this._msmpAvailable,
+        // MSMP 推送面（常驻连接）：查询面成功不代表推送面连上了——端口随机、密钥由
+        // 服务端生成写回，两者各自实测。实例已停时归零，避免显示上一次运行的残留
+        msmpPush: this.isRunning && this._msmpNotifConnected,
       },
       // 意外停止自动重启开关（供前端设置页读写）
       autoRestart: this.autoRestart,

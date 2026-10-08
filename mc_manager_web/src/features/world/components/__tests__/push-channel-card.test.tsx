@@ -13,6 +13,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { PushChannelCard } from '../push-channel-card'
 import type { PushChannelState } from '@/api/types'
 import { useConnectionStore } from '@/stores/connection'
+import { useServerStore } from '@/stores/server'
 
 const { apiGetPushChannel, apiSetPushChannel } = vi.hoisted(() => ({
   apiGetPushChannel: vi.fn(),
@@ -143,5 +144,50 @@ describe('PushChannelCard', () => {
 
     expect(await screen.findByText(/设置失败/)).toBeInTheDocument()
     expect(screen.getByText('未开启')).toBeInTheDocument()
+  })
+})
+
+describe('推送连接状态', () => {
+  const STATE_ON: PushChannelState = {
+    enabled: true,
+    tlsEnabled: false,
+    host: 'localhost',
+    port: 0,
+    secretConfigured: true,
+  }
+
+  /** 服务端按「常驻连接是否建立」上报；这里直接摆出该上报值 */
+  function setPushConnected(msmpPush: boolean, isRunning = true) {
+    useServerStore.setState({
+      status: { isRunning, capabilities: { rcon: true, msmp: false, msmpPush } } as never,
+    })
+  }
+
+  beforeEach(() => {
+    useServerStore.setState({ status: null })
+  })
+
+  it('已开启且已连通 → 显示「已连通」，不挂未连通提示', async () => {
+    setPushConnected(true)
+    renderCard(STATE_ON, { isRunning: true })
+
+    expect(await screen.findByText('已连通')).toBeInTheDocument()
+    expect(screen.queryByText(/服务端可能还没就绪/)).toBeNull()
+  })
+
+  it('已开启但未连通 → 显示「未连通」并给出可行动的说明（今天这条恒为此态）', async () => {
+    setPushConnected(false)
+    renderCard(STATE_ON, { isRunning: true })
+
+    expect(await screen.findByText('未连通')).toBeInTheDocument()
+    expect(screen.getByText(/服务端可能还没就绪/)).toBeInTheDocument()
+  })
+
+  it('未开启时不显示推送连接行（配置都没开，谈不上连通）', async () => {
+    setPushConnected(false)
+    renderCard(STATE_OFF)
+
+    await screen.findByText('未开启')
+    expect(screen.queryByText('推送连接')).toBeNull()
   })
 })

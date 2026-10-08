@@ -56,7 +56,9 @@ export const SENSITIVE_PROPERTY_KEYS: ReadonlySet<string> = new Set([
   'online-mode',
   'server-port',
   'server-ip',
-  // MSMP 凭据：MC 开启该协议且 secret 留空时会自动生成并写回 server.properties
+  // MSMP 凭据：实测 26.3 要求恰好 40 位字母数字，留空或手填短串会让服务端**直接崩在启动期**
+  // （`Invalid management server secret, must be 40 alphanumeric characters`），
+  // 面板代开时自己生成，不要手改
   'management-server-secret',
   'management-server-tls-keystore-password',
 ])

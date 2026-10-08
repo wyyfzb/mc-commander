@@ -3,6 +3,7 @@ import { Radio } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { Card, CardBody, CardHeader, CardTitle } from '@/components/mcs/card'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
+import { useServerStore } from '@/stores/server'
 import { usePushChannel, useSetPushChannel } from '../queries'
 
 /**
@@ -24,6 +25,9 @@ interface PushChannelCardProps {
 }
 
 export function PushChannelCard({ instanceId, isRunning }: PushChannelCardProps) {
+  // 连通性来自实例状态（服务端按「常驻连接是否已建立」上报），与这里的配置项是两件事：
+  // 配置为「已开启」不代表连上了——端口可随机、密钥由服务端生成写回文件
+  const pushConnected = useServerStore((s) => s.status?.capabilities.msmpPush ?? false)
   const stateQuery = usePushChannel(instanceId)
   const toggle = useSetPushChannel(instanceId)
   const [justToggled, setJustToggled] = useState<boolean | null>(null)
@@ -101,7 +105,19 @@ export function PushChannelCard({ instanceId, isRunning }: PushChannelCardProps)
                   {state.secretConfigured ? '已配置（面板管理）' : '未配置'}
                 </dd>
               </div>
+              {state.enabled && (
+                <div className="flex items-center gap-2">
+                  <dt className="text-mcs-text-muted">推送连接</dt>
+                  <dd className="text-mcs-text-default">{pushConnected ? '已连通' : '未连通'}</dd>
+                </div>
+              )}
             </dl>
+
+            {state.enabled && isRunning && !pushConnected && (
+              <p className="text-mcs-xs text-mcs-text-muted">
+                服务端可能还没就绪（管理协议端口在启动时才确定）。若一直未连通，请重启服务器后再看。
+              </p>
+            )}
 
             {/* ② 暴露面：只在真的不是本机绑定时提示，避免常年挂一条不生效的告警 */}
             {state.enabled && !isLoopbackHost(state.host) && (

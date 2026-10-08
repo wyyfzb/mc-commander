@@ -43,7 +43,13 @@ const ROSTER_QUERY_TIMEOUT_MS = 5000;
  */
 export async function _fetchOnlineRoster() {
   if (!this.isRunning) return null;
-  const viaMsmp = await this._msmpFetchOnlinePlayers();
+  let viaMsmp = await this._msmpFetchOnlinePlayers();
+  // 单次失败不足以判定通道不可用：服务端保存世界时会短暂占住管理连接，一次抖动就把
+  // 能力标记打成 false，会让界面与轮询策略来回抖。配置着 MSMP 时再给一次机会
+  // （`_msmpResolveEndpoint` 为 null 说明本来就没配，重试没有意义）
+  if (!viaMsmp && this._msmpResolveEndpoint()) {
+    viaMsmp = await this._msmpFetchOnlinePlayers();
+  }
   this._msmpAvailable = !!viaMsmp;
   if (viaMsmp) return viaMsmp;
   // RCON 未连接时没有第二条通道可取回执

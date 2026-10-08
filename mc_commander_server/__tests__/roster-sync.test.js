@@ -125,6 +125,29 @@ describe('_fetchOnlineRoster 通道择优（MSMP 优先，RCON 兜底）', () =>
     expect(inst._msmpAvailable).toBe(false);
   });
 
+  it('单次失败不判死：配置着 MSMP 时重试一次，第二次成功即记可用', async () => {
+    const inst = makeInstance('msmp-retry');
+    inst._msmpResolveEndpoint = () => ({ host: 'localhost', port: 1, secret: 'x', tls: false });
+    inst._msmpFetchOnlinePlayers = vi
+      .fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ names: ['Steve'] });
+
+    expect(await inst._fetchOnlineRoster()).toEqual({ names: ['Steve'] });
+    // 服务端保存世界时会短暂占住管理连接：一次抖动不该把能力标记打成不可用
+    expect(inst._msmpFetchOnlinePlayers).toHaveBeenCalledTimes(2);
+    expect(inst._msmpAvailable).toBe(true);
+  });
+
+  it('本来就没配 MSMP → 不重试（重试没有意义，白等一次超时）', async () => {
+    const inst = makeInstance('msmp-unconfigured');
+    inst._msmpResolveEndpoint = () => null;
+    inst._msmpFetchOnlinePlayers = vi.fn(async () => null);
+
+    await inst._fetchOnlineRoster();
+    expect(inst._msmpFetchOnlinePlayers).toHaveBeenCalledTimes(1);
+  });
+
   it('空名单也算实测成功：MSMP 返回 0 人时不得回退 RCON', async () => {
     const inst = makeInstance('msmp-empty');
     // 「0 人」是合法答案；若把它当失败去回退，等于用一个更弱的来源推翻权威答案

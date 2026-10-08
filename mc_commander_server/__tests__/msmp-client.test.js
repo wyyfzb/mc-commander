@@ -27,17 +27,25 @@ vi.mock('../config.js', async () => {
   };
 });
 
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import { MCServerInstance } from '../services/mc_server.js';
 import { _msmpRequest } from '../services/mc-server/msmp-client.js';
 
 const SECRET = 'A'.repeat(40);
 
-/** 裸原型实例：验证 Object.assign 挂载后的 this 绑定，不经 constructor 副作用 */
+/**
+ * 裸原型实例：验证 Object.assign 挂载后的 this 绑定，不经 constructor 副作用。
+ * 给真实临时目录 + server.properties：端点解析会**重读文件**（MC 会把自己生成的
+ * 密钥写回），没有文件就测不出这条路径。
+ */
 function makeInstance(overrides = {}) {
   const inst = Object.create(MCServerInstance.prototype);
   inst.id = 'msmp-test';
   inst.isRunning = true;
   inst.logBuffer = [];
+  inst.serverPath = fs.mkdtempSync(path.join(os.tmpdir(), 'msmp-client-'));
   inst.properties = {
     'management-server-enabled': 'true',
     'management-server-host': '127.0.0.1',
@@ -270,6 +278,47 @@ describe('_msmpFetchOnlinePlayers 名单解析', () => {
   });
 });
 
+describe('_msmpResolveEndpoint 读运行时写回的文件', () => {
+  it('构造时密钥为空 → 服务端生成后写回文件 → 重读即拿到密钥（今天这条必然连不上）', () => {
+    const inst = makeInstance({ 'management-server-secret': '' });
+    const propsPath = path.join(inst.serverPath, 'server.properties');
+    expect(inst._msmpResolveEndpoint()).toBeNull();
+
+    // 模拟 MC 启动时生成 secret 并写回 server.properties（内存缓存仍是空的）
+    fs.writeFileSync(
+      propsPath,
+      [
+        'management-server-enabled=true',
+        'management-server-host=127.0.0.1',
+        'management-server-port=25585',
+        `management-server-secret=${SECRET}`,
+      ].join('\n'),
+    );
+
+    expect(inst.properties['management-server-secret']).toBe('');
+    expect(inst._msmpResolveEndpoint()).toEqual({
+      host: '127.0.0.1',
+      port: 25585,
+      secret: SECRET,
+      tls: false,
+    });
+  });
+
+  it('未就绪的原因分开报：未开启 / 缺密钥 / 缺端口（调用方据此决定要不要等）', () => {
+    expect(
+      makeInstance({ 'management-server-enabled': 'false' })._msmpResolveEndpointResult(),
+    ).toEqual({ endpoint: null, reason: 'disabled' });
+    expect(makeInstance({ 'management-server-secret': '' })._msmpResolveEndpointResult()).toEqual({
+      endpoint: null,
+      reason: 'no-secret',
+    });
+    expect(makeInstance({ 'management-server-port': '0' })._msmpResolveEndpointResult()).toEqual({
+      endpoint: null,
+      reason: 'no-port',
+    });
+  });
+});
+
 describe('toStatus 的能力字段', () => {
   /** 全量构造（走 constructor 初始化，保证 _msmpAvailable 等状态真实存在） */
   const build = (over = {}) =>
@@ -284,16 +333,23 @@ describe('toStatus 的能力字段', () => {
       ...over,
     });
 
-  it('capabilities 并列报两条通道，初值 msmp=false（尚未实测到）', () => {
+  it('capabilities 分报三条通道，初值 msmp/msmpPush=false（尚未实测到）', () => {
     const status = build().toStatus();
-    expect(status.capabilities).toEqual({ rcon: expect.any(Boolean), msmp: false });
+    expect(status.capabilities).toEqual({
+      rcon: expect.any(Boolean),
+      msmp: false,
+      msmpPush: false,
+    });
   });
 
-  it('实例已停 → msmp 报 false（上一次运行的残留实测值不得外泄为当前状态）', () => {
+  it('实例已停 → 两条 MSMP 通道都报 false（上一次运行的残留值不得外泄为当前状态）', () => {
     const inst = build();
     inst.isRunning = false;
     inst._msmpAvailable = true; // 上一次运行实测到过
-    expect(inst.toStatus().capabilities.msmp).toBe(false);
+    inst._msmpNotifConnected = true; // 上一次运行的常驻连接
+    const { capabilities } = inst.toStatus();
+    expect(capabilities.msmp).toBe(false);
+    expect(capabilities.msmpPush).toBe(false);
   });
 
   it('运行中且实测到 MSMP → msmp 报 true', () => {

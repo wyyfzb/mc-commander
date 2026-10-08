@@ -57,12 +57,14 @@ const {
   _msmpNotifHandleMessage,
   _msmpNotifPing,
   _msmpNotifScheduleReconnect,
+  _msmpNotifWaitForEndpoint,
   MSMP_NOTIFICATION_ALLOWLIST,
 } = await import('../services/mc-server/msmp-notifications.js');
 
 /** 最小实例替身：只带连接域需要的状态 + 一个事件收集器 */
 function makeInstance(
   endpoint = { host: 'localhost', port: 25585, secret: 's'.repeat(40), tls: false },
+  reason = null,
 ) {
   const emitted = [];
   const inst = {
@@ -74,7 +76,13 @@ function makeInstance(
     _msmpNotifReconnectTimer: null,
     _msmpNotifBackoffMs: 0,
     _msmpNotifAlive: false,
-    _msmpResolveEndpoint: () => endpoint,
+    _msmpNotifConnected: false,
+    _msmpNotifEndpointWaitedMs: 0,
+    // 解析结果带原因：未开启与「还没就绪」要走不同分支
+    _msmpResolveEndpointResult: () => ({
+      endpoint,
+      reason: endpoint ? null : (reason ?? 'no-port'),
+    }),
     emit: (name, payload) => emitted.push({ name, payload }),
     emitted,
   };
@@ -87,6 +95,7 @@ function makeInstance(
     _msmpNotifHandleMessage,
     _msmpNotifPing,
     _msmpNotifScheduleReconnect,
+    _msmpNotifWaitForEndpoint,
   })) {
     inst[k] = v;
   }
@@ -112,8 +121,8 @@ describe('连接建立', () => {
     expect(instances).toHaveLength(1);
   });
 
-  it('端点为 null（未开启 MSMP/未起）时不建连接，也不空转重连', () => {
-    const inst = makeInstance(null);
+  it('未开启 MSMP（disabled）时不建连接，也不空转重连', () => {
+    const inst = makeInstance(null, 'disabled');
     inst._msmpNotifStart();
     expect(instances).toHaveLength(0);
     expect(inst._msmpNotifActive).toBe(false);
@@ -380,5 +389,92 @@ describe('心跳与半开', () => {
     expect(inst._msmpNotifHeartbeat).toBe(null);
     vi.advanceTimersByTime(120_000);
     expect(instances[0].pinged).toBe(0);
+  });
+});
+
+describe('端点未就绪：有界等待播报行', () => {
+  it('端口还没出现在播报行里 → 等它出现，出现即连上（不钉端口、不放弃）', () => {
+    let ready = false;
+    const inst = {
+      id: 'inst-1',
+      isRunning: true,
+      _msmpNotifActive: false,
+      _msmpNotifSocket: null,
+      _msmpNotifHeartbeat: null,
+      _msmpNotifPongTimer: null,
+      _msmpNotifReconnectTimer: null,
+      _msmpNotifBackoffMs: 0,
+      _msmpNotifAlive: false,
+      _msmpNotifConnected: false,
+      _msmpNotifEndpointWaitedMs: 0,
+      _msmpResolveEndpointResult: () =>
+        ready
+          ? {
+              endpoint: { host: 'localhost', port: 25585, secret: 's'.repeat(40), tls: false },
+              reason: null,
+            }
+          : { endpoint: null, reason: 'no-port' },
+    };
+    for (const [k, v] of Object.entries({
+      _msmpNotifStart,
+      _msmpNotifStop,
+      _msmpNotifClearTimers,
+      _msmpNotifConnect,
+      _msmpNotifWaitForEndpoint,
+      _msmpNotifHandleMessage,
+      _msmpNotifPing,
+      _msmpNotifScheduleReconnect,
+    })) {
+      inst[k] = v;
+    }
+
+    inst._msmpNotifStart();
+    expect(instances).toHaveLength(0);
+    // 播报行还没进日志：等待窗口内反复重试，而不是就此收手
+    vi.advanceTimersByTime(4_000);
+    expect(instances).toHaveLength(0);
+    expect(inst._msmpNotifActive).toBe(true);
+
+    ready = true; // 播报行进日志了
+    vi.advanceTimersByTime(2_000);
+    expect(instances).toHaveLength(1);
+    expect(inst._msmpNotifEndpointWaitedMs).toBe(0);
+  });
+
+  it('等满窗口仍未就绪 → 收手（不无限空转）', () => {
+    const inst = makeInstance(null, 'no-port');
+    inst._msmpNotifStart();
+    expect(instances).toHaveLength(0);
+
+    vi.advanceTimersByTime(120_000);
+    expect(instances).toHaveLength(0);
+    expect(inst._msmpNotifActive).toBe(false);
+  });
+});
+
+describe('可信连通状态', () => {
+  it('open 置真；close/error 置假；stop 归零（界面据此显示「已连通」）', () => {
+    const inst = makeInstance();
+    inst._msmpNotifStart();
+    expect(inst._msmpNotifConnected).toBe(false); // 还没握手成功
+
+    instances[0].emit('open');
+    expect(inst._msmpNotifConnected).toBe(true);
+
+    instances[0].emit('close');
+    expect(inst._msmpNotifConnected).toBe(false);
+
+    // 退避后重连：新一轮握手成功才算连通
+    vi.advanceTimersByTime(2_000);
+    instances[1].emit('open');
+    expect(inst._msmpNotifConnected).toBe(true);
+    instances[1].emit('error', new Error('boom'));
+    expect(inst._msmpNotifConnected).toBe(false);
+
+    vi.advanceTimersByTime(4_000);
+    instances[2].emit('open');
+    expect(inst._msmpNotifConnected).toBe(true);
+    inst._msmpNotifStop();
+    expect(inst._msmpNotifConnected).toBe(false);
   });
 });

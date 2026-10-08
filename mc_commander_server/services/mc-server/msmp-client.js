@@ -31,20 +31,45 @@ const MSMP_BIND_LINE_RE =
   /(?:Starting json RPC server|Json-RPC Management connection listening) on .*:(\d+)/;
 
 /**
+ * 解析 MSMP 端点，并回报**为什么没有端点**。
+ *
+ * 分原因是为了让调用方分得清两件完全不同的事：`disabled` 是用户的决定（不该空转重试），
+ * `no-secret` / `no-port` 只是还没到点（值得在窗口内等一小会儿）。
+ *
+ * **每次重读 server.properties**，与 `isRconConnected` 同一口径：文件会被 files 路由、
+ * 游戏内命令与面板代开流程改写，构造时缓存的那份可能已经过期。端口则**默认是 0**
+ * （实测 26.3：`management-server-port=0` 时服务端打印 `Starting json RPC server on
+ * localhost:0`，真实端口只出现在紧接着的 `Json-RPC Management connection listening on
+ * localhost:41997`，且**不会写回文件**）⇒ 端口只能从播报行取，也**不缓存**（不钉住），
+ * 每次按当时的事实重新解析。
+ *
+ * @returns {{endpoint: {host: string, port: number, secret: string, tls: boolean} | null,
+ *   reason: 'disabled' | 'no-secret' | 'no-port' | null}}
+ */
+export function _msmpResolveEndpointResult() {
+  const fresh = this._loadProperties?.();
+  if (fresh && Object.keys(fresh).length > 0) this.properties = fresh;
+  const props = this.properties || {};
+  if (props['management-server-enabled'] !== 'true') return { endpoint: null, reason: 'disabled' };
+  const secret = props['management-server-secret'];
+  if (!secret) return { endpoint: null, reason: 'no-secret' };
+  const host = props['management-server-host'] || 'localhost';
+  let port = Number.parseInt(props['management-server-port'] || '0', 10);
+  if (!Number.isInteger(port) || port <= 0) port = this._msmpPortFromLog();
+  if (!port) return { endpoint: null, reason: 'no-port' };
+  return {
+    endpoint: { host, port, secret, tls: props['management-server-tls-enabled'] === 'true' },
+    reason: null,
+  };
+}
+
+/**
  * 从 server.properties + 运行日志解析出可连接的 MSMP 端点。
  * @returns {{host: string, port: number, secret: string, tls: boolean} | null}
  *   MSMP 未开启 / 缺密钥 / 端口未知时返回 null（不产生任何网络开销）
  */
 export function _msmpResolveEndpoint() {
-  const props = this.properties || {};
-  if (props['management-server-enabled'] !== 'true') return null;
-  const secret = props['management-server-secret'];
-  if (!secret) return null;
-  const host = props['management-server-host'] || 'localhost';
-  let port = Number.parseInt(props['management-server-port'] || '0', 10);
-  if (!Number.isInteger(port) || port <= 0) port = this._msmpPortFromLog();
-  if (!port) return null;
-  return { host, port, secret, tls: props['management-server-tls-enabled'] === 'true' };
+  return this._msmpResolveEndpointResult().endpoint;
 }
 
 /** 从已摄取日志里取 MSMP 实际绑定的端口（仅 `port=0` 随机分配时需要）。 */

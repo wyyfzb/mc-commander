@@ -38,6 +38,7 @@
  */
 
 import { WebSocket } from 'ws';
+import { logger } from '../../utils/logger.js';
 
 /** 一期白名单：与 stdout 零冲突的两族 */
 export const MSMP_NOTIFICATION_ALLOWLIST = new Set([
@@ -75,6 +76,9 @@ const RECONNECT_BASE_MS = 2_000;
 const RECONNECT_MAX_MS = 60_000;
 /** 握手超时：回环链路上远快于此 */
 const HANDSHAKE_TIMEOUT_MS = 5_000;
+/** 端点未就绪时的重试间隔与等待窗口（见 `_msmpNotifWaitForEndpoint`） */
+const MSMP_ENDPOINT_RETRY_MS = 2_000;
+const MSMP_ENDPOINT_WAIT_MS = 60_000;
 
 /**
  * 建立常驻连接（幂等）。未开启 MSMP / 缺密钥 / 端口未知时不产生任何网络开销。
@@ -89,6 +93,8 @@ export function _msmpNotifStart() {
 /** 关闭常驻连接并停止重连（实例停止/卸载时调用） */
 export function _msmpNotifStop() {
   this._msmpNotifActive = false;
+  this._msmpNotifConnected = false;
+  this._msmpNotifEndpointWaitedMs = 0;
   this._msmpNotifClearTimers();
   const socket = this._msmpNotifSocket;
   this._msmpNotifSocket = null;
@@ -122,12 +128,18 @@ export function _msmpNotifClearTimers() {
 /** 建一条连接。失败一律走 `_msmpNotifScheduleReconnect`，不向外抛。 */
 export function _msmpNotifConnect() {
   if (!this._msmpNotifActive) return;
-  const endpoint = this._msmpResolveEndpoint();
+  const { endpoint, reason } = this._msmpResolveEndpointResult();
   if (!endpoint) {
-    // 通道不可用（未开启/未起）——不空转重连，等下次实例启动或用户开启后再来
-    this._msmpNotifActive = false;
-    return;
+    // 未开启是用户的决定：就此收手，不空转重连（等下次实例启动或用户开启）
+    if (reason === 'disabled') {
+      this._msmpNotifActive = false;
+      return;
+    }
+    // 密钥/端口还没就绪：端口默认 0 时真正的端口只出现在服务端的播报行里，
+    // 而这行可能还没进日志 ⇒ 在有界窗口内等它出现，超窗才收手
+    return this._msmpNotifWaitForEndpoint(reason);
   }
+  this._msmpNotifEndpointWaitedMs = 0;
 
   const scheme = endpoint.tls ? 'wss' : 'ws';
   let socket;
@@ -147,6 +159,7 @@ export function _msmpNotifConnect() {
   socket.on('open', () => {
     this._msmpNotifBackoffMs = RECONNECT_BASE_MS;
     this._msmpNotifAlive = true;
+    this._msmpNotifConnected = true;
     this._msmpNotifHeartbeat = setInterval(() => this._msmpNotifPing(), HEARTBEAT_MS);
     this._msmpNotifHeartbeat.unref?.();
   });
@@ -158,8 +171,40 @@ export function _msmpNotifConnect() {
       this._msmpNotifPongTimer = null;
     }
   });
-  socket.on('error', () => this._msmpNotifScheduleReconnect());
-  socket.on('close', () => this._msmpNotifScheduleReconnect());
+  socket.on('error', () => {
+    this._msmpNotifConnected = false;
+    this._msmpNotifScheduleReconnect();
+  });
+  socket.on('close', () => {
+    this._msmpNotifConnected = false;
+    this._msmpNotifScheduleReconnect();
+  });
+}
+
+/**
+ * 端点在窗口内还没解析出来时的有界等待。
+ *
+ * 为什么不能直接放弃：`management-server-port` 默认 0（启动时随机分配），真正的端口
+ * 只出现在服务端自己的播报行里；实例启动到那行进日志之间有一段真实空档，而通知面是在
+ * 「进程起来了」那一刻开始守通道的。窗口收在 `MSMP_ENDPOINT_WAIT_MS`（远大于该空档，
+ * 又短到不会让人觉得面板在空转），超窗即收手——真没开 MSMP 的实例由 `disabled`
+ * 分支直接收手，两条路都不会长期空转。
+ *
+ * 每次重试都重新解析（不缓存端点）：端口与密钥都以当时的事实为准。
+ */
+export function _msmpNotifWaitForEndpoint(reason) {
+  const waited = (this._msmpNotifEndpointWaitedMs ?? 0) + MSMP_ENDPOINT_RETRY_MS;
+  if (waited > MSMP_ENDPOINT_WAIT_MS) {
+    this._msmpNotifActive = false;
+    logger.warn(`[${this.id}] MSMP 通知面等待端点超时（${reason}），放弃本轮`);
+    return;
+  }
+  this._msmpNotifEndpointWaitedMs = waited;
+  this._msmpNotifReconnectTimer = setTimeout(
+    () => this._msmpNotifConnect(),
+    MSMP_ENDPOINT_RETRY_MS,
+  );
+  this._msmpNotifReconnectTimer.unref?.();
 }
 
 /**

@@ -124,7 +124,7 @@ describe('instance-properties.service · 敏感键掩码 maskSensitiveProperties
       'online-mode',
       'server-port',
       'server-ip',
-      // MSMP 凭据：MC 开启该协议且 secret 留空时自动生成并写回 server.properties
+      // MSMP 凭据：实测 26.3 要求 40 位字母数字，留空会让服务端崩在启动期（不是「自动生成」）
       'management-server-secret',
       'management-server-tls-keystore-password',
     ]) {

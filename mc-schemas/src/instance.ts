@@ -33,6 +33,9 @@ export const instanceCapabilitiesSchema = z.object({
   // MSMP：结构化查询面（1.21.9+）。判据是最近一次查询实测成功——端口默认可随机、
   // 链路可被反代，配置推不出可用性
   msmp: z.boolean(),
+  // MSMP：推送面常驻连接是否**已连通**（通知推送只发给已建立的连接）。与上面那个
+  // 查询面分开报：查询成功不代表推送面连着（端口随机、密钥由服务端生成写回文件）
+  msmpPush: z.boolean(),
 })
 
 export const instanceStatusSchema = z.object({

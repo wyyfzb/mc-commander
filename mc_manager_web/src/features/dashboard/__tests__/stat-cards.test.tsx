@@ -191,7 +191,7 @@ describe('PlayersCard（右栏可点行）', () => {
   it('RCON 未连接 → 提示启用 RCON', () => {
     setState({
       ...mockInstanceStatus,
-      capabilities: { rcon: false, msmp: false },
+      capabilities: { rcon: false, msmp: false, msmpPush: false },
       sleepingPlayerNames: [],
       awakePlayerNames: [],
     })
@@ -202,7 +202,7 @@ describe('PlayersCard（右栏可点行）', () => {
   it('RCON 未连接 → 空态提供「前往服务器属性」深链（issue 343）', () => {
     setState({
       ...mockInstanceStatus,
-      capabilities: { rcon: false, msmp: false },
+      capabilities: { rcon: false, msmp: false, msmpPush: false },
       sleepingPlayerNames: [],
       awakePlayerNames: [],
     })
@@ -213,7 +213,7 @@ describe('PlayersCard（右栏可点行）', () => {
   it('RCON 已连接 → 不渲染「前往服务器属性」深链', () => {
     setState({
       ...mockInstanceStatus,
-      capabilities: { rcon: true, msmp: false },
+      capabilities: { rcon: true, msmp: false, msmpPush: false },
       sleepingPlayerNames: [],
       awakePlayerNames: [],
     })
