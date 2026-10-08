@@ -29,6 +29,7 @@ vi.mock('../config.js', async () => {
 
 import {
   ROSTER_RECONCILE_INTERVAL_MS,
+  ROSTER_RECONCILE_PUSHED_INTERVAL_MS,
   ROSTER_FIRST_RECONCILE_MS,
   _reconcilePlayers,
   _scheduleRosterReconcile,
@@ -482,6 +483,32 @@ describe('对账调度链（串行化递归 setTimeout + 代际 epoch）', () =>
     expect(inst._rosterTimer).not.toBeNull();
     await vi.advanceTimersByTimeAsync(ROSTER_RECONCILE_INTERVAL_MS);
     expect(reconcile).toHaveBeenCalledTimes(2);
+  });
+
+  it('续链按**当时**的推送状态取间隔：在线 300s、掉线回 60s（不是只在首轮判一次）', async () => {
+    vi.useFakeTimers();
+    const inst = makeInstance('paced');
+    inst._reconcilePlayers = vi.fn(async () => {});
+    inst._msmpNotifConnected = true;
+
+    inst._scheduleRosterReconcile(ROSTER_RECONCILE_INTERVAL_MS);
+    await vi.advanceTimersByTimeAsync(ROSTER_RECONCILE_INTERVAL_MS);
+    expect(inst._reconcilePlayers).toHaveBeenCalledTimes(1);
+
+    // 推送在线：本轮完成后续 300s，60s 时不该动
+    await vi.advanceTimersByTimeAsync(ROSTER_RECONCILE_INTERVAL_MS);
+    expect(inst._reconcilePlayers).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(
+      ROSTER_RECONCILE_PUSHED_INTERVAL_MS - ROSTER_RECONCILE_INTERVAL_MS,
+    );
+    expect(inst._reconcilePlayers).toHaveBeenCalledTimes(2);
+
+    // 推送掉线：下一轮续链立刻回到 60s（若把间隔写死或只在首轮判断，这里会一直等 300s）
+    inst._msmpNotifConnected = false;
+    await vi.advanceTimersByTimeAsync(ROSTER_RECONCILE_PUSHED_INTERVAL_MS);
+    expect(inst._reconcilePlayers).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(ROSTER_RECONCILE_INTERVAL_MS);
+    expect(inst._reconcilePlayers).toHaveBeenCalledTimes(4);
   });
 
   it('对账抛错不中断链；代际推进后停链', async () => {

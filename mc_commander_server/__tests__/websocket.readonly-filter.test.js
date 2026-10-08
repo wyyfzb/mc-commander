@@ -131,6 +131,11 @@ describe('只读角色的 WS 事件过滤', () => {
       ['instance:performanceUpdate', WSEvents.PERFORMANCE_UPDATE, { tps: 20 }],
       ['instance:weatherUpdate', WSEvents.WEATHER_UPDATE, { weather: 'clear' }],
       ['instance:playerStatsUpdate', WSEvents.PLAYER_STATS_UPDATE, { players: [] }],
+      [
+        'instance:nameListChanged',
+        WSEvents.NAME_LIST_CHANGED,
+        { list: 'bans', action: 'added', target: 'Steve' },
+      ],
       ['instance:playerJoin', WSEvents.PLAYER_JOIN, { player: 'Steve' }],
       ['instance:playerLeave', WSEvents.PLAYER_LEAVE, { player: 'Steve' }],
       ['instance:playerDeath', WSEvents.PLAYER_DEATH, { players: ['Steve'], count: 1 }],

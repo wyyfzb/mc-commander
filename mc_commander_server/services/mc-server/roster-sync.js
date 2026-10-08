@@ -28,6 +28,11 @@ import { logger } from '../../utils/logger.js';
 
 /** 对账间隔：一条只读命令，开销可忽略；比前端玩家列表 30s 保底轮询略慢即可 */
 export const ROSTER_RECONCILE_INTERVAL_MS = 60000;
+/**
+ * 推送面在线时的对账间隔：轮询是**兜底**，推送已经把加入/离开即时送达，
+ * 60s 一轮纯属空转；掉线立刻回到 60s（续链处按当时状态取值，不只是首轮）。
+ */
+export const ROSTER_RECONCILE_PUSHED_INTERVAL_MS = 300000;
 /** 首轮对账提前量：面板启动时 RCON 尚未握手/服务器正在启动，留出握手窗口 */
 export const ROSTER_FIRST_RECONCILE_MS = 10000;
 /** 名单查询的调用方级超时：rcon-client 仅在请求出队时才计时，队列滞留期无超时 */
@@ -110,7 +115,15 @@ export function _scheduleRosterReconcile(delayMs = ROSTER_RECONCILE_INTERVAL_MS)
       // 监听器抛错（playerJoin/playerLeave 广播失败）等异常不得中断链
       logger.warn(`[${this.id}] 在线名单对账失败:`, e.message);
     }
-    if (epoch === this._rosterEpoch) this._scheduleRosterReconcile();
+    if (epoch === this._rosterEpoch) {
+      // 续链时按**当时**的推送状态取值：写死或只在首轮判断，会让推送掉线后
+      // 名单一直等下 300s 才发现
+      this._scheduleRosterReconcile(
+        this._msmpNotifConnected
+          ? ROSTER_RECONCILE_PUSHED_INTERVAL_MS
+          : ROSTER_RECONCILE_INTERVAL_MS,
+      );
+    }
   }, delayMs);
   // 不阻塞面板进程退出
   this._rosterTimer.unref?.();

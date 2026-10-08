@@ -8,6 +8,9 @@ export const WS_EVENT_TYPES = [
   'weatherUpdate',
   'worldUpgrade',
   'playerStatsUpdate',
+  // MSMP 推送的官方名单变化（白名单/管理员/封禁/IP 封禁）：面板外的 /op、/whitelist、/ban
+  // 也要让界面能跟上；载荷见 wsNameListChangedPayloadSchema
+  'nameListChanged',
   'playerJoin',
   'playerLeave',
   'playerDeath',
@@ -118,6 +121,16 @@ export const wsStatusEventPayloadSchema = z.object({
   autoRestart: z.boolean().optional(),
   consecutiveCrashes: z.number().optional(),
   windowMs: z.number().optional(),
+})
+
+/**
+ * 名单变化载荷：`list` 是面板侧的名单名（`allowlist` / `operators` / `bans` / `ipBans`），
+ * `target` 是玩家名或 IP——解析不出时为**空串**（不猜），消费方按「目标未知」处理。
+ */
+export const wsNameListChangedPayloadSchema = z.object({
+  list: z.enum(['allowlist', 'operators', 'bans', 'ipBans']),
+  action: z.enum(['added', 'removed']),
+  target: z.string(),
 })
 
 export const wsPlayerEventPayloadSchema = z.object({
@@ -245,6 +258,9 @@ export const WS_EVENT_KINDS: Readonly<Record<WsEventType, WsEventKind>> = {
   // ── event：发生过的事实 ──
   // `log` 属事件：每一行是「发生过」而不是「此刻的值」，丢行不影响历史（终端历史走 REST）。
   log: 'event',
+  // 名单变化是**发生过的瞬间事实**（谁在何时被 op/封），可丢可重放，丢失只是少一条刷新触发；
+  // 名单本身由 REST 读文件，不靠这条消息维持 ⇒ event 而非 state
+  nameListChanged: 'event',
   playerJoin: 'event',
   playerLeave: 'event',
   playerDeath: 'event',

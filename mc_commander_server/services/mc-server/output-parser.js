@@ -220,7 +220,10 @@ export function _parseOutput(text) {
       this._lastSaveTime = new Date().toISOString();
       // 存档落盘=世界体积增长点：标记 _getWorldSize 缓存失效（顶层目录 mtime 感知不到子目录写入）
       this._worldSizeDirty = true;
-      this.emit('status', { event: 'save' });
+      // 推送面在线时这一次保存已由 `notification/server/saved` 上报（同一个事件两个来源
+      // 会报两次），事实照记、事件不重发。按当时状态判断而不是禁用整条解析：推送一掉线
+      // 这里立刻接回，名单与状态都不依赖它。
+      if (!this._msmpNotifConnected) this.emit('status', { event: 'save' });
     }
 
     // ── 时间变化日志解析 ──
@@ -236,6 +239,9 @@ export function _parseOutput(text) {
     if (line.includes('Done') && line.includes('For help, type')) {
       // 启动完成（世界生成/首次写入结束）：标记存档大小缓存失效
       this._worldSizeDirty = true;
+      // 就绪**不**因推送在线而让位：推送面是在服务器 `Done` 之后才开始守通道的
+      // （`_msmpNotifStart` 在 `_finalizeStartup`），`notification/server/started`
+      // 对面板自己的启动必然已经错过——让位就等于永远收不到「就绪」
       this.emit('status', { event: 'ready' });
     }
 

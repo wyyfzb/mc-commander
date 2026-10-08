@@ -40,7 +40,17 @@
 import { WebSocket } from 'ws';
 import { logger } from '../../utils/logger.js';
 
-/** 一期白名单：与 stdout 零冲突的两族 */
+/**
+ * 接入的通知（一期两族 + 二期：名单族与 `started|saving|saved`）。
+ *
+ * 二期接入后，与 stdout 的**去重**靠三条各自成立的机制，而不是「谁先到谁赢」：
+ * - 名单族 → 走 `_registerPlayerJoin` / `_handlePlayerLeave` 这两个**幂等**入口
+ *   （与日志解析、名单对账同一份实现）⇒ 两个来源同报一次也只登记一次；
+ * - `server/saved` → 与 stdout 的 `Saved the game` 是同一次保存，stdout 侧在推送在线时
+ *   不再发 `status: save`（见 `output-parser.js`）；`saving` 没有 stdout 对应物，无需去重；
+ * - `server/started` 通常**收不到**：推送面是在服务器 `Done` 之后才开始守通道的，
+ *   故 stdout 的 `Done` 仍是面板「就绪」的权威来源，**不**因推送在线而禁用。
+ */
 export const MSMP_NOTIFICATION_ALLOWLIST = new Set([
   // 世界格式升级：面板今天完全无法呈现的能力，且 stdout 无对应物
   'minecraft:notification/world/upgrade_started',
@@ -49,7 +59,59 @@ export const MSMP_NOTIFICATION_ALLOWLIST = new Set([
   'minecraft:notification/world/upgrade_failed',
   // 停机：stdout 侧解析器没接，故也不重复
   'minecraft:notification/server/stopping',
+  // 服务器状态：只更新状态，不生成通知条目
+  'minecraft:notification/server/started',
+  'minecraft:notification/server/saving',
+  'minecraft:notification/server/saved',
+  // 在线名单：立即登记加入/离开，不再等下一轮对账
+  'minecraft:notification/players/joined',
+  'minecraft:notification/players/left',
+  // 官方名单变化（白名单/管理员/封禁/IP 封禁）
+  'minecraft:notification/allowlist/added',
+  'minecraft:notification/allowlist/removed',
+  'minecraft:notification/operators/added',
+  'minecraft:notification/operators/removed',
+  'minecraft:notification/bans/added',
+  'minecraft:notification/bans/removed',
+  'minecraft:notification/ip_bans/added',
+  'minecraft:notification/ip_bans/removed',
 ]);
+
+/**
+ * 名单变化的解析表：方法 → `{ list, action }`。
+ * 载荷形态**逐条实测**（26.3），不是照 schema 推的——`rpc.discover` 把 `ip_bans/*` 的字段
+ * 也叫 `player`，实际一个是 `{ip,…}`、另一个是**裸字符串**；`bans/removed` 反倒是 player 对象。
+ */
+const NAME_LIST_METHODS = {
+  'minecraft:notification/allowlist/added': { list: 'allowlist', action: 'added' },
+  'minecraft:notification/allowlist/removed': { list: 'allowlist', action: 'removed' },
+  'minecraft:notification/operators/added': { list: 'operators', action: 'added' },
+  'minecraft:notification/operators/removed': { list: 'operators', action: 'removed' },
+  'minecraft:notification/bans/added': { list: 'bans', action: 'added' },
+  'minecraft:notification/bans/removed': { list: 'bans', action: 'removed' },
+  'minecraft:notification/ip_bans/added': { list: 'ipBans', action: 'added' },
+  'minecraft:notification/ip_bans/removed': { list: 'ipBans', action: 'removed' },
+};
+
+/**
+ * 取一条通知里的目标名（玩家名或 IP）。
+ *
+ * 位置参数数组的首元素按方法分流解析：`allowlist/*` 与 `bans/removed` 是 player 对象、
+ * `operators/*` 与 `bans/added` 把 player 包在 `player` 里、`ip_bans/added` 是 `{ip}`、
+ * `ip_bans/removed` 是裸字符串。取不到就返回空串——**不猜**，让调用方按「目标未知」处理。
+ */
+export function _msmpNotificationTarget(method, params) {
+  if (!Array.isArray(params)) return '';
+  const first = params[0];
+  if (typeof first === 'string') return first; // ip_bans/removed
+  if (!first || typeof first !== 'object') return '';
+  if (typeof first.ip === 'string') return first.ip; // ip_bans/added
+  if (typeof first.name === 'string') return first.name; // player / allowlist / bans removed
+  const player = first.player;
+  if (player && typeof player.name === 'string') return player.name; // operators/*, bans/added
+  if (player && typeof player.ip === 'string') return player.ip;
+  return '';
+}
 
 /**
  * 取位置参数数组里的第一个数字（MSMP 的参数是位置形态，见文件头）。
@@ -290,6 +352,36 @@ export function _msmpNotifHandleMessage(data) {
       // 不写成 `params.progress`——那样恒取到 undefined（探针在真机上就是这么翻车的）
       progress: firstNumberParam(params),
     });
+  }
+
+  // ── 二期：服务器状态（只更新状态，不生成通知条目）──
+  if (method === 'minecraft:notification/server/saved') {
+    this._lastSaveTime = new Date().toISOString();
+    // 存档落盘=世界体积增长点：标记缓存失效（与 stdout 侧同一处理）
+    this._worldSizeDirty = true;
+    this.emit('status', { event: 'save' });
+  } else if (method === 'minecraft:notification/server/started') {
+    // 通常收不到（推送面在 `Done` 之后才开始守通道），收到就按就绪处理，幂等
+    this._worldSizeDirty = true;
+    this.emit('status', { event: 'ready' });
+  }
+  // `server/saving` 刻意不做事：面板与存档相关的用户可见状态只有「上次保存时刻」，
+  // 那是完成时刻；它也没有 stdout 对应物，没有要去重的东西。
+
+  // ── 二期：在线名单（走与日志/对账同一份幂等入口）──
+  if (method === 'minecraft:notification/players/joined') {
+    const name = _msmpNotificationTarget(method, params);
+    if (name) this._registerPlayerJoin(name);
+  } else if (method === 'minecraft:notification/players/left') {
+    const name = _msmpNotificationTarget(method, params);
+    if (name) this._handlePlayerLeave(name);
+  }
+
+  // ── 二期：官方名单变化（面板外的 /op、/whitelist、/ban 也要让界面能跟上）──
+  const listSpec = NAME_LIST_METHODS[method];
+  if (listSpec) {
+    const target = _msmpNotificationTarget(method, params);
+    this.emit('nameListChanged', { ...listSpec, target });
   }
 
   this.emit('msmpNotification', { method, params });

@@ -156,6 +156,36 @@ describe('_parseOutput stdout 行解析（真实样本驱动）', () => {
     expect(status).toEqual([{ event: 'save' }, { event: 'ready' }]);
   });
 
+  it('推送面在线时 `Saved the game` 不再发 save 事件：同一次保存只报一次，事实照记', () => {
+    const inst = makeBareInstance();
+    const status = [];
+    inst.on('status', (e) => status.push(e));
+    inst._msmpNotifConnected = true;
+
+    inst._parseOutput('[12:00:03] [Server thread/INFO]: Saved the game');
+
+    expect(status).toEqual([]);
+    // 事实（上次保存时刻、体积缓存失效）不因事件让位而丢
+    expect(inst._lastSaveTime).toBeTruthy();
+    expect(inst._worldSizeDirty).toBe(true);
+
+    // 推送掉线 → 立刻接回，名单与状态都不依赖推送
+    inst._msmpNotifConnected = false;
+    inst._parseOutput('[12:00:05] [Server thread/INFO]: Saved the game');
+    expect(status).toEqual([{ event: 'save' }]);
+  });
+
+  it('就绪事件不因推送在线而让位：推送面在 Done 之后才开始守通道，让它就等于永远收不到', () => {
+    const inst = makeBareInstance();
+    const status = [];
+    inst.on('status', (e) => status.push(e));
+    inst._msmpNotifConnected = true;
+
+    inst._parseOutput('[12:00:04] [Server thread/INFO]: Done (2.345s)! For help, type "help"');
+
+    expect(status).toEqual([{ event: 'ready' }]);
+  });
+
   it('join→leave 全链路：IP 缓存消费、今日新增计数、落盘与会话关闭、入睡计数递减', () => {
     const inst = makeBareInstance();
     const joins = [];

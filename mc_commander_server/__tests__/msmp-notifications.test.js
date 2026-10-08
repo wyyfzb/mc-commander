@@ -58,6 +58,7 @@ const {
   _msmpNotifPing,
   _msmpNotifScheduleReconnect,
   _msmpNotifWaitForEndpoint,
+  _msmpNotificationTarget,
   MSMP_NOTIFICATION_ALLOWLIST,
 } = await import('../services/mc-server/msmp-notifications.js');
 
@@ -173,18 +174,39 @@ describe('通知处理：白名单与形态', () => {
     });
   });
 
-  it('有 stdout 对应物的通知不接（避免两个来源报同一件事）', () => {
-    // server/saved ↔ 解析器的 `Saved the game` → status:'save'；server/started ↔ `Done (…)`
-    // → status:'ready'。接它们就要先定去重，属二期。
+  it('二期接入 server/saved：只更新状态、不生成通知条目', () => {
+    // 与 stdout 的 `Saved the game` 是同一次保存，去重在 stdout 侧做（推送在线时它不发事件），
+    // 这里只管把状态与缓存失效处理掉
     const inst = makeInstance();
-    for (const m of [
-      'minecraft:notification/server/saved',
-      'minecraft:notification/server/started',
-    ]) {
-      inst._msmpNotifHandleMessage(Buffer.from(JSON.stringify({ jsonrpc: '2.0', method: m })));
-      expect(MSMP_NOTIFICATION_ALLOWLIST.has(m)).toBe(false);
-    }
-    expect(inst.emitted).toEqual([]);
+    inst._msmpNotifHandleMessage(
+      Buffer.from(
+        JSON.stringify({ jsonrpc: '2.0', method: 'minecraft:notification/server/saved' }),
+      ),
+    );
+    expect(MSMP_NOTIFICATION_ALLOWLIST.has('minecraft:notification/server/saved')).toBe(true);
+    expect(inst.emitted).toEqual([
+      { name: 'status', payload: { event: 'save' } },
+      {
+        name: 'msmpNotification',
+        payload: { method: 'minecraft:notification/server/saved', params: null },
+      },
+    ]);
+    expect(inst._worldSizeDirty).toBe(true);
+  });
+
+  it('server/saving 接进来但不做事（无 stdout 对应物、也没有要更新的用户可见状态）', () => {
+    const inst = makeInstance();
+    inst._msmpNotifHandleMessage(
+      Buffer.from(
+        JSON.stringify({ jsonrpc: '2.0', method: 'minecraft:notification/server/saving' }),
+      ),
+    );
+    expect(inst.emitted).toEqual([
+      {
+        name: 'msmpNotification',
+        payload: { method: 'minecraft:notification/server/saving', params: null },
+      },
+    ]);
   });
 
   it('世界升级 4 个通知归一化成 worldUpgrade（消费方不必认识方法名）', () => {
@@ -241,19 +263,110 @@ describe('通知处理：白名单与形态', () => {
     expect(inst.emitted.map((e) => e.name)).toEqual(['msmpNotification']);
   });
 
-  it('白名单外的通知（名单类）一律不转——一期刻意不接，接了就要先定去重', () => {
+  it('仍未接入的通知（gamerules/updated、server/activity 等）一律不转', () => {
+    // 白名单是唯一入口：gamerule 改动今天有属性面板自己写、server/activity 是限流的心跳，
+    // 都没有面板要跟的语义
     const inst = makeInstance();
+    for (const method of [
+      'minecraft:notification/gamerules/updated',
+      'minecraft:notification/server/activity',
+    ]) {
+      inst._msmpNotifHandleMessage(Buffer.from(JSON.stringify({ jsonrpc: '2.0', method })));
+      expect(MSMP_NOTIFICATION_ALLOWLIST.has(method)).toBe(false);
+    }
+    expect(inst.emitted).toEqual([]);
+  });
+
+  it('在线名单：加入/离开走幂等入口（两来源同报一次只登记一次）', () => {
+    const joined = [];
+    const left = [];
+    const inst = makeInstance();
+    inst._registerPlayerJoin = (name) => joined.push(name);
+    inst._handlePlayerLeave = (name) => left.push(name);
+
     inst._msmpNotifHandleMessage(
       Buffer.from(
         JSON.stringify({
           jsonrpc: '2.0',
           method: 'minecraft:notification/players/joined',
-          params: { player: { name: 'Steve' } },
+          params: [{ id: 'uuid-1', name: 'Steve' }],
         }),
       ),
     );
-    expect(inst.emitted).toEqual([]);
-    expect(MSMP_NOTIFICATION_ALLOWLIST.has('minecraft:notification/players/joined')).toBe(false);
+    inst._msmpNotifHandleMessage(
+      Buffer.from(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'minecraft:notification/players/left',
+          params: [{ id: 'uuid-1', name: 'Steve' }],
+        }),
+      ),
+    );
+
+    expect(joined).toEqual(['Steve']);
+    expect(left).toEqual(['Steve']);
+  });
+
+  it('名单变化：按方法分流取目标，载荷形态逐条实测（ip_bans 的字段名是陷阱）', () => {
+    // 实测 26.3：allowlist/* 与 bans/removed 是 player 对象、operators/* 与 bans/added 把
+    // player 包一层、ip_bans/added 是 {ip}、ip_bans/removed 是**裸字符串**
+    const cases = [
+      [
+        'minecraft:notification/allowlist/added',
+        [{ id: 'u', name: 'Steve' }],
+        'allowlist',
+        'added',
+        'Steve',
+      ],
+      [
+        'minecraft:notification/operators/added',
+        [{ player: { name: 'Steve' } }],
+        'operators',
+        'added',
+        'Steve',
+      ],
+      [
+        'minecraft:notification/bans/added',
+        [{ player: { name: 'Alex' } }],
+        'bans',
+        'added',
+        'Alex',
+      ],
+      [
+        'minecraft:notification/bans/removed',
+        [{ id: 'u', name: 'Alex' }],
+        'bans',
+        'removed',
+        'Alex',
+      ],
+      ['minecraft:notification/ip_bans/added', [{ ip: '1.2.3.4' }], 'ipBans', 'added', '1.2.3.4'],
+      ['minecraft:notification/ip_bans/removed', ['1.2.3.4'], 'ipBans', 'removed', '1.2.3.4'],
+    ];
+    for (const [method, params, list, action, target] of cases) {
+      const inst = makeInstance();
+      inst._msmpNotifHandleMessage(Buffer.from(JSON.stringify({ jsonrpc: '2.0', method, params })));
+      expect(inst.emitted[0]).toEqual({
+        name: 'nameListChanged',
+        payload: { list, action, target },
+      });
+    }
+  });
+
+  it('载荷解析不出目标时不猜：仍转发原事件，但目标为空串', () => {
+    const inst = makeInstance();
+    inst._msmpNotifHandleMessage(
+      Buffer.from(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'minecraft:notification/bans/added',
+          params: [{ player: { id: 'u' } }],
+        }),
+      ),
+    );
+    expect(
+      _msmpNotificationTarget('minecraft:notification/bans/added', [{ player: { id: 'u' } }]),
+    ).toBe('');
+    expect(inst.emitted[0].payload.target).toBe('');
   });
 
   it('带 id 的响应（本模块不发请求）不转', () => {

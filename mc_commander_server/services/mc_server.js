@@ -230,6 +230,9 @@ export class MCServerManager extends EventEmitter {
     instance.on('playerLeave', (data) =>
       this.emit('instance:playerLeave', { instanceId: id, ...data }),
     );
+    instance.on('nameListChanged', (data) =>
+      this.emit('instance:nameListChanged', { instanceId: id, ...data }),
+    );
     instance.on('playerDeath', (data) =>
       this.emit('instance:playerDeath', { instanceId: id, ...data }),
     );

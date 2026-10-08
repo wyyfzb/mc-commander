@@ -6281,6 +6281,7 @@ const WS_EVENT_TYPES = [
 	"weatherUpdate",
 	"worldUpgrade",
 	"playerStatsUpdate",
+	"nameListChanged",
 	"playerJoin",
 	"playerLeave",
 	"playerDeath",
@@ -6386,6 +6387,16 @@ const wsStatusEventPayloadSchema = object({
 	consecutiveCrashes: number$1().optional(),
 	windowMs: number$1().optional()
 });
+object({
+	list: _enum([
+		"allowlist",
+		"operators",
+		"bans",
+		"ipBans"
+	]),
+	action: _enum(["added", "removed"]),
+	target: string()
+});
 const wsPlayerEventPayloadSchema = object({
 	name: string().optional(),
 	message: string().optional(),
@@ -6480,6 +6491,7 @@ const WS_EVENT_KINDS = {
 	upgradeProgress: "state",
 	systemStatsUpdate: "state",
 	log: "event",
+	nameListChanged: "event",
 	playerJoin: "event",
 	playerLeave: "event",
 	playerDeath: "event",
