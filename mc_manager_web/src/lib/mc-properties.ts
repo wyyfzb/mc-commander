@@ -896,7 +896,10 @@ export function buildUnknownPropertyDef(key: string, value: string): PropertyDef
   return {
     name: key,
     label: key,
-    desc: 'server.properties 设置项',
+    // 这一族由面板的推送开关统一写（enabled/secret/TLS 三项必须同时写对，只改 enabled 会让
+    // 服务器起不来），行上说明「谁管」，那句因果由推送卡的固定提示承担——行内说明是 2xs，
+    // 按字号口径只放短语、放不下整句
+    desc: isPanelManagedProperty(key) ? '由面板管理' : 'server.properties 设置项',
     category: 'serverSettings',
     type: isBool ? 'checkbox' : 'input',
     defaultValue: '',
@@ -904,6 +907,23 @@ export function buildUnknownPropertyDef(key: string, value: string): PropertyDef
     isHotReload: false,
     isWritable: false,
   }
+}
+
+/**
+ * 面板**代写**的键（属性面板把它们渲染成只读行，行上要说明「这不是给你手改的」）。
+ *
+ * 只列服务端 `setPushChannel` 真正写的那三个：`management-server-host` /
+ * `-allowed-origins` / `-port` 面板不写（非本机绑定的提示还要求用户自己改回 localhost），
+ * 把它们也说成「由面板管理」会挡住用户改那几项——那才是新的不准确。
+ */
+const PANEL_MANAGED_PROPERTY_KEYS = new Set([
+  'management-server-enabled',
+  'management-server-secret',
+  'management-server-tls-enabled',
+])
+
+export function isPanelManagedProperty(key: string): boolean {
+  return PANEL_MANAGED_PROPERTY_KEYS.has(key)
 }
 
 /**

@@ -1500,10 +1500,13 @@ const server = createServer((req, res) => {
       if (req.method === 'POST') {
         return res.end(ok({ enabled: true, restartRequired: true, secretGenerated: true }))
       }
+      // 未开启且**还没被面板接管**的状态（键缺失 ⇒ TLS 按 MC 默认 true 读）。
+      // 注意不要写成 tlsEnabled:false + secretConfigured:false：那个组合现实中不可达——
+      // 面板只在开启时写 tls=false，而那次也必然同时生成 secret
       return res.end(
         ok({
           enabled: false,
-          tlsEnabled: false,
+          tlsEnabled: true,
           host: 'localhost',
           port: 0,
           secretConfigured: false,

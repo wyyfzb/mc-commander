@@ -329,10 +329,12 @@ export const mockPanelErrors: PanelErrors = {
   logFile: '/srv/panel/data/logs/error.log',
 }
 
-/** 推送通道状态的 mock 基座：与 mockProperties 同一组字段口径（通道关闭、无 secret） */
+/** 推送通道状态的 mock 基座：与 mockProperties 同一组字段口径（通道关闭、无 secret）。
+ *  `tlsEnabled` 取 true＝键缺失时 MC 的默认值：`tls=false + 无 secret` 那个组合现实中不可达
+ *  （面板只在开启时写 tls=false，那次也必然生成 secret） */
 export const mockPushChannel: PushChannelState = {
   enabled: false,
-  tlsEnabled: false,
+  tlsEnabled: true,
   host: 'localhost',
   port: 0,
   secretConfigured: false,

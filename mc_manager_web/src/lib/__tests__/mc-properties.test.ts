@@ -7,6 +7,7 @@ import {
   buildPropertiesPayload,
   buildUnknownPropertyDef,
   HOT_RELOAD_KEYS,
+  isPanelManagedProperty,
   isBoolValue,
   SENSITIVE_PROPERTY_KEYS,
   SENSITIVE_PROPERTY_PLACEHOLDER,
@@ -187,6 +188,22 @@ describe('buildUnknownPropertyDef（未知属性追加）', () => {
     expect(def.category).toBe('serverSettings')
     expect(def.isWritable).toBe(false)
     expect(def.isHotReload).toBe(false)
+  })
+
+  it('面板接管的键族（management-server-*）行上说明「由面板管理」，不当成普通设置项', () => {
+    // 用户真正想手改的位置就是这几行：只写「server.properties 设置项」等于这里一句提醒都没有
+    expect(buildUnknownPropertyDef('management-server-enabled', 'false').desc).toBe('由面板管理')
+    expect(buildUnknownPropertyDef('management-server-secret', 'x').desc).toBe('由面板管理')
+    expect(buildUnknownPropertyDef('management-server-tls-enabled', 'false').desc).toBe(
+      '由面板管理',
+    )
+    // host / allowed-origins / port 面板不写（非本机提示还要求用户自己改回 localhost），
+    // 说成「由面板管理」会挡住用户改它们
+    expect(buildUnknownPropertyDef('management-server-host', 'localhost').desc).toBe(
+      'server.properties 设置项',
+    )
+    expect(isPanelManagedProperty('management-server-host')).toBe(false)
+    expect(isPanelManagedProperty('server-port')).toBe(false)
   })
 
   it('未知键命中敏感集时标记 isSensitive（防明文旁路）', () => {

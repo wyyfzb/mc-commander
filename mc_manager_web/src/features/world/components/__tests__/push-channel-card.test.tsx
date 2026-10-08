@@ -4,7 +4,9 @@
  * 承重点：这个开关的价值全在**替用户写对三项**，而用户看到的只有这一屏——所以界面必须
  * 把三件事说清，缺一件他就会去手改文件踩坑：
  * ① 开没开；② 绑在哪（非本机＝暴露面变大）；③ 运行中改动要重启才生效。
- * 另外「不要手改 server.properties」这句提示本身是承重的：用户手改正是本功能要防的事。
+ * 版式上另有三条承重口径：**答案在说明之前**（每次来都要看的是状态，说明只讲「这是什么」）、
+ * **背景说明收进浮层**（只留一行摘要）、**手改告警固定成一行**且只在「面板还没接管这三项」
+ * 时出现（面板开启时会连同写对 TLS，此后手改不会再踩坑，常年挂它只会是噪音）。
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
@@ -58,11 +60,45 @@ beforeEach(() => {
 })
 
 describe('PushChannelCard', () => {
-  it('未开启时显示未开启、并交代不要手改 server.properties', async () => {
-    renderCard(STATE_OFF)
+  it('答案在说明之前：卡体的第一个元素就是答案 dl', async () => {
+    const { container } = renderCard(STATE_OFF)
     expect(await screen.findByText('未开启')).toBeInTheDocument()
-    // 这句是护栏的一半：用户手改正是本功能要防的事
-    expect(screen.getByText(/不要手改 server.properties/)).toBeInTheDocument()
+
+    // 用户每次来这张卡是看状态的；说明只讲「这是什么」，不能挡在答案前面。
+    // 断「第一个元素是 dl」而不是断相对位置：任何插到前面去的东西（哪怕只是一句话）都会转红
+    const body = container.querySelector('dl')!.parentElement!
+    expect(body.firstElementChild?.tagName).toBe('DL')
+  })
+
+  it('背景说明收进浮层：可见的是术语本身（虚线记号），点击后细则才出现', async () => {
+    renderCard(STATE_OFF)
+    await screen.findByText('未开启')
+
+    // inline 档的记号要求：被解释的**词本身**是触发器（可见文本），不是一枚图标
+    const trigger = screen.getByText('管理协议')
+    expect(trigger.tagName).toBe('BUTTON')
+    // 细则（含版本要求）默认不可见，点开才进可访问性树
+    expect(screen.queryByText(/世界升级进度/)).toBeNull()
+    await userEvent.click(trigger)
+    expect(await screen.findByText(/世界升级进度/)).toBeInTheDocument()
+    expect(screen.getByText(/1\.21\.9/)).toBeInTheDocument()
+  })
+
+  it('未开启且 TLS 还开着 → 手改告警在场（那组必崩组合此时可达）', async () => {
+    renderCard(STATE_OFF)
+    expect(await screen.findByText(/若要手改 server.properties/)).toBeInTheDocument()
+  })
+
+  it('面板已接管（已开启）→ 不再挂手改告警：那时它已是常年不生效的噪音', async () => {
+    renderCard({ ...STATE_OFF, enabled: true, tlsEnabled: false, secretConfigured: true })
+    expect(await screen.findByText('已开启')).toBeInTheDocument()
+    expect(screen.queryByText(/若要手改 server.properties/)).toBeNull()
+  })
+
+  it('TLS 已被面板关掉（未开启但 tls=false）→ 告警也不该出现', async () => {
+    renderCard({ ...STATE_OFF, tlsEnabled: false })
+    expect(await screen.findByText('未开启')).toBeInTheDocument()
+    expect(screen.queryByText(/若要手改 server.properties/)).toBeNull()
   })
 
   it('端口为 0 时显示「随机端口」而不是 0（0 会被读成「没端口」）', async () => {

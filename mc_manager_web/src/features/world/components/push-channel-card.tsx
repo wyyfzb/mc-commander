@@ -1,7 +1,9 @@
 import { useState } from 'react'
-import { Radio } from 'lucide-react'
+import { Radio, TriangleAlert } from 'lucide-react'
+import { MSMP_MIN_MC_VERSION } from '@mc-commander/schemas'
 import { Switch } from '@/components/ui/switch'
 import { Card, CardBody, CardHeader, CardTitle } from '@/components/mcs/card'
+import { InfoHint } from '@/components/mcs/info-hint'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { useServerStore } from '@/stores/server'
 import { usePushChannel, useSetPushChannel } from '../queries'
@@ -63,12 +65,6 @@ export function PushChannelCard({ instanceId, isRunning }: PushChannelCardProps)
       </CardHeader>
 
       <CardBody className="flex flex-col gap-3">
-        <p className="text-mcs-xs text-mcs-text-muted">
-          开启后，面板能直接收到服务器推送的状态变化（如世界升级进度），不再只靠定时轮询。
-          这项配置需要服务器配合开启管理协议，<strong>不要手改 server.properties</strong>
-          ——单独改「启用」那一项（TLS 仍为默认开启、又没配证书）会让服务器起不来。
-        </p>
-
         {stateQuery.isLoading && <p className="text-mcs-xs text-mcs-text-muted">正在读取…</p>}
 
         {error && (
@@ -125,6 +121,36 @@ export function PushChannelCard({ instanceId, isRunning }: PushChannelCardProps)
                 当前绑定在 <code>{state.host}</code>（非本机）：管理协议已对网络开放。
                 如非有意，请把它改回 localhost。
               </NoticeBanner>
+            )}
+
+            {/* ④ 说明性内容收在答案之后：只讲「这是什么」，每次来都要看的是上面的状态。
+                浮层而不是 Tooltip：Tooltip 对触屏指针不响应，解释会只剩鼠标可达 */}
+            <p className="text-mcs-xs text-mcs-text-muted">
+              走服务器的
+              <InfoHint variant="inline" label="管理协议">
+                开启后，面板能直接收到服务器推送的状态变化（如世界升级进度），不再只靠定时轮询。
+                这项配置需要服务器配合开启管理协议（MSMP），该能力要求 MC {MSMP_MIN_MC_VERSION}{' '}
+                及以上。
+              </InfoHint>
+              推送状态变化，不再只靠轮询。
+            </p>
+
+            {/* ⑤ 手改预防：固定一行（不再嵌在说明段中间——那句粗体的落点会随卡片宽度漂移，实测
+                1440 在第 1 行、1024 在第 2 行）。
+                为什么只在「未开启且 TLS 还开着」时出现：面板开启时会连同写对 enabled/secret/TLS
+                （没配 keystore 就把 TLS 关掉），此后手改 enabled=true 也不会再踩那组必崩组合；
+                其余状态挂这条只会是常年不生效的告警 */}
+            {!state.enabled && state.tlsEnabled && (
+              <p className="flex items-start gap-1.5 text-mcs-xs text-mcs-text-default">
+                <TriangleAlert
+                  className="mt-0.5 size-3.5 shrink-0 text-mcs-warning-fg"
+                  aria-hidden="true"
+                />
+                <span>
+                  若要手改 server.properties：只把 <code>management-server-enabled</code> 改成
+                  true、而 TLS 仍开着又没配证书，服务器会起不来；用上面的开关会一次写对三项。
+                </span>
+              </p>
             )}
 
             {/* ③ 重启语义：MSMP 只在服务端启动时读取，运行中改动不会立刻生效 */}
