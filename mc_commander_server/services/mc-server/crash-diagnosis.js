@@ -57,7 +57,8 @@ export const CRASH_DIAGNOSIS_TABLE = [
     detail:
       '服务端启动时校验 management-server-secret 失败：该值必须是 40 位字母数字，否则服务端在初始化阶段直接崩溃。',
     actions: [
-      // 面板侧唯一入口：实例设置里的「实时推送」开关。关一次再打开会重写自洽三项
+      // 面板侧唯一入口：实例设置里的「实时推送」开关。关一次再打开会重写自洽三项；
+      // 由面板启动的实例，启动前也会自动修正这组配置（仍崩 ⇒ 多半不是面板启动的）
       '到实例设置 →「实时推送」把它关一次再重新开启（面板会一次写对 enabled/secret/TLS 三项）',
       '确认 server.properties 的 management-server-secret 不是手工填写的短串',
     ],

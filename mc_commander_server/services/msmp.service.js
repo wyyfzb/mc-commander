@@ -22,7 +22,7 @@
  */
 import crypto from 'crypto';
 import { reloadProperties } from './instance-properties.service.js';
-import { MSMP_MIN_MC_VERSION } from '@mc-commander/schemas';
+import { compareVersions, MSMP_MIN_MC_VERSION } from '@mc-commander/schemas';
 import { logger } from '../utils/logger.js';
 
 /** MC 对 `management-server-secret` 的硬要求（实测：非此形态直接崩在启动期） */
@@ -73,22 +73,12 @@ export function readPushChannelState(instance) {
 /**
  * 版本是否支持这条通道（MC >= MSMP_MIN_MC_VERSION）。
  *
- * 解析口径与前端 `lib/mc-version.ts` 一致（取第一段连续数字及其后的点分段，缺失段按 0），
- * 但**只用到一处**：面板不替不支持的版本写无用键。解析器本身只该有一份，收进契约包属跨包
- * 重构，已登记待办、未在本轮夹带。
+ * 版本未知或读不懂一律按**不支持**：宁可不配置，也不往用户文件里塞无用键。
+ * 比较复用契约包的唯一一份解析器——面板与服务端不能对同一串版本号得出不同结论。
  */
 function isMsmpSupportedVersion(version) {
-  const parse = (v) => {
-    const m = String(v ?? '').match(/(\d+)(?:\.(\d+))?(?:\.(\d+))?/);
-    return m ? [Number(m[1]), Number(m[2] ?? 0), Number(m[3] ?? 0)] : null;
-  };
-  const a = parse(version);
-  const b = parse(MSMP_MIN_MC_VERSION);
-  if (!a || !b) return false; // 版本未知或读不懂 ⇒ 不写（宁可不配置，也不往用户文件里塞无用键）
-  for (let i = 0; i < 3; i += 1) {
-    if (a[i] !== b[i]) return a[i] > b[i];
-  }
-  return true;
+  const cmp = compareVersions(version, MSMP_MIN_MC_VERSION);
+  return cmp !== null && cmp >= 0;
 }
 
 /**
@@ -111,10 +101,32 @@ export function ensureMsmpConfigured(instance) {
   // 面板之外改过（SSH 手改），用陈旧缓存判会把用户的显式关闭又改回开启
   if (instance) reloadProperties(instance);
   const props = instance?.properties ?? {};
-  if (props['management-server-enabled'] !== undefined) return null;
   if (!isMsmpSupportedVersion(instance?.mcVersion)) return null;
+  const state = readPushChannelState(instance);
+  const declared = props['management-server-enabled'] !== undefined;
+
+  // ① 从没配过（键缺失）⇒ 补上：用户要的是「状态变化及时到达」这个结果，不该由他去选实现
+  if (!declared) {
+    const result = setPushChannel(instance, true);
+    logger.info(`[${instance.id}] 已自动开启实时推送（management-server-* 三项），本次启动即生效`);
+    return result;
+  }
+
+  // ② 已表过态 ⇒ 尊重「要不要开」，但这两种组合会让服务器**启动即崩**，必须修：
+  //    enabled 语义为真 + TLS 开 + 无 keystore（实测 IllegalArgumentException: TLS is enabled
+  //    but keystore is not configured）；以及 secret 缺失或不是 40 位字母数字
+  //    （实测 IllegalStateException: Invalid management server secret）。
+  //    这不是替用户做选择，而是把他已经写下的「要开」修成能启动——否则面板的启动动作会直接
+  //    把服务器按死在启动阶段。修法复用 setPushChannel：三项必须是自洽组合。
+  if (String(props['management-server-enabled']).toLowerCase() !== 'true') return null;
+  const keystoreConfigured = Boolean(props['management-server-tls-keystore']);
+  const doomed = (state.tlsEnabled && !keystoreConfigured) || !state.secretConfigured;
+  if (!doomed) return null;
+
   const result = setPushChannel(instance, true);
-  logger.info(`[${instance.id}] 已自动开启实时推送（management-server-* 三项），本次启动即生效`);
+  logger.warn(
+    `[${instance.id}] 实时推送配置处于「必崩组合」，已按自洽三项修正（否则服务器启动即退出）`,
+  );
   return result;
 }
 
