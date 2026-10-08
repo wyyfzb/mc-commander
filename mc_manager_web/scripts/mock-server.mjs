@@ -1407,6 +1407,21 @@ const server = createServer((req, res) => {
 
     // ── 世界/属性域 ──
     if (path === '/api/v1/instances/e2e-demo/world') return res.end(ok(worldInfo))
+    // 推送通道（MSMP）：mock 里通道是关的，与 status.capabilities 的 msmp/msmpPush=false 同一套说法
+    if (path === '/api/v1/instances/e2e-demo/push-channel') {
+      if (req.method === 'POST') {
+        return res.end(ok({ enabled: true, restartRequired: true, secretGenerated: true }))
+      }
+      return res.end(
+        ok({
+          enabled: false,
+          tlsEnabled: false,
+          host: 'localhost',
+          port: 0,
+          secretConfigured: false,
+        }),
+      )
+    }
     if (path === '/api/v1/instances/e2e-demo/properties') {
       if (req.method === 'PUT') {
         return res.end(ok({ restartRequired: [] }, 'Properties updated'))

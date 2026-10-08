@@ -11,6 +11,7 @@ import type {
   InstanceStatus,
   OverviewData,
   Player,
+  PushChannelState,
   ServerProperties,
   SystemStats,
   WorldInfo,
@@ -267,6 +268,15 @@ export const mockWorldInfo: WorldInfo = {
 }
 
 /** 9 个敏感键占位符掩码 + 常用键（结构与真实 server.properties 对齐） */
+/** 推送通道状态的 mock 基座：与 mockProperties 同一组字段口径（通道关闭、无 secret） */
+export const mockPushChannel: PushChannelState = {
+  enabled: false,
+  tlsEnabled: false,
+  host: 'localhost',
+  port: 0,
+  secretConfigured: false,
+}
+
 export const mockProperties: ServerProperties = {
   'enable-rcon': '********',
   'rcon.password': '********',
@@ -870,6 +880,11 @@ export const handlers = [
   http.get('*/api/v1/instances/:id/world', () => ok(mockWorldInfo)),
   http.get('*/api/v1/instances/:id/properties', () => ok(mockProperties)),
   http.put('*/api/v1/instances/:id/properties', () => ok({ restartRequired: [] })),
+  // 推送通道（MSMP）状态：mock 里通道是关的，与 status.capabilities 的 msmp/msmpPush=false 同一套说法
+  http.get('*/api/v1/instances/:id/push-channel', () => ok(mockPushChannel)),
+  http.post('*/api/v1/instances/:id/push-channel', () =>
+    ok({ enabled: true, restartRequired: true, secretGenerated: true }),
+  ),
   // ── 文件域 ──
   http.get('*/api/v1/instances/:id/files/content', ({ request }) => {
     const filePath = new URL(request.url).searchParams.get('path') ?? '/server.properties'
