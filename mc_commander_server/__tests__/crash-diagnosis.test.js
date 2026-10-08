@@ -13,6 +13,10 @@ import { CRASH_DIAGNOSIS_TABLE, diagnoseCrash } from '../services/mc-server/cras
 
 /** 逐条真实样本：id → 诊断输入（取自真实产物或 26.3 jar 的固定词表） */
 const REAL_SAMPLES = {
+  // 真机 hs_err（MC 26.3 + Corretto 25，对本机服务端进程发 SIGSEGV 产出）故障行首段
+  'jvm-native-signal': {
+    fault: 'SIGSEGV (0xb) at pc=0x0000716d71298e4f (sent by kill), pid=119732, tid=119732',
+  },
   'msmp-invalid-secret': {
     description: 'Exception in server tick loop',
     exception:
@@ -51,7 +55,8 @@ describe('词条表结构自洽', () => {
       expect(entry.evidence.length).toBeGreaterThan(0);
       const keys = Object.keys(entry.match);
       expect(keys.length).toBeGreaterThan(0);
-      for (const key of keys) expect(['description', 'exception', 'logger']).toContain(key);
+      for (const key of keys)
+        expect(['description', 'exception', 'fault', 'logger']).toContain(key);
     }
   });
 

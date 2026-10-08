@@ -384,13 +384,38 @@ describe('getCrashArtifact 带诊断结论', () => {
     expect(unknownVersion.getCrashArtifact().diagnosis.instanceVersion).toBeNull();
   });
 
-  it('hs_err 没有可锚的键：未命中（原样展示已解析字段，不猜）', () => {
+  it('hs_err 的故障行是可锚键：信号族命中（结论 + 原始字段都在）', () => {
+    // 样本是真实 hs_err（`hs-err-segv.txt` 的故障行为 `SIGSEGV (0xb) at pc=...`）
     writeHsErr('hs_err_pid2601333.log', read('hs-err-segv.txt'));
 
     const artifact = makeInstance(tmpDir).getCrashArtifact();
 
     expect(artifact.kind).toBe('jvm-crash');
-    expect(artifact.diagnosis.matched).toBe(false);
+    expect(artifact.diagnosis.matched).toBe(true);
+    expect(artifact.diagnosis.entry.id).toBe('jvm-native-signal');
+    expect(artifact.diagnosis.entry.matchedBy).toBe('fault');
+    // 命中不等于不再展示原始字段：结论与「故障/问题帧」并存
     expect(artifact.summary.length).toBeGreaterThan(0);
+  });
+
+  it('非信号的故障行仍不命中（Internal Error 一类无真实样本，不猜）', () => {
+    writeHsErr(
+      'hs_err_pid999.log',
+      [
+        '#',
+        '# A fatal error has been detected by the Java Runtime Environment:',
+        '#',
+        '#  Internal Error (/tmp/hotspot/src/share/vm/runtime/thread.cpp:3660), pid=999, tid=1',
+        '# JRE version: OpenJDK Runtime Environment (21.0.1+12)',
+        '# Java VM: OpenJDK 64-Bit Server VM (21.0.1+12, mixed mode, linux-amd64)',
+        '# Problematic frame:',
+        '# V  [libjvm.so+0x1234]',
+      ].join('\n'),
+    );
+
+    const artifact = makeInstance(tmpDir).getCrashArtifact();
+
+    expect(artifact.kind).toBe('jvm-crash');
+    expect(artifact.diagnosis.matched).toBe(false);
   });
 });

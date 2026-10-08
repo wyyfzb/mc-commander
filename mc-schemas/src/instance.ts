@@ -330,7 +330,7 @@ export const crashArtifactFieldSchema = z.object({
  */
 export const crashDiagnosisEntrySchema = z.object({
   id: z.string(),
-  matchedBy: z.enum(['description', 'exception', 'logger']),
+  matchedBy: z.enum(['description', 'exception', 'fault', 'logger']),
   title: z.string(),
   detail: z.string(),
   actions: z.array(z.string()),

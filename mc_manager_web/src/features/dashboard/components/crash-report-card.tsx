@@ -144,8 +144,9 @@ function DiagnosisBlock({ data }: { data: CrashArtifact }) {
     )
   }
 
-  // 未命中分两类：崩溃报告是「键有值但没收录」，JVM 崩溃日志是「没有可锚的键」——
-  // 后者说成「不在已知词条里」等于替面板断言一件它无从知道的事，给出的对照物也不存在于该产物
+  // 未命中分两类：崩溃报告走 Description/异常行（键有值但没收录），JVM 崩溃日志走故障行
+  // （信号族能命中；`Internal Error`/OOM 型这类故障行暂未收录）——后者说成「不在已知词条里」
+  // 等于替面板断言一件它无从知道的事，且给出的对照物（顶层异常/由以下引起链）不存在于该产物
   const isJvm = data.kind === 'jvm-crash'
   const missTitle = isJvm ? '这份 JVM 崩溃日志没有可对照的词条' : '这次崩溃不在已知词条里'
   const missBody = isJvm

@@ -6,6 +6,10 @@
  *
  * 键只锚三处（这三处是崩溃报告自身的语义字段，不随 MC 的日志文案改写而漂移）：
  * - `description`：崩溃报告的 `Description:`，取值是**固定词表**（26.3 的取值与来源类见各条注释）
+ * - `fault`：JVM 崩溃日志（hs_err）故障行的**行首**，写 JVM 的标准故障串（`SIGSEGV`/`SIGBUS`…
+ *   信号族用共同前缀 `SIG`）。这是 hs_err 唯一可锚的键——它没有 `Description:`，也不是
+ *   Java 异常。⚠️ 非信号的故障行（`Internal Error (...)`、OOM 型）**刻意不锚**：手上没有
+ *   真实样本，凭印象写词条就是把猜测当结论（未命中仍按原样展示 + 出路处理）
  * - `exception`：顶层异常行**行首前缀**——写类名（`java.lang.OutOfMemoryError`）即可，
  *   写「类名: 消息开头」则更精确。⚠️ 只锚类名**不足以**区分同类异常：本仓两个真实样本
  *   （MSMP 密钥非法 / TLS 未配 keystore）类名同为 `java.lang.IllegalStateException`，
@@ -16,10 +20,12 @@
  *
  * 匹配语义：`match` 里的键是**与**关系（都命中才算），表内**顺序即优先级**（从具体到泛化），
  * 取第一条命中的——泛化条目（如 `Exception in server tick loop`）排在最后，否则它会抢走
- * 具体条目的结论。命中后 `entry.matchedBy` 报「固定键序（description→exception→logger）里
+ * 具体条目的结论。命中后 `entry.matchedBy` 报「固定键序（description→exception→fault→logger）里
  * 第一个被声明的键」，用于向用户解释结论靠什么锚定。
  *
  * 未命中**不猜**：返回 `matched: false` 与空词条，由呈现层原样展示原始字段并给出路。
+ * 三种产物类型各有各的键：崩溃报告看 `description`/`exception`，hs_err 看 `fault`，两者不会
+ * 互相抢条目（另一侧的键为 null ⇒ 判定不通过），故表序不受产物类型影响。
  *
  * 每条都标 `verifiedVersions`（该结论在哪些 MC 版本上核实过）与 `evidence`（实测样本 /
  * 从该版本 jar 静态提取）。`verifiedForInstance` 由呈现层用来提示「本条在别的版本上验证」，
@@ -28,6 +34,22 @@
 
 /** 词条表：顺序即优先级，从具体到泛化 */
 export const CRASH_DIAGNOSIS_TABLE = [
+  {
+    id: 'jvm-native-signal',
+    // 信号族共用前缀：SIGSEGV/SIGBUS/SIGILL/SIGFPE 对用户的结论与处置是同一件事
+    // （进程在 JVM/本地库层被信号打死），拆成四条只会得到四份同样的文案
+    match: { fault: 'SIG' },
+    title: 'JVM 在原生层崩溃（收到致命信号）',
+    detail:
+      '服务端进程收到 SIGSEGV 一类致命信号，崩溃点在 JVM 或本地库（「问题帧」里的 C/Java 帧就是落点），不是普通的 Java 异常。常见来源：模组带的本地库、与 JDK 不匹配的 JVM 参数、内存问题。',
+    actions: [
+      '看「问题帧」落在哪：本地库名指向具体组件，`libc.so.6` 这类系统库多指向系统层',
+      '故障行带 `(sent by kill)` 时信号来自**外部**：先查内核有没有因内存不足杀掉进程（`dmesg`），并核对实例内存上限与机器可用内存',
+      '换用与服务器版本匹配的 JDK，并去掉非必需的 `-XX`/`-D` 参数后重试',
+    ],
+    verifiedVersions: ['26.3'],
+    evidence: ['实测'],
+  },
   {
     id: 'msmp-invalid-secret',
     match: { exception: 'java.lang.IllegalStateException: Invalid management server secret' },
@@ -186,6 +208,8 @@ export const CRASH_DIAGNOSIS_TABLE = [
 function keyMatches(key, expected, input) {
   if (key === 'description') return input.description === expected;
   if (key === 'logger') return input.logger === expected;
+  // exception / fault 都是「行首前缀」：写类名或故障串即可，写更长则更精确
+  if (key === 'fault') return String(input.fault ?? '').startsWith(expected);
   return String(input.exception ?? '').startsWith(expected);
 }
 
@@ -194,7 +218,7 @@ function keyMatches(key, expected, input) {
  * 并以表里声明的第一个键作为 `matchedBy`（解释结论靠什么锚定）。
  */
 function matchedByOf(match, input) {
-  const keys = ['description', 'exception', 'logger'].filter((k) => match[k] != null);
+  const keys = ['description', 'exception', 'fault', 'logger'].filter((k) => match[k] != null);
   for (const key of keys) {
     if (!keyMatches(key, match[key], input)) return null;
   }

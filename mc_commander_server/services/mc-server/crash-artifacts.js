@@ -367,10 +367,12 @@ export function getCrashArtifact() {
   // 版本优先取崩溃报告自己写的：它才是「崩的那一份」；取不到再回落实例版本（unknown 视同未知）
   const instanceVersion = parsed.minecraftVersion || this._getMcVersion?.() || null;
   const mcVersion = instanceVersion === 'unknown' ? null : instanceVersion;
-  // hs_err 没有可锚的键（故障行不属于允许的键类型）⇒ 必然未命中，原样展示已解析字段
+  // hs_err 的可锚键是**故障行行首**（信号族用前缀锚）；非信号故障行（Internal Error / OOM 型）
+  // 仍会未命中，那时按原样展示已解析字段 + 出路处理
   const diagnosis = diagnoseCrash({
     description: parsed.description ?? null,
     exception: parsed.exception ?? null,
+    fault: parsed.failure?.[0] ?? null,
     mcVersion,
   });
   return { ...base, ...parsed, excerpt: excerptOf(text), diagnosis };

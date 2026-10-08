@@ -6027,6 +6027,7 @@ const crashDiagnosisEntrySchema = object({
 	matchedBy: _enum([
 		"description",
 		"exception",
+		"fault",
 		"logger"
 	]),
 	title: string(),
