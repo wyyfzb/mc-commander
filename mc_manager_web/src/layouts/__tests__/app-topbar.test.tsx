@@ -5,6 +5,7 @@
  * - 列表请求失败 → 「实例列表加载失败」，同样不谎报空
  * - 有实例但未选中 → 「未选择实例」（也不得假造并不存在的实例名）
  * - 退出登录：会话 + 残留 API Key 一并清除并落到 /login（只清会话会被守卫弹回、toast 失真）
+ * - 状态点的刷新语义：推送连通说「实时更新」，否则说「每 N 秒刷新」；实时通道断开时两者都不说
  * MSW 拦截实例列表（结构占位虚构数据，严禁真实服务器信息）
  */
 import { describe, it, expect, beforeEach, afterEach, afterAll, beforeAll, vi } from 'vitest'
@@ -17,6 +18,7 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { HttpResponse, http } from 'msw'
 import { setupServer } from 'msw/node'
 import { handlers, mockInstanceStatus } from '@/test/mocks/handlers'
+import { FALLBACK_POLL_INTERVAL_MS } from '@/api/queries'
 import { AppTopBar } from '../app-topbar'
 import { useConnectionStore } from '@/stores/connection'
 import { useServerStore } from '@/stores/server'
@@ -305,5 +307,74 @@ describe('AppTopBar 实例名三态', () => {
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/login'))
     expect(useAuthStore.getState().session).toBeNull()
+  })
+})
+
+describe('AppTopBar 状态点的刷新语义', () => {
+  it('实时推送连通：状态点表达「实时更新」，完整解释走 title 与 sr-only', async () => {
+    // 真值来自顶栏自订阅的实例详情（不是 store 里的 status——只有仪表盘会写它）
+    server.use(
+      http.get('*/api/v1/instances/:id', () =>
+        HttpResponse.json({
+          status: 'ok',
+          code: 0,
+          message: 'Success',
+          data: {
+            ...mockInstanceStatus,
+            capabilities: { rcon: true, msmp: true, msmpPush: true },
+          },
+          timestamp: new Date().toISOString(),
+        }),
+      ),
+    )
+    // 必须有选中的实例：详情是这条后缀的唯一真值来源（beforeEach 默认 instanceId=null）
+    useServerStore.setState({ socketConnected: true, status: null, instanceId: 'demo-1' })
+    renderTopbar()
+
+    const el = await screen.findByText('已连接 · 实时更新')
+    expect(el).toHaveAttribute('title', '实时推送已连通，服务器的状态变化会立即到达面板')
+    // aria-label 在 role=generic 的 span 上按规范不生效（读屏取不到）⇒ 完整解释挂 sr-only
+    expect(el.querySelector('.sr-only')?.textContent).toBe(
+      '，实时推送已连通，服务器的状态变化会立即到达面板',
+    )
+    expect(el).toHaveClass('text-mcs-xs')
+  })
+
+  it('未连通：改说「每 30 秒刷新」，秒数取自轮询常量而不是写死', async () => {
+    // 默认夹具 msmpPush=false；通道在线（socketConnected）才谈刷新时机
+    useServerStore.setState({ socketConnected: true, instanceId: 'demo-1' })
+    renderTopbar()
+
+    expect(
+      await screen.findByText(`已连接 · 每 ${FALLBACK_POLL_INTERVAL_MS / 1000} 秒刷新`),
+    ).toBeInTheDocument()
+  })
+
+  it('实例详情还没到 ⇒ 不声明刷新时机：宁可不说，也不说错', async () => {
+    // 详情未知时若按 store 的 null 落到「每 30 秒刷新」，从非仪表盘页面直接打开的用户
+    // 就会看到一句**错误的**陈述（推送其实连着）
+    server.use(http.get('*/api/v1/instances/:id', () => new Promise<never>(() => {})))
+    useServerStore.setState({ socketConnected: true, status: null, instanceId: 'demo-1' })
+    renderTopbar()
+
+    expect(await screen.findByText('已连接')).toBeInTheDocument()
+    expect(screen.queryByText(/实时更新|每 \d+ 秒刷新/)).toBeNull()
+  })
+
+  it('实时通道断开：顶栏不替轮询打包票（间隔已由降级横幅据实声明，两处会重复）', async () => {
+    useServerStore.setState({
+      socketConnected: false,
+      hasConnectedOnce: true,
+      status: null,
+      instanceId: 'demo-1',
+    })
+    renderTopbar()
+
+    // 实例详情必须先真的到达：否则本用例会在详情返回**之前**就断言完，
+    // 那时后缀本来就还没渲染——删掉 `socketConnected &&` 门控它也照样绿（假绿）
+    await screen.findByText(/1\.2\.3\.4:25565/)
+    // 降级档的既有措辞原样保留，且不得追加「每 30 秒刷新」——面板是否同样不可达这里无从判定
+    expect(screen.getByText('实时推送已断')).toBeInTheDocument()
+    expect(screen.queryByText(/每 30 秒刷新/)).toBeNull()
   })
 })

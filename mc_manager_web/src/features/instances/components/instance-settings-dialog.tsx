@@ -7,10 +7,12 @@
  * - 保存调 PUT /instances/:id（白名单 maxMemory/minMemory/jvmArgs/javaPath），成功后 toast +
  *   失效实例详情查询 + 关闭；遗留 startCommand 实例保存时一并传 startCommand:null 清除
  *   （否则 jvmArgs 空数组时 start() 回退旧命令，新配置被静默覆盖）
+ * - 实时推送（MSMP）开关：实例级设置，但走自己的 GET/POST /push-channel **即时落库**，
+ *   刻意不进上面那份 PUT 白名单——混进保存载荷会让开关的失败连带影响「保存配置」按钮
  * - 弹窗面走基座 bg-popover（全站统一）+ 表单输入实底；token 纪律，禁硬编码
  */
 import { useState } from 'react'
-import { ChevronDown, ChevronUp, Gauge, Info, Loader2, Save, Settings } from 'lucide-react'
+import { ChevronDown, ChevronUp, Gauge, Info, Loader2, Radio, Save, Settings } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -29,7 +31,9 @@ import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { cn } from '@/lib/utils'
 import { instanceLabel } from '@/lib/instance-label'
 import { getFriendlyErrorText } from '@/api/errors'
+import { FALLBACK_POLL_INTERVAL_MS } from '@/api/queries'
 import { useRestartPendingStore } from '@/stores/restart-pending'
+import { usePushChannel, useSetPushChannel } from '@/features/world/queries'
 import { useUpdateInstance } from '../queries'
 import type { InstanceStatus, InstanceSummary, InstanceUpdatePayload } from '@/api/types'
 
@@ -174,6 +178,26 @@ export function InstanceSettingsDialog({
 }: InstanceSettingsDialogProps) {
   const updateMutation = useUpdateInstance()
   const markPending = useRestartPendingStore((s) => s.markPending)
+
+  // ── 实时推送（MSMP）：独立接口即时落库，与下面那份「保存配置」互不牵连 ──
+  const pushStateQuery = usePushChannel(instance.id)
+  const setPushChannel = useSetPushChannel(instance.id)
+  /** 乐观翻转（null = 跟随服务端值）；失败回滚，避免开关停在没落库的位置 */
+  const [pushOverride, setPushOverride] = useState<boolean | null>(null)
+  const pushEnabled = pushOverride ?? pushStateQuery.data?.enabled ?? false
+
+  async function handleTogglePush(next: boolean) {
+    setPushOverride(next)
+    try {
+      await setPushChannel.mutateAsync(next)
+      /* MSMP 只在服务端启动时读配置，运行中改动不会立刻生效——所以给的是「下次重启后生效」
+         这个结果，而不是「已生效」；并且只在刚改过之后给一条回执，不做常驻说明 */
+      toast.success(`实时推送已${next ? '开启' : '关闭'}，下次重启服务器后生效`)
+    } catch (e) {
+      setPushOverride(null)
+      toast.error(`实时推送设置失败：${getFriendlyErrorText(e)}`)
+    }
+  }
 
   // ── 初始预填（挂载即打开：父组件条件渲染保证实例切换时重置）──
   const [initial] = useState(() => {
@@ -451,6 +475,47 @@ export function InstanceSettingsDialog({
           )}
         </div>
 
+        {/* ── 实时推送（MSMP）：与上面那份保存表单隔一条分隔线——它是即时落库的独立设置，
+             放在同一组里会被读成「点保存配置才生效」，而「取消」也退不回它 ── */}
+        <div className="flex flex-col gap-2 border-t border-mcs-border-muted pt-4">
+          <div className="flex items-center gap-3 rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-default px-3 py-2">
+            <Radio
+              className={cn(
+                'size-4 shrink-0',
+                pushEnabled ? 'text-mcs-accent-fg' : 'text-mcs-text-muted',
+              )}
+              aria-hidden
+            />
+            <div className="min-w-0 flex-1">
+              <p className="text-mcs-sm font-semibold text-mcs-text-default">实时推送</p>
+              {/* 只讲结果（用户拿到什么刷新时机），不出现 host/port/凭据这类运维视角字段 */}
+              <p className="text-mcs-xs text-mcs-text-muted">
+                开启后面板能实时收到状态变化；关闭则每 {FALLBACK_POLL_INTERVAL_MS / 1000} 秒刷新一次
+              </p>
+            </div>
+            {/* 读不到状态时不渲染开关：`?? false` 会把「不知道」显示成「已关闭」，
+                那是肯定式假信息——用户会以为关着，而真相是面板读不到这项配置 */}
+            {pushStateQuery.isError ? (
+              <span className="shrink-0 text-mcs-xs text-mcs-text-muted">状态未知</span>
+            ) : (
+              pushStateQuery.data && (
+                <Switch
+                  checked={pushEnabled}
+                  disabled={setPushChannel.isPending}
+                  onCheckedChange={(next) => void handleTogglePush(next)}
+                  aria-label="实时推送"
+                />
+              )
+            )}
+          </div>
+          {pushStateQuery.isError && (
+            <NoticeBanner variant="warning">
+              读不到实时推送状态：
+              {getFriendlyErrorText(pushStateQuery.error)}
+            </NoticeBanner>
+          )}
+        </div>
+
         {/* ── 底部操作：取消 / 保存配置 ── */}
         <div className="flex gap-3">
           <Button
@@ -485,7 +550,7 @@ export function InstanceSettingsDialog({
         open={closeConfirmOpen}
         onOpenChange={(open) => !open && setCloseConfirmOpen(false)}
         title="未保存的更改"
-        description="当前有未保存的配置更改，关闭后这些修改将丢失。"
+        description="上面有未保存的启动配置更改，关闭后这些改动将丢失（实时推送开关是即时保存的，不受此影响）。"
         confirmText="不保存"
         cancelText="继续编辑"
         onConfirm={() => {

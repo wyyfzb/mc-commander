@@ -47,10 +47,19 @@ const STATUS_CONFIG: Record<
 
 interface StatusIndicatorProps {
   status: IndicatorStatus
+  /** 追加在状态文字之后的短标签（如「实时更新」「每 30 秒刷新」）；只放短语 */
+  suffix?: string
+  /** 与 suffix 配套的完整解释：句子只进 title/aria-label，不占可见文本的字号档位 */
+  suffixDescription?: string
   className?: string
 }
 
-export function StatusIndicator({ status, className }: StatusIndicatorProps) {
+export function StatusIndicator({
+  status,
+  suffix,
+  suffixDescription,
+  className,
+}: StatusIndicatorProps) {
   const config = STATUS_CONFIG[status]
   const Icon = config.icon
   return (
@@ -60,6 +69,10 @@ export function StatusIndicator({ status, className }: StatusIndicatorProps) {
         className,
       )}
       data-status={status}
+      // 完整解释走两处：title 供指针悬停，sr-only 供读屏——可见文本只放短语（12px 下中文
+      // 句子屏显太挤）。不用 aria-label：span 是 role=generic，按规范禁止命名，
+      // 实测 Chromium 无障碍树里只取到可见文本，那句解释等于对读屏用户不存在
+      title={suffix ? suffixDescription : undefined}
     >
       <span className="relative flex size-2 items-center justify-center" aria-hidden>
         {/* 涟漪直径与起始不透明度即可感知门槛：与圆点同尺寸的 8px / 40% 在顶栏上几乎
@@ -80,6 +93,8 @@ export function StatusIndicator({ status, className }: StatusIndicatorProps) {
       </span>
       <Icon className="size-3.5" aria-hidden />
       {config.label}
+      {suffix && ` · ${suffix}`}
+      {suffix && suffixDescription && <span className="sr-only">，{suffixDescription}</span>}
     </span>
   )
 }

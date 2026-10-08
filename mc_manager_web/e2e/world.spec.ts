@@ -99,6 +99,27 @@ test.describe('世界页', () => {
     expect(overflow).toBe(0)
   })
 
+  test('顶栏刷新语义（结果说明）：未连通时据实说「每 30 秒刷新」', async ({ page }) => {
+    await setupConnection(page)
+    // 故意从世界页进：这条后缀的真值不依赖当前页面（此前它取 store，只有仪表盘会写，
+    // 于是从别的页面进来会拿到空值）
+    await page.goto('/world')
+    await expect(page.getByText(`已连接 · 每 ${30} 秒刷新`)).toBeVisible({ timeout: 10_000 })
+  })
+
+  test('顶栏刷新语义：实例详情报 msmpPush=true ⇒ 说「实时更新」', async ({ page }) => {
+    await setupConnection(page)
+    // 用 route 造出「推送面已连通」这一真值：mock 的通道是关的，缺这条就只剩单测证据
+    await page.route('**/api/v1/instances/*', async (route) => {
+      const res = await route.fetch()
+      const body = (await res.json()) as { data?: { capabilities?: { msmpPush?: boolean } } }
+      if (body?.data?.capabilities) body.data.capabilities.msmpPush = true
+      await route.fulfill({ response: res, json: body })
+    })
+    await page.goto('/world')
+    await expect(page.getByText('已连接 · 实时更新')).toBeVisible({ timeout: 10_000 })
+  })
+
   test('属性 Tab：默认渲染 + 编辑保存流程', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/world')

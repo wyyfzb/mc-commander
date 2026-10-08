@@ -139,7 +139,8 @@ const instance = {
   isRunning: true,
   // 与契约同形（instanceCapabilitiesSchema）：前端按 capabilities.rcon 判断命令面可用性，
   // 此前只补了 vitest 的 handlers，漏了这里 ⇒ e2e 里所有用到它的页面都抛异常被错误边界接住
-  capabilities: { rcon: true, msmp: false },
+  // 契约里 msmpPush 是必填：少给它会让「信息是否实时」这条结果说明在 e2e/截图里失真
+  capabilities: { rcon: true, msmp: false, msmpPush: false },
   autoRestart: true,
   uptime: 7200,
   // 截图/演示用：给一个可直连的公网地址，避免每张产品截图都挂着「内网地址」警示。

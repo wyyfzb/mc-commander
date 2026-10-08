@@ -897,7 +897,7 @@ export function buildUnknownPropertyDef(key: string, value: string): PropertyDef
     name: key,
     label: key,
     // 这一族由面板的推送开关统一写（enabled/secret/TLS 三项必须同时写对，只改 enabled 会让
-    // 服务器起不来），行上说明「谁管」，那句因果由推送卡的固定提示承担——行内说明是 2xs，
+    // 服务器起不来），行上说明「谁管」，那句因果由实例设置里的「实时推送」开关承担（启动前自动补齐，见 ensureMsmpConfigured）——行内说明是 2xs，
     // 按字号口径只放短语、放不下整句
     desc: isPanelManagedProperty(key) ? '由面板管理' : 'server.properties 设置项',
     category: 'serverSettings',

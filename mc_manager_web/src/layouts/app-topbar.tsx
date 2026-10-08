@@ -30,7 +30,7 @@ import { toneClasses } from '@/components/mcs/tone'
 import { NotificationDrawer } from '@/layouts/notification-drawer'
 import { useUiStore } from '@/stores/ui'
 import { useServerStore } from '@/stores/server'
-import { useInstanceStatus } from '@/api/queries'
+import { useInstanceStatus, FALLBACK_POLL_INTERVAL_MS } from '@/api/queries'
 import { useInstanceSwitch } from '@/hooks/use-instance-switch'
 import { useNotificationStore } from '@/stores/notifications'
 import { useConnectionStore } from '@/stores/connection'
@@ -123,6 +123,28 @@ export function AppTopBar() {
   } else {
     indicator = 'connected'
   }
+
+  /* 刷新语义挂在状态点上（不新增控件）：推送连通 = 状态变化即时到达，否则回落到定时轮询。
+     只在实时通道**确实在线**时声明刷新时机——通道断了的时候轮询是否真在刷新这里无从判定
+     （面板整体不可达时它同样失败），降级横幅已据实写明「每 N 秒」，顶栏不重复也不替它打包票。
+     秒数取 queries 常量：写死过一处就会与真实间隔漂移 */
+  // 取顶栏自订阅的实例详情，而不是 store 里的 status：后者只有仪表盘会写，
+  // 于是从别的页面直接打开时会拿不到真值——那句话会变成「每 30 秒刷新」的错误陈述
+  // （与上面地址 chip 踩过的是同一个坑）。
+  // 详情未到达时 pushConnected 为 undefined ⇒ 不声明刷新时机：宁可不说，也不说错。
+  const pushConnected = instanceDetail?.capabilities?.msmpPush
+  const pollSeconds = FALLBACK_POLL_INTERVAL_MS / 1000
+  const refreshSuffix =
+    socketConnected && pushConnected !== undefined
+      ? pushConnected
+        ? '实时更新'
+        : `每 ${pollSeconds} 秒刷新`
+      : undefined
+  const refreshSuffixDescription = !refreshSuffix
+    ? undefined
+    : pushConnected
+      ? '实时推送已连通，服务器的状态变化会立即到达面板'
+      : `实时推送未连通，面板每 ${pollSeconds} 秒刷新一次状态`
 
   // 无匹配实例时不得假造「默认实例」这类并不存在的名字；也不得把「列表还没到」
   // （加载中/请求失败）谎报成「一个实例都没有」——三种缺位各有诚实占位
@@ -286,8 +308,13 @@ export function AppTopBar() {
         </kbd>
       </Button>
 
-      {/* 服务器状态点（WS 实时） */}
-      <StatusIndicator status={indicator} className="hidden md:inline-flex" />
+      {/* 服务器状态点（WS 实时；刷新语义见 refreshSuffix） */}
+      <StatusIndicator
+        status={indicator}
+        suffix={refreshSuffix}
+        suffixDescription={refreshSuffixDescription}
+        className="hidden md:inline-flex"
+      />
 
       {/* 通知铃铛（未读徽章 + 抽屉） */}
       <IconButton

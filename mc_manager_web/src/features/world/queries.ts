@@ -91,7 +91,10 @@ export function useDatapackList(
  * 与 properties 同步失效：开关写的就是 server.properties 里的键，属性面板也展示它们，
  * 两条缓存各留一份旧值会让用户看到自相矛盾的界面。
  *
- * 不轮询：状态只可能被本页的开关或外部手改改变，前者由 mutation 失效、后者刷新页面即得。
+ * 消费点是实例设置弹窗（世界页不再常驻这张卡）：它写的就是 server.properties 里的键，
+ * 而属性面板把这几个键渲染成只读行，开关放在同一处设置里才有意义。
+ *
+ * 不轮询：状态只可能被设置弹窗的开关或外部手改改变，前者由 mutation 失效、后者刷新页面即得。
  */
 export function usePushChannel(instanceId: string | null) {
   const config = useConnectionStore()
