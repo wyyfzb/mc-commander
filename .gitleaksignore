@@ -1,2 +1,5 @@
 3f5cc8f53b4bcb93bf32dd3c950173769243984a:mc_commander_server/__tests__/index.security.test.js:generic-api-key:18
 92dd9f72744884b56493e17696220cb6b19b82c5:mc_commander_server/__tests__/index.fatal-guard.test.js:generic-api-key:22
+# 目录穿越夹具：这行里的 ../secret.txt 是「穿透目标存在与否」的现场，不是凭据
+# （generic-api-key 按熵值命中，与上面两条同因）
+ef916bf9bf84fa04afef09b8e6a5c0fadb5c6804:mc_commander_server/__tests__/crash-artifacts.test.js:generic-api-key:194
