@@ -241,7 +241,7 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
   }
 
   return (
-    <Card as="div" className="overflow-hidden">
+    <Card as="div" size="flush" className="overflow-hidden">
       {/* 标题：图标 + 备份管理 */}
       <div className="flex items-center gap-2 px-4 pb-3 pt-4">
         <span

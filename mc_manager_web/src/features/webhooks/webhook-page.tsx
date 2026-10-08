@@ -407,7 +407,7 @@ export default function WebhookPage() {
       )}
 
       {/* ── 列表容器 ── */}
-      <Card as="div" className="min-h-0 flex-1 overflow-hidden">
+      <Card as="div" size="flush" className="min-h-0 flex-1 overflow-hidden">
         {webhooksPhase === 'stale' && (
           <StaleQueryNotice
             className="m-2"

@@ -119,7 +119,12 @@ export function DataTableShell({
           取 min() 后下限随可用高收缩，既不挤掉兄弟也不会把表格压成一条线。
           **overflow-auto 必须保留**：摘掉会让 sticky 表头改为对 main 吸顶
           （滚动容器变了），行为变更。 */}
-      <Card as="div" ref={scrollRef} className="min-h-[min(10rem,100%)] max-h-full overflow-auto">
+      <Card
+        as="div"
+        ref={scrollRef}
+        size="flush"
+        className="min-h-[min(10rem,100%)] max-h-full overflow-auto"
+      >
         <table className={cn('w-full text-mcs-sm', tableClassName)}>
           {header}
           {isLoading ? (

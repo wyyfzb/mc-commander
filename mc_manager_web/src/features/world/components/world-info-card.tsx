@@ -117,7 +117,7 @@ export function sizeProgress(sizeGB: number): number {
 /** 世界信息卡：9 行只读信息（名称/类型/种子/存档大小/游戏天数/难度/游戏模式/视野距离/在线玩家） */
 export function WorldInfoCard({ world, isLoading, onRefresh, className }: WorldInfoCardProps) {
   return (
-    <Card className={cn('mcs-edge-top relative', className)}>
+    <Card size="flush" className={cn('mcs-edge-top relative', className)}>
       <CardHeader className="gap-3 border-b border-mcs-border-subtle px-4 py-3">
         <span className="flex size-8 shrink-0 items-center justify-center rounded-mcs-sm bg-mcs-accent-bg-subtle">
           <Globe className="size-4 text-mcs-accent-fg" aria-hidden />

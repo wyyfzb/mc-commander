@@ -57,7 +57,12 @@ export function DimensionCards({ dimensions, className }: DimensionCardsProps) {
         const kind = dimensionKind(dim.name)
         const english = dimEnglishName(dim.name)
         return (
-          <Card key={dim.name} data-dimension-kind={kind} className="flex overflow-hidden">
+          <Card
+            key={dim.name}
+            data-dimension-kind={kind}
+            size="flush"
+            className="flex overflow-hidden"
+          >
             {/* 左 4px 垂直维度色条（维度语义色 token） */}
             <span
               aria-hidden

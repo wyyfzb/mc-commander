@@ -70,7 +70,11 @@ export function EditorSlot({
     />
   )
   if (variant === 'desktop') {
-    return <Card className="flex h-full min-h-0 w-[45%] shrink-0 flex-col">{editor}</Card>
+    return (
+      <Card size="flush" className="flex h-full min-h-0 w-[45%] shrink-0 flex-col">
+        {editor}
+      </Card>
+    )
   }
   return (
     <div className="fixed inset-0 z-(--mcs-z-overlay) flex flex-col bg-mcs-bg-muted">{editor}</div>

@@ -486,7 +486,7 @@ export function PluginsPage() {
         </div>
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <Card as="div" className="overflow-hidden">
+          <Card as="div" size="flush" className="overflow-hidden">
             <ul className="divide-y divide-mcs-border-subtle">
               {filtered.map((plugin) => (
                 <PluginRow

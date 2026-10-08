@@ -79,7 +79,7 @@ export function AboutPanel(_props: AboutPanelProps) {
       </NoticeBanner>
 
       {/* ── 相关链接卡片 ── */}
-      <Card>
+      <Card size="flush">
         <CardHeader className="gap-3 border-b border-mcs-border-subtle px-4 py-3">
           <span className="flex size-8 shrink-0 items-center justify-center rounded-mcs-sm bg-mcs-accent-bg-subtle">
             <LinkIcon className="size-4 text-mcs-accent-fg" aria-hidden />

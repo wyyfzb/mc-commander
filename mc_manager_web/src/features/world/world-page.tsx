@@ -152,7 +152,8 @@ export function WorldPage() {
         </div>
 
         {/* ── 右栏：属性 / 游戏规则 Tabs ── */}
-        <Card as="div" className="flex min-h-0 min-w-0 flex-1 flex-col">
+        {/* flush：内距由标签条自己给（它的下边框要通到卡片边） */}
+        <Card as="div" size="flush" className="flex min-h-0 min-w-0 flex-1 flex-col">
           <Tabs
             value={activeTab}
             onValueChange={(v) => setActiveTab(v as WorldTab)}
