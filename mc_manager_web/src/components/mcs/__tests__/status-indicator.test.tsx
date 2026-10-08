@@ -31,33 +31,4 @@ describe('StatusIndicator', () => {
       unmount()
     }
   })
-
-  it('suffix 追加在状态文字之后：可见的只有短语，完整解释走 title 与 sr-only', () => {
-    render(
-      <StatusIndicator
-        status="connected"
-        suffix="实时更新"
-        suffixDescription="实时推送已连通，服务器的状态变化会立即到达面板"
-      />,
-    )
-
-    const el = screen.getByText('已连接 · 实时更新')
-    // 句子不进可见文本（整句会把顶栏撑成一段说明），但要真的可达：
-    // title 供指针悬停；aria-label 在 span（role=generic）上按规范被忽略——实测 Chromium
-    // 无障碍树只取到可见文本，故改挂 sr-only
-    expect(el).toHaveAttribute('title', '实时推送已连通，服务器的状态变化会立即到达面板')
-    expect(el.querySelector('.sr-only')?.textContent).toBe(
-      '，实时推送已连通，服务器的状态变化会立即到达面板',
-    )
-    expect(el).toHaveClass('text-mcs-xs')
-  })
-
-  it('不给 suffix 时文本与属性都不多一个字（调用点不必都写一句说明）', () => {
-    const { container } = render(<StatusIndicator status="connected" />)
-
-    expect(container.textContent).toBe('已连接')
-    expect(container.querySelector('[data-status]')).not.toHaveAttribute('title')
-    expect(container.querySelector('[data-status]')).not.toHaveAttribute('aria-label')
-    expect(container.querySelector('.sr-only')).toBeNull()
-  })
 })

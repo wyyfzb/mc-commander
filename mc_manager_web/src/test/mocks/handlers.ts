@@ -862,7 +862,7 @@ export const handlers = [
       ),
     })
   }),
-  // PUT /instances/:id 实例配置更新（启动配置弹窗；回显提交字段，结构占位）
+  // PUT /instances/:id 实例配置更新（实例设置弹窗；回显提交字段，结构占位）
   http.put('*/api/v1/instances/:id', async ({ request, params }) => {
     const body = (await request.json()) as Record<string, unknown>
     return ok({ ...mockInstanceStatus, id: String(params.id), ...body })

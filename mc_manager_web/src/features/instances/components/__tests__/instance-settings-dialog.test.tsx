@@ -174,7 +174,7 @@ describe('InstanceSettingsDialog', () => {
   it('结构化字段预填：内存 2G / Aikar 默认开（生成标志进预览）/ 高级参数默认折叠', () => {
     renderDialog()
 
-    expect(screen.getByText('启动配置')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '实例设置' })).toBeInTheDocument()
     expect(screen.getByText('虚构甲服')).toBeInTheDocument()
     expect(screen.getByText('2.0 GB')).toBeInTheDocument()
     expect(screen.getByText('/ 16.0 GB')).toBeInTheDocument()

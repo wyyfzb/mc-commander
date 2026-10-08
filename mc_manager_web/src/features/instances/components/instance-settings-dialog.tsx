@@ -1,5 +1,5 @@
 /**
- * InstanceSettingsDialog —— 实例启动配置弹窗
+ * InstanceSettingsDialog —— 实例设置弹窗
  * - 字段：内存滑块 maxMemory/minMemory（0.5 GB 步进）+ Aikar Flags 开关
  *   （生成 G1GC 优化参数同步进 jvmArgs 多行输入）+ javaPath 可选输入 + jvmArgs 多行
  * - 预填（新旧兼容）：优先解析实例旧 startCommand；无则回退结构化字段
@@ -328,7 +328,7 @@ export function InstanceSettingsDialog({
           </span>
           <div className="min-w-0">
             <DialogTitle className="text-mcs-xl font-semibold text-mcs-text-default">
-              启动配置
+              实例设置
             </DialogTitle>
             <DialogDescription className="truncate text-mcs-xs text-mcs-text-muted">
               {instanceLabel(instance)}
