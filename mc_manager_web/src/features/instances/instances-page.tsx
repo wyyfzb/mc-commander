@@ -2,7 +2,7 @@
  * InstancesPage —— 实例页
  * - 实例卡片网格（30s 轮询；逐卡详情 useQueries 批量拉取版本等字段，与 dashboard 共享 query 缓存）
  * - 部署向导 Dialog（三步 Stepper + WS 进度，deploy-dialog 组件）
- * - 切换实例/启动配置（实例设置弹窗，instance-settings-dialog 组件）/卸载（危险确认）
+ * - 切换实例/实例设置（instance-settings-dialog 组件）/卸载（危险确认）
  * - 深链接：?tab=deploy 自动打开部署向导；?focus=<id> 从通知中心跳转（切换到关联实例）
  */
 import { useEffect, useState } from 'react'
@@ -199,7 +199,7 @@ export function InstancesPage() {
   }
 
   /**
-   * 启动配置 → 实例设置弹窗。
+   * 打开实例设置弹窗（菜单项「实例设置」）。
    *
    * 弹窗必须拿到详情才能预填（预填在 mount 时计算，未就绪挂载会把默认值固化），故详情
    * 未就绪时弹窗延迟到查询完成才出现。但「详情失败」不会自愈——不给出反馈就是一个
@@ -207,8 +207,8 @@ export function InstancesPage() {
    */
   const handleOpenSettings = (inst: InstanceSummary) => {
     if (!detailStatuses[inst.id] && detailErrorIds.has(inst.id)) {
-      toast.error('实例详情获取失败，无法打开启动配置', {
-        description: '启动配置需要实例详情预填，请先重试获取详情。',
+      toast.error('实例详情获取失败，无法打开实例设置', {
+        description: '实例设置需要实例详情预填，请先重试获取详情。',
       })
       handleRetryDetail(inst.id)
       return
@@ -388,7 +388,7 @@ export function InstancesPage() {
         onDeployed={handleDeployed}
       />
 
-      {/* ── 启动配置弹窗（条件挂载：每次打开重置表单状态；详情预填取逐卡查询缓存） ──
+      {/* ── 实例设置弹窗（条件挂载：每次打开重置表单状态；详情预填取逐卡查询缓存） ──
           detail 就绪才挂载：预填在 mount 时计算，未就绪挂载会以默认值固化，
           详情到达后也不更新（点击后弹窗延迟至查询完成自动出现） */}
       {settingsTarget && detailStatuses[settingsTarget.id] && (

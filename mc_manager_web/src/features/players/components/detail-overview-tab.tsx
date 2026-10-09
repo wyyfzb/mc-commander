@@ -240,11 +240,11 @@ export function OverviewTab({
                   <div className="text-mcs-2xs text-mcs-text-muted">
                     {ban.isPermanent
                       ? '永久'
-                      : ban.expiresAt
-                        ? ban.isActive
-                          ? (formatBanRemaining(ban.expiresAt, nowMs) ?? '即将解封')
-                          : '已到期'
-                        : ''}
+                      : ban.isActive && ban.expiresAt
+                        ? (formatBanRemaining(ban.expiresAt, nowMs) ?? '即将解封')
+                        : ban.expired
+                          ? '已到期'
+                          : ''}
                     {' · '}
                     {ban.createdAt ? formatRelativeTime(ban.createdAt) : ''}
                   </div>

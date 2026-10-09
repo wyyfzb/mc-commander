@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
+  compareVersions,
+  parseVersion,
+  wsStatusSnapshotSchema,
   playerSchema,
   banRecordSchema,
   backupItemSchema,
@@ -202,9 +205,11 @@ describe('schemas 基础校验', () => {
       isActive: true,
       isPermanent: false,
       expiresAt: 1704153600000,
+      expired: false,
       createdAt: '2026-01-01T00:00:00Z',
     })
     expect(ban.isPermanent).toBe(false)
+    expect(ban.expired).toBe(false)
   })
 
   it('backupItem schema 解析备份条目', () => {
@@ -1029,5 +1034,47 @@ describe('事件通道口径（状态 vs 事件）', () => {
     // 缺口不是「可以忽略」，而是「已登记、等 owner 定」——往这个数组里加名字，就是承认又多了一个
     // 没有自愈路径的通道（state 类事件必须能被晚订阅者在有限时间内读到）。
     expect(gaps).toEqual([])
+  })
+})
+
+// 版本解析与比较是 web 与服务端**共用唯一一份**：同一串版本号在两处必须得出同一结论，
+// 否则服务端会替不支持的版本写配置（或反过来该写不写）。
+describe('版本号解析与比较（契约包唯一一份）', () => {
+  it('取第一段连续数字及其后点分段，缺失段按 0', () => {
+    expect(parseVersion('1.21.9')).toEqual([1, 21, 9])
+    expect(parseVersion('v1.21')).toEqual([1, 21, 0])
+    expect(parseVersion('26.3-snapshot-2')).toEqual([26, 3, 0])
+    expect(parseVersion('weird')).toBeNull()
+  })
+
+  it('逐段数值比较（不是字符串比较）', () => {
+    expect(compareVersions('26.3', '1.21.9')).toBeGreaterThan(0)
+    expect(compareVersions('1.21.4', '1.21.9')).toBeLessThan(0)
+    expect(compareVersions('1.21.9', '1.21.9')).toBe(0)
+    // 字符串比较会把 1.9 排在 1.21 前面，这里必须按数值
+    expect(compareVersions('1.9', '1.21')).toBeLessThan(0)
+  })
+
+  it('任一串读不懂 ⇒ 返回 null（不返回 NaN 三元组，避免所有分支静默为 false）', () => {
+    expect(compareVersions('weird', '1.0.0')).toBeNull()
+    expect(compareVersions('1.0.0', '')).toBeNull()
+  })
+})
+
+// 快照载荷里的 msmpPush 沿用 worldUpgrade 的三态口径：布尔＝权威值、**字段缺席＝未知**
+// （旧服务端）⇒ 客户端保持现状，不能读成「断开」。
+describe('状态快照载荷：msmpPush 可选', () => {
+  const base = { status: 'running', isRunning: true, players: [], tps: 20 }
+
+  it('带上布尔值 ⇒ 解析通过', () => {
+    expect(wsStatusSnapshotSchema.parse({ ...base, msmpPush: false }).msmpPush).toBe(false)
+  })
+
+  it('字段缺席 ⇒ 解析通过且不臆断（未知，不是 false）', () => {
+    expect(wsStatusSnapshotSchema.parse(base).msmpPush).toBeUndefined()
+  })
+
+  it('类型不对 ⇒ 拦下（不能把字符串当布尔用）', () => {
+    expect(() => wsStatusSnapshotSchema.parse({ ...base, msmpPush: 'true' })).toThrow()
   })
 })

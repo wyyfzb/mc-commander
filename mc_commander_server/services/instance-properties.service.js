@@ -9,20 +9,18 @@
  */
 import { logger } from '../utils/logger.js';
 
-// 支持运行中通过斜杠命令修改的 server.properties 属性 → 命令构造。
-// MC 服务器运行时不重新加载 server.properties 文件（启动时读取），
-// 仅以下属性可通过命令运行中生效；其余属性（pvp、max-players、online-mode 等）
-// 修改后需重启服务器。
-export const RUNTIME_COMMAND_MAP = {
-  'white-list': (v) => (String(v).toLowerCase() === 'true' ? 'whitelist on' : 'whitelist off'),
-  'enforce-whitelist': (v) =>
-    String(v).toLowerCase() === 'true' ? 'whitelist enforce on' : 'whitelist enforce off',
-  difficulty: (v) => `difficulty ${v}`,
-  gamemode: (v) => `defaultgamemode ${v}`,
-  // 官方运行期直达：/setidletimeout <分钟>（op 3）。不加这条只能写文件 + 重启，
-  // 而 server.properties 的运行时不重载是官方明文，故这是第二条有效路径。
-  'player-idle-timeout': (v) => `setidletimeout ${v}`,
-};
+// 运行期可热改的属性键与它们背后的结构化方法，都在方法面模块里（`SERVER_SETTING_METHODS`）：
+// 那张表逐条实测过「setter 回读＝落盘值」，命令只作为 MSMP 不可用时的等价回退。
+// MC 服务器运行时不重新加载 server.properties 文件（启动时读取），故未被热改的键
+// （pvp、online-mode 等）仍需重启。
+import { SERVER_SETTING_KEYS, SERVER_SETTING_METHODS } from './mc-server/msmp-methods.js';
+
+/** 带命令回退的键：只有这些键的值会被拼进控制台命令，需要字符集守卫 */
+const RUNTIME_COMMAND_FALLBACK_KEYS = new Set(
+  Object.entries(SERVER_SETTING_METHODS)
+    .filter(([, spec]) => spec.fallbackCommand)
+    .map(([key]) => key),
+);
 
 // ── PUT /properties 键白名单与值校验 ──
 // 普通可写属性键白名单（前端世界属性页暴露 + MC 26.x 常用键，保持新旧版本
@@ -148,12 +146,9 @@ export const SENSITIVE_PROPERTIES = new Set([
 ]);
 export const SENSITIVE_PLACEHOLDER = '********';
 
-// 可写键 = 普通可写键 + 运行期命令键（并集，保证 RUNTIME_COMMAND_MAP
-// 四键即使未出现在普通键集中也允许写入）
-export const ALLOWED_PROPERTY_KEYS = new Set([
-  ...WRITABLE_PROPERTIES,
-  ...Object.keys(RUNTIME_COMMAND_MAP),
-]);
+// 可写键 = 普通可写键 + 热改键（并集，保证 white-list/enforce-whitelist 这类
+// 只靠热改生效、未出现在普通键集里的键也允许写入）
+export const ALLOWED_PROPERTY_KEYS = new Set([...WRITABLE_PROPERTIES, ...SERVER_SETTING_KEYS]);
 
 // 单键值校验。返回 { ok: true, value } 或 { ok: false, reason }
 export function validatePropertyValue(key, rawValue) {
@@ -191,9 +186,9 @@ export function validatePropertyValue(key, rawValue) {
   if (/[\n\r]/.test(value)) {
     return { ok: false, reason: '字符串属性不允许包含换行符' };
   }
-  // 运行期命令键的值会拼入下发给 MC 控制台的命令，限制字符集防命令注入
+  // 带命令回退的键，其值在回退分支会拼入下发给 MC 控制台的命令，限制字符集防命令注入
   // （white-list/enforce-whitelist 已在布尔分支处理；difficulty/gamemode 走这里）
-  if (RUNTIME_COMMAND_MAP[key] && !/^[a-zA-Z0-9_:-]+$/.test(value)) {
+  if (RUNTIME_COMMAND_FALLBACK_KEYS.has(key) && !/^[a-zA-Z0-9_:-]+$/.test(value)) {
     return { ok: false, reason: '值包含非法字符' };
   }
   return { ok: true, value };
@@ -296,26 +291,32 @@ export async function applyPropertyUpdates(instance, newProps) {
 
   instance.saveProperties(validated);
 
-  // 对比新旧属性，区分「可运行中生效（下发命令）」与「需重启服务器」
+  // 对比新旧属性，区分「可运行中生效」与「需重启服务器」
   const changedKeys = Object.keys(validated).filter((k) => oldProps[k] !== validated[k]);
-  const runtimeChanged = changedKeys.filter((k) => RUNTIME_COMMAND_MAP[k]);
-  // 仅在服务器运行时才提示需重启（未运行时下次启动自然生效）
-  const restartRequired = instance.isRunning
-    ? changedKeys.filter((k) => !RUNTIME_COMMAND_MAP[k])
-    : [];
+  const runtimeChanged = changedKeys.filter((k) => SERVER_SETTING_KEYS.has(k));
 
-  // 服务器运行时，对支持运行中修改的属性下发斜杠命令，保证客户端修改立即生效
-  if (instance.isRunning && runtimeChanged.length > 0) {
+  // 运行中逐键应用：成功与否由**实际生效**决定，不看「这张表里有没有它」——
+  // 表里有、但这条实例的 MSMP 不可用又无命令回退时，该键仍要重启才生效
+  const appliedKeys = new Set();
+  if (instance.isRunning) {
     for (const key of runtimeChanged) {
-      const cmd = RUNTIME_COMMAND_MAP[key](validated[key]);
       try {
-        await instance.sendCommand(cmd);
-        logger.info(`[PUT properties] 下发运行中命令: ${cmd}`);
+        const via = await instance.applyServerSetting(key, validated[key]);
+        if (via === 'skipped') {
+          logger.warn(`[PUT properties] ${key} 本次未在运行中生效（无可用通道），需重启`);
+          continue;
+        }
+        appliedKeys.add(key);
+        logger.info(`[PUT properties] ${key} 运行中生效 via ${via}`);
       } catch (e) {
-        logger.warn(`[PUT properties] 命令 ${cmd} 下发失败: ${e.message}`);
+        logger.warn(`[PUT properties] ${key} 运行中应用失败: ${e.message}`);
       }
     }
   }
+  // 仅在服务器运行时才提示需重启（未运行时下次启动自然生效）
+  const restartRequired = instance.isRunning
+    ? changedKeys.filter((k) => !SERVER_SETTING_KEYS.has(k) || !appliedKeys.has(k))
+    : [];
 
   return { ok: true, restartRequired, applied: true };
 }

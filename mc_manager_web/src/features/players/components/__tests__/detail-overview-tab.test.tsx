@@ -11,6 +11,7 @@ import type { Player } from '@/api/types'
 import type { QueryPhase } from '@/lib/query-phase'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { OverviewTab } from '../detail-overview-tab'
+import type { BanRecord } from '@/api/types'
 
 function makePlayer(overrides: Partial<Player>): Player {
   return {
@@ -65,14 +66,14 @@ function makePlayer(overrides: Partial<Player>): Player {
   }
 }
 
-function renderOverview(player: Player, bansPhase: QueryPhase = 'ready') {
+function renderOverview(player: Player, bansPhase: QueryPhase = 'ready', bans: BanRecord[] = []) {
   return render(
     <TooltipProvider>
       <OverviewTab
         instanceId="demo"
         player={player}
         isRconConnected={false}
-        bans={[]}
+        bans={bans}
         bansPhase={bansPhase}
         bansError={bansPhase === 'failed' ? new Error('boom') : null}
         onRetryBans={() => {}}
@@ -122,5 +123,31 @@ describe('OverviewTab 生产契约回归', () => {
     )
     expect(screen.getByText('IP 登录历史')).toBeInTheDocument()
     expect(screen.getByText('203.0.113.1')).toBeInTheDocument()
+  })
+})
+
+describe('封禁状态文案：结束原因由服务端判定', () => {
+  const lifted = (overrides: Partial<BanRecord> = {}): BanRecord => ({
+    targetType: 'player',
+    target: 'Steve',
+    reason: '恶意破坏',
+    isActive: false,
+    isPermanent: false,
+    expiresAt: Date.parse('2026-09-01T00:00:00Z'),
+    expired: false,
+    createdAt: '2026-08-01T00:00:00.000Z',
+    ...overrides,
+  })
+
+  it('提前解封、且原到期时间已过：不写成「已到期」（结束原因是解封，不是时间）', () => {
+    renderOverview(makePlayer({}), 'ready', [lifted()])
+
+    expect(screen.queryByText(/已到期/)).not.toBeInTheDocument()
+  })
+
+  it('服务端判定为到期结束：才写「已到期」', () => {
+    renderOverview(makePlayer({}), 'ready', [lifted({ expired: true })])
+
+    expect(screen.getByText(/已到期/)).toBeInTheDocument()
   })
 })

@@ -17,15 +17,24 @@ vi.mock('../services/instance-properties.service.js', async (orig) => {
   return { ...actual, reloadProperties: vi.fn() };
 });
 
-const { generateMsmpSecret, isValidMsmpSecret, readPushChannelState, setPushChannel } =
-  await import('../services/msmp.service.js');
+// 打桩后的 reloadProperties：用于构造「内存缓存与磁盘不一致」的场景
+const { reloadProperties } = await import('../services/instance-properties.service.js');
+
+const {
+  ensureMsmpConfigured,
+  generateMsmpSecret,
+  isValidMsmpSecret,
+  readPushChannelState,
+  setPushChannel,
+} = await import('../services/msmp.service.js');
 
 /** 最小实例替身：properties 是读写的唯一事实源，saveProperties 是唯一的落盘口 */
-function makeInstance(props = {}, { isRunning = false } = {}) {
+function makeInstance(props = {}, { isRunning = false, mcVersion = '26.3' } = {}) {
   const instance = {
     id: 'i1',
     serverPath: '/tmp/does-not-matter',
     isRunning,
+    mcVersion,
     properties: { ...props },
     saveProperties: vi.fn(function (updates) {
       this.properties = { ...this.properties, ...updates };
@@ -238,5 +247,160 @@ describe('setPushChannel：关闭', () => {
     const inst = makeInstance({});
     setPushChannel(inst, false);
     expect(inst.saveProperties.mock.calls[0][0]).not.toHaveProperty('management-server-secret');
+  });
+});
+
+// 启动前自动补齐：用户要的是「状态变化及时到达」这个结果，MSMP 只是实现 ⇒ 默认开启、零交互。
+// 两条边界（只在键缺失时写、版本不够不写）与「失败不挡启动」都由这里锁住。
+describe('ensureMsmpConfigured：启动前自动补齐', () => {
+  it('键缺失且版本支持 → 一次写三项（复用 setPushChannel 的自洽组合）', () => {
+    const inst = makeInstance({}, { mcVersion: '26.3' });
+    const r = ensureMsmpConfigured(inst);
+
+    expect(inst.saveProperties).toHaveBeenCalledTimes(1);
+    const written = inst.saveProperties.mock.calls[0][0];
+    expect(Object.keys(written).sort()).toEqual([
+      'management-server-enabled',
+      'management-server-secret',
+      'management-server-tls-enabled',
+    ]);
+    expect(written['management-server-enabled']).toBe('true');
+    expect(written['management-server-tls-enabled']).toBe('false');
+    expect(isValidMsmpSecret(written['management-server-secret'])).toBe(true);
+    expect(r.enabled).toBe(true);
+  });
+
+  it('用户已显式关闭（键存在且为 false）→ 绝不动它：否则「关了又被打开」', () => {
+    // TLS 还开着也照样不动：enabled=false 时 MC 不读那两项，不存在必崩组合
+    const inst = makeInstance({ 'management-server-enabled': 'false' });
+    expect(ensureMsmpConfigured(inst)).toBeNull();
+    expect(inst.saveProperties).not.toHaveBeenCalled();
+  });
+
+  it('已开启且配置自洽 → 幂等跳过，不重写文件', () => {
+    const inst = makeInstance({
+      'management-server-enabled': 'true',
+      'management-server-secret': generateMsmpSecret(),
+      'management-server-tls-enabled': 'false',
+    });
+    expect(ensureMsmpConfigured(inst)).toBeNull();
+    expect(inst.saveProperties).not.toHaveBeenCalled();
+  });
+
+  it('版本低于最低要求 → 不写（往用户文件里塞无用键没有任何收益）', () => {
+    const inst = makeInstance({}, { mcVersion: '1.21.4' });
+    expect(ensureMsmpConfigured(inst)).toBeNull();
+    expect(inst.saveProperties).not.toHaveBeenCalled();
+  });
+
+  it('版本未知 → 不写（宁可不配置，也不塞无用键）', () => {
+    const inst = makeInstance({}, { mcVersion: null });
+    expect(ensureMsmpConfigured(inst)).toBeNull();
+    expect(inst.saveProperties).not.toHaveBeenCalled();
+  });
+
+  it('恰好等于最低版本 → 写（边界含等号）', () => {
+    const inst = makeInstance({}, { mcVersion: '1.21.9' });
+    expect(ensureMsmpConfigured(inst)?.enabled).toBe(true);
+  });
+});
+
+// MC 侧的布尔读法是 Boolean.valueOf（大小写不敏感，javap 实证）⇒ 写 TRUE/True 时 MC 是开着的。
+// 面板若按严格小写比较，会长期显示「未开启」这个与事实相反的假状态。
+describe('管理协议布尔值的大小写口径（与 MC 一致）', () => {
+  it('readPushChannelState：enabled=TRUE / True 都算开启', () => {
+    expect(
+      readPushChannelState(makeInstance({ 'management-server-enabled': 'TRUE' })).enabled,
+    ).toBe(true);
+    expect(
+      readPushChannelState(makeInstance({ 'management-server-enabled': 'True' })).enabled,
+    ).toBe(true);
+  });
+
+  it('readPushChannelState：tls-enabled=FALSE 算关闭（键缺失才是默认 true）', () => {
+    expect(
+      readPushChannelState(makeInstance({ 'management-server-tls-enabled': 'FALSE' })).tlsEnabled,
+    ).toBe(false);
+    expect(readPushChannelState(makeInstance({})).tlsEnabled).toBe(true);
+  });
+
+  it('ensureMsmpConfigured：enabled=TRUE（MC 认它开着）且配置自洽 ⇒ 不再改', () => {
+    const inst = makeInstance({
+      'management-server-enabled': 'TRUE',
+      'management-server-secret': generateMsmpSecret(),
+      'management-server-tls-enabled': 'false',
+    });
+    expect(ensureMsmpConfigured(inst)).toBeNull();
+    expect(inst.saveProperties).not.toHaveBeenCalled();
+  });
+
+  it('ensureMsmpConfigured：判断前重读磁盘——缓存陈旧时不得覆盖用户显式关闭', () => {
+    // 面板启动后文件被面板之外改过：缓存里没有该键，磁盘上用户写的是 false
+    const inst = makeInstance({});
+    inst.saveProperties = vi.fn();
+    const orig = reloadProperties.getMockImplementation();
+    reloadProperties.mockImplementation((target) => {
+      target.properties['management-server-enabled'] = 'false';
+    });
+    expect(ensureMsmpConfigured(inst)).toBeNull();
+    expect(inst.saveProperties).not.toHaveBeenCalled();
+    reloadProperties.mockImplementation(orig);
+  });
+});
+
+// 「必崩组合」（owner 裁定：这组配置会让服务器启动即退出，面板要顺手修掉）：
+// 面板尊重用户「要不要开」的选择，但不能眼睁睁看着这次启动必然失败。
+// 判定依据是 MC 的两条实测异常：TLS 开 + 无 keystore、secret 非法/缺失。
+describe('ensureMsmpConfigured：修必崩组合（尊重开关选择，但修成能启动）', () => {
+  it('enabled=true + TLS 开（键缺失即默认开）+ 无 keystore ⇒ 补齐三项', () => {
+    const inst = makeInstance({ 'management-server-enabled': 'true' });
+    const r = ensureMsmpConfigured(inst);
+
+    expect(inst.saveProperties).toHaveBeenCalledTimes(1);
+    const written = inst.saveProperties.mock.calls[0][0];
+    expect(written['management-server-tls-enabled']).toBe('false');
+    expect(isValidMsmpSecret(written['management-server-secret'])).toBe(true);
+    expect(written['management-server-enabled']).toBe('true');
+    expect(r.enabled).toBe(true);
+  });
+
+  it('enabled=true + TLS 开但**配了 keystore** ⇒ 尊重用户的 TLS，一个字都不动', () => {
+    const inst = makeInstance({
+      'management-server-enabled': 'true',
+      'management-server-secret': generateMsmpSecret(),
+      'management-server-tls-enabled': 'true',
+      'management-server-tls-keystore': '/path/to/keystore.jks',
+    });
+    expect(ensureMsmpConfigured(inst)).toBeNull();
+    expect(inst.saveProperties).not.toHaveBeenCalled();
+  });
+
+  it('enabled=true 但 secret 是短串（MC 会因非法密钥崩）⇒ 重新生成', () => {
+    const inst = makeInstance({
+      'management-server-enabled': 'true',
+      'management-server-secret': 'short',
+      'management-server-tls-enabled': 'false',
+    });
+    const r = ensureMsmpConfigured(inst);
+
+    expect(
+      isValidMsmpSecret(inst.saveProperties.mock.calls[0][0]['management-server-secret']),
+    ).toBe(true);
+    expect(r.secretGenerated).toBe(true);
+  });
+
+  it('enabled=false 即便 TLS 还开着也不动它：关闭态没有必崩组合，别替用户改配置', () => {
+    const inst = makeInstance({
+      'management-server-enabled': 'false',
+      'management-server-tls-enabled': 'true',
+    });
+    expect(ensureMsmpConfigured(inst)).toBeNull();
+    expect(inst.saveProperties).not.toHaveBeenCalled();
+  });
+
+  it('版本不支持 ⇒ 既不自配也不修（那两项对老版本没有意义）', () => {
+    const inst = makeInstance({ 'management-server-enabled': 'true' }, { mcVersion: '1.21.4' });
+    expect(ensureMsmpConfigured(inst)).toBeNull();
+    expect(inst.saveProperties).not.toHaveBeenCalled();
   });
 });

@@ -74,13 +74,13 @@ test.describe('实例页', () => {
     await expect(page.getByText(/实例 "新部署实例" 部署完成/)).toBeVisible()
   })
 
-  test('实例启动配置弹窗：内存/Aikar/高级参数 + 保存关闭', async ({ page }) => {
+  test('实例设置弹窗：内存/Aikar/高级参数 + 保存关闭', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/instances')
     await page.getByRole('button', { name: 'E2E 演示实例 操作菜单' }).click()
-    await page.getByRole('menuitem', { name: '启动配置' }).click()
+    await page.getByRole('menuitem', { name: '实例设置' }).click()
     // 弹窗标题 + 实例名 + 内存预填（mock maxMemory 4096MB → 4.0 GB）
-    await expect(page.getByRole('heading', { name: '启动配置' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: '实例设置' })).toBeVisible()
     await expect(page.getByText('4.0 GB')).toBeVisible()
     await expect(page.getByRole('switch', { name: "JVM 优化 (Aikar's Flags)" })).toBeChecked()
     // 生成的启动命令预览（Aikar 标志已同步进参数）
@@ -94,7 +94,7 @@ test.describe('实例页', () => {
     // 保存 → toast + 弹窗关闭
     await page.getByRole('button', { name: '保存配置' }).click()
     await expect(page.getByText('启动配置已保存')).toBeVisible()
-    await expect(page.getByRole('heading', { name: '启动配置' })).toBeHidden()
+    await expect(page.getByRole('heading', { name: '实例设置' })).toBeHidden()
   })
 
   test('卸载确认：对话框 + 取消', async ({ page }) => {

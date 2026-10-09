@@ -16,7 +16,8 @@ import {
   offlineUuid as computeOfflineUuid,
   getTotalPlayTime,
   readUuidFromUsercache,
-  shadowProfilePath,
+  readShadowProfile,
+  resolveShadowProfilePath,
 } from '../utils/player-utils.js';
 import { isPathContained } from '../utils/fs-utils.js';
 // addressReachability / isPrivateIp 复用 url-guard 的私有网段判定（SSRF 防护用的同一把尺子）：
@@ -33,7 +34,9 @@ import * as jarVersion from './mc-server/jar-version.js';
 import * as rosterSync from './mc-server/roster-sync.js';
 import * as msmpClient from './mc-server/msmp-client.js';
 import * as msmpNotifications from './mc-server/msmp-notifications.js';
+import * as msmpMethods from './mc-server/msmp-methods.js';
 import * as crashArtifacts from './mc-server/crash-artifacts.js';
+import * as structuredLogConfig from './mc-server/structured-log-config.js';
 import { logger } from '../utils/logger.js';
 
 // 原子写统一走 utils/fs-utils.js 公共实现（写唯一 .tmp 再 rename，失败清残留）。
@@ -228,6 +231,9 @@ export class MCServerManager extends EventEmitter {
     instance.on('playerLeave', (data) =>
       this.emit('instance:playerLeave', { instanceId: id, ...data }),
     );
+    instance.on('nameListChanged', (data) =>
+      this.emit('instance:nameListChanged', { instanceId: id, ...data }),
+    );
     instance.on('playerDeath', (data) =>
       this.emit('instance:playerDeath', { instanceId: id, ...data }),
     );
@@ -265,6 +271,11 @@ export class MCServerManager extends EventEmitter {
 
   getAllInstances() {
     return Array.from(this.instances.values()).map((i) => i.toStatus());
+  }
+
+  /** 运行中的实例对象（到期清扫要按实例扫官方封禁文件，DB 里未必有对应记录） */
+  getRunningInstances() {
+    return Array.from(this.instances.values()).filter((i) => i.isRunning);
   }
 
   // 显式停止全部运行中实例：等待 stop 命令送达 + MC 正常退出，超时兜底强杀，
@@ -363,6 +374,13 @@ export class MCServerInstance extends EventEmitter {
     this._msmpNotifReconnectTimer = null;
     this._msmpNotifBackoffMs = 0;
     this._msmpNotifAlive = false;
+    // 可信连通状态：open 置真、close/error/stop 置假。`_msmpNotifAlive` 只表示
+    // 「上一轮心跳有回音」（半开探测用），不能当连通性读——两者语义不同
+    this._msmpNotifConnected = false;
+    // 端点等待已累计的时长（有界等待窗口用）
+    this._msmpNotifEndpointWaitedMs = 0;
+    // 结构化日志覆盖配置的绝对路径：启动前置阶段解析（版本不达门槛时为 null＝不启用）
+    this._structuredLogConfigPath = null;
     // 死亡事件聚合窗口：团灭等批量场景 5s 内合并为单条事件（防通知风暴）
     this._deathAggBuffer = [];
     this._deathAggTimer = null;
@@ -774,12 +792,17 @@ export class MCServerInstance extends EventEmitter {
     this.adoptedPid = null;
 
     // 子阶段编排（各阶段实现见 start-lifecycle.js，经原型注入 this 绑定实例）：
-    // EULA 检查 → tempban 对账 → world 锁清理 → 启动命令/参数构建（四种来源优先级）
+    // EULA 检查 → tempban 对账 → world 锁清理 → 结构化日志配置（写覆盖配置，供下一步注入 -D）
+    // → 实时推送配置补齐（写 management-server-* 三项，服务器启动时读）
+    // → 启动命令/参数构建（四种来源优先级）
     // → spawn 与进程/stdin/输出/exit 监听器挂载 → 运行时状态初始化 → 收尾
     // （熔断重置 → started 事件 → 定时存档）。按原始执行顺序依次调用，行为零变化。
     this._ensureEulaAccepted();
     this._reconcileTempBansSafe();
     this._cleanWorldLock();
+    this._ensureStructuredLogConfig();
+    // 实时推送配置也在启动前补齐：服务器本次启动即读到，用户零交互
+    this._ensureMsmpConfiguredSafe();
 
     const { command, args } = this._resolveStartCommand(startCommand);
     this._spawnServerProcess(command, args);
@@ -938,7 +961,7 @@ export class MCServerInstance extends EventEmitter {
       this.stopGracefully().catch(() => {});
       return;
     }
-    this.sendCommand('stop').catch(() => {});
+    this.stopServer().catch(() => {});
   }
 
   // 优雅停止：await 发送 stop 命令并等待 MC 正常退出（exit 事件），
@@ -950,7 +973,7 @@ export class MCServerInstance extends EventEmitter {
     this._manualStop = true;
     this.cancelRestart();
     try {
-      await this.sendCommand('stop');
+      await this.stopServer();
     } catch {
       // 发送失败（RCON 断开等）：直接进入等待/强杀流程
     }
@@ -984,7 +1007,7 @@ export class MCServerInstance extends EventEmitter {
     if (this.isRunning) {
       // 主动重启：标记为手动停止，避免 stop 阶段触发自动重启
       this._manualStop = true;
-      this.sendCommand('stop').catch(() => {});
+      this.stopServer().catch(() => {});
     }
     this._scheduleRestartStart();
   }
@@ -1299,7 +1322,11 @@ export class MCServerInstance extends EventEmitter {
       // 实例已停时 msmp 一律报 false：那是上一次运行的残留实测值，不是当前状态。
       capabilities: {
         rcon: this.isRconConnected,
+        // MSMP 查询面
         msmp: this.isRunning && this._msmpAvailable,
+        // MSMP 推送面（常驻连接）：查询面成功不代表推送面连上了——端口随机、密钥由
+        // 服务端生成写回，两者各自实测。实例已停时归零，避免显示上一次运行的残留
+        msmpPush: this.isRunning && this._msmpNotifConnected,
       },
       // 意外停止自动重启开关（供前端设置页读写）
       autoRestart: this.autoRestart,
@@ -1603,13 +1630,7 @@ export class MCServerInstance extends EventEmitter {
   /// shadowProfileKey / shadowProfilePath）。返回 null 表示键越界——usercache 是本机文件、可被篡改，
   /// 落点仍须自证，UUID 化不能替代这一层。
   _shadowProfilePath(playerName, uuid) {
-    const dir = path.join(this.serverPath, 'playerdata');
-    const filePath = shadowProfilePath({ serverPath: this.serverPath, playerName, uuid });
-    if (!isPathContained(dir, filePath)) {
-      logger.error(`[${this.id}] 拒绝越界影子档案路径: ${JSON.stringify(filePath)}`);
-      return null;
-    }
-    return filePath;
+    return resolveShadowProfilePath({ serverPath: this.serverPath, playerName, uuid });
   }
 
   _savePlayerData(playerName, data) {
@@ -1665,14 +1686,7 @@ export class MCServerInstance extends EventEmitter {
   }
 
   _loadPlayerData(playerName) {
-    try {
-      const filePath = this._shadowProfilePath(playerName);
-      if (!filePath) return null;
-      if (!fs.existsSync(filePath)) return null;
-      return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-    } catch {
-      return null;
-    }
+    return readShadowProfile({ serverPath: this.serverPath, playerName });
   }
 
   // ══════════════════════════════════════════════════════════
@@ -2371,3 +2385,11 @@ Object.assign(MCServerInstance.prototype, msmpClient);
 // MSMP 通知面（一期）域挂载：常驻连接接收服务端推送的 world/upgrade_* 与
 // server/started|stopping|saving|saved（与 stdout 解析零冲突的两族，见模块头注释）。
 Object.assign(MCServerInstance.prototype, msmpNotifications);
+
+// 结构化日志域挂载：为实例写一份 log4j2 覆盖配置（纯文本通道不变 + 多一份 JSONL），
+// 启动时经 -D 注入（版本门槛与选型依据见模块头注释）。
+Object.assign(MCServerInstance.prototype, structuredLogConfig);
+
+// 方法面域挂载：白名单/OP/踢人/封禁走结构化方法、拿不到再退回等价命令
+// （判据与两条通道的差异见模块头注释）。依赖 msmp-client 的 _msmpRequest。
+Object.assign(MCServerInstance.prototype, msmpMethods);

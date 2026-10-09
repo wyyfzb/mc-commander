@@ -28,6 +28,7 @@ vi.mock('../utils/audit.js', async (importOriginal) => {
   return { ...actual, recordAudit: vi.fn() };
 });
 import { recordAudit, AuditActions } from '../utils/audit.js';
+import { asInstance } from './helpers/msmp-instance.js';
 
 describe('Player Routes 分支补测', () => {
   let app;
@@ -54,7 +55,7 @@ describe('Player Routes 分支补测', () => {
 
   // 标准实例 mock：列表/详情/命令端点共用的完整形态
   function makeInstance(overrides = {}) {
-    return {
+    return asInstance({
       isRunning: true,
       isRconConnected: false,
       serverPath: tmpServerPath,
@@ -76,7 +77,7 @@ describe('Player Routes 分支补测', () => {
       getPlayerDetails: vi.fn(),
       sendCommand: vi.fn(),
       ...overrides,
-    };
+    });
   }
 
   function writePlayerData(playerName, content, uuid) {
@@ -153,7 +154,7 @@ describe('Player Routes 分支补测', () => {
       '%s %s 实例未运行返回 400 INSTANCE_NOT_RUNNING 且不发命令',
       async (method, url, body) => {
         const instance = makeInstance({ isRunning: false });
-        mockManager.getInstance.mockReturnValue(instance);
+        mockManager.getInstance.mockReturnValue(asInstance(instance));
 
         const req = request(app)[method.toLowerCase()](url);
         const res = body ? await req.send(body) : await req;
@@ -198,7 +199,7 @@ describe('Player Routes 分支补测', () => {
           gameMode: 'survival',
         }),
       });
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
 
       const res = await request(app).get('/api/instances/s1/players/Steve/details');
 
@@ -233,7 +234,7 @@ describe('Player Routes 分支补测', () => {
           sleepCount: 0,
         }),
       });
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
 
       const res = await request(app).get('/api/instances/s1/players/Fallback/details');
 
@@ -254,7 +255,7 @@ describe('Player Routes 分支补测', () => {
       const instance = makeInstance({
         getPlayerDetails: vi.fn().mockRejectedValue(new Error('rcon timeout')),
       });
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
 
       const res = await request(app).get('/api/instances/s1/players/Ghost/details');
 
@@ -281,7 +282,7 @@ describe('Player Routes 分支补测', () => {
   describe('POST /players/:player/kick reason 分支', () => {
     it('express 5 无 JSON body（req.body undefined）使用默认 reason', async () => {
       const instance = makeInstance();
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
 
       // 不调用 .send()：无 Content-Type → express.json() 不解析 → req.body === undefined
       const res = await request(app).post('/api/instances/s1/players/Steve/kick');
@@ -300,7 +301,7 @@ describe('Player Routes 分支补测', () => {
 
     it('空 reason 与显式默认值一致', async () => {
       const instance = makeInstance();
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
 
       const res = await request(app)
         .post('/api/instances/s1/players/Steve/kick')
@@ -312,7 +313,7 @@ describe('Player Routes 分支补测', () => {
 
     it('reason 注入字符（换行/分号/管道/与号）被清洗为空格', async () => {
       const instance = makeInstance();
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
 
       await request(app)
         .post('/api/instances/s1/players/Steve/kick')
@@ -324,7 +325,7 @@ describe('Player Routes 分支补测', () => {
 
     it('超长 reason 截断至 200 字符', async () => {
       const instance = makeInstance();
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
 
       await request(app)
         .post('/api/instances/s1/players/Steve/kick')
@@ -338,7 +339,7 @@ describe('Player Routes 分支补测', () => {
   describe('POST /players/:player/ban 请求体分支', () => {
     it('duration "0d" 解析为 0 → 视为永久封禁（不写临时记录）', async () => {
       const instance = makeInstance();
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
 
       const res = await request(app)
         .post('/api/instances/s1/players/Steve/ban')
@@ -352,7 +353,7 @@ describe('Player Routes 分支补测', () => {
 
     it('duration "30s" 临时封禁到期时间精确透传', async () => {
       const instance = makeInstance();
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
 
       const before = Date.now();
       const res = await request(app)
@@ -370,7 +371,7 @@ describe('Player Routes 分支补测', () => {
       const instance = makeInstance({
         sendCommand: vi.fn().mockRejectedValue(new Error('rcon down')),
       });
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
 
       const res = await request(app)
         .post('/api/instances/s1/players/Steve/ban')
@@ -393,7 +394,7 @@ describe('Player Routes 分支补测', () => {
       const instance = makeInstance({
         sendCommand: vi.fn().mockRejectedValue(new Error('rcon down')),
       });
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
 
       const res = await request(app)
         .post('/api/instances/s1/players/Steve/ban')
@@ -409,7 +410,7 @@ describe('Player Routes 分支补测', () => {
       const instance = makeInstance({
         sendCommand: vi.fn().mockRejectedValue(new Error('rcon down')),
       });
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
 
       const res = await request(app)
         .post('/api/instances/s1/players/Steve/ban')
@@ -433,7 +434,7 @@ describe('Player Routes 分支补测', () => {
       const instance = makeInstance({
         sendCommand: vi.fn().mockRejectedValue(new Error('rcon timeout')),
       });
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
 
       const res = await request(app).post('/api/instances/s1/players/Steve/pardon');
 
@@ -470,7 +471,7 @@ describe('Player Routes 分支补测', () => {
       const instance = makeInstance({
         sendCommand: vi.fn().mockRejectedValue(new Error('rcon timeout')),
       });
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
 
       const res = await request(app).post('/api/instances/s1/players/Steve/pardon');
 
@@ -490,7 +491,7 @@ describe('Player Routes 分支补测', () => {
       const instance = makeInstance({
         sendCommand: vi.fn().mockRejectedValue(new Error('rcon timeout')),
       });
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
 
       const res = await request(app)
         .post('/api/instances/s1/players/bans/1.2.3.4/pardon')
@@ -504,7 +505,7 @@ describe('Player Routes 分支补测', () => {
 
     it('通用 pardon 无 body（targetType undefined）返回 400 且不触碰记录', async () => {
       const instance = makeInstance();
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
 
       // 不调用 .send()：req.body undefined → targetType 走 undefined 分支
       const res = await request(app).post('/api/instances/s1/players/bans/Steve/pardon');
@@ -523,7 +524,7 @@ describe('Player Routes 分支补测', () => {
       const instance = makeInstance({
         sendCommand: vi.fn().mockRejectedValue(new Error('rcon down')),
       });
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
 
       const res = await request(app).post('/api/instances/s1/players/Steve/op');
 
@@ -535,7 +536,7 @@ describe('Player Routes 分支补测', () => {
       const instance = makeInstance({
         sendCommand: vi.fn().mockRejectedValue(new Error('rcon down')),
       });
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
 
       const res = await request(app).delete('/api/instances/s1/players/Steve/op');
 
@@ -545,7 +546,7 @@ describe('Player Routes 分支补测', () => {
 
     it('op 幂等重放：重复 op 两次均成功且审计逐次记录', async () => {
       const instance = makeInstance();
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
 
       const res1 = await request(app).post('/api/instances/s1/players/Steve/op');
       const res2 = await request(app).post('/api/instances/s1/players/Steve/op');
@@ -560,7 +561,7 @@ describe('Player Routes 分支补测', () => {
       const instance = makeInstance({
         sendCommand: vi.fn().mockRejectedValue(new Error('rcon down')),
       });
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
 
       const res = await request(app).post('/api/instances/s1/players/Steve/whitelist/add');
 
@@ -583,7 +584,7 @@ describe('Player Routes 分支补测', () => {
             : Promise.reject(new Error('rcon err')),
         ),
       });
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
 
       const res = await request(app).get('/api/instances/s1/players');
 
@@ -605,7 +606,7 @@ describe('Player Routes 分支补测', () => {
           throw new Error('sync boom');
         }),
       });
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
 
       const res = await request(app).get('/api/instances/s1/players');
 
@@ -650,7 +651,7 @@ describe('Player Routes 分支补测', () => {
           throw new Error('dat corrupt');
         }),
       });
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
 
       const res = await request(app).get('/api/instances/s1/players');
 
@@ -720,7 +721,7 @@ describe('Player Routes 分支补测', () => {
           partial: false,
         })),
       });
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
       BanModel.findActiveByInstance.mockReturnValue([
         { targetType: 'ip', target: '5.6.7.8', expiresAt: 9_999_999_999_999 },
       ]);
@@ -749,7 +750,7 @@ describe('Player Routes 分支补测', () => {
             ['Corrupt', { isOp: false }], // 无 uuid → offline uuid 兜底分支
           ]),
       });
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
 
       const res = await request(app).get('/api/instances/s1/players');
 
@@ -768,7 +769,7 @@ describe('Player Routes 分支补测', () => {
       const instance = makeInstance({
         players: new Map([['Steve', { name: 'Steve', joinTime: Date.now(), sessions: [] }]]),
       });
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
 
       const res = await request(app).get('/api/instances/s1/players');
 
@@ -835,7 +836,7 @@ describe('Player Routes 分支补测', () => {
       // 空条目：entry.ip 缺失 → target 兜底空串分支
       fs.writeFileSync(path.join(tmpServerPath, 'banned-ips.json'), JSON.stringify([{}]));
       const instance = makeInstance();
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
 
       const res = await request(app).get('/api/instances/s1/players/bans');
 
@@ -870,7 +871,7 @@ describe('Player Routes 分支补测', () => {
         },
       ]);
       const instance = makeInstance();
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
 
       const res = await request(app).get('/api/instances/s1/players/bans');
 

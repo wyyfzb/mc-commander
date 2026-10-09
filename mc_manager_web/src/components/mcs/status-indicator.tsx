@@ -47,10 +47,14 @@ const STATUS_CONFIG: Record<
 
 interface StatusIndicatorProps {
   status: IndicatorStatus
+  /** 只作**不可见文本**的补充说明（挂 title + sr-only，不产生任何可见文字）。
+      给「同一事实在别处已有可见载体、这里只补可达性」的场合用——例如侧栏收起时，
+      刷新时机那条结果说明仍要能被读屏与悬停取到。 */
+  description?: string
   className?: string
 }
 
-export function StatusIndicator({ status, className }: StatusIndicatorProps) {
+export function StatusIndicator({ status, description, className }: StatusIndicatorProps) {
   const config = STATUS_CONFIG[status]
   const Icon = config.icon
   return (
@@ -60,6 +64,8 @@ export function StatusIndicator({ status, className }: StatusIndicatorProps) {
         className,
       )}
       data-status={status}
+      // 只放不可见文本：可见短语由调用点自己放在合适的位置（见侧栏实例卡）
+      title={description}
     >
       <span className="relative flex size-2 items-center justify-center" aria-hidden>
         {/* 涟漪直径与起始不透明度即可感知门槛：与圆点同尺寸的 8px / 40% 在顶栏上几乎
@@ -80,6 +86,7 @@ export function StatusIndicator({ status, className }: StatusIndicatorProps) {
       </span>
       <Icon className="size-3.5" aria-hidden />
       {config.label}
+      {description && <span className="sr-only">，{description}</span>}
     </span>
   )
 }

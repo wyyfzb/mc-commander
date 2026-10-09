@@ -8,6 +8,9 @@ export const WS_EVENT_TYPES = [
   'weatherUpdate',
   'worldUpgrade',
   'playerStatsUpdate',
+  // MSMP 推送的官方名单变化（白名单/管理员/封禁/IP 封禁）：面板外的 /op、/whitelist、/ban
+  // 也要让界面能跟上；载荷见 wsNameListChangedPayloadSchema
+  'nameListChanged',
   'playerJoin',
   'playerLeave',
   'playerDeath',
@@ -69,6 +72,15 @@ export const wsStatusSnapshotSchema = z.object({
    * 少了 `null` 与缺席的区分，「服务端没告诉我」会被读成「没有升级」，清掉正在跑的进度条。
    */
   worldUpgrade: z.object({ progress: z.number().nullable() }).nullable().optional(),
+  /**
+   * MSMP 推送面是否已连通（与 REST 状态里的 `capabilities.msmpPush` 同义）。
+   *
+   * 为什么要在快照里带上它：REST 详情是轮询取的，而推送面**断连**不会触发详情失效
+   * ⇒ 界面最多滞后一个轮询周期才把「实时」翻成「轮询」，期间它在说一件已经不再成立的事。
+   * 快照是推送的，所以连上/断开时随快照即时告诉客户端真相。
+   * 同样按 `worldUpgrade` 的三态口径：**字段缺席＝未知**（旧服务端）⇒ 客户端保持现状。
+   */
+  msmpPush: z.boolean().optional(),
 })
 
 export const wsPerformancePayloadSchema = z.object({
@@ -118,6 +130,16 @@ export const wsStatusEventPayloadSchema = z.object({
   autoRestart: z.boolean().optional(),
   consecutiveCrashes: z.number().optional(),
   windowMs: z.number().optional(),
+})
+
+/**
+ * 名单变化载荷：`list` 是面板侧的名单名（`allowlist` / `operators` / `bans` / `ipBans`），
+ * `target` 是玩家名或 IP——解析不出时为**空串**（不猜），消费方按「目标未知」处理。
+ */
+export const wsNameListChangedPayloadSchema = z.object({
+  list: z.enum(['allowlist', 'operators', 'bans', 'ipBans']),
+  action: z.enum(['added', 'removed']),
+  target: z.string(),
 })
 
 export const wsPlayerEventPayloadSchema = z.object({
@@ -245,6 +267,9 @@ export const WS_EVENT_KINDS: Readonly<Record<WsEventType, WsEventKind>> = {
   // ── event：发生过的事实 ──
   // `log` 属事件：每一行是「发生过」而不是「此刻的值」，丢行不影响历史（终端历史走 REST）。
   log: 'event',
+  // 名单变化是**发生过的瞬间事实**（谁在何时被 op/封），可丢可重放，丢失只是少一条刷新触发；
+  // 名单本身由 REST 读文件，不靠这条消息维持 ⇒ event 而非 state
+  nameListChanged: 'event',
   playerJoin: 'event',
   playerLeave: 'event',
   playerDeath: 'event',

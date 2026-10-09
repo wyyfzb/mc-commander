@@ -33,6 +33,7 @@ import { createStatusRoutes } from '../routes/status.js';
 import { InstanceModel } from '../db/index.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
 import { errorHandler } from '../middleware/error_handler.js';
+import { asInstance } from './helpers/msmp-instance.js';
 
 const TMP_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'mcs-status-input-'));
 const INSTANCE_PATH = path.join(TMP_ROOT, 's1');
@@ -95,7 +96,7 @@ function makeStatusFixture(overrides = {}) {
 
 /** 五端点共用实例 mock（字段可变，供 PUT settings 内存同步断言） */
 function makeInstance(overrides = {}) {
-  const instance = {
+  const instance = asInstance({
     id: 's1',
     serverPath: INSTANCE_PATH,
     name: 's1',
@@ -119,7 +120,7 @@ function makeInstance(overrides = {}) {
     saveProperties: vi.fn(),
     _loadProperties: vi.fn(() => null),
     ...overrides,
-  };
+  });
   return instance;
 }
 

@@ -3,10 +3,13 @@ import { cn } from '@/lib/utils'
 
 /**
  * Card —— 卡片容器基座（卡片容器的类名声明处，配 AGENTS.md「卡片容器」与「间距」的容器档位）
- * 只承载「卡片面」本身（圆角 + 描边 + 卡片底色 + 卡阴影）；padding 与内部布局
- * 默认留给调用点 className——各卡的内容档位不同（p-6/p-4/p-3/px-4 py-3/无内边距外壳），
- * 基座代劳就会逼调用点放弃自己的 flex/padding 布局。需要按档取内距时用 opt-in 的
- * `size`（见 CARD_SIZE_CLASSES），它不改变默认行为。
+ * 只承载「卡片面」本身（圆角 + 描边 + 卡片底色 + 卡阴影）；内距与内部布局由调用点按容器档位给。
+ *
+ * **内距默认给（opt-out）**：不写 `size` 就是标准卡（`default`）。原因是「忘了给内距」这个
+ * 缺陷形态在 opt-in 下**无门禁可拦**——正像素不违规、也不触发任何静态规则，而症状是文字贴着
+ * 卡片描边，一眼看去像坏了（实测发生过）。反过来，真的不要内距的现场（卡片面里装的是自带内距的
+ * 表格/列表/分栏）写 `size="flush"` 即可，那种现场的特征明显、审查时看得见。
+ * `className` 里的 `p-*` 仍覆盖基座档（twMerge）。
  *
  * 默认 `<section>`：本仓既有卡片容器绝大多数是 section（卡片是主题分组，不该降级为无语义块）；
  * 元素语义不同时用 `as` 声明（div/main/button），基座不替调用点改标签。
@@ -18,7 +21,7 @@ import { cn } from '@/lib/utils'
 const CARD_SURFACE = 'rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted shadow-mcs-card'
 
 /**
- * 卡片内距档位表（唯一声明处）。只收**卡片自己的**三档——Card 承载的是卡片面，
+ * 卡片内距档位表（唯一声明处）。只收**卡片自己的**档位——Card 承载的是卡片面，
  * 卡内的工具条 / 嵌块 / 代码块不是卡片面，它们的内距不归这里管（那三类的切档维度见
  * mc_manager_web/docs/design-review-guidelines.md「容器内距」一节）。
  *
@@ -28,10 +31,12 @@ const CARD_SURFACE = 'rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-mu
 export const CARD_SIZE_CLASSES = {
   /** 大面板：AppShell 级区块 */
   panel: 'p-6',
-  /** 标准卡 */
+  /** 标准卡（不写 `size` 即此档） */
   default: 'p-4',
   /** 紧凑卡 */
   compact: 'p-3',
+  /** 面壳：卡片面里装的是自带内距的结构（表格/列表/分栏），内距由子元素自己给——不是「不要内距」 */
+  flush: '',
 } as const
 
 export type CardSize = keyof typeof CARD_SIZE_CLASSES
@@ -43,9 +48,8 @@ interface CardProps {
   className?: string
   children?: ReactNode
   /**
-   * 内距档位（opt-in）：取值见 CARD_SIZE_CLASSES。默认不给内距——本基座只管卡片面，
-   * padding 历来由调用点声明，改成有默认值会把全站既有卡一起推离现状。
-   * 传了它就不必再在 className 里手写同一串；className 里的 p-* 仍会覆盖它（twMerge）。
+   * 内距档位：取值见 CARD_SIZE_CLASSES，**不传即标准卡**（默认给内距，见文件头）。
+   * 真的不要内距的现场显式写 `flush`；className 里的 p-* 仍会覆盖它（twMerge）。
    */
   size?: CardSize
   /** 透传 role、aria 属性、tabIndex 等：交互型卡片（单选组成员）的语义由调用点持有 */
@@ -64,10 +68,16 @@ interface CardProps {
   [key: `data-${string}`]: unknown
 }
 
-export function Card({ as = 'section', size, className, children, ...rest }: CardProps) {
+export function Card({
+  as = 'section',
+  size = 'default',
+  className,
+  children,
+  ...rest
+}: CardProps) {
   const Tag = as as ElementType
   return (
-    <Tag className={cn(CARD_SURFACE, size && CARD_SIZE_CLASSES[size], className)} {...rest}>
+    <Tag className={cn(CARD_SURFACE, CARD_SIZE_CLASSES[size], className)} {...rest}>
       {children}
     </Tag>
   )

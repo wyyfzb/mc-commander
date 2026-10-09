@@ -22,6 +22,8 @@
  */
 import crypto from 'crypto';
 import { reloadProperties } from './instance-properties.service.js';
+import { compareVersions, MSMP_MIN_MC_VERSION } from '@mc-commander/schemas';
+import { logger } from '../utils/logger.js';
 
 /** MC 对 `management-server-secret` 的硬要求（实测：非此形态直接崩在启动期） */
 const SECRET_LENGTH = 40;
@@ -57,13 +59,75 @@ export function readPushChannelState(instance) {
   reloadProperties(instance);
   const props = instance.properties ?? {};
   return {
-    enabled: props['management-server-enabled'] === 'true',
+    // MC 读布尔走 Boolean.valueOf（大小写不敏感，javap 实证）：写 TRUE/True 时 MC 是开着的，
+    // 严格比较会让面板长期报「未开启」这个与事实相反的假状态
+    enabled: String(props['management-server-enabled']).toLowerCase() === 'true',
     // MC 的默认是 true，故「键不存在」要按 true 读，否则界面会在键缺失时报「未启用 TLS」
-    tlsEnabled: props['management-server-tls-enabled'] !== 'false',
+    tlsEnabled: String(props['management-server-tls-enabled']).toLowerCase() !== 'false',
     host: props['management-server-host'] || DEFAULT_MSMP_HOST,
     port: Number.parseInt(props['management-server-port'] ?? '0', 10) || 0,
     secretConfigured: isValidMsmpSecret(props['management-server-secret']),
   };
+}
+
+/**
+ * 版本是否支持这条通道（MC >= MSMP_MIN_MC_VERSION）。
+ *
+ * 版本未知或读不懂一律按**不支持**：宁可不配置，也不往用户文件里塞无用键。
+ * 比较复用契约包的唯一一份解析器——面板与服务端不能对同一串版本号得出不同结论。
+ */
+function isMsmpSupportedVersion(version) {
+  const cmp = compareVersions(version, MSMP_MIN_MC_VERSION);
+  return cmp !== null && cmp >= 0;
+}
+
+/**
+ * 启动前自动补齐推送配置（幂等，返回写入结果或 null）。
+ *
+ * **为什么默认开启、不给用户选择**：用户要的是「状态变化及时到达」这个结果，MSMP 只是实现，
+ * 30 秒轮询是兜底——把实现摊到用户面前（开关 + 监听/凭据字段 + 手改警告）对零代码用户是纯噪音。
+ * 配置在**启动前**补齐，服务器本次启动即读到，于是「运行中改动要重启才生效」这条实现细节
+ * 根本不必进入界面。
+ *
+ * 两条边界：
+ * - **只在 `management-server-enabled` 键缺失时写**：键存在＝用户或面板已表过态（含显式关闭），
+ *   必须尊重——否则用户关了又被自动打开。
+ * - **版本不够就不写**：没有这条通道的版本，写进去只是往用户文件里塞无用键。
+ *
+ * 写入复用 `setPushChannel`：三项必须一次性写成自洽组合（否则会踩「TLS 开 + 证书空」那组必崩组合）。
+ */
+export function ensureMsmpConfigured(instance) {
+  // 先重读磁盘再判「用户是否表过态」：内存缓存是构造时快照，面板运行期间文件可能被
+  // 面板之外改过（SSH 手改），用陈旧缓存判会把用户的显式关闭又改回开启
+  if (instance) reloadProperties(instance);
+  const props = instance?.properties ?? {};
+  if (!isMsmpSupportedVersion(instance?.mcVersion)) return null;
+  const state = readPushChannelState(instance);
+  const declared = props['management-server-enabled'] !== undefined;
+
+  // ① 从没配过（键缺失）⇒ 补上：用户要的是「状态变化及时到达」这个结果，不该由他去选实现
+  if (!declared) {
+    const result = setPushChannel(instance, true);
+    logger.info(`[${instance.id}] 已自动开启实时推送（management-server-* 三项），本次启动即生效`);
+    return result;
+  }
+
+  // ② 已表过态 ⇒ 尊重「要不要开」，但这两种组合会让服务器**启动即崩**，必须修：
+  //    enabled 语义为真 + TLS 开 + 无 keystore（实测 IllegalArgumentException: TLS is enabled
+  //    but keystore is not configured）；以及 secret 缺失或不是 40 位字母数字
+  //    （实测 IllegalStateException: Invalid management server secret）。
+  //    这不是替用户做选择，而是把他已经写下的「要开」修成能启动——否则面板的启动动作会直接
+  //    把服务器按死在启动阶段。修法复用 setPushChannel：三项必须是自洽组合。
+  if (String(props['management-server-enabled']).toLowerCase() !== 'true') return null;
+  const keystoreConfigured = Boolean(props['management-server-tls-keystore']);
+  const doomed = (state.tlsEnabled && !keystoreConfigured) || !state.secretConfigured;
+  if (!doomed) return null;
+
+  const result = setPushChannel(instance, true);
+  logger.warn(
+    `[${instance.id}] 实时推送配置处于「必崩组合」，已按自洽三项修正（否则服务器启动即退出）`,
+  );
+  return result;
 }
 
 /**

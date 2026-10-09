@@ -124,6 +124,117 @@ export const logger = {
   },
 };
 
+// ── 读取侧：把面板自己的错误暴露给界面 ─────────────────
+// 写入与读取同在本模块：格式（`[ISO] [级别] 消息`）与轮转命名只有一份事实源，
+// 分家会让读取侧另写一份正则、随写入侧改动静默失配。
+
+/** 条目消息上限：与实例日志单行上限同量级，避免一条 util.format 的大对象撑爆响应 */
+const ERROR_ENTRY_MAX_CHARS = 4096;
+
+/** 单档读取的尾部字节数：只为看最近若干条，不必整读 20MB */
+const ERROR_READ_TAIL_BYTES = 256 * 1024;
+
+/** 轮转档文件名，新→旧：error.log 最新，.1 次之，…，.maxFiles 最旧 */
+function errorLogFiles() {
+  const names = [ERROR_FILE_NAME];
+  for (let i = 1; i <= current.maxFiles; i++) names.push(`${ERROR_FILE_NAME}.${i}`);
+  return names;
+}
+
+function errorLogPath() {
+  return path.join(current.dir, ERROR_FILE_NAME);
+}
+
+/**
+ * 解析一段错误日志文本。判据是「行首形如 `[时间] [级别] `」才算新条目，
+ * 其余行归上一条（多行消息/堆栈在文件里本就跨行，按行拆会把一条错误拆成多条）。
+ * `dropFirstLine` 用于尾部截断读取：首个物理行可能只读到半截，认它会显示残缺条目。
+ */
+function parseErrorLogText(text, { dropFirstLine = false } = {}) {
+  const lines = text.split('\n');
+  if (dropFirstLine) lines.shift();
+  const entries = [];
+  for (const raw of lines) {
+    if (!raw.trim()) continue;
+    const m = /^\[([^\]]+)\] \[([A-Z]+)\] ([\s\S]*)$/.exec(raw);
+    if (m) {
+      entries.push({ time: m[1], level: m[2], message: m[3] });
+    } else if (entries.length) {
+      entries[entries.length - 1].message += `\n${raw}`;
+    }
+    // 既非行首形态、前面又没有条目：尾部截断留下的残块，丢弃
+  }
+  for (const entry of entries) {
+    if (entry.message.length > ERROR_ENTRY_MAX_CHARS) {
+      entry.message = `${entry.message.slice(0, ERROR_ENTRY_MAX_CHARS)}…[已截断]`;
+    }
+  }
+  return entries;
+}
+
+/**
+ * 读取面板自身错误日志，**最新在前**。
+ *
+ * 不抛错：日志文件不存在（全新机器）与不可读（权限/文件系统故障）都返回空结果，
+ * 读取面不能把面板拖下去——调用方据 `available` 区分「还没有错误」与「读不到日志」。
+ */
+export function readErrorLog({ limit = 50 } = {}) {
+  const files = errorLogFiles();
+  const entries = [];
+  let available = false;
+  let hasMore = false;
+  // ENOENT（本来就是全新机器）与其它 errno（权限/磁盘故障）必须分开：后者才是「读取失败」，
+  // 两者都并进 available=false 时，界面只能对用户说「不存在，或存在但读不到」——
+  // 而这两件事指向完全不同的排查方向
+  let sawNonEnoentFailure = false;
+  for (const name of files) {
+    if (entries.length >= limit) {
+      hasMore = true;
+      break;
+    }
+    const file = path.join(current.dir, name);
+    let text;
+    let fromTail = false;
+    let dropFirstLine = false;
+    try {
+      const st = fs.statSync(file);
+      fromTail = st.size > ERROR_READ_TAIL_BYTES;
+      const start = fromTail ? st.size - ERROR_READ_TAIL_BYTES : 0;
+      // 尾部截断时多读 1 字节：用于判断窗口是否恰好落在行首。
+      // 落在行首 ⇒ 首个物理行是完整条目，不能丢（丢了就是静默少一条错误）；
+      // 落在行中 ⇒ 首行是残块，必须丢，否则会把半截时间戳当成一条错误显示。
+      // 判据用字节而非字符：0x0A 不可能是 UTF-8 续字节，多读的这 1 字节不会误判
+      const readFrom = fromTail ? start - 1 : 0;
+      const buf = Buffer.alloc(st.size - readFrom);
+      const fd = fs.openSync(file, 'r');
+      try {
+        fs.readSync(fd, buf, 0, buf.length, readFrom);
+      } finally {
+        fs.closeSync(fd);
+      }
+      text = buf.toString('utf-8');
+      if (fromTail) {
+        if (text.startsWith('\n')) text = text.slice(1);
+        else dropFirstLine = true;
+      }
+      available = true;
+    } catch (e) {
+      // 该档不存在或读不到：跳过，继续看更旧的档
+      if (e?.code && e.code !== 'ENOENT') sawNonEnoentFailure = true;
+      continue;
+    }
+    const parsed = parseErrorLogText(text, { dropFirstLine }).reverse();
+    const room = limit - entries.length;
+    if (parsed.length > room) hasMore = true;
+    entries.push(...parsed.slice(0, room));
+    // 尾部截断意味着本档更早的条目没进来
+    if (fromTail) hasMore = true;
+  }
+  // 读到任意一档即 ok；一档都没读到才需要区分「本来没有」与「读不到」
+  const readState = available ? 'ok' : sawNonEnoentFailure ? 'unreadable' : 'no-file';
+  return { readState, available, entries, hasMore, logFile: errorLogPath() };
+}
+
 // ── 测试注入通道（生产代码勿用）────────────────────────
 export function __configureLogger(overrides = {}) {
   current = { ...DEFAULTS, ...overrides };

@@ -78,7 +78,7 @@ export interface InstanceCardsProps {
   uninstallingId: string | null
   /** 切换当前实例 */
   onSwitch: (instance: InstanceSummary) => void
-  /** 启动配置 → 实例设置弹窗（页面打开 InstanceSettingsDialog） */
+  /** 打开实例设置弹窗（页面渲染 InstanceSettingsDialog） */
   onOpenSettings: (instance: InstanceSummary) => void
   /** 卸载实例 */
   onUninstall: (instance: InstanceSummary) => void
@@ -396,7 +396,7 @@ function InstanceCard({
           <DropdownMenuContent align="end">
             <DropdownMenuItem onSelect={() => onOpenSettings(instance)}>
               <Settings aria-hidden />
-              启动配置
+              实例设置
             </DropdownMenuItem>
             {!isRunning && (
               <DropdownMenuItem onSelect={() => onUpgrade(instance)}>

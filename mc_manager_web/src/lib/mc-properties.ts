@@ -4,7 +4,8 @@
  * 服务端契约：mc_commander_server/services/instance-properties.service.js
  * - GET /properties 对 SENSITIVE_PROPERTIES 11 键返回 '********' 占位符
  * - PUT /properties 提交占位符视为未修改（沿用磁盘现值），提交其他值整批 400 拒绝
- * - RUNTIME_COMMAND_MAP 4 键可运行期热改（走斜杠命令），其余属性需重启生效
+ * - 服务端 `SERVER_SETTING_METHODS`（15 键）可运行期热改：优先走 MSMP 结构化 setter，
+ *   MSMP 不可用时其中 5 键退回原版等价命令，其余键退回「写文件 + 重启生效」
  * - WRITABLE_PROPERTIES 白名单（isWritable 依据）；未知键提交会被 400 拒绝
  *
  * 默认值以 vanilla server.properties 官方默认值为准（版本差异在属性注释中标注）。
@@ -55,19 +56,30 @@ export const SENSITIVE_PROPERTY_KEYS: ReadonlySet<string> = new Set([
   'online-mode',
   'server-port',
   'server-ip',
-  // MSMP 凭据：MC 开启该协议且 secret 留空时会自动生成并写回 server.properties
+  // MSMP 凭据：实测 26.3 要求恰好 40 位字母数字，留空或手填短串会让服务端**直接崩在启动期**
+  // （`Invalid management server secret, must be 40 alphanumeric characters`），
+  // 面板代开时自己生成，不要手改
   'management-server-secret',
   'management-server-tls-keystore-password',
 ])
 
-/** 运行期热改键（4 键，与服务端 RUNTIME_COMMAND_MAP 保持一致） */
+/** 运行期热改键（15 键，与服务端 `SERVER_SETTING_METHODS` 一致；判据是逐条实测过的 setter 回读） */
 export const HOT_RELOAD_KEYS: ReadonlySet<string> = new Set([
   'white-list',
   'enforce-whitelist',
   'difficulty',
   'gamemode',
-  // 对应服务端 RUNTIME_COMMAND_MAP：改这项走 /setidletimeout，无需重启
+  'force-gamemode',
+  'max-players',
+  'motd',
+  'view-distance',
+  'simulation-distance',
+  'spawn-protection',
+  'allow-flight',
   'player-idle-timeout',
+  'hide-online-players',
+  'op-permission-level',
+  'entity-broadcast-range-percentage',
 ])
 
 /** 判断属性值是否为布尔（server.properties 中布尔值为 "true"/"false"） */
@@ -136,7 +148,7 @@ export const SERVER_PROPERTY_DEFS: PropertyDef[] = [
     type: 'checkbox',
     defaultValue: 'false',
     isSensitive: false,
-    isHotReload: false,
+    isHotReload: true,
     isWritable: true,
   },
   {
@@ -147,7 +159,7 @@ export const SERVER_PROPERTY_DEFS: PropertyDef[] = [
     type: 'input',
     defaultValue: '16',
     isSensitive: false,
-    isHotReload: false,
+    isHotReload: true,
     isWritable: true,
   },
   {
@@ -159,7 +171,7 @@ export const SERVER_PROPERTY_DEFS: PropertyDef[] = [
     type: 'checkbox',
     defaultValue: 'false',
     isSensitive: false,
-    isHotReload: false,
+    isHotReload: true,
     isWritable: true,
   },
   {
@@ -214,7 +226,7 @@ export const SERVER_PROPERTY_DEFS: PropertyDef[] = [
     type: 'input',
     defaultValue: '20',
     isSensitive: false,
-    isHotReload: false,
+    isHotReload: true,
     isWritable: true,
   },
   {
@@ -284,7 +296,7 @@ export const SERVER_PROPERTY_DEFS: PropertyDef[] = [
     options: ['1', '2', '3', '4'],
     defaultValue: '4',
     isSensitive: false,
-    isHotReload: false,
+    isHotReload: true,
     isWritable: true,
   },
 
@@ -297,7 +309,7 @@ export const SERVER_PROPERTY_DEFS: PropertyDef[] = [
     type: 'input',
     defaultValue: '10',
     isSensitive: false,
-    isHotReload: false,
+    isHotReload: true,
     isWritable: true,
   },
   {
@@ -308,7 +320,7 @@ export const SERVER_PROPERTY_DEFS: PropertyDef[] = [
     type: 'input',
     defaultValue: '10',
     isSensitive: false,
-    isHotReload: false,
+    isHotReload: true,
     isWritable: true,
   },
   {
@@ -443,7 +455,7 @@ export const SERVER_PROPERTY_DEFS: PropertyDef[] = [
     type: 'input',
     defaultValue: '100',
     isSensitive: false,
-    isHotReload: false,
+    isHotReload: true,
     isWritable: true,
   },
   {
@@ -628,7 +640,7 @@ export const SERVER_PROPERTY_DEFS: PropertyDef[] = [
     type: 'input',
     defaultValue: '',
     isSensitive: false,
-    isHotReload: false,
+    isHotReload: true,
     isWritable: true,
   },
   {
@@ -752,7 +764,7 @@ export const SERVER_PROPERTY_DEFS: PropertyDef[] = [
     type: 'checkbox',
     defaultValue: 'false',
     isSensitive: false,
-    isHotReload: false,
+    isHotReload: true,
     isWritable: true,
   },
   {
@@ -884,7 +896,10 @@ export function buildUnknownPropertyDef(key: string, value: string): PropertyDef
   return {
     name: key,
     label: key,
-    desc: 'server.properties 设置项',
+    // 这一族由面板的推送开关统一写（enabled/secret/TLS 三项必须同时写对，只改 enabled 会让
+    // 服务器起不来），行上说明「谁管」，那句因果由实例设置里的「实时推送」开关承担（启动前自动补齐，见 ensureMsmpConfigured）——行内说明是 2xs，
+    // 按字号口径只放短语、放不下整句
+    desc: isPanelManagedProperty(key) ? '由面板管理' : 'server.properties 设置项',
     category: 'serverSettings',
     type: isBool ? 'checkbox' : 'input',
     defaultValue: '',
@@ -892,6 +907,23 @@ export function buildUnknownPropertyDef(key: string, value: string): PropertyDef
     isHotReload: false,
     isWritable: false,
   }
+}
+
+/**
+ * 面板**代写**的键（属性面板把它们渲染成只读行，行上要说明「这不是给你手改的」）。
+ *
+ * 只列服务端 `setPushChannel` 真正写的那三个：`management-server-host` /
+ * `-allowed-origins` / `-port` 面板不写（非本机绑定的提示还要求用户自己改回 localhost），
+ * 把它们也说成「由面板管理」会挡住用户改那几项——那才是新的不准确。
+ */
+const PANEL_MANAGED_PROPERTY_KEYS = new Set([
+  'management-server-enabled',
+  'management-server-secret',
+  'management-server-tls-enabled',
+])
+
+export function isPanelManagedProperty(key: string): boolean {
+  return PANEL_MANAGED_PROPERTY_KEYS.has(key)
 }
 
 /**

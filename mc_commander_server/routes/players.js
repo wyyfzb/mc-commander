@@ -1,14 +1,14 @@
 import express from 'express';
 import fs from 'fs';
 import path from 'path';
+import { isBanExpired, parseBanExpires } from '../utils/ban-expires.js';
 import { error, ErrorCodes } from '../utils/response.js';
 import { BanModel } from '../db/index.js';
 import {
   getTotalPlayTime,
   playerNameRejectionReason,
-  shadowProfilePath,
+  readShadowProfile,
 } from '../utils/player-utils.js';
-import { isPathContained } from '../utils/fs-utils.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
 import {
   banRecordListSchema,
@@ -135,7 +135,9 @@ export function createPlayerRoutes(serverManager) {
         });
 
         // 优先使用自行追踪的游戏时长（uuid 已由上面的 known 解析过，传下去省一次读盘）
-        const savedData = loadPlayerData(instance.serverPath, name, known.uuid) || {};
+        const savedData =
+          loadPlayerData({ serverPath: instance.serverPath, playerName: name, uuid: known.uuid }) ||
+          {};
         if (savedData.totalPlayTime && savedData.totalPlayTime > totalPlayTime) {
           totalPlayTime = savedData.totalPlayTime;
         }
@@ -252,7 +254,12 @@ export function createPlayerRoutes(serverManager) {
         });
 
         // 从持久化文件加载离线数据（优先使用自行追踪的游戏时长）
-        const savedData = loadPlayerData(instance.serverPath, name, knownInfo.uuid) || {};
+        const savedData =
+          loadPlayerData({
+            serverPath: instance.serverPath,
+            playerName: name,
+            uuid: knownInfo.uuid,
+          }) || {};
         if (savedData.totalPlayTime && savedData.totalPlayTime > totalPlayTime) {
           totalPlayTime = savedData.totalPlayTime;
         }
@@ -355,6 +362,8 @@ export function createPlayerRoutes(serverManager) {
           isActive: b.isActive,
           isPermanent: false,
           expiresAt: b.expiresAt,
+          // 面板自己的临时封禁记录不记结束原因：提前解封与到期都只落 is_active=false
+          expired: false,
           createdAt: b.createdAt,
         });
       }
@@ -380,13 +389,17 @@ export function createPlayerRoutes(serverManager) {
           for (const entry of JSON.parse(fs.readFileSync(file.path, 'utf-8'))) {
             const target = entry[file.key] || '';
             if (activeTempKeys.has(`${file.targetType}:${target}`)) continue;
+            // 官条目也带 expires：临时封禁在此显示到期时间，过期的归入历史
+            const { isPermanent, expiresAt } = parseBanExpires(entry.expires);
+            const expired = isBanExpired(entry.expires);
             bans.push({
               targetType: file.targetType,
               target,
               reason: entry.reason || '',
-              isActive: true,
-              isPermanent: true,
-              expiresAt: null,
+              isActive: !expired,
+              isPermanent,
+              expiresAt,
+              expired,
               createdAt: entry.created || null,
             });
           }
@@ -445,7 +458,8 @@ export function createPlayerRoutes(serverManager) {
         res.json(validatedSuccess(playerDetailsResponseSchema, { ...baseInfo, ...details }));
       } catch (e) {
         logger.error(`Failed to get player details for ${playerName}:`, e);
-        const fallbackSaved = loadPlayerData(instance.serverPath, playerName) || {};
+        const fallbackSaved =
+          loadPlayerData({ serverPath: instance.serverPath, playerName: playerName }) || {};
         // 与成功路径字段集对齐：缺 sessions/stats/inventory/armor/xpProgress
         // 会让前端把 undefined 当数组访问崩溃——detail-log-tab 对 sessions 展开
         const mergedEvents = instance._mergePlayerEvents(
@@ -482,20 +496,10 @@ export function createPlayerRoutes(serverManager) {
     }),
   );
 
-  // 影子档案键与实例方法 _loadPlayerData 同源（UUID，不是玩家名），
-  // 否则「按 UUID 写、按名字读」会让档案时有时无。
-  function loadPlayerData(serverPath, playerName, uuid) {
-    try {
-      const dir = path.join(serverPath, 'playerdata');
-      const filePath = shadowProfilePath({ serverPath, playerName, uuid });
-      // usercache 是本机文件、可被篡改，落点仍须自证包含关系
-      if (!isPathContained(dir, filePath)) return null;
-      if (!fs.existsSync(filePath)) return null;
-      return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-    } catch {
-      return null;
-    }
-  }
+  // 影子档案读取走共享实现（`readShadowProfile`）：键是 UUID 不是玩家名，且落点自证
+  // 包含关系——实例与路由曾经各写一份，分叉风险与「路由那份不告警」都出在这里。
+  const loadPlayerData = ({ serverPath, playerName, uuid }) =>
+    readShadowProfile({ serverPath, playerName, uuid });
 
   // POST /api/instances/:id/players/:player/op
   router.post(
@@ -507,7 +511,7 @@ export function createPlayerRoutes(serverManager) {
         return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND));
       }
       if (!requireRunning(instance, res)) return;
-      await instance.sendCommand(`op ${req.params.player}`);
+      await instance.opPlayer(req.params.player);
       recordAudit({
         instanceId: req.params.id,
         action: AuditActions.PLAYER_OP,
@@ -528,7 +532,7 @@ export function createPlayerRoutes(serverManager) {
         return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND));
       }
       if (!requireRunning(instance, res)) return;
-      await instance.sendCommand(`deop ${req.params.player}`);
+      await instance.deopPlayer(req.params.player);
       recordAudit({
         instanceId: req.params.id,
         action: AuditActions.PLAYER_DEOP,
@@ -551,7 +555,7 @@ export function createPlayerRoutes(serverManager) {
       if (!requireRunning(instance, res)) return;
       // express 5：无 JSON body 的请求 req.body 为 undefined（v4 是 {}）
       const reason = sanitizeReason(req.body?.reason) || 'Kicked by operator';
-      await instance.sendCommand(`kick ${req.params.player} ${reason}`);
+      await instance.kickPlayer(req.params.player, reason);
       recordAudit({
         instanceId: req.params.id,
         action: AuditActions.PLAYER_KICK,
@@ -602,10 +606,13 @@ export function createPlayerRoutes(serverManager) {
       }
 
       try {
+        // 带时长交给方法面：结构化通道把 expires 写进官方条目（时长由官方数据承载），
+        // 回退到命令通道时官方条目是永久的，时长仍由 temp_bans 记录承载——两条路都对得上
+        const banOptions = expiresAt ? { expiresAt } : {};
         if (ip) {
-          await instance.sendCommand(`ban-ip ${ip} ${reason}`);
+          await instance.banIp(ip, reason, banOptions);
         } else {
-          await instance.sendCommand(`ban ${req.params.player} ${reason}`);
+          await instance.banPlayer(req.params.player, reason, banOptions);
         }
       } catch (err) {
         // 命令执行失败：回滚已写入的临时记录，保持「记录 ⇔ 封禁」一致，
@@ -656,7 +663,7 @@ export function createPlayerRoutes(serverManager) {
       // 先清理记录：清理失败（同步抛错）时命令尚未执行，无中间态
       BanModel.deactivateByPlayer(req.params.id, req.params.player);
       try {
-        await instance.sendCommand(`pardon ${req.params.player}`);
+        await instance.pardonPlayer(req.params.player);
       } catch (err) {
         // 命令执行失败：恢复已清理的记录，保持「记录 ⇔ 封禁」一致
         for (const b of tempBans) {
@@ -725,9 +732,9 @@ export function createPlayerRoutes(serverManager) {
       }
       try {
         if (targetType === 'ip') {
-          await instance.sendCommand(`pardon-ip ${target}`);
+          await instance.pardonIp(target);
         } else {
-          await instance.sendCommand(`pardon ${target}`);
+          await instance.pardonPlayer(target);
         }
       } catch (err) {
         // 命令执行失败：恢复已清理的记录，保持「记录 ⇔ 封禁」一致
@@ -770,7 +777,7 @@ export function createPlayerRoutes(serverManager) {
         return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND));
       }
       if (!requireRunning(instance, res)) return;
-      await instance.sendCommand(`whitelist add ${req.params.player}`);
+      await instance.whitelistAdd(req.params.player);
       // detail.op 与 remove 端点成对标注：add/remove 共用 PLAYER_WHITELIST，靠 detail 区分方向
       recordAudit({
         instanceId: req.params.id,
@@ -793,7 +800,7 @@ export function createPlayerRoutes(serverManager) {
         return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND));
       }
       if (!requireRunning(instance, res)) return;
-      await instance.sendCommand(`whitelist remove ${req.params.player}`);
+      await instance.whitelistRemove(req.params.player);
       // 审计复用 PLAYER_WHITELIST：前端映射「白名单操作」本就方向中性（add/remove 共用），
       // 拆新枚举会让过滤下拉出现两个半语义项；detail.op 区分加入/移除，与 add 端点成对标注。
       recordAudit({

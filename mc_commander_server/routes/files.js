@@ -132,28 +132,28 @@ function encodeContent(content, encoding, hasBom) {
 const LIST_FILE_SYNC = {
   'banned-players.json': {
     key: 'name',
-    removeCmd: 'pardon',
-    addCmd: 'ban',
+    removeOp: 'pardonPlayer',
+    addOp: 'banPlayer',
     hasReason: true,
     cleanTempBan: (instanceId, target) => BanModel.deactivateByPlayer(instanceId, target),
   },
   'banned-ips.json': {
     key: 'ip',
-    removeCmd: 'pardon-ip',
-    addCmd: 'ban-ip',
+    removeOp: 'pardonIp',
+    addOp: 'banIp',
     hasReason: true,
     cleanTempBan: (instanceId, target) => BanModel.deactivateByIp(instanceId, target),
   },
   'whitelist.json': {
     key: 'name',
-    removeCmd: 'whitelist remove',
-    addCmd: 'whitelist add',
+    removeOp: 'whitelistRemove',
+    addOp: 'whitelistAdd',
     hasReason: false,
   },
   'ops.json': {
     key: 'name',
-    removeCmd: 'deop',
-    addCmd: 'op',
+    removeOp: 'deopPlayer',
+    addOp: 'opPlayer',
     hasReason: false,
     // 注意：ops.json 的 level 字段无法通过命令精确同步（原版 op 固定 level 4），
     // 修改 level 需重启服务器生效；增删条目同步无此限制。
@@ -190,8 +190,8 @@ function parseListEntries(content, fileName) {
 }
 
 // 对比新旧条目差异并同步：
-//  - 移除的目标 → 运行中实例执行 removeCmd（同步 MC 内存）
-//  - 新增的目标 → 运行中实例执行 addCmd（变更立即生效）
+//  - 移除的目标 → 运行中实例执行 removeOp（同步 MC 内存）
+//  - 新增的目标 → 运行中实例执行 addOp（变更立即生效）
 // 封禁文件另清理被移除目标的 temp_bans 生效记录（文件是编辑后的最终状态，
 // 记录跟随文件，避免封禁记录残留已失效的"生效中"条目）。
 // 实例未运行时跳过命令（启动时自动加载文件），但 temp_bans 记录仍跟随文件清理。
@@ -216,22 +216,20 @@ function syncListFileChanges(instance, fileName, oldEntries, newEntries) {
     try {
       for (const target of removed) {
         try {
-          await instance.sendCommand(`${spec.removeCmd} ${target}`);
+          await instance[spec.removeOp](target);
         } catch (err) {
           logger.error(
-            `[Files] Failed to ${spec.removeCmd} ${target} after ${fileName} edit:`,
+            `[Files] Failed to ${spec.removeOp} ${target} after ${fileName} edit:`,
             err.message,
           );
         }
       }
       for (const entry of added) {
         try {
-          await instance.sendCommand(
-            `${spec.addCmd} ${entry.target}${entry.reason ? ` ${entry.reason}` : ''}`,
-          );
+          await instance[spec.addOp](entry.target, entry.reason);
         } catch (err) {
           logger.error(
-            `[Files] Failed to ${spec.addCmd} ${entry.target} after ${fileName} edit:`,
+            `[Files] Failed to ${spec.addOp} ${entry.target} after ${fileName} edit:`,
             err.message,
           );
         }

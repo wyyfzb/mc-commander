@@ -9,7 +9,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { render } from '@testing-library/react'
-import { Card, CardBody, CardHeader, CardTitle } from '../card'
+import { Card, CardBody, CardHeader, CardTitle, CARD_SIZE_CLASSES } from '../card'
 
 const SURFACE = [
   'rounded-mcs-md',
@@ -148,10 +148,17 @@ describe('Card 子块', () => {
     const el = container.querySelector('div') as HTMLElement
     expect([...el.classList].sort()).toEqual(['px-4', 'py-2'])
   })
-  it('size 缺省时不给内距（基座代劳会把全站既有卡推离现状）', () => {
+  it('size 缺省＝标准卡：默认给内距（「忘了给内距」在 opt-in 下无门禁可拦）', () => {
     const { container } = render(<Card>x</Card>)
     const el = container.querySelector('section') as HTMLElement
-    expect([...el.classList].some((c) => /(^|:)p-\d/.test(c))).toBe(false)
+    expect(el.classList.contains(CARD_SIZE_CLASSES.default)).toBe(true)
+    expect(el.classList.contains('shadow-mcs-card')).toBe(true)
+  })
+
+  it('size="flush" 是唯一不给内距的档（面壳：内距由子元素自己给）', () => {
+    const { container } = render(<Card size="flush">x</Card>)
+    const el = container.querySelector('section') as HTMLElement
+    expect([...el.classList].some((c) => /(^|:)p[xytblr]?-/.test(c))).toBe(false)
     expect(el.classList.contains('shadow-mcs-card')).toBe(true)
   })
 
@@ -164,6 +171,12 @@ describe('Card 子块', () => {
         <Card size="panel" className="p-2" data-testid="b">
           x
         </Card>
+        <Card className="px-4 py-3" data-testid="c">
+          x
+        </Card>
+        <Card className="p-2" data-testid="d">
+          x
+        </Card>
       </div>,
     )
     const a = container.querySelector('[data-testid="a"]') as HTMLElement
@@ -171,5 +184,15 @@ describe('Card 子块', () => {
     const b = container.querySelector('[data-testid="b"]') as HTMLElement
     expect(b.classList.contains('p-2')).toBe(true)
     expect(b.classList.contains('p-6')).toBe(false)
+    // 同组覆盖（p-2 vs 默认 p-4）：twMerge 直接把基座类删掉，确定性强
+    const d = container.querySelector('[data-testid="d"]') as HTMLElement
+    expect(d.classList.contains('p-4')).toBe(false)
+    expect(d.classList.contains('p-2')).toBe(true)
+    // 部分重叠（调用点给 px/py，基座给 p）：twMerge 只处理同组，两个类都会留下——
+    // 谁生效交给样式表顺序（Tailwind 把 px/py 排在 p 之后 ⇒ 调用点赢）。
+    // 这条不能在 jsdom 里断言，落地效果由 e2e 量计算样式（见 card-padding 的 e2e 断言）
+    const c = container.querySelector('[data-testid="c"]') as HTMLElement
+    expect(c.classList.contains('px-4')).toBe(true)
+    expect(c.classList.contains('py-3')).toBe(true)
   })
 })

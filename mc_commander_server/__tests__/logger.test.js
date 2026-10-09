@@ -4,7 +4,13 @@ import os from 'os';
 import path from 'path';
 
 import config from '../config.js';
-import { logger, __configureLogger, __resetLogger, __loggerState } from '../utils/logger.js';
+import {
+  logger,
+  readErrorLog,
+  __configureLogger,
+  __resetLogger,
+  __loggerState,
+} from '../utils/logger.js';
 
 // logger 单元测试（issue #325）：四级过滤 / error 分流 / 轮转 / banner 白名单
 // 输出捕获：替换 process.stdout/stderr.write（logger 唯一输出口）
@@ -157,5 +163,171 @@ describe('logger 轻量结构化日志', () => {
     expect(stderr).toContain('should-not-throw-2');
     // 降级告警仅一次
     expect(stderr.split('[logger] error 日志文件写入失败').length - 1).toBe(1);
+  });
+});
+
+// 读取侧（面板自身错误面）：与写入侧同一模块，故用真实写入路径产样本再真实读取——
+// 两侧对格式的耦合由此被锁住，任一侧改格式都会转红
+describe('readErrorLog 面板自身错误读取', () => {
+  let dir;
+  let origStdout;
+  let origStderr;
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-errlog-'));
+    __configureLogger({ dir });
+    // 写侧仍走真实路径，但把输出口接住：超长样本不该泄进测试输出
+    origStdout = process.stdout.write;
+    origStderr = process.stderr.write;
+    process.stdout.write = () => true;
+    process.stderr.write = () => true;
+  });
+  afterEach(() => {
+    process.stdout.write = origStdout;
+    process.stderr.write = origStderr;
+    __resetLogger();
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('日志文件不存在：readState=no-file（首次启动的常态，不是读取失败）', () => {
+    const result = readErrorLog();
+    expect(result.readState).toBe('no-file');
+    expect(result.available).toBe(false);
+    expect(result.entries).toEqual([]);
+    expect(result.hasMore).toBe(false);
+    expect(result.logFile).toBe(path.join(dir, 'error.log'));
+  });
+
+  it('文件存在但读不到（EACCES）：readState=unreadable —— 与「本来没有」分开', () => {
+    // 权限位在 root 下不生效（CAP_DAC_OVERRIDE），故用一个真实存在的**目录**占住文件名：
+    // 读它会得到 EISDIR（非 ENOENT），正是这条要区分的形态
+    fs.mkdirSync(path.join(dir, 'error.log'));
+    const result = readErrorLog();
+    expect(result.readState).toBe('unreadable');
+    expect(result.entries).toEqual([]);
+  });
+
+  it('读到任意一档即 ok（更旧的轮转档可读时，不因最新一档读不到而报读不到）', () => {
+    fs.mkdirSync(path.join(dir, 'error.log'));
+    fs.writeFileSync(
+      path.join(dir, 'error.log.1'),
+      '[2026-01-01T00:00:00.000Z] [ERROR] older-rotated\n',
+      'utf-8',
+    );
+    const result = readErrorLog();
+    expect(result.readState).toBe('ok');
+    expect(result.entries.map((e) => e.message)).toEqual(['older-rotated']);
+  });
+
+  it('文件在、里面没条目：readState=ok 且 entries 为空（与 no-file / unreadable 都不同形）', () => {
+    fs.writeFileSync(path.join(dir, 'error.log'), '', 'utf-8');
+    const result = readErrorLog();
+    expect(result.readState).toBe('ok');
+    expect(result.available).toBe(true);
+    expect(result.entries).toEqual([]);
+  });
+
+  it('读回真实写入的错误：最新在前，时间/级别/消息齐', () => {
+    logger.error('first-failure');
+    logger.error('second-failure');
+
+    const { available, entries, readState } = readErrorLog();
+    expect(readState).toBe('ok');
+    expect(available).toBe(true);
+    expect(entries.map((e) => e.message)).toEqual(['second-failure', 'first-failure']);
+    expect(entries[0].level).toBe('ERROR');
+    expect(entries[0].time).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
+  });
+
+  it('多行消息（堆栈）算一条：续行归上一条，不拆成多条错误', () => {
+    logger.error('boom\n  at a.b.C(D.java:1)\n  at d.e.F(G.java:2)');
+
+    const { entries } = readErrorLog();
+    expect(entries).toHaveLength(1);
+    expect(entries[0].message).toBe('boom\n  at a.b.C(D.java:1)\n  at d.e.F(G.java:2)');
+  });
+
+  it('info/warn 不入档：读取面只反映 error 分流的那一份', () => {
+    logger.warn('warn-not-persisted');
+    logger.info('info-not-persisted');
+    expect(readErrorLog().entries).toEqual([]);
+  });
+
+  it('轮转档按新→旧接续：error.log 的条目排在 error.log.1 之前', () => {
+    fs.writeFileSync(
+      path.join(dir, 'error.log.1'),
+      '[2026-01-01T00:00:00.000Z] [ERROR] older-rotated\n',
+      'utf-8',
+    );
+    logger.error('newest');
+
+    const { entries, hasMore } = readErrorLog();
+    expect(entries.map((e) => e.message)).toEqual(['newest', 'older-rotated']);
+    expect(hasMore).toBe(false);
+  });
+
+  it('limit 生效且 hasMore=true（还有更早的没返回）', () => {
+    logger.error('one');
+    logger.error('two');
+    logger.error('three');
+
+    const { entries, hasMore } = readErrorLog({ limit: 2 });
+    expect(entries.map((e) => e.message)).toEqual(['three', 'two']);
+    expect(hasMore).toBe(true);
+  });
+
+  it('尾部截断读取：丢掉半截首行，不产生残缺条目', () => {
+    // 单档读取上限 256KB：先写一条超长条目把窗口顶满，再写一条正常条目
+    logger.error('x'.repeat(300 * 1024));
+    logger.error('after-big');
+
+    const { entries, hasMore, available } = readErrorLog();
+    expect(available).toBe(true);
+    expect(hasMore).toBe(true); // 本档更早的内容没进来
+    expect(entries[0].message).toBe('after-big');
+    // 被截断的超长条目只剩尾巴，且其行首时间戳已丢 ⇒ 不应被当成独立条目
+    for (const e of entries) expect(e.time).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+
+  it('尾部窗口恰好落在行首：首个完整条目不能被丢（丢了就是静默少一条错误）', () => {
+    const tailBytes = 256 * 1024;
+    const marker = '[2026-01-03T00:00:00.000Z] [ERROR] boundary-entry\n';
+    const padPrefix = '[2026-01-02T00:00:00.000Z] [ERROR] ';
+    const padLen = tailBytes - marker.length - padPrefix.length - 1;
+    const rest = `${padPrefix}${'f'.repeat(padLen)}\n${marker}`;
+    // 自证：尾部那段的字节数正好等于读取上限 ⇒ 窗口起点恰好落在 pad 那一行的行首
+    expect(rest.length).toBe(tailBytes);
+    fs.writeFileSync(
+      path.join(dir, 'error.log'),
+      `[2026-01-01T00:00:00.000Z] [ERROR] outside-window\n${rest}`,
+      'utf-8',
+    );
+
+    const { entries, hasMore } = readErrorLog({ limit: 5 });
+
+    expect(hasMore).toBe(true);
+    // 窗口首行是完整条目 ⇒ 两条都要在（若被当成残块丢掉，就只剩 boundary-entry）
+    expect(entries).toHaveLength(2);
+    expect(entries[0].message).toBe('boundary-entry');
+    expect(entries[1].message.startsWith('f'.repeat(10))).toBe(true);
+  });
+
+  it('超长单条按上限截断并标记（不静默丢内容）', () => {
+    logger.error('y'.repeat(5000));
+
+    const { entries } = readErrorLog();
+    expect(entries[0].message.endsWith('…[已截断]')).toBe(true);
+    expect(entries[0].message.length).toBe(4096 + '…[已截断]'.length);
+  });
+
+  it('日志目录不可读时不抛错（读取面不能把面板拖下去）', () => {
+    const blocked = path.join(dir, 'blocked-read');
+    fs.writeFileSync(blocked, 'not-a-dir');
+    __configureLogger({ dir: blocked });
+
+    let result;
+    expect(() => {
+      result = readErrorLog();
+    }).not.toThrow();
+    expect(result.available).toBe(false);
   });
 });

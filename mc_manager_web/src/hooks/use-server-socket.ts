@@ -294,6 +294,15 @@ export function useServerSocket(instanceId: string | null) {
           // 详情同步失效：isRunning 镜像自详情 query（server store），只刷列表会让
           // 面板外停止（如终端输 stop）后的停止状态条滞后到 30s 轮询才翻转
           void queryClient.invalidateQueries({ queryKey: queryKeys.instance(msg.instanceId) })
+          // 崩溃产物与崩溃历史都是事后新增的文件，轮询没有意义（每次都要枚举目录 + 解析），
+          // 只在崩溃事件到达时失效一次。放在这里而不是页面里：帮助页、仪表盘都可能正开着，
+          // 页面级失效只对「当时挂载着的那个页面」生效。
+          if (ev === 'crash') {
+            void queryClient.invalidateQueries({
+              queryKey: queryKeys.crashArtifact(msg.instanceId),
+            })
+            void queryClient.invalidateQueries({ queryKey: queryKeys.crashHistory(msg.instanceId) })
+          }
           // critical 事件（当前实例）：入通知中心 + 持久 toast（手动关闭防错过）
           if (ev === 'crash' || ev === 'circuit_breaker') {
             dispatchEvent({
@@ -335,6 +344,20 @@ export function useServerSocket(instanceId: string | null) {
             players: (data.players as unknown[]) ?? [],
             tps: typeof data.tps === 'number' ? data.tps : null,
           })
+          // 推送面连通状态（`capabilities.msmpPush`）也随快照回来：REST 详情是轮询取的，
+          // 断连不会让它失效，界面会滞后一个轮询周期才把「实时」翻成「轮询」——期间它在说一件
+          // 已经不再成立的事。快照是推送的 ⇒ 就地写进详情缓存，界面即时对齐。
+          // 三态同 `worldUpgrade`：布尔＝权威值、**字段缺席＝未知**（旧服务端）⇒ 保持现状。
+          if (typeof data.msmpPush === 'boolean') {
+            queryClient.setQueryData(queryKeys.instance(msg.instanceId), (prev) => {
+              if (!prev || typeof prev !== 'object') return prev
+              const detail = prev as { capabilities?: Record<string, unknown> }
+              return {
+                ...detail,
+                capabilities: { ...detail.capabilities, msmpPush: data.msmpPush },
+              }
+            })
+          }
           // 世界格式升级属 state 类事件（契约 WS_EVENT_KINDS），权威读法随快照回来。
           // 三态必须分开：对象＝在途、null＝**确认空闲**（清掉本地残留）、
           // **字段缺席＝未知**（旧服务端或无权限，保持现状）——缺席时若按「没有升级」处理，
@@ -408,6 +431,12 @@ export function useServerSocket(instanceId: string | null) {
           })
           break
         }
+        // 官方名单变化（面板外的 /op、/whitelist、/ban 也会推来）：只失效重取，
+        // **不落通知条目**——面板自己的操作已经给过反馈，落条目会让同一次操作在通知中心
+        // 出现两条（这正是「重复不双报」要避免的）
+        case 'nameListChanged':
+          void queryClient.invalidateQueries({ queryKey: queryKeys.players(msg.instanceId) })
+          break
         case 'playerJoin':
         case 'playerLeave':
         case 'playerDeath':

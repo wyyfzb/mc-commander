@@ -255,6 +255,65 @@ test.describe('仪表盘', () => {
     await maybeShot(page, 'notification-drawer-instance-light.png')
   })
 
+  // 崩溃诊断已收进帮助页，仪表盘只留一句指引：这里锁「崩过就有指引 + 指得对」，
+  // 并顺带验证点进去落在帮助页的排障标签上（帮助页自身暂无 spec，这条是它唯一的 e2e 覆盖）
+  test('崩溃指引条：崩过时给一句指引，点「看诊断」落在帮助页排障', async ({ page }) => {
+    await setupConnection(page)
+    // 满档需要终端卡容器 ≥750px（窄容器下整条不渲染，见另一条用例）：这里显式给宽视口
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto('/dashboard')
+
+    const pointer = page.getByText(/崩过一次/)
+    await expect(pointer).toBeVisible()
+    await page.getByRole('link', { name: '看诊断' }).click()
+
+    await expect(page).toHaveURL(/\/help$/)
+    await expect(page.getByRole('heading', { name: '帮助中心' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: '自检' })).toBeVisible()
+  })
+
+  // 工具条固定 h-10 且不换行：空间不够时内联提示会溢出到右侧图标按钮**底下**——实测
+  // 375/480 下点「看诊断」落到「显示 JVM 警告」，静默切开了过滤器。故窄容器下整条不渲染
+  // （见 server-terminal.tsx 的 @[600px]），这条锁住「要么不渲染、要么真的点得到」
+  for (const width of [375, 480, 768]) {
+    test(`崩溃指引条：${width}px 下要么不渲染，要么「看诊断」真的点得到`, async ({ page }) => {
+      await setupConnection(page)
+      await page.setViewportSize({ width, height: 812 })
+      await page.goto('/dashboard')
+      await expect(page.getByTestId('server-terminal')).toBeVisible()
+
+      const link = page.getByRole('link', { name: '看诊断' })
+      if (await link.isVisible()) {
+        // Playwright 的 click 自带命中检测：被别的元素盖住会失败，正是要拦的形态
+        await link.click()
+        await expect(page).toHaveURL(/\/help$/)
+      } else {
+        await expect(link).toBeHidden()
+      }
+    })
+  }
+
+  test('崩溃指引条：没有产物时整条不出现', async ({ page }) => {
+    await setupConnection(page)
+    await page.route('**/api/v1/instances/*/crash-report*', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          status: 'ok',
+          code: 0,
+          message: 'ok',
+          timestamp: new Date().toISOString(),
+          data: null,
+        }),
+      }),
+    )
+    await page.goto('/dashboard')
+
+    await expect(page.getByText('MC 时钟 · 世界控制').first()).toBeVisible()
+    await expect(page.getByText(/崩过一次/)).toHaveCount(0)
+  })
+
   test('顶栏状态点：WS 连接后显示已连接', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/dashboard')

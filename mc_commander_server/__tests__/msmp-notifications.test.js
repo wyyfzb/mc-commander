@@ -57,12 +57,16 @@ const {
   _msmpNotifHandleMessage,
   _msmpNotifPing,
   _msmpNotifScheduleReconnect,
+  _msmpNotifWaitForEndpoint,
+  _emitPushChannelState,
+  _msmpNotificationTarget,
   MSMP_NOTIFICATION_ALLOWLIST,
 } = await import('../services/mc-server/msmp-notifications.js');
 
 /** 最小实例替身：只带连接域需要的状态 + 一个事件收集器 */
 function makeInstance(
   endpoint = { host: 'localhost', port: 25585, secret: 's'.repeat(40), tls: false },
+  reason = null,
 ) {
   const emitted = [];
   const inst = {
@@ -74,7 +78,13 @@ function makeInstance(
     _msmpNotifReconnectTimer: null,
     _msmpNotifBackoffMs: 0,
     _msmpNotifAlive: false,
-    _msmpResolveEndpoint: () => endpoint,
+    _msmpNotifConnected: false,
+    _msmpNotifEndpointWaitedMs: 0,
+    // 解析结果带原因：未开启与「还没就绪」要走不同分支
+    _msmpResolveEndpointResult: () => ({
+      endpoint,
+      reason: endpoint ? null : (reason ?? 'no-port'),
+    }),
     emit: (name, payload) => emitted.push({ name, payload }),
     emitted,
   };
@@ -87,6 +97,9 @@ function makeInstance(
     _msmpNotifHandleMessage,
     _msmpNotifPing,
     _msmpNotifScheduleReconnect,
+    _msmpNotifWaitForEndpoint,
+    // 新函数必须一并绑到假实例上：订阅 open/close 会调它，漏绑会让既有重连用例直接抛错
+    _emitPushChannelState,
   })) {
     inst[k] = v;
   }
@@ -112,8 +125,8 @@ describe('连接建立', () => {
     expect(instances).toHaveLength(1);
   });
 
-  it('端点为 null（未开启 MSMP/未起）时不建连接，也不空转重连', () => {
-    const inst = makeInstance(null);
+  it('未开启 MSMP（disabled）时不建连接，也不空转重连', () => {
+    const inst = makeInstance(null, 'disabled');
     inst._msmpNotifStart();
     expect(instances).toHaveLength(0);
     expect(inst._msmpNotifActive).toBe(false);
@@ -164,18 +177,39 @@ describe('通知处理：白名单与形态', () => {
     });
   });
 
-  it('有 stdout 对应物的通知不接（避免两个来源报同一件事）', () => {
-    // server/saved ↔ 解析器的 `Saved the game` → status:'save'；server/started ↔ `Done (…)`
-    // → status:'ready'。接它们就要先定去重，属二期。
+  it('二期接入 server/saved：只更新状态、不生成通知条目', () => {
+    // 与 stdout 的 `Saved the game` 是同一次保存，去重在 stdout 侧做（推送在线时它不发事件），
+    // 这里只管把状态与缓存失效处理掉
     const inst = makeInstance();
-    for (const m of [
-      'minecraft:notification/server/saved',
-      'minecraft:notification/server/started',
-    ]) {
-      inst._msmpNotifHandleMessage(Buffer.from(JSON.stringify({ jsonrpc: '2.0', method: m })));
-      expect(MSMP_NOTIFICATION_ALLOWLIST.has(m)).toBe(false);
-    }
-    expect(inst.emitted).toEqual([]);
+    inst._msmpNotifHandleMessage(
+      Buffer.from(
+        JSON.stringify({ jsonrpc: '2.0', method: 'minecraft:notification/server/saved' }),
+      ),
+    );
+    expect(MSMP_NOTIFICATION_ALLOWLIST.has('minecraft:notification/server/saved')).toBe(true);
+    expect(inst.emitted).toEqual([
+      { name: 'status', payload: { event: 'save' } },
+      {
+        name: 'msmpNotification',
+        payload: { method: 'minecraft:notification/server/saved', params: null },
+      },
+    ]);
+    expect(inst._worldSizeDirty).toBe(true);
+  });
+
+  it('server/saving 接进来但不做事（无 stdout 对应物、也没有要更新的用户可见状态）', () => {
+    const inst = makeInstance();
+    inst._msmpNotifHandleMessage(
+      Buffer.from(
+        JSON.stringify({ jsonrpc: '2.0', method: 'minecraft:notification/server/saving' }),
+      ),
+    );
+    expect(inst.emitted).toEqual([
+      {
+        name: 'msmpNotification',
+        payload: { method: 'minecraft:notification/server/saving', params: null },
+      },
+    ]);
   });
 
   it('世界升级 4 个通知归一化成 worldUpgrade（消费方不必认识方法名）', () => {
@@ -232,19 +266,110 @@ describe('通知处理：白名单与形态', () => {
     expect(inst.emitted.map((e) => e.name)).toEqual(['msmpNotification']);
   });
 
-  it('白名单外的通知（名单类）一律不转——一期刻意不接，接了就要先定去重', () => {
+  it('仍未接入的通知（gamerules/updated、server/activity 等）一律不转', () => {
+    // 白名单是唯一入口：gamerule 改动今天有属性面板自己写、server/activity 是限流的心跳，
+    // 都没有面板要跟的语义
     const inst = makeInstance();
+    for (const method of [
+      'minecraft:notification/gamerules/updated',
+      'minecraft:notification/server/activity',
+    ]) {
+      inst._msmpNotifHandleMessage(Buffer.from(JSON.stringify({ jsonrpc: '2.0', method })));
+      expect(MSMP_NOTIFICATION_ALLOWLIST.has(method)).toBe(false);
+    }
+    expect(inst.emitted).toEqual([]);
+  });
+
+  it('在线名单：加入/离开走幂等入口（两来源同报一次只登记一次）', () => {
+    const joined = [];
+    const left = [];
+    const inst = makeInstance();
+    inst._registerPlayerJoin = (name) => joined.push(name);
+    inst._handlePlayerLeave = (name) => left.push(name);
+
     inst._msmpNotifHandleMessage(
       Buffer.from(
         JSON.stringify({
           jsonrpc: '2.0',
           method: 'minecraft:notification/players/joined',
-          params: { player: { name: 'Steve' } },
+          params: [{ id: 'uuid-1', name: 'Steve' }],
         }),
       ),
     );
-    expect(inst.emitted).toEqual([]);
-    expect(MSMP_NOTIFICATION_ALLOWLIST.has('minecraft:notification/players/joined')).toBe(false);
+    inst._msmpNotifHandleMessage(
+      Buffer.from(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'minecraft:notification/players/left',
+          params: [{ id: 'uuid-1', name: 'Steve' }],
+        }),
+      ),
+    );
+
+    expect(joined).toEqual(['Steve']);
+    expect(left).toEqual(['Steve']);
+  });
+
+  it('名单变化：按方法分流取目标，载荷形态逐条实测（ip_bans 的字段名是陷阱）', () => {
+    // 实测 26.3：allowlist/* 与 bans/removed 是 player 对象、operators/* 与 bans/added 把
+    // player 包一层、ip_bans/added 是 {ip}、ip_bans/removed 是**裸字符串**
+    const cases = [
+      [
+        'minecraft:notification/allowlist/added',
+        [{ id: 'u', name: 'Steve' }],
+        'allowlist',
+        'added',
+        'Steve',
+      ],
+      [
+        'minecraft:notification/operators/added',
+        [{ player: { name: 'Steve' } }],
+        'operators',
+        'added',
+        'Steve',
+      ],
+      [
+        'minecraft:notification/bans/added',
+        [{ player: { name: 'Alex' } }],
+        'bans',
+        'added',
+        'Alex',
+      ],
+      [
+        'minecraft:notification/bans/removed',
+        [{ id: 'u', name: 'Alex' }],
+        'bans',
+        'removed',
+        'Alex',
+      ],
+      ['minecraft:notification/ip_bans/added', [{ ip: '1.2.3.4' }], 'ipBans', 'added', '1.2.3.4'],
+      ['minecraft:notification/ip_bans/removed', ['1.2.3.4'], 'ipBans', 'removed', '1.2.3.4'],
+    ];
+    for (const [method, params, list, action, target] of cases) {
+      const inst = makeInstance();
+      inst._msmpNotifHandleMessage(Buffer.from(JSON.stringify({ jsonrpc: '2.0', method, params })));
+      expect(inst.emitted[0]).toEqual({
+        name: 'nameListChanged',
+        payload: { list, action, target },
+      });
+    }
+  });
+
+  it('载荷解析不出目标时不猜：仍转发原事件，但目标为空串', () => {
+    const inst = makeInstance();
+    inst._msmpNotifHandleMessage(
+      Buffer.from(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'minecraft:notification/bans/added',
+          params: [{ player: { id: 'u' } }],
+        }),
+      ),
+    );
+    expect(
+      _msmpNotificationTarget('minecraft:notification/bans/added', [{ player: { id: 'u' } }]),
+    ).toBe('');
+    expect(inst.emitted[0].payload.target).toBe('');
   });
 
   it('带 id 的响应（本模块不发请求）不转', () => {
@@ -380,5 +505,150 @@ describe('心跳与半开', () => {
     expect(inst._msmpNotifHeartbeat).toBe(null);
     vi.advanceTimersByTime(120_000);
     expect(instances[0].pinged).toBe(0);
+  });
+});
+
+describe('端点未就绪：有界等待播报行', () => {
+  it('端口还没出现在播报行里 → 等它出现，出现即连上（不钉端口、不放弃）', () => {
+    let ready = false;
+    const inst = {
+      id: 'inst-1',
+      isRunning: true,
+      _msmpNotifActive: false,
+      _msmpNotifSocket: null,
+      _msmpNotifHeartbeat: null,
+      _msmpNotifPongTimer: null,
+      _msmpNotifReconnectTimer: null,
+      _msmpNotifBackoffMs: 0,
+      _msmpNotifAlive: false,
+      _msmpNotifConnected: false,
+      _msmpNotifEndpointWaitedMs: 0,
+      _msmpResolveEndpointResult: () =>
+        ready
+          ? {
+              endpoint: { host: 'localhost', port: 25585, secret: 's'.repeat(40), tls: false },
+              reason: null,
+            }
+          : { endpoint: null, reason: 'no-port' },
+    };
+    for (const [k, v] of Object.entries({
+      _msmpNotifStart,
+      _msmpNotifStop,
+      _msmpNotifClearTimers,
+      _msmpNotifConnect,
+      _msmpNotifWaitForEndpoint,
+      _msmpNotifHandleMessage,
+      _msmpNotifPing,
+      _msmpNotifScheduleReconnect,
+    })) {
+      inst[k] = v;
+    }
+
+    inst._msmpNotifStart();
+    expect(instances).toHaveLength(0);
+    // 播报行还没进日志：等待窗口内反复重试，而不是就此收手
+    vi.advanceTimersByTime(4_000);
+    expect(instances).toHaveLength(0);
+    expect(inst._msmpNotifActive).toBe(true);
+
+    ready = true; // 播报行进日志了
+    vi.advanceTimersByTime(2_000);
+    expect(instances).toHaveLength(1);
+    expect(inst._msmpNotifEndpointWaitedMs).toBe(0);
+  });
+
+  it('等满窗口仍未就绪 → 收手（不无限空转）', () => {
+    const inst = makeInstance(null, 'no-port');
+    inst._msmpNotifStart();
+    expect(instances).toHaveLength(0);
+
+    vi.advanceTimersByTime(120_000);
+    expect(instances).toHaveLength(0);
+    expect(inst._msmpNotifActive).toBe(false);
+  });
+});
+
+describe('可信连通状态', () => {
+  it('open 置真；close/error 置假；stop 归零（界面据此显示「已连通」）', () => {
+    const inst = makeInstance();
+    inst._msmpNotifStart();
+    expect(inst._msmpNotifConnected).toBe(false); // 还没握手成功
+
+    instances[0].emit('open');
+    expect(inst._msmpNotifConnected).toBe(true);
+
+    instances[0].emit('close');
+    expect(inst._msmpNotifConnected).toBe(false);
+
+    // 退避后重连：新一轮握手成功才算连通
+    vi.advanceTimersByTime(2_000);
+    instances[1].emit('open');
+    expect(inst._msmpNotifConnected).toBe(true);
+    instances[1].emit('error', new Error('boom'));
+    expect(inst._msmpNotifConnected).toBe(false);
+
+    vi.advanceTimersByTime(4_000);
+    instances[2].emit('open');
+    expect(inst._msmpNotifConnected).toBe(true);
+    inst._msmpNotifStop();
+    expect(inst._msmpNotifConnected).toBe(false);
+  });
+});
+
+// 推送面连通状态改变必须**立刻**告诉客户端：REST 详情是轮询取的，断连不会让它失效，
+// 界面会滞后一个轮询周期才把「实时」翻成「轮询」——期间它在说一件已经不再成立的事。
+describe('推送面连通状态变化：即时广播快照', () => {
+  function lastSnapshot(inst) {
+    const snapshots = inst.emitted.filter((e) => e.name === 'status' && !('event' in e.payload));
+    return snapshots[snapshots.length - 1]?.payload;
+  }
+
+  it('连上 ⇒ 广播一份带 msmpPush=true 的快照（载荷与订阅快照同形）', () => {
+    const inst = makeInstance();
+    inst._msmpNotifStart();
+    inst.emitted.length = 0;
+
+    instances[0].emit('open');
+
+    const payload = lastSnapshot(inst);
+    expect(payload.msmpPush).toBe(true);
+    expect(payload).toMatchObject({ status: 'running', isRunning: true, tps: null, players: [] });
+    // 无 event 字段 ⇒ websocket 侧按**快照**分支广播，不会被当成状态跃迁落库
+    expect('event' in payload).toBe(false);
+  });
+
+  it('断开 ⇒ 广播 msmpPush=false（这是那条滞后窗口的消除点）', () => {
+    const inst = makeInstance();
+    inst._msmpNotifStart();
+    instances[0].emit('open');
+    inst.emitted.length = 0;
+
+    instances[0].emit('close');
+
+    expect(lastSnapshot(inst).msmpPush).toBe(false);
+  });
+
+  it('error 与 close 成对到达 ⇒ 只广播一次，不为同一次断开重复写缓存', () => {
+    const inst = makeInstance();
+    inst._msmpNotifStart();
+    instances[0].emit('open');
+    inst.emitted.length = 0;
+
+    instances[0].emit('error');
+    instances[0].emit('close');
+
+    expect(inst.emitted.filter((e) => e.name === 'status')).toHaveLength(1);
+  });
+
+  it('实例已停 ⇒ 即便连接态还是 true 也报 false（不留上一次运行的残留）', () => {
+    const inst = makeInstance();
+    inst._msmpNotifStart();
+    instances[0].emit('open');
+    inst.isRunning = false;
+    inst.emitted.length = 0;
+
+    inst._emitPushChannelState();
+
+    expect(lastSnapshot(inst).msmpPush).toBe(false);
   });
 });

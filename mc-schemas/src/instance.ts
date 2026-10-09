@@ -23,6 +23,15 @@ export const instanceUpdatePayloadSchema = z.object({
 })
 
 /**
+ * MSMP（结构化查询/推送面）支持的**最低 MC 版本**。
+ *
+ * 放在契约包是因为它是 `capabilities.msmp` 的**语义前提**：低于此版本的实例，该能力为 false
+ * 不是「故障」而是「这个版本没有这个面」。消费方（帮助页自检）据此区分「未开启，可去开」
+ * 与「不适用，无需处理」——少了它只能一律报「未开启」，对老版本用户就是误报。
+ */
+export const MSMP_MIN_MC_VERSION = '1.21.9'
+
+/**
  * 实例可用通道。分两个布尔而非一个「管理通道」：两者的能力面不同，
  * 差异会被读成故障——RCON 能执行控制台命令，MSMP 不能（无 run_command 方法），
  * 但 MSMP 能给出结构化事实。UI 据各自的可用来决定「哪些操作可行」。
@@ -33,6 +42,9 @@ export const instanceCapabilitiesSchema = z.object({
   // MSMP：结构化查询面（1.21.9+）。判据是最近一次查询实测成功——端口默认可随机、
   // 链路可被反代，配置推不出可用性
   msmp: z.boolean(),
+  // MSMP：推送面常驻连接是否**已连通**（通知推送只发给已建立的连接）。与上面那个
+  // 查询面分开报：查询成功不代表推送面连着（端口随机、密钥由服务端生成写回文件）
+  msmpPush: z.boolean(),
 })
 
 export const instanceStatusSchema = z.object({
@@ -319,6 +331,36 @@ export const crashArtifactFieldSchema = z.object({
   value: z.string(),
 })
 
+/**
+ * 崩溃诊断词条：命中的结论 + 处置动作 + 该结论的**已验证 MC 版本**。
+ *
+ * `matchedBy` 说明是靠哪个键命中的（`description` = 崩溃报告的 `Description:`，
+ * `exception` = 顶层异常行行首前缀，`logger` = 日志 logger），前端据此解释结论来处。
+ */
+export const crashDiagnosisEntrySchema = z.object({
+  id: z.string(),
+  matchedBy: z.enum(['description', 'exception', 'fault', 'logger']),
+  title: z.string(),
+  detail: z.string(),
+  actions: z.array(z.string()),
+  verifiedVersions: z.array(z.string()),
+  evidence: z.array(z.enum(['实测', '静态提取'])),
+})
+
+/**
+ * 一次崩溃的诊断结果。
+ *
+ * `matched=false` 表示**没有命中任何词条**（或该产物类型没有可锚的键，如 hs_err）——
+ * 此时呈现层原样展示已解析字段并给出一键反馈出路，**不猜**。
+ * `verifiedForInstance` 为 null 表示实例版本未知（既不说适用也不说不适用）。
+ */
+export const crashDiagnosisSchema = z.object({
+  matched: z.boolean(),
+  entry: crashDiagnosisEntrySchema.nullable(),
+  instanceVersion: z.string().nullable(),
+  verifiedForInstance: z.boolean().nullable(),
+})
+
 export const crashArtifactSchema = z.object({
   /** 是否真的取到了产物（false 表示枚举/读取失败，与「从未崩溃过」的 null 不同） */
   available: z.boolean(),
@@ -329,6 +371,12 @@ export const crashArtifactSchema = z.object({
   sizeBytes: z.number().optional(),
   /** 已核实字段（有序）；解析失败时为空数组 */
   summary: z.array(crashArtifactFieldSchema).optional(),
+  /** 崩溃报告：`Description:`（固定词表，诊断映射的锚） */
+  description: z.string().nullable().optional(),
+  /** 崩溃报告 System Details 里的 Minecraft 版本（比 DB/jar 更贴近「是谁崩的」） */
+  minecraftVersion: z.string().nullable().optional(),
+  /** 诊断映射结果（未命中时为 matched:false，由呈现层走出路） */
+  diagnosis: crashDiagnosisSchema.optional(),
   /** 崩溃报告：顶层异常行 */
   exception: z.string().nullable().optional(),
   /** 崩溃报告：顶层栈帧（文本） */
@@ -349,3 +397,50 @@ export const crashArtifactSchema = z.object({
 
 export type CrashArtifactField = z.infer<typeof crashArtifactFieldSchema>
 export type CrashArtifact = z.infer<typeof crashArtifactSchema>
+export type CrashDiagnosisEntry = z.infer<typeof crashDiagnosisEntrySchema>
+export type CrashDiagnosis = z.infer<typeof crashDiagnosisSchema>
+
+/**
+ * 崩溃产物历史里的一条。
+ *
+ * `time`/`reason`/`detail` 都可能为 null：前者是产物本身没写（如 hs_err 无可靠时间），
+ * 后两者是「读不到或取不出」，此时界面回落到文件名——**不猜**，不拿别的字段顶替。
+ */
+export const crashArtifactHistoryItemSchema = z.object({
+  kind: z.enum(['crash-report', 'jvm-crash']),
+  fileName: z.string(),
+  mtimeMs: z.number(),
+  sizeBytes: z.number(),
+  /** 崩溃报告的 `Time:` 字段；取不到为 null（界面用 mtimeMs 兜底） */
+  time: z.string().nullable(),
+  /** 崩溃报告的 `Description:`；hs_err 的故障行 */
+  reason: z.string().nullable(),
+  /** 崩溃报告的顶层异常行；hs_err 的问题帧 */
+  detail: z.string().nullable(),
+})
+
+/**
+ * 崩溃产物历史（最新的在前）。产物文件本身即持久面，故不新建存储：
+ * `total` 是实例目录里全部产物的份数，`hasMore` 表示还有更早的没返回。
+ */
+export const crashArtifactHistorySchema = z.object({
+  items: z.array(crashArtifactHistoryItemSchema),
+  total: z.number(),
+  hasMore: z.boolean(),
+})
+
+/**
+ * 单份产物查询参数。`file` 缺省取最新一份；给值时按**产物文件名**选取（服务端只在枚举结果里匹配，
+ * 不接受路径）——帮助页点开历史里任意一条看完整诊断就靠它。
+ */
+export const crashArtifactQuerySchema = z.object({
+  file: z.string().min(1).max(255).optional(),
+})
+
+/** 历史份数上限：够看清「崩过几次」，又不至于把几十份产物一次灌给前端 */
+export const crashArtifactHistoryQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).catch(20),
+})
+
+export type CrashArtifactHistoryItem = z.infer<typeof crashArtifactHistoryItemSchema>
+export type CrashArtifactHistory = z.infer<typeof crashArtifactHistorySchema>

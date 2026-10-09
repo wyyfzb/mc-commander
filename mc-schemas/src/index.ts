@@ -3,6 +3,9 @@
  * API/WS/通知三方同源，根治契约漂移
  */
 
+// 版本号解析与比较（web 与服务端共用唯一一份）
+export { parseVersion, compareVersions, type VersionTriple } from './version'
+
 // 信封
 export {
   paginationSchema,
@@ -60,6 +63,8 @@ export {
 
 // 实例
 export {
+  MSMP_MIN_MC_VERSION,
+  crashArtifactQuerySchema,
   instanceSummarySchema,
   instanceStatusSchema,
   instanceStatusListSchema,
@@ -76,10 +81,19 @@ export {
   instanceDeleteResponseSchema,
   crashArtifactSchema,
   crashArtifactFieldSchema,
+  crashArtifactHistorySchema,
+  crashArtifactHistoryItemSchema,
+  crashArtifactHistoryQuerySchema,
+  crashDiagnosisSchema,
+  crashDiagnosisEntrySchema,
   overviewDataSchema,
   logEntrySchema,
   logEntriesSchema,
   commandResponseSchema,
+  type CrashDiagnosis,
+  type CrashDiagnosisEntry,
+  type CrashArtifactHistory,
+  type CrashArtifactHistoryItem,
   type InstanceSummary,
   type InstanceStatus,
   type InstanceStatusList,
@@ -332,12 +346,17 @@ export {
   memoryAlertThresholdsSchema,
   systemStatsSchema,
   updateCheckResultSchema,
+  panelErrorEntrySchema,
+  panelErrorsSchema,
+  panelErrorsQuerySchema,
   type DiskInfo,
   type DiskUsage,
   type DiskAlertThresholds,
   type MemoryAlertThresholds,
   type SystemStats,
   type UpdateCheckResult,
+  type PanelErrorEntry,
+  type PanelErrors,
 } from './system'
 
 // 认证与 API Key

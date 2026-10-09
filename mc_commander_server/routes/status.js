@@ -20,17 +20,22 @@ import {
   instanceSettingsRequestBodySchema,
   instanceStartRequestBodySchema,
   logEntriesSchema,
+  crashArtifactHistoryQuerySchema,
+  crashArtifactHistorySchema,
+  crashArtifactQuerySchema,
   crashArtifactSchema,
   nullDataSchema,
   overviewDataSchema,
+  panelErrorsQuerySchema,
+  panelErrorsSchema,
   serverPropertiesSchema,
   systemStatsSchema,
   updatePropertiesResponseSchema,
   worldInfoSchema,
 } from '@mc-commander/schemas';
-import { validateBody, validatedSuccess } from '../middleware/validate.js';
+import { validateBody, validateQuery, validatedSuccess } from '../middleware/validate.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
-import { logger } from '../utils/logger.js';
+import { logger, readErrorLog } from '../utils/logger.js';
 import { getServerVersion } from '../utils/version.js';
 import {
   getPropertiesView,
@@ -275,6 +280,15 @@ export function createStatusRoutes(serverManager) {
         memoryAlert: config.memoryAlert,
       }),
     );
+  });
+
+  // GET /api/system-errors - 面板自身错误日志（error.log 及轮转档）最近若干条
+  //
+  // 为什么要有它：面板自己出的错（升级失败、契约不一致等）此前只落在 data/logs/error.log，
+  // **没有任何读取入口**——用户遇到「升级失败」只能得到一句界面提示，看不到原因。
+  // 只读暴露，不做检索/过滤：错误量级本就低频，先用「能看到」补齐，检索等有真实诉求再加。
+  router.get('/system-errors', validateQuery(panelErrorsQuerySchema), (req, res) => {
+    res.json(validatedSuccess(panelErrorsSchema, readErrorLog({ limit: req.query.limit })));
   });
 
   // GET /api/instances - 实例列表（只读凭据按角色裁剪，见 statusForRole）
@@ -584,17 +598,35 @@ export function createStatusRoutes(serverManager) {
     res.json(validatedSuccess(logEntriesSchema, instance.getLogs(lines)));
   });
 
-  // GET /api/instances/:id/crash-report
-  // 最新一份崩溃诊断产物（MC 崩溃报告或 JVM 崩溃日志）的解析结果。
-  // 从未崩溃过时返回 null —— 那是正常空态，不是错误（与 available:false 的读取失败区分）。
-  router.get('/instances/:id/crash-report', (req, res) => {
+  // GET /api/instances/:id/crash-report[?file=<产物文件名>]
+  // 一份崩溃诊断产物（MC 崩溃报告或 JVM 崩溃日志）的解析结果；缺省取最新一份。
+  // 从未崩溃过、或指定文件已不在（轮转清理）时返回 null —— 那是正常空态，不是错误
+  // （与 available:false 的读取失败区分）。
+  router.get('/instances/:id/crash-report', validateQuery(crashArtifactQuerySchema), (req, res) => {
     const instance = serverManager.getInstance(req.params.id);
     if (!instance) {
       return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND));
     }
-    const artifact = instance.getCrashArtifact();
+    const artifact = instance.getCrashArtifact({ fileName: req.query.file });
     res.json(validatedSuccess(crashArtifactSchema.nullable(), artifact));
   });
+
+  // GET /api/instances/:id/crash-reports - 崩溃产物历史（最新的在前）
+  //
+  // 与上一条的分工：这一条只给「什么时候崩过几次、每次为什么」（时间/原因/顶层异常），
+  // 点开单份的完整解析仍走 /crash-report。产物文件本身跨面板重启留存，故不需要新存储。
+  router.get(
+    '/instances/:id/crash-reports',
+    validateQuery(crashArtifactHistoryQuerySchema),
+    (req, res) => {
+      const instance = serverManager.getInstance(req.params.id);
+      if (!instance) {
+        return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND));
+      }
+      const history = instance.getCrashArtifactHistory({ limit: req.query.limit });
+      res.json(validatedSuccess(crashArtifactHistorySchema, history));
+    },
+  );
 
   // GET /api/instances/:id/properties - 获取 server.properties
   // 展示视图（重读文件 → 运行状态型属性覆盖 → 敏感键掩码）见

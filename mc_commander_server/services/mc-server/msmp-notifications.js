@@ -38,8 +38,19 @@
  */
 
 import { WebSocket } from 'ws';
+import { logger } from '../../utils/logger.js';
 
-/** 一期白名单：与 stdout 零冲突的两族 */
+/**
+ * 接入的通知（一期两族 + 二期：名单族与 `started|saving|saved`）。
+ *
+ * 二期接入后，与 stdout 的**去重**靠三条各自成立的机制，而不是「谁先到谁赢」：
+ * - 名单族 → 走 `_registerPlayerJoin` / `_handlePlayerLeave` 这两个**幂等**入口
+ *   （与日志解析、名单对账同一份实现）⇒ 两个来源同报一次也只登记一次；
+ * - `server/saved` → 与 stdout 的 `Saved the game` 是同一次保存，stdout 侧在推送在线时
+ *   不再发 `status: save`（见 `output-parser.js`）；`saving` 没有 stdout 对应物，无需去重；
+ * - `server/started` 通常**收不到**：推送面是在服务器 `Done` 之后才开始守通道的，
+ *   故 stdout 的 `Done` 仍是面板「就绪」的权威来源，**不**因推送在线而禁用。
+ */
 export const MSMP_NOTIFICATION_ALLOWLIST = new Set([
   // 世界格式升级：面板今天完全无法呈现的能力，且 stdout 无对应物
   'minecraft:notification/world/upgrade_started',
@@ -48,7 +59,59 @@ export const MSMP_NOTIFICATION_ALLOWLIST = new Set([
   'minecraft:notification/world/upgrade_failed',
   // 停机：stdout 侧解析器没接，故也不重复
   'minecraft:notification/server/stopping',
+  // 服务器状态：只更新状态，不生成通知条目
+  'minecraft:notification/server/started',
+  'minecraft:notification/server/saving',
+  'minecraft:notification/server/saved',
+  // 在线名单：立即登记加入/离开，不再等下一轮对账
+  'minecraft:notification/players/joined',
+  'minecraft:notification/players/left',
+  // 官方名单变化（白名单/管理员/封禁/IP 封禁）
+  'minecraft:notification/allowlist/added',
+  'minecraft:notification/allowlist/removed',
+  'minecraft:notification/operators/added',
+  'minecraft:notification/operators/removed',
+  'minecraft:notification/bans/added',
+  'minecraft:notification/bans/removed',
+  'minecraft:notification/ip_bans/added',
+  'minecraft:notification/ip_bans/removed',
 ]);
+
+/**
+ * 名单变化的解析表：方法 → `{ list, action }`。
+ * 载荷形态**逐条实测**（26.3），不是照 schema 推的——`rpc.discover` 把 `ip_bans/*` 的字段
+ * 也叫 `player`，实际一个是 `{ip,…}`、另一个是**裸字符串**；`bans/removed` 反倒是 player 对象。
+ */
+const NAME_LIST_METHODS = {
+  'minecraft:notification/allowlist/added': { list: 'allowlist', action: 'added' },
+  'minecraft:notification/allowlist/removed': { list: 'allowlist', action: 'removed' },
+  'minecraft:notification/operators/added': { list: 'operators', action: 'added' },
+  'minecraft:notification/operators/removed': { list: 'operators', action: 'removed' },
+  'minecraft:notification/bans/added': { list: 'bans', action: 'added' },
+  'minecraft:notification/bans/removed': { list: 'bans', action: 'removed' },
+  'minecraft:notification/ip_bans/added': { list: 'ipBans', action: 'added' },
+  'minecraft:notification/ip_bans/removed': { list: 'ipBans', action: 'removed' },
+};
+
+/**
+ * 取一条通知里的目标名（玩家名或 IP）。
+ *
+ * 位置参数数组的首元素按方法分流解析：`allowlist/*` 与 `bans/removed` 是 player 对象、
+ * `operators/*` 与 `bans/added` 把 player 包在 `player` 里、`ip_bans/added` 是 `{ip}`、
+ * `ip_bans/removed` 是裸字符串。取不到就返回空串——**不猜**，让调用方按「目标未知」处理。
+ */
+export function _msmpNotificationTarget(method, params) {
+  if (!Array.isArray(params)) return '';
+  const first = params[0];
+  if (typeof first === 'string') return first; // ip_bans/removed
+  if (!first || typeof first !== 'object') return '';
+  if (typeof first.ip === 'string') return first.ip; // ip_bans/added
+  if (typeof first.name === 'string') return first.name; // player / allowlist / bans removed
+  const player = first.player;
+  if (player && typeof player.name === 'string') return player.name; // operators/*, bans/added
+  if (player && typeof player.ip === 'string') return player.ip;
+  return '';
+}
 
 /**
  * 取位置参数数组里的第一个数字（MSMP 的参数是位置形态，见文件头）。
@@ -75,6 +138,9 @@ const RECONNECT_BASE_MS = 2_000;
 const RECONNECT_MAX_MS = 60_000;
 /** 握手超时：回环链路上远快于此 */
 const HANDSHAKE_TIMEOUT_MS = 5_000;
+/** 端点未就绪时的重试间隔与等待窗口（见 `_msmpNotifWaitForEndpoint`） */
+const MSMP_ENDPOINT_RETRY_MS = 2_000;
+const MSMP_ENDPOINT_WAIT_MS = 60_000;
 
 /**
  * 建立常驻连接（幂等）。未开启 MSMP / 缺密钥 / 端口未知时不产生任何网络开销。
@@ -89,6 +155,8 @@ export function _msmpNotifStart() {
 /** 关闭常驻连接并停止重连（实例停止/卸载时调用） */
 export function _msmpNotifStop() {
   this._msmpNotifActive = false;
+  this._msmpNotifConnected = false;
+  this._msmpNotifEndpointWaitedMs = 0;
   this._msmpNotifClearTimers();
   const socket = this._msmpNotifSocket;
   this._msmpNotifSocket = null;
@@ -122,12 +190,18 @@ export function _msmpNotifClearTimers() {
 /** 建一条连接。失败一律走 `_msmpNotifScheduleReconnect`，不向外抛。 */
 export function _msmpNotifConnect() {
   if (!this._msmpNotifActive) return;
-  const endpoint = this._msmpResolveEndpoint();
+  const { endpoint, reason } = this._msmpResolveEndpointResult();
   if (!endpoint) {
-    // 通道不可用（未开启/未起）——不空转重连，等下次实例启动或用户开启后再来
-    this._msmpNotifActive = false;
-    return;
+    // 未开启是用户的决定：就此收手，不空转重连（等下次实例启动或用户开启）
+    if (reason === 'disabled') {
+      this._msmpNotifActive = false;
+      return;
+    }
+    // 密钥/端口还没就绪：端口默认 0 时真正的端口只出现在服务端的播报行里，
+    // 而这行可能还没进日志 ⇒ 在有界窗口内等它出现，超窗才收手
+    return this._msmpNotifWaitForEndpoint(reason);
   }
+  this._msmpNotifEndpointWaitedMs = 0;
 
   const scheme = endpoint.tls ? 'wss' : 'ws';
   let socket;
@@ -147,8 +221,10 @@ export function _msmpNotifConnect() {
   socket.on('open', () => {
     this._msmpNotifBackoffMs = RECONNECT_BASE_MS;
     this._msmpNotifAlive = true;
+    this._msmpNotifConnected = true;
     this._msmpNotifHeartbeat = setInterval(() => this._msmpNotifPing(), HEARTBEAT_MS);
     this._msmpNotifHeartbeat.unref?.();
+    this._emitPushChannelState();
   });
   socket.on('message', (data) => this._msmpNotifHandleMessage(data));
   socket.on('pong', () => {
@@ -158,8 +234,63 @@ export function _msmpNotifConnect() {
       this._msmpNotifPongTimer = null;
     }
   });
-  socket.on('error', () => this._msmpNotifScheduleReconnect());
-  socket.on('close', () => this._msmpNotifScheduleReconnect());
+  // error 与 close 常成对到达 ⇒ 只在真的从「连上」翻到「断开」时广播一次，
+  // 避免前端为同一次断开重复写缓存
+  socket.on('error', () => {
+    const wasConnected = this._msmpNotifConnected;
+    this._msmpNotifConnected = false;
+    if (wasConnected) this._emitPushChannelState();
+    this._msmpNotifScheduleReconnect();
+  });
+  socket.on('close', () => {
+    const wasConnected = this._msmpNotifConnected;
+    this._msmpNotifConnected = false;
+    if (wasConnected) this._emitPushChannelState();
+    this._msmpNotifScheduleReconnect();
+  });
+}
+
+/**
+ * 推送面连通状态变化时，立刻广播一份状态快照（带 `msmpPush`）。
+ *
+ * 为什么必须主动广播：REST 详情是**轮询**取的，而断连不会让前端失效那份详情 ⇒ 界面最多滞后
+ * 一个轮询周期才把「实时」翻成「轮询」，期间它在说一件已经不再成立的事。快照是推送的，
+ * 连上/断开各广播一次即可即时对齐。载荷与订阅时那份快照同形（无 `event` ⇒ 走快照分支）。
+ */
+export function _emitPushChannelState() {
+  this.emit('status', {
+    status: this.isRunning ? 'running' : 'stopped',
+    isRunning: Boolean(this.isRunning),
+    players: Array.from(this.players?.values?.() ?? []),
+    tps: typeof this.tps === 'number' ? this.tps : null,
+    msmpPush: Boolean(this.isRunning && this._msmpNotifConnected),
+  });
+}
+
+/**
+ * 端点在窗口内还没解析出来时的有界等待。
+ *
+ * 为什么不能直接放弃：`management-server-port` 默认 0（启动时随机分配），真正的端口
+ * 只出现在服务端自己的播报行里；实例启动到那行进日志之间有一段真实空档，而通知面是在
+ * 「进程起来了」那一刻开始守通道的。窗口收在 `MSMP_ENDPOINT_WAIT_MS`（远大于该空档，
+ * 又短到不会让人觉得面板在空转），超窗即收手——真没开 MSMP 的实例由 `disabled`
+ * 分支直接收手，两条路都不会长期空转。
+ *
+ * 每次重试都重新解析（不缓存端点）：端口与密钥都以当时的事实为准。
+ */
+export function _msmpNotifWaitForEndpoint(reason) {
+  const waited = (this._msmpNotifEndpointWaitedMs ?? 0) + MSMP_ENDPOINT_RETRY_MS;
+  if (waited > MSMP_ENDPOINT_WAIT_MS) {
+    this._msmpNotifActive = false;
+    logger.warn(`[${this.id}] MSMP 通知面等待端点超时（${reason}），放弃本轮`);
+    return;
+  }
+  this._msmpNotifEndpointWaitedMs = waited;
+  this._msmpNotifReconnectTimer = setTimeout(
+    () => this._msmpNotifConnect(),
+    MSMP_ENDPOINT_RETRY_MS,
+  );
+  this._msmpNotifReconnectTimer.unref?.();
 }
 
 /**
@@ -245,6 +376,36 @@ export function _msmpNotifHandleMessage(data) {
       // 不写成 `params.progress`——那样恒取到 undefined（探针在真机上就是这么翻车的）
       progress: firstNumberParam(params),
     });
+  }
+
+  // ── 二期：服务器状态（只更新状态，不生成通知条目）──
+  if (method === 'minecraft:notification/server/saved') {
+    this._lastSaveTime = new Date().toISOString();
+    // 存档落盘=世界体积增长点：标记缓存失效（与 stdout 侧同一处理）
+    this._worldSizeDirty = true;
+    this.emit('status', { event: 'save' });
+  } else if (method === 'minecraft:notification/server/started') {
+    // 通常收不到（推送面在 `Done` 之后才开始守通道），收到就按就绪处理，幂等
+    this._worldSizeDirty = true;
+    this.emit('status', { event: 'ready' });
+  }
+  // `server/saving` 刻意不做事：面板与存档相关的用户可见状态只有「上次保存时刻」，
+  // 那是完成时刻；它也没有 stdout 对应物，没有要去重的东西。
+
+  // ── 二期：在线名单（走与日志/对账同一份幂等入口）──
+  if (method === 'minecraft:notification/players/joined') {
+    const name = _msmpNotificationTarget(method, params);
+    if (name) this._registerPlayerJoin(name);
+  } else if (method === 'minecraft:notification/players/left') {
+    const name = _msmpNotificationTarget(method, params);
+    if (name) this._handlePlayerLeave(name);
+  }
+
+  // ── 二期：官方名单变化（面板外的 /op、/whitelist、/ban 也要让界面能跟上）──
+  const listSpec = NAME_LIST_METHODS[method];
+  if (listSpec) {
+    const target = _msmpNotificationTarget(method, params);
+    this.emit('nameListChanged', { ...listSpec, target });
   }
 
   this.emit('msmpNotification', { method, params });

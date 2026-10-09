@@ -3,7 +3,7 @@
  * - useServerVersions：版本列表（类型切换时按需拉取；5 分钟 stale）
  * - useDeployInstance：部署 mutation（10 分钟超时长请求；进度走 WS deploy store）
  * - useUninstallInstance：卸载 mutation（成功后失效实例列表；实例名确认由服务端强制）
- * - useUpdateInstance：实例配置更新 mutation（启动配置弹窗写入；成功后失效实例详情与列表）
+ * - useUpdateInstance：实例配置更新 mutation（实例设置弹窗写入；成功后失效实例详情与列表）
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/api/queries'
@@ -37,7 +37,7 @@ export function useDeployInstance() {
   })
 }
 
-/** 更新实例配置；成功后失效该实例详情与实例列表（启动配置弹窗回显依赖详情缓存） */
+/** 更新实例配置；成功后失效该实例详情与实例列表（实例设置弹窗回显依赖详情缓存） */
 export function useUpdateInstance() {
   const config = useConnectionStore()
   const queryClient = useQueryClient()

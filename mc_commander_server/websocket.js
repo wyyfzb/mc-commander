@@ -24,6 +24,7 @@ export const WSEvents = {
   WEATHER_UPDATE: 'weatherUpdate',
   WORLD_UPGRADE: 'worldUpgrade',
   PLAYER_STATS_UPDATE: 'playerStatsUpdate',
+  NAME_LIST_CHANGED: 'nameListChanged',
   PLAYER_JOIN: 'playerJoin',
   PLAYER_LEAVE: 'playerLeave',
   PLAYER_DEATH: 'playerDeath',
@@ -89,6 +90,7 @@ export const READONLY_WS_EVENTS = new Set([
   WSEvents.PERFORMANCE_UPDATE, // 性能读数（含睡眠/清醒玩家名）
   WSEvents.WEATHER_UPDATE,
   WSEvents.PLAYER_STATS_UPDATE, // 在线玩家血量/护甲/坐标
+  WSEvents.NAME_LIST_CHANGED, // 官方名单变化（只读连接也该看到「谁被 op / 被封」）
   WSEvents.PLAYER_JOIN,
   WSEvents.PLAYER_LEAVE,
   WSEvents.PLAYER_DEATH,
@@ -468,6 +470,8 @@ export function setupWebSocket(wss, serverManager) {
                   isRunning: Boolean(instance.isRunning),
                   players: Array.from(instance.players?.values?.() ?? []),
                   tps: typeof instance.tps === 'number' ? instance.tps : null,
+                  // 推送面真值随订阅快照一起给（与 REST 的 capabilities.msmpPush 同源同义）
+                  msmpPush: Boolean(instance.isRunning && instance._msmpNotifConnected),
                   ...(inFlight === undefined
                     ? {}
                     : { worldUpgrade: inFlight && { progress: inFlight.progress } }),
@@ -767,6 +771,10 @@ export function setupWebSocket(wss, serverManager) {
     }
     // 没有 event 字段 ⇒ 这是**快照形状**的周期性广播（每 5s 随性能附带），不是跃迁
     broadcast(data.instanceId, WSEvents.STATUS_SNAPSHOT, data);
+  });
+
+  serverManager.on('instance:nameListChanged', (data) => {
+    broadcast(data.instanceId, WSEvents.NAME_LIST_CHANGED, data);
   });
 
   serverManager.on('instance:playerJoin', (data) => {

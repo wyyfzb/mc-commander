@@ -1,7 +1,7 @@
 /**
  * InstanceCards 测试：
  * 卡片渲染（名称/状态文本/版本 mono 徽章）/ 状态点 token / 当前徽章 + 无切换按钮 /
- * 操作行收敛（主操作两个 + 操作菜单）/ 切换·启动配置·升级·卸载回调 /
+ * 操作行收敛（主操作两个 + 操作菜单）/ 切换·实例设置·升级·卸载回调 /
  * 卸载中禁用（他卡不受影响）/ 详情加载骨架 / 空态 + 部署入口
  * mock 数据为结构占位虚构（虚构实例名/版本），严禁真实服务器信息
  */
@@ -242,12 +242,12 @@ describe('InstanceCards', () => {
     ).toEqual(['停止 虚构甲服', '虚构甲服 操作菜单'])
   })
 
-  it('操作菜单：启动配置 / 升级版本 / 卸载实例三项，卸载为破坏性样式且与安全项分隔', async () => {
+  it('操作菜单：实例设置 / 升级版本 / 卸载实例三项，卸载为破坏性样式且与安全项分隔', async () => {
     const user = userEvent.setup()
     render(<InstanceCards {...baseProps()} />)
     await openMenu(user, '虚构乙服')
 
-    expect(await screen.findByRole('menuitem', { name: '启动配置' })).toBeInTheDocument()
+    expect(await screen.findByRole('menuitem', { name: '实例设置' })).toBeInTheDocument()
     expect(screen.getByRole('menuitem', { name: '升级版本' })).toBeInTheDocument()
     expect(screen.getByRole('menuitem', { name: '卸载实例' })).toHaveAttribute(
       'data-variant',
@@ -262,17 +262,17 @@ describe('InstanceCards', () => {
     render(<InstanceCards {...baseProps()} />)
     await openMenu(user, '虚构甲服')
 
-    expect(await screen.findByRole('menuitem', { name: '启动配置' })).toBeInTheDocument()
+    expect(await screen.findByRole('menuitem', { name: '实例设置' })).toBeInTheDocument()
     expect(screen.queryByRole('menuitem', { name: '升级版本' })).not.toBeInTheDocument()
   })
 
-  it('菜单「启动配置」回调 onOpenSettings 并携带该实例', async () => {
+  it('菜单「实例设置」回调 onOpenSettings 并携带该实例', async () => {
     const user = userEvent.setup()
     const onOpenSettings = vi.fn()
     render(<InstanceCards {...baseProps({ onOpenSettings })} />)
 
     await openMenu(user, '虚构甲服')
-    await user.click(await screen.findByRole('menuitem', { name: '启动配置' }))
+    await user.click(await screen.findByRole('menuitem', { name: '实例设置' }))
     expect(onOpenSettings).toHaveBeenCalledTimes(1)
     expect(onOpenSettings).toHaveBeenCalledWith(alpha)
   })

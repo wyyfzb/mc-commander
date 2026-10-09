@@ -61,6 +61,7 @@ import { runPanelBackupCycle, getLatestSnapshotTime } from '../services/panel-ba
 import config from '../config.js';
 import { logger } from '../utils/logger.js';
 import { toDbUtcString } from '../utils/db-time.js';
+import { asInstance } from './helpers/msmp-instance.js';
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -78,6 +79,7 @@ describe('TaskScheduler - 调度主链（启停 / 主循环 / 解封 / 任务分
     config.panelBackup.cron = '0 4 * * *';
     mockManager = {
       getInstance: vi.fn(() => undefined),
+      getRunningInstances: vi.fn(() => []),
       emit: vi.fn(),
     };
     scheduler = new TaskScheduler(mockManager);
@@ -300,7 +302,7 @@ describe('TaskScheduler - 调度主链（启停 / 主循环 / 解封 / 任务分
     });
 
     it('IP 封禁到期：实例运行中下发 pardon-ip，成功后解封记录失效', async () => {
-      const inst = { isRunning: true, sendCommand: vi.fn(() => Promise.resolve()) };
+      const inst = asInstance({ isRunning: true, sendCommand: vi.fn(() => Promise.resolve()) });
       mockManager.getInstance.mockReturnValue(inst);
       BanModel.findExpiredActive.mockReturnValue([ipBan]);
 
@@ -314,7 +316,7 @@ describe('TaskScheduler - 调度主链（启停 / 主循环 / 解封 / 任务分
     });
 
     it('玩家封禁到期：下发原版 pardon 命令', async () => {
-      const inst = { isRunning: true, sendCommand: vi.fn(() => Promise.resolve()) };
+      const inst = asInstance({ isRunning: true, sendCommand: vi.fn(() => Promise.resolve()) });
       mockManager.getInstance.mockReturnValue(inst);
       BanModel.findExpiredActive.mockReturnValue([playerBan]);
 
@@ -326,7 +328,7 @@ describe('TaskScheduler - 调度主链（启停 / 主循环 / 解封 / 任务分
     });
 
     it('实例未运行：跳过且记录保持生效（实例启动后下一轮再处理）', () => {
-      const inst = { isRunning: false, sendCommand: vi.fn() };
+      const inst = asInstance({ isRunning: false, sendCommand: vi.fn() });
       mockManager.getInstance.mockReturnValue(inst);
       BanModel.findExpiredActive.mockReturnValue([ipBan]);
 
@@ -357,10 +359,10 @@ describe('TaskScheduler - 调度主链（启停 / 主循环 / 解封 / 任务分
     });
 
     it('命令下发失败：保留记录下轮重试（不 deactivate）', async () => {
-      const inst = {
+      const inst = asInstance({
         isRunning: true,
         sendCommand: vi.fn(() => Promise.reject(new Error('rcon down'))),
-      };
+      });
       mockManager.getInstance.mockReturnValue(inst);
       BanModel.findExpiredActive.mockReturnValue([ipBan]);
 
@@ -484,7 +486,7 @@ describe('TaskScheduler - 调度主链（启停 / 主循环 / 解封 / 任务分
     });
 
     it('command：运行中下发命令，成功回调回填 success 与耗时', async () => {
-      const inst = { isRunning: true, sendCommand: vi.fn(() => Promise.resolve()) };
+      const inst = asInstance({ isRunning: true, sendCommand: vi.fn(() => Promise.resolve()) });
       mockManager.getInstance.mockReturnValue(inst);
 
       scheduler.executeTask({ ...baseTask, type: 'command', command: 'say hi' });
@@ -502,10 +504,10 @@ describe('TaskScheduler - 调度主链（启停 / 主循环 / 解封 / 任务分
     });
 
     it('command：下发失败回填 failed 并补发 taskFailed 事件（Error 对象取 message）', async () => {
-      const inst = {
+      const inst = asInstance({
         isRunning: true,
         sendCommand: vi.fn(() => Promise.reject(new Error('rcon down'))),
-      };
+      });
       mockManager.getInstance.mockReturnValue(inst);
 
       scheduler.executeTask({ ...baseTask, type: 'command', command: 'say hi' });
@@ -527,7 +529,10 @@ describe('TaskScheduler - 调度主链（启停 / 主循环 / 解封 / 任务分
     });
 
     it('command：失败原因为非 Error 值时回退 String(err)', async () => {
-      const inst = { isRunning: true, sendCommand: vi.fn(() => Promise.reject('plain failure')) };
+      const inst = asInstance({
+        isRunning: true,
+        sendCommand: vi.fn(() => Promise.reject('plain failure')),
+      });
       mockManager.getInstance.mockReturnValue(inst);
 
       scheduler.executeTask({ ...baseTask, type: 'command', command: 'say hi' });
@@ -542,7 +547,7 @@ describe('TaskScheduler - 调度主链（启停 / 主循环 / 解封 / 任务分
     });
 
     it('command：实例未运行按 skipped 计（本次触发被消费，不重试刷屏）', () => {
-      const inst = { isRunning: false, sendCommand: vi.fn() };
+      const inst = asInstance({ isRunning: false, sendCommand: vi.fn() });
       mockManager.getInstance.mockReturnValue(inst);
 
       scheduler.executeTask({ ...baseTask, type: 'command', command: 'say hi' });
@@ -556,7 +561,7 @@ describe('TaskScheduler - 调度主链（启停 / 主循环 / 解封 / 任务分
     });
 
     it('command：命令内容为空按 skipped 计', () => {
-      const inst = { isRunning: true, sendCommand: vi.fn() };
+      const inst = asInstance({ isRunning: true, sendCommand: vi.fn() });
       mockManager.getInstance.mockReturnValue(inst);
 
       scheduler.executeTask({ ...baseTask, type: 'command', command: '' });

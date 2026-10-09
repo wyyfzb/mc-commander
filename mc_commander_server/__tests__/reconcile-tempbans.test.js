@@ -18,9 +18,10 @@ vi.mock('../utils/fs-utils.js', () => ({
   atomicWriteFile: vi.fn((p, data) => fs.writeFileSync(p, data)),
 }));
 
-import { reconcileTempBans } from '../utils/ban-reconcile.js';
+import { findExpiredOfficialBans, reconcileTempBans } from '../utils/ban-reconcile.js';
 import { BanModel } from '../db/ban.model.js';
 import { atomicWriteFile } from '../utils/fs-utils.js';
+import { PERMANENT_EXPIRES } from '../utils/ban-expires.js';
 
 describe('reconcileTempBans', () => {
   let tmpDir;
@@ -188,5 +189,98 @@ describe('reconcileTempBans', () => {
     const writtenData = JSON.parse(atomicWriteFile.mock.calls[0][1]);
     expect(writtenData).toHaveLength(2);
     expect(writtenData.map((e) => e.name)).toEqual(['Bob', 'Steve']);
+  });
+
+  it('文件里带 expires 的条目按真实到期时间镜像进 DB，不写死永久', () => {
+    fs.writeFileSync(
+      bannedPath,
+      JSON.stringify([
+        {
+          name: 'Steve',
+          reason: '临时',
+          created: '2026-10-01 00:00:00 +0000',
+          expires: '2030-01-01 06:00:00 +0000',
+        },
+      ]),
+    );
+    BanModel.findActiveByInstance.mockReturnValue([]);
+    BanModel.findExpiredActive.mockReturnValue([]);
+
+    reconcileTempBans('inst-1', tmpDir);
+
+    expect(BanModel.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        target: 'Steve',
+        expiresAt: Date.parse('2030-01-01T06:00:00Z'),
+      }),
+    );
+  });
+
+  it('永久哨兵与解析不出的 expires 都落远未来值（不擅自替用户解封）', () => {
+    fs.writeFileSync(
+      bannedPath,
+      JSON.stringify([
+        { name: 'Alex', expires: 'forever' },
+        { name: 'Bob', expires: '不是时间' },
+      ]),
+    );
+    BanModel.findActiveByInstance.mockReturnValue([]);
+    BanModel.findExpiredActive.mockReturnValue([]);
+
+    reconcileTempBans('inst-1', tmpDir);
+
+    for (const name of ['Alex', 'Bob']) {
+      expect(BanModel.create).toHaveBeenCalledWith(
+        expect.objectContaining({ target: name, expiresAt: PERMANENT_EXPIRES }),
+      );
+    }
+  });
+});
+
+describe('findExpiredOfficialBans', () => {
+  let tmpDir;
+  const NOW = Date.parse('2026-10-08T00:00:00Z');
+  const write = (file, data) => fs.writeFileSync(path.join(tmpDir, file), JSON.stringify(data));
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'expired-official-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('文件不存在时返回空（多数实例没有封禁文件）', () => {
+    expect(findExpiredOfficialBans(tmpDir, NOW)).toEqual([]);
+  });
+
+  it('玩家与 IP 两个文件各自的过期条目都扫出来（面板外建的临时封禁没有 DB 记录）', () => {
+    write('banned-players.json', [
+      { name: 'Steve', expires: '2026-10-07 15:00:00 +0800' },
+      { name: 'Alex', expires: '2026-10-09 15:00:00 +0800' },
+    ]);
+    write('banned-ips.json', [{ ip: '1.2.3.4', expires: '2026-10-07 15:00:00 +0800' }]);
+
+    expect(findExpiredOfficialBans(tmpDir, NOW)).toEqual([
+      { targetType: 'player', target: 'Steve' },
+      { targetType: 'ip', target: '1.2.3.4' },
+    ]);
+  });
+
+  it('永久条目（缺失 expires / 哨兵）与解析不出的条目都不动：不擅自替用户解封', () => {
+    write('banned-players.json', [
+      { name: 'Steve' },
+      { name: 'Alex', expires: 'forever' },
+      { name: 'Herobrine', expires: '某个别的工具的格式' },
+    ]);
+
+    expect(findExpiredOfficialBans(tmpDir, NOW)).toEqual([]);
+  });
+
+  it('文件损坏时跳过该文件，不抛错（另一个文件照常扫）', () => {
+    fs.writeFileSync(path.join(tmpDir, 'banned-players.json'), 'NOT JSON{{{');
+    write('banned-ips.json', [{ ip: '5.6.7.8', expires: '2026-10-07 15:00:00 +0800' }]);
+
+    expect(findExpiredOfficialBans(tmpDir, NOW)).toEqual([{ targetType: 'ip', target: '5.6.7.8' }]);
   });
 });

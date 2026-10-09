@@ -30,7 +30,7 @@ import { toneClasses } from '@/components/mcs/tone'
 import { NotificationDrawer } from '@/layouts/notification-drawer'
 import { useUiStore } from '@/stores/ui'
 import { useServerStore } from '@/stores/server'
-import { useInstanceStatus } from '@/api/queries'
+import { FALLBACK_POLL_INTERVAL_MS, useInstanceStatus } from '@/api/queries'
 import { useInstanceSwitch } from '@/hooks/use-instance-switch'
 import { useNotificationStore } from '@/stores/notifications'
 import { useConnectionStore } from '@/stores/connection'
@@ -67,6 +67,17 @@ export function AppTopBar() {
   // 于是切到其它页面后顶栏的地址 chip 会消失（用户以为地址"时有时无"）。
   // 这里让顶栏自己订阅当前实例详情，任意页面都能拿到 address。
   const { data: instanceDetail } = useInstanceStatus(instanceId)
+  /* 刷新时机那条结果说明的可见载体在侧栏实例卡；桌面把侧栏收起时那块整卡不渲染，
+     于是这里只补一份**不可见文本**（title + sr-only），让该事实在收起态仍能被悬停与
+     读屏取到——不产生任何可见文字，不改变顶栏只报连接档位这件事。
+     真值同样取自订阅的实例详情（不取 store：只有仪表盘会写它）；详情未到时不说。 */
+  const pushConnected = instanceDetail?.capabilities?.msmpPush
+  const refreshDescription =
+    socketConnected && pushConnected !== undefined
+      ? pushConnected
+        ? '实时推送已连通，服务器的状态变化会立即到达面板'
+        : `实时推送未连通，面板每 ${FALLBACK_POLL_INTERVAL_MS / 1000} 秒刷新一次状态`
+      : undefined
   // 自订阅优先；实例详情尚未到达时回退到 store 里的值（保持既有行为，避免闪断）
   const serverAddress = instanceDetail?.address || status?.address || null
   // 地址可达范围同样来自服务端（契约里的 addressType），前端不自己按网段猜——
@@ -286,8 +297,12 @@ export function AppTopBar() {
         </kbd>
       </Button>
 
-      {/* 服务器状态点（WS 实时） */}
-      <StatusIndicator status={indicator} className="hidden md:inline-flex" />
+      {/* 服务器状态点（WS 实时；刷新时机已移到侧栏实例卡，见 app-sidebar） */}
+      <StatusIndicator
+        status={indicator}
+        description={refreshDescription}
+        className="hidden md:inline-flex"
+      />
 
       {/* 通知铃铛（未读徽章 + 抽屉） */}
       <IconButton

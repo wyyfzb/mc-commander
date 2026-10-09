@@ -25,7 +25,6 @@ import { DimensionCards } from './components/dimension-cards'
 import { PropertiesPanel } from './components/properties-panel'
 import { GamerulePanel } from './components/gamerule-panel'
 import { DatapackPanel } from './components/datapack-panel'
-import { PushChannelCard } from './components/push-channel-card'
 import { useServerProperties, useUpdateProperties, useWorldInfo } from './queries'
 import { InstanceRequiredState } from '@/features/instances/components/instance-required-state'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
@@ -152,7 +151,8 @@ export function WorldPage() {
         </div>
 
         {/* ── 右栏：属性 / 游戏规则 Tabs ── */}
-        <Card as="div" className="flex min-h-0 min-w-0 flex-1 flex-col">
+        {/* flush：内距由标签条自己给（它的下边框要通到卡片边） */}
+        <Card as="div" size="flush" className="flex min-h-0 min-w-0 flex-1 flex-col">
           <Tabs
             value={activeTab}
             onValueChange={(v) => setActiveTab(v as WorldTab)}
@@ -176,19 +176,14 @@ export function WorldPage() {
               value="properties"
               className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4"
             >
-              {/* 推送通道写在属性页签内：它写的就是 server.properties 里的键，
-                  而属性表把这几项渲染成只读行——开关放在同一屏，用户才不必去手改文件 */}
-              <div className="flex flex-col gap-4">
-                <PushChannelCard instanceId={instanceId} isRunning={isRunning} />
-                <PropertiesPanel
-                  properties={propertiesQuery.data}
-                  isLoading={propertiesQuery.isLoading}
-                  onSave={handleSaveProperties}
-                  onEditingChange={setPropertiesEditing}
-                  isRunning={isRunning}
-                  onRestart={() => handleRestart()}
-                />
-              </div>
+              <PropertiesPanel
+                properties={propertiesQuery.data}
+                isLoading={propertiesQuery.isLoading}
+                onSave={handleSaveProperties}
+                onEditingChange={setPropertiesEditing}
+                isRunning={isRunning}
+                onRestart={() => handleRestart()}
+              />
             </TabsContent>
             <TabsContent
               value="gamerule"

@@ -11,8 +11,9 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { logger } from '../utils/logger.js';
+import { asInstance } from './helpers/msmp-instance.js';
+import { SERVER_SETTING_KEYS, SERVER_SETTING_METHODS } from '../services/mc-server/msmp-methods.js';
 import {
-  RUNTIME_COMMAND_MAP,
   SENSITIVE_PROPERTIES,
   SENSITIVE_PLACEHOLDER,
   ALLOWED_PROPERTY_KEYS,
@@ -30,7 +31,7 @@ afterEach(() => {
 
 /** 行为级 instance fixture：properties 读写与命令下发全部可观测 */
 function makeInstance(overrides = {}) {
-  return {
+  return asInstance({
     id: 's1',
     properties: { difficulty: 'peaceful', 'view-distance': '10' },
     isRunning: false,
@@ -40,7 +41,7 @@ function makeInstance(overrides = {}) {
     saveProperties: vi.fn(),
     sendCommand: vi.fn().mockResolvedValue('OK'),
     ...overrides,
-  };
+  });
 }
 
 describe('instance-properties.service · 单键值校验 validatePropertyValue', () => {
@@ -123,7 +124,7 @@ describe('instance-properties.service · 敏感键掩码 maskSensitiveProperties
       'online-mode',
       'server-port',
       'server-ip',
-      // MSMP 凭据：MC 开启该协议且 secret 留空时自动生成并写回 server.properties
+      // MSMP 凭据：实测 26.3 要求 40 位字母数字，留空会让服务端崩在启动期（不是「自动生成」）
       'management-server-secret',
       'management-server-tls-keystore-password',
     ]) {
@@ -181,8 +182,12 @@ describe('instance-properties.service · PUT 校验阶段 validatePropertySubmis
 
   it('player-idle-timeout 映射到官方 /setidletimeout（分钟）', () => {
     // 官方运行期直达路径：不加这条，改这项只能写文件 + 重启
-    expect(RUNTIME_COMMAND_MAP['player-idle-timeout']('30')).toBe('setidletimeout 30');
-    expect(RUNTIME_COMMAND_MAP['player-idle-timeout']('0')).toBe('setidletimeout 0');
+    expect(SERVER_SETTING_METHODS['player-idle-timeout'].fallbackCommand('30')).toBe(
+      'setidletimeout 30',
+    );
+    expect(SERVER_SETTING_METHODS['player-idle-timeout'].fallbackCommand('0')).toBe(
+      'setidletimeout 0',
+    );
   });
 
   it.each([
@@ -198,7 +203,7 @@ describe('instance-properties.service · PUT 校验阶段 validatePropertySubmis
   });
 
   it('运行期命令键在白名单并集内（命令键不可绕过白名单）', () => {
-    for (const key of Object.keys(RUNTIME_COMMAND_MAP)) {
+    for (const key of SERVER_SETTING_KEYS) {
       expect(ALLOWED_PROPERTY_KEYS.has(key)).toBe(true);
     }
   });
@@ -266,7 +271,7 @@ describe('instance-properties.service · 写盘与重启联动编排 applyProper
     expect(instance.sendCommand).toHaveBeenNthCalledWith(2, 'defaultgamemode creative');
   });
 
-  it('命令下发失败降级：单条抛错仅警告，保存与返回不受阻', async () => {
+  it('运行期应用失败：仅警告，保存与返回不受阻，且如实把该键列入「需重启」', async () => {
     const instance = makeInstance({
       isRunning: true,
       properties: { difficulty: 'peaceful' },
@@ -274,7 +279,8 @@ describe('instance-properties.service · 写盘与重启联动编排 applyProper
     });
     const r = await applyPropertyUpdates(instance, { difficulty: 'hard' });
     expect(r.applied).toBe(true);
-    expect(r.restartRequired).toEqual([]);
+    // 没生效就说没生效：此前只看「表里有没有这个键」，命令失败也报「无需重启」
+    expect(r.restartRequired).toEqual(['difficulty']);
     expect(instance.saveProperties).toHaveBeenCalled();
   });
 });

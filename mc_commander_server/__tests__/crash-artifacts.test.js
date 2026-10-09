@@ -13,6 +13,7 @@ import os from 'os';
 import path from 'path';
 import * as crashArtifacts from '../services/mc-server/crash-artifacts.js';
 import { parseCrashReport, parseHsErr } from '../services/mc-server/crash-artifacts.js';
+import { crashArtifactSchema } from '@mc-commander/schemas';
 
 // 夹具一律用 .txt：服务端包 .gitignore 忽略 *.log，用真扩展名会被静默排除在提交之外，
 // 于是本地绿、CI 红（找不到夹具）
@@ -166,6 +167,37 @@ describe('getCrashArtifact 取用与降级', () => {
     expect(r.available).toBe(true);
   });
 
+  it('指定文件名时取那一份（帮助页点开历史里任意一条看完整诊断）', () => {
+    writeCrashReport('crash-2026-10-05_01.00.00-server.txt', read('crash-invalid-secret.txt'));
+    writeHsErr('hs_err_pid123.log', read('hs-err-segv.txt'));
+    const older = path.join(tmpDir, 'crash-reports', 'crash-2026-10-05_01.00.00-server.txt');
+    const past = Date.now() / 1000 - 3600;
+    fs.utimesSync(older, past, past);
+
+    // 先自证「缺省取最新」仍然成立，否则「指定生效」可能是选择逻辑整体没跑
+    expect(makeInstance(tmpDir).getCrashArtifact().fileName).toBe('hs_err_pid123.log');
+
+    const picked = makeInstance(tmpDir).getCrashArtifact({
+      fileName: 'crash-2026-10-05_01.00.00-server.txt',
+    });
+    expect(picked.kind).toBe('crash-report');
+    expect(picked.fileName).toBe('crash-2026-10-05_01.00.00-server.txt');
+  });
+
+  it('文件名只在枚举结果里匹配：目录穿越写法与未知名字都返回 null，且不读任何文件', () => {
+    writeCrashReport('crash-2026-10-05_01.00.00-server.txt', read('crash-invalid-secret.txt'));
+    // 造一个「穿越目标真实存在」的现场：光断言 null 无法区分「被拦下」与「本来就没有」
+    const secret = path.join(tmpDir, 'secret.txt');
+    fs.writeFileSync(secret, '不该被读到');
+    const inst = makeInstance(tmpDir);
+
+    for (const name of ['../secret.txt', 'crash-reports/../secret.txt', 'hs_err_pid999.log']) {
+      expect(inst.getCrashArtifact({ fileName: name })).toBeNull();
+    }
+    // 穿透目标仍在原处（没被当作产物读走/写坏）
+    expect(fs.readFileSync(secret, 'utf-8')).toBe('不该被读到');
+  });
+
   it('只认约定命名：其它文件不当作崩溃产物', () => {
     writeCrashReport('notes.txt', read('crash-invalid-secret.txt'));
     writeHsErr('hs_err_pid1.log.bak', read('hs-err-segv.txt'));
@@ -223,5 +255,198 @@ describe('getCrashArtifact 取用与降级', () => {
     } finally {
       fs.rmSync(outside, { recursive: true, force: true });
     }
+  });
+});
+
+// 实例报错持久面：产物文件本身跨面板重启留存，历史面只是把它读出来
+describe('崩溃产物历史（getCrashArtifactHistory）', () => {
+  /** 固定产物 mtime，让「最新在前」有确定含义 */
+  function touch(fileName, mtimeMs, dir = tmpDir) {
+    const target = path.join(dir, fileName);
+    const seconds = mtimeMs / 1000;
+    fs.utimesSync(target, seconds, seconds);
+  }
+
+  it('从未崩溃：空列表（正常空态，不是读取失败）', () => {
+    const instance = makeInstance(tmpDir);
+    expect(instance.getCrashArtifactHistory()).toEqual({ items: [], total: 0, hasMore: false });
+  });
+
+  it('多份产物按 mtime 最新在前，各自带时间/原因/顶层异常；hs_err 的时间留空', () => {
+    writeCrashReport('crash-2026-10-05_01.10.36-server.txt', read('crash-invalid-secret.txt'));
+    writeCrashReport('crash-2026-10-04_02.00.00-server.txt', read('crash-tls-keystore.txt'));
+    writeHsErr('hs_err_pid2601333.log', read('hs-err-segv.txt'));
+    touch(path.join('crash-reports', 'crash-2026-10-05_01.10.36-server.txt'), 3000);
+    touch(path.join('crash-reports', 'crash-2026-10-04_02.00.00-server.txt'), 1000);
+    touch('hs_err_pid2601333.log', 5000);
+
+    const history = makeInstance(tmpDir).getCrashArtifactHistory();
+
+    expect(history.total).toBe(3);
+    expect(history.hasMore).toBe(false);
+    expect(history.items.map((i) => i.fileName)).toEqual([
+      'hs_err_pid2601333.log',
+      'crash-2026-10-05_01.10.36-server.txt',
+      'crash-2026-10-04_02.00.00-server.txt',
+    ]);
+    // hs_err：原因取故障行、详情取问题帧；时间留空（其 Time 行形态含 elapsed time，交由界面用 mtime）
+    expect(history.items[0].kind).toBe('jvm-crash');
+    expect(history.items[0].reason).toContain('SIGSEGV');
+    expect(history.items[0].detail).toBeTruthy();
+    expect(history.items[0].time).toBeNull();
+    // 崩溃报告：Time/Description 直接取自产物，顶层异常行作为详情
+    expect(history.items[1]).toMatchObject({
+      kind: 'crash-report',
+      time: '2026-10-05 01:10:36',
+      reason: 'Exception in server tick loop',
+    });
+    expect(history.items[1].detail).toMatch(/(Exception|Error)\b/);
+    expect(history.items[2].reason).toBeTruthy();
+  });
+
+  it('limit 裁剪最早的那些，total/hasMore 如实反映总量', () => {
+    writeCrashReport('crash-a-server.txt', read('crash-invalid-secret.txt'));
+    writeCrashReport('crash-b-server.txt', read('crash-tls-keystore.txt'));
+    touch(path.join('crash-reports', 'crash-a-server.txt'), 2000);
+    touch(path.join('crash-reports', 'crash-b-server.txt'), 1000);
+
+    const history = makeInstance(tmpDir).getCrashArtifactHistory({ limit: 1 });
+
+    expect(history.items.map((i) => i.fileName)).toEqual(['crash-a-server.txt']);
+    expect(history.total).toBe(2);
+    expect(history.hasMore).toBe(true);
+  });
+
+  it('单份读不到不影响整列：该条保留元信息、原因留空（不猜），其余照常解析', () => {
+    writeCrashReport('crash-a-server.txt', read('crash-invalid-secret.txt'));
+    writeCrashReport('crash-b-server.txt', read('crash-tls-keystore.txt'));
+    touch(path.join('crash-reports', 'crash-a-server.txt'), 2000);
+    touch(path.join('crash-reports', 'crash-b-server.txt'), 1000);
+    const origOpen = fs.openSync.bind(fs);
+    vi.spyOn(fs, 'openSync').mockImplementation((target, ...rest) => {
+      if (String(target).endsWith('crash-a-server.txt')) throw new Error('EACCES: 权限不足');
+      return origOpen(target, ...rest);
+    });
+
+    const history = makeInstance(tmpDir).getCrashArtifactHistory();
+
+    expect(history.total).toBe(2);
+    expect(history.items[0]).toMatchObject({
+      fileName: 'crash-a-server.txt',
+      reason: null,
+      detail: null,
+      time: null,
+    });
+    expect(history.items[0].sizeBytes).toBeGreaterThan(0); // 元信息仍在，界面能回落到文件名
+    expect(history.items[1].reason).toBeTruthy();
+  });
+
+  it('产物目录不可读时不抛错（读取面不能把面板拖下去）', () => {
+    const instance = makeInstance(path.join(tmpDir, 'not-exist-dir'));
+    expect(() => instance.getCrashArtifactHistory()).not.toThrow();
+    expect(instance.getCrashArtifactHistory().items).toEqual([]);
+  });
+});
+
+// 诊断映射接进产物读取：卡片一次请求就能拿到「结论 + 已验证版本」
+describe('getCrashArtifact 带诊断结论', () => {
+  it('真实 26.1 样本：命中 MSMP 密钥非法，并指出该结论在 26.1 验证过', () => {
+    writeCrashReport('crash-2026-10-05_01.10.36-server.txt', read('crash-invalid-secret.txt'));
+
+    const artifact = makeInstance(tmpDir).getCrashArtifact();
+
+    expect(artifact.description).toBe('Exception in server tick loop');
+    expect(artifact.minecraftVersion).toBe('26.1');
+    expect(artifact.diagnosis.matched).toBe(true);
+    expect(artifact.diagnosis.entry.id).toBe('msmp-invalid-secret');
+    expect(artifact.diagnosis.entry.matchedBy).toBe('exception');
+    expect(artifact.diagnosis.instanceVersion).toBe('26.1');
+    expect(artifact.diagnosis.verifiedForInstance).toBe(true);
+    expect(artifact.diagnosis.entry.actions.length).toBeGreaterThan(0);
+  });
+
+  it('真实 26.1 样本：TLS 未配 keystore 走另一条具体词条（不被泛化条目顶替）', () => {
+    writeCrashReport('crash-2026-10-05_01.11.30-server.txt', read('crash-tls-keystore.txt'));
+
+    const artifact = makeInstance(tmpDir).getCrashArtifact();
+
+    expect(artifact.diagnosis.entry.id).toBe('msmp-tls-without-keystore');
+  });
+
+  it('未收录的崩溃：matched=false 且不给版本适用性结论（不猜）', () => {
+    writeCrashReport(
+      'crash-2026-10-05_02.00.00-server.txt',
+      // Description 与异常行都换成未收录的内容：该条样本的具体词条锚在异常行上，
+      // 只改 Description 仍会命中（这正是「具体优先」应有的行为）
+      read('crash-invalid-secret.txt')
+        .replace(
+          'Description: Exception in server tick loop',
+          'Description: Something We Have Never Seen',
+        )
+        .replace(
+          'java.lang.IllegalStateException: Invalid management server secret, must be 40 alphanumeric characters',
+          'java.lang.IllegalStateException: 未收录的初始化失败',
+        ),
+    );
+
+    const artifact = makeInstance(tmpDir).getCrashArtifact();
+
+    expect(artifact.diagnosis.matched).toBe(false);
+    expect(artifact.diagnosis.entry).toBeNull();
+    expect(artifact.diagnosis.verifiedForInstance).toBeNull();
+    // 未命中也要让用户看得到原始依据
+    expect(artifact.excerpt).toContain('Something We Have Never Seen');
+    // 契约自校验：路由的 validatedSuccess 只记不一致、不拦响应，漂移必须在这里转红
+    expect(crashArtifactSchema.safeParse(artifact).success).toBe(true);
+  });
+
+  it('崩溃报告没写版本时回落到实例版本；两者都没有则为 null', () => {
+    const text = read('crash-invalid-secret.txt').replace(/Minecraft Version:.*\n/, '');
+    writeCrashReport('crash-2026-10-05_03.00.00-server.txt', text);
+
+    const noVersion = makeInstance(tmpDir).getCrashArtifact();
+    expect(noVersion.minecraftVersion).toBeNull();
+    expect(noVersion.diagnosis.instanceVersion).toBeNull();
+
+    const withDbVersion = Object.assign(makeInstance(tmpDir), { _getMcVersion: () => '26.1' });
+    expect(withDbVersion.getCrashArtifact().diagnosis.instanceVersion).toBe('26.1');
+
+    const unknownVersion = Object.assign(makeInstance(tmpDir), { _getMcVersion: () => 'unknown' });
+    expect(unknownVersion.getCrashArtifact().diagnosis.instanceVersion).toBeNull();
+  });
+
+  it('hs_err 的故障行是可锚键：信号族命中（结论 + 原始字段都在）', () => {
+    // 样本是真实 hs_err（`hs-err-segv.txt` 的故障行为 `SIGSEGV (0xb) at pc=...`）
+    writeHsErr('hs_err_pid2601333.log', read('hs-err-segv.txt'));
+
+    const artifact = makeInstance(tmpDir).getCrashArtifact();
+
+    expect(artifact.kind).toBe('jvm-crash');
+    expect(artifact.diagnosis.matched).toBe(true);
+    expect(artifact.diagnosis.entry.id).toBe('jvm-native-signal');
+    expect(artifact.diagnosis.entry.matchedBy).toBe('fault');
+    // 命中不等于不再展示原始字段：结论与「故障/问题帧」并存
+    expect(artifact.summary.length).toBeGreaterThan(0);
+  });
+
+  it('非信号的故障行仍不命中（Internal Error 一类无真实样本，不猜）', () => {
+    writeHsErr(
+      'hs_err_pid999.log',
+      [
+        '#',
+        '# A fatal error has been detected by the Java Runtime Environment:',
+        '#',
+        '#  Internal Error (/tmp/hotspot/src/share/vm/runtime/thread.cpp:3660), pid=999, tid=1',
+        '# JRE version: OpenJDK Runtime Environment (21.0.1+12)',
+        '# Java VM: OpenJDK 64-Bit Server VM (21.0.1+12, mixed mode, linux-amd64)',
+        '# Problematic frame:',
+        '# V  [libjvm.so+0x1234]',
+      ].join('\n'),
+    );
+
+    const artifact = makeInstance(tmpDir).getCrashArtifact();
+
+    expect(artifact.kind).toBe('jvm-crash');
+    expect(artifact.diagnosis.matched).toBe(false);
   });
 });

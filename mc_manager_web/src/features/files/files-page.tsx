@@ -310,7 +310,7 @@ export function FilesPage() {
       {/* ── 双栏主体 ── */}
       <div ref={bodyRef} className="flex min-h-0 flex-1 gap-3 p-3">
         {/* 左栏：文件列表（桌面/移动同构：面包屑 + 工具栏导航）；flex-1 吃满编辑器以外宽度 */}
-        <Card className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
+        <Card size="flush" className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
           {/* ── 上传进度条（对齐插件页交互：progressbar ARIA + 取消） ── */}
           {uploading && <UploadProgressBar uploading={uploading} onCancel={cancelUpload} />}
           <FileList

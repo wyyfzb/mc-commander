@@ -44,6 +44,7 @@ import {
 import { BackupModel as MockBackupModel } from '../db/backup.model.js';
 import { spawn as mockSpawn } from 'child_process';
 import { ErrorCodes, AppError } from '../utils/response.js';
+import { asInstance } from './helpers/msmp-instance.js';
 
 // 等待事件（fire-and-forget 流程以事件作为完成信号）
 function waitForEvent(emitter, eventName, timeoutMs = 10000) {
@@ -336,12 +337,14 @@ describe('executeBackup：RCON 保存序列与对称恢复', () => {
     createTestInstance(serversDir);
     const snapshotDir = snapshotWithWorld();
     const send = vi.fn().mockResolvedValue('ok');
-    manager.getInstance = vi.fn(() => ({
-      isRunning: true,
-      isRconConnected: true,
-      sendCommandWithResponse: send,
-      jarFile: 'server.jar',
-    }));
+    manager.getInstance = vi.fn(() =>
+      asInstance({
+        isRunning: true,
+        isRconConnected: true,
+        sendCommandWithResponse: send,
+        jarFile: 'server.jar',
+      }),
+    );
     const service = new BackupService(manager);
 
     const done = waitForEvent(manager, 'instance:backupComplete');
@@ -363,12 +366,14 @@ describe('executeBackup：RCON 保存序列与对称恢复', () => {
       .fn()
       .mockRejectedValueOnce(new Error('RCON timeout')) // save-off 失败
       .mockRejectedValueOnce(new Error('RCON timeout')); // save-all flush 失败
-    manager.getInstance = vi.fn(() => ({
-      isRunning: true,
-      isRconConnected: true,
-      sendCommandWithResponse: send,
-      jarFile: 'server.jar',
-    }));
+    manager.getInstance = vi.fn(() =>
+      asInstance({
+        isRunning: true,
+        isRconConnected: true,
+        sendCommandWithResponse: send,
+        jarFile: 'server.jar',
+      }),
+    );
     const service = new BackupService(manager);
 
     const done = waitForEvent(manager, 'instance:backupComplete');
@@ -390,12 +395,14 @@ describe('executeBackup：RCON 保存序列与对称恢复', () => {
       .mockResolvedValueOnce('ok') // save-off
       .mockResolvedValueOnce('ok') // save-all flush
       .mockRejectedValueOnce(new Error('connection lost')); // save-on（finally 中）
-    manager.getInstance = vi.fn(() => ({
-      isRunning: true,
-      isRconConnected: true,
-      sendCommandWithResponse: send,
-      jarFile: 'server.jar',
-    }));
+    manager.getInstance = vi.fn(() =>
+      asInstance({
+        isRunning: true,
+        isRconConnected: true,
+        sendCommandWithResponse: send,
+        jarFile: 'server.jar',
+      }),
+    );
     const service = new BackupService(manager);
 
     const done = waitForEvent(manager, 'instance:backupComplete');
@@ -417,10 +424,12 @@ describe('executeBackup：RCON 保存序列与对称恢复', () => {
     const noInstance = new BackupService(manager);
     await expect(noInstance._restoreSaveOn('s1')).resolves.toBeUndefined();
 
-    manager.getInstance = vi.fn(() => ({
-      isRconConnected: false,
-      sendCommandWithResponse: vi.fn(),
-    }));
+    manager.getInstance = vi.fn(() =>
+      asInstance({
+        isRconConnected: false,
+        sendCommandWithResponse: vi.fn(),
+      }),
+    );
     const noRcon = new BackupService(manager);
     await expect(noRcon._restoreSaveOn('s1')).resolves.toBeUndefined();
   });
@@ -465,7 +474,7 @@ describe('executeRestore 安全网：后台竞态放弃与中段失败回滚', (
     const snapshotDir = goodSnapshot();
     spawnSucceeds();
     // 后台执行期二次检查发现实例已被启动（同步段检查之后的竞态）
-    manager.getInstance = vi.fn(() => ({ isRunning: true, isRconConnected: false }));
+    manager.getInstance = vi.fn(() => asInstance({ isRunning: true, isRconConnected: false }));
     const failed = waitForEvent(manager, 'instance:restoreFailed');
 
     await expect(
@@ -484,7 +493,7 @@ describe('executeRestore 安全网：后台竞态放弃与中段失败回滚', (
   it('复制结果缺世界数据：删除半成品新目录 + pre_restore 原样回归（原世界不丢）', async () => {
     createTestInstance(serversDir);
     const snapshotDir = goodSnapshot();
-    manager.getInstance = vi.fn(() => ({ isRunning: false, isRconConnected: false }));
+    manager.getInstance = vi.fn(() => asInstance({ isRunning: false, isRconConnected: false }));
     // 模拟复制只写回部分文件（无 level.dat）：⑤ 校验失败触发完整回滚
     vi.spyOn(service, '_restoreFromSnapshot').mockImplementation(async () => {
       fs.mkdirSync(path.join(serversDir, 's1'), { recursive: true });
@@ -512,7 +521,7 @@ describe('executeRestore 安全网：后台竞态放弃与中段失败回滚', (
   it('回滚中状态回写失败：不吞原错误（原恢复失败原因上抛）', async () => {
     createTestInstance(serversDir);
     const snapshotDir = goodSnapshot();
-    manager.getInstance = vi.fn(() => ({ isRunning: false, isRconConnected: false }));
+    manager.getInstance = vi.fn(() => asInstance({ isRunning: false, isRconConnected: false }));
     vi.spyOn(service, '_restoreFromSnapshot').mockImplementation(async () => {
       fs.mkdirSync(path.join(serversDir, 's1'), { recursive: true });
       fs.writeFileSync(path.join(serversDir, 's1', 'server.properties'), 'partial-copy');
@@ -537,7 +546,7 @@ describe('executeRestore 安全网：后台竞态放弃与中段失败回滚', (
   it('恢复已成功后置步骤（状态回写）失败：保留已恢复目录，不得反向销毁', async () => {
     createTestInstance(serversDir);
     const snapshotDir = goodSnapshot();
-    manager.getInstance = vi.fn(() => ({ isRunning: false, isRconConnected: false }));
+    manager.getInstance = vi.fn(() => asInstance({ isRunning: false, isRconConnected: false }));
     // 复制成功且带世界数据：⑤ 校验通过，流程走到 ⑥（删 pre_restore → 回写状态）
     vi.spyOn(service, '_restoreFromSnapshot').mockImplementation(async (_snap, target) => {
       fs.mkdirSync(path.join(target, 'world'), { recursive: true });

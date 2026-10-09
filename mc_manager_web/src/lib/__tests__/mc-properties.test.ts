@@ -7,6 +7,7 @@ import {
   buildPropertiesPayload,
   buildUnknownPropertyDef,
   HOT_RELOAD_KEYS,
+  isPanelManagedProperty,
   isBoolValue,
   SENSITIVE_PROPERTY_KEYS,
   SENSITIVE_PROPERTY_PLACEHOLDER,
@@ -55,11 +56,28 @@ describe('敏感键（11 键）与热改键（4 键）', () => {
     expect(SENSITIVE_PROPERTY_KEYS.size).toBe(11)
   })
 
-  it('热改键集合与服务端 RUNTIME_COMMAND_MAP 完全一致（5 键）', () => {
+  it('热改键集合与服务端 SERVER_SETTING_METHODS 一致（15 键）', () => {
+    // 判据是服务端逐条实测过的 setter 回读（值不生效的 setter 不纳入）
     expect([...HOT_RELOAD_KEYS].sort()).toEqual(
-      ['white-list', 'enforce-whitelist', 'difficulty', 'gamemode', 'player-idle-timeout'].sort(),
+      [
+        'white-list',
+        'enforce-whitelist',
+        'difficulty',
+        'gamemode',
+        'force-gamemode',
+        'max-players',
+        'motd',
+        'view-distance',
+        'simulation-distance',
+        'spawn-protection',
+        'allow-flight',
+        'player-idle-timeout',
+        'hide-online-players',
+        'op-permission-level',
+        'entity-broadcast-range-percentage',
+      ].sort(),
     )
-    expect(HOT_RELOAD_KEYS.size).toBe(5)
+    expect(HOT_RELOAD_KEYS.size).toBe(15)
   })
 
   it('敏感键与热改键均为已知属性，或走未知键定义（仍标记敏感）', () => {
@@ -170,6 +188,22 @@ describe('buildUnknownPropertyDef（未知属性追加）', () => {
     expect(def.category).toBe('serverSettings')
     expect(def.isWritable).toBe(false)
     expect(def.isHotReload).toBe(false)
+  })
+
+  it('面板接管的键族（management-server-*）行上说明「由面板管理」，不当成普通设置项', () => {
+    // 用户真正想手改的位置就是这几行：只写「server.properties 设置项」等于这里一句提醒都没有
+    expect(buildUnknownPropertyDef('management-server-enabled', 'false').desc).toBe('由面板管理')
+    expect(buildUnknownPropertyDef('management-server-secret', 'x').desc).toBe('由面板管理')
+    expect(buildUnknownPropertyDef('management-server-tls-enabled', 'false').desc).toBe(
+      '由面板管理',
+    )
+    // host / allowed-origins / port 面板不写（非本机提示还要求用户自己改回 localhost），
+    // 说成「由面板管理」会挡住用户改它们
+    expect(buildUnknownPropertyDef('management-server-host', 'localhost').desc).toBe(
+      'server.properties 设置项',
+    )
+    expect(isPanelManagedProperty('management-server-host')).toBe(false)
+    expect(isPanelManagedProperty('server-port')).toBe(false)
   })
 
   it('未知键命中敏感集时标记 isSensitive（防明文旁路）', () => {

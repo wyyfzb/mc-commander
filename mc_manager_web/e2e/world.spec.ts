@@ -8,6 +8,15 @@ import { test, expect, type Page } from '@playwright/test'
 
 // 可选截图（调试用）：设 E2E_SHOT=1 时输出到 test-results/shots/，默认关闭
 const SHOT_DIR = path.join(process.cwd(), 'test-results', 'shots')
+
+/** 可见文本（剔除 sr-only 的完整解释）：子串匹配咬不住文案本身，逐字比对才咬得住 */
+function visibleText(locator: import('@playwright/test').Locator) {
+  return locator.evaluate((el) => {
+    const clone = el.cloneNode(true) as HTMLElement
+    clone.querySelectorAll('.sr-only').forEach((n) => n.remove())
+    return clone.textContent
+  })
+}
 function maybeShot(page: Page, name: string) {
   return process.env.E2E_SHOT ? page.screenshot({ path: path.join(SHOT_DIR, name) }) : undefined
 }
@@ -97,6 +106,44 @@ test.describe('世界页', () => {
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     )
     expect(overflow).toBe(0)
+  })
+
+  test('侧栏实例卡刷新语义（结果说明）：未连通时说「轮询」且不截断', async ({ page }) => {
+    await setupConnection(page)
+    // 故意从世界页进：这条结果的真值不依赖当前页面（此前它取 store，只有仪表盘会写，
+    // 于是从别的页面进来会拿到空值）
+    await page.goto('/world')
+    // 桌面 rail 与移动抽屉各渲染一份迷你卡：抽屉那份 aria-hidden/inert，仍按名字精确限定
+    const rail = page.getByRole('complementary', { name: '主导航', exact: true })
+    const line = rail.getByText('运行中 · 3 人在线 · 轮询')
+    await expect(line).toBeVisible({ timeout: 10_000 })
+    // 逐字比对可见文本（剔除 sr-only）：`getByText` 是**子串**匹配，把标签改成「轮询中」
+    // 它照样命中——那种断言咬不住文案本身
+    expect(await visibleText(line)).toBe('运行中 · 3 人在线 · 轮询')
+    // 标签必须短到不截断：该行内容宽实测 149px（「运行中 · 3 人在线」占 90px），带空格的
+    // 整句「每 30 秒刷新」要 172px，会被 ellipsis 吃掉尾巴。这条只有真实布局能量到，jsdom 恒 0
+    expect(await line.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0)
+  })
+
+  test('侧栏实例卡刷新语义：实例详情报 msmpPush=true ⇒ 说「实时」', async ({ page }) => {
+    await setupConnection(page)
+    // 用 route 造出「推送面已连通」这一真值：mock 的通道是关的，缺这条就只剩单测证据
+    await page.route('**/api/v1/instances/*', async (route) => {
+      const res = await route.fetch()
+      const body = (await res.json()) as { data?: { capabilities?: { msmpPush?: boolean } } }
+      if (body?.data?.capabilities) body.data.capabilities.msmpPush = true
+      await route.fulfill({ response: res, json: body })
+    })
+    await page.goto('/world')
+    const rail = page.getByRole('complementary', { name: '主导航', exact: true })
+    const line = rail.getByText('运行中 · 3 人在线 · 实时')
+    await expect(line).toBeVisible({ timeout: 10_000 })
+    // 逐字比对可见文本：子串匹配下「实时更新」这类改法照样命中
+    expect(await visibleText(line)).toBe('运行中 · 3 人在线 · 实时')
+    // 正档同样不得被 ellipsis 吃掉（实测 128px / 内容宽 149px）；jsdom 量不到真实几何
+    expect(await line.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0)
+    // 顶栏已不承载这条结果（它只报连接档位）
+    await expect(page.getByText('已连接 · 实时')).toHaveCount(0)
   })
 
   test('属性 Tab：默认渲染 + 编辑保存流程', async ({ page }) => {

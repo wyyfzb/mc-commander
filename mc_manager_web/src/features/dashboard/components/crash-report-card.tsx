@@ -1,9 +1,14 @@
 import { useState } from 'react'
-import { ChevronDown, FileWarning, Info } from 'lucide-react'
+import { ChevronDown, Copy, ExternalLink, FileWarning, Info, TriangleAlert } from 'lucide-react'
+import { toast } from 'sonner'
 import { Card, CardBody, CardHeader, CardTitle } from '@/components/mcs/card'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
+import { SEMANTIC_TONE_CLASSES } from '@/components/mcs/tone'
+import { Link } from 'react-router'
+import { Button } from '@/components/ui/button'
 import { useCrashArtifact } from '@/api/queries'
-import type { CrashArtifact } from '@/api/types'
+import type { CrashArtifact, CrashDiagnosisEntry } from '@/api/types'
+import { copyText } from '@/lib/clipboard'
 import { formatRelativeTime } from '@/lib/format'
 import { useNow } from '@/hooks/use-now'
 
@@ -16,7 +21,55 @@ import { useNow } from '@/hooks/use-now'
  *
  * 只读展示，不进备份（快照不被诊断产物撑大）。产物不存在时**整卡不渲染**：
  * 没崩过的实例不该多一张空卡。
+ *
+ * 结论来自服务端的诊断词条（键只锚崩溃报告自身的语义字段），面板不在这里做任何推断：
+ * 未收录时如实说「不猜」，把原始字段摆出来并给出反馈入口。
  */
+
+/** 开源仓库主页（关于页另有一份字面量，本仓尚无共享常量） */
+const REPO_URL = 'https://github.com/wyyfzb/mc-commander'
+
+/** 词条依据的展示词：区分「实机观测到的样本」与「从该版本包里静态提取」 */
+const EVIDENCE_LABELS: Record<string, string> = {
+  实测: '实测样本',
+  静态提取: '版本静态提取',
+}
+
+/** Issue 预填正文上限：预填走 URL，过长会被浏览器/服务端截断，截在这里比截在跳转后可控 */
+const FEEDBACK_BODY_MAX = 1200
+
+/** 复制载荷上限：含调用栈与原文，避免一份超大崩溃把剪贴板与粘贴框塞满 */
+const FEEDBACK_TEXT_MAX = 8000
+
+/** 反馈正文：只放产物里的原始字段与原文，不放面板的推断 */
+function feedbackText(data: CrashArtifact, panelVersion?: string): string {
+  const lines = ['MC_Commander 崩溃诊断反馈']
+  // 面板版本要带上：接收方（模组作者或维护者）据此定位「这行为属于哪一版」
+  if (panelVersion) lines.push(`面板版本：${panelVersion}`)
+  lines.push(`产物文件：${data.fileName ?? '未知'}`)
+  if (data.minecraftVersion) lines.push(`崩溃报告里的 MC 版本：${data.minecraftVersion}`)
+  if (data.description) lines.push(`Description: ${data.description}`)
+  if (data.exception) lines.push(`顶层异常：${data.exception}`)
+  for (const field of data.summary ?? []) lines.push(`${field.label}：${field.value}`)
+  if (data.stack?.length) lines.push('', '调用栈：', ...data.stack)
+  if (data.excerpt) lines.push('', '产物原文：', data.excerpt)
+  return lines.join('\n').slice(0, FEEDBACK_TEXT_MAX)
+}
+
+/**
+ * 反馈用的 Issue 预填链接。
+ * 标题按产物类型分岔：崩溃报告是我们「没有收录这条」，而 JVM 崩溃日志**没有可锚的键**，
+ * 说成「未收录」是面板无从知道的判断。
+ */
+function feedbackIssueUrl(data: CrashArtifact, panelVersion?: string): string {
+  const subject = data.description ?? data.exception ?? data.fileName ?? '未知崩溃'
+  const title =
+    data.kind === 'jvm-crash'
+      ? `[崩溃诊断] JVM 崩溃日志：${data.fileName ?? '未知文件'}`
+      : `[崩溃诊断] 未收录：${subject}`
+  const body = `${feedbackText(data, panelVersion).slice(0, FEEDBACK_BODY_MAX)}\n\n（由 MC_Commander 面板生成）`
+  return `${REPO_URL}/issues/new?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`
+}
 
 /** 已核实字段的展示顺序由服务端给定（Ordered），此处只决定版式 */
 function FieldGrid({ fields }: { fields: NonNullable<CrashArtifact['summary']> }) {
@@ -55,10 +108,105 @@ function Collapsible({ title, children }: { title: string; children: React.React
 }
 
 /**
- * 纯展示：取数由 `CrashReportCard` 承担，本组件只管把已有数据画出来。
+ * 诊断结论区：命中就给结论与处置动作；未命中就如实说「不猜」，并给出反馈入口。
+ * 放在卡片正文最前——用户先要答案，再看细节。
+ */
+function DiagnosisBlock({ data, panelVersion }: { data: CrashArtifact; panelVersion?: string }) {
+  const diagnosis = data.diagnosis
+  if (!diagnosis) return null
+
+  if (diagnosis.matched && diagnosis.entry) {
+    const entry: CrashDiagnosisEntry = diagnosis.entry
+    const versions = entry.verifiedVersions.filter(Boolean)
+    return (
+      <div className="flex flex-col gap-1.5" data-testid="crash-diagnosis">
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+          <span className="text-mcs-sm font-semibold text-mcs-text-default">{entry.title}</span>
+          <span className="text-mcs-2xs text-mcs-text-muted">
+            依据：{entry.evidence.map((e) => EVIDENCE_LABELS[e] ?? e).join(' / ')}
+            {versions.length > 0 && ` · 已验证 ${versions.join(' / ')}`}
+          </span>
+        </div>
+        <p className="text-mcs-xs text-mcs-text-muted">{entry.detail}</p>
+        <ul className="flex list-disc flex-col gap-0.5 pl-4">
+          {entry.actions.map((action) => (
+            <li key={action} className="text-mcs-xs text-mcs-text-default">
+              {action}
+            </li>
+          ))}
+        </ul>
+        {/* 版本不符只提示适用范围，不否定键的命中——结论仍是证据，只是不能照搬到别的版本。
+            两个值都非空才说得成句：畸形数据不该渲染出「当前实例是 ；」 */}
+        {diagnosis.verifiedForInstance === false &&
+          versions.length > 0 &&
+          diagnosis.instanceVersion && (
+            <NoticeBanner variant="info" icon={Info}>
+              本条结论在 {versions.join(' / ')} 上验证过，当前实例是 {diagnosis.instanceVersion}
+              ；请结合下方原文判断。
+            </NoticeBanner>
+          )}
+      </div>
+    )
+  }
+
+  // 未命中分两类：崩溃报告走 Description/异常行（键有值但没收录），JVM 崩溃日志走故障行
+  // （信号族能命中；`Internal Error`/OOM 型这类故障行暂未收录）——后者说成「不在已知词条里」
+  // 等于替面板断言一件它无从知道的事，且给出的对照物（顶层异常/由以下引起链）不存在于该产物
+  const isJvm = data.kind === 'jvm-crash'
+  const missTitle = isJvm ? '这份 JVM 崩溃日志没有可对照的词条' : '这次崩溃不在已知词条里'
+  const missBody = isJvm
+    ? '面板不在此推断原因：下方「故障」与「问题帧」两行来自 JVM 崩溃日志本身，是判断 JVM/系统级故障（段错误、堆内存或堆外内存耗尽等）的直接依据。'
+    : '面板不猜原因。下面已把产物原文与已核实字段摆出来：可对照「顶层异常」与「由以下引起」链里的包名判断；装有模组或插件时，把崩溃报告全文提供给对应作者通常最快。'
+
+  const copy = async () => {
+    const ok = await copyText(feedbackText(data, panelVersion))
+    if (ok) toast.success('崩溃信息已复制', { duration: 1500 })
+    else toast.error('复制失败，请手动复制')
+  }
+
+  return (
+    <div className="flex flex-col gap-2" data-testid="crash-diagnosis-miss">
+      <NoticeBanner variant="neutral" form="card" icon={Info}>
+        <p className="text-mcs-xs font-medium text-mcs-text-default">{missTitle}</p>
+        <p className="mt-1 text-mcs-xs text-mcs-text-muted">{missBody}</p>
+      </NoticeBanner>
+      {/* 同卡折叠控件是紧凑档 h-7、这两枚是行内小档 h-6：前者是披露控件、后者是动作按钮，角色不同 */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="xs" variant="ghost" onClick={() => void copy()}>
+          <Copy className="size-3" aria-hidden="true" />
+          复制崩溃信息
+        </Button>
+        <Button size="xs" variant="outline" asChild>
+          <a href={feedbackIssueUrl(data, panelVersion)} target="_blank" rel="noreferrer noopener">
+            <ExternalLink className="size-3" aria-hidden="true" />
+            反馈到 GitHub
+          </a>
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * 「刚崩过」的窗口。帮助页自检与仪表盘指引条共用这一个常量：两处对同一份产物
+ * 必须给同一个口径（曾经一边说「当前稳定」、一边常驻琥珀告警）。
+ */
+export const RECENT_CRASH_MS = 24 * 60 * 60 * 1000
+
+/**
+ * 纯展示：取数由取数包装（仪表盘指引条 / 帮助页完整诊断）承担，本组件只管把已有数据画出来。
  * 分开的理由是测试——本仓组件测试一律以 props 喂数据，不引 msw。
  */
-export function CrashReportView({ data, nowMs }: { data: CrashArtifact; nowMs: number }) {
+export function CrashReportView({
+  data,
+  nowMs,
+  panelVersion,
+}: {
+  data: CrashArtifact
+  nowMs: number
+  /** 面板自身版本：只进复制载荷与反馈链接，让接收方能定位「这行为属于哪一版」 */
+  panelVersion?: string
+}) {
   const isJvm = data.kind === 'jvm-crash'
   const title = isJvm ? 'JVM 崩溃日志' : '崩溃报告'
 
@@ -80,9 +228,11 @@ export function CrashReportView({ data, nowMs }: { data: CrashArtifact; nowMs: n
       </CardHeader>
 
       <CardBody className="flex flex-col gap-3">
+        <DiagnosisBlock data={data} panelVersion={panelVersion} />
+
         {/* 解析失败如实说「读不到」，不显示空内容让用户以为「没有报错」 */}
         {data.parseError && (
-          <NoticeBanner variant="warning" icon={Info}>
+          <NoticeBanner variant="warning" icon={TriangleAlert}>
             {data.parseError}
           </NoticeBanner>
         )}
@@ -105,7 +255,10 @@ export function CrashReportView({ data, nowMs }: { data: CrashArtifact; nowMs: n
 
         {data.stack && data.stack.length > 0 && (
           <Collapsible title={`调用栈（${data.stack.length} 帧）`}>
-            <pre className="max-h-60 overflow-auto rounded-mcs-sm bg-mcs-bg-muted p-2 text-mcs-2xs text-mcs-text-default">
+            <pre
+              tabIndex={0}
+              className="max-h-60 overflow-auto rounded-mcs-sm bg-mcs-bg-muted p-2 text-mcs-2xs text-mcs-text-default focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-mcs-focus-ring"
+            >
               {data.stack.join('\n')}
             </pre>
           </Collapsible>
@@ -113,7 +266,10 @@ export function CrashReportView({ data, nowMs }: { data: CrashArtifact; nowMs: n
 
         {data.excerpt && (
           <Collapsible title="完整产物原文">
-            <pre className="max-h-80 overflow-auto rounded-mcs-sm bg-mcs-bg-muted p-2 text-mcs-2xs whitespace-pre-wrap text-mcs-text-default">
+            <pre
+              tabIndex={0}
+              className="max-h-80 overflow-auto rounded-mcs-sm bg-mcs-bg-muted p-2 text-mcs-2xs whitespace-pre-wrap text-mcs-text-default focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-mcs-focus-ring"
+            >
               {data.excerpt}
             </pre>
           </Collapsible>
@@ -124,14 +280,56 @@ export function CrashReportView({ data, nowMs }: { data: CrashArtifact; nowMs: n
 }
 
 /**
- * 薄包装：取最新一份崩溃诊断产物。
- * 从未崩溃过（服务端返回 null）时**整卡不渲染**——没崩过的实例不该多一张空卡。
+ * 仪表盘的崩溃指引条：只说「什么时候崩过 + 去哪看」，完整诊断在帮助页。
+ *
+ * 为什么不在这里摊开完整诊断：诊断要摆已核实字段、调用栈、产物原文，还会随历史切换，
+ * 那是一屏「我来查一下为什么」的内容 —— 它属于帮助页。但崩溃那一刻用户多半正看着仪表盘，
+ * 所以这里不能什么都不说，用一行提示把路指过去。
+ * 从未崩溃过（服务端返回 null）时不渲染。
  */
-export function CrashReportCard({ instanceId }: { instanceId: string | null }) {
+/**
+ * 崩溃指引条：折进终端卡那条固定 40px 的工具条，与「服务器终端」同一行。
+ *
+ * 为什么不独立成行：它只在真的崩过时出现，但独立成行会占掉约 34px，实测把「终端可见高度
+ * ≥ 400px」的首屏预算顶破（1440×900 下从 400+ 掉到 365.83）。工具条高度固定，塞进其左侧
+ * 不改变任何高度，而提示仍留在用户刚崩时最先看的位置（完整诊断在帮助页）。
+ *
+ * 窄容器（<750px）下**整条不渲染**：工具条不换行，空间不够时它会被压成 0 宽、溢出到右侧
+ * 图标按钮底下（实测 375/480 下点「看诊断」落到「显示 JVM 警告」，静默切开过滤器），
+ * 而只留「图标 + 看诊断」是「有图标没说明」（实测 768 下整句不可见）。750px 是「放得下
+ * 整句」的实测门槛；崩溃历史与完整诊断都在帮助页，宁可不显示也不给一个误导的入口。
+ */
+export function CrashPointerNotice({ instanceId }: { instanceId: string | null }) {
   const { data } = useCrashArtifact(instanceId)
-  // 相对时间要随时间自己走：渲染期直接 Date.now() 是不纯的（React Compiler 会告警），
-  // 用仓库既有的分钟级时间源
+  // 相对时间要随时间自己走：渲染期直接 Date.now() 是不纯的（React Compiler 会告警）
   const nowMs = useNow()
   if (!data) return null
-  return <CrashReportView data={data} nowMs={nowMs} />
+
+  const title = data.kind === 'jvm-crash' ? 'JVM 崩溃日志' : '崩溃报告'
+  // 反馈级别按「状态是否还在」定：刚崩过要提醒，几天前崩过一次只是历史事实——
+  // 常驻琥珀告警会把同屏真正的告警稀释掉（与帮助页自检的 24 小时窗口同源）
+  const recent = data.mtimeMs != null && nowMs - data.mtimeMs < RECENT_CRASH_MS
+  return (
+    <span role="status" className="hidden min-w-0 items-center gap-1.5 @[750px]:flex">
+      <FileWarning
+        className={`size-3.5 shrink-0 ${recent ? SEMANTIC_TONE_CLASSES.warning.text : 'text-mcs-text-muted'}`}
+        aria-hidden
+      />
+      <span className="truncate text-mcs-xs text-mcs-text-muted">
+        {formatRelativeTime(
+          data.mtimeMs != null ? new Date(data.mtimeMs).toISOString() : null,
+          nowMs,
+          '时间未知',
+        )}
+        崩过一次（{title}
+        {data.diagnosis?.matched && data.diagnosis.entry ? `：${data.diagnosis.entry.title}` : ''}）
+      </span>
+      <Link
+        to="/help"
+        className="shrink-0 text-mcs-xs font-medium text-mcs-accent-fg underline-offset-2 hover:underline"
+      >
+        看诊断
+      </Link>
+    </span>
+  )
 }

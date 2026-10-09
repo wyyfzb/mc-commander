@@ -169,7 +169,10 @@ export function BanRecordsDialog({
 /** 状态文本与配色 */
 function BanStatus({ ban }: { ban: BanRecord }) {
   const cls = (color: string) => `text-mcs-xs font-semibold ${color}`
-  if (!ban.isActive) return <span className={cls('text-mcs-text-muted')}>已解封</span>
+  if (!ban.isActive) {
+    // 结束原因由服务端判定（前端拿 now 猜会把「提前解封、后来时间也过了」误报成到期）
+    return <span className={cls('text-mcs-text-muted')}>{ban.expired ? '已到期' : '已解封'}</span>
+  }
   if (ban.isPermanent) return <span className={cls('text-mcs-error-fg')}>永久封禁</span>
   if (ban.expiresAt !== null) {
     // 渲染期取当前时间为可接受权衡：剩余时间精度到分钟、随列表数据刷新自然更新，非实时倒计时

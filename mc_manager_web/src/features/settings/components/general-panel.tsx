@@ -76,7 +76,7 @@ export function GeneralPanel(_props: GeneralPanelProps) {
   }
 
   return (
-    <Card>
+    <Card size="flush">
       <CardHeader className="gap-3 border-b border-mcs-border-subtle px-4 py-3">
         <span className="flex size-8 shrink-0 items-center justify-center rounded-mcs-sm bg-mcs-accent-bg-subtle">
           <Settings2 className="size-4 text-mcs-accent-fg" aria-hidden />

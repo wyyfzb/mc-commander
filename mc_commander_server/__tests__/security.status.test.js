@@ -16,6 +16,7 @@ vi.mock('../db/index.js', () => ({
 import { createStatusRoutes } from '../routes/status.js';
 import { InstanceModel } from '../db/index.js';
 import { errorHandler } from '../middleware/error_handler.js';
+import { asInstance } from './helpers/msmp-instance.js';
 
 // 安全修复回归测试：PUT /properties 键白名单与值校验、PUT /instances/:id
 // 与 POST /start 移除 startCommand 注入面、GET/PUT /properties 敏感键占位符。
@@ -70,7 +71,7 @@ describe('PUT /api/instances/:id/properties 键白名单与值校验', () => {
 
   it('未知键整体拒绝 400 并日志告警，且不写入任何属性', async () => {
     const instance = makeMockInstance();
-    mockManager.getInstance.mockReturnValue(instance);
+    mockManager.getInstance.mockReturnValue(asInstance(instance));
 
     const res = await request(app)
       .put('/api/instances/s1/properties')
@@ -83,7 +84,7 @@ describe('PUT /api/instances/:id/properties 键白名单与值校验', () => {
 
   it('敏感键禁止写入：enable-rcon / online-mode / server-port / enable-command-block / rcon.password 一律 400', async () => {
     const instance = makeMockInstance();
-    mockManager.getInstance.mockReturnValue(instance);
+    mockManager.getInstance.mockReturnValue(asInstance(instance));
 
     for (const key of [
       'enable-rcon',
@@ -107,7 +108,7 @@ describe('PUT /api/instances/:id/properties 键白名单与值校验', () => {
 
   it('布尔键仅接受 true/false，非法值 400', async () => {
     const instance = makeMockInstance();
-    mockManager.getInstance.mockReturnValue(instance);
+    mockManager.getInstance.mockReturnValue(asInstance(instance));
 
     const res = await request(app).put('/api/instances/s1/properties').send({ pvp: 'yes' });
 
@@ -117,7 +118,7 @@ describe('PUT /api/instances/:id/properties 键白名单与值校验', () => {
 
   it('数值键仅接受整数（含 -1 特殊值），非整数 400', async () => {
     const instance = makeMockInstance();
-    mockManager.getInstance.mockReturnValue(instance);
+    mockManager.getInstance.mockReturnValue(asInstance(instance));
 
     const bad1 = await request(app)
       .put('/api/instances/s1/properties')
@@ -137,7 +138,7 @@ describe('PUT /api/instances/:id/properties 键白名单与值校验', () => {
 
   it('字符串键拒绝真实换行符（防 server.properties 行注入）', async () => {
     const instance = makeMockInstance();
-    mockManager.getInstance.mockReturnValue(instance);
+    mockManager.getInstance.mockReturnValue(asInstance(instance));
 
     const res = await request(app)
       .put('/api/instances/s1/properties')
@@ -149,7 +150,7 @@ describe('PUT /api/instances/:id/properties 键白名单与值校验', () => {
 
   it('level-name 白名单拒绝路径穿越（.. 与路径分隔符），合法值通过', async () => {
     const instance = makeMockInstance();
-    mockManager.getInstance.mockReturnValue(instance);
+    mockManager.getInstance.mockReturnValue(asInstance(instance));
 
     const bad1 = await request(app)
       .put('/api/instances/s1/properties')
@@ -170,7 +171,7 @@ describe('PUT /api/instances/:id/properties 键白名单与值校验', () => {
 
   it('合法键批量写入成功；合法与非法混合时整体拒绝（原子性）', async () => {
     const instance = makeMockInstance();
-    mockManager.getInstance.mockReturnValue(instance);
+    mockManager.getInstance.mockReturnValue(asInstance(instance));
 
     const ok = await request(app)
       .put('/api/instances/s1/properties')
@@ -191,7 +192,7 @@ describe('PUT /api/instances/:id/properties 键白名单与值校验', () => {
 
   it('运行期命令键值限制字符集（difficulty 命令注入防护），合法值正常下发命令', async () => {
     const instance = makeMockInstance({ isRunning: true });
-    mockManager.getInstance.mockReturnValue(instance);
+    mockManager.getInstance.mockReturnValue(asInstance(instance));
 
     const bad = await request(app)
       .put('/api/instances/s1/properties')
@@ -205,7 +206,7 @@ describe('PUT /api/instances/:id/properties 键白名单与值校验', () => {
 
   it('空对象提交视为无变更，返回 200 且不写盘', async () => {
     const instance = makeMockInstance();
-    mockManager.getInstance.mockReturnValue(instance);
+    mockManager.getInstance.mockReturnValue(asInstance(instance));
 
     const res = await request(app).put('/api/instances/s1/properties').send({});
 
@@ -233,7 +234,7 @@ describe('PUT /api/instances/:id 与 POST /start 封堵 startCommand 注入面',
 
   it('PUT startCommand 返回 400，拒绝任意命令字符串入库', async () => {
     const instance = makeMockInstance();
-    mockManager.getInstance.mockReturnValue(instance);
+    mockManager.getInstance.mockReturnValue(asInstance(instance));
 
     const res = await request(app)
       .put('/api/instances/s1')
@@ -245,7 +246,7 @@ describe('PUT /api/instances/:id 与 POST /start 封堵 startCommand 注入面',
 
   it('PUT javaPath 为不存在的路径返回 400', async () => {
     const instance = makeMockInstance();
-    mockManager.getInstance.mockReturnValue(instance);
+    mockManager.getInstance.mockReturnValue(asInstance(instance));
 
     const res = await request(app)
       .put('/api/instances/s1')
@@ -259,7 +260,7 @@ describe('PUT /api/instances/:id 与 POST /start 封堵 startCommand 注入面',
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-sec-'));
     try {
       const instance = makeMockInstance();
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
 
       for (const name of ['bash', 'python', 'sh']) {
         const fakeExec = path.join(tmpDir, name);
@@ -277,7 +278,7 @@ describe('PUT /api/instances/:id 与 POST /start 封堵 startCommand 注入面',
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-sec-'));
     try {
       const instance = makeMockInstance();
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
       const fakeJava = path.join(tmpDir, 'java');
       fs.writeFileSync(fakeJava, 'fake java binary');
       InstanceModel.update.mockReturnValue({ changes: 1 });
@@ -293,7 +294,7 @@ describe('PUT /api/instances/:id 与 POST /start 封堵 startCommand 注入面',
 
   it('PUT 其余普通字段（name）仍正常更新（回归）', async () => {
     const instance = makeMockInstance({ name: 'S1' });
-    mockManager.getInstance.mockReturnValue(instance);
+    mockManager.getInstance.mockReturnValue(asInstance(instance));
     InstanceModel.update.mockReturnValue({ changes: 1 });
 
     const res = await request(app).put('/api/instances/s1').send({ name: 'S2' });
@@ -308,7 +309,7 @@ describe('PUT /api/instances/:id 与 POST /start 封堵 startCommand 注入面',
     try {
       fs.writeFileSync(path.join(tmpDir, 'eula.txt'), 'eula=true\n');
       const instance = makeMockInstance({ serverPath: tmpDir });
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
 
       const res = await request(app)
         .post('/api/instances/s1/start')
@@ -326,7 +327,7 @@ describe('PUT /api/instances/:id 与 POST /start 封堵 startCommand 注入面',
     try {
       fs.writeFileSync(path.join(tmpDir, 'eula.txt'), 'eula=true\n');
       const instance = makeMockInstance({ serverPath: tmpDir });
-      mockManager.getInstance.mockReturnValue(instance);
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
 
       const res = await request(app).post('/api/instances/s1/start');
 
@@ -365,7 +366,7 @@ describe('GET/PUT /properties 敏感键占位符掩码', () => {
         pvp: 'false',
       },
     });
-    mockManager.getInstance.mockReturnValue(instance);
+    mockManager.getInstance.mockReturnValue(asInstance(instance));
 
     const res = await request(app).get('/api/instances/s1/properties');
 
@@ -381,7 +382,7 @@ describe('GET/PUT /properties 敏感键占位符掩码', () => {
     const instance = makeMockInstance({
       properties: { 'rcon.password': '********', 'white-list': 'true' },
     });
-    mockManager.getInstance.mockReturnValue(instance);
+    mockManager.getInstance.mockReturnValue(asInstance(instance));
 
     const res = await request(app)
       .put('/api/instances/s1/properties')
@@ -411,7 +412,7 @@ describe('PUT /api/instances/:id jvmArgs 持久化与 startCommand 清除', () =
 
   it('合法 jvmArgs 数组持久化到 DB 并同步内存实例', async () => {
     const instance = makeMockInstance({ serverPath: '/opt/servers/s1' });
-    mockManager.getInstance.mockReturnValue(instance);
+    mockManager.getInstance.mockReturnValue(asInstance(instance));
 
     const res = await request(app)
       .put('/api/instances/s1')
@@ -426,7 +427,7 @@ describe('PUT /api/instances/:id jvmArgs 持久化与 startCommand 清除', () =
 
   it('jvmArgs 含 -jar 时路径必须位于实例目录内', async () => {
     const instance = makeMockInstance({ serverPath: '/opt/servers/s1' });
-    mockManager.getInstance.mockReturnValue(instance);
+    mockManager.getInstance.mockReturnValue(asInstance(instance));
 
     const ok = await request(app)
       .put('/api/instances/s1')
@@ -443,7 +444,7 @@ describe('PUT /api/instances/:id jvmArgs 持久化与 startCommand 清除', () =
 
   it('非法 jvmArgs 整体 400 拒绝：非数组 / 非字符串元素 / 不支持参数', async () => {
     const instance = makeMockInstance({ serverPath: '/opt/servers/s1' });
-    mockManager.getInstance.mockReturnValue(instance);
+    mockManager.getInstance.mockReturnValue(asInstance(instance));
 
     const nonArray = await request(app).put('/api/instances/s1').send({ jvmArgs: '-Xmx4G' });
     expect(nonArray.status).toBe(400);
@@ -468,7 +469,7 @@ describe('PUT /api/instances/:id jvmArgs 持久化与 startCommand 清除', () =
 
   it('空数组 jvmArgs 允许（清除自定义参数，回退默认启动）', async () => {
     const instance = makeMockInstance({ serverPath: '/opt/servers/s1', jvmArgs: ['-Xmx4G'] });
-    mockManager.getInstance.mockReturnValue(instance);
+    mockManager.getInstance.mockReturnValue(asInstance(instance));
 
     const res = await request(app).put('/api/instances/s1').send({ jvmArgs: [] });
 
@@ -479,7 +480,7 @@ describe('PUT /api/instances/:id jvmArgs 持久化与 startCommand 清除', () =
 
   it('startCommand: null 清除遗留旧命令（迁移到结构化参数的途径）', async () => {
     const instance = makeMockInstance({ startCommand: 'java -Xmx2G -jar server.jar nogui' });
-    mockManager.getInstance.mockReturnValue(instance);
+    mockManager.getInstance.mockReturnValue(asInstance(instance));
 
     const res = await request(app).put('/api/instances/s1').send({ startCommand: null });
 
@@ -490,7 +491,7 @@ describe('PUT /api/instances/:id jvmArgs 持久化与 startCommand 清除', () =
 
   it('startCommand 非 null 值仍 400 拒绝（RCE 注入面封堵）', async () => {
     const instance = makeMockInstance({ serverPath: '/opt/servers/s1' });
-    mockManager.getInstance.mockReturnValue(instance);
+    mockManager.getInstance.mockReturnValue(asInstance(instance));
 
     const res = await request(app)
       .put('/api/instances/s1')
@@ -502,7 +503,7 @@ describe('PUT /api/instances/:id jvmArgs 持久化与 startCommand 清除', () =
 
   it('实例无遗留 startCommand 时传 null 不产生更新（不误报空更新）', async () => {
     const instance = makeMockInstance({ startCommand: null });
-    mockManager.getInstance.mockReturnValue(instance);
+    mockManager.getInstance.mockReturnValue(asInstance(instance));
 
     const res = await request(app).put('/api/instances/s1').send({ startCommand: null });
 

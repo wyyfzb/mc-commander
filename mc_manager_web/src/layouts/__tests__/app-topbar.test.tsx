@@ -5,6 +5,7 @@
  * - 列表请求失败 → 「实例列表加载失败」，同样不谎报空
  * - 有实例但未选中 → 「未选择实例」（也不得假造并不存在的实例名）
  * - 退出登录：会话 + 残留 API Key 一并清除并落到 /login（只清会话会被守卫弹回、toast 失真）
+ * - 状态点只表达连接档位：刷新时机的结果说明归侧栏实例卡（app-sidebar.test.tsx）
  * MSW 拦截实例列表（结构占位虚构数据，严禁真实服务器信息）
  */
 import { describe, it, expect, beforeEach, afterEach, afterAll, beforeAll, vi } from 'vitest'
@@ -305,5 +306,44 @@ describe('AppTopBar 实例名三态', () => {
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/login'))
     expect(useAuthStore.getState().session).toBeNull()
+  })
+})
+
+describe('AppTopBar 状态点', () => {
+  it('状态点只报连接档位：刷新时机不在顶栏声明（该结果已移到侧栏实例卡）', async () => {
+    // 详情给足真值：msmpPush=true 正是以前会在这条状态文案后追加「实时更新」的分支
+    server.use(
+      http.get('*/api/v1/instances/:id', () =>
+        HttpResponse.json({
+          status: 'ok',
+          code: 0,
+          message: 'Success',
+          data: {
+            ...mockInstanceStatus,
+            capabilities: { rcon: true, msmp: true, msmpPush: true },
+          },
+          timestamp: new Date().toISOString(),
+        }),
+      ),
+    )
+    // 必须有选中的实例：详情是这条结果说明的唯一真值来源（beforeEach 默认 instanceId=null）
+    useServerStore.setState({ socketConnected: true, status: null, instanceId: 'demo-1' })
+    renderTopbar()
+
+    // 先锚定状态点已经渲染出来：只断言「没有那段后缀」的话，顶栏整体没渲染也会通过
+    expect(await screen.findByText('已连接')).toBeInTheDocument()
+    // 判据是**顶栏里不再出现刷新语义**，而不是「某个已知串消失」——只查固定措辞的话，
+    // 把新措辞写成兄弟节点照样全绿（刷新时机已由侧栏实例卡承担，顶栏只报连接档位）
+    const banner = screen.getByRole('banner')
+    expect(banner.textContent).not.toMatch(/实时更新|轮询|每\s?\d+\s?秒/)
+    // 收起侧栏时该事实仍要可达：顶栏只留**不可见**文本（title + sr-only），不产生可见文字
+    // 等详情真的到达再断言（上面那句「没有可见后缀」在详情到达前就成立，这里不能沿用同一时机）
+    await waitFor(() => {
+      const dot = banner.querySelector('[data-status]')
+      expect(dot).toHaveAttribute('title', '实时推送已连通，服务器的状态变化会立即到达面板')
+      expect(dot?.querySelector('.sr-only')?.textContent).toBe(
+        '，实时推送已连通，服务器的状态变化会立即到达面板',
+      )
+    })
   })
 })

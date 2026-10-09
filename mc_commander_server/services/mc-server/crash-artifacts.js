@@ -24,6 +24,7 @@
 import fs from 'fs';
 import path from 'path';
 import { logger } from '../../utils/logger.js';
+import { diagnoseCrash } from './crash-diagnosis.js';
 
 /** 崩溃报告目录（与 `backup.service.js` 的排除项同名） */
 const CRASH_REPORT_DIR = 'crash-reports';
@@ -112,16 +113,28 @@ export function _crashArtifactStat(filePath) {
   }
 }
 
-/** 读取产物头部文本（超长文件只读前 MAX_READ_BYTES 字节） */
-function readHead(filePath) {
+/** 读取产物头部文本（超长文件只读前 maxBytes 字节；历史摘要只需头部，传更小的窗口即可） */
+function readHead(filePath, maxBytes = MAX_READ_BYTES) {
   const fd = fs.openSync(filePath, 'r');
   try {
-    const buf = Buffer.alloc(MAX_READ_BYTES);
-    const read = fs.readSync(fd, buf, 0, MAX_READ_BYTES, 0);
+    const buf = Buffer.alloc(maxBytes);
+    const read = fs.readSync(fd, buf, 0, maxBytes, 0);
     return buf.subarray(0, read).toString('utf-8');
   } finally {
     fs.closeSync(fd);
   }
+}
+
+/** 顶层异常行判据（含包名的类名 + 异常/错误）：解析与历史摘要共用一份，避免两处规则漂移 */
+const TOP_EXCEPTION_RE = /^[\w.$]+(Exception|Error|Throwable)\b/;
+
+/** 在给定范围内找第一条顶层异常行 */
+function findTopException(lines, endIndex = lines.length) {
+  for (let i = 0; i < endIndex; i++) {
+    const trimmed = lines[i].trim();
+    if (TOP_EXCEPTION_RE.test(trimmed)) return trimmed;
+  }
+  return null;
 }
 
 /** 从 `Key: value` 形态的行里取字段（崩溃报告的上下文段即此形态） */
@@ -156,7 +169,7 @@ export function parseCrashReport(text) {
       causedBy.push(line.slice('Caused by: '.length).trim());
       continue;
     }
-    if (!exception && /^[\w.$]+(Exception|Error|Throwable)\b/.test(line.trim())) {
+    if (!exception && TOP_EXCEPTION_RE.test(line.trim())) {
       exception = line.trim();
       continue;
     }
@@ -189,7 +202,17 @@ export function parseCrashReport(text) {
   push('服务端品牌', fieldFrom(lines, 'Server brand'));
   push('崩溃时在线玩家', fieldFrom(lines, 'All players'));
 
-  return { summary, exception, stack, causedBy, sections };
+  return {
+    summary,
+    // 诊断映射的锚：Description 是固定词表，值得作为一等字段（不再靠 summary 的标签去取）
+    description: fieldFrom(lines, 'Description'),
+    // 崩溃报告自己写的版本，比 DB/jar 更贴近「是谁崩的」
+    minecraftVersion: fieldFrom(detailsBlock, 'Minecraft Version'),
+    exception,
+    stack,
+    causedBy,
+    sections,
+  };
 }
 
 /** 解析 JVM 崩溃日志；无法识别时返回 { parseError } */
@@ -253,18 +276,79 @@ function excerptOf(text) {
     : text;
 }
 
+/** 历史摘要只需头部：崩溃报告的 Time/Description 与 hs_err 的故障行都在前几行 */
+const HISTORY_HEAD_BYTES = 8 * 1024;
+
 /**
- * 取最新的一份崩溃诊断产物并解析。
- * 无产物返回 null（正常的空态，不是错误）；解析失败如实降级为 parseError，不静默给空。
+ * 崩溃产物**历史**（最新的在前）。
+ *
+ * 为什么要有它：`crash-reports/` 与 `hs_err_pid*.log` 本就跨面板重启留着，但此前只暴露「最新
+ * 一份」——反复崩溃的实例在界面上和偶尔崩一次没有区别，用户看不到「什么时候崩过几次、每次
+ * 为什么」。这里不新建存储：产物文件本身就是持久面，只是把它读出来。
+ *
+ * 每份只读头部小窗口并只取「时间 + 原因 + 顶层异常/问题帧」：列表要的是可扫读的原因，
+ * 不是每份的完整解析（点开单份仍走 getCrashArtifact）。读不到就留空字段，**不猜**。
  */
-export function getCrashArtifact() {
-  let latest;
+export function getCrashArtifactHistory({ limit = 20 } = {}) {
+  let artifacts;
   try {
-    latest = this._listCrashArtifacts()[0];
+    artifacts = this._listCrashArtifacts();
+  } catch (e) {
+    logger.warn(`[${this.id}] 枚举崩溃产物失败:`, e.message);
+    return { items: [], total: 0, hasMore: false };
+  }
+
+  const items = [];
+  for (const artifact of artifacts.slice(0, limit)) {
+    const item = {
+      kind: artifact.kind,
+      fileName: artifact.fileName,
+      mtimeMs: artifact.mtimeMs,
+      sizeBytes: artifact.sizeBytes,
+      time: null,
+      reason: null,
+      detail: null,
+    };
+    try {
+      const text = readHead(artifact.filePath, HISTORY_HEAD_BYTES);
+      const lines = text.split(/\r?\n/);
+      if (artifact.kind === 'crash-report') {
+        item.time = fieldFrom(lines, 'Time');
+        item.reason = fieldFrom(lines, 'Description');
+        item.detail = findTopException(lines);
+      } else {
+        // hs_err 的头部即故障描述；问题帧只有信号型才有（OOM 型没有该段）
+        const parsed = parseHsErr(text);
+        item.reason = parsed.failure && parsed.failure.length ? parsed.failure.join('；') : null;
+        item.detail = parsed.problematicFrame ?? null;
+      }
+    } catch (e) {
+      // 单份读不到不影响整列：元信息仍在，原因留空由界面回落到文件名
+      logger.warn(`[${this.id}] 读取崩溃产物 ${artifact.fileName} 失败:`, e.message);
+    }
+    items.push(item);
+  }
+
+  return { items, total: artifacts.length, hasMore: artifacts.length > limit };
+}
+
+/**
+ * 取一份崩溃诊断产物并解析；不传 `fileName` 就取最新的一份。
+ * 无产物、或指定的文件名不在枚举结果里，都返回 null（正常空态，不是错误）；
+ * 解析失败如实降级为 parseError，不静默给空。
+ *
+ * 选择**只做枚举结果的白名单匹配**，不参与任何路径拼接：文件名来自请求，拼路径等于把目录
+ * 穿越面开到接口上（枚举里没有的名字一律当作「不存在」）。
+ */
+export function getCrashArtifact({ fileName } = {}) {
+  let artifacts;
+  try {
+    artifacts = this._listCrashArtifacts();
   } catch (e) {
     logger.warn(`[${this.id}] 枚举崩溃产物失败:`, e.message);
     return { available: false, parseError: `枚举崩溃产物失败: ${e.message}` };
   }
+  const latest = fileName ? artifacts.find((a) => a.fileName === fileName) : artifacts[0];
   if (!latest) return null;
 
   const base = {
@@ -285,7 +369,18 @@ export function getCrashArtifact() {
   }
 
   const parsed = latest.kind === 'crash-report' ? parseCrashReport(text) : parseHsErr(text);
-  return { ...base, ...parsed, excerpt: excerptOf(text) };
+  // 版本优先取崩溃报告自己写的：它才是「崩的那一份」；取不到再回落实例版本（unknown 视同未知）
+  const instanceVersion = parsed.minecraftVersion || this._getMcVersion?.() || null;
+  const mcVersion = instanceVersion === 'unknown' ? null : instanceVersion;
+  // hs_err 的可锚键是**故障行行首**（信号族用前缀锚）；非信号故障行（Internal Error / OOM 型）
+  // 仍会未命中，那时按原样展示已解析字段 + 出路处理
+  const diagnosis = diagnoseCrash({
+    description: parsed.description ?? null,
+    exception: parsed.exception ?? null,
+    fault: parsed.failure?.[0] ?? null,
+    mcVersion,
+  });
+  return { ...base, ...parsed, excerpt: excerptOf(text), diagnosis };
 }
 
 export default {
@@ -293,6 +388,7 @@ export default {
   _crashArtifactContained,
   _crashArtifactStat,
   getCrashArtifact,
+  getCrashArtifactHistory,
   parseCrashReport,
   parseHsErr,
 };
