@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/wyyfzb/mc-commander/compare/v0.7.5...v0.8.0) (2026-10-09)
+
+
+### Features
+
+* 实时推送默认开启；结构化日志、崩溃诊断与帮助排障面 ([#650](https://github.com/wyyfzb/mc-commander/issues/650)) ([26ef3f6](https://github.com/wyyfzb/mc-commander/commit/26ef3f698da8ff8653329930df565df415d7f166))
+
 ## [0.7.5](https://github.com/wyyfzb/mc-commander/compare/v0.7.4...v0.7.5) (2026-10-07)
 
 
