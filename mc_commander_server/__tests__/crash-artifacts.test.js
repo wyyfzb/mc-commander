@@ -187,15 +187,18 @@ describe('getCrashArtifact 取用与降级', () => {
   it('文件名只在枚举结果里匹配：目录穿越写法与未知名字都返回 null，且不读任何文件', () => {
     writeCrashReport('crash-2026-10-05_01.00.00-server.txt', read('crash-invalid-secret.txt'));
     // 造一个「穿越目标真实存在」的现场：光断言 null 无法区分「被拦下」与「本来就没有」
-    const secret = path.join(tmpDir, 'secret.txt');
-    fs.writeFileSync(secret, '不该被读到');
+    // 命名刻意避开 secret/token 一类词：密钥扫描按「关键词邻近 + 高熵串」启发式判定，
+    // 把穿越目标叫 secret.txt 会被判成凭据（本仓实测误报过一次），而这里要表达的是
+    // 「crash-reports 目录外一个真实存在的文件」，叫什么名字与断言无关。
+    const outsideTarget = path.join(tmpDir, 'outside.txt');
+    fs.writeFileSync(outsideTarget, '不该被读到');
     const inst = makeInstance(tmpDir);
 
-    for (const name of ['../secret.txt', 'crash-reports/../secret.txt', 'hs_err_pid999.log']) {
+    for (const name of ['../outside.txt', 'crash-reports/../outside.txt', 'hs_err_pid999.log']) {
       expect(inst.getCrashArtifact({ fileName: name })).toBeNull();
     }
     // 穿透目标仍在原处（没被当作产物读走/写坏）
-    expect(fs.readFileSync(secret, 'utf-8')).toBe('不该被读到');
+    expect(fs.readFileSync(outsideTarget, 'utf-8')).toBe('不该被读到');
   });
 
   it('只认约定命名：其它文件不当作崩溃产物', () => {

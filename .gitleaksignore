@@ -1,5 +1,5 @@
 3f5cc8f53b4bcb93bf32dd3c950173769243984a:mc_commander_server/__tests__/index.security.test.js:generic-api-key:18
 92dd9f72744884b56493e17696220cb6b19b82c5:mc_commander_server/__tests__/index.fatal-guard.test.js:generic-api-key:22
-# 目录穿越夹具：这行里的 ../secret.txt 是「穿透目标存在与否」的现场，不是凭据
-# （generic-api-key 按熵值命中，与上面两条同因）
-ef916bf9bf84fa04afef09b8e6a5c0fadb5c6804:mc_commander_server/__tests__/crash-artifacts.test.js:generic-api-key:194
+# ⚠️ 指纹按提交 SHA 记，**squash 合并后随即失效**——PR 上跑绿不代表合并到 main 后仍绿
+# （main 的 push 事件只扫最后一笔，正是那个新的 squash 提交）。故此处只登记**确实需要豁免**的
+# 行；凡是能靠「改掉像凭据的命名」解决的误报，一律改命名，不要往这里加。
