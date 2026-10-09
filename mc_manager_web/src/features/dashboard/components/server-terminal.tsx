@@ -112,7 +112,11 @@ export function ServerTerminal({
   headerNotice,
 }: {
   isLoading?: boolean
-  /** 工具条左侧的附加内容（如崩溃指引条）：工具条高度固定，塞进来不占额外高度 */
+  /**
+   * 工具条左侧的附加内容（如崩溃指引条）：工具条高度固定，塞进来不占额外高度。
+   * 契约：内容必须自己按本卡的容器宽（本卡已声明 `@container`）决定窄容器下的表现——
+   * 工具条不换行，塞不下的内容会盖到右侧图标按钮上。
+   */
   headerNotice?: ReactNode
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -399,13 +403,16 @@ export function ServerTerminal({
        与 dashboard-page 的分栏同档切到 min-h-0——分栏后终端改为吃满剩余高度 */
     <section
       data-testid="server-terminal"
-      className="animate-mcs-fade-up mcs-delay-4 flex min-h-[60vh] flex-1 flex-col overflow-hidden rounded-mcs-md border border-mcs-border-muted shadow-mcs-card @5xl:min-h-0"
+      className="@container animate-mcs-fade-up mcs-delay-4 flex min-h-[60vh] flex-1 flex-col overflow-hidden rounded-mcs-md border border-mcs-border-muted shadow-mcs-card @5xl:min-h-0"
       style={{ background: 'var(--mcs-terminal-bg)' }}
     >
       {/* 工具栏（实底，玻璃禁区内） */}
       <div className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-mcs-border-muted bg-mcs-bg-muted px-2">
         <div className="flex min-w-0 items-center gap-2">
           <InstanceControls />
+          {/* 宽容器下才渲染：工具条固定 h-10 且不换行，空间不够时内联内容会溢出到右侧图标按钮
+              **底下**（实测 375/480 下点「看诊断」落到「显示 JVM 警告」）。门槛由提示条自己按
+              本卡宽度判（见 CrashPointerNotice 的 @[750px]），插槽不替它定档 */}
           {headerNotice}
         </div>
         <div className="flex items-center gap-1">

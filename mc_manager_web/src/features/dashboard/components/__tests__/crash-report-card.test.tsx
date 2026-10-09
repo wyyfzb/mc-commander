@@ -364,6 +364,8 @@ describe('CrashPointerNotice（折进终端工具条的崩溃指引）', () => {
     renderPointer()
     expect(screen.getByText(/崩过一次/)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '看诊断' })).toHaveAttribute('href', '/help')
+    // 产物是挂载后异步取到的：原先靠 NoticeBanner 的 live region 播报，内联后必须自己带上
+    expect(screen.getByRole('status')).toHaveTextContent(/崩过一次/)
   })
 
   it('从未崩溃过时不渲染（没崩过的实例不该多一条提示）', () => {

@@ -26,14 +26,6 @@ import { useNow } from '@/hooks/use-now'
  * 未收录时如实说「不猜」，把原始字段摆出来并给出反馈入口。
  */
 
-/**
- * 崩溃指引条（内联）：折进终端卡那条固定 40px 的工具条，与「服务器终端」同一行。
- *
- * 为什么不独立成行：它只在真的崩过时出现，但独立成行会占掉约 34px，实测把「终端可见高度
- * ≥ 400px」的首屏预算顶破（1440×900 下从 400+ 掉到 365.83）。工具条高度固定，塞进其左侧
- * 不改变任何高度，而提示仍留在用户刚崩时最先看的位置（完整诊断在帮助页）。
- */
-
 /** 开源仓库主页（关于页另有一份字面量，本仓尚无共享常量） */
 const REPO_URL = 'https://github.com/wyyfzb/mc-commander'
 
@@ -295,6 +287,18 @@ export function CrashReportView({
  * 所以这里不能什么都不说，用一行提示把路指过去。
  * 从未崩溃过（服务端返回 null）时不渲染。
  */
+/**
+ * 崩溃指引条：折进终端卡那条固定 40px 的工具条，与「服务器终端」同一行。
+ *
+ * 为什么不独立成行：它只在真的崩过时出现，但独立成行会占掉约 34px，实测把「终端可见高度
+ * ≥ 400px」的首屏预算顶破（1440×900 下从 400+ 掉到 365.83）。工具条高度固定，塞进其左侧
+ * 不改变任何高度，而提示仍留在用户刚崩时最先看的位置（完整诊断在帮助页）。
+ *
+ * 窄容器（<750px）下**整条不渲染**：工具条不换行，空间不够时它会被压成 0 宽、溢出到右侧
+ * 图标按钮底下（实测 375/480 下点「看诊断」落到「显示 JVM 警告」，静默切开过滤器），
+ * 而只留「图标 + 看诊断」是「有图标没说明」（实测 768 下整句不可见）。750px 是「放得下
+ * 整句」的实测门槛；崩溃历史与完整诊断都在帮助页，宁可不显示也不给一个误导的入口。
+ */
 export function CrashPointerNotice({ instanceId }: { instanceId: string | null }) {
   const { data } = useCrashArtifact(instanceId)
   // 相对时间要随时间自己走：渲染期直接 Date.now() 是不纯的（React Compiler 会告警）
@@ -306,7 +310,7 @@ export function CrashPointerNotice({ instanceId }: { instanceId: string | null }
   // 常驻琥珀告警会把同屏真正的告警稀释掉（与帮助页自检的 24 小时窗口同源）
   const recent = data.mtimeMs != null && nowMs - data.mtimeMs < RECENT_CRASH_MS
   return (
-    <span className="flex min-w-0 items-center gap-1.5">
+    <span role="status" className="hidden min-w-0 items-center gap-1.5 @[750px]:flex">
       <FileWarning
         className={`size-3.5 shrink-0 ${recent ? SEMANTIC_TONE_CLASSES.warning.text : 'text-mcs-text-muted'}`}
         aria-hidden
