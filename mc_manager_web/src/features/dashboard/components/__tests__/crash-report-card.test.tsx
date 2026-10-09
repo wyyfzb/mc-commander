@@ -29,6 +29,10 @@ vi.mock('sonner', () => ({
     error: (m: string) => toastError(m),
   },
 }))
+// 时间源钉住：分支按「24 小时内 / 更早」二选一，不钉住时夹具会随时间流逝落到同一支
+const useNow = vi.fn(() => NOW)
+vi.mock('@/hooks/use-now', () => ({ useNow: () => useNow() }))
+
 vi.mock('@/api/queries', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/api/queries')>()),
   useCrashArtifact: () => useCrashArtifact(),
@@ -361,11 +365,27 @@ describe('CrashPointerNotice（折进终端工具条的崩溃指引）', () => {
         diagnosis: { matched: false },
       },
     })
-    renderPointer()
+    const { container } = renderPointer()
     expect(screen.getByText(/崩过一次/)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '看诊断' })).toHaveAttribute('href', '/help')
     // 产物是挂载后异步取到的：原先靠 NoticeBanner 的 live region 播报，内联后必须自己带上
     expect(screen.getByRole('status')).toHaveTextContent(/崩过一次/)
+    // 24 小时内＝警告色级别记号（取 tone.ts 的唯一声明源；文案本身不依赖颜色）
+    expect(container.querySelector('svg')?.getAttribute('class')).toMatch(/text-mcs-warning/)
+  })
+
+  it('几天前崩过只是历史事实：级别记号退回中性色，不当常驻告警', () => {
+    useCrashArtifact.mockReturnValue({
+      data: {
+        kind: 'crash-report',
+        mtimeMs: NOW - 72 * 60 * 60 * 1000,
+        diagnosis: { matched: false },
+      },
+    })
+    const { container } = renderPointer()
+    expect(screen.getByText(/崩过一次/)).toBeInTheDocument()
+    expect(container.querySelector('svg')?.getAttribute('class')).toMatch(/text-mcs-text-muted/)
+    expect(container.querySelector('svg')?.getAttribute('class')).not.toMatch(/text-mcs-warning/)
   })
 
   it('从未崩溃过时不渲染（没崩过的实例不该多一条提示）', () => {
