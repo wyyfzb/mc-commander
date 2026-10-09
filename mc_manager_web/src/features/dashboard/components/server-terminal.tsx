@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { SearchAddon, type ISearchDecorationOptions } from '@xterm/addon-search'
@@ -106,7 +107,14 @@ interface SearchResult {
   resultCount: number
 }
 
-export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
+export function ServerTerminal({
+  isLoading = false,
+  headerNotice,
+}: {
+  isLoading?: boolean
+  /** 工具条左侧的附加内容（如崩溃指引条）：工具条高度固定，塞进来不占额外高度 */
+  headerNotice?: ReactNode
+}) {
   const containerRef = useRef<HTMLDivElement>(null)
   const xtermRef = useRef<Terminal | null>(null)
   const fitRef = useRef<FitAddon | null>(null)
@@ -396,7 +404,10 @@ export function ServerTerminal({ isLoading = false }: { isLoading?: boolean }) {
     >
       {/* 工具栏（实底，玻璃禁区内） */}
       <div className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-mcs-border-muted bg-mcs-bg-muted px-2">
-        <InstanceControls />
+        <div className="flex min-w-0 items-center gap-2">
+          <InstanceControls />
+          {headerNotice}
+        </div>
         <div className="flex items-center gap-1">
           <IconButton
             tooltip={`搜索终端内容（${primaryModifierLabel()}+F）`}

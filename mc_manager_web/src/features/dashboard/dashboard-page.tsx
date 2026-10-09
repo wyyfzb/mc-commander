@@ -8,7 +8,7 @@ import { McClockCard } from './components/mc-clock-card'
 import { RecentBackupsCard } from './components/recent-backups-card'
 import { AnnouncementCard } from './components/announcement-card'
 import { AlertBanner } from './components/alert-banner'
-import { CrashPointerCard } from './components/crash-report-card'
+import { CrashPointerNotice } from './components/crash-report-card'
 import { queryKeys, useInstanceStatus, useSystemErrors, useSystemStats } from '@/api/queries'
 import { useServerStore } from '@/stores/server'
 import { useNotificationStore } from '@/stores/notifications'
@@ -136,10 +136,13 @@ export function DashboardPage() {
           @5xl 起恢复 min-h-0 flex-1，终端保底约 672px，右栏自身滚动。 */}
       <div className="grid flex-1 grid-cols-1 gap-4 @5xl:min-h-0 @5xl:grid-cols-[minmax(0,1fr)_336px]">
         <div className="flex flex-col gap-4 @5xl:min-h-0">
-          {/* 崩溃指引条置于终端之上：只在真的崩过时渲染，那正是用户要找它的时刻。
-              完整诊断在帮助页（那里还有崩溃历史与自检），这里只把路指过去 */}
-          <CrashPointerCard instanceId={instanceId} />
-          <ServerTerminal isLoading={statusLoading} />
+          {/* 崩溃指引条折进终端卡工具条：它只在真的崩过时渲染，独立成行会顶破
+              「终端可见高度 ≥ 400px」的首屏预算（实测 365.83）。工具条高度固定，
+              放进去零额外高度，提示仍在用户刚崩时最先看的位置 */}
+          <ServerTerminal
+            isLoading={statusLoading}
+            headerNotice={<CrashPointerNotice instanceId={instanceId} />}
+          />
           <CommandInput />
         </div>
         <aside

@@ -9,7 +9,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { CrashArtifact } from '@/api/types'
 import { MemoryRouter } from 'react-router'
-import { CrashReportView, CrashPointerCard } from '../crash-report-card'
+import { CrashReportView, CrashPointerNotice } from '../crash-report-card'
 
 const NOW = new Date('2026-10-05T08:00:00.000Z').getTime()
 
@@ -344,12 +344,12 @@ describe('CrashReportView 诊断结论', () => {
   })
 })
 
-describe('CrashPointerCard（仪表盘的崩溃指引条）', () => {
+describe('CrashPointerNotice（折进终端工具条的崩溃指引）', () => {
   // 完整诊断已收进帮助页；仪表盘只在崩过时留一句指引，不能什么都不说
   const renderPointer = () =>
     render(
       <MemoryRouter>
-        <CrashPointerCard instanceId="inst-1" />
+        <CrashPointerNotice instanceId="inst-1" />
       </MemoryRouter>,
     )
 

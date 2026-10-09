@@ -3,6 +3,7 @@ import { ChevronDown, Copy, ExternalLink, FileWarning, Info, TriangleAlert } fro
 import { toast } from 'sonner'
 import { Card, CardBody, CardHeader, CardTitle } from '@/components/mcs/card'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
+import { SEMANTIC_TONE_CLASSES } from '@/components/mcs/tone'
 import { Link } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { useCrashArtifact } from '@/api/queries'
@@ -23,6 +24,14 @@ import { useNow } from '@/hooks/use-now'
  *
  * 结论来自服务端的诊断词条（键只锚崩溃报告自身的语义字段），面板不在这里做任何推断：
  * 未收录时如实说「不猜」，把原始字段摆出来并给出反馈入口。
+ */
+
+/**
+ * 崩溃指引条（内联）：折进终端卡那条固定 40px 的工具条，与「服务器终端」同一行。
+ *
+ * 为什么不独立成行：它只在真的崩过时出现，但独立成行会占掉约 34px，实测把「终端可见高度
+ * ≥ 400px」的首屏预算顶破（1440×900 下从 400+ 掉到 365.83）。工具条高度固定，塞进其左侧
+ * 不改变任何高度，而提示仍留在用户刚崩时最先看的位置（完整诊断在帮助页）。
  */
 
 /** 开源仓库主页（关于页另有一份字面量，本仓尚无共享常量） */
@@ -286,7 +295,7 @@ export function CrashReportView({
  * 所以这里不能什么都不说，用一行提示把路指过去。
  * 从未崩溃过（服务端返回 null）时不渲染。
  */
-export function CrashPointerCard({ instanceId }: { instanceId: string | null }) {
+export function CrashPointerNotice({ instanceId }: { instanceId: string | null }) {
   const { data } = useCrashArtifact(instanceId)
   // 相对时间要随时间自己走：渲染期直接 Date.now() 是不纯的（React Compiler 会告警）
   const nowMs = useNow()
@@ -297,25 +306,26 @@ export function CrashPointerCard({ instanceId }: { instanceId: string | null }) 
   // 常驻琥珀告警会把同屏真正的告警稀释掉（与帮助页自检的 24 小时窗口同源）
   const recent = data.mtimeMs != null && nowMs - data.mtimeMs < RECENT_CRASH_MS
   return (
-    <NoticeBanner variant={recent ? 'warning' : 'neutral'} icon={FileWarning}>
-      <span className="flex flex-wrap items-center gap-x-2">
-        <span>
-          {formatRelativeTime(
-            data.mtimeMs != null ? new Date(data.mtimeMs).toISOString() : null,
-            nowMs,
-            '时间未知',
-          )}
-          崩过一次（{title}
-          {data.diagnosis?.matched && data.diagnosis.entry ? `：${data.diagnosis.entry.title}` : ''}
-          ）
-        </span>
-        <Link
-          to="/help"
-          className="font-medium text-mcs-accent-fg underline-offset-2 hover:underline"
-        >
-          看诊断
-        </Link>
+    <span className="flex min-w-0 items-center gap-1.5">
+      <FileWarning
+        className={`size-3.5 shrink-0 ${recent ? SEMANTIC_TONE_CLASSES.warning.text : 'text-mcs-text-muted'}`}
+        aria-hidden
+      />
+      <span className="truncate text-mcs-xs text-mcs-text-muted">
+        {formatRelativeTime(
+          data.mtimeMs != null ? new Date(data.mtimeMs).toISOString() : null,
+          nowMs,
+          '时间未知',
+        )}
+        崩过一次（{title}
+        {data.diagnosis?.matched && data.diagnosis.entry ? `：${data.diagnosis.entry.title}` : ''}）
       </span>
-    </NoticeBanner>
+      <Link
+        to="/help"
+        className="shrink-0 text-mcs-xs font-medium text-mcs-accent-fg underline-offset-2 hover:underline"
+      >
+        看诊断
+      </Link>
+    </span>
   )
 }
