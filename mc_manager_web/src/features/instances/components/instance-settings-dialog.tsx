@@ -8,14 +8,29 @@
  *   失效实例详情查询 + 关闭；遗留 startCommand 实例保存时一并传 startCommand:null 清除
  *   （否则 jvmArgs 空数组时 start() 回退旧命令，新配置被静默覆盖）
  * - 实时推送（MSMP）开关：实例级设置，但走自己的 GET/POST /push-channel **即时落库**，
- *   刻意不进上面那份 PUT 白名单——混进保存载荷会让开关的失败连带影响「保存配置」按钮
+ *   刻意不进上面那份 PUT 白名单——混进保存载荷会让开关的失败连带影响「保存配置」按钮。
+ *   读状态三态分明：读失败给重试与可自查位置、在途给占位、只有真读到才渲染开关
+ *   （`?? false` 会把「不知道」显示成「已关闭」，那是肯定式假信息）
  * - 弹窗面走基座 bg-popover（全站统一）+ 表单输入实底；token 纪律，禁硬编码
  */
+import type { ReactNode } from 'react'
 import { useState } from 'react'
-import { ChevronDown, ChevronUp, Gauge, Info, Loader2, Radio, Save, Settings } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
+import {
+  ChevronDown,
+  ChevronUp,
+  Gauge,
+  Info,
+  Loader2,
+  Radio,
+  RefreshCw,
+  Save,
+  Settings,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import {
   Dialog,
@@ -27,7 +42,7 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { Slider } from '@/components/ui/slider'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
-import { NoticeBanner } from '@/components/mcs/notice-banner'
+import { NoticeBanner, NoticeBannerAction } from '@/components/mcs/notice-banner'
 import { cn } from '@/lib/utils'
 import { instanceLabel } from '@/lib/instance-label'
 import { getFriendlyErrorText } from '@/api/errors'
@@ -169,6 +184,37 @@ function splitLines(text: string): string[] {
 function syncAikar(lines: string[], useAikar: boolean, allocMem: number): string[] {
   const kept = lines.filter((l) => !isAikarFlagLine(l))
   return useAikar ? [...kept, ...generateAikarFlags(allocMem)] : kept
+}
+
+/**
+ * 设置行：图标 + 标题/说明 + 右侧控件的三栏行，弹窗内两处开关共用这一份配方
+ * （行高、描边、内距只有一处声明——改一处即同时作用于两行）。
+ * 圆角取 sm 而非卡片档 md：它是弹窗内的设置行，不是卡片面（卡片面配方归 components/mcs/card）。
+ * 图标是否处于「亮起」态由调用点给：两行的亮灭跟随各自的开关，着色语义留在调用侧。
+ */
+function SettingsRow({
+  icon: Icon,
+  iconClassName,
+  title,
+  description,
+  control,
+}: {
+  icon: LucideIcon
+  iconClassName?: string
+  title: string
+  description: string
+  control: ReactNode
+}) {
+  return (
+    <div className="flex items-center gap-3 rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-default px-3 py-2">
+      <Icon className={cn('size-4 shrink-0', iconClassName)} aria-hidden />
+      <div className="min-w-0 flex-1">
+        <p className="text-mcs-sm font-semibold text-mcs-text-default">{title}</p>
+        <p className="text-mcs-xs text-mcs-text-muted">{description}</p>
+      </div>
+      {control}
+    </div>
+  )
 }
 
 export function InstanceSettingsDialog({
@@ -360,28 +406,19 @@ export function InstanceSettingsDialog({
           </div>
 
           {/* ── Aikar Flags 开关（开启时生成 G1GC 优化参数同步进 jvmArgs）── */}
-          <div className="flex items-center gap-3 rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-default px-3 py-2">
-            <Gauge
-              className={cn(
-                'size-4 shrink-0',
-                useAikarFlags ? 'text-mcs-accent-fg' : 'text-mcs-text-muted',
-              )}
-              aria-hidden
-            />
-            <div className="min-w-0 flex-1">
-              <p className="text-mcs-sm font-semibold text-mcs-text-default">
-                JVM 优化 (Aikar&apos;s Flags)
-              </p>
-              <p className="text-mcs-xs text-mcs-text-muted">
-                使用 MCS 社区优化的 G1GC 参数，改善 GC 停顿
-              </p>
-            </div>
-            <Switch
-              checked={useAikarFlags}
-              onCheckedChange={handleToggleAikar}
-              aria-label="JVM 优化 (Aikar's Flags)"
-            />
-          </div>
+          <SettingsRow
+            icon={Gauge}
+            iconClassName={useAikarFlags ? 'text-mcs-accent-fg' : 'text-mcs-text-muted'}
+            title="JVM 优化 (Aikar's Flags)"
+            description="使用 MCS 社区优化的 G1GC 参数，改善 GC 停顿"
+            control={
+              <Switch
+                checked={useAikarFlags}
+                onCheckedChange={handleToggleAikar}
+                aria-label="JVM 优化 (Aikar's Flags)"
+              />
+            }
+          />
 
           {/* ── 生成的启动命令预览 ── */}
           <div className="flex flex-col gap-1.5">
@@ -478,40 +515,57 @@ export function InstanceSettingsDialog({
         {/* ── 实时推送（MSMP）：与上面那份保存表单隔一条分隔线——它是即时落库的独立设置，
              放在同一组里会被读成「点保存配置才生效」，而「取消」也退不回它 ── */}
         <div className="flex flex-col gap-2 border-t border-mcs-border-muted pt-4">
-          <div className="flex items-center gap-3 rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-default px-3 py-2">
-            <Radio
-              className={cn(
-                'size-4 shrink-0',
-                pushEnabled ? 'text-mcs-accent-fg' : 'text-mcs-text-muted',
-              )}
-              aria-hidden
-            />
-            <div className="min-w-0 flex-1">
-              <p className="text-mcs-sm font-semibold text-mcs-text-default">实时推送</p>
-              {/* 只讲结果（用户拿到什么刷新时机），不出现 host/port/凭据这类运维视角字段 */}
-              <p className="text-mcs-xs text-mcs-text-muted">
-                开启后面板能实时收到状态变化；关闭则每 {FALLBACK_POLL_INTERVAL_MS / 1000} 秒刷新一次
-              </p>
-            </div>
-            {/* 读不到状态时不渲染开关：`?? false` 会把「不知道」显示成「已关闭」，
-                那是肯定式假信息——用户会以为关着，而真相是面板读不到这项配置 */}
-            {pushStateQuery.isError ? (
-              <span className="shrink-0 text-mcs-xs text-mcs-text-muted">状态未知</span>
-            ) : (
-              pushStateQuery.data && (
-                <Switch
-                  checked={pushEnabled}
-                  disabled={setPushChannel.isPending}
-                  onCheckedChange={(next) => void handleTogglePush(next)}
-                  aria-label="实时推送"
+          <SettingsRow
+            icon={Radio}
+            iconClassName={pushEnabled ? 'text-mcs-accent-fg' : 'text-mcs-text-muted'}
+            title="实时推送"
+            /* 只讲结果（用户拿到什么刷新时机），不出现 host/port/凭据这类运维视角字段 */
+            description={`开启后面板能实时收到状态变化；关闭则每 ${FALLBACK_POLL_INTERVAL_MS / 1000} 秒刷新一次`}
+            control={
+              /* 三态分明：读失败说「不知道」（`?? false` 会把「不知道」显示成「已关闭」，
+                 那是肯定式假信息）；在途给占位而不是留空；只有真读到状态才落成开关。
+                 占位判据取 `isLoading`（真的在取）而非 `isPending`——后者还含「查询被禁用」，
+                 连接未就绪时会留下一个永不消失的骨架；占位尺寸对齐 ui/switch 基座，加载完不跳位 */
+              pushStateQuery.isError ? (
+                <span className="shrink-0 text-mcs-xs text-mcs-text-muted">状态未知</span>
+              ) : pushStateQuery.isLoading ? (
+                /* 圆角取基座给的 `rounded-mcs-md`：cn 未登记 `rounded-mcs-*` 词汇表，这里再压一个
+                   `rounded-full` 会两类并存、胜负交给样式表顺序（写了也不生效）。20px 高的盒子上
+                   12px 档被浏览器收敛为半高，视觉与 ui/switch 的胶囊一致，加载完不跳形 */
+                <Skeleton
+                  role="status"
+                  aria-label="正在读取实时推送状态"
+                  className="h-5 w-9 shrink-0"
                 />
+              ) : (
+                pushStateQuery.data && (
+                  <Switch
+                    checked={pushEnabled}
+                    disabled={setPushChannel.isPending}
+                    onCheckedChange={(next) => void handleTogglePush(next)}
+                    aria-label="实时推送"
+                  />
+                )
               )
-            )}
-          </div>
+            }
+          />
           {pushStateQuery.isError && (
             <NoticeBanner variant="warning">
-              读不到实时推送状态：
-              {getFriendlyErrorText(pushStateQuery.error)}
+              {/* 文案成块、动作靠右：整句折行不产生孤字，重试按钮也不被挤进文本流 */}
+              <span className="flex items-center justify-between gap-3">
+                <span className="min-w-0">
+                  读不到实时推送状态：{getFriendlyErrorText(pushStateQuery.error)}
+                  。可在世界页的「服务器属性」里核对这一项的实际值
+                </span>
+                {/* 读失败不是终态：重试复用同一个查询的重取，不另开第二条读路径 */}
+                <NoticeBannerAction
+                  onClick={() => void pushStateQuery.refetch()}
+                  disabled={pushStateQuery.isFetching}
+                >
+                  <RefreshCw className="size-3" aria-hidden />
+                  重试
+                </NoticeBannerAction>
+              </span>
             </NoticeBanner>
           )}
         </div>
