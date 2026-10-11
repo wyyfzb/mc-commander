@@ -34,7 +34,7 @@ export interface PropertyDef {
    * 否则这里会变成一份看着权威、实际已过期的数据（26.3 的 `white-list` 即此例）。
    */
   defaultValue: string
-  /** 敏感键：读写均以占位符掩码，提交永远只回传占位符 */
+  /** 敏感键：读写均以占位符掩码，提交时只回传占位符（真实值永不出前端） */
   isSensitive: boolean
   /** 运行期热改：支持不重启通过斜杠命令立即生效 */
   isHotReload: boolean
@@ -255,12 +255,14 @@ export const SERVER_PROPERTY_DEFS: PropertyDef[] = [
     isWritable: true,
   },
   {
+    // 26.3 官方默认清单中该键为 60（wiki Default content 段与 Keys 表同列 60）；
+    // 负数表示不自动暂停，desc 保留该语义说明
     name: 'pause-when-empty-seconds',
     label: '无人时暂停',
     desc: '服务器无人时暂停 tick 的秒数（-1=禁用）',
     category: 'gameplay',
     type: 'input',
-    defaultValue: '-1',
+    defaultValue: '60',
     isSensitive: false,
     isHotReload: false,
     isWritable: false,
@@ -657,7 +659,7 @@ export const SERVER_PROPERTY_DEFS: PropertyDef[] = [
     isWritable: true,
   },
   {
-    // 26.3 官方默认清单键（默认空，连字符十六进制 UUID）；服务端写白名单未含 ⇒ 只读
+    // 26.3 官方默认清单键（默认空，连字符十六进制 UUID）；已在服务端 WRITABLE_PROPERTIES
     name: 'resource-pack-id',
     label: '资源包ID',
     desc: '资源包唯一标识（UUID，供客户端识别资源包）',
@@ -666,7 +668,7 @@ export const SERVER_PROPERTY_DEFS: PropertyDef[] = [
     defaultValue: '',
     isSensitive: false,
     isHotReload: false,
-    isWritable: false,
+    isWritable: true,
   },
   {
     name: 'resource-pack-sha1',
@@ -702,7 +704,7 @@ export const SERVER_PROPERTY_DEFS: PropertyDef[] = [
     isWritable: true,
   },
   // 以下三键均为 26.3 官方默认清单键，默认值取自该清单（text-filtering-version=0、
-  // 两个刷屏阈值=10）；服务端写白名单未含它们 ⇒ 只读，开放写入须先改服务端白名单
+  // 两个刷屏阈值=10）；三键都已在服务端 WRITABLE_PROPERTIES，整数项亦已进 NUMERIC_PROPERTIES
   {
     name: 'text-filtering-version',
     label: '文本过滤版本',
@@ -712,7 +714,7 @@ export const SERVER_PROPERTY_DEFS: PropertyDef[] = [
     defaultValue: '0',
     isSensitive: false,
     isHotReload: false,
-    isWritable: false,
+    isWritable: true,
   },
   {
     name: 'chat-spam-threshold-seconds',
@@ -723,7 +725,7 @@ export const SERVER_PROPERTY_DEFS: PropertyDef[] = [
     defaultValue: '10',
     isSensitive: false,
     isHotReload: false,
-    isWritable: false,
+    isWritable: true,
   },
   {
     name: 'command-spam-threshold-seconds',
@@ -734,7 +736,7 @@ export const SERVER_PROPERTY_DEFS: PropertyDef[] = [
     defaultValue: '10',
     isSensitive: false,
     isHotReload: false,
-    isWritable: false,
+    isWritable: true,
   },
   {
     name: 'require-resource-pack',
@@ -806,7 +808,7 @@ export const SERVER_PROPERTY_DEFS: PropertyDef[] = [
     isWritable: false,
   },
   {
-    // 26.3 官方默认清单键（默认 0=禁用）；服务端写白名单未含 ⇒ 只读
+    // 26.3 官方默认清单键（默认 0=禁用）；已在服务端 WRITABLE_PROPERTIES
     name: 'status-heartbeat-interval',
     label: '状态心跳间隔',
     desc: '管理服务器状态心跳的发送间隔（秒，0=禁用）',
@@ -815,7 +817,7 @@ export const SERVER_PROPERTY_DEFS: PropertyDef[] = [
     defaultValue: '0',
     isSensitive: false,
     isHotReload: false,
-    isWritable: false,
+    isWritable: true,
   },
   {
     name: 'hide-online-players',
@@ -988,29 +990,22 @@ export function isPanelManagedProperty(key: string): boolean {
 }
 
 /**
- * 构建 server.properties 提交载荷。
- * - 敏感键恒回传 '********' 占位符（服务端视为未修改、沿用磁盘现值；
- *   提交真实值会整批 400 拒绝），current 中残留的敏感明文也一并掩码覆盖
+ * 构建 server.properties 提交载荷：**只回传与快照不同的键**。
+ * - 未改动的键一律不回传——服务端落盘以磁盘现值为基址合并（未出现的键保留原值），
+ *   语义等价；而整份回传会把 MC 自己补齐、面板管不到的键（26.3 引擎首启会写入整套键）
+ *   送进服务端的逐键白名单校验，只要有未知键就整批 400
+ * - 敏感键即使有改动也只回传 '********' 占位符（真实值永不出前端；服务端视为未修改、
+ *   沿用磁盘现值，提交真实值会整批 400 拒绝）；未改动则同样不回传，残留明文无从流出
  * - 布尔值（'true'/'false'）规范化透传；其余值 String() 转换
- * - edited 未覆盖的键沿用 current 现值
  */
 export function buildPropertiesPayload(
   edited: Record<string, string>,
   current: Record<string, string>,
 ): Record<string, string> {
-  const payload: Record<string, string> = { ...current }
+  const payload: Record<string, string> = {}
   for (const [key, raw] of Object.entries(edited)) {
-    if (SENSITIVE_PROPERTY_KEYS.has(key)) {
-      payload[key] = SENSITIVE_PROPERTY_PLACEHOLDER
-      continue
-    }
-    payload[key] = String(raw)
-  }
-  // current 中残留的敏感明文（旧版服务端明文返回兜底）一并掩码
-  for (const key of Object.keys(payload)) {
-    if (SENSITIVE_PROPERTY_KEYS.has(key)) {
-      payload[key] = SENSITIVE_PROPERTY_PLACEHOLDER
-    }
+    if (raw === current[key]) continue
+    payload[key] = SENSITIVE_PROPERTY_KEYS.has(key) ? SENSITIVE_PROPERTY_PLACEHOLDER : String(raw)
   }
   return payload
 }

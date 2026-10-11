@@ -75,6 +75,22 @@ export const WRITABLE_PROPERTIES = new Set([
   'initial-enabled-packs',
   'initial-disabled-packs',
   'text-filtering-config',
+  // 白名单/状态展示与模板键：white-list/enforce-whitelist 亦在热改键表里，并轨到普通白名单后
+  // 「并集」只兜底其余热改键；query.port 与 texture-pack 由本仓实例模板（server-jar.js）写入，
+  // 不纳入则任何按整份文件回传的调用方都会被它们整批 400
+  'white-list',
+  'enforce-whitelist',
+  'query.port',
+  'texture-pack',
+  // 26.3 官方默认清单键（属性页会渲染成一行，引擎首启也会把缺的键补齐进文件）：
+  // 同样遵循「对已知属性尽量放行、未知键才拒绝」的宽松策略
+  'pause-when-empty-seconds',
+  'max-chained-neighbor-updates',
+  'resource-pack-id',
+  'text-filtering-version',
+  'chat-spam-threshold-seconds',
+  'command-spam-threshold-seconds',
+  'status-heartbeat-interval',
 ]);
 
 // 布尔型属性：仅接受 true/false
@@ -118,6 +134,16 @@ export const NUMERIC_PROPERTIES = new Set([
   'op-permission-level',
   'spawn-protection',
   'max-world-size',
+  // 26.3 键与模板键里的整数项（该分支只判整数、不判区间：query.port 的 1-65534
+  // 与 text-filtering-version 的 0|1 都不拦截；放行负整数是有意的——
+  // max-chained-neighbor-updates / pause-when-empty-seconds 负数表示不限制/不暂停）
+  'query.port',
+  'pause-when-empty-seconds',
+  'max-chained-neighbor-updates',
+  'text-filtering-version',
+  'chat-spam-threshold-seconds',
+  'command-spam-threshold-seconds',
+  'status-heartbeat-interval',
 ]);
 
 // 敏感属性禁止 API 写入：enable-rcon/rcon.password/rcon.port 为 RCON
@@ -146,8 +172,9 @@ export const SENSITIVE_PROPERTIES = new Set([
 ]);
 export const SENSITIVE_PLACEHOLDER = '********';
 
-// 可写键 = 普通可写键 + 热改键（并集，保证 white-list/enforce-whitelist 这类
-// 只靠热改生效、未出现在普通键集里的键也允许写入）
+// 可写键 = 普通可写键 + 热改键并集（热改键表在 mc-server/msmp-methods.js，单一来源，本文件不复制）。
+// 当前 15 个热改键已全部落在普通白名单内，并集留作漂移兜底——那边将来新增热改键时
+// 不必同步改这里也不会被拒。
 export const ALLOWED_PROPERTY_KEYS = new Set([...WRITABLE_PROPERTIES, ...SERVER_SETTING_KEYS]);
 
 // 单键值校验。返回 { ok: true, value } 或 { ok: false, reason }

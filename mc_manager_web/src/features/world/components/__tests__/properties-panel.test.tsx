@@ -99,7 +99,7 @@ describe('PropertiesPanel 渲染', () => {
 })
 
 describe('PropertiesPanel 编辑流程', () => {
-  it('编辑 → 修改 → 保存（payload 含 bool 规范化 + 敏感键占位符）→ 成功 toast', async () => {
+  it('编辑 → 修改 → 保存（payload 只含改动键 + bool 规范化）→ 成功 toast', async () => {
     const user = userEvent.setup()
     const onSave = vi.fn().mockResolvedValue([])
     renderPanel(onSave)
@@ -116,8 +116,12 @@ describe('PropertiesPanel 编辑流程', () => {
     const payload = onSave.mock.calls[0]![0] as Record<string, string>
     expect(payload['pvp']).toBe('false')
     expect(payload['motd']).toBe('Hello MC')
-    // 敏感键恒回传占位符
-    expect(payload['rcon.password']).toBe('********')
+    // 载荷只含改动键：未改动的敏感键（占位符）与面板管不到的键都不回传——
+    // 整份回传会把后者送进服务端逐键白名单校验，导致整批 400
+    expect(Object.keys(payload).sort()).toEqual(['motd', 'pvp'])
+    expect(payload['rcon.password']).toBeUndefined()
+    expect(payload['white-list']).toBeUndefined()
+    expect(payload['custom-unknown-key']).toBeUndefined()
     expect(await screen.findByText('规则已保存到服务器')).toBeInTheDocument()
   })
 

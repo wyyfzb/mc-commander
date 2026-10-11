@@ -516,6 +516,23 @@ describe('Status Routes · 端点缺口收口', () => {
       expect(res.body.message).toContain('服务端版本过旧');
     });
 
+    it('空载荷 {} → 200 且不落盘（面板「没有改动就保存」走的就是这条，不得报错）', async () => {
+      const instance = {
+        id: 's1',
+        properties: { motd: 'old' },
+        isRunning: false,
+        saveProperties: vi.fn(),
+        _loadProperties: vi.fn().mockReturnValue({ motd: 'old' }),
+      };
+      mockManager.getInstance.mockReturnValue(asInstance(instance));
+
+      const res = await request(app).put('/api/instances/s1/properties').send({});
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.restartRequired).toEqual([]);
+      expect(instance.saveProperties).not.toHaveBeenCalled();
+    });
+
     it('非标量值 400：object 值视为校验失败整体拒绝，不落盘部分修改', async () => {
       const instance = {
         id: 's1',
