@@ -406,8 +406,12 @@ export function ServerTerminal({
       className="@container animate-mcs-fade-up mcs-delay-4 flex min-h-[60vh] flex-1 flex-col overflow-hidden rounded-mcs-md border border-mcs-border-muted shadow-mcs-card @5xl:min-h-0"
       style={{ background: 'var(--mcs-terminal-bg)' }}
     >
-      {/* 工具栏（实底，玻璃禁区内） */}
-      <div className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-mcs-border-muted bg-mcs-bg-muted px-2">
+      {/* 工具栏（实底，玻璃禁区内）。固定 h-10 且不换行 ⇒ 内联内容必须自己压成单行，
+          故 e2e 需要能直接量到这条工具条的盒子（testid 只为那条几何断言存在） */}
+      <div
+        data-testid="terminal-toolbar"
+        className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-mcs-border-muted bg-mcs-bg-muted px-2"
+      >
         <div className="flex min-w-0 items-center gap-2">
           <InstanceControls />
           {/* 宽容器下才渲染：工具条固定 h-10 且不换行，空间不够时内联内容会溢出到右侧图标按钮

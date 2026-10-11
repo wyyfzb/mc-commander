@@ -265,6 +265,28 @@ test.describe('仪表盘', () => {
 
     const pointer = page.getByText(/崩过一次/)
     await expect(pointer).toBeVisible()
+
+    // 承重的是下面三条 CSS 断言：这句指引折在**固定 h-10、不换行**的工具条里，靠 `truncate`
+    // （overflow hidden + text-overflow ellipsis + white-space nowrap）把「相对时间 + 崩溃报告
+    // 类型 [+ 词条标题]」压成一行；去掉它，文案一变长就会换行并溢出到右侧图标按钮上（实测
+    // 375/480 下点「看诊断」落到「显示 JVM 警告」就是这个形态），而工具条高度固定 ⇒ 首屏高度
+    // 那条断言抓不到这类溢出。（变异已验证：去掉 truncate ⇒ 本条转红。）
+    await expect(pointer).toHaveCSS('white-space', 'nowrap')
+    await expect(pointer).toHaveCSS('text-overflow', 'ellipsis')
+    await expect(pointer).toHaveCSS('overflow-x', 'hidden')
+    // ⚠️ 以下三条几何断言是**防御性预留**：当前夹具的指引仅 13 字（`4天前崩过一次（崩溃报告）`，
+    // diagnosis 未命中词条 ⇒ 不含标题），1440 视口下本来就不换行 ⇒ 去掉 truncate 也不会让它们转红
+    // （独立审查静态核算所得，未实跑 e2e）。它们挡的是「文案变长后越界」这一未来形态，不要把它们
+    // 当作「不越界已锁」的证据。
+    const toolbarBox = (await page.getByTestId('terminal-toolbar').boundingBox())!
+    const pointerBox = (await pointer.boundingBox())!
+    const linkBox = (await page.getByRole('link', { name: '看诊断' }).boundingBox())!
+    // 不越出工具条上下边（溢出会盖住终端首行）
+    expect(pointerBox.y).toBeGreaterThanOrEqual(toolbarBox.y)
+    expect(pointerBox.y + pointerBox.height).toBeLessThanOrEqual(toolbarBox.y + toolbarBox.height)
+    // 不压到「看诊断」上（截断正是为了让两者共存）
+    expect(pointerBox.x + pointerBox.width).toBeLessThanOrEqual(linkBox.x)
+
     await page.getByRole('link', { name: '看诊断' }).click()
 
     await expect(page).toHaveURL(/\/help$/)
@@ -274,7 +296,8 @@ test.describe('仪表盘', () => {
 
   // 工具条固定 h-10 且不换行：空间不够时内联提示会溢出到右侧图标按钮**底下**——实测
   // 375/480 下点「看诊断」落到「显示 JVM 警告」，静默切开了过滤器。故窄容器下整条不渲染
-  // （见 server-terminal.tsx 的 @[600px]），这条锁住「要么不渲染、要么真的点得到」
+  // （见 crash-report-card.tsx 的 @[750px]；插槽侧 server-terminal.tsx 不替它定档），
+  // 这条锁住「要么不渲染、要么真的点得到」
   for (const width of [375, 480, 768]) {
     test(`崩溃指引条：${width}px 下要么不渲染，要么「看诊断」真的点得到`, async ({ page }) => {
       await setupConnection(page)
