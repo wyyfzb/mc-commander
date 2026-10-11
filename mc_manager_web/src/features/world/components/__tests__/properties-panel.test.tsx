@@ -166,3 +166,70 @@ describe('PropertiesPanel 编辑流程', () => {
     expect(screen.getByText(/编辑模式已开启/)).toBeInTheDocument()
   })
 })
+
+/**
+ * 服务端在新版本不再读取的键（本例：pvp 在 1.21.9 起由游戏规则接管、spawn-npcs 更早被移除）：
+ * 面板必须锁死并说明去向，否则用户改完不生效却被告知「重启后生效」。
+ * 版本未知时不许替服务器下结论——与顶栏刷新语义同一取舍。
+ */
+describe('已迁出的属性键按实例版本锁定', () => {
+  const renderWithVersion = (mcVersion: string | undefined, props = mockProps) => {
+    const { container } = render(
+      <TooltipProvider>
+        <PropertiesPanel
+          properties={props}
+          isLoading={false}
+          onSave={vi.fn()}
+          mcVersion={mcVersion}
+        />
+        <Toaster />
+      </TooltipProvider>,
+    )
+    return container
+  }
+  const row = (container: HTMLElement, name: string) =>
+    container.querySelector(`[data-prop="${name}"]`) as HTMLElement
+  const hintName = '本版本服务端已不再读取此项'
+
+  it('26.3：已迁出键在编辑态下仍锁死并说明改由哪条游戏规则接管；其余键不受影响', async () => {
+    const user = userEvent.setup()
+    const container = renderWithVersion('26.3')
+    await user.click(screen.getByRole('button', { name: '编辑' }))
+    // 编辑态才分得清「因为不能再改」与「因为还没进编辑」——未失效键此时可用
+    expect(within(row(container, 'pvp')).getByRole('switch')).toBeDisabled()
+    expect(within(row(container, 'max-players')).getByRole('textbox')).toBeEnabled()
+    expect(within(row(container, 'max-players')).queryByRole('button', { name: hintName })).toBeNull()
+    await user.click(within(row(container, 'pvp')).getByRole('button', { name: hintName }))
+    expect(await screen.findByRole('dialog', { name: hintName })).toHaveTextContent(
+      '1.21.9 起服务端不再读取 server.properties 里的这一项，改由游戏规则 pvp 控制',
+    )
+  })
+
+  it('1.21.8：该版本服务端仍读取此键 ⇒ 保持可改，且不挂解释入口', async () => {
+    const user = userEvent.setup()
+    const container = renderWithVersion('1.21.8')
+    await user.click(screen.getByRole('button', { name: '编辑' }))
+    expect(within(row(container, 'pvp')).getByRole('switch')).toBeEnabled()
+    expect(within(row(container, 'pvp')).queryByRole('button', { name: hintName })).toBeNull()
+  })
+
+  it.each([
+    ['未传', undefined],
+    ['空串', ''],
+  ])('版本%s：不下结论——既不锁死也不挂解释', async (_label, mcVersion) => {
+    const user = userEvent.setup()
+    const container = renderWithVersion(mcVersion)
+    await user.click(screen.getByRole('button', { name: '编辑' }))
+    expect(within(row(container, 'pvp')).getByRole('switch')).toBeEnabled()
+    expect(within(row(container, 'pvp')).queryByRole('button', { name: hintName })).toBeNull()
+  })
+
+  it('无接替规则的键：说明它被移除且没有替代项', async () => {
+    const user = userEvent.setup()
+    const container = renderWithVersion('26.3', { 'spawn-npcs': 'true' })
+    await user.click(within(row(container, 'spawn-npcs')).getByRole('button', { name: hintName }))
+    expect(await screen.findByRole('dialog', { name: hintName })).toHaveTextContent(
+      '1.21.2 起服务端已移除这一项，且没有接替它的游戏规则',
+    )
+  })
+})

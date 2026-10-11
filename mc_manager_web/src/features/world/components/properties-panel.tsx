@@ -46,6 +46,38 @@ import {
   SENSITIVE_PROPERTY_PLACEHOLDER,
   type PropertyDef,
 } from '@/lib/mc-properties'
+import { isVersionAtLeast } from '@/lib/mc-version'
+
+/**
+ * 服务端已不再读取的 server.properties 键：`since` 起该键失效，`to` 是接管它的游戏规则（null＝无接替项）。
+ *
+ * 依据（实测，不是抄文档）：同一份含这些键的 server.properties 分别在 1.21.8 与 26.3 上启动，
+ * 前四键在 26.3 自己生成的默认键集里已消失、后两键在 1.21.8 就已消失；`pvp` 另有一条直接观测
+ * ——properties 写 false 而 26.3 报 `pvp is currently set to true`，即该值已被忽略。26.3 的规则名
+ * 取自该版本 `/gamerule` 的实际返回。
+ * 不标出来的代价是静默失效：用户改完不生效，面板还说「重启后生效」，比不给改更糟。
+ */
+const RETIRED_PROPERTY_KEYS: ReadonlyMap<string, { since: string; to: string | null }> = new Map([
+  ['pvp', { since: '1.21.9', to: 'pvp' }],
+  ['allow-nether', { since: '1.21.9', to: 'allow_entering_nether_using_portals' }],
+  ['enable-command-block', { since: '1.21.9', to: 'command_blocks_work' }],
+  ['spawn-monsters', { since: '1.21.9', to: 'spawn_monsters' }],
+  ['spawn-animals', { since: '1.21.2', to: null }],
+  ['spawn-npcs', { since: '1.21.2', to: null }],
+])
+
+/**
+ * 该键在当前实例版本下是否已被服务端弃用。**版本未知时不下结论**（宁可不说，不瞎说）——
+ * 与顶栏刷新语义同一取舍：详情未到时只说连接档位，不替服务器断言。
+ */
+function retiredPropertyOf(
+  name: string,
+  mcVersion: string | undefined,
+): { since: string; to: string | null } | null {
+  const info = RETIRED_PROPERTY_KEYS.get(name)
+  if (!info) return null
+  return isVersionAtLeast(mcVersion ?? '', info.since, false) ? info : null
+}
 
 const CATEGORY_LABELS: Array<{ value: string; label: string }> = [
   { value: 'all', label: '全部' },
@@ -74,6 +106,8 @@ interface PropertiesPanelProps {
   isRunning?: boolean
   /** 重启回调（Dialog 内「立即重启」按钮触发；由页面层注入重启 mutation） */
   onRestart?: () => Promise<void>
+  /** 实例的 MC 版本：判定哪些属性键已被该版本的服务端弃用；未取到时不作版本断言 */
+  mcVersion?: string
 }
 
 export function PropertiesPanel({
@@ -83,6 +117,7 @@ export function PropertiesPanel({
   onEditingChange,
   isRunning = false,
   onRestart,
+  mcVersion,
 }: PropertiesPanelProps) {
   const [isEditing, setIsEditingState] = useState(false)
 
@@ -361,6 +396,7 @@ export function PropertiesPanel({
                 value={displayValue(def)}
                 isEditing={isEditing}
                 onChange={(v) => setEditValue(def.name, v)}
+                retired={retiredPropertyOf(def.name, mcVersion)}
               />
             ))}
           </div>
@@ -370,20 +406,25 @@ export function PropertiesPanel({
   )
 }
 
-/** 单行：键名 + 描述 + 右对齐控件（敏感键锁定/switch/input/dropdown） */
+/** 单行：键名 + 描述 + 右对齐控件（敏感键锁定/已弃用键锁定/switch/input/dropdown） */
 function PropertyRow({
   def,
   value,
   isEditing,
   onChange,
+  retired,
 }: {
   def: PropertyDef
   value: string
   isEditing: boolean
   onChange: (v: string) => void
+  /** 非空＝该键在当前服务端版本已失效（服务端不读它），控件须锁死并给出解释 */
+  retired: { since: string; to: string | null } | null
 }) {
   const isSensitive = SENSITIVE_PROPERTY_KEYS.has(def.name)
   const isHotReload = HOT_RELOAD_KEYS.has(def.name)
+  // 可写与可改是两件事：isWritable 问「服务端收不收」，retired 问「服务端现在还读不读」
+  const locked = !def.isWritable || !!retired
 
   return (
     <div
@@ -415,6 +456,14 @@ function PropertyRow({
               </TooltipContent>
             </Tooltip>
           )}
+          {retired && (
+            // 解释语句进浮层（成句不得用 2xs，可见行只留这枚入口）——与页头「生效方式说明」同载体
+            <InfoHint label="本版本服务端已不再读取此项">
+              {retired.to
+                ? `${retired.since} 起服务端不再读取 server.properties 里的这一项，改由游戏规则 ${retired.to} 控制（见「游戏规则」标签页）`
+                : `${retired.since} 起服务端已移除这一项，且没有接替它的游戏规则`}
+            </InfoHint>
+          )}
           {isHotReload && (
             // 例外才配标识（常态由下方那行说明承担）：320px 下逐项挂标会把键名压到 2 字可见，
             // 故 xs 以下收起标识、把宽度还给键名——窄屏仍需知道规则时看那一行说明
@@ -438,7 +487,7 @@ function PropertyRow({
         ) : def.type === 'checkbox' ? (
           <Switch
             checked={value === 'true'}
-            disabled={!isEditing || !def.isWritable}
+            disabled={!isEditing || locked}
             onCheckedChange={(checked) => onChange(checked ? 'true' : 'false')}
             aria-label={`${def.label} 开关`}
           />
@@ -446,7 +495,7 @@ function PropertyRow({
           <Select
             value={value || (def.options?.[0] ?? '')}
             onValueChange={onChange}
-            disabled={!isEditing || !def.isWritable}
+            disabled={!isEditing || locked}
           >
             <SelectTrigger className="h-7 w-40 text-mcs-xs" aria-label={`${def.label} 选项`}>
               <SelectValue />
@@ -463,7 +512,7 @@ function PropertyRow({
           <Input
             value={value}
             onChange={(e) => onChange(e.target.value)}
-            disabled={!isEditing || !def.isWritable}
+            disabled={!isEditing || locked}
             className="h-7 w-40 font-mono"
             aria-label={`${def.label} 输入`}
           />
