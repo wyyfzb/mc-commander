@@ -162,7 +162,10 @@ describe('GamerulePanel 行级编辑', () => {
     await user.type(input, '9')
     // 上界 8 由真实服务端回包反推（9 → "more than 8"），而该文本不命中失败短语表 ⇒ 面板必须自己拦
     expect(input).toHaveAttribute('aria-invalid', 'true')
-    expect(screen.getByText('不得大于 8：9')).toHaveAttribute('role', 'alert')
+    const alert = screen.getByText('不得大于 8：9')
+    expect(alert).toHaveAttribute('role', 'alert')
+    // 顶替描述行必须仍受描述行的截断约束（min-w-0 + truncate），否则长错误文案会把行撑破
+    expect(alert).toHaveClass('min-w-0', 'flex-1', 'truncate')
     expect(screen.getByRole('button', { name: '保存' })).toBeDisabled()
     await user.clear(input)
     await user.type(input, '8')
