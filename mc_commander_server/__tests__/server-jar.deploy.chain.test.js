@@ -920,6 +920,8 @@ describe('generateServerProperties 落盘契约', () => {
     expect(props).toContain(`server-port=${25565 + offset}`);
     expect(props).toContain('enable-rcon=true');
     expect(props).toContain('online-mode=true');
+    // 白名单默认值与 MC 26.3 上游默认一致（true），与其余键同源
+    expect(props).toContain('white-list=true');
     const pwd = props.match(/^rcon\.password=([0-9a-f]+)$/m);
     expect(pwd).not.toBeNull();
     expect(pwd[1]).toHaveLength(16);
