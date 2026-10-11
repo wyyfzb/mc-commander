@@ -226,6 +226,54 @@ describe('已迁出的属性键按实例版本锁定', () => {
     expect(within(row(container, 'pvp')).queryByRole('button', { name: hintName })).toBeNull()
   })
 
+  it.each([
+    ['1.21.10', 'allow-nether', 'allowEnteringNetherUsingPortals'],
+    ['1.21.10', 'enable-command-block', 'commandBlocksEnabled'],
+    ['1.21.10', 'spawn-monsters', 'spawnMonsters'],
+    ['26.3', 'allow-nether', 'allow_entering_nether_using_portals'],
+    ['26.3', 'enable-command-block', 'command_blocks_work'],
+    ['26.3', 'spawn-monsters', 'spawn_monsters'],
+  ])('%s：%s 的接替规则点名 %s（名字与该版本规则表同源）', async (version, key, ruleName) => {
+    const user = userEvent.setup()
+    // 1.21.9/1.21.10 正是这几个键首次被弃用的版本，而那时规则名还是 camelCase——
+    // 提示若写死新名，就会对这两个版本点名一条不存在的规则
+    const container = renderWithVersion(version, { [key]: 'false' })
+    await user.click(within(row(container, key)).getByRole('button', { name: hintName }))
+    expect(await screen.findByRole('dialog', { name: hintName })).toHaveTextContent(
+      `改由游戏规则 ${ruleName} 控制`,
+    )
+  })
+
+  it('状态迟到：编辑之后才知道该键已迁出 ⇒ 保存也不下发它', async () => {
+    const user = userEvent.setup()
+    const onSave = vi.fn().mockResolvedValue([])
+    const { container, rerender } = render(
+      <TooltipProvider>
+        <PropertiesPanel properties={mockProps} isLoading={false} onSave={onSave} />
+        <Toaster />
+      </TooltipProvider>,
+    )
+    await user.click(screen.getByRole('button', { name: '编辑' }))
+    await user.click(within(row(container, 'pvp')).getByRole('switch'))
+    // 实例状态此刻才返回 ⇒ 该行转为锁定；但改动已经在编辑态里了
+    rerender(
+      <TooltipProvider>
+        <PropertiesPanel
+          properties={mockProps}
+          isLoading={false}
+          onSave={onSave}
+          mcVersion="26.3"
+        />
+        <Toaster />
+      </TooltipProvider>,
+    )
+    expect(within(row(container, 'pvp')).getByRole('switch')).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: '保存' }))
+    await waitFor(() => expect(onSave).toHaveBeenCalled())
+    // 下发只会拿到 200 而服务器根本不读 ⇒ 必须滤掉（pvp 确实改过，不滤就会在里面）
+    expect(onSave.mock.calls[0][0]).not.toHaveProperty('pvp')
+  })
+
   it('无接替规则的键：说明它被移除且没有替代项', async () => {
     const user = userEvent.setup()
     const container = renderWithVersion('26.3', { 'spawn-npcs': 'true' })
