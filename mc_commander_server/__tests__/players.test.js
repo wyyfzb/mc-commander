@@ -740,8 +740,13 @@ describe('Player Routes', () => {
       expect(res.status).toBe(200);
       expect(mockInstance._msmpRequest).toHaveBeenCalledWith(
         'minecraft:operators/add',
-        [[{ player: { name: 'Steve' }, permissionLevel: 4, bypassesPlayerLimit: false }]],
+        [[{ player: { name: 'Steve' }, permissionLevel: 4 }]],
         expect.any(Number),
+      );
+      // 不传 bypassesPlayerLimit：协议缺省是「已 op 沿用现值，否则 false」，
+      // 传死值 false 会把已打开「满员免排队」的管理员静默降级
+      expect(mockInstance._msmpRequest.mock.calls[0][1][0][0]).not.toHaveProperty(
+        'bypassesPlayerLimit',
       );
       expect(mockInstance.sendCommand).not.toHaveBeenCalled();
     });
