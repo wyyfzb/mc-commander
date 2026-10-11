@@ -1,6 +1,7 @@
 /**
- * server.properties 属性元数据单测（对照服务端
- * routes/status.js RUNTIME_COMMAND_MAP/WRITABLE_PROPERTIES/SENSITIVE_PROPERTIES）
+ * server.properties 属性元数据单测（键集合口径对照服务端
+ * services/instance-properties.service.js 的 WRITABLE_PROPERTIES / SENSITIVE_PROPERTIES，
+ * 热改键对照 mc-server/msmp-methods.js 的 SERVER_SETTING_METHODS）
  */
 import { describe, expect, it } from 'vitest'
 import {
@@ -15,18 +16,18 @@ import {
   SERVER_PROPERTY_DEF_MAP,
 } from '../mc-properties'
 
-describe('SERVER_PROPERTY_DEFS 总量与分类分布（68 条 = 18/17/33）', () => {
-  it('共 68 条且键名唯一', () => {
-    expect(SERVER_PROPERTY_DEFS).toHaveLength(68)
+describe('SERVER_PROPERTY_DEFS 总量与分类分布（73 条 = 18/17/38）', () => {
+  it('共 73 条且键名唯一', () => {
+    expect(SERVER_PROPERTY_DEFS).toHaveLength(73)
     const names = SERVER_PROPERTY_DEFS.map((d) => d.name)
-    expect(new Set(names).size).toBe(68)
+    expect(new Set(names).size).toBe(73)
   })
 
-  it('三分类分布 gameplay 18 / worldGen 17 / serverSettings 33', () => {
+  it('三分类分布 gameplay 18 / worldGen 17 / serverSettings 38', () => {
     const count = (cat: string) => SERVER_PROPERTY_DEFS.filter((d) => d.category === cat).length
     expect(count('gameplay')).toBe(18)
     expect(count('worldGen')).toBe(17)
-    expect(count('serverSettings')).toBe(33)
+    expect(count('serverSettings')).toBe(38)
   })
 
   it('分类取值合法（无其他类别）', () => {
@@ -288,5 +289,43 @@ describe('vanilla 官方默认值', () => {
 
   it('level-type=minecraft:normal', () => {
     expect(SERVER_PROPERTY_DEF_MAP.get('level-type')?.defaultValue).toBe('minecraft:normal')
+  })
+
+  // 26.3 官方默认清单里 difficulty 是 easy（wiki Server.properties 的 Default content 段与
+  // Keys 表同列 easy；实例模板 routes/server-jar.js 亦写 easy）——不是旧认知的 normal
+  it('difficulty=easy（26.3 官方默认）', () => {
+    expect(SERVER_PROPERTY_DEF_MAP.get('difficulty')?.defaultValue).toBe('easy')
+  })
+})
+
+describe('26.3 官方默认清单补入的 5 个键', () => {
+  // 默认值一律取自 https://minecraft.wiki/w/Server.properties 的 26.3 Default content 段
+  const KEYS_ADDED_FOR_263: ReadonlyArray<[string, string, string]> = [
+    ['chat-spam-threshold-seconds', '聊天刷屏阈值', '10'],
+    ['command-spam-threshold-seconds', '命令刷屏阈值', '10'],
+    ['resource-pack-id', '资源包ID', ''],
+    ['status-heartbeat-interval', '状态心跳间隔', '0'],
+    ['text-filtering-version', '文本过滤版本', '0'],
+  ]
+
+  it.each(KEYS_ADDED_FOR_263)('%s：默认值/分组/控件类型与中文说明', (name, label, defaultValue) => {
+    const def = SERVER_PROPERTY_DEF_MAP.get(name)
+    expect(def, `${name} 未入属性表`).toBeTruthy()
+    expect(def?.label).toBe(label)
+    expect(def?.defaultValue).toBe(defaultValue)
+    expect(def?.category).toBe('serverSettings')
+    expect(def?.type).toBe('input')
+    expect(def?.desc.length ?? 0).toBeGreaterThan(0)
+  })
+
+  // 服务端写白名单（WRITABLE_PROPERTIES ∪ 热改键）未含这 5 键 ⇒ 标可写会让提交撞 400；
+  // 将来服务端放开写入时，这条与表里的 isWritable 必须同批改
+  it('服务端白名单未含 ⇒ 一律只读、非热改、非敏感', () => {
+    for (const [name] of KEYS_ADDED_FOR_263) {
+      const def = SERVER_PROPERTY_DEF_MAP.get(name)
+      expect(def?.isWritable, `${name} 不应标可写`).toBe(false)
+      expect(def?.isHotReload, `${name} 不应标热改`).toBe(false)
+      expect(def?.isSensitive, `${name} 不应标敏感`).toBe(false)
+    }
   })
 })

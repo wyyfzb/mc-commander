@@ -1,5 +1,5 @@
 /**
- * server.properties 71 属性元数据
+ * server.properties 73 属性元数据
  *
  * 服务端契约：mc_commander_server/services/instance-properties.service.js
  * - GET /properties 对 SENSITIVE_PROPERTIES 11 键返回 '********' 占位符
@@ -88,20 +88,22 @@ export function isBoolValue(v: string): boolean {
 }
 
 /**
- * 已知 server.properties 属性的元数据（68 条）
+ * 已知 server.properties 属性的元数据（73 条）
  * 覆盖 vanilla 1.20.5 – 1.21+ 全部已知属性；保留少量废弃字段以兼容旧配置。
- * 分类分布：gameplay 18 / worldGen 17 / serverSettings 33。
+ * 分类分布：gameplay 18 / worldGen 17 / serverSettings 38。
  */
 export const SERVER_PROPERTY_DEFS: PropertyDef[] = [
   // ── 游戏玩法（gameplay，18） ──
   {
+    // 26.3 官方默认清单中该键为 easy（wiki Server.properties 的 Default content 段与 Keys 表；
+    // 实例模板 routes/server-jar.js 亦写 easy）⇒ 订正为 easy，勿沿用旧认知的 normal
     name: 'difficulty',
     label: '难度',
     desc: '设置游戏难度',
     category: 'gameplay',
     type: 'dropdown',
     options: ['peaceful', 'easy', 'normal', 'hard'],
-    defaultValue: 'normal',
+    defaultValue: 'easy',
     isSensitive: false,
     isHotReload: true,
     isWritable: true,
@@ -655,6 +657,18 @@ export const SERVER_PROPERTY_DEFS: PropertyDef[] = [
     isWritable: true,
   },
   {
+    // 26.3 官方默认清单键（默认空，连字符十六进制 UUID）；服务端写白名单未含 ⇒ 只读
+    name: 'resource-pack-id',
+    label: '资源包ID',
+    desc: '资源包唯一标识（UUID，供客户端识别资源包）',
+    category: 'serverSettings',
+    type: 'input',
+    defaultValue: '',
+    isSensitive: false,
+    isHotReload: false,
+    isWritable: false,
+  },
+  {
     name: 'resource-pack-sha1',
     label: '资源包SHA1',
     desc: '资源包校验值',
@@ -686,6 +700,41 @@ export const SERVER_PROPERTY_DEFS: PropertyDef[] = [
     isSensitive: false,
     isHotReload: false,
     isWritable: true,
+  },
+  // 以下三键均为 26.3 官方默认清单键，默认值取自该清单（text-filtering-version=0、
+  // 两个刷屏阈值=10）；服务端写白名单未含它们 ⇒ 只读，开放写入须先改服务端白名单
+  {
+    name: 'text-filtering-version',
+    label: '文本过滤版本',
+    desc: '文本过滤配置所用的格式版本',
+    category: 'serverSettings',
+    type: 'input',
+    defaultValue: '0',
+    isSensitive: false,
+    isHotReload: false,
+    isWritable: false,
+  },
+  {
+    name: 'chat-spam-threshold-seconds',
+    label: '聊天刷屏阈值',
+    desc: '聊天刷屏自动踢出阈值（秒，0=不踢出）',
+    category: 'serverSettings',
+    type: 'input',
+    defaultValue: '10',
+    isSensitive: false,
+    isHotReload: false,
+    isWritable: false,
+  },
+  {
+    name: 'command-spam-threshold-seconds',
+    label: '命令刷屏阈值',
+    desc: '命令刷屏自动踢出阈值（秒，0=不踢出）',
+    category: 'serverSettings',
+    type: 'input',
+    defaultValue: '10',
+    isSensitive: false,
+    isHotReload: false,
+    isWritable: false,
   },
   {
     name: 'require-resource-pack',
@@ -753,6 +802,18 @@ export const SERVER_PROPERTY_DEFS: PropertyDef[] = [
     type: 'checkbox',
     defaultValue: 'true',
     isSensitive: true,
+    isHotReload: false,
+    isWritable: false,
+  },
+  {
+    // 26.3 官方默认清单键（默认 0=禁用）；服务端写白名单未含 ⇒ 只读
+    name: 'status-heartbeat-interval',
+    label: '状态心跳间隔',
+    desc: '管理服务器状态心跳的发送间隔（秒，0=禁用）',
+    category: 'serverSettings',
+    type: 'input',
+    defaultValue: '0',
+    isSensitive: false,
     isHotReload: false,
     isWritable: false,
   },
