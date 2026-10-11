@@ -324,6 +324,22 @@ describe('安全修复：saveProperties 换行转义', () => {
     expect(content).toContain('new-key=v');
   });
 
+  it('`!` 注释行同样原样保留（properties 的另一种注释起始符）', () => {
+    const instance = createInstance();
+    fs.writeFileSync(
+      path.join(tmpDir, 'server.properties'),
+      '# 面板说明\n! 用户说明：保存后不得消失 = 原样保留\nmax-players=20\n',
+    );
+    instance.saveProperties({ motd: 'hi' });
+    const content = fs.readFileSync(path.join(tmpDir, 'server.properties'), 'utf-8');
+    expect(content).toContain('# 面板说明');
+    expect(content).toContain('! 用户说明：保存后不得消失 = 原样保留');
+    expect(content).toContain('max-players=20');
+    expect(content).toContain('motd=hi');
+    // 同一行只能出现一次：读侧若仍把 `!` 行当键，它会作为键值行再落盘一遍
+    expect(content.split('\n').filter((l) => l.includes('用户说明'))).toHaveLength(1);
+  });
+
   it('_saveProperties 内部方法同样转义', () => {
     const instance = createInstance();
     instance._saveProperties({ motd: 'x\ny' });
@@ -454,6 +470,12 @@ describe('properties 读取侧反解义（与写入侧成对的 Java properties 
     const props = instance._loadProperties();
     expect(props.motd).toBe('hi');
     expect(Object.keys(props)).toHaveLength(1);
+  });
+
+  it('`!` 注释行同样跳过（含 `=` 的 `!` 行不得读成幽灵键）', () => {
+    const instance = createInstance();
+    writeProps('# hash 注释\n! 说明：最大玩家数 = 20\n! 纯说明\nmotd=hi\n');
+    expect(instance._loadProperties()).toEqual({ motd: 'hi' });
   });
 });
 
