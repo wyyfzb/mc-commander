@@ -58,9 +58,6 @@ test.describe('文件页', () => {
       const cards = Array.from(document.querySelectorAll('main .shadow-mcs-card'))
       return {
         cardCount: cards.length,
-        monacoW: Math.round(
-          document.querySelector('.monaco-editor')!.getBoundingClientRect().width,
-        ),
         // 全屏覆盖层的判据：Monaco 挂在 fixed 祖先下（侧栏抽屉遮罩同为 overlay 档 z 轴，
         // 但 Monaco 不在它的子树里，用 closest 不会误判）
         overlay: !!document.querySelector('.monaco-editor')?.closest('.fixed'),
@@ -68,8 +65,18 @@ test.describe('文件页', () => {
     })
     expect(dual.cardCount).toBe(2)
     expect(dual.overlay).toBe(false)
-    // w-45% 且 ≥320px 才谈得上可用
-    expect(dual.monacoW).toBeGreaterThanOrEqual(320)
+    // w-45% 且 ≥320px 才谈得上可用。
+    // 宽度必须轮询、不能一次性量：双栏几何由 ResizeObserver（use-container-width）驱动，
+    // Monaco 挂载与切档之间存在中间态（实测偶发读到 5px），一次性量会把「还没稳定」读成「布局错了」。
+    await expect
+      .poll(
+        () =>
+          page.evaluate(() =>
+            Math.round(document.querySelector('.monaco-editor')!.getBoundingClientRect().width),
+          ),
+        { message: '双栏态下 Monaco 宽度应稳定在 320px 以上' },
+      )
+      .toBeGreaterThanOrEqual(320)
 
     // 768：侧栏常显占 208px ⇒ 内容 536px < 672 ⇒ 全屏覆盖。
     // 等「main 里只剩文件列表一张卡」——内联编辑器那张 Card 卸载后 main 才减到 1 张，

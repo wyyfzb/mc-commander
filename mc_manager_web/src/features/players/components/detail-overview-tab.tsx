@@ -247,6 +247,8 @@ export function OverviewTab({
                           : ''}
                     {' · '}
                     {ban.createdAt ? formatRelativeTime(ban.createdAt) : ''}
+                    {/* 谁封的：来自原版封禁条目的 source；旧文件没有该字段时不占位 */}
+                    {ban.source ? ` · 来源 ${ban.source}` : ''}
                   </div>
                 </div>
                 {ban.isActive && (

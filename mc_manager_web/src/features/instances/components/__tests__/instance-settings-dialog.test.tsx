@@ -4,7 +4,9 @@
  * - 交互：滑块 0.5G 步进联动预览 / Aikar 开关生成与移除 / 高级参数展开
  * - 保存：PUT /instances/:id 载荷校验（maxMemory/minMemory/jvmArgs/javaPath 白名单）
  *   + 成功 toast + 关闭 + 实例详情失效重拉；失败 toast 且不关闭
- * - 实时推送（MSMP）：走**自己的**接口即时落库，不进 PUT 白名单，也不参与「未保存的更改」判定
+ * - 实时推送（MSMP）：走**自己的**接口即时落库，不进 PUT 白名单，也不参与「未保存的更改」判定；
+ *   读失败 / 在途 / 已读到三态分明——读失败给重试与可自查位置，在途给占位，都不落成「已关闭」
+ * - 两处设置开关行共用同一容器配方：逐类等集 + 行外无额外包裹锁定外观；在途 / 连接未就绪两态分别锁定
  * mock 数据为结构占位虚构（虚构实例名/版本），严禁真实服务器信息
  */
 import { describe, expect, it, vi, beforeEach, afterEach, afterAll, beforeAll } from 'vitest'
@@ -274,6 +276,39 @@ describe('InstanceSettingsDialog', () => {
     expect(screen.getByText(/java -Xms1G -Xmx2G/)).toHaveTextContent('-XX:SurvivorRatio=32')
   })
 
+  it('两处设置行同形：容器逐类等集 + 行外无额外包裹（就绪态）', async () => {
+    renderDialog()
+    // 锁实际使用形态：等开关就位（占位态另有用例）
+    await screen.findByRole('switch', { name: '实时推送' })
+
+    /** 行容器配方（与抽取前逐字相同）；groupClass = 行所属分组容器，用来判「行外无额外包裹」 */
+    const cases = [
+      { title: "JVM 优化 (Aikar's Flags)", groupClass: 'flex flex-col gap-4' },
+      {
+        title: '实时推送',
+        groupClass: 'flex flex-col gap-2 border-t border-mcs-border-muted pt-4',
+      },
+    ]
+    const recipe =
+      'flex items-center gap-3 rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-default px-3 py-2'
+    const classTokens = (el: Element) => el.className.split(/\s+/).filter(Boolean).sort()
+
+    for (const { title, groupClass } of cases) {
+      const titleEl = screen.getByText(title)
+      // 行容器 = 标题 <p> 的祖父节点（p → 文本块 → 行）
+      const row = titleEl.closest('div.rounded-mcs-sm')
+      expect(row).not.toBeNull()
+      // 逐类「等集」而非「包含」：多压一个类（如再写一个圆角档）同样转红
+      expect(classTokens(row!)).toEqual(recipe.split(' ').sort())
+      // 分组容器同样是等集：行外多包一层（带不带类）都会在这里转红
+      expect(classTokens(row!.parentElement!)).toEqual(groupClass.split(' ').sort())
+      // 三列结构：图标 svg / 文本块 / 控件本体。任何一层多余包裹都会改变行高与图标对齐
+      expect(row!.children[0]?.tagName.toLowerCase()).toBe('svg')
+      expect(row!.children[1]).toBe(titleEl.parentElement)
+      expect(row!.children[2]).toBe(screen.getByRole('switch', { name: title }))
+    }
+  })
+
   it('保存成功：PUT 载荷（maxMemory/minMemory/jvmArgs，javaPath 默认不携带）+ toast + 关闭 + 详情失效重拉', async () => {
     const { onOpenChange } = renderDialog()
     const user = userEvent.setup()
@@ -466,11 +501,43 @@ describe('InstanceSettingsDialog 实时推送开关', () => {
     expect(screen.getByText(/读不到实时推送状态/)).toBeInTheDocument()
   })
 
-  it('状态还没读到：同样不给开关（默认 false 会把「在途」显示成「已关闭」）', async () => {
+  it('读失败给出路：横幅内可重试（复用同一查询）并指向可自查的位置', async () => {
+    apiGetPushChannel.mockRejectedValueOnce(new Error('boom'))
+    renderDialog()
+    const user = userEvent.setup()
+
+    expect(await screen.findByText('状态未知')).toBeInTheDocument()
+    // 出路一：指向可自查的位置——该项在世界页「服务器属性」里是只读行，用户能自己去核
+    expect(
+      screen.getByText(/。可在世界页的「服务器属性」里核对这一项的实际值$/),
+    ).toBeInTheDocument()
+    // 出路二：重试直接复用既有查询的重取，不另开第二条读路径
+    const callsBefore = apiGetPushChannel.mock.calls.length
+    await user.click(screen.getByRole('button', { name: /重试/ }))
+    await waitFor(() => expect(apiGetPushChannel.mock.calls.length).toBeGreaterThan(callsBefore))
+    // 重取成功后开关就位、横幅撤下：读失败不是终态
+    expect(await screen.findByRole('switch', { name: '实时推送' })).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByText(/读不到实时推送状态/)).toBeNull())
+  })
+
+  it('状态还没读到：给占位、不给开关（在途既不能显示成「已关闭」，也不能留空）', async () => {
+    // 恒 pending：读取期本身就是被测状态，不靠「等多久」来验证
     apiGetPushChannel.mockReturnValue(new Promise<PushChannelState>(() => {}))
     renderDialog()
 
     expect(await screen.findByText('实时推送')).toBeInTheDocument()
+    // 占位只表在途、不表态：不是语义提示容器，也不是开关（开关会把在途显示成已关闭）
+    expect(screen.getByRole('status', { name: '正在读取实时推送状态' })).toBeInTheDocument()
+    expect(screen.queryByRole('switch', { name: '实时推送' })).toBeNull()
+  })
+
+  it('连接未就绪：查询被禁用时既不留骨架也不落开关（isPending ≠ 在途）', async () => {
+    // enabled=false ⇒ pending 但不在取：拿 isPending 当在途判据会留下一个永不消失的骨架
+    useConnectionStore.setState({ status: 'configuring' })
+    renderDialog()
+
+    expect(await screen.findByText('实时推送')).toBeInTheDocument()
+    expect(screen.queryByRole('status', { name: '正在读取实时推送状态' })).toBeNull()
     expect(screen.queryByRole('switch', { name: '实时推送' })).toBeNull()
   })
 

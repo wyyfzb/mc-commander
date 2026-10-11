@@ -113,6 +113,47 @@ describe('MC 崩溃报告解析', () => {
     expect(byLabel['崩溃时在线玩家']).toContain('ServerPlayer');
   });
 
+  it('Fabric 追加的 Fabric Mods: 段不影响解析（段名依官方文档，内容虚构）', () => {
+    // Fabric 把 mod 清单作为 -- System Details -- 里的一个 Details **键**追加，不是新的
+    // `-- <段名> --` 段。解析器只认已知 Details 键与 `-- X --` 段名，故天然容忍：这条用例
+    // 把该容忍锁住，防止把「未知 Details 键」当成段名或异常。
+    const synthetic = [
+      '---- Minecraft Crash Report ----',
+      '// Oh dear',
+      '',
+      'Time: 2026-10-11 09:00:00',
+      'Description: Exception in server tick loop',
+      '',
+      'java.lang.RuntimeException: examplemod blew up',
+      '\tat example.mod.TickHandler.tick(TickHandler.java:10)',
+      '\tat net.minecraft.server.MinecraftServer.tick(MinecraftServer.java:900)',
+      '',
+      'A detailed walkthrough of the error, its code path and all known details is as follows:',
+      '---------------------------------------------------------------------------------------',
+      '',
+      '-- System Details --',
+      'Details:',
+      '\tMinecraft Version: 26.3',
+      '\tMemory: 512 MiB / 1024 MiB up to 2048 MiB',
+      '\tCPUs: 4',
+      '\tFabric Mods: ',
+      '\t\texamplemod: Example Mod 1.2.3',
+      '\t\tlibcore: Lib Core 2.0.0',
+      '\t\t\tcom_example_nested: Nested Lib 0.9.1',
+      '\tServer Running: true',
+    ].join('\n');
+    const r = parseCrashReport(synthetic);
+    expect(r.parseError).toBeUndefined();
+    // `Fabric Mods:` 是 Details 键而非段名，不得混进段列表
+    expect(r.sections).toEqual(['System Details']);
+    const byLabel = Object.fromEntries(r.summary.map((f) => [f.label, f.value]));
+    expect(byLabel['Minecraft 版本']).toBe('26.3');
+    expect(byLabel['CPU 数']).toBe('4');
+    expect(r.exception).toBe('java.lang.RuntimeException: examplemod blew up');
+    // mod 清单是两层 tab 缩进的 `id: 名称 版本`，不得被当成栈帧收进来
+    expect(r.stack.some((l) => /examplemod|libcore|com_example_nested/.test(l))).toBe(false);
+  });
+
   it('不是崩溃报告时如实降级，不给出空字段', () => {
     const r = parseCrashReport('随便一段文本\n没有任何头部标识');
     expect(r.parseError).toContain('未找到崩溃报告头部标识');

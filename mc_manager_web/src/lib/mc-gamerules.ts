@@ -833,6 +833,63 @@ export function buildGameruleSetCommand(ruleName: string, value: string): string
   return `gamerule ${ruleName} ${value}`
 }
 
+// ── 数值型规则的取值区间与值校验 ─────────────────────────
+//
+// 区间数据**全部实测自服务端**（26.3 官方 server.jar，本机一次性实例），不是文档抄录：
+//   gamerule random_tick_speed -1              → Integer must not be less than 0: found -1
+//   gamerule random_tick_speed 0               → Game rule random_tick_speed is now set to 0
+//   gamerule max_snow_accumulation_height 9    → Integer must not be more than 8: found 9
+//   gamerule max_snow_accumulation_height 2000000000 → 同上（硬上限 8）
+// 与 25w44a changelog 冲突处以实测为准：changelog 记 max_command_forks / max_entity_cramming
+// 最小 1，实测 26.3 对 0 放行、对 -1 报「must not be less than 0」⇒ 实际 min 是 0。
+// 另两点反直觉的实测结论：players_sleeping_percentage 接受 101（**没有** 0–100 上限）；
+// fire_spread_radius_around_player 接受 -1（语义是「无玩家附近也更新火」，故下界为 -1 而非 0）。
+
+/** 命令整数参数的解析上界：实测 2147483647 放行、2147483648 回 `Invalid integer` */
+export const GAMERULE_INT_MAX = 2147483647
+
+/**
+ * 数值型规则的实测区间，键为面板规则的规范名（1.21.11+ 命名体系）。
+ * 上界等于 `GAMERULE_INT_MAX` 的条目＝**规则级无额外上限**（实测这些规则接受 2000000000），
+ * 上界只由命令的整数解析决定；`max_snow_accumulation_height` 是唯一有硬上限的规则。
+ * 旧命名体系（1.21.11 前）没有本表：那一支本轮没有 oracle，不猜区间。
+ */
+export const GAMERULE_INT_RANGES: Readonly<Record<string, { min: number; max: number }>> = {
+  fire_spread_radius_around_player: { min: -1, max: GAMERULE_INT_MAX },
+  max_block_modifications: { min: 1, max: GAMERULE_INT_MAX },
+  max_command_forks: { min: 0, max: GAMERULE_INT_MAX },
+  max_command_sequence_length: { min: 0, max: GAMERULE_INT_MAX },
+  max_entity_cramming: { min: 0, max: GAMERULE_INT_MAX },
+  max_snow_accumulation_height: { min: 0, max: 8 },
+  players_nether_portal_creative_delay: { min: 0, max: GAMERULE_INT_MAX },
+  players_nether_portal_default_delay: { min: 0, max: GAMERULE_INT_MAX },
+  players_sleeping_percentage: { min: 0, max: GAMERULE_INT_MAX },
+  random_tick_speed: { min: 0, max: GAMERULE_INT_MAX },
+  respawn_radius: { min: 0, max: GAMERULE_INT_MAX },
+}
+
+/**
+ * 判断一条规则的值能否下发，返回中文原因（null = 放行）。
+ *
+ * 为什么必须在客户端拦：服务端对越界值的回包（`Integer must not be less than 0: found -1`、
+ * `Invalid integer '…'`、`Expected integer`）**不在**服务端命令失败短语表里，会被判成执行成功；
+ * 面板随即 toast「已更新」并乐观写上本地值，而服务器其实一个都没改——正是「界面显示已改、
+ * 服务器毫无变化」的成因。能拦的都是能证明的边界：区间表里没有的规则**不猜**，一律放行。
+ */
+export function gameruleValueError(def: GameruleDef, rawValue: string): string | null {
+  const value = String(rawValue).trim()
+  if (def.type === 'bool') {
+    return value === 'true' || value === 'false' ? null : `布尔规则只接受 true / false：${value}`
+  }
+  if (!/^-?\d+$/.test(value)) return `数值规则要求十进制整数：${value}`
+  const range = GAMERULE_INT_RANGES[def.name]
+  if (!range) return null
+  const n = Number(value)
+  if (n < range.min) return `不得小于 ${range.min}：${value}`
+  if (n > range.max) return `不得大于 ${range.max}：${value}`
+  return null
+}
+
 /**
  * 解析 RCON 'gamerule' 无参命令响应文本（英文原版格式：每行 '名字 = 值'）。
  * - 按行 split、trim，匹配 '名字 = (true|false|-?数字)'；首行提示/空行等不匹配行跳过

@@ -1,16 +1,19 @@
 /**
  * gamerule 双版本数据 + 查询解析单测
- * 数据基准：中文 Minecraft Wiki
+ * 数据基准：中文 Minecraft Wiki；官方名单与取值边界另有一份**实测 oracle**（见文件末尾夹具）
  * 重点防护：1.21.11 版本阈值数值化比较（1.21.2 vs 1.21.11 字符串坑）、disable 系语义反转、解析降级 1/3 阈值
  */
 import { describe, expect, it } from 'vitest'
 import {
   GAMERULE_CATEGORY_LABELS,
+  GAMERULE_INT_MAX,
+  GAMERULE_INT_RANGES,
   GAMERULE_QUERY_COMMAND,
   LEGACY_GAMERULES,
   MINECRAFT_GAMERULES,
   buildGameruleSetCommand,
   gameruleDisplayValue,
+  gameruleValueError,
   parseGameruleOutput,
   pickGameruleSet,
   type GameruleDef,
@@ -32,6 +35,104 @@ const parseDefs: GameruleDef[] = [
 
 const findNew = (name: string): GameruleDef => MINECRAFT_GAMERULES.find((d) => d.name === name)!
 const findLegacy = (name: string): GameruleDef => LEGACY_GAMERULES.find((d) => d.name === name)!
+
+// ── 官方 oracle 夹具（**实测样本**，非文档抄录）──────────────────────────────
+//
+// 版本：Minecraft **26.3**（官方 server.jar，java 25，`-Xmx1G`，一次性 /tmp 实例，flat 新世界）
+// 取法（两个命令的原文，均经 RCON 下发）：
+//   ① 全量规则名 —— `help gamerule`
+//      回的是 Brigadier 用法列表（每条形如 `/gamerule advance_time [<value>]`，带
+//      `minecraft:` 前缀的重复项去掉后共 **58 条**）。裸 `gamerule` 在 26.3 上不是合法
+//      命令（回 `Unknown or incomplete command`），全量名字只能这样取。
+//   ② 每条当前值 —— `gamerule <name>`
+//      回包形状 `Game rule <name> is currently set to <true|false|-?\d+>`；值的形状同时
+//      给出 bool/int 的事实判定。读取发生在**空世界首启之后**，故这些值即 26.3 的默认值。
+// 采集脚本：`.ai/temp/t10-collect-oracle.mjs`（私有工作区，不入库；可重跑复核）
+// 刷新时机：升 MC 版本、或给面板表加规则时，重采一次并整体替换本夹具——
+//   转红是提示「夹具该更新了」，不是回归。
+const OFFICIAL_26_3: ReadonlyArray<readonly [name: string, type: 'bool' | 'int', value: string]> = [
+  ['advance_time', 'bool', 'true'],
+  ['advance_weather', 'bool', 'true'],
+  ['allow_entering_nether_using_portals', 'bool', 'true'],
+  ['block_drops', 'bool', 'true'],
+  ['block_explosion_drop_decay', 'bool', 'true'],
+  ['command_block_output', 'bool', 'true'],
+  ['command_blocks_work', 'bool', 'true'],
+  ['drowning_damage', 'bool', 'true'],
+  ['elytra_movement_check', 'bool', 'true'],
+  ['ender_pearls_vanish_on_death', 'bool', 'true'],
+  ['entity_drops', 'bool', 'true'],
+  ['fall_damage', 'bool', 'true'],
+  ['fire_damage', 'bool', 'true'],
+  ['fire_spread_radius_around_player', 'int', '128'],
+  ['forgive_dead_players', 'bool', 'true'],
+  ['freeze_damage', 'bool', 'true'],
+  ['global_sound_events', 'bool', 'true'],
+  ['immediate_respawn', 'bool', 'false'],
+  ['keep_inventory', 'bool', 'false'],
+  ['lava_source_conversion', 'bool', 'false'],
+  ['limited_crafting', 'bool', 'false'],
+  ['locator_bar', 'bool', 'true'],
+  ['log_admin_commands', 'bool', 'true'],
+  ['max_block_modifications', 'int', '32768'],
+  ['max_command_forks', 'int', '65536'],
+  ['max_command_sequence_length', 'int', '65536'],
+  ['max_entity_cramming', 'int', '24'],
+  ['max_snow_accumulation_height', 'int', '1'],
+  ['mob_drops', 'bool', 'true'],
+  ['mob_explosion_drop_decay', 'bool', 'true'],
+  ['mob_griefing', 'bool', 'true'],
+  ['natural_health_regeneration', 'bool', 'true'],
+  ['player_movement_check', 'bool', 'true'],
+  ['players_nether_portal_creative_delay', 'int', '0'],
+  ['players_nether_portal_default_delay', 'int', '80'],
+  ['players_sleeping_percentage', 'int', '100'],
+  ['projectiles_can_break_blocks', 'bool', 'true'],
+  ['pvp', 'bool', 'true'],
+  ['raids', 'bool', 'true'],
+  ['random_tick_speed', 'int', '3'],
+  ['reduced_debug_info', 'bool', 'false'],
+  ['respawn_radius', 'int', '10'],
+  ['send_command_feedback', 'bool', 'true'],
+  ['show_advancement_messages', 'bool', 'true'],
+  ['show_death_messages', 'bool', 'true'],
+  ['spawn_mobs', 'bool', 'true'],
+  ['spawn_monsters', 'bool', 'true'],
+  ['spawn_patrols', 'bool', 'true'],
+  ['spawn_phantoms', 'bool', 'true'],
+  ['spawn_wandering_traders', 'bool', 'true'],
+  ['spawn_wardens', 'bool', 'true'],
+  ['spawner_blocks_work', 'bool', 'true'],
+  ['spectators_generate_chunks', 'bool', 'true'],
+  ['spread_vines', 'bool', 'true'],
+  ['tnt_explodes', 'bool', 'true'],
+  ['tnt_explosion_drop_decay', 'bool', 'false'],
+  ['universal_anger', 'bool', 'false'],
+  ['water_source_conversion', 'bool', 'true'],
+]
+
+/**
+ * 26.3 数值型规则的实测边界（探法：对每条先试下界-1、再试下界，上界同理）。
+ * 判据是服务端自己的回包，例如：
+ *   gamerule random_tick_speed -1 → `Integer must not be less than 0: found -1`
+ *   gamerule max_snow_accumulation_height 9 → `Integer must not be more than 8: found 9`
+ * `GAMERULE_INT_MAX` ＝ 规则级无额外上限（实测接受 2000000000），上界只由命令的整数解析给出。
+ * 与 25w44a changelog 冲突处以实测为准：它记 max_command_forks / max_entity_cramming 最小 1，
+ * 实测 26.3 对 0 放行、对 -1 报「less than 0」。
+ */
+const OFFICIAL_26_3_INT_BOUNDS: Readonly<Record<string, { min: number; max: number }>> = {
+  fire_spread_radius_around_player: { min: -1, max: GAMERULE_INT_MAX },
+  max_block_modifications: { min: 1, max: GAMERULE_INT_MAX },
+  max_command_forks: { min: 0, max: GAMERULE_INT_MAX },
+  max_command_sequence_length: { min: 0, max: GAMERULE_INT_MAX },
+  max_entity_cramming: { min: 0, max: GAMERULE_INT_MAX },
+  max_snow_accumulation_height: { min: 0, max: 8 },
+  players_nether_portal_creative_delay: { min: 0, max: GAMERULE_INT_MAX },
+  players_nether_portal_default_delay: { min: 0, max: GAMERULE_INT_MAX },
+  players_sleeping_percentage: { min: 0, max: GAMERULE_INT_MAX },
+  random_tick_speed: { min: 0, max: GAMERULE_INT_MAX },
+  respawn_radius: { min: 0, max: GAMERULE_INT_MAX },
+}
 
 describe('双版本数据（计数/类型/唯一性）', () => {
   it('新集 58 条 / 旧集 57 条', () => {
@@ -140,7 +241,11 @@ describe('pickGameruleSet（1.21.11 数值化阈值）', () => {
     expect(pickGameruleSet('latest')).toBe(MINECRAFT_GAMERULES)
   })
 
-  it('查询命令常量（无参 RCON 查询）', () => {
+  it('查询命令常量（当前接线：无参 `gamerule`）', () => {
+    // ⚠️ 实测（26.3，RCON）：裸 `gamerule` **不是合法命令**，服务端回
+    // `Unknown or incomplete command. See below for error...`；该文本命中服务端失败短语表
+    // ⇒ /command 抛错、parseGameruleOutput 拿不到任何 `名字 = 值` 行。即这条查询在真机上
+    // 恒失败，面板只能显示「默认」值。本断言锁的只是常量接线，不代表查询链路可用。
     expect(GAMERULE_QUERY_COMMAND).toBe('gamerule')
   })
 })
@@ -254,6 +359,97 @@ describe('buildGameruleSetCommand / gameruleDisplayValue / 分类标签', () => 
     }
     for (const d of LEGACY_GAMERULES) {
       expect(GAMERULE_CATEGORY_LABELS[d.category]).toBe('其他')
+    }
+  })
+})
+
+describe('守卫一：面板规则名 ⊆ 官方名单（oracle = 26.3 实测，见上方夹具）', () => {
+  it('新集每一条都在 26.3 官方名单里（名字写错/陈旧 → 红）', () => {
+    const official = new Set(OFFICIAL_26_3.map(([name]) => name))
+    const orphans = MINECRAFT_GAMERULES.filter((d) => !official.has(d.name)).map((d) => d.name)
+    // 官方名单里没有的名字，写下去只会拿到 `Incorrect argument for command`：规则改不动
+    expect(orphans).toEqual([])
+  })
+
+  it('反向覆盖：26.3 官方每一条面板新集都有（漏一条 = 该规则用户改不到）', () => {
+    const panel = new Set(MINECRAFT_GAMERULES.map((d) => d.name))
+    const missing = OFFICIAL_26_3.filter(([name]) => !panel.has(name)).map(([name]) => name)
+    expect(missing).toEqual([])
+  })
+
+  it('类型与默认值与 26.3 实测一致（把规则的 bool/int 标错 → 红）', () => {
+    for (const [name, type, value] of OFFICIAL_26_3) {
+      const row = findNew(name)
+      expect(row, `${name} 不在面板新集里`).toBeDefined()
+      expect(row.type, `${name} 的类型`).toBe(type)
+      expect(String(row.defaultValue), `${name} 的默认值`).toBe(value)
+    }
+  })
+
+  it('夹具自身完整：58 条且名字唯一（与 26.3 的 help gamerule 条数一致）', () => {
+    expect(OFFICIAL_26_3.length).toBe(58)
+    expect(new Set(OFFICIAL_26_3.map(([name]) => name)).size).toBe(58)
+  })
+
+  it('旧集（1.20.5–1.21.10）无 oracle：57 条里只有 pvp 与 26.3 同名，本夹具判不了它', () => {
+    // 旧集是 camelCase 的另一套命名体系（改名时只有 pvp 没被改），26.3 的名单判不了其余 56 条。
+    // 该区间的集合断言需要另采一次 1.21.8 / 1.20.5 服务端 oracle，本轮未做——
+    // 这里把「未覆盖」显式钉住，避免被当成「已通过」。
+    const official = new Set(OFFICIAL_26_3.map(([name]) => name))
+    const shared = LEGACY_GAMERULES.filter((d) => official.has(d.name)).map((d) => d.name)
+    expect(shared).toEqual(['pvp'])
+  })
+})
+
+describe('守卫二：数值型规则的取值区间（边界来自 26.3 实测）', () => {
+  it('区间表完整覆盖新集里的 int 规则（新增 int 规则必须同时给出实测区间）', () => {
+    const intRuleNames = MINECRAFT_GAMERULES.filter((d) => d.type === 'int')
+      .map((d) => d.name)
+      .sort()
+    expect(Object.keys(GAMERULE_INT_RANGES).sort()).toEqual(intRuleNames)
+  })
+
+  it('区间表与 26.3 实测边界逐条一致（边界值改错 → 红）', () => {
+    for (const [name, bounds] of Object.entries(OFFICIAL_26_3_INT_BOUNDS)) {
+      expect(GAMERULE_INT_RANGES[name], `${name} 缺区间`).toEqual(bounds)
+    }
+  })
+
+  it('边界值放行、越界值拦下（每条 int 规则双向验证）', () => {
+    for (const [name, bounds] of Object.entries(OFFICIAL_26_3_INT_BOUNDS)) {
+      const def = findNew(name)
+      expect(gameruleValueError(def, String(bounds.min)), `${name} 下界`).toBeNull()
+      expect(gameruleValueError(def, String(bounds.max)), `${name} 上界`).toBeNull()
+      expect(gameruleValueError(def, String(bounds.min - 1)), `${name} 下界-1`).not.toBeNull()
+      if (bounds.max < GAMERULE_INT_MAX) {
+        expect(gameruleValueError(def, String(bounds.max + 1)), `${name} 上界+1`).not.toBeNull()
+      }
+    }
+  })
+
+  it('逐条对照服务端回包里的越界实例（random_tick_speed -1 / 雪高 9）', () => {
+    expect(gameruleValueError(findNew('random_tick_speed'), '-1')).toContain('不得小于 0')
+    expect(gameruleValueError(findNew('max_snow_accumulation_height'), '9')).toContain('不得大于 8')
+    // 实测反例：players_sleeping_percentage 接受 101（没有 0–100 上限）、火蔓延半径接受 -1
+    expect(gameruleValueError(findNew('players_sleeping_percentage'), '101')).toBeNull()
+    expect(gameruleValueError(findNew('fire_spread_radius_around_player'), '-1')).toBeNull()
+  })
+
+  it('bool 规则只接受 true / false，非整数的 int 值拦下', () => {
+    expect(gameruleValueError(findNew('keep_inventory'), 'true')).toBeNull()
+    expect(gameruleValueError(findNew('keep_inventory'), 'false')).toBeNull()
+    expect(gameruleValueError(findNew('keep_inventory'), '1')).not.toBeNull()
+    // 服务端对这些形状的回包（Expected integer / Invalid integer）同样不在失败短语表里
+    expect(gameruleValueError(findNew('random_tick_speed'), '3.5')).not.toBeNull()
+    expect(gameruleValueError(findNew('random_tick_speed'), 'abc')).not.toBeNull()
+    expect(gameruleValueError(findNew('random_tick_speed'), String(GAMERULE_INT_MAX))).toBeNull()
+    expect(gameruleValueError(findNew('random_tick_speed'), '2147483648')).not.toBeNull()
+  })
+
+  it('区间表里没有的规则不猜区间（旧命名体系一律放行）', () => {
+    for (const d of LEGACY_GAMERULES.filter((x) => x.type === 'int')) {
+      expect(gameruleValueError(d, '-1')).toBeNull()
+      expect(gameruleValueError(d, '999999999')).toBeNull()
     }
   })
 })

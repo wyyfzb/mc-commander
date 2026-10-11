@@ -549,7 +549,9 @@ export class MCServerInstance extends EventEmitter {
       const props = {};
       for (const line of content.split('\n')) {
         const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith('#')) continue;
+        // Java properties 的注释行以 `#` **或** `!` 起始；只认 `#` 时，
+        // `! 说明 = 20` 这类注释会被当成键读出来（幽灵键流入界面与 API）
+        if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('!')) continue;
         const eqIndex = trimmed.indexOf('=');
         if (eqIndex > 0) {
           const key = trimmed.substring(0, eqIndex).trim();
@@ -607,6 +609,8 @@ export class MCServerInstance extends EventEmitter {
       .replace(/\r/g, '\\r');
   }
 
+  /// 底层全量写：只落给定键值，不保留磁盘上已有的注释行。对外保存路径走
+  /// saveProperties（它按 Java properties 语义把 `#` / `!` 注释行原样留住）。
   _saveProperties(props) {
     const propsPath = path.join(this.serverPath, 'server.properties');
     const lines = Object.entries(props).map(
@@ -617,7 +621,15 @@ export class MCServerInstance extends EventEmitter {
   }
 
   /// 公开方法：保存 server.properties（供 routes 调用）
-  /// 保留原注释行（以 # 开头），仅更新键值对；未在 props 中出现的键保留原值。
+  /// 保留原注释行（Java properties 里 `#` 与 `!` 都是注释起始符），仅更新键值对；
+  /// 未在 props 中出现的键保留原值。
+  /// 注释是**整行搬移**的：解析出的注释行统一落在文件开头，与它说明的键不再相邻。
+  /// 这不丢信息——Java properties 语义下注释位置无意义，MC 自己只按 Properties 读写；
+  /// 代价仅是人工阅读时的相邻性，为保留相邻性去维护「注释块 ↔ 键」映射不划算。
+  /// 另：**MC 本身不带「每键注释」**。它写盘走 java.util.Properties.store，输出只有
+  /// `#Minecraft server properties` 与 `#<日期>` 两行头 + 纯键值（26.3 实例文件实测如此，
+  /// 该 store 的 load→store 往返还会把文件里已有的注释全部丢掉），所以这里不存在
+  /// 「丢掉 MC 自带说明」的问题；磁盘上的用户注释反倒是本函数替 MC 多留的。
   /// 保留文件级"未知键自动追加"合并行为（files 路由直接编辑文件场景需要；
   /// API 路径的键白名单由 status-route 路由层负责）。
   saveProperties(props) {
@@ -629,7 +641,7 @@ export class MCServerInstance extends EventEmitter {
     let onDisk = {};
     try {
       const content = fs.readFileSync(propsPath, 'utf-8');
-      comments = content.split('\n').filter((l) => l.trim().startsWith('#'));
+      comments = content.split('\n').filter((l) => /^[#!]/.test(l.trim()));
       // 合并基址取磁盘最新内容而非内存缓存：缓存仅构造时加载一次，
       // 文件被外部编辑（files 路由/游戏内命令）后不刷新，以陈旧缓存
       // 为基址会把文件编辑值回滚（如 max-players=100 被覆盖回 20）

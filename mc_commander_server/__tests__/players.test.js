@@ -90,6 +90,47 @@ describe('Player Routes', () => {
       expect(res.body.data[0].stats.loginCount).toBe(1);
     });
 
+    it('ops.json 里显式打开的 bypassesPlayerLimit 贯通到玩家列表（含离线分支）', async () => {
+      const now = Date.now();
+      fs.writeFileSync(
+        path.join(tmpServerPath, 'ops.json'),
+        JSON.stringify([
+          { name: 'Steve', uuid: 'u1', level: 4, bypassesPlayerLimit: true },
+          { name: 'Alex', uuid: 'u2', level: 4, bypassesPlayerLimit: false },
+        ]),
+      );
+      const mockInstance = {
+        isRunning: true,
+        serverPath: tmpServerPath,
+        players: new Map([['Steve', { name: 'Steve', joinTime: now, sessions: [] }]]),
+        getAllKnownPlayers: () =>
+          new Map([
+            ['Steve', { name: 'Steve', uuid: 'u1', isOp: true }],
+            ['Alex', { name: 'Alex', uuid: 'u2', isOp: true }],
+          ]),
+        playerEvents: new Map(),
+        _worldSpawn: null,
+        _computePlayerStats: () => ({
+          totalOnline: 0,
+          loginCount: 1,
+          offlineSince: 0,
+          deathCount: 0,
+          achievementCount: 0,
+          sleepCount: 0,
+        }),
+        _mergePlayerEvents: (a, b) => [...(a || []), ...(b || [])],
+      };
+      mockManager.getInstance.mockReturnValue(asInstance(mockInstance));
+
+      const res = await request(app).get('/api/instances/s1/players');
+
+      expect(res.status).toBe(200);
+      const byName = Object.fromEntries(res.body.data.map((p) => [p.name, p]));
+      // 同是 OP，是否满员免排队只由 ops.json 该键决定
+      expect(byName.Steve.bypassesPlayerLimit).toBe(true);
+      expect(byName.Alex.bypassesPlayerLimit).toBe(false);
+    });
+
     it('玩家名含路径分量时不得读出 serverPath 根下的 .json（读侧越界守）', async () => {
       // 名字来自 instance.players（服务端 stdout / 名单），不是 HTTP 入参，
       // 所以这个端点上的 validatePlayerName 管不到它——落点必须自证
@@ -570,6 +611,106 @@ describe('Player Routes', () => {
       expect(bans[2].isPermanent).toBe(true);
       expect(BanModel.findActiveByInstance).toHaveBeenCalledWith('s1');
     });
+
+    it('原版封禁条目的 source 带出来（谁封的）；旧文件缺该字段时兜底 null', async () => {
+      vi.clearAllMocks();
+      fs.writeFileSync(
+        path.join(tmpServerPath, 'banned-players.json'),
+        JSON.stringify([
+          {
+            name: 'Alex',
+            uuid: 'u1',
+            reason: 'Griefing',
+            source: 'Server',
+            created: '2026-01-01 00:00:00',
+          },
+          // 旧版/手工编辑的封禁文件没有 source
+          { name: 'Steve', uuid: 'u2', reason: 'Legacy', created: '2026-01-02 00:00:00' },
+        ]),
+      );
+      fs.writeFileSync(
+        path.join(tmpServerPath, 'banned-ips.json'),
+        JSON.stringify([
+          { ip: '1.2.3.4', reason: 'Cheating', source: 'Rcon', created: '2026-02-01 00:00:00' },
+        ]),
+      );
+      mockManager.getInstance.mockReturnValue(
+        asInstance({ isRunning: true, serverPath: tmpServerPath }),
+      );
+
+      const res = await request(app).get('/api/instances/s1/players/bans');
+
+      expect(res.status).toBe(200);
+      const sourceByTarget = Object.fromEntries(res.body.data.map((b) => [b.target, b.source]));
+      expect(sourceByTarget.Alex).toBe('Server');
+      expect(sourceByTarget['1.2.3.4']).toBe('Rcon');
+      // 字段缺失 → null，界面按「未知」处理，而不是拿别的字段顶上
+      expect(sourceByTarget.Steve).toBeNull();
+    });
+
+    it('生效中的临时封禁沿用其原版条目的 source（展示走 temp_bans 记录，来源仍取自文件）', async () => {
+      vi.clearAllMocks();
+      fs.writeFileSync(
+        path.join(tmpServerPath, 'banned-players.json'),
+        JSON.stringify([
+          {
+            name: 'Steve',
+            uuid: 'u1',
+            reason: 'Cheating',
+            source: 'Server',
+            created: '2026-08-01 09:00:00',
+          },
+        ]),
+      );
+      BanModel.findActiveByInstance.mockReturnValue([
+        { id: 1, targetType: 'player', target: 'Steve', expiresAt: 1750000000000 },
+      ]);
+      BanModel.findAllByInstance.mockReturnValue([
+        {
+          id: 1,
+          targetType: 'player',
+          target: 'Steve',
+          reason: 'Cheating',
+          isActive: true,
+          expiresAt: 1750000000000,
+          createdAt: '2026-08-01 10:00:00',
+        },
+      ]);
+      mockManager.getInstance.mockReturnValue(
+        asInstance({ isRunning: true, serverPath: tmpServerPath }),
+      );
+
+      const res = await request(app).get('/api/instances/s1/players/bans');
+
+      expect(res.status).toBe(200);
+      // 原版条目被去重跳过（只有 temp_bans 那一条），但它的 source 跟着记录走
+      expect(res.body.data).toHaveLength(1);
+      expect(res.body.data[0].target).toBe('Steve');
+      expect(res.body.data[0].source).toBe('Server');
+    });
+  });
+
+  describe('GET /api/instances/:id/players/:player/details', () => {
+    it('ops.json 里显式打开的 bypassesPlayerLimit 贯通到详情响应', async () => {
+      fs.writeFileSync(
+        path.join(tmpServerPath, 'ops.json'),
+        JSON.stringify([{ name: 'Steve', uuid: 'u1', level: 4, bypassesPlayerLimit: true }]),
+      );
+      const mockInstance = {
+        isRunning: true,
+        serverPath: tmpServerPath,
+        players: new Map(),
+        getAllKnownPlayers: () => new Map([['Steve', { name: 'Steve', uuid: 'u1', isOp: true }]]),
+        playerEvents: new Map(),
+        getPlayerDetails: async () => ({}),
+      };
+      mockManager.getInstance.mockReturnValue(asInstance(mockInstance));
+
+      const res = await request(app).get('/api/instances/s1/players/Steve/details');
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.bypassesPlayerLimit).toBe(true);
+    });
   });
 
   describe('POST /api/instances/:id/players/:player/op', () => {
@@ -599,8 +740,13 @@ describe('Player Routes', () => {
       expect(res.status).toBe(200);
       expect(mockInstance._msmpRequest).toHaveBeenCalledWith(
         'minecraft:operators/add',
-        [[{ player: { name: 'Steve' }, permissionLevel: 4, bypassesPlayerLimit: false }]],
+        [[{ player: { name: 'Steve' }, permissionLevel: 4 }]],
         expect.any(Number),
+      );
+      // 不传 bypassesPlayerLimit：协议缺省是「已 op 沿用现值，否则 false」，
+      // 传死值 false 会把已打开「满员免排队」的管理员静默降级
+      expect(mockInstance._msmpRequest.mock.calls[0][1][0][0]).not.toHaveProperty(
+        'bypassesPlayerLimit',
       );
       expect(mockInstance.sendCommand).not.toHaveBeenCalled();
     });

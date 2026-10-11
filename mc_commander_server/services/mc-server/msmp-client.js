@@ -16,6 +16,7 @@
  */
 
 import { WebSocket } from 'ws';
+import { logger } from '../../utils/logger.js';
 
 /** 探测超时：握手 + 一次 `server/status`，回环链路上远快于此 */
 const MSMP_PROBE_TIMEOUT_MS = 2000;
@@ -92,7 +93,8 @@ export function _msmpPortFromLog() {
  * 常驻连接要处理重连、半开、服务端重启这一整套状态机——本模块只做只读查询，
  * 不值得为它引入连接生命周期。将来接推送通知时再改成常驻。
  *
- * @returns {Promise<unknown | null>} 失败一律 null（调用方按「取不到」处理）
+ * @returns {Promise<unknown | null>} 失败一律 null（调用方按「取不到」处理）；服务端回了
+ *   JSON-RPC 错误响应时，错误码与消息落一条 warn 日志，供排障区分失败原因
  */
 export function _msmpRequest(method, params = [], timeoutMs = MSMP_QUERY_TIMEOUT_MS) {
   const endpoint = this._msmpResolveEndpoint();
@@ -141,7 +143,21 @@ export function _msmpRequest(method, params = [], timeoutMs = MSMP_QUERY_TIMEOUT
       }
       // 通知没有 id：本模块不订阅通知，忽略即可（不得当成响应）
       if (message.id !== 1) return;
-      finish(message.error ? null : message.result);
+      // JSON-RPC 层的失败（-32601 方法不存在 / -32602 参数名或类型不符 / -32600 世界加载
+      // 窗口内不可调用）在返回契约上都是 null，调用方只分得出「取不到」、分不出是哪一种，
+      // 排障时无从定位，故把错误码与消息落到日志。
+      // **不改返回契约**：`_msmpRequest` 的契约是「失败一律 null」，而写路径
+      // （`_writeViaPreferredChannel`）以「非 null 即成功」判定并据此置 `_msmpAvailable`
+      // 能力位——返回结构化错误会被当成写成功，比丢失可分辨性更糟。
+      // 级别取 warn 而非 error：调用方都有兜底（退命令通道 / 保持现状），这不是面板故障。
+      if (message.error) {
+        const { code, message: detail } = message.error;
+        logger.warn(
+          `[${this.id}] MSMP ${method} 返回 JSON-RPC 错误 ${code ?? '?'}：${detail ?? '(无消息)'}`,
+        );
+        return finish(null);
+      }
+      finish(message.result);
     });
     // 401（认证失败）、超时、服务端重启一律归为「取不到」
     socket.on('error', () => finish(null));

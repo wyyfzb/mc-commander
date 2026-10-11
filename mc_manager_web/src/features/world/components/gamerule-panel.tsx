@@ -30,6 +30,7 @@ import {
   parseGameruleOutput,
   pickGameruleSet,
   type GameruleDef,
+  gameruleValueError,
 } from '@/lib/mc-gamerules'
 
 interface GamerulePanelProps {
@@ -277,7 +278,8 @@ function RuleRow({
   const display = isEditing && draft !== undefined ? draft : (current ?? String(def.defaultValue))
   const isBool = def.type === 'bool'
   const boolOn = isBool && display === 'true'
-  const intValid = !isBool && /^-?\d+$/.test(display)
+  // 取值越界在服务端是**静默成功**（越界回包不在失败短语表里）⇒ 必须在这里拦，否则界面报成功而服务器没改
+  const valueError = gameruleValueError(def, display)
   const isDefault = current === undefined
 
   return (
@@ -290,9 +292,20 @@ function RuleRow({
       </span>
       {/* 描述来自 mc-gamerules 的数据表（多为整句，最长 130+ 字），按「句子最低 xs」取 12px；
           行高由同行开关/输入决定，文字不撑行（实测 32/33/41px 三档不变），截断处由 title 兜底 */}
-      <span className="min-w-0 flex-1 truncate text-mcs-xs text-mcs-text-muted" title={def.desc}>
-        {def.desc}
-      </span>
+      {valueError ? (
+        // 顶替描述行而不是另起一行：行高与列结构不变，且这条原因比描述此刻更要紧（描述仍在 title 里）
+        <span
+          role="alert"
+          className="min-w-0 flex-1 truncate text-mcs-xs text-mcs-error-fg"
+          title={valueError}
+        >
+          {valueError}
+        </span>
+      ) : (
+        <span className="min-w-0 flex-1 truncate text-mcs-xs text-mcs-text-muted" title={def.desc}>
+          {def.desc}
+        </span>
+      )}
 
       {isDefault && !isEditing && (
         <span className="shrink-0 text-mcs-2xs text-mcs-text-muted">默认</span>
@@ -315,6 +328,7 @@ function RuleRow({
             onChange={(e) => onChange(e.target.value)}
             className="h-7 w-24 font-mono"
             aria-label={`${def.name} 值`}
+            aria-invalid={valueError !== null}
           />
         )}
       </div>
@@ -336,7 +350,7 @@ function RuleRow({
             size="sm"
             className="h-7 px-2 text-mcs-xs"
             onClick={onSave}
-            disabled={saving || (!isBool && !intValid)}
+            disabled={saving || valueError !== null}
           >
             <Check aria-hidden />
             保存

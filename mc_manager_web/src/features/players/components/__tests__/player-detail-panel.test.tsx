@@ -178,3 +178,29 @@ describe('PlayerDetailPanel 回退详情端点失败', () => {
     expect(screen.queryByText('详情加载失败')).not.toBeInTheDocument()
   })
 })
+
+/**
+ * 满员免排队（ops.json 的 bypassesPlayerLimit）是只读状态：面板不提供开关，
+ * 只在 OP 徽章上写明，避免用户以为这里能改。
+ */
+describe('PlayerDetailPanel OP 徽章：满员免排队', () => {
+  it('ops.json 显式打开时，OP 徽章写明「满员免排队」', () => {
+    renderPanel(makePlayer({ isOp: true, bypassesPlayerLimit: true }))
+
+    expect(screen.getByText('OP · 满员免排队')).toBeInTheDocument()
+  })
+
+  it('普通 OP 仍只显示 OP（不无中生有）', () => {
+    renderPanel(makePlayer({ isOp: true, bypassesPlayerLimit: false }))
+
+    expect(screen.getByText('OP')).toBeInTheDocument()
+    expect(screen.queryByText(/满员免排队/)).not.toBeInTheDocument()
+  })
+
+  it('非 OP 玩家即使字段为真也不显示 OP 徽章', () => {
+    renderPanel(makePlayer({ isOp: false, bypassesPlayerLimit: true }))
+
+    expect(screen.queryByText(/满员免排队/)).not.toBeInTheDocument()
+    expect(screen.queryByText('OP')).not.toBeInTheDocument()
+  })
+})

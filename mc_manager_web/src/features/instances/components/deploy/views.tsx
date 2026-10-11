@@ -2,11 +2,12 @@
  * DeployDialog 结果视图：部署中 / 成功 / 失败 / 已取消（从 deploy-dialog.tsx 行为不变迁移）
  * - 部署中：进度条（percent×100）+ stage 中文标签（DEPLOY_STAGE_LABELS）+ transferred/total MB
  *   +「取消部署」（服务端中断下载/安装/首启并清理实例目录）
- * - 成功：绿色结果块（实例 id/名称/版本）+ 自动启动状态（首启闭环，issue 312）+「完成」
+ * - 成功：绿色结果块（实例 id/名称/版本）+ 自动启动状态（首启闭环，issue 312）
+ *   + 白名单提示（新实例默认已开白名单、名单为空则谁都进不去；服务器启动后先加人）+「完成」
  * - 失败：error 块 + 取消/重试
  * - 已取消：中性结果块 + 关闭/重新部署（用户动作而非故障，故不占 error 档）
  */
-import { Ban, CheckCircle2, Info, Loader2, XCircle } from 'lucide-react'
+import { Ban, CheckCircle2, Info, Loader2, UserPlus, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { DialogFooter } from '@/components/ui/dialog'
 import { SERVER_TYPE_LABELS, recommendedJavaVersion, type ServerType } from '@/lib/mc-deploy'
@@ -125,6 +126,17 @@ export function DeploySuccessView({ result, autoStart, onComplete }: DeploySucce
           </span>
         </NoticeBanner>
       )}
+      {/* 新实例必然处于「白名单已开 + 名单为空」：部署写的 server.properties 跟随上游默认
+          （white-list=true），而部署不生成 whitelist.json（面板只在读侧用它识别已知玩家）
+          ⇒ 不先加人，谁都会被服务端在登录期拦下，包括服主自己。enforce-whitelist=false 只管
+          运行中重载时把非名单玩家踢出，登录期照样拦，指望不上它。
+          「服务器启动后」不是客套：加白名单的入口走 RCON（玩家页那个按钮在 RCON 未就绪时禁用），
+          而本视图在 autoStart 为 null/failed 时恰好就是服务器没起来的状态——少这一句，用户当场做不到。
+          图标取 UserPlus 而非 Info：与同屏「未同意 EULA」那条同为 info 档，靠语义图标区分
+          （与玩家页那个按钮同记号），否则两条同图标同 tint 会被读成「一条两块」。 */}
+      <NoticeBanner variant="info" icon={UserPlus}>
+        新实例默认开启白名单：名单为空时任何玩家都无法进入。服务器启动后，请在玩家页点「添加白名单」把自己加进去，再进入服务器。
+      </NoticeBanner>
       <DialogFooter>
         <Button onClick={onComplete}>完成</Button>
       </DialogFooter>

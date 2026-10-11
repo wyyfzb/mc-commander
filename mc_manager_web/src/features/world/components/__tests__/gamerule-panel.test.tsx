@@ -150,6 +150,33 @@ describe('GamerulePanel 行级编辑', () => {
     expect(await screen.findByText('已更新规则 randomTickSpeed = 2')).toBeInTheDocument()
   })
 
+  it('int 越界：保存被拦并就地给出原因（该回包在服务端是静默成功，不拦就会「界面说改了、服务器没改」）', async () => {
+    const user = userEvent.setup()
+    const { onSendCommand } = renderPanel({
+      mcVersion: '1.21.11',
+      onSendCommand: vi.fn<SendCommand>().mockResolvedValue(newOutput()),
+    })
+    await screen.findByText('max_snow_accumulation_height')
+    const input = screen.getByLabelText('max_snow_accumulation_height 值')
+    await user.clear(input)
+    await user.type(input, '9')
+    // 上界 8 由真实服务端回包反推（9 → "more than 8"），而该文本不命中失败短语表 ⇒ 面板必须自己拦
+    expect(input).toHaveAttribute('aria-invalid', 'true')
+    const alert = screen.getByText('不得大于 8：9')
+    expect(alert).toHaveAttribute('role', 'alert')
+    // 顶替描述行必须仍受描述行的截断约束（min-w-0 + truncate），否则长错误文案会把行撑破
+    expect(alert).toHaveClass('min-w-0', 'flex-1', 'truncate')
+    expect(screen.getByRole('button', { name: '保存' })).toBeDisabled()
+    await user.clear(input)
+    await user.type(input, '8')
+    expect(screen.queryByText('不得大于 8：9')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '保存' })).toBeEnabled()
+    await user.click(screen.getByRole('button', { name: '保存' }))
+    await waitFor(() =>
+      expect(onSendCommand).toHaveBeenCalledWith('gamerule max_snow_accumulation_height 8'),
+    )
+  })
+
   it('保存失败：toast 友好错误 + 回滚值（编辑态退出、开关回到已提交值）', async () => {
     const user = userEvent.setup()
     const onSendCommand = vi

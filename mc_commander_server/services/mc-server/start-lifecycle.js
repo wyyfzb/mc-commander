@@ -93,8 +93,20 @@ export function _ensureMsmpConfiguredSafe() {
   }
 }
 
+/**
+ * 启动前清掉上次运行残留的 world 锁。
+ *
+ * 为什么删：`session.lock` 只声明「最后一个写入该世界的程序是谁」（自 1.16-pre1 起内容是
+ * 单个 `☃`，实测本机 26.3 实例的 world/session.lock 就是 3 字节 `E2 98 83`），它本身不是
+ * 排他锁；停机或崩溃留下的那一份只是「世界已被打开」的假信号，会让下次启动被拒。面板在
+ * 停机/崩溃后重新拉起同一实例是常规路径，故每次启动前清掉它。
+ *
+ * 什么前提下危险——**世界正被某个进程写入时不得删**：删文件不会让旧进程松手（真锁绑在它的
+ * inode 上），新进程却能在新 inode 上顺利“拿到”锁，于是两个 JVM 同时写同一份存档。调用侧
+ * 保证了「旧进程已死」：`start()` 在 `isRunning` 时直接抛错，接管实例的重启也先等看门狗
+ * 确认旧进程退出（`_scheduleRestartStart`）。把本函数挪到这两个守卫之外，前提即失效。
+ */
 export function _cleanWorldLock() {
-  // 清理 world 锁文件，防止 session.lock 冲突
   // 注意：不使用 pkill，避免误杀同名进程和命令注入风险
   this.process = null;
   // 使用 level-name 而非硬编码 'world'，兼容自定义世界目录名；

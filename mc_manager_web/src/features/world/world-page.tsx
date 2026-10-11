@@ -183,6 +183,7 @@ export function WorldPage() {
                 onEditingChange={setPropertiesEditing}
                 isRunning={isRunning}
                 onRestart={() => handleRestart()}
+                mcVersion={mcVersion}
               />
             </TabsContent>
             <TabsContent

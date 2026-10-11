@@ -95,6 +95,8 @@ export function createPlayerRoutes(serverManager) {
       }
 
       const knownPlayers = instance.getAllKnownPlayers();
+      // 满员免排队名单读一次，在线/离线两分支共用
+      const bypassOps = loadBypassOps(instance.serverPath);
 
       // 临时封禁到期时间映射（服务端自实现 tempban 记录，供前端展示剩余时长）
       const activeBans = BanModel.findActiveByInstance(req.params.id);
@@ -158,6 +160,7 @@ export function createPlayerRoutes(serverManager) {
           onlineTime: Math.floor((Date.now() - onlineInfo.joinTime) / 1000),
           totalPlayTime: totalPlayTime,
           isOp: known.isOp || false,
+          bypassesPlayerLimit: bypassOps.has(name),
           isWhitelisted: known.isWhitelisted || false,
           isBanned: known.isBanned || false,
           // 临时封禁到期时间（null=永久封禁或未封禁）
@@ -283,6 +286,7 @@ export function createPlayerRoutes(serverManager) {
           onlineTime: null,
           totalPlayTime: totalPlayTime,
           isOp: knownInfo.isOp || false,
+          bypassesPlayerLimit: bypassOps.has(name),
           isWhitelisted: knownInfo.isWhitelisted || false,
           isBanned: knownInfo.isBanned || false,
           // 临时封禁到期时间（null=永久封禁或未封禁）
@@ -353,6 +357,38 @@ export function createPlayerRoutes(serverManager) {
 
       const bans = [];
 
+      // 生效中的临时封禁目标：其原版 ban/ban-ip 条目是临时封禁的实现载体，
+      // 与 temp_bans 记录重复，跳过以免同一封禁在记录中显示两条。
+      const activeTempKeys = new Set(
+        BanModel.findActiveByInstance(req.params.id).map((b) => `${b.targetType}:${b.target}`),
+      );
+
+      // 先读原版封禁文件：一是 `source`（「谁封的」）要先收进映射——生效中的临时封禁在下面
+      // 按 temp_bans 记录展示（原版条目被跳过），但该条目的 source 仍应跟着那条记录走；
+      // 二是读一次就够了，两条展示路径共用同一批条目。
+      const bannedFiles = [
+        {
+          path: path.join(instance.serverPath, 'banned-players.json'),
+          targetType: 'player',
+          key: 'name',
+        },
+        { path: path.join(instance.serverPath, 'banned-ips.json'), targetType: 'ip', key: 'ip' },
+      ];
+      const vanillaBans = [];
+      const sourceByTarget = new Map();
+      for (const file of bannedFiles) {
+        if (!fs.existsSync(file.path)) continue;
+        try {
+          for (const entry of JSON.parse(fs.readFileSync(file.path, 'utf-8'))) {
+            const target = entry[file.key] || '';
+            // 旧版/手工编辑的封禁文件可能没有 source（或写成非字符串）
+            const source = typeof entry.source === 'string' && entry.source ? entry.source : null;
+            vanillaBans.push({ targetType: file.targetType, target, source, entry });
+            if (source) sourceByTarget.set(`${file.targetType}:${target}`, source);
+          }
+        } catch {}
+      }
+
       // 1. 自实现临时封禁记录（含历史）
       for (const b of BanModel.findAllByInstance(req.params.id)) {
         bans.push({
@@ -365,45 +401,27 @@ export function createPlayerRoutes(serverManager) {
           // 面板自己的临时封禁记录不记结束原因：提前解封与到期都只落 is_active=false
           expired: false,
           createdAt: b.createdAt,
+          source: sourceByTarget.get(`${b.targetType}:${b.target}`) ?? null,
         });
       }
 
-      // 生效中的临时封禁目标：其原版 ban/ban-ip 条目是临时封禁的实现载体，
-      // 与 temp_bans 记录重复，跳过以免同一封禁在记录中显示两条。
-      const activeTempKeys = new Set(
-        BanModel.findActiveByInstance(req.params.id).map((b) => `${b.targetType}:${b.target}`),
-      );
-
-      // 2. 原版永久封禁文件（当前生效）
-      const bannedFiles = [
-        {
-          path: path.join(instance.serverPath, 'banned-players.json'),
-          targetType: 'player',
-          key: 'name',
-        },
-        { path: path.join(instance.serverPath, 'banned-ips.json'), targetType: 'ip', key: 'ip' },
-      ];
-      for (const file of bannedFiles) {
-        if (!fs.existsSync(file.path)) continue;
-        try {
-          for (const entry of JSON.parse(fs.readFileSync(file.path, 'utf-8'))) {
-            const target = entry[file.key] || '';
-            if (activeTempKeys.has(`${file.targetType}:${target}`)) continue;
-            // 官条目也带 expires：临时封禁在此显示到期时间，过期的归入历史
-            const { isPermanent, expiresAt } = parseBanExpires(entry.expires);
-            const expired = isBanExpired(entry.expires);
-            bans.push({
-              targetType: file.targetType,
-              target,
-              reason: entry.reason || '',
-              isActive: !expired,
-              isPermanent,
-              expiresAt,
-              expired,
-              createdAt: entry.created || null,
-            });
-          }
-        } catch {}
+      // 2. 原版永久封禁条目（当前生效）
+      for (const { targetType, target, source, entry } of vanillaBans) {
+        if (activeTempKeys.has(`${targetType}:${target}`)) continue;
+        // 官条目也带 expires：临时封禁在此显示到期时间，过期的归入历史
+        const { isPermanent, expiresAt } = parseBanExpires(entry.expires);
+        const expired = isBanExpired(entry.expires);
+        bans.push({
+          targetType,
+          target,
+          reason: entry.reason || '',
+          isActive: !expired,
+          isPermanent,
+          expiresAt,
+          expired,
+          createdAt: entry.created || null,
+          source,
+        });
       }
 
       // 生效中在前：临时到期时间升序 → 永久；历史按创建时间倒序
@@ -432,6 +450,7 @@ export function createPlayerRoutes(serverManager) {
       const playerName = req.params.player;
       const knownPlayers = instance.getAllKnownPlayers();
       const known = knownPlayers.get(playerName) || {};
+      const bypassOps = loadBypassOps(instance.serverPath);
 
       let totalPlayTime = 0;
       // 无 usercache 记录时走 offline uuid 兜底
@@ -447,6 +466,7 @@ export function createPlayerRoutes(serverManager) {
         uuid: known.uuid || '',
         isOnline: instance.players.has(playerName),
         isOp: known.isOp || false,
+        bypassesPlayerLimit: bypassOps.has(playerName),
         isWhitelisted: known.isWhitelisted || false,
         isBanned: known.isBanned || false,
         totalPlayTime: totalPlayTime,
@@ -500,6 +520,23 @@ export function createPlayerRoutes(serverManager) {
   // 包含关系——实例与路由曾经各写一份，分叉风险与「路由那份不告警」都出在这里。
   const loadPlayerData = ({ serverPath, playerName, uuid }) =>
     readShadowProfile({ serverPath, playerName, uuid });
+
+  /**
+   * ops.json 里显式打开 `bypassesPlayerLimit` 的玩家名集合（满员时免排队）。
+   * 官方 `/op` 固定给权限级 4、**不**设这个开关，它只能来自 ops.json 编辑或被显式传参的
+   * MSMP `minecraft:operators/add`，因此面板只读呈现该状态，不提供开关。
+   */
+  const loadBypassOps = (serverPath) => {
+    const names = new Set();
+    const opsPath = path.join(serverPath, 'ops.json');
+    if (!fs.existsSync(opsPath)) return names;
+    try {
+      for (const entry of JSON.parse(fs.readFileSync(opsPath, 'utf-8'))) {
+        if (entry.name && entry.bypassesPlayerLimit === true) names.add(entry.name);
+      }
+    } catch {}
+    return names;
+  };
 
   // POST /api/instances/:id/players/:player/op
   router.post(

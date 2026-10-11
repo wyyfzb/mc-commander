@@ -13,10 +13,14 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { logger } from '../utils/logger.js';
 import { asInstance } from './helpers/msmp-instance.js';
 import { SERVER_SETTING_KEYS, SERVER_SETTING_METHODS } from '../services/mc-server/msmp-methods.js';
+// 跨包只读：面板属性表（零 import 的纯数据模块，可直接并入 node 测试环境）。
+// 这条 import 就是「两个源」的另一侧——面板侧从它取，服务端侧从下方 service 常量取。
+import { SERVER_PROPERTY_DEFS } from '../../mc_manager_web/src/lib/mc-properties';
 import {
   SENSITIVE_PROPERTIES,
   SENSITIVE_PLACEHOLDER,
   ALLOWED_PROPERTY_KEYS,
+  NUMERIC_PROPERTIES,
   validatePropertyValue,
   maskSensitiveProperties,
   reloadProperties,
@@ -336,5 +340,95 @@ describe('instance-properties.service · 缓存刷新边界 reloadProperties', (
     });
     reloadProperties(throwing);
     expect(throwing.properties).toEqual({ motd: 'keep' });
+  });
+});
+
+// 面板属性表标为可写的键，必须能被服务端接受：前端只回传用户真正改过的键，
+// 故「面板标可写」就是「用户可提交」的全集，漏一个用户点保存就撞整批 400。
+// 两侧刻意取自两个不同的源（面板表 vs 本包 service 常量），改成同一处推导会让断言恒真。
+// 26.3 键与实例模板键已入白名单：面板模板（server-jar.js）会写 texture-pack/query.port/
+// max-chained-neighbor-updates，引擎首启又会补齐 26.3 全套键；这些键若被拒，任何按整份文件
+// 回传的调用方都会整批 400。
+describe('instance-properties.service · 26.3 键与模板键白名单对齐', () => {
+  const KEYS_WITH_SAMPLE = [
+    ['white-list', 'true'],
+    ['enforce-whitelist', 'false'],
+    ['query.port', '25565'],
+    ['texture-pack', ''],
+    ['pause-when-empty-seconds', '60'],
+    ['max-chained-neighbor-updates', '1000000'],
+    ['resource-pack-id', ''],
+    ['text-filtering-version', '0'],
+    ['chat-spam-threshold-seconds', '10'],
+    ['command-spam-threshold-seconds', '10'],
+    ['status-heartbeat-interval', '0'],
+  ];
+  // 上表中走整数校验分支的键（其余为布尔/字符串）
+  const NUMERIC_KEYS = [
+    'query.port',
+    'pause-when-empty-seconds',
+    'max-chained-neighbor-updates',
+    'text-filtering-version',
+    'chat-spam-threshold-seconds',
+    'command-spam-threshold-seconds',
+    'status-heartbeat-interval',
+  ];
+
+  it('逐个提交都被接受（值采样自官方默认值/合法值）', () => {
+    const rejected = [];
+    for (const [key, sample] of KEYS_WITH_SAMPLE) {
+      const { rejectedKeys } = validatePropertySubmission({ [key]: sample });
+      if (rejectedKeys.length > 0) rejected.push(key);
+    }
+    expect(rejected).toEqual([]);
+  });
+
+  it('整数项同时落在数值校验集合里（否则非法值会被原样写进文件）', () => {
+    const missing = NUMERIC_KEYS.filter((key) => !NUMERIC_PROPERTIES.has(key));
+    expect(missing).toEqual([]);
+    // 抽一条反向证据：整数项拒非整数
+    expect(validatePropertyValue('chat-spam-threshold-seconds', 'abc').ok).toBe(false);
+    expect(validatePropertyValue('max-chained-neighbor-updates', '-1').ok).toBe(true);
+  });
+});
+
+// 面板属性表标为可写的键，必须能被服务端接受：前端只回传用户真正改过的键，
+// 故「面板标可写」就是「用户可提交」的全集，漏一个用户点保存就撞整批 400。
+// 两侧刻意取自两个不同的源（面板表 vs 本包 service 常量），改成同一处推导会让断言恒真。
+describe('instance-properties.service · 面板可写键 ⊆ 服务端白名单（跨包守卫）', () => {
+  const panelWritableDefs = SERVER_PROPERTY_DEFS.filter((def) => def.isWritable);
+
+  it('面板可写键集合 ⊆ ALLOWED_PROPERTY_KEYS', () => {
+    expect(panelWritableDefs.length).toBeGreaterThan(0);
+    const missing = panelWritableDefs
+      .map((def) => def.name)
+      .filter((key) => !ALLOWED_PROPERTY_KEYS.has(key));
+    expect(missing).toEqual([]);
+  });
+
+  it('面板可写键逐个提交都过校验（行为面，不只看集合成员）', () => {
+    const rejected = [];
+    for (const def of panelWritableDefs) {
+      // 采样值取该控件类型的最小合法值：开关 true、下拉首项、文本 '1'
+      const sample = def.type === 'checkbox' ? 'true' : (def.options?.[0] ?? '1');
+      const { rejectedKeys } = validatePropertySubmission({ [def.name]: sample });
+      if (rejectedKeys.length > 0) rejected.push(def.name);
+    }
+    expect(rejected).toEqual([]);
+  });
+
+  it('面板可写键一次性全量提交也过校验（用户批量改多项的形态）', () => {
+    const payload = {};
+    for (const def of panelWritableDefs) {
+      payload[def.name] = def.type === 'checkbox' ? 'true' : (def.options?.[0] ?? '1');
+    }
+    expect(validatePropertySubmission(payload).rejectedKeys).toEqual([]);
+  });
+
+  it('敏感键不得出现在面板可写集合里', () => {
+    const leaked = panelWritableDefs
+      .map((def) => def.name)
+      .filter((key) => SENSITIVE_PROPERTIES.has(key));
+    expect(leaked).toEqual([]);
   });
 });

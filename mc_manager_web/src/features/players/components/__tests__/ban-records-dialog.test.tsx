@@ -95,4 +95,17 @@ describe('BanRecordsDialog 状态文案', () => {
 
     expect(screen.getByText(/暂无封禁记录/)).toBeInTheDocument()
   })
+
+  it('谁封的：原版条目带 source 时标出来', () => {
+    renderDialog([ban({ source: 'Rcon' })])
+
+    expect(screen.getByText(/封禁来源：Rcon/)).toBeInTheDocument()
+  })
+
+  it('旧封禁文件没有 source：不显示来源行，也不拿别的东西顶替', () => {
+    renderDialog([ban({ source: null })])
+
+    expect(screen.getByText('测试')).toBeInTheDocument() // 记录本身照常渲染
+    expect(screen.queryByText(/封禁来源/)).not.toBeInTheDocument()
+  })
 })

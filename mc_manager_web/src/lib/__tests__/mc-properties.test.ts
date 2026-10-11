@@ -1,6 +1,7 @@
 /**
- * server.properties 属性元数据单测（对照服务端
- * routes/status.js RUNTIME_COMMAND_MAP/WRITABLE_PROPERTIES/SENSITIVE_PROPERTIES）
+ * server.properties 属性元数据单测（键集合口径对照服务端
+ * services/instance-properties.service.js 的 WRITABLE_PROPERTIES / SENSITIVE_PROPERTIES，
+ * 热改键对照 mc-server/msmp-methods.js 的 SERVER_SETTING_METHODS）
  */
 import { describe, expect, it } from 'vitest'
 import {
@@ -15,18 +16,18 @@ import {
   SERVER_PROPERTY_DEF_MAP,
 } from '../mc-properties'
 
-describe('SERVER_PROPERTY_DEFS 总量与分类分布（68 条 = 18/17/33）', () => {
-  it('共 68 条且键名唯一', () => {
-    expect(SERVER_PROPERTY_DEFS).toHaveLength(68)
+describe('SERVER_PROPERTY_DEFS 总量与分类分布（73 条 = 18/17/38）', () => {
+  it('共 73 条且键名唯一', () => {
+    expect(SERVER_PROPERTY_DEFS).toHaveLength(73)
     const names = SERVER_PROPERTY_DEFS.map((d) => d.name)
-    expect(new Set(names).size).toBe(68)
+    expect(new Set(names).size).toBe(73)
   })
 
-  it('三分类分布 gameplay 18 / worldGen 17 / serverSettings 33', () => {
+  it('三分类分布 gameplay 18 / worldGen 17 / serverSettings 38', () => {
     const count = (cat: string) => SERVER_PROPERTY_DEFS.filter((d) => d.category === cat).length
     expect(count('gameplay')).toBe(18)
     expect(count('worldGen')).toBe(17)
-    expect(count('serverSettings')).toBe(33)
+    expect(count('serverSettings')).toBe(38)
   })
 
   it('分类取值合法（无其他类别）', () => {
@@ -214,29 +215,49 @@ describe('buildUnknownPropertyDef（未知属性追加）', () => {
   })
 })
 
-describe('buildPropertiesPayload（提交载荷）', () => {
-  it('敏感键恒回传占位符（编辑值被忽略）', () => {
+describe('buildPropertiesPayload（提交载荷：只回传改动键）', () => {
+  it('敏感键有改动时只回传占位符（真实值永不出前端）；未改动键不回传', () => {
     const edited: Record<string, string> = { 'server-port': '25599' }
     const current: Record<string, string> = { 'server-port': '25565', motd: 'hello' }
     const payload = buildPropertiesPayload(edited, current)
     expect(payload['server-port']).toBe(SENSITIVE_PROPERTY_PLACEHOLDER)
-    expect(payload.motd).toBe('hello')
+    // motd 未改动 ⇒ 不回传（旧实现整份回传才会带上 'hello'）
+    expect(payload.motd).toBeUndefined()
   })
 
-  it('current 中残留的敏感明文也一并掩码（旧版服务端明文兜底）', () => {
+  it('未改动的敏感键不回传 ⇒ current 里的残留明文无从流出（比掩码更严）', () => {
     const current: Record<string, string> = { 'rcon.password': 'realpass', motd: 'hi' }
     const payload = buildPropertiesPayload({}, current)
-    expect(payload['rcon.password']).toBe(SENSITIVE_PROPERTY_PLACEHOLDER)
-    expect(payload.motd).toBe('hi')
+    expect(payload).toEqual({})
+    expect(JSON.stringify(payload)).not.toContain('realpass')
   })
 
-  it('非敏感值透传，未编辑键沿用 current 现值', () => {
+  it('非敏感值透传，未编辑键不回传', () => {
     const edited: Record<string, string> = { pvp: 'false', motd: '新世界' }
     const current: Record<string, string> = { pvp: 'true', motd: '旧欢迎语', difficulty: 'hard' }
     const payload = buildPropertiesPayload(edited, current)
     expect(payload.pvp).toBe('false')
     expect(payload.motd).toBe('新世界')
-    expect(payload.difficulty).toBe('hard')
+    expect(payload.difficulty).toBeUndefined()
+  })
+
+  it('面板管不到的键一个都不回传（否则服务端逐键白名单会整批 400）', () => {
+    // 真实实例的 server.properties 含面板管不到的键：引擎首启补齐的 26.3 键、
+    // 模板写入的 texture-pack、由面板其它入口管理的 management-server-*
+    const current: Record<string, string> = {
+      motd: '旧欢迎语',
+      'management-server-host': 'localhost',
+      'texture-pack': '',
+      'max-chained-neighbor-updates': '1000000',
+    }
+    const payload = buildPropertiesPayload({ ...current, motd: '新欢迎语' }, current)
+    expect(payload).toEqual({ motd: '新欢迎语' })
+  })
+
+  it('快照里没有的键（新增）会回传', () => {
+    expect(buildPropertiesPayload({ 'chat-spam-threshold-seconds': '10' }, {})).toEqual({
+      'chat-spam-threshold-seconds': '10',
+    })
   })
 
   it('不修改入参（纯函数）', () => {
@@ -288,5 +309,50 @@ describe('vanilla 官方默认值', () => {
 
   it('level-type=minecraft:normal', () => {
     expect(SERVER_PROPERTY_DEF_MAP.get('level-type')?.defaultValue).toBe('minecraft:normal')
+  })
+
+  // 26.3 官方默认清单里 difficulty 是 easy（wiki Server.properties 的 Default content 段与
+  // Keys 表同列 easy；实例模板 routes/server-jar.js 亦写 easy）——不是旧认知的 normal
+  it('difficulty=easy（26.3 官方默认）', () => {
+    expect(SERVER_PROPERTY_DEF_MAP.get('difficulty')?.defaultValue).toBe('easy')
+  })
+
+  // 26.3 官方默认清单里该键是 60（wiki Default content 段与 Keys 表同列 60）——
+  // -1 是「不自动暂停」的取值，不是默认值
+  it('pause-when-empty-seconds=60（26.3 官方默认）', () => {
+    expect(SERVER_PROPERTY_DEF_MAP.get('pause-when-empty-seconds')?.defaultValue).toBe('60')
+  })
+})
+
+describe('26.3 官方默认清单补入的 5 个键', () => {
+  // 默认值一律取自 https://minecraft.wiki/w/Server.properties 的 26.3 Default content 段
+  const KEYS_ADDED_FOR_263: ReadonlyArray<[string, string, string]> = [
+    ['chat-spam-threshold-seconds', '聊天刷屏阈值', '10'],
+    ['command-spam-threshold-seconds', '命令刷屏阈值', '10'],
+    ['resource-pack-id', '资源包ID', ''],
+    ['status-heartbeat-interval', '状态心跳间隔', '0'],
+    ['text-filtering-version', '文本过滤版本', '0'],
+  ]
+
+  it.each(KEYS_ADDED_FOR_263)('%s：默认值/分组/控件类型与中文说明', (name, label, defaultValue) => {
+    const def = SERVER_PROPERTY_DEF_MAP.get(name)
+    expect(def, `${name} 未入属性表`).toBeTruthy()
+    expect(def?.label).toBe(label)
+    expect(def?.defaultValue).toBe(defaultValue)
+    expect(def?.category).toBe('serverSettings')
+    expect(def?.type).toBe('input')
+    expect(def?.desc.length ?? 0).toBeGreaterThan(0)
+  })
+
+  // 服务端 WRITABLE_PROPERTIES 已含这 5 键（整数项亦在 NUMERIC_PROPERTIES）⇒ 面板可写；
+  // 「面板可写 ⊆ 服务端白名单」这条跨包不变量由服务端侧
+  // __tests__/instance-properties.service.test.js 的跨包守卫断言守住
+  it('服务端白名单已含 ⇒ 可写、非热改、非敏感', () => {
+    for (const [name] of KEYS_ADDED_FOR_263) {
+      const def = SERVER_PROPERTY_DEF_MAP.get(name)
+      expect(def?.isWritable, `${name} 应标可写`).toBe(true)
+      expect(def?.isHotReload, `${name} 不应标热改`).toBe(false)
+      expect(def?.isSensitive, `${name} 不应标敏感`).toBe(false)
+    }
   })
 })
