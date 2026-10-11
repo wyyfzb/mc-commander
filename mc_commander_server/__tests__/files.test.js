@@ -421,6 +421,59 @@ describe('File Routes - Path Traversal Protection', () => {
     });
   });
 
+  // 26.1+ 的 server-icon.png 与 codeofconduct/<lang>.txt 是实例根下的普通文件，
+  // 走整树浏览即可见——这两条用例锁住「无需专门入口」，防止后来者再造一份重复功能。
+  describe('实例根整树浏览：server-icon.png / codeofconduct', () => {
+    const PNG_BYTES = Buffer.from([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x01, 0x02, 0x03,
+    ]);
+
+    function seedIconAndConduct() {
+      fs.writeFileSync(path.join(tmpDir, 'server-icon.png'), PNG_BYTES);
+      fs.mkdirSync(path.join(tmpDir, 'codeofconduct'));
+      fs.writeFileSync(path.join(tmpDir, 'codeofconduct', 'en_us.txt'), 'Be nice.\n');
+    }
+
+    it('两处都在整树列表里（根目录 + 子目录），不需要专门入口', async () => {
+      seedIconAndConduct();
+
+      const root = await request(app).get('/api/instances/s1/files').query({ path: '/' });
+      expect(root.status).toBe(200);
+      const rootNames = root.body.data.files.map((f) => f.name);
+      expect(rootNames).toContain('server-icon.png');
+      expect(rootNames).toContain('codeofconduct');
+
+      const sub = await request(app)
+        .get('/api/instances/s1/files')
+        .query({ path: 'codeofconduct' });
+      expect(sub.status).toBe(200);
+      expect(sub.body.data.files.map((f) => f.name)).toContain('en_us.txt');
+    });
+
+    it('行为准则文本可编辑；图标是二进制 ⇒ 拒绝按文本覆盖且原图不被改坏', async () => {
+      seedIconAndConduct();
+
+      const saved = await request(app)
+        .put('/api/instances/s1/files/content')
+        .set('Content-Type', 'application/json')
+        .send({ path: 'codeofconduct/en_us.txt', content: 'Be excellent.\n' });
+
+      expect(saved.status).toBe(200);
+      expect(fs.readFileSync(path.join(tmpDir, 'codeofconduct', 'en_us.txt'), 'utf-8')).toBe(
+        'Be excellent.\n',
+      );
+
+      const png = await request(app)
+        .put('/api/instances/s1/files/content')
+        .set('Content-Type', 'application/json')
+        .send({ path: 'server-icon.png', content: 'tampered' });
+
+      expect(png.status).toBe(400);
+      expect(png.body.code).toBe(ErrorCodes.BINARY_FILE_NOT_SUPPORTED.code);
+      expect(fs.readFileSync(path.join(tmpDir, 'server-icon.png')).equals(PNG_BYTES)).toBe(true);
+    });
+  });
+
   describe('GET /api/instances/:id/files/content - encoding detection', () => {
     it('should decode a GBK file and return encoding field', async () => {
       // 中文 GBK 内容（UTF-8 严格解码必然失败）
