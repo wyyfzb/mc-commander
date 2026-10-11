@@ -7,8 +7,9 @@
  * - 保存调 PUT /instances/:id（白名单 maxMemory/minMemory/jvmArgs/javaPath），成功后 toast +
  *   失效实例详情查询 + 关闭；遗留 startCommand 实例保存时一并传 startCommand:null 清除
  *   （否则 jvmArgs 空数组时 start() 回退旧命令，新配置被静默覆盖）
- * - 实时推送（MSMP）开关：实例级设置，但走自己的 GET/POST /push-channel **即时落库**，
- *   刻意不进上面那份 PUT 白名单——混进保存载荷会让开关的失败连带影响「保存配置」按钮。
+ * - 实时推送（MSMP）开关：实例级设置，走自己的 GET/POST /push-channel，但**与上面那份启动
+ *   配置同属一次事务**——拨动只改本地草稿，落库在点「保存配置」时；取消能一并退回，
+ *   推送写失败时另行交代且弹窗保持可重试（两件事的结局不同，不能混成一句）。
  *   读状态三态分明：读失败给重试与可自查位置、在途给占位、只有真读到才渲染开关
  *   （`?? false` 会把「不知道」显示成「已关闭」，那是肯定式假信息）
  * - 弹窗面走基座 bg-popover（全站统一）+ 表单输入实底；token 纪律，禁硬编码
@@ -187,6 +188,20 @@ function syncAikar(lines: string[], useAikar: boolean, allocMem: number): string
 }
 
 /**
+ * 保存结果文案：按**实际改了哪一类**分说。
+ *
+ * 两类改动都只有重启实例才生效，但来源不同（启动配置落实例记录、实时推送走 /push-channel），
+ * 混成一句「设置已保存」会让用户不知道该去哪一项上核对。逐字未变时不宣称「已修改」——
+ * 那会诱导一次无必要重启（保存按钮不判 dirty，原样保存也会走到这里）。
+ */
+function savedToastText(configDirty: boolean, pushDirty: boolean, pushNext: boolean): string {
+  if (configDirty && pushDirty) return '设置已保存，重启实例后生效'
+  if (pushDirty) return `实时推送已${pushNext ? '开启' : '关闭'}，重启实例后生效`
+  if (configDirty) return '启动配置已保存，重启实例后生效'
+  return '设置已保存（与之前一致，无需重启）'
+}
+
+/**
  * 设置行：图标 + 标题/说明 + 右侧控件的三栏行，弹窗内两处开关共用这一份配方
  * （行高、描边、内距只有一处声明——改一处即同时作用于两行）。
  * 圆角取 sm 而非卡片档 md：它是弹窗内的设置行，不是卡片面（卡片面配方归 components/mcs/card）。
@@ -225,25 +240,16 @@ export function InstanceSettingsDialog({
   const updateMutation = useUpdateInstance()
   const markPending = useRestartPendingStore((s) => s.markPending)
 
-  // ── 实时推送（MSMP）：独立接口即时落库，与下面那份「保存配置」互不牵连 ──
+  // ── 实时推送（MSMP）：与上面那份启动配置**同一次事务**——拨动只改本地草稿，
+  //    落库发生在点「保存配置」时，故「取消」退得回来（它走自己的 /push-channel 接口，
+  //    但提交时机必须与弹窗其余内容一致，否则弹窗里并存两套提交语义，用户只能靠猜） ──
   const pushStateQuery = usePushChannel(instance.id)
   const setPushChannel = useSetPushChannel(instance.id)
-  /** 乐观翻转（null = 跟随服务端值）；失败回滚，避免开关停在没落库的位置 */
-  const [pushOverride, setPushOverride] = useState<boolean | null>(null)
-  const pushEnabled = pushOverride ?? pushStateQuery.data?.enabled ?? false
-
-  async function handleTogglePush(next: boolean) {
-    setPushOverride(next)
-    try {
-      await setPushChannel.mutateAsync(next)
-      /* MSMP 只在服务端启动时读配置，运行中改动不会立刻生效——所以给的是「下次重启后生效」
-         这个结果，而不是「已生效」；并且只在刚改过之后给一条回执，不做常驻说明 */
-      toast.success(`实时推送已${next ? '开启' : '关闭'}，下次重启服务器后生效`)
-    } catch (e) {
-      setPushOverride(null)
-      toast.error(`实时推送设置失败：${getFriendlyErrorText(e)}`)
-    }
-  }
+  /** 本地草稿（null = 跟随服务端值；读不到状态时不会产生草稿——那时开关不渲染） */
+  const [pushDraft, setPushDraft] = useState<boolean | null>(null)
+  const pushEnabled = pushDraft ?? pushStateQuery.data?.enabled ?? false
+  /** 推送开关这一项是否偏离服务端现值（读不到现值时无从比较 ⇒ 不算脏，也不会提交） */
+  const pushDirty = pushDraft !== null && pushDraft !== (pushStateQuery.data?.enabled ?? false)
 
   // ── 初始预填（挂载即打开：父组件条件渲染保证实例切换时重置）──
   const [initial] = useState(() => {
@@ -280,12 +286,16 @@ export function InstanceSettingsDialog({
   const [isSaving, setIsSaving] = useState(false)
   const [closeConfirmOpen, setCloseConfirmOpen] = useState(false)
 
-  // 脏状态：任一字段偏离初始值
-  const dirty =
+  /** 启动配置四条是否偏离初始值（不含推送开关——两者要分开说，见 savedToastText） */
+  const configDirty =
     allocatedMemory !== initial.memory ||
     useAikarFlags !== initial.useAikar ||
     jvmArgsText !== initial.jvmArgsText ||
     javaPath !== initial.javaPath
+
+  // 脏状态：弹窗里**任何**一项偏离服务端现值（启动配置 + 实时推送开关）。
+  // 推送若不算进来，「拨了开关直接关闭」既不提示、也没人提醒它还没生效——两套提交语义的根源
+  const dirty = configDirty || pushDirty
 
   // totalMemory > 1 用系统内存，否则 16 兜底
   const totalMax = detail && detail.totalMemory > 1 ? detail.totalMemory : 16
@@ -334,18 +344,25 @@ export function InstanceSettingsDialog({
     setIsSaving(true)
     try {
       await updateMutation.mutateAsync({ instanceId: instance.id, payload })
-      /* 只在真的改动了才置位：保存按钮不判 dirty（详情未就绪也要能点），原样保存也走这条路
-         ——无条件置位会宣称「启动配置已修改」而实际逐字未变，诱导一次无必要重启。
-         改回原值是合法的 dirty=false 路径（用户改了又改回来），此时同样不该提示。 */
-      if (dirty) {
-        /* 置「待重启生效」：本弹窗保存后即关闭，是持续状态却没有可见载体（级别 3 的未满足
-           要求，见 docs/design-review-guidelines.md）。置位后由实例页页头的常驻指示器承担，
-           toast 只留动作回执本分——此前口径临时压在 toast 文案里，几秒即散。 */
-        markPending(instance.id)
+      /* 置位与另一半的成败**无关**：启动配置此刻已落库，它就是一条真实的「待重启生效」事实。
+         先把它记下来再处理推送——否则推送失败时这份真实待办在屏上没有任何载体，而确认框
+         还会对用户说「改动将丢失」。 */
+      if (configDirty) markPending(instance.id)
+      if (pushDirty) {
+        try {
+          await setPushChannel.mutateAsync(pushDraft === true)
+          markPending(instance.id)
+        } catch (e) {
+          /* 推送这一项没落：两件事必须分开说，且**不能关弹窗**——关了用户就以为整笔都成了。
+             弹窗留着，他再点一次「保存配置」即可重试（启动配置的 PATCH 与推送 POST 都幂等）。 */
+          toast.error(
+            `启动配置已保存，但实时推送设置失败：${getFriendlyErrorText(e)}（重启实例后生效）`,
+          )
+          setIsSaving(false)
+          return
+        }
       }
-      toast.success(
-        dirty ? '启动配置已保存，重启实例后生效' : '启动配置已保存（与之前一致，无需重启）',
-      )
+      toast.success(savedToastText(configDirty, pushDirty, pushDraft === true))
       onOpenChange(false)
     } catch (e) {
       toast.error(`保存失败：${getFriendlyErrorText(e)}`)
@@ -360,6 +377,10 @@ export function InstanceSettingsDialog({
     <Dialog
       open
       onOpenChange={(open) => {
+        /* 保存中不接受关闭：取消/保存按钮已按 isSaving 禁用，但 X、Esc 与遮罩走的是这里。
+           放行会让确认框说「改动将丢失」而在途的写请求照样落库——同一类「需要一句豁免才能
+           解释」的交互，直接不给这个窗口。 */
+        if (!open && isSaving) return
         if (!open && dirty) {
           setCloseConfirmOpen(true)
         } else if (!open) {
@@ -512,15 +533,18 @@ export function InstanceSettingsDialog({
           )}
         </div>
 
-        {/* ── 实时推送（MSMP）：与上面那份保存表单隔一条分隔线——它是即时落库的独立设置，
-             放在同一组里会被读成「点保存配置才生效」，而「取消」也退不回它 ── */}
+        {/* ── 实时推送（MSMP）：一条分隔线只分**主题**（启动配置 / 实时推送设置），不分事务——
+             它与上面那份启动配置同属这一次「保存配置 / 取消」。此前它是即时落库的独立设置，
+             同一弹窗里因此在两套提交语义之间切换：用户拨完开关以为「都保存好了」，或者反过来
+             以为「没点保存所以什么都没发生」，而实际已经落库、取消退不回 ── */}
         <div className="flex flex-col gap-2 border-t border-mcs-border-muted pt-4">
           <SettingsRow
             icon={Radio}
             iconClassName={pushEnabled ? 'text-mcs-accent-fg' : 'text-mcs-text-muted'}
             title="实时推送"
-            /* 只讲结果（用户拿到什么刷新时机），不出现 host/port/凭据这类运维视角字段 */
-            description={`开启后面板能实时收到状态变化；关闭则每 ${FALLBACK_POLL_INTERVAL_MS / 1000} 秒刷新一次`}
+            /* 只讲结果（用户拿到什么刷新时机），不出现 host/port/凭据这类运维视角字段。
+               明写「重启后生效」：MSMP 只在服务端启动时读这份配置，运行中开启也拿不到实时 */
+            description={`开启后面板能实时收到状态变化；关闭则每 ${FALLBACK_POLL_INTERVAL_MS / 1000} 秒刷新一次。重启实例后生效`}
             control={
               /* 三态分明：读失败说「不知道」（`?? false` 会把「不知道」显示成「已关闭」，
                  那是肯定式假信息）；在途给占位而不是留空；只有真读到状态才落成开关。
@@ -541,8 +565,8 @@ export function InstanceSettingsDialog({
                 pushStateQuery.data && (
                   <Switch
                     checked={pushEnabled}
-                    disabled={setPushChannel.isPending}
-                    onCheckedChange={(next) => void handleTogglePush(next)}
+                    /* 只改本地草稿：落库在「保存配置」，故「取消」退得回来、关闭前也会提示未保存 */
+                    onCheckedChange={setPushDraft}
                     aria-label="实时推送"
                   />
                 )
@@ -599,12 +623,14 @@ export function InstanceSettingsDialog({
         </div>
       </DialogContent>
 
-      {/* ── 脏状态关闭确认 ── */}
+      {/* ── 脏状态关闭确认 ──
+          推送开关也在这条判据里：此前专门加一句「实时推送开关是即时保存的，不受此影响」来豁免它，
+          但那句豁免正是缺陷的证据——需要一句话解释的交互，用户就无法从界面本身推断行为 */}
       <ConfirmDialog
         open={closeConfirmOpen}
         onOpenChange={(open) => !open && setCloseConfirmOpen(false)}
         title="未保存的更改"
-        description="上面有未保存的启动配置更改，关闭后这些改动将丢失（实时推送开关是即时保存的，不受此影响）。"
+        description="上面有未保存的更改，关闭后这些改动将丢失。"
         confirmText="不保存"
         cancelText="继续编辑"
         onConfirm={() => {

@@ -25,13 +25,12 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { IconButton } from '@/components/mcs/icon-button'
-import { StatusPill } from '@/components/mcs/status-pill'
 import { StatusIndicator, type IndicatorStatus } from '@/components/mcs/status-indicator'
 import { toneClasses } from '@/components/mcs/tone'
 import { NotificationDrawer } from '@/layouts/notification-drawer'
 import { useUiStore } from '@/stores/ui'
 import { useServerStore } from '@/stores/server'
-import { FALLBACK_POLL_INTERVAL_MS, useInstanceStatus } from '@/api/queries'
+import { useInstanceStatus } from '@/api/queries'
 import { useInstanceSwitch } from '@/hooks/use-instance-switch'
 import { useNotificationStore } from '@/stores/notifications'
 import { useConnectionStore } from '@/stores/connection'
@@ -68,18 +67,11 @@ export function AppTopBar() {
   // 于是切到其它页面后顶栏的地址 chip 会消失（用户以为地址"时有时无"）。
   // 这里让顶栏自己订阅当前实例详情，任意页面都能拿到 address。
   const { data: instanceDetail } = useInstanceStatus(instanceId)
-  /* 刷新时机的真值取自订阅的实例详情（不取 store：只有仪表盘会写它）；详情未到时不说。
-     可见载体按视口档分两处、任何视口只出现一处：md 以上是侧栏实例卡那条标记（见
-     app-sidebar），md 以下是下面那颗只读药丸（侧栏此时退化成抽屉、不占布局宽）。
-     状态点这份 title + sr-only 是不见文字的那一路：桌面把侧栏收起时侧栏卡整块不渲染，
-     该事实仍要能被悬停与读屏取到——它不产生可见文字，也不改顶栏只报连接档位这件事。 */
-  const pushConnected = instanceDetail?.capabilities?.msmpPush
-  const refreshDescription =
-    socketConnected && pushConnected !== undefined
-      ? pushConnected
-        ? '实时推送已连通，服务器的状态变化会立即到达面板'
-        : `实时推送未连通，面板每 ${FALLBACK_POLL_INTERVAL_MS / 1000} 秒刷新一次状态`
-      : undefined
+  /* 外壳只承载**全局事实**：顶栏这一格报的是面板与后端的连接档位（见下面 indicator）。
+     实例级事实（运行状态、TPS、刷新时机、待重启）一律落在实例卡片上——实例页卡片承担
+     在屏上常驻的那一份，侧栏展开态的实例迷你卡承担当前实例的简版。
+     此前刷新时机在本格按视口轮换（md 以上挂不可见 title、md 以下换成一颗只读药丸），
+     同一个位置因此在两个属性之间切换 ⇒ 用户无从从位置推断语义，读到的是串用的结论。 */
   // 自订阅优先；实例详情尚未到达时回退到 store 里的值（保持既有行为，避免闪断）
   const serverAddress = instanceDetail?.address || status?.address || null
   // 地址可达范围同样来自服务端（契约里的 addressType），前端不自己按网段猜——
@@ -121,9 +113,10 @@ export function AppTopBar() {
 
   const instancesQuery = useInstances()
 
-  // 状态点语义（三重编码；区分"初次连接"与"实时通道断开"）：降级档只表达
-  // "实时通道断了"这一已知事实——面板是否同样不可达在此无从判定，
-  // 能否取到数据由页面错误态如实呈现（降级横幅另说定时轮询确实存在）
+  // 状态点语义（三重编码；区分"初次连接"与"实时通道断开"）：这一格只报**面板与后端的连接**，
+  // 故只有连接四档。降级档只表达"实时通道断了"这一已知事实——面板是否同样不可达在此无从判定，
+  // 能否取到数据由页面错误态如实呈现（降级横幅另说定时轮询确实存在）。
+  // 实例健康（TPS 偏低）不在此处上色：那是实例事实，载体是实例卡片的 TPS 指标。
   let indicator: IndicatorStatus = 'disconnected'
   if (connectionStatus === 'unconfigured') {
     indicator = 'disconnected'
@@ -131,8 +124,6 @@ export function AppTopBar() {
     indicator = 'connecting'
   } else if (!socketConnected && hasConnectedOnce) {
     indicator = 'degraded'
-  } else if (status?.isRunning && (status.tps ?? 20) < 15) {
-    indicator = 'warning'
   } else {
     indicator = 'connected'
   }
@@ -299,33 +290,10 @@ export function AppTopBar() {
         </kbd>
       </Button>
 
-      {/* 服务器状态点（WS 实时）▸ 窄屏刷新时机药丸（宽屏同一事实由侧栏实例卡承担） */}
-      <StatusIndicator
-        status={indicator}
-        description={refreshDescription}
-        className="hidden md:inline-flex"
-      />
-
-      {/* 刷新时机（实时/轮询）的窄屏可见载体：md 以下侧栏退化成抽屉（不占布局宽），
-          侧栏实例卡那条标记随之离开屏幕——此前该状态在窄屏屏上没有任何可见载体，
-          用户会以为实时推送开着、其实在轮询。
-          与上面的状态点互补（状态点 md 以上显示）：同一个槽位任何视口只出现一个，不会同屏重复。
-          判据取视口档而不是容器宽，因为「载体该不该出现」由侧栏是否退出布局决定，而这是
-          视口档的事实（app-sidebar 的 hidden md:flex）；容器宽表达不了它——768 视口常驻侧栏
-          时顶栏只剩 560px，比 600 视口（抽屉态）的 600px 还窄，按容器档会在侧栏标记已经在屏上
-          时又插一份。
-          可见文本只给两字短语，完整解释走 title 与 sr-only（成句最低 xs，不得落 2xs）。 */}
-      {refreshDescription && (
-        <StatusPill
-          tone={pushConnected ? 'success' : 'muted'}
-          variant="outline"
-          title={refreshDescription}
-          className="md:hidden"
-        >
-          {pushConnected ? '实时' : '轮询'}
-          <span className="sr-only">，{refreshDescription}</span>
-        </StatusPill>
-      )}
+      {/* 服务器状态点（WS 实时）：只报面板与后端的连接档位，任何视口都在同一位置说话。
+          这里曾有第二重身份——刷新时机（md 以上挂在 title/sr-only、md 以下换成一颗只读药丸），
+          同一格按视口切换属性；该事实已归位到实例卡片（见 instance-cards 的状态行）。 */}
+      <StatusIndicator status={indicator} />
 
       {/* 通知铃铛（未读徽章 + 抽屉） */}
       <IconButton

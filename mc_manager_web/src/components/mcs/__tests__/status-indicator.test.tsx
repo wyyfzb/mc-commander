@@ -11,12 +11,12 @@ describe('StatusIndicator', () => {
     const { container } = render(<StatusIndicator status="degraded" />)
     expect(screen.getByText('实时推送已断')).toBeInTheDocument()
     expect(container.textContent).not.toContain('延迟刷新')
-    // 降级不呼吸：脉冲只给连接中与异常
+    // 降级不呼吸：脉冲只给「连接中」这一个在途档
     expect(container.querySelector('.animate-ping')).toBeNull()
   })
 
-  it('脉冲状态（连接中 / 异常）带涟漪，且涟漪与圆点同色（状态色 token）', () => {
-    for (const status of ['connecting', 'warning'] as IndicatorStatus[]) {
+  it('在途档（连接中）带涟漪，且涟漪与圆点同色（状态色 token）', () => {
+    for (const status of ['connecting'] as IndicatorStatus[]) {
       const { container, unmount } = render(<StatusIndicator status={status} />)
       expect(container.querySelector('.animate-ping')).not.toBeNull()
       expect(container.querySelector('[data-status]')).toHaveAttribute('data-status', status)

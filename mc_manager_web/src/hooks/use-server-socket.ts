@@ -188,6 +188,12 @@ export function useServerSocket(instanceId: string | null) {
         return
       }
       if (msg.instanceId && msg.instanceId !== instanceRef.current) {
+        /* 非当前实例的 `started` 也要消费它的「待重启」标记：那条事实的归属是**那台实例**，
+           与用户此刻在看哪一台无关（卡片会逐台置位徽章）。放在实例门控之前——门控之后这段
+           只对当前实例可达，非当前实例的徽章就再也撤不掉。 */
+        if (msg.type === 'statusEvent' && data.event === 'started') {
+          clearRestartPending(msg.instanceId)
+        }
         const isCriticalStatus =
           msg.type === 'statusEvent' && (data.event === 'crash' || data.event === 'circuit_breaker')
         if (isCriticalStatus) {

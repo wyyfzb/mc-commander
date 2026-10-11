@@ -4,10 +4,14 @@ import { cn } from '@/lib/utils'
 /**
  * StatusIndicator —— 状态三重编码（设计文档 P1 / 审查清单维度 1）
  * 颜色 + 图标 + 文字三通道同义，色盲用户仅靠图标/文字可区分
- * 唯一呼吸动画只给故障/降级状态（设计文档 §4.7）
+ * 唯一呼吸动画只给「连接中」这一个在途档（设计文档 §4.7）
+ *
+ * 档位只在有真实生产者时才加：这里曾有一个 `warning`（「异常」）档，唯一生产者是顶栏把
+ * 实例 TPS 偏低染上去——那属于把实例事实混进面板连接档位，已撤销（载体改为实例卡片的
+ * TPS 指标）。当前五档里没有「面板侧异常」这一说法，需要时按那时的真实语义新增。
  */
 
-export type IndicatorStatus = 'connected' | 'connecting' | 'disconnected' | 'warning' | 'degraded'
+export type IndicatorStatus = 'connected' | 'connecting' | 'disconnected' | 'degraded'
 
 const STATUS_CONFIG: Record<
   IndicatorStatus,
@@ -29,12 +33,6 @@ const STATUS_CONFIG: Record<
     icon: CloudOff,
     label: '未连接',
   },
-  warning: {
-    dot: 'bg-mcs-warning-fg',
-    icon: CircleOff,
-    label: '异常',
-    pulse: true,
-  },
   /** 实时通道断开：只陈述可确知的事实（推送断了）。
       不写「延迟刷新」——那暗示轮询确实在刷新，而面板整体不可达时轮询同样失败、
       内容区已是错误态；能否取到数据由页面错误态如实呈现，此处不承诺 */
@@ -47,14 +45,10 @@ const STATUS_CONFIG: Record<
 
 interface StatusIndicatorProps {
   status: IndicatorStatus
-  /** 只作**不可见文本**的补充说明（挂 title + sr-only，不产生任何可见文字）。
-      给「同一事实在别处已有可见载体、这里只补可达性」的场合用——例如侧栏收起时，
-      刷新时机那条结果说明仍要能被读屏与悬停取到。 */
-  description?: string
   className?: string
 }
 
-export function StatusIndicator({ status, description, className }: StatusIndicatorProps) {
+export function StatusIndicator({ status, className }: StatusIndicatorProps) {
   const config = STATUS_CONFIG[status]
   const Icon = config.icon
   return (
@@ -64,8 +58,6 @@ export function StatusIndicator({ status, description, className }: StatusIndica
         className,
       )}
       data-status={status}
-      // 只放不可见文本：可见短语由调用点自己放在合适的位置（见侧栏实例卡）
-      title={description}
     >
       <span className="relative flex size-2 items-center justify-center" aria-hidden>
         {/* 涟漪直径与起始不透明度即可感知门槛：与圆点同尺寸的 8px / 40% 在顶栏上几乎
@@ -86,7 +78,6 @@ export function StatusIndicator({ status, description, className }: StatusIndica
       </span>
       <Icon className="size-3.5" aria-hidden />
       {config.label}
-      {description && <span className="sr-only">，{description}</span>}
     </span>
   )
 }

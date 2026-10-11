@@ -2,13 +2,18 @@
  * InstanceCards —— 实例卡片网格
  * - 网格列数见 INSTANCE_GRID_CLASS（与加载骨架共用同一声明）
  * - 卡片：状态点（运行 success / 停止 muted）+ 名称 + 「当前」accent 徽章（currentId 命中）
- *   + 副行「运行中 · N 人在线」（success 色）/「已停止」（muted）+ 版本 mono 徽章
- *   （detailStatuses[id]?.mcVersion，组件内不查询；详情在途时仅该卡骨架占位）
- *   + 指标行（在线/TPS/内存/世界大小，detailStatuses 数据，缺省 —）
+ *   + 「待重启」warning 徽章（面板已改、重启后生效，见 stores/restart-pending）
+ *   + 副行「运行中 · N 人在线」（success 色）/「已停止」（muted）+ 数据刷新时机药丸
+ *   + 版本 mono 徽章（detailStatuses[id]?.mcVersion，组件内不查询；详情在途时仅该卡骨架占位）
+ *   + 指标行（在线/TPS/内存/世界大小，detailStatuses 数据，缺省 —；TPS 按 lib/mc-tps 分级上色）
  *   + 操作（收敛）：主操作最多两个——启停（busyId 防重复触发）/ 切换（非当前实例），
  *     配置、升级、卸载收进「操作菜单」（弹窗类与破坏性操作，低频；卸载另有输入实例名的强确认）
  * - 空态：「暂无已安装的实例」+「部署新实例」按钮（onDeploy 与页面头部入口共用）
  * - 设计纪律：实底卡（玻璃禁区）+ --mcs-* 语义 token，禁硬编码色值/间距/圆角
+ *
+ * 实例级事实（运行状态、数据刷新时机、低 TPS、待重启）在屏上的常驻落点就是本卡：
+ * 外壳（顶栏 / 侧栏）只承载全局事实，否则同一个槽位会在不同视口切换属性、用户只能靠猜
+ * （串用现场见 app-topbar 的注释）。刷新时机的判据与文案唯一声明源是 lib/instance-refresh。
  */
 import {
   ArrowRightLeft,
@@ -23,6 +28,7 @@ import {
   Trash2,
   TriangleAlert,
 } from 'lucide-react'
+import { useEffect, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -36,13 +42,17 @@ import { cn } from '@/lib/utils'
 import { formatWorldSize } from '@/lib/format'
 import { instanceHueFillClass } from '@/lib/instance-hue'
 import { instanceLabel } from '@/lib/instance-label'
+import { instanceRefreshMark } from '@/lib/instance-refresh'
+import { tpsLevel } from '@/lib/mc-tps'
+import { SEMANTIC_TONE_CLASSES } from '@/components/mcs/tone'
 import { StatusPill } from '@/components/mcs/status-pill'
 import { Card } from '@/components/mcs/card'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { EmptyState } from '@/components/mcs/empty-state'
 import { DeployGuideTile } from './deploy-guide-tile'
 import { useUpgradeStore, isUpgradeTerminal } from '@/stores/upgrade'
-import type { InstancePhase } from '@/stores/server'
+import { restartApplied, useRestartPendingStore } from '@/stores/restart-pending'
+import { useServerStore, type InstancePhase } from '@/stores/server'
 import type { InstanceStatus, InstanceSummary } from '@/api/types'
 
 /**
@@ -207,6 +217,30 @@ function InstanceCard({
   // （终态 store 清理由升级弹窗打开时做，卡片只认非终态）
   const upgradeStage = useUpgradeStore((s) => s.progress[id]?.stage)
   const upgrading = upgradeStage != null && !isUpgradeTerminal(upgradeStage)
+  /* 待重启生效：置位在实例设置弹窗保存时，清除见下面两条（WS 事件 + 按详情判）。 */
+  const restartPendingAt = useRestartPendingStore((s) => s.pending[id])
+  const clearRestartPending = useRestartPendingStore((s) => s.clearPending)
+  /* 清除的第二路（不依赖 WS）：前端只订阅**当前实例**的 status 事件，而卡片会为任意实例置位
+     ——从他人卡片进设置改东西后，那台重启的 `started` 根本不会到本端。这里用已轮询到的详情判：
+     实例在运行、且运行起点晚于置位时刻 ⇒ 那次改动已被一次重启消费。 */
+  useEffect(() => {
+    if (restartPendingAt === undefined || !detail?.isRunning) return
+    if (restartApplied(Date.now(), detail.uptime, restartPendingAt)) clearRestartPending(id)
+  }, [restartPendingAt, detail?.isRunning, detail?.uptime, id, clearRestartPending])
+  /* 数据刷新时机：真值是本实例详情里的 capabilities.msmpPush，门控还要算上面板到后端的实时通道
+     （通道断了就无从判定轮询是否真在刷新）——判据与文案取自 lib/instance-refresh */
+  const socketConnected = useServerStore((s) => s.socketConnected)
+  const refresh = instanceRefreshMark(socketConnected, detail?.capabilities?.msmpPush)
+  /* 实例健康：低 TPS 是实例事实，不该去染顶栏的面板连接档位（那里只报连接）。
+     分级与阈值取自 lib/mc-tps（与仪表盘统计卡、低 TPS 告警同源） */
+  const tps = isRunning && detail?.tps != null ? detail.tps : null
+  const tpsTone = tps == null ? null : tpsLevel(tps)
+  const tpsToneText =
+    tpsTone === 'critical'
+      ? SEMANTIC_TONE_CLASSES.error.text
+      : tpsTone === 'warning'
+        ? SEMANTIC_TONE_CLASSES.warning.text
+        : undefined
 
   return (
     <Card
@@ -229,7 +263,7 @@ function InstanceCard({
         aria-hidden
         className={cn('absolute inset-y-3 left-0 w-0.5 rounded-full', instanceHueFillClass(id))}
       />
-      {/* 首行：状态点 + 名称 + 「当前」徽章 + 升级中徽章 + 版本 mono 徽章（加载中骨架占位） */}
+      {/* 首行：状态点 + 名称 + 「当前」徽章 + 升级中徽章 + 待重启徽章 + 版本 mono 徽章（加载中骨架占位） */}
       <div className="flex items-center gap-2">
         <span
           data-instance-status={isRunning ? 'running' : 'stopped'}
@@ -274,10 +308,29 @@ function InstanceCard({
         ) : null}
       </div>
 
-      {/* 副行：「运行中 · N 人在线」/「已停止」 */}
-      <p className={cn('text-mcs-xs', isRunning ? 'text-mcs-success-fg' : 'text-mcs-text-muted')}>
-        {isRunning ? `运行中 · ${playerCount} 人在线` : '已停止'}
-      </p>
+      {/* 副行＝实例状态事实行：「运行中 · N 人在线」/「已停止」+ 待重启 + 数据刷新时机。
+          待重启放这里而不是首行：首行已有「当前/升级中/版本」三枚不可压缩药丸，再叠一枚会把
+          名称压到 ~57px（375 单列实测口径见 e2e）；本行本来就是可换行的状态事实行。
+          两条事实都用带标签的药丸，不被读成运行状态的一部分 */}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <p className={cn('text-mcs-xs', isRunning ? 'text-mcs-success-fg' : 'text-mcs-text-muted')}>
+          {isRunning ? `运行中 · ${playerCount} 人在线` : '已停止'}
+        </p>
+        {restartPendingAt !== undefined && (
+          <StatusPill
+            tone="warning"
+            className="text-mcs-2xs font-semibold"
+            title="面板已改，重启实例后生效"
+          >
+            待重启
+          </StatusPill>
+        )}
+        {refresh && (
+          <StatusPill tone={refresh.tone} className="text-mcs-2xs" title={refresh.description}>
+            {refresh.label}
+          </StatusPill>
+        )}
+      </div>
 
       {/* 指标行（在线/TPS/内存/世界大小；详情缺省 —）
           这里的 memoryUsage 是**进程驻留内存**（服务端 stats-collector 三平台分支分别取
@@ -286,9 +339,25 @@ function InstanceCard({
           统计未就绪初值为 0，此时显示 —（运行中却报 0 会被读成「内存耗光」） */}
       <div className="grid grid-cols-4 gap-2 rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-default px-3 py-2 shadow-mcs-card">
         <Metric label="在线" value={isRunning ? `${playerCount}` : '—'} />
+        {/* TPS 低时不能只染色：颜色是单通道（色觉障碍者区分不出 warning/error 两档，读屏也拿不到
+            「偏低」），故数字上色 + 标签行给语义图标（形状通道）+ 值后补读屏文本。
+            分级与阈值取自 lib/mc-tps，与仪表盘统计卡、低 TPS 告警同源 */}
         <Metric
           label="TPS"
-          value={isRunning && detail?.tps != null ? detail.tps.toFixed(1) : '—'}
+          value={tps != null ? tps.toFixed(1) : '—'}
+          valueClassName={tpsToneText}
+          badge={
+            tpsTone === 'critical' || tpsTone === 'warning' ? (
+              <TriangleAlert className="size-3 shrink-0" aria-hidden />
+            ) : undefined
+          }
+          badgeClassName={tpsToneText}
+          srText={tpsTone === 'critical' || tpsTone === 'warning' ? 'TPS 偏低' : undefined}
+          title={
+            tpsTone === 'critical' || tpsTone === 'warning'
+              ? `TPS 偏低（${tps?.toFixed(1)}）`
+              : undefined
+          }
         />
         <Metric
           label="内存"
@@ -424,16 +493,41 @@ function InstanceCard({
   )
 }
 
-/** 指标小格（label 上、数值下；tnum 对齐） */
-function Metric({ label, value }: { label: string; value: string }) {
+/** 指标小格（label 上、数值下；tnum 对齐）。valueClassName 只由调用点按语义分级给（如低 TPS） */
+function Metric({
+  label,
+  value,
+  valueClassName,
+  badge,
+  badgeClassName,
+  srText,
+  title,
+}: {
+  label: string
+  value: string
+  valueClassName?: string
+  /** 标签行的语义图标：给「不能用颜色单独表达」的档位补形状通道（值本身仍靠色 + 读屏文本） */
+  badge?: ReactNode
+  badgeClassName?: string
+  /** 值之后的读屏文本（如「TPS 偏低」）：颜色与图标对读屏都不可达 */
+  srText?: string
+  title?: string
+}) {
   return (
     <div className="min-w-0">
-      <div className="text-mcs-2xs text-mcs-text-muted">{label}</div>
+      <div className="flex items-center gap-1 text-mcs-2xs text-mcs-text-muted">
+        {label}
+        {badge && <span className={badgeClassName}>{badge}</span>}
+      </div>
       <div
-        className="mcs-num truncate text-mcs-sm leading-none font-semibold text-mcs-text-default"
-        title={value}
+        className={cn(
+          'mcs-num truncate text-mcs-sm leading-none font-semibold text-mcs-text-default',
+          valueClassName,
+        )}
+        title={title ?? value}
       >
         {value}
+        {srText && <span className="sr-only">，{srText}</span>}
       </div>
     </div>
   )

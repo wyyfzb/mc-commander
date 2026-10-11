@@ -1,12 +1,11 @@
 /**
- * RestartPendingBanner —— 启动配置「待重启生效」常驻指示器
+ * RestartPendingBanner —— 「面板已改、重启后才生效」常驻指示器（实例页一处汇总）
  *
- * 承担 docs/design-review-guidelines.md 里登记的**级别 3 缺口**：启动配置保存后不立即生效，
- * 是持续状态，但保存动作发生在「保存后即关闭」的弹窗里、原本没有可见常驻载体
- * （口径只能临时压在几秒即散的 toast 文案里）。本组件是该缺口的正式载体。
+ * 承担 docs/design-review-guidelines.md 里登记的**级别 3 要求**：这类改动保存后不立即生效，
+ * 是持续状态，而保存动作发生在「保存后即关闭」的弹窗里、没有可见常驻载体。本横幅是**汇总**
+ * 视角的载体，**逐台**的载体是实例卡片上的「待重启」徽章——用户不必拿名字去比对是哪一台。
  *
- * 只覆盖启动配置（内存 / Aikar / JVM 参数）——世界属性、server.properties 文件、插件启停
- * 三类同主题但语义不一，未入本集合，理由见 stores/restart-pending.ts。
+ * 覆盖范围＝只有重启才能生效的实例级设置（启动配置、实时推送开关），边界见 stores/restart-pending。
  *
  * 清除判据是 status 事件的 `started`（见 use-server-socket），故重启后本横幅自动消失；
  * 跨刷新由 store 的 persist 维持（用户改完关掉页面、明天再来仍能看到）。
@@ -40,10 +39,11 @@ export function RestartPendingBanner({ instances }: { instances: InstanceSummary
   if (names.length === 0) return null
 
   /* 只说明「有哪几个实例有待生效的改动 + 怎么让它生效」，不复述改了哪几项：
-     本集合是实例级的（不记字段），且弹窗里保存的是整份启动配置——点进去就能看到当前值 */
+     本集合是实例级的（不记字段），而弹窗里保存的是整份设置——点进去就能看到当前值。
+     措辞用「设置」而非「启动配置」：实时推送开关同属本集合，说「启动配置」对它就是假陈述 */
   return (
     <NoticeBanner variant="info" icon={RotateCcw}>
-      {`${names.join('、')} 的启动配置已修改，重启实例后生效`}
+      {`${names.join('、')} 的设置已修改，重启实例后生效`}
     </NoticeBanner>
   )
 }

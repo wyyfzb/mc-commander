@@ -10,8 +10,11 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { InstanceCards, type InstanceCardsProps } from '../instance-cards'
 import { mockInstanceStatus } from '@/test/mocks/handlers'
+import { FALLBACK_POLL_INTERVAL_MS } from '@/api/queries'
 import { useUpgradeStore } from '@/stores/upgrade'
-import type { InstanceSummary } from '@/api/types'
+import { useRestartPendingStore } from '@/stores/restart-pending'
+import { useServerStore } from '@/stores/server'
+import type { InstanceStatus, InstanceSummary } from '@/api/types'
 
 // ── 虚构占位数据（虚构实例名，非真实服务器）──────────────────
 
@@ -430,5 +433,159 @@ describe('InstanceCards 详情失败', () => {
     expect(within(alphaCard).queryByText(/运行详情获取失败/)).not.toBeInTheDocument()
     // 旧值照常渲染
     expect(within(alphaCard).getByText('1.21.4')).toBeInTheDocument()
+  })
+})
+
+/**
+ * 实例级事实在屏上的常驻落点：数据刷新时机、实例健康（低 TPS）、待重启。
+ * 这三条此前分别落在顶栏状态点/窄屏药丸与实例页页头横幅上——外壳的槽位因此按视口切换属性，
+ * 低 TPS 还会把「面板连接状态点」染成「异常」。本组锁住：事实一律落在实例卡片上。
+ */
+describe('InstanceCards 实例事实载体（刷新时机 / 低 TPS / 待重启）', () => {
+  beforeEach(() => {
+    useRestartPendingStore.setState({ pending: {} })
+    useServerStore.setState({ socketConnected: true })
+  })
+
+  afterEach(() => {
+    useRestartPendingStore.setState({ pending: {} })
+    useServerStore.setState({ socketConnected: false })
+  })
+
+  /** 单卡渲染：详情按用例覆盖（caps / tps 是这三条事实的真值来源） */
+  function renderOne(detail: Partial<InstanceStatus> = {}) {
+    return render(
+      <InstanceCards
+        {...baseProps({
+          instances: [alpha],
+          detailStatuses: {
+            alpha: { ...mockInstanceStatus, id: 'alpha', name: '虚构甲服', ...detail },
+          },
+        })}
+      />,
+    )
+  }
+
+  it('推送连通 ⇒ 卡上明说「实时推送」（不是光一个「实时」，免得被读成运行状态）', () => {
+    renderOne({ capabilities: { rcon: true, msmp: true, msmpPush: true } })
+
+    const pill = screen.getByText('实时推送')
+    expect(pill).toHaveAttribute('title', '实时推送已连通，服务器的状态变化会立即到达面板')
+    expect(pill).toHaveAttribute('data-status-tone', 'success')
+  })
+
+  it('推送未连通 ⇒ 说「轮询刷新」，秒数取 queries 常量（写死会与真实间隔漂移）', () => {
+    renderOne({ capabilities: { rcon: true, msmp: true, msmpPush: false } })
+
+    const pill = screen.getByText('轮询刷新')
+    expect(pill).toHaveAttribute(
+      'title',
+      `实时推送未连通，面板每 ${FALLBACK_POLL_INTERVAL_MS / 1000} 秒刷新一次状态`,
+    )
+    // 轮询是文档化的回落档、不是故障 ⇒ 中性档，不报警
+    expect(pill).toHaveAttribute('data-status-tone', 'muted')
+  })
+
+  it('面板实时通道断开 ⇒ 两档都不给：此时轮询是否真在刷新无从判定', () => {
+    useServerStore.setState({ socketConnected: false })
+    renderOne({ capabilities: { rcon: true, msmp: true, msmpPush: true } })
+
+    // 正向锚点：只有「都没出现」这类否定断言时，整卡不渲染（可编译变异）也会判绿
+    expect(screen.getByText('运行中 · 3 人在线')).toBeInTheDocument()
+    expect(screen.queryByText('实时推送')).toBeNull()
+    expect(screen.queryByText('轮询刷新')).toBeNull()
+  })
+
+  it('详情里没有 msmpPush 字段 ⇒ 不落药丸：宁可不说，也不说错', () => {
+    // 「有详情但推送读数缺失」是卡片侧的独立门控（侧栏另有用例）；`?? false` 会把它说成「轮询刷新」
+    renderOne({ capabilities: { rcon: true, msmp: false, msmpPush: undefined } as never })
+
+    expect(screen.getByText('运行中 · 3 人在线')).toBeInTheDocument()
+    expect(screen.queryByText('轮询刷新')).toBeNull()
+    expect(screen.queryByText('实时推送')).toBeNull()
+  })
+
+  it('待重启徽章只出现在置位的那台卡上', () => {
+    useRestartPendingStore.setState({ pending: { alpha: Date.now() } })
+    const { container } = render(<InstanceCards {...baseProps()} />)
+
+    const alphaCard = container.querySelector('[data-instance-id="alpha"]') as HTMLElement
+    const betaCard = container.querySelector('[data-instance-id="beta"]') as HTMLElement
+    expect(within(alphaCard).getByText('待重启')).toBeInTheDocument()
+    expect(within(alphaCard).getByTitle('面板已改，重启实例后生效')).toBeInTheDocument()
+    expect(within(betaCard).queryByText('待重启')).toBeNull()
+  })
+
+  it('重启后消费（事件那一路）：清除该实例的待重启状态后徽章消失', () => {
+    useRestartPendingStore.setState({ pending: { alpha: Date.now() } })
+    renderOne()
+    expect(screen.getByText('待重启')).toBeInTheDocument()
+
+    // 与 use-server-socket 收到 started 时调用的同一个动作
+    act(() => useRestartPendingStore.getState().clearPending('alpha'))
+    expect(screen.queryByText('待重启')).toBeNull()
+  })
+
+  it('重启后消费（详情那一路）：非当前实例收不到它的 started，按运行起点判「已生效」', () => {
+    /* 2 分钟前置位；详情显示该实例运行了 10 秒 ⇒ 运行起点晚于置位 ⇒ 那次改动已被重启消费。
+       这条不依赖 WS：前端只订阅当前实例，非当前实例的 started 根本不会到本端 */
+    useRestartPendingStore.setState({ pending: { alpha: Date.now() - 120_000 } })
+    renderOne({ isRunning: true, uptime: 10 })
+
+    expect(screen.queryByText('待重启')).toBeNull()
+    expect(useRestartPendingStore.getState().pending['alpha']).toBeUndefined()
+  })
+
+  it('运行起点早于置位 ⇒ 徽章保留：该实例还没来得及重启，改动确实还没生效', () => {
+    // 置位在 10 秒前，而实例已运行 3600 秒（先起后改）⇒ 不能消费
+    useRestartPendingStore.setState({ pending: { alpha: Date.now() - 10_000 } })
+    renderOne({ isRunning: true, uptime: 3600 })
+
+    expect(screen.getByText('待重启')).toBeInTheDocument()
+    expect(useRestartPendingStore.getState().pending['alpha']).toBeTypeOf('number')
+  })
+
+  it('实例已停止 ⇒ 不消费：停着说明改动还没被应用', () => {
+    useRestartPendingStore.setState({ pending: { alpha: Date.now() - 120_000 } })
+    renderOne({ isRunning: false, uptime: 0 })
+
+    expect(screen.getByText('待重启')).toBeInTheDocument()
+  })
+
+  it('低 TPS：数值按 lib/mc-tps 分级上色并给出说明', () => {
+    renderOne({ tps: 8 })
+
+    const value = screen.getByText('8.0')
+    expect(value).toHaveClass('text-mcs-error-fg')
+    // 说明与可见值同一写法（都 toFixed(1)）：同一指标给两种写法会让用户以为读数不一致
+    expect(value).toHaveAttribute('title', 'TPS 偏低（8.0）')
+  })
+
+  it('低 TPS 不只靠颜色：标签行有语义图标（形状通道）、值后有读屏文本', () => {
+    const { container } = renderOne({ tps: 8 })
+
+    // 颜色是单通道（色觉障碍者区分不出 warning/error，读屏也拿不到「偏低」）
+    const tpsCell = screen.getByText('TPS').parentElement as HTMLElement
+    expect(tpsCell.querySelector('svg')).not.toBeNull()
+    const value = screen.getByText('8.0')
+    expect(value.textContent).toContain('TPS 偏低')
+    expect(container.textContent).toContain('TPS 偏低')
+  })
+
+  it('TPS 处于告警档（<19 且 ≥15）：上 warning 色，不是 error', () => {
+    renderOne({ tps: 17 })
+
+    const value = screen.getByText('17.0')
+    expect(value).toHaveClass('text-mcs-warning-fg')
+    expect(value).not.toHaveClass('text-mcs-error-fg')
+  })
+
+  it('TPS 健康：数值不上色、说明就是数值本身（健康不该看起来像告警）', () => {
+    renderOne({ tps: 20 })
+
+    const value = screen.getByText('20.0')
+    expect(value).not.toHaveClass('text-mcs-warning-fg')
+    expect(value).not.toHaveClass('text-mcs-error-fg')
+    expect(value).toHaveAttribute('title', '20.0')
   })
 })

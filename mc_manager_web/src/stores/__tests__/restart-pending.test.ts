@@ -2,13 +2,14 @@
  * restart-pending store 单测（启动配置「待重启生效」跟踪）
  *
  * 闭环的每一环都要有锁，缺一个指示器就会说谎：
- * - 保存置位 / 重启（started）清除 / 跨刷新持久化**读回** / 卸载后不留残条
+ * - 保存置位 / 重启后清除（WS 事件 + 按详情的 `restartApplied` 两路）/ 跨刷新持久化**读回** /
+ *   卸载后不留残条
  * 仓储面（localStorage）是用户可改的外部输入，故损坏载荷必须逐态验证——
  * pending 为 null 会让 Object.keys 在 render 期抛错（整页白屏），为字符串/数组则会把
  * 下标或字符当实例 id 渲染出来。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { useRestartPendingStore } from '../restart-pending'
+import { restartApplied, useRestartPendingStore } from '../restart-pending'
 
 const STORAGE_KEY = 'mcs-restart-pending'
 
@@ -145,6 +146,35 @@ describe('restart-pending store 损坏载荷容错（逐态重建模块）', () 
     for (const payload of ['{not json', { version: 0 }, { state: [1, 2], version: 0 }]) {
       const store = await reloadWith(payload)
       expect(store.getState().pending).toEqual({})
+    }
+  })
+})
+
+/**
+ * 「已生效」判定：实例的运行起点晚于置位时刻 ⇒ 那次改动已被一次重启消费。
+ * 这是非当前实例的**唯一**清除路径（前端不订阅它的 status 事件），判错就是徽章永不消失
+ * 或刚置位就被误清。
+ */
+describe('restartApplied', () => {
+  const mark = 1_000_000_000_000
+
+  it('运行起点晚于置位 ⇒ 已生效（实例刚重启过）', () => {
+    // 置位发生在 2 分钟前，实例只跑了 10 秒
+    expect(restartApplied(mark + 120_000, 10, mark)).toBe(true)
+  })
+
+  it('运行起点早于置位 ⇒ 还没生效（先启动、后改配置）', () => {
+    expect(restartApplied(mark + 10_000, 3600, mark)).toBe(false)
+  })
+
+  it('容差：置位后 2 秒内即使 uptime 为 0 也不算已生效（吸收整秒取整与投递延迟）', () => {
+    expect(restartApplied(mark + 1000, 0, mark)).toBe(false)
+    expect(restartApplied(mark + 3000, 0, mark)).toBe(true)
+  })
+
+  it('uptime 非法（负数 / NaN / Infinity）⇒ 不判已生效：宁可留着也不谎报生效', () => {
+    for (const bad of [-1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(restartApplied(mark + 120_000, bad, mark)).toBe(false)
     }
   })
 })

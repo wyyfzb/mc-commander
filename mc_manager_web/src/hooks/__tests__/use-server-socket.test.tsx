@@ -6,6 +6,7 @@ import { useServerSocket, getSocketSingleton } from '../use-server-socket'
 import { useConnectionStore } from '@/stores/connection'
 import { useAuthStore, type StoredSession } from '@/stores/auth'
 import { useNotificationStore } from '@/stores/notifications'
+import { useRestartPendingStore } from '@/stores/restart-pending'
 import { useDeployStore } from '@/stores/deploy'
 import { useBackupProgressStore, clearBackupProgress } from '@/stores/backup-progress'
 import { useWorldUpgradeProgressStore } from '@/stores/world-upgrade-progress'
@@ -771,6 +772,21 @@ describe('useServerSocket（状态跃迁通知接线）', () => {
     })
     const items = useNotificationStore.getState().items
     expect(items[0]?.type).toBe('serverCrash')
+  })
+
+  it('非当前实例的 started 也消费它的「待重启」标记（卡片逐台置位，清除不该按当前实例丢弃）', async () => {
+    /* 前端只订阅当前实例，但「待重启」会为任意实例置位（从他人卡片进设置改东西）：
+       那条事实的归属是**那台实例**，与用户在看哪一台无关。 */
+    useRestartPendingStore.setState({ pending: { 'i-other': Date.now() } })
+    const ws = await connectReady('i-1')
+
+    act(() => {
+      ws.receive({ type: 'statusEvent', instanceId: 'i-other', data: { event: 'started' } })
+    })
+
+    expect(useRestartPendingStore.getState().pending['i-other']).toBeUndefined()
+    // 通知口径不变：非当前实例的常规跃迁仍不入通知中心（见下一条用例）
+    expect(useNotificationStore.getState().items.length).toBe(0)
   })
 
   it('status 跃迁同步失效当前实例详情 query（isRunning 源头；只刷列表会让停止状态条滞后到 30s 轮询）', async () => {

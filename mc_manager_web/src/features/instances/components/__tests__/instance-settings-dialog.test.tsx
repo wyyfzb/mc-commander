@@ -4,13 +4,14 @@
  * - 交互：滑块 0.5G 步进联动预览 / Aikar 开关生成与移除 / 高级参数展开
  * - 保存：PUT /instances/:id 载荷校验（maxMemory/minMemory/jvmArgs/javaPath 白名单）
  *   + 成功 toast + 关闭 + 实例详情失效重拉；失败 toast 且不关闭
- * - 实时推送（MSMP）：走**自己的**接口即时落库，不进 PUT 白名单，也不参与「未保存的更改」判定；
+ * - 实时推送（MSMP）：走**自己的**接口，但与启动配置**同属一次事务**——拨动只改本地草稿、
+ *   在点「保存配置」时落库，取消能一并退回；两者都需重启才生效，故同置「待重启」；
  *   读失败 / 在途 / 已读到三态分明——读失败给重试与可自查位置，在途给占位，都不落成「已关闭」
  * - 两处设置开关行共用同一容器配方：逐类等集 + 行外无额外包裹锁定外观；在途 / 连接未就绪两态分别锁定
  * mock 数据为结构占位虚构（虚构实例名/版本），严禁真实服务器信息
  */
 import { describe, expect, it, vi, beforeEach, afterEach, afterAll, beforeAll } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
 import { setupServer } from 'msw/node'
@@ -365,7 +366,7 @@ describe('InstanceSettingsDialog', () => {
     await user.click(screen.getByRole('button', { name: '保存配置' }))
     // 本用例未改动任何可见项 ⇒ 走「无需重启」文案，且**不得**置「待重启」：
     // 否则常驻横幅宣称「启动配置已修改」而实际逐字未变，诱导一次无必要重启。
-    expect(await screen.findByText('启动配置已保存（与之前一致，无需重启）')).toBeInTheDocument()
+    expect(await screen.findByText('设置已保存（与之前一致，无需重启）')).toBeInTheDocument()
     expect(useRestartPendingStore.getState().pending['alpha']).toBeUndefined()
     // 清除旧命令：否则 jvmArgs 空数组时 start() 回退 startCommand 静默覆盖新配置。
     // 这一项属内部归一（可见配置没变），故不影响上面「无需重启」的判定
@@ -392,20 +393,19 @@ describe('InstanceSettingsDialog', () => {
     expect(screen.getByRole('button', { name: '保存配置' })).toBeDisabled()
   })
 
-  it('关闭确认框：如实区分两套提交语义（推送开关即时保存，不受「取消」影响）', async () => {
-    // 这句曾写作「当前有未保存的配置更改，关闭后这些修改将丢失」——对推送开关那一行是**假陈述**
-    // （它即时落库、取消退不回来），用户会据此以为自己取消成功
+  it('关闭确认框：一份未保存清单（推送开关也在其中，不再需要豁免说明）', async () => {
+    // 这句曾写作「……（实时推送开关是即时保存的，不受此影响）」——那句豁免本身就是两套提交语义的
+    // 证据：需要一句话去解释的交互，用户无法从界面自身推断行为。现在推送同属这一次事务
     const { onOpenChange } = renderDialog()
     const user = userEvent.setup()
 
-    const slider = screen.getByRole('slider', { name: '内存分配' })
-    slider.focus()
-    await user.keyboard('{ArrowRight}')
+    await user.click(await screen.findByRole('switch', { name: '实时推送' }))
     await user.click(screen.getByRole('button', { name: '取消' }))
 
-    const description = await screen.findByText(/实时推送开关是即时保存的/)
-    expect(description).toBeInTheDocument()
-    expect(description.textContent).toContain('上面有未保存的启动配置更改')
+    expect(
+      await screen.findByText('上面有未保存的更改，关闭后这些改动将丢失。'),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/即时保存/)).toBeNull()
     expect(onOpenChange).not.toHaveBeenCalledWith(false)
   })
 
@@ -436,26 +436,37 @@ describe('InstanceSettingsDialog 实时推送开关', () => {
     expect(screen.queryByText(/server\.properties/)).toBeNull()
   })
 
-  it('开启：走自己的接口即时落库，并说明生效时机是下次重启', async () => {
+  it('拨动开关只改本地草稿：不落库、不关弹窗、不触发重取（取消退得回来）', async () => {
     const { onOpenChange } = renderDialog()
     const user = userEvent.setup()
 
     await user.click(await screen.findByRole('switch', { name: '实时推送' }))
 
-    await waitFor(() =>
-      expect(apiSetPushChannel).toHaveBeenCalledWith(expect.anything(), 'alpha', true),
-    )
-    expect(await screen.findByText('实时推送已开启，下次重启服务器后生效')).toBeInTheDocument()
-    // 开关不能等重取回来才动：夹具的 GET 是静态的（重取必然拿回 OFF），靠乐观翻转撑住用户意图。
-    // 等重取真的发生过再断言，否则这条会读到一个还没翻转的旧渲染而假绿
-    await waitFor(() => expect(apiGetPushChannel.mock.calls.length).toBeGreaterThanOrEqual(2))
     expect(screen.getByRole('switch', { name: '实时推送' })).toBeChecked()
-    // 独立通道：不借道 PUT /instances/:id，也不关闭弹窗
+    // 未点保存 ⇒ 一条写请求都不该有；「开关一动就落库」正是让用户误判「都保存好了」的根源
+    expect(apiSetPushChannel).not.toHaveBeenCalled()
     expect(putBodies).toHaveLength(0)
     expect(onOpenChange).not.toHaveBeenCalled()
   })
 
-  it('关闭：同样即时落库，且回执说的是关闭', async () => {
+  it('保存才落库：走自己的接口提交，并说清生效时机是重启之后', async () => {
+    const { onOpenChange } = renderDialog()
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('switch', { name: '实时推送' }))
+    await user.click(screen.getByRole('button', { name: '保存配置' }))
+
+    await waitFor(() =>
+      expect(apiSetPushChannel).toHaveBeenCalledWith(expect.anything(), 'alpha', true),
+    )
+    // 只改了推送 ⇒ 回执点名推送，不说成「启动配置已保存」（用户据此才知道去哪一项核对）
+    expect(await screen.findByText('实时推送已开启，重启实例后生效')).toBeInTheDocument()
+    // 推送同属「重启才生效」⇒ 与启动配置共用同一份待重启集合（实例卡片徽章 + 页头横幅的数据源）
+    expect(useRestartPendingStore.getState().pending['alpha']).toBeTypeOf('number')
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  it('关闭：同样在保存时提交，且回执说的是关闭', async () => {
     apiGetPushChannel.mockResolvedValue(PUSH_ON)
     renderDialog()
     const user = userEvent.setup()
@@ -463,33 +474,103 @@ describe('InstanceSettingsDialog 实时推送开关', () => {
     const toggle = await screen.findByRole('switch', { name: '实时推送' })
     expect(toggle).toBeChecked()
     await user.click(toggle)
+    await user.click(screen.getByRole('button', { name: '保存配置' }))
 
     await waitFor(() =>
       expect(apiSetPushChannel).toHaveBeenCalledWith(expect.anything(), 'alpha', false),
     )
-    expect(await screen.findByText('实时推送已关闭，下次重启服务器后生效')).toBeInTheDocument()
-    await waitFor(() => expect(apiGetPushChannel.mock.calls.length).toBeGreaterThanOrEqual(2))
-    expect(screen.getByRole('switch', { name: '实时推送' })).not.toBeChecked()
+    expect(await screen.findByText('实时推送已关闭，重启实例后生效')).toBeInTheDocument()
   })
 
-  it('设置失败：回滚 + 错误可见，且「保存配置」照常可用（两条通道互不牵连）', async () => {
-    // 从「已开启」起手：失败后的回滚才可观测（夹具的 GET 恒回 ON，回滚就是回到 ON）。
-    // 失败不触发失效重取，所以这条读到的一定是回滚结果而不是重取结果
-    apiGetPushChannel.mockResolvedValue(PUSH_ON)
+  it('两根都改时的回执：一句「设置已保存」覆盖两处（不逐条堆砌）', async () => {
+    renderDialog()
+    const user = userEvent.setup()
+
+    // 改启动配置 + 拨推送：两个分支各自单独覆盖过，这一条锁的是「同时改」那一支
+    const slider = screen.getByRole('slider', { name: '内存分配' })
+    slider.focus()
+    await user.keyboard('{ArrowRight}')
+    await user.click(await screen.findByRole('switch', { name: '实时推送' }))
+    await user.click(screen.getByRole('button', { name: '保存配置' }))
+
+    expect(await screen.findByText('设置已保存，重启实例后生效')).toBeInTheDocument()
+    expect(apiSetPushChannel).toHaveBeenCalledWith(expect.anything(), 'alpha', true)
+    expect(useRestartPendingStore.getState().pending['alpha']).toBeTypeOf('number')
+  })
+
+  it('读不到推送状态时只改启动配置：不误写推送（那一项根本没读到现值，无从比较）', async () => {
+    // 读失败 ⇒ 不渲染开关、pushDraft 恒 null。若判据写成 `pushDraft !== (data?.enabled ?? false)`，
+    // `null !== false` 会让它变成「脏」，保存时把推送静默写成 false
+    apiGetPushChannel.mockRejectedValue(new Error('boom'))
+    renderDialog()
+    const user = userEvent.setup()
+
+    const slider = screen.getByRole('slider', { name: '内存分配' })
+    slider.focus()
+    await user.keyboard('{ArrowRight}')
+    await user.click(screen.getByRole('button', { name: '保存配置' }))
+
+    expect(await screen.findByText('启动配置已保存，重启实例后生效')).toBeInTheDocument()
+    expect(apiSetPushChannel).not.toHaveBeenCalled()
+  })
+
+  it('推送失败时启动配置的「待重启」仍必须置位：已落库的事实不能没有载体', async () => {
+    /* 失败早退不能把另一半的置位一起跳过——否则这份真实待办在屏上没有任何载体，
+       而关闭确认框还会对用户说「改动将丢失」 */
+    useRestartPendingStore.setState({ pending: {} })
+    apiSetPushChannel.mockRejectedValueOnce(new Error('serverside-nope'))
+    renderDialog()
+    const user = userEvent.setup()
+
+    const slider = screen.getByRole('slider', { name: '内存分配' })
+    slider.focus()
+    await user.keyboard('{ArrowRight}')
+    await user.click(await screen.findByRole('switch', { name: '实时推送' }))
+    await user.click(screen.getByRole('button', { name: '保存配置' }))
+
+    expect(await screen.findByText(/但实时推送设置失败/)).toBeInTheDocument()
+    expect(putBodies).toHaveLength(1)
+    expect(useRestartPendingStore.getState().pending['alpha']).toBeTypeOf('number')
+  })
+
+  it('保存中不接受关闭：X 不会走到「不保存」（写请求在途，「将丢失」是假陈述）', async () => {
+    let release!: () => void
+    apiSetPushChannel.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve
+        }),
+    )
+    const { onOpenChange } = renderDialog()
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('switch', { name: '实时推送' }))
+    await user.click(screen.getByRole('button', { name: '保存配置' }))
+    // 在途：关闭按钮仍可点，但这一次点击必须被吞掉（否则用户会以为取消成功了）
+    await user.click(screen.getByRole('button', { name: '关闭弹窗' }))
+
+    expect(screen.queryByText('未保存的更改')).toBeNull()
+    expect(onOpenChange).not.toHaveBeenCalledWith(false)
+
+    await act(async () => {
+      release()
+    })
+  })
+
+  it('推送写入失败：启动配置已落库这件事必须分说，且弹窗不关（可重试）', async () => {
     apiSetPushChannel.mockRejectedValueOnce(new Error('serverside-nope'))
     const { onOpenChange } = renderDialog()
     const user = userEvent.setup()
 
     await user.click(await screen.findByRole('switch', { name: '实时推送' }))
-
-    expect(await screen.findByText(/实时推送设置失败/)).toBeInTheDocument()
-    // 失败必回滚：开关停在未落库的位置等于宣称一件没发生的事
-    expect(screen.getByRole('switch', { name: '实时推送' })).toBeChecked()
-
     await user.click(screen.getByRole('button', { name: '保存配置' }))
-    expect(await screen.findByText('启动配置已保存（与之前一致，无需重启）')).toBeInTheDocument()
+
+    // 两件事的真实结局不同，混成一句「保存失败」会让人以为启动配置也没落库
+    expect(await screen.findByText(/启动配置已保存，但实时推送设置失败/)).toBeInTheDocument()
     expect(putBodies).toHaveLength(1)
-    expect(onOpenChange).toHaveBeenCalledWith(false)
+    // 弹窗留着：用户再点一次保存即可重试，不必重新填一遍
+    expect(onOpenChange).not.toHaveBeenCalledWith(false)
+    expect(screen.getByRole('button', { name: '保存配置' })).not.toBeDisabled()
   })
 
   it('读不到状态：不渲染开关（「不知道」不能显示成「已关闭」），并说明读失败', async () => {
@@ -541,15 +622,21 @@ describe('InstanceSettingsDialog 实时推送开关', () => {
     expect(screen.queryByRole('switch', { name: '实时推送' })).toBeNull()
   })
 
-  it('开关不参与「未保存的更改」判定：改完开关点取消直接关闭', async () => {
+  it('开关参与「未保存的更改」判定：拨完开关点取消会先问一句（不再静默丢弃）', async () => {
     const { onOpenChange } = renderDialog()
     const user = userEvent.setup()
 
     await user.click(await screen.findByRole('switch', { name: '实时推送' }))
     await user.click(screen.getByRole('button', { name: '取消' }))
 
+    expect(
+      await screen.findByText('上面有未保存的更改，关闭后这些改动将丢失。'),
+    ).toBeInTheDocument()
+    expect(onOpenChange).not.toHaveBeenCalledWith(false)
+    // 确认「不保存」才真的关：草稿随卸载丢弃，服务端那份没被动过
+    await user.click(screen.getByRole('button', { name: '不保存' }))
     expect(onOpenChange).toHaveBeenCalledWith(false)
-    expect(screen.queryByText('未保存的更改')).toBeNull()
+    expect(apiSetPushChannel).not.toHaveBeenCalled()
   })
 })
 

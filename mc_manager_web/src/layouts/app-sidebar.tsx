@@ -20,8 +20,9 @@ import { cn } from '@/lib/utils'
 import { BrandLogo } from '@/components/mcs/brand-logo'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useUiStore } from '@/stores/ui'
-import { useInstanceStatus, useInstances, FALLBACK_POLL_INTERVAL_MS } from '@/api/queries'
+import { useInstanceStatus, useInstances } from '@/api/queries'
 import { instanceLabel } from '@/lib/instance-label'
+import { instanceRefreshMark } from '@/lib/instance-refresh'
 import { useServerStore } from '@/stores/server'
 
 /**
@@ -216,24 +217,13 @@ function SidebarBody(props: SidebarBodyProps) {
      方向上是「已断但仍说实时」这个短暂窗口，自愈。要消掉需服务端在通道 connect/disconnect
      时广播一次状态。
      「是否实时」这条结果说明挂在实例状态行尾部（不新增控件、不新增一行）：
-     推送连通 = 状态变化即时到达，否则回落到定时轮询。
-     实时通道断开时两个档位都不说——那时轮询是否真在刷新无从判定（面板整体不可达时
-     它同样失败），降级横幅已据实写明「每 N 秒」，两处会重复。
-     详情未到达（capabilities 读不到）时同样不说：宁可不说，也不说错。
-     秒数取 queries 常量，写死一处就会与真实间隔漂移。
+     推送连通 = 状态变化即时到达，否则回落到定时轮询。判据、文案与 tone 的唯一声明源是
+     lib/instance-refresh（实例卡片是同一事实的另一个载体，两处不能各写一份）。
      两档都用两字标签（「实时」/「轮询」）而不是「每 30 秒」：后者只给数量、不说什么东西每
      30 秒一次，读起来像倒计时或限额；「轮询」直接描述数据是怎么来的，且与该行既有内容同为
      短语。展开态 rail 该行内容宽实测 149px（「运行中 · 3 人在线」占 90px），带空格的整句要
      172px 会被 truncate 成「每 30 …」——两字标签不会；完整句子仍进 title/sr-only */
-  const pushConnected = instanceDetail?.capabilities?.msmpPush
-  const pollSeconds = FALLBACK_POLL_INTERVAL_MS / 1000
-  const refreshMark =
-    socketConnected && pushConnected !== undefined ? (pushConnected ? '实时' : '轮询') : null
-  const refreshMarkDescription = !refreshMark
-    ? undefined
-    : pushConnected
-      ? '实时推送已连通，服务器的状态变化会立即到达面板'
-      : `实时推送未连通，面板每 ${pollSeconds} 秒刷新一次状态`
+  const refresh = instanceRefreshMark(socketConnected, instanceDetail?.capabilities?.msmpPush)
 
   const links = (items: NavItem[], extraClass?: string) => (
     <nav className={cn('flex flex-col gap-1 p-2', extraClass)}>
@@ -278,14 +268,12 @@ function SidebarBody(props: SidebarBodyProps) {
               </div>
               <div
                 className="truncate font-mono text-mcs-2xs text-mcs-text-muted"
-                title={refreshMarkDescription}
+                title={refresh?.description}
               >
                 {current.isRunning ? '运行中' : '已停止'} · {current.playerCount} 人在线
-                {refreshMark && ` · ${refreshMark}`}
+                {refresh && ` · ${refresh.short}`}
                 {/* 完整解释挂在 role=generic 的 div 上按规范会被读屏忽略（本仓已踩过），故用 sr-only */}
-                {refreshMarkDescription && (
-                  <span className="sr-only">，{refreshMarkDescription}</span>
-                )}
+                {refresh && <span className="sr-only">，{refresh.description}</span>}
               </div>
             </div>
           </div>

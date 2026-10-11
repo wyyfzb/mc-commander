@@ -93,8 +93,32 @@ test.describe('实例页', () => {
     await expect(page.getByText('参数说明')).toBeVisible()
     // 保存 → toast + 弹窗关闭
     await page.getByRole('button', { name: '保存配置' }).click()
-    await expect(page.getByText('启动配置已保存')).toBeVisible()
+    // 本用例没改动任何项 ⇒ 回执如实说「与之前一致，无需重启」：笼统说「已保存」会诱导一次
+    // 无必要重启，也不该让用户以为待生效
+    await expect(page.getByText('设置已保存（与之前一致，无需重启）')).toBeVisible()
     await expect(page.getByRole('heading', { name: '实例设置' })).toBeHidden()
+  })
+
+  test('实例设置弹窗：实时推送随「保存配置」提交，保存后卡片注明「待重启」', async ({ page }) => {
+    await setupConnection(page)
+    await page.goto('/instances')
+    await page.getByRole('button', { name: 'E2E 演示实例 操作菜单' }).click()
+    await page.getByRole('menuitem', { name: '实例设置' }).click()
+
+    // 拨动开关只改本地草稿：此刻还没提交，弹窗也没关
+    await page.getByRole('switch', { name: '实时推送' }).click()
+    await expect(page.getByRole('heading', { name: '实例设置' })).toBeVisible()
+
+    await page.getByRole('button', { name: '保存配置' }).click()
+    // 只改了推送 ⇒ 回执点名推送，并说明它和启动配置一样要重启才生效
+    await expect(page.getByText('实时推送已开启，重启实例后生效')).toBeVisible()
+    await expect(page.getByRole('heading', { name: '实例设置' })).toBeHidden()
+
+    // 逐台注明：卡片上直接出现「待重启」，用户不必拿名字去比对页头横幅是哪一台
+    const card = page.locator('[data-instance-id="e2e-demo"]')
+    await expect(card.getByText('待重启')).toBeVisible()
+    // 汇总横幅同时给出「怎么让它生效」的出路
+    await expect(page.getByText('E2E 演示实例 的设置已修改，重启实例后生效')).toBeVisible()
   })
 
   test('卸载确认：对话框 + 取消', async ({ page }) => {

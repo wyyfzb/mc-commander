@@ -278,7 +278,7 @@ for (const [scopeName, vars] of [
   // 8c. 状态指示器 ping 涟漪（顶栏）：状态色按 --mcs-ripple-opacity 叠在顶栏玻璃面上。
   //     涟漪承担可感知性（无它只剩 8px 圆点），按非文字图形 ≥3:1 口径；
   //     不透明度与状态色都从 token 读——改了任一项却没重算对比度，这里会红。
-  //     pulse 的两个状态取自 status-indicator 的 STATUS_CONFIG（connecting=info / warning=warning）
+  //    pulse 状态取自 status-indicator 的 STATUS_CONFIG（当前只有 connecting=info）
   {
     const alpha = Number(vars.get('--mcs-ripple-opacity'))
     const chromeSpec = readGlassSpecs(scopeName === '亮色').find((s) => s.name === 'glass-chrome')
@@ -292,7 +292,7 @@ for (const [scopeName, vars] of [
       const glass = parseColor(vars.get(chromeSpec.token), vars, refVars)
       const page = parseColor(vars.get('--mcs-bg-default'), vars, refVars)
       const chrome = composite(glass.color, page.color, chromeSpec.alpha)
-      for (const status of ['info', 'warning']) {
+      for (const status of ['info']) {
         const fg = parseColor(vars.get(`--mcs-${status}-fg`), vars, refVars)
         check(
           `pulse 涟漪 ${status}-fg @${alpha} on glass-chrome`,

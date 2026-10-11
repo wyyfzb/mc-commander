@@ -11,7 +11,7 @@ import { useQueries, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, Loader2, Rocket } from 'lucide-react'
 import { toast } from 'sonner'
 import { apiGet, ApiError } from '@/api/client'
-import { queryKeys, useInstances } from '@/api/queries'
+import { FALLBACK_POLL_INTERVAL_MS, queryKeys, useInstances } from '@/api/queries'
 import { ErrorCode, getFriendlyErrorText } from '@/api/errors'
 import { queryFailed, queryPhase } from '@/lib/query-phase'
 import { instanceLabel } from '@/lib/instance-label'
@@ -168,7 +168,8 @@ export function InstancesPage() {
       queryFn: ({ signal }: { signal: AbortSignal }) =>
         apiGet<InstanceStatus>(`/api/v1/instances/${inst.id}`, config, signal),
       enabled: config.status === 'ready',
-      refetchInterval: 30_000,
+      // 与卡片文案（lib/instance-refresh 插值的那个常量）同源：写死一处就会与真实间隔漂移
+      refetchInterval: FALLBACK_POLL_INTERVAL_MS,
     })),
   })
   const detailStatuses: Record<string, InstanceStatus> = {}
