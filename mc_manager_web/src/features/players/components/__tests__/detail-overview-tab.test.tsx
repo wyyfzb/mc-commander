@@ -150,4 +150,16 @@ describe('封禁状态文案：结束原因由服务端判定', () => {
 
     expect(screen.getByText(/已到期/)).toBeInTheDocument()
   })
+
+  it('谁封的：原版条目带 source 时随行展示', () => {
+    renderOverview(makePlayer({}), 'ready', [lifted({ source: 'Server' })])
+
+    expect(screen.getByText(/来源 Server/)).toBeInTheDocument()
+  })
+
+  it('旧文件缺 source：不出现来源段', () => {
+    renderOverview(makePlayer({}), 'ready', [lifted()])
+
+    expect(screen.queryByText(/来源 /)).not.toBeInTheDocument()
+  })
 })

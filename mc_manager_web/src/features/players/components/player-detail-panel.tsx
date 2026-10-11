@@ -147,8 +147,15 @@ export function PlayerDetailPanel({
                   {effectivePlayer.isOnline ? '在线' : '离线'}
                 </span>
                 {effectivePlayer.isOp && (
-                  <span className="shrink-0 rounded-full bg-mcs-purple-bg-subtle px-1.5 text-mcs-2xs text-mcs-purple-fg">
-                    OP
+                  <span
+                    className="shrink-0 rounded-full bg-mcs-purple-bg-subtle px-1.5 text-mcs-2xs text-mcs-purple-fg"
+                    title={
+                      effectivePlayer.bypassesPlayerLimit
+                        ? '该管理员在服务器满员时仍可进入（ops.json 的 bypassesPlayerLimit）'
+                        : '管理员：可在游戏内执行 OP 级命令'
+                    }
+                  >
+                    {effectivePlayer.bypassesPlayerLimit ? 'OP · 满员免排队' : 'OP'}
                   </span>
                 )}
               </div>

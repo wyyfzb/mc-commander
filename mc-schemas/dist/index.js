@@ -5747,6 +5747,12 @@ const playerSchema = object({
 	onlineTime: number$1().nullable(),
 	totalPlayTime: number$1(),
 	isOp: boolean(),
+	/**
+	* 满员时是否免排队（`ops.json` 的 `bypassesPlayerLimit`）：为真时该 OP 在满员服务器上仍可进入。
+	* 可选是因为它只对「已设为 OP 且显式打开」的玩家为真；非 OP、旧文件缺该键、以及既有前端夹具
+	* 都不携带它，调用方须按「非真即未开启」处理。
+	*/
+	bypassesPlayerLimit: boolean().optional(),
 	isWhitelisted: boolean(),
 	isBanned: boolean(),
 	banExpiresAt: number$1().nullable(),
@@ -5792,6 +5798,8 @@ const playerDetailsResponseSchema = object({
 	uuid: string(),
 	isOnline: boolean(),
 	isOp: boolean(),
+	/** 同 `playerSchema`：满员时免排队，仅对显式打开的 OP 为真 */
+	bypassesPlayerLimit: boolean().optional(),
 	isWhitelisted: boolean(),
 	isBanned: boolean(),
 	totalPlayTime: number$1(),
@@ -5813,7 +5821,13 @@ const banRecordSchema = object({
 	* 面板自己的临时封禁记录无法区分「提前解封」与「到期」，一律 false（按已解封展示）。
 	*/
 	expired: boolean(),
-	createdAt: string().nullable()
+	createdAt: string().nullable(),
+	/**
+	* 「谁封的」——原版封禁条目的 `source`（控制台/RCON 下发写 `Server`/`Rcon`，游戏内 OP 写其名字）。
+	* 可选：旧版或手工编辑的封禁文件可能没有该字段；面板自实现的临时封禁记录也只从对应原版条目取，
+	* 取不到时为 null，界面按「未知」处理而不是猜一个来源。
+	*/
+	source: string().nullable().optional()
 });
 /** 封禁记录列表（生效中在前 + 历史，非分页信封） */
 const banRecordListSchema = array(banRecordSchema);

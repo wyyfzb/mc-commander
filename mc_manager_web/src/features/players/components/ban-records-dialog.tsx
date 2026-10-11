@@ -120,6 +120,12 @@ export function BanRecordsDialog({
                       <div className="truncate text-mcs-xs text-mcs-text-muted">
                         {ban.reason || '无原因'}
                       </div>
+                      {/* 谁封的：来自原版封禁条目的 source；旧文件没有该字段时不占位 */}
+                      {ban.source && (
+                        <div className="truncate text-mcs-2xs text-mcs-text-muted">
+                          封禁来源：{ban.source}
+                        </div>
+                      )}
                     </div>
                     <div className="flex shrink-0 flex-col items-end">
                       <BanStatus ban={ban} />
