@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.1](https://github.com/wyyfzb/mc-commander/compare/v0.8.0...v0.8.1) (2026-10-11)
+
+
+### Bug Fixes
+
+* 属性保存不再整份回传；已迁出服务端读取的属性键按版本标出 ([#653](https://github.com/wyyfzb/mc-commander/issues/653)) ([cd8e474](https://github.com/wyyfzb/mc-commander/commit/cd8e474fb07cca4d71274b87073824786c274867))
+
 ## [0.8.0](https://github.com/wyyfzb/mc-commander/compare/v0.7.5...v0.8.0) (2026-10-09)
 
 
