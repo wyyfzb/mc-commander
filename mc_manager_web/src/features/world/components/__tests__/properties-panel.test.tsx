@@ -271,7 +271,8 @@ describe('已迁出的属性键按实例版本锁定', () => {
     await user.click(screen.getByRole('button', { name: '保存' }))
     await waitFor(() => expect(onSave).toHaveBeenCalled())
     // 下发只会拿到 200 而服务器根本不读 ⇒ 必须滤掉（pvp 确实改过，不滤就会在里面）
-    expect(onSave.mock.calls[0][0]).not.toHaveProperty('pvp')
+    // 上面的 toHaveBeenCalled 已保证调用发生，这里的兜底只是满足严格模式下的可选值类型
+    expect(onSave.mock.calls.at(0)?.at(0) ?? {}).not.toHaveProperty('pvp')
   })
 
   it('无接替规则的键：说明它被移除且没有替代项', async () => {
