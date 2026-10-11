@@ -254,6 +254,7 @@ export function whitelistRemove(name) {
  * `bypassesPlayerLimit` **故意不传**：协议缺省是「已 op 则沿用该玩家现值，否则 false」——
  * 传死值 false 会把已经打开「满员免排队」的管理员静默降级，而不传在这两种情形下都正确
  * （新 op 仍是 false，已 op 保留原样）。
+ * 该结论只对 MSMP 通道成立；下面的命令回退路径（`op`）不带此开关，其影响未实测，不替它断言。
  */
 export function opPlayer(name) {
   return this._writeViaPreferredChannel(
