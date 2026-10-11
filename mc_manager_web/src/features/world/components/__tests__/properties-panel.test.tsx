@@ -198,7 +198,9 @@ describe('已迁出的属性键按实例版本锁定', () => {
     // 编辑态才分得清「因为不能再改」与「因为还没进编辑」——未失效键此时可用
     expect(within(row(container, 'pvp')).getByRole('switch')).toBeDisabled()
     expect(within(row(container, 'max-players')).getByRole('textbox')).toBeEnabled()
-    expect(within(row(container, 'max-players')).queryByRole('button', { name: hintName })).toBeNull()
+    expect(
+      within(row(container, 'max-players')).queryByRole('button', { name: hintName }),
+    ).toBeNull()
     await user.click(within(row(container, 'pvp')).getByRole('button', { name: hintName }))
     expect(await screen.findByRole('dialog', { name: hintName })).toHaveTextContent(
       '1.21.9 起服务端不再读取 server.properties 里的这一项，改由游戏规则 pvp 控制',
