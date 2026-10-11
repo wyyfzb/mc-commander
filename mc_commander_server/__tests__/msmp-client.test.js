@@ -32,6 +32,7 @@ import os from 'os';
 import path from 'path';
 import { MCServerInstance } from '../services/mc_server.js';
 import { _msmpRequest } from '../services/mc-server/msmp-client.js';
+import { logger } from '../utils/logger.js';
 
 const SECRET = 'A'.repeat(40);
 
@@ -152,6 +153,7 @@ describe('_msmpRequest JSON-RPC 往返', () => {
   afterEach(async () => {
     await stub?.close();
     stub = null;
+    vi.restoreAllMocks();
   });
 
   it('请求带 Bearer 认证头，返回 result 的裸值', async () => {
@@ -183,6 +185,40 @@ describe('_msmpRequest JSON-RPC 往返', () => {
       );
     });
     expect(await instFor(stub.port)._msmpRequest('minecraft:nope', [])).toBeNull();
+  });
+
+  it('错误响应 → 日志留住方法名、错误码与消息（调用方只见 null，排障全靠这条）', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    stub = await startStub((msg, socket) => {
+      socket.send(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: msg.id,
+          error: { code: -32602, message: 'Invalid params: unknown field' },
+        }),
+      );
+    });
+    const inst = instFor(stub.port);
+    // 返回契约不变：调用方仍按「取不到」处理
+    expect(await inst._msmpRequest('minecraft:players', [])).toBeNull();
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    const line = warnSpy.mock.calls[0][0];
+    expect(line).toContain(inst.id);
+    expect(line).toContain('minecraft:players');
+    expect(line).toContain('-32602');
+    expect(line).toContain('Invalid params: unknown field');
+  });
+
+  it('错误响应缺 message / 非对象 → 仍留一条可读日志，不抛给调用方', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    stub = await startStub((msg, socket) => {
+      socket.send(JSON.stringify({ jsonrpc: '2.0', id: msg.id, error: { code: -32600 } }));
+    });
+    const inst = instFor(stub.port);
+    expect(await inst._msmpRequest('minecraft:players', [])).toBeNull();
+    const line = warnSpy.mock.calls[0][0];
+    expect(line).toContain('-32600');
+    expect(line).toContain('(无消息)');
   });
 
   it('认证失败（HTTP 401）→ null', async () => {
@@ -239,6 +275,7 @@ describe('_msmpFetchOnlinePlayers 名单解析', () => {
   afterEach(async () => {
     await stub?.close();
     stub = null;
+    vi.restoreAllMocks();
   });
 
   const serve = (result) =>
