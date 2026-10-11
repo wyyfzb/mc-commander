@@ -49,6 +49,47 @@ test.describe('移动端侧栏抽屉', () => {
 })
 
 /**
+ * 顶栏刷新语义的窄屏载体：<768 侧栏退化成抽屉（不占布局宽），侧栏实例卡那条「实时/轮询」标记
+ * 随之离开屏幕 ⇒ 该状态在窄屏屏上没有任何可见载体，用户会以为实时推送开着、其实在轮询。
+ * 顶栏补一颗只读药丸，与状态点同槽位互补（状态点 md 以上显示）——所以它必须**只在 md 以下**
+ * 可见，否则与侧栏标记同屏重复。
+ * jsdom 既无布局引擎也不评估媒体查询，这层可见性只能在真实浏览器里锁（单测只锁文案与档类）。
+ */
+test.describe('顶栏窄屏刷新语义载体', () => {
+  test('375px：顶栏给出「轮询」，且桌面侧栏未占布局宽（不重复）', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 })
+    await setupConnection(page)
+    await page.goto('/dashboard')
+
+    // 宽屏那处载体此时不在布局里：侧栏 rail 是 md:flex，375 下退出（顶栏补位的正当性）
+    await expect(page.getByRole('complementary', { name: '主导航', exact: true })).toBeHidden()
+
+    const pill = page.getByRole('banner').locator('[data-status-pill]')
+    // mock 的推送通道是关的（capabilities.msmpPush=false）⇒ 真值是「轮询」，不是「实时」
+    await expect(pill).toHaveText(/^轮询/)
+    await expect(pill).toBeVisible()
+    // 可见短语走 12px 档：成句提示最低 xs，2xs 只许角标/单位/短标签
+    await expect(pill).toHaveCSS('font-size', '12px')
+    // 完整解释仍可达（可见文本只给两字短语）：悬停 title + 读屏 sr-only
+    await expect(pill).toHaveAttribute('title', '实时推送未连通，面板每 30 秒刷新一次状态')
+    await expect(pill.locator('.sr-only')).toHaveText('，实时推送未连通，面板每 30 秒刷新一次状态')
+  })
+
+  for (const width of [768, 1440]) {
+    test(`${width}px：侧栏承担该事实，顶栏不出现第二处载体`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 })
+      await setupConnection(page)
+      await page.goto('/dashboard')
+
+      const rail = page.getByRole('complementary', { name: '主导航', exact: true })
+      await expect(rail.getByText('运行中 · 3 人在线 · 轮询')).toBeVisible()
+      // 同屏不得重复：顶栏那颗药丸在 md 以上必须不可见（仍在 DOM 里，被档类藏起）
+      await expect(page.getByRole('banner').locator('[data-status-pill]')).toBeHidden()
+    })
+  }
+})
+
+/**
  * 侧栏「收起」态跨断点回归：桌面 sidebarCollapsed 只属于桌面侧栏（w-14 图标态），
  * 抽屉是 256px 浮层、不占布局宽 ⇒ 没有收起语义，恒按展开态渲染。
  * 曾把 nav 片段的 collapsed 直接复用到抽屉：桌面收起后拖窄窗口再开抽屉，
