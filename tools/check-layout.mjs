@@ -8,12 +8,15 @@
  *   ① 顶层条目必须在白名单内：新增顶层目录/文件要走一次显式登记（登记处就在本文件）；
  *   ② `apps/*` 内不得出现测试、不得出现非 README 的 Markdown——测试归 `tests/`，文档归 `docs/`；
  *   ③ 运行期与构建产物不得入库——包是交付物，不是数据落地处（无例外：契约包 `dist`
- *      同样是构建产物，服务端经 workspace 链接消费，谁消费谁先 `build`）。
+ *      同样是构建产物，服务端经 workspace 链接消费，谁消费谁先 `build`）；
+ *   ④ 配置与工作流里的**路径引用**必须指向存在的文件——布局改动后残留的旧引用会静默失效：
+ *      `extra-files` 指错只是让版本悄悄漂移（不报错），`cache-dependency-path` 指错会让
+ *      setup-node 直接失败、整个发布构建中止。
  *
  * 用法：`node tools/check-layout.mjs`（位置无关，仓库根按 `.git` 向上发现）。
  */
 import { execFileSync } from 'node:child_process'
-import { existsSync, statSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -130,6 +133,40 @@ for (const p of tracked) {
   }
   if (!ENV_TEMPLATE.test(segments.at(-1)) && FORBIDDEN_ARTIFACT_FILES.test(segments.at(-1))) {
     violations.push(`入库面不得含运行期文件：「${p}」`)
+  }
+}
+
+// ④ 路径引用不得失效（含 glob 的写法不判——它不是单一路径）
+const CONFIG_FILE = 'release-please-config.json'
+const configPath = join(ROOT, CONFIG_FILE)
+if (existsSync(configPath)) {
+  const config = JSON.parse(readFileSync(configPath, 'utf8'))
+  for (const [name, pkg] of Object.entries(config.packages ?? {})) {
+    for (const entry of pkg['extra-files'] ?? []) {
+      const ref = typeof entry === 'string' ? entry : entry.path
+      const rel = ref.replace(/^\//, '')
+      if (/[*?[\]]/.test(rel)) continue
+      if (!existsSync(join(ROOT, rel))) {
+        violations.push(
+          `${CONFIG_FILE} 的 packages["${name}"].extra-files 指向不存在的路径「${ref}」——布局改动后引用需同步`,
+        )
+      }
+    }
+  }
+}
+const workflowsDir = join(ROOT, '.github', 'workflows')
+if (existsSync(workflowsDir)) {
+  for (const file of readdirSync(workflowsDir).filter((f) => /\.ya?ml$/.test(f))) {
+    const lines = readFileSync(join(workflowsDir, file), 'utf8').split('\n')
+    for (const line of lines) {
+      const matched = line.match(/^\s*cache-dependency-path:\s*(\S+)\s*$/)
+      if (!matched || /[*?[\]]/.test(matched[1])) continue
+      if (!existsSync(join(ROOT, matched[1]))) {
+        violations.push(
+          `.github/workflows/${file} 的 cache-dependency-path 指向不存在的路径「${matched[1]}」——布局改动后引用需同步`,
+        )
+      }
+    }
   }
 }
 

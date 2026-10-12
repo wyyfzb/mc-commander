@@ -10,11 +10,23 @@
       "changelog-path": "/CHANGELOG.md",
       "extra-files": [
         "/apps/web/package.json",
-        "/apps/web/package-lock.json",
         "/apps/schemas/package.json",
-        "/apps/schemas/package-lock.json",
         "/apps/server/package.json",
-        "/apps/server/package-lock.json",
+        {
+          "type": "json",
+          "path": "/package-lock.json",
+          "jsonpath": "$.packages['apps/web'].version"
+        },
+        {
+          "type": "json",
+          "path": "/package-lock.json",
+          "jsonpath": "$.packages['apps/schemas'].version"
+        },
+        {
+          "type": "json",
+          "path": "/package-lock.json",
+          "jsonpath": "$.packages['apps/server'].version"
+        },
         "/README.md",
         "/apps/server/README.md"
       ]
