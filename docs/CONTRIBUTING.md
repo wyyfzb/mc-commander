@@ -1,0 +1,130 @@
+# 贡献指南
+
+> **贡献必须满足的项目规范（代码规范、CI 检查项、提交规范）见 [`AGENTS.md`](AGENTS.md)**；
+> 本文件只做上手补充。**开发流程由你自己决定**——用不用 TDD、本地跑多少测试、编辑器是什么，
+> 都不在项目约束范围内，只要你的 PR 最终通过 CI 即可。
+
+感谢参与 MC_Commander！无论提交 Issue、修复 Bug 还是开发新功能，都欢迎。
+
+## 快速上手
+
+### 环境要求
+
+| 依赖 | 版本 |
+|------|------|
+| Node.js | 22+ |
+| Java | 17 / 21 / 25（运行 Minecraft 实例用，按 MC 版本自动选择） |
+| 操作系统 | Windows / Linux / macOS 均可开发 |
+
+### 搭建步骤
+
+```bash
+git clone <仓库地址>
+cd mc-commander
+
+# 依赖：仓库根执行一次（npm workspaces，根 lock 是唯一事实源）
+npm ci
+
+# 契约包：服务端运行时消费它的构建产物 dist，故先建
+npm run build -w apps/schemas
+
+# 服务端
+npm run test -w apps/server        # 需要时先 cp apps/server/.env.example apps/server/.env
+
+# 前端（开发用 npm run dev -w apps/web）
+npm run build -w apps/web
+npm run test -w apps/web
+```
+三个包由仓库根的 npm workspaces 统一管理：**在仓库根执行一次 `npm ci`** 即装齐全部依赖
+（根 `package-lock.json` 是唯一事实源）。仓库根另有一个工具包 `package.json`，
+只装全仓共用的代码格式化器 Biome（`npm ci` 后 `npm run format`），不参与构建与运行。
+
+`apps/schemas` 是 web 与服务端共用的 zod 契约包：改动其 `src/` 后必须 `npm run build`
+重建 `dist/` 并连同源码一并提交——服务端运行时经 `file:` 链接消费 `dist`，前端则经
+vite alias 直读 `src`，不重建会让服务端静默使用旧契约（本地一键检查与 CI 均有
+消费前必须先构建 `dist`（CI 与 `local-check.sh` 都会构建并断言产物存在）。
+
+## 开发工作流
+
+### 分支与提交
+
+- 从 `main` 拉功能分支：`feat/<主题>` / `fix/<主题>` / `docs/<主题>`
+- 提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/)，
+  描述用中文：
+  - `feat(web): 玩家详情新增成就标签页`
+  - `fix(server): 实例未运行时白名单操作返回 400 而非 500`
+  - scope 可选：`web` / `server` / `ci` / `docs` 等
+- PR 目标分支为 `main`；较大变更建议先开 Issue 或 Discussion 对齐
+
+### CI 与本地检查
+
+PR 必须让 CI 全绿才能合并（6 项必需检查，见 `AGENTS.md`「CI 检查」）。仓库提供一键本地入口，
+**按你自己的习惯跑多少都行**，只要最终 CI 通过：
+
+```bash
+bash tools/ci/local-check.sh                     # Git Bash / Linux / macOS
+bash tools/ci/local-check.sh --skip-frontend     # 仅契约包 + 服务端
+bash tools/ci/local-check.sh --skip-schemas      # 跳过契约包
+```
+
+CI 在 PR 上运行：代码格式检查、三包 lint / 类型检查 / test（含覆盖率）、契约包构建产物、
+设计 token 与对比度门禁、构建体积检查、Playwright e2e、密钥泄漏扫描、三包生产依赖漏洞扫描
+（`npm audit --omit=dev`，阈值 high）。
+
+涉及页面渲染 / 展示文案的改动，建议加跑相关 e2e spec（`npx playwright test <spec>`）。
+
+### 代码格式
+
+格式化由仓库根目录的 **Biome** 统一负责（配置见 `biome.jsonc`，**只启用 formatter**，
+lint 归 oxlint，三个包同一把）：
+
+```bash
+npm run format          # 在仓库根执行：按配置格式化全仓
+npm run format:check    # 只检查不改写（CI 与 tools/ci/local-check.sh 跑这条）
+```
+
+- 范围：全仓 `.ts/.tsx/.js/.mjs` 与配置文件；**不含 CSS 与 Markdown**（设计 token 样式表由门禁脚本
+  解析、文档为手写排版），也不含 `dist/`、`public/`、`coverage/`、e2e 产物、锁文件与 `.ai/`、`.mimosa/`。
+- 风格参数向各包主导风格收敛（2 空格缩进、单引号、JSX 属性双引号、尾逗号 all、行宽 100；
+  分号按包分流：服务端有、前端/契约/e2e 无）。接入时少数偏离既有风格的现场被一并归一
+  （shadcn 生成的 `components/ui/*.tsx` 由双引号改单引号、个别服务端文件补分号），属一次性收敛。
+  此后**不要手工调整格式**——提交前跑一次 `npm run format` 即可；也不要引入其它格式化器
+  （Prettier 等），避免两把格式化器互相打架。
+
+### 测试约定
+
+- 新增/变更逻辑必须有测试覆盖（服务端 vitest + supertest；前端 vitest +
+  @testing-library，e2e 用 Playwright）
+- **测试数据一律虚构**：禁止出现真实服务器 IP、API Key、真实玩家数据
+  （用 `1.2.3.4`、TEST-NET 网段、Steve/Alex 示例名）
+- e2e 配置会自动启动 mock 后端（5198）与 dev server（5199），无需手工准备
+- **mock 是进程级共享的**（并行 spec 连同一个「服务端」）：spec 触发的构造端点广播
+  （deploy/upgrade 的进度与终态）只投递给**同分组**的连接，分组头是 `x-mock-ws-group`。
+  触发广播的 spec 必须声明自己的分组（`page.setExtraHTTPHeaders`；`page.request.*`
+  不继承它，需在调用处显式传），断言「通知空态 / 进度」这类全局状态的 spec 也应声明分组——
+  否则并行 spec 的广播会打进来（实测让 dashboard 的通知抽屉空态偶发变红）
+
+### 前端设计约束
+
+- 颜色/圆角/字号/动效/光影使用 `src/styles/` 的 `--mcs-*` 设计 token，**禁止硬编码色值**；
+  间距不设 token，统一走 Tailwind 默认 4px 刻度（结构间距 4px 倍数）；
+  文字两级（`text-mcs-text-default` / `text-mcs-text-muted`）、悬浮一档（`bg-mcs-state-hover`）、
+  圆角一套档位（6/8/12/16px）
+- 内容面 tint（`--mcs-{status,accent,dimension}-bg-subtle`，承载文字）**必须不透明**；
+  交互覆盖层（`--mcs-state-*`、`--mcs-scrim*`）保持半透明；同一元素只允许一个内容面 tint；
+  危险底用 `bg-mcs-error-bg-subtle`（禁 `bg-destructive/<alpha>`）
+- 交互元素禁用 `outline-none` 抵消 `focus-visible:outline-*`（会导致焦点环不可见）；
+  菜单/选项项须带 `focus:outline-2 focus:-outline-offset-2 focus:outline-mcs-focus-ring`
+- Z 轴禁裸 `z-<数字>`，用 `z-(--mcs-z-*)` 阶梯
+- 组件风格遵循既有 shadcn-ui + `apps/web/src/components/mcs/` 模式
+- 数据密集区域用实底背景；玻璃同屏 ≤2 层（顶栏 `glass-chrome` + 确认弹窗 `glass-overlay`，
+  alpha ≤0.7；亮色 overlay ≤0.85），侧栏/抽屉/toast 用实底；门禁按「全站各 1 处」静态校验
+
+## 行为准则
+
+参与本项目即同意遵守 [行为准则](CODE_OF_CONDUCT.md)。保持友善、对事不对人。
+
+## 安全问题
+
+安全漏洞不要开公开 Issue，请走[私密安全报告](SECURITY.md)，并先阅读
+SECURITY.md 中的信任模型（部分「越权」类发现属于单管理员架构的设计使然）。

@@ -1,0 +1,381 @@
+import {
+  Bell,
+  Copy,
+  KeyRound,
+  LogOut,
+  Menu,
+  Moon,
+  Search,
+  Server,
+  Settings,
+  Sun,
+  TriangleAlert,
+  UserRound,
+} from 'lucide-react'
+import { useState } from 'react'
+import { useNavigate } from 'react-router'
+import { toast } from 'sonner'
+import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { IconButton } from '@/components/mcs/icon-button'
+import { StatusIndicator, type IndicatorStatus } from '@/components/mcs/status-indicator'
+import { toneClasses } from '@/components/mcs/tone'
+import { NotificationDrawer } from '@/layouts/notification-drawer'
+import { useUiStore } from '@/stores/ui'
+import { useServerStore } from '@/stores/server'
+import { useInstanceStatus } from '@/api/queries'
+import { useInstanceSwitch } from '@/hooks/use-instance-switch'
+import { useNotificationStore } from '@/stores/notifications'
+import { useConnectionStore } from '@/stores/connection'
+import { useAuthStore } from '@/stores/auth'
+import { logout } from '@/api/auth'
+import { useInstances } from '@/api/queries'
+import { copyText } from '@/lib/clipboard'
+import { sessionAppliesToPanel } from '@/lib/mc-connection'
+import { clearLocalCredentials, logoutToastText } from '@/lib/logout'
+import { primaryModifierLabel } from '@/lib/platform'
+import { cn } from '@/lib/utils'
+import { instanceLabel } from '@/lib/instance-label'
+import { instanceHueFillClass } from '@/lib/instance-hue'
+
+/**
+ * AppTopBar —— 主顶栏（设计文档 §3.1）
+ * 实例选择器 ▸ 全局搜索 (Cmd/Ctrl+K) ▸ 服务器状态点（WS 实时）▸ 通知铃铛（未读徽章+抽屉）▸ 主题切换
+ */
+export function AppTopBar() {
+  const navigate = useNavigate()
+  const theme = useUiStore((s) => s.theme)
+  const toggleTheme = useUiStore((s) => s.toggleTheme)
+  const toggleMobileNav = useUiStore((s) => s.toggleMobileNav)
+  const setCommandPaletteOpen = useUiStore((s) => s.setCommandPaletteOpen)
+  const notificationsOpen = useUiStore((s) => s.notificationsOpen)
+  const setNotificationsOpen = useUiStore((s) => s.setNotificationsOpen)
+
+  const connectionStatus = useConnectionStore((s) => s.status)
+  const socketConnected = useServerStore((s) => s.socketConnected)
+  const hasConnectedOnce = useServerStore((s) => s.hasConnectedOnce)
+  const status = useServerStore((s) => s.status)
+  const instanceId = useServerStore((s) => s.instanceId)
+  // 连接地址的数据源与页面解耦：以前只有仪表盘会把实例详情写进 store，
+  // 于是切到其它页面后顶栏的地址 chip 会消失（用户以为地址"时有时无"）。
+  // 这里让顶栏自己订阅当前实例详情，任意页面都能拿到 address。
+  const { data: instanceDetail } = useInstanceStatus(instanceId)
+  /* 外壳只承载**全局事实**：顶栏这一格报的是面板与后端的连接档位（见下面 indicator）。
+     实例级事实（运行状态、TPS、刷新时机、待重启）一律落在实例卡片上——实例页卡片承担
+     在屏上常驻的那一份，侧栏展开态的实例迷你卡承担当前实例的简版。
+     此前刷新时机在本格按视口轮换（md 以上挂不可见 title、md 以下换成一颗只读药丸），
+     同一个位置因此在两个属性之间切换 ⇒ 用户无从从位置推断语义，读到的是串用的结论。 */
+  // 自订阅优先；实例详情尚未到达时回退到 store 里的值（保持既有行为，避免闪断）
+  const serverAddress = instanceDetail?.address || status?.address || null
+  // 地址可达范围同样来自服务端（契约里的 addressType），前端不自己按网段猜——
+  // 双端各判一次必然在某个特征段上漂移（如 CGNAT 100.64/10）。与地址同源取值，
+  // 避免「地址取详情、类型取 store」时两者版本错配。
+  const addressType = instanceDetail?.addressType ?? status?.addressType ?? null
+  const isPrivateAddress = addressType === 'private'
+  const { switchInstance } = useInstanceSwitch()
+  const unreadCount = useNotificationStore((s) => s.unreadCount)
+
+  // 安全主线：用户菜单（会话登录显示管理员身份；API Key 直连显示凭据徽章）
+  // 会话只在签发它的面板上算数：换地址后按 API Key 直连呈现（见 lib/mc-connection）
+  const session = useAuthStore((s) => s.session)
+  const apiKey = useConnectionStore((s) => s.apiKey)
+  const baseUrl = useConnectionStore((s) => s.baseUrl)
+  const sessionToken = sessionAppliesToPanel(session, baseUrl) ? (session?.token ?? null) : null
+  const [loggingOut, setLoggingOut] = useState(false)
+
+  const handleLogout = async () => {
+    setLoggingOut(true)
+    // 登出会一并清掉本机保存的 API Key（不可从浏览器恢复）——如实告知，不让用户在别处才发现
+    const doneToast = logoutToastText(Boolean(useConnectionStore.getState().apiKey))
+    try {
+      if (sessionToken) {
+        await logout({ baseUrl: useConnectionStore.getState().baseUrl, apiKey })
+      }
+      clearLocalCredentials()
+      toast.info(doneToast)
+      navigate('/login', { replace: true })
+    } catch {
+      // 服务端登出失败不阻塞本地登出（令牌已不可用）
+      clearLocalCredentials()
+      toast.info(doneToast)
+      navigate('/login', { replace: true })
+    } finally {
+      setLoggingOut(false)
+    }
+  }
+
+  const instancesQuery = useInstances()
+
+  // 状态点语义（三重编码；区分"初次连接"与"实时通道断开"）：这一格只报**面板与后端的连接**，
+  // 故只有连接四档。降级档只表达"实时通道断了"这一已知事实——面板是否同样不可达在此无从判定，
+  // 能否取到数据由页面错误态如实呈现（降级横幅另说定时轮询确实存在）。
+  // 实例健康（TPS 偏低）不在此处上色：那是实例事实，载体是实例卡片的 TPS 指标。
+  let indicator: IndicatorStatus = 'disconnected'
+  if (connectionStatus === 'unconfigured') {
+    indicator = 'disconnected'
+  } else if (!socketConnected && !hasConnectedOnce) {
+    indicator = 'connecting'
+  } else if (!socketConnected && hasConnectedOnce) {
+    indicator = 'degraded'
+  } else {
+    indicator = 'connected'
+  }
+
+  // 无匹配实例时不得假造「默认实例」这类并不存在的名字；也不得把「列表还没到」
+  // （加载中/请求失败）谎报成「一个实例都没有」——三种缺位各有诚实占位
+  const instanceList = instancesQuery.data ?? []
+  const selectedInstance = instanceList.find((i) => i.id === instanceId)
+  // 展示名统一走 instanceLabel（空名/纯空白名回退 id，避免顶栏出现「未选择实例」式的空壳）
+  const selectedInstanceName = selectedInstance ? instanceLabel(selectedInstance) : undefined
+  const instanceNameFallback =
+    instanceList.length > 0
+      ? '未选择实例'
+      : instancesQuery.isError
+        ? '实例列表加载失败'
+        : instancesQuery.isPending
+          ? '加载中…'
+          : '暂无实例'
+  const currentInstanceName = selectedInstanceName ?? instanceNameFallback
+  const noInstances = instancesQuery.isSuccess && instanceList.length === 0
+
+  /** 单实例且正是当前选中实例时才降级为纯展示：只有一个选项的下拉除了展开什么也做不了。
+      单实例但选中的是列表外的陈旧 id 时仍保留下拉——那时用户正需要靠它把那唯一实例选回来 */
+  const singleSelectedInstance = instanceList.length === 1 && instanceList[0]?.id === instanceId
+
+  /** 实例固定色相标识（非语义 identity：只回答「是哪个实例」，不表达运行/告警状态；
+      未选中实例时不渲染，避免与「暂无实例」等占位文案一起假装有个实例） */
+  const instanceHueDot = instanceId ? (
+    <span
+      data-instance-hue
+      className={cn('size-2 shrink-0 rounded-full', instanceHueFillClass(instanceId))}
+      aria-hidden
+    />
+  ) : null
+
+  return (
+    <header className="glass-chrome flex h-12 shrink-0 items-center gap-2 border-b border-mcs-border-muted px-3">
+      {/* 移动端导航抽屉开关（桌面侧栏开合在侧栏 Logo 上，见 app-sidebar） */}
+      <IconButton onClick={toggleMobileNav} aria-label="打开导航菜单" className="md:hidden">
+        <Menu aria-hidden />
+      </IconButton>
+
+      {/* 服务器地址 chip（带复制按钮，方便发给玩家直连）。
+          内网地址必须显式标注：那通常是「探测不到公网 IP」时的回退值，
+          玩家直连不上。不标注的话用户会照着复制发给朋友，然后对着
+          「连不上」却没有任何线索（这正是本 chip 存在的意义——发给玩家）。 */}
+      {serverAddress && (
+        <span
+          className={cn(
+            'hidden items-center gap-1 rounded-mcs-sm py-1 pr-1 pl-2 font-mono text-mcs-2xs lg:inline-flex',
+            isPrivateAddress
+              ? toneClasses('warning')
+              : 'border border-mcs-border-muted bg-mcs-bg-muted text-mcs-text-muted',
+          )}
+        >
+          {isPrivateAddress ? (
+            <TriangleAlert className="size-3" aria-hidden />
+          ) : (
+            <Server className="size-3" aria-hidden />
+          )}
+          <span
+            title={
+              isPrivateAddress
+                ? '这是内网地址，仅同一网络内可直连；公网玩家无法连接。请设置 PUBLIC_IP 后重启面板'
+                : 'MC 客户端连接地址（含端口）'
+            }
+          >
+            {serverAddress}
+          </span>
+          {isPrivateAddress && <span className="font-sans">内网地址</span>}
+          <button
+            type="button"
+            onClick={() =>
+              void copyText(serverAddress).then((ok) => {
+                if (!ok) {
+                  toast.error('复制失败，请手动复制')
+                  return
+                }
+                // 内网地址复制出去时明确提示：用户复制它就是为了发给玩家，
+                // 而这份地址玩家多半连不上——不能只回「已复制」让他去踩坑
+                if (isPrivateAddress) {
+                  toast.warning('已复制，但这是内网地址，公网玩家连不上', { duration: 4000 })
+                  return
+                }
+                toast.success('服务器地址已复制', { duration: 1500 })
+              })
+            }
+            aria-label="复制服务器地址"
+            title={isPrivateAddress ? '复制内网地址（仅同一网络可直连）' : '复制地址发给玩家'}
+            className={cn(
+              'rounded-mcs-xs p-1 transition-colors hover:bg-mcs-state-hover focus-visible:outline-2 focus-visible:outline-mcs-focus-ring focus-visible:outline-offset-1',
+              isPrivateAddress
+                ? 'text-mcs-warning-fg'
+                : 'text-mcs-text-muted hover:text-mcs-text-default',
+            )}
+          >
+            <Copy className="size-3" aria-hidden />
+          </button>
+        </span>
+      )}
+
+      {/* 实例选择器：单实例降级为纯展示（见 singleSelectedInstance）；0 实例 / 加载中 / 失败
+          仍保留下拉：那里要承载「前往部署」与诚实的缺位说明 */}
+      {singleSelectedInstance ? (
+        <span className="flex max-w-32 items-center gap-1.5 px-1 text-mcs-sm font-medium text-mcs-text-default">
+          <Server className="size-4 shrink-0 text-mcs-text-muted" aria-hidden />
+          {instanceHueDot}
+          <span className="truncate">{currentInstanceName}</span>
+        </span>
+      ) : (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" className="max-w-32 gap-1.5 text-mcs-sm font-medium">
+              <Server className="size-4 shrink-0 text-mcs-text-muted" aria-hidden />
+              {instanceHueDot}
+              <span className="truncate">{currentInstanceName}</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-56">
+            <DropdownMenuLabel>服务器实例</DropdownMenuLabel>
+            {/* 仅「确实一个实例都没有」才推去部署向导；列表未到/失败时不假装没有实例 */}
+            {noInstances && (
+              <DropdownMenuItem onClick={() => navigate('/instances?tab=deploy')}>
+                暂无实例，前往部署
+              </DropdownMenuItem>
+            )}
+            {instancesQuery.isError && (
+              <DropdownMenuItem disabled>实例列表加载失败</DropdownMenuItem>
+            )}
+            {instancesQuery.isPending && (
+              <DropdownMenuItem disabled>正在加载实例列表…</DropdownMenuItem>
+            )}
+            {instanceList.map((inst) => (
+              <DropdownMenuItem
+                key={inst.id}
+                onClick={() => switchInstance(inst.id)}
+                className="flex items-center justify-between gap-2"
+              >
+                <span className="truncate">{instanceLabel(inst)}</span>
+                {inst.id === instanceId ? (
+                  <span className="size-1.5 rounded-full bg-mcs-accent" aria-label="当前实例" />
+                ) : null}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+
+      {/* 全局搜索（Cmd/Ctrl+K） */}
+      <Button
+        variant="outline"
+        // 窄窗口文案被 hidden xs:inline 隐藏后按钮无可访问名（图标 aria-hidden）→ 显式补名
+        aria-label="搜索或执行命令"
+        className="ml-auto w-9 justify-center gap-2 text-mcs-sm text-mcs-text-muted xs:w-44 xs:justify-between sm:w-56"
+        onClick={() => setCommandPaletteOpen(true)}
+      >
+        {/* 窄窗口防错位：文案区可截断收缩（min-w-0 + truncate），kbd 徽标 shrink-0 永不换行 */}
+        <span className="inline-flex min-w-0 flex-1 items-center gap-2">
+          <Search className="size-3.5 shrink-0" aria-hidden />
+          <span className="hidden truncate xs:inline">搜索或执行命令…</span>
+        </span>
+        <kbd className="pointer-events-none hidden h-5 shrink-0 items-center gap-0.5 rounded border border-mcs-border-default bg-mcs-bg-default px-1.5 font-mono text-mcs-2xs font-medium whitespace-nowrap text-mcs-text-muted xs:inline-flex">
+          {`${primaryModifierLabel()} K`}
+        </kbd>
+      </Button>
+
+      {/* 服务器状态点（WS 实时）：只报面板与后端的连接档位，任何视口都在同一位置说话。
+          这里曾有第二重身份——刷新时机（md 以上挂在 title/sr-only、md 以下换成一颗只读药丸），
+          同一格按视口切换属性；该事实已归位到实例卡片（见 instance-cards 的状态行）。 */}
+      <StatusIndicator status={indicator} />
+
+      {/* 通知铃铛（未读徽章 + 抽屉） */}
+      <IconButton
+        tooltip="通知"
+        tooltipSide="bottom"
+        className="relative"
+        onClick={() => setNotificationsOpen(true)}
+        aria-label={`通知${unreadCount > 0 ? `（${unreadCount} 条未读）` : ''}`}
+      >
+        <Bell aria-hidden />
+        {unreadCount > 0 && (
+          // subtle 底 + fg 字：实底（fg+白字）在 dark 亮红上对比度不足（~2.6:1），且白字非 token
+          <span
+            className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-mcs-error-bg-subtle px-1 text-mcs-2xs font-medium text-mcs-error-fg"
+            aria-hidden
+          >
+            {unreadCount > 99 ? '99+' : unreadCount}
+          </span>
+        )}
+      </IconButton>
+
+      {/* 用户菜单（安全主线：管理员身份 / 凭据状态） */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <IconButton aria-label={sessionToken ? '管理员菜单' : 'API Key 直连状态'}>
+            {sessionToken ? (
+              <UserRound aria-hidden />
+            ) : (
+              <KeyRound aria-hidden className="text-mcs-warning-fg" />
+            )}
+          </IconButton>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-56">
+          <DropdownMenuLabel>
+            {sessionToken ? '管理员（会话登录）' : 'API Key 直连'}
+          </DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => navigate('/settings/account')} className="gap-2">
+            <Settings className="size-4 text-mcs-text-muted" aria-hidden />
+            账号与安全
+          </DropdownMenuItem>
+          {sessionToken ? (
+            <DropdownMenuItem
+              onClick={() => void handleLogout()}
+              disabled={loggingOut}
+              className="gap-2 text-mcs-error-fg focus:text-mcs-error-fg"
+            >
+              <LogOut className="size-4" aria-hidden />
+              退出登录
+            </DropdownMenuItem>
+          ) : (
+            <DropdownMenuItem
+              onClick={() => {
+                // API Key 直连登出=清除本浏览器凭据（该通道无服务端会话，无需调 logout API）；
+                // 不清则 /login 守卫弹回（与会话分支共用同一处置）
+                // 先取文案再清凭据：清完 Key 就没了，后取会恒判为「没清过」
+                const doneToast = logoutToastText(Boolean(useConnectionStore.getState().apiKey))
+                clearLocalCredentials()
+                toast.info(doneToast)
+                navigate('/login', { replace: true })
+              }}
+              className="gap-2 text-mcs-error-fg focus:text-mcs-error-fg"
+            >
+              <LogOut className="size-4" aria-hidden />
+              退出登录
+            </DropdownMenuItem>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      {/* 主题切换 */}
+      <IconButton
+        className="hidden xs:inline-flex"
+        tooltip={theme === 'dark' ? '切换到亮色主题' : '切换到深色主题'}
+        tooltipSide="bottom"
+        onClick={toggleTheme}
+        aria-label={theme === 'dark' ? '切换到亮色主题' : '切换到深色主题'}
+      >
+        {theme === 'dark' ? <Sun aria-hidden /> : <Moon aria-hidden />}
+      </IconButton>
+
+      <NotificationDrawer open={notificationsOpen} onOpenChange={setNotificationsOpen} />
+    </header>
+  )
+}

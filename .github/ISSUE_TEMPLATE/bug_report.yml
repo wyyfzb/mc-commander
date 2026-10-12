@@ -31,8 +31,8 @@ body:
     attributes:
       label: 受影响组件
       options:
-        - 服务端 (mc_commander_server)
-        - Web 前端 (mc_manager_web)
+        - 服务端 (apps/server)
+        - Web 前端 (apps/web)
         - 部署/脚本
         - 文档
         - 其他

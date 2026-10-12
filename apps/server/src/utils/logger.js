@@ -1,0 +1,261 @@
+// 轻量结构化日志系统（issue #325）：
+// console 包装器四级日志（debug/info/warn/error）+ error 分流独立文件 + 简单轮转
+//
+// 设计约束（C 甄别方案，不引 pino）：
+// - 零依赖：纯 Node 内置模块，延续项目极简依赖哲学（utils/password.js 注释自证）
+// - 级别过滤：消费 config.logLevel（LOG_LEVEL 环境变量，config.js 唯一来源），
+//   低于设定级别的日志不输出（debug < info < warn < error）
+// - 流选择与 console 原生习惯一致：debug/info → stdout，warn/error → stderr
+// - error 分流：独立 error.log 文件；单文件 20MB × 5 份简单轮转（上限 ~100MB）
+// - stderr 白名单：启动横幅等安全/引导输出走 banner()（stderr 直写，不受级别
+//   过滤、不落盘）——部署排障时启动信息必须始终可见（journalctl 场景同理）
+// - 故障降级：日志目录不可写等文件系统故障静默降级为仅 stderr 输出一次告警，
+//   自托管场景日志故障不允许拖垮主服务
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+import { format as formatUtil } from 'util';
+import config from '../config.js';
+
+const LEVELS = Object.freeze({ debug: 10, info: 20, warn: 30, error: 40 });
+const LEVEL_TAGS = Object.freeze({ debug: 'DEBUG', info: 'INFO', warn: 'WARN', error: 'ERROR' });
+const ERROR_FILE_NAME = 'error.log';
+
+// dataDir 容错：测试 vi.mock(config) 可能缺 dataDir 字段，模块加载期不得抛错。
+// 缺省时先跟随 DATA_DIR 环境变量（测试注入临时目录），最后落系统临时目录（不锚 cwd）；
+// 真实运行 config.dataDir 恒有值（config.js 默认 './var/data'），此分支不可达
+function defaultLogDir() {
+  if (config.dataDir) return path.join(config.dataDir, 'logs');
+  if (process.env.DATA_DIR) return path.join(process.env.DATA_DIR, 'logs');
+  return path.join(os.tmpdir(), 'mc-commander-logs');
+}
+
+const DEFAULTS = Object.freeze({
+  level: config.logLevel, // ← LOG_LEVEL 环境变量（config.js: logLevel）
+  dir: defaultLogDir(),
+  maxSizeBytes: 20 * 1024 * 1024, // 单文件上限 20MB
+  maxFiles: 5, // 轮转保留份数：error.log.1 ~ error.log.5
+});
+
+let current = { ...DEFAULTS };
+let fileFailureWarned = false;
+
+function normalizeLevel(value) {
+  const lv = String(value || '')
+    .trim()
+    .toLowerCase();
+  return Object.hasOwn(LEVELS, lv) ? lv : 'info';
+}
+
+function enabled(level) {
+  return LEVELS[level] >= LEVELS[normalizeLevel(current.level)];
+}
+
+// util.format 保留 console 原生占位符与多参数行为（%s/%d/%j、对象 inspect、err.stack）
+function formatLine(level, args) {
+  const message = formatUtil(...args);
+  return `[${new Date().toISOString()}] [${LEVEL_TAGS[level]}] ${message}`;
+}
+
+// 写前轮转：error.log ≥ maxSizeBytes 时整体后移（.4→.5、.3→.4 … error.log→.1），
+// 最旧的 error.log.maxFiles 删除。同步实现（error 量级低频，与 better-sqlite3 同步风格一致）。
+// 每一步都不做存在性预检：轮转是 best-effort（调用方整体 catch），预检与动作之间的
+// 窗口会把「文件不存在」抛成异常并让整轮轮转中断，直接吞掉 ENOENT 更稳
+function rotateIfNeeded(targetFile) {
+  const st = fs.statSync(targetFile);
+  if (st.size < current.maxSizeBytes) return;
+  const oldest = `${targetFile}.${current.maxFiles}`;
+  try {
+    fs.unlinkSync(oldest);
+  } catch {
+    /* 最旧档不存在 */
+  }
+  for (let i = current.maxFiles - 1; i >= 1; i--) {
+    try {
+      fs.renameSync(`${targetFile}.${i}`, `${targetFile}.${i + 1}`);
+    } catch {
+      /* 该档不存在 */
+    }
+  }
+  fs.renameSync(targetFile, `${targetFile}.1`);
+}
+
+function appendErrorFile(line) {
+  const targetFile = path.join(current.dir, ERROR_FILE_NAME);
+  try {
+    fs.mkdirSync(current.dir, { recursive: true });
+    try {
+      rotateIfNeeded(targetFile);
+    } catch {
+      /* 首次写入文件不存在等情况 */
+    }
+    fs.appendFileSync(targetFile, line + '\n', 'utf-8');
+    if (fileFailureWarned) fileFailureWarned = false; // 恢复后重置告警标志
+  } catch (err) {
+    // 文件系统故障降级：仅 stderr 告警一次，避免每次 error 都刷告警（防递归刷屏）
+    if (!fileFailureWarned) {
+      fileFailureWarned = true;
+      process.stderr.write(`[logger] error 日志文件写入失败（降级为仅 stderr）：${err.message}\n`);
+    }
+  }
+}
+
+function emit(stream, level, args) {
+  const line = formatLine(level, args);
+  stream.write(line + '\n');
+  if (level === 'error') appendErrorFile(line);
+}
+
+export const logger = {
+  debug: (...args) => {
+    if (enabled('debug')) emit(process.stdout, 'debug', args);
+  },
+  info: (...args) => {
+    if (enabled('info')) emit(process.stdout, 'info', args);
+  },
+  warn: (...args) => {
+    if (enabled('warn')) emit(process.stderr, 'warn', args);
+  },
+  error: (...args) => {
+    if (enabled('error')) emit(process.stderr, 'error', args);
+  },
+  // stderr 白名单通道：启动横幅等安全/引导输出。不受级别过滤（始终可见）、不落盘
+  banner: (...args) => {
+    process.stderr.write(formatLine('info', args) + '\n');
+  },
+};
+
+// ── 读取侧：把面板自己的错误暴露给界面 ─────────────────
+// 写入与读取同在本模块：格式（`[ISO] [级别] 消息`）与轮转命名只有一份事实源，
+// 分家会让读取侧另写一份正则、随写入侧改动静默失配。
+
+/** 条目消息上限：与实例日志单行上限同量级，避免一条 util.format 的大对象撑爆响应 */
+const ERROR_ENTRY_MAX_CHARS = 4096;
+
+/** 单档读取的尾部字节数：只为看最近若干条，不必整读 20MB */
+const ERROR_READ_TAIL_BYTES = 256 * 1024;
+
+/** 轮转档文件名，新→旧：error.log 最新，.1 次之，…，.maxFiles 最旧 */
+function errorLogFiles() {
+  const names = [ERROR_FILE_NAME];
+  for (let i = 1; i <= current.maxFiles; i++) names.push(`${ERROR_FILE_NAME}.${i}`);
+  return names;
+}
+
+function errorLogPath() {
+  return path.join(current.dir, ERROR_FILE_NAME);
+}
+
+/**
+ * 解析一段错误日志文本。判据是「行首形如 `[时间] [级别] `」才算新条目，
+ * 其余行归上一条（多行消息/堆栈在文件里本就跨行，按行拆会把一条错误拆成多条）。
+ * `dropFirstLine` 用于尾部截断读取：首个物理行可能只读到半截，认它会显示残缺条目。
+ */
+function parseErrorLogText(text, { dropFirstLine = false } = {}) {
+  const lines = text.split('\n');
+  if (dropFirstLine) lines.shift();
+  const entries = [];
+  for (const raw of lines) {
+    if (!raw.trim()) continue;
+    const m = /^\[([^\]]+)\] \[([A-Z]+)\] ([\s\S]*)$/.exec(raw);
+    if (m) {
+      entries.push({ time: m[1], level: m[2], message: m[3] });
+    } else if (entries.length) {
+      entries[entries.length - 1].message += `\n${raw}`;
+    }
+    // 既非行首形态、前面又没有条目：尾部截断留下的残块，丢弃
+  }
+  for (const entry of entries) {
+    if (entry.message.length > ERROR_ENTRY_MAX_CHARS) {
+      entry.message = `${entry.message.slice(0, ERROR_ENTRY_MAX_CHARS)}…[已截断]`;
+    }
+  }
+  return entries;
+}
+
+/**
+ * 读取面板自身错误日志，**最新在前**。
+ *
+ * 不抛错：日志文件不存在（全新机器）与不可读（权限/文件系统故障）都返回空结果，
+ * 读取面不能把面板拖下去——调用方据 `available` 区分「还没有错误」与「读不到日志」。
+ */
+export function readErrorLog({ limit = 50 } = {}) {
+  const files = errorLogFiles();
+  const entries = [];
+  let available = false;
+  let hasMore = false;
+  // ENOENT（本来就是全新机器）与其它 errno（权限/磁盘故障）必须分开：后者才是「读取失败」，
+  // 两者都并进 available=false 时，界面只能对用户说「不存在，或存在但读不到」——
+  // 而这两件事指向完全不同的排查方向
+  let sawNonEnoentFailure = false;
+  for (const name of files) {
+    if (entries.length >= limit) {
+      hasMore = true;
+      break;
+    }
+    const file = path.join(current.dir, name);
+    let text;
+    let fromTail = false;
+    let dropFirstLine = false;
+    try {
+      const st = fs.statSync(file);
+      fromTail = st.size > ERROR_READ_TAIL_BYTES;
+      const start = fromTail ? st.size - ERROR_READ_TAIL_BYTES : 0;
+      // 尾部截断时多读 1 字节：用于判断窗口是否恰好落在行首。
+      // 落在行首 ⇒ 首个物理行是完整条目，不能丢（丢了就是静默少一条错误）；
+      // 落在行中 ⇒ 首行是残块，必须丢，否则会把半截时间戳当成一条错误显示。
+      // 判据用字节而非字符：0x0A 不可能是 UTF-8 续字节，多读的这 1 字节不会误判
+      const readFrom = fromTail ? start - 1 : 0;
+      const buf = Buffer.alloc(st.size - readFrom);
+      const fd = fs.openSync(file, 'r');
+      try {
+        fs.readSync(fd, buf, 0, buf.length, readFrom);
+      } finally {
+        fs.closeSync(fd);
+      }
+      text = buf.toString('utf-8');
+      if (fromTail) {
+        if (text.startsWith('\n')) text = text.slice(1);
+        else dropFirstLine = true;
+      }
+      available = true;
+    } catch (e) {
+      // 该档不存在或读不到：跳过，继续看更旧的档
+      if (e?.code && e.code !== 'ENOENT') sawNonEnoentFailure = true;
+      continue;
+    }
+    const parsed = parseErrorLogText(text, { dropFirstLine }).reverse();
+    const room = limit - entries.length;
+    if (parsed.length > room) hasMore = true;
+    entries.push(...parsed.slice(0, room));
+    // 尾部截断意味着本档更早的条目没进来
+    if (fromTail) hasMore = true;
+  }
+  // 读到任意一档即 ok；一档都没读到才需要区分「本来没有」与「读不到」
+  const readState = available ? 'ok' : sawNonEnoentFailure ? 'unreadable' : 'no-file';
+  return { readState, available, entries, hasMore, logFile: errorLogPath() };
+}
+
+// ── 测试注入通道（生产代码勿用）────────────────────────
+export function __configureLogger(overrides = {}) {
+  current = { ...DEFAULTS, ...overrides };
+  fileFailureWarned = false;
+}
+
+export function __resetLogger() {
+  current = { ...DEFAULTS };
+  fileFailureWarned = false;
+}
+
+export function __loggerState() {
+  return {
+    level: normalizeLevel(current.level),
+    dir: current.dir,
+    maxSizeBytes: current.maxSizeBytes,
+    maxFiles: current.maxFiles,
+    defaultsLevel: normalizeLevel(DEFAULTS.level),
+    defaultsDir: DEFAULTS.dir,
+  };
+}
+
+export { LEVELS };

@@ -1,10 +1,21 @@
 {
   "name": "mc-commander-tooling",
   "private": true,
-  "description": "仓库级开发工具（当前仅 Biome 格式化器）。三个包仍各自独立安装依赖——此处不是 workspace 根，只为「跨包共用一把格式化器」提供唯一的版本与配置来源。",
+  "description": "MC_Commander 工作区根：三个包（apps/web · apps/server · apps/schemas）经 npm workspaces 统一安装，根锁文件是依赖的唯一事实源。",
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "apps/*"
+  ],
   "scripts": {
+    "check:layout": "node tools/check-layout.mjs",
     "format": "biome format --write .",
-    "format:check": "biome format ."
+    "format:check": "biome format .",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present",
+    "pretest": "npm run build -w apps/schemas"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15"

@@ -66,7 +66,7 @@
   "overrides": [
     {
       // 服务端既有风格以分号结尾；前端/契约/e2e 相反。分流而非统一，避免本次接入夹带风格变更
-      "includes": ["mc_commander_server/**"],
+      "includes": ["apps/server/**"],
       "javascript": {
         "formatter": {
           "semicolons": "always"

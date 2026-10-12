@@ -38,27 +38,27 @@ MC_Commander 是一个自托管的 Minecraft 服务器管理工具。**核心定
 
 | 仪表盘 |
 |---|
-| ![仪表盘](screenshots/dashboard.png) |
+| ![仪表盘](docs/assets/screenshots/dashboard.png) |
 
 | 备份管理 | 实例列表 |
 |---|---|
-| ![备份管理](screenshots/backup.png) | ![实例列表](screenshots/instances.png) |
+| ![备份管理](docs/assets/screenshots/backup.png) | ![实例列表](docs/assets/screenshots/instances.png) |
 
 | 文件管理 | 玩家管理 |
 |---|---|
-| ![文件管理](screenshots/files.png) | ![玩家管理](screenshots/players.png) |
+| ![文件管理](docs/assets/screenshots/files.png) | ![玩家管理](docs/assets/screenshots/players.png) |
 
 | 世界 | 任务 |
 |---|---|
-| ![世界](screenshots/world.png) | ![任务](screenshots/tasks.png) |
+| ![世界](docs/assets/screenshots/world.png) | ![任务](docs/assets/screenshots/tasks.png) |
 
 | 插件 | Webhook |
 |---|---|
-| ![插件](screenshots/plugins.png) | ![Webhook](screenshots/webhooks.png) |
+| ![插件](docs/assets/screenshots/plugins.png) | ![Webhook](docs/assets/screenshots/webhooks.png) |
 
 | 审计日志 | 设置 |
 |---|---|
-| ![审计日志](screenshots/audit.png) | ![设置](screenshots/settings.png) |
+| ![审计日志](docs/assets/screenshots/audit.png) | ![设置](docs/assets/screenshots/settings.png) |
 
 > 完整操作流程见 [docs/user-guide.md](docs/user-guide.md)。
 
@@ -84,7 +84,7 @@ MC_Commander 是一个自托管的 Minecraft 服务器管理工具。**核心定
 - **进程级异常兜底** — 未捕获异常/拒绝（uncaughtException/unhandledRejection）记录结构化错误日志（含堆栈）后自动优雅停机（停实例落盘、关库），避免无日志静默崩溃导致所有实例托管断连
 - **一键部署** — Vanilla/Paper/Fabric/Forge/Purpur 五种服务端类型，自动下载 JAR（实时进度）、Java 版本检测、首次启动配置、失败可重试
 - **Aikar's Flags JVM 优化** — 一键生成 G1GC 优化参数集，内存滑块带推荐值
-- **备份管理** — **目录快照 + 增量传输**（Linux rsync `--link-dest` 硬链接快照：未变化文件零拷贝；Windows rsync 优先、自动降级 robocopy 全量镜像）、**实例级备份**（世界+配置+插件全量，自动排除日志/加载器依赖/jar，兼容 26.x 新布局与旧版 Bukkit 维度目录）、在线备份原子序列（save-off→save-all flush→save-on）、恢复异步化（后台执行 + 进度事件 + 自动回滚 + 快照预检 + level.dat 完整性校验）、**自动清理**（数量/天数双上限）、磁盘预检与快照完整性校验（SQLite 持久化）、**面板自身数据快照**（SQLite 在线备份 API 每日快照至 `backups/panel/`，保留策略与实例备份一致，恢复步骤见服务端 README 备份章节；`.env` 不入自动备份，手动备份在服务端 README 有指引）
+- **备份管理** — **目录快照 + 增量传输**（Linux rsync `--link-dest` 硬链接快照：未变化文件零拷贝；Windows rsync 优先、自动降级 robocopy 全量镜像）、**实例级备份**（世界+配置+插件全量，自动排除日志/加载器依赖/jar，兼容 26.x 新布局与旧版 Bukkit 维度目录）、在线备份原子序列（save-off→save-all flush→save-on）、恢复异步化（后台执行 + 进度事件 + 自动回滚 + 快照预检 + level.dat 完整性校验）、**自动清理**（数量/天数双上限）、磁盘预检与快照完整性校验（SQLite 持久化）、**面板自身数据快照**（SQLite 在线备份 API 每日快照至 `var/backups/panel/`，保留策略与实例备份一致，恢复步骤见服务端 README 备份章节；`.env` 不入自动备份，手动备份在服务端 README 有指引）
 - **性能监控** — CPU/内存/TPS 采集，WebSocket 实时推送
 
 ### 实时与可靠性
@@ -98,7 +98,7 @@ MC_Commander 是一个自托管的 Minecraft 服务器管理工具。**核心定
 
 ### 服务端部署
 
-需要 **Node.js 22+** 和 **Java 17/21/25**（部署脚本会自动安装）。双包 package.json 均已声明 `engines`（node>=22）并启用 engine-strict，低版本 Node 执行 `npm install` 会直接报错拒绝安装，避免装完依赖运行时才崩溃。
+需要 **Node.js 22+** 和 **Java 17/21/25**（部署脚本会自动安装）。三个包与 workspace 根均声明 `engines`（node>=22）并启用 engine-strict，低版本 Node 执行 `npm install` 会直接报错拒绝安装，避免装完依赖运行时才崩溃。
 
 #### 方式一：Linux 一键部署（推荐）
 
@@ -107,16 +107,16 @@ MC_Commander 是一个自托管的 Minecraft 服务器管理工具。**核心定
 
 ```bash
 rm -f /tmp/deploy-mc-commander.sh && \
-( curl -fsSL --connect-timeout 10 --max-time 60 -o /tmp/deploy-mc-commander.sh https://raw.githubusercontent.com/wyyfzb/mc-commander/main/mc_commander_server/scripts/deploy-mc-commander.sh || \
-  curl -fsSL --connect-timeout 10 --max-time 60 -o /tmp/deploy-mc-commander.sh https://gitee.com/wyyfzb/mc-commander/raw/main/mc_commander_server/scripts/deploy-mc-commander.sh ) && \
+( curl -fsSL --connect-timeout 10 --max-time 60 -o /tmp/deploy-mc-commander.sh https://gitee.com/wyyfzb/mc-commander/raw/main/apps/server/scripts/deploy-mc-commander.sh ||
+  curl -fsSL --connect-timeout 10 --max-time 60 -o /tmp/deploy-mc-commander.sh https://raw.githubusercontent.com/wyyfzb/mc-commander/main/apps/server/scripts/deploy-mc-commander.sh ) && \
 sudo bash /tmp/deploy-mc-commander.sh
 ```
 
-> 第一条是 GitHub 源，国内网络可能很慢甚至**长时间无输出**。命令里的 `--max-time 60` 保证它
-> 最多等 60 秒就会失败并自动换第二条（gitee 镜像），不会无限期卡住；两源内容逐字节一致。
+> 第一条是 **Gitee 源**（国内直连），第二条是 GitHub 源——命令里的 `--max-time 60` 保证第一条
+> 超过 60 秒无响应就自动换第二条，不会无限期卡住；两源内容逐字节一致。
 > 如果你只想用其中一条，单独执行它也行：
-> GitHub `https://raw.githubusercontent.com/wyyfzb/mc-commander/main/mc_commander_server/scripts/deploy-mc-commander.sh`、
-> 镜像 `https://gitee.com/wyyfzb/mc-commander/raw/main/mc_commander_server/scripts/deploy-mc-commander.sh`。
+> GitHub `https://raw.githubusercontent.com/wyyfzb/mc-commander/main/apps/server/scripts/deploy-mc-commander.sh`、
+> 镜像 `https://gitee.com/wyyfzb/mc-commander/raw/main/apps/server/scripts/deploy-mc-commander.sh`。
 
 脚本会自动安装 Java/Node.js、下载代码、生成 API Key 与一次性 SETUP_TOKEN 并注册 systemd 服务（下载
 tarball 带 sha256 完整性校验）。
@@ -127,10 +127,11 @@ tarball 带 sha256 完整性校验）。
 ① `sudo VERSION=vX.Y.Z bash deploy-mc-commander.sh` 指定具体版本；② 自行取到
 `mc-commander-server.tar.gz` 解压进安装目录（默认 `/opt/mc-commander`）后执行
 `sudo SKIP_DOWNLOAD=1 bash deploy-mc-commander.sh`。
-**国内网络（脚本内部下载）**：gitee 镜像（分支 `main`，无 `master`）除了源码，**也同步发布产物与
-`SHA256SUMS.txt`**（由 CI 在发版时上传到 Gitee Release）。部署脚本会先探测 GitHub，
-探测超时或下载失败即**自动切到 Gitee 重试**——你不需要传任何参数。两个源的包与摘要始终同源，
-sha256 校验强度不变。
+**下载源（脚本内部）**：**默认走 Gitee**（源码与发布产物、`SHA256SUMS.txt` 都由 CI 同步到
+Gitee Release；分支 `main`，无 `master`），Gitee 不可用或该版本尚未同步时**自动回退 GitHub 权威源**
+（产物由 CI 构建、带 Immutable Releases 签名）——你不需要传任何参数。两个源的包与摘要始终同源，
+sha256 校验强度不变。要强制首选 GitHub：`SOURCE_PREFERENCE=github`；要禁用自动换源：
+`ALLOW_SOURCE_FALLBACK=0`。
 
 若两个源都拉不动，仍可走上面的 ②（自行取包 + `SKIP_DOWNLOAD=1`）或下方「方式二：手动部署」。
 
@@ -138,19 +139,18 @@ sha256 校验强度不变。
 
 ```bash
 git clone https://github.com/wyyfzb/mc-commander.git
-cd mc-commander/mc_commander_server
+# 依赖：在仓库根装一次（npm workspaces，根 lock 覆盖三个包）
+cd mc-commander
+npm ci
 
-npm install
+# 契约包产物 + 前端产物（面板界面由服务端托管：public/index.html 不存在时只提供 API，
+# 浏览器访问 25566 拿不到界面）；public/ 目录可用 PUBLIC_DIR 覆盖
+npm run build -w apps/schemas
+npm run build -w apps/web
+mkdir -p apps/server/public && cp -r apps/web/dist/. apps/server/public/
+
+cd apps/server
 cp .env.example .env   # 编辑 .env，设置 API Key（两种部署口径见下）
-
-# 构建前端产物并放入 public/（面板界面由它托管：public/index.html 不存在时
-# 服务端只提供 API，浏览器访问 25566 拿不到界面）；目录可用 PUBLIC_DIR 覆盖
-# Windows（PowerShell）等价：cd ../mc_manager_web; npm install; npm run build;
-# cd ../mc_commander_server; mkdir public -Force; Copy-Item ../mc_manager_web/dist/* public/ -Recurse -Force
-(cd ../mc_manager_web && npm install && npm run build)
-mkdir -p public
-cp -r ../mc_manager_web/dist/. public/
-
 npm start
 ```
 
@@ -176,7 +176,7 @@ npm start
 sudo bash /tmp/deploy-mc-commander.sh --uninstall
 ```
 
-**默认保留你的数据**——`servers/`（每个实例的完整 Minecraft 世界存档）、`data/`、`backups/`
+**默认保留你的数据**——`var/servers/`（每个实例的完整 Minecraft 世界存档）、`var/data/`、`var/backups/`
 都会原样留下，只是面板本身被移除；脚本结束时会打印它们的位置。想连数据一起删：
 
 ```bash
@@ -191,15 +191,14 @@ sudo bash /tmp/deploy-mc-commander.sh --uninstall --purge   # 会二次确认，
 
 ### Web 前端运行
 
-需要 **Node.js 22+**（`npm install` 受 engines 门禁强制校验，低版本 Node 直接报错拒绝安装）。
+需要 **Node.js 22+**（`npm ci` 受 engines 门禁强制校验，低版本 Node 直接报错拒绝安装）。
 
 ```bash
-cd mc_manager_web
-npm install
+npm ci                      # 仓库根：workspace 一次装齐三包依赖
 
-npm run dev      # 开发运行（默认 http://localhost:5173，代理指向 25566）
-npm run build    # 生产构建（tsc -b + vite build）
-npm run preview  # 预览生产构建
+npm run dev -w apps/web      # 开发运行（默认 http://localhost:5173，代理指向 25566）
+npm run build -w apps/web    # 生产构建（tsc -b + vite build）
+npm run preview -w apps/web  # 预览生产构建
 ```
 
 首次打开引导页按向导设置管理员密码（如服务端配置了 `SETUP_TOKEN`，按提示输入）即可使用。
@@ -265,7 +264,7 @@ mc.example.com {
 
 ### 方式二：手动创建
 
-在 `servers/` 目录下创建子目录，包含 `instance.json`：
+在 `var/servers/` 目录下创建子目录，包含 `instance.json`：
 
 ```json
 {
@@ -337,7 +336,7 @@ ws.onmessage = (event) => {
 };
 ```
 
-支持 **30 余种事件类型**，按域分组：日志/状态（`log`、`status`、`performanceUpdate`、`weatherUpdate`、`systemStatsUpdate`）、玩家（`playerJoin`、`playerLeave`、`playerDeath`、`playerRespawn`、`playerChat`、`playerSleep`、`achievement`、`playerStatsUpdate`）、备份/恢复（`backupStart`、`backupComplete`、`backupFailed`、`backupSkipped`、`restoreStart`、`restoreComplete`、`restoreFailed`）、任务/部署/升级（`taskExecute`、`taskFailed`、`deployProgress`、`deployComplete`、`deployFailed`、`upgradeProgress`、`upgradeComplete`、`upgradeFailed`）、可靠性（`webhookDeliveryFailed`、`circuit_breaker`、`error`）。完整清单以 [`websocket.js`](mc_commander_server/websocket.js) 的 `WSEvents` 枚举为单一事实源。
+支持 **30 余种事件类型**，按域分组：日志/状态（`log`、`status`、`performanceUpdate`、`weatherUpdate`、`systemStatsUpdate`）、玩家（`playerJoin`、`playerLeave`、`playerDeath`、`playerRespawn`、`playerChat`、`playerSleep`、`achievement`、`playerStatsUpdate`）、备份/恢复（`backupStart`、`backupComplete`、`backupFailed`、`backupSkipped`、`restoreStart`、`restoreComplete`、`restoreFailed`）、任务/部署/升级（`taskExecute`、`taskFailed`、`deployProgress`、`deployComplete`、`deployFailed`、`upgradeProgress`、`upgradeComplete`、`upgradeFailed`）、可靠性（`webhookDeliveryFailed`、`circuit_breaker`、`error`）。完整清单以 [`websocket.js`](apps/server/websocket.js) 的 `WSEvents` 枚举为单一事实源。
 
 > `tpsUpdate` 已并入 `performanceUpdate`（payload 含 tps 字段，避免双广播冗余）；`playerDeath` 批量场景为聚合格式 `{players: [...], count: N}`（5s 窗口）；`deployProgress` 进度节流 ≥1% 才发射。
 
@@ -380,7 +379,7 @@ ws.onmessage = (event) => {
 | `BODY_LIMIT_JSON` | `1mb` | 认证前 JSON body 大小上限（body-parser limit 语法）；文件上传走 multipart 独立通道不受此值影响 |
 | `BACKUP_RETENTION_MAX` | `10` | 每实例保留备份数量上限（超出自动清理） |
 | `BACKUP_RETENTION_DAYS` | `30` | 备份最大保留天数（超出自动清理） |
-| `PANEL_BACKUP_ENABLED` | `true` | 面板自身数据每日快照开关（SQLite 在线快照至 `backups/panel/`） |
+| `PANEL_BACKUP_ENABLED` | `true` | 面板自身数据每日快照开关（SQLite 在线快照至 `var/backups/panel/`） |
 | `PANEL_BACKUP_CRON` | `0 4 * * *` | 面板快照 cron 表达式 |
 | `PANEL_BACKUP_RETENTION_MAX` / `PANEL_BACKUP_RETENTION_DAYS` | 继承 `BACKUP_RETENTION_*` | 面板快照独立保留策略（数量/天数上限） |
 | `BACKUP_SPAWN_TIMEOUT_MS` | `3600000` | 备份/恢复子进程超时上限（默认按规模动态计算） |
@@ -425,33 +424,23 @@ ws.onmessage = (event) => {
 
 ```
 mc-commander/
-├── mc_manager_web/            # Web 前端
-│   ├── src/
-│   │   ├── main.tsx       # 入口（QueryClient + Tooltip + Router + Toaster）
-│   │   ├── routes.tsx     # 路由表（react-router v8 data mode）
-│   │   ├── features/      # 功能域（dashboard/players/world/files/tasks/instances/plugins/webhooks/audit/settings/help/onboarding/auth）
-│   │   ├── components/    # 通用组件 + mcs/ 设计系统组件
-│   │   ├── stores/        # zustand store（连接/通知偏好/部署）
-│   │   ├── api/           # REST/WS 客户端 + 类型契约
-│   │   ├── lib/           # 领域逻辑（mc-items/mc-properties/mc-gamerules/mc-cron 等）
-│   │   ├── hooks/         # 自定义 hooks（use-unsaved-guard 等）
-│   │   └── styles/        # 设计系统 token（--mcs-* 唯一来源）
-│   ├── e2e/               # Playwright E2E（mock 数据）
-│   └── scripts/           # mock-server（E2E 数据源）
-├── mc_commander_server/      # Node.js 后端
-│   ├── index.js          # 入口 (Express + WebSocketServer)
-│   ├── config.js         # 配置加载 (.env)
-│   ├── websocket.js      # WebSocket 事件广播（30 余种事件；通知落库/断线补齐/心跳/背压）
-│   ├── routes/           # API 路由（status/players/backups/tasks/files/server-jar/keys）
-│   ├── services/         # 业务逻辑（mc_server/backup/task_scheduler）
-│   ├── middleware/       # 中间件（auth/cors/error_handler/rate_limit）
-│   ├── db/               # SQLite 模型（instance/backup/scheduled_task/ban）
-│   └── utils/            # 工具（response/java-detector/player-utils）
-├── screenshots/              # 产品截图（README 引用）
-├── docs/                     # 架构说明 / 用户指南
-├── .github/                  # CI 工作流 / Issue 与 PR 模板 / Dependabot
-├── AGENTS.md                 # AI 编码工具上手指南（人类贡献者同样适用）
-└── scripts/                  # 通用脚本（local-check 一键本地检查 / pull-backups 离机副本）
+├── apps/web/                   # Web 前端（React 19 + vite）
+│   ├── src/                    # 纯源码：features/ components/ stores/ api/ lib/ hooks/ styles/
+│   ├── tests/{unit,support}/   # 镜像 src/ 的用例 + 测试基建（vitest）
+│   ├── assets/fonts/           # 字体资产（参与打包）
+│   ├── e2e/                    # Playwright E2E（19 spec，并行跑）
+│   └── scripts/                # 本包门禁与 E2E 基建：check-design-tokens / check-contrast / check-bundle-size / capture / mock-server
+├── apps/server/                # Node.js 后端
+│   ├── src/                    # 交付源码：入口 / 配置 / WS 广播 / routes / services / middleware / db / utils
+│   ├── tests/                  # 服务端用例（vitest）
+│   ├── scripts/                # 一键部署脚本（用户经 raw/镜像 curl 获取，不进发布包）
+│   ├── var/                    # 运行期数据（不入库）：servers/ 实例 · data/ 库与日志 · backups/ 快照
+│   └── public/                 # 前端产物（release 打包注入，同源托管）
+├── apps/schemas/               # 共享契约包（zod）：src/ + tests/ + 入库的 dist/
+├── tools/{ci,dev,ops}/         # 维护者工具：local-check / 生成器 / 运维脚本
+├── docs/                       # 架构、用户指南、贡献与安全文档、配图（assets/screenshots/）
+├── .github/                    # CI 工作流 / Issue 与 PR 模板 / Dependabot
+└── AGENTS.md                   # AI 编码工具上手指南（人类贡献者同样适用）
 ```
 
 ## 环境要求
@@ -476,20 +465,20 @@ mc-commander/
 ## 开发与测试
 
 ```bash
-# 服务端（vitest，2200+ 用例）
-cd mc_commander_server
-npm install
-npm run dev        # 热重载开发
-npm test
+# 依赖：仓库根一次装齐（npm workspaces）
+npm ci
+
+# 服务端（vitest，2200+ 用例；消费契约包 dist，故先 build）
+npm run build -w apps/schemas
+npm run dev -w apps/server     # 热重载开发
+npm test -w apps/server
 
 # Web 前端
-cd mc_manager_web
-npm install
-npm run dev        # 开发（默认 5173，代理指向 25566）
+npm run dev -w apps/web        # 开发（默认 5173，代理指向 25566）
 
 # 前端单测（vitest，2000+ 用例）/ 类型检查 / lint / 生产构建
-npm test
-npx tsc -b --noEmit
+npm test -w apps/web
+(cd apps/web && npx tsc -b --noEmit)
 npm run lint
 npm run build
 
@@ -504,16 +493,16 @@ PR 会自动跑 GitHub Actions（lint / typecheck / 单测 / e2e / 密钥扫描�
 
 ```bash
 # 契约包 + 服务端 + 前端：lint / 类型检查 / 单测 / 设计与对比度守门（Git Bash / Linux / macOS）
-bash scripts/local-check.sh
+bash tools/ci/local-check.sh
 
 # 仅服务端（前端依赖未安装时适用）
-bash scripts/local-check.sh --skip-frontend
+bash tools/ci/local-check.sh --skip-frontend
 
-# 跳过契约包（未改动 mc-schemas 时可省一步）
-bash scripts/local-check.sh --skip-schemas
+# 跳过契约包（未改动 apps/schemas 时可省一步）
+bash tools/ci/local-check.sh --skip-schemas
 ```
 
-详细贡献流程见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+详细贡献流程见 [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)。
 
 ## 常见问题
 
@@ -539,9 +528,9 @@ bash scripts/local-check.sh --skip-schemas
 
 ## 参与贡献
 
-- 贡献流程与开发环境：[CONTRIBUTING.md](CONTRIBUTING.md)
-- 安全问题报告：[SECURITY.md](SECURITY.md)
-- 行为准则：[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
+- 贡献流程与开发环境：[docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)
+- 安全问题报告：[docs/SECURITY.md](docs/SECURITY.md)
+- 行为准则：[docs/CODE_OF_CONDUCT.md](docs/CODE_OF_CONDUCT.md)
 - 架构与设计决策：[docs/](docs/)
 
 ---

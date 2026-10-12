@@ -5,49 +5,57 @@ MC\_Commander 是一个自托管的 Minecraft 服务器管理面板：不装插�
 
 > 本文件描述**仓库有什么**与**贡献必须满足的项目规范**（代码构成、CI 检查项、代码规范、提交规范）。
 > **开发流程由各人自定，不在本文约束范围**——只要你提交的改动符合这里的项目规范即可。
-> 面向社区贡献者的补充说明见 `CONTRIBUTING.md`（与本文重复处以本文为准）。
+> 面向社区贡献者的补充说明见 `docs/CONTRIBUTING.md`（与本文重复处以本文为准）。
 
 ## 项目构成
 
 | 目录                     | 说明                                                                                        |
 | ---------------------- | ----------------------------------------------------------------------------------------- |
-| `mc_manager_web/`      | Web 前端（React 19 / TypeScript strict / Tailwind v4 / shadcn-ui / TanStack Query / zustand） |
-| `mc_commander_server/` | 服务端（Express / WebSocket / better-sqlite3 / RCON 双通道 / cron 调度）                            |
-| `mc-schemas/`          | 共享契约包（zod，包名 `@mc-commander/schemas`）：web 经 vite alias 直读 `src`，服务端经 `file:` 链接消费 `dist`  |
-| `scripts/`             | 通用脚本（`local-check.sh` 一键本地检查）                                                             |
-| `docs/`                | 使用者文档（`architecture.md`、`user-guide.md`）；`mc_manager_web/docs/design-review-guidelines.md` 收录**无门禁、靠审查口径统一**的规则（CTA 配额、圆角守门、字号适用面、反馈级别等） |
+| `apps/web/`      | Web 前端（React 19 / TypeScript strict / Tailwind v4 / shadcn-ui / TanStack Query / zustand） |
+| `apps/server/` | 服务端（Express / WebSocket / better-sqlite3 / RCON 双通道 / cron 调度）                            |
+| `apps/*/src/`、`apps/*/tests/` | 源码与测试分离：`src/` 只放交付源码，测试放同包 `tests/`（web 镜像 `src/` 到 `tests/unit/`，基建在 `tests/support/`）；E2E 与它的 mock 后端留在 `apps/web/{e2e,scripts/mock-server.mjs}`——Playwright 与 vite 都在这个包的 devDeps 里，挪出包会解析不到依赖 |
+| `apps/server/var/` | 服务端运行期数据（实例 / SQLite 与日志 / 备份快照）：产物只进这里，包内不放数据；落点锚定包根（config.js），不随 cwd 漂移 |
+| `apps/schemas/`          | 共享契约包（zod，包名 `@mc-commander/schemas`）：web 经 vite alias 直读 `src`，服务端经 workspace 链接消费 `dist`（构建产物） |
+| `tools/`               | 维护者工具：`ci/local-check.sh`（一键本地检查）、`dev/`（生成器）、`ops/`（运维脚本） |
+| `docs/`                | 使用者文档（`architecture.md`、`user-guide.md`） |
 
-三个包各自独立安装依赖（无 workspace 根），分别 `npm ci`。**改动 `mc-schemas/src` 后必须
-`npm run build` 重建 `dist/` 并一并提交**——服务端运行时消费 `dist`，前端读 `src`，
-不重建会让服务端静默使用旧契约（`local-check.sh` 与 CI 均有 dist 同步守卫拦截）。
+仓库是 **npm workspaces**：在**仓库根**跑一次 `npm ci` 即装齐三包依赖，根 `package-lock.json`
+是依赖的唯一事实源（包内不再各放一份 lock 与 `.npmrc`）。包间依赖走 workspace 链接
+（`apps/server` 声明 `@mc-commander/schemas: "*"`），因此**服务端消费契约包产物**——
+`apps/schemas/dist` 必须先构建：`npm run build -w apps/schemas`。前端则经 vite alias
+直读 `apps/schemas/src`（改契约立即可见）。**`dist` 是构建产物、不入库**：服务端测试与运行前
+必须先在仓库根 `npm run build -w apps/schemas`（`npm test` 已带 `pretest` 自动做；CI 的 server
+job 与 `local-check.sh` 也都显式构建）——取代了旧口径「提交 dist 并用逐字节比对守卫防漂移」，
+从根上不存在可漂移的提交产物。
 
 ## 常用命令
 
 ```bash
-# 一键检查（格式 + 三包 lint / 类型检查 / 全量 test + 契约 dist 同步守卫）
+# 一键检查（格式 + 三包 lint / 类型检查 / 全量 test + 契约包构建）
 # 依赖 bash；Windows 上 Git 自带的 bash 默认不进 PATH，需把其 bin 或 usr/bin 加入 PATH
-bash scripts/local-check.sh
+bash tools/ci/local-check.sh
 
-# 仓库根（工具包，只装 Biome；不是 workspace 根）
+# 仓库根＝workspace 根：一次装齐三包依赖 + Biome
 npm ci
 npm run format               # 按 biome.jsonc 格式化全仓
 npm run format:check         # 只检查不改写（CI 与 local-check 用这条）
+npm run check:layout         # 目录结构门禁（顶层白名单 / 源码面无测试 / 无产物入库）
 
-# 以下各命令均在其包目录下执行
-# 契约包 mc-schemas/ —— 改 src 后必须 build 并提交 dist
-npm ci && npm run lint && npm test && npm run build
+# 以下用 workspace 定位（也可 cd 进包目录执行同名的包内脚本）
+# 契约包 —— dist 不入库，消费方（服务端测试/运行）前先在仓库根 build
+npm run lint -w apps/schemas && npm test -w apps/schemas && npm run build -w apps/schemas
 
-# 前端 mc_manager_web/
-npm ci
-npm run dev                  # Vite 开发服务器
-npm run lint && npx tsc -b --noEmit
-npm run test                 # vitest 全量
-npm run build                # 生产构建（tsc -b + vite build）
-npm run test:e2e             # Playwright e2e（自动起 mock 后端 + dev server）
+# 前端
+npm run dev -w apps/web                          # Vite 开发服务器
+npm run lint -w apps/web && (cd apps/web && npx tsc -b --noEmit)   # 类型检查须带 -b（solution 配置）
+npm run test -w apps/web                         # vitest 全量
+npm run build -w apps/web                        # 生产构建（tsc -b + vite build）
+npm run test:e2e -w apps/web # Playwright e2e（自动起 mock 后端 + dev server）
 
-# 服务端 mc_commander_server/
-npm ci && npm run lint && npm test   # oxlint + vitest 全量
-npm run dev                          # node --watch 热重载
+# 服务端
+npm run build -w apps/schemas        # 前置：服务端消费契约包 dist
+npm run lint -w apps/server && npm test -w apps/server   # oxlint + vitest 全量
+npm run dev -w apps/server           # node --watch 热重载
 ```
 
 ## CI 检查（PR 必须全绿）
@@ -57,22 +65,22 @@ npm run dev                          # node --watch 热重载
 
 | 检查 | 内容 |
 | --- | --- |
-| 仓库卫生 | `npm run format:check`（全仓格式）+ gitleaks 密钥泄漏扫描 |
-| 契约包 | `npm run lint` + `npm run test:coverage` + **dist 同步守卫**（`src` 重建后与已提交的 `dist` 逐字节比对） |
+| 仓库卫生 | `npm run format:check`（全仓格式）+ `npm run check:layout`（目录结构门禁）+ gitleaks 密钥泄漏扫描 |
+| 契约包 | `npm run lint` + `npm run test:coverage` + **构建产物**（`dist` 不入库，构建后断言产物存在） |
 | 服务端 | `npm run lint` + `npm run test:coverage` |
 | 前端 | `npm run lint` + `npm run test:coverage` + `check:design-tokens` + `check:contrast` |
 | 前端 | `npm run build` + `check:size` + Playwright e2e |
-| 生产依赖 | 三包 `npm audit --omit=dev --audit-level=high`（只判生产依赖，devDependencies 不进产物） |
+| 生产依赖 | 根 lock 一次 `npm audit --omit=dev --audit-level=high`（workspace 根覆盖三包；只判生产依赖，devDependencies 不进产物） |
 
-仓库提供一键本地等价入口 `bash scripts/local-check.sh`（代码格式 + 三包生产依赖漏洞门禁 +
-三包 lint / 类型检查 / 全量 test + 契约 dist 同步守卫），分步命令见上一节「常用命令」。
+仓库提供一键本地等价入口 `bash tools/ci/local-check.sh`（代码格式 + 生产依赖漏洞门禁 +
+三包 lint / 类型检查 / 全量 test + 契约包构建），分步命令见上一节「常用命令」。
 **测试与文档中禁止出现真实服务器信息**（IP / API Key / 真实玩家数据，见下方「测试数据」）。
 涉及页面渲染 / 展示文案的改动，建议加跑相关 e2e spec（`npx playwright test <spec>`）。
 
 ## 工程纪律
 
-> 本节前端路径以 `mc_manager_web/src/` 为根；其中 `ui/…` 是 `components/ui/…` 的简写
-> （如 `ui/button` = `src/components/ui/button`）。`src/` 开头者同样以 `mc_manager_web/` 为根。
+> 本节前端路径以 `apps/web/src/` 为根；其中 `ui/…` 是 `components/ui/…` 的简写
+> （如 `ui/button` = `src/components/ui/button`）。`src/` 开头者同样以 `apps/web/` 为根。
 
 - **设计 token**：前端颜色/圆角/字号/动效/光影一律使用 `src/styles/` 的 `--mcs-*` CSS token
   （经 `src/index.css` 的 `@theme` 注册为工具类），禁止组件内硬编码色值，禁止引入未 token 化的第三方 UI 库。
@@ -133,8 +141,7 @@ npm run dev                          # node --watch 热重载
   → `py-2`；无控件 → `py-2`）；横向 `px` 由**容器在嵌套树里的位置**定（卡内 4 / 嵌块 3 / 文本块 2.5~2）。
   选它的理由是与既有「控件高度档位」同构（不多引入第二个变量），且每一维都有能当场回答的问句。
   表格单元格的 `px-3 py-2` 属行列距、`ui/textarea` 的 `px-2.5 py-2` 属控件内距，都不参与容器切档；
-  具体盘点数字与复核口径见 `mc_manager_web/docs/design-review-guidelines.md`「容器内距」
-  （**引数字前先重采**：子串匹配会产生假数字，实测代码点与旧统计不一致）。
+  **引盘点数字前先重采**：子串匹配会产生假数字，实测代码点与旧统计不一致。
   语义提示一律用 `components/mcs/notice-banner.tsx`——**唯一容器**，调用点不再手写
   `border + tint + p-*` 组合。`form` 两档按**内容是不是块级**选（不按长度：长度给不出稳定边界，
   同一条文案换个容器宽度就从一行变三行）：行内流（单句/短语，可折行）用默认 `bar`
@@ -200,7 +207,7 @@ npm run dev                          # node --watch 热重载
   第 8 条只拦成对抵消形态）。
   行内 `onKeyDown` 对空格/回车 `preventDefault` 前必须判落点（`e.target` / `e.currentTarget`），
   否则容器会吞掉行内控件自己的激活键（门禁第 25 条静态拦截）。
-- **测试等待**：异步查询统一吃 `src/test/setup.ts` 的全局 `asyncUtilTimeout`（5s），
+- **测试等待**：异步查询统一吃 `tests/support/setup.ts` 的全局 `asyncUtilTimeout`（5s），
   不要写 per-call `timeout`；vitest 自带的 `vi.waitFor` 有独立硬编码的 1s 上限、不读该配置，
   等 toast 这类异步续延须显式传 `{ timeout }`；时机语义（防抖、轮询间隔）用 fake timers 断言，
   不要靠「等多久」来验证。
@@ -209,7 +216,7 @@ npm run dev                          # node --watch 热重载
 - **MC 版本兼容**：排查问题优先考虑 MC 26.x 新版与旧版在目录结构、数据格式、
   命令行为上的差异；改动不得破坏对新旧版本的兼容。
 - **注释纪律**：注释只写代码无法直观体现的**设计意图、隐含约束、特殊边界、选型原因**，
-  单行优先，不复述代码行为。禁止写入四类内容：
+  单行优先，不复述代码行为。禁止写入五类内容：
   ① 内部分批 / 台账 / finding 代号（`S-P0-2`、`P2-11`、`Phase 2`、`feat-8` 一类）——
   它们对仓库读者**不可解析**，看见的人只会以为漏了上下文；例外是 `(#326)`、`issue #309`
   这类**公开 issue / PR 引用**，它们指向仓库自己的公开历史，可以留。
@@ -218,6 +225,10 @@ npm run dev                          # node --watch 热重载
   ③ 「待办 / 将来 / 远景」式承诺（`TODO: 以后补`、`当前仅预留未启用`）——未做的事写进任务清单，
   注释会跟着文件走遍所有分支，而待办有自己的家。
   ④ 复述代码本身（`// 设置 count 为 1` 之于 `count = 1`）。
+  ⑤ 指向性内容——注释里指路到别的文件或文档（`详见 xxx.md`、「见 `<file>` §某节」）：读者在
+  编辑器里跳不过去，文档一挪就是死指针。要写明的规则**就地用最短一句写清**。
+  **注释不得多于代码**：改动文件的注释行数不得超过代码行数——到了这一步就是在写文档，
+  不是在写注释；理由属于提交信息的，不进注释。
   **实测数据与反例是允许且鼓励的**（`实测 812 vs 782 的假红`、`内联 420px 下每格仅 ~54px`）——
   它们是「为什么是这个值」的依据，属**依据**而非**过程**。
   灰区自问：**「把这条注释删掉，读者会损失什么？」** 答「损失一段历史」→ 删；
@@ -231,7 +242,7 @@ npm run dev                          # node --watch 热重载
 
 ## e2e 说明
 
-Playwright 配置（`mc_manager_web/playwright.config.ts`）会自动启动两个本地服务：
+Playwright 配置（`apps/web/playwright.config.ts`）会自动启动两个本地服务：
 mock 后端（端口 5198）+ 前端服务器（端口 5199，默认 dev；CI 与 `E2E_SERVER=preview`
 时用 vite preview 服务构建产物，需先 `npm run build`），无需手工准备；浏览器通道
 自动降级（Chrome → Edge → 内置 chromium）。断言优先用可访问性角色/名称，
@@ -256,7 +267,5 @@ Conventional Commits（`feat`/`fix`/`refactor`/`docs`/`chore`/`test` + scope）�
 
 改动走**特性分支 + PR** 提交到 `main`。`main` 受规则集 `main-protect` 保护：禁删除、禁强推、
 6 项必需检查且 `strict`（要求分支与 `main` 齐平，合并前须 rebase）。合并统一用 **squash**
-（仓库已禁用 merge commit，`allow_merge_commit=false`）：合并提交正文会带 PR 标题，而
-release-please 按「空行 + Conventional 前缀」切分提交消息，会导致同一条改动被分支提交与
-合并提交正文各记一次、CHANGELOG 每条重复两份；squash 只留一个提交，一个 PR 对应一条记录。
+（禁 merge commit）：合并提交正文会让 release-please 把同一条改动记两次。
 直接 push、合并 `main`、打 tag 均须维护者授权。

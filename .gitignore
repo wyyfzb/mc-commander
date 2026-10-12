@@ -10,8 +10,8 @@ mc-commander-prototype/
 prototype/
 # 灾备交接快照（Agent 台账与仓库副本，仅本机）
 mc-commander-handoff-*/
-mc_manager_web/prototype.html
-mc_manager_web/give-proto.html
+apps/web/prototype.html
+apps/web/give-proto.html
 .history/
 .vs/
 .trae/
@@ -41,9 +41,9 @@ skills-lock.json
 .dbg/
 *.log
 debug-*.md
-mc_commander_server/test_rcon.js
+apps/server/test_rcon.js
 # 调试探针残留目录（孤儿进程/进程树模拟探针，禁止提交；含 *_pid.txt 运行残留）
-mc_commander_server/.repro_orphan/
+apps/server/.repro_orphan/
 
 # Superpowers session data
 .superpowers/
@@ -57,11 +57,11 @@ mc_commander_server/.repro_orphan/
 release/
 
 # Server runtime data
-mc_commander_server/data/
-mc_commander_server/node_modules/
-mc_commander_server/.env
-mc_commander_server/backups/
-# servers/ 整体忽略（含 jar/world/logs 等运行时文件）由 mc_commander_server/.gitignore 的 servers/ 规则覆盖，
+apps/server/data/
+apps/server/node_modules/
+apps/server/.env
+apps/server/backups/
+# servers/ 整体忽略（含 jar/world/logs 等运行时文件）由 apps/server/.gitignore 的 servers/ 规则覆盖，
 # 此处的按文件列举规则已删除（原为死规则，从未实际生效）
 #
 # 根锚定兜底（防回归）：服务端 dataDir/serversDir/backupsDir 已锚定安装目录
@@ -122,11 +122,8 @@ coverage/
 .nyc_output/
 *.lcov
 
-# 通用构建输出
+# 通用构建输出（契约包 dist 也是产物：服务端经 workspace 链接消费，谁消费谁先 build）
 dist/
-!mc-schemas/dist/
-mc-schemas/dist/*.d.ts
-mc-schemas/dist/*.map
 out/
 node_modules/
 
@@ -165,7 +162,7 @@ server.pid
 *.pid
 
 # 本地开发部署脚本
-mc_commander_server/scripts/dev-deploy.sh
+apps/server/scripts/dev-deploy.sh
 
 # Flutter 自动生成文件（补充）
 .flutter-plugins
@@ -177,12 +174,32 @@ screenshots/
 *.jpeg
 *.gif
 *.bmp
-# 用户向导/README 配图白名单（仓库根 screenshots/，须入库）
-!screenshots/
-!screenshots/*.png
+# 服务端运行期产物（代码在包内，数据只在 var/；public/ 是 release 打包注入的前端产物）
+apps/server/var/
+apps/server/public/
+apps/server/*.log
+apps/server/npm-debug.log*
+apps/server/*.pid
+apps/server/server.log
+apps/server/.tmp_archive.zip
+apps/server/.tmp_extract/
+apps/server/.env
+
+# 前端构建与测试产物
+apps/web/dist/
+apps/web/dist-ssr/
+apps/web/test-results/
+apps/web/playwright-report/
+apps/web/logs
+apps/web/*.log
+apps/web/*.local
+
+# 用户向导/README 配图白名单（docs/assets/screenshots/，须入库）
+!docs/assets/screenshots/
+!docs/assets/screenshots/*.png
 *.webp
 !archived/mc_manager_app/assets/**
-!mc_manager_web/src/assets/**
+!apps/web/assets/**
 
 # 编译产物与二进制文件
 *.exe
