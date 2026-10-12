@@ -9,14 +9,14 @@
     ".": {
       "changelog-path": "/CHANGELOG.md",
       "extra-files": [
-        "/mc_manager_web/package.json",
-        "/mc_manager_web/package-lock.json",
-        "/mc-schemas/package.json",
-        "/mc-schemas/package-lock.json",
-        "/mc_commander_server/package.json",
-        "/mc_commander_server/package-lock.json",
+        "/apps/web/package.json",
+        "/apps/web/package-lock.json",
+        "/apps/schemas/package.json",
+        "/apps/schemas/package-lock.json",
+        "/apps/server/package.json",
+        "/apps/server/package-lock.json",
         "/README.md",
-        "/mc_commander_server/README.md"
+        "/apps/server/README.md"
       ]
     }
   }

@@ -61,7 +61,7 @@ MC_Commander 是一个自托管的 Minecraft 服务器管理面板：**无需安
 
 **预期结果**：实例出现在实例列表，显示名称与状态（已停止）。
 
-![实例列表](../screenshots/instances.png)
+![实例列表](assets/screenshots/instances.png)
 
 ---
 
@@ -74,7 +74,7 @@ MC_Commander 是一个自托管的 Minecraft 服务器管理面板：**无需安
 - 玩家在游戏内通过 `<服务器地址>:25565` 连接（地址见仪表盘顶栏）；
 - 首次启动如遇 EULA 未同意，面板会弹出协议确认对话框，同意后自动写入并重启。
 
-![仪表盘](../screenshots/dashboard.png)
+![仪表盘](assets/screenshots/dashboard.png)
 
 ---
 
@@ -96,7 +96,7 @@ MC_Commander 是一个自托管的 Minecraft 服务器管理面板：**无需安
 - **图形化操作**：传送、给予物品（含附魔/药水/自定义 NBT）、封禁/解封、白名单、OP、踢出、清空背包——全部由面板自动生成命令，无需手敲 MC 命令；
 - **筛选与搜索**：按状态/模式/维度过滤，支持批量操作（如批量给予、批量踢出）。
 
-![玩家管理](../screenshots/players.png)
+![玩家管理](assets/screenshots/players.png)
 
 ### 文件管理
 
@@ -106,7 +106,7 @@ MC_Commander 是一个自托管的 Minecraft 服务器管理面板：**无需安
 - 双击文本文件在浏览器内编辑（内置编辑器，`Ctrl/⌘+S` 保存），如调整 `server.properties`、`ops.json`；
 - 上传/下载/重命名/新建，删除高危目录有红色确认提示。
 
-![文件管理](../screenshots/files.png)
+![文件管理](assets/screenshots/files.png)
 
 ### 备份
 
@@ -123,7 +123,7 @@ MC_Commander 是一个自托管的 Minecraft 服务器管理面板：**无需安
   磁盘上的原归档快照（挂载不复制，它是唯一副本）。
   **卸载前若还想保留这些备份，请先下载到本机或挂载给另一个实例。**
 
-![备份](../screenshots/backup.png)
+![备份](assets/screenshots/backup.png)
 
 ### 离机副本（外部拉取）
 
@@ -132,7 +132,7 @@ MC_Commander 是一个自托管的 Minecraft 服务器管理面板：**无需安
 是流式 tar.gz，走既有鉴权），而不是让面板往外推。
 
 **适用形态**：局域网内的另一台机器或 NAS（单机自托管的常见形态）。
-仓库另附可直接使用的示例脚本 [scripts/pull-backups.sh](../scripts/pull-backups.sh)。
+仓库另附可直接使用的示例脚本 [tools/ops/pull-backups.sh](../tools/ops/pull-backups.sh)。
 
 **要留意的两点**：
 
@@ -141,7 +141,7 @@ MC_Commander 是一个自托管的 Minecraft 服务器管理面板：**无需安
    就不再成立——目标机器上的任何可读者都能看到世界数据。请据此限制目标机权限，
    必要时自行加密后再落地。
 2. **面板自身也要一起覆盖**。面板的 SQLite 库与 `.env` 伴生副本有**独立一套保留**
-   （落 `backups/panel/`，不入实例备份列表）。只拉实例备份的话，主机损毁后**面板配置
+   （落 `var/backups/panel/`，不入实例备份列表）。只拉实例备份的话，主机损毁后**面板配置
    与管理凭据无法重建**。
 
 **恢复语义**：远端副本须**先拉回本地同一个盘**（与 `backupsDir` 同一文件系统）才能进

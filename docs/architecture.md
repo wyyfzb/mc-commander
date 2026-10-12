@@ -4,22 +4,22 @@ MC_Commander 由两部分组成：**服务端**（Node.js，部署在 Minecraft 
 **Web 前端**（SPA，由服务端同源托管）。服主在浏览器中完成全部管理操作，
 无需在 Minecraft 服务端安装任何插件。
 
-两端的接口契约由共享包 `mc-schemas/`（zod）单一维护：前端经 vite alias 直读其 `src`，
+两端的接口契约由共享包 `apps/schemas/`（zod）单一维护：前端经 vite alias 直读其 `src`，
 服务端经 `file:` 链接消费其构建产物 `dist`——因此改 `src` 后必须重建并一并提交 `dist`。
 
 ```
 ┌─────────────┐  HTTPS/WSS   ┌──────────────────────┐   RCON / HTTP   ┌──────────────┐
-│   浏览器     │ ───────────▶ │  mc_commander_server  │ ──────────────▶ │ Minecraft 服务端│
+│   浏览器     │ ───────────▶ │  apps/server  │ ──────────────▶ │ Minecraft 服务端│
 │  (PWA 可装)  │ ◀─────────── │  Express + WebSocket  │ ◀────────────── │ (vanilla/纸鸢等) │
 └─────────────┘   事件广播     └──────────────────────┘                 └──────────────┘
                                     │ 文件系统
                                     ▼
-                        servers/<实例>/  data/  backups/
+                        var/servers/<实例>/  data/  backups/
 ```
 
-## 服务端（mc_commander_server/）
+## 服务端（apps/server/）
 
-- **入口**：`index.js`（Express + ws），同源托管 `public/` 下的前端产物
+- **入口**：`src/index.js`（Express + ws），同源托管 `public/` 下的前端产物
 - **认证**：双通道 —— 管理员会话（`Authorization: Bearer`，面板默认路径）与全局 API Key
   （`X-API-Key` 头，脚本/集成），+ 双级速率限制（见 SECURITY.md 信任模型）
 - **实例管理**：`services/mc_server.js` —— 子进程生命周期（spawn/崩溃检测/自动重启）、
@@ -34,7 +34,7 @@ MC_Commander 由两部分组成：**服务端**（Node.js，部署在 Minecraft 
 - **实时**：`websocket.js` —— 事件广播（目录与分类见契约包 `WS_EVENT_TYPES` / `WS_EVENT_KINDS`）、
   断线补齐、心跳保活、背压保护
 
-## Web 前端（mc_manager_web/）
+## Web 前端（apps/web/）
 
 - **技术栈**：React 19 + TypeScript strict + Vite + Tailwind v4（`--mcs-*` 设计 token 体系）+
   shadcn-ui + TanStack Query（服务端状态）+ zustand（客户端状态）
