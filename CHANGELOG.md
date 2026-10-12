@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.2](https://github.com/wyyfzb/mc-commander/compare/v0.8.1...v0.8.2) (2026-10-12)
+
+
+### Bug Fixes
+
+* **deps:** bump vite-plugin-pwa from 1.3.0 to 2.0.0 ([#660](https://github.com/wyyfzb/mc-commander/issues/660)) ([28c5963](https://github.com/wyyfzb/mc-commander/commit/28c596363e32ad9f0e5e75c22eb088953590fab6))
+
 ## [0.8.1](https://github.com/wyyfzb/mc-commander/compare/v0.8.0...v0.8.1) (2026-10-11)
 
 
