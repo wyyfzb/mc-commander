@@ -1,9 +1,33 @@
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 
 // ── 模块级共享状态与桩对象 ─────────────────────────────────────
 // 全部依赖在下方 vi.mock 为桩：避免 import index.js 时产生真实副作用
 // （真实数据库初始化 / 端口监听 / MC 子进程等）。
 // 注意：vi.mock 的路径相对于本测试文件，因此源码模块需用 ../ 前缀。
+/** 配置桩用的临时根目录：惰性创建（vi.mock 工厂在被测模块首次导入时才执行） */
+function mockCfgRoot() {
+  if (!h.tmpDir) {
+    /* 被测模块的日志在用例结束后仍会往这里写（定时器还活着），删了会被重建 ⇒ 用唯一目录，
+       并在开跑前收掉自己 10 分钟前的旧目录，避免逐次运行在 /tmp 里堆积 */
+    const root = os.tmpdir();
+    const now = Date.now();
+    for (const name of fs.readdirSync(root)) {
+      if (!name.startsWith('mc-cfg-security-') || name === 'mc-cfg-security-') continue;
+      const full = path.join(root, name);
+      try {
+        if (now - fs.statSync(full).mtimeMs > 10 * 60_000)
+          fs.rmSync(full, { recursive: true, force: true });
+      } catch {
+        /* 并发运行中的目录可能刚被清掉：忽略 */
+      }
+    }
+    h.tmpDir = fs.mkdtempSync(path.join(root, 'mc-cfg-security-'));
+  }
+  return h.tmpDir;
+}
 const h = vi.hoisted(() => {
   const appUse = vi.fn();
   const app = { use: appUse, set: vi.fn() };
@@ -21,7 +45,12 @@ const h = vi.hoisted(() => {
     serverOn,
     appUse,
     wsOpts: null,
+    tmpDir: null,
   };
+});
+
+afterAll(() => {
+  if (h.tmpDir) fs.rmSync(h.tmpDir, { recursive: true, force: true });
 });
 
 vi.mock('express', () => ({
@@ -50,12 +79,24 @@ vi.mock('../config.js', () => ({
     host: '127.0.0.1',
     setupToken: '',
     port: 1,
-    serversDir: 'mock:/servers',
-    dataDir: 'mock:/data',
-    // .env 写回目标（启动播种用）：桩成非真实路径，防止用例意外写仓库 .env
-    envFilePath: 'mock:/.env',
-    backupsDir: 'mock:/backups',
-    publicDir: 'mock:/public',
+    /* 桩进临时目录（绝对路径）：相对伪路径（mock:/data）会被被测代码当成真实目录建出来，
+       每跑一次测试就在包内落一个 mock: 目录（日志与备份累计到上百 MB） */
+    get serversDir() {
+      return path.join(mockCfgRoot(), 'servers');
+    },
+    get dataDir() {
+      return path.join(mockCfgRoot(), 'data');
+    },
+    // .env 写回目标（启动播种用）：同样进临时目录，防止用例写到仓库 .env
+    get envFilePath() {
+      return path.join(mockCfgRoot(), '.env');
+    },
+    get backupsDir() {
+      return path.join(mockCfgRoot(), 'backups');
+    },
+    get publicDir() {
+      return path.join(mockCfgRoot(), 'public');
+    },
     logLevel: 'info',
     rateLimit: { windowMs: 60000, max: 100 },
   },

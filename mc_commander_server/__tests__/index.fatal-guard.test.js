@@ -8,6 +8,15 @@ import path from 'path';
 // 产生真实副作用（数据库初始化 / 端口监听 / MC 子进程等）。
 // process.on 以 spy 拦截注册（不污染测试进程真实 handler），从 mock.calls
 // 提取 handler 手动触发，验证「结构化日志（含堆栈）→ 优雅停机链 → exit(0)」。
+/** 配置桩用的临时根目录：惰性创建（vi.mock 工厂在被测模块首次导入时才执行） */
+function mockCfgRoot() {
+  if (!h.tmpDir) {
+    h.tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-cfg-fatal-guard-'));
+    // 用例结束后被测模块的日志定时器可能重建该目录，故清理由进程退出兜底
+    process.once('exit', () => fs.rmSync(h.tmpDir, { recursive: true, force: true }));
+  }
+  return h.tmpDir;
+}
 const h = vi.hoisted(() => {
   const appUse = vi.fn();
   const app = { use: appUse, set: vi.fn() };
@@ -38,6 +47,7 @@ const h = vi.hoisted(() => {
     serverOn,
     appUse,
     wsOpts: null,
+    tmpDir: null,
     scheduler: null, // TaskScheduler 实例（constructor 捕获）
     manager: null, // MCServerManager 实例
     wss: null, // WebSocketServer 实例
@@ -72,12 +82,24 @@ vi.mock('../config.js', () => ({
       h.apiKeyHash = value;
     },
     port: 1,
-    serversDir: 'mock:/servers',
-    dataDir: 'mock:/data',
-    // .env 写回目标（启动播种用）：桩成非真实路径，防止用例意外写仓库 .env
-    envFilePath: 'mock:/.env',
-    backupsDir: 'mock:/backups',
-    publicDir: 'mock:/public',
+    /* 桩进临时目录（绝对路径）：相对伪路径（mock:/data）会被被测代码当成真实目录建出来，
+       每跑一次测试就在包内落一个 mock: 目录（日志与备份累计到上百 MB） */
+    get serversDir() {
+      return path.join(mockCfgRoot(), 'servers');
+    },
+    get dataDir() {
+      return path.join(mockCfgRoot(), 'data');
+    },
+    // .env 写回目标（启动播种用）：同样进临时目录，防止用例写到仓库 .env
+    get envFilePath() {
+      return path.join(mockCfgRoot(), '.env');
+    },
+    get backupsDir() {
+      return path.join(mockCfgRoot(), 'backups');
+    },
+    get publicDir() {
+      return path.join(mockCfgRoot(), 'public');
+    },
     logLevel: 'info',
     rateLimit: { windowMs: 60000, max: 100 },
   },
@@ -132,7 +154,7 @@ vi.mock('../db/index.js', () => ({
 let onSpy; // process.on 拦截（每用例装拆，最小化拦截窗口）
 
 // 重新 import index.js 前复位；logger 模块随 resetModules 重建，
-// 需对新实例重新注入 error.log 目录（避免向工作目录写 mock:/data/logs）
+// 需对新实例重新注入 error.log 目录（指向临时根，不落工作目录）
 async function resetAndImport() {
   vi.resetModules();
   h.appUse.mockClear();
@@ -153,7 +175,7 @@ describe('进程级兜底（uncaughtException/unhandledRejection）', () => {
   let stderrSpy;
 
   beforeAll(() => {
-    h.tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-fatal-guard-'));
+    mockCfgRoot(); // 与配置桩共用同一个临时根（afterAll 一并清掉）
     exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {});
     stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true); // logger.error/banner 走 stderr
   });
