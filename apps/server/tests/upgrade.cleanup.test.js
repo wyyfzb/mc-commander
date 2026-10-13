@@ -236,13 +236,18 @@ describe('成功路径：被替换旧版本 jar 清理（#520 实锤①）', () 
       expect(fs.existsSync(path.join(tmpDir, 'server-1.21.4.jar'))).toBe(false),
     );
 
-    // 目录终态：仅剩当前版本 jar，无任何 ._upgrade_backup_ 残留
+    // 目录终态：仅剩当前版本 jar，无任何 ._upgrade_backup_ 残留。
+    // 收尾的两处 unlink 都是 fire-and-forget（回调式、不 await），目录异步收敛；
+    // 而上面的 waitFor 等的是「旧 jar 本体」，它另有 awaited 的删除路径会先满足。
+    // 故先 waitFor 到备份副本消失再快照，否则会把「清理尚未落盘」读成残留。
+    await vi.waitFor(() =>
+      expect(fs.readdirSync(tmpDir).some((f) => f.startsWith('._upgrade_backup_'))).toBe(false),
+    );
     const jars = fs.readdirSync(tmpDir).filter((f) => f.endsWith('.jar'));
     expect(jars).toEqual(['server-1.21.6.jar']);
     expect(fs.readFileSync(path.join(tmpDir, 'server-1.21.6.jar'), 'utf8')).toBe(
       'V_1.21.6_CONTENT',
     );
-    expect(fs.readdirSync(tmpDir).some((f) => f.startsWith('._upgrade_backup_'))).toBe(false);
   });
 
   it('同版本直调服务层（绕过路由 UPGRADE_VERSION_SAME 校验）：oldJarPath 与 newJarPath 相同时守卫不误删当前 jar', async () => {
