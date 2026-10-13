@@ -95,11 +95,11 @@ export default defineConfig({
         // 会静默回退陈旧数据造成「假实时」误导干预决策，且跨服务器缓存串用
         // ——管理面板离线场景应显式报错而非展示过期状态）
         navigateFallbackDenylist: [/^\/api\//, /^\/ws/],
-        // Monaco 的 ts.worker/editor.api 是文件页懒加载 chunk（打开 .ts 才用），
-        // 超 2MiB precache 默认上限（否则 build 失败），且不应进首屏 precache
-        // 清单（6.9MB worker 全量 precache 违背离线快取初衷）。如需离线打开
-        // 文件编辑器，后续可给这两类加 runtimeCaching CacheFirst
-        globIgnores: ['**/ts.worker-*.js', '**/editor.api-*.js'],
+        // 编辑器子树整体不进 precache：files-page chunk（含 Monaco 核心，约 2.8MB，超
+        // 2MiB 上限即 build 失败）、json 语言服务（jsonMode）与两个 worker 都只服务文件页，
+        // 页面本身不预缓存时它们离线也用不上——共省下约 4.5MB 安装体积。其余路由仍可离线。
+        // 若将来要离线编辑，改为给这几个 chunk 加 runtimeCaching CacheFirst。
+        globIgnores: ['**/files-page-*.js', '**/jsonMode-*.js', '**/*.worker-*.js'],
       },
       devOptions: { enabled: false },
     }),
@@ -215,6 +215,9 @@ export default defineConfig({
           if (id.includes('/node_modules/lucide-react/') || id.includes('/node_modules/sonner/')) {
             return 'vendor-ui'
           }
+          // Monaco 刻意不单独成块：manualChunks 会把它变成「共享块」，rolldown 随后从入口
+          // 静态引用它（实测首屏闭包 +978KB gzip、玩家页/审计页也各带一份），编辑器就退化成
+          // 全站必载。保持它随 files-page 懒加载 chunk 走，并从 precache 清单按名排除即可。
         },
       },
     },

@@ -13,6 +13,13 @@
  * （dist 下递归收集 .ttf/.woff/.woff2/.otf/.eot，按扩展名而非目录收集，避免资产挪目录即失明）。
  * 动因：此前只统计 .js，字体/静态资产完全在预算之外——D1 字体交付（NotoSansSC 子集 3.6MB）
  * 落地后门禁给不出任何信号。
+ *
+ * 闭包之外的两类（路由闭包原理上看不见，此前是盲区）：
+ * ① 编辑器 worker 白名单：只有通用 editor worker 与 json 语言服务 worker 被装配过，出现别的
+ *    worker 即说明 Monaco 被整包引入（ts/css/html 三套语言服务及其 worker 曾这样进产物：8.5MB，
+ *    且不进任何路由闭包，上面的预算毫无信号）；
+ * ② dist 全量 JS（gzip 合计）：兜住只被动态 import 引用的 chunk 与 worker——它们是真实下载字节，
+ *    但不属于任何路由首访闭包。
  * 仍不在本门禁内的静态资产：图片/图标/favicon（本仓 dist 下仅 pwa-icon/pwa-maskable/favicon
  * 三个 svg，随源码而非随依赖增长，无回归面）——缺口显式声明于此，不靠「看不见」蒙过。
  */
@@ -37,6 +44,12 @@ const BUDGETS = [
 // 字体资产预算（原字节，见头注释口径）= 当前实测 + 约 8% 余量，取整到 5KB
 const FONT_EXTENSIONS = new Set(['.ttf', '.woff', '.woff2', '.otf', '.eot'])
 const FONT_BUDGET = { label: '字体资产（dist 全量）', limitKb: 2545 }
+
+// dist 全量 JS 预算（gzip 合计，见头注释②）= 当前实测 + 约 8% 余量，取整到 5KB
+const ALL_JS_BUDGET = { label: '全部 JS（dist 全量）', limitKb: 2190 }
+
+// 编辑器 worker 白名单（见头注释①）：文件名而非体积，出现白名单外的 worker 即失败
+const WORKER_ALLOWLIST = [/^editor\.worker-[\w-]+\.js$/, /^json\.worker-[\w-]+\.js$/]
 
 const VERBOSE = process.argv.includes('--verbose')
 const gzipCache = new Map()
@@ -149,10 +162,42 @@ if (fontAssets.length === 0) {
   }
 }
 
+// ── 编辑器 worker 白名单（文件名判据，见头注释①）──
+const workerFiles = readdirSync(assetsDir).filter((name) => name.includes('.worker-'))
+const extraWorkers = workerFiles.filter((name) => !WORKER_ALLOWLIST.some((re) => re.test(name)))
+failed ||= extraWorkers.length > 0
+console.log(
+  `  ${extraWorkers.length > 0 ? '✗ 白名单外' : '✓'} ${'编辑器 worker 集合'.padEnd(26, ' ')} ` +
+    `${String(workerFiles.length).padStart(3)} 文件  ` +
+    (extraWorkers.length > 0 ? extraWorkers.join(' / ') : '仅 editor + json'),
+)
+for (const name of extraWorkers) {
+  console.log(`      ${name} —— 疑似 Monaco 被整包引入（改为 editor.api + 需要的语言）`)
+}
+
+// ── dist 全量 JS（gzip 合计，见头注释②）──
+const allJsFiles = readdirSync(assetsDir).filter((name) => name.endsWith('.js'))
+const allJsKb = allJsFiles.reduce((sum, file) => sum + gzipKb(file), 0)
+const allJsOver = allJsKb > ALL_JS_BUDGET.limitKb
+failed ||= allJsOver
+console.log(
+  `  ${allJsOver ? '✗ 超预算' : '✓'} ${ALL_JS_BUDGET.label.padEnd(26, ' ')} ` +
+    `${String(allJsFiles.length).padStart(3)} 文件  ` +
+    `${allJsKb.toFixed(2).padStart(8)} KB / 预算 ${ALL_JS_BUDGET.limitKb.toFixed(2)} KB`,
+)
+if (VERBOSE || allJsOver) {
+  const ranked = [...allJsFiles].sort((a, b) => gzipKb(b) - gzipKb(a))
+  for (const file of ranked.slice(0, allJsOver ? 10 : 0)) {
+    console.log(`      ${file.padEnd(44, ' ')} ${gzipKb(file).toFixed(2).padStart(8)} KB`)
+  }
+}
+
 if (failed) {
   console.error(
     '\n✗ 体积超预算：JS 预算超支优先检查新增依赖是否被高频路由静态引用（改动态 import 按需加载）；' +
-      '字体资产超支检查字体子集是否被放大/新增字重（改子集范围或按需加载）。' +
+      '字体资产超支检查字体子集是否被放大/新增字重（改子集范围或按需加载）；' +
+      '全部 JS 超支看是否新增了只被动态 import 的大 chunk；' +
+      '白名单外 worker 见上方逐项提示（Monaco 按需引入的回归）。' +
       '确属必要增长时在 PR 中说明理由并上调对应预算。',
   )
   process.exit(1)
