@@ -3,7 +3,8 @@
  * Monaco 在 jsdom 不可渲染（依赖 canvas/DOM 测量）——测试策略：
  * 1. vi.mock('@monaco-editor/react')：占位 textarea（onChange 透传）+ 捕获最近一次 Editor props
  *    （language/theme/value/path 断言）+ 挂载后模拟 onMount（假编辑器记录 Ctrl+S 命令注册与释放）
- * 2. vi.mock('monaco-editor')：规避真实包在 jsdom 的加载副作用（组件仅消费 KeyMod/KeyCode 常量）
+ * 2. vi.mock('monaco-editor/editor/editor.api')：规避真实包在 jsdom 的加载副作用
+ *    （组件仅消费 KeyMod/KeyCode 常量）；语言定义/语言服务的侧效应导入一并 mock 成空模块
  * 3. languageForFile 为纯函数独立 export，直接单测
  * 测试路径全部为虚构示例（示例世界/示例文件名），禁真实服务器数据
  */
@@ -81,7 +82,12 @@ vi.mock('@monaco-editor/react', async () => {
   }
 })
 
-vi.mock('monaco-editor', () => monacoMock)
+// 组件按需引入 monaco（editor.api + 用到的语言定义/语言服务），mock 目标必须与引入路径一致
+vi.mock('monaco-editor/editor/editor.api', () => monacoMock)
+// 语言定义/语言服务是纯侧效应导入，在 jsdom 里没有意义：mock 成空模块保持用例无副作用
+vi.mock('monaco-editor/languages/definitions/ini/register', () => ({}))
+vi.mock('monaco-editor/languages/definitions/yaml/register', () => ({}))
+vi.mock('monaco-editor/language/json/monaco.contribution', () => ({}))
 
 /** 构造组件 props（默认全空态，override 覆盖；onSave/onClose/onRetry 可单独注入断言） */
 function makeProps(overrides: Partial<MonacoEditorPaneProps> = {}): MonacoEditorPaneProps {

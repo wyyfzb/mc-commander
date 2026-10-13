@@ -1,5 +1,5 @@
 /**
- * 审计日志 & 命令历史 Excel 导出（浏览器端 exceljs 生成，复用玩家数据导出范式）
+ * 审计日志 & 命令历史 Excel 导出（复用玩家数据导出范式）
  * 审计日志文件名「审计日志_yyyyMMdd_HHmm.xlsx」；命令历史「命令历史_yyyyMMdd_HHmm.xlsx」
  * 条数上限 AUDIT_EXPORT_MAX_ROWS=1000（时间最新优先）
  * 分页循环拉取（服务端零改动）：审计日志恒以 order=desc 取数保证截断时保留时间最新的记录，
@@ -10,6 +10,7 @@ import { apiGetAuditLogsPage, apiGetCommandHistoryPage, type AuditQueryParams } 
 import type { ConnectionConfig } from '@/api/client'
 import type { AuditLogItem, CommandHistoryItem } from '@/api/types'
 import { formatDurationMs, formatFullDateTime } from '@/lib/format'
+import { downloadXlsx, type XlsxColumn } from '@/lib/xlsx'
 import { getActionLabel } from './action-labels'
 
 export const AUDIT_EXPORT_MAX_ROWS = 1000
@@ -19,6 +20,22 @@ const EXPORT_PAGE_SIZE = 200
 
 /** 详情摘要截断长度：对象/长文本序列化后超长截断，避免单元格膨胀 */
 const DETAIL_SUMMARY_MAX = 200
+
+const AUDIT_COLUMNS: readonly XlsxColumn[] = [
+  { header: '时间', width: 20 },
+  { header: '操作', width: 16 },
+  { header: '来源', width: 10 },
+  { header: '目标', width: 24 },
+  { header: '详情摘要', width: 48 },
+]
+
+const COMMAND_COLUMNS: readonly XlsxColumn[] = [
+  { header: '时间', width: 20 },
+  { header: '命令', width: 48 },
+  { header: '结果', width: 8 },
+  { header: '来源', width: 10 },
+  { header: '耗时', width: 10 },
+]
 
 function pad2(n: number): string {
   return String(n).padStart(2, '0')
@@ -106,46 +123,17 @@ export async function exportAuditLogsToExcel(
   order: 'asc' | 'desc',
 ): Promise<void> {
   const fetched = await fetchAuditExportRows(config, params)
-  const rows = arrangeRowsForExport(fetched, order)
+  const rows = arrangeRowsForExport(fetched, order).map((item) => [
+    // 服务端下发 ISO8601，导出按本地时区格式化到秒（与页面时间列同口径；
+    // 直写 ISO 会让列宽溢出且带 Z 后缀，人类阅读/Excel 排序都不友好）
+    formatFullDateTime(item.createdAt),
+    getActionLabel(item.action),
+    item.source,
+    targetText(item),
+    detailSummary(item.detail),
+  ])
 
-  // exceljs 约 900KB：按需加载，避免整块计入审计页首访体积（只有点导出才付这份代价）
-  const exceljs = await import('exceljs')
-  const workbook = new exceljs.Workbook()
-  const sheet = workbook.addWorksheet('审计日志')
-
-  sheet.columns = [
-    { header: '时间', key: 'createdAt', width: 20 },
-    { header: '操作', key: 'action', width: 16 },
-    { header: '来源', key: 'source', width: 10 },
-    { header: '目标', key: 'target', width: 24 },
-    { header: '详情摘要', key: 'detail', width: 48 },
-  ]
-
-  const headerRow = sheet.getRow(1)
-  headerRow.font = { bold: true }
-
-  for (const item of rows) {
-    sheet.addRow({
-      // 服务端下发 ISO8601，导出按本地时区格式化到秒（与页面时间列同口径；
-      // 直写 ISO 会让列宽溢出且带 Z 后缀，人类阅读/Excel 排序都不友好）
-      createdAt: formatFullDateTime(item.createdAt),
-      action: getActionLabel(item.action),
-      source: item.source,
-      target: targetText(item),
-      detail: detailSummary(item.detail),
-    })
-  }
-
-  const buffer = await workbook.xlsx.writeBuffer()
-  const blob = new Blob([buffer], {
-    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  })
-  const url = URL.createObjectURL(blob)
-  const anchor = document.createElement('a')
-  anchor.href = url
-  anchor.download = buildAuditExportFilename(new Date())
-  anchor.click()
-  URL.revokeObjectURL(url)
+  await downloadXlsx('审计日志', AUDIT_COLUMNS, rows, buildAuditExportFilename(new Date()))
 }
 
 /** 生成并下载命令历史 Excel（5 列：时间/命令/结果/来源/耗时，与 CmdHeader 一致，issue 403） */
@@ -153,41 +141,13 @@ export async function exportCommandHistoryToExcel(
   config: ConnectionConfig,
   params: AuditQueryParams,
 ): Promise<void> {
-  const rows = await fetchCommandExportRows(config, params)
+  const rows = (await fetchCommandExportRows(config, params)).map((item) => [
+    formatFullDateTime(item.createdAt),
+    item.command,
+    item.success ? '成功' : '失败',
+    item.source,
+    formatDurationMs(item.durationMs),
+  ])
 
-  // exceljs 约 900KB：按需加载（同 exportAuditLogsToExcel）
-  const exceljs = await import('exceljs')
-  const workbook = new exceljs.Workbook()
-  const sheet = workbook.addWorksheet('命令历史')
-
-  sheet.columns = [
-    { header: '时间', key: 'createdAt', width: 20 },
-    { header: '命令', key: 'command', width: 48 },
-    { header: '结果', key: 'result', width: 8 },
-    { header: '来源', key: 'source', width: 10 },
-    { header: '耗时', key: 'duration', width: 10 },
-  ]
-
-  sheet.getRow(1).font = { bold: true }
-
-  for (const item of rows) {
-    sheet.addRow({
-      createdAt: formatFullDateTime(item.createdAt),
-      command: item.command,
-      result: item.success ? '成功' : '失败',
-      source: item.source,
-      duration: formatDurationMs(item.durationMs),
-    })
-  }
-
-  const buffer = await workbook.xlsx.writeBuffer()
-  const blob = new Blob([buffer], {
-    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  })
-  const url = URL.createObjectURL(blob)
-  const anchor = document.createElement('a')
-  anchor.href = url
-  anchor.download = buildCommandExportFilename(new Date())
-  anchor.click()
-  URL.revokeObjectURL(url)
+  await downloadXlsx('命令历史', COMMAND_COLUMNS, rows, buildCommandExportFilename(new Date()))
 }

@@ -20,7 +20,14 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { primaryModifierLabel } from '@/lib/platform'
 import Editor, { loader } from '@monaco-editor/react'
-import * as monaco from 'monaco-editor'
+// 只引入编辑器核心 API + **实际支持的语言**：整包引入 'monaco-editor' 会把 ts/css/html
+// 三套语言服务与其 worker 一并打进产物（实测 8.5MB 纯冗余，还会进 PWA 预缓存）。
+// 语言的正确引入点是 languages/definitions/<lang>/register（按需，84 种里只取用到的）；
+// json 无 tokenizer，走语言服务 monaco.contribution。子路径一律用 exports 兼容形式（见文件头）。
+import * as monaco from 'monaco-editor/editor/editor.api'
+import 'monaco-editor/languages/definitions/ini/register'
+import 'monaco-editor/languages/definitions/yaml/register'
+import 'monaco-editor/language/json/monaco.contribution'
 import editorWorker from 'monaco-editor/editor/editor.worker?worker'
 import jsonWorker from 'monaco-editor/language/json/json.worker?worker'
 import { FileEdit, RotateCcw, Save, X } from 'lucide-react'

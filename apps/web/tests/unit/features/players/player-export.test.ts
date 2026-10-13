@@ -1,14 +1,20 @@
 /**
  * player-export 行为级补测（issue 506）
- * - 真实 exceljs 生成工作簿 → 从下载 Blob 读回字节 → xlsx.load 解析断言 13 列与行值映射
- * - 浏览器边界（URL.createObjectURL/revokeObjectURL/anchor click）为观察点，导出编排逻辑全真
+ * - 拦截 write-excel-file：断言真实传给库的工作表数据（13 列表头/行值映射/列宽/表头加粗）
+ *   与下载文件名；导出编排逻辑（标签映射、四舍五入、或语义）全真
  * - 文件名「玩家数据_yyyyMMdd_HHmm.xlsx」经固定系统时间断言
  * mock 数据为虚构玩家（Steve/Alex），严禁真实玩家/服务器信息
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import ExcelJS from 'exceljs'
 import { exportPlayersToExcel } from '@/features/players/player-export'
 import type { Player } from '@/api/types'
+
+const { toFile, writeXlsxFileMock } = vi.hoisted(() => {
+  const toFile = vi.fn()
+  const writeXlsxFileMock = vi.fn((..._args: unknown[]) => ({ toBlob: vi.fn(), toFile }))
+  return { toFile, writeXlsxFileMock }
+})
+vi.mock('write-excel-file/browser', () => ({ default: writeXlsxFileMock }))
 
 function makePlayer(overrides: Partial<Player> = {}): Player {
   return {
@@ -79,81 +85,61 @@ const EXPECTED_HEADERS = [
   '假人',
 ]
 
-/** 从下载 Blob 读回 ArrayBuffer（jsdom FileReader 路径） */
-async function blobToArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
-  return new Promise<ArrayBuffer>((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(reader.result as ArrayBuffer)
-    reader.onerror = () => reject(reader.error)
-    reader.readAsArrayBuffer(blob)
-  })
+type Cell = { value?: unknown; fontWeight?: string }
+type SheetOptions = { sheet?: string; columns?: { width?: number }[] }
+
+/** 取最近一次导出传给库的工作表数据与该次工作表选项 */
+function lastCall(): { data: Cell[][]; options: SheetOptions } {
+  const call = writeXlsxFileMock.mock.calls.at(-1)
+  expect(call).toBeDefined()
+  return { data: call![0] as Cell[][], options: call![1] as SheetOptions }
+}
+
+/** 行内第 n 列（1-based，与表格列号一致）的值 */
+function column(data: Cell[][], rowIndex: number, columnNumber: number): unknown {
+  return data[rowIndex]![columnNumber - 1]!.value
 }
 
 describe('exportPlayersToExcel', () => {
-  const createObjectURL = vi.fn<(blob: Blob) => string>()
-  const revokeObjectURL = vi.fn()
-  let clickSpy: ReturnType<typeof vi.spyOn>
-  let captured: Blob | null = null
-
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-09-05T08:00:00') })
-    captured = null
-    createObjectURL.mockImplementation((blob: Blob) => {
-      captured = blob
-      return 'blob:mock-test'
-    })
-    vi.stubGlobal('URL', {
-      ...URL,
-      createObjectURL,
-      revokeObjectURL,
-    })
-    clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
   })
 
   afterEach(() => {
     vi.useRealTimers()
-    vi.unstubAllGlobals()
-    clickSpy.mockRestore()
     vi.clearAllMocks()
   })
 
-  async function readBack(): Promise<ExcelJS.Workbook> {
-    expect(captured).toBeInstanceOf(Blob)
-    const buffer = await blobToArrayBuffer(captured!)
-    const wb = new ExcelJS.Workbook()
-    await wb.xlsx.load(buffer)
-    return wb
-  }
-
-  it('单玩家全字段：13 列 header 顺序与行值映射、下载触发与对象 URL 释放', async () => {
+  it('单玩家全字段：13 列 header 顺序、表头加粗、列宽、行值映射与下载文件名', async () => {
     const steve = makePlayer({
-      name: 'Steve',
-      uuid: '00000000-0000-4000-8000-000000000002',
-      gameMode: 'survival',
-      dimension: 'overworld',
       position: { x: 10.4, y: 63.0, z: -3.6 } as Player['position'],
-      isOnline: true,
       totalPlayTime: 3600,
       isOp: true,
       isWhitelisted: true,
-      isBanned: false,
-      isIpBanned: false,
-      isFakePlayer: false,
     })
     await exportPlayersToExcel([steve])
 
-    const wb = await readBack()
-    const ws = wb.getWorksheet('玩家数据')
-    expect(ws).toBeDefined()
+    const { data, options } = lastCall()
+    expect(options.sheet).toBe('玩家数据')
+    expect(data[0]!.map((cell) => cell.value)).toEqual(EXPECTED_HEADERS)
+    expect(data[0]!.every((cell) => cell.fontWeight === 'bold')).toBe(true)
+    expect(options.columns).toEqual([
+      { width: 16 },
+      { width: 36 },
+      { width: 10 },
+      { width: 10 },
+      { width: 10 },
+      { width: 10 },
+      { width: 10 },
+      { width: 10 },
+      { width: 10 },
+      { width: 6 },
+      { width: 8 },
+      { width: 6 },
+      { width: 6 },
+    ])
 
-    // header：第 1 行 13 列（values 1-based，首元素 undefined）
-    const header = ws!.getRow(1).values as unknown[]
-    expect(header.slice(1)).toEqual(EXPECTED_HEADERS)
-    expect(ws!.getRow(1).font?.bold).toBe(true)
-
-    // 行值映射
-    const row = ws!.getRow(2).values as unknown[]
-    expect(row.slice(1)).toEqual([
+    expect(data[1]!.map((cell) => cell.value)).toEqual([
       'Steve',
       '00000000-0000-4000-8000-000000000002',
       '生存',
@@ -169,12 +155,9 @@ describe('exportPlayersToExcel', () => {
       '否',
     ])
 
-    // 下载触发：文件名含固定时刻（本地时区 2026-09-05 08:00）+ 对象 URL 释放
-    expect(clickSpy).toHaveBeenCalledTimes(1)
-    const anchor = clickSpy.mock.instances[0] as HTMLAnchorElement
-    expect(anchor.download).toBe('玩家数据_20260905_0800.xlsx')
-    expect(anchor.href).toContain('blob:mock-test')
-    expect(revokeObjectURL).toHaveBeenCalledWith('blob:mock-test')
+    // 文件名含固定时刻（本地时区 2026-09-05 08:00）
+    expect(toFile).toHaveBeenCalledTimes(1)
+    expect(toFile).toHaveBeenCalledWith('玩家数据_20260905_0800.xlsx')
   })
 
   it('未知游戏模式/维度原值透传（标签表 miss fallback）', async () => {
@@ -186,30 +169,27 @@ describe('exportPlayersToExcel', () => {
         dimension: 'the_end_alt' as unknown as Player['dimension'],
       }),
     ])
-    const wb = await readBack()
-    const row = wb.getWorksheet('玩家数据')!.getRow(2).values as unknown[]
-    expect(row[3]).toBe('unknown-mode')
-    expect(row[4]).toBe('the_end_alt')
+    const { data } = lastCall()
+    expect(column(data, 1, 3)).toBe('unknown-mode')
+    expect(column(data, 1, 4)).toBe('the_end_alt')
   })
 
   it('gameMode/dimension 缺省为空串；离线玩家连接状态=离线', async () => {
     await exportPlayersToExcel([
       makePlayer({ name: 'Alex', gameMode: null, dimension: null, isOnline: false }),
     ])
-    const wb = await readBack()
-    const row = wb.getWorksheet('玩家数据')!.getRow(2).values as unknown[]
-    expect(row[3]).toBe('')
-    expect(row[4]).toBe('')
-    expect(row[8]).toBe('离线')
+    const { data } = lastCall()
+    expect(column(data, 1, 3)).toBe('')
+    expect(column(data, 1, 4)).toBe('')
+    expect(column(data, 1, 8)).toBe('离线')
   })
 
   it('position 缺省：三坐标列为空串', async () => {
     await exportPlayersToExcel([makePlayer({ position: null })])
-    const wb = await readBack()
-    const row = wb.getWorksheet('玩家数据')!.getRow(2).values as unknown[]
-    expect(row[5]).toBe('')
-    expect(row[6]).toBe('')
-    expect(row[7]).toBe('')
+    const { data } = lastCall()
+    expect(column(data, 1, 5)).toBe('')
+    expect(column(data, 1, 6)).toBe('')
+    expect(column(data, 1, 7)).toBe('')
   })
 
   it('封禁取或语义：isIpBanned 单独为真即封禁=是；总时长小数一位；假人=是', async () => {
@@ -222,13 +202,12 @@ describe('exportPlayersToExcel', () => {
         isFakePlayer: true,
       }),
     ])
-    const wb = await readBack()
-    const row = wb.getWorksheet('玩家数据')!.getRow(2).values as unknown[]
-    expect(row[12]).toBe('是') // 封禁（isBanned || isIpBanned 右臂）
-    expect(row[9]).toBe('1.5') // 5400/3600
-    expect(row[13]).toBe('是') // 假人
-    expect(row[10]).toBe('否') // OP
-    expect(row[11]).toBe('否') // 白名单
+    const { data } = lastCall()
+    expect(column(data, 1, 12)).toBe('是') // 封禁（isBanned || isIpBanned 右臂）
+    expect(column(data, 1, 9)).toBe('1.5') // 5400/3600
+    expect(column(data, 1, 13)).toBe('是') // 假人
+    expect(column(data, 1, 10)).toBe('否') // OP
+    expect(column(data, 1, 11)).toBe('否') // 白名单
   })
 
   it('多玩家按传入顺序逐行写入；空列表仅 header 行', async () => {
@@ -238,17 +217,13 @@ describe('exportPlayersToExcel', () => {
       makePlayer({ name: 'Bob', uuid: '00000000-0000-4000-8000-000000000004' }),
     ]
     await exportPlayersToExcel(players)
-    const wb = await readBack()
-    const ws = wb.getWorksheet('玩家数据')!
-    expect(ws.rowCount).toBe(4)
-    expect((ws.getRow(2).values as unknown[])[1]).toBe('Steve')
-    expect((ws.getRow(3).values as unknown[])[1]).toBe('Alex')
-    expect((ws.getRow(4).values as unknown[])[1]).toBe('Bob')
+    const { data } = lastCall()
+    expect(data).toHaveLength(4)
+    expect(column(data, 1, 1)).toBe('Steve')
+    expect(column(data, 2, 1)).toBe('Alex')
+    expect(column(data, 3, 1)).toBe('Bob')
 
-    const wb2 = new ExcelJS.Workbook()
     await exportPlayersToExcel([])
-    const buffer2 = await blobToArrayBuffer(captured!)
-    await wb2.xlsx.load(buffer2)
-    expect(wb2.getWorksheet('玩家数据')!.rowCount).toBe(1)
+    expect(lastCall().data).toHaveLength(1)
   })
 })
