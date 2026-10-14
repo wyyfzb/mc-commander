@@ -57,6 +57,12 @@ interface DateTextInputProps {
   /** 可选上界（含）；'' 或省略表示不设界。同上，不拦键入 */
   max?: string
   placeholder?: string
+  /**
+   * 格式与键入方式的说明（悬停可见 + 读屏可读）。
+   * 不放 placeholder：144px 宽的输入框减去右内距只剩 102px，带格式示例的文案会被截成
+   * 「开始日期 如 202」——看着像一个真实的部分输入值，比不写更糟。
+   */
+  formatHint?: string
   ariaLabel: string
   className?: string
 }
@@ -67,6 +73,7 @@ export function DateTextInput({
   min,
   max,
   placeholder = '点击输入日期',
+  formatHint,
   ariaLabel,
   className,
 }: DateTextInputProps) {
@@ -94,6 +101,8 @@ export function DateTextInput({
         autoComplete="off"
         aria-label={ariaLabel}
         aria-invalid={draftInvalid || undefined}
+        aria-description={formatHint}
+        title={formatHint}
         placeholder={placeholder}
         value={shown}
         onChange={(e) => {

@@ -101,7 +101,8 @@ export function AuditFilterBar({
           onChange={(v) => changeDate('start', v)}
           // 起止互禁：开始日期不得晚于已选的结束日期（对侧为空则该项不设界）
           max={auditEnd}
-          placeholder="开始日期 如 2026-09-01"
+          placeholder="开始日期"
+          formatHint="yyyy-MM-dd，可直接键入数字（20260901 自动补成 2026-09-01）"
           ariaLabel="开始日期"
         />
         <span className="text-mcs-xs text-mcs-text-muted">至</span>
@@ -110,6 +111,7 @@ export function AuditFilterBar({
           onChange={(v) => changeDate('end', v)}
           min={auditStart}
           placeholder="结束日期"
+          formatHint="yyyy-MM-dd，可直接键入数字（20260901 自动补成 2026-09-01）"
           ariaLabel="结束日期"
         />
       </div>

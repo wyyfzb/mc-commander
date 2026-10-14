@@ -12,6 +12,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { setupServer } from 'msw/node'
 import { http, HttpResponse } from 'msw'
@@ -106,11 +107,13 @@ function renderPage(initialEntry = '/files?dir=/') {
   return render(<RouterProvider router={router} />)
 }
 
-/** 打开某一行的「移动」对话框并返回输入框 */
+/** 打开某一行的「移动」对话框并返回输入框（「移动到…」在行级操作菜单里） */
 async function openMoveDialog(rowLabel: string, initialEntry = '/files?dir=/') {
+  const user = userEvent.setup()
   renderPage(initialEntry)
-  const moveBtn = await screen.findByRole('button', { name: `移动 ${rowLabel}`, hidden: true })
-  fireEvent.click(moveBtn)
+  const menuBtn = await screen.findByRole('button', { name: `${rowLabel} 更多操作`, hidden: true })
+  await user.click(menuBtn)
+  await user.click(await screen.findByRole('menuitem', { name: '移动到…' }))
   return (await screen.findByLabelText('目标目录')) as HTMLInputElement
 }
 
@@ -213,10 +216,14 @@ describe('文件页「移动到…」', () => {
   })
 
   it('目录行与文件行都提供「移动」入口', async () => {
+    const user = userEvent.setup()
     renderPage('/files?dir=/world')
-    // region 是目录、level.dat 是文件——两族都要有入口（此前目录只能靠重命名绕）
-    expect(await screen.findByRole('button', { name: '移动 region' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '移动 level.dat' })).toBeInTheDocument()
+    // region 是目录、level.dat 是文件——两族都要有入口
+    await user.click(await screen.findByRole('button', { name: 'region 更多操作' }))
+    expect(await screen.findByRole('menuitem', { name: '移动到…' })).toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    await user.click(screen.getByRole('button', { name: 'level.dat 更多操作' }))
+    expect(await screen.findByRole('menuitem', { name: '移动到…' })).toBeInTheDocument()
   })
 
   it('根目录下的条目预填为 /（回退分支正确，不是空串）', async () => {

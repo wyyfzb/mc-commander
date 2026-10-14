@@ -130,8 +130,9 @@ test.describe('文件页', () => {
     await expect(page).toHaveURL(/dir=%2Fworld/)
     // 面包屑末级加粗
     await expect(page.locator('nav[aria-label="面包屑"]').getByText('world')).toBeVisible()
-    // 删除确认：level.dat → 对话框 → 截图（覆盖 destructive 按钮/路径行视觉）→ 取消
-    await page.getByRole('button', { name: '删除 level.dat' }).click()
+    // 删除确认：level.dat → 行级操作菜单 → 删除 → 对话框 → 截图（覆盖 destructive 按钮/路径行视觉）→ 取消
+    await page.getByRole('button', { name: 'level.dat 更多操作' }).click()
+    await page.getByRole('menuitem', { name: '删除' }).click()
     await expect(page.getByText('删除 level.dat？')).toBeVisible()
     await expect(page.getByText('/world/level.dat')).toBeVisible()
     await maybeShot(page, 'files-delete-confirm-dark.png')

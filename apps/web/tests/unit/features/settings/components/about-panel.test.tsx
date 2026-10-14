@@ -14,6 +14,7 @@ const APP_VERSION = __APP_VERSION__
 
 const REPO_URL = 'https://github.com/wyyfzb/mc-commander'
 const GITEE_REPO_URL = 'https://gitee.com/wyyfzb/mc-commander'
+const AUTHOR_URL = 'https://github.com/wyyfzb'
 
 describe('AboutPanel 应用信息', () => {
   it('应用名 + 副标题 + 版本徽章（mono）', () => {
@@ -38,7 +39,8 @@ describe('AboutPanel 开源卡片', () => {
 describe('AboutPanel 相关链接', () => {
   it('四行外链：href 正确 + target=_blank + rel=noreferrer', () => {
     render(<AboutPanel />)
-    const links = screen.getAllByRole('link')
+    // 作者署名也是链接，先按 href 把「相关链接」卡片的四行摘出来
+    const links = screen.getAllByRole('link').filter((l) => l.getAttribute('href') !== AUTHOR_URL)
     expect(links).toHaveLength(4)
     const hrefs = links.map((l) => l.getAttribute('href'))
     expect(hrefs).toEqual([REPO_URL, GITEE_REPO_URL, `${REPO_URL}/releases`, `${REPO_URL}/issues`])
@@ -50,7 +52,7 @@ describe('AboutPanel 相关链接', () => {
 
   it('四行标题/副标题文案', () => {
     render(<AboutPanel />)
-    const links = screen.getAllByRole('link')
+    const links = screen.getAllByRole('link').filter((l) => l.getAttribute('href') !== AUTHOR_URL)
     expect(within(links[0]!).getByText('GitHub 仓库')).toBeInTheDocument()
     expect(within(links[0]!).getByText('查看源代码并参与贡献')).toBeInTheDocument()
     expect(within(links[1]!).getByText('Gitee 镜像仓库')).toBeInTheDocument()
@@ -59,6 +61,16 @@ describe('AboutPanel 相关链接', () => {
     expect(within(links[2]!).getByText('查看版本发布与更新日志')).toBeInTheDocument()
     expect(within(links[3]!).getByText('问题反馈')).toBeInTheDocument()
     expect(within(links[3]!).getByText('报告 Bug 或建议新功能')).toBeInTheDocument()
+  })
+})
+
+describe('AboutPanel 作者声明', () => {
+  it('作者署名链接指向作者主页', () => {
+    render(<AboutPanel />)
+    const author = screen.getByRole('link', { name: '@wyyfzb' })
+    expect(author).toHaveAttribute('href', AUTHOR_URL)
+    expect(author).toHaveAttribute('target', '_blank')
+    expect(author).toHaveAttribute('rel', 'noreferrer')
   })
 })
 
