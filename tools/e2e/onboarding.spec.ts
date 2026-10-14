@@ -8,7 +8,7 @@ import { test, expect, type Page } from '@playwright/test'
  */
 
 // 可选截图（调试用）：设 E2E_SHOT=1 时输出到 test-results/shots/，默认关闭
-const SHOT_DIR = path.join(process.cwd(), 'test-results', 'shots')
+const SHOT_DIR = path.join(import.meta.dirname, 'test-results', 'shots')
 function maybeShot(page: Page, name: string) {
   return process.env.E2E_SHOT ? page.screenshot({ path: path.join(SHOT_DIR, name) }) : undefined
 }

@@ -37,6 +37,9 @@ jobs:
       - run: npm run format:check
       # 目录结构门禁：顶层白名单 + 源码面无测试 + 运行期产物不入库（判据见 tools/check-layout.mjs）。
       - run: npm run check:layout
+      # 工具链自身的 lint：tools/ 在 workspaces 之外，包级 oxlint（三个 job 走 -w 调用）
+      # 扫不到它——搬迁前这些文件住 apps/web 内、随该包一起被 lint。
+      - run: npm run lint:tools
       - uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -62,10 +65,15 @@ jobs:
       - name: 三包生产依赖零高危
         run: |
           failed=0
+          # 逐包跑而非在根跑一次：npm audit 按 cwd 解析依赖子树，包级调用只见该包的生产依赖
+          # （实测 schemas 子树 1 条链 / web 590 条链，dompurify 这类只在 web 出现），
+          # 报错时能直接指向是哪个包拖进来的。
           for pkg in apps/schemas apps/server apps/web; do
             echo "::group::$pkg"
             if ! (cd "$pkg" && npm audit --omit=dev --audit-level=high); then
-              echo "::error file=$pkg/package-lock.json::$pkg 存在 high 及以上生产依赖漏洞——本地执行 (cd $pkg && npm audit fix) 处置"
+              # file= 必须指真实存在的文件：单 lock 后包内无 package-lock.json，
+              # 指它会生成指向幽灵路径的注解，看的人按图索骥只会扑空。
+              echo "::error file=package-lock.json::$pkg 存在 high 及以上生产依赖漏洞——在仓库根执行 npm audit fix 后重建 lock（加 --registry=https://registry.npmjs.org）"
               failed=1
             fi
             echo "::endgroup::"
@@ -145,8 +153,9 @@ jobs:
       - run: npm run lint -w apps/web
       - run: npm run test:coverage -w apps/web
       # 设计 token 守门（色板类/dark:/transition-all/动效/圆角 + 对比度）——与 lint/test 并列拦截
-      - run: npm run check:design-tokens -w apps/web
-      - run: npm run check:contrast -w apps/web
+      # 探针住 tools/gates/（工具链层），判定对象固定在 apps/web——扫错树会自动红，见 lib/web-root.mjs
+      - run: npm run check:design-tokens
+      - run: npm run check:contrast
 
   web-e2e:
     name: 前端（build + e2e）
@@ -166,14 +175,15 @@ jobs:
       # build 内含 tsc -b（类型检查），产物供 preview e2e 复用（E2E_SERVER=preview）
       - run: npm run build -w apps/web
       # 首屏/路由首访体积门禁（gzip）：复用上面的构建产物，拦截重依赖回流高频路由
-      - run: npm run check:size -w apps/web
+      - run: npm run check:size
       - name: 缓存 Playwright 浏览器
         uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('apps/web/package-lock.json') }}
+          # 依赖唯一事实源是根 lock；指包内 lock（该文件不存在）会让缓存恒 miss
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
       - run: npx playwright install chromium --with-deps
-      - run: npm run test:e2e -w apps/web
+      - run: npm run test:e2e
         env:
           E2E_SERVER: preview
       - name: 上传失败现场
@@ -181,5 +191,5 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: playwright-report
-          path: apps/web/playwright-report/
+          path: tools/e2e/playwright-report/
           retention-days: 7

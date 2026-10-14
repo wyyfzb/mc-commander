@@ -2,13 +2,13 @@ import path from 'node:path'
 import { test, expect, type Page } from '@playwright/test'
 
 /**
- * 登录 E2E（安全主线；数据源：scripts/mock-server.mjs，凭据为结构占位虚构内容）
+ * 登录 E2E（安全主线；数据源：同目录 mock-server.mjs，凭据为结构占位虚构内容）
  * 验收：无凭据访问 → 重定向登录页 / 登录模式输错密码报错 / 正确密码登录进入面板 /
  *       会话持久化（刷新不掉线）/ 设密向导（?fresh=1）/ 顶栏用户菜单登出
  */
 
 // 可选截图（调试用）：设 E2E_SHOT=1 时输出到 test-results/shots/，默认关闭
-const SHOT_DIR = path.join(process.cwd(), 'test-results', 'shots')
+const SHOT_DIR = path.join(import.meta.dirname, 'test-results', 'shots')
 function maybeShot(page: Page, name: string) {
   return process.env.E2E_SHOT ? page.screenshot({ path: path.join(SHOT_DIR, name) }) : undefined
 }

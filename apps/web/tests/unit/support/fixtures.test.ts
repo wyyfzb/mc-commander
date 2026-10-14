@@ -4,7 +4,7 @@
  * 会把「名称写 08-14 / 时间显示 09-10」这类矛盾直接渲染进首屏；而断言通常只查
  * 「名称是否存在」——矛盾不会让任何用例变红，只能靠人眼发现。
  * 故在此对夹具立约：名称不内嵌日期、名称唯一。
- * （`scripts/mock-server.mjs` 的孪生夹具无法在 vitest 中导入，其三条名称由 e2e 以
+ * （`tools/e2e/mock-server.mjs` 的孪生夹具无法在 vitest 中导入，其三条名称由 e2e 以
  * `{ exact: true }` 精确断言钉住；子串匹配不算防线，改夹具名必须让 e2e 变红。）
  */
 import { describe, it, expect } from 'vitest'

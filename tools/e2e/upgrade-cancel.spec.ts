@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test'
 
 /**
- * 升级取消 E2E（数据源：scripts/mock-server.mjs 结构占位虚构数据）
+ * 升级取消 E2E（数据源：同目录 mock-server.mjs 结构占位虚构数据）
  * 路径：实例为停止态才给升级入口（运行中菜单里没有该项）→ 操作菜单「升级版本」
  *      → 选目标版本 → 开始升级 → WS 进度事件进入「升级中」视图 → 取消升级（二次确认）
  *      → 服务端补发 cancelled 终态 → 展示取消块（不是失败块）

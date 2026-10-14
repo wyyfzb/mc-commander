@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test'
 /**
  * 审计页多页形态（375×812）：分页栏渲染、翻页链路与窄屏不溢出
  *
- * 缺口：`scripts/mock-server.mjs` 审计日志只有 5 条、命令历史只有 4 条，
+ * 缺口：`同目录 mock-server.mjs` 审计日志只有 5 条、命令历史只有 4 条，
  * pageSize=20 下 totalPages 恒为 1 ⇒ 分页栏（prev-next 按钮 + 「第 x/y 页」文案）
  * 在既有 e2e 里结构性不可达，窄屏分页的折行/溢出从未被实测。
  *

@@ -1,6 +1,6 @@
 /**
  * 设计 token 完整性守门脚本（设计文档 §4.5 token 纪律）
- * 用法：node scripts/check-design-tokens.mjs
+ * 用法：node tools/gates/check-design-tokens.mjs（判定对象 apps/web）
  * 逐行检查（第 1–11 条，排除 src/components/ui/）：
  *   1. Tailwind 原始色板类（text-{color}/bg-{color}/border-{color}/ring-{color}）
  *   2. dark: 前缀类
@@ -88,8 +88,9 @@ import {
   overQuota,
   stripComments,
 } from './lib/design-token-rules.mjs'
+import { resolveWebRoot } from './lib/web-root.mjs'
 
-const root = join(import.meta.dirname, '..')
+const root = resolveWebRoot()
 const srcDir = join(root, 'src')
 
 /** 用例按定义就要写出类名/文案字面量，一律不进判定面（新布局 tests/，兼容旧 __tests__ 目录名） */
@@ -1125,7 +1126,7 @@ function localImportsOf(code, fromFile) {
 for (const f of GATE_FILES) {
   if (f.endsWith('.css') || isTestFile(f)) continue
   const rel = GATE_REL(f)
-  if (!/-page\.tsx$/.test(rel) || APP_SHELL_PAGE_EXEMPT.has(rel)) continue
+  if (!rel.endsWith('-page.tsx') || APP_SHELL_PAGE_EXEMPT.has(rel)) continue
   const code = stripComments(readFileSync(f, 'utf-8'))
   const headerCount = [...code.matchAll(/<PageHeader\b/g)].length
   if (headerCount !== 1) {

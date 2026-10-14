@@ -1,6 +1,6 @@
 /**
  * token 对比度批量校验（设计文档 §4.8-1，M1 出口二重审查）
- * 用法：node scripts/check-contrast.mjs
+ * 用法：node tools/gates/check-contrast.mjs（判定对象 apps/web）
  * 标准：正文 ≥4.5:1 / 边框与焦点 ≥3:1 / 图形 ≥3:1（WCAG 实测不取整）
  *       明暗主题独立验证；任一组合不达标 → exit 1（阻止合并）
  * 面口径（G3）：5 个语义底色 + 3 个玻璃面近似（按 glass.css alpha 叠在卡片/弹窗底上取最差合成）
@@ -9,10 +9,11 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { parse, wcagContrast, rgb as toRgb, converter } from 'culori'
+import { resolveWebRoot } from './lib/web-root.mjs'
 
 const toOklch = converter('oklch')
 
-const root = join(import.meta.dirname, '..')
+const root = resolveWebRoot()
 
 // ── CSS 变量解析 ───────────────────────────────────────────────
 function extractVars(cssText) {

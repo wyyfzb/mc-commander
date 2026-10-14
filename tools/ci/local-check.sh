@@ -78,10 +78,8 @@ if [ ! -d "$SERVER_DIR" ]; then
   exit 1
 fi
 ensure_deps
-  # 服务端消费契约包产物：node 解析经 workspace 链接落到 apps/schemas 的 main=dist/index.js，
-  # 故先建 dist。这一步取代了原先「提交版 dist 逐字节比对」——不再存在可漂移的提交产物
-  (cd "$PROJECT_DIR" && npm run build -w apps/schemas)
-  (cd "$PROJECT_DIR" && npm run lint -w apps/server && npm test -w apps/server)
+# 契约包 dist 已在上一步构建并断言存在，此处不再重复构建
+(cd "$PROJECT_DIR" && npm run lint -w apps/server && npm test -w apps/server)
 
 if [ "$SKIP_FRONTEND" -eq 1 ]; then
   echo "已跳过前端检查（--skip-frontend）"
@@ -101,8 +99,13 @@ npm run lint
 npx tsc -b --noEmit
 # 设计 token 守门（与 ci.yml web-check 对齐：design-tokens + contrast；前置快检秒级失败，不等全量）
 npx vitest run tests/unit/token-integrity.test.ts
-npm run check:design-tokens
-npm run check:contrast
 npm test
+# 门禁住 tools/，须回仓库根调用——包内已无这些 script；
+# tools/ 在 workspaces 之外，包级 lint / vitest 都扫不到（搬迁前这些文件住 apps/web
+# 内、随该包被扫），故单独跑一遍
+(cd "$PROJECT_DIR" && npm run check:design-tokens)
+(cd "$PROJECT_DIR" && npm run check:contrast)
+(cd "$PROJECT_DIR" && npm run lint:tools)
+(cd "$PROJECT_DIR" && npm run test:tools)
 
 echo "=== 本地检查通过 ==="

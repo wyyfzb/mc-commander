@@ -2,12 +2,12 @@ import path from 'node:path'
 import { test, expect, type Page } from '@playwright/test'
 
 /**
- * 审计页 E2E（数据源：scripts/mock-server.mjs，审计/命令历史为虚构占位数据）
+ * 审计页 E2E（数据源：同目录 mock-server.mjs，审计/命令历史为虚构占位数据）
  * 验收：Tab 切换 / 筛选栏渲染 / 日期键入与日历双模（打开月历 → 选日 → 回填） / 视觉截图
  */
 
 // 可选截图（调试用）：设 E2E_SHOT=1 时输出到 test-results/shots/，默认关闭
-const SHOT_DIR = path.join(process.cwd(), 'test-results', 'shots')
+const SHOT_DIR = path.join(import.meta.dirname, 'test-results', 'shots')
 function maybeShot(page: Page, name: string) {
   return process.env.E2E_SHOT ? page.screenshot({ path: path.join(SHOT_DIR, name) }) : undefined
 }
@@ -209,7 +209,7 @@ test.describe('审计页', () => {
     expect(small!.shellH).toBeLessThan(small!.mainH - 100)
 
     // 下方括号：把行数放大到远超一屏，壳必须保持「在可用高度内」且出现滚动
-    // 响应信封是 `data` 扁平数组 + 兄弟 `pagination`（见 scripts/mock-server.mjs）
+    // 响应信封是 `data` 扁平数组 + 兄弟 `pagination`（见 同目录 mock-server.mjs）
     await page.route('**/api/v1/audit-logs*', async (route) => {
       const response = await route.fetch()
       const body = await response.json()

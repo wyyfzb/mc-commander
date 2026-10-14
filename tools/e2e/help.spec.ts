@@ -2,7 +2,7 @@ import path from 'node:path'
 import { test, expect, type Page } from '@playwright/test'
 
 /**
- * 帮助中心 E2E（数据源：仓库根 docs/user-guide.md 构建期 `?raw` 内联 + scripts/mock-server.mjs）
+ * 帮助中心 E2E（数据源：仓库根 docs/user-guide.md 构建期 `?raw` 内联 + 同目录 mock-server.mjs）
  *
  * 两条腿：
  * ① **使用向导**：文档是构建期内联的（跨包 `?raw` + dev 的 `server.fs.allow` 都是构建期行为），
@@ -13,7 +13,7 @@ import { test, expect, type Page } from '@playwright/test'
  */
 
 // 可选截图（调试用）：设 E2E_SHOT=1 时输出到 test-results/shots/，默认关闭
-const SHOT_DIR = path.join(process.cwd(), 'test-results', 'shots')
+const SHOT_DIR = path.join(import.meta.dirname, 'test-results', 'shots')
 function maybeShot(page: Page, name: string) {
   return process.env.E2E_SHOT ? page.screenshot({ path: path.join(SHOT_DIR, name) }) : undefined
 }

@@ -1,5 +1,5 @@
 {
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "$schema": "../../node_modules/oxlint/configuration_schema.json",
   // 服务端 lint 配置（2026-09-19 由 eslint 迁入 oxlint，全仓一套 linter）。
   // 规则面＝原 eslint 配置（js.configs.recommended + 6 条显式规则）的等价物，
   // 逐条对照与差异如下：

@@ -1127,10 +1127,7 @@ const server = createServer((req, res) => {
       const task = mockTasks.find((t) => t.id === Number(taskMatch[1]))
       if (req.method === 'PUT') {
         return res.end(
-          ok(
-            { ...(task ?? {}), ...JSON.parse(body || '{}') },
-            'Scheduled task updated successfully',
-          ),
+          ok({ ...task, ...JSON.parse(body || '{}') }, 'Scheduled task updated successfully'),
         )
       }
       if (req.method === 'DELETE') {

@@ -19,7 +19,7 @@ import {
   overQuota,
   stripComments,
   titleBaseTiers,
-} from '../../scripts/lib/design-token-rules.mjs'
+} from '../gates/lib/design-token-rules.mjs'
 
 describe('额度口径（第 21/27 条共用：额度放行前 N 处现场，不是白名单整个文件）', () => {
   it('额度外的第 N+1 处即报', () => {

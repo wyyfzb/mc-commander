@@ -3,7 +3,7 @@ import { test, expect, type Page, type Route } from '@playwright/test'
 /**
  * 两步验证（TOTP）E2E：登录第二因子 + 设置页挂靠向导关键步骤
  *
- * 夹具策略：`scripts/mock-server.mjs` 未建模 TOTP 端点（它的登录恒成功、也没有
+ * 夹具策略：`同目录 mock-server.mjs` 未建模 TOTP 端点（它的登录恒成功、也没有
  * /auth/totp/*），故本 spec 用 `page.route` **就地**补齐，不改 mock 的共享行为——
  * 改 mock 会让其它 spec 的「密码登录必成功」前提失效（先例见 players-virtual-scroll.spec.ts）。
  *
@@ -15,7 +15,7 @@ import { test, expect, type Page, type Route } from '@playwright/test'
  * 凭据与恢复码全为虚构结构占位，严禁真实信息。
  */
 
-/** mock 后端会话令牌（scripts/mock-server.mjs 的固定值；注入会话态以免每次真登录） */
+/** mock 后端会话令牌（同目录 mock-server.mjs 的固定值；注入会话态以免每次真登录） */
 const MOCK_SESSION_TOKEN = 'e2e-mock-session-token-0000000001'
 
 /**

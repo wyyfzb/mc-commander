@@ -13,10 +13,10 @@ MC\_Commander 是一个自托管的 Minecraft 服务器管理面板：不装插�
 | ---------------------- | ----------------------------------------------------------------------------------------- |
 | `apps/web/`      | Web 前端（React 19 / TypeScript strict / Tailwind v4 / shadcn-ui / TanStack Query / zustand） |
 | `apps/server/` | 服务端（Express / WebSocket / better-sqlite3 / RCON 双通道 / cron 调度）                            |
-| `apps/*/src/`、`apps/*/tests/` | 源码与测试分离：`src/` 只放交付源码，测试放同包 `tests/`（web 镜像 `src/` 到 `tests/unit/`，基建在 `tests/support/`）；E2E 与它的 mock 后端留在 `apps/web/{e2e,scripts/mock-server.mjs}`——Playwright 与 vite 都在这个包的 devDeps 里，挪出包会解析不到依赖 |
+| `apps/*/src/`、`apps/*/tests/` | 源码与测试分离：`src/` 只放交付源码，测试放同包 `tests/`（web 镜像 `src/` 到 `tests/unit/`，基建在 `tests/support/`）。**包内只留产品与其测试**：E2E、mock 后端、门禁脚本、截图工具一律住 `tools/`——它们判定/驱动的是整个前端，不是包的运行时组成 |
 | `apps/server/var/` | 服务端运行期数据（实例 / SQLite 与日志 / 备份快照）：产物只进这里，包内不放数据；落点锚定包根（config.js），不随 cwd 漂移 |
 | `apps/schemas/`          | 共享契约包（zod，包名 `@mc-commander/schemas`）：web 经 vite alias 直读 `src`，服务端经 workspace 链接消费 `dist`（构建产物） |
-| `tools/`               | 维护者工具：`ci/local-check.sh`（一键本地检查）、`dev/`（生成器）、`ops/`（运维脚本） |
+| `tools/`               | 维护者工具（不住包内）：`gates/`（设计 token / 对比度 / 体积 / 目录结构）、`e2e/`（Playwright 配置 + 19 spec + mock 后端）、`vision/`（全站截图）、`ci/local-check.sh`、`dev/`（生成器）、`ops/`（运维）、`deploy/`（发布载荷） |
 | `docs/`                | 使用者文档（`architecture.md`、`user-guide.md`） |
 
 仓库是 **npm workspaces**：在**仓库根**跑一次 `npm ci` 即装齐三包依赖，根 `package-lock.json`
@@ -25,8 +25,7 @@ MC\_Commander 是一个自托管的 Minecraft 服务器管理面板：不装插�
 `apps/schemas/dist` 必须先构建：`npm run build -w apps/schemas`。前端则经 vite alias
 直读 `apps/schemas/src`（改契约立即可见）。**`dist` 是构建产物、不入库**：服务端测试与运行前
 必须先在仓库根 `npm run build -w apps/schemas`（`npm test` 已带 `pretest` 自动做；CI 的 server
-job 与 `local-check.sh` 也都显式构建）——取代了旧口径「提交 dist 并用逐字节比对守卫防漂移」，
-从根上不存在可漂移的提交产物。
+job 与 `local-check.sh` 也都显式构建），因此不存在可漂移的提交产物。
 
 ## 常用命令
 
@@ -45,12 +44,22 @@ npm run check:layout         # 目录结构门禁（顶层白名单 / 源码面�
 # 契约包 —— dist 不入库，消费方（服务端测试/运行）前先在仓库根 build
 npm run lint -w apps/schemas && npm test -w apps/schemas && npm run build -w apps/schemas
 
+# 工具链（住 tools/，判定对象固定为 apps/web；仓库根执行）
+npm run check:design-tokens            # 设计 token 门禁
+npm run check:contrast                 # 对比度门禁
+npm run check:size                     # 产物体积门禁（需先 build -w apps/web）
+npm run test:e2e                       # Playwright e2e（自动起 mock 后端 + dev server）
+npm run capture -- --routes=<路由>      # 全站截图（输出 .ai/vision/）
+
+# tools/ 自身：它在 workspaces 之外，包级 lint / vitest 扫不到；搬迁前这些文件住
+# apps/web 内、随该包被扫（不补即是净损失），故单独跑一遍
+npm run lint:tools && npm run test:tools
+
 # 前端
 npm run dev -w apps/web                          # Vite 开发服务器
 npm run lint -w apps/web && (cd apps/web && npx tsc -b --noEmit)   # 类型检查须带 -b（solution 配置）
 npm run test -w apps/web                         # vitest 全量
 npm run build -w apps/web                        # 生产构建（tsc -b + vite build）
-npm run test:e2e -w apps/web # Playwright e2e（自动起 mock 后端 + dev server）
 
 # 服务端
 npm run build -w apps/schemas        # 前置：服务端消费契约包 dist
@@ -65,7 +74,7 @@ npm run dev -w apps/server           # node --watch 热重载
 
 | 检查 | 内容 |
 | --- | --- |
-| 仓库卫生 | `npm run format:check`（全仓格式）+ `npm run check:layout`（目录结构门禁）+ gitleaks 密钥泄漏扫描 |
+| 仓库卫生 | `npm run format:check`（全仓格式）+ `npm run check:layout`（目录结构门禁）+ `tools/` 自身门禁（`lint:tools` / `test:tools`）+ gitleaks 密钥泄漏扫描 |
 | 契约包 | `npm run lint` + `npm run test:coverage` + **构建产物**（`dist` 不入库，构建后断言产物存在） |
 | 服务端 | `npm run lint` + `npm run test:coverage` |
 | 前端 | `npm run lint` + `npm run test:coverage` + `check:design-tokens` + `check:contrast` |
@@ -75,7 +84,7 @@ npm run dev -w apps/server           # node --watch 热重载
 仓库提供一键本地等价入口 `bash tools/ci/local-check.sh`（代码格式 + 生产依赖漏洞门禁 +
 三包 lint / 类型检查 / 全量 test + 契约包构建），分步命令见上一节「常用命令」。
 **测试与文档中禁止出现真实服务器信息**（IP / API Key / 真实玩家数据，见下方「测试数据」）。
-涉及页面渲染 / 展示文案的改动，建议加跑相关 e2e spec（`npx playwright test <spec>`）。
+涉及页面渲染 / 展示文案的改动，建议加跑相关 e2e spec（`npm run test:e2e -- <spec>`）。
 
 ## 工程纪律
 
@@ -242,11 +251,15 @@ npm run dev -w apps/server           # node --watch 热重载
 
 ## e2e 说明
 
-Playwright 配置（`apps/web/playwright.config.ts`）会自动启动两个本地服务：
-mock 后端（端口 5198）+ 前端服务器（端口 5199，默认 dev；CI 与 `E2E_SERVER=preview`
-时用 vite preview 服务构建产物，需先 `npm run build`），无需手工准备；浏览器通道
-自动降级（Chrome → Edge → 内置 chromium）。断言优先用可访问性角色/名称，
+Playwright 配置（`tools/e2e/playwright.config.ts`）会自动启动两个本地服务：
+mock 后端（同目录 `mock-server.mjs`，端口 5198）+ 前端服务器（端口 5199，默认 dev；CI 与
+`E2E_SERVER=preview` 时用 vite preview 服务构建产物，需先 `npm run build`），无需手工准备；
+浏览器通道自动降级（Chrome → Edge → 内置 chromium）。断言优先用可访问性角色/名称，
 不用脆弱的 CSS 选择器。
+
+**e2e 住工具层的连带约束**：spec 与配置在 `tools/e2e/`，被测应用在 `apps/web/`，两者不同层——
+配置里 `testDir` 与 `webServer.cwd` 都必须显式给出（不能靠配置所在目录推），spec 内取路径一律用
+`import.meta.dirname` 而非 `process.cwd()`（cwd 不再是包根）；产物落 `tools/e2e/{test-results,playwright-report}`。
 
 mock 是**进程级共享**的（并行 spec 连同一个「服务端」）：一个 spec 触发的构造端点
 广播（deploy/upgrade 的进度与终态）只投递给**同分组**连接，分组头 `x-mock-ws-group`。

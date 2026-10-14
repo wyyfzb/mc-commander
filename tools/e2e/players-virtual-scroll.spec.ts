@@ -3,7 +3,7 @@ import { test, expect, type Page } from '@playwright/test'
 /**
  * 长列表虚拟滚动：「全部」档下的尾部留白、行高恒定与滚动连续性
  *
- * 缺口：`scripts/mock-server.mjs` 只有 5 名玩家，「全部」档下表格高度不足一屏、
+ * 缺口：`同目录 mock-server.mjs` 只有 5 名玩家，「全部」档下表格高度不足一屏、
  * 没有可滚动高度 ⇒ 虚拟滚动的尾部留白与滚动连续性此前从未被实测。
  *
  * 夹具策略：在路由层取回既有 mock 响应后复制成 TOTAL 人，**不改 mock-server 的数据规模**——

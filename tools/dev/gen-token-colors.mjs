@@ -1,9 +1,9 @@
 /**
  * token 色彩生成脚本（设计文档 2026-08-14-web-app-design.md §4.1）
- * 用法：node scripts/gen-token-colors.mjs
+ * 用法：node tools/dev/gen-token-colors.mjs
  * 职责：hex → OKLCH 精确值；暗色中性层级以 WCAG 相对亮度区间二分生成
  *      （固定 H/C 只步进 L）；状态色容器底 12% alpha 混合；全部输出对照表。
- * 结果人工核对后写入 src/styles/tokens/reference.css（本脚本为生成器，非运行时依赖）。
+ * 只打印对照表（不写文件）；人工核对后写入 apps/web/src/styles/tokens/reference.css。
  */
 import { oklch, wcagLuminance, wcagContrast } from 'culori'
 

@@ -3,19 +3,22 @@ import path from 'node:path'
 import { test, expect, type Page } from '@playwright/test'
 
 /**
- * 设置页 E2E（数据源：scripts/mock-server.mjs，备份/实例数据为结构占位虚构内容）
+ * 设置页 E2E（数据源：同目录 mock-server.mjs，备份/实例数据为结构占位虚构内容）
  * 验收：子导航五页 / 连接表单保存 / 通用 autoRestart+主题 / 通知两组开关 / 备份列表+恢复确认 / 关于
  */
 
-// 可选截图（调试用）：设 E2E_SHOT=1 时输出到 test-results/shots/，默认关闭
-const SHOT_DIR = path.join(process.cwd(), 'test-results', 'shots')
+// 可选截图（调试用）：设 E2E_SHOT=1 时输出到 tools/e2e/test-results/shots/，默认关闭
+const E2E_DIR = import.meta.dirname
+const SHOT_DIR = path.join(E2E_DIR, 'test-results', 'shots')
 function maybeShot(page: Page, name: string) {
   return process.env.E2E_SHOT ? page.screenshot({ path: path.join(SHOT_DIR, name) }) : undefined
 }
 
 // 包版本（about-panel 由 vite define 编译期注入同源值），不逐版本改断言
+// 读前端包的 package.json：本 spec 住 tools/e2e/，cwd 不再是 apps/web，
+// 按 cwd 找会读到仓库根（该文件无 version 字段 → 断言恒拿到 undefined）
 const APP_VERSION = JSON.parse(
-  fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf-8'),
+  fs.readFileSync(path.join(E2E_DIR, '..', '..', 'apps', 'web', 'package.json'), 'utf-8'),
 ).version
 
 /** 注入连接配置（mock 假 key，mock server 不校验）——严禁真实服务器信息 */
@@ -31,7 +34,7 @@ async function setupConnection(page: Page) {
 /**
  * 把能力探测切到「API Key 通道关闭」态。
  *
- * 构造方式：mock 按请求头 `x-mock-api-key-enabled: 0` 判定（见 scripts/mock-server.mjs）。
+ * 构造方式：mock 按请求头 `x-mock-api-key-enabled: 0` 判定（见 同目录 mock-server.mjs）。
  * 之所以不在服务端启动时定死：Playwright 的 webServer 前后端共用一轮，环境变量改不了，
  * 而同一 spec 文件里真假两态必须都能跑（false 态结构性不可达的夹具等于没有防线）。
  * 只补一个请求头，不伪造响应体——走的仍是 mock 的真实应答路径。

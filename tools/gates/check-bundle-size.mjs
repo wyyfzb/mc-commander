@@ -26,8 +26,9 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import path from 'node:path'
 import zlib from 'node:zlib'
+import { resolveWebRoot } from './lib/web-root.mjs'
 
-const distDir = path.resolve(import.meta.dirname, '../dist')
+const distDir = path.join(resolveWebRoot(), 'dist')
 const assetsDir = path.join(distDir, 'assets')
 
 // 预算 = 当前实测值 + 约 8% 余量，取整到 5KB；上调需在 PR 里说明理由

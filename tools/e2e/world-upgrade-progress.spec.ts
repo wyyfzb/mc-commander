@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test'
 
 /**
- * 世界格式升级的进度条（数据源：scripts/mock-server.mjs 结构占位虚构数据）
+ * 世界格式升级的进度条（数据源：同目录 mock-server.mjs 结构占位虚构数据）
  *
  * 为什么值得一条 e2e：这条链路的产品价值全在「看得见」。协议给的是 **0..1 的分数**，
  * 换算错了（直灌原值）就会渲染成恒 0% 的空条——而单测里 store 拿到的仍是 0.37，

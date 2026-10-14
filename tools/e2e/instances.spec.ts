@@ -2,12 +2,12 @@ import path from 'node:path'
 import { test, expect, type Page } from '@playwright/test'
 
 /**
- * 实例页 E2E（数据源：scripts/mock-server.mjs，实例/部署数据为结构占位虚构内容）
+ * 实例页 E2E（数据源：同目录 mock-server.mjs，实例/部署数据为结构占位虚构内容）
  * 验收：实例卡片 / 部署向导三步流程 / 卸载确认 / 视觉截图
  */
 
 // 可选截图（调试用）：设 E2E_SHOT=1 时输出到 test-results/shots/，默认关闭
-const SHOT_DIR = path.join(process.cwd(), 'test-results', 'shots')
+const SHOT_DIR = path.join(import.meta.dirname, 'test-results', 'shots')
 function maybeShot(page: Page, name: string) {
   return process.env.E2E_SHOT ? page.screenshot({ path: path.join(SHOT_DIR, name) }) : undefined
 }

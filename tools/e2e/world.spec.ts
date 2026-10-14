@@ -2,12 +2,12 @@ import path from 'node:path'
 import { test, expect, type Page } from '@playwright/test'
 
 /**
- * 世界页 E2E（数据源：scripts/mock-server.mjs，世界/属性数据为结构占位虚构内容）
+ * 世界页 E2E（数据源：同目录 mock-server.mjs，世界/属性数据为结构占位虚构内容）
  * 验收：左栏世界信息卡+维度卡 / 属性 Tab 编辑保存 / gamerule Tab 查询+行级编辑 / 视觉截图
  */
 
 // 可选截图（调试用）：设 E2E_SHOT=1 时输出到 test-results/shots/，默认关闭
-const SHOT_DIR = path.join(process.cwd(), 'test-results', 'shots')
+const SHOT_DIR = path.join(import.meta.dirname, 'test-results', 'shots')
 
 /** 可见文本（剔除 sr-only 的完整解释）：子串匹配咬不住文案本身，逐字比对才咬得住 */
 function visibleText(locator: import('@playwright/test').Locator) {

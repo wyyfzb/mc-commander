@@ -17,8 +17,6 @@ const proxyTarget = process.env.VITE_PROXY_TARGET || 'http://localhost:25566'
 // 移回 dom 项目（失败是**明确报错**，不会静默跳过）。stores 域的 3 个用例暂不放入
 // （其 persist/localStorage 依赖经 jsdom 才成立）。
 const NODE_ENV_TESTS = [
-  // 门禁脚本内核（scripts/lib/）的纯逻辑用例：只处理源码字符串、不读 fs；住 tests/tools/，与 unit/ 的用例区分
-  'tests/tools/design-token-rules.test.mjs',
   'tests/unit/token-integrity.test.ts',
   // 字体子集覆盖：只读 woff2 字节（自带 cmap 解析），不碰 DOM
   'tests/unit/font-subset.test.ts',

@@ -6,7 +6,7 @@
  * 截图，输出 <VISION_OUT>/capture_<时间戳>/<路由>-<主题>.png + manifest.json
  * （manifest 逐图记视口与字节数，并记 servers 的来源 started|reused）。
  *
- * 用法（在 apps/web/ 下）：
+ * 用法（在仓库根）：
  *   npm run capture                         # 全量截图（19 路由 × 2 主题）
  *   npm run capture -- --routes=players     # 仅指定路由（逗号分隔，用 file 名）
  *   npm run capture -- --theme=dark         # 仅指定主题（dark|light）
@@ -18,7 +18,7 @@
  *
  * 批次夹具注入点（--inject）：整批一次的变更若只影响登录态/引导态等「非已连接」形态，
  * 默认夹具会整批报「无视觉变化」。传入一个 .mjs（**相对当前工作目录解析**，`npm run` 时即
- * apps/web/），其 default export 收 `{ page, route, theme, viewport, mockKey }`，
+ * 仓库根），其 default export 收 `{ page, route, theme, viewport, mockKey }`，
  * 在导航前按需注入：
  *   - 改初始状态：用 `page.addInitScript`（后注册者后执行，可覆盖脚本内建的默认注入）
  *   - 造接口形态：用 `page.route`
@@ -33,27 +33,29 @@
  *   MIN_SHOT_BYTES 截图大小阈值（默认 40KB，小于则判为疑似空态）
  *
  * 浏览器通道降级链：chrome → msedge → Playwright 内置 chromium。
- * 依赖：本包 node_modules（npm ci；浏览器另需 npx playwright install chromium）。
+ * 依赖：playwright（仓库根 node_modules，根 `npm ci` 装齐；浏览器另需 npx playwright install chromium）。
  * 设计基线与 P1-P6 原则由 owner 私有维护（不入库）。
  */
 import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, writeFileSync, statSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { join, resolve, dirname } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { connect } from 'node:net'
 
-// 本文件位于 apps/web/scripts/ → WEB_DIR 为上一级，PROJECT_ROOT 为仓库根
+// 本文件位于 tools/vision/ → 仓库根按 .git 向上发现，前端包固定为 apps/web
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url))
-const WEB_DIR = resolve(SCRIPT_DIR, '..')
-// 仓库根按 .git 向上发现：脚本位置或包层数变化时不必改这里
 const PROJECT_ROOT = (() => {
-  for (let d = WEB_DIR; ; ) {
+  for (let d = SCRIPT_DIR; ; ) {
     if (existsSync(join(d, '.git'))) return d
     const up = resolve(d, '..')
-    if (up === d) return resolve(WEB_DIR, '..', '..')
+    if (up === d) throw new Error(`向上未找到仓库根（.git），起点：${SCRIPT_DIR}`)
     d = up
   }
 })()
+const WEB_DIR = join(PROJECT_ROOT, 'apps', 'web')
+// mock 后端住 e2e 工具目录（它服务 e2e 与截图两处），与 apps/web 无关
+const MOCK_SERVER = join(PROJECT_ROOT, 'tools', 'e2e', 'mock-server.mjs')
 const MOCK_PORT = Number(process.env.MOCK_PORT) || 5198
 const DEV_PORT = Number(process.env.DEV_PORT) || 5199
 const OUT_DIR = resolve(process.env.VISION_OUT || join(PROJECT_ROOT, '.ai', 'vision'))
@@ -100,6 +102,26 @@ const themeFilter = (arg('theme', '') || '').toLowerCase()
 const forceClean = process.argv.includes('--force-clean')
 const waitMs = Number(arg('wait', '')) || 1000
 const MIN_SHOT_BYTES = Number(process.env.MIN_SHOT_BYTES) || 40_000
+
+/**
+ * 加载 Playwright 的 `chromium`。
+ * 取 `@playwright/test`（`apps/web` 声明的 devDependency），不取 `playwright`——后者只是它的
+ * 传递依赖、本仓未声明，直接 import 属幽灵依赖。
+ * require 锚在**声明它的包**（apps/web）而非本文件：这样提升到仓库根或嵌在包内都能解析，
+ * 锚在本文件则只能在恰好被提升时可用。
+ * 用 require 而非 ESM import：该包的 ESM 入口（index.mjs）只转出测试面，
+ * `chromium` 仅在 CJS 入口（index.js）上（实测 import 得到 undefined）。
+ * 不能拼 `apps/web/node_modules/...` 判存在：workspace 提升安装把依赖放在**仓库根**，
+ * 包内该路径不存在——按包内路径判「依赖装没装」会让干净检出下的截图必然失败。
+ */
+function loadChromium() {
+  try {
+    const require = createRequire(join(WEB_DIR, 'package.json'))
+    return { chromium: require('@playwright/test').chromium, error: null }
+  } catch (e) {
+    return { chromium: null, error: e }
+  }
+}
 // --strict：任一路由未产出、或截图小于阈值（疑似空态/未连接）时以非 0 退出（CI/自动审查用）
 const strict = process.argv.includes('--strict')
 // --viewport=WxH（可逗号分隔多档，如 1440x900,375x812）。缺省保持 1440×900 与旧文件名（兼容既有用法与 CI）；
@@ -254,8 +276,11 @@ async function main() {
     log('无截图目标（检查 --routes/--theme 参数）')
     process.exit(2)
   }
-  if (!existsSync(join(WEB_DIR, 'node_modules', 'playwright'))) {
-    console.error('[capture] apps/web 依赖未安装，请先执行: cd apps/web && npm ci')
+  const { chromium, error: playwrightError } = loadChromium()
+  if (!chromium) {
+    console.error(
+      `[capture] 未加载到 @playwright/test（${playwrightError?.message?.slice(0, 120)}），请在仓库根执行: npm ci`,
+    )
     process.exit(2)
   }
 
@@ -291,7 +316,7 @@ async function main() {
   const mockExisting = await portOpen(MOCK_PORT)
   if (!mockExisting) {
     children.push(
-      startServer('node', [join(WEB_DIR, 'scripts', 'mock-server.mjs')], {
+      startServer('node', [MOCK_SERVER], {
         cwd: WEB_DIR,
       }),
     )
@@ -313,10 +338,7 @@ async function main() {
   const devSource = devExisting ? 'reused' : 'started'
   log(`vite dev ${DEV_PORT} ${devSource === 'reused' ? '复用既有实例' : '本进程启动'}`)
 
-  // ── 2. 加载 Playwright（web 依赖）──
-  const { chromium } = await import(
-    pathToFileURL(join(WEB_DIR, 'node_modules', 'playwright', 'index.mjs'))
-  )
+  // ── 2. 取 Playwright 的 chromium（1. 处已加载，与安装形态无关）──
   const channel = browserChannel()
   log(`浏览器通道: ${channel || '内置 chromium'}`)
 
