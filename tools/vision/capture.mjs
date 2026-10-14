@@ -41,7 +41,7 @@ import { existsSync, mkdirSync, writeFileSync, statSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join, resolve, dirname } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { connect } from 'node:net'
+import { portOpen, LOOPBACK_HOSTS } from './lib/loopback-probe.mjs'
 
 // 本文件位于 tools/vision/ → 仓库根按 .git 向上发现，前端包固定为 apps/web
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url))
@@ -203,44 +203,46 @@ function killPort(port) {
   }
 }
 
-/** 端口是否已被监听（已监听则复用，避免端口冲突）
- *  必须在本进程内探测：早先实现走 spawnSync(node -e ...) 子进程 + 管道 stdio，
- *  在受限沙箱（子进程禁开管道）下恒返回 false → waitPort 必然超时报「等待超时」，
- *  把真正的失败原因掩盖成「端口没起来」。 */
-function portOpen(port) {
-  return new Promise((resolve) => {
-    const socket = connect({ port, host: '127.0.0.1' })
-    const done = (ok) => {
-      socket.destroy()
-      resolve(ok)
-    }
-    socket.setTimeout(800)
-    socket.once('connect', () => done(true))
-    socket.once('timeout', () => done(false))
-    socket.once('error', () => done(false))
-  })
-}
-
 function startServer(cmd, args, opts = {}) {
   log(`启动: ${cmd} ${args.join(' ')}`)
   // Windows shell 模式传拼接命令串（Node 24 弃用 shell+args 数组——参数不转义）
   const isWin = process.platform === 'win32'
   const child = spawn(isWin ? `${cmd} ${args.join(' ')}` : cmd, isWin ? [] : args, {
     cwd: opts.cwd || WEB_DIR,
-    stdio: 'ignore',
+    // 保留末尾若干 KB 输出：失败时打印子进程自己的报错。用管道而非文件——失败路径也得能读到输出，
+    // 而临时文件的清理时刻与打印时刻不重合。
+    stdio: ['ignore', 'pipe', 'pipe'],
     shell: isWin,
     env: opts.env ? { ...process.env, ...opts.env } : process.env,
   })
+  // 子进程输出留作失败时的诊断依据；不转投 stdout，避免污染调用方的日志与断言
+  const tail = []
+  for (const stream of [child.stdout, child.stderr]) {
+    stream?.on('data', (chunk) => {
+      tail.push(chunk.toString())
+      if (tail.length > 40) tail.shift()
+    })
+  }
+  child.tailOutput = () => tail.join('').slice(-4000)
+  // 无管道消费者时流会背压并卡住子进程；这里已挂了 data 监听，故不会
   return child
 }
 
-async function waitPort(port, timeoutMs = 60_000) {
+async function waitPort(port, timeoutMs = 60_000, child = null) {
   const start = Date.now()
   while (Date.now() - start < timeoutMs) {
     if (await portOpen(port)) return
     await new Promise((r) => setTimeout(r, 1000))
   }
-  throw new Error(`端口 ${port} 等待超时（${timeoutMs}ms 内未监听）`)
+  // 端口没等到 ≠ 服务没报错：子进程可能已退出（命令写错、依赖缺失）或绑到了别的地址。
+  // 两者在日志里必须可分辨，否则「等待超时」会把真因盖住。
+  const detail = []
+  const exit = child?.exitCode
+  if (exit !== null && exit !== undefined) detail.push(`子进程已退出（code=${exit}）`)
+  const said = child?.tailOutput?.()
+  if (said) detail.push(`子进程输出：\n${said.trim()}`)
+  detail.push(`已探地址：${LOOPBACK_HOSTS.join('、')}`)
+  throw new Error(`端口 ${port} 等待超时（${timeoutMs}ms 内未监听）\n${detail.join('\n')}`)
 }
 
 function browserChannel() {
@@ -315,25 +317,23 @@ async function main() {
   // 还是外部残留实例（旧 dist 喂假数据正是此类）。
   const mockExisting = await portOpen(MOCK_PORT)
   if (!mockExisting) {
-    children.push(
-      startServer('node', [MOCK_SERVER], {
-        cwd: WEB_DIR,
-      }),
-    )
-    await waitPort(MOCK_PORT)
+    const mockChild = startServer('node', [MOCK_SERVER], {
+      cwd: WEB_DIR,
+    })
+    children.push(mockChild)
+    await waitPort(MOCK_PORT, 60_000, mockChild)
   }
   const mockSource = mockExisting ? 'reused' : 'started'
   log(`mock-server ${MOCK_PORT} ${mockSource === 'reused' ? '复用既有实例' : '本进程启动'}`)
 
   const devExisting = await portOpen(DEV_PORT)
   if (!devExisting) {
-    children.push(
-      startServer('npm', ['run', 'dev', '--', '--port', String(DEV_PORT)], {
-        cwd: WEB_DIR,
-        env: { ...process.env, VITE_PROXY_TARGET: `http://localhost:${MOCK_PORT}` },
-      }),
-    )
-    await waitPort(DEV_PORT)
+    const devChild = startServer('npm', ['run', 'dev', '--', '--port', String(DEV_PORT)], {
+      cwd: WEB_DIR,
+      env: { ...process.env, VITE_PROXY_TARGET: `http://localhost:${MOCK_PORT}` },
+    })
+    children.push(devChild)
+    await waitPort(DEV_PORT, 60_000, devChild)
   }
   const devSource = devExisting ? 'reused' : 'started'
   log(`vite dev ${DEV_PORT} ${devSource === 'reused' ? '复用既有实例' : '本进程启动'}`)
