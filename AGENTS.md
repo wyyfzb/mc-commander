@@ -51,9 +51,10 @@ npm run check:size                     # 产物体积门禁（需先 build -w ap
 npm run test:e2e                       # Playwright e2e（自动起 mock 后端 + dev server）
 npm run capture -- --routes=<路由>      # 全站截图（输出 .ai/vision/）
 
-# tools/ 自身：它在 workspaces 之外，包级 lint / vitest 扫不到；搬迁前这些文件住
-# apps/web 内、随该包被扫（不补即是净损失），故单独跑一遍
-npm run lint:tools && npm run test:tools
+# tools/ 自身的三道门禁：它在 workspaces 之外，包级 lint / tsc / vitest 都扫不到
+npm run lint:tools && npm run typecheck && npm run test:tools
+# 截图工具冒烟（真起浏览器）：只在装了 Playwright 浏览器的环境跑，故不进上面那条
+npm run test:vision
 
 # 前端
 npm run dev -w apps/web                          # Vite 开发服务器
@@ -74,11 +75,11 @@ npm run dev -w apps/server           # node --watch 热重载
 
 | 检查 | 内容 |
 | --- | --- |
-| 仓库卫生 | `npm run format:check`（全仓格式）+ `npm run check:layout`（目录结构门禁）+ `tools/` 自身门禁（`lint:tools` / `test:tools`）+ gitleaks 密钥泄漏扫描 |
+| 仓库卫生 | `npm run format:check`（全仓格式）+ `npm run check:layout`（目录结构门禁）+ `tools/` 自身三道门禁（`lint:tools` / `typecheck` / `test:tools`）+ gitleaks 密钥泄漏扫描 |
 | 契约包 | `npm run lint` + `npm run test:coverage` + **构建产物**（`dist` 不入库，构建后断言产物存在） |
 | 服务端 | `npm run lint` + `npm run test:coverage` |
 | 前端 | `npm run lint` + `npm run test:coverage` + `check:design-tokens` + `check:contrast` |
-| 前端 | `npm run build` + `check:size` + Playwright e2e |
+| 前端 | `npm run build` + `check:size` + Playwright e2e + `test:vision`（截图工具冒烟） |
 | 生产依赖 | 根 lock 一次 `npm audit --omit=dev --audit-level=high`（workspace 根覆盖三包；只判生产依赖，devDependencies 不进产物） |
 
 仓库提供一键本地等价入口 `bash tools/ci/local-check.sh`（代码格式 + 生产依赖漏洞门禁 +

@@ -100,12 +100,12 @@ npx tsc -b --noEmit
 # 设计 token 守门（与 ci.yml web-check 对齐：design-tokens + contrast；前置快检秒级失败，不等全量）
 npx vitest run tests/unit/token-integrity.test.ts
 npm test
-# 门禁住 tools/，须回仓库根调用——包内已无这些 script；
-# tools/ 在 workspaces 之外，包级 lint / vitest 都扫不到（搬迁前这些文件住 apps/web
-# 内、随该包被扫），故单独跑一遍
+# 门禁与工具链门禁住 tools/，须回仓库根调用——包内已无这些 script；
+# tools/ 在 workspaces 之外，包级 lint / tsc / vitest 都扫不到它，故单独跑一遍
 (cd "$PROJECT_DIR" && npm run check:design-tokens)
 (cd "$PROJECT_DIR" && npm run check:contrast)
 (cd "$PROJECT_DIR" && npm run lint:tools)
+(cd "$PROJECT_DIR" && npm run typecheck)
 (cd "$PROJECT_DIR" && npm run test:tools)
 
 echo "=== 本地检查通过 ==="

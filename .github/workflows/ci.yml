@@ -37,9 +37,11 @@ jobs:
       - run: npm run format:check
       # 目录结构门禁：顶层白名单 + 源码面无测试 + 运行期产物不入库（判据见 tools/check-layout.mjs）。
       - run: npm run check:layout
-      # 工具链自身的 lint：tools/ 在 workspaces 之外，包级 oxlint（三个 job 走 -w 调用）
-      # 扫不到它——搬迁前这些文件住 apps/web 内、随该包一起被 lint。
+      # 工具链自身的门禁：tools/ 在 workspaces 之外，包级 lint / tsc / vitest 都扫不到它
+      # （三个 job 走 -w 调用），故在此显式跑，否则这里的错漏不会有任何信号。
       - run: npm run lint:tools
+      - run: npm run typecheck
+      - run: npm run test:tools
       - uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -186,6 +188,10 @@ jobs:
       - run: npm run test:e2e
         env:
           E2E_SERVER: preview
+      # 截图工具冒烟：真起一次 capture（单路由）断言出图。capture.mjs 无其他自动覆盖，
+      # 内部的路径引用断链（如 mock 后端搬走后仍指旧位置）不会任何一道门禁发现。
+      # 放这里而不是「仓库卫生」：本 job 已装 Playwright 浏览器，那边没装、跑它会必红。
+      - run: npm run test:vision
       - name: 上传失败现场
         if: failure()
         uses: actions/upload-artifact@v7

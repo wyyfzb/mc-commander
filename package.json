@@ -21,8 +21,10 @@
     "format:check": "biome format .",
     "lint": "npm run lint --workspaces --if-present && npm run lint:tools",
     "lint:tools": "oxlint tools/",
+    "typecheck": "tsc -p tools/tsconfig.json",
     "test": "npm run test --workspaces --if-present && npm run test:tools",
     "test:tools": "vitest run --config tools/vitest.config.ts",
+    "test:vision": "vitest run --config tools/vitest.vision.config.ts",
     "build": "npm run build --workspaces --if-present",
     "pretest": "npm run build -w apps/schemas"
   },
