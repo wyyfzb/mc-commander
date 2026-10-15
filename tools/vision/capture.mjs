@@ -36,12 +36,13 @@
  * 依赖：playwright（仓库根 node_modules，根 `npm ci` 装齐；浏览器另需 npx playwright install chromium）。
  * 设计基线与 P1-P6 原则由 owner 私有维护（不入库）。
  */
-import { spawn, spawnSync } from 'node:child_process'
+import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, writeFileSync, statSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join, resolve, dirname } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { portOpen, LOOPBACK_HOSTS } from './lib/loopback-probe.mjs'
+import { killGroup, spawnGrouped } from './lib/process-group.mjs'
 
 // 本文件位于 tools/vision/ → 仓库根按 .git 向上发现，前端包固定为 apps/web
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url))
@@ -207,7 +208,7 @@ function startServer(cmd, args, opts = {}) {
   log(`启动: ${cmd} ${args.join(' ')}`)
   // Windows shell 模式传拼接命令串（Node 24 弃用 shell+args 数组——参数不转义）
   const isWin = process.platform === 'win32'
-  const child = spawn(isWin ? `${cmd} ${args.join(' ')}` : cmd, isWin ? [] : args, {
+  const child = spawnGrouped(isWin ? `${cmd} ${args.join(' ')}` : cmd, isWin ? [] : args, {
     cwd: opts.cwd || WEB_DIR,
     // 保留末尾若干 KB 输出：失败时打印子进程自己的报错。用管道而非文件——失败路径也得能读到输出，
     // 而临时文件的清理时刻与打印时刻不重合。
@@ -287,15 +288,9 @@ async function main() {
   }
 
   const children = []
+  // 整组回收：服务常是孙进程（npm run dev → sh → vite），只杀直接子进程会把 vite 留成孤儿占着端口
   const cleanup = () => {
-    for (const c of children) {
-      try {
-        // Windows shell 模式 spawn 的是 cmd 包装层，kill 只杀包装进程——taskkill /T 杀整棵进程树
-        if (process.platform === 'win32' && c.pid)
-          spawnSync('taskkill', ['/F', '/T', '/PID', String(c.pid)])
-        else c.kill()
-      } catch {}
-    }
+    for (const c of children) killGroup(c)
   }
   process.on('exit', cleanup)
   process.on('SIGINT', () => {
