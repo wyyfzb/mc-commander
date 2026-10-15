@@ -116,12 +116,12 @@ export const marketInstallResultSchema = pluginUploadResultSchema.extend({
   originalFileName: z.string(),
 })
 
-// ── 请求侧契约（issue 391：路由层 zod 契约统一）──
+// ── 请求侧契约（路由层 zod 契约统一）──
 
 /**
  * GET /instances/:id/plugins/market/search 查询契约。
- * offset/limit 为分页参数，按 issue 391 边界保持既有手写解析不动
- * （由 #392 分页 util 后续统一），schema 仅作字符串透传避免归一化剥离。
+ * offset/limit 为分页参数，按分页边界保持既有手写解析不动，
+ * schema 仅作字符串透传避免归一化剥离。
  */
 export const marketSearchRequestSchema = z.object({
   q: z.string().optional(),

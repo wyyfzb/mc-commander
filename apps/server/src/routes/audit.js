@@ -13,9 +13,9 @@ export function createAuditRoutes() {
   const router = Router();
 
   // GET /api/v1/audit-logs
-  // 查询参数契约（issue 391）：筛选字段 + order（asc/desc，缺省/非法回落 desc，
-  // issue 383 向后兼容语义由 schema catch 表达）；page/pageSize 透传给
-  // parsePagination（issue 391 分页边界，#392 收敛的解析语义不变）
+  // 查询参数契约：筛选字段 + order（asc/desc，缺省/非法回落 desc，
+  // 向后兼容语义由 schema catch 表达）；page/pageSize 透传给
+  // parsePagination（分页边界收敛的解析语义不变）
   router.get('/audit-logs', validateQuery(auditLogsQuerySchema), (req, res, next) => {
     try {
       const { page, pageSize } = parsePagination(req.query);

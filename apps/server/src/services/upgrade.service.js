@@ -408,7 +408,7 @@ export class UpgradeService {
   }
 
   /**
-   * 回滚：恢复旧 JAR + DB/内存回写（#539）
+   * 回滚：恢复旧 JAR + DB/内存回写
    *
    * 回滚终态三者自洽：DB { jarFile: 旧名, mcVersion: 旧版本 } + 磁盘旧版本
    * jar 本体唯一（旧名内容=旧版本）+ 内存实例同步。阶段 3 已把 DB/内存
@@ -426,10 +426,10 @@ export class UpgradeService {
       const instance = this.serverManager.getInstance(instanceId);
       if (!instance) return;
 
-      // 恢复旧 JAR：目标改为旧 jar 本体路径（#539）。修复前目标是
-      // instance.jarFile——阶段 3 后已是新版本文件名，旧内容被拷到新名上
-      // 产生「新名旧内容」jar，破坏 server-{mcVersion}.jar 命名约定。
-      // 异步复制（#520）：50MB 级 JAR 同步 copyFileSync 会阻塞事件循环
+      // 恢复旧 JAR：目标为旧 jar 本体路径。阶段 3 后 instance.jarFile 已是新版本
+      // 文件名，以它为目标会把旧内容拷到新名上，产生「新名旧内容」jar，破坏
+      // server-{mcVersion}.jar 命名约定。
+      // 异步复制：50MB 级 JAR 同步 copyFileSync 会阻塞事件循环
       // 数百毫秒（期间 RCON/WS/全部请求延迟），与同链路其余异步 IO 风格对齐
       // 复制即判定：ENOENT ＝ 旧 jar 已被清理（无副本可恢复），跳过即可；
       // 不做存在性预检——预检与复制之间的窗口里旧 jar 被删会让整段回滚中断
@@ -440,8 +440,8 @@ export class UpgradeService {
         });
       }
 
-      // 错位副本清理（#539）：阶段 3 后磁盘上新版本文件名 jar（新版本内容，
-      // 即首启失败的那个）不再属于回滚终态，删除使旧版本 jar 本体唯一，
+      // 错位副本清理：阶段 3 后磁盘上新版本文件名 jar（新版本内容，
+      // 即首启失败的那个）不属于回滚终态，删除使旧版本 jar 本体唯一，
       // 后续备份快照不再冗余收录。同名守卫：阶段 3 前失败（jarFile 未切换）
       // 或同版本直调时二者同名，无错位副本可删。删除失败不阻塞回滚主流程。
       if (oldJarFile && instance.jarFile !== oldJarFile) {
@@ -449,11 +449,11 @@ export class UpgradeService {
         await fs.promises.unlink(misplacedJar).catch(() => {});
       }
 
-      // DB/内存回写旧版本（#539）：jarFile 一并回写——修复前仅回写
-      // mcVersion，DB jarFile 保持阶段 3 写入的新版本文件名，与磁盘/内存
-      // 三者错位，备份快照 --exclude 随之失效（排除新名、收录残留旧本体）。
-      // 内存同步：修复前回滚后内存 jarFile/mcVersion 仍指向新版本，错位
-      // 副本已删时再次启动将找不到 jar 文件
+      // DB/内存回写旧版本：jarFile 一并回写——只回写 mcVersion 会让 DB jarFile
+      // 保持阶段 3 写入的新版本文件名，与磁盘/内存三者错位，备份快照 --exclude
+      // 随之失效（排除新名、收录残留旧本体）。
+      // 内存同步：不同步回写 jarFile/mcVersion 时，错位副本已删的情况下再次
+      // 启动将找不到 jar 文件
       if (oldJarFile && instance._originalMcVersion) {
         const { InstanceModel } = await import('../db/index.js');
         InstanceModel.update(instanceId, {
@@ -465,7 +465,7 @@ export class UpgradeService {
       }
     } finally {
       // 清理临时旧 JAR（await：回滚完成（含清理）后才 resolve，
-      // 调用方不会在临时备份仍在磁盘时提前推进 cleanup，#520）
+      // 调用方不会在临时备份仍在磁盘时提前推进 cleanup）
       if (oldJarPath) await fs.promises.unlink(oldJarPath).catch(() => {});
     }
   }
@@ -575,7 +575,7 @@ export class UpgradeService {
 
       // 阶段 3：替换 JAR
       this._emitProgress(instanceId, UPGRADE_STAGES.REPLACE, 0, '正在替换 JAR...');
-      // 备份旧 JAR（异步复制对齐同链路 IO 风格，#520）。
+      // 备份旧 JAR（异步复制对齐同链路 IO 风格）。
       // 先写 .part 再改名：复制中途失败/被取消时 rollback 源要么不存在、要么完整，
       // 不会把半截文件当成「旧 JAR 副本」覆盖到实例目录（复制不可中断，取消落在
       // 复制中只能等它结束，故副本完整性必须靠原子改名保证）
@@ -606,7 +606,7 @@ export class UpgradeService {
       await this._startAndVerify(instanceId, { signal: task.signal });
       this._emitProgress(instanceId, UPGRADE_STAGES.COMPLETED, 100, '升级完成');
 
-      // 清理：回滚源副本 + 被替换的旧版本 jar（#520：升级成功后实例目录
+      // 清理：回滚源副本 + 被替换的旧版本 jar（升级成功后实例目录
       // 仅保留当前版本 jar，避免多次升级累积磁盘垃圾；失败/回滚路径不删，
       // 回滚源仍需可用。同路径守卫：路由层已拒同版本升级，直调服务层时
       // oldJarPath 可能与 newJarPath 相同，此时旧 jar 本体即新 jar，不可删）

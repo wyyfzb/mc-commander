@@ -1,5 +1,5 @@
 /**
- * zod schema 校验（@mc-commander/schemas 单源契约，验收 #262-#2）
+ * zod schema 校验（@mc-commander/schemas 单源契约）
  *
  * 请求侧：validateBody(schema) —— safeParse 失败返回 400 VALIDATION_ERROR
  *   （message 为可读聚合，details 为结构化 issue 列表），成功时把归一化
@@ -35,9 +35,9 @@ export function validateBody(schema) {
 }
 
 /**
- * 请求查询参数校验（issue 391）：与 validateBody 同一契约（400 VALIDATION_ERROR
+ * 请求查询参数校验：与 validateBody 同一契约（400 VALIDATION_ERROR
  * + 结构化 details），成功时把归一化结果回写 req.query（剥离未知字段，
- * 分页参数在 schema 内作字符串透传，交由 #392 parsePagination 解析）。
+ * 分页参数在 schema 内作字符串透传，交由 parsePagination 解析）。
  *
  * Express 5 中 req.query 定义在 Request 原型上（defineGetter，只读），
  * 直接赋值在 ESM 严格模式下抛 TypeError，因此用实例级 own property

@@ -135,8 +135,8 @@ export function createPluginRoutes(serverManager) {
   // ── 市场延伸：必须在 :file 参数路由之前注册 ──────────
 
   // GET /api/v1/instances/:id/plugins/market/search?q=&offset=&limit=&game_version=&loader=
-  // 查询契约（issue 391）：q/game_version/loader 归一校验；offset/limit 为分页参数
-  // 按 issue 391 边界透传，既有手写解析不动（#392 分页 util 后续统一）
+  // 查询契约：q/game_version/loader 归一校验；offset/limit 为分页参数
+  // 按分页边界透传，既有手写解析不动
   router.get(
     '/instances/:id/plugins/market/search',
     validateQuery(marketSearchRequestSchema),
@@ -247,7 +247,7 @@ export function createPluginRoutes(serverManager) {
     },
     validateQuery(pluginOverwriteQuerySchema, {
       // multer diskStorage 已落盘：schema 拒绝非法 overwrite（非 true/false 枚举）
-      // 时在 400 前清理临时文件，防止磁盘残留（#397 回归修复，issue 391）
+      // 时在 400 前清理临时文件，防止磁盘残留（安全性只增不减）
       onError: (req) => {
         if (req.file?.path) {
           try {

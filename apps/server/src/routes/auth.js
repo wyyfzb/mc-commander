@@ -51,7 +51,7 @@ import { generateRecoveryCodes, hashRecoveryCode } from '../utils/recovery-codes
  *                                  API Key 轮换入口——该开关是部署配置，公开的 status
  *                                  刻意不回传配置面）
  * - POST   /auth/setup       公开  首访设密（仅未设密时可用；成功即自动登录）
- *                                  所有权证明约定（#309）：.env 配置了 SETUP_TOKEN 时（公网
+ *                                  所有权证明约定：.env 配置了 SETUP_TOKEN 时（公网
  *                                  部署，部署脚本首次部署自动生成），请求必须携带
  *                                  `Authorization: SetupToken <token>`（本文件与
  *                                  utils/setup-token.js 约定的唯一通道；与 Bearer 会话头互不
@@ -225,7 +225,7 @@ export function createAuthRoutes() {
   });
 
   // POST /api/v1/auth/setup —— 公开：首访设密（幂等防护：已设密 409；所有权证明：SETUP_TOKEN）
-  // schema 只锁形状（#428）：SetupToken 403 校验在 handler 内先于密码强度 400，
+  // schema 只锁形状：SetupToken 403 校验在 handler 内先于密码强度 400，
   // 未证明所有权不泄露后续校验语义
   router.post('/auth/setup', validateBody(authSetupRequestBodySchema), (req, res, next) => {
     try {
@@ -234,7 +234,7 @@ export function createAuthRoutes() {
           .status(409)
           .json(error(ErrorCodes.AUTH_ALREADY_CONFIGURED, '管理员密码已设置，请直接登录'));
       }
-      // 所有权证明（#309）：公网部署时「部署完成 → 管理员设密」窗口内
+      // 所有权证明：公网部署时「部署完成 → 管理员设密」窗口内
       // 任何发现端口者可抢先设密永久接管面板；配置了 SETUP_TOKEN 则强制校验。
       // token 校验置于密码强度校验之前——未证明所有权不泄露后续校验语义
       const tokenRequired = isSetupTokenRequired();
@@ -284,7 +284,7 @@ export function createAuthRoutes() {
   });
 
   // POST /api/v1/auth/login —— 公开：密码换会话令牌
-  // schema 只锁形状（#428）：弱密码属凭据错误（401 + 失败锁定计数），不升为 400
+  // schema 只锁形状：弱密码属凭据错误（401 + 失败锁定计数），不升为 400
   router.post('/auth/login', validateBody(authLoginRequestBodySchema), (req, res, next) => {
     try {
       const ip = clientIp(req);
@@ -353,7 +353,7 @@ export function createAuthRoutes() {
   });
 
   // PUT /api/v1/auth/password —— 认证：改密（验旧密；改后踢单设备保留当前）
-  // schema 只锁形状（#428）：旧密 401 校验先于新密强度 400，错误呈现顺序保持
+  // schema 只锁形状：旧密 401 校验先于新密强度 400，错误呈现顺序保持
   router.put(
     '/auth/password',
     validateBody(authPasswordChangeRequestBodySchema),

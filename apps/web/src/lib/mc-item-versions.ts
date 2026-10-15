@@ -1,7 +1,7 @@
 import { isVersionAtLeast } from '@/lib/mc-version'
 
 /**
- * 物品版本元数据的**权威来源**（条目 9）。
+ * 物品版本元数据的**权威来源**。
  *
  * 数据不是手写的，由 `scripts/gen-item-versions.mjs` 从官方注册表生成：
  *   ① Mojang `version_manifest_v2.json` —— 权威「哪些 id 是正式发布版」列表

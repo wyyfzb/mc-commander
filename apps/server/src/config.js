@@ -73,7 +73,7 @@ const config = {
   // 写操作与敏感读（文件/日志/配置/命令史/审计/备份/会话）一律拒绝；WS 可握手但
   // 只收读数类事件（白名单见 websocket.js 的 READONLY_WS_EVENTS）。
   readonlyApiKeyHash: process.env.READONLY_API_KEY_HASH || '',
-  // 首访设密所有权证明（一次性 SETUP_TOKEN，/ issue #309）：
+  // 首访设密所有权证明（一次性 SETUP_TOKEN）：
   // 部署脚本首次部署生成写入 .env；POST /auth/setup 强制校验，通过即作废
   //（内存清空 + .env 移除，重启后同样失效）。未配置 = 未开启（本机首发兼容）
   setupToken: process.env.SETUP_TOKEN || '',

@@ -883,7 +883,7 @@ npm ci --omit=dev
 
 # 9. 生成/读取 .env 配置（API Key 首次部署自动生成，更新时保留原有Key）
 # .env 只落 API_KEY_HASH（SHA-256 摘要），明文仅在完成横幅一次性展示
-# SETUP_TOKEN：首访设密所有权证明（audit S-P0-1 / #309）——仅首次部署生成；
+# SETUP_TOKEN：首访设密所有权证明——仅首次部署生成；
 # 更新部署不读取不再生成（一次性凭据，避免重复展示扩大暴露面；存量部署
 # 需开启保护请手动向 .env 添加 SETUP_TOKEN 行后重启服务）
 SETUP_TOKEN=""
@@ -919,7 +919,7 @@ EOF
       echo "PUBLIC_IP=$PUBLIC_IP_DETECTED"
     } >> .env
   fi
-  # Key 掩码进日志（P2-10）：完整值仅在下方完成横幅一次性展示（交付通道），
+  # Key 掩码进日志：完整值仅在下方完成横幅一次性展示（交付通道），
   # 不进 log 长期留存；.env 只存摘要
   log "已生成 API Key: ${API_KEY:0:4}****（完整值见部署完成横幅）"
   log "已生成一次性 SETUP_TOKEN（首访设密时需粘贴，用后作废）"
