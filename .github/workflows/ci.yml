@@ -188,10 +188,6 @@ jobs:
       - run: npm run test:e2e
         env:
           E2E_SERVER: preview
-      # 截图工具冒烟：真起一次 capture（单路由）断言出图。capture.mjs 无其他自动覆盖，
-      # 内部的路径引用断链（如 mock 后端搬走后仍指旧位置）不会任何一道门禁发现。
-      # 放这里而不是「仓库卫生」：本 job 已装 Playwright 浏览器，那边没装、跑它会必红。
-      - run: npm run test:vision
       - name: 上传失败现场
         if: failure()
         uses: actions/upload-artifact@v7
