@@ -4,7 +4,6 @@
  *
  * 本用例真起进程验证：子进程再拉一个孙进程，killGroup 后孙进程必须消失。
  */
-import { spawn } from 'node:child_process'
 import { afterEach, describe, expect, it } from 'vitest'
 import { killGroup, spawnGrouped } from '../vision/lib/process-group.mjs'
 
