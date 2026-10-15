@@ -16,7 +16,7 @@ MC\_Commander 是一个自托管的 Minecraft 服务器管理面板：不装插�
 | `apps/*/src/`、`apps/*/tests/` | 源码与测试分离：`src/` 只放交付源码，测试放同包 `tests/`（web 镜像 `src/` 到 `tests/unit/`，基建在 `tests/support/`）。**包内只留产品与其测试**：E2E、mock 后端、门禁脚本、截图工具一律住 `tools/`——它们判定/驱动的是整个前端，不是包的运行时组成 |
 | `apps/server/var/` | 服务端运行期数据（实例 / SQLite 与日志 / 备份快照）：产物只进这里，包内不放数据；落点锚定包根（config.js），不随 cwd 漂移 |
 | `apps/schemas/`          | 共享契约包（zod，包名 `@mc-commander/schemas`）：web 经 vite alias 直读 `src`，服务端经 workspace 链接消费 `dist`（构建产物） |
-| `tools/`               | 维护者工具（不住包内）：`gates/`（设计 token / 对比度 / 体积 / 目录结构）、`e2e/`（Playwright 配置 + 19 spec + mock 后端）、`vision/`（全站截图）、`ci/local-check.sh`、`dev/`（生成器）、`ops/`（运维）、`deploy/`（发布载荷） |
+| `tools/`               | 维护者工具（不住包内）：`gates/`（设计 token / 对比度 / 体积 / 目录结构）、`e2e/`（Playwright 配置 + 19 spec + mock 后端）、`ci/local-check.sh`、`dev/`（生成器）、`ops/`（运维）、`deploy/`（发布载荷） |
 | `docs/`                | 使用者文档（`architecture.md`、`user-guide.md`） |
 
 仓库是 **npm workspaces**：在**仓库根**跑一次 `npm ci` 即装齐三包依赖，根 `package-lock.json`
@@ -49,7 +49,6 @@ npm run check:design-tokens            # 设计 token 门禁
 npm run check:contrast                 # 对比度门禁
 npm run check:size                     # 产物体积门禁（需先 build -w apps/web）
 npm run test:e2e                       # Playwright e2e（自动起 mock 后端 + dev server）
-npm run capture -- --routes=<路由>      # 全站截图（输出 .ai/vision/）
 
 # tools/ 自身的三道门禁：它在 workspaces 之外，包级 lint / tsc / vitest 都扫不到
 npm run lint:tools && npm run typecheck && npm run test:tools
