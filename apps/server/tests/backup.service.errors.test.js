@@ -5,11 +5,11 @@ import os from 'os';
 import crypto from 'crypto';
 import { EventEmitter } from 'events';
 
-// ---------- BackupService 编排层错误路径防护网（issue 500） ----------
+// ---------- BackupService 编排层错误路径防护网 ----------
 // 与 flow.test.js（真实文件系统 + 真实快照命令的主流程集成）互补：
 // 本文件专注错误分支与平台/工具分支——spawn 子进程行为全部 mock（平台无关，
 // 不依赖 rsync 安装），文件操作保持真实（断言回滚/清理的真实落盘结果）。
-// spawn mock 采用 importOriginal 语义级替换（#419 范式）：仅替换 spawn 导出，
+// spawn mock 采用 importOriginal 语义级替换（范式）：仅替换 spawn 导出，
 // 其余 child_process 能力保持原实现。
 
 vi.mock('../src/db/backup.model.js', () => ({

@@ -14,7 +14,7 @@ import { queryKeys } from '@/api/queries'
 import type { WebSocketLike, WebSocketCtor } from '@/api/ws'
 
 /**
- * WS 单例治理（issue #311）hook 层测试：
+ * WS 单例治理hook 层测试：
  * - 凭据变更（换 token）→ 旧连接 close、新连接首帧 auth 携带新凭据
  * - 登出（session 清空）→ 单例关闭置空、重连定时器清空
  * - 实例切换/effect 重跑 → connect 幂等不产生双 WebSocket
@@ -109,7 +109,7 @@ async function flushMicrotasks() {
   })
 }
 
-describe('useServerSocket（WS 单例治理，issue #311）', () => {
+describe('useServerSocket（WS 单例治理）', () => {
   beforeEach(() => {
     FakeWebSocket.instances = []
     localStorage.clear()
@@ -623,7 +623,7 @@ describe('useServerSocket（WS 单例治理，issue #311）', () => {
   })
 })
 
-describe('useServerSocket（备份进度与取消接线，清单 #16）', () => {
+describe('useServerSocket（备份进度与取消接线）', () => {
   beforeEach(() => {
     FakeWebSocket.instances = []
     localStorage.clear()
@@ -759,7 +759,7 @@ describe('useServerSocket（状态跃迁通知接线）', () => {
     expect(localStorage.getItem('mcs-notifications')).not.toBeNull()
   })
 
-  it('非当前实例的常规跃迁不入通知中心（维持 issue #334 的 critical-only 取舍）', async () => {
+  it('非当前实例的常规跃迁不入通知中心（维持 的 critical-only 取舍）', async () => {
     const ws = await connectReady('i-1')
 
     act(() => {

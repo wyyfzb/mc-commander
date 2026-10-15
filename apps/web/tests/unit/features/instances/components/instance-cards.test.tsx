@@ -104,7 +104,7 @@ describe('InstanceCards', () => {
     expect(screen.getByText('内存').parentElement).toHaveTextContent('—')
   })
 
-  it('升级中徽标：store 有非终态进度时显示（issue 352）', () => {
+  it('升级中徽标：store 有非终态进度时显示', () => {
     act(() => {
       useUpgradeStore.setState({
         progress: {
@@ -360,7 +360,7 @@ describe('InstanceCards', () => {
 })
 
 /**
- * 详情查询失败（条目 35）：失败必须与「本来就没有这个值」可分。
+ * 详情查询失败：失败必须与「本来就没有这个值」可分。
  * 此前只取 data/isLoading，isError 被静默丢掉 ⇒ 版本徽章凭空消失、指标全「—」，
  * 用户会把上游故障读成「这台机器就是没有 TPS/世界大小」。
  */

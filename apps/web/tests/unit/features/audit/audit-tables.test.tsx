@@ -35,7 +35,7 @@ function makeCmd(overrides: Partial<CommandHistoryItem>): CommandHistoryItem {
   }
 }
 
-describe('AuditBody（issue 481 拆分后行为级测试）', () => {
+describe('AuditBody（拆分后行为级测试）', () => {
   it('行渲染：key+from+to 三件套合并展示，操作列走标签映射，目标列拼接类型与 ID', () => {
     const logs: AuditLogItem[] = [
       makeLog({

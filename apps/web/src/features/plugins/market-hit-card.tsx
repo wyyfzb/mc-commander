@@ -1,5 +1,5 @@
 /**
- * 市场结果卡片（拆分自 market-sheet.tsx，issue 473 治理线延续，纯搬移）
+ * 市场结果卡片（拆分自 market-sheet.tsx，纯搬移）
  *
  * 搜索结果条目 + 内联版本面板。纯受控组件：展开/安装行为经 onToggle/onInstall
  * 回调上抛，版本数据由 MarketSheet 经 VersionsPanel 下发（同一时刻仅一个 slug

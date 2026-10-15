@@ -1,5 +1,5 @@
 /**
- * PluginRow 行为级测试（issue 449：插件行组件 funcs 洼地覆盖收口）
+ * PluginRow 行为级测试（插件行组件 funcs 洼地覆盖收口）
  * 纯展示组件（props 全回调注入，无网络/store 依赖），覆盖：
  * - 渲染与 meta 回退：displayName（meta.name ?? 文件名）、版本/API 徽章条件渲染、
  *   启停状态徽章、作者/依赖列表、缺省字段不出现在文档

@@ -204,7 +204,7 @@ describe('PlayersCard（右栏可点行）', () => {
     expect(screen.getByText('需启用 RCON 才能读取在线玩家')).toBeInTheDocument()
   })
 
-  it('RCON 未连接 → 空态提供「前往服务器属性」深链（issue 343）', () => {
+  it('RCON 未连接 → 空态提供「前往服务器属性」深链', () => {
     setState({
       ...mockInstanceStatus,
       capabilities: { rcon: false, msmp: false, msmpPush: false },

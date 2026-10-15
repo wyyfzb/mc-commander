@@ -1,5 +1,5 @@
 /**
- * player-export 行为级补测（issue 506）
+ * player-export 行为级补测
  * - 拦截 write-excel-file：断言真实传给库的工作表数据（13 列表头/行值映射/列宽/表头加粗）
  *   与下载文件名；导出编排逻辑（标签映射、四舍五入、或语义）全真
  * - 文件名「玩家数据_yyyyMMdd_HHmm.xlsx」经固定系统时间断言

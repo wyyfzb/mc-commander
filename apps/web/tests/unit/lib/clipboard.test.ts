@@ -1,5 +1,5 @@
 /**
- * lib/clipboard 统一工具单测（issue #349）
+ * lib/clipboard 统一工具单测
  * 覆盖：
  * - 安全上下文：异步 Clipboard API 成功（不触碰 execCommand 降级）
  * - 非安全上下文：clipboard 缺失 → execCommand('copy') 兜底成功
@@ -15,7 +15,7 @@ function setClipboard(value: unknown) {
   Object.defineProperty(window.navigator, 'clipboard', { value, configurable: true })
 }
 
-describe('lib/clipboard copyText（issue #349）', () => {
+describe('lib/clipboard copyText', () => {
   let execCommandMock: ReturnType<typeof vi.fn>
 
   beforeEach(() => {

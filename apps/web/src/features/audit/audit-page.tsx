@@ -3,10 +3,10 @@
  * 双 Tab：审计日志（操作记录）/ 命令历史（命令执行记录）
  * TanStack Query 数据获取：isLoading/isFetching/isError 内建，
  * keepPreviousData 翻页不闪烁，过滤器变化经 query key 自动重获取
- * 审计状态 URL 持久化（issue 381）：tab/页码/操作类型/时间起止同步到查询参数，
+ * 审计状态 URL 持久化：tab/页码/操作类型/时间起止同步到查询参数，
  * 刷新/分享链接后筛选保持（与核心列表页 useSearchParams 模式对齐）
- * 时间排序切换（issue 383）：正序/倒序（默认倒序，URL 不留参数），切换重置页码保留筛选
- * 命令历史 tab 时间筛选（issue 385）：接入服务端既有 startTime/endTime 参数，
+ * 时间排序切换：正序/倒序（默认倒序，URL 不留参数），切换重置页码保留筛选
+ * 命令历史 tab 时间筛选：接入服务端既有 startTime/endTime 参数，
  * 筛选栏样式与倒置防护对齐审计日志 tab（cmdStart/cmdEnd/cmdPage 同样 URL 持久化）
  */
 import { useMemo, useRef, useState } from 'react'
@@ -52,7 +52,7 @@ const DATE_PARAM_RE = /^\d{4}-\d{2}-\d{2}$/
 const MASKED_COMMAND_RE = /\*\*\*/
 
 export function AuditPage() {
-  // ── 筛选状态 URL 持久化（issue 381）：state 为唯一真源，URL 为镜像 ──
+  // ── 筛选状态 URL 持久化：state 为唯一真源，URL 为镜像 ──
   // 挂载时惰性读取（非法值回退默认，与无参数访问行为一致）；变更经 setter 包装同步写回。
   // paramsRef 累积同批次多次 patch（如清空筛选四连调）：setSearchParams 的函数式更新
   // 捕获的是本次渲染的闭包值，同批多次调用会互相覆盖，因此先在 ref 上合并再一次性写回。
@@ -89,7 +89,7 @@ export function AuditPage() {
     const v = searchParams.get('end') ?? ''
     return DATE_PARAM_RE.test(v) ? v : ''
   })
-  // 时间排序（issue 383）：仅 asc 留参数（desc 为默认，URL 保持最短）；非法值回退默认
+  // 时间排序：仅 asc 留参数（desc 为默认，URL 保持最短）；非法值回退默认
   const [auditOrder, setAuditOrderState] = useState<'asc' | 'desc'>(() =>
     searchParams.get('order') === 'asc' ? 'asc' : 'desc',
   )
@@ -115,7 +115,7 @@ export function AuditPage() {
     setAuditEndState(v)
     syncParams({ end: v || null })
   }
-  // 切换排序：重置到第 1 页、保留现有筛选（issue 383 验收项）
+  // 切换排序：重置到第 1 页、保留现有筛选（验收项）
   const setAuditOrder = (v: 'asc' | 'desc') => {
     setAuditOrderState(v)
     syncParams({ order: v === 'asc' ? 'asc' : null })
@@ -155,7 +155,7 @@ export function AuditPage() {
     setAuditPage(1)
   }
 
-  /** 空态排查：筛选（操作类型/时间范围）生效时提供一键清空（issue 343 空态 CTA 补齐） */
+  /** 空态排查：筛选（操作类型/时间范围）生效时提供一键清空（空态 CTA 补齐） */
   const auditFiltered = Boolean(auditAction) || hasTimeRange
   const clearAuditFilters = () => {
     setAuditAction('')
@@ -171,7 +171,7 @@ export function AuditPage() {
     // 倒置期间两侧均不传（服务端 created_at 为 UTC「YYYY-MM-DD HH:MM:SS」字符串比较，须先换算）
     startTime: auditStart && !rangeInvalid ? toServerStart(auditStart) : undefined,
     endTime: auditEnd && !rangeInvalid ? toServerEnd(auditEnd) : undefined,
-    // desc 为服务端默认不传，请求与历史形态一致（issue 383）
+    // desc 为服务端默认不传，请求与历史形态一致
     order: auditOrder === 'asc' ? 'asc' : undefined,
   })
 
@@ -202,7 +202,7 @@ export function AuditPage() {
     syncParams({ cmdEnd: v || null })
   }
 
-  // ── 命令历史 tab 时间筛选（issue 385：接入服务端既有 startTime/endTime 参数） ──
+  // ── 命令历史 tab 时间筛选（接入服务端既有 startTime/endTime 参数） ──
   // 起止倒置：与审计日志 tab 同款防护——可见提示并暂停时间过滤
   const cmdRangeInvalid = isRangeInverted(cmdStart, cmdEnd)
   const cmdHasTimeRange = Boolean(cmdStart || cmdEnd)
@@ -283,7 +283,7 @@ export function AuditPage() {
       setReplayTarget(null)
     }
   }
-  // 导出：按当前筛选 + 排序口径拉取（服务端零改动，上限 1000 条，issue 384）
+  // 导出：按当前筛选 + 排序口径拉取（服务端零改动，上限 1000 条）
   const [exporting, setExporting] = useState(false)
   const handleExport = async () => {
     setExporting(true)
@@ -306,7 +306,7 @@ export function AuditPage() {
 
   const refreshing = auditQuery.isFetching || cmdQuery.isFetching
 
-  // 命令历史导出（issue 403）：筛选口径与 cmdQuery 一致（时间起止 + 倒置防护），
+  // 命令历史导出：筛选口径与 cmdQuery 一致（时间起止 + 倒置防护），
   // 服务端固定最新优先；失败 toast 与审计日志导出口径一致
   const [cmdExporting, setCmdExporting] = useState(false)
   const handleCmdExport = async () => {

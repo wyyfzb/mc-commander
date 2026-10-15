@@ -10,7 +10,7 @@ import { MINECRAFT_ITEMS } from '@/lib/mc-items'
 import { buildGiveCommand } from '@/lib/mc-enchantments'
 
 /**
- * 物品版本元数据（条目 9）。
+ * 物品版本元数据。
  *
  * 本表由 `scripts/gen-item-versions.mjs` 从**官方注册表**生成（Mojang 正式版清单 +
  * mcmeta 各版本 item 注册表），故测试重点不是「值对不对」（那是生成器的职责），

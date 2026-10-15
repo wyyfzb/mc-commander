@@ -287,7 +287,7 @@ export type InstancePropertiesRequestBody = z.infer<typeof instancePropertiesReq
 export type InstanceEulaRequestBody = z.infer<typeof instanceEulaRequestBodySchema>
 
 // ---------------------------------------------------------------------------
-// 卸载实例（issue 486 收口的同一范式，见上）
+// 卸载实例（收口的同一范式，见上）
 // 破坏性端点：实例名确认由服务端强制（前端弹窗的输入只存在于客户端，直连 API
 // 的调用方此前可无确认删除），备份目录按设计保留，故成功响应回报保留内容。
 // ---------------------------------------------------------------------------

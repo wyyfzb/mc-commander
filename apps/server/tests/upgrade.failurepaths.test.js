@@ -1,5 +1,5 @@
 /**
- * 升级服务异常路径与长尾分支补测（#465）
+ * 升级服务异常路径与长尾分支补测
  *
  * 覆盖既有 3 个 upgrade 测试文件未触及的分支域：
  * ① resolveDownload 三上游分支矩阵：vanilla 缺版本/缺 JAR/无 sha1、paper v3
@@ -12,7 +12,7 @@
  * ④ _startAndVerify：首启 crash、他实例状态隔离、实例内存缺失、start 同步
  *    抛错/异步拒绝、120s 校验超时
  * ⑤ _doRollback：恢复旧 JAR 至旧本体路径 + DB jarFile/mcVersion 回写
- *    （#539）、oldJarPath 为空跳过复制、_originalMcVersion/oldJarFile 缺失
+ *    、oldJarPath 为空跳过复制、_originalMcVersion/oldJarFile 缺失
  *    跳过回写、回滚自身失败兜底日志、备份恢复失败不阻塞
  *
  * 网络隔离：http-client 全量 mock（json/stream 行为按用例注入），CI 离线确定性。
@@ -467,7 +467,7 @@ describe('_createBackupAndWait 失败与超时', () => {
     const stages = progressStages(manager);
     expect(stages[stages.length - 1]).toBe(UPGRADE_STAGES.FAILED);
     expect(stages).toContain(UPGRADE_STAGES.ROLLED_BACK);
-    // 回滚 DB 回写：恢复旧 jarFile 名 + 旧版本（#539；备份失败时 jarFile 未切换，幂等恢复）
+    // 回滚 DB 回写：恢复旧 jarFile 名 + 旧版本（；备份失败时 jarFile 未切换 幂等恢复）
     expect(InstanceModel.update).toHaveBeenCalledWith('inst-1', {
       jarFile: 'server-1.20.4.jar',
       mcVersion: '1.20.4',
@@ -579,7 +579,7 @@ describe('_startAndVerify 失败与超时', () => {
     expect(stages).toContain(UPGRADE_STAGES.ROLLED_BACK);
     expect(stages[stages.length - 1]).toBe(UPGRADE_STAGES.FAILED);
 
-    // 回滚把备份的旧 JAR 恢复回旧 jar 本体路径（#539：目标不再是被切换的新名）
+    // 回滚把备份的旧 JAR 恢复回旧 jar 本体路径（目标不再是被切换的新名）
     expect(fs.readFileSync(path.join(tmpDir, 'server-1.20.4.jar'), 'utf8')).toBe('OLD_JAR_CONTENT');
     // 错位副本（新名 jar）已删：旧版本 jar 本体唯一
     expect(fs.existsSync(path.join(tmpDir, 'server-1.21.4.jar'))).toBe(false);
@@ -588,7 +588,7 @@ describe('_startAndVerify 失败与超时', () => {
     await vi.waitFor(() =>
       expect(fs.readdirSync(tmpDir)).not.toContain('._upgrade_backup_server-1.20.4.jar'),
     );
-    // DB：replace 阶段写新版本，回滚阶段恢复旧 jarFile 名 + 原版本（#539）
+    // DB：replace 阶段写新版本，回滚阶段恢复旧 jarFile 名 + 原版本
     expect(InstanceModel.update).toHaveBeenCalledWith('inst-1', {
       jarFile: 'server-1.21.4.jar',
       mcVersion: '1.21.4',

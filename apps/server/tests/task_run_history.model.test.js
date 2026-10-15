@@ -38,7 +38,7 @@ import { TaskRunHistoryModel } from '../src/db/task_run_history.model.js';
 const findSqlIndex = (fragment) =>
   prepareLog.reduce((acc, e, i) => (e.sql.includes(fragment) ? i : acc), -1);
 
-describe('TaskRunHistoryModel（issue #299）', () => {
+describe('TaskRunHistoryModel', () => {
   beforeEach(() => {
     prepareLog.length = 0;
     setRows([]);

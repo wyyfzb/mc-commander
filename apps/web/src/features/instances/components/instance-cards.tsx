@@ -100,7 +100,7 @@ export interface InstanceCardsProps {
   onStop: (instance: InstanceSummary) => void
   /** 启停请求在途的实例 id（对应卡启停按钮禁用 + spinner） */
   busyId: string | null
-  /** 启停中间态表（issue 334：starting/stopping 期间对应卡禁用；与 busyId 叠加） */
+  /** 启停中间态表（starting/stopping 期间对应卡禁用；与 busyId 叠加） */
   phaseById: Record<string, InstancePhase>
   /** 部署新实例入口（空态按钮与页面头部共用） */
   onDeploy: () => void
@@ -213,7 +213,7 @@ function InstanceCard({
   // 展示名与操作按钮的可访问名统一走 instanceLabel（空名回退 id，避免出现无名按钮）
   const name = instanceLabel(instance)
   const mcVersion = detail?.mcVersion
-  // 升级中标识（issue 352）：WS 订阅补发/实时事件驱动；终态残留不误显示
+  // 升级中标识：WS 订阅补发/实时事件驱动；终态残留不误显示
   // （终态 store 清理由升级弹窗打开时做，卡片只认非终态）
   const upgradeStage = useUpgradeStore((s) => s.progress[id]?.stage)
   const upgrading = upgradeStage != null && !isUpgradeTerminal(upgradeStage)
@@ -387,7 +387,7 @@ function InstanceCard({
       )}
 
       {/* 操作行：主操作只留启停（状态类，按 phase 中间态禁用：starting/stopping
-          spinner，WS 确认后解锁 issue 334）与切换（非当前实例的导航）；
+          spinner，WS 确认后解锁）与切换（非当前实例的导航）；
           配置/升级/卸载收进操作菜单——弹窗类与破坏性操作低频，且卸载另有输入实例名的强确认，
           五个按钮平铺会把卡片右下角挤满。菜单项文案对齐各自弹窗标题。
           「停止」有中断服务与断连玩家的后果，走 destructive 变体；危险语义色只从变体取，

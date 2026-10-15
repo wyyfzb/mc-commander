@@ -71,7 +71,7 @@ export class AuditLogModel {
     const whereClause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
     const offset = (page - 1) * pageSize;
 
-    // 排序方向白名单（issue 383）：缺省/非法值回落 DESC，与历史行为完全一致
+    // 排序方向白名单：缺省/非法值回落 DESC，与历史行为完全一致
     const direction = order === 'asc' ? 'ASC' : 'DESC';
 
     const rows = db

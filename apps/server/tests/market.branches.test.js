@@ -1,5 +1,5 @@
 /**
- * market.service.js 分支补测（issue 518：缓存行为/下载安全臂/清洗回退/错误翻译）
+ * market.service.js 分支补测（缓存行为 下载安全臂 清洗回退 错误翻译）
  *
  * 范式与 market.test.js 同构：http-client 全量 mock（离线语义），本文件聚焦既有用例
  * 未触达的分支面——cacheGet 过期清理臂、cacheSet 近似 LRU 淘汰、下载超限中断流、

@@ -64,7 +64,7 @@ import { pruneOrphanBackupDirs } from '../src/services/backup-snapshot.service.j
 import config from '../src/config.js';
 import { logger } from '../src/utils/logger.js';
 
-describe('TaskScheduler - append-only 表保留清理（issue #472：审计日志 / webhook 投递记录；issue #479：命令历史）', () => {
+describe('TaskScheduler - append-only 表保留清理（审计日志 webhook 投递记录； 命令历史）', () => {
   let scheduler;
   let mockManager;
 
@@ -245,7 +245,7 @@ describe('TaskScheduler - append-only 表保留清理（issue #472：审计日�
     );
   });
 
-  it('runRetentionPrune：命令历史表失败不拖累其余两表，failed 归因 command_history（issue #479 失败隔离）', () => {
+  it('runRetentionPrune：命令历史表失败不拖累其余两表，failed 归因 command_history（失败隔离）', () => {
     config.retentionPrune.enabled = true;
     AuditLogModel.prune.mockReturnValue(6);
     WebhookModel.pruneDeliveries.mockReturnValue(3);

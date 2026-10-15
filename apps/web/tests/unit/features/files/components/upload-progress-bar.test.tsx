@@ -1,5 +1,5 @@
 /**
- * UploadProgressBar 组件测试（#430 拆分交付：上传进度条迁移后的渲染与 ARIA 验证）
+ * UploadProgressBar 组件测试（拆分交付 上传进度条迁移后的渲染与 ARIA 验证）
  * 覆盖：名称/百分比渲染 / progressbar ARIA 三元组（label/min/max/valuenow）/ 取消回调接线
  * 与既有 page 级测试（files-page-upload-progress.test.tsx）的 ARIA 断言口径一致
  */

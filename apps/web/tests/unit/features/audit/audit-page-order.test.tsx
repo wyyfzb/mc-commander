@@ -1,5 +1,5 @@
 /**
- * AuditPage 时间排序切换测试（issue 383）
+ * AuditPage 时间排序切换测试
  * mock @/api/queries 捕获 useAuditLogs 入参 + createMemoryRouter 检查 location.search：
  * - 默认倒序：「最新优先」激活，order 不入查询参数（与历史请求形态一致）
  * - 切换正序：URL 写回 order=asc，查询参数透传 asc
@@ -77,7 +77,7 @@ beforeEach(() => {
   auditParams.order = undefined
 })
 
-describe('AuditPage 时间排序切换（issue 383）', () => {
+describe('AuditPage 时间排序切换', () => {
   it('默认倒序：最新优先激活，order 不入查询参数（向后兼容）', async () => {
     renderPage()
 

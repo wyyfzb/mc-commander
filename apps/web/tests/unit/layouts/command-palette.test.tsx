@@ -1,5 +1,5 @@
 /**
- * CommandPalette 实例操作分组测试（issue 343）：
+ * CommandPalette 实例操作分组测试：
  * - 分组渲染（带实例名）+ 三条目（重启/备份/停止）
  * - 停止/重启：关面板 → ConfirmDialog 二次确认 → 确认后发令
  * - 备份：非破坏性直接执行

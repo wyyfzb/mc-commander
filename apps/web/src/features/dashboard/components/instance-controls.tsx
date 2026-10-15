@@ -48,7 +48,7 @@ export function InstanceControls() {
   // 启动：共享 mutation（EULA 首启特例内置：命中 → 弹同意 → 续启；与实例页同源）
   const { startInstance, startPending, pendingStartId, eulaDialog } = useStartInstanceWithEula()
 
-  // 停止：共享 mutation（issue 334 收敛：与实例页同源，phase 中间态防连点）
+  // 停止：共享 mutation（收敛：与实例页同源，phase 中间态防连点）
   const stopMutation = useStopInstance()
 
   // 重启/保存（启动/停止已拆出共享 hook）
@@ -102,7 +102,7 @@ export function InstanceControls() {
       return {
         ok: false,
         message: '服务器启动后立即崩溃，请检查日志',
-        // 深入链接：一键查看进程末尾日志（issue 343，消费 lastOutput）
+        // 深入链接：一键查看进程末尾日志（消费 lastOutput）
         instanceId: id,
       }
     }
@@ -121,7 +121,7 @@ export function InstanceControls() {
           toast.success('服务器已启动')
         } else {
           toast.error(result.message, {
-            // 深入链接：失败时进程可能已留下末尾输出（issue 343）
+            // 深入链接：失败时进程可能已留下末尾输出
             ...(result.instanceId
               ? {
                   action: {
@@ -168,7 +168,7 @@ export function InstanceControls() {
     []
 
   // 启动按钮 busy：共享 hook 的启动中（含 EULA 同意后续启）或本页确认弹窗链路；
-  // phase 中间态（issue 334）：starting/stopping 期间全部启停按钮禁用（WS 确认后解锁）
+  // phase 中间态：starting/stopping 期间全部启停按钮禁用（WS 确认后解锁）
   const startBusy =
     (startPending && pendingStartId === instanceId) ||
     busyAction === '启动' ||

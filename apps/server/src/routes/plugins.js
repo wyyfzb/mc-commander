@@ -290,7 +290,7 @@ export function createPluginRoutes(serverManager) {
   );
 
   // PUT /api/v1/instances/:id/plugins/:file/enabled  body: { enabled: boolean }
-  // 请求体契约（issue 391）：enabled 布尔守护由 pluginEnabledRequestSchema 统一
+  // 请求体契约：enabled 布尔守护由 pluginEnabledRequestSchema 统一
   router.put(
     '/instances/:id/plugins/:file/enabled',
     validateBody(pluginEnabledRequestSchema),

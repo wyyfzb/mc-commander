@@ -99,7 +99,7 @@ export class UpgradeService {
   }
 
   /**
-   * 解析 JAR 下载地址与期望摘要（issue 316：上游提供 sha 时返回 expectedHash，
+   * 解析 JAR 下载地址与期望摘要（上游提供 sha 时返回 expectedHash，
    * 下载完成后由 _downloadJar 强制校验）。
    * 各上游摘要可用性：vanilla Piston detail.downloads.server.sha1（官方提供
    * sha1）；paper v3 downloadInfo.checksums.sha256；purpur /latest 的顶层 md5。
@@ -151,7 +151,7 @@ export class UpgradeService {
   }
 
   /**
-   * 下载 JAR 文件到指定路径，带进度广播 + 体积上限 + 落地完整性校验（issue 316）
+   * 下载 JAR 文件到指定路径，带进度广播 + 体积上限 + 落地完整性校验
    * @param {string} url
    * @param {string} destPath
    * @param {string} instanceId
@@ -228,7 +228,7 @@ export class UpgradeService {
       stream.pipe(file);
 
       file.on('finish', () => {
-        // close 回调确保 fd 落盘后才校验摘要（issue 316：fail-closed）
+        // close 回调确保 fd 落盘后才校验摘要（fail-closed）
         file.close(() => {
           if (aborted) return;
           assertDownloadIntegrity(destPath, expectedHash)

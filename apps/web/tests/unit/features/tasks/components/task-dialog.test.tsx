@@ -380,7 +380,7 @@ describe('TaskDialog dirty 关闭拦截', { timeout: 15000 }, () => {
   })
 })
 
-// ── 最近执行时间线（issue #299）──────────────────────────────────
+// ── 最近执行时间线──────────────────────────────────
 
 const RUN_HISTORY_MOCK: TaskRunHistory[] = [
   {
@@ -409,7 +409,7 @@ const RUN_HISTORY_MOCK: TaskRunHistory[] = [
   },
 ]
 
-describe('TaskDialog 最近执行时间线（issue #299）', { timeout: 15000 }, () => {
+describe('TaskDialog 最近执行时间线', { timeout: 15000 }, () => {
   it('编辑模式：渲染倒序执行历史（状态/耗时/失败原因），hook 收到任务 id', () => {
     useTaskHistoryMock.mockImplementation(() => ({ data: RUN_HISTORY_MOCK, isLoading: false }))
     renderDialog({ task: makeTask({ id: 1 }) })

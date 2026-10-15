@@ -1,5 +1,5 @@
 /**
- * NotificationDrawer 通知条目跳转测试（issue 334）
+ * NotificationDrawer 通知条目跳转测试
  * - 带 instanceId 的条目：点击 → 标记已读 + 关抽屉 + navigate /instances?focus=<id>
  * - 无 instanceId 的条目：点击仅标记已读（原行为）
  * - circuitBreaker 类型渲染（severe 样式 + 图标）
@@ -164,7 +164,7 @@ describe('NotificationDrawer 世界格式升级进度（就地更新的进度条
   })
 })
 
-describe('NotificationDrawer 条目跳转（issue 334）', () => {
+describe('NotificationDrawer 条目跳转', () => {
   it('带 instanceId 条目：点击 → 已读 + 关抽屉 + focus 深链接跳转', () => {
     const { onOpenChange } = renderDrawer()
 
@@ -215,7 +215,7 @@ describe('NotificationDrawer 条目跳转（issue 334）', () => {
   })
 })
 
-// ─── 以下为组件打磨批（issue 344）补充：severity 筛选 + 清除全部确认 ───
+// ─── 以下为组件打磨批补充：severity 筛选 + 清除全部确认 ───
 
 let seq = 0
 function makeItem(
@@ -232,7 +232,7 @@ function makeItem(
   }
 }
 
-describe('NotificationDrawer severity 筛选（issue 344）', () => {
+describe('NotificationDrawer severity 筛选', () => {
   it('无通知：显示空态且不渲染筛选 chips', () => {
     useNotificationStore.setState({ items: [], unreadCount: 0, activeAlerts: new Set() })
     renderDrawer()
@@ -297,7 +297,7 @@ describe('NotificationDrawer severity 筛选（issue 344）', () => {
   })
 })
 
-describe('NotificationDrawer 清除全部确认（issue 344）', () => {
+describe('NotificationDrawer 清除全部确认', () => {
   it('点「清除全部」先弹确认，未确认前不清空', async () => {
     const user = userEvent.setup()
     useNotificationStore.setState({

@@ -1,5 +1,5 @@
 /**
- * Deploy 端点审计断言（INSTANCE_CREATE，issue 373）
+ * Deploy 端点审计断言（INSTANCE_CREATE）
  *
  * 部署链路重依赖（网络下载 / java 子进程 / forge 安装）全部 mock：
  * - 上游 HTTP：vanilla 的构建解析走 Piston manifest（由 httpJson 替身合成）

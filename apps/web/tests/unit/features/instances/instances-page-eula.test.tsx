@@ -1,5 +1,5 @@
 /**
- * 实例页 EULA 首启闭环测试（issue 312）：
+ * 实例页 EULA 首启闭环测试：
  * - 卡片「启动」命中 EULA 需求（403 EULA_NOT_ACCEPTED）→ 弹中文同意对话框
  * - 同意 → POST /eula 写入 + 自动续启（start 第二次调用成功）→ toast 反馈
  * - 拒绝 → 提示不启动，不写 EULA
@@ -63,7 +63,7 @@ beforeEach(() => {
   instanceListMock.running = true
 })
 
-describe('InstancesPage EULA 首启闭环（issue 312）', () => {
+describe('InstancesPage EULA 首启闭环', () => {
   it('启动命中 EULA → 同意弹窗 → 确认后写入 EULA 并自动续启成功', async () => {
     instanceListMock.running = false // 非运行实例 → 卡片显示「启动」按钮
     startMock.eulaRequired = true // 首启：服务端返回 EULA_NOT_ACCEPTED

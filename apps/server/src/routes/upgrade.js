@@ -18,7 +18,7 @@ import { cancelTask, TASK_KINDS } from '../utils/cancellable-task.js';
  * POST /instances/:id/upgrade —— 202 异步，WS 推送进度
  * GET /instances/:id/upgrade/status —— 查询当前升级状态
  *
- * 请求体契约（issue 391）：mcVersion 必填 + type 枚举（vanilla/paper/purpur，
+ * 请求体契约：mcVersion 必填 + type 枚举（vanilla/paper/purpur，
  * 缺省归一 vanilla）由 upgradeRequestSchema 统一校验（非法 400 VALIDATION_ERROR
  * + 结构化 details）；点分版本白名单属服务层纵深防御口径，保留在路由内。
  */

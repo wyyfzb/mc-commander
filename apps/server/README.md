@@ -482,7 +482,7 @@ apps/server/
 │   │   ├── panel-backup.service.js # 面板自身数据备份（SQLite 在线快照）
 │   │   ├── plugin.service.js # 插件扫描 / 启停 / 市场安装
 │   │   ├── market.service.js # Modrinth 市场客户端
-│   │   ├── instance-properties.service.js # server.properties 读写（issue 514）
+│   │   ├── instance-properties.service.js # server.properties 读写
 │   │   ├── upgrade.service.js # 实例版本升级
 │   │   ├── webhook.service.js # Webhook 投递（重试 + 投递日志）
 │   │   └── task_scheduler.js # Cron 调度（croner）+ 临时封禁到期自动解封

@@ -6,8 +6,8 @@
  * - 自动回填：版本/加载器列表就绪回填首个；系统内存 → 推荐档位（用户手动调整后不覆盖），
  *   回填值同步基线不算 dirty
  * - EULA 同意随部署请求下发（服务端据此写 eula.txt）；部署成功且已同意时发启动指令
- *   （POST /start），结果块展示启动状态（首启闭环，issue 312）
- * - 视图状态机：部署中 → 成功 → 已取消 → 失败 → 表单三步；恢复场景保留进行中进度（issue 352）；
+ *   （POST /start），结果块展示启动状态（首启闭环）
+ * - 视图状态机：部署中 → 成功 → 已取消 → 失败 → 表单三步；恢复场景保留进行中进度；
  *   服务端报告在途部署时禁止再次发起（消除重复部署）；部署中禁用上一步与关闭（ESC/遮罩拦截），
  *   仅保留「取消部署」出口（服务端中断执行体并清理未完成目录）
  * - dirty 关闭拦截：表单与基线对比（自动回填的版本/加载器同步基线，不误判 dirty）
@@ -100,7 +100,7 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
 
   // 打开时重置表单与部署状态（自动回填前的基线同步见下方 effect）。
   // 恢复场景例外：store 中已有进行中的部署（页面刷新后 WS 连接补发恢复的
-  // 进度）→ 保留进度直接显示部署视图，重置会丢掉恢复态（issue 352）
+  // 进度）→ 保留进度直接显示部署视图，重置会丢掉恢复态
   useEffect(() => {
     if (!open) return
     const store = useDeployStore.getState()
@@ -226,7 +226,7 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
       const deployed = await deployMutation.mutateAsync(payload)
       setResult(deployed)
       finishDeploy({ ok: true, instanceId: deployed.id })
-      // 首启闭环（issue 312）：EULA 已随部署请求写入，这里只需发启动指令（启动异步，状态在仪表盘/终端可见）
+      // 首启闭环：EULA 已随部署请求写入，这里只需发启动指令（启动异步，状态在仪表盘/终端可见）
       if (eulaAgreed) {
         setAutoStart('pending')
         try {

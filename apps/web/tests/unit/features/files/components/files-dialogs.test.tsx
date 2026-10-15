@@ -1,6 +1,6 @@
 /**
  * RenameDialog / DeleteConfirmDialog / UploadConflictDialog / UnsavedConfirmDialog 组件测试
- * （#430 拆分交付：files 对话框群迁移后的渲染与回调接线验证）
+ * （拆分交付 files 对话框群迁移后的渲染与回调接线验证）
  * 覆盖：目录/文件分支文案、路径插槽、覆盖回调携带文件、isBlocked 文案分支
  * 组件为纯受控展示件：mutation 与页面级副作用由父组件负责，此处以 spy 断言回调
  */

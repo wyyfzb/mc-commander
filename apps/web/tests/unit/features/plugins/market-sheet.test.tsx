@@ -228,7 +228,7 @@ describe('MarketSheet', () => {
     expect(screen.getByRole('button', { name: '重试' })).toBeInTheDocument()
   })
 
-  it('无匹配空态提供「清空过滤」CTA：清关键词+过滤后回到热门浏览（issue 343）', async () => {
+  it('无匹配空态提供「清空过滤」CTA：清关键词+过滤后回到热门浏览', async () => {
     const user = userEvent.setup()
     let lastQ = ''
     server.use(

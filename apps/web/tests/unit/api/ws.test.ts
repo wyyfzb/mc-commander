@@ -177,7 +177,7 @@ describe('McSocket（对照服务端 websocket.js 契约，首帧鉴权）', () 
     await expect(socket.connect()).rejects.toThrow('连接凭据未配置')
   })
 
-  describe('WS 单例治理（issue #311：connect 幂等 + 重建清理 + 登出关闭）', () => {
+  describe('WS 单例治理（connect 幂等 + 重建清理 + 登出关闭）', () => {
     it('connect 幂等：OPEN 后重复调用复用同一 promise，仅创建一个 WebSocket（重连按钮防抖）', async () => {
       const socket = new McSocket({ apiKey: 'k', WebSocketImpl: FakeCtor })
       const p1 = socket.connect()

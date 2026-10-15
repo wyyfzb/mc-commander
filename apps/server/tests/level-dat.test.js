@@ -1,5 +1,5 @@
 /**
- * level-dat 世界存档数据读取域模块行为级测试（issue 490 拆分交付）
+ * level-dat 世界存档数据读取域模块行为级测试（拆分交付）
  * - 模块直接 import 可用（require 复用语义，与 mc_server.js 原型注入同源）
  * - 原型注入后实例调用 this 绑定正确（_getSafeLevelName 走实例 properties）
  * - makeSeedCache 缓存条目构造（mtime/size 快照）

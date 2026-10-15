@@ -4,7 +4,7 @@ import fs from 'fs';
 import os from 'os';
 import { EventEmitter } from 'events';
 
-// ---------- 备份/恢复取消与进度（清单 #16） ----------
+// ---------- 备份/恢复取消与进度 ----------
 // 与 errors.test.js 同范式：spawn 子进程全部 mock（平台无关），文件操作保持
 // 真实（断言取消路径的半成品清理与回滚真实落盘）。取消通道的核心断言点：
 // requestCancelBackup 命中注册表 → abort → spawn 以 CANCELLED 上抛 →

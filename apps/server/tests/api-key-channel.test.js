@@ -124,7 +124,7 @@ describe('API_KEY_ENABLED=false：API Key 通道 fail-closed', () => {
 
   it('空白 X-API-Key（`""` / `"   "`）同按「未提供凭据」处理：40107 而非 40101', async () => {
     // 脚本从环境变量取值、变量未设置时会发出空 header——报 40101 会把「没配好凭据」
-    // 误导成「Key 无效」，与定向文案（#19）的意图相反
+    // 误导成「Key 无效」，与定向文案的意图相反
     for (const raw of ['', '   ']) {
       const res = await request(app).get('/api/v1/protected').set('X-API-Key', raw);
       expect(res.status, `header=${JSON.stringify(raw)}`).toBe(401);

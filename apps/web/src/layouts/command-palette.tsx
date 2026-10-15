@@ -54,7 +54,7 @@ import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
  * CommandPalette —— Cmd+K 全局命令面板
  * 能力：页面跳转 / 主题切换 / 命令域（预设快捷命令经命令总线执行）
  * / 玩家搜索、给予/传送/封禁快捷入口
- * / 实例操作（重启/备份/停止，issue 343：破坏性操作二次确认，备份直接执行）
+ * / 实例操作（重启/备份/停止：破坏性操作二次确认，备份直接执行）
  */
 
 const PRESET_STORAGE_KEY = 'mcs-command-presets'
@@ -105,7 +105,7 @@ export function CommandPalette() {
   const isInstanceRunning = useServerStore((s) => s.status?.isRunning ?? false)
   const openPlayerDetail = usePlayersUiStore((s) => s.openPlayerDetail)
 
-  // 实例操作（issue 343）：重启/备份/停止；破坏性操作关面板后二次确认
+  // 实例操作：重启/备份/停止；破坏性操作关面板后二次确认
   const queryClient = useQueryClient()
   const config = useConnectionStore()
   const stopMutation = useStopInstance()

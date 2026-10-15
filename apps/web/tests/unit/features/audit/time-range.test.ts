@@ -1,5 +1,5 @@
 /**
- * time-range 工具单测（#303）
+ * time-range 工具单测
  * 锁定服务端口径：SQLite CURRENT_TIMESTAMP 为 UTC「YYYY-MM-DD HH:MM:SS」，
  * 字符串比较语义下起止换算必须与该格式逐字符对齐。
  * 用固定时刻构造（不依赖运行时区），断言全部基于同一时区下换算的自洽性。

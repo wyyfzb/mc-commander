@@ -52,7 +52,7 @@ const ONLINE_PLAYER: Player = {
   },
 }
 
-describe('ExperienceForm（issue 480 拆分后组件行为级测试）', () => {
+describe('ExperienceForm（拆分后组件行为级测试）', () => {
   it('单模式提交路径：默认 10 经验值提交，onAction 收到 /xp 命令', async () => {
     const user = userEvent.setup()
     const onAction = vi.fn(async () => {})

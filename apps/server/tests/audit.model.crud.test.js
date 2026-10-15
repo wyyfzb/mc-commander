@@ -4,10 +4,10 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-// AuditLogModel / CommandHistoryModel 持久层行为级补测（真实 SQLite，issue 503）。
+// AuditLogModel / CommandHistoryModel 持久层行为级补测（真实 SQLite）。
 // 既有 audit.model.test.js 以 fakeDb 锁定 SQL 形状；本文件补真实数据库行为语义：
 // CRUD 往返 / 默认值链 / 分页边界 / 过滤组合（AND）/ 时间窗（>= <=）/ 排序方向
-// 白名单回落 / prune 清理计数。范式与 backup.model.crud.test.js（issue 421）一致：
+// 白名单回落 / prune 清理计数。范式与 backup.model.crud.test.js 一致：
 // db 层用真实 SQLite 实例，仅替身 database.js 的连接管理（getDb 指向本文件
 // 创建的临时库），SQL 语义真实。
 

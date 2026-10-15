@@ -1,6 +1,6 @@
 /**
  * terminal store 单测：缓冲生命周期与实例隔离
- * 真实调用 store action 断言状态变迁（#436/#449 行为级范式）；
+ * 真实调用 store action 断言状态变迁（行为级范式）；
  * 级别推断/截断等纯函数语义由 lib 层用例锁定，此处只验证 store 接线
  */
 import { beforeEach, describe, expect, it } from 'vitest'

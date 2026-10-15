@@ -1,5 +1,5 @@
 /**
- * 契约测试：auth/keys 路由响应接入 validatedSuccess 观测（issue 414）
+ * 契约测试：auth/keys 路由响应接入 validatedSuccess 观测
  *
  * 用 supertest 实打实打路由（真实 model + SQLite 临时库），断言各成功响应
  * data 可被 @mc-commander/schemas auth 域 schema parse——session/apiKey 属

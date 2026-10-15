@@ -1,5 +1,5 @@
 /**
- * WebhookService 分发主链补测（issue #410）
+ * WebhookService 分发主链补测
  * 覆盖 dispatch → _deliver → 重试 → 落库 → 失败通知全链路：
  * 事件/实例过滤、背压（MAX_CONCURRENT_PER_WEBHOOK=5，丢弃落 skipped 投递记录）、指数退避（1s→5s，vi.useFakeTimers 锁定时序）、
  * 4xx 短路、重试耗尽落库（attempts/durationMs）、失败通知去重（首次通知/重复抑制/成功恢复）、
@@ -125,7 +125,7 @@ async function runDeliverToFruition(hook, eventType = 'player.join', payload = {
   await p;
 }
 
-describe('WebhookService.dispatch 主流程（issue #410）', () => {
+describe('WebhookService.dispatch 主流程', () => {
   it('事件过滤：仅 events 包含该事件的 webhook 被投递（白名单语义在订阅方）', async () => {
     const joined = createHook({ url: 'https://hooks.example.com/joined', events: ['player.join'] });
     const other = createHook({
@@ -248,7 +248,7 @@ describe('WebhookService.dispatch 主流程（issue #410）', () => {
   });
 });
 
-describe('WebhookService._deliver 重试链路（issue #410）', () => {
+describe('WebhookService._deliver 重试链路', () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });
@@ -390,7 +390,7 @@ describe('WebhookService._deliver 重试链路（issue #410）', () => {
   });
 });
 
-describe('WebhookService 投递失败通知去重（issue #410）', () => {
+describe('WebhookService 投递失败通知去重', () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });
@@ -446,7 +446,7 @@ describe('WebhookService 投递失败通知去重（issue #410）', () => {
   });
 });
 
-describe('WebhookService 背压保护（issue #410）', () => {
+describe('WebhookService 背压保护', () => {
   it('同一 webhook 第 6 个并发投递被拒（MAX_CONCURRENT_PER_WEBHOOK=5），完成后计数释放', async () => {
     const hook = createHook();
     const gates = [];
@@ -459,7 +459,7 @@ describe('WebhookService 背压保护（issue #410）', () => {
     }
 
     expect(postImpl.current).toHaveBeenCalledTimes(5);
-    // 前 5 个事件 pending 挂起；第 6 个事件背压丢弃落 skipped 记录（issue 526 可观测性）
+    // 前 5 个事件 pending 挂起；第 6 个事件背压丢弃落 skipped 记录（可观测性）
     const rows = deliveriesOf(hook.id);
     expect(rows.filter((r) => r.status === 'pending')).toHaveLength(5);
     const skippedRows = rows.filter((r) => r.status === 'skipped');
@@ -486,7 +486,7 @@ describe('WebhookService 背压保护（issue #410）', () => {
     });
   });
 
-  it('背压丢弃落 skipped 投递记录：event/instance/payload 可查，attempts=0 durationMs=0，不发起投递（issue 526）', async () => {
+  it('背压丢弃落 skipped 投递记录：event/instance/payload 可查，attempts=0 durationMs=0，不发起投递', async () => {
     const hook = createHook({ events: ['player.join'] });
     const gates = [];
     postImpl.current = vi.fn(() => new Promise((r) => gates.push(r)));
@@ -517,7 +517,7 @@ describe('WebhookService 背压保护（issue #410）', () => {
     await new Promise((r) => setImmediate(r));
   });
 
-  it('背压持续期间每个被丢弃事件各落一条记录；槽释放后恢复投递（issue 526）', async () => {
+  it('背压持续期间每个被丢弃事件各落一条记录；槽释放后恢复投递', async () => {
     const hook = createHook();
     const gates = [];
     postImpl.current = vi.fn(() => new Promise((r) => gates.push(r)));
@@ -552,7 +552,7 @@ describe('WebhookService 背压保护（issue #410）', () => {
     });
   });
 
-  it('落记录抛错不中断 dispatch：退化为仅告警，事件仍被跳过不投递（issue 526）', async () => {
+  it('落记录抛错不中断 dispatch：退化为仅告警，事件仍被跳过不投递', async () => {
     const hook = createHook();
     const gates = [];
     postImpl.current = vi.fn(() => new Promise((r) => gates.push(r)));
@@ -583,7 +583,7 @@ describe('WebhookService 背压保护（issue #410）', () => {
   });
 });
 
-describe('WebhookService.dispatch SSRF 拦截（issue #410）', () => {
+describe('WebhookService.dispatch SSRF 拦截', () => {
   it('dispatch 路径私网 URL 被拦截：落 failed 记录（attempts=0、durationMs=0）且不发起投递', async () => {
     const hook = createHook();
     guardImpl.current = async () => ({ ok: false, reason: '私网地址被拒绝' });
@@ -603,7 +603,7 @@ describe('WebhookService.dispatch SSRF 拦截（issue #410）', () => {
   });
 });
 
-describe('WebhookService._sign 与 _truncateBody（issue #410）', () => {
+describe('WebhookService._sign 与 _truncateBody', () => {
   it('_sign：固定输入的 HMAC-SHA256 输出可复算（硬编码期望值）', () => {
     expect(WebhookService._sign('test-secret-key', '1700000000', '{"event":"ping"}')).toBe(
       'sha256=9326beadedfdb706c389ab1eef12c2b20fb29b38a3ed7702d93e012f2e1f6485',
@@ -630,7 +630,7 @@ describe('WebhookService._sign 与 _truncateBody（issue #410）', () => {
   });
 });
 
-describe('setupWebhookDispatch 事件桥接（issue #410）', () => {
+describe('setupWebhookDispatch 事件桥接', () => {
   it('EVENT_MAP 全量映射：玩家/成就源事件分发到对应 webhook 事件', () => {
     const dispatchSpy = vi.spyOn(WebhookService, 'dispatch').mockResolvedValue();
     const sm = new EventEmitter();

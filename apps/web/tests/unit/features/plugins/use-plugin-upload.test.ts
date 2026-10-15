@@ -1,5 +1,5 @@
 /**
- * usePluginUpload hook 单元测试（issue 432：插件域 0% 覆盖收口）
+ * usePluginUpload hook 单元测试（插件域 0% 覆盖收口）
  * apiUploadPlugin 以 vi.mock 替换为可控 Promise（gate 手法）精确编排时序；toast 层 mock 断言文案。
  * 覆盖：
  * - 入口过滤：全非 .jar 拒绝 + 混合列表跳过提示

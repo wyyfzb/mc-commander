@@ -945,7 +945,7 @@ describe('Status Routes · 端点缺口收口', () => {
       expect(recordAudit).toHaveBeenCalled();
     });
 
-    // ── 备份互斥（#530）：creating/restoring 进行中拒绝卸载，防恢复竞争数据事故 ──
+    // ── 备份互斥：creating/restoring 进行中拒绝卸载，防恢复竞争数据事故 ──
     it('restoring 记录存在 → 409 拒绝：不触碰实例目录/快照目录/任何 DB 记录', async () => {
       const instance = makeInstance();
       mockManager.getInstance.mockReturnValue(asInstance(instance));

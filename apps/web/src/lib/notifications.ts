@@ -327,7 +327,7 @@ export function buildNotifications(
         },
       ]
     }
-    // 长任务终态（issue 352）：部署完成前实例未入库，实例名由 payload 携带；
+    // 长任务终态：部署完成前实例未入库，实例名由 payload 携带；
     // 升级终态的服务端 payload 同样补了 instanceName
     case 'deployComplete':
       return [

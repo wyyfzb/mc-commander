@@ -4,12 +4,12 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-// ScheduledTaskModel 持久层语义补测（issue #424，真实 SQLite）。
+// ScheduledTaskModel 持久层语义补测（真实 SQLite）。
 // 既有 scheduled_task.model.test.js 以 fakeDb 断言 SQL 形状（lastRunStatus
 // 与执行历史收口），本文件补真实库语义：findAll 动态过滤与分页偏移、
 // create 默认值链、update fieldMap 白名单（lastRunStatus 防篡改）、
 // updateLastRun/updateLastRunStatus 的错误清空链路与历史落库行为。
-// db 层用真实 SQLite 实例，仅替身 database.js 的连接管理（#421 范式）。
+// db 层用真实 SQLite 实例，仅替身 database.js 的连接管理（范式）。
 
 const TEST_DIR = path.join(os.tmpdir(), `mcs-scheduled-task-model-${process.pid}-${Date.now()}`);
 
@@ -66,7 +66,7 @@ beforeAll(async () => {
     )
   `);
 
-  // scheduled_tasks.instance_id 带 FK 约束，预置实例行（#416 教训）
+  // scheduled_tasks.instance_id 带 FK 约束，预置实例行（教训）
   db.prepare('INSERT INTO instances (id, name) VALUES (?, ?)').run('s1', 'Instance 1');
   db.prepare('INSERT INTO instances (id, name) VALUES (?, ?)').run('s2', 'Instance 2');
 

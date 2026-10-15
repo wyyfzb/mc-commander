@@ -1,5 +1,5 @@
 /**
- * 市场过滤栏（拆分自 market-sheet.tsx，issue 473 治理线延续，纯搬移）
+ * 市场过滤栏（拆分自 market-sheet.tsx，纯搬移）
  *
  * 纯受控组件：关键词（防抖由 SearchInput 内部管理）+ 加载器/版本筛选 +
  * 手动刷新 + 结果计数。全部状态由 MarketSheet 持有，本组件只负责展示

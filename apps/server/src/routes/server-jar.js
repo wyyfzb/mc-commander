@@ -211,7 +211,7 @@ async function downloadWithProgress(
     stream.pipe(file);
 
     file.on('finish', () => {
-      // close 回调确保 fd 落盘后才校验摘要（issue 316：fail-closed）
+      // close 回调确保 fd 落盘后才校验摘要（fail-closed）
       file.close(() => {
         if (aborted) return;
         assertDownloadIntegrity(destPath, expectedHash)
@@ -571,7 +571,7 @@ export function createServerJarRoutes(serverManager) {
         });
 
         let downloadUrl;
-        let expectedHash = null; // 上游摘要（issue 316）：有则强校验，无则仅限流
+        let expectedHash = null; // 上游摘要：有则强校验，无则仅限流
         if (type.toLowerCase() === 'paper') {
           ({ url: downloadUrl, expectedHash } = await getPaperDownload(mcVersion));
         } else if (type.toLowerCase() === 'vanilla') {

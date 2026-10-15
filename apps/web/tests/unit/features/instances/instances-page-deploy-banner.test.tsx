@@ -1,5 +1,5 @@
 /**
- * 实例页部署进行中横幅测试（issue 352）：
+ * 实例页部署进行中横幅测试：
  * - deployStore 部署中（deploying + progress）→ 横幅显示实例名 + 阶段标签（刷新后 WS 补发恢复的最小可见标识）
  * - 无进行中部署 → 横幅不渲染；部署终态 → 横幅收敛（deploying 为 false）
  * - 下载阶段带百分比；非下载阶段（forge_install/first_launch）不带误导性 0%
@@ -56,7 +56,7 @@ beforeEach(() => {
   useDeployStore.setState({ progress: null, deploying: false, lastResult: null })
 })
 
-describe('InstancesPage 部署进行中横幅（issue 352）', () => {
+describe('InstancesPage 部署进行中横幅', () => {
   it('部署中：横幅显示实例名 + 阶段标签（恢复态可见标识）', () => {
     act(() => {
       useDeployStore.setState({

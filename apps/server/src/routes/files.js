@@ -257,7 +257,7 @@ function resolveInstancePath(basePath, userPath, options) {
 export function createFileRoutes(serverManager) {
   const router = Router({ mergeParams: true });
 
-  // 列出文件/目录（查询契约 issue 391：path 缺省归一 '/'，未知字段剥离）
+  // 列出文件/目录（查询契约：path 缺省归一 '/'，未知字段剥离）
   router.get(
     '/instances/:instanceId/files',
     validateQuery(fileListRequestSchema),
@@ -887,7 +887,7 @@ export function createFileRoutes(serverManager) {
 
   // 上传文件（POST /instances/:instanceId/files/upload，multipart/form-data）
   // multer 错误标准化中间件：MulterError（file too large 等）→ AppError；
-  // targetDir 查询契约（issue 391）：缺省归一 '/'、拒绝控制字符，由 schema 完成
+  // targetDir 查询契约：缺省归一 '/'、拒绝控制字符，由 schema 完成
   router.post(
     '/instances/:instanceId/files/upload',
     (req, res, next) => {
@@ -950,7 +950,7 @@ export function createFileRoutes(serverManager) {
         const basePath = instance.serverPath || path.join(config.serversDir, instanceId);
 
         // 目标目录：可选 targetDir 查询参数（schema 已缺省归一 '/'、补全前导 /
-        // 并拒绝控制字符，issue 391）
+        // 并拒绝控制字符）
         const normalizedDir = req.query.targetDir;
         // 去掉前导 / 以便拼接（normalizedDir 为 '/' 时 relativeDir 为空）
         const relativeDir = normalizedDir === '/' ? '' : normalizedDir.slice(1);

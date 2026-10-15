@@ -1,5 +1,5 @@
 /**
- * players API 函数行为级测试（issue 495：api 层三文件覆盖率洼地收口）
+ * players API 函数行为级测试（api 层三文件覆盖率洼地收口）
  * msw 局部拦截真链路：路径/请求体契约断言 + 解包契约；
  * 错误传播：非 2xx 错误信封 → ApiError / 200 error 信封 → ApiError
  * 数据均为虚构测试值，不含真实服务器/玩家信息

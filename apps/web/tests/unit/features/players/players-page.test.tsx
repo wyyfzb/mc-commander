@@ -144,7 +144,7 @@ describe('PlayersPage', () => {
     expect(await screen.findByText('没有匹配的玩家')).toBeInTheDocument()
   })
 
-  it('无匹配空态提供「清空筛选」CTA：点击恢复全量列表（issue 343）', async () => {
+  it('无匹配空态提供「清空筛选」CTA：点击恢复全量列表', async () => {
     renderPage()
     await screen.findByText('Steve')
     fireEvent.change(screen.getByPlaceholderText('搜索玩家名或 UUID…'), {

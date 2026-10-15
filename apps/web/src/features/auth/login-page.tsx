@@ -53,7 +53,7 @@ import {
 
 type Phase = 'probing' | 'setup' | 'login' | 'unreachable'
 
-/** 服务端 AUTH_SETUP_TOKEN_INVALID：公网部署开启了首访设密所有权证明（issue 309） */
+/** 服务端 AUTH_SETUP_TOKEN_INVALID：公网部署开启了首访设密所有权证明 */
 const AUTH_SETUP_TOKEN_INVALID_CODE = 40104
 
 /**
@@ -103,7 +103,7 @@ export function LoginPage() {
   const [baseUrl, setBaseUrl] = useState(() => useConnectionStore.getState().baseUrl)
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
-  // 首访设密所有权证明（issue 309）：服务端返回 40104 时展示 SETUP_TOKEN 输入框
+  // 首访设密所有权证明：服务端返回 40104 时展示 SETUP_TOKEN 输入框
   const [needsSetupToken, setNeedsSetupToken] = useState(false)
   const [setupToken, setSetupToken] = useState('')
   /**

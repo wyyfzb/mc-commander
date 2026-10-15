@@ -1,5 +1,5 @@
 /**
- * 进程输出解析域（issue 494 治理线·服务端第二阶段）：_parseOutput 与玩家进出事件辅助
+ * 进程输出解析域（治理线·服务端第二阶段）：_parseOutput 与玩家进出事件辅助
  * 自 mc_server.js 等价搬移。挂载方式与 level-dat 域一致：由宿主模块 Object.assign
  * 原型注入复用，模块函数体内 this 语义与类内定义完全一致（实例方法调用时 this
  * 绑定实例），全部调用点零改动，对外接口零变化。域外协作方法（_loadPlayerData、

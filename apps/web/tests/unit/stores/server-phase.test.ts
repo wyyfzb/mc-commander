@@ -1,5 +1,5 @@
 /**
- * server store phase 中间态单测（issue 334）
+ * server store phase 中间态单测
  * - setPhase 置入 starting/stopping（按实例隔离，多实例并行互不覆盖）
  * - setPhase(id, null) 清除（清除不存在的 key 无害且不新建键）
  */

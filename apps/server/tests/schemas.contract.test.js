@@ -1,5 +1,5 @@
 /**
- * 契约测试：服务端响应与 @mc-commander/schemas 单源 schema 对齐（验收 #262-#2 响应侧）
+ * 契约测试：服务端响应与 @mc-commander/schemas 单源 schema 对齐（验收 -#2 响应侧）
  *
  * 用 supertest 实打实打路由（真实 model + SQLite 内存外临时库），断言：
  * 1. 成功响应信封可被 apiEnvelopeSchema parse（status/code/message/timestamp 结构）
@@ -88,7 +88,7 @@ beforeAll(() => {
     action TEXT NOT NULL, target_type TEXT, target_id TEXT, detail TEXT,
     source TEXT DEFAULT 'api', created_at TEXT DEFAULT CURRENT_TIMESTAMP
   )`);
-  // v11：响应侧契约观测推广（#393）——players 封禁记录 / backups 列表契约断言用
+  // v11：响应侧契约观测推广——players 封禁记录 / backups 列表契约断言用
   db.exec(`CREATE TABLE IF NOT EXISTS temp_bans (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     instance_id TEXT NOT NULL,
@@ -256,9 +256,9 @@ describe('响应契约：任务路由 × scheduledTaskSchema', () => {
   });
 });
 
-// ── 响应侧契约观测推广（#393）：players / status / backups 接入断言 ──
+// ── 响应侧契约观测推广：players / status / backups 接入断言 ──
 
-describe('响应契约：玩家路由 × banRecordSchema（#393 接入）', () => {
+describe('响应契约：玩家路由 × banRecordSchema（接入）', () => {
   it('GET /instances/:id/players/bans → data 逐条通过 banRecordSchema', async () => {
     db.prepare(
       "INSERT INTO temp_bans (instance_id, target_type, target, reason, expires_at, is_active) VALUES (?, 'player', 'Steve', '破坏行为', ?, 1)",
@@ -285,7 +285,7 @@ describe('响应契约：玩家路由 × banRecordSchema（#393 接入）', () =
   });
 });
 
-describe('响应契约：状态路由 × overviewDataSchema（#393 接入）', () => {
+describe('响应契约：状态路由 × overviewDataSchema（接入）', () => {
   it('GET /overview → 信封与 data 均通过 overviewDataSchema', async () => {
     const fakeManager = {
       instances: new Map(),
@@ -303,7 +303,7 @@ describe('响应契约：状态路由 × overviewDataSchema（#393 接入）', (
   });
 });
 
-describe('响应契约：备份路由 × backupItemSchema（#393 接入）', () => {
+describe('响应契约：备份路由 × backupItemSchema（接入）', () => {
   it('GET /instances/:instanceId/backups → 信封 + pagination 可 parse，data 逐条通过 backupItemSchema', async () => {
     db.prepare(
       "INSERT INTO backups (instance_id, name, description, type, size, status, world_name) VALUES (?, ?, ?, 'manual', ?, 'completed', ?)",

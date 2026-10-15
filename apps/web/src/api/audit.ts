@@ -10,7 +10,7 @@ export interface AuditQueryParams {
   source?: string
   page?: number
   pageSize?: number
-  /** 时间排序（issue 383）：asc 正序 / desc 倒序；desc 为服务端默认，不传以保持请求最短 */
+  /** 时间排序：asc 正序 / desc 倒序；desc 为服务端默认，不传以保持请求最短 */
   order?: 'asc' | 'desc'
 }
 

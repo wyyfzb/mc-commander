@@ -1,5 +1,5 @@
 /**
- * PlayerTable 行为级测试（issue 466：组件拆分等价性回归锁）
+ * PlayerTable 行为级测试（组件拆分等价性回归锁）
  * 拆分（player-table-columns/row/config）后锁定原有交互语义，覆盖：
  * - 表头 10 列渲染与加载骨架行
  * - 空态双文案（0=暂无玩家 / >0=无匹配 + 清空筛选 CTA）；错误态由页面持有，本组件不渲染
@@ -470,7 +470,7 @@ describe('PlayerTable · 列头排序', () => {
     )
   })
 
-  // 回归锁（issue #472 / PR #473 沉淀缺口）：v9 未注册 sortedRowModel 时
+  // 回归锁（沉淀缺口）：v9 未注册 sortedRowModel 时
   // getRowModel() 返回预排序模型——箭头翻转但行序纹丝不动。此用例断言
   // 行序真实变化：升序 Alex 在前、降序 Steve 在前（修复前升序仍是 Steve 在前）
   const playerNameOrder = () =>

@@ -169,7 +169,7 @@ export function useServerSocket(instanceId: string | null) {
         return
       }
 
-      // ── critical 事件全局广播（issue 334）：非当前实例的 crash/熔断不丢弃 ──
+      // ── critical 事件全局广播：非当前实例的 crash/熔断不丢弃 ──
       // 用户切到其他页面/实例时，崩溃与熔断仍入通知中心（可跳转回溯）。
       // 失败类事件（备份失败/任务失败/Webhook 投递失败）与服务端同口径走
       // 无订阅全局播发（broadcastCriticalInstanceEvent，instanceId 可空＝
@@ -289,7 +289,7 @@ export function useServerSocket(instanceId: string | null) {
           if (ev === 'started') {
             clearRestartPending(msg.instanceId)
           }
-          // 启停中间态确认清除（issue 334）：started/stopped 为终态确认，crash/熔断为异常终态
+          // 启停中间态确认清除：started/stopped 为终态确认，crash/熔断为异常终态
           if (ev === 'started' || ev === 'stopped' || ev === 'crash' || ev === 'circuit_breaker') {
             clearPhase(msg.instanceId, null)
           }
@@ -322,7 +322,7 @@ export function useServerSocket(instanceId: string | null) {
                 : `实例「${name}」连续崩溃 ${Number(data.consecutiveCrashes ?? 0)} 次，已触发熔断保护`,
               {
                 duration: Infinity,
-                // 深入链接：一键查看进程末尾日志（issue 343，消费 lastOutput）
+                // 深入链接：一键查看进程末尾日志（消费 lastOutput）
                 action: {
                   label: '查看末尾日志',
                   onClick: () => setLastOutputInstanceId(crashedInstanceId),

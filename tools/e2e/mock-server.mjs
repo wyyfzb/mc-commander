@@ -116,7 +116,7 @@ let mockReadonlyConfigured = false
 const mockReadonlyEnabled = !['0', 'false', 'no', 'off'].includes(
   (process.env.MOCK_READONLY_ENABLED ?? 'true').trim().toLowerCase(),
 )
-/** 升级在途快照（#94）：非 null 表示 mock 正在「升级中」，取消后清空 */
+/** 升级在途快照：非 null 表示 mock 正在「升级中」，取消后清空 */
 let upgradeInFlight = null
 /** 无需凭据即可访问的端点（登录前必须可达，与真实服务端一致） */
 const PUBLIC_PATHS = new Set(['/api/v1/auth/status', '/api/v1/auth/login', '/api/v1/auth/setup'])
@@ -1093,7 +1093,7 @@ const server = createServer((req, res) => {
     if (path === '/api/v1/instances/e2e-demo/start') return res.end(ok({ started: true }))
     if (path === '/api/v1/instances/e2e-demo/stop') return res.end(ok({ stopped: true }))
     if (path === '/api/v1/instances/e2e-demo/restart') return res.end(ok({ restarted: true }))
-    // EULA 首启闭环（issue 312）：部署产物实例的同意写入 + 自动启动端点
+    // EULA 首启闭环：部署产物实例的同意写入 + 自动启动端点
     if (path === '/api/v1/instances/paper-a1b2c3d4/eula') return res.end(ok({ accepted: true }))
     if (path === '/api/v1/instances/paper-a1b2c3d4/start') return res.end(ok({ started: true }))
 
@@ -1359,7 +1359,7 @@ const server = createServer((req, res) => {
       )
       return res.end(ok({ instanceId, cancelled: true }, 'Deployment cancellation requested'))
     }
-    // ── 升级域（#94）──
+    // ── 升级域──
     // 受理后按真实链路补发进度事件：前端据 WS 事件进入「升级中」视图（只回 HTTP 不发事件
     // 会让用例停在初始表单，真实服务端不会）
     if (path === '/api/v1/instances/e2e-demo/upgrade' && req.method === 'POST') {
