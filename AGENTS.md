@@ -53,8 +53,6 @@ npm run capture -- --routes=<路由>      # 全站截图（输出 .ai/vision/）
 
 # tools/ 自身的三道门禁：它在 workspaces 之外，包级 lint / tsc / vitest 都扫不到
 npm run lint:tools && npm run typecheck && npm run test:tools
-# 截图工具冒烟（真起浏览器）：只在装了 Playwright 浏览器的环境跑，故不进上面那条
-npm run test:vision
 
 # 前端
 npm run dev -w apps/web                          # Vite 开发服务器
@@ -79,7 +77,7 @@ npm run dev -w apps/server           # node --watch 热重载
 | 契约包 | `npm run lint` + `npm run test:coverage` + **构建产物**（`dist` 不入库，构建后断言产物存在） |
 | 服务端 | `npm run lint` + `npm run test:coverage` |
 | 前端 | `npm run lint` + `npm run test:coverage` + `check:design-tokens` + `check:contrast` |
-| 前端 | `npm run build` + `check:size` + Playwright e2e + `test:vision`（截图工具冒烟） |
+| 前端 | `npm run build` + `check:size` + Playwright e2e |
 | 生产依赖 | 根 lock 一次 `npm audit --omit=dev --audit-level=high`（workspace 根覆盖三包；只判生产依赖，devDependencies 不进产物） |
 
 仓库提供一键本地等价入口 `bash tools/ci/local-check.sh`（代码格式 + 生产依赖漏洞门禁 +
@@ -227,9 +225,10 @@ npm run dev -w apps/server           # node --watch 热重载
   命令行为上的差异；改动不得破坏对新旧版本的兼容。
 - **注释纪律**：注释只写代码无法直观体现的**设计意图、隐含约束、特殊边界、选型原因**，
   单行优先，不复述代码行为。禁止写入五类内容：
-  ① 内部分批 / 台账 / finding 代号（`S-P0-2`、`P2-11`、`Phase 2`、`feat-8` 一类）——
-  它们对仓库读者**不可解析**，看见的人只会以为漏了上下文；例外是 `(#326)`、`issue #309`
-  这类**公开 issue / PR 引用**，它们指向仓库自己的公开历史，可以留。
+  ① 一切编号式引用——内部分批 / 台账 / finding 代号（`S-P0-2`、`P2-11`、`Phase 2`、
+  `feat-8` 一类），以及 `(#326)`、`issue #309` 这类**公开 issue / PR 引用**。两者对仓库
+  读者都**不可解析**（看见的人只会以为漏了上下文），且编号会随 issue 迁移、仓库改名而
+  漂移，注释里的编号迟早指向别处。要交代的背景就地写成最短一句。
   ② 开发历程与决策过程（改了几版、谁提出、走过哪些弯路）——要留的是**选型原因**，
   不是**演化过程**。
   ③ 「待办 / 将来 / 远景」式承诺（`TODO: 以后补`、`当前仅预留未启用`）——未做的事写进任务清单，
