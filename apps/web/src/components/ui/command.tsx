@@ -89,23 +89,24 @@ function CommandInput({
   ...props
 }: React.ComponentProps<typeof CommandPrimitive.Input>) {
   return (
-    <div data-slot="command-input-wrapper" className="p-1 pb-0">
-      <InputGroup className="rounded-lg! border-input bg-input shadow-none! *:data-[slot=input-group-addon]:pl-2!">
-        <CommandPrimitive.Input
-          data-slot="command-input"
-          className={cn(
-            // 焦点配方与 ui/input 同款：InputGroup 的 has() 替换只认 input-group-control
-            // slot，本输入（command-input）匹配不到，必须自带 ring 指示
-            'w-full text-sm outline-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50',
-            className,
-          )}
-          {...props}
-        />
-        <InputGroupAddon>
-          <SearchIcon className="size-4 shrink-0 opacity-50" />
-        </InputGroupAddon>
-      </InputGroup>
-    </div>
+    /* mx-1 与 command 的 p-1 合起来给出 8px 左内距，与下方列表项左缘对齐 */
+    <InputGroup className="mx-1 mt-1 bg-input">
+      {/* 必须挂 InputGroup 的控制槽位（input-group-control）：基座的焦点配方
+          `has-[[data-slot=input-group-control]:focus-visible]:border-ring ring-3`
+          与 border/bg 归一都按该 slot 生效。挂别的 slot 名匹配不到，就得在此手写
+          内层 focus ring——它会在外框里再画出第二个方框（一个输入框看着套了多层） */}
+      <CommandPrimitive.Input
+        data-slot="input-group-control"
+        className={cn(
+          'w-full bg-transparent text-sm outline-none disabled:cursor-not-allowed disabled:opacity-50',
+          className,
+        )}
+        {...props}
+      />
+      <InputGroupAddon>
+        <SearchIcon className="size-4 shrink-0 opacity-50" />
+      </InputGroupAddon>
+    </InputGroup>
   )
 }
 

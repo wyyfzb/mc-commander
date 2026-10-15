@@ -32,6 +32,7 @@ import {
   Home,
   Image,
   Loader2,
+  MoreHorizontal,
   Pencil,
   RefreshCw,
   Settings,
@@ -41,6 +42,13 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { IconButton } from '@/components/mcs/icon-button'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { cn } from '@/lib/utils'
@@ -211,60 +219,61 @@ function FileListRow({
           <Pencil className="size-3.5" aria-hidden />
         </IconButton>
       )}
-      {!isDir && onDownload && (
-        <IconButton
-          aria-label={`下载 ${entry.name}`}
-          title="下载到本地"
-          disabled={isDownloading}
-          className="text-mcs-text-muted hover:text-mcs-text-default"
-          onClick={(e) => {
-            e.stopPropagation()
-            onDownload(entry)
-          }}
-        >
-          {isDownloading ? (
-            <Loader2 className="size-3.5 animate-spin" aria-hidden />
-          ) : (
-            <Download className="size-3.5" aria-hidden />
-          )}
-        </IconButton>
-      )}
-      {onRename && (
-        <IconButton
-          aria-label={`重命名 ${entry.name}`}
-          title="重命名"
-          className="text-mcs-text-muted hover:text-mcs-text-default"
-          onClick={(e) => {
-            e.stopPropagation()
-            onRename(entry)
-          }}
-        >
-          <TextCursorInput className="size-3.5" aria-hidden />
-        </IconButton>
-      )}
-      {onMove && (
-        <IconButton
-          aria-label={`移动 ${entry.name}`}
-          title="移动到…"
-          className="text-mcs-text-muted hover:text-mcs-text-default"
-          onClick={(e) => {
-            e.stopPropagation()
-            onMove(entry)
-          }}
-        >
-          <FolderInput className="size-3.5" aria-hidden />
-        </IconButton>
-      )}
-      <IconButton
-        aria-label={`删除 ${entry.name}`}
-        className="text-mcs-error-fg hover:bg-mcs-state-hover-error"
-        onClick={(e) => {
-          e.stopPropagation()
-          onDelete(entry)
-        }}
-      >
-        <Trash2 className="size-3.5" aria-hidden />
-      </IconButton>
+      {/* 行级操作收进二级菜单：每行常驻两枚可点目标（编辑 + 更多），
+          相邻按钮的可点目标少 ⇒ 误点代价低（最坏情况是删掉文件），
+          且目录行与文件行的按钮列位对齐。菜单项可访问名沿用「动作 + 文件名」口径。
+          外层 span 拦点击：Radix 的 asChild 会把 onClick 合进触发器自身，
+          而触发器在行盒内——不拦就会冒泡到行上，点菜单等于点了行（进目录/开文件） */}
+      <span className="flex shrink-0" onClick={(e) => e.stopPropagation()}>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <IconButton
+              aria-label={`${entry.name} 更多操作`}
+              className="text-mcs-text-muted hover:text-mcs-text-default"
+            >
+              <MoreHorizontal className="size-3.5" aria-hidden />
+            </IconButton>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {!isDir && onDownload && (
+              <DropdownMenuItem
+                disabled={isDownloading}
+                onSelect={() => onDownload(entry)}
+                className="gap-2"
+              >
+                {isDownloading ? (
+                  <Loader2 className="size-4 animate-spin" aria-hidden />
+                ) : (
+                  <Download className="size-4" aria-hidden />
+                )}
+                下载到本地
+              </DropdownMenuItem>
+            )}
+            {onRename && (
+              <DropdownMenuItem onSelect={() => onRename(entry)} className="gap-2">
+                <TextCursorInput className="size-4" aria-hidden />
+                重命名
+              </DropdownMenuItem>
+            )}
+            {onMove && (
+              <DropdownMenuItem onSelect={() => onMove(entry)} className="gap-2">
+                <FolderInput className="size-4" aria-hidden />
+                移动到…
+              </DropdownMenuItem>
+            )}
+            {/* 删除与上方动作之间留一条分隔线：它是唯一的破坏性项，
+              紧挨「移动到…」会让误点直接落到删除上 */}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onSelect={() => onDelete(entry)}
+              className="gap-2 text-mcs-error-fg focus:text-mcs-error-fg"
+            >
+              <Trash2 className="size-4" aria-hidden />
+              删除
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </span>
     </div>
   )
 }

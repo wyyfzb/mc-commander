@@ -102,7 +102,7 @@ MC_Commander 是一个自托管的 Minecraft 服务器管理工具。**核心定
 
 #### 方式一：Linux 一键部署（推荐）
 
-**复制下面整段**（先后取自建源与国内镜像源，任一成功就用它；**两条都失败则不会执行任何脚本**——
+**复制下面整段**（先后取 Gitee 国内镜像源与 GitHub 源，任一成功就用它；**两条都失败则不会执行任何脚本**——
 避免把上一次的残留/半截文件当脚本用 `sudo` 跑起来）：
 
 ```bash
@@ -427,9 +427,7 @@ mc-commander/
 ├── apps/web/                   # Web 前端（React 19 + vite）
 │   ├── src/                    # 纯源码：features/ components/ stores/ api/ lib/ hooks/ styles/
 │   ├── tests/{unit,support}/   # 镜像 src/ 的用例 + 测试基建（vitest）
-│   ├── assets/fonts/           # 字体资产（参与打包）
-│   ├── e2e/                    # Playwright E2E（19 spec，并行跑）
-│   └── scripts/                # 本包门禁与 E2E 基建：check-design-tokens / check-contrast / check-bundle-size / capture / mock-server
+│   └── assets/fonts/           # 字体资产（参与打包）
 ├── apps/server/                # Node.js 后端
 │   ├── src/                    # 交付源码：入口 / 配置 / WS 广播 / routes / services / middleware / db / utils
 │   ├── tests/                  # 服务端用例（vitest）
@@ -437,7 +435,8 @@ mc-commander/
 │   ├── var/                    # 运行期数据（不入库）：servers/ 实例 · data/ 库与日志 · backups/ 快照
 │   └── public/                 # 前端产物（release 打包注入，同源托管）
 ├── apps/schemas/               # 共享契约包（zod）：src/ + tests/ + 入库的 dist/
-├── tools/{ci,dev,ops}/         # 维护者工具：local-check / 生成器 / 运维脚本
+├── tools/                      # 维护者工具（不住包内）：gates/ 门禁 · e2e/ Playwright（19 spec + mock 后端）
+│   │                           #   · ci/ local-check · dev/ 生成器 · ops/ 运维 · vision/ 全站截图 · deploy/ 发布载荷
 ├── docs/                       # 架构、用户指南、贡献与安全文档、配图（assets/screenshots/）
 ├── .github/                    # CI 工作流 / Issue 与 PR 模板 / Dependabot
 └── AGENTS.md                   # AI 编码工具上手指南（人类贡献者同样适用）
@@ -482,7 +481,7 @@ npm test -w apps/web
 npm run lint
 npm run build
 
-# E2E（自动起 mock 服务 + dev server；18 spec）
+# E2E（住 tools/e2e/；自动起 mock 服务 + dev server；19 spec / 150 用例）
 npm run test:e2e
 ```
 

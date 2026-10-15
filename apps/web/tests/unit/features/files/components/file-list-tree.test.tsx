@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterAll, afterEach, beforeAll, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { setupServer } from 'msw/node'
@@ -101,6 +102,11 @@ describe('格式化函数（组件内）', () => {
   })
 })
 
+/** 打开某一行的行级操作菜单（行内左起第二枚按钮） */
+async function openRowMenu(user: ReturnType<typeof userEvent.setup>, name: string) {
+  await user.click(screen.getByRole('button', { name: `${name} 更多操作` }))
+}
+
 describe('FileList', () => {
   it('加载中显示 Skeleton 行', () => {
     renderWithClient(<FileList {...baseFileListProps} />)
@@ -130,7 +136,8 @@ describe('FileList', () => {
     expect(screen.getByTestId('file-icon-server.properties')).toHaveClass('text-mcs-text-muted')
   })
 
-  it('目录行单击 onOpenDir；文件行/编辑按钮 onSelectFile；删除按钮 onDelete（含目录）', async () => {
+  it('目录行单击 onOpenDir；文件行/编辑按钮 onSelectFile；删除菜单项 onDelete（含目录）', async () => {
+    const user = userEvent.setup()
     const onSelectFile = vi.fn()
     const onOpenDir = vi.fn()
     const onDelete = vi.fn()
@@ -154,8 +161,9 @@ describe('FileList', () => {
     expect(onSelectFile).toHaveBeenCalledTimes(2)
     expect(onSelectFile).toHaveBeenLastCalledWith('/server.properties')
     expect(onOpenDir).toHaveBeenCalledTimes(1)
-    // 删除按钮：文件与目录均可，且不触发行单击
-    fireEvent.click(screen.getByRole('button', { name: '删除 whitelist.json' }))
+    // 删除在二级菜单里：文件与目录均可，且不触发行单击
+    await openRowMenu(user, 'whitelist.json')
+    await user.click(await screen.findByRole('menuitem', { name: '删除' }))
     expect(onDelete).toHaveBeenCalledWith(
       expect.objectContaining({
         name: 'whitelist.json',
@@ -163,7 +171,8 @@ describe('FileList', () => {
         isDirectory: false,
       }),
     )
-    fireEvent.click(screen.getByRole('button', { name: '删除 world' }))
+    await openRowMenu(user, 'world')
+    await user.click(await screen.findByRole('menuitem', { name: '删除' }))
     expect(onDelete).toHaveBeenLastCalledWith(
       expect.objectContaining({ name: 'world', path: '/world', isDirectory: true }),
     )
@@ -246,10 +255,11 @@ describe('FileList', () => {
     expect(onSelectFile).toHaveBeenCalledWith('/server.properties')
   })
 
-  it('下载按钮：文件行渲染、目录行不渲染、点击回调 onDownload', async () => {
+  it('下载菜单项：文件行渲染、目录行不渲染、点击回调 onDownload', async () => {
+    const user = userEvent.setup()
     useBinaryList()
     const onDownload = vi.fn()
-    // 混入一个目录验证目录无下载按钮
+    // 混入一个目录验证目录无下载项
     server.use(
       http.get('*/api/v1/instances/:id/files', () =>
         ok({
@@ -270,33 +280,42 @@ describe('FileList', () => {
       ),
     )
     renderWithClient(<FileList {...baseFileListProps} onDownload={onDownload} />)
-    await screen.findByRole('button', { name: '下载 server.jar' })
-    expect(screen.getByRole('button', { name: '下载 level.dat' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '下载 server.properties' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '下载 world' })).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '下载 server.jar' }))
+    await screen.findByRole('button', { name: 'server.jar 更多操作' })
+    await openRowMenu(user, 'server.jar')
+    const item = await screen.findByRole('menuitem', { name: '下载到本地' })
+    expect(item).toBeInTheDocument()
+    await user.click(item)
     expect(onDownload).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'server.jar', path: '/server.jar' }),
     )
+    // 目录行没有下载项（本组夹具未传 onRename/onMove，菜单里只剩删除）
+    await user.keyboard('{Escape}')
+    await openRowMenu(user, 'world')
+    expect(await screen.findByRole('menuitem', { name: '删除' })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: '下载到本地' })).not.toBeInTheDocument()
   })
 
-  it('未提供 onDownload 时不渲染下载按钮（向后兼容）', async () => {
+  it('未提供 onDownload 时不渲染下载菜单项', async () => {
+    const user = userEvent.setup()
     useBinaryList()
     renderWithClient(<FileList {...baseFileListProps} />)
     await screen.findByRole('button', { name: '文件 server.jar（二进制，可下载）' })
-    expect(screen.queryByRole('button', { name: '下载 server.jar' })).not.toBeInTheDocument()
+    await openRowMenu(user, 'server.jar')
+    expect(await screen.findByRole('menuitem', { name: '删除' })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: '下载到本地' })).not.toBeInTheDocument()
   })
 
-  it('下载中（downloadingPath 命中）→ 按钮 disabled + spinner 图标', async () => {
+  it('下载中（downloadingPath 命中）→ 菜单项 disabled + spinner 图标', async () => {
+    const user = userEvent.setup()
     useBinaryList()
     renderWithClient(
       <FileList {...baseFileListProps} onDownload={vi.fn()} downloadingPath="/server.jar" />,
     )
-    const btn = await screen.findByRole('button', { name: '下载 server.jar' })
-    expect(btn).toBeDisabled()
-    expect(btn.querySelector('.animate-spin')).not.toBeNull()
-    // 其他行不受影响
-    expect(screen.getByRole('button', { name: '下载 level.dat' })).toBeEnabled()
+    await screen.findByRole('button', { name: 'server.jar 更多操作' })
+    await openRowMenu(user, 'server.jar')
+    const item = await screen.findByRole('menuitem', { name: '下载到本地' })
+    expect(item).toHaveAttribute('aria-disabled', 'true')
+    expect(item.querySelector('.animate-spin')).not.toBeNull()
   })
 
   it('面包屑：根 Home + 逐级可点，末级加粗 aria-current', async () => {

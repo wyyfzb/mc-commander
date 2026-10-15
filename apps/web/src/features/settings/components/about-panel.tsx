@@ -112,9 +112,20 @@ export function AboutPanel(_props: AboutPanelProps) {
         </CardBody>
       </Card>
 
-      {/* ── 版权（居中 subtle）── */}
+      {/* ── 版权与作者（居中 subtle）── */}
       <p className="py-2 text-center text-mcs-xs text-mcs-text-muted">
         © 2026 MC_Commander · 社区开源项目
+      </p>
+      <p className="pb-1 text-center text-mcs-xs text-mcs-text-muted">
+        作者{' '}
+        <a
+          href="https://github.com/wyyfzb"
+          target="_blank"
+          rel="noreferrer"
+          className="font-medium text-mcs-accent-fg underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-mcs-focus-ring focus-visible:outline-offset-2"
+        >
+          @wyyfzb
+        </a>
       </p>
     </div>
   )

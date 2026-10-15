@@ -154,6 +154,21 @@ if (existsSync(configPath)) {
     }
   }
 }
+// ⑤ 前端包里不得再长出工具链目录
+// 判据＝「谁消费」：E2E、mock 后端、门禁脚本判定/驱动的是整个前端，故住 tools/。
+// 只列具体路径，不按「脚本」泛判——交付给用户的脚本（apps/server/scripts/deploy-*.sh）
+// 与一次性探针（.ai/）各有归属，泛判会三者混一误报。
+for (const banned of ['e2e', 'scripts', 'playwright.config.ts']) {
+  if (
+    tracked.has(`apps/web/${banned}`) ||
+    [...tracked].some((p) => p.startsWith(`apps/web/${banned}/`))
+  ) {
+    violations.push(
+      `前端包内不得放工具链「apps/web/${banned}」——E2E / mock 后端 / 门禁归 tools/（它们服务于整个前端，非本包运行期组成）`,
+    )
+  }
+}
+
 const workflowsDir = join(ROOT, '.github', 'workflows')
 if (existsSync(workflowsDir)) {
   for (const file of readdirSync(workflowsDir).filter((f) => /\.ya?ml$/.test(f))) {

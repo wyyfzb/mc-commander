@@ -15,12 +15,18 @@ npm run dev            # 开发（默认 5173，proxy /api 与 /ws 到 localhost
 npm run build          # tsc -b strict + vite 构建
 npm run lint           # oxlint
 npm run test           # Vitest 单测/组件测试（jsdom）
-npm run test:e2e       # Playwright E2E（使用系统 Chrome，免下载 Chromium）
-npm run capture        # 截图（mock 数据 + dev server，输出到 gitignore 的 .ai/vision/）
-npm run check:contrast # token 对比度批量校验（258 组合，exit 非 0 阻止合并）
-npm run check:design-tokens # 设计 token 门禁（硬编码色值 / z 轴 / 玻璃预算等）
-npm run check:size     # 构建体积预算（gzip 口径，对入口 + 路由 chunk 闭包求和）
-npm run check:tokens   # OKLCH 色值生成器（设计文档 §4.1 的色值来源）
+```
+
+工具链（E2E 与门禁）住仓库 `tools/`——它们判定/驱动的是整个前端，不是本包的运行时组成；
+以下命令均**在仓库根**执行：
+
+```bash
+npm run test:e2e               # Playwright E2E（19 spec / 150 用例）
+npm run capture                # 截图（mock 数据 + dev server，输出到 gitignore 的 .ai/vision/）
+npm run check:contrast         # token 对比度批量校验（258 组合，exit 非 0 阻止合并）
+npm run check:design-tokens    # 设计 token 门禁（硬编码色值 / z 轴 / 玻璃预算等）
+npm run check:size             # 构建体积预算（gzip 口径，对入口 + 路由 chunk 闭包求和）
+npm run check:tokens           # OKLCH 色值生成器（设计文档 §4.1 的色值来源）
 ```
 
 ## 目录结构
@@ -40,10 +46,10 @@ tests/                # 镜像 src/ 的单元与组件测试（vitest）
 ├── unit/           # 用例（路径与 src/ 一一对应）
 └── support/        # setup / MSW handlers / 容器宽度 mock
 assets/fonts/         # 字体资产（被 styles/fonts.css 引用，参与打包）
-e2e/                  # Playwright E2E（冒烟 + 页面行为，视觉截图走 `npm run capture`）
-scripts/              # 本包门禁、生成器与 E2E 基建：check-design-tokens / check-contrast / check-bundle-size / capture /
-                      # gen-token-colors / mock-server（E2E 的假后端）
 ```
+
+E2E 与门禁不在本包内：住仓库 `tools/e2e/`（Playwright 配置 + spec + mock 后端）与
+`tools/gates/`（设计 token / 对比度 / 体积）。
 
 ## 设计纪律
 

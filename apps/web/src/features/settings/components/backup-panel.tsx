@@ -16,6 +16,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import {
+  ArchiveRestore,
   CalendarClock,
   ChevronDown,
   ChevronUp,
@@ -25,7 +26,6 @@ import {
   FolderInput,
   HardDrive,
   Loader2,
-  RotateCcw,
   ServerOff,
   Trash2,
   X,
@@ -679,7 +679,7 @@ function BackupRow({
         className="text-mcs-accent-fg"
         onClick={() => onRestore(backup)}
       >
-        <RotateCcw className="size-3.5" aria-hidden />
+        <ArchiveRestore className="size-3.5" aria-hidden />
       </IconButton>
       {/* 进行中行显示取消（取消请求异步生效，点击后按钮交由页面级 pending）；否则删除 */}
       {isInProgress ? (

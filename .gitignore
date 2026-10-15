@@ -188,11 +188,12 @@ apps/server/.env
 # 前端构建与测试产物
 apps/web/dist/
 apps/web/dist-ssr/
-apps/web/test-results/
-apps/web/playwright-report/
 apps/web/logs
 apps/web/*.log
 apps/web/*.local
+# e2e 产物（工具链层：探针住 tools/e2e/，产物不落包内）
+tools/e2e/test-results/
+tools/e2e/playwright-report/
 
 # 用户向导/README 配图白名单（docs/assets/screenshots/，须入库）
 !docs/assets/screenshots/

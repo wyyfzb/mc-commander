@@ -236,7 +236,8 @@ export function AppTopBar() {
       ) : (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="max-w-32 gap-1.5 text-mcs-sm font-medium">
+            {/* 顶栏统一走紧凑档 h-7：与右侧三枚图标钮同档，相邻元素顶底对齐 */}
+            <Button variant="ghost" size="sm" className="max-w-32 gap-1.5 text-mcs-sm font-medium">
               <Server className="size-4 shrink-0 text-mcs-text-muted" aria-hidden />
               {instanceHueDot}
               <span className="truncate">{currentInstanceName}</span>
@@ -272,12 +273,13 @@ export function AppTopBar() {
         </DropdownMenu>
       )}
 
-      {/* 全局搜索（Cmd/Ctrl+K） */}
+      {/* 全局搜索（Cmd/Ctrl+K）：紧凑档 h-7，与顶栏其余控件同档。
+          窄窗口文案被 hidden xs:inline 隐藏后按钮无可访问名（图标 aria-hidden）→ 显式补名 */}
       <Button
         variant="outline"
-        // 窄窗口文案被 hidden xs:inline 隐藏后按钮无可访问名（图标 aria-hidden）→ 显式补名
+        size="sm"
         aria-label="搜索或执行命令"
-        className="ml-auto w-9 justify-center gap-2 text-mcs-sm text-mcs-text-muted xs:w-44 xs:justify-between sm:w-56"
+        className="ml-auto w-9 justify-center gap-2 text-mcs-text-muted xs:w-44 xs:justify-between sm:w-56"
         onClick={() => setCommandPaletteOpen(true)}
       >
         {/* 窄窗口防错位：文案区可截断收缩（min-w-0 + truncate），kbd 徽标 shrink-0 永不换行 */}

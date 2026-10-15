@@ -1,5 +1,5 @@
 {
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "$schema": "../../node_modules/oxlint/configuration_schema.json",
   // 契约包 lint 配置（2026-09-19 接入，全仓统一 oxlint）。
   // 只开 correctness 档 + 与另两包同口径的显式规则；不设 no-undef（TS 编译期已覆盖，
   // 对该规则重复告警只会制造噪音），也不引入 unicorn 等偏好插件。

@@ -1,6 +1,7 @@
 {
   "name": "mc-commander-tooling",
   "private": true,
+  "type": "module",
   "description": "MC_Commander 工作区根：三个包（apps/web · apps/server · apps/schemas）经 npm workspaces 统一安装，根锁文件是依赖的唯一事实源。",
   "engines": {
     "node": ">=22"
@@ -10,14 +11,30 @@
   ],
   "scripts": {
     "check:layout": "node tools/check-layout.mjs",
+    "capture": "node tools/vision/capture.mjs",
+    "check:design-tokens": "node tools/gates/check-design-tokens.mjs",
+    "check:contrast": "node tools/gates/check-contrast.mjs",
+    "check:size": "node tools/gates/check-bundle-size.mjs",
+    "check:tokens": "node tools/dev/gen-token-colors.mjs",
+    "test:e2e": "playwright test --config tools/e2e/playwright.config.ts",
     "format": "biome format --write .",
     "format:check": "biome format .",
-    "lint": "npm run lint --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present && npm run lint:tools",
+    "lint:tools": "oxlint tools/",
+    "typecheck": "tsc -p tools/tsconfig.json",
+    "test": "npm run test --workspaces --if-present && npm run test:tools",
+    "test:tools": "vitest run --config tools/vitest.config.ts",
+    "test:vision": "vitest run --config tools/vitest.vision.config.ts",
     "build": "npm run build --workspaces --if-present",
     "pretest": "npm run build -w apps/schemas"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.15"
+    "@biomejs/biome": "2.5.15",
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^26.6.4",
+    "culori": "^4.0.2",
+    "oxlint": "^1.87.0",
+    "typescript": "~7.0.2",
+    "vitest": "^5.0.3"
   }
 }
