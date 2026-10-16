@@ -1,5 +1,5 @@
 /**
- * parentDirOf 契约测试（I 类「两处各写一份公式」的技术债收编，见 path-utils.ts 注释）
+ * parentDirOf 契约测试（「两处各写一份公式」的技术债收编）
  * 口径：'/' 前缀风格，根/无斜杠一律归一为 '/'。
  */
 import { describe, it, expect } from 'vitest'

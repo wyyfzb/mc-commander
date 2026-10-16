@@ -22,8 +22,8 @@ async function setupInFlightDeploy(page: Page) {
     localStorage.setItem('mcs-deploy-mock', 'in-flight')
   })
   // WS 连接分组：断线用例会调 mock 的 drop-ws，按分组只断本用例的连接。
-  // 旧实现断的是共享 mock 进程里的全部连接（连接普查实测：会连带掐掉并行 spec 的
-  // 实时通道），按分组后只断自己那几条
+  // 不带分组会断掉共享 mock 进程里的全部连接（连接普查实测：会连带掐掉并行 spec 的
+  // 实时通道）
   await page.setExtraHTTPHeaders({ 'x-mock-ws-group': 'deploy-fallback' })
 }
 

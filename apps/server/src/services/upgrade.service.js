@@ -417,11 +417,10 @@ export class UpgradeService {
    * @param {string} instanceId
    * @param {string|null} oldJarPath - 回滚源副本（阶段 3 备份的旧 jar）；
    *   null 或不存在时跳过恢复复制（阶段 3 前失败时无副本可恢复）
-   * @param {string|null} _backupId - 备份 ID（预留，当前未用）
    * @param {string} [oldJarFile] - 升级前旧 jar 文件名；缺省时跳过恢复
    *   复制、错位副本清理与 DB/内存回写（仅剩临时副本清理兜底）
    */
-  async _doRollback(instanceId, oldJarPath, _backupId, oldJarFile) {
+  async _doRollback(instanceId, oldJarPath, oldJarFile) {
     try {
       const instance = this.serverManager.getInstance(instanceId);
       if (!instance) return;
@@ -547,7 +546,7 @@ export class UpgradeService {
 
       // 阶段 2.5：Java 校验。**必须落在替换之前**——替换一旦执行就已改掉 DB 与实例
       // jar，那是整条链路里最难回退的时点；而跨 Java 大版本升级（1.20.x 的 Java 17
-      // → 26.3 的 Java 25）此前会一路改完后才在首启时崩，用户拿到的是「升完起不来」。
+      // → 26.3 的 Java 25）若不先校验就会一路改完后才在首启时崩，用户拿到的是「升完起不来」。
       // 权威来源是刚下载的新 jar 内 version.json 的 java_version（服务端自带），
       // 不手写版本矩阵；读不到就退回与部署同一套推荐表，再读不到则不阻塞（无法证明）。
       const requiredJava = this._resolveRequiredJava(newJarPath, mcVersion);
@@ -628,7 +627,7 @@ export class UpgradeService {
           // 取消不另发中间进度档：rolled_back 在 WS 层是「升级失败」并落库（通知中心
           // 严重档），复用它会把自己主动取消显示成故障。回滚只花一次文件复制 + 一次
           // DB 写，用户在弹窗里已有「正在取消…」的在途反馈，无需再造一档进度
-          await this._doRollback(instanceId, backupJarPath, backupId, oldJarFile);
+          await this._doRollback(instanceId, backupJarPath, oldJarFile);
           cancelDetail = `已取消，已回滚到 ${oldMcVersion}`;
           // 刻意不自动恢复升级前备份（失败路径会恢复）：取消是用户主动中止，
           // 顺带触发一次分钟级世界恢复会把「取消」变成看不见的长任务；
@@ -644,7 +643,7 @@ export class UpgradeService {
             0,
             `升级失败: ${err.message}，正在回滚...`,
           );
-          await this._doRollback(instanceId, backupJarPath, backupId, oldJarFile);
+          await this._doRollback(instanceId, backupJarPath, oldJarFile);
           // 回滚后尝试恢复备份
           if (backupId) {
             try {

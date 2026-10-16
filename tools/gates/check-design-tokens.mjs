@@ -1,5 +1,5 @@
 /**
- * 设计 token 完整性守门脚本（设计文档 §4.5 token 纪律）
+ * 设计 token 完整性守门脚本（token 纪律）
  * 用法：node tools/gates/check-design-tokens.mjs（判定对象 apps/web）
  * 逐行检查（第 1–11 条，排除 src/components/ui/）：
  *   1. Tailwind 原始色板类（text-{color}/bg-{color}/border-{color}/ring-{color}）
@@ -9,7 +9,7 @@
  *   5. rounded-[ 任意值圆角
  *   6. Tailwind 原生字号 3xl 及以上（原生字号上限 xl；本仓文字档上限 text-mcs-xl（22px）；
  *      数字面板可走 --mcs-font-size-display（30px），须与 .mcs-num 同用，不占文字档位）
- *   7.（空缺保留）原紧急页字重限定：/emergency 页已移除，后续编号不重排以免外部引用失效
+ *   7.（空缺保留）编号不重排：外部引用按序号定位条目
  *   8. 焦点可见性：outline-none 与 focus-visible:outline-* 同处 utilities 层会互相抵消
  *      （outline-style 恒为 none，焦点环零绘制），未补 ring 兜底即报错
  *   9. 未注册的 mcs-* 工具类：@theme 未注册 → Tailwind 静默不生成任何规则（语义丢失）
@@ -43,7 +43,7 @@
  *      `shadow-mcs-card` 标记的现场按「登记额度」豁免（额度外的第 N 处即报，豁免的是现场
  *      而非整个文件）
  *  22. 标签组件唯一性：只读状态 StatusPill / 可交互 Chip / 计数 CountBadge，禁第四套标签组件、
- *      已删除的 shadcn ui/badge 引用与重建；判定面是组件声明、模块引用与基座文件存在性
+ *      禁 shadcn ui/badge 的引用与重建；判定面是组件声明、模块引用与基座文件存在性
  *      （行内胶囊着色点不判）
  *  23. 页面页头：AppShell 主页面必须有且仅有一个 PageHeader，且该页标题字号档 ≤3
  *      （标题组件的角色轴按调用点分类：CardTitle 默认角色 = 区块标题档，variant="label" = 标签档）
@@ -75,7 +75,7 @@
 import { readFileSync, readdirSync, existsSync } from 'node:fs'
 import { join, extname, relative, sep } from 'node:path'
 // 额度/档位采集内核（纯函数；单测见本包测试）。
-// 抽出的动因：这些判定此前只有探针证据、没有单测——额度记错一位会静默放行额度外的第 N 处。
+// 抽出的动因：这些判定必须有单测——额度记错一位会静默放行额度外的第 N 处。
 import {
   STRING_LITERAL,
   collectCardSurfaceOffsets,
@@ -135,6 +135,7 @@ function readRegistered() {
   // keep：Tailwind v4 的配对行高子键（--text-mcs-sm--line-height）会被贪婪捕获成
   // `sm--line-height`。parseTokenClass 对含 `--` 的 raw 先返回 null，故该路径当前不可达，
   // 保留它是防御性的：注册集本身不该收进子键名，将来正则或解析改动时不会再放出假档名。
+  /** @param {(name: string) => boolean} [keep] */
   const collect = (css, re, keep = () => true) =>
     new Set([...css.matchAll(re)].map((m) => m[1]).filter(keep))
   return {
@@ -286,7 +287,7 @@ function checkTokenClasses(classes, filePath, lineNum) {
 
 /**
  * text-base 的现场豁免额度（第 27 条在 G21–G27 段判定）。
- * 额度是裁定结果而非白名单：唯一来源是移动端输入控件聚焦时的 iOS 自动缩放防护——
+ * 额度是逐处核定的结果而非白名单：唯一来源是移动端输入控件聚焦时的 iOS 自动缩放防护——
  * 其余任何位置（含豁免文件里的第 2 处）都属体系外第 7 个字号。
  */
 const TEXT_BASE_ALLOWLIST = new Map([
@@ -1000,7 +1001,7 @@ for (const f of G9_FILES) {
 // 21. 卡片面类名只在 components/mcs/card.tsx 声明：配方 = rounded-mcs-md + border-mcs-border-muted
 //     + bg-mcs-bg-muted + shadow-mcs-card，以 `shadow-mcs-card`（卡阴影无第二用途）为判定标记；
 //     非卡片面但共用该标记的现场按「登记额度」豁免——额度外的第 N 处即报（豁免的是现场，不豁免
-//     整个文件）。额度是裁定结果而非白名单：7 处里只有「同配方」与「仅共用卡阴影」两种来源，
+//     整个文件）。额度是逐处核定的结果而非白名单：7 处里只有「同配方」与「仅共用卡阴影」两种来源，
 //     逐条理由见下表；新写一处卡面会被额度拒收，不因同文件已豁免而放过。
 const CARD_DECLARATION_SOURCE = 'src/components/mcs/card.tsx'
 const CARD_SURFACE_ALLOWLIST = new Map([
@@ -1030,7 +1031,7 @@ for (const f of GATE_FILES) {
 
 // 22. 标签组件唯一性：只读状态 = StatusPill、可交互/通用 = Chip、计数 = CountBadge，
 //     禁第四套标签组件。三条判定面：①除三件基座外新导出 Badge/Pill/Tag 命名的组件或精确的
-//     Chip；②引用已删除的 shadcn ui/badge（模块路径或 `<Badge` 用法，`\b` 保证不误收图标
+//     Chip；②引用 shadcn ui/badge（本仓无该基座；模块路径或 `<Badge` 用法，`\b` 保证不误收图标
 //     `BadgeCheck`）；③ui/badge.tsx 文件本身被重建（零引用也算重蹈覆辙）。
 //     `*Chip` 不判：本仓它是领域复合部件名（如快捷传送点 QuickChip：双行内容 + 编辑/删除
 //     按钮，不是标签胶囊）。行内胶囊着色点（通知未读浮标、状态点、更新按钮）形状各异且多为
@@ -1274,7 +1275,7 @@ for (const f of GATE_FILES) {
 }
 
 if (violations > 0) {
-  console.error(`\n✗ 发现 ${violations} 处设计 token 违规（设计规范 §4.5）`)
+  console.error(`\n✗ 发现 ${violations} 处设计 token 违规`)
   process.exit(1)
 }
 console.log(

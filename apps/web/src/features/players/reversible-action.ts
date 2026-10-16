@@ -41,7 +41,7 @@ export function toastWithUndo({
     },
   }
   // description 两个分支都要带：它不只承载失败明细，也承载「撤销覆盖面」这类成功态说明
-  // （此前只在 warning 分支传，成功态的非空说明会被静默吞掉）。空串按缺省处理——sonner
+  // （只在 warning 分支传会把成功态的非空说明静默吞掉）。空串按缺省处理——sonner
   // 仅在 description 为真值时才渲染该节点。
   const options = { duration: UNDO_WINDOW_MS, action, description: description || undefined }
   if (variant === 'warning') toast.warning(text, options)

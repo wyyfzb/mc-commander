@@ -4,7 +4,7 @@
  * 范式：status.endpoints.test.js 的 mock 隔离（InstanceModel/recordAudit）
  * + auth.input.contract.test.js 的 400 统一信封断言（code 40000 + details 路径）。
  * 覆盖：每端点合法/非法输入各至少 1 例——非法断言 400 信封错误码（schema 层
- * 前置拒收），合法断言行为零变化（handler 原语义/DB 持久化/下游调用保持）。
+ * 前置拒收），合法断言 handler 语义、DB 持久化与下游调用保持。
  */
 import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
 import express from 'express';

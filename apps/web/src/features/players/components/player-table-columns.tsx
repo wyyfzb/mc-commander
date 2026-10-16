@@ -1,5 +1,5 @@
 /**
- * PlayerTable 列定义 —— 10 列规格（自 player-table.tsx 拆出，纯搬移零行为变更）
+ * PlayerTable 列定义 —— 10 列规格
  * 工厂参数化注入选择集与操作回调；依赖常量见 player-table-config.ts
  * 行内菜单交互口径：OP/白名单切换可逆 → 直执 + 5s 撤销；踢出无逆操作 → 直执 + 普通回执
  * compact（表格区实宽 <1016px）：10 列合计约 1016px，装不下时表格会横向溢出把勾选框与玩家名推出视野，
@@ -152,7 +152,7 @@ export function buildPlayerColumns({
                 </button>
                 <PlayerBadges player={p} part="icons" />
               </div>
-              {/* 次要行：文本徽标与 IP 分列。文本徽标此前与姓名同行，其 shrink-0 会把姓名挤到
+              {/* 次要行：文本徽标与 IP 分列。文本徽标与姓名同行时，其 shrink-0 会把姓名挤到
                   只剩几个字（1280 下 16 字名仅剩 3 字），故下移到此行。
                   必须 nowrap：折行会把行撑过 ROW_HEIGHT，破坏「全部」档虚拟滚动的 estimateSize
                   前提（实测 在线+临时封禁+IP 折行 → 行高 40→59px）；宽紧时由 IP 承担收缩裁切，

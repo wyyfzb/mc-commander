@@ -16,7 +16,7 @@ import { useNow } from '@/hooks/use-now'
  * 崩溃诊断产物卡：把最近一次崩溃的要点摆到实例页。
  *
  * 为什么需要它：MC 崩溃报告（`crash-reports/crash-*.txt`）与 JVM 崩溃日志
- * （`hs_err_pid*.log`）此前只出现在备份排除清单里，从未呈现给用户——排查崩溃时
+ * （`hs_err_pid*.log`）只出现在备份排除清单里，面板不呈现的话，排查崩溃时
  * 用户被推回「请检查日志」，而这两份恰是最有价值的诊断文件。
  *
  * 只读展示，不进备份（快照不被诊断产物撑大）。产物不存在时**整卡不渲染**：
@@ -150,7 +150,7 @@ function DiagnosisBlock({ data, panelVersion }: { data: CrashArtifact; panelVers
   }
 
   // 未命中分两类：崩溃报告走 Description/异常行（键有值但没收录），JVM 崩溃日志走故障行
-  // （信号族能命中；`Internal Error`/OOM 型这类故障行暂未收录）——后者说成「不在已知词条里」
+  // （信号族能命中；`Internal Error`/OOM 型这类故障行不在词条表内）——后者说成「不在已知词条里」
   // 等于替面板断言一件它无从知道的事，且给出的对照物（顶层异常/由以下引起链）不存在于该产物
   const isJvm = data.kind === 'jvm-crash'
   const missTitle = isJvm ? '这份 JVM 崩溃日志没有可对照的词条' : '这次崩溃不在已知词条里'
@@ -189,7 +189,7 @@ function DiagnosisBlock({ data, panelVersion }: { data: CrashArtifact; panelVers
 
 /**
  * 「刚崩过」的窗口。帮助页自检与仪表盘指引条共用这一个常量：两处对同一份产物
- * 必须给同一个口径（曾经一边说「当前稳定」、一边常驻琥珀告警）。
+ * 必须给同一个口径，否则会出现「一边说当前稳定、一边常驻琥珀告警」。
  */
 export const RECENT_CRASH_MS = 24 * 60 * 60 * 1000
 

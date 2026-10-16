@@ -168,13 +168,13 @@ describe('DateTextInput 交互', () => {
     render(<Harness />)
     const input = screen.getByLabelText('开始日期')
 
-    // 更短：旧实现按长度判「末端删除」，会留下旧值前缀 2026
+    // 更短：按长度判「末端删除」会留下旧值前缀 2026
     await user.click(input)
     await user.keyboard('{Control>}a{/Control}')
     await user.paste('2025')
     expect(input).toHaveValue('2025')
 
-    // 更长：旧实现按长度判「末端追加」，会把新串尾巴接在旧值后面（2024-01）
+    // 更长：按长度判「末端追加」会把新串尾巴接在旧值后面（2024-01）
     await user.keyboard('{Control>}a{/Control}')
     await user.paste('2025-01')
     expect(input).toHaveValue('2025-01')

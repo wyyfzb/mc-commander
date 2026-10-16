@@ -72,7 +72,7 @@ describe('TaskScheduler - backup 任务分支（互斥跳过 + 失败可见性�
     expect(payload.name).toMatch(new RegExp(`^每日备份 ${localDay}T\\d{2}-\\d{2}-\\d{2}-\\d{3}$`));
     // 触发时只刷新时间戳（不带 status 第三参）
     expect(ScheduledTaskModel.updateLastRun).toHaveBeenCalledWith(10, expect.any(String));
-    // success 不再由调度器 .then 回写（createBackup resolve 早于快照完成，
+    // 调度器不回写 success（createBackup resolve 早于快照完成，
     // 真实成败由 backup.service 的 executeBackup 经 taskId 回写）
     expect(ScheduledTaskModel.updateLastRunStatus).not.toHaveBeenCalled();
     expect(mockManager.emit).not.toHaveBeenCalledWith('instance:backupSkipped', expect.anything());
@@ -95,8 +95,8 @@ describe('TaskScheduler - backup 任务分支（互斥跳过 + 失败可见性�
     scheduler.executeTask(baseTask);
 
     // 跳过对用户可见（backupSkipped 事件）且消费本次触发（刷新 lastRunAt +
-    // 结果落 skipped）：旧实现 skip 不刷新 lastRunAt——大世界备份耗时超 cron
-    // 周期时每分钟重试并发一条跳过事件（落库+广播+前端刷新），通知刷屏；
+    // 结果落 skipped）：skip 不刷新 lastRunAt 时，大世界备份耗时超 cron
+    // 周期就会每分钟重试并发一条跳过事件（落库+广播+前端刷新），通知刷屏；
     // 刷新后每个 cron 周期最多跳过一次，下周期仍会再尝试（重试语义保留）
     expect(scheduler.backupService.createBackup).not.toHaveBeenCalled();
     expect(mockManager.emit).toHaveBeenCalledWith(

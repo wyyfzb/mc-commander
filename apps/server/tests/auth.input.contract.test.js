@@ -122,7 +122,7 @@ describe('auth 输入侧契约 - POST /auth/login', { timeout: 15_000 }, () => {
     expect(_getLoginFailuresSize()).toBe(1);
   });
 
-  it('错误密码 401；正确密码 200（凭据语义零变化）', async () => {
+  it('错误密码 401；正确密码 200（凭据校验语义不受输入侧收口影响）', async () => {
     AdminAccountModel.setPassword(hashPassword('known-pass-123'));
     const wrong = await request(app).post('/api/v1/auth/login').send({ password: 'wrong-wrong' });
     expect(wrong.status).toBe(401);

@@ -367,7 +367,7 @@ test.describe('仪表盘', () => {
     })
     await page.goto('/dashboard')
 
-    // 出口可见且点名失败来源（此前该失败完全静默，资源卡只会停在「暂无数据」）
+    // 出口可见且点名失败来源（失败若静默，资源卡只会停在「暂无数据」）
     await expect(page.getByText('系统资源获取失败')).toBeVisible()
     await expect(page.getByText('服务器状态获取失败')).toHaveCount(0)
 

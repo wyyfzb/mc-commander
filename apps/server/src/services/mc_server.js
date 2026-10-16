@@ -281,7 +281,7 @@ export class MCServerManager extends EventEmitter {
   // 显式停止全部运行中实例：等待 stop 命令送达 + MC 正常退出，超时兜底强杀，
   // 避免残留孤儿进程、在线玩家数据（离开事件/60s 保存）丢失。
   // 注意：面板停机（SIGTERM/SIGINT/崩溃）已不调用本方法——停机不停实例，
-  // 由下次启动的 adoptOrphanInstances 接管（owner 2026-09-09 拍板）。
+  // 由下次启动的 adoptOrphanInstances 接管。
   async stopAll({ timeout = 8000 } = {}) {
     await Promise.all(
       Array.from(this.instances.values())
@@ -666,9 +666,9 @@ export class MCServerInstance extends EventEmitter {
   /// 供前端标注「这条地址玩家能不能直连」。两条纪律：
   /// ① 不在前端重算——双端各算一次必然漂移；
   /// ② 不按来源判——同一个 IP 从哪个分支来都必须得到同一个结论。
-  ///    曾经 PUBLIC_IP 分支硬编码 public、网卡分支硬编码 private，于是
-  ///    「PUBLIC_IP=100.64.0.1」标 public 而「server-ip=100.64.0.1」标 private（同值两判），
-  ///    且网卡上挂着真实公网 IP 的机器（探测失败时）会被误标成内网。
+  ///    按来源判会得到同值两判：「PUBLIC_IP=100.64.0.1」标 public 而
+  ///    「server-ip=100.64.0.1」标 private，且网卡上挂着真实公网 IP 的机器
+  ///    （探测失败时）会被误标成内网。
   _resolveServerAddress(props) {
     const port = props['server-port'] || '25565';
     // 优先使用公网 IP（云服务器场景下局域网 IP 对客户端不可达）。
@@ -808,7 +808,7 @@ export class MCServerInstance extends EventEmitter {
     // → 实时推送配置补齐（写 management-server-* 三项，服务器启动时读）
     // → 启动命令/参数构建（四种来源优先级）
     // → spawn 与进程/stdin/输出/exit 监听器挂载 → 运行时状态初始化 → 收尾
-    // （熔断重置 → started 事件 → 定时存档）。按原始执行顺序依次调用，行为零变化。
+    // （熔断重置 → started 事件 → 定时存档）。必须按此顺序依次调用。
     this._ensureEulaAccepted();
     this._reconcileTempBansSafe();
     this._cleanWorldLock();
@@ -1261,8 +1261,8 @@ export class MCServerInstance extends EventEmitter {
       }
 
       // 无第二通道可用：RCON 未连接时无法取得命令回执。
-      // 此前这里退回一条自造的 `mcsmp_<id>` stdin 行协议，但那个协议需要配套 Mod，
-      // 而该 Mod 在全仓与 git 历史中都不存在 ⇒ 正常部署下这条路径无人应答，用户只能
+      // 不能退回自造的 `mcsmp_<id>` stdin 行协议：那个协议需要配套 Mod，而该 Mod 在
+      // 全仓与 git 历史中都不存在 ⇒ 正常部署下这条路径无人应答，用户只能
       // 等到 5s 后一条含义不明的 `Command timeout`。明确报错比伪装成「发出去了」诚实。
       // （与外部增强通信的正统路径是官方 MSMP，见 config 的 management-server-* 键。）
       reject(new Error('Command response unavailable: RCON is not connected'));
@@ -1498,7 +1498,7 @@ export class MCServerInstance extends EventEmitter {
               name: entry.name,
               uuid: entry.uuid || '',
               // usercache **不携带**最后在线时间：它的 expiresOn 是「条目创建 + 1 个月」
-              // 的缓存过期时刻，与最后在线无关。此前拿它当 lastSeen，界面会显示一个
+              // 的缓存过期时刻，与最后在线无关。拿它当 lastSeen 会显示一个
               // 看似权威、实为「缓存创建 + 1 个月」的时间。准确的 lastSeen 由自有影子
               // 档案提供（玩家离开时写入，见 _supplementKnownPlayersFromProfiles）。
               lastSeen: null,
@@ -2286,7 +2286,7 @@ export class MCServerInstance extends EventEmitter {
 
     // MC 官方真实统计优先：从 world/players/stats/<uuid>.json 读取
     // deaths / sleep_in_bed / play_time / leave_game；文件缺失时回退自建近似。
-    // 成就计数仍用日志解析事件（MC advancements 文件为进度树结构，解析复杂暂不接入）。
+    // 成就计数用日志解析事件（MC advancements 文件是进度树结构，解析成本高于收益）。
     if (playerName) {
       const real = this._loadPlayerRealStats(playerName);
       if (
@@ -2351,24 +2351,21 @@ export class MCServerInstance extends EventEmitter {
   }
 }
 
-// 世界存档数据读取域挂载（治理线·服务端第一阶段）：level-dat 模块经原型注入复用，
-// 模块函数体内 this 语义与类内定义完全一致（实例方法调用时 this 绑定实例），
-// 全部调用点零改动，对外接口零变化。
+// 世界存档数据读取域挂载：level-dat 模块经原型注入复用，
+// 模块函数体内 this 语义与类内定义完全一致（实例方法调用时 this 绑定实例）。
 
-// 实例启动生命周期域挂载（治理线·服务端第四阶段）：start-lifecycle 模块经原型
-// 注入复用，模块函数体内 this 语义与类内定义完全一致（实例方法调用时 this 绑定实例），
-// start() 主体降为子阶段编排，全部调用点零改动，对外接口零变化。
+// 实例启动生命周期域挂载：start-lifecycle 模块经原型注入复用，
+// 模块函数体内 this 语义与类内定义完全一致（实例方法调用时 this 绑定实例），
+// start() 主体只做子阶段编排。
 Object.assign(MCServerInstance.prototype, startLifecycle);
 Object.assign(MCServerInstance.prototype, levelDat);
 
-// 进程输出解析域挂载（治理线·服务端第二阶段）：output-parser 模块经原型注入复用，
-// 模块函数体内 this 语义与类内定义完全一致（实例方法调用时 this 绑定实例），
-// 全部调用点零改动，对外接口零变化。
+// 进程输出解析域挂载：output-parser 模块经原型注入复用，
+// 模块函数体内 this 语义与类内定义完全一致（实例方法调用时 this 绑定实例）。
 Object.assign(MCServerInstance.prototype, outputParser);
 
-// 实例统计采集域挂载（治理线·服务端第三阶段）：stats-collector 模块经原型注入复用，
-// 模块函数体内 this 语义与类内定义完全一致（实例方法调用时 this 绑定实例），
-// 全部调用点零改动，对外接口零变化。
+// 实例统计采集域挂载：stats-collector 模块经原型注入复用，
+// 模块函数体内 this 语义与类内定义完全一致（实例方法调用时 this 绑定实例）。
 Object.assign(MCServerInstance.prototype, statsCollector);
 
 // 接管实例日志续读域挂载（后续）：log-tail 模块经原型注入复用，

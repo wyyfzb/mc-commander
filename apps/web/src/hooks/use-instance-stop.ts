@@ -1,9 +1,9 @@
 /**
  * useStopInstance —— 停止指令共享 mutation
- * - 两入口收敛：实例页卡片「停止」/ 仪表盘 InstanceControls「停止」（原先各自实现）
+ * - 两入口共用：实例页卡片「停止」/ 仪表盘 InstanceControls「停止」
  * - phase 中间态：发令前置 'stopping'（按钮禁用防连点）；WS stopped 确认清除（hook 层），
  *   mutation settled 兜底清除（WS 断线时防按钮永久禁用）
- * - 成功反馈与列表刷新保持原两处语义：toast + 失效实例详情/列表缓存
+ * - 成功反馈与列表刷新：toast + 失效实例详情/列表缓存
  */
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'

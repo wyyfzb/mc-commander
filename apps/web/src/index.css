@@ -2,7 +2,7 @@
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
 
-/* ── MCS 设计系统 token 三层（设计文档 §4.5）── */
+/* ── MCS 设计系统 token 三层 ── */
 @import './styles/tokens/reference.css';
 @import './styles/tokens/semantic.css';
 @import './styles/tokens/theme.css';

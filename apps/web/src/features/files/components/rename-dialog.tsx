@@ -1,5 +1,5 @@
 /**
- * RenameDialog —— 文件/目录重命名对话框（自 files-page.tsx 迁出，纯移动零行为变更）
+ * RenameDialog —— 文件/目录重命名对话框
  * - 标题携带原名；描述区分目录/文件并展示完整路径
  * - 受控新名称输入 + Enter 直提交；重命名中 LoadingButton 防重复提交
  * - 名称校验（空值/分隔符/未变更短路）由父组件 onSubmit 负责

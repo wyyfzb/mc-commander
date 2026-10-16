@@ -1,5 +1,5 @@
 /**
- * PluginDetailSheet —— 插件详情侧滑面板（自 plugins-page.tsx 迁出，纯移动零行为变更）
+ * PluginDetailSheet —— 插件详情侧滑面板
  * 完整元数据（描述/主类/依赖/软依赖/官网/加载时机）+ 文件信息 + 行内启停
  */
 import { ExternalLink, Globe, Layers, Power, PowerOff } from 'lucide-react'

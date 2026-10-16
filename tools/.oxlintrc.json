@@ -1,0 +1,27 @@
+{
+  "$schema": "../node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "oxc"],
+  // correctness 整档必须显式设 error：oxlint 默认该档为 warn，而 warn 不产生非零退出码
+  // ⇒ 缺这行时该档 111 条规则全部只报不拦，lint 全绿也挡不住回归（本目录住着 CI 门禁
+  // 脚本与发布载荷构建器，坏了会静默失效，而它们没有别的自动覆盖）
+  "categories": { "correctness": "error" },
+  "env": { "node": true },
+  "rules": {
+    // no-undef 在此必须开：另三包关它是因 tsc 覆盖标识符，而本目录的 .mjs 不在
+    // tools/tsconfig.json 的 include 内 ⇒ 这里它是全局拼写错误（paht/path）的唯一拦截点
+    "no-undef": "error",
+    "no-unused-vars": ["error", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }]
+  },
+  "overrides": [
+    // e2e spec 的 page.evaluate 回调在浏览器里执行，才需要这三个全局；按目录收窄
+    // 而非全目录放开，门禁脚本仍受完整 no-undef 约束
+    {
+      "files": ["e2e/**/*.ts"],
+      "globals": {
+        "document": "readonly",
+        "window": "readonly",
+        "getComputedStyle": "readonly"
+      }
+    }
+  ]
+}

@@ -1,5 +1,5 @@
 /**
- * DeployDialog 工具函数（从 deploy-dialog.tsx 行为不变迁移）
+ * DeployDialog 工具函数
  */
 import { MEMORY_OPTIONS } from './constants'
 

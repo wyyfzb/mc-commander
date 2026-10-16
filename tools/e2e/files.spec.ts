@@ -29,7 +29,7 @@ test.describe('文件页', () => {
     // 就绪门：页面 chunk 是懒加载的，壳未挂载时下面的断言会把预算耗在「页还没到」上
     // （并行 worker 冷启动下偶发），先等外壳再断内容
     await expect(page.locator('#main-content')).toBeVisible({ timeout: 30_000 })
-    // 目录树已移除（导航收敛到面包屑 + 上级按钮）
+    // 导航只有面包屑 + 上级按钮，不存在目录树
     await expect(page.getByRole('button', { name: '展开 实例根目录' })).toHaveCount(0)
     // 左栏文件列表（根目录 5 项）
     await expect(page.getByText('server.properties')).toBeVisible()
@@ -162,7 +162,7 @@ test.describe('文件页', () => {
  * 长目录虚拟滚动：行高恒定、少渲染、滚动连续，以及截断时的如实提示。
  *
  * 缺口由来：mock 根目录只有 5 条，「条目多于一屏」的形态结构性不可达——
- * 虚拟滚动的 estimateSize 前提（行高恒等）此前从未被实测。
+ * 虚拟滚动的 estimateSize 前提（行高恒等）因此只能在这里实测。
  * 夹具策略：在路由层放大既有 mock 响应，**不改 mock-server 的数据规模**
  * （改 mock 会连带影响既有 spec 的文件名断言）。
  * jsdom 无布局引擎（滚动容器恒 0 高）、也不评估行高，故只能在 e2e 锁。

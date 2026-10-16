@@ -174,7 +174,7 @@ function PlayerCard({
             </button>
             <PlayerBadges player={p} />
           </div>
-          {/* 摘要行：原先横向排开的列在此折为一行（状态在前，身份信息在后）
+          {/* 摘要行：横向排开的列在此折为一行（状态在前，身份信息在后）
               中文走 xs：与表格同名字段（模式/维度/状态）同档；2xs 只留给角标与 mono 元数据 */}
           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-mcs-xs text-mcs-text-muted">
             <span>

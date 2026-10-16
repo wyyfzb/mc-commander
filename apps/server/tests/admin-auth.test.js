@@ -263,9 +263,9 @@ describe('滑动续期绝对过期 cap 语义（absoluteTtlMs 0/负值守卫）'
     expect(new Date(session.expires_at).getTime()).toBeGreaterThan(Date.now() + 86400_000 - 2_000);
   });
 
-  // 该降级语义（见 middleware/auth.js 的 sessionCreatedAt 注释）此前无任何用例守住，
-  // 而它是「旧库缺列时 admin 不被锁在门外」的唯一依据——反过来也意味着该会话不再受
-  // 30 天绝对上限约束，仅剩滑动 TTL 兜底，属有意为之的取舍，必须钉死。
+  // 该降级语义（见 middleware/auth.js 的 sessionCreatedAt 注释）是「旧库缺列时 admin
+  // 不被锁在门外」的唯一依据——反过来也意味着该会话不受 30 天绝对上限约束，仅剩滑动
+  // TTL 兜底，属有意为之的取舍，必须钉死。
   it('created_at 取不到（NULL/旧库缺列）：不施加绝对上限，会话不被判死且续期不被 cap 削减', async () => {
     config.adminSession.absoluteTtlMs = 1 * 86400_000; // 1 天绝对上限
     config.adminSession.ttlMs = 7 * 86400_000;
@@ -282,7 +282,7 @@ describe('滑动续期绝对过期 cap 语义（absoluteTtlMs 0/负值守卫）'
     expect(new Date(session.expires_at).getTime()).toBeGreaterThan(Date.now() + 6 * 86400_000);
   });
 
-  // 60s 写库节流此前无用例：last_seen_at 同为无时区串，裸解析在 UTC+8 下恒判
+  // 60s 写库节流的判据坑：last_seen_at 同为无时区串，裸解析在 UTC+8 下恒判
   // 「已超 60s」，每个已认证请求都写一次库（性能回退而非功能错，CI 在 UTC 下不体现）。
   it('续期写库节流：last_seen_at 在阈值内不写库，超阈值才写', async () => {
     config.adminSession.absoluteTtlMs = 30 * 86400_000;

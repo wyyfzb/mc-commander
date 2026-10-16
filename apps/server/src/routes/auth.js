@@ -657,8 +657,7 @@ export function createAuthRoutes() {
   return router;
 }
 
-// 测试钩子（历史消费者从本模块导入）：以具名导入同名再导出，实现已收敛至
-// utils/credential-lockout.js
+// 测试钩子：实现住 utils/credential-lockout.js，此处以具名导入同名再导出供既有消费者
 export {
   resetLoginLockState,
   _getLoginFailuresSize,

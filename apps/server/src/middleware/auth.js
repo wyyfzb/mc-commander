@@ -17,7 +17,7 @@ function clientIp(req) {
 }
 
 /**
- * 401 分支补日志（此前认证失败全静默，爆破不可见）。
+ * 401 分支必须记日志（认证失败若静默，爆破不可见）。
  * 级别分档：无效凭据（key 错 / 令牌未知 / 头缺失）= 潜在攻击信号 → warn；
  * 会话正常生命周期（到期 / 绝对过期）= 客户端会自动重登 → debug。
  * 日志只含 IP 与路径，永不记录凭据/令牌本体。
@@ -176,8 +176,7 @@ export function authMiddleware(req, res, next) {
             ),
           );
       }
-      // `.env` 只读通道持**全部只读作用域**：它是既有部署形态，行为必须逐字不变
-      // （此前它靠 READONLY_ALLOWED 白名单放行，等价于持全部只读作用域）
+      // `.env` 只读通道持**全部只读作用域**（与 READONLY_ALLOWED 白名单同一可达面）
       req.auth = { source: 'apiKey', role: 'readonly', scopes: [...READONLY_SCOPES], key: apiKey };
       return next();
     }
@@ -250,8 +249,8 @@ export function authMiddleware(req, res, next) {
  * 只读作用域可达的端点白名单（唯一事实源已移至 `utils/scopes.js` 的 SCOPE_ENDPOINTS）。
  *
  * 此处只做**再导出**：判定方向是「不在表里 ⇒ 拒绝」，逐条列举的是**放行**而非拒绝，
- * 所以漏登记只会更严、不会更松。从前这份清单在本文件独立维护，与作用域表并存
- * 必然漂移，而漂移方向恰好是「白名单比作用域更宽」＝越权，故收归一处。
+ * 所以漏登记只会更严、不会更松。清单与作用域表必须同源——两处各写一份必然漂移，
+ * 而漂移方向恰好是「白名单比作用域更宽」＝越权。
  *
  * 收录标准：只读监控/仪表盘真正需要的实时状态观测端点，且不返回凭据、文件内容、
  * 日志、配置内容、命令史、备份、会话或审计明细。返回历史/管理记录的一律不收。
@@ -294,7 +293,7 @@ export function requireAdminRole(req, res, next) {
  *   API_KEY_ENABLED=false 时与 HTTP 同款 fail-closed——即使同时带了会话令牌也不
  *   回退到它（关闭通道的语义是「该通道不可用」，而非「尽力而为」）
  * - 通道二：管理员会话令牌（mc-commander-session.* subprotocol）——
- *   浏览器会话化后 WS 握手不再依赖明文 API Key，与 HTTP Bearer 同源凭据。
+ *   会话令牌通道：WS 握手用会话凭据，不依赖明文 API Key，与 HTTP Bearer 同源。
  *   会话需存在且未过期；不在此处 touch 续期（重连频率不可控，避免绕过
  *   HTTP 通道的 60s 写库节流），会话活性由 HTTP Bearer 请求持续滑动续期。
  *   校验失败一律返回 null，由调用方以 1008 关闭。

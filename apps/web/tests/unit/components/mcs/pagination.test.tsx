@@ -80,7 +80,7 @@ describe('Pagination 当前页语义', () => {
 
     expect(screen.queryAllByRole('button')).toHaveLength(0)
     expect(screen.getByText('共 0 条')).toBeInTheDocument()
-    // 旧实现会渲染「共 0 条 · 第 1/0 页」（safePage 兜底 1、totalPages 为 0）
+    // safePage 兜底 1、totalPages 为 0 时不得渲染「共 0 条 · 第 1/0 页」
     expect(container.textContent).not.toMatch(/第\s*\d+\s*\/\s*0\s*页/)
   })
 

@@ -245,7 +245,7 @@ describe('PluginsPage 列表渲染', () => {
     useServerStore.setState({ instanceId: null })
     renderPage()
     expect(await screen.findByText('暂无服务器实例')).toBeInTheDocument()
-    // 零实例场景唯一有用的动作是建实例 → 深链直达部署向导（此前只跳 /instances 列表页）
+    // 零实例场景唯一有用的动作是建实例 → 深链直达部署向导（只跳 /instances 列表页不够）
     await user.click(screen.getByRole('button', { name: '部署新实例' }))
     expect(screen.getByText('reached:/instances?tab=deploy')).toBeInTheDocument()
   })

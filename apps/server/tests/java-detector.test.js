@@ -2,7 +2,7 @@
  * java-detector 专项单测（stmts 0.68% 覆盖率洼地专项）
  *
  * 测试策略（fs / 子进程 / 平台全部 mock 注入，不依赖宿主机 Java 环境）：
- * - 纯函数矩阵经导出入口间接驱动（源文件未导出私有函数，业务代码零改动）：
+ * - 纯函数矩阵经导出入口间接驱动（源文件未导出私有函数）：
  *   parseMcVersion / getRecommendedJavaVersion → getRecommendedJavaVersion
  *   getJavaVersionFromPath / parseJavaVersionOutput → getAllJavaVersions 的
  *   JAVA_HOME 探测链
@@ -14,14 +14,14 @@
  *   spawnSync 注入（stdout 路径 / stderr 路径 / 无输出路径 / 进程起不来）
  *
  * 绝对路径语义：expandGlob 对以 '/' 开头的模式必须保留根（从 '/' 起拼段）。
- * 曾出现过「从空串起拼段」的缺陷——`path.join('', 'usr')` 丢掉根变成相对路径，
+ * 从空串起拼段会丢根：`path.join('', 'usr')` 变成相对路径，
  * 使所有硬编码绝对 glob 只在 cwd 恰为 '/' 时命中（实测 systemd 部署下 getAllJavaVersions 恒返回空）。
  * 故探测树与断言一律使用**绝对路径**，并由「绝对 glob 必须命中」用例承重防回归。
  *
  * 平台约束：探测树的键、expandGlob 的展开结果、which/where 的输出三者都按
  * **宿主分隔符**归一（夹具与 mock 用 path.normalize，命令输出用 path.sep），
  * 实现内部 path.join 的产物因此与夹具始终一致——本文件在 Windows 宿主上同样
- * 成立，不再按平台 skip（此前 5 个 describe 在 win32 上零覆盖）。
+ * 成立，不按平台 skip。
  */
 import path from 'node:path';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';

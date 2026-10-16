@@ -1,6 +1,9 @@
 {
   "$schema": "../../node_modules/oxlint/configuration_schema.json",
   "plugins": ["react", "typescript", "oxc"],
+  // correctness 整档必须显式设 error：oxlint 默认该档为 warn，而 warn 不产生非零退出码
+  // ⇒ 缺这行时该档 128 条规则全部只报不拦，lint 全绿也挡不住回归
+  "categories": { "correctness": "error" },
   "rules": {
     "react/rules-of-hooks": "error",
     // exhaustive-deps：启用后逐处清理——

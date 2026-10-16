@@ -30,7 +30,7 @@ import {
 } from '@mc-commander/schemas'
 
 /**
- * MSW handlers 基座（设计文档 §六：单测/组件测试拦截 API）
+ * MSW handlers 基座（单测/组件测试拦截 API）
  * 数据为结构占位 mock，使用虚构测试数据，不含真实服务器信息/玩家数据
  */
 

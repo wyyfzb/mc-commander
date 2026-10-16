@@ -1,6 +1,5 @@
 /**
- * OverviewTab 概览展示原子件
- * 自 detail-overview-tab.tsx 纯搬移（治理线延续）：Section/InfoCell/StatCell 单一职责收口
+ * OverviewTab 概览展示原子件（Section/InfoCell/StatCell 单一职责收口）
  */
 import type { ReactNode } from 'react'
 

@@ -1,5 +1,5 @@
 /**
- * TanStack Query 集成（设计文档 §5.1 queries.ts）
+ * TanStack Query 集成
  * Query key 分层：['instance'] / ['players', {q, mode}] / ['logs', id] …
  * 提供 key 工厂 + 基础 hook（overview/system-stats/logs 等）；
  * 各领域 queries.ts 见 features/<domain>/queries.ts
@@ -98,7 +98,7 @@ export function useOverview() {
     queryKey: queryKeys.overview(),
     queryFn: ({ signal }) => apiGet<OverviewData>('/api/v1/overview', config, signal),
     enabled: config.status === 'ready',
-    refetchInterval: FALLBACK_POLL_INTERVAL_MS, // 轮询保底（与 WS 事件互补，设计文档 §5.2）
+    refetchInterval: FALLBACK_POLL_INTERVAL_MS, // 轮询保底（与 WS 事件互补）
   })
 }
 

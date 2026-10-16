@@ -517,7 +517,7 @@ export function createPlayerRoutes(serverManager) {
   );
 
   // 影子档案读取走共享实现（`readShadowProfile`）：键是 UUID 不是玩家名，且落点自证
-  // 包含关系——实例与路由曾经各写一份，分叉风险与「路由那份不告警」都出在这里。
+  // 包含关系。实例与路由共用这一处，越界告警才不会只剩一半。
   const loadPlayerData = ({ serverPath, playerName, uuid }) =>
     readShadowProfile({ serverPath, playerName, uuid });
 

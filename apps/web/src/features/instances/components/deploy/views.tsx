@@ -1,5 +1,5 @@
 /**
- * DeployDialog 结果视图：部署中 / 成功 / 失败 / 已取消（从 deploy-dialog.tsx 行为不变迁移）
+ * DeployDialog 结果视图：部署中 / 成功 / 失败 / 已取消
  * - 部署中：进度条（percent×100）+ stage 中文标签（DEPLOY_STAGE_LABELS）+ transferred/total MB
  *   +「取消部署」（服务端中断下载/安装/首启并清理实例目录）
  * - 成功：绿色结果块（实例 id/名称/版本）+ 自动启动状态（首启闭环）
@@ -103,9 +103,9 @@ export function DeploySuccessView({ result, autoStart, onComplete }: DeploySucce
         </div>
       </NoticeBanner>
       {/* autoStart === null 表示「未同意 EULA，故未尝试启动」。
-          此前这一支**什么都不渲染**：用户只看到「部署成功」，没有任何线索表明
-          服务器还起不来，直到去点「启动」才被拦下——而那一刻被呈现为「启动失败」。
-          结果必须交代清楚，否则「成功」是误导。 */}
+          这一支必须渲染：只显示「部署成功」会让用户以为服务器能跑，直到去点「启动」
+          才被拦下——而那一刻被呈现为「启动失败」。结果必须交代清楚，
+          否则「成功」是误导。 */}
       {autoStart === null ? (
         <NoticeBanner variant="info" icon={Info}>
           实例已创建，但服务器尚未启动：Minecraft 要求先同意 EULA 才能运行。

@@ -529,8 +529,8 @@ export function InstanceSettingsDialog({
         </div>
 
         {/* ── 实时推送（MSMP）：一条分隔线只分**主题**（启动配置 / 实时推送设置），不分事务——
-             它与上面那份启动配置同属这一次「保存配置 / 取消」。此前它是即时落库的独立设置，
-             同一弹窗里因此在两套提交语义之间切换：用户拨完开关以为「都保存好了」，或者反过来
+             它与上面那份启动配置同属这一次「保存配置 / 取消」。做成即时落库的独立设置会让
+             同一弹窗里在两套提交语义之间切换：用户拨完开关以为「都保存好了」，或者反过来
              以为「没点保存所以什么都没发生」，而实际已经落库、取消退不回 ── */}
         <div className="flex flex-col gap-2 border-t border-mcs-border-muted pt-4">
           <SettingsRow
@@ -619,8 +619,8 @@ export function InstanceSettingsDialog({
       </DialogContent>
 
       {/* ── 脏状态关闭确认 ──
-          推送开关也在这条判据里：此前专门加一句「实时推送开关是即时保存的，不受此影响」来豁免它，
-          但那句豁免正是缺陷的证据——需要一句话解释的交互，用户就无法从界面本身推断行为 */}
+          推送开关也在这条判据里，不得为它写豁免说明——需要一句话解释的交互，
+          用户就无法从界面本身推断行为 */}
       <ConfirmDialog
         open={closeConfirmOpen}
         onOpenChange={(open) => !open && setCloseConfirmOpen(false)}

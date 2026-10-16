@@ -1,5 +1,5 @@
 /**
- * Component 层映射（设计文档 §4.5 tokens/theme.css）
+ * Component 层映射
  * shadcn/nova 组件变量 ← 语义 token（--mcs-*）
  * shadcn 组件代码只认这层变量名，本层负责把设计系统语义注入组件基座
  */

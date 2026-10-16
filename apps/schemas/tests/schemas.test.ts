@@ -930,8 +930,8 @@ describe('实例控制面输入侧契约（五 body 端点）', () => {
 })
 
 describe('备份请求侧契约（attach / restore 的必填文案）', () => {
-  // 这两个 schema 此前零 schema 级覆盖：服务端的 attach 用例只断言 status=400、
-  // restore 只断言路由层比对，文案写错不会转红 ⇒ 补齐（zod 4 的 error 回调若不按
+  // 这两个 schema 的必填文案必须在本包钉住：服务端的 attach 用例只断言 status=400、
+  // restore 只断言路由层比对，文案写错不会转红（zod 4 的 error 回调若不按
   // issue.code 限定，会把 check 的默认文案一并接管）
   it('backupRestoreRequestSchema：confirmName 缺键报原文案', () => {
     expect(() => backupRestoreRequestSchema.parse({})).toThrow(/confirmName 必填/)
@@ -1031,7 +1031,7 @@ describe('事件通道口径（状态 vs 事件）', () => {
       .filter(([, path]) => path === 'none')
       .map(([type]) => type)
       .sort()
-    // 缺口不是「可以忽略」，而是「已登记、等 owner 定」——往这个数组里加名字，就是承认又多了一个
+    // 缺口不是「可以忽略」，而是「已登记、待定」——往这个数组里加名字，就是承认又多了一个
     // 没有自愈路径的通道（state 类事件必须能被晚订阅者在有限时间内读到）。
     expect(gaps).toEqual([])
   })

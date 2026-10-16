@@ -36,7 +36,7 @@ export const ErrorCodes = {
   // 用户取消导致长任务未完成（部署 POST 的响应；终态事件会另行推送 cancelled 阶段）
   TASK_CANCELLED: { code: 40915, message: 'Task cancelled by user', status: 409 },
   // 卸载实例的实例名确认（服务端强制）：前端弹窗的输入只存在于客户端，
-  // 不带确认的直连 API 调用此前可无确认删除，故确认必须由服务端裁决
+  // 不带确认的直连 API 调用不受客户端弹窗约束，故确认必须由服务端裁决
   INSTANCE_DELETE_CONFIRM_REQUIRED: {
     code: 40016,
     message: '需在请求体提供 confirmName 且与实例名完全一致才能卸载实例',
@@ -74,7 +74,7 @@ export const ErrorCodes = {
   // 恢复互斥：另一恢复正在进行（同一实例 status='restoring'）
   RESTORE_IN_PROGRESS: { code: 40903, message: 'Restore already in progress', status: 409 },
   // 恢复缺少/不匹配实例名确认（服务端强制）：恢复会用快照覆盖实例目录，
-  // 前端弹窗的实例名输入此前是唯一闸门，直连 API 可无确认覆盖
+  // 前端弹窗的实例名输入只存在于客户端，故确认必须由服务端裁决
   BACKUP_RESTORE_CONFIRM_REQUIRED: {
     code: 40017,
     message: '需在请求体提供 confirmName 且与该备份所属实例名完全一致才能恢复',
@@ -108,7 +108,7 @@ export const ErrorCodes = {
     status: 404,
   },
   /* 把目录移进自己的子树：底层是 EPERM/EINVAL，对用户毫无意义，
-     且此前落 500（用户输入被报成服务端故障）。语义是「这个目标不合法」。 */
+     不拦会落 500（用户输入被报成服务端故障）。语义是「这个目标不合法」。 */
   FILE_MOVE_INTO_SELF: {
     code: 40009,
     message: 'Cannot move a directory into its own subtree',

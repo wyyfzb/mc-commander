@@ -686,8 +686,8 @@ describe('安全修复：读侧路径校验', () => {
   );
 
   it('_loadPlayerRealStats：自定义合法 level-name 时优先读该世界目录', () => {
-    // 此前只有「非法 level-name 回退 world」的用例，合法自定义名那条分支无覆盖——
-    // 候选生成重构时把版式收进两层循环，这条分支一并进入被改动范围，故补上。
+    // 候选由两层循环生成（两条 UUID × 两条目录版式）：非法 level-name 回退 world 与
+    // 合法自定义名走的是同一处候选生成，两条分支都必须有用例。
     const instance = createInstance();
     const statsDir = path.join(tmpDir, 'my_world', 'players', 'stats');
     fs.mkdirSync(statsDir, { recursive: true });

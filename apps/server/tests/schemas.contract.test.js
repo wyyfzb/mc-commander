@@ -27,8 +27,8 @@ import {
   overviewDataSchema,
 } from '@mc-commander/schemas';
 
-// 临时库放系统临时目录（与 admin-auth.test.js 同款）：此前落在服务端工作目录内，
-// 而 error-codes.contract.test.js 会递归扫描该目录树——本文件的建/删与扫描并发时
+// 临时库放系统临时目录（与 admin-auth.test.js 同款）：落在服务端工作目录内时，
+// error-codes.contract.test.js 会递归扫描该目录树——本文件的建/删与扫描并发时
 // readdirSync 撞 ENOENT，整个契约检查随机变红。
 const TEST_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'mcs-schema-contract-'));
 let db;

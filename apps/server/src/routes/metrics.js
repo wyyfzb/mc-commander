@@ -7,7 +7,6 @@ export function createMetricsRoutes() {
   const router = Router();
 
   // GET /api/v1/metrics?hours=24 - 分钟级主机指标历史（管理员；未入只读白名单）。
-  // 消费方：面板尚未上线，端点先行供 dashboard「昨日摘要」等能力取数。
   //
   // hours 上限 72 高于保留期 48h：上限是**参数笔误的容忍度**（写大了返回现有全部样本，
   // 而不是 400），不是「有 72h 数据」的承诺。

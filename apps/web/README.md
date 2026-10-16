@@ -25,7 +25,7 @@ npm run test:e2e               # Playwright E2E（19 spec / 150 用例）
 npm run check:contrast         # token 对比度批量校验（258 组合，exit 非 0 阻止合并）
 npm run check:design-tokens    # 设计 token 门禁（硬编码色值 / z 轴 / 玻璃预算等）
 npm run check:size             # 构建体积预算（gzip 口径，对入口 + 路由 chunk 闭包求和）
-npm run check:tokens           # OKLCH 色值生成器（设计文档 §4.1 的色值来源）
+npm run check:tokens           # OKLCH 色值生成器（设计 token 色值的来源）
 ```
 
 ## 目录结构

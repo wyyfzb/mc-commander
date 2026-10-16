@@ -54,7 +54,7 @@ import {
 } from '@/lib/notifications'
 
 /**
- * NotificationDrawer —— 右侧滑出通知抽屉（设计文档 §3.2：通知面板改顶栏铃铛+滑出抽屉）
+ * NotificationDrawer —— 右侧滑出通知抽屉（顶栏铃铛 + 滑出抽屉）
  * 对话流式气泡：game 靠左（类型色 8% 底）/ server 靠右；未读态 accent 圆点+类型色边框+加粗
  */
 
@@ -242,7 +242,6 @@ function NotificationRow({
   const Icon = TYPE_ICON[item.type]
   const color = notificationColor(item.type)
   const isGame = item.category === 'game'
-  item.type === 'worldUpgradeStart' && item.instanceId
   // 关联实例条目可跳转：关闭抽屉 → 实例页 focus 深链接切换
   const jumpToInstance = () => {
     markAsRead(item.id)

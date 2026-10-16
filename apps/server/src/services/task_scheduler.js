@@ -442,7 +442,7 @@ export class TaskScheduler {
               .catch((err) => {
                 // 仅 setup 阶段失败（世界缺失/磁盘不足/RCON 不可用等，executeBackup
                 // 尚未启动）走这里；执行阶段失败由 executeBackup 内部回写。
-                // 定时备份失败必须对用户可见：补发 backupFailed 事件（旧实现仅记日志）
+                // 定时备份失败必须对用户可见：补发 backupFailed 事件（不能只记日志）
                 logger.error(`Scheduled backup failed for instance ${task.instanceId}:`, err);
                 if (this.serverManager) {
                   this.serverManager.emit('instance:backupFailed', {

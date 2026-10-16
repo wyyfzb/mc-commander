@@ -54,7 +54,7 @@ export function apiCancelBackupOperation(config: ConnectionConfig, instanceId: s
  * 下载备份（GET /backups/:id/download；流式 tar.gz blob）。
  * 走共享下载实现（apiDownloadFile）而不是自实现 fetch：凭据注入（会话 Bearer 优先、
  * 不适用时才回落 X-API-Key）与 40103 会话过期处置必须与其它请求同口径——
- * 原先只发 X-API-Key，纯密码登录（本机无 Key）的用户下载备份必然 40101 失败。
+ * 只发 X-API-Key 会让纯密码登录（本机无 Key）的用户下载备份必然 40101 失败。
  * 超时沿用 120s（共享实现的默认是 600s，备份体量远小于世界文件），
  * 响应头的 Content-Disposition 不取——文件名由前端按备份元数据构造。
  */

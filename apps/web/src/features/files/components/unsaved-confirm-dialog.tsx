@@ -1,5 +1,5 @@
 /**
- * UnsavedConfirmDialog —— 未保存修改放弃确认（自 files-page.tsx 迁出，纯移动零行为变更）
+ * UnsavedConfirmDialog —— 未保存修改放弃确认
  * - 关闭编辑器与路由守卫共用（open = 关闭确认 || guard.isBlocked）
  * - isBlocked 分支描述文案：「离开页面」/「关闭」
  * - danger：确认按钮 destructive 深红实底

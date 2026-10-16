@@ -4,7 +4,7 @@ import { sessionAppliesToPanel } from '@/lib/mc-connection'
 import { getStoredSession } from '@/stores/auth'
 
 /**
- * 连接配置（设计文档 §3.2 onboarding 简化页的数据源）
+ * 连接配置（onboarding 简化页的数据源）
  * 默认同源（dev 走 Vite proxy /api；生产由 Express 同源托管）
  * 持久化 localStorage；严禁在源码中写真实服务器信息
  *

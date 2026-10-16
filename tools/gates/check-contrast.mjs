@@ -1,5 +1,5 @@
 /**
- * token 对比度批量校验（设计文档 §4.8-1，M1 出口二重审查）
+ * token 对比度批量校验
  * 用法：node tools/gates/check-contrast.mjs（判定对象 apps/web）
  * 标准：正文 ≥4.5:1 / 边框与焦点 ≥3:1 / 图形 ≥3:1（WCAG 实测不取整）
  *       明暗主题独立验证；任一组合不达标 → exit 1（阻止合并）
@@ -33,7 +33,7 @@ function resolveScopes(cssText) {
       scopes[scopeName].set(k, v)
     }
   }
-  // 亮色未定义的变量继承暗色定义（设计文档：独立映射，但允许共享非颜色 token）
+  // 亮色未定义的变量继承暗色定义：两套作用域独立映射，但共享非颜色 token
   for (const [k, v] of scopes.root) {
     if (!scopes.light.has(k)) scopes.light.set(k, v)
   }
@@ -158,10 +158,12 @@ function contrastVarPair(varNameA, varNameB, vars) {
   return wcagContrast(fg, b.color)
 }
 
-for (const [scopeName, vars] of [
+/** @type {[string, Map<string,string>][]} */
+const scopeEntries = [
   ['暗色', semanticScopes.root],
   ['亮色', semanticScopes.light],
-]) {
+]
+for (const [scopeName, vars] of scopeEntries) {
   console.log(`\n════ ${scopeName}主题 ════`)
 
   // 面集合：5 个语义底色 + 玻璃面（glass.css 规格 × scrim 后的卡片/弹窗底，取最差合成）
@@ -372,7 +374,7 @@ for (const [scopeName, vars] of [
 console.log(`\n──────────────────────────────`)
 console.log(`共校验 ${checks} 组合，失败 ${failures}`)
 if (failures > 0) {
-  console.error('✗ 存在对比度不达标的 token 组合，禁止合并（设计规范 §4.8-1）')
+  console.error('✗ 存在对比度不达标的 token 组合，禁止合并')
   process.exit(1)
 }
 console.log('✓ 全部组合达标（明暗主题独立验证）')

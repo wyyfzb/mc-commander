@@ -243,7 +243,7 @@ describe('InstanceModel.delete / 运行时长', () => {
 });
 
 describe('InstanceModel.create 同 id 重写（窄列 upsert）', () => {
-  // 旧实现（INSERT OR REPLACE）在 id 冲突时先删后插，create() 未列出的 9 列被静默重置
+  // INSERT OR REPLACE 在 id 冲突时先删后插，create() 未列出的 9 列会被静默重置
   // （8 列回退默认值/null，updated_at 重置为当前时刻）；这些列由 update()/运行期维护
   const UNLISTED_PRESERVED_COLUMNS = [
     'description',

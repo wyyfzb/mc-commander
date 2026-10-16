@@ -1,5 +1,5 @@
 /**
- * Auth store（安全主线 §认证会话）
+ * Auth store（认证会话）
  * - 管理员登录后的会话凭据（Bearer token），与 connection store（API Key 通道）并列
  * - localStorage 持久化 `mcs-session`：刷新/新标签页保持登录（服务端 7 天滑动续期）
  * - 安全取舍：token 存 localStorage 而非 sessionStorage——自托管单管理员场景下

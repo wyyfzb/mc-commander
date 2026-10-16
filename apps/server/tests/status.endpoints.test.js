@@ -641,7 +641,7 @@ describe('Status Routes · 端点缺口收口', () => {
 
       expect(res.status).toBe(200);
       // motd 无结构化 setter：运行中实例需重启生效；difficulty 的通道全部失败，
-      // 也如实列入（此前只看「表里有没有这个键」，失败也报「无需重启」）
+      // 也如实列入（只看「表里有没有这个键」，失败也会报「无需重启」）
       expect(res.body.data.restartRequired).toEqual(['difficulty', 'motd']);
       expect(instance.saveProperties).toHaveBeenCalled();
     });

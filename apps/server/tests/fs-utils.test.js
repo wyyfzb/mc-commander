@@ -407,7 +407,7 @@ describe('fs-utils resolveContainedPath（解析面，绝对/混合 target）', 
       const outside = path.join(root, 'outside');
       fs.mkdirSync(outside);
       fs.symlinkSync(outside, path.join(base, 'world'), 'junction');
-      // 叶子不存在，旧实现（只对完整目标 realpath）会因 realpath ENOENT 而放行
+      // 叶子不存在：只对完整目标 realpath 会因 realpath ENOENT 而放行
       expect(() => resolveContainedPath(base, path.join(base, 'world', 'newfile'))).toThrow(
         PathTraversalError,
       );

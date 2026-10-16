@@ -1,11 +1,11 @@
 /**
- * 实例启动生命周期域（治理线·服务端第四阶段）：MCServerInstance.start() 的
+ * 实例启动生命周期域：MCServerInstance.start() 的
  * 子阶段拆解——EULA 检查、tempban 对账、world 锁文件清理、启动命令/参数构建（四种来源
  * 优先级）、spawn 与进程/stdin/输出/exit 监听器挂载、运行时状态初始化、收尾（熔断重置/
- * started 事件/定时存档），共 11 方法，自 mc_server.js 等价搬移。挂载方式与 level-dat /
+ * started 事件/定时存档），共 11 方法。挂载方式与 level-dat /
  * output-parser / stats-collector 域一致：由宿主模块 Object.assign 原型注入复用，模块函数
- * 体内 this 语义与类内定义完全一致（实例方法调用时 this 绑定实例），全部调用点零改动，
- * 对外接口零变化。域外协作方法（_getSafeLevelName、_readWeatherFromLevelDat、
+ * 体内 this 语义与类内定义完全一致（实例方法调用时 this 绑定实例）。
+ * 域外协作方法（_getSafeLevelName、_readWeatherFromLevelDat、
  * _readWorldSpawnFromLevelDat、_parseOutput、_handlePlayerLeave、_savePlayerData、
  * _startStatsCollection、_stopStatsCollection、_rconCleanup、_isValidJavaExecutable、
  * _buildFullJvmArgs、_validateJvmArgs、_parseLegacyStartCommand）留宿主类内或既有域
@@ -45,8 +45,8 @@ function truncateLogText(text) {
  * 读取即判定：文件缺失（ENOENT）与内容不含 `eula=true` 都算未同意——不做
  * existsSync 预检，预检与读之间的窗口会让「文件消失」以裸 ENOENT 冒泡成 500，
  * 而语义上它就该是「未同意 EULA」。
- * 行首锚定（^…$，多行）：`#eula=true` 这类注释行不算同意（旧实现的行内匹配会把
- * 注释也认下，与路由侧口径分叉，两侧统一到严格口径）。已知与 MC 自身解析的差异：
+ * 行首锚定（^…$，多行）：`#eula=true` 这类注释行不算同意——行内匹配会把注释也
+ * 认下，故必须行首锚定。已知与 MC 自身解析的差异：
  * java.util.Properties 忽略行首空白（` eula=true` 对 MC 有效），本判定不认——面板
  * 写入侧（routes/status.js、routes/server-jar.js）产生的都是无缩进的干净行，该差异
  * 只在人工手改文件时可见，且路由侧一直是这个口径。

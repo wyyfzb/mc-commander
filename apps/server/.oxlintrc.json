@@ -20,7 +20,7 @@
   // env.node 预置 process/Buffer 等 Node 全局，避免 no-undef 误报
   // 已知与旧 eslint 的两处机制差异（今日无影响，登记备查）：
   //   ① oxlint 遵循 .gitignore（旧 flat-config eslint 不遵循）：放进被忽略目录的
-  //      调试脚本会逃逸 lint——调试残留请仍按纪律放 .ai/temp/ 或及时清理
+  //      调试脚本会逃逸 lint——调试残留须及时清理，不留到提交
   //   ② 旧配置的 sourceType:'module' 无对应物（oxlint 顶层无该选项），改由文件内
   //      有无 import/export 推断严格模式；本仓 221 个文件全含 import/export
   // 存量 `// eslint-disable` 注释无需改写：oxlint 同时识别 eslint- 与 oxlint- 前缀

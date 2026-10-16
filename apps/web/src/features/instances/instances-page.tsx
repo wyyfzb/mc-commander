@@ -174,7 +174,7 @@ export function InstancesPage() {
   })
   const detailStatuses: Record<string, InstanceStatus> = {}
   const loadingIds = new Set<string>()
-  /* 逐卡详情失败必须传到卡片：此前只取 data/isLoading，isError 被静默丢掉 ⇒
+  /* 逐卡详情失败必须传到卡片：只取 data/isLoading 会静默丢掉 isError ⇒
      失败卡的版本徽章凭空消失、四个指标全「—」，与「这台机器真的没有 TPS」不可分 */
   const detailErrorIds = new Set<string>()
   const detailIndexById = new Map<string, number>()

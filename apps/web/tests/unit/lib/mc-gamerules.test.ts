@@ -47,7 +47,8 @@ const findLegacy = (name: string): GameruleDef => LEGACY_GAMERULES.find((d) => d
 //   ② 每条当前值 —— `gamerule <name>`
 //      回包形状 `Game rule <name> is currently set to <true|false|-?\d+>`；值的形状同时
 //      给出 bool/int 的事实判定。读取发生在**空世界首启之后**，故这些值即 26.3 的默认值。
-// 采集脚本：`.ai/tools/gamerule-oracle/collect.mjs`（私有工作区，不入库；可重跑复核）
+// 采集方式：起一个一次性 MC 服务端（官方 server.jar、flat 新世界），用 RCON 下发上面两条
+// 命令取回结果，重采后整体替换本夹具。
 // 刷新时机：升 MC 版本、或给面板表加规则时，重采一次并整体替换本夹具——
 //   转红是提示「夹具该更新了」，不是回归。
 const OFFICIAL_26_3: ReadonlyArray<readonly [name: string, type: 'bool' | 'int', value: string]> = [

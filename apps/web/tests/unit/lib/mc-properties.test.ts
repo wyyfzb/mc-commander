@@ -221,7 +221,7 @@ describe('buildPropertiesPayload（提交载荷：只回传改动键）', () => 
     const current: Record<string, string> = { 'server-port': '25565', motd: 'hello' }
     const payload = buildPropertiesPayload(edited, current)
     expect(payload['server-port']).toBe(SENSITIVE_PROPERTY_PLACEHOLDER)
-    // motd 未改动 ⇒ 不回传（旧实现整份回传才会带上 'hello'）
+    // motd 未改动 ⇒ 不回传（整份回传会连带带上 'hello'）
     expect(payload.motd).toBeUndefined()
   })
 

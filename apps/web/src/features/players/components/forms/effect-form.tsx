@@ -1,5 +1,5 @@
 /**
- * EffectForm - /effect give|clear 命令（赋予/清除状态效果），自 action-forms.tsx 原样迁入。
+ * EffectForm - /effect give|clear 命令（赋予/清除状态效果）。
  * 执行走 onAction({kind:'command', command})；批量用 runBatchForTargets + formatBatchSummary toast。
  * 设计纪律：全部 --mcs-* token
  */

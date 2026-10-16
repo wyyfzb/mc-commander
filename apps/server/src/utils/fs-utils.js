@@ -2,9 +2,9 @@
 // 直接 writeFileSync 覆盖（默认 flag 'w'：先 truncate 后写）在进程中途崩溃/断电时会残留
 // 截断或半写内容，损坏目标文件（如 server.properties）；原子写崩溃只影响临时文件
 // （finally 清理），目标文件保持完整旧内容。
-// 按模式库 docs/scan-patterns.md 原子写维度收敛：mc_server.js（saveProperties/_saveProperties、
-// instance.json 同步）与 routes/files.js（PUT /files/content）均复用本函数，
-// 不再各自定义本地副本，杜绝双写入点原子性保障分叉。
+// 原子写维度全仓收敛到本函数：mc_server.js（saveProperties/_saveProperties、
+// instance.json 同步）与 routes/files.js（PUT /files/content）均复用它，
+// 不各自定义本地副本，杜绝双写入点原子性保障分叉。
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
@@ -73,10 +73,9 @@ export function ensureDir(dir) {
  *     「释放占位后 rename」——残留窗口为微秒级，且竞争方最多抢到一个空目录，
  *     没有任何数据可丢。
  * 源不存在时抛原生 ENOENT（占位文件会被回收，不留残件）。
- * 与旧写法的已知差异（POSIX）：目标是指向不存在文件的悬空符号链接时，`open('wx')`
- * 按 POSIX 语义一律 EEXIST（→409），而旧的 `existsSync`（跟随链接）判 false 会直接
- * rename 替换该链接。差异只落在「悬空链接作目标」这一病态场景，且 win32 行为与旧版
- * 一致（占位创建成功、链接被替换）。
+ * 悬空符号链接作目标时（POSIX）：`open('wx')` 一律 EEXIST（→409），
+ * 而 `existsSync` 跟随链接判 false 会直接 rename 替换该链接。
+ * 该差异只落在这一病态场景，win32 下不受影响（占位创建成功、链接被替换）。
  */
 export function renameNoClobber(src, dst) {
   if (!fs.lstatSync(src).isDirectory()) {
@@ -181,7 +180,7 @@ function assertPathContained(base, full, options = {}) {
 export function resolveSafePath(basePath, userPath, options = {}) {
   // ① path.resolve 归一化。注意用 path.join 拼接而非 path.resolve(base, userPath)：
   // path.resolve 会把以 '/' 开头的用户路径当绝对路径处理（Windows 上 '/' 直接落到
-  // 盘符根目录，导致列表根目录 '/' 失效），而 join 语义与旧实现一致——按相对实例
+  // 盘符根目录，导致列表根目录 '/' 失效），而 join 按相对实例
   // 目录拼接后统一归一化，跨平台行为不变
   const base = path.resolve(basePath);
   const full = path.resolve(path.join(base, userPath));

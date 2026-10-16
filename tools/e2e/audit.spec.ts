@@ -152,7 +152,7 @@ test.describe('审计页', () => {
     await page.waitForTimeout(300)
     await maybeShot(page, 'audit-calendar-light.png')
 
-    // 亮色激活态：选日回填后截图（此前「激活态仅暗色有图」的审查盲区）
+    // 亮色激活态：选日回填后截图（否则激活态只有暗色有图，是审查盲区）
     await popover.getByRole('button', { name: '今天', exact: true }).click()
     await expect(page.getByLabel('开始日期')).not.toHaveValue('')
     await page.waitForTimeout(300)

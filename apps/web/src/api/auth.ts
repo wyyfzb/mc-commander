@@ -15,9 +15,8 @@ import type {
 import type { StoredSession } from '@/stores/auth'
 
 /**
- * 从契约派生，不再手写副本：手写的本地类型会与服务端契约静默漂移——
- * 本次新增 setupTokenRequired 时，契约与实现都改了，只有这份副本没跟上，
- * 直到类型检查才暴露。派生后契约加字段即自动可见。
+ * 从契约派生，不手写副本：本地手写类型会与服务端契约静默漂移，
+ * 派生后契约加字段即自动可见。
  */
 export type AuthStatusData = AuthStatusResponse
 

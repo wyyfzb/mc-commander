@@ -2,7 +2,7 @@
  * PlayerDetailPanel —— 详情面板壳（Master-Detail 右栏）
  * - 单个模式：头像+名字+状态徽章+UUID + 5 Tab（概览/物品栏/传送/给予物品/日志）
  * - 批量模式：堆叠头像+「已选择 N 名玩家」+目标名单，仅保留 传送/给予物品 Tab
- * - 承载方式见 variant：lg 及以上内联右栏 / lg 以下由 Sheet 承载（此前窄屏是无 dialog 语义的覆盖层）
+ * - 承载方式见 variant：lg 及以上内联右栏 / lg 以下由 Sheet 承载（带 dialog 语义，不用无 dialog 语义的覆盖层）
  * - 打开期间封禁记录 30s 轮询
  */
 import { RefreshCw, X } from 'lucide-react'
@@ -165,8 +165,8 @@ export function PlayerDetailPanel({
             </div>
           </div>
         ) : fallbackPhase === 'failed' ? (
-          /* 请求失败：头部给错误态 + 重试。此前与「加载中…」共用一态，
-             端点持续故障时用户看到的是永久骨架——把失败呈现成「还在转」 */
+          /* 请求失败：头部给错误态 + 重试。与「加载中…」共用一态会让
+             端点持续故障时用户看到永久骨架——把失败呈现成「还在转」 */
           <div className="flex min-w-0 flex-1 items-center gap-2">
             <span className="truncate text-mcs-sm text-mcs-error-fg">详情加载失败</span>
             <Button

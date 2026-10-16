@@ -32,7 +32,7 @@ function buildApp() {
  * 隔离 .env 文件视图：readFileSync 仅对 envPath 返回桩定态，其余走真实 fs。
  * exists=false 时抛真实形态的 ENOENT（而不是返回空串）——persistEnvHash 的
  * 「读取即判定」分支（ENOENT ⇒ 从空串起写，其余错误上抛）只有这样才被走到；
- * existsSync 一并隔离，防止别处（如旧实现残留）用存在性预检蒙对。
+ * existsSync 一并隔离，防止别处用存在性预检蒙对。
  */
 function stageEnvFile({ exists, content }) {
   const realExistsSync = fs.existsSync.bind(fs);

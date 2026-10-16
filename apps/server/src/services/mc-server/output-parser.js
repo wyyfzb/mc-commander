@@ -1,8 +1,8 @@
 /**
- * 进程输出解析域（治理线·服务端第二阶段）：_parseOutput 与玩家进出事件辅助
- * 自 mc_server.js 等价搬移。挂载方式与 level-dat 域一致：由宿主模块 Object.assign
+ * 进程输出解析域：_parseOutput 与玩家进出事件辅助
+ * 挂载方式与 level-dat 域一致：由宿主模块 Object.assign
  * 原型注入复用，模块函数体内 this 语义与类内定义完全一致（实例方法调用时 this
- * 绑定实例），全部调用点零改动，对外接口零变化。域外协作方法（_loadPlayerData、
+ * 绑定实例）。域外协作方法（_loadPlayerData、
  * _savePlayerData、_todayKey、_emitDeathAggregated、_emitPerformance）留宿主类内，
  * 经 this 按原型链解析。
  */
@@ -11,8 +11,8 @@
  * 取日志行的**消息体**（剥掉 `[时间] [线程/级别]: ` 前缀）。
  *
  * 事件解析一律只认消息体、且锚定其行首。理由是**玩家能影响这一行的内容**：
- * 聊天也会落进日志，形如 `<玩家> 文本`。此前事件正则在整个行内任意位置找
- * `名字 + 事件短语`，于是玩家在聊天框打出 `../instance joined the game` 就会被
+ * 聊天也会落进日志，形如 `<玩家> 文本`。事件正则若在整个行内任意位置找
+ * `名字 + 事件短语`，玩家在聊天框打出 `../instance joined the game` 就会被
  * 当成一次真实加入——名字随即被拼进档案路径，可覆盖服务端根目录下的
  * `instance.json` / `ops.json` / `whitelist.json` 等（实测）。
  *
