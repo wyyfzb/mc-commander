@@ -449,8 +449,8 @@ export function setupWebSocket(wss, serverManager) {
           // 不带角色判据：status 本就在只读白名单内，包一层恒真的判据只会让后来者
           // 误以为这条快照是「可拦的」（真判据在 fanOut 与重放处）。
           // 四个字段逐项对齐 wsStatusSnapshotSchema（前端 applyWsSnapshot 与 e2e mock
-          // 同款口径）：ManagedInstance 上没有 status 字段（旧实现发 undefined，
-          // 违反契约的 z.string()）、players 是 Map（旧实现直接发出去会被
+          // 同款口径）：ManagedInstance 上没有 status 字段（直发会得 undefined，
+          // 违反契约的 z.string()）、players 是 Map（直接发出去会被
           // JSON.stringify 成 {}，违反 z.array）。四项都不在只读裁剪清单内，故不分角色
           if (instance) {
             // 世界格式升级（state 类，见契约 WS_EVENT_KINDS）的权威读法放在状态快照里：

@@ -174,8 +174,8 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
     });
 
     it('latest 下载失败时，报错指向可执行动作', () => {
-      // 文案已改为「从发布版下载代码包失败」并在同一句交代「两个源都试过」——
-      // 自动回退上线后仍只说「网络到 GitHub 不稳定」会误导用户去排查一个已不成立的假设
+      // 文案须说「从发布版下载代码包失败」并在同一句交代「两个源都试过」——
+      // 只说「网络到 GitHub 不稳定」会误导用户去排查一个已不成立的假设
       expect(script).toContain('从发布版下载代码包失败');
       expect(script).toContain('两个源');
       expect(script).toContain('显式指定版本');
@@ -224,10 +224,9 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
       expect(hintLines).toMatch(/sudo VERSION=\S+ bash/);
     });
 
-    // 此前的断言是「脚本不得出现 gitee」——理由是「mirror 只推 tags/branches、不推 Release 资产」。
-    // 该前提已被改变：release.yml 的 sync-gitee job 会把产物与 SHA256SUMS 一并同步到 Gitee
-    // （仓库镜像不同步 release，所以必须由 workflow 显式上传附件）。
-    // 故这里不再禁止 gitee，而是锁定现在真正要守的性质。
+    // 这里不禁止脚本出现 gitee——release.yml 的 sync-gitee job 会把产物与 SHA256SUMS 一并
+    // 同步到 Gitee（仓库镜像不同步 release，所以必须由 workflow 显式上传附件）。
+    // 要守的性质是「默认下载源」与「权威兜底」各是谁，不是「脚本里能不能出现 gitee」。
     it('默认首选 Gitee（用户实际链路在国内），GitHub 仍作权威兜底', () => {
       // 权威源仍是 GitHub（CI 构建产物 + Immutable Releases 签名），Gitee 只是分发镜像；
       // 但**默认下载源**是 Gitee：用户链路在国内，实测两者相差约 460 倍。
@@ -235,7 +234,7 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
       expect(script).toMatch(/RELEASE_BASE="https:\/\/github\.com\/wyyfzb\/mc-commander/);
       // 兜底必须存在且可探：Gitee 不可用时回 GitHub（latest 直接可用，无需解析 tag）
       expect(script).toMatch(/use_github\(\) \{/);
-      // 旧变量保留原意：ALLOW_GITEE_FALLBACK=0 曾表示「只用 GitHub」
+      // 兼容别名：ALLOW_GITEE_FALLBACK=0 等价于强制首选 GitHub
       expect(script).toContain(
         '[ "${ALLOW_GITEE_FALLBACK:-}" = "0" ] && SOURCE_PREFERENCE="github"',
       );

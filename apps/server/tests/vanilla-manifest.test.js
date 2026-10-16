@@ -67,8 +67,8 @@ describe('resolveVanillaDownload', () => {
   });
 
   it('详情里有别的摘要字段（sha256）但没有 sha1 → 仍按无摘要，不拿别的字段顶替', async () => {
-    // 这条钉住「不做多级字段回退」：旧实现是 `artifact.hash || build.sha256 || build.sha1`，
-    // 回退会让「读到哪个字段」随上游形状漂移；而拿 sha256 当 sha1 比对必然误报损坏。
+    // 这条钉住「不做多级字段回退」：`artifact.hash || build.sha256 || build.sha1` 式回退
+    // 会让「读到哪个字段」随上游形状漂移；而拿 sha256 当 sha1 比对必然误报损坏。
     // 诱饵要放在**所有可能被回退读到的地方**，否则这条用例对「回退实现」不承重：
     // 只在一处放诱饵时，回退实现读另一处照样返回 null，用例会假绿（探针实测过）。
     const decoy = 'b'.repeat(64);

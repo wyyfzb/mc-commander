@@ -206,7 +206,7 @@ describe('进程级兜底（uncaughtException/unhandledRejection）', () => {
     expect(events).toContain('unhandledRejection');
     // 既有优雅停机信号不回退
     expect(events).toContain('SIGTERM');
-    // 系统资源统计的 WS 推送必须在启动时接线（此前该函数无任何调用点，
+    // 系统资源统计的 WS 推送必须在启动时接线（不接线则该函数无调用点，
     // 事件从不发射，前端只能吃 30s 保底轮询）
     expect(h.startSystemStatsBroadcast).toHaveBeenCalledTimes(1);
     expect(events).toContain('SIGINT');
@@ -226,7 +226,7 @@ describe('进程级兜底（uncaughtException/unhandledRejection）', () => {
     await new Promise((resolve) => setImmediate(resolve));
     expect(h.scheduler.stop).toHaveBeenCalledTimes(1); // 定时任务先停
     expect(h.stopSystemStatsBroadcast).toHaveBeenCalled(); // 系统统计定时器同停
-    // 面板停机不停实例（owner 2026-09-09 拍板）：实例继续服务玩家，重启后接管
+    // 面板停机不停实例：实例继续服务玩家，重启后接管
     expect(h.manager.stopAll).not.toHaveBeenCalled();
     expect(h.db.close).toHaveBeenCalledTimes(1); // 数据库关闭（WAL 刷盘）
     expect(exitSpy).toHaveBeenCalledWith(0); // 优雅退出而非无日志崩溃

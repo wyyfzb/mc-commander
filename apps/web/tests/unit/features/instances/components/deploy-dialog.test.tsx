@@ -145,7 +145,7 @@ describe('DeployDialog', () => {
 
     // EULA 不再阻断部署：未同意时主操作为「部署（暂不启动）」（可点），同意后变「部署并启动」。
     // 文案说后果而非流程模式——「仅部署」曾与「部署并启动」并列，读起来像平级选项，
-    // 而前者实际通向「服务器起不来」（见 UAT-09 复盘）。
+    // 而前者实际通向「服务器起不来」。
     expect(screen.getByRole('button', { name: '部署（暂不启动）' })).toBeEnabled()
     // 未同意时**先说后果**（服务器无法启动）再给出路，不把「仍可部署」放在前面
     expect(
@@ -374,8 +374,8 @@ describe('DeployDialog', () => {
     expect(startMock.calls).toBe(0)
     expect(eulaMock.calls).toBe(0)
     // 承重断言：未同意 EULA 时**必须交代「尚未启动」**。
-    // 此前这一支不渲染任何状态块，用户只看到「部署成功」、无从知道服务器还起不来，
-    // 直到点「启动」才被拦下——而那一刻被呈现成「启动失败」（见 UAT-12）。
+    // 这一支若不渲染状态块，用户只看到「部署成功」、无从知道服务器还起不来，
+    // 直到点「启动」才被拦下——而那一刻被呈现成「启动失败」。
     expect(screen.getByText(/服务器尚未启动/)).toBeInTheDocument()
     // 且不得出现启动类文案（未尝试启动就不该暗示正在启动）
     expect(screen.queryByText(/正在启动服务器/)).not.toBeInTheDocument()

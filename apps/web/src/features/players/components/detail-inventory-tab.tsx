@@ -333,8 +333,8 @@ function InventorySlot({
           }}
           className={cn(
             // 格子是图形对象不是文本术语，故不套 InfoHint 的虚线下划线；
-            // 但触发器必须是可聚焦的 button 且浮层走 Popover——原先是
-            // Tooltip + 不可聚焦 <span>，键盘拿不到物品信息、触屏点按也不响应
+            // 但触发器必须是可聚焦的 button 且浮层走 Popover——Tooltip + 不可聚焦
+            // <span> 会让键盘拿不到物品信息、触屏点按也不响应
             'relative block cursor-help rounded-mcs-xs border transition-colors',
             'hover:border-mcs-accent-border-strong focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-mcs-focus-ring',
             variant === 'ender'

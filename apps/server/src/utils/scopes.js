@@ -1,14 +1,14 @@
 /**
  * 机器凭据的作用域目录（scope catalog）与「端点 → 所需作用域」的唯一映射。
  *
- * 设计意图（owner 2026-09-27 拍板）：让用户自己的 AI 通过面板接口做运维，而
+ * 设计意图：让用户自己的 AI 通过面板接口做运维，而
  * **权限在接口层限制**——比提示词约束可靠（OWASP LLM03 *Excessive Agency* 首条缓解
  * 即 complete mediation：鉴权必须落在下游系统，不能靠模型自行判断）。
  *
  * 三条口径：
  * 1. **命名用扁平 `resource:action`**（如 `instance:read`），不做 ABAC、不做实例级 ACL。
- * 2. **本模块是「端点需要什么」的唯一声明源**：`READONLY_ALLOWED` 不再独立维护，
- *    而是从本表推导——两处各写一份必然漂移，且漂移方向是「白名单比作用域更宽」＝越权。
+ * 2. **本模块是「端点需要什么」的唯一声明源**：`READONLY_ALLOWED` 从本表推导，
+ *    不另立一份——两处各写一份必然漂移，且漂移方向是「白名单比作用域更宽」＝越权。
  * 3. **fail-closed**：不在表内的端点**没有任何作用域能满足**，因此对受限凭据一律拒绝。
  *    登记的是**放行**而非拒绝，漏登记只会更严、不会更松。
  */
@@ -153,7 +153,7 @@ export function scopeCovers(method, reqPath, heldScopes) {
 }
 
 /**
- * 只读凭据可达的端点清单——**由 SCOPE_ENDPOINTS 推导**，不独立维护。
+ * 只读凭据可达的端点清单——**由 SCOPE_ENDPOINTS 推导**，不另立一份。
  *
  * 推导用的是**发放边界**（`isGrantableScope`）而非描述性的 `isReadonlyScope`：
  * 两者今天等价，但真正决定「机器凭据能被授予什么」的是 GRANTABLE_SCOPES，让

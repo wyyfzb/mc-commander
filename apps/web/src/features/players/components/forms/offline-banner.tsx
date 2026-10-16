@@ -1,4 +1,4 @@
-/** RCON 断连提示横幅（经验/效果/召唤三表单共用，自 action-forms.tsx 原样迁入） */
+/** RCON 断连提示横幅（经验/效果/召唤三表单共用） */
 import { CloudOff } from 'lucide-react'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
 

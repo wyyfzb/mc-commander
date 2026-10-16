@@ -94,8 +94,8 @@ describe('WebSocket 事件格式契约', () => {
 
     it('subscribe 应立即回发 status 快照，且逐字段满足 wsStatusSnapshotSchema', () => {
       // 桩用真实 ManagedInstance 的形状：没有 status 字段、players 是 Map。
-      // 旧实现手抄了 {status, isRunning, players, tps}：status 取到 undefined、
-      // players 被 JSON.stringify 成 {} —— 两项都违反契约 schema，且与 e2e mock
+      // 手抄 {status, isRunning, players, tps} 会取到 status undefined、并把
+      // players 经 JSON.stringify 成 {} —— 两项都违反契约 schema，且与 e2e mock
       // 及前端 applyWsSnapshot 的口径不一致
       serverManager.getInstance.mockReturnValue({
         isRunning: true,

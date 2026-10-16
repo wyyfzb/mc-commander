@@ -1,5 +1,5 @@
 /**
- * 玩家页 UI 态（zustand，设计文档 §5.2）
+ * 玩家页 UI 态（zustand）
  * - 选中集按 uuid；切换实例清空
  * - 筛选/排序规则为纯函数（matchesSearch/matchesModeFilter/sortPlayers，applyPlayersFilter 供表格数据源）
  * - 详情面板状态（单个玩家 / 批量模式）

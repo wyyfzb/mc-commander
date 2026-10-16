@@ -1,5 +1,5 @@
 /**
- * UploadConflictDialog —— 上传同名冲突确认（自 files-page.tsx 迁出，纯移动零行为变更）
+ * UploadConflictDialog —— 上传同名冲突确认
  * - 覆盖/跳过二选（对齐插件市场 40912 冲突流程）：确认携带冲突文件执行覆盖上传
  * - danger：覆盖按钮 destructive 深红实底
  */

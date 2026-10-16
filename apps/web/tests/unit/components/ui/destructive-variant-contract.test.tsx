@@ -2,8 +2,8 @@
  * 危险语义色「唯一声明源＝变体」契约
  *
  * 背景：危险按钮的着色（描边 + 文字，浅档另加悬停底）只在 `components/ui/button.tsx` 的
- * variant 里声明一份。曾经的现场是在调用点写 `variant="outline"` + `className="border-mcs-error-border
- * text-mcs-error-fg …"` —— 双轨并存时改一次危险色必然静默掉队，
+ * variant 里声明一份。调用点若写 `variant="outline"` + `className="border-mcs-error-border
+ * text-mcs-error-fg …"`，双轨并存时改一次危险色必然静默掉队，
  * 而对比度门禁只看 token 定义、结构上发现不了这类绕过。
  *
  * 本用例守两件事（新增危险按钮时请在此补一条）：

@@ -1,6 +1,5 @@
 /**
  * 部署向导三步 Stepper：圆点序号 + 标签 + 连接线（token 纪律，禁硬编码）
- * 从 deploy-dialog.tsx 行为不变迁移
  */
 import { Fragment } from 'react'
 import { Check } from 'lucide-react'

@@ -283,7 +283,7 @@ export function AuditPage() {
       setReplayTarget(null)
     }
   }
-  // 导出：按当前筛选 + 排序口径拉取（服务端零改动，上限 1000 条）
+  // 导出：按当前筛选 + 排序口径拉取（上限 1000 条）
   const [exporting, setExporting] = useState(false)
   const handleExport = async () => {
     setExporting(true)

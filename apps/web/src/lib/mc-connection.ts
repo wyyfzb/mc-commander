@@ -92,7 +92,7 @@ export function needsHttpPlaintextWarning(url: string): boolean {
  * JSON 的引号与转义在人工编辑时极易弄坏（少个引号就整段不可用），
  * 而 key: value 一行一项，缺一项只缺一项、错一行只错一行。
  *
- * 不使用 `url#key` 单行形态（owner 已拍板）：明文 API Key 进 URL 会留在浏览器历史、
+ * 不使用 `url#key` 单行形态：明文 API Key 进 URL 会留在浏览器历史、
  * 剪贴板与聊天记录里，与本仓「只存摘要、明文只显示一次」的姿态相冲。
  */
 const CONFIG_TEXT_URL_KEY = '面板地址'

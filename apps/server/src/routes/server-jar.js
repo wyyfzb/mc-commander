@@ -420,7 +420,7 @@ export function createServerJarRoutes(serverManager) {
         }
 
         if (type === 'fabric') {
-          // 与其余加载器一致：直连上游，经本仓（不再委托 minecraft-core）
+          // 与其余加载器一致：直连上游，经本仓
           const versions = await listFabricGameVersions();
           let loaders = [];
           try {
@@ -575,7 +575,7 @@ export function createServerJarRoutes(serverManager) {
         if (type.toLowerCase() === 'paper') {
           ({ url: downloadUrl, expectedHash } = await getPaperDownload(mcVersion));
         } else if (type.toLowerCase() === 'vanilla') {
-          // 与升级共用同一实现（此前走 minecraft-core 的 UnifiedBuild，是两套夹具的根源）。
+          // 与升级共用同一实现（两处各写一份会分叉成两套夹具与两套哈希可得性）。
           // 该实现取不到版本/地址时**直接抛错**——不给多级哈希回退，也不静默跳过校验。
           ({ url: downloadUrl, expectedHash } = await resolveVanillaDownload(mcVersion));
         } else if (type.toLowerCase() === 'purpur') {
@@ -588,7 +588,7 @@ export function createServerJarRoutes(serverManager) {
           ));
         } else if (type.toLowerCase() === 'forge') {
           // forge 没有构建详情接口：构建号取 promotions，下载地址按 maven 路径拼。
-          // 此前由依赖包代下并落盘——那条路下面板侧的体积上限与域白名单都不生效。
+          // 由本仓下载而非依赖包代下：那条路的 URL 不经过面板侧，体积上限与域白名单都不生效。
           ({ url: downloadUrl, expectedHash } = await resolveForgeInstallerDownload(mcVersion));
         } else {
           // 走到这里就是非法入参（契约只允许 vanilla/paper/fabric/forge/purpur）
@@ -604,8 +604,8 @@ export function createServerJarRoutes(serverManager) {
 
         if (downloadUrl) {
           // 下载 URL 全部来自上游响应（Piston 详情、paper v3、
-          // 以及本文件的 fabric/purpur 兜底），上游被污染即可指向任意主机。升级路径
-          // 一直有此断言，部署路径此前缺——同一个入参面不该只有一条路守。
+          // 以及本文件的 fabric/purpur 兜底），上游被污染即可指向任意主机。部署与升级
+          // 走同一个入参面，两处都必须有此断言——同一个入参面不该只有一条路守。
           assertAllowedDownloadHost(downloadUrl, allowedDownloadHosts([type.toLowerCase()]));
           logger.info(`Download URL: ${downloadUrl}`);
           await downloadWithProgress(downloadUrl, jarPath, serverManager, 'download', {

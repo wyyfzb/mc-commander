@@ -1,5 +1,5 @@
 /**
- * API 客户端（设计文档 §5.1 client.ts）
+ * API 客户端
  * fetch 封装：双通道凭据注入、10s 超时、响应信封解析、错误码 → ApiError
  * 凭据优先级（安全主线）：会话 Bearer 令牌 > X-API-Key（自动化/回退通道），
  * 且令牌只在**签发它的面板**上使用（见下方 sessionAppliesTo）；
@@ -388,7 +388,7 @@ export interface UploadOptions {
  * multipart 文件上传（共享实现， 插件上传延伸）：
  * - XHR 而非 fetch：fetch 无法观测上传进度（onprogress 仅 fetch stream 读响应侧）
  * - 双通道凭据注入（Bearer 会话优先 / X-API-Key 回退，与 apiRequest 互斥逻辑一致）
- * - withTransformPort 网关适配（此前 files.ts 独立实现遗漏此处理，沙箱下上传必挂）
+ * - withTransformPort 网关适配（漏掉它沙箱下上传必挂，故必须带）
  * - 超时 10 分钟兜底（大文件慢速网络）；用户取消走 signal
  * - 响应信封解析与错误码语义与 apiRequest 完全一致
  */

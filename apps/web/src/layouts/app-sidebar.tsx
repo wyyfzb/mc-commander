@@ -26,7 +26,7 @@ import { instanceRefreshMark } from '@/lib/instance-refresh'
 import { useServerStore } from '@/stores/server'
 
 /**
- * AppSidebar —— 主侧栏（设计文档 §3.1）
+ * AppSidebar —— 主侧栏
  * 导航：仪表盘/玩家/世界/文件/任务/实例 + 底部设置
  * 折叠由 zustand（useUiStore.sidebarCollapsed）驱动
  * 移动端（<768px）：fixed 抽屉 + 遮罩（useUiStore.mobileNavOpen 驱动）；底部实例迷你卡

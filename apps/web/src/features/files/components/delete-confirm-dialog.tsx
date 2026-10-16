@@ -1,5 +1,5 @@
 /**
- * DeleteConfirmDialog —— 文件/目录删除确认（自 files-page.tsx 迁出，纯移动零行为变更）
+ * DeleteConfirmDialog —— 文件/目录删除确认
  * - 目录：红色警告递归删除文案；文件：单文件删除文案
  * - danger + 不可逆提示；内容插槽展示完整路径（truncate + title 悬浮全路径）
  */

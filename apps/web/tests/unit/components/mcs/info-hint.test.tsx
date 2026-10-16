@@ -4,8 +4,8 @@
  * - icon 档：入口是可聚焦按钮，可访问名＝label，点按出浮层
  * - inline 档：可见文本＝label（或被 term 覆盖），带虚线下划线记号，可访问名仍取 label
  * - **键盘路径**：Tab 落点 → Enter 打开 → Escape 关闭后焦点回到入口
- *   （这条是本组件存在的理由：此前这些解释挂在不可聚焦的 <span> + Tooltip 上，
- *   键盘与触屏完全拿不到；只测点按证明不了它被修好）
+ *   （这条是本组件存在的理由：解释若挂在不可聚焦的 <span> + Tooltip 上，
+ *   键盘与触屏完全拿不到；只测点按证明不了它可用）
  */
 import { describe, expect, it } from 'vitest'
 import { render, screen } from '@testing-library/react'

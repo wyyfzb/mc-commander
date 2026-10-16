@@ -1,5 +1,5 @@
 /**
- * PluginRow —— 插件列表单行卡片（自 plugins-page.tsx 迁出，纯移动零行为变更）
+ * PluginRow —— 插件列表单行卡片
  * 复选框 + 元数据主列 + 状态/操作列；行点击打开详情
  */
 import { Package, Power, PowerOff, Trash2 } from 'lucide-react'

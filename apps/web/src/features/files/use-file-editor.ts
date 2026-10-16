@@ -1,5 +1,5 @@
 /**
- * useFileEditor —— 编辑器内容状态管理外提（自 files-page.tsx 迁出，纯移动零行为变更）
+ * useFileEditor —— 编辑器内容状态管理
  * - draft 组件 state 与 query 缓存隔离；originalRef 为已加载/已保存基线
  * - 内容加载完成 → 同步 draft 与基线；二进制文件深链接守卫
  * - 保存竞态守卫（useSnapshotSave）：连续快速保存只有最后一次结果被采纳

@@ -1,5 +1,5 @@
 /**
- * WebSocket 封装（设计文档 §5.1 ws.ts）
+ * WebSocket 封装
  * 契约（服务端 websocket.js）：
  *  - 鉴权（首帧通道，主线）：连接建立后客户端第一条消息必须是
  *    {type:'auth', apiKey? | sessionToken?}，服务端校验通过回执
@@ -7,7 +7,7 @@
  *    1008 + auth 类 reason 为终态：不自动重连（无效凭据重试会把自己
  *    撞进服务端 IP 封禁），凭据变更由上层凭据比对后重建连接。
  *    旧 subprotocol 通道（mc-commander-apikey./mc-commander-session.）
- *    服务端继续接受（向后兼容），客户端不再使用。
+ *    服务端继续接受以兼容旧客户端，本端只用 auth 消息。
  *  - 消息：{type:'subscribe'|'unsubscribe'|'ping', instanceId?, lastEventId?}
  *  - 订阅即回 status 快照；通知事件带自增 id（断线补齐游标，上限 500 条）
  *  - 服务端 30s ping 心跳；客户端消息限速 60 条/分钟

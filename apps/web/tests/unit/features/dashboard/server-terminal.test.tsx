@@ -368,7 +368,7 @@ describe('ServerTerminal JVM 眼睛切换（复现修复）', () => {
     renderTerminal()
     expect(screen.getByRole('status').textContent).toContain('实例已停止')
 
-    // 翻转为运行中 → 状态条随显隐消失（旧实现写入 xterm 画布后无法擦除，刷新竞态下运行中残留停止标记）
+    // 翻转为运行中 → 状态条随显隐消失（标记若写进 xterm 画布就无法擦除，刷新竞态下会残留停止标记）
     useServerStore.setState({ status: { isRunning: true } as never })
     await waitFor(() => expect(screen.queryByRole('status')).toBeNull())
   })

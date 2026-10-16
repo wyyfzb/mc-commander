@@ -3,8 +3,8 @@
  * 33 条命令 14 分类；图标/颜色映射；前缀匹配补全（最多 10 条）
  * 玩家页命令拼装（give/teleport/ban 等）消费此表
  *
- * 条数与分类数由 `mc-commands.test.ts` 钉住：这两项此前既无断言、注释也失实，
- * 于是自述数字与实际数量长期不一致而无人发现。
+ * 条数与分类数由 `mc-commands.test.ts` 钉住：这两项无断言时，
+ * 自述数字会与实际数量长期不一致而无人发现。
  */
 import type { LucideIcon } from 'lucide-react'
 import {

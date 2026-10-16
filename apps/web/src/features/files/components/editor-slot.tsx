@@ -1,10 +1,10 @@
 /**
- * EditorSlot —— Monaco 编辑器窗格容器（自 files-page.tsx 迁出，纯移动零行为变更）
+ * EditorSlot —— Monaco 编辑器窗格容器
  * - desktop：桌面端内联 section（w-[45%]，path 空串兜底未选中态）
  * - fullscreen：移动端全屏覆盖层（fixed inset-0，仅选中文件时由父组件条件渲染）
  * - isLoading 差异：desktop 附加 selectedPath!==null 条件（未选中不显示加载骨架），
- *   fullscreen 只在选中时渲染故直接透传（与原实现一致）
- * - encoding/loadError 由 contentQuery 派生（派生规则与原实现逐字一致）
+ *   fullscreen 只在选中时渲染故直接透传
+ * - encoding/loadError 由 contentQuery 派生
  */
 import { getFriendlyErrorText } from '@/api/errors'
 import { Card } from '@/components/mcs/card'

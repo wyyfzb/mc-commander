@@ -59,7 +59,7 @@ function cssVar(name: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || undefined!
 }
 
-/** 终端主题与主主题解耦：独立深底 token（设计文档 4.6，亮暗同值；级别色用深底变体） */
+/** 终端主题与主主题解耦：独立深底 token（亮暗同值；级别色用深底变体） */
 function buildXtermTheme() {
   const accent = cssVar('--mcs-terminal-accent')
   const error = cssVar('--mcs-terminal-error')
@@ -553,7 +553,7 @@ export function ServerTerminal({
         ) : null}
       </div>
       {/* 停止状态条：随 isRunning 显隐的 DOM 元素而非 xterm 画布内容——
-          画布只追加不可擦除，旧实现把标记行写进画布，刷新时 isRunning
+          画布只追加不可擦除，标记行写进画布后，刷新时 isRunning
           短暂为 false 的竞态会让「运行中」实例永久残留停止标记（实测） */}
       {!isRunning && buffer.length > 0 && (
         <div

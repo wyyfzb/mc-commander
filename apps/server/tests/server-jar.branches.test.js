@@ -273,8 +273,8 @@ describe('GET /versions 分发缺口', () => {
   });
 
   it('未知 type：如实 400（不再委托库「什么都能答」）', async () => {
-    // 部署契约只允许 vanilla/paper/fabric/forge/purpur；未知类型走到这里是非法入参。
-    // 旧实现会把任意 type 透传给 minecraft-core 并接受其返回，等于对非法入参也给答案。
+    // 部署契约只允许 vanilla/paper/fabric/forge/purpur；未知类型走到这里是非法入参，
+    // 必须如实 400，不能接受一个「什么都能答」的返回。
     const { app } = buildApp();
     const res = await request(app).get('/api/versions?type=neoforge');
     expect(res.status).toBe(400);
@@ -393,10 +393,8 @@ describe('Paper 构建发现链形态缺口', () => {
 });
 
 describe('deploy · 上游直链形态', () => {
-  // 曾有一组「downloadServer 本地落盘」用例（build 为 path 形态 / build 为 null /
-  // 库返回 url / 库返回空对象）。它们测的是 minecraft-core 的**库内自取**那条路，
-  // 而那条路已被移除——它下面板侧的体积上限与下载域白名单都不生效（URL 不经过本仓，
-  // 断言不到）。故随实现一并删除，不是被跳过。
+  // 上游 URL 一律经本仓下载：库内自取那条路下面板侧的体积上限与下载域白名单都不生效
+  // （URL 不经过本仓，断言不到），故不覆盖它。
   function defineVanilla() {
     defineManifest();
   }

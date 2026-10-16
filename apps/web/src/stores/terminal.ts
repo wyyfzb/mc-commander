@@ -8,7 +8,7 @@ import {
 } from '@/lib/terminal-log'
 
 /**
- * 终端日志缓冲 store（设计文档 §5.2：切页不丢，组件卸载时状态提升到 store）
+ * 终端日志缓冲 store（切页不丢，组件卸载时状态提升到 store）
  * - WS log 事件 → pushEntry（2000 条上限）
  * - 历史日志仅当缓冲为空时填充（防重复）
  * - 手动清空后 suppressBackfill 标记：组件重建不再回填历史

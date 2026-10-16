@@ -110,7 +110,7 @@ test.describe('世界页', () => {
 
   test('侧栏实例卡刷新语义（结果说明）：未连通时说「轮询」且不截断', async ({ page }) => {
     await setupConnection(page)
-    // 故意从世界页进：这条结果的真值不依赖当前页面（此前它取 store，只有仪表盘会写，
+    // 故意从世界页进：这条结果的真值不依赖当前页面（它若取 store，只有仪表盘会写，
     // 于是从别的页面进来会拿到空值）
     await page.goto('/world')
     // 桌面 rail 与移动抽屉各渲染一份迷你卡：抽屉那份 aria-hidden/inert，仍按名字精确限定
@@ -170,7 +170,7 @@ test.describe('世界页', () => {
     await setupConnection(page)
     await page.goto('/world')
     await page.getByRole('tab', { name: '游戏规则' }).click()
-    // URL 深链接（设计文档 §3.3）：Tab 状态写入 ?tab=
+    // URL 深链接：Tab 状态写入 ?tab=
     await expect(page).toHaveURL(/tab=gamerule/)
     // 版本徽章（mcVersion 1.21.4 → 旧版规则集）
     await expect(page.getByText('旧版规则')).toBeVisible()

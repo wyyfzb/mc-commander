@@ -47,7 +47,7 @@ describe('免确认白名单', () => {
     expect(isSafeCommand('gamerule')).toBe(false)
   })
 
-  it('前导斜杠不再造成同一种命令两种待遇（此前只有 seed 容忍斜杠）', () => {
+  it('前导斜杠不造成同一种命令两种待遇（只给 seed 容忍斜杠即是漏判）', () => {
     for (const cmd of ['list', 'tps', 'help', 'seed', 'version']) {
       expect(isSafeCommand(cmd), cmd).toBe(isSafeCommand(`/${cmd}`))
     }

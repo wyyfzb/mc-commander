@@ -394,7 +394,7 @@ export function TotpPanel({ baseUrl, apiKey, authed }: TotpPanelProps) {
               完成挂靠
             </LoadingButton>
             {/* 「取消」是无后果的退出口（退回稳态，不改任何服务端状态）→ ghost；
-                ghost/link 明确不计入配额（见审查指南 §CTA 配额末条）。 */}
+                ghost/link 明确不计入配额）。 */}
             <Button
               type="button"
               variant="ghost"

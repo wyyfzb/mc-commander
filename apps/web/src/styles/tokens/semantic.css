@@ -1,5 +1,5 @@
 /**
- * Semantic 层 —— --mcs-* 语义 token（设计文档 §4.5）
+ * Semantic 层 —— --mcs-* 语义 token
  * 命名公式：[category]-[semantic]-[variant]（Primer 法）
  * 层级词表固定：default / muted / subtle / emphasis，禁同义词混用
  * 组件代码只允许消费本层；深色为默认（P4 深色优先），.light 为亮色覆盖
@@ -140,7 +140,7 @@
   --mcs-font-size-display: 30px; /* 数字 display 档（mono + tnum，仅 KPI 等数字面板，非文字档位） */
   --mcs-line-height-body: 1.6;
 
-  /* ── 终端专用（设计文档 4.6：ServerTerminal 独立深底，与基面同阶，主题无关）── */
+  /* ── 终端专用（ServerTerminal 独立深底，与基面同阶，主题无关）── */
   --mcs-terminal-bg: oklch(0.1663 0.0262 269.37);     /* 基面深底（亮暗同值） */
   --mcs-terminal-fg: var(--ref-dark-text-muted);
   --mcs-terminal-fg-bright: var(--ref-dark-text-default);
@@ -170,7 +170,7 @@
   --mcs-ripple-opacity: 0.75;
   --mcs-bg-muted: var(--ref-light-card);
   /* 深嵌区：亮色下与页面底同值（浅灰）。终端等真正深嵌场景由 M2 引入
-     主题无关的 --mcs-terminal-* 专用 token（设计文档：ServerTerminal 独立深底） */
+     主题无关的 --mcs-terminal-* 专用 token（ServerTerminal 独立深底） */
   --mcs-bg-subtle: var(--ref-light-bg);
   --mcs-bg-emphasis: var(--ref-light-popover);
   --mcs-bg-secondary: var(--ref-light-secondary);

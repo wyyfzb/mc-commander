@@ -1,7 +1,7 @@
 import { cn } from '@/lib/utils'
 
 /**
- * BrandLogo —— 品牌图标（设计文档 §3.1 品牌触点）
+ * BrandLogo —— 品牌图标（品牌触点）
  * 极简终端提示符标记：圆角窗 + 命令符 + 光标条，呼应产品「服务器命令中枢」定位。
  * 窗体描边跟随文本色（currentColor），命令符/光标用品牌 accent（--mcs-* token，
  * 经 Tailwind 语义类注入），亮暗主题自动适配。favicon/PWA 图标为同构静态版。

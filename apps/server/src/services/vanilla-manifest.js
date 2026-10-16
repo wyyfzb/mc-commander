@@ -1,10 +1,10 @@
 /**
  * vanilla 构建解析的**唯一实现**：从 Mojang Piston manifest 取目标版本的 server jar 地址与摘要。
  *
- * 为什么要有这个模块：部署与升级此前**各写一份**——部署走 `minecraft-core` 的 `UnifiedBuild`，
- * 升级直连 Piston。同一个事实两种取法，于是有了两套夹具、两套哈希可得性（部署侧是
- * `artifact.hash || build.sha256 || build.sha1` 的三级回退）。这正是「测试夹具把错误形状
- * 固化成契约」这类失效模式的温床（本仓已因此出过两次生产缺陷）。
+ * 为什么要有这个模块：vanilla 构建解析全仓只有这一处实现，部署与升级共用它。
+ * 两处各写一份必然分叉——两套夹具、两套哈希可得性（`artifact.hash || build.sha256 ||
+ * build.sha1` 三级回退即此形态），而「读到哪个字段」会随上游形状漂移。这正是「测试夹具
+ * 把错误形状固化成契约」这类失效模式的温床（本仓已因此出过两次生产缺陷）。
  *
  * 形态依据（对照真实响应核实）：
  * - manifest：`{ latest: { release }, versions: [{ id, type, url }] }`

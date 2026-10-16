@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 
 /**
- * Token 引用完整性测试（防复发，对应设计文档 §4.8-1 前置检查）
+ * Token 引用完整性测试（防复发）
  * 1. semantic.css 引用的所有 --ref-* 必须已在 reference.css 定义
  * 2. theme.css / @theme inline 引用的所有 --mcs-* 必须已在 semantic.css 定义
  * 3. 组件源码（styles/、components/ui/ 除外）禁止硬编码色值

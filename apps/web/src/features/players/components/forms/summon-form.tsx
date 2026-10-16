@@ -1,5 +1,5 @@
 /**
- * SummonForm - /summon 命令（在指定坐标召唤实体），自 action-forms.tsx 原样迁入。
+ * SummonForm - /summon 命令（在指定坐标召唤实体）。
  * 执行走 onAction({kind:'command', command})。
  * 设计纪律：全部 --mcs-* token
  */

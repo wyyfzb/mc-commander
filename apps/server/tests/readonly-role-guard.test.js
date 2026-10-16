@@ -361,7 +361,7 @@ describe('拒绝语义与信息暴露', () => {
 });
 
 describe('凭据通道与角色赋值', () => {
-  it('管理员 API Key → admin 角色且不被角色门拦（既有行为零变化）', async () => {
+  it('管理员 API Key → admin 角色且不被角色门拦', async () => {
     for (const { method, pattern } of endpoints) {
       const url = API_V1_MOUNT + concreteUrl(pattern);
       // 两个轮换端点会真实改写内存中的哈希（并把新哈希写进临时 .env），

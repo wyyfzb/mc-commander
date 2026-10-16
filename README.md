@@ -255,7 +255,7 @@ mc.example.com {
 
 在"创建实例"页面，选择服务端类型（Vanilla/Paper/Fabric/Forge/Purpur）、MC 版本、实例名称和内存，点击部署即可。系统会自动：
 
-1. 调用对应 API 获取最新版本（minecraft-core + Paper v3 API）
+1. 从各加载器官方源获取版本与下载地址（Piston / paper v3 / Fabric meta / Forge promotions / Purpur API）
 2. 下载 JAR 文件（流式下载并上报进度，经 WebSocket 推送部署进度）
 3. 自动检测并选择合适的 Java 版本（参考 HeadlessMC 版本矩阵）
 4. 生成 server.properties、eula.txt 等配置文件
@@ -415,7 +415,7 @@ ws.onmessage = (event) => {
 | 数据库 | SQLite (better-sqlite3) |
 | 实时通信 | ws (WebSocket) |
 | HTTP 客户端 | 内置 fetch + 自建薄封装（服务端 JAR 下载、API 调用） |
-| MC 服务端下载 | minecraft-core（Vanilla/Fabric/Forge/Purpur）+ Paper v3 API 自适应 |
+| MC 服务端下载 | 各加载器官方源直取（Piston / paper v3 / Fabric meta / Forge promotions / Purpur API），带下载域白名单与体积上限 |
 | Java 版本检测 | 自建版本矩阵（参考 HeadlessMC） |
 | RCON 协议 | rcon-client（零依赖、Promise API、串行队列） |
 | 定时任务 | croner（零依赖、DST 感知） |

@@ -3,7 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware'
 import { migrateFromLegacyKeys, STORAGE_KEY } from '@/lib/migrate-ui-keys'
 
 /**
- * 全局 UI 态（zustand persist，设计文档 §二/5.1）
+ * 全局 UI 态（zustand persist）
  * 主题 / 终端自动滚动 / 命令确认偏好 —— localStorage 持久化
  * 侧栏折叠 / 命令面板 / 通知抽屉 / 移动端导航 —— 纯会话态，不持久化
  */

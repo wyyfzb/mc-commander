@@ -348,8 +348,8 @@ describe.skipIf(!snapshotTool)(
 
     it('恢复坏快照（无 level.dat）：预检拦截（不触碰原实例目录），原世界不丢', async () => {
       // 构造"内容为空/无世界数据"的坏快照目录（模拟世界被清空时创建的
-      // 快照——旧实现解压 exit 0 即删 pre_restore，原世界不可逆丢失；
-      // 快照方案在 rename 之前预检，原实例目录根本不被触碰）
+      // 快照——解压 exit 0 即删 pre_restore 会让原世界不可逆丢失，故预检必须落在
+      // rename 之前，原实例目录根本不被触碰）
       createTestInstance(serversDir);
       const badSnapshot = path.join(backupsDir, 's1', 'bad-snapshot');
       fs.mkdirSync(path.join(badSnapshot, 'world'), { recursive: true });

@@ -139,7 +139,7 @@ const serverManager = new MCServerManager();
 // 孤儿实例接管：面板重启后扫描各实例 pid 文件，验活接管仍在运行的
 // MC 进程（恢复运行态/RCON/停止能力）。必须先于 autoStart 错峰启动执行——
 // 接管置 isRunning=true 后，autoStart 的已运行跳过检查天然防止双开。
-// 失败不阻塞面板启动（接管缺失退化为旧行为：实例失联显示已停止）
+// 失败不阻塞面板启动（接管缺失时实例失联、显示为已停止）
 try {
   adoptOrphanInstances(serverManager);
 } catch (err) {
@@ -356,7 +356,7 @@ server.listen(config.port, config.host, () => {
 
 // 优雅停机：只关面板自身资源（调度器/WS/DB/HTTP），不停 MC 实例——实例
 // detached 运行且 pid 文件已随 start() 落盘，面板退出后继续服务玩家，下次启动
-// 由 adoptOrphanInstances 接管（owner 2026-09-09 拍板：面板停机不停实例）。
+// 由 adoptOrphanInstances 接管（面板停机不停实例）。
 // 边界：面板不在线期间实例崩溃无自动重启（autoRestart 依赖面板进程）。
 async function shutdown(signal) {
   logger.info(`${signal} received, shutting down (MC instances keep running)...`);

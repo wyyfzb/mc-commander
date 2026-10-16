@@ -50,7 +50,7 @@ export const STRUCTURED_LOG_PROPERTY = 'log4j.configurationFile';
 /** 已验证下限（1.21.6 的 log4j 版本）；低于它不启用，见文件头的版本门槛 */
 const MIN_VERIFIED_LOG4J = [2, 24, 1];
 
-/** 面板要读的字段；`msg` 仍是自由文本，但不再需要从行首形态里剥 */
+/** 面板要读的字段；`msg` 是自由文本，取值不依赖行首形态 */
 const JSONL_PATTERN =
   '{"ts":"%d{yyyy-MM-dd HH:mm:ss}","lvl":"%level","thr":"%t","logger":"%logger","msg":"%encode{%msg}{json}"}%n';
 

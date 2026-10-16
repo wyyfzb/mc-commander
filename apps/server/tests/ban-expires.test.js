@@ -1,8 +1,8 @@
 /**
  * 原版封禁条目到期时间口径。
  *
- * 承重点：永久只由**缺失/空串/哨兵**判定，临时按 MC 的日期格式解析——此前读侧一律当永久，
- * 于是任何带 `expires` 的官方条目在面板里都显示「永久」，用户看不出它什么时候解封。
+ * 承重点：永久只由**缺失/空串/哨兵**判定，临时按 MC 的日期格式解析——读侧一律当永久，
+ * 任何带 `expires` 的官方条目在面板里都显示「永久」，用户看不出它什么时候解封。
  */
 import { describe, it, expect } from 'vitest';
 import { isBanExpired, parseBanExpires, PERMANENT_EXPIRES } from '../src/utils/ban-expires.js';

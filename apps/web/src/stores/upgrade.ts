@@ -16,7 +16,7 @@ export const UPGRADE_STAGE_LABELS: Record<UpgradeStage, string> = {
 
 /**
  * 升级终态阶段（单一事实源）：弹窗视图切换、实例卡「升级中」徽章、socket 终态失效刷新
- * 三处共用——此前各写一份名单，新增阶段（如 cancelled）必然漏改其中一两处
+ * 三处共用——各写一份名单的话，新增阶段（如 cancelled）必然漏改其中一两处
  */
 export const UPGRADE_TERMINAL_STAGES: ReadonlySet<UpgradeStage> = new Set([
   'completed',

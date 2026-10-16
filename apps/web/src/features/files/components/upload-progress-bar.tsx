@@ -1,5 +1,5 @@
 /**
- * UploadProgressBar —— 文件上传进度条（自 files-page.tsx 迁出，纯移动零行为变更）
+ * UploadProgressBar —— 文件上传进度条
  * - 对齐插件页交互：progressbar ARIA 三元组（label/min/max + valuenow 直更）+ 取消按钮
  * - 挂载于文件列表上方（mx-3 mt-2），aria-live=polite 播报进度
  */

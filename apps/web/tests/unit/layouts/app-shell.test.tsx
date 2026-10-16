@@ -127,7 +127,7 @@ describe('AppShell', () => {
     fireEvent.click(await screen.findByRole('option', { name: /世界/ }))
     expect(await screen.findByText('世界占位')).toBeInTheDocument()
 
-    // 回归：命令面板页面组必须包含「插件」「Webhook」（此前漏配导致 Ctrl+K 无法跳转）
+    // 回归：命令面板页面组必须包含「插件」「Webhook」（漏配会让 Ctrl+K 无法跳转）
     fireEvent.keyDown(window, { key: 'k', metaKey: true })
     expect(await screen.findByRole('option', { name: /插件/ })).toBeInTheDocument()
     expect(screen.getByRole('option', { name: /Webhook/ })).toBeInTheDocument()

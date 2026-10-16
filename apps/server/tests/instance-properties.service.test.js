@@ -7,7 +7,7 @@
  * 联动编排（磁盘快照 diff 基线/restartRequired 判定/运行中命令逐条下发
  * 与单条失败降级）、GET 展示视图（运行状态覆盖/掩码/异常兜底）、缓存
  * 刷新边界。路由层端点行为由 status.test.js / status.endpoints.test.js /
- * status.input.contract.test.js 既有行为级测试守护（零改动通过）。
+ * status.input.contract.test.js 行为级测试守护。
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { logger } from '../src/utils/logger.js';
@@ -286,7 +286,7 @@ describe('instance-properties.service · 写盘与重启联动编排 applyProper
     });
     const r = await applyPropertyUpdates(instance, { difficulty: 'hard' });
     expect(r.applied).toBe(true);
-    // 没生效就说没生效：此前只看「表里有没有这个键」，命令失败也报「无需重启」
+    // 没生效就说没生效：只看「表里有没有这个键」，命令失败也会报「无需重启」
     expect(r.restartRequired).toEqual(['difficulty']);
     expect(instance.saveProperties).toHaveBeenCalled();
   });

@@ -26,7 +26,7 @@ const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
  *   - `package-lock.json`：本脚本现场生成 ⇒ 用户侧安装可复现
  *   - `src/**`：运行时全部代码（唯一入口 src/index.js）
  *   - `public/**`：前端构建产物（面板 UI + PWA，安装时不再构建）
- *   - `mc-schemas/package.json`：服务端依赖目标的清单（已收敛为运行期字段）
+ *   - `mc-schemas/package.json`：服务端依赖目标的清单（只含运行期字段）
  *   - `mc-schemas/dist/index.js`：服务端 `require('@mc-commander/schemas')` 的实现
  */
 export const PAYLOAD = {

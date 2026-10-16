@@ -281,7 +281,7 @@ describe('InstanceSettingsDialog', () => {
     // 锁实际使用形态：等开关就位（占位态另有用例）
     await screen.findByRole('switch', { name: '实时推送' })
 
-    /** 行容器配方（与抽取前逐字相同）；groupClass = 行所属分组容器，用来判「行外无额外包裹」 */
+    /** 行容器配方；groupClass = 行所属分组容器，用来判「行外无额外包裹」 */
     const cases = [
       { title: "JVM 优化 (Aikar's Flags)", groupClass: 'flex flex-col gap-4' },
       {

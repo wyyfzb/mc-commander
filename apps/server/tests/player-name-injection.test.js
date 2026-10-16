@@ -219,8 +219,7 @@ describe('档案路径越界（写侧与读侧同守）', () => {
   });
 
   // 落点守卫在「名字」这一侧其实**不可达**：影子档案的键取 UUID（usercache → 离线算法派生），
-  // 名字永远不成为文件名。它能被触发的唯一场景是 **usercache 被篡改**（它的注释写的就是这个），
-  // 而这一段此前没有用例 ⇒ 删掉守卫不会有任何用例变红。以下三条把那条路径钉住。
+  // 名字永远不成为文件名。它能被触发的唯一场景是 **usercache 被篡改**（它的注释写的就是这个）。
   it('共享入口：实例与路由共用同一处校验（篡改 usercache ⇒ null + 告警；正常名仍可用）', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-inject-shared-'));
     fs.writeFileSync(

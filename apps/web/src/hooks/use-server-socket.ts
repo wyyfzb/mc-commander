@@ -23,7 +23,7 @@ import type { Player, UpgradeStage, WsMessage } from '@/api/types'
 import { wsWorldUpgradePayloadSchema } from '@mc-commander/schemas'
 
 /**
- * useServerSocket —— WS 单例 hook（设计文档 §5.2）
+ * useServerSocket —— WS 单例 hook
  * - 建立 McSocket（subprotocol 鉴权），订阅当前实例
  * - 事件分派：status 快照/performanceUpdate → ServerStore；通知类 → NotificationStore
  * - 断线重连由 McSocket 内置（指数退避 ≤30s，订阅自动恢复）
@@ -98,7 +98,7 @@ export function useServerSocket(instanceId: string | null) {
         baseUrl,
         sessionToken,
         // 连接生命周期边沿：断线即时置 false（激活「实时推送已断」降级态
-        // 与降级横幅——此前 socketConnected 只在 effect 挂载/卸载时置位，断线
+        // 与降级横幅——只在 effect 挂载/卸载时置位的话，断线
         // 永远感知不到，degraded 态是死码）；重连成功 onopen 置回 true
         onStateChange: ({ open }) => {
           setSocketConnected(open)

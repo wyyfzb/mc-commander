@@ -11,7 +11,7 @@
  * 一个 spec 触发的构造端点（deploy/upgrade 的进度与终态）若向全部连接广播，
  * 会打进并行 spec 的页面：实测 dashboard 的「通知抽屉空态」会被 upgrade-cancel /
  * deploy-fallback 广播的终态事件塞进一条未读通知而偶发变红。故**广播按分组投递**：
- * 只发给与触发请求同分组的连接（无分组 → 无分组，保持旧行为）。
+ * 只发给与触发请求同分组的连接（无分组 → 无分组）。
  * 触发构造端点的 spec 必须声明自己的分组：不声明则既收不到自己触发的事件
  * （分组不同），又会污染未声明分组的 spec。
  */
@@ -138,7 +138,7 @@ const instance = {
   name: 'E2E 演示实例',
   isRunning: true,
   // 与契约同形（instanceCapabilitiesSchema）：前端按 capabilities.rcon 判断命令面可用性，
-  // 此前只补了 vitest 的 handlers，漏了这里 ⇒ e2e 里所有用到它的页面都抛异常被错误边界接住
+  // 缺了它 e2e 里所有用到它的页面都抛异常被错误边界接住
   // 契约里 msmpPush 是必填：少给它会让「信息是否实时」这条结果说明在 e2e/截图里失真
   capabilities: { rcon: true, msmp: false, msmpPush: false },
   autoRestart: true,

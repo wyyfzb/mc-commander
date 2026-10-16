@@ -21,9 +21,9 @@ trae/
 # Agent 私有配置/技能/MCP（本机工作环境，不入库）
 .claude/
 .ai/
-# roadmap.md 属开发意图（缺口候选/排期口径/不做清单），按 AGENTS.md「开发意图类不入库」移入 .ai/
+# roadmap.md 属开发意图（缺口候选/排期口径/不做清单），不入库
 roadmap.md
-# AgentTeams 工作流已于 2026-09-16 退役（owner）；规则保留，防止宿主再次生成该目录时被误入库
+# 宿主生成的 AgentTeams 工作流目录，防止被误入库
 .agent-teams/
 .zcode/
 .mimosa/
@@ -61,15 +61,14 @@ apps/server/data/
 apps/server/node_modules/
 apps/server/.env
 apps/server/backups/
-# servers/ 整体忽略（含 jar/world/logs 等运行时文件）由 apps/server/.gitignore 的 servers/ 规则覆盖，
-# 此处的按文件列举规则已删除（原为死规则，从未实际生效）
+# servers/ 整体忽略（含 jar/world/logs 等运行时文件）由 apps/server/.gitignore 的 servers/ 规则覆盖
 #
-# 根锚定兜底（防回归）：服务端 dataDir/serversDir/backupsDir 已锚定安装目录
+# 根锚定兜底（防回归）：服务端 dataDir/serversDir/backupsDir 锚定安装目录
 # （config.js 的 path.resolve(__dirname, process.env.X || './x')），从仓库根启动
-# 服务端/测试不会再把运行期产物写到根级。保留这几条是因为包内同名规则只在
-# cwd = 包目录时生效——一旦锚定口径被改回 cwd 相对、或有人传了相对路径的 env，
-# 根级就会重新出现 data/ servers/ backups/ 裸目录（曾被 *.log 规则碰巧盖住，
-# 但轮转文件 error.log.1~.5 与 data/mc_commander.db 当时都是未忽略状态）。
+# 服务端/测试不会把运行期产物写到根级。保留这几条是因为包内同名规则只在
+# cwd = 包目录时生效——锚定口径被改回 cwd 相对、或有人传了相对路径的 env，
+# 根级就会重新出现 data/ servers/ backups/ 裸目录（轮转文件 error.log.1~.5 与
+# data/mc_commander.db 都不被 *.log 规则覆盖）。
 /data/
 /servers/
 /backups/
