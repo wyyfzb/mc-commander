@@ -112,7 +112,9 @@ function parseArgs(argv) {
 }
 
 function main() {
-  const { out, source } = parseArgs(process.argv.slice(2))
+  const parsed = parseArgs(process.argv.slice(2))
+  const out = /** @type {string} */ (/** @type {unknown} */ (parsed.out))
+  const { source } = parsed
   const staging = path.resolve(REPO, out)
   fs.rmSync(staging, { recursive: true, force: true })
   fs.mkdirSync(staging, { recursive: true })

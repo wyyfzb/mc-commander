@@ -10,7 +10,14 @@
     "skipLibCheck": true,
     "esModuleInterop": true,
     "resolveJsonModule": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    // .mjs 无类型语法，推断不出参数与局部变量类型 ⇒ checkJs 必须关掉这两个档，
+    // 否则 136 条 TS7006/TS7034 全是「缺注解」噪音，把真错误淹掉
+    "allowJs": true,
+    "checkJs": true,
+    "noImplicitAny": false
   },
-  "include": ["e2e/**/*.ts"]
+  // 判定对象是门禁脚本与 e2e：它们住 tools/，不在三包的任何 tsconfig 内
+  "include": ["e2e/**/*.ts", "**/*.mjs"],
+  "exclude": ["node_modules"]
 }

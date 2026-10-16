@@ -158,10 +158,12 @@ function contrastVarPair(varNameA, varNameB, vars) {
   return wcagContrast(fg, b.color)
 }
 
-for (const [scopeName, vars] of [
+/** @type {[string, Map<string,string>][]} */
+const scopeEntries = [
   ['暗色', semanticScopes.root],
   ['亮色', semanticScopes.light],
-]) {
+]
+for (const [scopeName, vars] of scopeEntries) {
   console.log(`\n════ ${scopeName}主题 ════`)
 
   // 面集合：5 个语义底色 + 玻璃面（glass.css 规格 × scrim 后的卡片/弹窗底，取最差合成）

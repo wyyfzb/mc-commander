@@ -117,6 +117,7 @@ const mockReadonlyEnabled = !['0', 'false', 'no', 'off'].includes(
   (process.env.MOCK_READONLY_ENABLED ?? 'true').trim().toLowerCase(),
 )
 /** 升级在途快照：非 null 表示 mock 正在「升级中」，取消后清空 */
+/** @type {{ stage: string, detail: string } | null} */
 let upgradeInFlight = null
 /** 无需凭据即可访问的端点（登录前必须可达，与真实服务端一致） */
 const PUBLIC_PATHS = new Set(['/api/v1/auth/status', '/api/v1/auth/login', '/api/v1/auth/setup'])
@@ -965,6 +966,7 @@ const server = createServer((req, res) => {
       /^\/api\/v1\/instances\/e2e-demo\/plugins\/[^/]+\/enabled$/.test(path) &&
       req.method === 'PUT'
     ) {
+      /** @type {typeof plugins[number] | undefined | null} */
       let target = null
       try {
         const file = decodeURIComponent(path.split('/')[6])
@@ -1281,6 +1283,7 @@ const server = createServer((req, res) => {
     // 'readonly' }`）：全量复位会把并行 spec 正在用的场景态一起清掉（归档用例刚断言
     // 「挂载后清点收敛」，升级用例的 finally 一复位就又让归档冒出来）。不传 only 时全量复位
     if (path === '/api/v1/mock/reset' && req.method === 'POST') {
+      /** @type {string | null} */
       let only = null
       try {
         const parsed = JSON.parse(body || '{}')
@@ -1648,6 +1651,9 @@ const server = createServer((req, res) => {
         },
       ]
       const isAudit = path === '/api/v1/audit-logs'
+      // 两个域的形状不同（审计有 action/targetType，命令历史有 command/success），
+      // 共用一张表只为复用同一套分页/排序；就地标注为「任一侧的条目」避免联合类型互斥
+      /** @type {Array<Record<string, any> & { createdAt: string }>} */
       let list = isAudit ? auditLogs : commandHistory
       if (isAudit && q.action) list = list.filter((l) => l.action === q.action)
       if (q.startTime) list = list.filter((l) => l.createdAt >= q.startTime)
@@ -1754,7 +1760,8 @@ function decodeFrame(buf) {
   const payload = buf.subarray(off, off + len)
   if (masked) {
     const unmasked = Buffer.from(payload)
-    for (let i = 0; i < unmasked.length; i++) unmasked[i] ^= mask[i & 3]
+    const maskBytes = /** @type {Buffer} */ (/** @type {unknown} */ (mask))
+    for (let i = 0; i < unmasked.length; i++) unmasked[i] ^= maskBytes[i & 3]
     return { opcode, text: unmasked.toString('utf8') }
   }
   return { opcode, text: payload.toString('utf8') }
@@ -1804,93 +1811,101 @@ function broadcastWs(type, data, instanceId, group = '') {
 
 const wsSockets = new Set()
 
-server.on('upgrade', (req, socket) => {
-  const url = req.url ?? ''
-  if (!url.startsWith('/ws')) return socket.destroy()
-  const protocols = String(req.headers['sec-websocket-protocol'] ?? '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean)
-  const chosen = authProtocol(protocols)
-  const firstFrameAuth = !chosen // 无凭据握手 → 走首帧鉴权通道（客户端主线）
-  const key = req.headers['sec-websocket-key']
-  const accept = createHash('sha1')
-    .update(key + WS_GUID)
-    .digest('base64')
-  socket.write(
-    `HTTP/1.1 101 Switching Protocols\r\n` +
-      `Upgrade: websocket\r\nConnection: Upgrade\r\n` +
-      `Sec-WebSocket-Accept: ${accept}\r\n` +
-      (chosen ? `Sec-WebSocket-Protocol: ${chosen}\r\n` : '') +
-      `\r\n`,
-  )
-  socket.setNoDelay(true)
-  // WS 连接分组：drop-ws 这类「断开实时通道」的场景只该断自己那一组，不能把同轮
-  // 其它 spec 正常断言的连接一起掐掉（实测它确实打到过别的 spec）。分组随握手请求头
-  // 携带（Playwright 的 extraHTTPHeaders 会带到 WS 握手，已实测）
-  socket.mockWsGroup = String(req.headers['x-mock-ws-group'] ?? '')
-  // 逐连接场景态：握手请求头携带的覆写在 status 快照里沿用（与 REST 同源）
-  socket.mockRunning =
-    req.headers['x-mock-instance-running'] === 'true'
-      ? true
-      : req.headers['x-mock-instance-running'] === 'false'
-        ? false
-        : null
-  // 首帧鉴权状态（对齐真实端：鉴权前收到非 auth 消息即断连）
-  let authed = !firstFrameAuth
-  wsSockets.add(socket)
-  socket.on('data', (buf) => {
-    // 一个 TCP 段可能含多帧（客户端限速下实际只有单帧，够用）
-    let frame
-    try {
-      frame = decodeFrame(buf)
-    } catch {
-      return
-    }
-    if (!frame || frame.opcode !== 0x1) return
-    let msg
-    try {
-      msg = JSON.parse(frame.text)
-    } catch {
-      return
-    }
-    if (msg.type === 'auth') {
-      // 首帧鉴权回执（mock 恒放行）：与真实端一致——收到 auth 才回执 ok
-      if (authed) return
-      authed = true
-      socket.write(
-        encodeTextFrame(JSON.stringify({ type: 'auth', ok: true, timestamp: Date.now() })),
-      )
-      return
-    }
-    // 鉴权前收到非 auth 消息：与真实端一致断连（暴露鉴权前发消息的客户端回归）
-    if (!authed) return socket.destroy()
-    if (msg.type === 'ping') {
-      socket.write(encodeTextFrame(JSON.stringify({ type: 'pong', timestamp: Date.now() })))
-      return
-    }
-    if (msg.type === 'subscribe' && msg.instanceId) {
-      // 订阅即回 status 快照（对齐 websocket.js subscribe 分支）
-      socket.write(
-        encodeTextFrame(
-          JSON.stringify({
-            type: 'statusSnapshot',
-            instanceId: msg.instanceId,
-            data: {
-              status: (socket.mockRunning ?? instance.isRunning) ? 'running' : 'stopped',
-              isRunning: socket.mockRunning ?? instance.isRunning,
-              players: instance.players,
-              tps: instance.tps,
-            },
-            timestamp: Date.now(),
-          }),
-        ),
-      )
-    }
-  })
-  socket.on('close', () => wsSockets.delete(socket))
-  socket.on('error', () => wsSockets.delete(socket))
-})
+/**
+ * WS 握手后挂到 socket 上的逐连接场景态：分组名与运行态覆写随握手请求头携带，
+ * 只在 mock 内部使用（Node 的 Duplex 类型没有这两个字段）。
+ * @typedef {import('node:net').Socket & { mockWsGroup?: string, mockRunning?: boolean | null }} MockWsSocket
+ */
+server.on(
+  'upgrade',
+  (/** @type {import('node:http').IncomingMessage} */ req, /** @type {MockWsSocket} */ socket) => {
+    const url = req.url ?? ''
+    if (!url.startsWith('/ws')) return socket.destroy()
+    const protocols = String(req.headers['sec-websocket-protocol'] ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+    const chosen = authProtocol(protocols)
+    const firstFrameAuth = !chosen // 无凭据握手 → 走首帧鉴权通道（客户端主线）
+    const key = req.headers['sec-websocket-key']
+    const accept = createHash('sha1')
+      .update(key + WS_GUID)
+      .digest('base64')
+    socket.write(
+      `HTTP/1.1 101 Switching Protocols\r\n` +
+        `Upgrade: websocket\r\nConnection: Upgrade\r\n` +
+        `Sec-WebSocket-Accept: ${accept}\r\n` +
+        (chosen ? `Sec-WebSocket-Protocol: ${chosen}\r\n` : '') +
+        `\r\n`,
+    )
+    socket.setNoDelay(true)
+    // WS 连接分组：drop-ws 这类「断开实时通道」的场景只该断自己那一组，不能把同轮
+    // 其它 spec 正常断言的连接一起掐掉（实测它确实打到过别的 spec）。分组随握手请求头
+    // 携带（Playwright 的 extraHTTPHeaders 会带到 WS 握手，已实测）
+    socket.mockWsGroup = String(req.headers['x-mock-ws-group'] ?? '')
+    // 逐连接场景态：握手请求头携带的覆写在 status 快照里沿用（与 REST 同源）
+    socket.mockRunning =
+      req.headers['x-mock-instance-running'] === 'true'
+        ? true
+        : req.headers['x-mock-instance-running'] === 'false'
+          ? false
+          : null
+    // 首帧鉴权状态（对齐真实端：鉴权前收到非 auth 消息即断连）
+    let authed = !firstFrameAuth
+    wsSockets.add(socket)
+    socket.on('data', (buf) => {
+      // 一个 TCP 段可能含多帧（客户端限速下实际只有单帧，够用）
+      let frame
+      try {
+        frame = decodeFrame(buf)
+      } catch {
+        return
+      }
+      if (!frame || frame.opcode !== 0x1) return
+      let msg
+      try {
+        msg = JSON.parse(frame.text)
+      } catch {
+        return
+      }
+      if (msg.type === 'auth') {
+        // 首帧鉴权回执（mock 恒放行）：与真实端一致——收到 auth 才回执 ok
+        if (authed) return
+        authed = true
+        socket.write(
+          encodeTextFrame(JSON.stringify({ type: 'auth', ok: true, timestamp: Date.now() })),
+        )
+        return
+      }
+      // 鉴权前收到非 auth 消息：与真实端一致断连（暴露鉴权前发消息的客户端回归）
+      if (!authed) return socket.destroy()
+      if (msg.type === 'ping') {
+        socket.write(encodeTextFrame(JSON.stringify({ type: 'pong', timestamp: Date.now() })))
+        return
+      }
+      if (msg.type === 'subscribe' && msg.instanceId) {
+        // 订阅即回 status 快照（对齐 websocket.js subscribe 分支）
+        socket.write(
+          encodeTextFrame(
+            JSON.stringify({
+              type: 'statusSnapshot',
+              instanceId: msg.instanceId,
+              data: {
+                status: (socket.mockRunning ?? instance.isRunning) ? 'running' : 'stopped',
+                isRunning: socket.mockRunning ?? instance.isRunning,
+                players: instance.players,
+                tps: instance.tps,
+              },
+              timestamp: Date.now(),
+            }),
+          ),
+        )
+      }
+    })
+    socket.on('close', () => wsSockets.delete(socket))
+    socket.on('error', () => wsSockets.delete(socket))
+  },
+)
 
 server.listen(PORT, () => {
   console.log(`[mock-server] listening on http://localhost:${PORT}`)

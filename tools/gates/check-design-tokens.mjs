@@ -135,6 +135,7 @@ function readRegistered() {
   // keep：Tailwind v4 的配对行高子键（--text-mcs-sm--line-height）会被贪婪捕获成
   // `sm--line-height`。parseTokenClass 对含 `--` 的 raw 先返回 null，故该路径当前不可达，
   // 保留它是防御性的：注册集本身不该收进子键名，将来正则或解析改动时不会再放出假档名。
+  /** @param {(name: string) => boolean} [keep] */
   const collect = (css, re, keep = () => true) =>
     new Set([...css.matchAll(re)].map((m) => m[1]).filter(keep))
   return {
