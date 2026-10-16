@@ -167,7 +167,6 @@ export interface WsEventInput {
 }
 
 export interface AlertThresholds {
-  tpsWarning?: number // 预留：百分比语义（当前实现走 tpsLow）
   cpuWarning: number
   /**
    * **整机**内存使用率告警阈值。服务端下发（`config.memoryAlert`）时覆盖；
