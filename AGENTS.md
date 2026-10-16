@@ -16,7 +16,7 @@ MC\_Commander 是一个自托管的 Minecraft 服务器管理面板：不装插�
 | `apps/*/src/`、`apps/*/tests/` | 源码与测试分离：`src/` 只放交付源码，测试放同包 `tests/`（web 镜像 `src/` 到 `tests/unit/`，基建在 `tests/support/`）。**包内只留产品与其测试**：E2E、mock 后端、门禁脚本、截图工具一律住 `tools/`——它们判定/驱动的是整个前端，不是包的运行时组成 |
 | `apps/server/var/` | 服务端运行期数据（实例 / SQLite 与日志 / 备份快照）：产物只进这里，包内不放数据；落点锚定包根（config.js），不随 cwd 漂移 |
 | `apps/schemas/`          | 共享契约包（zod，包名 `@mc-commander/schemas`）：web 经 vite alias 直读 `src`，服务端经 workspace 链接消费 `dist`（构建产物） |
-| `tools/`               | 维护者工具（不住包内）：`gates/`（设计 token / 对比度 / 体积 / 目录结构）、`e2e/`（Playwright 配置 + 19 spec + mock 后端）、`ci/local-check.sh`、`dev/`（生成器）、`ops/`（运维）、`deploy/`（发布载荷） |
+| `tools/`               | 维护者工具（不住包内）：`gates/`（设计 token / 对比度 / 体积 / 注释纪律）、`e2e/`（Playwright 配置 + 19 spec + mock 后端）、`ci/local-check.sh`、`check-layout.mjs`（目录结构）、`dev/`（生成器）、`ops/`（运维）、`deploy/`（发布载荷） |
 | `docs/`                | 使用者文档（`architecture.md`、`user-guide.md`） |
 
 仓库是 **npm workspaces**：在**仓库根**跑一次 `npm ci` 即装齐三包依赖，根 `package-lock.json`
@@ -39,6 +39,7 @@ npm ci
 npm run format               # 按 biome.jsonc 格式化全仓
 npm run format:check         # 只检查不改写（CI 与 local-check 用这条）
 npm run check:layout         # 目录结构门禁（顶层白名单 / 源码面无测试 / 无产物入库）
+npm run check:comments       # 注释纪律门禁（编号 / 演化叙述 / 归属叙述 / 私有指针 / 待办承诺 / 死指针）
 
 # 以下用 workspace 定位（也可 cd 进包目录执行同名的包内脚本）
 # 契约包 —— dist 不入库，消费方（服务端测试/运行）前先在仓库根 build
@@ -72,7 +73,7 @@ npm run dev -w apps/server           # node --watch 热重载
 
 | 检查 | 内容 |
 | --- | --- |
-| 仓库卫生 | `npm run format:check`（全仓格式）+ `npm run check:layout`（目录结构门禁）+ `tools/` 自身三道门禁（`lint:tools` / `typecheck` / `test:tools`）+ gitleaks 密钥泄漏扫描 |
+| 仓库卫生 | `npm run format:check`（全仓格式）+ `npm run check:layout`（目录结构门禁）+ `npm run check:comments`（注释纪律门禁）+ `tools/` 自身三道门禁（`lint:tools` / `typecheck` / `test:tools`）+ gitleaks 密钥泄漏扫描 |
 | 契约包 | `npm run lint` + `npm run test:coverage` + **构建产物**（`dist` 不入库，构建后断言产物存在） |
 | 服务端 | `npm run lint` + `npm run test:coverage` |
 | 前端 | `npm run lint` + `npm run test:coverage` + `check:design-tokens` + `check:contrast` |
@@ -222,19 +223,31 @@ npm run dev -w apps/server           # node --watch 热重载
   一律使用虚构数据（`1.2.3.4`、TEST-NET 网段、Steve/Alex 等官方示例名）。
 - **MC 版本兼容**：排查问题优先考虑 MC 26.x 新版与旧版在目录结构、数据格式、
   命令行为上的差异；改动不得破坏对新旧版本的兼容。
-- **注释纪律**：注释只写代码无法直观体现的**设计意图、隐含约束、特殊边界、选型原因**，
+- **注释纪律**：注释只写代码无法直观体现的**设计意图、隐含约束、特殊边界**，
   单行优先，不复述代码行为。禁止写入五类内容：
   ① 一切编号式引用——内部分批 / 台账 / finding 代号（`S-P0-2`、`P2-11`、`Phase 2`、
   `feat-8` 一类），以及 `(#326)`、`issue #309` 这类**公开 issue / PR 引用**。两者对仓库
   读者都**不可解析**（看见的人只会以为漏了上下文），且编号会随 issue 迁移、仓库改名而
   漂移，注释里的编号迟早指向别处。要交代的背景就地写成最短一句。
-  ② 开发历程与决策过程（改了几版、谁提出、走过哪些弯路）——要留的是**选型原因**，
-  不是**演化过程**。
+  ② 开发历程与演化叙述——改了几版、谁提出、走过哪些弯路，以及「此前是 A / 原先只做 X /
+  旧实现如何 / 纯搬移 / 零行为变更 / 自某文件原样迁入」这类**时间轴**。读者要的是**当前
+  实现是什么、它受什么约束**；「A 与 B 比过、选了 B」不是他要的信息。反例本身可以留，但要说
+  成约束而不是历史：不写「旧实现的行内匹配会把 `#eula=true` 算作同意」，写「行内匹配会把
+  `#eula=true` 算作同意，故必须行首锚定」。
   ③ 「待办 / 将来 / 远景」式承诺（`TODO: 以后补`、`当前仅预留未启用`）——未做的事写进任务清单，
   注释会跟着文件走遍所有分支，而待办有自己的家。
   ④ 复述代码本身（`// 设置 count 为 1` 之于 `count = 1`）。
   ⑤ 指向性内容——注释里指路到别的文件或文档（`详见 xxx.md`、「见 `<file>` §某节」）：读者在
   编辑器里跳不过去，文档一挪就是死指针。要写明的规则**就地用最短一句写清**。
+  **替换式**（禁令说别写什么，替换式说写什么；照着换就不必当场判断）：
+  编号 → 它承载的那句事实（不写「（issue #309）」，写「一次性令牌，通过即作废」）；
+  演化叙述 → 当前实现方式（不写「此前靠正则剥字段，现改为配置注入」，写「字段由配置注入，
+  不再依赖解析」）；
+  待办 → 当前实现与它的边界（不写「暂未收录这类行」，写「这类行不在词条表内」）；
+  指向 → 就地最短一句（不写「详见 xxx.md」，把那句规则写在这里）。
+  其中编号、`owner`/`拍板`/`裁定`、`TODO`/`FIXME`/`HACK`、`.ai/` 深层指针、演化叙述与
+  **指向入库面之外的死指针**（含「设计文档 §4.5」这类私有文档裸名）由 `npm run check:comments`
+  机械拦截；其余靠审查——机械判据只收零歧义形态，判宽了会拿误报训练人忽略整道门禁。
   **注释不得多于代码**：改动文件的注释行数不得超过代码行数——到了这一步就是在写文档，
   不是在写注释；理由属于提交信息的，不进注释。
   **实测数据与反例是允许且鼓励的**（`实测 812 vs 782 的假红`、`内联 420px 下每格仅 ~54px`）——

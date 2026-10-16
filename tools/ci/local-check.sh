@@ -36,9 +36,11 @@ ensure_deps() {
   (cd "$PROJECT_DIR" && npm ci --no-audit --no-fund)
 }
 
-echo "=== [1/6] 目录结构门禁（顶层白名单 + 源码面无测试 + 无运行期产物入库）==="
+echo "=== [1a/6] 目录结构门禁（顶层白名单 + 源码面无测试 + 无运行期产物入库）==="
 node "$PROJECT_DIR/tools/check-layout.mjs"
 
+echo "=== [1b/6] 注释纪律门禁（编号 / 演化叙述 / 归属叙述 / 私有指针 / 待办承诺 / 死指针）==="
+node "$PROJECT_DIR/tools/gates/check-comment-discipline.mjs"
 echo "=== [2/6] 代码格式检查（Biome formatter；范围与排除项见 biome.jsonc）==="
 # 根 = workspace 根（Biome 与三包依赖同在根一次安装）
 ensure_deps
@@ -64,8 +66,7 @@ cd "$SCHEMAS_DIR"
 npm run lint
 npm test
 # 契约包产物是消费前置：服务端经 workspace 链接解析到 dist/index.js。dist 不入库，
-# 故这里构建并断言产物存在——取代原先「与提交版逐字节比对」：不再有可漂移的提交产物，
-# 服务端也不可能吃到陈旧契约。
+# 故这里构建并断言产物存在：提交产物会漂移，服务端也可能吃到陈旧契约。
 npm run build >/dev/null
 if [ ! -f dist/index.js ]; then
   echo "错误：apps/schemas 构建未产出 dist/index.js"
