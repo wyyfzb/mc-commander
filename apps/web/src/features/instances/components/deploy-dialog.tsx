@@ -392,7 +392,7 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
                   setForm((f) => ({ ...f, name }))
                 }}
                 onMemoryChange={(memory) => {
-                  // 用户手动调整后不再被推荐值覆盖
+                  // 用户改过内存后，推荐值不得再覆盖它
                   memoryTouchedRef.current = true
                   setForm((f) => ({ ...f, memory }))
                 }}

@@ -5,7 +5,7 @@
  * 网络抖动呈现成整屏故障：数据被换成「加载失败」、滚动位与勾选态随之丢失，而用户看不出
  * 「刚才那些是旧值」。本模块把判定拆成四相，让有旧值可留的失败降级为非阻断提示。
  *
- * `stale` 相之所以真实可达（不是防御性分支）：@tanstack/query-core 5.102 的 error
+ * `stale` 相真实可达（不是防御性分支）：@tanstack/query-core 5.102 的 error
  * reducer 只做 `{...state, error, status:'error', ...}`，**不清空 data**——refetch 失败后
  * 上一轮数据仍留在 query 里，是调用点的判定链主动丢弃了它。
  */

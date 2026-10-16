@@ -649,9 +649,9 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
   });
 
   it('vanilla：摘要只认 Piston 的 sha1 —— 不符即 502，不再有 hashType 回退放行', async () => {
-    // 旧实现按 hashType 在 `artifact.hash || build.sha256 || build.sha1` 之间回退，
-    // 认不出算法就**静默跳过校验**。改成与升级共用 Piston 解析后，vanilla 的摘要只有一个
-    // 来源（`downloads.server.sha1`）；给一个不相符的摘要必须**报错**而不是放行。
+    // 摘要只有一个来源：与升级共用 Piston 解析后的 `downloads.server.sha1`。按 hashType 在
+    // `artifact.hash || build.sha256 || build.sha1` 之间回退会让「读到哪个字段」随上游形状
+    // 漂移，认不出算法时还会**静默跳过校验**；给一个不相符的摘要必须**报错**而不是放行。
     const wrongSha1 = crypto.createHash('sha1').update('别的字节').digest('hex');
     testState.latestBuild = {
       downloads: {
@@ -758,7 +758,7 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
   });
 
   it('上游未给 sha1 → 按无摘要处理并照常部署（判据是字段在不在，不是算法认不认）', async () => {
-    // 旧实现的「跳过校验」判据是「算法认不出来」；新实现的判据是「Piston 有没有给 sha1」。
+    // 「跳过校验」的判据是「Piston 有没有给 sha1」，不是「算法认不认」。
     // 这一支仍然必须存在：Piston 偶尔不给摘要时不能把部署卡死，但也不能拿别的字段顶替。
     testState.latestBuild = {
       downloads: {

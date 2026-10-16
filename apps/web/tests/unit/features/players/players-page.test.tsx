@@ -105,7 +105,7 @@ describe('PlayersPage', () => {
     renderPage()
 
     expect(await screen.findByText('暂无服务器实例')).toBeInTheDocument()
-    // 此前 usePlayers 被 disabled、isLoading=false → 表格显示「暂无在线玩家」（真实病因是没有实例）
+    // 无实例时 usePlayers 被 disabled、isLoading=false → 表格会显示「暂无在线玩家」（真实病因是没有实例）
     expect(screen.queryByText('暂无在线玩家')).not.toBeInTheDocument()
   })
 

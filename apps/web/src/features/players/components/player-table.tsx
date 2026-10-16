@@ -2,10 +2,10 @@
  * PlayerTable —— 玩家表格（10 列规格，TanStack Table）
  * - 默认排序 = 收敛规则（在线>离线 → OP → lastSeen → 总时长，applyPlayersFilter 预排）
  * - 列头点击启用单列排序（Web 增强）；分页 10/20/50/全部（「全部」档 react-virtual 虚拟滚动）
- * - 行内溢出菜单：详情/传送/给予物品/OP 切换/白名单切换/踢出/封禁（设计文档 §3.2 重排）
+ * - 行内溢出菜单：详情/传送/给予物品/OP 切换/白名单切换/踢出/封禁
  * - 行内菜单交互口径：可逆（OP/白名单）直执 + 5s 撤销，踢出直执（无逆操作）
  * - 响应式：列数按**表格区实宽**切档（<1016px 裁到核心列免横向滚动）；<640px 整表转行式卡片
- * 单元拆分（纯搬移零行为变更）：列定义 player-table-columns / 行组件 player-table-row /
+ * 单元拆分：列定义 player-table-columns / 行组件 player-table-row /
  * 行菜单 player-row-menu / 卡片态 player-card-list / 共享常量 player-table-config
  */
 import { useCallback, useMemo, useRef, useState } from 'react'

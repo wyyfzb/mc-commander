@@ -139,9 +139,9 @@ export function LoginPage() {
       const status = await fetchAuthStatus(base)
       if (seq !== probeSeq.current) return
       setPhase(status.hasPassword ? 'login' : 'setup')
-      // 首屏就按服务端下发的判定渲染 SETUP_TOKEN 输入框：
-      // 此前只能等提交后拿 40104 才展开，导致每个新装用户都要先失败一次。
-      // 仍保留 40104 分支兜底（服务端在探测后、提交前被改成需要令牌时同样能救回来）。
+      // 首屏就按服务端下发的判定渲染 SETUP_TOKEN 输入框：等提交后拿 40104 才展开
+      // 会让每个新装用户先失败一次。40104 分支仍保留兜底（服务端在探测后、提交前
+      // 被改成需要令牌时同样能救回来）。
       setNeedsSetupToken(status.setupTokenRequired)
     } catch {
       if (seq !== probeSeq.current) return

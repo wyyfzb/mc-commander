@@ -338,8 +338,8 @@ export function PlayersCard({ isLoading = false }: { isLoading?: boolean }) {
   )
 
   const body = isLoading ? (
-    // 首帧未落定不得抢答：此前 status 未到即按 isRunning=false 渲染
-    // 「实例已停止，暂无玩家数据」，把「还不知道」说成了一条确定结论
+    // 首帧未落定不得抢答：status 未到即按 isRunning=false 渲染
+    // 「实例已停止，暂无玩家数据」，会把「还不知道」说成一条确定结论
     <ListSkeleton rows={3} />
   ) : !isRunning ? (
     <p className="py-1 text-mcs-xs text-mcs-text-muted">实例已停止，暂无玩家数据</p>
@@ -531,8 +531,8 @@ export function RuntimeInfoCard({ isLoading = false }: { isLoading?: boolean }) 
 /** 磁盘使用率色阶（ResourceRow 磁盘行用）：正常 / 警告(≥85%) / 错误(≥95%) */
 /**
  * 三行资源条（CPU / 内存 / 磁盘）共用的阈值阶梯：≥95 红 / ≥85 黄 / 其余绿。
- * 同卡三行是同一套视觉语言，阶梯必须一致——此前只有磁盘行接它，CPU 与内存行恒绿，
- * 于是「97% 的 CPU」和「12% 的 CPU」长得一模一样（违反 P1 的阈值对齐）。
+ * 同卡三行是同一套视觉语言，阶梯必须一致——只有磁盘行接它、CPU 与内存行恒绿的话，
+ * 「97% 的 CPU」和「12% 的 CPU」长得一模一样（违反 P1 的阈值对齐）。
  * 刻意不复用告警系统的 80：那条是**进程** CPU 单核口径（见 lib/notifications.ts
  * 的 DEFAULT_ALERT_THRESHOLDS 声明），与本卡的整机口径不同源、不可互为后备。
  */

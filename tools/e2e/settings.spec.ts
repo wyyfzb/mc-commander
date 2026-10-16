@@ -147,7 +147,7 @@ test.describe('设置页', () => {
 
     // 换成本面板地址 + 本面板 Key → 走 API Key 通道测试成功。
     // 承重：mock 按未知 Bearer 回 40103（见 mock-server.mjs 请求入口），
-    // 旧实现无条件发 A 的令牌，这里拿不到「连接成功」。
+    // 故这里必须发面板自己的令牌才能拿到「连接成功」。
     // 地址同样取当前页 origin（端口随泳道变化，硬编码端口在非默认泳道下假红）
     await page.getByRole('textbox', { name: '面板地址' }).fill(new URL(page.url()).origin)
     await page.getByRole('textbox', { name: 'API Key' }).fill('e2e-mock-key-0000000000')

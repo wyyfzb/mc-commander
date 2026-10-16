@@ -699,7 +699,7 @@ describe('_doRollback 分支行为', () => {
     const service = new UpgradeService(manager);
     manager._instance._originalMcVersion = '1.20.4';
 
-    await service._doRollback('inst-1', null, null, 'server-1.20.4.jar');
+    await service._doRollback('inst-1', null, 'server-1.20.4.jar');
 
     expect(InstanceModel.update).toHaveBeenCalledWith('inst-1', {
       jarFile: 'server-1.20.4.jar',
@@ -711,7 +711,7 @@ describe('_doRollback 分支行为', () => {
     const manager = createMockServerManager();
     const service = new UpgradeService(manager);
 
-    await service._doRollback('inst-1', null, null, 'server-1.20.4.jar');
+    await service._doRollback('inst-1', null, 'server-1.20.4.jar');
 
     expect(InstanceModel.update).not.toHaveBeenCalled();
   });

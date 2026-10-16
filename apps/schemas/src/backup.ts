@@ -24,7 +24,7 @@ export const backupCreateRequestSchema = z.object({
 /**
  * POST /backups/:id/restore 请求契约。
  * confirmName 必须是该备份所属实例的名称（服务端 trim 后全等比对）：恢复会用快照整体
- * 覆盖实例目录，前端弹窗的实例名输入此前是唯一闸门，直连 API 的调用方可无确认覆盖。
+ * 覆盖实例目录，前端弹窗的输入只存在于客户端，故确认必须由服务端裁决。
  */
 export const backupRestoreRequestSchema = z.object({
   confirmName: z.string({

@@ -3,7 +3,7 @@
  *
  * 承重点：**过期与解封不是一回事**——一条记录是「被时间结束」还是「有人解封」，用户据此判断
  * 「要不要再处理」。官方封禁条目带上 `expires` 后，历史里会真出现「自己到期」的记录
- * （此前读侧一律当永久，该分支到不了）。
+ * （读侧若一律当永久，该分支到不了）。
  */
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'

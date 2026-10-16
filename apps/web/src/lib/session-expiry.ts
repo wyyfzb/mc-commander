@@ -1,7 +1,7 @@
 /**
  * 会话过期（40103）的全局处置：落点决策 + 监听器接线（routes.tsx 调用一次）。
  * 拆出 installSessionExpiryHandler 是为了让**接线本身**可测——
- * 只有纯函数有用例时，把监听器改回旧写法（无条件跳登录）测试仍会全绿。
+ * 只有纯函数有用例时，监听器无条件跳登录这类改动静默通过。
  *
  * 关键一条：本机仍持有 API Key 时 connection.status 仍是 ready，此时跳 /login 会被
  * requireUnconfigured 弹回仪表盘（用户被无声挪页、returnTo 也丢）——而双通道设计本就是

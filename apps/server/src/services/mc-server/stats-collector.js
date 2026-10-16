@@ -1,9 +1,9 @@
 /**
- * 实例统计采集域（治理线·服务端第三阶段）：系统资源（CPU/内存）、玩家状态
- * （血量/坐标/入睡）、MSPT、世界状态（时间/天气/天数）的定时采集与调度，共 12 方法，
- * 自 mc_server.js 等价搬移。挂载方式与 level-dat / output-parser 域一致：由宿主模块
+ * 实例统计采集域：系统资源（CPU/内存）、玩家状态
+ * （血量/坐标/入睡）、MSPT、世界状态（时间/天气/天数）的定时采集与调度，共 12 方法。
+ * 挂载方式与 level-dat / output-parser 域一致：由宿主模块
  * Object.assign 原型注入复用，模块函数体内 this 语义与类内定义完全一致（实例方法调用时
- * this 绑定实例），全部调用点零改动，对外接口零变化。域外协作方法（_rconSend、
+ * this 绑定实例）。域外协作方法（_rconSend、
  * _rconEnsureConnected、_queryAttribute、_readWeatherFromLevelDat、_emitPerformance、
  * _addPlayerEvent）留宿主类内或既有域模块，经 this 按原型链解析。
  */

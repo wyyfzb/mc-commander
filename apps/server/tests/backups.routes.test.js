@@ -1,7 +1,6 @@
 /**
- * routes/backups.js 路由补测：列表/详情/创建/删除四端点此前
- * 零测试，restore 的 VALIDATION_ERROR 分支与 creating 互斥分支、download 的
- * tar 进程错误分支无覆盖。
+ * routes/backups.js 路由补测：列表/详情/创建/删除四端点，以及 restore 的
+ * VALIDATION_ERROR 分支、creating 互斥分支与 download 的 tar 进程错误分支。
  *
  * 既有 backups.test.js 已锁定 restore 主链（202/404/409 运行中/restoring 互斥）、
  * backups.download.test.js 已锁定 download 安全链（流式/404/400/路径

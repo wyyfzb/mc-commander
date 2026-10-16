@@ -2,9 +2,9 @@ import { CircleOff, CloudOff, Cloud } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 /**
- * StatusIndicator —— 状态三重编码（设计文档 P1 / 审查清单维度 1）
+ * StatusIndicator —— 状态三重编码
  * 颜色 + 图标 + 文字三通道同义，色盲用户仅靠图标/文字可区分
- * 唯一呼吸动画只给「连接中」这一个在途档（设计文档 §4.7）
+ * 唯一呼吸动画只给「连接中」这一个在途档
  *
  * 档位只在有真实生产者时才加：这里曾有一个 `warning`（「异常」）档，唯一生产者是顶栏把
  * 实例 TPS 偏低染上去——那属于把实例事实混进面板连接档位，已撤销（载体改为实例卡片的

@@ -22,8 +22,7 @@ describe('错误码映射（对照服务端 ErrorCodes 契约）', () => {
   })
 
   it('40003 碰撞已消除：INSTANCE_RUNNING 独占 40003', () => {
-    // 40003 曾经与 PLAYER_NOT_ONLINE 碰撞，现已拆分
-    // PLAYER_NOT_ONLINE 已随僵尸码清理移除，40003 仅 INSTANCE_RUNNING 使用
+    // 40003 仅 INSTANCE_RUNNING 使用：同码多义会让前端把运行中误报成玩家离线
     expect(ErrorCode.INSTANCE_RUNNING).toBe(40003)
     // 确认不再有其他枚举值映射到 40003
     const values = Object.values(ErrorCode)

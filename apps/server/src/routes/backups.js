@@ -204,8 +204,8 @@ export function createBackupRoutes(serverManager) {
         throw new AppError(ErrorCodes.BACKUP_NOT_FOUND);
       }
 
-      // 确认串校验（服务端强制）：UI 的输入框只存在于客户端，直连 API 的调用方此前可
-      // 跳过确认直接覆盖实例目录。确认目标是「实例名」，实例无名称时退到备份名/id
+      // 确认串校验（服务端强制）：UI 的输入框只存在于客户端，直连 API 的调用方不受它
+      // 约束，故确认必须由服务端裁决。确认目标是「实例名」，实例无名称时退到备份名/id
       // （restoreConfirmTarget 单一派生）——空名实例下实例名确认会空转（空串天然匹配），
       // 与卸载侧空名实例的加固同源。两侧 trim 后全等比对，文案不回显确认目标
       const instance = serverManager.getInstance(backup.instanceId);

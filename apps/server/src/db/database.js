@@ -419,8 +419,7 @@ function createTables() {
   }
 
   // 迁移 v14：分钟级主机指标历史（metrics 采样器每 60s 写一行，24h 保留期）。
-  // 面板尚未上线、暂无前端消费方——端点先行（GET /api/v1/metrics），为
-  // dashboard「昨日摘要」等后续能力提供数据面
+  // 数据面供 GET /api/v1/metrics 消费（分钟级指标历史）
   if (userVersion < 14) {
     db.exec(`
       CREATE TABLE IF NOT EXISTS metrics_history (
@@ -442,8 +441,8 @@ function createTables() {
 
   // 迁移 v15：机器凭据台账（可作用域化的多 Key 体系，一期只发放只读作用域）。
   //
-  // 此前两把 Key 只是 .env 里的两个哈希：无台账、无 scope、无启停、无吊销、无法分辨
-  // 「哪个调用方」，也就无法回答「这条审计是谁干的」。本表补的正是这层身份。
+  // 只把 Key 存成 .env 里的哈希就没有台账、没有 scope、没有启停与吊销，也无法分辨
+  // 「哪个调用方」，回答不了「这条审计是谁干的」。本表补的正是这层身份。
   //
   // - token_hash 唯一：同一摘要只允许一条（并发轮换不会造出两行指向同一凭据）
   // - scopes 存逗号分隔字符串（`resource:action` 扁平命名；一期全部只读）。

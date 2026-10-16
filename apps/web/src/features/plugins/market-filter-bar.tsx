@@ -1,9 +1,9 @@
 /**
- * 市场过滤栏（拆分自 market-sheet.tsx，纯搬移）
+ * 市场过滤栏
  *
  * 纯受控组件：关键词（防抖由 SearchInput 内部管理）+ 加载器/版本筛选 +
  * 手动刷新 + 结果计数。全部状态由 MarketSheet 持有，本组件只负责展示
- * 与回调透传，保持拆分前后行为等价。
+ * 与回调透传，不得自行持有筛选状态。
  */
 import { RefreshCw } from 'lucide-react'
 import { SearchInput } from '@/components/mcs/search-input'

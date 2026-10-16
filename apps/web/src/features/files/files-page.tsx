@@ -1,6 +1,5 @@
 /**
  * FilesPage —— 文件页（双栏布局）：左栏文件列表（面包屑/工具栏/删除入口）+ 右栏 Monaco 编辑器
- * - 对话框群与上传/下载逻辑已拆至 components/ 与 use-* hooks（纯移动零行为变更）
  * - URL 深链接 ?dir=&file=（可分享、可刷新保持）；实例切换重置回初始态
  * - 编辑内容为组件 state，与 query 缓存隔离（保存成功由 mutation 失效列表/内容缓存）
  */
@@ -40,7 +39,7 @@ import {
 import { InstanceRequiredState } from '@/features/instances/components/instance-required-state'
 import { normalizeDirInput, parentDirOf } from './path-utils'
 
-/** 名称校验：返回错误文案（null=通过）；空值/路径分隔符（文案与原实现逐字一致） */
+/** 名称校验：返回错误文案（null=通过）；拦空值与路径分隔符 */
 function entryNameError(name: string, label: string): null | string {
   if (name.length === 0) return `${label}不能为空`
   if (name.includes('/') || name.includes('\\')) return `${label}不能包含路径分隔符`
@@ -267,7 +266,7 @@ export function FilesPage() {
   /**
    * 移动：换父目录的 rename。服务端 `POST /files/rename` 本就接受任意 newPath
    * 并带 `renameNoClobber`（目标同名即拒），故此能力零新 API——
-   * 此前做不到只是因为前端名称校验禁含 `/`（只能改同目录内的名字）。
+   * 前端名称校验禁含 `/`（重命名只能改同目录内的名字），移动由此处承担。
    */
   const confirmMove = async () => {
     if (!moveTarget) return

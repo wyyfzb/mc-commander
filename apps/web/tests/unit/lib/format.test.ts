@@ -144,7 +144,7 @@ describe('formatStartTime / formatLogFileName / worldTimePhase', () => {
   })
 
   it('worldSizeParts：<1GB 换 MB，≥1GB 保留一位 GB，异常值回退 0 GB', () => {
-    // 实测场景：643MB 存档（0.6279296875 GB）旧实现渲染「0.6」易误读为 0
+    // 实测场景：643MB 存档（0.6279296875 GB）若渲染「0.6」易误读为 0
     expect(worldSizeParts(0.6279296875)).toEqual({ value: '643', unit: 'MB' })
     expect(worldSizeParts(3.2)).toEqual({ value: '3.2', unit: 'GB' })
     expect(worldSizeParts(1)).toEqual({ value: '1.0', unit: 'GB' })

@@ -1,5 +1,5 @@
 /**
- * DeployDialog 表单模型（从 deploy-dialog.tsx 行为不变迁移）
+ * DeployDialog 表单模型
  */
 import { DEFAULT_MEMORY } from './constants'
 import type { ServerType } from '@/lib/mc-deploy'

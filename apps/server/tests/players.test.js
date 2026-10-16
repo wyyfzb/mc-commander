@@ -332,7 +332,8 @@ describe('Player Routes', () => {
       });
       expect(byTarget.Alex).toMatchObject({ isPermanent: true, expiresAt: null, isActive: true });
       expect(byTarget.Carol).toMatchObject({ isPermanent: true, expiresAt: null, isActive: true });
-      // 过期的官条目仍列出（是历史），但不再是生效中——此前一律 isActive: true 且显示「永久」
+      // 过期的官条目仍列出（是历史），但不再生效中——一律 isActive: true 且显示「永久」
+      // 会让用户看不出它什么时候解封
       expect(byTarget.Bob).toMatchObject({
         isPermanent: false,
         expiresAt: Date.parse('1999-01-01T00:00:00Z'),

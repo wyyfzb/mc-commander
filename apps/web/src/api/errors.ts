@@ -1,5 +1,5 @@
 /**
- * 错误码映射（设计文档 §5.1 errors.ts）
+ * 错误码映射
  * 对照服务端 utils/response.js ErrorCodes 全表；
  * 策略：服务端 message 已本地化的（40902 等）直接透传，
  *       英文默认文案的用本地友好文案覆盖
@@ -79,7 +79,7 @@ export const ErrorCode = {
   FILE_ALREADY_EXISTS: 40909,
   /** 移动/重命名的目标目录不存在（与 40406「源不存在」分开，用户据此判断该改哪一头） */
   FILE_TARGET_DIR_NOT_FOUND: 40414,
-  /** 把目录移进自己的子树（用户输入错；此前落 500 通用文案） */
+  /** 把目录移进自己的子树（用户输入错；不拦会落 500 通用文案） */
   FILE_MOVE_INTO_SELF: 40009,
 
   WEBHOOK_NOT_FOUND: 40410,

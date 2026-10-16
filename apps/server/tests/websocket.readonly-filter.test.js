@@ -11,7 +11,7 @@
  *
  * 另含一条**归类哨兵**：`WSEvents` 新增成员若没在本文件里二分归类即变红——
  * 白名单是「放行」语义，漏登记只会更严不会更松，但**新增事件悄悄变成放行**（或
- * 悄悄变成拒绝）都是需要人拍板的事，故用用例把这次决策钉住。
+ * 悄悄变成拒绝）都是需要单独决策的事，故用用例把这次决策钉住。
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'events';
@@ -238,7 +238,7 @@ describe('只读角色的 WS 事件过滤', () => {
   describe('③ 订阅补发升级进度快照', () => {
     it('只读订阅时不补发升级进度，但仍补发 status 快照', () => {
       serverManager.activeUpgrades = new Map([['s1', { stage: 'download', percent: 40 }]]);
-      // players 与真实 ManagedInstance 同为 Map（旧实现直接下发 Map → JSON 成 {}）
+      // players 与真实 ManagedInstance 同为 Map（直接下发 Map → JSON 成 {}）
       serverManager.getInstance = vi.fn(() => ({
         isRunning: true,
         players: new Map([['Steve', { name: 'Steve' }]]),
@@ -380,7 +380,7 @@ describe('只读角色的 WS 事件过滤', () => {
       // MC 世界格式升级进度（MSMP 通知面一期）。归类到「拦下」而不是白名单，理由：
       // 它伴随服务端版本变更出现，是**管理员动作的余波**（与 upgradeProgress 同类语境），
       // 而白名单的自检正则正是按 `upgrade` 这个词排除这一类；要放行就得放宽那条正则，
-      // 得不偿失。口径是「漏登记只会更严不会更松」，将来要放行再单独拍板。
+      // 得不偿失。口径是「漏登记只会更严不会更松」：放行须同时放宽那条正则。
       WSEvents.WORLD_UPGRADE,
     ];
 

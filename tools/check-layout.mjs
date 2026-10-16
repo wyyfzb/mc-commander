@@ -131,7 +131,8 @@ for (const p of tracked) {
     violations.push(`入库面不得含产物目录「${badDir}」：「${p}」`)
     continue
   }
-  if (!ENV_TEMPLATE.test(segments.at(-1)) && FORBIDDEN_ARTIFACT_FILES.test(segments.at(-1))) {
+  const baseName = /** @type {string} */ (segments.at(-1))
+  if (!ENV_TEMPLATE.test(baseName) && FORBIDDEN_ARTIFACT_FILES.test(baseName)) {
     violations.push(`入库面不得含运行期文件：「${p}」`)
   }
 }

@@ -186,8 +186,8 @@ describe('POST /instances/:id/files/rename', () => {
 
   /**
    * 「目标目录不存在」与「源不存在」都从 renameNoClobber 抛 ENOENT，但对用户的含义
-   * 相反——前者是目标写错了，后者是源没了。此前一律报「Source file not found」，
-   * 用户会去怀疑那个其实好好的源文件。故显式分流到不同错误码。
+   * 相反——前者是目标写错了，后者是源没了。一律报「Source file not found」会让用户
+   * 去怀疑那个其实好好的源文件。故显式分流到不同错误码。
    */
   it('目标目录不存在 → 404 指明是目标（不是误报「源不存在」）', async () => {
     fs.writeFileSync(path.join(tmpDir, 'test-inst', 'movable.txt'), 'x');

@@ -2,8 +2,8 @@
  * utils/credentials.js：凭据生成 + .env 写回 + 监听面判定。
  *
  * 承重点：服务端签发的 Key 必须满足文档对「自填 Key」的同一条要求
- * （≥32 字节 CSPRNG），且 .env 写回是「保留其余键 + 原子写 + 0600」——弱 Key 路径
- * 之所以存在，正是此前由部署方自行 `sha256sum` 生成、服务端只能照收。
+ * （≥32 字节 CSPRNG），且 .env 写回是「保留其余键 + 原子写 + 0600」——部署方自行
+ * `sha256sum` 生成的 Key 服务端只能照收，弱 Key 由此进来，故这条要求必须同尺子。
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';

@@ -138,7 +138,7 @@ export function ConnectionForm({
   /**
    * 状态行三档。connection store 的 `ready` 只表示**凭据存在**（见
    * stores/connection.ts 的 hasCredentials），服务端整体不可达时它同样为 ready，
-   * 撑不起「已连接」这个词——此前设置页与顶栏用同一个词说两件不同的事。
+   * 撑不起「已连接」这个词——设置页与顶栏用同一个词说两件不同的事会让用户对不上。
    * 「已连接」只由真实连通证据给出：实时通道在线，或本次测试连接拿到结果。
    */
   const isConnected = socketConnected || testedOk || latencyMs != null

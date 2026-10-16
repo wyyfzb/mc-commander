@@ -3,7 +3,7 @@
  *
  * 服务端按**形状**分流：6 位数字走动态口令（RFC 6238，含漂移窗与重放防护），
  * 其余形状走一次性恢复码（见 apps/server/routes/auth.js 的 verifySecondFactor）。
- * 因此前端不设「改用恢复码」开关——同一个输入框粘贴恢复码即可，分流由服务端按形状判定；
+ * 故前端不设「改用恢复码」开关——同一个输入框粘贴恢复码即可，分流由服务端按形状判定；
  * 多一个模式开关只会制造「开关选错 → 明明粘对了却报码错」的假失败面。
  *
  * 相应地，前端**不得改动输入的长度语义**：清洗只做「去分隔符」这一件服务端也做的事，
@@ -21,7 +21,7 @@ export const TOTP_CODE_LENGTH = 6
 export const RECOVERY_CODE_LENGTH = 10
 
 /**
- * 恢复码字母表：服务端 ALPHABET 原样搬来（32 字符，去混淆剔除 I/O/0/1）。
+ * 恢复码字母表：与服务端 ALPHABET 逐字一致（32 字符，去混淆剔除 I/O/0/1）。
  * 注意其中含 2–9 共 8 个数字字符 —— 这正是「纯数字恢复码合法」的来源。
  */
 export const RECOVERY_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'

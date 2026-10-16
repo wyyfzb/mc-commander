@@ -200,7 +200,7 @@ export function PlayersPage() {
   }
 
   // 无实例门：判据是实例列表本身（详见 InstanceRequiredState）——
-  // 此前无实例时 usePlayers 被 disabled，表格会把它显示成「暂无在线玩家」
+  // 无实例时 usePlayers 被 disabled，表格会把它显示成「暂无在线玩家」
   if (!instanceId) {
     return <InstanceRequiredState />
   }

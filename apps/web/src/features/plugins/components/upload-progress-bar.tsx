@@ -1,5 +1,5 @@
 /**
- * UploadProgressBar —— 上传进度条（自 plugins-page.tsx 迁出，纯移动零行为变更）
+ * UploadProgressBar —— 上传进度条
  * 顺序队列展示：当前文件名 + 队列剩余 + 进度百分比 + 取消按钮
  */
 import { FileText, X } from 'lucide-react'

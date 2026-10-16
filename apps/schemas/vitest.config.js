@@ -1,9 +1,8 @@
 import { defineConfig } from 'vitest/config'
 
 // 覆盖率口径与另两包对齐：v8 provider、statements 判阈值。
-// apps/schemas 的 dist 是服务端运行时消费物，却在此前完全没有覆盖率约束——
-// 它是三包里最该被盯的一个（另两包的契约漂移由「服务端消费已构建的 dist」这条链兜底，
-// 而 schema 行为差异只在运行期暴露）。
+// apps/schemas 的 dist 是服务端运行时消费物，故它是三包里最该被盯的一个——另两包的
+// 契约漂移由「服务端消费已构建的 dist」这条链兜底，而 schema 行为差异只在运行期暴露。
 export default defineConfig({
   test: {
     coverage: {

@@ -1,5 +1,5 @@
 /**
- * ExperienceForm - /xp 命令（给予/设置/移除经验值或经验等级），自 action-forms.tsx 原样迁入。
+ * ExperienceForm - /xp 命令（给予/设置/移除经验值或经验等级）。
  * 执行走 onAction({kind:'command', command})；批量用 runBatchForTargets + formatBatchSummary toast。
  * 设计纪律：全部 --mcs-* token
  */

@@ -308,8 +308,7 @@ describe('取消在途部署', () => {
   it('上游版本查询窗口内取消：无在途 IO 可中断时靠 await 边界拦下（不下载/不建目录/不入库）', async () => {
     // 版本查询是部署的第一个 await：此窗口内既没有下载流也没有子进程，
     // 取消只能靠 await 边界后的 throwIfCancelled 生效
-    // vanilla 的第一个 await 现在是 Piston manifest 查询（与升级同一实现），
-    // 不再经过 minecraft-core 的版本查询 ⇒ 挂住这一处
+    // vanilla 的第一个 await 是 Piston manifest 查询（与升级同一实现）⇒ 挂住这一处
     let releaseQuery = () => {};
     httpState.manifestPromise = new Promise((resolve) => {
       releaseQuery = resolve;

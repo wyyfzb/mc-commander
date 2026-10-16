@@ -1,5 +1,5 @@
 /**
- * PlayerRow —— 玩家表格行（自 player-table.tsx 拆出，纯搬移零行为变更）
+ * PlayerRow —— 玩家表格行
  *
  * 行点击只服务指针便利（整行可点）；**键盘/读屏入口是玩家名列的详情按钮**：
  * `<table>` 祖先下的 `<tr>` 只允许 `row` 角色（ARIA in HTML），加交互角色会

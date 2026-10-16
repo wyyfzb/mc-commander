@@ -1,8 +1,8 @@
 /**
  * ReadonlyCredentialPanel —— 设置页「只读监控凭据」管理
  *
- * 背景：只读机器凭据（`READONLY_API_KEY_HASH`）此前只能改服务端 `.env` 或手调
- * `POST /rotate-readonly-key`——而「未配置 = 该通道不存在」（fail-closed），手工改 .env
+ * 背景：只读机器凭据（`READONLY_API_KEY_HASH`）改服务端 `.env` 或手调
+ * `POST /rotate-readonly-key` 才能改——而「未配置 = 该通道不存在」（fail-closed），手工改 .env
  * 又要求部署方自己算 SHA-256 摘要。本面板把这条生命周期搬进浏览器：状态可见（通道开关 +
  * 是否已创建）、一键生成/轮换、明文一次性展示（与轮换端点同一口径：明文不落盘）。
  *

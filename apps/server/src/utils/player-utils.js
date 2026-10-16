@@ -76,8 +76,7 @@ export function shadowProfilePath({ serverPath, playerName, uuid }) {
  *
  * 为什么键是 UUID 还要自证：正常玩家名永远变不成文件名（见 `shadowProfileKey`），
  * 能越界的只剩**被篡改的 usercache**——它把 `uuid` 写成 `../x` 时路径就出去了。
- * 三条消费路径共用这一处，是因为「只有一处校验」才守得住：曾经实例与路由各写一份，
- * 路由那份还静默 `return null`，篡改就无人知晓。
+ * 三条消费路径共用这一处：校验只有一份才守得住——各写一份时漏掉的那份会静默放行。
  *
  * 越界返回 null 并留告警（这是唯一可能触发的场景，静默等于放过）。
  */

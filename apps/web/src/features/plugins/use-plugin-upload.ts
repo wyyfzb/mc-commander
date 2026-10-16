@@ -1,5 +1,5 @@
 /**
- * usePluginUpload —— 插件上传逻辑外提（自 plugins-page.tsx 迁出，纯移动零行为变更）
+ * usePluginUpload —— 插件上传逻辑
  * - 顺序上传队列：XHR 进度（可取消）+ 失败不阻断 + 40912 同名冲突暂停弹确认
  * - 选择/拖放入口：过滤非 .jar（逐个提示）
  * - 全页拖放：dragover 高亮遮罩（嵌套 dragleave 用计数法防误触发）

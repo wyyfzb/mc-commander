@@ -6,7 +6,7 @@
  *   格式为 UTC「YYYY-MM-DD HH:MM:SS」（空格分隔、无时区标记、零填充）
  * - audit.model.js 按字符串比较（created_at >= / <=）过滤时间范围
  * - ISO「T」分隔格式与该口径字符串比较会失配（'T' 0x54 > ' ' 0x20，
- *   导致当日记录被错误排除），因此前端必须先换算成同格式再传参
+ *   导致当日记录被错误排除），故前端必须先换算成同格式再传参
  */
 import { toIsoDate } from '@/lib/mc-calendar'
 

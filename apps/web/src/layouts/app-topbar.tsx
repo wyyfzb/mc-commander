@@ -46,7 +46,7 @@ import { instanceLabel } from '@/lib/instance-label'
 import { instanceHueFillClass } from '@/lib/instance-hue'
 
 /**
- * AppTopBar —— 主顶栏（设计文档 §3.1）
+ * AppTopBar —— 主顶栏
  * 实例选择器 ▸ 全局搜索 (Cmd/Ctrl+K) ▸ 服务器状态点（WS 实时）▸ 通知铃铛（未读徽章+抽屉）▸ 主题切换
  */
 export function AppTopBar() {
@@ -70,8 +70,8 @@ export function AppTopBar() {
   /* 外壳只承载**全局事实**：顶栏这一格报的是面板与后端的连接档位（见下面 indicator）。
      实例级事实（运行状态、TPS、刷新时机、待重启）一律落在实例卡片上——实例页卡片承担
      在屏上常驻的那一份，侧栏展开态的实例迷你卡承担当前实例的简版。
-     此前刷新时机在本格按视口轮换（md 以上挂不可见 title、md 以下换成一颗只读药丸），
-     同一个位置因此在两个属性之间切换 ⇒ 用户无从从位置推断语义，读到的是串用的结论。 */
+     本格不按视口轮换刷新时机（md 以上挂不可见 title、md 以下换成一颗只读药丸），
+     同一个位置在两个属性之间切换 ⇒ 用户无从从位置推断语义，读到的是串用的结论。 */
   // 自订阅优先；实例详情尚未到达时回退到 store 里的值（保持既有行为，避免闪断）
   const serverAddress = instanceDetail?.address || status?.address || null
   // 地址可达范围同样来自服务端（契约里的 addressType），前端不自己按网段猜——

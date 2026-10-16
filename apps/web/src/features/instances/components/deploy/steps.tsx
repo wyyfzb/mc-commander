@@ -1,5 +1,5 @@
 /**
- * DeployDialog 三步表单面板（从 deploy-dialog.tsx 行为不变迁移）
+ * DeployDialog 三步表单面板
  * - 步骤① 服务端类型 5 卡单选 + 版本 Select + fabric/forge loader Select
  * - 步骤② 实例名称 Input + 内存 Select 档位
  * - 步骤③ 确认摘要 + EULA 同意勾选
@@ -283,8 +283,8 @@ export function DeployStepConfirm({
           <span>我已阅读并同意 Minecraft EULA（Mojang 最终用户许可协议）</span>
         </label>
         {/* 未同意时**先说后果**再给出路：EULA 是运行服务器的前置条件，不是可选模式。
-            此前文案以「未勾选也可部署」开头，把「你仍可部署」放在「服务器起不来」之前，
-            读起来像一个平级选项，用户容易以为只是少个自动启动。 */}
+            把「你仍可部署」放在「服务器起不来」之前，读起来像一个平级选项，
+            用户容易以为只是少个自动启动。 */}
         <p className="pl-6 text-mcs-xs text-mcs-text-muted">
           {eulaAgreed
             ? '同意后写入 eula.txt（eula=true），部署完成后自动启动服务器。'

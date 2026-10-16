@@ -167,7 +167,7 @@ describe('POST /instances/deploy 审计（INSTANCE_CREATE）', () => {
   });
 
   it('部署中途失败（502）：受理语义不回滚审计（失败可见性由进度事件承担）', async () => {
-    testState.latestBuild = null; // getLatestBuild 无 build → downloadServer 缺失抛错 → 502
+    testState.latestBuild = null; // 构建信息缺失 → 下载地址取不到而抛错 → 502
     const app = buildApp();
     const res = await request(app)
       .post('/api/instances/deploy')

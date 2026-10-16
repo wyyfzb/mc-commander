@@ -738,7 +738,7 @@ describe('useServerSocket（状态跃迁通知接线）', () => {
     return ws
   }
 
-  it('started/stopped 跃迁入通知中心（回归：此前仅 crash/熔断接线）', async () => {
+  it('started/stopped 跃迁入通知中心（回归：仅 crash/熔断接线会漏掉它）', async () => {
     const ws = await connectReady('i-1')
 
     act(() => {

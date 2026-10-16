@@ -4,7 +4,7 @@ import { test, expect, type Page } from '@playwright/test'
  * 长列表虚拟滚动：「全部」档下的尾部留白、行高恒定与滚动连续性
  *
  * 缺口：`同目录 mock-server.mjs` 只有 5 名玩家，「全部」档下表格高度不足一屏、
- * 没有可滚动高度 ⇒ 虚拟滚动的尾部留白与滚动连续性此前从未被实测。
+ * 没有可滚动高度 ⇒ 虚拟滚动的尾部留白与滚动连续性只能在这里实测。
  *
  * 夹具策略：在路由层取回既有 mock 响应后复制成 TOTAL 人，**不改 mock-server 的数据规模**——
  * 改 mock 会连带影响 players/dashboard/mobile 等既有 spec 的条数与计数断言。
@@ -128,7 +128,7 @@ test.describe('长列表虚拟滚动（「全部」档）', () => {
     await page.setViewportSize({ width: 1440, height: 900 })
     await openAllPage(page)
 
-    // 1. 真出现可滚动高度（本项此前从未被实测的前提条件）
+    // 1. 真出现可滚动高度（这是虚拟滚动各项断言成立的前提）
     const top = await snapshot(page)
     expect(top.scrollH).toBeGreaterThan(top.clientH)
     expect(top.scrollTop).toBe(0)

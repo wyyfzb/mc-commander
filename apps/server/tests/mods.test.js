@@ -81,7 +81,7 @@ describe('装载目标表（目录名的唯一声明源）', () => {
   });
 
   it('原型链键必须同样被拒（否则 dir/label 全 undefined，删除会先删再抛）', () => {
-    // 直接下标会走原型链：这些键在旧实现下被判为「合法目标」，随后 dir 为 undefined、
+    // 直接下标会走原型链：这些键会被判为「合法目标」，随后 dir 为 undefined、
     // listPlugins/deletePlugin 抛原生 TypeError（对外 500），且 deletePlugin 会在抛错
     // **之前**真的删掉文件。这是「决定改哪个目录」的守卫，必须 own-property 判定。
     for (const key of ['__proto__', 'constructor', 'toString', 'valueOf', 'hasOwnProperty']) {
@@ -98,7 +98,7 @@ describe('装载目标表（目录名的唯一声明源）', () => {
     expect(fs.existsSync(path.join(modsDir, 'canary.jar')), '文件不得被删').toBe(true);
   });
 
-  it('不传 kind 时默认 plugins（既有调用方行为零变化）', () => {
+  it('不传 kind 时默认 plugins（插件是缺省装载目标）', () => {
     expect(resolveLoadTarget().dir).toBe('plugins');
   });
 });

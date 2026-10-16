@@ -1689,9 +1689,8 @@ describe('MCServerManager', () => {
   });
 
   describe('MCServerInstance - getAllKnownPlayers 不从 usercache 取 lastSeen', () => {
-    // 这条用例此前断言「expiresOn 应成为 lastSeen」——那是把缺陷当规格锁住：
-    // expiresOn 是条目创建 + 1 个月的**缓存过期时刻**，与最后在线无关。
-    // MC 会按它剪枝 usercache，故它连「玩家是否还在名单里」都说明不了。
+    // expiresOn 不得成为 lastSeen：它是条目创建 + 1 个月的**缓存过期时刻**，
+    // 与最后在线无关。MC 会按它剪枝 usercache，故它连「玩家是否还在名单里」都说明不了。
     it('usercache.json 的 expiresOn 不得成为 lastSeen（它是缓存过期时刻）', () => {
       const id = `known-players-${Date.now()}`;
       const instance = manager.createInstance({

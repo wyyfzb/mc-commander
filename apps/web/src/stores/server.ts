@@ -10,7 +10,7 @@ import type {
 const STORAGE_KEY = 'mcs-server'
 
 /**
- * 服务器实时状态 store（WS 事件 → 分派；Query 轮询 30s 保底互补，设计文档 §5.2）
+ * 服务器实时状态 store（WS 事件 → 分派；Query 轮询 30s 保底互补）
  * - performanceUpdate → 局部字段更新（500ms 节流由消费端按需处理）
  * - status 事件 → 触发全量刷新（消费端监听 event 变化后 fetch）
  * - systemStats：云服务器系统资源（独立于实例状态）

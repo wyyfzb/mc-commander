@@ -30,7 +30,7 @@ const EXCLUDED_DIRS = new Set([
   'backups',
 ]);
 
-// 路径包含校验已收敛到 utils/fs-utils.js 的解析面 resolveContainedPath
+// 路径包含校验走 utils/fs-utils.js 的解析面 resolveContainedPath
 // （四步防线：归一化 → 相等排除 + sep 边界 → 逐段 realpath → 最终目标 symlink 拒绝）。
 // 本文件保留导出名与一层错误形态翻译：路由层契约是 AppError(PATH_TRAVERSAL_DETECTED)，
 // 消息文本随 fs-utils 单源；baseMustExist=false——实例/世界目录的存在性由后续
@@ -176,10 +176,10 @@ export function sanitizeFileName(name) {
 }
 
 // 递归统计目录总大小（字节，异步不阻塞事件循环），跳过排除清单——
-// 用于磁盘空间预检、快照大小统计与恢复子进程超时估算。旧实现同步
-// readdirSync+statSync 全量遍历，十万级文件的大世界在 HTTP 同步段阻塞
-// 事件循环 1-3 秒（期间 RCON/WS/其余请求全部延迟）——改为异步遍历，
-// 每次 await 让出事件循环。实例运行中（save-off 后）世界文件短暂静态，
+// 用于磁盘空间预检、快照大小统计与恢复子进程超时估算。必须异步遍历：
+// readdirSync+statSync 全量遍历会让十万级文件的大世界在 HTTP 同步段阻塞
+// 事件循环 1-3 秒（期间 RCON/WS/其余请求全部延迟），每次 await 让出事件循环。
+// 实例运行中（save-off 后）世界文件短暂静态，
 // 预检为近似值即可，不追求统计期间完全一致。
 export async function estimateDirSize(dir, { jarFile = null } = {}) {
   let total = 0;
@@ -271,7 +271,7 @@ export class BackupService {
     // 运行中实例的在线备份依赖 RCON（save-off→save-all flush→save-on 原子
     // 序列）：RCON 不可用（原版默认 enable-rcon=false）时静默直压运行中
     // 世界会产出不一致包，Windows 下还因文件占用失败——显式拒绝并提示
-    // 用户（停止服务器 或 启用 RCON），而非旧实现的静默降级。
+    // 用户（停止服务器 或 启用 RCON），不静默降级。
     if (instance?.isRunning && !instance.isRconConnected) {
       throw new AppError(ErrorCodes.BACKUP_RCON_UNAVAILABLE);
     }
@@ -299,7 +299,7 @@ export class BackupService {
 
     // 检查世界目录是否存在。
     // 同步抛错路径（此时无 backupId，未创建记录）也要发 backupFailed 事件：
-    // 旧实现此处仅被定时调度器 .catch 记日志，用户对唯一灾备手段失效完全无感知
+    // 不能只交给定时调度器 .catch 记日志：用户对唯一灾备手段失效会完全无感知
     // （保留了存在性判定：它是「在任何花费与副作用之前给出明确领域错误」的
     // 前置校验门，判定为假时直接中止且不改动任何文件；竞态下目录被删则会由
     // 后续 rsync/robocopy 失败路径接手，两处都有明确失败出口）
@@ -317,7 +317,7 @@ export class BackupService {
     checkDiskSpace(this.backupsDir, estimateBytes);
 
     // 生成快照目录名（清洗 name 防止路径遍历）。
-    // 只替换 Windows 非法文件名字符，保留中文/Unicode：旧实现用
+    // 只替换 Windows 非法文件名字符，保留中文/Unicode：用
     // [^\w.-] 清洗（\w 为 ASCII）会把中文名（如定时任务"每日备份"）
     // 全部替换为下划线，目录名失去可读性。路径安全由下方
     // resolvedBackupPath 前缀校验兜底。快照 = 完整目录树，
@@ -372,7 +372,7 @@ export class BackupService {
   }
 
   // 同步抛错路径（setup 阶段，无 backupId）统一发 backupFailed 事件：
-  // 旧实现此处仅被定时调度器 .catch 记日志，用户对唯一灾备手段失效完全无感知。
+  // 不能只交给定时调度器 .catch 记日志：用户对唯一灾备手段失效会完全无感知。
   // content 携带失败原因（磁盘满/世界缺失等对用户可见），三来源结构统一
   // { instanceId, backupId?, error, phase, content }
   _failSetup(instanceId, err) {
@@ -807,8 +807,8 @@ export class BackupService {
   }
 
   // 恢复自动保存（save-off 的对称操作）。
-  // save-on 失败时通过 backupFailed 事件暴露（phase='save-on'）——旧实现
-  // 仅 console.warn 静默跳过，若 save-off 已生效后 RCON 断连，MC 服务器
+  // save-on 失败时通过 backupFailed 事件暴露（phase='save-on'）——若只
+  // console.warn 静默跳过，save-off 已生效后 RCON 断连，MC 服务器
   // 会永久停留在自动保存关闭状态，崩溃/断电时世界数据回退且无人知晓。
   async _restoreSaveOn(instanceId) {
     if (!this.serverManager) return;
@@ -975,8 +975,8 @@ export class BackupService {
   async executeRestore(backupId, backup, instanceDir, snapshotDir, { jarFile = null } = {}) {
     const instanceId = backup.instance_id;
     const backupName = backup.name || `备份 #${backupId}`;
-    // 本次恢复的 pre_restore 目录（try 内赋值、catch 精确回滚——旧实现
-    // 在 catch 里按前缀 find 扫描 serversDir，多个残留 pre_restore 目录
+    // 本次恢复的 pre_restore 目录（try 内赋值、catch 精确回滚——若在 catch
+    // 里按前缀 find 扫描 serversDir，多个残留 pre_restore 目录
     // 时可能把上次崩溃遗留的旧版本 rename 回实例目录，本次真实原数据
     // 被遗弃为孤儿目录）
     let preRestoreDir = null;
@@ -1053,8 +1053,8 @@ export class BackupService {
       fs.rmSync(preRestoreDir, { recursive: true, force: true });
       // pre_restore 一删，「回滚能力」随之消失：此后（DB 回写、日志、事件派发）
       // 任一步失败都必须保留**已恢复成功**的实例目录，不能落进下面的回滚分支
-      // 去删它——清掉状态位是这条边界的唯一判据（旧实现靠 existsSync(preRestoreDir)
-      // 事后探盘，恰好也在这条路径上返回 false，换成状态位后必须显式复位）
+      // 去删它——清掉状态位是这条边界的唯一判据（靠 existsSync(preRestoreDir)
+      // 事后探盘恰也在这条路径上返回 false，故状态位必须显式复位）
       swappedToPreRestore = false;
       BackupModel.update(backupId, { status: 'completed' });
 

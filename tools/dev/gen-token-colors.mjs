@@ -1,5 +1,5 @@
 /**
- * token 色彩生成脚本（设计文档 2026-08-14-web-app-design.md §4.1）
+ * token 色彩生成脚本
  * 用法：node tools/dev/gen-token-colors.mjs
  * 职责：hex → OKLCH 精确值；暗色中性层级以 WCAG 相对亮度区间二分生成
  *      （固定 H/C 只步进 L）；状态色容器底 12% alpha 混合；全部输出对照表。
@@ -7,7 +7,7 @@
  */
 import { oklch, wcagLuminance, wcagContrast } from 'culori'
 
-// ── 设计文档 §4.1 定值 ────────────────────────────────────────
+// ── 色值定值 ────────────────────────────────────────────────
 const DARK_BASE = '#0A0E1A' // 暗色基面（H≈220，偏蓝非纯黑）
 // 文字三级（2026-08-14 对比度校验驱动修正：default 提亮保弹窗 ≥4.5；muted 提亮保全层 ≥3:1）
 const TEXT_DARK = ['#EDF2F7', '#B8C4D4', '#64748B'] // default / muted / subtle
@@ -19,7 +19,7 @@ const STATUS = {
   purple: '#A78BFA',
   orange: '#FB923C',
 }
-// 中性台阶：OKLCH L 步进（设计文档"明度 5-6% 基面"指 OKLCH L，非 WCAG 相对亮度）
+// 中性台阶：OKLCH L 步进（"明度 5-6% 基面"指 OKLCH L，非 WCAG 相对亮度）
 // 基面 L=0.166 → 背景 0.19 → 卡片 0.235 → 悬浮 0.28 → 弹窗 0.325（固定 H/C，等距上行）
 const TIER_L = {
   background: 0.19,

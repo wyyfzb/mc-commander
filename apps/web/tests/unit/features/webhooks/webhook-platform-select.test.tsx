@@ -1,7 +1,7 @@
 /**
  * Webhook 渠道预设的单选组语义
- * 该处此前已是 role=radiogroup + role=radio + aria-checked，却没有 roving tabindex 与
- * 方向键——读屏宣告了「单选组」，键盘操作却不符合模型（三个按钮各占一个 Tab 停靠点、
+ * 该处已是 role=radiogroup + role=radio + aria-checked，但 roving tabindex 与
+ * 方向键缺一不可——否则读屏宣告了「单选组」，键盘操作却不符合模型（三个按钮各占一个 Tab 停靠点、
  * 方向键无响应）。本用例锁定补齐后的完整 APG 模型。
  * MSW 拦截列表与事件类型端点（结构占位虚构数据，严禁真实服务器信息）
  */

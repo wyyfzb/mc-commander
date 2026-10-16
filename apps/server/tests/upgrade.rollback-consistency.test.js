@@ -290,7 +290,7 @@ describe('_doRollback 直调（阶段 3 已切换模拟）', () => {
     fs.writeFileSync(backupPath, 'OLD_JAR_BODY');
     const asyncCopySpy = vi.spyOn(fs.promises, 'copyFile');
 
-    await service._doRollback('inst-1', backupPath, null, 'server-1.20.4.jar');
+    await service._doRollback('inst-1', backupPath, 'server-1.20.4.jar');
 
     // 恢复复制：备份 → 旧 jar 本体路径（非新名）
     expect(asyncCopySpy).toHaveBeenCalledWith(backupPath, OLD_JAR());

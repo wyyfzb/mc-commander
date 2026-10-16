@@ -2,7 +2,7 @@
  * 玩家名**安全谓词**（`isSafePlayerName` / `playerNameRejectionReason`）。
  *
  * 这条判据的边界**全部来自实机 RCON 实测**（MC 26.3），不是照规范推的——正因如此，
- * 旧实现 `^[A-Za-z0-9_]{3,16}$` 与实测差得很远：它把服务端**本可寻址**的名字
+ * `^[A-Za-z0-9_]{3,16}$` 这类正则与实测差得很远：它把服务端**本可寻址**的名字
  * （Floodgate 前缀名、中文名、含 `-`/`.` 的名字）一并挡掉，却对「前导 `@`」这条
  * 真正危险的性质不加区分（它挡住了，但理由是「不是合法字符」，而不是「会被当选择器」）。
  *
@@ -24,7 +24,7 @@ import { isSafePlayerName, playerNameRejectionReason } from '../src/utils/player
 describe('isSafePlayerName：服务端实测可寻址的名字须放行', () => {
   it.each([
     ['正版名', 'Bot_Steve'],
-    ['Floodgate 前缀名（旧正则的主要误伤）', '.BedrockName'],
+    ['Floodgate 前缀名（以点开头）', '.BedrockName'],
     ['中文名', '中文名'],
     ['含连字符', '-dash-Name'],
     ['含点与下划线', 'a_b.c-D1'],

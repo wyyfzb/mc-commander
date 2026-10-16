@@ -218,7 +218,7 @@ describe('InstancesPage · 卸载确认', () => {
     it('空输入即匹配但要声明不可恢复：首次 40916 → 二次确认带 acknowledgeIrreversible 才卸载', async () => {
       const user = userEvent.setup()
       renderPage()
-      // 操作按钮的可访问名同样回退到 id：空名旧行此前给出的是「无名按钮」（名字只剩「操作菜单」）
+      // 操作按钮的可访问名同样回退到 id：空名行若不给回退就只剩「无名按钮」
       await user.click(await screen.findByRole('button', { name: 'demo 操作菜单' }))
       await user.click(await screen.findByRole('menuitem', { name: '卸载实例' }))
       // 确认块刻意用原值（服务端比的是 trim 后的 name），故这里标签仍是空名

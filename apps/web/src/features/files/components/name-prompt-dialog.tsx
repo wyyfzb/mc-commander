@@ -1,8 +1,7 @@
 /**
  * NamePromptDialog —— 名称输入对话框（新建文件/新建目录共用表单骨架）
- * （自 files-page.tsx 两个同构 Dialog 合并迁出，纯移动零行为变更）
  * - 受控名称输入 + Enter 直提交；创建中 LoadingButton 防重复提交
- * - 名称校验（空值/路径分隔符）由父组件 onSubmit 负责（toast 提示行为不变）
+ * - 名称校验（空值/路径分隔符）由父组件 onSubmit 负责并以 toast 提示
  */
 import {
   Dialog,

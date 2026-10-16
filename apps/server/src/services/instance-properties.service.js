@@ -1,11 +1,10 @@
 /**
  * 实例 server.properties 域 service（分层治理）
  *
- * 自 routes/status.js 原位搬移：域校验常量（运行期命令映射/可写白名单/布尔/
+ * 域校验常量（运行期命令映射/可写白名单/布尔/
  * 数值/敏感键）、单键值校验、GET 展示视图（重读文件 + 运行状态覆盖 + 敏感键
  * 掩码）与 PUT 写盘及重启联动编排。路由层降为薄编排（参数解析 → service
  * 调用 → 响应包装），对齐 routes/players.js 薄路由分层惯例。
- * 端点行为零变化：校验顺序、拒绝理由、日志文本、diff 与运行中命令下发语义逐项保持。
  */
 import { logger } from '../utils/logger.js';
 

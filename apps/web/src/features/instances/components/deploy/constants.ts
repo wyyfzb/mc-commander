@@ -1,6 +1,5 @@
 /**
  * DeployDialog 本地 UI 常量（文案与图标非领域数据，不入 lib/mc-deploy）
- * 从 deploy-dialog.tsx 行为不变迁移
  */
 import { FileText, Flame, LayoutGrid, Sparkles, Wrench } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'

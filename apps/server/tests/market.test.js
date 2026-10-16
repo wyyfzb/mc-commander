@@ -430,7 +430,7 @@ describe('market.service - 条目类型参数化（plugin / mod）', () => {
     vi.clearAllMocks();
   });
 
-  it('projectType 缺省仍是 plugin（既有调用方行为零变化）', async () => {
+  it('projectType 缺省仍是 plugin（不传即按插件检索）', async () => {
     vi.mocked(httpJson).mockResolvedValueOnce(SEARCH_FIXTURE);
     await searchMarketPlugins({ query: 'x' });
     const [, opts] = vi.mocked(httpJson).mock.calls[0];

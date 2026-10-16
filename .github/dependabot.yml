@@ -9,12 +9,11 @@ version: 2
 # 就发一次版」；要避免这次 patch，把它与下一个 fix/feat 一起合即可。
 #
 # `vitest` 与 `@vitest/coverage-v8` 是**已知无法自动化的例外**：一律 ignore，由维护者成对升级。
-# 根因是 peer 需求**不对称**：`@vitest/coverage-v8` 把 vitest 钉成精确同版（非 optional，
-# 实测 5.0.3 的 peerDependencies = {vitest: "5.0.3"}），而 `vitest` 对 `@vitest/coverage-v8`
-# 只是 optional peer。dependabot 据此认为「单独升 vitest 不违反 peer」，于是只提 vitest、
-# 丢掉同伴，而 `npm ci` 时同伴那条精确 peer 立刻 ERESOLVE。
-# 实测记录：独立升与加 `vitest` 分组两条路，六条 PR **全红** —— 分组救不了它，因为分组只合并
-# 「各自都能更新成功的条目」，而 coverage-v8 单独升必然违反 peer，于是永远进不了组。
+# 根因是 peer 需求**不对称**：`@vitest/coverage-v8` 把 vitest 钉成精确同版（非 optional），
+# 而 `vitest` 对 `@vitest/coverage-v8` 只是 optional peer。dependabot 据此认为「单独升 vitest
+# 不违反 peer」，于是只提 vitest、丢掉同伴，而 `npm ci` 时同伴那条精确 peer 立刻 ERESOLVE。
+# 分组救不了它：分组只合并「各自都能更新成功的条目」，而 coverage-v8 单独升必然违反 peer，
+# 于是永远进不了组。
 # 版本选择还受默认 3 天 cooldown 影响：目标版刚发布时仍在冷却期，dependabot 只能退选
 # **装不上**的旧版（npm arborist 空指针，非本机问题）。故不再折腾分组配置，直接登记为例外。
 #
@@ -31,14 +30,13 @@ updates:
     rebase-strategy: auto
     commit-message:
       prefix: "fix(deps)"
-    # vitest 与其 coverage 同伴由维护者成对升级（见文件头说明），不交给 dependabot
+    # vitest 与其 coverage 同伴由维护者成对升级（peer 需求不对称，见文件头），不交给 dependabot
     ignore:
       - dependency-name: "vitest"
       - dependency-name: "@vitest/coverage-v8"
-      # dompurify 是 monaco-editor 的传递依赖，而 monaco-editor 最新版仍精确锁 3.4.15
+      # dompurify 是 monaco-editor 的传递依赖，而 monaco-editor 仍精确锁 3.4.15
       # ⇒ 无修复版可升，安全更新作业只会反复失败。两条告警都要求 IN_PLACE 模式，monaco
-      # 从不启用（仅 `IN_PLACE = cfg.IN_PLACE || false`，整包 0 处 IN_PLACE: true）⇒ 不可达，
-      # 已按 not_used 处置；等 monaco-editor 升级带上新版 dompurify 后移除本条。
+      # 从不启用（仅 `IN_PLACE = cfg.IN_PLACE || false`，整包 0 处 IN_PLACE: true）⇒ 不可达。
       - dependency-name: "dompurify"
     groups:
       minor-and-patch:

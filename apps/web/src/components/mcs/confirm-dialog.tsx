@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button'
 import { LoadingButton } from '@/components/mcs/loading-button'
 
 /**
- * ConfirmDialog —— Tasteful Friction 分级确认（设计文档 P2）
+ * ConfirmDialog —— Tasteful Friction 分级确认
  * - danger：破坏性操作（停止服务器等）确认按钮走 destructive 深红实底
  * - warning：不可逆提示小字（「此操作不可撤销」）
  * - children：自定义内容插槽（表单类确认，如消息输入）
