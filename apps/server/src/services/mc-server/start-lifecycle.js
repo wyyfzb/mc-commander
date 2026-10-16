@@ -1,5 +1,5 @@
 /**
- * 实例启动生命周期域（issue 513 治理线·服务端第四阶段）：MCServerInstance.start() 的
+ * 实例启动生命周期域（治理线·服务端第四阶段）：MCServerInstance.start() 的
  * 子阶段拆解——EULA 检查、tempban 对账、world 锁文件清理、启动命令/参数构建（四种来源
  * 优先级）、spawn 与进程/stdin/输出/exit 监听器挂载、运行时状态初始化、收尾（熔断重置/
  * started 事件/定时存档），共 11 方法，自 mc_server.js 等价搬移。挂载方式与 level-dat /

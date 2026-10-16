@@ -180,7 +180,7 @@ export const useNotificationStore = create<NotificationState>()((set, get) => ({
   activeAlerts: new Set(),
 
   dispatchWsEvent: (event, now = Date.now()) => {
-    // instanceId 透传：server 类事件关联实例（通知条目据此跳转实例页，issue 334）
+    // instanceId 透传：server 类事件关联实例（通知条目据此跳转实例页）
     // eventKey 透传：服务端事件身份（信封 eventId + 事件内序号）——同一条事件在
     // 多个标签页各生成一份条目，跨标签合并靠它去重（见 lib/notifications 的 merge）
     const built = buildNotifications(event)

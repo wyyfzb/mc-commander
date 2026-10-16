@@ -1,5 +1,5 @@
 /**
- * server store WS 数据合并链路单测（issue 407）
+ * server store WS 数据合并链路单测
  * - 基础 setter：setStatus / setSystemStats / setInstanceId（含 null 清除）与连接态 setter
  * - applyWsSnapshot：实例匹配合并 / instanceId 不匹配早退 / status 为 null 早退 / tps 缺省回落
  * - applyWsPerformance：status 为 null 早退 / 九字段全量合并（其余字段保留）

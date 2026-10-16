@@ -1,5 +1,5 @@
 /**
- * PluginDetailSheet 组件级测试（issue 442：插件域剩余洼地覆盖收口）
+ * PluginDetailSheet 组件级测试（插件域剩余洼地覆盖收口）
  * 纯展示组件（无网络/store 依赖），radix Sheet open 受控渲染，覆盖：
  * - 渲染守卫：plugin=null 不渲染；meta=null 标题回退文件名
  * - 元数据条件渲染：版本/API 版本/加载时机（LOAD_LABEL 映射 + 未知值回退）/主类/作者/官网/描述，缺省字段不出现在文档

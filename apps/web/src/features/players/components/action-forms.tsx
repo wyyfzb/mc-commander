@@ -1,7 +1,7 @@
 /**
  * ActionForms - 玩家操作表单 Tab 壳（经验/效果/召唤），与 GiveItemPanel/TeleportTab 同构模式
  *
- * 表单实现拆分于 forms/ 子目录（issue 480 治理线拆分）：
+ * 表单实现拆分于 forms/ 子目录（治理线拆分）：
  * 1. forms/experience-form.tsx - ExperienceForm（/xp 命令）
  * 2. forms/effect-form.tsx - EffectForm（/effect give|clear 命令）
  * 3. forms/summon-form.tsx - SummonForm（/summon 命令）

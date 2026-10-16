@@ -106,7 +106,7 @@ export const upgradeProgressSchema = z.object({
 })
 
 /**
- * POST /instances/:id/upgrade 请求体契约（issue 391 接入路由层）。
+ * POST /instances/:id/upgrade 请求体契约（接入路由层）。
  * - mcVersion 缺省消息保留原路由文案；点分版本白名单（MC_VERSION_REGEX）
  *   属服务层纵深防御口径，保持在路由/服务层校验，schema 只做类型与必填。
  * - type 枚举错误消息保留原路由 'Invalid type' 文案（error 回调保留既有
@@ -137,7 +137,7 @@ export const upgradeCancelResponseSchema = z.object({
 })
 
 /**
- * GET /instances/:id/upgrade/status 响应契约（issue 402 响应侧接入）。
+ * GET /instances/:id/upgrade/status 响应契约（响应侧接入）。
  * upgrading 为判别字段：升级中 = 进度对象展开（与 upgradeProgressSchema 同构），
  * 空闲 = 仅布尔 false（与路由 null progress 分支一致）。
  */

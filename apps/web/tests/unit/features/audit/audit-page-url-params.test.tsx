@@ -1,5 +1,5 @@
 /**
- * AuditPage 筛选状态 URL 持久化测试（issue 381）
+ * AuditPage 筛选状态 URL 持久化测试
  * mock @/api/queries 捕获 useAuditLogs 入参 + createMemoryRouter 检查 location.search：
  * - URL 带参数挂载：筛选初始值生效（UI 选中态 + 查询参数按服务端口径透传）
  * - 无参数访问：默认行为与现状一致（全部空 = 不过滤）
@@ -86,7 +86,7 @@ beforeAll(() => {
   Element.prototype.scrollIntoView = vi.fn()
 })
 
-describe('AuditPage 筛选状态 URL 持久化（issue 381）', () => {
+describe('AuditPage 筛选状态 URL 持久化', () => {
   it('URL 带参数挂载：筛选初始值生效（UI 选中态 + 查询参数透传）', async () => {
     renderPage('/audit?action=INSTANCE_UPDATE&start=2026-01-01&end=2026-01-31')
 

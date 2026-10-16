@@ -24,7 +24,7 @@ export const ErrorCode = {
   AUTH_NOT_CONFIGURED: 40013,
   AUTH_ALREADY_CONFIGURED: 40911,
   AUTH_LOGIN_LOCKED: 42901,
-  /** 首访设密 SETUP_TOKEN 校验失败（缺失/错误/已作废；公网部署所有权证明，issue 309） */
+  /** 首访设密 SETUP_TOKEN 校验失败（缺失/错误/已作废；公网部署所有权证明） */
   AUTH_SETUP_TOKEN_INVALID: 40104,
   /** 密码已通过、尚缺第二因子：据此显示动态口令输入框（服务端此时未签发会话） */
   AUTH_TOTP_REQUIRED: 40105,

@@ -1,5 +1,5 @@
 /**
- * 任务执行历史路由测试（issue #299）：GET /tasks/:id/history
+ * 任务执行历史路由测试：GET /tasks/:id/history
  * - 任务不存在 → 40400 TASK_NOT_FOUND
  * - 正常查询 → 倒序历史 + 分页信封 + limit 钳制
  */
@@ -25,7 +25,7 @@ vi.mock('../src/db/task_run_history.model.js', () => ({
 import { createTaskRoutes } from '../src/routes/tasks.js';
 import { errorHandler } from '../src/middleware/error_handler.js';
 
-describe('GET /tasks/:id/history（issue #299）', () => {
+describe('GET /tasks/:id/history', () => {
   let app;
 
   beforeEach(() => {

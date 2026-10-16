@@ -233,7 +233,7 @@ describe('DeployDialog', () => {
     expect(screen.getByText('正在部署…')).toBeInTheDocument()
   })
 
-  it('恢复场景：打开时保留进行中的部署进度（页面刷新后 WS 补发恢复态不被 reset，issue 352）', () => {
+  it('恢复场景：打开时保留进行中的部署进度（页面刷新后 WS 补发恢复态不被 reset）', () => {
     // 预置恢复态（模拟刷新后 WS 连接补发已写入 store）
     act(() => {
       useDeployStore.setState({

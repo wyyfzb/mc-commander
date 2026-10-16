@@ -84,7 +84,7 @@ export function AppShell() {
       <CommandPalette />
       {/* 全局命令执行器（命令面板全站可用） */}
       <CommandBridge />
-      {/* 末尾日志弹窗（崩溃/熔断 toast 深入链接入口，issue 343） */}
+      {/* 末尾日志弹窗（崩溃/熔断 toast 深入链接入口） */}
       <LastOutputDialog />
     </div>
   )

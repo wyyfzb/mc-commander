@@ -1,5 +1,5 @@
 /**
- * 市场过滤栏行为级测试（#482 拆分护住：render + userEvent 触达筛选路径）
+ * 市场过滤栏行为级测试（拆分护住 render + userEvent 触达筛选路径）
  * 覆盖：关键词防抖回调链 / MC 版本输入 trim / 刷新回调 + loading 禁用 + 结果计数
  */
 import { describe, it, expect, vi } from 'vitest'

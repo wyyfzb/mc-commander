@@ -51,7 +51,7 @@ export class TaskScheduler {
 
     this.startPanelBackupCron();
 
-    // 保留策略首执行（issue #472）：不等到首个 cron 触发点（默认次日凌晨），
+    // 保留策略首执行：不等到首个 cron 触发点（默认次日凌晨），
     // 启动即收敛一次存量增长；失败仅记日志不阻塞调度器启动
     if (config.retentionPrune.enabled) {
       this.runRetentionPrune('startup');

@@ -1,5 +1,5 @@
 /**
- * status 输入侧契约测试（issue 486）：实例控制面五 body 端点 validateBody 收口
+ * status 输入侧契约测试：实例控制面五 body 端点 validateBody 收口
  *
  * 范式：status.endpoints.test.js 的 mock 隔离（InstanceModel/recordAudit）
  * + auth.input.contract.test.js 的 400 统一信封断言（code 40000 + details 路径）。
@@ -124,7 +124,7 @@ function makeInstance(overrides = {}) {
   return instance;
 }
 
-describe('status 输入侧契约 - PUT /instances/:id（issue 486）', () => {
+describe('status 输入侧契约 - PUT /instances/:id', () => {
   let app;
   let instance;
   let manager;
@@ -222,7 +222,7 @@ describe('status 输入侧契约 - PUT /instances/:id（issue 486）', () => {
   });
 });
 
-describe('status 输入侧契约 - POST /instances/:id/start（issue 486）', () => {
+describe('status 输入侧契约 - POST /instances/:id/start', () => {
   let app;
   let instance;
   let manager;
@@ -273,7 +273,7 @@ describe('status 输入侧契约 - POST /instances/:id/start（issue 486）', ()
   });
 });
 
-describe('status 输入侧契约 - POST /instances/:id/command（issue 486）', () => {
+describe('status 输入侧契约 - POST /instances/:id/command', () => {
   let app;
   let instance;
   let manager;
@@ -331,7 +331,7 @@ describe('status 输入侧契约 - POST /instances/:id/command（issue 486）', 
   });
 });
 
-describe('status 输入侧契约 - PUT /instances/:id/properties（issue 486）', () => {
+describe('status 输入侧契约 - PUT /instances/:id/properties', () => {
   let app;
   let instance;
   let manager;
@@ -376,7 +376,7 @@ describe('status 输入侧契约 - PUT /instances/:id/properties（issue 486）'
   });
 });
 
-describe('status 输入侧契约 - POST /instances/:id/eula（issue 486）', () => {
+describe('status 输入侧契约 - POST /instances/:id/eula', () => {
   let app;
   let instance;
   let manager;

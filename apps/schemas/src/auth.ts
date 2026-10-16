@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 /**
- * 认证与 API Key 域响应契约（issue 414）
+ * 认证与 API Key 域响应契约
  *
  * - 会话令牌为 base64url 明文交客户端（服务端仅存 SHA-256 摘要）；sessionId 为 UUID 字符串
  * - login 会话结构与 sessions 列表条目分开定义（字段语义不同：前者含明文 token，后者含 current 标记）
@@ -228,7 +228,7 @@ export type AuthSessionKickResponse = z.infer<typeof authSessionKickResponseSche
 export type ApiKeyRotateResponse = z.infer<typeof apiKeyRotateResponseSchema>
 
 // ---------------------------------------------------------------------------
-// 输入侧契约（issue 428）
+// 输入侧契约
 //
 // 凭据端点入参只锁「形状」（字段存在 + string 类型）；密码强度（8-128 位）
 // 校验留在路由层，且必须置于以下既有安全语义之后：

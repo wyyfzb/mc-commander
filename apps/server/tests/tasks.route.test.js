@@ -1,5 +1,5 @@
 /**
- * 定时任务 CRUD 路由补测（issue #411）：routes/tasks.js 8 端点中 7 个此前零测试
+ * 定时任务 CRUD 路由补测：routes/tasks.js 8 端点中 7 个此前零测试
  * （仅 GET /tasks/:id/history 由 task_history.route.test.js 覆盖）。
  *
  * 范式沿用 task_history.route.test.js / status.test.js：vi.mock 数据模型层

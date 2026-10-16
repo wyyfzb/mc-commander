@@ -107,7 +107,7 @@ describe('Audit Routes', () => {
     expect(res.status).toBe(200);
   });
 
-  // ── 分页参数回归（parsePagination 统一收口，issue 388）──
+  // ── 分页参数回归（parsePagination 统一收口）──
   it('GET /audit-logs 分页参数透传到模型', async () => {
     await request(app).get('/api/v1/audit-logs?page=3&pageSize=7').set('X-API-Key', 'test-key');
     expect(AuditLogModel.findAll).toHaveBeenCalledWith(
@@ -128,7 +128,7 @@ describe('Audit Routes', () => {
   });
 });
 
-describe('Audit Routes zod 请求契约（issue 391）', () => {
+describe('Audit Routes zod 请求契约', () => {
   let app;
 
   beforeEach(() => {
@@ -147,7 +147,7 @@ describe('Audit Routes zod 请求契约（issue 391）', () => {
     expect(arg).not.toHaveProperty('junk');
   });
 
-  it('GET /audit-logs 分页参数保持 #392 parsePagination 语义（schema 透传 → util 解析）', async () => {
+  it('GET /audit-logs 分页参数保持 parsePagination 语义（schema 透传 → util 解析）', async () => {
     await request(app).get('/api/v1/audit-logs?page=3&pageSize=50');
     expect(AuditLogModel.findAll).toHaveBeenCalledWith(
       expect.objectContaining({ page: 3, pageSize: 50 }),
@@ -161,7 +161,7 @@ describe('Audit Routes zod 请求契约（issue 391）', () => {
     expect(arg.page).toBe(1);
   });
 
-  it('GET /audit-logs 非法 order 回落 desc 是 schema 契约的一部分（issue 383 向后兼容语义，不升级 400）', async () => {
+  it('GET /audit-logs 非法 order 回落 desc 是 schema 契约的一部分（向后兼容语义，不升级 400）', async () => {
     await request(app).get('/api/v1/audit-logs?order=<script>');
     expect(AuditLogModel.findAll).toHaveBeenCalledWith(expect.objectContaining({ order: 'desc' }));
   });

@@ -1,5 +1,5 @@
 /**
- * OverviewCells 展示原子件行为级测试（issue 489 拆分交付）
+ * OverviewCells 展示原子件行为级测试（拆分交付）
  * - Section：标题 + 子内容渲染
  * - InfoCell：label/value 渲染与 mono 等宽态
  * - StatCell：label/value 渲染

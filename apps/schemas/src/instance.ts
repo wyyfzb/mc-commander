@@ -160,13 +160,13 @@ export type CommandResponse = z.infer<typeof commandResponseSchema>
 export type LogEntry = z.infer<typeof logEntrySchema>
 
 // ---------------------------------------------------------------------------
-// 输入侧契约（issue 486）
+// 输入侧契约
 //
-// status.js 实例控制面五 body 端点收口（validateBody 前置校验，范式同 auth #428）：
+// status.js 实例控制面五 body 端点收口（validateBody 前置校验，范式同 auth 的收口）：
 // - 仅锁「形状与类型」；业务语义校验（javaPath 可执行性 / jvmArgs -X/-D 形态 /
 //   属性值字符集）仍由路由层既有逻辑持有——schema 收口只统一 400 VALIDATION_ERROR
 //   信封，不挪动任何安全校验挂靠点
-// - start 端点：startCommand 禁用键（z.never）承接 find-002「启动命令不得经 API
+// - start 端点：startCommand 禁用键（z.never）承接「启动命令不得经 API
 //   传入」——任何值（含 null）在 schema 层前置 400，路由层原判断保留作纵深防御
 // - properties 端点：passthrough 保留全部属性键（properties 键不可枚举，不能走
 //   剥离范式）；数组/标量/null 由 schema 层拒绝（文案与原 400 一致）
@@ -287,7 +287,7 @@ export type InstancePropertiesRequestBody = z.infer<typeof instancePropertiesReq
 export type InstanceEulaRequestBody = z.infer<typeof instanceEulaRequestBodySchema>
 
 // ---------------------------------------------------------------------------
-// 卸载实例（issue 486 收口的同一范式，见上）
+// 卸载实例（收口的同一范式，见上）
 // 破坏性端点：实例名确认由服务端强制（前端弹窗的输入只存在于客户端，直连 API
 // 的调用方此前可无确认删除），备份目录按设计保留，故成功响应回报保留内容。
 // ---------------------------------------------------------------------------

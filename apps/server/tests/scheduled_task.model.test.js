@@ -62,7 +62,7 @@ describe('ScheduledTaskModel - lastRunStatus', () => {
   });
 });
 
-describe('ScheduledTaskModel - 执行历史单点收口（issue #299）', () => {
+describe('ScheduledTaskModel - 执行历史单点收口', () => {
   beforeEach(() => {
     prepareLog.length = 0;
   });

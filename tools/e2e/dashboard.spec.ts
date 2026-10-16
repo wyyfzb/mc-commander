@@ -160,7 +160,7 @@ test.describe('仪表盘', () => {
     // B8 停止确认动态文案：mock 有在线玩家 → 显示人数
     await expect(page.getByText(/名玩家当前在线/)).toBeVisible()
     await page.getByRole('button', { name: '停止', exact: true }).last().click()
-    // 停止收敛共享 mutation（issue 334）：指令发送即 toast（服务端异步确认走 WS status 事件）
+    // 停止收敛共享 mutation：指令发送即 toast（服务端异步确认走 WS status 事件）
     await expect(page.getByText('停止指令已发送')).toBeVisible({ timeout: 10_000 })
   })
 

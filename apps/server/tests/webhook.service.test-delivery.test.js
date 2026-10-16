@@ -1,5 +1,5 @@
 /**
- * WebhookService.testDelivery 落库测试（issue #356）
+ * WebhookService.testDelivery 落库测试
  * 验收：成功 / 非 2xx / 网络异常 三路径均落一条 event_type=ping 的投递记录；
  * SSRF 拦截与 webhook 不存在发生在投递尝试前，不落记录。
  * utils/http-client / url-guard / getDb 全 mock：不触网，真实 better-sqlite3 断言落库。
@@ -72,7 +72,7 @@ function deliveriesOf(webhookId) {
     .all(webhookId);
 }
 
-describe('WebhookService.testDelivery 落库（issue #356）', () => {
+describe('WebhookService.testDelivery 落库', () => {
   let hook;
 
   beforeAll(() => {

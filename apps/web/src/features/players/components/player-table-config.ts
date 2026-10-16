@@ -12,7 +12,7 @@ import {
 } from '@tanstack/react-table'
 
 // v9 features 需模块级静态定义（官方建议）：排序 + 列尺寸（getSize）/列可见（getVisibleCells）
-// sortedRowModel 必须注册（issue 472 / PR 473 沉淀）：v9 未注册 sorted row-model
+// sortedRowModel 必须注册（/ PR 473 沉淀）：v9 未注册 sorted row-model
 // factory 时 getRowModel() 返回预排序模型——点击表头仅 sorting state 与箭头变化，
 // 行序不应用。alphanumeric 为官方示例注册项（字符串列 auto sortFn 命中最常见场景）
 export const features = tableFeatures({

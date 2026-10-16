@@ -1,5 +1,5 @@
 /**
- * AuditPage 导出按钮组件测试（issue 384）
+ * AuditPage 导出按钮组件测试
  * mock @/api/queries（页面数据源）+ mock ../audit-export（捕获导出调用）：
  * - 导出入口渲染 + 上限提示（最多导出 1000 条）
  * - 点击触发：按当前筛选（action/时间）与排序口径调用导出
@@ -74,7 +74,7 @@ beforeEach(() => {
   exportImpl.current = () => Promise.resolve()
 })
 
-describe('AuditPage 导出入口（issue 384）', () => {
+describe('AuditPage 导出入口', () => {
   it('导出按钮 + 上限提示渲染（最多导出 1000 条（时间最新优先））', async () => {
     renderPage()
     await waitFor(() => expect(screen.getByTestId('audit-export')).toBeInTheDocument())

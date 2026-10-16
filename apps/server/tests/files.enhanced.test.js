@@ -377,7 +377,7 @@ describe('POST /instances/:id/files/upload', () => {
     expect(fs.existsSync(path.join(tmpDir, 'test-inst', 'root.txt'))).toBe(true);
   });
 });
-describe('files zod 请求契约（issue 391）', () => {
+describe('files zod 请求契约', () => {
   it('PUT /files/content：content 非字符串 → 400 + 结构化 details（契约拦截在 handler 前）', async () => {
     const res = await request(app)
       .put('/api/v1/instances/test-inst/files/content')

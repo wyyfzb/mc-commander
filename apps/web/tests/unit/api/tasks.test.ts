@@ -1,5 +1,5 @@
 /**
- * tasks API 函数行为级测试（issue 476：tasks/world 数据访问层零防护收口）
+ * tasks API 函数行为级测试（tasks world 数据访问层零防护收口）
  * msw 局部拦截真链路：路径/查询串/请求体透传断言 + 解包契约；
  * 错误传播三向覆盖：非 2xx 错误信封 → ApiError / 200 异常载荷（error 信封与非 JSON）→ NetworkError/ApiError / 网络层失败 → NetworkError
  * 数据均为虚构测试值，不含真实服务器信息

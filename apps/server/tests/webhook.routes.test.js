@@ -244,7 +244,7 @@ describe('Webhook 路由', () => {
     expect(res.status).toBe(200);
   });
 
-  // ── 分页参数回归（parsePagination 统一收口，issue 388）──
+  // ── 分页参数回归（parsePagination 统一收口）──
   it('GET /webhooks 分页参数透传', async () => {
     const res = await request(getApp()).get('/api/v1/webhooks?page=2&pageSize=5');
     expect(res.status).toBe(200);
@@ -267,7 +267,7 @@ describe('Webhook 路由', () => {
   });
 });
 
-// ── 三子路由行为收口（#437）：DELETE /:id、POST /:id/test、GET /:id/deliveries ──
+// ── 三子路由行为收口：DELETE /:id、POST /:id/test、GET /:id/deliveries ──
 // 断言深度对齐行为而非 keyword 命中：404 分支、audit 记录语义、分页钳制上限逐项落点
 describe('Webhook 三子路由行为收口', () => {
   beforeEach(() => {

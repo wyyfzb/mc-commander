@@ -1,5 +1,5 @@
 /**
- * 审计日志 & 命令历史导出工具单测（issue 384 / issue 403）
+ * 审计日志 & 命令历史导出工具单测
  * mock @/api/audit 捕获分页拉取入参 + 拦截 write-excel-file 断言工作表数据与下载文件名：
  * - 文件名生成：审计日志/命令历史_yyyyMMdd_HHmm.xlsx 格式
  * - 分页循环拉取：上限 1000 条（5 页 × 200 即停）、数据耗尽即停、审计日志恒以 desc 取数、
@@ -105,7 +105,7 @@ function mkCmdRow(seq: number): CommandHistoryItem {
   }
 }
 
-describe('审计导出工具（issue 384）', () => {
+describe('审计导出工具', () => {
   it('buildAuditExportFilename 生成「审计日志_yyyyMMdd_HHmm.xlsx」', () => {
     const name = buildAuditExportFilename(new Date(2026, 8, 3, 20, 5)) // 2026-09-03 20:05
     expect(name).toBe('审计日志_20260903_2005.xlsx')
@@ -161,7 +161,7 @@ describe('审计导出工具（issue 384）', () => {
   })
 })
 
-describe('命令历史导出工具（issue 403）', () => {
+describe('命令历史导出工具', () => {
   it('buildCommandExportFilename 生成「命令历史_yyyyMMdd_HHmm.xlsx」', () => {
     const name = buildCommandExportFilename(new Date(2026, 8, 4, 8, 30)) // 2026-09-04 08:30
     expect(name).toBe('命令历史_20260904_0830.xlsx')

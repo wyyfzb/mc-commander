@@ -8,7 +8,7 @@
  * - 批量操作：行复选框多选 → 批量启用/禁用/删除（顺序执行，逐项提示，汇总结果）
  * - 启停 = jar ↔ jar.disabled 重命名（服务端原子执行），重启实例后生效
  *
- * 拆分结构（issue 389，纯移动零行为变更）：
+ * 拆分结构（纯移动零行为变更）：
  * - components/plugin-row.tsx        单行插件卡片
  * - components/plugin-detail-sheet.tsx  详情侧滑面板（含 LOAD_LABEL）
  * - components/upload-progress-bar.tsx  上传进度条
@@ -96,7 +96,7 @@ export function PluginsPage() {
     }
   }, [pluginsQuery.isError, pluginsQuery.isSuccess, pluginsQuery.error])
 
-  // 上传队列/冲突确认/拖放（逻辑外提，issue 389）
+  // 上传队列/冲突确认/拖放（逻辑外提）
   const {
     uploading,
     queueRemaining,

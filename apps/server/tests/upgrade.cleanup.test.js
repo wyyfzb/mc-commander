@@ -1,5 +1,5 @@
 /**
- * 升级成功路径旧 jar 清理 + 备份/回滚复制异步化行为级补测（#520）
+ * 升级成功路径旧 jar 清理 + 备份/回滚复制异步化行为级补测
  *
  * 覆盖 upgrade.service.js 两处实现问题修复后的行为契约：
  * ① 成功路径删除被替换旧版本 jar（失败/回滚路径保留回滚源）；同版本
@@ -195,7 +195,7 @@ const BACKUP_JAR = () => path.join(tmpDir, '._upgrade_backup_server-1.20.4.jar')
 
 // ── ① 成功路径：被替换旧版本 jar 清理 ──
 
-describe('成功路径：被替换旧版本 jar 清理（#520 实锤①）', () => {
+describe('成功路径：被替换旧版本 jar 清理（实锤①）', () => {
   it('升级成功后旧 jar 本体已删除、当前 jar 内容为新版、备份副本已清理', async () => {
     const manager = createMockServerManager({ start: startEmitsReady() });
     const service = new UpgradeService(manager);
@@ -270,7 +270,7 @@ describe('成功路径：被替换旧版本 jar 清理（#520 实锤①）', () 
 
 // ── ② 失败/回滚路径：回滚源可用性与 await 语义 ──
 
-describe('失败/回滚路径：旧 jar 保留与回滚完成语义（#520）', () => {
+describe('失败/回滚路径：旧 jar 保留与回滚完成语义', () => {
   it('首启 crash 回滚后旧 jar 本体保留且内容不变（失败路径不删）', async () => {
     const manager = createMockServerManager({ start: startEmitsCrash() });
     const service = new UpgradeService(manager);
@@ -299,14 +299,14 @@ describe('失败/回滚路径：旧 jar 保留与回滚完成语义（#520）', 
     // _doRollback finally await unlink：调用方收到 reject 时清理已同步完成，
     // 无需 waitFor（修复前 fire-and-forget 需轮询，此为 await 语义的直接证据）
     expect(fs.existsSync(BACKUP_JAR())).toBe(false);
-    // 回滚恢复语义（#539）：旧 jar 本体内容=备份旧内容，错位副本（新名）已删，
+    // 回滚恢复语义：旧 jar 本体内容=备份旧内容，错位副本（新名）已删，
     // 实例目录旧版本 jar 本体唯一
     expect(fs.readFileSync(OLD_JAR(), 'utf8')).toBe('OLD_JAR_CONTENT');
     expect(fs.existsSync(path.join(tmpDir, 'server-1.21.4.jar'))).toBe(false);
   });
 });
 
-// ── ③ 复制异步化：API 选择与调用语义（#520 实锤②） ──
+// ── ③ 复制异步化：API 选择与调用语义（实锤②） ──
 
 describe('复制异步化：零 copyFileSync、promises.copyFile 参数正确', () => {
   it('升级全程（含回滚）零 fs.copyFileSync；备份走 .part 原子改名、回滚一次异步复制', async () => {
@@ -325,7 +325,7 @@ describe('复制异步化：零 copyFileSync、promises.copyFile 参数正确', 
     // 同步 API 已彻底退出升级链路
     expect(syncCopySpy).not.toHaveBeenCalled();
 
-    // 异步复制恰好两次：replace 阶段备份 + 回滚恢复（目标=旧 jar 本体路径，#539）。
+    // 异步复制恰好两次：replace 阶段备份 + 回滚恢复（目标=旧 jar 本体路径）。
     // 备份先写 .part 再改名：复制不可中断（取消/失败都可能落在复制中），
     // 只有原子改名才能保证 rollback 源要么不存在、要么是完整副本
     expect(asyncCopySpy).toHaveBeenCalledTimes(2);

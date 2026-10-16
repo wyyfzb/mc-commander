@@ -1,5 +1,5 @@
 /**
- * routes/backups.js 路由补测（issue #424）：列表/详情/创建/删除四端点此前
+ * routes/backups.js 路由补测：列表/详情/创建/删除四端点此前
  * 零测试，restore 的 VALIDATION_ERROR 分支与 creating 互斥分支、download 的
  * tar 进程错误分支无覆盖。
  *
@@ -7,7 +7,7 @@
  * backups.download.test.js 已锁定 download 安全链（流式/404/400/路径
  * 穿越/RFC 5987）——本文件只补缺口，不重复上述断言。
  *
- * 范式沿用 tasks.route.test.js（#413）：vi.mock 数据模型层与服务层隔离
+ * 范式沿用 tasks.route.test.js：vi.mock 数据模型层与服务层隔离
  * SQLite/文件系统，supertest + 内存 express 组装真实路由；schemas 与
  * parsePagination 走真实实现锁定契约；recordAudit 半覆盖捕获审计断言。
  */

@@ -1,5 +1,5 @@
 /**
- * LastOutputDialog —— 实例末尾日志弹窗（issue 343：崩溃排障深入链接）
+ * LastOutputDialog —— 实例末尾日志弹窗（崩溃排障深入链接）
  * - 入口：崩溃/熔断 toast「查看末尾日志」action / 启动失败 toast（全局单例，ui store 控制）
  * - 打开时拉取 GET /instances/:id 消费 lastOutput（服务端进程末尾输出，崩溃时最接近现场）
  * - 手动刷新 + 空态诚实提示；等宽滚动区展示，不截断

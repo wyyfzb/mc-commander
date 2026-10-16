@@ -65,7 +65,7 @@ export const fileUploadResponseSchema = z.object({
   isDirectory: z.literal(false),
 })
 
-// ── 请求侧契约（issue 391：路由层 zod 契约统一）──
+// ── 请求侧契约（路由层 zod 契约统一）──
 
 /** GET /instances/:id/files 目录列表查询：path 缺省归一为 '/'（与既有行为一致） */
 export const fileListRequestSchema = z.object({

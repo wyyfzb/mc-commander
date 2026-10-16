@@ -21,7 +21,7 @@ export interface StatusEvent {
   timestamp: number
 }
 
-/** 启停中间态（issue 334）：mutation 发令时置入，WS started/stopped/crash 确认后清除 */
+/** 启停中间态：mutation 发令时置入，WS started/stopped/crash 确认后清除 */
 export type InstancePhase = 'starting' | 'stopping'
 
 interface ServerState {

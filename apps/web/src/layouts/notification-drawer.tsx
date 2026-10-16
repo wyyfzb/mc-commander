@@ -243,7 +243,7 @@ function NotificationRow({
   const color = notificationColor(item.type)
   const isGame = item.category === 'game'
   item.type === 'worldUpgradeStart' && item.instanceId
-  // 关联实例条目可跳转（issue 334）：关闭抽屉 → 实例页 focus 深链接切换
+  // 关联实例条目可跳转：关闭抽屉 → 实例页 focus 深链接切换
   const jumpToInstance = () => {
     markAsRead(item.id)
     if (item.instanceId) {

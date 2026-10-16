@@ -1,5 +1,5 @@
 /**
- * AuditPage 空态 CTA 测试（issue 343：空态排查补齐）
+ * AuditPage 空态 CTA 测试（空态排查补齐）
  * - 有筛选（操作类型/时间范围）且结果为空 → 空态文案变更 +「清空筛选」按钮
  * - 无筛选且为空 → 普通「暂无记录」，无 CTA
  * - 点击「清空筛选」→ 操作类型与时间范围全部复位
@@ -82,7 +82,7 @@ beforeAll(() => {
   Element.prototype.scrollIntoView = vi.fn()
 })
 
-describe('AuditPage 空态 CTA（issue 343）', () => {
+describe('AuditPage 空态 CTA', () => {
   it('无筛选空态：普通「暂无记录」，无清空按钮', async () => {
     renderPage()
     await waitFor(() => expect(screen.getByText('暂无记录')).toBeInTheDocument())

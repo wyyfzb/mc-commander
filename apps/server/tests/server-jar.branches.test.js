@@ -1,5 +1,5 @@
 /**
- * server-jar 部署链分支面收口补测（issue 511）
+ * server-jar 部署链分支面收口补测
  * 在 server-jar.deploy.chain.test.js（30 例主链）基础上扩展未覆盖分支：
  * - versions 分发缺口：type 缺省 vanilla / fabric·未知 type 的对象形态 / forge promos 缺失
  * - Paper 构建发现链形态：裸数组响应 / 无 builds 键 / STABLE 空回退全量 / build 字段排序 / server:default 无摘要

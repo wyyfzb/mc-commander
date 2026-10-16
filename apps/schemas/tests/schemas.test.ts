@@ -432,7 +432,7 @@ describe('schemas 基础校验', () => {
   })
 })
 
-describe('请求侧契约（issue 391 路由层 zod 统一）', () => {
+describe('请求侧契约（路由层 zod 统一）', () => {
   it('fileUploadQuerySchema：缺省归一为 /，无前导斜杠补全，空串非法', () => {
     expect(fileUploadQuerySchema.parse({}).targetDir).toBe('/')
     expect(fileUploadQuerySchema.parse({ targetDir: 'world' }).targetDir).toBe('/world')
@@ -455,14 +455,14 @@ describe('请求侧契约（issue 391 路由层 zod 统一）', () => {
     expect(() => fileSaveRequestSchema.parse({ path: '/a', content: 1 })).toThrow()
   })
 
-  it('auditLogsQuerySchema：order 缺省/非法回落 desc（issue 383 向后兼容语义），合法值保留', () => {
+  it('auditLogsQuerySchema：order 缺省/非法回落 desc（向后兼容语义），合法值保留', () => {
     expect(auditLogsQuerySchema.parse({}).order).toBe('desc')
     expect(auditLogsQuerySchema.parse({ order: 'asc' }).order).toBe('asc')
     expect(auditLogsQuerySchema.parse({ order: 'desc' }).order).toBe('desc')
     expect(auditLogsQuerySchema.parse({ order: 'DROP TABLE' }).order).toBe('desc')
   })
 
-  it('auditLogsQuerySchema：page/pageSize 原样透传（#392 分页边界）', () => {
+  it('auditLogsQuerySchema：page/pageSize 原样透传（分页边界）', () => {
     const parsed = auditLogsQuerySchema.parse({ page: '3', pageSize: '50' })
     expect(parsed.page).toBe('3')
     expect(parsed.pageSize).toBe('50')
@@ -675,7 +675,7 @@ describe('请求侧契约（issue 391 路由层 zod 统一）', () => {
   })
 })
 
-describe('响应侧契约（issue 402 files/plugins/upgrade 接入）', () => {
+describe('响应侧契约（files / plugins / upgrade 接入）', () => {
   it('fileMkdirResponseSchema：path/name 必填字符串', () => {
     expect(fileMkdirResponseSchema.parse({ path: '/world', name: 'world' })).toEqual({
       path: '/world',
@@ -832,7 +832,7 @@ describe('响应侧契约（issue 402 files/plugins/upgrade 接入）', () => {
   })
 })
 
-describe('实例控制面输入侧契约（issue 486 五 body 端点）', () => {
+describe('实例控制面输入侧契约（五 body 端点）', () => {
   it('instanceSettingsRequestBodySchema：白名单字段形状锁定，未知字段剥离', () => {
     const parsed = instanceSettingsRequestBodySchema.parse({
       name: 'survival',

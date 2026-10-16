@@ -97,7 +97,7 @@ afterEach(() => {
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
-describe('响应信封契约观测（issue 402：validatedSuccess 接入后的全链路验证）', () => {
+describe('响应信封契约观测（validatedSuccess 接入后的全链路验证）', () => {
   it('files 列表：信封结构不变且 data 与 fileListResponseSchema 一致', async () => {
     const res = await request(app).get('/api/v1/instances/test-inst/files?path=/');
     expect(res.status).toBe(200);

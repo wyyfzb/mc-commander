@@ -1,5 +1,5 @@
 /**
- * 市场安装 sha512 完整性校验测试（issue 537）
+ * 市场安装 sha512 完整性校验测试
  *
  * 网络隔离：http-client 全量 mock（与 market.test.js 同范式）。
  * - httpJson(...)（直出解析结果）：fixture 直接内联真实 hashes.sha512（对 JAR 字节预计算）
@@ -110,7 +110,7 @@ function tmpLeftovers() {
 
 // ── 版本映射透传 ─────────────────────────────────────────────────────
 
-describe('getMarketProjectVersions - hashes.sha512 透传（issue 537）', () => {
+describe('getMarketProjectVersions - hashes.sha512 透传', () => {
   it('上游提供 hashes.sha512 → file.sha512 原样透传', async () => {
     vi.mocked(httpJson).mockResolvedValueOnce(versionsFixture(JAR_SHA512));
 
@@ -136,7 +136,7 @@ describe('getMarketProjectVersions - hashes.sha512 透传（issue 537）', () =>
 
 // ── 安装链完整性闸门 ─────────────────────────────────────────────────
 
-describe('installPluginFromMarket - sha512 完整性校验（issue 537）', () => {
+describe('installPluginFromMarket - sha512 完整性校验', () => {
   it('哈希比对通过 → 放行落盘（官方哈希大写形式亦归一通过）', async () => {
     mockUpstream(JAR_SHA512.toUpperCase());
 

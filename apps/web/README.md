@@ -22,7 +22,6 @@ npm run test           # Vitest 单测/组件测试（jsdom）
 
 ```bash
 npm run test:e2e               # Playwright E2E（19 spec / 150 用例）
-npm run capture                # 截图（mock 数据 + dev server，输出到 gitignore 的 .ai/vision/）
 npm run check:contrast         # token 对比度批量校验（258 组合，exit 非 0 阻止合并）
 npm run check:design-tokens    # 设计 token 门禁（硬编码色值 / z 轴 / 玻璃预算等）
 npm run check:size             # 构建体积预算（gzip 口径，对入口 + 路由 chunk 闭包求和）

@@ -1,5 +1,5 @@
 /**
- * 实例 server.properties 域 service（issue 514 分层治理）
+ * 实例 server.properties 域 service（分层治理）
  *
  * 自 routes/status.js 原位搬移：域校验常量（运行期命令映射/可写白名单/布尔/
  * 数值/敏感键）、单键值校验、GET 展示视图（重读文件 + 运行状态覆盖 + 敏感键

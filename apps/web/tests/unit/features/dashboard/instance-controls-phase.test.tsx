@@ -1,5 +1,5 @@
 /**
- * InstanceControls phase 中间态测试（issue 334）
+ * InstanceControls phase 中间态测试
  * - phase=stopping：停止按钮禁用 + spinner；启动/重启/保存按钮禁用（防连点）
  * - phase=starting：启动按钮禁用 + spinner
  * - 无 phase：运行中实例仅停止/重启/保存可用（原行为）
@@ -125,7 +125,7 @@ describe('InstanceControls 启动确认（EULA 前置条件前移）', () => {
   })
 })
 
-describe('InstanceControls phase 中间态（issue 334）', () => {
+describe('InstanceControls phase 中间态', () => {
   it('stopping 中间态：停止按钮禁用 + spinner，其余操作全部禁用', () => {
     setStatus(true)
     setPhase({ 'inst-1': 'stopping' })

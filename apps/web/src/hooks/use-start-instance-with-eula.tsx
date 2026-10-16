@@ -1,5 +1,5 @@
 /**
- * useStartInstanceWithEula —— 启动指令共享 mutation + EULA 首启特例（issue 312）
+ * useStartInstanceWithEula —— 启动指令共享 mutation + EULA 首启特例
  * - 两入口复用：实例页卡片「启动」/ 仪表盘 InstanceControls「启动」
  * - EULA 特例：start 失败含 EULA_NOT_ACCEPTED → 弹同意对话框（中文说明）→
  *   同意后写入 eula.txt（请求体 POST /eula {agreed:true} → 文件内容 eula=true）并自动续启
@@ -41,7 +41,7 @@ export function useStartInstanceWithEula() {
 
   const startMutation = useMutation({
     mutationFn: async (id: string) => {
-      // phase 中间态（issue 334）：发令即置 starting（按钮禁用防连点）；
+      // phase 中间态：发令即置 starting（按钮禁用防连点）；
       // WS started 确认清除；异常路径（失败/EULA 拦截/onStarted 链终了）兜底清除
       setPhase(id, 'starting')
       await apiPost(`/api/v1/instances/${id}/start`, config)

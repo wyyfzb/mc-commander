@@ -45,7 +45,7 @@ export function CmdFilterBar({
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {/* 时间筛选栏（issue 385）：样式与交互对齐审计日志 tab，倒置防护复用同一逻辑 */}
+      {/* 时间筛选栏：样式与交互对齐审计日志 tab，倒置防护复用同一逻辑 */}
       <div className="flex items-center gap-1" {...quickGroup.groupProps}>
         {QUICK_RANGES.map((q, index) => {
           const active = activeQuickCmd?.key === q.key

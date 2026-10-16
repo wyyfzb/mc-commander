@@ -1,5 +1,5 @@
 /**
- * 升级回滚路径 jarFile 名实一致化行为级测试（#539）
+ * 升级回滚路径 jarFile 名实一致化行为级测试
  *
  * 回滚终态契约：DB { jarFile: 旧名, mcVersion: 旧版本 } + 磁盘旧版本 jar
  * 本体唯一（错位副本清零、临时副本清零）+ 内存实例同步。修复前回滚仅回写
@@ -185,7 +185,7 @@ const NEW_JAR = () => path.join(tmpDir, 'server-1.21.4.jar');
 
 // ── ① verify 失败 → 回滚终态三者自洽 ──
 
-describe('回滚终态三者自洽（#539 核心行为）', () => {
+describe('回滚终态三者自洽（核心行为）', () => {
   it('verify 失败回滚后：DB 回写旧名+旧版本、磁盘旧 jar 本体唯一且内容一致、错位副本与残留清零、内存同步', async () => {
     const manager = createMockServerManager({ start: startEmitsCrash() });
     const service = new UpgradeService(manager);
@@ -292,7 +292,7 @@ describe('_doRollback 直调（阶段 3 已切换模拟）', () => {
 
     await service._doRollback('inst-1', backupPath, null, 'server-1.20.4.jar');
 
-    // 恢复复制：备份 → 旧 jar 本体路径（非新名，#539）
+    // 恢复复制：备份 → 旧 jar 本体路径（非新名）
     expect(asyncCopySpy).toHaveBeenCalledWith(backupPath, OLD_JAR());
     expect(fs.readFileSync(OLD_JAR(), 'utf8')).toBe('OLD_JAR_BODY');
     // 错位副本删除：新名 jar 不复存在

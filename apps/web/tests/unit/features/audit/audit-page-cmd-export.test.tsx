@@ -1,5 +1,5 @@
 /**
- * AuditPage 命令历史导出按钮组件测试（issue 403）
+ * AuditPage 命令历史导出按钮组件测试
  * 对齐 audit-page-export.test.tsx 范式：mock @/api/queries + mock ../audit-export：
  * - commands tab 导出入口渲染 + 上限提示（最多导出 1000 条），与审计日志 tab 同构
  * - 点击触发：按当前 cmd 筛选（时间起止）口径调用导出
@@ -76,7 +76,7 @@ beforeEach(() => {
   cmdExportImpl.current = () => Promise.resolve()
 })
 
-describe('AuditPage 命令历史导出入口（issue 403）', () => {
+describe('AuditPage 命令历史导出入口', () => {
   it('commands tab 导出按钮 + 上限提示渲染（最多导出 1000 条（时间最新优先））', async () => {
     renderPage()
     await waitFor(() => expect(screen.getByTestId('cmd-export')).toBeInTheDocument())

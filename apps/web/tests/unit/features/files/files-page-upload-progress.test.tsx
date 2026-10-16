@@ -1,5 +1,5 @@
 /**
- * FilesPage 上传进度反馈测试（#293 toast 文字 → issue 339 进度条改版）
+ * FilesPage 上传进度反馈测试（toast 文字 → 进度条改版）
  * Monaco 在 jsdom 不可渲染——沿用 monaco-editor-pane.test 的 mock 策略（占位组件 + 常量 stub）。
  * apiUploadFile 走 XMLHttpRequest：以 FakeXHR 全局替换并手动编排 upload progress / load 响应，
  * 验证 handleUploadChange → useUploadFile → apiUploadFile 的 onProgress 透传链、

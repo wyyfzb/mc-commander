@@ -267,7 +267,7 @@ describe('服务层路径收口（真实临时目录 + 真实 fs）', () => {
       /Download host not allowed: evil\.example\.com/,
     );
     // 污染 URL 未产生任何写入（回滚仅恢复升级前旧 jarFile 名——污染上下文的
-    // 新版本文件名从未入库，#539）
+    // 新版本文件名从未入库）
     expect(fs.readdirSync(tmpDir)).toEqual([]);
     expect(InstanceModel.update).not.toHaveBeenCalledWith('inst-1', {
       jarFile: 'server-1.21.4.jar',

@@ -1,11 +1,11 @@
 /**
- * stats-collector 实例统计采集域模块行为级测试（issue 510 补测）
+ * stats-collector 实例统计采集域模块行为级测试（补测）
  * - 调度链：串行化递归 setTimeout + 代际 epoch 防双链（fake timers 推钟）
  * - 系统采集：/proc fixture 驱动差分 CPU 计算 + win32 PowerShell 分支 + ps 兜底
  * - MSPT：tick query 主路径 + TPS 回退反推（真实 isRconConnected getter 链路）
  * - 世界状态：三级时间 fallback 链 + weather.dat 真实 NBT fixture
  * - 玩家采集：RCON 响应解析 / 入睡事件 / 计数聚合 / 错误隔离
- * RCON 为外部 IO 边界（单测无法直连真实服务器），按 #505 范式在实例边界 stub，
+ * RCON 为外部 IO 边界（单测无法直连真实服务器），按既有范式在实例边界 stub，
  * 解析/聚合/事件广播全为真实行为断言；数据全部为虚构占位（Steve/Alex/1.2.3.4）。
  */
 import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest';

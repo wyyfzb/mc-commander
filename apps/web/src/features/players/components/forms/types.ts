@@ -1,5 +1,5 @@
 /**
- * ActionForms 表单群共享 Props 契约（issue 480 拆分：三表单与 Tab 壳共用）。
+ * ActionForms 表单群共享 Props 契约（拆分：三表单与 Tab 壳共用）。
  * 自 action-forms.tsx 原样迁入，字段语义见各注释。
  */
 import type { Player } from '@/api/types'

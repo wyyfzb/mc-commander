@@ -3,7 +3,7 @@
  * 分区顺序：操作按钮组 → 状态条 → 药水效果 → 基本信息 → 封禁记录 → 行为状态 → 统计 → IP 登录历史
  * 可逆操作（OP/白名单/游戏模式）直接执行 + 5s undo toast；无逆操作的踢出直执；
  * 不可逆操作（清空背包/解封）保留后果清单确认（口径与行内菜单、批量条共用 reversible-action）
- * 操作按钮组/常量与格式化工具/展示子件拆分至 overview-actions.tsx、detail-overview-format.ts、overview-cells.tsx（issue 489）
+ * 操作按钮组/常量与格式化工具/展示子件拆分至 overview-actions.tsx、detail-overview-format.ts、overview-cells.tsx
  */
 import { useState, type ReactNode } from 'react'
 import { Feather, Flame, MoveDown, Snowflake, Wind, Zap } from 'lucide-react'

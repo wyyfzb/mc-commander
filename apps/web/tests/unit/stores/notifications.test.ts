@@ -100,7 +100,7 @@ describe('notifications store 偏好过滤', () => {
   })
 })
 
-describe('notifications store instanceId 透传（issue 334）', () => {
+describe('notifications store instanceId 透传', () => {
   beforeEach(() => {
     useNotificationStore.setState({ items: [], unreadCount: 0, activeAlerts: new Set() })
     useNotificationPreferenceStore.setState({ prefs: {} })

@@ -1,5 +1,5 @@
 /**
- * files 域 TanStack Query hooks 行为级测试（issue 507：数据层 hooks 覆盖收口）
+ * files 域 TanStack Query hooks 行为级测试（数据层 hooks 覆盖收口）
  * 真链路取向：msw 拦截真实请求（不 mock api 层），mutation 失效联动经 msw 命中计数验证；
  * 上传走 XMLHttpRequest——沿用仓库 FakeXHR 全局替换范式手动编排响应（与 upload-conflict 同款）
  * parentDirOf 三分支（无斜杠 / 根斜杠 / 嵌套）经失效目录断言覆盖

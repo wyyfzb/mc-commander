@@ -1,5 +1,5 @@
 /**
- * LastOutputDialog 测试（issue 343：崩溃排障深入链接）：
+ * LastOutputDialog 测试（崩溃排障深入链接）：
  * - 打开时拉取实例状态并展示 lastOutput
  * - lastOutput 为空：诚实空态
  * - 拉取失败：错误提示 + 重试

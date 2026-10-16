@@ -1,5 +1,5 @@
 /**
- * PluginsPage 集成测试（issue 432：插件域 0% 覆盖收口）
+ * PluginsPage 集成测试（插件域 0% 覆盖收口）
  * MSW 拦截列表/启停/删除/更新检测端点；上传走 FakeXHR 全局替换
  * （jsdom 不触发真实 upload progress，手动编排，沿用 files-page-upload-progress 先例），覆盖：
  * - 列表渲染：元数据行（版本/作者）+ 启停状态 Chip + 统计口径

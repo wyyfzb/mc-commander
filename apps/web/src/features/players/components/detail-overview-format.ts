@@ -1,6 +1,6 @@
 /**
  * OverviewTab 概览格式化工具与标签常量
- * 自 detail-overview-tab.tsx 纯搬移（issue 489 治理线延续）：常量表与纯函数单一职责收口
+ * 自 detail-overview-tab.tsx 纯搬移（治理线延续）：常量表与纯函数单一职责收口
  */
 
 export const GAME_MODE_LABELS: Record<string, string> = {

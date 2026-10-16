@@ -1,5 +1,5 @@
 /**
- * JAR 下载落地校验测试（issue 316）
+ * JAR 下载落地校验测试
  *
  * 覆盖：
  * ① guard 工具单测：hashFile 摘要计算 / assertDownloadIntegrity（null 跳过、
@@ -303,7 +303,7 @@ function progressStages(serverManager) {
     .map((e) => e.data.stage);
 }
 
-describe('upgrade.service 下载落地校验集成（issue 316）', () => {
+describe('upgrade.service 下载落地校验集成', () => {
   it('purpur：/latest 给出 md5 且匹配 → 校验通过完成升级', async () => {
     const serverManager = createMockServerManager();
     const service = new UpgradeService(serverManager);

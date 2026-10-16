@@ -12,7 +12,7 @@ import {
   __loggerState,
 } from '../src/utils/logger.js';
 
-// logger 单元测试（issue #325）：四级过滤 / error 分流 / 轮转 / banner 白名单
+// logger 单元测试：四级过滤 / error 分流 / 轮转 / banner 白名单
 // 输出捕获：替换 process.stdout/stderr.write（logger 唯一输出口）
 describe('logger 轻量结构化日志', () => {
   let tmpDir;

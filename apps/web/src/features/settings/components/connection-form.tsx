@@ -243,7 +243,7 @@ export function ConnectionForm({
   }
 
   /**
-   * 复制当前连接配置（条目 23）。**只复制表单里的值，不读 store**：
+   * 复制当前连接配置。**只复制表单里的值，不读 store**：
    * 用户此刻看到的地址/Key 就是他想给出去的那份，读 store 会在「改完未保存」时
    * 复制出与他眼前所见不符的旧配置。
    */
@@ -483,7 +483,7 @@ export function ConnectionForm({
         </Button>
       </div>
 
-      {/* 复制 / 粘贴导入（条目 23）：跨设备或多人共用同一面板时免手抄地址与 Key。
+      {/* 复制 / 粘贴导入：跨设备或多人共用同一面板时免手抄地址与 Key。
           两者都是「同一份配置换个载体」的辅助动作 → ghost，不占页面的次操作名额。 */}
       <div className="flex flex-wrap items-center gap-2 border-t border-mcs-border-muted pt-3">
         <Button

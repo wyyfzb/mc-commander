@@ -29,7 +29,7 @@ roadmap.md
 .mimosa/
 .workbuddy/
 .mcp.json
-# CLAUDE.md 是 owner 私有 overlay（本机工作环境），AGENTS.md 是唯一入库的社区版规则
+# 本机私有 overlay 与技能锁：AGENTS.md 是唯一入库的规则文件
 CLAUDE.md
 CLAUDE.local.md
 skills-lock.json

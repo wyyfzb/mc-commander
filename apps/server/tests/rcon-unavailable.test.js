@@ -1,5 +1,5 @@
 /**
- * RCON_UNAVAILABLE 错误码 + world gameDays null 降级测试（issue #238）
+ * RCON_UNAVAILABLE 错误码 + world gameDays null 降级测试
  * - 命令路由 RCON 断开时返回 50302 而非 500
  * - world info gameDays 查询失败返回 null 而非 0
  */
@@ -151,7 +151,7 @@ describe('world info gameDays null 降级', () => {
   });
 });
 
-describe('readDifficulty 意外异常兜底（issue #295）', () => {
+describe('readDifficulty 意外异常兜底', () => {
   // properties/world 路由对 readDifficulty 的调用兜底意外异常：
   // 静默降级保留文件值并返回 200，而非挂起请求或触发 unhandledRejection。
   let app, mockManager;

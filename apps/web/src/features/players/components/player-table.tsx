@@ -34,7 +34,7 @@ interface PlayerTableProps {
   isLoading: boolean
   /** 未筛选总数（空态双文案判断：0=暂无玩家，>0=无匹配） */
   totalCount: number
-  /** 无匹配空态的清空筛选回调（有筛选时展示 CTA，issue 343） */
+  /** 无匹配空态的清空筛选回调（有筛选时展示 CTA） */
   onClearFilter?: () => void
   isRconConnected: boolean
   onOpenDetail: (name: string, tab?: PlayerDetailTab) => void

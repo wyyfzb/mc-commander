@@ -1,5 +1,5 @@
 /**
- * server-jar 部署主链行为补测（issue 415）
+ * server-jar 部署主链行为补测
  *
  * 覆盖 routes/server-jar.js 六个主链函数（经公共路由触发，SUT 真实 import）：
  * - getPaperVersions/getPaperBuild/getPaperDownload（Paper API v3 三段发现链）
@@ -7,7 +7,7 @@
  * - generateServerProperties（RCON 端口偏移与随机密码契约）
  * - runFirstLaunch（退出码/错误/60s 超时进程树终止）
  *
- * mock 边界（对齐 PR#413/#412/#409 范式：仅替身外部依赖，importOriginal 保留语义）：
+ * mock 边界（对齐 范式 仅替身外部依赖 importOriginal 保留语义）：
  * - utils/http-client：HTTP 层替身（httpJson 按 URL 注册表返回；httpStream 注入可控字节流）
  * - 上游 HTTP：vanilla/purpur/forge 的构建解析由 httpJson 替身按夹具合成
  * - child_process：假 java/forge 进程（importOriginal 保留 spawnSync）
@@ -488,7 +488,7 @@ describe('POST /instances/deploy · Paper 主链', () => {
   });
 });
 
-describe('部署注册表终态语义（issue 420）', () => {
+describe('部署注册表终态语义', () => {
   function setPaperChain({ badSha = false } = {}) {
     httpState.jsonTable = {
       'projects/paper/versions': {

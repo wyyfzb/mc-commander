@@ -1,5 +1,5 @@
 /**
- * FilesPage 上传同名冲突确认测试（#328）
+ * FilesPage 上传同名冲突确认测试
  * 验证上传前探测同名文件 → 弹确认对话框（覆盖/跳过）→ 未冲突文件直接上传。
  * Monaco 在 jsdom 不可渲染——沿用 mock 策略（占位组件 + 常量 stub）。
  * 测试路径与文件名均为虚构示例，严禁真实服务器数据
@@ -102,7 +102,7 @@ function okUploadEnvelope(name: string, path: string) {
   }
 }
 
-describe('FilesPage 上传同名冲突确认（#328）', () => {
+describe('FilesPage 上传同名冲突确认', () => {
   beforeAll(() => server.listen({ onUnhandledFrame: 'error' }))
   afterAll(() => server.close())
   afterEach(() => {

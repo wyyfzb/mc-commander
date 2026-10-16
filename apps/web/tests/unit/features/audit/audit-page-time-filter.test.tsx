@@ -1,5 +1,5 @@
 /**
- * AuditPage 时间范围筛选测试（#303）
+ * AuditPage 时间范围筛选测试
  * mock @/api/queries 捕获 useAuditLogs 入参，验证：
  * - 快捷区间（今天/近7天/近30天）点击后 startTime/endTime 按
  *   服务端口径（UTC「YYYY-MM-DD HH:MM:SS」）透传（期望值经同一工具换算，时区自洽）
@@ -7,9 +7,9 @@
  * - 筛选变更重置回第 1 页（与 action 筛选行为一致）
  * - 快捷区间再次点击取消、清空时间恢复全量
  * - 与 action 筛选叠加（组合查询）
- * 命令历史 tab 时间筛选（issue 385）：
+ * 命令历史 tab 时间筛选：
  * - 快捷区间/自定义起止透传 + 筛选变更重置页码（cmdCalls 捕获）
- * - 起止倒置防护与 cmdStart/cmdEnd URL 持久化（对齐 #381 模式）
+ * - 起止倒置防护与 cmdStart/cmdEnd URL 持久化（对齐 模式）
  * 全部数据为虚构占位，无真实服务器信息。
  */
 import { describe, expect, it, vi, beforeEach, beforeAll } from 'vitest'
@@ -256,7 +256,7 @@ describe('与 action 筛选叠加', () => {
   })
 })
 
-describe('命令历史 tab 时间筛选（issue 385）', () => {
+describe('命令历史 tab 时间筛选', () => {
   it('快捷区间透传 startTime/endTime（服务端口径）+ 筛选变更重置页码', async () => {
     const user = userEvent.setup()
     renderPage()
@@ -285,7 +285,7 @@ describe('命令历史 tab 时间筛选（issue 385）', () => {
     expect(lastCmdCall().endTime).toBeUndefined()
   })
 
-  it('起止倒置防护与 URL 持久化（对齐 #381 模式，cmd 前缀参数）', async () => {
+  it('起止倒置防护与 URL 持久化（对齐 模式 cmd 前缀参数）', async () => {
     const user = userEvent.setup()
     const router = renderPage()
     await user.click(screen.getByRole('tab', { name: '命令历史' }))

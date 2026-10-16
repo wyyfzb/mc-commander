@@ -1,5 +1,5 @@
 /**
- * instance-properties.service 行为级测试（issue 514 分层治理）
+ * instance-properties.service 行为级测试（分层治理）
  *
  * 覆盖 service 层核心分支：单键值校验（布尔/数值/level-name 路径穿越/
  * 换行注入/运行期命令字符集/非标量拒绝）、敏感键掩码、PUT

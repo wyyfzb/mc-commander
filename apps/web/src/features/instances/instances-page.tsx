@@ -40,7 +40,7 @@ import { useStartInstanceWithEula } from '@/hooks/use-start-instance-with-eula'
 import { useStopInstance } from '@/hooks/use-instance-stop'
 
 /**
- * 部署进行中横幅（issue 352）：部署实例完成前未入实例列表，卡片网格看不到它——
+ * 部署进行中横幅：部署实例完成前未入实例列表，卡片网格看不到它——
  * 列表页顶部横幅是刷新后恢复的「最小可见标识」（WS 连接补发 deployProgress，
  * WS 断线期间由 useDeployStatusFallback 轮询服务端快照）。
  * 终态由 deployStore.deploying 收敛（applyDeployProgress 终态不置 deploying）
@@ -108,7 +108,7 @@ export function InstancesPage() {
   // 启动：共享 mutation（EULA 首启特例：命中 → 弹同意 → 续启；与仪表盘同源）
   const { startInstance, startPending, pendingStartId, eulaDialog } = useStartInstanceWithEula()
 
-  // ── 深链接：?focus=<id> 从通知中心跳转（issue 334）→ 切换到关联实例并清参数 ──
+  // ── 深链接：?focus=<id> 从通知中心跳转→ 切换到关联实例并清参数 ──
   useEffect(() => {
     const focus = searchParams.get('focus')
     if (!focus) return
@@ -126,7 +126,7 @@ export function InstancesPage() {
     }
   }, [searchParams, setSearchParams, setInstanceId, instanceId])
 
-  // ── 停止：共享 mutation（issue 334 收敛：与仪表盘同源，phase 中间态防连点） ──
+  // ── 停止：共享 mutation（收敛：与仪表盘同源，phase 中间态防连点） ──
   // 卡片停止按钮仍经 ConfirmDialog 确认后调用 stopMutation.mutate(id)
 
   /** 卡片启动：EULA 首启弹窗由共享 hook 处理，成功后反馈与列表刷新与 stop 一致 */

@@ -1,5 +1,5 @@
 /**
- * tasks 域 TanStack Query hooks 行为级测试（issue 476：数据访问层零防护收口）
+ * tasks 域 TanStack Query hooks 行为级测试（数据访问层零防护收口）
  * 真链路取向：msw 拦截真实请求（不 mock api 层），mutation 失效联动经 msw 命中计数验证，
  * 错误传播断言 error state 携带 ApiError（请求失败）与 mutationFn 前置校验（未选择实例）两类
  * 数据均为虚构测试值，不含真实服务器信息

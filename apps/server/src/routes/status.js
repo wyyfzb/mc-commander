@@ -315,7 +315,7 @@ export function createStatusRoutes(serverManager) {
 
   // PUT /api/instances/:id - 更新实例配置（启动命令/JVM 参数等）
   // 同步更新数据库持久化记录与内存中运行实例的字段，下次 start() 生效
-  // 输入侧契约（issue 486）：形状/类型 schema 前置，业务语义（javaPath 可执行性等）仍由下方路由层持有
+  // 输入侧契约：形状/类型 schema 前置，业务语义（javaPath 可执行性等）仍由下方路由层持有
   router.put(
     '/instances/:id',
     validateBody(instanceSettingsRequestBodySchema),
@@ -467,7 +467,7 @@ export function createStatusRoutes(serverManager) {
   );
 
   // POST /api/instances/:id/start
-  // 输入侧契约（issue 486）：startCommand 禁用键 schema 前置 400；
+  // 输入侧契约：startCommand 禁用键 schema 前置 400；
   // 下方路由层原判断保留作纵深防御（中间件被移除时仍封堵 RCE）
   router.post(
     '/instances/:id/start',
@@ -553,7 +553,7 @@ export function createStatusRoutes(serverManager) {
   );
 
   // POST /api/instances/:id/command
-  // 输入侧契约（issue 486）：非空字符串 + 长度上限 schema 前置（仅拒收类型/长度非法，行为零变化）
+  // 输入侧契约：非空字符串 + 长度上限 schema 前置（仅拒收类型/长度非法，行为零变化）
   // source 为白名单枚举，用于把「审计页的行内重发」与普通下发区分开（见契约注释）
   router.post(
     '/instances/:id/command',
@@ -630,7 +630,7 @@ export function createStatusRoutes(serverManager) {
 
   // GET /api/instances/:id/properties - 获取 server.properties
   // 展示视图（重读文件 → 运行状态型属性覆盖 → 敏感键掩码）见
-  // services/instance-properties.service.js getPropertiesView（issue 514 分层治理）。
+  // services/instance-properties.service.js getPropertiesView（分层治理）。
   router.get(
     '/instances/:id/properties',
     asyncHandler(async (req, res) => {
@@ -644,10 +644,10 @@ export function createStatusRoutes(serverManager) {
   );
 
   // PUT /api/instances/:id/properties - 更新 server.properties
-  // 输入侧契约（issue 486）：对象形状 schema 前置（passthrough 保留全部属性键，
+  // 输入侧契约：对象形状 schema 前置（passthrough 保留全部属性键，
   // 数组/标量/null 在 schema 层拒绝），下游属性值语义校验不变。
   // 键白名单/敏感键占位符短路/单键值校验/写盘与重启联动编排见
-  // services/instance-properties.service.js（issue 514 分层治理），路由层降为
+  // services/instance-properties.service.js（分层治理），路由层降为
   // 薄编排：参数解析 → service 调用 → 响应包装。
   router.put(
     '/instances/:id/properties',

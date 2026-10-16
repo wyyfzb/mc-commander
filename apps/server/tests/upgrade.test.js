@@ -177,7 +177,7 @@ describe('Upgrade Routes', () => {
     expect(res.body.details.some((d) => d.path === 'type')).toBe(true);
   });
 
-  it('POST /instances/:id/upgrade - mcVersion 非字符串返回 400 + 结构化 details（issue 391 契约）', async () => {
+  it('POST /instances/:id/upgrade - mcVersion 非字符串返回 400 + 结构化 details（契约）', async () => {
     const res = await request
       .post('/api/v1/instances/inst-1/upgrade')
       .send({ mcVersion: 123, type: 'vanilla' });

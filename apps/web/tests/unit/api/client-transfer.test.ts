@@ -1,5 +1,5 @@
 /**
- * client.ts 下载/上传传输层行为级测试（issue 495：api 层三文件覆盖率洼地收口）
+ * client.ts 下载/上传传输层行为级测试（api 层三文件覆盖率洼地收口）
  * 补足既有 client.test.ts（信封契约/凭据）未触达的传输分支：
  * - apiDownloadFile：Content-Disposition 三形态解析（RFC5987/引号/无引号）+ 编码异常回退、
  *   流式进度（ReadableStream + Content-Length）、blob 快路径、错误信封/非 JSON 错误、外部取消

@@ -1,5 +1,5 @@
 /**
- * Clipboard 统一工具（issue 349）
+ * Clipboard 统一工具
  *
  * 背景：`navigator.clipboard` 仅在安全上下文（HTTPS / localhost）暴露；
  * 自托管管理面板经 HTTP + 局域网 IP 访问（服主高频场景）时该对象为 undefined，

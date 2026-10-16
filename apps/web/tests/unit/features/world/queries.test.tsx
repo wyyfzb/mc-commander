@@ -1,5 +1,5 @@
 /**
- * world 域 TanStack Query hooks 行为级测试（issue 476：数据访问层零防护收口）
+ * world 域 TanStack Query hooks 行为级测试（数据访问层零防护收口）
  * 真链路取向：msw 拦截真实请求（不 mock api 层），保存属性后 properties+world 双失效
  * 经 msw 命中计数验证，错误传播断言 error state 携带 ApiError
  * 数据均为虚构测试值，不含真实服务器信息（敏感键以 ******** 占位）

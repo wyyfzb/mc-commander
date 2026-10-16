@@ -519,7 +519,7 @@ describe('Plugin Routes - POST upload', () => {
   });
 });
 
-describe('Plugin Routes zod 请求契约（issue 391）', () => {
+describe('Plugin Routes zod 请求契约', () => {
   let app;
   let mockManager;
 

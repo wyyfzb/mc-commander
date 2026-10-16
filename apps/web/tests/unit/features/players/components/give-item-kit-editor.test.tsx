@@ -1,5 +1,5 @@
 /**
- * KitEditorDialog 脏状态关闭拦截测试（issue #347）：
+ * KitEditorDialog 脏状态关闭拦截测试：
  * 干净状态（无改动）关闭路径直接关闭；dirty（name/icon/desc/items 相对初始值有改动）
  * 时 ESC/遮罩/取消先弹确认（继续编辑保留 / 放弃修改关闭）；改动还原后回到干净语义。
  * mock 数据为结构占位（虚构礼包名），严禁真实玩家/服务器信息

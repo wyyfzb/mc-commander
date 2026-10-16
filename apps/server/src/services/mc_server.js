@@ -2351,22 +2351,22 @@ export class MCServerInstance extends EventEmitter {
   }
 }
 
-// 世界存档数据读取域挂载（issue 490 治理线·服务端第一阶段）：level-dat 模块经原型注入复用，
+// 世界存档数据读取域挂载（治理线·服务端第一阶段）：level-dat 模块经原型注入复用，
 // 模块函数体内 this 语义与类内定义完全一致（实例方法调用时 this 绑定实例），
 // 全部调用点零改动，对外接口零变化。
 
-// 实例启动生命周期域挂载（issue 513 治理线·服务端第四阶段）：start-lifecycle 模块经原型
+// 实例启动生命周期域挂载（治理线·服务端第四阶段）：start-lifecycle 模块经原型
 // 注入复用，模块函数体内 this 语义与类内定义完全一致（实例方法调用时 this 绑定实例），
 // start() 主体降为子阶段编排，全部调用点零改动，对外接口零变化。
 Object.assign(MCServerInstance.prototype, startLifecycle);
 Object.assign(MCServerInstance.prototype, levelDat);
 
-// 进程输出解析域挂载（issue 494 治理线·服务端第二阶段）：output-parser 模块经原型注入复用，
+// 进程输出解析域挂载（治理线·服务端第二阶段）：output-parser 模块经原型注入复用，
 // 模块函数体内 this 语义与类内定义完全一致（实例方法调用时 this 绑定实例），
 // 全部调用点零改动，对外接口零变化。
 Object.assign(MCServerInstance.prototype, outputParser);
 
-// 实例统计采集域挂载（issue 502 治理线·服务端第三阶段）：stats-collector 模块经原型注入复用，
+// 实例统计采集域挂载（治理线·服务端第三阶段）：stats-collector 模块经原型注入复用，
 // 模块函数体内 this 语义与类内定义完全一致（实例方法调用时 this 绑定实例），
 // 全部调用点零改动，对外接口零变化。
 Object.assign(MCServerInstance.prototype, statsCollector);

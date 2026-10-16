@@ -1,5 +1,5 @@
 /**
- * NamePromptDialog 组件测试（#430 拆分交付：新建文件/新建目录共用表单对话框）
+ * NamePromptDialog 组件测试（拆分交付 新建文件 新建目录共用表单对话框）
  * 覆盖：受控渲染（标题/描述/值）/ 输入受控回写 / Enter 直提交 / 取消走 onOpenChange(false)
  * 组件为纯受控展示件：校验与 mutation 均由父组件负责，此处以 spy 断言回调接线
  */
