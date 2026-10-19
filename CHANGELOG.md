@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.4](https://github.com/wyyfzb/mc-commander/compare/v0.8.3...v0.8.4) (2026-10-19)
+
+
+### Bug Fixes
+
+* **deps:** bump the minor-and-patch group with 10 updates ([#673](https://github.com/wyyfzb/mc-commander/issues/673)) ([896f66a](https://github.com/wyyfzb/mc-commander/commit/896f66a39f52c27bccddc19e0f5f279f66a82124))
+
 ## [0.8.3](https://github.com/wyyfzb/mc-commander/compare/v0.8.2...v0.8.3) (2026-10-17)
 
 
