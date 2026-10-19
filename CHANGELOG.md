@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.5](https://github.com/wyyfzb/mc-commander/compare/v0.8.4...v0.8.5) (2026-10-19)
+
+
+### Bug Fixes
+
+* 游戏规则当前值改由服务器自述，并修属性区间校验与保存往返守卫 ([#675](https://github.com/wyyfzb/mc-commander/issues/675)) ([60e1423](https://github.com/wyyfzb/mc-commander/commit/60e1423557259e026177741e3f1641d04da17505))
+
 ## [0.8.4](https://github.com/wyyfzb/mc-commander/compare/v0.8.3...v0.8.4) (2026-10-19)
 
 
