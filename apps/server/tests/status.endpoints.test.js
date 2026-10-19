@@ -80,7 +80,7 @@ import { errorHandler } from '../src/middleware/error_handler.js';
 import config from '../src/config.js';
 import { __configureLogger, __resetLogger } from '../src/utils/logger.js';
 import { panelErrorsSchema } from '@mc-commander/schemas';
-import { crashArtifactHistorySchema } from '@mc-commander/schemas';
+import { crashArtifactHistorySchema, gamerulesResponseSchema } from '@mc-commander/schemas';
 import { asInstance } from './helpers/msmp-instance.js';
 
 const GB = 1024 * 1024 * 1024;
@@ -1144,6 +1144,88 @@ describe('Status Routes · 端点缺口收口', () => {
       expect(res.status).toBe(200);
       expect(res.body.data.gameDays).toBeNull();
       expect(res.body.data.difficulty).toBe('peaceful');
+    });
+  });
+
+  // ── GET /instances/:id/gamerules：规则当前值（读链路的接线与出参契约）──
+  // 三态与通道择优的承重用例在 gamerule-reader.test.js（那里用假 RCON 连接跑真实收包路径）；
+  // 这里只钉接线：实例查找、契约、以及「实例没在跑」不是错误。
+  describe('GET /api/instances/:id/gamerules', () => {
+    it('404：实例不存在', async () => {
+      mockManager.getInstance.mockReturnValue(asInstance(undefined));
+      const res = await request(app).get('/api/instances/s1/gamerules');
+      expect(res.status).toBe(404);
+      expect(res.body.code).toBe(40401);
+    });
+
+    it('未运行 → 200 且 source=none（不是 500，也不是空规则表的「没有规则」）', async () => {
+      mockManager.getInstance.mockReturnValue(
+        asInstance({
+          id: 's1',
+          isRunning: false,
+          isRconConnected: false,
+          _msmpRequest: vi.fn(async () => null),
+          sendCommandWithResponse: vi.fn(),
+        }),
+      );
+
+      const res = await request(app).get('/api/instances/s1/gamerules');
+
+      expect(res.status).toBe(200);
+      expect(res.body.data).toEqual({ source: 'none', rules: [] });
+      expect(res.body.data.rules).toEqual([]);
+    });
+
+    it('出参过契约：MSMP 一次取全时 source=msmp、条目三态齐备', async () => {
+      mockManager.getInstance.mockReturnValue(
+        asInstance({
+          id: 's1',
+          isRunning: true,
+          isRconConnected: true,
+          _msmpRequest: vi.fn(async () => [
+            { key: 'minecraft:pvp', type: 'boolean', value: false },
+            { key: 'minecraft:random_tick_speed', type: 'integer', value: 3 },
+          ]),
+          sendCommandWithResponse: vi.fn(),
+        }),
+      );
+
+      const res = await request(app).get('/api/instances/s1/gamerules');
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.source).toBe('msmp');
+      expect(res.body.data.rules).toEqual([
+        { name: 'pvp', status: 'current', type: 'boolean', value: 'false' },
+        { name: 'random_tick_speed', status: 'current', type: 'integer', value: '3' },
+      ]);
+      // 契约自校验：validatedSuccess 只记不一致日志、不拦响应，漂移必须在这里转红
+      expect(gamerulesResponseSchema.safeParse(res.body.data).success).toBe(true);
+    });
+
+    // 「名单查询失败」与「两通道都不可用」必须能分辨：前者通道是通的，界面该提示重试，
+    // 而不是让用户去查连接。故出参带 rosterFailed，而不是把 source 降级成 none。
+    it('名单查询失败 → 200 且 rosterFailed=true、source 仍是 rcon', async () => {
+      mockManager.getInstance.mockReturnValue(
+        asInstance({
+          id: 's1',
+          isRunning: true,
+          isRconConnected: true,
+          _msmpRequest: vi.fn(async () => null),
+          _rconCommandCollect: vi.fn(async () => {
+            throw new Error('RCON command channel busy');
+          }),
+          _fetchGameruleRoster: vi.fn(async () => {
+            throw new Error('RCON command channel busy');
+          }),
+          sendCommandWithResponse: vi.fn(),
+        }),
+      );
+
+      const res = await request(app).get('/api/instances/s1/gamerules');
+
+      expect(res.status).toBe(200);
+      expect(res.body.data).toEqual({ source: 'rcon', rules: [], rosterFailed: true });
+      expect(gamerulesResponseSchema.safeParse(res.body.data).success).toBe(true);
     });
   });
 });

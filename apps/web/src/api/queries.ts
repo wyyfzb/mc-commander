@@ -67,6 +67,9 @@ export const queryKeys = {
     [...queryKeys.all, 'files', id, 'content', filePath] as const,
   world: (id: string) => [...queryKeys.all, 'world', id] as const,
   properties: (id: string) => [...queryKeys.all, 'properties', id] as const,
+  /** 游戏规则当前值：独立键，**不挂在 world 前缀下**——world 是 30s 轮询的属性域，
+   *  规则读值是一次 RCON 名单 + 逐条读值，跟着轮询跑等于每 30s 给服务器发一遍命令 */
+  gamerules: (id: string) => [...queryKeys.all, 'gamerules', id] as const,
   crashArtifact: (id: string) => [...queryKeys.all, 'crash-artifact', id] as const,
   crashHistory: (id: string) => [...queryKeys.all, 'crash-history', id] as const,
   datapacks: (id: string) => [...queryKeys.all, 'datapacks', id] as const,

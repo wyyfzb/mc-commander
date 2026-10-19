@@ -96,6 +96,9 @@ export type {
   UpdatePropertiesResponse,
 } from '@mc-commander/schemas'
 
+// ── 游戏规则当前值 ──
+export type { GameruleEntry, GamerulesResponse } from '@mc-commander/schemas'
+
 // ── 推送通道（MSMP）──
 export type {
   PushChannelState,

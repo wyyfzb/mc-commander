@@ -202,11 +202,15 @@ export {
   worldDimensionSchema,
   serverPropertiesSchema,
   updatePropertiesResponseSchema,
+  gameruleEntrySchema,
+  gamerulesResponseSchema,
   type WorldInfo,
   type WorldDimension,
   type ServerPropertiesMap,
   type ServerProperties,
   type UpdatePropertiesResponse,
+  type GameruleEntry,
+  type GamerulesResponse,
 } from './world'
 
 // 文件

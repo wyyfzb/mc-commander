@@ -274,6 +274,27 @@ const worldInfo = {
   ],
 }
 
+/**
+ * 游戏规则快照夹具（GET /instances/:id/gamerules 的 data）。
+ *
+ * 名字取 e2e-demo 的 mcVersion（1.21.4）上存在的规则，命名体系是 1.21.x 的 camelCase，
+ * 且**刻意混两类**：`doFireTick`/`spawnChunkRadius` 在面板文案表里查不到、只由服务器
+ * 自述的名单给出——按静态表渲染时这两行不存在，故它们的存在本身就是「名单来自端点」的
+ * 判据；其余能在文案表里查到中文名。三态各给样本：
+ * - current：布尔 true / 布尔 false / 整数，覆盖开关两态与输入框
+ * - missing：本版本没有这条规则（服务器回 Incorrect argument，不是读失败）
+ * - unreadable：这条读失败，其余规则照常返回（不是整份失败）
+ */
+const gamerulesLegacy = [
+  { name: 'allowEnteringNetherUsingPortals', status: 'current', type: 'boolean', value: 'true' },
+  { name: 'spawnChunkRadius', status: 'current', type: 'integer', value: '2' },
+  { name: 'doDaylightCycle', status: 'current', type: 'boolean', value: 'true' },
+  { name: 'doFireTick', status: 'current', type: 'boolean', value: 'false' },
+  { name: 'maxEntityCramming', status: 'current', type: 'integer', value: '24' },
+  { name: 'keepInventory', status: 'unreadable', type: null, value: null },
+  { name: 'doVillageSieges', status: 'missing', type: null, value: null },
+]
+
 // 9 个敏感键占位符掩码 + 常用键（结构与真实 server.properties 对齐）
 const properties = {
   'enable-rcon': '********',
@@ -1057,39 +1078,18 @@ const server = createServer((req, res) => {
       try {
         cmd = JSON.parse(body || '{}').command ?? ''
       } catch {}
-      // gamerule 无参查询 → 全量规则文本（≥ 规则集 1/3 才能过 parseGameruleOutput 阈值，返回 20 条）
-      if (/^gamerule\s*$/i.test(cmd)) {
-        return res.end(
-          ok(
-            [
-              'allowEnteringNetherUsingPortals = true',
-              'announceAdvancements = true',
-              'blockExplosionDropDecay = true',
-              'commandBlockOutput = true',
-              'commandBlocksEnabled = true',
-              'commandModificationBlockLimit = 32768',
-              'disableElytraMovementCheck = false',
-              'disablePlayerMovementCheck = false',
-              'disableRaids = false',
-              'doDaylightCycle = true',
-              'doEntityDrops = true',
-              'doImmediateRespawn = false',
-              'doInsomnia = true',
-              'doLimitedCrafting = false',
-              'doMobLoot = true',
-              'doMobSpawning = true',
-              'doPatrolSpawning = true',
-              'doTileDrops = true',
-              'doTraderSpawning = true',
-              'doVinesSpread = true',
-            ].join('\n'),
-          ),
+      // 带值的 gamerule 写命令走命令通道，并写回夹具的当前值：与真实服务器同语义，
+      // 改完立刻反映到 /gamerules（否则「保存后重取」会把刚提交的值盖回旧值，像没生效）
+      const gameruleSet = /^gamerule\s+(\S+)\s+(\S+)\s*$/i.exec(cmd)
+      if (gameruleSet) {
+        const entry = gamerulesLegacy.find(
+          (r) => r.name === gameruleSet[1] && r.status === 'current',
         )
-      }
-      // gamerule 修改（带值）→ RCON 成功文本
-      if (/^gamerule\s+\S+\s+\S+\s*$/i.test(cmd)) {
+        if (entry) entry.value = gameruleSet[2]
         return res.end(ok('Game rule has been updated'))
       }
+      // 裸 gamerule 只回一句已执行：规则的名单与当前值只从 /gamerules 交齐，
+      // 命令回包不带「name = value」，前端也就不存在解析它的路径
       return res.end(ok({ response: `已执行: ${cmd}` }))
     }
     if (path === '/api/v1/instances/e2e-demo/start') return res.end(ok({ started: true }))
@@ -1519,6 +1519,25 @@ const server = createServer((req, res) => {
         return res.end(ok({ restartRequired: [] }, 'Properties updated'))
       }
       return res.end(ok(properties))
+    }
+
+    // 游戏规则快照（名单与当前值都由服务器自述，前端不解析命令回包）。
+    // 默认回 RCON 逐条读值那一档，三态样本见 gamerulesLegacy。
+    // 两条场景态都按请求头逐请求覆写、不落进程级开关——mock 被并行 spec 共享，
+    // 实例级开关会把别的 spec 正在断言的规则列表改脏（与 x-mock-instance-running 同一范式）
+    const gamerulesMatch = path.match(/^\/api\/v1\/instances\/([^/]+)\/gamerules$/)
+    if (gamerulesMatch && req.method === 'GET') {
+      const sourceScenario = req.headers['x-mock-gamerules-source']
+      // 两条通道都不可用：source='none' 且**不带** rosterFailed——那个字段专指
+      // 「通道通、这一问没答上来」，混进来会让界面把连接问题报成「重试即可」
+      if (sourceScenario === 'none') {
+        return res.end(ok({ source: 'none', rules: [] }))
+      }
+      // 通道通、名单查询失败：source 仍是实际通道，空 rules + rosterFailed
+      if (sourceScenario === 'roster-failed') {
+        return res.end(ok({ source: 'rcon', rules: [], rosterFailed: true }))
+      }
+      return res.end(ok({ source: 'rcon', rules: gamerulesLegacy }))
     }
 
     // ── 文件域 ──

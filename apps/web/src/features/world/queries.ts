@@ -8,6 +8,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/api/queries'
 import {
+  apiGetGamerules,
   apiGetProperties,
   apiGetPushChannel,
   apiGetWorld,
@@ -26,6 +27,37 @@ export function useWorldInfo(instanceId: string | null) {
     queryFn: () => apiGetWorld(config, instanceId ?? ''),
     enabled: config.status === 'ready' && Boolean(instanceId),
     refetchInterval: 30_000,
+  })
+}
+
+/**
+ * 游戏规则当前值（GET /gamerules，一次取整份快照）。
+ *
+ * **不轮询**：这份数据只在用户点刷新、或保存某条规则之后才需要更新；每次读取都是一条
+ * `help gamerule` 加至多 58 条串行读值命令，挂 refetchInterval 等于定时向服务器发命令。
+ *
+ * 命令通道不可用（RCON 未连接）时由调用方传入 `enabled=false` 不发请求：服务端此刻只会回
+ * `source: 'none'`，与「两条通道都读不到」同形，而两者处置不同（一个是等连接、一个是重试）。
+ *
+ * `staleTime` 与同域其它查询同档（30s），替这一档把关的不是时效而是**载荷成本**：整份快照
+ * 背后是一次名单查询加几十条串行读值命令，30s 内重复触发纯属让服务器白跑一遍。窗口内新增
+ * 的 observer（重挂载、切回本 Tab）直接吃缓存，不再打第二发；超过窗口重挂载会重取一次，
+ * 那是「数据可能变了」的正常语义。乐观值的寿命不靠它——保存成功走的是显式 refetch。
+ *
+ * `queryFn` 刻意**不读 `signal`**：读它会把这一轮取数标记成「可中止」，而 React StrictMode
+ * 的双挂载（卸载 → 中止并回滚 → 重新挂载 → 重新取）实测在真实浏览器里打出两发
+ * （第一发 \`ERR_ABORTED\`，但服务端那次名单查询与几十条读值已经跑完了）。这份快照是只读的，
+ * 结果本就该进缓存，让它在组件闪断时继续跑完，比中止再重取一次更省；不读信号时移除
+ * observer 只会停掉重试、不取消在途请求，第二次挂载直接复用同一发。
+ */
+export function useGamerules(instanceId: string | null, enabled = true) {
+  const config = useConnectionStore()
+  return useQuery({
+    queryKey: queryKeys.gamerules(instanceId ?? ''),
+    queryFn: () => apiGetGamerules(config, instanceId ?? ''),
+    enabled: enabled && config.status === 'ready' && Boolean(instanceId),
+    staleTime: 30_000,
+    retry: false,
   })
 }
 

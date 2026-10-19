@@ -1,6 +1,5 @@
 import { http, HttpResponse } from 'msw'
 import { restoreConfirmTarget } from '@mc-commander/schemas'
-import { LEGACY_GAMERULES } from '@/lib/mc-gamerules'
 import { todayIso } from '@/lib/mc-calendar'
 import type {
   BackupItem,
@@ -10,6 +9,8 @@ import type {
   ScheduledTask,
   FileContentResponse,
   FileListResponse,
+  GameruleEntry,
+  GamerulesResponse,
   InstanceStatus,
   OverviewData,
   PanelErrors,
@@ -270,6 +271,66 @@ export const mockWorldInfo: WorldInfo = {
     { name: '末地', icon: '🟣', playerCount: 0 },
   ],
 }
+
+// ── 游戏规则当前值（GET /gamerules）──
+//
+// 夹具按服务端**逐条读值的两种回包文案**原文生成，面板只消费解析后的快照：
+//   1.21.x：`Gamerule <name> is currently set to: <value>`
+//   26.x  ：`Game rule <name> is currently set to <value>`
+// 两式都要认，故两份原文各造一份，走同一个提取器——两份解析出的形状必须一致。
+const GAMERULE_REPLY_1_21 = [
+  'Gamerule keepInventory is currently set to: false',
+  'Gamerule randomTickSpeed is currently set to: 3',
+  'Gamerule doDaylightCycle is currently set to: true',
+  'Gamerule mobGriefing is currently set to: true',
+]
+const GAMERULE_REPLY_26 = [
+  'Game rule keep_inventory is currently set to false',
+  'Game rule random_tick_speed is currently set to 3',
+  'Game rule advance_time is currently set to true',
+  'Game rule mob_griefing is currently set to true',
+]
+
+/** 回包原文 → 快照条目（值形态决定 type：true/false 是布尔，其余按整数） */
+function entriesFromReplies(replies: string[]): GameruleEntry[] {
+  return replies.map((line) => {
+    const m = /^(?:Gamerule|Game rule) (\S+) is currently set to:? (\S+)$/.exec(line)
+    if (!m) throw new Error(`夹具回包不合两式之一：${line}`)
+    const value = m[2]!
+    return {
+      name: m[1]!,
+      status: 'current' as const,
+      type: value === 'true' || value === 'false' ? ('boolean' as const) : ('integer' as const),
+      value,
+    }
+  })
+}
+
+/**
+ * 三态齐备的一份快照：有值 / 该版本没有 / 读取失败。
+ * `spawnChunkRadius` 在文案表里查不到（1.21.4 新增），用来钉「无文案也照常出现且可编辑」。
+ */
+export const mockGamerules: GamerulesResponse = {
+  source: 'rcon',
+  rules: [
+    ...entriesFromReplies(GAMERULE_REPLY_1_21),
+    { name: 'spawnChunkRadius', status: 'current', type: 'integer', value: '2' },
+    { name: 'doVillageSieges', status: 'missing', type: null, value: null },
+    { name: 'announceAdvancements', status: 'unreadable', type: null, value: null },
+  ],
+}
+
+/** 26.x 形态（snake_case 名，回包文案不带冒号） */
+export const mockGamerulesSnake: GamerulesResponse = {
+  source: 'msmp',
+  rules: entriesFromReplies(GAMERULE_REPLY_26),
+}
+
+/** 两条通道都不可用：前端必须显示「未能读取当前值」，不得回退任何默认值 */
+export const mockGamerulesNone: GamerulesResponse = { source: 'none', rules: [] }
+
+/** 用例切换端点回包：none（通道全不可用）/ snake（26.x 形态） */
+export const gamerulesMock: { variant: 'legacy' | 'snake' | 'none' } = { variant: 'legacy' }
 
 /** 9 个敏感键占位符掩码 + 常用键（结构与真实 server.properties 对齐） */
 /** 单份产物的完整解析夹具：与崩溃历史第一条同文件名，默认选中它时才前后一致 */
@@ -923,21 +984,22 @@ export const handlers = [
   }),
   http.post('*/api/v1/instances/:id/stop', () => ok({ stopped: true })),
   http.post('*/api/v1/instances/:id/restart', () => ok({ restarted: true })),
+  // 裸 `gamerule` **不是**合法命令（实测 26.3 与 1.21.4 都回 Unknown or incomplete command），
+  // 故这里不为它提供响应；规则名单与当前值走 /gamerules 端点
   http.post('*/api/v1/instances/:id/command', async ({ request }) => {
     const body = (await request.json()) as { command?: string }
     const cmd = body.command ?? ''
-    // gamerule 无参查询 → 全量规则文本（≥ defs 1/3 才能过 parseGameruleOutput 阈值，取前 20 条）
-    if (/^gamerule\s*$/i.test(cmd)) {
-      const lines = LEGACY_GAMERULES.slice(0, 20)
-        .map((r) => `${r.name} = ${String(r.defaultValue)}`)
-        .join('\n')
-      return ok(lines)
-    }
     // gamerule 修改（带值）→ RCON 成功文本
     if (/^gamerule\s+\S+\s+\S+\s*$/i.test(cmd)) {
       return ok('Game rule has been updated')
     }
     return ok({ response: `已执行: ${cmd}` })
+  }),
+  // GET /gamerules：名单与当前值由服务端自述，解析不在前端
+  http.get('*/api/v1/instances/:id/gamerules', () => {
+    if (gamerulesMock.variant === 'none') return ok(mockGamerulesNone)
+    if (gamerulesMock.variant === 'snake') return ok(mockGamerulesSnake)
+    return ok(mockGamerules)
   }),
   // ── 世界/属性域 ──
   http.get('*/api/v1/instances/:id/world', () => ok(mockWorldInfo)),
