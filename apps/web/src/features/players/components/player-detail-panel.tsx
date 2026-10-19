@@ -9,6 +9,7 @@ import { RefreshCw, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ErrorStateVisual } from '@/components/mcs/data-states'
+import { InfoHint } from '@/components/mcs/info-hint'
 import { cn } from '@/lib/utils'
 import { queryPhase } from '@/lib/query-phase'
 import type { Player } from '@/api/types'
@@ -75,6 +76,13 @@ export function PlayerDetailPanel({
   // 封禁记录 30s 轮询（面板打开期间）
   const bansQuery = usePlayerBans(instanceId, detail !== null)
   const bans = bansQuery.data ?? []
+
+  /* OP 徽章的可见文本只回答「是什么」，解释（含 ops.json 依据）进浮层：
+     裸 title 对触屏与键盘都取不到，解释必须挂在能聚焦的触发器上 */
+  const opBadgeText = effectivePlayer?.bypassesPlayerLimit ? 'OP · 满员免排队' : 'OP'
+  const opHintText = effectivePlayer?.bypassesPlayerLimit
+    ? '该管理员在服务器满员时仍可进入（ops.json 的 bypassesPlayerLimit）'
+    : '管理员：可在游戏内执行 OP 级命令'
 
   const tabs = isBatchMode ? BATCH_TABS : DETAIL_TAB_LABELS.map((t) => t.value)
   const currentTab = detail?.tab ?? 'overview'
@@ -147,15 +155,19 @@ export function PlayerDetailPanel({
                   {effectivePlayer.isOnline ? '在线' : '离线'}
                 </span>
                 {effectivePlayer.isOp && (
-                  <span
-                    className="shrink-0 rounded-full bg-mcs-purple-bg-subtle px-1.5 text-mcs-2xs text-mcs-purple-fg"
-                    title={
-                      effectivePlayer.bypassesPlayerLimit
-                        ? '该管理员在服务器满员时仍可进入（ops.json 的 bypassesPlayerLimit）'
-                        : '管理员：可在游戏内执行 OP 级命令'
-                    }
-                  >
-                    {effectivePlayer.bypassesPlayerLimit ? 'OP · 满员免排队' : 'OP'}
+                  /* 外层承担 shrink-0：触发器是 button，行内收缩必须仍由这枚徽章挡住 */
+                  <span className="inline-flex shrink-0">
+                    <InfoHint
+                      variant="inline"
+                      label={`${opBadgeText} 说明`}
+                      term={
+                        <span className="rounded-full bg-mcs-purple-bg-subtle px-1.5 text-mcs-2xs text-mcs-purple-fg">
+                          {opBadgeText}
+                        </span>
+                      }
+                    >
+                      {opHintText}
+                    </InfoHint>
                   </span>
                 )}
               </div>

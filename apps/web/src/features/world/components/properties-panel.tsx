@@ -8,7 +8,7 @@
  *   例外标在 xs 以下收起——窄屏逐项挂标会把键名压到 2 字可见，宽度还给键名更重要
  * - 编辑值在组件 state，与 30s 轮询 query data 隔离，无需暂停轮询
  */
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { Copy, Check, Lock, Loader2, Pencil, RefreshCw, Save, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -171,6 +171,8 @@ export function PropertiesPanel({
   const [saving, setSaving] = useState(false)
   /** 编辑态值（键→值；初始=快照） */
   const [edited, setEdited] = useState<Record<string, string>>({})
+  /* 与 edited 同值的 ref：保存的 await 返回后要读「此刻」的编辑值，闭包里的 edited 停在发起保存那一帧 */
+  const editedRef = useRef<Record<string, string>>({})
   const [snapshot, setSnapshot] = useState<Record<string, string>>({})
   const [category, setCategory] = useState('all')
   const [search, setSearch] = useState('')
@@ -210,15 +212,21 @@ export function PropertiesPanel({
     })
   }, [rows, category, search])
 
+  /** 编辑值唯一写入口：state 与 ref 必须同值，否则保存往返的判断会读到旧编辑 */
+  const applyEdited = (next: Record<string, string>) => {
+    editedRef.current = next
+    setEdited(next)
+  }
+
   const startEditing = () => {
     if (!properties) return
     setSnapshot({ ...properties })
-    setEdited({ ...properties })
+    applyEdited({ ...properties })
     setEditing(true)
   }
 
   const cancelEditing = () => {
-    setEdited({})
+    applyEdited({})
     setSnapshot({})
     setEditing(false)
   }
@@ -255,17 +263,22 @@ export function PropertiesPanel({
 
   const save = async () => {
     setSaving(true)
+    /* 提交瞬间的编辑值：await 返回后 editedRef 已是「此刻」，两者相比才判得出往返期间的新编辑 */
+    const submitted = editedRef.current
     try {
-      const payload = buildPropertiesPayload(edited, snapshot)
+      const payload = buildPropertiesPayload(submitted, snapshot)
       // 已迁出的键服务端不再读取：实例状态还没返回、行尚未被锁的窗口期里用户可能改过它们，
       // 下发只会拿到 200 却什么也没发生——按「不生效的键不下发」滤掉
       for (const key of Object.keys(payload)) {
         if (retiredPropertyOf(key, mcVersion)) delete payload[key]
       }
       const restartRequired = await onSave(payload)
-      // 保存往返期间又有新编辑 → 保持编辑模式并提示再次保存（防静默丢编辑）
-      const hasNewEdits = Object.keys(payload).some((k) => edited[k] !== payload[k])
-      if (hasNewEdits) {
+      // 往返期间又改了值：此时退出编辑会把界面连同这些改动一起丢掉，故留在编辑态提示再次保存。
+      // 比对「提交瞬间 vs 此刻」而不是与快照比——改了又改回提交值的那一刻等于没改
+      const changedDuringSave = Object.keys({ ...submitted, ...editedRef.current }).some(
+        (key) => editedRef.current[key] !== submitted[key],
+      )
+      if (changedDuringSave) {
         toast.warning('保存成功，但期间有新的修改，请再次保存')
         return
       }
@@ -278,7 +291,7 @@ export function PropertiesPanel({
           key: k,
           label: SERVER_PROPERTY_DEF_MAP.get(k)?.label ?? k,
           oldValue: snapshot[k] ?? '',
-          newValue: edited[k] ?? payload[k] ?? '',
+          newValue: submitted[k] ?? payload[k] ?? '',
         }))
         setRestartItems(items)
         setRestartDialogOpen(true)
@@ -296,7 +309,7 @@ export function PropertiesPanel({
     isEditing ? (edited[def.name] ?? snapshot[def.name] ?? '') : (properties?.[def.name] ?? '')
 
   const setEditValue = (key: string, value: string) => {
-    setEdited((prev) => ({ ...prev, [key]: value }))
+    applyEdited({ ...editedRef.current, [key]: value })
   }
 
   return (
