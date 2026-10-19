@@ -236,7 +236,18 @@ export function _msmpNotifConnect() {
   });
   // error 与 close 常成对到达 ⇒ 只在真的从「连上」翻到「断开」时广播一次，
   // 避免前端为同一次断开重复写缓存
-  socket.on('error', () => {
+  //
+  // 日志档位：同一次掉线里 ws 会先 error 再 close（本模块只在 error 里记，close 记就是
+  // 成对重复），而连不上时每一轮重试都会再来一次 error ⇒ 只在**本轮第一次**失败记 warn
+  // （判据是本轮退避还没翻倍：连上即归位，故重启一轮必然从 warn 重新开始），后续重试降
+  // debug——MSMP 长时间连不上时若每轮都 warn，真故障会被同一条错误刷掉。
+  socket.on('error', (err) => {
+    // ws 只在 socket 级失败（ECONNREFUSED 一类）给 error.code；握手被拒没有 code，状态码写在
+    // message 里（`Unexpected server response: 401`）⇒ 有 code 就前置，两种失败都留得下线索
+    const detail = err?.code ? `${err.code} ${err.message}` : (err?.message ?? '(无消息)');
+    const line = `[${this.id}] MSMP 通知面连接失败：${detail}`;
+    if ((this._msmpNotifBackoffMs ?? RECONNECT_BASE_MS) <= RECONNECT_BASE_MS) logger.warn(line);
+    else logger.debug(line);
     const wasConnected = this._msmpNotifConnected;
     this._msmpNotifConnected = false;
     if (wasConnected) this._emitPushChannelState();

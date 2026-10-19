@@ -9,7 +9,9 @@
  * 它们只有靠注入 close/error/心跳才能稳定走到。
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { logger } from '../src/utils/logger.js';
 
+// 日志断言与假 socket 同一批 hoist：模块加载期就要能替换掉实现
 const { FakeWebSocket, instances } = vi.hoisted(() => {
   class FakeWebSocket {
     constructor(url, protocols, options) {
@@ -113,6 +115,15 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+});
+
+// 日志断言看的是「打了几条」，故 spy 全文件只建一次、每条用例前清空；
+// 不能用 restoreAllMocks（那会把实现还给 logger，后续断言记不到调用）
+const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => {});
+beforeEach(() => {
+  warnSpy.mockClear();
+  debugSpy.mockClear();
 });
 
 describe('连接建立', () => {
@@ -591,6 +602,65 @@ describe('可信连通状态', () => {
     instances[2].emit('open');
     expect(inst._msmpNotifConnected).toBe(true);
     inst._msmpNotifStop();
+    expect(inst._msmpNotifConnected).toBe(false);
+  });
+});
+
+// 推送面是**常驻**连接：掉线后自己按退避无限重试，ws 的 error 事件是唯一的失败信号。
+// 只在 error 里记（close 与它常成对，两处都记就是同一次断开两条日志），且只在**本轮首次**
+// 失败记 warn——退避翻过倍说明这是同一轮里的重试，再 warn 只会把真故障刷掉。
+describe('推送面连接失败的日志', () => {
+  it('首次连不上 ⇒ 一条 warn，带 error 的 code 与 message', () => {
+    const inst = makeInstance();
+    inst._msmpNotifStart();
+    const err = new Error('connect ECONNREFUSED 127.0.0.1:25585');
+    err.code = 'ECONNREFUSED';
+    instances[0].emit('error', err);
+
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    const line = warnSpy.mock.calls[0][0];
+    expect(line).toContain('ECONNREFUSED');
+    expect(line).toContain('connect ECONNREFUSED 127.0.0.1:25585');
+  });
+
+  it('握手被拒（401）没有 code，状态码从 message 里带出（否则排障只剩「失败」二字）', () => {
+    const inst = makeInstance();
+    inst._msmpNotifStart();
+    instances[0].emit('error', new Error('Unexpected server response: 401'));
+
+    expect(warnSpy.mock.calls[0][0]).toContain('Unexpected server response: 401');
+  });
+
+  it('同一轮里的后续重试降 debug（否则每次退避都刷一条 warn）', () => {
+    const inst = makeInstance();
+    inst._msmpNotifStart();
+    instances[0].emit('error', new Error('boom'));
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+
+    // 退避已翻倍 ⇒ 第二轮失败不该再 warn
+    vi.advanceTimersByTime(2_000);
+    instances[1].emit('error', new Error('boom'));
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(debugSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('连上后再掉线 ⇒ 重新算一轮，仍然 warn', () => {
+    const inst = makeInstance();
+    inst._msmpNotifStart();
+    instances[0].emit('error', new Error('boom'));
+    vi.advanceTimersByTime(2_000);
+    instances[1].emit('open');
+    warnSpy.mockClear();
+
+    instances[1].emit('error', new Error('boom again'));
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('error 不带参数也不抛（ws 之外的事件源里 err 可能缺失）', () => {
+    const inst = makeInstance();
+    inst._msmpNotifStart();
+    expect(() => instances[0].emit('error')).not.toThrow();
+    expect(warnSpy.mock.calls[0][0]).toContain('(无消息)');
     expect(inst._msmpNotifConnected).toBe(false);
   });
 });

@@ -118,8 +118,8 @@ export const BOOLEAN_PROPERTIES = new Set([
   'require-resource-pack',
 ]);
 
-// 数值型属性：仅接受整数（max-tick-time / network-compression-threshold
-// 允许 -1 表示禁用/不限制）
+// 数值型属性：接受整数，区间见 NUMERIC_PROPERTY_RANGES（max-tick-time /
+// network-compression-threshold 允许 -1 表示禁用/不限制）
 export const NUMERIC_PROPERTIES = new Set([
   'max-players',
   'view-distance',
@@ -133,9 +133,8 @@ export const NUMERIC_PROPERTIES = new Set([
   'op-permission-level',
   'spawn-protection',
   'max-world-size',
-  // 26.3 键与模板键里的整数项（该分支只判整数、不判区间：query.port 的 1-65534
-  // 与 text-filtering-version 的 0|1 都不拦截；放行负整数是有意的——
-  // max-chained-neighbor-updates / pause-when-empty-seconds 负数表示不限制/不暂停）
+  // 26.3 键与模板键里的整数项。负整数默认放行：各键含义不统一，
+  // max-chained-neighbor-updates / pause-when-empty-seconds 的负数本身就是「不限制/不暂停」
   'query.port',
   'pause-when-empty-seconds',
   'max-chained-neighbor-updates',
@@ -144,6 +143,41 @@ export const NUMERIC_PROPERTIES = new Set([
   'command-spam-threshold-seconds',
   'status-heartbeat-interval',
 ]);
+
+// 数值属性的生效区间；不在表内的数值键一律放行。
+//
+// 判据是「服务端会不会按写入值生效」，不是「文档写了多少」：26.3 对这些越界值既不报错也不
+// 拒绝启动，而是**静默钳制**或**整段失效**——用户看到「已保存」，实际生效的是另一个数，
+// 或这项能力直接被关掉。故每项都取服务端真正接受的那一段：
+// - query.port 0~65535：查询线程只拒 <0 与 >65535，越界即 queries disabled
+//   （实测 65536 命中该警告，1 与 65535 正常起 GS4 监听）。
+// - view-distance 2~32：ChunkMap 里对写入值做 Mth.clamp(2,32)，写 100 会原样留在
+//   server.properties 而内存里是 32（实测重启后磁盘仍是 100）。
+// - max-players 0~2147483647：PlayerList 以「已在线 >= max-players」判满，负数即永远
+//   满员——没人能进服，原版对此零提示。超过 int 上界的值会在解析期静默退回默认值。
+// - max-world-size 1~29999984、entity-broadcast-range-percentage 10~1000：
+//   属性构造期的 lambda 就是 Mth.clamp，实测越界值被读入后写回钳制结果
+//   （-5→1、999999999→29999984、5→10）。
+// - op-permission-level / function-permission-level 0~4：权限等级走 ByIdMap 的 CLAMP，
+//   越界被改写成 0 或 4（实测 MSMP setter 与磁盘写回同）。
+// - text-filtering-version 0~1：文本过滤只认 0（legacy）与 1（player-safety），其余值打
+//   unsupported text filtering version 警告且过滤整体不启用（实测 7 命中该警告）。
+//
+// 刻意不收录：max-tick-time / network-compression-threshold / rate-limit /
+// pause-when-empty-seconds / chat-spam-threshold-seconds / command-spam-threshold-seconds /
+// status-heartbeat-interval 的非正值都是有意的关闭语义，不存在「被静默改写」；
+// simulation-distance 与 spawn-protection 在 26.3 上未找到任何钳制（写 100 原样保留），
+// 没有证据就不猜边界。
+export const NUMERIC_PROPERTY_RANGES = Object.freeze({
+  'query.port': { min: 0, max: 65535 },
+  'view-distance': { min: 2, max: 32 },
+  'max-players': { min: 0, max: 2147483647 },
+  'max-world-size': { min: 1, max: 29999984 },
+  'entity-broadcast-range-percentage': { min: 10, max: 1000 },
+  'op-permission-level': { min: 0, max: 4 },
+  'function-permission-level': { min: 0, max: 4 },
+  'text-filtering-version': { min: 0, max: 1 },
+});
 
 // 敏感属性禁止 API 写入：enable-rcon/rcon.password/rcon.port 为 RCON
 // 远程控制通道，enable-query/enable-status 暴露服务器信息，enable-command-block
@@ -192,6 +226,18 @@ export function validatePropertyValue(key, rawValue) {
   if (NUMERIC_PROPERTIES.has(key)) {
     if (!/^-?\d+$/.test(value)) {
       return { ok: false, reason: '数值属性仅接受整数' };
+    }
+    // 越界值在服务端不会报错，只会被钳制或让整项能力失效 ⇒ 保存前就拦下来，
+    // 否则界面报「已保存」而实际生效的是另一个数
+    const range = NUMERIC_PROPERTY_RANGES[key];
+    if (range) {
+      const numeric = Number(value);
+      if (numeric < range.min || numeric > range.max) {
+        return {
+          ok: false,
+          reason: `${key} 仅接受 ${range.min}~${range.max} 之间的整数`,
+        };
+      }
     }
     // 通用数值分支允许负整数，但挂机超时以分钟计、0 即禁用，负数无意义：
     // 放行会拼出 `setidletimeout -5`，服务端拒绝后只留一条警告，用户以为已生效。

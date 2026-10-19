@@ -24,6 +24,7 @@ import {
   SENSITIVE_PLACEHOLDER,
   ALLOWED_PROPERTY_KEYS,
   NUMERIC_PROPERTIES,
+  NUMERIC_PROPERTY_RANGES,
   validatePropertyValue,
   maskSensitiveProperties,
   reloadProperties,
@@ -106,6 +107,67 @@ describe('instance-properties.service · 单键值校验 validatePropertyValue',
     expect(validatePropertyValue('motd', null)).toEqual({ ok: false, reason: '值必须是标量' });
     expect(validatePropertyValue('motd', undefined)).toEqual({ ok: false, reason: '值必须是标量' });
     expect(validatePropertyValue('motd', { a: 1 })).toEqual({ ok: false, reason: '值必须是标量' });
+  });
+});
+
+// 越界值在服务端不会报错，只会被钳制或让整项能力失效（query.port 越界即关闭查询、
+// max-players 负数即永远满员）⇒ 保存前必须拦下。区间表只收有服务端依据的键，
+// 未收录者一律放行——宁可让越界值写进去由服务端钳制，也不猜一个边界把合法值挡在门外。
+describe('instance-properties.service · 数值属性区间校验', () => {
+  const RANGE_KEYS = Object.entries(NUMERIC_PROPERTY_RANGES);
+
+  it('区间表只收录数值属性（表里混进字符串键会让校验恒不触发）', () => {
+    const stray = RANGE_KEYS.map(([key]) => key).filter((key) => !NUMERIC_PROPERTIES.has(key));
+    expect(stray).toEqual([]);
+    expect(RANGE_KEYS.length).toBeGreaterThan(0);
+  });
+
+  it.each(RANGE_KEYS)('%s 接受上下边界、拒绝越界一格', (key, range) => {
+    expect(validatePropertyValue(key, String(range.min)).ok).toBe(true);
+    expect(validatePropertyValue(key, String(range.max)).ok).toBe(true);
+    expect(validatePropertyValue(key, String(range.min - 1)).ok).toBe(false);
+    expect(validatePropertyValue(key, String(range.max + 1)).ok).toBe(false);
+  });
+
+  it('越界理由带上区间（用户要知道能填多少，而不是只听到「非法」）', () => {
+    expect(validatePropertyValue('view-distance', '100')).toEqual({
+      ok: false,
+      reason: 'view-distance 仅接受 2~32 之间的整数',
+    });
+    expect(validatePropertyValue('query.port', '65536')).toEqual({
+      ok: false,
+      reason: 'query.port 仅接受 0~65535 之间的整数',
+    });
+    expect(validatePropertyValue('text-filtering-version', '7')).toEqual({
+      ok: false,
+      reason: 'text-filtering-version 仅接受 0~1 之间的整数',
+    });
+  });
+
+  it('按数值比大小（退化成字符串比会拿字典序把 9 判成越界）', () => {
+    // '9' > '2147483647' 在字典序下成立，数值比较下 9 远在区间内
+    expect(validatePropertyValue('max-players', '9').ok).toBe(true);
+    expect(validatePropertyValue('query.port', '9').ok).toBe(true);
+  });
+
+  it('未收录的数值键不猜边界：越界值照旧放行（交给服务端钳制）', () => {
+    // 这三键在 26.3 上未找到任何钳制，写 100 会原样保留
+    expect(validatePropertyValue('simulation-distance', '100').ok).toBe(true);
+    expect(validatePropertyValue('spawn-protection', '-1').ok).toBe(true);
+    expect(validatePropertyValue('network-compression-threshold', '-1').ok).toBe(true);
+  });
+
+  it('player-idle-timeout 仍走专用文案（不进区间表，负数另有语义说明）', () => {
+    expect(validatePropertyValue('player-idle-timeout', '-5')).toEqual({
+      ok: false,
+      reason: '挂机超时仅接受非负整数（分钟，0=禁用）',
+    });
+  });
+
+  it('区间校验接在写盘路径上：越界提交整批拒绝、不落盘', () => {
+    const r = validatePropertySubmission({ motd: 'Aether', 'view-distance': '64' });
+    expect(r.rejectedKeys).toEqual(['view-distance']);
+    expect(r.validated).toEqual({ motd: 'Aether' });
   });
 });
 
@@ -398,6 +460,15 @@ describe('instance-properties.service · 26.3 键与模板键白名单对齐', (
 // 面板属性表标为可写的键，必须能被服务端接受：前端只回传用户真正改过的键，
 // 故「面板标可写」就是「用户可提交」的全集，漏一个用户点保存就撞整批 400。
 // 两侧刻意取自两个不同的源（面板表 vs 本包 service 常量），改成同一处推导会让断言恒真。
+// 采样值优先取面板表里的官方默认值（它必然是该键的合法值），默认值为空的（level-name、
+// level-seed 这类）退回 '1'：若一律用 '1'，有区间的键（view-distance 下界 2、
+// entity-broadcast-range-percentage 下界 10）会被区间校验挡下，守卫变成在验「1 合不合法」。
+function sampleValue(def) {
+  if (def.type === 'checkbox') return 'true';
+  if (def.options) return def.options[0];
+  return def.defaultValue === '' ? '1' : def.defaultValue;
+}
+
 describe('instance-properties.service · 面板可写键 ⊆ 服务端白名单（跨包守卫）', () => {
   const panelWritableDefs = SERVER_PROPERTY_DEFS.filter((def) => def.isWritable);
 
@@ -412,9 +483,7 @@ describe('instance-properties.service · 面板可写键 ⊆ 服务端白名单�
   it('面板可写键逐个提交都过校验（行为面，不只看集合成员）', () => {
     const rejected = [];
     for (const def of panelWritableDefs) {
-      // 采样值取该控件类型的最小合法值：开关 true、下拉首项、文本 '1'
-      const sample = def.type === 'checkbox' ? 'true' : (def.options?.[0] ?? '1');
-      const { rejectedKeys } = validatePropertySubmission({ [def.name]: sample });
+      const { rejectedKeys } = validatePropertySubmission({ [def.name]: sampleValue(def) });
       if (rejectedKeys.length > 0) rejected.push(def.name);
     }
     expect(rejected).toEqual([]);
@@ -423,7 +492,7 @@ describe('instance-properties.service · 面板可写键 ⊆ 服务端白名单�
   it('面板可写键一次性全量提交也过校验（用户批量改多项的形态）', () => {
     const payload = {};
     for (const def of panelWritableDefs) {
-      payload[def.name] = def.type === 'checkbox' ? 'true' : (def.options?.[0] ?? '1');
+      payload[def.name] = sampleValue(def);
     }
     expect(validatePropertySubmission(payload).rejectedKeys).toEqual([]);
   });
