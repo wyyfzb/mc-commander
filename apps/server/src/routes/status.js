@@ -24,6 +24,7 @@ import {
   crashArtifactHistorySchema,
   crashArtifactQuerySchema,
   crashArtifactSchema,
+  gamerulesResponseSchema,
   nullDataSchema,
   overviewDataSchema,
   panelErrorsQuerySchema,
@@ -1004,6 +1005,24 @@ export function createStatusRoutes(serverManager) {
       };
 
       res.json(validatedSuccess(worldInfoSchema, worldInfo));
+    }),
+  );
+
+  // GET /api/instances/:id/gamerules - 游戏规则当前值（名单与取值均由服务器自述）
+  //
+  // 独立端点而不并进 /world：世界信息是 30s 轮询的属性域，这里一次要串行读几十条游戏规则，
+  // 跟着轮询跑会把只读查询变成常态负载。实例未运行时返回 source:'none' 而不是错误——
+  // 「服务器没开」与「读不到规则」在界面上是同一种呈现（未读取），不是故障。
+  // 通道通、但名单没答上来时是 source:'rcon' + rosterFailed：空 rules 与 none 都是空表，
+  // 但前者该提示重试、后者该提示连不上，混成一个会让用户跑去查网络。
+  router.get(
+    '/instances/:id/gamerules',
+    asyncHandler(async (req, res) => {
+      const instance = serverManager.getInstance(req.params.id);
+      if (!instance) {
+        return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND));
+      }
+      res.json(validatedSuccess(gamerulesResponseSchema, await instance._readGamerules()));
     }),
   );
 

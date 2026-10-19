@@ -4,6 +4,7 @@
  */
 import { apiGet, apiPost, apiPut, type ConnectionConfig } from './client'
 import type {
+  GamerulesResponse,
   PushChannelState,
   PushChannelToggleResponse,
   ServerProperties,
@@ -16,6 +17,21 @@ const base = (instanceId: string) => `/api/v1/instances/${instanceId}`
 /** 世界信息（GET /instances/:id/world） */
 export function apiGetWorld(config: ConnectionConfig, instanceId: string) {
   return apiGet<WorldInfo>(`${base(instanceId)}/world`, config)
+}
+
+/**
+ * 游戏规则当前值（GET /instances/:id/gamerules）
+ *
+ * 名单与取值都来自服务器自述（MSMP 结构化优先，RCON 名单 + 逐条读值兜底），前端不参与解析。
+ * `source: 'none'` 是「两条通道都不可用」——此时 `rules` 为空，调用方必须按「未读取」呈现，
+ * 不能回退任何默认值。
+ */
+export function apiGetGamerules(
+  config: ConnectionConfig,
+  instanceId: string,
+  signal?: AbortSignal,
+) {
+  return apiGet<GamerulesResponse>(`${base(instanceId)}/gamerules`, config, signal)
 }
 
 /**

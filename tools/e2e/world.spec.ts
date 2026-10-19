@@ -166,22 +166,124 @@ test.describe('世界页', () => {
     await maybeShot(page, 'world-properties-dark.png')
   })
 
-  test('游戏规则 Tab：查询渲染 + 行级编辑保存', async ({ page }) => {
+  test('游戏规则 Tab：名单来自端点 + 三态渲染 + 行级编辑保存后重取', async ({ page }) => {
     await setupConnection(page)
+    // 取数次数由本 spec 自己数：端点回包与「保存后重取」都只有这一条链路的证据
+    let gameruleHits = 0
+    page.on('request', (req) => {
+      if (req.url().includes('/gamerules')) gameruleHits++
+    })
+    // 保存下发的值从请求体里取，不从夹具常量推：mock 的规则值会被写命令改掉，
+    // 写死期望值在 CI 重试时（同一进程的第二次运行）会把断言锚在旧状态上
+    let sentRule = ''
+    page.on('request', (req) => {
+      if (!req.url().endsWith('/command')) return
+      const body = req.postDataJSON() as { command?: string } | null
+      const m = /^gamerule\s+(\S+)\s+(\S+)$/.exec(body?.command ?? '')
+      if (m) sentRule = `${m[1]} = ${m[2]}`
+    })
     await page.goto('/world')
     await page.getByRole('tab', { name: '游戏规则' }).click()
     // URL 深链接：Tab 状态写入 ?tab=
     await expect(page).toHaveURL(/tab=gamerule/)
-    // 版本徽章（mcVersion 1.21.4 → 旧版规则集）
-    await expect(page.getByText('旧版规则')).toBeVisible()
-    // 查询返回 20 条规则解析成功（≥1/3 阈值）；首行与已查到值的规则可见
-    await expect(page.getByText('allowEnteringNetherUsingPortals')).toBeVisible()
-    await expect(page.getByText('doMobSpawning')).toBeVisible()
-    // 行级编辑：切首行 switch（true → false）→ 行尾保存 → 成功 toast
-    await page.getByRole('switch', { name: 'allowEnteringNetherUsingPortals 开关' }).click()
+
+    // 名单以服务器自述为准：这两条在面板文案表里查不到，只由端点回包给出，
+    // 故它们出现即证明行是按端点名单渲染的，不是按静态表
+    await expect(page.getByText('doFireTick', { exact: true })).toBeVisible()
+    await expect(page.getByText('spawnChunkRadius', { exact: true })).toBeVisible()
+    // 文案表能查到的规则同样由端点给名，值控件按端点类型渲染
+    await expect(page.getByText('doDaylightCycle', { exact: true })).toBeVisible()
+    await expect(page.getByRole('textbox', { name: 'maxEntityCramming 值' })).toHaveValue('24')
+    // 徽章表达取值通道（MSMP / RCON 两档，取端点 source 字段）而非版本：这里只要求
+    // 有一枚通道徽章在，不锁具体哪一档——换档由 mock 回包决定，不是断言对象
+    await expect(page.getByText(/^(MSMP|RCON)$/)).toBeVisible()
+
+    // missing：灰标「未读取」且**不渲染值控件**（开关的「关」会被读成事实）
+    const missingRow = page.getByTestId('gamerule-row-doVillageSieges')
+    await expect(missingRow).toContainText('未读取')
+    await expect(missingRow.getByRole('switch')).toHaveCount(0)
+    await expect(missingRow.getByRole('textbox')).toHaveCount(0)
+    // unreadable 与 missing 的呈现同形，原因文案不同（读失败 vs 本版本没有）
+    const unreadableRow = page.getByTestId('gamerule-row-keepInventory')
+    await expect(unreadableRow).toContainText('未读取')
+    await expect(unreadableRow.getByRole('switch')).toHaveCount(0)
+
+    // StrictMode 下挂载期的 effect 会跑两遍，取数次数因此有 1~2 发的浮动——
+    // 断言只锁「保存后恰好多一轮」，绝对值锁在这里是锁 StrictMode 的实现细节
+    const hitsAfterMount = gameruleHits
+
+    // 行级编辑：切首行 switch（写成它的相反值）→ 行尾保存 → 乐观值 + toast + 重新取数一次
+    const firstSwitch = page.getByRole('switch', { name: 'allowEnteringNetherUsingPortals 开关' })
+    const before = await firstSwitch.getAttribute('data-state')
+    await firstSwitch.click()
     await page.getByRole('button', { name: '保存' }).click()
-    await expect(page.getByText('已更新规则 allowEnteringNetherUsingPortals = false')).toBeVisible()
+    // 下发值同样由观测得出：mock 的规则值会被写命令改掉，写死期望值在重跑时会锚在旧状态
+    await expect
+      .poll(() => sentRule)
+      .toBe('allowEnteringNetherUsingPortals = ' + (before === 'checked' ? 'false' : 'true'))
+    await expect(page.getByText('已更新规则 ' + sentRule)).toBeVisible()
+    // 乐观值：控件先显示刚提交的那一档，不等端点回来
+    await expect(firstSwitch).toHaveAttribute(
+      'data-state',
+      before === 'checked' ? 'unchecked' : 'checked',
+    )
+    // 保存后必须重新取数一次（乐观值只活到这一轮回来）；不轮询 ⇒ 不会多出第三轮
+    await expect.poll(() => gameruleHits).toBe(hitsAfterMount + 1)
     await maybeShot(page, 'world-gamerules-dark.png')
+  })
+
+  test('游戏规则 Tab：两条通道都不可用 ⇒ 整块「未能读取当前值」，不画任何规则行', async ({
+    page,
+  }) => {
+    await setupConnection(page)
+    // 「读不到」按请求头构造（mock 侧不落进程级开关，否则会改脏并行 spec 的规则列表）
+    await page.setExtraHTTPHeaders({ 'x-mock-gamerules-source': 'none' })
+    // 契约层：两条通道都不可用时 source='none' 且**不带** rosterFailed。
+    // 界面区分不出这一档（两个字段的结论都是「未读取」），所以只能在这一层咬住——
+    // 一旦 none 也带上 rosterFailed，「查连接」与「重试」的判据就永久丢失且无人发现
+    const noneBody = await page.request.get('/api/v1/instances/e2e-demo/gamerules', {
+      headers: { 'x-mock-gamerules-source': 'none' },
+    })
+    const noneData = (await noneBody.json()).data as { source: string; rosterFailed?: boolean }
+    expect(noneData.source).toBe('none')
+    expect(noneData.rosterFailed).toBeUndefined()
+
+    await page.goto('/world?tab=gamerule')
+    await expect(page.getByText(/未能读取当前值/)).toBeVisible()
+    // 两通道都不通是连接问题，措辞必须指向它——与下一条「名单没答上来」区分开
+    await expect(page.getByText(/命令通道与推送通道都不可用/)).toBeVisible()
+    // 不回退任何默认值：一条规则行、一个值控件都不画
+    await expect(page.locator('[data-testid^="gamerule-row-"]')).toHaveCount(0)
+    await expect(page.getByRole('switch')).toHaveCount(0)
+  })
+
+  test('游戏规则 Tab：通道通但名单查询失败 ⇒ 说「名单」可重试，不说「通道都不可用」', async ({
+    page,
+  }) => {
+    await setupConnection(page)
+    // source 仍是 rcon（通道是通的），只是这一问没答上来 ⇒ rosterFailed
+    await page.setExtraHTTPHeaders({ 'x-mock-gamerules-source': 'roster-failed' })
+    const failedBody = await page.request.get('/api/v1/instances/e2e-demo/gamerules', {
+      headers: { 'x-mock-gamerules-source': 'roster-failed' },
+    })
+    const failedData = (await failedBody.json()).data as {
+      source: string
+      rules: unknown[]
+      rosterFailed?: boolean
+    }
+    expect(failedData.source).toBe('rcon')
+    expect(failedData.rules).toEqual([])
+    expect(failedData.rosterFailed).toBe(true)
+
+    await page.goto('/world?tab=gamerule')
+    // 结论落在「名单」上：用户该做的是重试，不是去查连接
+    await expect(page.getByText(/未能读取规则名单/)).toBeVisible()
+    await expect(page.getByRole('button', { name: /重试/ })).toBeVisible()
+    // 反过来：把它报成「两条通道都不可用」是假结论，用户会去改一个没坏的配置
+    await expect(page.getByText(/命令通道与推送通道都不可用/)).toHaveCount(0)
+    // 空名单不是「没有规则」：不能画成空态，也不能给任何默认值控件
+    await expect(page.getByText('未读取到任何规则')).toHaveCount(0)
+    await expect(page.locator('[data-testid^="gamerule-row-"]')).toHaveCount(0)
   })
 
   test('属性面板窄屏（375px）：键名与值上下堆叠，全部键名不再被裁', async ({ page }) => {

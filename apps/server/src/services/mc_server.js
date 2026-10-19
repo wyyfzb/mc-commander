@@ -36,6 +36,7 @@ import * as msmpClient from './mc-server/msmp-client.js';
 import * as msmpNotifications from './mc-server/msmp-notifications.js';
 import * as msmpMethods from './mc-server/msmp-methods.js';
 import * as crashArtifacts from './mc-server/crash-artifacts.js';
+import * as gameruleReader from './mc-server/gamerule-reader.js';
 import * as structuredLogConfig from './mc-server/structured-log-config.js';
 import { logger } from '../utils/logger.js';
 
@@ -2402,3 +2403,7 @@ Object.assign(MCServerInstance.prototype, structuredLogConfig);
 // 方法面域挂载：白名单/OP/踢人/封禁走结构化方法、拿不到再退回等价命令
 // （判据与两条通道的差异见模块头注释）。依赖 msmp-client 的 _msmpRequest。
 Object.assign(MCServerInstance.prototype, msmpMethods);
+
+// 游戏规则读值域挂载：名单由服务器自述（MSMP 结构化 / help gamerule），读值走
+// sendCommandWithResponse 以免写命令史（机制与逐版本回包文案见模块头注释）。
+Object.assign(MCServerInstance.prototype, gameruleReader);

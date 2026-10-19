@@ -7,17 +7,24 @@
  */
 import { vi } from 'vitest';
 import * as msmpMethods from '../../src/services/mc-server/msmp-methods.js';
+import * as gameruleReader from '../../src/services/mc-server/gamerule-reader.js';
 
 /** 模块导出的全部函数（除 default）：新增方法不必再改这里 */
-const METHOD_NAMES = Object.entries(msmpMethods)
+const METHOD_NAMES = [...Object.entries(msmpMethods), ...Object.entries(gameruleReader)]
   .filter(([name, value]) => typeof value === 'function' && name !== 'default')
   .map(([name]) => name);
+
+/** 同名方法不会跨域撞车，但仍按「谁导出了它」取函数，避免日后两域重名时静默取错 */
+const DOMAINS = [msmpMethods, gameruleReader];
 
 /** 幂等：同一个桩被包两次不会叠加 */
 export function asInstance(stub) {
   if (!stub) return stub;
   stub._msmpRequest ??= vi.fn(async () => null);
   stub._msmpAvailable ??= false;
-  for (const name of METHOD_NAMES) stub[name] = msmpMethods[name].bind(stub);
+  for (const name of METHOD_NAMES) {
+    const domain = DOMAINS.find((mod) => typeof mod[name] === 'function');
+    stub[name] = domain[name].bind(stub);
+  }
   return stub;
 }

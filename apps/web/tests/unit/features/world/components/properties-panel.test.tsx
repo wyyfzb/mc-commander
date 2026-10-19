@@ -1,9 +1,10 @@
 /**
- * PropertiesPanel 测试：渲染/敏感键锁定/编辑流程（快照-取消-保存）/restartRequired toast/搜索分类过滤
+ * PropertiesPanel 测试：渲染/敏感键锁定/编辑流程（快照-取消-保存）/保存往返期间的新编辑/
+ * restartRequired toast/搜索分类过滤
  * mock 属性为虚构占位值，无真实服务器数据
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Toaster, toast as sonnerToast } from 'sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -31,6 +32,15 @@ function renderPanel(onSave = vi.fn().mockResolvedValue([])) {
       <Toaster />
     </TooltipProvider>,
   )
+}
+
+/** onSave 停在 pending：用来在「保存往返期间」（响应尚未返回）插入用户操作 */
+function pendingSave() {
+  let release: (restartRequired: string[]) => void = () => {}
+  const promise = new Promise<string[]>((resolve) => {
+    release = resolve
+  })
+  return { promise, release }
 }
 
 beforeEach(() => {
@@ -154,6 +164,97 @@ describe('PropertiesPanel 编辑流程', () => {
     // 重新进入编辑：pvp 恢复 true（快照）
     await user.click(screen.getByRole('button', { name: '编辑' }))
     expect(screen.getByLabelText('PvP 开关')).toHaveAttribute('data-state', 'checked')
+  })
+
+  it('保存往返期间又改了值：保持编辑态 + 警告 toast + 用户的编辑不丢', async () => {
+    const user = userEvent.setup()
+    const running = pendingSave()
+    const onSave = vi.fn().mockReturnValue(running.promise)
+    renderPanel(onSave)
+    await user.click(screen.getByRole('button', { name: '编辑' }))
+    const maxPlayers = screen.getByLabelText('最大玩家数 输入')
+    await user.clear(maxPlayers)
+    await user.type(maxPlayers, '30')
+    await user.click(screen.getByRole('button', { name: '保存' }))
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1))
+    // 响应还没回来，用户接着改了另一个键
+    const motd = screen.getByLabelText('MOTD 输入')
+    await user.clear(motd)
+    await user.type(motd, 'Hello MC')
+    await act(async () => {
+      running.release([])
+    })
+    expect(await screen.findByText('保存成功，但期间有新的修改，请再次保存')).toBeInTheDocument()
+    // 退出编辑态会把刚改的 MOTD 连同输入框一起丢掉
+    expect(screen.getByText(/编辑模式已开启/)).toBeInTheDocument()
+    expect(screen.getByLabelText('MOTD 输入')).toHaveValue('Hello MC')
+    expect(screen.queryByText('规则已保存到服务器')).not.toBeInTheDocument()
+  })
+
+  it('往返期间改了又改回提交值：不算新编辑，正常退出并成功 toast', async () => {
+    const user = userEvent.setup()
+    const running = pendingSave()
+    const onSave = vi.fn().mockReturnValue(running.promise)
+    renderPanel(onSave)
+    await user.click(screen.getByRole('button', { name: '编辑' }))
+    const maxPlayers = screen.getByLabelText('最大玩家数 输入')
+    await user.clear(maxPlayers)
+    await user.type(maxPlayers, '30')
+    await user.click(screen.getByRole('button', { name: '保存' }))
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1))
+    // 中间态与最终值都不等于提交值，但最终值回到了提交值 ⇒ 等于没改
+    const motd = screen.getByLabelText('MOTD 输入')
+    await user.clear(motd)
+    await user.type(motd, 'Hello')
+    await user.clear(motd)
+    await user.type(motd, 'Welcome')
+    await act(async () => {
+      running.release([])
+    })
+    expect(await screen.findByText('规则已保存到服务器')).toBeInTheDocument()
+    expect(screen.queryByText(/编辑模式已开启/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/期间有新的修改/)).not.toBeInTheDocument()
+  })
+
+  /* 判别用例：往返期间「先改成 B、再改成 C」且 C 与提交值不同。旧判据（拿 payload 比当前
+     编辑值）在这一刻看不见 motd——提交时 motd 等于快照，所以它根本不在 payload 里，比较
+     也就无从发生 → 静默退出编辑态，用户最后一次输入被丢掉。新判据比「提交瞬间 vs 此刻」，
+     能看到 C ≠ A。 */
+  it('往返期间 A→B→C（C≠提交值）：保持编辑态 + 警告，再次保存下发的是 A→C', async () => {
+    const user = userEvent.setup()
+    const first = pendingSave()
+    const second = pendingSave()
+    const onSave = vi.fn().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise)
+    renderPanel(onSave)
+    await user.click(screen.getByRole('button', { name: '编辑' }))
+    const maxPlayers = screen.getByLabelText('最大玩家数 输入')
+    await user.clear(maxPlayers)
+    await user.type(maxPlayers, '30')
+    await user.click(screen.getByRole('button', { name: '保存' }))
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1))
+
+    // 往返期间：motd 先改成 B='Hello'、再改成 C='Goodbye'；快照 A 是 'Welcome'，C ≠ A
+    const motd = screen.getByLabelText('MOTD 输入')
+    await user.clear(motd)
+    await user.type(motd, 'Hello')
+    await user.clear(motd)
+    await user.type(motd, 'Goodbye')
+    await act(async () => {
+      first.release([])
+    })
+
+    expect(await screen.findByText('保存成功，但期间有新的修改，请再次保存')).toBeInTheDocument()
+    expect(screen.getByText(/编辑模式已开启/)).toBeInTheDocument()
+    expect(screen.getByLabelText('MOTD 输入')).toHaveValue('Goodbye')
+
+    // 再次保存：下发的是 A→C（快照仍是 'Welcome'），用户的最后一次输入不丢
+    await user.click(screen.getByRole('button', { name: '保存' }))
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(2))
+    expect(onSave.mock.calls[1]![0]).toMatchObject({ motd: 'Goodbye', 'max-players': '30' })
+    await act(async () => {
+      second.release([])
+    })
+    expect(await screen.findByText('规则已保存到服务器')).toBeInTheDocument()
   })
 
   it('保存失败：错误 toast + 保持编辑态', async () => {

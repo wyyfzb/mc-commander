@@ -12,6 +12,7 @@
  */
 import { describe, expect, it, beforeAll, afterAll, afterEach, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { setupServer } from 'msw/node'
 import { http, HttpResponse } from 'msw'
@@ -182,6 +183,7 @@ describe('PlayerDetailPanel 回退详情端点失败', () => {
 /**
  * 满员免排队（ops.json 的 bypassesPlayerLimit）是只读状态：面板不提供开关，
  * 只在 OP 徽章上写明，避免用户以为这里能改。
+ * 徽章的完整解释（含 ops.json 依据）挂在可聚焦的入口上：裸 title 对触屏与键盘都取不到。
  */
 describe('PlayerDetailPanel OP 徽章：满员免排队', () => {
   it('ops.json 显式打开时，OP 徽章写明「满员免排队」', () => {
@@ -195,6 +197,31 @@ describe('PlayerDetailPanel OP 徽章：满员免排队', () => {
 
     expect(screen.getByText('OP')).toBeInTheDocument()
     expect(screen.queryByText(/满员免排队/)).not.toBeInTheDocument()
+  })
+
+  it('徽章解释全程键盘可达：Tab 之外的焦点落点 → Enter 打开浮层，读到 ops.json 依据', async () => {
+    const user = userEvent.setup()
+    renderPanel(makePlayer({ isOp: true, bypassesPlayerLimit: true }))
+
+    const trigger = screen.getByRole('button', { name: 'OP · 满员免排队 说明' })
+    expect(trigger).toHaveTextContent('OP · 满员免排队')
+    // 可聚焦是前提：挂在不可聚焦的 <span> + title 上时键盘永远拿不到解释
+    trigger.focus()
+    expect(trigger).toHaveFocus()
+    await user.keyboard('{Enter}')
+    expect(await screen.findByRole('dialog', { name: 'OP · 满员免排队 说明' })).toHaveTextContent(
+      '该管理员在服务器满员时仍可进入（ops.json 的 bypassesPlayerLimit）',
+    )
+  })
+
+  it('普通 OP 亦有解释入口（不只是免排队那一档）', async () => {
+    const user = userEvent.setup()
+    renderPanel(makePlayer({ isOp: true, bypassesPlayerLimit: false }))
+
+    await user.click(screen.getByRole('button', { name: 'OP 说明' }))
+    expect(await screen.findByRole('dialog', { name: 'OP 说明' })).toHaveTextContent(
+      '管理员：可在游戏内执行 OP 级命令',
+    )
   })
 
   it('非 OP 玩家即使字段为真也不显示 OP 徽章', () => {
