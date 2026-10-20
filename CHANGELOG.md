@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.0](https://github.com/wyyfzb/mc-commander/compare/v0.8.5...v0.9.0) (2026-10-20)
+
+
+### Features
+
+* **web:** 实例内存按余量分配，实例卡片新增重启操作 ([#677](https://github.com/wyyfzb/mc-commander/issues/677)) ([b54d262](https://github.com/wyyfzb/mc-commander/commit/b54d2628cb71a22def328b08defa9fcdbc29d255))
+
 ## [0.8.5](https://github.com/wyyfzb/mc-commander/compare/v0.8.4...v0.8.5) (2026-10-19)
 
 
