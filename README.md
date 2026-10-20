@@ -1,6 +1,6 @@
 <p align="center">
   <img src="https://img.shields.io/github/actions/workflow/status/wyyfzb/mc-commander/ci.yml?branch=main&style=flat-square&label=CI" alt="CI">
-  <img src="https://img.shields.io/badge/version-0.8.5?style=flat-square" alt="Version"> <!-- x-release-please-version -->
+  <img src="https://img.shields.io/github/v/release/wyyfzb/mc-commander?style=flat-square&label=version&color=blue" alt="Version">
   <img src="https://img.shields.io/badge/license-AGPL--3.0-green?style=flat-square" alt="License">
 </p>
 
