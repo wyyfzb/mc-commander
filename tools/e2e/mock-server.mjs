@@ -211,7 +211,10 @@ const overview = {
   systemMemoryPercent: 26.3,
   totalMemory: 16,
   freeMemory: 11.8,
-  instances: [{ id: 'e2e-demo', name: 'E2E 演示实例', isRunning: true, playerCount: 3 }],
+  // maxMemory 走与详情同一个字段：部署向导据此从整机内存里扣掉已占部分
+  instances: [
+    { id: 'e2e-demo', name: 'E2E 演示实例', isRunning: true, playerCount: 3, maxMemory: '4G' },
+  ],
 }
 
 const systemStats = {

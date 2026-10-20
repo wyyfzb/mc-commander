@@ -21,6 +21,7 @@ import {
   Loader2,
   MoreHorizontal,
   Play,
+  RefreshCw,
   Server,
   Settings,
   ShieldAlert,
@@ -98,12 +99,16 @@ export interface InstanceCardsProps {
   onStart: (instance: InstanceSummary) => void
   /** 停止实例（页面负责确认弹窗） */
   onStop: (instance: InstanceSummary) => void
+  /** 重启实例（页面负责确认弹窗） */
+  onRestart: (instance: InstanceSummary) => void
   /** 启停请求在途的实例 id（对应卡启停按钮禁用 + spinner） */
   busyId: string | null
   /** 启停中间态表（starting/stopping 期间对应卡禁用；与 busyId 叠加） */
   phaseById: Record<string, InstancePhase>
   /** 部署新实例入口（空态按钮与页面头部共用） */
   onDeploy: () => void
+  /** 内存余量一行；null 表示暂无读数 */
+  remainingMemoryText?: string | null
 }
 
 export function InstanceCards({
@@ -120,9 +125,11 @@ export function InstanceCards({
   onUpgrade,
   onStart,
   onStop,
+  onRestart,
   busyId,
   phaseById,
   onDeploy,
+  remainingMemoryText,
 }: InstanceCardsProps) {
   if (instances.length === 0) {
     return (
@@ -158,12 +165,14 @@ export function InstanceCards({
           onUninstall={onUninstall}
           onStart={onStart}
           onStop={onStop}
+          onRestart={onRestart}
           className={`animate-mcs-fade-up mcs-delay-${Math.min(index + 1, 6)}`}
         />
       ))}
       {instances.length === 1 && (
         <DeployGuideTile
           onDeploy={onDeploy}
+          remainingText={remainingMemoryText}
           className="animate-mcs-fade-up mcs-delay-2 @5xl:col-span-2"
         />
       )}
@@ -188,6 +197,7 @@ function InstanceCard({
   onUpgrade,
   onStart,
   onStop,
+  onRestart,
   className,
 }: {
   instance: InstanceSummary
@@ -206,6 +216,8 @@ function InstanceCard({
   onUpgrade: (instance: InstanceSummary) => void
   onStart: (instance: InstanceSummary) => void
   onStop: (instance: InstanceSummary) => void
+  /** 重启（页面负责确认弹窗）：与停止不同，重启不留停机窗口 */
+  onRestart: (instance: InstanceSummary) => void
   /** 入场 stagger（页面组合处注入，组件内不内嵌动效类） */
   className?: string
 }) {
@@ -386,29 +398,40 @@ function InstanceCard({
         </NoticeBanner>
       )}
 
-      {/* 操作行：主操作只留启停（状态类，按 phase 中间态禁用：starting/stopping
-          spinner，WS 确认后解锁）与切换（非当前实例的导航）；
-          配置/升级/卸载收进操作菜单——弹窗类与破坏性操作低频，且卸载另有输入实例名的强确认，
-          五个按钮平铺会把卡片右下角挤满。菜单项文案对齐各自弹窗标题。
-          「停止」有中断服务与断连玩家的后果，走 destructive 变体；危险语义色只从变体取，
-          不在调用点手写第二份色类（否则变体一改、这里就静默掉队） */}
+      {/* 操作行：停止与重启是两个不同后果的操作，各自独立存在；
+          配置/升级/卸载收进操作菜单：弹窗类与破坏性操作低频，且卸载另有输入实例名的强确认。
+          「停止」走 destructive 变体，危险语义色只从变体取，不在调用点手写第二份色类
+          （否则变体一改、这里就静默掉队） */}
       <div className="mt-auto flex items-center justify-end gap-1.5">
         {isRunning ? (
-          <Button
-            variant="destructive"
-            size="sm"
-            aria-label={phase === 'stopping' ? `正在停止 ${name}` : `停止 ${name}`}
-            title="停止"
-            disabled={isBusy || phase !== null}
-            onClick={() => onStop(instance)}
-          >
-            {isBusy || phase === 'stopping' ? (
-              <Loader2 className="animate-spin" aria-hidden />
-            ) : (
-              <Square aria-hidden />
-            )}
-            停止
-          </Button>
+          <>
+            <Button
+              variant="destructive"
+              size="sm"
+              aria-label={phase === 'stopping' ? `正在停止 ${name}` : `停止 ${name}`}
+              title="停止"
+              disabled={isBusy || phase !== null}
+              onClick={() => onStop(instance)}
+            >
+              {isBusy || phase === 'stopping' ? (
+                <Loader2 className="animate-spin" aria-hidden />
+              ) : (
+                <Square aria-hidden />
+              )}
+              停止
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              aria-label={`重启 ${name}`}
+              title="重启"
+              disabled={isBusy || phase !== null}
+              onClick={() => onRestart(instance)}
+            >
+              <RefreshCw aria-hidden />
+              重启
+            </Button>
+          </>
         ) : (
           <Button
             size="sm"

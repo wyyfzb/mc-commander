@@ -24,18 +24,22 @@ export function RestartPendingBanner({ instances }: { instances: InstanceSummary
     pruneTo(new Set(instances.map((i) => i.id)))
   }, [instances, pruneTo])
 
-  const names = Object.keys(pending).map((id) => {
+  const entries = Object.keys(pending).map((id) => {
     const found = instances.find((i) => i.id === id)
-    return found ? instanceLabel(found) : id
+    return { id, label: found ? instanceLabel(found) : id, running: found?.isRunning === true }
   })
-  if (names.length === 0) return null
+  if (entries.length === 0) return null
 
-  /* 只说明「有哪几个实例有待生效的改动 + 怎么让它生效」，不复述改了哪几项：
-     本集合是实例级的（不记字段），而弹窗里保存的是整份设置——点进去就能看到当前值。
-     措辞用「设置」而非「启动配置」：实时推送开关同属本集合，说「启动配置」对它就是假陈述 */
+  /* 两处措辞各有约束：「设置」涵盖推送开关（说「启动配置」对它是假陈述）；
+     已停止的实例没有「重启」这一步，合成一个分支会让用户去找不存在的按钮 */
+  const running = entries.filter((e) => e.running).map((e) => e.label)
+  const stopped = entries.filter((e) => !e.running).map((e) => e.label)
+  const parts: string[] = []
+  if (running.length > 0) parts.push(`${running.join('、')} 的设置已修改，重启后生效`)
+  if (stopped.length > 0) parts.push(`${stopped.join('、')} 的设置已修改，下次启动即生效`)
   return (
     <NoticeBanner variant="info" icon={RotateCcw}>
-      {`${names.join('、')} 的设置已修改，重启实例后生效`}
+      {parts.join('；')}
     </NoticeBanner>
   )
 }

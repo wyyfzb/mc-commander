@@ -1047,6 +1047,16 @@ describe('版本号解析与比较（契约包唯一一份）', () => {
     expect(parseVersion('weird')).toBeNull()
   })
 
+  it('周快照形态不可解析：25 是年份后两位，不是主版本号', () => {
+    // 读成 25.0.0 会排到 1.21.9 之后 ⇒ 2019 年的快照被判成支持 MSMP
+    expect(parseVersion('25w35a')).toBeNull()
+    expect(parseVersion('26w14a')).toBeNull()
+    expect(parseVersion('19w34a')).toBeNull()
+    expect(compareVersions('25w35a', '1.21.9')).toBeNull()
+    // 点分快照仍可解析：它的主版本号是真的
+    expect(parseVersion('26.4-snapshot-4')).toEqual([26, 4, 0])
+  })
+
   it('逐段数值比较（不是字符串比较）', () => {
     expect(compareVersions('26.3', '1.21.9')).toBeGreaterThan(0)
     expect(compareVersions('1.21.4', '1.21.9')).toBeLessThan(0)

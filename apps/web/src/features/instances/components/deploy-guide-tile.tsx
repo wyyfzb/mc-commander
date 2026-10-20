@@ -13,11 +13,13 @@ import { cn } from '@/lib/utils'
 interface DeployGuideTileProps {
   /** 部署向导入口（与页面头部 CTA 同一入口） */
   onDeploy: () => void
+  /** 内存余量一行；null 表示暂无读数（算不出余量，整行不渲染） */
+  remainingText?: string | null
   /** 入场 stagger（与实例卡同批编排，由调用点注入） */
   className?: string
 }
 
-export function DeployGuideTile({ onDeploy, className }: DeployGuideTileProps) {
+export function DeployGuideTile({ onDeploy, remainingText, className }: DeployGuideTileProps) {
   return (
     <Card
       as="div"
@@ -37,6 +39,9 @@ export function DeployGuideTile({ onDeploy, className }: DeployGuideTileProps) {
       <p className="text-mcs-xs text-mcs-text-muted">
         独立目录 / 端口 / Java 版本，切换实例互不影响
       </p>
+      {/* 把「还能开几个」摆在入口处：这里是用户决定要不要再加一台的地方，
+          等进了向导才告诉他内存不够，等于让他白走一趟 */}
+      {remainingText != null && <p className="text-mcs-xs text-mcs-text-muted">{remainingText}</p>}
       <Button variant="outline" size="sm" className="mt-1" onClick={onDeploy}>
         打开部署向导
       </Button>

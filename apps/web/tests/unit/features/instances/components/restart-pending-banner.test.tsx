@@ -33,7 +33,7 @@ describe('RestartPendingBanner', () => {
     useRestartPendingStore.setState({ pending: { alpha: Date.now() } })
     render(<RestartPendingBanner instances={[alpha, beta]} />)
 
-    expect(await screen.findByText('虚构甲服 的设置已修改，重启实例后生效')).toBeInTheDocument()
+    expect(await screen.findByText('虚构甲服 的设置已修改，重启后生效')).toBeInTheDocument()
     expect(screen.queryByText(/启动配置已修改/)).toBeNull()
   })
 
@@ -41,8 +41,12 @@ describe('RestartPendingBanner', () => {
     useRestartPendingStore.setState({ pending: { alpha: Date.now(), beta: Date.now() } })
     render(<RestartPendingBanner instances={[alpha, beta]} />)
 
+    /* 甲服运行中 ⇒ 重启；乙服已停止 ⇒ 下次启动即生效。统一说「重启」会让乙服用户
+       去一个不存在的按钮上找（已停止的卡片只有「启动」） */
     expect(
-      await screen.findByText('虚构甲服、虚构乙服 的设置已修改，重启实例后生效'),
+      await screen.findByText(
+        '虚构甲服 的设置已修改，重启后生效；虚构乙服 的设置已修改，下次启动即生效',
+      ),
     ).toBeInTheDocument()
   })
 
@@ -52,7 +56,7 @@ describe('RestartPendingBanner', () => {
 
     await waitFor(() => expect(useRestartPendingStore.getState().pending['ghost']).toBeUndefined())
     expect(useRestartPendingStore.getState().pending['alpha']).toBeTypeOf('number')
-    expect(await screen.findByText('虚构甲服 的设置已修改，重启实例后生效')).toBeInTheDocument()
+    expect(await screen.findByText('虚构甲服 的设置已修改，重启后生效')).toBeInTheDocument()
   })
 
   it('列表还没加载完（空数组）时不清：据此清会把有效待办误删', async () => {
@@ -61,7 +65,7 @@ describe('RestartPendingBanner', () => {
 
     // 名字取不到是另一回事：条目必须还在（横幅照常出现，名字回退 id）
     expect(useRestartPendingStore.getState().pending['alpha']).toBeTypeOf('number')
-    expect(await screen.findByText('alpha 的设置已修改，重启实例后生效')).toBeInTheDocument()
+    expect(await screen.findByText('alpha 的设置已修改，下次启动即生效')).toBeInTheDocument()
     expect(container).not.toBeEmptyDOMElement()
   })
 })

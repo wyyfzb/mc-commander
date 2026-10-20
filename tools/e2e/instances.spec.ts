@@ -55,6 +55,9 @@ test.describe('实例页', () => {
     await page.getByRole('button', { name: '下一步' }).click()
     await expect(page.getByText('实例配置')).toBeVisible()
     await page.getByLabel('实例名称').fill('E2E 新服务器')
+    // 内存分母是「还能分配」而不是整机：mock 已有 1 个 4G 实例，16 − 2 − 4 = 10 GB
+    await expect(page.getByText('/ 还能分配 10.0 GB')).toBeVisible()
+    await maybeShot(page, 'deploy-step2-dark.png')
     await page.getByRole('button', { name: '下一步' }).click()
     // 步骤③：确认摘要 + EULA 同意勾选（不阻断部署：未同意为「部署（暂不启动）」，同意后为「部署并启动」）
     // 文案说后果而非流程模式——「仅部署」曾与「部署并启动」并列，读起来像平级选项
@@ -81,13 +84,21 @@ test.describe('实例页', () => {
     await page.getByRole('menuitem', { name: '实例设置' }).click()
     // 弹窗标题 + 实例名 + 内存预填（mock maxMemory 4096MB → 4.0 GB）
     await expect(page.getByRole('heading', { name: '实例设置' })).toBeVisible()
-    await expect(page.getByText('4.0 GB')).toBeVisible()
-    await expect(page.getByRole('switch', { name: "JVM 优化 (Aikar's Flags)" })).toBeChecked()
-    // 生成的启动命令预览（Aikar 标志已同步进参数）
-    await expect(page.getByText(/java -Xms2G -Xmx4G/)).toBeVisible()
+    // exact：分母那行「/ 最多 14.0 GB」也含「4.0 GB」，子串匹配会同时命中两个元素
+    await expect(page.getByText('4.0 GB', { exact: true })).toBeVisible()
+    // 滑块分母是「这台最多能给多少」（16 GB 机器扣 2 GB 系统保留），不是整机内存
+    await expect(page.getByText('/ 最多 14.0 GB')).toBeVisible()
+    // 默认不开 JVM 调优：现代 JVM 先不加 flag，卡顿或有 GC 问题再开
+    await expect(page.getByRole('switch', { name: "JVM 优化 (Aikar's Flags)" })).not.toBeChecked()
+    // 高级参数默认收起：先把「不动也能用」的结论摆出来，命令与参数藏进折叠区
+    await expect(page.getByText('不动这里也能正常用', { exact: false })).toBeVisible()
+    // exact：引导句里也含「实际启动命令」这四个字，子串匹配会命中引导句本身
+    await expect(page.getByText('实际启动命令', { exact: true })).toBeHidden()
+    await expect(page.getByLabel('Java 路径（可选）')).toBeHidden()
     await maybeShot(page, 'instance-settings-dark.png')
-    // 高级参数：Java 路径 + JVM 参数 + 参数说明
+    // 高级参数：启动命令 + Java 路径 + JVM 参数 + 参数说明
     await page.getByRole('button', { name: /高级参数/ }).click()
+    await expect(page.getByText(/java -Xms2G -Xmx4G/)).toBeVisible()
     await expect(page.getByLabel('Java 路径（可选）')).toBeVisible()
     await expect(page.getByLabel('JVM 参数（每行一个）')).toBeVisible()
     await expect(page.getByText('参数说明')).toBeVisible()
@@ -117,8 +128,10 @@ test.describe('实例页', () => {
     // 逐台注明：卡片上直接出现「待重启」，用户不必拿名字去比对页头横幅是哪一台
     const card = page.locator('[data-instance-id="e2e-demo"]')
     await expect(card.getByText('待重启')).toBeVisible()
-    // 汇总横幅同时给出「怎么让它生效」的出路
-    await expect(page.getByText('E2E 演示实例 的设置已修改，重启实例后生效')).toBeVisible()
+    // mock 里该实例在运行中 ⇒ 横幅说「重启后生效」，卡片上同时有重启与停止两枚操作
+    await expect(page.getByText('E2E 演示实例 的设置已修改，重启后生效')).toBeVisible()
+    await expect(card.getByRole('button', { name: '重启 E2E 演示实例' })).toBeVisible()
+    await expect(card.getByRole('button', { name: '停止 E2E 演示实例' })).toBeVisible()
   })
 
   test('卸载确认：对话框 + 取消', async ({ page }) => {

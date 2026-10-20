@@ -38,7 +38,12 @@ import { useDeployStatusFallback } from '../hooks/use-deploy-status-fallback'
 import { apiCancelDeploy } from '@/api/instances'
 import type { DeployRequest, DeployResult } from '@/api/types'
 import { INITIAL_FORM, type AutoStartState, type DeployForm } from './deploy/types'
-import { recommendedMemoryGB } from './deploy/utils'
+import {
+  hasRoomForInstance,
+  memoryBudget,
+  recommendNewInstanceGB,
+  selectableTiersGB,
+} from '@/lib/instance-memory'
 import { Stepper } from './deploy/stepper'
 import {
   DeployCancelledView,
@@ -93,9 +98,22 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
   )
   const loaders = versionsQuery.data?.loaders ?? EMPTY_STRINGS
 
-  // 系统内存 → 推荐档位（用户手动调整后不覆盖）
   const overviewQuery = useOverview()
   const totalMemory = overviewQuery.data?.totalMemory ?? 4
+  const budget = useMemo(
+    () =>
+      memoryBudget(
+        totalMemory,
+        (overviewQuery.data?.instances ?? []).map((i) => i.maxMemory),
+      ),
+    [totalMemory, overviewQuery.data],
+  )
+  /** 只留装得下的档：8G 摆在一台 7.4G 的机器上，点了才发现起不来 */
+  const memoryOptions = useMemo(
+    () => selectableTiersGB(budget.availableGB).map((gb) => `${gb}G`),
+    [budget.availableGB],
+  )
+  const recommendMemory = `${recommendNewInstanceGB(budget.availableGB, budget.allocatableGB)}G`
   const memoryTouchedRef = useRef(false)
 
   // 打开时重置表单与部署状态（自动回填前的基线同步见下方 effect）。
@@ -124,22 +142,32 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
   }, [open])
 
   // 系统内存就绪 → 推荐档位覆盖默认 2G。
-  // 仅用户未手动调整内存时覆盖；打开向导时重置手动标记（与表单重置同周期）
+  // 与表单重置同周期
   useEffect(() => {
     if (open) memoryTouchedRef.current = false
   }, [open])
 
   useEffect(() => {
-    const recommended = recommendedMemoryGB(totalMemory)
     if (memoryTouchedRef.current) return
     setForm((f) => {
-      const next = `${recommended}G`
-      if (f.memory === next) return f
+      if (f.memory === recommendMemory) return f
+      baselineRef.current = { ...baselineRef.current, memory: recommendMemory }
+      return { ...f, memory: recommendMemory }
+    })
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- recommendMemory 由预算派生，setter/ref 稳定引用
+  }, [recommendMemory, open])
+
+  // 预算变小（别的实例占走了内存）而当前档位已装不下 → 拉回装得下的最大档。
+  // 不静默下发装不下的档：服务端不校验，用户会拿到一个必然互相抢内存的实例
+  useEffect(() => {
+    if (memoryTouchedRef.current) return
+    setForm((f) => {
+      if (memoryOptions.includes(f.memory)) return f
+      const next = memoryOptions[memoryOptions.length - 1] ?? recommendMemory
       baselineRef.current = { ...baselineRef.current, memory: next }
       return { ...f, memory: next }
     })
-    // oxlint-disable-next-line react-hooks/exhaustive-deps -- recommendedMemoryGB 模块级纯函数，setter/ref 稳定引用
-  }, [totalMemory, open])
+  }, [memoryOptions, recommendMemory])
 
   // 版本列表就绪 → 自动回填首个版本，并同步基线。
   // 依赖含 open 且用函数式更新内部判空：打开向导时重置清空 version，但 effect 读到的
@@ -199,12 +227,22 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
       setNameError('请填写实例名称')
       return
     }
+    // 内存不够时不放行：服务端不校验总量，放过去就是一个必然与已有实例抢内存的实例，
+    // 症状要等到运行时被 OOM 杀掉才出现，那时用户已经不知道是哪一步的错
+    if (step === 1 && !hasRoomForInstance(budget.availableGB)) {
+      setNameError('这台机器已没有可分配的内存，请先卸载不用的实例')
+      return
+    }
     setNameError('')
     setStep((s) => Math.min(s + 1, 2))
   }
 
   const handleDeploy = async () => {
     if (form.version === '' || form.name.trim() === '') return
+    if (!hasRoomForInstance(budget.availableGB)) {
+      toast.error('这台机器已没有可分配的内存，请先卸载不用的实例')
+      return
+    }
     // 服务端在途部署时不再发起（服务端同样以 409 拒绝，这里省掉一次注定失败的往返）
     if (duplicateDeploy) {
       toast.error('服务端已有部署在进行中，请等待其完成后再发起新部署')
@@ -385,7 +423,9 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
             {step === 1 && (
               <DeployStepConfig
                 form={form}
-                totalMemory={totalMemory}
+                budget={budget}
+                memoryOptions={memoryOptions}
+                recommendGB={recommendNewInstanceGB(budget.availableGB, budget.allocatableGB)}
                 nameError={nameError}
                 onNameChange={(name) => {
                   setNameError('')

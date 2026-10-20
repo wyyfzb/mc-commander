@@ -27,7 +27,6 @@
           "path": "/package-lock.json",
           "jsonpath": "$.packages['apps/server'].version"
         },
-        "/README.md",
         "/apps/server/README.md"
       ]
     }

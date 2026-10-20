@@ -4,6 +4,7 @@
 import { FileText, Flame, LayoutGrid, Sparkles, Wrench } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { ServerType } from '@/lib/mc-deploy'
+import { MEMORY_TIERS_GB } from '@/lib/instance-memory'
 
 /** 服务端类型卡片说明一行 */
 export const SERVER_TYPE_DESCRIPTIONS: Record<ServerType, string> = {
@@ -23,9 +24,8 @@ export const SERVER_TYPE_ICONS: Record<ServerType, LucideIcon> = {
   purpur: Sparkles,
 }
 
-/** 内存档位（1G/2G/4G/8G；默认 2G） */
-export const MEMORY_OPTIONS = ['1G', '2G', '4G', '8G'] as const
-export const DEFAULT_MEMORY = '2G'
+/** 未拿到内存账本前的初始档位（真实可选档由 lib/instance-memory 按余量派生） */
+export const DEFAULT_MEMORY = `${MEMORY_TIERS_GB[1]}G`
 
 /** 三步 Stepper 标签 */
 export const STEP_LABELS = ['选择服务端', '实例配置', '确认部署'] as const

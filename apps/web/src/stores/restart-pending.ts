@@ -31,7 +31,9 @@ const APPLIED_TOLERANCE_MS = 2000
  * @param markedAtMs 置位时刻（保存那次改动的时间）
  */
 export function restartApplied(nowMs: number, uptimeSeconds: number, markedAtMs: number): boolean {
-  if (!Number.isFinite(uptimeSeconds) || uptimeSeconds < 0) return false
+  /* uptime 必须为正：未运行时服务端报 0，此时 now - 0 恒大于置位时刻，会得出「已生效」并抹掉徽章。
+     判据不交给调用方的 isRunning 门控——那让本函数对单独调用恒为真，与它自述的语义不符 */
+  if (!Number.isFinite(uptimeSeconds) || uptimeSeconds <= 0) return false
   return nowMs - uptimeSeconds * 1000 > markedAtMs + APPLIED_TOLERANCE_MS
 }
 

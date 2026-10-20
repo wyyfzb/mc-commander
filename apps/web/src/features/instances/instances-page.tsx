@@ -5,16 +5,17 @@
  * - 切换实例/实例设置（instance-settings-dialog 组件）/卸载（危险确认）
  * - 深链接：?tab=deploy 自动打开部署向导；?focus=<id> 从通知中心跳转（切换到关联实例）
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router'
-import { useQueries, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, Loader2, Rocket } from 'lucide-react'
 import { toast } from 'sonner'
-import { apiGet, ApiError } from '@/api/client'
-import { FALLBACK_POLL_INTERVAL_MS, queryKeys, useInstances } from '@/api/queries'
+import { apiGet, apiPost, ApiError } from '@/api/client'
+import { FALLBACK_POLL_INTERVAL_MS, queryKeys, useInstances, useOverview } from '@/api/queries'
 import { ErrorCode, getFriendlyErrorText } from '@/api/errors'
 import { queryFailed, queryPhase } from '@/lib/query-phase'
 import { instanceLabel } from '@/lib/instance-label'
+import { memoryBudget, remainingMemoryHint } from '@/lib/instance-memory'
 import { EmptyState } from '@/components/mcs/empty-state'
 import { StaleQueryNotice } from '@/components/mcs/data-states'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
@@ -78,10 +79,39 @@ export function InstancesPage() {
   const { duplicateDeployBlocked } = useDeployStatusFallback()
 
   const instancesQuery = useInstances()
+  /* 与部署向导共用 lib 的账本，不各算一份：两处口径一旦不同，
+     引导块说「还能再开一台」而向导说「已分完」 */
+  const overviewQuery = useOverview()
+  const remainingMemoryText = useMemo(() => {
+    const total = overviewQuery.data?.totalMemory
+    if (total == null) return null
+    return remainingMemoryHint(
+      memoryBudget(
+        total,
+        (overviewQuery.data?.instances ?? []).map((inst) => inst.maxMemory),
+      ),
+    )
+  }, [overviewQuery.data])
   /** 列表相位：有旧值可留时不把一次轮询抖动呈现成整屏故障 */
   const instancesPhase = queryPhase(instancesQuery)
   const uninstallMutation = useUninstallInstance()
   const stopMutation = useStopInstance()
+  /* 重启：与命令面板、世界页同一端点。不复用命令面板的 mutation——那处是它的私有实现，
+     共享要走 hook；此处只有一处调用，直接用 useMutation 保持端点字符串唯一（见 apiPost 调用） */
+  const restartMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiPost(`/api/v1/instances/${id}/restart`, config)
+      return id
+    },
+    onSuccess: (_data, id) => {
+      toast.success('重启指令已发送')
+      void queryClient.invalidateQueries({ queryKey: queryKeys.instance(id) })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.instances() })
+    },
+    onError: (e) => {
+      toast.error(`重启失败：${getFriendlyErrorText(e)}`)
+    },
+  })
   const queryClient = useQueryClient()
   const phase = useServerStore((s) => s.phase)
 
@@ -104,6 +134,7 @@ export function InstancesPage() {
   const uninstallInputMatches = uninstallInput.trim() === (uninstallTarget?.name ?? '').trim()
   /** 待停止确认的实例（启动走共享 hook：EULA 首启特例内置） */
   const [stopTarget, setStopTarget] = useState<InstanceSummary | null>(null)
+  const [restartTarget, setRestartTarget] = useState<InstanceSummary | null>(null)
 
   // 启动：共享 mutation（EULA 首启特例：命中 → 弹同意 → 续启；与仪表盘同源）
   const { startInstance, startPending, pendingStartId, eulaDialog } = useStartInstanceWithEula()
@@ -130,6 +161,11 @@ export function InstancesPage() {
   // 卡片停止按钮仍经 ConfirmDialog 确认后调用 stopMutation.mutate(id)
 
   /** 卡片启动：EULA 首启弹窗由共享 hook 处理，成功后反馈与列表刷新与 stop 一致 */
+  /** 卡片重启：与命令面板、世界页同一端点；确认弹窗由 restartTarget 承担 */
+  const handleRestart = (inst: InstanceSummary) => {
+    setRestartTarget(inst)
+  }
+
   const handleStart = (inst: InstanceSummary) => {
     startInstance(inst.id, {
       onStarted: () => {
@@ -372,11 +408,13 @@ export function InstancesPage() {
             onUninstall={setUninstallTarget}
             onStart={handleStart}
             onStop={setStopTarget}
+            onRestart={handleRestart}
             busyId={
               (startPending ? pendingStartId : null) ??
               (stopMutation.isPending ? (stopMutation.variables ?? null) : null)
             }
             phaseById={phase}
+            remainingMemoryText={remainingMemoryText}
             onDeploy={() => setDeployOpenDeep(true)}
           />
         )}
@@ -396,6 +434,9 @@ export function InstancesPage() {
         <InstanceSettingsDialog
           instance={settingsTarget}
           detail={detailStatuses[settingsTarget.id]}
+          othersMemory={instances
+            .filter((inst) => inst.id !== settingsTarget.id)
+            .map((inst) => detailStatuses[inst.id]?.maxMemory)}
           onOpenChange={(open) => !open && setSettingsTarget(null)}
         />
       )}
@@ -426,6 +467,21 @@ export function InstancesPage() {
           const target = stopTarget
           setStopTarget(null)
           if (target) stopMutation.mutate(target.id)
+        }}
+      />
+
+      {/* ── 重启确认（卡片「待重启」时露出的主操作） ── */}
+      <ConfirmDialog
+        open={restartTarget !== null}
+        onOpenChange={(open) => !open && setRestartTarget(null)}
+        title="重启服务器"
+        description={`确定要重启实例 "${restartTarget ? instanceLabel(restartTarget) : ''}" 吗？重启前将自动执行存档，在线玩家会短暂断开并自动重连。`}
+        confirmText="存档并重启"
+        danger
+        onConfirm={() => {
+          const target = restartTarget
+          setRestartTarget(null)
+          if (target) restartMutation.mutate(target.id)
         }}
       />
 

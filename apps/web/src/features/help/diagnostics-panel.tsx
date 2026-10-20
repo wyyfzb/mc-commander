@@ -186,7 +186,7 @@ export function buildChecks(input: {
       verdict: '已连通',
       basis: '玩家名单与统计走实时推送',
     })
-  } else if (!isVersionAtLeast(status.mcVersion, MSMP_MIN_MC_VERSION, true)) {
+  } else if (!isVersionAtLeast(status.mcVersion, MSMP_MIN_MC_VERSION, false)) {
     // 老版本没有这个面：报「不适用」并给出结论，不报「未开启」——对 MC 1.21.4 的用户，
     // 一条他无法处理的警告等于噪音，而自检里每多一条噪音，其余条目就更不被当回事
     checks.push({
