@@ -21,6 +21,7 @@ import {
   deployStatusMock,
   startMock,
   eulaMock,
+  overviewMock,
 } from '@tests/support/handlers'
 import { DeployDialog } from '@/features/instances/components/deploy-dialog'
 import { useDeployStore } from '@/stores/deploy'
@@ -93,6 +94,8 @@ beforeEach(() => {
   startMock.calls = 0
   eulaMock.shouldFail = false
   eulaMock.calls = 0
+  // 概览载荷按用例覆盖，残留会让后续用例读到上一轮的「已占内存」
+  overviewMock.instances = null
 })
 
 describe('DeployDialog', () => {
@@ -490,6 +493,57 @@ describe('DeployDialog 取消部署', () => {
 
     expect(await screen.findByText(/收尾未完成：实例目录未能删除（EBUSY/)).toBeInTheDocument()
     expect(screen.queryByText(/实例目录已清理/)).not.toBeInTheDocument()
+  })
+
+  it('内存吃紧：档位只列装得下的，且滑块分母是「还能分配」而非整机内存', async () => {
+    // 16 GB 机器上已有一个 8G 实例 ⇒ 可分配 14 − 8 = 6 GB
+    overviewMock.instances = [
+      { id: 'demo', name: '演示实例', isRunning: true, playerCount: 0, maxMemory: '8G' },
+    ]
+    renderDialog()
+    const user = userEvent.setup()
+
+    await waitVersion()
+    await user.click(screen.getByRole('button', { name: '下一步' }))
+
+    // 8G 档装不下（6 < 8），不得出现在可选项里——摆出来就等于允许用户选一个必然抢内存的配置
+    await user.click(screen.getByRole('combobox', { name: '选择内存分配' }))
+    expect(await screen.findByRole('option', { name: '4G' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: '8G' })).not.toBeInTheDocument()
+    await user.keyboard('{Escape}')
+
+    expect(screen.getByText('/ 还能分配 6.0 GB')).toBeInTheDocument()
+    // 只报「谁占的」：整机与系统保留不再复述，上面的「/ 还能分配 6.0 GB」已经是结论
+    expect(screen.getByText('已有 1 个实例分配了 8 GB')).toBeInTheDocument()
+    expect(screen.queryByText(/系统保留 2 GB/)).not.toBeInTheDocument()
+    /* 推荐语只给「该不该改小」的判据。不写算法解释：推荐值已预填在下方下拉框里，
+       用户看得见那个数，缺的是「什么时候该动它」 */
+    expect(screen.getByText(/推荐 4 GB；这台机器还要再开别的服，就选小一点/)).toBeInTheDocument()
+  })
+
+  it('内存已分完：给出超卖警示并阻断「下一步」', async () => {
+    overviewMock.instances = [
+      { id: 'a', name: '甲服', isRunning: true, playerCount: 0, maxMemory: '8G' },
+      { id: 'b', name: '乙服', isRunning: false, playerCount: 0, maxMemory: '8G' },
+    ]
+    renderDialog()
+    const user = userEvent.setup()
+
+    await waitVersion()
+    await user.click(screen.getByRole('button', { name: '下一步' }))
+    await user.type(screen.getByLabelText('实例名称'), '我的生存服')
+
+    expect(
+      screen.getByText(
+        '内存已分完：整机 16.0 GB，2 个实例已分配 16 GB，还要留 2 GB 给面板与系统。再开一台会和已有实例抢内存，轻则卡顿、重则被系统杀掉——建议先卸载不用的实例，或把某个实例的内存调小。',
+      ),
+    ).toBeInTheDocument()
+
+    // 阻断：放过去就是一个必然抢内存的实例，症状要到运行期才出现
+    await user.click(screen.getByRole('button', { name: '下一步' }))
+    expect(screen.getByText('这台机器已没有可分配的内存，请先卸载不用的实例')).toBeInTheDocument()
+    // 仍停在步骤②：EULA 勾选只在步骤③出现
+    expect(screen.queryByRole('checkbox', { name: /Minecraft EULA/ })).not.toBeInTheDocument()
   })
 
   it('收尾未完成（服务端带清理明细）：取消视图如实说明，不谎报已清理', () => {

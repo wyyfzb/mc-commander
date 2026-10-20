@@ -17,9 +17,17 @@
 /** 主 / 次 / 修订；缺失段为 0（不是 NaN） */
 export type VersionTriple = readonly [number, number, number]
 
-/** 取版本三段；整串里找不到数字时返回 null */
+/**
+ * 取版本三段；整串里找不到数字时返回 null。
+ *
+ * 周快照形态（`25w35a`、`26w14a`）同样返回 null：它的 `25` 是**年份后两位**，
+ * 按点分版本读成 `25.0.0` 会排到 1.21.9 之后——把 2019 年的版本判成支持 MSMP、
+ * 把 1.21.2 时代的周快照送进 26.x 的规则名表。读不懂就返回 null，由调用方按各自极性处置。
+ */
 export function parseVersion(version: string): VersionTriple | null {
-  const m = String(version ?? '').match(/(\d+)(?:\.(\d+))?(?:\.(\d+))?/)
+  const text = String(version ?? '')
+  if (/^\d{2}w\d{2}[a-z]$/.test(text)) return null
+  const m = text.match(/(\d+)(?:\.(\d+))?(?:\.(\d+))?/)
   if (!m) return null
   return [Number(m[1]), Number(m[2] ?? 0), Number(m[3] ?? 0)]
 }

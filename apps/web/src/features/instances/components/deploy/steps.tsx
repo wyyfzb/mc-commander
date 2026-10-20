@@ -1,11 +1,11 @@
 /**
  * DeployDialog 三步表单面板
  * - 步骤① 服务端类型 5 卡单选 + 版本 Select + fabric/forge loader Select
- * - 步骤② 实例名称 Input + 内存 Select 档位
+ * - 步骤② 实例名称 Input + 内存 Select 档位（只列装得下的档）
  * - 步骤③ 确认摘要 + EULA 同意勾选
  * 纯展示组件：表单状态与派生逻辑留在编排层（deploy-dialog.tsx），经 props 回调上行
  */
-import { Check, Info } from 'lucide-react'
+import { AlertTriangle, Check, Info } from 'lucide-react'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
@@ -26,9 +26,9 @@ import {
   recommendedJavaVersion,
   type ServerType,
 } from '@/lib/mc-deploy'
-import { SERVER_TYPE_DESCRIPTIONS, SERVER_TYPE_ICONS, MEMORY_OPTIONS } from './constants'
+import { hasRoomForInstance, type MemoryBudget } from '@/lib/instance-memory'
+import { SERVER_TYPE_DESCRIPTIONS, SERVER_TYPE_ICONS } from './constants'
 import type { DeployForm } from './types'
-import { memoryToGB } from './utils'
 
 interface DeployStepServerProps {
   form: DeployForm
@@ -165,7 +165,11 @@ export function DeployStepServer({
 
 interface DeployStepConfigProps {
   form: DeployForm
-  totalMemory: number
+  budget: MemoryBudget
+  /** 装得下的档位（'1G'/'2G'…）；一个都装不下时为最低档 */
+  memoryOptions: readonly string[]
+  /** 推荐档位（GB） */
+  recommendGB: number
   nameError: string
   onNameChange: (name: string) => void
   onMemoryChange: (memory: string) => void
@@ -174,11 +178,18 @@ interface DeployStepConfigProps {
 /** 步骤② 实例名称 + 内存档位 */
 export function DeployStepConfig({
   form,
-  totalMemory,
+  budget,
+  memoryOptions,
+  recommendGB,
   nameError,
   onNameChange,
   onMemoryChange,
 }: DeployStepConfigProps) {
+  const fits = hasRoomForInstance(budget.availableGB)
+  /* 档位比预期少时才需要这句交代是谁占的；有别的实例在时才渲染。
+     说「分配了」不说「占了」：这是 -Xmx 之和，实测 -Xmx4G 空转服务器 RSS 只有几十 MB */
+  const allocatedText =
+    budget.otherCount > 0 ? `已有 ${budget.otherCount} 个实例分配了 ${budget.othersGB} GB` : null
   return (
     <div className="flex flex-col gap-3">
       {/* 实例名称 */}
@@ -194,35 +205,45 @@ export function DeployStepConfig({
         {nameError !== '' && <p className="text-mcs-xs text-mcs-error-fg">{nameError}</p>}
       </div>
 
-      {/* 内存档位 */}
+      {/* 内存档位：分母是本机「还能分配的量」而非整机内存——整机数字对多实例场景
+          是假的可行空间，用户会据此选中装不下的档 */}
       <div className="flex flex-col gap-2">
         <Label>内存分配</Label>
         <div className="flex items-baseline gap-2">
           <span className="font-mono text-mcs-xl font-semibold text-mcs-accent-fg">
-            {memoryToGB(form.memory).toFixed(1)} GB
+            {form.memory}
           </span>
-          <span className="text-mcs-sm text-mcs-text-muted">/ {totalMemory.toFixed(1)} GB</span>
+          <span className="text-mcs-sm text-mcs-text-muted">
+            / 还能分配 {budget.availableGB.toFixed(1)} GB
+          </span>
         </div>
         <Select value={form.memory} onValueChange={onMemoryChange}>
           <SelectTrigger className="w-full" aria-label="选择内存分配">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {MEMORY_OPTIONS.map((m) => (
+            {memoryOptions.map((m) => (
               <SelectItem key={m} value={m}>
                 {m}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
-        <p className="text-mcs-xs text-mcs-text-muted">选择 Minecraft 服务器可用的最大内存</p>
-        {/* 推荐提示（<=8G 推荐 50%，>8G 推荐 70%） */}
-        <p className="flex items-center gap-1.5 text-mcs-xs text-mcs-warning-fg">
-          <Info className="size-3.5 shrink-0" aria-hidden />
-          {totalMemory <= 8
-            ? `推荐分配 ${(totalMemory * 0.5).toFixed(1)} GB（系统保留 ${(totalMemory - totalMemory * 0.5).toFixed(1)} GB）`
-            : `推荐分配 ${(totalMemory * 0.7).toFixed(1)} GB（系统保留 ${(totalMemory - totalMemory * 0.7).toFixed(1)} GB）`}
-        </p>
+        {allocatedText !== null && (
+          <p className="text-mcs-xs text-mcs-text-muted">{allocatedText}</p>
+        )}
+        {fits ? (
+          <p className="flex items-center gap-1.5 text-mcs-xs text-mcs-warning-fg">
+            <Info className="size-3.5 shrink-0" aria-hidden />
+            {/* 只给「该选多少」的判据，不解释推荐值怎么算出来的：8G 已经预填在下拉框里，
+                用户看得见这个数，他缺的是「什么时候该改小」——而那正是这半句 */}
+            推荐 {recommendGB} GB；这台机器还要再开别的服，就选小一点
+          </p>
+        ) : (
+          <NoticeBanner variant="warning" icon={AlertTriangle}>
+            {`内存已分完：整机 ${budget.totalGB.toFixed(1)} GB，${budget.otherCount} 个实例已分配 ${budget.othersGB} GB，还要留 ${budget.reserveGB} GB 给面板与系统。再开一台会和已有实例抢内存，轻则卡顿、重则被系统杀掉——建议先卸载不用的实例，或把某个实例的内存调小。`}
+          </NoticeBanner>
+        )}
       </div>
     </div>
   )

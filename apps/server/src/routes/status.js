@@ -248,6 +248,8 @@ export function createStatusRoutes(serverManager) {
           name: i.name,
           isRunning: i.isRunning,
           playerCount: i.playerCount,
+          // 与部署向导同源：面板靠它扣减其他实例的已分配量，不看运行状态
+          maxMemory: i.maxMemory,
         })),
       }),
     );

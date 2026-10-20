@@ -5,6 +5,9 @@ export const instanceSummarySchema = z.object({
   name: z.string(),
   isRunning: z.boolean(),
   playerCount: z.number(),
+  // 已分配的 -Xmx：面板据此算「这台机器还能给新实例多少内存」。
+  // 可选是因为它也会出现在只关心身份的列表载荷里，缺省即「未知，不计入已分配」。
+  maxMemory: z.union([z.string(), z.number()]).nullable().optional(),
 })
 
 export const instanceUpdatePayloadSchema = z.object({

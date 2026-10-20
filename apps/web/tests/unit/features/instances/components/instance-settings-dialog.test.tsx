@@ -21,7 +21,10 @@ import { queryKeys, FALLBACK_POLL_INTERVAL_MS } from '@/api/queries'
 import { handlers, mockInstanceStatus } from '@tests/support/handlers'
 import { useConnectionStore } from '@/stores/connection'
 import { useRestartPendingStore } from '@/stores/restart-pending'
-import { InstanceSettingsDialog } from '@/features/instances/components/instance-settings-dialog'
+import {
+  InstanceSettingsDialog,
+  generateAikarFlags,
+} from '@/features/instances/components/instance-settings-dialog'
 import type { InstanceStatus, InstanceSummary, PushChannelState } from '@/api/types'
 
 // 推送通道接口按用例打桩（其余域仍走真实 MSW）：像读失败、写失败这类分支要精确编排状态。
@@ -136,7 +139,7 @@ function DetailProbe() {
   return <span data-testid="detail-probe">{data ? 'loaded' : 'loading'}</span>
 }
 
-function renderDialog(detail?: InstanceStatus) {
+function renderDialog(detail?: InstanceStatus, othersMemory?: string[]) {
   // 显式传 undefined = 详情未就绪场景；省略参数 = 默认详情（默认参数机制会把
   // 显式 undefined 替换成默认值，需用 arguments.length 区分）
   const d = arguments.length === 0 ? detailWith() : detail
@@ -144,7 +147,12 @@ function renderDialog(detail?: InstanceStatus) {
   const onOpenChange = vi.fn()
   render(
     <QueryClientProvider client={qc}>
-      <InstanceSettingsDialog instance={alpha} detail={d} onOpenChange={onOpenChange} />
+      <InstanceSettingsDialog
+        instance={alpha}
+        detail={d}
+        othersMemory={othersMemory}
+        onOpenChange={onOpenChange}
+      />
       <DetailProbe />
       <Toaster />
     </QueryClientProvider>,
@@ -173,24 +181,26 @@ beforeEach(() => {
 })
 
 describe('InstanceSettingsDialog', () => {
-  it('结构化字段预填：内存 2G / Aikar 默认开（生成标志进预览）/ 高级参数默认折叠', () => {
+  it('结构化字段预填：内存 2G / 滑块上限扣系统保留 / Aikar 默认关 / 高级参数默认折叠', () => {
     renderDialog()
 
     expect(screen.getByRole('heading', { name: '实例设置' })).toBeInTheDocument()
     expect(screen.getByText('虚构甲服')).toBeInTheDocument()
     expect(screen.getByText('2.0 GB')).toBeInTheDocument()
-    expect(screen.getByText('/ 16.0 GB')).toBeInTheDocument()
+    // 分母是「这台最多能给多少」：16 GB 机器扣掉 2 GB 系统保留，不是整机 16
+    expect(screen.getByText('/ 最多 14.0 GB')).toBeInTheDocument()
     expect(screen.getByRole('slider', { name: '内存分配' })).toHaveAttribute('aria-valuenow', '2')
-    expect(screen.getByRole('switch', { name: "JVM 优化 (Aikar's Flags)" })).toBeChecked()
+    // 默认不开 JVM 调优：官方口径是现代 JVM 先不加 flag 试运行
+    expect(screen.getByRole('switch', { name: "JVM 优化 (Aikar's Flags)" })).not.toBeChecked()
+    /* 触发条件必须是用户看得见的东西：GC 停顿只能靠 -Xlog 才输出，而面板启动参数里
+       没有它（实测 latest.log 中 GC 停顿行数为 0）⇒ 拿「日志里的 GC 停顿」当判据
+       等于指路到一个空文件。换成 TPS 与「玩家说卡」这两个真实可观测的信号 */
+    const desc = screen.getByText(/玩家说卡、面板上 TPS 长期偏低时再打开/)
+    expect(desc).toBeInTheDocument()
+    expect(desc.textContent).not.toContain('GC 停顿')
 
-    // 预览 = java + -Xms1G -Xmx2G + Aikar 生成行 + -jar server.jar nogui
-    const preview = screen.getByText(/java -Xms1G -Xmx2G/)
-    expect(preview).toBeInTheDocument()
-    expect(preview).toHaveTextContent('-XX:+UseG1GC')
-    expect(preview).toHaveTextContent('-Daikars.new.flags=true')
-    expect(preview).toHaveTextContent('-jar server.jar nogui')
-
-    // 高级参数默认折叠：Java 路径输入不可见
+    // 高级参数默认折叠：启动命令与 Java 路径都不可见（常驻会把弹窗变成调优手册）
+    expect(screen.queryByText('实际启动命令')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Java 路径（可选）')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /高级参数/ })).toHaveAttribute(
       'aria-expanded',
@@ -198,24 +208,55 @@ describe('InstanceSettingsDialog', () => {
     )
   })
 
-  it('高级参数展开：Java 路径 + JVM 参数多行 + 参数说明（含逐行参数与说明）', async () => {
+  it('高级参数展开：启动命令 + Java 路径 + JVM 参数多行 + 参数说明', async () => {
     renderDialog()
     const user = userEvent.setup()
 
     await user.click(screen.getByRole('button', { name: /高级参数/ }))
 
+    // 启动命令 = java + -Xms1G -Xmx2G + -jar server.jar nogui（Aikar 默认关 ⇒ 无生成行）
+    const preview = screen.getByText(/java -Xms1G -Xmx2G/)
+    expect(preview).toHaveTextContent('-jar server.jar nogui')
+    expect(preview).not.toHaveTextContent('-XX:+UseG1GC')
+
     const javaPath = screen.getByLabelText('Java 路径（可选）')
     expect(javaPath).toHaveValue('java')
     const jvmArgs = screen.getByLabelText('JVM 参数（每行一个）') as HTMLTextAreaElement
-    expect(jvmArgs.value).toContain('-XX:+UseG1GC')
-    // 参数说明：系统参数行 + 自定义参数行（每条自定义参数均带「自定义 JVM 参数」说明）
+    expect(jvmArgs.value).toBe('')
+    // 参数说明：系统参数行（自定义参数为空 ⇒ 无「自定义 JVM 参数」行）
     expect(screen.getByText('-Xmx2G')).toBeInTheDocument()
     expect(screen.getByText('初始堆内存（自动设为最大值的一半）')).toBeInTheDocument()
-    expect(screen.getAllByText('自定义 JVM 参数').length).toBeGreaterThan(0)
+    expect(screen.queryByText('自定义 JVM 参数')).not.toBeInTheDocument()
   })
 
-  it('旧 startCommand 解析（无 aikars 标记）：内存 -Xmx3G + 附加参数保留、Aikar 开关关闭', () => {
+  it('其他实例已占内存时滑块上限随之收缩（不再按整机内存给）', () => {
+    renderDialog(detailWith({ totalMemory: 16 }), ['4G', '2G'])
+
+    // 16 − 2（系统保留）− 6（其他实例）= 8
+    expect(screen.getByText('/ 最多 8.0 GB')).toBeInTheDocument()
+    expect(screen.getByRole('slider', { name: '内存分配' })).toHaveAttribute('aria-valuemax', '8')
+    // 只说「为什么拖不上去」，不复述整机与系统保留（上面的「/ 最多 8.0 GB」已是结论）
+    expect(
+      screen.getByText('这台最多只能分到 8.0 GB：其他 2 个实例已分配 6 GB'),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/系统保留 2 GB/)).not.toBeInTheDocument()
+  })
+
+  it('其他实例已占满整机时给出超卖警示（而不是让用户继续拖大）', () => {
+    renderDialog(detailWith({ totalMemory: 16 }), ['8G', '8G'])
+
+    expect(screen.getByText('/ 已无余量可分')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        '这台机器已经没有余量可分了。再把内存调大会和已有实例抢内存，轻则卡顿、重则被系统杀掉——建议先把不用的实例卸载，或把它的内存调小。',
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('旧 startCommand 解析（无 aikars 标记）：内存 -Xmx3G + 附加参数保留、Aikar 开关关闭', async () => {
     renderDialog(detailWith({ startCommand: 'java -Xmx3G -XX:+UseG1GC -jar server.jar nogui' }))
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: /高级参数/ }))
 
     expect(screen.getByText('3.0 GB')).toBeInTheDocument()
     expect(screen.getByRole('switch', { name: "JVM 优化 (Aikar's Flags)" })).not.toBeChecked()
@@ -226,13 +267,15 @@ describe('InstanceSettingsDialog', () => {
     expect(preview).not.toHaveTextContent('-XX:SurvivorRatio=32')
   })
 
-  it('旧 startCommand 解析（含 aikars）：开关开启并生成完整 Aikar 标志', () => {
+  it('旧 startCommand 解析（含 aikars）：开关开启并生成完整 Aikar 标志', async () => {
     renderDialog(
       detailWith({
         startCommand:
           'java -Xms1G -Xmx4G -Dusing.aikars.flags=https://mcflags.emc.gs -jar server.jar nogui',
       }),
     )
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: /高级参数/ }))
 
     expect(screen.getByText('4.0 GB')).toBeInTheDocument()
     expect(screen.getByRole('switch', { name: "JVM 优化 (Aikar's Flags)" })).toBeChecked()
@@ -241,8 +284,35 @@ describe('InstanceSettingsDialog', () => {
     expect(preview).toHaveTextContent('-Daikars.new.flags=true')
   })
 
-  it('结构化 jvmArgs 预填：maxMemory 数值(MB) 解析 + 自定义行保留（Aikar 关）', () => {
+  /* 逐值锁两个分支：这 5 个值决定新生代占比与回收时机，改错不会让任何界面变红，
+     只会让开了「优化」的服务器 GC 更频繁——症状出现在用户那边，不在这里 */
+  it('Aikar 取值：≤12G 用原文基准档，>12G 切到三值齐变的大堆档', () => {
+    expect(generateAikarFlags(8)).toEqual(
+      expect.arrayContaining([
+        '-XX:G1NewSizePercent=30',
+        '-XX:G1MaxNewSizePercent=40',
+        '-XX:G1HeapRegionSize=8M',
+        '-XX:G1ReservePercent=20',
+        '-XX:InitiatingHeapOccupancyPercent=15',
+      ]),
+    )
+    expect(generateAikarFlags(16)).toEqual(
+      expect.arrayContaining([
+        '-XX:G1NewSizePercent=40',
+        '-XX:G1MaxNewSizePercent=50',
+        '-XX:G1HeapRegionSize=16M',
+        '-XX:G1ReservePercent=15',
+        '-XX:InitiatingHeapOccupancyPercent=20',
+      ]),
+    )
+    // 12 是分界点本身：走基准档（原文「12GB or less 不要调整」）
+    expect(generateAikarFlags(12)).toContain('-XX:G1NewSizePercent=30')
+  })
+
+  it('结构化 jvmArgs 预填：maxMemory 数值(MB) 解析 + 自定义行保留（Aikar 关）', async () => {
     renderDialog(detailWith({ maxMemory: 4096, jvmArgs: ['-Dcustom=1'] }))
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: /高级参数/ }))
 
     expect(screen.getByText('4.0 GB')).toBeInTheDocument()
     expect(screen.getByRole('switch', { name: "JVM 优化 (Aikar's Flags)" })).not.toBeChecked()
@@ -254,6 +324,7 @@ describe('InstanceSettingsDialog', () => {
   it('滑块 0.5G 步进：数值与命令预览实时联动（非整数 G → M 后缀）', async () => {
     renderDialog()
     const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: /高级参数/ }))
 
     const slider = screen.getByRole('slider', { name: '内存分配' })
     slider.focus()
@@ -264,16 +335,20 @@ describe('InstanceSettingsDialog', () => {
     expect(screen.getByText(/java -Xms1280M -Xmx2560M/)).toBeInTheDocument()
   })
 
-  it('Aikar 开关关闭移除生成行、再开启重新生成（自定义行保留）', async () => {
+  it('Aikar 开关默认关闭；开启后生成行进入启动命令，再关闭即移除', async () => {
     renderDialog()
     const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: /高级参数/ }))
 
     const toggle = screen.getByRole('switch', { name: "JVM 优化 (Aikar's Flags)" })
-    await user.click(toggle)
-    expect(screen.getByText(/java -Xms1G -Xmx2G/)).not.toHaveTextContent('-XX:SurvivorRatio=32')
-
+    expect(toggle).not.toBeChecked()
     await user.click(toggle)
     expect(screen.getByText(/java -Xms1G -Xmx2G/)).toHaveTextContent('-XX:SurvivorRatio=32')
+
+    await user.click(toggle)
+    const preview = screen.getByText(/java -Xms1G -Xmx2G/)
+    expect(preview).not.toHaveTextContent('-XX:SurvivorRatio=32')
+    expect(preview).not.toHaveTextContent('-Daikars.new.flags=true')
   })
 
   it('两处设置行同形：容器逐类等集 + 行外无额外包裹（就绪态）', async () => {
@@ -321,11 +396,8 @@ describe('InstanceSettingsDialog', () => {
 
     expect(await screen.findByText('启动配置已保存，重启实例后生效')).toBeInTheDocument()
     expect(putBodies).toHaveLength(1)
-    expect(putBodies[0]).toEqual({
-      maxMemory: '4G',
-      minMemory: '2G',
-      jvmArgs: expect.arrayContaining(['-XX:+UseG1GC', '-Daikars.new.flags=true']),
-    })
+    // 默认不开 JVM 调优 ⇒ jvmArgs 为空数组：保存不得凭空写入用户没要的参数
+    expect(putBodies[0]).toEqual({ maxMemory: '4G', minMemory: '2G', jvmArgs: [] })
     expect(putBodies[0]).not.toHaveProperty('javaPath')
     expect(onOpenChange).toHaveBeenCalledTimes(1)
     expect(onOpenChange).toHaveBeenCalledWith(false)

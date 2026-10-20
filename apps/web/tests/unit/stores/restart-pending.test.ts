@@ -167,9 +167,12 @@ describe('restartApplied', () => {
     expect(restartApplied(mark + 10_000, 3600, mark)).toBe(false)
   })
 
-  it('容差：置位后 2 秒内即使 uptime 为 0 也不算已生效（吸收整秒取整与投递延迟）', () => {
+  /* 未运行时服务端报 uptime=0：now-0 恒大于置位时刻，旧判据会据此抹掉徽章。
+     判据归本函数，不靠调用方的 isRunning 门控——否则单独调用它得出的「已生效」与自述语义相反 */
+  it('uptime 为 0（实例未运行）⇒ 一律不判已生效，与距置位多久无关', () => {
     expect(restartApplied(mark + 1000, 0, mark)).toBe(false)
-    expect(restartApplied(mark + 3000, 0, mark)).toBe(true)
+    expect(restartApplied(mark + 3000, 0, mark)).toBe(false)
+    expect(restartApplied(mark + 86_400_000, 0, mark)).toBe(false)
   })
 
   it('uptime 非法（负数 / NaN / Infinity）⇒ 不判已生效：宁可留着也不谎报生效', () => {

@@ -17,6 +17,7 @@ import type { ReactNode } from 'react'
 import { useState } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import {
+  AlertTriangle,
   ChevronDown,
   ChevronUp,
   Gauge,
@@ -45,6 +46,12 @@ import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { NoticeBanner, NoticeBannerAction } from '@/components/mcs/notice-banner'
 import { cn } from '@/lib/utils'
 import { instanceLabel } from '@/lib/instance-label'
+import {
+  formatMemoryForJvm,
+  hasRoomForInstance,
+  memoryBudget,
+  parseMemoryGB,
+} from '@/lib/instance-memory'
 import { getFriendlyErrorText } from '@/api/errors'
 import { FALLBACK_POLL_INTERVAL_MS } from '@/api/queries'
 import { useRestartPendingStore } from '@/stores/restart-pending'
@@ -53,21 +60,6 @@ import { useUpdateInstance } from '../queries'
 import type { InstanceStatus, InstanceSummary, InstanceUpdatePayload } from '@/api/types'
 
 // ── 启动命令解析/生成纯函数 ──
-
-/** Java -Xmx/-Xms 不支持小数 G 后缀：整数用 G，非整数转 M */
-export function formatMemForJvm(mem: number): string {
-  if (mem === Math.round(mem)) return `${Math.round(mem)}G`
-  return `${Math.round(mem * 1024)}M`
-}
-
-/** 解析持久化内存字段：'4G'/'2048M' 字符串；旧数据数值按 MB 处理（mock/旧库约定） */
-export function parseMemoryValue(value: string | number | null | undefined): number | null {
-  if (value == null || value === '') return null
-  if (typeof value === 'number') return value / 1024
-  const m = value.match(/^(\d+(?:\.\d+)?)(G|M)$/i)
-  if (!m) return null
-  return m[2]!.toUpperCase() === 'G' ? parseFloat(m[1]!) : parseFloat(m[1]!) / 1024
-}
 
 /** Aikar 生成的参数名全集（识别并移除旧生成行——参数值随内存变化，不能按整行精确匹配） */
 const AIKAR_FLAG_NAMES = [
@@ -98,9 +90,14 @@ export function isAikarFlagLine(line: string): boolean {
   return AIKAR_FLAG_NAMES.some((n) => line === n || line.startsWith(`${n}=`))
 }
 
-/** 按当前内存生成 Aikar Flags（内存 >=12G 用 40/50 档，否则 10/30） */
+/**
+ * 按当前内存生成 Aikar Flags，取值为 Aikar 原文（mcflags.emc.gs）的两个分支：
+ * -Xmx ≤ 12G 用基准档（30/40、8M、20、15），> 12G 才动其余三个值。
+ * 小堆不另设更小的档：基准档本身就是给「12G 或更少」用的，再调小只会让新生代更小、GC 更频。
+ */
 export function generateAikarFlags(allocMem: number): string[] {
-  const big = allocMem >= 12
+  // 严格大于 12：原文的边界是「12GB or less 不要调整」，恰好 12G 属基准档
+  const big = allocMem > 12
   return [
     '-XX:+UseG1GC',
     '-XX:+ParallelRefProcEnabled',
@@ -108,13 +105,13 @@ export function generateAikarFlags(allocMem: number): string[] {
     '-XX:+UnlockExperimentalVMOptions',
     '-XX:+DisableExplicitGC',
     '-XX:+AlwaysPreTouch',
-    `-XX:G1NewSizePercent=${big ? '40' : '10'}`,
-    `-XX:G1MaxNewSizePercent=${big ? '50' : '30'}`,
-    '-XX:G1HeapRegionSize=8M',
-    '-XX:G1ReservePercent=20',
+    `-XX:G1NewSizePercent=${big ? '40' : '30'}`,
+    `-XX:G1MaxNewSizePercent=${big ? '50' : '40'}`,
+    `-XX:G1HeapRegionSize=${big ? '16M' : '8M'}`,
+    `-XX:G1ReservePercent=${big ? '15' : '20'}`,
     '-XX:G1HeapWastePercent=5',
     '-XX:G1MixedGCCountTarget=4',
-    '-XX:InitiatingHeapOccupancyPercent=15',
+    `-XX:InitiatingHeapOccupancyPercent=${big ? '20' : '15'}`,
     '-XX:G1MixedGCLiveThresholdPercent=90',
     '-XX:G1RSetUpdatingPauseTimePercent=5',
     '-XX:SurvivorRatio=32',
@@ -135,7 +132,9 @@ export interface ParsedStartCommand {
 /** 解析既有启动命令：内存 / Aikar 开关 / 附加参数 */
 export function parseStartCommand(cmd: string | null | undefined): ParsedStartCommand {
   if (cmd == null || cmd.trim() === '') {
-    return { memory: 2.0, useAikarFlags: true, jvmArgsTokens: [] }
+    // 默认不开 Aikar：PaperMC 官方口径是 JVM 17/21+ 先不加 flag 试运行，出现 GC 问题再加。
+    // 默认开等于替用户先决定了调优，与他的实际症状无关
+    return { memory: 2.0, useAikarFlags: false, jvmArgsTokens: [] }
   }
   let memory = 2.0
   const xmx = cmd.match(/-Xmx(\d+(?:\.\d+)?)(G|M)/)
@@ -168,6 +167,8 @@ export interface InstanceSettingsDialogProps {
   instance: InstanceSummary
   /** 实例详情（GET /instances/:id 结果；含 startCommand/jvmArgs/javaPath/内存，缺失时用默认值） */
   detail: InstanceStatus | undefined
+  /** 其他实例已分配的 -Xmx（不含本实例） */
+  othersMemory?: readonly (string | number | null | undefined)[]
   /** 关闭回调（保存成功后同样触发） */
   onOpenChange: (open: boolean) => void
 }
@@ -234,6 +235,7 @@ function SettingsRow({
 export function InstanceSettingsDialog({
   instance,
   detail,
+  othersMemory,
   onOpenChange,
 }: InstanceSettingsDialogProps) {
   const updateMutation = useUpdateInstance()
@@ -257,11 +259,11 @@ export function InstanceSettingsDialog({
     const memory =
       detail?.startCommand != null && detail.startCommand.trim() !== ''
         ? parsed.memory
-        : (parseMemoryValue(detail?.maxMemory) ?? 2.0)
+        : (parseMemoryGB(detail?.maxMemory) ?? 2.0)
     const useAikar =
       detail?.startCommand != null && detail.startCommand.trim() !== ''
         ? parsed.useAikarFlags
-        : (detail?.jvmArgs?.some(isAikarFlagLine) ?? true)
+        : (detail?.jvmArgs?.some(isAikarFlagLine) ?? false)
     const jvmArgsInit =
       detail?.startCommand != null && detail.startCommand.trim() !== ''
         ? parsed.jvmArgsTokens
@@ -296,8 +298,12 @@ export function InstanceSettingsDialog({
   // 推送若不算进来，「拨了开关直接关闭」既不提示、也没人提醒它还没生效——两套提交语义的根源
   const dirty = configDirty || pushDirty
 
-  // totalMemory > 1 用系统内存，否则 16 兜底
-  const totalMax = detail && detail.totalMemory > 1 ? detail.totalMemory : 16
+  /* totalMemory 缺失（<=1）按 16 兜底，与部署向导同一默认值。
+     用整机内存当滑块上限会显示出一个给不出来的数：两个 4G 实例并存时仍能拖到 16 */
+  const machineTotalGB = detail && detail.totalMemory > 1 ? detail.totalMemory : 16
+  const budget = memoryBudget(machineTotalGB, othersMemory ?? [])
+  const totalMax = Math.max(budget.availableGB, initial.memory, 1)
+  const overCommitted = !hasRoomForInstance(budget.availableGB)
   const jvmArgsLines = splitLines(jvmArgsText)
   const startMem = Math.min(Math.max(allocatedMemory / 2, 1), allocatedMemory)
 
@@ -315,8 +321,8 @@ export function InstanceSettingsDialog({
   /** 生成的启动命令预览（与提交的结构化配置一致：javaPath + -Xms/-Xmx + jvmArgs + -jar server.jar nogui） */
   const startCommandPreview = [
     javaPath.trim() === '' ? 'java' : javaPath.trim(),
-    `-Xms${formatMemForJvm(startMem)}`,
-    `-Xmx${formatMemForJvm(allocatedMemory)}`,
+    `-Xms${formatMemoryForJvm(startMem)}`,
+    `-Xmx${formatMemoryForJvm(allocatedMemory)}`,
     ...jvmArgsLines,
     '-jar',
     'server.jar',
@@ -326,8 +332,8 @@ export function InstanceSettingsDialog({
   const handleSave = async () => {
     if (isSaving) return
     const payload: InstanceUpdatePayload = {
-      maxMemory: formatMemForJvm(allocatedMemory),
-      minMemory: formatMemForJvm(startMem),
+      maxMemory: formatMemoryForJvm(allocatedMemory),
+      minMemory: formatMemoryForJvm(startMem),
       jvmArgs: jvmArgsLines,
     }
     // 遗留 startCommand 实例：保存结构化配置时显式清除旧命令（startCommand:null）——否则
@@ -407,7 +413,9 @@ export function InstanceSettingsDialog({
                 {allocatedMemory.toFixed(1)} GB
               </span>
               <span className="ml-1 text-mcs-sm text-mcs-text-muted">
-                / {totalMax.toFixed(1)} GB
+                {/* 超卖时显示 0 会和滑块上仍停在 4G 的手柄自相矛盾：
+                    改成「已无余量」，说的是「不该再加」而不是「现值错了」 */}
+                {overCommitted ? '/ 已无余量可分' : `/ 最多 ${budget.availableGB.toFixed(1)} GB`}
               </span>
             </p>
             <Slider
@@ -418,15 +426,28 @@ export function InstanceSettingsDialog({
               value={[allocatedMemory]}
               onValueChange={([v]) => handleMemoryChange(v!)}
             />
-            <p className="text-mcs-xs text-mcs-text-muted">拖拽滑块分配该实例可用的最大内存</p>
+            {/* 只在「滑块拖不到底」时解释为什么：此时用户会本能地怀疑上限算错了。
+                没有别的实例占内存时上限 = 整机减保留，报整机与保留等于让他自己相减，
+                而他要的信息（最多能拖到几）上面那行已经给了 */}
+            {budget.otherCount > 0 && (
+              <p className="text-mcs-xs text-mcs-text-muted">
+                {`这台最多只能分到 ${budget.availableGB.toFixed(1)} GB：其他 ${budget.otherCount} 个实例已分配 ${budget.othersGB} GB`}
+              </p>
+            )}
+            {overCommitted && (
+              <NoticeBanner variant="warning" icon={AlertTriangle}>
+                这台机器已经没有余量可分了。再把内存调大会和已有实例抢内存，轻则卡顿、重则被系统杀掉——建议先把不用的实例卸载，或把它的内存调小。
+              </NoticeBanner>
+            )}
           </div>
 
-          {/* ── Aikar Flags 开关（开启时生成 G1GC 优化参数同步进 jvmArgs）── */}
+          {/* ── JVM 优化开关：说明写「什么时候该开」而不是参数名——服主判断不了
+                「G1GC 停顿」是什么，但能判断「服务器卡不卡」 ── */}
           <SettingsRow
             icon={Gauge}
             iconClassName={useAikarFlags ? 'text-mcs-accent-fg' : 'text-mcs-text-muted'}
             title="JVM 优化 (Aikar's Flags)"
-            description="使用 MCS 社区优化的 G1GC 参数，改善 GC 停顿"
+            description="玩家说卡、面板上 TPS 长期偏低时再打开；现代 Java 的默认参数通常够用"
             control={
               <Switch
                 checked={useAikarFlags}
@@ -436,31 +457,41 @@ export function InstanceSettingsDialog({
             }
           />
 
-          {/* ── 生成的启动命令预览 ── */}
+          {/* ── 高级参数（启动命令 + javaPath + jvmArgs + 参数说明）：默认收起。
+                这些是「出了问题时才需要看」的内容，常驻会让弹窗读起来像一份调优手册，
+                而打开这个弹窗的多数人只是想改一下内存 ── */}
           <div className="flex flex-col gap-1.5">
-            <span className="text-mcs-xs font-semibold text-mcs-text-muted">生成的启动命令</span>
-            <pre className="w-full overflow-x-auto whitespace-pre-wrap break-all rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-default p-3 font-mono text-mcs-xs text-mcs-accent-fg">
-              {startCommandPreview}
-            </pre>
+            <button
+              type="button"
+              onClick={() => setShowAdvanced((s) => !s)}
+              aria-expanded={showAdvanced}
+              className="flex cursor-pointer items-center gap-1 self-start rounded-mcs-sm text-mcs-sm font-medium text-mcs-text-muted transition-colors hover:bg-mcs-state-hover hover:text-mcs-text-default"
+            >
+              {showAdvanced ? (
+                <ChevronUp className="size-4" aria-hidden />
+              ) : (
+                <ChevronDown className="size-4" aria-hidden />
+              )}
+              高级参数
+            </button>
+            <p className="text-mcs-xs text-mcs-text-muted">
+              不动这里也能正常用；要换 Java、加自定义参数或核对实际启动命令时再展开。
+            </p>
           </div>
-
-          {/* ── 高级参数（javaPath + jvmArgs + 参数说明，展开/收起）── */}
-          <button
-            type="button"
-            onClick={() => setShowAdvanced((s) => !s)}
-            aria-expanded={showAdvanced}
-            className="flex cursor-pointer items-center gap-1 rounded-mcs-sm text-mcs-sm font-medium text-mcs-text-muted transition-colors hover:bg-mcs-state-hover hover:text-mcs-text-default"
-          >
-            {showAdvanced ? (
-              <ChevronUp className="size-4" aria-hidden />
-            ) : (
-              <ChevronDown className="size-4" aria-hidden />
-            )}
-            高级参数
-          </button>
 
           {showAdvanced && (
             <div className="flex flex-col gap-4">
+              {/* 实际启动命令：只在展开高级参数时出现，回答「我到底会用什么命令启动它」 */}
+              <div className="flex flex-col gap-1.5">
+                <span className="text-mcs-xs font-semibold text-mcs-text-muted">实际启动命令</span>
+                <pre className="w-full overflow-x-auto whitespace-pre-wrap break-all rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-default p-3 font-mono text-mcs-xs text-mcs-accent-fg">
+                  {startCommandPreview}
+                </pre>
+                <p className="text-mcs-xs text-mcs-text-muted">
+                  内存上限与上面的参数会自动拼进来，无需手工维护这份命令。
+                </p>
+              </div>
+
               {/* Java 路径（可选）：默认 java；服务端 PUT 校验必须为已存在 java 可执行文件 */}
               <div className="flex flex-col gap-1.5">
                 <span className="text-mcs-xs font-medium text-mcs-text-muted">
@@ -502,11 +533,17 @@ export function InstanceSettingsDialog({
                   <Info className="size-3.5" aria-hidden />
                   参数说明
                 </p>
+                <p className="mt-1 text-mcs-xs text-mcs-text-muted">
+                  只看结论就够：不动这些参数，服务器也能正常启动
+                </p>
                 <dl className="mt-1.5 flex flex-col gap-1">
                   {(
                     [
-                      [`-Xms${formatMemForJvm(startMem)}`, '初始堆内存（自动设为最大值的一半）'],
-                      [`-Xmx${formatMemForJvm(allocatedMemory)}`, '最大堆内存（根据滑块值决定）'],
+                      [`-Xms${formatMemoryForJvm(startMem)}`, '初始堆内存（自动设为最大值的一半）'],
+                      [
+                        `-Xmx${formatMemoryForJvm(allocatedMemory)}`,
+                        '最大堆内存（根据滑块值决定）',
+                      ],
                       ['-jar server.jar', '指定服务器 JAR 文件'],
                       ['nogui', '禁用图形界面'],
                       ...jvmArgsLines.map((arg) => [arg, '自定义 JVM 参数'] as [string, string]),

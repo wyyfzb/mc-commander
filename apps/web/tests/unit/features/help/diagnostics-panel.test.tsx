@@ -123,6 +123,20 @@ describe('buildChecks：判据', () => {
     expect(msmp.action).toBeUndefined()
   })
 
+  it('推送面：版本读不懂（周快照形态）与服务端同极性，不报「未开启」', () => {
+    // 服务端 isMsmpSupportedVersion 对未知版本返 false（宁可不写配置），
+    // 帮助页若按「未知当新版」处理就会报「未开启 + 去世界页」，把用户引向一件做不成的事
+    const snapshot = { ...STATUS, mcVersion: '25w35a' }
+    const checks = buildChecks({
+      instanceId: 'inst-1',
+      status: { ...snapshot, capabilities: { rcon: true, msmp: false, msmpPush: false } },
+    })
+    const msmp = checkOf(checks, 'msmp')
+    expect(msmp.tone).toBe('ok')
+    expect(msmp.verdict).toContain('不适用')
+    expect(msmp.action).toBeUndefined()
+  })
+
   it('推送面：版本支持时，查询面可用与全未开启给不同结论（指向不同处置）', () => {
     const modern = { ...STATUS, mcVersion: '26.3' }
     const pushdown = buildChecks({

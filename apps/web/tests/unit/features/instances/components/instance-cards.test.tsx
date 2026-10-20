@@ -46,6 +46,7 @@ function baseProps(overrides: Partial<InstanceCardsProps> = {}): InstanceCardsPr
     onUninstall: vi.fn(),
     onStart: vi.fn(),
     onStop: vi.fn(),
+    onRestart: vi.fn(),
     busyId: null,
     phaseById: {},
     onDeploy: vi.fn(),
@@ -223,7 +224,9 @@ describe('InstanceCards', () => {
 
   // ── 操作行收敛────────────────────────────────────────────
 
-  it('行内最多两个主操作：启停 + 切换（非当前实例）+ 一个操作菜单触发器', () => {
+  /* 运行中恒有「停止」与「重启」两枚：两者后果不同（停止中断服务、重启不停服），
+     一枚顶替另一枚就会剥夺另一种操作——有待重启时尤其不能拿掉「停止」 */
+  it('运行中恒给停止与重启两枚操作，已停止只给启动', () => {
     const { container } = render(<InstanceCards {...baseProps()} />)
     const card = (id: string) =>
       container.querySelector(`[data-instance-id="${id}"]`) as HTMLElement
@@ -233,7 +236,12 @@ describe('InstanceCards', () => {
       within(card(id))
         .getAllByRole('button')
         .map((b) => b.getAttribute('aria-label'))
-    expect(labels('alpha')).toEqual(['停止 虚构甲服', '切换到 虚构甲服', '虚构甲服 操作菜单'])
+    expect(labels('alpha')).toEqual([
+      '停止 虚构甲服',
+      '重启 虚构甲服',
+      '切换到 虚构甲服',
+      '虚构甲服 操作菜单',
+    ])
     expect(labels('beta')).toEqual(['启动 虚构乙服', '切换到 虚构乙服', '虚构乙服 操作菜单'])
   })
 
@@ -245,7 +253,31 @@ describe('InstanceCards', () => {
       within(card)
         .getAllByRole('button')
         .map((b) => b.getAttribute('aria-label')),
-    ).toEqual(['停止 虚构甲服', '虚构甲服 操作菜单'])
+    ).toEqual(['停止 虚构甲服', '重启 虚构甲服', '虚构甲服 操作菜单'])
+  })
+
+  /* 横幅说「重启实例后生效」，出口必须在这张卡上——只说「重启」而不给入口，
+     用户得自己想明白「停止 + 启动」与重启等价，而那件事带停机窗口 */
+  it('有待重启时仍保留「停止」，重启与停止各自触发对应的回调', async () => {
+    const user = userEvent.setup()
+    const onRestart = vi.fn()
+    const onStop = vi.fn()
+    useRestartPendingStore.setState({ pending: { alpha: Date.now() } })
+    const { container } = render(<InstanceCards {...baseProps({ onRestart, onStop })} />)
+    const card = container.querySelector('[data-instance-id="alpha"]') as HTMLElement
+
+    expect(
+      within(card)
+        .getAllByRole('button')
+        .map((b) => b.getAttribute('aria-label')),
+    ).toEqual(['停止 虚构甲服', '重启 虚构甲服', '切换到 虚构甲服', '虚构甲服 操作菜单'])
+
+    await user.click(within(card).getByRole('button', { name: '重启 虚构甲服' }))
+    expect(onRestart).toHaveBeenCalledWith(expect.objectContaining({ id: 'alpha' }))
+    expect(onStop).not.toHaveBeenCalled()
+
+    await user.click(within(card).getByRole('button', { name: '停止 虚构甲服' }))
+    expect(onStop).toHaveBeenCalledWith(expect.objectContaining({ id: 'alpha' }))
   })
 
   it('操作菜单：实例设置 / 升级版本 / 卸载实例三项，卸载为破坏性样式且与安全项分隔', async () => {

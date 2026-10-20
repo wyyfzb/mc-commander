@@ -46,7 +46,8 @@ export const mockOverview: OverviewData = {
   systemMemoryPercent: 26.3,
   totalMemory: 16,
   freeMemory: 11.8,
-  instances: [{ id: 'demo', name: '演示实例', isRunning: true, playerCount: 0 }],
+  // 该实例已分配 2G：部署向导扣掉它后才算「还能给新实例多少」
+  instances: [{ id: 'demo', name: '演示实例', isRunning: true, playerCount: 0, maxMemory: '2G' }],
 }
 
 export const mockSystemStats: SystemStats = {
@@ -627,6 +628,13 @@ export const deployStatusMock: { active: boolean } = { active: false }
 /** 实例列表运行态开关（测试注入：false → 卡片显示启动按钮，供 EULA 首启用例） */
 export const instanceListMock = { running: true }
 
+/**
+ * 概览载荷的可控覆盖（部署向导的内存账本按它算）。
+ * 默认不改：只有需要「整机内存吃紧」这类场景的用例才置位，
+ * 用后必须恢复，否则会污染并行渲染的其他用例。
+ */
+export const overviewMock: { instances: OverviewData['instances'] | null } = { instances: null }
+
 /** 启动开关（测试注入：eulaRequired=EULA 首启特例 / shouldFail=普通失败；calls 供断言续启） */
 export const startMock = { eulaRequired: false, shouldFail: false, calls: 0 }
 
@@ -855,7 +863,15 @@ export const handlers = [
       ]),
     ),
   ),
-  http.get('*/api/v1/overview', () => ok(overviewDataSchema.parse(mockOverview))),
+  http.get('*/api/v1/overview', () =>
+    ok(
+      overviewDataSchema.parse(
+        overviewMock.instances === null
+          ? mockOverview
+          : { ...mockOverview, instances: overviewMock.instances },
+      ),
+    ),
+  ),
   http.get('*/api/v1/system-stats', () => ok(systemStatsSchema.parse(mockSystemStats))),
   http.get('*/api/v1/check-update', () =>
     ok({ current: '0.1.0', latest: null, hasUpdate: false, offline: true }),
