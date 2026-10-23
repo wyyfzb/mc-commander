@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.0](https://github.com/wyyfzb/mc-commander/compare/v0.9.0...v0.10.0) (2026-10-23)
+
+
+### Features
+
+* 跨设备一致与面板内彻底删除 ([#679](https://github.com/wyyfzb/mc-commander/issues/679)) ([fd03de9](https://github.com/wyyfzb/mc-commander/commit/fd03de9b11a4c072aa778e0f2cd4ff2a0ff41ede))
+
 ## [0.9.0](https://github.com/wyyfzb/mc-commander/compare/v0.8.5...v0.9.0) (2026-10-20)
 
 
