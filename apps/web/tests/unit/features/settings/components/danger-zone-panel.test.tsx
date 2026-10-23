@@ -8,6 +8,17 @@ import { act, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { DangerZonePanel, RemovalProgress } from '@/features/settings/components/danger-zone-panel'
 import type { PanelDataItem } from '@/features/settings/components/contracts'
+import { GAME_PORT_END, GAME_PORT_START, PANEL_PORT, RCON_PORT_START } from '@mc-commander/schemas'
+
+/**
+ * 端口段由契约包给，不在测试里抄一遍数字——抄了就变成第二份事实，
+ * 分配器一改，断言仍会「通过」而界面已经在说假话。
+ */
+function portsSentence(): RegExp {
+  return new RegExp(
+    `删掉入方向里 ${PANEL_PORT}、${GAME_PORT_START} 到 ${GAME_PORT_END}、${RCON_PORT_START}`,
+  )
+}
 
 function item(over: Partial<PanelDataItem> = {}): PanelDataItem {
   return {
@@ -127,7 +138,7 @@ describe('危险区面板', () => {
       expect(warning.compareDocumentPosition(password) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
         Node.DOCUMENT_POSITION_FOLLOWING,
       )
-      expect(screen.getByText(/删掉入方向里 25566、25567 到 25666、35575/)).toBeInTheDocument()
+      expect(screen.getByText(portsSentence())).toBeInTheDocument()
       expect(screen.getByText(/MC Commander 面板本地 CA/)).toBeInTheDocument()
       expect(screen.getByText(/别的浏览器或手机上登录过这个面板的/)).toBeInTheDocument()
     })
@@ -141,8 +152,9 @@ describe('危险区面板', () => {
 
     it('端口写全三段，不把实例端口与 RCON 段合成一句数字范围', () => {
       render(<DangerZonePanel {...baseProps()} />)
-      // 35575 与 25666 不连续，写成「25567 到 35575」会把整段误说成实例端口
-      expect(screen.getByText(/35575/)).toBeInTheDocument()
+      // RCON 段与实例段不连续，写成「25567 到 35575」会把中间的空段误说成实例端口
+      expect(screen.getByText(new RegExp(String(RCON_PORT_START)))).toBeInTheDocument()
+      expect(screen.queryByText(new RegExp(`${GAME_PORT_START} 到 ${RCON_PORT_START}`))).toBeNull()
     })
   })
 
@@ -328,7 +340,7 @@ describe('删除完成后的收尾', () => {
   it('给出三件事的执行指引，不只有一句「已删除」', async () => {
     await renderGone()
     expect(screen.getByText('还有三件事要你自己做')).toBeInTheDocument()
-    expect(screen.getByText(/删掉入方向里 25566、25567 到 25666、35575/)).toBeInTheDocument()
+    expect(screen.getByText(portsSentence())).toBeInTheDocument()
     expect(screen.getByText(/MC Commander 面板本地 CA/)).toBeInTheDocument()
     expect(screen.getByText(/别的浏览器或手机上登录过这个面板的/)).toBeInTheDocument()
   })
@@ -337,6 +349,26 @@ describe('删除完成后的收尾', () => {
     await renderGone()
     expect(screen.getByText(/网络与安全 → 防火墙规则/)).toBeInTheDocument()
     expect(screen.getByText(/受信任的根证书颁发机构/)).toBeInTheDocument()
+  })
+
+  /* 删除前后的两份清单说的是同一件事：各写一份就必然漂移，
+     而漂移的表现是「删之前看到一种说法、删之后看到另一种」，两边都不可信 */
+  it('删除前后列出的三件事逐字相同', async () => {
+    const before = render(<DangerZonePanel {...baseProps()} />)
+    const preText = before
+      .getAllByRole('listitem')
+      .map((li) => li.textContent ?? '')
+      .filter((t) => t.includes('云服务器控制台') || t.includes('根证书') || t.includes('登录凭据'))
+    before.unmount()
+
+    await renderGone()
+    const postText = screen
+      .getAllByRole('listitem')
+      .map((li) => li.textContent ?? '')
+      .filter((t) => t.includes('云服务器控制台') || t.includes('根证书') || t.includes('登录凭据'))
+
+    expect(preText).toHaveLength(3)
+    expect(postText).toEqual(preText)
   })
 
   it('不向用户展示任何日志内容（目标用户不读日志，删完更读不到）', async () => {

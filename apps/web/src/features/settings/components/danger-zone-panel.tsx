@@ -28,6 +28,7 @@ import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { CommandPreview } from '@/components/mcs/command-preview'
 import { InfoHint } from '@/components/mcs/info-hint'
 import { formatWorldSize } from '@/lib/format'
+import { GAME_PORT_END, GAME_PORT_START, PANEL_PORT, RCON_PORT_START } from '@mc-commander/schemas'
 
 function formatBytes(bytes: number): string {
   if (bytes <= 0) return '0 B'
@@ -62,6 +63,24 @@ const BROWSER_STORAGE_KEYS = [
 
 /** 断线补齐游标按实例分键（`mcs-ws-last-event-<实例 id>`），裸键本身从不写入 */
 const WS_CURSOR_KEY_PREFIX = 'mcs-ws-last-event-'
+
+/** 面板碰不到的三件事：云控制台的端口、设备里的证书、别的浏览器里的登录凭据。删除前后共用一份，否则两处措辞必然分叉 */
+const OUT_OF_REACH_ITEMS = [
+  <>
+    到云服务器控制台关掉端口：这台机器 → 网络与安全 → 防火墙规则（有的厂商叫「安全组」） →
+    删掉入方向里 {PANEL_PORT}、{GAME_PORT_START} 到 {GAME_PORT_END}、{RCON_PORT_START}{' '}
+    这几段的放行。端口在云厂商那边，删面板不会自动关。
+  </>,
+  <>
+    在每台导入过根证书的设备上删掉那张证书，名字是「MC Commander 面板本地 CA」：Windows 按{' '}
+    <code className="font-mono">Win+R</code> 输入 <code className="font-mono">certlm.msc</code> →
+    受信任的根证书颁发机构 → 证书；macOS 打开「钥匙串访问」→ 系统 →
+    证书。证书删不删都不影响别的网站。
+  </>,
+  <>
+    别的浏览器或手机上登录过这个面板的，那些地方的登录凭据要各自清一次；本浏览器的登录凭据与使用记录还在，删除面板之后可以一键清掉。
+  </>,
+]
 
 /** 清掉本项目在本浏览器留下的全部键，返回实际清掉的条数 */
 function clearBrowserData(): number {
@@ -211,20 +230,9 @@ export function DangerZonePanel({
               删除后你需要自己做
             </p>
             <ul className="flex list-disc flex-col gap-1.5 pl-5 text-mcs-xs text-mcs-text-muted">
-              <li>
-                到云服务器控制台关掉端口：这台机器 → 网络与安全 → 防火墙规则（有的厂商叫「安全组」）
-                → 删掉入方向里 25566、25567 到 25666、35575 这几段的放行。面板删了，端口不会跟着关。
-              </li>
-              <li>
-                在每台导入过根证书的设备上删掉那张证书，名字是「MC Commander 面板本地 CA」：Windows
-                按 <code className="font-mono">Win+R</code> 输入{' '}
-                <code className="font-mono">certlm.msc</code> → 受信任的根证书颁发机构 → 证书；macOS
-                打开「钥匙串访问」→ 系统 → 证书。证书删不删都不影响别的网站。
-              </li>
-              <li>
-                别的浏览器或手机上登录过这个面板的，那些地方的登录凭据要各自清一次；
-                本浏览器的可以在删除完成后一键清掉。
-              </li>
+              {OUT_OF_REACH_ITEMS.map((item, i) => (
+                <li key={i}>{item}</li>
+              ))}
             </ul>
           </div>
 
@@ -431,20 +439,9 @@ export function RemovalProgress({
             还有三件事要你自己做
           </p>
           <ul className="flex list-disc flex-col gap-1.5 pl-5 text-mcs-xs text-mcs-text-muted">
-            <li>
-              到云服务器控制台关掉端口：这台机器 → 网络与安全 → 防火墙规则（有的厂商叫「安全组」） →
-              删掉入方向里 25566、25567 到 25666、35575 这几段的放行。
-            </li>
-            <li>
-              在每台导入过根证书的设备上删掉那张证书，名字是「MC Commander 面板本地 CA」：Windows 按{' '}
-              <code className="font-mono">Win+R</code> 输入{' '}
-              <code className="font-mono">certlm.msc</code> → 受信任的根证书颁发机构 → 证书；macOS
-              打开「钥匙串访问」→ 系统 → 证书。
-            </li>
-            <li>
-              别的浏览器或手机上登录过这个面板的，那些地方的登录凭据要各自清一次。
-              本浏览器的登录凭据与使用记录还在，下面这个按钮可以一次清掉。
-            </li>
+            {OUT_OF_REACH_ITEMS.map((item, i) => (
+              <li key={i}>{item}</li>
+            ))}
           </ul>
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => setCleared(clearBrowserData())}>

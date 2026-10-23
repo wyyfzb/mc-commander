@@ -61,6 +61,16 @@ export {
   type PlayerInventory,
 } from './player'
 
+// 端口段位（面板 / 实例 / RCON，服务端分配与前端提示共用同一份事实）
+export {
+  PANEL_PORT,
+  GAME_PORT_START,
+  GAME_PORT_COUNT,
+  GAME_PORT_END,
+  RCON_PORT_START,
+  RCON_PORT_END,
+} from './ports'
+
 // 实例
 export {
   MSMP_MIN_MC_VERSION,

@@ -1,16 +1,18 @@
 import net from 'node:net';
+import { GAME_PORT_COUNT, GAME_PORT_START, RCON_PORT_START } from '@mc-commander/schemas';
 
 /**
  * 实例端口分配。
  *
- * game 端口与 rcon 端口各占独立段，且都避开面板端口：云主机的安全组是按端口逐个
- * 放行的，把 game 段和面板段混在一起会让用户「放行了一个端口，实例还是连不上」。
+ * 段位定义在契约包：前端要用同一份事实告诉用户去云控制台放行哪几段。
  * 段位固定后端口号本身可读——用户看到 25567 就知道这是第一个实例。
  */
-export const PANEL_PORT = 25566;
-export const GAME_PORT_START = 25567;
-export const GAME_PORT_COUNT = 100;
-export const RCON_PORT_START = 35575;
+export {
+  GAME_PORT_COUNT,
+  GAME_PORT_START,
+  PANEL_PORT,
+  RCON_PORT_START,
+} from '@mc-commander/schemas';
 
 /** rcon 段与 game 段隔开，不共享取模基数，避免一个实例的 rcon 占掉别人的 game 端口 */
 export function rconPortFor(gamePort) {
