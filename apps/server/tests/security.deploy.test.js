@@ -344,9 +344,18 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
       const start = script.indexOf('mc-commander-removal.service <<EOF');
       const removalUnit = script.slice(start, start + 400);
       expect(removalUnit).toContain('User=root');
-      // 白名单只给 start，不给 stop/restart 等其它能力
-      expect(script).toContain('NOPASSWD: /usr/bin/systemctl start mc-commander-removal.service');
+      // 白名单只给 start，不给 stop/restart 等其它能力。
+      // --no-block 是参数序列的一部分：sudoers 逐参数匹配，面板调用少一个词就不放行
+      expect(script).toContain(
+        'NOPASSWD: /usr/bin/systemctl start --no-block mc-commander-removal.service',
+      );
       expect(script).not.toMatch(/NOPASSWD:.*systemctl (stop|restart|disable)/);
+      // 面板发的命令必须与白名单里的参数序列逐字一致，否则线上永远匹配不上
+      const panelRoute = readFileSync(
+        path.resolve(import.meta.dirname, '../src/routes/panel.js'),
+        'utf8',
+      );
+      expect(panelRoute).toContain("'start', '--no-block', unit");
     });
 
     it('创建专用低权限用户并移交目录属主', () => {

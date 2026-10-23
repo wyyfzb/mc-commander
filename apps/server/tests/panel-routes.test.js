@@ -48,6 +48,29 @@ vi.mock('../src/utils/totp.js', () => ({
 
 const { createPanelRoutes } = await import('../src/routes/panel.js');
 
+/**
+ * 用假 sudo 替换 PATH 里的那个：真实 sudo 的行为取决于这台机器装了什么、是不是 root，
+ * 断言会随环境变。假 sudo 把收到的参数写文件并按指定退出码返回，两个分支都能稳定复现。
+ */
+function withFakeSudo({ status = 0, stderr = '' } = {}) {
+  const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'fake-sudo-'));
+  const argvFile = path.join(bin, 'argv');
+  fs.writeFileSync(
+    path.join(bin, 'sudo'),
+    `#!/usr/bin/env bash\nprintf '%s\\n' "$@" > "${argvFile}"\nprintf '%s' "${stderr}" >&2\nexit ${status}\n`,
+    { mode: 0o755 },
+  );
+  const originalPath = process.env.PATH;
+  process.env.PATH = `${bin}:${originalPath}`;
+  return {
+    argv: () => fs.readFileSync(argvFile, 'utf8').trim().split('\n'),
+    restore: () => {
+      process.env.PATH = originalPath;
+      fs.rmSync(bin, { recursive: true, force: true });
+    },
+  };
+}
+
 let root;
 
 function buildApp() {
@@ -129,6 +152,70 @@ describe('面板去留端点', () => {
       .send({ password: 'right', confirmText: '彻底删除' });
     expect(res.status).toBe(401);
   });
+
+  /* 删除触发失败必须当场回错：回「已开始清理」而实际没动，用户会一直等一个不会来的结果 */
+  it('删除执行单元缺失 → 500 且说明该走哪条路，不回成功文案', async () => {
+    const fake = withFakeSudo({
+      status: 5,
+      stderr:
+        'Failed to start mc-commander-removal.service: Unit mc-commander-removal.service not found.',
+    });
+    try {
+      const res = await request(buildApp())
+        .post('/api/panel/removal')
+        .send({ password: 'right', confirmText: '彻底删除' });
+      expect(res.status).toBe(500);
+      expect(res.body.message).not.toContain('已开始清理');
+      expect(res.body.message).toContain('--uninstall');
+    } finally {
+      fake.restore();
+    }
+  });
+
+  it('sudo 白名单缺失 → 500 且指出是权限问题', async () => {
+    const fake = withFakeSudo({ status: 1, stderr: 'sudo: a password is required' });
+    try {
+      const res = await request(buildApp())
+        .post('/api/panel/removal')
+        .send({ password: 'right', confirmText: '彻底删除' });
+      expect(res.status).toBe(500);
+      expect(res.body.message).toContain('sudo');
+    } finally {
+      fake.restore();
+    }
+  });
+
+  it('触发成功才回「已开始清理」，且用 --no-block 让 oneshot 单元不阻塞', async () => {
+    const fake = withFakeSudo();
+    try {
+      const res = await request(buildApp())
+        .post('/api/panel/removal')
+        .send({ password: 'right', confirmText: '彻底删除' });
+      expect(res.status).toBe(200);
+      expect(res.body.message).toContain('已开始清理');
+      expect(fake.argv()).toEqual([
+        '-n',
+        '/usr/bin/systemctl',
+        'start',
+        '--no-block',
+        'mc-commander-removal.service',
+      ]);
+    } finally {
+      fake.restore();
+    }
+  });
+
+  it('勾了保留存档 → 指向 keep 单元', async () => {
+    const fake = withFakeSudo();
+    try {
+      await request(buildApp())
+        .post('/api/panel/removal')
+        .send({ password: 'right', confirmText: '彻底删除', keepData: true });
+      expect(fake.argv()).toContain('mc-commander-removal-keep.service');
+    } finally {
+      fake.restore();
+    }
+  });
 });
 
 /* 面板删完之后，用户机器上还剩什么由清理脚本决定。这里直接跑脚本本体：
@@ -137,11 +224,16 @@ const REPO = path.resolve(import.meta.dirname, '../../..');
 const REMOVAL = path.join(REPO, 'apps/server/src/services/panel-removal.sh');
 const BASH_BIN = process.env.BASH_BIN || 'bash';
 
-function runRemoval(installDir, mode = '--keep-data', tmpDir) {
+function runRemoval(installDir, mode = '--keep-data', tmpDir, extraEnv) {
   // 临时目录也要指向沙箱：脚本按 TMPDIR 收安装清单残件，不隔离就会动到真实的 /tmp
   const r = spawnSync(BASH_BIN, [REMOVAL, mode], {
     encoding: 'utf8',
-    env: { ...process.env, MC_COMMANDER_DIR: installDir, TMPDIR: tmpDir ?? os.tmpdir() },
+    env: {
+      ...process.env,
+      MC_COMMANDER_DIR: installDir,
+      TMPDIR: tmpDir ?? os.tmpdir(),
+      ...extraEnv,
+    },
   });
   if (r.error) throw new Error(`无法启动 bash（${BASH_BIN}）：${r.error.message}`);
   return { status: r.status, out: r.stdout + r.stderr };
@@ -204,5 +296,36 @@ describe('清理脚本收尾本项目自己的残留', () => {
     const r = runRemoval(dir);
     expect(r.status).toBe(0);
     expect(fs.existsSync(victim)).toBe(true);
+  });
+
+  it('清单里的包名只按名字传给包管理器，不被拆成额外参数', () => {
+    // 清单在面板可写的安装目录内：一行 -o DPkg::Pre-Invoke::=… 就能把面板权限提成 root
+    const bin = path.join(tmpHome, 'bin');
+    const argvFile = path.join(tmpHome, 'apt-argv');
+    const pwned = path.join(tmpHome, 'pwned');
+    fs.mkdirSync(bin, { recursive: true });
+    // 假 apt-get：记下收到的每个参数，便于断言包名是逐个传入而不是被拆开
+    fs.writeFileSync(
+      path.join(bin, 'apt-get'),
+      `#!/usr/bin/env bash\nprintf '%s\\n' "$@" > "${argvFile}"\n`,
+      { mode: 0o755 },
+    );
+    fs.writeFileSync(
+      path.join(dir, '.install-manifest'),
+      `pkg-installed\topenjdk-17-jre-headless\npkg-installed\t-o\npkg-installed\tDPkg::Pre-Invoke::=touch ${pwned}\n`,
+    );
+
+    const r = runRemoval(dir, '--keep-data', tmpHome, {
+      PATH: `${bin}:${process.env.PATH}`,
+      argvFile,
+    });
+    expect(r.status).toBe(0);
+    expect(fs.readFileSync(argvFile, 'utf8').trim().split('\n')).toEqual([
+      'remove',
+      '-y',
+      '--purge',
+      'openjdk-17-jre-headless',
+    ]);
+    expect(fs.existsSync(pwned)).toBe(false);
   });
 });

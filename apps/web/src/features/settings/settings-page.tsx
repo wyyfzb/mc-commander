@@ -1,9 +1,10 @@
 /**
  * SettingsPage —— 设置页布局
- * - 左子导航 200px（实底卡片）+ 右内容区 Outlet（子路由 /settings/connection|general|notifications|backup|about）
+ * - 左子导航 200px（实底卡片）+ 右内容区 Outlet（子路由 /settings/connection|account|general|notifications|backup|data|about）
  * - 菜单激活态：accent-bg-subtle 底 + accent-border + accent 文字
  * - 设计纪律：设置页内容区实底（风格 A 玻璃禁区）；子侧栏同实底卡
  */
+import { Suspense, lazy } from 'react'
 import { Link, Outlet, useLocation } from 'react-router'
 import {
   BellRing,
@@ -18,17 +19,34 @@ import type { LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { TONE_SELECTED_CLASSES } from '@/components/mcs/tone'
 import { PageHeader } from '@/components/mcs/page-header'
+import { ListSkeleton } from '@/components/mcs/data-states'
 import { useServerStore } from '@/stores/server'
 import { ConnectionForm } from './components/connection-form'
-import { AccountPanel } from './components/account-panel'
 import { GeneralPanel } from './components/general-panel'
 import { NotificationsPanel } from './components/notifications-panel'
 import { BackupPanel } from './components/backup-panel'
 import { AboutPanel } from './components/about-panel'
-import { DataPanel } from './components/data-panel'
 import { UpdateCheckSection } from './components/update-check-section'
 
-/** 子导航项（六项） */
+// 账号与安全、数据与卸载各自带着低频重面板（会话轮询 / 导出 / 删除命令预览），
+// 静态引入会把它们塞进入口 chunk，首访任意页面都要多下几十 KB
+const AccountPanel = lazy(() =>
+  import('./components/account-panel').then((m) => ({ default: m.AccountPanel })),
+)
+const DataPanel = lazy(() =>
+  import('./components/data-panel').then((m) => ({ default: m.DataPanel })),
+)
+
+/** 子页 chunk 加载占位：内容区骨架，切页时不留整块空白 */
+function PanelFallback() {
+  return (
+    <div role="status" aria-label="设置内容加载中">
+      <ListSkeleton rows={3} />
+    </div>
+  )
+}
+
+/** 子导航项（七项） */
 const SUB_NAV: { to: string; label: string; icon: LucideIcon }[] = [
   { to: '/settings/connection', label: '连接设置', icon: Link2 },
   { to: '/settings/account', label: '账号与安全', icon: ShieldCheck },
@@ -92,7 +110,7 @@ export function SettingsPage() {
   )
 }
 
-// ── 六个子页薄封装（子路由组件；实例数据从 server store 注入 backup/general 面板） ──
+// ── 七个子页薄封装（子路由组件；实例数据从 server store 注入 backup/general 面板） ──
 
 /** 连接设置子页 */
 export function ConnectionSettingsPage() {
@@ -101,7 +119,11 @@ export function ConnectionSettingsPage() {
 
 /** 账号与安全子页（管理员密码 / 会话管理 / 登出） */
 export function AccountSettingsPage() {
-  return <AccountPanel />
+  return (
+    <Suspense fallback={<PanelFallback />}>
+      <AccountPanel />
+    </Suspense>
+  )
 }
 
 /** 通用设置子页 */
@@ -122,7 +144,11 @@ export function BackupSettingsPage() {
 
 /** 数据与卸载子页（面板自身去留） */
 export function DataSettingsPage() {
-  return <DataPanel />
+  return (
+    <Suspense fallback={<PanelFallback />}>
+      <DataPanel />
+    </Suspense>
+  )
 }
 
 /** 关于子页（静态面板 + 更新检查） */

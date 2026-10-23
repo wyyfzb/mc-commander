@@ -535,16 +535,24 @@ do_uninstall() {
     done < "$mf"
 
     # 4b. 系统包：只卸「装之前不存在」的那些
-    local pkgs=""
+    # 清单在面板可写的安装目录内，包名拼成字符串再裸展开，一个空格就多出一个包管理器参数
+    local pkgs=()
     while IFS=$'\t' read -r key value; do
-      [ "$key" = "pkg-installed" ] && pkgs="$pkgs $value"
+      [ "$key" = "pkg-installed" ] || continue
+      # 以 - 开头的值会被当成选项，-o DPkg::Pre-Invoke::=<命令> 足以在本脚本的 root 权限下执行任意命令
+      if [[ "$value" =~ ^[a-zA-Z0-9][a-zA-Z0-9+._-]*$ ]]; then
+        pkgs+=("$value")
+      else
+        # 截断再回显：清单可被写坏，原样回显一个超长值会把终端刷屏
+        warn "  忽略非法包名：${value:0:40}"
+      fi
     done < "$mf"
-    if [ -n "$pkgs" ]; then
-      log "  卸载安装时新增的系统包：$pkgs"
-      case "$PKG_MANAGER" in
-        apt) apt-get remove -y --purge $pkgs >/dev/null 2>&1 || warn "  部分系统包卸载失败，可手动处理：apt-get remove --purge$pkgs" ;;
-        yum|dnf) $PKG_MANAGER remove -y $pkgs >/dev/null 2>&1 || warn "  部分系统包卸载失败，可手动处理：$PKG_MANAGER remove$pkgs" ;;
-        apk) apk del $pkgs >/dev/null 2>&1 || true ;;
+    if [ "${#pkgs[@]}" -gt 0 ]; then
+      log "  卸载安装时新增的系统包：${pkgs[*]}"
+      case "${PKG_MANAGER:-}" in
+        apt) apt-get remove -y --purge "${pkgs[@]}" >/dev/null 2>&1 || warn "  部分系统包卸载失败，可手动处理：apt-get remove --purge ${pkgs[*]}" ;;
+        yum|dnf) "$PKG_MANAGER" remove -y "${pkgs[@]}" >/dev/null 2>&1 || warn "  部分系统包卸载失败，可手动处理：$PKG_MANAGER remove ${pkgs[*]}" ;;
+        apk) apk del "${pkgs[@]}" >/dev/null 2>&1 || true ;;
       esac
     fi
 
@@ -1438,9 +1446,10 @@ ExecStart=/bin/bash $MC_COMMANDER_DIR/src/services/panel-removal.sh --keep-data
 EOF
   record_change "systemd-unit" "/etc/systemd/system/mc-commander-removal-keep.service"
 
-  # sudoers 白名单：只放行启动这两个单元，面板拿不到任何其它 root 能力
+  # sudoers 白名单：只放行启动这两个单元，面板拿不到任何其它 root 能力。
+  # 必须带 --no-block：sudoers 按完整参数序列匹配，面板用别的形态调用一律不匹配。
   cat > /etc/sudoers.d/mc-commander <<EOF
-mc-commander ALL=(root) NOPASSWD: /usr/bin/systemctl start mc-commander-removal.service, /usr/bin/systemctl start mc-commander-removal-keep.service
+mc-commander ALL=(root) NOPASSWD: /usr/bin/systemctl start --no-block mc-commander-removal.service, /usr/bin/systemctl start --no-block mc-commander-removal-keep.service
 EOF
   chmod 440 /etc/sudoers.d/mc-commander
   record_change "sudoers" "/etc/sudoers.d/mc-commander"

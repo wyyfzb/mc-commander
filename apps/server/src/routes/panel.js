@@ -6,7 +6,7 @@
  * 把「会删什么」按真实内容列清楚。
  */
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { Router } from 'express';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { success, error, ErrorCodes } from '../utils/response.js';
@@ -16,6 +16,17 @@ import { AdminAccountModel, AdminRecoveryCodeModel } from '../db/index.js';
 import { verifyPassword } from '../utils/password.js';
 import { verifyTotpCode, normalizeTotpCode } from '../utils/totp.js';
 import config from '../config.js';
+
+/** 两类失败都是安装侧缺件，用户改不了，只能告诉他该走哪条路 */
+function removalTriggerMessage(raw) {
+  if (/not found/i.test(raw)) {
+    return '这台机器上没有删除执行单元，面板无法自删。请用部署脚本的 --uninstall 卸载，或重新安装一次以补齐删除单元。';
+  }
+  if (/password|sudo/i.test(raw)) {
+    return '面板没有执行删除的权限（sudo 白名单缺失）。请用部署脚本的 --uninstall 卸载。';
+  }
+  return `无法启动删除流程：${raw || '未知原因'}`;
+}
 
 /** 第二因子校验：配了 2FA 就必须给动态口令或恢复码，没配则不要求 */
 function verifySecondFactor(state, rawCode) {
@@ -150,22 +161,23 @@ export function createPanelRoutes() {
         detail: { action: 'removal', keepData: keepData === true },
       });
 
-      // 先回包再执行：清理一开始就会杀掉本进程，回包必须抢在它前面
-      res.json(success(null, '已开始清理，完成后本页面会断开'));
+      // 触发结果必须同步拿到：没启动成功时页面只会静默等下去，用户没有任何其它途径知道。
+      // 面板以低权限用户运行、删不掉自己，故触发安装时预置的 root 单元在面板进程外执行。
+      const unit =
+        keepData === true ? 'mc-commander-removal-keep.service' : 'mc-commander-removal.service';
+      // --no-block：oneshot 单元默认要等脚本跑完才返回，而脚本第一步就停掉本进程
+      // 用 /usr/bin/systemctl：sudoers 按解析后的真实路径匹配，写 /bin 会不匹配
+      const trigger = spawnSync('sudo', ['-n', '/usr/bin/systemctl', 'start', '--no-block', unit], {
+        encoding: 'utf8',
+        timeout: 15_000,
+      });
+      if (trigger.status !== 0) {
+        const raw = (trigger.stderr || trigger.error?.message || '').trim().split('\n')[0];
+        logger.error('panel removal trigger failed:', raw || `exit ${trigger.status}`);
+        return res.status(500).json(error(ErrorCodes.SERVER_ERROR, removalTriggerMessage(raw)));
+      }
 
-      setTimeout(() => {
-        // 面板以低权限用户运行，删不掉自己：触发安装时预置的 root 单元，
-        // 由 systemd 在面板进程之外执行。sudoers 只放行 start 这两个单元。
-        const unit =
-          keepData === true ? 'mc-commander-removal-keep.service' : 'mc-commander-removal.service';
-        // 用 /usr/bin/systemctl：sudoers 按解析后的真实路径匹配，写 /bin 会不匹配
-        const child = spawn('sudo', ['-n', '/usr/bin/systemctl', 'start', unit], {
-          detached: true,
-          stdio: 'ignore',
-        });
-        child.on('error', (e) => logger.error('panel removal spawn failed:', e.message));
-        child.unref();
-      }, 500);
+      res.json(success(null, '已开始清理，完成后本页面会断开'));
     }),
   );
 

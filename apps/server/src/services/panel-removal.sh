@@ -151,19 +151,27 @@ if [ -f "$MANIFEST" ]; then
   done < "$MANIFEST"
 
   # 系统包：只卸「装之前不存在」的那些
-  pkgs=""
+  # 清单在面板可写的安装目录内，包名拼成字符串再裸展开，一个空格就多出一个包管理器参数
+  pkgs=()
   while IFS=$'\t' read -r key value; do
-    [ "$key" = "pkg-installed" ] && pkgs="$pkgs $value"
+    [ "$key" = "pkg-installed" ] || continue
+    # 以 - 开头的值会被当成选项，-o DPkg::Pre-Invoke::=<命令> 足以在本脚本的 root 权限下执行任意命令
+    if [[ "$value" =~ ^[a-zA-Z0-9][a-zA-Z0-9+._-]*$ ]]; then
+      pkgs+=("$value")
+    else
+      # 截断再回显：清单可被写坏，原样回显一个超长值会把终端刷屏
+      warn "  忽略非法包名：${value:0:40}"
+    fi
   done < "$MANIFEST"
-  if [ -n "$pkgs" ]; then
-    log "  卸载安装时新增的系统包：$pkgs"
+  if [ "${#pkgs[@]}" -gt 0 ]; then
+    log "  卸载安装时新增的系统包：${pkgs[*]}"
     if command -v apt-get &>/dev/null; then
-      apt-get remove -y --purge $pkgs >/dev/null 2>&1 ||
-        warn "  部分系统包卸载失败，可手动执行：apt-get remove --purge$pkgs"
+      apt-get remove -y --purge "${pkgs[@]}" >/dev/null 2>&1 ||
+        warn "  部分系统包卸载失败，可手动执行：apt-get remove --purge ${pkgs[*]}"
     elif command -v dnf &>/dev/null; then
-      dnf remove -y $pkgs >/dev/null 2>&1 || warn "  部分系统包卸载失败"
+      dnf remove -y "${pkgs[@]}" >/dev/null 2>&1 || warn "  部分系统包卸载失败"
     elif command -v yum &>/dev/null; then
-      yum remove -y $pkgs >/dev/null 2>&1 || warn "  部分系统包卸载失败"
+      yum remove -y "${pkgs[@]}" >/dev/null 2>&1 || warn "  部分系统包卸载失败"
     fi
   fi
 

@@ -44,13 +44,21 @@ async function mockApiKeyChannel(page: Page, enabled: boolean) {
 }
 
 test.describe('设置页', () => {
-  test('子导航：六子页 + 默认重定向连接设置', async ({ page }) => {
+  test('子导航：七子页 + 默认重定向连接设置', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/settings')
     // /settings → 重定向 /settings/connection
     await expect(page).toHaveURL(/\/settings\/connection/)
-    // 子导航六项（含安全主线的账号与安全）
-    for (const label of ['连接设置', '账号与安全', '通用设置', '通知设置', '备份管理', '关于']) {
+    // 子导航七项（含安全主线的账号与安全、面板自身去留的数据与卸载）
+    for (const label of [
+      '连接设置',
+      '账号与安全',
+      '通用设置',
+      '通知设置',
+      '备份管理',
+      '数据与卸载',
+      '关于',
+    ]) {
       await expect(page.getByRole('link', { name: label })).toBeVisible()
     }
     await expect(page.getByRole('link', { name: '连接设置' })).toHaveAttribute(
