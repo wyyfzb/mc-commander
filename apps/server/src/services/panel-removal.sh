@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 # 面板内「彻底删除」的实际执行体。
 #
-# 由面板经 systemd-run 以延迟单元启动，脱离面板进程生命周期：
+# 由面板经 sudo 触发一个 root 权限的一次性 systemd 单元运行，脱离面板进程生命周期：
 # 在面板内部直接 rm -rf 会在删到一半时失去可执行文件与依赖树，留下半删状态。
+#
+# 部署时会被装到 /usr/local/lib/mc-commander/（root:root 0755）并要求单元只认那份副本：
+# 安装目录整体属于面板账号，root 执行的脚本留在那儿等于面板可改 root 要跑的代码。
 #
 # 用法：panel-removal.sh --purge|--keep-data
 #   --purge      删除程序与全部数据（实例、存档、备份）
@@ -19,9 +22,22 @@ else
   INSTALL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 fi
 MANIFEST="$INSTALL_DIR/.install-manifest"
+# 第三方软件源与密钥的合法落点：清单可被写坏，只有这几个目录下的文件允许删。
+# 可注入是为了让用例在沙箱目录里验证同一条判定（生产环境不需要改它）
+REPO_FILE_ROOTS="${REPO_FILE_ROOTS:-/etc/apt/sources.list.d /etc/yum.repos.d /usr/share/keyrings}"
 
 log() { echo "[$(date '+%H:%M:%S')] $*"; }
 warn() { echo "[$(date '+%H:%M:%S')] [WARN] $*"; }
+
+# 值是否落在软件源/密钥目录内，且不含上跳段
+repo_file_allowed() {
+  case "$1" in ''|*/../*|*/..|../*|..) return 1 ;; esac
+  local root
+  for root in $REPO_FILE_ROOTS; do
+    case "$1" in "$root"/*) return 0 ;; esac
+  done
+  return 1
+}
 
 case "$MODE" in
   --purge|--keep-data) ;;
@@ -139,15 +155,13 @@ if [ -f "$MANIFEST" ]; then
           log "  已撤销 iptables 规则 $value/tcp"
         ;;
       repo-file)
-        # 清单是可写文件：把值直接当 rm 的入参，等于给「清单被改过」开一个删任意文件的口子。
-        # 只认软件源与密钥类文件（.list/.sources/.repo/.gpg/.asc/.key），其余一律不动。
-        case "${value##*/}" in
-          *.list|*.sources|*.repo|*.gpg|*.asc|*.key)
-            if [ -f "$value" ]; then
-              rm -f "$value" && log "  已移除软件源文件 ${value##*/}"
-            fi
-            ;;
-        esac
+        # 清单是可写文件，值直接当 rm 入参等于给「清单被改过」开一个删任意文件的口子。
+        # 只认软件源与密钥所在的那几个目录；按后缀放行挡不住 /tmp/x.list 这类越界路径。
+        if repo_file_allowed "$value"; then
+          [ -f "$value" ] && rm -f "$value" && log "  已移除软件源文件 ${value##*/}"
+        else
+          warn "  忽略清单外路径的软件源记录：${value:0:60}"
+        fi
         ;;
     esac
   done < "$MANIFEST"

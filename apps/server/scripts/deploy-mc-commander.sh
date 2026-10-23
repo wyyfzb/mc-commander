@@ -172,6 +172,20 @@ log()  {
   echo "[$(date '+%H:%M:%S')] $*"
 }
 warn() { echo "[WARN] $*"; }
+
+# 软件源与密钥的合法落点：清单可被写坏，只有这几个目录下的文件允许删。
+# 可注入是为了让用例在沙箱里验证同一条判定（生产环境不需要改它）
+REPO_FILE_ROOTS="${REPO_FILE_ROOTS:-/etc/apt/sources.list.d /etc/yum.repos.d /usr/share/keyrings}"
+
+# 值是否落在软件源/密钥目录内，且不含上跳段
+repo_file_allowed() {
+  case "$1" in ''|*/../*|*/..|../*|..) return 1 ;; esac
+  local root
+  for root in $REPO_FILE_ROOTS; do
+    case "$1" in "$root"/*) return 0 ;; esac
+  done
+  return 1
+}
 err()  { ERR_SHOWN=1; echo "[ERROR] $*" >&2; }
 
 # 把 $VERSION/$ASSET_NAME 解析为某源的下载前缀。
@@ -518,7 +532,17 @@ do_uninstall() {
     log "回滚安装时记录的系统改动..."
 
     # 4a. 防火墙：只撤本项目加的那条规则
+    # 清单在面板可写目录内，值会被拼进本脚本的 root 命令：只接受 1-65535 的端口号，
+    # 其余一律跳过（端口段不是数字时那些命令也撤不掉任何真规则）
     while IFS=$'\t' read -r key value; do
+      case "$key" in
+        firewall-ufw|firewall-firewalld|firewall-iptables)
+          if ! [[ "$value" =~ ^[0-9]{1,5}$ ]] || [ "$value" -lt 1 ] || [ "$value" -gt 65535 ]; then
+            warn "  忽略非法防火墙端口：${value:0:40}"
+            continue
+          fi
+          ;;
+      esac
       case "$key" in
         firewall-ufw)
           if command -v ufw &>/dev/null; then
@@ -554,16 +578,37 @@ do_uninstall() {
         warn "  忽略非法包名：${value:0:40}"
       fi
     done < "$mf"
+    # 按命令探测而不是读 $PKG_MANAGER：卸载在安装流程之前分派，那时该变量还没赋值，
+    # 依赖它会让这一段恒不执行——脚本报「已卸载」而系统包全在
     if [ "${#pkgs[@]}" -gt 0 ]; then
       log "  卸载安装时新增的系统包：${pkgs[*]}"
-      case "${PKG_MANAGER:-}" in
-        apt) apt-get remove -y --purge "${pkgs[@]}" >/dev/null 2>&1 || warn "  部分系统包卸载失败，可手动处理：apt-get remove --purge ${pkgs[*]}" ;;
-        yum|dnf) "$PKG_MANAGER" remove -y "${pkgs[@]}" >/dev/null 2>&1 || warn "  部分系统包卸载失败，可手动处理：$PKG_MANAGER remove ${pkgs[*]}" ;;
-        apk) apk del "${pkgs[@]}" >/dev/null 2>&1 || true ;;
-      esac
+      if command -v apt-get &>/dev/null; then
+        apt-get remove -y --purge "${pkgs[@]}" >/dev/null 2>&1 ||
+          warn "  部分系统包卸载失败，可手动处理：apt-get remove --purge ${pkgs[*]}"
+      elif command -v dnf &>/dev/null; then
+        dnf remove -y "${pkgs[@]}" >/dev/null 2>&1 ||
+          warn "  部分系统包卸载失败，可手动处理：dnf remove ${pkgs[*]}"
+      elif command -v yum &>/dev/null; then
+        yum remove -y "${pkgs[@]}" >/dev/null 2>&1 ||
+          warn "  部分系统包卸载失败，可手动处理：yum remove ${pkgs[*]}"
+      elif command -v apk &>/dev/null; then
+        apk del "${pkgs[@]}" >/dev/null 2>&1 ||
+          warn "  部分系统包卸载失败，可手动处理：apk del ${pkgs[*]}"
+      fi
     fi
 
-    # 4c. Node 软链：只在它们指向本项目装的 /opt/node-* 时才删
+    # 4c. 软件源与密钥文件：安装时新增的 corretto 源不在卸载后清理，会一直留在
+    # apt/yum 的源列表里；清单可被写坏，故只认这几个目录下的源文件
+    while IFS=$'\t' read -r key value; do
+      [ "$key" = "repo-file" ] || continue
+      if repo_file_allowed "$value"; then
+        [ -f "$value" ] && rm -f "$value" && log "  已移除软件源文件 ${value##*/}"
+      else
+        warn "  忽略清单外路径的软件源记录：${value:0:60}"
+      fi
+    done < "$mf"
+
+    # 4d. Node 软链：只在它们指向本项目装的 /opt/node-* 时才删
     while IFS=$'\t' read -r key value; do
       if [ "$key" = "node-symlink" ]; then
         local target

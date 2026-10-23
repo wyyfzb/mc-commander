@@ -40,7 +40,7 @@ export interface RemovalRequest {
   keepData?: boolean
 }
 
-/** 面板内彻底删除：服务端先回包，再由 systemd-run 延迟执行清理 */
+/** 面板内彻底删除：服务端触发清理单元并回包，清理在本面板进程之外进行 */
 export function apiRequestRemoval(config: ConnectionConfig, payload: RemovalRequest) {
   return apiPost<null>('/api/v1/panel/removal', config, payload, { timeoutMs: 30_000 })
 }

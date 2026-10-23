@@ -232,6 +232,9 @@ function runRemoval(installDir, mode = '--keep-data', tmpDir, extraEnv) {
       ...process.env,
       MC_COMMANDER_DIR: installDir,
       TMPDIR: tmpDir ?? os.tmpdir(),
+      // 软件源文件的合法目录也是沙箱：否则用例只能靠 /etc 下的真实文件验证，
+      // 而它非 root 写不了，判定对不对都测不出来
+      REPO_FILE_ROOTS: installDir,
       ...extraEnv,
     },
   });
@@ -271,6 +274,8 @@ describe('清理脚本收尾本项目自己的残留', () => {
   });
 
   it('按清单里的 repo-file 撤掉第三方软件源与密钥', () => {
+    // 两个文件都落在沙箱的软件源根目录下：路径形态与生产一致（/etc/apt/sources.list.d 或
+    // /usr/share/keyrings 下的 .list / .gpg），只是根换成了临时目录
     const keyring = path.join(dir, 'corretto-keyring.gpg');
     const aptList = path.join(dir, 'corretto.list');
     fs.writeFileSync(keyring, 'key');
@@ -286,9 +291,10 @@ describe('清理脚本收尾本项目自己的残留', () => {
     expect(fs.existsSync(aptList)).toBe(false);
   });
 
-  it('repo-file 只删系统源路径，不接受清单里的任意路径', () => {
-    // 清单是可写文件：把值当无条件 rm 的入参，等于给「清单被改过」开了删任意文件的口子
-    const victim = path.join(dir, 'servers/world/level.dat');
+  it('repo-file 只删软件源目录内的文件，清单里的任意路径一律不动', () => {
+    // 清单是可写文件：把值当无条件 rm 的入参，等于给「清单被改过」开了删任意文件的口子。
+    // 世界存档不在软件源目录内，这正是要拦的那一类。
+    const victim = path.join(tmpHome, 'servers/world/level.dat');
     fs.mkdirSync(path.dirname(victim), { recursive: true });
     fs.writeFileSync(victim, 'world');
     fs.writeFileSync(path.join(dir, '.install-manifest'), `repo-file\t${victim}\n`);
@@ -296,6 +302,23 @@ describe('清理脚本收尾本项目自己的残留', () => {
     const r = runRemoval(dir);
     expect(r.status).toBe(0);
     expect(fs.existsSync(victim)).toBe(true);
+    // 拒绝要说出来，不能静默跳过——用户以为清理了，实际文件还在
+    expect(r.out).toContain('清单外路径');
+  });
+
+  it('repo-file 的值带上跳段时拒绝执行，不允许穿出软件源目录', () => {
+    // 用字符串拼而不是 path.join：join 会把 .. 归一化掉，那样测的就不是上跳段本身了。
+    // 这个形态真的会越界——rm -f <root>/../../shadow 删的是 /etc/shadow
+    const escape = `${dir}/../escape.list`;
+    const victim = path.resolve(escape);
+    fs.mkdirSync(path.dirname(victim), { recursive: true });
+    fs.writeFileSync(victim, 'x');
+    fs.writeFileSync(path.join(dir, '.install-manifest'), `repo-file\t${escape}\n`);
+
+    const r = runRemoval(dir);
+    expect(r.status).toBe(0);
+    expect(fs.existsSync(victim)).toBe(true);
+    expect(r.out).toContain('清单外路径');
   });
 
   it('清单里的包名只按名字传给包管理器，不被拆成额外参数', () => {

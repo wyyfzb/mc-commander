@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync, mkdtempSync, writeFileSync, rmSync, mkdirSync, chmodSync } from 'node:fs';
+import {
+  readFileSync,
+  mkdtempSync,
+  writeFileSync,
+  rmSync,
+  mkdirSync,
+  chmodSync,
+  existsSync,
+} from 'node:fs';
 import { spawn, spawnSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
@@ -1322,6 +1330,72 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
       const body = script.slice(fnStart, script.indexOf('\n}\n', fnStart));
       expect(body).toContain('ps -u mc-commander');
       expect(body).toContain('pkill -u mc-commander');
+    });
+  });
+
+  /* 注释里写着 systemd-run，实现却是 sudo 触发预置的一次性单元：
+     照着注释排查会去找一个根本不存在的延迟单元 */
+  it('删除链路三处注释与实际启动方式一致', () => {
+    const files = [
+      '../src/services/panel-removal.sh',
+      '../src/routes/panel.js',
+      '../src/routes/panel.ts',
+      '../../web/src/api/panel.ts',
+    ];
+    for (const rel of files) {
+      const abs = path.resolve(import.meta.dirname, rel);
+      if (!existsSync(abs)) continue;
+      expect(readFileSync(abs, 'utf8'), `${rel} 仍写着 systemd-run`).not.toContain('systemd-run');
+    }
+    expect(
+      readFileSync(path.resolve(import.meta.dirname, '../src/routes/panel.js'), 'utf8'),
+    ).toContain('--no-block');
+  });
+
+  /* 卸载在安装流程之前分派，那时 PKG_MANAGER 还没赋值：读它会让系统包一条都卸不掉，
+     而脚本照常报「卸载完成」 */
+  describe('卸载按命令探测包管理器', () => {
+    it('系统包卸载不依赖安装阶段才赋值的 $PKG_MANAGER', () => {
+      const fnStart = script.indexOf('do_uninstall() {');
+      const body = script.slice(fnStart, script.indexOf('\n}\n', fnStart));
+      expect(body).not.toContain('case "${PKG_MANAGER:-}"');
+      expect(body).toMatch(/command -v apt-get/);
+    });
+
+    it('PKG_MANAGER 的赋值确实在 do_uninstall 之后（依赖它就是恒不执行）', () => {
+      const uninstallAt = script.indexOf('do_uninstall() {');
+      const assignAt = script.indexOf('PKG_MANAGER="apt"');
+      expect(assignAt).toBeGreaterThan(uninstallAt);
+    });
+  });
+
+  /* 安装时往 apt/yum 源目录里写 corretto 的密钥与源文件；卸载不撤，用户机器的包管理器
+     会一直带着一个指向已删项目的源 */
+  describe('卸载撤掉安装时写的软件源', () => {
+    it('do_uninstall 里有 repo-file 分支', () => {
+      const fnStart = script.indexOf('do_uninstall() {');
+      const body = script.slice(fnStart, script.indexOf('\n}\n', fnStart));
+      expect(body).toContain('repo-file');
+      expect(body).toContain('repo_file_allowed');
+    });
+
+    it('只删软件源目录内的文件，清单被改写也删不到别处', () => {
+      // 判定抽成函数后要连函数体一起看：白名单在函数里，分支里只剩调用
+      expect(script).toMatch(
+        /REPO_FILE_ROOTS="\$\{REPO_FILE_ROOTS:-\/etc\/apt\/sources\.list\.d \/etc\/yum\.repos\.d \/usr\/share\/keyrings\}"/,
+      );
+      const fnStart = script.indexOf('repo_file_allowed() {');
+      const helper = script.slice(fnStart, script.indexOf('\n}\n', fnStart));
+      // 上跳段必须显式拒绝：只做前缀匹配挡不住 <root>/../../etc/shadow
+      expect(helper).toContain('*/../*');
+    });
+
+    it('防火墙值只接受端口号，清单里塞的非数字一律跳过', () => {
+      const fnStart = script.indexOf('do_uninstall() {');
+      const body = script.slice(fnStart, script.indexOf('\n}\n', fnStart));
+      expect(body).toMatch(/\^\[0-9\]\{1,5\}\$/);
+      expect(body).toMatch(/-gt 65535/);
+      expect(body).toContain('忽略非法防火墙端口');
     });
   });
 });
