@@ -129,8 +129,8 @@ export function createPanelRoutes() {
   // POST /api/v1/panel/removal - 面板内彻底删除
   //
   // 删除要越过「正在运行的这个进程」：直接在自己内部 rm -rf 会在删到一半时
-  // 失去可执行文件与依赖树，留下半删状态且无法回报结果。故交给 systemd-run
-  // 起一个延迟生效的独立单元，由它脱离本进程生命周期执行清理脚本。
+  // 失去可执行文件与依赖树，留下半删状态且无法回报结果。故由 sudo 触发安装时
+  // 预置的 root 一次性单元，由 systemd 在本进程之外执行清理脚本。
   router.post(
     '/panel/removal',
     asyncHandler(async (req, res) => {
