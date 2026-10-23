@@ -72,6 +72,9 @@ export DEBIAN_FRONTEND=noninteractive
 export NEEDRESTART_MODE=a
 
 MC_COMMANDER_DIR="${MC_COMMANDER_DIR:-/opt/mc-commander}"
+# root 执行的删除脚本必须与面板可写目录分离：装一份只读副本，单元只认它
+REMOVAL_LIB_DIR="/usr/local/lib/mc-commander"
+REMOVAL_SCRIPT="$REMOVAL_LIB_DIR/panel-removal.sh"
 # 安装清单：记录「本项目在系统上加了什么」。卸载要靠它精确回滚——
 # 没有它就只能猜，而猜错的后果是删掉用户原有的 Java 或留下几百 MB 残留。
 MANIFEST="$MC_COMMANDER_DIR/.install-manifest"
@@ -417,7 +420,11 @@ do_uninstall() {
     log "停止并禁用 systemd 服务..."
     systemctl stop mc-commander 2>/dev/null || true
     systemctl disable mc-commander 2>/dev/null || true
-    rm -f "$unit_path"
+    rm -f "$unit_path" \
+          /etc/systemd/system/mc-commander-removal.service \
+          /etc/systemd/system/mc-commander-removal-keep.service
+    rm -rf "$REMOVAL_LIB_DIR"
+    rm -f /etc/sudoers.d/mc-commander
     systemctl daemon-reload 2>/dev/null || true
     systemctl reset-failed mc-commander 2>/dev/null || true
     log "已删除 /etc/systemd/system/mc-commander.service"
@@ -1417,6 +1424,13 @@ EOF
   # 彻底删除的执行单元：面板以 mc-commander 低权限运行，删不掉自己，
   # 故预置一个 root 权限、不自启、只能由面板触发的一次性单元。
   # 面板经 sudoers 白名单只允许 start 这一个单元，不能执行任意命令。
+  #
+  # 脚本副本装到 root 独占目录：安装目录整体 chown 给了面板用户，root 执行的
+  # 脚本留在那儿就等于「面板只要能写文件就能改掉 root 要跑的代码」。
+  install -d -o root -g root -m 0755 "$REMOVAL_LIB_DIR"
+  install -o root -g root -m 0755 \
+    "$MC_COMMANDER_DIR/src/services/panel-removal.sh" "$REMOVAL_SCRIPT"
+  record_change "removal-lib" "$REMOVAL_SCRIPT"
   cat > /etc/systemd/system/mc-commander-removal.service <<EOF
 [Unit]
 Description=MC Commander panel removal
@@ -1428,7 +1442,7 @@ Type=oneshot
 # 该单元只能由面板经 sudoers 白名单触发，不接受其它调用路径。
 User=root
 Environment=MC_COMMANDER_DIR=$MC_COMMANDER_DIR
-ExecStart=/bin/bash $MC_COMMANDER_DIR/src/services/panel-removal.sh --purge
+ExecStart=/bin/bash $REMOVAL_SCRIPT --purge
 EOF
   record_change "systemd-unit" "/etc/systemd/system/mc-commander-removal.service"
 
@@ -1442,7 +1456,7 @@ After=network.target
 Type=oneshot
 User=root
 Environment=MC_COMMANDER_DIR=$MC_COMMANDER_DIR
-ExecStart=/bin/bash $MC_COMMANDER_DIR/src/services/panel-removal.sh --keep-data
+ExecStart=/bin/bash $REMOVAL_SCRIPT --keep-data
 EOF
   record_change "systemd-unit" "/etc/systemd/system/mc-commander-removal-keep.service"
 

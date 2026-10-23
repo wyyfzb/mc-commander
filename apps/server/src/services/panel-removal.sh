@@ -107,11 +107,13 @@ if command -v systemctl &>/dev/null && unit_belongs_here; then
   log "已移除 systemd 服务"
 fi
 
-# sudoers 白名单是本项目加的，一并撤掉
+# sudoers 白名单与本脚本的 root 副本都是本项目加的，一并撤掉
 if [ -f /etc/sudoers.d/mc-commander ]; then
   rm -f /etc/sudoers.d/mc-commander
   log "已移除 sudoers 白名单"
 fi
+# 正在执行的就是这个副本：删掉它不影响已加载进内存的后续语句
+rm -rf /usr/local/lib/mc-commander
 
 # 4. 按安装清单回滚系统改动。
 #    只动清单里记过的条目：用户机器原有的 Java/Node 不能碰（他别的程序要用）。

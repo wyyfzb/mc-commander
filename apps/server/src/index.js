@@ -448,6 +448,9 @@ async function shutdown(signal) {
   stopSystemStatsBroadcast();
   stopMetricsSampler();
   flushNotificationEvents();
+  // 先踢掉全部客户端：wss.close() 要等连接自己断开才回调，而浏览器那页正在等面板退出，
+  // 两边互等就是永久挂起——实测面板停在 SIGTERM 之后 85 秒才退出，直到标签页被关掉
+  for (const client of wss.clients) client.terminate();
   wss.close(() => {
     logger.info('WebSocket server closed');
     // 停机窗口内 serverManager 仍可能发出通知事件（入队未刷），关库前收尾

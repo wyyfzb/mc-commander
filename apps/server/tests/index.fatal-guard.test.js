@@ -65,6 +65,8 @@ vi.mock('express', () => ({
 vi.mock('http', () => ({ default: { createServer: () => h.server } }));
 vi.mock('ws', () => ({
   WebSocketServer: class {
+    // 真实 ws 的 WebSocketServer 恒有 clients 集合，停机流程会遍历它断开连接
+    clients = new Set();
     constructor(options) {
       h.wsOpts = options;
       h.wss = this;

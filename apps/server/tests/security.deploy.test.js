@@ -358,6 +358,32 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
       expect(panelRoute).toContain("'start', '--no-block', unit");
     });
 
+    /* root 执行的脚本若留在面板可写目录里，面板拿到任意写文件能力就等于拿到 root */
+    it('删除单元执行的是 root 独占目录里的副本，不是安装目录里那份', () => {
+      expect(script).toContain('REMOVAL_LIB_DIR="/usr/local/lib/mc-commander"');
+      expect(script).toMatch(
+        /install -o root -g root -m 0755 \\?\s*"\$MC_COMMANDER_DIR\/src\/services\/panel-removal\.sh" "\$REMOVAL_SCRIPT"/,
+      );
+      // 单元只认副本路径：写回安装目录就退化成「面板可改 root 要跑的代码」
+      const heredocStart = script.indexOf('mc-commander-removal.service <<EOF');
+      // 从 heredoc 起始行之后再找结束标记：'EOF' 三个字母本身就在起始行里
+      const unitBlock = script.slice(
+        heredocStart,
+        script.indexOf('\nEOF', heredocStart + 'mc-commander-removal.service <<EOF'.length),
+      );
+      expect(unitBlock).toContain('ExecStart=/bin/bash $REMOVAL_SCRIPT --purge');
+      expect(unitBlock).not.toContain('$MC_COMMANDER_DIR/src/services');
+    });
+
+    it('卸载与自删都清掉 root 副本，不留一个可被再次触发的 root 脚本', () => {
+      expect(script).toContain('rm -rf "$REMOVAL_LIB_DIR"');
+      const removal = readFileSync(
+        path.resolve(import.meta.dirname, '../src/services/panel-removal.sh'),
+        'utf8',
+      );
+      expect(removal).toContain('rm -rf /usr/local/lib/mc-commander');
+    });
+
     it('创建专用低权限用户并移交目录属主', () => {
       expect(script).toContain('useradd --system');
       expect(script).toContain('mc-commander');
