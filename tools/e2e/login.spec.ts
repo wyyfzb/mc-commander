@@ -143,7 +143,9 @@ test.describe('登录页', () => {
     // 会话徽章 + 会话列表（mock UA 无浏览器指纹 → describeUserAgent 显示「未知浏览器」+ 本机徽章）
     await expect(page.getByText('管理员会话').first()).toBeVisible()
     await expect(page.getByText('未知浏览器')).toBeVisible()
-    await expect(page.getByText('本机')).toBeVisible()
+    // exact 是必要的：同页「传输加密」区块还有一句「本机未启用加密访问」，
+    // 模糊匹配会同时命中它（strict mode violation）
+    await expect(page.getByText('本机', { exact: true })).toBeVisible()
     // 改密表单存在
     await expect(page.getByLabel('当前密码')).toBeVisible()
     await maybeShot(page, 'account-panel.png')
